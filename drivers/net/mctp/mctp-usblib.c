@@ -162,6 +162,186 @@ void mctp_usblib_rx_cancel(struct mctp_usblib_rx *rx)
 }
 EXPORT_SYMBOL_GPL(mctp_usblib_rx_cancel);
 
+/* transmit context: encapsulates one transfer */
+struct mctp_usblib_tx_ctx {
+	struct mctp_usblib_tx *tx;
+	struct sk_buff *skb;
+	unsigned int len;
+	enum mctp_usblib_tx_buf_type {
+		TX_SINGLE,
+	} buf_type;
+};
+
+void mctp_usblib_tx_init(struct mctp_usblib_tx *tx,
+			 const struct mctp_usblib_tx_ops *ops,
+			 void *priv)
+{
+	memset(tx, 0, sizeof(*tx));
+	tx->ops = *ops;
+	tx->priv = priv;
+}
+EXPORT_SYMBOL_GPL(mctp_usblib_tx_init);
+
+void mctp_usblib_tx_fini(struct mctp_usblib_tx *tx)
+{
+}
+EXPORT_SYMBOL_GPL(mctp_usblib_tx_fini);
+
+void *mctp_usblib_tx_ctx_priv(struct mctp_usblib_tx_ctx *tx_ctx)
+{
+	return tx_ctx->tx->priv;
+}
+EXPORT_SYMBOL_GPL(mctp_usblib_tx_ctx_priv);
+
+static struct mctp_usblib_tx_ctx *
+mctp_usblib_tx_ctx_create(struct mctp_usblib_tx *tx, struct sk_buff *skb)
+{
+	struct mctp_usblib_tx_ctx *ctx;
+
+	ctx = kzalloc_obj(*ctx, GFP_ATOMIC);
+	if (!ctx)
+		return NULL;
+
+	ctx->tx = tx;
+	ctx->buf_type = TX_SINGLE;
+	ctx->skb = skb;
+	ctx->len += skb->len;
+
+	return ctx;
+}
+
+static int mctp_usblib_tx_send(struct mctp_usblib_tx_ctx *ctx)
+{
+	struct mctp_usblib_tx *tx = ctx->tx;
+	void *buf = ctx->skb->data;
+
+	return tx->ops.send(ctx, buf, ctx->len);
+}
+
+static void mctp_usblib_tx_ctx_free(struct mctp_usblib_tx_ctx *ctx)
+{
+	if (ctx)
+		dev_kfree_skb_any(ctx->skb);
+	kfree(ctx);
+}
+
+static void mctp_usblib_tx_stats_update(struct mctp_usblib_tx_ctx *ctx,
+					struct net_device *dev,
+					bool ok)
+{
+	struct pcpu_dstats *dstats = get_cpu_ptr(dev->dstats);
+	unsigned long flags;
+
+	flags = u64_stats_update_begin_irqsave(&dstats->syncp);
+	if (ok) {
+		u64_stats_inc(&dstats->tx_packets);
+		u64_stats_add(&dstats->tx_bytes, ctx->len);
+	} else {
+		u64_stats_inc(&dstats->tx_drops);
+	}
+	u64_stats_update_end_irqrestore(&dstats->syncp, flags);
+	put_cpu_ptr(dev->dstats);
+}
+
+static void mctp_usblib_tx_stats_single_drop(struct net_device *dev)
+{
+	struct pcpu_dstats *dstats = get_cpu_ptr(dev->dstats);
+	unsigned long flags;
+
+	flags = u64_stats_update_begin_irqsave(&dstats->syncp);
+	u64_stats_inc(&dstats->tx_drops);
+	u64_stats_update_end_irqrestore(&dstats->syncp, flags);
+	put_cpu_ptr(dev->dstats);
+}
+
+/*
+ * Completion for the ->send() op. This will update netdev stats and
+ * free the tx context.
+ *
+ * Likely called from (atomic) URB completion context.
+ */
+void mctp_usblib_tx_send_complete(struct mctp_usblib_tx_ctx *tx_ctx,
+				  struct net_device *dev, bool ok)
+{
+	mctp_usblib_tx_ctx_free(tx_ctx);
+}
+EXPORT_SYMBOL_GPL(mctp_usblib_tx_send_complete);
+
+/* Prepare a skb for push() */
+static int mctp_usblib_tx_skb_prepare(struct sk_buff *skb)
+{
+	struct mctp_usb_hdr *hdr;
+	unsigned long plen;
+	int rc;
+
+	plen = skb->len;
+	if (plen + sizeof(*hdr) > MCTP_USB_1_0_PKTLEN_MAX)
+		return -EMSGSIZE;
+
+	rc = skb_cow_head(skb, sizeof(*hdr));
+	if (rc)
+		return rc;
+
+	hdr = skb_push(skb, sizeof(*hdr));
+	if (!hdr)
+		return -ENOMEM;
+
+	hdr->id = cpu_to_be16(MCTP_USB_DMTF_ID);
+	hdr->rsvd = 0;
+	hdr->len = plen + sizeof(*hdr);
+
+	return 0;
+}
+
+/*
+ * Push a new skb to the transfer. At present, no send must be in progress,
+ * as we only handle single-packet USB transfers.
+ *
+ * Takes ownership of @skb, including on error.
+ */
+int mctp_usblib_tx_push(struct net_device *dev,
+			struct mctp_usblib_tx *tx,
+			struct sk_buff *skb, bool more)
+{
+	struct mctp_usblib_tx_ctx *ctx;
+	int rc;
+
+	if (!skb)
+		return 0;
+
+	rc = mctp_usblib_tx_skb_prepare(skb);
+	if (rc)
+		goto err_drop_single;
+
+	ctx = mctp_usblib_tx_ctx_create(tx, skb);
+	if (!ctx) {
+		rc = -ENOMEM;
+		goto err_drop_single;
+	}
+
+	rc = mctp_usblib_tx_send(ctx);
+	if (rc) {
+		mctp_usblib_tx_stats_update(ctx, dev, false);
+		mctp_usblib_tx_ctx_free(ctx);
+	}
+
+	return rc;
+
+err_drop_single:
+	mctp_usblib_tx_stats_single_drop(dev);
+	kfree_skb(skb);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(mctp_usblib_tx_push);
+
+/* Cancel a tx: any un-sent context is released. */
+void mctp_usblib_tx_cancel(struct mctp_usblib_tx *tx,
+			   struct net_device *dev)
+{
+	/* nothing to do at present, no ctx is persistent */
+}
+EXPORT_SYMBOL_GPL(mctp_usblib_tx_cancel);
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jeremy Kerr <jk@codeconstruct.com.au>");
 MODULE_DESCRIPTION("MCTP USB transport library");
