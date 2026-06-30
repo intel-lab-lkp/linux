@@ -186,7 +186,7 @@ struct i915_page_table {
 struct i915_page_directory {
 	struct i915_page_table pt;
 	spinlock_t lock;
-	void **entry;
+	void *entry[];
 };
 
 #define __px_choose_expr(x, type, expr, other) \

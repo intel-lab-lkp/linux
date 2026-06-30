@@ -36,15 +36,9 @@ struct i915_page_directory *__alloc_pd(int count)
 {
 	struct i915_page_directory *pd;
 
-	pd = kzalloc_obj(*pd, I915_GFP_ALLOW_FAIL);
+	pd = kzalloc_flex(*pd, entry, count, I915_GFP_ALLOW_FAIL);
 	if (unlikely(!pd))
 		return NULL;
-
-	pd->entry = kzalloc_objs(*pd->entry, count, I915_GFP_ALLOW_FAIL);
-	if (unlikely(!pd->entry)) {
-		kfree(pd);
-		return NULL;
-	}
 
 	spin_lock_init(&pd->lock);
 	return pd;
@@ -60,7 +54,6 @@ struct i915_page_directory *alloc_pd(struct i915_address_space *vm)
 
 	pd->pt.base = vm->alloc_pt_dma(vm, I915_GTT_PAGE_SIZE_4K);
 	if (IS_ERR(pd->pt.base)) {
-		kfree(pd->entry);
 		kfree(pd);
 		return ERR_PTR(-ENOMEM);
 	}
@@ -71,12 +64,6 @@ struct i915_page_directory *alloc_pd(struct i915_address_space *vm)
 void free_px(struct i915_address_space *vm, struct i915_page_table *pt, int lvl)
 {
 	BUILD_BUG_ON(offsetof(struct i915_page_directory, pt));
-
-	if (lvl) {
-		struct i915_page_directory *pd =
-			container_of(pt, typeof(*pd), pt);
-		kfree(pd->entry);
-	}
 
 	if (pt->base)
 		i915_gem_object_put(pt->base);
