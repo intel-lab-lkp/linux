@@ -76,6 +76,9 @@ static struct microcode_intel *ucode_patch_late __read_mostly;
 /* last level cache size per core */
 static unsigned int llc_size_per_core __ro_after_init;
 
+/* CPU capability for update status and staging support */
+static bool cpu_has_mcu __ro_after_init;
+
 /* microcode format is extended from prescott processors */
 struct extended_signature {
 	unsigned int	sig;
@@ -702,6 +705,16 @@ static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
 	/* write microcode via MSR 0x79 */
 	native_wrmsrq(MSR_IA32_UCODE_WRITE, (unsigned long)mc->bits);
 
+	/* Check if the update put the system in an unreliable state */
+	if (cpu_has_mcu) {
+		u64 status = native_rdmsrq(MSR_IA32_MCU_STATUS);
+
+		if (status & (MCU_PARTIAL_UPDATE | AUTH_FAIL_ON_MCU_COMPONENT)) {
+			pr_emerg("Partial update: MSR_IA32_MCU_STATUS=0x%llx\n", status);
+			nmi_panic(NULL, "Microcode load: fatal status from partial update");
+		}
+	}
+
 	rev = intel_get_microcode_revision();
 	if (rev != mc->hdr.rev)
 		return UCODE_ERROR;
@@ -779,10 +792,29 @@ static int __init save_builtin_microcode(void)
 }
 early_initcall(save_builtin_microcode);
 
+#define CPUID_EDX_ARCH_CAP	BIT(29)
+
+static __init bool mcu_capable(void)
+{
+	if (native_cpuid_eax(0) < 7)
+		return false;
+
+	if (!(native_cpuid_edx(7) & CPUID_EDX_ARCH_CAP))
+		return false;
+
+	if (!(native_rdmsrq(MSR_IA32_ARCH_CAPABILITIES) & ARCH_CAP_MCU_ENUM))
+		return false;
+
+	return true;
+}
+
 /* Load microcode on BSP from initrd or builtin blobs */
 void __init load_ucode_intel_bsp(struct early_load_data *ed)
 {
 	struct ucode_cpu_info uci;
+
+	/* Indicate early enough to cover the early-loading path */
+	cpu_has_mcu = mcu_capable();
 
 	uci.mc = get_microcode_blob(&uci, false);
 	ed->old_rev = uci.cpu_sig.rev;
@@ -1023,8 +1055,7 @@ static __init bool staging_available(void)
 {
 	u64 val;
 
-	val = x86_read_arch_cap_msr();
-	if (!(val & ARCH_CAP_MCU_ENUM))
+	if (!cpu_has_mcu)
 		return false;
 
 	rdmsrq(MSR_IA32_MCU_ENUMERATION, val);

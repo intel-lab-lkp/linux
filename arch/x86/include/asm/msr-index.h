@@ -977,6 +977,10 @@
 #define MSR_IA32_MCU_ENUMERATION	0x0000007b
 #define MCU_STAGING			BIT(4)
 
+#define MSR_IA32_MCU_STATUS		0x0000007c
+#define MCU_PARTIAL_UPDATE		BIT(0)
+#define AUTH_FAIL_ON_MCU_COMPONENT	BIT(1)
+
 #define MSR_IA32_UCODE_REV		0x0000008b
 
 /* Intel SGX Launch Enclave Public Key Hash MSRs */
