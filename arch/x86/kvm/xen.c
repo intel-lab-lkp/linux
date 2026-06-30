@@ -22,6 +22,7 @@
 #include <xen/interface/version.h>
 #include <xen/interface/event_channel.h>
 #include <xen/interface/sched.h>
+#include <xen/xen-ops.h>
 
 #include <asm/xen/cpuid.h>
 #include <asm/pvclock.h>
@@ -1103,6 +1104,8 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		break;
 
 	case KVM_XEN_VCPU_ATTR_TYPE_VCPU_ID:
+		BUILD_BUG_ON(XEN_VCPU_ID_INVALID < KVM_MAX_VCPUS);
+
 		if (data->u.vcpu_id >= KVM_MAX_VCPUS)
 			r = -EINVAL;
 		else {
@@ -1612,6 +1615,9 @@ static bool kvm_xen_hcall_vcpu_op(struct kvm_vcpu *vcpu, bool longmode, int cmd,
 		return false;
 
 	if (!kvm_xen_timer_enabled(vcpu))
+		return false;
+
+	if (vcpu->arch.xen.vcpu_id == XEN_VCPU_ID_INVALID)
 		return false;
 
 	/*
@@ -2300,7 +2306,7 @@ static bool kvm_xen_hcall_evtchn_send(struct kvm_vcpu *vcpu, u64 param, u64 *r)
 
 void kvm_xen_init_vcpu(struct kvm_vcpu *vcpu)
 {
-	vcpu->arch.xen.vcpu_id = vcpu->vcpu_idx;
+	vcpu->arch.xen.vcpu_id = XEN_VCPU_ID_INVALID;
 	vcpu->arch.xen.poll_evtchn = 0;
 
 	timer_setup(&vcpu->arch.xen.poll_timer, cancel_evtchn_poll, 0);
