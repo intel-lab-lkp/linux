@@ -11108,6 +11108,7 @@ F:	drivers/platform/x86/gpd-pocket-fan.c
 
 GPIB DRIVERS
 M:	Dave Penkler <dpenkler@gmail.com>
+M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 S:	Maintained
 F:	drivers/gpib/
 F:	include/uapi/linux/gpib.h
