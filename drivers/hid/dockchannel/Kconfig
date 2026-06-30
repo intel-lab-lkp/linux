@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only OR MIT
+
+config APPLE_DOCKCHANNEL_HID
+	tristate "HID over Apple DockChannel"
+	depends on APPLE_DOCKCHANNEL
+	depends on APPLE_RTKIT
+	depends on HID
+	depends on INPUT
+	depends on OF
+	help
+	  This provides a HID transport layer over the Apple DockChannel
+	  mailbox interface. It is required to support the internal keyboard
+	  and trackpad on M2 and later MacBook models.
+
+	  Say Y here if you have an M2 or later Apple MacBook.
