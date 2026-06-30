@@ -112,6 +112,23 @@ static int kvm_ptdump_build_levels(struct ptdump_pg_level *level, u32 start_lvl)
 	return 0;
 }
 
+static int kvm_ptdump_parser_init(struct kvm_ptdump_guest_state *st, struct kvm *kvm,
+				  struct kvm_pgtable *pgt)
+{
+	int ret;
+
+	ret = kvm_ptdump_build_levels(&st->level[0], pgt->start_level);
+	if (ret)
+		return ret;
+
+	st->ipa_marker[0].name          = "Guest IPA";
+	st->ipa_marker[1].start_address = BIT(pgt->ia_bits);
+
+	st->kvm                         = kvm;
+
+	return 0;
+}
+
 static struct kvm_ptdump_guest_state *kvm_ptdump_parser_create(struct kvm *kvm)
 {
 	struct kvm_ptdump_guest_state *st;
@@ -129,17 +146,13 @@ static struct kvm_ptdump_guest_state *kvm_ptdump_parser_create(struct kvm *kvm)
 	}
 
 	pgtable = kvm->arch.mmu.pgt;
+	ret = kvm_ptdump_parser_init(st, kvm, pgtable);
 
-	ret = kvm_ptdump_build_levels(&st->level[0], pgtable->start_level);
 	if (ret) {
 		kfree(st);
 		return ERR_PTR(ret);
 	}
 
-	st->ipa_marker[0].name		= "Guest IPA";
-	st->ipa_marker[1].start_address = BIT(pgtable->ia_bits);
-
-	st->kvm				= kvm;
 	return st;
 }
 
