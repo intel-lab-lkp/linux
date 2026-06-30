@@ -1185,7 +1185,7 @@ __emac_prepare_rx_skb(struct sk_buff *skb, struct emac_instance *dev, int slot)
 	dev->rx_desc[slot].data_ptr =
 	    dma_map_single(&dev->ofdev->dev, skb->data - NET_IP_ALIGN,
 			   dev->rx_sync_size, DMA_FROM_DEVICE) + NET_IP_ALIGN;
-	wmb();
+	dma_wmb();
 	dev->rx_desc[slot].ctrl = MAL_RX_CTRL_EMPTY |
 	    (slot == (NUM_RX_BUFF - 1) ? MAL_RX_CTRL_WRAP : 0);
 
@@ -1263,7 +1263,7 @@ static int emac_open(struct net_device *ndev)
 			link_poll_interval = PHY_POLL_LINK_OFF;
 		}
 		dev->link_polling = 1;
-		wmb();
+		smp_wmb();
 		schedule_delayed_work(&dev->link_work, link_poll_interval);
 		emac_print_link_status(dev);
 	} else
@@ -1464,7 +1464,7 @@ static netdev_tx_t emac_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 						     skb->data, len,
 						     DMA_TO_DEVICE);
 	dev->tx_desc[slot].data_len = (u16) len;
-	wmb();
+	dma_wmb();
 	dev->tx_desc[slot].ctrl = ctrl;
 
 	return emac_xmit_finish(dev, len);
@@ -1560,7 +1560,7 @@ emac_start_xmit_sg(struct sk_buff *skb, struct net_device *ndev)
 	/* Send the packet out */
 	if (dev->tx_slot == NUM_TX_BUFF - 1)
 		ctrl |= MAL_TX_CTRL_WRAP;
-	wmb();
+	dma_wmb();
 	dev->tx_desc[dev->tx_slot].ctrl = ctrl;
 	dev->tx_slot = (slot + 1) % NUM_TX_BUFF;
 
@@ -1671,7 +1671,7 @@ static inline void emac_recycle_rx_skb(struct emac_instance *dev, int slot,
 			       DMA_FROM_DEVICE);
 
 	dev->rx_desc[slot].data_len = 0;
-	wmb();
+	dma_wmb();
 	dev->rx_desc[slot].ctrl = MAL_RX_CTRL_EMPTY |
 	    (slot == (NUM_RX_BUFF - 1) ? MAL_RX_CTRL_WRAP : 0);
 }
@@ -1754,7 +1754,7 @@ static int emac_poll_rx(void *param, int budget)
 			break;
 
 		skb = dev->rx_skb[slot];
-		mb();
+		dma_rmb();
 		len = dev->rx_desc[slot].data_len;
 
 		if (unlikely(!MAL_IS_SINGLE_RX(ctrl)))
@@ -1845,7 +1845,7 @@ static int emac_poll_rx(void *param, int budget)
 	}
 
 	if (unlikely(budget && test_bit(MAL_COMMAC_RX_STOPPED, &dev->commac.flags))) {
-		mb();
+		dma_rmb();
 		if (!(dev->rx_desc[slot].ctrl & MAL_RX_CTRL_EMPTY)) {
 			DBG2(dev, "rx restart" NL);
 			received = 0;
@@ -3167,7 +3167,7 @@ static int emac_probe(struct platform_device *ofdev)
 	/* Set our drvdata last as we don't want them visible until we are
 	 * fully initialized
 	 */
-	wmb();
+	smp_wmb();
 	platform_set_drvdata(ofdev, dev);
 
 	printk(KERN_INFO "%s: EMAC-%d %pOF, MAC %pM\n",

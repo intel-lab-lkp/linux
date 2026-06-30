@@ -691,7 +691,7 @@ static int mal_probe(struct platform_device *ofdev)
 	       mal->num_tx_chans, mal->num_rx_chans);
 
 	/* Advertise this instance to the rest of the world */
-	wmb();
+	smp_wmb();
 	platform_set_drvdata(ofdev, mal);
 
 	return 0;

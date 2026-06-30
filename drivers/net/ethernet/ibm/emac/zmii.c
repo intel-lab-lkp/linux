@@ -258,8 +258,8 @@ static int zmii_probe(struct platform_device *ofdev)
 	/* Disable all inputs by default */
 	out_be32(&dev->base->fer, 0);
 
-	printk(KERN_INFO "ZMII %pOF initialized\n", ofdev->dev.of_node);
-	wmb();
+	dev_info(&ofdev->dev, "ZMII initialized\n");
+	smp_wmb();
 	platform_set_drvdata(ofdev, dev);
 
 	return 0;

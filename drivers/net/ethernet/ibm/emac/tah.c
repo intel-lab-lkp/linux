@@ -112,7 +112,7 @@ static int tah_probe(struct platform_device *ofdev)
 	tah_reset(ofdev);
 
 	printk(KERN_INFO "TAH %pOF initialized\n", ofdev->dev.of_node);
-	wmb();
+	smp_wmb();
 
 	return 0;
 }

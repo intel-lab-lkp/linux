@@ -255,7 +255,7 @@ static int rgmii_probe(struct platform_device *ofdev)
 	       ofdev->dev.of_node,
 	       (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");
 
-	wmb();
+	smp_wmb();
 	platform_set_drvdata(ofdev, dev);
 
 	return 0;
