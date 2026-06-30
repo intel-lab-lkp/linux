@@ -227,18 +227,19 @@ static void usb_free_dynids(struct usb_driver *usb_drv)
 	}
 }
 
-static const struct usb_device_id *usb_match_dynamic_id(struct usb_interface *intf,
-							const struct usb_driver *drv)
+static bool usb_match_dynamic_id(struct usb_interface *intf, const struct usb_driver *drv,
+				 struct usb_device_id *id)
 {
 	struct usb_dynid *dynid;
 
 	guard(mutex)(&usb_dynids_lock);
 	list_for_each_entry(dynid, &drv->dynids.list, node) {
 		if (usb_match_one_id(intf, &dynid->id)) {
-			return &dynid->id;
+			*id = dynid->id;
+			return true;
 		}
 	}
-	return NULL;
+	return false;
 }
 
 
@@ -320,7 +321,8 @@ static int usb_probe_interface(struct device *dev)
 	struct usb_driver *driver = to_usb_driver(dev->driver);
 	struct usb_interface *intf = to_usb_interface(dev);
 	struct usb_device *udev = interface_to_usbdev(intf);
-	const struct usb_device_id *id;
+	struct usb_device_id id;
+	const struct usb_device_id *matched_id;
 	int error = -ENODEV;
 	int lpm_disable_error = -ENODEV;
 
@@ -340,11 +342,12 @@ static int usb_probe_interface(struct device *dev)
 		return error;
 	}
 
-	id = usb_match_dynamic_id(intf, driver);
-	if (!id)
-		id = usb_match_id(intf, driver->id_table);
-	if (!id)
-		return error;
+	if (!usb_match_dynamic_id(intf, driver, &id)) {
+		matched_id = usb_match_id(intf, driver->id_table);
+		if (!matched_id)
+			return error;
+		id = *matched_id;
+	}
 
 	dev_dbg(dev, "%s - got id\n", __func__);
 
@@ -393,7 +396,7 @@ static int usb_probe_interface(struct device *dev)
 		intf->needs_altsetting0 = 0;
 	}
 
-	error = driver->probe(intf, id);
+	error = driver->probe(intf, &id);
 	if (error)
 		goto err;
 
@@ -891,7 +894,7 @@ static int usb_device_match(struct device *dev, const struct device_driver *drv)
 	} else if (is_usb_interface(dev)) {
 		struct usb_interface *intf;
 		const struct usb_driver *usb_drv;
-		const struct usb_device_id *id;
+		struct usb_device_id id;
 
 		/* device drivers never match interfaces */
 		if (is_usb_device_driver(drv))
@@ -900,12 +903,10 @@ static int usb_device_match(struct device *dev, const struct device_driver *drv)
 		intf = to_usb_interface(dev);
 		usb_drv = to_usb_driver(drv);
 
-		id = usb_match_id(intf, usb_drv->id_table);
-		if (id)
+		if (usb_match_id(intf, usb_drv->id_table))
 			return 1;
 
-		id = usb_match_dynamic_id(intf, usb_drv);
-		if (id)
+		if (usb_match_dynamic_id(intf, usb_drv, &id))
 			return 1;
 	}
 
