@@ -252,6 +252,12 @@ definitions:
       -
         name: state-can-change
         doc: pin state can be changed
+      -
+        name: state-connected-override
+        doc: |
+          pin state can be set to connected regardless of current
+          DPLL device mode, overriding the active input selection.
+          Requires state-can-change to be set as well.
   -
     type: const
     name: phase-offset-divider

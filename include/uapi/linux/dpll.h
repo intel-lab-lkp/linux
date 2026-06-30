@@ -208,11 +208,15 @@ enum dpll_pin_operstate {
  * @DPLL_PIN_CAPABILITIES_DIRECTION_CAN_CHANGE: pin direction can be changed
  * @DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE: pin priority can be changed
  * @DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE: pin state can be changed
+ * @DPLL_PIN_CAPABILITIES_STATE_CONNECTED_OVERRIDE: pin state can be set to
+ *   connected regardless of current DPLL device mode, overriding the active
+ *   input selection. Requires state-can-change to be set as well.
  */
 enum dpll_pin_capabilities {
 	DPLL_PIN_CAPABILITIES_DIRECTION_CAN_CHANGE = 1,
 	DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE = 2,
 	DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE = 4,
+	DPLL_PIN_CAPABILITIES_STATE_CONNECTED_OVERRIDE = 8,
 };
 
 #define DPLL_PHASE_OFFSET_DIVIDER		1000
