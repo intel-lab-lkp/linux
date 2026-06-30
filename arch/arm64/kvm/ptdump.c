@@ -156,7 +156,7 @@ static struct kvm_ptdump_guest_state *kvm_ptdump_parser_create(struct kvm *kvm)
 	return st;
 }
 
-static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
+static int kvm_ptdump_guest_canonical_show(struct seq_file *m, void *unused)
 {
 	struct kvm_ptdump_guest_state *st = m->private;
 	struct kvm *kvm = st->kvm;
@@ -181,7 +181,8 @@ static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
 	return 0;
 }
 
-static int kvm_ptdump_guest_open(struct inode *m, struct file *file)
+static int kvm_ptdump_guest_open(struct inode *m, struct file *file,
+				 int (*show)(struct seq_file *, void *))
 {
 	struct kvm *kvm = m->i_private;
 	struct kvm_ptdump_guest_state *st;
@@ -196,7 +197,7 @@ static int kvm_ptdump_guest_open(struct inode *m, struct file *file)
 		goto err_with_kvm_ref;
 	}
 
-	ret = single_open(file, kvm_ptdump_guest_show, st);
+	ret = single_open(file, show, st);
 	if (!ret)
 		return 0;
 
@@ -204,6 +205,11 @@ static int kvm_ptdump_guest_open(struct inode *m, struct file *file)
 err_with_kvm_ref:
 	kvm_put_kvm(kvm);
 	return ret;
+}
+
+static int kvm_ptdump_guest_canonical_open(struct inode *m, struct file *file)
+{
+	return kvm_ptdump_guest_open(m, file, kvm_ptdump_guest_canonical_show);
 }
 
 static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
@@ -217,8 +223,8 @@ static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
 	return single_release(m, file);
 }
 
-static const struct file_operations kvm_ptdump_guest_fops = {
-	.open		= kvm_ptdump_guest_open,
+static const struct file_operations kvm_ptdump_guest_canonical_fops = {
+	.open		= kvm_ptdump_guest_canonical_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= kvm_ptdump_guest_close,
@@ -296,7 +302,7 @@ static const struct file_operations kvm_pgtable_levels_fops = {
 void kvm_s2_ptdump_create_debugfs(struct kvm *kvm)
 {
 	debugfs_create_file("stage2_page_tables", 0400, kvm->debugfs_dentry,
-			    kvm, &kvm_ptdump_guest_fops);
+			    kvm, &kvm_ptdump_guest_canonical_fops);
 	debugfs_create_file("ipa_range", 0400, kvm->debugfs_dentry,
 			    kvm, &kvm_pgtable_range_fops);
 	debugfs_create_file("stage2_levels", 0400, kvm->debugfs_dentry,
