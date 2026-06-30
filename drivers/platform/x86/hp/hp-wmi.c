@@ -1825,7 +1825,7 @@ static int victus_s_gpu_thermal_profile_set(bool ctgp_enable,
 					       &current_ppab_state,
 					       &current_dstate,
 					       &current_gpu_slowdown_temp);
-	if (ret < 0) {
+	if (ret) {
 		pr_warn("GPU modes not updated, unable to get slowdown temp\n");
 		return ret;
 	}
@@ -1907,7 +1907,7 @@ static int platform_profile_victus_s_get_ec(enum platform_profile_option *profil
 						       &current_ppab_state,
 						       &current_dstate,
 						       &current_gpu_slowdown_temp);
-		if (ret < 0)
+		if (ret)
 			return ret;
 		if (current_ctgp_state == 0 && current_ppab_state == 0)
 			*profile = PLATFORM_PROFILE_LOW_POWER;
