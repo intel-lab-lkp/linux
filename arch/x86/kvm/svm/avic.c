@@ -293,12 +293,9 @@ static int avic_get_physical_id_table_order(struct kvm *kvm)
 	return get_order((__avic_get_max_physical_id(kvm, NULL) + 1) * sizeof(u64));
 }
 
-int avic_alloc_physical_id_table(struct kvm *kvm)
+static int avic_alloc_physical_id_table(struct kvm *kvm)
 {
 	struct kvm_svm *kvm_svm = to_kvm_svm(kvm);
-
-	if (!irqchip_in_kernel(kvm) || !enable_apicv)
-		return 0;
 
 	if (kvm_svm->avic_physical_id_table)
 		return 0;
@@ -309,6 +306,14 @@ int avic_alloc_physical_id_table(struct kvm *kvm)
 		return -ENOMEM;
 
 	return 0;
+}
+
+int avic_vcpu_precreate(struct kvm *kvm)
+{
+	if (!irqchip_in_kernel(kvm) || WARN_ON_ONCE(!enable_apicv))
+		return 0;
+
+	return avic_alloc_physical_id_table(kvm);
 }
 
 void avic_vm_destroy(struct kvm *kvm)
