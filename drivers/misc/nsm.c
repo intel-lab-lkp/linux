@@ -105,6 +105,8 @@ static int cbor_object_get_array(u8 *cbor_object, size_t cbor_object_size, u8 **
 		return -EFAULT;
 
 	cbor_short_size = (cbor_object[0] & 0x1F);
+	if (cbor_short_size > CBOR_LONG_SIZE_U64)
+		return -EFAULT;
 
 	/* Decoding byte array length */
 	array_offset = CBOR_HEADER_SIZE_SHORT;
@@ -117,7 +119,7 @@ static int cbor_object_get_array(u8 *cbor_object, size_t cbor_object_size, u8 **
 	array_len_p = &cbor_object[1];
 
 	switch (cbor_short_size) {
-	case CBOR_SHORT_SIZE_MAX_VALUE: /* short encoding */
+	case 0 ... CBOR_SHORT_SIZE_MAX_VALUE: /* short encoding */
 		array_len = cbor_short_size;
 		break;
 	case CBOR_LONG_SIZE_U8:
