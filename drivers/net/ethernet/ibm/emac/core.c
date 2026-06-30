@@ -1741,6 +1741,7 @@ static int emac_poll_rx(void *param, int budget)
 {
 	struct emac_instance *dev = param;
 	int slot = dev->rx_slot, received = 0;
+	u64 packets = 0, bytes = 0;
 
 	DBG2(dev, "poll_rx(%d)" NL, budget);
 
@@ -1797,10 +1798,11 @@ static int emac_poll_rx(void *param, int budget)
 
 		napi_gro_receive(&dev->mal->napi, skb);
 	next:
-		++dev->stats.rx_packets;
+		++packets;
 	skip:
-		dev->stats.rx_bytes += len;
-		slot = (slot + 1) % NUM_RX_BUFF;
+		bytes += len;
+		if (++slot == NUM_RX_BUFF)
+			slot = 0;
 		--budget;
 		++received;
 		continue;
@@ -1864,6 +1866,9 @@ static int emac_poll_rx(void *param, int budget)
 		emac_rx_enable(dev);
 		dev->rx_slot = 0;
 	}
+
+	dev->stats.rx_packets += packets;
+	dev->stats.rx_bytes += bytes;
 	return received;
 }
 
