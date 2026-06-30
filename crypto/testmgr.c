@@ -3211,6 +3211,291 @@ static int test_skcipher(int enc, const struct cipher_test_suite *suite,
 	return 0;
 }
 
+/* Upper bound on the IVs the dun() template accepts (16: xts; 32: Adiantum). */
+#define TEST_MDU_MAX_IVSIZE	32
+
+/*
+ * Increment an @ivsize-byte IV as a wide counter.  Byte-wise with carry --
+ * deliberately independent of crypto/dun.c's per-limb walk, so the two only
+ * agree if the carry is right.  LE: byte 0 least significant; BE: last byte.
+ */
+static void test_mdu_iv_inc(u8 *iv, unsigned int ivsize, bool big_endian)
+{
+	int i;
+
+	if (big_endian) {
+		for (i = ivsize - 1; i >= 0; i--)
+			if (++iv[i])
+				break;
+	} else {
+		for (i = 0; i < (int)ivsize; i++)
+			if (++iv[i])
+				break;
+	}
+}
+
+/*
+ * Seed @iv so the low 64-bit limb is all-ones but its least-significant byte:
+ * the 2nd increment wraps the limb and carries into the next.  LE limb is
+ * bytes [0,8); BE limb is the last 8 bytes.  Bytes outside keep their value.
+ */
+static void test_mdu_iv_boundary(u8 *iv, unsigned int ivsize, bool big_endian)
+{
+	unsigned int i;
+
+	if (big_endian) {
+		for (i = ivsize - 8; i < ivsize; i++)
+			iv[i] = 0xff;
+		iv[ivsize - 1] = 0xfe;
+	} else {
+		for (i = 0; i < 8; i++)
+			iv[i] = 0xff;
+		iv[0] = 0xfe;
+	}
+}
+
+/* Encrypt one du_size block with a plain single-DU request (the reference). */
+static int test_mdu_ref_encrypt(struct crypto_skcipher *tfm, const u8 *in,
+				u8 *out, unsigned int du_size, const u8 *iv,
+				unsigned int ivsize)
+{
+	struct skcipher_request *req;
+	struct scatterlist sg_in;
+	DECLARE_CRYPTO_WAIT(wait);
+	u8 ivbuf[TEST_MDU_MAX_IVSIZE];
+	int err;
+
+	req = skcipher_request_alloc(tfm, GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+	memcpy(ivbuf, iv, ivsize);
+	memcpy(out, in, du_size);
+	sg_init_one(&sg_in, out, du_size);
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG |
+				      CRYPTO_TFM_REQ_MAY_SLEEP,
+				      crypto_req_done, &wait);
+	skcipher_request_set_crypt(req, &sg_in, &sg_in, du_size, ivbuf);
+	err = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+	skcipher_request_free(req);
+	return err;
+}
+
+/*
+ * Build an SG over @buf with du_size-unaligned entries, so the splitter's
+ * per-DU views cross SG entries and exercise the scatter_walk cursor.
+ */
+static void test_mdu_sg_fragment(struct scatterlist *sg, unsigned int nents,
+				 u8 *buf, unsigned int total)
+{
+	unsigned int chunk = total / nents;
+	unsigned int off = 0, i;
+
+	sg_init_table(sg, nents);
+	for (i = 0; i < nents; i++) {
+		unsigned int len = (i == nents - 1) ? total - off : chunk;
+
+		sg_set_buf(&sg[i], buf + off, len);
+		off += len;
+	}
+}
+
+#define TEST_MDU_NR_UNITS	4
+#define TEST_MDU_NR_FRAGS	5
+/*
+ * Verify batched dispatch on @mdu (a dun(<inner>,<endian>) tfm) is byte-equal
+ * to an independent N x single-DU reference on @inner with @big_endian-walked
+ * IVs, over a fragmented SG, then round-trips.  Both tfms must share a key.
+ * @iv_orig is the ivsize-byte starting IV (the caller varies it to exercise
+ * both a random IV and one seeded to cross a carry boundary).
+ */
+static int test_skcipher_multi_du_one(struct crypto_skcipher *mdu,
+				      struct crypto_skcipher *inner,
+				      unsigned int du_size, bool big_endian,
+				      const u8 *iv_orig)
+{
+	const char *driver = crypto_skcipher_driver_name(mdu);
+	const unsigned int total = du_size * TEST_MDU_NR_UNITS;
+	const unsigned int ivsize = crypto_skcipher_ivsize(mdu);
+	struct skcipher_request *req = NULL;
+	struct scatterlist sg[TEST_MDU_NR_FRAGS];
+	DECLARE_CRYPTO_WAIT(wait);
+	u8 iv_work[TEST_MDU_MAX_IVSIZE], iv_ref[TEST_MDU_MAX_IVSIZE];
+	u8 *plain = NULL, *buf = NULL, *ref = NULL;
+	unsigned int u;
+	int err;
+
+	plain = kmalloc(total, GFP_KERNEL);
+	buf = kmalloc(total, GFP_KERNEL);
+	ref = kmalloc(total, GFP_KERNEL);
+	req = skcipher_request_alloc(mdu, GFP_KERNEL);
+	if (!plain || !buf || !ref || !req) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	get_random_bytes(plain, total);
+
+	/* Reference: per-DU single requests on the inner tfm, counter-walked IVs. */
+	memcpy(iv_ref, iv_orig, ivsize);
+	for (u = 0; u < TEST_MDU_NR_UNITS; u++) {
+		err = test_mdu_ref_encrypt(inner, plain + u * du_size,
+					   ref + u * du_size, du_size, iv_ref,
+					   ivsize);
+		if (err) {
+			pr_err("alg: skcipher: %s multi-DU ref encrypt failed (du=%u): %d\n",
+			       driver, du_size, err);
+			goto out;
+		}
+		test_mdu_iv_inc(iv_ref, ivsize, big_endian);
+	}
+
+	/* Batched: one request over a fragmented SG. */
+	memcpy(buf, plain, total);
+	memcpy(iv_work, iv_orig, ivsize);
+	test_mdu_sg_fragment(sg, TEST_MDU_NR_FRAGS, buf, total);
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG |
+				      CRYPTO_TFM_REQ_MAY_SLEEP,
+				      crypto_req_done, &wait);
+	skcipher_request_set_crypt(req, sg, sg, total, iv_work);
+	skcipher_request_set_data_unit_size(req, du_size);
+	err = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+	if (err) {
+		pr_err("alg: skcipher: %s multi-DU encrypt failed (du=%u): %d\n",
+		       driver, du_size, err);
+		goto out;
+	}
+	if (memcmp(buf, ref, total) != 0) {
+		pr_err("alg: skcipher: %s multi-DU ciphertext differs from single-DU reference (du=%u)\n",
+		       driver, du_size);
+		err = -EBADMSG;
+		goto out;
+	}
+	/* req->iv must be unchanged after multi-DU dispatch. */
+	if (memcmp(iv_work, iv_orig, ivsize) != 0) {
+		pr_err("alg: skcipher: %s multi-DU encrypt mutated caller IV (du=%u)\n",
+		       driver, du_size);
+		err = -EBADMSG;
+		goto out;
+	}
+
+	/* Round-trip the batched ciphertext back to plaintext. */
+	test_mdu_sg_fragment(sg, TEST_MDU_NR_FRAGS, buf, total);
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG |
+				      CRYPTO_TFM_REQ_MAY_SLEEP,
+				      crypto_req_done, &wait);
+	skcipher_request_set_crypt(req, sg, sg, total, iv_work);
+	skcipher_request_set_data_unit_size(req, du_size);
+	err = crypto_wait_req(crypto_skcipher_decrypt(req), &wait);
+	if (err) {
+		pr_err("alg: skcipher: %s multi-DU decrypt failed (du=%u): %d\n",
+		       driver, du_size, err);
+		goto out;
+	}
+	if (memcmp(buf, plain, total) != 0) {
+		pr_err("alg: skcipher: %s multi-DU round-trip mismatch (du=%u)\n",
+		       driver, du_size);
+		err = -EBADMSG;
+	}
+
+out:
+	skcipher_request_free(req);
+	kfree(ref);
+	kfree(buf);
+	kfree(plain);
+	return err;
+}
+
+/*
+ * Cross-check the dun(<inner>,@endian) wrapper against @tfm over all du sizes.
+ * Returns 0 on success or skip (no wrapper / rejected key); -EBADMSG on a real
+ * mismatch.
+ */
+static int test_skcipher_multi_du_endian(struct crypto_skcipher *tfm,
+					 const char *alg_name,
+					 const char *endian, bool big_endian,
+					 const u8 *keybuf, unsigned int keylen)
+{
+	static const unsigned int du_sizes[] = { 512, 1024, 2048, 4096 };
+	char mdu_name[CRYPTO_MAX_ALG_NAME];
+	struct crypto_skcipher *mdu;
+	unsigned int ivsize;
+	u8 iv[TEST_MDU_MAX_IVSIZE];
+	unsigned int j;
+	int err;
+
+	if (snprintf(mdu_name, sizeof(mdu_name), "dun(%s,%s)", alg_name,
+		     endian) >= (int)sizeof(mdu_name))
+		return 0;
+
+	mdu = crypto_alloc_skcipher(mdu_name, 0, 0);
+	if (IS_ERR(mdu)) {
+		/* No dun wrapper (ivsize not a multiple of 8, or too wide): skip. */
+		if (PTR_ERR(mdu) == -ENOENT || PTR_ERR(mdu) == -EINVAL)
+			return 0;
+		return PTR_ERR(mdu);
+	}
+
+	ivsize = crypto_skcipher_ivsize(mdu);
+	if (ivsize > TEST_MDU_MAX_IVSIZE) {
+		err = 0;	/* wider than we have buffers for: skip */
+		goto out;
+	}
+
+	err = crypto_skcipher_setkey(mdu, keybuf, keylen);
+	if (err) {
+		err = 0;	/* weak/rejected key (e.g. XTS equal halves): skip */
+		goto out;
+	}
+
+	for (j = 0; j < ARRAY_SIZE(du_sizes); j++) {
+		/* A random starting IV. */
+		get_random_bytes(iv, ivsize);
+		err = test_skcipher_multi_du_one(mdu, tfm, du_sizes[j],
+						 big_endian, iv);
+		if (err)
+			break;
+		/* And one seeded to carry across a 64-bit limb / byte run. */
+		get_random_bytes(iv, ivsize);
+		test_mdu_iv_boundary(iv, ivsize, big_endian);
+		err = test_skcipher_multi_du_one(mdu, tfm, du_sizes[j],
+						 big_endian, iv);
+		if (err)
+			break;
+		cond_resched();
+	}
+out:
+	crypto_free_skcipher(mdu);
+	return err;
+}
+
+/*
+ * Cross-check dun() dispatch against a single-DU reference, in both le and be,
+ * for every ivsize the template accepts (16: xts; 32: Adiantum).
+ */
+static int test_skcipher_multi_du(struct crypto_skcipher *tfm)
+{
+	const char *alg_name = crypto_skcipher_alg(tfm)->base.cra_name;
+	u8 keybuf[128];
+	unsigned int keylen;
+	int err;
+
+	/* Key the inner tfm; each dun() wrapper is keyed identically below. */
+	keylen = crypto_skcipher_min_keysize(tfm);
+	if (keylen > sizeof(keybuf))
+		return 0;	/* unusually large key; skip rather than overflow */
+	get_random_bytes(keybuf, keylen);
+	err = crypto_skcipher_setkey(tfm, keybuf, keylen);
+	if (err)
+		return 0;	/* weak/rejected key (e.g. XTS equal halves): skip */
+
+	err = test_skcipher_multi_du_endian(tfm, alg_name, "le", false,
+					    keybuf, keylen);
+	if (err)
+		return err;
+	return test_skcipher_multi_du_endian(tfm, alg_name, "be", true,
+					     keybuf, keylen);
+}
+
 static int alg_test_skcipher(const struct alg_test_desc *desc,
 			     const char *driver, u32 type, u32 mask)
 {
@@ -3256,6 +3541,10 @@ static int alg_test_skcipher(const struct alg_test_desc *desc,
 		goto out;
 
 	err = test_skcipher(DECRYPT, suite, req, tsgls);
+	if (err)
+		goto out;
+
+	err = test_skcipher_multi_du(tfm);
 	if (err)
 		goto out;
 
