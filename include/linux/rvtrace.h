@@ -160,6 +160,7 @@ struct rvtrace_platform_data {
  */
 struct rvtrace_driver_data {
 	u32 (*get_impl)(struct rvtrace_platform_data *pdata);
+	void *(*get_data)(struct rvtrace_platform_data *pdata);
 };
 
 static inline u32 rvtrace_read32(struct rvtrace_platform_data *pdata, u32 offset)
@@ -263,7 +264,8 @@ struct rvtrace_component *rvtrace_cpu_source(unsigned int cpu);
 
 struct rvtrace_component *rvtrace_register_component(enum rvtrace_component_type type,
 						     u32 version,
-						     struct rvtrace_platform_data *pdata);
+						     struct rvtrace_platform_data *pdata,
+						     void *data);
 void rvtrace_unregister_component(struct rvtrace_component *comp);
 
 /**

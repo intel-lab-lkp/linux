@@ -122,6 +122,7 @@ static int rvtrace_platform_probe(struct platform_device *pdev)
 	u32 impl, type, major, minor;
 	struct device_node *node;
 	struct resource *res;
+	void *data = NULL;
 	int ret;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
@@ -168,6 +169,11 @@ static int rvtrace_platform_probe(struct platform_device *pdev)
 	if (driver_data) {
 		if (driver_data->get_impl)
 			impl = driver_data->get_impl(pdata);
+		if (driver_data->get_data) {
+			data = driver_data->get_data(pdata);
+			if (IS_ERR(data))
+				return PTR_ERR(data);
+		}
 	} else {
 		impl = rvtrace_read32(pdata, RVTRACE_COMPONENT_IMPL_OFFSET);
 	}
@@ -179,7 +185,8 @@ static int rvtrace_platform_probe(struct platform_device *pdev)
 	minor = (impl >> RVTRACE_COMPONENT_IMPL_VERMINOR_SHIFT) &
 		RVTRACE_COMPONENT_IMPL_VERMINOR_MASK;
 
-	comp = rvtrace_register_component(type, rvtrace_component_mkversion(major, minor), pdata);
+	comp = rvtrace_register_component(type, rvtrace_component_mkversion(major, minor),
+					  pdata, data);
 	if (IS_ERR(comp))
 		return PTR_ERR(comp);
 
@@ -205,10 +212,12 @@ static void rvtrace_platform_remove(struct platform_device *pdev)
 
 static const struct rvtrace_driver_data rvtrace_v0_encoder_data = {
 	.get_impl = rvtrace_v0_get_encoder_impl,
+	.get_data = rvtrace_v0_get_comp_data,
 };
 
 static const struct rvtrace_driver_data rvtrace_v0_funnel_data = {
 	.get_impl = rvtrace_v0_get_funnel_impl,
+	.get_data = rvtrace_v0_get_comp_data,
 };
 
 static const struct of_device_id rvtrace_platform_match[] = {

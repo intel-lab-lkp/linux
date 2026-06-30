@@ -368,7 +368,8 @@ static void rvtrace_component_release(struct device *dev)
 
 struct rvtrace_component *rvtrace_register_component(enum rvtrace_component_type type,
 						     u32 version,
-						     struct rvtrace_platform_data *pdata)
+						     struct rvtrace_platform_data *pdata,
+						     void *data)
 {
 	struct rvtrace_connection *conn;
 	struct rvtrace_component *comp;
@@ -413,6 +414,7 @@ struct rvtrace_component *rvtrace_register_component(enum rvtrace_component_type
 	comp->pdata = pdata;
 	comp->id.type = type;
 	comp->id.version = version;
+	comp->id.data = data;
 	ret = rvtrace_alloc_type_idx(comp);
 	if (ret) {
 		kfree(comp);
