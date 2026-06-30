@@ -10123,7 +10123,8 @@ no_add:
 	return spares;
 }
 
-static bool md_choose_sync_action(struct mddev *mddev, int *spares)
+static bool md_choose_sync_action(struct mddev *mddev, int *spares,
+				  bool array_suspended)
 {
 	/* Check if reshape is in progress first. */
 	if (mddev->reshape_position != MaxSector) {
@@ -10139,7 +10140,9 @@ static bool md_choose_sync_action(struct mddev *mddev, int *spares)
 
 	/* Check if resync is in progress. */
 	if (mddev->resync_offset < MaxSector) {
-		remove_spares(mddev, NULL);
+		if (array_suspended)
+			remove_spares(mddev, NULL);
+
 		set_bit(MD_RECOVERY_SYNC, &mddev->recovery);
 		clear_bit(MD_RECOVERY_RECOVER, &mddev->recovery);
 		clear_bit(MD_RECOVERY_LAZY_RECOVER, &mddev->recovery);
@@ -10151,7 +10154,11 @@ static bool md_choose_sync_action(struct mddev *mddev, int *spares)
 	 * also removed and re-added, to allow the personality to fail the
 	 * re-add.
 	 */
-	*spares = remove_and_add_spares(mddev, NULL);
+	if (array_suspended)
+		*spares = remove_and_add_spares(mddev, NULL);
+	else
+		*spares = 0;
+
 	if (*spares || test_bit(MD_RECOVERY_LAZY_RECOVER, &mddev->recovery)) {
 		clear_bit(MD_RECOVERY_SYNC, &mddev->recovery);
 		clear_bit(MD_RECOVERY_CHECK, &mddev->recovery);
@@ -10196,11 +10203,12 @@ static void md_start_sync(struct work_struct *ws)
 		 * As we only add devices that are already in-sync, we can
 		 * activate the spares immediately.
 		 */
-		remove_and_add_spares(mddev, NULL);
+		if (suspend)
+			remove_and_add_spares(mddev, NULL);
 		goto not_running;
 	}
 
-	if (!md_choose_sync_action(mddev, &spares))
+	if (!md_choose_sync_action(mddev, &spares, suspend))
 		goto not_running;
 
 	if (!mddev->pers->sync_request)
