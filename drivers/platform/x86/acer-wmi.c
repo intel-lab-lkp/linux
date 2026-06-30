@@ -1581,7 +1581,11 @@ static int WMI_gaming_execute_u32_u64(u32 method_id, u32 in, u64 *out)
 		return -EIO;
 
 	obj = result.pointer;
-	if (obj && out) {
+	if (!obj) {
+		ret = -ENOMSG;
+	} else if (!out) {
+		ret = -EINVAL;
+	} else {
 		switch (obj->type) {
 		case ACPI_TYPE_INTEGER:
 			*out = obj->integer.value;
