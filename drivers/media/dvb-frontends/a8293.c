@@ -202,12 +202,10 @@ static int a8293_set_voltage(struct dvb_frontend *fe,
 
 	/* Use slew version if slew rate is set to a sane value */
 	if (volt_slew_nanos_per_mv > 0 && volt_slew_nanos_per_mv < 1600)
-		a8293_set_voltage_slew(dev, client, fe_sec_voltage,
-				       volt_slew_nanos_per_mv);
-	else
-		a8293_set_voltage_noslew(fe, fe_sec_voltage);
+		return a8293_set_voltage_slew(dev, client, fe_sec_voltage,
+					      volt_slew_nanos_per_mv);
 
-	return 0;
+	return a8293_set_voltage_noslew(fe, fe_sec_voltage);
 }
 
 static int a8293_probe(struct i2c_client *client)
