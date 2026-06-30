@@ -1253,6 +1253,12 @@ static const struct platform_profile_ops amd_pstate_profile_ops = {
 	.profile_get = amd_pstate_profile_get,
 };
 
+int amd_pstate_dynamic_epp_disabled(void)
+{
+	return !dynamic_epp;
+}
+EXPORT_SYMBOL_FOR_PSTATE_UT(amd_pstate_dynamic_epp_disabled);
+
 void amd_pstate_clear_dynamic_epp(struct cpufreq_policy *policy)
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
