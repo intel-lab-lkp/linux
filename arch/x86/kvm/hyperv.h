@@ -76,6 +76,8 @@ static inline struct kvm_vcpu_hv *to_hv_vcpu_safe(struct kvm_vcpu *vcpu)
 
 static inline struct kvm_vcpu_hv *to_hv_vcpu(struct kvm_vcpu *vcpu)
 {
+	kvm_lockdep_assert_vcpu_is_locked_or_unreachable(vcpu);
+
 	return vcpu->arch.hyperv;
 }
 
