@@ -18,7 +18,8 @@
 #include <linux/log2.h>
 #include "pmbus.h"
 
-enum chips { adm1075, adm1272, adm1273, adm1275, adm1276, adm1278, adm1281, adm1293, adm1294 };
+enum chips { adm1075, adm1272, adm1273, adm1275, adm1276, adm1278, adm1281,
+	 adm1293, adm1294, sq24905c };
 
 #define ADM1275_MFR_STATUS_IOUT_WARN2	BIT(0)
 #define ADM1293_MFR_STATUS_VAUX_UV_WARN	BIT(5)
@@ -477,15 +478,16 @@ static int adm1275_read_byte_data(struct i2c_client *client, int page, int reg)
 }
 
 static const struct i2c_device_id adm1275_id[] = {
-	{ "adm1075", adm1075 },
-	{ "adm1272", adm1272 },
-	{ "adm1273", adm1273 },
-	{ "adm1275", adm1275 },
-	{ "adm1276", adm1276 },
-	{ "adm1278", adm1278 },
-	{ "adm1281", adm1281 },
-	{ "adm1293", adm1293 },
-	{ "adm1294", adm1294 },
+	{ .name = "adm1075", .driver_data = adm1075 },
+	{ .name = "adm1272", .driver_data = adm1272 },
+	{ .name = "adm1273", .driver_data = adm1273 },
+	{ .name = "adm1275", .driver_data = adm1275 },
+	{ .name = "adm1276", .driver_data = adm1276 },
+	{ .name = "adm1278", .driver_data = adm1278 },
+	{ .name = "adm1281", .driver_data = adm1281 },
+	{ .name = "adm1293", .driver_data = adm1293 },
+	{ .name = "adm1294", .driver_data = adm1294 },
+	{ .name = "mc09c", .driver_data = sq24905c },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adm1275_id);
@@ -532,7 +534,8 @@ static int adm1275_probe(struct i2c_client *client)
 		dev_err(&client->dev, "Failed to read Manufacturer ID\n");
 		return ret;
 	}
-	if (ret != 3 || strncmp(block_buffer, "ADI", 3)) {
+	if ((ret != 3 || strncmp(block_buffer, "ADI", 3)) &&
+	    (ret != 2 || strncmp(block_buffer, "SY", 2))) {
 		dev_err(&client->dev, "Unsupported Manufacturer ID\n");
 		return -ENODEV;
 	}
@@ -558,7 +561,8 @@ static int adm1275_probe(struct i2c_client *client)
 
 	if (mid->driver_data == adm1272 || mid->driver_data == adm1273 ||
 	    mid->driver_data == adm1278 || mid->driver_data == adm1281 ||
-	    mid->driver_data == adm1293 || mid->driver_data == adm1294)
+	    mid->driver_data == adm1293 || mid->driver_data == adm1294 ||
+	    mid->driver_data == sq24905c)
 		config_read_fn = i2c_smbus_read_word_data;
 	else
 		config_read_fn = i2c_smbus_read_byte_data;
@@ -708,6 +712,7 @@ static int adm1275_probe(struct i2c_client *client)
 		break;
 	case adm1278:
 	case adm1281:
+	case sq24905c:
 		data->have_vout = true;
 		data->have_pin_max = true;
 		data->have_temp_max = true;

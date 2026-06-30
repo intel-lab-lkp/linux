@@ -26,9 +26,6 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/accel/kxcjk_1013.h>
 
-#define KXCJK1013_DRV_NAME "kxcjk1013"
-#define KXCJK1013_IRQ_NAME "kxcjk1013_event"
-
 #define KXTF9_REG_HP_XOUT_L		0x00
 #define KXTF9_REG_HP_XOUT_H		0x01
 #define KXTF9_REG_HP_YOUT_L		0x02
@@ -639,10 +636,8 @@ static int kxcjk1013_set_power_state(struct kxcjk1013_data *data, bool on)
 
 	if (on)
 		ret = pm_runtime_resume_and_get(&data->client->dev);
-	else {
-		pm_runtime_mark_last_busy(&data->client->dev);
+	else
 		ret = pm_runtime_put_autosuspend(&data->client->dev);
-	}
 	if (ret < 0) {
 		dev_err(&data->client->dev,
 			"Failed: %s for %d\n", __func__, on);
@@ -1464,7 +1459,7 @@ static int kxcjk1013_probe(struct i2c_client *client)
 						kxcjk1013_data_rdy_trig_poll,
 						kxcjk1013_event_handler,
 						IRQF_TRIGGER_RISING,
-						KXCJK1013_IRQ_NAME,
+						"kxcjk1013_event",
 						indio_dev);
 		if (ret)
 			goto err_poweroff;
@@ -1635,11 +1630,11 @@ static const struct dev_pm_ops kxcjk1013_pm_ops = {
 };
 
 static const struct i2c_device_id kxcjk1013_id[] = {
-	{ "kxcjk1013",  (kernel_ulong_t)&kxcjk1013_info },
-	{ "kxcj91008",  (kernel_ulong_t)&kxcj91008_info },
-	{ "kxtj21009",  (kernel_ulong_t)&kxtj21009_info },
-	{ "kxtf9", (kernel_ulong_t)&kxtf9_info },
-	{ "kx023-1025", (kernel_ulong_t)&kx0231025_info },
+	{ .name = "kxcjk1013", .driver_data = (kernel_ulong_t)&kxcjk1013_info },
+	{ .name = "kxcj91008", .driver_data = (kernel_ulong_t)&kxcj91008_info },
+	{ .name = "kxtj21009", .driver_data = (kernel_ulong_t)&kxtj21009_info },
+	{ .name = "kxtf9", .driver_data = (kernel_ulong_t)&kxtf9_info },
+	{ .name = "kx023-1025", .driver_data = (kernel_ulong_t)&kx0231025_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, kxcjk1013_id);
@@ -1674,7 +1669,7 @@ MODULE_DEVICE_TABLE(acpi, kx_acpi_match);
 
 static struct i2c_driver kxcjk1013_driver = {
 	.driver = {
-		.name	= KXCJK1013_DRV_NAME,
+		.name	= "kxcjk1013",
 		.acpi_match_table = kx_acpi_match,
 		.of_match_table = kxcjk1013_of_match,
 		.pm	= pm_ptr(&kxcjk1013_pm_ops),

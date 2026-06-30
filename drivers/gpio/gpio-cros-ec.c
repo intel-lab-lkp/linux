@@ -188,7 +188,7 @@ static int cros_ec_gpio_probe(struct platform_device *pdev)
 	gc->can_sleep = true;
 	gc->label = dev_name(dev);
 	gc->base = -1;
-	gc->set_rv = cros_ec_gpio_set;
+	gc->set = cros_ec_gpio_set;
 	gc->get = cros_ec_gpio_get;
 	gc->get_direction = cros_ec_gpio_get_direction;
 
@@ -196,8 +196,8 @@ static int cros_ec_gpio_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id cros_ec_gpio_id[] = {
-	{ "cros-ec-gpio", 0 },
-	{}
+	{ .name = "cros-ec-gpio" },
+	{ }
 };
 MODULE_DEVICE_TABLE(platform, cros_ec_gpio_id);
 

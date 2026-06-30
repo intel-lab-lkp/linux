@@ -106,7 +106,6 @@
 #define JSA1212_PXS_DELAY_MS	100
 
 #define JSA1212_DRIVER_NAME	"jsa1212"
-#define JSA1212_REGMAP_NAME	"jsa1212_regmap"
 
 enum jsa1212_op_mode {
 	JSA1212_OPMODE_ALS_EN,
@@ -300,7 +299,7 @@ static bool jsa1212_is_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config jsa1212_regmap_config = {
-	.name =  JSA1212_REGMAP_NAME,
+	.name = "jsa1212_regmap",
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = JSA1212_MAX_REG,
@@ -429,7 +428,7 @@ static const struct acpi_device_id jsa1212_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, jsa1212_acpi_match);
 
 static const struct i2c_device_id jsa1212_id[] = {
-	{ JSA1212_DRIVER_NAME },
+	{ .name = JSA1212_DRIVER_NAME },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, jsa1212_id);

@@ -38,6 +38,7 @@ bool intel_fb_is_rc_ccs_cc_modifier(u64 modifier);
 bool intel_fb_is_mc_ccs_modifier(u64 modifier);
 bool intel_fb_needs_64k_phys(u64 modifier);
 bool intel_fb_is_tile4_modifier(u64 modifier);
+bool intel_fb_needs_cpu_access(const struct drm_framebuffer *fb);
 
 bool intel_fb_is_ccs_aux_plane(const struct drm_framebuffer *fb, int color_plane);
 int intel_fb_rc_ccs_cc_plane(const struct drm_framebuffer *fb);
@@ -47,7 +48,7 @@ u64 *intel_fb_plane_get_modifiers(struct intel_display *display,
 bool intel_fb_plane_supports_modifier(struct intel_plane *plane, u64 modifier);
 
 const struct drm_format_info *
-intel_fb_get_format_info(const struct drm_mode_fb_cmd2 *cmd);
+intel_fb_get_format_info(u32 pixel_format, u64 modifier);
 
 bool
 intel_format_info_is_yuv_semiplanar(const struct drm_format_info *info,
@@ -62,7 +63,6 @@ int skl_main_to_aux_plane(const struct drm_framebuffer *fb, int main_plane);
 unsigned int intel_tile_size(struct intel_display *display);
 unsigned int intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane);
 unsigned int intel_tile_height(const struct drm_framebuffer *fb, int color_plane);
-unsigned int intel_tile_row_size(const struct drm_framebuffer *fb, int color_plane);
 unsigned int intel_fb_align_height(const struct drm_framebuffer *fb,
 				   int color_plane, unsigned int height);
 
@@ -78,7 +78,6 @@ u32 intel_plane_compute_aligned_offset(int *x, int *y,
 				       const struct intel_plane_state *plane_state,
 				       int color_plane);
 
-bool intel_fb_needs_pot_stride_remap(const struct intel_framebuffer *fb);
 bool intel_plane_uses_fence(const struct intel_plane_state *plane_state);
 bool intel_fb_supports_90_270_rotation(const struct intel_framebuffer *fb);
 
@@ -102,13 +101,19 @@ void intel_add_fb_offsets(int *x, int *y,
 
 int intel_framebuffer_init(struct intel_framebuffer *ifb,
 			   struct drm_gem_object *obj,
+			   const struct drm_format_info *info,
 			   struct drm_mode_fb_cmd2 *mode_cmd);
+
+struct intel_framebuffer *intel_framebuffer_alloc(void);
+
 struct drm_framebuffer *
 intel_framebuffer_create(struct drm_gem_object *obj,
+			 const struct drm_format_info *info,
 			 struct drm_mode_fb_cmd2 *mode_cmd);
 struct drm_framebuffer *
 intel_user_framebuffer_create(struct drm_device *dev,
 			      struct drm_file *filp,
+			      const struct drm_format_info *info,
 			      const struct drm_mode_fb_cmd2 *user_mode_cmd);
 
 bool intel_fb_modifier_uses_dpt(struct intel_display *display, u64 modifier);

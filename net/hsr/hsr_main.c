@@ -22,7 +22,7 @@ static bool hsr_slave_empty(struct hsr_priv *hsr)
 {
 	struct hsr_port *port;
 
-	hsr_for_each_port(hsr, port)
+	hsr_for_each_port_rtnl(hsr, port)
 		if (port->type != HSR_PT_MASTER)
 			return false;
 	return true;
@@ -89,7 +89,7 @@ static int hsr_netdev_notify(struct notifier_block *nb, unsigned long event,
 			}
 		}
 
-		/* Make sure we recognize frames from ourselves in hsr_rcv() */
+		/* Make sure we recognize frames from ourselves in hsr_handle_frame() */
 		port = hsr_port_get_hsr(hsr, HSR_PT_SLAVE_B);
 		res = hsr_create_self_node(hsr,
 					   master->dev->dev_addr,
@@ -134,7 +134,7 @@ struct hsr_port *hsr_port_get_hsr(struct hsr_priv *hsr, enum hsr_port_type pt)
 {
 	struct hsr_port *port;
 
-	hsr_for_each_port(hsr, port)
+	hsr_for_each_port_rtnl(hsr, port)
 		if (port->type == pt)
 			return port;
 	return NULL;

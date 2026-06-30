@@ -321,10 +321,8 @@ static int lmp91000_probe(struct i2c_client *client)
 	data->trig = devm_iio_trigger_alloc(dev, "%s-mux%d",
 					    indio_dev->name,
 					    iio_device_id(indio_dev));
-	if (!data->trig) {
-		dev_err(dev, "cannot allocate iio trigger.\n");
+	if (!data->trig)
 		return -ENOMEM;
-	}
 
 	init_completion(&data->completion);
 
@@ -405,8 +403,8 @@ static const struct of_device_id lmp91000_of_match[] = {
 MODULE_DEVICE_TABLE(of, lmp91000_of_match);
 
 static const struct i2c_device_id lmp91000_id[] = {
-	{ "lmp91000" },
-	{ "lmp91002" },
+	{ .name = "lmp91000" },
+	{ .name = "lmp91002" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lmp91000_id);

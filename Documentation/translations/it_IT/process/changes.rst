@@ -33,7 +33,7 @@ PC Card, per esempio, probabilmente non dovreste preoccuparvi di pcmciautils.
         Programma       Versione minima       Comando per verificare la versione
 ====================== =================  ========================================
 GNU C                  8.1                gcc --version
-Clang/LLVM (optional)  13.0.0             clang --version
+Clang/LLVM (optional)  17.0.1             clang --version
 Rust (opzionale)       1.78.0             rustc --version
 bindgen (opzionale)    0.65.1             bindgen --version
 GNU make               4.0                make --version
@@ -46,7 +46,6 @@ util-linux             2.10o              mount --version
 kmod                   13                 depmod -V
 e2fsprogs              1.41.4             e2fsck -V
 jfsutils               1.1.3              fsck.jfs -V
-reiserfsprogs          3.6.3              reiserfsck -V
 xfsprogs               2.6.0              xfs_db -V
 squashfs-tools         4.0                mksquashfs -version
 btrfs-progs            0.18               btrfsck
@@ -260,14 +259,6 @@ Sono disponibili i seguenti strumenti:
 
 - sono disponibili altri strumenti per il file-system.
 
-Reiserfsprogs
--------------
-
-Il pacchetto reiserfsprogs dovrebbe essere usato con reiserfs-3.6.x (Linux
-kernel 2.4.x).  Questo è un pacchetto combinato che contiene versioni
-funzionanti di ``mkreiserfs``, ``resize_reiserfs``, ``debugreiserfs`` e
-``reiserfsck``.  Questi programmi funzionano sulle piattaforme i386 e alpha.
-
 Xfsprogs
 --------
 
@@ -478,11 +469,6 @@ JFSutils
 --------
 
 - <https://jfs.sourceforge.net/>
-
-Reiserfsprogs
--------------
-
-- <https://git.kernel.org/pub/scm/linux/kernel/git/jeffm/reiserfsprogs.git/>
 
 Xfsprogs
 --------

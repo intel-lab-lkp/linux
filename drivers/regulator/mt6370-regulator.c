@@ -320,7 +320,7 @@ static int mt6370_regulator_irq_register(struct mt6370_priv *priv)
 	return 0;
 }
 
-static int mt6370_regualtor_register(struct mt6370_priv *priv)
+static int mt6370_regulator_register(struct mt6370_priv *priv)
 {
 	struct regulator_dev *rdev;
 	struct regulator_config cfg = {};
@@ -363,7 +363,7 @@ static int mt6370_regulator_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	ret = mt6370_regualtor_register(priv);
+	ret = mt6370_regulator_register(priv);
 	if (ret)
 		return ret;
 
@@ -371,8 +371,8 @@ static int mt6370_regulator_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id mt6370_devid_table[] = {
-	{ "mt6370-regulator", 0},
-	{}
+	{ .name = "mt6370-regulator" },
+	{ }
 };
 MODULE_DEVICE_TABLE(platform, mt6370_devid_table);
 
