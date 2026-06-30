@@ -1563,6 +1563,9 @@ EXPORT_SYMBOL_GPL(media_devnode_create);
 
 void media_devnode_remove(struct media_intf_devnode *devnode)
 {
+	if (!devnode)
+		return;
+
 	media_remove_intf_links(&devnode->intf);
 	media_gobj_destroy(&devnode->intf.graph_obj);
 	kfree(devnode);
