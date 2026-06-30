@@ -686,6 +686,7 @@ bool cyapa_sort_tsg_pip_app_resp_data(struct cyapa *cyapa,
 		u8 *data, int len)
 {
 	struct cyapa_pip_cmd_states *pip = &cyapa->cmd_states.pip;
+	u8 cmd_code;
 	int resp_len;
 
 	if (!data || len < PIP_MIN_APP_RESP_LENGTH)
@@ -694,13 +695,19 @@ bool cyapa_sort_tsg_pip_app_resp_data(struct cyapa *cyapa,
 	if (data[PIP_RESP_REPORT_ID_OFFSET] == PIP_APP_RESP_REPORT_ID &&
 			data[PIP_RESP_RSVD_OFFSET] == PIP_RESP_RSVD_KEY) {
 		resp_len = get_unaligned_le16(&data[PIP_RESP_LENGTH_OFFSET]);
-		if (GET_PIP_CMD_CODE(data[PIP_RESP_APP_CMD_OFFSET]) == 0x00 &&
-			resp_len == PIP_UNSUPPORTED_CMD_RESP_LENGTH &&
-			data[5] == pip->in_progress_cmd) {
-			/* Unsupported command code */
-			return false;
-		} else if (GET_PIP_CMD_CODE(data[PIP_RESP_APP_CMD_OFFSET]) ==
-				pip->in_progress_cmd) {
+		cmd_code = GET_PIP_CMD_CODE(data[PIP_RESP_APP_CMD_OFFSET]);
+		if (cmd_code == 0x00 &&
+		    resp_len == PIP_UNSUPPORTED_CMD_RESP_LENGTH) {
+			if (len < PIP_UNSUPPORTED_CMD_RESP_LENGTH)
+				return false;
+
+			if (data[PIP_RESP_STATUS_OFFSET] == pip->in_progress_cmd) {
+				/* Unsupported command code */
+				return false;
+			}
+		}
+
+		if (cmd_code == pip->in_progress_cmd) {
 			/* Correct command response received */
 			return true;
 		}
