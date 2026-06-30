@@ -776,6 +776,8 @@ static bool io_coalesce_buffer(struct page ***pages, int *nr_pages,
 	unsigned i, j;
 
 	/* Store head pages only*/
+	if (nr_folios > INT_MAX / sizeof(struct page *))
+		return false;
 	new_array = kvmalloc_objs(struct page *, nr_folios);
 	if (!new_array)
 		return false;
