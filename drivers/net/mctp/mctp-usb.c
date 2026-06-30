@@ -38,9 +38,12 @@ struct mctp_usb {
 	struct delayed_work rx_retry_work;
 
 	struct mctp_usblib_tx tx;
-	/* protects tx_anchor across submission / completion / cancellation */
+	/* protects tx_anchor & tx_qmem across submission / completion /
+	 * cancellation
+	 */
 	spinlock_t tx_lock;
 	struct usb_anchor tx_anchor;
+	unsigned int tx_qmem;
 };
 
 enum {
@@ -48,22 +51,38 @@ enum {
 	MCTP_USB_SUBCLASS_SPAN = 0x02,
 };
 
+/* We use a total-size limit for outstanding URBs, as the transfer counts
+ * may vary a lot between spanning- and non-spanning modes. In spanning mode,
+ * this will allow for a couple of max-sized transfers to be in flight. In
+ * non-spanning mode, 32.
+ *
+ * We want to avoid disabling the tx queue if possible; doing so will end up
+ * requeueing to gso_skb, and we only dequeue from that one skb at a time,
+ * so can no longer perform transfer packing.
+ */
+static const unsigned int TX_QMEM_MAX = 16384;
+
 static void mctp_usb_out_complete(struct urb *urb)
 {
 	struct mctp_usblib_tx_ctx *tx_ctx = urb->context;
 	struct mctp_usb *mctp_usb = mctp_usblib_tx_ctx_priv(tx_ctx);
 	struct net_device *netdev = mctp_usb->netdev;
 	unsigned long flags;
+	bool wake = false;
 
 	mctp_usblib_tx_send_complete(tx_ctx, netdev, urb->status == 0);
 
 	spin_lock_irqsave(&mctp_usb->tx_lock, flags);
+	mctp_usb->tx_qmem -= urb->transfer_buffer_length;
+	if (mctp_usb->tx_qmem < TX_QMEM_MAX)
+		wake = true;
 	usb_unanchor_urb(urb);
 	spin_unlock_irqrestore(&mctp_usb->tx_lock, flags);
 
 	usb_free_urb(urb);
 
-	netif_wake_queue(netdev);
+	if (wake)
+		netif_wake_queue(netdev);
 }
 
 static int mctp_usb_tx_send(struct mctp_usblib_tx_ctx *tx_ctx,
@@ -85,18 +104,19 @@ static int mctp_usb_tx_send(struct mctp_usblib_tx_ctx *tx_ctx,
 	if (mctp_usb->span)
 		urb->transfer_flags |= URB_ZERO_PACKET;
 
-	netif_stop_queue(mctp_usb->netdev);
-
 	spin_lock_irqsave(&mctp_usb->tx_lock, flags);
 	rc = usb_submit_urb(urb, GFP_ATOMIC);
-	if (!rc)
+	if (!rc) {
 		usb_anchor_urb(urb, &mctp_usb->tx_anchor);
+		mctp_usb->tx_qmem += len;
+		if (mctp_usb->tx_qmem >= TX_QMEM_MAX)
+			netif_stop_queue(mctp_usb->netdev);
+	}
 	spin_unlock_irqrestore(&mctp_usb->tx_lock, flags);
 
 	if (rc) {
 		netdev_dbg(mctp_usb->netdev, "TX urb submit failed, %d\n", rc);
 		usb_free_urb(urb);
-		netif_start_queue(mctp_usb->netdev);
 	}
 
 	return rc;
@@ -221,12 +241,15 @@ static int mctp_usb_stop(struct net_device *dev)
 	flush_delayed_work(&mctp_usb->rx_retry_work);
 
 	usb_kill_urb(mctp_usb->rx_urb);
-	/* we have stopped queues, the anchor's own lock will serialise
-	 * access from the urb completion.
+
+	/* We have stopped queues, the anchor's own lock will serialise
+	 * access from the urb completion. We are then guaranteed that no
+	 * further completions can occur, so can clear tx_qmem without locking.
 	 */
 	usb_kill_anchored_urbs(&mctp_usb->tx_anchor);
 
 	mctp_usblib_tx_cancel(&mctp_usb->tx, dev);
+	mctp_usb->tx_qmem = 0;
 
 	return 0;
 }
