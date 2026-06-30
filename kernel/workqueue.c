@@ -7720,9 +7720,12 @@ static void show_cpu_pool_busy_workers(struct worker_pool *pool)
 	bool found_running = false;
 	struct worker *worker;
 	unsigned long irq_flags;
-	int bkt;
+	int cpu, bkt;
 
 	raw_spin_lock_irqsave(&pool->lock, irq_flags);
+
+	/* Snapshot cpu inside the lock to safely use it after unlock. */
+	cpu = pool->cpu;
 
 	hash_for_each(pool->busy_hash, bkt, worker, hentry) {
 		/* Skip workers that are not actively running on the CPU. */
@@ -7751,6 +7754,15 @@ static void show_cpu_pool_busy_workers(struct worker_pool *pool)
 		show_pool_no_running_worker(pool);
 
 	raw_spin_unlock_irqrestore(&pool->lock, irq_flags);
+
+	/*
+	 * Trigger a backtrace on the stalled CPU to capture what it is
+	 * currently executing. Skip an offline CPU, whose NMI is never acked
+	 * and would make the backtrace busy-wait until it times out. Done
+	 * after releasing the lock to avoid issues with NMI delivery.
+	 */
+	if (!found_running && cpu_online(cpu))
+		trigger_single_cpu_backtrace(cpu);
 }
 
 static void show_cpu_pools_busy_workers(void)
