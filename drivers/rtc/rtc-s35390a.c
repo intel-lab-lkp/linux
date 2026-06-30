@@ -12,11 +12,13 @@
 #include <linux/bcd.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <dt-bindings/rtc/s35390a.h>
 
 #define S35390A_CMD_STATUS1	0
 #define S35390A_CMD_STATUS2	1
 #define S35390A_CMD_TIME1	2
 #define S35390A_CMD_TIME2	3
+#define S35390A_CMD_INT1_REG1	4
 #define S35390A_CMD_INT2_REG1	5
 #define S35390A_CMD_FREE_REG    7
 
@@ -36,6 +38,7 @@
 #define S35390A_FLAG_POC	BIT(0)
 #define S35390A_FLAG_BLD	BIT(1)
 #define S35390A_FLAG_INT2	BIT(2)
+#define S35390A_FLAG_INT1	BIT(3)
 #define S35390A_FLAG_24H	BIT(6)
 #define S35390A_FLAG_RESET	BIT(7)
 
@@ -49,6 +52,14 @@
 #define S35390A_INT2_MODE_PMIN_EDG	BIT(2) /* INT2ME */
 #define S35390A_INT2_MODE_FREQ		BIT(3) /* INT2FE */
 #define S35390A_INT2_MODE_PMIN		(BIT(3) | BIT(2)) /* INT2FE | INT2ME */
+
+/* INT1 pin output mode */
+#define S35390A_INT1_MODE_MASK		0xE0
+#define S35390A_INT1_MODE_NOINTR	0x00
+#define S35390A_INT1_MODE_ALARM		BIT(5) /* INT1AE */
+#define S35390A_INT1_MODE_PMIN_EDG	BIT(6) /* INT1ME */
+#define S35390A_INT1_MODE_FREQ		BIT(7) /* INT1FE */
+#define S35390A_INT1_MODE_PMIN		(BIT(7) | BIT(6)) /* INT1FE | INT1ME */
 
 static const struct i2c_device_id s35390a_id[] = {
 	{ .name = "s35390a" },
@@ -65,6 +76,7 @@ MODULE_DEVICE_TABLE(of, s35390a_of_match);
 struct s35390a {
 	struct i2c_client *client[8];
 	int twentyfourhour;
+	bool wakealarm_use_int1;
 };
 
 static int s35390a_set_reg(struct s35390a *s35390a, int reg, u8  *buf, int len)
@@ -275,7 +287,7 @@ static int s35390a_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct s35390a *s35390a = i2c_get_clientdata(client);
 	u8 buf[3], sts = 0;
-	int err, i;
+	int err, i, reg;
 
 	dev_dbg(&client->dev, "%s: alm is secs=%d, mins=%d, hours=%d mday=%d, "\
 		"mon=%d, year=%d, wday=%d\n", __func__, alm->time.tm_sec,
@@ -293,9 +305,13 @@ static int s35390a_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 		return err;
 
 	if (alm->enabled)
-		sts = S35390A_INT2_MODE_ALARM;
+		sts = s35390a->wakealarm_use_int1
+			? S35390A_INT1_MODE_ALARM
+			: S35390A_INT2_MODE_ALARM;
 	else
-		sts = S35390A_INT2_MODE_NOINTR;
+		sts = s35390a->wakealarm_use_int1
+			? S35390A_INT1_MODE_NOINTR
+			: S35390A_INT2_MODE_NOINTR;
 
 	/* set interrupt mode*/
 	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
@@ -317,8 +333,11 @@ static int s35390a_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	for (i = 0; i < 3; ++i)
 		buf[i] = bitrev8(buf[i]);
 
-	err = s35390a_set_reg(s35390a, S35390A_CMD_INT2_REG1, buf,
-								sizeof(buf));
+	reg = s35390a->wakealarm_use_int1
+		? S35390A_CMD_INT1_REG1
+		: S35390A_CMD_INT2_REG1;
+
+	err = s35390a_set_reg(s35390a, reg, buf, sizeof(buf));
 
 	return err;
 }
@@ -328,13 +347,21 @@ static int s35390a_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct s35390a *s35390a = i2c_get_clientdata(client);
 	u8 buf[3], sts;
-	int i, err;
+	int i, err, reg, mask, mode;
 
 	err = s35390a_get_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
 	if (err < 0)
 		return err;
 
-	if ((sts & S35390A_INT2_MODE_MASK) != S35390A_INT2_MODE_ALARM) {
+	mask = s35390a->wakealarm_use_int1
+		? S35390A_INT1_MODE_MASK
+		: S35390A_INT2_MODE_MASK;
+
+	mode = s35390a->wakealarm_use_int1
+		? S35390A_INT1_MODE_ALARM
+		: S35390A_INT2_MODE_ALARM;
+
+	if ((sts & mask) != mode) {
 		/*
 		 * When the alarm isn't enabled, the register to configure
 		 * the alarm time isn't accessible.
@@ -345,7 +372,11 @@ static int s35390a_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alm)
 		alm->enabled = 1;
 	}
 
-	err = s35390a_get_reg(s35390a, S35390A_CMD_INT2_REG1, buf, sizeof(buf));
+	reg = s35390a->wakealarm_use_int1
+		? S35390A_CMD_INT1_REG1
+		: S35390A_CMD_INT2_REG1;
+
+	err = s35390a_get_reg(s35390a, reg, buf, sizeof(buf));
 	if (err < 0)
 		return err;
 
@@ -437,10 +468,10 @@ static int s35390a_nvmem_write(void *priv, unsigned int offset, void *val,
 static int s35390a_probe(struct i2c_client *client)
 {
 	int err, err_read;
-	unsigned int i;
+	unsigned int i, wakealarm_output_pin = 0;
 	struct s35390a *s35390a;
 	struct rtc_device *rtc;
-	u8 buf, status1;
+	u8 buf, status1, flag;
 	struct device *dev = &client->dev;
 	struct nvmem_config nvmem_cfg = {
 		.name = "s35390a_nvram",
@@ -452,6 +483,9 @@ static int s35390a_probe(struct i2c_client *client)
 		.reg_write = s35390a_nvmem_write,
 	};
 
+	fwnode_property_read_u32(dev->fwnode, "sii,wakealarm-output-pin",
+				 &wakealarm_output_pin);
+
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -ENODEV;
 
@@ -460,6 +494,7 @@ static int s35390a_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	s35390a->client[0] = client;
+	s35390a->wakealarm_use_int1 = wakealarm_output_pin == S35390A_OUTPUT_PIN_INT1;
 	i2c_set_clientdata(client, s35390a);
 
 	/* This chip uses multiple addresses, use dummy devices for them */
@@ -489,7 +524,9 @@ static int s35390a_probe(struct i2c_client *client)
 	else
 		s35390a->twentyfourhour = 0;
 
-	if (status1 & S35390A_FLAG_INT2) {
+	flag = s35390a->wakealarm_use_int1 ? S35390A_FLAG_INT1 : S35390A_FLAG_INT2;
+
+	if (status1 & flag) {
 		/* disable alarm (and maybe test mode) */
 		buf = 0;
 		err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &buf, 1);
@@ -514,7 +551,7 @@ static int s35390a_probe(struct i2c_client *client)
 	set_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->features);
 	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->features);
 
-	if (status1 & S35390A_FLAG_INT2)
+	if (status1 & flag)
 		rtc_update_irq(rtc, 1, RTC_AF);
 
 	nvmem_cfg.priv = s35390a;
