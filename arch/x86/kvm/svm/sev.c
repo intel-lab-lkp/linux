@@ -5136,7 +5136,7 @@ int sev_gmem_prepare(struct kvm *kvm, kvm_pfn_t pfn, gfn_t gfn, int max_order)
 	return 0;
 }
 
-void sev_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
+void sev_gmem_reclaim_memory(kvm_pfn_t start, kvm_pfn_t end)
 {
 	kvm_pfn_t pfn;
 

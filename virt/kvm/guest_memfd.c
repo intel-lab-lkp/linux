@@ -530,7 +530,7 @@ static void kvm_gmem_free_folio(struct folio *folio)
 	kvm_pfn_t pfn = page_to_pfn(page);
 	int order = folio_order(folio);
 
-	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
+	kvm_arch_gmem_reclaim_memory(pfn, pfn + (1ul << order));
 }
 #endif
 

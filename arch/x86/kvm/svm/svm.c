@@ -5460,9 +5460,11 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 	.vcpu_get_apicv_inhibit_reasons = avic_vcpu_get_apicv_inhibit_reasons,
 	.alloc_apic_backing_page = svm_alloc_apic_backing_page,
 
+#ifdef CONFIG_KVM_AMD_SEV
 	.gmem_prepare = sev_gmem_prepare,
-	.gmem_invalidate = sev_gmem_invalidate,
+	.gmem_reclaim_memory = sev_gmem_reclaim_memory,
 	.gmem_max_mapping_level = sev_gmem_max_mapping_level,
+#endif
 };
 
 /*
