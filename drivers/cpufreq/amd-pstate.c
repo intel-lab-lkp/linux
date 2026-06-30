@@ -82,12 +82,18 @@ struct quirk_entry {
 	u32 lowest_freq;
 };
 
+enum dynamic_epp_state {
+	DYNAMIC_EPP_USER_TOGGLE = -1,	/* User can toggle dynamic EPP. (Default) */
+	DYNAMIC_EPP_DISABLED,		/* Dynamic EPP disabled from command line. */
+	DYNAMIC_EPP_DEFAULT_ENABLED,	/* Dynamic EPP enabled from command line. */
+};
+
+static enum dynamic_epp_state dynamic_epp = DYNAMIC_EPP_USER_TOGGLE;
 static struct cpufreq_driver *current_pstate_driver;
 static struct cpufreq_driver amd_pstate_driver;
 static struct cpufreq_driver amd_pstate_epp_driver;
 static int cppc_state = AMD_PSTATE_UNDEFINED;
 static bool amd_pstate_prefcore = true;
-static bool dynamic_epp;
 static struct quirk_entry *quirks;
 
 /*
@@ -1839,39 +1845,9 @@ static ssize_t dynamic_epp_show(struct device *dev,
 	return sysfs_emit(buf, "%s\n", str_enabled_disabled(dynamic_epp));
 }
 
-static ssize_t dynamic_epp_store(struct device *a, struct device_attribute *b,
-				 const char *buf, size_t count)
-{
-	bool enabled;
-	int ret;
-
-	ret = kstrtobool(buf, &enabled);
-	if (ret)
-		return ret;
-
-	guard(mutex)(&amd_pstate_driver_lock);
-
-	if (cppc_state != AMD_PSTATE_ACTIVE) {
-		pr_debug("dynamic_epp can only be toggled in active mode\n");
-		return -EINVAL;
-	}
-
-	/* Nothing to do */
-	if (dynamic_epp == enabled)
-		return count;
-
-	/* reinitialize with desired dynamic EPP value */
-	dynamic_epp = enabled;
-	ret = amd_pstate_change_driver_mode(cppc_state);
-	if (ret)
-		dynamic_epp = false;
-
-	return ret ? ret : count;
-}
-
 static DEVICE_ATTR_RW(status);
 static DEVICE_ATTR_RO(prefcore);
-static DEVICE_ATTR_RW(dynamic_epp);
+static DEVICE_ATTR_RO(dynamic_epp);
 
 static struct attribute *pstate_global_attributes[] = {
 	&dev_attr_status.attr,
@@ -1983,7 +1959,7 @@ static int amd_pstate_epp_cpu_init(struct cpufreq_policy *policy)
 		cpudata->current_profile = PLATFORM_PROFILE_BALANCED;
 	}
 
-	if (dynamic_epp) {
+	if (dynamic_epp == DYNAMIC_EPP_DEFAULT_ENABLED) {
 		/* Dynamic EPP is only available with the POWERSAVE policy. */
 		policy->policy = CPUFREQ_POLICY_POWERSAVE;
 		ret = amd_pstate_set_dynamic_epp(policy);
@@ -2076,7 +2052,7 @@ static int amd_pstate_epp_set_policy(struct cpufreq_policy *policy)
 		 * If dynamic_epp is enabled by default, toggle it on
 		 * when switching to CPUFREQ_POLICY_POWERSAVE.
 		 */
-		if (dynamic_epp) {
+		if (dynamic_epp == DYNAMIC_EPP_DEFAULT_ENABLED) {
 			WARN_ON_ONCE(policy->policy != CPUFREQ_POLICY_POWERSAVE);
 
 			cpudata->current_profile = PLATFORM_PROFILE_BALANCED;
@@ -2410,9 +2386,9 @@ static int __init amd_prefcore_param(char *str)
 static int __init amd_dynamic_epp_param(char *str)
 {
 	if (!strcmp(str, "disable"))
-		dynamic_epp = false;
+		dynamic_epp = DYNAMIC_EPP_DISABLED;
 	if (!strcmp(str, "enable"))
-		dynamic_epp = true;
+		dynamic_epp = DYNAMIC_EPP_DEFAULT_ENABLED;
 
 	return 0;
 }
