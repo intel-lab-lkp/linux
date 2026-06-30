@@ -374,9 +374,20 @@ int avic_vcpu_precreate(struct kvm *kvm)
 	return 0;
 }
 
+void avic_vm_pre_destroy(struct kvm *kvm)
+{
+	struct kvm_svm *kvm_svm = to_kvm_svm(kvm);
+
+	if (WARN_ON_ONCE(!enable_apicv) || !kvm_svm->avic_vm_id)
+		return;
+
+	guard(spinlock_irqsave)(&svm_vm_data_hash_lock);
+
+	hash_del(&kvm_svm->hnode);
+}
+
 void avic_vm_destroy(struct kvm *kvm)
 {
-	unsigned long flags;
 	struct kvm_svm *kvm_svm = to_kvm_svm(kvm);
 
 	if (!enable_apicv)
@@ -385,12 +396,6 @@ void avic_vm_destroy(struct kvm *kvm)
 	free_page((unsigned long)kvm_svm->avic_logical_id_table);
 	free_pages((unsigned long)kvm_svm->avic_physical_id_table,
 		   avic_get_physical_id_table_order(kvm));
-
-	if (kvm_svm->avic_vm_id) {
-		spin_lock_irqsave(&svm_vm_data_hash_lock, flags);
-		hash_del(&kvm_svm->hnode);
-		spin_unlock_irqrestore(&svm_vm_data_hash_lock, flags);
-	}
 }
 
 static phys_addr_t avic_get_backing_page_address(struct vcpu_svm *svm)
