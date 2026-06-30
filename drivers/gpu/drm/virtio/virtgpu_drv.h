@@ -264,6 +264,8 @@ struct virtio_gpu_device {
 
 	struct work_struct config_changed_work;
 
+	struct work_struct hotplug_work;
+
 	struct work_struct obj_free_work;
 	spinlock_t obj_free_lock;
 	struct list_head obj_free_list;
@@ -350,6 +352,7 @@ void virtio_gpu_cmd_transfer_to_host_2d(struct virtio_gpu_device *vgdev,
 					uint32_t x, uint32_t y,
 					struct virtio_gpu_object_array *objs,
 					struct virtio_gpu_fence *fence);
+void virtio_gpu_hotplug_work_func(struct work_struct *work);
 void virtio_gpu_panic_cmd_resource_flush(struct virtio_gpu_device *vgdev,
 					 uint32_t resource_id,
 					 uint32_t x, uint32_t y,
