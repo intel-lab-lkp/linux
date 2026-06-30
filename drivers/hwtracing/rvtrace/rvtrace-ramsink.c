@@ -26,6 +26,39 @@ enum rvtrace_ramsink_mode {
 	MODE_SMEM
 };
 
+/**
+ * struct rvtrace_ramsink_regs - Register offsets for RAM sink implementations
+ * @start_low:   Offset of the start address low register
+ * @start_high:  Offset of the start address high register
+ * @limit_low:   Offset of the limit address low register
+ * @limit_high:  Offset of the limit address high register
+ * @wp_low:      Offset of the write pointer low register
+ * @wp_high:     Offset of the write pointer high register
+ *
+ * Different RAM sink implementations may have different register layouts.
+ * This structure allows the common code to work with any layout.
+ */
+struct rvtrace_ramsink_regs {
+	u32 start_low;
+	u32 start_high;
+	u32 limit_low;
+	u32 limit_high;
+	u32 wp_low;
+	u32 wp_high;
+};
+
+/**
+ * struct rvtrace_ramsink_priv - Private data for RAM sink implementations
+ * @size:         Size of the allocated DMA buffer
+ * @va:           Virtual address of the DMA buffer
+ * @start:        DMA start address
+ * @end:          DMA end address
+ * @mode:         Ramsink mode (e.g., SRAM vs SMEM)
+ * @stop_on_wrap: Whether to stop tracing when buffer wraps
+ * @mem_acc_width: Memory access width in bytes
+ * @regs:         Pointer to register offset definitions
+ * @prev_wp:      Previous write pointer position (for incremental copies)
+ */
 struct rvtrace_ramsink_priv {
 	size_t size;
 	void *va;
@@ -34,13 +67,30 @@ struct rvtrace_ramsink_priv {
 	enum rvtrace_ramsink_mode mode;
 	bool stop_on_wrap;
 	int mem_acc_width;
+	const struct rvtrace_ramsink_regs *regs;
 	u64 prev_wp;
 };
 
+/**
+ * struct trace_buf - Trace buffer descriptor for copy operations
+ * @base: Base address of the buffer
+ * @cur:  Current position in the buffer
+ * @len:  Length of the buffer
+ */
 struct trace_buf {
 	void *base;
 	size_t cur;
 	size_t len;
+};
+
+/* Register offsets for the standard RISC-V trace ramsink */
+static const struct rvtrace_ramsink_regs rvtrace_std_ramsink_regs = {
+	.start_low    = RVTRACE_RAMSINK_STARTLOW_OFF,
+	.start_high   = RVTRACE_RAMSINK_STARTHIGH_OFF,
+	.limit_low    = RVTRACE_RAMSINK_LIMITLOW_OFF,
+	.limit_high   = RVTRACE_RAMSINK_LIMITHIGH_OFF,
+	.wp_low       = RVTRACE_RAMSINK_WPLOW_OFF,
+	.wp_high      = RVTRACE_RAMSINK_WPHIGH_OFF,
 };
 
 static int rvtrace_ramsink_start(struct rvtrace_path_node *node)
@@ -117,6 +167,7 @@ static size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
 					    struct rvtrace_perf_auxbuf *buf)
 {
 	struct rvtrace_ramsink_priv *priv = dev_get_drvdata(&comp->dev);
+	const struct rvtrace_ramsink_regs *regs = priv->regs;
 	struct trace_buf src, dst;
 	u32 wp_low, wp_high;
 	size_t bytes = 0;
@@ -128,16 +179,17 @@ static size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
 	dst.cur = buf->pos;
 	src.base = priv->va;
 	src.len = priv->size;
-	wp_low = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_WPLOW_OFF);
-	wp_high = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_WPHIGH_OFF);
-	wp = (u64)(wp_high) << 32 | wp_low;
+
+	wp_low = rvtrace_read32(comp->pdata, regs->wp_low);
+	wp_high = rvtrace_read32(comp->pdata, regs->wp_high);
+	wp = (u64)wp_high << 32 | wp_low;
 	wrap = wp & RVTRACE_RAMSINK_WPLOW_WRAP;
 	wp &= ~RVTRACE_RAMSINK_WPLOW_WRAP;
 	if (wrap) {
 		rvtrace_write32(comp->pdata, lower_32_bits(priv->start),
-				RVTRACE_RAMSINK_WPLOW_OFF);
+				regs->wp_low);
 		rvtrace_write32(comp->pdata, upper_32_bits(priv->start),
-				RVTRACE_RAMSINK_WPHIGH_OFF);
+				regs->wp_high);
 		src.cur = wp - priv->start;
 		priv->prev_wp = priv->start;
 		/*
@@ -160,22 +212,23 @@ static size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
 static int rvtrace_ramsink_setup_buf(struct rvtrace_component *comp,
 				     struct rvtrace_ramsink_priv *priv)
 {
+	const struct rvtrace_ramsink_regs *regs = priv->regs;
 	struct device *pdev = comp->pdata->dev;
 	u64 start_min, limit_max, end;
 	u32 low, high;
 	int ret;
 
 	/* Probe min and max values for start and limit registers */
-	rvtrace_write32(comp->pdata, 0, RVTRACE_RAMSINK_STARTLOW_OFF);
-	rvtrace_write32(comp->pdata, 0, RVTRACE_RAMSINK_STARTHIGH_OFF);
-	low = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_STARTLOW_OFF);
-	high = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_STARTHIGH_OFF);
+	rvtrace_write32(comp->pdata, 0, regs->start_low);
+	rvtrace_write32(comp->pdata, 0, regs->start_high);
+	low = rvtrace_read32(comp->pdata, regs->start_low);
+	high = rvtrace_read32(comp->pdata, regs->start_high);
 	start_min = (u64)(high) << 32 | low;
 
-	rvtrace_write32(comp->pdata, 0xffffffff, RVTRACE_RAMSINK_LIMITLOW_OFF);
-	rvtrace_write32(comp->pdata, 0xffffffff, RVTRACE_RAMSINK_LIMITHIGH_OFF);
-	low = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_LIMITLOW_OFF);
-	high = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_LIMITHIGH_OFF);
+	rvtrace_write32(comp->pdata, 0xffffffff, regs->limit_low);
+	rvtrace_write32(comp->pdata, 0xffffffff, regs->limit_high);
+	low = rvtrace_read32(comp->pdata, regs->limit_low);
+	high = rvtrace_read32(comp->pdata, regs->limit_high);
 	limit_max = (u64)(high) << 32 | low;
 
 	/* Set DMA mask based on the maximum allowed limit address */
@@ -203,10 +256,10 @@ static int rvtrace_ramsink_setup_buf(struct rvtrace_component *comp,
 		priv->start = start_min;
 	}
 
-	rvtrace_write32(comp->pdata, lower_32_bits(priv->start), RVTRACE_RAMSINK_STARTLOW_OFF);
-	rvtrace_write32(comp->pdata, upper_32_bits(priv->start), RVTRACE_RAMSINK_STARTHIGH_OFF);
-	rvtrace_write32(comp->pdata, lower_32_bits(priv->start), RVTRACE_RAMSINK_WPLOW_OFF);
-	rvtrace_write32(comp->pdata, upper_32_bits(priv->start), RVTRACE_RAMSINK_WPHIGH_OFF);
+	rvtrace_write32(comp->pdata, lower_32_bits(priv->start), regs->start_low);
+	rvtrace_write32(comp->pdata, upper_32_bits(priv->start), regs->start_high);
+	rvtrace_write32(comp->pdata, lower_32_bits(priv->start), regs->wp_low);
+	rvtrace_write32(comp->pdata, upper_32_bits(priv->start), regs->wp_high);
 	/* Setup ram sink limit addresses */
 	if (priv->end > limit_max) {
 		dev_warn(&comp->dev, "Ramsink limit address updated from %pad to %pad\n",
@@ -217,10 +270,10 @@ static int rvtrace_ramsink_setup_buf(struct rvtrace_component *comp,
 
 	/* Limit address needs to be set to end - mem_access_width to avoid overflow */
 	end = priv->end - priv->mem_acc_width;
-	rvtrace_write32(comp->pdata, lower_32_bits(end), RVTRACE_RAMSINK_LIMITLOW_OFF);
-	rvtrace_write32(comp->pdata, upper_32_bits(end), RVTRACE_RAMSINK_LIMITHIGH_OFF);
-	low = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_LIMITLOW_OFF);
-	high = rvtrace_read32(comp->pdata, RVTRACE_RAMSINK_LIMITHIGH_OFF);
+	rvtrace_write32(comp->pdata, lower_32_bits(end), regs->limit_low);
+	rvtrace_write32(comp->pdata, upper_32_bits(end), regs->limit_high);
+	low = rvtrace_read32(comp->pdata, regs->limit_low);
+	high = rvtrace_read32(comp->pdata, regs->limit_high);
 	end = (u64)(high) << 32 | low;
 	if (end != (priv->end - 4)) {
 		dev_warn(&comp->dev, "Ramsink limit address updated from %pad to %pad\n",
@@ -251,6 +304,8 @@ static int rvtrace_ramsink_setup(struct rvtrace_component *comp)
 		priv->mem_acc_width = 4;
 		break;
 	}
+
+	priv->regs = &rvtrace_std_ramsink_regs;
 
 	trram_ctrl = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
 	trram_ctrl |= priv->mode << RVTRACE_RAMSINK_CTRL_MODE_SHIFT;
