@@ -324,6 +324,9 @@ static enum si_sm_result start_next_msg(struct smi_info *smi_info)
 {
 	int rv;
 
+	if (unlikely(!smi_info->si_sm))
+		return SI_SM_IDLE;
+
 	if (!smi_info->waiting_msg) {
 		smi_info->curr_msg = NULL;
 		rv = SI_SM_IDLE;
@@ -803,6 +806,9 @@ static enum si_sm_result smi_event_handler(struct smi_info *smi_info,
 					   int time)
 {
 	enum si_sm_result si_sm_result;
+
+	if (unlikely(!smi_info->si_sm))
+		return SI_SM_IDLE;
 
 restart:
 	if (smi_info->si_state == SI_HOSED)
