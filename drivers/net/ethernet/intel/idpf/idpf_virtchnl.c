@@ -3195,15 +3195,8 @@ init_failed:
  */
 void idpf_vc_core_deinit(struct idpf_adapter *adapter)
 {
-	bool remove_in_prog;
-
 	if (!test_bit(IDPF_VC_CORE_INIT, adapter->flags))
 		return;
-
-	/* Avoid transaction timeouts when called during reset */
-	remove_in_prog = test_bit(IDPF_REMOVE_IN_PROG, adapter->flags);
-	if (!remove_in_prog)
-		libie_ctlq_xn_shutdown(adapter->xnm);
 
 	idpf_ptp_release(adapter);
 	idpf_deinit_task(adapter);
@@ -3211,8 +3204,7 @@ void idpf_vc_core_deinit(struct idpf_adapter *adapter)
 	idpf_rel_rx_pt_lkup(adapter);
 	idpf_intr_rel(adapter);
 
-	if (remove_in_prog)
-		libie_ctlq_xn_shutdown(adapter->xnm);
+	libie_ctlq_xn_shutdown(adapter->xnm);
 
 	cancel_delayed_work_sync(&adapter->serv_task);
 	cancel_delayed_work_sync(&adapter->mbx_task);
