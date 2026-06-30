@@ -2026,57 +2026,55 @@ static irqreturn_t emac_irq(int irq, void *dev_instance)
 	return IRQ_HANDLED;
 }
 
-static struct net_device_stats *emac_stats(struct net_device *ndev)
+static void emac_get_stats64(struct net_device *ndev,
+			     struct rtnl_link_stats64 *stats)
 {
 	struct emac_instance *dev = netdev_priv(ndev);
 	struct emac_stats *st = &dev->stats;
 	struct emac_error_stats *est = &dev->estats;
-	struct net_device_stats *nst = &ndev->stats;
 	unsigned long flags;
 
 	DBG2(dev, "stats" NL);
 
-	/* Compute "legacy" statistics */
 	spin_lock_irqsave(&dev->lock, flags);
-	nst->rx_packets = (unsigned long)st->rx_packets;
-	nst->rx_bytes = (unsigned long)st->rx_bytes;
-	nst->tx_packets = (unsigned long)st->tx_packets;
-	nst->tx_bytes = (unsigned long)st->tx_bytes;
-	nst->rx_dropped = (unsigned long)(est->rx_dropped_oom +
-					  est->rx_dropped_error +
-					  est->rx_dropped_resize +
-					  est->rx_dropped_mtu);
-	nst->tx_dropped = (unsigned long)est->tx_dropped;
+	stats->rx_packets = st->rx_packets;
+	stats->rx_bytes = st->rx_bytes;
+	stats->tx_packets = st->tx_packets;
+	stats->tx_bytes = st->tx_bytes;
+	stats->rx_dropped = est->rx_dropped_oom +
+			    est->rx_dropped_error +
+			    est->rx_dropped_resize +
+			    est->rx_dropped_mtu;
+	stats->tx_dropped = est->tx_dropped;
 
-	nst->rx_errors = (unsigned long)est->rx_bd_errors;
-	nst->rx_fifo_errors = (unsigned long)(est->rx_bd_overrun +
-					      est->rx_fifo_overrun +
-					      est->rx_overrun);
-	nst->rx_frame_errors = (unsigned long)(est->rx_bd_alignment_error +
-					       est->rx_alignment_error);
-	nst->rx_crc_errors = (unsigned long)(est->rx_bd_bad_fcs +
-					     est->rx_bad_fcs);
-	nst->rx_length_errors = (unsigned long)(est->rx_bd_runt_packet +
-						est->rx_bd_short_event +
-						est->rx_bd_packet_too_long +
-						est->rx_bd_out_of_range +
-						est->rx_bd_in_range +
-						est->rx_runt_packet +
-						est->rx_short_event +
-						est->rx_packet_too_long +
-						est->rx_out_of_range +
-						est->rx_in_range);
+	stats->rx_errors = est->rx_bd_errors;
+	stats->rx_fifo_errors = est->rx_bd_overrun +
+				est->rx_fifo_overrun +
+				est->rx_overrun;
+	stats->rx_frame_errors = est->rx_bd_alignment_error +
+				 est->rx_alignment_error;
+	stats->rx_crc_errors = est->rx_bd_bad_fcs +
+			       est->rx_bad_fcs;
+	stats->rx_length_errors = est->rx_bd_runt_packet +
+				  est->rx_bd_short_event +
+				  est->rx_bd_packet_too_long +
+				  est->rx_bd_out_of_range +
+				  est->rx_bd_in_range +
+				  est->rx_runt_packet +
+				  est->rx_short_event +
+				  est->rx_packet_too_long +
+				  est->rx_out_of_range +
+				  est->rx_in_range;
 
-	nst->tx_errors = (unsigned long)(est->tx_bd_errors + est->tx_errors);
-	nst->tx_fifo_errors = (unsigned long)(est->tx_bd_underrun +
-					      est->tx_underrun);
-	nst->tx_carrier_errors = (unsigned long)est->tx_bd_carrier_loss;
-	nst->collisions = (unsigned long)(est->tx_bd_excessive_deferral +
-					  est->tx_bd_excessive_collisions +
-					  est->tx_bd_late_collision +
-					  est->tx_bd_multple_collisions);
+	stats->tx_errors = est->tx_bd_errors + est->tx_errors;
+	stats->tx_fifo_errors = est->tx_bd_underrun +
+				est->tx_underrun;
+	stats->tx_carrier_errors = est->tx_bd_carrier_loss;
+	stats->collisions = est->tx_bd_excessive_deferral +
+			    est->tx_bd_excessive_collisions +
+			    est->tx_bd_late_collision +
+			    est->tx_bd_multple_collisions;
 	spin_unlock_irqrestore(&dev->lock, flags);
-	return nst;
 }
 
 static struct mal_commac_ops emac_commac_ops = {
@@ -3040,7 +3038,7 @@ static int emac_init_config(struct emac_instance *dev)
 static const struct net_device_ops emac_netdev_ops = {
 	.ndo_open		= emac_open,
 	.ndo_stop		= emac_close,
-	.ndo_get_stats		= emac_stats,
+	.ndo_get_stats64	= emac_get_stats64,
 	.ndo_set_rx_mode	= emac_set_multicast_list,
 	.ndo_eth_ioctl		= emac_ioctl,
 	.ndo_tx_timeout		= emac_tx_timeout,
@@ -3052,7 +3050,7 @@ static const struct net_device_ops emac_netdev_ops = {
 static const struct net_device_ops emac_gige_netdev_ops = {
 	.ndo_open		= emac_open,
 	.ndo_stop		= emac_close,
-	.ndo_get_stats		= emac_stats,
+	.ndo_get_stats64	= emac_get_stats64,
 	.ndo_set_rx_mode	= emac_set_multicast_list,
 	.ndo_eth_ioctl		= emac_ioctl,
 	.ndo_tx_timeout		= emac_tx_timeout,
