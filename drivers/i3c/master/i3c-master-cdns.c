@@ -714,6 +714,8 @@ static int cdns_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 
 	ret = xfer->ret;
 	cmd->err = cdns_i3c_cmd_get_err(&xfer->cmds[0]);
+	if (!ret && cmd->rnw)
+		cmd->dests[0].payload.actual_len = cmd->dests[0].payload.len;
 	cdns_i3c_master_free_xfer(xfer);
 
 	return ret;

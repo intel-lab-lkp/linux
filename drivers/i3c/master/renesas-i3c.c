@@ -805,6 +805,8 @@ static int renesas_i3c_send_ccc_cmd(struct i3c_master_controller *m,
 	ret = xfer->ret;
 	if (ret)
 		ccc->err = I3C_ERROR_M2;
+	else if (ccc->rnw)
+		ccc->dests[0].payload.actual_len = cmd->rx_count;
 
 	return ret;
 }
