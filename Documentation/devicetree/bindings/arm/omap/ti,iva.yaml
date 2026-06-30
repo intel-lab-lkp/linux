@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/omap/ti,iva.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments IVA (Imaging and Video Accelerator)
+
+maintainers:
+  - Eduard Bostina <egbostina@gmail.com>
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: ti,ivahd
+          - const: ti,iva
+      - enum:
+          - ti,iva1
+          - ti,iva2.1
+          - ti,iva2.2
+          - ti,ivahd
+
+  ti,hwmods:
+    description: Name of the hwmod associated to the iva
+    $ref: /schemas/types.yaml#/definitions/string
+    const: iva
+
+  dsp:
+    type: object
+    $ref: /schemas/arm/omap/ti,omap3-c64.yaml#
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    iva {
+        compatible = "ti,iva2.2";
+        ti,hwmods = "iva";
+        dsp {
+            compatible = "ti,omap3-c64";
+        };
+    };
+  - |
+    iva {
+        compatible = "ti,ivahd", "ti,iva";
+        ti,hwmods = "iva";
+    };
