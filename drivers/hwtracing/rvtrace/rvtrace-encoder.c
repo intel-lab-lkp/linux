@@ -11,8 +11,9 @@
 #define RVTRACE_COMPONENT_CTRL_INSTMODE_SHIFT	4
 #define RVTRACE_COMPONENT_CTRL_INSTMODE_OPIT	0x6
 
-static int rvtrace_encoder_start(struct rvtrace_component *comp)
+static int rvtrace_encoder_start(struct rvtrace_path_node *node)
 {
+	struct rvtrace_component *comp = node->comp;
 	int ret;
 	u32 val;
 

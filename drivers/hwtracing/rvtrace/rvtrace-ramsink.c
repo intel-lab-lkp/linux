@@ -43,8 +43,9 @@ struct trace_buf {
 	size_t len;
 };
 
-static int rvtrace_ramsink_start(struct rvtrace_component *comp)
+static int rvtrace_ramsink_start(struct rvtrace_path_node *node)
 {
+	struct rvtrace_component *comp = node->comp;
 	int ret;
 	u32 val;
 

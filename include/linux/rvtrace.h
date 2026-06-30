@@ -281,6 +281,18 @@ struct rvtrace_path {
 #define RVTRACE_INVALID_TRACE_ID	0
 };
 
+/**
+ * struct rvtrace_path_node - Representation of a node in the trace path
+ * @head: List head for linking nodes in the path
+ * @comp: Pointer to the trace component at this node
+ * @conn: Pointer to the connection leading to the next node (NULL for sink)
+ */
+struct rvtrace_path_node {
+	struct list_head		head;
+	struct rvtrace_component	*comp;
+	struct rvtrace_connection	*conn;
+};
+
 struct rvtrace_component *rvtrace_path_source(struct rvtrace_path *path);
 struct rvtrace_component *rvtrace_path_sink(struct rvtrace_path *path);
 struct rvtrace_path *rvtrace_create_path(struct rvtrace_component *source,
@@ -324,7 +336,7 @@ struct rvtrace_driver {
 	const struct rvtrace_component_id *id_table;
 	size_t			(*copyto_auxbuf)(struct rvtrace_component *comp,
 						 struct rvtrace_perf_auxbuf *buf);
-	int			(*start)(struct rvtrace_component *comp);
+	int			(*start)(struct rvtrace_path_node *node);
 	int			(*stop)(struct rvtrace_component *comp);
 	int			(*probe)(struct rvtrace_component *comp);
 	void			(*remove)(struct rvtrace_component *comp);

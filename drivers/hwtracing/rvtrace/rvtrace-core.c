@@ -501,12 +501,6 @@ void rvtrace_unregister_component(struct rvtrace_component *comp)
 }
 EXPORT_SYMBOL_GPL(rvtrace_unregister_component);
 
-struct rvtrace_path_node {
-	struct list_head		head;
-	struct rvtrace_component	*comp;
-	struct rvtrace_connection	*conn;
-};
-
 struct rvtrace_component *rvtrace_path_source(struct rvtrace_path *path)
 {
 	struct rvtrace_path_node *node;
@@ -625,17 +619,15 @@ static void rvtrace_release_path_nodes(struct rvtrace_path *path)
 int rvtrace_path_start(struct rvtrace_path *path)
 {
 	const struct rvtrace_driver *rtdrv;
-	struct rvtrace_component *comp;
 	struct rvtrace_path_node *node;
 	int ret;
 
 	list_for_each_entry_reverse(node, &path->comp_list, head) {
-		comp = node->comp;
-		rtdrv = to_rvtrace_driver(comp->dev.driver);
+		rtdrv = to_rvtrace_driver(node->comp->dev.driver);
 		if (!rtdrv->start)
 			continue;
 
-		ret = rtdrv->start(comp);
+		ret = rtdrv->start(node);
 		if (ret)
 			return ret;
 	}
