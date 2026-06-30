@@ -57,6 +57,17 @@ properties:
   interrupts:
     maxItems: 1
 
+  no-hpd:
+    type: boolean
+    description:
+      Set if the HPD line on the bridge isn't physically connected to the
+      DisplayPort connector or cannot be used for hotplug detection.
+
+      Valid use cases include HPD pin not routed to the connector on the PCB,
+      HPD signal muxed with another function on the SoC making it unavailable
+      for hotplug detection, or hardware design where HPD cannot reliably
+      detect monitor presence.
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
