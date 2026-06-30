@@ -12,6 +12,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_gem_dma_helper.h>
+#include <drm/drm_managed.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
@@ -60,10 +61,6 @@ static const struct drm_encoder_helper_funcs logicvc_encoder_helper_funcs = {
 	.disable		= logicvc_encoder_disable,
 };
 
-static const struct drm_encoder_funcs logicvc_encoder_funcs = {
-	.destroy		= drm_encoder_cleanup,
-};
-
 static int logicvc_connector_get_modes(struct drm_connector *drm_connector)
 {
 	struct logicvc_interface *interface =
@@ -84,7 +81,6 @@ static const struct drm_connector_helper_funcs logicvc_connector_helper_funcs = 
 static const struct drm_connector_funcs logicvc_connector_funcs = {
 	.reset			= drm_atomic_helper_connector_reset,
 	.fill_modes		= drm_helper_probe_single_connector_modes,
-	.destroy		= drm_connector_cleanup,
 	.atomic_duplicate_state	= drm_atomic_helper_connector_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_connector_destroy_state,
 };
@@ -147,36 +143,35 @@ int logicvc_interface_init(struct logicvc_drm *logicvc)
 	int encoder_type = logicvc_interface_encoder_type(logicvc);
 	int connector_type = logicvc_interface_connector_type(logicvc);
 	bool native_connector = logicvc_interface_native_connector(logicvc);
+	struct drm_bridge *bridge;
+	struct drm_panel *panel;
 	int ret;
 
-	interface = devm_kzalloc(dev, sizeof(*interface), GFP_KERNEL);
-	if (!interface) {
-		ret = -ENOMEM;
-		goto error_early;
-	}
-
-	ret = drm_of_find_panel_or_bridge(of_node, 0, 0, &interface->drm_panel,
-					  &interface->drm_bridge);
+	ret = drm_of_find_panel_or_bridge(of_node, 0, 0, &panel,
+					  &bridge);
 	if (ret == -EPROBE_DEFER)
-		goto error_early;
+		return ret;
 
-	ret = drm_encoder_init(drm_dev, &interface->drm_encoder,
-			       &logicvc_encoder_funcs, encoder_type, NULL);
-	if (ret) {
+	interface = drmm_encoder_alloc(drm_dev, struct logicvc_interface, drm_encoder,
+				       NULL, encoder_type, NULL);
+	if (IS_ERR(interface)) {
 		drm_err(drm_dev, "Failed to initialize encoder\n");
-		goto error_early;
+		return PTR_ERR(interface);
 	}
+
+	interface->drm_panel = panel;
+	interface->drm_bridge = bridge;
 
 	drm_encoder_helper_add(&interface->drm_encoder,
 			       &logicvc_encoder_helper_funcs);
 
 	if (native_connector || interface->drm_panel) {
-		ret = drm_connector_init(drm_dev, &interface->drm_connector,
-					 &logicvc_connector_funcs,
-					 connector_type);
+		ret = drmm_connector_init(drm_dev, &interface->drm_connector,
+					  &logicvc_connector_funcs,
+					  connector_type, NULL);
 		if (ret) {
 			drm_err(drm_dev, "Failed to initialize connector\n");
-			goto error_encoder;
+			return ret;
 		}
 
 		drm_connector_helper_add(&interface->drm_connector,
@@ -187,7 +182,7 @@ int logicvc_interface_init(struct logicvc_drm *logicvc)
 		if (ret) {
 			drm_err(drm_dev,
 				"Failed to attach connector to encoder\n");
-			goto error_encoder;
+			return ret;
 		}
 	}
 
@@ -197,17 +192,11 @@ int logicvc_interface_init(struct logicvc_drm *logicvc)
 		if (ret) {
 			drm_err(drm_dev,
 				"Failed to attach bridge to encoder\n");
-			goto error_encoder;
+			return ret;
 		}
 	}
 
 	logicvc->interface = interface;
 
 	return 0;
-
-error_encoder:
-	drm_encoder_cleanup(&interface->drm_encoder);
-
-error_early:
-	return ret;
 }
