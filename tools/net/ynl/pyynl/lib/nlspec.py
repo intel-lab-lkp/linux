@@ -12,6 +12,8 @@ import importlib
 import os
 import yaml as pyyaml
 
+from .specdir import find_spec, SYS_SCHEMA_DIR
+
 
 class SpecException(Exception):
     """Netlink spec exception.
@@ -444,7 +446,17 @@ class SpecFamily(SpecElement):
     except AttributeError:
         _yaml_loader = pyyaml.SafeLoader
 
-    def __init__(self, spec_path, schema_path=None, exclude_ops=None):
+    def __init__(self, spec_path=None, schema_path=None, exclude_ops=None,
+                 family=None):
+        if (spec_path is None) == (family is None):
+            raise ValueError("Specify exactly one of spec path or family name")
+        if family is not None:
+            spec_path = find_spec(family)
+            # Installed specs are assumed correct, so skip schema validation
+            # to save cycles; only validate in the development environment.
+            if schema_path is None and spec_path.startswith(SYS_SCHEMA_DIR):
+                schema_path = ''
+
         with open(spec_path, "r", encoding='utf-8') as stream:
             prefix = '# SPDX-License-Identifier: '
             first = stream.readline().strip()
