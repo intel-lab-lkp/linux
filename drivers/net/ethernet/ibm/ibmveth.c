@@ -584,7 +584,8 @@ static int ibmveth_allocate_tx_ltb(struct ibmveth_adapter *adapter, int idx)
 }
 
 static int ibmveth_register_logical_lan(struct ibmveth_adapter *adapter,
-        union ibmveth_buf_desc rxq_desc, u64 mac_address)
+				   union ibmveth_buf_desc rxq_desc,
+				   u64 mac_address)
 {
 	int rc, try_again = 1;
 
