@@ -99,6 +99,9 @@ static int or51211_load_firmware (struct dvb_frontend* fe,
 
 	dprintk("Firmware is %zu bytes\n", fw->size);
 
+	if (fw->size < 393 + 8125)
+		return -EINVAL;
+
 	/* Get eprom data */
 	tudata[0] = 17;
 	if (i2c_writebytes(state,0x50,tudata,1)) {
