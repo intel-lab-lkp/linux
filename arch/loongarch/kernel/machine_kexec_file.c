@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/kexec.h>
 #include <linux/memblock.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -67,6 +68,7 @@ static int prepare_elf_headers(void **addr, unsigned long *sz)
 	nr_ranges = 2; /* for exclusion of crashkernel region */
 	for_each_mem_range(i, &start, &end)
 		nr_ranges++;
+	nr_ranges += of_reserved_mem_kdump_nr_ranges();
 
 	cmem = kmalloc_flex(*cmem, ranges, nr_ranges);
 	if (!cmem)
@@ -90,6 +92,10 @@ static int prepare_elf_headers(void **addr, unsigned long *sz)
 		if (ret < 0)
 			goto out;
 	}
+
+	ret = of_reserved_mem_kdump_exclude(cmem);
+	if (ret)
+		goto out;
 
 	ret = crash_prepare_elf64_headers(cmem, true, addr, sz);
 
