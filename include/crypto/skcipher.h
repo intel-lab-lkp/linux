@@ -31,6 +31,13 @@ struct scatterlist;
 /**
  *	struct skcipher_request - Symmetric key cipher request
  *	@cryptlen: Number of bytes to encrypt or decrypt
+ *	@data_unit_size: Size in bytes of each data unit, or 0 for a
+ *		single-data-unit request (the default).  When non-zero,
+ *		must be a multiple of the cipher block size, @cryptlen must
+ *		be a positive multiple of it, and per-DU IVs are derived from
+ *		@iv as a wide counter (the data-unit-number convention); the
+ *		counter width and endianness are chosen by the consumer (e.g.
+ *		the dun() template's second parameter).
  *	@iv: Initialisation Vector
  *	@src: Source SG list
  *	@dst: Destination SG list
@@ -39,6 +46,7 @@ struct scatterlist;
  */
 struct skcipher_request {
 	unsigned int cryptlen;
+	unsigned int data_unit_size;
 
 	u8 *iv;
 
@@ -225,6 +233,7 @@ struct lskcipher_alg {
 	struct skcipher_request *name = \
 		(((struct skcipher_request *)__##name##_desc)->base.tfm = \
 			crypto_sync_skcipher_tfm((_tfm)), \
+		 ((struct skcipher_request *)__##name##_desc)->data_unit_size = 0, \
 		 (void *)__##name##_desc)
 
 /**
@@ -819,6 +828,8 @@ static inline void skcipher_request_set_tfm(struct skcipher_request *req,
 					    struct crypto_skcipher *tfm)
 {
 	req->base.tfm = crypto_skcipher_tfm(tfm);
+	/* Reused requests default to single-data-unit. */
+	req->data_unit_size = 0;
 }
 
 static inline void skcipher_request_set_sync_tfm(struct skcipher_request *req,
@@ -935,6 +946,29 @@ static inline void skcipher_request_set_crypt(
 	req->dst = dst;
 	req->cryptlen = cryptlen;
 	req->iv = iv;
+}
+
+/**
+ * skcipher_request_set_data_unit_size() - submit as multiple data units
+ * @req: request handle
+ * @data_unit_size: data-unit size in bytes (a multiple of the cipher block
+ *		    size), or 0 to disable
+ *
+ * Process @req as @cryptlen / @data_unit_size data units sharing one starting
+ * @iv, with per-DU IVs derived by treating @iv as a wide counter (the data-
+ * unit-number convention).  @cryptlen must be a positive multiple of
+ * @data_unit_size.  This is honoured only by a tfm that understands data
+ * units -- an instance of the dun(...) template (which splits the request
+ * into one inner call per unit, with the counter endianness given as its
+ * second parameter), or a driver that consumes a whole multi-DU request
+ * natively, which rejects a request violating these constraints with -EINVAL.
+ * A plain skcipher ignores the field.
+ */
+static inline void
+skcipher_request_set_data_unit_size(struct skcipher_request *req,
+				    unsigned int data_unit_size)
+{
+	req->data_unit_size = data_unit_size;
 }
 
 #endif	/* _CRYPTO_SKCIPHER_H */
