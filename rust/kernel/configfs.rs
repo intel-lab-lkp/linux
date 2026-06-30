@@ -21,7 +21,7 @@
 //!
 //! ```ignore
 //! use kernel::alloc::flags;
-//! use kernel::configfs_attrs;
+//! use macros::configfs_attrs;
 //! use kernel::configfs;
 //! use kernel::new_mutex;
 //! use kernel::page::PAGE_SIZE;
@@ -240,7 +240,7 @@ unsafe impl<Data> HasGroup<Data> for Subsystem<Data> {
 /// A configfs group.
 ///
 /// To add a subgroup to configfs, pass this type as `ctype` to
-/// [`crate::configfs_attrs`] when creating a group in [`GroupOperations::make_group`].
+/// [`macros::configfs_attrs`] when creating a group in [`GroupOperations::make_group`].
 #[pin_data]
 pub struct Group<Data> {
     #[pin]
@@ -637,7 +637,7 @@ where
 /// implement `HasGroup<Data>`. The trait must be implemented once for each
 /// attribute of the group. The constant type parameter `ID` maps the
 /// implementation to a specific `Attribute`. `ID` must be passed when declaring
-/// attributes via the [`kernel::configfs_attrs`] macro, to tie
+/// attributes via the [`macros::configfs_attrs`] macro, to tie
 /// `AttributeOperations` implementations to concrete named attributes.
 #[vtable]
 pub trait AttributeOperations<const ID: u64 = 0> {
@@ -669,13 +669,13 @@ pub trait AttributeOperations<const ID: u64 = 0> {
 /// This type is used to construct a new [`ItemType`]. It represents a list of
 /// [`Attribute`] that will appear in the directory representing a [`Group`].
 /// Users should not directly instantiate this type, rather they should use the
-/// [`kernel::configfs_attrs`] macro to declare a static set of attributes for a
+/// [`macros::configfs_attrs`] macro to declare a static set of attributes for a
 /// group.
 ///
 /// # Note
 ///
 /// Instances of this type are constructed statically at compile by the
-/// [`kernel::configfs_attrs`] macro.
+/// [`macros::configfs_attrs`] macro.
 #[repr(transparent)]
 pub struct AttributeList<const N: usize, Data>(
     /// Null terminated Array of pointers to [`Attribute`]. The type is [`c_void`]
@@ -724,7 +724,7 @@ impl<const N: usize, Data> AttributeList<N, Data> {
 /// [`Subsystem`].
 ///
 /// Users should not directly instantiate objects of this type. Rather, they
-/// should use the [`kernel::configfs_attrs`] macro to statically declare the
+/// should use the [`macros::configfs_attrs`] macro to statically declare the
 /// shape of a [`Group`] or [`Subsystem`].
 #[pin_data]
 pub struct ItemType<Container, Data> {
@@ -791,254 +791,3 @@ impl<Container, Data> ItemType<Container, Data> {
         self.item_type.get()
     }
 }
-
-/// Define a list of configfs attributes statically.
-///
-/// Invoking the macro in the following manner:
-///
-/// ```ignore
-/// let item_type = configfs_attrs! {
-///     container: configfs::Subsystem<Configuration>,
-///     data: Configuration,
-///     child: Child,
-///     attributes: [
-///         message: 0,
-///         bar: 1,
-///     ],
-/// };
-/// ```
-///
-/// Expands the following output:
-///
-/// ```ignore
-/// let item_type = {
-///     static CONFIGURATION_MESSAGE_ATTR: kernel::configfs::Attribute<
-///         0,
-///         Configuration,
-///         Configuration,
-///     > = unsafe {
-///         kernel::configfs::Attribute::new({
-///             const S: &str = "message\u{0}";
-///             const C: &kernel::str::CStr = match kernel::str::CStr::from_bytes_with_nul(
-///                 S.as_bytes()
-///             ) {
-///                 Ok(v) => v,
-///                 Err(_) => {
-///                     core::panicking::panic_fmt(core::const_format_args!(
-///                         "string contains interior NUL"
-///                     ));
-///                 }
-///             };
-///             C
-///         })
-///     };
-///
-///     static CONFIGURATION_BAR_ATTR: kernel::configfs::Attribute<
-///             1,
-///             Configuration,
-///             Configuration
-///     > = unsafe {
-///         kernel::configfs::Attribute::new({
-///             const S: &str = "bar\u{0}";
-///             const C: &kernel::str::CStr = match kernel::str::CStr::from_bytes_with_nul(
-///                 S.as_bytes()
-///             ) {
-///                 Ok(v) => v,
-///                 Err(_) => {
-///                     core::panicking::panic_fmt(core::const_format_args!(
-///                         "string contains interior NUL"
-///                     ));
-///                 }
-///             };
-///             C
-///         })
-///     };
-///
-///     const N: usize = (1usize + (1usize + 0usize)) + 1usize;
-///
-///     static CONFIGURATION_ATTRS: kernel::configfs::AttributeList<N, Configuration> =
-///         unsafe { kernel::configfs::AttributeList::new() };
-///
-///     {
-///         const N: usize = 0usize;
-///         unsafe { CONFIGURATION_ATTRS.add::<N, 0, _>(&CONFIGURATION_MESSAGE_ATTR) };
-///     }
-///
-///     {
-///         const N: usize = (1usize + 0usize);
-///         unsafe { CONFIGURATION_ATTRS.add::<N, 1, _>(&CONFIGURATION_BAR_ATTR) };
-///     }
-///
-///     static CONFIGURATION_TPE:
-///       kernel::configfs::ItemType<configfs::Subsystem<Configuration> ,Configuration>
-///         = kernel::configfs::ItemType::<
-///                 configfs::Subsystem<Configuration>,
-///                 Configuration
-///                 >::new_with_child_ctor::<N,Child>(
-///             &THIS_MODULE,
-///             &CONFIGURATION_ATTRS
-///         );
-///
-///     &CONFIGURATION_TPE
-/// }
-/// ```
-#[macro_export]
-macro_rules! configfs_attrs {
-    (
-        container: $container:ty,
-        data: $data:ty,
-        attributes: [
-            $($name:ident: $attr:literal),* $(,)?
-        ] $(,)?
-    ) => {
-        $crate::configfs_attrs!(
-            count:
-            @container($container),
-            @data($data),
-            @child(),
-            @no_child(x),
-            @attrs($($name $attr)*),
-            @eat($($name $attr,)*),
-            @assign(),
-            @cnt(0usize),
-        )
-    };
-    (
-        container: $container:ty,
-        data: $data:ty,
-        child: $child:ty,
-        attributes: [
-            $($name:ident: $attr:literal),* $(,)?
-        ] $(,)?
-    ) => {
-        $crate::configfs_attrs!(
-            count:
-            @container($container),
-            @data($data),
-            @child($child),
-            @no_child(),
-            @attrs($($name $attr)*),
-            @eat($($name $attr,)*),
-            @assign(),
-            @cnt(0usize),
-        )
-    };
-    (count:
-     @container($container:ty),
-     @data($data:ty),
-     @child($($child:ty)?),
-     @no_child($($no_child:ident)?),
-     @attrs($($aname:ident $aattr:literal)*),
-     @eat($name:ident $attr:literal, $($rname:ident $rattr:literal,)*),
-     @assign($($assign:block)*),
-     @cnt($cnt:expr),
-    ) => {
-        $crate::configfs_attrs!(
-            count:
-            @container($container),
-            @data($data),
-            @child($($child)?),
-            @no_child($($no_child)?),
-            @attrs($($aname $aattr)*),
-            @eat($($rname $rattr,)*),
-            @assign($($assign)* {
-                const N: usize = $cnt;
-                // The following macro text expands to a call to `Attribute::add`.
-
-                // SAFETY: By design of this macro, the name of the variable we
-                // invoke the `add` method on below, is not visible outside of
-                // the macro expansion. The macro does not operate concurrently
-                // on this variable, and thus we have exclusive access to the
-                // variable.
-                unsafe {
-                    $crate::macros::paste!(
-                        [< $data:upper _ATTRS >]
-                            .add::<N, $attr, _>(&[< $data:upper _ $name:upper _ATTR >])
-                    )
-                };
-            }),
-            @cnt(1usize + $cnt),
-        )
-    };
-    (count:
-     @container($container:ty),
-     @data($data:ty),
-     @child($($child:ty)?),
-     @no_child($($no_child:ident)?),
-     @attrs($($aname:ident $aattr:literal)*),
-     @eat(),
-     @assign($($assign:block)*),
-     @cnt($cnt:expr),
-    ) =>
-    {
-        $crate::configfs_attrs!(
-            final:
-            @container($container),
-            @data($data),
-            @child($($child)?),
-            @no_child($($no_child)?),
-            @attrs($($aname $aattr)*),
-            @assign($($assign)*),
-            @cnt($cnt),
-        )
-    };
-    (final:
-     @container($container:ty),
-     @data($data:ty),
-     @child($($child:ty)?),
-     @no_child($($no_child:ident)?),
-     @attrs($($name:ident $attr:literal)*),
-     @assign($($assign:block)*),
-     @cnt($cnt:expr),
-    ) =>
-    {
-        $crate::macros::paste!{
-            {
-                $(
-                    // SAFETY: We are expanding `configfs_attrs`.
-                    static [< $data:upper _ $name:upper _ATTR >]:
-                        $crate::configfs::Attribute<$attr, $data, $data> =
-                            unsafe {
-                                $crate::configfs::Attribute::new(
-                                    $crate::c_str!(::core::stringify!($name)),
-                                )
-                            };
-                )*
-
-
-                // We need space for a null terminator.
-                const N: usize = $cnt + 1usize;
-
-                // SAFETY: We are expanding `configfs_attrs`.
-                static [< $data:upper _ATTRS >]:
-                $crate::configfs::AttributeList<N, $data> =
-                    unsafe { $crate::configfs::AttributeList::new() };
-
-                $($assign)*
-
-                $(
-                    const [<$no_child:upper>]: bool = true;
-
-                    static [< $data:upper _TPE >] : $crate::configfs::ItemType<$container, $data>  =
-                        $crate::configfs::ItemType::<$container, $data>::new::<N>(
-                            &THIS_MODULE, &[<$ data:upper _ATTRS >]
-                        );
-                )?
-
-                $(
-                    static [< $data:upper _TPE >]:
-                        $crate::configfs::ItemType<$container, $data>  =
-                            $crate::configfs::ItemType::<$container, $data>::
-                            new_with_child_ctor::<N, $child>(
-                                &THIS_MODULE, &[<$ data:upper _ATTRS >]
-                            );
-                )?
-
-                & [< $data:upper _TPE >]
-            }
-        }
-    };
-
-}
-
-pub use crate::configfs_attrs;
