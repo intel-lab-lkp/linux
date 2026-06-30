@@ -384,7 +384,8 @@ xfs_broot_alloc(
 	ASSERT(ifp->if_broot == NULL);
 
 	ifp->if_broot = kmalloc(new_size,
-				GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+				GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL |
+				__GFP_ZERO);
 	ifp->if_broot_bytes = new_size;
 	return ifp->if_broot;
 }
@@ -417,7 +418,8 @@ xfs_broot_realloc(
 	if (ifp->if_broot_bytes > 0 && ifp->if_broot_bytes > new_size) {
 		struct xfs_btree_block	*old_broot = ifp->if_broot;
 
-		ifp->if_broot = kmalloc(new_size, GFP_KERNEL | __GFP_NOFAIL);
+		ifp->if_broot = kmalloc(new_size,
+					GFP_KERNEL | __GFP_NOFAIL | __GFP_ZERO);
 		ifp->if_broot_bytes = new_size;
 		memcpy(ifp->if_broot, old_broot, new_size);
 		kfree(old_broot);
@@ -429,7 +431,7 @@ xfs_broot_realloc(
 	 * object.
 	 */
 	ifp->if_broot = krealloc(ifp->if_broot, new_size,
-			GFP_KERNEL | __GFP_NOFAIL);
+			GFP_KERNEL | __GFP_NOFAIL | __GFP_ZERO);
 	ifp->if_broot_bytes = new_size;
 	return ifp->if_broot;
 }
