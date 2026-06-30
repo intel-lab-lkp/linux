@@ -282,11 +282,10 @@ static irqreturn_t mal_txeob(int irq, void *dev_instance)
 	mal_schedule_poll(mal);
 	set_mal_dcrn(mal, MAL_TXEOBISR, r);
 
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (mal_has_feature(mal, MAL_FTR_CLEAR_ICINTSTAT))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    mal_has_feature(mal, MAL_FTR_CLEAR_ICINTSTAT))
 		mtdcri(SDR0, DCRN_SDR_ICINTSTAT,
-				(mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICTX));
-#endif
+			(mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICTX));
 
 	return IRQ_HANDLED;
 }
@@ -302,11 +301,10 @@ static irqreturn_t mal_rxeob(int irq, void *dev_instance)
 	mal_schedule_poll(mal);
 	set_mal_dcrn(mal, MAL_RXEOBISR, r);
 
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (mal_has_feature(mal, MAL_FTR_CLEAR_ICINTSTAT))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    mal_has_feature(mal, MAL_FTR_CLEAR_ICINTSTAT))
 		mtdcri(SDR0, DCRN_SDR_ICINTSTAT,
-				(mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICRX));
-#endif
+			(mfdcri(SDR0, DCRN_SDR_ICINTSTAT) | ICINTSTAT_ICRX));
 
 	return IRQ_HANDLED;
 }

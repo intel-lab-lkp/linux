@@ -139,20 +139,18 @@ static inline void emac_report_timeout_error(struct emac_instance *dev,
  */
 static inline void emac_rx_clk_tx(struct emac_instance *dev)
 {
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (emac_has_feature(dev, EMAC_FTR_440EP_PHY_CLK_FIX))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_440EP_PHY_CLK_FIX))
 		dcri_clrset(SDR0, SDR0_MFR,
 			    0, SDR0_MFR_ECS >> dev->cell_index);
-#endif
 }
 
 static inline void emac_rx_clk_default(struct emac_instance *dev)
 {
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (emac_has_feature(dev, EMAC_FTR_440EP_PHY_CLK_FIX))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_440EP_PHY_CLK_FIX))
 		dcri_clrset(SDR0, SDR0_MFR,
 			    SDR0_MFR_ECS >> dev->cell_index, 0);
-#endif
 }
 
 /* PHY polling intervals */
@@ -339,7 +337,7 @@ static int emac_reset(struct emac_instance *dev)
 {
 	struct emac_regs __iomem *p = dev->emacp;
 	int n = 20;
-	bool __maybe_unused try_internal_clock = false;
+	bool try_internal_clock = false;
 
 	DBG(dev, "reset" NL);
 
@@ -351,8 +349,6 @@ static int emac_reset(struct emac_instance *dev)
 		emac_tx_disable(dev);
 	}
 
-#ifdef CONFIG_PPC_DCR_NATIVE
-do_retry:
 	/*
 	 * PPC460EX/GT Embedded Processor Advanced User's Manual
 	 * section 28.10.1 Mode Register 0 (EMACx_MR0) states:
@@ -370,7 +366,9 @@ do_retry:
 	 * driver will temporarily switch to the internal clock, after
 	 * the first reset fails.
 	 */
-	if (emac_has_feature(dev, EMAC_FTR_460EX_PHY_CLK_FIX)) {
+retry:
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_460EX_PHY_CLK_FIX)) {
 		if (try_internal_clock || (dev->phy_address == 0xffffffff &&
 					   dev->phy_map == 0xffffffff)) {
 			/* No PHY: select internal loop clock before reset */
@@ -382,19 +380,18 @@ do_retry:
 				    SDR0_ETH_CFG_ECS << dev->cell_index, 0);
 		}
 	}
-#endif
 
 	out_be32(&p->mr0, EMAC_MR0_SRST);
 	while ((in_be32(&p->mr0) & EMAC_MR0_SRST) && n)
 		--n;
 
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (emac_has_feature(dev, EMAC_FTR_460EX_PHY_CLK_FIX)) {
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_460EX_PHY_CLK_FIX)) {
 		if (!n && !try_internal_clock) {
 			/* first attempt has timed out. */
 			n = 20;
 			try_internal_clock = true;
-			goto do_retry;
+			goto retry;
 		}
 
 		if (try_internal_clock || (dev->phy_address == 0xffffffff &&
@@ -404,7 +401,6 @@ do_retry:
 				    SDR0_ETH_CFG_ECS << dev->cell_index, 0);
 		}
 	}
-#endif
 
 	if (n) {
 		dev->reset_failed = 0;
@@ -2754,18 +2750,16 @@ static int emac_init_phy(struct emac_instance *dev)
 	dev->phy.mdio_write = emac_mdio_write;
 
 	/* Enable internal clock source */
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (emac_has_feature(dev, EMAC_FTR_440GX_PHY_CLK_FIX))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_440GX_PHY_CLK_FIX))
 		dcri_clrset(SDR0, SDR0_MFR, 0, SDR0_MFR_ECS);
-#endif
 	/* PHY clock workaround */
 	emac_rx_clk_tx(dev);
 
 	/* Enable internal clock source on 440GX*/
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (emac_has_feature(dev, EMAC_FTR_440GX_PHY_CLK_FIX))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_440GX_PHY_CLK_FIX))
 		dcri_clrset(SDR0, SDR0_MFR, 0, SDR0_MFR_ECS);
-#endif
 	/* Configure EMAC with defaults so we can at least use MDIO
 	 * This is needed mostly for 440GX
 	 */
@@ -2825,10 +2819,9 @@ static int emac_init_phy(struct emac_instance *dev)
 		}
 
 	/* Enable external clock source */
-#ifdef CONFIG_PPC_DCR_NATIVE
-	if (emac_has_feature(dev, EMAC_FTR_440GX_PHY_CLK_FIX))
+	if (IS_ENABLED(CONFIG_PPC_DCR_NATIVE) &&
+	    emac_has_feature(dev, EMAC_FTR_440GX_PHY_CLK_FIX))
 		dcri_clrset(SDR0, SDR0_MFR, SDR0_MFR_ECS, 0);
-#endif
 	mutex_unlock(&emac_phy_map_lock);
 	if (i == 0x20) {
 		printk(KERN_WARNING "%pOF: can't find PHY!\n", np);
