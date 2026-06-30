@@ -181,6 +181,50 @@ static int kvm_ptdump_guest_canonical_show(struct seq_file *m, void *unused)
 	return 0;
 }
 
+static int kvm_ptdump_guest_nested_show(struct seq_file *m, void *unused)
+{
+	int ret = 0, i;
+	struct kvm_ptdump_guest_state *st = m->private;
+	struct kvm *kvm = st->kvm;
+	struct kvm_pgtable_walker walker = (struct kvm_pgtable_walker) {
+		.cb	= kvm_ptdump_visitor,
+		.arg	= &st->parser_state,
+		.flags	= KVM_PGTABLE_WALK_LEAF,
+	};
+
+	guard(write_lock)(&kvm->mmu_lock);
+
+	if (!kvm->arch.nested_mmus)
+		return 0;
+
+	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
+		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
+
+		if (!mmu->pgt)
+			continue;
+
+		if (kvm_s2_mmu_valid(mmu)) {
+			memset(st, 0, sizeof(*st));
+			ret = kvm_ptdump_parser_init(st, kvm, mmu->pgt);
+			if (ret)
+				return ret;
+			st->parser_state = (struct ptdump_pg_state) {
+				.marker		= &st->ipa_marker[0],
+				.level		= -1,
+				.pg_level	= &st->level[0],
+				.seq		= m,
+			};
+			seq_printf(m, "nested mmu %d VTCR: 0x%016llx VTTBR: 0x%016llx s2: %s\n",
+				   i, mmu->tlb_vtcr, mmu->tlb_vttbr,
+				   mmu->nested_stage2_enabled ? "enabled" : "disabled");
+			ret = kvm_pgtable_walk(mmu->pgt, 0, BIT(mmu->pgt->ia_bits), &walker);
+			if (ret)
+				return ret;
+		}
+	}
+	return ret;
+}
+
 static int kvm_ptdump_guest_open(struct inode *m, struct file *file,
 				 int (*show)(struct seq_file *, void *))
 {
@@ -212,6 +256,11 @@ static int kvm_ptdump_guest_canonical_open(struct inode *m, struct file *file)
 	return kvm_ptdump_guest_open(m, file, kvm_ptdump_guest_canonical_show);
 }
 
+static int kvm_ptdump_guest_nested_open(struct inode *m, struct file *file)
+{
+	return kvm_ptdump_guest_open(m, file, kvm_ptdump_guest_nested_show);
+}
+
 static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
 {
 	struct kvm *kvm = m->i_private;
@@ -225,6 +274,13 @@ static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
 
 static const struct file_operations kvm_ptdump_guest_canonical_fops = {
 	.open		= kvm_ptdump_guest_canonical_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= kvm_ptdump_guest_close,
+};
+
+static const struct file_operations kvm_ptdump_guest_nested_fops = {
+	.open		= kvm_ptdump_guest_nested_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= kvm_ptdump_guest_close,
@@ -307,6 +363,9 @@ void kvm_s2_ptdump_create_debugfs(struct kvm *kvm)
 			    kvm, &kvm_pgtable_range_fops);
 	debugfs_create_file("stage2_levels", 0400, kvm->debugfs_dentry,
 			    kvm, &kvm_pgtable_levels_fops);
-	if (cpus_have_final_cap(ARM64_HAS_NESTED_VIRT))
+	if (cpus_have_final_cap(ARM64_HAS_NESTED_VIRT)) {
 		kvm->arch.debugfs_nv_dentry = debugfs_create_dir("nested", kvm->debugfs_dentry);
+		debugfs_create_file("shadow_page_tables", 0400, kvm->arch.debugfs_nv_dentry,
+				    kvm, &kvm_ptdump_guest_nested_fops);
+	}
 }

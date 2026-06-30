@@ -1266,6 +1266,7 @@ void kvm_nested_s2_flush(struct kvm *kvm)
 
 void kvm_arch_flush_shadow_all(struct kvm *kvm)
 {
+	struct kvm_s2_mmu *mmus;
 	int i;
 
 	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
@@ -1274,9 +1275,14 @@ void kvm_arch_flush_shadow_all(struct kvm *kvm)
 		if (!WARN_ON(atomic_read(&mmu->refcnt)))
 			kvm_free_stage2_pgd(mmu);
 	}
-	kvfree(kvm->arch.nested_mmus);
-	kvm->arch.nested_mmus = NULL;
-	kvm->arch.nested_mmus_size = 0;
+
+	scoped_guard(write_lock, &kvm->mmu_lock) {
+		mmus = kvm->arch.nested_mmus;
+		kvm->arch.nested_mmus = NULL;
+		kvm->arch.nested_mmus_size = 0;
+	}
+
+	kvfree(mmus);
 	kvm_uninit_stage2_mmu(kvm);
 }
 
