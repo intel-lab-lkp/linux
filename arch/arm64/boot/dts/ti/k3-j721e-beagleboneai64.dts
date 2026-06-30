@@ -57,7 +57,7 @@
 			no-map;
 		};
 
-		mcu_r5fss0_core0_memory_region: memory@a0100000 {
+		mcu_r5fss0_core0_memory_region: dm@a0100000 {
 			compatible = "shared-dma-pool";
 			reg = <0x00 0xa0100000 0x00 0xf00000>;
 			no-map;
