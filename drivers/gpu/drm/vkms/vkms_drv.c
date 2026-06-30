@@ -91,7 +91,8 @@ static void vkms_atomic_commit_tail(struct drm_atomic_commit *old_state)
 }
 
 static const struct drm_driver vkms_driver = {
-	.driver_features	= DRIVER_MODESET | DRIVER_ATOMIC | DRIVER_GEM,
+	.driver_features	= DRIVER_MODESET | DRIVER_ATOMIC | DRIVER_GEM |
+				  DRIVER_PLANE_COLOR_PIPELINE,
 	.fops			= &vkms_driver_fops,
 	DRM_GEM_SHMEM_DRIVER_OPS,
 	DRM_FBDEV_SHMEM_DRIVER_OPS,
@@ -183,6 +184,9 @@ int vkms_create(struct vkms_config *config)
 	vkms_device->faux_dev = fdev;
 	vkms_device->config = config;
 	config->dev = vkms_device;
+
+	if (!enable_plane_pipeline)
+		vkms_device->drm.driver_features &= ~DRIVER_PLANE_COLOR_PIPELINE;
 
 	ret = dma_coerce_mask_and_coherent(vkms_device->drm.dev,
 					   DMA_BIT_MASK(64));
