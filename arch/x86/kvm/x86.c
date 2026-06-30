@@ -6903,6 +6903,8 @@ static void kvm_setup_efer_caps(void)
 
 	if (kvm_cpu_cap_has(X86_FEATURE_AUTOIBRS))
 		kvm_enable_efer_bits(EFER_AUTOIBRS);
+
+	kvm_x86_call(setup_efer_caps)();
 }
 
 static inline void kvm_ops_update(struct kvm_x86_init_ops *ops)
@@ -7041,12 +7043,12 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 	if (r != 0)
 		goto out_mmu_exit;
 
-	kvm_setup_efer_caps();
-
 	enable_device_posted_irqs &= enable_apicv &&
 				     irq_remapping_cap(IRQ_POSTING_CAP);
 
 	kvm_ops_update(ops);
+
+	kvm_setup_efer_caps();
 
 	for_each_online_cpu(cpu) {
 		smp_call_function_single(cpu, kvm_x86_check_cpu_compat, &r, 1);
