@@ -7,6 +7,7 @@
 #include <linux/rvtrace.h>
 #include <linux/types.h>
 #include "rvtrace-v0.h"
+#include "rvtrace-ramsink.h"
 
 #define RVTRACE_COMPONENT_CTRL_ITRACE_SHIFT	2
 #define RVTRACE_COMPONENT_CTRL_INSTMODE_SHIFT	4
@@ -78,6 +79,8 @@ static int rvtrace_encoder_stop(struct rvtrace_component *comp)
 
 static int rvtrace_encoder_probe(struct rvtrace_component *comp)
 {
+	struct rvtrace_v0_comp_features *data;
+	struct rvtrace_driver *rtdrv;
 	int ret;
 	u32 comp_maj;
 
@@ -87,6 +90,13 @@ static int rvtrace_encoder_probe(struct rvtrace_component *comp)
 		ret = rvtrace_v0_ramsink_setup(comp);
 		if (ret)
 			return dev_err_probe(&comp->dev, ret, "failed to setup ramsink.\n");
+
+		data = (struct rvtrace_v0_comp_features *)comp->id.data;
+		if (data && (data->has_sba_sink || data->has_sram_sink)) {
+			rtdrv = to_rvtrace_driver(comp->dev.driver);
+			if (!rtdrv->copyto_auxbuf)
+				rtdrv->copyto_auxbuf = rvtrace_ramsink_copyto_auxbuf;
+		}
 	}
 
 	ret = rvtrace_enable_component(comp->pdata);

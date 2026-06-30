@@ -179,8 +179,8 @@ static void tbuf_to_pbuf_copy(struct trace_buf *src, struct trace_buf *dst, size
 	}
 }
 
-static size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
-					    struct rvtrace_perf_auxbuf *buf)
+size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
+				    struct rvtrace_perf_auxbuf *buf)
 {
 	struct rvtrace_ramsink_priv *priv = dev_get_drvdata(&comp->dev);
 	const struct rvtrace_ramsink_regs *regs = priv->regs;
@@ -224,6 +224,7 @@ static size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
 	dev_dbg(&comp->dev, "Copied %zu bytes\n", bytes);
 	return bytes;
 }
+EXPORT_SYMBOL_GPL(rvtrace_ramsink_copyto_auxbuf);
 
 static int rvtrace_ramsink_setup_buf(struct rvtrace_component *comp,
 				     struct rvtrace_ramsink_priv *priv)

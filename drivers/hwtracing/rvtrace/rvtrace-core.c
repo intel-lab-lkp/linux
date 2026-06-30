@@ -677,7 +677,7 @@ int rvtrace_path_copyto_auxbuf(struct rvtrace_path *path,
 	list_for_each_entry(node, &path->comp_list, head) {
 		comp = node->comp;
 		rtdrv = to_rvtrace_driver(comp->dev.driver);
-		if (!rtdrv->copyto_auxbuf)
+		if (!rtdrv->copyto_auxbuf || node->conn)
 			continue;
 
 		*bytes_copied = rtdrv->copyto_auxbuf(comp, buf);
