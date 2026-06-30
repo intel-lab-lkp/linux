@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause) */
+
+#ifndef __DT_BINDINGS_RTC_S35390A_H
+#define __DT_BINDINGS_RTC_S35390A_H
+
+#define S35390A_OUTPUT_PIN_INT1	1
+#define S35390A_OUTPUT_PIN_INT2	2
+
+#endif /* __DT_BINDINGS_RTC_S35390A_H */

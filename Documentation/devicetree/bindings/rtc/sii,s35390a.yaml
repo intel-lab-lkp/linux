@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/sii,s35390a.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: S-35390A 2-WIRE REAL-TIME CLOCK
+
+maintainers:
+  - Alexandre Belloni <alexandre.belloni@bootlin.com>
+
+description:
+  The S-35390A is a CMOS 2-wire real-time clock IC which operates with the
+  very low current consumption in the wide range of operation voltage.
+
+allOf:
+  - $ref: rtc.yaml#
+
+properties:
+  compatible:
+    const: sii,s35390a
+
+  reg:
+    maxItems: 1
+
+  sii,wakealarm-output-pin:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2]
+    description: |
+      The output pin to wake up the system.
+      Default will use the output pin for interrupt signal 2.
+        <S35390A_OUTPUT_PIN_INT1> : Output pin for interrupt signal 1
+        <S35390A_OUTPUT_PIN_INT2> : Output pin for interrupt signal 2
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/rtc/s35390a.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        rtc: rtc@30 {
+            compatible = "sii,s35390a";
+            reg = <0x30>;
+            sii,wakealarm-output-pin = <S35390A_OUTPUT_PIN_INT2>;
+        };
+    };
