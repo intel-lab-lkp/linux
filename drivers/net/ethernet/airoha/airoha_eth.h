@@ -245,6 +245,28 @@ struct airoha_hw_stats {
 	u64 rx_fragment;
 	u64 rx_jabber;
 	u64 rx_len[7];
+
+	struct {
+	/* Previous HW register values for 32-bit counter delta tracking.
+	 * Storing the last seen value and accumulating (u32)(curr - prev)
+	 * in 64-bit software counter & handles wrap-around transparently
+	 * via unsigned arithmetic. These fields are never reported to
+	 * userspace.
+	 */
+		u32 tx_drops;
+		u32 tx_broadcast;
+		u32 tx_multicast;
+		u32 tx_len[7];
+		u32 rx_drops;
+		u32 rx_broadcast;
+		u32 rx_multicast;
+		u32 rx_errors;
+		u32 rx_crc_error;
+		u32 rx_over_errors;
+		u32 rx_fragment;
+		u32 rx_jabber;
+		u32 rx_len[7];
+	} hw_prev_stats;
 };
 
 enum {
