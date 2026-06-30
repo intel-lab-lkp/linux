@@ -54,6 +54,15 @@ static int rvtrace_funnel_probe(struct rvtrace_component *comp)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(comp->pdata->dev);
 	int ret;
+	u32 comp_maj;
+
+	/* Pre-ratified ramsink setup */
+	comp_maj = rvtrace_component_version_major(comp->id.version);
+	if (comp_maj == 0) {
+		ret = rvtrace_v0_ramsink_setup(comp);
+		if (ret)
+			return dev_err_probe(&comp->dev, ret, "failed to setup ramsink.\n");
+	}
 
 	ret = rvtrace_enable_component(comp->pdata);
 	if (ret)

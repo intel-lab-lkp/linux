@@ -10,6 +10,8 @@
 #include <linux/rvtrace.h>
 #include <linux/types.h>
 #include <linux/sizes.h>
+#include "rvtrace-ramsink.h"
+#include "rvtrace-v0.h"
 
 #define RVTRACE_RAMSINK_STARTLOW_OFF		0x010
 #define RVTRACE_RAMSINK_STARTHIGH_OFF		0x014
@@ -81,6 +83,20 @@ struct trace_buf {
 	void *base;
 	size_t cur;
 	size_t len;
+};
+
+/*
+ * Register offset for SiFive trace encoder/funnel system memory sink.
+ * Note: SiFive uses RVTRACE_V0_SINK_BASE_HIGH_OFF for start_high, limit_high,
+ * and wp_high (shared register).
+ */
+static const struct rvtrace_ramsink_regs rvtrace_v0_sink_regs = {
+	.start_low    = RVTRACE_V0_SINK_BASE_OFF,
+	.start_high   = RVTRACE_V0_SINK_BASE_HIGH_OFF,
+	.limit_low    = RVTRACE_V0_SINK_LIMIT_OFF,
+	.limit_high   = RVTRACE_V0_SINK_BASE_HIGH_OFF,  /* Shared with start_high */
+	.wp_low       = RVTRACE_V0_SINK_WP_OFF,
+	.wp_high      = RVTRACE_V0_SINK_BASE_HIGH_OFF,  /* Shared with start_high */
 };
 
 /* Register offsets for the standard RISC-V trace ramsink */
@@ -285,10 +301,10 @@ static int rvtrace_ramsink_setup_buf(struct rvtrace_component *comp,
 	return 0;
 }
 
-static int rvtrace_ramsink_setup(struct rvtrace_component *comp)
+int rvtrace_ramsink_setup(struct rvtrace_component *comp)
 {
 	struct rvtrace_ramsink_priv *priv;
-	u32 trram_ctrl;
+	u32 trram_ctrl, comp_maj;
 	int ret;
 
 	priv = devm_kzalloc(&comp->dev, sizeof(*priv), GFP_KERNEL);
@@ -305,16 +321,26 @@ static int rvtrace_ramsink_setup(struct rvtrace_component *comp)
 		break;
 	}
 
-	priv->regs = &rvtrace_std_ramsink_regs;
+	comp_maj = rvtrace_component_version_major(comp->id.version);
+	/* Pre-ratified ramsink regs */
+	if (comp_maj == 0)
+		priv->regs = &rvtrace_v0_sink_regs;
+	else
+		priv->regs = &rvtrace_std_ramsink_regs;
 
 	trram_ctrl = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
-	trram_ctrl |= priv->mode << RVTRACE_RAMSINK_CTRL_MODE_SHIFT;
-	rvtrace_write32(comp->pdata, trram_ctrl, RVTRACE_COMPONENT_CTRL_OFFSET);
-	trram_ctrl = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
-	dev_dbg(&comp->dev, "mode: %s\n", (trram_ctrl >> RVTRACE_RAMSINK_CTRL_MODE_SHIFT) & 0x1 ?
-		 "SMEM" : "SRAM");
 
-	trram_ctrl |= priv->stop_on_wrap << RVTRACE_RAMSINK_CTRL_STP_WRAP_SHIFT;
+	if (comp_maj == 0) {
+		trram_ctrl |= priv->stop_on_wrap << RVTRACE_V0_CTRL_STOP_ON_WRAP_SHIFT;
+	} else {
+		trram_ctrl |= priv->mode << RVTRACE_RAMSINK_CTRL_MODE_SHIFT;
+		rvtrace_write32(comp->pdata, trram_ctrl, RVTRACE_COMPONENT_CTRL_OFFSET);
+		trram_ctrl = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
+		dev_dbg(&comp->dev, "mode: %s\n",
+			(trram_ctrl >> RVTRACE_RAMSINK_CTRL_MODE_SHIFT) & 0x1 ? "SMEM" : "SRAM");
+		trram_ctrl |= priv->stop_on_wrap << RVTRACE_RAMSINK_CTRL_STP_WRAP_SHIFT;
+	}
+
 	rvtrace_write32(comp->pdata, trram_ctrl, RVTRACE_COMPONENT_CTRL_OFFSET);
 
 	ret = rvtrace_ramsink_setup_buf(comp, priv);

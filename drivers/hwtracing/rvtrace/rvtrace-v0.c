@@ -3,8 +3,51 @@
  * Copyright (c) 2026 SiFive Inc.
  */
 
+#include <linux/of_reserved_mem.h>
 #include <linux/rvtrace.h>
 #include "rvtrace-v0.h"
+#include "rvtrace-ramsink.h"
+
+int rvtrace_v0_ramsink_setup(struct rvtrace_component *comp)
+{
+	struct rvtrace_v0_comp_features	*data = NULL;
+	int ret;
+	u32 val;
+
+	data = (struct rvtrace_v0_comp_features *)comp->id.data;
+	if (!data)
+		return -EINVAL;
+
+	if (comp->id.type > RVTRACE_COMPONENT_TYPE_FUNNEL)
+		return -EOPNOTSUPP;
+
+	if (data->has_sba_sink) {
+		/*
+		 * The pre-ratified ramsink's sink limit and write pointer registers share
+		 * their upper 32 bits with the sink base address register. This hardware
+		 * constraint prevents the trace buffer from crossing a 4GB memory boundary.
+		 *
+		 * Use of_reserved_mem_device_init() to associate the device with a
+		 * reserved memory region defined in the Device Tree. This ensures the
+		 * buffer allocation adheres to the necessary alignment and size constraints.
+		 */
+		ret = of_reserved_mem_device_init(comp->pdata->dev);
+		if (ret) {
+			dev_err(comp->pdata->dev, "Failed to get reserved memory region\n");
+			return ret;
+		}
+
+		/* Set comp sink to SBA (system memory) */
+		val = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
+		val &= ~RVTRACE_V0_CTRL_SINK_MASK;
+		val |= TE_SINK_SBA << RVTRACE_V0_CTRL_SINK_SHIFT;
+		rvtrace_write32(comp->pdata, val, RVTRACE_COMPONENT_CTRL_OFFSET);
+
+		return rvtrace_ramsink_setup(comp);
+	}
+
+	return 0;
+}
 
 int rvtrace_v0_sink_config(struct rvtrace_path_node *node)
 {
