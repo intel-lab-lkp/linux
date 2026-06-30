@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/ti,omap4-dmic.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments OMAP4+ Digital Microphone Module
+
+maintainers:
+  - Peter Ujfalusi <peter.ujfalusi@ti.com>
+
+description:
+  The OMAP4+ Digital Microphone (DMIC) controller captures audio from
+  up to three stereo digital microphone pairs over an I2S-like
+  interface and transfers the resulting PCM data to memory via DMA.
+  The controller exposes two register regions, one for MPU-private
+  control and status access and one for the L3 interconnect side
+  used for data transfer, and is found on OMAP4, OMAP5 and DRA7xx
+  family SoCs.
+
+properties:
+  compatible:
+    const: ti,omap4-dmic
+
+  reg:
+    maxItems: 2
+
+  reg-names:
+    items:
+      - const: mpu
+      - const: dma
+
+  interrupts:
+    maxItems: 1
+
+  ti,hwmods:
+    description: Name of the hwmod associated with OMAP DMIC IP.
+    const: dmic
+
+  dmas:
+    maxItems: 1
+
+  dma-names:
+    const: up_link
+
+required:
+  - reg
+  - compatible
+  - reg-names
+  - interrupts
+  - dmas
+  - dma-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    dmic@4012e000 {
+        compatible = "ti,omap4-dmic";
+        reg = <0x4012e000 0x7f>, /* MPU private access */
+              <0x4902e000 0x7f>; /* L3 Interconnect */
+        reg-names = "mpu", "dma";
+        interrupts = <GIC_SPI 114 IRQ_TYPE_LEVEL_HIGH>;
+        dmas = <&sdma 67>;
+        dma-names = "up_link";
+        ti,hwmods = "dmic";
+    };
