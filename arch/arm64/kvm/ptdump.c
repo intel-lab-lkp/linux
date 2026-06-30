@@ -115,12 +115,20 @@ static int kvm_ptdump_build_levels(struct ptdump_pg_level *level, u32 start_lvl)
 static struct kvm_ptdump_guest_state *kvm_ptdump_parser_create(struct kvm *kvm)
 {
 	struct kvm_ptdump_guest_state *st;
-	struct kvm_pgtable *pgtable = kvm->arch.mmu.pgt;
+	struct kvm_pgtable *pgtable;
 	int ret;
 
 	st = kzalloc_obj(struct kvm_ptdump_guest_state, GFP_KERNEL_ACCOUNT);
 	if (!st)
 		return ERR_PTR(-ENOMEM);
+
+	guard(write_lock)(&kvm->mmu_lock);
+	if (!kvm->arch.mmu.pgt) {
+		kfree(st);
+		return ERR_PTR(-ENXIO);
+	}
+
+	pgtable = kvm->arch.mmu.pgt;
 
 	ret = kvm_ptdump_build_levels(&st->level[0], pgtable->start_level);
 	if (ret) {
@@ -137,7 +145,6 @@ static struct kvm_ptdump_guest_state *kvm_ptdump_parser_create(struct kvm *kvm)
 
 static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
 {
-	int ret;
 	struct kvm_ptdump_guest_state *st = m->private;
 	struct kvm *kvm = st->kvm;
 	struct kvm_s2_mmu *mmu = &kvm->arch.mmu;
@@ -154,11 +161,11 @@ static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
 		.seq		= m,
 	};
 
-	write_lock(&kvm->mmu_lock);
-	ret = kvm_pgtable_walk(mmu->pgt, 0, BIT(mmu->pgt->ia_bits), &walker);
-	write_unlock(&kvm->mmu_lock);
+	guard(write_lock)(&kvm->mmu_lock);
+	if (mmu->pgt)
+		return kvm_pgtable_walk(mmu->pgt, 0, BIT(mmu->pgt->ia_bits), &walker);
 
-	return ret;
+	return 0;
 }
 
 static int kvm_ptdump_guest_open(struct inode *m, struct file *file)
@@ -206,17 +213,23 @@ static const struct file_operations kvm_ptdump_guest_fops = {
 
 static int kvm_pgtable_range_show(struct seq_file *m, void *unused)
 {
-	struct kvm_pgtable *pgtable = m->private;
+	struct kvm *kvm = m->private;
 
-	seq_printf(m, "%2u\n", pgtable->ia_bits);
+	guard(write_lock)(&kvm->mmu_lock);
+	if (kvm->arch.mmu.pgt)
+		seq_printf(m, "%2u\n", kvm->arch.mmu.pgt->ia_bits);
+
 	return 0;
 }
 
 static int kvm_pgtable_levels_show(struct seq_file *m, void *unused)
 {
-	struct kvm_pgtable *pgtable = m->private;
+	struct kvm *kvm = m->private;
 
-	seq_printf(m, "%1d\n", KVM_PGTABLE_MAX_LEVELS - pgtable->start_level);
+	guard(write_lock)(&kvm->mmu_lock);
+	if (kvm->arch.mmu.pgt)
+		seq_printf(m, "%1d\n", KVM_PGTABLE_MAX_LEVELS - kvm->arch.mmu.pgt->start_level);
+
 	return 0;
 }
 
@@ -224,15 +237,12 @@ static int kvm_pgtable_debugfs_open(struct inode *m, struct file *file,
 				    int (*show)(struct seq_file *, void *))
 {
 	struct kvm *kvm = m->i_private;
-	struct kvm_pgtable *pgtable;
 	int ret;
 
 	if (!kvm_get_kvm_safe(kvm))
 		return -ENOENT;
 
-	pgtable = kvm->arch.mmu.pgt;
-
-	ret = single_open(file, show, pgtable);
+	ret = single_open(file, show, kvm);
 	if (ret < 0)
 		kvm_put_kvm(kvm);
 	return ret;
