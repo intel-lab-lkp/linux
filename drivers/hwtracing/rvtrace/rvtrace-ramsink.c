@@ -59,7 +59,6 @@ struct rvtrace_ramsink_regs {
  * @stop_on_wrap: Whether to stop tracing when buffer wraps
  * @mem_acc_width: Memory access width in bytes
  * @regs:         Pointer to register offset definitions
- * @prev_wp:      Previous write pointer position (for incremental copies)
  */
 struct rvtrace_ramsink_priv {
 	size_t size;
@@ -70,7 +69,6 @@ struct rvtrace_ramsink_priv {
 	bool stop_on_wrap;
 	int mem_acc_width;
 	const struct rvtrace_ramsink_regs *regs;
-	u64 prev_wp;
 };
 
 /**
@@ -202,25 +200,25 @@ size_t rvtrace_ramsink_copyto_auxbuf(struct rvtrace_component *comp,
 	wrap = wp & RVTRACE_RAMSINK_WPLOW_WRAP;
 	wp &= ~RVTRACE_RAMSINK_WPLOW_WRAP;
 	if (wrap) {
-		rvtrace_write32(comp->pdata, lower_32_bits(priv->start),
-				regs->wp_low);
-		rvtrace_write32(comp->pdata, upper_32_bits(priv->start),
-				regs->wp_high);
 		src.cur = wp - priv->start;
-		priv->prev_wp = priv->start;
 		/*
-		 * There is no way to tell if trRamWp wrapped around more than once. As a
-		 * result priv->prev_wp can't be used and the entire buffer must be copied
-		 * even though some data might be duplicated.
+		 * There is no way to tell if trRamWp wrapped around more than once.
+		 * The entire buffer must be copied even though some data might be duplicated.
 		 */
 		bytes = priv->size;
 	} else {
-		src.cur =  priv->prev_wp - priv->start;
-		bytes = wp - priv->prev_wp;
-		priv->prev_wp = wp;
+		src.cur = 0;
+		bytes = wp - priv->start;
 	}
 
 	tbuf_to_pbuf_copy(&src, &dst, bytes);
+
+	/* Reset WP after trace data copy to perf AUX buf */
+	rvtrace_write32(comp->pdata, lower_32_bits(priv->start),
+			regs->wp_low);
+	rvtrace_write32(comp->pdata, upper_32_bits(priv->start),
+			regs->wp_high);
+
 	dev_dbg(&comp->dev, "Copied %zu bytes\n", bytes);
 	return bytes;
 }
@@ -258,7 +256,6 @@ static int rvtrace_ramsink_setup_buf(struct rvtrace_component *comp,
 		return -ENOMEM;
 
 	priv->end = priv->start + priv->size;
-	priv->prev_wp = priv->start;
 	if (priv->end <= start_min || priv->start >= limit_max) {
 		dma_free_coherent(pdev, priv->size, priv->va, priv->start);
 		dev_err(&comp->dev, "DMA memory not addressable by device\n");
