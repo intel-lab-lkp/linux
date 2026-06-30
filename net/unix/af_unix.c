@@ -2459,6 +2459,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 				goto out_free;
 
 			size = err;
+			skb_shinfo(skb)->flags |= SKBFL_SHARED_FRAG;
 			refcount_add(size, &sk->sk_wmem_alloc);
 		} else {
 			skb_put(skb, size - data_len);
