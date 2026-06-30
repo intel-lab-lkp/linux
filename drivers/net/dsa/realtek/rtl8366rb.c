@@ -820,6 +820,40 @@ static int rtl8366rb_port_remove_isolation(struct realtek_priv *priv, int port,
 				  RTL8366RB_PORT_ISO_PORTS(mask), 0);
 }
 
+static void
+rtl8366rb_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
+{
+	struct realtek_priv *priv = ds->priv;
+	u32 val;
+	int i;
+
+	switch (state) {
+	case BR_STATE_DISABLED:
+		val = RTL8366RB_STP_STATE_DISABLED;
+		break;
+	case BR_STATE_BLOCKING:
+	case BR_STATE_LISTENING:
+		val = RTL8366RB_STP_STATE_BLOCKING;
+		break;
+	case BR_STATE_LEARNING:
+		val = RTL8366RB_STP_STATE_LEARNING;
+		break;
+	case BR_STATE_FORWARDING:
+		val = RTL8366RB_STP_STATE_FORWARDING;
+		break;
+	default:
+		dev_err(priv->dev, "unknown bridge state requested\n");
+		return;
+	}
+
+	/* Set the same status for the port on all the FIDs */
+	for (i = 0; i < RTL8366RB_NUM_FIDS; i++) {
+		regmap_update_bits(priv->map, RTL8366RB_STP_STATE_BASE + i,
+				   RTL8366RB_STP_STATE_MASK(port),
+				   RTL8366RB_STP_STATE(port, val));
+	}
+}
+
 static int rtl8366rb_setup(struct dsa_switch *ds)
 {
 	struct realtek_priv *priv = ds->priv;
@@ -900,6 +934,12 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 
 	/* Start with all ports blocked, including unused ports */
 	dsa_switch_for_each_port(dp, ds) {
+		/* Set the initial STP state of all ports to DISABLED, otherwise
+		 * ports will still forward frames to the CPU despite being
+		 * administratively down by default.
+		 */
+		rtl8366rb_port_stp_state_set(ds, dp->index, BR_STATE_DISABLED);
+
 		/* Start with all ports completely isolated */
 		ret = rtl8366rb_port_set_isolation(priv, dp->index, 0);
 		if (ret)
@@ -1318,40 +1358,6 @@ rtl8366rb_port_bridge_flags(struct dsa_switch *ds, int port,
 	}
 
 	return 0;
-}
-
-static void
-rtl8366rb_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
-{
-	struct realtek_priv *priv = ds->priv;
-	u32 val;
-	int i;
-
-	switch (state) {
-	case BR_STATE_DISABLED:
-		val = RTL8366RB_STP_STATE_DISABLED;
-		break;
-	case BR_STATE_BLOCKING:
-	case BR_STATE_LISTENING:
-		val = RTL8366RB_STP_STATE_BLOCKING;
-		break;
-	case BR_STATE_LEARNING:
-		val = RTL8366RB_STP_STATE_LEARNING;
-		break;
-	case BR_STATE_FORWARDING:
-		val = RTL8366RB_STP_STATE_FORWARDING;
-		break;
-	default:
-		dev_err(priv->dev, "unknown bridge state requested\n");
-		return;
-	}
-
-	/* Set the same status for the port on all the FIDs */
-	for (i = 0; i < RTL8366RB_NUM_FIDS; i++) {
-		regmap_update_bits(priv->map, RTL8366RB_STP_STATE_BASE + i,
-				   RTL8366RB_STP_STATE_MASK(port),
-				   RTL8366RB_STP_STATE(port, val));
-	}
 }
 
 static void
