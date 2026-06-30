@@ -210,16 +210,14 @@ static void ConstructPSPoll(struct adapter *padapter, u8 *pframe, u32 *pLength)
 	*pLength = 16;
 }
 
-static void ConstructNullFunctionData(
-	struct adapter *padapter,
-	u8 *pframe,
-	u32 *pLength,
-	u8 *StaAddr,
-	u8 bQoS,
-	u8 AC,
-	u8 bEosp,
-	u8 bForcePowerSave
-)
+static void ConstructNullFunctionData(struct adapter *padapter,
+				      u8 *pframe,
+				      u32 *pLength,
+				      u8 *StaAddr,
+				      u8 bQoS,
+				      u8 AC,
+				      u8 bEosp,
+				      u8 bForcePowerSave)
 {
 	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
@@ -460,9 +458,7 @@ void rtl8723b_set_FwPwrModeInIPS_cmd(struct adapter *padapter, u8 cmd_param)
  * to Hw again and set the length in descriptor to the real beacon length.
  */
 /* 2009.10.15 by tynli. */
-static void rtl8723b_set_FwRsvdPagePkt(
-	struct adapter *padapter, bool bDLFinished
-)
+static void rtl8723b_set_FwRsvdPagePkt(struct adapter *padapter, bool bDLFinished)
 {
 	struct xmit_frame *pcmdframe;
 	struct pkt_attrib *pattrib;
@@ -522,13 +518,12 @@ static void rtl8723b_set_FwRsvdPagePkt(
 
 	/* 3 (3) null data */
 	RsvdPageLoc.LocNullData = TotalPageNum;
-	ConstructNullFunctionData(
-		padapter,
-		&ReservedPagePacket[BufIndex],
-		&NullDataLength,
-		get_my_bssid(&pmlmeinfo->network),
-		false, 0, 0, false
-	);
+	ConstructNullFunctionData(padapter,
+				  &ReservedPagePacket[BufIndex],
+				  &NullDataLength,
+				  get_my_bssid(&pmlmeinfo->network),
+				  false, 0, 0, false);
+
 	rtl8723b_fill_fake_txdesc(padapter, &ReservedPagePacket[BufIndex - TxDescLen], NullDataLength, false, false, false);
 
 	CurtPktPageNum = (u8)PageNum_128(TxDescLen + NullDataLength);
@@ -539,13 +534,12 @@ static void rtl8723b_set_FwRsvdPagePkt(
 
 	/* 3 (5) Qos null data */
 	RsvdPageLoc.LocQosNull = TotalPageNum;
-	ConstructNullFunctionData(
-		padapter,
-		&ReservedPagePacket[BufIndex],
-		&QosNullLength,
-		get_my_bssid(&pmlmeinfo->network),
-		true, 0, 0, false
-	);
+	ConstructNullFunctionData(padapter,
+				  &ReservedPagePacket[BufIndex],
+				  &QosNullLength,
+				  get_my_bssid(&pmlmeinfo->network),
+				  true, 0, 0, false);
+
 	rtl8723b_fill_fake_txdesc(padapter, &ReservedPagePacket[BufIndex - TxDescLen], QosNullLength, false, false, false);
 
 	CurtPktPageNum = (u8)PageNum_128(TxDescLen + QosNullLength);
@@ -556,13 +550,12 @@ static void rtl8723b_set_FwRsvdPagePkt(
 
 	/* 3 (6) BT Qos null data */
 	RsvdPageLoc.LocBTQosNull = TotalPageNum;
-	ConstructNullFunctionData(
-		padapter,
-		&ReservedPagePacket[BufIndex],
-		&BTQosNullLength,
-		get_my_bssid(&pmlmeinfo->network),
-		true, 0, 0, false
-	);
+	ConstructNullFunctionData(padapter,
+				  &ReservedPagePacket[BufIndex],
+				  &BTQosNullLength,
+				  get_my_bssid(&pmlmeinfo->network),
+				  true, 0, 0, false);
+
 	rtl8723b_fill_fake_txdesc(padapter, &ReservedPagePacket[BufIndex - TxDescLen], BTQosNullLength, false, true, false);
 
 	CurtPktPageNum = (u8)PageNum_128(TxDescLen + BTQosNullLength);
@@ -693,12 +686,7 @@ void rtl8723b_set_FwJoinBssRpt_cmd(struct adapter *padapter, u8 mstatus)
 /* arg[1] = raid */
 /* arg[2] = shortGIrate */
 /* arg[3] = init_rate */
-void rtl8723b_Add_RateATid(
-	struct adapter *padapter,
-	u32 bitmap,
-	u8 *arg,
-	u8 rssi_level
-)
+void rtl8723b_Add_RateATid(struct adapter *padapter, u32 bitmap, u8 *arg, u8 rssi_level)
 {
 	struct hal_com_data	*pHalData = GET_HAL_DATA(padapter);
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
@@ -722,16 +710,14 @@ void rtl8723b_Add_RateATid(
 	rtl8723b_set_FwMacIdConfig_cmd(padapter, mac_id, raid, bw, shortGI, mask);
 }
 
-static void ConstructBtNullFunctionData(
-	struct adapter *padapter,
-	u8 *pframe,
-	u32 *pLength,
-	u8 *StaAddr,
-	u8 bQoS,
-	u8 AC,
-	u8 bEosp,
-	u8 bForcePowerSave
-)
+static void ConstructBtNullFunctionData(struct adapter *padapter,
+					u8 *pframe,
+					u32 *pLength,
+					u8 *StaAddr,
+					u8 bQoS,
+					u8 AC,
+					u8 bEosp,
+					u8 bForcePowerSave)
 {
 	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
@@ -828,13 +814,12 @@ static void SetFwRsvdPagePkt_BTCoex(struct adapter *padapter)
 
 	/* 3 (6) BT Qos null data */
 	RsvdPageLoc.LocBTQosNull = TotalPageNum;
-	ConstructBtNullFunctionData(
-		padapter,
-		&ReservedPagePacket[BufIndex],
-		&BTQosNullLength,
-		NULL,
-		true, 0, 0, false
-	);
+	ConstructBtNullFunctionData(padapter,
+				    &ReservedPagePacket[BufIndex],
+				    &BTQosNullLength,
+				    NULL,
+				    true, 0, 0, false);
+
 	rtl8723b_fill_fake_txdesc(padapter, &ReservedPagePacket[BufIndex - TxDescLen], BTQosNullLength, false, true, false);
 
 	CurtPktPageNum = (u8)PageNum_128(TxDescLen + BTQosNullLength);
