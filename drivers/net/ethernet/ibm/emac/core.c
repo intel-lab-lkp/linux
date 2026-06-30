@@ -52,7 +52,15 @@
 #include "core.h"
 
 /*
- * Lack of dma_unmap_???? calls is intentional.
+ * Note on dma_unmap calls:
+ *
+ * RX buffers are properly unmapped before being remapped or passed to the
+ * network stack.  See emac_recycle_rx_skb() and emac_poll_rx().
+ *
+ * TX buffers still lack dma_unmap calls for the reasons explained in the
+ * original note below (a single skb may be split across multiple BDs on
+ * TAH-equipped EMACs, making per-fragment tracking complex).
+ * The original rationale is kept for the TX path only:
  *
  * API-correct usage requires additional support state information to be
  * maintained for every RX and TX buffer descriptor (BD). Unfortunately, due to
@@ -1058,6 +1066,7 @@ static int emac_resize_rx_ring(struct emac_instance *dev, int new_mtu)
 	/* Second pass, allocate new skbs */
 	for (i = 0; i < NUM_RX_BUFF; ++i) {
 		struct sk_buff *skb;
+		dma_addr_t dma;
 
 		skb = netdev_alloc_skb_ip_align(dev->ndev, rx_skb_size);
 		if (!skb) {
@@ -1066,12 +1075,24 @@ static int emac_resize_rx_ring(struct emac_instance *dev, int new_mtu)
 		}
 
 		BUG_ON(!dev->rx_skb[i]);
+		dma_unmap_single(&dev->ofdev->dev,
+				 dev->rx_dma[i],
+				 dev->rx_sync_size, DMA_FROM_DEVICE);
 		dev_kfree_skb(dev->rx_skb[i]);
 
-		dev->rx_desc[i].data_ptr =
-		    dma_map_single(&dev->ofdev->dev, skb->data - NET_IP_ALIGN,
-				   rx_sync_size, DMA_FROM_DEVICE)
-				   + NET_IP_ALIGN;
+		dma = dma_map_single(&dev->ofdev->dev, skb->data - NET_IP_ALIGN,
+				     rx_sync_size, DMA_FROM_DEVICE);
+		if (dma_mapping_error(&dev->ofdev->dev, dma)) {
+			dev_kfree_skb(skb);
+			dev->rx_skb[i] = NULL;
+			dev->rx_dma[i] = 0;
+			dev->rx_desc[i].data_ptr = 0;
+			dev->rx_desc[i].ctrl = 0;
+			ret = -ENOMEM;
+			goto oom;
+		}
+		dev->rx_desc[i].data_ptr = dma + NET_IP_ALIGN;
+		dev->rx_dma[i] = dma;
 		dev->rx_skb[i] = skb;
 	}
  skip:
@@ -1150,9 +1171,13 @@ static void emac_clean_rx_ring(struct emac_instance *dev)
 
 	for (i = 0; i < NUM_RX_BUFF; ++i)
 		if (dev->rx_skb[i]) {
+			dma_unmap_single(&dev->ofdev->dev,
+					 dev->rx_dma[i],
+					 dev->rx_sync_size, DMA_FROM_DEVICE);
 			dev->rx_desc[i].ctrl = 0;
 			dev_kfree_skb(dev->rx_skb[i]);
 			dev->rx_skb[i] = NULL;
+			dev->rx_dma[i] = 0;
 			dev->rx_desc[i].data_ptr = 0;
 		}
 
@@ -1176,15 +1201,23 @@ static void emac_clear_mal_desc(struct mal_descriptor *desc, int count)
 static int
 __emac_prepare_rx_skb(struct sk_buff *skb, struct emac_instance *dev, int slot)
 {
+	dma_addr_t dma;
+
 	if (unlikely(!skb))
 		return -ENOMEM;
 
 	dev->rx_skb[slot] = skb;
 	dev->rx_desc[slot].data_len = 0;
 
-	dev->rx_desc[slot].data_ptr =
-	    dma_map_single(&dev->ofdev->dev, skb->data - NET_IP_ALIGN,
-			   dev->rx_sync_size, DMA_FROM_DEVICE) + NET_IP_ALIGN;
+	dma = dma_map_single(&dev->ofdev->dev, skb->data - NET_IP_ALIGN,
+			     dev->rx_sync_size, DMA_FROM_DEVICE);
+	if (dma_mapping_error(&dev->ofdev->dev, dma)) {
+		dev->rx_skb[slot] = NULL;
+		dev_kfree_skb(skb);
+		return -ENOMEM;
+	}
+	dev->rx_desc[slot].data_ptr = dma + NET_IP_ALIGN;
+	dev->rx_dma[slot] = dma;
 	dma_wmb();
 	dev->rx_desc[slot].ctrl = MAL_RX_CTRL_EMPTY |
 	    (slot == (NUM_RX_BUFF - 1) ? MAL_RX_CTRL_WRAP : 0);
@@ -1463,6 +1496,12 @@ static netdev_tx_t emac_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	dev->tx_desc[slot].data_ptr = dma_map_single(&dev->ofdev->dev,
 						     skb->data, len,
 						     DMA_TO_DEVICE);
+	if (dma_mapping_error(&dev->ofdev->dev,
+			      dev->tx_desc[slot].data_ptr)) {
+		dev->tx_skb[slot] = NULL;
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
 	dev->tx_desc[slot].data_len = (u16) len;
 	dma_wmb();
 	dev->tx_desc[slot].ctrl = ctrl;
@@ -1530,8 +1569,12 @@ emac_start_xmit_sg(struct sk_buff *skb, struct net_device *ndev)
 	/* skb data */
 	dev->tx_skb[slot] = NULL;
 	chunk = min(len, MAL_MAX_TX_SIZE);
-	dev->tx_desc[slot].data_ptr = pd =
-	    dma_map_single(&dev->ofdev->dev, skb->data, len, DMA_TO_DEVICE);
+	pd = dma_map_single(&dev->ofdev->dev, skb->data, len, DMA_TO_DEVICE);
+	if (dma_mapping_error(&dev->ofdev->dev, pd)) {
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
+	dev->tx_desc[slot].data_ptr = pd;
 	dev->tx_desc[slot].data_len = (u16) chunk;
 	len -= chunk;
 	if (unlikely(len))
@@ -1547,6 +1590,18 @@ emac_start_xmit_sg(struct sk_buff *skb, struct net_device *ndev)
 
 		pd = skb_frag_dma_map(&dev->ofdev->dev, frag, 0, len,
 				      DMA_TO_DEVICE);
+		if (dma_mapping_error(&dev->ofdev->dev, pd)) {
+			/* Undo partial descriptor setup and drop packet */
+			while (slot != dev->tx_slot) {
+				dev->tx_desc[slot].ctrl = 0;
+				--dev->tx_cnt;
+				if (--slot < 0)
+					slot = NUM_TX_BUFF - 1;
+			}
+			++dev->estats.tx_undo;
+			dev_kfree_skb(skb);
+			return NETDEV_TX_OK;
+		}
 
 		slot = emac_xmit_split(dev, slot, pd, len, i == nr_frags - 1,
 				       ctrl);
@@ -1661,14 +1716,14 @@ static void emac_poll_tx(void *param)
 static inline void emac_recycle_rx_skb(struct emac_instance *dev, int slot,
 				       int len)
 {
-	struct sk_buff *skb = dev->rx_skb[slot];
-
 	DBG2(dev, "recycle %d %d" NL, slot, len);
 
-	if (len)
-		dma_map_single(&dev->ofdev->dev, skb->data - NET_IP_ALIGN,
-			       SKB_DATA_ALIGN(len + NET_IP_ALIGN),
-			       DMA_FROM_DEVICE);
+	if (len) {
+		dma_sync_single_for_device(&dev->ofdev->dev,
+					    dev->rx_dma[slot],
+					    SKB_DATA_ALIGN(len + NET_IP_ALIGN),
+					    DMA_FROM_DEVICE);
+	}
 
 	dev->rx_desc[slot].data_len = 0;
 	dma_wmb();
@@ -1808,12 +1863,17 @@ static int emac_poll_rx(void *param, int budget)
 		continue;
 	sg:
 		if (ctrl & MAL_RX_CTRL_FIRST) {
+			dma_addr_t old_dma = dev->rx_dma[slot];
+
 			BUG_ON(dev->rx_sg_skb);
 			if (unlikely(emac_alloc_rx_skb_napi(dev, slot))) {
 				DBG(dev, "rx OOM %d" NL, slot);
 				++dev->estats.rx_dropped_oom;
 				emac_recycle_rx_skb(dev, slot, 0);
 			} else {
+				dma_unmap_single(&dev->ofdev->dev, old_dma,
+						 dev->rx_sync_size,
+						 DMA_FROM_DEVICE);
 				dev->rx_sg_skb = skb;
 				skb_put(skb, len);
 			}

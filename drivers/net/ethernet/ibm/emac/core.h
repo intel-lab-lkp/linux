@@ -246,6 +246,7 @@ struct emac_instance {
 
 	struct sk_buff			*tx_skb[NUM_TX_BUFF];
 	struct sk_buff			*rx_skb[NUM_RX_BUFF];
+	dma_addr_t			rx_dma[NUM_RX_BUFF];
 
 	/* Stats
 	 */
