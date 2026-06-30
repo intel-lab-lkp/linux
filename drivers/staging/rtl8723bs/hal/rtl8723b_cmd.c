@@ -69,9 +69,9 @@ s32 FillH2CCmd8723B(struct adapter *padapter, u8 ElementID, u32 CmdLen, u8 *pCmd
 		if (!_is_fw_read_cmd_down(padapter, h2c_box_num))
 			goto exit;
 
-		if (CmdLen <= 3)
+		if (CmdLen <= 3) {
 			memcpy((u8 *)(&h2c_cmd) + 1, pCmdBuffer, CmdLen);
-		else {
+		} else {
 			memcpy((u8 *)(&h2c_cmd) + 1, pCmdBuffer, 3);
 			memcpy((u8 *)(&h2c_cmd_ex), pCmdBuffer + 3, CmdLen - 3);
 		}
