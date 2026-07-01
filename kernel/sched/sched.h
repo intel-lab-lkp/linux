@@ -4230,4 +4230,13 @@ DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 
 #include "ext/ext.h"
 
+static inline bool task_has_preferred_cpus(struct task_struct *p)
+{
+	/* Only FAIR tasks honor preferred CPU state */
+	if (unlikely(p->sched_class != &fair_sched_class))
+		return false;
+
+	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
+}
+
 #endif /* _KERNEL_SCHED_SCHED_H */
