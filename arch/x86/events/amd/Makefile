@@ -7,6 +7,8 @@ obj-$(CONFIG_PERF_EVENTS_AMD_UNCORE_COMMON) += amd-uncore-common.o
 amd-uncore-common-objs := amd_uncore_common.o
 obj-$(CONFIG_PERF_EVENTS_AMD_UNCORE)	+= amd-uncore.o
 amd-uncore-objs				:= uncore.o
+obj-$(CONFIG_PERF_EVENTS_HYGON_UNCORE)	+= hygon-uncore.o
+hygon-uncore-objs			:= hygon_uncore.o
 ifdef CONFIG_AMD_IOMMU
 obj-$(CONFIG_CPU_SUP_AMD)		+= iommu.o
 endif
