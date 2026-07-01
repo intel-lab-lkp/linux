@@ -50,6 +50,18 @@ config PERF_EVENTS_AMD_UNCORE
 	  To compile this driver as a module, choose M here: the
 	  module will be called 'amd-uncore'.
 
+config PERF_EVENTS_HYGON_UNCORE
+	tristate "Hygon Uncore performance events"
+	depends on PERF_EVENTS && CPU_SUP_HYGON
+	select PERF_EVENTS_UNCORE_COMMON
+	default y
+	help
+	  Include support for Hygon uncore performance events for use with
+	  e.g., perf stat -e hygon_df/.../.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called 'hygon-uncore'.
+
 config PERF_EVENTS_AMD_BRS
 	depends on PERF_EVENTS && CPU_SUP_AMD
 	bool "AMD Zen3 Branch Sampling support"
