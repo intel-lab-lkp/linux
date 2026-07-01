@@ -22,6 +22,7 @@ static const char *device_bdf;
 
 struct test_params {
 	u64 size;
+	int mmap_flags;
 };
 
 struct test_params test_params;
@@ -88,7 +89,7 @@ FIXTURE_TEARDOWN(vfio_dma_mapping_perf_test)
 TEST_F(vfio_dma_mapping_perf_test, dma_map_unmap)
 {
 	const u64 size = test_params.size;
-	const int flags = variant->mmap_flags;
+	const int flags = variant->mmap_flags | test_params.mmap_flags;
 	struct dma_region region;
 	struct timespec start;
 	u64 unmapped;
@@ -217,7 +218,9 @@ TEST_F(vfio_dma_mapping_perf_memfd_test, dma_map_unmap_from_file)
 	u64 unmapped;
 	int rc, fd;
 
-	region.vaddr = setup_memfd(&fd, size, variant->mmap_flags, variant->memfd_flags);
+	region.vaddr = setup_memfd(&fd, size,
+				   variant->mmap_flags | test_params.mmap_flags,
+				   variant->memfd_flags);
 	ASSERT_NE(region.vaddr, MAP_FAILED);
 
 	region.iova = iova_allocator_alloc(self->iova_allocator, size);
@@ -288,11 +291,16 @@ size_t parse_size(const char *size)
 static void help(char *name)
 {
 	puts("");
-	printf("usage: %s [-h] [-b bytes] [-a \"test harness args\"]\n", name);
+	printf("usage: %s [-h|-p] [-b bytes] [-a \"test harness args\"]\n", name);
 	puts("");
 	printf(" -h: Display this help message.\n"
 	       " -b: Specify the size of the DMA region to be mapped\n"
 	       "     and unmapped. e.g. 16M or 8G, (default: 1G)\n"
+	       " -p: Append 'MAP_POPULATE' to the mmap() flags to avoid\n"
+	       "     prefaulting while mapping DMA regions. Instead, any\n"
+	       "     and all prefaulting needed will happen during the\n"
+	       "     mmap() call. This will make mapping DMA regions\n"
+	       "     more consistent.\n"
 	       " -a: Args that are forwarded to the test harness,\n"
 	       "     e.g. -a \"-t dma_map_unmap_from_file\"\n");
 }
@@ -320,15 +328,19 @@ static void setup_test(struct harness_args *args, int argc, char *argv[])
 
 	test_params = (struct test_params) {
 		.size = SZ_1G,
+		.mmap_flags = 0,
 	};
 
-	while ((opt = getopt(argc, argv, "a:b:h")) != -1) {
+	while ((opt = getopt(argc, argv, "a:b:ph")) != -1) {
 		switch (opt) {
 		case 'a':
 			populate_harness_args(args, argv[0], optarg);
 			break;
 		case 'b':
 			test_params.size = parse_size(optarg);
+			break;
+		case 'p':
+			test_params.mmap_flags = MAP_POPULATE;
 			break;
 		case 'h':
 		default:
