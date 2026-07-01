@@ -1759,6 +1759,12 @@ out:
 			synth_opts->period = PERF_ITRACE_DEFAULT_PERIOD;
 	}
 
+	if (!period_set &&
+	    synth_opts->period_type == PERF_ITRACE_PERIOD_INSTRUCTIONS) {
+		/* Indicates a sample is taken for every instruction. */
+		synth_opts->period = 1;
+	}
+
 	return 0;
 
 out_err:
