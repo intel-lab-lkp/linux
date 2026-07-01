@@ -663,9 +663,11 @@ unlock:
 
 int devlink_nl_rate_new_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *rate_devlink, *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink_nl_ctx *ctx = devlink_nl_ctx(info);
+	struct devlink *devlink = ctx->devlink;
 	struct devlink_rate *rate_node;
 	const struct devlink_ops *ops;
+	struct devlink *rate_devlink;
 	int err;
 
 	ops = devlink->ops;
