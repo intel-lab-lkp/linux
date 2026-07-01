@@ -2406,9 +2406,11 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 	struct dentry *dentry = pfile->f_path.dentry;
 	struct inode *inode = file_inode(pfile);
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
+	struct cifsFileInfo *cfile;
 	struct cifs_open_parms oparms;
 	struct cifs_fid fid;
 	struct cifs_tcon *tcon;
+	struct tcon_link *tlink;
 	const unsigned char *path;
 	char *returned_ioctl_info = NULL;
 	void *page = alloc_dentry_path();
@@ -2440,6 +2442,20 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 			goto notify_exit;
 		}
 		notify.data_len = 0;
+	}
+
+	if (!pfile->private_data) {
+		tlink = cifs_sb_tlink(cifs_sb);
+		if (IS_ERR(tlink)) {
+			rc = PTR_ERR(tlink);
+			goto notify_exit;
+		}
+		cfile = cifs_new_dir_fileinfo(pfile, tlink);
+		cifs_put_tlink(tlink);
+		if (!cfile) {
+			rc = -ENOMEM;
+			goto notify_exit;
+		}
 	}
 
 	tcon = cifs_sb_master_tcon(cifs_sb);
