@@ -1252,10 +1252,32 @@ again:
 	}
 
 	if (state->regs[reg].kind == TSR_KIND_PERCPU_BASE) {
-		u64 var_addr = dloc->op->offset;
+		u64 var_addr;
 		int var_offset;
 
 		pr_debug_dtp("percpu var");
+
+		if (arch__is_arm64(dloc->arch)) {
+			int reg2;
+
+			if (!dloc->op->multi_regs ||
+			    dloc->op->reg1 == dloc->op->reg2 || !retry)
+				return PERF_TMR_BAIL_OUT;
+
+			reg2 = dloc->op->reg2;
+			if (!has_reg_type(state, reg2) ||
+			    !state->regs[reg2].ok ||
+			    (state->regs[reg2].kind != TSR_KIND_GLOBAL_ADDR &&
+			     state->regs[reg2].kind != TSR_KIND_TYPE))
+				return PERF_TMR_NO_TYPE;
+
+			pr_debug_dtp(" : retry\n");
+			retry = false;
+			reg = reg2;
+			goto again;
+		}
+
+		var_addr = dloc->op->offset;
 
 		if (dloc->op->multi_regs) {
 			int reg2 = dloc->op->reg2;

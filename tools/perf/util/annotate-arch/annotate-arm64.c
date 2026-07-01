@@ -462,6 +462,15 @@ retry:
 		u64 ip = dloc->ms->sym->start + dl->al.offset;
 		u64 addr = src_tsr.addr + reg_offset;
 		int offset;
+		u8 kind;
+		const char *var_name = NULL;
+
+		/* it might be per-cpu offset */
+		if (get_global_var_info(dloc, addr, &var_name, &offset) &&
+		    !strcmp(var_name, "__per_cpu_offset"))
+			kind = TSR_KIND_PERCPU_BASE;
+		else
+			kind = TSR_KIND_TYPE;
 
 		if (!get_global_var_type(cu_die, dloc, ip, addr, &offset, &type_die) ||
 		    !die_get_member_type(&type_die, offset, &type_die)) {
@@ -470,7 +479,7 @@ retry:
 		}
 
 		tsr->type = type_die;
-		tsr->kind = TSR_KIND_TYPE;
+		tsr->kind = kind;
 		tsr->offset = 0;
 		tsr->addr = 0;
 		tsr->ok = true;
@@ -483,6 +492,28 @@ retry:
 				     insn_offset, sreg, dreg);
 		}
 		pr_debug_type_name(&tsr->type, tsr->kind);
+	}
+	/* Or check if it's a per-cpu access */
+	else if (src_tsr.kind == TSR_KIND_PERCPU_BASE) {
+		int reg2;
+
+		if (!src->multi_regs || src->reg1 == src->reg2 ||
+		    sreg == src->reg2 /* retried */) {
+			invalidate_reg_state(tsr);
+			goto out_adjust;
+		}
+
+		reg2 = src->reg2;
+		if (!has_reg_type(state, reg2) || !state->regs[reg2].ok ||
+		    (state->regs[reg2].kind != TSR_KIND_GLOBAL_ADDR &&
+		     state->regs[reg2].kind != TSR_KIND_TYPE)) {
+			invalidate_reg_state(tsr);
+			goto out_adjust;
+		} else {
+			/* Treat percpu as array: resolve type from reg2 */
+			sreg = src->reg2;
+			goto retry;
+		}
 	}
 	/* Or try another register if any */
 	else if (src->multi_regs && src->reg1 != src->reg2 && sreg != src->reg2) {
@@ -692,6 +723,33 @@ retry:
 
 		pr_debug_dtp("add [%x] global %#x(reg%d) -> reg%d\n",
 			     insn_offset, reg_offset, sreg, dreg);
+	}
+	/* Handle per-cpu base address calculation for per-cpu variables */
+	else if (src_tsr.kind == TSR_KIND_PERCPU_BASE) {
+		/*
+		 * A per-cpu base acts like an array index. Adding it to
+		 * a global variable or typed register should preserve
+		 * the original variable's type. Inherit the type from
+		 * the typed register.
+		 */
+		if (!src->multi_regs || !has_reg_type(state, src->reg2) ||
+		    !state->regs[src->reg2].ok ||
+		    (state->regs[src->reg2].kind != TSR_KIND_GLOBAL_ADDR &&
+		     state->regs[src->reg2].kind != TSR_KIND_TYPE)) {
+			invalidate_reg_state(tsr);
+			return;
+		}
+
+		tsr->type = state->regs[src->reg2].type;
+		tsr->kind = state->regs[src->reg2].kind;
+		tsr->offset = state->regs[src->reg2].offset;
+		tsr->addr = state->regs[src->reg2].addr;
+		tsr->ok = state->regs[src->reg2].ok;
+
+		pr_debug_dtp("add [%x] percpu (reg%d) -> reg%d",
+			     insn_offset, sreg, dreg);
+		pr_debug_type_name(&tsr->type, tsr->kind);
+		return;
 	}
 	/* Or try another register if any */
 	else if (src->multi_regs && src->reg1 != src->reg2 && sreg != src->reg2) {
