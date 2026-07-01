@@ -7129,6 +7129,8 @@ err_out:
 		rsp->hdr.Status = STATUS_INVALID_PARAMETER;
 	else if (rc == -EMSGSIZE)
 		rsp->hdr.Status = STATUS_INFO_LENGTH_MISMATCH;
+	else if (rc == -ENOSPC || rc == -EFBIG)
+		rsp->hdr.Status = STATUS_DISK_FULL;
 	else if (rc == -ESHARE)
 		rsp->hdr.Status = STATUS_SHARING_VIOLATION;
 	else if (rc == -ENOENT)
