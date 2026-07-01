@@ -2096,8 +2096,11 @@ static void __iommu_dma_iova_unlink(struct device *dev,
 
 	if (!iotlb_gather.queued)
 		iommu_iotlb_sync(domain, &iotlb_gather);
-	if (free_iova)
+	if (free_iova) {
+		/* Free the whole reservation, not just the linked @size. */
+		size = iova_align(iovad, dma_iova_size(state) + iova_start_pad);
 		iommu_dma_free_iova(domain, addr, size, &iotlb_gather);
+	}
 }
 
 /**
