@@ -26,6 +26,7 @@ struct steal_monitor {
 extern struct steal_monitor sm_core_ctx;
 
 u64 get_system_steal_time(void);
+unsigned int get_num_cpus_steal_ratio(void);
 void increase_preferred_cpus(struct steal_monitor *ctx);
 void decrease_preferred_cpus(struct steal_monitor *ctx);
 

@@ -28,6 +28,17 @@ u64 __weak get_system_steal_time(void)
 }
 
 /*
+ * Return number of CPUs to consider for steal ratio calculation
+ *
+ * Default returns number of active CPUs.
+ */
+unsigned int __weak get_num_cpus_steal_ratio(void)
+{
+	guard(cpus_read_lock)();
+	return num_active_cpus();
+}
+
+/*
  * Default implementation of decrementing the preferred CPUs based on steal
  * time. This is simple logic and decrease the preferred CPUs by 1 core.
  * It takes out the last core in the active & preferred.
