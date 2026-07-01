@@ -430,7 +430,7 @@ static void update_insn_state_arm64(struct type_state *state,
 	 * the destination register itself to prevent incorrect type propagation.
 	 */
 	if (has_reg_type(state, dst->reg1) &&
-	    strncmp(dl->ins.name, "ld", 2)) {
+	    strncmp(dl->ins.name, "ld", 2) && strncmp(dl->ins.name, "st", 2)) {
 		pr_debug_dtp("%s [%x] invalidate reg%d\n",
 			     dl->ins.name, insn_offset, dst->reg1);
 		invalidate_reg_state(&state->regs[dst->reg1]);
@@ -441,6 +441,16 @@ static void update_insn_state_arm64(struct type_state *state,
 	if (!strncmp(dl->ins.name, "ld", 2)) {
 		update_load_insn_state(state, dl, src, dst);
 		return;
+	}
+
+	/* Register to memory transfers */
+	if (!strncmp(dl->ins.name, "st", 2)) {
+		/*
+		 * Store instructions do not change the register type,
+		 * but the base register must be updated for pre/post-index
+		 * modes.
+		 */
+		adjust_reg_index_state(state, dst, "str", insn_offset);
 	}
 }
 #endif
