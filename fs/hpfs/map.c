@@ -20,7 +20,7 @@ __le32 *hpfs_map_bitmap(struct super_block *s, unsigned bmp_block,
 	secno sec;
 	__le32 *ret;
 	unsigned n_bands = (hpfs_sb(s)->sb_fs_size + 0x3fff) >> 14;
-	if (hpfs_sb(s)->sb_chk) if (bmp_block >= n_bands) {
+	if (1) if (bmp_block >= n_bands) {
 		hpfs_error(s, "hpfs_map_bitmap called with bad parameter: %08x at %s", bmp_block, id);
 		return NULL;
 	}
@@ -164,11 +164,11 @@ void hpfs_load_hotfix_map(struct super_block *s, struct hpfs_spare_block *spareb
 struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_head **bhp)
 {
 	struct fnode *fnode;
-	if (hpfs_sb(s)->sb_chk) if (hpfs_chk_sectors(s, ino, 1, "fnode")) {
+	if (1) if (hpfs_chk_sectors(s, ino, 1, "fnode")) {
 		return NULL;
 	}
 	if ((fnode = hpfs_map_sector(s, ino, bhp, FNODE_RD_AHEAD))) {
-		if (hpfs_sb(s)->sb_chk) {
+		if (1) {
 			struct extended_attribute *ea;
 			struct extended_attribute *ea_end;
 			if (le32_to_cpu(fnode->magic) != FNODE_MAGIC) {
@@ -221,9 +221,9 @@ struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_hea
 struct anode *hpfs_map_anode(struct super_block *s, anode_secno ano, struct buffer_head **bhp)
 {
 	struct anode *anode;
-	if (hpfs_sb(s)->sb_chk) if (hpfs_chk_sectors(s, ano, 1, "anode")) return NULL;
+	if (1) if (hpfs_chk_sectors(s, ano, 1, "anode")) return NULL;
 	if ((anode = hpfs_map_sector(s, ano, bhp, ANODE_RD_AHEAD)))
-		if (hpfs_sb(s)->sb_chk) {
+		if (1) {
 			if (le32_to_cpu(anode->magic) != ANODE_MAGIC) {
 				hpfs_error(s, "bad magic on anode %08x", ano);
 				goto bail;
@@ -257,7 +257,7 @@ struct dnode *hpfs_map_dnode(struct super_block *s, unsigned secno,
 			     struct quad_buffer_head *qbh)
 {
 	struct dnode *dnode;
-	if (hpfs_sb(s)->sb_chk) {
+	if (1) {
 		if (hpfs_chk_sectors(s, secno, 4, "dnode")) return NULL;
 		if (secno & 3) {
 			hpfs_error(s, "dnode %08x not byte-aligned", secno);
@@ -265,7 +265,7 @@ struct dnode *hpfs_map_dnode(struct super_block *s, unsigned secno,
 		}	
 	}
 	if ((dnode = hpfs_map_4sectors(s, secno, qbh, DNODE_RD_AHEAD)))
-		if (hpfs_sb(s)->sb_chk) {
+		if (1) {
 			unsigned p, pp = 0;
 			unsigned char *d = (unsigned char *)dnode;
 			int b = 0;
