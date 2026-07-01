@@ -11,6 +11,7 @@ use kernel::{
     device,
     dma::Coherent,
     io::poll::read_poll_timeout,
+    num::TryIntoBounded,
     prelude::*,
     ptr::{
         Alignable,
@@ -300,7 +301,7 @@ impl<'a> Fsp<'a> {
             return Err(EIO);
         }
 
-        if command_nvdm_type != u8::from(M::NVDM_TYPE).into() {
+        if command_nvdm_type.try_into_bounded() != Some(M::NVDM_TYPE.into()) {
             dev_err!(
                 dev,
                 "Expected NVDM type {:?} in reply, got {:#x}\n",
