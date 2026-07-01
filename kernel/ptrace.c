@@ -1147,8 +1147,8 @@ ptrace_set_syscall_info(struct task_struct *child, unsigned long user_size,
 	if (copy_from_user(&info, datavp, sizeof(info)))
 		return -EFAULT;
 
-	/* Reserved for future use. */
-	if (info.flags || info.reserved)
+	/* Unused flags and fields reserved for future use. */
+	if ((info.flags & ~PTRACE_SYSCALL_INFO_FLAG_ALL) || info.reserved)
 		return -EINVAL;
 
 	/*
@@ -1163,6 +1163,13 @@ ptrace_set_syscall_info(struct task_struct *child, unsigned long user_size,
 		if ((info.op != PTRACE_SYSCALL_INFO_SECCOMP_SKIP) ||
 				(child_op != PTRACE_SYSCALL_INFO_SECCOMP))
 			return -EINVAL;
+	}
+
+	if (info.flags & PTRACE_SYSCALL_INFO_FLAG_SET_IP) {
+		unsigned long ip = info.instruction_pointer;
+		if (ip != info.instruction_pointer)
+			return -ERANGE;
+		instruction_pointer_set(regs, ip);
 	}
 
 	switch (info.op) {

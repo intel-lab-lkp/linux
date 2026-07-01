@@ -81,6 +81,10 @@ struct seccomp_metadata {
 #define PTRACE_SYSCALL_INFO_SECCOMP	3
 #define PTRACE_SYSCALL_INFO_SECCOMP_SKIP 4
 
+#define PTRACE_SYSCALL_INFO_FLAG_SET_IP (1 << 0)
+#define PTRACE_SYSCALL_INFO_FLAG_ALL \
+	(PTRACE_SYSCALL_INFO_FLAG_SET_IP)
+
 struct ptrace_syscall_info {
 	__u8 op;	/* PTRACE_SYSCALL_INFO_* */
 	__u8 reserved;
