@@ -1841,6 +1841,11 @@ static void record__init_features(struct record *rec)
 	if (!record__comp_enabled(rec))
 		perf_header__clear_feat(&session->header, HEADER_COMPRESSED);
 
+	if (rec->opts.no_bpf_event) {
+		perf_header__clear_feat(&session->header, HEADER_BPF_PROG_INFO);
+		perf_header__clear_feat(&session->header, HEADER_BPF_BTF);
+	}
+
 	perf_header__clear_feat(&session->header, HEADER_STAT);
 }
 
