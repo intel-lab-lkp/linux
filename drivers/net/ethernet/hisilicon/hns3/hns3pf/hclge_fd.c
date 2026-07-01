@@ -6,6 +6,7 @@
 #include <net/vxlan.h>
 #include "hclge_fd.h"
 #include "hclge_main.h"
+#include "hclge_vf_rep.h"
 
 static const struct key_info meta_data_key_info[] = {
 	{ PACKET_TYPE_ID, 6 },
@@ -2285,6 +2286,7 @@ static int hclge_get_cls_key_ip_tos(const struct flow_rule *flow,
 }
 
 static int hclge_get_tc_flower_action(struct hclge_dev *hdev,
+				      struct hclge_vport *vport,
 				      struct flow_cls_offload *cls_flower,
 				      struct hclge_fd_rule *rule)
 {
@@ -2292,10 +2294,17 @@ static int hclge_get_tc_flower_action(struct hclge_dev *hdev,
 	struct netlink_ext_ack *extack = cls_flower->common.extack;
 	struct hnae3_handle *handle = &hdev->vport[0].nic;
 	struct flow_action *action = &flow->action;
+	u16 num_tqps = vport->nic.kinfo.num_tqps;
 	struct flow_action_entry *act;
 	int tc;
 
 	if (!flow_action_has_entries(&flow->action)) {
+		if (vport != &hdev->vport[0]) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "VF does not support select TC action");
+			return -EOPNOTSUPP;
+		}
+
 		tc = tc_classid_to_hwtc(handle->netdev, cls_flower->classid);
 		if (tc < 0 || tc > hdev->tc_max) {
 			NL_SET_ERR_MSG_FMT_MOD(extack,
@@ -2311,11 +2320,10 @@ static int hclge_get_tc_flower_action(struct hclge_dev *hdev,
 	act = &action->entries[0];
 	switch (act->id) {
 	case FLOW_ACTION_RX_QUEUE_MAPPING:
-		if (act->rx_queue >= handle->kinfo.num_tqps) {
+		if (act->rx_queue >= num_tqps) {
 			NL_SET_ERR_MSG_FMT_MOD(extack,
 					       "queue id (%u) should be less than %u",
-					       act->rx_queue,
-					       handle->kinfo.num_tqps);
+					       act->rx_queue, num_tqps);
 			return -EINVAL;
 		}
 
@@ -2423,12 +2431,11 @@ static int hclge_check_cls_flower(struct hclge_dev *hdev,
 	return 0;
 }
 
-int hclge_add_cls_flower(struct hnae3_handle *handle,
-			 struct flow_cls_offload *cls_flower)
+static int hclge_add_cls_flower_common(struct hclge_dev *hdev,
+				       struct hclge_vport *vport,
+				       struct flow_cls_offload *cls_flower)
 {
 	struct netlink_ext_ack *extack = cls_flower->common.extack;
-	struct hclge_vport *vport = hclge_get_vport(handle);
-	struct hclge_dev *hdev = vport->back;
 	struct hclge_fd_rule *rule;
 	int ret;
 
@@ -2451,14 +2458,14 @@ int hclge_add_cls_flower(struct hnae3_handle *handle,
 		return ret;
 	}
 
-	ret = hclge_get_tc_flower_action(hdev, cls_flower, rule);
+	ret = hclge_get_tc_flower_action(hdev, vport, cls_flower, rule);
 	if (ret) {
 		kfree(rule);
 		return ret;
 	}
 
 	rule->location = cls_flower->common.prio - 1;
-	rule->vf_id = 0;
+	rule->vf_id = vport->vport_id;
 	rule->cls_flower.cookie = cls_flower->cookie;
 	rule->rule_type = HCLGE_FD_TC_FLOWER_ACTIVE;
 
@@ -2467,6 +2474,21 @@ int hclge_add_cls_flower(struct hnae3_handle *handle,
 		kfree(rule);
 
 	return ret;
+}
+
+int hclge_add_cls_flower(struct hnae3_handle *handle,
+			 struct flow_cls_offload *cls_flower)
+{
+	struct hclge_vport *vport = hclge_get_vport(handle);
+
+	return hclge_add_cls_flower_common(vport->back, vport, cls_flower);
+}
+
+int hclge_add_cls_flower_vf(struct hclge_vf_rep *vf_rep,
+			    struct flow_cls_offload *cls_flower)
+{
+	return hclge_add_cls_flower_common(vf_rep->hdev, vf_rep->vport,
+					   cls_flower);
 }
 
 static struct hclge_fd_rule *hclge_find_cls_flower(struct hclge_dev *hdev,
@@ -2520,6 +2542,14 @@ int hclge_del_cls_flower(struct hnae3_handle *handle,
 	spin_unlock_bh(&hdev->fd_rule_lock);
 
 	return 0;
+}
+
+int hclge_del_cls_flower_vf(struct hclge_vf_rep *vf_rep,
+			    struct flow_cls_offload *cls_flower)
+{
+	struct hclge_dev *hdev = vf_rep->hdev;
+
+	return hclge_del_cls_flower(&hdev->vport[0].nic, cls_flower);
 }
 
 static void hclge_sync_fd_list(struct hclge_dev *hdev, struct hlist_head *hlist)

@@ -796,6 +796,8 @@ struct hnae3_ae_ops {
 	int (*get_link_diagnosis_info)(struct hnae3_handle *handle,
 				       u32 *status_code);
 	void (*clean_vf_config)(struct hnae3_ae_dev *ae_dev, int num_vfs);
+	int (*create_vf_reps)(struct hnae3_ae_dev *ae_dev, int num_vfs);
+	void (*destroy_vf_reps)(struct hnae3_ae_dev *ae_dev);
 	int (*get_dscp_prio)(struct hnae3_handle *handle, u8 dscp,
 			     u8 *tc_map_mode, u8 *priority);
 	void (*get_wol)(struct hnae3_handle *handle,

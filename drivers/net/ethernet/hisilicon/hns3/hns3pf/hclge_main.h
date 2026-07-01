@@ -17,6 +17,9 @@
 #include "hnae3.h"
 #include "hclge_comm_rss.h"
 #include "hclge_comm_tqp_stats.h"
+#include "hclge_vf_rep.h"
+
+struct hclge_vf_rep;
 
 #define HCLGE_MOD_VERSION "1.0"
 #define HCLGE_DRIVER_NAME "hclge"
@@ -934,6 +937,9 @@ struct hclge_dev {
 
 	bool cur_promisc;
 	int num_alloc_vfs;	/* Actual number of VFs allocated */
+
+	struct hclge_vf_rep	**vf_reps;
+	u16			num_vf_reps;
 
 	struct hclge_comm_tqp *htqp;
 	struct hclge_vport *vport;

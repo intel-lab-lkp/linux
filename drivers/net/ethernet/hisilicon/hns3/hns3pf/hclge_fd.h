@@ -6,6 +6,8 @@
 
 struct hnae3_handle;
 struct hclge_dev;
+struct hclge_vf_rep;
+struct flow_cls_offload;
 
 int hclge_init_fd_config(struct hclge_dev *hdev);
 int hclge_add_fd_entry(struct hnae3_handle *handle, struct ethtool_rxnfc *cmd);
@@ -26,6 +28,11 @@ int hclge_add_cls_flower(struct hnae3_handle *handle,
 int hclge_del_cls_flower(struct hnae3_handle *handle,
 			 struct flow_cls_offload *cls_flower);
 bool hclge_is_cls_flower_active(struct hnae3_handle *handle);
+
+int hclge_add_cls_flower_vf(struct hclge_vf_rep *vf_rep,
+			    struct flow_cls_offload *cls_flower);
+int hclge_del_cls_flower_vf(struct hclge_vf_rep *vf_rep,
+			    struct flow_cls_offload *cls_flower);
 int hclge_clear_arfs_rules(struct hclge_dev *hdev);
 void hclge_sync_fd_table(struct hclge_dev *hdev);
 void hclge_rfs_filter_expire(struct hclge_dev *hdev);

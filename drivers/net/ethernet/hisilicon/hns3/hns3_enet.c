@@ -3211,6 +3211,7 @@ static void hns3_remove(struct pci_dev *pdev)
  **/
 static int hns3_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
 {
+	struct hnae3_ae_dev *ae_dev = pci_get_drvdata(pdev);
 	int ret;
 
 	if (!(hns3_is_phys_func(pdev) && IS_ENABLED(CONFIG_PCI_IOV))) {
@@ -3220,13 +3221,24 @@ static int hns3_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
 
 	if (num_vfs) {
 		ret = pci_enable_sriov(pdev, num_vfs);
-		if (ret)
+		if (ret) {
 			dev_err(&pdev->dev, "SRIOV enable failed %d\n", ret);
-		else
+		} else {
+			if (ae_dev->ops->create_vf_reps) {
+				ret = ae_dev->ops->create_vf_reps(ae_dev,
+								  num_vfs);
+				if (ret)
+					dev_warn(&pdev->dev,
+						"failed to create VF representors: %d\n",
+						ret);
+			}
 			return num_vfs;
+		}
 	} else if (!pci_vfs_assigned(pdev)) {
 		int num_vfs_pre = pci_num_vf(pdev);
 
+		if (ae_dev->ops->destroy_vf_reps)
+			ae_dev->ops->destroy_vf_reps(ae_dev);
 		pci_disable_sriov(pdev);
 		hns3_clean_vf_config(pdev, num_vfs_pre);
 	} else {
