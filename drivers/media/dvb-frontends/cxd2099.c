@@ -560,6 +560,8 @@ static int read_data(struct dvb_ca_en50221 *ca, int slot, u8 *ebuf, int ecount)
 	len = ((u16)msb << 8) | lsb;
 	if (len > ecount || len < 2) {
 		/* read it anyway or cxd may hang */
+		if (len > sizeof(ci->rbuf))
+			len = sizeof(ci->rbuf);
 		read_block(ci, 0x12, ci->rbuf, len);
 		mutex_unlock(&ci->lock);
 		return -EIO;
