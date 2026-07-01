@@ -8,6 +8,8 @@
 # include <asm/string_64.h>
 #endif
 
+#include <asm/shared/string.h>
+
 static __always_inline void *__inline_memcpy(void *to, const void *from, size_t len)
 {
 	void *ret = to;
