@@ -228,9 +228,10 @@ static void __exfat_cache_inval_inode(struct inode *inode)
 		exfat_cache_free(cache);
 	}
 	/* Update. The copy of caches before this id is discarded. */
-	ei->cache_valid_id++;
-	if (ei->cache_valid_id == EXFAT_CACHE_VALID)
-		ei->cache_valid_id++;
+	if (ei->cache_valid_id + 1 == EXFAT_CACHE_VALID)
+		ei->cache_valid_id = EXFAT_CACHE_VALID + 1;
+	else
+		ei->cache_valid_id = ei->cache_valid_id + 1;
 }
 
 void exfat_cache_inval_inode(struct inode *inode)
