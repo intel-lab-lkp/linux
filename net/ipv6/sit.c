@@ -1143,17 +1143,17 @@ static void ipip6_tunnel_update(struct ip_tunnel *t,
 
 	ipip6_tunnel_unlink(sitn, t);
 	synchronize_net();
-	t->parms.iph.saddr = p->iph.saddr;
-	t->parms.iph.daddr = p->iph.daddr;
+	WRITE_ONCE(t->parms.iph.saddr, p->iph.saddr);
+	WRITE_ONCE(t->parms.iph.daddr, p->iph.daddr);
 	__dev_addr_set(t->dev, &p->iph.saddr, 4);
 	memcpy(t->dev->broadcast, &p->iph.daddr, 4);
 	ipip6_tunnel_link(sitn, t);
-	t->parms.iph.ttl = p->iph.ttl;
-	t->parms.iph.tos = p->iph.tos;
-	t->parms.iph.frag_off = p->iph.frag_off;
-	if (t->parms.link != p->link || t->fwmark != fwmark) {
-		t->parms.link = p->link;
-		t->fwmark = fwmark;
+	WRITE_ONCE(t->parms.iph.ttl, p->iph.ttl);
+	WRITE_ONCE(t->parms.iph.tos, p->iph.tos);
+	WRITE_ONCE(t->parms.iph.frag_off, p->iph.frag_off);
+	if (READ_ONCE(t->parms.link) != p->link || READ_ONCE(t->fwmark) != fwmark) {
+		WRITE_ONCE(t->parms.link, p->link);
+		WRITE_ONCE(t->fwmark, fwmark);
 		ipip6_tunnel_bind_dev(t->dev);
 	}
 	dst_cache_reset(&t->dst_cache);
@@ -1184,9 +1184,9 @@ static int ipip6_tunnel_update_6rd(struct ip_tunnel *t,
 		return -EINVAL;
 
 	t->ip6rd.prefix = prefix;
-	t->ip6rd.relay_prefix = relay_prefix;
-	t->ip6rd.prefixlen = ip6rd->prefixlen;
-	t->ip6rd.relay_prefixlen = ip6rd->relay_prefixlen;
+	WRITE_ONCE(t->ip6rd.relay_prefix, relay_prefix);
+	WRITE_ONCE(t->ip6rd.prefixlen, ip6rd->prefixlen);
+	WRITE_ONCE(t->ip6rd.relay_prefixlen, ip6rd->relay_prefixlen);
 	dst_cache_reset(&t->dst_cache);
 	netdev_state_change(t->dev);
 	return 0;
@@ -1693,42 +1693,52 @@ static size_t ipip6_get_size(const struct net_device *dev)
 
 static int ipip6_fill_info(struct sk_buff *skb, const struct net_device *dev)
 {
-	struct ip_tunnel *tunnel = netdev_priv(dev);
-	struct ip_tunnel_parm_kern *parm = &tunnel->parms;
+	const struct ip_tunnel *tunnel = netdev_priv(dev);
+	const struct ip_tunnel_parm_kern *parm;
+	IP_TUNNEL_DECLARE_FLAGS(i_flags);
+	__be16 frag_off;
+	__be32 daddr;
+	__be32 saddr;
 
-	if (nla_put_u32(skb, IFLA_IPTUN_LINK, parm->link) ||
-	    nla_put_in_addr(skb, IFLA_IPTUN_LOCAL, parm->iph.saddr) ||
-	    nla_put_in_addr(skb, IFLA_IPTUN_REMOTE, parm->iph.daddr) ||
-	    nla_put_u8(skb, IFLA_IPTUN_TTL, parm->iph.ttl) ||
-	    nla_put_u8(skb, IFLA_IPTUN_TOS, parm->iph.tos) ||
+	parm = &tunnel->parms;
+	i_flags[0] = READ_ONCE(parm->i_flags[0]);
+	frag_off = READ_ONCE(parm->iph.frag_off);
+	saddr = READ_ONCE(parm->iph.saddr);
+	daddr = READ_ONCE(parm->iph.daddr);
+
+	if (nla_put_u32(skb, IFLA_IPTUN_LINK, READ_ONCE(parm->link)) ||
+	    nla_put_in_addr(skb, IFLA_IPTUN_LOCAL, saddr) ||
+	    nla_put_in_addr(skb, IFLA_IPTUN_REMOTE, daddr) ||
+	    nla_put_u8(skb, IFLA_IPTUN_TTL, READ_ONCE(parm->iph.ttl)) ||
+	    nla_put_u8(skb, IFLA_IPTUN_TOS, READ_ONCE(parm->iph.tos)) ||
 	    nla_put_u8(skb, IFLA_IPTUN_PMTUDISC,
-		       !!(parm->iph.frag_off & htons(IP_DF))) ||
-	    nla_put_u8(skb, IFLA_IPTUN_PROTO, parm->iph.protocol) ||
+		       !!(frag_off & htons(IP_DF))) ||
+	    nla_put_u8(skb, IFLA_IPTUN_PROTO, READ_ONCE(parm->iph.protocol)) ||
 	    nla_put_be16(skb, IFLA_IPTUN_FLAGS,
-			 ip_tunnel_flags_to_be16(parm->i_flags)) ||
-	    nla_put_u32(skb, IFLA_IPTUN_FWMARK, tunnel->fwmark))
+			 ip_tunnel_flags_to_be16(i_flags)) ||
+	    nla_put_u32(skb, IFLA_IPTUN_FWMARK, READ_ONCE(tunnel->fwmark)))
 		goto nla_put_failure;
 
 #ifdef CONFIG_IPV6_SIT_6RD
 	if (nla_put_in6_addr(skb, IFLA_IPTUN_6RD_PREFIX,
 			     &tunnel->ip6rd.prefix) ||
 	    nla_put_in_addr(skb, IFLA_IPTUN_6RD_RELAY_PREFIX,
-			    tunnel->ip6rd.relay_prefix) ||
+			    READ_ONCE(tunnel->ip6rd.relay_prefix)) ||
 	    nla_put_u16(skb, IFLA_IPTUN_6RD_PREFIXLEN,
-			tunnel->ip6rd.prefixlen) ||
+			READ_ONCE(tunnel->ip6rd.prefixlen)) ||
 	    nla_put_u16(skb, IFLA_IPTUN_6RD_RELAY_PREFIXLEN,
-			tunnel->ip6rd.relay_prefixlen))
+			READ_ONCE(tunnel->ip6rd.relay_prefixlen)))
 		goto nla_put_failure;
 #endif
 
 	if (nla_put_u16(skb, IFLA_IPTUN_ENCAP_TYPE,
-			tunnel->encap.type) ||
+			READ_ONCE(tunnel->encap.type)) ||
 	    nla_put_be16(skb, IFLA_IPTUN_ENCAP_SPORT,
-			tunnel->encap.sport) ||
+			READ_ONCE(tunnel->encap.sport)) ||
 	    nla_put_be16(skb, IFLA_IPTUN_ENCAP_DPORT,
-			tunnel->encap.dport) ||
+			READ_ONCE(tunnel->encap.dport)) ||
 	    nla_put_u16(skb, IFLA_IPTUN_ENCAP_FLAGS,
-			tunnel->encap.flags))
+			READ_ONCE(tunnel->encap.flags)))
 		goto nla_put_failure;
 
 	return 0;
