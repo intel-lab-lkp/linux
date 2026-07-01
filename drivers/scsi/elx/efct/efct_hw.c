@@ -1129,6 +1129,7 @@ efct_hw_parse_filter(struct efct_hw *hw, void *value)
 
 	p = kstrdup(value, GFP_KERNEL);
 	if (!p || !*p) {
+		kfree(p);
 		efc_log_err(hw->os, "p is NULL\n");
 		return -ENOMEM;
 	}
