@@ -1,0 +1,221 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/mbedtee,rpc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MbedTEE Trusted Execution Environment
+
+maintainers:
+  - Xing Loong <xing.xl.loong@gmail.com>
+
+description: |
+  MbedTEE is a Trusted Execution Environment for embedded systems.
+  This binding describes the shared-memory regions used for RPC
+  communication between the Linux REE driver and MbedTEE OS.
+
+  The REE and TEE CPUs sharing the RPC memory must be in a
+  hardware-coherent domain (same CPU cluster, coherent caches).
+
+  Two or three reserved-memory regions are required:
+
+    rpc-t2r-ring  ring buffer for TEE-to-REE notifications (all platforms)
+    rpc-t2r-shm   shared memory for TEE-to-REE RPC payloads (all platforms)
+    rpc-r2t-ring  ring buffer for REE-to-TEE command submissions (RISC-V only)
+
+  On ARM/AArch64 the transport uses SMC calls; TEE-to-REE
+  notifications use a GIC SPI edge interrupt.
+
+  On RISC-V the TEE notifies the REE via IMSIC MSI; the REE submits
+  commands via shared-memory rpc-r2t-ring that the TEE polls. No
+  REE-to-TEE interrupt is used. No SBI ecall is involved.
+
+properties:
+  $nodename:
+    const: mbedtee
+
+  compatible:
+    const: mbedtee,rpc
+
+  interrupts:
+    description:
+      GIC interrupt used by the TEE to notify the REE of pending RPC
+      responses (ARM/AArch64 only). Not present on RISC-V platforms which
+      use IMSIC platform MSI interrupts allocated dynamically at runtime.
+
+  msi-parent:
+    maxItems: 1
+    description:
+      IMSIC MSI controller used by the Linux driver to allocate the
+      TEE-to-REE notification interrupt on RISC-V platforms. Not present on
+      ARM/AArch64 platforms, which use the interrupts property.
+
+  memory-region:
+    minItems: 2
+    maxItems: 3
+    description:
+      References to reserved-memory regions for REE<->TEE communication.
+      Entries must match memory-region-names order.
+
+  memory-region-names:
+    minItems: 2
+    maxItems: 3
+    items:
+      enum:
+        - rpc-t2r-ring
+        - rpc-t2r-shm
+        - rpc-r2t-ring
+
+required:
+  - compatible
+
+allOf:
+  - if:
+      required:
+        - interrupts
+    then:
+      required:
+        - interrupts
+        - memory-region
+        - memory-region-names
+      properties:
+        msi-parent: false
+        memory-region:
+          minItems: 2
+          maxItems: 2
+        memory-region-names:
+          items:
+            - const: rpc-t2r-ring
+            - const: rpc-t2r-shm
+    else:
+      required:
+        - msi-parent
+        - memory-region
+        - memory-region-names
+      properties:
+        memory-region:
+          minItems: 3
+          maxItems: 3
+        memory-region-names:
+          items:
+            - const: rpc-t2r-ring
+            - const: rpc-t2r-shm
+            - const: rpc-r2t-ring
+
+additionalProperties: false
+
+examples:
+  - |
+    /* ARM TrustZone (SMC) */
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    / {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      gic: interrupt-controller@2f000000 {
+        compatible = "arm,gic-v3";
+        reg = <0 0x2f000000 0 0x10000>,
+              <0 0x2f100000 0 0x200000>;
+        interrupt-controller;
+        #interrupt-cells = <3>;
+      };
+
+      reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        mbedtee_t2r_ring: rpc-t2r-ring@85f10000 {
+          reg = <0 0x85f10000 0 0x20000>;
+          no-map;
+        };
+
+        mbedtee_t2r_shm: rpc-t2r-shm@85f30000 {
+          reg = <0 0x85f30000 0 0x40000>;
+          no-map;
+        };
+      };
+
+      firmware {
+        mbedtee {
+          compatible = "mbedtee,rpc";
+          interrupt-parent = <&gic>;
+          interrupts = <GIC_SPI 72 IRQ_TYPE_EDGE_RISING>;
+          memory-region = <&mbedtee_t2r_ring>, <&mbedtee_t2r_shm>;
+          memory-region-names = "rpc-t2r-ring", "rpc-t2r-shm";
+        };
+      };
+    };
+
+  - |
+    /* RISC-V IMSIC (ring-buffer polling REE->TEE, MSI TEE->REE) */
+    / {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        cpu@0 {
+          device_type = "cpu";
+          reg = <0>;
+
+          cpu0_intc: interrupt-controller {
+            compatible = "riscv,cpu-intc";
+            interrupt-controller;
+            #interrupt-cells = <1>;
+          };
+        };
+      };
+
+      imsic: interrupt-controller@28000000 {
+        compatible = "qemu,imsics", "riscv,imsics";
+        reg = <0 0x28000000 0 0x1000>;
+        interrupts-extended = <&cpu0_intc 9>;
+        interrupt-controller;
+        #interrupt-cells = <0>;
+        msi-controller;
+        #msi-cells = <0>;
+        riscv,num-ids = <255>;
+      };
+
+      reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        rv_t2r_ring: rpc-t2r-ring@5f10000 {
+          reg = <0 0x5f10000 0 0x20000>;
+          no-map;
+        };
+
+        rv_t2r_shm: rpc-t2r-shm@5f30000 {
+          reg = <0 0x5f30000 0 0x40000>;
+          no-map;
+        };
+
+        rv_r2t_ring: rpc-r2t-ring@5f70000 {
+          reg = <0 0x5f70000 0 0x20000>;
+          no-map;
+        };
+      };
+
+      /*
+       * The riscv container avoids a duplicate /firmware/mbedtee path
+       * with the ARM example above when the DT checker concatenates
+       * examples into a single .dts.
+       */
+      riscv {
+        firmware {
+          mbedtee {
+            compatible = "mbedtee,rpc";
+            msi-parent = <&imsic>;
+            memory-region = <&rv_t2r_ring>, <&rv_t2r_shm>,
+                            <&rv_r2t_ring>;
+            memory-region-names = "rpc-t2r-ring", "rpc-t2r-shm",
+                                  "rpc-r2t-ring";
+          };
+        };
+      };
+    };
