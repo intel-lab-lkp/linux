@@ -197,6 +197,7 @@ void __rtnl_net_unlock(struct net *net)
 {
 	ASSERT_RTNL();
 
+	unregister_netdevice_many_net(net);
 	mutex_unlock(&net->rtnl_mutex);
 }
 EXPORT_SYMBOL(__rtnl_net_unlock);
@@ -289,6 +290,9 @@ void rtnl_net_flush_workqueue(void)
 void rtnl_net_work_func(struct work_struct *work)
 {
 	struct net *net = container_of(work, struct net, rtnl_work);
+
+	if (list_empty(&net->dev_unreg_head))
+		return;
 
 	rtnl_net_lock(net);
 	rtnl_net_unlock(net);
