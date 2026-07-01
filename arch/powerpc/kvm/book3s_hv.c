@@ -3850,10 +3850,20 @@ static noinline void kvmppc_run_core(struct kvmppc_vcore *vc)
 	 * and return without going into the guest(s).
 	 * If the mmu_ready flag has been cleared, don't go into the
 	 * guest because that means a HPT resize operation is in progress.
+	 *
+	 * xfer_to_guest_mode_work_pending() is the IRQs-disabled recheck for
+	 * pending guest-mode work (reschedule, signals, and TIF_NOTIFY_RESUME
+	 * task_work such as the deferred CFS throttle). It is the pre-POWER9
+	 * analog of the final gate in kvmhv_run_single_vcpu(), and a superset
+	 * of the old need_resched() check: it catches work that raced in after
+	 * the drain in kvmppc_run_vcpu(), so a CPU-bound vCPU is throttled here
+	 * instead of running one more guest dispatch past its quota. IRQs are
+	 * hard-disabled just above, so the non-__ variant (which asserts that)
+	 * is the correct one.
 	 */
 	local_irq_disable();
 	hard_irq_disable();
-	if (lazy_irq_pending() || need_resched() ||
+	if (lazy_irq_pending() || xfer_to_guest_mode_work_pending() ||
 	    recheck_signals_and_mmu(&core_info)) {
 		local_irq_enable();
 		vc->vcore_state = VCORE_INACTIVE;
@@ -4824,10 +4834,24 @@ static int kvmppc_run_vcpu(struct kvm_vcpu *vcpu)
 		vc->runner = vcpu;
 		if (n_ceded == vc->n_runnable) {
 			kvmppc_vcore_blocked(vc);
-		} else if (need_resched()) {
+		} else if (__xfer_to_guest_mode_work_pending()) {
 			kvmppc_vcore_preempt(vc);
-			/* Let something else run */
-			cond_resched_lock(&vc->lock);
+			/*
+			 * Let something else run, and run pending guest-mode
+			 * work (reschedule, and TIF_NOTIFY_RESUME task_work such
+			 * as the deferred CFS throttle) before we would re-enter
+			 * the guest, so a CPU-bound vCPU is actually throttled
+			 * here instead of running past its quota. This is a
+			 * superset of the old need_resched() check. Use the raw
+			 * helper, not the kvm_ wrapper: signals (KVM_EXIT_INTR
+			 * and the signal_exits stat) are accounted by this path's
+			 * existing handling below, so going through the wrapper
+			 * here would double-count them. The helper may schedule(),
+			 * so the vcore lock is dropped around it.
+			 */
+			spin_unlock(&vc->lock);
+			xfer_to_guest_mode_handle_work();
+			spin_lock(&vc->lock);
 			if (vc->vcore_state == VCORE_PREEMPT)
 				kvmppc_vcore_end_preempt(vc);
 		} else {
@@ -4899,8 +4923,21 @@ int kvmhv_run_single_vcpu(struct kvm_vcpu *vcpu, u64 time_limit,
 		}
 	}
 
-	if (need_resched())
-		cond_resched();
+	/*
+	 * Run pending work before (re-)entering the guest, most importantly
+	 * task_work queued via TWA_RESUME (e.g. the deferred CFS bandwidth
+	 * throttle, which only sets TIF_NOTIFY_RESUME). Without this a CPU-bound
+	 * vCPU that keeps returning RESUME_GUEST never reaches an exit-to-user
+	 * point, so the throttle is never enforced and the task runs far beyond
+	 * its quota. The helper also handles reschedule and signals, replacing
+	 * the cond_resched() that was here. It may schedule(), so it runs before
+	 * preemption and IRQs are disabled, with no vcore/KVM locks held. This
+	 * is the per-reentry site shared by the bare-metal and pseries (nested)
+	 * paths, so both are covered.
+	 */
+	r = kvm_xfer_to_guest_mode_handle_work(vcpu);
+	if (r)	/* -EINTR: signal pending, exit to userspace (KVM_EXIT_INTR) */
+		return r;
 
 	kvmppc_update_vpas(vcpu);
 
@@ -4914,9 +4951,14 @@ int kvmhv_run_single_vcpu(struct kvm_vcpu *vcpu, u64 time_limit,
 
 	vcpu->arch.state = KVMPPC_VCPU_RUNNABLE;
 
-	if (signal_pending(current))
-		goto sigpend;
-	if (need_resched() || !kvm->arch.mmu_ready)
+	/*
+	 * Final IRQs-disabled check for pending guest-mode work or an MMU that
+	 * is not ready. IRQs are disabled here, so bail to the outer loop,
+	 * which re-enters and handles the pending work via
+	 * kvm_xfer_to_guest_mode_handle_work() above (exiting with -EINTR on a
+	 * signal).
+	 */
+	if (xfer_to_guest_mode_work_pending() || !kvm->arch.mmu_ready)
 		goto out;
 
 	vcpu->cpu = pcpu;
@@ -5068,10 +5110,6 @@ int kvmhv_run_single_vcpu(struct kvm_vcpu *vcpu, u64 time_limit,
 
 	return vcpu->arch.ret;
 
- sigpend:
-	vcpu->stat.signal_exits++;
-	run->exit_reason = KVM_EXIT_INTR;
-	vcpu->arch.ret = -EINTR;
  out:
 	vcpu->cpu = -1;
 	vcpu->arch.thread_cpu = -1;

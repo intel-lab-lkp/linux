@@ -84,18 +84,34 @@ int kvmppc_prepare_to_enter(struct kvm_vcpu *vcpu)
 	hard_irq_disable();
 
 	while (true) {
-		if (need_resched()) {
+		if (__xfer_to_guest_mode_work_pending()) {
+			/*
+			 * Handle pending guest-mode work before entering the
+			 * guest: reschedule, signals, and TIF_NOTIFY_RESUME
+			 * task_work such as the deferred CFS bandwidth throttle.
+			 * The helper must run with interrupts enabled and may
+			 * schedule(). This is a superset of the open-coded
+			 * need_resched()/signal_pending() checks it replaces. On
+			 * a pending signal it returns -EINTR after
+			 * kvm_xfer_to_guest_mode_handle_work() has set
+			 * run->exit_reason (KVM_EXIT_INTR) and bumped
+			 * vcpu->stat.signal_exits, so just return to userspace.
+			 */
 			local_irq_enable();
-			cond_resched();
+			r = kvm_xfer_to_guest_mode_handle_work(vcpu);
 			hard_irq_disable();
+			if (r) {
+				/*
+				 * -EINTR: the generic helper does not set the
+				 * exit type, so record it here for the E500
+				 * CONFIG_KVM_EXIT_TIMING histogram (a no-op
+				 * otherwise). Only the exit type is set;
+				 * signal_exits was already accounted above.
+				 */
+				kvmppc_set_exit_type(vcpu, SIGNAL_EXITS);
+				break;
+			}
 			continue;
-		}
-
-		if (signal_pending(current)) {
-			kvmppc_account_exit(vcpu, SIGNAL_EXITS);
-			vcpu->run->exit_reason = KVM_EXIT_INTR;
-			r = -EINTR;
-			break;
 		}
 
 		vcpu->mode = IN_GUEST_MODE;
