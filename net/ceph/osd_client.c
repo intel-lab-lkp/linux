@@ -1702,6 +1702,12 @@ static enum calc_target_result calc_target(struct ceph_osd_client *osdc,
 		}
 	}
 
+	if (t->osd != CEPH_HOMELESS_OSD && (u32)t->osd >= osdc->osdmap->max_osd) {
+		t->osd = CEPH_HOMELESS_OSD;
+		ct_res = CALC_TARGET_NEED_RESEND;
+		goto out;
+	}
+
 	if (unpaused || legacy_change || force_resend || split)
 		ct_res = CALC_TARGET_NEED_RESEND;
 	else
