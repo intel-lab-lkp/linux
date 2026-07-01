@@ -14,6 +14,7 @@ struct arch_arm64 {
 	struct arch arch;
 	regex_t call_insn;
 	regex_t jump_insn;
+	regex_t ldst_insn; /* load and store instruction */
 };
 
 static bool arm64__is_reg(const char *op)
@@ -141,6 +142,104 @@ static const struct ins_ops arm64_mov_ops = {
 	.scnprintf = arm64_mov__scnprintf,
 };
 
+static bool arm64__insn_is_source_first(struct disasm_line *dl)
+{
+	/*
+	 * Store instructions invert the standard syntax by placing the source
+	 * register before the destination memory address.
+	 */
+	return !strncmp(dl->ins.name, "st", 2);
+}
+
+/*
+ * This function is used to parse arm64 load/store instructions into
+ * instruction operands.
+ *
+ * Typical instructions and their parsing logic:
+ *
+ * 1. Immediate offset:
+ *    ldr   x2, [x0]                -> target="x2", source="[x0]"
+ *    ldr   x2, [x0, #24]           -> target="x2", source="[x0, #24]"
+ *    ldp   x19, x20, [sp, #16]     -> target="x19, x20", source="[sp, #16]"
+ *
+ * 2. Pre-index addressing:
+ *    stp   x29, x30, [sp, #-64]!   -> target="[sp, #-64]!", source="x29, x30"
+ *
+ * 3. Post-index addressing:
+ *    str   x1, [x0], #8            -> target="[x0], #8", source="x1"
+ *    ldr   w1, [x21], #4           -> target="w1", source="[x21], #4"
+ *    ldp   x29, x30, [sp], #32     -> target="x29, x30", source="[sp], #32"
+ *
+ * 4. Register offset / extension:
+ *    ldr   x0, [x1, w0, sxtw #3]   -> target="x0", source="[x1, w0, sxtw #3]"
+ *    ldr   x0, [x1, x0, lsl #3]    -> target="x0", source="[x1, x0, lsl #3]"
+ *
+ * 5. Atomic operations:
+ *    cas   w3, w1, [x0]            -> target="w3, w1", source="[x0]"
+ *    swp   x3, x0, [x2]            -> target="x3, x0", source="[x2]"
+ *
+ * 6. Prefetch memory:
+ *    prfm  pstl1strm, [x4]         -> target="pstl1strm", source="[x4]"
+ *
+ * Parsing strategy:
+ * Use the '[' bracket as the boundary to split the operands into left
+ * and right sides. For non-store instructions, the left side is the
+ * target and the right side is the source. For store instructions, the
+ * roles are reversed.
+ */
+static int arm64_ldst__parse(const struct arch *arch,
+			     struct ins_operands *ops,
+			     struct map_symbol *ms __maybe_unused,
+			     struct disasm_line *dl)
+{
+	char *s, *left, *right;
+
+	right = s = strchr(ops->raw, arch->objdump.memory_ref_char);
+	if (!s)
+		return -1;
+
+	while (s > ops->raw && *s != ',')
+		--s;
+
+	if (s == ops->raw)
+		return -1;
+
+	*s = '\0';
+	left = strdup(ops->raw);
+
+	*s = ',';
+	if (!left)
+		return -1;
+
+	right = strdup(right);
+	if (!right) {
+		zfree(&left);
+		return -1;
+	}
+
+	if (arm64__insn_is_source_first(dl)) {
+		ops->source.raw = left;
+		ops->source.mem_ref = false;
+
+		ops->target.raw = right;
+		ops->target.mem_ref = true;
+		ops->target.multi_regs = arm64__check_multi_regs(arch, ops->target.raw);
+	} else {
+		ops->source.raw = right;
+		ops->source.mem_ref = true;
+		ops->source.multi_regs = arm64__check_multi_regs(arch, ops->source.raw);
+
+		ops->target.raw = left;
+		ops->target.mem_ref = false;
+	}
+
+	return 0;
+}
+
+static struct ins_ops arm64_ldst_ops = {
+	.parse	   = arm64_ldst__parse,
+};
+
 static const struct ins_ops *arm64__associate_instruction_ops(struct arch *arch, const char *name)
 {
 	struct arch_arm64 *arm = container_of(arch, struct arch_arm64, arch);
@@ -151,6 +250,8 @@ static const struct ins_ops *arm64__associate_instruction_ops(struct arch *arch,
 		ops = &jump_ops;
 	else if (!regexec(&arm->call_insn, name, 2, match, 0))
 		ops = &call_ops;
+	else if (!regexec(&arm->ldst_insn, name, 2, match, 0))
+		ops = &arm64_ldst_ops;
 	else if (!strcmp(name, "ret"))
 		ops = &ret_ops;
 	else
@@ -175,6 +276,8 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	arch->id = *id;
 	arch->objdump.comment_char	  = '/';
 	arch->objdump.skip_functions_char = '+';
+	arch->objdump.memory_ref_char	  = '[';
+	arch->objdump.imm_char		  = '#';
 	arch->associate_instruction_ops   = arm64__associate_instruction_ops;
 
 	/* bl, blr */
@@ -188,8 +291,20 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	if (err)
 		goto out_free_call;
 
+	/*
+	 * The ARM64 architecture has many variants of load/store instructions.
+	 * It is quite challenging to match all of them completely. Here, we
+	 * only match the prefixes of these instructions.
+	 */
+	err = regcomp(&arm->ldst_insn, "^(ld|st|cas|prf|swp)",
+		      REG_EXTENDED);
+	if (err)
+		goto out_free_jump;
+
 	return arch;
 
+out_free_jump:
+	regfree(&arm->jump_insn);
 out_free_call:
 	regfree(&arm->call_insn);
 out_free_arm:
