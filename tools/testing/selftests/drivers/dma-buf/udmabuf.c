@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
 	void *addr1, *addr2;
 
 	ksft_print_header();
-	ksft_set_plan(7);
+	ksft_set_plan(8);
 
 	devfd = open("/dev/udmabuf", O_RDWR);
 	if (devfd < 0) {
@@ -188,6 +188,18 @@ int main(int argc, char *argv[])
 		ksft_test_result_fail("%s: [FAIL,test-2]\n", TEST_PREFIX);
 	else
 		ksft_test_result_pass("%s: [PASS,test-2]\n", TEST_PREFIX);
+
+	/* should fail (unknown flags) */
+	create.memfd  = memfd;
+	create.offset = 0;
+	create.size   = size;
+	create.flags  = UDMABUF_FLAGS_CLOEXEC | 0x2;
+	buf = ioctl(devfd, UDMABUF_CREATE, &create);
+	if (buf >= 0)
+		ksft_test_result_fail("%s: [FAIL,test-unknown-flags]\n", TEST_PREFIX);
+	else
+		ksft_test_result_pass("%s: [PASS,test-unknown-flags]\n", TEST_PREFIX);
+	create.flags = 0;
 
 	/* should fail (not memfd) */
 	create.memfd  = 0; /* stdin */

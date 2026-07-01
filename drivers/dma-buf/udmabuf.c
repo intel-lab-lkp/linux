@@ -358,6 +358,9 @@ static long udmabuf_create(struct miscdevice *device,
 	long ret = -EINVAL;
 	u32 i, flags;
 
+	if (head->flags & ~UDMABUF_FLAGS_CLOEXEC)
+		return -EINVAL;
+
 	ubuf = kzalloc(sizeof(*ubuf), GFP_KERNEL);
 	if (!ubuf)
 		return -ENOMEM;

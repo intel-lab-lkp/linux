@@ -7,6 +7,13 @@
 
 #define UDMABUF_FLAGS_CLOEXEC	0x01
 
+/**
+ * struct udmabuf_create - parameters for %UDMABUF_CREATE
+ * @memfd: memfd containing the memory to export
+ * @flags: %UDMABUF_FLAGS_CLOEXEC only; unknown bits are rejected
+ * @offset: byte offset into @memfd (page aligned)
+ * @size: number of bytes to export (page aligned, non-zero)
+ */
 struct udmabuf_create {
 	__u32 memfd;
 	__u32 flags;
@@ -21,6 +28,12 @@ struct udmabuf_create_item {
 	__u64 size;
 };
 
+/**
+ * struct udmabuf_create_list - parameters for %UDMABUF_CREATE_LIST
+ * @flags: %UDMABUF_FLAGS_CLOEXEC only; unknown bits are rejected
+ * @count: number of entries in @list (non-zero, capped by driver)
+ * @list: flexible array of memfd regions to combine
+ */
 struct udmabuf_create_list {
 	__u32 flags;
 	__u32 count;
