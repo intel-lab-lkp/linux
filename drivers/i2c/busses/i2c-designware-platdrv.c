@@ -8,6 +8,8 @@
  * Copyright (C) 2007 MontaVista Software Inc.
  * Copyright (C) 2009 Provigent Ltd.
  */
+
+#include <linux/acpi.h>
 #include <linux/clk-provider.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
@@ -130,6 +132,132 @@ static int i2c_dw_probe_lock_support(struct dw_i2c_dev *dev)
 	return 0;
 }
 
+#if defined(CONFIG_ACPI) && defined(CONFIG_GPIOLIB)
+struct gpio_controller_ref {
+	struct list_head node;
+	const char *path;
+};
+
+static void free_gpio_controller_list(struct list_head *gpio_controllers)
+{
+	struct gpio_controller_ref *ref, *tmp;
+
+	list_for_each_entry_safe(ref, tmp, gpio_controllers, node) {
+		list_del(&ref->node);
+		kfree(ref->path);
+		kfree(ref);
+	}
+}
+
+static int check_gpioint_resource(struct acpi_resource *ares, void *data)
+{
+	struct list_head *gpio_controllers = data;
+	struct acpi_resource_gpio *agpio;
+	struct gpio_controller_ref *ref;
+
+	if (!acpi_gpio_get_irq_resource(ares, &agpio))
+		return 1;
+
+	if (!agpio->resource_source.string_length)
+		return 1;
+
+	/* Skip if we've already tracked this GPIO controller */
+	list_for_each_entry(ref, gpio_controllers, node) {
+		if (!strncmp(ref->path, agpio->resource_source.string_ptr,
+			     agpio->resource_source.string_length))
+			return 1;
+	}
+
+	ref = kzalloc(sizeof(*ref), GFP_KERNEL);
+	if (!ref)
+		return -ENOMEM;
+
+	ref->path = kstrdup(agpio->resource_source.string_ptr, GFP_KERNEL);
+	if (!ref->path) {
+		kfree(ref);
+		return -ENOMEM;
+	}
+
+	list_add_tail(&ref->node, gpio_controllers);
+	return 1;
+}
+
+static int check_child_gpioint(struct acpi_device *adev, void *data)
+{
+	struct list_head res_list;
+	int ret;
+
+	INIT_LIST_HEAD(&res_list);
+	ret = acpi_dev_get_resources(adev, &res_list, check_gpioint_resource, data);
+	if (ret < 0)
+		return ret;
+
+	acpi_dev_free_resource_list(&res_list);
+	return 0;
+}
+
+static int i2c_dw_check_gpio_dependencies(struct device *dev)
+{
+	struct gpio_controller_ref *ref;
+	LIST_HEAD(gpio_controllers);
+	struct acpi_device *adev;
+	int ret;
+
+	adev = ACPI_COMPANION(dev);
+	if (!adev)
+		return 0;
+
+	/* Walk all child devices and collect GpioInt controller references */
+	ret = acpi_dev_for_each_child(adev, check_child_gpioint, &gpio_controllers);
+	if (ret < 0)
+		goto cleanup;
+
+	/* For each GPIO controller, check if its platform device is bound */
+	list_for_each_entry(ref, &gpio_controllers, node) {
+		struct acpi_device *gpio_adev;
+		struct device *gpio_dev;
+		acpi_status status;
+		acpi_handle handle;
+		bool bound;
+
+		status = acpi_get_handle(NULL, ref->path, &handle);
+		if (ACPI_FAILURE(status))
+			continue;
+
+		gpio_adev = acpi_fetch_acpi_dev(handle);
+		if (!gpio_adev)
+			continue;
+
+		gpio_dev = acpi_get_first_physical_node(gpio_adev);
+		acpi_dev_put(gpio_adev);
+		if (gpio_dev) {
+			guard(device)(gpio_dev);
+			bound = device_is_bound(gpio_dev);
+		} else {
+			bound = false;
+		}
+		/*
+		 * Defer probe until the GPIO controller is fully bound,
+		 * ensuring its IRQ setup is complete before we enumerate
+		 * I2C child devices.
+		 */
+		if (!bound) {
+			ret = -EPROBE_DEFER;
+			goto cleanup;
+		}
+	}
+
+cleanup:
+	free_gpio_controller_list(&gpio_controllers);
+	return ret;
+}
+#else
+static int i2c_dw_check_gpio_dependencies(struct device *dev)
+{
+	return 0;
+}
+#endif /* CONFIG_ACPI && CONFIG_GPIOLIB */
+
 static int dw_i2c_plat_probe(struct platform_device *pdev)
 {
 	u32 flags = (uintptr_t)device_get_match_data(&pdev->dev);
@@ -137,6 +265,10 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	struct i2c_adapter *adap;
 	struct dw_i2c_dev *dev;
 	int irq, ret;
+
+	ret = i2c_dw_check_gpio_dependencies(device);
+	if (ret)
+		return ret;
 
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq == -ENXIO)
