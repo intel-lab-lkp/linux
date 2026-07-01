@@ -79,6 +79,7 @@ struct seccomp_metadata {
 #define PTRACE_SYSCALL_INFO_ENTRY	1
 #define PTRACE_SYSCALL_INFO_EXIT	2
 #define PTRACE_SYSCALL_INFO_SECCOMP	3
+#define PTRACE_SYSCALL_INFO_SECCOMP_SKIP 4
 
 struct ptrace_syscall_info {
 	__u8 op;	/* PTRACE_SYSCALL_INFO_* */
