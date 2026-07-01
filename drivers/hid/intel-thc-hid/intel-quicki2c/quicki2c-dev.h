@@ -222,6 +222,8 @@ struct quicki2c_device {
 	wait_queue_head_t reset_ack_wq;
 	bool reset_ack;
 
+	struct work_struct recover_work;
+
 	u32 i2c_max_frame_size_enable;
 	u32 i2c_max_frame_size;
 	u32 i2c_int_delay_enable;
