@@ -591,6 +591,111 @@ smb2_verify_signature(struct smb_rqst *rqst, struct TCP_Server_Info *server)
 		return 0;
 }
 
+int
+smb2_send_cancel(struct cifs_ses *ses, struct TCP_Server_Info *server,
+		 struct smb_rqst *rqst, struct mid_q_entry *mid,
+		 unsigned int xid)
+{
+	struct smb2_pdu *req;
+	struct smb2_hdr *shdr;
+	struct smb2_transform_hdr tr_hdr;
+	struct smb_rqst new_rqst[2] = {};
+	struct kvec tr_iov = {
+		.iov_base = &tr_hdr,
+		.iov_len = sizeof(tr_hdr),
+	};
+	struct kvec iov[1];
+	struct smb_rqst crqst = {
+		.rq_iov = iov,
+		.rq_nvec = 1,
+	};
+	struct cifs_tcon *tcon;
+	__le32 flags;
+	__le32 pid;
+	__le32 tid;
+	__le64 sid;
+	__u64 async_id;
+	bool async_cmd;
+	bool encrypt = false;
+	int rc;
+
+	if (!ses || !server || !rqst || !rqst->rq_iov || !mid)
+		return -EINVAL;
+
+	if (rqst->rq_iov[0].iov_len < sizeof(struct smb2_hdr) + 4)
+		return -EINVAL;
+
+	req = rqst->rq_iov[0].iov_base;
+	if (!req)
+		return -EINVAL;
+
+	shdr = &req->hdr;
+	flags = shdr->Flags & SMB2_FLAGS_SIGNED;
+	pid = shdr->Id.SyncId.ProcessId;
+	tid = shdr->Id.SyncId.TreeId;
+	sid = shdr->SessionId;
+	spin_lock(&mid->mid_lock);
+	async_cmd = mid->async_cmd;
+	async_id = mid->async_id;
+	spin_unlock(&mid->mid_lock);
+
+	tcon = smb2_find_smb_tcon(server, le64_to_cpu(sid), le32_to_cpu(tid));
+	if (tcon) {
+		encrypt = smb3_encryption_required(tcon);
+		cifs_put_tcon(tcon, netfs_trace_tcon_ref_put_cancelled_mid);
+	}
+	if (encrypt)
+		flags = 0;
+
+	/* SMB2_CANCEL targets an existing mid and does not get a response. */
+	memset(req, 0, sizeof(struct smb2_hdr) + 4);
+	shdr->ProtocolId = SMB2_PROTO_NUMBER;
+	shdr->StructureSize = SMB2_HEADER_STRUCTURE_SIZE;
+	shdr->Command = SMB2_CANCEL;
+	shdr->Flags = flags;
+	shdr->MessageId = cpu_to_le64(mid->mid);
+	if (async_cmd) {
+		shdr->Flags |= SMB2_FLAGS_ASYNC_COMMAND;
+		shdr->Id.AsyncId = cpu_to_le64(async_id);
+	} else {
+		shdr->Id.SyncId.ProcessId = pid;
+		shdr->Id.SyncId.TreeId = tid;
+	}
+	shdr->SessionId = sid;
+	req->StructureSize2 = cpu_to_le16(4);
+
+	iov[0].iov_base = req;
+	iov[0].iov_len = sizeof(struct smb2_hdr) + 4;
+
+	cifs_server_lock(server);
+	if (encrypt) {
+		if (!server->ops->init_transform_rq) {
+			rc = smb_EIO(smb_eio_trace_tx_need_transform);
+			goto unlock;
+		}
+
+		new_rqst[0].rq_iov = &tr_iov;
+		new_rqst[0].rq_nvec = 1;
+		rc = server->ops->init_transform_rq(server, 2, new_rqst,
+						    &crqst);
+		if (!rc) {
+			rc = __smb_send_cancel_rqst(server, 2, new_rqst);
+			smb3_free_compound_rqst(1, &new_rqst[1]);
+		}
+	} else {
+		rc = smb2_sign_rqst(&crqst, server);
+		if (!rc)
+			rc = __smb_send_cancel_rqst(server, 1, &crqst);
+	}
+
+unlock:
+	cifs_server_unlock(server);
+
+	cifs_dbg(FYI, "issued SMB2_CANCEL for mid %llu xid=%u rc=%d\n",
+		 mid->mid, xid, rc);
+	return rc;
+}
+
 /*
  * Set message id for the request. Should be called after wait_for_free_request
  * and when srv_mutex is held.

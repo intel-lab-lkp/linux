@@ -40,6 +40,9 @@ int smb2_verify_signature(struct smb_rqst *rqst,
 			  struct TCP_Server_Info *server);
 int smb2_check_receive(struct mid_q_entry *mid, struct TCP_Server_Info *server,
 		       bool log_error);
+int smb2_send_cancel(struct cifs_ses *ses, struct TCP_Server_Info *server,
+		     struct smb_rqst *rqst, struct mid_q_entry *mid,
+		     unsigned int xid);
 struct mid_q_entry *smb2_setup_request(struct cifs_ses *ses,
 				       struct TCP_Server_Info *server,
 				       struct smb_rqst *rqst);
