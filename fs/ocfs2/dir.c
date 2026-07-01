@@ -1867,6 +1867,7 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 	struct super_block * sb = inode->i_sb;
 	unsigned int ra_sectors = 16;
 	int stored = 0;
+	int ret = 0;
 
 	bh = NULL;
 
@@ -1874,9 +1875,13 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 
 	while (ctx->pos < i_size_read(inode)) {
 		blk = ctx->pos >> sb->s_blocksize_bits;
-		if (ocfs2_read_dir_block(inode, blk, &bh, 0)) {
+		ret = ocfs2_read_dir_block(inode, blk, &bh, 0);
+		if (ret) {
+			if (persist)
+				return ret;
 			/* Skip the corrupt dirblock and keep trying */
 			ctx->pos += sb->s_blocksize - offset;
+			offset = 0;
 			continue;
 		}
 
@@ -1951,7 +1956,7 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 		if (!persist && stored)
 			break;
 	}
-	return 0;
+	return ret;
 }
 
 static int ocfs2_dir_foreach_blk(struct inode *inode, u64 *f_version,
@@ -1970,8 +1975,7 @@ static int ocfs2_dir_foreach_blk(struct inode *inode, u64 *f_version,
 int ocfs2_dir_foreach(struct inode *inode, struct dir_context *ctx)
 {
 	u64 version = inode_query_iversion(inode);
-	ocfs2_dir_foreach_blk(inode, &version, ctx, true);
-	return 0;
+	return ocfs2_dir_foreach_blk(inode, &version, ctx, true);
 }
 
 /*
@@ -2190,8 +2194,10 @@ int ocfs2_empty_dir(struct inode *inode)
 	}
 
 	ret = ocfs2_dir_foreach(inode, &priv.ctx);
-	if (ret)
+	if (ret) {
 		mlog_errno(ret);
+		return 0;
+	}
 
 	if (!priv.seen_dot || !priv.seen_dot_dot) {
 		mlog(ML_ERROR, "bad directory (dir #%llu) - no `.' or `..'\n",
