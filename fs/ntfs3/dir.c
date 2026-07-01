@@ -492,11 +492,21 @@ static int ntfs_readdir(struct file *file, struct dir_context *ctx)
 		bit = (pos - sbi->record_size) >> index_bits;
 	} else {
 		/*
+		 * Release ni_lock before dir_emit (which may fault into
+		 * user pages).  root->ihdr lives in the main MFT record
+		 * whose lifetime is bound to the inode, and i_rwsem shared
+		 * prevents concurrent directory modifications.
+		 */
+		ni_unlock(ni);
+
+		/*
 		 * Add each name from root in 'ctx'.
 		 */
 		err = ntfs_read_hdr(sbi, ni, &root->ihdr, 0, pos, name, ctx);
 		if (err)
-			goto out_unlock;
+			goto out;
+
+		ni_lock(ni);
 		bit = 0;
 	}
 
@@ -526,13 +536,21 @@ static int ntfs_readdir(struct file *file, struct dir_context *ctx)
 			goto out_unlock;
 
 		/*
+		 * node->index is a kmalloc'd buffer, safe after ni_unlock.
+		 * Release lock before dir_emit to avoid lock-order issues.
+		 */
+		ni_unlock(ni);
+
+		/*
 		 * Add each name from index in 'ctx'.
 		 */
 		err = ntfs_read_hdr(sbi, ni, &node->index->ihdr,
 				    ((u64)bit << index_bits) + sbi->record_size,
 				    pos, name, ctx);
 		if (err)
-			goto out_unlock;
+			goto out;
+
+		ni_lock(ni);
 	}
 
 out_unlock:
