@@ -174,7 +174,7 @@ struct rk_udphy {
 
 	/* PHY status management */
 	bool flip;
-	bool phy_needs_reinit;
+	bool orientation_changed;
 	u8 hw_mode; /* modes currently supported by hardware */
 	u8 sw_mode; /* modes currently requested */
 	u8 status; /* current PHY power state */
@@ -667,7 +667,7 @@ static int rk_udphy_orien_sw_set(struct typec_switch_dev *sw,
 
 	if (udphy->flip != flipped) {
 		dev_dbg(udphy->dev, "cable orientation changed, PHY re-init required.\n");
-		udphy->phy_needs_reinit = true;
+		udphy->orientation_changed = true;
 	}
 
 	udphy->flip = flipped;
@@ -1020,7 +1020,7 @@ static int rk_udphy_update_power_state(struct rk_udphy *udphy)
 	u8 target_mode = udphy->hw_mode & udphy->sw_mode;
 	int ret;
 
-	if (!udphy->phy_needs_reinit && udphy->status == target_mode)
+	if (!udphy->orientation_changed && udphy->status == target_mode)
 		return 0;
 
 	/*
@@ -1067,7 +1067,7 @@ static int rk_udphy_update_power_state(struct rk_udphy *udphy)
 	phy_notify_reset(udphy->phy_u3, PHY_NOTIFY_POST_RESET);
 
 	udphy->status = target_mode;
-	udphy->phy_needs_reinit = false;
+	udphy->orientation_changed = false;
 
 	return 0;
 }
