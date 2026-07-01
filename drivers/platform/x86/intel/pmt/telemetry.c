@@ -427,6 +427,9 @@ static struct auxiliary_driver pmt_telem_aux_driver = {
 	.id_table	= pmt_telem_id_table,
 	.remove		= pmt_telem_remove,
 	.probe		= pmt_telem_probe,
+	.driver = {
+		.suppress_bind_attrs = true,
+	},
 };
 
 static int __init pmt_telem_init(void)

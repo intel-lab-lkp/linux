@@ -900,6 +900,9 @@ static struct pci_driver intel_vsec_pci_driver = {
 	.id_table = intel_vsec_pci_ids,
 	.probe = intel_vsec_pci_probe,
 	.err_handler = &intel_vsec_pci_err_handlers,
+	.driver = {
+		.suppress_bind_attrs = true,
+	},
 };
 module_pci_driver(intel_vsec_pci_driver);
 
