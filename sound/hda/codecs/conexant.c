@@ -1193,6 +1193,24 @@ static void add_cx5051_fake_mutes(struct hda_codec *codec)
 	spec->gen.dac_min_mute = true;
 }
 
+static void cxt_fixed_mic_boost(struct hda_codec *codec, hda_nid_t node_id)
+{
+	struct conexant_spec *spec = codec->spec;
+	unsigned int value = 0;
+
+	value = snd_hda_codec_read(codec, node_id, 0, AC_VERB_GET_AMP_GAIN_MUTE, 0);
+	snd_hda_codec_amp_stereo(codec, node_id, HDA_INPUT, 0, HDA_AMP_VOLMASK, value);
+}
+
+static void cxt_capture_hook(struct hda_pcm_stream *hinfo,  struct hda_codec *codec,
+			       struct snd_pcm_substream *substream, int action)
+{
+	struct conexant_spec *spec = codec->spec;
+	hda_nid_t mux_pin = spec->gen.imux_pins[spec->gen.cur_mux[0]];
+
+	cxt_fixed_mic_boost(codec, mux_pin);
+}
+
 static int cx_probe(struct hda_codec *codec, const struct hda_device_id *id)
 {
 	struct conexant_spec *spec;
@@ -1279,6 +1297,9 @@ static int cx_probe(struct hda_codec *codec, const struct hda_device_id *id)
 	err = snd_hda_gen_parse_auto_config(codec, &spec->gen.autocfg);
 	if (err < 0)
 		goto error;
+
+	if (spec->gen.pcm_capture_hook == NULL)
+		spec->gen.pcm_capture_hook = cxt_capture_hook;
 
 	/* Some laptops with Conexant chips show stalls in S3 resume,
 	 * which falls into the single-cmd mode.
