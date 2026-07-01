@@ -76,6 +76,10 @@ struct htm_pmu_buf {
 	bool    full;
 	int	htm_stopped;
 	int	collect_htm_trace;
+	u64	mem_head;
+	void	*htm_mem_buf;
+	u64	mem_start;
+	int	collect_htm_mem;
 };
 
 struct htm_pmu_ctx {
@@ -143,6 +147,86 @@ out:
 	return -EINVAL;
 }
 
+static int htm_collect_memory_config(struct perf_event *event,
+					struct htm_pmu_buf *aux_buf)
+{
+	struct perf_sample_data data;
+	struct perf_raw_record raw;
+	struct pt_regs regs;
+	u64 *num_entries;
+	u64 to_copy = 0;
+	int htm_val;
+	long rc;
+	int ret;
+	int retries = 0;
+	size_t size;
+	size_t space_to_end = aux_buf->size - aux_buf->mem_head;
+
+	/* Capture HTM system memory configuration in aux buffer */
+	do {
+		rc = htm_hcall_wrapper(htmflags, 0, 0, 0,
+				0, H_HTM_OP_DUMP_SYSMEM_CONF, virt_to_phys(aux_buf->htm_mem_buf),
+				PAGE_SIZE, aux_buf->mem_start);
+		ret = htm_return_check(rc);
+	} while (ret == -EBUSY && ++retries < 100);
+
+	/* Return once there is no more data in HTM buffer */
+	if (ret <= 0) {
+		perf_sample_data_init(&data, 0, event->hw.last_period);
+		memset(&raw, 0, sizeof(raw));
+		memset(&regs, 0, sizeof(regs));
+
+		htm_val = (aux_buf->head/((aux_buf->nr_pages * PAGE_SIZE)));
+		raw.frag.data = &htm_val;
+		raw.frag.size = sizeof(htm_val);
+
+		aux_buf->collect_htm_mem = 0;
+		perf_sample_save_raw_data(&data, event, &raw);
+		perf_event_overflow(event, &data, &regs);
+		return 0;
+	}
+
+	/*
+	 * Find how much data to copy to aux buffer
+	 * If hcall returned H_PARTIAL, set mem_start to
+	 * indicate next offset of memory to read from
+	 */
+	num_entries = aux_buf->htm_mem_buf + 0x10;
+	aux_buf->mem_start = be64_to_cpu(*(u64 *)(aux_buf->htm_mem_buf + 0x8));
+
+	to_copy = 32 + (be64_to_cpu(*num_entries) * 32);
+
+	if (to_copy <= space_to_end) {
+		if ((to_copy + aux_buf->mem_head) >= ((aux_buf->nr_pages * PAGE_SIZE)/2)) {
+			/*
+			 * Crossing 50% threshold - flush and wrap.
+			 * Write current chunk, then pad to end of buffer.
+			 * This ensures next write starts at beginning with
+			 * perf head also at beginning (synchronized).
+			 */
+			memcpy(aux_buf->base + aux_buf->mem_head, aux_buf->htm_mem_buf, to_copy);
+			aux_buf->mem_head = 0;
+
+			/*
+			 * Return space_to_end to include padding.
+			 * Perf will advance head to end (wrapping to 0),
+			 * matching our mem_head position.
+			 */
+			size = space_to_end;
+		} else {
+			/* Normal case - chunk fits without crossing threshold */
+			memcpy(aux_buf->base + aux_buf->mem_head, aux_buf->htm_mem_buf, to_copy);
+			aux_buf->mem_head += to_copy;
+			size = to_copy;
+		}
+	} else {
+		return 0;
+	}
+
+	/* Return non-zero to indicate that one record is written to aux buffer */
+	return size;
+}
+
 static int htm_dump_sample_data(struct perf_event *event)
 {
 	struct htm_pmu_ctx *htm_ctx = this_cpu_ptr(&htm_pmu_ctx);
@@ -162,7 +246,7 @@ static int htm_dump_sample_data(struct perf_event *event)
 	if (!aux_buf)
 		return -1;
 
-	if (!aux_buf->collect_htm_trace) {
+	if (!aux_buf->collect_htm_mem && !aux_buf->collect_htm_trace) {
 		perf_aux_output_end(&htm_ctx->handle, 0);
 		return 0;
 	}
@@ -202,10 +286,15 @@ static int htm_dump_sample_data(struct perf_event *event)
 		if (ret > 0) {
 			aux_buf->head += (aux_buf->nr_pages * PAGE_SIZE);
 			perf_aux_output_end(&htm_ctx->handle, (aux_buf->nr_pages * PAGE_SIZE));
+			return ret;
 		} else {
 			aux_buf->collect_htm_trace = 0;
-			perf_aux_output_end(&htm_ctx->handle, 0);
 		}
+	}
+
+	if (aux_buf->collect_htm_mem) {
+		ret = htm_collect_memory_config(event, aux_buf);
+		perf_aux_output_end(&htm_ctx->handle, ret);
 	}
 
 	return ret;
@@ -397,6 +486,13 @@ static void *htm_setup_aux(struct perf_event *event, void **pages,
 		return NULL;
 	}
 
+	buf->htm_mem_buf = kmalloc_node(PAGE_SIZE, GFP_KERNEL, cpu_to_node(cpu));
+	if (!buf->htm_mem_buf) {
+		kfree(buf);
+		pr_err("Failed to allocate htm mem buf\n");
+		return NULL;
+	}
+
 	buf->nr_pages = nr_pages;
 	buf->snapshot = false;
 	buf->size = nr_pages << PAGE_SHIFT;
@@ -404,6 +500,9 @@ static void *htm_setup_aux(struct perf_event *event, void **pages,
 	buf->head_size = 0;
 	buf->htm_stopped = 0;
 	buf->collect_htm_trace = 1;
+	buf->mem_head = 0;
+	buf->collect_htm_mem = 1;
+	buf->mem_start = 0;
 	return buf;
 }
 
@@ -413,10 +512,17 @@ static void *htm_setup_aux(struct perf_event *event, void **pages,
 static void htm_free_aux(void *aux)
 {
 	struct htm_pmu_buf *buf = aux;
+	void *free_mem;
 
 	if (!buf)
 		return;
 
+	free_mem = buf->htm_mem_buf;
+	buf->htm_mem_buf = NULL;
+
+	smp_mb();
+
+	kfree(free_mem);
 	kfree(buf);
 }
 
