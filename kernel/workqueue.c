@@ -226,6 +226,8 @@ struct worker_pool {
 						/* L: hash of busy workers */
 
 	struct worker		*manager;	/* L: purely informational */
+	/* L: last worker woken by kick_pool() */
+	struct worker		*last_woken_worker;
 	struct list_head	workers;	/* A: attached workers */
 
 	struct ida		worker_ida;	/* worker IDs for task name */
@@ -1318,6 +1320,9 @@ static bool kick_pool_pick(struct worker_pool *pool, struct task_struct **wakep)
 		}
 	}
 #endif
+	/* Track the last idle worker woken, used for stall diagnostics. */
+	pool->last_woken_worker = worker;
+
 	*wakep = p;
 	return true;
 }
@@ -2975,6 +2980,13 @@ static void set_worker_dying(struct worker *worker, struct list_head *list)
 
 	pool->nr_workers--;
 	pool->nr_idle--;
+
+	/*
+	 * Clear last_woken_worker if it points to this worker, so that
+	 * show_cpu_pool_busy_workers() cannot dereference a freed worker.
+	 */
+	if (pool->last_woken_worker == worker)
+		pool->last_woken_worker = NULL;
 
 	worker->flags |= WORKER_DIE;
 
@@ -7740,13 +7752,25 @@ static void show_pool_no_running_worker(struct worker_pool *pool)
 		idle_cpu(pool->cpu) ? "idle" : "busy",
 		pool->nr_workers, pool->nr_idle);
 	pr_info("The pool might have trouble waking an idle worker.\n");
+	/*
+	 * last_woken_worker and its task are valid here: set_worker_dying()
+	 * clears it under pool->lock before setting WORKER_DIE, so if
+	 * last_woken_worker is non-NULL the kthread has not yet exited and
+	 * worker->task is still alive.
+	 */
+	if (pool->last_woken_worker) {
+		pr_info("Backtrace of last woken worker:\n");
+		sched_show_task(pool->last_woken_worker->task);
+	} else {
+		pr_info("Last woken worker empty\n");
+	}
 	printk_deferred_exit();
 }
 
 /*
  * Show running workers that might prevent the processing of pending work items.
  * If no running worker is found, the pool may be stuck waiting for an idle
- * worker to be woken, so report the pool state.
+ * worker to be woken, so report the pool state and the last woken worker.
  */
 static void show_cpu_pool_busy_workers(struct worker_pool *pool)
 {
@@ -7781,7 +7805,8 @@ static void show_cpu_pool_busy_workers(struct worker_pool *pool)
 
 	/*
 	 * If no running worker was found, the pool is likely stuck. Print pool
-	 * state.
+	 * state and the backtrace of the last woken worker, which is the prime
+	 * suspect for the stall.
 	 */
 	if (!found_running)
 		show_pool_no_running_worker(pool);
