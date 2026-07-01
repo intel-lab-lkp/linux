@@ -539,10 +539,10 @@ struct drm_sched_job *drm_sched_entity_pop_job(struct drm_sched_entity *entity)
 	 * TODO: Replace spsc_queue completely with a locked (h)list.
 	 */
 	spsc_queue_pop(&entity->job_queue);
+	drm_sched_rq_pop_entity(entity);
 	spin_unlock(&entity->lock);
 
 	dma_fence_put(prev_last_scheduled);
-	drm_sched_rq_pop_entity(entity);
 
 	/* Jobs and entities might have different lifecycles. Since we're
 	 * removing the job from the entities queue, set the jobs entity pointer
