@@ -173,6 +173,8 @@ struct quickspi_device {
 
 	wait_queue_head_t set_report_cmpl_wq;
 	bool set_report_cmpl;
+
+	struct work_struct recover_work;
 };
 
 #endif /* _QUICKSPI_DEV_H_ */
