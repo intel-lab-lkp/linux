@@ -34,7 +34,7 @@ properties:
 
   clocks:
     minItems: 1
-    maxItems: 2
+    maxItems: 3
     description:
       PHY input reference clocks - refclk (for PLL0) & pll1_refclk (for PLL1).
       pll1_refclk is optional and used for multi-protocol configurations requiring
@@ -45,9 +45,17 @@ properties:
 
   clock-names:
     minItems: 1
-    items:
-      - const: refclk
-      - enum: [ pll1_refclk, phy_en_refclk ]
+    maxItems: 3
+    oneOf:
+      - items:
+          - const: refclk
+      - items:
+          - const: refclk
+          - enum: [ pll1_refclk, phy_en_refclk ]
+      - items:
+          - const: refclk
+          - const: pll1_refclk
+          - const: phy_en_refclk
 
   reg:
     minItems: 1
