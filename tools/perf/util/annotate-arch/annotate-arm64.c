@@ -14,6 +14,8 @@
 #include "../debug.h"
 #include "../map.h"
 #include "../symbol.h"
+#include "../dso.h"
+#include "../strbuf.h"
 
 struct arch_arm64 {
 	struct arch arch;
@@ -787,6 +789,81 @@ static void update_adrp_insn_state(struct type_state *state,
 		     insn_offset, tsr->addr, dreg);
 }
 
+static Dwarf_Off task_struct_dieoff;
+
+static void update_mrs_insn_state(struct type_state *state,
+				  struct data_loc_info *dloc, Dwarf_Die *cu_die,
+				  struct disasm_line *dl,
+				  struct annotated_op_loc *dst)
+{
+	struct type_state_reg *tsr;
+	Dwarf_Die type_die;
+	u32 insn_offset = dl->al.offset;
+	int dreg = dst->reg1;
+	Dwarf_Die func_die;
+	Dwarf_Attribute attr;
+	u64 ip, pc;
+
+	if (!has_reg_type(state, dreg))
+		return;
+
+	tsr = &state->regs[dreg];
+	tsr->copied_from = -1;
+
+	/* Handle case difference: LLVM (SP_EL0) vs objdump (sp_el0) */
+	if (!dso__kernel(map__dso(dloc->ms->map)) ||
+	    strcasecmp(dl->ops.source.raw, "sp_el0")) {
+		invalidate_reg_state(tsr);
+		return;
+	}
+
+	ip = dloc->ms->sym->start + dl->al.offset;
+	pc = map__rip_2objdump(dloc->ms->map, ip);
+
+	if (!task_struct_dieoff ||
+	    !dwarf_offdie(dloc->di->dbg, task_struct_dieoff, &type_die)) {
+		struct strbuf sb;
+		char *type_name;
+		/*
+		 * Find the inline function 'get_current()' Dwarf_Die
+		 * and obtain its return value data type, which should
+		 * be 'struct task_struct*'.
+		 */
+		if (!die_find_inlinefunc(cu_die, pc, &func_die) ||
+			!dwarf_attr_integrate(&func_die, DW_AT_type, &attr) ||
+			!dwarf_formref_die(&attr, &type_die)) {
+			invalidate_reg_state(tsr);
+			return;
+		}
+
+		strbuf_init(&sb, 32);
+		die_get_typename_from_type(&type_die, &sb);
+		type_name = strbuf_detach(&sb, NULL);
+
+		if (!type_name || strcmp(type_name, "struct task_struct*")) {
+			invalidate_reg_state(tsr);
+			return;
+		}
+
+		/*
+		 * Cache the 'struct task_struct*' die offset globally.
+		 * This allows us to resolve stack canary accesses even
+		 * in CUs that lack a full task_struct definition (e.g.,
+		 * compiler-generated entry/exit code).
+		 */
+		task_struct_dieoff = dwarf_dieoffset(&type_die);
+	}
+
+	tsr->type = type_die;
+	tsr->kind = TSR_KIND_TYPE;
+	tsr->offset = 0;
+	tsr->addr = 0;
+	tsr->ok = true;
+
+	pr_debug_dtp("mrs [%x] sp_el0 -> reg%d", insn_offset, dreg);
+	pr_debug_type_name(&type_die, tsr->kind);
+}
+
 static void update_insn_state_arm64(struct type_state *state,
 				    struct data_loc_info *dloc, Dwarf_Die *cu_die,
 				    struct disasm_line *dl)
@@ -804,12 +881,17 @@ static void update_insn_state_arm64(struct type_state *state,
 	 * the destination register itself to prevent incorrect type propagation.
 	 */
 	if (has_reg_type(state, dst->reg1) &&
-	    strcmp(dl->ins.name, "adrp") &&
+	    strcmp(dl->ins.name, "mrs") && strcmp(dl->ins.name, "adrp") &&
 	    strcmp(dl->ins.name, "add") && strcmp(dl->ins.name, "mov") &&
 	    strncmp(dl->ins.name, "ld", 2) && strncmp(dl->ins.name, "st", 2)) {
 		pr_debug_dtp("%s [%x] invalidate reg%d\n",
 			     dl->ins.name, insn_offset, dst->reg1);
 		invalidate_reg_state(&state->regs[dst->reg1]);
+		return;
+	}
+
+	if (!strcmp(dl->ins.name, "mrs")) {
+		update_mrs_insn_state(state, dloc, cu_die, dl, dst);
 		return;
 	}
 
