@@ -373,7 +373,6 @@ drm_sched_select_entity(struct drm_gpu_scheduler *sched)
 				return ERR_PTR(-ENOSPC);
 			}
 
-			reinit_completion(&entity->entity_idle);
 			break;
 		}
 	}
