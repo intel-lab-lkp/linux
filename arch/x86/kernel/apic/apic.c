@@ -176,7 +176,7 @@ static struct resource lapic_resource = {
 };
 
 /* Measured in ticks per HZ. */
-unsigned int lapic_timer_period = 0;
+static unsigned int lapic_timer_period;
 
 static void apic_pm_activate(void);
 
@@ -794,6 +794,16 @@ bool __init apic_needs_pit(void)
 	 * required. If unknown, let the PIT be initialized.
 	 */
 	return lapic_timer_period == 0;
+}
+
+void apic_set_timer_period_khz(u64 period_khz, const char *source)
+{
+	lapic_timer_period = mul_u64_u32_div(period_khz, 1000, HZ);
+}
+
+void apic_set_timer_period_hz(u64 period_hz, const char *source)
+{
+	lapic_timer_period = div_u64(period_hz, HZ);
 }
 
 static int __init calibrate_APIC_clock(void)
