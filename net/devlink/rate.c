@@ -30,14 +30,42 @@ devlink_rate_leaf_get_from_info(struct devlink *devlink, struct genl_info *info)
 	return devlink_rate ?: ERR_PTR(-ENODEV);
 }
 
+/* Repeatedly walks the nested devlink chain while cross device rate nodes are
+ * supported and finds the topmost instance where rates should be stored.
+ * That instance is locked, referenced and returned.
+ * When cross device rate nodes aren't supported the original devlink instance
+ * is returned.
+ */
 static struct devlink *devl_rate_lock(struct devlink *devlink)
 {
-	return devlink;
+	struct devlink *rate_devlink = devlink, *parent;
+
+	devl_assert_locked(devlink);
+
+	while (rate_devlink->ops &&
+	       rate_devlink->ops->supported_cross_device_rate_nodes) {
+		parent = devlink_nested_in_get_lock(rate_devlink);
+		if (!parent)
+			break;
+		if (rate_devlink != devlink) {
+			/* Unlock intermediate instances. */
+			devl_unlock(rate_devlink);
+			devlink_put(rate_devlink);
+		}
+		rate_devlink = parent;
+	}
+	return rate_devlink;
 }
 
+/* Unlocks and puts 'rate devlink' if different than 'devlink'. */
 static void devl_rate_unlock(struct devlink *devlink,
 			     struct devlink *rate_devlink)
 {
+	if (devlink == rate_devlink)
+		return;
+
+	devl_unlock(rate_devlink);
+	devlink_put(rate_devlink);
 }
 
 static struct devlink_rate *
@@ -121,6 +149,25 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+static int devlink_nl_rate_parent_fill(struct sk_buff *msg,
+				       struct devlink_rate *devlink_rate)
+{
+	struct devlink_rate *parent = devlink_rate->parent;
+	struct devlink *devlink = parent->devlink;
+
+	if (nla_put_string(msg, DEVLINK_ATTR_RATE_PARENT_NODE_NAME,
+			   parent->name))
+		return -EMSGSIZE;
+
+	if (devlink != devlink_rate->devlink &&
+	    devlink_nl_put_nested_handle(msg,
+					 devlink_net(devlink_rate->devlink),
+					 devlink, DEVLINK_ATTR_PARENT_DEV))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
 static int devlink_nl_rate_fill(struct sk_buff *msg,
 				struct devlink_rate *devlink_rate,
 				enum devlink_command cmd, u32 portid, u32 seq,
@@ -165,10 +212,9 @@ static int devlink_nl_rate_fill(struct sk_buff *msg,
 			devlink_rate->tx_weight))
 		goto nla_put_failure;
 
-	if (devlink_rate->parent)
-		if (nla_put_string(msg, DEVLINK_ATTR_RATE_PARENT_NODE_NAME,
-				   devlink_rate->parent->name))
-			goto nla_put_failure;
+	if (devlink_rate->parent &&
+	    devlink_nl_rate_parent_fill(msg, devlink_rate))
+		goto nla_put_failure;
 
 	if (devlink_rate_put_tc_bws(msg, devlink_rate->tc_bw))
 		goto nla_put_failure;
@@ -322,13 +368,14 @@ devlink_nl_rate_parent_node_set(struct devlink_rate *devlink_rate,
 				struct genl_info *info,
 				struct nlattr *nla_parent)
 {
-	struct devlink *devlink = devlink_rate->devlink;
+	struct devlink *devlink = devlink_rate->devlink, *parent_devlink;
 	const char *parent_name = nla_data(nla_parent);
 	const struct devlink_ops *ops = devlink->ops;
 	size_t len = strlen(parent_name);
 	struct devlink_rate *parent;
 	int err = -EOPNOTSUPP;
 
+	parent_devlink = devlink_nl_ctx(info)->parent_devlink ? : devlink;
 	parent = devlink_rate->parent;
 
 	if (parent && !len) {
@@ -346,7 +393,13 @@ devlink_nl_rate_parent_node_set(struct devlink_rate *devlink_rate,
 		refcount_dec(&parent->refcnt);
 		devlink_rate->parent = NULL;
 	} else if (len) {
-		parent = devlink_rate_node_get_by_name(rate_devlink, devlink,
+		/* parent_devlink (when different than devlink) isn't locked,
+		 * but the rate node devlink instance is, so nobody from the
+		 * same group of devices sharing rates could change the used
+		 * fields or unregister the parent.
+		 */
+		parent = devlink_rate_node_get_by_name(rate_devlink,
+						       parent_devlink,
 						       parent_name);
 		if (IS_ERR(parent))
 			return -ENODEV;
@@ -633,9 +686,11 @@ static bool devlink_rate_set_ops_supported(const struct devlink_ops *ops,
 
 int devlink_nl_rate_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *rate_devlink, *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink_nl_ctx *ctx = devlink_nl_ctx(info);
+	struct devlink *devlink = ctx->devlink;
 	struct devlink_rate *devlink_rate;
 	const struct devlink_ops *ops;
+	struct devlink *rate_devlink;
 	int err;
 
 	rate_devlink = devl_rate_lock(devlink);
@@ -648,6 +703,14 @@ int devlink_nl_rate_set_doit(struct sk_buff *skb, struct genl_info *info)
 	ops = devlink->ops;
 	if (!ops ||
 	    !devlink_rate_set_ops_supported(ops, info, devlink_rate->type)) {
+		err = -EOPNOTSUPP;
+		goto unlock;
+	}
+
+	if (ctx->parent_devlink && ctx->parent_devlink != devlink &&
+	    !ops->supported_cross_device_rate_nodes) {
+		NL_SET_ERR_MSG(info->extack,
+			       "Cross-device rate parents aren't supported");
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
@@ -678,6 +741,13 @@ int devlink_nl_rate_new_doit(struct sk_buff *skb, struct genl_info *info)
 
 	if (!devlink_rate_set_ops_supported(ops, info, DEVLINK_RATE_TYPE_NODE))
 		return -EOPNOTSUPP;
+
+	if (ctx->parent_devlink && ctx->parent_devlink != devlink &&
+	    !ops->supported_cross_device_rate_nodes) {
+		NL_SET_ERR_MSG(info->extack,
+			       "Cross-device rate parents aren't supported");
+		return -EOPNOTSUPP;
+	}
 
 	rate_devlink = devl_rate_lock(devlink);
 	rate_node = devlink_rate_node_get_from_attrs(rate_devlink, devlink,
