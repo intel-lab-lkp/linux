@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linux/zalloc.h>
+#include <linux/string.h>
+#include <linux/ctype.h>
 #include <regex.h>
 #include "../annotate.h"
 #include "../disasm.h"
@@ -14,59 +16,129 @@ struct arch_arm64 {
 	regex_t jump_insn;
 };
 
-static int arm64_mov__parse(const struct arch *arch __maybe_unused,
+static bool arm64__is_reg(const char *op)
+{
+	if (!op || !*op)
+		return false;
+
+	/*
+	 * General-purpose registers: x0-x30, w0-w30.
+	 * Check for 'x' or 'w' prefix followed by a numeric index.
+	 */
+	if ((op[0] == 'x' || op[0] == 'w') && isdigit(op[1]))
+		return true;
+
+	/*
+	 * Special-purpose registers:
+	 * sp: stack pointer
+	 * xzr/wzr: zero registers
+	 */
+	if (!strncmp(op, "sp", 2) || !strncmp(op, "xzr", 3) ||
+	    !strncmp(op, "wzr", 3))
+		return true;
+
+	return false;
+}
+
+static bool arm64__check_multi_regs(const struct arch *arch, const char *op)
+{
+	const char *p = op;
+	int reg_count = 0;
+
+	while (p && *p) {
+		p = skip_spaces(p);
+		if (*p == arch->objdump.memory_ref_char)
+			p++;
+
+		if (arm64__is_reg(p))
+			reg_count++;
+
+		if (reg_count >= 2)
+			return true;
+
+		/* Move to next operand after comma */
+		p = strchr(p, ',');
+		if (p)
+			p++;
+	}
+
+	return false;
+}
+
+static int arm64_mov__parse(const struct arch *arch,
 			    struct ins_operands *ops,
 			    struct map_symbol *ms __maybe_unused,
 			    struct disasm_line *dl __maybe_unused)
 {
-	char *s = strchr(ops->raw, ','), *target, *endptr;
+	char *s = strchr(ops->raw, ','), *source, *endptr, *comment, prev;
 
 	if (s == NULL)
 		return -1;
 
 	*s = '\0';
-	ops->source.raw = strdup(ops->raw);
+	ops->target.raw = strdup(ops->raw);
 	*s = ',';
 
-	if (ops->source.raw == NULL)
+	if (ops->target.raw == NULL)
 		return -1;
 
-	target = ++s;
-	ops->target.raw = strdup(target);
-	if (ops->target.raw == NULL)
-		goto out_free_source;
+	/* Parse source, discarding comment if present */
+	source = skip_spaces(++s);
+	comment = strchr(s, arch->objdump.comment_char);
 
-	ops->target.addr = strtoull(target, &endptr, 16);
-	if (endptr == target)
-		goto out_free_target;
+	if (comment != NULL)
+		s = comment - 1;
+	else
+		s = strchr(s, '\0') - 1;
 
+	while (s > source && isspace(s[0]))
+		--s;
+	s++;
+	prev = *s;
+	*s = '\0';
+	ops->source.raw = strdup(source);
+	*s = prev;
+
+	if (ops->source.raw == NULL) {
+		zfree(&ops->target.raw);
+		return -1;
+	}
+
+	ops->source.multi_regs = arm64__check_multi_regs(arch, ops->source.raw);
+
+	/* Parse address from source (if any) */
+	ops->source.addr = strtoull(source, &endptr, 16);
+	if (endptr == source)
+		return 0;
+
+	/* Parse a symbol followed by an address, if present */
 	s = strchr(endptr, '<');
 	if (s == NULL)
-		goto out_free_target;
-	endptr = strchr(s + 1, '>');
+		return 0;
+	endptr = strrchr(s + 1, '>');
 	if (endptr == NULL)
-		goto out_free_target;
+		return 0;
 
 	*endptr = '\0';
 	*s = ' ';
-	ops->target.name = strdup(s);
+	s = skip_spaces(++s);
+	ops->source.name = strdup(s);
 	*s = '<';
 	*endptr = '>';
-	if (ops->target.name == NULL)
-		goto out_free_target;
 
 	return 0;
+}
 
-out_free_target:
-	zfree(&ops->target.raw);
-out_free_source:
-	zfree(&ops->source.raw);
-	return -1;
+static int arm64_mov__scnprintf(const struct ins *ins, char *bf, size_t size,
+				struct ins_operands *ops, int max_ins_name)
+{
+	return scnprintf(bf, size, "%-*s %s, %s", max_ins_name, ins->name,
+			 ops->target.raw, ops->source.name ?: ops->source.raw);
 }
 
 static const struct ins_ops arm64_mov_ops = {
 	.parse	   = arm64_mov__parse,
-	.scnprintf = mov__scnprintf,
+	.scnprintf = arm64_mov__scnprintf,
 };
 
 static const struct ins_ops *arm64__associate_instruction_ops(struct arch *arch, const char *name)
