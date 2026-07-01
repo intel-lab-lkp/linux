@@ -118,6 +118,18 @@ correct. This prevents the situation where only some of the controls
 were set/get. Only low-level errors (e. g. a failed i2c command) can
 still cause this situation.
 
+The validation of controls is not expected to be exhaustive, for example
+custom controls under ``V4L2_CTRL_CLASS_USER`` would become very voluminous.
+The expected behaviour is to reject settings that could:
+
+1. Pose stability issues, such as turning the hardware unresponsive requiring
+   a hard reset, such controls must be rejected.
+
+2. Pose security issues, such as compromising unrelated kernel-contained
+   data to userspace.
+
+Extended validation of control values should be performed in userspace.
+
 .. tabularcolumns:: |p{6.8cm}|p{4.0cm}|p{6.5cm}|
 
 .. c:type:: v4l2_ext_control
