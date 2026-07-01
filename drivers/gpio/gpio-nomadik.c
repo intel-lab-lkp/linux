@@ -527,15 +527,15 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 
 	if (device_property_read_u32(gpio_dev, "gpio-bank", &id)) {
 		dev_err(dev, "populate: gpio-bank property not found\n");
-		platform_device_put(gpio_pdev);
-		return ERR_PTR(-EINVAL);
+		ret = -EINVAL;
+		goto err_put_pdev;
 	}
 
 #ifdef CONFIG_PINCTRL_NOMADIK
 	if (id >= ARRAY_SIZE(nmk_gpio_chips)) {
 		dev_err(dev, "populate: invalid id: %u\n", id);
-		platform_device_put(gpio_pdev);
-		return ERR_PTR(-EINVAL);
+		ret = -EINVAL;
+		goto err_put_pdev;
 	}
 	/* Already populated? */
 	nmk_chip = nmk_gpio_chips[id];
@@ -547,8 +547,8 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 
 	nmk_chip = devm_kzalloc(dev, sizeof(*nmk_chip), GFP_KERNEL);
 	if (!nmk_chip) {
-		platform_device_put(gpio_pdev);
-		return ERR_PTR(-ENOMEM);
+		ret = -ENOMEM;
+		goto err_put_pdev;
 	}
 
 	if (device_property_read_u32(gpio_dev, "ngpios", &ngpio)) {
@@ -569,16 +569,16 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	res = platform_get_resource(gpio_pdev, IORESOURCE_MEM, 0);
 	base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(base)) {
-		platform_device_put(gpio_pdev);
-		return ERR_CAST(base);
+		ret = PTR_ERR(base);
+		goto err_put_pdev;
 	}
 	nmk_chip->addr = base;
 
 	/* NOTE: do not use devm_ here! */
 	clk = clk_get_optional(gpio_dev, NULL);
 	if (IS_ERR(clk)) {
-		platform_device_put(gpio_pdev);
-		return ERR_CAST(clk);
+		ret = PTR_ERR(clk);
+		goto err_put_pdev;
 	}
 	clk_prepare(clk);
 	nmk_chip->clk = clk;
@@ -586,12 +586,9 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	/* NOTE: do not use devm_ here! */
 	reset = reset_control_get_optional_shared(gpio_dev, NULL);
 	if (IS_ERR(reset)) {
-		clk_unprepare(clk);
-		clk_put(clk);
-		platform_device_put(gpio_pdev);
-		dev_err(dev, "failed getting reset control: %pe\n",
-			reset);
-		return ERR_CAST(reset);
+		dev_err(dev, "failed getting reset control: %pe\n", reset);
+		ret = PTR_ERR(reset);
+		goto err_unprepare_clk;
 	}
 
 	/*
@@ -601,18 +598,23 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	 */
 	ret = reset_control_deassert(reset);
 	if (ret) {
-		reset_control_put(reset);
-		clk_unprepare(clk);
-		clk_put(clk);
-		platform_device_put(gpio_pdev);
 		dev_err(dev, "failed reset deassert: %d\n", ret);
-		return ERR_PTR(ret);
+		goto err_put_reset;
 	}
 
 #ifdef CONFIG_PINCTRL_NOMADIK
 	nmk_gpio_chips[id] = nmk_chip;
 #endif
 	return nmk_chip;
+
+err_put_reset:
+	reset_control_put(reset);
+err_unprepare_clk:
+	clk_unprepare(clk);
+	clk_put(clk);
+err_put_pdev:
+	platform_device_put(gpio_pdev);
+	return ERR_PTR(ret);
 }
 
 static void nmk_gpio_irq_print_chip(struct irq_data *d, struct seq_file *p)
