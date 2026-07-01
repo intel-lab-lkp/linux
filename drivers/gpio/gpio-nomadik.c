@@ -712,8 +712,6 @@ static int nmk_gpio_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, nmk_chip);
 
-	dev_info(dev, "chip registered\n");
-
 	return 0;
 }
 
