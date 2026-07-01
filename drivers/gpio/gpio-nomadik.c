@@ -651,10 +651,8 @@ static int nmk_gpio_probe(struct platform_device *pdev)
 	int ret;
 
 	nmk_chip = nmk_gpio_populate_chip(dev_fwnode(dev), pdev);
-	if (IS_ERR(nmk_chip)) {
-		dev_err(dev, "could not populate nmk chip struct\n");
+	if (IS_ERR(nmk_chip))
 		return PTR_ERR(nmk_chip);
-	}
 
 	supports_sleepmode =
 		device_property_read_bool(dev, "st,supports-sleepmode");
