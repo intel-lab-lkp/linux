@@ -8,6 +8,9 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/cpuhplock.h>
+#include <linux/cpumask.h>
+#include <linux/workqueue.h>
+#include <linux/sched/isolation.h>
 
 struct steal_monitor {
 	struct delayed_work	work;
