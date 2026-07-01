@@ -228,6 +228,9 @@ static void pcrypt_free(struct aead_instance *inst)
 static int pcrypt_init_instance(struct crypto_instance *inst,
 				struct crypto_alg *alg)
 {
+	if (strstr(alg->cra_driver_name, "pcrypt"))
+		return -ELOOP;		/* Nesting of pcrypt is not allowed */
+
 	if (snprintf(inst->alg.cra_driver_name, CRYPTO_MAX_ALG_NAME,
 		     "pcrypt(%s)", alg->cra_driver_name) >= CRYPTO_MAX_ALG_NAME)
 		return -ENAMETOOLONG;
