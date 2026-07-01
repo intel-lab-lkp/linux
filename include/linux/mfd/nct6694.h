@@ -9,7 +9,9 @@
 #ifndef __MFD_NCT6694_H
 #define __MFD_NCT6694_H
 
+#include <linux/bitfield.h>
 #include <linux/idr.h>
+#include <linux/regmap.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 
@@ -28,6 +30,9 @@ struct mfd_cell;
 
 #define NCT6694_HCTRL_SET	0x40
 #define NCT6694_HCTRL_GET	0x80
+
+/* Maximum message payload length exchanged with the firmware in one command */
+#define NCT6694_MAX_PACKET_SIZE	0x3F0
 
 enum nct6694_irq_id {
 	NCT6694_IRQ_GPIO0 = 0,
@@ -87,6 +92,7 @@ struct __packed nct6694_response_header {
 
 struct nct6694 {
 	struct device *dev;
+	struct regmap *regmap;
 	struct ida gpio_ida;
 	struct ida i2c_ida;
 	struct ida canfd_ida;
@@ -97,29 +103,64 @@ struct nct6694 {
 	void *priv;
 };
 
-int nct6694_core_probe(struct device *dev, struct nct6694 *nct6694,
-		       const struct mfd_cell *cells, int n_cells);
-void nct6694_core_remove(struct nct6694 *nct6694);
+/*
+ * The NCT6694 firmware is reached through messages that carry a module id
+ * together with an offset (or command/selector pair). These fields are packed
+ * into a single 32-bit regmap register so that the sub-device drivers can use
+ * the standard regmap bulk accessors, while each transport driver implements
+ * the actual I/O through its own regmap bus.
+ *
+ *   bits [31:24]  host control (NCT6694_HCTRL_GET / NCT6694_HCTRL_SET)
+ *   bits [23:16]  module id
+ *   bits [15:0]   offset (low byte = command, high byte = selector)
+ */
+#define NCT6694_REG_HCTRL	GENMASK(31, 24)
+#define NCT6694_REG_MOD		GENMASK(23, 16)
+#define NCT6694_REG_OFFSET	GENMASK(15, 0)
 
-int nct6694_usb_read_msg(struct nct6694 *nct6694,
-			 const struct nct6694_cmd_header *cmd_hd,
-			 void *buf);
-int nct6694_usb_write_msg(struct nct6694 *nct6694,
-			  const struct nct6694_cmd_header *cmd_hd,
-			  void *buf);
+static inline u32 nct6694_cmd_to_reg(const struct nct6694_cmd_header *cmd_hd,
+				     u8 hctrl)
+{
+	return FIELD_PREP(NCT6694_REG_HCTRL, hctrl) |
+	       FIELD_PREP(NCT6694_REG_MOD, cmd_hd->mod) |
+	       FIELD_PREP(NCT6694_REG_OFFSET, le16_to_cpu(cmd_hd->offset));
+}
 
 static inline int nct6694_read_msg(struct nct6694 *nct6694,
 				   const struct nct6694_cmd_header *cmd_hd,
 				   void *buf)
 {
-	return nct6694_usb_read_msg(nct6694, cmd_hd, buf);
+	return regmap_bulk_read(nct6694->regmap,
+				nct6694_cmd_to_reg(cmd_hd, NCT6694_HCTRL_GET),
+				buf, le16_to_cpu(cmd_hd->len));
 }
 
 static inline int nct6694_write_msg(struct nct6694 *nct6694,
 				    const struct nct6694_cmd_header *cmd_hd,
 				    void *buf)
 {
-	return nct6694_usb_write_msg(nct6694, cmd_hd, buf);
+	return regmap_bulk_write(nct6694->regmap,
+				 nct6694_cmd_to_reg(cmd_hd, NCT6694_HCTRL_SET),
+				 buf, le16_to_cpu(cmd_hd->len));
 }
+
+/*
+ * A few firmware commands (e.g. the I2C "deliver") transmit a request and
+ * read the reply back in a single transaction. Model this as a regmap read of
+ * a SET register: @buf carries the request on entry and holds the reply on
+ * return, so the firmware exchange stays a single message as before.
+ */
+static inline int nct6694_write_read_msg(struct nct6694 *nct6694,
+					 const struct nct6694_cmd_header *cmd_hd,
+					 void *buf)
+{
+	return regmap_bulk_read(nct6694->regmap,
+				nct6694_cmd_to_reg(cmd_hd, NCT6694_HCTRL_SET),
+				buf, le16_to_cpu(cmd_hd->len));
+}
+
+int nct6694_core_probe(struct device *dev, struct nct6694 *nct6694,
+		       const struct mfd_cell *cells, int n_cells);
+void nct6694_core_remove(struct nct6694 *nct6694);
 
 #endif

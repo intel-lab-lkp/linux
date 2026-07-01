@@ -1166,6 +1166,7 @@ config MFD_MENF21BMC
 config MFD_NCT6694
 	tristate
 	select MFD_CORE
+	select REGMAP
 	help
 	  Core MFD support for the Nuvoton NCT6694 peripheral expander.
 	  This provides the common APIs and shared structures used by all

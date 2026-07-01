@@ -9,6 +9,7 @@
  * CAN, WDT, HWMON and RTC management.
  */
 
+#include <linux/bitfield.h>
 #include <linux/bits.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -17,7 +18,9 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/nct6694.h>
 #include <linux/module.h>
+#include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/unaligned.h>
 #include <linux/usb.h>
 
 #define NCT6694_VENDOR_ID	0x0416
@@ -34,10 +37,10 @@ union __packed nct6694_usb_msg {
 };
 
 struct nct6694_usb_data {
-	struct mutex access_lock;
 	struct urb *int_in_urb;
 	struct usb_device *udev;
 	union nct6694_usb_msg *usb_msg;
+	void *xfer_buf;
 	__le32 *int_buffer;
 };
 
@@ -101,28 +104,14 @@ static int nct6694_usb_err_handling(struct nct6694 *nct6694, unsigned char err_s
 	return -EIO;
 }
 
-/**
- * nct6694_usb_read_msg() - Read message from NCT6694 device
- * @nct6694: NCT6694 device pointer
- * @cmd_hd: command header structure
- * @buf: buffer to store the response data
- *
- * Sends a command to the NCT6694 device and reads the response.
- * The command header is specified in @cmd_hd, and the response
- * data is stored in @buf.
- *
- * Return: Negative value on error or 0 on success.
- */
-int nct6694_usb_read_msg(struct nct6694 *nct6694,
-			 const struct nct6694_cmd_header *cmd_hd,
-			 void *buf)
+static int nct6694_usb_read_msg(struct nct6694 *nct6694,
+				const struct nct6694_cmd_header *cmd_hd,
+				void *buf)
 {
 	struct nct6694_usb_data *udata = nct6694->priv;
 	union nct6694_usb_msg *msg = udata->usb_msg;
 	struct usb_device *udev = udata->udev;
 	int tx_len, rx_len, ret;
-
-	guard(mutex)(&udata->access_lock);
 
 	memcpy(&msg->cmd_header, cmd_hd, sizeof(*cmd_hd));
 	msg->cmd_header.hctrl = NCT6694_HCTRL_GET;
@@ -153,29 +142,15 @@ int nct6694_usb_read_msg(struct nct6694 *nct6694,
 
 	return nct6694_usb_err_handling(nct6694, msg->response_header.sts);
 }
-EXPORT_SYMBOL_GPL(nct6694_usb_read_msg);
 
-/**
- * nct6694_usb_write_msg() - Write message to NCT6694 device
- * @nct6694: NCT6694 device pointer
- * @cmd_hd: command header structure
- * @buf: buffer containing the data to be sent
- *
- * Sends a command to the NCT6694 device and writes the data
- * from @buf. The command header is specified in @cmd_hd.
- *
- * Return: Negative value on error or 0 on success.
- */
-int nct6694_usb_write_msg(struct nct6694 *nct6694,
-			  const struct nct6694_cmd_header *cmd_hd,
-			  void *buf)
+static int nct6694_usb_write_msg(struct nct6694 *nct6694,
+				 const struct nct6694_cmd_header *cmd_hd,
+				 void *buf)
 {
 	struct nct6694_usb_data *udata = nct6694->priv;
 	union nct6694_usb_msg *msg = udata->usb_msg;
 	struct usb_device *udev = udata->udev;
 	int tx_len, rx_len, ret;
-
-	guard(mutex)(&udata->access_lock);
 
 	memcpy(&msg->cmd_header, cmd_hd, sizeof(*cmd_hd));
 	msg->cmd_header.hctrl = NCT6694_HCTRL_SET;
@@ -212,7 +187,67 @@ int nct6694_usb_write_msg(struct nct6694 *nct6694,
 
 	return nct6694_usb_err_handling(nct6694, msg->response_header.sts);
 }
-EXPORT_SYMBOL_GPL(nct6694_usb_write_msg);
+
+static int nct6694_usb_regmap_read(void *context, const void *reg_buf,
+				   size_t reg_size, void *val_buf,
+				   size_t val_size)
+{
+	struct nct6694 *nct6694 = context;
+	u32 reg = get_unaligned_be32(reg_buf);
+	const struct nct6694_cmd_header cmd_hd = {
+		.mod = FIELD_GET(NCT6694_REG_MOD, reg),
+		.offset = cpu_to_le16(FIELD_GET(NCT6694_REG_OFFSET, reg)),
+		.len = cpu_to_le16(val_size),
+	};
+
+	/*
+	 * A SET transaction is a request/response exchange: send the payload
+	 * already present in @val_buf and read the response back into it.
+	 */
+	if (FIELD_GET(NCT6694_REG_HCTRL, reg) == NCT6694_HCTRL_SET)
+		return nct6694_usb_write_msg(nct6694, &cmd_hd, val_buf);
+
+	return nct6694_usb_read_msg(nct6694, &cmd_hd, val_buf);
+}
+
+static int nct6694_usb_regmap_write(void *context, const void *data,
+				    size_t count)
+{
+	struct nct6694 *nct6694 = context;
+	struct nct6694_usb_data *udata = nct6694->priv;
+	u32 reg = get_unaligned_be32(data);
+	size_t len = count - sizeof(reg);
+	const struct nct6694_cmd_header cmd_hd = {
+		.mod = FIELD_GET(NCT6694_REG_MOD, reg),
+		.offset = cpu_to_le16(FIELD_GET(NCT6694_REG_OFFSET, reg)),
+		.len = cpu_to_le16(len),
+	};
+
+	if (len > NCT6694_MAX_PACKET_SIZE)
+		return -EINVAL;
+
+	/*
+	 * nct6694_usb_write_msg() reads the firmware response back into the
+	 * payload buffer, so copy the const regmap data into a scratch buffer
+	 * it can write to.
+	 */
+	memcpy(udata->xfer_buf, data + sizeof(reg), len);
+
+	return nct6694_usb_write_msg(nct6694, &cmd_hd, udata->xfer_buf);
+}
+
+static const struct regmap_bus nct6694_usb_regmap_bus = {
+	.read = nct6694_usb_regmap_read,
+	.write = nct6694_usb_regmap_write,
+};
+
+static const struct regmap_config nct6694_usb_regmap_config = {
+	.reg_bits = 32,
+	.val_bits = 8,
+	.reg_stride = 1,
+	.max_raw_read = NCT6694_MAX_PACKET_SIZE,
+	.max_raw_write = NCT6694_MAX_PACKET_SIZE,
+};
 
 static void nct6694_usb_int_callback(struct urb *urb)
 {
@@ -270,6 +305,10 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	if (!udata->usb_msg)
 		return -ENOMEM;
 
+	udata->xfer_buf = devm_kzalloc(dev, NCT6694_MAX_PACKET_SIZE, GFP_KERNEL);
+	if (!udata->xfer_buf)
+		return -ENOMEM;
+
 	udata->int_buffer = devm_kzalloc(dev, sizeof(*udata->int_buffer), GFP_KERNEL);
 	if (!udata->int_buffer)
 		return -ENOMEM;
@@ -283,9 +322,12 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	nct6694->dev = dev;
 	nct6694->priv = udata;
 
-	ret = devm_mutex_init(dev, &udata->access_lock);
-	if (ret)
+	nct6694->regmap = devm_regmap_init(dev, &nct6694_usb_regmap_bus, nct6694,
+					   &nct6694_usb_regmap_config);
+	if (IS_ERR(nct6694->regmap)) {
+		ret = PTR_ERR(nct6694->regmap);
 		goto err_urb;
+	}
 
 	interface = iface->cur_altsetting;
 
