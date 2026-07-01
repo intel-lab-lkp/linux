@@ -12,6 +12,7 @@
 #include "../../util/debug.h"
 #include "../../util/auxtrace.h"
 #include "../../util/powerpc-vpadtl.h"
+#include "../../util/powerpc-htm.h"
 #include "../../util/record.h"
 
 struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
@@ -19,6 +20,7 @@ struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 {
 	struct evsel *pos;
 	int found_vpa_dtl = 0;
+	int found_htm = 0;
 
 	/*
 	 * Set err value to zero here. Any fail later
@@ -31,13 +33,19 @@ struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 			found_vpa_dtl = 1;
 			pos->needs_auxtrace_mmap = true;
 			break;
+		} else if (strstarts(pos->name, "htm")) {
+			found_htm = 1;
+			pos->needs_auxtrace_mmap = true;
+			break;
 		}
 	}
 
 	if (found_vpa_dtl)
 		return vpa_dtl_recording_init(pos);
+	else if (found_htm)
+		return htm_recording_init(pos);
 	else {
-		*err = -EINVAL;
+		*err = 0;
 		return NULL;
 	}
 }
