@@ -16,19 +16,19 @@ MODULE_VERSION(DRIVERVERSION);
 /* module param defaults */
 static int rtw_chip_version;
 static int rtw_rfintfs = HWPI;
-static int rtw_lbkmode;/* RTL8712_AIR_TRX; */
+static int rtw_lbkmode; /* RTL8712_AIR_TRX; */
 
-
-static int rtw_network_mode = Ndis802_11IBSS;/* Ndis802_11Infrastructure;infra, ad-hoc, auto */
+static int rtw_network_mode =
+	Ndis802_11IBSS; /* Ndis802_11Infrastructure;infra, ad-hoc, auto */
 /* struct ndis_802_11_ssid	ssid; */
-static int rtw_channel = 1;/* ad-hoc support requirement */
+static int rtw_channel = 1; /* ad-hoc support requirement */
 static int rtw_wireless_mode = WIRELESS_11BG_24N;
 static int rtw_vrtl_carrier_sense = AUTO_VCS;
-static int rtw_vcs_type = RTS_CTS;/*  */
-static int rtw_rts_thresh = 2347;/*  */
-static int rtw_frag_thresh = 2346;/*  */
-static int rtw_preamble = PREAMBLE_LONG;/* long, short, auto */
-static int rtw_scan_mode = 1;/* active, passive */
+static int rtw_vcs_type = RTS_CTS; /*  */
+static int rtw_rts_thresh = 2347; /*  */
+static int rtw_frag_thresh = 2346; /*  */
+static int rtw_preamble = PREAMBLE_LONG; /* long, short, auto */
+static int rtw_scan_mode = 1; /* active, passive */
 static int rtw_adhoc_tx_pwr = 1;
 static int rtw_soft_ap;
 /* int smart_ps = 1; */
@@ -41,7 +41,7 @@ static int rtw_smart_ps = 2;
 
 static int rtw_check_fw_ps = 1;
 
-static int rtw_usb_rxagg_mode = 2;/* USB_RX_AGG_DMA = 1, USB_RX_AGG_USB =2 */
+static int rtw_usb_rxagg_mode = 2; /* USB_RX_AGG_DMA = 1, USB_RX_AGG_USB =2 */
 module_param(rtw_usb_rxagg_mode, int, 0644);
 
 static int rtw_radio_enable = 1;
@@ -54,9 +54,9 @@ static int rtw_ack_policy = NORMAL_ACK;
 static int rtw_software_encrypt;
 static int rtw_software_decrypt;
 
-static int rtw_acm_method;/*  0:By SW 1:By HW. */
+static int rtw_acm_method; /*  0:By SW 1:By HW. */
 
-static int rtw_wmm_enable = 1;/*  default is set to enable the wmm. */
+static int rtw_wmm_enable = 1; /*  default is set to enable the wmm. */
 static int rtw_uapsd_enable;
 static int rtw_uapsd_max_sp = NO_LIMIT;
 static int rtw_uapsd_acbk_en;
@@ -71,9 +71,11 @@ int rtw_ht_enable = 1;
  * 0x01 means enable 2.4G 40MHz
  */
 static int rtw_bw_mode = 0x01;
-static int rtw_ampdu_enable = 1;/* for enable tx_ampdu ,0: disable, 0x1:enable (but wifi_spec should be 0), 0x2: force enable (don't care wifi_spec) */
-static int rtw_rx_stbc = 1;/*  0: disable, 1:enable 2.4g */
-static int rtw_ampdu_amsdu;/*  0: disabled, 1:enabled, 2:auto . There is an IOT issu with DLINK DIR-629 when the flag turn on */
+static int rtw_ampdu_enable =
+	1; /* for enable tx_ampdu ,0: disable, 0x1:enable (but wifi_spec should be 0), 0x2: force enable (don't care wifi_spec) */
+static int rtw_rx_stbc = 1; /*  0: disable, 1:enable 2.4g */
+static int
+	rtw_ampdu_amsdu; /*  0: disabled, 1:enabled, 2:auto . There is an IOT issu with DLINK DIR-629 when the flag turn on */
 /*  Short GI support Bit Map */
 /*  BIT0 - 20MHz, 0: non-support, 1: support */
 /*  BIT1 - 40MHz, 0: non-support, 1: support */
@@ -87,7 +89,8 @@ static int rtw_stbc_cap = 0x13;
 /*  BIT0: Enable VHT Beamformer, BIT1: Enable VHT Beamformee, BIT4: Enable HT Beamformer, BIT5: Enable HT Beamformee */
 static int rtw_beamform_cap = 0x2;
 
-static int rtw_lowrate_two_xmit = 1;/* Use 2 path Tx to transmit MCS0~7 and legacy mode */
+static int rtw_lowrate_two_xmit =
+	1; /* Use 2 path Tx to transmit MCS0~7 and legacy mode */
 
 static int rtw_low_power;
 static int rtw_wifi_spec;
@@ -98,7 +101,8 @@ module_param(rtw_ant_num, int, 0644);
 MODULE_PARM_DESC(rtw_ant_num, "Antenna number setting");
 
 static int rtw_antdiv_cfg = 1; /*  0:OFF , 1:ON, 2:decide by Efuse config */
-static int rtw_antdiv_type; /* 0:decide by efuse  1: for 88EE, 1Tx and 1RxCG are diversity.(2 Ant with SPDT), 2:  for 88EE, 1Tx and 2Rx are diversity.(2 Ant, Tx and RxCG are both on aux port, RxCS is on main port), 3: for 88EE, 1Tx and 1RxCG are fixed.(1Ant, Tx and RxCG are both on aux port) */
+static int
+	rtw_antdiv_type; /* 0:decide by efuse  1: for 88EE, 1Tx and 1RxCG are diversity.(2 Ant with SPDT), 2:  for 88EE, 1Tx and 2Rx are diversity.(2 Ant, Tx and RxCG are both on aux port, RxCS is on main port), 3: for 88EE, 1Tx and 1RxCG are fixed.(1Ant, Tx and RxCG are both on aux port) */
 
 static int rtw_hw_wps_pbc;
 
@@ -106,14 +110,14 @@ int rtw_mc2u_disable;
 
 static int rtw_80211d;
 
-static int rtw_qos_opt_enable;/* 0: disable, 1:enable */
+static int rtw_qos_opt_enable; /* 0: disable, 1:enable */
 module_param(rtw_qos_opt_enable, int, 0644);
 
 static char *ifname = "wlan%d";
 module_param(ifname, charp, 0644);
 MODULE_PARM_DESC(ifname, "The default name to allocate for first interface");
 
-char *rtw_initmac;  /*  temp mac address if users want to use instead of the mac address in Efuse */
+char *rtw_initmac; /*  temp mac address if users want to use instead of the mac address in Efuse */
 
 module_param(rtw_initmac, charp, 0644);
 module_param(rtw_channel_plan, int, 0644);
@@ -143,7 +147,6 @@ module_param(rtw_wifi_spec, int, 0644);
 module_param(rtw_antdiv_cfg, int, 0644);
 module_param(rtw_antdiv_type, int, 0644);
 
-
 module_param(rtw_hw_wps_pbc, int, 0644);
 
 static uint rtw_max_roaming_times = 2;
@@ -157,7 +160,8 @@ MODULE_PARM_DESC(rtw_80211d, "Enable 802.11d mechanism");
 
 static uint rtw_notch_filter;
 module_param(rtw_notch_filter, uint, 0644);
-MODULE_PARM_DESC(rtw_notch_filter, "0:Disable, 1:Enable, 2:Enable only for P2P");
+MODULE_PARM_DESC(rtw_notch_filter,
+		 "0:Disable, 1:Enable, 2:Enable only for P2P");
 
 #define CONFIG_RTW_HIQ_FILTER 1
 
@@ -169,7 +173,8 @@ static int rtw_tx_pwr_lmt_enable;
 static int rtw_tx_pwr_by_rate;
 
 module_param(rtw_tx_pwr_lmt_enable, int, 0644);
-MODULE_PARM_DESC(rtw_tx_pwr_lmt_enable, "0:Disable, 1:Enable, 2: Depend on efuse");
+MODULE_PARM_DESC(rtw_tx_pwr_lmt_enable,
+		 "0:Disable, 1:Enable, 2: Depend on efuse");
 
 module_param(rtw_tx_pwr_by_rate, int, 0644);
 MODULE_PARM_DESC(rtw_tx_pwr_by_rate, "0:Disable, 1:Enable, 2: Depend on efuse");
@@ -178,13 +183,13 @@ static int netdev_close(struct net_device *pnetdev);
 
 static void loadparam(struct adapter *padapter, struct net_device *pnetdev)
 {
-	struct registry_priv  *registry_par = &padapter->registrypriv;
+	struct registry_priv *registry_par = &padapter->registrypriv;
 
 	registry_par->chip_version = (u8)rtw_chip_version;
 	registry_par->rfintfs = (u8)rtw_rfintfs;
 	registry_par->lbkmode = (u8)rtw_lbkmode;
 	/* registry_par->hci = (u8)hci; */
-	registry_par->network_mode  = (u8)rtw_network_mode;
+	registry_par->network_mode = (u8)rtw_network_mode;
 
 	memcpy(registry_par->ssid.ssid, "ANY", 3);
 	registry_par->ssid.ssid_length = 3;
@@ -199,8 +204,8 @@ static void loadparam(struct adapter *padapter, struct net_device *pnetdev)
 	registry_par->preamble = (u8)rtw_preamble;
 	registry_par->scan_mode = (u8)rtw_scan_mode;
 	registry_par->adhoc_tx_pwr = (u8)rtw_adhoc_tx_pwr;
-	registry_par->soft_ap =  (u8)rtw_soft_ap;
-	registry_par->smart_ps =  (u8)rtw_smart_ps;
+	registry_par->soft_ap = (u8)rtw_soft_ap;
+	registry_par->smart_ps = (u8)rtw_smart_ps;
 	registry_par->check_fw_ps = (u8)rtw_check_fw_ps;
 	registry_par->power_mgnt = (u8)rtw_power_mgnt;
 	registry_par->ips_mode = (u8)rtw_ips_mode;
@@ -216,7 +221,7 @@ static void loadparam(struct adapter *padapter, struct net_device *pnetdev)
 	registry_par->acm_method = (u8)rtw_acm_method;
 	registry_par->usb_rxagg_mode = (u8)rtw_usb_rxagg_mode;
 
-	 /* UAPSD */
+	/* UAPSD */
 	registry_par->wmm_enable = (u8)rtw_wmm_enable;
 	registry_par->uapsd_enable = (u8)rtw_uapsd_enable;
 	registry_par->uapsd_max_sp = (u8)rtw_uapsd_max_sp;
@@ -237,7 +242,6 @@ static void loadparam(struct adapter *padapter, struct net_device *pnetdev)
 
 	registry_par->lowrate_two_xmit = (u8)rtw_lowrate_two_xmit;
 	registry_par->low_power = (u8)rtw_low_power;
-
 
 	registry_par->wifi_spec = (u8)rtw_wifi_spec;
 
@@ -291,8 +295,10 @@ static struct net_device_stats *rtw_net_get_stats(struct net_device *pnetdev)
 	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
 	struct recv_priv *precvpriv = &padapter->recvpriv;
 
-	padapter->stats.tx_packets = pxmitpriv->tx_pkts;/* pxmitpriv->tx_pkts++; */
-	padapter->stats.rx_packets = precvpriv->rx_pkts;/* precvpriv->rx_pkts++; */
+	padapter->stats.tx_packets =
+		pxmitpriv->tx_pkts; /* pxmitpriv->tx_pkts++; */
+	padapter->stats.rx_packets =
+		precvpriv->rx_pkts; /* precvpriv->rx_pkts++; */
 	padapter->stats.tx_dropped = pxmitpriv->tx_drop;
 	padapter->stats.rx_dropped = precvpriv->rx_drop;
 	padapter->stats.tx_bytes = pxmitpriv->tx_bytes;
@@ -335,11 +341,10 @@ static unsigned int rtw_classify8021d(struct sk_buff *skb)
 	return dscp >> 5;
 }
 
-
 static u16 rtw_select_queue(struct net_device *dev, struct sk_buff *skb,
 			    struct net_device *sb_dev)
 {
-	struct adapter	*padapter = rtw_netdev_priv(dev);
+	struct adapter *padapter = rtw_netdev_priv(dev);
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	skb->priority = rtw_classify8021d(skb);
@@ -354,7 +359,7 @@ u16 rtw_recv_select_queue(struct sk_buff *skb)
 {
 	struct iphdr *piphdr;
 	unsigned int dscp;
-	__be16	eth_type;
+	__be16 eth_type;
 	u32 priority;
 	u8 *pdata = skb->data;
 
@@ -400,7 +405,7 @@ static const struct net_device_ops rtw_netdev_ops = {
 	.ndo_open = netdev_open,
 	.ndo_stop = netdev_close,
 	.ndo_start_xmit = rtw_xmit_entry,
-	.ndo_select_queue	= rtw_select_queue,
+	.ndo_select_queue = rtw_select_queue,
 	.ndo_set_mac_address = rtw_net_set_mac_address,
 	.ndo_get_stats = rtw_net_get_stats,
 };
@@ -423,7 +428,8 @@ struct net_device *rtw_init_netdev(struct adapter *old_padapter)
 	struct net_device *pnetdev;
 
 	if (old_padapter)
-		pnetdev = rtw_alloc_etherdev_with_old_priv(sizeof(struct adapter), (void *)old_padapter);
+		pnetdev = rtw_alloc_etherdev_with_old_priv(
+			sizeof(struct adapter), (void *)old_padapter);
 	else
 		pnetdev = rtw_alloc_etherdev(sizeof(struct adapter));
 
@@ -468,18 +474,22 @@ u32 rtw_start_drv_threads(struct adapter *padapter)
 {
 	u32 _status = _SUCCESS;
 
-	padapter->xmitThread = kthread_run(rtw_xmit_thread, padapter, "RTW_XMIT_THREAD");
+	padapter->xmitThread =
+		kthread_run(rtw_xmit_thread, padapter, "RTW_XMIT_THREAD");
 	if (IS_ERR(padapter->xmitThread))
 		_status = _FAIL;
 
-	padapter->cmdThread = kthread_run(rtw_cmd_thread, padapter, "RTW_CMD_THREAD");
+	padapter->cmdThread =
+		kthread_run(rtw_cmd_thread, padapter, "RTW_CMD_THREAD");
 	if (IS_ERR(padapter->cmdThread))
 		_status = _FAIL;
 	else
-		wait_for_completion(&padapter->cmdpriv.terminate_cmdthread_comp); /* wait for cmd_thread to run */
+		wait_for_completion(
+			&padapter->cmdpriv
+				 .terminate_cmdthread_comp); /* wait for cmd_thread to run */
 
-	padapter->xmitpriv.SdioXmitThread = kthread_run(rtl8723bs_xmit_thread,
-							padapter, "RTWHALXT");
+	padapter->xmitpriv.SdioXmitThread =
+		kthread_run(rtl8723bs_xmit_thread, padapter, "RTWHALXT");
 	if (IS_ERR(padapter->xmitpriv.SdioXmitThread)) {
 		padapter->xmitpriv.SdioXmitThread = NULL;
 		_status = _FAIL;
@@ -527,14 +537,15 @@ static void rtw_init_default_value(struct adapter *padapter)
 	/* pmlmepriv->qospriv.qos_option = pregistrypriv->wmm_enable; */
 
 	/* ht_priv */
-	pmlmepriv->htpriv.ampdu_enable = false;/* set to disabled */
+	pmlmepriv->htpriv.ampdu_enable = false; /* set to disabled */
 
 	/* security_priv */
 	psecuritypriv->binstallGrpkey = _FAIL;
 	psecuritypriv->sw_encrypt = pregistrypriv->software_encrypt;
 	psecuritypriv->sw_decrypt = pregistrypriv->software_decrypt;
 
-	psecuritypriv->dot11AuthAlgrthm = dot11AuthAlgrthm_Open; /* open system */
+	psecuritypriv->dot11AuthAlgrthm =
+		dot11AuthAlgrthm_Open; /* open system */
 	psecuritypriv->dot11PrivacyAlgrthm = _NO_PRIVACY_;
 
 	psecuritypriv->dot11PrivacyKeyIndex = 0;
@@ -555,13 +566,13 @@ static void rtw_init_default_value(struct adapter *padapter)
 	/* misc. */
 	RTW_ENABLE_FUNC(padapter, DF_RX_BIT);
 	RTW_ENABLE_FUNC(padapter, DF_TX_BIT);
-	padapter->bLinkInfoDump = 0;
+	padapter->link_info_dump = 0;
 	padapter->bNotifyChannelChange = 0;
 
 	/* for debug purpose */
 	padapter->fix_rate = 0xFF;
 	padapter->driver_ampdu_spacing = 0xFF;
-	padapter->driver_rx_ampdu_factor =  0xFF;
+	padapter->driver_rx_ampdu_factor = 0xFF;
 }
 
 struct dvobj_priv *devobj_init(void)
@@ -613,7 +624,7 @@ void rtw_reset_drv_sw(struct adapter *padapter)
 
 	RTW_ENABLE_FUNC(padapter, DF_RX_BIT);
 	RTW_ENABLE_FUNC(padapter, DF_TX_BIT);
-	padapter->bLinkInfoDump = 0;
+	padapter->link_info_dump = 0;
 
 	padapter->xmitpriv.tx_pkts = 0;
 	padapter->recvpriv.rx_pkts = 0;
@@ -632,7 +643,6 @@ void rtw_reset_drv_sw(struct adapter *padapter)
 
 	rtw_set_signal_stat_timer(&padapter->recvpriv);
 }
-
 
 u8 rtw_init_drv_sw(struct adapter *padapter)
 {
@@ -709,7 +719,8 @@ void rtw_cancel_all_timer(struct adapter *padapter)
 
 	timer_delete_sync(&padapter->mlmepriv.dynamic_chk_timer);
 
-	timer_delete_sync(&(adapter_to_pwrctl(padapter)->pwr_state_check_timer));
+	timer_delete_sync(
+		&(adapter_to_pwrctl(padapter)->pwr_state_check_timer));
 
 	timer_delete_sync(&padapter->mlmepriv.set_scan_deny_timer);
 	rtw_clear_scan_deny(padapter);
@@ -729,7 +740,8 @@ u8 rtw_free_drv_sw(struct adapter *padapter)
 
 	_rtw_free_xmit_priv(&padapter->xmitpriv);
 
-	_rtw_free_sta_priv(&padapter->stapriv); /* will free bcmc_stainfo here */
+	_rtw_free_sta_priv(
+		&padapter->stapriv); /* will free bcmc_stainfo here */
 
 	_rtw_free_recv_priv(&padapter->recvpriv);
 
@@ -855,7 +867,8 @@ int netdev_open(struct net_device *pnetdev)
 	if (pwrctrlpriv->bInSuspend)
 		return 0;
 
-	if (mutex_lock_interruptible(&(adapter_to_dvobj(padapter)->hw_init_mutex)))
+	if (mutex_lock_interruptible(
+		    &(adapter_to_dvobj(padapter)->hw_init_mutex)))
 		return -1;
 
 	ret = _netdev_open(pnetdev);
@@ -864,7 +877,7 @@ int netdev_open(struct net_device *pnetdev)
 	return ret;
 }
 
-static int  ips_netdrv_open(struct adapter *padapter)
+static int ips_netdrv_open(struct adapter *padapter)
 {
 	int status = _SUCCESS;
 	/* struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter); */
@@ -890,7 +903,6 @@ netdev_open_error:
 
 	return _FAIL;
 }
-
 
 int rtw_ips_pwr_up(struct adapter *padapter)
 {
@@ -919,12 +931,14 @@ static int pm_netdev_open(struct net_device *pnetdev, u8 bnormal)
 	struct adapter *padapter = rtw_netdev_priv(pnetdev);
 
 	if (bnormal) {
-		if (mutex_lock_interruptible(&(adapter_to_dvobj(padapter)->hw_init_mutex)) == 0) {
+		if (mutex_lock_interruptible(&(
+			    adapter_to_dvobj(padapter)->hw_init_mutex)) == 0) {
 			status = _netdev_open(pnetdev);
-			mutex_unlock(&(adapter_to_dvobj(padapter)->hw_init_mutex));
+			mutex_unlock(
+				&(adapter_to_dvobj(padapter)->hw_init_mutex));
 		}
 	} else {
-		status =  (ips_netdrv_open(padapter) == _SUCCESS) ? (0) : (-1);
+		status = (ips_netdrv_open(padapter) == _SUCCESS) ? (0) : (-1);
 	}
 
 	return status;
@@ -980,7 +994,8 @@ void rtw_dev_unload(struct adapter *padapter)
 	if (padapter->bup) {
 		padapter->bDriverStopped = true;
 		if (padapter->xmitpriv.ack_tx)
-			rtw_ack_tx_done(&padapter->xmitpriv, RTW_SCTX_DONE_DRV_STOP);
+			rtw_ack_tx_done(&padapter->xmitpriv,
+					RTW_SCTX_DONE_DRV_STOP);
 
 		if (padapter->intf_stop)
 			padapter->intf_stop(padapter);
@@ -996,14 +1011,15 @@ void rtw_dev_unload(struct adapter *padapter)
 		}
 
 		/* check the status of IPS */
-		if (rtw_hal_check_ips_status(padapter) || pwrctl->rf_pwrstate == rf_off) {
+		if (rtw_hal_check_ips_status(padapter) ||
+		    pwrctl->rf_pwrstate == rf_off) {
 			/* check HW status and SW state */
 			netdev_dbg(padapter->pnetdev,
 				   "%s: driver in IPS-FWLPS\n", __func__);
 			LeaveAllPowerSaveMode(padapter);
 		} else {
-			netdev_dbg(padapter->pnetdev,
-				   "%s: driver not in IPS\n", __func__);
+			netdev_dbg(padapter->pnetdev, "%s: driver not in IPS\n",
+				   __func__);
 		}
 
 		if (!padapter->bSurpriseRemoved) {
@@ -1024,13 +1040,14 @@ static int rtw_suspend_free_assoc_resource(struct adapter *padapter)
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	if (rtw_chk_roam_flags(padapter, RTW_ROAM_ON_RESUME)) {
-		if (check_fwstate(pmlmepriv, WIFI_STATION_STATE)
-			&& check_fwstate(pmlmepriv, _FW_LINKED)) {
+		if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) &&
+		    check_fwstate(pmlmepriv, _FW_LINKED)) {
 			rtw_set_to_roam(padapter, 1);
 		}
 	}
 
-	if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) && check_fwstate(pmlmepriv, _FW_LINKED)) {
+	if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) &&
+	    check_fwstate(pmlmepriv, _FW_LINKED)) {
 		rtw_disassoc_cmd(padapter, 0, false);
 		/* s2-2.  indicate disconnect to os */
 		rtw_indicate_disconnect(padapter);
@@ -1067,7 +1084,8 @@ static void rtw_suspend_normal(struct adapter *padapter)
 
 	rtw_suspend_free_assoc_resource(padapter);
 
-	if ((rtw_hal_check_ips_status(padapter)) || (adapter_to_pwrctl(padapter)->rf_pwrstate == rf_off))
+	if ((rtw_hal_check_ips_status(padapter)) ||
+	    (adapter_to_pwrctl(padapter)->rf_pwrstate == rf_off))
 		netdev_dbg(padapter->pnetdev,
 			   "%s: ### ERROR #### driver in IPS ####ERROR###!!!\n",
 			   __func__);
@@ -1094,7 +1112,8 @@ void rtw_suspend_common(struct adapter *padapter)
 	while (pwrpriv->bips_processing)
 		msleep(1);
 
-	if ((!padapter->bup) || (padapter->bDriverStopped) || (padapter->bSurpriseRemoved))
+	if ((!padapter->bup) || (padapter->bDriverStopped) ||
+	    (padapter->bSurpriseRemoved))
 		return;
 
 	rtw_ps_deny(padapter, PS_DENY_SUSPEND);
@@ -1143,7 +1162,9 @@ static int rtw_resume_process_normal(struct adapter *padapter)
 	}
 	rtw_sdio_disable_interrupt(padapter);
 	/* if (sdio_alloc_irq(adapter_to_dvobj(padapter)) != _SUCCESS) */
-	if ((padapter->intf_alloc_irq) && (padapter->intf_alloc_irq(adapter_to_dvobj(padapter)) != _SUCCESS)) {
+	if ((padapter->intf_alloc_irq) &&
+	    (padapter->intf_alloc_irq(adapter_to_dvobj(padapter)) !=
+	     _SUCCESS)) {
 		ret = -1;
 		goto exit;
 	}
