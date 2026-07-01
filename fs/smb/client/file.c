@@ -666,6 +666,30 @@ cifs_down_write(struct rw_semaphore *sem)
 static void cifsFileInfo_put_work(struct work_struct *work);
 void serverclose_work(struct work_struct *work);
 
+struct cifsFileInfo *cifs_new_dir_fileinfo(struct file *file,
+					   struct tcon_link *tlink)
+{
+	struct cifsFileInfo *cfile, *old;
+
+	cfile = kzalloc_obj(struct cifsFileInfo);
+	if (!cfile)
+		return NULL;
+
+	spin_lock_init(&cfile->file_info_lock);
+	mutex_init(&cfile->fh_mutex);
+	cfile->invalidHandle = true;
+	cfile->tlink = cifs_get_tlink(tlink);
+
+	old = cmpxchg(&file->private_data, NULL, cfile);
+	if (old) {
+		cifs_put_tlink(cfile->tlink);
+		kfree(cfile);
+		return old;
+	}
+
+	return cfile;
+}
+
 struct cifsFileInfo *cifs_new_fileinfo(struct cifs_fid *fid, struct file *file,
 				       struct tcon_link *tlink, __u32 oplock,
 				       const char *symlink_target)

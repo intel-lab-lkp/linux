@@ -267,6 +267,8 @@ void cifs_close_all_deferred_files(struct cifs_tcon *tcon);
 void cifs_close_all_deferred_files_sb(struct cifs_sb_info *cifs_sb);
 void cifs_close_deferred_file_under_dentry(struct cifs_tcon *tcon,
 					   struct dentry *dentry);
+struct cifsFileInfo *cifs_new_dir_fileinfo(struct file *file,
+					   struct tcon_link *tlink);
 
 void cifs_mark_open_handles_for_deleted_file(struct inode *inode,
 					     const char *path);

@@ -355,20 +355,17 @@ _initiate_cifs_search(const unsigned int xid, struct file *file,
 	__u16 search_flags;
 	int rc = 0;
 
-	if (file->private_data == NULL) {
+	if (!file->private_data) {
 		tlink = cifs_sb_tlink(cifs_sb);
 		if (IS_ERR(tlink))
 			return PTR_ERR(tlink);
 
-		cifsFile = kzalloc_obj(struct cifsFileInfo);
-		if (cifsFile == NULL) {
+		cifsFile = cifs_new_dir_fileinfo(file, tlink);
+		if (!cifsFile) {
 			rc = -ENOMEM;
 			goto error_exit;
 		}
-		spin_lock_init(&cifsFile->file_info_lock);
-		file->private_data = cifsFile;
-		cifsFile->tlink = cifs_get_tlink(tlink);
-		tcon = tlink_tcon(tlink);
+		tcon = tlink_tcon(cifsFile->tlink);
 	} else {
 		cifsFile = file->private_data;
 		tcon = tlink_tcon(cifsFile->tlink);
@@ -1130,7 +1127,8 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 	 * Ensure FindFirst doesn't fail before doing filldir() for '.' and
 	 * '..'. Otherwise we won't be able to notify VFS in case of failure.
 	 */
-	if (file->private_data == NULL) {
+	cifsFile = file->private_data;
+	if (!cifsFile || cifsFile->invalidHandle) {
 		rc = initiate_cifs_search(xid, file, full_path);
 		cifs_dbg(FYI, "initiate cifs search rc %d\n", rc);
 		if (rc)
