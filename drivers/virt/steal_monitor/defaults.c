@@ -53,7 +53,7 @@ unsigned int __weak get_num_cpus_steal_ratio(void)
 
 void __weak decrease_preferred_cpus(struct steal_monitor *ctx)
 {
-	int tmp_cpu, first_hk_cpu;
+	int tmp_cpu, first_hk_cpu, last_cpu;
 	const struct cpumask *first_hk_core;
 	int target_cpu = nr_cpu_ids;
 
@@ -62,14 +62,30 @@ void __weak decrease_preferred_cpus(struct steal_monitor *ctx)
 	first_hk_cpu = cpumask_first_and(housekeeping_cpumask(HK_TYPE_KERNEL_NOISE),
 					 cpu_active_mask);
 
-	if (first_hk_cpu >= nr_cpu_ids)
+	last_cpu = cpumask_last(cpu_preferred_mask);
+
+	if (first_hk_cpu >= nr_cpu_ids || last_cpu >= nr_cpu_ids)
 		return;
 
 	first_hk_core = get_core_mask(first_hk_cpu);
 
-	/* Always leave first housekeeping core as preferred. */
-	for_each_cpu_andnot(tmp_cpu, cpu_preferred_mask, first_hk_core)
-		target_cpu = tmp_cpu;
+	/*
+	 * Always leave first housekeeping core as preferred.
+	 * In most configurations housekeeping core will be at beginning,
+	 * i.e there is no nohz_full= or isolcpus=.
+	 * Skip the loop in that case.
+	 */
+	if (!cpumask_test_cpu(last_cpu, first_hk_core)) {
+		target_cpu = last_cpu;
+	} else {
+		/*
+		 * Since one may specify nohz_full= for any set of CPUs,
+		 * Find the last CPU which doesn't belong to the
+		 * protected first housekeeping core.
+		 */
+		for_each_cpu_andnot(tmp_cpu, cpu_preferred_mask, first_hk_core)
+			target_cpu = tmp_cpu;
+	}
 
 	/* Only the first housekeeping core remains */
 	if (target_cpu >= nr_cpu_ids)
