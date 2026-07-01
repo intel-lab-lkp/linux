@@ -438,6 +438,8 @@ int neigh_sysctl_register(struct net_device *dev, struct neigh_parms *p,
 			  proc_handler *proc_handler);
 void neigh_sysctl_unregister(struct neigh_parms *p);
 
+struct neigh_parms *neigh_parms_lookup_dev(struct neigh_table *tbl, struct net_device *dev);
+
 static inline void __neigh_parms_put(struct neigh_parms *parms)
 {
 	refcount_dec(&parms->refcnt);
