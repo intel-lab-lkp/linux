@@ -282,10 +282,11 @@ static int rtnl_net_cmp_locks(const struct net *net_a, const struct net *net_b)
 #endif
 
 struct rtnl_nets {
-	/* ->newlink() needs to freeze 3 netns at most;
-	 * 2 for the new device, 1 for its peer.
+	/* ->newlink() needs to freeze 4 netns at most;
+	 * 2 for the new device, 1 for its peer, 1 for
+	 * an existing device (do_setlink() path).
 	 */
-	struct net *net[3];
+	struct net *net[4];
 	unsigned char len;
 };
 
@@ -4154,6 +4155,8 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			goto put_net;
 		}
 	}
+
+	rtnl_nets_add(&rtnl_nets, get_net(sock_net(skb->sk)));
 
 	rtnl_nets_lock(&rtnl_nets);
 	ret = __rtnl_newlink(skb, nlh, ops, tgt_net, link_net, peer_net, tbs, data, extack);
