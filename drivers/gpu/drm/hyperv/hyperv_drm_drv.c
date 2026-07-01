@@ -52,6 +52,7 @@ static const struct pci_device_id hv_drm_pci_tbl[] = {
 	},
 	{ /* end of list */ }
 };
+MODULE_DEVICE_TABLE(pci, hv_drm_pci_tbl);
 
 /*
  * PCI stub to support gen1 VM.
@@ -219,6 +220,7 @@ static const struct hv_vmbus_device_id hv_drm_vmbus_tbl[] = {
 	{HV_SYNTHVID_GUID},
 	{}
 };
+MODULE_DEVICE_TABLE(vmbus, hv_drm_vmbus_tbl);
 
 static struct hv_driver hv_drm_hv_driver = {
 	.name = KBUILD_MODNAME,
@@ -260,8 +262,6 @@ static void __exit hv_drm_exit(void)
 module_init(hv_drm_init);
 module_exit(hv_drm_exit);
 
-MODULE_DEVICE_TABLE(pci, hv_drm_pci_tbl);
-MODULE_DEVICE_TABLE(vmbus, hv_drm_vmbus_tbl);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Deepak Rawat <drawat.floss@gmail.com>");
 MODULE_DESCRIPTION("DRM driver for Hyper-V synthetic video device");
