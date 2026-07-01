@@ -41,6 +41,7 @@ config PERF_EVENTS_UNCORE_COMMON
 config PERF_EVENTS_AMD_UNCORE
 	tristate "AMD Uncore performance events"
 	depends on PERF_EVENTS && CPU_SUP_AMD
+	select PERF_EVENTS_UNCORE_COMMON
 	default y
 	help
 	  Include support for AMD uncore performance events for use with
