@@ -1,0 +1,13 @@
+config DRM_ACCEL_NPAC_CLIENT
+	tristate "NPAC Client Driver"
+	depends on DRM_ACCEL
+	depends on RPMSG
+	help
+	  This driver is the NPAC (Network Packet ACcelerator) client,
+	  communicating with the NPAC host driver running on a remote
+	  processor over RPMsg. The driver registers with the DRM accelerator
+	  framework and exposes /dev/accel/accel* as the userspace interface
+	  for ACL rule offload operations.
+	  If you have a device with NPAC and wish to use it with this
+	  driver, say M to compile this driver as a module, or Y to
+	  compile it into the kernel.
