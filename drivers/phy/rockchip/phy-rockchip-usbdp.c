@@ -771,21 +771,21 @@ static int rk_udphy_status_check(struct rk_udphy *udphy)
 	return 0;
 }
 
-static int rk_udphy_init(struct rk_udphy *udphy)
+static int rk_udphy_init(struct rk_udphy *udphy, u8 mode)
 {
 	const struct rk_udphy_cfg *cfg = udphy->cfgs;
 	int ret;
 
 	dev_dbg(udphy->dev, "reinit PHY with USB=%s and DP=%s (%u lanes) flipped=%s\n",
-		str_enabled_disabled(udphy->hw_mode & UDPHY_MODE_USB),
-		str_enabled_disabled(udphy->hw_mode & UDPHY_MODE_DP),
+		str_enabled_disabled(mode & UDPHY_MODE_USB),
+		str_enabled_disabled(mode & UDPHY_MODE_DP),
 		udphy->dp_lanes, str_yes_no(udphy->flip));
 
 	rk_udphy_reset_assert_all(udphy);
 	usleep_range(10000, 11000);
 
 	/* enable rx lfps for usb */
-	if (udphy->hw_mode & UDPHY_MODE_USB)
+	if (mode & UDPHY_MODE_USB)
 		rk_udphy_grfreg_write(udphy->udphygrf, &cfg->grfcfg.rx_lfps, true);
 
 	/* Step 1: power on pma and deassert apb rstn */
@@ -822,13 +822,13 @@ static int rk_udphy_init(struct rk_udphy *udphy)
 			   FIELD_PREP(CMN_DP_LANE_EN_ALL, 0));
 
 	/* Step 4: deassert init rstn and wait for 200ns from datasheet */
-	if (udphy->hw_mode & UDPHY_MODE_USB) {
+	if (mode & UDPHY_MODE_USB) {
 		ret = rk_udphy_reset_deassert(udphy, "init");
 		if (ret)
 			goto assert_resets;
 	}
 
-	if (udphy->hw_mode & UDPHY_MODE_DP) {
+	if (mode & UDPHY_MODE_DP) {
 		regmap_update_bits(udphy->pma_regmap, CMN_DP_RSTN_OFFSET,
 				   CMN_DP_INIT_RSTN,
 				   FIELD_PREP(CMN_DP_INIT_RSTN, 0x1));
@@ -837,7 +837,7 @@ static int rk_udphy_init(struct rk_udphy *udphy)
 	udelay(1);
 
 	/*  Step 5: deassert cmn/lane rstn */
-	if (udphy->hw_mode & UDPHY_MODE_USB) {
+	if (mode & UDPHY_MODE_USB) {
 		ret = rk_udphy_reset_deassert(udphy, "cmn");
 		if (ret)
 			goto assert_resets;
@@ -860,7 +860,7 @@ assert_resets:
 	return ret;
 }
 
-static int rk_udphy_setup(struct rk_udphy *udphy)
+static int rk_udphy_setup(struct rk_udphy *udphy, u8 mode)
 {
 	int ret;
 
@@ -872,7 +872,7 @@ static int rk_udphy_setup(struct rk_udphy *udphy)
 		return ret;
 	}
 
-	ret = rk_udphy_init(udphy);
+	ret = rk_udphy_init(udphy, mode);
 	if (ret) {
 		dev_err(udphy->dev, "failed to init combophy\n");
 		clk_bulk_disable_unprepare(udphy->num_clks, udphy->clks);
@@ -1039,7 +1039,7 @@ static int rk_udphy_update_power_state(struct rk_udphy *udphy)
 
 	if (udphy->status == UDPHY_MODE_NONE) {
 		/* Power up (incl. clocks) */
-		ret = rk_udphy_setup(udphy);
+		ret = rk_udphy_setup(udphy, target_mode);
 		if (ret) {
 			phy_notify_reset(udphy->phy_u3, PHY_NOTIFY_POST_RESET);
 			return ret;
@@ -1049,7 +1049,7 @@ static int rk_udphy_update_power_state(struct rk_udphy *udphy)
 		rk_udphy_disable(udphy);
 	} else {
 		/* Mode change => re-init */
-		ret = rk_udphy_init(udphy);
+		ret = rk_udphy_init(udphy, target_mode);
 		if (ret) {
 			phy_notify_reset(udphy->phy_u3, PHY_NOTIFY_POST_RESET);
 			return ret;
