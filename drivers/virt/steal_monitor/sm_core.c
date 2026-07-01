@@ -34,6 +34,37 @@ MODULE_PARM_DESC(low_threshold,
 
 static void compute_preferred_cpus_work(struct work_struct *work)
 {
+	u64 curr_steal, delta_steal, delta_ns, steal_ratio;
+	ktime_t now;
+
+	curr_steal = get_system_steal_time();
+	now = ktime_get();
+
+	/* get the deltas */
+	delta_steal = curr_steal > sm_core_ctx.prev_steal ?
+		      curr_steal - sm_core_ctx.prev_steal : 0;
+	delta_ns = max_t(u64, ktime_to_ns(ktime_sub(now, sm_core_ctx.prev_time)), 1);
+
+	/* Update for next calculation */
+	sm_core_ctx.prev_steal = curr_steal;
+	sm_core_ctx.prev_time = now;
+
+	/*
+	 * Multiply by 100 to consider the fractional values of steal time.
+	 * steal_ratio = (delta_steal * 100 * 100)/(delta_ns * num_cpus())
+	 */
+	delta_ns = div_u64(delta_ns * get_num_cpus_steal_ratio(), 100 * 100);
+	if (unlikely(!delta_ns))
+		return;
+
+	steal_ratio = div64_u64(delta_steal, delta_ns);
+	/* If the steal time values are high, reduce preferred CPUs */
+	if (steal_ratio > sm_core_ctx.high_threshold)
+		decrease_preferred_cpus(&sm_core_ctx);
+	/* If the steal time values are low, increase preferred CPUs */
+	if (steal_ratio <= sm_core_ctx.low_threshold)
+		increase_preferred_cpus(&sm_core_ctx);
+
 	/* At least one core is kept as preferred */
 	WARN_ON(cpumask_empty(cpu_preferred_mask));
 
@@ -54,6 +85,8 @@ static int __init steal_monitor_init(void)
 		sm_core_ctx.interval_ms, sm_core_ctx.high_threshold, sm_core_ctx.low_threshold);
 
 	INIT_DELAYED_WORK(&sm_core_ctx.work, compute_preferred_cpus_work);
+	sm_core_ctx.prev_steal = get_system_steal_time();
+	sm_core_ctx.prev_time = ktime_get();
 
 	schedule_delayed_work(&sm_core_ctx.work,
 			      msecs_to_jiffies(sm_core_ctx.interval_ms));
