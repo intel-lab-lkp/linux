@@ -283,8 +283,21 @@ static int process_sample_event(const struct perf_tool *tool,
 				struct machine *machine)
 {
 	struct perf_annotate *ann = container_of(tool, struct perf_annotate, tool);
+	struct evsel *evsel = sample->evsel;
 	struct addr_location al;
 	int ret = 0;
+
+	/*
+	 * ARM SPE synthesizes multiple overlapping events (e.g., l1d-miss,
+	 * tlb-access) for a single sampled instruction. When data type is
+	 * enabled, counting all of these overlapping events would inflate
+	 * the profile and distort the data type statistics. To avoid this,
+	 * deduplicate by retaining only the comprehensive "instructions" event.
+	 */
+	if (ann->data_type && !ann->session->itrace_synth_opts->set &&
+	    event->auxtrace_info.type == PERF_AUXTRACE_ARM_SPE &&
+	    strcmp(evsel->name, "instructions") != 0)
+		return 0;
 
 	addr_location__init(&al);
 	if (machine__resolve(machine, &al, sample) < 0) {

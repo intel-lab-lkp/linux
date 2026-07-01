@@ -403,6 +403,7 @@ static void arm_spe_prep_sample(struct arm_spe *spe,
 	event->sample.header.type = PERF_RECORD_SAMPLE;
 	event->sample.header.misc = sample->cpumode;
 	event->sample.header.size = sizeof(struct perf_event_header);
+	event->auxtrace_info.type = PERF_AUXTRACE_ARM_SPE;
 }
 
 static void arm_spe__prep_branch_stack(struct arm_spe_queue *speq)
