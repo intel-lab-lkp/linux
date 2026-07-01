@@ -1,0 +1,51 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: Dynamic event - test eBPF compiled fetchargs for tprobe and fprobe
+# requires: dynamic_events "t[:[<group>/][<event>]] <tracepoint> [<args>]":README
+
+# Check if the sample module is loaded
+if ! lsmod | grep -q trace_events_sample; then
+  modprobe trace-events-sample || exit_unsupported
+fi
+
+echo 0 > events/enable
+echo > dynamic_events
+clear_trace
+
+# Add a tprobe to sample-trace:foo_bar
+# foo_bar args: const char *foo, int bar, ...
+# So $arg1 is char ptr (points to "hello"), $arg2 is int.
+# Let's test REG (arg2) and DEREF (+0($arg1))
+# "hello" in little-endian 32-bit: 'h'(0x68), 'e'(0x65), 'l'(0x6c), 'l'(0x6c) -> 0x6c6c6568 -> 1819043176
+echo "t:test_tprobe foo_bar mybar=\$arg2 myfoo=+0(\$arg1):u32" >> dynamic_events
+
+# Add an fprobe to __traceiter_foo_bar
+if grep -q "__traceiter_foo_bar" /proc/kallsyms; then
+  # __traceiter_foo_bar args: void *__data, const char *foo, int bar, ...
+  # $arg1 is __data, $arg2 is foo (points to "hello")
+  # "hello" in little-endian 32-bit: 'h'(0x68), 'e'(0x65), 'l'(0x6c), 'l'(0x6c) -> 0x6c6c6568 -> 1819043176
+  echo "f:test_fprobe __traceiter_foo_bar myfoo=\$arg2 myfmt=+0(\$arg2):u32" >> dynamic_events
+fi
+
+echo 1 > events/sample-trace/foo_bar/enable
+echo 1 > events/tracepoints/test_tprobe/enable
+if [ -d events/fprobes/test_fprobe ]; then
+  echo 1 > events/fprobes/test_fprobe/enable
+fi
+
+# Wait for 2 seconds to let the sample thread trigger the events
+sleep 2
+
+echo 0 > events/enable
+
+# Now verify the trace
+grep -q "test_tprobe.*myfoo=1819043176" trace || exit_fail
+
+if [ -d events/fprobes/test_fprobe ]; then
+  grep -q "test_fprobe.*myfmt=1819043176" trace || exit_fail
+fi
+
+echo > dynamic_events
+rmmod trace-events-sample
+
+exit 0
