@@ -1,0 +1,3 @@
+obj-m += fetcharg_bench.o
+
+ccflags-y += -I$(src)
