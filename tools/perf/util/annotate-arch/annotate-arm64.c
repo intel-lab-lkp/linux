@@ -7,6 +7,7 @@
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <regex.h>
+#include <inttypes.h>
 #include "../annotate.h"
 #include "../disasm.h"
 #include "../annotate-data.h"
@@ -359,7 +360,7 @@ static void adjust_reg_index_state(struct type_state *state,
 }
 
 static void update_load_insn_state(struct type_state *state,
-				   struct data_loc_info *dloc,
+				   struct data_loc_info *dloc, Dwarf_Die *cu_die,
 				   struct disasm_line *dl,
 				   struct annotated_op_loc *src,
 				   struct annotated_op_loc *dst)
@@ -402,6 +403,7 @@ retry:
 			tsr->type = stack->type;
 			tsr->kind = stack->kind;
 			tsr->offset = stack->ptr_offset;
+			tsr->addr = stack->addr;
 			tsr->ok = true;
 		} else if (die_get_member_type(&stack->type,
 					       offset - stack->offset,
@@ -409,6 +411,7 @@ retry:
 			tsr->type = type_die;
 			tsr->kind = TSR_KIND_TYPE;
 			tsr->offset = 0;
+			tsr->addr = 0;
 			tsr->ok = true;
 		} else {
 			invalidate_reg_state(tsr);
@@ -441,6 +444,7 @@ retry:
 		tsr->type = type_die;
 		tsr->kind = TSR_KIND_TYPE;
 		tsr->offset = 0;
+		tsr->addr = 0;
 		tsr->ok = true;
 
 		if (src->multi_regs) {
@@ -450,6 +454,33 @@ retry:
 		} else {
 			pr_debug_dtp("ldr [%x] %#x(reg%d) -> reg%d",
 				     insn_offset, reg_offset, sreg, dreg);
+		}
+		pr_debug_type_name(&tsr->type, tsr->kind);
+	}
+	/* Or check if it's a global variable */
+	else if (src_tsr.kind == TSR_KIND_GLOBAL_ADDR) {
+		u64 ip = dloc->ms->sym->start + dl->al.offset;
+		u64 addr = src_tsr.addr + reg_offset;
+		int offset;
+
+		if (!get_global_var_type(cu_die, dloc, ip, addr, &offset, &type_die) ||
+		    !die_get_member_type(&type_die, offset, &type_die)) {
+			invalidate_reg_state(tsr);
+			goto out_adjust;
+		}
+
+		tsr->type = type_die;
+		tsr->kind = TSR_KIND_TYPE;
+		tsr->offset = 0;
+		tsr->addr = 0;
+		tsr->ok = true;
+
+		if (src->multi_regs) {
+			pr_debug_dtp("ldr [%x] global (reg%d, reg%d) -> reg%d",
+				     insn_offset, src->reg1, src->reg2, dreg);
+		} else {
+			pr_debug_dtp("ldr [%x] global (reg%d) -> reg%d",
+				     insn_offset, sreg, dreg);
 		}
 		pr_debug_type_name(&tsr->type, tsr->kind);
 	}
@@ -498,10 +529,10 @@ static void update_store_insn_state(struct type_state *state,
 		if (stack) {
 			if (!stack->compound)
 				set_stack_state(stack, offset, tsr->kind,
-						&tsr->type, tsr->offset);
+						&tsr->type, tsr->offset, tsr->addr);
 		} else {
 			findnew_stack_state(state, offset, tsr->kind,
-					    &tsr->type, tsr->offset);
+					    &tsr->type, tsr->offset, tsr->addr);
 		}
 
 		if (dst->reg1 == fbreg) {
@@ -547,6 +578,7 @@ static void update_mov_insn_state(struct type_state *state,
 		tsr->kind = TSR_KIND_CONST;
 		tsr->imm_value = src->offset;
 		tsr->offset = 0;
+		tsr->addr = 0;
 		tsr->ok = true;
 
 		pr_debug_dtp("mov [%x] imm=%#x -> reg%d\n",
@@ -563,6 +595,7 @@ static void update_mov_insn_state(struct type_state *state,
 	tsr->kind = state->regs[sreg].kind;
 	tsr->imm_value = state->regs[sreg].imm_value;
 	tsr->offset = state->regs[sreg].offset;
+	tsr->addr = state->regs[sreg].addr;
 	tsr->ok = state->regs[sreg].ok;
 
 	if (tsr->kind == TSR_KIND_TYPE || tsr->kind == TSR_KIND_POINTER)
@@ -641,6 +674,7 @@ retry:
 		tsr->type = src_tsr.type;
 		tsr->kind = src_tsr.kind;
 		tsr->offset = offset;
+		tsr->addr = 0;
 		tsr->ok = src_tsr.ok;
 
 		pr_debug_dtp("add [%x] address of %s%#x(reg%d) -> reg%d",
@@ -649,6 +683,16 @@ retry:
 
 		pr_debug_type_name(&tsr->type, tsr->kind);
 	}
+	/* Handle page-relative global address calculation */
+	else if (src_tsr.kind == TSR_KIND_GLOBAL_ADDR) {
+		tsr->kind = src_tsr.kind;
+		tsr->addr = src_tsr.addr + reg_offset;
+		tsr->offset = 0;
+		tsr->ok = true;
+
+		pr_debug_dtp("add [%x] global %#x(reg%d) -> reg%d\n",
+			     insn_offset, reg_offset, sreg, dreg);
+	}
 	/* Or try another register if any */
 	else if (src->multi_regs && src->reg1 != src->reg2 && sreg != src->reg2) {
 		sreg = src->reg2;
@@ -656,8 +700,37 @@ retry:
 	}
 }
 
+static void update_adrp_insn_state(struct type_state *state,
+				   struct disasm_line *dl,
+				   struct annotated_op_loc *dst)
+{
+	struct type_state_reg *tsr;
+	u32 insn_offset = dl->al.offset;
+	int dreg = dst->reg1;
+
+	if (!has_reg_type(state, dreg))
+		return;
+
+	tsr = &state->regs[dreg];
+	tsr->copied_from = -1;
+
+	if (!dl->ops.source.addr) {
+		invalidate_reg_state(tsr);
+		return;
+	}
+
+	tsr->kind = TSR_KIND_GLOBAL_ADDR;
+	/* Partial page-relative address, finalized in next 'add/ldr' */
+	tsr->addr = dl->ops.source.addr;
+	tsr->offset = 0;
+	tsr->ok = true;
+
+	pr_debug_dtp("adrp [%x] global addr=%#"PRIx64" -> reg%d\n",
+		     insn_offset, tsr->addr, dreg);
+}
+
 static void update_insn_state_arm64(struct type_state *state,
-				    struct data_loc_info *dloc, Dwarf_Die *cu_die __maybe_unused,
+				    struct data_loc_info *dloc, Dwarf_Die *cu_die,
 				    struct disasm_line *dl)
 {
 	struct annotated_insn_loc loc;
@@ -673,11 +746,17 @@ static void update_insn_state_arm64(struct type_state *state,
 	 * the destination register itself to prevent incorrect type propagation.
 	 */
 	if (has_reg_type(state, dst->reg1) &&
+	    strcmp(dl->ins.name, "adrp") &&
 	    strcmp(dl->ins.name, "add") && strcmp(dl->ins.name, "mov") &&
 	    strncmp(dl->ins.name, "ld", 2) && strncmp(dl->ins.name, "st", 2)) {
 		pr_debug_dtp("%s [%x] invalidate reg%d\n",
 			     dl->ins.name, insn_offset, dst->reg1);
 		invalidate_reg_state(&state->regs[dst->reg1]);
+		return;
+	}
+
+	if (!strcmp(dl->ins.name, "adrp")) {
+		update_adrp_insn_state(state, dl, dst);
 		return;
 	}
 
@@ -694,7 +773,7 @@ static void update_insn_state_arm64(struct type_state *state,
 
 	/* Memory to register transfers */
 	if (!strncmp(dl->ins.name, "ld", 2)) {
-		update_load_insn_state(state, dloc, dl, src, dst);
+		update_load_insn_state(state, dloc, cu_die, dl, src, dst);
 		return;
 	}
 
