@@ -3462,7 +3462,7 @@
 			status = "disabled";
 		};
 
-		pcie6a: pci@1bf8000 {
+		pcie6a: pcie@1bf8000 {
 			device_type = "pci";
 			compatible = "qcom,pcie-x1e80100";
 			reg = <0 0x01bf8000 0 0x3000>,
@@ -3605,7 +3605,7 @@
 			status = "disabled";
 		};
 
-		pcie5: pci@1c00000 {
+		pcie5: pcie@1c00000 {
 			device_type = "pci";
 			compatible = "qcom,pcie-x1e80100";
 			reg = <0 0x01c00000 0 0x3000>,
@@ -3742,7 +3742,7 @@
 			status = "disabled";
 		};
 
-		pcie4: pci@1c08000 {
+		pcie4: pcie@1c08000 {
 			device_type = "pci";
 			compatible = "qcom,pcie-x1e80100";
 			reg = <0 0x01c08000 0 0x3000>,
