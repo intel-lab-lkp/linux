@@ -13,6 +13,7 @@
 #include <linux/netdevice.h>
 #include <linux/net_tstamp.h>
 #include <linux/pci.h>
+#include <linux/timer.h>
 #include <linux/ptp_clock_kernel.h>
 #include <linux/u64_stats_sync.h>
 #include <net/page_pool/helpers.h>
@@ -41,6 +42,7 @@
 
 /* Interval to schedule a stats report update, 20000ms. */
 #define GVE_STATS_REPORT_TIMER_PERIOD	20000
+#define GVE_RX_NAPI_RESCHED_MS 20 /* msecs */
 
 /* Numbers of NIC tx/rx stats in stats report. */
 #define NIC_TX_STATS_REPORT_NUM	0
@@ -318,6 +320,7 @@ struct gve_rx_ring {
 	u64 rx_copied_pkt; /* free-running total number of copied packets */
 	u64 rx_skb_alloc_fail; /* free-running count of skb alloc fails */
 	u64 rx_buf_alloc_fail; /* free-running count of buffer alloc fails */
+	u64 rx_critical_low_bufs; /* count of critical low buffer events */
 	u64 rx_desc_err_dropped_pkt; /* free-running count of packets dropped by descriptor error */
 	/* free-running count of unsplit packets due to header buffer overflow or hdr_len is 0 */
 	u64 rx_hsplit_unsplit_pkt;
@@ -334,6 +337,7 @@ struct gve_rx_ring {
 	struct gve_queue_resources *q_resources; /* head and tail pointer idx */
 	dma_addr_t q_resources_bus; /* dma address for the queue resources */
 	struct u64_stats_sync statss; /* sync stats for 32bit archs */
+	struct timer_list starvation_timer; /* for queue starvation recovery */
 
 	struct gve_rx_ctx ctx; /* Info for packet currently being processed in this ring. */
 
