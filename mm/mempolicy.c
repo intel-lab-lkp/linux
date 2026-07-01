@@ -2538,16 +2538,35 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct
 }
 EXPORT_SYMBOL(vma_alloc_folio_noprof);
 
+/*
+ * Bare alloc_pages() calls only have task policy as a placement hint.
+ * There are 3 scenarios where we don't want to use the task policy:
+ *  1) interrupt context - these allocations are not related to the task
+ *  2) __GFP_THISNODE - the caller asked for explicit placement
+ *  3) Unmovable (!__GFP_MOVABLE), unaccounted (!__GFP_ACCOUNT) kernel memory
+ *
+ * The third filter keeps incidental global kernel allocations from being
+ * spread throughout the system when a task has set an interleave policy.
+ * This can include cached global metadata for drivers and internal
+ * services that outlives the life of the task.
+ *
+ * Allowing movable allocations to follow task policy retains existing
+ * non-harmful behavior, and cpuset constraints are still respected.
+ *
+ * No reference counting needed for current->mempolicy nor default_policy
+ */
+static struct mempolicy *alloc_task_policy(gfp_t gfp)
+{
+	if (in_interrupt() || (gfp & __GFP_THISNODE))
+		return &default_policy;
+	if (!(gfp & (__GFP_MOVABLE | __GFP_ACCOUNT)))
+		return &default_policy;
+	return get_task_policy(current);
+}
+
 struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned order)
 {
-	struct mempolicy *pol = &default_policy;
-
-	/*
-	 * No reference counting needed for current->mempolicy
-	 * nor system default_policy
-	 */
-	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
-		pol = get_task_policy(current);
+	struct mempolicy *pol = alloc_task_policy(gfp);
 
 	return alloc_pages_mpol(gfp, order, pol, NO_INTERLEAVE_INDEX,
 				       numa_node_id());
@@ -2765,12 +2784,9 @@ static unsigned long alloc_pages_bulk_preferred_many(gfp_t gfp, int nid,
 unsigned long alloc_pages_bulk_mempolicy_noprof(gfp_t gfp,
 		unsigned long nr_pages, struct page **page_array)
 {
-	struct mempolicy *pol = &default_policy;
+	struct mempolicy *pol = alloc_task_policy(gfp);
 	nodemask_t *nodemask;
 	int nid;
-
-	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
-		pol = get_task_policy(current);
 
 	if (pol->mode == MPOL_INTERLEAVE)
 		return alloc_pages_bulk_interleave(gfp, pol,
