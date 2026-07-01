@@ -4720,7 +4720,7 @@ static int bond_neigh_init(struct neighbour *n)
 {
 	struct bonding *bond = netdev_priv(n->dev);
 	const struct net_device_ops *slave_ops;
-	struct neigh_parms parms;
+	struct neigh_parms parms, *p;
 	struct slave *slave;
 	int ret = 0;
 
@@ -4728,6 +4728,14 @@ static int bond_neigh_init(struct neighbour *n)
 	slave = bond_first_slave_rcu(bond);
 	if (!slave)
 		goto out;
+
+	p = neigh_parms_lookup_dev(n->tbl, slave->dev);
+
+	if (p && p->neigh_setup) {
+		ret = p->neigh_setup(n);
+		goto out;
+	}
+
 	slave_ops = slave->dev->netdev_ops;
 	if (!slave_ops->ndo_neigh_setup)
 		goto out;
