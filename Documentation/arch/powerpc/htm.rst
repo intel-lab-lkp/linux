@@ -18,9 +18,10 @@ H_HTM is used as an interface for executing Hardware Trace Macro (HTM)
 functions, including setup, configuration, control and dumping of the HTM data.
 For using HTM, it is required to setup HTM buffers and HTM operations can
 be controlled using the H_HTM hcall. The hcall can be invoked for any core/chip
-of the system from within a partition itself. To use this feature, a debugfs
-folder called "htmdump" is present under /sys/kernel/debug/powerpc.
+of the system from within a partition itself.
 
+To use this feature, a debugfs folder called "htmdump" is present under
+/sys/kernel/debug/powerpc. Another interface is via perf.
 
 HTM debugfs example usage
 =========================
@@ -94,7 +95,137 @@ This trace file will contain the relevant instruction traces
 collected during the workload execution. And can be used as
 input file for trace decoders to understand data.
 
-Benefits of using HTM debugfs interface
+HTM perf interface usage
+========================
+
+The HTM (Hardware Trace Macro) perf interface enables collection and analysis
+of hardware trace data from PowerPC systems. This interface allows users to
+capture detailed execution traces for performance analysis and debugging.
+
+Event Configuration
+-------------------
+
+Use ``perf record`` with the htm PMU event. The event is configured using
+named parameters that specify the target hardware location and trace type:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Parameter
+     - Description
+   * - htm_type
+     - Type of HTM trace to collect (bits 0-3)
+   * - nodeindex
+     - Node index in the system topology (bits 4-11)
+   * - nodalchipindex
+     - Chip index within the specified node (bits 12-19)
+   * - coreindexonchip
+     - Core index on the specified chip (bits 20-27)
+
+- event: "config:0-27"
+- htm_type: "config:0-3"
+- nodeindex: "config:4-11"
+- nodalchipindex: "config:12-19"
+- coreindexonchip: "config:20-27"
+
+1) nodeindex, nodalchipindex, coreindexonchip: this specifies
+   which partition to configure the HTM for.
+2) htmtype: specifies the type of HTM.
+
+Event Syntax
+------------
+
+The event configuration uses named parameters::
+
+   htm/nodeindex=N,nodalchipindex=C,coreindexonchip=R,htm_type=T/
+
+Where:
+
+- N = node index
+- C = chip index within the node
+- R = core index on the chip
+- T = HTM type
+
+Basic Usage Example
+-------------------
+
+To collect HTM trace data for a specific chip:
+
+.. code-block:: sh
+
+   # perf record -C 1 -e htm/nodalchipindex=2,nodeindex=0,htm_type=1/ <workload>
+
+In this example:
+
+- ``-C 1``: Collect on CPU 1
+- ``nodeindex=0``: Target node 0
+- ``nodalchipindex=2``: Target chip 2 within node 0
+- ``htm_type=1``: HTM trace type 1
+
+Output Files
+------------
+
+After running ``perf record``, the following files are generated:
+
+.. code-block:: sh
+
+   # ls htm.bin.*
+   htm.bin.n0.p2.c0 htm.bin.n1.p3.c0  # Binary trace files
+
+   # ls translation.*
+   translation.n0.p2.c0  translation.n1.p3.c0  # Memory configuration files
+
+These files contain:
+
+- **htm.bin.*** - Raw HTM trace data in binary format
+- **translation.*** - Memory address translation information for decoding
+
+Trace Data Processing
+---------------------
+
+Process the collected trace data using perf script:
+
+.. code-block:: sh
+
+   # perf script -D
+
+This command:
+
+1. Reads the perf.data file
+2. Decodes HTM trace data using translation files
+3. Displays human-readable trace output
+4. Shows instruction addresses and execution flow
+
+The decoder automatically:
+
+- Translates physical addresses to logical addresses
+- Creates decoded output files for analysis
+- Correlates trace data with memory mappings
+
+Complete Workflow Example
+--------------------------
+
+Here's a complete example of collecting and analyzing HTM traces:
+
+.. code-block:: sh
+
+   # Step 1: Collect trace data
+   perf record -C 1 -e htm/nodalchipindex=2,nodeindex=0,htm_type=1/ sleep 5
+
+   # Step 2: Verify output files
+   ls htm.bin.*        # Binary trace files
+   ls translation.*    # Memory configuration files
+   ls perf.data        # Perf data file
+
+   # Step 3: Decode and view traces
+   perf script -D > decoded_trace.txt
+
+   # Step 4: Analyze with perf report to see the hot logical address
+   perf report
+
+
+Benefits of using HTM interface
 =======================================
 
 It is now possible to collect traces for a particular core/chip
