@@ -725,6 +725,7 @@ static int ufs_fill_super(struct super_block *sb, struct fs_context *fc)
 	struct ufs_buffer_head * ubh;	
 	struct inode *inode;
 	unsigned block_size, super_block_size;
+	u64 expected_cssize;
 	unsigned flags;
 	unsigned super_block_offset;
 	unsigned maxsymlen;
@@ -1139,6 +1140,19 @@ magic_found:
 		uspi->s_csaddr = fs32_to_cpu(sb, usb1->fs_csaddr);
 
 	uspi->s_cssize = fs32_to_cpu(sb, usb1->fs_cssize);
+	if (uspi->s_fshift != ilog2(uspi->s_fsize)) {
+		pr_err("%s(): fragment size/shift mismatch (%u/%u)\n",
+		       __func__, uspi->s_fsize, uspi->s_fshift);
+		goto failed;
+	}
+	expected_cssize = (u64)uspi->s_ncg * sizeof(struct ufs_csum);
+	expected_cssize = (expected_cssize + uspi->s_fsize - 1) &
+		~((u64)uspi->s_fsize - 1);
+	if (!uspi->s_cssize || uspi->s_cssize != expected_cssize) {
+		pr_err("%s(): invalid cylinder summary size %u (expected %llu)\n",
+		       __func__, uspi->s_cssize, expected_cssize);
+		goto failed;
+	}
 	uspi->s_cgsize = fs32_to_cpu(sb, usb1->fs_cgsize);
 	uspi->s_ntrak = fs32_to_cpu(sb, usb1->fs_ntrak);
 	uspi->s_nsect = fs32_to_cpu(sb, usb1->fs_nsect);
