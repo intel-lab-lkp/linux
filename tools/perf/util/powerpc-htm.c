@@ -202,7 +202,7 @@ static int add_map_entry(struct addr_map **arr, size_t *count, size_t *cap, stru
 static unsigned long find_logical_addr(unsigned long long given_addr,
 				struct mem_entries *mem_entries_array,
 				size_t n_entries,
-				u32 lp_filter)
+				u32 lp_filter, int filter)
 {
 	for (size_t i = 0; i < n_entries; i++) {
 		unsigned long long start = mem_entries_array[i].phy_addr & PHYS_ADDR_MASK;
@@ -221,10 +221,12 @@ static unsigned long find_logical_addr(unsigned long long given_addr,
 		 * If so, calculate:
 		 * 'offset' and the 'logical address
 		 */
-		if (start <= given_addr && given_addr < end &&
-			mem_entries_array[i].lp_index == lp_filter) {
+		if (start <= given_addr && given_addr < end) {
 			unsigned long long offset = given_addr - start;
 			unsigned long logical = mem_entries_array[i].logical_addr + offset;
+
+			if (filter && (mem_entries_array[i].lp_index != lp_filter))
+				continue;
 
 			pr_debug("DEBUG: Condition hit at i=%zu given_addr=0x%llx start=0x%llx end=0x%llx lp_index=%u\n",
 				i, given_addr,
@@ -259,29 +261,52 @@ static struct addr_map *process_trace_file(const char *trace_file,
 	unsigned long logical_addr;
 	size_t total_phys = 0;
 	size_t total_phys_to_logical = 0;
-
 	FILE *fp = fopen(trace_file, "r");
+	size_t prefix_len;
+	int found_match = 0;
+	FILE *fout;
+	int filter_lp = 1;
+	char *output = malloc(strlen(trace_file) + 3);  /* +3 for ".l" and null */
+
+	if (!output) {
+		pr_err("Failed to allocate memory for output filename\n");
+		fclose(fp);
+		return NULL;
+	}
 
 	if (!fp) {
 		pr_err("Failed to open trace file %s: %s\n", trace_file, strerror(errno));
 		return NULL;
 	}
 
+	snprintf(output, strlen(trace_file) + 3, "%s.l", trace_file);
+	fout = fopen(output, "w");
+	if (!fout) {
+		pr_err("Failed to open trace output file: %s\n", output);
+		fclose(fp);
+		return NULL;
+	}
+
 	if (regcomp(&addr_regex, "addr:0x[0-9A-Fa-f]+", REG_EXTENDED) != 0) {
 		pr_err("Failed to compile addr_regex\n");
-		return NULL;
+		goto out;
 	}
 
 	if (regcomp(&label_regex,
 		   "^[[:space:]]*[0-9A-Fa-f]+ : [^[:space:]]+[[:space:]]+([^[:space:]]+)",
 		   REG_EXTENDED) != 0) {
 		pr_err("Failed to compile label_regex\n");
-		return NULL;
+		regfree(&addr_regex);
+		goto out;
 	}
 
 	maps = NULL;
 	count = 0;
 	cap = 0;
+
+	/* When dumping traces, show all addresses regardless of LP index */
+	if (dump_trace)
+		filter_lp = 0;
 
 	while (getline(&line, &len, fp) != -1) {
 		if (regexec(&label_regex, line, 2, pmatch, 0) == 0) {
@@ -289,6 +314,7 @@ static struct addr_map *process_trace_file(const char *trace_file,
 			int start = pmatch[1].rm_so;
 			int end   = pmatch[1].rm_eo;
 			int line_len   = end - start;
+			found_match = 0;
 
 			if (line_len < 0)
 				line_len = 0;
@@ -303,6 +329,10 @@ static struct addr_map *process_trace_file(const char *trace_file,
 			while (regexec(&addr_regex, ptr, 1, pmatch, 0) == 0) {
 				unsigned long long phys_addr = 0;
 				struct addr_map entry = {0};
+				char *hex_start = strstr(line, "addr:0x");
+				const char *target = "addr:0x";
+				char *old_val_ptr;
+				size_t written;
 
 				if (sscanf(ptr + pmatch[0].rm_so + strlen("addr:"),
 					  "%llx", &phys_addr) != 1) {
@@ -315,7 +345,30 @@ static struct addr_map *process_trace_file(const char *trace_file,
 				logical_addr = find_logical_addr(phys_addr,
 							mem_entries_array,
 							n_entries,
-							lp_filter);
+							lp_filter, filter_lp);
+				/* create output.txt with logical address */
+				if (dump_trace && hex_start) {
+					old_val_ptr = hex_start + strlen(target);
+					prefix_len = hex_start - line;
+					written = fwrite(line, 1, prefix_len, fout);
+					if (written != prefix_len) {
+						pr_err("Failed to write prefix to output file\n");
+						continue;
+					}
+					if (fprintf(fout, "addr:0x%llx\t", (unsigned long long)logical_addr) < 0) {
+						pr_err("Failed to write to output file\n");
+						continue;
+					}
+					while (*old_val_ptr != ' ' && *old_val_ptr != '\n' && *old_val_ptr != '\0') {
+						old_val_ptr++;
+					}
+					if (fprintf(fout, "%s", old_val_ptr) < 0) {
+						pr_err("Failed to write suffix to output file\n");
+						continue;
+					}
+					found_match = 1;
+				}
+
 				if (logical_addr == 0) {
 					ptr += pmatch[0].rm_eo;
 					continue;
@@ -335,6 +388,12 @@ static struct addr_map *process_trace_file(const char *trace_file,
 
 				ptr += pmatch[0].rm_eo;
 			}
+			if (dump_trace && (!found_match) && line) {
+				if (fprintf(fout, "%s", line) < 0) {
+					pr_err("Failed to write line to output file\n");
+					continue;
+				}
+			}
 		}
 	}
 
@@ -342,9 +401,17 @@ static struct addr_map *process_trace_file(const char *trace_file,
 	fclose(fp);
 	regfree(&addr_regex);
 	regfree(&label_regex);
+	fclose(fout);
+	free(output);
 
 	*count_out = count;
 	return maps;
+
+out:
+	fclose(fp);
+	fclose(fout);
+	free(output);
+	return NULL;
 }
 
 static int create_mem_maps(struct perf_session *session, struct powerpc_htm *htm)
