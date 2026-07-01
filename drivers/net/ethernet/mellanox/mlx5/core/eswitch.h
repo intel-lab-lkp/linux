@@ -415,8 +415,9 @@ struct mlx5_eswitch {
 	struct {
 		/* Initially 0, meaning no QoS users and QoS is disabled. */
 		refcount_t refcnt;
-		u32 root_tsar_ix;
 		struct mlx5_qos_domain *domain;
+		/* The root node of the hierarchy. */
+		struct mlx5_esw_sched_node *root;
 	} qos;
 
 	struct mlx5_esw_bridge_offloads *br_offloads;
