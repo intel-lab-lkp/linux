@@ -572,6 +572,90 @@ static void update_mov_insn_state(struct type_state *state,
 	pr_debug_type_name(&tsr->type, tsr->kind);
 }
 
+static void update_add_insn_state(struct type_state *state,
+				  struct disasm_line *dl,
+				  struct annotated_op_loc *src,
+				  struct annotated_op_loc *dst)
+{
+	struct type_state_reg *tsr;
+	struct type_state_reg src_tsr;
+	Dwarf_Die type_die;
+	u32 insn_offset = dl->al.offset;
+	int sreg = src->reg1;
+	int dreg = dst->reg1;
+	int reg_offset;
+
+	if (!has_reg_type(state, dreg))
+		return;
+
+	tsr = &state->regs[dreg];
+	tsr->copied_from = -1;
+
+retry:
+	if (!has_reg_type(state, sreg) || !state->regs[sreg].ok) {
+		invalidate_reg_state(tsr);
+		return;
+	}
+
+	src_tsr = state->regs[sreg];
+
+	/*
+	 * Handle 'add' instructions of the form:
+	 *   add  dreg, base, #offset     (immediate offset)
+	 *   add  dreg, base, reg2        (reg2 holds a constant)
+	 *
+	 * For case 2, retrieve the constant value from reg2
+	 * and use it as the offset.
+	 */
+	reg_offset = src->offset;
+	if (src->multi_regs) {
+		int reg2 = (sreg == src->reg1) ? src->reg2 : src->reg1;
+
+		if (has_reg_type(state, reg2) && state->regs[reg2].ok &&
+		    state->regs[reg2].kind == TSR_KIND_CONST)
+			reg_offset = state->regs[reg2].imm_value;
+	}
+
+	/* Handle calculation of a register holding a typed pointer */
+	if (src_tsr.kind == TSR_KIND_POINTER ||
+	    (src_tsr.kind == TSR_KIND_TYPE &&
+	     dwarf_tag(&src_tsr.type) == DW_TAG_pointer_type)) {
+		s32 offset;
+
+		if (src_tsr.kind == TSR_KIND_TYPE &&
+		    __die_get_real_type(&src_tsr.type, &type_die) == NULL) {
+			invalidate_reg_state(tsr);
+			return;
+		}
+
+		if (src_tsr.kind == TSR_KIND_POINTER)
+			type_die = src_tsr.type;
+
+		/* Check if the target type has a member at the new offset */
+		offset = reg_offset + src_tsr.offset;
+		if (die_get_member_type(&type_die, offset, &type_die) == NULL) {
+			invalidate_reg_state(tsr);
+			return;
+		}
+
+		tsr->type = src_tsr.type;
+		tsr->kind = src_tsr.kind;
+		tsr->offset = offset;
+		tsr->ok = src_tsr.ok;
+
+		pr_debug_dtp("add [%x] address of %s%#x(reg%d) -> reg%d",
+			     insn_offset, reg_offset < 0 ? "-" : "",
+			     abs(reg_offset), sreg, dreg);
+
+		pr_debug_type_name(&tsr->type, tsr->kind);
+	}
+	/* Or try another register if any */
+	else if (src->multi_regs && src->reg1 != src->reg2 && sreg != src->reg2) {
+		sreg = src->reg2;
+		goto retry;
+	}
+}
+
 static void update_insn_state_arm64(struct type_state *state,
 				    struct data_loc_info *dloc, Dwarf_Die *cu_die __maybe_unused,
 				    struct disasm_line *dl)
@@ -589,11 +673,16 @@ static void update_insn_state_arm64(struct type_state *state,
 	 * the destination register itself to prevent incorrect type propagation.
 	 */
 	if (has_reg_type(state, dst->reg1) &&
-	    strcmp(dl->ins.name, "mov") &&
+	    strcmp(dl->ins.name, "add") && strcmp(dl->ins.name, "mov") &&
 	    strncmp(dl->ins.name, "ld", 2) && strncmp(dl->ins.name, "st", 2)) {
 		pr_debug_dtp("%s [%x] invalidate reg%d\n",
 			     dl->ins.name, insn_offset, dst->reg1);
 		invalidate_reg_state(&state->regs[dst->reg1]);
+		return;
+	}
+
+	if (!strcmp(dl->ins.name, "add")) {
+		update_add_insn_state(state, dl, src, dst);
 		return;
 	}
 
