@@ -51,6 +51,20 @@ DEFINE_PER_CPU(struct resctrl_pqr_state, pqr_state);
  */
 bool rdt_alloc_capable;
 
+/*
+ * Need to re-evaluate on each mount whether any mon_capable resources
+ * are enabled.
+ */
+bool resctrl_arch_mon_capable(void)
+{
+	struct rdt_resource *r;
+
+	for_each_mon_capable_rdt_resource(r)
+		return true;
+
+	return false;
+}
+
 static void mba_wrmsr_intel(struct msr_param *m);
 static void cat_wrmsr(struct msr_param *m);
 static void mba_wrmsr_amd(struct msr_param *m);
@@ -783,7 +797,6 @@ void resctrl_arch_pre_mount(void)
 	cpus_read_lock();
 	mutex_lock(&domain_list_lock);
 	r->mon_capable = true;
-	rdt_mon_capable = true;
 	for_each_online_cpu(cpu)
 		domain_add_cpu_mon(cpu, r);
 	mutex_unlock(&domain_list_lock);
@@ -1017,9 +1030,8 @@ static __init void check_quirks(void)
 static __init bool get_rdt_resources(void)
 {
 	rdt_alloc_capable = get_rdt_alloc_resources();
-	rdt_mon_capable = get_rdt_mon_resources();
 
-	return (rdt_mon_capable || rdt_alloc_capable);
+	return get_rdt_mon_resources() || rdt_alloc_capable;
 }
 
 static __init void rdt_init_res_defs_intel(void)
