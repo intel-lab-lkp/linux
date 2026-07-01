@@ -184,6 +184,7 @@ struct channel {
 	struct list_head clist;		/* link in list of channels per unit */
 	spinlock_t	upl;		/* protects `ppp' and 'bridge' */
 	struct channel __rcu *bridge;	/* "bridged" ppp channel */
+	struct rcu_head	rcu;		/* for RCU-deferred free of the channel */
 #ifdef CONFIG_PPP_MULTILINK
 	u8		avail;		/* flag used in multilink stuff */
 	u8		had_frag;	/* >= 1 fragments have been sent */
@@ -3583,7 +3584,7 @@ static void ppp_release_channel(struct channel *pch)
 	}
 	skb_queue_purge(&pch->file.xq);
 	skb_queue_purge(&pch->file.rq);
-	kfree(pch);
+	kfree_rcu(pch, rcu);
 }
 
 static void __exit ppp_cleanup(void)
