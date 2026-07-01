@@ -253,7 +253,7 @@ struct fsl_edma_engine {
 	struct dma_device	dma_dev;
 	void __iomem		*membase;
 	void __iomem		*muxbase[DMAMUX_NR];
-	struct clk		*muxclk[DMAMUX_NR];
+	struct clk_bulk_data    *muxclk;
 	struct clk		*dmaclk;
 	struct mutex		fsl_edma_mutex;
 	const struct fsl_edma_drvdata *drvdata;
