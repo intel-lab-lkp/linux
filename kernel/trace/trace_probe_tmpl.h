@@ -274,7 +274,7 @@ store_trace_args(void *data, struct trace_probe *tp, void *rec, void *edata,
 	int ret, i;
 
 #ifdef CONFIG_BPF_SYSCALL
-	if (tp->prog) {
+	if (tp->prog && !trace_probe_bpf_disabled()) {
 		struct fetch_bpf_ctx ctx = {
 			.rec = rec,
 			.edata = edata,

@@ -1503,6 +1503,7 @@ extern int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
 		C(PAUSE_ON_TRACE,	"pause-on-trace"),	\
 		C(HASH_PTR,		"hash-ptr"),	/* Print hashed pointer */ \
 		C(BITMASK_LIST,		"bitmask-list"),	\
+		C(DISABLE_BPF,		"disable_bpf"),		\
 		FUNCTION_FLAGS					\
 		FGRAPH_FLAGS					\
 		STACK_FLAGS					\
@@ -2505,4 +2506,11 @@ static inline int rv_init_interface(void)
 		_args;							\
 	})
 
+#ifdef CONFIG_BPF_SYSCALL
+bool trace_probe_bpf_disabled(void);
+#else
+static inline bool trace_probe_bpf_disabled(void) { return false; }
+#endif
+
 #endif /* _LINUX_KERNEL_TRACE_H */
+

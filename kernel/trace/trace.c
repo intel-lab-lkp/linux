@@ -9940,6 +9940,13 @@ struct trace_array *trace_get_global_array(void)
 }
 #endif
 
+#ifdef CONFIG_BPF_SYSCALL
+bool trace_probe_bpf_disabled(void)
+{
+	return !!(global_trace.trace_flags & TRACE_ITER(DISABLE_BPF));
+}
+#endif
+
 void __init early_trace_init(void)
 {
 	if (tracepoint_printk) {
