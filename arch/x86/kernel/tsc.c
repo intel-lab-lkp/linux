@@ -1451,13 +1451,17 @@ static int __init init_tsc_clocksource(void)
 device_initcall(init_tsc_clocksource);
 
 static bool __init determine_cpu_tsc_frequencies(bool early,
+						 unsigned int known_cpu_khz,
 						 unsigned int known_tsc_khz)
 {
 	/* Make sure that cpu and tsc are not already calibrated */
 	WARN_ON(cpu_khz || tsc_khz);
 
 	if (early) {
-		cpu_khz = x86_platform.calibrate_cpu();
+		if (known_cpu_khz)
+			cpu_khz = known_cpu_khz;
+		else
+			cpu_khz = x86_platform.calibrate_cpu();
 		if (known_tsc_khz)
 			tsc_khz = known_tsc_khz;
 		else
@@ -1514,7 +1518,7 @@ static void __init tsc_enable_sched_clock(void)
 
 void __init tsc_early_init(void)
 {
-	unsigned int known_tsc_khz = 0;
+	unsigned int known_cpu_khz = 0, known_tsc_khz = 0;
 
 	if (!boot_cpu_has(X86_FEATURE_TSC))
 		return;
@@ -1522,22 +1526,33 @@ void __init tsc_early_init(void)
 	if (is_early_uv_system())
 		return;
 
+	if (x86_init.hyper.get_cpu_khz)
+		known_cpu_khz = x86_init.hyper.get_cpu_khz();
+
 	if (cc_platform_has(CC_ATTR_GUEST_SNP_SECURE_TSC))
 		known_tsc_khz = snp_secure_tsc_init();
 	else if (boot_cpu_has(X86_FEATURE_TDX_GUEST))
 		known_tsc_khz = tdx_tsc_init();
 
 	/*
+	 * If the TSC frequency wasn't provided by trusted firmware, try to get
+	 * it from the hypervisor (which is untrusted when running as a CoCo guest).
+	 */
+	if (!known_tsc_khz && x86_init.hyper.get_tsc_khz)
+		known_tsc_khz = x86_init.hyper.get_tsc_khz();
+
+	/*
 	 * Ignore the user-provided TSC frequency if the exact frequency was
-	 * obtained from trusted firmware, as the user-provided frequency is
-	 * intended as a "starting point", not a known, guaranteed frequency.
+	 * obtained from trusted firmware or the hypervisor, as the user-
+	 * provided frequency is intended as a "starting point", not a known,
+	 * guaranteed frequency.
 	 */
 	if (!known_tsc_khz)
 		known_tsc_khz = tsc_early_khz;
 	else if (tsc_early_khz)
-		pr_err("Ignoring 'tsc_early_khz' in favor of trusted firmware.\n");
+		pr_err("Ignoring 'tsc_early_khz' in favor of firmware/hypervisor.\n");
 
-	if (!determine_cpu_tsc_frequencies(true, known_tsc_khz))
+	if (!determine_cpu_tsc_frequencies(true, known_cpu_khz, known_tsc_khz))
 		return;
 	tsc_enable_sched_clock();
 }
@@ -1558,7 +1573,7 @@ void __init tsc_init(void)
 
 	if (!tsc_khz) {
 		/* We failed to determine frequencies earlier, try again */
-		if (!determine_cpu_tsc_frequencies(false, 0)) {
+		if (!determine_cpu_tsc_frequencies(false, 0, 0)) {
 			mark_tsc_unstable("could not calculate TSC khz");
 			setup_clear_cpu_cap(X86_FEATURE_TSC_DEADLINE_TIMER);
 			return;

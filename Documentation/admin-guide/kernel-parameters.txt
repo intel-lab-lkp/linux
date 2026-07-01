@@ -7948,7 +7948,8 @@ Kernel parameters
 
 			Note, tsc_early_khz is ignored if the TSC frequency is
 			provided by trusted firmware when running as an SNP or
-			TDX guest.
+			TDX guest, or when the hypervisor provides the exact
+			frequency via a paravirtual interface.
 
 	tsx=		[X86] Control Transactional Synchronization
 			Extensions (TSX) feature in Intel processors that
