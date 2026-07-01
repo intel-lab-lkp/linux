@@ -196,20 +196,20 @@ int hfsplus_find_cat(struct super_block *sb, u32 cnid,
 {
 	hfsplus_cat_entry tmp = {0};
 	int err;
-	u16 type;
+	u16 entry_type;
 
 	hfsplus_cat_build_key_with_cnid(sb, fd->search_key, cnid);
 	err = hfsplus_brec_read_cat(fd, &tmp);
 	if (err)
 		return err;
 
-	type = be16_to_cpu(tmp.type);
-	if (type != HFSPLUS_FOLDER_THREAD && type != HFSPLUS_FILE_THREAD) {
+	entry_type = be16_to_cpu(tmp.type);
+	if (!is_hfsplus_thread_type(entry_type)) {
 		pr_err("found bad thread record in catalog\n");
 		return -EIO;
 	}
 
-	if (be16_to_cpu(tmp.thread.nodeName.length) > 255) {
+	if (!is_hfsplus_name_length_valid(tmp.thread.nodeName.length)) {
 		pr_err("catalog name length corrupted\n");
 		return -EIO;
 	}
@@ -350,23 +350,29 @@ int hfsplus_delete_cat(u32 cnid, struct inode *dir, const struct qstr *str)
 		goto out;
 
 	if (!str) {
-		int len;
+		hfsplus_cat_entry entry = {0};
+		u16 entry_type;
 
 		hfsplus_cat_build_key_with_cnid(sb, fd.search_key, cnid);
-		err = hfs_brec_find(&fd, hfs_find_rec_by_key);
+		err = hfsplus_brec_read_cat(&fd, &entry);
 		if (err)
 			goto out;
 
-		off = fd.entryoffset +
-			offsetof(struct hfsplus_cat_thread, nodeName);
-		fd.search_key->cat.parent = cpu_to_be32(dir->i_ino);
-		hfs_bnode_read(fd.bnode,
-			&fd.search_key->cat.name.length, off, 2);
-		len = be16_to_cpu(fd.search_key->cat.name.length) * 2;
-		hfs_bnode_read(fd.bnode,
-			&fd.search_key->cat.name.unicode,
-			off + 2, len);
-		fd.search_key->key_len = cpu_to_be16(6 + len);
+		entry_type = be16_to_cpu(entry.type);
+		if (!is_hfsplus_thread_type(entry_type)) {
+			pr_err("found bad thread record in catalog\n");
+			err = -EIO;
+			goto out;
+		}
+
+		if (!is_hfsplus_name_length_valid(entry.thread.nodeName.length)) {
+			pr_err("catalog name length corrupted\n");
+			err = -EIO;
+			goto out;
+		}
+
+		hfsplus_cat_build_key_uni(fd.search_key, dir->i_ino,
+					  &entry.thread.nodeName);
 	} else {
 		err = hfsplus_cat_build_key(sb, fd.search_key, dir->i_ino, str);
 		if (unlikely(err))
