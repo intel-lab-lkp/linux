@@ -72,6 +72,7 @@ struct ipvl_dev {
 	DECLARE_BITMAP(mac_filters, IPVLAN_MAC_FILTER_SIZE);
 	netdev_features_t	sfeatures;
 	u32			msg_enable;
+	bool			dying;
 };
 
 struct ipvl_addr {
@@ -216,7 +217,8 @@ struct ipvtap_dev {
 	struct tap_dev	  tap;
 };
 
-void __ipvtap_dellink(struct net_device *dev, struct list_head *head);
+void __ipvtap_dellink(struct net *net, struct net_device *dev,
+		      struct list_head *head);
 #endif
 
 #endif /* __IPVLAN_H */

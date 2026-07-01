@@ -110,7 +110,8 @@ static void ipvtap_dellink(struct net_device *dev,
 	struct ipvl_port *port = vlantap->vlan.port;
 
 	mutex_lock(&port->pnodes_lock);
-	__ipvtap_dellink(dev, head);
+	if (!vlantap->vlan.dying)
+		__ipvtap_dellink(dev_net(dev), dev, head);
 	mutex_unlock(&port->pnodes_lock);
 }
 
