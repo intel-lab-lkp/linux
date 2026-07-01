@@ -250,7 +250,6 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 	unsigned int nr_enc_pages, enc_idx;
 	struct page **enc_pages;
 	struct bio *enc_bio;
-	unsigned int i;
 
 	skcipher_request_set_callback(ciph_req,
 			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
@@ -259,9 +258,6 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 	memcpy(curr_dun, bc->bc_dun, sizeof(curr_dun));
 	sg_init_table(&src, 1);
 	sg_init_table(&dst, 1);
-
-	skcipher_request_set_crypt(ciph_req, &src, &dst, data_unit_size,
-				   iv.bytes);
 
 	/*
 	 * Encrypt each page in the source bio.  Because the source bio could
@@ -287,29 +283,26 @@ new_bio:
 		__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
 				src_bv.bv_offset);
 
-		sg_set_page(&src, src_bv.bv_page, data_unit_size,
-			    src_bv.bv_offset);
-		sg_set_page(&dst, enc_page, data_unit_size, src_bv.bv_offset);
-
 		/*
 		 * Increment the index now that the encrypted page is added to
 		 * the bio.  This is important for the error unwind path.
 		 */
 		enc_idx++;
 
-		/*
-		 * Encrypt each data unit in this page.
-		 */
-		for (i = 0; i < src_bv.bv_len; i += data_unit_size) {
-			blk_crypto_dun_to_iv(curr_dun, &iv);
-			if (crypto_skcipher_encrypt(ciph_req)) {
-				enc_bio->bi_status = BLK_STS_IOERR;
-				goto out_free_enc_bio;
-			}
-			bio_crypt_dun_increment(curr_dun, 1);
-			src.offset += data_unit_size;
-			dst.offset += data_unit_size;
+		/* Encrypt the whole segment as one multi-data-unit request. */
+		blk_crypto_dun_to_iv(curr_dun, &iv);
+		sg_set_page(&src, src_bv.bv_page, src_bv.bv_len,
+			    src_bv.bv_offset);
+		sg_set_page(&dst, enc_page, src_bv.bv_len, src_bv.bv_offset);
+		skcipher_request_set_crypt(ciph_req, &src, &dst, src_bv.bv_len,
+					   iv.bytes);
+		skcipher_request_set_data_unit_size(ciph_req, data_unit_size);
+		if (crypto_skcipher_encrypt(ciph_req)) {
+			enc_bio->bi_status = BLK_STS_IOERR;
+			goto out_free_enc_bio;
 		}
+		bio_crypt_dun_increment(curr_dun,
+					src_bv.bv_len / data_unit_size);
 
 		bio_advance_iter_single(src_bio, &src_bio->bi_iter,
 				src_bv.bv_len);
@@ -380,7 +373,6 @@ static blk_status_t __blk_crypto_fallback_decrypt_bio(struct bio *bio,
 	struct scatterlist sg;
 	struct bio_vec bv;
 	const int data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
-	unsigned int i;
 
 	skcipher_request_set_callback(ciph_req,
 			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
@@ -388,26 +380,20 @@ static blk_status_t __blk_crypto_fallback_decrypt_bio(struct bio *bio,
 
 	memcpy(curr_dun, bc->bc_dun, sizeof(curr_dun));
 	sg_init_table(&sg, 1);
-	skcipher_request_set_crypt(ciph_req, &sg, &sg, data_unit_size,
-				   iv.bytes);
 
-	/* Decrypt each segment in the bio */
+	/* One dun() request per segment; the crypto layer walks the per-unit DUN. */
 	__bio_for_each_segment(bv, bio, iter, iter) {
-		struct page *page = bv.bv_page;
-
 		if (!IS_ALIGNED(bv.bv_len | bv.bv_offset, data_unit_size))
 			return BLK_STS_INVAL;
 
-		sg_set_page(&sg, page, data_unit_size, bv.bv_offset);
-
-		/* Decrypt each data unit in the segment */
-		for (i = 0; i < bv.bv_len; i += data_unit_size) {
-			blk_crypto_dun_to_iv(curr_dun, &iv);
-			if (crypto_skcipher_decrypt(ciph_req))
-				return BLK_STS_IOERR;
-			bio_crypt_dun_increment(curr_dun, 1);
-			sg.offset += data_unit_size;
-		}
+		blk_crypto_dun_to_iv(curr_dun, &iv);
+		sg_set_page(&sg, bv.bv_page, bv.bv_len, bv.bv_offset);
+		skcipher_request_set_crypt(ciph_req, &sg, &sg, bv.bv_len,
+					   iv.bytes);
+		skcipher_request_set_data_unit_size(ciph_req, data_unit_size);
+		if (crypto_skcipher_decrypt(ciph_req))
+			return BLK_STS_IOERR;
+		bio_crypt_dun_increment(curr_dun, bv.bv_len / data_unit_size);
 	}
 
 	return BLK_STS_OK;
@@ -621,6 +607,7 @@ out:
 int blk_crypto_fallback_start_using_mode(enum blk_crypto_mode_num mode_num)
 {
 	const char *cipher_str = blk_crypto_modes[mode_num].cipher_str;
+	char dun_str[CRYPTO_MAX_ALG_NAME];
 	struct blk_crypto_fallback_keyslot *slotp;
 	unsigned int i;
 	int err = 0;
@@ -641,15 +628,24 @@ int blk_crypto_fallback_start_using_mode(enum blk_crypto_mode_num mode_num)
 	if (err)
 		goto out;
 
+	/*
+	 * Wrap in dun() to handle a whole segment per request (a higher-priority
+	 * hardware dun() wins if present).  The blk-crypto DUN is little-endian.
+	 */
+	if (snprintf(dun_str, sizeof(dun_str), "dun(%s,le)", cipher_str) >=
+	    (int)sizeof(dun_str)) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	for (i = 0; i < blk_crypto_num_keyslots; i++) {
 		slotp = &blk_crypto_keyslots[i];
-		slotp->tfms[mode_num] = crypto_alloc_sync_skcipher(cipher_str,
-				0, 0);
+		slotp->tfms[mode_num] = crypto_alloc_sync_skcipher(dun_str, 0, 0);
 		if (IS_ERR(slotp->tfms[mode_num])) {
 			err = PTR_ERR(slotp->tfms[mode_num]);
 			if (err == -ENOENT) {
 				pr_warn_once("Missing crypto API support for \"%s\"\n",
-					     cipher_str);
+					     dun_str);
 				err = -ENOPKG;
 			}
 			slotp->tfms[mode_num] = NULL;

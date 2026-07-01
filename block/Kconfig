@@ -204,6 +204,7 @@ config BLK_INLINE_ENCRYPTION_FALLBACK
 	depends on BLK_INLINE_ENCRYPTION
 	select CRYPTO
 	select CRYPTO_SKCIPHER
+	select CRYPTO_DUN # batches a segment's data units per crypto request
 	help
 	  Enabling this lets the block layer handle inline encryption
 	  by falling back to the kernel crypto API when inline
