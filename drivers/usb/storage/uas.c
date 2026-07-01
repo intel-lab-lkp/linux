@@ -32,6 +32,10 @@
 
 #define MAX_CMNDS 256
 
+static int uas_reset_limit = 3;
+module_param_named(reset_limit, uas_reset_limit, int, 0644);
+MODULE_PARM_DESC(reset_limit, "Maximum number of consecutive device resets during error handling before failing");
+
 struct uas_dev_info {
 	struct usb_interface *intf;
 	struct usb_device *udev;
@@ -40,6 +44,7 @@ struct uas_dev_info {
 	struct usb_anchor data_urbs;
 	u64 flags;
 	int qdepth, resetting;
+	int reset_cnt;
 	unsigned cmd_pipe, status_pipe, data_in_pipe, data_out_pipe;
 	unsigned use_streams:1;
 	unsigned shutdown:1;
@@ -255,6 +260,8 @@ static int uas_try_complete(struct scsi_cmnd *cmnd, const char *caller)
 		return -EBUSY;
 	devinfo->cmnd[cmdinfo->uas_tag - 1] = NULL;
 	uas_free_unsubmitted_urbs(cmnd);
+	if (cmnd->result == 0 && cmnd->submitter == SUBMITTED_BY_BLOCK_LAYER)
+		devinfo->reset_cnt = 0;
 	scsi_done(cmnd);
 	return 0;
 }
@@ -796,6 +803,21 @@ static int uas_eh_host_reset_handler(struct scsi_cmnd *cmnd)
 	usb_kill_anchored_urbs(&devinfo->cmd_urbs);
 	usb_kill_anchored_urbs(&devinfo->sense_urbs);
 	usb_kill_anchored_urbs(&devinfo->data_urbs);
+
+	spin_lock_irqsave(&devinfo->lock, flags);
+	if (uas_reset_limit > 0 && devinfo->reset_cnt >= uas_reset_limit) {
+		devinfo->resetting = 0;
+		spin_unlock_irqrestore(&devinfo->lock, flags);
+		uas_zap_pending(devinfo, DID_NO_CONNECT);
+		usb_unlock_device(udev);
+		shost_printk(KERN_ERR, sdev->host,
+			     "%s FAILED reset limit %d exceeded\n",
+			     __func__, uas_reset_limit);
+		return FAILED;
+	}
+	devinfo->reset_cnt++;
+	spin_unlock_irqrestore(&devinfo->lock, flags);
+
 	uas_zap_pending(devinfo, DID_RESET);
 
 	err = usb_reset_device(udev);
