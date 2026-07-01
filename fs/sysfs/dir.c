@@ -46,10 +46,16 @@ int sysfs_create_dir_ns(struct kobject *kobj, const struct ns_common *ns)
 	if (WARN_ON(!kobj))
 		return -EINVAL;
 
-	if (kobj->parent)
+	if (kobj->parent) {
+		spin_lock(&sysfs_symlink_target_lock);
 		parent = kobj->parent->sd;
-	else
+		if (parent)
+			kernfs_get(parent);
+		spin_unlock(&sysfs_symlink_target_lock);
+	} else {
 		parent = sysfs_root_kn;
+		kernfs_get(parent);
+	}
 
 	if (!parent)
 		return -ENOENT;
@@ -61,10 +67,12 @@ int sysfs_create_dir_ns(struct kobject *kobj, const struct ns_common *ns)
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
 			sysfs_warn_dup(parent, kobject_name(kobj));
+		kernfs_put(parent);
 		return PTR_ERR(kn);
 	}
 
 	kobj->sd = kn;
+	kernfs_put(parent);
 	return 0;
 }
 
