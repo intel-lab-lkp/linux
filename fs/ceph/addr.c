@@ -491,6 +491,10 @@ static int ceph_init_request(struct netfs_io_request *rreq, struct file *file)
 			rreq->netfs_priv = priv;
 			return 0;
 		}
+
+		/* If this is a lazy fd, also try to get LAZYIO caps */
+		if (fi->fmode & CEPH_FILE_MODE_LAZY)
+			want |= CEPH_CAP_FILE_LAZYIO;
 	}
 
 	/*
