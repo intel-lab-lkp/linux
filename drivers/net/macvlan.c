@@ -171,7 +171,7 @@ static int macvlan_hash_add_source(struct macvlan_dev *vlan,
 	RCU_INIT_POINTER(entry->vlan, vlan);
 	h = &port->vlan_source_hash[macvlan_eth_hash(addr)];
 	hlist_add_head_rcu(&entry->hlist, h);
-	vlan->macaddr_count++;
+	WRITE_ONCE(vlan->macaddr_count, vlan->macaddr_count + 1);
 
 	return 0;
 }
@@ -402,7 +402,7 @@ static void macvlan_flush_sources(struct macvlan_port *port,
 		if (rcu_access_pointer(entry->vlan) == vlan)
 			macvlan_hash_del_source(entry);
 
-	vlan->macaddr_count = 0;
+	WRITE_ONCE(vlan->macaddr_count, 0);
 }
 
 static void macvlan_forward_source_one(struct sk_buff *skb,
@@ -874,7 +874,7 @@ static void update_port_bc_cutoff(struct macvlan_dev *vlan, int cutoff)
 	if (vlan->port->bc_cutoff == cutoff)
 		return;
 
-	vlan->port->bc_cutoff = cutoff;
+	WRITE_ONCE(vlan->port->bc_cutoff, cutoff);
 	macvlan_recompute_bc_filter(vlan);
 }
 
@@ -1427,7 +1427,7 @@ static int macvlan_changelink_sources(struct macvlan_dev *vlan, u32 mode,
 		entry = macvlan_hash_lookup_source(vlan, addr);
 		if (entry) {
 			macvlan_hash_del_source(entry);
-			vlan->macaddr_count--;
+			WRITE_ONCE(vlan->macaddr_count, vlan->macaddr_count - 1);
 		}
 	} else if (mode == MACVLAN_MACADDR_FLUSH) {
 		macvlan_flush_sources(vlan->port, vlan);
@@ -1653,7 +1653,8 @@ static int macvlan_changelink(struct net_device *dev,
 	}
 
 	if (data && data[IFLA_MACVLAN_BC_QUEUE_LEN]) {
-		vlan->bc_queue_len_req = nla_get_u32(data[IFLA_MACVLAN_BC_QUEUE_LEN]);
+		WRITE_ONCE(vlan->bc_queue_len_req,
+			   nla_get_u32(data[IFLA_MACVLAN_BC_QUEUE_LEN]));
 		update_port_bc_queue_len(vlan->port);
 	}
 
@@ -1676,10 +1677,12 @@ static int macvlan_changelink(struct net_device *dev,
 
 static size_t macvlan_get_size_mac(const struct macvlan_dev *vlan)
 {
-	if (vlan->macaddr_count == 0)
+	unsigned int macaddr_count = READ_ONCE(vlan->macaddr_count);
+
+	if (!macaddr_count)
 		return 0;
 	return nla_total_size(0) /* IFLA_MACVLAN_MACADDR_DATA */
-		+ vlan->macaddr_count * nla_total_size(sizeof(u8) * ETH_ALEN);
+		+ macaddr_count * nla_total_size(sizeof(u8) * ETH_ALEN);
 }
 
 static size_t macvlan_get_size(const struct net_device *dev)
@@ -1702,53 +1705,75 @@ static int macvlan_fill_info_macaddr(struct sk_buff *skb,
 				     const int i)
 {
 	struct hlist_head *h = &vlan->port->vlan_source_hash[i];
-	struct macvlan_source_entry *entry;
+	const struct macvlan_source_entry *entry;
+	int cnt = 0;
 
-	hlist_for_each_entry_rcu(entry, h, hlist, lockdep_rtnl_is_held()) {
+	hlist_for_each_entry_rcu(entry, h, hlist) {
 		if (rcu_access_pointer(entry->vlan) != vlan)
 			continue;
 		if (nla_put(skb, IFLA_MACVLAN_MACADDR, ETH_ALEN, entry->addr))
-			return 1;
+			return -EMSGSIZE;
+		cnt++;
 	}
-	return 0;
+	return cnt;
 }
 
 static int macvlan_fill_info(struct sk_buff *skb,
 				const struct net_device *dev)
 {
-	struct macvlan_dev *vlan = netdev_priv(dev);
+	const struct macvlan_dev *vlan = netdev_priv(dev);
 	struct macvlan_port *port = vlan->port;
-	int i;
-	struct nlattr *nest;
+	unsigned int macaddr_count = 0;
+	struct nlattr *nest, *attr;
+	int bc_cutoff, cnt, i;
 
-	if (nla_put_u32(skb, IFLA_MACVLAN_MODE, vlan->mode))
+	rcu_read_lock();
+	if (nla_put_u32(skb, IFLA_MACVLAN_MODE, READ_ONCE(vlan->mode)))
 		goto nla_put_failure;
-	if (nla_put_u16(skb, IFLA_MACVLAN_FLAGS, vlan->flags))
+
+	if (nla_put_u16(skb, IFLA_MACVLAN_FLAGS, READ_ONCE(vlan->flags)))
 		goto nla_put_failure;
-	if (nla_put_u32(skb, IFLA_MACVLAN_MACADDR_COUNT, vlan->macaddr_count))
+
+	attr = nla_reserve(skb, IFLA_MACVLAN_MACADDR_COUNT, sizeof(u32));
+	if (!attr)
 		goto nla_put_failure;
-	if (vlan->macaddr_count > 0) {
+
+	if (READ_ONCE(vlan->macaddr_count) > 0) {
 		nest = nla_nest_start_noflag(skb, IFLA_MACVLAN_MACADDR_DATA);
 		if (nest == NULL)
 			goto nla_put_failure;
 
 		for (i = 0; i < MACVLAN_HASH_SIZE; i++) {
-			if (macvlan_fill_info_macaddr(skb, vlan, i))
+			cnt = macvlan_fill_info_macaddr(skb, vlan, i);
+			if (cnt < 0)
 				goto nla_put_failure;
+			macaddr_count += cnt;
 		}
-		nla_nest_end(skb, nest);
+		if (!macaddr_count)
+			nla_nest_cancel(skb, nest);
+		else if (nla_nest_end_safe(skb, nest) < 0)
+			goto nla_put_failure;
 	}
-	if (nla_put_u32(skb, IFLA_MACVLAN_BC_QUEUE_LEN, vlan->bc_queue_len_req))
+	*(u32 *)nla_data(attr) = macaddr_count;
+
+	if (nla_put_u32(skb, IFLA_MACVLAN_BC_QUEUE_LEN,
+			READ_ONCE(vlan->bc_queue_len_req)))
 		goto nla_put_failure;
+
 	if (nla_put_u32(skb, IFLA_MACVLAN_BC_QUEUE_LEN_USED,
 			READ_ONCE(port->bc_queue_len_used)))
 		goto nla_put_failure;
-	if (port->bc_cutoff != 1 &&
-	    nla_put_s32(skb, IFLA_MACVLAN_BC_CUTOFF, port->bc_cutoff))
+
+	bc_cutoff = READ_ONCE(port->bc_cutoff);
+	if (bc_cutoff != 1 &&
+	    nla_put_s32(skb, IFLA_MACVLAN_BC_CUTOFF, bc_cutoff))
 		goto nla_put_failure;
+
+	rcu_read_unlock();
 	return 0;
 
 nla_put_failure:
+	rcu_read_unlock();
 	return -EMSGSIZE;
 }
 
