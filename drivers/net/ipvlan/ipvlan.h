@@ -96,7 +96,7 @@ struct ipvl_port {
 	u16			dev_id_start;
 	struct work_struct	wq;
 	struct sk_buff_head	backlog;
-	int			count;
+	refcount_t		count;
 	struct ida		ida;
 	netdevice_tracker	dev_tracker;
 };
