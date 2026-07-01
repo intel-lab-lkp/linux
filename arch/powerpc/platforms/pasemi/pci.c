@@ -25,6 +25,8 @@
 
 #define PA_PXP_CFA(bus, devfn, off) (((bus) << 20) | ((devfn) << 12) | (off))
 
+extern void nemo_init_IRQ(void);
+
 static inline int pa_pxp_offset_valid(u8 bus, u8 devfn, int offset)
 {
 	/* Device 0 Function 0 is special: It's config space spans function 1 as
@@ -264,6 +266,11 @@ static int __init pas_add_bridge(struct device_node *dev)
 	 * and does nothing on machines without one.
 	 */
 	isa_bridge_find_early(hose);
+
+	/*
+	 * ISA bridge is now active, add the i8259 cascade (if needed)
+	 */
+	nemo_init_IRQ();
 
 	return 0;
 }
