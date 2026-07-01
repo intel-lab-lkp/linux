@@ -888,6 +888,16 @@ void intel_display_driver_pm_resume(struct intel_display *display)
 	intel_display_power_enable(display);
 }
 
+void intel_display_driver_runtime_pm_enable(struct intel_display *display)
+{
+	intel_display_power_enable(display);
+}
+
+void intel_display_driver_runtime_pm_disable(struct intel_display *display)
+{
+	intel_display_power_disable(display);
+}
+
 /* before irq suspend */
 void intel_display_driver_pm_runtime_suspend(struct intel_display *display)
 {
