@@ -474,6 +474,7 @@ static int ax88179_write_cmd(struct usbnet *dev, u8 cmd, u16 value, u16 index,
 
 static void ax88179_status(struct usbnet *dev, struct urb *urb)
 {
+	struct ax88179_data *data = dev->driver_priv;
 	struct ax88179_int_data *event;
 	u32 link;
 
@@ -484,6 +485,9 @@ static void ax88179_status(struct usbnet *dev, struct urb *urb)
 	le32_to_cpus((void *)&event->intdata1);
 
 	link = (((__force u32)event->intdata1) & AX_INT_PPLS_LINK) >> 16;
+	data->speed = (((__force u32)event->intdata1) >> 8) & 0x7;
+	data->full_duplex = (((__force u32)event->intdata1) >> 12) & 0x1;
+	data->link = link;
 
 	if (netif_carrier_ok(dev->net) != link) {
 		usbnet_link_change(dev, link, 1);
