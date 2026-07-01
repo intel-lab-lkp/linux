@@ -529,9 +529,17 @@ struct drm_sched_job *drm_sched_entity_pop_job(struct drm_sched_entity *entity)
 	spin_lock(&entity->lock);
 	prev_last_scheduled = entity->last_scheduled;
 	entity->last_scheduled = dma_fence_get(&sched_job->s_fence->finished);
-	spin_unlock(&entity->lock);
 
+	/* Preceding cleanup work made it necessary to add the spinlock
+	 * to this function. spsc_queue, a lockless queue, is now
+	 * counterintuitively guarded by the lock as well. spsc_queue is queued
+	 * for removal (see DRM TODO list), so this somewhat serves as a
+	 * preparational step.
+	 *
+	 * TODO: Replace spsc_queue completely with a locked (h)list.
+	 */
 	spsc_queue_pop(&entity->job_queue);
+	spin_unlock(&entity->lock);
 
 	dma_fence_put(prev_last_scheduled);
 	drm_sched_rq_pop_entity(entity);
