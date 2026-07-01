@@ -2395,7 +2395,21 @@ smb3_enum_snapshots(const unsigned int xid, struct cifs_tcon *tcon,
 	return rc;
 }
 
-
+static void
+smb3_notify_invalidate_fid(struct cifsFileInfo *cfile,
+			   const struct cifs_fid *fid)
+{
+	mutex_lock(&cfile->notify_fid_mutex);
+	if (cfile->has_notify_fid &&
+	    cfile->notify_fid.persistent_fid == fid->persistent_fid &&
+	    cfile->notify_fid.volatile_fid == fid->volatile_fid) {
+		cfile->has_notify_fid = false;
+		memset(&cfile->notify_fid, 0, sizeof(cfile->notify_fid));
+		cifs_put_tlink(cfile->notify_tlink);
+		cfile->notify_tlink = NULL;
+	}
+	mutex_unlock(&cfile->notify_fid_mutex);
+}
 
 static int
 smb3_notify(const unsigned int xid, struct file *pfile,
@@ -2418,6 +2432,7 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 	u8 oplock = SMB2_OPLOCK_LEVEL_NONE;
 	int rc = 0;
 	__u32 ret_len = 0;
+	bool retry = false;
 
 	if (return_changes) {
 		if (copy_from_user(&notify, ioc_buf, sizeof(struct smb3_notify_info))) {
@@ -2448,6 +2463,7 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 		cfile = pfile->private_data;
 	}
 
+retry_notify:
 	mutex_lock(&cfile->notify_fid_mutex);
 	if (!cfile->has_notify_fid) {
 		page = alloc_dentry_path();
@@ -2498,7 +2514,23 @@ notify_unlock:
 	rc = SMB2_change_notify(xid, tcon, fid.persistent_fid, fid.volatile_fid,
 				notify.watch_tree, notify.completion_filter,
 				notify.data_len, &returned_ioctl_info, &ret_len);
+	if (rc == -EBADF) {
+		smb3_notify_invalidate_fid(cfile, &fid);
+		if (retry)
+			goto notify_done;
 
+		kfree(returned_ioctl_info);
+		returned_ioctl_info = NULL;
+		free_dentry_path(page);
+		page = NULL;
+		kfree(utf16_path);
+		utf16_path = NULL;
+		ret_len = 0;
+		retry = true;
+		goto retry_notify;
+	}
+
+notify_done:
 	cifs_dbg(FYI, "change notify for %pd rc %d\n", dentry, rc);
 	if (return_changes && (ret_len > 0) && (notify.data_len > 0)) {
 		if (ret_len > notify.data_len)
