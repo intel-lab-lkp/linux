@@ -956,6 +956,71 @@ static int ax88179_set_link_ksettings(struct net_device *net,
 	return mii_ethtool_set_link_ksettings(&dev->mii, cmd);
 }
 
+static void ax88179a_get_pauseparam(struct net_device *net, struct ethtool_pauseparam *pause)
+{
+	struct usbnet *dev = netdev_priv(net);
+	struct ax88179_data *data;
+	u16 bmcr, lcladv, rmtadv;
+	u8 cap;
+
+	data = dev->driver_priv;
+
+	if (data->chip_version < AX_VERSION_AX88179A)
+		return;
+
+	bmcr = ax88179_mdio_read(net, dev->mii.phy_id, MII_BMCR);
+	lcladv = ax88179_mdio_read(net, dev->mii.phy_id, MII_ADVERTISE);
+	rmtadv = ax88179_mdio_read(net, dev->mii.phy_id, MII_LPA);
+
+	if (!(bmcr & BMCR_ANENABLE)) {
+		pause->autoneg = 0;
+		pause->rx_pause = 0;
+		pause->tx_pause = 0;
+		return;
+	}
+
+	pause->autoneg = 1;
+
+	cap = mii_resolve_flowctrl_fdx(lcladv, rmtadv);
+
+	if (cap & FLOW_CTRL_RX)
+		pause->rx_pause = 1;
+
+	if (cap & FLOW_CTRL_TX)
+		pause->tx_pause = 1;
+}
+
+static int ax88179a_set_pauseparam(struct net_device *net, struct ethtool_pauseparam *pause)
+{
+	struct usbnet *dev = netdev_priv(net);
+	struct ax88179_data *data;
+	u16 old, new1, bmcr;
+	u8 cap = 0;
+
+	data = dev->driver_priv;
+
+	if (data->chip_version < AX_VERSION_AX88179A)
+		return -EOPNOTSUPP;
+
+	bmcr = ax88179_mdio_read(net, dev->mii.phy_id, MII_BMCR);
+	if (pause->autoneg && !(bmcr & BMCR_ANENABLE))
+		return -EINVAL;
+
+	if (pause->rx_pause)
+		cap |= FLOW_CTRL_RX;
+
+	if (pause->tx_pause)
+		cap |= FLOW_CTRL_TX;
+
+	old = ax88179_mdio_read(net, dev->mii.phy_id, MII_ADVERTISE);
+	new1 = (old & ~(ADVERTISE_PAUSE_CAP | ADVERTISE_PAUSE_ASYM)) |
+		mii_advertise_flowctrl(cap);
+	if (old != new1)
+		ax88179_mdio_write(net, dev->mii.phy_id, MII_ADVERTISE, new1);
+
+	return mii_nway_restart(&dev->mii);
+}
+
 static int
 ax88179_ethtool_get_eee(struct usbnet *dev, struct ethtool_keee *data)
 {
@@ -1130,6 +1195,8 @@ static const struct ethtool_ops ax88179_ethtool_ops = {
 	.nway_reset		= usbnet_nway_reset,
 	.get_link_ksettings	= ax88179_get_link_ksettings,
 	.set_link_ksettings	= ax88179_set_link_ksettings,
+	.get_pauseparam		= ax88179a_get_pauseparam,
+	.set_pauseparam		= ax88179a_set_pauseparam,
 	.get_ts_info		= ethtool_op_get_ts_info,
 };
 
