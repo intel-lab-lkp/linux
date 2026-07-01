@@ -274,6 +274,9 @@ struct trace_probe {
 	ssize_t				size;	/* trace entry size */
 	unsigned int			nr_args;
 	struct probe_entry_arg		*entry_arg;	/* This is only for return probe */
+#ifdef CONFIG_BPF_SYSCALL
+	struct bpf_prog			*prog;
+#endif
 	struct probe_arg		args[];
 };
 
@@ -298,6 +301,7 @@ static inline void trace_probe_set_flag(struct trace_probe *tp,
 {
 	smp_store_release(&tp->event->flags, tp->event->flags | flag);
 }
+
 
 static inline void trace_probe_clear_flag(struct trace_probe *tp,
 					  unsigned int flag)
@@ -631,3 +635,14 @@ struct uprobe_dispatch_data {
 	struct trace_uprobe	*tu;
 	unsigned long		bp_addr;
 };
+
+#ifdef CONFIG_BPF_SYSCALL
+#include <linux/filter.h>
+
+struct fetch_bpf_ctx {
+	void *rec;
+	void *edata;
+	void *data;
+	void *base;
+};
+#endif

@@ -273,6 +273,19 @@ store_trace_args(void *data, struct trace_probe *tp, void *rec, void *edata,
 	u32 *dl;	/* Data location */
 	int ret, i;
 
+#ifdef CONFIG_BPF_SYSCALL
+	if (tp->prog) {
+		struct fetch_bpf_ctx ctx = {
+			.rec = rec,
+			.edata = edata,
+			.data = data,
+			.base = base,
+		};
+		bpf_prog_run(tp->prog, &ctx);
+		return;
+	}
+#endif
+
 	for (i = 0; i < tp->nr_args; i++) {
 		arg = tp->args + i;
 		dl = data + arg->offset;
