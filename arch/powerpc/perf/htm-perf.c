@@ -66,6 +66,23 @@ static const struct attribute_group *attr_groups[] = {
 
 static u64 htmflags = H_HTM_FLAGS_NOWRAP;
 
+struct htm_pmu_buf {
+	int     nr_pages;
+	bool    snapshot;
+	void     *base;
+	u64     size;
+	u64     head;
+	u64     head_size;
+	bool    full;
+	int	htm_stopped;
+	int	collect_htm_trace;
+};
+
+struct htm_pmu_ctx {
+	struct perf_output_handle handle;
+};
+
+static DEFINE_PER_CPU(struct htm_pmu_ctx, htm_pmu_ctx);
 /*
  * Check the return code for H_HTM hcall.
  * Return non-zero value (1) if either H_PARTIAL or H_SUCCESS
@@ -124,6 +141,74 @@ static ssize_t htm_return_check(int rc)
 	return 1;
 out:
 	return -EINVAL;
+}
+
+static int htm_dump_sample_data(struct perf_event *event)
+{
+	struct htm_pmu_ctx *htm_ctx = this_cpu_ptr(&htm_pmu_ctx);
+	struct htm_pmu_buf *aux_buf;
+	u64 config = event->attr.config;
+	u32 htmtype, nodeindex, nodalchipindex, coreindexonchip;
+	long rc;
+	int ret = 0;
+	int retries = 0;
+
+	htmtype = config & 0xf;
+	nodeindex = (config >> 4) & 0xff;
+	nodalchipindex = (config >> 12) & 0xff;
+	coreindexonchip = (config >> 20) & 0xff;
+
+	aux_buf = perf_aux_output_begin(&htm_ctx->handle, event);
+	if (!aux_buf)
+		return -1;
+
+	if (!aux_buf->collect_htm_trace) {
+		perf_aux_output_end(&htm_ctx->handle, 0);
+		return 0;
+	}
+
+	if (!aux_buf->htm_stopped) {
+		do {
+			rc = htm_hcall_wrapper(htmflags, nodeindex, nodalchipindex, coreindexonchip,
+				htmtype, H_HTM_OP_STOP, 0, 0, 0);
+			ret = htm_return_check(rc);
+		} while (ret == -EBUSY && ++retries < 100);
+
+		if (ret > 0) {
+			/* HTM stopped trace collection */
+			aux_buf->htm_stopped = 1;
+		} else {
+			/* Failed to stop tracing, don't proceed to trace collection */
+			perf_aux_output_end(&htm_ctx->handle, 0);
+			return ret;
+		}
+		/* Reset the retries */
+		retries = 0;
+	}
+
+	/*
+	 * Invoke H_HTM call with:
+	 * - operation as htm dump (H_HTM_OP_DUMP_DATA)
+	 * - last three values are address, size and offset
+	 */
+	if (aux_buf->collect_htm_trace) {
+		do {
+			rc = htm_hcall_wrapper(htmflags, nodeindex, nodalchipindex, coreindexonchip,
+				htmtype, H_HTM_OP_DUMP_DATA, virt_to_phys(aux_buf->base),
+				(aux_buf->nr_pages * PAGE_SIZE), aux_buf->head);
+			ret = htm_return_check(rc);
+		} while (ret == -EBUSY && ++retries < 100);
+
+		if (ret > 0) {
+			aux_buf->head += (aux_buf->nr_pages * PAGE_SIZE);
+			perf_aux_output_end(&htm_ctx->handle, (aux_buf->nr_pages * PAGE_SIZE));
+		} else {
+			aux_buf->collect_htm_trace = 0;
+			perf_aux_output_end(&htm_ctx->handle, 0);
+		}
+	}
+
+	return ret;
 }
 
 static int htm_event_init(struct perf_event *event)
@@ -262,7 +347,77 @@ static void htm_event_del(struct perf_event *event, int flags)
  */
 static void htm_event_read(struct perf_event *event)
 {
-	return;
+	int ret;
+
+	if (event->state != PERF_EVENT_STATE_ACTIVE)
+		return;
+
+	ret = htm_dump_sample_data(event);
+
+	if (ret <= 0)
+		local64_set(&event->count, 0);
+	else
+		local64_set(&event->count, 1);
+}
+
+/*
+ * Set up pmu-private data structures for an AUX area
+ * **pages contains the aux buffer allocated for this event
+ * for the corresponding cpu. rb_alloc_aux uses "alloc_pages_node"
+ * and returns pointer to each page address. Map these pages to
+ * contiguous space using vmap and use that as base address.
+ *
+ * The aux private data structure ie, "struct htm_pmu_buf" mainly
+ * saves
+ * - buf->base: aux buffer base address
+ * - buf->head: offset from base address where data will be written to.
+ * - buf->size: Size of allocated memory
+ */
+static void *htm_setup_aux(struct perf_event *event, void **pages,
+		int nr_pages, bool snapshot)
+{
+	int cpu = event->cpu;
+	struct htm_pmu_buf *buf;
+
+	/* We need at least one page for this to work. */
+	if (!nr_pages)
+		return NULL;
+
+	if (cpu == -1)
+		cpu = raw_smp_processor_id();
+
+	buf = kzalloc_node(sizeof(*buf), GFP_KERNEL, cpu_to_node(cpu));
+	if (!buf)
+		return NULL;
+
+	buf->base = pages[0];
+
+	if (!buf->base) {
+		kfree(buf);
+		return NULL;
+	}
+
+	buf->nr_pages = nr_pages;
+	buf->snapshot = false;
+	buf->size = nr_pages << PAGE_SHIFT;
+	buf->head = 0;
+	buf->head_size = 0;
+	buf->htm_stopped = 0;
+	buf->collect_htm_trace = 1;
+	return buf;
+}
+
+/*
+ * free pmu-private AUX data structures
+ */
+static void htm_free_aux(void *aux)
+{
+	struct htm_pmu_buf *buf = aux;
+
+	if (!buf)
+		return;
+
+	kfree(buf);
 }
 
 static void htm_event_start(struct perf_event *event, int flags)
@@ -284,7 +439,10 @@ static struct pmu htm_pmu = {
 	.read        = htm_event_read,
 	.start	     = htm_event_start,
 	.stop	     = htm_event_stop,
-	.capabilities = PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_EXCLUSIVE,
+	.setup_aux   = htm_setup_aux,
+	.free_aux    = htm_free_aux,
+	.capabilities = PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_EXCLUSIVE
+			| PERF_PMU_CAP_AUX_NO_SG | PERF_PMU_CAP_AUX_PREFER_LARGE,
 };
 
 static int htm_init(void)
