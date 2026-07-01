@@ -31,6 +31,56 @@ static struct buffer_head *omfs_get_bucket(struct inode *dir,
 	return omfs_bread(dir->i_sb, dir->i_ino);
 }
 
+static int omfs_get_sibling(struct inode *dir, u64 block, u64 *sibling)
+{
+	struct buffer_head *bh;
+	struct omfs_inode *oi;
+
+	bh = omfs_bread(dir->i_sb, block);
+	if (!bh)
+		return -EIO;
+
+	oi = (struct omfs_inode *)bh->b_data;
+	if (omfs_is_bad(OMFS_SB(dir->i_sb), &oi->i_head, block)) {
+		brelse(bh);
+		return -EIO;
+	}
+
+	*sibling = be64_to_cpu(oi->i_sibling);
+	brelse(bh);
+	return 0;
+}
+
+static int omfs_check_chain_cycle(struct inode *dir, u64 *slow, u64 *fast)
+{
+	int err;
+
+	if (*fast == ~0)
+		return 0;
+
+	err = omfs_get_sibling(dir, *fast, fast);
+	if (err)
+		return err;
+
+	if (*fast == ~0)
+		return 0;
+
+	err = omfs_get_sibling(dir, *fast, fast);
+	if (err)
+		return err;
+
+	if (*slow != ~0) {
+		err = omfs_get_sibling(dir, *slow, slow);
+		if (err)
+			return err;
+	}
+
+	if (*slow != ~0 && *slow == *fast)
+		return -ELOOP;
+
+	return 0;
+}
+
 static struct buffer_head *omfs_scan_list(struct inode *dir, u64 block,
 				const char *name, int namelen,
 				u64 *prev_block)
@@ -38,6 +88,8 @@ static struct buffer_head *omfs_scan_list(struct inode *dir, u64 block,
 	struct buffer_head *bh;
 	struct omfs_inode *oi;
 	int err = -ENOENT;
+	u64 slow = block;
+	u64 fast = block;
 	*prev_block = ~0;
 
 	while (block != ~0) {
@@ -59,6 +111,10 @@ static struct buffer_head *omfs_scan_list(struct inode *dir, u64 block,
 		*prev_block = block;
 		block = be64_to_cpu(oi->i_sibling);
 		brelse(bh);
+
+		err = omfs_check_chain_cycle(dir, &slow, &fast);
+		if (err)
+			goto err;
 	}
 err:
 	return ERR_PTR(err);
@@ -331,12 +387,15 @@ static bool omfs_fill_chain(struct inode *dir, struct dir_context *ctx,
 		u64 fsblock, int hindex)
 {
 	/* follow chain in this bucket */
+	u64 slow = fsblock;
+	u64 fast = fsblock;
 	while (fsblock != ~0) {
-		struct buffer_head *bh = omfs_bread(dir->i_sb, fsblock);
+		struct buffer_head *bh;
 		struct omfs_inode *oi;
 		u64 self;
 		unsigned char d_type;
 
+		bh = omfs_bread(dir->i_sb, fsblock);
 		if (!bh)
 			return true;
 
@@ -366,6 +425,9 @@ static bool omfs_fill_chain(struct inode *dir, struct dir_context *ctx,
 		}
 		brelse(bh);
 		ctx->pos++;
+
+		if (omfs_check_chain_cycle(dir, &slow, &fast))
+			return true;
 	}
 	return true;
 }
