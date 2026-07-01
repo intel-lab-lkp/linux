@@ -11,6 +11,8 @@
 #include "../disasm.h"
 #include "../annotate-data.h"
 #include "../debug.h"
+#include "../map.h"
+#include "../symbol.h"
 
 struct arch_arm64 {
 	struct arch arch;
@@ -357,6 +359,7 @@ static void adjust_reg_index_state(struct type_state *state,
 }
 
 static void update_load_insn_state(struct type_state *state,
+				   struct data_loc_info *dloc,
 				   struct disasm_line *dl,
 				   struct annotated_op_loc *src,
 				   struct annotated_op_loc *dst)
@@ -368,6 +371,8 @@ static void update_load_insn_state(struct type_state *state,
 	int reg_offset;
 	int sreg = src->reg1;
 	int dreg = dst->reg1;
+	int fbreg = dloc->fbreg;
+	int fboff = 0;
 
 	if (!has_reg_type(state, dreg))
 		goto out_adjust;
@@ -375,7 +380,52 @@ static void update_load_insn_state(struct type_state *state,
 	tsr = &state->regs[dreg];
 	tsr->copied_from = -1;
 
+	if (dloc->fb_cfa) {
+		u64 ip = dloc->ms->sym->start + dl->al.offset;
+		u64 pc = map__rip_2objdump(dloc->ms->map, ip);
+
+		if (die_get_cfa(dloc->di->dbg, pc, &fbreg, &fboff) < 0)
+			fbreg = -1;
+	}
+
 retry:
+	/* Check stack variables with offset */
+	if (sreg == fbreg || sreg == state->stack_reg) {
+		struct type_state_stack *stack;
+		int offset = src->offset - fboff;
+
+		stack = find_stack_state(state, offset);
+		if (stack == NULL) {
+			invalidate_reg_state(tsr);
+			goto out_adjust;
+		} else if (!stack->compound) {
+			tsr->type = stack->type;
+			tsr->kind = stack->kind;
+			tsr->offset = stack->ptr_offset;
+			tsr->ok = true;
+		} else if (die_get_member_type(&stack->type,
+					       offset - stack->offset,
+					       &type_die)) {
+			tsr->type = type_die;
+			tsr->kind = TSR_KIND_TYPE;
+			tsr->offset = 0;
+			tsr->ok = true;
+		} else {
+			invalidate_reg_state(tsr);
+			goto out_adjust;
+		}
+
+		if (sreg == fbreg) {
+			pr_debug_dtp("ldr [%x] -%#x(stack) -> reg%d",
+				     insn_offset, -offset, dreg);
+		} else {
+			pr_debug_dtp("ldr [%x] %#x(reg%d) -> reg%d",
+				     insn_offset, offset, sreg, dreg);
+		}
+		pr_debug_type_name(&tsr->type, tsr->kind);
+		goto out_adjust;
+	}
+
 	if (!has_reg_type(state, sreg) || !state->regs[sreg].ok) {
 		invalidate_reg_state(tsr);
 		return;
@@ -413,6 +463,70 @@ out_adjust:
 	adjust_reg_index_state(state, src, "ldr", insn_offset);
 }
 
+static void update_store_insn_state(struct type_state *state,
+				    struct data_loc_info *dloc,
+				    struct disasm_line *dl,
+				    struct annotated_op_loc *src,
+				    struct annotated_op_loc *dst)
+{
+	struct type_state_reg *tsr;
+	u32 insn_offset = dl->al.offset;
+	int sreg = src->reg1;
+	int dreg = dst->reg1;
+	int fbreg = dloc->fbreg;
+	int fboff = 0;
+
+	if (!has_reg_type(state, sreg) || !state->regs[sreg].ok)
+		goto out_adjust;
+
+	if (dloc->fb_cfa) {
+		u64 ip = dloc->ms->sym->start + dl->al.offset;
+		u64 pc = map__rip_2objdump(dloc->ms->map, ip);
+
+		if (die_get_cfa(dloc->di->dbg, pc, &fbreg, &fboff) < 0)
+			fbreg = -1;
+	}
+
+	/* Check stack variables with offset */
+	if (dreg == fbreg || dreg == state->stack_reg) {
+		struct type_state_stack *stack;
+		int offset = dst->offset - fboff;
+
+		tsr = &state->regs[sreg];
+
+		stack = find_stack_state(state, offset);
+		if (stack) {
+			if (!stack->compound)
+				set_stack_state(stack, offset, tsr->kind,
+						&tsr->type, tsr->offset);
+		} else {
+			findnew_stack_state(state, offset, tsr->kind,
+					    &tsr->type, tsr->offset);
+		}
+
+		if (dst->reg1 == fbreg) {
+			pr_debug_dtp("str [%x] reg%d -> -%#x(stack)",
+				     insn_offset, sreg, -offset);
+		} else {
+			pr_debug_dtp("str [%x] reg%d -> %#x(reg%d)",
+				     insn_offset, sreg, offset, dreg);
+		}
+		if (tsr->offset != 0) {
+			pr_debug_dtp(" reg%d offset %#x ->",
+				     sreg, tsr->offset);
+		}
+		pr_debug_type_name(&tsr->type, tsr->kind);
+	}
+
+out_adjust:
+	/*
+	 * Store instructions do not change the register type,
+	 * but the base register must be updated for pre/post-index
+	 * modes.
+	 */
+	adjust_reg_index_state(state, dst, "str", insn_offset);
+}
+
 static void update_insn_state_arm64(struct type_state *state,
 				    struct data_loc_info *dloc, Dwarf_Die *cu_die __maybe_unused,
 				    struct disasm_line *dl)
@@ -439,18 +553,14 @@ static void update_insn_state_arm64(struct type_state *state,
 
 	/* Memory to register transfers */
 	if (!strncmp(dl->ins.name, "ld", 2)) {
-		update_load_insn_state(state, dl, src, dst);
+		update_load_insn_state(state, dloc, dl, src, dst);
 		return;
 	}
 
 	/* Register to memory transfers */
 	if (!strncmp(dl->ins.name, "st", 2)) {
-		/*
-		 * Store instructions do not change the register type,
-		 * but the base register must be updated for pre/post-index
-		 * modes.
-		 */
-		adjust_reg_index_state(state, dst, "str", insn_offset);
+		update_store_insn_state(state, dloc, dl, src, dst);
+		return;
 	}
 }
 #endif
