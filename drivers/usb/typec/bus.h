@@ -23,6 +23,8 @@ struct altmode {
 
 	struct altmode			*partner;
 	struct altmode			*plug[2];
+
+	bool				module_hold;
 };
 
 #define to_altmode(d) container_of(d, struct altmode, adev)

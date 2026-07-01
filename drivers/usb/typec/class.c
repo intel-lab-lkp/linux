@@ -299,16 +299,31 @@ static void typec_altmode_put_partner(struct altmode *altmode)
  */
 void typec_altmode_update_active(struct typec_altmode *adev, bool active)
 {
+	struct altmode *alt = to_altmode(adev);
 	char dir[6];
 
 	if (adev->active == active)
 		return;
 
+	/*
+	 * A partner/plug alternate mode pins its driver's module while the
+	 * mode is active. The driver bind/unbind and the active state change
+	 * are not serialised: the driver may be (un)bound between the enter
+	 * and exit updates, and try_module_get() can fail if the module is
+	 * already going away. Track whether a reference is actually held so
+	 * the get and put always balance instead of underflowing module
+	 * refcounts.
+	 */
 	if (!is_typec_port(adev->dev.parent) && adev->dev.driver) {
-		if (!active)
-			module_put(adev->dev.driver->owner);
-		else
-			WARN_ON(!try_module_get(adev->dev.driver->owner));
+		if (!active) {
+			if (alt->module_hold) {
+				module_put(adev->dev.driver->owner);
+				alt->module_hold = false;
+			}
+		} else if (!alt->module_hold) {
+			alt->module_hold = try_module_get(adev->dev.driver->owner);
+			WARN_ON(!alt->module_hold);
+		}
 	}
 
 	adev->active = active;
