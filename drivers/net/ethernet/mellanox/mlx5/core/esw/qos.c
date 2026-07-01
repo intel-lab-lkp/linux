@@ -1139,18 +1139,10 @@ static void mlx5_esw_qos_vport_disable_locked(struct mlx5_vport *vport)
 void mlx5_esw_qos_vport_disable(struct mlx5_vport *vport)
 {
 	struct mlx5_eswitch *esw = vport->dev->priv.eswitch;
-	struct mlx5_esw_sched_node *parent;
 
 	lockdep_assert_held(&esw->state_lock);
 	esw_qos_lock(esw);
-	if (!vport->qos.sched_node)
-		goto unlock;
-
-	parent = vport->qos.sched_node->parent;
-	WARN(parent, "Disabling QoS on port before detaching it from node");
-
 	mlx5_esw_qos_vport_disable_locked(vport);
-unlock:
 	esw_qos_unlock(esw);
 }
 
@@ -1866,8 +1858,10 @@ int mlx5_esw_devlink_rate_node_del(struct devlink_rate *rate_node, void *priv,
 	return 0;
 }
 
-int mlx5_esw_qos_vport_update_parent(struct mlx5_vport *vport, struct mlx5_esw_sched_node *parent,
-				     struct netlink_ext_ack *extack)
+static int
+mlx5_esw_qos_vport_update_parent(struct mlx5_vport *vport,
+				 struct mlx5_esw_sched_node *parent,
+				 struct netlink_ext_ack *extack)
 {
 	struct mlx5_eswitch *esw = vport->dev->priv.eswitch;
 	int err = 0;
