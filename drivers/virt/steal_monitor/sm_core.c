@@ -84,6 +84,9 @@ static void compute_preferred_cpus_work(struct work_struct *work)
 	/* At least one core is kept as preferred */
 	WARN_ON(cpumask_empty(cpu_preferred_mask));
 
+	/* Maintain design construct */
+	WARN_ON(!cpumask_subset(cpu_preferred_mask, cpu_active_mask));
+
 	/* Warn if interval_ms is set to 0, that might cause lockup. */
 	if (unlikely(sm_core_ctx.interval_ms == 0)) {
 		WARN_ON(1);
