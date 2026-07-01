@@ -277,7 +277,7 @@ static void macvlan_broadcast(struct sk_buff *skb,
 		return;
 
 	hash_for_each_rcu(port->vlan_hash, i, vlan, hlist) {
-		if (vlan->dev == src || !(vlan->mode & mode))
+		if (vlan->dev == src || !(READ_ONCE(vlan->mode) & mode))
 			continue;
 
 		hash = mc_hash(vlan, eth->h_dest);
@@ -306,7 +306,7 @@ static void macvlan_multicast_rx(const struct macvlan_port *port,
 				  MACVLAN_MODE_VEPA    |
 				  MACVLAN_MODE_PASSTHRU|
 				  MACVLAN_MODE_BRIDGE);
-	else if (src->mode == MACVLAN_MODE_VEPA)
+	else if (READ_ONCE(src->mode) == MACVLAN_MODE_VEPA)
 		/* flood to everyone except source */
 		macvlan_broadcast(skb, port, src->dev,
 				  MACVLAN_MODE_VEPA |
@@ -447,7 +447,7 @@ static bool macvlan_forward_source(struct sk_buff *skb,
 			if (!vlan)
 				continue;
 
-			if (vlan->flags & MACVLAN_FLAG_NODST)
+			if (READ_ONCE(vlan->flags) & MACVLAN_FLAG_NODST)
 				consume = true;
 			macvlan_forward_source_one(skb, vlan);
 		}
@@ -487,14 +487,18 @@ static rx_handler_result_t macvlan_handle_frame(struct sk_buff **pskb)
 			return RX_HANDLER_CONSUMED;
 		}
 		src = macvlan_hash_lookup(port, eth->h_source);
-		if (src && src->mode != MACVLAN_MODE_VEPA &&
-		    src->mode != MACVLAN_MODE_BRIDGE) {
-			/* forward to original port. */
-			vlan = src;
-			ret = macvlan_broadcast_one(skb, vlan, eth, 0) ?:
-			      __netif_rx(skb);
-			handle_res = RX_HANDLER_CONSUMED;
-			goto out;
+		if (src) {
+			enum macvlan_mode mode = READ_ONCE(src->mode);
+
+			if (mode != MACVLAN_MODE_VEPA &&
+			    mode != MACVLAN_MODE_BRIDGE) {
+				/* forward to original port. */
+				vlan = src;
+				ret = macvlan_broadcast_one(skb, vlan, eth, 0) ?:
+				      __netif_rx(skb);
+				handle_res = RX_HANDLER_CONSUMED;
+				goto out;
+			}
 		}
 
 		hash = mc_hash(NULL, eth->h_dest);
@@ -515,7 +519,7 @@ static rx_handler_result_t macvlan_handle_frame(struct sk_buff **pskb)
 					      struct macvlan_dev, list);
 	else
 		vlan = macvlan_hash_lookup(port, eth->h_dest);
-	if (!vlan || vlan->mode == MACVLAN_MODE_SOURCE)
+	if (!vlan || READ_ONCE(vlan->mode) == MACVLAN_MODE_SOURCE)
 		return RX_HANDLER_PASS;
 
 	dev = vlan->dev;
@@ -548,7 +552,7 @@ static int macvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 	const struct macvlan_port *port = vlan->port;
 	const struct macvlan_dev *dest;
 
-	if (vlan->mode == MACVLAN_MODE_BRIDGE) {
+	if (READ_ONCE(vlan->mode) == MACVLAN_MODE_BRIDGE) {
 		const struct ethhdr *eth = skb_eth_hdr(skb);
 
 		/* send to other bridge ports directly */
@@ -559,7 +563,7 @@ static int macvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 
 		dest = macvlan_hash_lookup(port, eth->h_dest);
-		if (dest && dest->mode == MACVLAN_MODE_BRIDGE) {
+		if (dest && READ_ONCE(dest->mode) == MACVLAN_MODE_BRIDGE) {
 			/* send to lowerdev first for its network taps */
 			dev_forward_skb(vlan->lowerdev, skb);
 
@@ -777,7 +781,7 @@ static int macvlan_set_mac_address(struct net_device *dev, void *p)
 	if (ether_addr_equal(dev->dev_addr, addr->__data))
 		return 0;
 
-	if (vlan->mode == MACVLAN_MODE_PASSTHRU) {
+	if (READ_ONCE(vlan->mode) == MACVLAN_MODE_PASSTHRU) {
 		macvlan_set_addr_change(vlan->port);
 		return dev_set_mac_address(vlan->lowerdev, addr, NULL);
 	}
@@ -1645,7 +1649,7 @@ static int macvlan_changelink(struct net_device *dev,
 			if (err < 0)
 				return err;
 		}
-		vlan->flags = flags;
+		WRITE_ONCE(vlan->flags, flags);
 	}
 
 	if (data && data[IFLA_MACVLAN_BC_QUEUE_LEN]) {
@@ -1658,7 +1662,7 @@ static int macvlan_changelink(struct net_device *dev,
 			vlan, nla_get_s32(data[IFLA_MACVLAN_BC_CUTOFF]));
 
 	if (set_mode)
-		vlan->mode = mode;
+		WRITE_ONCE(vlan->mode, mode);
 	if (data && data[IFLA_MACVLAN_MACADDR_MODE]) {
 		if (vlan->mode != MACVLAN_MODE_SOURCE)
 			return -EINVAL;
