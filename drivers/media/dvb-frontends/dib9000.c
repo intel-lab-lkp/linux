@@ -390,7 +390,7 @@ static inline int dib9000_write_word_attr(struct dib9000_state *state, u16 reg, 
 #define dib9000_write16_noinc_attr(state, reg, buf, len, attribute) dib9000_write16_attr(state, reg, buf, len, DATA_BUS_ACCESS_MODE_NO_ADDRESS_INCREMENT | (attribute))
 
 #define dib9000_mbx_send(state, id, data, len) dib9000_mbx_send_attr(state, id, data, len, 0)
-#define dib9000_mbx_get_message(state, id, msg, len) dib9000_mbx_get_message_attr(state, id, msg, len, 0)
+#define dib9000_mbx_get_message(state, id, msg, len, words) dib9000_mbx_get_message_attr(state, id, msg, len, words, 0)
 
 #define MAC_IRQ      (1 << 1)
 #define IRQ_POL_MSK  (1 << 4)
@@ -725,7 +725,7 @@ static int dib9000_mbx_process(struct dib9000_state *state, u16 attr)
 	return ret;
 }
 
-static int dib9000_mbx_get_message_attr(struct dib9000_state *state, u16 id, u16 * msg, u8 * size, u16 attr)
+static int dib9000_mbx_get_message_attr(struct dib9000_state *state, u16 id, u16 *msg, u8 *size, u16 msg_words, u16 attr)
 {
 	u8 i;
 	u16 *block;
@@ -738,6 +738,10 @@ static int dib9000_mbx_get_message_attr(struct dib9000_state *state, u16 id, u16
 			block = state->platform.risc.message_cache[i];
 			if ((*block >> 8) == id) {
 				*size = (*block & 0xff) - 1;
+				if (*size > msg_words) {
+					*block = 0;
+					return -1;
+				}
 				memcpy(msg, block + 1, (*size) * 2);
 				*block = 0;	/* free the block */
 				i = 0;	/* signal that we found a message */
@@ -770,7 +774,7 @@ static int dib9000_risc_check_version(struct dib9000_state *state)
 	if (dib9000_mbx_send(state, OUT_MSG_REQ_VERSION, &fw_version, 1) != 0)
 		return -EIO;
 
-	if (dib9000_mbx_get_message(state, IN_MSG_VERSION, (u16 *) r, &size) < 0)
+	if (dib9000_mbx_get_message(state, IN_MSG_VERSION, (u16 *) r, &size, sizeof(r) / sizeof(u16)) < 0)
 		return -EIO;
 
 	fw_version = (r[0] << 8) | r[1];
@@ -1022,7 +1026,7 @@ static int dib9000_risc_apb_access_read(struct dib9000_state *state, u32 address
 	mb[0] = (u16) address;
 	mb[1] = len / 2;
 	dib9000_mbx_send_attr(state, OUT_MSG_BRIDGE_APB_R, mb, 2, attribute);
-	switch (dib9000_mbx_get_message_attr(state, IN_MSG_END_BRIDGE_APB_RW, mb, &s, attribute)) {
+	switch (dib9000_mbx_get_message_attr(state, IN_MSG_END_BRIDGE_APB_RW, mb, &s, ARRAY_SIZE(mb), attribute)) {
 	case 1:
 		s--;
 		for (i = 0; i < s; i++) {
@@ -1056,7 +1060,7 @@ static int dib9000_risc_apb_access_write(struct dib9000_state *state, u32 addres
 		mb[1 + len / 2] = b[len - 1] << 8;
 
 	dib9000_mbx_send_attr(state, OUT_MSG_BRIDGE_APB_W, mb, (3 + len) / 2, attribute);
-	return dib9000_mbx_get_message_attr(state, IN_MSG_END_BRIDGE_APB_RW, mb, &s, attribute) == 1 ? 0 : -EINVAL;
+	return dib9000_mbx_get_message_attr(state, IN_MSG_END_BRIDGE_APB_RW, mb, &s, ARRAY_SIZE(mb), attribute) == 1 ? 0 : -EINVAL;
 }
 
 static int dib9000_fw_memmbx_sync(struct dib9000_state *state, u8 i)
@@ -1135,7 +1139,7 @@ static int dib9000_fw_init(struct dib9000_state *state)
 	if (dib9000_mbx_send(state, OUT_MSG_FE_FW_DL, NULL, 0) != 0)
 		return -EIO;
 
-	if (dib9000_mbx_get_message(state, IN_MSG_FE_FW_DL_DONE, b, &size) < 0)
+	if (dib9000_mbx_get_message(state, IN_MSG_FE_FW_DL_DONE, b, &size, ARRAY_SIZE(b)) < 0)
 		return -EIO;
 
 	if (size > ARRAY_SIZE(b)) {
