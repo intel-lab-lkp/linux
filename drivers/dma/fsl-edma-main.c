@@ -671,8 +671,8 @@ static void fsl_edma3_detach_pd(struct fsl_edma_engine *fsl_edma)
 			fsl_chan->pd_dev_link = NULL;
 		}
 		if (fsl_chan->pd_dev) {
-			dev_pm_domain_detach(fsl_chan->pd_dev, false);
 			pm_runtime_set_suspended(fsl_chan->pd_dev);
+			dev_pm_domain_detach(fsl_chan->pd_dev, false);
 		}
 	}
 }
