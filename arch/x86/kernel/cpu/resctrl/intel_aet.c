@@ -25,8 +25,8 @@
 #include <linux/intel_vsec.h>
 #include <linux/io.h>
 #include <linux/minmax.h>
-#include <linux/mutex.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
@@ -310,7 +310,7 @@ static void (*put_feature)(struct pmt_feature_group *p);
  * struct pmt_feature_group to indicate that its events are successfully
  * enabled.
  */
-bool intel_aet_get_events(void)
+static bool aet_get_events(void)
 {
 	struct pmt_feature_group *p;
 	enum pmt_feature_id pfid;
@@ -319,14 +319,14 @@ bool intel_aet_get_events(void)
 
 	for_each_event_group(peg) {
 		pfid = lookup_pfid((*peg)->pfname);
-		p = intel_pmt_get_regions_by_feature(pfid);
+		p = get_feature(pfid);
 		if (IS_ERR_OR_NULL(p))
 			continue;
 		if (enable_events(*peg, p)) {
 			(*peg)->pfg = p;
 			ret = true;
 		} else {
-			intel_pmt_put_feature_group(p);
+			put_feature(p);
 		}
 	}
 
@@ -359,16 +359,58 @@ void intel_aet_unregister_enumeration(void)
 }
 EXPORT_SYMBOL_NS_GPL(intel_aet_unregister_enumeration, "INTEL_PMT");
 
-void __exit intel_aet_exit(void)
+/*
+ * Track whether pmt_telemetry enumeration succeeded during mount to
+ * detect nested mount attempts and for use during unmount.
+ */
+static bool pmt_in_use;
+
+bool intel_aet_pre_mount(void)
+{
+	bool ret;
+
+	guard(mutex)(&aet_register_lock);
+
+	/* Nested mount attempt. File system code will return -EBUSY */
+	if (pmt_in_use)
+		return false;
+
+	if (!get_feature || !put_feature)
+		return false;
+
+	if (!intel_aet_try_module_get(pmt_module))
+		return false;
+
+	ret = aet_get_events();
+
+	if (!ret)
+		intel_aet_module_put(pmt_module);
+	else
+		pmt_in_use = true;
+
+	return ret;
+}
+
+void intel_aet_unmount(void)
 {
 	struct event_group **peg;
 
+	guard(mutex)(&aet_register_lock);
+	if (!pmt_in_use)
+		return;
+
 	for_each_event_group(peg) {
-		if ((*peg)->pfg) {
-			intel_pmt_put_feature_group((*peg)->pfg);
-			(*peg)->pfg = NULL;
+		struct event_group *e = *peg;
+
+		if (e->pfg) {
+			for (int j = 0; j < e->num_events; j++)
+				resctrl_disable_mon_event(e->evts[j].id);
+			put_feature(e->pfg);
+			e->pfg = NULL;
 		}
 	}
+	intel_aet_module_put(pmt_module);
+	pmt_in_use = false;
 }
 
 #define DATA_VALID	BIT_ULL(63)
