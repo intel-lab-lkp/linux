@@ -520,21 +520,22 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 
 	gpio_dev = bus_find_device_by_fwnode(&platform_bus_type, fwnode);
 	if (!gpio_dev) {
-		dev_err(dev, "populate \"%pfwP\": device not found\n", fwnode);
-		return ERR_PTR(-ENODEV);
+		ret = -ENODEV;
+		dev_err_probe(dev, ret, "populate \"%pfwP\": device not found\n", fwnode);
+		return ERR_PTR(ret);
 	}
 	gpio_pdev = to_platform_device(gpio_dev);
 
 	if (device_property_read_u32(gpio_dev, "gpio-bank", &id)) {
-		dev_err(dev, "populate: gpio-bank property not found\n");
 		ret = -EINVAL;
+		dev_err_probe(dev, ret, "populate: gpio-bank property not found\n");
 		goto err_put_pdev;
 	}
 
 #ifdef CONFIG_PINCTRL_NOMADIK
 	if (id >= ARRAY_SIZE(nmk_gpio_chips)) {
-		dev_err(dev, "populate: invalid id: %u\n", id);
 		ret = -EINVAL;
+		dev_err_probe(dev, ret, "populate: invalid id: %u\n", id);
 		goto err_put_pdev;
 	}
 	/* Already populated? */
@@ -578,7 +579,7 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	clk = clk_get_optional(gpio_dev, NULL);
 	if (IS_ERR(clk)) {
 		ret = PTR_ERR(clk);
-		dev_err(dev, "failed getting clock: %d\n", ret);
+		dev_err_probe(dev, ret, "failed getting clock\n");
 		goto err_put_pdev;
 	}
 	clk_prepare(clk);
@@ -587,8 +588,8 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	/* NOTE: do not use devm_ here! */
 	reset = reset_control_get_optional_shared(gpio_dev, NULL);
 	if (IS_ERR(reset)) {
-		dev_err(dev, "failed getting reset control: %pe\n", reset);
 		ret = PTR_ERR(reset);
+		dev_err_probe(dev, ret, "failed getting reset control\n");
 		goto err_unprepare_clk;
 	}
 
@@ -599,7 +600,7 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	 */
 	ret = reset_control_deassert(reset);
 	if (ret) {
-		dev_err(dev, "failed reset deassert: %d\n", ret);
+		dev_err_probe(dev, ret, "failed reset deassert\n");
 		goto err_put_reset;
 	}
 
@@ -695,7 +696,7 @@ static int nmk_gpio_probe(struct platform_device *pdev)
 	ret = devm_request_irq(dev, irq, nmk_gpio_irq_handler, IRQF_SHARED,
 			       dev_name(dev), nmk_chip);
 	if (ret) {
-		dev_err(dev, "failed requesting IRQ\n");
+		dev_err_probe(dev, ret, "failed requesting IRQ\n");
 		return ret;
 	}
 
