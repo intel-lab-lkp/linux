@@ -2416,6 +2416,7 @@ static void etm4_remove_platform_dev(struct platform_device *pdev)
 
 	if (drvdata)
 		etm4_remove_dev(drvdata);
+	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
 

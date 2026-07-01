@@ -647,6 +647,7 @@ static void catu_platform_remove(struct platform_device *pdev)
 		return;
 
 	__catu_remove(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
 

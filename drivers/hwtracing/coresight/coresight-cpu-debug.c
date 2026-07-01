@@ -711,6 +711,7 @@ static void debug_platform_remove(struct platform_device *pdev)
 		return;
 
 	__debug_remove(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
 

@@ -266,6 +266,7 @@ static void ctcu_platform_remove(struct platform_device *pdev)
 		return;
 
 	ctcu_remove(pdev);
+	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
 

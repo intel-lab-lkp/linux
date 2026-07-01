@@ -989,6 +989,7 @@ static void tmc_platform_remove(struct platform_device *pdev)
 		return;
 
 	__tmc_remove(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
 
