@@ -82,7 +82,7 @@ struct altera_cvp_conf {
 };
 
 struct cvp_priv {
-	void	(*switch_clk)(struct altera_cvp_conf *conf);
+	int	(*switch_clk)(struct altera_cvp_conf *conf);
 	int	(*clear_state)(struct altera_cvp_conf *conf);
 	int	(*wait_credit)(struct fpga_manager *mgr, u32 blocks);
 	size_t	block_size;
@@ -116,7 +116,8 @@ static enum fpga_mgr_states altera_cvp_state(struct fpga_manager *mgr)
 	struct altera_cvp_conf *conf = mgr->priv;
 	u32 status;
 
-	altera_read_config_dword(conf, VSE_CVP_STATUS, &status);
+	if (altera_read_config_dword(conf, VSE_CVP_STATUS, &status))
+		return FPGA_MGR_STATE_UNKNOWN;
 
 	if (status & VSE_CVP_STATUS_CFG_DONE)
 		return FPGA_MGR_STATE_OPERATING;
@@ -139,19 +140,27 @@ static void altera_cvp_write_data_config(struct altera_cvp_conf *conf, u32 val)
 }
 
 /* switches between CvP clock and internal clock */
-static void altera_cvp_dummy_write(struct altera_cvp_conf *conf)
+static int altera_cvp_dummy_write(struct altera_cvp_conf *conf)
 {
 	unsigned int i;
+	int ret;
 	u32 val;
 
 	/* set 1 CVP clock cycle for every CVP Data Register Write */
-	altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	if (ret)
+		return ret;
+
 	val &= ~VSE_CVP_MODE_CTRL_NUMCLKS_MASK;
 	val |= 1 << VSE_CVP_MODE_CTRL_NUMCLKS_OFF;
-	altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < CVP_DUMMY_WR; i++)
 		conf->write_data(conf, 0); /* dummy data, could be any value */
+
+	return 0;
 }
 
 static int altera_cvp_wait_status(struct altera_cvp_conf *conf, u32 status_mask,
@@ -159,13 +168,17 @@ static int altera_cvp_wait_status(struct altera_cvp_conf *conf, u32 status_mask,
 {
 	unsigned int retries;
 	u32 val;
+	int ret;
 
 	retries = timeout_us / 10;
 	if (timeout_us % 10)
 		retries++;
 
 	do {
-		altera_read_config_dword(conf, VSE_CVP_STATUS, &val);
+		ret = altera_read_config_dword(conf, VSE_CVP_STATUS, &val);
+		if (ret)
+			return ret;
+
 		if ((val & status_mask) == status_val)
 			return 0;
 
@@ -287,21 +300,31 @@ static int altera_cvp_teardown(struct fpga_manager *mgr,
 	u32 val;
 
 	/* STEP 12 - reset START_XFER bit */
-	altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
+	if (ret)
+		return ret;
+
 	val &= ~VSE_CVP_PROG_CTRL_START_XFER;
-	altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	if (ret)
+		return ret;
 
 	/* STEP 13 - reset CVP_CONFIG bit */
 	val &= ~VSE_CVP_PROG_CTRL_CONFIG;
-	altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	if (ret)
+		return ret;
 
 	/*
 	 * STEP 14
 	 * - set CVP_NUMCLKS to 1 and then issue CVP_DUMMY_WR dummy
 	 *   writes to the HIP
 	 */
-	if (conf->priv->switch_clk)
-		conf->priv->switch_clk(conf);
+	if (conf->priv->switch_clk) {
+		ret = conf->priv->switch_clk(conf);
+		if (ret)
+			return ret;
+	}
 
 	/* STEP 15 - poll CVP_CONFIG_READY bit for 0 with 10us timeout */
 	ret = altera_cvp_wait_status(conf, VSE_CVP_STATUS_CFG_RDY, 0,
@@ -336,7 +359,10 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 		conf->numclks = 1; /* for uncompressed and unencrypted images */
 
 	/* STEP 1 - read CVP status and check CVP_EN flag */
-	altera_read_config_dword(conf, VSE_CVP_STATUS, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_STATUS, &val);
+	if (ret)
+		return ret;
+
 	if (!(val & VSE_CVP_STATUS_CVP_EN)) {
 		dev_err(&mgr->dev, "CVP mode off: 0x%04x\n", val);
 		return -ENODEV;
@@ -354,21 +380,34 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 	 * - set HIP_CLK_SEL and CVP_MODE (must be set in the order mentioned)
 	 */
 	/* switch from fabric to PMA clock */
-	altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	if (ret)
+		return ret;
+
 	val |= VSE_CVP_MODE_CTRL_HIP_CLK_SEL;
-	altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	if (ret)
+		return ret;
 
 	/* set CVP mode */
-	altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	if (ret)
+		return ret;
+
 	val |= VSE_CVP_MODE_CTRL_CVP_MODE;
-	altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	if (ret)
+		return ret;
 
 	/*
 	 * STEP 3
 	 * - set CVP_NUMCLKS to 1 and issue CVP_DUMMY_WR dummy writes to the HIP
 	 */
-	if (conf->priv->switch_clk)
-		conf->priv->switch_clk(conf);
+	if (conf->priv->switch_clk) {
+		ret = conf->priv->switch_clk(conf);
+		if (ret)
+			return ret;
+	}
 
 	if (conf->priv->clear_state) {
 		ret = conf->priv->clear_state(conf);
@@ -381,10 +420,15 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 	conf->sent_packets = 0;
 
 	/* STEP 4 - set CVP_CONFIG bit */
-	altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
+	if (ret)
+		return ret;
+
 	/* request control block to begin transfer using CVP */
 	val |= VSE_CVP_PROG_CTRL_CONFIG;
-	altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	if (ret)
+		return ret;
 
 	/* STEP 5 - poll CVP_CONFIG READY for 1 with timeout */
 	ret = altera_cvp_wait_status(conf, VSE_CVP_STATUS_CFG_RDY,
@@ -399,8 +443,11 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 	 * STEP 6
 	 * - set CVP_NUMCLKS to 1 and issue CVP_DUMMY_WR dummy writes to the HIP
 	 */
-	if (conf->priv->switch_clk)
-		conf->priv->switch_clk(conf);
+	if (conf->priv->switch_clk) {
+		ret = conf->priv->switch_clk(conf);
+		if (ret)
+			return ret;
+	}
 
 	if (altera_cvp_chkcfg) {
 		ret = altera_cvp_chk_error(mgr, 0);
@@ -411,16 +458,26 @@ static int altera_cvp_write_init(struct fpga_manager *mgr,
 	}
 
 	/* STEP 7 - set START_XFER */
-	altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_PROG_CTRL, &val);
+	if (ret)
+		return ret;
+
 	val |= VSE_CVP_PROG_CTRL_START_XFER;
-	altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_PROG_CTRL, val);
+	if (ret)
+		return ret;
 
 	/* STEP 8 - start transfer (set CVP_NUMCLKS for bitstream) */
 	if (conf->priv->switch_clk) {
-		altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+		ret = altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+		if (ret)
+			return ret;
+
 		val &= ~VSE_CVP_MODE_CTRL_NUMCLKS_MASK;
 		val |= conf->numclks << VSE_CVP_MODE_CTRL_NUMCLKS_OFF;
-		altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+		ret = altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+		if (ret)
+			return ret;
 	}
 	return 0;
 }
@@ -490,17 +547,25 @@ static int altera_cvp_write_complete(struct fpga_manager *mgr,
 		return ret;
 
 	/* STEP 16 - check CVP_CONFIG_ERROR_LATCHED bit */
-	altera_read_config_dword(conf, VSE_UNCOR_ERR_STATUS, &val);
+	ret = altera_read_config_dword(conf, VSE_UNCOR_ERR_STATUS, &val);
+	if (ret)
+		return ret;
+
 	if (val & VSE_UNCOR_ERR_CVP_CFG_ERR) {
 		dev_err(&mgr->dev, "detected CVP_CONFIG_ERROR_LATCHED!\n");
 		return -EPROTO;
 	}
 
 	/* STEP 17 - reset CVP_MODE and HIP_CLK_SEL bit */
-	altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	ret = altera_read_config_dword(conf, VSE_CVP_MODE_CTRL, &val);
+	if (ret)
+		return ret;
+
 	val &= ~VSE_CVP_MODE_CTRL_HIP_CLK_SEL;
 	val &= ~VSE_CVP_MODE_CTRL_CVP_MODE;
-	altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	ret = altera_write_config_dword(conf, VSE_CVP_MODE_CTRL, val);
+	if (ret)
+		return ret;
 
 	/* STEP 18 - poll PLD_CLK_IN_USE and USER_MODE bits */
 	mask = VSE_CVP_STATUS_PLD_CLK_IN_USE | VSE_CVP_STATUS_USERMODE;
@@ -590,7 +655,10 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 		return -ENODEV;
 	}
 
-	pci_read_config_dword(pdev, offset + VSE_CVP_STATUS, &regval);
+	ret = pci_read_config_dword(pdev, offset + VSE_CVP_STATUS, &regval);
+	if (ret)
+		return ret;
+
 	if (!(regval & VSE_CVP_STATUS_CVP_EN)) {
 		dev_err(&pdev->dev,
 			"CVP is disabled for this device: CVP_STATUS Reg 0x%x\n",
@@ -613,10 +681,15 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 	 * even if the concerned BAR is not needed for FPGA configuration
 	 * at all. Thus, enable the device via PCI config space command.
 	 */
-	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	ret = pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	if (ret)
+		return ret;
+
 	if (!(cmd & PCI_COMMAND_MEMORY)) {
 		cmd |= PCI_COMMAND_MEMORY;
-		pci_write_config_word(pdev, PCI_COMMAND, cmd);
+		ret = pci_write_config_word(pdev, PCI_COMMAND, cmd);
+		if (ret)
+			return ret;
 	}
 
 	ret = pci_request_region(pdev, CVP_BAR, "CVP");
