@@ -160,6 +160,11 @@ void ath9k_wmi_event_tasklet(struct tasklet_struct *t)
 			kfree_skb(skb);
 			continue;
 		}
+		/*
+		 * Make sure ath9k_htc_probe_device() initialization is
+		 * committed to memory before processing skb.
+		 */
+		smp_rmb();
 
 		hdr = (struct wmi_cmd_hdr *) skb->data;
 		cmd_id = be16_to_cpu(hdr->command_id);
