@@ -1263,6 +1263,9 @@ static int dvb_demux_release(struct inode *inode, struct file *file)
 	} else
 		mutex_unlock(&dmxdev->mutex);
 
+	if (dmxdev->dvbdev->minor)
+		dvb_device_put(dmxdev->dvbdev);
+
 	return ret;
 }
 
