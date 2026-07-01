@@ -61,6 +61,9 @@ static void __wbuf(struct ksmbd_work *work, void **req, void **rsp)
 	(FILE_ATTRIBUTE_MASK & ~(FILE_ATTRIBUTE_INTEGRITY_STREAM | \
 				 FILE_ATTRIBUTE_NO_SCRUB_DATA))
 
+/* Windows reports automatic write-time updates at roughly 15 ms resolution. */
+#define KSMBD_WRITE_TIME_RESOLUTION	(15ULL * 10000)
+
 /**
  * check_session_id() - check for valid session id in smb header
  * @conn:	connection instance
@@ -3985,6 +3988,7 @@ reconnected_fp:
 	time = ksmbd_UnixTimeToNT(stat.atime);
 	rsp->LastAccessTime = cpu_to_le64(time);
 	time = ksmbd_UnixTimeToNT(stat.mtime);
+	fp->open_mtime = time;
 	rsp->LastWriteTime = cpu_to_le64(time);
 	rsp->ChangeTime = cpu_to_le64(fp->change_time);
 	/*
@@ -6451,6 +6455,9 @@ int smb2_close(struct ksmbd_work *work)
 		time = ksmbd_UnixTimeToNT(stat.atime);
 		rsp->LastAccessTime = cpu_to_le64(time);
 		time = ksmbd_UnixTimeToNT(stat.mtime);
+		if (time > fp->open_mtime &&
+		    time - fp->open_mtime < KSMBD_WRITE_TIME_RESOLUTION)
+			time = fp->open_mtime;
 		rsp->LastWriteTime = cpu_to_le64(time);
 		rsp->ChangeTime = cpu_to_le64(fp->change_time);
 		ksmbd_fd_put(work, fp);
