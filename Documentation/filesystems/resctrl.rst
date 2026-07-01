@@ -630,7 +630,7 @@ When monitoring is enabled all MON groups will also contain:
 	each instance of an L3 cache. Each directory contains files for the enabled
 	L3 events (e.g. "llc_occupancy", "mbm_total_bytes", and "mbm_local_bytes").
 
-	If telemetry monitoring is enabled, there will be a "mon_PERF_PKG_YY"
+	If telemetry monitoring is enabled [#]_, there will be a "mon_PERF_PKG_YY"
 	directory for each physical processor package. Each directory contains
 	files for the enabled telemetry events (e.g. "core_energy". "activity",
 	"uops_retired", etc.)
@@ -668,6 +668,10 @@ When monitoring is enabled all MON groups will also contain:
 	counter is assigned to it. For CTRL_MON groups, 'Unassigned' is
 	returned if the MBM event does not have an assigned counter in the
 	CTRL_MON group nor in any of its associated MON groups.
+
+.. [#] Telemetry features are enumerated asynchronously by the PMT driver, so
+   an automatic mount of resctrl from ``/etc/fstab`` at boot may not enable
+   them. See `Mounting resctrl with telemetry`_ below.
 
 "mon_hw_id":
 	Available only with debug option. The identifier used by hardware
@@ -1897,6 +1901,60 @@ m. Unmount the resctrl filesystem.
 ::
 
   # umount /sys/fs/resctrl/
+
+Mounting resctrl with telemetry
+===============================
+
+Telemetry features (e.g. the ``mon_PERF_PKG_YY`` events) are enumerated
+asynchronously by the PMT driver. If resctrl is mounted before that
+enumeration completes - for example, when mounted automatically from
+``/etc/fstab`` early in boot - the telemetry features will not be available
+at mount time and will therefore not be enabled in the mounted instance.
+
+To avoid this race, defer the mount until after the ``pmt_telemetry`` module
+has loaded. One way to do this is with a udev rule that triggers a systemd
+service when the module appears. A tmpfs mount onto /sys/fs/resctrl is
+needed to prevent daemon tasks from obtaining references to the resctrl
+file system in the other name spaces that systemd uses during startup.
+
+Example systemd tmpfs mount service (``/etc/systemd/system/sys-fs-resctrl.mount``)::
+
+  [Unit]
+  Description=Early Resctrl Namespace Firewall
+  DefaultDependencies=no
+  Before=basic.target local-fs.target
+
+  [Mount]
+  What=tmpfs
+  Where=/sys/fs/resctrl
+  Type=tmpfs
+  Options=private,nosuid,nodev,noexec,mode=755
+
+  [Install]
+  WantedBy=sysinit.target
+
+Example systemd service (``/etc/systemd/system/mount-resctrl.service``)::
+
+  [Unit]
+  Description=Mount real resctrl pseudo-filesystem natively
+  DefaultDependencies=no
+  Requires=sys-fs-resctrl.mount
+  After=sys-fs-resctrl.mount
+
+  [Service]
+  Type=oneshot
+  # Pause to let systemd start daemons
+  ExecStart=/usr/bin/sleep 10
+  # Mount the real resctrl file system
+  ExecStart=/usr/bin/mount -t resctrl resctrl /sys/fs/resctrl
+  RemainAfterExit=no
+
+  [Install]
+  WantedBy=multi-user.target
+
+Example udev rule (``/etc/udev/rules.d/99-rmid-telemetry.rules``)::
+
+  SUBSYSTEM=="module", KERNEL=="pmt_telemetry", ACTION=="add", RUN+="/usr/bin/systemctl start mount-resctrl.service"
 
 Intel RDT Errata
 ================
