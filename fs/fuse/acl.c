@@ -155,6 +155,8 @@ int fuse_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		 */
 		forget_all_cached_acls(inode);
 		fuse_invalidate_attr(inode);
+		if (!ret)
+			set_cached_acl(inode, type, acl);
 	}
 
 	return ret;
