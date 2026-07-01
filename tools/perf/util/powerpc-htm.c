@@ -42,6 +42,7 @@ struct powerpc_htm {
 	char				trans_file[64];
 	int				htm_mem_entries;
 	int				mem_maps;
+	u64				sample_id;
 };
 
 struct htm_mem {
@@ -123,6 +124,43 @@ static int run_htmdecode(const char *input_file, const char *output_file)
 	} else if (WIFSIGNALED(status)) {
 		pr_err("htmdecode killed by signal %d\n", WTERMSIG(status));
 		return -EINTR;
+	}
+
+	return 0;
+}
+
+static int powerpc_htm_create_sample(unsigned long addr, struct perf_session *session,
+		struct powerpc_htm *htm)
+{
+	struct perf_sample sample;
+	union perf_event event;
+
+	if (dump_trace)
+		return 0;
+
+	memset(&sample, 0, sizeof(sample));
+	sample.cpumode = PERF_RECORD_MISC_USER;
+
+	if (!addr)
+		return 0;
+
+	if (addr >= 0xc000000000000000)
+		sample.cpumode = PERF_RECORD_MISC_KERNEL;
+
+	sample.ip = addr;
+	sample.period = 1;
+	sample.cpu = 0;
+	sample.id = htm->sample_id;
+	sample.callchain = NULL;
+	sample.branch_stack = NULL;
+	memset(&event, 0, sizeof(event));
+	event.sample.header.type = PERF_RECORD_SAMPLE;
+	event.sample.header.misc = sample.cpumode;
+	event.sample.header.size = sizeof(struct perf_event_header);
+
+	if (perf_session__deliver_synth_event(session, &event, &sample)) {
+		pr_debug("Failed to create sample for htm entry\n");
+		return -1;
 	}
 
 	return 0;
@@ -309,7 +347,7 @@ static struct addr_map *process_trace_file(const char *trace_file,
 	return maps;
 }
 
-static int create_mem_maps(struct powerpc_htm *htm)
+static int create_mem_maps(struct perf_session *session, struct powerpc_htm *htm)
 {
 	off_t file_size;
 	void *htmdata, *mapped_data;
@@ -422,6 +460,7 @@ static int create_mem_maps(struct powerpc_htm *htm)
 			maps[i].event,
 			maps[i].phys_addr,
 			(unsigned long)maps[i].logical_addr);
+		powerpc_htm_create_sample(maps[i].logical_addr, session, htm);
 	}
 
 	free(maps);
@@ -581,7 +620,7 @@ static int powerpc_htm_process_event(struct perf_session *session __maybe_unused
 		}
 		/* Only for power bus traces, we decode traces */
 		if (config == 1)
-			create_mem_maps(htm);
+			create_mem_maps(session, htm);
 	}
 
 	return 0;
@@ -634,6 +673,69 @@ static void powerpc_htm_print_info(__u64 *arr)
 		return;
 
 	fprintf(stdout, powerpc_htm_info_fmts[POWERPC_HTM_TYPE], arr[POWERPC_HTM_TYPE]);
+}
+
+static void set_event_name(struct evlist *evlist, u64 id,
+			const char *name)
+{
+	struct evsel *evsel;
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (evsel->core.id && evsel->core.id[0] == id) {
+			if (evsel->name)
+				zfree(&evsel->name);
+			evsel->name = strdup(name);
+			if (!evsel->name) {
+				pr_err("Failed to allocate memory for event name\n");
+				return;
+			}
+			break;
+		}
+	}
+}
+
+static int
+powerpc_htm_synth_events(struct powerpc_htm *htm, struct perf_session *session)
+{
+	struct evlist *evlist = session->evlist;
+	struct evsel *evsel;
+	struct perf_event_attr attr;
+	bool found = false;
+	u64 id;
+	int err;
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (strstarts(evsel->name, "htm")) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		pr_debug("No selected events with HTM trace data\n");
+		return 0;
+	}
+
+	memset(&attr, 0, sizeof(struct perf_event_attr));
+	attr.size = sizeof(struct perf_event_attr);
+	attr.sample_type = evsel->core.attr.sample_type;
+	attr.sample_id_all = evsel->core.attr.sample_id_all;
+	attr.type = PERF_TYPE_SYNTH;
+	attr.config = PERF_SYNTH_POWERPC_HTM;
+
+	/* create new id val to be a fixed offset from evsel id */
+	id = evsel->core.id[0] + 1000000000;
+	if (!id)
+		id = 1;
+
+	err = perf_session__deliver_synth_attr_event(session, &attr, id);
+	if (err)
+		return err;
+
+	htm->sample_id = id;
+	set_event_name(evlist, id, "htm");
+
+	return 0;
 }
 
 int powerpc_htm_process_auxtrace_info(union perf_event *event,
@@ -697,6 +799,10 @@ int powerpc_htm_process_auxtrace_info(union perf_event *event,
 	err = auxtrace_queues__process_index(&htm->queues, session);
 	if (err)
 		goto err_free_queues;
+
+	err = powerpc_htm_synth_events(htm, session);
+	if (err)
+		goto err_free;
 
 	return 0;
 
