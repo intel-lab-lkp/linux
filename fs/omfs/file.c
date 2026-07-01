@@ -17,6 +17,70 @@ static u32 omfs_max_extents(struct omfs_sb_info *sbi, int offset)
 		sizeof(struct omfs_extent_entry);
 }
 
+static int omfs_extent_table_offset(struct inode *inode, u64 block)
+{
+	return block == inode->i_ino ? OMFS_EXTENT_START : OMFS_EXTENT_CONT;
+}
+
+static int omfs_extent_next(struct inode *inode, u64 block, u64 *next)
+{
+	struct omfs_sb_info *sbi = OMFS_SB(inode->i_sb);
+	struct buffer_head *bh;
+	struct omfs_extent *oe;
+	u32 extent_count;
+	int offset = omfs_extent_table_offset(inode, block);
+
+	bh = omfs_bread(inode->i_sb, block);
+	if (!bh)
+		return -EIO;
+
+	if (omfs_is_bad(sbi, (struct omfs_header *)bh->b_data, block)) {
+		brelse(bh);
+		return -EIO;
+	}
+
+	oe = (struct omfs_extent *)&bh->b_data[offset];
+	extent_count = be32_to_cpu(oe->e_extent_count);
+	if (extent_count > omfs_max_extents(sbi, offset)) {
+		brelse(bh);
+		return -EIO;
+	}
+
+	*next = be64_to_cpu(oe->e_next);
+	brelse(bh);
+	return 0;
+}
+
+static int omfs_check_extent_cycle(struct inode *inode, u64 *slow, u64 *fast)
+{
+	int err;
+
+	if (*fast == ~0)
+		return 0;
+
+	err = omfs_extent_next(inode, *fast, fast);
+	if (err)
+		return err;
+
+	if (*fast == ~0)
+		return 0;
+
+	err = omfs_extent_next(inode, *fast, fast);
+	if (err)
+		return err;
+
+	if (*slow != ~0) {
+		err = omfs_extent_next(inode, *slow, slow);
+		if (err)
+			return err;
+	}
+
+	if (*slow != ~0 && *slow == *fast)
+		return -ELOOP;
+
+	return 0;
+}
+
 void omfs_make_empty_table(struct buffer_head *bh, int offset)
 {
 	struct omfs_extent *oe = (struct omfs_extent *) &bh->b_data[offset];
@@ -35,6 +99,7 @@ int omfs_shrink_inode(struct inode *inode)
 	struct omfs_extent_entry *entry;
 	struct buffer_head *bh;
 	u64 next, last;
+	u64 slow, fast;
 	u32 extent_count;
 	u32 max_extents;
 	int ret;
@@ -43,6 +108,8 @@ int omfs_shrink_inode(struct inode *inode)
 	 * than inode->i_size;
 	 */
 	next = inode->i_ino;
+	slow = next;
+	fast = next;
 
 	/* only support truncate -> 0 for now */
 	ret = -EIO;
@@ -69,6 +136,10 @@ int omfs_shrink_inode(struct inode *inode)
 		last = next;
 		next = be64_to_cpu(oe->e_next);
 		entry = oe->e_entry;
+
+		ret = omfs_check_extent_cycle(inode, &slow, &fast);
+		if (ret)
+			goto out_brelse;
 
 		/* ignore last entry as it is the terminator */
 		for (; extent_count > 1; extent_count--) {
@@ -228,6 +299,7 @@ static int omfs_get_block(struct inode *inode, sector_t block,
 	struct omfs_sb_info *sbi = OMFS_SB(inode->i_sb);
 	int max_blocks = bh_result->b_size >> inode->i_blkbits;
 	int remain;
+	u64 slow, fast;
 
 	ret = -EIO;
 	bh = omfs_bread(inode->i_sb, inode->i_ino);
@@ -237,6 +309,8 @@ static int omfs_get_block(struct inode *inode, sector_t block,
 	oe = (struct omfs_extent *)(&bh->b_data[OMFS_EXTENT_START]);
 	max_extents = omfs_max_extents(sbi, OMFS_EXTENT_START);
 	next = inode->i_ino;
+	slow = next;
+	fast = next;
 
 	for (;;) {
 
@@ -261,6 +335,10 @@ static int omfs_get_block(struct inode *inode, sector_t block,
 		}
 		if (next == ~0)
 			break;
+
+		ret = omfs_check_extent_cycle(inode, &slow, &fast);
+		if (ret)
+			goto out_brelse;
 
 		brelse(bh);
 		bh = omfs_bread(inode->i_sb, next);
@@ -377,4 +455,3 @@ const struct address_space_operations omfs_aops = {
 	.bmap = omfs_bmap,
 	.migrate_folio = buffer_migrate_folio,
 };
-
