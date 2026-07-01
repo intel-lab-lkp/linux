@@ -11,4 +11,4 @@
 #
 obj-$(subst y,m,$(CONFIG_PREFERRED_CPU)) += steal_monitor.o
 
-steal_monitor-y := sm_core.o
+steal_monitor-y := sm_core.o defaults.o

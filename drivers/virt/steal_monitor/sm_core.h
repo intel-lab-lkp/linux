@@ -11,6 +11,7 @@
 #include <linux/cpumask.h>
 #include <linux/workqueue.h>
 #include <linux/sched/isolation.h>
+#include <linux/kernel_stat.h>
 
 struct steal_monitor {
 	struct delayed_work	work;
@@ -23,5 +24,7 @@ struct steal_monitor {
 };
 
 extern struct steal_monitor sm_core_ctx;
+
+u64 get_system_steal_time(void);
 
 #endif /* __VIRT_STEAL_CORE_H */
