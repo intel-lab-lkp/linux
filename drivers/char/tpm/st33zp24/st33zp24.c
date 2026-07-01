@@ -18,6 +18,7 @@
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/unaligned.h>
 
 #include "../tpm.h"
 #include "st33zp24.h"
@@ -364,7 +365,7 @@ static int st33zp24_send(struct tpm_chip *chip, unsigned char *buf,
 		goto out_err;
 
 	if (chip->flags & TPM_CHIP_FLAG_IRQ) {
-		ordinal = be32_to_cpu(*((__be32 *) (buf + 6)));
+		ordinal = get_unaligned_be32(buf + 6);
 
 		ret = wait_for_stat(chip, TPM_STS_DATA_AVAIL | TPM_STS_VALID,
 				tpm_calc_ordinal_duration(chip, ordinal),
@@ -400,7 +401,7 @@ static int st33zp24_recv(struct tpm_chip *chip, unsigned char *buf,
 		goto out;
 	}
 
-	expected = be32_to_cpu(*(__be32 *)(buf + 2));
+	expected = get_unaligned_be32(buf + 2);
 	if (expected > count || expected < TPM_HEADER_SIZE) {
 		size = -EIO;
 		goto out;
