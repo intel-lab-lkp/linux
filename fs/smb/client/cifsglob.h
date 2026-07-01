@@ -1715,6 +1715,7 @@ struct mid_q_entry {
 	struct list_head qhead;	/* mids waiting on reply from this server */
 	refcount_t refcount;
 	__u64 mid;		/* multiplex id */
+	__u64 async_id;		/* async id if server returned STATUS_PENDING */
 	__u16 credits;		/* number of credits consumed by this mid */
 	__u16 credits_received;	/* number of credits from the response */
 	__u32 pid;		/* process id */
@@ -1744,6 +1745,7 @@ struct mid_q_entry {
 	bool multiRsp:1;	/* multiple trans2 responses for one request  */
 	bool multiEnd:1;	/* both received */
 	bool decrypted:1;	/* decrypted entry */
+	bool async_cmd:1;	/* server returned an async id for this request */
 };
 
 struct close_cancelled_open {

@@ -2714,10 +2714,22 @@ static bool
 smb2_is_status_pending(char *buf, struct TCP_Server_Info *server)
 {
 	struct smb2_hdr *shdr = (struct smb2_hdr *)buf;
+	struct mid_q_entry *mid;
 	int scredits, in_flight;
 
 	if (shdr->Status != STATUS_PENDING)
 		return false;
+
+	if (shdr->Flags & SMB2_FLAGS_ASYNC_COMMAND) {
+		mid = __smb2_find_mid(server, buf, false);
+		if (mid) {
+			spin_lock(&mid->mid_lock);
+			mid->async_cmd = true;
+			mid->async_id = le64_to_cpu(shdr->Id.AsyncId);
+			spin_unlock(&mid->mid_lock);
+			release_mid(server, mid);
+		}
+	}
 
 	if (shdr->CreditRequest) {
 		spin_lock(&server->req_lock);
