@@ -327,11 +327,98 @@ static int extract_op_location_arm64(const struct arch *arch,
 }
 
 #ifdef HAVE_LIBDW_SUPPORT
+static int get_reg_index_offset(struct annotated_op_loc *op_loc)
+{
+	return op_loc->addr_mode == PERF_ADDR_MODE_POST_INDEX ? 0 : op_loc->offset;
+}
+
+static void adjust_reg_index_state(struct type_state *state,
+				   struct annotated_op_loc *op_loc,
+				   const char *insn_name, u32 insn_offset)
+{
+	struct type_state_reg *tsr;
+	int reg = op_loc->reg1;
+
+	if (op_loc->addr_mode != PERF_ADDR_MODE_PRE_INDEX &&
+	    op_loc->addr_mode != PERF_ADDR_MODE_POST_INDEX)
+		return;
+
+	if (!has_reg_type(state, reg) || !state->regs[reg].ok)
+		return;
+
+	tsr = &state->regs[reg];
+	tsr->copied_from = -1;
+	tsr->offset = op_loc->offset + tsr->offset;
+
+	pr_debug_dtp("%s [%x] %s-index %#x(reg%d) -> reg%d", insn_name,
+		     insn_offset, op_loc->addr_mode == PERF_ADDR_MODE_PRE_INDEX ?
+		     "pre" : "post", op_loc->offset, reg, reg);
+	pr_debug_type_name(&tsr->type, tsr->kind);
+}
+
+static void update_load_insn_state(struct type_state *state,
+				   struct disasm_line *dl,
+				   struct annotated_op_loc *src,
+				   struct annotated_op_loc *dst)
+{
+	struct type_state_reg *tsr;
+	struct type_state_reg src_tsr;
+	Dwarf_Die type_die;
+	u32 insn_offset = dl->al.offset;
+	int reg_offset;
+	int sreg = src->reg1;
+	int dreg = dst->reg1;
+
+	if (!has_reg_type(state, dreg))
+		goto out_adjust;
+
+	tsr = &state->regs[dreg];
+	tsr->copied_from = -1;
+
+retry:
+	if (!has_reg_type(state, sreg) || !state->regs[sreg].ok) {
+		invalidate_reg_state(tsr);
+		return;
+	}
+
+	src_tsr = state->regs[sreg];
+	reg_offset = get_reg_index_offset(src);
+
+	/* Dereference the pointer if it has one */
+	if (src_tsr.kind == TSR_KIND_TYPE &&
+	    die_deref_ptr_type(&src_tsr.type,
+			       src_tsr.offset + reg_offset, &type_die)) {
+		tsr->type = type_die;
+		tsr->kind = TSR_KIND_TYPE;
+		tsr->offset = 0;
+		tsr->ok = true;
+
+		if (src->multi_regs) {
+			pr_debug_dtp("ldr [%x] %#x(reg%d, reg%d) -> reg%d",
+				     insn_offset, reg_offset, src->reg1,
+				     src->reg2, dreg);
+		} else {
+			pr_debug_dtp("ldr [%x] %#x(reg%d) -> reg%d",
+				     insn_offset, reg_offset, sreg, dreg);
+		}
+		pr_debug_type_name(&tsr->type, tsr->kind);
+	}
+	/* Or try another register if any */
+	else if (src->multi_regs && src->reg1 != src->reg2 && sreg != src->reg2) {
+		sreg = src->reg2;
+		goto retry;
+	}
+
+out_adjust:
+	adjust_reg_index_state(state, src, "ldr", insn_offset);
+}
+
 static void update_insn_state_arm64(struct type_state *state,
 				    struct data_loc_info *dloc, Dwarf_Die *cu_die __maybe_unused,
 				    struct disasm_line *dl)
 {
 	struct annotated_insn_loc loc;
+	struct annotated_op_loc *src = &loc.ops[INSN_OP_SOURCE];
 	struct annotated_op_loc *dst = &loc.ops[INSN_OP_TARGET];
 	u32 insn_offset = dl->al.offset;
 
@@ -342,10 +429,17 @@ static void update_insn_state_arm64(struct type_state *state,
 	 * For unsupported instructions with a destination register, invalidate
 	 * the destination register itself to prevent incorrect type propagation.
 	 */
-	if (has_reg_type(state, dst->reg1)) {
+	if (has_reg_type(state, dst->reg1) &&
+	    strncmp(dl->ins.name, "ld", 2)) {
 		pr_debug_dtp("%s [%x] invalidate reg%d\n",
 			     dl->ins.name, insn_offset, dst->reg1);
 		invalidate_reg_state(&state->regs[dst->reg1]);
+		return;
+	}
+
+	/* Memory to register transfers */
+	if (!strncmp(dl->ins.name, "ld", 2)) {
+		update_load_insn_state(state, dl, src, dst);
 		return;
 	}
 }
