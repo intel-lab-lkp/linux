@@ -588,6 +588,24 @@ bool is_bnode_offset_valid(struct hfs_bnode *node, u32 off)
 }
 
 static inline
+bool hfs_bnode_num_recs_valid(struct hfs_bnode *node, u16 num_recs)
+{
+	u32 node_size;
+	u32 offs_size;
+
+	if (!node || !node->tree)
+		return false;
+
+	node_size = node->tree->node_size;
+	if (node_size < sizeof(struct hfs_bnode_desc) + sizeof(__be16))
+		return false;
+
+	offs_size = ((u32)num_recs + 1) * sizeof(__be16);
+
+	return offs_size <= node_size - sizeof(struct hfs_bnode_desc);
+}
+
+static inline
 u32 check_and_correct_requested_length(struct hfs_bnode *node, u32 off, u32 len)
 {
 	unsigned int node_size;
