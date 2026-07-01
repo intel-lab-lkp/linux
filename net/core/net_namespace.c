@@ -181,6 +181,7 @@ static void ops_exit_rtnl_list(const struct list_head *ops_list,
 				ops->exit_rtnl(net, &dev_kill_list);
 		}
 
+		unregister_netdevice_queue_many_net(net, &dev_kill_list);
 		__rtnl_net_unlock(net);
 	}
 
