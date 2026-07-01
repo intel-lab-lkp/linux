@@ -35,8 +35,10 @@
 #define AX_RELOAD_EEPROM_EFUSE			0x06
 #define AX88179A_WAKEUP_SETTING			0x07
 #define AX_FW_MODE				0x08
+#define AX_GPHY_CTL				0x0F
 #define AX88179A_FLASH_READ			0x21
 #define AX88179A_FLASH_WRITE			0x24
+#define AX88179A_PHY_CLAUSE45			0x27
 #define AX88179A_ACCESS_BL			0x2A
 #define AX88179A_PHY_POWER			0x31
 #define AX88179A_AUTODETACH			0xC0
@@ -113,6 +115,9 @@
 	#define AX_PHYPWR_RSTCTL_AT	0x1000
 
 #define AX_RX_BULKIN_QCTRL			0x2e
+
+#define AX_GPHY_EEE_CTRL			0x01
+
 #define AX_CLK_SELECT				0x33
 	#define AX_CLK_SELECT_BCS	0x01
 	#define AX_CLK_SELECT_ACS	0x02
@@ -559,6 +564,32 @@ ax88179_phy_write_mmd_indirect(struct usbnet *dev, u16 prtad, u16 devad,
 	return 0;
 }
 
+static int ax_read_mmd(struct usbnet *dev, u16 dev_addr, u16 reg)
+{
+	struct ax88179_data *priv = dev->driver_priv;
+	u16 res;
+	int ret;
+
+	if (priv->chip_version >= AX_VERSION_AX88179A) {
+		ret = ax88179_read_cmd(dev, AX88179A_PHY_CLAUSE45, dev_addr, reg, 2, &res);
+		if (ret < 0)
+			return ret;
+		return res;
+	}
+
+	return ax88179_phy_read_mmd_indirect(dev, reg, dev_addr);
+}
+
+static int ax_write_mmd(struct usbnet *dev, u16 dev_addr, u16 reg, u16 data)
+{
+	struct ax88179_data *priv = dev->driver_priv;
+
+	if (priv->chip_version >= AX_VERSION_AX88179A)
+		return ax88179_write_cmd(dev, AX88179A_PHY_CLAUSE45, dev_addr, reg, 2, &data);
+
+	return ax88179_phy_write_mmd_indirect(dev, reg, dev_addr, data);
+}
+
 static int ax88179_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
@@ -853,11 +884,38 @@ free:
 }
 
 static int ax88179_get_link_ksettings(struct net_device *net,
-				      struct ethtool_link_ksettings *cmd)
+				       struct ethtool_link_ksettings *cmd)
 {
 	struct usbnet *dev = netdev_priv(net);
+	struct ax88179_data *data;
+	int v;
+
+	data = dev->driver_priv;
 
 	mii_ethtool_get_link_ksettings(&dev->mii, cmd);
+
+	if (data->chip_version >= AX_VERSION_AX88279) {
+		linkmode_set_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+				 cmd->link_modes.supported);
+
+		v = ax88179_mdio_read(dev->net, dev->mii.phy_id, MII_ADVERTISE);
+		if (v >= 0 && v & ADVERTISE_RESV)
+			linkmode_set_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+					 cmd->link_modes.advertising);
+
+		v = ax_read_mmd(dev, MDIO_MMD_AN, MDIO_AN_10GBT_STAT);
+		if (data->speed == ETHER_LINK_2500) {
+			cmd->base.speed = SPEED_2500;
+			/* MDIO_AN_10GBT_STAT_LP2_5G is broken, but we can deduce that
+			 * the link-partner advertised 2500M if remotely AN succceded
+			 * for link speed > 1000M and we locally have a link speed of
+			 * 2500M
+			 */
+			if (v >= 0 && v & MDIO_AN_10GBT_STAT_REMOK)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+						 cmd->link_modes.lp_advertising);
+		}
+	}
 
 	return 0;
 }
@@ -866,34 +924,63 @@ static int ax88179_set_link_ksettings(struct net_device *net,
 				      const struct ethtool_link_ksettings *cmd)
 {
 	struct usbnet *dev = netdev_priv(net);
+	struct ax88179_data *data;
+	int v;
+
+	data = dev->driver_priv;
+
+	/* mii_ethtool_set_link_ksettings handles unknown bits in MII_ADVERTISE
+	 * transparently, so for the 2.5GBit link speed of the AX_VERSION_AX88279
+	 * we just set up ADVERTISE_RESV before calling mii_ethtool_set_link_ksettings
+	 * at least for speeds < 2500
+	 */
+	if (data->chip_version == AX_VERSION_AX88279) {
+		v = ax88179_mdio_read(net, dev->mii.phy_id, MII_ADVERTISE);
+		if (v < 0)
+			return v;
+
+		if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+				      cmd->link_modes.advertising))
+			v |= ADVERTISE_RESV;
+		else
+			v &= ~ADVERTISE_RESV;
+		ax88179_mdio_write(net, dev->mii.phy_id, MII_ADVERTISE, v);
+		if (cmd->base.speed == SPEED_2500)
+			return mii_nway_restart(&dev->mii);
+	}
+
 	return mii_ethtool_set_link_ksettings(&dev->mii, cmd);
 }
 
 static int
 ax88179_ethtool_get_eee(struct usbnet *dev, struct ethtool_keee *data)
 {
+	struct ax88179_data *priv = dev->driver_priv;
 	int val;
 
 	/* Get Supported EEE */
-	val = ax88179_phy_read_mmd_indirect(dev, MDIO_PCS_EEE_ABLE,
-					    MDIO_MMD_PCS);
+	val = ax_read_mmd(dev, MDIO_MMD_PCS, MDIO_PCS_EEE_ABLE);
 	if (val < 0)
 		return val;
 	mii_eee_cap1_mod_linkmode_t(data->supported, val);
 
 	/* Get advertisement EEE */
-	val = ax88179_phy_read_mmd_indirect(dev, MDIO_AN_EEE_ADV,
-					    MDIO_MMD_AN);
+	val = ax_read_mmd(dev, MDIO_MMD_AN, MDIO_AN_EEE_ADV);
 	if (val < 0)
 		return val;
 	mii_eee_cap1_mod_linkmode_t(data->advertised, val);
 
 	/* Get LP advertisement EEE */
-	val = ax88179_phy_read_mmd_indirect(dev, MDIO_AN_EEE_LPABLE,
-					    MDIO_MMD_AN);
+	val = ax_read_mmd(dev, MDIO_MMD_AN, MDIO_AN_EEE_LPABLE);
 	if (val < 0)
 		return val;
 	mii_eee_cap1_mod_linkmode_t(data->lp_advertised, val);
+	if (priv->chip_version >= AX_VERSION_AX88279) {
+		val = ax_read_mmd(dev, MDIO_MMD_AN, MDIO_AN_EEE_LPABLE2);
+		if (val < 0)
+			return val;
+		mii_eee_cap2_mod_linkmode_adv_t(data->lp_advertised, val);
+	}
 
 	return 0;
 }
@@ -903,8 +990,7 @@ ax88179_ethtool_set_eee(struct usbnet *dev, struct ethtool_keee *data)
 {
 	u16 tmp16 = linkmode_to_mii_eee_cap1_t(data->advertised);
 
-	return ax88179_phy_write_mmd_indirect(dev, MDIO_AN_EEE_ADV,
-					      MDIO_MMD_AN, tmp16);
+	return ax_write_mmd(dev, MDIO_MMD_AN, MDIO_AN_EEE_ADV, tmp16);
 }
 
 static int ax88179_chk_eee(struct usbnet *dev)
@@ -914,40 +1000,27 @@ static int ax88179_chk_eee(struct usbnet *dev)
 
 	mii_ethtool_gset(&dev->mii, &ecmd);
 
-	if (ecmd.duplex & DUPLEX_FULL) {
+	priv->eee_active = 0;
+	if ((priv->chip_version < AX_VERSION_AX88279 && (ecmd.duplex & DUPLEX_FULL)) ||
+	    (ecmd.speed == SPEED_1000 && (ecmd.duplex & DUPLEX_FULL))) {
 		int eee_lp, eee_cap, eee_adv;
 		u32 lp, cap, adv, supported = 0;
 
-		eee_cap = ax88179_phy_read_mmd_indirect(dev,
-							MDIO_PCS_EEE_ABLE,
-							MDIO_MMD_PCS);
-		if (eee_cap < 0) {
-			priv->eee_active = 0;
+		eee_cap = ax_read_mmd(dev, MDIO_MMD_PCS, MDIO_PCS_EEE_ABLE);
+		if (eee_cap < 0)
 			return false;
-		}
 
 		cap = mmd_eee_cap_to_ethtool_sup_t(eee_cap);
-		if (!cap) {
-			priv->eee_active = 0;
+		if (!cap)
 			return false;
-		}
 
-		eee_lp = ax88179_phy_read_mmd_indirect(dev,
-						       MDIO_AN_EEE_LPABLE,
-						       MDIO_MMD_AN);
-		if (eee_lp < 0) {
-			priv->eee_active = 0;
-			return false;
-		}
+		eee_lp = ax_read_mmd(dev, MDIO_MMD_AN, MDIO_AN_EEE_LPABLE);
+		if (eee_lp < 0)
+			return true;
 
-		eee_adv = ax88179_phy_read_mmd_indirect(dev,
-							MDIO_AN_EEE_ADV,
-							MDIO_MMD_AN);
-
-		if (eee_adv < 0) {
-			priv->eee_active = 0;
-			return false;
-		}
+		eee_adv = ax_read_mmd(dev, MDIO_MMD_AN, MDIO_AN_EEE_ADV);
+		if (eee_adv < 0)
+			return true;
 
 		adv = mmd_eee_adv_to_ethtool_adv_t(eee_adv);
 		lp = mmd_eee_adv_to_ethtool_adv_t(eee_lp);
@@ -955,65 +1028,53 @@ static int ax88179_chk_eee(struct usbnet *dev)
 			     SUPPORTED_1000baseT_Full :
 			     SUPPORTED_100baseT_Full;
 
-		if (!(lp & adv & supported)) {
-			priv->eee_active = 0;
-			return false;
-		}
+		if (!(lp & adv & supported))
+			return true;
 
 		priv->eee_active = 1;
 		return true;
 	}
 
-	priv->eee_active = 0;
 	return false;
 }
 
-static void ax88179_disable_eee(struct usbnet *dev)
+static void ax88179_eee_config(struct usbnet *dev, bool enable)
 {
+	struct ax88179_data *priv = dev->driver_priv;
 	u16 tmp16;
 
-	tmp16 = GMII_PHY_PGSEL_PAGE3;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  GMII_PHY_PAGE_SELECT, 2, &tmp16);
+	if (priv->chip_version < AX_VERSION_AX88179A) {
+		tmp16 = GMII_PHY_PGSEL_PAGE3;
+		ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
+				  GMII_PHY_PAGE_SELECT, 2, &tmp16);
 
-	tmp16 = 0x3246;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  MII_PHYADDR, 2, &tmp16);
+		tmp16 = enable ? 0x3247 : 0x3246;
+		ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
+				  MII_PHYADDR, 2, &tmp16);
+		if (enable) {
+			tmp16 = GMII_PHY_PGSEL_PAGE5;
+			ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
+					  GMII_PHY_PAGE_SELECT, 2, &tmp16);
 
-	tmp16 = GMII_PHY_PGSEL_PAGE0;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  GMII_PHY_PAGE_SELECT, 2, &tmp16);
-}
+			tmp16 = 0x0680;
+			ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
+					  MII_BMSR, 2, &tmp16);
+		}
 
-static void ax88179_enable_eee(struct usbnet *dev)
-{
-	u16 tmp16;
-
-	tmp16 = GMII_PHY_PGSEL_PAGE3;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  GMII_PHY_PAGE_SELECT, 2, &tmp16);
-
-	tmp16 = 0x3247;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  MII_PHYADDR, 2, &tmp16);
-
-	tmp16 = GMII_PHY_PGSEL_PAGE5;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  GMII_PHY_PAGE_SELECT, 2, &tmp16);
-
-	tmp16 = 0x0680;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  MII_BMSR, 2, &tmp16);
-
-	tmp16 = GMII_PHY_PGSEL_PAGE0;
-	ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
-			  GMII_PHY_PAGE_SELECT, 2, &tmp16);
+		tmp16 = GMII_PHY_PGSEL_PAGE0;
+		ax88179_write_cmd(dev, AX_ACCESS_PHY, AX88179_PHY_ID,
+				  GMII_PHY_PAGE_SELECT, 2, &tmp16);
+	} else {
+		ax88179_write_cmd(dev, AX_GPHY_CTL, AX_GPHY_EEE_CTRL, enable, 0, NULL);
+	}
 }
 
 static int ax88179_get_eee(struct net_device *net, struct ethtool_keee *edata)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv;
+
+	priv = dev->driver_priv;
 
 	edata->eee_enabled = priv->eee_enabled;
 	edata->eee_active = priv->eee_active;
@@ -1024,18 +1085,20 @@ static int ax88179_get_eee(struct net_device *net, struct ethtool_keee *edata)
 static int ax88179_set_eee(struct net_device *net, struct ethtool_keee *edata)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct ax88179_data *priv = dev->driver_priv;
+	struct ax88179_data *priv;
 	int ret;
+
+	priv = dev->driver_priv;
 
 	priv->eee_enabled = edata->eee_enabled;
 	if (!priv->eee_enabled) {
-		ax88179_disable_eee(dev);
+		ax88179_eee_config(dev, false);
 	} else {
 		priv->eee_enabled = ax88179_chk_eee(dev);
 		if (!priv->eee_enabled)
 			return -EOPNOTSUPP;
 
-		ax88179_enable_eee(dev);
+		ax88179_eee_config(dev, true);
 	}
 
 	ret = ax88179_ethtool_set_eee(dev, edata);
@@ -2459,11 +2522,20 @@ static int ax88179_reset(struct usbnet *dev)
 	ax179_data->eee_enabled = 0;
 	ax179_data->eee_active = 0;
 
-	ax88179_disable_eee(dev);
+	if (ax179_data->chip_version < AX_VERSION_AX88179A) {
+		ax88179_eee_config(dev, false);
 
-	ax88179_ethtool_get_eee(dev, &eee_data);
-	linkmode_zero(eee_data.advertised);
-	ax88179_ethtool_set_eee(dev, &eee_data);
+		ax88179_ethtool_get_eee(dev, &eee_data);
+		linkmode_zero(eee_data.advertised);
+		ax88179_ethtool_set_eee(dev, &eee_data);
+	} else {
+		ax88179_eee_config(dev, true);
+		ax88179_ethtool_get_eee(dev, &eee_data);
+		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, eee_data.advertised);
+		if (ax179_data->chip_version >= AX_VERSION_AX88279)
+			linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, eee_data.advertised);
+		ax88179_ethtool_set_eee(dev, &eee_data);
+	}
 
 	/* Restart autoneg */
 	mii_nway_restart(&dev->mii);
