@@ -100,6 +100,10 @@ static int befs_bt_read_node(struct super_block *sb, const befs_data_stream *ds,
 			     struct befs_btree_node *node,
 			     befs_off_t node_off);
 
+static int befs_bt_validate_node(struct super_block *sb,
+				 struct befs_btree_node *node,
+				 size_t bytes);
+
 static int befs_leafnode(struct befs_btree_node *node);
 
 static fs16 *befs_bt_keylen_index(struct befs_btree_node *node);
@@ -192,6 +196,7 @@ befs_bt_read_node(struct super_block *sb, const befs_data_stream *ds,
 		  struct befs_btree_node *node, befs_off_t node_off)
 {
 	uint off = 0;
+	size_t bytes;
 
 	befs_debug(sb, "---> %s", __func__);
 
@@ -206,6 +211,14 @@ befs_bt_read_node(struct super_block *sb, const befs_data_stream *ds,
 
 		return BEFS_ERR;
 	}
+	if (off >= BEFS_SB(sb)->block_size) {
+		befs_error(sb, "%s node offset %u is outside block", __func__,
+			   off);
+		brelse(node->bh);
+		node->bh = NULL;
+		return BEFS_ERR;
+	}
+	bytes = BEFS_SB(sb)->block_size - off;
 	node->od_node =
 	    (befs_btree_nodehead *) ((void *) node->bh->b_data + off);
 
@@ -218,8 +231,78 @@ befs_bt_read_node(struct super_block *sb, const befs_data_stream *ds,
 	    fs16_to_cpu(sb, node->od_node->all_key_count);
 	node->head.all_key_length =
 	    fs16_to_cpu(sb, node->od_node->all_key_length);
+	if (befs_bt_validate_node(sb, node, bytes) != BEFS_OK) {
+		brelse(node->bh);
+		node->bh = NULL;
+		return BEFS_ERR;
+	}
 
 	befs_debug(sb, "<--- %s", __func__);
+	return BEFS_OK;
+}
+
+static int
+befs_bt_validate_node(struct super_block *sb, struct befs_btree_node *node,
+		      size_t bytes)
+{
+	fs16 *keylen_index;
+	size_t keydata_end;
+	size_t keylen_index_off;
+	size_t keylen_index_size;
+	size_t valarray_off;
+	size_t valarray_size;
+	u16 prev_key_end = 0;
+	int i;
+
+	if (bytes < sizeof(befs_btree_nodehead)) {
+		befs_error(sb, "B-tree node is too small: %zu", bytes);
+		return BEFS_ERR;
+	}
+
+	if (node->head.all_key_length >
+	    bytes - sizeof(befs_btree_nodehead)) {
+		befs_error(sb, "B-tree node key data is too large: %u",
+			   node->head.all_key_length);
+		return BEFS_ERR;
+	}
+
+	keydata_end = sizeof(befs_btree_nodehead) +
+		      node->head.all_key_length;
+	keylen_index_off = (keydata_end + 7) & ~7UL;
+	keylen_index_size = node->head.all_key_count * sizeof(fs16);
+	if (keylen_index_off > bytes ||
+	    keylen_index_size > bytes - keylen_index_off) {
+		befs_error(sb, "B-tree node key index is too large: %u keys",
+			   node->head.all_key_count);
+		return BEFS_ERR;
+	}
+
+	valarray_off = keylen_index_off + keylen_index_size;
+	valarray_size = node->head.all_key_count * sizeof(fs64);
+	if (valarray_size > bytes - valarray_off) {
+		befs_error(sb, "B-tree node value array is too large: %u keys",
+			   node->head.all_key_count);
+		return BEFS_ERR;
+	}
+
+	keylen_index = befs_bt_keylen_index(node);
+	for (i = 0; i < node->head.all_key_count; i++) {
+		u16 key_end = fs16_to_cpu(sb, keylen_index[i]);
+
+		if (key_end < prev_key_end ||
+		    key_end > node->head.all_key_length) {
+			befs_error(sb, "B-tree node has invalid key offset");
+			return BEFS_ERR;
+		}
+		prev_key_end = key_end;
+	}
+
+	if (node->head.all_key_count &&
+	    prev_key_end != node->head.all_key_length) {
+		befs_error(sb, "B-tree node key length mismatch");
+		return BEFS_ERR;
+	}
+
 	return BEFS_OK;
 }
 
