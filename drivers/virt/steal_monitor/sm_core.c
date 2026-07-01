@@ -20,6 +20,12 @@ struct steal_monitor sm_core_ctx = {
 	.low_threshold = 200,	/* 2% */
 };
 
+enum sm_direction {
+	SM_DIR_INCREASE = -1,
+	SM_DIR_NONE	=  0,
+	SM_DIR_DECREASE	=  1,
+};
+
 module_param_named(interval_ms, sm_core_ctx.interval_ms, uint, 0644);
 MODULE_PARM_DESC(interval_ms,
 		 "Sampling frequency for steal values in milliseconds (default: 1000)");
@@ -59,11 +65,21 @@ static void compute_preferred_cpus_work(struct work_struct *work)
 
 	steal_ratio = div64_u64(delta_steal, delta_ns);
 	/* If the steal time values are high, reduce preferred CPUs */
-	if (steal_ratio > sm_core_ctx.high_threshold)
+	if (sm_core_ctx.prev_direction == SM_DIR_DECREASE &&
+	    steal_ratio > sm_core_ctx.high_threshold)
 		decrease_preferred_cpus(&sm_core_ctx);
 	/* If the steal time values are low, increase preferred CPUs */
-	if (steal_ratio <= sm_core_ctx.low_threshold)
+	if (sm_core_ctx.prev_direction == SM_DIR_INCREASE &&
+	    steal_ratio <= sm_core_ctx.low_threshold)
 		increase_preferred_cpus(&sm_core_ctx);
+
+	/* mark the direction. This helps to avoid ping-pongs */
+	if (steal_ratio > sm_core_ctx.high_threshold)
+		sm_core_ctx.prev_direction = SM_DIR_DECREASE;
+	else if (steal_ratio <= sm_core_ctx.low_threshold)
+		sm_core_ctx.prev_direction = SM_DIR_INCREASE;
+	else
+		sm_core_ctx.prev_direction = SM_DIR_NONE;
 
 	/* At least one core is kept as preferred */
 	WARN_ON(cpumask_empty(cpu_preferred_mask));
