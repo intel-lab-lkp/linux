@@ -18,6 +18,12 @@
 	(struct pt_regs *)((char *)current_thread_info() + THREAD_SIZE) - 1
 #define current_user_stack_pointer() rdusp()
 
+static inline void instruction_pointer_set(struct pt_regs *regs,
+					   unsigned long val)
+{
+	instruction_pointer(regs) = val;
+}
+
 #define arch_has_single_step()	(1)
 
 #ifdef CONFIG_MMU

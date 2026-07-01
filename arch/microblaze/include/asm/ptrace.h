@@ -20,5 +20,11 @@ static inline long regs_return_value(struct pt_regs *regs)
 	return regs->r3;
 }
 
+static inline void instruction_pointer_set(struct pt_regs *regs,
+					   unsigned long val)
+{
+	instruction_pointer(regs) = val;
+}
+
 #endif /* __ASSEMBLER__ */
 #endif /* _ASM_MICROBLAZE_PTRACE_H */

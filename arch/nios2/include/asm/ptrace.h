@@ -70,6 +70,12 @@ struct switch_stack {
 #define user_stack_pointer(regs)	((regs)->sp)
 extern void show_regs(struct pt_regs *);
 
+static inline void instruction_pointer_set(struct pt_regs *regs,
+					   unsigned long val)
+{
+	instruction_pointer(regs) = val;
+}
+
 #define current_pt_regs() \
 	((struct pt_regs *)((unsigned long)current_thread_info() + THREAD_SIZE)\
 		- 1)
