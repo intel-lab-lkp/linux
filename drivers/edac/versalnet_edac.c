@@ -464,7 +464,7 @@ static void handle_error(struct mc_priv  *priv, struct ecc_status *stat,
 		pfn = PHYS_PFN(pa);
 
 		if (IS_ENABLED(CONFIG_MEMORY_FAILURE)) {
-			err = memory_failure(pfn, MF_ACTION_REQUIRED);
+			err = memory_failure(pfn, 0);
 			if (err)
 				edac_dbg(2, "memory_failure() error: %d", err);
 			else
