@@ -14309,6 +14309,10 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 		if (!idle_cpu(balance_cpu))
 			continue;
 
+		/* There is no point in pulling the load, just to push it out next */
+		if (!cpu_preferred(balance_cpu))
+			continue;
+
 		/*
 		 * If this CPU gets work to do, stop the load balancing
 		 * work being done for other CPUs. Next load
@@ -14483,9 +14487,10 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	this_rq->idle_stamp = rq_clock(this_rq);
 
 	/*
-	 * Do not pull tasks towards !active CPUs...
+	 * Do not pull tasks towards !preferred CPUs...
+	 * preferred is always a subset of active.
 	 */
-	if (!cpu_active(this_cpu))
+	if (!cpu_preferred(this_cpu))
 		return 0;
 
 	/*
