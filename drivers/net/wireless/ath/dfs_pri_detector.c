@@ -16,6 +16,7 @@
 
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/reciprocal_div.h>
 
 #include "ath.h"
 #include "dfs_pattern_detector.h"
@@ -41,7 +42,9 @@ struct pulse_elem {
  * pde_get_multiple() - get number of multiples considering a given tolerance
  * Return value: factor if abs(val - factor*fraction) <= tolerance, 0 otherwise
  */
-static u32 pde_get_multiple(u32 val, u32 fraction, u32 tolerance)
+static u32 pde_get_multiple(u32 val, u32 fraction,
+			    struct reciprocal_value fraction_recip,
+			    u32 tolerance)
 {
 	u32 remainder;
 	u32 factor;
@@ -56,8 +59,8 @@ static u32 pde_get_multiple(u32 val, u32 fraction, u32 tolerance)
 		/* val and fraction are within tolerance */
 		return 1;
 
-	factor = val / fraction;
-	remainder = val % fraction;
+	factor = reciprocal_divide(val, fraction_recip);
+	remainder = val - factor * fraction;
 	if (remainder > tolerance) {
 		/* no exact match */
 		if ((fraction - remainder) <= tolerance)
@@ -247,6 +250,9 @@ static bool pseq_handler_create_sequences(struct pri_detector *pde,
 		ps.last_ts = ts;
 		ps.pri = GET_PRI_TO_USE(pde->rs->pri_min,
 			pde->rs->pri_max, ts - p->ts);
+		ps.pri_recip = (struct reciprocal_value){};
+		if (ps.pri)
+			ps.pri_recip = reciprocal_value(ps.pri);
 		ps.dur = ps.pri * (pde->rs->ppb - 1)
 				+ 2 * pde->rs->max_pri_tolerance;
 
@@ -261,6 +267,7 @@ static bool pseq_handler_create_sequences(struct pri_detector *pde,
 				break;
 			/* check if pulse match (multi)PRI */
 			factor = pde_get_multiple(ps.last_ts - p2->ts, ps.pri,
+						  ps.pri_recip,
 						  pde->rs->max_pri_tolerance);
 			if (factor > 0) {
 				ps.count++;
@@ -318,6 +325,7 @@ pseq_handler_add_to_existing_seqs(struct pri_detector *pde, u64 ts)
 
 		delta_ts = ts - ps->last_ts;
 		factor = pde_get_multiple(delta_ts, ps->pri,
+					  ps->pri_recip,
 					  pde->rs->max_pri_tolerance);
 		if (factor > 0) {
 			ps->last_ts = ts;
