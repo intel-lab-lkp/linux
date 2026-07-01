@@ -9,4 +9,16 @@
 #include <linux/init.h>
 #include <linux/cpuhplock.h>
 
+struct steal_monitor {
+	struct delayed_work	work;
+	u64			prev_steal;
+	int			prev_direction;
+	unsigned int		interval_ms;
+	unsigned int		high_threshold;
+	unsigned int		low_threshold;
+	ktime_t			prev_time;
+};
+
+extern struct steal_monitor sm_core_ctx;
+
 #endif /* __VIRT_STEAL_CORE_H */

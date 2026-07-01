@@ -14,6 +14,8 @@
 
 #include "sm_core.h"
 
+struct steal_monitor sm_core_ctx;
+
 static int __init steal_monitor_init(void)
 {
 	pr_info("steal_monitor is enabled\n");
