@@ -17,6 +17,7 @@
 #include <linux/list.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_wakeup.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
@@ -1929,6 +1930,13 @@ i3c_master_register_new_i3c_devs(struct i3c_master_controller *master)
 
 		if (desc->boardinfo)
 			desc->dev->dev.of_node = desc->boardinfo->of_node;
+
+		/*
+		 * In the case of IBI wakeup, any IBI-capable device can
+		 * wakeup.
+		 */
+		if (master->ibi_wakeup && (desc->info.bcr & I3C_BCR_IBI_REQ_CAP))
+			device_set_wakeup_capable(&desc->dev->dev, true);
 
 		ret = device_register(&desc->dev->dev);
 		if (ret) {
