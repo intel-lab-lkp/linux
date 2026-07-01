@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include <wordexp.h>
 
 #include <linux/iommufd.h>
 #include <linux/limits.h>
@@ -18,6 +19,12 @@
 #include "kselftest_harness.h"
 
 static const char *device_bdf;
+
+struct test_params {
+	u64 size;
+};
+
+struct test_params test_params;
 
 struct iommu_mapping {
 	u64 pgd;
@@ -80,7 +87,7 @@ FIXTURE_TEARDOWN(vfio_dma_mapping_perf_test)
 
 TEST_F(vfio_dma_mapping_perf_test, dma_map_unmap)
 {
-	const u64 size = SZ_1G;
+	const u64 size = test_params.size;
 	const int flags = variant->mmap_flags;
 	struct dma_region region;
 	struct timespec start;
@@ -204,7 +211,7 @@ static void teardown_memfd(int fd, u64 size, void *vaddr)
 
 TEST_F(vfio_dma_mapping_perf_memfd_test, dma_map_unmap_from_file)
 {
-	const u64 size = SZ_1G;
+	const u64 size = test_params.size;
 	struct dma_region region;
 	struct timespec start;
 	u64 unmapped;
@@ -235,8 +242,127 @@ TEST_F(vfio_dma_mapping_perf_memfd_test, dma_map_unmap_from_file)
 	teardown_memfd(fd, size, region.vaddr);
 }
 
+/*
+ * Parses "[0-9]+[kmgt]?".
+ */
+size_t parse_size(const char *size)
+{
+	size_t base;
+	char *scale;
+	int shift = 0;
+
+	VFIO_ASSERT_TRUE(size && isdigit(size[0]),
+			 "Need at least one digit in '%s'.", size);
+
+	base = strtoull(size, &scale, 0);
+
+	VFIO_ASSERT_TRUE(base != ULLONG_MAX, "Overflow parsing size!");
+
+	switch (tolower(*scale)) {
+	case 't':
+		shift = 40;
+		break;
+	case 'g':
+		shift = 30;
+		break;
+	case 'm':
+		shift = 20;
+		break;
+	case 'k':
+		shift = 10;
+		break;
+	case 'b':
+	case '\0':
+		shift = 0;
+		break;
+	default:
+		VFIO_FAIL("Unknown size letter '%c'.", *scale);
+	}
+
+	VFIO_ASSERT_TRUE((base << shift) >> shift == base,
+			 "Overflow scaling size!");
+
+	return base << shift;
+}
+
+static void help(char *name)
+{
+	puts("");
+	printf("usage: %s [-h] [-b bytes] [-a \"test harness args\"]\n", name);
+	puts("");
+	printf(" -h: Display this help message.\n"
+	       " -b: Specify the size of the DMA region to be mapped\n"
+	       "     and unmapped. e.g. 16M or 8G, (default: 1G)\n"
+	       " -a: Args that are forwarded to the test harness,\n"
+	       "     e.g. -a \"-t dma_map_unmap_from_file\"\n");
+}
+
+struct harness_args
+{
+	int argc;
+	char **argv;
+	wordexp_t exp;
+};
+
+static void populate_harness_args(struct harness_args *args, const char *argv_0,
+				  const char *cmdlne)
+{
+	if (wordexp(argv_0, &args->exp, WRDE_NOCMD) == 0 &&
+	    wordexp(cmdlne, &args->exp, WRDE_APPEND | WRDE_NOCMD) == 0) {
+		args->argc = args->exp.we_wordc;
+		args->argv = args->exp.we_wordv;
+	}
+}
+
+static void setup_test(struct harness_args *args, int argc, char *argv[])
+{
+	int opt;
+
+	test_params = (struct test_params) {
+		.size = SZ_1G,
+	};
+
+	while ((opt = getopt(argc, argv, "a:b:h")) != -1) {
+		switch (opt) {
+		case 'a':
+			populate_harness_args(args, argv[0], optarg);
+			break;
+		case 'b':
+			test_params.size = parse_size(optarg);
+			break;
+		case 'h':
+		default:
+			help(argv[0]);
+			goto out;
+		}
+	}
+
+out:
+	// Reset getopt() state to allow the test harness to use it.
+	optind = 1; 
+}
+
+static void teardown_test(struct harness_args *args)
+{
+	if (args->argv) {
+		args->argc = 0;
+		args->argv = NULL;
+		wordfree(&args->exp);
+	}
+}
+
 int main(int argc, char *argv[])
 {
+	struct harness_args args = (struct harness_args) {
+		.argc = 0,
+		.argv = NULL,
+	};
+	int r;
+
+	setup_test(&args, argc, argv);
 	device_bdf = vfio_selftests_get_bdf(&argc, argv);
-	return test_harness_run(argc, argv);
+	r = test_harness_run(args.argc, args.argv);
+	teardown_test(&args);
+
+	return r;
 }
