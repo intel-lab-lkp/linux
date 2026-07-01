@@ -27,6 +27,23 @@ KSM's merged pages were originally locked into kernel memory, but can now
 be swapped out just like other user pages (but sharing is broken when they
 are swapped back in: ksmd must rediscover their identity and merge again).
 
+Security considerations
+=======================
+
+Because KSM merges pages based on their content, across all processes
+with mergeable memory regardless of which user, container, or virtual
+machine they belong to, it exposes a side channel that can be used to
+infer the contents of mergeable memory across security domains.  Users
+should assume that any memory marked mergeable is readable by every
+other process using KSM.
+
+KSM should therefore only be enabled for mutually trusted workloads, or
+where the merged data is not sensitive; in particular, merging pages
+across mutually untrusted virtual machines or tenants is not secure.
+KSM is disabled by default (``run`` is 0).  Applications and VMMs that
+use ``MADV_MERGEABLE`` should limit it to regions that do not hold
+secrets.
+
 Controlling KSM with madvise
 ============================
 
