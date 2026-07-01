@@ -109,6 +109,8 @@ int cifs_sync_mid_result(struct mid_q_entry *mid,
 			 struct TCP_Server_Info *server);
 int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 		    struct smb_rqst *rqst);
+int __smb_send_cancel_rqst(struct TCP_Server_Info *server, int num_rqst,
+			   struct smb_rqst *rqst);
 int wait_for_free_request(struct TCP_Server_Info *server, const int flags,
 			  unsigned int *instance);
 int cifs_wait_mtu_credits(struct TCP_Server_Info *server, size_t size,

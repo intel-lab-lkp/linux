@@ -130,17 +130,18 @@ delete_mid(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 }
 
 /*
- * smb_send_kvec - send an array of kvecs to the server
+ * smb_send_kvec_flags - send an array of kvecs to the server
  * @server:	Server to send the data to
  * @smb_msg:	Message to send
  * @sent:	amount of data sent on socket is stored here
+ * @force_nonblock:	force non-blocking socket sends
  *
- * Our basic "send data to server" function. Should be called with srv_mutex
+ * Our basic "send data to server" helper. Should be called with srv_mutex
  * held. The caller is responsible for handling the results.
  */
-int
-smb_send_kvec(struct TCP_Server_Info *server, struct msghdr *smb_msg,
-	      size_t *sent)
+static int
+smb_send_kvec_flags(struct TCP_Server_Info *server, struct msghdr *smb_msg,
+		    size_t *sent, bool force_nonblock)
 {
 	int rc = 0;
 	int retries = 0;
@@ -148,7 +149,7 @@ smb_send_kvec(struct TCP_Server_Info *server, struct msghdr *smb_msg,
 
 	*sent = 0;
 
-	if (server->noblocksnd)
+	if (server->noblocksnd || force_nonblock)
 		smb_msg->msg_flags = MSG_DONTWAIT + MSG_NOSIGNAL;
 	else
 		smb_msg->msg_flags = MSG_NOSIGNAL;
@@ -210,6 +211,13 @@ smb_send_kvec(struct TCP_Server_Info *server, struct msghdr *smb_msg,
 	return 0;
 }
 
+int
+smb_send_kvec(struct TCP_Server_Info *server, struct msghdr *smb_msg,
+	      size_t *sent)
+{
+	return smb_send_kvec_flags(server, smb_msg, sent, false);
+}
+
 unsigned long
 smb_rqst_len(struct TCP_Server_Info *server, struct smb_rqst *rqst)
 {
@@ -235,8 +243,10 @@ smb_rqst_len(struct TCP_Server_Info *server, struct smb_rqst *rqst)
 	return buflen;
 }
 
-int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
-		    struct smb_rqst *rqst)
+static int
+__smb_send_rqst_common(struct TCP_Server_Info *server, int num_rqst,
+		       struct smb_rqst *rqst, bool ignore_signal,
+		       bool force_nonblock)
 {
 	int rc;
 	struct kvec *iov;
@@ -263,7 +273,7 @@ int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 		goto out;
 
 	rc = -ERESTARTSYS;
-	if (fatal_signal_pending(current)) {
+	if (!ignore_signal && fatal_signal_pending(current)) {
 		cifs_dbg(FYI, "signal pending before send request\n");
 		goto out;
 	}
@@ -293,7 +303,8 @@ int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 			.iov_len  = 4
 		};
 		iov_iter_kvec(&smb_msg.msg_iter, ITER_SOURCE, &hiov, 1, 4);
-		rc = smb_send_kvec(server, &smb_msg, &sent);
+		rc = smb_send_kvec_flags(server, &smb_msg, &sent,
+					 force_nonblock);
 		if (rc < 0)
 			goto unmask;
 
@@ -315,7 +326,8 @@ int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 
 		iov_iter_kvec(&smb_msg.msg_iter, ITER_SOURCE, iov, n_vec, size);
 
-		rc = smb_send_kvec(server, &smb_msg, &sent);
+		rc = smb_send_kvec_flags(server, &smb_msg, &sent,
+					 force_nonblock);
 		if (rc < 0)
 			goto unmask;
 
@@ -323,7 +335,8 @@ int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 
 		if (iov_iter_count(&rqst[j].rq_iter) > 0) {
 			smb_msg.msg_iter = rqst[j].rq_iter;
-			rc = smb_send_kvec(server, &smb_msg, &sent);
+			rc = smb_send_kvec_flags(server, &smb_msg,
+						 &sent, force_nonblock);
 			if (rc < 0)
 				break;
 			total_len += sent;
@@ -380,6 +393,18 @@ smbd_done:
 out:
 	cifs_in_send_dec(server);
 	return rc;
+}
+
+int __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
+		    struct smb_rqst *rqst)
+{
+	return __smb_send_rqst_common(server, num_rqst, rqst, false, false);
+}
+
+int __smb_send_cancel_rqst(struct TCP_Server_Info *server, int num_rqst,
+			   struct smb_rqst *rqst)
+{
+	return __smb_send_rqst_common(server, num_rqst, rqst, true, true);
 }
 
 static int
