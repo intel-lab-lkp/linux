@@ -91,6 +91,10 @@ static struct sock_fprog seccomp_prog = {
 	.len = ARRAY_SIZE(seccomp_filter)
 };
 
+static char w1[] = {'A', '\n'};
+static char w2[] = {'B', '\n'};
+static char w3[] = {'C', '\n'};
+
 static void
 check_psi_entry(struct __test_metadata *_metadata,
 		const struct ptrace_syscall_info *info,
@@ -666,6 +670,149 @@ TEST(set_syscall_info_seccomp)
 					info.op = PTRACE_SYSCALL_INFO_SECCOMP_SKIP;
 					info.exit.rval = 42;
 					info.exit.is_error = 0;
+					ptrace_stop++;
+					break;
+				case 3:  ASSERT_EQ(__NR_exit_group, info.seccomp.nr) {
+						 LOG_KILL_TRACEE("step %d nr __NR_exit_group mismatch: %m", ptrace_stop);
+					 }
+					 break;
+				default:
+					 LOG_KILL_TRACEE("unexpected system call: %m");
+					 break;
+
+			}
+			ASSERT_EQ(0,sys_ptrace(PTRACE_SET_SYSCALL_INFO, tracee_pid, info_size, (uintptr_t) &info)) {
+				LOG_KILL_TRACEE("PTRACE_SET_SYSCALL_INFO: %m");
+			}
+
+			ASSERT_EQ(0,sys_ptrace(PTRACE_CONT, tracee_pid, 0, 0)) {
+				LOG_KILL_TRACEE("PTRACE_CONT: %m");
+			}
+		}
+	}
+}
+
+TEST(set_syscall_info_setip)
+{
+	tracer_pid = getpid();
+	tracee_pid = fork();
+
+	ASSERT_LE(0, tracee_pid) {
+		TH_LOG("fork: %m");
+	}
+
+	/* tracee */
+	if (tracee_pid == 0) {
+		tracee_pid = getpid();
+		ASSERT_EQ(0, sys_ptrace(PTRACE_TRACEME, 0, 0, 0)) {
+			TH_LOG("PTRACE_TRACEME: %m");
+		}
+		ASSERT_EQ(0, kill(tracee_pid, SIGSTOP)) {
+			/* cannot happen */
+			TH_LOG("kill SIGSTOP: %m");
+		}
+
+		ASSERT_EQ(0, prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
+			TH_LOG("prctl: %m");
+			_exit(1);
+		}
+		ASSERT_EQ(0, sys_seccomp(SECCOMP_SET_MODE_FILTER, 0,
+					(void *) &seccomp_prog)) {
+			TH_LOG("seccomp: %m");
+			_exit(1);
+		}
+
+presyscall:
+		/* this sysall will run twice
+		   (the tracer steps back the instruction pointer) */
+		int rv = write(1, w1, sizeof(w1));
+		ASSERT_EQ(2, rv) {
+			TH_LOG("getpid skip set return value changes: %m");
+			_exit(1);
+		}
+
+		/* run write unmodified */
+		ASSERT_EQ(2, write(1, w3, sizeof(w3))) {
+			TH_LOG("getpid skip set return value changes: %m");
+			_exit(1);
+		}
+		_exit(0);
+	}
+
+	int status;
+	void *doitagain = &&presyscall;
+
+	/* tracer */
+	ASSERT_LE(0, waitpid(-1,&status,0)) {
+		LOG_KILL_TRACEE("waitpid: %m");
+	}
+
+	ASSERT_EQ(0, sys_ptrace(PTRACE_SETOPTIONS, tracee_pid, 0, PTRACE_O_TRACESECCOMP | PTRACE_O_TRACESYSGOOD))
+		LOG_KILL_TRACEE("PTRACE_SETOPTIONS: %m");
+
+	ASSERT_EQ(0, sys_ptrace(PTRACE_CONT, tracee_pid, 0, 0)) {
+		LOG_KILL_TRACEE("PTRACE_CONT: %m");
+	}
+
+	while (1) {
+		ASSERT_EQ(tracee_pid, wait(&status)) {
+			/* cannot happen */
+			LOG_KILL_TRACEE("wait: %m");
+		}
+		if (WIFEXITED(status)) {
+			tracee_pid = 0; /* the tracee is no more */
+			ASSERT_EQ(0, WEXITSTATUS(status)) {
+				LOG_KILL_TRACEE("unexpected exit status %u",
+						WEXITSTATUS(status));
+			}
+			break;
+		}
+		ASSERT_FALSE(WIFSIGNALED(status)) {
+			tracee_pid = 0; /* the tracee is no more */
+			LOG_KILL_TRACEE("unexpected signal %u",
+					WTERMSIG(status));
+		}
+		ASSERT_TRUE(WIFSTOPPED(status)) {
+			LOG_KILL_TRACEE("unexpected wait status %#x", status);
+		}
+
+		if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
+			struct ptrace_syscall_info info;
+			size_t info_size = sizeof(info);
+			ASSERT_LT(0, sys_ptrace(PTRACE_GET_SYSCALL_INFO, tracee_pid, info_size, (uintptr_t) &info)) {
+				LOG_KILL_TRACEE("PTRACE_GET_SYSCALL_INFO: %m");
+			}
+			ASSERT_EQ(PTRACE_SYSCALL_INFO_SECCOMP, info.op) {
+				LOG_KILL_TRACEE("entry op mismatch: %m");
+			}
+			ASSERT_TRUE(info.arch) {
+				LOG_KILL_TRACEE("entry arch mismatch: %m");
+			}
+			ASSERT_TRUE(info.instruction_pointer) {
+				LOG_KILL_TRACEE("entry instruction_pointer mismatch: %m");
+			}
+			ASSERT_TRUE(info.stack_pointer) {
+				LOG_KILL_TRACEE("entry stack_pointer mismatch: %m");
+			}
+
+			switch (ptrace_stop) {
+				case 0: ASSERT_EQ(__NR_write, info.seccomp.nr) {
+						LOG_KILL_TRACEE("step %d nr __NR_write mismatch: %m", ptrace_stop);
+					}
+					info.instruction_pointer = (uintptr_t) doitagain;
+					info.flags = PTRACE_SYSCALL_INFO_FLAG_SET_IP;
+					ptrace_stop++;
+					break;
+				case 1:
+					info.seccomp.nr = __NR_write;
+					info.seccomp.args[0] = 1;
+					info.seccomp.args[1] = (uintptr_t) w2;
+					info.seccomp.args[2] = sizeof(w2);
+					ptrace_stop++;
+					break;
+				case 2: ASSERT_EQ(__NR_write, info.seccomp.nr) {
+						LOG_KILL_TRACEE("step %d nr __NR_write mismatch: %m", ptrace_stop);
+					}
 					ptrace_stop++;
 					break;
 				case 3:  ASSERT_EQ(__NR_exit_group, info.seccomp.nr) {
