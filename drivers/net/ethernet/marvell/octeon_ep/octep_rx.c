@@ -476,6 +476,12 @@ static int __octep_oq_process_rx(struct octep_device *oct,
 			skb_put(skb, oq->max_single_buffer_size);
 			shinfo = skb_shinfo(skb);
 			data_len = buff_info->len - oq->max_single_buffer_size;
+			if (DIV_ROUND_UP(data_len, oq->buffer_size) > MAX_SKB_FRAGS) {
+				dev_kfree_skb_any(skb);
+				octep_oq_drop_rx(oq, buff_info,
+						 &read_idx, &desc_used);
+				continue;
+			}
 			while (data_len) {
 				buff_info = (struct octep_rx_buffer *)
 					    &oq->buff_info[read_idx];
