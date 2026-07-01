@@ -128,6 +128,7 @@
 #define CDNS_I2C_TIMEOUT_MAX	0xFF
 
 #define CDNS_I2C_BROKEN_HOLD_BIT	BIT(0)
+#define CDNS_I2C_ENABLE_SMBUS_QUICK	BIT(1)
 #define CDNS_I2C_POLL_US	100000
 #define CDNS_I2C_POLL_US_ATOMIC	10
 #define CDNS_I2C_TIMEOUT_US	500000
@@ -1175,9 +1176,13 @@ static int cdns_i2c_master_xfer_atomic(struct i2c_adapter *adap, struct i2c_msg 
  */
 static u32 cdns_i2c_func(struct i2c_adapter *adap)
 {
+	struct cdns_i2c *id = adap->algo_data;
 	u32 func = I2C_FUNC_I2C | I2C_FUNC_10BIT_ADDR |
 			(I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK) |
 			I2C_FUNC_SMBUS_BLOCK_DATA;
+
+	if (id->quirks & CDNS_I2C_ENABLE_SMBUS_QUICK)
+		func |= I2C_FUNC_SMBUS_QUICK;
 
 #if IS_ENABLED(CONFIG_I2C_SLAVE)
 	func |= I2C_FUNC_SLAVE;
@@ -1442,9 +1447,24 @@ static const struct cdns_platform_data r1p10_i2c_def = {
 	.quirks = CDNS_I2C_BROKEN_HOLD_BIT,
 };
 
+static const struct cdns_platform_data ax3000_i2c_def = {
+	.quirks = CDNS_I2C_ENABLE_SMBUS_QUICK,
+};
+
+/*
+ * The controller does not support zero-length reads. Enabling SMBus Quick
+ * commands would otherwise let the core emulate a Quick read as a zero-length
+ * read message, which writes 0 to the transfer size register and leaves the
+ * hardware in an unsupported state. Reject such transfers in the core.
+ */
+static const struct i2c_adapter_quirks cdns_i2c_quirks = {
+	.flags = I2C_AQ_NO_ZERO_LEN_READ,
+};
+
 static const struct of_device_id cdns_i2c_of_match[] = {
 	{ .compatible = "cdns,i2c-r1p10", .data = &r1p10_i2c_def },
 	{ .compatible = "cdns,i2c-r1p14",},
+	{ .compatible = "axiado,ax3000-i2c", .data = &ax3000_i2c_def },
 	{ /* end of table */ }
 };
 MODULE_DEVICE_TABLE(of, cdns_i2c_of_match);
@@ -1509,6 +1529,9 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 		const struct cdns_platform_data *data = match->data;
 		id->quirks = data->quirks;
 	}
+
+	if (id->quirks & CDNS_I2C_ENABLE_SMBUS_QUICK)
+		id->adap.quirks = &cdns_i2c_quirks;
 
 	id->rinfo.pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(id->rinfo.pinctrl)) {
