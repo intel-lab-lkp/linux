@@ -25,6 +25,7 @@
 #include <linux/syscalls.h>
 #include <linux/mman.h>
 #include <linux/pagemap.h>
+#include <linux/mempolicy.h>
 #include <linux/file.h>
 #include <linux/uio.h>
 #include <linux/error-injection.h>
@@ -1010,7 +1011,9 @@ struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order,
 
 		return folio;
 	}
-	return folio_alloc_noprof(gfp, order);
+	/* page cache defaults to first-accessor task mempolicy for placement */
+	return folio_alloc_mpol_noprof(gfp, order, get_task_policy(current),
+			NO_INTERLEAVE_INDEX, numa_node_id());
 }
 EXPORT_SYMBOL(filemap_alloc_folio_noprof);
 #endif
