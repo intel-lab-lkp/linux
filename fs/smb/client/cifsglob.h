@@ -1460,6 +1460,10 @@ struct cifsFileInfo {
 	int count;
 	spinlock_t file_info_lock; /* protects four flag/count fields above */
 	struct mutex fh_mutex; /* prevents reopen race after dead ses*/
+	struct mutex notify_fid_mutex;
+	struct cifs_fid notify_fid;
+	struct tcon_link *notify_tlink;
+	bool has_notify_fid:1;
 	struct cifs_search_info srch_inf;
 	struct work_struct oplock_break; /* work for oplock breaks */
 	struct work_struct put; /* work for the final part of _put */

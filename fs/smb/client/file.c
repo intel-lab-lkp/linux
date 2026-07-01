@@ -677,6 +677,7 @@ struct cifsFileInfo *cifs_new_dir_fileinfo(struct file *file,
 
 	spin_lock_init(&cfile->file_info_lock);
 	mutex_init(&cfile->fh_mutex);
+	mutex_init(&cfile->notify_fid_mutex);
 	cfile->invalidHandle = true;
 	cfile->tlink = cifs_get_tlink(tlink);
 
@@ -739,6 +740,7 @@ struct cifsFileInfo *cifs_new_fileinfo(struct cifs_fid *fid, struct file *file,
 	INIT_WORK(&cfile->serverclose, serverclose_work);
 	INIT_DELAYED_WORK(&cfile->deferred, smb2_deferred_work_close);
 	mutex_init(&cfile->fh_mutex);
+	mutex_init(&cfile->notify_fid_mutex);
 	spin_lock_init(&cfile->file_info_lock);
 
 	/*
@@ -1563,6 +1565,32 @@ cifs_reopen_persistent_handles(struct cifs_tcon *tcon)
 	}
 }
 
+static void cifs_close_notify_fid(unsigned int xid, struct cifsFileInfo *cfile)
+{
+	struct cifs_tcon *tcon;
+	struct TCP_Server_Info *server;
+	int rc = 0;
+
+	mutex_lock(&cfile->notify_fid_mutex);
+	if (!cfile->has_notify_fid)
+		goto unlock;
+
+	tcon = tlink_tcon(cfile->notify_tlink);
+	server = tcon->ses->server;
+	if (server->ops->close_dir)
+		rc = server->ops->close_dir(xid, tcon, &cfile->notify_fid);
+	else if (server->ops->close)
+		rc = server->ops->close(xid, tcon, &cfile->notify_fid);
+
+	cifs_dbg(FYI, "Closing cached notify handle with rc %d\n", rc);
+	cfile->has_notify_fid = false;
+	cifs_put_tlink(cfile->notify_tlink);
+	cfile->notify_tlink = NULL;
+
+unlock:
+	mutex_unlock(&cfile->notify_fid_mutex);
+}
+
 int cifs_closedir(struct inode *inode, struct file *file)
 {
 	int rc = 0;
@@ -1582,6 +1610,8 @@ int cifs_closedir(struct inode *inode, struct file *file)
 	server = tcon->ses->server;
 
 	cifs_dbg(FYI, "Freeing private data in close dir\n");
+	cifs_close_notify_fid(xid, cfile);
+
 	spin_lock(&cfile->file_info_lock);
 	if (server->ops->dir_needs_close(cfile)) {
 		cfile->invalidHandle = true;
