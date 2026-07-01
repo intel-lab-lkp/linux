@@ -56,6 +56,7 @@ htm_recording_options(struct auxtrace_record *ar __maybe_unused,
 		if (strstarts(pos->name, "htm")) {
 			pos->needs_auxtrace_mmap = true;
 			pos->core.attr.aux_watermark = opts->auxtrace_mmap_pages * (size_t)page_size;
+			pos->core.attr.sample_type |= PERF_SAMPLE_RAW;
 			break;
 		}
 	}
@@ -75,6 +76,8 @@ htm_info_fill(struct auxtrace_record *itr __maybe_unused,
 		struct perf_record_auxtrace_info *auxtrace_info __maybe_unused,
 		size_t priv_size __maybe_unused)
 {
+	auxtrace_info->type = PERF_AUXTRACE_POWERPC_HTM;
+
 	return 0;
 }
 

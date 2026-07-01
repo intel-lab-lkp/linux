@@ -20,4 +20,6 @@ struct perf_session;
 struct perf_pmu;
 
 struct auxtrace_record *htm_recording_init(struct evsel *pos);
+int powerpc_htm_process_auxtrace_info(union perf_event *event,
+					struct perf_session *session);
 #endif
