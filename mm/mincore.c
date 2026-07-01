@@ -12,6 +12,7 @@
 #include <linux/gfp.h>
 #include <linux/pagewalk.h>
 #include <linux/mman.h>
+#include <linux/mmap_lock.h>
 #include <linux/syscalls.h>
 #include <linux/swap.h>
 #include <linux/leafops.h>
@@ -231,27 +232,24 @@ static inline bool can_do_mincore(struct vm_area_struct *vma)
 	       file_permission(vma->vm_file, MAY_WRITE) == 0;
 }
 
-static const struct mm_walk_ops mincore_walk_ops = {
-	.pmd_entry		= mincore_pte_range,
-	.pte_hole		= mincore_unmapped_range,
-	.hugetlb_entry		= mincore_hugetlb,
-	.walk_lock		= PGWALK_RDLOCK,
-};
-
 /*
  * Do a chunk of "sys_mincore()". We've already checked
- * all the arguments, we hold the mmap semaphore: we should
- * just return the amount of info we're asked for.
+ * all the arguments, we should just return the amount of
+ * info we're asked for.
  */
-static long do_mincore(unsigned long addr, unsigned long pages, unsigned char *vec)
+static long do_mincore(struct vm_area_struct *vma, unsigned long addr,
+		unsigned long pages, unsigned char *vec,
+		enum page_walk_lock walk_lock)
 {
-	struct vm_area_struct *vma;
 	unsigned long end;
 	int err;
+	struct mm_walk_ops mincore_walk_ops = {
+		.pmd_entry		= mincore_pte_range,
+		.pte_hole		= mincore_unmapped_range,
+		.hugetlb_entry		= mincore_hugetlb,
+		.walk_lock		= walk_lock,
+	};
 
-	vma = vma_lookup(current->mm, addr);
-	if (!vma)
-		return -ENOMEM;
 	end = min(vma->vm_end, addr + (pages << PAGE_SHIFT));
 	if (!can_do_mincore(vma)) {
 		unsigned long pages = DIV_ROUND_UP(end - addr, PAGE_SIZE);
@@ -327,13 +325,34 @@ SYSCALL_DEFINE3(mincore, unsigned long, start, size_t, len,
 
 	retval = 0;
 	while (pages) {
+		struct mm_struct *mm = current->mm;
+		enum page_walk_lock walk_lock;
+		struct vm_area_struct *vma;
+
+		vma = lock_vma_under_rcu(mm, start);
+		if (vma) {
+			walk_lock = PGWALK_VMA_RDLOCK_VERIFY;
+		} else {
+			mmap_read_lock(mm);
+			vma = vma_lookup(mm, start);
+			if (!vma) {
+				mmap_read_unlock(mm);
+				retval = -ENOMEM;
+				break;
+			}
+			walk_lock = PGWALK_RDLOCK;
+		}
+
 		/*
 		 * Do at most PAGE_SIZE entries per iteration, due to
 		 * the temporary buffer size.
 		 */
-		mmap_read_lock(current->mm);
-		retval = do_mincore(start, min(pages, PAGE_SIZE), tmp);
-		mmap_read_unlock(current->mm);
+		retval = do_mincore(vma, start, min(pages, PAGE_SIZE), tmp, walk_lock);
+
+		if (walk_lock == PGWALK_VMA_RDLOCK_VERIFY)
+			vma_end_read(vma);
+		else
+			mmap_read_unlock(mm);
 
 		if (retval <= 0)
 			break;
