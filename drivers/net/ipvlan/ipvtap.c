@@ -2,7 +2,6 @@
 #include <linux/etherdevice.h>
 #include "ipvlan.h"
 #include <linux/if_vlan.h>
-#include <linux/if_tap.h>
 #include <linux/interrupt.h>
 #include <linux/nsproxy.h>
 #include <linux/compat.h>
@@ -41,11 +40,6 @@ static struct class ipvtap_class = {
 	 .name = "ipvtap",
 	 .ns_type = &net_ns_type_operations,
 	 .namespace = ipvtap_net_namespace,
-};
-
-struct ipvtap_dev {
-	struct ipvl_dev vlan;
-	struct tap_dev	  tap;
 };
 
 static void ipvtap_count_tx_dropped(struct tap_dev *tap)
@@ -112,11 +106,12 @@ static int ipvtap_newlink(struct net_device *dev,
 static void ipvtap_dellink(struct net_device *dev,
 			   struct list_head *head)
 {
-	struct ipvtap_dev *vlan = netdev_priv(dev);
+	struct ipvtap_dev *vlantap = netdev_priv(dev);
+	struct ipvl_port *port = vlantap->vlan.port;
 
-	netdev_rx_handler_unregister(dev);
-	tap_del_queues(&vlan->tap);
-	ipvlan_link_delete(dev, head);
+	mutex_lock(&port->pnodes_lock);
+	__ipvtap_dellink(dev, head);
+	mutex_unlock(&port->pnodes_lock);
 }
 
 static void ipvtap_setup(struct net_device *dev)

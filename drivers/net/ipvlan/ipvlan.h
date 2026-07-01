@@ -16,6 +16,9 @@
 #include <linux/if_arp.h>
 #include <linux/if_link.h>
 #include <linux/if_vlan.h>
+#if IS_ENABLED(CONFIG_IPVTAP)
+#include <linux/if_tap.h>
+#endif
 #include <linux/ip.h>
 #include <linux/inetdevice.h>
 #include <linux/netfilter.h>
@@ -91,6 +94,7 @@ struct ipvl_port {
 	struct hlist_head	hlhead[IPVLAN_HASH_SIZE];
 	spinlock_t		addrs_lock; /* guards hash-table and addrs */
 	struct list_head	ipvlans;
+	struct mutex		pnodes_lock;
 	u16			mode;
 	u16			flags;
 	u16			dev_id_start;
@@ -168,7 +172,6 @@ void ipvlan_count_rx(const struct ipvl_dev *ipvlan,
 		     unsigned int len, bool success, bool mcast);
 int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 		    struct netlink_ext_ack *extack);
-void ipvlan_link_delete(struct net_device *dev, struct list_head *head);
 void ipvlan_link_setup(struct net_device *dev);
 int ipvlan_link_register(struct rtnl_link_ops *ops);
 #ifdef CONFIG_IPVLAN_L3S
@@ -206,5 +209,14 @@ static inline bool netif_is_ipvlan_port(const struct net_device *dev)
 {
 	return rcu_access_pointer(dev->rx_handler) == ipvlan_handle_frame;
 }
+
+#if IS_ENABLED(CONFIG_IPVTAP)
+struct ipvtap_dev {
+	struct ipvl_dev vlan;
+	struct tap_dev	  tap;
+};
+
+void __ipvtap_dellink(struct net_device *dev, struct list_head *head);
+#endif
 
 #endif /* __IPVLAN_H */
