@@ -578,6 +578,7 @@ struct nmk_gpio_chip *nmk_gpio_populate_chip(struct fwnode_handle *fwnode,
 	clk = clk_get_optional(gpio_dev, NULL);
 	if (IS_ERR(clk)) {
 		ret = PTR_ERR(clk);
+		dev_err(dev, "failed getting clock: %d\n", ret);
 		goto err_put_pdev;
 	}
 	clk_prepare(clk);
