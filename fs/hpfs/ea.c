@@ -7,6 +7,8 @@
  *  handling extended attributes
  */
 
+#include <linux/limits.h>
+
 #include "hpfs_fn.h"
 
 /* Remove external extended attributes. ano specifies whether a is a 
@@ -48,9 +50,14 @@ void hpfs_ea_ext_remove(struct super_block *s, secno a, int ano, unsigned len)
 	}
 }
 
-static char *get_indirect_ea(struct super_block *s, int ano, secno a, int size)
+static char *get_indirect_ea(struct super_block *s, int ano, secno a,
+			     unsigned int size, int *out_size)
 {
 	char *ret;
+	if (size > S32_MAX || (size_t)size + 1 > KMALLOC_MAX_SIZE) {
+		hpfs_error(s, "indirect EA is too large: %u", size);
+		return NULL;
+	}
 	if (!(ret = kmalloc(size + 1, GFP_NOFS))) {
 		pr_err("out of memory for EA\n");
 		return NULL;
@@ -60,6 +67,7 @@ static char *get_indirect_ea(struct super_block *s, int ano, secno a, int size)
 		return NULL;
 	}
 	ret[size] = 0;
+	*out_size = size;
 	return ret;
 }
 
@@ -138,7 +146,9 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 	for (ea = fnode_ea(fnode); ea < ea_end; ea = next_ea(ea))
 		if (!strcmp(ea->name, key)) {
 			if (ea_indirect(ea))
-				return get_indirect_ea(s, ea_in_anode(ea), ea_sec(ea), *size = ea_len(ea));
+				return get_indirect_ea(s, ea_in_anode(ea),
+						       ea_sec(ea), ea_len(ea),
+						       size);
 			if (!(ret = kmalloc((*size = ea_valuelen(ea)) + 1, GFP_NOFS))) {
 				pr_err("out of memory for EA\n");
 				return NULL;
@@ -164,7 +174,9 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 			return NULL;
 		if (!strcmp(ea->name, key)) {
 			if (ea_indirect(ea))
-				return get_indirect_ea(s, ea_in_anode(ea), ea_sec(ea), *size = ea_len(ea));
+				return get_indirect_ea(s, ea_in_anode(ea),
+						       ea_sec(ea), ea_len(ea),
+						       size);
 			if (!(ret = kmalloc((*size = ea_valuelen(ea)) + 1, GFP_NOFS))) {
 				pr_err("out of memory for EA\n");
 				return NULL;
