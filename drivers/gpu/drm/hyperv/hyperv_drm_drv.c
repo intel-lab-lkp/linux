@@ -45,10 +45,6 @@ static int hv_drm_pci_probe(struct pci_dev *pdev,
 	return 0;
 }
 
-static void hv_drm_pci_remove(struct pci_dev *pdev)
-{
-}
-
 static const struct pci_device_id hv_drm_pci_tbl[] = {
 	{
 		PCI_VDEVICE_SUB(MICROSOFT, PCI_DEVICE_ID_HYPERV_VIDEO,
@@ -64,7 +60,6 @@ static struct pci_driver hv_drm_pci_driver = {
 	.name =		KBUILD_MODNAME,
 	.id_table =	hv_drm_pci_tbl,
 	.probe =	hv_drm_pci_probe,
-	.remove =	hv_drm_pci_remove,
 };
 
 static int hv_drm_setup_vram(struct hv_drm_device *hv,
