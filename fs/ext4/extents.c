@@ -4748,9 +4748,11 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 			return ret;
 	}
 
-	ret = ext4_update_disksize_before_punch(inode, offset, len);
-	if (ret)
-		return ret;
+	if (mode & FALLOC_FL_ZERO_RANGE) {
+		ret = ext4_update_disksize_before_punch(inode, offset, len);
+		if (ret)
+			return ret;
+	}
 
 	/* Now release the pages and zero block aligned part of pages */
 	ret = ext4_truncate_page_cache_block_range(inode, offset, end);
