@@ -453,10 +453,30 @@ impl Device {
 }
 
 impl<'a> Device<device::Core<'a>> {
-    /// Enable memory resources for this device.
-    pub fn enable_device_mem(&self) -> Result {
+    /// Enable I/O and memory resources for this device.
+    ///
+    /// This function is unmanaged and does not perform any cleanup when the device is unbound.
+    /// For a managed function take a look at [`Device::enable_device_managed`].
+    #[inline]
+    pub fn enable_device(&self) -> Result {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
-        to_result(unsafe { bindings::pci_enable_device_mem(self.as_raw()) })
+        to_result(unsafe { bindings::pci_enable_device(self.as_raw()) })
+    }
+
+    /// Disable I/O and memory resources for this device.
+    ///
+    /// This function is the counterpart to [`Device::enable_device`].
+    #[inline]
+    pub fn disable_device(&self) {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        unsafe { bindings::pci_disable_device(self.as_raw()) }
+    }
+
+    /// Enable I/O and memory resources for this device, with automatic cleanup.
+    #[inline]
+    pub fn enable_device_managed(&self) -> Result {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        to_result(unsafe { bindings::pcim_enable_device(self.as_raw()) })
     }
 
     /// Enable bus-mastering for this device.

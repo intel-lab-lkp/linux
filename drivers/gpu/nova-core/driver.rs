@@ -75,7 +75,7 @@ impl pci::Driver for NovaCoreDriver {
         pin_init::pin_init_scope(move || {
             dev_dbg!(pdev, "Probe Nova Core GPU driver.\n");
 
-            pdev.enable_device_mem()?;
+            pdev.enable_device_managed()?;
             pdev.set_master();
 
             Ok(try_pin_init!(NovaCore {

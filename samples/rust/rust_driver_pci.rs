@@ -154,7 +154,7 @@ impl pci::Driver for SampleDriver {
             pdev.device_id()
         );
 
-        pdev.enable_device_mem()?;
+        pdev.enable_device_managed()?;
         pdev.set_master();
 
         let bar = pdev.iomap_region_sized::<{ regs::END }>(0, c"rust_driver_pci")?;
