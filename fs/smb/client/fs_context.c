@@ -1333,6 +1333,7 @@ static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon;
 	struct rb_node *node;
+	bool became_nolease = false;
 
 	spin_lock(&cifs_sb->tlink_tree_lock);
 	for (node = rb_first(&cifs_sb->tlink_tree); node; node = rb_next(node)) {
@@ -1340,16 +1341,29 @@ static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
 		tcon = tlink_tcon(tlink);
 		if (IS_ERR(tcon))
 			continue;
+		/*
+		 * Update under tc_lock to pair with match_tcon(), which reads
+		 * tcon->no_lease with tc_lock held.  Track whether this is the
+		 * lease -> nolease transition so the expensive cleanup below
+		 * only runs when nolease is actually being switched on.
+		 */
+		spin_lock(&tcon->tc_lock);
+		if (ctx->no_lease && !tcon->no_lease)
+			became_nolease = true;
 		tcon->no_lease = ctx->no_lease;
+		spin_unlock(&tcon->tc_lock);
 	}
 	spin_unlock(&cifs_sb->tlink_tree_lock);
 
 	/*
-	 * Both _sb() helpers iterate all tcons internally and handle
-	 * their own locking.  They can sleep, so they must be called
+	 * Only when switching to nolease must we evict lease-bearing cached
+	 * state (deferred handles and cached dir fids).  Skipping this when
+	 * nolease was already set avoids dropping caches on every bare
+	 * remount.  Both _sb() helpers iterate all tcons internally and
+	 * handle their own locking; they can sleep, so they must be called
 	 * outside tlink_tree_lock.
 	 */
-	if (ctx->no_lease) {
+	if (became_nolease) {
 		cifs_close_all_deferred_files_sb(cifs_sb);
 		invalidate_all_cached_dirs_sb(cifs_sb);
 	}

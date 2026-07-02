@@ -598,10 +598,17 @@ done:
 }
 
 /*
- * Invalidate all cached dirs when a TCON has been reset
- * due to a session loss.
+ * Invalidate all cached dirs on a TCON, moving them to the dying list
+ * for the laundromat to clean up.
+ *
+ * @close_handles: if true, the connection is still live (e.g. remount),
+ * so leave cfid->is_open set and let smb2_close_cached_fid() send
+ * SMB2_close to release the server-side directory handle and lease.  If
+ * false (the session-loss teardown case), mark the cfids closed so the
+ * doomed SMB2_close is skipped -- the server has already dropped them.
  */
-void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
+void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync,
+				bool close_handles)
 {
 	struct cached_fids *cfids = tcon->cfids;
 	struct cached_fid *cfid, *q;
@@ -610,15 +617,16 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
 		return;
 
 	/*
-	 * Mark all the cfids as closed, and move them to the cfids->dying list.
-	 * They'll be cleaned up by laundromat.  Take a reference to each cfid
-	 * during this process.
+	 * Move all the cfids to the cfids->dying list.  They'll be cleaned
+	 * up by laundromat.  Take a reference to each cfid during this
+	 * process.
 	 */
 	spin_lock(&cfids->cfid_list_lock);
 	list_for_each_entry_safe(cfid, q, &cfids->entries, entry) {
 		list_move(&cfid->entry, &cfids->dying);
 		cfids->num_entries--;
-		cfid->is_open = false;
+		if (!close_handles)
+			cfid->is_open = false;
 		cfid->on_list = false;
 		if (cfid->has_lease) {
 			/*
@@ -640,10 +648,14 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
 /*
  * Invalidate cached directory entries across all tcons under a
  * superblock.  Collect references on each tcon under tlink_tree_lock,
- * then call invalidate_all_cached_dirs() outside the spinlock since it
- * can sleep.  Holding a tc_count reference prevents the tcon from being
+ * then close their cached dirs outside the spinlock since that can
+ * sleep.  Holding a tc_count reference prevents the tcon from being
  * freed by tlink_expire_delayed() between dropping the spinlock and
  * the call.
+ *
+ * Called on remount while the connection is live (e.g. switching to
+ * nolease), so pass close_handles=true to actually release the
+ * server-side directory handles and their leases.
  */
 void invalidate_all_cached_dirs_sb(struct cifs_sb_info *cifs_sb)
 {
@@ -674,7 +686,7 @@ void invalidate_all_cached_dirs_sb(struct cifs_sb_info *cifs_sb)
 	spin_unlock(&cifs_sb->tlink_tree_lock);
 
 	list_for_each_entry_safe(tmp_list, q, &tcon_head, entry) {
-		invalidate_all_cached_dirs(tmp_list->tcon, true);
+		invalidate_all_cached_dirs(tmp_list->tcon, true, true);
 		list_del(&tmp_list->entry);
 		cifs_put_tcon(tmp_list->tcon, netfs_trace_tcon_ref_put_cached_inval_sb);
 		kfree(tmp_list);

@@ -383,7 +383,7 @@ static ssize_t cifs_debug_dirs_proc_write(struct file *file, const char __user *
 				if (cifs_ses_exiting(ses))
 					continue;
 				list_for_each_entry(tcon, &ses->tcon_list, tcon_list)
-					invalidate_all_cached_dirs(tcon, false);
+					invalidate_all_cached_dirs(tcon, false, false);
 			}
 		}
 		spin_unlock(&cifs_tcp_ses_lock);
