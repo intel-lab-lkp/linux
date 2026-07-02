@@ -1250,6 +1250,59 @@ static int mvebu_gpio_probe(struct platform_device *pdev)
 		BUG();
 	}
 
+	/* Some gpio controllers do not provide irq support */
+	if (have_irqs) {
+		mvchip->domain = irq_domain_create_linear(dev_fwnode(&pdev->dev),
+							  ngpios,
+							  &irq_generic_chip_ops,
+							  NULL);
+		if (!mvchip->domain)
+			return dev_err_probe(&pdev->dev, -ENODEV,
+					     "couldn't allocate irq domain %s (DT).\n",
+					     mvchip->chip.label);
+
+		err = devm_add_action_or_reset(&pdev->dev,
+					       mvebu_gpio_remove_irq_domain,
+					       mvchip->domain);
+		if (err)
+			return err;
+
+		err = irq_alloc_domain_generic_chips(
+		    mvchip->domain, ngpios, 2, np->name, handle_level_irq,
+		    IRQ_NOREQUEST | IRQ_NOPROBE | IRQ_LEVEL, 0,
+		    IRQ_GC_INIT_NESTED_LOCK);
+		if (err)
+			return dev_err_probe(&pdev->dev, err,
+					     "couldn't allocate irq chips %s (DT).\n",
+					     mvchip->chip.label);
+
+		/*
+		 * NOTE: The common accessors cannot be used because of the
+		 * percpu access to the mask registers
+		 */
+		gc = irq_get_domain_generic_chip(mvchip->domain, 0);
+		gc->private = mvchip;
+		ct = &gc->chip_types[0];
+		ct->type = IRQ_TYPE_LEVEL_HIGH | IRQ_TYPE_LEVEL_LOW;
+		ct->chip.irq_mask = mvebu_gpio_level_irq_mask;
+		ct->chip.irq_unmask = mvebu_gpio_level_irq_unmask;
+		ct->chip.irq_set_type = mvebu_gpio_irq_set_type;
+		ct->chip.irq_set_wake = mvebu_gpio_set_wake_irq;
+		ct->chip.flags = IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND;
+		ct->chip.name = mvchip->chip.label;
+
+		ct = &gc->chip_types[1];
+		ct->type = IRQ_TYPE_EDGE_RISING | IRQ_TYPE_EDGE_FALLING;
+		ct->chip.irq_ack = mvebu_gpio_irq_ack;
+		ct->chip.irq_mask = mvebu_gpio_edge_irq_mask;
+		ct->chip.irq_unmask = mvebu_gpio_edge_irq_unmask;
+		ct->chip.irq_set_type = mvebu_gpio_irq_set_type;
+		ct->chip.irq_set_wake = mvebu_gpio_set_wake_irq;
+		ct->chip.flags = IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND;
+		ct->handler = handle_edge_irq;
+		ct->chip.name = mvchip->chip.label;
+	}
+
 	err = devm_gpiochip_add_data(&pdev->dev, &mvchip->chip, mvchip);
 	if (err)
 		return dev_err_probe(&pdev->dev, err,
@@ -1262,71 +1315,21 @@ static int mvebu_gpio_probe(struct platform_device *pdev)
 			return err;
 	}
 
-	/* Some gpio controllers do not provide irq support */
-	if (!have_irqs)
-		return 0;
+	if (have_irqs) {
+		/*
+		 * Setup the interrupt handlers. Each chip can have up to 4
+		 * interrupt handlers, with each handler dealing with 8 GPIO
+		 * pins.
+		 */
+		for (i = 0; i < ARRAY_SIZE(mvchip->bank_irq); i++) {
+			int irq = platform_get_irq_optional(pdev, i);
 
-	mvchip->domain = irq_domain_create_linear(dev_fwnode(&pdev->dev), ngpios,
-						  &irq_generic_chip_ops, NULL);
-	if (!mvchip->domain) {
-		dev_err(&pdev->dev, "couldn't allocate irq domain %s (DT).\n",
-			mvchip->chip.label);
-		return -ENODEV;
-	}
-
-	err = devm_add_action_or_reset(&pdev->dev, mvebu_gpio_remove_irq_domain,
-				       mvchip->domain);
-	if (err)
-		return err;
-
-	err = irq_alloc_domain_generic_chips(
-	    mvchip->domain, ngpios, 2, np->name, handle_level_irq,
-	    IRQ_NOREQUEST | IRQ_NOPROBE | IRQ_LEVEL, 0, IRQ_GC_INIT_NESTED_LOCK);
-	if (err) {
-		dev_err(&pdev->dev, "couldn't allocate irq chips %s (DT).\n",
-			mvchip->chip.label);
-		return err;
-	}
-
-	/*
-	 * NOTE: The common accessors cannot be used because of the percpu
-	 * access to the mask registers
-	 */
-	gc = irq_get_domain_generic_chip(mvchip->domain, 0);
-	gc->private = mvchip;
-	ct = &gc->chip_types[0];
-	ct->type = IRQ_TYPE_LEVEL_HIGH | IRQ_TYPE_LEVEL_LOW;
-	ct->chip.irq_mask = mvebu_gpio_level_irq_mask;
-	ct->chip.irq_unmask = mvebu_gpio_level_irq_unmask;
-	ct->chip.irq_set_type = mvebu_gpio_irq_set_type;
-	ct->chip.irq_set_wake = mvebu_gpio_set_wake_irq;
-	ct->chip.flags = IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND;
-	ct->chip.name = mvchip->chip.label;
-
-	ct = &gc->chip_types[1];
-	ct->type = IRQ_TYPE_EDGE_RISING | IRQ_TYPE_EDGE_FALLING;
-	ct->chip.irq_ack = mvebu_gpio_irq_ack;
-	ct->chip.irq_mask = mvebu_gpio_edge_irq_mask;
-	ct->chip.irq_unmask = mvebu_gpio_edge_irq_unmask;
-	ct->chip.irq_set_type = mvebu_gpio_irq_set_type;
-	ct->chip.irq_set_wake = mvebu_gpio_set_wake_irq;
-	ct->chip.flags = IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND;
-	ct->handler = handle_edge_irq;
-	ct->chip.name = mvchip->chip.label;
-
-	/*
-	 * Setup the interrupt handlers. Each chip can have up to 4
-	 * interrupt handlers, with each handler dealing with 8 GPIO
-	 * pins.
-	 */
-	for (i = 0; i < ARRAY_SIZE(mvchip->bank_irq); i++) {
-		int irq = platform_get_irq_optional(pdev, i);
-
-		if (irq < 0)
-			continue;
-		irq_set_chained_handler_and_data(irq, mvebu_gpio_irq_handler,
-						 mvchip);
-		mvchip->bank_irq[i] = irq;
+			if (irq < 0)
+				continue;
+			irq_set_chained_handler_and_data(irq,
+					mvebu_gpio_irq_handler, mvchip);
+			mvchip->bank_irq[i] = irq;
+		}
 	}
 
 	return 0;
