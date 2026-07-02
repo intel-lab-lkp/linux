@@ -341,7 +341,7 @@ static const struct qusb2_phy_cfg ipq6018_phy_cfg = {
 	.disable_ctrl   = POWER_DOWN,
 	.mask_core_ready = PLL_LOCKED,
 	/* autoresume not used */
-	.autoresume_en   = BIT(0),
+	.autoresume_en   = 0,
 };
 
 static const struct qusb2_phy_cfg qcs615_phy_cfg = {
@@ -352,7 +352,7 @@ static const struct qusb2_phy_cfg qcs615_phy_cfg = {
 	.disable_ctrl   = (CLAMP_N_EN | FREEZIO_N | POWER_DOWN),
 	.mask_core_ready = PLL_LOCKED,
 	/* autoresume not used */
-	.autoresume_en   = BIT(0),
+	.autoresume_en   = 0,
 };
 
 static const struct qusb2_phy_cfg qusb2_v2_phy_cfg = {
@@ -677,7 +677,7 @@ static int __maybe_unused qusb2_phy_runtime_suspend(struct device *dev)
 	}
 
 	/* enable phy auto-resume only if device is connected on bus */
-	if (qphy->mode != PHY_MODE_INVALID) {
+	if (qphy->mode != PHY_MODE_INVALID && cfg->autoresume_en) {
 		qusb2_setbits(qphy->base, cfg->regs[QUSB2PHY_PORT_TEST1],
 			      cfg->autoresume_en);
 		/* Autoresume bit has to be toggled in order to enable it */
