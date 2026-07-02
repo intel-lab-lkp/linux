@@ -592,6 +592,7 @@ hdmi_compute_clock(const struct drm_connector *connector,
 		return -EINVAL;
 
 	conn_state->hdmi.tmds_char_rate = clock;
+	conn_state->hdmi.scrambler_needed = (clock > HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ);
 
 	return 0;
 }
