@@ -892,10 +892,19 @@ static int ov02c10_probe(struct i2c_client *client)
 				     "failed to get imaging clock\n");
 
 	freq = clk_get_rate(ov02c10->img_clk);
+	if (freq != OV02C10_MCLK) {
+		/*
+		 * Some platforms provide the sensor clock via a programmable
+		 * PMIC. Ask for OV02C10_MCLK; if that is not possible (e.g. a
+		 * fixed 12 MHz clock on the Surface Laptop 7) proceed anyway.
+		 */
+		if (clk_set_rate(ov02c10->img_clk, OV02C10_MCLK) == 0)
+			freq = clk_get_rate(ov02c10->img_clk);
+	}
 	if (freq != OV02C10_MCLK)
-		return dev_err_probe(ov02c10->dev, -EINVAL,
-				     "external clock %lu is not supported",
-				     freq);
+		dev_warn(ov02c10->dev,
+			 "external clock %lu differs from expected %u; proceeding anyway\n",
+			 freq, OV02C10_MCLK);
 
 	v4l2_i2c_subdev_init(&ov02c10->sd, client, &ov02c10_subdev_ops);
 
