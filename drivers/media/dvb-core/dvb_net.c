@@ -966,7 +966,7 @@ static void dvb_net_sec(struct net_device *dev,
 		eth[13] = pkt[19];
 	} else {
 		/* protocol numbers are from rfc-1700 or
-		 * http://www.iana.org/assignments/ethernet-numbers
+		 * http://www.iana.org/assignments/ethernet-numbers/ethernet-numbers.xhtml
 		 */
 		if (pkt[12] >> 4 == 6) { /* version field from IP header */
 			eth[12] = 0x86;	/* IPv6 */
