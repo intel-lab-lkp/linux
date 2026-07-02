@@ -1380,7 +1380,7 @@ int ppe_ring_queue_map_set(struct ppe_device *ppe_dev, int ring_id, u32 *queue_m
 }
 
 static int ppe_config_bm_threshold(struct ppe_device *ppe_dev, int bm_port_id,
-				   const struct ppe_bm_port_config port_cfg)
+				   struct ppe_bm_port_config port_cfg)
 {
 	u32 reg, val, bm_fc_val[2];
 	int ret;
@@ -1586,7 +1586,7 @@ qm_config_fail:
 }
 
 static int ppe_node_scheduler_config(struct ppe_device *ppe_dev,
-				     const struct ppe_scheduler_port_config config)
+				     struct ppe_scheduler_port_config config)
 {
 	struct ppe_scheduler_cfg sch_cfg;
 	int ret, i;
