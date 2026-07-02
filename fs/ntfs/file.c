@@ -550,6 +550,12 @@ static ssize_t ntfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (NVolShutdown(vol))
 		return -EIO;
 
+	if (ni->mft_no < FILE_first_user) {
+		ntfs_error(vi->i_sb, "Attempt to write to $MFT denied (mft_no: 0x%llx)",
+				ni->mft_no);
+		return -EACCES;
+	}
+
 	if (NInoEncrypted(ni)) {
 		ntfs_error(vi->i_sb, "Writing for %s files is not supported yet",
 			   NInoCompressed(ni) ? "Compressed" : "Encrypted");
@@ -618,7 +624,14 @@ out_lock:
 static vm_fault_t ntfs_filemap_page_mkwrite(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct ntfs_inode *ni = NTFS_I(inode);
 	vm_fault_t ret;
+
+	if (ni->mft_no < FILE_first_user) {
+		ntfs_error(inode->i_sb, "Attempt to write to $MFT via mmap denied (mft_no: 0x%llx)",
+				ni->mft_no);
+		return VM_FAULT_SIGBUS;
+	}
 
 	sb_start_pagefault(inode->i_sb);
 	file_update_time(vmf->vma->vm_file);
