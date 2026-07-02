@@ -11,7 +11,6 @@ use kernel::{
 use crate::gpu;
 
 /// Requests the GPU firmware TLV `name` suitable for `chipset`.
-#[expect(dead_code)]
 pub(crate) fn request_tlv(
     dev: &device::Device,
     chipset: gpu::Chipset,
@@ -117,6 +116,9 @@ impl<'tlv, 'a> Iterator for TlvIter<'tlv, 'a> {
 /// be exactly partitionable into blocks (no trailing partial header or slack). After
 /// that, [`TlvIter`] only signals end-of-stream via [`None`], not parse failure.
 ///
+/// Although the spec forbids duplicate tags, neither the constructor nor the iterator
+/// enforces this restriction.  Instead, duplicate tags are simply ignored.
+///
 /// # Invariants
 ///
 /// `data` is a validated TLV payload (the bytes *after* the `NVFW` magic): it is the exact
@@ -129,7 +131,6 @@ pub(crate) struct Tlv<'a> {
     data: &'a [u8],
 }
 
-#[expect(dead_code)]
 impl<'a> Tlv<'a> {
     const MAGIC: &'static [u8; 4] = b"NVFW";
 
@@ -161,6 +162,7 @@ impl<'a> Tlv<'a> {
             else {
                 return Err(EINVAL);
             };
+
             // The `length` field of a TLV block contains the actual byte length of the
             // value, but each TLV block is aligned to a 4-byte boundary.
             let Some(stored_size) = header.length.checked_next_multiple_of(4) else {
