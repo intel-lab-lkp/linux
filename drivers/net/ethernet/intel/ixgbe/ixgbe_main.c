@@ -7554,11 +7554,11 @@ static int ixgbe_resume(struct device *dev_d)
 
 	device_wakeup_disable(dev_d);
 
+	rtnl_lock();
 	ixgbe_reset(adapter);
 
 	IXGBE_WRITE_REG(&adapter->hw, IXGBE_WUS, ~0);
 
-	rtnl_lock();
 	err = ixgbe_init_interrupt_scheme(adapter);
 	if (!err && netif_running(netdev))
 		err = ixgbe_open(netdev);
