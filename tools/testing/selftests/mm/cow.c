@@ -145,26 +145,39 @@ static int child_vmsplice_memcmp_fn(char *mem, size_t size,
 	char *old, *new;
 	int fds[2];
 	char buf;
+	int ret;
 
 	old = malloc(size);
 	new = malloc(size);
+	if (!old || !new) {
+		ret = -ENOMEM;
+		goto free;
+	}
 
 	/* Backup the original content. */
 	memcpy(old, mem, size);
 
-	if (pipe(fds) < 0)
-		return -errno;
+	if (pipe(fds) < 0) {
+		ret = -errno;
+		goto free;
+	}
 
 	/* Trigger a read-only pin. */
 	transferred = vmsplice(fds[1], &iov, 1, 0);
-	if (transferred < 0)
-		return -errno;
-	if (transferred == 0)
-		return -EINVAL;
+	if (transferred < 0) {
+		ret = -errno;
+		goto close_pipe;
+	}
+	if (transferred == 0) {
+		ret = -EINVAL;
+		goto close_pipe;
+	}
 
 	/* Unmap it from our page tables. */
-	if (munmap(mem, size) < 0)
-		return -errno;
+	if (munmap(mem, size) < 0) {
+		ret = -errno;
+		goto close_pipe;
+	}
 
 	/* Wait until the parent modified it. */
 	write(comm_pipes->child_ready[1], "0", 1);
@@ -174,11 +187,20 @@ static int child_vmsplice_memcmp_fn(char *mem, size_t size,
 	/* See if we still read the old values via the pipe. */
 	for (total = 0; total < transferred; total += cur) {
 		cur = read(fds[0], new + total, transferred - total);
-		if (cur < 0)
-			return -errno;
+		if (cur < 0) {
+			ret = -errno;
+			goto close_pipe;
+		}
 	}
 
-	return memcmp(old, new, transferred);
+	ret = memcmp(old, new, transferred);
+close_pipe:
+	close(fds[0]);
+	close(fds[1]);
+free:
+	free(old);
+	free(new);
+	return ret;
 }
 
 typedef int (*child_fn)(char *mem, size_t size, struct comm_pipes *comm_pipes);
