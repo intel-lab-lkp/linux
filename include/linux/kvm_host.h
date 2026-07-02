@@ -56,6 +56,7 @@
  */
 #define KVM_MEMSLOT_INVALID			(1UL << 16)
 #define KVM_MEMSLOT_GMEM_ONLY			(1UL << 17)
+#define MEMSLOT_USER_FLAGS_MASK			0xffff
 
 /*
  * Bit 63 of the memslot generation number is an "update in-progress flag",
@@ -731,6 +732,9 @@ static inline bool kvm_arch_has_private_mem(struct kvm *kvm)
 
 #ifdef CONFIG_KVM_GUEST_MEMFD
 bool kvm_arch_supports_gmem_init_shared(struct kvm *kvm);
+bool kvm_arch_supports_gmem_mmap_dirty_logging(struct kvm *kvm);
+int kvm_gmem_check_no_change(struct kvm *kvm, struct kvm_memory_slot *slot,
+			     unsigned int fd, loff_t offset);
 
 static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 {
@@ -740,6 +744,17 @@ static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 		flags |= GUEST_MEMFD_FLAG_INIT_SHARED;
 
 	return flags;
+}
+#else
+static inline bool kvm_arch_supports_gmem_mmap_dirty_logging(struct kvm *kvm)
+{
+	return false;
+}
+static inline int kvm_gmem_check_no_change(struct kvm *kvm, struct kvm_memory_slot *slot,
+					   unsigned int fd, loff_t offset)
+{
+	WARN_ON_ONCE(1);
+	return -EIO;
 }
 #endif
 

@@ -77,6 +77,9 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args);
 int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 		  unsigned int fd, uoff_t offset);
 void kvm_gmem_unbind(struct kvm_memory_slot *slot);
+int kvm_gmem_change_flags(struct kvm *kvm, struct kvm_memory_slot *old,
+			  struct kvm_memory_slot *new, unsigned int fd,
+			  loff_t offset);
 #else
 static inline int kvm_gmem_init(struct module *module)
 {
@@ -94,6 +97,14 @@ static inline int kvm_gmem_bind(struct kvm *kvm,
 static inline void kvm_gmem_unbind(struct kvm_memory_slot *slot)
 {
 	WARN_ON_ONCE(1);
+}
+static inline int kvm_gmem_change_flags(struct kvm *kvm,
+					struct kvm_memory_slot *old,
+					struct kvm_memory_slot *new,
+					unsigned int fd, loff_t offset)
+{
+	WARN_ON_ONCE(1);
+	return -EIO;
 }
 #endif /* CONFIG_KVM_GUEST_MEMFD */
 

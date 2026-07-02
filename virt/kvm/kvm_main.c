@@ -1573,14 +1573,14 @@ static void kvm_replace_memslot(struct kvm *kvm,
 static int check_memory_region_flags(struct kvm *kvm,
 				     const struct kvm_userspace_memory_region2 *mem)
 {
-	u32 valid_flags = KVM_MEM_LOG_DIRTY_PAGES;
+	u32 valid_flags = 0;
 
 	if (IS_ENABLED(CONFIG_KVM_GUEST_MEMFD))
 		valid_flags |= KVM_MEM_GUEST_MEMFD;
 
-	/* Dirty logging private memory is not currently supported. */
-	if (mem->flags & KVM_MEM_GUEST_MEMFD)
-		valid_flags &= ~KVM_MEM_LOG_DIRTY_PAGES;
+	if (!(mem->flags & KVM_MEM_GUEST_MEMFD) ||
+	    kvm_arch_supports_gmem_mmap_dirty_logging(kvm))
+		valid_flags |= KVM_MEM_LOG_DIRTY_PAGES;
 
 	/*
 	 * GUEST_MEMFD is incompatible with read-only memslots, as writes to
@@ -1739,16 +1739,6 @@ static void kvm_commit_memory_region(struct kvm *kvm,
 		 */
 		if (old->dirty_bitmap && !new->dirty_bitmap)
 			kvm_destroy_dirty_bitmap(old);
-
-		/*
-		 * Unbind the guest_memfd instance as needed; the @new slot has
-		 * already created its own binding.  TODO: Drop the WARN when
-		 * dirty logging guest_memfd memslots is supported.  Until then,
-		 * flags-only changes on guest_memfd slots should be impossible.
-		 */
-		if (WARN_ON_ONCE(old->flags & KVM_MEM_GUEST_MEMFD))
-			kvm_gmem_unbind(old);
-
 		/*
 		 * The final quirk.  Free the detached, old slot, but only its
 		 * memory, not any metadata.  Metadata, including arch specific
@@ -2073,21 +2063,26 @@ static int kvm_set_memory_region(struct kvm *kvm,
 		if ((kvm->nr_memslot_pages + npages) < kvm->nr_memslot_pages)
 			return -EINVAL;
 	} else { /* Modify an existing slot. */
-		/* Private memslots are immutable, they can only be deleted. */
-		if (mem->flags & KVM_MEM_GUEST_MEMFD)
-			return -EINVAL;
 		if ((mem->userspace_addr != old->userspace_addr) ||
 		    (npages != old->npages) ||
 		    ((mem->flags ^ old->flags) & (KVM_MEM_READONLY | KVM_MEM_GUEST_MEMFD)))
 			return -EINVAL;
 
-		if (base_gfn != old->base_gfn)
+		if (base_gfn != old->base_gfn) {
 			change = KVM_MR_MOVE;
-		else if (mem->flags != old->flags)
+		} else if (mem->flags != (old->flags & MEMSLOT_USER_FLAGS_MASK)) {
 			change = KVM_MR_FLAGS_ONLY;
-		else /* Nothing to change. */
+		} else if (mem->flags & KVM_MEM_GUEST_MEMFD) {
+			return kvm_gmem_check_no_change(kvm, old, mem->guest_memfd,
+							mem->guest_memfd_offset);
+		} else {
 			return 0;
+		}
 	}
+
+	if (mem->flags & KVM_MEM_GUEST_MEMFD &&
+	    change != KVM_MR_CREATE && change != KVM_MR_FLAGS_ONLY)
+		return -EINVAL;
 
 	if ((change == KVM_MR_CREATE || change == KVM_MR_MOVE) &&
 	    kvm_check_memslot_overlap(slots, id, base_gfn, base_gfn + npages))
@@ -2105,7 +2100,12 @@ static int kvm_set_memory_region(struct kvm *kvm,
 	new->flags = mem->flags;
 	new->userspace_addr = mem->userspace_addr;
 	if (mem->flags & KVM_MEM_GUEST_MEMFD) {
-		r = kvm_gmem_bind(kvm, new, mem->guest_memfd, mem->guest_memfd_offset);
+		if (change == KVM_MR_CREATE) {
+			r = kvm_gmem_bind(kvm, new, mem->guest_memfd, mem->guest_memfd_offset);
+		} else if (change == KVM_MR_FLAGS_ONLY) {
+			r = kvm_gmem_change_flags(kvm, old, new, mem->guest_memfd,
+						  mem->guest_memfd_offset);
+		}
 		if (r)
 			goto out;
 	}
@@ -2117,7 +2117,7 @@ static int kvm_set_memory_region(struct kvm *kvm,
 	return 0;
 
 out_unbind:
-	if (mem->flags & KVM_MEM_GUEST_MEMFD)
+	if ((mem->flags & KVM_MEM_GUEST_MEMFD) && change == KVM_MR_CREATE)
 		kvm_gmem_unbind(new);
 out:
 	kfree(new);

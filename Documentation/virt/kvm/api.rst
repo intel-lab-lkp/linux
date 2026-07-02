@@ -9493,6 +9493,15 @@ take care to differentiate between these cases.
 The presence of this capability indicates that the nested KVM guest can
 start in ESA mode.
 
+8.48 KVM_CAP_GUEST_MEMFD_MMAP_LOG_DIRTY_PAGES
+---------------------------------------------
+
+:Architectures: all
+
+The presence of this capability indicates that memslots backed by a guest_memfd
+file descriptor created with the GUEST_MEMFD_FLAG_MMAP flag can have dirty
+page logging enabled.
+
 9. Known KVM API problems
 =========================
 

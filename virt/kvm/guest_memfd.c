@@ -622,6 +622,11 @@ bool __weak kvm_arch_supports_gmem_init_shared(struct kvm *kvm)
 	return true;
 }
 
+bool __weak kvm_arch_supports_gmem_mmap_dirty_logging(struct kvm *kvm)
+{
+	return false;
+}
+
 static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 {
 	static const char *name = "[kvm-gmem]";
@@ -705,6 +710,66 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 	return __kvm_gmem_create(kvm, size, flags);
 }
 
+static int __kvm_gmem_check_no_change(struct kvm *kvm, struct kvm_memory_slot *old,
+				      struct file *old_file, unsigned int fd,
+				      loff_t offset)
+{
+	struct file *new_file;
+
+	new_file = fget(fd);
+	if (!new_file)
+		return -EBADF;
+	if (new_file != old_file) {
+		fput(new_file);
+		return -EBADF;
+	}
+	fput(new_file);
+
+	if (old->gmem.pgoff != offset >> PAGE_SHIFT)
+		return -EINVAL;
+
+	return 0;
+}
+
+int kvm_gmem_check_no_change(struct kvm *kvm, struct kvm_memory_slot *old,
+			     unsigned int fd, loff_t offset)
+{
+	CLASS(gmem_get_file, old_file)(old);
+
+	return __kvm_gmem_check_no_change(kvm, old, old_file, fd, offset);
+}
+
+int kvm_gmem_change_flags(struct kvm *kvm, struct kvm_memory_slot *old,
+			  struct kvm_memory_slot *new, unsigned int fd,
+			  loff_t offset)
+{
+	struct gmem_file *old_f;
+	int ret;
+
+	lockdep_assert_held(&kvm->slots_lock);
+
+	if (!kvm_memslot_is_gmem_only(old))
+		return -EINVAL;
+
+	CLASS(gmem_get_file, old_file)(old);
+
+	ret = __kvm_gmem_check_no_change(kvm, old, old_file, fd, offset);
+	if (ret)
+		return ret;
+
+	old_f = old_file->private_data;
+	if (xa_load(&old_f->bindings, old->gmem.pgoff) != memslot_to_xa_value(new)) {
+		WARN_ON_ONCE(xa_to_value(xa_load(&old_f->bindings, old->gmem.pgoff)));
+		return -EIO;
+	}
+
+	new->gmem.file = old->gmem.file;
+	new->gmem.pgoff = old->gmem.pgoff;
+	new->flags |= KVM_MEMSLOT_GMEM_ONLY;
+
+	return 0;
+}
+
 int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 		  unsigned int fd, uoff_t offset)
 {
@@ -732,6 +797,11 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	inode = file_inode(file);
 
 	if (!PAGE_ALIGNED(offset) || offset + size > i_size_read(inode))
+		goto err;
+
+	if (slot->flags & KVM_MEM_LOG_DIRTY_PAGES &&
+	    (!kvm_gmem_supports_mmap(inode) ||
+	     !kvm_arch_supports_gmem_mmap_dirty_logging(kvm)))
 		goto err;
 
 	filemap_invalidate_lock(inode->i_mapping);
