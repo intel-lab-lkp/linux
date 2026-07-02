@@ -19,7 +19,14 @@ struct vfio_pci_dma_buf {
 	u32 nr_ranges;
 	struct kref kref;
 	struct completion comp;
-	u8 revoked : 1;
+
+	/* Protected by dmabuf->resv. */
+	u8 revoked:1;
+	u8 tph_ph:2;
+	u8 tph_st_valid:1;
+	u8 tph_xst_valid:1;
+	u8 tph_st;
+	u16 tph_xst;
 };
 
 static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
@@ -81,6 +88,26 @@ static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 	kref_put(&priv->kref, vfio_pci_dma_buf_done);
 }
 
+static int vfio_pci_dma_buf_get_pci_tph(struct dma_buf *dmabuf, bool extended,
+					u16 *tag, u8 *ph)
+{
+	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+
+	dma_resv_assert_held(priv->dmabuf->resv);
+
+	if (extended) {
+		if (!priv->tph_xst_valid)
+			return -EOPNOTSUPP;
+		*tag = priv->tph_xst;
+	} else {
+		if (!priv->tph_st_valid)
+			return -EOPNOTSUPP;
+		*tag = priv->tph_st;
+	}
+	*ph = priv->tph_ph;
+	return 0;
+}
+
 static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct vfio_pci_dma_buf *priv = dmabuf->priv;
@@ -105,6 +132,26 @@ static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 	.release = vfio_pci_dma_buf_release,
 };
+
+int vfio_pci_dma_buf_get_tph_by_fd(int fd, bool extended, u16 *tag, u8 *ph)
+{
+	struct dma_buf *dmabuf;
+	int ret = 0;
+
+	dmabuf = dma_buf_get(fd);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	if (dmabuf->ops != &vfio_pci_dmabuf_ops) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = vfio_pci_dma_buf_get_pci_tph(dmabuf, extended, tag, ph);
+out:
+	dma_buf_put(dmabuf);
+	return ret;
+}
 
 /*
  * This is a temporary "private interconnect" between VFIO DMABUF and iommufd.
