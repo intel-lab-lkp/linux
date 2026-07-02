@@ -242,7 +242,7 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	display->hotplug.dp_wq = alloc_ordered_workqueue("intel-dp", 0);
 	if (!display->hotplug.dp_wq) {
 		ret = -ENOMEM;
-		goto cleanup_pw_domain_dmc;
+		goto cleanup_pw_domain;
 	}
 
 	display->wq.modeset = alloc_ordered_workqueue("i915_modeset", 0);
@@ -276,27 +276,27 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 
 	ret = intel_cdclk_init(display);
 	if (ret)
-		goto cleanup_wq_unordered;
+		goto cleanup_mode_config;
 
 	ret = intel_color_init(display);
 	if (ret)
-		goto cleanup_wq_unordered;
+		goto cleanup_mode_config;
 
 	ret = intel_dbuf_init(display);
 	if (ret)
-		goto cleanup_wq_unordered;
+		goto cleanup_mode_config;
 
 	ret = intel_dbuf_bw_init(display);
 	if (ret)
-		goto cleanup_wq_unordered;
+		goto cleanup_mode_config;
 
 	ret = intel_bw_init(display);
 	if (ret)
-		goto cleanup_wq_unordered;
+		goto cleanup_mode_config;
 
 	ret = intel_pmdemand_init(display);
 	if (ret)
-		goto cleanup_wq_unordered;
+		goto cleanup_mode_config;
 
 	intel_init_quirks(display);
 
@@ -304,7 +304,9 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 
 	return 0;
 
-cleanup_wq_unordered:
+cleanup_mode_config:
+	intel_mode_config_cleanup(display);
+	intel_dmc_fini(display);
 	destroy_workqueue(display->wq.unordered);
 cleanup_wq_cleanup:
 	destroy_workqueue(display->wq.cleanup);
@@ -314,8 +316,7 @@ cleanup_wq_modeset:
 	destroy_workqueue(display->wq.modeset);
 cleanup_wq_dp:
 	destroy_workqueue(display->hotplug.dp_wq);
-cleanup_pw_domain_dmc:
-	intel_dmc_fini(display);
+cleanup_pw_domain:
 	intel_display_power_driver_remove(display);
 cleanup_bios:
 	intel_bios_driver_remove(display);
