@@ -3806,8 +3806,17 @@ static bool ata_scsi_cmd_is_supported(struct ata_device *dev, u8 op, u16 sa,
 		}
 		return true;
 	case ZBC_IN:
+		return sa == ZI_REPORT_ZONES && ata_dev_is_zoned(dev);
 	case ZBC_OUT:
-		return ata_id_zoned_cap(dev->id) || dev->class == ATA_DEV_ZAC;
+		switch (sa) {
+		case ZO_CLOSE_ZONE:
+		case ZO_FINISH_ZONE:
+		case ZO_OPEN_ZONE:
+		case ZO_RESET_WRITE_POINTER:
+			return ata_dev_is_zoned(dev);
+		default:
+			return false;
+		}
 	case SERVICE_ACTION_IN_16:
 		return sa == SAI_READ_CAPACITY_16;
 	case SECURITY_PROTOCOL_IN:
