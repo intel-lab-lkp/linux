@@ -150,6 +150,7 @@ struct vfio_pci_core_device {
 	struct rw_semaphore	memory_lock;
 	struct list_head	dmabufs;
 	u8			tph_policy;
+	bool			tph_permit;
 };
 
 enum vfio_pci_io_width {

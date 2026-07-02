@@ -30,6 +30,7 @@
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/pci-tph.h>
 #include <linux/seq_file.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
@@ -610,6 +611,7 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 		goto out_disable_device;
 
 	vdev->reset_works = !ret;
+	vdev->tph_permit = false;
 	pci_save_state(pdev);
 	vdev->pci_saved_state = pci_store_saved_state(pdev);
 	if (!vdev->pci_saved_state)
@@ -1607,6 +1609,38 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
+				     u32 flags,
+				     struct vfio_device_feature_tph __user *arg,
+				     size_t argsz)
+{
+	struct vfio_device_feature_tph tph = {0};
+	int ret;
+
+	if (!pcie_tph_supported(vdev->pdev, false))
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz,
+			VFIO_DEVICE_FEATURE_GET | VFIO_DEVICE_FEATURE_SET,
+			sizeof(tph));
+	if (ret <= 0)
+		return ret;
+
+	if (flags & VFIO_DEVICE_FEATURE_SET) {
+		vdev->tph_permit = 1;
+		return 0;
+	}
+
+	tph.flags = VFIO_DEVICE_TPH_CAP_DMABUF;
+	if (vdev->tph_policy != VFIO_PCI_TPH_POLICY_NO_ST &&
+		pcie_tph_dsm_supported(vdev->pdev))
+		tph.flags |= VFIO_DEVICE_TPH_CAP_CPU;
+	if (vdev->tph_policy == VFIO_PCI_TPH_POLICY_LITERAL)
+		tph.flags |= VFIO_DEVICE_TPH_CAP_LITERAL;
+
+	return copy_to_user(arg, &tph, sizeof(tph)) ? -EFAULT : 0;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1625,6 +1659,8 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_feature_token(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_DMA_BUF:
 		return vfio_pci_core_feature_dma_buf(vdev, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH:
+		return vfio_pci_core_feature_tph(vdev, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}
