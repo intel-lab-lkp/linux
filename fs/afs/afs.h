@@ -26,6 +26,13 @@ typedef u64			afs_volid_t;
 typedef u64			afs_vnodeid_t;
 typedef u64			afs_dataversion_t;
 
+/* This is stored in ->d_fsdata to stop d_revalidate looking at,
+ * and possibly changing, ->d_time on a dentry which is being moved
+ * between directories, and to block lookup for dentry that is
+ * being removed without silly-rename.
+ */
+#define AFS_FSDATA_BLOCKED ((void*)1)
+
 typedef enum {
 	AFSVL_RWVOL,			/* read/write volume */
 	AFSVL_ROVOL,			/* read-only volume */
