@@ -316,9 +316,9 @@ static inline bool folio_may_be_lru_cached(struct folio *folio)
 	/*
 	 * Holding PMD-sized folios in per-CPU LRU cache unbalances accounting.
 	 * Holding small numbers of low-order mTHP folios in per-CPU LRU cache
-	 * will be sensible, but nobody has implemented and tested that yet.
+	 * will be sensible.
 	 */
-	return !folio_test_large(folio);
+	return folio_order(folio) < PAGE_ALLOC_COSTLY_ORDER;
 }
 
 extern atomic_t lru_disable_count;
