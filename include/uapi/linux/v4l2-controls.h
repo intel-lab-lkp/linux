@@ -1263,6 +1263,7 @@ enum v4l2_jpeg_chroma_subsampling {
 #define V4L2_CFA_PATTERN_RGGB			0x00000001
 #define V4L2_CFA_PATTERN_BGGR			0x00000002
 #define V4L2_CFA_PATTERN_GBRG			0x00000003
+#define V4L2_CFA_PATTERN_MONO			0x00010000
 
 
 /* Image processing controls */

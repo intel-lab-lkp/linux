@@ -136,3 +136,6 @@ Image Source Control IDs
         the top-left and bottom-right pixels, a blue filter in the top-right
         pixel, and a red filter in the bottom-left pixel.
       - 0x00000003
+    * - V4L2_CFA_PATTERN_MONO
+      - Monochromatic sensor, no CFA pattern.
+      - 0x00010000
