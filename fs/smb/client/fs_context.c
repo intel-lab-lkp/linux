@@ -928,18 +928,22 @@ static void smb3_fs_context_free(struct fs_context *fc)
 }
 
 /*
- * Sync cifs_sb->ctx with runtime state from tcon/server/ses so the
- * baseline matches what cifs_show_options() displays.  Wide fields
- * (dstaddr, ops/vals) are protected by the matching server/tcon lock;
- * the remaining word-sized scalars rely on the same unsynchronized-read
- * pattern already used by cifs_show_options().
+ * Sync a private reconfigure context with runtime state from
+ * tcon/server/ses so the baseline matches what cifs_show_options()
+ * displays.  @ctx must be the caller's freshly-duplicated context, not
+ * the live cifs_sb->ctx: this function writes into @ctx, and mutating
+ * the shared cifs_sb->ctx here would race with concurrent fspick/remount
+ * and /proc/mounts readers.  Wide fields (dstaddr, ops/vals) are read
+ * under the matching server/tcon lock; the remaining word-sized scalars
+ * rely on the same unsynchronized-read pattern already used by
+ * cifs_show_options().
  */
-static int smb3_sync_ctx_from_runtime(struct cifs_sb_info *cifs_sb)
+static int smb3_sync_ctx_from_runtime(struct cifs_sb_info *cifs_sb,
+				      struct smb3_fs_context *ctx)
 {
 	struct cifs_tcon *tcon = cifs_sb_master_tcon(cifs_sb);
 	struct TCP_Server_Info *server = tcon->ses->server;
 	struct cifs_ses *ses = tcon->ses;
-	struct smb3_fs_context *ctx = cifs_sb->ctx;
 	const char *domain;
 	int unicode;
 
@@ -962,6 +966,16 @@ static int smb3_sync_ctx_from_runtime(struct cifs_sb_info *cifs_sb)
 	spin_unlock(&server->srv_lock);
 
 	/*
+	 * retrans lives on the shared TCP_Server_Info and can be updated by
+	 * a remount of any mount sharing the connection.  Sync it from the
+	 * live server so a bare remount carries the current value forward
+	 * instead of writing a stale per-mount copy back in
+	 * smb3_sync_server_opts().  Read with READ_ONCE to pair with the
+	 * lockless WRITE_ONCE writers and the runtime retry-path reader.
+	 */
+	ctx->retrans = READ_ONCE(server->retrans);
+
+	/*
 	 * tcon->unix_ext can be flipped post-mount by reset_cifs_unix_caps()
 	 * on SMB1 reconnect (smb1_reconnect path). Read under tc_lock to pair
 	 * with that writer. tcon->posix_extensions is only ever set at
@@ -978,15 +992,27 @@ static int smb3_sync_ctx_from_runtime(struct cifs_sb_info *cifs_sb)
 	}
 	spin_unlock(&tcon->tc_lock);
 	ctx->seal	  = tcon->seal;
+	/*
+	 * persistent reflects the live tcon->use_persistent so the baseline
+	 * matches what cifs_show_options() reports (persistenthandles).  Do
+	 * NOT derive nopersistent from use_persistent: persistent and
+	 * nopersistent are independent user options and use_persistent is a
+	 * derived runtime result.  nopersistent is not reported by
+	 * cifs_show_options(), so it must keep the user's original value
+	 * (carried by the dup); fabricating it here would, after the
+	 * reconfigure commits the ctx, wrongly suppress persistent-handle
+	 * auto-enable on continuous-availability shares at reconnect.
+	 */
 	ctx->persistent	  = tcon->use_persistent;
-	ctx->nopersistent = !tcon->use_persistent;
 	ctx->resilient	  = tcon->use_resilient;
 	ctx->witness	  = tcon->use_witness;
 
 	/*
 	 * Session fields: domainName and unicode are effectively
 	 * write-once (set during session setup, never freed/replaced
-	 * while the session exists), so plain reads are safe.
+	 * while the session exists), so plain reads are safe.  @ctx is
+	 * the caller's private copy, so filling in a missing domainname
+	 * here cannot leak or race.
 	 */
 	domain = ses->domainName;
 	unicode = ses->unicode;
@@ -1180,7 +1206,7 @@ static int smb3_verify_reconfigure_ctx(struct fs_context *fc,
 		return -EINVAL;
 	}
 	if (new_ctx->ignore_signature != old_ctx->ignore_signature) {
-		cifs_errorf(fc, "can not change ignore_signature during remount\n");
+		cifs_errorf(fc, "can not change ignore_signature (signloosely) during remount\n");
 		return -EINVAL;
 	}
 	if (new_ctx->seal != old_ctx->seal) {
@@ -1212,7 +1238,11 @@ static int smb3_verify_reconfigure_ctx(struct fs_context *fc,
 		cifs_errorf(fc, "can not change rdma during remount\n");
 		return -EINVAL;
 	}
-	/* init default: cache_ro = false, cache_rw = false (i.e. cache=strict) */
+	/*
+	 * cache=ro sets cache_ro and cache=singleclient sets cache_rw; the
+	 * other cache modes (strict/loose/none) leave both clear and are
+	 * handled separately in smb3_update_mnt_flags().
+	 */
 	if (new_ctx->cache_ro != old_ctx->cache_ro) {
 		cifs_errorf(fc, "can not change cache=ro during remount\n");
 		return -EINVAL;
@@ -1340,7 +1370,7 @@ static void smb3_sync_server_opts(struct cifs_sb_info *cifs_sb)
 	struct TCP_Server_Info *server = cifs_sb_master_tcon(cifs_sb)->ses->server;
 	struct smb3_fs_context *ctx = cifs_sb->ctx;
 
-	server->retrans = ctx->retrans;
+	WRITE_ONCE(server->retrans, ctx->retrans);
 }
 
 static int smb3_reconfigure(struct fs_context *fc)
@@ -1348,6 +1378,7 @@ static int smb3_reconfigure(struct fs_context *fc)
 	struct smb3_fs_context *ctx = smb3_fc2context(fc);
 	struct smb3_fs_context *new_ctx = NULL;
 	struct smb3_fs_context *old_ctx = NULL;
+	struct smb3_fs_context *base_ctx = NULL;
 	struct dentry *root = fc->root;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(root->d_sb);
 	struct cifs_ses *ses = cifs_sb_master_tcon(cifs_sb)->ses;
@@ -1360,9 +1391,37 @@ static int smb3_reconfigure(struct fs_context *fc)
 	if (ses->expired_pwd)
 		need_recon = true;
 
-	rc = smb3_verify_reconfigure_ctx(fc, ctx, cifs_sb->ctx, need_recon);
+	/*
+	 * Compare the new context against a runtime-synced baseline, not the
+	 * raw cifs_sb->ctx.  smb3_init_fs_context() syncs the new context
+	 * (fc->fs_private) from runtime state, so the comparison baseline must
+	 * be synced the same way; otherwise a field that drifted at runtime
+	 * (e.g. dstaddr after witness failover, or use_persistent auto-enabled
+	 * on a continuous-availability share) would look like a user-requested
+	 * change and be rejected on an otherwise bare remount.  Sync a private
+	 * copy rather than cifs_sb->ctx: s_umount serializes reconfigures, but
+	 * not the fspick/fsconfig init path, which dup()s cifs_sb->ctx in
+	 * smb3_init_fs_context() before reconfigure_super() takes s_umount.  An
+	 * in-place sync would therefore race that lockless dup (e.g. a torn
+	 * read of the 128-byte dstaddr).
+	 */
+	base_ctx = kzalloc_obj(*base_ctx);
+	if (!base_ctx)
+		return -ENOMEM;
+	rc = smb3_fs_context_dup(base_ctx, cifs_sb->ctx);
 	if (rc)
-		return rc;
+		goto free_base_ctx;
+	rc = smb3_sync_ctx_from_runtime(cifs_sb, base_ctx);
+	if (rc)
+		goto cleanup_base_ctx;
+
+	rc = smb3_verify_reconfigure_ctx(fc, ctx, base_ctx, need_recon);
+	if (rc)
+		goto cleanup_base_ctx;
+
+	smb3_cleanup_fs_context_contents(base_ctx);
+	kfree(base_ctx);
+	base_ctx = NULL;
 
 	rc = smb3_handle_conflicting_options(fc);
 	if (rc)
@@ -1536,6 +1595,13 @@ restore_ctx:
 	memcpy(cifs_sb->ctx, old_ctx, sizeof(*old_ctx));
 free_old_ctx:
 	kfree(old_ctx);
+
+	return rc;
+
+cleanup_base_ctx:
+	smb3_cleanup_fs_context_contents(base_ctx);
+free_base_ctx:
+	kfree(base_ctx);
 
 	return rc;
 }
@@ -2258,21 +2324,19 @@ int smb3_init_fs_context(struct fs_context *fc)
 	 * instead of building one from scratch with init defaults.
 	 *
 	 * VFS sets fc->root before calling init_fs_context for reconfigure,
-	 * so we can access the existing superblock's context.  We first sync
-	 * cifs_sb->ctx with runtime state (tcon/server/ses) so that ctx
-	 * matches what cifs_show_options() displays.  Then we dup old_ctx
-	 * into new_ctx.  The parser will overwrite only the options
-	 * explicitly passed on remount, so any difference between new_ctx
-	 * and old_ctx in smb3_verify_reconfigure_ctx() represents a real,
-	 * intentional change by the user.
+	 * so we can access the existing superblock's context.  We dup the
+	 * live cifs_sb->ctx into a private new_ctx, then sync new_ctx with
+	 * runtime state (tcon/server/ses) so it matches what
+	 * cifs_show_options() displays.  Syncing into the private copy (not
+	 * the shared cifs_sb->ctx) avoids racing with concurrent
+	 * fspick/remount and /proc/mounts readers.  The parser will overwrite
+	 * only the options explicitly passed on remount, so any difference
+	 * between new_ctx and old_ctx in smb3_verify_reconfigure_ctx()
+	 * represents a real, intentional change by the user.
 	 */
 	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
 		struct cifs_sb_info *cifs_sb = CIFS_SB(fc->root->d_sb);
 		int rc;
-
-		rc = smb3_sync_ctx_from_runtime(cifs_sb);
-		if (rc)
-			return rc;
 
 		ctx = kzalloc_obj(struct smb3_fs_context);
 		if (!ctx)
@@ -2280,6 +2344,14 @@ int smb3_init_fs_context(struct fs_context *fc)
 
 		rc = smb3_fs_context_dup(ctx, cifs_sb->ctx);
 		if (rc) {
+			smb3_cleanup_fs_context_contents(ctx);
+			kfree(ctx);
+			return rc;
+		}
+
+		rc = smb3_sync_ctx_from_runtime(cifs_sb, ctx);
+		if (rc) {
+			smb3_cleanup_fs_context_contents(ctx);
 			kfree(ctx);
 			return rc;
 		}

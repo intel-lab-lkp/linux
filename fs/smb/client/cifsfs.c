@@ -627,6 +627,7 @@ cifs_show_options(struct seq_file *s, struct dentry *root)
 	struct cifs_tcon *tcon = cifs_sb_master_tcon(cifs_sb);
 	struct sockaddr *srcaddr;
 	unsigned int sbflags;
+	unsigned int retrans;
 
 	srcaddr = (struct sockaddr *)&tcon->ses->server->srcaddr;
 
@@ -782,8 +783,9 @@ cifs_show_options(struct seq_file *s, struct dentry *root)
 		seq_printf(s, ",rasize=%u", cifs_sb->ctx->rasize);
 	if (tcon->ses->server->min_offload)
 		seq_printf(s, ",esize=%u", tcon->ses->server->min_offload);
-	if (tcon->ses->server->retrans)
-		seq_printf(s, ",retrans=%u", tcon->ses->server->retrans);
+	retrans = READ_ONCE(tcon->ses->server->retrans);
+	if (retrans)
+		seq_printf(s, ",retrans=%u", retrans);
 	seq_printf(s, ",echo_interval=%lu",
 			tcon->ses->server->echo_interval / HZ);
 

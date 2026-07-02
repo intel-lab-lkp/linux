@@ -1658,7 +1658,7 @@ static int match_server(struct TCP_Server_Info *server,
 	if (server->min_offload != ctx->min_offload)
 		return 0;
 
-	if (server->retrans != ctx->retrans)
+	if (READ_ONCE(server->retrans) != ctx->retrans)
 		return 0;
 
 	return 1;
@@ -1873,7 +1873,7 @@ smbd_connected:
 	 */
 	__module_get(THIS_MODULE);
 	tcp_ses->min_offload = ctx->min_offload;
-	tcp_ses->retrans = ctx->retrans;
+	WRITE_ONCE(tcp_ses->retrans, ctx->retrans);
 	/*
 	 * at this point we are the only ones with the pointer
 	 * to the struct since the kernel thread not created yet
