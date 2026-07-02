@@ -1414,6 +1414,9 @@ static int __init cpg_mssr_probe(struct platform_device *pdev)
 
 	error = cpg_mssr_reset_controller_register(priv);
 
+	if (!error && info->sysc_init)
+		error = info->sysc_init(priv->dev);
+
 reserve_exit:
 	cpg_mssr_reserved_exit(priv);
 
