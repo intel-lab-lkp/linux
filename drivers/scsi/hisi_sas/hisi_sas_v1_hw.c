@@ -1760,6 +1760,7 @@ static const struct scsi_host_template sht_v1_hw = {
 	.sdev_init		= hisi_sas_sdev_init,
 	.shost_groups		= host_v1_hw_groups,
 	.host_reset		= hisi_sas_host_reset,
+	.spinup_notify		= hisi_sas_spinup_notify,
 };
 
 static const struct hisi_sas_hw hisi_sas_v1_hw = {

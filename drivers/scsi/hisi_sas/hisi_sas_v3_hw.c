@@ -3417,6 +3417,7 @@ static const struct scsi_host_template sht_v3_hw = {
 	.host_reset		= hisi_sas_host_reset,
 	.host_tagset		= 1,
 	.mq_poll		= queue_complete_v3_hw,
+	.spinup_notify		= hisi_sas_spinup_notify,
 };
 
 static const struct hisi_sas_hw hisi_sas_v3_hw = {
