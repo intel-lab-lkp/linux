@@ -123,8 +123,8 @@ static __init bool overlaps_reserved_region(const void *fdt, u32 start,
 
 		len = 0;
 		reg = fdt_getprop(fdt, subnode, "reg", &len);
-		while (len >= (regions.reserved_mem_addr_cells +
-			       regions.reserved_mem_size_cells)) {
+		while (len >= 4 * (regions.reserved_mem_addr_cells +
+				   regions.reserved_mem_size_cells)) {
 			base = fdt32_to_cpu(reg[0]);
 			if (regions.reserved_mem_addr_cells == 2)
 				base = (base << 32) | fdt32_to_cpu(reg[1]);
