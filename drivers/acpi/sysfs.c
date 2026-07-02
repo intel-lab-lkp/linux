@@ -1038,8 +1038,18 @@ int __init acpi_sysfs_init(void)
 
 	result = sysfs_create_file(hotplug_kobj, &force_remove_attr.attr);
 	if (result)
-		return result;
+		goto err_hotplug;
 
 	result = sysfs_create_file(acpi_kobj, &pm_profile_attr.attr);
+	if (result)
+		goto err_force_remove;
+
+	return 0;
+
+err_force_remove:
+	sysfs_remove_file(hotplug_kobj, &force_remove_attr.attr);
+err_hotplug:
+	kobject_put(hotplug_kobj);
+	hotplug_kobj = NULL;
 	return result;
 }
