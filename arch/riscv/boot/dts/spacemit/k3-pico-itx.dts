@@ -221,3 +221,7 @@
 &usb2_phy {
 	status = "okay";
 };
+
+&ufshc {
+	status = "okay";
+};
