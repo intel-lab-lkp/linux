@@ -2296,6 +2296,10 @@ static struct damos_sysfs_action_name damos_sysfs_action_names[] = {
 		.name = "collapse",
 	},
 	{
+		.action = DAMOS_SPLIT,
+		.name = "split",
+	},
+	{
 		.action = DAMOS_LRU_PRIO,
 		.name = "lru_prio",
 	},
@@ -3063,10 +3067,22 @@ static struct damos *damon_sysfs_mk_scheme(
 			HPAGE_PMD_ORDER, HPAGE_PMD_ORDER);
 		target_order = 0;
 	}
+	if (sysfs_scheme->action == DAMOS_SPLIT &&
+	    (target_order == 0 ||
+	     target_order >= HPAGE_PMD_ORDER)) {
+		pr_warn("DAMON split: target_order %u invalid, need 2..%u. Defaulting to 2.\n",
+			target_order,
+			HPAGE_PMD_ORDER - 1);
+		target_order = 2;
+	}
 #else
 	if (sysfs_scheme->action == DAMOS_COLLAPSE && target_order != 0) {
 		pr_warn("DAMON collapse: target_order not supported without THP. Use 0.\n");
 		target_order = 0;
+	}
+	if (sysfs_scheme->action == DAMOS_SPLIT) {
+		pr_warn("DAMON split: not supported without THP.\n");
+		target_order = 2;
 	}
 #endif
 	scheme->target_order = target_order;
