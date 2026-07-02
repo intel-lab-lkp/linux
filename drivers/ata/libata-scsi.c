@@ -3739,7 +3739,21 @@ static const struct ata_scsi_cmd ata_supported_cmds[] = {
 	{ ZBC_OUT,		16,	ZO_RESET_WRITE_POINTER },
 };
 
-static const struct ata_scsi_cmd *ata_scsi_get_supported_cmd(u8 op)
+static const struct ata_scsi_cmd *ata_scsi_get_supported_cmd(u8 op, u16 sa)
+{
+	const struct ata_scsi_cmd *cmd;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ata_supported_cmds); i++) {
+		cmd = &ata_supported_cmds[i];
+		if (cmd->op == op && cmd->sa == sa)
+			return cmd;
+	}
+
+	return NULL;
+}
+
+static bool ata_scsi_supported_cmd_has_sa(u8 op)
 {
 	const struct ata_scsi_cmd *cmd;
 	int i;
@@ -3747,10 +3761,10 @@ static const struct ata_scsi_cmd *ata_scsi_get_supported_cmd(u8 op)
 	for (i = 0; i < ARRAY_SIZE(ata_supported_cmds); i++) {
 		cmd = &ata_supported_cmds[i];
 		if (cmd->op == op)
-			return cmd;
+			return cmd->sa != 0;
 	}
 
-	return NULL;
+	return false;
 }
 
 struct ata_scsi_cmd_support {
@@ -3758,13 +3772,13 @@ struct ata_scsi_cmd_support {
 	u8 rwcdlp;
 };
 
-static bool ata_scsi_cmd_is_supported(struct ata_device *dev, u8 op,
+static bool ata_scsi_cmd_is_supported(struct ata_device *dev, u8 op, u16 sa,
 				      struct ata_scsi_cmd_support *sup)
 {
 	const struct ata_scsi_cmd *cmd;
 
 	/* First, see if we support the command. */
-	cmd = ata_scsi_get_supported_cmd(op);
+	cmd = ata_scsi_get_supported_cmd(op, sa);
 	if (!cmd)
 		return false;
 
@@ -3794,6 +3808,8 @@ static bool ata_scsi_cmd_is_supported(struct ata_device *dev, u8 op,
 	case ZBC_IN:
 	case ZBC_OUT:
 		return ata_id_zoned_cap(dev->id) || dev->class == ATA_DEV_ZAC;
+	case SERVICE_ACTION_IN_16:
+		return sa == SAI_READ_CAPACITY_16;
 	case SECURITY_PROTOCOL_IN:
 	case SECURITY_PROTOCOL_OUT:
 		return dev->flags & ATA_DFLAG_TRUSTED;
@@ -3810,15 +3826,28 @@ static unsigned int ata_scsi_report_supported_opcodes(struct ata_device *dev,
 {
 	struct ata_scsi_cmd_support sup;
 	u8 *cdb = cmd->cmnd;
+	u16 sa = 0;
 
-	if (cdb[2] != 1 && cdb[2] != 3) {
+	switch (cdb[2]) {
+	case 1:
+		/* One command format with command support data, ignore sa. */
+		if (ata_scsi_supported_cmd_has_sa(cdb[3])) {
+			ata_scsi_set_invalid_field(dev, cmd, 3, 0xff);
+			return 0;
+		}
+		break;
+	case 3:
+		/* One command format */
+		sa = get_unaligned_be16(&cdb[4]);
+		break;
+	default:
 		ata_dev_warn(dev, "invalid command format %d\n", cdb[2]);
 		ata_scsi_set_invalid_field(dev, cmd, 2, 0xff);
 		return 0;
 	}
 
 	/* One command format */
-	if (ata_scsi_cmd_is_supported(dev, cdb[3], &sup)) {
+	if (ata_scsi_cmd_is_supported(dev, cdb[3], sa, &sup)) {
 		rbuf[0] = sup.rwcdlp;
 		rbuf[1] = (sup.cdlp << 3) | 0x03;
 	} else {
