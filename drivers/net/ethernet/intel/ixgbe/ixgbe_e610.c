@@ -1913,7 +1913,7 @@ void ixgbe_fc_autoneg_e610(struct ixgbe_hw *hw)
 	/* Get current link err.
 	 * Current FC mode will be stored in the hw context.
 	 */
-	err = ixgbe_aci_get_link_info(hw, false, NULL);
+	err = ixgbe_aci_get_link_info(hw, true, NULL);
 	if (err)
 		goto no_autoneg;
 
@@ -2219,7 +2219,7 @@ int ixgbe_setup_phy_link_e610(struct ixgbe_hw *hw)
 	u64 phy_type_low = 0, phy_type_high = 0;
 	int err;
 
-	err = ixgbe_aci_get_link_info(hw, false, NULL);
+	err = ixgbe_aci_get_link_info(hw, true, NULL);
 	if (err)
 		return err;
 
