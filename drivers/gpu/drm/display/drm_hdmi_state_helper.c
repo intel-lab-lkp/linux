@@ -566,6 +566,9 @@ hdmi_clock_valid(const struct drm_connector *connector,
 		status = funcs->tmds_char_rate_valid(connector, mode, clock);
 		if (status != MODE_OK)
 			return status;
+	} else if (connector->hdmi.max_tmds_char_rate) {
+		if (clock > connector->hdmi.max_tmds_char_rate)
+			return MODE_CLOCK_HIGH;
 	}
 
 	return MODE_OK;
