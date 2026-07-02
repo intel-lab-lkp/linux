@@ -91,7 +91,7 @@ static __init u64 get_kaslr_seed(void *fdt)
 	return ret;
 }
 
-static __init bool regions_overlap(u32 s1, u32 e1, u32 s2, u32 e2)
+static __init bool regions_overlap(u64 s1, u64 e1, u64 s2, u64 e2)
 {
 	return e1 >= s2 && e2 >= s1;
 }
@@ -100,13 +100,15 @@ static __init bool overlaps_reserved_region(const void *fdt, u32 start,
 					    u32 end)
 {
 	int subnode, len, i;
-	u64 base, size;
+	u64 base, size, rsv_end;
 
 	/* check for overlap with /memreserve/ entries */
 	for (i = 0; i < fdt_num_mem_rsv(fdt); i++) {
 		if (fdt_get_mem_rsv(fdt, i, &base, &size) < 0)
 			continue;
-		if (regions_overlap(start, end, base, base + size))
+
+		rsv_end = base + min(size, U64_MAX - base);
+		if (regions_overlap(start, end, base, rsv_end))
 			return true;
 	}
 
@@ -118,7 +120,6 @@ static __init bool overlaps_reserved_region(const void *fdt, u32 start,
 	     subnode >= 0;
 	     subnode = fdt_next_subnode(fdt, subnode)) {
 		const fdt32_t *reg;
-		u64 rsv_end;
 
 		len = 0;
 		reg = fdt_getprop(fdt, subnode, "reg", &len);
@@ -141,8 +142,7 @@ static __init bool overlaps_reserved_region(const void *fdt, u32 start,
 			if (base >= regions.pa_end)
 				continue;
 
-			rsv_end = min(base + size, (u64)U32_MAX);
-
+			rsv_end = base + min(size, U64_MAX - base);
 			if (regions_overlap(start, end, base, rsv_end))
 				return true;
 		}
