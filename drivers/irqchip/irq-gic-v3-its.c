@@ -3801,10 +3801,6 @@ static const struct irq_domain_ops its_domain_ops = {
  */
 static void its_vpe_db_proxy_unmap_locked(struct its_vpe *vpe)
 {
-	/* GICv4.1 doesn't use a proxy, so nothing to do here */
-	if (gic_rdists->has_rvpeid)
-		return;
-
 	/* Already unmapped? */
 	if (vpe->vpe_proxy_event == -1)
 		return;
