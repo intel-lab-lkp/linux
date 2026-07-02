@@ -1977,22 +1977,8 @@ int ext4_convert_inline_data(struct inode *inode)
 	handle_t *handle;
 	struct ext4_iloc iloc;
 
-	if (!ext4_has_inline_data(inode)) {
-		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	if (!ext4_has_feature_inline_data(inode->i_sb))
 		return 0;
-	} else if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
-		/*
-		 * Inode has inline data but EXT4_STATE_MAY_INLINE_DATA is
-		 * cleared. This means we are in the middle of moving of
-		 * inline data to delay allocated block. Just force writeout
-		 * here to finish conversion.
-		 */
-		error = filemap_flush(inode->i_mapping);
-		if (error)
-			return error;
-		if (!ext4_has_inline_data(inode))
-			return 0;
-	}
 
 	needed_blocks = ext4_chunk_trans_extent(inode, 1);
 
@@ -2008,8 +1994,22 @@ int ext4_convert_inline_data(struct inode *inode)
 	}
 
 	ext4_write_lock_xattr(inode, &no_expand);
-	if (ext4_has_inline_data(inode))
+	if (ext4_has_inline_data(inode) &&
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA))
 		error = ext4_convert_inline_data_nolock(handle, inode, &iloc);
+	/*
+	 * If has_inline_data is set but MAY_INLINE_DATA is clear, a
+	 * concurrent ext4_da_convert_inline_data_to_extent() has already
+	 * copied the data to page cache and will finish conversion via
+	 * writeback -- skip convert_nolock to avoid destroy+restore
+	 * re-setting MAY_INLINE_DATA behind its back.
+	 *
+	 * Clear MAY_INLINE_DATA if inline data is gone (convert succeeded
+	 * or was already completed).  Do not clear it if convert failed
+	 * and inline data was restored.
+	 */
+	if (!ext4_has_inline_data(inode))
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	ext4_write_unlock_xattr(inode, &no_expand);
 	ext4_journal_stop(handle);
 out_free:
