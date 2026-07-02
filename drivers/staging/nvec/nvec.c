@@ -908,6 +908,7 @@ static void tegra_nvec_remove(struct platform_device *pdev)
 	cancel_work_sync(&nvec->tx_work);
 	if (pm_power_off == nvec_power_off)
 		pm_power_off = NULL;
+	nvec_disable_i2c_slave(nvec);
 }
 
 #ifdef CONFIG_PM_SLEEP
