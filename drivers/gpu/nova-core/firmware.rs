@@ -11,8 +11,7 @@ use kernel::{
     device,
     firmware,
     prelude::*,
-    str::CString,
-    transmute::FromBytes, //
+    str::CString, //
 };
 
 use crate::{
@@ -351,7 +350,7 @@ impl<F: FalconFirmware> FirmwareObject<F, Unsigned> {
 
 /// Header common to most firmware files.
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromBytes)]
 struct BinHdr {
     /// Magic number, must be `0x10de`.
     bin_magic: u32,
@@ -366,9 +365,6 @@ struct BinHdr {
     /// Size in bytes of the data payload.
     data_size: u32,
 }
-
-// SAFETY: all bit patterns are valid for this type, and it doesn't use interior mutability.
-unsafe impl FromBytes for BinHdr {}
 
 // A firmware blob starting with a `BinHdr`.
 struct BinFirmware<'a> {
@@ -385,7 +381,7 @@ impl<'a> BinFirmware<'a> {
 
         fw.get(0..size_of::<BinHdr>())
             // Extract header.
-            .and_then(BinHdr::from_bytes_copy)
+            .and_then(|b| BinHdr::read_from_bytes(b).ok())
             // Validate header.
             .filter(|hdr| hdr.bin_magic == BIN_MAGIC)
             .map(|hdr| Self { hdr, fw })
