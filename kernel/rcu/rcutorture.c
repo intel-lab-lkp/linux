@@ -2760,7 +2760,7 @@ static int rcu_nocb_toggle(void *arg)
 			atomic_long_inc(&n_nocb_deoffload);
 		}
 		toggle_delay = torture_random(&rand) % toggle_fuzz + toggle_interval;
-		set_current_state(TASK_INTERRUPTIBLE);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		schedule_hrtimeout(&toggle_delay, HRTIMER_MODE_REL);
 		if (stutter_wait("rcu_nocb_toggle"))
 			sched_set_normal(current, oldnice);
