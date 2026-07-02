@@ -772,8 +772,8 @@ static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	if (iocb->ki_flags & IOCB_DIRECT)
 		ret = exfat_dio_write_iter(iocb, iter);
 	else
-		ret = iomap_file_buffered_write(iocb, iter,
-				&exfat_write_iomap_ops, NULL, NULL);
+		ret = iomap_file_buffered_write(iocb, iter, &exfat_write_iomap_ops,
+						&exfat_iomap_write_ops, NULL);
 	if (ret < 0)
 		goto unlock;
 

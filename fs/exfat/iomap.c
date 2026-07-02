@@ -56,6 +56,7 @@ static int __exfat_iomap_begin(struct inode *inode, loff_t offset, loff_t length
 			iomap->addr = IOMAP_NULL_ADDR;
 			iomap->offset = offset;
 			iomap->length = length;
+			iomap->validity_cookie = ei->cache_valid_id;
 			return 0;
 		}
 
@@ -133,7 +134,7 @@ static int __exfat_iomap_begin(struct inode *inode, loff_t offset, loff_t length
 		}
 	}
 
-	iomap->flags |= IOMAP_F_MERGED;
+	iomap->validity_cookie = ei->cache_valid_id;
 out:
 	mutex_unlock(&sbi->s_lock);
 	return err;
@@ -191,6 +192,15 @@ const struct iomap_ops exfat_write_iomap_ops = {
 	.iomap_end	= exfat_write_iomap_end,
 };
 
+static bool exfat_iomap_valid(struct inode *inode, const struct iomap *iomap)
+{
+	return EXFAT_I(inode)->cache_valid_id == iomap->validity_cookie;
+}
+
+const struct iomap_write_ops exfat_iomap_write_ops = {
+	.iomap_valid = exfat_iomap_valid,
+};
+
 /*
  * exfat_writeback_range - Map folio during writeback
  *
@@ -201,7 +211,8 @@ static ssize_t exfat_writeback_range(struct iomap_writepage_ctx *wpc,
 		struct folio *folio, u64 offset, unsigned int len, u64 end_pos)
 {
 	if (offset < wpc->iomap.offset ||
-	    offset >= wpc->iomap.offset + wpc->iomap.length) {
+	    offset >= wpc->iomap.offset + wpc->iomap.length ||
+	    !exfat_iomap_valid(wpc->inode, &wpc->iomap)) {
 		int error;
 
 		error = __exfat_iomap_begin(wpc->inode, offset, len,
