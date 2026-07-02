@@ -131,9 +131,19 @@ struct vgic_irq *vgic_get_vcpu_irq(struct kvm_vcpu *vcpu, u32 intid)
 
 static void vgic_release_lpi_locked(struct vgic_dist *dist, struct vgic_irq *irq)
 {
+	struct vgic_irq *old;
+
 	lockdep_assert_held(&dist->lpi_xa.xa_lock);
-	__xa_erase(&dist->lpi_xa, irq->intid);
-	kfree_rcu(irq, rcu);
+
+	/*
+	 * Free the IRQ if it is still present in the xarray, as its entry could have
+	 * been overwritten after the refcount was dropped, but before the xarray lock
+	 * was acquired. If the cmpxchg fails, vgic_add_lpi() grabbed the lock first
+	 * and freed the old IRQ along the way.
+	 */
+	old = __xa_cmpxchg(&dist->lpi_xa, irq->intid, irq, NULL, 0);
+	if (old == irq)
+		kfree_rcu(irq, rcu);
 }
 
 static __must_check bool __vgic_put_irq(struct kvm *kvm, struct vgic_irq *irq)
