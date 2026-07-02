@@ -39,6 +39,7 @@
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-resv.h>
+#include <linux/pci-tph.h>
 #include <rdma/frmr_pools.h>
 #include <rdma/ib_umem_odp.h>
 #include "dm.h"
@@ -167,6 +168,39 @@ static int get_unchangeable_access_flags(struct mlx5_ib_dev *dev,
 #define MLX5_FRMR_POOLS_KERNEL_KEY_PH_MASK GENMASK_ULL(23, 16)
 #define MLX5_FRMR_POOLS_KERNEL_KEY_ST_INDEX_MASK GENMASK_ULL(15, 0)
 
+static u8 mlx5_ib_tph_key_ph(u8 ph)
+{
+	if (ph == MLX5_IB_NO_PH || ph == 0)
+		ph ^= MLX5_IB_NO_PH;
+
+	return ph;
+}
+
+static int mlx5_ib_get_st_handle_ref(struct mlx5_ib_dev *dev, u16 st_index)
+{
+	if (st_index == MLX5_MKC_PCIE_TPH_NO_STEERING_TAG_INDEX)
+		return 0;
+
+	return mlx5_st_get_index(dev->mdev, st_index);
+}
+
+static void mlx5_ib_put_st_index_ref(struct mlx5_ib_dev *dev, u16 st_index)
+{
+	if (st_index == MLX5_MKC_PCIE_TPH_NO_STEERING_TAG_INDEX)
+		return;
+
+	mlx5_st_dealloc_index(dev->mdev, st_index);
+}
+
+static void mlx5_ib_put_st_handle_ref(struct mlx5_ib_dev *dev,
+				      u64 kernel_vendor_key)
+{
+	u16 st_index = FIELD_GET(MLX5_FRMR_POOLS_KERNEL_KEY_ST_INDEX_MASK,
+				 kernel_vendor_key);
+
+	mlx5_ib_put_st_index_ref(dev, st_index);
+}
+
 static struct mlx5_ib_mr *
 _mlx5_frmr_pool_alloc(struct mlx5_ib_dev *dev, struct ib_umem *umem,
 		      int access_flags, int access_mode,
@@ -189,13 +223,10 @@ _mlx5_frmr_pool_alloc(struct mlx5_ib_dev *dev, struct ib_umem *umem,
 			MLX5_FRMR_POOLS_KEY_ACCESS_MODE_KSM_MASK :
 			0;
 
-	/* Normalize ph: swap 0 and MLX5_IB_NO_PH */
-	if (ph == MLX5_IB_NO_PH || ph == 0)
-		ph ^= MLX5_IB_NO_PH;
-
 	mr->ibmr.frmr.key.kernel_vendor_key =
 		FIELD_PREP(MLX5_FRMR_POOLS_KERNEL_KEY_ST_INDEX_MASK, st_index) |
-		FIELD_PREP(MLX5_FRMR_POOLS_KERNEL_KEY_PH_MASK, ph);
+		FIELD_PREP(MLX5_FRMR_POOLS_KERNEL_KEY_PH_MASK,
+			   mlx5_ib_tph_key_ph(ph));
 	err = ib_frmr_pool_pop(&dev->ib_dev, &mr->ibmr);
 	if (err) {
 		kfree(mr);
@@ -218,7 +249,9 @@ struct mlx5_ib_mr *mlx5_mr_cache_alloc(struct mlx5_ib_dev *dev,
 				      0 :
 				      MLX5_FRMR_POOLS_KEY_ACCESS_MODE_KSM_MASK,
 		.num_dma_blocks = ndescs,
-		.kernel_vendor_key = 0, /* no PH and no ST index */
+		.kernel_vendor_key =
+			FIELD_PREP(MLX5_FRMR_POOLS_KERNEL_KEY_ST_INDEX_MASK,
+				   MLX5_MKC_PCIE_TPH_NO_STEERING_TAG_INDEX),
 	};
 	struct mlx5_ib_mr *mr;
 	int ret;
@@ -557,6 +590,10 @@ static struct mlx5_ib_mr *reg_create(struct ib_pd *pd, struct ib_umem *umem,
 	mr->ibmr.pd = pd;
 	mr->access_flags = access_flags;
 	mr->page_shift = order_base_2(page_size);
+	mr->ibmr.frmr.key.kernel_vendor_key =
+		FIELD_PREP(MLX5_FRMR_POOLS_KERNEL_KEY_ST_INDEX_MASK, st_index) |
+		FIELD_PREP(MLX5_FRMR_POOLS_KERNEL_KEY_PH_MASK,
+			   mlx5_ib_tph_key_ph(ph));
 
 	inlen = MLX5_ST_SZ_BYTES(create_mkey_in);
 	if (populate)
@@ -753,6 +790,12 @@ static struct ib_mr *create_real_mr(struct ib_pd *pd, struct ib_umem *umem,
 			st_index = mdmah->st_index;
 	}
 
+	err = mlx5_ib_get_st_handle_ref(dev, st_index);
+	if (err) {
+		ib_umem_release(umem);
+		return ERR_PTR(err);
+	}
+
 	xlt_with_umr = mlx5r_umr_can_load_pas(dev, umem->length);
 	if (xlt_with_umr) {
 		mr = alloc_cacheable_mr(pd, umem, iova, access_flags,
@@ -769,6 +812,7 @@ static struct ib_mr *create_real_mr(struct ib_pd *pd, struct ib_umem *umem,
 		mutex_unlock(&dev->slow_path_mutex);
 	}
 	if (IS_ERR(mr)) {
+		mlx5_ib_put_st_index_ref(dev, st_index);
 		ib_umem_release(umem);
 		return ERR_CAST(mr);
 	}
@@ -903,6 +947,52 @@ static struct dma_buf_attach_ops mlx5_ib_dmabuf_attach_ops = {
 	.invalidate_mappings = mlx5_ib_dmabuf_invalidate_cb,
 };
 
+static void get_pci_tph_mr_dmabuf(struct mlx5_ib_dev *dev, struct dma_buf *dmabuf,
+				  u16 *st_index, u8 *ph)
+{
+	u16 local_st_index;
+	u16 steering_tag;
+	u8 local_ph;
+	bool extended;
+	int ret;
+
+	switch (pcie_tph_enabled_req_type(dev->mdev->pdev)) {
+	case PCI_TPH_REQ_TPH_ONLY:
+		extended = false;
+		break;
+	case PCI_TPH_REQ_EXT_TPH:
+		extended = true;
+		break;
+	default:
+		return;
+	}
+
+	dma_resv_lock(dmabuf->resv, NULL);
+	ret = dma_buf_get_pci_tph(dmabuf, extended, &steering_tag, &local_ph);
+	dma_resv_unlock(dmabuf->resv);
+	if (ret) {
+		if (ret != -EOPNOTSUPP)
+			mlx5_ib_dbg(dev, "get_pci_tph failed (%d)\n", ret);
+		return;
+	}
+
+	ret = mlx5_st_alloc_index_by_tag(dev->mdev, steering_tag,
+					 &local_st_index);
+	if (ret) {
+		mlx5_ib_dbg(dev, "st_alloc_index_by_tag failed (%d)\n", ret);
+		return;
+	}
+
+	*st_index = local_st_index;
+	*ph = local_ph;
+}
+
+static void mlx5_ib_mr_put_st_handle_ref(struct mlx5_ib_mr *mr)
+{
+	mlx5_ib_put_st_handle_ref(mr_to_mdev(mr),
+				  mr->ibmr.frmr.key.kernel_vendor_key);
+}
+
 static struct ib_mr *
 reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 		   u64 offset, u64 length, u64 virt_addr,
@@ -945,12 +1035,22 @@ reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 		ph = dmah->ph;
 		if (dmah->valid_fields & BIT(IB_DMAH_CPU_ID_EXISTS))
 			st_index = mdmah->st_index;
+
+		err = mlx5_ib_get_st_handle_ref(dev, st_index);
+		if (err) {
+			ib_umem_release(&umem_dmabuf->umem);
+			return ERR_PTR(err);
+		}
+	} else {
+		get_pci_tph_mr_dmabuf(dev, umem_dmabuf->attach->dmabuf,
+				      &st_index, &ph);
 	}
 
 	mr = alloc_cacheable_mr(pd, &umem_dmabuf->umem, virt_addr,
 				access_flags, access_mode,
 				st_index, ph);
 	if (IS_ERR(mr)) {
+		mlx5_ib_put_st_index_ref(dev, st_index);
 		ib_umem_release(&umem_dmabuf->umem);
 		return ERR_CAST(mr);
 	}
@@ -1405,6 +1505,7 @@ static int mlx5r_handle_mkey_cleanup(struct mlx5_ib_mr *mr)
 	if (mr->ibmr.frmr.pool) {
 		if (!mlx5_umr_revoke_mr_with_lock(mr)) {
 			ib_frmr_pool_push(mr->ibmr.device, &mr->ibmr);
+			mlx5_ib_mr_put_st_handle_ref(mr);
 			return 0;
 		}
 	}
@@ -1431,6 +1532,9 @@ static int mlx5r_handle_mkey_cleanup(struct mlx5_ib_mr *mr)
 
 	if (mr->ibmr.frmr.pool && !ret)
 		ib_frmr_pool_drop(&mr->ibmr);
+
+	if (!ret)
+		mlx5_ib_mr_put_st_handle_ref(mr);
 
 	return ret;
 }
