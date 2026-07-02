@@ -688,6 +688,7 @@ static int cvm_oct_probe(struct platform_device *pdev)
 {
 	int num_interfaces;
 	int interface;
+	int ret = 0;
 	int fau = FAU_NUM_PACKET_BUFFERS_TO_FREE;
 	int qos;
 	struct device_node *pip;
@@ -934,8 +935,13 @@ static int cvm_oct_probe(struct platform_device *pdev)
 		}
 	}
 
-	cvm_oct_tx_initialize(pdev);
-	cvm_oct_rx_initialize(pdev);
+	ret = cvm_oct_tx_initialize(pdev);
+	if (ret)
+		goto err_tx;
+
+	ret = cvm_oct_rx_initialize(pdev);
+	if (ret)
+		goto err_rx;
 
 	/*
 	 * 150 uS: about 10 1500-byte packets at 1GE.
@@ -945,6 +951,32 @@ static int cvm_oct_probe(struct platform_device *pdev)
 	schedule_delayed_work(&plat->rx_refill_work, HZ);
 
 	return 0;
+
+err_rx:
+	cvm_oct_tx_shutdown();
+err_tx:
+	cvmx_ipd_disable();
+
+	atomic_inc_return(&cvm_oct_poll_queue_stopping);
+
+	/* Free the ethernet devices */
+	for (int port = 0; port < TOTAL_NUMBER_OF_PORTS; port++)
+		cvm_oct_remove_device(port);
+
+	cvmx_pko_shutdown();
+
+	cvmx_ipd_free_ptr();
+
+	/* Free the HW pools */
+	cvm_oct_mem_empty_fpa(pdev, CVMX_FPA_PACKET_POOL, CVMX_FPA_PACKET_POOL_SIZE,
+			      num_packet_buffers);
+	cvm_oct_mem_empty_fpa(pdev, CVMX_FPA_WQE_POOL, CVMX_FPA_WQE_POOL_SIZE,
+			      num_packet_buffers);
+	if (CVMX_FPA_OUTPUT_BUFFER_POOL != CVMX_FPA_PACKET_POOL)
+		cvm_oct_mem_empty_fpa(pdev, CVMX_FPA_OUTPUT_BUFFER_POOL,
+				      CVMX_FPA_OUTPUT_BUFFER_POOL_SIZE, 128);
+
+	return ret;
 }
 
 static void cvm_oct_remove(struct platform_device *pdev)
