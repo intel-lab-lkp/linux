@@ -3452,6 +3452,7 @@ static inline struct percpu_counter_tree_level_item *get_rss_stat_items(struct m
 	unsigned long ptr = (unsigned long)mm;
 
 	ptr += offsetof(struct mm_struct, flexible_array);
+	ptr += get_rss_stat_items_offset();
 	return (struct percpu_counter_tree_level_item *)ptr;
 }
 
