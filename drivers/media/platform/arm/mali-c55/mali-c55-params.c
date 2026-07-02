@@ -6,6 +6,7 @@
  */
 #include <linux/media/arm/mali-c55-config.h>
 #include <linux/pm_runtime.h>
+#include <linux/unaligned.h>
 
 #include <media/media-entity.h>
 #include <media/v4l2-dev.h>
@@ -208,7 +209,7 @@ mali_c55_params_aexp_hist_weights(struct mali_c55 *mali_c55,
 	 * of overwriting other registers.
 	 */
 	for (unsigned int i = 0; i < 56; i++) {
-		val = ((u32 *)params->zone_weights)[i]
+		val = get_unaligned_le32(&params->zone_weights[i * 4])
 			    & MALI_C55_AEXP_HIST_ZONE_WEIGHT_MASK;
 		addr = base + MALI_C55_AEXP_HIST_ZONE_WEIGHTS_OFFSET + (4 * i);
 
