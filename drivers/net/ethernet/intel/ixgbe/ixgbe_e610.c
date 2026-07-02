@@ -1536,7 +1536,7 @@ int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
  *
  * Return: the exit code of the operation.
  */
-int ixgbe_aci_set_event_mask(struct ixgbe_hw *hw, u8 port_num, u16 mask)
+static int ixgbe_aci_set_event_mask(struct ixgbe_hw *hw, u8 port_num, u16 mask)
 {
 	struct ixgbe_aci_cmd_set_event_mask *cmd;
 	struct libie_aq_desc desc;
@@ -1551,25 +1551,25 @@ int ixgbe_aci_set_event_mask(struct ixgbe_hw *hw, u8 port_num, u16 mask)
 	return ixgbe_aci_send_cmd(hw, &desc, NULL, 0);
 }
 
+static int ixgbe_aci_init_event_mask(struct ixgbe_hw *hw)
+{
+	u16 mask = ~((u16)(IXGBE_ACI_LINK_EVENT_UPDOWN |
+			   IXGBE_ACI_LINK_EVENT_MEDIA_NA |
+			   IXGBE_ACI_LINK_EVENT_MODULE_QUAL_FAIL |
+			   IXGBE_ACI_LINK_EVENT_PHY_FW_LOAD_FAIL));
+
+	return ixgbe_aci_set_event_mask(hw, (u8)hw->bus.func, mask);
+}
+
 /**
  * ixgbe_configure_lse - enable/disable link status events
  * @hw: pointer to the HW struct
  * @activate: true for enable lse, false otherwise
- * @mask: event mask to be set; a set bit means deactivation of the
- * corresponding event
- *
- * Set the event mask and then enable or disable link status events
  *
  * Return: the exit code of the operation.
  */
-int ixgbe_configure_lse(struct ixgbe_hw *hw, bool activate, u16 mask)
+int ixgbe_configure_lse(struct ixgbe_hw *hw, bool activate)
 {
-	int err;
-
-	err = ixgbe_aci_set_event_mask(hw, (u8)hw->bus.func, mask);
-	if (err)
-		return err;
-
 	/* Enabling link status events generation by fw. */
 	return ixgbe_aci_get_link_info(hw, activate, NULL);
 }
@@ -1596,6 +1596,16 @@ static int ixgbe_start_hw_e610(struct ixgbe_hw *hw)
 		return err;
 
 	ixgbe_start_hw_gen2(hw);
+
+	err = ixgbe_aci_init_event_mask(hw);
+	/* In case of error just log it, don't fail the whole init */
+	if (err) {
+		struct ixgbe_adapter *adapter =
+				container_of(hw, struct ixgbe_adapter, hw);
+
+		e_dev_err("Cannot configure Link Status Event mask, err = %d\n",
+			   err);
+	}
 
 	return 0;
 }
