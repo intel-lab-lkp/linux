@@ -25,6 +25,7 @@ struct gmem_file {
 	struct kvm *kvm;
 	struct xarray bindings;
 	struct list_head entry;
+	bool found_memslot;	/* Used for balancing invalidations when punching a hole */
 };
 
 struct gmem_inode {
@@ -42,6 +43,29 @@ static __always_inline struct gmem_inode *GMEM_I(struct inode *inode)
 
 #define kvm_gmem_for_each_file(f, inode) \
 	list_for_each_entry(f, &GMEM_I(inode)->gmem_file_list, entry)
+
+static void *memslot_to_xa_value(struct kvm_memory_slot *slot)
+{
+	WARN_ON_ONCE(sizeof(slot->as_id) > 16);
+	WARN_ON_ONCE(sizeof(slot->id) > 16);
+	WARN_ON_ONCE(sizeof(slot->as_id) + sizeof(slot->id) > sizeof(unsigned long));
+
+	return xa_mk_value(((unsigned long)slot->as_id) << 16 | (unsigned long)slot->id);
+}
+
+static struct kvm_memory_slot *xa_value_to_memslot(struct kvm *kvm, const void *entry)
+{
+	unsigned long full_id = xa_to_value(entry);
+	u16 as_id = (full_id >> 16) & U16_MAX;
+	short id = full_id & U16_MAX;
+
+	/*
+	 * Do not ignore KVM_MEMSLOT_INVALID memslots, as we want
+	 * ->error_remove_folio(), when it races with memslot deletion, to have
+	 *  unmapped the memory upon completion.
+	 */
+	return id_to_memslot(__kvm_memslots(kvm, as_id), id);
+}
 
 /**
  * folio_file_pfn - like folio_file_page, but return a pfn.
@@ -157,7 +181,7 @@ static enum kvm_gfn_range_filter kvm_gmem_get_invalidate_filter(struct inode *in
 	return KVM_FILTER_PRIVATE;
 }
 
-static void __kvm_gmem_invalidate_start(struct gmem_file *f, pgoff_t start,
+static bool __kvm_gmem_invalidate_start(struct gmem_file *f, pgoff_t start,
 					pgoff_t end,
 					enum kvm_gfn_range_filter attr_filter)
 {
@@ -165,9 +189,15 @@ static void __kvm_gmem_invalidate_start(struct gmem_file *f, pgoff_t start,
 	struct kvm_memory_slot *slot;
 	struct kvm *kvm = f->kvm;
 	unsigned long index;
+	void *entry;
 
-	xa_for_each_range(&f->bindings, index, slot, start, end - 1) {
-		pgoff_t pgoff = slot->gmem.pgoff;
+	xa_for_each_range(&f->bindings, index, entry, start, end - 1) {
+		pgoff_t pgoff;
+
+		slot = xa_value_to_memslot(kvm, entry);
+		if (!slot)
+			continue;
+		pgoff = slot->gmem.pgoff;
 
 		struct kvm_gfn_range gfn_range = {
 			.start = slot->base_gfn + max(pgoff, start) - pgoff,
@@ -192,6 +222,8 @@ static void __kvm_gmem_invalidate_start(struct gmem_file *f, pgoff_t start,
 
 	if (found_memslot)
 		KVM_MMU_UNLOCK(kvm);
+
+	return found_memslot;
 }
 
 static void kvm_gmem_invalidate_start(struct inode *inode, pgoff_t start,
@@ -199,11 +231,22 @@ static void kvm_gmem_invalidate_start(struct inode *inode, pgoff_t start,
 {
 	enum kvm_gfn_range_filter attr_filter;
 	struct gmem_file *f;
+	struct kvm *kvm;
+	int idx;
 
 	attr_filter = kvm_gmem_get_invalidate_filter(inode);
 
-	kvm_gmem_for_each_file(f, inode)
-		__kvm_gmem_invalidate_start(f, start, end, attr_filter);
+	kvm_gmem_for_each_file(f, inode) {
+		kvm = f->kvm;
+		idx = srcu_read_lock(&kvm->srcu);
+		/*
+		 * This is safe to do because calls to
+		 * kvm_gmem_invalidate_start() are serialized by
+		 * filemap_invalidate_lock().
+		 */
+		f->found_memslot = __kvm_gmem_invalidate_start(f, start, end, attr_filter);
+		srcu_read_unlock(&kvm->srcu, idx);
+	}
 }
 
 static void __kvm_gmem_invalidate_end(struct gmem_file *f, pgoff_t start,
@@ -223,8 +266,11 @@ static void kvm_gmem_invalidate_end(struct inode *inode, pgoff_t start,
 {
 	struct gmem_file *f;
 
-	kvm_gmem_for_each_file(f, inode)
+	kvm_gmem_for_each_file(f, inode) {
+		if (!f->found_memslot)
+			continue;
 		__kvm_gmem_invalidate_end(f, start, end);
+	}
 }
 
 static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
@@ -326,6 +372,7 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 	struct kvm_memory_slot *slot;
 	struct kvm *kvm = f->kvm;
 	unsigned long index;
+	void *entry;
 
 	/*
 	 * Prevent concurrent attempts to *unbind* a memslot.  This is the last
@@ -344,17 +391,18 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 
 	filemap_invalidate_lock(inode->i_mapping);
 
-	xa_for_each(&f->bindings, index, slot)
+	xa_for_each(&f->bindings, index, entry) {
+		slot = xa_value_to_memslot(kvm, entry);
 		WRITE_ONCE(slot->gmem.file, NULL);
+	}
 
 	/*
 	 * All in-flight operations are gone and new bindings can be created.
 	 * Zap all SPTEs pointed at by this file.  Do not free the backing
 	 * memory, as its lifetime is associated with the inode, not the file.
 	 */
-	__kvm_gmem_invalidate_start(f, 0, -1ul,
-				    kvm_gmem_get_invalidate_filter(inode));
-	__kvm_gmem_invalidate_end(f, 0, -1ul);
+	if (__kvm_gmem_invalidate_start(f, 0, -1ul, kvm_gmem_get_invalidate_filter(inode)))
+		__kvm_gmem_invalidate_end(f, 0, -1ul);
 
 	list_del(&f->entry);
 
@@ -498,14 +546,20 @@ static int kvm_gmem_migrate_folio(struct address_space *mapping,
 
 static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *folio)
 {
+	enum kvm_gfn_range_filter attr_filter;
+	struct inode *inode = mapping->host;
+	struct gmem_file *f;
 	pgoff_t start, end;
+	bool found_memslot;
+	struct kvm *kvm;
+	int idx;
 
 	filemap_invalidate_lock_shared(mapping);
 
 	start = folio->index;
 	end = start + folio_nr_pages(folio);
 
-	kvm_gmem_invalidate_start(mapping->host, start, end);
+	attr_filter = kvm_gmem_get_invalidate_filter(inode);
 
 	/*
 	 * Do not truncate the range, what action is taken in response to the
@@ -515,8 +569,19 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	 * at which point KVM can either terminate the VM or propagate the
 	 * error to userspace.
 	 */
+	kvm_gmem_for_each_file(f, inode) {
+		kvm = f->kvm;
 
-	kvm_gmem_invalidate_end(mapping->host, start, end);
+		idx = srcu_read_lock(&kvm->srcu);
+		found_memslot = __kvm_gmem_invalidate_start(f, start, end, attr_filter);
+		srcu_read_unlock(&kvm->srcu, idx);
+
+		if (found_memslot) {
+			KVM_MMU_LOCK(kvm);
+			kvm_mmu_invalidate_end(kvm);
+			KVM_MMU_UNLOCK(kvm);
+		}
+	}
 
 	filemap_invalidate_unlock_shared(mapping);
 
@@ -691,7 +756,7 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	if (kvm_gmem_supports_mmap(inode))
 		slot->flags |= KVM_MEMSLOT_GMEM_ONLY;
 
-	xa_store_range(&f->bindings, start, end - 1, slot, GFP_KERNEL);
+	xa_store_range(&f->bindings, start, end - 1, memslot_to_xa_value(slot), GFP_KERNEL);
 	filemap_invalidate_unlock(inode->i_mapping);
 
 	/*
@@ -765,8 +830,8 @@ static struct folio *__kvm_gmem_get_pfn(struct file *file,
 		return ERR_PTR(-EFAULT);
 	}
 
-	if (xa_load(&f->bindings, index) != slot) {
-		WARN_ON_ONCE(xa_load(&f->bindings, index));
+	if (xa_load(&f->bindings, index) != memslot_to_xa_value(slot)) {
+		WARN_ON_ONCE(xa_to_value(xa_load(&f->bindings, index)));
 		return ERR_PTR(-EIO);
 	}
 
