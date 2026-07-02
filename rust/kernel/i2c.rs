@@ -116,17 +116,17 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
         );
 
         let i2c_table = match T::I2C_ID_TABLE {
-            Some(table) => table.as_ptr(),
+            Some(table) => table.as_raw_id_table(),
             None => core::ptr::null(),
         };
 
         let of_table = match T::OF_ID_TABLE {
-            Some(table) => table.as_ptr(),
+            Some(table) => table.as_raw_id_table(),
             None => core::ptr::null(),
         };
 
         let acpi_table = match T::ACPI_ID_TABLE {
-            Some(table) => table.as_ptr(),
+            Some(table) => table.as_raw_id_table(),
             None => core::ptr::null(),
         };
 
@@ -208,7 +208,7 @@ impl<T: Driver> Adapter<T> {
         // SAFETY:
         // - `table` has static lifetime, hence it's valid for reads
         // - `dev` is guaranteed to be valid while it's alive, and so is `dev.as_raw()`.
-        let raw_id = unsafe { bindings::i2c_match_id(table.as_ptr(), dev.as_raw()) };
+        let raw_id = unsafe { bindings::i2c_match_id(table.as_raw_id_table(), dev.as_raw()) };
 
         if raw_id.is_null() {
             return None;

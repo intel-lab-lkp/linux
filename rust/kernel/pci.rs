@@ -81,7 +81,7 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
             (*pdrv.get()).name = name.as_char_ptr();
             (*pdrv.get()).probe = Some(Self::probe_callback);
             (*pdrv.get()).remove = Some(Self::remove_callback);
-            (*pdrv.get()).id_table = T::ID_TABLE.as_ptr();
+            (*pdrv.get()).id_table = T::ID_TABLE.as_raw_id_table();
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `DriverType`.

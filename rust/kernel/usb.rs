@@ -58,7 +58,7 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
             (*udrv.get()).name = name.as_char_ptr();
             (*udrv.get()).probe = Some(Self::probe_callback);
             (*udrv.get()).disconnect = Some(Self::disconnect_callback);
-            (*udrv.get()).id_table = T::ID_TABLE.as_ptr();
+            (*udrv.get()).id_table = T::ID_TABLE.as_raw_id_table();
         }
 
         // SAFETY: `udrv` is guaranteed to be a valid `DriverType`.

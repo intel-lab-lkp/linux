@@ -341,7 +341,8 @@ pub trait Adapter {
             // SAFETY:
             // - `table` has static lifetime, hence it's valid for read,
             // - `dev` is guaranteed to be valid while it's alive, and so is `dev.as_raw()`.
-            let raw_id = unsafe { bindings::acpi_match_device(table.as_ptr(), dev.as_raw()) };
+            let raw_id =
+                unsafe { bindings::acpi_match_device(table.as_raw_id_table(), dev.as_raw()) };
 
             if raw_id.is_null() {
                 None
@@ -374,7 +375,8 @@ pub trait Adapter {
             // SAFETY:
             // - `table` has static lifetime, hence it's valid for read,
             // - `dev` is guaranteed to be valid while it's alive, and so is `dev.as_raw()`.
-            let raw_id = unsafe { bindings::of_match_device(table.as_ptr(), dev.as_raw()) };
+            let raw_id =
+                unsafe { bindings::of_match_device(table.as_raw_id_table(), dev.as_raw()) };
 
             if !raw_id.is_null() {
                 // SAFETY: `DeviceId` is a `#[repr(transparent)]` wrapper of `struct of_device_id`
@@ -404,7 +406,7 @@ pub trait Adapter {
             // - `adev` is a valid pointer to `acpi_device` or is null. It is guaranteed to be
             //   valid as long as `dev` is alive.
             // - `table` has static lifetime, hence it's valid for read.
-            if unsafe { acpi_of_match_device(adev, table.as_ptr(), &raw mut raw_id) } {
+            if unsafe { acpi_of_match_device(adev, table.as_raw_id_table(), &raw mut raw_id) } {
                 // SAFETY:
                 // - the function returns true, therefore `raw_id` has been set to a pointer to a
                 //   valid `of_device_id`.

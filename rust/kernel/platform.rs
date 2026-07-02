@@ -63,12 +63,12 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
         module: &'static ThisModule,
     ) -> Result {
         let of_table = match T::OF_ID_TABLE {
-            Some(table) => table.as_ptr(),
+            Some(table) => table.as_raw_id_table(),
             None => core::ptr::null(),
         };
 
         let acpi_table = match T::ACPI_ID_TABLE {
-            Some(table) => table.as_ptr(),
+            Some(table) => table.as_raw_id_table(),
             None => core::ptr::null(),
         };
 
