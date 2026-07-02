@@ -616,6 +616,7 @@ static int spi_geni_init(struct spi_geni_master *mas)
 	PM_RUNTIME_ACQUIRE_IF_ENABLED(mas->dev, pm);
 	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
 	if (ret < 0) {
+		pm_runtime_set_suspended(mas->dev);
 		dev_err(mas->dev, "Failed to resume and get %d\n", ret);
 		return ret;
 	}
