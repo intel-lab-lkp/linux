@@ -7826,7 +7826,7 @@ static struct ibm_struct volume_driver_data = {
  *	does so, its initial value is meaningless (0x07).
  *
  *	For firmware bugs, refer to:
- *	https://thinkwiki.org/wiki/Embedded_Controller_Firmware#Firmware_Issues
+ *	https://www.thinkwiki.org/wiki/Embedded_Controller_Firmware#Firmware_Issues
  *
  * 	----
  *
@@ -7851,7 +7851,7 @@ static struct ibm_struct volume_driver_data = {
  *	mode.
  *
  *	For firmware bugs, refer to:
- *	https://thinkwiki.org/wiki/Embedded_Controller_Firmware#Firmware_Issues
+ *	https://www.thinkwiki.org/wiki/Embedded_Controller_Firmware#Firmware_Issues
  *
  *	----
  *
@@ -11754,7 +11754,7 @@ static int __must_check __init get_thinkpad_model_data(
 	 * X32 or newer, all Z series;  Some models must have an
 	 * up-to-date BIOS or they will not be detected.
 	 *
-	 * See https://thinkwiki.org/wiki/List_of_DMI_IDs
+	 * See https://www.thinkwiki.org/wiki/List_of_DMI_IDs
 	 */
 	while ((dev = dmi_find_device(DMI_DEV_TYPE_OEM_STRING, NULL, dev))) {
 		if (sscanf(dev->name,
@@ -12289,8 +12289,8 @@ MODULE_DEVICE_TABLE(acpi, ibm_htk_device_ids);
 /*
  * DMI matching for module autoloading
  *
- * See https://thinkwiki.org/wiki/List_of_DMI_IDs
- * See https://thinkwiki.org/wiki/BIOS_Upgrade_Downloads
+ * See https://www.thinkwiki.org/wiki/List_of_DMI_IDs
+ * See https://www.thinkwiki.org/wiki/BIOS_Upgrade_Downloads
  *
  * Only models listed in thinkwiki will be supported, so add yours
  * if it is not there yet.
