@@ -148,8 +148,6 @@ u64 stable_page_flags(const struct page *page)
 	const struct folio *folio;
 	struct page_snapshot ps;
 	unsigned long k;
-	unsigned long mapping;
-	bool is_anon;
 	u64 u = 0;
 
 	/*
@@ -163,17 +161,14 @@ u64 stable_page_flags(const struct page *page)
 	folio = &ps.folio_snapshot;
 
 	k = folio->flags.f;
-	mapping = (unsigned long)folio->mapping;
-	is_anon = mapping & FOLIO_MAPPING_ANON;
-
 	/*
 	 * pseudo flags for the well known (anonymous) memory mapped pages
 	 */
 	if (folio_mapped(folio))
 		u |= BIT_ULL(KPF_MMAP);
-	if (is_anon) {
+	if (folio_test_anon(folio)) {
 		u |= BIT_ULL(KPF_ANON);
-		if ((mapping & FOLIO_MAPPING_FLAGS) == FOLIO_MAPPING_KSM)
+		if (folio_test_ksm(folio))
 			u |= BIT_ULL(KPF_KSM);
 	}
 
@@ -181,10 +176,12 @@ u64 stable_page_flags(const struct page *page)
 	 * compound pages: export both head/tail info
 	 * they together define a compound page's start/end pos and order
 	 */
-	if (ps.idx == 0)
-		u |= kpf_copy_bit(k, KPF_COMPOUND_HEAD, PG_head);
-	else
+	if (ps.idx == 0) {
+		if (folio_test_head(folio))
+			u |= BIT_ULL(KPF_COMPOUND_HEAD);
+	} else {
 		u |= BIT_ULL(KPF_COMPOUND_TAIL);
+	}
 	if (folio_test_hugetlb(folio))
 		u |= BIT_ULL(KPF_HUGE);
 	else if (folio_test_large(folio) &&
@@ -201,6 +198,9 @@ u64 stable_page_flags(const struct page *page)
 	if (ps.flags & PAGE_SNAPSHOT_PG_BUDDY)
 		u |= BIT_ULL(KPF_BUDDY);
 
+	if (ps.flags & PAGE_SNAPSHOT_PG_IDLE)
+		u |= BIT_ULL(KPF_IDLE);
+
 	if (folio_test_offline(folio))
 		u |= BIT_ULL(KPF_OFFLINE);
 	if (folio_test_pgtable(folio))
@@ -208,42 +208,46 @@ u64 stable_page_flags(const struct page *page)
 	if (folio_test_slab(folio))
 		u |= BIT_ULL(KPF_SLAB);
 
-#if defined(CONFIG_PAGE_IDLE_FLAG) && defined(CONFIG_64BIT)
-	u |= kpf_copy_bit(k, KPF_IDLE,          PG_idle);
-#else
-	if (ps.flags & PAGE_SNAPSHOT_PG_IDLE)
-		u |= BIT_ULL(KPF_IDLE);
-#endif
+	if (folio_test_locked(folio))
+		u |= BIT_ULL(KPF_LOCKED);
+	if (folio_test_dirty(folio))
+		u |= BIT_ULL(KPF_DIRTY);
+	if (folio_test_uptodate(folio))
+		u |= BIT_ULL(KPF_UPTODATE);
+	if (folio_test_writeback(folio))
+		u |= BIT_ULL(KPF_WRITEBACK);
 
-	u |= kpf_copy_bit(k, KPF_LOCKED,	PG_locked);
-	u |= kpf_copy_bit(k, KPF_DIRTY,		PG_dirty);
-	u |= kpf_copy_bit(k, KPF_UPTODATE,	PG_uptodate);
-	u |= kpf_copy_bit(k, KPF_WRITEBACK,	PG_writeback);
+	if (folio_test_lru(folio))
+		u |= BIT_ULL(KPF_LRU);
+	if (folio_test_referenced(folio))
+		u |= BIT_ULL(KPF_REFERENCED);
+	if (folio_test_active(folio))
+		u |= BIT_ULL(KPF_ACTIVE);
+	if (folio_test_reclaim(folio))
+		u |= BIT_ULL(KPF_RECLAIM);
 
-	u |= kpf_copy_bit(k, KPF_LRU,		PG_lru);
-	u |= kpf_copy_bit(k, KPF_REFERENCED,	PG_referenced);
-	u |= kpf_copy_bit(k, KPF_ACTIVE,	PG_active);
-	u |= kpf_copy_bit(k, KPF_RECLAIM,	PG_reclaim);
+	if (folio_test_swapcache(folio))
+		u |= BIT_ULL(KPF_SWAPCACHE);
+	if (folio_test_swapbacked(folio))
+		u |= BIT_ULL(KPF_SWAPBACKED);
+	if (folio_test_unevictable(folio))
+		u |= BIT_ULL(KPF_UNEVICTABLE);
+	if (folio_test_mlocked(folio))
+		u |= BIT_ULL(KPF_MLOCKED);
 
-#define SWAPCACHE ((1 << PG_swapbacked) | (1 << PG_swapcache))
-	if ((k & SWAPCACHE) == SWAPCACHE)
-		u |= 1 << KPF_SWAPCACHE;
-	u |= kpf_copy_bit(k, KPF_SWAPBACKED,	PG_swapbacked);
+	if ((folio_test_hugetlb(folio) && folio_test_hwpoison(folio))
+		|| PageHWPoison(&ps.page_snapshot))
+		u |= BIT_ULL(KPF_HWPOISON);
 
-	u |= kpf_copy_bit(k, KPF_UNEVICTABLE,	PG_unevictable);
-	u |= kpf_copy_bit(k, KPF_MLOCKED,	PG_mlocked);
+	if (folio_test_reserved(folio))
+		u |= BIT_ULL(KPF_RESERVED);
+	if (folio_test_owner_2(folio))
+		u |= BIT_ULL(KPF_OWNER_2);
+	if (folio_test_private(folio))
+		u |= BIT_ULL(KPF_PRIVATE);
+	if (folio_test_private_2(folio))
+		u |= BIT_ULL(KPF_PRIVATE_2);
 
-#ifdef CONFIG_MEMORY_FAILURE
-	if (u & (1 << KPF_HUGE))
-		u |= kpf_copy_bit(k, KPF_HWPOISON,	PG_hwpoison);
-	else
-		u |= kpf_copy_bit(ps.page_snapshot.flags.f, KPF_HWPOISON, PG_hwpoison);
-#endif
-
-	u |= kpf_copy_bit(k, KPF_RESERVED,	PG_reserved);
-	u |= kpf_copy_bit(k, KPF_OWNER_2,	PG_owner_2);
-	u |= kpf_copy_bit(k, KPF_PRIVATE,	PG_private);
-	u |= kpf_copy_bit(k, KPF_PRIVATE_2,	PG_private_2);
 	u |= kpf_copy_bit(k, KPF_OWNER_PRIVATE,	PG_owner_priv_1);
 	u |= kpf_copy_bit(k, KPF_ARCH,		PG_arch_1);
 #ifdef CONFIG_ARCH_USES_PG_ARCH_2
