@@ -3640,7 +3640,7 @@ static int ixgbe_get_eee_e610(struct net_device *netdev,
 	linkmode_zero(kedata->supported);
 	linkmode_zero(kedata->advertised);
 
-	err = ixgbe_aci_get_link_info(hw, true, &link);
+	err = ixgbe_aci_get_link_info(hw, &link);
 	if (err)
 		return err;
 
