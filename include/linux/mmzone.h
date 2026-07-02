@@ -2403,6 +2403,14 @@ static inline unsigned int section_order(const struct mem_section *section)
 }
 #endif
 
+static inline bool section_vmemmap_optimizable(const struct mem_section *section)
+{
+	if (!is_power_of_2(sizeof(struct page)))
+		return false;
+
+	return section_order(section) >= OPTIMIZABLE_FOLIO_MIN_ORDER;
+}
+
 /*
  * Fallback case for when the architecture provides its own pfn_valid() but
  * not a corresponding for_each_valid_pfn().
