@@ -184,6 +184,7 @@ struct ibmvfc_npiv_login {
 #define IBMVFC_YES_SCSI			0x040
 #define IBMVFC_USE_ASYNC_SUBQ		0x100
 #define IBMVFC_CAN_USE_NOOP_CMD		0x200
+#define IBMVFC_CAN_HANDLE_FPIN_EXT	0x800
 	__be64 node_name;
 	struct srp_direct_buf async;
 	u8 partition_name[IBMVFC_MAX_NAME];
@@ -233,6 +234,7 @@ struct ibmvfc_npiv_login_resp {
 #define IBMVFC_SUPPORT_SCSI		0x0200
 #define IBMVFC_SUPPORT_ASYNC_SUBQ	0x0800
 #define IBMVFC_SUPPORT_NOOP_CMD		0x1000
+#define IBMVFC_SUPPORT_FPIN_EXT		0x2000
 	__be32 max_cmds;
 	__be32 scsi_id_sz;
 	__be64 max_dma_len;
@@ -715,6 +717,7 @@ struct ibmvfc_async_crq {
 struct ibmvfc_async_subq {
 	volatile u8 valid;
 #define IBMVFC_ASYNC_ID_IS_ASSOC_ID	0x01
+#define IBMVFC_ASYNC_IS_FPIN_EXT	0x02
 #define IBMVFC_FC_EEH			0x04
 #define IBMVFC_FC_FW_UPDATE		0x08
 #define IBMVFC_FC_FW_DUMP		0x10
@@ -729,6 +732,34 @@ struct ibmvfc_async_subq {
 		__be64 node_name;
 		__be64 assoc_id;
 	} id;
+} __packed __aligned(8);
+
+struct ibmvfc_fpin_data {
+#define IBMVFC_FPIN_EVENT_TYPE_VALID	0x01
+#define IBMVFC_FPIN_MODIFIER_VALID	0x02
+#define IBMVFC_FPIN_THRESHOLD_VALID	0x04
+#define IBMVFC_FPIN_SEVERITY_VALID	0x08
+#define IBMVFC_FPIN_EVENT_COUNT_VALID	0x10
+	u8 flags;
+	u8 reserved[3];
+	__be16 event_type;
+	__be16 event_type_modifier;
+	__be32 event_threshold;
+	union {
+		u8 severity;
+		__be32 event_count;
+	} event_data;
+} __packed __aligned(8);
+
+struct ibmvfc_async_subq_fpin {
+	volatile u8 valid;
+	u8 flags;
+	u8 link_state;
+	u8 fpin_status;
+	__be16 event;
+	__be16 pad;
+	volatile __be64 wwpn;
+	struct ibmvfc_fpin_data fpin_data;
 } __packed __aligned(8);
 
 struct ibmvfc_async_work {
