@@ -2682,6 +2682,7 @@ void __init __weak mem_init(void)
 
 void __init mm_core_init_early(void)
 {
+	sparse_memblock_present();
 	free_area_init();
 
 	hugetlb_cma_reserve();
