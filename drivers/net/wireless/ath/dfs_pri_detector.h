@@ -18,6 +18,7 @@
 #define DFS_PRI_DETECTOR_H
 
 #include <linux/list.h>
+#include <linux/reciprocal_div.h>
 
 extern struct ath_dfs_pool_stats global_dfs_pool_stats;
 
@@ -25,6 +26,7 @@ extern struct ath_dfs_pool_stats global_dfs_pool_stats;
  * struct pri_sequence - sequence of pulses matching one PRI
  * @head: list_head
  * @pri: pulse repetition interval (PRI) in usecs
+ * @pri_recip: cached reciprocal value for PRI divisions
  * @dur: duration of sequence in usecs
  * @count: number of pulses in this sequence
  * @count_falses: number of not matching pulses in this sequence
@@ -35,6 +37,7 @@ extern struct ath_dfs_pool_stats global_dfs_pool_stats;
 struct pri_sequence {
 	struct list_head head;
 	u32 pri;
+	struct reciprocal_value pri_recip;
 	u32 dur;
 	u32 count;
 	u32 count_falses;
