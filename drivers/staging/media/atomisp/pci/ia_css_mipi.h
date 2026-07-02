@@ -7,7 +7,8 @@
 #ifndef __IA_CSS_MIPI_H
 #define __IA_CSS_MIPI_H
 
-/* @file
+/*
+ * @file
  * This file contains MIPI support functionality
  */
 
@@ -16,7 +17,8 @@
 #include "ia_css_stream_format.h"
 #include "ia_css_input_port.h"
 
-/* @brief Calculate the size of a mipi frame.
+/*
+ * @brief Calculate the size of a mipi frame.
  *
  * @param[in]	width		The width (in pixels) of the frame.
  * @param[in]	height		The height (in lines) of the frame.
