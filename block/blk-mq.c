@@ -1077,11 +1077,13 @@ static inline void blk_account_io_done(struct request *req, u64 now)
 	 */
 	if ((req->rq_flags & (RQF_IO_STAT|RQF_FLUSH_SEQ)) == RQF_IO_STAT) {
 		const int sgrp = op_stat_group(req_op(req));
+		u64 nsecs = now - req->start_time_ns;
 
 		part_stat_lock();
 		update_io_ticks(req->part, jiffies, true);
 		part_stat_inc(req->part, ios[sgrp]);
-		part_stat_add(req->part, nsecs[sgrp], now - req->start_time_ns);
+		part_stat_add(req->part, nsecs[sgrp], nsecs);
+		disk_lat_hist_record_part(req->part, sgrp, nsecs);
 		bdev_dec_in_flight(req->part, req_op(req));
 		part_stat_unlock();
 	}

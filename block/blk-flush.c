@@ -124,11 +124,12 @@ static void blk_flush_restore_request(struct request *rq)
 static void blk_account_io_flush(struct request *rq)
 {
 	struct block_device *part = rq->q->disk->part0;
+	u64 nsecs = blk_time_get_ns() - rq->start_time_ns;
 
 	part_stat_lock();
 	part_stat_inc(part, ios[STAT_FLUSH]);
-	part_stat_add(part, nsecs[STAT_FLUSH],
-		      blk_time_get_ns() - rq->start_time_ns);
+	part_stat_add(part, nsecs[STAT_FLUSH], nsecs);
+	disk_lat_hist_record_part(part, STAT_FLUSH, nsecs);
 	part_stat_unlock();
 }
 

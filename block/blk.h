@@ -345,6 +345,13 @@ bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
 bool blk_bio_list_merge(struct request_queue *q, struct list_head *list,
 			struct bio *bio, unsigned int nr_segs);
 
+void disk_lat_hist_alloc(struct block_device *bdev);
+void disk_lat_hist_free(struct block_device *bdev);
+void disk_lat_hist_set_all(struct block_device *bdev, int value);
+void disk_lat_hist_record_part(struct block_device *part, int sgrp, u64 nsec);
+int disk_lat_buckets_show(struct seq_file *seqf, void *v);
+int disk_lat_hists_show(struct seq_file *seqf, void *v);
+
 /*
  * Plug flush limits
  */

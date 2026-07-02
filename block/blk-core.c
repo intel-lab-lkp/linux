@@ -1107,12 +1107,14 @@ void bdev_end_io_acct(struct block_device *bdev, enum req_op op,
 	const int sgrp = op_stat_group(op);
 	unsigned long now = READ_ONCE(jiffies);
 	unsigned long duration = now - start_time;
+	u64 duration_ns = jiffies_to_nsecs(duration);
 
 	part_stat_lock();
 	update_io_ticks(bdev, now, true);
 	part_stat_inc(bdev, ios[sgrp]);
 	part_stat_add(bdev, sectors[sgrp], sectors);
-	part_stat_add(bdev, nsecs[sgrp], jiffies_to_nsecs(duration));
+	part_stat_add(bdev, nsecs[sgrp], duration_ns);
+	disk_lat_hist_record_part(bdev, sgrp, duration_ns);
 	bdev_dec_in_flight(bdev, op);
 	part_stat_unlock();
 }

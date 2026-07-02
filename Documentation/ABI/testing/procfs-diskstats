@@ -41,3 +41,28 @@ Description:
 		==  =====================================
 
 		For more details refer to Documentation/admin-guide/iostats.rst
+
+What:		/proc/disk_lat_buckets
+Date:		July 2026
+Contact:	Linux block layer mailing list <linux-block@vger.kernel.org>
+Description:
+		Contains the latency histogram bucket upper bounds, in
+		microseconds. The 24 bounds define the 25 counters in
+		/proc/disk_lat_hists. The first counter covers latencies up to
+		10 us, and the last counter covers latencies above 8 seconds.
+
+What:		/proc/disk_lat_hists
+Date:		July 2026
+Contact:	Linux block layer mailing list <linux-block@vger.kernel.org>
+Description:
+		Contains cumulative I/O latency histogram counters for block
+		devices and partitions. Each reported device or partition has
+		four consecutive lines, in read, write, discard, flush order.
+		Each line has 28 fields:
+
+		==  ===================================
+		 1  major number
+		 2  minor number
+		 3  device name
+		 4-28 cumulative latency bucket counters
+		==  ===================================

@@ -394,6 +394,7 @@ static void bdev_free_inode(struct inode *inode)
 {
 	struct block_device *bdev = I_BDEV(inode);
 
+	disk_lat_hist_free(bdev);
 	free_percpu(bdev->bd_stats);
 	kfree(bdev->bd_meta_info);
 	security_bdev_free(bdev);
@@ -483,6 +484,7 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 		iput(inode);
 		return NULL;
 	}
+	disk_lat_hist_alloc(bdev);
 	bdev->bd_disk = disk;
 	return bdev;
 }

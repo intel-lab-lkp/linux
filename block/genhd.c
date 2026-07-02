@@ -743,6 +743,7 @@ static void __del_gendisk(struct gendisk *disk)
 	disk->slave_dir = NULL;
 
 	part_stat_set_all(disk->part0, 0);
+	disk_lat_hist_set_all(disk->part0, 0);
 	disk->part0->bd_stamp = 0;
 	sysfs_remove_link(block_depr, dev_name(disk_to_dev(disk)));
 	pm_runtime_set_memalloc_noio(disk_to_dev(disk), false);
@@ -1420,9 +1421,18 @@ static const struct seq_operations diskstats_op = {
 	.show	= diskstats_show
 };
 
+static const struct seq_operations disk_lat_hists_op = {
+	.start	= disk_seqf_start,
+	.next	= disk_seqf_next,
+	.stop	= disk_seqf_stop,
+	.show	= disk_lat_hists_show
+};
+
 static int __init proc_genhd_init(void)
 {
 	proc_create_seq("diskstats", 0, NULL, &diskstats_op);
+	proc_create_single("disk_lat_buckets", 0, NULL, disk_lat_buckets_show);
+	proc_create_seq("disk_lat_hists", 0, NULL, &disk_lat_hists_op);
 	proc_create_seq("partitions", 0, NULL, &partitions_op);
 	return 0;
 }

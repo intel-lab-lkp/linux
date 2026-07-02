@@ -44,6 +44,7 @@ struct block_device {
 	struct gendisk *	bd_disk;
 	struct request_queue *	bd_queue;
 	struct disk_stats __percpu *bd_stats;
+	struct disk_lat_hist __percpu *bd_lat_hist;
 	unsigned long		bd_stamp;
 	atomic_t		__bd_flags;	// partition number + flags
 #define BD_PARTNO		255	// lower 8 bits; assign-once
