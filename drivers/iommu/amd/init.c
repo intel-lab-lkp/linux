@@ -3085,11 +3085,21 @@ static void __init free_iommu_resources(void)
 	free_pci_segments();
 }
 
-/* SB IOAPIC is always on this device in AMD systems */
-#define IOAPIC_SB_DEVID		((0x00 << 8) | PCI_DEVFN(0x14, 0))
+static bool __init check_sb_ioapic(int devid)
+{
+	u8 bus = PCI_BUS_NUM(devid);
+	u8 devfn = devid & 0xff;
+	u16 val;
 
-/* SB IOAPIC for Hygon family 18h model 4h is on the device 0xb */
-#define IOAPIC_SB_DEVID_FAM18H_M4H	((0x00 << 8) | PCI_DEVFN(0xb, 0))
+	val = read_pci_config_16(bus, PCI_SLOT(devfn), PCI_FUNC(devfn),
+				 PCI_CLASS_DEVICE);
+
+	/*
+	 * The SB IOAPIC is integrated into the FCH (Southbridge), which is
+	 * exposed as an SMBus or ISA bridge in PCI config space.
+	 */
+	return val == PCI_CLASS_SERIAL_SMBUS || val == PCI_CLASS_BRIDGE_ISA;
+}
 
 /*
  * The Southbridge IOAPIC is assigned a GSI Base of 0 (handling interrupts
@@ -3140,12 +3150,7 @@ static bool __init check_ioapic_information(void)
 			pr_err("%s: IOAPIC[%d] not in IVRS table\n",
 				fw_bug, id);
 			ret = false;
-		} else if (id == sb_apicid && (devid == IOAPIC_SB_DEVID ||
-			   (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON &&
-			    boot_cpu_data.x86 == 0x18 &&
-			    boot_cpu_data.x86_model >= 0x4 &&
-			    boot_cpu_data.x86_model <= 0xf &&
-			    devid == IOAPIC_SB_DEVID_FAM18H_M4H))) {
+		} else if (id == sb_apicid && check_sb_ioapic(devid)) {
 			has_sb_ioapic = true;
 		}
 	}
