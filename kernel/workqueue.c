@@ -1530,7 +1530,11 @@ void wq_worker_tick(struct task_struct *task)
 	if (!pwq)
 		return;
 
-	pwq->stats[PWQ_STAT_CPU_TIME] += TICK_USEC;
+	/*
+	 * @pwq is shared across CPUs for unbound wqs and this advisory stat is
+	 * bumped outside pool->lock, so the update is intentionally racy.
+	 */
+	data_race(pwq->stats[PWQ_STAT_CPU_TIME] += TICK_USEC);
 
 	if (!wq_cpu_intensive_thresh_us)
 		return;
