@@ -2015,6 +2015,14 @@ struct mem_section {
 	 */
 	struct page_ext *page_ext;
 #endif
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+	/*
+	 * The order of compound pages in this section. Typically, the section
+	 * holds compound pages of this order; a larger compound page will span
+	 * multiple sections.
+	 */
+	unsigned int order;
+#endif
 };
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
@@ -2361,9 +2369,33 @@ static inline unsigned long next_present_section_nr(unsigned long section_nr)
 #endif
 
 #else
+struct mem_section;
+
 #define sparse_vmemmap_init_nid_early(_nid) do {} while (0)
 #define pfn_in_present_section pfn_valid
 #endif /* CONFIG_SPARSEMEM */
+
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+static inline void section_set_order(struct mem_section *section, unsigned int order)
+{
+	VM_WARN_ON(section->order && order && section->order != order);
+	section->order = order;
+}
+
+static inline unsigned int section_order(const struct mem_section *section)
+{
+	return section->order;
+}
+#else
+static inline void section_set_order(struct mem_section *section, unsigned int order)
+{
+}
+
+static inline unsigned int section_order(const struct mem_section *section)
+{
+	return 0;
+}
+#endif
 
 /*
  * Fallback case for when the architecture provides its own pfn_valid() but
