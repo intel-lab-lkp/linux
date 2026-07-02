@@ -631,43 +631,50 @@ EXPORT_SYMBOL(drm_crtc_vblank_waitqueue);
  * drm_crtc_vblank_helper_get_vblank_timestamp(). They are derived from
  * CRTC's true scanout timing, so they take things like panel scaling or
  * other adjustments into account.
+ *
+ * Returns:
+ * 0 on success, or a negative errno code otherwise.
  */
-void drm_calc_timestamping_constants(struct drm_crtc *crtc,
-				     const struct drm_display_mode *mode)
+int drm_calc_timestamping_constants(struct drm_crtc *crtc,
+				    const struct drm_display_mode *mode)
 {
 	struct drm_device *dev = crtc->dev;
 	unsigned int pipe = drm_crtc_index(crtc);
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
-	int linedur_ns = 0, framedur_ns = 0;
+	u64 linedur_ns, framedur_ns;
 	int dotclock = mode->crtc_clock;
+	unsigned int frame_size;
 
 	if (!drm_dev_has_vblank(dev))
-		return;
+		return 0;
 
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
-		return;
+		return -EINVAL;
 
-	/* Valid dotclock? */
-	if (dotclock > 0) {
-		int frame_size = mode->crtc_htotal * mode->crtc_vtotal;
-
-		/*
-		 * Convert scanline length in pixels and video
-		 * dot clock to line duration and frame duration
-		 * in nanoseconds:
-		 */
-		linedur_ns  = div_u64((u64) mode->crtc_htotal * 1000000, dotclock);
-		framedur_ns = div_u64((u64) frame_size * 1000000, dotclock);
-
-		/*
-		 * Fields of interlaced scanout modes are only half a frame duration.
-		 */
-		if (mode->flags & DRM_MODE_FLAG_INTERLACE)
-			framedur_ns /= 2;
-	} else {
-		drm_err(dev, "crtc %u: Can't calculate constants, dotclock = 0!\n",
-			crtc->base.id);
+	if (dotclock <= 0) {
+		drm_err(dev, "crtc %u: Can't calculate constants, dotclock = %d!\n",
+			crtc->base.id, dotclock);
+		return -EINVAL;
 	}
+
+	frame_size = (unsigned int)mode->crtc_htotal * (unsigned int)mode->crtc_vtotal;
+
+	/*
+	 * Convert scanline length in pixels and video dot clock to line duration
+	 * and frame duration in nanoseconds.
+	 */
+	linedur_ns  = div_u64((u64)mode->crtc_htotal * 1000000, dotclock);
+	framedur_ns = div_u64((u64)frame_size * 1000000, dotclock);
+
+	/*
+	 * Fields of interlaced scanout modes are only half a frame duration.
+	 */
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
+		framedur_ns /= 2;
+
+	if (drm_WARN_ON_ONCE(dev, linedur_ns > INT_MAX) ||
+	    drm_WARN_ON_ONCE(dev, framedur_ns > INT_MAX))
+		return -EINVAL;
 
 	vblank->linedur_ns  = linedur_ns;
 	vblank->framedur_ns = framedur_ns;
@@ -678,7 +685,10 @@ void drm_calc_timestamping_constants(struct drm_crtc *crtc,
 		     crtc->base.id, mode->crtc_htotal,
 		     mode->crtc_vtotal, mode->crtc_vdisplay);
 	drm_dbg_core(dev, "crtc %u: clock %d kHz framedur %d linedur %d\n",
-		     crtc->base.id, dotclock, framedur_ns, linedur_ns);
+		     crtc->base.id, dotclock,
+		     vblank->framedur_ns, vblank->linedur_ns);
+
+	return 0;
 }
 EXPORT_SYMBOL(drm_calc_timestamping_constants);
 
@@ -2221,6 +2231,7 @@ int drm_crtc_vblank_start_timer(struct drm_crtc *crtc)
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 	struct drm_vblank_crtc_timer *vtimer = &vblank->vblank_timer;
 	unsigned long flags;
+	int ret;
 
 	if (!vtimer->crtc) {
 		/*
@@ -2239,7 +2250,9 @@ int drm_crtc_vblank_start_timer(struct drm_crtc *crtc)
 			hrtimer_try_to_cancel(&vtimer->timer);
 	}
 
-	drm_calc_timestamping_constants(crtc, &crtc->mode);
+	ret = drm_calc_timestamping_constants(crtc, &crtc->mode);
+	if (ret)
+		return ret;
 
 	spin_lock_irqsave(&vtimer->interval_lock, flags);
 	vtimer->interval = ns_to_ktime(vblank->framedur_ns);
