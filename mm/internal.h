@@ -1002,9 +1002,25 @@ static inline void sparse_init(void) {}
  */
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 void sparse_init_subsection_map(void);
+
+static inline bool page_vmemmap_optimizable(const struct page *page, unsigned int order)
+{
+	const unsigned long pfn = page_to_pfn(page);
+	const unsigned long nr_pages = 1UL << order;
+
+	if (!is_power_of_2(sizeof(struct page)))
+		return false;
+
+	return (pfn & (nr_pages - 1)) >= OPTIMIZED_FOLIO_VMEMMAP_NR_STRUCT_PAGES;
+}
 #else
 static inline void sparse_init_subsection_map(void)
 {
+}
+
+static inline bool page_vmemmap_optimizable(const struct page *page, unsigned int order)
+{
+	return false;
 }
 #endif /* CONFIG_SPARSEMEM_VMEMMAP */
 

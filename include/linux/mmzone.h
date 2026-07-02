@@ -2375,6 +2375,10 @@ struct mem_section;
 
 #define sparse_vmemmap_init_nid_early(_nid) do {} while (0)
 #define pfn_in_present_section pfn_valid
+static inline struct mem_section *__pfn_to_section(unsigned long pfn)
+{
+	return NULL;
+}
 #endif /* CONFIG_SPARSEMEM */
 
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
