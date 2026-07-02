@@ -2029,6 +2029,47 @@ struct drm_connector_hdmi_audio {
 	int dai_port;
 };
 
+/**
+ * struct drm_connector_hdmi_caps - HDMI capabilities structure
+ *
+ * This structure is required to initialize the connector using
+ * drmm_connector_hdmi_init_with_caps().
+ */
+struct drm_connector_hdmi_caps {
+	/**
+	 * @supported_hdmi_ver:
+	 *
+	 * Maximum HDMI specification version supported by the controller side
+	 * of this connector. This describes the controller capability only;
+	 * the effective link capabilities may be further restricted by the
+	 * sink, bridge, or mode validation.
+	 *
+	 * HDMI_VERSION_UNKNOWN means legacy/default behaviour.
+	 */
+	enum hdmi_version supported_hdmi_ver;
+
+	/**
+	 * @supported_formats:
+	 *
+	 * Bitmask of @drm_output_color_format listing supported output formats.
+	 */
+	unsigned long supported_formats;
+
+	/**
+	 * @max_tmds_char_rate:
+	 *
+	 * Maximum TMDS character rate supported by the source, in Hz.
+	 * A value of 0 means the core should use the default limit implied by
+	 * @supported_hdmi_ver.
+	 */
+	unsigned long long max_tmds_char_rate;
+
+	/**
+	 * @max_bpc: Maximum bits per char the HDMI connector supports.
+	 */
+	unsigned int max_bpc;
+};
+
 /*
  * struct drm_connector_hdmi - DRM Connector HDMI-related structure
  */
@@ -2050,6 +2091,12 @@ struct drm_connector_hdmi {
 	 * supported by the controller.
 	 */
 	unsigned long supported_formats;
+
+	/**
+	 * @max_tmds_char_rate: Maximum TMDS character rate, in Hz,
+	 * supported by the controller.
+	 */
+	unsigned long long max_tmds_char_rate;
 
 	/**
 	 * @funcs: HDMI connector Control Functions
@@ -2555,6 +2602,14 @@ int drmm_connector_hdmi_init(struct drm_device *dev,
 			     struct i2c_adapter *ddc,
 			     unsigned long supported_formats,
 			     unsigned int max_bpc);
+int drmm_connector_hdmi_init_with_caps(struct drm_device *dev,
+				       struct drm_connector *connector,
+				       const char *vendor, const char *product,
+				       const struct drm_connector_funcs *funcs,
+				       const struct drm_connector_hdmi_funcs *hdmi_funcs,
+				       int connector_type,
+				       struct i2c_adapter *ddc,
+				       const struct drm_connector_hdmi_caps *caps);
 void drm_connector_attach_edid_property(struct drm_connector *connector);
 int drm_connector_register(struct drm_connector *connector);
 int drm_connector_dynamic_register(struct drm_connector *connector);
