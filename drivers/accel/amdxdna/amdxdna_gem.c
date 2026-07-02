@@ -526,7 +526,12 @@ static int amdxdna_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struc
 	return 0;
 
 close_vma:
+	/* vm_ops->close() drops the reference taken by drm_gem_object_get()
+	 * above, so return directly instead of falling through to put_obj
+	 * and dropping it a second time.
+	 */
 	vma->vm_ops->close(vma);
+	return ret;
 put_obj:
 	drm_gem_object_put(gobj);
 	return ret;
