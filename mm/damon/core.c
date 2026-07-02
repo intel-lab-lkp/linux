@@ -647,6 +647,7 @@ struct damos *damon_new_scheme(struct damos_access_pattern *pattern,
 
 	scheme->migrate_dests = (struct damos_migrate_dests){};
 	scheme->target_nid = target_nid;
+	scheme->target_order = 0;
 
 	return scheme;
 }
@@ -1343,6 +1344,7 @@ static int damos_commit(struct damos *dst, struct damos *src)
 
 	dst->wmarks = src->wmarks;
 	dst->target_nid = src->target_nid;
+	dst->target_order = src->target_order;
 
 	err = damos_commit_dests(&dst->migrate_dests, &src->migrate_dests);
 	if (err)
