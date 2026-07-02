@@ -174,6 +174,26 @@ static const struct drm_connector_hdmi_funcs reject_100mhz_connector_hdmi_funcs 
 	},
 };
 
+static enum drm_mode_status
+accept_connector_tmds_char_rate_valid(const struct drm_connector *connector,
+				      const struct drm_display_mode *mode,
+				      unsigned long long tmds_rate)
+{
+	return MODE_OK;
+}
+
+static const struct drm_connector_hdmi_funcs accept_connector_hdmi_funcs = {
+	.tmds_char_rate_valid	= accept_connector_tmds_char_rate_valid,
+	.avi = {
+		.clear_infoframe = accept_infoframe_clear_infoframe,
+		.write_infoframe = accept_infoframe_write_infoframe,
+	},
+	.hdmi = {
+		.clear_infoframe = accept_infoframe_clear_infoframe,
+		.write_infoframe = accept_infoframe_write_infoframe,
+	},
+};
+
 static int dummy_connector_get_modes(struct drm_connector *connector)
 {
 	struct drm_atomic_helper_connector_hdmi_priv *priv =
@@ -2772,6 +2792,103 @@ static void drm_test_check_mode_valid_reject_max_clock(struct kunit *test)
 }
 
 /*
+ * Test that a driver-provided .tmds_char_rate_valid() hook takes precedence
+ * over the connector->hdmi.max_tmds_char_rate fallback: the fallback must
+ * not be consulted when the hook is present.
+ */
+static void
+drm_test_check_mode_valid_driver_hook_overrides_max_tmds_char_rate(struct kunit *test)
+{
+	struct drm_connector_hdmi_caps caps = {
+		.supported_hdmi_ver = HDMI_VERSION_1_3,
+		.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444),
+		.max_bpc = 8,
+		.max_tmds_char_rate = 100ULL * 1000 * 1000,
+	};
+	struct drm_atomic_helper_connector_hdmi_priv *priv;
+	struct drm_display_mode *preferred;
+
+	priv = drm_kunit_helper_connector_hdmi_init_with_caps_edid_funcs(test,
+					&caps,
+					&accept_connector_hdmi_funcs,
+					test_edid_hdmi_1080p_rgb_max_200mhz);
+	KUNIT_ASSERT_NOT_NULL(test, priv);
+
+	preferred = find_preferred_mode(&priv->connector);
+	KUNIT_ASSERT_NOT_NULL(test, preferred);
+	KUNIT_EXPECT_EQ(test, preferred->hdisplay, 1920);
+	KUNIT_EXPECT_EQ(test, preferred->vdisplay, 1080);
+	KUNIT_EXPECT_EQ(test, preferred->clock, 148500);
+}
+
+/*
+ * Test that drm_hdmi_connector_mode_valid() falls back to
+ * connector->hdmi.max_tmds_char_rate when the driver provides no
+ * .tmds_char_rate_valid() hook, rejecting modes whose computed TMDS character
+ * rate exceeds the connector limit.
+ */
+static void
+drm_test_check_mode_valid_reject_connector_max_tmds_char_rate(struct kunit *test)
+{
+	struct drm_connector_hdmi_caps caps = {
+		.supported_hdmi_ver = HDMI_VERSION_1_3,
+		.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444),
+		.max_bpc = 8,
+		.max_tmds_char_rate = 100ULL * 1000 * 1000,
+	};
+	struct drm_atomic_helper_connector_hdmi_priv *priv;
+	struct drm_display_mode *preferred;
+
+	priv = drm_kunit_helper_connector_hdmi_init_with_caps_edid_funcs(test,
+					&caps,
+					&dummy_connector_hdmi_funcs,
+					test_edid_hdmi_1080p_rgb_max_200mhz);
+	KUNIT_ASSERT_NOT_NULL(test, priv);
+
+	preferred = find_preferred_mode(&priv->connector);
+	KUNIT_ASSERT_NOT_NULL(test, preferred);
+	KUNIT_EXPECT_EQ(test, preferred->hdisplay, 640);
+	KUNIT_EXPECT_EQ(test, preferred->vdisplay, 480);
+	KUNIT_EXPECT_EQ(test, preferred->clock, 25200);
+}
+
+/*
+ * Test that the max_tmds_char_rate inferred from caps.supported_hdmi_ver
+ * is applied as a mode-filtering limit: with an HDMI 1.3 connector
+ * (340 MHz inferred cap) and no driver hook, modes whose RGB444/8bpc TMDS
+ * rate exceeds 340 MHz must be filtered out even though the sink itself
+ * advertises a higher limit.
+ */
+static void
+drm_test_check_mode_valid_reject_inferred_max_tmds_char_rate(struct kunit *test)
+{
+	struct drm_connector_hdmi_caps caps = {
+		.supported_hdmi_ver = HDMI_VERSION_1_3,
+		.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444),
+		.max_bpc = 8,
+	};
+	struct drm_atomic_helper_connector_hdmi_priv *priv;
+	struct drm_display_mode *preferred;
+	unsigned long long rate;
+
+	priv = drm_kunit_helper_connector_hdmi_init_with_caps_edid_funcs(test,
+					&caps,
+					&dummy_connector_hdmi_funcs,
+					test_edid_hdmi_4k_rgb_yuv420_dc_max_600mhz);
+	KUNIT_ASSERT_NOT_NULL(test, priv);
+
+	KUNIT_ASSERT_EQ(test, priv->connector.hdmi.max_tmds_char_rate,
+			HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ);
+
+	preferred = find_preferred_mode(&priv->connector);
+	KUNIT_ASSERT_NOT_NULL(test, preferred);
+
+	rate = drm_hdmi_compute_mode_clock(preferred, 8,
+					   DRM_OUTPUT_COLOR_FORMAT_RGB444);
+	KUNIT_EXPECT_LE(test, rate, HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ);
+}
+
+/*
  * Test that drm_hdmi_connector_mode_valid() will accept modes that require a
  * 4:2:0 chroma subsampling, even if said mode would violate maximum clock
  * constraints if it used RGB 4:4:4.
@@ -2865,6 +2982,9 @@ static struct kunit_case drm_atomic_helper_connector_hdmi_mode_valid_tests[] = {
 	KUNIT_CASE(drm_test_check_mode_valid_reject),
 	KUNIT_CASE(drm_test_check_mode_valid_reject_rate),
 	KUNIT_CASE(drm_test_check_mode_valid_reject_max_clock),
+	KUNIT_CASE(drm_test_check_mode_valid_driver_hook_overrides_max_tmds_char_rate),
+	KUNIT_CASE(drm_test_check_mode_valid_reject_connector_max_tmds_char_rate),
+	KUNIT_CASE(drm_test_check_mode_valid_reject_inferred_max_tmds_char_rate),
 	KUNIT_CASE(drm_test_check_mode_valid_yuv420_only_max_clock),
 	KUNIT_CASE(drm_test_check_mode_valid_reject_yuv420_only_connector),
 	KUNIT_CASE(drm_test_check_mode_valid_accept_yuv420_also_connector_rgb),
