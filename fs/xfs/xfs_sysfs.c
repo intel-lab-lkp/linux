@@ -725,9 +725,21 @@ nr_open_zones_show(
 	struct kobject		*kobj,
 	char			*buf)
 {
-	struct xfs_zone_info	*zi = zoned_to_mp(kobj)->m_zone_info;
+	struct xfs_mount	*mp = zoned_to_mp(kobj);
+	struct xfs_zone_info	*zi;
+	ssize_t			ret;
 
-	return sysfs_emit(buf, "%u\n", READ_ONCE(zi->zi_nr_open_zones));
+	if (!down_read_trylock(&mp->m_super->s_umount))
+		return -ENODEV;
+
+	zi = mp->m_zone_info;
+	if (zi)
+		ret = sysfs_emit(buf, "%u\n", READ_ONCE(zi->zi_nr_open_zones));
+	else
+		ret = -ENODEV;
+	up_read(&mp->m_super->s_umount);
+
+	return ret;
 }
 XFS_SYSFS_ATTR_RO(nr_open_zones);
 
