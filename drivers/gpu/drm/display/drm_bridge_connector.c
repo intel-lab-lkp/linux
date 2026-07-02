@@ -221,7 +221,8 @@ drm_bridge_connector_detect(struct drm_connector *connector, bool force)
 		status = detect->funcs->detect(detect, connector);
 
 		if (hdmi)
-			drm_atomic_helper_connector_hdmi_hotplug(connector, status);
+			drm_atomic_helper_connector_hdmi_hotplug(connector, status,
+								 NULL);
 
 		drm_bridge_connector_hpd_notify(connector, status);
 	} else {
