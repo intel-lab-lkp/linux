@@ -3845,6 +3845,13 @@ static unsigned int ata_scsi_report_supported_opcodes(struct ata_device *dev,
 			return 0;
 		}
 		break;
+	case 2:
+		/* One command format, must have sa. */
+		if (!ata_scsi_supported_cmd_has_sa(cdb[3])) {
+			ata_scsi_set_invalid_field(dev, cmd, 3, 0xff);
+			return 0;
+		}
+		fallthrough;
 	case 3:
 		/* One command format */
 		sa = get_unaligned_be16(&cdb[4]);
