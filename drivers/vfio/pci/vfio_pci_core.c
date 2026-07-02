@@ -128,10 +128,19 @@ static int vfio_pci_core_debugfs_disable_idle_d3(struct seq_file *seq,
 	return 0;
 }
 
+static int vfio_pci_core_debugfs_tph_policy(struct seq_file *seq,
+					    void *data)
+{
+	struct vfio_pci_core_device *vdev = vfio_pci_core_debugfs_private(seq);
+
+	seq_printf(seq, "%u\n", vdev->tph_policy);
+	return 0;
+}
+
 /*
- * disable_idle_d3 and nointxmask are writable module parameters latched
- * per device at init, so a device's effective value can differ from the
- * current parameter setting.  Expose the per-device (read-only) values
+ * disable_idle_d3, nointxmask and tph_policy are writable module parameters
+ * latched per device at init, so a device's effective value can differ from
+ * the current parameter setting.  Expose the per-device (read-only) values
  * here for visibility; read-only parameters can't drift and are omitted.
  */
 static void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
@@ -147,6 +156,8 @@ static void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
 				    vfio_pci_core_debugfs_nointxmask);
 	debugfs_create_devm_seqfile(dev, "disable_idle_d3", pci_dir,
 				    vfio_pci_core_debugfs_disable_idle_d3);
+	debugfs_create_devm_seqfile(dev, "tph_policy", pci_dir,
+				    vfio_pci_core_debugfs_tph_policy);
 }
 #else
 static inline void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
