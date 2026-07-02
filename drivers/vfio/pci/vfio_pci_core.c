@@ -1713,6 +1713,123 @@ out:
 	return copy_to_user(arg, &resolve, sizeof(resolve)) ? -EFAULT : 0;
 }
 
+static u32 tph_calc_st_size(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	u32 loc = pcie_tph_get_st_table_loc(pdev);
+	int ret;
+
+	if (loc == PCI_TPH_LOC_CAP) {
+		return pcie_tph_get_st_table_size(pdev);
+	} else if (loc == PCI_TPH_LOC_MSIX) {
+		ret = pci_msix_vec_count(pdev);
+		if (ret < 0)
+			return 0;
+		return ret;
+	} else {
+		return 0;
+	}
+}
+
+static int tph_get_st_tag(struct pci_dev *pdev, u32 src_bits, u32 src_hndl,
+			  bool extended, u16 *tag)
+{
+	int ret = 0;
+	u8 ph;
+
+	if (src_bits & VFIO_DEVICE_TPH_SRC_NONE)
+		*tag = 0;
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_DMABUF)
+		ret = vfio_pci_dma_buf_get_tph_by_fd(src_hndl, extended,
+						     tag, &ph);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_CPU_VOLATILE)
+		ret = pcie_tph_get_cpu_st_explicit(pdev, TPH_MEM_TYPE_VM,
+					extended, src_hndl, tag);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT)
+		ret = pcie_tph_get_cpu_st_explicit(pdev, TPH_MEM_TYPE_PM,
+					extended, src_hndl, tag);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_LITERAL)
+		*tag = src_hndl;
+
+	if (ret != 0)
+		*tag = 0;
+
+	return ret;
+}
+
+static int vfio_pci_core_feature_tph_st(struct vfio_pci_core_device *vdev,
+				u32 flags,
+				struct vfio_device_feature_tph_st __user *arg,
+				size_t argsz)
+{
+	u32 permit_flags = VFIO_DEVICE_TPH_SRC_MASK | VFIO_DEVICE_TPH_EXTENDED;
+	struct vfio_device_feature_tph_st tph_st = {0};
+	struct pci_dev *pdev = vdev->pdev;
+	u32 src_bits, st_size;
+	bool stop_on_zero_st;
+	u32 *src_hndl = NULL;
+	void __user *uptr;
+	bool extended;
+	int ret, i;
+	u16 tag;
+
+	if (!vdev->tph_permit || vdev->tph_policy == VFIO_PCI_TPH_POLICY_NO_ST)
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(tph_st));
+	if (ret <= 0)
+		return ret;
+
+	if (copy_from_user(&tph_st, arg, sizeof(tph_st)))
+		return -EFAULT;
+
+	src_bits = tph_st.flags & VFIO_DEVICE_TPH_SRC_MASK;
+	if (vdev->tph_policy != VFIO_PCI_TPH_POLICY_LITERAL)
+		permit_flags &= ~VFIO_DEVICE_TPH_SRC_LITERAL;
+	if (!(tph_st.flags & permit_flags) || !is_power_of_2(src_bits))
+		return -EINVAL;
+	extended = !!(tph_st.flags & VFIO_DEVICE_TPH_EXTENDED);
+	if (extended && !pcie_tph_supported(vdev->pdev, true))
+		return -EINVAL;
+
+	st_size = tph_calc_st_size(vdev);
+	if (tph_st.start >= st_size || tph_st.count > st_size - tph_st.start ||
+		tph_st.count == 0)
+		return -EINVAL;
+
+	uptr = u64_to_user_ptr(tph_st.dests);
+	if (!(src_bits & VFIO_DEVICE_TPH_SRC_NONE)) {
+		src_hndl = memdup_array_user(uptr, tph_st.count, sizeof(u32));
+		if (IS_ERR(src_hndl))
+			return PTR_ERR(src_hndl);
+	}
+
+	down_write(&vdev->memory_lock);
+	ret = vfio_pci_set_power_state(vdev, PCI_D0);
+	if (ret)
+		goto out;
+
+	stop_on_zero_st = !!(tph_st.flags & VFIO_DEVICE_TPH_REQUIRE_ST);
+	if (tph_st.flags & VFIO_DEVICE_TPH_SRC_NONE)
+		stop_on_zero_st = false;
+	for (i = 0; i < tph_st.count; i++) {
+		ret = tph_get_st_tag(pdev, src_bits, src_hndl ? src_hndl[i] : 0,
+				     extended, &tag);
+		if (ret || (stop_on_zero_st && tag == 0))
+			break;
+		ret = pcie_tph_set_st_entry(pdev, tph_st.start + i, tag);
+		if (ret)
+			break;
+	}
+	ret = i;
+
+out:
+	up_write(&vdev->memory_lock);
+	kfree(src_hndl);
+	return ret;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1736,6 +1853,8 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 	case VFIO_DEVICE_FEATURE_TPH_RESOLVE:
 		return vfio_pci_core_feature_tph_resolve(vdev, flags,
 							 arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_ST:
+		return vfio_pci_core_feature_tph_st(vdev, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}
