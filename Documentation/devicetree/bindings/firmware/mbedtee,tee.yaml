@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/mbedtee,tee.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MbedTEE Trusted Execution Environment
+
+maintainers:
+  - Xing Loong <xing.xl.loong@gmail.com>
+
+description: |
+  MbedTEE is a Trusted Execution Environment for embedded systems.
+  It communicates with the REE (Linux) via shared-memory ring
+  buffers using a fixed RPC protocol.
+
+  The REE and TEE CPUs sharing the RPC memory must be in a
+  hardware-coherent domain (same CPU cluster, coherent caches).
+
+  Two or three reserved-memory regions are required:
+
+    t2r-ring  ring buffer for TEE-to-REE notifications (all platforms)
+    t2r-shm   shared memory for TEE-to-REE RPC payloads (all platforms)
+    r2t-ring  ring buffer for REE-to-TEE command submissions (RISC-V only)
+
+  On ARM/AArch64 the TEE is invoked via SMC and signals the REE via
+  a GIC SPI edge interrupt.
+
+  On RISC-V the TEE signals the REE via IMSIC MSI; the REE submits
+  commands via r2t-ring that the TEE polls. No REE-to-TEE interrupt
+  is used. No SBI ecall is involved.
+
+properties:
+  compatible:
+    const: mbedtee,tee
+
+  interrupts:
+    maxItems: 1
+
+  msi-parent:
+    maxItems: 1
+
+  memory-region:
+    minItems: 2
+    maxItems: 3
+    # Minimum across platforms (ARM: 2, RISC-V: 3), constrained by allOf below
+
+  memory-region-names:
+    minItems: 2
+    maxItems: 3
+    items:
+      enum:
+        - t2r-ring
+        - t2r-shm
+        - r2t-ring
+
+required:
+  - compatible
+  - memory-region
+  - memory-region-names
+
+allOf:
+  - if:
+      required:
+        - interrupts
+    then:
+      required:
+        - interrupts
+      properties:
+        msi-parent: false
+        memory-region:
+          maxItems: 2
+        memory-region-names:
+          items:
+            - const: t2r-ring
+            - const: t2r-shm
+    else:
+      required:
+        - msi-parent
+      properties:
+        memory-region:
+          minItems: 3
+        memory-region-names:
+          items:
+            - const: t2r-ring
+            - const: t2r-shm
+            - const: r2t-ring
+
+additionalProperties: false
+
+examples:
+  - |
+    /* ARM TrustZone (SMC) */
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    firmware {
+      mbedtee {
+        compatible = "mbedtee,tee";
+        interrupts = <GIC_SPI 72 IRQ_TYPE_EDGE_RISING>;
+        memory-region = <&mbedtee_t2r_ring>, <&mbedtee_t2r_shm>;
+        memory-region-names = "t2r-ring", "t2r-shm";
+      };
+    };
+
+    /* memory-region phandle targets */
+    mbedtee_t2r_ring: t2r-ring {};
+    mbedtee_t2r_shm: t2r-shm {};
+
+  - |
+    /* RISC-V IMSIC (ring-buffer polling REE->TEE, MSI TEE->REE) */
+
+    firmware {
+      mbedtee {
+        compatible = "mbedtee,tee";
+        msi-parent = <&imsic>;
+        memory-region = <&rv_t2r_ring>, <&rv_t2r_shm>,
+                        <&rv_r2t_ring>;
+        memory-region-names = "t2r-ring", "t2r-shm",
+                              "r2t-ring";
+      };
+    };
+
+    /* msi-parent phandle target */
+    imsic: imsic {
+      msi-controller;
+      #msi-cells = <0>;
+    };
+
+    /* memory-region phandle targets */
+    rv_t2r_ring: t2r-ring {};
+    rv_t2r_shm: t2r-shm {};
+    rv_r2t_ring: r2t-ring {};
