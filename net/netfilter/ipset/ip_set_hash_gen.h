@@ -303,10 +303,13 @@ struct htype {
 	u8 netmask;		/* netmask value for subnets to store */
 	union nf_inet_addr bitmask;	/* stores bitmask */
 #endif
-	struct mtype_elem next; /* temporary storage for uadd */
 #ifdef IP_SET_HASH_WITH_NETS
 	struct net_prefixes nets[NLEN]; /* book-keeping of prefixes */
 #endif
+	/* Because 'next' is IPv4/IPv6 dependent, no elements of this
+	 * structure and referred in create() may come after 'next'.
+	 */
+	struct mtype_elem next; /* temporary storage for uadd */
 };
 
 /* ADD|DEL entries saved during resize */
@@ -1584,7 +1587,13 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 	if (tb[IPSET_ATTR_MAXELEM])
 		maxelem = ip_set_get_h32(tb[IPSET_ATTR_MAXELEM]);
 
-	hsize = sizeof(*h);
+#ifdef IP_SET_PROTO_UNDEF
+	hsize = sizeof(struct htype);
+#else
+	hsize = set->family == NFPROTO_IPV6 ?
+		sizeof(struct IPSET_TOKEN(HTYPE, 6)) :
+		sizeof(struct IPSET_TOKEN(HTYPE, 4));
+#endif
 	h = kzalloc(hsize, GFP_KERNEL);
 	if (!h)
 		return -ENOMEM;
