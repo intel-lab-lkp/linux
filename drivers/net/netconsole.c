@@ -61,6 +61,19 @@ MODULE_IMPORT_NS("NETDEV_INTERNAL");
 #define MAX_USERDATA_ITEMS		256
 #define MAX_PRINT_CHUNK			1000
 
+/*
+ * Sizing for the per-target fallback skb pool consulted by find_skb()
+ * when its GFP_ATOMIC allocation fails so messages still get out under
+ * memory pressure.
+ */
+#define MAX_UDP_CHUNK			1460
+#define MAX_SKBS			32
+#define MAX_SKB_SIZE							\
+	(sizeof(struct ethhdr) +					\
+	 sizeof(struct iphdr) +						\
+	 sizeof(struct udphdr) +					\
+	 MAX_UDP_CHUNK)
+
 static char config[MAX_PARAM_LENGTH];
 module_param_string(netconsole, config, MAX_PARAM_LENGTH, 0);
 MODULE_PARM_DESC(netconsole, " netconsole=[src-port]@[src-ip]/[dev],[tgt-port]@<tgt-ip>/[tgt-macaddr]");
@@ -290,6 +303,22 @@ static void netcons_release_dev(struct netconsole_target *nt)
 	do_netpoll_cleanup(&nt->np);
 	if (bound_by_mac(nt))
 		memset(&nt->np.dev_name, 0, IFNAMSIZ);
+}
+
+static void refill_skbs(struct netpoll *np)
+{
+	struct sk_buff_head *skb_pool;
+	struct sk_buff *skb;
+
+	skb_pool = &np->skb_pool;
+
+	while (READ_ONCE(skb_pool->qlen) < MAX_SKBS) {
+		skb = alloc_skb(MAX_SKB_SIZE, GFP_ATOMIC | __GFP_NOWARN);
+		if (!skb)
+			break;
+
+		skb_queue_tail(skb_pool, skb);
+	}
 }
 
 static void refill_skbs_work_handler(struct work_struct *work)
