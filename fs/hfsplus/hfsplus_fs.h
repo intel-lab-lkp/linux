@@ -588,6 +588,68 @@ bool is_bnode_offset_valid(struct hfs_bnode *node, u32 off)
 }
 
 static inline
+bool hfs_bnode_num_recs_valid(struct hfs_bnode *node)
+{
+	u32 node_size;
+	u32 rec_off_size;
+	u32 rec_off_tab_size;
+	u32 rec_area_size;
+
+	if (!node || !node->tree)
+		return false;
+
+	node_size = node->tree->node_size;
+	rec_off_size = sizeof(__be16);
+	if (node_size < sizeof(struct hfs_bnode_desc) + rec_off_size)
+		return false;
+
+	rec_area_size = node_size - sizeof(struct hfs_bnode_desc);
+	rec_off_tab_size = ((u32)node->num_recs + 1) * rec_off_size;
+
+	return rec_off_tab_size <= rec_area_size;
+}
+
+static inline
+bool hfs_brec_record_valid(struct hfs_bnode *node, int record)
+{
+	if (!hfs_bnode_num_recs_valid(node))
+		return false;
+	if (record < 0)
+		return false;
+
+	return record < node->num_recs;
+}
+
+static inline
+bool hfs_brec_range_valid(struct hfs_bnode *node, u16 off, u16 next_off,
+			  u16 rec_off)
+{
+	u32 rec_off_size;
+	u32 rec_off_tab_size;
+	u32 rec_off_tab_start;
+
+	if (!node || !node->tree)
+		return false;
+
+	if (off < sizeof(struct hfs_bnode_desc) || (off & 1))
+		return false;
+
+	if (next_off <= off ||
+		next_off > node->tree->node_size ||
+		next_off > rec_off ||
+		(next_off & 1))
+		return false;
+
+	rec_off_size = sizeof(__be16);
+	rec_off_tab_size = ((u32)node->num_recs + 1) * rec_off_size;
+	rec_off_tab_start = node->tree->node_size - rec_off_tab_size;
+	if (next_off > rec_off_tab_start)
+		return false;
+
+	return true;
+}
+
+static inline
 u32 check_and_correct_requested_length(struct hfs_bnode *node, u32 off, u32 len)
 {
 	unsigned int node_size;
