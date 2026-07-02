@@ -73,6 +73,19 @@ extern enum hv_partition_type hv_curr_partition_type;
 extern void * __percpu *hyperv_pcpu_input_arg;
 extern void * __percpu *hyperv_pcpu_output_arg;
 
+#ifdef CONFIG_HYPERV_PVIOMMU
+int  hv_iommu_register_pci_bus(int pci_domain_nr, u32 logical_dev_id_prefix);
+void hv_iommu_unregister_pci_bus(int pci_domain_nr);
+int  hv_iommu_lookup_logical_dev_id(int pci_domain_nr, u32 *prefix);
+#else
+static inline int hv_iommu_register_pci_bus(int pci_domain_nr,
+					    u32 logical_dev_id_prefix)
+{
+	return 0;
+}
+static inline void hv_iommu_unregister_pci_bus(int pci_domain_nr) { }
+#endif
+
 u64 hv_do_hypercall(u64 control, void *inputaddr, void *outputaddr);
 u64 hv_do_fast_hypercall8(u16 control, u64 input8);
 u64 hv_do_fast_hypercall16(u16 control, u64 input1, u64 input2);

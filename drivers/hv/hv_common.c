@@ -26,6 +26,8 @@
 #include <linux/kmsg_dump.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/list.h>
+#include <linux/spinlock.h>
 #include <linux/dma-map-ops.h>
 #include <linux/set_memory.h>
 #include <hyperv/hvhdk.h>
@@ -863,3 +865,96 @@ const char *hv_result_to_string(u64 status)
 	return "Unknown";
 }
 EXPORT_SYMBOL_GPL(hv_result_to_string);
+
+#ifdef CONFIG_HYPERV_PVIOMMU
+/*
+ * Logical device ID registry shared between the vPCI bus driver
+ * (pci-hyperv) and the para-virtualized IOMMU driver. The vPCI driver
+ * registers the per-bus logical device ID prefix at bus probe time, and
+ * the pvIOMMU driver looks it up to build the full logical device ID used
+ * in IOMMU hypercalls.
+ */
+struct hv_pci_busdata {
+	int		 pci_domain_nr;
+	u32		 logical_dev_id_prefix;
+	struct list_head list;
+};
+
+static LIST_HEAD(hv_pci_bus_list);
+static DEFINE_SPINLOCK(hv_pci_bus_lock);
+
+int hv_iommu_register_pci_bus(int pci_domain_nr, u32 logical_dev_id_prefix)
+{
+	struct hv_pci_busdata *bus, *new;
+	int ret = 0;
+
+	new = kzalloc_obj(*new, GFP_KERNEL);
+	if (!new)
+		return -ENOMEM;
+
+	spin_lock(&hv_pci_bus_lock);
+	list_for_each_entry(bus, &hv_pci_bus_list, list) {
+		if (bus->pci_domain_nr != pci_domain_nr)
+			continue;
+
+		if (bus->logical_dev_id_prefix != logical_dev_id_prefix) {
+			pr_err("stale registration for PCI domain %d (old prefix 0x%08x, new 0x%08x)\n",
+			       pci_domain_nr, bus->logical_dev_id_prefix,
+			       logical_dev_id_prefix);
+			ret = -EEXIST;
+		}
+
+		goto out_free;
+	}
+
+	new->pci_domain_nr = pci_domain_nr;
+	new->logical_dev_id_prefix = logical_dev_id_prefix;
+	list_add(&new->list, &hv_pci_bus_list);
+	spin_unlock(&hv_pci_bus_lock);
+	return 0;
+
+out_free:
+	spin_unlock(&hv_pci_bus_lock);
+	kfree(new);
+	return ret;
+}
+EXPORT_SYMBOL_FOR_MODULES(hv_iommu_register_pci_bus, "pci-hyperv");
+
+void hv_iommu_unregister_pci_bus(int pci_domain_nr)
+{
+	struct hv_pci_busdata *bus, *tmp;
+
+	spin_lock(&hv_pci_bus_lock);
+	list_for_each_entry_safe(bus, tmp, &hv_pci_bus_list, list) {
+		if (bus->pci_domain_nr == pci_domain_nr) {
+			list_del(&bus->list);
+			kfree(bus);
+			break;
+		}
+	}
+	spin_unlock(&hv_pci_bus_lock);
+}
+EXPORT_SYMBOL_FOR_MODULES(hv_iommu_unregister_pci_bus, "pci-hyperv");
+
+/*
+ * Look up the logical device ID prefix registered for @pci_domain_nr.
+ * Returns 0 on success with *prefix filled in; -ENODEV if no entry is
+ * registered for that PCI domain.
+ */
+int hv_iommu_lookup_logical_dev_id(int pci_domain_nr, u32 *prefix)
+{
+	struct hv_pci_busdata *bus;
+	int ret = -ENODEV;
+
+	spin_lock(&hv_pci_bus_lock);
+	list_for_each_entry(bus, &hv_pci_bus_list, list) {
+		if (bus->pci_domain_nr == pci_domain_nr) {
+			*prefix = bus->logical_dev_id_prefix;
+			ret = 0;
+			break;
+		}
+	}
+	spin_unlock(&hv_pci_bus_lock);
+	return ret;
+}
+#endif /* CONFIG_HYPERV_PVIOMMU */
