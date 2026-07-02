@@ -2154,7 +2154,9 @@ out_err:
 		rsp->hdr.Status = STATUS_ACCESS_DENIED;
 	else if (rc)
 		rsp->hdr.Status = STATUS_LOGON_FAILURE;
-	if (rsp->hdr.Status == STATUS_USER_SESSION_DELETED &&
+	if ((rsp->hdr.Status == STATUS_USER_SESSION_DELETED ||
+	     (rsp->hdr.Status == STATUS_INVALID_PARAMETER &&
+	      (req->Flags & SMB2_SESSION_REQ_FLAG_BINDING))) &&
 	    (req->hdr.Flags & SMB2_FLAGS_SIGNED))
 		rsp->hdr.Flags |= SMB2_FLAGS_SIGNED;
 
