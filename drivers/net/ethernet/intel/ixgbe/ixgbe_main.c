@@ -5958,23 +5958,14 @@ static void ixgbe_configure(struct ixgbe_adapter *adapter)
 /**
  * ixgbe_enable_link_status_events - enable link status events
  * @adapter: pointer to the adapter structure
- * @mask: event mask to be set
  *
  * Enables link status events by invoking ixgbe_configure_lse()
  *
  * Return: the exit code of the operation.
  */
-static int ixgbe_enable_link_status_events(struct ixgbe_adapter *adapter,
-					   u16 mask)
+static int ixgbe_enable_link_status_events(struct ixgbe_adapter *adapter)
 {
-	int err;
-
-	err = ixgbe_configure_lse(&adapter->hw, true, mask);
-	if (err)
-		return err;
-
-	adapter->lse_mask = mask;
-	return 0;
+	return ixgbe_configure_lse(&adapter->hw, true);
 }
 
 /**
@@ -5987,14 +5978,7 @@ static int ixgbe_enable_link_status_events(struct ixgbe_adapter *adapter,
  */
 static int ixgbe_disable_link_status_events(struct ixgbe_adapter *adapter)
 {
-	int err;
-
-	err = ixgbe_configure_lse(&adapter->hw, false, adapter->lse_mask);
-	if (err)
-		return err;
-
-	adapter->lse_mask = 0;
-	return 0;
+	return ixgbe_configure_lse(&adapter->hw, false);
 }
 
 /**
@@ -6028,10 +6012,6 @@ static int ixgbe_non_sfp_link_config(struct ixgbe_hw *hw)
 {
 	struct ixgbe_adapter *adapter = container_of(hw, struct ixgbe_adapter,
 						     hw);
-	u16 mask = ~((u16)(IXGBE_ACI_LINK_EVENT_UPDOWN |
-			   IXGBE_ACI_LINK_EVENT_MEDIA_NA |
-			   IXGBE_ACI_LINK_EVENT_MODULE_QUAL_FAIL |
-			   IXGBE_ACI_LINK_EVENT_PHY_FW_LOAD_FAIL));
 	bool autoneg, link_up = false;
 	int ret = -EIO;
 	u32 speed;
@@ -6059,7 +6039,7 @@ static int ixgbe_non_sfp_link_config(struct ixgbe_hw *hw)
 
 	if (hw->mac.ops.setup_link) {
 		if (adapter->hw.mac.type == ixgbe_mac_e610) {
-			ret = ixgbe_enable_link_status_events(adapter, mask);
+			ret = ixgbe_enable_link_status_events(adapter);
 			if (ret)
 				return ret;
 		}
