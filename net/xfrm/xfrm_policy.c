@@ -1362,7 +1362,7 @@ static void xfrm_hash_rebuild(struct work_struct *work)
 		if (xfrm_policy_is_dead_or_sk(policy))
 			continue;
 
-		hlist_del_rcu(&policy->bydst);
+		hlist_del_init_rcu(&policy->bydst);
 
 		newpos = NULL;
 		dir = xfrm_policy_id2dir(policy->index);
