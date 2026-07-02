@@ -1367,7 +1367,8 @@ int ppe_rss_hash_config_set(struct ppe_device *ppe_dev, int mode,
  *
  * Return: 0 on success, negative error code on failure.
  */
-int ppe_ring_queue_map_set(struct ppe_device *ppe_dev, int ring_id, u32 *queue_map)
+int ppe_ring_queue_map_set(struct ppe_device *ppe_dev, int ring_id,
+			   const u32 *queue_map)
 {
 	u32 reg, queue_bitmap_val[PPE_RING_TO_QUEUE_BITMAP_WORD_CNT];
 
