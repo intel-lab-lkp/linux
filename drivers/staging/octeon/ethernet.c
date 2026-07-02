@@ -934,7 +934,7 @@ static int cvm_oct_probe(struct platform_device *pdev)
 		}
 	}
 
-	cvm_oct_tx_initialize();
+	cvm_oct_tx_initialize(pdev);
 	cvm_oct_rx_initialize(pdev);
 
 	/*
