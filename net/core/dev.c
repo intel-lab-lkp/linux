@@ -1802,6 +1802,7 @@ void netif_close_many(struct list_head *head, bool unlink)
 	__dev_close_many(head);
 
 	list_for_each_entry_safe(dev, tmp, head, close_list) {
+		netdev_assert_locked_ops_compat(dev);
 		rtmsg_ifinfo(RTM_NEWLINK, dev, IFF_UP | IFF_RUNNING, GFP_KERNEL, 0, NULL);
 		call_netdevice_notifiers(NETDEV_DOWN, dev);
 		if (unlink)
@@ -9786,6 +9787,8 @@ void __dev_notify_flags(struct net_device *dev, unsigned int old_flags,
 			const struct nlmsghdr *nlh)
 {
 	unsigned int changes = dev->flags ^ old_flags;
+
+	netdev_assert_locked_ops_compat(dev);
 
 	if (gchanges)
 		rtmsg_ifinfo(RTM_NEWLINK, dev, gchanges, GFP_ATOMIC, portid, nlh);

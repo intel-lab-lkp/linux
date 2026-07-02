@@ -421,6 +421,8 @@ running under the lock:
 * ``NETDEV_CHANGENAME``
 * ``NETDEV_REGISTER``
 * ``NETDEV_UP``
+* ``NETDEV_DOWN``
+* ``NETDEV_GOING_DOWN``
 
 The following notifiers are running without the lock:
 * ``NETDEV_UNREGISTER``
