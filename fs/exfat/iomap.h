@@ -11,6 +11,7 @@ extern const struct iomap_ops exfat_iomap_ops;
 extern const struct iomap_ops exfat_write_iomap_ops;
 extern const struct iomap_writeback_ops exfat_writeback_ops;
 extern const struct iomap_read_ops exfat_iomap_bio_read_ops;
+extern const struct iomap_write_ops exfat_iomap_write_ops;
 
 int exfat_iomap_swap_activate(struct swap_info_struct *sis,
 			       struct file *file, sector_t *span);
