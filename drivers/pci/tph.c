@@ -615,3 +615,31 @@ bool pcie_tph_supported(struct pci_dev *pdev, bool want_ext)
 	return pdev->tph_ext_support;
 }
 EXPORT_SYMBOL(pcie_tph_supported);
+
+/**
+ * pcie_tph_dsm_supported - Check if root port exposes TPH ST _DSM
+ * @pdev: target PCI device
+ *
+ * Return true if root port of @pdev provides TPH ST DSM function,
+ * false otherwise (ACPI disabled or DSM missing).
+ */
+bool pcie_tph_dsm_supported(struct pci_dev *pdev)
+{
+#ifdef CONFIG_ACPI
+	struct pci_dev *rp = pcie_find_root_port(pdev);
+	acpi_handle handle;
+
+	if (!rp || !rp->bus || !rp->bus->bridge)
+		return false;
+
+	handle = ACPI_HANDLE(rp->bus->bridge);
+	if (!handle)
+		return false;
+
+	return acpi_check_dsm(handle, &pci_acpi_dsm_guid, 7,
+			      BIT(TPH_ST_DSM_FUNC_INDEX));
+#else
+	return false;
+#endif
+}
+EXPORT_SYMBOL_GPL(pcie_tph_dsm_supported);
