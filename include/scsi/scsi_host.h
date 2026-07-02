@@ -374,6 +374,15 @@ struct scsi_host_template {
 #define SCSI_ADAPTER_RESET	1
 #define SCSI_FIRMWARE_RESET	2
 
+	/*
+	 * Optional callback invoked when a device returns NOT_READY with
+	 * ASC/ASCQ = 0x04/0x11 ("notify (enable spinup) required").
+	 * This allows LLDDs to perform controller-specific spinup
+	 * notification before the mid-layer retries.
+	 *
+	 * Status: OPTIONAL
+	 */
+	void (*spinup_notify)(struct scsi_device *sdev);
 
 	/*
 	 * Name of proc directory

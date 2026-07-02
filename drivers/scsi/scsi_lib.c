@@ -905,6 +905,10 @@ static void scsi_io_completion_action(struct scsi_cmnd *cmd, int result)
 				case 0x1a: /* start stop unit in progress */
 				case 0x1b: /* sanitize in progress */
 				case 0x1d: /* configuration in progress */
+					if (sshdr.ascq == 0x11 &&
+					    cmd->device->host->hostt->spinup_notify)
+						cmd->device->host->hostt->spinup_notify(
+							cmd->device);
 					action = ACTION_DELAYED_RETRY;
 					break;
 				case 0x0a: /* ALUA state transition */
