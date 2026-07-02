@@ -417,6 +417,13 @@ static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 		return -ENOSPC;
 
 	ext4_write_lock_xattr(inode, &no_expand);
+
+	/* Once converted to extents, never go back to inline data. */
+	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
+		ext4_write_unlock_xattr(inode, &no_expand);
+		return -ENOSPC;
+	}
+
 	/*
 	 * ei->i_inline_size may have changed since the initial check
 	 * if other xattrs were added. Recalculate to ensure
