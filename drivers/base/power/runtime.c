@@ -309,6 +309,7 @@ static int rpm_get_suppliers(struct device *dev)
 		/* Ignore suppliers with disabled runtime PM. */
 		if (retval < 0 && retval != -EACCES) {
 			pm_runtime_put_noidle(link->supplier);
+			pm_runtime_set_suspended(link->supplier);
 			return retval;
 		}
 		refcount_inc(&link->rpm_active);
