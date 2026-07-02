@@ -5956,19 +5956,6 @@ static void ixgbe_configure(struct ixgbe_adapter *adapter)
 }
 
 /**
- * ixgbe_enable_link_status_events - enable link status events
- * @adapter: pointer to the adapter structure
- *
- * Enables link status events by invoking ixgbe_configure_lse()
- *
- * Return: the exit code of the operation.
- */
-static int ixgbe_enable_link_status_events(struct ixgbe_adapter *adapter)
-{
-	return ixgbe_configure_lse(&adapter->hw, true);
-}
-
-/**
  * ixgbe_sfp_link_config - set up SFP+ link
  * @adapter: pointer to private adapter struct
  **/
@@ -5997,8 +5984,6 @@ static void ixgbe_sfp_link_config(struct ixgbe_adapter *adapter)
  **/
 static int ixgbe_non_sfp_link_config(struct ixgbe_hw *hw)
 {
-	struct ixgbe_adapter *adapter = container_of(hw, struct ixgbe_adapter,
-						     hw);
 	bool autoneg, link_up = false;
 	int ret = -EIO;
 	u32 speed;
@@ -6024,14 +6009,8 @@ static int ixgbe_non_sfp_link_config(struct ixgbe_hw *hw)
 	if (ret)
 		return ret;
 
-	if (hw->mac.ops.setup_link) {
-		if (adapter->hw.mac.type == ixgbe_mac_e610) {
-			ret = ixgbe_enable_link_status_events(adapter);
-			if (ret)
-				return ret;
-		}
+	if (hw->mac.ops.setup_link)
 		ret = hw->mac.ops.setup_link(hw, speed, link_up);
-	}
 
 	return ret;
 }

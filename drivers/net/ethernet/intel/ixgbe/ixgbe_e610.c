@@ -1391,7 +1391,7 @@ int ixgbe_update_link_info(struct ixgbe_hw *hw)
 
 	li = &hw->link.link_info;
 
-	err = ixgbe_aci_get_link_info(hw, true, NULL);
+	err = ixgbe_aci_get_link_info(hw, NULL);
 	if (err)
 		return err;
 
@@ -1445,7 +1445,6 @@ int ixgbe_get_link_status(struct ixgbe_hw *hw, bool *link_up)
 /**
  * ixgbe_aci_get_link_info - get the link status
  * @hw: pointer to the HW struct
- * @ena_lse: enable/disable LinkStatusEvent reporting
  * @link: pointer to link status structure - optional
  *
  * Get the current Link Status using ACI command (0x607).
@@ -1454,8 +1453,7 @@ int ixgbe_get_link_status(struct ixgbe_hw *hw, bool *link_up)
  *
  * Return: the link status of the adapter.
  */
-int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
-			    struct ixgbe_link_status *link)
+int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, struct ixgbe_link_status *link)
 {
 	struct ixgbe_aci_cmd_get_link_status_data link_data = {};
 	struct ixgbe_aci_cmd_get_link_status *resp;
@@ -1474,7 +1472,7 @@ int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
 	hw_fc_info = &hw->fc;
 
 	ixgbe_fill_dflt_direct_cmd_desc(&desc, ixgbe_aci_opc_get_link_status);
-	cmd_flags = (ena_lse) ? IXGBE_ACI_LSE_ENA : IXGBE_ACI_LSE_DIS;
+	cmd_flags = IXGBE_ACI_LSE_ENA;
 	resp = libie_aq_raw(&desc);
 	resp->cmd_flags = cpu_to_le16(cmd_flags);
 	resp->lport_num = hw->bus.func;
@@ -1559,19 +1557,6 @@ static int ixgbe_aci_init_event_mask(struct ixgbe_hw *hw)
 			   IXGBE_ACI_LINK_EVENT_PHY_FW_LOAD_FAIL));
 
 	return ixgbe_aci_set_event_mask(hw, (u8)hw->bus.func, mask);
-}
-
-/**
- * ixgbe_configure_lse - enable/disable link status events
- * @hw: pointer to the HW struct
- * @activate: true for enable lse, false otherwise
- *
- * Return: the exit code of the operation.
- */
-int ixgbe_configure_lse(struct ixgbe_hw *hw, bool activate)
-{
-	/* Enabling link status events generation by fw. */
-	return ixgbe_aci_get_link_info(hw, activate, NULL);
 }
 
 /**
@@ -1913,7 +1898,7 @@ void ixgbe_fc_autoneg_e610(struct ixgbe_hw *hw)
 	/* Get current link err.
 	 * Current FC mode will be stored in the hw context.
 	 */
-	err = ixgbe_aci_get_link_info(hw, true, NULL);
+	err = ixgbe_aci_get_link_info(hw, NULL);
 	if (err)
 		goto no_autoneg;
 
@@ -2219,7 +2204,7 @@ int ixgbe_setup_phy_link_e610(struct ixgbe_hw *hw)
 	u64 phy_type_low = 0, phy_type_high = 0;
 	int err;
 
-	err = ixgbe_aci_get_link_info(hw, true, NULL);
+	err = ixgbe_aci_get_link_info(hw, NULL);
 	if (err)
 		return err;
 
