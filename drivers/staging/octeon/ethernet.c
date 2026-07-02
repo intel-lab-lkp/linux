@@ -104,6 +104,21 @@ struct net_device *cvm_oct_device[TOTAL_NUMBER_OF_PORTS];
 
 u64 cvm_oct_tx_poll_interval;
 
+static void cvm_oct_remove_device(int port)
+{
+	if (cvm_oct_device[port]) {
+		struct net_device *dev = cvm_oct_device[port];
+		struct octeon_ethernet *priv = netdev_priv(dev);
+
+		cancel_delayed_work_sync(&priv->port_periodic_work);
+
+		cvm_oct_tx_shutdown_dev(dev);
+		unregister_netdev(dev);
+		free_netdev(dev);
+		cvm_oct_device[port] = NULL;
+	}
+}
+
 static void cvm_oct_rx_refill_worker(struct work_struct *work)
 {
 	struct octeon_ethernet_platform *plat = container_of(work,
@@ -948,19 +963,8 @@ static void cvm_oct_remove(struct platform_device *pdev)
 	cvmx_pko_disable();
 
 	/* Free the ethernet devices */
-	for (port = 0; port < TOTAL_NUMBER_OF_PORTS; port++) {
-		if (cvm_oct_device[port]) {
-			struct net_device *dev = cvm_oct_device[port];
-			struct octeon_ethernet *priv = netdev_priv(dev);
-
-			cancel_delayed_work_sync(&priv->port_periodic_work);
-
-			cvm_oct_tx_shutdown_dev(dev);
-			unregister_netdev(dev);
-			free_netdev(dev);
-			cvm_oct_device[port] = NULL;
-		}
-	}
+	for (port = 0; port < TOTAL_NUMBER_OF_PORTS; port++)
+		cvm_oct_remove_device(port);
 
 	cvmx_pko_shutdown();
 
