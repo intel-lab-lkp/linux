@@ -1734,7 +1734,7 @@ static int ntlm_authenticate(struct ksmbd_work *work,
 
 		if (!ksmbd_compare_user(sess->user, user)) {
 			ksmbd_free_user(user);
-			return -EPERM;
+			return -EKEYREJECTED;
 		}
 		ksmbd_free_user(user);
 	} else {
@@ -1845,7 +1845,8 @@ static int krb5_authenticate(struct ksmbd_work *work,
 					 out_blob, &out_len, auth_key);
 	if (retval) {
 		ksmbd_debug(SMB, "krb5 authentication failed\n");
-		retval = -EINVAL;
+		if (retval != -EKEYREJECTED)
+			retval = -EINVAL;
 		goto out;
 	}
 
@@ -2139,6 +2140,8 @@ out_err:
 		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
 	else if (rc == -EOPNOTSUPP)
 		rsp->hdr.Status = STATUS_NOT_SUPPORTED;
+	else if (rc == -EKEYREJECTED)
+		rsp->hdr.Status = STATUS_ACCESS_DENIED;
 	else if (rc)
 		rsp->hdr.Status = STATUS_LOGON_FAILURE;
 
@@ -2148,6 +2151,16 @@ out_err:
 	}
 
 	if (rc < 0) {
+		if (sess && (req->Flags & SMB2_SESSION_REQ_FLAG_BINDING)) {
+			struct preauth_session *preauth_sess;
+
+			preauth_sess = ksmbd_preauth_session_lookup(conn, sess->id);
+			if (preauth_sess) {
+				list_del(&preauth_sess->preauth_entry);
+				kfree(preauth_sess);
+			}
+		}
+
 		/*
 		 * SecurityBufferOffset should be set to zero
 		 * in session setup error response.
