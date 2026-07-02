@@ -588,6 +588,9 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		switch (result.uint_32) {
 		case Opt_rescue_usebackuproot:
 			btrfs_set_opt(ctx->mount_opt, USEBACKUPROOT);
+
+			/* If we're loading the backup roots we can't trust the space cache. */
+			btrfs_set_opt(ctx->mount_opt, CLEAR_CACHE);
 			break;
 		case Opt_rescue_nologreplay:
 			btrfs_set_opt(ctx->mount_opt, NOLOGREPLAY);
