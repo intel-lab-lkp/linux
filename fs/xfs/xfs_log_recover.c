@@ -1912,7 +1912,6 @@ xlog_recover_reorder_trans(
 			xfs_warn(log->l_mp,
 				"%s: unrecognized type of log operation (%d)",
 				__func__, ITEM_TYPE(item));
-			ASSERT(0);
 			/*
 			 * return the remaining items back to the transaction
 			 * item list so they can be freed in caller.
