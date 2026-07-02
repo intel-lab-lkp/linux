@@ -220,6 +220,19 @@ void drm_connector_free_work_fn(struct work_struct *work)
 	}
 }
 
+static void drm_connector_hdmi_scdc_work(struct work_struct *work)
+{
+	struct drm_connector *connector;
+	struct drm_connector_hdmi *hdmi;
+
+	hdmi = container_of(to_delayed_work(work), struct drm_connector_hdmi,
+			    scdc_work);
+	connector = container_of(hdmi, struct drm_connector, hdmi);
+
+	if (hdmi->scdc_cb)
+		hdmi->scdc_cb(connector);
+}
+
 static int drm_connector_init_only(struct drm_device *dev,
 				   struct drm_connector *connector,
 				   const struct drm_connector_funcs *funcs,
@@ -285,6 +298,7 @@ static int drm_connector_init_only(struct drm_device *dev,
 	mutex_init(&connector->edid_override_mutex);
 	mutex_init(&connector->hdmi.infoframes.lock);
 	mutex_init(&connector->hdmi_audio.lock);
+	INIT_DELAYED_WORK(&connector->hdmi.scdc_work, drm_connector_hdmi_scdc_work);
 	connector->edid_blob_ptr = NULL;
 	connector->epoch_counter = 0;
 	connector->tile_blob_ptr = NULL;
@@ -624,12 +638,18 @@ int drmm_connector_hdmi_init_with_caps(struct drm_device *dev,
 	 * inferred limit with the actual controller capability. A value of
 	 * zero keeps the default limit inferred from supported_hdmi_ver.
 	 */
-	if (caps->supported_hdmi_ver >= HDMI_VERSION_2_0)
+	if (caps->supported_hdmi_ver >= HDMI_VERSION_2_0) {
+		if (!hdmi_funcs->scrambler_enable ||
+		    !hdmi_funcs->scrambler_disable)
+			return -EINVAL;
+
+		connector->hdmi.scrambler_supported = true;
 		connector->hdmi.max_tmds_char_rate = HDMI_2_0_TMDS_CHAR_RATE_MAX_HZ;
-	else if (caps->supported_hdmi_ver >= HDMI_VERSION_1_3)
+	} else if (caps->supported_hdmi_ver >= HDMI_VERSION_1_3) {
 		connector->hdmi.max_tmds_char_rate = HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ;
-	else if (caps->supported_hdmi_ver >= HDMI_VERSION_1_0)
+	} else if (caps->supported_hdmi_ver >= HDMI_VERSION_1_0) {
 		connector->hdmi.max_tmds_char_rate = HDMI_1_0_TMDS_CHAR_RATE_MAX_HZ;
+	}
 
 	if (caps->max_tmds_char_rate) {
 		if (caps->max_tmds_char_rate > connector->hdmi.max_tmds_char_rate)
