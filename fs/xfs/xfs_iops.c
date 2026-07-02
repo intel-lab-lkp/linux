@@ -835,7 +835,7 @@ xfs_setattr_nonsize(
 	}
 
 	error = xfs_trans_alloc_ichange(ip, udqp, gdqp, NULL,
-					ns_capable_noaudit(&init_user_ns, CAP_FOWNER),
+					capable_noaudit(CAP_FOWNER),
 					&tp);
 	if (error)
 		goto out_dqrele;
