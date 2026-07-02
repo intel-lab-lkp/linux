@@ -6483,6 +6483,36 @@ dma_engine_disable:
 	}
 }
 
+static void ixgbe_mac_addr_refresh(struct ixgbe_adapter *adapter)
+{
+	struct net_device *netdev = adapter->netdev;
+	struct ixgbe_hw *hw = &adapter->hw;
+	int err;
+
+	if (hw->mac.type != ixgbe_mac_e610)
+		return;
+
+	/* fetch address stored currently in RAR0 in case the addr has been
+	 * altered by FW; if so, use it as the default one
+	 */
+	err = hw->mac.ops.get_mac_addr(hw, hw->mac.addr);
+	if (err) {
+		e_dev_warn("Cannot get MAC address\n");
+		return;
+	}
+
+	if (ether_addr_equal(netdev->dev_addr, hw->mac.addr) ||
+	    !is_valid_ether_addr(hw->mac.addr))
+		return;
+
+	ASSERT_RTNL();
+
+	eth_hw_addr_set(netdev, hw->mac.addr);
+	ether_addr_copy(adapter->mac_table[0].addr, hw->mac.addr);
+
+	call_netdevice_notifiers(NETDEV_CHANGEADDR, netdev);
+}
+
 void ixgbe_reset(struct ixgbe_adapter *adapter)
 {
 	struct ixgbe_hw *hw = &adapter->hw;
@@ -6499,6 +6529,8 @@ void ixgbe_reset(struct ixgbe_adapter *adapter)
 	adapter->flags2 &= ~(IXGBE_FLAG2_SEARCH_FOR_SFP |
 			     IXGBE_FLAG2_SFP_NEEDS_RESET);
 	adapter->flags &= ~IXGBE_FLAG_NEED_LINK_CONFIG;
+
+	ixgbe_mac_addr_refresh(adapter);
 
 	err = hw->mac.ops.init_hw(hw);
 	switch (err) {
@@ -8664,6 +8696,11 @@ static void ixgbe_service_task(struct work_struct *work)
 			ixgbe_handle_fw_event(adapter);
 		ixgbe_check_media_subtask(adapter);
 	}
+
+	rtnl_lock();
+	ixgbe_mac_addr_refresh(adapter);
+	rtnl_unlock();
+
 	ixgbe_reset_subtask(adapter);
 	ixgbe_phy_interrupt_subtask(adapter);
 	ixgbe_sfp_detection_subtask(adapter);
