@@ -11,6 +11,13 @@
 /* Cap maximum number of ioeventfds per device (arbitrary) */
 #define VFIO_PCI_IOEVENTFD_MAX		1000
 
+enum vfio_pci_tph_policy {
+	VFIO_PCI_TPH_POLICY_NO_ST = 0,
+	VFIO_PCI_TPH_POLICY_IV_ST = 1,
+	VFIO_PCI_TPH_POLICY_DS_ST = 2,
+	VFIO_PCI_TPH_POLICY_LITERAL = 3,
+};
+
 struct vfio_pci_ioeventfd {
 	struct list_head	next;
 	struct vfio_pci_core_device	*vdev;
