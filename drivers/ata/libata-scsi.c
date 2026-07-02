@@ -2285,6 +2285,39 @@ static unsigned int ata_scsiop_inq_89(struct ata_device *dev,
 }
 
 /**
+ * ata_dsm_trim_pages - maximum DSM TRIM payload for a device, in 512-byte pages
+ * @dev: ATA device the DATA SET MANAGEMENT TRIM command will be sent to
+ *
+ * A DATA SET MANAGEMENT TRIM payload is a list of 512-byte pages, each holding
+ * up to ATA_MAX_TRIM_RNUM (64) LBA Range Entries; the format is page-based and
+ * unrelated to the logical sector size.
+ *
+ * The logical sector size still bounds it, though: the descriptor is written
+ * directly into the WRITE SAME data-out buffer, which sd sizes to a single
+ * logical block, so it can hold at most sector_size / 512 pages.
+ *
+ * Return: the maximum number of 512-byte pages a single translated WRITE SAME
+ * command may send to @dev (never less than one), that is the smaller of:
+ *   - MAX PAGES PER DSM COMMAND (IDENTIFY DEVICE word 105), when the device
+ *     reports a non-zero limit; and
+ *   - the logical sector size expressed in 512-byte pages (see above).
+ */
+static unsigned int ata_dsm_trim_pages(struct ata_device *dev)
+{
+	unsigned int sector_size = ata_id_logical_sector_size(dev->id);
+	unsigned int max_pages = ata_id_dsm_max_pages(dev->id);
+	unsigned int pages = sector_size / ATA_SECT_SIZE;
+
+	/* If the device does not specify a limit, assume only a single page. */
+	if (!max_pages)
+		max_pages = 1;
+
+	pages = min(pages, max_pages);
+
+	return pages;
+}
+
+/**
  *	ata_scsiop_inq_b0 - Simulate INQUIRY VPD page B0, Block Limits
  *	@dev: Target device.
  *	@cmd: SCSI command of interest.
@@ -2323,7 +2356,8 @@ static unsigned int ata_scsiop_inq_b0(struct ata_device *dev,
 	 * with the unmap bit set.
 	 */
 	if (ata_id_has_trim(dev->id)) {
-		u64 max_blocks = 65535 * ATA_MAX_TRIM_RNUM;
+		unsigned int max_pages = ata_dsm_trim_pages(dev);
+		u64 max_blocks = max_pages * ATA_MAX_TRIM_RNUM * (u64)U16_MAX;
 
 		if (dev->quirks & ATA_QUIRK_MAX_TRIM_128M)
 			max_blocks = 128 << (20 - SECTOR_SHIFT);
@@ -3524,14 +3558,14 @@ static unsigned int ata_scsi_pass_thru(struct ata_queued_cmd *qc)
 /**
  * ata_format_dsm_trim_descr() - SATL Write Same to DSM Trim
  * @cmd: SCSI command being translated
- * @trmax: Maximum number of entries that will fit in sector_size bytes.
+ * @size: DSM TRIM payload size in bytes (a multiple of 512)
  * @sector: Starting sector
  * @count: Total Range of request in logical sectors
  *
  * Rewrite the WRITE SAME descriptor to be a DSM TRIM little-endian formatted
  * descriptor.
  *
- * Upto 64 entries of the format:
+ * The payload is a list of @size / 8 entries of the format:
  *   63:48 Range Length
  *   47:0  LBA
  *
@@ -3540,35 +3574,45 @@ static unsigned int ata_scsi_pass_thru(struct ata_queued_cmd *qc)
  *
  * NOTE: this is the same format as ADD LBA(S) TO NV CACHE PINNED SET
  *
- * Return: Number of bytes copied into sglist.
+ * The descriptor is written straight into the WRITE SAME data-out buffer;
+ * ata_dsm_trim_pages() guarantees @size does not exceed that buffer (one
+ * logical block). An atomic sg_miter mapping is used so this works from the
+ * command submission path and, unlike page_address(), copes with a high
+ * memory payload.
+ *
+ * Return: Number of bytes written into the data-out buffer.
  */
-static size_t ata_format_dsm_trim_descr(struct scsi_cmnd *cmd, u32 trmax,
+static size_t ata_format_dsm_trim_descr(struct scsi_cmnd *cmd, size_t size,
 					u64 sector, u32 count)
 {
-	size_t len = ATA_SECT_SIZE;
-	size_t r;
-	__le64 *buf;
-	u32 i = 0;
-	unsigned long flags;
+	struct sg_mapping_iter miter;
+	size_t offset = 0;
 
-	BUILD_BUG_ON(ATA_SECT_SIZE > ATA_SCSI_RBUF_SIZE);
+	sg_miter_start(&miter, scsi_sglist(cmd), scsi_sg_count(cmd),
+		       SG_MITER_TO_SG | SG_MITER_ATOMIC);
+	while (offset < size && sg_miter_next(&miter)) {
+		__le64 *buf = miter.addr;
+		size_t chunk = min_t(size_t, miter.length, size - offset);
+		unsigned int n = chunk / sizeof(__le64);
+		unsigned int i;
 
-	spin_lock_irqsave(&ata_scsi_rbuf_lock, flags);
-	buf = ((void *)ata_scsi_rbuf);
-	memset(buf, 0, len);
-	while (i < trmax) {
-		u64 entry = sector |
-			((u64)(count > 0xffff ? 0xffff : count) << 48);
-		buf[i++] = __cpu_to_le64(entry);
-		if (count <= 0xffff)
-			break;
-		count -= 0xffff;
-		sector += 0xffff;
+		for (i = 0; i < n; i++) {
+			u64 entry = 0;
+
+			if (count) {
+				u32 rlen = min_t(u32, count, 0xffff);
+
+				entry = sector | ((u64)rlen << 48);
+				sector += rlen;
+				count -= rlen;
+			}
+			buf[i] = cpu_to_le64(entry);
+		}
+		offset += n * sizeof(__le64);
 	}
-	r = sg_copy_from_buffer(scsi_sglist(cmd), scsi_sg_count(cmd), buf, len);
-	spin_unlock_irqrestore(&ata_scsi_rbuf_lock, flags);
+	sg_miter_stop(&miter);
 
-	return r;
+	return offset;
 }
 
 /**
@@ -3588,10 +3632,11 @@ static unsigned int ata_scsi_write_same_xlat(struct ata_queued_cmd *qc)
 	struct scsi_cmnd *scmd = qc->scsicmd;
 	struct ata_device *dev = qc->dev;
 	const u8 *cdb = scmd->cmnd;
+	unsigned int max_pages = ata_dsm_trim_pages(dev);
+	unsigned int n_pages;
+	size_t size;
 	u64 block;
 	u32 n_block;
-	const u32 trmax = ATA_MAX_TRIM_RNUM;
-	u32 size;
 	u16 fp;
 	u8 bp = 0xff;
 	u8 unmap = cdb[1] & 0x8;
@@ -3621,7 +3666,7 @@ static unsigned int ata_scsi_write_same_xlat(struct ata_queued_cmd *qc)
 		goto invalid_fld;
 	}
 	/* If the request is too large the cmd is invalid */
-	if (n_block > 0xffff * trmax) {
+	if (n_block > max_pages * ATA_MAX_TRIM_RNUM * (u64)U16_MAX) {
 		fp = 2;
 		goto invalid_fld;
 	}
@@ -3634,31 +3679,39 @@ static unsigned int ata_scsi_write_same_xlat(struct ata_queued_cmd *qc)
 		goto invalid_param_len;
 
 	/*
-	 * The TRIM descriptor is a single 512-byte page, which is the maximum
-	 * WRITE SAME length advertised in the Block Limits VPD page. For DATA
-	 * SET MANAGEMENT TRIM the COUNT field (aka nsect) is the number of
-	 * 512-byte blocks to be transferred.
+	 * The DATA SET MANAGEMENT TRIM payload is a whole number of 512-byte
+	 * pages (each holding up to ATA_MAX_TRIM_RNUM LBA Range Entries),
+	 * independent of the logical sector size. Only use as many pages as
+	 * are needed to describe the request, capped at max_pages.
 	 */
-	size = ata_format_dsm_trim_descr(scmd, trmax, block, n_block);
-	if (size != ATA_SECT_SIZE)
+	n_pages = DIV_ROUND_UP(DIV_ROUND_UP(n_block, U16_MAX),
+			       ATA_MAX_TRIM_RNUM);
+	n_pages = clamp(n_pages, 1U, max_pages);
+	size = (size_t)n_pages * ATA_SECT_SIZE;
+
+	if (ata_format_dsm_trim_descr(scmd, size, block, n_block) != size)
 		goto invalid_param_len;
 
+	/*
+	 * For DATA SET MANAGEMENT TRIM the COUNT field (aka nsect) is the
+	 * number of 512-byte pages to be transferred.
+	 */
 	if (ata_ncq_enabled(dev) && ata_fpdma_dsm_supported(dev)) {
 		/* Newer devices support queued TRIM commands */
 		tf->protocol = ATA_PROT_NCQ;
 		tf->command = ATA_CMD_FPDMA_SEND;
 		tf->hob_nsect = ATA_SUBCMD_FPDMA_SEND_DSM & 0x1f;
 		tf->nsect = qc->hw_tag << 3;
-		tf->hob_feature = (size / 512) >> 8;
-		tf->feature = size / 512;
+		tf->hob_feature = n_pages >> 8;
+		tf->feature = n_pages;
 
 		tf->auxiliary = 1;
 	} else {
 		tf->protocol = ATA_PROT_DMA;
 		tf->hob_feature = 0;
 		tf->feature = ATA_DSM_TRIM;
-		tf->hob_nsect = (size / 512) >> 8;
-		tf->nsect = size / 512;
+		tf->hob_nsect = n_pages >> 8;
+		tf->nsect = n_pages;
 		tf->command = ATA_CMD_DSM;
 	}
 
@@ -3667,9 +3720,9 @@ static unsigned int ata_scsi_write_same_xlat(struct ata_queued_cmd *qc)
 
 	ata_qc_set_pc_nbytes(qc);
 	/*
-	 * The DSM TRIM payload is a single 512-byte page, which may be smaller
-	 * than the WRITE SAME data-out buffer (one logical block); only
-	 * transfer that page so the length matches the COUNT field.
+	 * The DSM TRIM payload (size) may be smaller than the WRITE SAME
+	 * data-out buffer (one logical block); only transfer the pages that
+	 * were actually built so the transfer length matches the COUNT field.
 	 */
 	qc->nbytes = size;
 
