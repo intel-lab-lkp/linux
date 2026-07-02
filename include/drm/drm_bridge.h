@@ -1177,6 +1177,12 @@ struct drm_bridge {
 	const char *product;
 
 	/**
+	 * @supported_hdmi_ver: HDMI version the bridge is conformant with.
+	 * This is only relevant if @DRM_BRIDGE_OP_HDMI is set.
+	 */
+	enum hdmi_version supported_hdmi_ver;
+
+	/**
 	 * @supported_formats: Bitmask of @drm_output_color_format listing
 	 * supported output formats. This is only relevant if
 	 * @DRM_BRIDGE_OP_HDMI is set.

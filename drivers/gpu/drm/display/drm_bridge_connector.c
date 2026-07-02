@@ -823,8 +823,10 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 	struct drm_connector *connector;
 	struct i2c_adapter *ddc = NULL;
 	struct drm_bridge *panel_bridge __free(drm_bridge_put) = NULL;
-	unsigned int supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444);
-	unsigned int max_bpc = 8;
+	struct drm_connector_hdmi_caps caps = {
+		.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444),
+		.max_bpc = 8,
+	};
 	bool support_hdcp = false;
 	int connector_type;
 	int ret;
@@ -885,6 +887,7 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 		if (bridge->ops & DRM_BRIDGE_OP_HDMI) {
 			if (bridge_connector->bridge_hdmi)
 				return ERR_PTR(-EBUSY);
+
 			if (!bridge->funcs->hdmi_write_avi_infoframe ||
 			    !bridge->funcs->hdmi_clear_avi_infoframe ||
 			    !bridge->funcs->hdmi_write_hdmi_infoframe ||
@@ -908,10 +911,12 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 
 			bridge_connector->bridge_hdmi = drm_bridge_get(bridge);
 
+			if (bridge->supported_hdmi_ver)
+				caps.supported_hdmi_ver = bridge->supported_hdmi_ver;
 			if (bridge->supported_formats)
-				supported_formats = bridge->supported_formats;
+				caps.supported_formats = bridge->supported_formats;
 			if (bridge->max_bpc)
-				max_bpc = bridge->max_bpc;
+				caps.max_bpc = bridge->max_bpc;
 		}
 
 		if (bridge->ops & DRM_BRIDGE_OP_HDMI_AUDIO) {
@@ -994,7 +999,7 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 
 	if (bridge_connector->bridge_hdmi) {
 		if (!connector->ycbcr_420_allowed)
-			supported_formats &= ~BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR420);
+			caps.supported_formats &= ~BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR420);
 
 		bridge_connector->hdmi_funcs = drm_bridge_connector_hdmi_funcs;
 
@@ -1010,14 +1015,12 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 			bridge_connector->hdmi_funcs.spd =
 				drm_bridge_connector_hdmi_spd_infoframe;
 
-		ret = drmm_connector_hdmi_init(drm, connector,
-					       bridge_connector->bridge_hdmi->vendor,
-					       bridge_connector->bridge_hdmi->product,
-					       &drm_bridge_connector_funcs,
-					       &bridge_connector->hdmi_funcs,
-					       connector_type, ddc,
-					       supported_formats,
-					       max_bpc);
+		ret = drmm_connector_hdmi_init_with_caps(drm, connector,
+							 bridge_connector->bridge_hdmi->vendor,
+							 bridge_connector->bridge_hdmi->product,
+							 &drm_bridge_connector_funcs,
+							 &bridge_connector->hdmi_funcs,
+							 connector_type, ddc, &caps);
 		if (ret)
 			return ERR_PTR(ret);
 	} else {
