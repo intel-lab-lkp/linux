@@ -1168,9 +1168,16 @@ static int check_windows_hibernation_status(struct ntfs_volume *vol)
 			ntfs_debug("hiberfil.sys not present.  Windows is not hibernated on the volume.");
 			return 0;
 		}
-		/* A real error occurred. */
-		ntfs_error(vol->sb, "Failed to find inode number for hiberfil.sys.");
-		return ret;
+		/* Validate error code from untrusted disk data. */
+		if (ret < 0 && ret >= -MAX_ERRNO) {
+			ntfs_error(vol->sb, "Failed to find inode number for hiberfil.sys.");
+			return ret;
+		}
+		/* Invalid error code indicates disk corruption. */
+		ntfs_error(vol->sb,
+			"hiberfil.sys lookup returned invalid error code %i, treating as disk corruption.",
+				ret);
+		return -EIO;
 	}
 	/* Get the inode. */
 	vi = ntfs_iget(vol->sb, MREF(mref));
