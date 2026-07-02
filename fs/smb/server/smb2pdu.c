@@ -2013,7 +2013,17 @@ int smb2_sess_setup(struct ksmbd_work *work)
 	} else if ((conn->dialect < SMB30_PROT_ID ||
 		    server_conf.flags & KSMBD_GLOBAL_FLAG_SMB3_MULTICHANNEL) &&
 		   (req->Flags & SMB2_SESSION_REQ_FLAG_BINDING)) {
-		sess = NULL;
+		sess = ksmbd_session_lookup_slowpath(le64_to_cpu(req->hdr.SessionId));
+		if (sess) {
+			work->sess = sess;
+			if (sess->state != SMB2_SESSION_VALID ||
+			    !(req->hdr.Flags & SMB2_FLAGS_SIGNED) ||
+			    !conn->ops->check_sign_req(work)) {
+				ksmbd_user_session_put(sess);
+				work->sess = NULL;
+				sess = NULL;
+			}
+		}
 		rc = -EACCES;
 		goto out_err;
 	} else {
@@ -2144,6 +2154,9 @@ out_err:
 		rsp->hdr.Status = STATUS_ACCESS_DENIED;
 	else if (rc)
 		rsp->hdr.Status = STATUS_LOGON_FAILURE;
+	if (rsp->hdr.Status == STATUS_USER_SESSION_DELETED &&
+	    (req->hdr.Flags & SMB2_FLAGS_SIGNED))
+		rsp->hdr.Flags |= SMB2_FLAGS_SIGNED;
 
 	if (conn->mechToken) {
 		kfree(conn->mechToken);
@@ -2151,7 +2164,8 @@ out_err:
 	}
 
 	if (rc < 0) {
-		if (sess && (req->Flags & SMB2_SESSION_REQ_FLAG_BINDING)) {
+		if (sess && conn->dialect == SMB311_PROT_ID &&
+		    (req->Flags & SMB2_SESSION_REQ_FLAG_BINDING)) {
 			struct preauth_session *preauth_sess;
 
 			preauth_sess = ksmbd_preauth_session_lookup(conn, sess->id);
