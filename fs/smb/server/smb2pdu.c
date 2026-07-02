@@ -2015,10 +2015,16 @@ int smb2_sess_setup(struct ksmbd_work *work)
 		   (req->Flags & SMB2_SESSION_REQ_FLAG_BINDING)) {
 		sess = ksmbd_session_lookup_slowpath(le64_to_cpu(req->hdr.SessionId));
 		if (sess) {
+			int sign_ret;
+
 			work->sess = sess;
+			if (sess->dialect >= SMB30_PROT_ID)
+				sign_ret = smb3_check_sign_req(work);
+			else
+				sign_ret = smb2_check_sign_req(work);
 			if (sess->state != SMB2_SESSION_VALID ||
 			    !(req->hdr.Flags & SMB2_FLAGS_SIGNED) ||
-			    !conn->ops->check_sign_req(work)) {
+			    !sign_ret) {
 				ksmbd_user_session_put(sess);
 				work->sess = NULL;
 				sess = NULL;
@@ -9681,9 +9687,13 @@ int smb3_check_sign_req(struct ksmbd_work *work)
 	} else {
 		chann = lookup_chann_list(work->sess, conn);
 		if (!chann) {
-			return 0;
+			if (le16_to_cpu(hdr->Command) != SMB2_SESSION_SETUP_HE ||
+			    !(hdr->Flags & SMB2_FLAGS_SIGNED))
+				return 0;
+			signing_key = work->sess->smb3signingkey;
+		} else {
+			signing_key = chann->smb3signingkey;
 		}
-		signing_key = chann->smb3signingkey;
 	}
 
 	if (!signing_key) {

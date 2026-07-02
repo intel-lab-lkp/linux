@@ -243,8 +243,14 @@ static void __handle_ksmbd_work(struct ksmbd_work *work,
 
 		if (work->sess &&
 		    (work->sess->sign || smb3_11_final_sess_setup_resp(work) ||
-		     conn->ops->is_sign_req(work, command)))
-			conn->ops->set_sign_rsp(work);
+		     conn->ops->is_sign_req(work, command))) {
+			if (command == SMB2_SESSION_SETUP_HE &&
+			    work->sess->dialect >= SMB30_PROT_ID &&
+			    conn->dialect < SMB30_PROT_ID)
+				smb3_set_sign_rsp(work);
+			else
+				conn->ops->set_sign_rsp(work);
+		}
 	} while (is_chained == true);
 
 send:
