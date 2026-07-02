@@ -15,27 +15,38 @@ struct gx_formatter {
 	struct gx_stream *stream;
 	const struct gx_formatter_driver *drv;
 	bool enabled;
+	bool prepared;
 	struct regmap *map;
 };
 
-static int gx_formatter_enable(struct gx_formatter *formatter)
+static int gx_formatter_prepare(struct gx_formatter *formatter)
 {
 	int ret;
 
-	/* Do nothing if the formatter is already enabled */
-	if (formatter->enabled)
+	if (formatter->prepared)
 		return 0;
 
 	/* Setup the stream parameter in the formatter */
 	if (formatter->drv->ops->prepare) {
 		ret = formatter->drv->ops->prepare(formatter->map,
-					   formatter->drv->quirks,
-					   formatter->stream);
+						   formatter->drv->quirks,
+						   formatter->stream);
 		if (ret)
 			return ret;
 	}
 
-	/* Finally, actually enable the formatter */
+	formatter->prepared = true;
+
+	return 0;
+}
+
+static int gx_formatter_enable(struct gx_formatter *formatter)
+{
+	/* Do nothing if the formatter is already enabled */
+	if (formatter->enabled)
+		return 0;
+
+	/* Enable the formatter */
 	if (formatter->drv->ops->enable)
 		formatter->drv->ops->enable(formatter->map);
 
@@ -63,6 +74,12 @@ static int gx_formatter_attach(struct gx_formatter *formatter)
 
 	mutex_lock(&ts->lock);
 
+	ret = gx_formatter_prepare(formatter);
+	if (ret) {
+		pr_err("failed to prepare the formatter\n");
+		goto out;
+	}
+
 	/* Catch up if the stream is already running when we attach */
 	if (ts->ready) {
 		ret = gx_formatter_enable(formatter);
@@ -87,9 +104,9 @@ static void gx_formatter_detach(struct gx_formatter *formatter)
 
 	mutex_lock(&ts->lock);
 	list_del(&formatter->list);
-	mutex_unlock(&ts->lock);
-
 	gx_formatter_disable(formatter);
+	formatter->prepared = false;
+	mutex_unlock(&ts->lock);
 }
 
 static int gx_formatter_power_up(struct gx_formatter *formatter,
