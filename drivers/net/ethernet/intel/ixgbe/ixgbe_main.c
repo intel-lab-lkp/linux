@@ -5969,19 +5969,6 @@ static int ixgbe_enable_link_status_events(struct ixgbe_adapter *adapter)
 }
 
 /**
- * ixgbe_disable_link_status_events - disable link status events
- * @adapter: pointer to the adapter structure
- *
- * Disables link status events by invoking ixgbe_configure_lse()
- *
- * Return: the exit code of the operation.
- */
-static int ixgbe_disable_link_status_events(struct ixgbe_adapter *adapter)
-{
-	return ixgbe_configure_lse(&adapter->hw, false);
-}
-
-/**
  * ixgbe_sfp_link_config - set up SFP+ link
  * @adapter: pointer to private adapter struct
  **/
@@ -6752,8 +6739,6 @@ void ixgbe_down(struct ixgbe_adapter *adapter)
 
 	ixgbe_clean_all_tx_rings(adapter);
 	ixgbe_clean_all_rx_rings(adapter);
-	if (adapter->hw.mac.type == ixgbe_mac_e610)
-		ixgbe_disable_link_status_events(adapter);
 }
 
 /**
@@ -12093,9 +12078,6 @@ static void ixgbe_remove(struct pci_dev *pdev)
 
 	set_bit(__IXGBE_REMOVING, &adapter->state);
 	cancel_work_sync(&adapter->service_task);
-
-	if (adapter->hw.mac.type == ixgbe_mac_e610)
-		ixgbe_disable_link_status_events(adapter);
 
 	if (adapter->mii_bus)
 		mdiobus_unregister(adapter->mii_bus);
