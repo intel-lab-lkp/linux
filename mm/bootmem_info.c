@@ -45,9 +45,8 @@ static void __init register_page_bootmem_info_section(unsigned long start_pfn)
 	section_nr = pfn_to_section_nr(start_pfn);
 	ms = __nr_to_section(section_nr);
 
-	if (!preinited_vmemmap_section(ms))
-		register_page_bootmem_memmap(section_nr, pfn_to_page(start_pfn),
-					     PAGES_PER_SECTION);
+	register_page_bootmem_memmap(section_nr, pfn_to_page(start_pfn),
+				     PAGES_PER_SECTION);
 }
 
 void __init register_page_bootmem_info_node(struct pglist_data *pgdat)

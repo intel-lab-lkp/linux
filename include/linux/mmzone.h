@@ -2392,6 +2392,18 @@ static inline unsigned int section_order(const struct mem_section *section)
 {
 	return section->order;
 }
+
+static inline void section_set_order_range(unsigned long pfn, unsigned long nr_pages,
+					   unsigned int order)
+{
+	unsigned long section_nr = pfn_to_section_nr(pfn);
+
+	if (!IS_ALIGNED(pfn | nr_pages, PAGES_PER_SECTION))
+		return;
+
+	for (unsigned long i = 0; i < nr_pages / PAGES_PER_SECTION; i++)
+		section_set_order(__nr_to_section(section_nr + i), order);
+}
 #else
 static inline void section_set_order(struct mem_section *section, unsigned int order)
 {
@@ -2400,6 +2412,11 @@ static inline void section_set_order(struct mem_section *section, unsigned int o
 static inline unsigned int section_order(const struct mem_section *section)
 {
 	return 0;
+}
+
+static inline void section_set_order_range(unsigned long pfn, unsigned long nr_pages,
+					   unsigned int order)
+{
 }
 #endif
 
