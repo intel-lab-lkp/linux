@@ -11,6 +11,7 @@
 #ifndef _X86_VIRT_SEAMCALL_INTERNAL_H
 #define _X86_VIRT_SEAMCALL_INTERNAL_H
 
+#include <linux/bitfield.h>
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <asm/archrandom.h>
@@ -22,6 +23,22 @@ u64 __seamcall_ret(u64 fn, struct tdx_module_args *args);
 u64 __seamcall_saved_ret(u64 fn, struct tdx_module_args *args);
 
 typedef u64 (*sc_func_t)(u64 fn, struct tdx_module_args *args);
+
+/*
+ * SEAMCALL leaf:
+ *
+ * Bit 15:0	Leaf number
+ * Bit 23:16	Version number
+ */
+#define SEAMCALL_VERSION_MASK		GENMASK_U64(23, 16)
+
+static __always_inline u64 __seamcall_encode_fn(sc_func_t func, u64 fn,
+						struct tdx_module_args *args)
+{
+	FIELD_MODIFY(SEAMCALL_VERSION_MASK, &fn, args->version);
+
+	return func(fn, args);
+}
 
 static __always_inline u64 __seamcall_dirty_cache(sc_func_t func, u64 fn,
 						  struct tdx_module_args *args)
@@ -39,7 +56,7 @@ static __always_inline u64 __seamcall_dirty_cache(sc_func_t func, u64 fn,
 	 */
 	this_cpu_write(cache_state_incoherent, true);
 
-	return func(fn, args);
+	return __seamcall_encode_fn(func, fn, args);
 }
 
 static __always_inline u64 sc_retry(sc_func_t func, u64 fn,

@@ -143,6 +143,8 @@ struct tdx_module_args {
 	u64 rbx;
 	u64 rdi;
 	u64 rsi;
+	/* ABI version, encoded in rax */
+	u8  version;
 };
 
 /* Used to communicate with the TDX module */
