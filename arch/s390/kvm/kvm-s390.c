@@ -955,7 +955,7 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 		break;
 	case KVM_CAP_S390_USER_OPEREXEC:
 		VM_EVENT(kvm, 3, "%s", "ENABLE: CAP_S390_USER_OPEREXEC");
-		kvm->arch.user_operexec = 1;
+		WRITE_ONCE(kvm->arch.user_operexec, 1);
 		icpt_operexc_on_all_vcpus(kvm);
 		r = 0;
 		break;
