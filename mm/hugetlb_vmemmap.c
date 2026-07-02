@@ -20,6 +20,7 @@
 
 #include <asm/tlbflush.h>
 #include "hugetlb_vmemmap.h"
+#include "internal.h"
 
 /**
  * struct vmemmap_remap_walk - walk vmemmap page table
@@ -708,10 +709,9 @@ void hugetlb_vmemmap_optimize_bootmem_folios(struct hstate *h, struct list_head 
 	__hugetlb_vmemmap_optimize_folios(h, folio_list, true);
 }
 
-void __init hugetlb_vmemmap_optimize_bootmem_page(struct huge_bootmem_page *m)
+void __init hugetlb_vmemmap_optimize_bootmem_page(const struct hstate *h, void *addr)
 {
-	struct hstate *h = m->hstate;
-	unsigned long pfn = PHYS_PFN(__pa(m));
+	unsigned long pfn = PHYS_PFN(__pa(addr));
 
 	if (!vmemmap_should_optimize(h))
 		return;
