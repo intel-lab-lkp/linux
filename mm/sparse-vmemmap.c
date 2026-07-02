@@ -144,20 +144,6 @@ void __meminit vmemmap_verify(pte_t *pte, int node,
 			start, end - 1);
 }
 
-static struct zone __meminit *pfn_to_zone(unsigned long pfn, int nid)
-{
-	pg_data_t *pgdat = NODE_DATA(nid);
-
-	for (enum zone_type zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++) {
-		struct zone *zone = &pgdat->node_zones[zone_type];
-
-		if (zone_spans_pfn(zone, pfn))
-			return zone;
-	}
-
-	return NULL;
-}
-
 static __meminit struct page *vmemmap_get_tail(unsigned int order, struct zone *zone);
 
 static pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node,

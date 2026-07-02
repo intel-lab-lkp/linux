@@ -1360,6 +1360,7 @@ static inline bool deferred_pages_enabled(void)
 }
 #endif /* CONFIG_DEFERRED_STRUCT_PAGE_INIT */
 
+struct zone *pfn_to_zone(unsigned long pfn, int nid);
 void init_deferred_page(unsigned long pfn, int nid);
 
 enum mminit_level {
