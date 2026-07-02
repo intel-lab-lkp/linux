@@ -104,3 +104,7 @@
 #ifdef CONFIG_SCHED_AUTOGROUP
 # include "autogroup.c"
 #endif
+
+#ifdef CONFIG_PSI_AUTO_MONITOR
+# include "psi_monitor.c"
+#endif

@@ -757,6 +757,22 @@ config PSI_DEFAULT_DISABLED
 
 	  Say N if unsure.
 
+config PSI_AUTO_MONITOR
+	bool "In-kernel automatic PSI monitor with sysfs + weighted scoring"
+	depends on PSI && TASK_XACCT && TASK_IO_ACCOUNTING && TRACEPOINTS
+	default n
+	help
+	  Enables a kernel-internal PSI observer that periodically checks CPU,
+	  memory, and I/O pressure via a delayed workqueue. When thresholds
+	  are breached, it ranks tasks by weighted RSS, I/O, and CPU usage,
+	  then logs top-N tasks via printk and emits trace events.
+
+	  Thresholds, poll interval and weights are tunable at runtime via:
+	  /sys/kernel/psi_monitor/
+
+	  Say N if unsure.
+
+
 endmenu # "CPU/Task time and stats accounting"
 
 config CPU_ISOLATION
