@@ -86,8 +86,7 @@ static const struct iio_chan_spec incl_3d_channels[] = {
 };
 
 /* Adjust channel real bits based on report descriptor */
-static void incl_3d_adjust_channel_bit_mask(struct iio_chan_spec *chan,
-						int size)
+static void incl_3d_adjust_channel_bit_mask(struct iio_chan_spec *chan, int size)
 {
 	chan->scan_type.sign = 's';
 	/* Real storage bits will change based on the report desc. */
@@ -98,9 +97,8 @@ static void incl_3d_adjust_channel_bit_mask(struct iio_chan_spec *chan,
 
 /* Channel read_raw handler */
 static int incl_3d_read_raw(struct iio_dev *indio_dev,
-			      struct iio_chan_spec const *chan,
-			      int *val, int *val2,
-			      long mask)
+			    struct iio_chan_spec const *chan,
+			    int *val, int *val2, long mask)
 {
 	struct incl_3d_state *incl_state = iio_priv(indio_dev);
 	int report_id = -1;
@@ -125,7 +123,7 @@ static int incl_3d_read_raw(struct iio_dev *indio_dev,
 				min < 0);
 		else {
 			hid_sensor_power_state(&incl_state->common_attributes,
-						false);
+					       false);
 			return -EINVAL;
 		}
 		hid_sensor_power_state(&incl_state->common_attributes, false);
@@ -158,10 +156,8 @@ static int incl_3d_read_raw(struct iio_dev *indio_dev,
 
 /* Channel write_raw handler */
 static int incl_3d_write_raw(struct iio_dev *indio_dev,
-			       struct iio_chan_spec const *chan,
-			       int val,
-			       int val2,
-			       long mask)
+			     struct iio_chan_spec const *chan,
+			     int val, int val2, long mask)
 {
 	struct incl_3d_state *incl_state = iio_priv(indio_dev);
 	int ret;
@@ -189,8 +185,7 @@ static const struct iio_info incl_3d_info = {
 
 /* Callback handler to send event after all samples are received and captured */
 static int incl_3d_proc_event(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id,
-				void *priv)
+			      u32 usage_id, void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct incl_3d_state *incl_state = iio_priv(indio_dev);
@@ -212,9 +207,9 @@ static int incl_3d_proc_event(struct hid_sensor_hub_device *hsdev,
 
 /* Capture samples in local storage */
 static int incl_3d_capture_sample(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id,
-				size_t raw_len, char *raw_data,
-				void *priv)
+				  u32 usage_id,
+				  size_t raw_len, char *raw_data,
+				  void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct incl_3d_state *incl_state = iio_priv(indio_dev);
@@ -350,7 +345,7 @@ static int hid_incl_3d_probe(struct platform_device *pdev)
 	atomic_set(&incl_state->common_attributes.data_ready, 0);
 
 	ret = hid_sensor_setup_trigger(indio_dev, name,
-					&incl_state->common_attributes);
+				       &incl_state->common_attributes);
 	if (ret) {
 		dev_err(&pdev->dev, "trigger setup failed\n");
 		return ret;
@@ -366,8 +361,8 @@ static int hid_incl_3d_probe(struct platform_device *pdev)
 	incl_state->callbacks.capture_sample = incl_3d_capture_sample;
 	incl_state->callbacks.pdev = pdev;
 	ret = sensor_hub_register_callback(hsdev,
-					HID_USAGE_SENSOR_INCLINOMETER_3D,
-					&incl_state->callbacks);
+					   HID_USAGE_SENSOR_INCLINOMETER_3D,
+					   &incl_state->callbacks);
 	if (ret) {
 		dev_err(&pdev->dev, "callback reg failed\n");
 		goto error_iio_unreg;

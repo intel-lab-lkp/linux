@@ -233,7 +233,7 @@ void hid_sensor_remove_trigger(struct iio_dev *indio_dev,
 EXPORT_SYMBOL_NS(hid_sensor_remove_trigger, "IIO_HID");
 
 int hid_sensor_setup_trigger(struct iio_dev *indio_dev, const char *name,
-				struct hid_sensor_common *attrb)
+			     struct hid_sensor_common *attrb)
 {
 	const struct iio_dev_attr **fifo_attrs;
 	int ret;

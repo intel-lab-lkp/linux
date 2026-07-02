@@ -107,8 +107,8 @@ static void hinge_adjust_channel_realbits(struct iio_chan_spec *channels,
 
 /* Channel read_raw handler */
 static int hinge_read_raw(struct iio_dev *indio_dev,
-			  struct iio_chan_spec const *chan, int *val, int *val2,
-			  long mask)
+			  struct iio_chan_spec const *chan,
+			  int *val, int *val2, long mask)
 {
 	struct hinge_state *st = iio_priv(indio_dev);
 	struct hid_sensor_hub_device *hsdev;
@@ -154,8 +154,8 @@ static int hinge_read_raw(struct iio_dev *indio_dev,
 
 /* Channel write_raw handler */
 static int hinge_write_raw(struct iio_dev *indio_dev,
-			   struct iio_chan_spec const *chan, int val, int val2,
-			   long mask)
+			   struct iio_chan_spec const *chan,
+			   int val, int val2, long mask)
 {
 	struct hinge_state *st = iio_priv(indio_dev);
 
@@ -209,8 +209,9 @@ static int hinge_proc_event(struct hid_sensor_hub_device *hsdev,
 
 /* Capture samples in local storage */
 static int hinge_capture_sample(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id, size_t raw_len,
-				char *raw_data, void *priv)
+				u32 usage_id,
+				size_t raw_len, char *raw_data,
+				void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct hinge_state *st = iio_priv(indio_dev);
