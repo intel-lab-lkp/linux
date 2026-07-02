@@ -32,9 +32,8 @@ int ixgbe_aci_set_phy_cfg(struct ixgbe_hw *hw,
 int ixgbe_aci_set_link_restart_an(struct ixgbe_hw *hw, bool ena_link);
 int ixgbe_update_link_info(struct ixgbe_hw *hw);
 int ixgbe_get_link_status(struct ixgbe_hw *hw, bool *link_up);
-int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
+int ixgbe_aci_get_link_info(struct ixgbe_hw *hw,
 			    struct ixgbe_link_status *link);
-int ixgbe_configure_lse(struct ixgbe_hw *hw, bool activate);
 int ixgbe_aci_set_port_id_led(struct ixgbe_hw *hw, bool orig_mode);
 enum ixgbe_media_type ixgbe_get_media_type_e610(struct ixgbe_hw *hw);
 int ixgbe_setup_link_e610(struct ixgbe_hw *hw, ixgbe_link_speed speed,
