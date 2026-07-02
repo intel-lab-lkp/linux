@@ -334,6 +334,15 @@ config CLK_HAWI_TCSRCC
 	  Support for the TCSR clock controller on Hawi devices.
 	  Say Y if you want to use peripheral devices such as PCIe, USB, UFS.
 
+config CLK_HAWI_VIDEOCC
+	tristate "Hawi Video Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_HAWI_GCC
+	help
+	  Support for the video clock controller on Hawi devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
 config APQ_GCC_8084
 	tristate "APQ8084 Global Clock Controller"
 	depends on ARM || COMPILE_TEST
