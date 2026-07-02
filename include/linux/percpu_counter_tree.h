@@ -101,7 +101,24 @@ struct percpu_counter_tree {
 	} approx_accuracy_range;
 };
 
-size_t percpu_counter_tree_items_size(void);
+extern size_t __percpu_counter_tree_items_size __ro_after_init;
+
+/*
+ * percpu_counter_tree_items_size - Query the size required for counter tree items.
+ *
+ * Query the size of the memory area required to hold the counter tree
+ * items. This depends on the hardware topology and is invariant after
+ * boot.
+ *
+ * Return: Size required to hold tree items.
+ */
+static inline
+size_t percpu_counter_tree_items_size(void)
+{
+	WARN_ON_ONCE(__percpu_counter_tree_items_size == SIZE_MAX);
+	return __percpu_counter_tree_items_size;
+}
+
 int percpu_counter_tree_init_many(struct percpu_counter_tree *counters, struct percpu_counter_tree_level_item *items,
 				  unsigned int nr_counters, unsigned long batch_size, gfp_t gfp_flags);
 int percpu_counter_tree_init(struct percpu_counter_tree *counter, struct percpu_counter_tree_level_item *items,

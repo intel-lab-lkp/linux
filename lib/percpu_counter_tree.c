@@ -653,22 +653,9 @@ void percpu_counter_tree_set(struct percpu_counter_tree *counter, long v)
 }
 EXPORT_SYMBOL_GPL(percpu_counter_tree_set);
 
-/*
- * percpu_counter_tree_items_size - Query the size required for counter tree items.
- *
- * Query the size of the memory area required to hold the counter tree
- * items. This depends on the hardware topology and is invariant after
- * boot.
- *
- * Return: Size required to hold tree items.
- */
-size_t percpu_counter_tree_items_size(void)
-{
-	if (!nr_cpus_order)
-		return 0;
-	return counter_config->nr_items * sizeof(struct percpu_counter_tree_level_item);
-}
-EXPORT_SYMBOL_GPL(percpu_counter_tree_items_size);
+/* Initialize to SIZE_MAX to catch early boot misuses. */
+size_t __percpu_counter_tree_items_size __ro_after_init = SIZE_MAX;
+EXPORT_SYMBOL_GPL(__percpu_counter_tree_items_size);
 
 static void __init calculate_accuracy_topology(void)
 {
@@ -697,6 +684,11 @@ int __init percpu_counter_tree_subsystem_init(void)
 		return -1;
 	}
 	counter_config = &per_nr_cpu_order_config[nr_cpus_order];
+	if (!nr_cpus_order)
+		__percpu_counter_tree_items_size = 0;
+	else
+		__percpu_counter_tree_items_size = counter_config->nr_items *
+			sizeof(struct percpu_counter_tree_level_item);
 	calculate_accuracy_topology();
 	return 0;
 }
