@@ -841,8 +841,7 @@ static int ad7779_setup_without_backend(struct ad7779_state *st, struct iio_dev 
 			       IRQF_NO_THREAD | IRQF_NO_AUTOEN, indio_dev->name,
 			       st->trig);
 	if (ret)
-		return dev_err_probe(dev, ret, "request IRQ %d failed\n",
-				     st->spi->irq);
+		return ret;
 
 	ret = devm_iio_trigger_register(dev, st->trig);
 	if (ret)
