@@ -9,6 +9,13 @@
 #include "core_priv.h"
 
 #include <trace/events/rdma_core.h>
+
+static atomic_t ib_cq_drain;
+
+static bool ib_cq_draining(void)
+{
+	return atomic_read(&ib_cq_drain) || system_state != SYSTEM_RUNNING;
+}
 /* Max size for shared CQ, may require tuning */
 #define IB_MAX_SHARED_CQ_SZ		4096U
 
@@ -96,6 +103,9 @@ static int __ib_process_cq(struct ib_cq *cq, int budget, struct ib_wc *wcs,
 
 	trace_cq_process(cq);
 
+	if (ib_cq_draining())
+		return 0;
+
 	/*
 	 * budget might be (-1) if the caller does not
 	 * want to bound this call, thus we need unsigned
@@ -105,6 +115,9 @@ static int __ib_process_cq(struct ib_cq *cq, int budget, struct ib_wc *wcs,
 					budget - completed), wcs)) > 0) {
 		for (i = 0; i < n; i++) {
 			struct ib_wc *wc = &wcs[i];
+
+			if (ib_cq_draining())
+				return completed;
 
 			if (wc->wr_cqe)
 				wc->wr_cqe->done(cq, wc);
@@ -157,7 +170,8 @@ static int ib_poll_handler(struct irq_poll *iop, int budget)
 	completed = __ib_process_cq(cq, budget, cq->wc, IB_POLL_BATCH);
 	if (completed < budget) {
 		irq_poll_complete(&cq->iop);
-		if (ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0) {
+		if (!ib_cq_draining() &&
+		    ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0) {
 			trace_cq_reschedule(cq);
 			irq_poll_sched(&cq->iop);
 		}
@@ -171,6 +185,9 @@ static int ib_poll_handler(struct irq_poll *iop, int budget)
 
 static void ib_cq_completion_softirq(struct ib_cq *cq, void *private)
 {
+	if (ib_cq_draining())
+		return;
+
 	trace_cq_schedule(cq);
 	irq_poll_sched(&cq->iop);
 }
@@ -180,8 +197,14 @@ static void ib_cq_poll_work(struct work_struct *work)
 	struct ib_cq *cq = container_of(work, struct ib_cq, work);
 	int completed;
 
+	if (ib_cq_draining())
+		return;
+
 	completed = __ib_process_cq(cq, IB_POLL_BUDGET_WORKQUEUE, cq->wc,
 				    IB_POLL_BATCH);
+	if (ib_cq_draining())
+		return;
+
 	if (completed >= IB_POLL_BUDGET_WORKQUEUE ||
 	    ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0)
 		queue_work(cq->comp_wq, &cq->work);
@@ -191,6 +214,9 @@ static void ib_cq_poll_work(struct work_struct *work)
 
 static void ib_cq_completion_workqueue(struct ib_cq *cq, void *private)
 {
+	if (ib_cq_draining())
+		return;
+
 	trace_cq_schedule(cq);
 	queue_work(cq->comp_wq, &cq->work);
 }
@@ -358,6 +384,25 @@ void ib_free_cq(struct ib_cq *cq)
 	kfree(cq);
 }
 EXPORT_SYMBOL(ib_free_cq);
+
+/**
+ * ib_drain_completion_queues - Quiesce CQ polling before device shutdown
+ *
+ * Called from the kernel reboot/poweroff path immediately before
+ * device_shutdown(), while RDMA upper layers may still hold live CQs.
+ * Stops new CQ work from being queued and waits for in-flight
+ * ib_cq_poll_work handlers to finish.
+ */
+void ib_drain_completion_queues(void)
+{
+	atomic_set(&ib_cq_drain, 1);
+
+	if (ib_comp_wq)
+		flush_workqueue(ib_comp_wq);
+	if (ib_comp_unbound_wq)
+		flush_workqueue(ib_comp_unbound_wq);
+}
+EXPORT_SYMBOL_GPL(ib_drain_completion_queues);
 
 void ib_cq_pool_cleanup(struct ib_device *dev)
 {

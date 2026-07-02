@@ -81,6 +81,9 @@ void __weak (*pm_power_off)(void);
  */
 static BLOCKING_NOTIFIER_HEAD(reboot_notifier_list);
 
+void (*ib_drain_completion_queues_fn)(void);
+EXPORT_SYMBOL_GPL(ib_drain_completion_queues_fn);
+
 /**
  *	emergency_restart - reboot the system
  *
@@ -102,6 +105,10 @@ void kernel_restart_prepare(char *cmd)
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
 	usermodehelper_disable();
+#if IS_ENABLED(CONFIG_INFINIBAND)
+	if (ib_drain_completion_queues_fn)
+		ib_drain_completion_queues_fn();
+#endif
 	device_shutdown();
 }
 
@@ -305,6 +312,10 @@ static void kernel_shutdown_prepare(enum system_states state)
 		(state == SYSTEM_HALT) ? SYS_HALT : SYS_POWER_OFF, NULL);
 	system_state = state;
 	usermodehelper_disable();
+#if IS_ENABLED(CONFIG_INFINIBAND)
+	if (ib_drain_completion_queues_fn)
+		ib_drain_completion_queues_fn();
+#endif
 	device_shutdown();
 }
 /**

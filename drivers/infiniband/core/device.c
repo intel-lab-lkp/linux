@@ -3287,6 +3287,8 @@ static int __init ib_core_init(void)
 
 	register_netdevice_notifier(&nb_netdevice);
 
+	ib_drain_completion_queues_fn = ib_drain_completion_queues;
+
 	return 0;
 
 err_parent:
@@ -3316,6 +3318,7 @@ err:
 
 static void __exit ib_core_cleanup(void)
 {
+	ib_drain_completion_queues_fn = NULL;
 	unregister_netdevice_notifier(&nb_netdevice);
 	roce_gid_mgmt_cleanup();
 	rdma_nl_unregister(RDMA_NL_LS);

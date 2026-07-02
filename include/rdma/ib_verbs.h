@@ -61,6 +61,9 @@ extern struct workqueue_struct *ib_wq;
 extern struct workqueue_struct *ib_comp_wq;
 extern struct workqueue_struct *ib_comp_unbound_wq;
 
+extern void (*ib_drain_completion_queues_fn)(void);
+void ib_drain_completion_queues(void);
+
 struct ib_ucq_object;
 
 __printf(2, 3) __cold
