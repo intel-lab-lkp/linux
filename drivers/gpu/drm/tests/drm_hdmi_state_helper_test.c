@@ -231,8 +231,7 @@ static const struct drm_encoder_helper_funcs test_encoder_helper_funcs = {
 static
 struct drm_atomic_helper_connector_hdmi_priv *
 __connector_hdmi_init(struct kunit *test,
-		      unsigned int formats,
-		      unsigned int max_bpc,
+		      const struct drm_connector_hdmi_caps *caps,
 		      const struct drm_connector_hdmi_funcs *hdmi_funcs,
 		      const void *edid_data, size_t edid_len)
 {
@@ -273,16 +272,16 @@ __connector_hdmi_init(struct kunit *test,
 	enc->possible_crtcs = drm_crtc_mask(priv->crtc);
 
 	conn = &priv->connector;
-	conn->ycbcr_420_allowed = !!(formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR420));
+	conn->ycbcr_420_allowed = !!(caps->supported_formats &
+				     BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR420));
 
-	ret = drmm_connector_hdmi_init(drm, conn,
-				       "Vendor", "Product",
-				       &dummy_connector_funcs,
-				       hdmi_funcs,
-				       DRM_MODE_CONNECTOR_HDMIA,
-				       NULL,
-				       formats,
-				       max_bpc);
+	ret = drmm_connector_hdmi_init_with_caps(drm, conn,
+						 "Vendor", "Product",
+						 &dummy_connector_funcs,
+						 hdmi_funcs,
+						 DRM_MODE_CONNECTOR_HDMIA,
+						 NULL,
+						 caps);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_connector_helper_add(conn, &dummy_connector_helper_funcs);
@@ -298,8 +297,18 @@ __connector_hdmi_init(struct kunit *test,
 	return priv;
 }
 
-#define drm_kunit_helper_connector_hdmi_init_with_edid_funcs(test, formats, max_bpc, funcs, edid) \
-	__connector_hdmi_init(test, formats, max_bpc, funcs, edid, ARRAY_SIZE(edid))
+#define drm_kunit_helper_connector_hdmi_init_with_edid_funcs(test, formats,	\
+						bpc_max, funcs, edid)		\
+({										\
+	struct drm_connector_hdmi_caps __caps = {				\
+		.supported_formats = (formats),					\
+		.max_bpc = (bpc_max),						\
+	};									\
+	__connector_hdmi_init(test, &__caps, funcs, edid, ARRAY_SIZE(edid));	\
+})
+
+#define drm_kunit_helper_connector_hdmi_init_with_caps_edid_funcs(test, caps, funcs, edid) \
+	__connector_hdmi_init(test, caps, funcs, edid, ARRAY_SIZE(edid))
 
 static
 struct drm_atomic_helper_connector_hdmi_priv *
