@@ -9,6 +9,7 @@
 #define pr_fmt(fmt) "Hyper-V pvIOMMU: " fmt
 #define dev_fmt(fmt) pr_fmt(fmt)
 
+#include <linux/hyperv.h>
 #include <linux/iommu.h>
 #include <linux/pci.h>
 #include <linux/dma-map-ops.h>
@@ -401,10 +402,74 @@ static void hv_iommu_flush_iotlb_all(struct iommu_domain *domain)
 	hv_flush_device_domain(to_hv_iommu_domain(domain));
 }
 
+/*
+ * Calculate the minimal power-of-two aligned range that covers [start, end]
+ * (end is inclusive). Returns a single (page_number, page_mask_shift)
+ * descriptor that may over-flush when the range is not naturally aligned.
+ */
+static void hv_iommu_calc_flush_range(unsigned long start, unsigned long end,
+				       union hv_iommu_flush_va *va)
+{
+	unsigned long start_pfn = HVPFN_DOWN(start);
+	unsigned long last_pfn = HVPFN_UP(end + 1) - 1;
+	unsigned long mask_shift, aligned_pfn;
+
+	if (start_pfn == last_pfn) {
+		mask_shift = 0;
+	} else {
+		/*
+		 * Find the highest bit position where start_pfn and last_pfn
+		 * differ.  A range aligned to one above that bit is the
+		 * smallest power-of-two region that covers both endpoints.
+		 */
+		mask_shift = __fls(start_pfn ^ last_pfn) + 1;
+	}
+
+	aligned_pfn = ALIGN_DOWN(start_pfn, 1UL << mask_shift);
+	va->page_number = aligned_pfn;
+	va->page_mask_shift = mask_shift;
+}
+
+static void hv_flush_device_domain_list(struct hv_iommu_domain *hv_domain,
+					struct iommu_iotlb_gather *iotlb_gather)
+{
+	u64 status;
+	unsigned long flags;
+	struct hv_input_flush_device_domain_list *input;
+
+	local_irq_save(flags);
+
+	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
+	memset(input, 0, sizeof(*input));
+
+	input->device_domain = hv_domain->device_domain;
+	input->flags |= HV_FLUSH_DEVICE_DOMAIN_LIST_IOMMU_FORMAT;
+	hv_iommu_calc_flush_range(iotlb_gather->start, iotlb_gather->end,
+				  &input->iova_list[0]);
+
+	status = hv_do_rep_hypercall(HVCALL_FLUSH_DEVICE_DOMAIN_LIST,
+				     1, 0, input, NULL);
+
+	if (!hv_result_success(status)) {
+		/* Page-selective flush failed, fall back to full flush. */
+		struct hv_input_flush_device_domain *flush_all = (void *)input;
+
+		memset(flush_all, 0, sizeof(*flush_all));
+		flush_all->device_domain = hv_domain->device_domain;
+		status = hv_do_hypercall(HVCALL_FLUSH_DEVICE_DOMAIN,
+					flush_all, NULL);
+		WARN(!hv_result_success(status),
+		     "HVCALL_FLUSH_DEVICE_DOMAIN fallback also failed: %lld\n",
+		     status);
+	}
+
+	local_irq_restore(flags);
+}
+
 static void hv_iommu_iotlb_sync(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *iotlb_gather)
 {
-	hv_flush_device_domain(to_hv_iommu_domain(domain));
+	hv_flush_device_domain_list(to_hv_iommu_domain(domain), iotlb_gather);
 
 	iommu_put_pages_list(&iotlb_gather->freelist);
 }
@@ -455,6 +520,7 @@ static struct iommu_domain *hv_iommu_domain_alloc_paging(struct device *dev)
 
 	cfg.common.hw_max_vasz_lg2 = hv_iommu_device->max_iova_width;
 	cfg.common.hw_max_oasz_lg2 = 52;
+	cfg.common.features |= BIT(PT_FEAT_FLUSH_RANGE);
 	cfg.top_level = (hv_iommu_device->max_iova_width > 48) ? 4 : 3;
 
 	ret = pt_iommu_x86_64_init(&hv_domain->pt_iommu_x86_64, &cfg, GFP_KERNEL);
