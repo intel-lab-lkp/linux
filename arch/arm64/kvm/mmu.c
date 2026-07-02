@@ -1648,7 +1648,8 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd)
 		return ret;
 	}
 
-	if (!(s2fd->memslot->flags & KVM_MEM_READONLY))
+	if (!(s2fd->memslot->flags & KVM_MEM_READONLY) &&
+	    (!kvm_slot_dirty_track_enabled(s2fd->memslot) || write_fault))
 		prot |= KVM_PGTABLE_PROT_W;
 
 	if (s2fd->nested)

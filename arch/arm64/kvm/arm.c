@@ -393,6 +393,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_COUNTER_OFFSET:
 	case KVM_CAP_ARM_WRITABLE_IMP_ID_REGS:
 	case KVM_CAP_ARM_SEA_TO_USER:
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	case KVM_CAP_GUEST_MEMFD_MMAP_LOG_DIRTY_PAGES:
+#endif
 		r = 1;
 		break;
 	case KVM_CAP_SET_GUEST_DEBUG2:
@@ -492,6 +495,25 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 
 	return r;
 }
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+bool kvm_arch_supports_gmem_mmap_dirty_logging(struct kvm *kvm)
+{
+	/*
+	 * Protected pKVM VMs don't allow dirty page logging, fail early here
+	 * instead of in kvm_arch_prepare_memory_region().
+	 *
+	 * KVM_CAP_GUEST_MEMFD_MMAP_LOG_DIRTY_PAGES is not available for a
+	 * protected pKVM VM, and returning false means that
+	 * KVM_SET_USER_MEMORY_REGION2 fails with EINVAL, which is consistent
+	 * with unsupported memslot flags.
+	 */
+	if (!is_protected_kvm_enabled())
+		return true;
+
+	return kvm_pkvm_ext_allowed(kvm, KVM_CAP_GUEST_MEMFD_MMAP_LOG_DIRTY_PAGES);
+}
+#endif
 
 long kvm_arch_dev_ioctl(struct file *filp,
 			unsigned int ioctl, unsigned long arg)
