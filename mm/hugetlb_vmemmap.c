@@ -495,7 +495,7 @@ static bool vmemmap_should_optimize_folio(const struct hstate *h, struct folio *
 
 static struct page *vmemmap_get_tail(unsigned int order, struct zone *zone)
 {
-	const unsigned int idx = order - VMEMMAP_TAIL_MIN_ORDER;
+	const unsigned int idx = order - OPTIMIZABLE_FOLIO_MIN_ORDER;
 	struct page *tail, *p;
 	int node = zone_to_nid(zone);
 
