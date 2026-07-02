@@ -3829,6 +3829,42 @@ static bool ata_scsi_cmd_is_supported(struct ata_device *dev, u8 op, u16 sa,
 	return true;
 }
 
+static unsigned int
+ata_scsi_report_all_supported_opcodes(struct ata_device *dev, u8 *rbuf)
+{
+	struct ata_scsi_cmd_support sup;
+	const struct ata_scsi_cmd *cmd;
+	unsigned int len = 4;
+	u8 *buf = &rbuf[len];
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ata_supported_cmds); i++) {
+		if (len > ATA_SCSI_RBUF_SIZE - 8)
+			break;
+
+		cmd = &ata_supported_cmds[i];
+
+		/* All command format */
+		if (!ata_scsi_cmd_is_supported(dev, cmd->op, cmd->sa, &sup))
+			continue;
+
+		buf[0] = cmd->op;
+		put_unaligned_be16(cmd->sa, &buf[2]);
+		buf[5] |= (sup.rwcdlp << 6) | (sup.cdlp << 2);
+		if (cmd->sa)
+			buf[5] |= 0x01;
+		put_unaligned_be16(cmd->cdb_len, &buf[6]);
+
+		/* CTDP == 0 */
+		len += 8;
+		buf += 8;
+	}
+
+	put_unaligned_be32(len - 4, &rbuf[0]);
+
+	return len;
+}
+
 static unsigned int ata_scsi_report_supported_opcodes(struct ata_device *dev,
 						      struct scsi_cmnd *cmd,
 						      u8 *rbuf)
@@ -3838,6 +3874,9 @@ static unsigned int ata_scsi_report_supported_opcodes(struct ata_device *dev,
 	u16 sa = 0;
 
 	switch (cdb[2]) {
+	case 0:
+		/* All command format */
+		return ata_scsi_report_all_supported_opcodes(dev, rbuf);
 	case 1:
 		/* One command format with command support data, ignore sa. */
 		if (ata_scsi_supported_cmd_has_sa(cdb[3])) {
