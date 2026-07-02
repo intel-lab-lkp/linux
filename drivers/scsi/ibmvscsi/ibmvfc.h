@@ -671,7 +671,11 @@ enum ibmvfc_ae_fpin_status {
 	IBMVFC_AE_FPIN_PORT_CONGESTED	= 0x2,
 	IBMVFC_AE_FPIN_PORT_CLEARED	= 0x3,
 	IBMVFC_AE_FPIN_PORT_DEGRADED	= 0x4,
+	IBMVFC_AE_FPIN_CONGESTION_CLEARED	= 0x5,
 };
+
+#define IBMVFC_FPIN_DEFAULT_EVENT_PERIOD	(5*60*MSEC_PER_SEC) /* 5 minutes */
+#define IBMVFC_FPIN_DEFAULT_EVENT_THRESHOLD	(5*60*MSEC_PER_SEC/2) /* 2.5 minutes */
 
 struct ibmvfc_async_crq {
 	volatile u8 valid;
@@ -685,6 +689,12 @@ struct ibmvfc_async_crq {
 	volatile __be64 node_name;
 	__be64 reserved;
 } __packed __aligned(8);
+
+struct ibmvfc_async_work {
+	struct ibmvfc_host *vhost;
+	struct ibmvfc_async_crq crq;
+	struct work_struct async_work_s;
+};
 
 union ibmvfc_iu {
 	struct ibmvfc_mad_common mad_common;
@@ -914,6 +924,7 @@ struct ibmvfc_host {
 	struct work_struct rport_add_work_q;
 	wait_queue_head_t init_wait_q;
 	wait_queue_head_t work_wait_q;
+	struct workqueue_struct *fpin_workq;
 };
 
 #define DBG_CMD(CMD) do { if (ibmvfc_debug) CMD; } while (0)
@@ -951,6 +962,11 @@ struct ibmvfc_host {
 #else
 #define ibmvfc_create_trace_file(kobj, attr) 0
 #define ibmvfc_remove_trace_file(kobj, attr) do { } while (0)
+#endif
+
+#ifdef VISIBLE_IF_KUNIT
+VISIBLE_IF_KUNIT void ibmvfc_handle_async(struct ibmvfc_async_crq *crq, struct ibmvfc_host *vhost);
+VISIBLE_IF_KUNIT struct list_head *ibmvfc_get_headp(void);
 #endif
 
 #endif
