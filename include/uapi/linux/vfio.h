@@ -1534,6 +1534,68 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/* PCIe TPH device feature definitions for VFIO_DEVICE_FEATURE ioctl */
+#define VFIO_DEVICE_FEATURE_TPH		13
+#define VFIO_DEVICE_FEATURE_TPH_RESOLVE	14
+#define VFIO_DEVICE_FEATURE_TPH_ST	15
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH - Control and query PCI TPH capabilities
+ *
+ * SET: Opt-in to TPH feature; flags must be zero.
+ * GET: Return supported TPH capability bits in flags.
+ */
+struct vfio_device_feature_tph {
+	__u32 flags;
+};
+
+/* Capability bits returned by GET on VFIO_DEVICE_FEATURE_TPH */
+#define VFIO_DEVICE_TPH_CAP_DMABUF	(1u << 0) /* DMABUF sources resolvable */
+#define VFIO_DEVICE_TPH_CAP_CPU		(1u << 1) /* CPU sources resolvable via _DSM */
+#define VFIO_DEVICE_TPH_CAP_LITERAL	(1u << 2) /* LITERAL ST source supported */
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH_RESOLVE - Resolve PH/ST tag value from source
+ * Note: GET only
+ */
+struct vfio_device_feature_tph_resolve {
+	__u32 flags;	/* IN: source type + namespace modifiers */
+	__u32 src;	/* IN: dma-buf fd or CPU ID based on flags */
+	__u8 valid;	/* OUT: bitmap indicating valid output fields */
+#define VFIO_DEVICE_TPH_VALID_PH (1u << 0) /* ph holds valid processing hint */
+#define VFIO_DEVICE_TPH_VALID_ST (1u << 1) /* st holds valid steering tag */
+	__u8 ph;	/* OUT: TPH processing hint */
+	__u16 st;	/* OUT: raw steering tag value */
+};
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH_ST - Batch program architected ST table entries
+ * Return value: number of successfully written entries
+ * Note: SET only
+ */
+struct vfio_device_feature_tph_st {
+	__u32 flags;		/* IN: source type + namespace modifiers */
+	__u16 start;		/* IN: first ST table index / MSI-X vector */
+	__u16 count;		/* IN: number of contiguous entries to program */
+	__aligned_u64 dests;	/* IN: user pointer to array of source u32 values */
+};
+
+/* Common flags shared by TPH_RESOLVE and TPH_ST features */
+#define VFIO_DEVICE_TPH_SRC_NONE           (1u << 0) /* TPH_ST only: set ST=0 */
+#define VFIO_DEVICE_TPH_SRC_DMABUF	   (1u << 1) /* src = dma-buf fd */
+#define VFIO_DEVICE_TPH_SRC_CPU_VOLATILE   (1u << 2) /* src = volatile memory CPU ID */
+#define VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT (1u << 3) /* src = persistent memory CPU ID */
+#define VFIO_DEVICE_TPH_SRC_LITERAL        (1u << 4) /* TPH_ST only: src = raw literal ST */
+#define VFIO_DEVICE_TPH_EXTENDED           (1u << 30) /* Use extended 16-bit ST namespace */
+#define VFIO_DEVICE_TPH_REQUIRE_ST         (1u << 31) /* TPH_ST only: fail if resolved ST=0 */
+
+/* Mask for mutually exclusive source type bits, only one may be set */
+#define VFIO_DEVICE_TPH_SRC_MASK	(VFIO_DEVICE_TPH_SRC_NONE | \
+					 VFIO_DEVICE_TPH_SRC_DMABUF | \
+					 VFIO_DEVICE_TPH_SRC_CPU_VOLATILE | \
+					 VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT | \
+					 VFIO_DEVICE_TPH_SRC_LITERAL)
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
