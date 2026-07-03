@@ -599,7 +599,11 @@ int ipu6_isys_isr_one(struct ipu6_bus_device *adev)
 		 * firmware only release the capture msg until software
 		 * get pin_data_ready event
 		 */
-		ipu6_put_fw_msg_buf(ipu6_bus_get_drvdata(adev), resp->buf_id);
+		struct isys_fw_msgs *msg =
+			container_of((void *)resp->buf_id, struct isys_fw_msgs,
+				     ipu6.dummy);
+
+		ipu6_put_fw_msg_buf(ipu6_bus_get_drvdata(adev), msg);
 		if (resp->pin_id < IPU6_ISYS_OUTPUT_PINS &&
 		    stream->output_pins_queue[resp->pin_id])
 			ipu6_isys_queue_buf_ready(stream, resp);
