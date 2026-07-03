@@ -375,11 +375,18 @@ int kho_radix_walk_tree(struct kho_radix_tree *tree,
 }
 EXPORT_SYMBOL_GPL(kho_radix_walk_tree);
 
-/* For physically contiguous 0-order pages. */
-static void kho_init_pages(struct page *page, unsigned long nr_pages)
+/* For physically contiguous pages. */
+static void kho_restore_refcounts(struct page *page, unsigned long nr_pages,
+				  enum kho_page_type type)
 {
-	for (unsigned long i = 0; i < nr_pages; i++) {
-		set_page_count(page + i, 1);
+	/* Head page always gets refcount of 1. */
+	set_page_count(page, 1);
+	clear_page_tag_ref(page);
+
+	for (unsigned long i = 1; i < nr_pages; i++) {
+		unsigned int count = (type == KHO_PAGE_SPLIT) ? 1 : 0;
+
+		set_page_count(page + i, count);
 		/* Clear each page's codetag to avoid accounting mismatch. */
 		clear_page_tag_ref(page + i);
 	}
@@ -387,16 +394,7 @@ static void kho_init_pages(struct page *page, unsigned long nr_pages)
 
 static void kho_init_folio(struct page *page, unsigned int order)
 {
-	unsigned long nr_pages = (1 << order);
-
-	/* Head page gets refcount of 1. */
-	set_page_count(page, 1);
-	/* Clear head page's codetag to avoid accounting mismatch. */
-	clear_page_tag_ref(page);
-
-	/* For higher order folios, tail pages get a page count of zero. */
-	for (unsigned long i = 1; i < nr_pages; i++)
-		set_page_count(page + i, 0);
+	kho_restore_refcounts(page, 1 << order, KHO_PAGE_CONTIG);
 
 	if (order > 0)
 		prep_compound_page(page, order);
@@ -421,13 +419,20 @@ static struct page *kho_restore_page(phys_addr_t phys, bool is_folio)
 		return NULL;
 	nr_pages = (1 << info.order);
 
+	/*
+	 * If we want to restore a folio, but the memory was split in the
+	 * previous kernel, something is wrong.
+	 */
+	if (WARN_ON_ONCE(is_folio && info.type == KHO_PAGE_SPLIT))
+		return NULL;
+
 	/* Clear private to make sure later restores on this page error out. */
 	page->private = 0;
 
 	if (is_folio)
 		kho_init_folio(page, info.order);
 	else
-		kho_init_pages(page, nr_pages);
+		kho_restore_refcounts(page, nr_pages, info.type);
 
 	adjust_managed_page_count(page, nr_pages);
 	return page;
