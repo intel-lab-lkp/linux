@@ -996,10 +996,22 @@ static void hisi_sas_phyup_pm_work(struct work_struct *work)
 	pm_runtime_put_sync(dev);
 }
 
+static void hisi_sas_spinup_notify_work(struct work_struct *work)
+{
+	struct hisi_sas_phy *phy =
+		container_of(work, typeof(*phy), works[HISI_PHYE_SPINUP_NOTIFY]);
+	struct hisi_hba *hisi_hba = phy->hisi_hba;
+	int phy_no = phy->sas_phy.id;
+
+	hisi_hba->hw->sl_notify_ssp(hisi_hba, phy_no);
+	dev_info(hisi_hba->dev, "spinup notify primitive on phy%d\n", phy_no);
+}
+
 static const work_func_t hisi_sas_phye_fns[HISI_PHYES_NUM] = {
 	[HISI_PHYE_PHY_UP] = hisi_sas_phyup_work,
 	[HISI_PHYE_LINK_RESET] = hisi_sas_linkreset_work,
 	[HISI_PHYE_PHY_UP_PM] = hisi_sas_phyup_pm_work,
+	[HISI_PHYE_SPINUP_NOTIFY] = hisi_sas_spinup_notify_work,
 };
 
 bool hisi_sas_notify_phy_event(struct hisi_sas_phy *phy,
@@ -2473,6 +2485,28 @@ int hisi_sas_get_fw_info(struct hisi_hba *hisi_hba)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(hisi_sas_get_fw_info);
+
+void hisi_sas_spinup_notify(struct scsi_device *sdev)
+{
+	struct domain_device *dev = sdev_to_domain_dev(sdev);
+	struct sas_ha_struct *sha;
+	struct hisi_hba *hisi_hba;
+	struct sas_phy *local_phy;
+	struct hisi_sas_phy *phy;
+
+	if (dev->parent && dev_is_expander(dev->parent->dev_type))
+		return;
+
+	sha = SHOST_TO_SAS_HA(sdev->host);
+	hisi_hba = sha->lldd_ha;
+
+	local_phy = sas_get_local_phy(dev);
+	phy = &hisi_hba->phy[local_phy->number];
+	if (phy->identify.target_port_protocols & SAS_PROTOCOL_SSP)
+		hisi_sas_notify_phy_event(phy, HISI_PHYE_SPINUP_NOTIFY);
+	sas_put_local_phy(local_phy);
+}
+EXPORT_SYMBOL_GPL(hisi_sas_spinup_notify);
 
 static struct Scsi_Host *hisi_sas_shost_alloc(struct platform_device *pdev,
 					      const struct hisi_sas_hw *hw)
