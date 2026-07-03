@@ -116,6 +116,28 @@ static const struct ipu6_buttress_ctrl ipu6_psys_buttress_ctrl = {
 	.pwr_sts_off = IPU6_BUTTRESS_PWR_STATE_DN_DONE,
 };
 
+static const struct ipu6_buttress_ctrl ipu7_isys_buttress_ctrl = {
+	.subsys_id = IPU_ISYS,
+	.ratio = IPU7_IS_FREQ_CTL_DEFAULT_RATIO,
+	.qos_floor = 0,
+	.freq_ctl = IPU7_BUTTRESS_REG_IS_WORKPOINT_REQ,
+	.pwr_sts_shift = IPU7_BUTTRESS_PWR_STATE_IS_PWR_SHIFT,
+	.pwr_sts_mask = IPU7_BUTTRESS_PWR_STATE_IS_PWR_MASK,
+	.pwr_sts_on = IPU6_BUTTRESS_PWR_STATE_UP_DONE,
+	.pwr_sts_off = IPU6_BUTTRESS_PWR_STATE_DN_DONE,
+};
+
+static const struct ipu6_buttress_ctrl ipu7_psys_buttress_ctrl = {
+	.subsys_id = IPU_PSYS,
+	.ratio = IPU7_PS_FREQ_CTL_DEFAULT_RATIO,
+	.qos_floor = 0,
+	.freq_ctl = IPU7_BUTTRESS_REG_PS_WORKPOINT_REQ,
+	.pwr_sts_shift = IPU7_BUTTRESS_PWR_STATE_PS_PWR_SHIFT,
+	.pwr_sts_mask = IPU7_BUTTRESS_PWR_STATE_PS_PWR_MASK,
+	.pwr_sts_on = IPU6_BUTTRESS_PWR_STATE_UP_DONE,
+	.pwr_sts_off = IPU6_BUTTRESS_PWR_STATE_DN_DONE,
+};
+
 static void
 ipu6_pkg_dir_configure_spc(struct ipu6_device *isp,
 			   const struct ipu6_hw_variants *hw_variant,
@@ -564,6 +586,11 @@ static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		break;
 	case PCI_DEVICE_ID_INTEL_IPU6EP_MTL:
 		isp->cpd_fw_name = IPU6EPMTL_FIRMWARE_NAME;
+		break;
+	case PCI_DEVICE_ID_INTEL_IPU7_MTL:
+		isp->cpd_fw_name = IPU7_FIRMWARE_NAME;
+		isys_ctrl = &ipu7_isys_buttress_ctrl;
+		psys_ctrl = &ipu7_psys_buttress_ctrl;
 		break;
 	default:
 		return dev_err_probe(dev, -ENODEV,

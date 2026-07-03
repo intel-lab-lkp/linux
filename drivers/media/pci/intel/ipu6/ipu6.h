@@ -25,6 +25,8 @@ struct ipu6_bus_device;
 #define IPU6_FIRMWARE_NAME		"intel/ipu/ipu6_fw.bin"
 #define IPU6EPMTL_FIRMWARE_NAME		"intel/ipu/ipu6epmtl_fw.bin"
 #define IPU6EPADLN_FIRMWARE_NAME	"intel/ipu/ipu6epadln_fw.bin"
+#define IPU7_FIRMWARE_NAME		"intel/ipu/ipu7_fw.bin"
+#define IPU7P5_FIRMWARE_NAME		"intel/ipu/ipu7ptl_fw.bin"
 
 static const struct pci_device_id ipu6se_ids[] = {
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6SE), },
