@@ -3479,6 +3479,7 @@ err_mem:
  */
 int idpf_vc_core_init(struct idpf_adapter *adapter)
 {
+	struct idpf_hw *hw = &adapter->hw;
 	int task_delay = 30;
 	u16 num_max_vports;
 	int err = 0;
@@ -3550,15 +3551,18 @@ restart:
 	if (err) {
 		dev_err(&adapter->pdev->dev, "Failed to map BAR0 region(s): %d\n",
 			err);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto err_lan_regs;
 	}
 
 	pci_sriov_set_totalvfs(adapter->pdev, idpf_get_max_vfs(adapter));
 	num_max_vports = idpf_get_max_vports(adapter);
 	adapter->max_vports = num_max_vports;
 	adapter->vports = kzalloc_objs(*adapter->vports, num_max_vports);
-	if (!adapter->vports)
-		return -ENOMEM;
+	if (!adapter->vports) {
+		err = -ENOMEM;
+		goto err_lan_regs;
+	}
 
 	if (!adapter->netdevs) {
 		adapter->netdevs = kzalloc_objs(struct net_device *,
@@ -3624,6 +3628,10 @@ err_intr_req:
 err_netdev_alloc:
 	kfree(adapter->vports);
 	adapter->vports = NULL;
+err_lan_regs:
+	kfree(hw->lan_regs);
+	hw->lan_regs = NULL;
+	hw->num_lan_regs = 0;
 	return err;
 
 init_failed:
