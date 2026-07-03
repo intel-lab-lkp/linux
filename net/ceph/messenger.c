@@ -554,12 +554,22 @@ static void ceph_msg_remove_list(struct list_head *head)
 
 void ceph_con_reset_session(struct ceph_connection *con)
 {
+	LIST_HEAD(tmp);
+
 	dout("%s con %p\n", __func__, con);
 
 	WARN_ON(con->in_msg);
 	WARN_ON(con->out_msg);
-	ceph_msg_remove_list(&con->out_queue);
-	ceph_msg_remove_list(&con->out_sent);
+
+	/* move all messages to the stack and call
+	 * ceph_msg_remove_list() without holding the spinlock
+	 */
+	spin_lock(&con->out_lock);
+	list_splice_init(&con->out_queue, &tmp);
+	list_splice_init(&con->out_sent, &tmp);
+	spin_unlock(&con->out_lock);
+	ceph_msg_remove_list(&tmp);
+
 	con->out_seq = 0;
 	con->in_seq = 0;
 	con->in_seq_acked = 0;
@@ -577,7 +587,9 @@ void ceph_con_close(struct ceph_connection *con)
 {
 	mutex_lock(&con->mutex);
 	dout("con_close %p peer %s\n", con, ceph_pr_addr(&con->peer_addr));
+	spin_lock(&con->out_lock);
 	con->state = CEPH_CON_S_CLOSED;
+	spin_unlock(&con->out_lock);
 
 	ceph_con_flag_clear(con, CEPH_CON_F_LOSSYTX);  /* so we retry next
 							  connect */
@@ -603,7 +615,9 @@ void ceph_con_open(struct ceph_connection *con,
 	dout("con_open %p %s\n", con, ceph_pr_addr(addr));
 
 	WARN_ON(con->state != CEPH_CON_S_CLOSED);
+	spin_lock(&con->out_lock);
 	con->state = CEPH_CON_S_PREOPEN;
+	spin_unlock(&con->out_lock);
 
 	con->peer_name.type = (__u8) entity_type;
 	con->peer_name.num = cpu_to_le64(entity_num);
@@ -642,6 +656,7 @@ void ceph_con_init(struct ceph_connection *con, void *private,
 	con_sock_state_init(con);
 
 	mutex_init(&con->mutex);
+	spin_lock_init(&con->out_lock);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, ceph_con_workfn);
@@ -671,10 +686,16 @@ u32 ceph_get_global_seq(struct ceph_messenger *msgr, u32 gt)
  */
 void ceph_con_discard_sent(struct ceph_connection *con, u64 ack_seq)
 {
+	LIST_HEAD(tmp);
 	struct ceph_msg *msg;
 	u64 seq;
 
 	dout("%s con %p ack_seq %llu\n", __func__, con, ack_seq);
+
+	/* move all discarded messages to the stack and call
+	 * ceph_msg_remove_list() without holding the spinlock
+	 */
+	spin_lock(&con->out_lock);
 	while (!list_empty(&con->out_sent)) {
 		msg = list_first_entry(&con->out_sent, struct ceph_msg,
 				       list_head);
@@ -685,8 +706,11 @@ void ceph_con_discard_sent(struct ceph_connection *con, u64 ack_seq)
 
 		dout("%s con %p discarding msg %p seq %llu\n", __func__, con,
 		     msg, seq);
-		ceph_msg_remove(msg);
+		list_move_tail(&msg->list_head, &tmp);
 	}
+	spin_unlock(&con->out_lock);
+
+	ceph_msg_remove_list(&tmp);
 }
 
 /*
@@ -696,10 +720,16 @@ void ceph_con_discard_sent(struct ceph_connection *con, u64 ack_seq)
  */
 void ceph_con_discard_requeued(struct ceph_connection *con, u64 reconnect_seq)
 {
+	LIST_HEAD(tmp);
 	struct ceph_msg *msg;
 	u64 seq;
 
 	dout("%s con %p reconnect_seq %llu\n", __func__, con, reconnect_seq);
+
+	/* move all discarded messages to the stack and call
+	 * ceph_msg_remove_list() without holding the spinlock
+	 */
+	spin_lock(&con->out_lock);
 	while (!list_empty(&con->out_queue)) {
 		msg = list_first_entry(&con->out_queue, struct ceph_msg,
 				       list_head);
@@ -711,8 +741,11 @@ void ceph_con_discard_requeued(struct ceph_connection *con, u64 reconnect_seq)
 
 		dout("%s con %p discarding msg %p seq %llu\n", __func__, con,
 		     msg, seq);
-		ceph_msg_remove(msg);
+		list_move_tail(&msg->list_head, &tmp);
 	}
+	spin_unlock(&con->out_lock);
+
+	ceph_msg_remove_list(&tmp);
 }
 
 #ifdef CONFIG_BLOCK
@@ -1626,9 +1659,12 @@ static void con_fault(struct ceph_connection *con)
 
 	ceph_con_reset_protocol(con);
 
+	spin_lock(&con->out_lock);
+
 	if (ceph_con_flag_test(con, CEPH_CON_F_LOSSYTX)) {
 		dout("fault on LOSSYTX channel, marking CLOSED\n");
 		con->state = CEPH_CON_S_CLOSED;
+		spin_unlock(&con->out_lock);
 		return;
 	}
 
@@ -1642,6 +1678,7 @@ static void con_fault(struct ceph_connection *con)
 		dout("fault %p setting STANDBY clearing WRITE_PENDING\n", con);
 		ceph_con_flag_clear(con, CEPH_CON_F_WRITE_PENDING);
 		con->state = CEPH_CON_S_STANDBY;
+		spin_unlock(&con->out_lock);
 	} else {
 		/* retry after a delay. */
 		con->state = CEPH_CON_S_PREOPEN;
@@ -1653,6 +1690,7 @@ static void con_fault(struct ceph_connection *con)
 				con->delay = MAX_DELAY_INTERVAL;
 		}
 		ceph_con_flag_set(con, CEPH_CON_F_BACKOFF);
+		spin_unlock(&con->out_lock);
 		queue_con(con);
 	}
 }
@@ -1716,7 +1754,9 @@ static void clear_standby(struct ceph_connection *con)
 	/* come back from STANDBY? */
 	if (con->state == CEPH_CON_S_STANDBY) {
 		dout("clear_standby %p\n", con);
+		spin_lock(&con->out_lock);
 		con->state = CEPH_CON_S_PREOPEN;
+		spin_unlock(&con->out_lock);
 		if (!ceph_msgr2(from_msgr(con->msgr)))
 			con->v1.connect_seq++;
 		WARN_ON(ceph_con_flag_test(con, CEPH_CON_F_WRITE_PENDING));
@@ -1736,12 +1776,14 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	BUG_ON(msg->front.iov_len != le32_to_cpu(msg->hdr.front_len));
 	msg->needs_out_seq = true;
 
-	mutex_lock(&con->mutex);
+	msg_con_set(msg, NULL);
+
+	spin_lock(&con->out_lock);
 
 	if (con->state == CEPH_CON_S_CLOSED) {
 		dout("con_send %p closed, dropping %p\n", con, msg);
+		spin_unlock(&con->out_lock);
 		ceph_msg_put(msg);
-		mutex_unlock(&con->mutex);
 		return;
 	}
 
@@ -1756,8 +1798,14 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	     le32_to_cpu(msg->hdr.middle_len),
 	     le32_to_cpu(msg->hdr.data_len));
 
-	clear_standby(con);
-	mutex_unlock(&con->mutex);
+	if (con->state == CEPH_CON_S_STANDBY) {
+		spin_unlock(&con->out_lock);
+		mutex_lock(&con->mutex);
+		clear_standby(con);
+		mutex_unlock(&con->mutex);
+	} else {
+		spin_unlock(&con->out_lock);
+	}
 
 	/* if there wasn't anything waiting to send before, queue
 	 * new work */
@@ -1779,16 +1827,21 @@ void ceph_msg_revoke(struct ceph_msg *msg)
 	}
 
 	mutex_lock(&con->mutex);
+	spin_lock(&con->out_lock);
 	if (list_empty(&msg->list_head)) {
 		WARN_ON(con->out_msg == msg);
 		dout("%s con %p msg %p not linked\n", __func__, con, msg);
+		spin_unlock(&con->out_lock);
 		mutex_unlock(&con->mutex);
 		return;
 	}
 
+	list_del_init(&msg->list_head);
+	spin_unlock(&con->out_lock);
+
 	dout("%s con %p msg %p was linked\n", __func__, con, msg);
 	msg->hdr.seq = 0;
-	ceph_msg_remove(msg);
+	ceph_msg_put(msg);
 
 	if (con->out_msg == msg) {
 		WARN_ON(con->state != CEPH_CON_S_OPEN);
@@ -2114,6 +2167,9 @@ struct ceph_msg *ceph_con_get_out_msg(struct ceph_connection *con)
 {
 	struct ceph_msg *msg;
 
+	lockdep_assert_held(&con->mutex);
+	lockdep_assert_held(&con->out_lock);
+
 	if (list_empty(&con->out_queue))
 		return NULL;
 
@@ -2134,8 +2190,11 @@ struct ceph_msg *ceph_con_get_out_msg(struct ceph_connection *con)
 		msg->hdr.seq = cpu_to_le64(++con->out_seq);
 		msg->needs_out_seq = false;
 
-		if (con->ops->reencode_message)
+		if (con->ops->reencode_message) {
+			spin_unlock(&con->out_lock);
 			con->ops->reencode_message(msg);
+			spin_lock(&con->out_lock);
+		}
 	}
 
 	/*
