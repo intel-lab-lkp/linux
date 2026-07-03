@@ -54,9 +54,11 @@ static void __vlan_delete_pvid(struct net_bridge_vlan_group *vg, u16 vid)
 	vg->pvid = 0;
 }
 
-/* Update the BRIDGE_VLAN_INFO_PVID and BRIDGE_VLAN_INFO_UNTAGGED flags of @v.
- * If @commit is false, return just whether the BRIDGE_VLAN_INFO_PVID and
- * BRIDGE_VLAN_INFO_UNTAGGED bits of @flags would produce any change onto @v.
+/* Update the BRIDGE_VLAN_INFO_PVID, BRIDGE_VLAN_INFO_UNTAGGED and
+ * BRIDGE_VLAN_INFO_DYNAMIC flags of @v.
+ * If @commit is false, return just whether the BRIDGE_VLAN_INFO_PVID,
+ * BRIDGE_VLAN_INFO_UNTAGGED and BRIDGE_VLAN_INFO_DYNAMIC bits of @flags
+ * would produce any change onto @v.
  */
 static bool __vlan_flags_update(struct net_bridge_vlan *v, u16 flags,
 				bool commit)
@@ -71,7 +73,8 @@ static bool __vlan_flags_update(struct net_bridge_vlan *v, u16 flags,
 
 	/* check if anything would be changed on commit */
 	change = !!(flags & BRIDGE_VLAN_INFO_PVID) == !!(vg->pvid != v->vid) ||
-		 ((flags ^ v->flags) & BRIDGE_VLAN_INFO_UNTAGGED);
+		 ((flags ^ v->flags) & (BRIDGE_VLAN_INFO_UNTAGGED |
+					BRIDGE_VLAN_INFO_DYNAMIC));
 
 	if (!commit)
 		goto out;
@@ -85,6 +88,11 @@ static bool __vlan_flags_update(struct net_bridge_vlan *v, u16 flags,
 		v->flags |= BRIDGE_VLAN_INFO_UNTAGGED;
 	else
 		v->flags &= ~BRIDGE_VLAN_INFO_UNTAGGED;
+
+	if (flags & BRIDGE_VLAN_INFO_DYNAMIC)
+		v->flags |= BRIDGE_VLAN_INFO_DYNAMIC;
+	else
+		v->flags &= ~BRIDGE_VLAN_INFO_DYNAMIC;
 
 out:
 	return change;
@@ -1874,6 +1882,8 @@ static bool br_vlan_fill_vids(struct sk_buff *skb, u16 vid, u16 vid_range,
 		info.flags |= BRIDGE_VLAN_INFO_UNTAGGED;
 	if (flags & BRIDGE_VLAN_INFO_PVID)
 		info.flags |= BRIDGE_VLAN_INFO_PVID;
+	if (flags & BRIDGE_VLAN_INFO_DYNAMIC)
+		info.flags |= BRIDGE_VLAN_INFO_DYNAMIC;
 
 	if (nla_put(skb, BRIDGE_VLANDB_ENTRY_INFO, sizeof(info), &info))
 		goto out_err;

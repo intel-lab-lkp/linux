@@ -134,6 +134,7 @@ enum {
 #define BRIDGE_VLAN_INFO_RANGE_END	(1<<4) /* VLAN is end of vlan range */
 #define BRIDGE_VLAN_INFO_BRENTRY	(1<<5) /* Global bridge VLAN entry */
 #define BRIDGE_VLAN_INFO_ONLY_OPTS	(1<<6) /* Skip create/delete/flags */
+#define BRIDGE_VLAN_INFO_DYNAMIC	(1<<7) /* 802.1Q Dynamic VLAN Registration Entry */
 
 struct bridge_vlan_info {
 	__u16 flags;

@@ -388,6 +388,9 @@ static int br_fill_ifvlaninfo_compressed(struct sk_buff *skb,
 		if (v->flags & BRIDGE_VLAN_INFO_UNTAGGED)
 			flags |= BRIDGE_VLAN_INFO_UNTAGGED;
 
+		if (v->flags & BRIDGE_VLAN_INFO_DYNAMIC)
+			flags |= BRIDGE_VLAN_INFO_DYNAMIC;
+
 		if (vid_range_start == 0) {
 			goto initvars;
 		} else if ((v->vid - vid_range_end) == 1 &&
@@ -439,6 +442,9 @@ static int br_fill_ifvlaninfo(struct sk_buff *skb,
 
 		if (v->flags & BRIDGE_VLAN_INFO_UNTAGGED)
 			vinfo.flags |= BRIDGE_VLAN_INFO_UNTAGGED;
+
+		if (v->flags & BRIDGE_VLAN_INFO_DYNAMIC)
+			vinfo.flags |= BRIDGE_VLAN_INFO_DYNAMIC;
 
 		if (nla_put(skb, IFLA_BRIDGE_VLAN_INFO,
 			    sizeof(vinfo), &vinfo))
