@@ -47,6 +47,16 @@ static const struct pci_device_id ipu6_tgl_ids[] = {
 	{ }
 };
 
+static const struct pci_device_id ipu7_ids[] = {
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU7_MTL), },
+	{ }
+};
+
+static const struct pci_device_id ipu7p5_ids[] = {
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU7P5_PTL), },
+	{ }
+};
+
 /*
  * ISYS DMA can overshoot. For higher resolutions over allocation is one line
  * but it must be at minimum 1024 bytes. Value could be different in
