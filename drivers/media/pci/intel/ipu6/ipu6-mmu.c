@@ -678,7 +678,8 @@ struct ipu6_mmu *ipu6_mmu_init(struct device *dev,
 	if (!mmu)
 		return ERR_PTR(-ENOMEM);
 
-	mmu->ops = &ipu6_mmu_ops;
+	mmu->ops = pci_match_id(ipu7_ids, isp->pdev) ? &ipu7_mmu_ops :
+						       &ipu6_mmu_ops;
 	mmu->mmid = mmid;
 	mmu->ready = false;
 	INIT_LIST_HEAD(&mmu->vma_list);
