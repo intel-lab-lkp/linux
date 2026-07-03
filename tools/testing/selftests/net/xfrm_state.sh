@@ -42,7 +42,11 @@ tests="
 	mtu_ipv4_r2			IPv4 MTU exceeded from ESP router r2
 	mtu_ipv6_r2			IPv6 MTU exceeded from ESP router r2
 	mtu_ipv4_r3			IPv4 MTU exceeded from router r3
-	mtu_ipv6_r3			IPv6 MTU exceeded from router r3"
+	mtu_ipv6_r3			IPv6 MTU exceeded from router r3
+	mark_wildcard_shadow		mark: wildcard SA in by-spi state get lookup
+	mark_wildcard_delete		mark: wildcard SA in by-spi state delete
+	mark_wildcard_get_addr		mark: wildcard SA in by-address get lookup
+	mark_wildcard_delete_addr	mark: wildcard SA in by-address delete"
 
 prefix4="10.1"
 prefix6="fc00"
@@ -101,6 +105,10 @@ run_test() {
 		mtu_ipv6_r2)         test_mtu_ipv6_r2 ;;
 		mtu_ipv4_r3)         test_mtu_ipv4_r3 ;;
 		mtu_ipv6_r3)         test_mtu_ipv6_r3 ;;
+		mark_wildcard_shadow)      test_mark_wildcard_shadow ;;
+		mark_wildcard_delete)      test_mark_wildcard_delete ;;
+		mark_wildcard_get_addr)    test_mark_wildcard_get_addr ;;
+		mark_wildcard_delete_addr) test_mark_wildcard_delete_addr ;;
 		esac
 		ret=$?
 
@@ -167,6 +175,8 @@ setup_namespaces() {
 	[ -n "${NS_S2}" ] && ns_s2=(ip netns exec "${NS_S2}") && ns_active="${ns_active} $NS_S2"
 	[ -n "${NS_R3}" ] && ns_r3=(ip netns exec "${NS_R3}") && ns_active="${ns_active} $NS_R3"
 	[ -n "${NS_B}" ] && ns_active="${ns_active} $NS_B"
+
+	return 0
 }
 
 addr_add() {
@@ -295,6 +305,18 @@ setup_ns_set_v6x() {
 	set_xfrm_params
 }
 
+setup_ns_set_simple() {
+	# Single namespace, no veths/routes.
+	ns_set="a"
+	imax=1
+	src="10.1.1.1"
+	dst="10.1.1.2"
+	src_net="10.1.0.0/24"
+	dst_net="10.2.0.0/24"
+
+	set_xfrm_params
+}
+
 setup_network() {
 	# Create veths and add addresses
 	local -a ns_cmd
@@ -403,6 +425,7 @@ setup() {
 		ns_set_v4x)    setup_ns_set_v4x ;;
 		ns_set_v6)     setup_ns_set_v6 ;;
 		ns_set_v6x)    setup_ns_set_v6x ;;
+		ns_set_simple) setup_ns_set_simple ;;
 		namespaces)    setup_namespaces ;;
 		network)       setup_network ;;
 		xfrm)          setup_xfrm ;;
@@ -546,6 +569,111 @@ test_mtu_ipv6_r3() {
 	rc=0
 	echo -e "$out" | grep -q -E "From fc00:5::2 icmp_seq=.* Packet too big: mtu=1300" || rc=1
 	return "${rc}"
+}
+
+# SA_decoy (mark 0/0, added second) shadows SA_target (mark 1/1) on a
+# wildcard mark lookup. No traffic sent; these only exercise the SAD.
+
+test_mark_wildcard_shadow() {
+	setup ns_set_simple namespaces || return "$ksft_skip"
+	local result=0
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src}" dst "${dst}" proto esp spi 0x1000 \
+		reqid 100 mode tunnel \
+		aead 'rfc4106(gcm(aes))' 0x1111111111111111111111111111111111111111 96 \
+		mark 1 mask 1
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src}" dst "${dst}" proto esp spi 0x1000 \
+		reqid 100 mode tunnel \
+		aead 'rfc4106(gcm(aes))' 0x2222222222222222222222222222222222222222 96 \
+		mark 0 mask 0
+
+	run_cmd_err "${ns_a[@]}" ip xfrm state get \
+		dst "${dst}" proto esp spi 0x1000 \
+		mark 1 mask 1
+
+	# Expected: SA_target (mark 0x1/0x1). Actual (bug): SA_decoy (mark 0/0).
+	echo "$out" | grep -q "mark 0x1/0x1" || result=1
+
+	return "${result}"
+}
+
+test_mark_wildcard_delete() {
+	setup ns_set_simple namespaces || return "$ksft_skip"
+	local result=0
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src}" dst "${dst}" proto esp spi 0x1000 \
+		reqid 100 mode tunnel \
+		aead 'rfc4106(gcm(aes))' 0x1111111111111111111111111111111111111111 96 \
+		mark 1 mask 1
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src}" dst "${dst}" proto esp spi 0x1000 \
+		reqid 100 mode tunnel \
+		aead 'rfc4106(gcm(aes))' 0x2222222222222222222222222222222222222222 96 \
+		mark 0 mask 0
+
+	run_cmd "${ns_a[@]}" ip xfrm state delete \
+		dst "${dst}" proto esp spi 0x1000 \
+		mark 1 mask 1
+
+	run_cmd_err "${ns_a[@]}" ip xfrm state show
+	echo "$out" | grep -q "mark 0x1/0x1" && result=1
+
+	return "${result}"
+}
+
+# by-address counterpart: proto route2/hao (IPv6 mobility) have no SPI,
+# so xfrm_user_state_lookup() resolves them by address instead.
+
+test_mark_wildcard_get_addr() {
+	setup ns_set_simple namespaces || return "$ksft_skip"
+	local result=0
+	local src6="fc00:9::1"
+	local dst6="fc00:9::2"
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src6}" dst "${dst6}" proto route2 mode ro coa fc00:9::3 \
+		mark 1 mask 1
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src6}" dst "${dst6}" proto route2 mode ro coa fc00:9::4 \
+		mark 0 mask 0
+
+	run_cmd_err "${ns_a[@]}" ip xfrm state get \
+		src "${src6}" dst "${dst6}" proto route2 \
+		mark 1 mask 1
+
+	echo "$out" | grep -q "mark 0x1/0x1" || result=1
+
+	return "${result}"
+}
+
+test_mark_wildcard_delete_addr() {
+	setup ns_set_simple namespaces || return "$ksft_skip"
+	local result=0
+	local src6="fc00:9::1"
+	local dst6="fc00:9::2"
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src6}" dst "${dst6}" proto route2 mode ro coa fc00:9::3 \
+		mark 1 mask 1
+
+	run_cmd "${ns_a[@]}" ip xfrm state add \
+		src "${src6}" dst "${dst6}" proto route2 mode ro coa fc00:9::4 \
+		mark 0 mask 0
+
+	run_cmd "${ns_a[@]}" ip xfrm state delete \
+		src "${src6}" dst "${dst6}" proto route2 \
+		mark 1 mask 1
+
+	run_cmd_err "${ns_a[@]}" ip xfrm state show
+	echo "$out" | grep -q "mark 0x1/0x1" && result=1
+
+	return "${result}"
 }
 
 ################################################################################
