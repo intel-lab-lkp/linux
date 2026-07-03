@@ -34,16 +34,22 @@ struct kho_radix_tree {
 	struct mutex lock; /* protects the tree's structure and root pointer */
 };
 
+enum kho_page_type {
+	KHO_PAGE_CONTIG = 0,
+	KHO_PAGE_SPLIT,
+};
+
 typedef int (*kho_radix_tree_walk_callback_t)(phys_addr_t phys,
-					      unsigned int order);
+					      unsigned int order,
+					      enum kho_page_type type);
 
 #ifdef CONFIG_KEXEC_HANDOVER
 
 int kho_radix_add_page(struct kho_radix_tree *tree, unsigned long pfn,
-		       unsigned int order);
+		       unsigned int order, enum kho_page_type type);
 
 void kho_radix_del_page(struct kho_radix_tree *tree, unsigned long pfn,
-			unsigned int order);
+			unsigned int order, enum kho_page_type type);
 
 int kho_radix_walk_tree(struct kho_radix_tree *tree,
 			kho_radix_tree_walk_callback_t cb);
@@ -51,13 +57,14 @@ int kho_radix_walk_tree(struct kho_radix_tree *tree,
 #else  /* #ifdef CONFIG_KEXEC_HANDOVER */
 
 static inline int kho_radix_add_page(struct kho_radix_tree *tree, long pfn,
-				     unsigned int order)
+				     unsigned int order, enum kho_page_type type)
 {
 	return -EOPNOTSUPP;
 }
 
 static inline void kho_radix_del_page(struct kho_radix_tree *tree,
-				      unsigned long pfn, unsigned int order) { }
+				      unsigned long pfn, unsigned int order,
+				      enum kho_page_type type) { }
 
 static inline int kho_radix_walk_tree(struct kho_radix_tree *tree,
 				      kho_radix_tree_walk_callback_t cb)
