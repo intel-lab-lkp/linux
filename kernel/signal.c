@@ -1090,8 +1090,7 @@ static void enqueue_signal(struct task_struct *t, enum pid_type type,
 		&signal->shared_pending : &t->pending;
 	bool need_signal_wake_up = true;
 
-	if (sig_fatal(t, sig) && !sig_kernel_coredump(sig) &&
-	    sig_can_short_circuit(t, type, sig)) {
+	if (sig_fatal(t, sig) && sig_can_short_circuit(t, type, sig)) {
 		struct task_struct *thread;
 		/*
 		 * This signal will be fatal to the whole group.
