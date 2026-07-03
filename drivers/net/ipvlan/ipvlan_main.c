@@ -86,6 +86,7 @@ static int ipvlan_port_create(struct net_device *dev)
 		goto err;
 
 	netdev_hold(dev, &port->dev_tracker, GFP_KERNEL);
+
 	return 0;
 
 err:
@@ -93,22 +94,45 @@ err:
 	return err;
 }
 
-static void ipvlan_port_destroy(struct net_device *dev)
+static void ipvlan_port_destroy(struct ipvl_port *port)
 {
-	struct ipvl_port *port = ipvlan_port_get_rtnl(dev);
+	struct net_device *dev = port->dev;
 	struct sk_buff *skb;
 
-	netdev_put(dev, &port->dev_tracker);
 	if (port->mode == IPVLAN_MODE_L3S)
 		ipvlan_l3s_unregister(port);
+
 	netdev_rx_handler_unregister(dev);
 	cancel_work_sync(&port->wq);
+	netdev_put(dev, &port->dev_tracker);
+
 	while ((skb = __skb_dequeue(&port->backlog)) != NULL) {
 		dev_put(skb->dev);
 		kfree_skb(skb);
 	}
 	ida_destroy(&port->ida);
 	kfree(port);
+}
+
+static void ipvlan_port_put(struct ipvl_port *port)
+{
+	if (refcount_dec_and_test(&port->count))
+		ipvlan_port_destroy(port);
+}
+
+static struct ipvl_port *ipvlan_port_get(struct net_device *dev)
+{
+	struct ipvl_port *port = NULL;
+
+	rcu_read_lock();
+	if (netif_is_ipvlan_port(dev)) {
+		port = ipvlan_port_get_rcu(dev);
+		if (!refcount_inc_not_zero(&port->count))
+			port = NULL;
+	}
+	rcu_read_unlock();
+
+	return port;
 }
 
 #define IPVLAN_ALWAYS_ON_OFLOADS \
@@ -159,24 +183,24 @@ static int ipvlan_init(struct net_device *dev)
 			free_percpu(ipvlan->pcpu_stats);
 			return err;
 		}
+		port = ipvlan_port_get_rtnl(phy_dev);
+		refcount_set(&port->count, 1);
+	} else {
+		port = ipvlan_port_get_rtnl(phy_dev);
+		refcount_inc(&port->count);
 	}
-	port = ipvlan_port_get_rtnl(phy_dev);
-	port->count += 1;
+
+	ipvlan->port = port;
+
 	return 0;
 }
 
 static void ipvlan_uninit(struct net_device *dev)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
-	struct net_device *phy_dev = ipvlan->phy_dev;
-	struct ipvl_port *port;
 
 	free_percpu(ipvlan->pcpu_stats);
-
-	port = ipvlan_port_get_rtnl(phy_dev);
-	port->count -= 1;
-	if (!port->count)
-		ipvlan_port_destroy(port->dev);
+	ipvlan_port_put(ipvlan->port);
 }
 
 static int ipvlan_open(struct net_device *dev)
@@ -594,9 +618,7 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 	if (err < 0)
 		return err;
 
-	/* ipvlan_init() would have created the port, if required */
-	port = ipvlan_port_get_rtnl(phy_dev);
-	ipvlan->port = port;
+	port = ipvlan->port;
 
 	/* If the port-id base is at the MAX value, then wrap it around and
 	 * begin from 0x1 again. This may be due to a busy system where lots
@@ -729,14 +751,13 @@ static int ipvlan_device_event(struct notifier_block *unused,
 	struct netdev_notifier_pre_changeaddr_info *prechaddr_info;
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct ipvl_dev *ipvlan, *next;
+	int err, ret = NOTIFY_DONE;
 	struct ipvl_port *port;
 	LIST_HEAD(lst_kill);
-	int err;
 
-	if (!netif_is_ipvlan_port(dev))
-		return NOTIFY_DONE;
-
-	port = ipvlan_port_get_rtnl(dev);
+	port = ipvlan_port_get(dev);
+	if (!port)
+		return ret;
 
 	switch (event) {
 	case NETDEV_UP:
@@ -788,8 +809,10 @@ static int ipvlan_device_event(struct notifier_block *unused,
 			err = netif_pre_changeaddr_notify(ipvlan->dev,
 							  prechaddr_info->dev_addr,
 							  extack);
-			if (err)
-				return notifier_from_errno(err);
+			if (err) {
+				ret = notifier_from_errno(err);
+				break;
+			}
 		}
 		break;
 
@@ -802,7 +825,8 @@ static int ipvlan_device_event(struct notifier_block *unused,
 
 	case NETDEV_PRE_TYPE_CHANGE:
 		/* Forbid underlying device to change its type. */
-		return NOTIFY_BAD;
+		ret = NOTIFY_BAD;
+		break;
 
 	case NETDEV_NOTIFY_PEERS:
 	case NETDEV_BONDING_FAILOVER:
@@ -810,7 +834,10 @@ static int ipvlan_device_event(struct notifier_block *unused,
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode)
 			call_netdevice_notifiers(event, ipvlan->dev);
 	}
-	return NOTIFY_DONE;
+
+	ipvlan_port_put(port);
+
+	return ret;
 }
 
 /* the caller must held the addrs lock */
