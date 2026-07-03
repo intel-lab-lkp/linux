@@ -748,7 +748,8 @@ process_status:
 
 	if (status & TCPC_ALERT_RX_STATUS) {
 		struct pd_message msg;
-		unsigned int cnt, payload_cnt;
+		unsigned int cnt, type, payload_cnt;
+		enum tcpm_transmit_type rx_type;
 		u16 header;
 
 		regmap_read(tcpci->regmap, TCPC_RX_BYTE_CNT, &cnt);
@@ -763,6 +764,17 @@ process_status:
 		else
 			payload_cnt = 0;
 
+		regmap_read(tcpci->regmap, TCPC_RX_BUF_FRAME_TYPE, &type);
+		switch (type) {
+		case TCPC_RX_BUF_FRAME_TYPE_SOP1:
+			rx_type = TCPC_TX_SOP_PRIME;
+			break;
+		case TCPC_RX_BUF_FRAME_TYPE_SOP:
+		default:
+			rx_type = TCPC_TX_SOP;
+			break;
+		}
+
 		tcpci_read16(tcpci, TCPC_RX_HDR, &header);
 		msg.header = cpu_to_le16(header);
 
@@ -776,7 +788,7 @@ process_status:
 		/* Read complete, clear RX status alert bit */
 		tcpci_write16(tcpci, TCPC_ALERT, TCPC_ALERT_RX_STATUS);
 
-		tcpm_pd_receive(tcpci->port, &msg, TCPC_TX_SOP);
+		tcpm_pd_receive(tcpci->port, &msg, rx_type);
 	}
 
 	if (tcpci->data->vbus_vsafe0v && (status & TCPC_ALERT_EXTENDED_STATUS)) {
