@@ -360,6 +360,8 @@ static int adi_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 		adi_i3c_master_unqueue_xfer(master, xfer);
 
 	cmd->err = adi_i3c_cmd_get_err(&xfer->cmds[0]);
+	if (!xfer->ret && cmd->rnw)
+		cmd->dests[0].payload.actual_len = cmd->dests[0].payload.len;
 
 	return xfer->ret;
 }
