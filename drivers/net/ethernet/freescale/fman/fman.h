@@ -286,6 +286,7 @@ struct fman_dts_params {
 	struct resource *res;                   /* FMan memory resource */
 	u8 id;                                  /* FMan ID */
 
+	int irq;                                /* FMan IRQ */
 	int err_irq;                            /* FMan Error IRQ */
 
 	u16 clk_freq;                           /* FMan clock freq (In Mhz) */
