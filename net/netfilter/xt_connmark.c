@@ -103,7 +103,13 @@ connmark_tg_v2(struct sk_buff *skb, const struct xt_action_param *par)
 
 static int connmark_tg_check(const struct xt_tgchk_param *par)
 {
+	const struct xt_connmark_tginfo2 *info = par->targinfo;
 	int ret;
+
+	if (par->target->revision == 2) {
+		if (info->shift_dir > D_SHIFT_RIGHT || info->shift_bits >= 32)
+			return -EINVAL;
+	}
 
 	ret = nf_ct_netns_get(par->net, par->family);
 	if (ret < 0)
