@@ -191,6 +191,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 {
 	int ret;
 	tidle->thread_info.cpu = cpu;
+	tidle->thread_info.pcpu_offset = per_cpu_offset(cpu);
 
 	ret = start_secondary_cpu(cpu, tidle);
 	if (!ret) {
@@ -207,6 +208,11 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 	return ret;
 }
 #endif
+
+void __init smp_prepare_boot_cpu(void)
+{
+	__my_cpu_offset = per_cpu_offset(smp_processor_id());
+}
 
 void __init smp_cpus_done(unsigned int max_cpus)
 {
@@ -232,6 +238,8 @@ asmlinkage __visible void smp_callin(void)
 	/* All kernel threads share the same mm context.  */
 	mmgrab(mm);
 	current->active_mm = mm;
+
+	__my_cpu_offset = per_cpu_offset(smp_processor_id());
 
 #ifdef CONFIG_HOTPLUG_PARALLEL
 	cpuhp_ap_sync_alive();
