@@ -90,6 +90,7 @@ struct ipu6_device {
 
 #define IPU_PSYS	0
 #define IPU_ISYS	1
+#define IPU_SUBSYS_NUM	2
 
 #define IPU6_ISYS_NAME "isys"
 #define IPU6_PSYS_NAME "psys"
