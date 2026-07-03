@@ -209,8 +209,23 @@ static u32 dwapb_do_irq(struct dwapb_gpio *gpio)
 	for_each_set_bit(hwirq, &irq_status, DWAPB_MAX_GPIOS) {
 		int gpio_irq = irq_find_mapping(gen_gc->gc.irq.domain, hwirq);
 		u32 irq_type = irq_get_trigger_type(gpio_irq);
+		int ret;
+		u32 val_intmask, val_inten;
 
-		generic_handle_irq(gpio_irq);
+		ret = generic_handle_irq(gpio_irq);
+		if (ret) {
+			dev_warn_ratelimited(gpio->dev, "Failed to handle irq %d\n", gpio_irq);
+			/* Clear the interrupt */
+			scoped_guard(gpio_generic_lock_irqsave, gen_gc) {
+				/* Clear the interrupt */
+				dwapb_write(gpio, GPIO_PORTA_EOI, BIT(hwirq));
+				val_intmask = dwapb_read(gpio, GPIO_INTMASK);
+				dwapb_write(gpio, GPIO_INTMASK, val_intmask | BIT(hwirq));
+				val_inten = dwapb_read(gpio, GPIO_INTEN);
+				dwapb_write(gpio, GPIO_INTEN, val_inten & ~BIT(hwirq));
+			}
+			continue;
+		}
 
 		if ((irq_type & IRQ_TYPE_SENSE_MASK) == IRQ_TYPE_EDGE_BOTH)
 			dwapb_toggle_trigger(gpio, hwirq);
