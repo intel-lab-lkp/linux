@@ -31,15 +31,7 @@ struct ipu6_buttress_ctrl {
 struct ipu6_buttress_ipc {
 	struct completion send_complete;
 	struct completion recv_complete;
-	u32 nack;
-	u32 nack_mask;
 	u32 recv_data;
-	u32 csr_out;
-	u32 csr_in;
-	u32 db0_in;
-	u32 db0_out;
-	u32 data0_out;
-	u32 data0_in;
 };
 
 struct ipu6_buttress_registers {
@@ -56,6 +48,12 @@ struct ipu6_buttress_registers {
 	u32 tsc_lo;
 	u32 wdt;
 	u32 btrs_ctrl;
+	u32 csr_in;
+	u32 csr_out;
+	u32 db0_in;
+	u32 db0_out;
+	u32 data0_in;
+	u32 data0_out;
 
 	/* Bitmasks */
 	u32 irq_is;
