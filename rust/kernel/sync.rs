@@ -5,8 +5,12 @@
 //! This module contains the kernel APIs related to synchronisation that have been ported or
 //! wrapped for usage by Rust code in the kernel.
 
-use crate::prelude::*;
-use crate::types::Opaque;
+use core::panic::Location;
+
+use crate::{
+    prelude::*,
+    types::Opaque, //
+};
 use pin_init;
 
 mod arc;
@@ -66,6 +70,31 @@ impl LockClassKey {
         }
     }
 
+    /// Obtain a statically allocated lock class key identified by the caller's location.
+    ///
+    /// Different caller locations will be guaranteed to have different lock class keys; however for
+    /// the same caller location, this may return different keys, e.g. if the caller is instantiated
+    /// in different object files.
+    #[inline]
+    #[track_caller]
+    pub const fn from_caller() -> Pin<&'static Self> {
+        static_assert!(size_of::<Location<'_>>() >= size_of::<LockClassKey>());
+
+        #[cfg(CONFIG_LOCKDEP)]
+        {
+            let caller = Location::caller();
+            // SAFETY: For static objects, lockdep does not touch the underlying memory, and only
+            // the address matters. `Location::caller()` is in rodata so it meets the requirement.
+            // The size check above makes sure that it does not overlap with other lock class keys.
+            unsafe { Pin::new_unchecked(&*core::ptr::from_ref(caller).cast::<Self>()) }
+        }
+
+        // A separate version if lockdep is disabled to avoid unnecessary `Location` being
+        // generated.
+        #[cfg(not(CONFIG_LOCKDEP))]
+        static_lock_class!()
+    }
+
     /// Initializes a dynamically allocated lock class key.
     ///
     /// In the common case of using a statically allocated lock class key, the
@@ -83,7 +112,7 @@ impl LockClassKey {
     /// let key_ptr = key.into_foreign();
     ///
     /// {
-    ///     stack_pin_init!(let num: SpinLock<u32> = SpinLock::new(
+    ///     stack_pin_init!(let num: SpinLock<u32> = SpinLock::new_with_lock_class(
     ///         0,
     ///         c"my_spinlock",
     ///         // SAFETY: `key_ptr` is returned by the above `into_foreign()`, whose
@@ -129,7 +158,7 @@ impl PinnedDrop for LockClassKey {
 /// use kernel::sync::{static_lock_class, Arc, SpinLock};
 ///
 /// fn new_locked_int() -> Result<Arc<SpinLock<u32>>> {
-///     Arc::pin_init(SpinLock::new(
+///     Arc::pin_init(SpinLock::new_with_lock_class(
 ///         42,
 ///         c"new_locked_int",
 ///         static_lock_class!(),

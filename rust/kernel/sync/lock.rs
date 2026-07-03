@@ -127,8 +127,17 @@ unsafe impl<T: ?Sized + Send, B: Backend> Send for Lock<T, B> {}
 unsafe impl<T: ?Sized + Send, B: Backend> Sync for Lock<T, B> {}
 
 impl<T, B: Backend> Lock<T, B> {
-    /// Constructs a new lock initialiser.
-    pub fn new(
+    /// Constructs a new lock initialiser with a custom name.
+    #[inline]
+    #[track_caller]
+    pub fn new_with_name(t: impl PinInit<T>, name: &'static CStr) -> impl PinInit<Self> {
+        let key = LockClassKey::from_caller();
+        Self::new_with_lock_class(t, name, key)
+    }
+
+    /// Constructs a new lock initialiser with a custom name and lock class key.
+    #[inline]
+    pub fn new_with_lock_class(
         t: impl PinInit<T>,
         name: &'static CStr,
         key: Pin<&'static LockClassKey>,

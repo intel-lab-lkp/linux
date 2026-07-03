@@ -11,8 +11,7 @@
 #[macro_export]
 macro_rules! new_spinlock {
     ($inner:expr $(, $name:literal)? $(,)?) => {
-        $crate::sync::SpinLock::new(
-            $inner, $crate::optional_name!($($name)?), $crate::static_lock_class!())
+        $crate::sync::SpinLock::new_with_name($inner, $crate::optional_name!($($name)?))
     };
 }
 pub use new_spinlock;
