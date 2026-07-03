@@ -197,6 +197,7 @@ struct net {
 #ifdef CONFIG_DEBUG_NET_SMALL_RTNL
 	/* Move to a better place when the config guard is removed. */
 	struct mutex		rtnl_mutex;
+	struct work_struct	rtnl_work;
 #endif
 #if IS_ENABLED(CONFIG_VSOCKETS)
 	struct netns_vsock	vsock;

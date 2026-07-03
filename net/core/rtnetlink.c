@@ -273,6 +273,26 @@ bool lockdep_rtnl_net_is_held(struct net *net)
 	return lockdep_rtnl_is_held() && lockdep_is_held(&net->rtnl_mutex);
 }
 EXPORT_SYMBOL(lockdep_rtnl_net_is_held);
+
+static struct workqueue_struct *rtnl_net_wq;
+
+void rtnl_net_queue_work(struct net *net)
+{
+	queue_work(rtnl_net_wq, &net->rtnl_work);
+}
+
+void rtnl_net_flush_workqueue(void)
+{
+	flush_workqueue(rtnl_net_wq);
+}
+
+void rtnl_net_work_func(struct work_struct *work)
+{
+	struct net *net = container_of(work, struct net, rtnl_work);
+
+	rtnl_net_lock(net);
+	rtnl_net_unlock(net);
+}
 #else
 static int rtnl_net_cmp_locks(const struct net *net_a, const struct net *net_b)
 {
@@ -7226,4 +7246,10 @@ void __init rtnetlink_init(void)
 	register_netdevice_notifier(&rtnetlink_dev_notifier);
 
 	rtnl_register_many(rtnetlink_rtnl_msg_handlers);
+
+#ifdef CONFIG_DEBUG_NET_SMALL_RTNL
+	rtnl_net_wq = create_workqueue("rtnl_net");
+	if (!rtnl_net_wq)
+		panic("Could not create rtnl_net workq");
+#endif
 }
