@@ -3688,12 +3688,166 @@ invalid_opcode:
 	return 1;
 }
 
+struct ata_scsi_cmd {
+	u8 op;
+	u8 cdb_len;
+	bool sa_valid;
+	u16 sa;
+};
+
+/*
+ * Array of commands supported with translation or emulation, sorted in
+ * ascending opcode and service action order. All of these commands are
+ * processed either in ata_xlat_func() or in ata_scsi_simulate();
+ *
+ * Note: commands that are not fully supported may be left out of this array
+ * so that they are not reported as supported for passthrough but still
+ * available through the block layer. For now, this includes the following
+ * commands:
+ *  - WRITE_SAME_16: ata_scsi_write_same_xlat() forbids passthrough commands
+ */
+static const struct ata_scsi_cmd ata_supported_cmds[] = {
+	{	.op = TEST_UNIT_READY,		.cdb_len = 6	},
+	{	.op = REZERO_UNIT,		.cdb_len = 6	},
+	{	.op = REQUEST_SENSE,		.cdb_len = 6	},
+	{	.op = READ_6,			.cdb_len = 6	},
+	{	.op = WRITE_6,			.cdb_len = 6	},
+	{	.op = SEEK_6,			.cdb_len = 6	},
+	{	.op = INQUIRY,			.cdb_len = 6	},
+	{	.op = MODE_SELECT,		.cdb_len = 6	},
+	{	.op = MODE_SENSE,		.cdb_len = 6	},
+	{	.op = START_STOP,		.cdb_len = 6	},
+	{	.op = SEND_DIAGNOSTIC,		.cdb_len = 6	},
+	{	.op = READ_CAPACITY,		.cdb_len = 10	},
+	{	.op = READ_10,			.cdb_len = 10	},
+	{	.op = WRITE_10,			.cdb_len = 10	},
+	{	.op = SEEK_10,			.cdb_len = 10	},
+	{	.op = VERIFY,			.cdb_len = 10	},
+	{	.op = SYNCHRONIZE_CACHE,	.cdb_len = 10	},
+	{	.op = MODE_SELECT_10,		.cdb_len = 10	},
+	{	.op = MODE_SENSE_10,		.cdb_len = 10	},
+	{
+		.op = VARIABLE_LENGTH_CMD,	.cdb_len = 32,
+		.sa_valid = true,
+		.sa = ATA_32
+	},
+	{	.op = ATA_16,			.cdb_len = 16	},
+	{	.op = READ_16,			.cdb_len = 16	},
+	{	.op = WRITE_16,			.cdb_len = 16	},
+	{	.op = VERIFY_16,		.cdb_len = 16	},
+	{	.op = SYNCHRONIZE_CACHE_16,	.cdb_len = 16	},
+	{
+		.op = ZBC_OUT,			.cdb_len = 16,
+		.sa_valid = true,
+		.sa = ZO_CLOSE_ZONE
+	},
+	{
+		.op = ZBC_OUT,			.cdb_len = 16,
+		.sa_valid = true,
+		.sa = ZO_FINISH_ZONE
+	},
+	{
+		.op = ZBC_OUT,			.cdb_len = 16,
+		.sa_valid = true,
+		.sa = ZO_OPEN_ZONE
+	},
+	{
+		.op = ZBC_OUT,			.cdb_len = 16,
+		.sa_valid = true,
+		.sa = ZO_RESET_WRITE_POINTER
+	},
+	{
+		.op = ZBC_IN,			.cdb_len = 16,
+		.sa_valid = true,
+		.sa = ZI_REPORT_ZONES
+	},
+	{
+		.op = SERVICE_ACTION_IN_16,	.cdb_len = 16,
+		.sa_valid = true,
+		.sa = SAI_READ_CAPACITY_16
+	},
+	{	.op = REPORT_LUNS,		.cdb_len = 12	},
+	{	.op = ATA_12,			.cdb_len = 12	},
+	{	.op = SECURITY_PROTOCOL_IN,	.cdb_len = 12	},
+	{
+		.op = MAINTENANCE_IN,		.cdb_len = 12,
+		.sa_valid = true,
+		.sa = MI_REPORT_SUPPORTED_OPERATION_CODES
+	},
+	{	.op = SECURITY_PROTOCOL_OUT,	.cdb_len = 12	},
+};
+
+static const struct ata_scsi_cmd *ata_scsi_get_supported_cmd(u8 op)
+{
+	const struct ata_scsi_cmd *cmd;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ata_supported_cmds); i++) {
+		cmd = &ata_supported_cmds[i];
+		if (cmd->op == op)
+			return cmd;
+	}
+
+	return NULL;
+}
+
+struct ata_scsi_cmd_support {
+	u8 cdlp;
+	u8 rwcdlp;
+};
+
+static bool ata_scsi_cmd_is_supported(struct ata_device *dev, u8 op,
+				      struct ata_scsi_cmd_support *sup)
+{
+	const struct ata_scsi_cmd *cmd;
+
+	/* First, see if we support the command. */
+	cmd = ata_scsi_get_supported_cmd(op);
+	if (!cmd)
+		return false;
+
+	/* Now refine the support report depending on the device features. */
+	memset(sup, 0, sizeof(*sup));
+	switch (op) {
+	case READ_16:
+		if (dev->flags & ATA_DFLAG_CDL) {
+			/*
+			 * CDL read descriptors map to the T2A page, that is,
+			 * rwcdlp = 0x01 and cdlp = 0x01
+			 */
+			sup->rwcdlp = 0x01;
+			sup->cdlp = 0x01;
+		}
+		return true;
+	case WRITE_16:
+		if (dev->flags & ATA_DFLAG_CDL) {
+			/*
+			 * CDL write descriptors map to the T2B page, that is,
+			 * rwcdlp = 0x01 and cdlp = 0x02
+			 */
+			sup->rwcdlp = 0x01;
+			sup->cdlp = 0x02;
+		}
+		return true;
+	case ZBC_IN:
+	case ZBC_OUT:
+		return ata_dev_is_zoned(dev);
+	case SECURITY_PROTOCOL_IN:
+	case SECURITY_PROTOCOL_OUT:
+		return dev->flags & ATA_DFLAG_TRUSTED;
+	default:
+		break;
+	}
+
+	return true;
+}
+
 static unsigned int ata_scsi_report_supported_opcodes(struct ata_device *dev,
 						      struct scsi_cmnd *cmd,
 						      u8 *rbuf)
 {
+	struct ata_scsi_cmd_support sup;
 	u8 *cdb = cmd->cmnd;
-	u8 supported = 0, cdlp = 0, rwcdlp = 0;
 
 	if (cdb[2] != 1 && cdb[2] != 3) {
 		ata_dev_warn(dev, "invalid command format %d\n", cdb[2]);
@@ -3701,74 +3855,13 @@ static unsigned int ata_scsi_report_supported_opcodes(struct ata_device *dev,
 		return 0;
 	}
 
-	switch (cdb[3]) {
-	case INQUIRY:
-	case MODE_SENSE:
-	case MODE_SENSE_10:
-	case READ_CAPACITY:
-	case SERVICE_ACTION_IN_16:
-	case REPORT_LUNS:
-	case REQUEST_SENSE:
-	case SYNCHRONIZE_CACHE:
-	case SYNCHRONIZE_CACHE_16:
-	case REZERO_UNIT:
-	case SEEK_6:
-	case SEEK_10:
-	case TEST_UNIT_READY:
-	case SEND_DIAGNOSTIC:
-	case MAINTENANCE_IN:
-	case READ_6:
-	case READ_10:
-	case WRITE_6:
-	case WRITE_10:
-	case ATA_12:
-	case ATA_16:
-	case VERIFY:
-	case VERIFY_16:
-	case MODE_SELECT:
-	case MODE_SELECT_10:
-	case START_STOP:
-		supported = 3;
-		break;
-	case READ_16:
-		supported = 3;
-		if (dev->flags & ATA_DFLAG_CDL) {
-			/*
-			 * CDL read descriptors map to the T2A page, that is,
-			 * rwcdlp = 0x01 and cdlp = 0x01
-			 */
-			rwcdlp = 0x01;
-			cdlp = 0x01 << 3;
-		}
-		break;
-	case WRITE_16:
-		supported = 3;
-		if (dev->flags & ATA_DFLAG_CDL) {
-			/*
-			 * CDL write descriptors map to the T2B page, that is,
-			 * rwcdlp = 0x01 and cdlp = 0x02
-			 */
-			rwcdlp = 0x01;
-			cdlp = 0x02 << 3;
-		}
-		break;
-	case ZBC_IN:
-	case ZBC_OUT:
-		if (ata_dev_is_zoned(dev))
-			supported = 3;
-		break;
-	case SECURITY_PROTOCOL_IN:
-	case SECURITY_PROTOCOL_OUT:
-		if (dev->flags & ATA_DFLAG_TRUSTED)
-			supported = 3;
-		break;
-	default:
-		break;
-	}
-
 	/* One command format */
-	rbuf[0] = rwcdlp;
-	rbuf[1] = cdlp | supported;
+	if (ata_scsi_cmd_is_supported(dev, cdb[3], &sup)) {
+		rbuf[0] = sup.rwcdlp;
+		rbuf[1] = (sup.cdlp << 3) | 0x03;
+	} else {
+		rbuf[1] = 0x01;
+	}
 
 	return 4;
 }
