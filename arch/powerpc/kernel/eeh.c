@@ -997,6 +997,21 @@ int eeh_init(struct eeh_ops *ops)
 	return eeh_event_init();
 }
 
+#ifdef CONFIG_EEH
+static void eeh_sync_pm_cap(struct eeh_dev *edev, struct pci_dev *pdev)
+{
+	if (!edev || !pdev)
+		return;
+
+	/*
+	 * Prefer PCI core cached PM capability once pci_dev exists.
+	 * If pm_cap is zero, clear pmcsr_offset as well.
+	 */
+	edev->pm_cap = pdev->pm_cap;
+	edev->pmcsr_offset = pdev->pm_cap ? pdev->pm_cap + PCI_PM_CTRL : 0;
+}
+#endif
+
 /**
  * eeh_probe_device() - Perform EEH initialization for the indicated pci device
  * @dev: pci device for which to set up EEH
@@ -1050,6 +1065,7 @@ void eeh_probe_device(struct pci_dev *dev)
 	/* bind the pdev and the edev together */
 	edev->pdev = dev;
 	dev->dev.archdata.edev = edev;
+	eeh_sync_pm_cap(edev, dev);
 	eeh_addr_cache_insert_dev(dev);
 	eeh_sysfs_add_device(dev);
 }

@@ -95,6 +95,24 @@ static int rtas_pci_read_config(struct pci_bus *bus,
 	return ret;
 }
 
+static bool eeh_handle_pmcsr_read(struct eeh_dev *edev, int size,
+				  u32 *val, int *pcibios_ret)
+{
+	struct pci_dev *pdev;
+
+	if (!edev)
+		return false;
+
+	pdev = edev->pdev;
+	if (!pdev || pdev->current_state != PCI_D3cold)
+		return false;
+
+	*val = EEH_IO_ERROR_VALUE(size);
+	*pcibios_ret = PCIBIOS_SUCCESSFUL;
+
+	return true;
+}
+
 int rtas_pci_dn_write_config(struct pci_dn *pdn, int where, int size, u32 val)
 {
 	unsigned long buid, addr;
@@ -108,6 +126,14 @@ int rtas_pci_dn_write_config(struct pci_dn *pdn, int where, int size, u32 val)
 	if (pdn->edev && pdn->edev->pe &&
 	    (pdn->edev->pe->state & EEH_PE_CFG_BLOCKED))
 		return PCIBIOS_SET_FAILED;
+
+	if (unlikely(pdn->edev && pdn->edev->pmcsr_offset &&
+		     size == 2 && where == pdn->edev->pmcsr_offset)) {
+		int pcibios_ret;
+
+		if (eeh_handle_pmcsr_read(pdn->edev, size, &val, &pcibios_ret))
+			return pcibios_ret;
+	}
 #endif
 
 	addr = rtas_config_addr(pdn->busno, pdn->devfn, where);

@@ -139,6 +139,15 @@ struct eeh_dev {
 	int pcie_cap;			/* Saved PCIe capability	*/
 	int aer_cap;			/* Saved AER capability		*/
 	int af_cap;			/* Saved AF capability		*/
+	/*
+	 * Cached PCI PM capability information.
+	 * pm_cap == 0 means the device does not have PCI PM capability
+	 * or it has not been discovered yet.
+	 * pmcsr_offset is the absolute config-space offset of PMCSR:
+	 *     pm_cap + PCI_PM_CTRL
+	 */
+	u8 pm_cap;
+	u16 pmcsr_offset;
 	struct eeh_pe *pe;		/* Associated PE		*/
 	struct list_head entry;		/* Membership in eeh_pe.edevs	*/
 	struct list_head rmv_entry;	/* Membership in rmv_list	*/

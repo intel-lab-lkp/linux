@@ -351,6 +351,21 @@ static struct eeh_pe *pseries_eeh_pe_get_parent(struct eeh_dev *edev)
 	return NULL;
 }
 
+static void pseries_eeh_init_pm_cap(struct pci_dn *pdn, struct eeh_dev *edev)
+{
+	edev->pm_cap = 0;
+	edev->pmcsr_offset = 0;
+
+	if (!pdn || !edev)
+		return;
+
+	edev->pm_cap = pseries_eeh_find_cap(pdn, PCI_CAP_ID_PM);
+	if (!edev->pm_cap)
+		return;
+
+	edev->pmcsr_offset = edev->pm_cap + PCI_PM_CTRL;
+}
+
 /**
  * pseries_eeh_init_edev - initialise the eeh_dev and eeh_pe for a pci_dn
  *
@@ -408,6 +423,7 @@ static void pseries_eeh_init_edev(struct pci_dn *pdn)
 	edev->pcix_cap = pseries_eeh_find_cap(pdn, PCI_CAP_ID_PCIX);
 	edev->pcie_cap = pseries_eeh_find_cap(pdn, PCI_CAP_ID_EXP);
 	edev->aer_cap = pseries_eeh_find_ecap(pdn, PCI_EXT_CAP_ID_ERR);
+	pseries_eeh_init_pm_cap(pdn, edev);
 	edev->mode &= 0xFFFFFF00;
 	if ((pdn->class_code >> 8) == PCI_CLASS_BRIDGE_PCI) {
 		edev->mode |= EEH_DEV_BRIDGE;
