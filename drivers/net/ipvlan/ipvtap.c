@@ -109,13 +109,14 @@ static int ipvtap_newlink(struct net_device *dev,
 	return err;
 }
 
-static void __ipvtap_dellink(struct net_device *dev, struct list_head *head)
+static void __ipvtap_dellink(struct net *net, struct net_device *dev,
+			     struct list_head *head)
 {
 	struct ipvtap_dev *vlantap = netdev_priv(dev);
 
 	netdev_rx_handler_unregister(dev);
 	tap_del_queues(&vlantap->tap);
-	__ipvlan_link_delete(dev, head);
+	__ipvlan_link_delete(net, dev, head);
 }
 
 static void ipvtap_dellink(struct net_device *dev,
@@ -125,7 +126,8 @@ static void ipvtap_dellink(struct net_device *dev,
 	struct ipvl_port *port = vlantap->vlan.port;
 
 	mutex_lock(&port->pnodes_lock);
-	__ipvtap_dellink(dev, head);
+	if (!vlantap->vlan.dying)
+		__ipvtap_dellink(dev_net(dev), dev, head);
 	mutex_unlock(&port->pnodes_lock);
 }
 

@@ -8,7 +8,7 @@
 #include "ipvlan.h"
 
 #if IS_ENABLED(CONFIG_IPVTAP)
-void (*__ipvtap_dellink_ptr)(struct net_device *dev,
+void (*__ipvtap_dellink_ptr)(struct net *net, struct net_device *dev,
 			     struct list_head *head);
 EXPORT_SYMBOL(__ipvtap_dellink_ptr);
 #endif
@@ -706,7 +706,8 @@ unregister_netdev:
 }
 EXPORT_SYMBOL_GPL(ipvlan_link_new);
 
-void __ipvlan_link_delete(struct net_device *dev, struct list_head *head)
+void __ipvlan_link_delete(struct net *net, struct net_device *dev,
+			  struct list_head *head)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct ipvl_addr *addr, *next;
@@ -721,7 +722,7 @@ void __ipvlan_link_delete(struct net_device *dev, struct list_head *head)
 
 	ida_free(&ipvlan->port->ida, dev->dev_id);
 	list_del_rcu(&ipvlan->pnode);
-	unregister_netdevice_queue(dev, head);
+	unregister_netdevice_queue_net(net, dev, head);
 	netdev_upper_dev_unlink(ipvlan->phy_dev, dev);
 }
 EXPORT_SYMBOL(__ipvlan_link_delete);
@@ -731,7 +732,8 @@ static void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 
 	mutex_lock(&ipvlan->port->pnodes_lock);
-	__ipvlan_link_delete(dev, head);
+	if (!ipvlan->dying)
+		__ipvlan_link_delete(dev_net(dev), dev, head);
 	mutex_unlock(&ipvlan->port->pnodes_lock);
 }
 
@@ -827,22 +829,26 @@ static int ipvlan_device_event(struct notifier_block *unused,
 			ipvlan_migrate_l3s_hook(oldnet, newnet);
 		break;
 	}
-	case NETDEV_UNREGISTER:
+	case NETDEV_UNREGISTER: {
+		struct net *net = dev_net(dev);
+
 		if (dev->reg_state != NETREG_UNREGISTERING)
 			break;
 
 		list_for_each_entry_safe(ipvlan, next, &port->ipvlans, pnode) {
+			ipvlan->dying = true;
+
 #if IS_ENABLED(CONFIG_IPVTAP)
 			if (ipvlan->dev->rtnl_link_ops != &ipvlan_link_ops)
-				__ipvtap_dellink_ptr(ipvlan->dev, &lst_kill);
+				__ipvtap_dellink_ptr(net, ipvlan->dev, &lst_kill);
 			else
 #endif
-				__ipvlan_link_delete(ipvlan->dev, &lst_kill);
+				__ipvlan_link_delete(net, ipvlan->dev, &lst_kill);
 		}
 
 		unregister_netdevice_many(&lst_kill);
 		break;
-
+	}
 	case NETDEV_FEAT_CHANGE:
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
 			netif_inherit_tso_max(ipvlan->dev, dev);

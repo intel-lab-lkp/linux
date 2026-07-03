@@ -69,6 +69,7 @@ struct ipvl_dev {
 	DECLARE_BITMAP(mac_filters, IPVLAN_MAC_FILTER_SIZE);
 	netdev_features_t	sfeatures;
 	u32			msg_enable;
+	bool			dying;
 };
 
 struct ipvl_addr {
@@ -169,7 +170,8 @@ void ipvlan_count_rx(const struct ipvl_dev *ipvlan,
 		     unsigned int len, bool success, bool mcast);
 int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 		    struct netlink_ext_ack *extack);
-void __ipvlan_link_delete(struct net_device *dev, struct list_head *head);
+void __ipvlan_link_delete(struct net *net, struct net_device *dev,
+			  struct list_head *head);
 void ipvlan_link_setup(struct net_device *dev);
 int ipvlan_link_register(struct rtnl_link_ops *ops);
 #ifdef CONFIG_IPVLAN_L3S
@@ -209,7 +211,7 @@ static inline bool netif_is_ipvlan_port(const struct net_device *dev)
 }
 
 #if IS_ENABLED(CONFIG_IPVTAP)
-extern void (*__ipvtap_dellink_ptr)(struct net_device *dev,
+extern void (*__ipvtap_dellink_ptr)(struct net *net, struct net_device *dev,
 				    struct list_head *head);
 #endif
 
