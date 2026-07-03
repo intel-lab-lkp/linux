@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <string.h>
 #include <fcntl.h>
 
@@ -175,6 +177,48 @@ TEST(check_huge_pages)
 
 
 /*
+ * Return the size of the mmap read-around window, in pages, for the block
+ * device backing the file referred to by @fd, or -1 if it cannot be
+ * determined. The window size is the device's read_ahead_kb divided by the
+ * page size; the kernel centres this window on the faulting page, so it must
+ * be at least two pages wide for any neighbouring page to be read in.
+ */
+static long readahead_window_pages(int fd, long page_size)
+{
+	char path[64];
+	struct stat st;
+	long ra_kb;
+	FILE *f;
+
+	if (fstat(fd, &st))
+		return -1;
+
+	/*
+	 * read_ahead_kb lives in the owning disk's queue/ directory. For a
+	 * whole-disk device that is the device's own queue/; for a partition
+	 * it is one level up ("..") at the parent disk.
+	 */
+	snprintf(path, sizeof(path), "/sys/dev/block/%u:%u/queue/read_ahead_kb",
+		 major(st.st_dev), minor(st.st_dev));
+	f = fopen(path, "r");
+	if (!f) {
+		snprintf(path, sizeof(path),
+			 "/sys/dev/block/%u:%u/../queue/read_ahead_kb",
+			 major(st.st_dev), minor(st.st_dev));
+		f = fopen(path, "r");
+		if (!f)
+			return -1;
+	}
+	if (fscanf(f, "%ld", &ra_kb) != 1) {
+		fclose(f);
+		return -1;
+	}
+	fclose(f);
+
+	return (ra_kb << 10) / page_size;
+}
+
+/*
  * Test mincore() behavior on a file-backed page.
  * No pages should be loaded into memory right after the mapping. Then,
  * accessing any address in the mapping range should load the page
@@ -194,6 +238,7 @@ TEST(check_file_mmap)
 	int fd;
 	int i;
 	int ra_pages = 0;
+	long ra_window;
 
 	page_size = sysconf(_SC_PAGESIZE);
 	vec_size = FILE_SIZE / page_size;
@@ -225,6 +270,22 @@ TEST(check_file_mmap)
 	}
 
 	/*
+	 * mmap read-around brings in a window of pages centred on the
+	 * faulting page. Its width is the backing device's read_ahead_kb
+	 * divided by the page size. If that window is narrower than two
+	 * pages - because readahead is disabled, or the base page size is so
+	 * large that read_ahead_kb covers a single page - then no
+	 * neighbouring page can ever be read in and the readahead part of
+	 * this test does not apply, so skip it. The same goes for a file with
+	 * no backing block device (e.g. on tmpfs), where the window cannot be
+	 * determined and there is no block-device readahead to exercise.
+	 */
+	ra_window = readahead_window_pages(fd, page_size);
+	if (ra_window < 2)
+		SKIP(goto out_close,
+		     "no usable readahead window for this configuration.");
+
+	/*
 	 * Map the whole file, the pages shouldn't be fetched yet.
 	 */
 	errno = 0;
@@ -242,8 +303,11 @@ TEST(check_file_mmap)
 	}
 
 	/*
-	 * Touch a page in the middle of the mapping. We expect the next
-	 * few pages (the readahead window) to be populated too.
+	 * Touch a page in the middle of the mapping. We expect the
+	 * surrounding pages (the readahead window) to be populated too.
+	 * The kernel centres the mmap read-around window on the faulting
+	 * page, so with a large base page size the readahead pages may
+	 * land before the touched page rather than after it.
 	 */
 	addr[FILE_SIZE / 2] = 1;
 	retval = mincore(addr, FILE_SIZE, vec);
@@ -252,11 +316,25 @@ TEST(check_file_mmap)
 		TH_LOG("Page not found in memory after use");
 	}
 
+	/* Count readahead pages that landed before the touched page. */
+	i = FILE_SIZE / 2 / page_size - 1;
+	while (i >= 0 && vec[i]) {
+		ra_pages++;
+		i--;
+	}
+
+	/* Count readahead pages that landed after the touched page. */
 	i = FILE_SIZE / 2 / page_size + 1;
 	while (i < vec_size && vec[i]) {
 		ra_pages++;
 		i++;
 	}
+
+	/*
+	 * The readahead window is at least two pages wide here (narrow
+	 * windows were skipped above), so the kernel must have brought in at
+	 * least one neighbouring page on one side of the faulted page.
+	 */
 	EXPECT_GT(ra_pages, 0) {
 		TH_LOG("No read-ahead pages found in memory");
 	}
