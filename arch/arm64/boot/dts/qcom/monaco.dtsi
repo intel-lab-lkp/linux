@@ -7895,6 +7895,7 @@
 
 		gpuss-0-thermal {
 			thermal-sensors = <&tsens0 5>;
+			polling-delay-passive = <10>;
 
 			trips {
 				gpuss0_alert0: trip-point0 {
@@ -8028,6 +8029,7 @@
 
 		gpuss-1-thermal {
 			thermal-sensors = <&tsens1 5>;
+			polling-delay-passive = <10>;
 
 			trips {
 				gpuss1_alert0: trip-point0 {
