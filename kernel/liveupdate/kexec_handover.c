@@ -918,15 +918,29 @@ static unsigned int __kho_preserve_pages_order(unsigned long start_pfn,
 	return order;
 }
 
+static bool kho_is_page_split(unsigned long pfn, unsigned int order)
+{
+	/*
+	 * If the refcount of the second page is non-zero, this block
+	 * has been split.
+	 */
+	if (order > 0 && page_ref_count(pfn_to_page(pfn + 1)) != 0)
+		return true;
+
+	return false;
+}
+
 static void __kho_unpreserve(struct kho_radix_tree *tree,
 			     unsigned long pfn, unsigned long end_pfn)
 {
-	unsigned int order;
-
 	while (pfn < end_pfn) {
-		order = __kho_preserve_pages_order(pfn, end_pfn);
+		unsigned int order = __kho_preserve_pages_order(pfn, end_pfn);
+		enum kho_page_type type;
 
-		kho_radix_del_page(tree, pfn, order, KHO_PAGE_CONTIG);
+		type = kho_is_page_split(pfn, order) ? KHO_PAGE_SPLIT :
+						       KHO_PAGE_CONTIG;
+
+		kho_radix_del_page(tree, pfn, order, type);
 
 		pfn += 1 << order;
 	}
@@ -958,8 +972,12 @@ int kho_preserve_pages(struct page *page, unsigned long nr_pages)
 
 	while (pfn < end_pfn) {
 		unsigned int order = __kho_preserve_pages_order(pfn, end_pfn);
+		enum kho_page_type type;
 
-		err = kho_radix_add_page(tree, pfn, order, KHO_PAGE_CONTIG);
+		type = kho_is_page_split(pfn, order) ? KHO_PAGE_SPLIT :
+						       KHO_PAGE_CONTIG;
+
+		err = kho_radix_add_page(tree, pfn, order, type);
 		if (err) {
 			failed_pfn = pfn;
 			break;
