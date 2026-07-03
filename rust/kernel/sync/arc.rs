@@ -253,7 +253,7 @@ impl<T: ?Sized> Arc<T> {
 
     /// Convert the [`Arc`] into a raw pointer.
     ///
-    /// The raw pointer has ownership of the refcount that this Arc object owned.
+    /// The raw pointer has ownership of the refcount that this [`Arc`] object owned.
     pub fn into_raw(self) -> *const T {
         let ptr = self.ptr.as_ptr();
         core::mem::forget(self);
@@ -261,7 +261,7 @@ impl<T: ?Sized> Arc<T> {
         unsafe { core::ptr::addr_of!((*ptr).data) }
     }
 
-    /// Return a raw pointer to the data in this arc.
+    /// Return a raw pointer to the data in this [`Arc`].
     pub fn as_ptr(this: &Self) -> *const T {
         let ptr = this.ptr.as_ptr();
 
