@@ -1032,6 +1032,21 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 	return;
 }
 
+static void enqueue_signal(struct task_struct *t, enum pid_type type,
+			   int sig, struct sigqueue *q)
+{
+	struct signal_struct *signal = t->signal;
+	struct sigpending *pending = (type != PIDTYPE_PID) ?
+		&signal->shared_pending : &t->pending;
+
+	signalfd_notify(t, sig);
+	if (q) {
+		list_add_tail(&q->list, &pending->list);
+	}
+	sigaddset(&pending->signal, sig);
+	complete_signal(sig, t, type);
+}
+
 static inline bool legacy_queue(struct sigpending *signals, int sig)
 {
 	return (sig < SIGRTMIN) && sigismember(&signals->signal, sig);
@@ -1085,7 +1100,6 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	q = sigqueue_alloc(sig, t, GFP_ATOMIC, override_rlimit);
 
 	if (q) {
-		list_add_tail(&q->list, &pending->list);
 		switch ((unsigned long) info) {
 		case (unsigned long) SEND_SIG_NOINFO:
 			clear_siginfo(&q->info);
@@ -1131,9 +1145,6 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	}
 
 out_set:
-	signalfd_notify(t, sig);
-	sigaddset(&pending->signal, sig);
-
 	/* Let multiprocess signals appear after on-going forks */
 	if (type > PIDTYPE_TGID) {
 		struct multiprocess_signals *delayed;
@@ -1148,7 +1159,7 @@ out_set:
 		}
 	}
 
-	complete_signal(sig, t, type);
+	enqueue_signal(t, type, sig, q);
 ret:
 	trace_signal_generate(sig, info, t, type != PIDTYPE_PID, result);
 	return ret;
@@ -1947,18 +1958,6 @@ bool posixtimer_init_sigqueue(struct sigqueue *q)
 	return true;
 }
 
-static void posixtimer_queue_sigqueue(struct sigqueue *q, struct task_struct *t, enum pid_type type)
-{
-	struct sigpending *pending;
-	int sig = q->info.si_signo;
-
-	signalfd_notify(t, sig);
-	pending = (type != PIDTYPE_PID) ? &t->signal->shared_pending : &t->pending;
-	list_add_tail(&q->list, &pending->list);
-	sigaddset(&pending->signal, sig);
-	complete_signal(sig, t, type);
-}
-
 /*
  * This function is used by POSIX timers to deliver a timer signal.
  * Where type is PIDTYPE_PID (such as for timers with SIGEV_THREAD_ID
@@ -2084,7 +2083,7 @@ void posixtimer_send_sigqueue(struct k_itimer *tmr)
 	else
 		hlist_del_init(&tmr->ignored_list);
 
-	posixtimer_queue_sigqueue(q, t, tmr->it_pid_type);
+	enqueue_signal(t, tmr->it_pid_type, sig, q);
 	result = TRACE_SIGNAL_DELIVERED;
 out:
 	trace_signal_generate(sig, &q->info, t, tmr->it_pid_type != PIDTYPE_PID, result);
@@ -2145,7 +2144,7 @@ static void posixtimer_sig_unignore(struct task_struct *tsk, int sig)
 		guard(rcu)();
 		target = posixtimer_get_target(tmr);
 		if (target)
-			posixtimer_queue_sigqueue(&tmr->sigq, target, tmr->it_pid_type);
+			enqueue_signal(target, tmr->it_pid_type, sig, &tmr->sigq);
 		else
 			posixtimer_putref(tmr);
 	}
