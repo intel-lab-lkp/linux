@@ -198,6 +198,7 @@ static void intel_iommu_domain_free(struct iommu_domain *domain);
 
 int dmar_disabled = !IS_ENABLED(CONFIG_INTEL_IOMMU_DEFAULT_ON);
 int intel_iommu_sm = IS_ENABLED(CONFIG_INTEL_IOMMU_SCALABLE_MODE_DEFAULT_ON);
+static int intel_iommu_cmdline_on;
 
 int intel_iommu_enabled = 0;
 EXPORT_SYMBOL_GPL(intel_iommu_enabled);
@@ -238,10 +239,12 @@ static int __init intel_iommu_setup(char *str)
 	while (*str) {
 		if (!strncmp(str, "on", 2)) {
 			dmar_disabled = 0;
+			intel_iommu_cmdline_on = 1;
 			pr_info("IOMMU enabled\n");
 		} else if (!strncmp(str, "off", 3)) {
 			dmar_disabled = 1;
 			no_platform_optin = 1;
+			intel_iommu_cmdline_on = 0;
 			pr_info("IOMMU disabled\n");
 		} else if (!strncmp(str, "igfx_off", 8)) {
 			disable_igfx_iommu = 1;
@@ -275,6 +278,19 @@ static int __init intel_iommu_setup(char *str)
 
 	return 1;
 }
+
+static const struct dmi_system_id intel_iommu_broken_dmar_table[] __initconst = {
+	{
+		.ident = "Lenovo ThinkPad P50s",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "20FLCTO1WW"),
+			DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad P50s"),
+		},
+	},
+	{}
+};
+
 __setup("intel_iommu=", intel_iommu_setup);
 
 /*
@@ -2561,6 +2577,13 @@ int __init intel_iommu_init(void)
 	 */
 	force_on = (!intel_iommu_tboot_noforce && tboot_force_iommu()) ||
 		    platform_optin_force_iommu();
+
+	if (!force_on && !intel_iommu_cmdline_on &&
+    dmi_check_system(intel_iommu_broken_dmar_table)) {
+		dmar_disabled = 1;
+		no_platform_optin = 1;
+		pr_info("DMAR: IOMMU disabled on Lenovo ThinkPad P50s due to firmware issue\n");
+	}
 
 	down_write(&dmar_global_lock);
 	if (dmar_table_init()) {
