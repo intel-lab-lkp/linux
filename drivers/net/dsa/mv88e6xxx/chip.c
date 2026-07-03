@@ -974,6 +974,10 @@ static void mv88e6xxx_mac_link_down(struct phylink_config *config,
 	     mode == MLO_AN_FIXED) && ops->port_sync_link)
 		err = ops->port_sync_link(chip, port, mode, false);
 
+	if (!err)
+		err = mv88e6xxx_port_set_force_flow_ctl(chip, port, false,
+							false);
+
 	if (!err && ops->port_set_speed_duplex)
 		err = ops->port_set_speed_duplex(chip, port, SPEED_UNFORCED,
 						 DUPLEX_UNFORCED);
@@ -1011,6 +1015,11 @@ static void mv88e6xxx_mac_link_up(struct phylink_config *config,
 			if (err && err != -EOPNOTSUPP)
 				goto error;
 		}
+
+		err = mv88e6xxx_port_set_force_flow_ctl(chip, port, true,
+							rx_pause);
+		if (err)
+			goto error;
 
 		if (ops->port_sync_link)
 			err = ops->port_sync_link(chip, port, mode, true);

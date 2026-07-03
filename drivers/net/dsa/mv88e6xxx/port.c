@@ -182,6 +182,26 @@ int mv88e6xxx_port_set_link(struct mv88e6xxx_chip *chip, int port, int link)
 	return 0;
 }
 
+int mv88e6xxx_port_set_force_flow_ctl(struct mv88e6xxx_chip *chip, int port,
+				      bool force, bool value)
+{
+	u16 reg;
+	int err;
+
+	err = mv88e6xxx_port_read(chip, port, MV88E6XXX_PORT_MAC_CTL, &reg);
+	if (err)
+		return err;
+
+	reg &= ~(MV88E6XXX_PORT_MAC_CTL_FORCE_FC | MV88E6XXX_PORT_MAC_CTL_FC);
+	if (force) {
+		reg |= MV88E6XXX_PORT_MAC_CTL_FORCE_FC;
+		if (value)
+			reg |= MV88E6XXX_PORT_MAC_CTL_FC;
+	}
+
+	return mv88e6xxx_port_write(chip, port, MV88E6XXX_PORT_MAC_CTL, reg);
+}
+
 int mv88e6xxx_port_sync_link(struct mv88e6xxx_chip *chip, int port, unsigned int mode, bool isup)
 {
 	const struct mv88e6xxx_ops *ops = chip->info->ops;
