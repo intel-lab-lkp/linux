@@ -130,6 +130,14 @@ impl<T, B: Backend> Lock<T, B> {
     /// Constructs a new lock initialiser with a custom name.
     #[inline]
     #[track_caller]
+    pub fn new(t: impl PinInit<T>) -> impl PinInit<Self> {
+        let key = LockClassKey::from_caller();
+        Self::new_with_lock_class(t, super::LOCKDEP_RUST_NAME, key)
+    }
+
+    /// Constructs a new lock initialiser with a custom name.
+    #[inline]
+    #[track_caller]
     pub fn new_with_name(t: impl PinInit<T>, name: &'static CStr) -> impl PinInit<Self> {
         let key = LockClassKey::from_caller();
         Self::new_with_lock_class(t, name, key)

@@ -724,7 +724,12 @@ static void __print_lock_name(struct held_lock *hlock, struct lock_class *class)
 		name = __get_key_name(class->key, str);
 		printk(KERN_CONT "%s", name);
 	} else {
-		printk(KERN_CONT "%s", name);
+		if (CONFIG_RUST && class->name == lockdep_rust_name)
+			lockdep_print_rust_name((struct lock_class_key *)(
+				class->key - class->subclass
+			));
+		else
+			printk(KERN_CONT "%s", name);
 		if (class->name_version > 1)
 			printk(KERN_CONT "#%d", class->name_version);
 		if (class->subclass)

@@ -134,6 +134,9 @@ extern void get_usage_chars(struct lock_class *class,
 extern const char *__get_key_name(const struct lockdep_subclass_key *key,
 				  char *str);
 
+extern const char lockdep_rust_name[];
+extern void lockdep_print_rust_name(struct lock_class_key *key);
+
 struct lock_class *lock_chain_get_class(struct lock_chain *chain, int i);
 
 extern unsigned long nr_lock_classes;

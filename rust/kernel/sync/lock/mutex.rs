@@ -24,8 +24,8 @@ pub use new_mutex;
 ///
 /// Since it may block, [`Mutex`] needs to be used with care in atomic contexts.
 ///
-/// Instances of [`Mutex`] need a lock class and to be pinned. The recommended way to create such
-/// instances is with the [`pin_init`](pin_init::pin_init) and [`new_mutex`] macros.
+/// Instances of [`Mutex`] need to be pinned. You can create such instances with the
+/// [`pin_init`](pin_init::pin_init).
 ///
 /// # Examples
 ///
@@ -33,7 +33,7 @@ pub use new_mutex;
 /// contains an inner struct (`Inner`) that is protected by a mutex.
 ///
 /// ```
-/// use kernel::sync::{new_mutex, Mutex};
+/// use kernel::sync::Mutex;
 ///
 /// struct Inner {
 ///     a: u32,
@@ -51,7 +51,7 @@ pub use new_mutex;
 ///     fn new() -> impl PinInit<Self> {
 ///         pin_init!(Self {
 ///             c: 10,
-///             d <- new_mutex!(Inner { a: 20, b: 30 }),
+///             d <- Mutex::new(Inner { a: 20, b: 30 }),
 ///         })
 ///     }
 /// }

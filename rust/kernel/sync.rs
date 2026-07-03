@@ -8,6 +8,7 @@
 use core::panic::Location;
 
 use crate::{
+    pr_cont,
     prelude::*,
     types::Opaque, //
 };
@@ -148,6 +149,29 @@ impl PinnedDrop for LockClassKey {
         // hasn't changed. Thus, it's safe to pass it to unregister.
         unsafe { bindings::lockdep_unregister_key(self.as_ptr()) }
     }
+}
+
+// We want this to be completely unique so lockdep can identify when lock classes are generated with
+// `new_static` mechanism, hence making this `static` and attach a `link_section` so it cannot be
+// merged with other constants.
+#[export_name = "lockdep_rust_name"]
+#[link_section = ".rodata"]
+static LOCKDEP_RUST_NAME_BYTES: [u8; 7] = *b"(rust)\0";
+
+// This should only be used in conjunction of `LockClassKey::from_caller`.
+const LOCKDEP_RUST_NAME: &CStr = match CStr::from_bytes_with_nul(&LOCKDEP_RUST_NAME_BYTES) {
+    Ok(v) => v,
+    Err(_) => unreachable!(),
+};
+
+#[cfg(CONFIG_LOCKDEP)]
+#[expect(clippy::missing_safety_doc)]
+#[no_mangle]
+unsafe extern "C" fn lockdep_print_rust_name(key: *mut bindings::lock_class_key) {
+    // SAFETY: `rust_print_lockdep_name` is called when the lock name is a reserved value indicating
+    // that the lock_class_key is static and backed by a `Location`.
+    let location = unsafe { &*key.cast::<Location<'_>>() };
+    pr_cont!("{}:{}", location.file(), location.line());
 }
 
 /// Defines a new static lock class and returns a pointer to it.

@@ -22,8 +22,8 @@ pub use new_spinlock;
 /// one at a time is allowed to progress, the others will block (spinning) until the spinlock is
 /// unlocked, at which point another CPU will be allowed to make progress.
 ///
-/// Instances of [`SpinLock`] need a lock class and to be pinned. The recommended way to create such
-/// instances is with the [`pin_init`](pin_init::pin_init) and [`new_spinlock`] macros.
+/// Instances of [`SpinLock`] need to be pinned. You can create such instances with the
+/// [`pin_init`](pin_init::pin_init).
 ///
 /// # Examples
 ///
@@ -31,7 +31,7 @@ pub use new_spinlock;
 /// contains an inner struct (`Inner`) that is protected by a spinlock.
 ///
 /// ```
-/// use kernel::sync::{new_spinlock, SpinLock};
+/// use kernel::sync::SpinLock;
 ///
 /// struct Inner {
 ///     a: u32,
@@ -49,7 +49,7 @@ pub use new_spinlock;
 ///     fn new() -> impl PinInit<Self> {
 ///         pin_init!(Self {
 ///             c: 10,
-///             d <- new_spinlock!(Inner { a: 20, b: 30 }),
+///             d <- SpinLock::new(Inner { a: 20, b: 30 }),
 ///         })
 ///     }
 /// }
