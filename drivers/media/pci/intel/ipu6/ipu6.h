@@ -8,6 +8,8 @@
 #include <linux/pci.h>
 #include <linux/types.h>
 
+#include <media/ipu6-pci-table.h>
+
 #include "ipu6-buttress.h"
 
 struct firmware;
@@ -23,39 +25,27 @@ struct ipu6_bus_device;
 #define IPU6EPMTL_FIRMWARE_NAME		"intel/ipu/ipu6epmtl_fw.bin"
 #define IPU6EPADLN_FIRMWARE_NAME	"intel/ipu/ipu6epadln_fw.bin"
 
-enum ipu6_version {
-	IPU6_VER_INVALID = 0,
-	IPU6_VER_6 = 1,
-	IPU6_VER_6SE = 3,
-	IPU6_VER_6EP = 5,
-	IPU6_VER_6EP_MTL = 6,
+static const struct pci_device_id ipu6se_ids[] = {
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6SE), },
+	{ }
 };
 
-/*
- * IPU6 - TGL
- * IPU6SE - JSL
- * IPU6EP - ADL/RPL
- * IPU6EP_MTL - MTL
- */
-static inline bool is_ipu6se(u8 hw_ver)
-{
-	return hw_ver == IPU6_VER_6SE;
-}
+static const struct pci_device_id ipu6ep_ids[] = {
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6EP_ADLP), },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6EP_RPLP), },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6EP_ADLN), },
+	{ }
+};
 
-static inline bool is_ipu6ep(u8 hw_ver)
-{
-	return hw_ver == IPU6_VER_6EP;
-}
+static const struct pci_device_id ipu6ep_mtl_ids[] = {
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6EP_MTL), },
+	{ }
+};
 
-static inline bool is_ipu6ep_mtl(u8 hw_ver)
-{
-	return hw_ver == IPU6_VER_6EP_MTL;
-}
-
-static inline bool is_ipu6_tgl(u8 hw_ver)
-{
-	return hw_ver == IPU6_VER_6;
-}
+static const struct pci_device_id ipu6_tgl_ids[] = {
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_INTEL_IPU6), },
+	{ }
+};
 
 /*
  * ISYS DMA can overshoot. For higher resolutions over allocation is one line
@@ -84,7 +74,6 @@ struct ipu6_device {
 	void __iomem *base;
 	bool need_ipc_reset;
 	bool secure_mode;
-	u8 hw_ver;
 	bool bus_ready_to_probe;
 };
 
