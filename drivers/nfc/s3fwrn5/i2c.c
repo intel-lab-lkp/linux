@@ -23,8 +23,52 @@ struct s3fwrn5_i2c_phy {
 	struct i2c_client *i2c_dev;
 	struct clk *clk;
 
+	/*
+	 * Optional hardware clock-request handshake. When a CLK_REQ GPIO is
+	 * wired, the chip drives it high while it needs its XI clock -- notably
+	 * to generate the poll/reader carrier -- and the clock is gated on it
+	 * instead of being left always-on (which never lets the chip's TX PLL
+	 * lock on a fresh clock start, leaving it unable to poll).
+	 */
+	struct gpio_desc *gpio_clk_req;
+	bool clk_on;
+	struct mutex clk_lock;	/* serialises clk_on against the CLK_REQ irq */
+
 	unsigned int irq_skip:1;
 };
+
+static void s3fwrn5_i2c_clk_set(struct s3fwrn5_i2c_phy *phy, bool on)
+{
+	mutex_lock(&phy->clk_lock);
+	if (on && !phy->clk_on) {
+		int ret = clk_prepare_enable(phy->clk);
+
+		if (ret == 0)
+			phy->clk_on = true;
+		else
+			dev_warn_once(&phy->i2c_dev->dev,
+				      "failed to enable clock (%d); NFC may not poll\n",
+				      ret);
+	} else if (!on && phy->clk_on) {
+		clk_disable_unprepare(phy->clk);
+		phy->clk_on = false;
+	}
+	mutex_unlock(&phy->clk_lock);
+}
+
+static void s3fwrn5_i2c_clk_disable_action(void *data)
+{
+	s3fwrn5_i2c_clk_set(data, false);
+}
+
+static irqreturn_t s3fwrn5_i2c_clk_req_thread(int irq, void *phy_id)
+{
+	struct s3fwrn5_i2c_phy *phy = phy_id;
+
+	s3fwrn5_i2c_clk_set(phy, gpiod_get_value_cansleep(phy->gpio_clk_req) > 0);
+
+	return IRQ_HANDLED;
+}
 
 static void s3fwrn5_i2c_set_mode(void *phy_id, enum s3fwrn5_mode mode)
 {
@@ -146,6 +190,7 @@ out:
 
 static int s3fwrn5_i2c_probe(struct i2c_client *client)
 {
+	enum s3fwrn5_variant variant;
 	struct s3fwrn5_i2c_phy *phy;
 	int ret;
 
@@ -172,15 +217,63 @@ static int s3fwrn5_i2c_probe(struct i2c_client *client)
 	 * S3FWRN5 depends on a clock input ("XI" pin) to function properly.
 	 * Depending on the hardware configuration this could be an always-on
 	 * oscillator or some external clock that must be explicitly enabled.
-	 * Make sure the clock is running before starting S3FWRN5.
+	 *
+	 * If a CLK_REQ GPIO is wired, the chip gates the clock itself (driving
+	 * CLK_REQ high when it needs XI); service that handshake. Otherwise just
+	 * make sure the clock is running before starting S3FWRN5.
 	 */
-	phy->clk = devm_clk_get_optional_enabled(&client->dev, NULL);
-	if (IS_ERR(phy->clk))
-		return dev_err_probe(&client->dev, PTR_ERR(phy->clk),
-				     "failed to get clock\n");
+	mutex_init(&phy->clk_lock);
+	phy->gpio_clk_req = devm_gpiod_get_optional(&client->dev, "clk-req",
+						    GPIOD_IN);
+	if (IS_ERR(phy->gpio_clk_req))
+		return PTR_ERR(phy->gpio_clk_req);
 
+	if (phy->gpio_clk_req) {
+		int clk_req_irq;
+
+		phy->clk = devm_clk_get_optional(&client->dev, NULL);
+		if (IS_ERR(phy->clk))
+			return dev_err_probe(&client->dev, PTR_ERR(phy->clk),
+					     "failed to get clock\n");
+
+		/*
+		 * Unlike the always-on branch below, this clock is enabled by
+		 * hand from the CLK_REQ handler, so devm will not disable it on
+		 * unbind. Gate it off explicitly if it is still on at teardown.
+		 */
+		ret = devm_add_action_or_reset(&client->dev,
+					       s3fwrn5_i2c_clk_disable_action,
+					       phy);
+		if (ret)
+			return ret;
+
+		clk_req_irq = gpiod_to_irq(phy->gpio_clk_req);
+		if (clk_req_irq < 0)
+			return clk_req_irq;
+
+		ret = devm_request_threaded_irq(&client->dev, clk_req_irq, NULL,
+						s3fwrn5_i2c_clk_req_thread,
+						IRQF_TRIGGER_RISING |
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						"s3fwrn5_clk_req", phy);
+		if (ret)
+			return ret;
+
+		/* Seed the clock state from the current CLK_REQ level. */
+		s3fwrn5_i2c_clk_set(phy,
+				    gpiod_get_value_cansleep(phy->gpio_clk_req) > 0);
+	} else {
+		phy->clk = devm_clk_get_optional_enabled(&client->dev, NULL);
+		if (IS_ERR(phy->clk))
+			return dev_err_probe(&client->dev, PTR_ERR(phy->clk),
+					     "failed to get clock\n");
+	}
+
+	/* No match data (e.g. i2c_device_id binding) means the default FWDL. */
+	variant = (uintptr_t)i2c_get_match_data(client);
 	ret = s3fwrn5_probe(&phy->common.ndev, phy, &phy->i2c_dev->dev,
-			    &i2c_phy_ops);
+			    &i2c_phy_ops, variant);
 	if (ret < 0)
 		return ret;
 
@@ -210,8 +303,11 @@ static const struct i2c_device_id s3fwrn5_i2c_id_table[] = {
 };
 MODULE_DEVICE_TABLE(i2c, s3fwrn5_i2c_id_table);
 
-static const struct of_device_id of_s3fwrn5_i2c_match[] __maybe_unused = {
-	{ .compatible = "samsung,s3fwrn5-i2c", },
+static const struct of_device_id of_s3fwrn5_i2c_match[] = {
+	{ .compatible = "samsung,s3fwrn5-i2c",
+	  .data = (void *)S3FWRN5_VARIANT_FWDL, },
+	{ .compatible = "samsung,s3nrn4v-i2c",
+	  .data = (void *)S3FWRN5_VARIANT_S3NRN4V, },
 	{}
 };
 MODULE_DEVICE_TABLE(of, of_s3fwrn5_i2c_match);
@@ -219,7 +315,7 @@ MODULE_DEVICE_TABLE(of, of_s3fwrn5_i2c_match);
 static struct i2c_driver s3fwrn5_i2c_driver = {
 	.driver = {
 		.name = S3FWRN5_I2C_DRIVER_NAME,
-		.of_match_table = of_match_ptr(of_s3fwrn5_i2c_match),
+		.of_match_table = of_s3fwrn5_i2c_match,
 	},
 	.probe = s3fwrn5_i2c_probe,
 	.remove = s3fwrn5_i2c_remove,
