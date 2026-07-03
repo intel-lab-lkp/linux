@@ -132,8 +132,8 @@ static int mseal_apply(struct mm_struct *mm,
  *   addr is not a valid address (not allocated).
  *   end (start + len) is not a valid address.
  *   a gap (unallocated memory) between start and end.
- *  -EPERM:
- *  - In 32 bit architecture, sealing is not supported.
+ *  -EINTR:
+ *   interrupted while waiting for the mmap write lock.
  * Note:
  *  user can call mseal(2) multiple times, adding a seal on an
  *  already sealed memory is a no-action (no error).
