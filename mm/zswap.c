@@ -1560,6 +1560,27 @@ check_old:
 }
 
 /**
+ * zswap_range_has_entry() - is any slot in [entry, entry + nr) in zswap?
+ * @entry: base swap entry of the range
+ * @nr: number of contiguous slots to check
+ */
+bool zswap_range_has_entry(swp_entry_t entry, unsigned int nr)
+{
+	pgoff_t offset = swp_offset(entry);
+	XA_STATE(xas, swap_zswap_tree(entry), offset);
+	bool found;
+
+	if (!nr || zswap_never_enabled())
+		return false;
+
+	rcu_read_lock();
+	found = !!xas_find(&xas, offset + nr - 1);
+	rcu_read_unlock();
+
+	return found;
+}
+
+/**
  * zswap_load() - load a folio from zswap
  * @folio: folio to load
  *
@@ -1571,10 +1592,9 @@ check_old:
  *  NOT marked up-to-date, so that an IO error is emitted (e.g. do_swap_page()
  *  will SIGBUS).
  *
- *  -EINVAL: if the swapped out content was in zswap, but the page belongs
- *  to a large folio, which is not supported by zswap. The folio is unlocked,
- *  but NOT marked up-to-date, so that an IO error is emitted (e.g.
- *  do_swap_page() will SIGBUS).
+ *  -EIO: if a slot in a large-folio range is unexpectedly still in zswap.
+ *  The folio is unlocked, but NOT marked up-to-date, so that an IO
+ *  error is emitted (e.g. do_swap_page() will SIGBUS).
  *
  *  -ENOENT: if the swapped out content was not in zswap. The folio remains
  *  locked on return.
@@ -1593,13 +1613,19 @@ int zswap_load(struct folio *folio)
 		return -ENOENT;
 
 	/*
-	 * Large folios should not be swapped in while zswap is being used, as
-	 * they are not properly handled. Zswap does not properly load large
-	 * folios, and a large folio may only be partially in zswap.
+	 * A large folio reaches zswap_load() only when its whole range is
+	 * expected to be on disk: PMD swap-entry consumers split before
+	 * calling into PMD-order swapin whenever any slot is still in zswap.
+	 * Confirm the range is entirely absent from zswap and return -ENOENT
+	 * so the caller reads it from disk; if a slot is unexpectedly still in
+	 * zswap, fail the read rather than return partially-initialized data.
 	 */
-	if (WARN_ON_ONCE(folio_test_large(folio))) {
-		folio_unlock(folio);
-		return -EINVAL;
+	if (folio_test_large(folio)) {
+		if (zswap_range_has_entry(swp, folio_nr_pages(folio))) {
+			folio_unlock(folio);
+			return -EIO;
+		}
+		return -ENOENT;
 	}
 
 	entry = xa_load(tree, offset);
