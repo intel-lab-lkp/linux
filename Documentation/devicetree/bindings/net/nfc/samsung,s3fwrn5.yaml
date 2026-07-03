@@ -14,11 +14,19 @@ properties:
     enum:
       - samsung,s3fwrn5-i2c
       - samsung,s3fwrn82
+      - samsung,s3nrn4v-i2c
 
   en-gpios:
     maxItems: 1
     description:
       Output GPIO pin used for enabling/disabling the chip
+
+  clk-req-gpios:
+    maxItems: 1
+    description:
+      Input GPIO pin connected to the controller's clock-request output. When
+      present, the reference clock is enabled in response to this signal
+      instead of being left always-on.
 
   interrupts:
     maxItems: 1
@@ -58,11 +66,24 @@ allOf:
       properties:
         compatible:
           contains:
-            const: samsung,s3fwrn5-i2c
+            enum:
+              - samsung,s3fwrn5-i2c
+              - samsung,s3nrn4v-i2c
     then:
       required:
         - interrupts
         - reg
+
+  # The clock-request handshake only exists on the S3NRN4V.
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: samsung,s3nrn4v-i2c
+    then:
+      properties:
+        clk-req-gpios: false
 
 examples:
   - |
