@@ -1191,6 +1191,11 @@ impl Thread {
             }
 
             if inner.is_dead {
+                binder_debug!(
+                    crate::debug::BINDER_DEBUG_FAILED_TRANSACTION,
+                    "send failed reply for transaction {}, target dead",
+                    transaction.debug_id
+                );
                 return true;
             }
 
@@ -1198,7 +1203,18 @@ impl Thread {
                 Ok(work) => {
                     inner.push_work(work);
                 }
-                Err(code) => inner.push_reply_work(code),
+                Err(code) => {
+                    if code == BR_FAILED_REPLY || code == BR_DEAD_REPLY {
+                        binder_debug!(
+                            crate::debug::BINDER_DEBUG_FAILED_TRANSACTION,
+                            "send failed reply for transaction {} to {}:{}",
+                            transaction.debug_id,
+                            self.process.task.pid(),
+                            self.task.pid()
+                        );
+                    }
+                    inner.push_reply_work(code)
+                }
             }
         }
 
@@ -1297,11 +1313,27 @@ impl Thread {
                     ee.param = source.to_errno();
                 }
 
-                pr_warn!(
-                    "{}:{} transaction to {} failed: {source:?}",
+                binder_debug!(
+                    crate::debug::BINDER_DEBUG_FAILED_TRANSACTION,
+                    "{}:{} transaction {} to {}:{} failed {}/{}/{}, code {} size {}-{} line {}",
                     info.from_pid,
                     info.from_tid,
-                    info.to_pid
+                    if info.is_reply {
+                        "reply"
+                    } else if info.is_oneway() {
+                        "async"
+                    } else {
+                        "call"
+                    },
+                    info.to_pid,
+                    info.to_tid,
+                    info.debug_id,
+                    err.reply,
+                    info.errno,
+                    info.code,
+                    info.data_size,
+                    info.offsets_size,
+                    line!()
                 );
             }
         }

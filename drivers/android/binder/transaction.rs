@@ -405,6 +405,11 @@ impl DeliverToRead for Transaction {
         } else {
             // On failure to process the list, we send a reply back to the sender and ignore the
             // transaction on the recipient.
+            binder_debug!(
+                crate::debug::BINDER_DEBUG_FAILED_TRANSACTION,
+                "transaction {} fd fixups failed",
+                self.debug_id
+            );
             return Ok(true);
         };
 
