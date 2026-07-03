@@ -220,6 +220,15 @@ time_mt(const struct sk_buff *skb, struct xt_action_param *par)
 			stamp -= SECONDS_PER_DAY;
 	}
 
+	/*
+	 * The date_start/date_stop ABI cannot express pre-epoch timestamps.
+	 * If XT_TIME_CONTIGUOUS moves the packet into that range, only rules
+	 * without calendar constraints can still match.
+	 */
+	if (stamp < 0)
+		return info->weekdays_match == XT_TIME_ALL_WEEKDAYS &&
+		       info->monthdays_match == XT_TIME_ALL_MONTHDAYS;
+
 	localtime_2(&current_time, stamp);
 
 	if (!(info->weekdays_match & (1U << current_time.weekday)))
