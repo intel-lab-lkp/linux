@@ -671,6 +671,8 @@ retry:
 
 	if (folio)
 		block_commit_write(folio, from, to);
+	if (folio && !ret)
+		ext4_set_inode_state(inode, EXT4_STATE_INLINE_CONVERTED);
 out:
 	if (folio) {
 		folio_unlock(folio);
@@ -921,6 +923,7 @@ static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
 	clear_buffer_new(folio_buffers(folio));
 	folio_mark_dirty(folio);
 	folio_mark_uptodate(folio);
+	ext4_set_inode_state(inode, EXT4_STATE_INLINE_CONVERTED);
 	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	*fsdata = (void *)CONVERT_INLINE_DATA;
 
@@ -1172,8 +1175,14 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 	}
 
 out_restore:
-	if (error)
-		ext4_restore_inline_data(handle, inode, iloc, buf, inline_size);
+	if (error) {
+		WARN_ON_ONCE(ext4_test_inode_state(inode,
+					EXT4_STATE_INLINE_CONVERTED));
+		ext4_restore_inline_data(handle, inode, iloc, buf,
+					 inline_size);
+	} else {
+		ext4_set_inode_state(inode, EXT4_STATE_INLINE_CONVERTED);
+	}
 
 out:
 	brelse(data_bh);
@@ -1959,21 +1968,27 @@ int ext4_convert_inline_data(struct inode *inode)
 	handle_t *handle;
 	struct ext4_iloc iloc;
 
-	if (!ext4_has_inline_data(inode)) {
-		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	if (!ext4_has_feature_inline_data(inode->i_sb))
 		return 0;
-	} else if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+
+	/*
+	 * Once inline data has been successfully copied out (to page
+	 * cache or a data block), this bit is set and never cleared.
+	 * It is safe to check without locks -- the bit is monotonic.
+	 */
+	if (ext4_test_inode_state(inode, EXT4_STATE_INLINE_CONVERTED)) {
 		/*
-		 * Inode has inline data but EXT4_STATE_MAY_INLINE_DATA is
-		 * cleared. This means we are in the middle of moving of
+		 * Inode is in STATE_INLINE_CONVERTED state but still has
+		 * inline data. This means we are in the middle of moving of
 		 * inline data to delay allocated block. Just force writeout
 		 * here to finish conversion.
 		 */
-		error = filemap_flush(inode->i_mapping);
-		if (error)
-			return error;
-		if (!ext4_has_inline_data(inode))
-			return 0;
+		if (ext4_has_inline_data(inode)) {
+			error = filemap_flush(inode->i_mapping);
+			if (error)
+				return error;
+		}
+		return 0;
 	}
 
 	needed_blocks = ext4_chunk_trans_extent(inode, 1);
@@ -1990,8 +2005,13 @@ int ext4_convert_inline_data(struct inode *inode)
 	}
 
 	ext4_write_lock_xattr(inode, &no_expand);
-	if (ext4_has_inline_data(inode))
+	if (ext4_has_inline_data(inode) &&
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA))
 		error = ext4_convert_inline_data_nolock(handle, inode, &iloc);
+	if (!ext4_has_inline_data(inode)) {
+		ext4_set_inode_state(inode, EXT4_STATE_INLINE_CONVERTED);
+		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	}
 	ext4_write_unlock_xattr(inode, &no_expand);
 	ext4_journal_stop(handle);
 out_free:
