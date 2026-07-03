@@ -3435,18 +3435,23 @@ static int xfrm_do_migrate_state(struct sk_buff *skb, struct nlmsghdr *nlh,
 						       x->nat_keepalive_interval);
 
 	if (m.new_family != um->id.family ||
-	    !xfrm_addr_equal(&m.new_daddr, &um->id.daddr, um->id.family)) {
+	    !xfrm_addr_equal(&m.new_daddr, &um->id.daddr, um->id.family) ||
+	    (m.new_mark && (m.new_mark->v != x->mark.v ||
+			   m.new_mark->m != x->mark.m))) {
 		u32 new_mark_key = m.new_mark ? m.new_mark->v & m.new_mark->m :
-						m.old_mark.v & m.old_mark.m;
+						x->mark.v & x->mark.m;
 		struct xfrm_state *x_new;
 
 		x_new = xfrm_state_lookup(net, new_mark_key, &m.new_daddr,
 					  um->id.spi, um->id.proto, m.new_family);
 		if (x_new) {
 			xfrm_state_put(x_new);
-			NL_SET_ERR_MSG(extack, "New SA tuple already occupied");
-			err = -EEXIST;
-			goto out;
+			if (x_new != x) {
+				NL_SET_ERR_MSG(extack, "New SA tuple already occupied");
+				err = -EEXIST;
+				goto out;
+			}
+			/* self-match via wide mark mask; not a collision */
 		}
 	}
 
