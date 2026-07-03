@@ -2914,6 +2914,7 @@ relock:
 	}
 
 	for (;;) {
+		bool group_exit_needed = false;
 		struct k_sigaction *ka;
 		enum pid_type type;
 		int exit_code = 0;
@@ -3056,6 +3057,7 @@ relock:
 		 * Anything else is fatal, maybe with a core dump.
 		 */
 		exit_code = signr;
+		group_exit_needed = true;
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
@@ -3090,7 +3092,10 @@ relock:
 		/*
 		 * Death signals, no core dump.
 		 */
-		do_group_exit(exit_code);
+		if (group_exit_needed)
+			do_group_exit(exit_code);
+		else
+			do_exit(exit_code);
 		/* NOTREACHED */
 	}
 	spin_unlock_irq(&sighand->siglock);
