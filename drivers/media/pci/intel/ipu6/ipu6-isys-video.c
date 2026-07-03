@@ -1012,9 +1012,11 @@ int ipu6_isys_fw_open(struct ipu6_isys *isys)
 	if (isys->ref_count++)
 		goto unlock;
 
-	ipu6_configure_spc(adev->isp, &ipdata->hw_variant,
-			   IPU6_CPD_PKG_DIR_ISYS_SERVER_IDX, isys->pdata->base,
-			   adev->pkg_dir, adev->pkg_dir_dma_addr);
+	if (!pci_match_id(ipu7_ids, adev->isp->pdev))
+		ipu6_configure_spc(adev->isp, &ipdata->hw_variant,
+				   IPU6_CPD_PKG_DIR_ISYS_SERVER_IDX,
+				   isys->pdata->base, adev->pkg_dir,
+				   adev->pkg_dir_dma_addr);
 
 	/*
 	 * Buffers could have been left to wrong queue at last closure.
