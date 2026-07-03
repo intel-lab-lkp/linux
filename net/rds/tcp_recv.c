@@ -205,9 +205,26 @@ static int rds_tcp_data_recv(read_descriptor_t *desc, struct sk_buff *skb,
 			offset += to_copy;
 
 			if (tc->t_tinc_hdr_rem == 0) {
+				u32 h_len;
+
+				h_len = be32_to_cpu(tinc->ti_inc.i_hdr.h_len);
+				if (h_len > RDS_MAX_MSG_SIZE) {
+					tc->t_tinc_hdr_rem = sizeof(struct rds_header);
+					tc->t_tinc_data_rem = 0;
+					tc->t_tinc = NULL;
+					rds_inc_put(&tinc->ti_inc);
+					tinc = NULL;
+					desc->count = 0;
+					desc->error = -EMSGSIZE;
+					rds_conn_path_error(cp,
+						"incoming message too large: %u bytes\n",
+						h_len);
+					left = 0;
+					goto out;
+				}
+
 				/* could be 0 for a 0 len message */
-				tc->t_tinc_data_rem =
-					be32_to_cpu(tinc->ti_inc.i_hdr.h_len);
+				tc->t_tinc_data_rem = h_len;
 				tinc->ti_inc.i_rx_lat_trace[RDS_MSG_RX_START] =
 					local_clock();
 			}
