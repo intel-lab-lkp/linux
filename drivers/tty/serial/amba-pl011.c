@@ -2743,8 +2743,6 @@ static void pl011_putc(struct uart_port *port, unsigned char c)
 		writel(c, port->membase + UART01x_DR);
 	else
 		writeb(c, port->membase + UART01x_DR);
-	while (readl(port->membase + UART01x_FR) & UART01x_FR_BUSY)
-		cpu_relax();
 }
 
 static void pl011_early_write(struct console *con, const char *s, unsigned int n)
@@ -2752,6 +2750,20 @@ static void pl011_early_write(struct console *con, const char *s, unsigned int n
 	struct earlycon_device *dev = con->data;
 
 	uart_console_write(&dev->port, s, n, pl011_putc);
+
+	/*
+	 * Wait for the last character to be fully transmitted before
+	 * returning, same as pl011_console_write_atomic()/_thread() do for
+	 * the non-early console. There is no need to do this after every
+	 * character in pl011_putc(): checking TXFF there already prevents
+	 * overrunning the FIFO, and waiting for BUSY per character forces
+	 * the UART to be drained serially instead of letting it buffer
+	 * queued bytes, which is needlessly slow, especially so under
+	 * virtualization where each poll of UARTFR/UARTDR is a trapped MMIO
+	 * access.
+	 */
+	while (readl(dev->port.membase + UART01x_FR) & UART01x_FR_BUSY)
+		cpu_relax();
 }
 
 #ifdef CONFIG_CONSOLE_POLL
