@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <stdio.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -119,8 +120,19 @@ FIXTURE_VARIANT_ADD_ALL_IOMMU_MODES(anonymous_hugetlb_1gb, SZ_1G, MAP_HUGETLB | 
 
 FIXTURE_SETUP(vfio_dma_mapping_test)
 {
+	const u64 page_size = variant->size ?: getpagesize();
+	const bool force_dynamic = !!variant->size;
+	int ret;
+
 	self->iommu = iommu_init(variant->iommu_mode);
 	self->device = vfio_pci_device_init(device_bdf, self->iommu);
+
+	ret = iommu_prepare_dma_window(self->iommu, page_size, page_size,
+				       force_dynamic);
+	if (ret)
+		SKIP(return, "DMA window unavailable: %s (%d)\n",
+		     strerror(-ret), -ret);
+
 	self->iova_allocator = iova_allocator_init(self->iommu);
 }
 
@@ -227,6 +239,7 @@ FIXTURE_SETUP(vfio_dma_map_limit_test)
 	u64 region_size = getpagesize();
 	iova_t last_iova;
 	u32 nranges;
+	int ret;
 
 	/*
 	 * Over-allocate mmap by double the size to provide enough backing vaddr
@@ -236,6 +249,13 @@ FIXTURE_SETUP(vfio_dma_map_limit_test)
 
 	self->iommu = iommu_init(variant->iommu_mode);
 	self->device = vfio_pci_device_init(device_bdf, self->iommu);
+
+	ret = iommu_prepare_dma_window(self->iommu, region_size, region_size,
+				       false);
+	if (ret)
+		SKIP(return, "DMA window unavailable: %s (%d)\n",
+		     strerror(-ret), -ret);
+
 	region->vaddr = mmap(NULL, self->mmap_size, PROT_READ | PROT_WRITE,
 			     MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	ASSERT_NE(region->vaddr, MAP_FAILED);
@@ -277,6 +297,8 @@ TEST_F(vfio_dma_map_limit_test, unmap_all)
 	u64 unmapped;
 	int rc;
 
+	if (!iommu_supports_unmap_all(self->iommu))
+		SKIP(return, "IOMMU backend does not support unmap-all\n");
 	iommu_map(self->iommu, region);
 	ASSERT_EQ(region->iova, to_iova(self->device, region->vaddr));
 
