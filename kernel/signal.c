@@ -708,6 +708,36 @@ again:
 }
 EXPORT_SYMBOL_GPL(dequeue_signal);
 
+static int dequeue_exit_signal(
+	struct task_struct *tsk, int exit_code, kernel_siginfo_t *info)
+{
+	struct signal_struct *signal = tsk->signal;
+
+	/* The default siginfo to return */
+	clear_siginfo(info);
+	info->si_signo = SIGKILL;
+	info->si_code = SI_KERNEL;
+
+	if (signal->flags & SIGNAL_EXIT_DEQUEUE) {
+		int sig = exit_code;
+		signal->flags &= ~SIGNAL_EXIT_DEQUEUE;
+
+		struct sigqueue *q =
+			list_last_entry_or_null(&signal->shared_pending.list,
+						struct sigqueue, list);
+		if (q && (q->info.si_signo == sig)) {
+			list_del_init(&q->list);
+			copy_siginfo(info, &q->info);
+			__sigqueue_free(q);
+		} else {
+			info->si_signo = sig;
+		}
+		sigdelset(&signal->shared_pending.signal, sig);
+	}
+
+	return info->si_signo;
+}
+
 static int dequeue_synchronous_signal(kernel_siginfo_t *info)
 {
 	struct task_struct *tsk = current;
@@ -1071,7 +1101,8 @@ static void enqueue_signal(struct task_struct *t, enum pid_type type,
 		 * running and doing things after a slower
 		 * thread has the fatal signal pending.
 		 */
-		signal->flags = SIGNAL_GROUP_EXIT;
+		pending = &signal->shared_pending;
+		signal->flags = SIGNAL_GROUP_EXIT | SIGNAL_EXIT_DEQUEUE;
 		signal->group_exit_code = sig;
 		signal->group_stop_count = 0;
 		__for_each_thread(signal, thread) {
@@ -2925,15 +2956,11 @@ relock:
 		     signal->group_exec_task) {
 			if (signal->flags & SIGNAL_GROUP_EXIT)
 				exit_code = signal->group_exit_code;
-			signr = SIGKILL;
 			sigdelset(&current->pending.signal, SIGKILL);
-			trace_signal_deliver(SIGKILL, SEND_SIG_NOINFO,
-					     &sighand->action[SIGKILL-1]);
+			signr = dequeue_exit_signal(current, exit_code, &ksig->info);
+			trace_signal_deliver(signr, &ksig->info,
+					     &sighand->action[signr-1]);
 			recalc_sigpending();
-			/*
-			 * implies do_group_exit() or return to PF_USER_WORKER,
-			 * no need to initialize ksig->info/etc.
-			 */
 			goto fatal;
 		}
 
