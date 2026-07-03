@@ -49,6 +49,12 @@ static int cpu_psci_cpu_boot(unsigned int cpu)
 #ifdef CONFIG_HOTPLUG_CPU
 static bool cpu_psci_cpu_can_disable(unsigned int cpu)
 {
+#ifdef CONFIG_PM_SLEEP_SMP_CPU_ZERO_STRICT
+	if (cpu == get_boot_cpu_id()) {
+		pr_info("Disabling boot CPU is not supported\n");
+		return false;
+	}
+#endif
 	return !psci_tos_resident_on(cpu);
 }
 

@@ -263,6 +263,15 @@ config ARM64
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
+config PM_SLEEP_SMP_CPU_ZERO_STRICT
+       bool "Disallow boot CPU (CPU0) offline"
+       depends on ARCH_QCOM
+       depends on HOTPLUG_CPU
+       depends on SUSPEND
+       help
+         Disallow boot CPU (CPU0) offline when the suspend_ops->enter()
+         has to be executed by boot CPU.
+
 config RUSTC_SUPPORTS_ARM64
 	def_bool y
 	depends on CPU_LITTLE_ENDIAN
