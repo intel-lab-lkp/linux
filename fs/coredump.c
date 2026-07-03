@@ -480,46 +480,50 @@ out:
 	return true;
 }
 
-static int zap_process(struct signal_struct *signal, int exit_code)
+static inline bool coredump_skip(enum task_dumpable dumpable,
+				 const struct linux_binfmt *binfmt)
 {
+	if (!binfmt)
+		return true;
+	if (!binfmt->core_dump)
+		return true;
+	if (dumpable == TASK_DUMPABLE_OFF)
+		return true;
+	return false;
+}
+
+void coredump_begin(struct core_state *core_state)
+{
+	/* Called with siglock held */
+	struct task_struct *tsk = current;
+	struct signal_struct *signal = tsk->signal;
+	struct mm_struct *mm = tsk->mm;
+	struct linux_binfmt * binfmt = mm->binfmt;
+	/* Snapshot dumpable for the dump */
+	enum task_dumpable dumpable = task_exec_state_get_dumpable(tsk);
 	struct task_struct *t;
 	int nr = 0;
 
-	signal->flags = SIGNAL_GROUP_EXIT;
-	signal->group_exit_code = exit_code;
-	signal->group_stop_count = 0;
+	if (coredump_skip(dumpable, binfmt))
+		return;
 
-	__for_each_thread(signal, t) {
-		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-		if (t != current && !(t->flags & PF_POSTCOREDUMP)) {
-			sigaddset(&t->pending.signal, SIGKILL);
-			signal_wake_up(t, 1);
-			nr++;
-		}
-	}
+	init_completion(&core_state->startup);
+	core_state->dumper.task = tsk;
+	core_state->dumper.next = NULL;
+	core_state->dumpable = dumpable;
 
-	return nr;
-}
+	/* Count how may other threads will participate in the coredump */
+	__for_each_thread(signal, t)
+		nr += (t != tsk) && !(t->flags & PF_POSTCOREDUMP);
 
-static int zap_threads(struct task_struct *tsk,
-			struct core_state *core_state, int exit_code)
-{
-	struct signal_struct *signal = tsk->signal;
-	int nr = -EAGAIN;
-
-	spin_lock_irq(&tsk->sighand->siglock);
-	if (!(signal->flags & SIGNAL_GROUP_EXIT) && !signal->group_exec_task) {
-		/* Allow SIGKILL, see prepare_signal() */
-		signal->core_state = core_state;
-		nr = zap_process(signal, exit_code);
-		clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
-		tsk->flags |= PF_DUMPCORE;
-		atomic_set(&core_state->nr_threads, nr);
-	}
-	if (nr <= 0)
+	atomic_set(&core_state->nr_threads, nr);
+	if (nr == 0)
 		complete(&core_state->startup);
-	spin_unlock_irq(&tsk->sighand->siglock);
-	return nr;
+
+	/* Allow SIGKILL, see prepare_signal() */
+	signal->core_state = core_state;
+	clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
+	tsk->flags |= PF_DUMPCORE;
 }
 
 void coredump_join(struct core_state *core_state)
@@ -545,17 +549,9 @@ void coredump_join(struct core_state *core_state)
 	__set_current_state(TASK_RUNNING);
 }
 
-static int coredump_wait(int exit_code, struct core_state *core_state)
+static void coredump_wait(struct core_state *core_state)
 {
-	struct task_struct *tsk = current;
 	struct core_thread *ptr;
-	int core_waiters;
-
-	init_completion(&core_state->startup);
-	core_state->dumper.task = tsk;
-	core_state->dumper.next = NULL;
-
-	core_waiters = zap_threads(tsk, core_state, exit_code);
 
 	wait_for_completion_state(&core_state->startup,
 				  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
@@ -569,8 +565,6 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 		wait_task_inactive(ptr->task, TASK_ANY);
 		ptr = ptr->next;
 	}
-
-	return core_waiters;
 }
 
 static void coredump_finish(bool core_dumped)
@@ -1095,18 +1089,6 @@ static void coredump_cleanup(struct core_name *cn, struct coredump_params *cprm)
 	coredump_finish(cn->core_dumped);
 }
 
-static inline bool coredump_skip(const struct coredump_params *cprm,
-				 const struct linux_binfmt *binfmt)
-{
-	if (!binfmt)
-		return true;
-	if (!binfmt->core_dump)
-		return true;
-	if (cprm->dumpable == TASK_DUMPABLE_OFF)
-		return true;
-	return false;
-}
-
 static void do_coredump(struct core_name *cn, struct coredump_params *cprm,
 			size_t **argv, int *argc, const struct linux_binfmt *binfmt)
 {
@@ -1179,7 +1161,7 @@ static void do_coredump(struct core_name *cn, struct coredump_params *cprm,
 void vfs_coredump(const kernel_siginfo_t *siginfo)
 {
 	size_t *argv __free(kfree) = NULL;
-	struct core_state core_state;
+	struct core_state *core_state = current->signal->core_state;
 	struct core_name cn;
 	const struct mm_struct *mm = current->mm;
 	const struct linux_binfmt *binfmt = mm->binfmt;
@@ -1187,15 +1169,18 @@ void vfs_coredump(const kernel_siginfo_t *siginfo)
 	struct coredump_params cprm = {
 		.siginfo = siginfo,
 		.limit = rlimit(RLIMIT_CORE),
-		/* Snapshot MMF_DUMP_FILTER_* (unlocked) and dumpable for the dump. */
+		/* Snapshot MMF_DUMP_FILTER_* (unlocked) for the dump */
 		.mm_flags = __mm_flags_get_word(mm),
-		.dumpable = task_exec_state_get_dumpable(current),
 		.vma_meta = NULL,
 		.cpu = raw_smp_processor_id(),
 	};
 
-	if (coredump_skip(&cprm, binfmt))
+	/* coredump_begin decided not to coredump */
+	if (!core_state)
 		return;
+
+	/* Copy the snapshot of dumpable into coredump_params */
+	cprm.dumpable = core_state->dumpable;
 
 	CLASS(prepare_creds, cred)();
 	if (!cred)
@@ -1209,8 +1194,7 @@ void vfs_coredump(const kernel_siginfo_t *siginfo)
 	if (coredump_force_suid_safe(&cprm))
 		cred->fsuid = GLOBAL_ROOT_UID;
 
-	if (coredump_wait(siginfo->si_signo, &core_state) < 0)
-		return;
+	coredump_wait(core_state);
 
 	scoped_with_creds(cred)
 		do_coredump(&cn, &cprm, &argv, &argc, binfmt);
