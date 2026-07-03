@@ -131,6 +131,7 @@ struct mv88e6xxx_info {
 	u16 prod_num;
 	const char *name;
 	unsigned int num_databases;
+	bool atu_fid_reg;
 	unsigned int num_macs;
 	unsigned int num_ports;
 	unsigned int num_internal_phys;
