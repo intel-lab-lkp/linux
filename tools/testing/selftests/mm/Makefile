@@ -105,6 +105,7 @@ TEST_GEN_FILES += guard-regions
 TEST_GEN_FILES += merge
 TEST_GEN_FILES += rmap
 TEST_GEN_FILES += folio_split_race_test
+TEST_GEN_FILES += pmd_swap
 
 ifneq ($(ARCH),arm64)
 TEST_GEN_FILES += soft-dirty
