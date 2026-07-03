@@ -208,11 +208,11 @@ mali_c55_params_aexp_hist_weights(struct mali_c55 *mali_c55,
 	 * of overwriting other registers.
 	 */
 	for (unsigned int i = 0; i < 56; i++) {
-		val = ((u32 *)params->zone_weights)[i]
-			    & MALI_C55_AEXP_HIST_ZONE_WEIGHT_MASK;
+		memcpy(&val, &params->zone_weights[4 * i], 4);
 		addr = base + MALI_C55_AEXP_HIST_ZONE_WEIGHTS_OFFSET + (4 * i);
 
-		mali_c55_ctx_write(mali_c55, addr, val);
+		mali_c55_ctx_write(mali_c55, addr,
+				   val & MALI_C55_AEXP_HIST_ZONE_WEIGHT_MASK);
 	}
 
 	val = params->zone_weights[MALI_C55_MAX_ZONES - 1];
