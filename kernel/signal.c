@@ -103,6 +103,25 @@ static bool sig_task_ignored(struct task_struct *t, int sig, bool force)
 	return sig_handler_ignored(handler, sig);
 }
 
+static bool sig_blocked(struct task_struct *t, int sig)
+{
+	/*
+	 * Is calling the signal handler blocked?
+	 *
+	 * Two sigsets need to be consulted to see if the userspace
+	 * signal handler can be invoked: thread->blocked and
+	 * thread->real_blocked.  Ordinarily thread->blocked contains
+	 * all of the information and thread->real_blocked is empty.
+	 *
+	 * When thread->real_blocked is in use it contains the actual
+	 * information on which signal handlers can not be invoked and
+	 * thread->blocked has a subset of the signals contained in
+	 * thread->real_blocked.
+	 */
+	return sigismember(&t->blocked, sig) ||
+		sigismember(&t->real_blocked, sig);
+}
+
 static bool sig_ignored(struct task_struct *t, int sig, bool force)
 {
 	/*
@@ -110,7 +129,7 @@ static bool sig_ignored(struct task_struct *t, int sig, bool force)
 	 * signal handler may change by the time it is
 	 * unblocked.
 	 */
-	if (sigismember(&t->blocked, sig) || sigismember(&t->real_blocked, sig))
+	if (sig_blocked(t, sig))
 		return false;
 
 	/*
