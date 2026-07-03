@@ -2038,6 +2038,7 @@ enum {
 	EXT4_STATE_FC_FLUSHING_DATA,	/* Fast commit flushing data */
 	EXT4_STATE_ORPHAN_FILE,		/* Inode orphaned in orphan file */
 	EXT4_STATE_FC_REQUEUE,		/* Inode modified during fast commit */
+	EXT4_STATE_INLINE_CONVERTED,	/* inline data copied out, do not restore */
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\
