@@ -1222,6 +1222,7 @@ impl Thread {
         info.buffers_size = td.buffers_size as usize;
         // SAFETY: Above `read` call initializes all bytes, so this union read is ok.
         info.target_handle = unsafe { td.transaction_data.target.handle };
+        info.debug_id = super::next_debug_id();
         Ok(())
     }
 
