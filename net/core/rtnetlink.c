@@ -714,8 +714,12 @@ void rtnl_link_unregister(struct rtnl_link_ops *ops)
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock_unregistering_all();
 
-	for_each_net(net)
+	for_each_net(net) {
+		__rtnl_net_lock(net);
 		__rtnl_kill_links(net, ops, &dev_kill_list);
+		unregister_netdevice_queue_many_net(net, &dev_kill_list);
+		__rtnl_net_unlock(net);
+	}
 
 	unregister_netdevice_many(&dev_kill_list);
 

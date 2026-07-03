@@ -3481,12 +3481,18 @@ static inline void unregister_netdevice(struct net_device *dev)
 void unregister_netdevice_queue_net(struct net *net, struct net_device *dev,
 				    struct list_head *head);
 void unregister_netdevice_many_net(struct net *net);
+void unregister_netdevice_queue_many_net(struct net *net, struct list_head *head);
 #else
 static inline void unregister_netdevice_queue_net(struct net *net,
 						  struct net_device *dev,
 						  struct list_head *head)
 {
 	unregister_netdevice_queue(dev, head);
+}
+
+static inline void unregister_netdevice_queue_many_net(struct net *net,
+						       struct list_head *head)
+{
 }
 #endif
 

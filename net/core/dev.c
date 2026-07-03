@@ -12552,6 +12552,28 @@ void unregister_netdevice_queue_net(struct net *net, struct net_device *dev,
 }
 EXPORT_SYMBOL(unregister_netdevice_queue_net);
 
+void unregister_netdevice_queue_many_net(struct net *net, struct list_head *head)
+{
+	struct net_device *dev, *tmp;
+
+	spin_lock(&net->dev_unreg_lock);
+	list_for_each_entry_safe(dev, tmp, head, unreg_list) {
+		/* Once all cross-netns unregister_netdevice_queue() is
+		 * converted to _net() (or for debugging), remove this check.
+		 */
+		if (!net_eq(dev_net(dev), net))
+			continue;
+
+		DEBUG_NET_WARN_ONCE(!net_eq(dev_net(dev), net),
+				    "%s was unregistered from a different netns.\n",
+				    dev->name);
+
+		list_del_init(&dev->unreg_list);
+		list_move_tail(&dev->unreg_list_net, &net->dev_unreg_head);
+	}
+	spin_unlock(&net->dev_unreg_lock);
+}
+
 static void unregister_netdevice_move_net(struct net *net_old,
 					  struct net *net,
 					  struct net_device *dev)
@@ -13185,12 +13207,17 @@ static void __net_exit default_device_exit_batch(struct list_head *net_list)
 	__rtnl_net_unlock(&init_net);
 
 	list_for_each_entry(net, net_list, exit_list) {
+		__rtnl_net_lock(net);
+
 		for_each_netdev_reverse(net, dev) {
 			if (dev->rtnl_link_ops && dev->rtnl_link_ops->dellink)
 				dev->rtnl_link_ops->dellink(dev, &dev_kill_list);
 			else
 				unregister_netdevice_queue(dev, &dev_kill_list);
 		}
+
+		unregister_netdevice_queue_many_net(net, &dev_kill_list);
+		__rtnl_net_unlock(net);
 	}
 	unregister_netdevice_many(&dev_kill_list);
 	rtnl_unlock();
