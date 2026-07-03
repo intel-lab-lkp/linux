@@ -1699,6 +1699,18 @@ static int mv88e6xxx_atu_setup(struct mv88e6xxx_chip *chip)
 {
 	int err;
 
+	/* Avoid collisions on the 6341 family by disabling hashing. */
+	if (chip->info->family == MV88E6XXX_FAMILY_6341 &&
+	    chip->info->ops->atu_set_hash) {
+		u8 hash = MV88E6161_G1_ATU_CTL_HASH_DIRECT;
+
+		err = chip->info->ops->atu_set_hash(chip, hash);
+		if (err)
+			return err;
+
+		dev_info(chip->dev, "ATU hash mode set to 0x%x\n", hash);
+	}
+
 	err = mv88e6xxx_g1_atu_flush(chip, 0, true);
 	if (err)
 		return err;
