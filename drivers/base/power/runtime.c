@@ -469,7 +469,13 @@ static int rpm_callback(int (*cb)(struct device *), struct device *dev)
 	if (retval == -EACCES)
 		retval = -EAGAIN;
 
-	if (retval != -EAGAIN && retval != -EBUSY)
+	/*
+	 * Only stick the error on suspend failures.  Resume failures are not
+	 * treated as permanent so that the next resume attempt will run the
+	 * callback again rather than short-circuiting on runtime_error.
+	 */
+	if (retval != -EAGAIN && retval != -EBUSY &&
+	    dev->power.runtime_status == RPM_SUSPENDING)
 		dev->power.runtime_error = retval;
 
 	return retval;
