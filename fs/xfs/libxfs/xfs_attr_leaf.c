@@ -300,7 +300,8 @@ xfs_attr3_leaf_verify_entry(
 	struct xfs_attr3_icleaf_hdr		*leafhdr,
 	struct xfs_attr_leaf_entry		*ent,
 	int					idx,
-	__u32					*last_hashval)
+	__u32					*last_hashval,
+	unsigned int				*usedbytes)
 {
 	struct xfs_attr_leaf_name_local		*lentry;
 	struct xfs_attr_leaf_name_remote	*rentry;
@@ -358,6 +359,7 @@ xfs_attr3_leaf_verify_entry(
 	if (name_end > buf_end)
 		return __this_address;
 
+	*usedbytes += namesize;
 	return NULL;
 }
 
@@ -390,6 +392,7 @@ xfs_attr3_leaf_verify(
 	char				*buf_end;
 	uint32_t			end;	/* must be 32bit - see below */
 	__u32				last_hashval = 0;
+	unsigned int			usedbytes = 0;
 	int				i;
 	xfs_failaddr_t			fa;
 
@@ -424,10 +427,20 @@ xfs_attr3_leaf_verify(
 	buf_end = (char *)bp->b_addr + mp->m_attr_geo->blksize;
 	for (i = 0, ent = entries; i < ichdr.count; ent++, i++) {
 		fa = xfs_attr3_leaf_verify_entry(mp, buf_end, leaf, &ichdr,
-				ent, i, &last_hashval);
+				ent, i, &last_hashval, &usedbytes);
 		if (fa)
 			return fa;
 	}
+
+	/*
+	 * usedbytes must equal the summed entry sizes and fit in the
+	 * nameval region; otherwise a later repack underflows firstused
+	 * in xfs_attr3_leaf_moveents().
+	 */
+	if (usedbytes != ichdr.usedbytes)
+		return __this_address;
+	if (ichdr.usedbytes > mp->m_attr_geo->blksize - ichdr.firstused)
+		return __this_address;
 
 	/*
 	 * Quickly check the freemap information.  Attribute data has to be
