@@ -47,6 +47,13 @@ static const struct iommu_mode iommu_modes[] = {
 	{
 		.name = MODE_IOMMUFD,
 	},
+#ifdef __powerpc__
+	{
+		.name = MODE_VFIO_SPAPR_TCE_V2_IOMMU,
+		.container_path = "/dev/vfio/vfio",
+		.iommu_type = VFIO_SPAPR_TCE_v2_IOMMU,
+	},
+#endif
 };
 
 static const struct iommu_mode *lookup_iommu_mode(const char *iommu_mode)
