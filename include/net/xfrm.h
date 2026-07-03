@@ -1741,7 +1741,7 @@ struct xfrm_state *xfrm_input_state_lookup(struct net *net, u32 mark,
 					   const xfrm_address_t *daddr,
 					   __be32 spi, u8 proto,
 					   unsigned short family);
-struct xfrm_state *xfrm_state_lookup_byaddr(struct net *net, u32 mark,
+struct xfrm_state *xfrm_state_lookup_byaddr(struct net *net, u32 mark, u32 mask, bool exact,
 					    const xfrm_address_t *daddr,
 					    const xfrm_address_t *saddr,
 					    u8 proto,

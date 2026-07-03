@@ -1274,11 +1274,12 @@ out:
 }
 EXPORT_SYMBOL(xfrm_input_state_lookup);
 
-static struct xfrm_state *__xfrm_state_lookup_byaddr(const struct xfrm_hash_state_ptrs *state_ptrs,
-						     u32 mark,
-						     const xfrm_address_t *daddr,
-						     const xfrm_address_t *saddr,
-						     u8 proto, unsigned short family)
+static struct xfrm_state *
+__xfrm_state_lookup_byaddr(const struct xfrm_hash_state_ptrs *state_ptrs,
+			   u32 mark, u32 mask, bool exact,
+			   const xfrm_address_t *daddr,
+			   const xfrm_address_t *saddr,
+			   u8 proto, unsigned short family)
 {
 	unsigned int h = __xfrm_src_hash(daddr, saddr, family, state_ptrs->hmask);
 	struct xfrm_state *x;
@@ -1290,7 +1291,7 @@ static struct xfrm_state *__xfrm_state_lookup_byaddr(const struct xfrm_hash_stat
 		    !xfrm_addr_equal(&x->props.saddr, saddr, family))
 			continue;
 
-		if ((mark & x->mark.m) != x->mark.v)
+		if (!xfrm_state_mark_matches(x, mark, mask, exact))
 			continue;
 		if (!xfrm_state_hold_rcu(x))
 			continue;
@@ -1313,7 +1314,7 @@ __xfrm_state_locate(struct xfrm_state *x, int use_spi, int family)
 		return __xfrm_state_lookup(&state_ptrs, mark, 0, false, &x->id.daddr,
 					   x->id.spi, x->id.proto, family);
 	else
-		return __xfrm_state_lookup_byaddr(&state_ptrs, mark,
+		return __xfrm_state_lookup_byaddr(&state_ptrs, mark, 0, false,
 						  &x->id.daddr,
 						  &x->props.saddr,
 						  x->id.proto, family);
@@ -1334,7 +1335,7 @@ __xfrm_state_locate_exact(struct xfrm_state *x, int use_spi, int family)
 		return __xfrm_state_lookup_exact(&state_ptrs, &x->mark, &x->id.daddr,
 						 x->id.spi, x->id.proto, family);
 	else
-		return __xfrm_state_lookup_byaddr(&state_ptrs, x->mark.v & x->mark.m,
+		return __xfrm_state_lookup_byaddr(&state_ptrs, x->mark.v, x->mark.m, true,
 						  &x->id.daddr,
 						  &x->props.saddr,
 						  x->id.proto, family);
@@ -2424,7 +2425,7 @@ xfrm_state_lookup(struct net *net, u32 mark, const xfrm_address_t *daddr, __be32
 EXPORT_SYMBOL(xfrm_state_lookup);
 
 struct xfrm_state *
-xfrm_state_lookup_byaddr(struct net *net, u32 mark,
+xfrm_state_lookup_byaddr(struct net *net, u32 mark, u32 mask, bool exact,
 			 const xfrm_address_t *daddr, const xfrm_address_t *saddr,
 			 u8 proto, unsigned short family)
 {
@@ -2435,7 +2436,7 @@ xfrm_state_lookup_byaddr(struct net *net, u32 mark,
 
 	xfrm_hash_ptrs_get(net, &state_ptrs);
 
-	x = __xfrm_state_lookup_byaddr(&state_ptrs, mark, daddr, saddr, proto, family);
+	x = __xfrm_state_lookup_byaddr(&state_ptrs, mark, mask, exact, daddr, saddr, proto, family);
 	rcu_read_unlock();
 	return x;
 }

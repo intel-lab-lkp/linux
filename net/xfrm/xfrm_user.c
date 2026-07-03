@@ -1105,7 +1105,7 @@ static struct xfrm_state *xfrm_user_state_lookup(struct net *net,
 		}
 
 		err = -ESRCH;
-		x = xfrm_state_lookup_byaddr(net, m.v & m.m,
+		x = xfrm_state_lookup_byaddr(net, m.v, m.m, true,
 					     &p->daddr, saddr,
 					     p->proto, p->family);
 	}
