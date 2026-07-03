@@ -2916,10 +2916,13 @@ relock:
 	for (;;) {
 		struct k_sigaction *ka;
 		enum pid_type type;
+		int exit_code = 0;
 
 		/* Has this task already been marked for death? */
 		if ((signal->flags & SIGNAL_GROUP_EXIT) ||
 		     signal->group_exec_task) {
+			if (signal->flags & SIGNAL_GROUP_EXIT)
+				exit_code = signal->group_exit_code;
 			signr = SIGKILL;
 			sigdelset(&current->pending.signal, SIGKILL);
 			trace_signal_deliver(SIGKILL, SEND_SIG_NOINFO,
@@ -3049,14 +3052,15 @@ relock:
 			continue;
 		}
 
+		/*
+		 * Anything else is fatal, maybe with a core dump.
+		 */
+		exit_code = signr;
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
 			cgroup_leave_frozen(true);
 
-		/*
-		 * Anything else is fatal, maybe with a core dump.
-		 */
 		current->flags |= PF_SIGNALED;
 
 		if (sig_kernel_coredump(signr)) {
@@ -3086,7 +3090,7 @@ relock:
 		/*
 		 * Death signals, no core dump.
 		 */
-		do_group_exit(signr);
+		do_group_exit(exit_code);
 		/* NOTREACHED */
 	}
 	spin_unlock_irq(&sighand->siglock);
