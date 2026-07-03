@@ -17,6 +17,7 @@ struct pci_dev;
 struct ipu6_bus_device;
 
 #define IPU6_NAME			"intel-ipu6"
+#define IPU7_MEDIA_DEV_MODEL_NAME	"ipu7"
 #define IPU6_MEDIA_DEV_MODEL_NAME	"ipu6"
 
 #define IPU6SE_FIRMWARE_NAME		"intel/ipu/ipu6se_fw.bin"

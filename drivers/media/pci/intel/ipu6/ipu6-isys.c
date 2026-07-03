@@ -739,11 +739,14 @@ static int isys_register_devices(struct ipu6_isys *isys)
 {
 	struct device *dev = &isys->adev->auxdev.dev;
 	struct pci_dev *pdev = isys->adev->isp->pdev;
+	const char *model = pci_match_id(ipu7_ids, pdev) ?
+				IPU7_MEDIA_DEV_MODEL_NAME :
+				IPU6_MEDIA_DEV_MODEL_NAME;
 	int ret;
 
 	isys->media_dev.dev = dev;
 	media_device_pci_init(&isys->media_dev,
-			      pdev, IPU6_MEDIA_DEV_MODEL_NAME);
+			      pdev, model);
 
 	strscpy(isys->v4l2_dev.name, isys->media_dev.model,
 		sizeof(isys->v4l2_dev.name));
