@@ -133,6 +133,9 @@ isys_complete_ext_device_registration(struct ipu6_isys *isys,
 	}
 
 	isys->csi2[csi2->port].nlanes = csi2->nlanes;
+	isys->csi2[csi2->port].phy_mode =
+		csi2->bus_type == V4L2_MBUS_CSI2_DPHY ?
+		PHY_MODE_DPHY : PHY_MODE_CPHY;
 
 	return 0;
 
@@ -628,7 +631,8 @@ static int isys_notifier_init(struct ipu6_isys *isys)
 
 	for (i = 0; i < ISYS_MAX_PORTS; i++) {
 		struct v4l2_fwnode_endpoint vep = {
-			.bus_type = V4L2_MBUS_CSI2_DPHY
+			.bus_type = pci_match_id(ipu7_ids, isp->pdev) ?
+					V4L2_MBUS_UNKNOWN : V4L2_MBUS_CSI2_DPHY
 		};
 		struct sensor_async_sd *s_asd;
 		struct fwnode_handle *ep;
@@ -644,6 +648,15 @@ static int isys_notifier_init(struct ipu6_isys *isys)
 			goto err_parse;
 		}
 
+		if (pci_match_id(ipu7_ids, isp->pdev) &&
+		    vep.bus_type != V4L2_MBUS_CSI2_DPHY &&
+		    vep.bus_type != V4L2_MBUS_CSI2_CPHY) {
+			ret = -EINVAL;
+			dev_err(dev, "unsupported bus type %d!\n",
+				vep.bus_type);
+			goto err_parse;
+		}
+
 		s_asd = v4l2_async_nf_add_fwnode_remote(&isys->notifier, ep,
 							struct sensor_async_sd);
 		if (IS_ERR(s_asd)) {
@@ -654,6 +667,7 @@ static int isys_notifier_init(struct ipu6_isys *isys)
 
 		s_asd->csi2.port = vep.base.port;
 		s_asd->csi2.nlanes = vep.bus.mipi_csi2.num_data_lanes;
+		s_asd->csi2.bus_type = vep.bus_type;
 
 		dev_dbg(dev, "remote endpoint port %d with %d lanes added\n",
 			s_asd->csi2.port, s_asd->csi2.nlanes);
