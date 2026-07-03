@@ -82,6 +82,7 @@ struct ipu6_device {
 	u32 cpd_metadata_cmpnt_size;
 
 	void __iomem *base;
+	void __iomem *pb_base;
 	bool need_ipc_reset;
 	bool secure_mode;
 	bool bus_ready_to_probe;

@@ -34,6 +34,7 @@
 #include "ipu6-platform-regs.h"
 
 #define IPU6_PCI_BAR		0
+#define IPU7_PCI_PBBAR		4
 
 struct ipu6_cell_program {
 	u32 magic_number;
@@ -209,6 +210,7 @@ static struct ipu6_psys_internal_pdata psys_ipdata = {
 };
 
 static const struct ipu6_buttress_ctrl isys_buttress_ctrl = {
+	.subsys_id = IPU_ISYS,
 	.ratio = IPU6_IS_FREQ_CTL_DEFAULT_RATIO,
 	.qos_floor = IPU6_IS_FREQ_CTL_DEFAULT_QOS_FLOOR_RATIO,
 	.freq_ctl = IPU6_BUTTRESS_REG_IS_FREQ_CTL,
@@ -219,6 +221,7 @@ static const struct ipu6_buttress_ctrl isys_buttress_ctrl = {
 };
 
 static const struct ipu6_buttress_ctrl psys_buttress_ctrl = {
+	.subsys_id = IPU_PSYS,
 	.ratio = IPU6_PS_FREQ_CTL_DEFAULT_RATIO,
 	.qos_floor = IPU6_PS_FREQ_CTL_DEFAULT_QOS_FLOOR_RATIO,
 	.freq_ctl = IPU6_BUTTRESS_REG_PS_FREQ_CTL,
@@ -523,6 +526,15 @@ static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (IS_ERR(isp->base))
 		return dev_err_probe(dev, PTR_ERR(isp->base),
 				     "Failed to I/O mem remapping\n");
+
+	if (pci_match_id(ipu7_ids, pdev)) {
+		isp->pb_base = pcim_iomap_region(pdev, IPU7_PCI_PBBAR,
+						 IPU6_NAME);
+		if (IS_ERR(isp->pb_base))
+			return dev_err_probe(dev, PTR_ERR(isp->pb_base),
+					     "I/O remapping PB BAR %u failed\n",
+					     IPU7_PCI_PBBAR);
+	}
 
 	pci_set_drvdata(pdev, isp);
 	pci_set_master(pdev);
