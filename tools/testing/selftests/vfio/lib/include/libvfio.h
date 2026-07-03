@@ -25,6 +25,15 @@ const char *vfio_selftests_get_bdf(int *argc, char *argv[]);
 char **vfio_selftests_get_bdfs(int *argc, char *argv[], int *nr_bdfs);
 
 /*
+ * Return the IOMMU mode string from the environment variable
+ * $VFIO_SELFTESTS_IOMMU_MODE.
+ *
+ * Returns NULL if the environment variable is not set, allowing
+ * tests to use their default mode.
+ */
+const char *vfio_selftests_get_iommu_mode(void);
+
+/*
  * Reserve virtual address space of size at an address satisfying
  * (vaddr % align) == offset.
  *

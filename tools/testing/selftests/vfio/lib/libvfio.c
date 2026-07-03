@@ -101,3 +101,42 @@ void *mmap_reserve(size_t size, size_t align, size_t offset)
 
 	return map_align;
 }
+
+static const char *get_iommu_mode_env(void)
+{
+	const char *mode;
+	static const char * const valid_modes[] = {
+		MODE_VFIO_TYPE1_IOMMU,
+		MODE_VFIO_TYPE1V2_IOMMU,
+		MODE_IOMMUFD_COMPAT_TYPE1,
+		MODE_IOMMUFD_COMPAT_TYPE1V2,
+		MODE_IOMMUFD,
+#ifdef __powerpc__
+		MODE_VFIO_SPAPR_TCE_V2_IOMMU,
+#endif
+	};
+	int i;
+
+	mode = getenv("VFIO_SELFTESTS_IOMMU_MODE");
+	if (!mode)
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(valid_modes); i++) {
+		if (!strcmp(mode, valid_modes[i]))
+			return mode;
+	}
+
+	fprintf(stderr, "Invalid VFIO_SELFTESTS_IOMMU_MODE: %s\n", mode);
+	fprintf(stderr, "Valid modes are:\n");
+	for (i = 0; i < ARRAY_SIZE(valid_modes); i++)
+		fprintf(stderr, "  %s\n", valid_modes[i]);
+	exit(KSFT_SKIP);
+}
+
+const char *vfio_selftests_get_iommu_mode(void)
+{
+	return get_iommu_mode_env();
+}
+
+	return map_align;
+}
