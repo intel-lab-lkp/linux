@@ -129,3 +129,18 @@ void fman_muram_free_mem(struct muram_info *muram, unsigned long offset,
 
 	gen_pool_free(muram->pool, addr, size);
 }
+
+/**
+ * fman_muram_finish
+ * @muram:	FM-MURAM module pointer.
+ *
+ * Frees all resources associated with a MURAM partition.
+ */
+void fman_muram_finish(struct muram_info *muram)
+{
+	if (!muram)
+		return;
+	iounmap(muram->vbase);
+	gen_pool_destroy(muram->pool);
+	kfree(muram);
+}
