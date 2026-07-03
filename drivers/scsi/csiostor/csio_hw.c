@@ -38,6 +38,7 @@
 #include <linux/stddef.h>
 #include <linux/delay.h>
 #include <linux/string.h>
+#include <linux/string_choices.h>
 #include <linux/compiler.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
@@ -3490,7 +3491,7 @@ static void csio_mem_intr_handler(struct csio_hw *hw, int idx)
 
 		csio_wr_reg32(hw, ECC_CECNT_V(ECC_CECNT_M), cnt_addr);
 		csio_warn(hw, "%u %s correctable ECC data error%s\n",
-			    cnt, name[idx], cnt > 1 ? "s" : "");
+			  cnt, name[idx], str_plural(cnt));
 	}
 	if (v & ECC_UE_INT_CAUSE_F)
 		csio_fatal(hw, "%s uncorrectable ECC data error\n", name[idx]);
