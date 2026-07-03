@@ -316,10 +316,18 @@ TEST_F(vfio_dma_map_limit_test, overflow)
 	region->size = self->mmap_size;
 
 	rc = __iommu_map(self->iommu, region);
+#ifdef __powerpc__
+	ASSERT_EQ(rc, -ENXIO);
+#else
 	ASSERT_EQ(rc, -EOVERFLOW);
+#endif
 
 	rc = __iommu_unmap(self->iommu, region, NULL);
+#ifdef __powerpc__
+	ASSERT_EQ(rc, -ENXIO);
+#else
 	ASSERT_EQ(rc, -EOVERFLOW);
+#endif
 }
 
 int main(int argc, char *argv[])
