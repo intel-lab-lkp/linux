@@ -86,6 +86,7 @@ struct ipu6_device {
 	bool need_ipc_reset;
 	bool secure_mode;
 	bool bus_ready_to_probe;
+	u32 *fw_code_region;
 };
 
 #define IPU_PSYS	0

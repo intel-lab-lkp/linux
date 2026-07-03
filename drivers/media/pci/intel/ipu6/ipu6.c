@@ -19,6 +19,7 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/vmalloc.h>
 
 #include <media/ipu-bridge.h>
 #include <media/ipu6-pci-table.h>
@@ -27,6 +28,7 @@
 #include "ipu6-bus.h"
 #include "ipu6-buttress.h"
 #include "ipu6-cpd.h"
+#include "ipu6-dma.h"
 #include "ipu6-isys.h"
 #include "ipu6-mmu.h"
 #include "ipu6-platform-buttress-regs.h"
@@ -436,6 +438,67 @@ static int ipu6_map_fw(struct ipu6_device *isp)
 	return 0;
 }
 
+static int __ipu7_map_fw_non_secure(struct ipu6_device *isp)
+{
+	int ret;
+
+	/*
+	 * Allocate and map memory for running the firmware. Not
+	 * required in secure mode, in which firmware runs in IMR.
+	 */
+	isp->fw_code_region = vmalloc(IPU7_FW_CODE_REGION_SIZE);
+	if (!isp->fw_code_region)
+		return -ENOMEM;
+
+	ret = ipu7_cpd_copy_binary(isp->cpd_fw->data, "isys",
+				   isp->fw_code_region, &isp->isys->fw_entry);
+	if (ret)
+		goto free_fw_region;
+
+	ret = ipu6_map_fw_region(isp->isys, isp->fw_code_region,
+				 IPU7_FW_CODE_REGION_SIZE, DMA_BIDIRECTIONAL,
+				 0);
+	if (ret)
+		goto free_fw_region;
+
+	ret = ipu7_cpd_copy_binary(isp->cpd_fw->data, "psys",
+				   isp->fw_code_region, &isp->psys->fw_entry);
+	if (ret)
+		goto free_fw_region;
+
+	ret = ipu6_map_fw_region(isp->psys, isp->fw_code_region,
+				 IPU7_FW_CODE_REGION_SIZE, DMA_BIDIRECTIONAL,
+				 0);
+	if (ret)
+		goto free_fw_region;
+
+	return 0;
+
+free_fw_region:
+	vfree(isp->fw_code_region);
+	isp->fw_code_region = NULL;
+
+	return ret;
+}
+
+static int ipu7_map_fw(struct ipu6_device *isp)
+{
+	int ret;
+
+	ret = isp->secure_mode ?
+		ipu6_map_fw_region(isp->psys, isp->cpd_fw->data,
+				   isp->cpd_fw->size, DMA_BIDIRECTIONAL, 0) :
+		__ipu7_map_fw_non_secure(isp);
+
+	if (ret) {
+		dev_err_probe(&isp->pdev->dev, ret,
+			      "Failed to init ipu7 firmware region\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	const struct ipu6_buttress_ctrl *isys_ctrl, *psys_ctrl;
@@ -445,6 +508,7 @@ static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct ipu6_device *isp;
 	phys_addr_t phys;
 	u32 val, version, sku_id;
+	unsigned long attrs;
 	int ret;
 
 	isp = devm_kzalloc(dev, sizeof(*isp), GFP_KERNEL);
@@ -567,7 +631,8 @@ static int ipu6_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_ipu6_rpm_put;
 	}
 
-	ret = ipu6_map_fw(isp);
+	ret = pci_match_id(ipu7_ids, pdev) ? ipu7_map_fw(isp) :
+					     ipu6_map_fw(isp);
 	if (ret)
 		goto out_ipu6_rpm_put;
 
@@ -609,15 +674,21 @@ out_free_irq:
 out_ipu6_rpm_put:
 	pm_runtime_put_sync(&isp->psys->auxdev.dev);
 out_ipu6_bus_del_devices:
+	attrs = pci_match_id(ipu7_ids, pdev) ? DMA_BIDIRECTIONAL :
+					       DMA_TO_DEVICE;
 	if (!IS_ERR_OR_NULL(isp->psys)) {
-		ipu6_cpd_free_pkg_dir(isp->psys);
 		if (isp->psys->fw_sgt.nents)
-			ipu6_unmap_fw_region(isp->psys, DMA_TO_DEVICE);
+			ipu6_unmap_fw_region(isp->psys, attrs);
+		ipu6_cpd_free_pkg_dir(isp->psys);
 	}
 	if (!IS_ERR_OR_NULL(isp->isys)) {
 		ipu6_cpd_free_pkg_dir(isp->isys);
 		if (isp->isys->fw_sgt.nents)
-			ipu6_unmap_fw_region(isp->isys, DMA_TO_DEVICE);
+			ipu6_unmap_fw_region(isp->isys, attrs);
+	}
+	if (isp->fw_code_region) {
+		vfree(isp->fw_code_region);
+		isp->fw_code_region = NULL;
 	}
 	if (!IS_ERR_OR_NULL(isp->psys) && !IS_ERR_OR_NULL(isp->psys->mmu))
 		ipu6_mmu_cleanup(isp->psys->mmu);
@@ -636,17 +707,23 @@ static void ipu6_pci_remove(struct pci_dev *pdev)
 	struct ipu6_device *isp = pci_get_drvdata(pdev);
 	struct ipu6_mmu *isys_mmu = isp->isys->mmu;
 	struct ipu6_mmu *psys_mmu = isp->psys->mmu;
+	unsigned long attrs;
 
 	devm_free_irq(&pdev->dev, pdev->irq, isp);
-	ipu6_cpd_free_pkg_dir(isp->psys);
 
-	ipu6_unmap_fw_region(isp->psys, DMA_TO_DEVICE);
+	attrs = pci_match_id(ipu7_ids, pdev) ? DMA_BIDIRECTIONAL :
+					       DMA_TO_DEVICE;
+	ipu6_cpd_free_pkg_dir(isp->psys);
+	ipu6_unmap_fw_region(isp->psys, attrs);
 
 	if (isp->isys) {
 		ipu6_cpd_free_pkg_dir(isp->isys);
 		if (isp->isys->fw_sgt.nents)
-			ipu6_unmap_fw_region(isp->isys, DMA_TO_DEVICE);
+			ipu6_unmap_fw_region(isp->isys, attrs);
 	}
+
+	if (isp->fw_code_region)
+		vfree(isp->fw_code_region);
 
 	ipu6_buttress_exit(isp);
 
