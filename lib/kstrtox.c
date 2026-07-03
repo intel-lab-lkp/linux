@@ -71,15 +71,11 @@ unsigned int _parse_integer_limit(const char *s, unsigned int base, unsigned lon
 
 		if (val >= base)
 			break;
-		/*
-		 * Check for overflow only if we are within range of
-		 * it in the max base we support (16)
-		 */
-		if (unlikely(res & (~0ull << 60))) {
-			if (res > div_u64(ULLONG_MAX - val, base))
-				rv |= KSTRTOX_OVERFLOW;
-		}
-		res = res * base + val;
+
+		if (check_mul_overflow(res, base, &res))
+			rv |= KSTRTOX_OVERFLOW;
+		if (check_add_overflow(res, val, &res))
+			rv |= KSTRTOX_OVERFLOW;
 		rv++;
 		s++;
 	}
