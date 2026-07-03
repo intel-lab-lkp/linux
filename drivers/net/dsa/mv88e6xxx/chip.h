@@ -180,6 +180,14 @@ struct mv88e6xxx_info {
 	 * port 0, 1 means internal PHYs range starts at port 1, etc
 	 */
 	unsigned int internal_phys_offset;
+
+	/* Arrival Time Stamp Mode (ArrTSMode); see the ArrTSMode encoding in
+	 * hwtstamp.h. Zero (the default) leaves arrival time stamps in the
+	 * switch registers; non-zero embeds them in the frame, either appended
+	 * as a trailer or overwritten at that byte offset past the start of the
+	 * PTP common header.
+	 */
+	unsigned int arr_ts_mode;
 };
 
 struct mv88e6xxx_atu_entry {
