@@ -26,6 +26,7 @@
 #include <net/pkt_cls.h>
 
 #include "chip.h"
+#include "leds.h"
 #include "smi.h"
 
 struct yt921x_mib_desc {
@@ -150,8 +151,6 @@ static const struct yt921x_info yt921x_infos[] = {
 	},
 	{}
 };
-
-#define YT921X_NAME	"yt921x"
 
 #define YT921X_VID_UNWARE	4095
 
@@ -4580,6 +4579,12 @@ static int yt921x_dsa_setup(struct dsa_switch *ds)
 
 	if (res)
 		return res;
+
+#if IS_ENABLED(CONFIG_NET_DSA_YT921X_LEDS)
+	res = yt921x_leds_setup(priv);
+	if (res)
+		dev_warn(dev, "Failed to setup LEDs: %d\n", res);
+#endif
 
 	return 0;
 }
