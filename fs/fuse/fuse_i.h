@@ -450,6 +450,12 @@ struct fuse_conn {
 	/** @max_read: Maximum read size */
 	unsigned max_read;
 
+	/** @folio_max_order: Maximum folio order */
+	unsigned int folio_max_order;
+
+	/** @folio_min_order: Minimum folio order */
+	unsigned int folio_min_order;
+
 	/** @max_write: Maximum write size */
 	unsigned max_write;
 

@@ -9,6 +9,7 @@
 
 #include <linux/dax.h>
 #include <linux/pagemap.h>
+#include <linux/log2.h>
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/seq_file.h>
@@ -413,6 +414,18 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 	if (S_ISREG(inode->i_mode)) {
 		fuse_init_common(inode);
 		fuse_init_file_inode(inode, attr->flags);
+		if (fc->folio_max_order || fc->folio_min_order) {
+			unsigned int max_order;
+
+			max_order = fc->folio_max_order ?
+				    fc->folio_max_order : MAX_PAGECACHE_ORDER;
+			mapping_set_folio_order_range(inode->i_mapping,
+						      fc->folio_min_order,
+						      max_order);
+			pr_info("fuse: inode %llu folio order range set to min=%u, max=%u\n",
+				(unsigned long long)inode->i_ino,
+				fc->folio_min_order, max_order);
+		}
 	} else if (S_ISDIR(inode->i_mode))
 		fuse_init_dir(inode);
 	else if (S_ISLNK(inode->i_mode))

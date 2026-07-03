@@ -137,4 +137,37 @@ TEST_F(fusectl, abort)
 	ASSERT_EQ(errno, ENOTCONN);
 }
 
+TEST_F(fusectl, folio_orders)
+{
+	char max_path[PATH_MAX];
+	char min_path[PATH_MAX];
+	int fd;
+
+	sprintf(max_path, "/sys/fs/fuse/connections/%d/folio_max_order", self->connection);
+	sprintf(min_path, "/sys/fs/fuse/connections/%d/folio_min_order", self->connection);
+
+	/* 1. Verify sysfs files exist */
+	ASSERT_EQ(0, access(max_path, F_OK));
+	ASSERT_EQ(0, access(min_path, F_OK));
+
+	/* 2. Set valid folio_max_order = 8 */
+	write_file(_metadata, max_path, "8");
+	/* 3. Set valid folio_min_order = 4 */
+	write_file(_metadata, min_path, "4");
+
+	/* 4. Reject invalid write: min_order > max_order (e.g. min=10, max=8) */
+	fd = open(min_path, O_WRONLY);
+	ASSERT_GE(fd, 0);
+	ASSERT_LT(write(fd, "10", 2), 0);
+	ASSERT_EQ(errno, EINVAL);
+	close(fd);
+
+	/* 5. Reject invalid write: max_order < min_order (e.g. max=2, min=4) */
+	fd = open(max_path, O_WRONLY);
+	ASSERT_GE(fd, 0);
+	ASSERT_LT(write(fd, "2", 1), 0);
+	ASSERT_EQ(errno, EINVAL);
+	close(fd);
+}
+
 TEST_HARNESS_MAIN

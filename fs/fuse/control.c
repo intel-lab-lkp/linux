@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/fs_context.h>
 #include <linux/namei.h>
+#include <linux/pagemap.h>
 
 #define FUSE_CTL_SUPER_MAGIC 0x65735543
 
@@ -173,6 +174,94 @@ out:
 	return ret;
 }
 
+static ssize_t fuse_conn_folio_max_order_read(struct file *file,
+					       char __user *buf, size_t len,
+					       loff_t *ppos)
+{
+	struct fuse_conn *fc;
+	unsigned int val;
+
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		return 0;
+
+	val = READ_ONCE(fc->folio_max_order);
+	fuse_conn_put(fc);
+
+	return fuse_conn_limit_read(file, buf, len, ppos, val);
+}
+
+static ssize_t fuse_conn_folio_max_order_write(struct file *file,
+						const char __user *buf,
+						size_t count, loff_t *ppos)
+{
+	unsigned int val = 0;
+	struct fuse_conn *fc;
+	ssize_t ret;
+
+	ret = fuse_conn_limit_write(file, buf, count, ppos, &val, MAX_PAGECACHE_ORDER);
+	if (ret <= 0)
+		goto out;
+
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		goto out;
+
+	if (val != 0 && val < READ_ONCE(fc->folio_min_order)) {
+		fuse_conn_put(fc);
+		return -EINVAL;
+	}
+
+	WRITE_ONCE(fc->folio_max_order, val);
+	fuse_conn_put(fc);
+out:
+	return ret;
+}
+
+static ssize_t fuse_conn_folio_min_order_read(struct file *file,
+					       char __user *buf, size_t len,
+					       loff_t *ppos)
+{
+	struct fuse_conn *fc;
+	unsigned int val;
+
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		return 0;
+
+	val = READ_ONCE(fc->folio_min_order);
+	fuse_conn_put(fc);
+
+	return fuse_conn_limit_read(file, buf, len, ppos, val);
+}
+
+static ssize_t fuse_conn_folio_min_order_write(struct file *file,
+						const char __user *buf,
+						size_t count, loff_t *ppos)
+{
+	unsigned int val = 0;
+	struct fuse_conn *fc;
+	ssize_t ret;
+
+	ret = fuse_conn_limit_write(file, buf, count, ppos, &val, MAX_PAGECACHE_ORDER);
+	if (ret <= 0)
+		goto out;
+
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		goto out;
+
+	if (READ_ONCE(fc->folio_max_order) != 0 && val > READ_ONCE(fc->folio_max_order)) {
+		fuse_conn_put(fc);
+		return -EINVAL;
+	}
+
+	WRITE_ONCE(fc->folio_min_order, val);
+	fuse_conn_put(fc);
+out:
+	return ret;
+}
+
 static const struct file_operations fuse_ctl_abort_ops = {
 	.open = nonseekable_open,
 	.write = fuse_conn_abort_write,
@@ -193,6 +282,18 @@ static const struct file_operations fuse_conn_congestion_threshold_ops = {
 	.open = nonseekable_open,
 	.read = fuse_conn_congestion_threshold_read,
 	.write = fuse_conn_congestion_threshold_write,
+};
+
+static const struct file_operations fuse_conn_folio_max_order_ops = {
+	.open = nonseekable_open,
+	.read = fuse_conn_folio_max_order_read,
+	.write = fuse_conn_folio_max_order_write,
+};
+
+static const struct file_operations fuse_conn_folio_min_order_ops = {
+	.open = nonseekable_open,
+	.read = fuse_conn_folio_min_order_read,
+	.write = fuse_conn_folio_min_order_write,
 };
 
 static struct dentry *fuse_ctl_add_dentry(struct dentry *parent,
@@ -267,7 +368,13 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 				 NULL, &fuse_conn_max_background_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "congestion_threshold",
 				 S_IFREG | 0600, NULL,
-				 &fuse_conn_congestion_threshold_ops))
+				 &fuse_conn_congestion_threshold_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "folio_max_order",
+				 S_IFREG | 0600, NULL,
+				 &fuse_conn_folio_max_order_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "folio_min_order",
+				 S_IFREG | 0600, NULL,
+				 &fuse_conn_folio_min_order_ops))
 		goto err;
 
 	return 0;
