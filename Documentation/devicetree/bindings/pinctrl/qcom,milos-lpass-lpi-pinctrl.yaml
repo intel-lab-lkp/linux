@@ -15,12 +15,13 @@ description:
 
 properties:
   compatible:
-    const: qcom,milos-lpass-lpi-pinctrl
+    oneOf:
+      - const: qcom,milos-lpass-lpi-pinctrl
+      - const: qcom,eliza-lpass-lpi-pinctrl
 
   reg:
-    items:
-      - description: LPASS LPI TLMM Control and Status registers
-      - description: LPASS LPI MCC registers
+    minItems: 1
+    maxItems: 2
 
   clocks:
     items:
@@ -73,6 +74,19 @@ $defs:
 
 allOf:
   - $ref: qcom,lpass-lpi-common.yaml#
+
+  - if:
+      properties:
+        compatible:
+          const: qcom,eliza-lpass-lpi-pinctrl
+    then:
+      properties:
+        reg:
+          maxItems: 1
+    else:
+      properties:
+        reg:
+          minItems: 2
 
 required:
   - compatible
