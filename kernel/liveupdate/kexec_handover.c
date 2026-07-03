@@ -1018,6 +1018,29 @@ void kho_unpreserve_pages(struct page *page, unsigned long nr_pages)
 }
 EXPORT_SYMBOL_GPL(kho_unpreserve_pages);
 
+/**
+ * kho_split_preserved_pages - split contiguous pages that are preserved
+ * @page: first page in the list.
+ * @order: the order of the original allocation.
+ *
+ * This function allows to split a high-order allocation that has been
+ * preserved across kexec. It unpreserves the pages, splits them using
+ * split_page() and then re-preserves them as individual pages.
+ *
+ * This function MUST only be called on pages that are currently preserved.
+ * The @order provided MUST match the order used during the initial
+ * preservation.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int kho_split_preserved_pages(struct page *page, unsigned int order)
+{
+	kho_unpreserve_pages(page, 1UL << order);
+	split_page(page, order);
+	return kho_preserve_pages(page, 1UL << order);
+}
+EXPORT_SYMBOL_GPL(kho_split_preserved_pages);
+
 /* vmalloc flags KHO supports */
 #define KHO_VMALLOC_SUPPORTED_FLAGS	(VM_ALLOC | VM_ALLOW_HUGE_VMAP)
 

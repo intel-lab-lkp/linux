@@ -24,6 +24,7 @@ int kho_preserve_folio(struct folio *folio);
 void kho_unpreserve_folio(struct folio *folio);
 int kho_preserve_pages(struct page *page, unsigned long nr_pages);
 void kho_unpreserve_pages(struct page *page, unsigned long nr_pages);
+int kho_split_preserved_pages(struct page *page, unsigned int order);
 int kho_preserve_vmalloc(void *ptr, struct kho_vmalloc *preservation);
 void kho_unpreserve_vmalloc(struct kho_vmalloc *preservation);
 void *kho_alloc_preserve(size_t size);
@@ -64,6 +65,12 @@ static inline int kho_preserve_pages(struct page *page, unsigned int nr_pages)
 }
 
 static inline void kho_unpreserve_pages(struct page *page, unsigned int nr_pages) { }
+
+static inline int kho_split_preserved_pages(struct page *page,
+					    unsigned int order)
+{
+	return -EOPNOTSUPP;
+}
 
 static inline int kho_preserve_vmalloc(void *ptr,
 				       struct kho_vmalloc *preservation)
