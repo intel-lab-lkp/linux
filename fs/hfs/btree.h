@@ -93,6 +93,8 @@ extern void hfs_btree_write(struct hfs_btree *tree);
 extern int hfs_bmap_reserve(struct hfs_btree *tree, u32 rsvd_nodes);
 extern struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree);
 extern void hfs_bmap_free(struct hfs_bnode *node);
+struct hfs_bmap_ctx;
+extern bool hfs_bmap_test_bit(struct hfs_bnode *node, u32 node_bit_idx);
 
 /* bnode.c */
 extern void hfs_bnode_read(struct hfs_bnode *node, void *buf, u32 off, u32 len);
