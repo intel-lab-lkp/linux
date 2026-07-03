@@ -75,6 +75,7 @@ static const struct ipu6_buttress_registers ipu6_buttress_regs = {
 	.db0_out	= BUTTRESS_REG_IU2CSEDB0,
 	.data0_in	= BUTTRESS_REG_CSE2IUDATA0,
 	.data0_out	= BUTTRESS_REG_IU2CSEDATA0,
+	.sku_id		= BUTTRESS_REG_SKU,
 
 	/* Bitmasks */
 	.irq_is		= BUTTRESS_ISR_IS_IRQ,
@@ -105,6 +106,7 @@ static const struct ipu6_buttress_registers ipu7_buttress_regs = {
 	.db0_out	= IPU7_BUTTRESS_REG_IU2CSEDB0,
 	.data0_in	= IPU7_BUTTRESS_REG_CSE2IUDATA0,
 	.data0_out	= IPU7_BUTTRESS_REG_IU2CSEDATA0,
+	.sku_id		= IPU7_BUTTRESS_REG_SKU,
 
 	/* Bitmasks */
 	.irq_is		= IPU7_BUTTRESS_IRQ_IS_IRQ,
