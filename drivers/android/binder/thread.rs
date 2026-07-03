@@ -1150,6 +1150,13 @@ impl Thread {
             let mut inner = thread.inner.lock();
             inner.pop_transaction_to_reply(thread.as_ref())
         } {
+            binder_debug!(
+                crate::debug::BINDER_DEBUG_DEAD_TRANSACTION,
+                "release process {} transaction {} in, still active",
+                self.process.task.pid(),
+                transaction.debug_id
+            );
+
             let reply = Err(BR_DEAD_REPLY);
             if !transaction.from.deliver_single_reply(reply, &transaction) {
                 break;
@@ -1728,7 +1735,16 @@ impl DeliverToRead for ThreadError {
         Ok(true)
     }
 
-    fn cancel(self: DArc<Self>) {}
+    fn cancel(self: DArc<Self>) {
+        let code = self.error_code.load(Relaxed);
+        if code != BR_OK {
+            binder_debug!(
+                crate::debug::BINDER_DEBUG_DEAD_TRANSACTION,
+                "undelivered TRANSACTION_ERROR: {}",
+                code
+            );
+        }
+    }
 
     fn should_sync_wakeup(&self) -> bool {
         false

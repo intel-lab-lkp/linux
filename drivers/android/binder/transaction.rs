@@ -485,6 +485,12 @@ impl DeliverToRead for Transaction {
         if self.target_node.is_some() && self.flags & TF_ONE_WAY == 0 {
             let reply = Err(BR_DEAD_REPLY);
             self.from.deliver_reply(reply, &self);
+        } else {
+            binder_debug!(
+                crate::debug::BINDER_DEBUG_DEAD_TRANSACTION,
+                "undelivered transaction {}, process died",
+                self.debug_id
+            );
         }
 
         self.drop_outstanding_txn();

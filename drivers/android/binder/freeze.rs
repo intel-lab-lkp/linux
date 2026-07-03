@@ -140,7 +140,13 @@ impl DeliverToRead for FreezeMessage {
         }
     }
 
-    fn cancel(self: DArc<Self>) {}
+    fn cancel(self: DArc<Self>) {
+        binder_debug!(
+            crate::debug::BINDER_DEBUG_DEAD_TRANSACTION,
+            "undelivered freeze notification, {:016x}",
+            self.cookie.0
+        );
+    }
 
     fn should_sync_wakeup(&self) -> bool {
         false
