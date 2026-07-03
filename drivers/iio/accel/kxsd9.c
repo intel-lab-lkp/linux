@@ -139,18 +139,17 @@ static int kxsd9_write_raw(struct iio_dev *indio_dev,
 			   int val2,
 			   long mask)
 {
-	int ret = -EINVAL;
 	struct kxsd9_state *st = iio_priv(indio_dev);
+	int ret;
 
-	pm_runtime_get_sync(st->dev);
+	ret = pm_runtime_resume_and_get(st->dev);
+	if (ret < 0)
+		return ret;
 
-	if (mask == IIO_CHAN_INFO_SCALE) {
-		/* Check no integer component */
-		if (val)
-			ret = -EINVAL;
-		else
-			ret = kxsd9_write_scale(indio_dev, val2);
-	}
+	if (mask == IIO_CHAN_INFO_SCALE && !val)
+		ret = kxsd9_write_scale(indio_dev, val2);
+	else
+		ret = -EINVAL;
 
 	pm_runtime_put_autosuspend(st->dev);
 
@@ -161,20 +160,22 @@ static int kxsd9_read_raw(struct iio_dev *indio_dev,
 			  struct iio_chan_spec const *chan,
 			  int *val, int *val2, long mask)
 {
-	int ret = -EINVAL;
 	struct kxsd9_state *st = iio_priv(indio_dev);
 	unsigned int regval;
 	__be16 raw_val;
 	u16 nval;
+	int ret;
 
-	pm_runtime_get_sync(st->dev);
+	ret = pm_runtime_resume_and_get(st->dev);
+	if (ret < 0)
+		return ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 		ret = regmap_bulk_read(st->map, chan->address, &raw_val,
 				       sizeof(raw_val));
 		if (ret)
-			goto error_ret;
+			break;
 		nval = be16_to_cpu(raw_val);
 		/* Only 12 bits are valid */
 		nval >>= 4;
@@ -191,18 +192,20 @@ static int kxsd9_read_raw(struct iio_dev *indio_dev,
 				  KXSD9_REG_CTRL_C,
 				  &regval);
 		if (ret < 0)
-			goto error_ret;
+			break;
 		*val = 0;
 		*val2 = kxsd9_micro_scales[regval & KXSD9_CTRL_C_FS_MASK];
 		ret = IIO_VAL_INT_PLUS_MICRO;
 		break;
+	default:
+		ret = -EINVAL;
+		break;
 	}
 
-error_ret:
 	pm_runtime_put_autosuspend(st->dev);
 
 	return ret;
-};
+}
 
 static irqreturn_t kxsd9_trigger_handler(int irq, void *p)
 {
@@ -240,9 +243,7 @@ static int kxsd9_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct kxsd9_state *st = iio_priv(indio_dev);
 
-	pm_runtime_get_sync(st->dev);
-
-	return 0;
+	return pm_runtime_resume_and_get(st->dev);
 }
 
 static int kxsd9_buffer_postdisable(struct iio_dev *indio_dev)
@@ -480,8 +481,9 @@ void kxsd9_common_remove(struct device *dev)
 
 	iio_device_unregister(indio_dev);
 	iio_triggered_buffer_cleanup(indio_dev);
-	pm_runtime_get_sync(dev);
-	pm_runtime_put_noidle(dev);
+
+	if (pm_runtime_resume_and_get(dev) >= 0)
+		pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
 	kxsd9_power_down(st);
 }
