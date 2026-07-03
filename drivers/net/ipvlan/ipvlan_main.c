@@ -7,6 +7,12 @@
 
 #include "ipvlan.h"
 
+#if IS_ENABLED(CONFIG_IPVTAP)
+void (*__ipvtap_dellink_ptr)(struct net_device *dev,
+			     struct list_head *head);
+EXPORT_SYMBOL(__ipvtap_dellink_ptr);
+#endif
+
 static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 				struct netlink_ext_ack *extack)
 {
@@ -16,6 +22,8 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 
 	ASSERT_RTNL();
 	if (port->mode != nval) {
+		mutex_lock(&port->pnodes_lock);
+
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
 			flags = ipvlan->dev->flags;
 			if (nval == IPVLAN_MODE_L3 || nval == IPVLAN_MODE_L3S) {
@@ -40,6 +48,8 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 			ipvlan_l3s_unregister(port);
 		}
 		port->mode = nval;
+
+		mutex_unlock(&port->pnodes_lock);
 	}
 	return 0;
 
@@ -55,6 +65,8 @@ fail:
 			dev_change_flags(ipvlan->dev, flags & ~IFF_NOARP,
 					 NULL);
 	}
+
+	mutex_unlock(&port->pnodes_lock);
 
 	return err;
 }
@@ -76,6 +88,7 @@ static int ipvlan_port_create(struct net_device *dev)
 		INIT_HLIST_HEAD(&port->hlhead[idx]);
 
 	spin_lock_init(&port->addrs_lock);
+	mutex_init(&port->pnodes_lock);
 	skb_queue_head_init(&port->backlog);
 	INIT_WORK(&port->wq, ipvlan_process_multicast);
 	ida_init(&port->ida);
@@ -676,7 +689,10 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 	if (err)
 		goto unlink_netdev;
 
+	mutex_lock(&port->pnodes_lock);
 	list_add_tail_rcu(&ipvlan->pnode, &port->ipvlans);
+	mutex_unlock(&port->pnodes_lock);
+
 	netif_stacked_transfer_operstate(phy_dev, dev);
 	return 0;
 
@@ -690,7 +706,7 @@ unregister_netdev:
 }
 EXPORT_SYMBOL_GPL(ipvlan_link_new);
 
-void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
+void __ipvlan_link_delete(struct net_device *dev, struct list_head *head)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct ipvl_addr *addr, *next;
@@ -708,7 +724,16 @@ void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
 	unregister_netdevice_queue(dev, head);
 	netdev_upper_dev_unlink(ipvlan->phy_dev, dev);
 }
-EXPORT_SYMBOL_GPL(ipvlan_link_delete);
+EXPORT_SYMBOL(__ipvlan_link_delete);
+
+static void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
+{
+	struct ipvl_dev *ipvlan = netdev_priv(dev);
+
+	mutex_lock(&ipvlan->port->pnodes_lock);
+	__ipvlan_link_delete(dev, head);
+	mutex_unlock(&ipvlan->port->pnodes_lock);
+}
 
 void ipvlan_link_setup(struct net_device *dev)
 {
@@ -770,9 +795,15 @@ static int ipvlan_device_event(struct notifier_block *unused,
 	struct ipvl_port *port;
 	LIST_HEAD(lst_kill);
 
+	if (event == NETDEV_PRECHANGEUPPER ||
+	    event == NETDEV_CHANGEUPPER)
+		return ret;
+
 	port = ipvlan_port_get(dev);
 	if (!port)
 		return ret;
+
+	mutex_lock(&port->pnodes_lock);
 
 	switch (event) {
 	case NETDEV_UP:
@@ -800,9 +831,15 @@ static int ipvlan_device_event(struct notifier_block *unused,
 		if (dev->reg_state != NETREG_UNREGISTERING)
 			break;
 
-		list_for_each_entry_safe(ipvlan, next, &port->ipvlans, pnode)
-			ipvlan->dev->rtnl_link_ops->dellink(ipvlan->dev,
-							    &lst_kill);
+		list_for_each_entry_safe(ipvlan, next, &port->ipvlans, pnode) {
+#if IS_ENABLED(CONFIG_IPVTAP)
+			if (ipvlan->dev->rtnl_link_ops != &ipvlan_link_ops)
+				__ipvtap_dellink_ptr(ipvlan->dev, &lst_kill);
+			else
+#endif
+				__ipvlan_link_delete(ipvlan->dev, &lst_kill);
+		}
+
 		unregister_netdevice_many(&lst_kill);
 		break;
 
@@ -849,6 +886,8 @@ static int ipvlan_device_event(struct notifier_block *unused,
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode)
 			call_netdevice_notifiers(event, ipvlan->dev);
 	}
+
+	mutex_unlock(&port->pnodes_lock);
 
 	ipvlan_port_put(port);
 
