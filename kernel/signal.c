@@ -81,7 +81,7 @@ static inline bool sig_handler_ignored(void __user *handler, int sig)
 	       (handler == SIG_DFL && sig_kernel_ignore(sig));
 }
 
-static bool sig_task_ignored(struct task_struct *t, int sig, bool force)
+static bool sig_ignored(struct task_struct *t, int sig, bool force)
 {
 	void __user *handler;
 
@@ -122,25 +122,49 @@ static bool sig_blocked(struct task_struct *t, int sig)
 		sigismember(&t->real_blocked, sig);
 }
 
-static bool sig_ignored(struct task_struct *t, int sig, bool force)
+static bool sig_can_short_circuit_to_thread(struct task_struct *thread, int sig)
+{
+	/* Only a living thread can receive a short circuit signal */
+	if (__fatal_signal_pending(thread) || (thread->flags & PF_EXITING))
+		return false;
+
+	/*
+	 * If the signal handler is blocked then short circuit
+	 * delivery may not happen because the signal handler may
+	 * change by the time it is unblocked.
+	 */
+	if (sig_blocked(thread, sig))
+		return false;
+
+	/*
+	 * Tracers are allowed to see and modify all signals.
+	 * SIGKILL and the SA_IMMUTABLE signals are an exception.
+	 */
+	if (thread->ptrace &&
+	    (sig != SIGKILL) &&
+	    !(thread->sighand->action[sig - 1].sa.sa_flags & SA_IMMUTABLE))
+		return false;
+
+	return true;
+}
+
+static bool sig_can_short_circuit(struct task_struct *p, enum pid_type type, int sig)
 {
 	/*
-	 * Blocked signals are never ignored, since the
-	 * signal handler may change by the time it is
-	 * unblocked.
+	 * Is there at least one thread where the short circuit
+	 * delivery is valid?
 	 */
-	if (sig_blocked(t, sig))
-		return false;
+	struct task_struct *thread;
 
-	/*
-	 * Tracers may want to know about even ignored signal unless it
-	 * is SIGKILL which can't be reported anyway but can be ignored
-	 * by SIGNAL_UNKILLABLE task.
-	 */
-	if (t->ptrace && sig != SIGKILL)
-		return false;
+	if (type == PIDTYPE_PID)
+		return sig_can_short_circuit_to_thread(p, sig);
 
-	return sig_task_ignored(t, sig, force);
+	for_each_thread(p, thread) {
+		if (sig_can_short_circuit_to_thread(thread, sig))
+			return true;
+	}
+
+	return false;
 }
 
 /*
@@ -887,7 +911,8 @@ static void ptrace_trap_notify(struct task_struct *t)
  * Returns true if the signal should be actually delivered, otherwise
  * it should be dropped.
  */
-static bool prepare_signal(int sig, struct task_struct *p, bool force)
+static bool prepare_signal(int sig, struct task_struct *p,
+			   enum pid_type type, bool force)
 {
 	struct signal_struct *signal = p->signal;
 	struct task_struct *t;
@@ -951,7 +976,11 @@ static bool prepare_signal(int sig, struct task_struct *p, bool force)
 		}
 	}
 
-	return !sig_ignored(p, sig, force);
+	/* Stop process the signal if nothing more needs to be done */
+	if (sig_ignored(p, sig, force) && sig_can_short_circuit(p, type, sig))
+		return false;
+
+	return true;
 }
 
 /*
@@ -1082,7 +1111,7 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	lockdep_assert_held(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
-	if (!prepare_signal(sig, t, force))
+	if (!prepare_signal(sig, t, type, force))
 		goto ret;
 
 	pending = (type != PIDTYPE_PID) ? &t->signal->shared_pending : &t->pending;
@@ -2028,7 +2057,7 @@ void posixtimer_send_sigqueue(struct k_itimer *tmr)
 	 */
 	tmr->it_sig_periodic = tmr->it_status == POSIX_TIMER_REQUEUE_PENDING;
 
-	if (!prepare_signal(sig, t, false)) {
+	if (!prepare_signal(sig, t, tmr->it_pid_type, false)) {
 		result = TRACE_SIGNAL_IGNORED;
 
 		if (!list_empty(&q->list)) {
