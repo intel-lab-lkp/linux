@@ -24,12 +24,26 @@ struct dma_region {
 	u64 size;
 };
 
+struct spapr_tce_window {
+	u64 start;
+	u64 size;
+	u32 page_shift;
+	bool valid;
+	bool dynamic;
+	bool remove_on_cleanup;
+};
+
 struct iommu {
 	const struct iommu_mode *mode;
 	int container_fd;
 	int iommufd;
 	u32 ioas_id;
 	struct list_head dma_regions;
+#ifdef __powerpc__
+	struct spapr_tce_window default_window;
+	struct spapr_tce_window ddw_window;
+	struct spapr_tce_window *active_window;
+#endif
 };
 
 struct iommu *iommu_init(const char *iommu_mode);
@@ -60,6 +74,10 @@ int __iommu_hva2iova(struct iommu *iommu, void *vaddr, iova_t *iova);
 iova_t iommu_hva2iova(struct iommu *iommu, void *vaddr);
 
 struct iommu_iova_range *iommu_iova_ranges(struct iommu *iommu, u32 *nranges);
+
+int iommu_prepare_dma_window(struct iommu *iommu, u64 min_size,
+			     u64 page_size, bool force_dynamic);
+bool iommu_supports_unmap_all(struct iommu *iommu);
 
 #define MODE_VFIO_TYPE1_IOMMU "vfio_type1_iommu"
 #define MODE_VFIO_TYPE1V2_IOMMU "vfio_type1v2_iommu"

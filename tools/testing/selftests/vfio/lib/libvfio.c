@@ -138,5 +138,3 @@ const char *vfio_selftests_get_iommu_mode(void)
 	return get_iommu_mode_env();
 }
 
-	return map_align;
-}

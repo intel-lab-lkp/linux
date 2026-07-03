@@ -16,9 +16,11 @@
 #include <linux/types.h>
 #include <linux/vfio.h>
 #include <linux/iommufd.h>
+#include <linux/sizes.h>
 
 #include "../../../kselftest.h"
 #include <libvfio.h>
+#include <limits.h>
 
 const char *default_iommu_mode = MODE_IOMMUFD;
 
@@ -93,6 +95,233 @@ int __iommu_hva2iova(struct iommu *iommu, void *vaddr, iova_t *iova)
 	return -ENOENT;
 }
 
+#ifdef __powerpc__
+static bool iommu_is_spapr_tce_v2(struct iommu *iommu)
+{
+	return !!(iommu->mode->iommu_type == VFIO_SPAPR_TCE_v2_IOMMU);
+}
+
+static u32 page_size_to_shift(u64 page_size)
+{
+	return __builtin_ctzll(page_size);
+}
+
+static int spapr_tce_read_default_window(struct iommu *iommu)
+{
+	struct vfio_iommu_spapr_tce_info info = {
+		.argsz = sizeof(info),
+	};
+
+	if (iommu->default_window.valid)
+		return 0;
+
+	if (ioctl(iommu->container_fd, VFIO_IOMMU_SPAPR_TCE_GET_INFO, &info))
+		return -errno;
+
+	iommu->default_window.start = info.dma32_window_start;
+	iommu->default_window.size = info.dma32_window_size;
+	iommu->default_window.page_shift = page_size_to_shift(getpagesize());
+	iommu->default_window.valid = true;
+	iommu->default_window.dynamic = false;
+	iommu->default_window.remove_on_cleanup = false;
+
+	return 0;
+}
+
+static int spapr_tce_create_ddw(struct iommu *iommu, u64 min_size, u32 page_shift)
+{
+	struct vfio_iommu_spapr_tce_create create = {
+		.argsz = sizeof(create),
+		.page_shift = page_shift,
+		.levels = 1,
+		.window_size = min_size,
+	};
+
+	if (ioctl(iommu->container_fd, VFIO_IOMMU_SPAPR_TCE_CREATE, &create))
+		return -errno;
+
+	iommu->ddw_window.start = create.start_addr;
+	iommu->ddw_window.size = create.window_size;
+	iommu->ddw_window.page_shift = page_shift;
+	iommu->ddw_window.valid = true;
+	iommu->ddw_window.dynamic = true;
+	iommu->ddw_window.remove_on_cleanup = true;
+
+	return 0;
+}
+
+static int spapr_tce_remove_window(struct iommu *iommu, struct spapr_tce_window *window)
+{
+	struct vfio_iommu_spapr_tce_remove remove = {
+		.argsz = sizeof(remove),
+		.start_addr = window->start,
+	};
+
+	if (!window->valid || !window->remove_on_cleanup)
+		return 0;
+
+	if (ioctl(iommu->container_fd, VFIO_IOMMU_SPAPR_TCE_REMOVE, &remove))
+		return -errno;
+
+	window->valid = false;
+	return 0;
+}
+
+static bool spapr_tce_window_satisfies(struct spapr_tce_window *window,
+				       u64 min_size, u32 page_shift,
+				       bool require_dynamic)
+{
+	if (!window || !window->valid)
+		return false;
+
+	if (require_dynamic && !window->dynamic)
+		return false;
+
+	if (window->size < min_size)
+		return false;
+
+	if (window->page_shift != page_shift)
+		return false;
+
+	return true;
+}
+
+static struct iommu_iova_range *spapr_tce_iova_ranges(struct iommu *iommu, u32 *nranges)
+{
+	struct iommu_iova_range *ranges;
+	int ret;
+
+	if (!iommu->active_window) {
+		ret = iommu_prepare_dma_window(iommu, SZ_1G, getpagesize(), false);
+		if (ret)
+			return NULL;
+	}
+
+	ranges = calloc(1, sizeof(*ranges));
+	VFIO_ASSERT_NOT_NULL(ranges);
+
+	ranges[0].start = iommu->active_window->start;
+	ranges[0].last = iommu->active_window->start + iommu->active_window->size - 1;
+
+	*nranges = 1;
+	return ranges;
+}
+
+static bool spapr_tce_iova_inside_window(struct iommu *iommu, struct dma_region *region)
+{
+	struct spapr_tce_window *window = iommu->active_window;
+
+	if (!window || !window->valid)
+		return false;
+
+	if (region->iova < window->start)
+		return false;
+
+	if (region->iova + region->size > window->start + window->size)
+		return false;
+
+	return true;
+}
+
+static int spapr_register_memory(struct iommu *iommu, struct dma_region *region)
+{
+	struct vfio_iommu_spapr_register_memory args = {
+		.argsz = sizeof(args),
+		.vaddr = (u64)region->vaddr,
+		.size = region->size,
+	};
+
+	if (ioctl(iommu->container_fd, VFIO_IOMMU_SPAPR_REGISTER_MEMORY, &args))
+		return -errno;
+
+	return 0;
+}
+
+static int spapr_unregister_memory(struct iommu *iommu, struct dma_region *region)
+{
+	struct vfio_iommu_spapr_register_memory args = {
+		.argsz = sizeof(args),
+		.vaddr = (u64)region->vaddr,
+		.size = region->size,
+	};
+
+	if (ioctl(iommu->container_fd, VFIO_IOMMU_SPAPR_UNREGISTER_MEMORY, &args))
+		return -errno;
+
+	return 0;
+}
+
+int iommu_prepare_dma_window(struct iommu *iommu, u64 min_size,
+			     u64 page_size, bool force_dynamic)
+{
+	u32 page_shift;
+	int ret;
+
+	if (!iommu_is_spapr_tce_v2(iommu))
+		return 0;
+
+	if (!page_size)
+		page_size = getpagesize();
+
+	page_shift = page_size_to_shift(page_size);
+
+	ret = spapr_tce_read_default_window(iommu);
+	if (ret)
+		return ret;
+
+	/*
+	 * Normal mapping path:
+	 * use default window when it satisfies the request.
+	 */
+	if (!force_dynamic &&
+	    spapr_tce_window_satisfies(&iommu->default_window,
+				       min_size, page_shift, false)) {
+		iommu->active_window = &iommu->default_window;
+		return 0;
+	}
+
+	/*
+	 * Dynamic path:
+	 * use existing DDW if it already satisfies the request.
+	 */
+	if (spapr_tce_window_satisfies(&iommu->ddw_window,
+				       min_size, page_shift, true)) {
+		iommu->active_window = &iommu->ddw_window;
+		return 0;
+	}
+
+	/*
+	 * Neither default nor DDW is sufficient.
+	 * Remove only the selftest-created DDW, then create a new DDW.
+	 */
+	ret = spapr_tce_remove_window(iommu, &iommu->ddw_window);
+	if (ret)
+		return ret;
+
+	ret = spapr_tce_create_ddw(iommu, min_size, page_shift);
+	if (ret)
+		return ret;
+
+	iommu->active_window = &iommu->ddw_window;
+	return 0;
+}
+#else
+int iommu_prepare_dma_window(struct iommu *iommu, u64 min_size,
+			     u64 page_size, bool force_dynamic)
+{
+	return 0;
+}
+#endif
+
+bool iommu_supports_unmap_all(struct iommu *iommu)
+{
+#ifdef __powerpc__
+	if (iommu_is_spapr_tce_v2(iommu))
+		return false;
+#endif
+	return true;
+}
+
 iova_t iommu_hva2iova(struct iommu *iommu, void *vaddr)
 {
 	iova_t iova;
@@ -113,9 +342,27 @@ static int vfio_iommu_map(struct iommu *iommu, struct dma_region *region)
 		.iova = region->iova,
 		.size = region->size,
 	};
+	int ret;
 
-	if (ioctl(iommu->container_fd, VFIO_IOMMU_MAP_DMA, &args))
+#ifdef __powerpc__
+	if (iommu_is_spapr_tce_v2(iommu)) {
+		if (!spapr_tce_iova_inside_window(iommu, region))
+			return -EINVAL;
+
+		ret = spapr_register_memory(iommu, region);
+		if (ret)
+			return ret;
+	}
+#endif
+
+	ret = ioctl(iommu->container_fd, VFIO_IOMMU_MAP_DMA, &args);
+	if (ret) {
+#ifdef __powerpc__
+		if (iommu_is_spapr_tce_v2(iommu))
+			spapr_unregister_memory(iommu, region);
+#endif
 		return -errno;
+	}
 
 	return 0;
 }
@@ -177,8 +424,18 @@ static int __vfio_iommu_unmap(int fd, u64 iova, u64 size, u32 flags, u64 *unmapp
 static int vfio_iommu_unmap(struct iommu *iommu, struct dma_region *region,
 			    u64 *unmapped)
 {
-	return __vfio_iommu_unmap(iommu->container_fd, region->iova,
-				  region->size, 0, unmapped);
+	int ret;
+
+	ret = __vfio_iommu_unmap(iommu->container_fd, region->iova,
+				 region->size, 0, unmapped);
+	if (ret)
+		return ret;
+#ifdef __powerpc__
+	if (iommu_is_spapr_tce_v2(iommu))
+		ret = spapr_unregister_memory(iommu, region);
+#endif
+
+	return ret;
 }
 
 static int __iommufd_unmap(int fd, u64 iova, u64 length, u32 ioas_id, u64 *unmapped)
@@ -323,6 +580,11 @@ static struct iommu_iova_range *vfio_iommu_iova_ranges(struct iommu *iommu,
 	struct vfio_info_cap_header *hdr;
 	struct iommu_iova_range *ranges = NULL;
 
+#ifdef __powerpc__
+	if (iommu_is_spapr_tce_v2(iommu))
+		return spapr_tce_iova_ranges(iommu, nranges);
+#endif
+
 	info = vfio_iommu_get_info(iommu->container_fd);
 	hdr = vfio_iommu_info_cap_hdr(info, VFIO_IOMMU_TYPE1_INFO_CAP_IOVA_RANGE);
 	VFIO_ASSERT_NOT_NULL(hdr);
@@ -458,6 +720,11 @@ struct iommu *iommu_init(const char *iommu_mode)
 
 void iommu_cleanup(struct iommu *iommu)
 {
+#ifdef __powerpc__
+	if (iommu_is_spapr_tce_v2(iommu))
+		spapr_tce_remove_window(iommu, &iommu->ddw_window);
+#endif
+
 	if (iommu->iommufd)
 		VFIO_ASSERT_EQ(close(iommu->iommufd), 0);
 	else
