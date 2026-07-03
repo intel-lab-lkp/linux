@@ -369,7 +369,12 @@ static int ipu6_pci_config_setup(struct pci_dev *dev)
 
 static void ipu6_configure_vc_mechanism(struct ipu6_device *isp)
 {
-	u32 val = readl(isp->base + BUTTRESS_REG_BTRS_CTRL);
+	u32 val;
+
+	if (pci_match_id(ipu7_ids, isp->pdev))
+		return;
+
+	val = readl(isp->base + BUTTRESS_REG_BTRS_CTRL);
 
 	if (IPU6_BTRS_ARB_STALL_MODE_VC0 == IPU6_BTRS_ARB_MODE_TYPE_STALL)
 		val |= BUTTRESS_REG_BTRS_CTRL_STALL_MODE_VC0;
