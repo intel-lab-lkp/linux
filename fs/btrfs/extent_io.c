@@ -2280,7 +2280,8 @@ static void prepare_eb_write(struct extent_buffer *eb)
 }
 
 static noinline_for_stack void write_one_eb(struct extent_buffer *eb,
-					    struct writeback_control *wbc)
+					    struct writeback_control *wbc,
+					    bool submit)
 {
 	struct btrfs_fs_info *fs_info = eb->fs_info;
 	struct btrfs_bio *bbio;
@@ -2310,6 +2311,12 @@ static noinline_for_stack void write_one_eb(struct extent_buffer *eb,
 		wbc_account_cgroup_owner(wbc, folio, range_len);
 		folio_unlock(folio);
 	}
+
+	if (!submit) {
+		btrfs_bio_end_io(bbio, BLK_STS_OK);
+		return;
+	}
+
 	/*
 	 * If the fs is already in error status, do not submit any writeback
 	 * but immediately finish it.
@@ -2397,6 +2404,8 @@ retry:
 		struct extent_buffer *eb;
 
 		while ((eb = eb_batch_next(&batch)) != NULL) {
+			bool submit = true;
+
 			ctx.eb = eb;
 
 			ret = btrfs_check_meta_write_pointer(eb->fs_info, &ctx);
@@ -2411,6 +2420,9 @@ retry:
 				continue;
 			}
 
+			if (btrfs_is_zoned(fs_info) && !ctx.zoned_bg)
+				submit = false;
+
 			if (!lock_extent_buffer_for_io(eb, wbc))
 				continue;
 
@@ -2420,7 +2432,7 @@ retry:
 				btrfs_schedule_zone_finish_bg(ctx.zoned_bg, eb);
 				ctx.zoned_bg->meta_write_pointer += eb->len;
 			}
-			write_one_eb(eb, wbc);
+			write_one_eb(eb, wbc, submit);
 		}
 		nr_to_write_done = (wbc->nr_to_write <= 0);
 		eb_batch_release(&batch);
