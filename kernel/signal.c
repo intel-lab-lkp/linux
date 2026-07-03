@@ -1045,36 +1045,8 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 	}
 
 	/*
-	 * Found a killable thread.  If the signal will be fatal,
-	 * then start taking the whole group down immediately.
-	 */
-	if (sig_fatal(p, sig) && !sigismember(&t->real_blocked, sig) &&
-	    (sig == SIGKILL || !p->ptrace)) {
-		/*
-		 * This signal will be fatal to the whole group.
-		 */
-		if (!sig_kernel_coredump(sig)) {
-			/*
-			 * Start a group exit and wake everybody up.
-			 * This way we don't have other threads
-			 * running and doing things after a slower
-			 * thread has the fatal signal pending.
-			 */
-			signal->flags = SIGNAL_GROUP_EXIT;
-			signal->group_exit_code = sig;
-			signal->group_stop_count = 0;
-			__for_each_thread(signal, t) {
-				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-				sigaddset(&t->pending.signal, SIGKILL);
-				signal_wake_up(t, 1);
-			}
-			return;
-		}
-	}
-
-	/*
-	 * The signal is already in the shared-pending queue.
-	 * Tell the chosen thread to wake up and dequeue it.
+	 * Found a killable thread.  The signal is already in the
+	 * queue.  Tell the chosen thread to wake up and dequeue it.
 	 */
 	signal_wake_up(t, sig == SIGKILL);
 	return;
@@ -1086,13 +1058,37 @@ static void enqueue_signal(struct task_struct *t, enum pid_type type,
 	struct signal_struct *signal = t->signal;
 	struct sigpending *pending = (type != PIDTYPE_PID) ?
 		&signal->shared_pending : &t->pending;
+	bool need_signal_wake_up = true;
+
+	if (sig_fatal(t, sig) && !sig_kernel_coredump(sig) &&
+	    sig_can_short_circuit(t, type, sig)) {
+		struct task_struct *thread;
+		/*
+		 * This signal will be fatal to the whole group.
+		 *
+		 * Start a group exit and wake everybody up.
+		 * This way we don't have other threads
+		 * running and doing things after a slower
+		 * thread has the fatal signal pending.
+		 */
+		signal->flags = SIGNAL_GROUP_EXIT;
+		signal->group_exit_code = sig;
+		signal->group_stop_count = 0;
+		__for_each_thread(signal, thread) {
+			task_clear_jobctl_pending(thread, JOBCTL_PENDING_MASK);
+			sigaddset(&thread->pending.signal, SIGKILL);
+			signal_wake_up(thread, 1);
+		}
+		need_signal_wake_up = false;
+	}
 
 	signalfd_notify(t, sig);
 	if (q) {
 		list_add_tail(&q->list, &pending->list);
 	}
 	sigaddset(&pending->signal, sig);
-	complete_signal(sig, t, type);
+	if (need_signal_wake_up)
+		complete_signal(sig, t, type);
 }
 
 static inline bool legacy_queue(struct sigpending *signals, int sig)
