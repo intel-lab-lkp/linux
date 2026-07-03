@@ -69,8 +69,8 @@ struct ad3530r_chip_info {
 	const char *name;
 	const struct iio_chan_spec *channels;
 	int (*input_ch_reg)(unsigned int channel);
+	int (*sw_ldac_trig_reg)(unsigned int channel);
 	unsigned int num_channels;
-	unsigned int sw_ldac_trig_reg;
 	bool internal_ref_support;
 };
 
@@ -190,6 +190,16 @@ static ssize_t ad3530r_set_dac_powerdown(struct iio_dev *indio_dev,
 	return len;
 }
 
+static int ad3530r_trigger_sw_ldac_reg(unsigned int channel)
+{
+	return AD3530R_SW_LDAC_TRIG_A;
+}
+
+static int ad3531r_trigger_sw_ldac_reg(unsigned int channel)
+{
+	return AD3531R_SW_LDAC_TRIG_A;
+}
+
 static int ad3530r_trigger_hw_ldac(struct gpio_desc *ldac_gpio)
 {
 	gpiod_set_value_cansleep(ldac_gpio, 1);
@@ -215,7 +225,7 @@ static int ad3530r_dac_write(struct ad3530r_state *st, unsigned int chan,
 	if (st->ldac_gpio)
 		return ad3530r_trigger_hw_ldac(st->ldac_gpio);
 
-	return regmap_set_bits(st->regmap, st->chip_info->sw_ldac_trig_reg,
+	return regmap_set_bits(st->regmap, st->chip_info->sw_ldac_trig_reg(chan),
 			       AD3530R_SLD_TRIG_A);
 }
 
@@ -335,7 +345,7 @@ static const struct ad3530r_chip_info ad3530_chip = {
 	.name = "ad3530",
 	.channels = ad3530r_channels,
 	.num_channels = ARRAY_SIZE(ad3530r_channels),
-	.sw_ldac_trig_reg = AD3530R_SW_LDAC_TRIG_A,
+	.sw_ldac_trig_reg = ad3530r_trigger_sw_ldac_reg,
 	.input_ch_reg = ad3530r_input_ch_reg,
 	.internal_ref_support = false,
 };
@@ -344,7 +354,7 @@ static const struct ad3530r_chip_info ad3530r_chip = {
 	.name = "ad3530r",
 	.channels = ad3530r_channels,
 	.num_channels = ARRAY_SIZE(ad3530r_channels),
-	.sw_ldac_trig_reg = AD3530R_SW_LDAC_TRIG_A,
+	.sw_ldac_trig_reg = ad3530r_trigger_sw_ldac_reg,
 	.input_ch_reg = ad3530r_input_ch_reg,
 	.internal_ref_support = true,
 };
@@ -353,7 +363,7 @@ static const struct ad3530r_chip_info ad3531_chip = {
 	.name = "ad3531",
 	.channels = ad3531r_channels,
 	.num_channels = ARRAY_SIZE(ad3531r_channels),
-	.sw_ldac_trig_reg = AD3531R_SW_LDAC_TRIG_A,
+	.sw_ldac_trig_reg = ad3531r_trigger_sw_ldac_reg,
 	.input_ch_reg = ad3531r_input_ch_reg,
 	.internal_ref_support = false,
 };
@@ -362,7 +372,7 @@ static const struct ad3530r_chip_info ad3531r_chip = {
 	.name = "ad3531r",
 	.channels = ad3531r_channels,
 	.num_channels = ARRAY_SIZE(ad3531r_channels),
-	.sw_ldac_trig_reg = AD3531R_SW_LDAC_TRIG_A,
+	.sw_ldac_trig_reg = ad3531r_trigger_sw_ldac_reg,
 	.input_ch_reg = ad3531r_input_ch_reg,
 	.internal_ref_support = true,
 };
