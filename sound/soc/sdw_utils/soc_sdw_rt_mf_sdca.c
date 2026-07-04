@@ -74,6 +74,12 @@ int asoc_sdw_rt_mf_sdca_spk_rtd_init(struct snd_soc_pcm_runtime *rtd, struct snd
 		return -EINVAL;
 	}
 
+	card->components = devm_kasprintf(card->dev, GFP_KERNEL,
+					  "%s spk:%s",
+					  card->components, codec_name);
+	if (!card->components)
+		return -ENOMEM;
+
 	/* Add routes */
 	ret = snd_soc_dapm_add_routes(dapm, route_map->route_map, route_map->route_size);
 	if (ret)
