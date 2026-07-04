@@ -11,11 +11,14 @@
 #include <linux/uaccess.h>
 #include <linux/signal.h>
 #include <linux/elf.h>
+#include <linux/sysctl.h>
 
 #include <linux/sched/signal.h>
 #include <linux/sched/task_stack.h>
 
 #include <asm/syscall.h>
+
+static int syscall_user_dispatch_allowed __read_mostly = 1;
 
 static void trigger_sigsys(struct pt_regs *regs)
 {
@@ -102,6 +105,10 @@ static int task_set_syscall_user_dispatch(struct task_struct *task, unsigned lon
 		return -EINVAL;
 	}
 
+	/* Arming can be denied at runtime via sysctl, disarming is allowed */
+	if (mode != PR_SYS_DISPATCH_OFF && !syscall_user_dispatch_allowed)
+		return -EPERM;
+
 	/*
 	 * access_ok() will clear memory tags for tagged addresses
 	 * if current has memory tagging enabled.
@@ -172,3 +179,24 @@ int syscall_user_dispatch_set_config(struct task_struct *task, unsigned long siz
 	return task_set_syscall_user_dispatch(task, cfg.mode, cfg.offset, cfg.len,
 					      (char __user *)(uintptr_t)cfg.selector);
 }
+
+#ifdef CONFIG_SYSCTL
+static const struct ctl_table syscall_user_dispatch_sysctls[] = {
+	{
+		.procname	= "syscall_user_dispatch",
+		.data		= &syscall_user_dispatch_allowed,
+		.maxlen		= sizeof(syscall_user_dispatch_allowed),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+};
+
+static int __init syscall_user_dispatch_sysctl_init(void)
+{
+	register_sysctl_init("kernel", syscall_user_dispatch_sysctls);
+	return 0;
+}
+late_initcall(syscall_user_dispatch_sysctl_init);
+#endif /* CONFIG_SYSCTL */
