@@ -829,10 +829,9 @@ static int em28xx_audio_init(struct em28xx *dev)
 	err = snd_card_new(&dev->intf->dev, index[devnr], "Em28xx Audio",
 			   THIS_MODULE, 0, &card);
 	if (err < 0)
-		return err;
+		goto ref_put;
 
 	spin_lock_init(&adev->slock);
-	adev->sndcard = card;
 	adev->udev = udev;
 
 	err = snd_pcm_new(card, "Em28xx Audio", 0, 0, 1, &pcm);
@@ -875,6 +874,8 @@ static int em28xx_audio_init(struct em28xx *dev)
 	if (err < 0)
 		goto urb_free;
 
+	adev->sndcard = card;
+
 	dev_info(&dev->intf->dev, "Audio extension successfully initialized\n");
 	return 0;
 
@@ -883,7 +884,9 @@ urb_free:
 
 card_free:
 	snd_card_free(card);
-	adev->sndcard = NULL;
+
+ref_put:
+	kref_put(&dev->ref, em28xx_free_device);
 
 	return err;
 }
@@ -912,9 +915,9 @@ static int em28xx_audio_fini(struct em28xx *dev)
 
 		snd_card_free(dev->adev.sndcard);
 		dev->adev.sndcard = NULL;
-	}
 
-	kref_put(&dev->ref, em28xx_free_device);
+		kref_put(&dev->ref, em28xx_free_device);
+	}
 	return 0;
 }
 
