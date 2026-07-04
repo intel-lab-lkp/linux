@@ -526,6 +526,14 @@ static __init int armada38x_rtc_probe(struct platform_device *pdev)
 	else
 		clear_bit(RTC_FEATURE_ALARM, rtc->rtc_dev->features);
 
+	/*
+	 * A large forward step of the RTC time makes
+	 * rtc_timer_do_work() replay one period per elapsed second and can
+	 * loop long enough to trigger a soft lockup. Do not advertise
+	 * native UIE; RTC_UIE_ON then uses the poll-based emulation.
+	 */
+	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->rtc_dev->features);
+
 	/* Update RTC-MBUS bridge timing parameters */
 	rtc->data->update_mbus_timing(rtc);
 
