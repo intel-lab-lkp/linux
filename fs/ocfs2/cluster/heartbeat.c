@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/bio.h>
+#include <linux/blk-cgroup.h>
 #include <linux/blkdev.h>
 #include <linux/delay.h>
 #include <linux/file.h>
@@ -519,16 +520,24 @@ static struct bio *o2hb_setup_one_bio(struct o2hb_region *reg,
 	struct bio *bio;
 	struct page *page;
 
-	/* Testing has shown this allocation to take long enough under
+	/*
+	 * Testing has shown this allocation to take long enough under
 	 * GFP_KERNEL that the local node can get fenced. It would be
 	 * nicest if we could pre-allocate these bios and avoid this
-	 * all together. */
-	bio = bio_alloc(reg_bdev(reg), 16, opf, GFP_ATOMIC);
+	 * all together.
+	 *
+	 * Use the atomic bio allocation helper so bio_init() does not create a
+	 * missing blkg. Heartbeat IO is cluster-liveness IO, so account it to
+	 * the root blkcg instead.
+	 */
+	bio = bio_alloc_atomic(16, opf);
 	if (!bio) {
 		mlog(ML_ERROR, "Could not alloc slots BIO!\n");
 		bio = ERR_PTR(-ENOMEM);
 		goto bail;
 	}
+	bio->bi_bdev = reg_bdev(reg);
+	bio_associate_blkg_from_css(bio, blkcg_root_css);
 
 	/* Must put everything in 512 byte sectors for the bio... */
 	bio->bi_iter.bi_sector = (reg->hr_start_block + cs) << (bits - 9);

@@ -366,6 +366,12 @@ static inline struct bio *bio_alloc(struct block_device *bdev,
 	return bio_alloc_bioset(bdev, nr_vecs, opf, gfp_mask, &fs_bio_set);
 }
 
+static inline struct bio *bio_alloc_atomic(unsigned short nr_vecs,
+					   blk_opf_t opf)
+{
+	return bio_alloc_bioset(NULL, nr_vecs, opf, GFP_ATOMIC, &fs_bio_set);
+}
+
 void submit_bio(struct bio *bio);
 
 extern void bio_endio(struct bio *);
