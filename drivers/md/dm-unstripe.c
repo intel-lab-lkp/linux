@@ -136,7 +136,7 @@ static int unstripe_map(struct dm_target *ti, struct bio *bio)
 {
 	struct unstripe_c *uc = ti->private;
 
-	bio_set_dev(bio, uc->dev->bdev);
+	dm_bio_set_dev(bio, uc->dev->bdev);
 	bio->bi_iter.bi_sector = map_to_core(ti, bio) + uc->physical_start;
 
 	return DM_MAPIO_REMAPPED;

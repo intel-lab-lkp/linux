@@ -610,6 +610,8 @@ static void free_io(struct dm_io *io)
 	bio_put(&io->tio.clone);
 }
 
+static void free_tio(struct bio *clone);
+
 static struct bio *alloc_tio(struct clone_info *ci, struct dm_target *ti,
 			     unsigned int target_bio_nr, unsigned int *len, gfp_t gfp_mask)
 {
@@ -644,8 +646,12 @@ static struct bio *alloc_tio(struct clone_info *ci, struct dm_target *ti,
 
 	/* Set default bdev, but target must bio_set_dev() before issuing IO */
 	clone->bi_bdev = md->disk->part0;
-	if (likely(ti != NULL) && unlikely(ti->needs_bio_set_dev))
-		bio_set_dev(clone, md->disk->part0);
+	if (likely(ti != NULL) && unlikely(ti->needs_bio_set_dev)) {
+		bio_set_dev_no_blkg(clone, md->disk->part0);
+		if (!bio_associate_blkg(clone,
+				!gfpflags_allow_blocking(gfp_mask)))
+			goto fail;
+	}
 
 	if (len) {
 		clone->bi_iter.bi_size = to_bytes(*len);
@@ -654,6 +660,14 @@ static struct bio *alloc_tio(struct clone_info *ci, struct dm_target *ti,
 	}
 
 	return clone;
+
+fail:
+	if (dm_tio_flagged(clone_to_tio(clone), DM_TIO_INSIDE_DM_IO)) {
+		clone->bi_bdev = NULL;
+		clone_to_tio(clone)->io = NULL;
+	}
+	free_tio(clone);
+	return NULL;
 }
 
 static void free_tio(struct bio *clone)
@@ -1364,7 +1378,15 @@ void dm_submit_bio_remap(struct bio *clone, struct bio *tgt_clone)
 	if (!tgt_clone)
 		tgt_clone = clone;
 
-	bio_clone_blkg_association(tgt_clone, io->orig_bio, false);
+	if (tgt_clone->bi_opf & REQ_NOWAIT) {
+		if (!bio_clone_blkg_association(tgt_clone, io->orig_bio, true)) {
+			tgt_clone->bi_status = BLK_STS_AGAIN;
+			tgt_clone->bi_end_io(tgt_clone);
+			return;
+		}
+	} else {
+		bio_clone_blkg_association(tgt_clone, io->orig_bio, false);
+	}
 
 	/*
 	 * Account io->origin_bio to DM dev on behalf of target

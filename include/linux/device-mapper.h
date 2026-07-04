@@ -713,6 +713,14 @@ module_exit(dm_##name##_exit)
 #define DM_MAPIO_DELAY_REQUEUE	DM_ENDIO_DELAY_REQUEUE
 #define DM_MAPIO_KILL		4
 
+static inline void dm_bio_set_dev(struct bio *bio, struct block_device *bdev)
+{
+	if (bio->bi_opf & REQ_NOWAIT)
+		bio_set_dev_no_blkg(bio, bdev);
+	else
+		bio_set_dev(bio, bdev);
+}
+
 #define dm_sector_div64(x, y)( \
 { \
 	u64 _res; \
