@@ -64,7 +64,6 @@ struct maple_devinfo {
 };
 
 struct maple_device {
-	struct maple_driver *driver;
 	struct mapleq *mq;
 	void (*callback) (struct mapleq * mq);
 	void (*fileerr_handler)(struct maple_device *mdev, void *recvbuf);
