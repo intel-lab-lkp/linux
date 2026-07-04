@@ -1501,9 +1501,6 @@ static int mtk_hdmi_v2_probe(struct platform_device *pdev)
 
 static void mtk_hdmi_v2_remove(struct platform_device *pdev)
 {
-	struct mtk_hdmi *hdmi = platform_get_drvdata(pdev);
-
-	i2c_put_adapter(hdmi->ddc_adpt);
 }
 
 static const struct of_device_id mtk_drm_hdmi_v2_of_ids[] = {
