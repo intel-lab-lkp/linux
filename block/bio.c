@@ -259,6 +259,20 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 }
 EXPORT_SYMBOL(bio_init);
 
+static bool bio_init_nowait(struct bio *bio, struct block_device *bdev,
+		struct bio_vec *table, unsigned short max_vecs, blk_opf_t opf)
+{
+	bio_init(bio, NULL, table, max_vecs, opf);
+	if (bdev) {
+		bio_set_dev_no_blkg(bio, bdev);
+		if (bio_associate_blkg(bio, true))
+			return true;
+		bio_uninit(bio);
+		return false;
+	}
+	return true;
+}
+
 /**
  * bio_reset - reinitialize a bio
  * @bio:	bio to reset
@@ -599,12 +613,25 @@ struct bio *bio_alloc_bioset(struct block_device *bdev, unsigned short nr_vecs,
 		}
 	}
 
-	if (nr_vecs && nr_vecs <= BIO_INLINE_VECS)
-		bio_init_inline(bio, bdev, nr_vecs, opf);
-	else
-		bio_init(bio, bdev, bvecs, nr_vecs, opf);
+	if (nr_vecs && nr_vecs <= BIO_INLINE_VECS) {
+		bvecs = bio_inline_vecs(bio);
+		if (gfpflags_allow_blocking(saved_gfp))
+			bio_init(bio, bdev, bvecs, nr_vecs, opf);
+		else if (!bio_init_nowait(bio, bdev, bvecs, nr_vecs, opf))
+			goto fail_free_bio;
+	} else {
+		if (gfpflags_allow_blocking(saved_gfp))
+			bio_init(bio, bdev, bvecs, nr_vecs, opf);
+		else if (!bio_init_nowait(bio, bdev, bvecs, nr_vecs, opf))
+			goto fail_free_bio;
+	}
 	bio->bi_pool = bs;
 	return bio;
+
+fail_free_bio:
+	bio->bi_pool = bs;
+	bio_put(bio);
+	return NULL;
 }
 EXPORT_SYMBOL(bio_alloc_bioset);
 
@@ -857,7 +884,9 @@ static int __bio_clone(struct bio *bio, struct bio *bio_src, gfp_t gfp)
 		if (bio->bi_bdev == bio_src->bi_bdev &&
 		    bio_flagged(bio_src, BIO_REMAPPED))
 			bio_set_flag(bio, BIO_REMAPPED);
-		bio_clone_blkg_association(bio, bio_src, false);
+		if (!bio_clone_blkg_association(bio, bio_src,
+					!gfpflags_allow_blocking(gfp)))
+			return -ENOMEM;
 	}
 
 	if (bio_crypt_clone(bio, bio_src, gfp) < 0)
@@ -913,9 +942,14 @@ EXPORT_SYMBOL(bio_alloc_clone);
 int bio_init_clone(struct block_device *bdev, struct bio *bio,
 		struct bio *bio_src, gfp_t gfp)
 {
+	bool blocking = gfpflags_allow_blocking(gfp);
 	int ret;
 
-	bio_init(bio, bdev, bio_src->bi_io_vec, 0, bio_src->bi_opf);
+	if (blocking)
+		bio_init(bio, bdev, bio_src->bi_io_vec, 0, bio_src->bi_opf);
+	else if (!bio_init_nowait(bio, bdev, bio_src->bi_io_vec, 0,
+				bio_src->bi_opf))
+		return -ENOMEM;
 	ret = __bio_clone(bio, bio_src, gfp);
 	if (ret)
 		bio_uninit(bio);
