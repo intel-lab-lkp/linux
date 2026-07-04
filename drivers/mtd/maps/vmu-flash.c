@@ -772,11 +772,9 @@ static void vmu_file_error(struct maple_device *mdev, void *recvbuf)
 static int probe_maple_vmu(struct device *dev)
 {
 	struct maple_device *mdev = to_maple_dev(dev);
-	struct maple_driver *mdrv = to_maple_driver(dev->driver);
 
 	mdev->can_unload = vmu_can_unload;
 	mdev->fileerr_handler = vmu_file_error;
-	mdev->driver = mdrv;
 
 	return vmu_connect(mdev);
 }
