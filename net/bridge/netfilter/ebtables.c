@@ -2299,7 +2299,7 @@ static int compat_do_replace(struct net *net, sockptr_t arg, unsigned int len)
 	}
 
 	countersize = COUNTER_OFFSET(tmp.nentries) * nr_cpu_ids;
-	newinfo = vmalloc(sizeof(*newinfo) + countersize);
+	newinfo = __vmalloc(sizeof(*newinfo) + countersize, GFP_KERNEL_ACCOUNT);
 	if (!newinfo)
 		return -ENOMEM;
 
@@ -2308,7 +2308,7 @@ static int compat_do_replace(struct net *net, sockptr_t arg, unsigned int len)
 
 	memset(&state, 0, sizeof(state));
 
-	newinfo->entries = vmalloc(tmp.entries_size);
+	newinfo->entries = __vmalloc(tmp.entries_size, GFP_KERNEL_ACCOUNT);
 	if (!newinfo->entries) {
 		ret = -ENOMEM;
 		goto free_newinfo;
