@@ -566,10 +566,11 @@ static int elants_i2c_query_ts_info_ekth(struct elants_data *ts)
 
 	dev_dbg(&client->dev, "phy_x=%d, phy_y=%d\n", phy_x, phy_y);
 
-	if (rows == 0 || cols == 0 || osr == 0) {
+	if (rows == 0 || cols == 0 || osr == 0 ||
+	    phy_x == 0 || phy_y == 0) {
 		dev_warn(&client->dev,
-			 "invalid trace number data: %d, %d, %d\n",
-			 rows, cols, osr);
+			 "invalid data: rows=%u cols=%u osr=%u phy_x=%u phy_y=%u\n",
+			 rows, cols, osr, phy_x, phy_y);
 	} else {
 		/* translate trace number to TS resolution */
 		ts->x_max = ELAN_TS_RESOLUTION(rows, osr);
