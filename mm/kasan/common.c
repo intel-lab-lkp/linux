@@ -188,7 +188,7 @@ static inline u8 assign_tag(struct kmem_cache *cache,
 					const void *object, bool init)
 {
 	if (IS_ENABLED(CONFIG_KASAN_GENERIC))
-		return 0xff;
+		return KASAN_TAG_KERNEL;
 
 	/*
 	 * If the cache neither has a constructor nor has SLAB_TYPESAFE_BY_RCU
