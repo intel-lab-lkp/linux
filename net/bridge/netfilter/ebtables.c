@@ -1390,6 +1390,9 @@ static int do_update_counters(struct net *net, const char *name,
 	if (num_counters == 0)
 		return -EINVAL;
 
+	if (num_counters >= MAX_EBT_ENTRIES)
+		return -ENOMEM;
+
 	tmp = vmalloc_array(num_counters, sizeof(*tmp));
 	if (!tmp)
 		return -ENOMEM;
