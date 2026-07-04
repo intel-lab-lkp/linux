@@ -80,6 +80,7 @@ struct usbg_cmd {
 	struct work_struct work;
 	int unpacked_lun;
 	struct se_cmd se_cmd;
+	struct se_session *se_sess;
 	void *data_buf; /* used if no sg support available */
 	struct f_uas *fu;
 	struct kref ref;

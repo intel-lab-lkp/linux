@@ -725,7 +725,7 @@ static void uasp_status_data_cmpl(struct usb_ep *ep, struct usb_request *req)
 		    cmd->tmr_rsp != RC_RESPONSE_UNKNOWN) {
 			struct se_session *se_sess;
 
-			se_sess = fu->tpg->tpg_nexus->tvn_se_sess;
+			se_sess = cmd->se_sess;
 			sbitmap_queue_clear(&se_sess->sess_tag_pool,
 					    cmd->se_cmd.map_tag,
 					    cmd->se_cmd.map_cpu);
@@ -1186,14 +1186,41 @@ static int usbg_send_read_response(struct se_cmd *se_cmd)
 
 static void usbg_aborted_task(struct se_cmd *se_cmd);
 
+static void usbg_cleanup_queued_cmd(struct usbg_cmd *cmd)
+{
+	struct se_session *se_sess = cmd->se_sess;
+
+	if (cmd->fu->flags & USBG_IS_UAS) {
+		struct uas_stream *stream;
+
+		stream = &cmd->fu->stream[cmd->se_cmd.map_tag];
+		if (hash_hashed(&stream->node))
+			hash_del(&stream->node);
+	}
+
+	sbitmap_queue_clear(&se_sess->sess_tag_pool,
+			    cmd->se_cmd.map_tag,
+			    cmd->se_cmd.map_cpu);
+}
+
 static void usbg_submit_tmr(struct usbg_cmd *cmd)
 {
+	struct tcm_usbg_nexus *tv_nexus;
 	struct se_session *se_sess;
 	struct se_cmd *se_cmd;
 	int flags = TARGET_SCF_ACK_KREF;
 
 	se_cmd = &cmd->se_cmd;
-	se_sess = cmd->fu->tpg->tpg_nexus->tvn_se_sess;
+	tv_nexus = cmd->fu->tpg->tpg_nexus;
+	if (!tv_nexus) {
+		struct usb_gadget *gadget = fuas_to_gadget(cmd->fu);
+
+		dev_err(&gadget->dev, "Missing nexus for TMR, ignoring command\n");
+		usbg_cleanup_queued_cmd(cmd);
+		return;
+	}
+
+	se_sess = tv_nexus->tvn_se_sess;
 
 	target_submit_tmr(se_cmd, se_sess,
 			  cmd->response_iu.add_response_info,
@@ -1226,6 +1253,7 @@ static void usbg_submit_cmd(struct usbg_cmd *cmd)
 		struct usb_gadget *gadget = fuas_to_gadget(cmd->fu);
 
 		dev_err(&gadget->dev, "Missing nexus, ignoring command\n");
+		usbg_cleanup_queued_cmd(cmd);
 		return;
 	}
 
@@ -1271,12 +1299,22 @@ static void usbg_cmd_work(struct work_struct *work)
 skip:
 	if (cmd->tmr_rsp == RC_OVERLAPPED_TAG) {
 		struct f_uas *fu = cmd->fu;
+		struct tcm_usbg_nexus *tv_nexus;
 		struct se_session *se_sess;
 		struct uas_stream *stream = NULL;
 		struct hlist_node *tmp;
 		struct usbg_cmd *active_cmd = NULL;
 
-		se_sess = cmd->fu->tpg->tpg_nexus->tvn_se_sess;
+		tv_nexus = fu->tpg->tpg_nexus;
+		if (!tv_nexus) {
+			struct usb_gadget *gadget = fuas_to_gadget(fu);
+
+			dev_err(&gadget->dev, "Missing nexus for overlapped tag, ignoring command\n");
+			usbg_cleanup_queued_cmd(cmd);
+			return;
+		}
+
+		se_sess = tv_nexus->tvn_se_sess;
 
 		hash_for_each_possible_safe(fu->stream_hash, stream, tmp, node, cmd->tag) {
 			int i = stream - &fu->stream[0];
@@ -1357,6 +1395,7 @@ static struct usbg_cmd *usbg_get_cmd(struct f_uas *fu,
 	cmd->se_cmd.map_cpu = cpu;
 	cmd->se_cmd.cpuid = cpu;
 	cmd->se_cmd.tag = cmd->tag = scsi_tag;
+	cmd->se_sess = se_sess;
 	cmd->fu = fu;
 
 	return cmd;
@@ -1413,7 +1452,7 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 		struct se_session *se_sess;
 		int i = stream - &fu->stream[0];
 
-		se_sess = cmd->fu->tpg->tpg_nexus->tvn_se_sess;
+		se_sess = tv_nexus->tvn_se_sess;
 		active_cmd = &((struct usbg_cmd *)se_sess->sess_cmd_map)[i];
 
 		if (active_cmd->tag == scsi_tag) {
@@ -1494,6 +1533,7 @@ static void bot_cmd_work(struct work_struct *work)
 		struct usb_gadget *gadget = fuas_to_gadget(cmd->fu);
 
 		dev_err(&gadget->dev, "Missing nexus, ignoring command\n");
+		usbg_cleanup_queued_cmd(cmd);
 		return;
 	}
 
