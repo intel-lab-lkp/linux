@@ -54,8 +54,12 @@ static void gb_bootrom_timedout(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct gb_bootrom *bootrom = container_of(dwork,
 						  struct gb_bootrom, dwork);
-	struct device *dev = &bootrom->connection->bundle->dev;
+	struct gb_connection *connection = bootrom->connection;
+	struct device *dev = &connection->bundle->dev;
+	struct gb_interface *intf = connection->bundle->intf;
+	struct gb_svc *svc = connection->hd->svc;
 	const char *reason;
+	int ret;
 
 	switch (bootrom->next_request) {
 	case NEXT_REQ_FIRMWARE_SIZE:
@@ -82,7 +86,11 @@ static void gb_bootrom_timedout(struct work_struct *work)
 	free_firmware(bootrom);
 	mutex_unlock(&bootrom->mutex);
 
-	/* TODO: Power-off Module ? */
+	/* Power-off Module */
+	ret = gb_svc_intf_eject(svc, intf->interface_id);
+	if (ret)
+		dev_err(dev, "failed to eject interface %u (%d)\n",
+			intf->interface_id, ret);
 }
 
 static void gb_bootrom_set_timeout(struct gb_bootrom *bootrom,
