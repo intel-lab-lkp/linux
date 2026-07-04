@@ -1848,6 +1848,9 @@ static struct folio *alloc_fresh_hugetlb_folio(struct hstate *h,
 {
 	struct folio *folio;
 
+	if (!nmask)
+		nmask = &cpuset_current_mems_allowed;
+
 	folio = only_alloc_fresh_hugetlb_folio(h, gfp_mask, nid, nmask, NULL);
 	if (folio)
 		hugetlb_vmemmap_optimize_folio(h, folio);
