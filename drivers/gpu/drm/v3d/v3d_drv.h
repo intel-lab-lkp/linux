@@ -75,11 +75,13 @@ struct v3d_queue_state {
 	spinlock_t queue_lock;
 };
 
-/* Performance monitor object. The perform lifetime is controlled by userspace
- * using perfmon related ioctls. A perfmon can be attached to a submit_cl
- * request, and when this is the case, HW perf counters will be activated just
- * before the submit_cl is submitted to the GPU and disabled when the job is
- * done. This way, only events related to a specific job will be counted.
+/* Performance monitor object
+ *
+ * The performance monitor (perfmon) lifetime is controlled by userspace using
+ * perfmon related ioctls. A perfmon can be attached to a CL or CSD submission
+ * request, and when it is, HW performance counters will be activated just
+ * before the job is submitted to the GPU and disabled when the job is done.
+ * This way, only events related to a specific submission will be counted.
  */
 struct v3d_perfmon {
 	/* Tracks the number of users of the perfmon, when this counter reaches
@@ -168,13 +170,31 @@ struct v3d_dev {
 
 	struct v3d_queue_state queue[V3D_MAX_QUEUES];
 
-	/* Tracks the performance monitor state. */
+	/*
+	 * Tracks the performance monitor state and consistency.
+	 *
+	 * When a non-global perfmon is attached to a job, the scheduler must
+	 * not run any other job on the HW concurrently (otherwise, the
+	 * counters would be polluted by unrelated work).
+	 */
 	struct {
 		/* Protects @active. */
 		spinlock_t lock;
 
 		/* Perfmon currently programmed in HW (or NULL if none). */
 		struct v3d_perfmon *active;
+
+		/* Finished fence of the most recently submitted job that
+		 * opened a serialization window (i.e. a job with a non-global
+		 * perfmon attached).
+		 */
+		struct dma_fence *fence;
+
+		/* Finished fence of the most recently submitted job on each HW
+		 * queue. Used so that a new perfmon-carrying job can depend on
+		 * every job currently in-flight across all queues.
+		 */
+		struct dma_fence *last_hw_fence[V3D_MAX_QUEUES];
 	} perfmon_state;
 
 	/* Protects bo_stats */

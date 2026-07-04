@@ -275,6 +275,12 @@ void v3d_perfmon_start(struct v3d_dev *v3d, struct v3d_perfmon *perfmon)
 	if (!perfmon || v3d->global_perfmon)
 		return;
 
+	/* Cross-queue serialization should have drained any previous perfmon
+	 * job before this one runs.
+	 */
+	if (WARN_ON_ONCE(v3d->perfmon_state.active))
+		return;
+
 	if (!pm_runtime_get_if_active(v3d->drm.dev))
 		return;
 
