@@ -50,8 +50,8 @@ static int dc_mouse_open(struct input_dev *dev)
 {
 	struct dc_mouse *mse = input_get_drvdata(dev);
 
-	maple_getcond_callback(mse->mdev, dc_mouse_callback, HZ/50,
-		MAPLE_FUNC_MOUSE);
+	maple_getcond_callback(mse->mdev, dc_mouse_callback, HZ / 50,
+			       MAPLE_FUNC_MOUSE);
 
 	return 0;
 }
