@@ -119,7 +119,7 @@ asmlinkage void kasan_unpoison_task_stack_below(const void *watermark)
 	 * because this function is called by early resume code which hasn't
 	 * yet set up the percpu register (%gs).
 	 */
-	void *base = (void *)((unsigned long)watermark & ~(THREAD_SIZE - 1));
+	void *base = (void *)ALIGN_DOWN((unsigned long)watermark, THREAD_SIZE);
 
 	kasan_unpoison(base, watermark - base, false);
 }
