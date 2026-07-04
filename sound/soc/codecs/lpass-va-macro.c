@@ -1749,7 +1749,15 @@ static int va_macro_runtime_resume(struct device *dev)
 	}
 
 	regcache_cache_only(va->regmap, false);
-	regcache_sync(va->regmap);
+	ret = regcache_sync(va->regmap);
+	if (ret) {
+		regcache_cache_only(va->regmap, true);
+		regcache_mark_dirty(va->regmap);
+		if (va->has_npl_clk)
+			clk_disable_unprepare(va->npl);
+		clk_disable_unprepare(va->mclk);
+		return ret;
+	}
 
 	return 0;
 }
