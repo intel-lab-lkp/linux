@@ -14,9 +14,6 @@
 #include <linux/timer.h>
 #include <linux/maple.h>
 
-/* Very simple mutex to ensure proper cleanup */
-static DEFINE_MUTEX(maple_keyb_mutex);
-
 #define NR_SCANCODES 256
 
 MODULE_AUTHOR("Adrian McMenamin <adrian@mcmen.demon.co.uk");
@@ -128,15 +125,9 @@ static void dc_kbd_callback(struct mapleq *mq)
 	struct dc_kbd *kbd = maple_get_drvdata(mapledev);
 	unsigned long *buf = (unsigned long *)(mq->recvbuf->buf);
 
-	/*
-	 * We should always get the lock because the only
-	 * time it may be locked is if the driver is in the cleanup phase.
-	 */
-	scoped_guard(mutex_try, &maple_keyb_mutex) {
-		if (buf[1] == mapledev->function) {
-			memcpy(kbd->new, buf + 2, 8);
-			dc_scan_kbd(kbd);
-		}
+	if (buf[1] == mapledev->function) {
+		memcpy(kbd->new, buf + 2, 8);
+		dc_scan_kbd(kbd);
 	}
 }
 
@@ -211,22 +202,12 @@ fail:
 	return error;
 }
 
-static void remove_maple_kbd(struct maple_device *mdev)
-{
-	struct dc_kbd *kbd = maple_get_drvdata(mdev);
-
-	guard(mutex)(&maple_keyb_mutex);
-
-	input_unregister_device(kbd->dev);
-	kfree(kbd);
 
 
-}
 
 static struct maple_driver dc_kbd_driver = {
 	.function = MAPLE_FUNC_KEYBOARD,
 	.probe =	probe_maple_kbd,
-	.remove =	remove_maple_kbd,
 	.drv = {
 		.name = "Dreamcast_keyboard",
 	},
