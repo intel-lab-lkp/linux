@@ -146,7 +146,6 @@ static int probe_maple_controller(struct device *dev)
 fail:
 	input_free_device(idev);
 	kfree(pad);
-	maple_set_drvdata(mdev, NULL);
 	return error;
 }
 
@@ -156,7 +155,6 @@ static int remove_maple_controller(struct device *dev)
 	struct dc_pad *pad = maple_get_drvdata(mdev);
 
 	input_unregister_device(pad->dev);
-	maple_set_drvdata(mdev, NULL);
 	kfree(pad);
 
 	return 0;
