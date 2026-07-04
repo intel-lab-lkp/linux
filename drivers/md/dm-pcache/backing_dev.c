@@ -204,6 +204,7 @@ static struct pcache_backing_dev_req *req_type_req_alloc(struct pcache_backing_d
 	struct pcache_request *pcache_req = opts->req.upper_req;
 	struct pcache_backing_dev_req *backing_req;
 	struct bio *orig = pcache_req->bio;
+	int ret;
 
 	backing_req = mempool_alloc(&backing_dev->req_pool, opts->gfp_mask);
 	if (!backing_req)
@@ -211,13 +212,20 @@ static struct pcache_backing_dev_req *req_type_req_alloc(struct pcache_backing_d
 
 	memset(backing_req, 0, sizeof(struct pcache_backing_dev_req));
 
-	bio_init_clone(backing_dev->dm_dev->bdev, &backing_req->bio, orig, opts->gfp_mask);
+	ret = bio_init_clone(backing_dev->dm_dev->bdev, &backing_req->bio,
+			     orig, opts->gfp_mask);
+	if (ret)
+		goto free_backing_req;
 
 	backing_req->type = BACKING_DEV_REQ_TYPE_REQ;
 	backing_req->backing_dev = backing_dev;
 	atomic_inc(&backing_dev->inflight_reqs);
 
 	return backing_req;
+
+free_backing_req:
+	mempool_free(backing_req, &backing_dev->req_pool);
+	return NULL;
 }
 
 static struct pcache_backing_dev_req *kmem_type_req_alloc(struct pcache_backing_dev *backing_dev,
