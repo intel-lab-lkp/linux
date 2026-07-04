@@ -70,17 +70,13 @@ static int probe_maple_mouse(struct maple_device *mdev)
 	struct input_dev *input_dev;
 	struct dc_mouse *mse;
 
-	mse = kzalloc_obj(*mse);
-	if (!mse) {
-		error = -ENOMEM;
-		goto fail;
-	}
+	mse = devm_kzalloc(&mdev->dev, sizeof(*mse), GFP_KERNEL);
+	if (!mse)
+		return -ENOMEM;
 
-	input_dev = input_allocate_device();
-	if (!input_dev) {
-		error = -ENOMEM;
-		goto fail_nomem;
-	}
+	input_dev = devm_input_allocate_device(&mdev->dev);
+	if (!input_dev)
+		return -ENOMEM;
 
 	mse->dev = input_dev;
 	mse->mdev = mdev;
@@ -99,29 +95,14 @@ static int probe_maple_mouse(struct maple_device *mdev)
 	input_dev->id.bustype = BUS_HOST;
 	error =	input_register_device(input_dev);
 	if (error)
-		goto fail_register;
-	return error;
+		return error;
 
-fail_register:
-	input_free_device(input_dev);
-fail_nomem:
-	kfree(mse);
-fail:
-	return error;
-}
-
-static void remove_maple_mouse(struct maple_device *mdev)
-{
-	struct dc_mouse *mse = maple_get_drvdata(mdev);
-
-	input_unregister_device(mse->dev);
-	kfree(mse);
+	return 0;
 }
 
 static struct maple_driver dc_mouse_driver = {
 	.function =	MAPLE_FUNC_MOUSE,
 	.probe =	probe_maple_mouse,
-	.remove =	remove_maple_mouse,
 	.drv = {
 		.name = "Dreamcast_mouse",
 	},
