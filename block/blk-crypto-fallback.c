@@ -187,7 +187,7 @@ static struct bio *blk_crypto_alloc_enc_bio(struct bio *bio_src,
 	bio->bi_write_hint	= bio_src->bi_write_hint;
 	bio->bi_write_stream	= bio_src->bi_write_stream;
 	bio->bi_iter.bi_sector	= bio_src->bi_iter.bi_sector;
-	bio_clone_blkg_association(bio, bio_src);
+	bio_clone_blkg_association(bio, bio_src, false);
 
 	/*
 	 * Move page array up in the allocated memory for the bio vecs as far as

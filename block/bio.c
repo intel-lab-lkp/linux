@@ -236,7 +236,7 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 	bio->bi_blkg = NULL;
 	bio->issue_time_ns = 0;
 	if (bdev)
-		bio_associate_blkg(bio);
+		bio_associate_blkg(bio, false);
 #ifdef CONFIG_BLK_CGROUP_IOCOST
 	bio->bi_iocost_cost = 0;
 #endif
@@ -281,7 +281,7 @@ void bio_reset(struct bio *bio, struct block_device *bdev, blk_opf_t opf)
 	bio->bi_io_vec = bv;
 	bio->bi_bdev = bdev;
 	if (bio->bi_bdev)
-		bio_associate_blkg(bio);
+		bio_associate_blkg(bio, false);
 	bio->bi_opf = opf;
 }
 EXPORT_SYMBOL(bio_reset);
@@ -857,7 +857,7 @@ static int __bio_clone(struct bio *bio, struct bio *bio_src, gfp_t gfp)
 		if (bio->bi_bdev == bio_src->bi_bdev &&
 		    bio_flagged(bio_src, BIO_REMAPPED))
 			bio_set_flag(bio, BIO_REMAPPED);
-		bio_clone_blkg_association(bio, bio_src);
+		bio_clone_blkg_association(bio, bio_src, false);
 	}
 
 	if (bio_crypt_clone(bio, bio_src, gfp) < 0)

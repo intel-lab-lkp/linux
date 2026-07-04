@@ -484,7 +484,7 @@ static struct bio *gfs2_chain_bio(struct bio *prev, unsigned int nr_iovecs,
 	struct bio *new;
 
 	new = bio_alloc(prev->bi_bdev, nr_iovecs, opf, GFP_NOIO);
-	bio_clone_blkg_association(new, prev);
+	bio_clone_blkg_association(new, prev, false);
 	new->bi_iter.bi_sector = sector;
 	bio_chain(new, prev);
 	submit_bio(prev);
@@ -1114,4 +1114,3 @@ const struct gfs2_log_operations *gfs2_log_ops[] = {
 	&gfs2_revoke_lops,
 	NULL,
 };
-

@@ -537,7 +537,7 @@ static struct bio *o2hb_setup_one_bio(struct o2hb_region *reg,
 		goto bail;
 	}
 	bio->bi_bdev = reg_bdev(reg);
-	bio_associate_blkg_from_css(bio, blkcg_root_css);
+	bio_associate_blkg_from_css(bio, blkcg_root_css, true);
 
 	/* Must put everything in 512 byte sectors for the bio... */
 	bio->bi_iter.bi_sector = (reg->hr_start_block + cs) << (bits - 9);

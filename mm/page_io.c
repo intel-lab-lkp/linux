@@ -321,7 +321,7 @@ static void bio_associate_blkg_from_page(struct bio *bio, struct folio *folio)
 		css = NULL;
 	rcu_read_unlock();
 
-	bio_associate_blkg_from_css(bio, css);
+	bio_associate_blkg_from_css(bio, css, false);
 	if (css)
 		css_put(css);
 }

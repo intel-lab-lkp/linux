@@ -848,7 +848,7 @@ static CLOSURE_CALLBACK(cached_dev_read_done)
 		s->iop.bio->bi_iter.bi_sector =
 			s->cache_miss->bi_iter.bi_sector;
 		s->iop.bio->bi_iter.bi_size = s->insert_bio_sectors << 9;
-		bio_clone_blkg_association(s->iop.bio, s->cache_miss);
+		bio_clone_blkg_association(s->iop.bio, s->cache_miss, false);
 		bch_bio_map(s->iop.bio, NULL);
 
 		bio_copy_data(s->cache_miss, s->iop.bio);

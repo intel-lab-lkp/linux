@@ -2068,7 +2068,7 @@ retry:
  * up taking a reference on or %NULL if no reference was taken.
  */
 static inline struct blkcg_gq *blkg_tryget_closest(struct bio *bio,
-		struct cgroup_subsys_state *css)
+		struct cgroup_subsys_state *css, bool nowait)
 {
 	struct request_queue *q = bio->bi_bdev->bd_queue;
 	struct blkcg *blkcg = css_to_blkcg(css);
@@ -2110,18 +2110,30 @@ static inline struct blkcg_gq *blkg_tryget_closest(struct bio *bio,
  * A reference will be taken on the blkg and will be released when @bio is
  * freed.
  */
-void bio_associate_blkg_from_css(struct bio *bio,
-				 struct cgroup_subsys_state *css)
+bool bio_associate_blkg_from_css(struct bio *bio,
+		struct cgroup_subsys_state *css, bool nowait)
 {
-	if (bio->bi_blkg)
+	struct blkcg_gq *blkg;
+
+	if (!nowait)
+		might_sleep();
+
+	if (bio->bi_blkg) {
 		blkg_put(bio->bi_blkg);
+		bio->bi_blkg = NULL;
+	}
 
 	if (css && css->parent) {
-		bio->bi_blkg = blkg_tryget_closest(bio, css);
+		blkg = blkg_tryget_closest(bio, css, nowait);
+		if (!blkg)
+			return false;
+		bio->bi_blkg = blkg;
 	} else {
 		blkg_get(bdev_get_queue(bio->bi_bdev)->root_blkg);
 		bio->bi_blkg = bdev_get_queue(bio->bi_bdev)->root_blkg;
 	}
+
+	return true;
 }
 EXPORT_SYMBOL_GPL(bio_associate_blkg_from_css);
 
@@ -2134,16 +2146,19 @@ EXPORT_SYMBOL_GPL(bio_associate_blkg_from_css);
  * already associated, the css is reused and association redone as the
  * request_queue may have changed.
  */
-void bio_associate_blkg(struct bio *bio)
+bool bio_associate_blkg(struct bio *bio, bool nowait)
 {
 	struct cgroup_subsys_state *css;
+	bool ret;
 
 	if (blk_op_is_passthrough(bio->bi_opf))
-		return;
+		return true;
+	if (!bio->bi_bdev)
+		return true;
 
 	if (bio->bi_blkg) {
 		css = bio_blkcg_css(bio);
-		bio_associate_blkg_from_css(bio, css);
+		return bio_associate_blkg_from_css(bio, css, nowait);
 	} else {
 		rcu_read_lock();
 		css = blkcg_css();
@@ -2151,9 +2166,10 @@ void bio_associate_blkg(struct bio *bio)
 			css = NULL;
 		rcu_read_unlock();
 
-		bio_associate_blkg_from_css(bio, css);
+		ret = bio_associate_blkg_from_css(bio, css, nowait);
 		if (css)
 			css_put(css);
+		return ret;
 	}
 }
 EXPORT_SYMBOL_GPL(bio_associate_blkg);
@@ -2163,10 +2179,14 @@ EXPORT_SYMBOL_GPL(bio_associate_blkg);
  * @dst: destination bio
  * @src: source bio
  */
-void bio_clone_blkg_association(struct bio *dst, struct bio *src)
+bool bio_clone_blkg_association(struct bio *dst, struct bio *src, bool nowait)
 {
-	if (src->bi_blkg)
-		bio_associate_blkg_from_css(dst, bio_blkcg_css(src));
+	if (!src->bi_blkg)
+		return true;
+	if (!dst->bi_bdev)
+		return false;
+
+	return bio_associate_blkg_from_css(dst, bio_blkcg_css(src), nowait);
 }
 EXPORT_SYMBOL_GPL(bio_clone_blkg_association);
 

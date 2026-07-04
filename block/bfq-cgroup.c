@@ -616,13 +616,14 @@ struct bfq_group *bfq_bio_bfqg(struct bfq_data *bfqd, struct bio *bio)
 		}
 		bfqg = blkg_to_bfqg(blkg);
 		if (bfqg->pd.online) {
-			bio_associate_blkg_from_css(bio, &blkg->blkcg->css);
+			bio_associate_blkg_from_css(bio, &blkg->blkcg->css, false);
 			return bfqg;
 		}
 		blkg = blkg->parent;
 	}
 	bio_associate_blkg_from_css(bio,
-				&bfqg_to_blkg(bfqd->root_group)->blkcg->css);
+				&bfqg_to_blkg(bfqd->root_group)->blkcg->css,
+				false);
 	return bfqd->root_group;
 }
 

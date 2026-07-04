@@ -9355,7 +9355,7 @@ void md_submit_discard_bio(struct mddev *mddev, struct md_rdev *rdev,
 		return;
 
 	bio_chain(discard_bio, bio);
-	bio_clone_blkg_association(discard_bio, bio);
+	bio_clone_blkg_association(discard_bio, bio, false);
 	mddev_trace_remap(mddev, discard_bio, bio->bi_iter.bi_sector);
 	submit_bio_noacct(discard_bio);
 }
