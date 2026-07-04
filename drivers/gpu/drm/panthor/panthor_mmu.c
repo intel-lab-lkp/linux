@@ -2975,10 +2975,14 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 {
 	ssize_t vm_pgsz = panthor_vm_page_size(vm);
 	struct drm_gem_object *gem;
+	u64 end;
 	int ret;
 
 	/* Aligned on page size. */
 	if (!IS_ALIGNED(op->va | op->size | op->bo_offset, vm_pgsz))
+		return -EINVAL;
+
+	if (check_add_overflow(op->va, op->size, &end))
 		return -EINVAL;
 
 	switch (op->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) {
