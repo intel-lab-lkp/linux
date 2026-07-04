@@ -377,6 +377,15 @@ impl Delta {
     /// A span of time equal to zero.
     pub const ZERO: Self = Self { nanos: 0 };
 
+    /// Create a new [`Delta`] from a number of jiffies.
+    #[inline]
+    pub fn from_jiffies(jiffies: u64) -> Self {
+        // SAFETY: `jiffies64_to_nsecs` is always safe to call no matter what the argument is.
+        let nanos = unsafe { bindings::jiffies64_to_nsecs(jiffies) } as i64;
+
+        Self { nanos }
+    }
+
     /// Create a new [`Delta`] from a number of nanoseconds.
     #[inline]
     pub const fn from_nanos(nanos: i64) -> Self {
@@ -431,6 +440,15 @@ impl Delta {
         self.as_nanos() < 0
     }
 
+    /// Return the smallest number of jiffies greater than or equal
+    /// to the value in the [`Delta`].
+    ///
+    /// If the value is negative, `0` is used.
+    #[inline]
+    pub fn as_jiffies_ceil(self) -> crate::ffi::c_ulong {
+        msecs_to_jiffies(u32::try_from(self.as_millis_ceil().max(0)).unwrap_or(u32::MAX))
+    }
+
     /// Return the number of nanoseconds in the [`Delta`].
     #[inline]
     pub const fn as_nanos(self) -> i64 {
@@ -465,6 +483,22 @@ impl Delta {
         // SAFETY: It is always safe to call `ktime_to_ms()` with any value.
         unsafe {
             bindings::ktime_to_ms(self.as_nanos())
+        }
+    }
+
+    /// Return the smallest number of milliseconds greater than or equal
+    /// to the value in the [`Delta`].
+    #[inline]
+    pub fn as_millis_ceil(self) -> i64 {
+        #[cfg(CONFIG_64BIT)]
+        {
+            self.as_nanos().saturating_add(NSEC_PER_MSEC - 1) / NSEC_PER_MSEC
+        }
+
+        #[cfg(not(CONFIG_64BIT))]
+        // SAFETY: It is always safe to call `ktime_to_ms()` with any value.
+        unsafe {
+            bindings::ktime_to_ms(self.as_nanos().saturating_add(NSEC_PER_MSEC - 1))
         }
     }
 
