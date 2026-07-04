@@ -714,8 +714,9 @@ static CLOSURE_CALLBACK(journal_write_unlocked)
 
 		atomic_long_add(sectors, &ca->meta_sectors_written);
 
-		bio_reset(bio, ca->bdev, REQ_OP_WRITE | 
-			  REQ_SYNC | REQ_META | REQ_PREFLUSH | REQ_FUA);
+		bio_reset(bio, NULL, REQ_OP_WRITE | REQ_SYNC | REQ_META |
+			  REQ_PREFLUSH | REQ_FUA);
+		bio->bi_bdev = ca->bdev;
 		bio->bi_iter.bi_sector	= PTR_OFFSET(k, i);
 		bio->bi_iter.bi_size = sectors << 9;
 
@@ -740,8 +741,10 @@ static CLOSURE_CALLBACK(journal_write_unlocked)
 
 	spin_unlock(&c->journal.lock);
 
-	while ((bio = bio_list_pop(&list)))
+	while ((bio = bio_list_pop(&list))) {
+		bio_associate_blkg(bio, false);
 		closure_bio_submit(c, bio, cl);
+	}
 
 	continue_at(cl, journal_write_done, NULL);
 }

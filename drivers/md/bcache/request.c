@@ -932,6 +932,8 @@ static int cached_dev_cache_miss(struct btree *b, struct search *s,
 	if (!cache_bio)
 		goto out_submit;
 
+	if (!bio_clone_blkg_association(cache_bio, miss, true))
+		goto out_put;
 	cache_bio->bi_iter.bi_sector	= miss->bi_iter.bi_sector;
 	cache_bio->bi_iter.bi_size	= s->insert_bio_sectors << 9;
 
