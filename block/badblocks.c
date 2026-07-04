@@ -853,14 +853,20 @@ static bool _badblocks_set(struct badblocks *bb, sector_t s, sector_t sectors,
 		/* Invalid sectors number */
 		return false;
 
+	if (s > ULLONG_MAX - sectors)
+		return false;
+
 	if (bb->shift) {
 		/* round the start down, and the end up */
 		sector_t next = s + sectors;
 
-		rounddown(s, 1 << bb->shift);
-		roundup(next, 1 << bb->shift);
+		s = round_down(s, 1 << bb->shift);
+		next = round_up(next, 1 << bb->shift);
 		sectors = next - s;
 	}
+
+	if (sectors == 0)
+		return false;
 
 	write_seqlock_irqsave(&bb->lock, flags);
 
@@ -1061,6 +1067,9 @@ static bool _badblocks_clear(struct badblocks *bb, sector_t s, sector_t sectors)
 		/* Invalid sectors number */
 		return false;
 
+	if (s > ULLONG_MAX - sectors)
+		return false;
+
 	if (bb->shift) {
 		sector_t target;
 
@@ -1071,10 +1080,16 @@ static bool _badblocks_clear(struct badblocks *bb, sector_t s, sector_t sectors)
 		 * isn't than to think a block is not bad when it is.
 		 */
 		target = s + sectors;
-		roundup(s, 1 << bb->shift);
-		rounddown(target, 1 << bb->shift);
-		sectors = target - s;
+		s = round_up(s, 1 << bb->shift);
+		target = round_down(target, 1 << bb->shift);
+		if (target < s)
+			sectors = 0;
+		else
+			sectors = target - s;
 	}
+
+	if (sectors == 0)
+		return false;
 
 	write_seqlock_irq(&bb->lock);
 
@@ -1303,13 +1318,22 @@ int badblocks_check(struct badblocks *bb, sector_t s, sector_t sectors,
 
 	WARN_ON(bb->shift < 0 || sectors == 0);
 
+	if (s > ULLONG_MAX - sectors)
+		return -EINVAL;
+
 	if (bb->shift > 0) {
 		/* round the start down, and the end up */
 		sector_t target = s + sectors;
 
-		rounddown(s, 1 << bb->shift);
-		roundup(target, 1 << bb->shift);
-		sectors = target - s;
+		s = round_down(s, 1 << bb->shift);
+		target = round_up(target, 1 << bb->shift);
+		if (target < s)
+			sectors = 0;
+		else
+			sectors = target - s;
+
+		if (sectors == 0)
+			return 0;
 	}
 
 retry:
