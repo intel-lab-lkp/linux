@@ -155,17 +155,13 @@ static int probe_maple_kbd(struct maple_device *mdev)
 	struct dc_kbd *kbd;
 	struct input_dev *idev;
 
-	kbd = kzalloc_obj(*kbd);
-	if (!kbd) {
-		error = -ENOMEM;
-		goto fail;
-	}
+	kbd = devm_kzalloc(&mdev->dev, sizeof(*kbd), GFP_KERNEL);
+	if (!kbd)
+		return -ENOMEM;
 
-	idev = input_allocate_device();
-	if (!idev) {
-		error = -ENOMEM;
-		goto fail_idev_alloc;
-	}
+	idev = devm_input_allocate_device(&mdev->dev);
+	if (!idev)
+		return -ENOMEM;
 
 	kbd->dev = idev;
 	memcpy(kbd->keycode, dc_kbd_keycode, sizeof(kbd->keycode));
@@ -179,7 +175,6 @@ static int probe_maple_kbd(struct maple_device *mdev)
 	idev->keycodesize = sizeof(unsigned short);
 	idev->keycodemax = ARRAY_SIZE(kbd->keycode);
 	idev->id.bustype = BUS_HOST;
-	idev->dev.parent = &mdev->dev;
 	idev->open = dc_kbd_open;
 	idev->close = dc_kbd_close;
 
@@ -191,15 +186,9 @@ static int probe_maple_kbd(struct maple_device *mdev)
 
 	error = input_register_device(idev);
 	if (error)
-		goto fail_register;
-	return error;
+		return error;
 
-fail_register:
-	input_free_device(idev);
-fail_idev_alloc:
-	kfree(kbd);
-fail:
-	return error;
+	return 0;
 }
 
 
