@@ -7,6 +7,8 @@
 #ifndef ZRDMA_MEM_H
 #define ZRDMA_MEM_H
 
+#include "zrdma_defs.h"
+
 #define ZXDH_TABLE5_VF_EN 0x04
 
 #define ZXDH_HMC_MAX_SD_COUNT 8192

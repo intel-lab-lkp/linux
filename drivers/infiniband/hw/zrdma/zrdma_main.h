@@ -10,6 +10,7 @@
 #include <linux/auxiliary_bus.h>
 #include "zrdma_type.h"
 #include "zrdma_ctrl.h"
+#include "zrdma_uk.h"
 
 #define ZXDH_PF_NAME "dinghai10e"
 #define ZXDH_RDMA_DEV_NAME "rdma_aux"

@@ -68,6 +68,8 @@ static int zxdh_probe(struct auxiliary_device *aux_dev,
 		container_of(aux_dev, struct zxdh_auxiliary_dev, adev);
 	struct zxdh_handler *hdl;
 	struct zxdh_device *zdev;
+	struct zxdh_pci_f *rf;
+	int err;
 
 	zdev = ib_alloc_device(zxdh_device, ibdev);
 	if (!zdev)
@@ -75,10 +77,17 @@ static int zxdh_probe(struct auxiliary_device *aux_dev,
 
 	zdev->zxdh_adev = zxdh_adev;
 
+	zdev->rf = kzalloc_obj(*zdev->rf);
+	if (!zdev->rf) {
+		ib_dealloc_device(&zdev->ibdev);
+		return -ENOMEM;
+	}
+
 	zxdh_fill_device_info(zdev, zxdh_adev->zxdh_info);
 
 	hdl = kzalloc_obj(*hdl);
 	if (!hdl) {
+		kfree(zdev->rf);
 		ib_dealloc_device(&zdev->ibdev);
 		return -ENOMEM;
 	}
@@ -87,11 +96,23 @@ static int zxdh_probe(struct auxiliary_device *aux_dev,
 	zdev->hdl = hdl;
 	zdev->netdev_speed = SPEED_UNKNOWN;
 
+	rf = zdev->rf;
+	err = zxdh_ctrl_init_hw(rf);
+	if (err)
+		goto err_ctrl_init;
+
 	zxdh_add_handler(hdl);
 
 	dev_set_drvdata(&aux_dev->dev, zdev);
 
 	return 0;
+
+err_ctrl_init:
+	kfree(hdl);
+	kfree(zdev->rf);
+	ib_dealloc_device(&zdev->ibdev);
+
+	return err;
 }
 
 static void zxdh_remove(struct auxiliary_device *aux_dev)
@@ -105,6 +126,7 @@ static void zxdh_remove(struct auxiliary_device *aux_dev)
 
 	zxdh_del_handler(zdev->hdl);
 	kfree(zdev->hdl);
+	kfree(zdev->rf);
 	ib_dealloc_device(&zdev->ibdev);
 }
 
