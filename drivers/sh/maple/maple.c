@@ -121,6 +121,7 @@ void maple_getcond_callback(struct maple_device *dev,
 			void (*callback) (struct mapleq *mq),
 			unsigned long interval, unsigned long function)
 {
+	guard(mutex)(&dev->callback_mutex);
 	dev->callback = callback;
 	dev->interval = interval;
 	dev->function = cpu_to_be32(function);
@@ -230,11 +231,13 @@ static struct maple_device *maple_alloc_dev(int port, int unit)
 	mdev->dev.bus = &maple_bus_type;
 	mdev->dev.parent = &maple_bus;
 	init_waitqueue_head(&mdev->maple_wait);
+	mutex_init(&mdev->callback_mutex);
 	return mdev;
 }
 
 static void maple_free_dev(struct maple_device *mdev)
 {
+	mutex_destroy(&mdev->callback_mutex);
 	kmem_cache_free(maple_queue_cache, mdev->mq->recvbuf);
 	kfree(mdev->mq);
 	kfree(mdev);
@@ -655,8 +658,10 @@ static void maple_dma_handler(struct work_struct *work)
 				break;
 
 			case MAPLE_RESPONSE_DATATRF:
-				if (mdev->callback)
-					mdev->callback(mq);
+				scoped_guard(mutex, &mdev->callback_mutex) {
+					if (mdev->callback)
+						mdev->callback(mq);
+				}
 				atomic_set(&mdev->busy, 0);
 				wake_up(&mdev->maple_wait);
 				break;

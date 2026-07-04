@@ -3,6 +3,7 @@
 #define __LINUX_MAPLE_H
 
 #include <linux/device.h>
+#include <linux/mutex.h>
 #include <mach/maple.h>
 
 /* Maple Bus command and response codes */
@@ -75,6 +76,7 @@ struct maple_device {
 	char product_licence[64];
 	atomic_t busy;
 	wait_queue_head_t maple_wait;
+	struct mutex callback_mutex;
 	struct device dev;
 };
 
