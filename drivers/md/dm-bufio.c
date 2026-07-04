@@ -1347,7 +1347,14 @@ static void use_bio(struct dm_buffer *b, enum req_op op, sector_t sector,
 		use_dmio(b, op, sector, n_sectors, offset, ioprio);
 		return;
 	}
-	bio_init_inline(bio, b->c->bdev, 1, op);
+	bio_init_inline(bio, NULL, 1, op);
+	bio_set_dev_no_blkg(bio, b->c->bdev);
+	if (!bio_associate_blkg(bio, true)) {
+		bio_uninit(bio);
+		kfree(bio);
+		use_dmio(b, op, sector, n_sectors, offset, ioprio);
+		return;
+	}
 	bio->bi_iter.bi_sector = sector;
 	bio->bi_end_io = bio_complete;
 	bio->bi_private = b;
