@@ -3143,6 +3143,7 @@ static ssize_t ioc_weight_write(struct kernfs_open_file *of, char *buf,
 	struct blkg_conf_ctx ctx;
 	struct ioc_now now;
 	struct ioc_gq *iocg;
+	unsigned long flags;
 	u32 v;
 	int ret;
 
@@ -3195,11 +3196,11 @@ static ssize_t ioc_weight_write(struct kernfs_open_file *of, char *buf,
 			goto unprep;
 	}
 
-	spin_lock(&iocg->ioc->lock);
+	spin_lock_irqsave(&iocg->ioc->lock, flags);
 	iocg->cfg_weight = v * WEIGHT_ONE;
 	ioc_now(iocg->ioc, &now);
 	weight_updated(iocg, &now);
-	spin_unlock(&iocg->ioc->lock);
+	spin_unlock_irqrestore(&iocg->ioc->lock, flags);
 
 	ret = 0;
 
