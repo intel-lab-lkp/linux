@@ -899,6 +899,7 @@ static const struct i2c_device_id lt9611uxc_id[] = {
 	{ "lontium,lt9611uxc" },
 	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(i2c, lt9611uxc_id);
 
 static const struct of_device_id lt9611uxc_match_table[] = {
 	{ .compatible = "lontium,lt9611uxc" },
