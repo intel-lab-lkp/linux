@@ -184,6 +184,17 @@ int main(int argc, const char *argv[])
 	online_cpus = bitmask_alloc(sysconf(_SC_NPROCESSORS_CONF));
 	offline_cpus = bitmask_alloc(sysconf(_SC_NPROCESSORS_CONF));
 
+	if (!cpus_chosen || !online_cpus || !offline_cpus) {
+		fprintf(stderr, _("Failed to allocate bitmasks\n"));
+		if (cpus_chosen)
+			bitmask_free(cpus_chosen);
+		if (online_cpus)
+			bitmask_free(online_cpus);
+		if (offline_cpus)
+			bitmask_free(offline_cpus);
+		return EXIT_FAILURE;
+	}
+
 	argc--;
 	argv += 1;
 
