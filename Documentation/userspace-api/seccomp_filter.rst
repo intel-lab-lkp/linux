@@ -289,6 +289,115 @@ above in this document: all arguments being read from the tracee's memory
 should be read into the tracer's memory before any policy decisions are made.
 This allows for an atomic decision on syscall arguments.
 
+Non-cooperative pinned-memfd redirect
+=====================================
+
+The TOCTOU described above means ``SECCOMP_USER_NOTIF_FLAG_CONTINUE`` cannot
+enforce a policy on pointer arguments: after the supervisor inspects the
+target's memory and lets the syscall continue, the target (or a thread sharing
+its address space) can rewrite that memory before the kernel reads it. The
+cooperative workaround, the target ``mmap()`` + ``mseal()``-ing a shared
+buffer, is unavailable in the fork+execve sandbox model, where the supervisor
+confines a binary it did not write.
+
+Two ioctls let the supervisor close this race without target cooperation. The
+redirect step (below) requires a listener created with
+``SECCOMP_FILTER_FLAG_REDIRECT`` (in addition to
+``SECCOMP_FILTER_FLAG_NEW_LISTENER``). Because it rewrites another task's
+registers, at most one such listener may exist in a task's filter chain; a
+second fails with ``-EBUSY``:
+
+.. code-block:: c
+
+    fd = seccomp(SECCOMP_SET_MODE_FILTER,
+                 SECCOMP_FILTER_FLAG_NEW_LISTENER | SECCOMP_FILTER_FLAG_REDIRECT,
+                 &prog);
+
+``ioctl(SECCOMP_IOCTL_NOTIF_PIN_INSTALL)`` installs a sealed mapping of a
+supervisor-owned ``memfd`` directly into the trapped task's address space:
+
+.. code-block:: c
+
+    struct seccomp_notif_pin_install {
+        __u64 id;
+        __u32 flags;       /* reserved, must be 0 */
+        __u32 memfd;
+        __u64 target_addr;
+        __u64 size;
+        __u64 offset;      /* page-aligned offset into memfd */
+    };
+
+``id`` names an active notification (the trapped task to install into).
+``target_addr``, ``size`` and ``offset`` are page-aligned; ``offset`` selects
+where in ``memfd`` the mapping starts, so one memfd can back several pins. If
+``target_addr`` is ``0`` the kernel picks a free address and writes it back;
+otherwise an existing mapping there yields ``-EEXIST``. The pin is read-only
+and sealed, the target and its threads cannot unmap, move, reprotect or
+overwrite it, and lasts until the target ``execve()``s or exits.
+
+``memfd`` must be write-sealed (``F_SEAL_WRITE`` or ``F_SEAL_FUTURE_WRITE``)
+or the ioctl returns ``-EINVAL``; otherwise the target could rewrite the pin's
+bytes through a separate writable handle to the same memfd.
+``F_SEAL_FUTURE_WRITE`` still lets the supervisor update the contents through
+its own mapping made before the seal.
+
+``ioctl(SECCOMP_IOCTL_NOTIF_SEND_REDIRECT)`` then resumes the trapped syscall
+like ``SECCOMP_USER_NOTIF_FLAG_CONTINUE``, but with selected argument
+registers replaced:
+
+.. code-block:: c
+
+    struct seccomp_notif_resp_redirect {
+        __u64 id;
+        __u32 flags;      /* SECCOMP_REDIRECT_FLAG_CONTINUE must be set */
+        __u32 args_mask;  /* which arg registers to replace */
+        __u32 ptr_mask;   /* which of those are pointers into a pin */
+        __u32 memfd;      /* the pin's backing memfd */
+        __u64 args[6];    /* replacement values */
+        __u64 ptr_len[6]; /* validated access length for each pointer arg */
+    };
+
+Each bit in ``ptr_mask`` (a subset of ``args_mask``) marks ``args[i]`` as a
+pointer; the access ``[args[i], args[i] + ptr_len[i])`` must lie within a
+single read-only pin of ``memfd`` in the target, or the ioctl returns
+``-EFAULT``. ``ptr_len[i]`` must be non-zero for those bits and ``0``
+otherwise. Bits in ``args_mask`` but not ``ptr_mask`` are scalar replacements
+written verbatim, e.g. to set the length register that goes with a redirected
+pointer. The original registers are restored at syscall exit, so the
+substitution is invisible to the target and the TOCTOU is closed.
+
+Scope and limitations
+---------------------
+
+The redirect mechanism is deliberately narrow and is *not* a general syscall
+rewriting facility:
+
+- **Read-only input pointers only.** A pin is read-only, so only an argument
+  the syscall *reads* (a pathname, a ``sockaddr``) may be redirected into it.
+  Aiming an output or in/out argument at a pin makes the syscall fail with
+  ``-EFAULT`` when it writes back.
+
+- **Same syscall only.** A redirect replaces arguments, never the syscall
+  number. ``rt_sigreturn()`` (and its compat variant) cannot be redirected and
+  return ``-EOPNOTSUPP``.
+
+- **Signals and restarts.** The redirected syscall really runs, so it can be
+  interrupted and restarted. On a restart the original arguments are restored
+  and the syscall re-traps, so the supervisor is notified again and must answer
+  consistently. Syscalls the kernel restarts without re-trapping (e.g.
+  ``nanosleep()``, ``futex(FUTEX_WAIT)``) keep the substituted arguments --
+  safe for read-only inputs, but a reason not to redirect arguments of syscalls
+  that block or wait.
+
+- **clone()/fork().** The task-creation family (``clone``, ``clone3``,
+  ``fork``, ``vfork``) cannot be redirected and returns ``-EOPNOTSUPP``. A new
+  child inherits the substituted argument registers but not the restore, so it
+  would return to user space with the pinned values still in its registers.
+
+- **ptrace.** A tracer sees the substituted arguments at the syscall-exit stop;
+  they are restored before the task resumes, so a ``PTRACE_SETREGS`` of a
+  substituted register at that stop is overwritten.
+
 Sysctls
 =======
 
