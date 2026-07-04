@@ -1913,6 +1913,12 @@ int rsi_send_bgscan_probe_req(struct rsi_common *common,
 		return -ENOMEM;
 	}
 
+	if (probereq_skb->len > MAX_BGSCAN_PROBE_REQ_LEN) {
+		dev_kfree_skb(probereq_skb);
+		dev_kfree_skb(skb);
+		return -EINVAL;
+	}
+
 	memcpy(&skb->data[frame_len], probereq_skb->data, probereq_skb->len);
 
 	bgscan->probe_req_length = cpu_to_le16(probereq_skb->len);
