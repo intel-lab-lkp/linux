@@ -78,7 +78,7 @@ static void dc_pad_close(struct input_dev *dev)
 }
 
 /* allow the controller to be used */
-static int probe_maple_controller(struct device *dev)
+static int probe_maple_controller(struct maple_device *mdev)
 {
 	static const short btn_bit[32] = {
 		BTN_C, BTN_B, BTN_A, BTN_START, -1, -1, -1, -1,
@@ -94,7 +94,6 @@ static int probe_maple_controller(struct device *dev)
 		-1, -1, -1, -1, -1, -1, -1, -1,
 	};
 
-	struct maple_device *mdev = to_maple_dev(dev);
 	int i, error;
 	struct dc_pad *pad;
 	struct input_dev *idev;
@@ -145,23 +144,20 @@ fail:
 	return error;
 }
 
-static int remove_maple_controller(struct device *dev)
+static void remove_maple_controller(struct maple_device *mdev)
 {
-	struct maple_device *mdev = to_maple_dev(dev);
 	struct dc_pad *pad = maple_get_drvdata(mdev);
 
 	input_unregister_device(pad->dev);
 	kfree(pad);
-
-	return 0;
 }
 
 static struct maple_driver dc_pad_driver = {
 	.function =	MAPLE_FUNC_CONTROLLER,
+	.probe =	probe_maple_controller,
+	.remove =	remove_maple_controller,
 	.drv = {
 		.name	= "Dreamcast_controller",
-		.probe	= probe_maple_controller,
-		.remove	= remove_maple_controller,
 	},
 };
 

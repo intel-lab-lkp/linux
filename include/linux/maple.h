@@ -80,6 +80,8 @@ struct maple_device {
 
 struct maple_driver {
 	unsigned long function;
+	int (*probe)(struct maple_device *dev);
+	void (*remove)(struct maple_device *dev);
 	struct device_driver drv;
 };
 

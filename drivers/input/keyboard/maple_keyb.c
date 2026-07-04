@@ -158,14 +158,11 @@ static void dc_kbd_close(struct input_dev *dev)
 	maple_getcond_callback(mdev, NULL, 0, MAPLE_FUNC_KEYBOARD);
 }
 
-static int probe_maple_kbd(struct device *dev)
+static int probe_maple_kbd(struct maple_device *mdev)
 {
-	struct maple_device *mdev;
 	int i, error;
 	struct dc_kbd *kbd;
 	struct input_dev *idev;
-
-	mdev = to_maple_dev(dev);
 
 	kbd = kzalloc_obj(*kbd);
 	if (!kbd) {
@@ -214,9 +211,8 @@ fail:
 	return error;
 }
 
-static int remove_maple_kbd(struct device *dev)
+static void remove_maple_kbd(struct maple_device *mdev)
 {
-	struct maple_device *mdev = to_maple_dev(dev);
 	struct dc_kbd *kbd = maple_get_drvdata(mdev);
 
 	guard(mutex)(&maple_keyb_mutex);
@@ -224,15 +220,15 @@ static int remove_maple_kbd(struct device *dev)
 	input_unregister_device(kbd->dev);
 	kfree(kbd);
 
-	return 0;
+
 }
 
 static struct maple_driver dc_kbd_driver = {
 	.function = MAPLE_FUNC_KEYBOARD,
+	.probe =	probe_maple_kbd,
+	.remove =	remove_maple_kbd,
 	.drv = {
 		.name = "Dreamcast_keyboard",
-		.probe = probe_maple_kbd,
-		.remove = remove_maple_kbd,
 	},
 };
 

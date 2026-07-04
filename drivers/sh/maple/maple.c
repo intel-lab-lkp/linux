@@ -721,6 +721,11 @@ static irqreturn_t maple_vblank_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/*
+ * We pass &maple_bus as dev_id for the shared interrupts because
+ * the kernel requires a unique non-NULL token for shared IRQs,
+ * even though the handlers themselves ignore it.
+ */
 static int maple_set_dma_interrupt_handler(void)
 {
 	return request_irq(HW_EVENT_MAPLE_DMA, maple_dma_interrupt,
@@ -765,9 +770,30 @@ static void maple_bus_release(struct device *dev)
 /*
  * maple_bus_type - core maple bus structure
  */
+static int maple_bus_probe(struct device *dev)
+{
+	struct maple_driver *maple_drv = to_maple_driver(dev->driver);
+	struct maple_device *maple_dev = to_maple_dev(dev);
+
+	if (maple_drv->probe)
+		return maple_drv->probe(maple_dev);
+	return -ENODEV;
+}
+
+static void maple_bus_remove(struct device *dev)
+{
+	struct maple_driver *maple_drv = to_maple_driver(dev->driver);
+	struct maple_device *maple_dev = to_maple_dev(dev);
+
+	if (maple_drv->remove)
+		maple_drv->remove(maple_dev);
+}
+
 static const struct bus_type maple_bus_type = {
 	.name = "maple",
 	.match = maple_match_bus_driver,
+	.probe = maple_bus_probe,
+	.remove = maple_bus_remove,
 };
 
 static struct device maple_bus = {
@@ -789,7 +815,6 @@ static int __init maple_bus_init(void)
 	retval = bus_register(&maple_bus_type);
 	if (retval)
 		goto cleanup_device;
-
 
 	/* allocate memory for maple bus dma */
 	retval = maple_get_dma_buffer();

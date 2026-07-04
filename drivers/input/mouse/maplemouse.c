@@ -64,9 +64,8 @@ static void dc_mouse_close(struct input_dev *dev)
 }
 
 /* allow the mouse to be used */
-static int probe_maple_mouse(struct device *dev)
+static int probe_maple_mouse(struct maple_device *mdev)
 {
-	struct maple_device *mdev = to_maple_dev(dev);
 	int error;
 	struct input_dev *input_dev;
 	struct dc_mouse *mse;
@@ -111,23 +110,20 @@ fail:
 	return error;
 }
 
-static int remove_maple_mouse(struct device *dev)
+static void remove_maple_mouse(struct maple_device *mdev)
 {
-	struct maple_device *mdev = to_maple_dev(dev);
 	struct dc_mouse *mse = maple_get_drvdata(mdev);
 
 	input_unregister_device(mse->dev);
 	kfree(mse);
-
-	return 0;
 }
 
 static struct maple_driver dc_mouse_driver = {
 	.function =	MAPLE_FUNC_MOUSE,
+	.probe =	probe_maple_mouse,
+	.remove =	remove_maple_mouse,
 	.drv = {
 		.name = "Dreamcast_mouse",
-		.probe = probe_maple_mouse,
-		.remove = remove_maple_mouse,
 	},
 };
 

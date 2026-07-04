@@ -769,30 +769,25 @@ static void vmu_file_error(struct maple_device *mdev, void *recvbuf)
 }
 
 
-static int probe_maple_vmu(struct device *dev)
+static int probe_maple_vmu(struct maple_device *mdev)
 {
-	struct maple_device *mdev = to_maple_dev(dev);
-
 	mdev->can_unload = vmu_can_unload;
 	mdev->fileerr_handler = vmu_file_error;
 
 	return vmu_connect(mdev);
 }
 
-static int remove_maple_vmu(struct device *dev)
+static void remove_maple_vmu(struct maple_device *mdev)
 {
-	struct maple_device *mdev = to_maple_dev(dev);
-
 	vmu_disconnect(mdev);
-	return 0;
 }
 
 static struct maple_driver vmu_flash_driver = {
 	.function =	MAPLE_FUNC_MEMCARD,
+	.probe =	probe_maple_vmu,
+	.remove =	remove_maple_vmu,
 	.drv = {
 		.name =		"Dreamcast_visual_memory",
-		.probe =	probe_maple_vmu,
-		.remove =	remove_maple_vmu,
 	},
 };
 
