@@ -1437,6 +1437,8 @@ static int update_counters(struct net *net, sockptr_t arg, unsigned int len)
 	if (len != sizeof(hlp) + hlp.num_counters * sizeof(struct ebt_counter))
 		return -EINVAL;
 
+	hlp.name[sizeof(hlp.name) - 1] = 0;
+
 	return do_update_counters(net, hlp.name, hlp.counters,
 				  hlp.num_counters, len);
 }
@@ -2398,6 +2400,8 @@ static int compat_update_counters(struct net *net, sockptr_t arg,
 	/* try real handler in case userland supplied needed padding */
 	if (len != sizeof(hlp) + hlp.num_counters * sizeof(struct ebt_counter))
 		return update_counters(net, arg, len);
+
+	hlp.name[sizeof(hlp.name) - 1] = 0;
 
 	return do_update_counters(net, hlp.name, compat_ptr(hlp.counters),
 				  hlp.num_counters, len);
