@@ -192,6 +192,19 @@ static sector_t chunk_to_sector(struct dm_exception_store *store,
 	return chunk << store->chunk_shift;
 }
 
+/*
+ * Snapshot exception-table locks are spinlocks.  Only update the target
+ * device while holding them; dm_submit_bio_remap() will associate target-owned
+ * bios with the original bio's blkg from a sleepable submission context.
+ */
+static void snapshot_bio_set_dev(struct bio *bio, struct block_device *bdev)
+{
+	bio_clear_flag(bio, BIO_REMAPPED);
+	if (bio->bi_bdev != bdev)
+		bio_clear_flag(bio, BIO_BPS_THROTTLED);
+	bio->bi_bdev = bdev;
+}
+
 static int bdev_equal(struct block_device *lhs, struct block_device *rhs)
 {
 	/*
@@ -1566,7 +1579,7 @@ static void flush_bios(struct bio *bio)
 	while (bio) {
 		n = bio->bi_next;
 		bio->bi_next = NULL;
-		submit_bio_noacct(bio);
+		dm_submit_bio_remap(bio, NULL);
 		bio = n;
 	}
 }
@@ -1586,7 +1599,7 @@ static void retry_origin_bios(struct dm_snapshot *s, struct bio *bio)
 		bio->bi_next = NULL;
 		r = do_origin(s->origin, bio, false);
 		if (r == DM_MAPIO_REMAPPED)
-			submit_bio_noacct(bio);
+			dm_submit_bio_remap(bio, NULL);
 		bio = n;
 	}
 }
@@ -1827,7 +1840,7 @@ static void start_full_bio(struct dm_snap_pending_exception *pe,
 	bio->bi_end_io = full_bio_end_io;
 	bio->bi_private = callback_data;
 
-	submit_bio_noacct(bio);
+	dm_submit_bio_remap(bio, NULL);
 }
 
 static struct dm_snap_pending_exception *
@@ -1898,7 +1911,7 @@ __find_pending_exception(struct dm_snapshot *s,
 static void remap_exception(struct dm_snapshot *s, struct dm_exception *e,
 			    struct bio *bio, chunk_t chunk)
 {
-	bio_set_dev(bio, s->cow->bdev);
+	snapshot_bio_set_dev(bio, s->cow->bdev);
 	bio->bi_iter.bi_sector =
 		chunk_to_sector(s->store, dm_chunk_number(e->new_chunk) +
 				(chunk - e->old_chunk)) +
@@ -1982,7 +1995,7 @@ static int snapshot_map(struct dm_target *ti, struct bio *bio)
 			 * defeat the goal of freeing space in origin that is
 			 * implied by the "discard_passdown_origin" feature)
 			 */
-			bio_set_dev(bio, s->origin->bdev);
+			snapshot_bio_set_dev(bio, s->origin->bdev);
 			track_chunk(s, bio, chunk);
 			goto out_unlock;
 		}
@@ -2081,7 +2094,7 @@ static int snapshot_map(struct dm_target *ti, struct bio *bio)
 			goto out;
 		}
 	} else {
-		bio_set_dev(bio, s->origin->bdev);
+		snapshot_bio_set_dev(bio, s->origin->bdev);
 		track_chunk(s, bio, chunk);
 	}
 
@@ -2143,7 +2156,7 @@ static int snapshot_merge_map(struct dm_target *ti, struct bio *bio)
 		    chunk >= s->first_merging_chunk &&
 		    chunk < (s->first_merging_chunk +
 			     s->num_merging_chunks)) {
-			bio_set_dev(bio, s->origin->bdev);
+			snapshot_bio_set_dev(bio, s->origin->bdev);
 			bio_list_add(&s->bios_queued_during_merge, bio);
 			r = DM_MAPIO_SUBMITTED;
 			goto out_unlock;
@@ -2157,7 +2170,7 @@ static int snapshot_merge_map(struct dm_target *ti, struct bio *bio)
 	}
 
 redirect_to_origin:
-	bio_set_dev(bio, s->origin->bdev);
+	snapshot_bio_set_dev(bio, s->origin->bdev);
 
 	if (bio_data_dir(bio) == WRITE) {
 		up_write(&s->lock);
