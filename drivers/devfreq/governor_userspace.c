@@ -97,6 +97,12 @@ static int userspace_init(struct devfreq *devfreq)
 	devfreq->governor_data = data;
 
 	err = sysfs_create_group(&devfreq->dev.kobj, &dev_attr_group);
+
+	if (err) {
+		kfree(data);
+		devfreq->governor_data = NULL;
+	}
+
 out:
 	return err;
 }
