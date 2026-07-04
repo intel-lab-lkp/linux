@@ -3369,5 +3369,5 @@ static int qla28xx_validate_flash_image(struct bsg_job *bsg_job)
 		bsg_job_done(bsg_job, bsg_reply->result,
 			     bsg_reply->reply_payload_rcv_len);
 
-	return QLA_SUCCESS;
+	return rval;
 }
