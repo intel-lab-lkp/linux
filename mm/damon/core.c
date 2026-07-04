@@ -4144,6 +4144,8 @@ static int kdamond_fn(void *data)
 
 		if (!access_check_disabled && ctx->ops.prepare_access_checks)
 			ctx->ops.prepare_access_checks(ctx);
+		if (ctx->ops.prep_probes)
+			ctx->ops.prep_probes(ctx);
 
 		kdamond_usleep(sample_interval);
 		ctx->passed_sample_intervals++;
