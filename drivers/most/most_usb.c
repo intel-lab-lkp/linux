@@ -780,6 +780,7 @@ static const struct usb_device_id usbid[] = {
 	{ USB_DEVICE(USB_VENDOR_ID_SMSC, USB_DEV_ID_OS81210), },
 	{ } /* Terminating entry */
 };
+MODULE_DEVICE_TABLE(usb, usbid);
 
 struct regs {
 	const char *name;
