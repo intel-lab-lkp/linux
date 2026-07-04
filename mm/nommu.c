@@ -1009,7 +1009,8 @@ enomem:
 /*
  * handle mapping creation for uClinux
  */
-unsigned long do_mmap(struct file *file,
+unsigned long __do_mmap(struct mm_struct *mm,
+			struct file *file,
 			unsigned long addr,
 			unsigned long len,
 			unsigned long prot,
@@ -1024,7 +1025,7 @@ unsigned long do_mmap(struct file *file,
 	struct rb_node *rb;
 	unsigned long capabilities, result;
 	int ret;
-	VMA_ITERATOR(vmi, current->mm, 0);
+	VMA_ITERATOR(vmi, mm, 0);
 
 	*populate = 0;
 
@@ -1049,7 +1050,7 @@ unsigned long do_mmap(struct file *file,
 	if (!region)
 		goto error_getting_region;
 
-	vma = vm_area_alloc(current->mm);
+	vma = vm_area_alloc(mm);
 	if (!vma)
 		goto error_getting_vma;
 
@@ -1190,7 +1191,7 @@ unsigned long do_mmap(struct file *file,
 	/* okay... we have a mapping; now we have to register it */
 	result = vma->vm_start;
 
-	current->mm->total_vm += len >> PAGE_SHIFT;
+	mm->total_vm += len >> PAGE_SHIFT;
 
 share:
 	BUG_ON(!vma->vm_region);
@@ -1198,8 +1199,8 @@ share:
 	if (vma_iter_prealloc(&vmi, vma))
 		goto error_just_free;
 
-	setup_vma_to_mm(vma, current->mm);
-	current->mm->map_count++;
+	setup_vma_to_mm(vma, mm);
+	mm->map_count++;
 	/* add the VMA to the tree */
 	vma_iter_store_new(&vmi, vma);
 
@@ -1244,6 +1245,15 @@ error_getting_region:
 			len, current->pid);
 	show_mem();
 	return -ENOMEM;
+}
+
+unsigned long do_mmap(struct file *file, unsigned long addr, unsigned long len,
+		      unsigned long prot, unsigned long flags,
+		      vm_flags_t vm_flags, unsigned long pgoff,
+		      unsigned long *populate, struct list_head *uf)
+{
+	return __do_mmap(current->mm, file, addr, len, prot, flags, vm_flags, pgoff,
+			 populate, uf);
 }
 
 unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,

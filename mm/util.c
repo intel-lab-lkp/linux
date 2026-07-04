@@ -588,6 +588,103 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	return ret;
 }
 
+/**
+ * vm_mmap_remote - install a file (or anonymous) mapping into @mm, without
+ * target-side cooperation.
+ * @mm: Target mm; caller holds a reference (e.g. get_task_mm()).
+ * @file: Backing file, or NULL for an anonymous mapping.
+ * @addr: Page-aligned address. If non-zero it is used as given (honoring
+ *        MAP_FIXED/MAP_FIXED_NOREPLACE in @flags); if zero, the kernel
+ *        chooses a free area in @mm and returns it.
+ * @len: Length in bytes.
+ * @prot: PROT_* protection bits.
+ * @flags: MAP_* flags.
+ * @pgoff: Page offset into @file.
+ * @vm_flags: Extra VMA flags to OR in (e.g. VM_SEALED), or 0.
+ *
+ * The general form of the remote install primitive: a supervisor places a
+ * mapping into a remote task's address space. LSM/fsnotify hooks run against
+ * %current (the installer), paralleling pidfd_getfd()'s cross-task install;
+ * cross-task authorization is the caller's responsibility The foreign mm is
+ * not mm_populate()d.
+ *
+ * Returns the mapped address on success, or a negative errno.
+ */
+unsigned long vm_mmap_remote(struct mm_struct *mm, struct file *file,
+	unsigned long addr, unsigned long len, unsigned long prot,
+	unsigned long flags, unsigned long pgoff, vm_flags_t vm_flags)
+{
+	loff_t off = (loff_t)pgoff << PAGE_SHIFT;
+	unsigned long aligned_len = PAGE_ALIGN(len);
+	unsigned long ret;
+	unsigned long populate;
+	LIST_HEAD(uf);
+
+	if (WARN_ON_ONCE(!mm))
+		return -EINVAL;
+
+	ret = security_mmap_file(file, prot, flags);
+	if (!ret)
+		ret = fsnotify_mmap_perm(file, prot, off, len);
+	if (ret)
+		return ret;
+
+	if (mmap_write_lock_killable(mm))
+		return -EINTR;
+
+	/*
+	 * __do_mmap()'s get_unmapped_area() path searches current->mm and
+	 * asserts current->mm's mmap_lock, we have to resolve the address
+	 * against @mm ourselves and pin it with MAP_FIXED, so __do_mmap()
+	 * uses it directly rather than searching.
+	 */
+	if (!addr) {
+		addr = mm_get_unmapped_area_remote(mm, aligned_len);
+		if (IS_ERR_VALUE(addr)) {
+			ret = addr;
+			goto unlock;
+		}
+	}
+
+	if (aligned_len > mm->task_size || addr > mm->task_size - aligned_len) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	if (!(flags & MAP_FIXED_NOREPLACE))
+		flags |= MAP_FIXED;
+
+	ret = __do_mmap(mm, file, addr, len, prot, flags, vm_flags,
+			pgoff, &populate, &uf);
+unlock:
+	mmap_write_unlock(mm);
+	userfaultfd_unmap_complete(mm, &uf);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vm_mmap_remote);
+
+/**
+ * vm_munmap_remote - unmap a range from @mm, mirroring vm_munmap() but
+ * targeting an explicit mm.
+ * @mm: Target mm; caller holds a reference (e.g. get_task_mm()).
+ * @start: Start address of the range to unmap.
+ * @len: Length in bytes.
+ *
+ * Returns 0 on success, or a negative errno.
+ */
+int vm_munmap_remote(struct mm_struct *mm, unsigned long start, size_t len)
+{
+	VMA_ITERATOR(vmi, mm, start);
+	int ret;
+
+	if (mmap_write_lock_killable(mm))
+		return -EINTR;
+	ret = do_vmi_munmap(&vmi, mm, start, len, NULL, false);
+	mmap_write_unlock(mm);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vm_munmap_remote);
+
 /*
  * Perform a userland memory mapping into the current process address space. See
  * the comment for do_mmap() for more details on this operation in general.
