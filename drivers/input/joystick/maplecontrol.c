@@ -35,22 +35,22 @@ static void dc_pad_callback(struct mapleq *mq)
 	buttons = ~le16_to_cpup((__le16 *)(res + 8));
 
 	input_report_abs(dev, ABS_HAT0Y,
-		(buttons & 0x0010 ? -1 : 0) + (buttons & 0x0020 ? 1 : 0));
+			 !!(buttons & BIT(5)) - !!(buttons & BIT(4)));
 	input_report_abs(dev, ABS_HAT0X,
-		(buttons & 0x0040 ? -1 : 0) + (buttons & 0x0080 ? 1 : 0));
+			 !!(buttons & BIT(7)) - !!(buttons & BIT(6)));
 	input_report_abs(dev, ABS_HAT1Y,
-		(buttons & 0x1000 ? -1 : 0) + (buttons & 0x2000 ? 1 : 0));
+			 !!(buttons & BIT(13)) - !!(buttons & BIT(12)));
 	input_report_abs(dev, ABS_HAT1X,
-		(buttons & 0x4000 ? -1 : 0) + (buttons & 0x8000 ? 1 : 0));
+			 !!(buttons & BIT(15)) - !!(buttons & BIT(14)));
 
-	input_report_key(dev, BTN_C,      buttons & 0x0001);
-	input_report_key(dev, BTN_B,      buttons & 0x0002);
-	input_report_key(dev, BTN_A,      buttons & 0x0004);
-	input_report_key(dev, BTN_START,  buttons & 0x0008);
-	input_report_key(dev, BTN_Z,      buttons & 0x0100);
-	input_report_key(dev, BTN_Y,      buttons & 0x0200);
-	input_report_key(dev, BTN_X,      buttons & 0x0400);
-	input_report_key(dev, BTN_SELECT, buttons & 0x0800);
+	input_report_key(dev, BTN_C,      buttons & BIT(0));
+	input_report_key(dev, BTN_B,      buttons & BIT(1));
+	input_report_key(dev, BTN_A,      buttons & BIT(2));
+	input_report_key(dev, BTN_START,  buttons & BIT(3));
+	input_report_key(dev, BTN_Z,      buttons & BIT(8));
+	input_report_key(dev, BTN_Y,      buttons & BIT(9));
+	input_report_key(dev, BTN_X,      buttons & BIT(10));
+	input_report_key(dev, BTN_SELECT, buttons & BIT(11));
 
 	input_report_abs(dev, ABS_GAS,    res[10]);
 	input_report_abs(dev, ABS_BRAKE,  res[11]);
@@ -138,7 +138,6 @@ static int probe_maple_controller(struct maple_device *mdev)
 		return error;
 
 	return 0;
-
 }
 
 static struct maple_driver dc_pad_driver = {
