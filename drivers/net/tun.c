@@ -98,7 +98,8 @@ static void tun_default_link_ksettings(struct net_device *dev,
 #define TUN_FASYNC	IFF_ATTACH_QUEUE
 
 #define TUN_FEATURES (IFF_NO_PI | IFF_ONE_QUEUE | IFF_VNET_HDR | \
-		      IFF_MULTI_QUEUE | IFF_NAPI | IFF_NAPI_FRAGS)
+		      IFF_MULTI_QUEUE | IFF_NAPI | IFF_NAPI_FRAGS | \
+		      IFF_BACKPRESSURE)
 
 #define GOODCOPY_LEN 128
 
@@ -1077,7 +1078,8 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	spin_lock(&tfile->tx_ring.producer_lock);
 	ret = __ptr_ring_produce(&tfile->tx_ring, skb);
-	if (!qdisc_txq_has_no_queue(queue) &&
+	if ((tun->flags & IFF_BACKPRESSURE) &&
+	    !qdisc_txq_has_no_queue(queue) &&
 	    __ptr_ring_check_produce(&tfile->tx_ring) == -ENOSPC) {
 		netif_tx_stop_queue(queue);
 		/* Paired with smp_mb() in __tun_wake_queue() */
@@ -2151,8 +2153,12 @@ done:
 static void __tun_wake_queue(struct tun_struct *tun,
 			     struct tun_file *tfile, int consumed)
 {
-	struct netdev_queue *txq = netdev_get_tx_queue(tun->dev,
-						tfile->queue_index);
+	struct netdev_queue *txq;
+
+	if (!(tun->flags & IFF_BACKPRESSURE))
+		return;
+
+	txq = netdev_get_tx_queue(tun->dev, tfile->queue_index);
 
 	/* Paired with smp_mb__after_atomic() in tun_net_xmit() */
 	smp_mb();
@@ -2893,8 +2899,19 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 	/* Make sure persistent devices do not get stuck in
 	 * xoff state.
 	 */
-	if (netif_running(tun->dev))
-		netif_tx_wake_all_queues(tun->dev);
+	if (netif_running(tun->dev)) {
+		for (int i = 0; i < tun->numqueues; i++) {
+			struct tun_file *i_tfile;
+
+			i_tfile = rtnl_dereference(tun->tfiles[i]);
+			spin_lock_bh(&i_tfile->tx_ring.consumer_lock);
+			spin_lock(&i_tfile->tx_ring.producer_lock);
+			netif_wake_subqueue(tun->dev, i_tfile->queue_index);
+			i_tfile->cons_cnt = 0;
+			spin_unlock(&i_tfile->tx_ring.producer_lock);
+			spin_unlock_bh(&i_tfile->tx_ring.consumer_lock);
+		}
+	}
 
 	strscpy(ifr->ifr_name, tun->dev->name);
 	return 0;
