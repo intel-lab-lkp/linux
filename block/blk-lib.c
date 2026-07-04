@@ -56,7 +56,8 @@ struct bio *blk_alloc_discard_bio(struct block_device *bdev,
 	 * discards (like mkfs).  Be nice and allow us to schedule out to avoid
 	 * softlocking if preempt is disabled.
 	 */
-	cond_resched();
+	if (gfpflags_allow_blocking(gfp_mask))
+		cond_resched();
 	return bio;
 }
 
