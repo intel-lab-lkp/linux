@@ -6,6 +6,7 @@
 
 #ifdef CONFIG_X86_32
 #define __NR_seccomp_sigreturn		__NR_sigreturn
+#define __NR_seccomp_rt_sigreturn	__NR_rt_sigreturn
 #endif
 
 #ifdef CONFIG_COMPAT
@@ -14,6 +15,11 @@
 #define __NR_seccomp_write_32		__NR_ia32_write
 #define __NR_seccomp_exit_32		__NR_ia32_exit
 #define __NR_seccomp_sigreturn_32	__NR_ia32_sigreturn
+#define __NR_seccomp_rt_sigreturn_32	__NR_ia32_rt_sigreturn
+#define __NR_seccomp_clone_32		__NR_ia32_clone
+#define __NR_seccomp_clone3_32		__NR_ia32_clone3
+#define __NR_seccomp_fork_32		__NR_ia32_fork
+#define __NR_seccomp_vfork_32		__NR_ia32_vfork
 #endif
 
 #ifdef CONFIG_X86_64
