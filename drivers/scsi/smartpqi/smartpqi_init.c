@@ -8897,7 +8897,19 @@ static void pqi_free_interrupts(struct pqi_ctrl_info *ctrl_info)
 
 static void pqi_free_ctrl_resources(struct pqi_ctrl_info *ctrl_info)
 {
+	/*
+	 * Release blocked workers first.  Disable ctrl_offline_work before
+	 * freeing IRQs because its callback can also free them.  event_work
+	 * can requeue rescan_work, so drain event_work before cancelling
+	 * rescan again.
+	 */
+	pqi_ctrl_unblock_requests(ctrl_info);
+	disable_work_sync(&ctrl_info->ctrl_offline_work);
 	pqi_free_interrupts(ctrl_info);
+	cancel_work_sync(&ctrl_info->event_work);
+	pqi_cancel_rescan_worker(ctrl_info);
+	cancel_work_sync(&ctrl_info->ofa_memory_alloc_work);
+	cancel_work_sync(&ctrl_info->ofa_quiesce_work);
 	if (ctrl_info->queue_memory_base)
 		dma_free_coherent(&ctrl_info->pci_dev->dev,
 			ctrl_info->queue_memory_length,
