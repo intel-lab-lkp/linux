@@ -95,6 +95,13 @@ struct seccomp_knotif {
 	u32 flags;
 
 	/*
+	 * Set by SEND_REDIRECT: the reply rewrote the syscall's registers,
+	 * so on resume the syscall must be re-evaluated against the filters
+	 * outer to the one that notified (see __seccomp_filter()).
+	 */
+	bool redirect;
+
+	/*
 	 * Signals when this has changed states, such as the listener
 	 * dying, a new seccomp addfd message, or changing to REPLIED
 	 */
@@ -1181,10 +1188,12 @@ static bool should_sleep_killable(struct seccomp_filter *match,
 
 static int seccomp_do_user_notification(int this_syscall,
 					struct seccomp_filter *match,
-					const struct seccomp_data *sd)
+					const struct seccomp_data *sd,
+					bool *redirected)
 {
 	int err;
 	u32 flags = 0;
+	bool redirect = false;
 	long ret = 0;
 	struct seccomp_knotif n = {};
 	struct seccomp_kaddfd *addfd, *tmp;
@@ -1241,6 +1250,7 @@ static int seccomp_do_user_notification(int this_syscall,
 	ret = n.val;
 	err = n.error;
 	flags = n.flags;
+	redirect = n.redirect;
 
 interrupted:
 	/* If there were any pending addfd calls, clear them out */
@@ -1267,12 +1277,36 @@ out:
 	mutex_unlock(&match->notify_lock);
 
 	/* Userspace requests to continue the syscall. */
-	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE)
+	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) {
+		*redirected = redirect;
 		return 0;
+	}
 
 	syscall_set_return_value(current, current_pt_regs(),
 				 err, ret);
 	return -1;
+}
+
+static u32 seccomp_run_filters_seq(const struct seccomp_data *sd,
+				   struct seccomp_filter **match,
+				   struct seccomp_filter *f,
+				   int this_syscall)
+{
+	for (; f; f = f->prev) {
+		u32 cur_ret = bpf_prog_run_pin_on_cpu(f->prog, sd);
+		u32 action = ACTION_ONLY(cur_ret);
+
+		if (action == SECCOMP_RET_ALLOW)
+			continue;
+		/* LOG does not block the syscall; record it and continue. */
+		if (action == SECCOMP_RET_LOG) {
+			seccomp_log(this_syscall, 0, action, true);
+			continue;
+		}
+		*match = f;
+		return cur_ret;
+	}
+	return SECCOMP_RET_ALLOW;
 }
 
 static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
@@ -1280,6 +1314,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 	u32 filter_ret, action;
 	struct seccomp_data sd;
 	struct seccomp_filter *match = NULL;
+	bool in_walk = false;
 	int data;
 
 	/*
@@ -1291,6 +1326,8 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 	populate_seccomp_data(&sd);
 
 	filter_ret = seccomp_run_filters(&sd, &match);
+
+eval:
 	data = filter_ret & SECCOMP_RET_DATA;
 	action = filter_ret & SECCOMP_RET_ACTION_FULL;
 
@@ -1343,6 +1380,18 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 			goto skip;
 
 		/*
+		 * During a post-redirect outward walk, TRACE is terminal: the
+		 * tracer has handled the call and, like the other blocking
+		 * actions, the walk consults no further filters. Do not run the
+		 * full-stack recheck below: it restarts from the innermost
+		 * filter and would reconsult (and re-notify) the inner filter
+		 * that redirected, breaking the walk's monotonic-outward
+		 * guarantee.
+		 */
+		if (in_walk)
+			return 0;
+
+		/*
 		 * Recheck the syscall, since it may have changed. This
 		 * intentionally uses a NULL struct seccomp_data to force
 		 * a reload of all registers. This does not goto skip since
@@ -1353,11 +1402,51 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 
 		return 0;
 
-	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(this_syscall, match, &sd))
+	case SECCOMP_RET_USER_NOTIF: {
+		struct seccomp_filter *outer;
+		bool redirected = false;
+
+		if (seccomp_do_user_notification(this_syscall, match, &sd,
+						 &redirected))
 			goto skip;
 
-		return 0;
+		/*
+		 * Continue the outward walk only when the syscall still runs
+		 * and there is an outer filter left to judge it. That holds for
+		 * a redirect, and for a plain FLAG_CONTINUE (resume, no
+		 * redirect) reached during the walk: either way the call must
+		 * keep being offered to the remaining outer filters, or this
+		 * notifier's reply would let it slip past a stricter filter
+		 * further out. A redirect by the outermost filter (no
+		 * match->prev) has no outer filter to re-validate against.
+		 */
+		if (!match->prev || !(redirected || in_walk))
+			return 0;
+
+		if (redirected) {
+			/*
+			 * The notifier rewrote the registers. Reload the
+			 * seccomp_data so the outer filters judge the
+			 * substituted syscall; a plain resume leaves the
+			 * registers (and thus the current sd) unchanged. The
+			 * walk is strictly outward, so a notifier can never
+			 * re-notify on its own redirect.
+			 */
+			populate_seccomp_data(&sd);
+			this_syscall = sd.nr;
+			if (this_syscall < 0)
+				return 0;
+			in_walk = true;
+		}
+
+		outer = match->prev;
+		match = NULL;
+		filter_ret = seccomp_run_filters_seq(&sd, &match, outer,
+						     this_syscall);
+		if (!match)
+			return 0;
+		goto eval;
+	}
 
 	case SECCOMP_RET_LOG:
 		seccomp_log(this_syscall, 0, action, true);
@@ -2201,6 +2290,7 @@ static long seccomp_notify_send_redirect(struct seccomp_filter *filter,
 		goto out_unlock_free;
 	}
 
+	knotif->redirect = true;
 	knotif->state = SECCOMP_NOTIFY_REPLIED;
 	knotif->error = 0;
 	knotif->val = 0;
