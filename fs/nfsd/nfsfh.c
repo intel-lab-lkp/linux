@@ -345,20 +345,22 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 			fhp->fh_no_wcc = true;
 		fhp->fh_64bit_cookies = true;
 		if (exp->ex_flags & NFSEXP_V4ROOT)
-			goto out;
+			goto out_dput;
 		break;
 	case NFS_FHSIZE:
 		fhp->fh_no_wcc = true;
 		if (EX_WGATHER(exp))
 			fhp->fh_use_wgather = true;
 		if (exp->ex_flags & NFSEXP_V4ROOT)
-			goto out;
+			goto out_dput;
 	}
 
 	fhp->fh_dentry = dentry;
 	fhp->fh_export = exp;
 
 	return 0;
+out_dput:
+	dput(dentry);
 out:
 	exp_put(exp);
 	return error;
