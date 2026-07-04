@@ -43,7 +43,6 @@ static LIST_HEAD(maple_sentq);
 /* mutex to protect queue of waiting packets */
 static DEFINE_MUTEX(maple_wlist_lock);
 
-static struct maple_driver maple_unsupported_device;
 static struct device maple_bus;
 static int subdevice_map[MAPLE_PORTS];
 static unsigned long *maple_sendbuf, *maple_sendptr, *maple_lastptr;
@@ -368,7 +367,6 @@ static void maple_attach_driver(struct maple_device *mdev)
 	if (function > 0x200) {
 		/* Do this silently - as not a real device */
 		function = 0;
-		mdev->driver = &maple_unsupported_device;
 		dev_set_name(&mdev->dev, "%d:0.port", mdev->port);
 	} else {
 		matched =
@@ -378,7 +376,6 @@ static void maple_attach_driver(struct maple_device *mdev)
 		if (matched == 0) {
 			/* Driver does not exist yet */
 			dev_info(&mdev->dev, "no driver found\n");
-			mdev->driver = &maple_unsupported_device;
 		}
 		dev_set_name(&mdev->dev, "%d:0%d.%lX", mdev->port,
 			     mdev->unit, function);
@@ -727,13 +724,13 @@ static irqreturn_t maple_vblank_interrupt(int irq, void *dev_id)
 static int maple_set_dma_interrupt_handler(void)
 {
 	return request_irq(HW_EVENT_MAPLE_DMA, maple_dma_interrupt,
-		IRQF_SHARED, "maple bus DMA", &maple_unsupported_device);
+		IRQF_SHARED, "maple bus DMA", &maple_bus);
 }
 
 static int maple_set_vblank_interrupt_handler(void)
 {
 	return request_irq(HW_EVENT_VSYNC, maple_vblank_interrupt,
-		IRQF_SHARED, "maple bus VBLANK", &maple_unsupported_device);
+		IRQF_SHARED, "maple bus VBLANK", &maple_bus);
 }
 
 static int maple_get_dma_buffer(void)
@@ -765,12 +762,6 @@ static void maple_bus_release(struct device *dev)
 {
 }
 
-static struct maple_driver maple_unsupported_device = {
-	.drv = {
-		.name = "maple_unsupported_device",
-		.bus = &maple_bus_type,
-	},
-};
 /*
  * maple_bus_type - core maple bus structure
  */
@@ -799,15 +790,12 @@ static int __init maple_bus_init(void)
 	if (retval)
 		goto cleanup_device;
 
-	retval = driver_register(&maple_unsupported_device.drv);
-	if (retval)
-		goto cleanup_bus;
 
 	/* allocate memory for maple bus dma */
 	retval = maple_get_dma_buffer();
 	if (retval) {
 		dev_err(&maple_bus, "failed to allocate DMA buffers\n");
-		goto cleanup_basic;
+		goto cleanup_bus;
 	}
 
 	/* set up DMA interrupt handler */
@@ -863,16 +851,13 @@ cleanup_cache:
 	kmem_cache_destroy(maple_queue_cache);
 
 cleanup_bothirqs:
-	free_irq(HW_EVENT_VSYNC, 0);
+	free_irq(HW_EVENT_VSYNC, &maple_bus);
 
 cleanup_irq:
-	free_irq(HW_EVENT_MAPLE_DMA, 0);
+	free_irq(HW_EVENT_MAPLE_DMA, &maple_bus);
 
 cleanup_dma:
 	free_pages((unsigned long) maple_sendbuf, MAPLE_DMA_PAGES);
-
-cleanup_basic:
-	driver_unregister(&maple_unsupported_device.drv);
 
 cleanup_bus:
 	bus_unregister(&maple_bus_type);
