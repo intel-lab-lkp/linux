@@ -35,8 +35,22 @@
  * Output register: dst
  * Note: input and output registers must be disjoint register sets
          (eg: a macro instance with mpidr = x1 and dst = x1 is invalid)
+         This is enforced at build time by the assertions below.
  */
+	.macro mpidr_hash_assert_distinct reg, regs:vararg
+	.irp	r, \regs
+	.ifc	\reg, \r
+	.error	"compute_mpidr_hash: register arguments must be distinct"
+	.endif
+	.endr
+	.endm
+
 	.macro compute_mpidr_hash dst, rs0, rs1, rs2, rs3, mpidr, mask
+	/* \dst is written before any input is consumed */
+	mpidr_hash_assert_distinct \dst, \rs0, \rs1, \rs2, \rs3, \mpidr, \mask
+	/* \mpidr and \mask are clobbered while other inputs are still live */
+	mpidr_hash_assert_distinct \mpidr, \rs0, \rs1, \rs2, \rs3, \mask
+	mpidr_hash_assert_distinct \mask, \rs1, \rs2, \rs3
 	and	\mpidr, \mpidr, \mask		// mask out MPIDR bits
 	and	\dst, \mpidr, #0xff		// mask=aff0
 	lsr	\dst ,\dst, \rs0		// dst=aff0>>rs0
