@@ -19,9 +19,24 @@ properties:
     description: phandle link to the I2C controller used for DDC EDID probing
     $ref: /schemas/types.yaml#/definitions/phandle
 
+  edid:
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    description:
+      When the DDC signals are not wired to the connector, and the connected
+      display is not removable, this property is used to supply a binary EDID
+      blob for the display.
+
   port:
     $ref: /schemas/graph.yaml#/properties/port
     description: Connection to controller providing VGA signals
+
+allOf:
+  - if:
+      required:
+        - ddc-i2c-bus
+    then:
+      properties:
+        edid: false
 
 required:
   - compatible
