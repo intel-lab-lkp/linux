@@ -52,16 +52,15 @@ static int punch_hole(struct gfs2_inode *ip, u64 offset, u64 length);
  * Returns: errno
  */
 static int gfs2_unstuffer_folio(struct gfs2_inode *ip, struct buffer_head *dibh,
-			       u64 block, struct folio *folio)
+			       u64 block, struct folio *folio, size_t size)
 {
 	struct inode *inode = &ip->i_inode;
 
 	if (!folio_test_uptodate(folio)) {
 		void *kaddr = kmap_local_folio(folio, 0);
-		u64 dsize = i_size_read(inode);
- 
-		memcpy(kaddr, dibh->b_data + sizeof(struct gfs2_dinode), dsize);
-		memset(kaddr + dsize, 0, folio_size(folio) - dsize);
+
+		memcpy(kaddr, dibh->b_data + sizeof(struct gfs2_dinode), size);
+		memset(kaddr + size, 0, folio_size(folio) - size);
 		kunmap_local(kaddr);
 
 		folio_mark_uptodate(folio);
@@ -92,8 +91,14 @@ static int __gfs2_unstuff_inode(struct gfs2_inode *ip, struct folio *folio)
 	struct buffer_head *bh, *dibh;
 	struct gfs2_dinode *di;
 	u64 block = 0;
+	loff_t size = i_size_read(&ip->i_inode);
 	int isdir = gfs2_is_dir(ip);
 	int error;
+
+	if (unlikely(size < 0 || size > gfs2_max_stuffed_size(ip))) {
+		gfs2_consist_inode(ip);
+		return -EIO;
+	}
 
 	error = gfs2_meta_inode_buffer(ip, &dibh);
 	if (error)
@@ -116,7 +121,8 @@ static int __gfs2_unstuff_inode(struct gfs2_inode *ip, struct folio *folio)
 					      dibh, sizeof(struct gfs2_dinode));
 			brelse(bh);
 		} else {
-			error = gfs2_unstuffer_folio(ip, dibh, block, folio);
+			error = gfs2_unstuffer_folio(ip, dibh, block, folio,
+						     size);
 			if (error)
 				goto out_brelse;
 		}
