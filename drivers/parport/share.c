@@ -533,8 +533,10 @@ void parport_announce_port(struct parport *port)
 	attach_driver_chain(port);
 	for (i = 1; i < 3; i++) {
 		struct parport *slave = port->slaves[i-1];
-		if (slave)
+		if (slave) {
 			attach_driver_chain(slave);
+			set_bit(PARPORT_ANNOUNCED, &slave->devflags);
+		}
 	}
 	set_bit(PARPORT_ANNOUNCED, &port->devflags);
 	mutex_unlock(&registration_lock);
