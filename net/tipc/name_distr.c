@@ -192,7 +192,10 @@ static void named_distribute(struct net *net, struct sk_buff_head *list,
 		skb_trim(skb, INT_H_SIZE + (msg_dsz - msg_rem));
 		__skb_queue_tail(list, skb);
 	}
-	hdr = buf_msg(skb_peek_tail(list));
+	skb = skb_peek_tail(list);
+	if (!skb)
+		return;
+	hdr = buf_msg(skb);
 	msg_set_last_bulk(hdr);
 	msg_set_named_seqno(hdr, seqno);
 }
@@ -219,7 +222,8 @@ void tipc_named_node_up(struct net *net, u32 dnode, u16 capabilities)
 
 	read_lock_bh(&nt->cluster_scope_lock);
 	named_distribute(net, &head, dnode, &nt->cluster_scope, seqno);
-	tipc_node_xmit(net, &head, dnode, 0);
+	if (!skb_queue_empty(&head))
+		tipc_node_xmit(net, &head, dnode, 0);
 	read_unlock_bh(&nt->cluster_scope_lock);
 }
 
