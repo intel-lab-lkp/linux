@@ -742,6 +742,14 @@ int kvm_ioapic_init(struct kvm *kvm)
 	return ret;
 }
 
+void kvm_ioapic_pre_destroy(struct kvm *kvm)
+{
+	struct kvm_ioapic *ioapic = kvm->arch.vioapic;
+
+	if (ioapic)
+		cancel_delayed_work_sync(&ioapic->eoi_inject);
+}
+
 void kvm_ioapic_destroy(struct kvm *kvm)
 {
 	struct kvm_ioapic *ioapic = kvm->arch.vioapic;

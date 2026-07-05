@@ -9942,6 +9942,7 @@ void kvm_arch_pre_destroy_vm(struct kvm *kvm)
 	 */
 #ifdef CONFIG_KVM_IOAPIC
 	kvm_free_pit(kvm);
+	kvm_ioapic_pre_destroy(kvm);
 #endif
 
 	kvm_mmu_pre_destroy_vm(kvm);
