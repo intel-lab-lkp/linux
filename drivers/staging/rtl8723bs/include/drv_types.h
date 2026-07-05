@@ -344,7 +344,7 @@ struct adapter {
 
 	u8 bFWReady;
 	u8 bBTFWReady;
-	u8 bLinkInfoDump;
+	u8 link_info_dump;
 	u8 bRxRSSIDisplay;
 	/* 	Added by Albert 2012/10/26 */
 	/* 	The driver will show up the desired channel number when this flag is 1. */
