@@ -1,0 +1,174 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/xilinx-xadc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Xilinx 7 Series XADC and UltraScale/UltraScale+ System Monitor
+
+maintainers:
+  - Avermoal <avermoal@gmail.com>
+
+description: |
+  The Xilinx XADC is an ADC that can be found in the Series 7 FPGAs from Xilinx.
+  The XADC has a DRP interface for communication. Currently two different
+  frontends for the DRP interface exist. One that is only available on the ZYNQ
+  family as a hardmacro in the SoC portion of the ZYNQ. The other one is
+  available on all series 7 platforms and is a softmacro with an AXI interface.
+  This binding document describes the bindings for both of them since the
+  bindings are very similar.
+
+  The Xilinx System Monitor is an ADC that is found in the UltraScale and
+  UltraScale+ FPGAs from Xilinx. The System Monitor provides a DRP interface
+  for communication. Xilinx provides a standard IP core that can be used to
+  access the System Monitor through an AXI interface in the FPGA fabric.
+  This IP core is called the Xilinx System Management Wizard. This document
+  describes the bindings for this IP.
+
+properties:
+  compatible:
+    description: |
+      Specifies the interface type and the target device.
+      - "xlnx,zynq-xadc-1.00.a"
+      for ZYNQ device configuration interface (hardmacro in SoC)
+      - "xlnx,axi-xadc-1.00.a"
+      for AXI pcore softmacro on all Series 7 FPGAs
+      - "xlnx,system-management-wiz-1.3"
+      for UltraScale/UltraScale+ System Monitor via AXI
+    enum:
+      - xlnx,zynq-xadc-1.00.a
+      - xlnx,axi-xadc-1.00.a
+      - xlnx,system-management-wiz-1.3
+
+  reg:
+    description: Address and length of the register set for the device.
+    maxItems: 1
+
+  interrupts:
+    description: Interrupt for the XADC control interface.
+    maxItems: 1
+
+  clocks:
+    description: |
+      When using the ZYNQ this must be the ZYNQ PCAP clock,
+      when using the axi-xadc or the axi-system-management-wizard this must be
+      the clock that provides the clock to the AXI bus interface of the core.
+    maxItems: 1
+
+  xlnx,external-mux:
+    description: |
+      External multiplexer mode. If omitted, defaults to "none".
+      - "none" – no external multiplexer (default)
+      - "single" – one external multiplexer
+      - "dual" – two external multiplexers for simultaneous sampling
+    $ref: /schemas/types.yaml#/definitions/string
+    enum: [none, single, dual]
+    default: none
+
+  xlnx,external-mux-channel:
+    description: |
+      Configures which pair of pins is used to sample data in external mux mode.
+      For single mode: 0 (VP/VN) or 1..16 (VAUXP[0..15]/VAUXN[0..15]).
+      For dual mode: 1..8, where the value n corresponds to the pair
+      (VAUXP[n-1]/VAUXN[n-1] and VAUXP[n+7]/VAUXN[n+7]).
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 16
+
+  xlnx,channels:
+    description: |
+      Container for external channels that are connected to the ADC.
+      If this property is not present, no external channels will be assumed.
+    type: object
+    properties:
+      "#address-cells":
+        const: 1
+      "#size-cells":
+        const: 0
+    patternProperties:
+      "^channel@[0-9a-f]+$":
+        type: object
+        description: Each child node represents one external channel.
+        properties:
+          reg:
+            description: |
+              Pair of pins the channel is connected to.
+              0: VP/VN
+              1..16: VAUXP[0..15]/VAUXN[0..15]
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 16
+          xlnx,bipolar:
+            description: If present, the channel is used in bipolar mode.
+            type: boolean
+        required:
+          - reg
+        additionalProperties: false
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    xadc@f8007100 {
+        compatible = "xlnx,zynq-xadc-1.00.a";
+        reg = <0xf8007100 0x20>;
+        interrupts = <0 7 4>;
+        interrupt-parent = <&gic>;
+        clocks = <&pcap_clk>;
+
+        xlnx,channels {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            channel@0 {
+                reg = <0>;
+            };
+            channel@1 {
+                reg = <1>;
+            };
+            channel@8 {
+                reg = <8>;
+            };
+        };
+    };
+  - |
+    xadc@43200000 {
+        compatible = "xlnx,axi-xadc-1.00.a";
+        reg = <0x43200000 0x1000>;
+        interrupts = <0 53 4>;
+        interrupt-parent = <&gic>;
+        clocks = <&fpga1_clk>;
+
+        xlnx,channels {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            channel@0 {
+                reg = <0>;
+                xlnx,bipolar;
+            };
+        };
+    };
+  - |
+    adc@80000000 {
+        compatible = "xlnx,system-management-wiz-1.3";
+        reg = <0x80000000 0x1000>;
+        interrupts = <0 81 4>;
+        interrupt-parent = <&gic>;
+        clocks = <&fpga1_clk>;
+
+        xlnx,channels {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            channel@0 {
+                reg = <0>;
+                xlnx,bipolar;
+            };
+        };
+    };
+...
