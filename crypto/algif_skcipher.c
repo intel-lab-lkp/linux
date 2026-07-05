@@ -45,6 +45,9 @@ static const struct af_alg_allowlist_entry skcipher_allowlist[] = {
 	{ "ecb(des)", true }, /* iwd */
 	{ "hctr2(aes)", false }, /* cryptsetup */
 	{ "xts(aes)", false }, /* cryptsetup benchmark */
+	{ "xts(camellia)", false }, /* cryptsetup */
+	{ "xts(serpent)", false }, /* cryptsetup */
+	{ "xts(twofish)", false }, /* cryptsetup */
 	{},
 };
 
