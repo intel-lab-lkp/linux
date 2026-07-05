@@ -172,6 +172,7 @@ class SpecAttr(SpecElement):
         selector      string, name of attribute used to select
                       sub-message type
 
+        bloblen       string, name of attr which reports the blob length
         is_auto_scalar bool, attr is a variable-size scalar
     """
     def __init__(self, family, attr_set, yaml, value):
@@ -181,6 +182,7 @@ class SpecAttr(SpecElement):
         self.value = value
         self.attr_set = attr_set
         self.is_multi = yaml.get('multi-attr', False)
+        self.bloblen = yaml.get('bloblen')
         self.struct_name = yaml.get('struct')
         self.sub_type = yaml.get('sub-type')
         self.byte_order = yaml.get('byte-order')
@@ -190,6 +192,10 @@ class SpecAttr(SpecElement):
         self.selector = yaml.get('selector')
 
         self.is_auto_scalar = self.type in ("sint", "uint")
+
+        if self.bloblen and not self.is_multi:
+            raise SpecException(
+                f"Attribute '{attr_set.name}.{self.name}' has bloblen without multi-attr")
 
 
 class SpecAttrSet(SpecElement):
@@ -355,6 +361,8 @@ class SpecOperation(SpecElement):
         attr_set        attribute set name
         fixed_header    string, optional name of fixed header struct
 
+        dump_blob_attrs set, reply blob attribute names which may span messages
+
         yaml            raw spec as loaded from the spec file
     """
     def __init__(self, family, yaml, req_value, rsp_value):
@@ -369,6 +377,7 @@ class SpecOperation(SpecElement):
         self.is_async = 'notify' in yaml or 'event' in yaml
         self.is_resv = not self.is_async and not self.is_call
         self.fixed_header = self.yaml.get('fixed-header', family.fixed_header)
+        self.dump_blob_attrs = frozenset()
 
         # Added by resolve:
         self.attr_set = None
@@ -388,6 +397,9 @@ class SpecOperation(SpecElement):
             raise SpecException(f"Can't resolve attribute set for op '{self.name}'")
         if attr_set_name:
             self.attr_set = self.family.attr_sets[attr_set_name]
+            reply_attrs = self.yaml.get('dump', {}).get('reply', {}).get('attributes', ())
+            self.dump_blob_attrs = frozenset(
+                name for name in reply_attrs if self.attr_set[name].bloblen)
 
 
 class SpecMcastGroup(SpecElement):
