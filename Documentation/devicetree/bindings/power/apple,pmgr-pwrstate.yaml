@@ -46,6 +46,7 @@ properties:
           - enum:
               - apple,t6020-pmgr-pwrstate
               - apple,t8122-pmgr-pwrstate
+              - apple,t8132-pmgr-pwrstate
           - const: apple,t8103-pmgr-pwrstate
 
   reg:
