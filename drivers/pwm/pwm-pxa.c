@@ -136,7 +136,6 @@ static const struct pwm_ops pxa_pwm_ops = {
 	.apply = pxa_pwm_apply,
 };
 
-#ifdef CONFIG_OF
 /*
  * Device tree users must create one device instance for each PWM channel.
  * Hence we dispense with the HAS_SECONDARY_PWM and "tell" the original driver
@@ -151,9 +150,6 @@ static const struct of_device_id pwm_of_match[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(of, pwm_of_match);
-#else
-#define pwm_of_match NULL
-#endif
 
 static int pwm_probe(struct platform_device *pdev)
 {
@@ -165,7 +161,7 @@ static int pwm_probe(struct platform_device *pdev)
 	struct reset_control *rst;
 	int ret = 0;
 
-	if (IS_ENABLED(CONFIG_OF) && id == NULL)
+	if (id == NULL)
 		id = of_device_get_match_data(dev);
 
 	if (id == NULL)
@@ -191,9 +187,7 @@ static int pwm_probe(struct platform_device *pdev)
 		return PTR_ERR(rst);
 
 	chip->ops = &pxa_pwm_ops;
-
-	if (IS_ENABLED(CONFIG_OF))
-		chip->of_xlate = of_pwm_single_xlate;
+	chip->of_xlate = of_pwm_single_xlate;
 
 	pc->mmio_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(pc->mmio_base))
