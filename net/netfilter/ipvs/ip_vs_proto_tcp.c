@@ -582,14 +582,12 @@ tcp_state_transition(struct ip_vs_conn *cp, int direction,
 		     struct ip_vs_proto_data *pd)
 {
 	struct tcphdr _tcph, *th;
+	struct ip_vs_iphdr iph;
 
-#ifdef CONFIG_IP_VS_IPV6
-	int ihl = cp->af == AF_INET ? ip_hdrlen(skb) : sizeof(struct ipv6hdr);
-#else
-	int ihl = ip_hdrlen(skb);
-#endif
+	if (!ip_vs_fill_iph_skb(cp->af, skb, false, &iph))
+		return;
 
-	th = skb_header_pointer(skb, ihl, sizeof(_tcph), &_tcph);
+	th = skb_header_pointer(skb, iph.len, sizeof(_tcph), &_tcph);
 	if (th == NULL)
 		return;
 
