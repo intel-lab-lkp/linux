@@ -74,6 +74,9 @@ struct qcom_ubwc_cfg_data;
  * @core_init_done: structure of signal completion for system response
  * @intr_status: interrupt status
  * @sys_error_handler: a delayed work for handling system fatal error
+ * @unregistering: set under @lock in iris_remove() to block core re-init
+ *	and sys_error re-arming; checked under @lock in iris_core_init() and
+ *	the HFI system-error handlers
  * @instances: a list_head of all instances
  * @inst_fw_caps_dec: an array of supported instance capabilities by decoder
  * @inst_fw_caps_enc: an array of supported instance capabilities by encoder
@@ -119,6 +122,7 @@ struct iris_core {
 	struct completion			core_init_done;
 	u32					intr_status;
 	struct delayed_work			sys_error_handler;
+	bool					unregistering;
 	struct list_head			instances;
 	/* encoder and decoder have overlapping caps, so two different arrays are required */
 	struct platform_inst_fw_cap		inst_fw_caps_dec[INST_FW_CAP_MAX];

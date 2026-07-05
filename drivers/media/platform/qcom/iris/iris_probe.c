@@ -200,7 +200,17 @@ static void iris_remove(struct platform_device *pdev)
 	if (!core)
 		return;
 
+	/*
+	 * Prevent the system-error work from re-initializing the core once
+	 * teardown begins.  Then drain any work that was queued before the
+	 * flag was set, before destroying the mutex used by the work function.
+	 */
+	mutex_lock(&core->lock);
+	core->unregistering = true;
+	mutex_unlock(&core->lock);
+
 	iris_core_deinit(core);
+	cancel_delayed_work_sync(&core->sys_error_handler);
 
 	video_unregister_device(core->vdev_dec);
 	video_unregister_device(core->vdev_enc);
