@@ -64,6 +64,31 @@
 	lsr	\mask ,\mask, \rs3
 	orr	\dst, \dst, \mask		// dst|=(aff3>>rs3)
 	.endm
+
+/*
+ * Compute the address of the current CPU's entry in sleep_save_stash,
+ * i.e. &sleep_save_stash[hash(MPIDR_EL1)].
+ *
+ * @slot: output register
+ *
+ * Clobbers: x2 - x8
+ */
+	.macro get_sleep_stash_slot slot
+	mpidr_hash_assert_distinct \slot, x2
+	mrs	x3, mpidr_el1
+	adr_l	x2, mpidr_hash
+	ldr	x8, [x2, #MPIDR_HASH_MASK]
+	/*
+	 * Following code relies on the struct mpidr_hash
+	 * members size.
+	 */
+	ldp	w4, w5, [x2, #MPIDR_HASH_SHIFTS]
+	ldp	w6, w7, [x2, #(MPIDR_HASH_SHIFTS + 8)]
+	compute_mpidr_hash x2, x4, x5, x6, x7, x3, x8
+	ldr_l	\slot, sleep_save_stash
+	add	\slot, \slot, x2, lsl #3
+	.endm
+
 /*
  * Save CPU state in the provided sleep_stack_data area, and publish its
  * location for cpu_resume()'s use in sleep_save_stash.
@@ -88,19 +113,8 @@ SYM_FUNC_START(__cpu_suspend_enter)
 	mov	x2, sp
 	str	x2, [x0, #SLEEP_STACK_DATA_SYSTEM_REGS + CPU_CTX_SP]
 
-	/* find the mpidr_hash */
-	ldr_l	x1, sleep_save_stash
-	mrs	x7, mpidr_el1
-	adr_l	x9, mpidr_hash
-	ldr	x10, [x9, #MPIDR_HASH_MASK]
-	/*
-	 * Following code relies on the struct mpidr_hash
-	 * members size.
-	 */
-	ldp	w3, w4, [x9, #MPIDR_HASH_SHIFTS]
-	ldp	w5, w6, [x9, #(MPIDR_HASH_SHIFTS + 8)]
-	compute_mpidr_hash x8, x3, x4, x5, x6, x7, x10
-	add	x1, x1, x8, lsl #3
+	/* find this CPU's slot in sleep_save_stash */
+	get_sleep_stash_slot x1
 
 	str	x0, [x1]
 	add	x0, x0, #SLEEP_STACK_DATA_SYSTEM_REGS
@@ -131,18 +145,9 @@ SYM_FUNC_START(_cpu_resume)
 	mov	x0, x19
 	bl	finalise_el2
 
-	mrs	x1, mpidr_el1
-	adr_l	x8, mpidr_hash		// x8 = struct mpidr_hash virt address
-
-	/* retrieve mpidr_hash members to compute the hash */
-	ldr	x2, [x8, #MPIDR_HASH_MASK]
-	ldp	w3, w4, [x8, #MPIDR_HASH_SHIFTS]
-	ldp	w5, w6, [x8, #(MPIDR_HASH_SHIFTS + 8)]
-	compute_mpidr_hash x7, x3, x4, x5, x6, x1, x2
-
-	/* x7 contains hash index, let's use it to grab context pointer */
-	ldr_l	x0, sleep_save_stash
-	ldr	x0, [x0, x7, lsl #3]
+	/* grab this CPU's context pointer from sleep_save_stash */
+	get_sleep_stash_slot x0
+	ldr	x0, [x0]
 	add	x29, x0, #SLEEP_STACK_DATA_CALLEE_REGS
 	add	x0, x0, #SLEEP_STACK_DATA_SYSTEM_REGS
 	/* load sp from context */
