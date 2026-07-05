@@ -2385,6 +2385,35 @@ static const struct dmi_system_id power_limits[] = {
 	},
 	{
 		.matches = {
+			DMI_MATCH(DMI_BOARD_NAME, "HN7306EA"),
+		},
+		.driver_data = &(struct power_data) {
+			.ac_data = &(struct power_limits) {
+				.ppt_pl1_spl_min = 35,
+				.ppt_pl1_spl_def = 60,
+				.ppt_pl1_spl_max = 85,
+				.ppt_pl2_sppt_min = 40,
+				.ppt_pl2_sppt_def = 70,
+				.ppt_pl2_sppt_max = 95,
+				.ppt_pl3_fppt_min = 50,
+				.ppt_pl3_fppt_def = 85,
+				.ppt_pl3_fppt_max = 115,
+			},
+			.dc_data = &(struct power_limits) {
+				.ppt_pl1_spl_min = 35,
+				.ppt_pl1_spl_def = 45,
+				.ppt_pl1_spl_max = 60,
+				.ppt_pl2_sppt_min = 40,
+				.ppt_pl2_sppt_def = 55,
+				.ppt_pl2_sppt_max = 70,
+				.ppt_pl3_fppt_min = 50,
+				.ppt_pl3_fppt_def = 65,
+				.ppt_pl3_fppt_max = 85,
+			},
+		},
+	},
+	{
+		.matches = {
 			DMI_MATCH(DMI_BOARD_NAME, "RC71"),
 		},
 		.driver_data = &(struct power_data) {
