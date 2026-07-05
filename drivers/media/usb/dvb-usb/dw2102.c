@@ -1893,7 +1893,7 @@ static int dw2102_load_firmware(struct usb_device *dev,
 		break;
 	}
 	info("start downloading DW210X firmware");
-	p = kmalloc(fw->size, GFP_KERNEL);
+	p = kzalloc(round_up(fw->size, 0x40), GFP_KERNEL);
 	reset = 1;
 	/*stop the CPU*/
 	dw210x_op_rw(dev, 0xa0, 0x7f92, 0, &reset, 1, DW210X_WRITE_MSG);
