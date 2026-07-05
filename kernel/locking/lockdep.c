@@ -786,18 +786,23 @@ static void print_lock(struct held_lock *hlock)
 static void lockdep_print_held_locks(struct task_struct *p)
 {
 	int i, depth = READ_ONCE(p->lockdep_depth);
+	const char *msg_running = "";
 
-	if (!depth)
+	if (!depth) {
 		printk("no locks held by %s/%d.\n", p->comm, task_pid_nr(p));
-	else
-		printk("%d lock%s held by %s/%d:\n", depth,
-		       str_plural(depth), p->comm, task_pid_nr(p));
+		return;
+	}
+
 	/*
-	 * It's not reliable to print a task's held locks if it's not sleeping
-	 * and it's not the current task.
+	 * It's not reliable to print a task's held locks if it's not
+	 * sleeping and it's not the current task:
 	 */
 	if (p != current && task_is_running(p))
-		return;
+		msg_running = " (WARNING: task running)";
+
+	printk("%d lock%s held by %s/%d%s:\n", depth,
+	       str_plural(depth), p->comm, task_pid_nr(p), msg_running);
+
 	for (i = 0; i < depth; i++) {
 		printk(" #%d: ", i);
 		print_lock(p->held_locks + i);
