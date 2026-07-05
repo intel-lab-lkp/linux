@@ -308,21 +308,23 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	host_err = fh_want_write(fhp);
 	if (host_err) {
 		status = nfserrno(host_err);
-		goto out_free;
+		goto out;
 	}
 
 	child = start_creating(&nop_mnt_idmap, parent,
 			       &QSTR_LEN(open->op_fname, open->op_fnamelen));
 	if (IS_ERR(child)) {
 		status = nfserrno(PTR_ERR(child));
+		fh_drop_write(fhp);
 		goto out;
 	}
 	path.dentry = child;
 
 	if (d_really_is_positive(child)) {
 		/*
-		 * open the file so that we consistently have a valid
-		 * op_filp.
+		 * open the file so that, unless it is O_RDONLY, we
+		 * have write-access to the fs for setattr below.
+		 * Also we can be sure that op_filp->f_path.dentry is valid.
 		 */
 		open->op_filp = dentry_open(&path, oflags, current_cred());
 		if (IS_ERR(open->op_filp)) {
@@ -344,6 +346,7 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		}
 	}
 	end_creating(child);
+	fh_drop_write(fhp);
 	if (status != nfs_ok)
 		goto out;
 
@@ -387,7 +390,24 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if ((iap->ia_valid & ATTR_SIZE) && (iap->ia_size == 0))
 		iap->ia_valid &= ~ATTR_SIZE;
 
-	status = nfsd_create_setattr(rqstp, fhp, resfhp, &attrs);
+	if (((oflags & O_ACCMODE) == O_RDONLY)) {
+		/*
+		 * We will need write access to set the attrs,
+		 * but a successful open won't have provided
+		 * that.
+		 */
+		int host_err = fh_want_write(fhp);
+		if (host_err) {
+			status = nfserrno(host_err);
+		} else {
+			status = nfsd_create_setattr(rqstp, fhp,
+						     resfhp, &attrs);
+			fh_drop_write(fhp);
+		}
+	} else {
+		status = nfsd_create_setattr(rqstp, fhp,
+					     resfhp, &attrs);
+	}
 
 	if (attrs.na_labelerr)
 		open->op_bmval[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
@@ -398,8 +418,6 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (attrs.na_paclerr)
 		open->op_bmval[2] &= ~FATTR4_WORD2_POSIX_ACCESS_ACL;
 out:
-	fh_drop_write(fhp);
-out_free:
 	nfsd_attrs_free(&attrs);
 	return status;
 }
