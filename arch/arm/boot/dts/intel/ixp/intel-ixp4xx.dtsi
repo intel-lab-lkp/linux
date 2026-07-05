@@ -114,6 +114,7 @@
 			reg = <0xc8004000 0x1000>;
 			gpio-controller;
 			#gpio-cells = <2>;
+			#address-cells = <0>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
 		};
