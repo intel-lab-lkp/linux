@@ -27,6 +27,8 @@ struct display_connector {
 	struct regulator	*supply;
 	struct gpio_desc	*ddc_en;
 
+	const struct drm_edid	*edid;
+
 	struct work_struct	hpd_work;
 };
 
@@ -48,6 +50,7 @@ static void display_connector_destroy(struct drm_bridge *bridge)
 	struct display_connector *conn = to_display_connector(bridge);
 
 	i2c_put_adapter(conn->bridge.ddc);
+	drm_edid_free(conn->edid);
 }
 
 static enum drm_connector_status display_connector_detect(struct drm_bridge *bridge)
@@ -62,6 +65,9 @@ static enum drm_connector_status display_connector_detect(struct drm_bridge *bri
 	}
 
 	if (conn->bridge.ddc && drm_probe_ddc(conn->bridge.ddc))
+		return connector_status_connected;
+
+	if (conn->edid)
 		return connector_status_connected;
 
 	switch (conn->bridge.type) {
@@ -130,7 +136,10 @@ static const struct drm_edid *display_connector_edid_read(struct drm_bridge *bri
 {
 	struct display_connector *conn = to_display_connector(bridge);
 
-	return drm_edid_read_ddc(connector, conn->bridge.ddc);
+	if (conn->bridge.ddc)
+		return drm_edid_read_ddc(connector, conn->bridge.ddc);
+	else
+		return drm_edid_dup(conn->edid);
 }
 
 /*
@@ -376,6 +385,24 @@ static int display_connector_probe(struct platform_device *pdev)
 		}
 	}
 
+	/* Retrieve the hardcoded EDID for VGA connectors. */
+	if (type == DRM_MODE_CONNECTOR_VGA) {
+		const void *edid;
+		int size;
+
+		edid = of_get_property(pdev->dev.of_node, "edid", &size);
+		if (edid) {
+			if (conn->bridge.ddc)
+				return dev_err_probe(&pdev->dev, -EINVAL,
+						     "DDC and EDID are mutually exclusive\n");
+
+			conn->edid = drm_edid_alloc(edid, size);
+			if (!conn->edid)
+				return dev_err_probe(&pdev->dev, -EINVAL,
+						     "failed to parse EDID\n");
+		}
+	}
+
 	/* Get the DP PWR for DP connector. */
 	if (type == DRM_MODE_CONNECTOR_DisplayPort) {
 		int ret;
@@ -412,7 +439,7 @@ static int display_connector_probe(struct platform_device *pdev)
 
 	conn->bridge.of_node = pdev->dev.of_node;
 
-	if (conn->bridge.ddc)
+	if (conn->bridge.ddc || conn->edid)
 		conn->bridge.ops |= DRM_BRIDGE_OP_EDID
 				 |  DRM_BRIDGE_OP_DETECT;
 	/* Detecting the monitor requires reading DPCD */
