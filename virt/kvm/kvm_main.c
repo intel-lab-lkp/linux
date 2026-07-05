@@ -2693,7 +2693,7 @@ unsigned long kvm_host_page_size(struct kvm_vcpu *vcpu, gfn_t gfn)
 		return PAGE_SIZE;
 
 	mmap_read_lock(current->mm);
-	vma = find_vma(current->mm, addr);
+	vma = vma_lookup(current->mm, addr);
 	if (!vma)
 		goto out;
 
