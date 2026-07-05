@@ -281,15 +281,17 @@ static int btrfs_get_blocks_direct_write(struct extent_map **map,
 		em2 = btrfs_create_dio_extent(BTRFS_I(inode), dio_data, start,
 					      &file_extent, type);
 		btrfs_dec_nocow_writers(bg);
+		if (IS_ERR(em2)) {
+			ret = PTR_ERR(em2);
+			btrfs_free_extent_map(em);
+			*map = NULL;
+			goto out;
+		}
+
 		if (type == BTRFS_ORDERED_PREALLOC) {
 			btrfs_free_extent_map(em);
 			*map = em2;
 			em = em2;
-		}
-
-		if (IS_ERR(em2)) {
-			ret = PTR_ERR(em2);
-			goto out;
 		}
 
 		dio_data->nocow_done = true;
