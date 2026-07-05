@@ -784,6 +784,12 @@ static void solos_bh(unsigned long card_arg)
 
 				header = (void *)skb->data;
 				size = le16_to_cpu(header->size);
+				if (size > RX_DMA_SIZE - sizeof(*header)) {
+					dev_warn(&card->dev->dev, "Invalid DMA buffer size\n");
+					dev_kfree_skb_any(skb);
+					goto refill_rx;
+				}
+
 				skb_put(skb, size + sizeof(*header));
 				skb_pull(skb, sizeof(*header));
 			} else {
@@ -865,6 +871,7 @@ static void solos_bh(unsigned long card_arg)
 				break;
 			}
 		}
+refill_rx:
 		/* Allocate RX skbs for any ports which need them */
 		if (card->using_dma && card->atmdev[port] &&
 		    !card->rx_skb[port]) {
