@@ -2592,6 +2592,9 @@ static enum sctp_disposition sctp_sf_do_5_2_6_stale(
 
 	err = (struct sctp_errhdr *)(chunk->skb->data);
 
+	if ((u8 *)err + sizeof(*err) + sizeof(__be32) > chunk->chunk_end)
+		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
+
 	/* When calculating the time extension, an implementation
 	 * SHOULD use the RTT information measured based on the
 	 * previous COOKIE ECHO / ERROR exchange, and should add no
