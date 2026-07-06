@@ -663,6 +663,9 @@ static struct vxlanhdr *vxlan_gro_prepare_receive(struct sock *sk,
 	struct vxlan_sock *vs = rcu_dereference_sk_user_data(sk);
 	__be32 flags;
 
+	if (!vs)
+		return NULL;
+
 	skb_gro_remcsum_init(grc);
 
 	off_vx = skb_gro_offset(skb);
