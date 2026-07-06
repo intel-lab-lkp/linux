@@ -1962,6 +1962,11 @@ static int imx_pcie_probe(struct platform_device *pdev)
 		 */
 		imx_pcie_add_lut_by_rid(imx_pcie, 0);
 	} else {
+		/*
+		 * i.MX RC is powered off during suspend, force L2 entry to
+		 * ensure proper endpoint notification before power loss.
+		 */
+		pci->pp.force_l2 = true;
 		if (imx_check_flag(imx_pcie, IMX_PCIE_FLAG_SKIP_L23_READY))
 			pci->pp.skip_l23_ready = true;
 		if (imx_check_flag(imx_pcie, IMX_PCIE_FLAG_KEEP_MSI_CAP))

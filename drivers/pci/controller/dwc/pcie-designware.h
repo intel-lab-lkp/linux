@@ -471,6 +471,11 @@ struct dw_pcie_rp {
 	bool			native_ecam;
 	bool                    skip_l23_ready;
 	bool			skip_pwrctrl_off;
+	/*
+	 * Force L2 entry even if D3cold not possible (e.g., when RC loses
+	 * power).
+	 */
+	bool                    force_l2;
 };
 
 struct dw_pcie_ep_ops {
