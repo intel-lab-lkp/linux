@@ -302,8 +302,10 @@ v3d_attach_perfmon_to_jobs(struct v3d_submit *submit, u32 perfmon_id)
 	if (!perfmon_id)
 		return 0;
 
-	if (v3d->global_perfmon)
-		return -EAGAIN;
+	scoped_guard(spinlock_irqsave, &v3d->perfmon_state.lock) {
+		if (v3d->global_perfmon)
+			return -EAGAIN;
+	}
 
 	perfmon = v3d_perfmon_find(v3d_priv, perfmon_id);
 	if (!perfmon)

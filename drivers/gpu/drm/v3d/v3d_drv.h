@@ -87,9 +87,6 @@ struct v3d_perfmon {
 	 */
 	refcount_t refcnt;
 
-	/* Protects perfmon stop, as it can be invoked from multiple places. */
-	struct mutex lock;
-
 	/* Number of counters activated in this perfmon instance
 	 * (should be less than DRM_V3D_MAX_PERF_COUNTERS).
 	 */
@@ -171,8 +168,14 @@ struct v3d_dev {
 
 	struct v3d_queue_state queue[V3D_MAX_QUEUES];
 
-	/* Used to track the active perfmon if any. */
-	struct v3d_perfmon *active_perfmon;
+	/* Tracks the performance monitor state. */
+	struct {
+		/* Protects @active. */
+		spinlock_t lock;
+
+		/* Perfmon currently programmed in HW (or NULL if none). */
+		struct v3d_perfmon *active;
+	} perfmon_state;
 
 	/* Protects bo_stats */
 	struct mutex bo_lock;
@@ -667,6 +670,10 @@ void v3d_perfmon_put(struct v3d_perfmon *perfmon);
 void v3d_perfmon_start(struct v3d_dev *v3d, struct v3d_perfmon *perfmon);
 void v3d_perfmon_stop(struct v3d_dev *v3d, struct v3d_perfmon *perfmon,
 		      bool capture);
+void v3d_perfmon_stop_locked(struct v3d_dev *v3d, struct v3d_perfmon *perfmon,
+			     bool capture);
+void v3d_perfmon_suspend(struct v3d_dev *v3d);
+void v3d_perfmon_resume(struct v3d_dev *v3d);
 struct v3d_perfmon *v3d_perfmon_find(struct v3d_file_priv *v3d_priv, int id);
 void v3d_perfmon_open_file(struct v3d_file_priv *v3d_priv);
 void v3d_perfmon_close_file(struct v3d_file_priv *v3d_priv);
