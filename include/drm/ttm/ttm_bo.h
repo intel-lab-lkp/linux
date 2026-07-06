@@ -135,6 +135,12 @@ struct ttm_buffer_object {
 	 * reservation lock.
 	 */
 	struct sg_table *sg;
+
+	/**
+	 * @objcg: object cgroup to charge this to if it ends up using system memory.
+	 * NULL means don't charge.
+	 */
+	struct obj_cgroup *objcg;
 };
 
 #define TTM_BO_MAP_IOMEM_MASK 0x80
@@ -342,6 +348,20 @@ ttm_bo_move_to_lru_tail_unlocked(struct ttm_buffer_object *bo)
 	spin_lock(&bo->bdev->lru_lock);
 	ttm_bo_move_to_lru_tail(bo);
 	spin_unlock(&bo->bdev->lru_lock);
+}
+
+/**
+ * ttm_bo_set_cgroup - assign a cgroup to a buffer object.
+ * @bo: The bo to set the cgroup for
+ * @objcg: the cgroup to set.
+ *
+ * This transfers the cgroup reference to the bo. From this
+ * point on the cgroup reference is owned by the ttm bo.
+ */
+static inline void ttm_bo_set_cgroup(struct ttm_buffer_object *bo,
+				     struct obj_cgroup *objcg)
+{
+	bo->objcg = objcg;
 }
 
 static inline void ttm_bo_assign_mem(struct ttm_buffer_object *bo,
