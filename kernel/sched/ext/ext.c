@@ -2974,12 +2974,20 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, bool first)
 	 */
 	if ((p->scx.slice == SCX_SLICE_INF) !=
 	    (bool)(rq->scx.flags & SCX_RQ_CAN_STOP_TICK)) {
-		if (p->scx.slice == SCX_SLICE_INF)
+		if (p->scx.slice == SCX_SLICE_INF) {
 			rq->scx.flags |= SCX_RQ_CAN_STOP_TICK;
-		else
+			sched_update_tick_dependency(rq);
+		} else {
 			rq->scx.flags &= ~SCX_RQ_CAN_STOP_TICK;
 
-		sched_update_tick_dependency(rq);
+			/*
+			 * The rq still references the outgoing scheduling context.
+			 * A finite slice is sufficient by itself to require the tick.
+			 */
+			if (tick_nohz_full_cpu(cpu_of(rq)))
+				tick_nohz_dep_set_cpu(cpu_of(rq),
+							TICK_DEP_BIT_SCHED);
+		}
 
 		/*
 		 * For now, let's refresh the load_avgs just when transitioning
