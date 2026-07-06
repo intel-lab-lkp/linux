@@ -66,6 +66,9 @@
 /* Maximum time to wait for U-Boot and DDR to be ready with ms. */
 #define LS2K_BMC_RESET_WAIT_TIME	10000
 
+/* The length of the LS2K BMC display resolution string stored in PCI BAR0 */
+#define LS2K_RESOLUTION_STR_LEN		SZ_64
+
 /* It's an experience value */
 #define LS7A_BAR0_CHECK_MAX_TIMES	2000
 
@@ -427,27 +430,39 @@ static int ls2k_bmc_init(struct ls2k_bmc_ddata *ddata)
  */
 static int ls2k_bmc_parse_mode(struct pci_dev *pdev, struct simplefb_platform_data *pd)
 {
-	char *mode;
+	char *mode __free(kfree) = NULL;
+	void __iomem *base;
+	char *pos = NULL;
 	int depth, ret;
 
 	/* The last 16M of PCI BAR0 is used to store the resolution string. */
-	mode = devm_ioremap(&pdev->dev, pci_resource_start(pdev, 0) + SZ_16M, SZ_16M);
+	base = devm_ioremap(&pdev->dev, pci_resource_start(pdev, 0) + SZ_16M,
+			    LS2K_RESOLUTION_STR_LEN);
+	if (!base)
+		return -ENOMEM;
+
+	mode = kmalloc(LS2K_RESOLUTION_STR_LEN, GFP_KERNEL);
 	if (!mode)
 		return -ENOMEM;
 
+	memcpy_fromio(mode, base, LS2K_RESOLUTION_STR_LEN);
+
 	/* The resolution field starts with the flag "video=". */
-	if (!strncmp(mode, "video=", 6))
-		mode = mode + 6;
+	if (strncmp(mode, "video=", 6)) {
+		dev_err(&pdev->dev, "Simpledrm resolution missing or corrupt!\n");
+		return -EINVAL;
+	}
 
-	ret = kstrtoint(strsep(&mode, "x"), 10, &pd->width);
+	pos = mode + 6;
+	ret = kstrtoint(strsep(&pos, "x"), 10, &pd->width);
 	if (ret)
 		return ret;
 
-	ret = kstrtoint(strsep(&mode, "-"), 10, &pd->height);
+	ret = kstrtoint(strsep(&pos, "-"), 10, &pd->height);
 	if (ret)
 		return ret;
 
-	ret = kstrtoint(strsep(&mode, "@"), 10, &depth);
+	ret = kstrtoint(strsep(&pos, "@"), 10, &depth);
 	if (ret)
 		return ret;
 
