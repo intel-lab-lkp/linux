@@ -80,13 +80,23 @@ impl From<Hertz> for c_ulong {
 mod common_clk {
     use super::Hertz;
     use crate::{
-        device::{Bound, Device},
-        error::{from_err_ptr, to_result, Result},
+        device::{
+            Bound,
+            Device, //
+        },
+        error::{
+            from_err_ptr,
+            to_result, //
+        },
         prelude::*,
-        sync::Arc,
+        sync::Arc, //
     };
 
-    use core::{marker::PhantomData, mem::ManuallyDrop, ptr};
+    use core::{
+        marker::PhantomData,
+        mem::ManuallyDrop,
+        ptr, //
+    };
 
     mod private {
         pub trait Sealed {}
@@ -193,9 +203,15 @@ mod common_clk {
         /// original [`Clk`], e.g.:
         ///
         /// ```
-        /// use kernel::clk::{Clk, Enabled, Unprepared};
-        /// use kernel::device::{Bound, Device};
-        /// use kernel::error::Result;
+        /// use kernel::clk::{
+        ///     Clk,
+        ///     Enabled,
+        ///     Unprepared, //
+        /// };
+        /// use kernel::device::{
+        ///     Bound,
+        ///     Device, //
+        /// };
         ///
         /// fn get_enabled(dev: &Device<Bound>) -> Result<Clk<Enabled>> {
         ///     let clk = Clk::<Unprepared>::get(dev, Some(c"apb_clk"))?
@@ -245,9 +261,17 @@ mod common_clk {
     /// The following example demonstrates how to obtain and configure a clock for a device.
     ///
     /// ```
-    /// use kernel::clk::{Clk, Enabled, Hertz, Unprepared, Prepared};
-    /// use kernel::device::{Bound, Device};
-    /// use kernel::error::Result;
+    /// use kernel::clk::{
+    ///     Clk,
+    ///     Enabled,
+    ///     Hertz,
+    ///     Prepared,
+    ///     Unprepared, //
+    /// };
+    /// use kernel::device::{
+    ///     Bound,
+    ///     Device, //
+    /// };
     ///
     /// fn configure_clk(dev: &Device<Bound>) -> Result {
     ///     // The fastest way is to use a version of `Clk::get` for the desired
@@ -292,8 +316,11 @@ mod common_clk {
     /// and move between the variants:
     ///
     /// ```
-    /// use kernel::clk::{Clk, Enabled, Prepared};
-    /// use kernel::error::Result;
+    /// use kernel::clk::{
+    ///     Clk,
+    ///     Enabled,
+    ///     Prepared, //
+    /// };
     ///
     /// enum DeviceClk {
     ///     Suspended(Clk<Prepared>),
@@ -323,8 +350,11 @@ mod common_clk {
     /// enable a clone of it:
     ///
     /// ```
-    /// use kernel::clk::{Clk, Enabled, Prepared};
-    /// use kernel::error::Result;
+    /// use kernel::clk::{
+    ///     Clk,
+    ///     Enabled,
+    ///     Prepared, //
+    /// };
     ///
     /// fn use_clk(prepared_clk: &Clk<Prepared>) -> Result {
     ///     let enabled_clk: Clk<Enabled> = prepared_clk.clone().enable()?;
@@ -556,8 +586,12 @@ mod common_clk {
         /// clock or threading it through an intermediate state, e.g.:
         ///
         /// ```
-        /// use kernel::clk::{Clk, Enabled, Hertz, Prepared};
-        /// use kernel::error::Result;
+        /// use kernel::clk::{
+        ///     Clk,
+        ///     Enabled,
+        ///     Hertz,
+        ///     Prepared, //
+        /// };
         ///
         /// fn read_rate(clk: &Clk<Prepared>) -> Result<Hertz> {
         ///     clk.with_enabled(|clk: &Clk<Enabled>| clk.rate())
