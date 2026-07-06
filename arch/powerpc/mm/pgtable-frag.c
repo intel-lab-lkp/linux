@@ -123,7 +123,12 @@ void pte_fragment_free(unsigned long *table, int kernel)
 
 	BUG_ON(atomic_read(&ptdesc->pt_frag_refcount) <= 0);
 	if (atomic_dec_and_test(&ptdesc->pt_frag_refcount)) {
-		if (kernel || !folio_test_clear_active(ptdesc_folio(ptdesc)))
+		/*
+		 * Kernel page tables may be walked locklessly under RCU by
+		 * ptdump, so defer their free by a grace period too, like the
+		 * lockless-GUP case below for user tables.
+		 */
+		if (!kernel && !folio_test_clear_active(ptdesc_folio(ptdesc)))
 			pte_free_now(&ptdesc->pt_rcu_head);
 		else
 			call_rcu(&ptdesc->pt_rcu_head, pte_free_now);
