@@ -208,6 +208,65 @@ invalidate() callback. That lock must be held before calling
 mmu_interval_read_retry() to avoid any race with a concurrent CPU page table
 update.
 
+Dropping the mmap lock during page faults
+=========================================
+
+Some VMAs have fault handlers that need to release the mmap lock while
+servicing a fault (for example, regions managed by ``userfaultfd``).
+``hmm_range_fault()`` cannot be used on such mappings because it must hold the
+mmap lock for the duration of the call. Drivers that need to support them
+should call::
+
+  int hmm_range_fault_unlocked(struct hmm_range *range);
+
+The caller must not hold ``mmap_read_lock`` before the call.
+``hmm_range_fault_unlocked()`` takes the mmap read lock internally and allows
+``handle_mm_fault()`` to drop it during fault handling. If the mmap lock is
+dropped, the function returns ``-EBUSY``. The caller must then restart the
+walk from ``range->start`` with a fresh notifier sequence. ``-EINTR`` is
+returned if a fatal signal is pending during retry handling.
+
+A typical caller looks like this::
+
+ int driver_populate_range_unlocked(...)
+ {
+      struct hmm_range range;
+      ...
+
+      range.notifier = &interval_sub;
+      range.start = ...;
+      range.end = ...;
+      range.hmm_pfns = ...;
+
+      if (!mmget_not_zero(interval_sub.mm))
+          return -EFAULT;
+
+ again:
+      range.notifier_seq = mmu_interval_read_begin(&interval_sub);
+      ret = hmm_range_fault_unlocked(&range);
+      if (ret) {
+          if (ret == -EBUSY)
+              goto again;
+          goto out_put;
+      }
+
+      take_lock(driver->update);
+      if (mmu_interval_read_retry(&interval_sub, range.notifier_seq)) {
+          release_lock(driver->update);
+          goto again;
+      }
+
+      /* Use pfns array content to update device page table,
+       * under the update lock */
+
+      release_lock(driver->update);
+      ret = 0;
+
+ out_put:
+      mmput(interval_sub.mm);
+      return ret;
+ }
+
 Leverage default_flags and pfn_flags_mask
 =========================================
 
