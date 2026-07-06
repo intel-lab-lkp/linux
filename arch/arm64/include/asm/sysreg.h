@@ -9,12 +9,16 @@
 #ifndef __ASM_SYSREG_H
 #define __ASM_SYSREG_H
 
+#ifdef ARM64_S390_COMMON
 #include <linux/bits.h>
+#endif /* ARM64_S390_COMMON */
 #include <linux/stringify.h>
 #include <linux/kasan-tags.h>
 #include <linux/kconfig.h>
 
 #include <asm/gpr-num.h>
+
+#ifdef ARM64_S390_COMMON
 
 /*
  * ARMv8 ARM reserves the following encoding for system registers:
@@ -50,6 +54,8 @@
 #define sys_reg_CRm(id)	(((id) >> CRm_shift) & CRm_mask)
 #define sys_reg_Op2(id)	(((id) >> Op2_shift) & Op2_mask)
 
+#endif /* ARM64_S390_COMMON */
+
 #ifndef CONFIG_BROKEN_GAS_INST
 
 #ifdef __ASSEMBLER__
@@ -79,6 +85,8 @@
 
 #endif	/* CONFIG_BROKEN_GAS_INST */
 
+#ifdef ARM64_S390_COMMON
+
 /*
  * Instructions for modifying PSTATE fields.
  * As per Arm ARM for v8-A, Section "C.5.1.3 op0 == 0b00, architectural hints,
@@ -91,14 +99,17 @@
  */
 #define pstate_field(op1, op2)		((op1) << Op1_shift | (op2) << Op2_shift)
 #define PSTATE_Imm_shift		CRm_shift
-#define ENCODE_PSTATE(x, r)		(0xd500401f | PSTATE_ ## r | ((!!x) << PSTATE_Imm_shift))
-#define SET_PSTATE(x, r)		__emit_inst(ENCODE_PSTATE(x, r))
 
 #define PSTATE_PAN			pstate_field(0, 4)
 #define PSTATE_UAO			pstate_field(0, 3)
 #define PSTATE_SSBS			pstate_field(3, 1)
 #define PSTATE_DIT			pstate_field(3, 2)
 #define PSTATE_TCO			pstate_field(3, 4)
+
+#endif /* ARM64_S390_COMMON */
+
+#define ENCODE_PSTATE(x, r)		(0xd500401f | PSTATE_ ## r | ((!!x) << PSTATE_Imm_shift))
+#define SET_PSTATE(x, r)		__emit_inst(ENCODE_PSTATE(x, r))
 
 #define SET_PSTATE_PAN(x)		SET_PSTATE((x), PAN)
 #define SET_PSTATE_UAO(x)		SET_PSTATE((x), UAO)
@@ -122,6 +133,8 @@
 #define SB_BARRIER_INSN			__SYS_BARRIER_INSN(0, 3, 3, 0, 7, 31)
 #define GSB_SYS_BARRIER_INSN		__SYS_BARRIER_INSN(1, 0, 12, 0, 0, 31)
 #define GSB_ACK_BARRIER_INSN		__SYS_BARRIER_INSN(1, 0, 12, 0, 1, 31)
+
+#ifdef ARM64_S390_COMMON
 
 /* Data cache zero operations */
 #define SYS_DC_ISW			sys_insn(1, 0, 7, 6, 2)
@@ -835,6 +848,8 @@
 #define SCTLR_ELx_A	 (BIT(1))
 #define SCTLR_ELx_M	 (BIT(0))
 
+#endif /* ARM64_S390_COMMON */
+
 #ifdef CONFIG_CPU_BIG_ENDIAN
 #define ENDIAN_SET_EL2		SCTLR_ELx_EE
 #else
@@ -868,6 +883,8 @@
 	 ENDIAN_SET_EL1   | SCTLR_EL1_UCI    | SCTLR_EL1_EPAN  | \
 	 SCTLR_EL1_LSMAOE | SCTLR_EL1_nTLSMD | SCTLR_EL1_EIS   | \
 	 SCTLR_EL1_TSCXT  | SCTLR_EL1_EOS)
+
+#ifdef ARM64_S390_COMMON
 
 /* MAIR_ELx memory attributes (used by Linux) */
 #define MAIR_ATTR_DEVICE_nGnRnE		UL(0x00)
@@ -1105,6 +1122,8 @@
 #define GICV5_GICR_CDNMIA_TYPE_MASK	GENMASK_ULL(31, 29)
 #define GICV5_GICR_CDNMIA_ID_MASK	GENMASK_ULL(23, 0)
 
+#endif /* ARM64_S390_COMMON */
+
 #define gicr_insn(insn)			read_sysreg_s(GICV5_OP_GICR_##insn)
 #define gic_insn(v, insn)		write_sysreg_s(v, GICV5_OP_GIC_##insn)
 
@@ -1254,6 +1273,8 @@
 	par;								\
 })
 
+#ifdef ARM64_S390_COMMON
+
 #define SYS_FIELD_VALUE(reg, field, val)	reg##_##field##_##val
 
 #define SYS_FIELD_GET(reg, field, val)		\
@@ -1266,6 +1287,8 @@
 		 FIELD_PREP(reg##_##field##_MASK,	\
 			    SYS_FIELD_VALUE(reg, field, val))
 
-#endif
+#endif /* ARM64_S390_COMMON */
+
+#endif /* __ASSEMBLER__ */
 
 #endif	/* __ASM_SYSREG_H */

@@ -142,11 +142,14 @@ static __always_inline unsigned long __kern_hyp_va(unsigned long v)
 
 extern u32 __hyp_va_bits;
 
+#ifdef ARM64_S390_COMMON
 /*
  * We currently support using a VM-specified IPA size. For backward
  * compatibility, the default IPA size is fixed to 40bits.
  */
 #define KVM_PHYS_SHIFT	(40)
+
+#endif /* ARM64_S390_COMMON */
 
 #define kvm_phys_shift(mmu)		VTCR_EL2_IPA((mmu)->vtcr)
 #define kvm_phys_size(mmu)		(_AC(1, ULL) << kvm_phys_shift(mmu))
@@ -178,8 +181,11 @@ void stage2_unmap_vm(struct kvm *kvm);
 int kvm_init_stage2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu, unsigned long type);
 void kvm_uninit_stage2_mmu(struct kvm *kvm);
 void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu);
+#ifdef ARM64_S390_COMMON
 int kvm_phys_addr_ioremap(struct kvm *kvm, phys_addr_t guest_ipa,
 			  phys_addr_t pa, unsigned long size, bool writable);
+
+#endif /* ARM64_S390_COMMON */
 
 int kvm_handle_guest_sea(struct kvm_vcpu *vcpu);
 int kvm_handle_guest_abort(struct kvm_vcpu *vcpu);
