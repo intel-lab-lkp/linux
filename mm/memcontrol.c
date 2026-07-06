@@ -3659,7 +3659,7 @@ void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
  * The objcg is only set on the first page, so transfer it to all the
  * other pages.
  */
-void split_page_memcg(struct page *page, unsigned order)
+void split_page_memcg(struct page *page, unsigned int order)
 {
 	struct obj_cgroup *objcg = page_objcg(page);
 	unsigned int i, nr = 1 << order;
@@ -3673,10 +3673,10 @@ void split_page_memcg(struct page *page, unsigned order)
 	obj_cgroup_get_many(objcg, nr - 1);
 }
 
-void folio_split_memcg_refs(struct folio *folio, unsigned old_order,
-		unsigned new_order)
+void folio_split_memcg_refs(struct folio *folio, unsigned int old_order,
+			    unsigned int new_order)
 {
-	unsigned new_refs;
+	unsigned int new_refs;
 
 	if (mem_cgroup_disabled() || !folio_memcg_charged(folio))
 		return;
