@@ -40,6 +40,22 @@ static inline int set_direct_map_valid_noflush(struct page *page,
 	return 0;
 }
 
+/**
+ * set_direct_map_ro_noflush - make direct-map mappings read-only
+ * @addr: start address in the direct map
+ * @nr_pages: number of pages starting at @addr
+ *
+ * Make the direct-map mappings for @nr_pages pages starting at @addr
+ * read-only, without flushing TLBs.
+ *
+ * Return: 0 on success or when unsupported, negative error code on failure.
+ */
+static inline int set_direct_map_ro_noflush(const void *addr,
+					    unsigned long nr_pages)
+{
+	return 0;
+}
+
 static inline bool kernel_page_present(struct page *page)
 {
 	return true;
@@ -55,6 +71,16 @@ static inline bool can_set_direct_map(void)
 	return true;
 }
 #define can_set_direct_map can_set_direct_map
+#endif
+
+#ifndef set_direct_map_ro_noflush
+static inline int set_direct_map_ro_noflush(const void *addr,
+					    unsigned long nr_pages)
+{
+	return 0;
+}
+
+#define set_direct_map_ro_noflush set_direct_map_ro_noflush
 #endif
 #endif /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
 
