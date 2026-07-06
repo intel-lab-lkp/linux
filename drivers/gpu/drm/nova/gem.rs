@@ -2,14 +2,21 @@
 
 use kernel::{
     drm,
-    drm::{gem, gem::BaseObject, DeviceContext},
+    drm::{
+        gem,
+        gem::BaseObject,
+        DeviceContext, //
+    },
     page,
     prelude::*,
     sync::aref::ARef,
 };
 
 use crate::{
-    driver::{NovaDevice, NovaDriver},
+    driver::{
+        NovaDevice,
+        NovaDriver, //
+    },
     file::File,
 };
 
