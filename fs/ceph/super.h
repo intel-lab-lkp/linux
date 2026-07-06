@@ -46,6 +46,7 @@
 #define CEPH_MOUNT_OPT_NOPAGECACHE     (1<<16) /* bypass pagecache altogether */
 #define CEPH_MOUNT_OPT_SPARSEREAD      (1<<17) /* always do sparse reads */
 #define CEPH_MOUNT_OPT_LAZYIO          (1<<18) /* force lazyio for all file opens */
+#define CEPH_MOUNT_OPT_NEARFULL_SYNC   (1<<19) /* sync writes when nearfull */
 
 #define CEPH_MOUNT_OPT_DEFAULT			\
 	(CEPH_MOUNT_OPT_DCACHE |		\
