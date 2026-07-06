@@ -972,24 +972,39 @@ bit_table(struct drm_device *dev, u8 id, struct bit_entry *bit)
 {
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nvbios *bios = &drm->vbios;
-	u8 entries, *entry;
+	u32 entry_size, entries, offset;
+	u8 *entry;
 
 	if (bios->type != NVBIOS_BIT)
 		return -ENODEV;
 
+	if (bios->offset > bios->length || bios->length - bios->offset < 12)
+		return -EINVAL;
+
+	entry_size = bios->data[bios->offset + 9];
 	entries = bios->data[bios->offset + 10];
-	entry   = &bios->data[bios->offset + 12];
+	if (entry_size < 6 ||
+	    entries > (bios->length - bios->offset - 12) / entry_size)
+		return -EINVAL;
+
+	entry = &bios->data[bios->offset + 12];
 	while (entries--) {
 		if (entry[0] == id) {
 			bit->id = entry[0];
 			bit->version = entry[1];
 			bit->length = ROM16(entry[2]);
 			bit->offset = ROM16(entry[4]);
+
+			offset = bit->offset;
+			if (offset > bios->length ||
+			    bit->length > bios->length - offset)
+				return -EINVAL;
+
 			bit->data = ROMPTR(dev, entry[4]);
 			return 0;
 		}
 
-		entry += bios->data[bios->offset + 9];
+		entry += entry_size;
 	}
 
 	return -ENOENT;
