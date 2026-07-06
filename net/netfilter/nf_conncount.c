@@ -127,6 +127,15 @@ find_or_evict(struct net *net, struct nf_conncount_list *list,
 	return ERR_PTR(-EAGAIN);
 }
 
+static enum ip_conntrack_dir
+nf_conncount_zone_dir(const struct nf_conntrack_zone *zone)
+{
+	if (zone->dir & NF_CT_ZONE_DIR_ORIG)
+		return IP_CT_DIR_ORIGINAL;
+
+	return IP_CT_DIR_REPLY;
+}
+
 static bool get_ct_or_tuple_from_skb(struct net *net,
 				     const struct sk_buff *skb,
 				     u16 l3num,
@@ -211,8 +220,10 @@ check_connections:
 			/* Not found, but might be about to be confirmed */
 			if (PTR_ERR(found) == -EAGAIN) {
 				if (nf_ct_tuple_equal(&conn->tuple, &tuple) &&
-				    nf_ct_zone_id(&conn->zone, conn->zone.dir) ==
-				    nf_ct_zone_id(zone, zone->dir))
+				    nf_ct_zone_id(&conn->zone,
+						  nf_conncount_zone_dir(&conn->zone)) ==
+				    nf_ct_zone_id(zone,
+						  nf_conncount_zone_dir(zone)))
 					goto out_put; /* already exists */
 			} else {
 				collect++;
@@ -223,7 +234,7 @@ check_connections:
 		found_ct = nf_ct_tuplehash_to_ctrack(found);
 
 		if (nf_ct_tuple_equal(&conn->tuple, &tuple) &&
-		    nf_ct_zone_equal(found_ct, zone, zone->dir)) {
+		    nf_ct_zone_equal(found_ct, zone, nf_conncount_zone_dir(zone))) {
 			/*
 			 * We should not see tuples twice unless someone hooks
 			 * this into a table without "-p tcp --syn".
