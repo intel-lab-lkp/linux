@@ -1927,7 +1927,7 @@ static int xe_bo_fault_migrate(struct xe_bo *bo, struct ttm_operation_ctx *ctx,
 	if (ttm_manager_type(tbo->bdev, tbo->resource->mem_type)->use_tt) {
 		err = xe_bo_wait_usage_kernel(bo, ctx);
 		if (!err)
-			err = ttm_bo_populate(&bo->ttm, false, ctx);
+			err = ttm_bo_populate(&bo->ttm, tbo->resource->placement & TTM_PL_FLAG_MEMCG, ctx);
 	} else if (should_migrate_to_smem(bo)) {
 		xe_assert(xe_bo_device(bo), bo->flags & XE_BO_FLAG_SYSTEM);
 		err = xe_bo_migrate(bo, XE_PL_TT, ctx, exec);
