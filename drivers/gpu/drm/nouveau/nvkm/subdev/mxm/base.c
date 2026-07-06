@@ -47,7 +47,8 @@ mxm_shadow_rom(struct nvkm_mxm *mxm, u8 version)
 	struct nvkm_bios *bios = device->bios;
 	struct nvkm_i2c *i2c = device->i2c;
 	struct nvkm_i2c_bus *bus = NULL;
-	u8 i2cidx, mxms[6], addr, size;
+	u8 i2cidx, mxms[8], addr;
+	u32 size;
 
 	i2cidx = mxm_ddc_map(bios, 1 /* LVDS_DDC */) & 0x0f;
 	if (i2cidx < 0x0f)
@@ -56,22 +57,32 @@ mxm_shadow_rom(struct nvkm_mxm *mxm, u8 version)
 		return false;
 
 	addr = 0x54;
-	if (!mxm_shadow_rom_fetch(bus, addr, 0, 6, mxms)) {
+	if (!mxm_shadow_rom_fetch(bus, addr, 0, sizeof(mxms), mxms)) {
 		addr = 0x56;
-		if (!mxm_shadow_rom_fetch(bus, addr, 0, 6, mxms))
+		if (!mxm_shadow_rom_fetch(bus, addr, 0, sizeof(mxms), mxms))
 			return false;
 	}
 
 	mxm->mxms = mxms;
+	mxm->mxms_size = sizeof(mxms);
 	size = mxms_headerlen(mxm) + mxms_structlen(mxm);
+	if (size < mxms_headerlen(mxm) || size > U8_MAX) {
+		mxm->mxms = NULL;
+		mxm->mxms_size = 0;
+		return false;
+	}
+
 	mxm->mxms = kmalloc(size, GFP_KERNEL);
 
 	if (mxm->mxms &&
-	    mxm_shadow_rom_fetch(bus, addr, 0, size, mxm->mxms))
+	    mxm_shadow_rom_fetch(bus, addr, 0, size, mxm->mxms)) {
+		mxm->mxms_size = size;
 		return true;
+	}
 
 	kfree(mxm->mxms);
 	mxm->mxms = NULL;
+	mxm->mxms_size = 0;
 	return false;
 }
 
@@ -113,6 +124,8 @@ mxm_shadow_dsm(struct nvkm_mxm *mxm, u8 version)
 	if (obj->type == ACPI_TYPE_BUFFER) {
 		mxm->mxms = kmemdup(obj->buffer.pointer,
 					 obj->buffer.length, GFP_KERNEL);
+		if (mxm->mxms)
+			mxm->mxms_size = obj->buffer.length;
 	} else if (obj->type == ACPI_TYPE_INTEGER) {
 		nvkm_debug(subdev, "DSM MXMS returned 0x%llx\n",
 			   obj->integer.value);
@@ -188,6 +201,8 @@ mxm_shadow_wmi(struct nvkm_mxm *mxm, u8 version)
 	if (obj->type == ACPI_TYPE_BUFFER) {
 		mxm->mxms = kmemdup(obj->buffer.pointer,
 				    obj->buffer.length, GFP_KERNEL);
+		if (mxm->mxms)
+			mxm->mxms_size = obj->buffer.length;
 	}
 
 	kfree(obj);
@@ -220,6 +235,7 @@ mxm_shadow(struct nvkm_mxm *mxm, u8 version)
 				return 0;
 			kfree(mxm->mxms);
 			mxm->mxms = NULL;
+			mxm->mxms_size = 0;
 		}
 	} while ((++shadow)->name);
 	return -ENOENT;

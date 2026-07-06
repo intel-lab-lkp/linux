@@ -60,14 +60,21 @@ mxms_headerlen(struct nvkm_mxm *mxm)
 u16
 mxms_structlen(struct nvkm_mxm *mxm)
 {
-	return *(u16 *)&mxms_data(mxm)[6];
+	if (mxm->mxms_size < mxms_headerlen(mxm))
+		return 0;
+
+	return ROM16(mxms_data(mxm)[6]);
 }
 
 bool
 mxms_checksum(struct nvkm_mxm *mxm)
 {
-	u16 size = mxms_headerlen(mxm) + mxms_structlen(mxm);
+	u32 size = mxms_headerlen(mxm) + mxms_structlen(mxm);
 	u8 *mxms = mxms_data(mxm), sum = 0;
+
+	if (size < mxms_headerlen(mxm) || mxm->mxms_size < size)
+		return false;
+
 	while (size--)
 		sum += *mxms++;
 	if (sum) {
@@ -81,7 +88,13 @@ bool
 mxms_valid(struct nvkm_mxm *mxm)
 {
 	u8 *mxms = mxms_data(mxm);
-	if (*(u32 *)mxms != 0x5f4d584d) {
+
+	if (mxm->mxms_size < mxms_headerlen(mxm)) {
+		nvkm_debug(&mxm->subdev, "header too short\n");
+		return false;
+	}
+
+	if (ROM32(mxms[0]) != 0x5f4d584d) {
 		nvkm_debug(&mxm->subdev, "signature invalid\n");
 		return false;
 	}
@@ -97,15 +110,21 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 	     bool (*exec)(struct nvkm_mxm *, u8 *, void *), void *info)
 {
 	struct nvkm_subdev *subdev = &mxm->subdev;
+	u32 remaining = mxms_structlen(mxm);
 	u8 *mxms = mxms_data(mxm);
 	u8 *desc = mxms + mxms_headerlen(mxm);
-	u8 *fini = desc + mxms_structlen(mxm) - 1;
-	while (desc < fini) {
-		u8 type = desc[0] & 0x0f;
+
+	if (mxm->mxms_size < mxms_headerlen(mxm) + remaining)
+		return false;
+
+	while (remaining) {
+		u32 desclen;
+		u8 type;
 		u8 headerlen = 0;
 		u8 recordlen = 0;
 		u8 entries = 0;
 
+		type = desc[0] & 0x0f;
 		switch (type) {
 		case 0: /* Output Device Structure */
 			if (mxms_version(mxm) >= 0x0300)
@@ -119,6 +138,8 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 			headerlen = 4;
 			break;
 		case 4: /* GPIO Device Structure */
+			if (remaining < sizeof(u32))
+				return false;
 			headerlen = 4;
 			recordlen = 2;
 			entries   = (ROM32(desc[0]) & 0x01f00000) >> 20;
@@ -128,6 +149,8 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 			break;
 		case 6: /* Backlight Control Structure */
 			if (mxms_version(mxm) >= 0x0300) {
+				if (remaining < 2)
+					return false;
 				headerlen = 4;
 				recordlen = 8;
 				entries   = (desc[1] & 0xf0) >> 4;
@@ -136,6 +159,8 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 			}
 			break;
 		case 7: /* Fan Control Structure */
+			if (remaining < 2)
+				return false;
 			headerlen = 8;
 			recordlen = 4;
 			entries   = desc[1] & 0x07;
@@ -145,8 +170,13 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 			return false;
 		}
 
+		if (headerlen > remaining ||
+		    (recordlen && entries > (remaining - headerlen) / recordlen))
+			return false;
+
+		desclen = headerlen + entries * recordlen;
 		if (mxm->subdev.debug >= NV_DBG_DEBUG && (exec == NULL)) {
-			static const char * mxms_desc[] = {
+			static const char * const mxms_desc[] = {
 				"ODS", "SCCS", "TS", "IPS",
 				"GSD", "VSS", "BCS", "FCS",
 			};
@@ -171,7 +201,8 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 				return false;
 		}
 
-		desc += headerlen + (entries * recordlen);
+		desc += desclen;
+		remaining -= desclen;
 	}
 
 	return true;

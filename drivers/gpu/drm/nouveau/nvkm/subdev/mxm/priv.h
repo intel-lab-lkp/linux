@@ -9,6 +9,7 @@
 struct nvkm_mxm {
 	struct nvkm_subdev subdev;
 	u32 action;
+	u32 mxms_size;
 	u8 *mxms;
 };
 
