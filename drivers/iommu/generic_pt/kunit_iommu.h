@@ -135,6 +135,16 @@ static int pt_kunit_priv_init(struct kunit *test, struct kunit_iommu_priv *priv)
 #ifdef kunit_fmt_cfgs
 	priv->cfg = kunit_fmt_cfgs[((uintptr_t)test->param_value) - 1];
 	/*
+	 * Without CONFIG_DEBUG_GENERIC_PT only the format's compiled-in
+	 * PT_SUPPORTED_FEATURES are available, so cfgs requesting bits outside
+	 * that set cannot be tested.
+	 */
+	if (priv->cfg.common.features & ~KUNIT_PT_SUPPORTED_FEATURES)
+		kunit_skip(
+			test,
+			"cfg requires features not built into this format (enable CONFIG_DEBUG_GENERIC_PT)");
+
+	/*
 	 * The format can set a list of features that the kunit_fmt_cfgs
 	 * controls, other features are default to on.
 	 */
