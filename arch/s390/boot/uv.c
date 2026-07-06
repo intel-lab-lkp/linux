@@ -26,7 +26,7 @@ void uv_query_info(void)
 	if (uv_call(0, (uint64_t)&uvcb) && uvcb.header.rc != UVC_RC_MORE_DATA)
 		return;
 
-	if (IS_ENABLED(CONFIG_KVM)) {
+	if (IS_ENABLED(CONFIG_KVM_S390)) {
 		memcpy(uv_info.inst_calls_list, uvcb.inst_calls_list, sizeof(uv_info.inst_calls_list));
 		uv_info.uv_base_stor_len = uvcb.uv_base_stor_len;
 		uv_info.guest_base_stor_len = uvcb.conf_base_phys_stor_len;

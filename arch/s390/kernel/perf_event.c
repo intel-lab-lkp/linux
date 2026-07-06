@@ -37,7 +37,7 @@ static bool is_in_guest(struct pt_regs *regs)
 {
 	if (user_mode(regs))
 		return false;
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 	return instruction_pointer(regs) == (unsigned long) &sie_exit;
 #else
 	return false;

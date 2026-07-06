@@ -113,7 +113,7 @@ _LPP_OFFSET	= __LC_LPP
 		    "jnz .+8; .insn rrf,0xb2e80000,0,0,13,0", ALT_SPEC(82)
 	.endm
 
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 	.macro SIEEXIT sie_control,lowcore
 	lg	%r9,\sie_control			# get control block pointer
 	ni	__SIE_PROG0C+3(%r9),0xfe		# no longer in SIE
@@ -184,7 +184,7 @@ EXPORT_SYMBOL(__WARN_trap)
 
 #endif /* CONFIG_BUG && CONFIG_CC_HAS_ASM_IMMEDIATE_STRINGS */
 
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 /*
  * __sie64a calling convention:
  * %r2 pointer to sie control block phys
@@ -315,7 +315,7 @@ SYM_CODE_START(pgm_check_handler)
 	xgr	%r10,%r10
 	tmhh	%r8,0x0001		# coming from user space?
 	jo	3f			# -> fault in user space
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 	lg	%r11,__LC_CURRENT(%r13)
 	tm	__TI_sie(%r11),0xff
 	jz	1f
@@ -397,7 +397,7 @@ SYM_CODE_START(\name)
 	lmg	%r8,%r9,\lc_old_psw(%r13)
 	tmhh	%r8,0x0001			# interrupting from user ?
 	jnz	1f
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 	lg	%r10,__LC_CURRENT(%r13)
 	tm	__TI_sie(%r10),0xff
 	jz	0f
@@ -475,7 +475,7 @@ SYM_CODE_START(mcck_int_handler)
 	jnz	.Lmcck_user
 	TSTMSK	__LC_MCCK_CODE(%r13),MCCK_CODE_PSW_IA_VALID
 	jno	.Lmcck_panic
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 	lg	%r10,__LC_CURRENT(%r13)
 	tm	__TI_sie(%r10),0xff
 	jz	.Lmcck_user

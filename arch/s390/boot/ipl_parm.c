@@ -300,7 +300,7 @@ void parse_boot_command_line(void)
 			stack_protector_debug = 1;
 #endif
 
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_KVM_S390)
 		if (!strcmp(param, "prot_virt")) {
 			rc = kstrtobool(val, &enabled);
 			if (!rc && enabled)
