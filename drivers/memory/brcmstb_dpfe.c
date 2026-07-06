@@ -522,6 +522,9 @@ static int __verify_firmware(struct init_data *init,
 	bool is_big_endian = false;
 	const u32 *chksum_ptr;
 
+	if (fw->size < sizeof(*header) + sizeof(*chksum_ptr))
+		return ERR_INVALID_SIZE;
+
 	if (header->magic == DPFE_BE_MAGIC)
 		is_big_endian = true;
 	else if (header->magic != DPFE_LE_MAGIC)
@@ -537,6 +540,13 @@ static int __verify_firmware(struct init_data *init,
 
 	/* Data and instruction sections are 32 bit words. */
 	if ((dmem_size % sizeof(u32)) != 0 || (imem_size % sizeof(u32)) != 0)
+		return ERR_INVALID_SIZE;
+
+	if (dmem_size > fw->size - sizeof(*header) - sizeof(*chksum_ptr))
+		return ERR_INVALID_SIZE;
+
+	if (imem_size > fw->size - sizeof(*header) - sizeof(*chksum_ptr) -
+	    dmem_size)
 		return ERR_INVALID_SIZE;
 
 	/*
