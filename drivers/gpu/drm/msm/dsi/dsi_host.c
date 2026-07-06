@@ -2165,7 +2165,17 @@ int msm_dsi_host_xfer_prepare(struct mipi_dsi_host *host,
 	 * mdp clock need to be enabled to receive dsi interrupt
 	 */
 	pm_runtime_get_sync(&msm_host->pdev->dev);
-	cfg_hnd->ops->link_clk_set_rate(msm_host);
+	/*
+	 * Don't re-set the link clock rate when the link is already up. The
+	 * requested byte-clock rate rarely equals the DSI PHY PLL's achievable
+	 * rate, so clk_set_rate() re-locks the PLL on every command; for a
+	 * video-mode panel with no internal timing generator that clock glitch
+	 * makes the panel lose pixel lock mid-scanout (~1s of displaced image on
+	 * each DCS write, e.g. every backlight update). The rate is already set
+	 * at power-on.
+	 */
+	if (!msm_host->power_on)
+		cfg_hnd->ops->link_clk_set_rate(msm_host);
 	cfg_hnd->ops->link_clk_enable(msm_host);
 
 	/* TODO: vote for bus bandwidth */
