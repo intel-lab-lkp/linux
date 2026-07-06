@@ -646,8 +646,10 @@ struct drm_display_mode *drm_cvt_mode(struct drm_device *dev, int hdisplay,
 	 * return directly
 	 */
 	drm_mode = drm_mode_create();
-	if (!drm_mode)
+	if (!drm_mode) {
+		drm_notice(dev, "Failed to create a new display mode\n");
 		return NULL;
+	}
 
 	/* the CVT default refresh rate is 60Hz */
 	if (!vrefresh)
@@ -881,8 +883,10 @@ drm_gtf_mode_complex(struct drm_device *dev, int hdisplay, int vdisplay,
 		return NULL;
 
 	drm_mode = drm_mode_create();
-	if (!drm_mode)
+	if (!drm_mode) {
+		drm_notice(dev, "Failed to create a new display mode\n");
 		return NULL;
+	}
 
 	/* 1. In order to give correct results, the number of horizontal
 	 * pixels requested is first processed to ensure that it is divisible
@@ -1458,8 +1462,10 @@ struct drm_display_mode *drm_mode_duplicate(struct drm_device *dev,
 	struct drm_display_mode *nmode;
 
 	nmode = drm_mode_create();
-	if (!nmode)
+	if (!nmode) {
+		drm_notice(dev, "Failed to create a new display mode\n");
 		return NULL;
+	}
 
 	drm_mode_copy(nmode, mode);
 
