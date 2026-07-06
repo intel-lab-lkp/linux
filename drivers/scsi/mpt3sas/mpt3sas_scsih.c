@@ -12267,7 +12267,6 @@ mpt3sas_scsih_event_callback(struct MPT3SAS_ADAPTER *ioc, u8 msix_index,
 		if (!fw_event->retries) {
 
 			ioc_err(ioc, "failure at %s:%d/%s()!\n",  __FILE__, __LINE__, __func__);
-			kfree(fw_event->event_data);
 			fw_event_work_put(fw_event);
 			return 1;
 		}
