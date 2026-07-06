@@ -9,6 +9,8 @@
  */
 #include <linux/gpio.h>
 #include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
+#include <linux/property.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
@@ -16,10 +18,10 @@
 #include <linux/mtd/physmap.h>
 #include <linux/mv643xx_eth.h>
 #include <linux/leds.h>
-#include <linux/gpio_keys.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
 #include <linux/ata_platform.h>
+#include <plat/orion-gpio.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include "common.h"
@@ -76,34 +78,48 @@ static struct platform_device mv2120_nor_flash = {
 	.num_resources	= 1,
 };
 
-static struct gpio_keys_button mv2120_buttons[] = {
-	{
-		.code		= KEY_RESTART,
-		.gpio		= MV2120_GPIO_KEY_RESET,
-		.desc		= "reset",
-		.active_low	= 1,
-	}, {
-		.code		= KEY_POWER,
-		.gpio		= MV2120_GPIO_KEY_POWER,
-		.desc		= "power",
-		.active_low	= 1,
-	},
+static const struct software_node mv2120_gpio_keys_node = {
+	.name = "mv2120-gpio-keys",
 };
 
-static struct gpio_keys_platform_data mv2120_button_data = {
-	.buttons	= mv2120_buttons,
-	.nbuttons	= ARRAY_SIZE(mv2120_buttons),
+static const struct property_entry mv2120_reset_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_RESTART),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    MV2120_GPIO_KEY_RESET, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "reset"),
+	{ }
 };
 
-static struct platform_device mv2120_button_device = {
-	.name		= "gpio-keys",
-	.id		= -1,
-	.num_resources	= 0,
-	.dev		= {
-		.platform_data	= &mv2120_button_data,
-	},
+static const struct software_node mv2120_reset_key_node = {
+	.parent = &mv2120_gpio_keys_node,
+	.properties = mv2120_reset_key_props,
 };
 
+static const struct property_entry mv2120_power_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    MV2120_GPIO_KEY_POWER, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "power"),
+	{ }
+};
+
+static const struct software_node mv2120_power_key_node = {
+	.parent = &mv2120_gpio_keys_node,
+	.properties = mv2120_power_key_props,
+};
+
+static const struct software_node * const mv2120_gpio_keys_swnodes[] __initconst = {
+	&mv2120_gpio_keys_node,
+	&mv2120_reset_key_node,
+	&mv2120_power_key_node,
+	NULL
+};
+
+static const struct platform_device_info mv2120_button_info __initconst = {
+	.name	= "gpio-keys",
+	.id	= PLATFORM_DEVID_NONE,
+	.swnode	= &mv2120_gpio_keys_node,
+};
 
 /****************************************************************************
  * General Setup
@@ -200,6 +216,8 @@ static void mv2120_power_off(void)
 
 static void __init mv2120_init(void)
 {
+	int err;
+
 	/* Setup basic Orion functions. Need to be called early. */
 	orion5x_init();
 
@@ -222,7 +240,9 @@ static void __init mv2120_init(void)
 				    MV2120_NOR_BOOT_SIZE);
 	platform_device_register(&mv2120_nor_flash);
 
-	platform_device_register(&mv2120_button_device);
+	err = software_node_register_node_group(mv2120_gpio_keys_swnodes);
+	if (!err)
+		platform_device_register_full(&mv2120_button_info);
 
 	if (gpio_request(MV2120_GPIO_RTC_IRQ, "rtc") == 0) {
 		if (gpio_direction_input(MV2120_GPIO_RTC_IRQ) == 0)
