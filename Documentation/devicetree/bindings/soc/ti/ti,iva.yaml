@@ -24,7 +24,6 @@ properties:
 
 required:
   - compatible
-  - ti,hwmods
 
 additionalProperties: false
 
