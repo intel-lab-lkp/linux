@@ -277,12 +277,9 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 static void svm_setup_efer_caps(void)
 {
 	if (nested) {
-		kvm_enable_efer_bits(EFER_SVME);
+		kvm_caps.supported_efer_bits |= EFER_SVME;
 		if (!boot_cpu_has(X86_FEATURE_EFER_LMSLE_MBZ))
-			kvm_enable_efer_bits(EFER_LMSLE);
-	} else {
-		kvm_disable_efer_bits(EFER_SVME);
-		kvm_disable_efer_bits(EFER_LMSLE);
+			kvm_caps.supported_efer_bits |= EFER_LMSLE;
 	}
 }
 
