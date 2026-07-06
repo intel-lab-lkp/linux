@@ -635,7 +635,7 @@ static void viommu_event_handler(struct virtqueue *vq)
 	struct viommu_dev *viommu = vq->vdev->priv;
 
 	while ((evt = virtqueue_get_buf(vq, &len)) != NULL) {
-		if (len > sizeof(*evt)) {
+		if (len != sizeof(*evt)) {
 			dev_err(viommu->dev,
 				"invalid event buffer (len %u != %zu)\n",
 				len, sizeof(*evt));
