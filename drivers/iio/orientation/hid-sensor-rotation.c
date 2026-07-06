@@ -81,9 +81,8 @@ static const struct iio_chan_spec dev_rot_channels[] = {
 
 /* Channel read_raw handler */
 static int dev_rot_read_raw(struct iio_dev *indio_dev,
-				struct iio_chan_spec const *chan,
-				int size, int *vals, int *val_len,
-				long mask)
+			    struct iio_chan_spec const *chan,
+			    int size, int *vals, int *val_len, long mask)
 {
 	struct dev_rot_state *rot_state = iio_priv(indio_dev);
 	int ret_type;
@@ -129,10 +128,8 @@ static int dev_rot_read_raw(struct iio_dev *indio_dev,
 
 /* Channel write_raw handler */
 static int dev_rot_write_raw(struct iio_dev *indio_dev,
-			       struct iio_chan_spec const *chan,
-			       int val,
-			       int val2,
-			       long mask)
+			     struct iio_chan_spec const *chan,
+			     int val, int val2, long mask)
 {
 	struct dev_rot_state *rot_state = iio_priv(indio_dev);
 	int ret;
@@ -176,8 +173,7 @@ static const struct iio_info dev_rot_info = {
 
 /* Callback handler to send event after all samples are received and captured */
 static int dev_rot_proc_event(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id,
-				void *priv)
+			      u32 usage_id, void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct dev_rot_state *rot_state = iio_priv(indio_dev);
@@ -209,9 +205,9 @@ static int dev_rot_proc_event(struct hid_sensor_hub_device *hsdev,
 
 /* Capture samples in local storage */
 static int dev_rot_capture_sample(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id,
-				size_t raw_len, char *raw_data,
-				void *priv)
+				  u32 usage_id,
+				  size_t raw_len, char *raw_data,
+				  void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct dev_rot_state *rot_state = iio_priv(indio_dev);
@@ -326,7 +322,7 @@ static int hid_dev_rot_probe(struct platform_device *pdev)
 	atomic_set(&rot_state->common_attributes.data_ready, 0);
 
 	ret = hid_sensor_setup_trigger(indio_dev, name,
-					&rot_state->common_attributes);
+				       &rot_state->common_attributes);
 	if (ret) {
 		dev_err(&pdev->dev, "trigger setup failed\n");
 		return ret;
@@ -336,7 +332,7 @@ static int hid_dev_rot_probe(struct platform_device *pdev)
 	rot_state->callbacks.capture_sample = dev_rot_capture_sample;
 	rot_state->callbacks.pdev = pdev;
 	ret = sensor_hub_register_callback(hsdev, hsdev->usage,
-					&rot_state->callbacks);
+					   &rot_state->callbacks);
 	if (ret) {
 		dev_err(&pdev->dev, "callback reg failed\n");
 		goto error_remove_trigger;

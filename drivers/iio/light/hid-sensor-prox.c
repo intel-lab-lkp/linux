@@ -70,9 +70,8 @@ static const struct iio_chan_spec prox_channels[] = {
 
 /* Channel read_raw handler */
 static int prox_read_raw(struct iio_dev *indio_dev,
-			      struct iio_chan_spec const *chan,
-			      int *val, int *val2,
-			      long mask)
+			 struct iio_chan_spec const *chan,
+			 int *val, int *val2, long mask)
 {
 	struct prox_state *prox_state = iio_priv(indio_dev);
 	struct hid_sensor_hub_device *hsdev;
@@ -135,10 +134,8 @@ static int prox_read_raw(struct iio_dev *indio_dev,
 
 /* Channel write_raw handler */
 static int prox_write_raw(struct iio_dev *indio_dev,
-			       struct iio_chan_spec const *chan,
-			       int val,
-			       int val2,
-			       long mask)
+			  struct iio_chan_spec const *chan,
+			  int val, int val2, long mask)
 {
 	struct prox_state *prox_state = iio_priv(indio_dev);
 	int ret = 0;
@@ -166,8 +163,7 @@ static const struct iio_info prox_info = {
 
 /* Callback handler to send event after all samples are received and captured */
 static int prox_proc_event(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id,
-				void *priv)
+			   u32 usage_id, void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct prox_state *prox_state = iio_priv(indio_dev);
@@ -183,9 +179,9 @@ static int prox_proc_event(struct hid_sensor_hub_device *hsdev,
 
 /* Capture samples in local storage */
 static int prox_capture_sample(struct hid_sensor_hub_device *hsdev,
-				u32 usage_id,
-				size_t raw_len, char *raw_data,
-				void *priv)
+			       u32 usage_id,
+			       size_t raw_len, char *raw_data,
+			       void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct prox_state *prox_state = iio_priv(indio_dev);
@@ -218,8 +214,8 @@ static int prox_capture_sample(struct hid_sensor_hub_device *hsdev,
 
 /* Parse report which is specific to an usage id*/
 static int prox_parse_report(struct platform_device *pdev,
-				struct hid_sensor_hub_device *hsdev,
-				struct prox_state *st)
+			     struct hid_sensor_hub_device *hsdev,
+			     struct prox_state *st)
 {
 	struct iio_chan_spec *channels = st->channels;
 	int index = 0;
@@ -271,8 +267,7 @@ static int hid_prox_probe(struct platform_device *pdev)
 	struct iio_dev *indio_dev;
 	struct prox_state *prox_state;
 
-	indio_dev = devm_iio_device_alloc(&pdev->dev,
-				sizeof(struct prox_state));
+	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(struct prox_state));
 	if (!indio_dev)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, indio_dev);
@@ -306,7 +301,7 @@ static int hid_prox_probe(struct platform_device *pdev)
 	atomic_set(&prox_state->common_attributes.data_ready, 0);
 
 	ret = hid_sensor_setup_trigger(indio_dev, name,
-				&prox_state->common_attributes);
+				       &prox_state->common_attributes);
 	if (ret) {
 		dev_err(&pdev->dev, "trigger setup failed\n");
 		return ret;
