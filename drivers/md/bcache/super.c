@@ -503,7 +503,14 @@ static int __uuid_write(struct cache_set *c)
 	unsigned int size;
 
 	closure_init_stack(&cl);
-	lockdep_assert_held(&bch_register_lock);
+	/*
+	 * Called either with bch_register_lock held, or from
+	 * bch_cache_set_recover() on a cache_set that is still
+	 * CACHE_SET_REGISTERING and therefore not yet reachable by any
+	 * other thread.
+	 */
+	if (!test_bit(CACHE_SET_REGISTERING, &c->flags))
+		lockdep_assert_held(&bch_register_lock);
 
 	if (bch_bucket_alloc_set(c, RESERVE_BTREE, &k.key, true))
 		return 1;
@@ -1212,6 +1219,12 @@ int bch_cached_dev_attach(struct cached_dev *dc, struct cache_set *c,
 
 	if (test_bit(CACHE_SET_STOPPING, &c->flags)) {
 		pr_err("Can't attach %pg: shutting down\n", dc->bdev);
+		return -EINVAL;
+	}
+
+	if (test_bit(CACHE_SET_REGISTERING, &c->flags)) {
+		pr_err("Can't attach %pg: cache set is still registering\n",
+		       dc->bdev);
 		return -EINVAL;
 	}
 
@@ -1983,10 +1996,23 @@ err:
 	return NULL;
 }
 
-static int run_cache_set(struct cache_set *c)
+/*
+ * Recover a cache_set from disk (journal replay, btree check, allocator
+ * start) or initialize a brand new one. This is the expensive, I/O-bound
+ * part of bringing a cache_set up.
+ *
+ * For a freshly allocated cache_set, this is called without
+ * bch_register_lock held: the cache_set is marked CACHE_SET_REGISTERING
+ * and is not yet reachable via c->kobj/sysfs or via any attach lookup (see
+ * bch_cached_dev_attach()'s CACHE_SET_REGISTERING check), so nothing else
+ * can observe it while it is only partially recovered. No failure path may
+ * exist below after bch_gc_thread_start(), since cache_set_flush()'s
+ * teardown assumes the gc thread is either fully started or
+ * IS_ERR_OR_NULL.
+ */
+static int bch_cache_set_recover(struct cache_set *c)
 {
 	const char *err = "cannot allocate memory";
-	struct cached_dev *dc, *t;
 	struct cache *ca = c->cache;
 	struct closure cl;
 	LIST_HEAD(journal);
@@ -2137,13 +2163,6 @@ static int run_cache_set(struct cache_set *c)
 	if (bch_has_feature_obso_large_bucket(&c->cache->sb))
 		pr_err("Detect obsoleted large bucket layout, all attached bcache device will be read-only\n");
 
-	list_for_each_entry_safe(dc, t, &uncached_devices, list)
-		bch_cached_dev_attach(dc, c, NULL);
-
-	flash_devs_run(c);
-
-	bch_journal_space_reserve(&c->journal);
-	set_bit(CACHE_SET_RUNNING, &c->flags);
 	return 0;
 err:
 	while (!list_empty(&journal)) {
@@ -2159,23 +2178,114 @@ err:
 	return -EIO;
 }
 
+/*
+ * Publish a recovered cache_set: attach pending backing/flash devices and
+ * mark it running. Must be called with bch_register_lock held. Unlike
+ * bch_cache_set_recover(), nothing here can fail.
+ */
+static void bch_cache_set_attach_devices(struct cache_set *c)
+{
+	struct cached_dev *dc, *t;
+
+	lockdep_assert_held(&bch_register_lock);
+
+	list_for_each_entry_safe(dc, t, &uncached_devices, list)
+		bch_cached_dev_attach(dc, c, NULL);
+
+	flash_devs_run(c);
+
+	bch_journal_space_reserve(&c->journal);
+	set_bit(CACHE_SET_RUNNING, &c->flags);
+}
+
+/*
+ * Recover and publish a cache_set as a single locked unit. Used only for
+ * attaching a cache device to an already-published cache_set (the "found:"
+ * case in register_cache_set()) — that cache_set is already reachable via
+ * bch_cache_sets/sysfs, so it must not go through the unlocked recovery
+ * path used for a brand new cache_set.
+ */
+static int run_cache_set(struct cache_set *c)
+{
+	int ret;
+
+	lockdep_assert_held(&bch_register_lock);
+
+	ret = bch_cache_set_recover(c);
+	if (ret)
+		return ret;
+
+	bch_cache_set_attach_devices(c);
+	return 0;
+}
+
+/*
+ * Register a cache device against a (possibly brand new) cache_set.
+ *
+ * A brand new cache_set only needs bch_register_lock for the cheap
+ * bookkeeping below (duplicate-uuid check, allocation, list linkage,
+ * kobject creation) — the expensive recovery in bch_cache_set_recover()
+ * runs unlocked on a cache_set marked CACHE_SET_REGISTERING, which keeps
+ * it out of sysfs and out of reach of cache-set lookups
+ * (bch_cached_dev_attach()) while still keeping it visible to duplicate
+ * detection and to bcache_reboot() via bch_cache_sets. This avoids
+ * blocking every other cache_set's/cached_dev's sysfs show/store for the
+ * whole recovery duration, which a plain lock-type change cannot fix,
+ * since the lock would still have to be held continuously across
+ * bch_cache_set_recover() for the same reason it does today.
+ *
+ * Attaching an additional cache device to an already-published cache_set
+ * (the "found:" case) is left fully serialized under bch_register_lock,
+ * exactly as before: that cache_set is already reachable via sysfs, so
+ * recovering it outside the lock would reintroduce the half-initialized
+ * -but-visible window this design avoids for the fresh case.
+ */
 static const char *register_cache_set(struct cache *ca)
 {
 	char buf[12];
 	const char *err = "cannot allocate memory";
 	struct cache_set *c;
+	bool fresh = false;
+
+	mutex_lock(&bch_register_lock);
 
 	list_for_each_entry(c, &bch_cache_sets, list)
 		if (!memcmp(c->set_uuid, ca->sb.set_uuid, 16)) {
-			if (c->cache)
+			if (c->cache) {
+				mutex_unlock(&bch_register_lock);
 				return "duplicate cache set member";
+			}
 
 			goto found;
 		}
 
 	c = bch_cache_set_alloc(&ca->sb);
-	if (!c)
+	if (!c) {
+		mutex_unlock(&bch_register_lock);
 		return err;
+	}
+
+	/*
+	 * Link the new cache_set into bch_cache_sets right away, marked
+	 * CACHE_SET_REGISTERING, before dropping the lock for recovery.
+	 * bch_cache_set_alloc() already set c->cache = ca above, so the
+	 * duplicate-uuid check above will correctly reject a second
+	 * concurrent registration for the same uuid while this one is
+	 * mid-recovery.
+	 */
+	set_bit(CACHE_SET_REGISTERING, &c->flags);
+	list_add(&c->list, &bch_cache_sets);
+	fresh = true;
+
+	mutex_unlock(&bch_register_lock);
+
+	err = "failed to recover cache set";
+	if (bch_cache_set_recover(c) < 0) {
+		mutex_lock(&bch_register_lock);
+		goto err;
+	}
+
+	mutex_lock(&bch_register_lock);
 
 	err = "error creating kobject";
 	if (kobject_add(&c->kobj, bcache_kobj, "%pU", c->set_uuid) ||
@@ -2186,8 +2296,7 @@ static const char *register_cache_set(struct cache *ca)
 		goto err;
 
 	bch_debug_init_cache_set(c);
-
-	list_add(&c->list, &bch_cache_sets);
+	clear_bit(CACHE_SET_REGISTERING, &c->flags);
 found:
 	sprintf(buf, "cache%i", ca->sb.nr_this_dev);
 	if (sysfs_create_link(&ca->kobj, &c->kobj, "set") ||
@@ -2199,11 +2308,15 @@ found:
 	ca->set->cache = ca;
 
 	err = "failed to run cache set";
-	if (run_cache_set(c) < 0)
+	if (fresh)
+		bch_cache_set_attach_devices(c);
+	else if (run_cache_set(c) < 0)
 		goto err;
 
+	mutex_unlock(&bch_register_lock);
 	return NULL;
 err:
+	mutex_unlock(&bch_register_lock);
 	bch_cache_set_unregister(c);
 	return err;
 }
@@ -2424,9 +2537,7 @@ static int register_cache(struct cache_sb *sb, struct cache_sb_disk *sb_disk,
 		goto out;
 	}
 
-	mutex_lock(&bch_register_lock);
 	err = register_cache_set(ca);
-	mutex_unlock(&bch_register_lock);
 
 	if (err) {
 		ret = -ENODEV;

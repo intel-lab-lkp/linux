@@ -507,11 +507,20 @@ struct gc_stat {
  * CACHE_SET_IO_DISABLE is set when bcache is stopping the whold cache set, all
  * external and internal I/O should be denied when this flag is set.
  *
+ * CACHE_SET_REGISTERING is set while a freshly allocated cache set is running
+ * its recovery path (journal replay, btree check, allocator start) without
+ * holding bch_register_lock. The cache set is already linked into
+ * bch_cache_sets at this point (so duplicate-uuid detection and reboot
+ * bookkeeping can see it), but its kobjects are not added to sysfs yet, so
+ * it is not reachable from userspace or from cache-set lookups that attach
+ * backing devices. Cleared once the cache set is fully published.
+ *
  */
 #define CACHE_SET_UNREGISTERING		0
 #define	CACHE_SET_STOPPING		1
 #define	CACHE_SET_RUNNING		2
 #define CACHE_SET_IO_DISABLE		3
+#define CACHE_SET_REGISTERING		4
 
 struct cache_set {
 	struct closure		cl;

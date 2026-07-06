@@ -1032,6 +1032,14 @@ SHOW(__bch_cache)
 {
 	struct cache *ca = container_of(kobj, struct cache, kobj);
 
+	/*
+	 * ca->set is still being recovered without bch_register_lock held
+	 * (see bch_cache_set_recover()); its bucket_lock and on-disk
+	 * superblock are not safe to touch yet.
+	 */
+	if (ca->set && test_bit(CACHE_SET_REGISTERING, &ca->set->flags))
+		return -EAGAIN;
+
 	sysfs_hprint(bucket_size,	bucket_bytes(ca));
 	sysfs_hprint(block_size,	block_bytes(ca));
 	sysfs_print(nbuckets,		ca->sb.nbuckets);
@@ -1139,6 +1147,14 @@ STORE(__bch_cache)
 	/* no user space access if system is rebooting */
 	if (bcache_is_reboot)
 		return -EBUSY;
+
+	/*
+	 * ca->set is still being recovered without bch_register_lock held
+	 * (see bch_cache_set_recover()); its bucket_lock and on-disk
+	 * superblock are not safe to touch yet.
+	 */
+	if (ca->set && test_bit(CACHE_SET_REGISTERING, &ca->set->flags))
+		return -EAGAIN;
 
 	if (attr == &sysfs_cache_replacement_policy) {
 		v = __sysfs_match_string(cache_replacement_policies, -1, buf);
