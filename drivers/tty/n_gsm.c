@@ -3186,6 +3186,11 @@ static int gsm_activate_mux(struct gsm_mux *gsm)
 	struct gsm_dlci *dlci;
 	int ret;
 
+	guard(mutex)(&gsm->mutex);
+
+	if (unlikely(gsm->dlci[0]))
+		return -EBUSY;
+
 	dlci = gsm_dlci_alloc(gsm, 0);
 	if (dlci == NULL)
 		return -ENOMEM;
