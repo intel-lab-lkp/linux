@@ -188,6 +188,7 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 	bp.domain = initial_domain;
 	bp.bo_ptr_size = sizeof(struct amdgpu_bo);
 	bp.xcp_id_plus1 = xcp_id_plus1;
+	bp.objcg = get_obj_cgroup_from_current();
 
 	r = amdgpu_bo_create_user(adev, &bp, &ubo);
 	if (r)

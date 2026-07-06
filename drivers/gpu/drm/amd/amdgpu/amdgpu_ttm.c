@@ -155,11 +155,14 @@ static void amdgpu_evict_flags(struct ttm_buffer_object *bo,
 			amdgpu_bo_placement_from_domain(abo, AMDGPU_GEM_DOMAIN_GTT |
 							AMDGPU_GEM_DOMAIN_CPU);
 		}
+		for (int i = 0; i < abo->placement.num_placement; i++)
+			abo->placements[i].flags &= ~TTM_PL_FLAG_MEMCG;
 		break;
 	case TTM_PL_TT:
 	case AMDGPU_PL_PREEMPT:
 	default:
 		amdgpu_bo_placement_from_domain(abo, AMDGPU_GEM_DOMAIN_CPU);
+		abo->placements[0].flags &= ~TTM_PL_FLAG_MEMCG;
 		break;
 	}
 	*placement = abo->placement;
