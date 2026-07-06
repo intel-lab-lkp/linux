@@ -11,7 +11,6 @@
 #include "gmap.h"
 #include "faultin.h"
 
-bool kvm_arch_setup_async_pf(struct kvm_vcpu *vcpu);
 #define CREATE_TRACE_POINTS
 #include "trace-gmap.h"
 

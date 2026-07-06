@@ -153,8 +153,7 @@ struct kvm_vcpu_stat {
 #define PGM_OPERATION			0x01
 #define PGM_PRIVILEGED_OP		0x02
 #define PGM_EXECUTE			0x03
-#define PGM_PROTECTION			0x04
-#define PGM_ADDRESSING			0x05
+/* 0x04 & 0x05 defined in kvm_host.h */
 #define PGM_SPECIFICATION		0x06
 #define PGM_DATA			0x07
 #define PGM_FIXED_POINT_OVERFLOW	0x08
@@ -165,8 +164,7 @@ struct kvm_vcpu_stat {
 #define PGM_HFP_EXPONENT_UNDERFLOW	0x0d
 #define PGM_HFP_SIGNIFICANCE		0x0e
 #define PGM_HFP_DIVIDE			0x0f
-#define PGM_SEGMENT_TRANSLATION		0x10
-#define PGM_PAGE_TRANSLATION		0x11
+/* 0x10 & 0x11 defined in kvm_host.h */
 #define PGM_TRANSLATION_SPEC		0x12
 #define PGM_SPECIAL_OPERATION		0x13
 #define PGM_OPERAND			0x15
@@ -196,10 +194,7 @@ struct kvm_vcpu_stat {
 #define PGM_STACK_SPECIFICATION		0x32
 #define PGM_STACK_TYPE			0x33
 #define PGM_STACK_OPERATION		0x34
-#define PGM_ASCE_TYPE			0x38
-#define PGM_REGION_FIRST_TRANS		0x39
-#define PGM_REGION_SECOND_TRANS		0x3a
-#define PGM_REGION_THIRD_TRANS		0x3b
+/* 0x38 - 0x3b defined in kvm_host.h */
 #define PGM_SECURE_STORAGE_ACCESS	0x3d
 #define PGM_NON_SECURE_STORAGE_ACCESS	0x3e
 #define PGM_SECURE_STORAGE_VIOLATION	0x3f
