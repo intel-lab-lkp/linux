@@ -1375,12 +1375,14 @@ static void free_mod_mem(struct module *mod)
 
 		/* Free lock-classes; relies on the preceding sync_rcu(). */
 		lockdep_free_key_range(mod_mem->base, mod_mem->size);
+		dept_free_range(mod_mem->base, mod_mem->size);
 		if (mod_mem->size)
 			module_memory_free(mod, type);
 	}
 
 	/* MOD_DATA hosts mod, so free it at last */
 	lockdep_free_key_range(mod->mem[MOD_DATA].base, mod->mem[MOD_DATA].size);
+	dept_free_range(mod->mem[MOD_DATA].base, mod->mem[MOD_DATA].size);
 	module_memory_free(mod, MOD_DATA);
 }
 
