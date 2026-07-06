@@ -6,6 +6,7 @@
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM kvm
+#define TRACE_INCLUDE_PATH ../gmap
 #undef TRACE_INCLUDE_FILE
 #define TRACE_INCLUDE_FILE trace-gmap
 
