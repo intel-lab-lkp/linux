@@ -409,6 +409,7 @@ intel_context_init(struct intel_context *ce, struct intel_engine_cs *engine)
 	/* NB ce->signal_link/lock is used under RCU */
 	spin_lock_init(&ce->signal_lock);
 	INIT_LIST_HEAD(&ce->signals);
+	INIT_LIST_HEAD(&ce->signal_link);
 
 	mutex_init(&ce->pin_mutex);
 
