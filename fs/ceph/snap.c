@@ -297,7 +297,7 @@ static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
 
 	lockdep_assert_held_write(&mdsc->snap_rwsem);
 
-	if (realm->parent_ino == parentino)
+	if (realm->parent && realm->parent->ino == parentino)
 		return 0;
 
 	parent = ceph_lookup_snap_realm(mdsc, parentino);
@@ -307,12 +307,11 @@ static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
 			return PTR_ERR(parent);
 	}
 	doutc(cl, "%llx %p: %llx %p -> %llx %p\n", realm->ino, realm,
-	      realm->parent_ino, realm->parent, parentino, parent);
+	      realm->parent ? realm->parent->ino : 0, realm->parent, parentino, parent);
 	if (realm->parent) {
 		list_del_init(&realm->child_item);
 		ceph_put_snap_realm(mdsc, realm->parent);
 	}
-	realm->parent_ino = parentino;
 	realm->parent = parent;
 	list_add(&realm->child_item, &parent->children);
 	return 1;

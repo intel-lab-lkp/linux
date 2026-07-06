@@ -1024,7 +1024,6 @@ struct ceph_snap_realm {
 	struct rb_node node;
 
 	u64 created, seq;
-	u64 parent_ino;
 	u64 parent_since;   /* snapid when our current parent became so */
 
 	u64 *prior_parent_snaps;      /* snaps inherited from any parents we had prior to parent_since */

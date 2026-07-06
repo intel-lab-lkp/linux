@@ -5059,10 +5059,10 @@ static int encode_snap_realms(struct ceph_mds_client *mdsc,
 		}
 
 		doutc(cl, " adding snap realm %llx seq %lld parent %llx\n",
-		      realm->ino, realm->seq, realm->parent_ino);
+		      realm->ino, realm->seq, realm->parent ? realm->parent->ino : 0);
 		sr_rec.ino = cpu_to_le64(realm->ino);
 		sr_rec.seq = cpu_to_le64(realm->seq);
-		sr_rec.parent = cpu_to_le64(realm->parent_ino);
+		sr_rec.parent = cpu_to_le64(realm->parent ? realm->parent->ino : 0);
 
 		err = ceph_pagelist_append(pagelist, &sr_rec, sizeof(sr_rec));
 		if (err)
