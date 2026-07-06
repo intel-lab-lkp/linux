@@ -127,6 +127,8 @@ static inline void ksm_exit(struct mm_struct *mm)
 {
 }
 
+#define is_ksm_zero_pte(pte) false
+
 static inline void ksm_might_unmap_zero_page(struct mm_struct *mm, pte_t pte)
 {
 }

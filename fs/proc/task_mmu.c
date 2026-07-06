@@ -1061,6 +1061,9 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 		young = pte_young(ptent);
 		dirty = pte_dirty(ptent);
 		present = true;
+
+		if (is_ksm_zero_pte(ptent))
+			mss->ksm += PAGE_SIZE;
 	} else if (pte_none(ptent)) {
 		smaps_pte_hole_lookup(addr, walk);
 	} else {
