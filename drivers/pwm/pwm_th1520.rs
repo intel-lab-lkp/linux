@@ -22,7 +22,7 @@
 
 use core::ops::Deref;
 use kernel::{
-    clk::Clk,
+    clk::{Clk, Enabled},
     device::{Bound, Core, Device},
     devres,
     io::{
@@ -89,11 +89,11 @@ struct Th1520WfHw {
 }
 
 /// The driver's private data struct. It holds all necessary devres managed resources.
-#[pin_data(PinnedDrop)]
+#[pin_data]
 struct Th1520PwmDriverData {
     #[pin]
     iomem: devres::Devres<IoMem<TH1520_PWM_REG_SIZE>>,
-    clk: Clk,
+    clk: Clk<Enabled>,
 }
 
 impl pwm::PwmOps for Th1520PwmDriverData {
@@ -298,13 +298,6 @@ impl pwm::PwmOps for Th1520PwmDriverData {
     }
 }
 
-#[pinned_drop]
-impl PinnedDrop for Th1520PwmDriverData {
-    fn drop(self: Pin<&mut Self>) {
-        self.clk.disable_unprepare();
-    }
-}
-
 struct Th1520PwmPlatformDriver;
 
 kernel::of_device_table!(
@@ -325,9 +318,7 @@ impl platform::Driver for Th1520PwmPlatformDriver {
         let dev = pdev.as_ref();
         let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
 
-        let clk = Clk::get(dev, None)?;
-
-        clk.prepare_enable()?;
+        let clk = Clk::<Enabled>::get(dev, None)?;
 
         // TODO: Get exclusive ownership of the clock to prevent rate changes.
         // The Rust equivalent of `clk_rate_exclusive_get()` is not yet available.
