@@ -96,6 +96,11 @@ u64 kvm_pmu_evtyper_mask(struct kvm *kvm)
 	return mask;
 }
 
+static bool kvm_pmu_fixed_counters_only(struct kvm *kvm)
+{
+	return test_bit(KVM_ARCH_FLAG_PMU_V3_FIXED_COUNTERS_ONLY, &kvm->arch.flags);
+}
+
 /**
  * kvm_pmc_is_64bit - determine if counter is 64bit
  * @pmc: counter context
@@ -343,7 +348,11 @@ u64 kvm_pmu_implemented_counter_mask(struct kvm_vcpu *vcpu)
 
 static void kvm_pmc_enable_perf_event(struct kvm_pmc *pmc)
 {
-	if (!pmc->perf_event) {
+	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
+
+	if (!pmc->perf_event ||
+	    (kvm_pmu_fixed_counters_only(vcpu->kvm) &&
+	     !cpumask_test_cpu(vcpu->cpu, &to_arm_pmu(pmc->perf_event->pmu)->supported_cpus))) {
 		kvm_pmu_create_perf_event(pmc);
 		return;
 	}
@@ -707,6 +716,12 @@ static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc)
 	int eventsel;
 	u64 evtreg;
 
+	if (kvm_pmu_fixed_counters_only(vcpu->kvm)) {
+		arm_pmu = kvm_pmu_probe_armpmu(vcpu->cpu);
+		if (WARN_ON_ONCE(!arm_pmu))
+			return;
+	}
+
 	evtreg = kvm_pmc_read_evtreg(pmc);
 
 	kvm_pmu_stop_counter(pmc);
@@ -735,7 +750,7 @@ static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc)
 	 * Don't create an event if we're running on hardware that requires
 	 * PMUv3 event translation and we couldn't find a valid mapping.
 	 */
-	eventsel = kvm_map_pmu_event(vcpu->kvm->arch.arm_pmu, eventsel);
+	eventsel = kvm_map_pmu_event(arm_pmu, eventsel);
 	if (eventsel < 0)
 		return;
 
@@ -865,6 +880,9 @@ u64 kvm_pmu_get_pmceid(struct kvm_vcpu *vcpu, bool pmceid1)
 	u64 val, mask = 0;
 	int base, i, nr_events;
 
+	if (kvm_pmu_fixed_counters_only(vcpu->kvm))
+		return 0;
+
 	if (!pmceid1) {
 		val = compute_pmceid0(cpu_pmu);
 		base = 0;
@@ -890,6 +908,24 @@ u64 kvm_pmu_get_pmceid(struct kvm_vcpu *vcpu, bool pmceid1)
 	}
 
 	return val & mask;
+}
+
+void kvm_vcpu_load_pmu(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * ARMV8_PMU_INSTR_IDX will need the same check once
+	 * FEAT_PMUv3_ICNTR is supported.
+	 */
+	struct kvm_pmc *pmc = kvm_vcpu_idx_to_pmc(vcpu, ARMV8_PMU_CYCLE_IDX);
+	struct arm_pmu *cpu_pmu;
+
+	if (!kvm_pmu_fixed_counters_only(vcpu->kvm) ||
+	    !kvm_pmu_counter_is_enabled(pmc) || !pmc->perf_event)
+		return;
+
+	cpu_pmu = to_arm_pmu(pmc->perf_event->pmu);
+	if (!cpumask_test_cpu(vcpu->cpu, &cpu_pmu->supported_cpus))
+		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
 }
 
 void kvm_vcpu_reload_pmu(struct kvm_vcpu *vcpu)
@@ -1002,6 +1038,9 @@ static bool pmu_irq_is_valid(struct kvm *kvm, int irq)
 u8 kvm_arm_pmu_get_max_counters(struct kvm *kvm)
 {
 	struct arm_pmu *arm_pmu = kvm->arch.arm_pmu;
+
+	if (kvm_pmu_fixed_counters_only(kvm))
+		return 0;
 
 	/*
 	 * PMUv3 requires that all event counters are capable of counting any
