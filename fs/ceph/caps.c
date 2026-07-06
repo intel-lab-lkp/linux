@@ -1128,8 +1128,7 @@ static void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 	struct ceph_mds_client *mdsc;
 	int removed = 0;
 
-	/* 'ci' being NULL means the remove have already occurred */
-	if (!ci) {
+	if (ceph_cap_is_removed(cap)) {
 		doutc(cl, "inode is NULL\n");
 		return;
 	}
@@ -1201,8 +1200,7 @@ void ceph_remove_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	struct ceph_inode_info *ci = cap->ci;
 	struct ceph_fs_client *fsc;
 
-	/* 'ci' being NULL means the remove have already occurred */
-	if (!ci) {
+	if (ceph_cap_is_removed(cap)) {
 		doutc(mdsc->fsc->client, "inode is NULL\n");
 		return;
 	}
