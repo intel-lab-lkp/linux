@@ -13,7 +13,8 @@
 #include <linux/mtd/physmap.h>
 #include <linux/mv643xx_eth.h>
 #include <linux/leds.h>
-#include <linux/gpio_keys.h>
+#include <linux/gpio/property.h>
+#include <linux/property.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
 #include <linux/ata_platform.h>
@@ -309,41 +310,64 @@ static void __init net2big_gpio_leds_init(void)
 #define NET2BIG_SWITCH_POWER_ON		0x1
 #define NET2BIG_SWITCH_POWER_OFF	0x2
 
-static struct gpio_keys_button net2big_buttons[] = {
-	{
-		.type		= EV_SW,
-		.code		= NET2BIG_SWITCH_POWER_OFF,
-		.gpio		= NET2BIG_GPIO_POWER_SWITCH_OFF,
-		.desc		= "Power rocker switch (auto|off)",
-		.active_low	= 0,
-	},
-	{
-		.type		= EV_SW,
-		.code		= NET2BIG_SWITCH_POWER_ON,
-		.gpio		= NET2BIG_GPIO_POWER_SWITCH_ON,
-		.desc		= "Power rocker switch (on|auto)",
-		.active_low	= 0,
-	},
-	{
-		.type		= EV_KEY,
-		.code		= KEY_POWER,
-		.gpio		= NET2BIG_GPIO_PUSH_BUTTON,
-		.desc		= "Front Push Button",
-		.active_low	= 0,
-	},
+static const struct software_node net2big_gpio_keys_node = {
+	.name = "net2big-gpio-keys",
 };
 
-static struct gpio_keys_platform_data net2big_button_data = {
-	.buttons	= net2big_buttons,
-	.nbuttons	= ARRAY_SIZE(net2big_buttons),
+static const struct property_entry net2big_power_sw_off_props[] = {
+	PROPERTY_ENTRY_U32("linux,input-type", EV_SW),
+	PROPERTY_ENTRY_U32("linux,code", NET2BIG_SWITCH_POWER_OFF),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    NET2BIG_GPIO_POWER_SWITCH_OFF, GPIO_ACTIVE_HIGH),
+	PROPERTY_ENTRY_STRING("label", "Power rocker switch (auto|off)"),
+	{ }
 };
 
-static struct platform_device net2big_gpio_buttons = {
-	.name		= "gpio-keys",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &net2big_button_data,
-	},
+static const struct software_node net2big_power_sw_off_node = {
+	.parent = &net2big_gpio_keys_node,
+	.properties = net2big_power_sw_off_props,
+};
+
+static const struct property_entry net2big_power_sw_on_props[] = {
+	PROPERTY_ENTRY_U32("linux,input-type", EV_SW),
+	PROPERTY_ENTRY_U32("linux,code", NET2BIG_SWITCH_POWER_ON),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    NET2BIG_GPIO_POWER_SWITCH_ON, GPIO_ACTIVE_HIGH),
+	PROPERTY_ENTRY_STRING("label", "Power rocker switch (on|auto)"),
+	{ }
+};
+
+static const struct software_node net2big_power_sw_on_node = {
+	.parent = &net2big_gpio_keys_node,
+	.properties = net2big_power_sw_on_props,
+};
+
+static const struct property_entry net2big_power_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,input-type", EV_KEY),
+	PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    NET2BIG_GPIO_PUSH_BUTTON, GPIO_ACTIVE_HIGH),
+	PROPERTY_ENTRY_STRING("label", "Front Push Button"),
+	{ }
+};
+
+static const struct software_node net2big_power_key_node = {
+	.parent = &net2big_gpio_keys_node,
+	.properties = net2big_power_key_props,
+};
+
+static const struct software_node * const net2big_gpio_keys_swnodes[] __initconst = {
+	&net2big_gpio_keys_node,
+	&net2big_power_sw_off_node,
+	&net2big_power_sw_on_node,
+	&net2big_power_key_node,
+	NULL
+};
+
+static const struct platform_device_info net2big_button_info __initconst = {
+	.name	= "gpio-keys",
+	.id	= PLATFORM_DEVID_NONE,
+	.swnode	= &net2big_gpio_keys_node,
 };
 
 /*****************************************************************************
@@ -387,6 +411,8 @@ static void net2big_power_off(void)
 
 static void __init net2big_init(void)
 {
+	int err;
+
 	/*
 	 * Setup basic Orion functions. Need to be called early.
 	 */
@@ -413,7 +439,9 @@ static void __init net2big_init(void)
 				    NET2BIG_NOR_BOOT_SIZE);
 	platform_device_register(&net2big_nor_flash);
 
-	platform_device_register(&net2big_gpio_buttons);
+	err = software_node_register_node_group(net2big_gpio_keys_swnodes);
+	if (!err)
+		platform_device_register_full(&net2big_button_info);
 	net2big_gpio_leds_init();
 
 	i2c_register_board_info(0, net2big_i2c_devices,
