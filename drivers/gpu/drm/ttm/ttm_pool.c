@@ -440,9 +440,13 @@ static unsigned int ttm_pool_shrink(int nid, unsigned long num_to_free)
 
 	down_read(&pool_shrink_rwsem);
 	spin_lock(&shrinker_lock);
-	pt = list_first_entry(&shrinker_list, typeof(*pt), shrinker_list);
-	list_move_tail(&pt->shrinker_list, &shrinker_list);
+	pt = list_first_entry_or_null(&shrinker_list, typeof(*pt), shrinker_list);
+	if (pt)
+		list_move_tail(&pt->shrinker_list, &shrinker_list);
 	spin_unlock(&shrinker_lock);
+
+	if (!pt)
+		return 0;
 
 	num_pages = list_lru_walk_node(&pt->pages, nid, pool_move_to_dispose_list, &dispose, &num_to_free);
 	num_pages *= 1 << pt->order;
@@ -1402,6 +1406,17 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 	spin_lock_init(&shrinker_lock);
 	INIT_LIST_HEAD(&shrinker_list);
 
+	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
+	if (!mm_shrinker)
+		return -ENOMEM;
+
+	mm_shrinker->count_objects = ttm_pool_shrinker_count;
+	mm_shrinker->scan_objects = ttm_pool_shrinker_scan;
+	mm_shrinker->batch = TTM_SHRINKER_BATCH;
+	mm_shrinker->seeks = 1;
+
+	shrinker_register(mm_shrinker);
+
 	for (i = 0; i < NR_PAGE_ORDERS; ++i) {
 		ttm_pool_type_init(&global_write_combined[i], NULL,
 				   ttm_write_combined, i);
@@ -1423,17 +1438,6 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 				  &backup_fault_inject);
 #endif
 #endif
-
-	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
-	if (!mm_shrinker)
-		return -ENOMEM;
-
-	mm_shrinker->count_objects = ttm_pool_shrinker_count;
-	mm_shrinker->scan_objects = ttm_pool_shrinker_scan;
-	mm_shrinker->batch = TTM_SHRINKER_BATCH;
-	mm_shrinker->seeks = 1;
-
-	shrinker_register(mm_shrinker);
 
 	return 0;
 }
