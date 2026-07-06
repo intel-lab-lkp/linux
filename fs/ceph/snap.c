@@ -118,7 +118,7 @@ static struct ceph_snap_realm *ceph_create_snap_realm(
 
 	lockdep_assert_held_write(&mdsc->snap_rwsem);
 
-	realm = kzalloc_obj(*realm, GFP_NOFS);
+	realm = kmem_cache_zalloc(ceph_snap_realm_cachep, GFP_NOFS);
 	if (!realm)
 		return ERR_PTR(-ENOMEM);
 
@@ -205,7 +205,7 @@ static void __destroy_snap_realm(struct ceph_mds_client *mdsc,
 	kfree(realm->prior_parent_snaps);
 	kfree(realm->snaps);
 	ceph_put_snap_context(realm->cached_context);
-	kfree(realm);
+	kmem_cache_free(ceph_snap_realm_cachep, realm);
 }
 
 /*

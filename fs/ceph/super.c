@@ -920,6 +920,7 @@ struct kmem_cache *ceph_inode_cachep;
 struct kmem_cache *ceph_cap_cachep;
 struct kmem_cache *ceph_cap_snap_cachep;
 struct kmem_cache *ceph_cap_flush_cachep;
+struct kmem_cache *ceph_snap_realm_cachep;
 struct kmem_cache *ceph_dentry_cachep;
 struct kmem_cache *ceph_file_cachep;
 struct kmem_cache *ceph_dir_file_cachep;
@@ -954,6 +955,11 @@ static int __init init_caches(void)
 					   SLAB_RECLAIM_ACCOUNT);
 	if (!ceph_cap_flush_cachep)
 		goto bad_cap_flush;
+
+	ceph_snap_realm_cachep = KMEM_CACHE(ceph_snap_realm,
+					    SLAB_RECLAIM_ACCOUNT);
+	if (!ceph_snap_realm_cachep)
+		goto bad_snap_realm;
 
 	ceph_dentry_cachep = KMEM_CACHE(ceph_dentry_info,
 					SLAB_RECLAIM_ACCOUNT);
@@ -994,6 +1000,8 @@ bad_dir_file:
 bad_file:
 	kmem_cache_destroy(ceph_dentry_cachep);
 bad_dentry:
+	kmem_cache_destroy(ceph_snap_realm_cachep);
+bad_snap_realm:
 	kmem_cache_destroy(ceph_cap_flush_cachep);
 bad_cap_flush:
 	kmem_cache_destroy(ceph_cap_snap_cachep);
@@ -1016,6 +1024,7 @@ static void destroy_caches(void)
 	kmem_cache_destroy(ceph_cap_cachep);
 	kmem_cache_destroy(ceph_cap_snap_cachep);
 	kmem_cache_destroy(ceph_cap_flush_cachep);
+	kmem_cache_destroy(ceph_snap_realm_cachep);
 	kmem_cache_destroy(ceph_dentry_cachep);
 	kmem_cache_destroy(ceph_file_cachep);
 	kmem_cache_destroy(ceph_dir_file_cachep);
