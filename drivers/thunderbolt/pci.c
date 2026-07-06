@@ -43,6 +43,14 @@ static void nhi_pci_check_quirks(struct tb_nhi_pci *nhi_pci)
 	struct tb_nhi *nhi = &nhi_pci->nhi;
 	struct pci_dev *pdev = to_pci_dev(nhi->dev);
 
+	/*
+	 * AMD USB4 host routers may otherwise become active too early during
+	 * resume after the PCI core restores the saved COMMAND register.
+	 */
+	if (pdev->vendor == PCI_VENDOR_ID_AMD &&
+	    pdev->class == PCI_CLASS_SERIAL_USB_USB4)
+		nhi->quirks |= QUIRK_QUIESCE_ON_SUSPEND;
+
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL) {
 		/*
 		 * Intel hardware supports auto clear of the interrupt

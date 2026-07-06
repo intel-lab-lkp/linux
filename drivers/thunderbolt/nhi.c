@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
+#include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/property.h>
 #include <linux/string_choices.h>
@@ -39,6 +40,31 @@
 static bool host_reset = true;
 module_param(host_reset, bool, 0444);
 MODULE_PARM_DESC(host_reset, "reset USB4 host router (default: true)");
+
+static bool nhi_quirk_quiesce_on_suspend(const struct tb_nhi *nhi)
+{
+	return nhi->quirks & QUIRK_QUIESCE_ON_SUSPEND;
+}
+
+static void nhi_disable_pci_mem_master(struct tb_nhi *nhi)
+{
+	struct pci_dev *pdev = to_pci_dev(nhi->dev);
+	u16 cmd;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	cmd &= ~(PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+	pci_write_config_word(pdev, PCI_COMMAND, cmd);
+}
+
+static void nhi_enable_pci_mem_master(struct tb_nhi *nhi)
+{
+	struct pci_dev *pdev = to_pci_dev(nhi->dev);
+	u16 cmd;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+	pci_write_config_word(pdev, PCI_COMMAND, cmd);
+}
 
 static int ring_interrupt_index(const struct tb_ring *ring)
 {
@@ -988,6 +1014,9 @@ static int __nhi_suspend_noirq(struct device *dev, bool wakeup)
 			return ret;
 	}
 
+	if (nhi_quirk_quiesce_on_suspend(nhi))
+		nhi_disable_pci_mem_master(nhi);
+
 	return 0;
 }
 
@@ -1039,6 +1068,18 @@ static int nhi_resume_noirq(struct device *dev)
 	int ret;
 
 	/*
+	 * If the NHI was quiesced on suspend keep it quiescent (bus
+	 * mastering and memory access disabled) across the noirq phase.
+	 * The PCI core restores the config space of the tunneled PCI
+	 * bridges and anything behind them (e.g. a dock) here; letting the
+	 * AMD host router become active now can wedge the PCIe bus before
+	 * the dock side is ready. The controller and domain are brought
+	 * back up in nhi_complete() once the whole system has resumed.
+	 */
+	if (nhi_quirk_quiesce_on_suspend(nhi))
+		return 0;
+
+	/*
 	 * Check that the device is still there. It may be that the user
 	 * unplugged last device which causes the host controller to go
 	 * away on PCs.
@@ -1064,16 +1105,33 @@ static int nhi_suspend(struct device *dev)
 static void nhi_complete(struct device *dev)
 {
 	struct tb *tb = dev_get_drvdata(dev);
+	struct tb_nhi *nhi = tb->nhi;
 
 	/*
 	 * If we were runtime suspended when system suspend started,
 	 * schedule runtime resume now. It should bring the domain back
-	 * to functional state.
+	 * to functional state (and undo the quiesce, if any, via
+	 * nhi_runtime_resume()).
 	 */
-	if (pm_runtime_suspended(dev))
+	if (pm_runtime_suspended(dev)) {
 		pm_runtime_resume(dev);
-	else
-		tb_domain_complete(tb);
+		return;
+	}
+
+	/*
+	 * A quiesced NHI (see __nhi_suspend_noirq()) was intentionally
+	 * left with bus mastering and memory access disabled and its
+	 * domain was not resumed in nhi_resume_noirq(). Now that the whole
+	 * system has resumed and the PCI core has finished restoring the
+	 * tunneled bridges, re-enable the controller and bring the domain
+	 * back up so Thunderbolt/USB4 keeps working after resume.
+	 */
+	if (nhi_quirk_quiesce_on_suspend(nhi)) {
+		nhi_enable_pci_mem_master(nhi);
+		tb_domain_resume_noirq(tb);
+	}
+
+	tb_domain_complete(tb);
 }
 
 static int nhi_runtime_suspend(struct device *dev)
@@ -1091,6 +1149,10 @@ static int nhi_runtime_suspend(struct device *dev)
 		if (ret)
 			return ret;
 	}
+
+	if (nhi_quirk_quiesce_on_suspend(nhi))
+		nhi_disable_pci_mem_master(nhi);
+
 	return 0;
 }
 
@@ -1099,6 +1161,14 @@ static int nhi_runtime_resume(struct device *dev)
 	struct tb *tb = dev_get_drvdata(dev);
 	struct tb_nhi *nhi = tb->nhi;
 	int ret;
+
+	/*
+	 * The NHI is quiesced (bus mastering and memory access disabled)
+	 * across runtime suspend as well; re-enable it before resuming the
+	 * domain.
+	 */
+	if (nhi_quirk_quiesce_on_suspend(nhi))
+		nhi_enable_pci_mem_master(nhi);
 
 	if (nhi->ops->runtime_resume) {
 		ret = nhi->ops->runtime_resume(nhi);
