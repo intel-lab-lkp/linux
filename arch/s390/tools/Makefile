@@ -3,8 +3,13 @@
 # Makefile for s390 specific build tools
 #
 
+include $(srctree)/arch/s390/tools/Makefile.arm64h
+
 kapi := arch/$(ARCH)/include/generated/asm
 kapi-hdrs-y := $(kapi)/facility-defs.h $(kapi)/dis-defs.h
+kapi-hdrs-$(CONFIG_KVM_ARM64) += $(ARM64_TARGETS)
+
+targets += $(addprefix ../../../,$(kapi-hdrs-y))
 
 PHONY += kapi
 
