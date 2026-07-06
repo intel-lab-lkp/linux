@@ -3,7 +3,7 @@ CFLAGS += -Wall -pthread
 
 all: ${HELPER_PROGS}
 
-TEST_FILES     := with_stress.sh
+TEST_FILES     := with_stress.sh vmtest-dmem.sh
 TEST_PROGS     := test_stress.sh test_cpuset_prs.sh test_cpuset_v1_hp.sh
 TEST_GEN_FILES := wait_inotify
 # Keep the lists lexicographically sorted
