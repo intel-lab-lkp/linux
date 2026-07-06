@@ -480,11 +480,14 @@ static void mpxy_mbox_peek_rpmi_data(struct mbox_chan *chan,
 	struct rpmi_mbox_message msg;
 	unsigned long pos = 0;
 
-	while (pos < events_data_len && (events_data_len - pos) <= sizeof(*event)) {
+	while (events_data_len - pos >= sizeof(*event)) {
 		event = (struct rpmi_notification_event *)(notif->events_data + pos);
 
 		msg.type = RPMI_MBOX_MSG_TYPE_NOTIFICATION_EVENT;
 		msg.notif.event_datalen = le16_to_cpu(event->event_datalen);
+		if (msg.notif.event_datalen >
+		    events_data_len - pos - sizeof(*event))
+			break;
 		msg.notif.event_id = event->event_id;
 		msg.notif.event_data = event->event_data;
 		msg.error = 0;
