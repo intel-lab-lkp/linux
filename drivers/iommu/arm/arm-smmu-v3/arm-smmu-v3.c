@@ -16,8 +16,10 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
-#include <linux/io-pgtable.h>
+#include <linux/generic_pt/iommu.h>
 #include <linux/iopoll.h>
+
+#include "../../iommu-pages.h"
 #include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
@@ -1596,25 +1598,24 @@ void arm_smmu_make_s1_cd(struct arm_smmu_cd *target,
 			 struct arm_smmu_domain *smmu_domain)
 {
 	struct arm_smmu_ctx_desc *cd = &smmu_domain->cd;
-	const struct io_pgtable_cfg *pgtbl_cfg =
-		&io_pgtable_ops_to_pgtable(smmu_domain->pgtbl_ops)->cfg;
-	typeof(&pgtbl_cfg->arm_lpae_s1_cfg.tcr) tcr =
-		&pgtbl_cfg->arm_lpae_s1_cfg.tcr;
+	struct pt_iommu_armv8_hw_info info;
+
+	pt_iommu_armv8_hw_info(&smmu_domain->armv8pt, &info);
 
 	memset(target, 0, sizeof(*target));
 
 	target->data[0] = cpu_to_le64(
-		FIELD_PREP(CTXDESC_CD_0_TCR_T0SZ, tcr->tsz) |
-		FIELD_PREP(CTXDESC_CD_0_TCR_TG0, tcr->tg) |
-		FIELD_PREP(CTXDESC_CD_0_TCR_IRGN0, tcr->irgn) |
-		FIELD_PREP(CTXDESC_CD_0_TCR_ORGN0, tcr->orgn) |
-		FIELD_PREP(CTXDESC_CD_0_TCR_SH0, tcr->sh) |
+		FIELD_PREP(CTXDESC_CD_0_TCR_T0SZ, info.tsz) |
+		FIELD_PREP(CTXDESC_CD_0_TCR_TG0, info.tg) |
+		FIELD_PREP(CTXDESC_CD_0_TCR_IRGN0, info.irgn) |
+		FIELD_PREP(CTXDESC_CD_0_TCR_ORGN0, info.orgn) |
+		FIELD_PREP(CTXDESC_CD_0_TCR_SH0, info.sh) |
 #ifdef __BIG_ENDIAN
 		CTXDESC_CD_0_ENDI |
 #endif
 		CTXDESC_CD_0_TCR_EPD1 |
 		CTXDESC_CD_0_V |
-		FIELD_PREP(CTXDESC_CD_0_TCR_IPS, tcr->ips) |
+		FIELD_PREP(CTXDESC_CD_0_TCR_IPS, info.ps) |
 		CTXDESC_CD_0_AA64 |
 		(master->stall_enabled ? CTXDESC_CD_0_S : 0) |
 		CTXDESC_CD_0_R |
@@ -1623,14 +1624,12 @@ void arm_smmu_make_s1_cd(struct arm_smmu_cd *target,
 		FIELD_PREP(CTXDESC_CD_0_ASID, cd->asid)
 		);
 
-	/* To enable dirty flag update, set both Access flag and dirty state update */
-	if (pgtbl_cfg->quirks & IO_PGTABLE_QUIRK_ARM_HD)
+	if (smmu_domain->armv8pt.armpt.common.features & BIT(PT_FEAT_ARMV8_DBM))
 		target->data[0] |= cpu_to_le64(CTXDESC_CD_0_TCR_HA |
 					       CTXDESC_CD_0_TCR_HD);
 
-	target->data[1] = cpu_to_le64(pgtbl_cfg->arm_lpae_s1_cfg.ttbr &
-				      CTXDESC_CD_1_TTB0_MASK);
-	target->data[3] = cpu_to_le64(pgtbl_cfg->arm_lpae_s1_cfg.mair);
+	target->data[1] = cpu_to_le64(info.ttb & CTXDESC_CD_1_TTB0_MASK);
+	target->data[3] = cpu_to_le64(info.s1.mair);
 }
 EXPORT_SYMBOL_IF_KUNIT(arm_smmu_make_s1_cd);
 
@@ -1888,12 +1887,11 @@ void arm_smmu_make_s2_domain_ste(struct arm_smmu_ste *target,
 				 bool ats_enabled)
 {
 	struct arm_smmu_s2_cfg *s2_cfg = &smmu_domain->s2_cfg;
-	const struct io_pgtable_cfg *pgtbl_cfg =
-		&io_pgtable_ops_to_pgtable(smmu_domain->pgtbl_ops)->cfg;
-	typeof(&pgtbl_cfg->arm_lpae_s2_cfg.vtcr) vtcr =
-		&pgtbl_cfg->arm_lpae_s2_cfg.vtcr;
+	struct pt_iommu_armv8_hw_info info;
 	u64 vtcr_val;
 	struct arm_smmu_device *smmu = master->smmu;
+
+	pt_iommu_armv8_hw_info(&smmu_domain->armv8pt, &info);
 
 	memset(target, 0, sizeof(*target));
 	target->data[0] = cpu_to_le64(
@@ -1904,19 +1902,20 @@ void arm_smmu_make_s2_domain_ste(struct arm_smmu_ste *target,
 		FIELD_PREP(STRTAB_STE_1_EATS,
 			   ats_enabled ? STRTAB_STE_1_EATS_TRANS : 0));
 
-	if (pgtbl_cfg->quirks & IO_PGTABLE_QUIRK_ARM_S2FWB)
+	if (smmu_domain->armv8pt.armpt.common.features &
+	    BIT(PT_FEAT_ARMV8_S2FWB))
 		target->data[1] |= cpu_to_le64(STRTAB_STE_1_S2FWB);
 	if (smmu->features & ARM_SMMU_FEAT_ATTR_TYPES_OVR)
 		target->data[1] |= cpu_to_le64(FIELD_PREP(STRTAB_STE_1_SHCFG,
 							  STRTAB_STE_1_SHCFG_INCOMING));
 
-	vtcr_val = FIELD_PREP(STRTAB_STE_2_VTCR_S2T0SZ, vtcr->tsz) |
-		   FIELD_PREP(STRTAB_STE_2_VTCR_S2SL0, vtcr->sl) |
-		   FIELD_PREP(STRTAB_STE_2_VTCR_S2IR0, vtcr->irgn) |
-		   FIELD_PREP(STRTAB_STE_2_VTCR_S2OR0, vtcr->orgn) |
-		   FIELD_PREP(STRTAB_STE_2_VTCR_S2SH0, vtcr->sh) |
-		   FIELD_PREP(STRTAB_STE_2_VTCR_S2TG, vtcr->tg) |
-		   FIELD_PREP(STRTAB_STE_2_VTCR_S2PS, vtcr->ps);
+	vtcr_val = FIELD_PREP(STRTAB_STE_2_VTCR_S2T0SZ, info.tsz) |
+		   FIELD_PREP(STRTAB_STE_2_VTCR_S2SL0, info.s2.sl0) |
+		   FIELD_PREP(STRTAB_STE_2_VTCR_S2IR0, info.irgn) |
+		   FIELD_PREP(STRTAB_STE_2_VTCR_S2OR0, info.orgn) |
+		   FIELD_PREP(STRTAB_STE_2_VTCR_S2SH0, info.sh) |
+		   FIELD_PREP(STRTAB_STE_2_VTCR_S2TG, info.tg) |
+		   FIELD_PREP(STRTAB_STE_2_VTCR_S2PS, info.ps);
 	target->data[2] = cpu_to_le64(
 		FIELD_PREP(STRTAB_STE_2_S2VMID, s2_cfg->vmid) |
 		FIELD_PREP(STRTAB_STE_2_VTCR, vtcr_val) |
@@ -1928,8 +1927,7 @@ void arm_smmu_make_s2_domain_ste(struct arm_smmu_ste *target,
 		(master->stall_enabled ? STRTAB_STE_2_S2S : 0) |
 		STRTAB_STE_2_S2R);
 
-	target->data[3] = cpu_to_le64(pgtbl_cfg->arm_lpae_s2_cfg.vttbr &
-				      STRTAB_STE_3_S2TTB_MASK);
+	target->data[3] = cpu_to_le64(info.ttb & STRTAB_STE_3_S2TTB_MASK);
 }
 EXPORT_SYMBOL_IF_KUNIT(arm_smmu_make_s2_domain_ste);
 
@@ -2387,14 +2385,6 @@ static int arm_smmu_atc_inv_master(struct arm_smmu_master *master,
 	return arm_smmu_cmdq_batch_submit(master->smmu, &cmds);
 }
 
-/* IO_PGTABLE API */
-static void arm_smmu_tlb_inv_context(void *cookie)
-{
-	struct arm_smmu_domain *smmu_domain = cookie;
-
-	arm_smmu_domain_inv(smmu_domain);
-}
-
 /*
  * Check address alignment for TTL hint per SMMUv3 F.b Section 4.4.1.
  * Address bits below the alignment must be zero, otherwise UNPREDICTABLE.
@@ -2476,8 +2466,8 @@ static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi,
 	 */
 	if (num_tg == 1) {
 		/*
-		 * The two io-pgtable ops filling the tlbi won't generate ttl=0.
-		 * sva sets constants for single page that give ttl=3
+		 * iommupt won't generate a malformed gather and sva sets
+		 * constants for single page that give ttl=3
 		 */
 		if (WARN_ON(!ttl))
 			ttl = 3;
@@ -2776,42 +2766,6 @@ void arm_smmu_domain_tlbi(struct arm_smmu_tlbi *tlbi)
 	rcu_read_unlock();
 }
 
-static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
-					 unsigned long iova, size_t granule,
-					 void *cookie)
-{
-	struct arm_smmu_domain *smmu_domain = cookie;
-	struct iommu_domain *domain = &smmu_domain->domain;
-
-	iommu_iotlb_gather_add_page(domain, gather, iova, granule);
-}
-
-/*
- * Called by io-pgtable-arm.c for each single table level it wants to remove.
- * size is the size of the table level and granule is the tg in bytes.
- */
-static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
-				  size_t granule, void *cookie)
-{
-	struct arm_smmu_domain *smmu_domain = cookie;
-	unsigned int tg_lg2 = smmu_domain->tgsz_lg2;
-	struct arm_smmu_tlbi tlbi = {
-		.smmu_domain = smmu_domain,
-		.start = iova,
-		.last = iova + size - 1,
-		.table_levels_bitmap =
-			BIT((ilog2(size) - tg_lg2) / (tg_lg2 - 3)),
-	};
-
-	arm_smmu_domain_tlbi(&tlbi);
-}
-
-static const struct iommu_flush_ops arm_smmu_flush_ops = {
-	.tlb_flush_all	= arm_smmu_tlb_inv_context,
-	.tlb_flush_walk = arm_smmu_tlb_inv_walk,
-	.tlb_add_page	= arm_smmu_tlb_inv_page_nosync,
-};
-
 static bool arm_smmu_dbm_capable(struct arm_smmu_device *smmu)
 {
 	u32 features = (ARM_SMMU_FEAT_HD | ARM_SMMU_FEAT_COHERENCY);
@@ -2831,7 +2785,6 @@ static bool arm_smmu_capable(struct device *dev, enum iommu_cap cap)
 	case IOMMU_CAP_ENFORCE_CACHE_COHERENCY:
 		return arm_smmu_master_canwbs(master);
 	case IOMMU_CAP_NOEXEC:
-	case IOMMU_CAP_DEFERRED_FLUSH:
 		return true;
 	case IOMMU_CAP_DIRTY_TRACKING:
 		return arm_smmu_dbm_capable(master->smmu);
@@ -2889,7 +2842,7 @@ static void arm_smmu_domain_free_paging(struct iommu_domain *domain)
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 
-	free_io_pgtable_ops(smmu_domain->pgtbl_ops);
+	pt_iommu_deinit(&smmu_domain->armv8pt.iommu);
 
 	/* Free the ASID or VMID */
 	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1) {
@@ -2942,66 +2895,69 @@ static int arm_smmu_domain_finalise(struct arm_smmu_domain *smmu_domain,
 				    struct arm_smmu_device *smmu, u32 flags)
 {
 	int ret;
-	enum io_pgtable_fmt fmt;
-	struct io_pgtable_cfg pgtbl_cfg;
-	struct io_pgtable_ops *pgtbl_ops;
+	struct pt_iommu_armv8_cfg cfg = {};
 	int (*finalise_stage_fn)(struct arm_smmu_device *smmu,
 				 struct arm_smmu_domain *smmu_domain);
 	bool enable_dirty = flags & IOMMU_HWPT_ALLOC_DIRTY_TRACKING;
 
-	pgtbl_cfg = (struct io_pgtable_cfg) {
-		.pgsize_bitmap	= smmu->pgsize_bitmap,
-		.coherent_walk	= smmu->features & ARM_SMMU_FEAT_COHERENCY,
-		.tlb		= &arm_smmu_flush_ops,
-		.iommu_dev	= smmu->dev,
-	};
+	cfg.granule_lg2sz =
+		pt_iommu_armv8_choose_granule_lg2sz(smmu->pgsize_bitmap);
+	if (!cfg.granule_lg2sz)
+		return -EOPNOTSUPP;
+
+	cfg.common.features |= BIT(PT_FEAT_DETAILED_GATHER);
+	if (!(smmu->features & ARM_SMMU_FEAT_COHERENCY))
+		cfg.common.features |= BIT(PT_FEAT_DMA_INCOHERENT);
 
 	switch (smmu_domain->stage) {
-	case ARM_SMMU_DOMAIN_S1: {
-		unsigned long ias = (smmu->features &
-				     ARM_SMMU_FEAT_VAX) ? 52 : 48;
-
-		pgtbl_cfg.ias = min_t(unsigned long, ias, VA_BITS);
-		pgtbl_cfg.oas = smmu->oas;
-		if (enable_dirty)
-			pgtbl_cfg.quirks |= IO_PGTABLE_QUIRK_ARM_HD;
-		fmt = ARM_64_LPAE_S1;
+	case ARM_SMMU_DOMAIN_S1:
+		/*
+		 * Historically FEAT_VAX maps to LVA behavior in the io-pgtable.
+		 * IDRs should be decoded more completely to select
+		 * LVA/LPA/LPA2.
+		 */
+		if (smmu->features & ARM_SMMU_FEAT_VAX &&
+		    cfg.granule_lg2sz == 16) {
+			cfg.common.features |= BIT(PT_FEAT_ARMV8_LVA);
+			cfg.common.hw_max_vasz_lg2 = 52;
+		} else {
+			cfg.common.hw_max_vasz_lg2 = 48;
+		}
+		cfg.common.hw_max_oasz_lg2 = smmu->oas;
+		if (enable_dirty) {
+			cfg.common.features |= BIT(PT_FEAT_ARMV8_DBM);
+			smmu_domain->domain.dirty_ops = &arm_smmu_dirty_ops;
+		}
 		finalise_stage_fn = arm_smmu_domain_finalise_s1;
 		break;
-	}
 	case ARM_SMMU_DOMAIN_S2:
 		if (enable_dirty)
 			return -EOPNOTSUPP;
-		pgtbl_cfg.ias = smmu->oas;
-		pgtbl_cfg.oas = smmu->oas;
-		fmt = ARM_64_LPAE_S2;
-		finalise_stage_fn = arm_smmu_domain_finalise_s2;
+		cfg.common.features |= BIT(PT_FEAT_ARMV8_S2);
+		cfg.common.hw_max_vasz_lg2 = smmu->oas;
+		cfg.common.hw_max_oasz_lg2 = smmu->oas;
 		if ((smmu->features & ARM_SMMU_FEAT_S2FWB) &&
 		    (flags & IOMMU_HWPT_ALLOC_NEST_PARENT))
-			pgtbl_cfg.quirks |= IO_PGTABLE_QUIRK_ARM_S2FWB;
+			cfg.common.features |= BIT(PT_FEAT_ARMV8_S2FWB);
+		finalise_stage_fn = arm_smmu_domain_finalise_s2;
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	pgtbl_ops = alloc_io_pgtable_ops(fmt, &pgtbl_cfg, smmu_domain);
-	if (!pgtbl_ops)
-		return -ENOMEM;
+	smmu_domain->armv8pt.iommu.iommu_device = smmu->dev;
+	ret = pt_iommu_armv8_init(&smmu_domain->armv8pt, &cfg, GFP_KERNEL);
+	if (ret)
+		return ret;
 
-	smmu_domain->domain.pgsize_bitmap = pgtbl_cfg.pgsize_bitmap;
-	smmu_domain->tgsz_lg2 = __ffs(pgtbl_cfg.pgsize_bitmap);
-	smmu_domain->domain.geometry.aperture_end = (1UL << pgtbl_cfg.ias) - 1;
-	smmu_domain->domain.geometry.force_aperture = true;
-	if (enable_dirty && smmu_domain->stage == ARM_SMMU_DOMAIN_S1)
-		smmu_domain->domain.dirty_ops = &arm_smmu_dirty_ops;
+	smmu_domain->tgsz_lg2 = cfg.granule_lg2sz;
 
 	ret = finalise_stage_fn(smmu, smmu_domain);
 	if (ret < 0) {
-		free_io_pgtable_ops(pgtbl_ops);
+		pt_iommu_deinit(&smmu_domain->armv8pt.iommu);
 		return ret;
 	}
 
-	smmu_domain->pgtbl_ops = pgtbl_ops;
 	smmu_domain->smmu = smmu;
 	return 0;
 }
@@ -4022,7 +3978,6 @@ arm_smmu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 		goto err_free;
 	}
 
-	smmu_domain->domain.type = IOMMU_DOMAIN_UNMANAGED;
 	smmu_domain->domain.ops = arm_smmu_ops.default_domain_ops;
 	ret = arm_smmu_domain_finalise(smmu_domain, smmu, flags);
 	if (ret)
@@ -4032,31 +3987,6 @@ arm_smmu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 err_free:
 	arm_smmu_domain_free(smmu_domain);
 	return ERR_PTR(ret);
-}
-
-static int arm_smmu_map_pages(struct iommu_domain *domain, unsigned long iova,
-			      phys_addr_t paddr, size_t pgsize, size_t pgcount,
-			      int prot, gfp_t gfp, size_t *mapped)
-{
-	struct io_pgtable_ops *ops = to_smmu_domain(domain)->pgtbl_ops;
-
-	if (!ops)
-		return -ENODEV;
-
-	return ops->map_pages(ops, iova, paddr, pgsize, pgcount, prot, gfp, mapped);
-}
-
-static size_t arm_smmu_unmap_pages(struct iommu_domain *domain, unsigned long iova,
-				   size_t pgsize, size_t pgcount,
-				   struct iommu_iotlb_gather *gather)
-{
-	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
-	struct io_pgtable_ops *ops = smmu_domain->pgtbl_ops;
-
-	if (!ops)
-		return 0;
-
-	return ops->unmap_pages(ops, iova, pgsize, pgcount, gather);
 }
 
 static void arm_smmu_flush_iotlb_all(struct iommu_domain *domain)
@@ -4080,43 +4010,23 @@ static void arm_smmu_flush_iotlb_all(struct iommu_domain *domain)
 	 */
 
 	if (smmu_domain->smmu)
-		arm_smmu_tlb_inv_context(smmu_domain);
+		arm_smmu_domain_inv(smmu_domain);
 }
 
-/*
- * Called by io-pgtable-arm.c for each run of same pgsize leaf only
- * invalidation. If it has to change to a different leaf level then it flushes
- * the gather and starts a fresh one. Thus this always targets only a single
- * leaf level.
- */
 static void arm_smmu_iotlb_sync(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *gather)
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
-	unsigned int tg = smmu_domain->tgsz_lg2;
 	struct arm_smmu_tlbi tlbi = {
 		.smmu_domain = smmu_domain,
 		.start = gather->start,
 		.last = gather->end,
-		.leaf_levels_bitmap =
-			BIT((ilog2(gather->pgsize) - tg) / (tg - 3)),
+		.leaf_levels_bitmap = gather->pt.leaf_levels_bitmap,
+		.table_levels_bitmap = gather->pt.table_levels_bitmap,
 	};
 
-	if (!gather->pgsize)
-		return;
-
 	arm_smmu_domain_tlbi(&tlbi);
-}
-
-static phys_addr_t
-arm_smmu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
-{
-	struct io_pgtable_ops *ops = to_smmu_domain(domain)->pgtbl_ops;
-
-	if (!ops)
-		return 0;
-
-	return ops->iova_to_phys(ops, iova);
+	iommu_put_pages_list(&gather->freelist);
 }
 
 static struct platform_driver arm_smmu_driver;
@@ -4368,17 +4278,6 @@ static void arm_smmu_release_device(struct device *dev)
 	kfree(master);
 }
 
-static int arm_smmu_read_and_clear_dirty(struct iommu_domain *domain,
-					 unsigned long iova, size_t size,
-					 unsigned long flags,
-					 struct iommu_dirty_bitmap *dirty)
-{
-	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
-	struct io_pgtable_ops *ops = smmu_domain->pgtbl_ops;
-
-	return ops->read_and_clear_dirty(ops, iova, size, flags, dirty);
-}
-
 static int arm_smmu_set_dirty_tracking(struct iommu_domain *domain,
 				       bool enabled)
 {
@@ -4468,20 +4367,18 @@ static const struct iommu_ops arm_smmu_ops = {
 	.user_pasid_table	= 1,
 	.owner			= THIS_MODULE,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
+		IOMMU_PT_DOMAIN_OPS(armv8),
 		.attach_dev		= arm_smmu_attach_dev,
 		.enforce_cache_coherency = arm_smmu_enforce_cache_coherency,
 		.set_dev_pasid		= arm_smmu_s1_set_dev_pasid,
-		.map_pages		= arm_smmu_map_pages,
-		.unmap_pages		= arm_smmu_unmap_pages,
 		.flush_iotlb_all	= arm_smmu_flush_iotlb_all,
 		.iotlb_sync		= arm_smmu_iotlb_sync,
-		.iova_to_phys		= arm_smmu_iova_to_phys,
 		.free			= arm_smmu_domain_free_paging,
 	}
 };
 
 static struct iommu_dirty_ops arm_smmu_dirty_ops = {
-	.read_and_clear_dirty	= arm_smmu_read_and_clear_dirty,
+	IOMMU_PT_DIRTY_OPS(armv8),
 	.set_dirty_tracking     = arm_smmu_set_dirty_tracking,
 };
 
@@ -5104,7 +5001,7 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	/*
 	 * Translation table endianness.
 	 * We currently require the same endianness as the CPU, but this
-	 * could be changed later by adding a new IO_PGTABLE_QUIRK.
+	 * could be changed later by adding a new feature flag.
 	 */
 	switch (FIELD_GET(IDR0_TTENDIAN, reg)) {
 	case IDR0_TTENDIAN_MIXED:
@@ -5702,4 +5599,5 @@ module_driver(arm_smmu_driver, platform_driver_register,
 MODULE_DESCRIPTION("IOMMU API for ARM architected SMMUv3 implementations");
 MODULE_AUTHOR("Will Deacon <will@kernel.org>");
 MODULE_ALIAS("platform:arm-smmu-v3");
+MODULE_IMPORT_NS("GENERIC_PT_IOMMU");
 MODULE_LICENSE("GPL v2");

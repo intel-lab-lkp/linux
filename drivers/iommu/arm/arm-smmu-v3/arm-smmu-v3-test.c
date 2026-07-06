@@ -3,7 +3,7 @@
  * Copyright 2024 Google LLC.
  */
 #include <kunit/test.h>
-#include <linux/io-pgtable.h>
+#include <linux/generic_pt/iommu.h>
 
 #include "arm-smmu-v3.h"
 
@@ -343,21 +343,21 @@ static void arm_smmu_test_make_s2_ste(struct arm_smmu_ste *ste,
 		.smmu = &smmu,
 		.stall_enabled = stall_enabled,
 	};
-	struct io_pgtable io_pgtable = {};
-	struct arm_smmu_domain smmu_domain = {
-		.pgtbl_ops = &io_pgtable.ops,
+	struct arm_smmu_domain smmu_domain = {};
+	struct pt_iommu_armv8_cfg cfg = {
+		.granule_lg2sz = 12,
+		.common.features = BIT(PT_FEAT_ARMV8_S2) |
+				   BIT(PT_FEAT_DETAILED_GATHER),
+		.common.hw_max_vasz_lg2 = 40,
+		.common.hw_max_oasz_lg2 = 40,
 	};
+	int ret;
 
-	io_pgtable.cfg.arm_lpae_s2_cfg.vttbr = 0xdaedbeefdeadbeefULL;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.ps = 1;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.tg = 2;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.sh = 3;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.orgn = 1;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.irgn = 2;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.sl = 3;
-	io_pgtable.cfg.arm_lpae_s2_cfg.vtcr.tsz = 4;
+	ret = pt_iommu_armv8_init(&smmu_domain.armv8pt, &cfg, GFP_KERNEL);
+	WARN_ON(ret);
 
 	arm_smmu_make_s2_domain_ste(ste, &master, &smmu_domain, ats_enabled);
+	pt_iommu_deinit(&smmu_domain.armv8pt.iommu);
 }
 
 static void arm_smmu_v3_write_ste_test_s2_to_abort(struct kunit *test)
@@ -495,24 +495,24 @@ static void arm_smmu_test_make_s1_cd(struct arm_smmu_cd *cd, unsigned int asid)
 	struct arm_smmu_master master = {
 		.smmu = &smmu,
 	};
-	struct io_pgtable io_pgtable = {};
 	struct arm_smmu_domain smmu_domain = {
-		.pgtbl_ops = &io_pgtable.ops,
 		.cd = {
 			.asid = asid,
 		},
 	};
+	struct pt_iommu_armv8_cfg cfg = {
+		.granule_lg2sz = 12,
+		.common.features = BIT(PT_FEAT_DETAILED_GATHER),
+		.common.hw_max_vasz_lg2 = 40,
+		.common.hw_max_oasz_lg2 = 40,
+	};
+	int ret;
 
-	io_pgtable.cfg.arm_lpae_s1_cfg.ttbr = 0xdaedbeefdeadbeefULL;
-	io_pgtable.cfg.arm_lpae_s1_cfg.tcr.ips = 1;
-	io_pgtable.cfg.arm_lpae_s1_cfg.tcr.tg = 2;
-	io_pgtable.cfg.arm_lpae_s1_cfg.tcr.sh = 3;
-	io_pgtable.cfg.arm_lpae_s1_cfg.tcr.orgn = 1;
-	io_pgtable.cfg.arm_lpae_s1_cfg.tcr.irgn = 2;
-	io_pgtable.cfg.arm_lpae_s1_cfg.tcr.tsz = 4;
-	io_pgtable.cfg.arm_lpae_s1_cfg.mair = 0xabcdef012345678ULL;
+	ret = pt_iommu_armv8_init(&smmu_domain.armv8pt, &cfg, GFP_KERNEL);
+	WARN_ON(ret);
 
 	arm_smmu_make_s1_cd(cd, &master, &smmu_domain);
+	pt_iommu_deinit(&smmu_domain.armv8pt.iommu);
 }
 
 static void arm_smmu_v3_write_cd_test_s1_clear(struct kunit *test)
@@ -815,5 +815,6 @@ static struct kunit_suite arm_smmu_v3_test_module = {
 kunit_test_suites(&arm_smmu_v3_test_module);
 
 MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
+MODULE_IMPORT_NS("GENERIC_PT_IOMMU");
 MODULE_DESCRIPTION("KUnit tests for arm-smmu-v3 driver");
 MODULE_LICENSE("GPL v2");

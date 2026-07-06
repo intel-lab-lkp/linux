@@ -9,6 +9,7 @@
 #define _ARM_SMMU_V3_H
 
 #include <linux/bitfield.h>
+#include <linux/generic_pt/iommu.h>
 #include <linux/iommu.h>
 #include <linux/iommufd.h>
 #include <linux/kernel.h>
@@ -1066,9 +1067,12 @@ enum arm_smmu_domain_stage {
 };
 
 struct arm_smmu_domain {
-	struct arm_smmu_device		*smmu;
+	union {
+		struct iommu_domain	domain;
+		struct pt_iommu_armv8	armv8pt;
+	};
 
-	struct io_pgtable_ops		*pgtbl_ops;
+	struct arm_smmu_device		*smmu;
 	atomic_t			nr_ats_masters;
 
 	enum arm_smmu_domain_stage	stage;
@@ -1076,8 +1080,6 @@ struct arm_smmu_domain {
 		struct arm_smmu_ctx_desc	cd;
 		struct arm_smmu_s2_cfg		s2_cfg;
 	};
-
-	struct iommu_domain		domain;
 
 	struct arm_smmu_invs __rcu	*invs;
 
@@ -1090,6 +1092,7 @@ struct arm_smmu_domain {
 
 	struct mmu_notifier		mmu_notifier;
 };
+PT_IOMMU_CHECK_DOMAIN(struct arm_smmu_domain, armv8pt.iommu, domain);
 
 struct arm_smmu_nested_domain {
 	struct iommu_domain domain;
