@@ -11,13 +11,21 @@
 #define MINIX_V2		0x0002		/* minix V2 fs */
 #define MINIX_V3		0x0003		/* minix V3 fs */
 
+/* Block storage layout. All versions have 7 direct blocks, but they have
+ * differing depths: V1 only has doubly indirect blocks, while V2/V3 have
+ * trebly indirect blocks. Thus, V1 depth is 3 while V2 and V3 are 4.
+ */
+enum {MINIX_DIRECT = 7, MINIX_V1_DEPTH = 3, MINIX_V2_DEPTH = 4};
+
 /*
  * minix fs inode data in memory
  */
+#define MINIX_INODE_DATA_ELEMENTS 16
+
 struct minix_inode_info {
 	union {
-		__u16 i1_data[16];
-		__u32 i2_data[16];
+		__u16 i1_data[MINIX_INODE_DATA_ELEMENTS];
+		__u32 i2_data[MINIX_INODE_DATA_ELEMENTS];
 	} u;
 	struct mapping_metadata_bhs i_metadata_bhs;
 	struct inode vfs_inode;
@@ -41,6 +49,11 @@ struct minix_sb_info {
 	struct minix_super_block * s_ms;
 	unsigned short s_mount_state;
 	unsigned short s_version;
+	/* Just set the # of direct blocks and depth of indirect blocks once
+	 * in the sb info instead of having split itree functions and all that.
+	 */
+	unsigned short s_direct;
+	unsigned short s_depth;
 };
 
 void __minix_error_inode(struct inode *inode, const char *function,
@@ -61,14 +74,11 @@ int minix_prepare_chunk(struct folio *folio, loff_t pos, unsigned len);
 struct mapping_metadata_bhs *minix_get_metadata_bhs(struct inode *inode);
 int minix_fsync(struct file *file, loff_t start, loff_t end, int datasync);
 
-extern void V1_minix_truncate(struct inode *);
-extern void V2_minix_truncate(struct inode *);
 extern void minix_truncate(struct inode *);
 extern void minix_set_inode(struct inode *, dev_t);
-extern int V1_minix_get_block(struct inode *, long, struct buffer_head *, int);
-extern int V2_minix_get_block(struct inode *, long, struct buffer_head *, int);
-extern unsigned V1_minix_blocks(loff_t, struct super_block *);
-extern unsigned V2_minix_blocks(loff_t, struct super_block *);
+extern int minix_get_block(struct inode *inode, sector_t block,
+		struct buffer_head *bh, int create);
+extern unsigned int minix_blocks(loff_t size, struct super_block *sb);
 
 struct minix_dir_entry *minix_find_entry(struct dentry *, struct folio **);
 int minix_add_link(struct dentry*, struct inode*);

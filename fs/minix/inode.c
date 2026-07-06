@@ -298,6 +298,15 @@ static int minix_fill_super(struct super_block *s, struct fs_context *fc)
 	} else
 		goto out_no_fs;
 
+	/* Set the direct block and indirect block depth now that the rest of
+	 * the version-specific settings have been set.
+	 */
+	sbi->s_direct = MINIX_DIRECT; /* Always the same. */
+	if (sbi->s_version == MINIX_V1)
+		sbi->s_depth = MINIX_V1_DEPTH;
+	else
+		sbi->s_depth = MINIX_V2_DEPTH;
+
 	if (!minix_check_superblock(s))
 		goto out_illegal_sb;
 
@@ -434,15 +443,6 @@ static int minix_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_fsid = u64_to_fsid(id);
 
 	return 0;
-}
-
-static int minix_get_block(struct inode *inode, sector_t block,
-		    struct buffer_head *bh_result, int create)
-{
-	if (INODE_VERSION(inode) == MINIX_V1)
-		return V1_minix_get_block(inode, block, bh_result, create);
-	else
-		return V2_minix_get_block(inode, block, bh_result, create);
 }
 
 static int minix_writepages(struct address_space *mapping,
@@ -714,24 +714,11 @@ int minix_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 	generic_fillattr(&nop_mnt_idmap, request_mask, inode, stat);
 	if (INODE_VERSION(inode) == MINIX_V1)
-		stat->blocks = (BLOCK_SIZE / 512) * V1_minix_blocks(stat->size, sb);
+		stat->blocks = (BLOCK_SIZE / 512) * minix_blocks(stat->size, sb);
 	else
-		stat->blocks = (sb->s_blocksize / 512) * V2_minix_blocks(stat->size, sb);
+		stat->blocks = (sb->s_blocksize / 512) * minix_blocks(stat->size, sb);
 	stat->blksize = sb->s_blocksize;
 	return 0;
-}
-
-/*
- * The function that is called for file truncation.
- */
-void minix_truncate(struct inode * inode)
-{
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)))
-		return;
-	if (INODE_VERSION(inode) == MINIX_V1)
-		V1_minix_truncate(inode);
-	else
-		V2_minix_truncate(inode);
 }
 
 static struct file_system_type minix_fs_type = {
