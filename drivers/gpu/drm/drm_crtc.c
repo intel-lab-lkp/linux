@@ -897,7 +897,7 @@ out:
 		}
 	}
 	kfree(connector_set);
-	drm_mode_destroy(dev, mode);
+	drm_mode_destroy(mode);
 
 	/* In case we need to retry... */
 	connector_set = NULL;

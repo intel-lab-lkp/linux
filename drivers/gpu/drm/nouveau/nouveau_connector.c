@@ -969,7 +969,7 @@ nouveau_connector_get_modes(struct drm_connector *connector)
 	/* destroy the native mode, the attached monitor could have changed.
 	 */
 	if (nv_connector->native_mode) {
-		drm_mode_destroy(dev, nv_connector->native_mode);
+		drm_mode_destroy(nv_connector->native_mode);
 		nv_connector->native_mode = NULL;
 	}
 

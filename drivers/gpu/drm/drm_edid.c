@@ -3361,7 +3361,7 @@ drm_gtf2_mode(struct drm_device *dev,
 		return NULL;
 
 	if (drm_mode_hsync(mode) > drm_gtf2_hbreak(drm_edid)) {
-		drm_mode_destroy(dev, mode);
+		drm_mode_destroy(mode);
 		mode = drm_gtf_mode_complex(dev, hsize, vsize,
 					    vrefresh_rate, 0, 0,
 					    drm_gtf2_m(drm_edid),
@@ -3777,7 +3777,7 @@ static int drm_gtf_modes_for_range(struct drm_connector *connector,
 		drm_mode_fixup_1366x768(newmode);
 		if (!mode_in_range(newmode, drm_edid, timing) ||
 		    !valid_inferred_mode(connector, newmode)) {
-			drm_mode_destroy(dev, newmode);
+			drm_mode_destroy(newmode);
 			continue;
 		}
 
@@ -3806,7 +3806,7 @@ static int drm_gtf2_modes_for_range(struct drm_connector *connector,
 		drm_mode_fixup_1366x768(newmode);
 		if (!mode_in_range(newmode, drm_edid, timing) ||
 		    !valid_inferred_mode(connector, newmode)) {
-			drm_mode_destroy(dev, newmode);
+			drm_mode_destroy(newmode);
 			continue;
 		}
 
@@ -3836,7 +3836,7 @@ static int drm_cvt_modes_for_range(struct drm_connector *connector,
 		drm_mode_fixup_1366x768(newmode);
 		if (!mode_in_range(newmode, drm_edid, timing) ||
 		    !valid_inferred_mode(connector, newmode)) {
-			drm_mode_destroy(dev, newmode);
+			drm_mode_destroy(newmode);
 			continue;
 		}
 

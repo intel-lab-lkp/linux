@@ -1787,8 +1787,7 @@ static void psb_intel_sdvo_enc_destroy(struct drm_encoder *encoder)
 	struct psb_intel_sdvo *psb_intel_sdvo = to_psb_intel_sdvo(encoder);
 
 	if (psb_intel_sdvo->sdvo_lvds_fixed_mode != NULL)
-		drm_mode_destroy(encoder->dev,
-				 psb_intel_sdvo->sdvo_lvds_fixed_mode);
+		drm_mode_destroy(psb_intel_sdvo->sdvo_lvds_fixed_mode);
 
 	i2c_del_adapter(&psb_intel_sdvo->ddc);
 	gma_encoder_destroy(encoder);

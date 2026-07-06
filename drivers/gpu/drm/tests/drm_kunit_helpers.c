@@ -337,7 +337,7 @@ static void kunit_action_drm_mode_destroy(void *ptr)
 {
 	struct drm_display_mode *mode = ptr;
 
-	drm_mode_destroy(NULL, mode);
+	drm_mode_destroy(mode);
 }
 
 /**

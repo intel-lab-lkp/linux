@@ -2579,7 +2579,7 @@ int msm_dsi_host_set_display_mode(struct mipi_dsi_host *host,
 	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
 
 	if (msm_host->mode) {
-		drm_mode_destroy(msm_host->dev, msm_host->mode);
+		drm_mode_destroy(msm_host->mode);
 		msm_host->mode = NULL;
 	}
 

@@ -421,7 +421,7 @@ bool drm_crtc_helper_set_mode(struct drm_crtc *crtc,
 
 	/* FIXME: add subpixel order */
 done:
-	drm_mode_destroy(dev, adjusted_mode);
+	drm_mode_destroy(adjusted_mode);
 	if (!ret) {
 		crtc->enabled = saved_enabled;
 		drm_mode_copy(&crtc->mode, &saved_mode);

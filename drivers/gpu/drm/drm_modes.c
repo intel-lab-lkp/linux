@@ -85,12 +85,11 @@ EXPORT_SYMBOL(drm_mode_create);
 
 /**
  * drm_mode_destroy - remove a mode
- * @dev: DRM device
  * @mode: mode to remove
  *
- * Release @mode's unique ID, then free it @mode structure itself using kfree.
+ * Free @mode structure using kfree.
  */
-void drm_mode_destroy(struct drm_device *dev, struct drm_display_mode *mode)
+void drm_mode_destroy(struct drm_display_mode *mode)
 {
 	if (!mode)
 		return;
@@ -591,7 +590,7 @@ struct drm_display_mode *drm_analog_tv_mode(struct drm_device *dev,
 	return mode;
 
 err_free_mode:
-	drm_mode_destroy(dev, mode);
+	drm_mode_destroy(mode);
 	return NULL;
 }
 EXPORT_SYMBOL(drm_analog_tv_mode);
@@ -1842,7 +1841,7 @@ void drm_mode_prune_invalid(struct drm_device *dev,
 				drm_dbg_kms(dev, "Rejected mode: " DRM_MODE_FMT " (%s)\n",
 					    DRM_MODE_ARG(mode), drm_get_mode_status_name(mode->status));
 			}
-			drm_mode_destroy(dev, mode);
+			drm_mode_destroy(mode);
 		}
 	}
 }
@@ -1947,7 +1946,7 @@ void drm_connector_list_update(struct drm_connector *connector)
 			}
 
 			list_del(&pmode->head);
-			drm_mode_destroy(connector->dev, pmode);
+			drm_mode_destroy(pmode);
 			break;
 		}
 

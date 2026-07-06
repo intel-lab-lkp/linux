@@ -782,7 +782,7 @@ static int vbox_fill_modes(struct drm_connector *connector, u32 max_x,
 	dev = vbox_connector->base.dev;
 	list_for_each_entry_safe(mode, iterator, &connector->modes, head) {
 		list_del(&mode->head);
-		drm_mode_destroy(dev, mode);
+		drm_mode_destroy(mode);
 	}
 
 	return drm_helper_probe_single_connector_modes(connector, max_x, max_y);

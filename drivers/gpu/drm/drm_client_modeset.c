@@ -79,7 +79,7 @@ static void drm_client_modeset_release(struct drm_client_dev *client)
 	drm_client_for_each_modeset(modeset, client) {
 		int i;
 
-		drm_mode_destroy(client->dev, modeset->mode);
+		drm_mode_destroy(modeset->mode);
 		modeset->mode = NULL;
 		modeset->fb = NULL;
 
@@ -272,7 +272,7 @@ static void mode_replace(struct drm_device *dev,
 			 const struct drm_display_mode **dst,
 			 const struct drm_display_mode *src)
 {
-	drm_mode_destroy(dev, (struct drm_display_mode *)*dst);
+	drm_mode_destroy((struct drm_display_mode *)*dst);
 
 	*dst = src ? drm_mode_duplicate(dev, src) : NULL;
 }
@@ -367,7 +367,7 @@ static bool drm_client_target_cloned(struct drm_device *dev,
 		if (!modes[i])
 			can_clone = false;
 	}
-	drm_mode_destroy(dev, dmt_mode);
+	drm_mode_destroy(dmt_mode);
 
 	if (can_clone) {
 		drm_dbg_kms(dev, "can clone using 1024x768\n");
@@ -913,7 +913,7 @@ int drm_client_modeset_probe(struct drm_client_dev *client, unsigned int width, 
 				break;
 			}
 
-			drm_mode_destroy(dev, modeset->mode);
+			drm_mode_destroy(modeset->mode);
 			modeset->mode = drm_mode_duplicate(dev, mode);
 			if (!modeset->mode) {
 				ret = -ENOMEM;

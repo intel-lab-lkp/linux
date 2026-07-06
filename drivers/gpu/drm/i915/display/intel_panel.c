@@ -401,7 +401,7 @@ static void intel_panel_destroy_probed_modes(struct intel_connector *connector)
 			    connector->base.base.id, connector->base.name,
 			    DRM_MODE_ARG(mode));
 		list_del(&mode->head);
-		drm_mode_destroy(display->drm, mode);
+		drm_mode_destroy(mode);
 	}
 }
 
@@ -558,7 +558,7 @@ void intel_panel_fini(struct intel_connector *connector)
 
 	list_for_each_entry_safe(fixed_mode, next, &panel->fixed_modes, head) {
 		list_del(&fixed_mode->head);
-		drm_mode_destroy(connector->base.dev, fixed_mode);
+		drm_mode_destroy(fixed_mode);
 	}
 }
 

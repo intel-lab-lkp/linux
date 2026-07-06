@@ -1185,7 +1185,7 @@ nv50_mstc_get_modes(struct drm_connector *connector)
 		connector->display_info.bpc = 8;
 
 	if (mstc->native)
-		drm_mode_destroy(mstc->connector.dev, mstc->native);
+		drm_mode_destroy(mstc->native);
 	mstc->native = nouveau_conn_native_mode(&mstc->connector);
 	return ret;
 }

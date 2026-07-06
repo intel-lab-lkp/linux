@@ -8562,7 +8562,7 @@ enum drm_mode_status amdgpu_dm_connector_mode_valid(struct drm_connector *connec
 	stream = create_validate_stream_for_sink(connector, test_mode,
 						 to_dm_connector_state(connector->state),
 						 NULL);
-	drm_mode_destroy(connector->dev, test_mode);
+	drm_mode_destroy(test_mode);
 	if (stream) {
 		dc_stream_release(stream);
 		result = MODE_OK;
@@ -9217,7 +9217,7 @@ static uint add_fs_modes(struct amdgpu_dm_connector *aconnector)
 			drm_mode_probed_add(&aconnector->base, new_mode);
 			new_modes_count += 1;
 		} else
-			drm_mode_destroy(aconnector->base.dev, new_mode);
+			drm_mode_destroy(new_mode);
 	}
  out:
 	return new_modes_count;
