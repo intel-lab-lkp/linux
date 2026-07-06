@@ -71,6 +71,7 @@ bool folio_use_access_time(struct folio *folio)
 
 #ifdef CONFIG_NUMA_MIGRATION
 static int top_tier_adistance;
+static nodemask_t toptier_nodes __read_mostly = NODE_MASK_ALL;
 /*
  * node_demotion[] examples:
  *
@@ -276,27 +277,7 @@ static struct memory_tier *__node_get_memory_tier(int node)
 #ifdef CONFIG_NUMA_MIGRATION
 bool node_is_toptier(int node)
 {
-	bool toptier;
-	pg_data_t *pgdat;
-	struct memory_tier *memtier;
-
-	pgdat = NODE_DATA(node);
-	if (!pgdat)
-		return false;
-
-	rcu_read_lock();
-	memtier = rcu_dereference(pgdat->memtier);
-	if (!memtier) {
-		toptier = true;
-		goto out;
-	}
-	if (memtier->adistance_start <= top_tier_adistance)
-		toptier = true;
-	else
-		toptier = false;
-out:
-	rcu_read_unlock();
-	return toptier;
+	return node_isset(node, toptier_nodes);
 }
 
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
@@ -497,19 +478,22 @@ static void establish_demotion_targets(void)
 		}
 	}
 	/*
-	 * Now build the lower_tier mask for each node collecting node mask from
-	 * all memory tier below it. This allows us to fallback demotion page
-	 * allocation to a set of nodes that is closer the above selected
-	 * preferred node.
+	 * A node stays toptier unless it belongs to a tier below
+	 * top_tier_adistance, while each tier's lower_tier_mask collects the
+	 * nodes of every tier below it so demotion page allocation can fall
+	 * back to nodes closer to the selected preferred node.
 	 */
+	toptier_nodes = node_states[N_MEMORY];
 	lower_tier = node_states[N_MEMORY];
 	list_for_each_entry(memtier, &memory_tiers, list) {
+		tier_nodes = get_memtier_nodemask(memtier);
+		if (memtier->adistance_start > top_tier_adistance)
+			nodes_andnot(toptier_nodes, toptier_nodes, tier_nodes);
 		/*
 		 * Keep removing current tier from lower_tier nodes,
 		 * This will remove all nodes in current and above
 		 * memory tier from the lower_tier mask.
 		 */
-		tier_nodes = get_memtier_nodemask(memtier);
 		nodes_andnot(lower_tier, lower_tier, tier_nodes);
 		memtier->lower_tier_mask = lower_tier;
 	}
