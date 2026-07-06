@@ -22,12 +22,25 @@ properties:
     $ref: /schemas/types.yaml#/definitions/string
     const: iva
 
+  dsp:
+    type: object
+    $ref: /schemas/soc/ti/ti,omap3-c64.yaml#
+    unevaluatedProperties: false
+
 required:
   - compatible
 
 additionalProperties: false
 
 examples:
+  - |
+    iva {
+        compatible = "ti,iva2.2";
+        ti,hwmods = "iva";
+        dsp {
+            compatible = "ti,omap3-c64";
+        };
+    };
   - |
     iva {
         compatible = "ti,ivahd";
