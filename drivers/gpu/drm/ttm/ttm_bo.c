@@ -48,6 +48,7 @@
 #include <linux/atomic.h>
 #include <linux/cgroup_dmem.h>
 #include <linux/dma-resv.h>
+#include <linux/memcontrol.h>
 
 #include "ttm_module.h"
 #include "ttm_bo_internal.h"
@@ -315,6 +316,7 @@ static void ttm_bo_release(struct kref *kref)
 		dma_resv_unlock(bo->base.resv);
 	}
 
+	obj_cgroup_put(bo->objcg);
 	atomic_dec(&ttm_glob.bo_count);
 	bo->destroy(bo);
 }

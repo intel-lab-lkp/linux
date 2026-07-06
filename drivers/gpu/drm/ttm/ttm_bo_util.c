@@ -238,6 +238,8 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 		return -ENOMEM;
 
 	fbo->base = *bo;
+	if (bo->objcg)
+		obj_cgroup_get(bo->objcg);
 
 	/**
 	 * Fix up members that we shouldn't copy directly:
