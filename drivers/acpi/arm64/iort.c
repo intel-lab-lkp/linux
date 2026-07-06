@@ -15,6 +15,7 @@
 #include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -148,6 +149,69 @@ typedef acpi_status (*iort_find_node_callback)
 /* Root pointer to the mapped IORT table */
 static struct acpi_table_header *iort_table;
 
+static bool iort_node_valid(struct acpi_iort_node *node,
+			    struct acpi_iort_node *end)
+{
+	size_t remaining;
+
+	if (WARN_TAINT(node >= end, TAINT_FIRMWARE_WORKAROUND,
+		       "IORT node pointer overflows, bad table!\n"))
+		return false;
+
+	remaining = (char *)end - (char *)node;
+	if (WARN_TAINT(remaining < sizeof(*node), TAINT_FIRMWARE_WORKAROUND,
+		       "IORT node header is truncated, bad table!\n"))
+		return false;
+
+	if (WARN_TAINT(node->length < sizeof(*node) || node->length > remaining,
+		       TAINT_FIRMWARE_WORKAROUND,
+		       "IORT node length overflows, bad table!\n"))
+		return false;
+
+	return true;
+}
+
+static bool iort_node_array_valid(struct acpi_iort_node *node, u32 offset,
+				  u32 count, size_t elem_size,
+				  size_t min_offset, const char *name)
+{
+	size_t bytes;
+
+	if (!count)
+		return true;
+
+	if (!offset || offset < min_offset || offset > node->length) {
+		pr_err(FW_BUG "Invalid %s offset in IORT node %p\n", name,
+		       node);
+		return false;
+	}
+
+	if (check_mul_overflow(count, elem_size, &bytes) ||
+	    bytes > node->length - offset) {
+		pr_err(FW_BUG "Invalid %s array in IORT node %p\n", name,
+		       node);
+		return false;
+	}
+
+	return true;
+}
+
+static bool iort_rmr_node_valid(struct acpi_iort_node *node)
+{
+	struct acpi_iort_rmr *rmr;
+
+	if (node->length < sizeof(*node) + sizeof(*rmr)) {
+		pr_err(FW_BUG "Truncated RMR node in IORT table\n");
+		return false;
+	}
+
+	rmr = (struct acpi_iort_rmr *)node->node_data;
+	return iort_node_array_valid(node, rmr->rmr_offset, rmr->rmr_count,
+				     sizeof(struct acpi_iort_rmr_desc),
+				     sizeof(*node) + sizeof(*rmr),
+				     "RMR descriptor");
+}
+
 static LIST_HEAD(iort_msi_chip_list);
 static DEFINE_SPINLOCK(iort_msi_chip_lock);
 
@@ -243,8 +307,7 @@ static struct acpi_iort_node *iort_scan_node(enum acpi_iort_node_type type,
 				iort_table->length);
 
 	for (i = 0; i < iort->node_count; i++) {
-		if (WARN_TAINT(iort_node >= iort_end, TAINT_FIRMWARE_WORKAROUND,
-			       "IORT node pointer overflows, bad table!\n"))
+		if (!iort_node_valid(iort_node, iort_end))
 			return NULL;
 
 		if (iort_node->type == type &&
@@ -1025,6 +1088,9 @@ static void iort_get_rmrs(struct acpi_iort_node *node,
 	struct acpi_iort_rmr_desc *rmr_desc;
 	int i;
 
+	if (!iort_rmr_node_valid(node))
+		return;
+
 	rmr_desc = ACPI_ADD_PTR(struct acpi_iort_rmr_desc, node,
 				rmr->rmr_offset);
 
@@ -1125,6 +1191,16 @@ static void iort_node_get_rmr_info(struct acpi_iort_node *node,
 		return;
 	}
 
+	if (!iort_node_array_valid(node, node->mapping_offset,
+				   node->mapping_count,
+				   sizeof(struct acpi_iort_id_mapping),
+				   sizeof(*node),
+				   "ID mapping"))
+		return;
+
+	if (!iort_rmr_node_valid(node))
+		return;
+
 	rmr = (struct acpi_iort_rmr *)node->node_data;
 	if (!rmr->rmr_offset || !rmr->rmr_count)
 		return;
@@ -1186,8 +1262,7 @@ static void iort_find_rmrs(struct acpi_iort_node *iommu, struct device *dev,
 				iort_table->length);
 
 	for (i = 0; i < iort->node_count; i++) {
-		if (WARN_TAINT(iort_node >= iort_end, TAINT_FIRMWARE_WORKAROUND,
-			       "IORT node pointer overflows, bad table!\n"))
+		if (!iort_node_valid(iort_node, iort_end))
 			return;
 
 		if (iort_node->type == ACPI_IORT_NODE_RMR)
