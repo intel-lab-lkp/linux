@@ -55,7 +55,7 @@ struct meson_msr {
 #define CLK_MSR_ID(__id, __name) \
 	[__id] = {.id = __id, .name = __name,}
 
-static const struct meson_msr_id clk_msr_m8[] = {
+static const struct meson_msr_id clk_msr_m8[] __initconst = {
 	CLK_MSR_ID(0, "ring_osc_out_ee0"),
 	CLK_MSR_ID(1, "ring_osc_out_ee1"),
 	CLK_MSR_ID(2, "ring_osc_out_ee2"),
@@ -104,7 +104,7 @@ static const struct meson_msr_id clk_msr_m8[] = {
 	CLK_MSR_ID(63, "mipi_csi_cfg"),
 };
 
-static const struct meson_msr_id clk_msr_gx[] = {
+static const struct meson_msr_id clk_msr_gx[] __initconst = {
 	CLK_MSR_ID(0, "ring_osc_out_ee_0"),
 	CLK_MSR_ID(1, "ring_osc_out_ee_1"),
 	CLK_MSR_ID(2, "ring_osc_out_ee_2"),
@@ -174,7 +174,7 @@ static const struct meson_msr_id clk_msr_gx[] = {
 	CLK_MSR_ID(82, "ge2d"),
 };
 
-static const struct meson_msr_id clk_msr_axg[] = {
+static const struct meson_msr_id clk_msr_axg[] __initconst = {
 	CLK_MSR_ID(0, "ring_osc_out_ee_0"),
 	CLK_MSR_ID(1, "ring_osc_out_ee_1"),
 	CLK_MSR_ID(2, "ring_osc_out_ee_2"),
@@ -248,7 +248,7 @@ static const struct meson_msr_id clk_msr_axg[] = {
 	CLK_MSR_ID(109, "audio_locker_in"),
 };
 
-static const struct meson_msr_id clk_msr_g12a[] = {
+static const struct meson_msr_id clk_msr_g12a[] __initconst = {
 	CLK_MSR_ID(0, "ring_osc_out_ee_0"),
 	CLK_MSR_ID(1, "ring_osc_out_ee_1"),
 	CLK_MSR_ID(2, "ring_osc_out_ee_2"),
@@ -364,7 +364,7 @@ static const struct meson_msr_id clk_msr_g12a[] = {
 	CLK_MSR_ID(122, "audio_pdm_dclk"),
 };
 
-static const struct meson_msr_id clk_msr_sm1[] = {
+static const struct meson_msr_id clk_msr_sm1[] __initconst = {
 	CLK_MSR_ID(0, "ring_osc_out_ee_0"),
 	CLK_MSR_ID(1, "ring_osc_out_ee_1"),
 	CLK_MSR_ID(2, "ring_osc_out_ee_2"),
@@ -494,7 +494,7 @@ static const struct meson_msr_id clk_msr_sm1[] = {
 	CLK_MSR_ID(127, "csi2_data"),
 };
 
-static const struct meson_msr_id clk_msr_c3[] = {
+static const struct meson_msr_id clk_msr_c3[] __initconst = {
 	CLK_MSR_ID(0,	"sys_clk"),
 	CLK_MSR_ID(1,	"axi_clk"),
 	CLK_MSR_ID(2,	"rtc_clk"),
@@ -634,7 +634,7 @@ static const struct meson_msr_id clk_msr_c3[] = {
 
 };
 
-static const struct meson_msr_id clk_msr_s4[] = {
+static const struct meson_msr_id clk_msr_s4[] __initconst = {
 	CLK_MSR_ID(0, "sys_clk"),
 	CLK_MSR_ID(1, "axi_clk"),
 	CLK_MSR_ID(2, "rtc_clk"),
@@ -787,7 +787,7 @@ static const struct meson_msr_id clk_msr_s4[] = {
 
 };
 
-static const struct meson_msr_id clk_msr_a1[] = {
+static const struct meson_msr_id clk_msr_a1[] __initconst = {
 	CLK_MSR_ID(0, "tdmout_b_sclk"),
 	CLK_MSR_ID(1, "tdmout_a_sclk"),
 	CLK_MSR_ID(2, "tdmin_lb_sclk"),
@@ -843,7 +843,7 @@ static const struct meson_msr_id clk_msr_a1[] = {
 	CLK_MSR_ID(61, "osc_ring_ramb"),
 };
 
-static const struct meson_msr_id clk_msr_t7[] = {
+static const struct meson_msr_id clk_msr_t7[] __initconst = {
 	CLK_MSR_ID(0, "sys"),
 	CLK_MSR_ID(1, "axi"),
 	CLK_MSR_ID(2, "rtc"),
