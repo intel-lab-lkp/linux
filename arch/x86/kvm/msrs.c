@@ -660,9 +660,15 @@ static int set_efer(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 
 void kvm_enable_efer_bits(u64 mask)
 {
-       efer_reserved_bits &= ~mask;
+	efer_reserved_bits &= ~mask;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_enable_efer_bits);
+
+void kvm_disable_efer_bits(u64 mask)
+{
+	efer_reserved_bits |= mask;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_disable_efer_bits);
 
 bool kvm_msr_allowed(struct kvm_vcpu *vcpu, u32 index, u32 type)
 {

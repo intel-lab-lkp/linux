@@ -5645,6 +5645,9 @@ static __init int svm_hardware_setup(void)
 		r = nested_svm_init_msrpm_merge_offsets();
 		if (r)
 			return r;
+	} else {
+		kvm_disable_efer_bits(EFER_SVME);
+		kvm_disable_efer_bits(EFER_LMSLE);
 	}
 
 	/*
