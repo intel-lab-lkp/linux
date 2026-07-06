@@ -1359,6 +1359,8 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 	if (!sock)
 		return err;
 
+	nbd_reclassify_socket(sock);
+
 	args = kzalloc_obj(*args);
 	if (!args) {
 		sockfd_put(sock);
