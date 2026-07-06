@@ -286,6 +286,20 @@ int __kprobes kprobe_fault_handler(struct pt_regs *regs, unsigned int fsr)
 	case KPROBE_HIT_SS:
 	case KPROBE_REENTER:
 		/*
+		 * A fault taken while a kprobe is single-stepping is not
+		 * necessarily caused by the instruction in the XOL slot. For
+		 * example, tracing or perf code running in this window may take
+		 * an unrelated fault.
+		 *
+		 * Handle the fault here only when the faulting PC is the XOL
+		 * instruction of the current kprobe. Otherwise let the normal
+		 * fault handling path deal with it.
+		 */
+		if (cur->ainsn.xol_insn &&
+			instruction_pointer(regs) != (unsigned long)cur->ainsn.xol_insn)
+			break;
+
+		/*
 		 * We are here because the instruction being single
 		 * stepped caused a page fault. We reset the current
 		 * kprobe and the ip points back to the probe address
