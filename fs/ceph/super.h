@@ -1021,16 +1021,16 @@ struct ceph_readdir_cache_control {
 struct ceph_snap_realm {
 	u64 ino;
 	struct inode *inode;
-	atomic_t nref;
 	struct rb_node node;
 
 	u64 created, seq;
 	u64 parent_ino;
 	u64 parent_since;   /* snapid when our current parent became so */
 
-	u64 *prior_parent_snaps;      /* snaps inherited from any parents we */
-	u32 num_prior_parent_snaps;   /*  had prior to parent_since */
+	u64 *prior_parent_snaps;      /* snaps inherited from any parents we had prior to parent_since */
 	u64 *snaps;                   /* snaps specific to this realm */
+
+	u32 num_prior_parent_snaps;
 	u32 num_snaps;
 
 	struct ceph_snap_realm *parent;
@@ -1048,6 +1048,8 @@ struct ceph_snap_realm {
 
 	struct list_head inodes_with_caps;
 	spinlock_t inodes_with_caps_lock;
+
+	atomic_t nref;
 };
 
 static inline int default_congestion_kb(void)
