@@ -809,6 +809,17 @@ struct arm_smmu_tlbi {
 	size_t size;
 	unsigned int iopte_granule;
 	bool leaf_only;
+
+	struct {
+		bool use_full_inv;
+		u16 num;
+	} single;
+
+	struct {
+		bool use_full_inv;
+		u32 data0;
+		u64 data1;
+	} range;
 };
 
 struct arm_smmu_evtq {
