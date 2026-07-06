@@ -184,12 +184,21 @@ static int ses_set_page2_descriptor(struct enclosure_device *edev,
 	struct ses_device *ses_dev = edev->scratch;
 	unsigned char *type_ptr = ses_dev->page1_types;
 	unsigned char *desc_ptr = ses_dev->page2 + 8;
+	unsigned char *page2_end = ses_dev->page2 + ses_dev->page2_len;
 
 	/* Clear everything */
 	memset(desc_ptr, 0, ses_dev->page2_len - 8);
 	for (i = 0; i < ses_dev->page1_num_types; i++, type_ptr += 4) {
 		for (j = 0; j < type_ptr[1]; j++) {
 			desc_ptr += 4;
+			/*
+			 * The descriptor count comes from page 1 while page 2
+			 * is a separately sized diagnostic page; a device that
+			 * reports more descriptors than page 2 can hold would
+			 * walk desc_ptr past the buffer, so stop here.
+			 */
+			if (desc_ptr + 4 > page2_end)
+				goto out;
 			if (type_ptr[0] != ENCLOSURE_COMPONENT_DEVICE &&
 			    type_ptr[0] != ENCLOSURE_COMPONENT_ARRAY_DEVICE)
 				continue;
@@ -203,6 +212,7 @@ static int ses_set_page2_descriptor(struct enclosure_device *edev,
 		}
 	}
 
+out:
 	return ses_send_diag(sdev, 2, ses_dev->page2, ses_dev->page2_len);
 }
 
@@ -214,6 +224,7 @@ static unsigned char *ses_get_page2_descriptor(struct enclosure_device *edev,
 	struct ses_device *ses_dev = edev->scratch;
 	unsigned char *type_ptr = ses_dev->page1_types;
 	unsigned char *desc_ptr = ses_dev->page2 + 8;
+	unsigned char *page2_end = ses_dev->page2 + ses_dev->page2_len;
 
 	if (ses_recv_diag(sdev, 2, ses_dev->page2, ses_dev->page2_len))
 		return NULL;
@@ -221,6 +232,8 @@ static unsigned char *ses_get_page2_descriptor(struct enclosure_device *edev,
 	for (i = 0; i < ses_dev->page1_num_types; i++, type_ptr += 4) {
 		for (j = 0; j < type_ptr[1]; j++) {
 			desc_ptr += 4;
+			if (desc_ptr + 4 > page2_end)
+				return NULL;
 			if (type_ptr[0] != ENCLOSURE_COMPONENT_DEVICE &&
 			    type_ptr[0] != ENCLOSURE_COMPONENT_ARRAY_DEVICE)
 				continue;
