@@ -24,10 +24,26 @@ static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc);
 static void kvm_pmu_release_perf_event(struct kvm_pmc *pmc);
 static bool kvm_pmu_counter_is_enabled(struct kvm_pmc *pmc);
 
-bool kvm_supports_guest_pmuv3(void)
+int kvm_supports_guest_pmuv3(void)
 {
+	cpumask_var_t cpus __free(free_cpumask_var) = CPUMASK_VAR_NULL;
+	struct arm_pmu_entry *entry;
+
+	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpumask_copy(cpus, cpu_possible_mask);
+
 	guard(mutex)(&arm_pmus_lock);
-	return !list_empty(&arm_pmus);
+
+	list_for_each_entry(entry, &arm_pmus, entry) {
+		struct arm_pmu *pmu = entry->arm_pmu;
+
+		if (!cpumask_andnot(cpus, cpus, &pmu->supported_cpus))
+			return 1;
+	}
+
+	return 0;
 }
 
 static struct kvm_vcpu *kvm_pmc_to_vcpu(const struct kvm_pmc *pmc)
