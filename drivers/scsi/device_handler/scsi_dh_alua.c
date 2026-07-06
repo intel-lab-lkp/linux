@@ -681,7 +681,12 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	for (k = tpg_desc_tbl_off, desc = buff + tpg_desc_tbl_off;
 	     k < len;
 	     k += off, desc += off) {
-		u16 group_id = get_unaligned_be16(&desc[2]);
+		u16 group_id;
+
+		if (len - k < 8)
+			break;
+
+		group_id = get_unaligned_be16(&desc[2]);
 
 		spin_lock_irqsave(&port_group_lock, flags);
 		tmp_pg = alua_find_get_pg(pg->device_id_str, pg->device_id_len,
