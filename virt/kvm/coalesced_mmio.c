@@ -12,6 +12,8 @@
 #include <kvm/iodev.h>
 
 #include <linux/kvm_host.h>
+
+#ifdef HAVE_KVM_MMIO
 #include <linux/slab.h>
 #include <linux/kvm.h>
 
@@ -188,3 +190,4 @@ int kvm_vm_ioctl_unregister_coalesced_mmio(struct kvm *kvm,
 	 */
 	return 0;
 }
+#endif /* ifdef HAVE_KVM_MMIO */

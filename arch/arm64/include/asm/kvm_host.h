@@ -33,6 +33,8 @@
 
 #define KVM_HALT_POLL_NS_DEFAULT 500000
 
+#define HAVE_KVM_MMIO
+
 #include <kvm/arm_vgic.h>
 #include <kvm/arm_arch_timer.h>
 #include <kvm/arm_pmu.h>

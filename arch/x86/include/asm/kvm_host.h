@@ -46,6 +46,8 @@
 
 #define __KVM_HAVE_ARCH_VCPU_DEBUGFS
 
+#define HAVE_KVM_MMIO
+
 /*
  * CONFIG_KVM_MAX_NR_VCPUS is defined iff CONFIG_KVM!=n, provide a dummy max if
  * KVM is disabled (arbitrarily use the default from CONFIG_KVM_MAX_NR_VCPUS).

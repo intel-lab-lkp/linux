@@ -26,6 +26,8 @@
 
 #include <kvm/iodev.h>
 
+#define HAVE_KVM_MMIO
+
 /* MIPS KVM register ids */
 #define MIPS_CP0_32(_R, _S)					\
 	(KVM_REG_MIPS_CP0 | KVM_REG_SIZE_U32 | (8 * (_R) + (_S)))

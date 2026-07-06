@@ -29,6 +29,13 @@
 
 #define __KVM_HAVE_ARCH_VCPU_DEBUGFS
 
+#if defined(CONFIG_KVM_BOOK3S_32_HANDLER) || \
+	defined(CONFIG_KVM_BOOK3S_PR_POSSIBLE) || \
+	defined(CONFIG_KVM_E500V2) || \
+	defined(CONFIG_KVM_E500MC)
+#define HAVE_KVM_MMIO
+#endif
+
 #define KVM_MAX_VCPUS		NR_CPUS
 #define KVM_MAX_VCORES		NR_CPUS
 

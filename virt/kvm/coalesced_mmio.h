@@ -11,7 +11,7 @@
  *
  */
 
-#ifdef CONFIG_KVM_MMIO
+#ifdef HAVE_KVM_MMIO
 
 #include <linux/list.h>
 
