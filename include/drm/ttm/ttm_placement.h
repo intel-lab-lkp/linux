@@ -70,6 +70,9 @@
 /* Placement is only used during eviction */
 #define TTM_PL_FLAG_FALLBACK	(1 << 4)
 
+/* Placement should account mem cgroup */
+#define TTM_PL_FLAG_MEMCG	(1 << 5)
+
 /**
  * struct ttm_place
  *
