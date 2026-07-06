@@ -1219,6 +1219,7 @@ static struct ttm_tt *amdgpu_ttm_tt_create(struct ttm_buffer_object *bo,
  */
 static int amdgpu_ttm_tt_populate(struct ttm_device *bdev,
 				  struct ttm_tt *ttm,
+				  bool memcg_account,
 				  struct ttm_operation_ctx *ctx)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bdev);
@@ -1242,7 +1243,7 @@ static int amdgpu_ttm_tt_populate(struct ttm_device *bdev,
 		pool = &adev->mman.ttm_pools[gtt->pool_id];
 	else
 		pool = &adev->mman.bdev.pool;
-	ret = ttm_pool_alloc(pool, ttm, ctx);
+	ret = ttm_pool_alloc(pool, ttm, memcg_account, ctx);
 	if (ret)
 		return ret;
 

@@ -317,6 +317,7 @@ err_free:
 
 static int i915_ttm_tt_populate(struct ttm_device *bdev,
 				struct ttm_tt *ttm,
+				bool memcg_account,
 				struct ttm_operation_ctx *ctx)
 {
 	struct i915_ttm_tt *i915_tt = container_of(ttm, typeof(*i915_tt), ttm);
@@ -324,7 +325,7 @@ static int i915_ttm_tt_populate(struct ttm_device *bdev,
 	if (i915_tt->is_shmem)
 		return i915_ttm_tt_shmem_populate(bdev, ttm, ctx);
 
-	return ttm_pool_alloc(&bdev->pool, ttm, ctx);
+	return ttm_pool_alloc(&bdev->pool, ttm, memcg_account, ctx);
 }
 
 static void i915_ttm_tt_unpopulate(struct ttm_device *bdev, struct ttm_tt *ttm)
@@ -815,7 +816,7 @@ static int __i915_ttm_get_pages(struct drm_i915_gem_object *obj,
 	}
 
 	if (bo->ttm && !ttm_tt_is_populated(bo->ttm)) {
-		ret = ttm_bo_populate(bo, &ctx);
+		ret = ttm_bo_populate(bo, false, &ctx);
 		if (ret)
 			return ret;
 

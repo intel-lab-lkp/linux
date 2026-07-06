@@ -85,6 +85,7 @@ struct ttm_device_funcs {
 	 */
 	int (*ttm_tt_populate)(struct ttm_device *bdev,
 			       struct ttm_tt *ttm,
+			       bool memcg_account,
 			       struct ttm_operation_ctx *ctx);
 
 	/**

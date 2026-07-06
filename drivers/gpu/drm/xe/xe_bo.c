@@ -536,6 +536,7 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 }
 
 static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
+			      bool memcg_account,
 			      struct ttm_operation_ctx *ctx)
 {
 	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
@@ -553,7 +554,7 @@ static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 		err = ttm_tt_restore(ttm_dev, tt, ctx);
 	} else {
 		ttm_tt_clear_backed_up(tt);
-		err = ttm_pool_alloc(&ttm_dev->pool, tt, ctx);
+		err = ttm_pool_alloc(&ttm_dev->pool, tt, memcg_account, ctx);
 	}
 	if (err)
 		return err;
@@ -1926,7 +1927,7 @@ static int xe_bo_fault_migrate(struct xe_bo *bo, struct ttm_operation_ctx *ctx,
 	if (ttm_manager_type(tbo->bdev, tbo->resource->mem_type)->use_tt) {
 		err = xe_bo_wait_usage_kernel(bo, ctx);
 		if (!err)
-			err = ttm_bo_populate(&bo->ttm, ctx);
+			err = ttm_bo_populate(&bo->ttm, false, ctx);
 	} else if (should_migrate_to_smem(bo)) {
 		xe_assert(xe_bo_device(bo), bo->flags & XE_BO_FLAG_SYSTEM);
 		err = xe_bo_migrate(bo, XE_PL_TT, ctx, exec);

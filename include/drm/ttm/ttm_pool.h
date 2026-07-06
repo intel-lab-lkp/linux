@@ -78,6 +78,7 @@ struct ttm_pool {
 };
 
 int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
+		   bool memcg_account,
 		   struct ttm_operation_ctx *ctx);
 void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt);
 
