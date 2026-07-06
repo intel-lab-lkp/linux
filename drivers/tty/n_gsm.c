@@ -2698,6 +2698,7 @@ static void gsm_dlci_free(struct tty_port *port)
 	kfifo_free(&dlci->fifo);
 	while ((dlci->skb = skb_dequeue(&dlci->skb_list)))
 		dev_kfree_skb(dlci->skb);
+	mutex_destroy(&dlci->mutex);
 	kfree(dlci);
 }
 
