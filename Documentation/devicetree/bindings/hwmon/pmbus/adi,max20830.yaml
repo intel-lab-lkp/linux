@@ -39,6 +39,11 @@ properties:
     description:
       Optional 2.5V to 5.5V LDO input supply.
 
+  enable-gpios:
+    description:
+      GPIO connected to the EN (enable) pin.
+    maxItems: 1
+
   pwr-good-gpios:
     description:
       GPIO connected to the power-good status output pin.
@@ -53,6 +58,8 @@ unevaluatedProperties: false
 
 examples:
   - |
+    #include <dt-bindings/gpio/gpio.h>
+
     i2c {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -61,6 +68,10 @@ examples:
             compatible = "adi,max20830";
             reg = <0x30>;
             vddh-supply = <&vddh>;
+            avdd-supply = <&avdd>;
+            ldoin-supply = <&ldoin>;
+            enable-gpios = <&gpio 1 GPIO_ACTIVE_HIGH>;
+            pwr-good-gpios = <&gpio 2 GPIO_ACTIVE_HIGH>;
         };
     };
 ...
