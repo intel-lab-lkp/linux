@@ -15,6 +15,8 @@
  */
 #include <linux/gpio.h>
 #include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
+#include <linux/property.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -24,12 +26,12 @@
 #include <linux/mtd/physmap.h>
 #include <linux/mv643xx_eth.h>
 #include <linux/leds.h>
-#include <linux/gpio_keys.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
 #include <linux/ata_platform.h>
 #include <linux/phy.h>
 #include <linux/marvell_phy.h>
+#include <plat/orion-gpio.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/pci.h>
@@ -338,46 +340,66 @@ static struct platform_device dns323_gpio_leds = {
  * GPIO Attached Keys
  */
 
-static struct gpio_keys_button dns323ab_buttons[] = {
-	{
-		.code		= KEY_RESTART,
-		.gpio		= DNS323_GPIO_KEY_RESET,
-		.desc		= "Reset Button",
-		.active_low	= 1,
-	}, {
-		.code		= KEY_POWER,
-		.gpio		= DNS323_GPIO_KEY_POWER,
-		.desc		= "Power Button",
-		.active_low	= 1,
-	},
+static const struct software_node dns323_gpio_keys_node = {
+	.name = "dns323-gpio-keys",
 };
 
-static struct gpio_keys_platform_data dns323ab_button_data = {
-	.buttons	= dns323ab_buttons,
-	.nbuttons	= ARRAY_SIZE(dns323ab_buttons),
+static const struct property_entry dns323ab_reset_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_RESTART),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    DNS323_GPIO_KEY_RESET, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "Reset Button"),
+	{ }
 };
 
-static struct gpio_keys_button dns323c_buttons[] = {
-	{
-		.code		= KEY_POWER,
-		.gpio		= DNS323C_GPIO_KEY_POWER,
-		.desc		= "Power Button",
-		.active_low	= 1,
-	},
+static const struct software_node dns323ab_reset_key_node = {
+	.parent = &dns323_gpio_keys_node,
+	.properties = dns323ab_reset_key_props,
 };
 
-static struct gpio_keys_platform_data dns323c_button_data = {
-	.buttons	= dns323c_buttons,
-	.nbuttons	= ARRAY_SIZE(dns323c_buttons),
+static const struct property_entry dns323ab_power_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    DNS323_GPIO_KEY_POWER, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "Power Button"),
+	{ }
 };
 
-static struct platform_device dns323_button_device = {
-	.name		= "gpio-keys",
-	.id		= -1,
-	.num_resources	= 0,
-	.dev		= {
-		.platform_data	= &dns323ab_button_data,
-	},
+static const struct software_node dns323ab_power_key_node = {
+	.parent = &dns323_gpio_keys_node,
+	.properties = dns323ab_power_key_props,
+};
+
+static const struct software_node * const dns323ab_gpio_keys_swnodes[] __initconst = {
+	&dns323_gpio_keys_node,
+	&dns323ab_reset_key_node,
+	&dns323ab_power_key_node,
+	NULL
+};
+
+static const struct property_entry dns323c_power_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    DNS323C_GPIO_KEY_POWER, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "Power Button"),
+	{ }
+};
+
+static const struct software_node dns323c_power_key_node = {
+	.parent = &dns323_gpio_keys_node,
+	.properties = dns323c_power_key_props,
+};
+
+static const struct software_node * const dns323c_gpio_keys_swnodes[] __initconst = {
+	&dns323_gpio_keys_node,
+	&dns323c_power_key_node,
+	NULL
+};
+
+static const struct platform_device_info dns323_button_info __initconst = {
+	.name	= "gpio-keys",
+	.id	= PLATFORM_DEVID_NONE,
+	.swnode	= &dns323_gpio_keys_node,
 };
 
 /*****************************************************************************
@@ -611,6 +633,9 @@ static int __init dns323_identify_rev(void)
 
 static void __init dns323_init(void)
 {
+	const struct software_node * const *keys_swnodes = dns323ab_gpio_keys_swnodes;
+	int err;
+
 	/* Setup basic Orion functions. Need to be called early. */
 	orion5x_init();
 
@@ -665,7 +690,7 @@ static void __init dns323_init(void)
 		/* Hookup LEDs & Buttons */
 		gpiod_add_lookup_table(&dns323c_leds_gpio_table);
 		dns323_gpio_leds.dev.platform_data = &dns323c_led_data;
-		dns323_button_device.dev.platform_data = &dns323c_button_data;
+		keys_swnodes = dns323c_gpio_keys_swnodes;
 
 		/* Hookup i2c devices and fan driver */
 		i2c_register_board_info(0, dns323c_i2c_devices,
@@ -681,7 +706,10 @@ static void __init dns323_init(void)
 	}
 
 	platform_device_register(&dns323_gpio_leds);
-	platform_device_register(&dns323_button_device);
+
+	err = software_node_register_node_group(keys_swnodes);
+	if (!err)
+		platform_device_register_full(&dns323_button_info);
 
 	/*
 	 * Configure peripherals.
