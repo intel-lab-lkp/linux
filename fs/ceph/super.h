@@ -209,6 +209,14 @@ struct ceph_cap {
 	struct list_head session_caps;   /* per-session caplist */
 	u64 cap_id;       /* unique cap id (mds provided) */
 	union {
+		/* reserved caps */
+		struct {
+			/**
+			 * For the `ceph_mds_client.caps_list` list.
+			 * Protected by `caps_list_lock`.
+			 */
+			struct list_head caps_item;
+		};
 		/* in-use caps */
 		struct {
 			int issued;       /* latest, from the mds */
@@ -225,7 +233,6 @@ struct ceph_cap {
 	};
 	u32 seq, issue_seq, mseq;
 	u32 cap_gen;      /* active/stale cycle */
-	struct list_head caps_item;
 };
 
 #define CHECK_CAPS_AUTHONLY     1  /* only check auth cap */
