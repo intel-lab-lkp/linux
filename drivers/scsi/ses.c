@@ -862,6 +862,7 @@ static void ses_intf_remove_enclosure(struct scsi_device *sdev)
 {
 	struct enclosure_device *edev;
 	struct ses_device *ses_dev;
+	void *scomp;
 
 	/*  exact match to this enclosure */
 	edev = enclosure_find(&sdev->sdev_gendev, NULL);
@@ -869,18 +870,24 @@ static void ses_intf_remove_enclosure(struct scsi_device *sdev)
 		return;
 
 	ses_dev = edev->scratch;
-	edev->scratch = NULL;
+	scomp = edev->components ? edev->component[0].scratch : NULL;
+
+	/*
+	 * Unregister before freeing.  enclosure_unregister() tears down the
+	 * component sysfs attributes, draining any in-flight get or set access,
+	 * and points edev->cb at the null callbacks.  Freeing ses_dev and the
+	 * pages it references first leaves those attributes live over freed
+	 * memory, so a concurrent component-attribute access dereferences the
+	 * freed edev->scratch in ses_get_page2_descriptor() or ses_show_id().
+	 */
+	put_device(&edev->edev);
+	enclosure_unregister(edev);
 
 	kfree(ses_dev->page10);
 	kfree(ses_dev->page1);
 	kfree(ses_dev->page2);
 	kfree(ses_dev);
-
-	if (edev->components)
-		kfree(edev->component[0].scratch);
-
-	put_device(&edev->edev);
-	enclosure_unregister(edev);
+	kfree(scomp);
 }
 
 static void ses_intf_remove(struct device *cdev)
