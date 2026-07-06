@@ -19,61 +19,61 @@
 #include <dt-bindings/clock/am3.h>
 
 &{/} {
-        /* Dual-MAC Ethernet application node on PRU-ICSS */
-        pruss_eth: pruss-eth {
-                compatible = "ti,am3359-prueth";
-                ti,prus = <&pru0>, <&pru1>;
-                sram = <&ocmcram>;
-                ti,mii-rt = <&pruss_mii_rt>;
-                ti,iep = <&pruss_iep>;
-                ti,ecap = <&pruss_ecap>;
-                interrupts = <20 2 2>, <21 3 3>;
-                interrupt-names = "rx_hp", "rx_lp";
-                interrupt-parent = <&pruss_intc>;
+	/* Dual-MAC Ethernet application node on PRU-ICSS */
+	pruss_eth: pruss-eth {
+		compatible = "ti,am3359-prueth";
+		ti,prus = <&pru0>, <&pru1>;
+		sram = <&ocmcram>;
+		ti,mii-rt = <&pruss_mii_rt>;
+		ti,iep = <&pruss_iep>;
+		ti,ecap = <&pruss_ecap>;
+		interrupts = <20 2 2>, <21 3 3>;
+		interrupt-names = "rx_hp", "rx_lp";
+		interrupt-parent = <&pruss_intc>;
 
-                pinctrl-0 = <&pruss_eth_default>;
-                pinctrl-names = "default";
+		pinctrl-0 = <&pruss_eth_default>;
+		pinctrl-names = "default";
 
-                ethernet-ports {
-                        #address-cells = <1>;
-                        #size-cells = <0>;
-                        pruss_emac0: ethernet-port@0 {
-                                reg = <0>;
-                                phy-handle = <&pruss_eth0_phy>;
-                                phy-mode = "mii";
-                                interrupts = <20 2 2>, <26 6 6>, <23 6 6>;
-                                interrupt-names = "rx", "emac_ptp_tx",
-                                                  "hsr_ptp_tx";
-                                /* Filled in by bootloader */
-                                local-mac-address = [00 00 00 00 00 00];
-                        };
+		ethernet-ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			pruss_emac0: ethernet-port@0 {
+				reg = <0>;
+				phy-handle = <&pruss_eth0_phy>;
+				phy-mode = "mii";
+				interrupts = <20 2 2>, <26 6 6>, <23 6 6>;
+				interrupt-names = "rx", "emac_ptp_tx",
+						  "hsr_ptp_tx";
+				/* Filled in by bootloader */
+				local-mac-address = [00 00 00 00 00 00];
+			};
 
-                        pruss_emac1: ethernet-port@1 {
-                                reg = <1>;
-                                phy-handle = <&pruss_eth1_phy>;
-                                phy-mode = "mii";
-                                interrupts = <21 3 3>, <27 9 7>, <24 9 7>;
-                                interrupt-names = "rx", "emac_ptp_tx",
-                                                  "hsr_ptp_tx";
-                                /* Filled in by bootloader */
-                                local-mac-address = [00 00 00 00 00 00];
-                        };
-                };
-        };
+			pruss_emac1: ethernet-port@1 {
+				reg = <1>;
+				phy-handle = <&pruss_eth1_phy>;
+				phy-mode = "mii";
+				interrupts = <21 3 3>, <27 9 7>, <24 9 7>;
+				interrupt-names = "rx", "emac_ptp_tx",
+						  "hsr_ptp_tx";
+				/* Filled in by bootloader */
+				local-mac-address = [00 00 00 00 00 00];
+			};
+		};
+	};
 };
 
 &am33xx_pinmux {
 	/* MDIO node for PRU-ICSS */
-        pruss_mdio_default: pruss-mdio-default-pins {
-                pinctrl-single,pins = <
+	pruss_mdio_default: pruss-mdio-default-pins {
+		pinctrl-single,pins = <
 			AM33XX_IOPAD(0x88c, PIN_OUTPUT | MUX_MODE5) /* (V12) gpmc_clk.pr1_mdio_mdclk */
 			AM33XX_IOPAD(0x888, PIN_INPUT | MUX_MODE5) /* (T13) gpmc_csn3.pr1_mdio_data */
-                >;
-        };
+		>;
+	};
 
 	/* Pinmux configuration for PRU-ICSS */
-        pruss_eth_default: pruss-eth-default-pins {
-                pinctrl-single,pins = <
+	pruss_eth_default: pruss-eth-default-pins {
+		pinctrl-single,pins = <
 			AM33XX_IOPAD(0x8a0, PIN_INPUT | MUX_MODE2) /* (R1) lcd_data0.pr1_mii_mt0_clk */
 			AM33XX_IOPAD(0x8b4, PIN_OUTPUT | MUX_MODE2) /* (T2) lcd_data5.pr1_mii0_txd0 */
 			AM33XX_IOPAD(0x8b0, PIN_OUTPUT | MUX_MODE2) /* (T1) lcd_data4.pr1_mii0_txd1 */
@@ -105,14 +105,14 @@
 			AM33XX_IOPAD(0x86c, PIN_INPUT | MUX_MODE5) /* (V17) gpmc_a11.pr1_mii1_rxer */
 			AM33XX_IOPAD(0x878, PIN_INPUT | MUX_MODE5) /* (U18) gpmc_be1n.pr1_mii1_rxlink */
 			AM33XX_IOPAD(0x8ec, PIN_INPUT | MUX_MODE2) /* (R6) lcd_ac_bias_en.pr1_mii1_crs */
-                >;
-        };
+		>;
+	};
 };
 
 &gpio3 {
-        mux-mii-hog {
+	mux-mii-hog {
 		status = "disabled";
-        };
+	};
 
 	mux-mii-hog-0 {
 		gpio-hog;
@@ -129,28 +129,28 @@
  * conflict with PRU-ICSS
  */
 &mac_sw {
-        status = "disabled";
+	status = "disabled";
 };
 
 &davinci_mdio_sw {
-        status = "disabled";
+	status = "disabled";
 };
 
 /* PRU-ICSS MDIO configuration */
 &pruss_mdio {
-        pinctrl-0 = <&pruss_mdio_default>;
-        pinctrl-names = "default";
-        reset-gpios = <&gpio2 5 GPIO_ACTIVE_LOW>;
-        reset-delay-us = <2>; /* PHY datasheet states 1uS min */
-        status = "okay";
-        #address-cells = <1>;
-        #size-cells = <0>;
+	pinctrl-0 = <&pruss_mdio_default>;
+	pinctrl-names = "default";
+	reset-gpios = <&gpio2 5 GPIO_ACTIVE_LOW>;
+	reset-delay-us = <2>; /* PHY datasheet states 1uS min */
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
 
-        pruss_eth0_phy: ethernet-phy@1 {
-                 reg = <1>;
-        };
+	pruss_eth0_phy: ethernet-phy@1 {
+		reg = <1>;
+	};
 
-        pruss_eth1_phy: ethernet-phy@3 {
-                 reg = <3>;
-        };
+	pruss_eth1_phy: ethernet-phy@3 {
+		reg = <3>;
+	};
 };
