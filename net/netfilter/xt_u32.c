@@ -14,9 +14,10 @@
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter/xt_u32.h>
 
-static bool u32_match_it(const struct xt_u32 *data,
+static bool u32_match_it(struct xt_action_param *par,
 			 const struct sk_buff *skb)
 {
+	const struct xt_u32 *data = par->matchinfo;
 	const struct xt_u32_test *ct;
 	unsigned int testind;
 	unsigned int nnums;
@@ -40,7 +41,8 @@ static bool u32_match_it(const struct xt_u32 *data,
 			return false;
 
 		if (skb_copy_bits(skb, pos, &n, sizeof(n)) < 0)
-			BUG();
+			goto err;
+
 		val   = ntohl(n);
 		nnums = ct->nnums;
 
@@ -68,7 +70,7 @@ static bool u32_match_it(const struct xt_u32 *data,
 
 				if (skb_copy_bits(skb, at + pos, &n,
 						    sizeof(n)) < 0)
-					BUG();
+					goto err;
 				val = ntohl(n);
 				break;
 			}
@@ -85,6 +87,9 @@ static bool u32_match_it(const struct xt_u32 *data,
 	}
 
 	return true;
+err:
+	par->hotdrop = true;
+	return false;
 }
 
 static bool u32_mt(const struct sk_buff *skb, struct xt_action_param *par)
@@ -92,7 +97,7 @@ static bool u32_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct xt_u32 *data = par->matchinfo;
 	bool ret;
 
-	ret = u32_match_it(data, skb);
+	ret = u32_match_it(par, skb);
 	return ret ^ data->invert;
 }
 
