@@ -863,6 +863,11 @@ KVM_CREATE_DEVICE, which also supports creating a GICv2.  Using
 KVM_CREATE_DEVICE is preferred over KVM_CREATE_IRQCHIP for GICv2.
 On s390, a dummy irq routing table is created.
 
+On x86, when an in-kernel irqchip is enabled, KVM reserves a private memory
+slot for the local APIC at the default APIC base address (0xfee00000).  User
+space must not map guest memory that covers this address and must leave a 4 KiB
+hole in the guest physical memory map at this address.
+
 Note that on s390 the KVM_CAP_S390_IRQCHIP vm capability needs to be enabled
 before KVM_CREATE_IRQCHIP can be used.
 
