@@ -15,8 +15,10 @@
 #include <linux/ethtool.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
-#include <linux/gpio_keys.h>
+#include <linux/gpio/property.h>
+#include <linux/property.h>
 #include <linux/input.h>
+#include <plat/orion-gpio.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include "mv78xx0.h"
@@ -105,31 +107,39 @@ static unsigned int wxl_mpp_config[] __initdata = {
 	0
 };
 
-static struct gpio_keys_button tswxl_buttons[] = {
-	{
-		.code	   = KEY_OPTION,
-		.gpio	   = TSWXL_AUTO_SWITCH,
-		.desc	   = "Power-auto Switch",
-		.active_low     = 1,
-	}
+static const struct software_node tswxl_gpio_keys_node = {
+	.name = "tswxl-gpio-keys",
 };
 
-static struct gpio_keys_platform_data tswxl_button_data = {
-	.buttons	= tswxl_buttons,
-	.nbuttons       = ARRAY_SIZE(tswxl_buttons),
+static const struct property_entry tswxl_auto_switch_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_OPTION),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    TSWXL_AUTO_SWITCH, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "Power-auto Switch"),
+	{ }
 };
 
-static struct platform_device tswxl_button_device = {
-	.name	   = "gpio-keys",
-	.id	     = -1,
-	.num_resources  = 0,
-	.dev	    = {
-		.platform_data  = &tswxl_button_data,
-	},
+static const struct software_node tswxl_auto_switch_node = {
+	.parent = &tswxl_gpio_keys_node,
+	.properties = tswxl_auto_switch_props,
+};
+
+static const struct software_node * const tswxl_gpio_keys_swnodes[] __initconst = {
+	&tswxl_gpio_keys_node,
+	&tswxl_auto_switch_node,
+	NULL
+};
+
+static const struct platform_device_info tswxl_button_info __initconst = {
+	.name	= "gpio-keys",
+	.id	= PLATFORM_DEVID_NONE,
+	.swnode	= &tswxl_gpio_keys_node,
 };
 
 static void __init wxl_init(void)
 {
+	int err;
+
 	/*
 	 * Basic MV78xx0 setup. Needs to be called early.
 	 */
@@ -158,7 +168,9 @@ static void __init wxl_init(void)
 	gpio_direction_output(TSWXL_USB_POWER2, 1);
 
 	//enable rear switch
-	platform_device_register(&tswxl_button_device);
+	err = software_node_register_node_group(tswxl_gpio_keys_swnodes);
+	if (!err)
+		platform_device_register_full(&tswxl_button_info);
 }
 
 static int __init wxl_pci_init(void)
