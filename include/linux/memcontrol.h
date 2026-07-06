@@ -1804,6 +1804,11 @@ static inline void __memcg_kmem_uncharge_page(struct page *page, int order)
 {
 }
 
+static inline struct obj_cgroup *get_obj_cgroup_from_current(void)
+{
+	return NULL;
+}
+
 static inline struct obj_cgroup *get_obj_cgroup_from_folio(struct folio *folio)
 {
 	return NULL;
