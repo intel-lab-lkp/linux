@@ -2766,17 +2766,12 @@ static int airoha_qdma_set_tx_rate_limit(struct net_device *netdev,
 	return 0;
 }
 
-static int airoha_tc_htb_modify_queue(struct net_device *dev,
-				      struct tc_htb_qopt_offload *opt)
+static int airoha_tc_htb_set_rate(struct net_device *dev,
+				  struct tc_htb_qopt_offload *opt,
+				  u32 channel)
 {
-	u32 channel = TC_H_MIN(opt->classid) % AIROHA_NUM_QOS_CHANNELS;
 	u32 rate = div_u64(opt->rate, 1000) << 3; /* kbps */
 	int err;
-
-	if (opt->parent_classid != TC_HTB_CLASSID_ROOT) {
-		NL_SET_ERR_MSG_MOD(opt->extack, "invalid parent classid");
-		return -EINVAL;
-	}
 
 	err = airoha_qdma_set_tx_rate_limit(dev, channel, rate, opt->quantum);
 	if (err)
@@ -2784,6 +2779,20 @@ static int airoha_tc_htb_modify_queue(struct net_device *dev,
 				   "failed configuring htb offload");
 
 	return err;
+}
+
+static int airoha_tc_htb_modify_queue(struct net_device *netdev,
+				      struct tc_htb_qopt_offload *opt)
+{
+	u32 channel = TC_H_MIN(opt->classid) % AIROHA_NUM_QOS_CHANNELS;
+	struct airoha_gdm_dev *dev = netdev_priv(netdev);
+
+	if (!test_bit(channel, dev->qos_sq_bmap)) {
+		NL_SET_ERR_MSG_MOD(opt->extack, "invalid queue id");
+		return -EINVAL;
+	}
+
+	return airoha_tc_htb_set_rate(netdev, opt, channel);
 }
 
 static int airoha_tc_htb_alloc_leaf_queue(struct net_device *netdev,
@@ -2794,6 +2803,11 @@ static int airoha_tc_htb_alloc_leaf_queue(struct net_device *netdev,
 	struct airoha_gdm_dev *dev = netdev_priv(netdev);
 	struct airoha_qdma *qdma = dev->qdma;
 
+	if (opt->parent_classid != TC_HTB_CLASSID_ROOT) {
+		NL_SET_ERR_MSG_MOD(opt->extack, "invalid parent classid");
+		return -EINVAL;
+	}
+
 	/* Here we need to check the requested QDMA channel is not already
 	 * in use by another net_device running on the same QDMA block.
 	 */
@@ -2803,7 +2817,7 @@ static int airoha_tc_htb_alloc_leaf_queue(struct net_device *netdev,
 		return -EBUSY;
 	}
 
-	err = airoha_tc_htb_modify_queue(netdev, opt);
+	err = airoha_tc_htb_set_rate(netdev, opt, channel);
 	if (err)
 		goto error;
 
