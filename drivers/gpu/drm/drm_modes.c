@@ -63,7 +63,6 @@ EXPORT_SYMBOL(drm_mode_debug_printmodeline);
 
 /**
  * drm_mode_create - create a new display mode
- * @dev: DRM device
  *
  * Create a new, cleared drm_display_mode with kzalloc, allocate an ID for it
  * and return it.
@@ -71,7 +70,7 @@ EXPORT_SYMBOL(drm_mode_debug_printmodeline);
  * Returns:
  * Pointer to new mode on success, NULL on error.
  */
-struct drm_display_mode *drm_mode_create(struct drm_device *dev)
+struct drm_display_mode *drm_mode_create(void)
 {
 	struct drm_display_mode *nmode;
 
@@ -577,7 +576,7 @@ struct drm_display_mode *drm_analog_tv_mode(struct drm_device *dev,
 		return NULL;
 	}
 
-	mode = drm_mode_create(dev);
+	mode = drm_mode_create();
 	if (!mode)
 		return NULL;
 
@@ -646,7 +645,7 @@ struct drm_display_mode *drm_cvt_mode(struct drm_device *dev, int hdisplay,
 	/* allocate the drm_display_mode structure. If failure, we will
 	 * return directly
 	 */
-	drm_mode = drm_mode_create(dev);
+	drm_mode = drm_mode_create();
 	if (!drm_mode)
 		return NULL;
 
@@ -881,7 +880,7 @@ drm_gtf_mode_complex(struct drm_device *dev, int hdisplay, int vdisplay,
 	if (!hdisplay || !vdisplay)
 		return NULL;
 
-	drm_mode = drm_mode_create(dev);
+	drm_mode = drm_mode_create();
 	if (!drm_mode)
 		return NULL;
 
@@ -1458,7 +1457,7 @@ struct drm_display_mode *drm_mode_duplicate(struct drm_device *dev,
 {
 	struct drm_display_mode *nmode;
 
-	nmode = drm_mode_create(dev);
+	nmode = drm_mode_create();
 	if (!nmode)
 		return NULL;
 

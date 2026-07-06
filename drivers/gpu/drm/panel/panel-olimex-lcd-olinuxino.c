@@ -112,7 +112,7 @@ static int lcd_olinuxino_get_modes(struct drm_panel *panel,
 		lcd_mode = (struct lcd_olinuxino_mode *)
 			   &lcd->eeprom.reserved[i * sizeof(*lcd_mode)];
 
-		mode = drm_mode_create(connector->dev);
+		mode = drm_mode_create();
 		if (!mode) {
 			dev_err(panel->dev, "failed to add mode %ux%u@%u\n",
 				lcd_mode->hactive,

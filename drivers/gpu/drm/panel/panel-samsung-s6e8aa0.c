@@ -925,7 +925,7 @@ static int s6e8aa0_get_modes(struct drm_panel *panel,
 	struct s6e8aa0 *ctx = panel_to_s6e8aa0(panel);
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_create(connector->dev);
+	mode = drm_mode_create();
 	if (!mode) {
 		dev_err(panel->dev, "failed to create a new display mode\n");
 		return 0;

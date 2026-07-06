@@ -69,7 +69,7 @@ static int seiko_panel_get_fixed_modes(struct seiko_panel *panel,
 		struct videomode vm;
 
 		videomode_from_timing(dt, &vm);
-		mode = drm_mode_create(connector->dev);
+		mode = drm_mode_create();
 		if (!mode) {
 			dev_err(panel->base.dev, "failed to add mode %ux%u\n",
 				dt->hactive.typ, dt->vactive.typ);

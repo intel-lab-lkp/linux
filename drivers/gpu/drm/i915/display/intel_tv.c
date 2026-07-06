@@ -1806,7 +1806,7 @@ intel_tv_get_modes(struct drm_connector *connector)
 		    input->h > intel_tv_mode_vdisplay(tv_mode))
 			continue;
 
-		mode = drm_mode_create(connector->dev);
+		mode = drm_mode_create();
 		if (!mode)
 			continue;
 

@@ -67,7 +67,7 @@ static int connector_get_modes(struct drm_connector *connector)
 	struct videomode videomode;
 	int width, height;
 
-	mode = drm_mode_create(connector->dev);
+	mode = drm_mode_create();
 	if (!mode)
 		return 0;
 

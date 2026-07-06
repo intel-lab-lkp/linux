@@ -264,7 +264,7 @@ static int gud_connector_get_modes(struct drm_connector *connector)
 	for (i = 0; i < num_modes; i++) {
 		struct drm_display_mode *mode;
 
-		mode = drm_mode_create(connector->dev);
+		mode = drm_mode_create();
 		if (!mode) {
 			num_modes = i;
 			goto out;

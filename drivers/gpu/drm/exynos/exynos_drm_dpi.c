@@ -69,7 +69,7 @@ static int exynos_dpi_get_modes(struct drm_connector *connector)
 	if (ctx->vm) {
 		struct drm_display_mode *mode;
 
-		mode = drm_mode_create(connector->dev);
+		mode = drm_mode_create();
 		if (!mode) {
 			DRM_DEV_ERROR(ctx->dev,
 				      "failed to create a new display mode\n");

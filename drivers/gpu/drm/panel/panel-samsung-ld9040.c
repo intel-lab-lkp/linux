@@ -267,7 +267,7 @@ static int ld9040_get_modes(struct drm_panel *panel,
 	struct ld9040 *ctx = panel_to_ld9040(panel);
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_create(connector->dev);
+	mode = drm_mode_create();
 	if (!mode) {
 		dev_err(panel->dev, "failed to create a new display mode\n");
 		return 0;

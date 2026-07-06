@@ -3563,7 +3563,7 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_connector *connecto
 		goto set_size;
 	}
 
-	mode = drm_mode_create(dev);
+	mode = drm_mode_create();
 	if (!mode)
 		return NULL;
 
@@ -6876,7 +6876,7 @@ static struct drm_display_mode *drm_mode_displayid_detailed(struct drm_device *d
 	bool hsync_positive = le16_to_cpu(timings->hsync) & (1 << 15);
 	bool vsync_positive = le16_to_cpu(timings->vsync) & (1 << 15);
 
-	mode = drm_mode_create(dev);
+	mode = drm_mode_create();
 	if (!mode)
 		return NULL;
 

@@ -777,7 +777,7 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 			}
 		}
 
-		mode = drm_mode_create(dev);
+		mode = drm_mode_create();
 		if (!mode) {
 			ret = -ENOMEM;
 			goto out;

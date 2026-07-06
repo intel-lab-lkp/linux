@@ -180,7 +180,7 @@ static unsigned int panel_simple_get_timings_modes(struct panel_simple *panel,
 		struct videomode vm;
 
 		videomode_from_timing(dt, &vm);
-		mode = drm_mode_create(connector->dev);
+		mode = drm_mode_create();
 		if (!mode) {
 			dev_err(panel->base.dev, "failed to add mode %ux%u\n",
 				dt->hactive.typ, dt->vactive.typ);

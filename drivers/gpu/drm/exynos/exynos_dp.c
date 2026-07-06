@@ -68,6 +68,53 @@ static int exynos_dp_poweroff(struct analogix_dp_plat_data *plat_data)
 	return exynos_dp_crtc_clock_enable(plat_data, false);
 }
 
+static int exynos_dp_get_modes(struct analogix_dp_plat_data *plat_data,
+			       struct drm_connector *connector)
+{
+	struct exynos_dp_device *dp = to_dp(plat_data);
+	struct drm_display_mode *mode;
+
+	if (dp->plat_data.panel)
+		return 0;
+
+	mode = drm_mode_create();
+	if (!mode) {
+		DRM_DEV_ERROR(dp->dev,
+			      "failed to create a new display mode.\n");
+		return 0;
+	}
+
+	drm_display_mode_from_videomode(&dp->vm, mode);
+	connector->display_info.width_mm = mode->width_mm;
+	connector->display_info.height_mm = mode->height_mm;
+
+	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+	drm_mode_set_name(mode);
+	drm_mode_probed_add(connector, mode);
+
+	return 1;
+}
+
+static int exynos_dp_bridge_attach(struct analogix_dp_plat_data *plat_data,
+				   struct drm_bridge *bridge,
+				   struct drm_connector *connector)
+{
+	struct exynos_dp_device *dp = to_dp(plat_data);
+	int ret;
+
+	dp->connector = connector;
+
+	/* Pre-empt DP connector creation if there's a bridge */
+	if (dp->ptn_bridge) {
+		ret = drm_bridge_attach(&dp->encoder, dp->ptn_bridge, bridge,
+					0);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static void exynos_dp_mode_set(struct drm_encoder *encoder,
 			       struct drm_display_mode *mode,
 			       struct drm_display_mode *adjusted_mode)

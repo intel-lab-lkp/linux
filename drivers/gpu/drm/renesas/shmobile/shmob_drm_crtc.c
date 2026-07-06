@@ -489,7 +489,7 @@ static int shmob_drm_connector_get_modes(struct drm_connector *connector)
 	struct shmob_drm_connector *scon = to_shmob_connector(connector);
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_create(connector->dev);
+	mode = drm_mode_create();
 	if (mode == NULL)
 		return 0;
 
