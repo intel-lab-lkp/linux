@@ -260,6 +260,7 @@ static int mwifiex_ret_tx_rate_cfg(struct mwifiex_private *priv,
 	struct mwifiex_rate_scope *rate_scope;
 	struct mwifiex_ie_types_header *head;
 	u16 tlv, tlv_buf_len, tlv_buf_left;
+	size_t rate_scope_len;
 	u8 *tlv_buf;
 	u32 i;
 
@@ -276,6 +277,14 @@ static int mwifiex_ret_tx_rate_cfg(struct mwifiex_private *priv,
 
 		switch (tlv) {
 		case TLV_TYPE_RATE_SCOPE:
+			rate_scope_len = offsetof(struct mwifiex_rate_scope,
+						  vht_mcs_rate_bitmap) - sizeof(*head);
+			if (priv->adapter->fw_api_ver == MWIFIEX_FW_V15)
+				rate_scope_len = sizeof(*rate_scope) - sizeof(*head);
+
+			if (tlv_buf_len < rate_scope_len)
+				break;
+
 			rate_scope = (struct mwifiex_rate_scope *) tlv_buf;
 			priv->bitmap_rates[0] =
 				le16_to_cpu(rate_scope->hr_dsss_rate_bitmap);
