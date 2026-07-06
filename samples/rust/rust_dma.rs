@@ -12,9 +12,13 @@ use kernel::{
         Device,
         DmaMask, //
     },
-    page, pci,
+    page,
+    pci, //
     prelude::*,
-    scatterlist::{Owned, SGTable},
+    scatterlist::{
+        Owned,
+        SGTable, //
+    },
     sync::aref::ARef,
 };
 
