@@ -203,6 +203,13 @@ struct arm_vsmmu;
 #define Q_MAX_SZ_SHIFT			(PAGE_SHIFT + MAX_PAGE_ORDER)
 #endif
 
+/* Constants used for CD TCR and STE VTCR fields */
+#define ARM_SMMU_TCR_TG0_4K	0
+#define ARM_SMMU_TCR_TG0_64K	1
+#define ARM_SMMU_TCR_TG0_16K	2
+#define ARM_SMMU_TCR_RGN_WBWA	1
+#define ARM_SMMU_TCR_SH_IS	3
+
 /*
  * Stream table.
  *

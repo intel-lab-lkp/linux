@@ -11,7 +11,6 @@
 #include <kunit/visibility.h>
 
 #include "arm-smmu-v3.h"
-#include "../../io-pgtable-arm.h"
 
 static void __maybe_unused
 arm_smmu_update_s1_domain_cd_entry(struct arm_smmu_domain *smmu_domain)
@@ -41,10 +40,10 @@ static u64 page_size_to_cd(void)
 	static_assert(PAGE_SIZE == SZ_4K || PAGE_SIZE == SZ_16K ||
 		      PAGE_SIZE == SZ_64K);
 	if (PAGE_SIZE == SZ_64K)
-		return ARM_LPAE_TCR_TG0_64K;
+		return ARM_SMMU_TCR_TG0_64K;
 	if (PAGE_SIZE == SZ_16K)
-		return ARM_LPAE_TCR_TG0_16K;
-	return ARM_LPAE_TCR_TG0_4K;
+		return ARM_SMMU_TCR_TG0_16K;
+	return ARM_SMMU_TCR_TG0_4K;
 }
 
 VISIBLE_IF_KUNIT
@@ -85,10 +84,10 @@ void arm_smmu_make_sva_cd(struct arm_smmu_cd *target,
 				   64ULL - vabits_actual) |
 			FIELD_PREP(CTXDESC_CD_0_TCR_TG0, page_size_to_cd()) |
 			FIELD_PREP(CTXDESC_CD_0_TCR_IRGN0,
-				   ARM_LPAE_TCR_RGN_WBWA) |
+				   ARM_SMMU_TCR_RGN_WBWA) |
 			FIELD_PREP(CTXDESC_CD_0_TCR_ORGN0,
-				   ARM_LPAE_TCR_RGN_WBWA) |
-			FIELD_PREP(CTXDESC_CD_0_TCR_SH0, ARM_LPAE_TCR_SH_IS));
+				   ARM_SMMU_TCR_RGN_WBWA) |
+			FIELD_PREP(CTXDESC_CD_0_TCR_SH0, ARM_SMMU_TCR_SH_IS));
 
 		target->data[1] = cpu_to_le64(virt_to_phys(mm->pgd) &
 					      CTXDESC_CD_1_TTB0_MASK);
