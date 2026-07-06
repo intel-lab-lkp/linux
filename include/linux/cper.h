@@ -598,7 +598,8 @@ void cper_print_proc_arm(const char *pfx,
 			 const struct cper_sec_proc_arm *proc,
 			 u32 length);
 void cper_print_proc_ia(const char *pfx,
-			const struct cper_sec_proc_ia *proc);
+			const struct cper_sec_proc_ia *proc,
+			u32 length);
 int cper_mem_err_location(struct cper_mem_err_compact *mem, char *msg);
 int cper_dimm_err_location(struct cper_mem_err_compact *mem, char *msg);
 

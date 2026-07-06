@@ -3,6 +3,7 @@
 
 #include <linux/cper.h>
 #include <linux/acpi.h>
+#include <linux/printk.h>
 
 /*
  * We don't need a "CPER_IA" prefix since these are all locally defined.
@@ -254,17 +255,26 @@ static void print_err_info(const char *pfx, u8 err_type, u64 check)
 	}
 }
 
-void cper_print_proc_ia(const char *pfx, const struct cper_sec_proc_ia *proc)
+void cper_print_proc_ia(const char *pfx, const struct cper_sec_proc_ia *proc,
+			u32 length)
 {
 	int i;
+	u32 len;
 	struct cper_ia_err_info *err_info;
 	struct cper_ia_proc_ctx *ctx_info;
 	char newpfx[64], infopfx[64];
 	u8 err_type;
 
+	if (length < sizeof(*proc)) {
+		pr_warn("%ssection length is too small\n", pfx);
+		pr_warn("%sfirmware-generated error record is incorrect\n", pfx);
+		return;
+	}
+
 	if (proc->validation_bits & VALID_LAPIC_ID)
 		printk("%sLocal APIC_ID: 0x%llx\n", pfx, proc->lapic_id);
 
+	len = length - sizeof(*proc);
 	if (proc->validation_bits & VALID_CPUID_INFO) {
 		printk("%sCPUID Info:\n", pfx);
 		print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4, proc->cpuid,
@@ -276,6 +286,11 @@ void cper_print_proc_ia(const char *pfx, const struct cper_sec_proc_ia *proc)
 	err_info = (struct cper_ia_err_info *)(proc + 1);
 	for (i = 0; i < VALID_PROC_ERR_INFO_NUM(proc->validation_bits); i++) {
 		printk("%sError Information Structure %d:\n", pfx, i);
+		if (len < sizeof(*err_info)) {
+			pr_warn("%ssection length is too small\n", newpfx);
+			pr_warn("%sfirmware-generated error record is incorrect\n", pfx);
+			return;
+		}
 
 		err_type = cper_get_err_type(&err_info->err_type);
 		printk("%sError Structure Type: %s\n", newpfx,
@@ -321,14 +336,26 @@ void cper_print_proc_ia(const char *pfx, const struct cper_sec_proc_ia *proc)
 		}
 
 		err_info++;
+		len -= sizeof(*err_info);
 	}
 
 	ctx_info = (struct cper_ia_proc_ctx *)err_info;
 	for (i = 0; i < VALID_PROC_CXT_INFO_NUM(proc->validation_bits); i++) {
-		int size = ALIGN(sizeof(*ctx_info) + ctx_info->reg_arr_size, 16);
+		int size;
 		int groupsize = 4;
 
 		printk("%sContext Information Structure %d:\n", pfx, i);
+		if (len < sizeof(*ctx_info)) {
+			pr_warn("%ssection length is too small\n", newpfx);
+			pr_warn("%sfirmware-generated error record is incorrect\n", pfx);
+			return;
+		}
+		size = ALIGN(sizeof(*ctx_info) + ctx_info->reg_arr_size, 16);
+		if (size > len) {
+			pr_warn("%ssection length is too small\n", newpfx);
+			pr_warn("%sfirmware-generated error record is incorrect\n", pfx);
+			return;
+		}
 
 		printk("%sRegister Context Type: %s\n", newpfx,
 		       ctx_info->reg_ctx_type < ARRAY_SIZE(ia_reg_ctx_strs) ?
@@ -357,5 +384,6 @@ void cper_print_proc_ia(const char *pfx, const struct cper_sec_proc_ia *proc)
 		}
 
 		ctx_info = (struct cper_ia_proc_ctx *)((long)ctx_info + size);
+		len -= size;
 	}
 }

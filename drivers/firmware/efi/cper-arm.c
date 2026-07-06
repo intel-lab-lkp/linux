@@ -313,10 +313,16 @@ void cper_print_proc_arm(const char *pfx,
 	ctx_info = (struct cper_arm_ctx_info *)err_info;
 	max_ctx_type = ARRAY_SIZE(arm_reg_ctx_strs) - 1;
 	for (i = 0; i < proc->context_info_num; i++) {
-		int size = ALIGN(sizeof(*ctx_info) + ctx_info->size, 16);
+		int size;
 
 		printk("%sContext info structure %d:\n", pfx, i);
-		if (len < size) {
+		if (len < sizeof(*ctx_info)) {
+			pr_warn("%ssection length is too small\n", newpfx);
+			pr_warn("%sfirmware-generated error record is incorrect\n", pfx);
+			return;
+		}
+		size = ALIGN(sizeof(*ctx_info) + ctx_info->size, 16);
+		if (size > len) {
 			printk("%ssection length is too small\n", newpfx);
 			printk("%sfirmware-generated error record is incorrect\n", pfx);
 			return;
