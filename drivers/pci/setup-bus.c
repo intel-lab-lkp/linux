@@ -29,6 +29,8 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include "pci.h"
 
 #define PCI_RES_TYPE_MASK \
@@ -1385,6 +1387,54 @@ static void pbus_size_mem(struct pci_bus *bus, struct resource *b_res,
 	}
 }
 
+/*
+ * pci_bridge_of_get_window - Get bridge window from DT.
+ *
+ * If the bridge's DT node has a "ranges" property, then parse the property and
+ * return the bridge window sizes. This allows per-bridge resource allocation
+ * from DT.
+ *
+ * Return: 'true' if a valid 'ranges' property was found in DT node, with bridge
+ * window resources populated in @io, @mmio, @mmio_pref arguments. 'false'
+ * otherwise.
+ */
+static bool pci_bridge_of_get_window(struct pci_dev *dev,
+				     struct resource *io,
+				     struct resource *mmio,
+				     struct resource *mmio_pref)
+{
+	struct device_node *np = dev->dev.of_node;
+	struct of_pci_range_parser parser;
+	struct of_pci_range range;
+	bool found = false;
+
+	if (!np || !of_property_present(np, "ranges"))
+		return false;
+
+	if (of_pci_range_parser_init(&parser, np))
+		return false;
+
+	for_each_of_pci_range(&parser, &range) {
+		struct resource *res;
+
+		if (range.flags & IORESOURCE_IO)
+			res = io;
+		else if (range.flags & IORESOURCE_PREFETCH)
+			res = mmio_pref;
+		else if (range.flags & IORESOURCE_MEM)
+			res = mmio;
+		else
+			continue;
+
+		res->flags = range.flags;
+		res->start = range.cpu_addr;
+		res->end = range.cpu_addr + range.size - 1;
+		found = true;
+	}
+
+	return found;
+}
+
 void __pci_bus_size_bridges(struct pci_bus *bus, struct list_head *realloc_head)
 {
 	struct pci_dev *dev;
@@ -1430,9 +1480,34 @@ void __pci_bus_size_bridges(struct pci_bus *bus, struct list_head *realloc_head)
 	case PCI_HEADER_TYPE_BRIDGE:
 		pci_bridge_check_ranges(bus);
 		if (bus->self->is_hotplug_bridge) {
+			struct resource dt_io = {}, dt_mmio = {}, dt_mmio_pref = {};
+
 			additional_io_size  = pci_hotplug_io_size;
 			additional_mmio_size = pci_hotplug_mmio_size;
 			additional_mmio_pref_size = pci_hotplug_mmio_pref_size;
+
+			/*
+			 * If the bridge has a DT ranges property, use that to
+			 * override the default window sizes. Command line
+			 * parameters (hpmemsize etc...) take precedence over
+			 * DT.
+			 */
+			if (pci_bridge_of_get_window(bus->self,
+						     &dt_io, &dt_mmio,
+						     &dt_mmio_pref)) {
+				if (dt_io.flags &&
+				    pci_hotplug_io_size == DEFAULT_HOTPLUG_IO_SIZE)
+					additional_io_size =
+						resource_size(&dt_io);
+				if (dt_mmio.flags &&
+				    pci_hotplug_mmio_size == DEFAULT_HOTPLUG_MMIO_SIZE)
+					additional_mmio_size =
+						resource_size(&dt_mmio);
+				if (dt_mmio_pref.flags &&
+				    pci_hotplug_mmio_pref_size == DEFAULT_HOTPLUG_MMIO_PREF_SIZE)
+					additional_mmio_pref_size =
+						resource_size(&dt_mmio_pref);
+			}
 		}
 		fallthrough;
 	default:

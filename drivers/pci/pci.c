@@ -103,9 +103,6 @@ bool pci_reset_supported(struct pci_dev *dev)
 int pci_domains_supported = 1;
 #endif
 
-#define DEFAULT_HOTPLUG_IO_SIZE		(256)
-#define DEFAULT_HOTPLUG_MMIO_SIZE	(2*1024*1024)
-#define DEFAULT_HOTPLUG_MMIO_PREF_SIZE	(2*1024*1024)
 /* hpiosize=nn can override this */
 unsigned long pci_hotplug_io_size  = DEFAULT_HOTPLUG_IO_SIZE;
 /*
