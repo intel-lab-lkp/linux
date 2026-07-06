@@ -6,15 +6,17 @@
  *
  *  We handle the machine-specific bits of the UCB1x00 driver here.
  */
-#include <linux/module.h>
-#include <linux/init.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/fs.h>
-#include <linux/gpio_keys.h>
+#include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
+#include <linux/init.h>
 #include <linux/input.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/proc_fs.h>
+#include <linux/property.h>
 #include <linux/mfd/ucb1x00.h>
 
 #define UCB1X00_ATTR(name,input)\
@@ -34,31 +36,71 @@ UCB1X00_ATTR(vbatt, UCB_ADC_INP_AD1);
 UCB1X00_ATTR(vcharger, UCB_ADC_INP_AD0);
 UCB1X00_ATTR(batt_temp, UCB_ADC_INP_AD2);
 
+static const struct property_entry ucb1x00_gpio_keys_props[] = {
+	PROPERTY_ENTRY_STRING("label", "ucb1x00"),
+	PROPERTY_ENTRY_U32("poll-interval", 50),
+	{ }
+};
+
+static const struct software_node ucb1x00_gpio_keys_node = {
+	.name = "ucb1x00-gpio-keys",
+	.properties = ucb1x00_gpio_keys_props,
+};
+
+#define UCB1X00_BTN_PROPS(_idx)						\
+static const struct property_entry ucb1x00_btn##_idx##_props[] = {	\
+	PROPERTY_ENTRY_U32("linux,code", BTN_0 + (_idx)),		\
+	PROPERTY_ENTRY_GPIO("gpios", &ucb1x00_gpiochip_node,		\
+			    _idx, GPIO_ACTIVE_HIGH),			\
+	PROPERTY_ENTRY_STRING("label", "btn" #_idx),			\
+	PROPERTY_ENTRY_BOOL("linux,can-disable"),			\
+	{ }								\
+};									\
+static const struct software_node ucb1x00_btn##_idx##_node = {		\
+	.parent = &ucb1x00_gpio_keys_node,				\
+	.properties = ucb1x00_btn##_idx##_props,			\
+}
+
+UCB1X00_BTN_PROPS(0);
+UCB1X00_BTN_PROPS(1);
+UCB1X00_BTN_PROPS(2);
+UCB1X00_BTN_PROPS(3);
+UCB1X00_BTN_PROPS(4);
+UCB1X00_BTN_PROPS(5);
+
+static const struct software_node * const ucb1x00_assabet_swnodes[] = {
+	&ucb1x00_gpio_keys_node,
+	&ucb1x00_btn0_node,
+	&ucb1x00_btn1_node,
+	&ucb1x00_btn2_node,
+	&ucb1x00_btn3_node,
+	&ucb1x00_btn4_node,
+	&ucb1x00_btn5_node,
+	NULL
+};
+
 static int ucb1x00_assabet_add(struct ucb1x00_dev *dev)
 {
 	struct ucb1x00 *ucb = dev->ucb;
+	struct platform_device_info pdevinfo = {
+		.name = "gpio-keys",
+		.id = PLATFORM_DEVID_NONE,
+		.parent = &ucb->dev,
+		.swnode = &ucb1x00_gpio_keys_node,
+	};
 	struct platform_device *pdev;
-	struct gpio_keys_platform_data keys;
-	static struct gpio_keys_button buttons[6];
-	unsigned i;
+	int ret;
 
-	memset(buttons, 0, sizeof(buttons));
-	memset(&keys, 0, sizeof(keys));
+	ret = software_node_register_node_group(ucb1x00_assabet_swnodes);
+	if (ret)
+		return ret;
 
-	for (i = 0; i < ARRAY_SIZE(buttons); i++) {
-		buttons[i].code = BTN_0 + i;
-		buttons[i].gpio = ucb->gpio.base + i;
-		buttons[i].type = EV_KEY;
-		buttons[i].can_disable = true;
+	pdev = platform_device_register_full(&pdevinfo);
+	ret = PTR_ERR_OR_ZERO(pdev);
+	if (ret) {
+		software_node_unregister_node_group(ucb1x00_assabet_swnodes);
+		return ret;
 	}
-
-	keys.buttons = buttons;
-	keys.nbuttons = ARRAY_SIZE(buttons);
-	keys.poll_interval = 50;
-	keys.name = "ucb1x00";
-
-	pdev = platform_device_register_data(&ucb->dev, "gpio-keys", -1,
-		&keys, sizeof(keys));
 
 	device_create_file(&ucb->dev, &dev_attr_vbatt);
 	device_create_file(&ucb->dev, &dev_attr_vcharger);
@@ -74,6 +116,8 @@ static void ucb1x00_assabet_remove(struct ucb1x00_dev *dev)
 
 	if (!IS_ERR(pdev))
 		platform_device_unregister(pdev);
+
+	software_node_unregister_node_group(ucb1x00_assabet_swnodes);
 
 	device_remove_file(&dev->ucb->dev, &dev_attr_batt_temp);
 	device_remove_file(&dev->ucb->dev, &dev_attr_vcharger);
