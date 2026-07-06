@@ -23,6 +23,21 @@
 /* Root pointer to the mapped APMT table */
 static struct acpi_table_header *apmt_table;
 
+static bool __init apmt_node_valid(struct acpi_table_apmt *apmt, u64 offset,
+				   u64 end)
+{
+	struct acpi_apmt_node *node;
+
+	if (offset > end || end - offset < sizeof(*node))
+		return false;
+
+	node = ACPI_ADD_PTR(struct acpi_apmt_node, apmt, offset);
+	if (node->length < sizeof(*node))
+		return false;
+
+	return node->length <= end - offset;
+}
+
 static int __init apmt_init_resources(struct resource *res,
 				      struct acpi_apmt_node *node)
 {
@@ -129,8 +144,13 @@ static int __init apmt_init_platform_devices(void)
 	apmt = (struct acpi_table_apmt *)apmt_table;
 	offset = sizeof(*apmt);
 	end = apmt->header.length;
+	if (end < sizeof(*apmt))
+		return -EINVAL;
 
 	while (offset < end) {
+		if (!apmt_node_valid(apmt, offset, end))
+			return -EINVAL;
+
 		apmt_node = ACPI_ADD_PTR(struct acpi_apmt_node, apmt,
 				 offset);
 
