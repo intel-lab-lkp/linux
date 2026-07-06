@@ -1029,8 +1029,8 @@ static void ieee80211_update_sta_info(struct ieee80211_sub_if_data *sdata,
 		u32 changed = IEEE80211_RC_SUPP_RATES_CHANGED;
 		u8 rx_nss = sta->sta.deflink.rx_nss;
 
-		/* Force rx_nss recalculation */
-		sta->sta.deflink.rx_nss = 0;
+		ieee80211_sta_init_nss_bw_capa(&sta->deflink,
+					       &sdata->deflink.conf->chanreq.oper);
 		rate_control_rate_init(&sta->deflink);
 		if (sta->sta.deflink.rx_nss != rx_nss)
 			changed |= IEEE80211_RC_NSS_CHANGED;
