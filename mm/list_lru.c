@@ -627,6 +627,7 @@ int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru,
 		return 0;
 	return __memcg_list_lru_alloc(memcg, lru, gfp);
 }
+EXPORT_SYMBOL_GPL(memcg_list_lru_alloc);
 
 int folio_memcg_list_lru_alloc(struct folio *folio, struct list_lru *lru,
 			       gfp_t gfp)
