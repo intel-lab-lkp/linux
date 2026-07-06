@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/efi.h>
 #include <linux/acpi.h>
+#include <linux/overflow.h>
 #include <linux/prmt.h>
 #include <asm/efi.h>
 
@@ -91,6 +92,56 @@ static u64 efi_pa_va_lookup(efi_guid_t *guid, u64 pa)
 #define get_first_handler(a) ((struct acpi_prmt_handler_info *) ((char *) (a) + a->handler_info_offset))
 #define get_next_handler(a) ((struct acpi_prmt_handler_info *) (sizeof(struct acpi_prmt_handler_info) + (char *) a))
 
+static bool __init prmt_module_info_valid(struct acpi_prmt_module_info *module_info,
+					  const unsigned long end)
+{
+	struct acpi_prmt_handler_info *handler_info;
+	unsigned long start = (unsigned long)module_info;
+	size_t handler_bytes;
+	size_t remaining;
+	int i;
+
+	if (start >= end)
+		return false;
+
+	remaining = end - start;
+	if (remaining < sizeof(*module_info) ||
+	    module_info->length < sizeof(*module_info) ||
+	    module_info->length > remaining) {
+		pr_err(FW_BUG "Invalid PRMT module length\n");
+		return false;
+	}
+
+	if (!module_info->handler_info_count) {
+		pr_err(FW_BUG "PRMT module has no handlers\n");
+		return false;
+	}
+
+	if (module_info->handler_info_offset < sizeof(*module_info) ||
+	    module_info->handler_info_offset > module_info->length) {
+		pr_err(FW_BUG "Invalid PRMT handler offset\n");
+		return false;
+	}
+
+	if (check_mul_overflow(module_info->handler_info_count,
+			       sizeof(*handler_info), &handler_bytes) ||
+	    handler_bytes > module_info->length -
+			    module_info->handler_info_offset) {
+		pr_err(FW_BUG "Invalid PRMT handler array\n");
+		return false;
+	}
+
+	handler_info = get_first_handler(module_info);
+	for (i = 0; i < module_info->handler_info_count; i++) {
+		if (handler_info[i].length < sizeof(*handler_info)) {
+			pr_err(FW_BUG "Invalid PRMT handler length\n");
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static int __init
 acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 {
@@ -105,6 +156,9 @@ acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 	void *temp_mmio;
 
 	module_info = (struct acpi_prmt_module_info *) header;
+	if (!prmt_module_info_valid(module_info, end))
+		return -EINVAL;
+
 	module_info_size = struct_size(tm, handlers, module_info->handler_info_count);
 	tm = kmalloc(module_info_size, GFP_KERNEL);
 	if (!tm)
