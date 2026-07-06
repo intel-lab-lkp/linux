@@ -414,9 +414,15 @@ static int tb_drom_parse_entries(struct tb_switch *sw, size_t header_size)
 	int res;
 
 	while (pos < drom_size) {
-		struct tb_drom_entry_header *entry = (void *) (sw->drom + pos);
-		if (pos + 1 == drom_size || pos + entry->len > drom_size
-				|| !entry->len) {
+		struct tb_drom_entry_header *entry;
+
+		if (drom_size - pos < sizeof(*entry)) {
+			tb_sw_warn(sw, "DROM buffer overrun\n");
+			return -EIO;
+		}
+
+		entry = (void *)(sw->drom + pos);
+		if (entry->len < sizeof(*entry) || entry->len > drom_size - pos) {
 			tb_sw_warn(sw, "DROM buffer overrun\n");
 			return -EIO;
 		}
