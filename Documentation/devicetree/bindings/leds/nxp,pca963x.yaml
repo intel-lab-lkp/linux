@@ -88,12 +88,24 @@ allOf:
           properties:
             reg:
               maximum: 3
-    else:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - nxp,pca9634
+    then:
       patternProperties:
         "^led@[0-9a-f]+$":
           properties:
             reg:
               maximum: 7
+    else:
+      patternProperties:
+        "^led@[0-9a-f]+$":
+          properties:
+            reg:
+              maximum: 15
 
 additionalProperties: false
 
