@@ -13258,6 +13258,11 @@ err_out:
 	return rc;
 }
 
+static bool bnx2x_fw_section_valid(size_t fw_size, u32 offset, u32 len)
+{
+	return offset <= fw_size && len <= fw_size - offset;
+}
+
 static int bnx2x_check_firmware(struct bnx2x *bp)
 {
 	const struct firmware *firmware = bp->firmware;
@@ -13281,7 +13286,7 @@ static int bnx2x_check_firmware(struct bnx2x *bp)
 	for (i = 0; i < sizeof(*fw_hdr) / sizeof(*sections); i++) {
 		offset = be32_to_cpu(sections[i].offset);
 		len = be32_to_cpu(sections[i].len);
-		if (offset + len > firmware->size) {
+		if (!bnx2x_fw_section_valid(firmware->size, offset, len)) {
 			BNX2X_ERR("Section %d length is out of bounds\n", i);
 			return -EINVAL;
 		}
@@ -13300,6 +13305,11 @@ static int bnx2x_check_firmware(struct bnx2x *bp)
 	}
 
 	/* Check FW version */
+	if (be32_to_cpu(fw_hdr->fw_version.len) < 4) {
+		BNX2X_ERR("FW version section is too small\n");
+		return -EINVAL;
+	}
+
 	offset = be32_to_cpu(fw_hdr->fw_version.offset);
 	fw_ver = firmware->data + offset;
 	if (fw_ver[0] != bp->fw_major || fw_ver[1] != bp->fw_minor ||
