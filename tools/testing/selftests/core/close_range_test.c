@@ -389,10 +389,10 @@ TEST(close_range_cloexec_syzbot)
 
 	/* Create a huge gap in the fd table. */
 	fd1 = open("/dev/null", O_RDWR);
-	EXPECT_GT(fd1, 0);
+	EXPECT_GE(fd1, 0);
 
 	fd2 = dup2(fd1, 1000);
-	EXPECT_GT(fd2, 0);
+	EXPECT_GE(fd2, 0);
 
 	flags = fcntl(fd1, F_DUPFD_QUERY, fd2);
 	if (flags < 0) {
@@ -423,7 +423,7 @@ TEST(close_range_cloexec_syzbot)
 		EXPECT_EQ(flags & FD_CLOEXEC, FD_CLOEXEC);
 
 		fd3 = dup2(fd1, 42);
-		EXPECT_GT(fd3, 0);
+		EXPECT_GE(fd3, 0);
 
 		flags = fcntl(fd1, F_DUPFD_QUERY, fd3);
 		if (flags < 0) {
@@ -462,7 +462,7 @@ TEST(close_range_cloexec_syzbot)
 	EXPECT_EQ(flags & FD_CLOEXEC, FD_CLOEXEC);
 
 	fd3 = dup2(fd1, 42);
-	EXPECT_GT(fd3, 0);
+	EXPECT_GE(fd3, 0);
 
 	flags = fcntl(fd1, F_DUPFD_QUERY, fd3);
 	if (flags < 0) {
@@ -472,7 +472,7 @@ TEST(close_range_cloexec_syzbot)
 	}
 
 	fd4 = open("/dev/null", O_RDWR);
-	EXPECT_GT(fd4, 0);
+	EXPECT_GE(fd4, 0);
 
 	/* Same inode, different file pointers. */
 	flags = fcntl(fd1, F_DUPFD_QUERY, fd4);
@@ -516,10 +516,10 @@ TEST(close_range_cloexec_unshare_syzbot)
 	 * to be sure.
 	 */
 	fd1 = open("/dev/null", O_RDWR);
-	EXPECT_GT(fd1, 0);
+	EXPECT_GE(fd1, 0);
 
 	fd2 = dup2(fd1, 1000);
-	EXPECT_GT(fd2, 0);
+	EXPECT_GE(fd2, 0);
 
 	for (i = 0; i < 100; i++) {
 
@@ -546,7 +546,7 @@ TEST(close_range_cloexec_unshare_syzbot)
 			EXPECT_EQ(flags & FD_CLOEXEC, FD_CLOEXEC);
 
 			fd3 = dup2(fd1, 42);
-			EXPECT_GT(fd3, 0);
+			EXPECT_GE(fd3, 0);
 
 			/*
 			 * Duplicating the file descriptor must remove the
@@ -582,7 +582,7 @@ TEST(close_range_cloexec_unshare_syzbot)
 	EXPECT_EQ(flags & FD_CLOEXEC, 0);
 
 	fd3 = dup2(fd1, 42);
-	EXPECT_GT(fd3, 0);
+	EXPECT_GE(fd3, 0);
 
 	flags = fcntl(fd3, F_GETFD);
 	EXPECT_GT(flags, -1);
