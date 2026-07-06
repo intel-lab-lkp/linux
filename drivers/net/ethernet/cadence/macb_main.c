@@ -1971,7 +1971,7 @@ static int macb_tx_poll(struct napi_struct *napi, int budget)
 		    (unsigned int)(queue - bp->queues), work_done, budget);
 
 	if (work_done < budget && napi_complete_done(napi, work_done)) {
-		queue_writel(queue, IER, MACB_BIT(TCOMP));
+		queue_writel(queue, IER, MACB_BIT(TCOMP) | MACB_BIT(TXUBR));
 
 		/* Packet completions only seem to propagate to raise
 		 * interrupts when interrupts are enabled at the time, so if
@@ -2161,7 +2161,8 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 
 		if (status & (MACB_BIT(TCOMP) |
 			      MACB_BIT(TXUBR))) {
-			queue_writel(queue, IDR, MACB_BIT(TCOMP));
+			queue_writel(queue, IDR, MACB_BIT(TCOMP) |
+						 MACB_BIT(TXUBR));
 			macb_queue_isr_clear(bp, queue, MACB_BIT(TCOMP) |
 							MACB_BIT(TXUBR));
 			if (status & MACB_BIT(TXUBR)) {
