@@ -415,12 +415,18 @@ struct rxe_port {
 	u32			qp_gsi_index;
 };
 
+enum rxe_net_flags {
+	/* rxe_net_del() must drop the pernet socket refs exactly once */
+	RXE_NET_SK_PUT,
+};
+
 struct rxe_dev {
 	struct ib_device	ib_dev;
 	struct ib_device_attr	attr;
 	int			max_ucontext;
 	int			max_inline_data;
 	struct mutex		usdev_lock;
+	unsigned long		net_flags;
 
 	char			raw_gid[ETH_ALEN];
 
