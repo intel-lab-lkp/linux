@@ -2066,6 +2066,8 @@ retry:
 	if (swapcache_prepare(entry, nr_pages)) {
 		folio_put(new);
 		new = ERR_PTR(-EEXIST);
+		/* Relax a bit to prevent rapid repeated page faults */
+		schedule_timeout_uninterruptible(1);
 		/* Try smaller folio to avoid cache conflict */
 		goto fallback;
 	}
