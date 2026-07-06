@@ -702,6 +702,21 @@ static inline bool has_not_enough_free_secs(struct f2fs_sb_info *sbi,
 	free_secs = free_sections(sbi) + freed;
 	required_secs = needed + reserved_sections(sbi) +
 			__get_secs_required(sbi);
+	/*
+	 * Credit the checkpoint-stable invalid-block budget (SSR-reusable slack)
+	 * to free_secs, so the watermark lets allocation recycle that slack via
+	 * SSR instead of running foreground GC.  cib_total_blocks is a section/
+	 * block count (always non-negative), so the math stays in unsigned int and
+	 * is capped at the sections still unaccounted for.
+	 */
+	if (test_opt(sbi, GCLESS)) {
+		unsigned int sec_blks = CAP_BLKS_PER_SEC(sbi);
+		unsigned int add_secs = READ_ONCE(sbi->cib_total_blocks) / sec_blks;
+		unsigned int room = free_secs < MAIN_SECS(sbi) ?
+					MAIN_SECS(sbi) - free_secs : 0;
+
+		free_secs += min(add_secs, room);
+	}
 
 	return free_secs < required_secs;
 }

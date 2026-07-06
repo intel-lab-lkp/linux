@@ -409,6 +409,14 @@ lookup_mode=%s		 Control the directory lookup behavior for casefolded
 					        on-disk `SB_ENC_NO_COMPAT_FALLBACK_FL`
 					        flag.
 			     ================== ========================================
+gcless			 Avoid foreground GC by crediting checkpoint-stable invalid
+			 blocks (invalid at the last checkpoint and thus SSR-reusable)
+			 as free space in the free section watermark, so allocation
+			 recycles that slack via SSR instead of relocating valid
+			 blocks. Intended for heavy out-of-place overwrite at
+			 near-full utilization, where it reduces write amplification.
+			 Not allowed in LFS mode (including zoned block devices),
+			 by default it's disabled.
 ======================== ============================================================
 
 Debugfs Entries

@@ -305,6 +305,53 @@ static void __complete_revoke_list(struct inode *inode, struct list_head *head,
 		f2fs_do_truncate_blocks(inode, start_index * PAGE_SIZE, false);
 }
 
+static inline u32 cib_contrib_of_se(struct f2fs_sb_info *sbi, unsigned long seg)
+{
+	struct dirty_seglist_info *dirty_i = DIRTY_I(sbi);
+	struct free_segmap_info *free_i = SM_I(sbi)->free_info;
+	struct seg_entry *se = get_seg_entry(sbi, seg);
+	u32 usable = f2fs_usable_blks_in_seg(sbi, seg);
+	u32 ckpt_v = se->ckpt_valid_blocks;
+
+	/* free, prefree and current segments hold no reusable SSR slack */
+	if (test_bit(seg, free_i->free_segmap))
+		return 0;
+	if (test_bit(seg, dirty_i->dirty_segmap[PRE]))
+		return 0;
+	if (is_curseg(sbi, seg))
+		return 0;
+	if (ckpt_v >= usable)
+		return 0;
+
+	return usable - ckpt_v;
+}
+
+/*
+ * Recompute the checkpoint-stable invalid-block budget by scanning all main
+ * segments via ckpt_valid_blocks (free/prefree/current segments contribute
+ * nothing).  Called at mount and after every successful checkpoint, both under
+ * block_operations(), so it is the only writer and needs no atomic; readers use
+ * READ_ONCE().  ckpt_valid_blocks is fixed between checkpoints, so the value is
+ * exact at each checkpoint -- gcless checkpoints often enough to keep it fresh,
+ * which is why no per-allocation delta hooks are needed.
+ */
+void f2fs_update_cib(struct f2fs_sb_info *sbi)
+{
+	unsigned long nsegs = MAIN_SEGS(sbi);
+	unsigned long seg;
+	block_t total = 0;
+
+	if (!test_opt(sbi, GCLESS)) {
+		WRITE_ONCE(sbi->cib_total_blocks, 0);
+		return;
+	}
+
+	for (seg = 0; seg < nsegs; seg++)
+		total += cib_contrib_of_se(sbi, seg);
+
+	WRITE_ONCE(sbi->cib_total_blocks, total);
+}
+
 static int __f2fs_commit_atomic_write(struct inode *inode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);

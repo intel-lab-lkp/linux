@@ -234,6 +234,7 @@ enum {
 	Opt_jqfmt,
 	Opt_checkpoint,
 	Opt_lookup_mode,
+	Opt_gcless,
 	Opt_err,
 };
 
@@ -336,6 +337,7 @@ static const struct fs_parameter_spec f2fs_param_specs[] = {
 	fsparam_flag("usrquota", Opt_usrquota),
 	fsparam_flag("grpquota", Opt_grpquota),
 	fsparam_flag("prjquota", Opt_prjquota),
+	fsparam_flag("gcless", Opt_gcless),
 	fsparam_string("usrjquota", Opt_usrjquota),
 	fsparam_flag("usrjquota", Opt_usrjquota),
 	fsparam_string("grpjquota", Opt_grpjquota),
@@ -1230,6 +1232,9 @@ static int f2fs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_nat_bits:
 		ctx_set_opt(ctx, F2FS_MOUNT_NAT_BITS);
 		break;
+	case Opt_gcless:
+		ctx_set_opt(ctx, F2FS_MOUNT_GCLESS);
+		break;
 	case Opt_lookup_mode:
 		F2FS_CTX_INFO(ctx).lookup_mode = result.uint_32;
 		ctx->spec_mask |= F2FS_SPEC_lookup_mode;
@@ -1603,6 +1608,13 @@ static int f2fs_check_opt_consistency(struct fs_context *fc,
 		f2fs_err(sbi, "Allow to mount readonly mode only");
 		return -EROFS;
 	}
+
+	/* Only for adaptive mode */
+	if (test_opt(sbi, GCLESS) && f2fs_lfs_mode(sbi)) {
+		f2fs_err(sbi, "gcless is not allowed in LFS mode");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -2541,6 +2553,9 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 		seq_show_option(seq, "lookup_mode", "compat");
 	else if (F2FS_OPTION(sbi).lookup_mode == LOOKUP_AUTO)
 		seq_show_option(seq, "lookup_mode", "auto");
+
+	if (test_opt(sbi, GCLESS))
+		seq_puts(seq, ",gcless");
 
 	return 0;
 }
@@ -5343,6 +5358,8 @@ reset_checkpoint:
 		err = f2fs_enable_checkpoint(sbi);
 	if (err)
 		goto sync_free_meta;
+
+	f2fs_update_cib(sbi);
 
 	/*
 	 * If filesystem is not mounted as read-only then

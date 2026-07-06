@@ -1964,10 +1964,11 @@ gc_more:
 		 * threshold, we can make them free by checkpoint. Then, we
 		 * secure free segments which doesn't need fggc any more.
 		 */
-		if (prefree_segments(sbi)) {
+		if (prefree_segments(sbi) || test_opt(sbi, GCLESS)) {
 			stat_inc_cp_call_count(sbi, TOTAL_CALL);
 			ret = f2fs_write_checkpoint(sbi, &cpc);
-			if (ret)
+			if (ret ||
+			    (test_opt(sbi, GCLESS) && has_enough_free_secs(sbi, 0, 0)))
 				goto stop;
 			/* Reset due to checkpoint */
 			sec_freed = 0;

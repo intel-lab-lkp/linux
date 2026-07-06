@@ -137,6 +137,7 @@ enum f2fs_mount_opt {
 	 * string rather than using the MS_LAZYTIME flag, so this must remain.
 	 */
 	F2FS_MOUNT_LAZYTIME,
+	F2FS_MOUNT_GCLESS,
 	F2FS_MOUNT_RESERVE_NODE,
 };
 
@@ -1869,6 +1870,15 @@ struct f2fs_sb_info {
 	struct percpu_counter total_valid_inode_count;
 
 	struct f2fs_mount_info mount_opt;	/* mount options */
+
+	/*
+	 * Checkpoint-stable invalid blocks: sum of blocks that were invalid at
+	 * the last checkpoint and are thus SSR-eligible while their section stays
+	 * dirty.  Written only by f2fs_update_cib() (mount and after each
+	 * successful checkpoint, under block_operations()), read locklessly, so a
+	 * plain block_t with READ_ONCE()/WRITE_ONCE() suffices -- no atomic.
+	 */
+	block_t cib_total_blocks;
 
 	/* for cleaning operations */
 	struct f2fs_rwsem gc_lock;		/*
@@ -4000,6 +4010,7 @@ bool f2fs_issue_discard_timeout(struct f2fs_sb_info *sbi, bool need_check);
 void f2fs_clear_prefree_segments(struct f2fs_sb_info *sbi,
 					struct cp_control *cpc);
 void f2fs_dirty_to_prefree(struct f2fs_sb_info *sbi);
+void f2fs_update_cib(struct f2fs_sb_info *sbi);
 block_t f2fs_get_unusable_blocks(struct f2fs_sb_info *sbi);
 int f2fs_disable_cp_again(struct f2fs_sb_info *sbi, block_t unusable);
 void f2fs_release_discard_addrs(struct f2fs_sb_info *sbi);
@@ -4289,6 +4300,7 @@ struct f2fs_stat_info {
 	int dirty_count, node_pages, meta_pages, compress_pages;
 	int compress_page_hit;
 	int prefree_count, free_segs, free_secs;
+	block_t cib_total_blocks;
 	int cp_call_count[MAX_CALL_TYPE], cp_count;
 	int gc_call_count[MAX_CALL_TYPE];
 	int gc_segs[2][2];
