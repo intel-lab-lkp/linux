@@ -105,20 +105,24 @@ void notrace lockdep_on_restore(unsigned long ps,
 				unsigned long ip)
 {
 #ifdef CONFIG_PROVE_LOCKING
-	/* Restoring IPL==7 means interrupts remain disabled. */
+	/*
+	 * If PAL_rti will restore IPL == 7, IRQs remain disabled.
+	 * There is no hardirqs-on transition to annotate.
+	 */
 	if ((ps & 7) == 7)
 		return;
 
 	/*
-	 * If hardware IRQs are already enabled here, then emitting a
-	 * hardirqs-on transition is redundant.
+	 * This helper is meant to run before PAL_rti, after entry.S has
+	 * forced IPL to 7.  If IRQs are already enabled, do not emit a
+	 * fake transition.
 	 */
 	if (!irqs_disabled())
 		return;
 
 	/*
-	 * Only emit the transition if lockdep currently believes
-	 * hardirqs are off.
+	 * Only emit an ON transition if lockdep currently tracks hardirqs
+	 * as off.
 	 */
 	if (lockdep_hardirqs_enabled())
 		return;
