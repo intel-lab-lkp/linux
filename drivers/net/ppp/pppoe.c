@@ -960,6 +960,7 @@ static int pppoe_recvmsg(struct socket *sock, struct msghdr *m,
 #ifdef CONFIG_PROC_FS
 static int pppoe_seq_show(struct seq_file *seq, void *v)
 {
+	struct net_device *dev;
 	struct pppox_sock *po;
 	char *dev_name;
 
@@ -969,7 +970,10 @@ static int pppoe_seq_show(struct seq_file *seq, void *v)
 	}
 
 	po = v;
-	dev_name = po->pppoe_pa.dev;
+	dev = READ_ONCE(po->pppoe_dev);
+	if (!dev)
+		goto out;
+	dev_name = dev->name;
 
 	seq_printf(seq, "%08X %pM %8s\n",
 		po->pppoe_pa.sid, po->pppoe_pa.remote, dev_name);
