@@ -279,5 +279,15 @@ struct dept_hash {
 	int				bits;
 };
 
+enum object_t {
+#define OBJECT(id, nr) OBJECT_##id,
+	#include "dept_object.h"
+#undef OBJECT
+	OBJECT_NR,
+};
+
+extern struct list_head dept_classes;
+extern struct dept_pool dept_pool[];
+
 #endif
 #endif /* __DEPT_INTERNAL_H */
