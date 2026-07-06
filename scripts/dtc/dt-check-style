@@ -365,8 +365,13 @@ def check_mixed_indent_chars(ctx):
             continue
         if dl.linetype == LineType.PREPROCESSOR:
             continue
-        if ' ' in dl.indent_str and '\t' in dl.indent_str:
-            yield (dl.lineno, 'mixed tabs and spaces in indent')
+        if ctx.indent_kind == 'spaces':
+            if ' ' in dl.indent_str and '\t' in dl.indent_str:
+                yield (dl.lineno, 'mixed tabs and spaces in indent')
+        else:
+            # Spaces are used to align indentation in comments or continued lines
+            if dl.indent_str.count(' ') > 7:
+                yield (dl.lineno, 'too many space characters in indent (more than 7)')
 
 
 def detect_indent_unit(ctx):
