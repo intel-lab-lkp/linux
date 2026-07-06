@@ -72,6 +72,7 @@ struct ceph_options {
 /*
  * defaults
  */
+#define CEPH_GET_CAPS_WAIT_TIMEOUT (5 * HZ)
 #define CEPH_MOUNT_TIMEOUT_DEFAULT	msecs_to_jiffies(60 * 1000)
 #define CEPH_OSD_KEEPALIVE_DEFAULT	msecs_to_jiffies(5 * 1000)
 #define CEPH_OSD_IDLE_TTL_DEFAULT	msecs_to_jiffies(60 * 1000)
