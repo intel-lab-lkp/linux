@@ -29,10 +29,10 @@ static void ctc_gradient(
 		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE,
 				    "ctc_gradient() error, illegal division operation\n");
 		return;
-	} else {
-		dydx_int = dy / dx;
-		dydx_frc = ((dy - dydx_int * dx) << frc_bits) / dx;
 	}
+
+	dydx_int = dy / dx;
+	dydx_frc = ((dy - dydx_int * dx) << frc_bits) / dx;
 
 	assert(y0 >= 0 && y0 <= max_dydx);
 	assert(y1 >= 0 && y1 <= max_dydx);
