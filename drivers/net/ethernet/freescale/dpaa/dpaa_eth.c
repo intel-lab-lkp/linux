@@ -2825,10 +2825,7 @@ static enum qman_cb_dqrr_result rx_default_dqrr(struct qman_portal *portal,
 
 	skb_len = skb->len;
 
-	if (unlikely(netif_receive_skb(skb) == NET_RX_DROP)) {
-		percpu_stats->rx_dropped++;
-		return qman_cb_dqrr_consume;
-	}
+	napi_gro_receive(&np->napi, skb);
 
 	percpu_stats->rx_packets++;
 	percpu_stats->rx_bytes += skb_len;
