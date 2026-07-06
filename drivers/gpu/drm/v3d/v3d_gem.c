@@ -371,7 +371,10 @@ v3d_gem_destroy(struct drm_device *dev)
 	for (q = 0; q < V3D_MAX_QUEUES; q++) {
 		WARN_ON(v3d->queue[q].active_job);
 		v3d_stats_put(v3d->queue[q].stats);
+		dma_fence_put(v3d->perfmon_state.last_hw_fence[q]);
 	}
+
+	dma_fence_put(v3d->perfmon_state.fence);
 
 	drm_mm_takedown(&v3d->mm);
 

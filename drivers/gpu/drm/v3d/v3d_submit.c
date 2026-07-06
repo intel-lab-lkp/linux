@@ -4,6 +4,8 @@
  * Copyright (C) 2023 Raspberry Pi
  */
 
+#include <linux/dma-fence-unwrap.h>
+
 #include <drm/drm_print.h>
 #include <drm/drm_syncobj.h>
 
@@ -320,6 +322,73 @@ v3d_attach_perfmon_to_jobs(struct v3d_submit *submit, u32 perfmon_id)
 	return 0;
 }
 
+/*
+ * Prepare fences to enforce job serialization when a perfmon is active. A job
+ * that carries a non-global perfmon must wait for every job currently in-flight
+ * across all HW queues to finish, otherwise concurrent unrelated work on the
+ * same core would pollute the performance counters. Symmetrically, while such a
+ * job is still in-flight, all subsequently submitted jobs must wait for it.
+ *
+ * We don't serialize the jobs when using a global perfmon as it's expected to
+ * track concurrent activity from all jobs.
+ */
+static int
+v3d_serialize_for_perfmon(struct v3d_job *job)
+{
+	struct v3d_dev *v3d = job->v3d;
+	struct dma_fence *merged;
+	bool is_global_perfmon;
+	int ret;
+
+	lockdep_assert_held(&v3d->sched_lock);
+
+	scoped_guard(spinlock_irqsave, &v3d->perfmon_state.lock)
+		is_global_perfmon = !!v3d->global_perfmon;
+
+	if (is_global_perfmon)
+		goto publish;
+
+	if (job->perfmon) {
+		for (enum v3d_queue q = 0; q < V3D_MAX_QUEUES; q++) {
+			struct dma_fence *f = v3d->perfmon_state.last_hw_fence[q];
+
+			if (!f || dma_fence_is_signaled(f))
+				continue;
+
+			ret = drm_sched_job_add_dependency(&job->base, dma_fence_get(f));
+			if (ret)
+				return ret;
+		}
+	} else if (v3d->perfmon_state.fence &&
+		   !dma_fence_is_signaled(v3d->perfmon_state.fence)) {
+		ret = drm_sched_job_add_dependency(&job->base,
+						   dma_fence_get(v3d->perfmon_state.fence));
+		if (ret)
+			return ret;
+	}
+
+publish:
+	/*
+	 * Accumulate every in-flight job on this queue into one merged fence.
+	 * A HW queue is fed by several scheduler entities (one per-fd), so jobs
+	 * on it can complete out of order.
+	 */
+	merged = dma_fence_unwrap_merge(v3d->perfmon_state.last_hw_fence[job->queue],
+					job->done_fence);
+	if (!merged)
+		return -ENOMEM;
+
+	dma_fence_put(v3d->perfmon_state.last_hw_fence[job->queue]);
+	v3d->perfmon_state.last_hw_fence[job->queue] = merged;
+
+	if (job->perfmon && !is_global_perfmon) {
+		dma_fence_put(v3d->perfmon_state.fence);
+		v3d->perfmon_state.fence = dma_fence_get(job->done_fence);
+	}
+
+	return 0;
+}
+
 static void
 v3d_submit_attach_object_fences(struct v3d_submit *submit)
 {
@@ -392,6 +461,12 @@ v3d_submit_jobs(struct v3d_submit *submit, struct drm_syncobj *sync_out,
 	for (int i = 1; i < submit->job_count; i++) {
 		ret = drm_sched_job_add_dependency(&submit->jobs[i]->base,
 						   dma_fence_get(submit->jobs[i - 1]->done_fence));
+		if (ret)
+			goto err;
+	}
+
+	for (int i = 0; i < submit->job_count; i++) {
+		ret = v3d_serialize_for_perfmon(submit->jobs[i]);
 		if (ret)
 			goto err;
 	}
