@@ -2165,6 +2165,15 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 					     (struct mwifiex_ie_types_data **)
 					     &chan_band_tlv);
 
+	if (tsf_tlv &&
+	    le16_to_cpu(tsf_tlv->header.len) / TSF_DATA_SIZE <
+	    scan_rsp->number_of_sets)
+		tsf_tlv = NULL;
+	if (chan_band_tlv &&
+	    le16_to_cpu(chan_band_tlv->header.len) /
+	    sizeof(*chan_band_tlv->chan_band_param) < scan_rsp->number_of_sets)
+		chan_band_tlv = NULL;
+
 #ifdef CONFIG_PM
 	if (priv->wdev.wiphy->wowlan_config)
 		nd_config = priv->wdev.wiphy->wowlan_config->nd_config;
