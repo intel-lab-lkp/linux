@@ -3,6 +3,8 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <linux/sort.h>
+
 #include "gt/intel_gt_print.h"
 #include "selftests/igt_spinner.h"
 #include "selftests/igt_reset.h"
@@ -10,21 +12,21 @@
 #include "gt/intel_engine_heartbeat.h"
 #include "gem/selftests/mock_context.h"
 
+static int cmp_logical_instance(const void *a, const void *b)
+{
+	const struct intel_engine_cs *ea = *(const struct intel_engine_cs **)a;
+	const struct intel_engine_cs *eb = *(const struct intel_engine_cs **)b;
+
+	if (ea->logical_mask < eb->logical_mask)
+		return -1;
+	if (ea->logical_mask > eb->logical_mask)
+		return 1;
+	return 0;
+}
+
 static void logical_sort(struct intel_engine_cs **engines, int num_engines)
 {
-	struct intel_engine_cs *sorted[MAX_ENGINE_INSTANCE + 1];
-	int i, j;
-
-	for (i = 0; i < num_engines; ++i)
-		for (j = 0; j < MAX_ENGINE_INSTANCE + 1; ++j) {
-			if (engines[j]->logical_mask & BIT(i)) {
-				sorted[i] = engines[j];
-				break;
-			}
-		}
-
-	memcpy(*engines, *sorted,
-	       sizeof(struct intel_engine_cs *) * num_engines);
+	sort(engines, num_engines, sizeof(*engines), cmp_logical_instance, NULL);
 }
 
 static struct intel_context *
