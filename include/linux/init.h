@@ -271,8 +271,20 @@ extern struct module __this_module;
 		__initcall_name(initcall, __iid, id),		\
 		__initcall_section(__sec, __iid))
 
+struct initcall_modname {
+	initcall_t initcall_fn;
+	const char *modname;
+};
+
 #define ___define_initcall(fn, id, __sec)			\
-	__unique_initcall(fn, id, __sec, __initcall_id(fn))
+	__unique_initcall(fn, id, __sec, __initcall_id(fn))		\
+	static const char __initstr_##fn[] __used __aligned(1)		\
+		__section(".init.rodata") = KBUILD_MODNAME;		\
+	static const struct initcall_modname __modname_##fn __used	\
+		__section(".initcall.modnames") = {			\
+			.initcall_fn = fn,				\
+			.modname = __initstr_##fn			\
+		};
 
 #define __define_initcall(fn, id) ___define_initcall(fn, id, .initcall##id)
 
