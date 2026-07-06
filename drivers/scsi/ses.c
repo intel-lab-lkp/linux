@@ -766,6 +766,9 @@ static int ses_intf_add(struct device *cdev)
 		goto page2_not_supported;
 
 	len = (hdr_buf[2] << 8) + hdr_buf[3] + 4;
+	/* a status page too short for its 8-byte header carries no page 2 */
+	if (len < 8)
+		goto page2_not_supported;
 	buf = kzalloc(len, GFP_KERNEL);
 	if (!buf)
 		goto err_free;
