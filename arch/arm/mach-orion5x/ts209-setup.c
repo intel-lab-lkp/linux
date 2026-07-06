@@ -13,11 +13,14 @@
 #include <linux/mtd/physmap.h>
 #include <linux/mtd/rawnand.h>
 #include <linux/mv643xx_eth.h>
-#include <linux/gpio_keys.h>
+#include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
+#include <linux/property.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
 #include <linux/serial_reg.h>
 #include <linux/ata_platform.h>
+#include <plat/orion-gpio.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/pci.h>
@@ -200,32 +203,47 @@ static struct i2c_board_info __initdata qnap_ts209_i2c_rtc = {
 #define QNAP_TS209_GPIO_KEY_MEDIA	1
 #define QNAP_TS209_GPIO_KEY_RESET	2
 
-static struct gpio_keys_button qnap_ts209_buttons[] = {
-	{
-		.code		= KEY_COPY,
-		.gpio		= QNAP_TS209_GPIO_KEY_MEDIA,
-		.desc		= "USB Copy Button",
-		.active_low	= 1,
-	}, {
-		.code		= KEY_RESTART,
-		.gpio		= QNAP_TS209_GPIO_KEY_RESET,
-		.desc		= "Reset Button",
-		.active_low	= 1,
-	},
+static const struct software_node qnap_ts209_gpio_keys_node = {
+	.name = "qnap-ts209-gpio-keys",
 };
 
-static struct gpio_keys_platform_data qnap_ts209_button_data = {
-	.buttons	= qnap_ts209_buttons,
-	.nbuttons	= ARRAY_SIZE(qnap_ts209_buttons),
+static const struct property_entry qnap_ts209_copy_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_COPY),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    QNAP_TS209_GPIO_KEY_MEDIA, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "USB Copy Button"),
+	{ }
 };
 
-static struct platform_device qnap_ts209_button_device = {
-	.name		= "gpio-keys",
-	.id		= -1,
-	.num_resources	= 0,
-	.dev		= {
-		.platform_data	= &qnap_ts209_button_data,
-	},
+static const struct software_node qnap_ts209_copy_key_node = {
+	.parent = &qnap_ts209_gpio_keys_node,
+	.properties = qnap_ts209_copy_key_props,
+};
+
+static const struct property_entry qnap_ts209_reset_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_RESTART),
+	PROPERTY_ENTRY_GPIO("gpios", &orion_gpio_swnodes[0],
+			    QNAP_TS209_GPIO_KEY_RESET, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "Reset Button"),
+	{ }
+};
+
+static const struct software_node qnap_ts209_reset_key_node = {
+	.parent = &qnap_ts209_gpio_keys_node,
+	.properties = qnap_ts209_reset_key_props,
+};
+
+static const struct software_node * const qnap_ts209_gpio_keys_swnodes[] __initconst = {
+	&qnap_ts209_gpio_keys_node,
+	&qnap_ts209_copy_key_node,
+	&qnap_ts209_reset_key_node,
+	NULL
+};
+
+static const struct platform_device_info qnap_ts209_button_info __initconst = {
+	.name	= "gpio-keys",
+	.id	= PLATFORM_DEVID_NONE,
+	.swnode	= &qnap_ts209_gpio_keys_node,
 };
 
 /*****************************************************************************
@@ -265,6 +283,8 @@ static unsigned int ts209_mpp_modes[] __initdata = {
 
 static void __init qnap_ts209_init(void)
 {
+	int err;
+
 	/*
 	 * Setup basic Orion functions. Need to be called early.
 	 */
@@ -300,7 +320,9 @@ static void __init qnap_ts209_init(void)
 	orion5x_uart1_init();
 	orion5x_xor_init();
 
-	platform_device_register(&qnap_ts209_button_device);
+	err = software_node_register_node_group(qnap_ts209_gpio_keys_swnodes);
+	if (!err)
+		platform_device_register_full(&qnap_ts209_button_info);
 
 	/* Get RTC IRQ and register the chip */
 	if (gpio_request(TS209_RTC_GPIO, "rtc") == 0) {
