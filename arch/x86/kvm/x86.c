@@ -10129,11 +10129,18 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 		return -EINVAL;
 
 	if (change == KVM_MR_CREATE || change == KVM_MR_MOVE) {
+		const gfn_t apic_gfn = gpa_to_gfn(APIC_DEFAULT_PHYS_BASE);
+
 		if ((new->base_gfn + new->npages - 1) > kvm_mmu_max_gfn())
 			return -EINVAL;
 
 		if (kvm_is_gfn_alias(kvm, new->base_gfn + new->npages - 1))
 			return -EINVAL;
+
+		if (irqchip_in_kernel(kvm) &&
+		    new->base_gfn <= apic_gfn &&
+		    apic_gfn < new->base_gfn + new->npages)
+			return -EEXIST;
 
 		return kvm_alloc_memslot_metadata(kvm, new);
 	}
