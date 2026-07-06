@@ -144,7 +144,9 @@ static int ttm_pool_nid(struct ttm_pool *pool)
 }
 
 /* Allocate pages of size 1 << order with the given gfp_flags */
-static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
+static struct page *ttm_pool_alloc_page(struct ttm_pool *pool,
+					struct obj_cgroup *objcg,
+					gfp_t gfp_flags,
 					unsigned int order)
 {
 	const unsigned int beneficial_order = ttm_pool_beneficial_order(pool);
@@ -172,7 +174,10 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 		p = alloc_pages_node(pool->nid, gfp_flags, order);
 		if (p) {
 			p->private = order;
-			mod_lruvec_page_state(p, NR_GPU_ACTIVE, 1 << order);
+			if (!mem_cgroup_charge_gpu_page(objcg, p, order, gfp_flags, false)) {
+				__free_pages(p, order);
+				return NULL;
+			}
 		}
 		return p;
 	}
@@ -209,8 +214,7 @@ error_free:
 static void __free_pages_gpu_account(struct page *p, unsigned int order,
 				     bool reclaim)
 {
-	mod_lruvec_page_state(p, reclaim ? NR_GPU_RECLAIM : NR_GPU_ACTIVE,
-			      -(1 << order));
+	mem_cgroup_uncharge_gpu_page(p, order, reclaim);
 	__free_pages(p, order);
 }
 
@@ -317,12 +321,11 @@ static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 
 	INIT_LIST_HEAD(&p->lru);
 	rcu_read_lock();
-	list_lru_add(&pt->pages, &p->lru, nid, NULL);
+	list_lru_add(&pt->pages, &p->lru, nid, page_memcg_check(p));
 	rcu_read_unlock();
 
 	atomic_long_add(num_pages, &allocated_pages[nid]);
-	mod_lruvec_page_state(p, NR_GPU_ACTIVE, -num_pages);
-	mod_lruvec_page_state(p, NR_GPU_RECLAIM, num_pages);
+	mem_cgroup_move_gpu_page_reclaim(NULL, p, pt->order, true);
 }
 
 static enum lru_status take_one_from_lru(struct list_head *item,
@@ -337,20 +340,56 @@ static enum lru_status take_one_from_lru(struct list_head *item,
 	return LRU_REMOVED;
 }
 
-/* Take pages from a specific pool_type, return NULL when nothing available */
-static struct page *ttm_pool_type_take(struct ttm_pool_type *pt, int nid)
+static int pool_lru_get_page(struct ttm_pool_type *pt, int nid,
+			     struct page **page_out,
+			     struct obj_cgroup *objcg,
+			     struct mem_cgroup *memcg)
 {
 	int ret;
 	struct page *p = NULL;
 	unsigned long nr_to_walk = 1;
+	unsigned int num_pages = 1 << pt->order;
 
-	ret = list_lru_walk_node(&pt->pages, nid, take_one_from_lru, (void *)&p, &nr_to_walk);
+	ret = list_lru_walk_one(&pt->pages, nid, memcg, take_one_from_lru, (void *)&p, &nr_to_walk);
 	if (ret == 1 && p) {
-		atomic_long_sub(1 << pt->order, &allocated_pages[nid]);
-		mod_lruvec_page_state(p, NR_GPU_ACTIVE, (1 << pt->order));
-		mod_lruvec_page_state(p, NR_GPU_RECLAIM, -(1 << pt->order));
+		atomic_long_sub(num_pages, &allocated_pages[nid]);
+
+		if (!mem_cgroup_move_gpu_page_reclaim(objcg, p, pt->order, false)) {
+			__free_pages(p, pt->order);
+			p = NULL;
+		}
 	}
-	return p;
+	*page_out = p;
+	return ret;
+}
+
+/* Take pages from a specific pool_type, return NULL when nothing available */
+static struct page *ttm_pool_type_take(struct ttm_pool_type *pt, int nid,
+				       struct obj_cgroup *orig_objcg)
+{
+	struct page *page_out = NULL;
+	int ret;
+	struct mem_cgroup *orig_memcg = orig_objcg ? get_mem_cgroup_from_objcg(orig_objcg) : NULL;
+	struct mem_cgroup *memcg = orig_memcg;
+
+	/*
+	 * Attempt to get a page from the current memcg, but if it hasn't got any in it's level,
+	 * go up to the parent and check there. This helps the scenario where multiple apps get
+	 * started into their own cgroup from a common parent and want to reuse the pools.
+	 */
+	while (!page_out) {
+		ret = pool_lru_get_page(pt, nid, &page_out, orig_objcg, memcg);
+		if (ret == 1)
+			break;
+		if (!memcg)
+			break;
+		memcg = parent_mem_cgroup(memcg);
+		if (!memcg)
+			break;
+	}
+
+	mem_cgroup_put(orig_memcg);
+	return page_out;
 }
 
 /* Initialize and add a pool type to the global shrinker list */
@@ -360,7 +399,7 @@ static void ttm_pool_type_init(struct ttm_pool_type *pt, struct ttm_pool *pool,
 	pt->pool = pool;
 	pt->caching = caching;
 	pt->order = order;
-	list_lru_init(&pt->pages);
+	list_lru_init_memcg(&pt->pages, mm_shrinker);
 
 	spin_lock(&shrinker_lock);
 	list_add_tail(&pt->shrinker_list, &shrinker_list);
@@ -403,6 +442,31 @@ static void ttm_pool_type_fini(struct ttm_pool_type *pt)
 	ttm_pool_dispose_list(pt, &dispose);
 }
 
+/*
+ * This function doesn't currently check dma32, because no driver using this
+ * support dma32. This should be added and debugged when that changes.
+ */
+static void ttm_pool_check_objcg(struct obj_cgroup *objcg)
+{
+#ifdef CONFIG_MEMCG
+	int r = 0;
+	struct mem_cgroup *memcg;
+	if (!objcg)
+		return;
+
+	memcg = get_mem_cgroup_from_objcg(objcg);
+	for (unsigned i = 0; i < NR_PAGE_ORDERS; i++) {
+		r = memcg_list_lru_alloc(memcg, &global_write_combined[i].pages, GFP_KERNEL);
+		if (r)
+			break;
+		r = memcg_list_lru_alloc(memcg, &global_uncached[i].pages, GFP_KERNEL);
+		if (r)
+			break;
+	}
+	mem_cgroup_put(memcg);
+#endif
+}
+
 /* Return the pool_type to use for the given caching and order */
 static struct ttm_pool_type *ttm_pool_select_type(struct ttm_pool *pool,
 						  enum ttm_caching caching,
@@ -432,7 +496,9 @@ static struct ttm_pool_type *ttm_pool_select_type(struct ttm_pool *pool,
 }
 
 /* Free pages using the per-node shrinker list */
-static unsigned int ttm_pool_shrink(int nid, unsigned long num_to_free)
+static unsigned int ttm_pool_shrink(int nid,
+				    struct mem_cgroup *memcg,
+				    unsigned long num_to_free)
 {
 	LIST_HEAD(dispose);
 	struct ttm_pool_type *pt;
@@ -448,7 +514,11 @@ static unsigned int ttm_pool_shrink(int nid, unsigned long num_to_free)
 	if (!pt)
 		return 0;
 
-	num_pages = list_lru_walk_node(&pt->pages, nid, pool_move_to_dispose_list, &dispose, &num_to_free);
+	if (!memcg) {
+		num_pages = list_lru_walk_node(&pt->pages, nid, pool_move_to_dispose_list, &dispose, &num_to_free);
+	} else {
+		num_pages = list_lru_walk_one(&pt->pages, nid, memcg, pool_move_to_dispose_list, &dispose, &num_to_free);
+	}
 	num_pages *= 1 << pt->order;
 
 	ttm_pool_dispose_list(pt, &dispose);
@@ -777,6 +847,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	bool allow_pools;
 	struct page *p;
 	int r;
+	struct obj_cgroup *objcg = memcg_account ? tt->objcg : NULL;
 
 	WARN_ON(!alloc->remaining_pages || ttm_tt_is_populated(tt));
 	WARN_ON(alloc->dma_addr && !pool->dev);
@@ -794,6 +865,9 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 
 	page_caching = tt->caching;
 	allow_pools = true;
+
+	ttm_pool_check_objcg(objcg);
+
 	for (order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
 	     alloc->remaining_pages;
 	     order = ttm_pool_alloc_find_order(order, alloc)) {
@@ -803,7 +877,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		p = NULL;
 		pt = ttm_pool_select_type(pool, page_caching, order);
 		if (pt && allow_pools)
-			p = ttm_pool_type_take(pt, ttm_pool_nid(pool));
+			p = ttm_pool_type_take(pt, ttm_pool_nid(pool), objcg);
 
 		/*
 		 * If that fails or previously failed, allocate from system.
@@ -814,7 +888,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		if (!p) {
 			page_caching = ttm_cached;
 			allow_pools = false;
-			p = ttm_pool_alloc_page(pool, gfp_flags, order);
+			p = ttm_pool_alloc_page(pool, objcg, gfp_flags, order);
 		}
 		/* If that fails, lower the order if possible and retry. */
 		if (!p) {
@@ -960,7 +1034,7 @@ void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt)
 
 	while (atomic_long_read(&allocated_pages[nid]) > pool_node_limit[nid]) {
 		unsigned long diff = atomic_long_read(&allocated_pages[nid]) - pool_node_limit[nid];
-		ttm_pool_shrink(nid, diff);
+		ttm_pool_shrink(nid, NULL, diff);
 	}
 }
 EXPORT_SYMBOL(ttm_pool_free);
@@ -1214,10 +1288,14 @@ static unsigned long ttm_pool_shrinker_scan(struct shrinker *shrink,
 					    struct shrink_control *sc)
 {
 	unsigned long num_freed = 0;
+	int num_pools;
+	spin_lock(&shrinker_lock);
+	num_pools = list_count_nodes(&shrinker_list);
+	spin_unlock(&shrinker_lock);
 
 	do
-		num_freed += ttm_pool_shrink(sc->nid, sc->nr_to_scan);
-	while (num_freed < sc->nr_to_scan &&
+		num_freed += ttm_pool_shrink(sc->nid, sc->memcg, sc->nr_to_scan);
+	while (num_pools-- >= 0 && num_freed < sc->nr_to_scan &&
 	       atomic_long_read(&allocated_pages[sc->nid]));
 
 	sc->nr_scanned = num_freed;
@@ -1406,7 +1484,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 	spin_lock_init(&shrinker_lock);
 	INIT_LIST_HEAD(&shrinker_list);
 
-	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
+	mm_shrinker = shrinker_alloc(SHRINKER_MEMCG_AWARE | SHRINKER_NUMA_AWARE, "drm-ttm_pool");
 	if (!mm_shrinker)
 		return -ENOMEM;
 
