@@ -83,6 +83,7 @@ mod common_clk {
         device::{Bound, Device},
         error::{from_err_ptr, to_result, Result},
         prelude::*,
+        sync::Arc,
     };
 
     use core::{marker::PhantomData, mem::ManuallyDrop, ptr};
@@ -97,11 +98,11 @@ mod common_clk {
 
     /// A trait representing the different states that a [`Clk`] can be in.
     pub trait ClkState: private::Sealed {
-        /// Whether the clock should be disabled when dropped.
-        const DISABLE_ON_DROP: bool;
+        /// Whether the clock is enabled in this state.
+        const ENABLED: bool;
 
-        /// Whether the clock should be unprepared when dropped.
-        const UNPREPARE_ON_DROP: bool;
+        /// Whether the clock is prepared in this state.
+        const PREPARED: bool;
     }
 
     /// A state where the [`Clk`] is not prepared and not enabled.
@@ -114,18 +115,18 @@ mod common_clk {
     pub struct Enabled;
 
     impl ClkState for Unprepared {
-        const DISABLE_ON_DROP: bool = false;
-        const UNPREPARE_ON_DROP: bool = false;
+        const ENABLED: bool = false;
+        const PREPARED: bool = false;
     }
 
     impl ClkState for Prepared {
-        const DISABLE_ON_DROP: bool = false;
-        const UNPREPARE_ON_DROP: bool = true;
+        const ENABLED: bool = false;
+        const PREPARED: bool = true;
     }
 
     impl ClkState for Enabled {
-        const DISABLE_ON_DROP: bool = true;
-        const UNPREPARE_ON_DROP: bool = true;
+        const ENABLED: bool = true;
+        const PREPARED: bool = true;
     }
 
     /// An error that can occur when trying to convert a [`Clk`] between states.
@@ -183,13 +184,15 @@ mod common_clk {
     /// portion of the kernel or a `NULL` pointer.
     ///
     /// Instances of this type are reference-counted. Calling [`Clk::get`] ensures that the
-    /// allocation remains valid for the lifetime of the [`Clk`].
+    /// allocation remains valid for the lifetime of the [`Clk`] and of all its clones: the
+    /// underlying [`struct clk`] is obtained through a single call to `clk_get()`, which is
+    /// balanced by a single call to `clk_put()` when the last clone is dropped.
     ///
-    /// The [`Prepared`] state is associated with a single count of
-    /// `clk_prepare()`, and the [`Enabled`] state is associated with a single
-    /// count of both `clk_prepare()` and `clk_enable()`.
-    ///
-    /// All states are associated with a single count of `clk_get()`.
+    /// Each [`Clk`] value owns its own state counts: the [`Prepared`] state is
+    /// associated with a single count of `clk_prepare()`, and the [`Enabled`]
+    /// state is associated with a single count of both `clk_prepare()` and
+    /// `clk_enable()`. These counts are released when the value transitions to
+    /// a lower state or is dropped.
     ///
     /// # Examples
     ///
@@ -268,11 +271,55 @@ mod common_clk {
     /// }
     /// ```
     ///
+    /// Cloning a [`Clk`] yields an independent view of the same underlying
+    /// clock, in the same state, owning its own state counts. This lets a
+    /// driver keep e.g. a long-lived [`Clk<Prepared>`] around and temporarily
+    /// enable a clone of it:
+    ///
+    /// ```
+    /// use kernel::clk::{Clk, Enabled, Prepared};
+    /// use kernel::error::Result;
+    ///
+    /// fn use_clk(prepared_clk: &Clk<Prepared>) -> Result {
+    ///     let enabled_clk: Clk<Enabled> = prepared_clk.clone().enable()?;
+    ///
+    ///     // Do something that requires the clock to be enabled.
+    ///
+    ///     // `enabled_clk` is dropped here and releases its own counts; the
+    ///     // clock remains prepared through `prepared_clk`.
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// Note that cloning a [`Clk<Prepared>`] or a [`Clk<Enabled>`] may sleep.
+    ///
+    /// [`struct clk`]: https://docs.kernel.org/driver-api/clk.html
+    pub struct Clk<T: ClkState> {
+        inner: Arc<RawClk>,
+        _phantom: core::marker::PhantomData<T>,
+    }
+
+    /// Owns a single `clk_get()` reference to a [`struct clk`].
+    ///
+    /// This is shared by every clone of a [`Clk`], so that `clk_put()` is
+    /// called exactly once, when the last clone is dropped.
+    ///
+    /// # Invariants
+    ///
+    /// The wrapped pointer is either a pointer to a valid [`struct clk`]
+    /// obtained through `clk_get()` or one of its variants, or `NULL`.
+    ///
     /// [`struct clk`]: https://docs.kernel.org/driver-api/clk.html
     #[repr(transparent)]
-    pub struct Clk<T: ClkState> {
-        inner: *mut bindings::clk,
-        _phantom: core::marker::PhantomData<T>,
+    struct RawClk(*mut bindings::clk);
+
+    impl Drop for RawClk {
+        #[inline]
+        fn drop(&mut self) {
+            // SAFETY: By the type invariants, `self.0` is a valid argument for
+            // [`clk_put`], which also accepts a `NULL` pointer.
+            unsafe { bindings::clk_put(self.0) };
+        }
     }
 
     // SAFETY: It is safe to call `clk_put` on another thread than where `clk_get` was called.
@@ -311,11 +358,14 @@ mod common_clk {
 
             // SAFETY: It is safe to call [`clk_get`] for a valid device pointer
             // and any `con_id`, including NULL.
-            let inner = from_err_ptr(unsafe { bindings::clk_get(dev.as_raw(), con_id) })?;
+            let clk = from_err_ptr(unsafe { bindings::clk_get(dev.as_raw(), con_id) })?;
 
-            // INVARIANT: The reference-count is decremented when [`Clk`] goes out of scope.
+            // INVARIANT: The single `clk_get()` reference is owned by `RawClk`,
+            // which releases it when the last clone of this [`Clk`] goes out of
+            // scope. If the allocation fails, `Arc::new` drops the `RawClk`,
+            // releasing the reference.
             Ok(Self {
-                inner,
+                inner: Arc::new(RawClk(clk), GFP_KERNEL)?,
                 _phantom: PhantomData,
             })
         }
@@ -329,11 +379,14 @@ mod common_clk {
 
             // SAFETY: It is safe to call [`clk_get`] for a valid device pointer
             // and any `con_id`, including NULL.
-            let inner = from_err_ptr(unsafe { bindings::clk_get_optional(dev.as_raw(), con_id) })?;
+            let clk = from_err_ptr(unsafe { bindings::clk_get_optional(dev.as_raw(), con_id) })?;
 
-            // INVARIANT: The reference-count is decremented when [`Clk`] goes out of scope.
+            // INVARIANT: The single `clk_get()` reference is owned by `RawClk`,
+            // which releases it when the last clone of this [`Clk`] goes out of
+            // scope. If the allocation fails, `Arc::new` drops the `RawClk`,
+            // releasing the reference.
             Ok(Self {
-                inner,
+                inner: Arc::new(RawClk(clk), GFP_KERNEL)?,
                 _phantom: PhantomData,
             })
         }
@@ -356,7 +409,10 @@ mod common_clk {
                 // `Clk<Prepared>` owns a single count of it, which is released
                 // when it leaves the [`Prepared`] state.
                 .map(|()| Clk {
-                    inner: clk.inner,
+                    // SAFETY: `clk` is wrapped in `ManuallyDrop`, so its `Arc`
+                    // reference is never released; moving it out here keeps the
+                    // reference count balanced.
+                    inner: unsafe { ptr::read(&clk.inner) },
                     _phantom: PhantomData,
                 })
                 .map_err(|error| Error {
@@ -404,9 +460,12 @@ mod common_clk {
             unsafe { bindings::clk_unprepare(clk.as_raw()) }
 
             // INVARIANT: The `clk_prepare()` count was released above, so the
-            // returned `Clk<Unprepared>` owns only the `clk_get()` count.
+            // returned `Clk<Unprepared>` owns only the `clk_get()` reference.
             Clk {
-                inner: clk.inner,
+                // SAFETY: `clk` is wrapped in `ManuallyDrop`, so its `Arc`
+                // reference is never released; moving it out here keeps the
+                // reference count balanced.
+                inner: unsafe { ptr::read(&clk.inner) },
                 _phantom: PhantomData,
             }
         }
@@ -429,7 +488,10 @@ mod common_clk {
                 // `Clk<Enabled>` owns a single count of it, which is released
                 // when it leaves the [`Enabled`] state.
                 .map(|()| Clk {
-                    inner: clk.inner,
+                    // SAFETY: `clk` is wrapped in `ManuallyDrop`, so its `Arc`
+                    // reference is never released; moving it out here keeps the
+                    // reference count balanced.
+                    inner: unsafe { ptr::read(&clk.inner) },
                     _phantom: PhantomData,
                 })
                 .map_err(|error| Error {
@@ -474,7 +536,10 @@ mod common_clk {
             //
             // INVARIANT: The clock is enabled for the lifetime of `enabled`.
             let enabled = ManuallyDrop::new(Clk::<Enabled> {
-                inner: self.inner,
+                // SAFETY: The duplicate `Arc` reference is wrapped in
+                // `ManuallyDrop` and thus never released, keeping the reference
+                // count balanced.
+                inner: unsafe { ptr::read(&self.inner) },
                 _phantom: PhantomData,
             });
 
@@ -527,10 +592,13 @@ mod common_clk {
             unsafe { bindings::clk_disable(clk.as_raw()) };
 
             // INVARIANT: The `clk_enable()` count was released above, so the
-            // returned `Clk<Prepared>` owns the `clk_get()` and `clk_prepare()`
-            // counts.
+            // returned `Clk<Prepared>` owns the `clk_get()` reference and the
+            // `clk_prepare()` count.
             Clk {
-                inner: clk.inner,
+                // SAFETY: `clk` is wrapped in `ManuallyDrop`, so its `Arc`
+                // reference is never released; moving it out here keeps the
+                // reference count balanced.
+                inner: unsafe { ptr::read(&clk.inner) },
                 _phantom: PhantomData,
             }
         }
@@ -540,7 +608,7 @@ mod common_clk {
         /// Obtain the raw [`struct clk`] pointer.
         #[inline]
         pub fn as_raw(&self) -> *mut bindings::clk {
-            self.inner
+            self.inner.0
         }
 
         /// Get clock's rate.
@@ -573,21 +641,50 @@ mod common_clk {
 
     impl<T: ClkState> Drop for Clk<T> {
         fn drop(&mut self) {
-            if T::DISABLE_ON_DROP {
-                // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-                // [`clk_disable`].
+            if T::ENABLED {
+                // SAFETY: By the type invariants, `self.as_raw()` is a valid
+                // argument for [`clk_disable`].
                 unsafe { bindings::clk_disable(self.as_raw()) };
             }
 
-            if T::UNPREPARE_ON_DROP {
-                // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-                // [`clk_unprepare`].
+            if T::PREPARED {
+                // SAFETY: By the type invariants, `self.as_raw()` is a valid
+                // argument for [`clk_unprepare`].
                 unsafe { bindings::clk_unprepare(self.as_raw()) };
             }
 
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_put`].
-            unsafe { bindings::clk_put(self.as_raw()) };
+            // The `clk_get()` reference is owned by `RawClk`: it is released
+            // by its drop implementation when the last clone goes out of scope.
+        }
+    }
+
+    impl<T: ClkState> Clone for Clk<T> {
+        #[inline]
+        fn clone(&self) -> Self {
+            if T::PREPARED {
+                // SAFETY: By the type invariants, `self.as_raw()` is a valid
+                // argument for [`clk_prepare`]. `self` already holds a
+                // `clk_prepare()` count, so the underlying clock is already
+                // prepared and this call only increments the prepare count:
+                // it cannot fail.
+                unsafe { bindings::clk_prepare(self.as_raw()) };
+            }
+
+            if T::ENABLED {
+                // SAFETY: By the type invariants, `self.as_raw()` is a valid
+                // argument for [`clk_enable`]. `self` already holds a
+                // `clk_enable()` count, so the underlying clock is already
+                // enabled and this call only increments the enable count: it
+                // cannot fail.
+                unsafe { bindings::clk_enable(self.as_raw()) };
+            }
+
+            // INVARIANT: The new value owns the state counts acquired above
+            // and shares the `clk_get()` reference through the `Arc`.
+            Self {
+                inner: self.inner.clone(),
+                _phantom: PhantomData,
+            }
         }
     }
 }
