@@ -213,6 +213,7 @@ static int kvm_handle_guest_debug(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+#ifdef ARM64_S390_COMMON
 static int kvm_handle_unknown_ec(struct kvm_vcpu *vcpu)
 {
 	u64 esr = kvm_vcpu_get_esr(vcpu);
@@ -223,6 +224,8 @@ static int kvm_handle_unknown_ec(struct kvm_vcpu *vcpu)
 	kvm_inject_undefined(vcpu);
 	return 1;
 }
+
+#endif /* ARM64_S390_COMMON */
 
 /*
  * Guest access to SVE registers should be routed to this handler only
@@ -404,6 +407,7 @@ static exit_handle_fn arm_exit_handlers[] = {
 	[ESR_ELx_EC_GCS]	= kvm_handle_gcs,
 };
 
+#ifdef ARM64_S390_COMMON
 static exit_handle_fn kvm_get_exit_handler(struct kvm_vcpu *vcpu)
 {
 	u64 esr = kvm_vcpu_get_esr(vcpu);
@@ -438,6 +442,8 @@ static int handle_trap_exceptions(struct kvm_vcpu *vcpu)
 
 	return handled;
 }
+
+#endif /* ARM64_S390_COMMON */
 
 /*
  * Return > 0 to return to guest, < 0 on error, 0 (and set exit_reason) on

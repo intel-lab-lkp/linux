@@ -34,6 +34,7 @@
 static u32 __ro_after_init kvm_ipa_limit;
 unsigned int __ro_after_init kvm_host_sve_max_vl;
 
+#ifdef ARM64_S390_COMMON
 /*
  * ARMv8 Reset Values
  */
@@ -45,6 +46,8 @@ unsigned int __ro_after_init kvm_host_sve_max_vl;
 
 #define VCPU_RESET_PSTATE_SVC	(PSR_AA32_MODE_SVC | PSR_AA32_A_BIT | \
 				 PSR_AA32_I_BIT | PSR_AA32_F_BIT)
+
+#endif /* ARM64_S390_COMMON */
 
 unsigned int __ro_after_init kvm_sve_max_vl;
 

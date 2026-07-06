@@ -543,6 +543,7 @@ int kvm_arch_vcpu_ioctl_set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	return -EINVAL;
 }
 
+#ifdef ARM64_S390_COMMON
 static int copy_core_reg_indices(const struct kvm_vcpu *vcpu,
 				 u64 __user *uindices)
 {
@@ -590,6 +591,8 @@ static unsigned long num_core_regs(const struct kvm_vcpu *vcpu)
 {
 	return copy_core_reg_indices(vcpu, NULL);
 }
+
+#endif /* ARM64_S390_COMMON */
 
 static unsigned long num_sve_regs(const struct kvm_vcpu *vcpu)
 {
