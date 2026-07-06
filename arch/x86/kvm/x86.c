@@ -4413,6 +4413,10 @@ set_identity_unlock:
 		if (kvm->created_vcpus)
 			goto create_irqchip_unlock;
 
+		r = -EEXIST;
+		if (gfn_to_memslot(kvm, gpa_to_gfn(APIC_DEFAULT_PHYS_BASE)))
+			goto create_irqchip_unlock;
+
 		r = kvm_pic_init(kvm);
 		if (r)
 			goto create_irqchip_unlock;
