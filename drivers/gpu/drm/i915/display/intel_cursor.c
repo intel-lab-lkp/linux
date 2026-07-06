@@ -1039,11 +1039,27 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 		local_irq_disable();
 	}
 
-	if (new_plane_state->uapi.visible) {
-		intel_plane_update_noarm(NULL, plane, crtc_state, new_plane_state);
-		intel_plane_update_arm(NULL, plane, crtc_state, new_plane_state);
-	} else {
-		intel_plane_disable_arm(NULL, plane, crtc_state);
+	for (int i = 0; i < num_pipes; i++) {
+		u32 start_vbl_count = intel_crtc_get_vblank_counter(joined[i].crtc);
+		u32 end_vbl_count;
+
+		if (joined[i].new_plane_state->uapi.visible) {
+			intel_plane_update_noarm(NULL, joined[i].plane,
+						 joined[i].crtc_state,
+						 joined[i].new_plane_state);
+			intel_plane_update_arm(NULL, joined[i].plane,
+					       joined[i].crtc_state,
+					       joined[i].new_plane_state);
+		} else {
+			intel_plane_disable_arm(NULL, joined[i].plane, joined[i].crtc_state);
+		}
+
+		end_vbl_count = intel_crtc_get_vblank_counter(joined[i].crtc);
+		if (start_vbl_count != end_vbl_count)
+			drm_err(display->drm,
+				"Atomic update failure on pipe %c (start=%u end=%u)\n",
+				pipe_name(joined[i].crtc->pipe),
+				start_vbl_count, end_vbl_count);
 	}
 
 	local_irq_enable();
