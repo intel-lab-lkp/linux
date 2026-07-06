@@ -348,7 +348,7 @@ static ssize_t fan1_div_store(struct device *dev, struct device_attribute *da,
 	/* update fan target if high byte is not disabled */
 	if ((data->fan_target & 0x1fe0) != 0x1fe0) {
 		u16 new_target = (data->fan_target * old_div) / new_div;
-		data->fan_target = min(new_target, (u16)0x1fff);
+		data->fan_target = min_t(u16, new_target, 0x1fff);
 		write_fan_target_to_i2c(client, data->fan_target);
 	}
 
