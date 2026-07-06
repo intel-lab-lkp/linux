@@ -1870,8 +1870,10 @@ static int hda_init_streams(struct azx *chip)
 		struct hda_intel_stream *s = kzalloc_obj(*s);
 		int tag, dir;
 
-		if (!s)
+		if (!s) {
+			azx_free_streams(chip);
 			return -ENOMEM;
+		}
 
 		s->hda = container_of(chip, struct hda_intel, chip);
 		INIT_WORK(&s->irq_pending_work, azx_irq_pending_work);
