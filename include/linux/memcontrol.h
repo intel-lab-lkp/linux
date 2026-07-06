@@ -1583,6 +1583,7 @@ static inline void mem_cgroup_flush_foreign(struct bdi_writeback *wb)
 #endif	/* CONFIG_CGROUP_WRITEBACK */
 
 struct sock;
+
 #ifdef CONFIG_MEMCG
 extern struct static_key_false memcg_sockets_enabled_key;
 #define mem_cgroup_sockets_enabled static_branch_unlikely(&memcg_sockets_enabled_key)
@@ -1629,6 +1630,17 @@ static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
 }
 #endif
 
+bool mem_cgroup_charge_gpu_page(struct obj_cgroup *objcg, struct page *page,
+			   unsigned int order,
+			   gfp_t gfp_mask, bool reclaim);
+void mem_cgroup_uncharge_gpu_page(struct page *page,
+				  unsigned int order,
+				  bool reclaim);
+bool mem_cgroup_move_gpu_page_reclaim(struct obj_cgroup *objcg,
+				      struct page *page,
+				      unsigned int order,
+				      bool to_reclaim);
+
 int alloc_shrinker_info(struct mem_cgroup *memcg);
 void free_shrinker_info(struct mem_cgroup *memcg);
 void set_shrinker_bit(struct mem_cgroup *memcg, int nid, int shrinker_id);
@@ -1663,6 +1675,28 @@ static inline bool mem_cgroup_sk_charge(const struct sock *sk,
 static inline void mem_cgroup_sk_uncharge(const struct sock *sk,
 					  unsigned int nr_pages)
 {
+}
+
+static inline bool mem_cgroup_charge_gpu_page(struct obj_cgroup *objcg,
+					      struct page *page,
+					      unsigned int order,
+					      gfp_t gfp_mask, bool reclaim)
+{
+	return true;
+}
+
+static inline void mem_cgroup_uncharge_gpu_page(struct page *page,
+						unsigned int order,
+						bool reclaim)
+{
+}
+
+static inline bool mem_cgroup_move_gpu_page_reclaim(struct obj_cgroup *objcg,
+						    struct page *page,
+						    unsigned int order,
+						    bool to_reclaim)
+{
+	return true;
 }
 
 static inline void set_shrinker_bit(struct mem_cgroup *memcg,
