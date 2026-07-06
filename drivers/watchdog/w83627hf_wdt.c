@@ -241,9 +241,8 @@ static int w83627hf_init(struct watchdog_device *wdog, enum chips chip)
 			pr_warn("Stopping previously enabled watchdog until userland kicks in\n");
 			superio_outb(cr_wdt_timeout, 0);
 		} else {
-			pr_info("Watchdog already running. Resetting timeout to %d sec\n",
-				wdog->timeout);
-			superio_outb(cr_wdt_timeout, wdog->timeout);
+			pr_info("Watchdog already running.\n");
+			set_bit(WDOG_HW_RUNNING, &wdog->status);
 		}
 	}
 
