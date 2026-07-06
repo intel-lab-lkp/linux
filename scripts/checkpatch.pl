@@ -854,7 +854,6 @@ our @mode_permission_funcs = (
 	["debugfs_create_(?:file|u8|u16|u32|u64|x8|x16|x32|x64|size_t|atomic_t|bool|blob|regset32|u32_array)", 2],
 	["proc_create(?:_data|)", 2],
 	["(?:CLASS|DEVICE|SENSOR|SENSOR_DEVICE|IIO_DEVICE)_ATTR", 2],
-	["IIO_DEV_ATTR_[A-Z_]+", 1],
 	["SENSOR_(?:DEVICE_|)ATTR_2", 2],
 	["SENSOR_TEMPLATE(?:_2|)", 3],
 	["__ATTR", 2],
