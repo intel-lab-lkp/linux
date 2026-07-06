@@ -257,6 +257,13 @@ config DRM_TTM_HELPER
 	help
 	  Helpers for ttm-based gem objects
 
+config DRM_TTM_MEMCG
+	bool "Enable TTM mem cgroup by default"
+	depends on DRM_TTM
+	depends on MEMCG
+	help
+	  Enable the memcg integration by default
+
 config DRM_GEM_DMA_HELPER
 	tristate
 	depends on DRM

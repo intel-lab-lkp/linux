@@ -119,6 +119,24 @@ static unsigned long page_pool_size;
 MODULE_PARM_DESC(page_pool_size, "Number of pages in the WC/UC/DMA pool per NUMA node");
 module_param(page_pool_size, ulong, 0644);
 
+/*
+ * Don't use the memcg aware lru for pooled pages.
+ *
+ * There are use-cases where for example one application in a cgroup will preallocate 1GB
+ * of uncached pages, and immediately release them into the pool, for other consumers
+ * to use. This use-case could be handled with a proper cgroup hierarchy, but to allow
+ * that use case to continue to operate as-is, add a module option.
+ *
+ * This still stores the pages in the list_lru, it just doesn't use the memcg when
+ * adding/removing them.
+ */
+#define DEFAULT_TTM_MEMCG IS_ENABLED(CONFIG_DRM_TTM_MEMCG)
+static bool ttm_memcg = DEFAULT_TTM_MEMCG;
+
+MODULE_PARM_DESC(ttm_memcg, "Allow using cgroups with TTM "
+		 "[default=" __stringify(DEFAULT_TTM_MEMCG) "])");
+module_param(ttm_memcg, bool, 0444);
+
 static unsigned long pool_node_limit[MAX_NUMNODES];
 static atomic_long_t allocated_pages[MAX_NUMNODES];
 
@@ -321,7 +339,7 @@ static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 
 	INIT_LIST_HEAD(&p->lru);
 	rcu_read_lock();
-	list_lru_add(&pt->pages, &p->lru, nid, page_memcg_check(p));
+	list_lru_add(&pt->pages, &p->lru, nid, ttm_memcg ? page_memcg_check(p) : NULL);
 	rcu_read_unlock();
 
 	atomic_long_add(num_pages, &allocated_pages[nid]);
@@ -370,7 +388,7 @@ static struct page *ttm_pool_type_take(struct ttm_pool_type *pt, int nid,
 	struct page *page_out = NULL;
 	int ret;
 	struct mem_cgroup *orig_memcg = orig_objcg ? get_mem_cgroup_from_objcg(orig_objcg) : NULL;
-	struct mem_cgroup *memcg = orig_memcg;
+	struct mem_cgroup *memcg = ttm_memcg ? orig_memcg : NULL;
 
 	/*
 	 * Attempt to get a page from the current memcg, but if it hasn't got any in it's level,
@@ -844,7 +862,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	bool allow_pools;
 	struct page *p;
 	int r;
-	struct obj_cgroup *objcg = memcg_account ? tt->objcg : NULL;
+	struct obj_cgroup *objcg = (ttm_memcg && memcg_account) ? tt->objcg : NULL;
 
 	WARN_ON(!alloc->remaining_pages || ttm_tt_is_populated(tt));
 	WARN_ON(alloc->dma_addr && !pool->dev);
