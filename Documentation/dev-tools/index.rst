@@ -23,6 +23,8 @@ Documentation/process/debugging/index.rst
    coccinelle
    context-analysis
    sparse
+   dept
+   dept_api
    kcov
    gcov
    kasan
