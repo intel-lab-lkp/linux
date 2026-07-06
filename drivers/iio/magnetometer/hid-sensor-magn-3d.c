@@ -322,7 +322,7 @@ static int magn_3d_capture_sample(struct hid_sensor_hub_device *hsdev,
 
 	iio_val = magn_state->magn_val_addr[offset];
 
-	if (iio_val != NULL)
+	if (iio_val)
 		*iio_val = *((u32 *)raw_data);
 	else
 		ret = -EINVAL;
@@ -461,7 +461,7 @@ static int hid_magn_3d_probe(struct platform_device *pdev)
 
 	indio_dev = devm_iio_device_alloc(&pdev->dev,
 					  sizeof(struct magn_3d_state));
-	if (indio_dev == NULL)
+	if (!indio_dev)
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, indio_dev);
