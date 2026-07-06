@@ -906,7 +906,8 @@ static int xe_oa_alloc_oa_buffer(struct xe_oa_stream *stream, size_t size)
 
 	bo = xe_bo_create_pin_map_novm(stream->oa->xe, stream->gt->tile,
 				       size, ttm_bo_type_kernel,
-				       vram | XE_BO_FLAG_GGTT, false);
+				       vram | XE_BO_FLAG_GGTT | XE_BO_FLAG_ACCOUNTED,
+				       false);
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
 
