@@ -55,6 +55,8 @@
 #include "gmap.h"
 #include "faultin.h"
 #include "pci.h"
+#include "sk.h"
+#include "cmma.h"
 
 #define CREATE_TRACE_POINTS
 #include "trace.h"

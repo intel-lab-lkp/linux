@@ -29,6 +29,8 @@
 #include "s390.h"
 #include "trace.h"
 #include "gmap.h"
+#include "sk.h"
+#include "cmma.h"
 
 static int handle_ri(struct kvm_vcpu *vcpu)
 {

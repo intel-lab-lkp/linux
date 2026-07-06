@@ -20,6 +20,9 @@
 #include <asm/gmap_helpers.h>
 
 #include "dat.h"
+#include "sk.h"
+#include "cmma.h"
+
 #include "gmap.h"
 #include "s390.h"
 #include "faultin.h"
@@ -940,39 +943,6 @@ void gmap_split_huge_pages(struct gmap *gmap)
 	} while (start);
 }
 
-static int _gmap_enable_skeys(struct gmap *gmap)
-{
-	gfn_t start = 0;
-	int rc;
-
-	if (uses_skeys(gmap))
-		return 0;
-
-	set_bit(GMAP_FLAG_USES_SKEYS, &gmap->flags);
-	rc = gmap_helper_disable_cow_sharing();
-	if (rc) {
-		clear_bit(GMAP_FLAG_USES_SKEYS, &gmap->flags);
-		return rc;
-	}
-
-	do {
-		scoped_guard(write_lock, &gmap->kvm->mmu_lock)
-			start = dat_reset_skeys(gmap->asce, start);
-		cond_resched();
-	} while (start);
-	return 0;
-}
-
-int gmap_enable_skeys(struct gmap *gmap)
-{
-	int rc;
-
-	mmap_write_lock(gmap->kvm->mm);
-	rc = _gmap_enable_skeys(gmap);
-	mmap_write_unlock(gmap->kvm->mm);
-	return rc;
-}
-
 static long _destroy_pages_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_walk *walk)
 {
 	if (!ptep->s.pr)
@@ -1091,50 +1061,6 @@ int gmap_protect_rmap(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gfn_t p_gf
 	pgste_set_unlock(ptep, pgste);
 
 	return 0;
-}
-
-static long __set_cmma_clean_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_walk *walk)
-{
-	union pgste pgste;
-
-	pgste = pgste_get_lock(ptep);
-	pgste.cmma_d = 0;
-	pgste_set_unlock(ptep, pgste);
-
-	if (need_resched())
-		return next;
-	return 0;
-}
-
-static long __set_cmma_dirty_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_walk *walk)
-{
-	union pgste pgste;
-
-	pgste = pgste_get_lock(ptep);
-	if (!pgste.cmma_d)
-		atomic64_inc(walk->priv);
-	pgste.cmma_d = 1;
-	pgste_set_unlock(ptep, pgste);
-
-	if (need_resched())
-		return next;
-	return 0;
-}
-
-void _gmap_set_cmma_all(struct gmap *gmap, bool dirty)
-{
-	const struct dat_walk_ops ops = {
-		.pte_entry = dirty ? __set_cmma_dirty_pte : __set_cmma_clean_pte,
-	};
-	gfn_t gfn = 0;
-
-	do {
-		scoped_guard(read_lock, &gmap->kvm->mmu_lock)
-			gfn = _dat_walk_gfn_range(gfn, asce_end(gmap->asce), gmap->asce, &ops,
-						  DAT_WALK_IGN_HOLES,
-						  &gmap->kvm->arch.cmma_dirty_pages);
-		cond_resched();
-	} while (gfn);
 }
 
 static void gmap_unshadow_level(struct gmap *sg, gfn_t r_gfn, int level)

@@ -20,6 +20,7 @@
 #include "s390.h"
 #include "dat.h"
 #include "gmap.h"
+#include "sk.h"
 #include "gaccess.h"
 #include "faultin.h"
 
