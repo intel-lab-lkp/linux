@@ -700,7 +700,7 @@ our $tracing_logging_tags = qr{(?xi:
 	[\.\!:\s]*
 )};
 
-# Device ID types like found in include/linux/mod_devicetable.h.
+# Device ID types like found in include/linux/device-id/*.h.
 our $dev_id_types = qr{\b[a-z]\w*_device_id\b};
 
 sub edit_distance_min {
