@@ -2085,12 +2085,12 @@
 		};
 
 		cambistmclkcc: clock-controller@1760000 {
-		       compatible = "qcom,sm8750-cambistmclkcc";
-		       reg = <0x0 0x1760000 0x0 0x6000>;
-		       clocks = <&gcc GCC_CAM_BIST_MCLK_AHB_CLK>,
-				<&bi_tcxo_div2>,
-				<&bi_tcxo_ao_div2>,
-				<&sleep_clk>;
+			compatible = "qcom,sm8750-cambistmclkcc";
+			reg = <0x0 0x1760000 0x0 0x6000>;
+			clocks = <&gcc GCC_CAM_BIST_MCLK_AHB_CLK>,
+				 <&bi_tcxo_div2>,
+				 <&bi_tcxo_ao_div2>,
+				 <&sleep_clk>;
 			power-domains = <&rpmhpd RPMHPD_MMCX>,
 					<&rpmhpd RPMHPD_MX>;
 			required-opps = <&rpmhpd_opp_low_svs>,
