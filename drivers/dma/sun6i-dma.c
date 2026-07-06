@@ -891,6 +891,7 @@ static int sun6i_dma_pause(struct dma_chan *chan)
 	struct sun6i_dma_dev *sdev = to_sun6i_dma_dev(chan->device);
 	struct sun6i_vchan *vchan = to_sun6i_vchan(chan);
 	struct sun6i_pchan *pchan = vchan->phy;
+	unsigned long flags;
 
 	dev_dbg(chan2dev(chan), "vchan %p: pause\n", &vchan->vc);
 
@@ -898,9 +899,9 @@ static int sun6i_dma_pause(struct dma_chan *chan)
 		writel(DMA_CHAN_PAUSE_PAUSE,
 		       pchan->base + DMA_CHAN_PAUSE);
 	} else {
-		spin_lock(&sdev->lock);
+		spin_lock_irqsave(&sdev->lock, flags);
 		list_del_init(&vchan->node);
-		spin_unlock(&sdev->lock);
+		spin_unlock_irqrestore(&sdev->lock, flags);
 	}
 
 	return 0;
@@ -921,9 +922,9 @@ static int sun6i_dma_resume(struct dma_chan *chan)
 		writel(DMA_CHAN_PAUSE_RESUME,
 		       pchan->base + DMA_CHAN_PAUSE);
 	} else if (!list_empty(&vchan->vc.desc_issued)) {
-		spin_lock(&sdev->lock);
+		spin_lock_irq(&sdev->lock);
 		list_add_tail(&vchan->node, &sdev->pending);
-		spin_unlock(&sdev->lock);
+		spin_unlock_irq(&sdev->lock);
 	}
 
 	spin_unlock_irqrestore(&vchan->vc.lock, flags);
@@ -939,9 +940,9 @@ static int sun6i_dma_terminate_all(struct dma_chan *chan)
 	unsigned long flags;
 	LIST_HEAD(head);
 
-	spin_lock(&sdev->lock);
+	spin_lock_irqsave(&sdev->lock, flags);
 	list_del_init(&vchan->node);
-	spin_unlock(&sdev->lock);
+	spin_unlock_irqrestore(&sdev->lock, flags);
 
 	spin_lock_irqsave(&vchan->vc.lock, flags);
 
@@ -1021,7 +1022,7 @@ static void sun6i_dma_issue_pending(struct dma_chan *chan)
 	spin_lock_irqsave(&vchan->vc.lock, flags);
 
 	if (vchan_issue_pending(&vchan->vc)) {
-		spin_lock(&sdev->lock);
+		spin_lock_irq(&sdev->lock);
 
 		if (!vchan->phy && list_empty(&vchan->node)) {
 			list_add_tail(&vchan->node, &sdev->pending);
@@ -1030,7 +1031,7 @@ static void sun6i_dma_issue_pending(struct dma_chan *chan)
 				&vchan->vc);
 		}
 
-		spin_unlock(&sdev->lock);
+		spin_unlock_irq(&sdev->lock);
 	} else {
 		dev_dbg(chan2dev(chan), "vchan %p: nothing to issue\n",
 			&vchan->vc);
