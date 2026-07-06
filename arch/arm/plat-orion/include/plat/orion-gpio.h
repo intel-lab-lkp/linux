@@ -16,6 +16,9 @@
 #include <linux/irqdomain.h>
 
 struct gpio_desc;
+struct software_node;
+
+extern const struct software_node orion_gpio_swnodes[2];
 
 /*
  * Orion-specific GPIO API extensions.

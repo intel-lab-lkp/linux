@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
+#include <linux/property.h>
 #include <plat/orion-gpio.h>
 
 /*
@@ -92,6 +93,11 @@ static void __iomem *GPIO_LEVEL_MASK(struct orion_gpio_chip *ochip)
 
 static struct orion_gpio_chip orion_gpio_chips[2];
 static int orion_gpio_chip_count;
+
+const struct software_node orion_gpio_swnodes[2] = {
+	{ .name = "orion_gpio0" },
+	{ .name = "orion_gpio1" },
+};
 
 static inline void
 __set_direction(struct orion_gpio_chip *ochip, unsigned pin, int input)
@@ -522,6 +528,7 @@ void __init orion_gpio_init(int gpio_base, int ngpio,
 			    int secondary_irq_base,
 			    int irqs[4])
 {
+	const struct software_node *swnode = &orion_gpio_swnodes[orion_gpio_chip_count];
 	struct orion_gpio_chip *ochip;
 	struct irq_chip_generic *gc;
 	struct irq_chip_type *ct;
@@ -553,6 +560,9 @@ void __init orion_gpio_init(int gpio_base, int ngpio,
 	ochip->valid_output = 0;
 	ochip->mask_offset = mask_offset;
 	ochip->secondary_irq_base = secondary_irq_base;
+
+	software_node_register(swnode);
+	ochip->chip.fwnode = software_node_fwnode(swnode);
 
 	gpiochip_add_data(&ochip->chip, ochip);
 
