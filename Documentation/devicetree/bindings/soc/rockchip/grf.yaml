@@ -64,6 +64,8 @@ properties:
               - rockchip,rk3588-vo1-grf
               - rockchip,rk3588-vop-grf
               - rockchip,rv1103b-ioc
+              - rockchip,rv1106-ioc
+              - rockchip,rv1106-pmuioc
               - rockchip,rv1108-usbgrf
           - const: syscon
       - items:
@@ -100,6 +102,7 @@ properties:
               - rockchip,rk3576-usb2phy-grf
               - rockchip,rk3588-usb2phy-grf
               - rockchip,rv1103b-pmu-grf
+              - rockchip,rv1106-grf
               - rockchip,rv1108-grf
               - rockchip,rv1108-pmugrf
               - rockchip,rv1126-grf
@@ -243,6 +246,33 @@ allOf:
           $ref: /schemas/power/reset/syscon-reboot-mode.yaml#
 
           unevaluatedProperties: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: rockchip,rv1106-grf
+
+    then:
+      properties:
+        clock-controller:
+          type: object
+          additionalProperties: false
+
+          properties:
+            compatible:
+              const: rockchip,rv1106-grf-cru
+
+            "#clock-cells":
+              const: 1
+
+          required:
+            - compatible
+            - "#clock-cells"
+
+          description:
+            Clock provider for the MMC drive and sample phase clocks,
+            whose control registers live in the GRF region.
 
   - if:
       properties:
