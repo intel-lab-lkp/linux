@@ -162,6 +162,48 @@ enum {
 	PT_FEAT_AMDV1_FORCE_COHERENCE,
 };
 
+struct pt_armv8 {
+	struct pt_common common;
+	unsigned int granule_lg2sz;
+};
+
+enum {
+	/* Use the upper address space instead of lower */
+	PT_FEAT_ARMV8_TTBR1 = PT_FEAT_FMT_START,
+	/*
+	 * Large Physical Address Extension (for 64k):
+	 *  - HW must support a 4TB block descriptor
+	 *  - HW must decode the additional OA in PTE bits[15:12]
+	 */
+	PT_FEAT_ARMV8_LPA,
+	/*
+	 * Large Physical Address 2 Extension (for 4/16k):
+	 *  - HW must support TSZ=12 (52 bit VA)
+	 *  - HW must support a 5 level walk (table level -1), 4k only
+	 *  - HW must support 16 entries in ARM L0, 16k only
+	 *  - HW must support a 512GB block descriptor in 4k
+	 *                       64GB block descriptor in 16k
+	 *  - HW must decode the additional OA in PTE bits[9:8]
+	 *  - HW must support DS=1
+	 */
+	PT_FEAT_ARMV8_LPA2,
+	/*
+	 * Large Virtual Address Extension (for S1 64k):
+	 *  - HW must support S1.TSZ=12 (52 bit VA)
+	 */
+	PT_FEAT_ARMV8_LVA,
+	/* Use the Stage 2 format instead of Stage 1 */
+	PT_FEAT_ARMV8_S2,
+	/* Use Dirty Bit Modifier, necessary for IOMMU dirty tracking */
+	PT_FEAT_ARMV8_DBM,
+	/* For S2 uses the Force Write Back coding of the S2MEMATTR */
+	PT_FEAT_ARMV8_S2FWB,
+	/* Set the NS and NSTable bits in all entries */
+	PT_FEAT_ARMV8_NS,
+	/* Limit to AARCH32 long descriptor format features */
+	PT_FEAT_ARMV8_AARCH32,
+};
+
 struct pt_vtdss {
 	struct pt_common common;
 };

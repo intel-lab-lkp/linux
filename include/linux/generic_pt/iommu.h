@@ -309,6 +309,79 @@ IOMMU_FORMAT(amdv1, amdpt);
 struct pt_iommu_amdv1_mock_hw_info;
 IOMMU_PROTOTYPES(amdv1_mock);
 
+struct pt_iommu_armv8_cfg {
+	struct pt_iommu_cfg common;
+	unsigned int granule_lg2sz;
+};
+
+struct pt_iommu_armv8_hw_info {
+	/* translation table base: ttb0, ttb1, s2ttb */
+	u64 ttb;
+	/* physical address size: ips, s2ps*/
+	u8 ps;
+	/* input size: t0sz, t1sz, s2t0sz */
+	u8 tsz;
+	/* translation granule: tg1, tg0, s2tg */
+	u8 tg;
+	/* 52-bit OA / LPA2 PTE encoding enable: ds, s2ds */
+	u8 ds;
+	/* endian: endi, s2endi */
+	u8 endi;
+	/* aarch64 mode: aa64, s2aa64 */
+	u8 aa64;
+	/* shareability: sh0, s2sh0 */
+	u8 sh;
+	/* inner cacheability: irgn0, s2ir0 */
+	u8 irgn;
+	/* outer cacheability: orgn0, s2or0 */
+	u8 orgn;
+
+	union {
+		struct {
+			/* top byte ignore */
+			u8 tbix;
+			/* translation table walk disable */
+			u8 epd0;
+			u8 epd1;
+			u32 mair;
+		} s1;
+		struct {
+			/* start level */
+			u8 sl0;
+			u8 sl2;
+		} s2;
+	};
+};
+
+IOMMU_FORMAT(armv8, armpt);
+
+/**
+ * pt_iommu_armv8_choose_granule_lg2sz - Select the best granule size
+ * @hw_granules: Bitmask of hardware supported granule sizes
+ *
+ * Used by IOMMU drivers to automatically select the best granule size from
+ * their HW support. iommu_domain works best when the granule is the same as
+ * PAGE_SIZE, it works well if it is less than PAGE_SIZE and greater is not well
+ * supported.
+ *
+ * Return: 0 if none of the HW values are supportable.
+ */
+static inline unsigned int pt_iommu_armv8_choose_granule_lg2sz(u64 hw_granules)
+{
+	/* pt_iommu_armv8 always supports these */
+	hw_granules &= SZ_4K | SZ_16K | SZ_64K;
+	if (!hw_granules)
+		return 0;
+
+	if (hw_granules & PAGE_SIZE)
+		return PAGE_SHIFT;
+
+	if (hw_granules % PAGE_SIZE)
+		return ilog2(rounddown_pow_of_two(hw_granules % PAGE_SIZE));
+
+	return __ffs(hw_granules);
+}
+
 struct pt_iommu_vtdss_cfg {
 	struct pt_iommu_cfg common;
 	/* 4 is a 57 bit 5 level table */

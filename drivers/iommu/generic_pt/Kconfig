@@ -42,6 +42,17 @@ config IOMMU_PT_AMDV1
 
 	  Selected automatically by an IOMMU driver that uses this format.
 
+config IOMMU_PT_ARMV8
+	tristate "IOMMU page table for 64 bit ARMv8"
+	depends on !GENERIC_ATOMIC64 # for cmpxchg64
+	help
+	  iommu_domain implementation for the ARMv8 VMSAv8-64 and the VMSAv8-32
+	  long descriptor pagetable format. This format supports both stage-1
+	  and stage-2, as well as address spaces up to 48-bits in size with
+	  4K, 16K, and 64K granule sizes.
+
+	  Selected automatically by an IOMMU driver that uses this format.
+
 config IOMMU_PT_VTDSS
        tristate "IOMMU page table for Intel VT-d Second Stage"
 	depends on !GENERIC_ATOMIC64 # for cmpxchg64
@@ -76,6 +87,7 @@ config IOMMU_PT_KUNIT_TEST
 	tristate "IOMMU Page Table KUnit Test" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	depends on IOMMU_PT_AMDV1 || !IOMMU_PT_AMDV1
+	depends on IOMMU_PT_ARMV8 || !IOMMU_PT_ARMV8
 	depends on IOMMU_PT_RISCV64 || !IOMMU_PT_RISCV64
 	depends on IOMMU_PT_X86_64 || !IOMMU_PT_X86_64
 	depends on IOMMU_PT_VTDSS || !IOMMU_PT_VTDSS
