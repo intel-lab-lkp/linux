@@ -254,29 +254,6 @@ int s390_replace_asce(struct gmap *gmap)
 	return 0;
 }
 
-bool _gmap_unmap_prefix(struct gmap *gmap, gfn_t gfn, gfn_t end, bool hint)
-{
-	struct kvm *kvm = gmap->kvm;
-	struct kvm_vcpu *vcpu;
-	gfn_t prefix_gfn;
-	unsigned long i;
-
-	if (is_shadow(gmap))
-		return false;
-	kvm_for_each_vcpu(i, vcpu, kvm) {
-		/* Match against both prefix pages */
-		prefix_gfn = gpa_to_gfn(kvm_s390_get_prefix(vcpu));
-		if (prefix_gfn < end && gfn <= prefix_gfn + 1) {
-			if (hint && kvm_s390_is_in_sie(vcpu))
-				return false;
-			VCPU_EVENT(vcpu, 2, "gmap notifier for %llx-%llx",
-				   gfn_to_gpa(gfn), gfn_to_gpa(end));
-			kvm_s390_sync_request(KVM_REQ_REFRESH_GUEST_PREFIX, vcpu);
-		}
-	}
-	return true;
-}
-
 struct clear_young_pte_priv {
 	struct gmap *gmap;
 	bool young;

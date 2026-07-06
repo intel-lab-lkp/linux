@@ -13,6 +13,7 @@
 #include <linux/kvm_host.h>
 
 #include "dat.h"
+#include "prefix.h"
 
 /**
  * enum gmap_flags - Flags of a gmap.
@@ -156,16 +157,6 @@ static inline void gmap_handle_vsie_unshadow_event(struct gmap *parent, gfn_t gf
 {
 	scoped_guard(spinlock, &parent->children_lock)
 		_gmap_handle_vsie_unshadow_event(parent, gfn);
-}
-
-static inline bool gmap_mkold_prefix(struct gmap *gmap, gfn_t gfn, gfn_t end)
-{
-	return _gmap_unmap_prefix(gmap, gfn, end, true);
-}
-
-static inline bool gmap_unmap_prefix(struct gmap *gmap, gfn_t gfn, gfn_t end)
-{
-	return _gmap_unmap_prefix(gmap, gfn, end, false);
 }
 
 /**
