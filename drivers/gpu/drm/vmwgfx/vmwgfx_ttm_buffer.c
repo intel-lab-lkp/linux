@@ -360,7 +360,8 @@ static void vmw_ttm_destroy(struct ttm_device *bdev, struct ttm_tt *ttm)
 
 
 static int vmw_ttm_populate(struct ttm_device *bdev,
-			    struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
+			    struct ttm_tt *ttm, bool memcg_account,
+			    struct ttm_operation_ctx *ctx)
 {
 	bool external = (ttm->page_flags & TTM_TT_FLAG_EXTERNAL) != 0;
 
@@ -372,7 +373,7 @@ static int vmw_ttm_populate(struct ttm_device *bdev,
 						       ttm->dma_address,
 						       ttm->num_pages);
 
-	return ttm_pool_alloc(&bdev->pool, ttm, ctx);
+	return ttm_pool_alloc(&bdev->pool, ttm, memcg_account, ctx);
 }
 
 static void vmw_ttm_unpopulate(struct ttm_device *bdev,
@@ -580,7 +581,7 @@ int vmw_bo_create_and_populate(struct vmw_private *dev_priv,
 	if (unlikely(ret != 0))
 		return ret;
 
-	ret = vmw_ttm_populate(vbo->tbo.bdev, vbo->tbo.ttm, &ctx);
+	ret = vmw_ttm_populate(vbo->tbo.bdev, vbo->tbo.ttm, false, &ctx);
 	if (likely(ret == 0)) {
 		struct vmw_ttm_tt *vmw_tt =
 			container_of(vbo->tbo.ttm, struct vmw_ttm_tt, dma_ttm);
