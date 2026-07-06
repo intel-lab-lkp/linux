@@ -887,7 +887,6 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	struct intel_display *display = to_intel_display(plane);
 	struct intel_plane_state *old_plane_state =
 		to_intel_plane_state(plane->base.state);
-	struct intel_plane_state *new_plane_state = NULL;
 	struct intel_crtc_state *crtc_state =
 		to_intel_crtc_state(crtc->base.state);
 	struct intel_vblank_evade_ctx evade;
@@ -987,7 +986,6 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 		num_pipes++;
 	}
 
-	new_plane_state = joined[0].new_plane_state;
 	intel_frontbuffer_flush(to_intel_frontbuffer(joined[0].new_plane_state->hw.fb),
 				ORIGIN_CURSOR_UPDATE);
 
@@ -1070,17 +1068,19 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 * Schedule or immediately unpin old framebuffers.
 	 * Protect against concurrent access.
 	 */
-	if (old_plane_state->ggtt_vma != new_plane_state->ggtt_vma) {
-		drm_vblank_work_init(&old_plane_state->unpin_work, &crtc->base,
-				     intel_cursor_unpin_work);
+	for (int i = 0; i < num_pipes; i++) {
+		struct intel_plane_state *old = joined[i].old_plane_state;
 
-		drm_vblank_work_schedule(&old_plane_state->unpin_work,
-					 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
-					 false);
-
-		joined[0].old_plane_state = NULL;
-	} else {
-		intel_plane_unpin_fb(old_plane_state);
+		if (old->ggtt_vma != joined[i].new_plane_state->ggtt_vma) {
+			drm_vblank_work_init(&old->unpin_work, &crtc->base,
+					     intel_cursor_unpin_work);
+			drm_vblank_work_schedule(&old->unpin_work,
+						 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
+						 false);
+			joined[i].old_plane_state = NULL;
+		} else {
+			intel_plane_unpin_fb(old);
+		}
 	}
 
 out_free:
