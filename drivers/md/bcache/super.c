@@ -40,7 +40,7 @@ static const char invalid_uuid[] = {
 };
 
 static struct kobject *bcache_kobj;
-struct mutex bch_register_lock;
+struct rw_semaphore bch_register_lock;
 bool bcache_is_reboot;
 LIST_HEAD(bch_cache_sets);
 static LIST_HEAD(uncached_devices);
@@ -1155,7 +1155,7 @@ static void cached_dev_detach_finish(struct work_struct *w)
 		dc->writeback_thread = NULL;
 	}
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 
 	bcache_device_detach(&dc->disk);
 	list_move(&dc->list, &uncached_devices);
@@ -1164,7 +1164,7 @@ static void cached_dev_detach_finish(struct work_struct *w)
 	clear_bit(BCACHE_DEV_DETACHING, &dc->disk.flags);
 	clear_bit(BCACHE_DEV_UNLINK_DONE, &dc->disk.flags);
 
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	pr_info("Caching disabled for %pg\n", dc->bdev);
 
@@ -1362,7 +1362,7 @@ static CLOSURE_CALLBACK(cached_dev_free)
 	if (!IS_ERR_OR_NULL(dc->status_update_thread))
 		kthread_stop(dc->status_update_thread);
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 
 	if (atomic_read(&dc->running)) {
 		bd_unlink_disk_holder(dc->bdev, dc->disk.disk);
@@ -1371,7 +1371,7 @@ static CLOSURE_CALLBACK(cached_dev_free)
 	bcache_device_free(&dc->disk);
 	list_del(&dc->list);
 
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	/*
 	 * Wait for any pending sb_write to complete before free.
@@ -1397,9 +1397,9 @@ static CLOSURE_CALLBACK(cached_dev_flush)
 	closure_type(dc, struct cached_dev, disk.cl);
 	struct bcache_device *d = &dc->disk;
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	bcache_device_unlink(d);
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	bch_cache_accounting_destroy(&dc->accounting);
 	kobject_del(&d->kobj);
@@ -1512,12 +1512,12 @@ static CLOSURE_CALLBACK(flash_dev_free)
 {
 	closure_type(d, struct bcache_device, cl);
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	atomic_long_sub(bcache_dev_sectors_dirty(d),
 			&d->c->flash_dev_dirty_sectors);
 	del_gendisk(d->disk);
 	bcache_device_free(d);
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 	kobject_put(&d->kobj);
 }
 
@@ -1525,9 +1525,9 @@ static CLOSURE_CALLBACK(flash_dev_flush)
 {
 	closure_type(d, struct bcache_device, cl);
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	bcache_device_unlink(d);
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 	kobject_del(&d->kobj);
 	continue_at(cl, flash_dev_free, system_percpu_wq);
 }
@@ -1689,7 +1689,7 @@ static CLOSURE_CALLBACK(cache_set_free)
 	bch_btree_cache_free(c);
 	bch_journal_free(c);
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	bch_bset_sort_state_free(&c->sort);
 	free_pages((unsigned long) c->uuids, ilog2(meta_bucket_pages(&c->cache->sb)));
 
@@ -1710,7 +1710,7 @@ static CLOSURE_CALLBACK(cache_set_free)
 	kfree(c->devices);
 
 	list_del(&c->list);
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	pr_info("Cache set %pU unregistered\n", c->set_uuid);
 	wake_up(&unregister_wait);
@@ -1828,7 +1828,7 @@ static CLOSURE_CALLBACK(__cache_set_unregister)
 	struct bcache_device *d;
 	size_t i;
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 
 	for (i = 0; i < c->devices_max_used; i++) {
 		d = c->devices[i];
@@ -1846,7 +1846,7 @@ static CLOSURE_CALLBACK(__cache_set_unregister)
 		}
 	}
 
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	continue_at(cl, cache_set_flush, system_percpu_wq);
 }
@@ -2424,9 +2424,9 @@ static int register_cache(struct cache_sb *sb, struct cache_sb_disk *sb_disk,
 		goto out;
 	}
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	err = register_cache_set(ca);
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	if (err) {
 		ret = -ENODEV;
@@ -2501,11 +2501,11 @@ static void register_bdev_worker(struct work_struct *work)
 	struct async_reg_args *args =
 		container_of(work, struct async_reg_args, reg_work.work);
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	if (register_bdev(args->sb, args->sb_disk, args->bdev_file,
 			  args->holder) < 0)
 		fail = true;
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	if (fail)
 		pr_info("error %s: fail to register backing device\n",
@@ -2620,13 +2620,13 @@ static ssize_t register_bcache(struct kobject *k, struct kobj_attribute *attr,
 		if (ret == -EBUSY) {
 			dev_t dev;
 
-			mutex_lock(&bch_register_lock);
+			down_write(&bch_register_lock);
 			if (lookup_bdev(strim(path), &dev) == 0 &&
 			    bch_is_open(dev))
 				err = "device already registered";
 			else
 				err = "device busy";
-			mutex_unlock(&bch_register_lock);
+			up_write(&bch_register_lock);
 			if (attr == &ksysfs_register_quiet) {
 				quiet = true;
 				ret = size;
@@ -2659,9 +2659,9 @@ static ssize_t register_bcache(struct kobject *k, struct kobj_attribute *attr,
 	}
 
 	if (SB_IS_BDEV(sb)) {
-		mutex_lock(&bch_register_lock);
+		down_write(&bch_register_lock);
 		ret = register_bdev(sb, sb_disk, bdev_file, holder);
-		mutex_unlock(&bch_register_lock);
+		up_write(&bch_register_lock);
 		/* blkdev_put() will be called in cached_dev_free() */
 		if (ret < 0)
 			goto out_free_sb;
@@ -2715,7 +2715,7 @@ static ssize_t bch_pending_bdevs_cleanup(struct kobject *k,
 	struct pdev *pdev, *tpdev;
 	struct cache_set *c, *tc;
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
 	list_for_each_entry_safe(dc, tdc, &uncached_devices, list) {
 		pdev = kmalloc_obj(struct pdev);
 		if (!pdev)
@@ -2736,7 +2736,7 @@ static ssize_t bch_pending_bdevs_cleanup(struct kobject *k,
 			}
 		}
 	}
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
 
 	list_for_each_entry_safe(pdev, tpdev, &pending_devs, list) {
 		pr_info("delete pdev %p\n", pdev);
@@ -2763,7 +2763,7 @@ static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 		struct cache_set *c, *tc;
 		struct cached_dev *dc, *tdc;
 
-		mutex_lock(&bch_register_lock);
+		down_write(&bch_register_lock);
 
 		if (bcache_is_reboot)
 			goto out;
@@ -2780,7 +2780,7 @@ static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 		    list_empty(&uncached_devices))
 			goto out;
 
-		mutex_unlock(&bch_register_lock);
+		up_write(&bch_register_lock);
 
 		pr_info("Stopping all devices:\n");
 
@@ -2815,7 +2815,7 @@ static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 		while (1) {
 			long timeout = start + 10 * HZ - jiffies;
 
-			mutex_lock(&bch_register_lock);
+			down_write(&bch_register_lock);
 			stopped = list_empty(&bch_cache_sets) &&
 				list_empty(&uncached_devices);
 
@@ -2825,7 +2825,7 @@ static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 			prepare_to_wait(&unregister_wait, &wait,
 					TASK_UNINTERRUPTIBLE);
 
-			mutex_unlock(&bch_register_lock);
+			up_write(&bch_register_lock);
 			schedule_timeout(timeout);
 		}
 
@@ -2836,7 +2836,7 @@ static int bcache_reboot(struct notifier_block *n, unsigned long code, void *x)
 		else
 			pr_notice("Timeout waiting for devices to be closed\n");
 out:
-		mutex_unlock(&bch_register_lock);
+		up_write(&bch_register_lock);
 	}
 
 	return NOTIFY_DONE;
@@ -2864,7 +2864,6 @@ static void bcache_exit(void)
 	if (bcache_major)
 		unregister_blkdev(bcache_major, "bcache");
 	unregister_reboot_notifier(&reboot);
-	mutex_destroy(&bch_register_lock);
 }
 
 /* Check and fixup module parameters */
@@ -2904,14 +2903,13 @@ static int __init bcache_init(void)
 
 	check_module_parameters();
 
-	mutex_init(&bch_register_lock);
+	init_rwsem(&bch_register_lock);
 	init_waitqueue_head(&unregister_wait);
 	register_reboot_notifier(&reboot);
 
 	bcache_major = register_blkdev(0, "bcache");
 	if (bcache_major < 0) {
 		unregister_reboot_notifier(&reboot);
-		mutex_destroy(&bch_register_lock);
 		return bcache_major;
 	}
 

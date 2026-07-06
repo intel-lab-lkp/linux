@@ -285,7 +285,26 @@ SHOW(__bch_cached_dev)
 #undef var
 	return 0;
 }
-SHOW_LOCKED(bch_cached_dev)
+SHOW(bch_cached_dev)
+{
+	struct cached_dev *dc = container_of(kobj, struct cached_dev,
+					     disk.kobj);
+	ssize_t ret;
+
+	/*
+	 * Statistics attributes like dirty_data read atomic variables and
+	 * can be shown without holding the global bch_register_lock.
+	 */
+	if (attr == &sysfs_dirty_data ||
+	    attr == &sysfs_writeback_rate_debug)
+		return __bch_cached_dev_show(kobj, attr, buf);
+
+	down_read(&bch_register_lock);
+	ret = __bch_cached_dev_show(kobj, attr, buf);
+	up_read(&bch_register_lock);
+
+	return ret;
+}
 
 STORE(__cached_dev)
 {
@@ -462,7 +481,8 @@ STORE(bch_cached_dev)
 	if (bcache_is_reboot)
 		return -EBUSY;
 
-	mutex_lock(&bch_register_lock);
+	down_write(&bch_register_lock);
+
 	size = __cached_dev_store(kobj, attr, buf, size);
 
 	if (attr == &sysfs_writeback_running) {
@@ -495,7 +515,8 @@ STORE(bch_cached_dev)
 			schedule_delayed_work(&dc->writeback_rate_update,
 				      dc->writeback_rate_update_seconds * HZ);
 
-	mutex_unlock(&bch_register_lock);
+	up_write(&bch_register_lock);
+
 	return size;
 }
 
@@ -598,7 +619,18 @@ STORE(__bch_flash_dev)
 
 	return size;
 }
-STORE_LOCKED(bch_flash_dev)
+STORE(bch_flash_dev)
+{
+	/* no user space access if system is rebooting */
+	if (bcache_is_reboot)
+		return -EBUSY;
+
+	down_write(&bch_register_lock);
+	size = __bch_flash_dev_store(kobj, attr, buf, size);
+	up_write(&bch_register_lock);
+
+	return size;
+}
 
 static struct attribute *bch_flash_dev_attrs[] = {
 	&sysfs_unregister,
@@ -806,7 +838,16 @@ SHOW(__bch_cache_set)
 
 	return 0;
 }
-SHOW_LOCKED(bch_cache_set)
+SHOW(bch_cache_set)
+{
+	ssize_t ret;
+
+	down_read(&bch_register_lock);
+	ret = __bch_cache_set_show(kobj, attr, buf);
+	up_read(&bch_register_lock);
+
+	return ret;
+}
 
 STORE(__bch_cache_set)
 {
@@ -927,7 +968,20 @@ STORE(__bch_cache_set)
 
 	return size;
 }
-STORE_LOCKED(bch_cache_set)
+STORE(bch_cache_set)
+{
+	ssize_t ret;
+
+	/* no user space access if system is rebooting */
+	if (bcache_is_reboot)
+		return -EBUSY;
+
+	down_write(&bch_register_lock);
+	ret = __bch_cache_set_store(kobj, attr, buf, size);
+	up_write(&bch_register_lock);
+
+	return ret;
+}
 
 SHOW(bch_cache_set_internal)
 {

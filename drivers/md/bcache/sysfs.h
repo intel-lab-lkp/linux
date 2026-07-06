@@ -24,9 +24,9 @@ static ssize_t fn ## _store(struct kobject *kobj, struct attribute *attr,\
 SHOW(fn)								\
 {									\
 	ssize_t ret;							\
-	mutex_lock(&bch_register_lock);					\
+	down_read(&bch_register_lock);					\
 	ret = __ ## fn ## _show(kobj, attr, buf);			\
-	mutex_unlock(&bch_register_lock);				\
+	up_read(&bch_register_lock);				\
 	return ret;							\
 }
 
@@ -34,9 +34,9 @@ SHOW(fn)								\
 STORE(fn)								\
 {									\
 	ssize_t ret;							\
-	mutex_lock(&bch_register_lock);					\
+	down_write(&bch_register_lock);					\
 	ret = __ ## fn ## _store(kobj, attr, buf, size);		\
-	mutex_unlock(&bch_register_lock);				\
+	up_write(&bch_register_lock);				\
 	return ret;							\
 }
 
