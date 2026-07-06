@@ -2888,6 +2888,10 @@ static int do_change_type(const struct path *path, int ms_flags)
 	if (!type)
 		return -EINVAL;
 
+	err = security_mount_change_type(path, ms_flags);
+	if (err)
+		return err;
+
 	guard(namespace_excl)();
 
 	err = may_change_propagation(mnt);
@@ -2998,6 +3002,7 @@ static int do_loopback(const struct path *path, const char *old_name,
 {
 	struct path old_path __free(path_put) = {};
 	struct mount *mnt = NULL;
+	struct path dest;
 	int err;
 
 	if (!old_name || !*old_name)
@@ -3015,6 +3020,17 @@ static int do_loopback(const struct path *path, const char *old_name,
 
 	if (!check_mnt(mp.parent))
 		return -EINVAL;
+
+	/*
+	 * Check permission against the mountpoint that was actually pinned
+	 * under the namespace semaphore, rather than the caller-supplied
+	 * @path which may have been overmounted before the lock was taken.
+	 */
+	dest.mnt = &mp.parent->mnt;
+	dest.dentry = mp.mp->m_dentry;
+	err = security_mount_bind(&old_path, &dest, recurse);
+	if (err)
+		return err;
 
 	mnt = __do_loopback(&old_path, recurse, CL_COPY_MNT_NS_FILE);
 	if (IS_ERR(mnt))
@@ -3328,7 +3344,8 @@ static void mnt_warn_timestamp_expiry(const struct path *mountpoint,
  * superblock it refers to.  This is triggered by specifying MS_REMOUNT|MS_BIND
  * to mount(2).
  */
-static int do_reconfigure_mnt(const struct path *path, unsigned int mnt_flags)
+static int do_reconfigure_mnt(const struct path *path, unsigned int mnt_flags,
+			      unsigned long flags)
 {
 	struct super_block *sb = path->mnt->mnt_sb;
 	struct mount *mnt = real_mount(path->mnt);
@@ -3342,6 +3359,10 @@ static int do_reconfigure_mnt(const struct path *path, unsigned int mnt_flags)
 
 	if (!can_change_locked_flags(mnt, mnt_flags))
 		return -EPERM;
+
+	ret = security_mount_reconfigure(path, mnt_flags, flags);
+	if (ret)
+		return ret;
 
 	/*
 	 * We're only checking whether the superblock is read-only not
@@ -3366,7 +3387,7 @@ static int do_reconfigure_mnt(const struct path *path, unsigned int mnt_flags)
  * on it - tough luck.
  */
 static int do_remount(const struct path *path, int sb_flags,
-		      int mnt_flags, void *data)
+		      int mnt_flags, void *data, unsigned long flags)
 {
 	int err;
 	struct super_block *sb = path->mnt->mnt_sb;
@@ -3393,6 +3414,9 @@ static int do_remount(const struct path *path, int sb_flags,
 	fc->oldapi = true;
 
 	err = parse_monolithic_mount_data(fc, data);
+	if (!err)
+		err = security_mount_remount(fc, path, mnt_flags, flags,
+					    data);
 	if (!err) {
 		down_write(&sb->s_umount);
 		err = -EPERM;
@@ -3430,6 +3454,16 @@ static int do_set_group(const struct path *from_path, const struct path *to_path
 	int err;
 
 	guard(namespace_excl)();
+
+	/*
+	 * Setting a sharing group does not overmount anything, so the
+	 * source, target and top mount all refer to @to_path.  The check
+	 * runs under the namespace semaphore for the same reason as the
+	 * move case.
+	 */
+	err = security_mount_move(from_path, to_path, to_path);
+	if (err)
+		return err;
 
 	err = may_change_propagation(from);
 	if (err)
@@ -3627,6 +3661,7 @@ static int do_move_mount(const struct path *old_path,
 			 enum mnt_tree_flags_t flags)
 {
 	struct mount *old = real_mount(old_path->mnt);
+	struct path target, top;
 	int err;
 	bool beneath = flags & MNT_TREE_BENEATH;
 
@@ -3639,6 +3674,17 @@ static int do_move_mount(const struct path *old_path,
 	LOCK_MOUNT_MAYBE_BENEATH(mp, new_path, beneath);
 	if (IS_ERR(mp.parent))
 		return PTR_ERR(mp.parent);
+
+	/*
+	 * The destination that was actually pinned under the namespace
+	 * semaphore.  For a plain move the source is attached on top of
+	 * @target, so @target is also the mount that ends up on top; for
+	 * MOVE_MOUNT_BENEATH the source is inserted below the existing top
+	 * mount, which is reported separately below.
+	 */
+	target.mnt = &mp.parent->mnt;
+	target.dentry = mp.mp->m_dentry;
+	top = target;
 
 	if (check_mnt(old)) {
 		/* if the source is in our namespace... */
@@ -3680,7 +3726,13 @@ static int do_move_mount(const struct path *old_path,
 		err = can_move_mount_beneath(old, over, &mp);
 		if (err)
 			return err;
+		top.mnt = &over->mnt;
+		top.dentry = over->mnt.mnt_root;
 	}
+
+	err = security_mount_move(old_path, &target, &top);
+	if (err)
+		return err;
 
 	/*
 	 * Don't move a mount tree containing unbindable mounts to a destination
@@ -3786,7 +3838,7 @@ static int do_new_mount_fc(struct fs_context *fc, const struct path *mountpoint,
  */
 static int do_new_mount(const struct path *path, const char *fstype,
 			int sb_flags, int mnt_flags,
-			const char *name, void *data)
+			const char *name, void *data, unsigned long flags)
 {
 	struct file_system_type *type;
 	struct fs_context *fc;
@@ -3830,6 +3882,9 @@ static int do_new_mount(const struct path *path, const char *fstype,
 		err = parse_monolithic_mount_data(fc, data);
 	if (!err && !mount_capable(fc))
 		err = -EPERM;
+
+	if (!err)
+		err = security_mount_new(fc, path, mnt_flags, flags, data);
 	if (!err)
 		err = do_new_mount_fc(fc, path, mnt_flags);
 
@@ -4080,7 +4135,6 @@ int path_mount(const char *dev_name, const struct path *path,
 		const char *type_page, unsigned long flags, void *data_page)
 {
 	unsigned int mnt_flags = 0, sb_flags;
-	int ret;
 
 	/* Discard magic */
 	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
@@ -4093,9 +4147,6 @@ int path_mount(const char *dev_name, const struct path *path,
 	if (flags & MS_NOUSER)
 		return -EINVAL;
 
-	ret = security_sb_mount(dev_name, path, type_page, flags, data_page);
-	if (ret)
-		return ret;
 	if (!may_mount())
 		return -EPERM;
 	if (flags & SB_MANDLOCK)
@@ -4141,9 +4192,9 @@ int path_mount(const char *dev_name, const struct path *path,
 			    SB_I_VERSION);
 
 	if ((flags & (MS_REMOUNT | MS_BIND)) == (MS_REMOUNT | MS_BIND))
-		return do_reconfigure_mnt(path, mnt_flags);
+		return do_reconfigure_mnt(path, mnt_flags, flags);
 	if (flags & MS_REMOUNT)
-		return do_remount(path, sb_flags, mnt_flags, data_page);
+		return do_remount(path, sb_flags, mnt_flags, data_page, flags);
 	if (flags & MS_BIND)
 		return do_loopback(path, dev_name, flags & MS_REC);
 	if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE))
@@ -4152,7 +4203,7 @@ int path_mount(const char *dev_name, const struct path *path,
 		return do_move_mount_old(path, dev_name);
 
 	return do_new_mount(path, type_page, sb_flags, mnt_flags, dev_name,
-			    data_page);
+			    data_page, flags);
 }
 
 int do_mount(const char *dev_name, const char __user *dir_name,
@@ -4543,12 +4594,6 @@ static inline int vfs_move_mount(const struct path *from_path,
 				 const struct path *to_path,
 				 enum mnt_tree_flags_t mflags)
 {
-	int ret;
-
-	ret = security_move_mount(from_path, to_path);
-	if (ret)
-		return ret;
-
 	if (mflags & MNT_TREE_PROPAGATION)
 		return do_set_group(from_path, to_path);
 
