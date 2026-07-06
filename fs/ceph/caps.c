@@ -1201,13 +1201,13 @@ void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 	if (queue_release &&
 	    (!session->s_cap_reconnect ||
 	     cap->cap_gen == atomic_read(&session->s_cap_gen))) {
-		cap->queue_release = 1;
+		cap->queue_release = true;
 		if (removed) {
 			__ceph_queue_cap_release(session, cap);
 			removed = 0;
 		}
 	} else {
-		cap->queue_release = 0;
+		cap->queue_release = false;
 	}
 	cap->cap_ino = ceph_ino(inode);
 
@@ -4684,7 +4684,7 @@ flush_cap_releases:
 	if (do_cap_release) {
 		cap = ceph_get_cap(mdsc, NULL);
 		cap->cap_ino = vino.ino;
-		cap->queue_release = 1;
+		cap->queue_release = true;
 		cap->cap_id = le64_to_cpu(h->cap_id);
 		cap->mseq = mseq;
 		cap->seq = seq;

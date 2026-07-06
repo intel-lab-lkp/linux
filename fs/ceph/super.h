@@ -220,7 +220,7 @@ struct ceph_cap {
 		/* caps to release */
 		struct {
 			u64 cap_ino;
-			int queue_release;
+			bool queue_release;
 		};
 	};
 	u32 seq, issue_seq, mseq;
