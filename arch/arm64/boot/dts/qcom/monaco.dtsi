@@ -2927,7 +2927,7 @@
 				};
 			};
 
-			lpi_i2s4_active: lpi_i2s4-active-state {
+			lpi_i2s4_active: lpi-i2s4-active-state {
 				data0-pins {
 					pins = "gpio17";
 					function = "i2s4_data";
