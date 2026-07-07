@@ -5,6 +5,7 @@
 #include <asm/errno.h>
 #include <linux/uuid.h>
 #include <linux/cper.h>
+#include <uapi/linux/vmcore.h>
 
 #ifdef CONFIG_DEBUG_FS
 int ras_userspace_consumers(void);
@@ -33,6 +34,12 @@ log_non_standard_event(const guid_t *sec_type,
 { return; }
 static inline void
 log_arm_hw_error(struct cper_sec_proc_arm *err, const u8 sev) { return; }
+#endif
+
+#ifdef CONFIG_RAS_HWERR
+void hwerr_log_error_type(enum hwerr_error_type src);
+#else
+static inline void hwerr_log_error_type(enum hwerr_error_type src) { }
 #endif
 
 struct atl_err {

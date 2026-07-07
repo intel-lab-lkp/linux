@@ -34,6 +34,18 @@ if RAS
 source "arch/x86/ras/Kconfig"
 source "drivers/ras/amd/atl/Kconfig"
 
+config RAS_HWERR
+	bool "Track hardware errors for crash analysis"
+	default y
+	help
+	  Record the count and timestamp of the most recent recoverable
+	  hardware error for each source (CPU, memory, PCI, CXL, ...).  The
+	  data is written at runtime and read post-mortem from a vmcore by
+	  tools such as crash or drgn, to correlate recoverable errors with a
+	  later panic.
+
+	  If unsure, say Y.
+
 config RAS_FMPM
 	tristate "FRU Memory Poison Manager"
 	default m

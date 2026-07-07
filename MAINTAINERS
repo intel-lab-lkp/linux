@@ -22539,6 +22539,13 @@ L:	linux-edac@vger.kernel.org
 S:	Maintained
 F:	drivers/ras/amd/fmpm.c
 
+RAS RECOVERABLE HARDWARE ERROR TRACKING
+M:	Breno Leitao <leitao@kernel.org>
+L:	linux-edac@vger.kernel.org
+S:	Maintained
+F:	Documentation/driver-api/hw-recoverable-errors.rst
+F:	drivers/ras/hwerr_tracking.c
+
 RASPBERRY PI PISP BACK END
 M:	Jacopo Mondi <jacopo.mondi@ideasonboard.com>
 R:	Raspberry Pi Kernel Maintenance <kernel-list@raspberrypi.com>
