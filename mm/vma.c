@@ -732,6 +732,7 @@ static int commit_merge(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *vma;
 	struct vma_prepare vp;
+	unsigned long rbase_diff;
 
 	if (vmg->__adjust_next_start) {
 		/* We manipulate middle and adjust next, which is the target. */
@@ -748,11 +749,15 @@ static int commit_merge(struct vma_merge_struct *vmg)
 	/*
 	 * If vmg->give_up_on_oom is set, we're safe, because we don't actually
 	 * manipulate any VMAs until we succeed at preallocation.
-	 *
-	 * Past this point, we will not return an error.
 	 */
 	if (vma_iter_prealloc(vmg->vmi, vma))
 		return -ENOMEM;
+
+	rbase_diff = rmap_base(vmg->start, vmg->pgoff) - vma_rmap_base(vma);
+	if (rbase_diff && vma_pre_update_rmap_base(vma, rbase_diff)) {
+		vma_iter_free(vmg->vmi);
+		return -ENOMEM;
+	}
 
 	vma_prepare(&vp);
 	/*
@@ -766,6 +771,8 @@ static int commit_merge(struct vma_merge_struct *vmg)
 	vma_iter_store_overwrite(vmg->vmi, vmg->target);
 
 	vma_complete(&vp, vmg->vmi, vma->vm_mm);
+	if (rbase_diff)
+		vma_post_update_rmap_base(vma, rbase_diff);
 
 	return 0;
 }
@@ -1248,6 +1255,7 @@ int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	       unsigned long start, unsigned long end, pgoff_t pgoff)
 {
 	struct vma_prepare vp;
+	unsigned long rbase_diff;
 
 	WARN_ON((vma->vm_start != start) && (vma->vm_end != end));
 
@@ -1261,6 +1269,12 @@ int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	vma_start_write(vma);
 
+	rbase_diff = rmap_base(start, pgoff) - vma_rmap_base(vma);
+	if (rbase_diff && vma_pre_update_rmap_base(vma, rbase_diff)) {
+		vma_iter_free(vmi);
+		return -ENOMEM;
+	}
+
 	init_vma_prep(&vp, vma);
 	vma_prepare(&vp);
 	vma_adjust_trans_huge(vma, start, end, NULL);
@@ -1268,6 +1282,8 @@ int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	vma_iter_clear(vmi);
 	vma_set_range(vma, start, end, pgoff);
 	vma_complete(&vp, vmi, vma->vm_mm);
+	if (rbase_diff)
+		vma_post_update_rmap_base(vma, rbase_diff);
 	validate_mm(vma->vm_mm);
 	return 0;
 }

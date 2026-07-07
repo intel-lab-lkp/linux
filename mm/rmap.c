@@ -622,7 +622,7 @@ void __put_anon_node(struct anon_node *anon_nod)
 }
 
 static inline struct anon_node *anon_node_alloc(struct vm_area_struct *vma,
-		struct anon_node *parent, bool is_fork)
+		struct anon_node *parent, unsigned long rmap_base, bool is_fork)
 {
 	struct anon_node *anon_nod;
 
@@ -641,7 +641,7 @@ static inline struct anon_node *anon_node_alloc(struct vm_area_struct *vma,
 	anon_nod->nr_children = 0;
 	INIT_LIST_HEAD(&anon_nod->fractal_list);
 	anon_nod->mm = vma->vm_mm;
-	atomic_long_set(&anon_nod->rbc, vma_rmap_base(vma) + 1);
+	atomic_long_set(&anon_nod->rbc, rmap_base + 1);
 	return anon_nod;
 }
 
@@ -700,7 +700,7 @@ int __anon_node_prepare(struct vm_area_struct *vma)
 			return 0;
 	}
 
-	anon_nod = anon_node_alloc(vma, NULL, false);
+	anon_nod = anon_node_alloc(vma, NULL, rmap_base, false);
 	if (unlikely(!anon_nod))
 		return -ENOMEM;
 
@@ -734,7 +734,7 @@ static inline void vma_set_anon_node(struct vm_area_struct *vma,
 }
 
 static int anon_node_add_child(struct anon_node *anon_nod,
-	struct vm_area_struct *vma, bool is_fork)
+	struct vm_area_struct *vma, unsigned long rmap_base, bool is_fork)
 {
 	struct anon_node *child;
 	struct anon_node *root = anon_nod->root;
@@ -743,7 +743,7 @@ static int anon_node_add_child(struct anon_node *anon_nod,
 
 	if (root->depth == 0)
 		root->depth = 1;
-	child = anon_node_alloc(vma, anon_nod, is_fork);
+	child = anon_node_alloc(vma, anon_nod, rmap_base, is_fork);
 	if (!child)
 		return -ENOMEM;
 
@@ -764,10 +764,9 @@ static int anon_node_add_child(struct anon_node *anon_nod,
 
 /* Returns 0 on success, non-zero on failure. */
 static int anon_node_track_rmap(struct anon_node *anon_nod,
-		struct vm_area_struct *vma)
+		struct vm_area_struct *vma, unsigned long rmap_base)
 {
 	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
-	unsigned long rmap_base = vma_rmap_base(vma);
 	struct anon_node *rbc_ch = anon_nod;
 
 	if (try_track_rmap(anon_nod, rmap_base))
@@ -782,7 +781,7 @@ static int anon_node_track_rmap(struct anon_node *anon_nod,
 	if (rbc_ch)
 		return 0;
 
-	return anon_node_add_child(anon_nod, vma, false);
+	return anon_node_add_child(anon_nod, vma, rmap_base, false);
 }
 
 /* vma clones src anon_node and increments the count. */
@@ -796,7 +795,7 @@ int anon_node_clone(struct vm_area_struct *vma,  struct vm_area_struct *src,
 		return 0;
 
 	VM_BUG_ON_VMA(vma->anon_vma != (void *)anon_nod, vma);
-	return anon_node_track_rmap(anon_nod, vma);
+	return anon_node_track_rmap(anon_nod, vma, vma_rmap_base(vma));
 }
 
 static struct anon_node *fork_reuse_ancestor(struct anon_node *parent,
@@ -856,12 +855,13 @@ int anon_node_fork_with_prev(struct vm_area_struct *vma,
 		return 0;
 
 	/* 3) Fork a new anon_node. */
-	return anon_node_add_child(parent, vma, true);
+	return anon_node_add_child(parent, vma, rmap_base, true);
 }
 
 /* Returns true if untrack succeeds. */
 static bool anon_node_untrack_rmap_locked(struct anon_node *anon_nod,
-		struct vm_area_struct *vma, struct anon_node **release_node)
+		struct vm_area_struct *vma, unsigned long rmap_base,
+		struct anon_node **release_node)
 {
 	struct anon_node *root = anon_nod->root;
 	struct anon_node *node = anon_nod;
@@ -869,7 +869,7 @@ static bool anon_node_untrack_rmap_locked(struct anon_node *anon_nod,
 	bool test_empty = false;
 
 	do {
-		if (try_untrack_rmap(node, vma_rmap_base(vma), &test_empty))
+		if (try_untrack_rmap(node, rmap_base, &test_empty))
 			break;
 		node = anon_node_next_rbc_child(anon_nod, node);
 	} while (node);
@@ -938,7 +938,8 @@ void unlink_anon_nodes(struct vm_area_struct *vma)
 	down_write(rmap_sem);
 	anon_nod = vma_anon_node(vma); /* Recheck after locking. */
 	if (anon_nod) {
-		anon_node_untrack_rmap_locked(anon_nod, vma, &release_node);
+		anon_node_untrack_rmap_locked(anon_nod, vma,
+			vma_rmap_base(vma), &release_node);
 		vma->anon_vma = NULL;
 	}
 	up_write(rmap_sem);
@@ -947,6 +948,39 @@ void unlink_anon_nodes(struct vm_area_struct *vma)
 		release_anon_nodes(release_node);
 }
 
+int vma_pre_update_rmap_base(struct vm_area_struct *vma, unsigned long diff)
+{
+	struct anon_node *anon_nod = vma_anon_node(vma);
+	int err;
+
+	vma_assert_write_locked(vma);
+	if (!anon_nod || !diff)
+		return 0;
+
+	err = anon_node_track_rmap(anon_nod, vma, vma_rmap_base(vma) + diff);
+	if (!err)
+		down_write(anon_node_rmap_sem(anon_nod));
+	return err;
+}
+
+void vma_post_update_rmap_base(struct vm_area_struct *vma, unsigned long diff)
+{
+	struct anon_node *anon_nod = vma_anon_node(vma);
+	struct rw_semaphore *rmap_sem;
+	struct anon_node *release_node = NULL;
+
+	vma_assert_write_locked(vma);
+	if (!anon_nod || !diff)
+		return;
+
+	rmap_sem = anon_node_rmap_sem(anon_nod);
+	rwsem_assert_held_write(rmap_sem);
+	anon_node_untrack_rmap_locked(anon_nod, vma,
+		vma_rmap_base(vma) - diff, &release_node);
+	up_write(rmap_sem);
+	if (release_node)
+		release_anon_nodes(release_node);
+}
 
 #endif
 

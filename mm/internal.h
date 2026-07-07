@@ -315,7 +315,12 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma);
 int  __anon_vma_prepare(struct vm_area_struct *vma);
 void unlink_anon_vmas(struct vm_area_struct *vma);
 
-#ifdef CONFIG_ANON_VMA_FRACTAL
+#ifndef CONFIG_ANON_VMA_FRACTAL
+static inline int vma_pre_update_rmap_base(struct vm_area_struct *vma,
+	unsigned long diff) { return 0; }
+static inline void vma_post_update_rmap_base(struct vm_area_struct *vma,
+	unsigned long diff) {}
+#else
 int anon_node_clone(struct vm_area_struct *vma, struct vm_area_struct *src,
 	enum vma_operation operation);
 int anon_node_fork_with_prev(struct vm_area_struct *vma,
@@ -323,6 +328,9 @@ int anon_node_fork_with_prev(struct vm_area_struct *vma,
 	struct vm_area_struct *pvma_prev);
 int __anon_node_prepare(struct vm_area_struct *vma);
 void unlink_anon_nodes(struct vm_area_struct *vma);
+/* relocate_vma_down() changes vma_rmap_base. */
+int vma_pre_update_rmap_base(struct vm_area_struct *vma, unsigned long diff);
+void vma_post_update_rmap_base(struct vm_area_struct *vma, unsigned long diff);
 
 #endif
 
