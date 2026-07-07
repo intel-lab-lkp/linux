@@ -300,6 +300,9 @@ static int eip93_hash_init(struct ahash_request *req)
 	struct eip93_hash_ctx *ctx = crypto_ahash_ctx(ahash);
 	struct sa_state *sa_state = &rctx->sa_state;
 
+	if (IS_HMAC(ctx->flags) && !memchr_inv(ctx->ipad, 0, SHA256_BLOCK_SIZE))
+		return -EINVAL;
+
 	memset(sa_state->state_byte_cnt, 0, sizeof(u32) * 2);
 	eip93_hash_init_sa_state_digest(ctx->flags & EIP93_HASH_MASK,
 					sa_state->state_i_digest);
