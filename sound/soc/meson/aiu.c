@@ -311,7 +311,7 @@ static int aiu_probe(struct platform_device *pdev)
 					 ARRAY_SIZE(aiu_cpu_dai_drv));
 	if (ret) {
 		dev_err(dev, "Failed to register cpu component\n");
-		return ret;
+		goto err;
 	}
 
 	/* Register the hdmi codec control component */
