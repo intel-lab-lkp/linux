@@ -733,8 +733,10 @@ static int vga_switchto_stage2(struct vga_switcheroo_client *new_client)
 	if (!active->driver_power_control)
 		set_audio_state(active->id, VGA_SWITCHEROO_OFF);
 
+	if (new_client->ops->pre_switch)
+		new_client->ops->pre_switch(new_client->pdev);
 #if defined(CONFIG_FB)
-	if (new_client->fb_info)
+	else if (new_client->fb_info)
 		fb_switch_outputs(new_client->fb_info);
 #endif
 
