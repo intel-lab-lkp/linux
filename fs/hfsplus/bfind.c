@@ -322,6 +322,11 @@ int hfsplus_brec_read_cat(struct hfs_find_data *fd, hfsplus_cat_entry *entry)
 			pr_err("thread record too short (got %u)\n", fd->entrylength);
 			return -EIO;
 		}
+		if (be16_to_cpu(entry->thread.nodeName.length) >
+		    HFSPLUS_MAX_STRLEN) {
+			pr_err("catalog name length corrupted\n");
+			return -EIO;
+		}
 		expected_size = hfsplus_cat_thread_size(&entry->thread);
 		break;
 	default:

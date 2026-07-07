@@ -92,6 +92,11 @@
 #define HFS_CDR_THD		0x03	/* folder (directory) thread */
 #define HFS_CDR_FTH		0x04	/* file thread */
 
+static inline bool is_hfs_thread_record_type(u16 type)
+{
+	return type == HFS_CDR_THD || type == HFS_CDR_FTH;
+}
+
 /* legal values for hfs_ext_key.FkType and hfs_file.fork */
 #define HFS_FK_DATA		0x00
 #define HFS_FK_RSRC		0xFF
