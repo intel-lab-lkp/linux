@@ -85,12 +85,7 @@ pub use super::{
         VVec,
         Vec, //
     },
-    build_assert::{
-        build_assert,
-        build_error,
-        const_assert,
-        static_assert, //
-    },
+    build_assert::*,
     current,
     dev_alert,
     dev_crit,
