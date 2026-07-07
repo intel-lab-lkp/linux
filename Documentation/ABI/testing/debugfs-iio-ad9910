@@ -1,0 +1,60 @@
+What:		/sys/kernel/debug/iio/iio:deviceX/frequency_source
+KernelVersion:	7.3
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Read-only. Reports the channel label that corresponds to which of the
+		on-chip signal generators is currently driving the output frequency.
+
+		Resolution order (first match wins):
+
+		- ``ram`` — RAM playback is enabled and its destination is
+		  frequency, phase (polar), amplitude, or polar.
+		- ``drg_frequency`` — the Digital Ramp Generator is enabled
+		  and its destination is frequency.
+		- ``parallel_frequency`` — the parallel data port is enabled
+		  and the frequency scan element is active.
+		- ``profileN`` (N = 0..7) — none of the above modulation
+		  sources are driving frequency, so the currently selected
+		  single-tone profile register is in effect.
+
+What:		/sys/kernel/debug/iio/iio:deviceX/phase_source
+KernelVersion:	7.3
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Read-only. Reports the channel label that corresponds to which of the
+		on-chip signal generators is currently driving the output phase.
+
+		Resolution order (first match wins):
+
+		- ``ram`` — RAM playback is enabled and its destination is
+		  phase or polar.
+		- ``drg_phase`` — the Digital Ramp Generator is enabled and
+		  its destination is phase.
+		- ``parallel_phase`` / ``parallel_polar_phase`` — the parallel
+		  data port is enabled and the corresponding phase scan
+		  element is active.
+		- ``profileN`` (N = 0..7) — none of the above modulation
+		  sources are driving phase, so the currently selected
+		  single-tone profile register is in effect.
+
+What:		/sys/kernel/debug/iio/iio:deviceX/amplitude_source
+KernelVersion:	7.3
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Read-only. Reports the channel label that corresponds to which of the
+		on-chip signal generators is currently driving the output amplitude.
+
+		Resolution order (first match wins):
+
+		- ``osk`` — the Output Shift Keying block is enabled and
+		  overrides other amplitude sources.
+		- ``ram`` — RAM playback is enabled and its destination is
+		  amplitude or polar.
+		- ``drg_amplitude`` — the Digital Ramp Generator is enabled
+		  and its destination is amplitude.
+		- ``parallel_amplitude`` / ``parallel_polar_amplitude`` — the
+		  parallel data port is enabled and the corresponding
+		  amplitude scan element is active.
+		- ``profileN`` (N = 0..7) — none of the above modulation
+		  sources are driving amplitude, so the currently selected
+		  single-tone profile register is in effect.
