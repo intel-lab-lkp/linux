@@ -111,6 +111,12 @@
 #define RTL8116AF_FUNC_PM_CSR		0x80
 #define RTL8116AF_FUNC_EXP_LNKCTL	0x44
 #define RTL_PM_D3HOT			GENMASK(1, 0)
+#define R8127_SDS_CMD			0x2348
+#define R8127_SDS_ADDR			0x234a
+#define R8127_SDS_DATA_IN		0x234c
+#define R8127_SDS_DATA_OUT		0x234e
+#define R8127_SDS_CMD_EXEC		BIT(0)
+#define R8127_SDS_CMD_WE		BIT(1)
 
 static const struct rtl_chip_info {
 	u32 mask;
@@ -1223,6 +1229,67 @@ static void r8127_sfp_sds_phy_reset(struct rtl8169_private *tp)
 	RTL_W16(tp, 0x233a, 0x801f);
 	RTL_W8(tp, 0x2350, RTL_R8(tp, 0x2350) | BIT(0));
 	usleep_range(10, 20);
+}
+
+DECLARE_RTL_COND(r8127_sds_cmd_cond)
+{
+	return RTL_R16(tp, R8127_SDS_CMD) & R8127_SDS_CMD_EXEC;
+}
+
+static u16 r8127_sds_read(struct rtl8169_private *tp, u16 index, u16 page, u16 reg)
+{
+	u16 addr = (index << 11) | (page << 5) | reg;
+
+	RTL_W16(tp, R8127_SDS_ADDR, addr);
+	RTL_W16(tp, R8127_SDS_CMD, R8127_SDS_CMD_EXEC);
+
+	if (rtl_loop_wait_low(tp, &r8127_sds_cmd_cond, 10, 100))
+		return RTL_R16(tp, R8127_SDS_DATA_OUT);
+
+	return 0xffff;
+}
+
+static void r8127_sds_write(struct rtl8169_private *tp, u16 index, u16 page,
+			    u16 reg, u16 val)
+{
+	u16 addr = (index << 11) | (page << 5) | reg;
+
+	RTL_W16(tp, R8127_SDS_DATA_IN, val);
+	RTL_W16(tp, R8127_SDS_ADDR, addr);
+	RTL_W16(tp, R8127_SDS_CMD, R8127_SDS_CMD_EXEC | R8127_SDS_CMD_WE);
+
+	rtl_loop_wait_low(tp, &r8127_sds_cmd_cond, 10, 100);
+}
+
+static void r8127_sds_modify(struct rtl8169_private *tp, u16 index, u16 page,
+			     u16 reg, u16 clearmask, u16 setmask)
+{
+	u16 val = r8127_sds_read(tp, index, page, reg);
+
+	val = (val & ~clearmask) | setmask;
+	r8127_sds_write(tp, index, page, reg, val);
+}
+
+static void r8127_sfp_init_1g(struct rtl8169_private *tp)
+{
+	int val;
+
+	r8127_sfp_sds_phy_reset(tp);
+
+	r8127_sds_modify(tp, 0, 1, 31, 0, BIT(3));
+	r8127_sds_modify(tp, 0, 2,  0, BIT(13) | BIT(12) | BIT(6), BIT(12) | BIT(6));
+	r8127_sds_modify(tp, 0, 0,  4, 0, BIT(2));
+
+	RTL_W16(tp, 0x233a, 0x8004);
+	RTL_W16(tp, 0x233e, (RTL_R16(tp, 0x233e) & ~0x3003) | 0x0002);
+
+	r8168_phy_ocp_write(tp, 0xc40a, 0x0000);
+	r8168_phy_ocp_write(tp, 0xc466, 0x0000);
+	r8168_phy_ocp_write(tp, 0xc808, 0x0000);
+	r8168_phy_ocp_write(tp, 0xc80a, 0x0000);
+
+	val = r8168_phy_ocp_read(tp, 0xc804);
+	r8168_phy_ocp_write(tp, 0xc804, (val & ~0x000f) | 0x000c);
 }
 
 static void r8127_sfp_init_10g(struct rtl8169_private *tp)
@@ -5756,8 +5823,20 @@ static int rtl8169_pcs_config(struct phylink_pcs *pcs, unsigned int mode,
 {
 	struct rtl8169_private *tp = container_of(pcs, struct rtl8169_private, pcs);
 
-	if (tp->sfp_mode == RTL_SFP_8127_ATF)
-		r8127_sfp_init_10g(tp);
+	if (tp->sfp_mode == RTL_SFP_8127_ATF) {
+		switch (interface) {
+		case PHY_INTERFACE_MODE_10GBASER:
+			r8127_sfp_init_10g(tp);
+			break;
+		case PHY_INTERFACE_MODE_1000BASEX:
+			r8127_sfp_init_1g(tp);
+			break;
+		default:
+			netdev_err(tp->dev, "Unsupported SFP interface mode: %s\n",
+				   phy_modes(interface));
+			return -EOPNOTSUPP;
+		}
+	}
 
 	return 0;
 }
@@ -5848,7 +5927,7 @@ static int rtl_init_phylink(struct rtl8169_private *tp)
 		tp->pcs.ops = &r8169_pcs_ops;
 		phy_mode = PHY_INTERFACE_MODE_10GBASER;
 		tp->phylink_config.default_an_inband = true;
-		tp->phylink_config.mac_capabilities |= MAC_10000FD;
+		tp->phylink_config.mac_capabilities |= MAC_1000FD | MAC_10000FD;
 		break;
 	default:
 		phy_mode = PHY_INTERFACE_MODE_INTERNAL;
