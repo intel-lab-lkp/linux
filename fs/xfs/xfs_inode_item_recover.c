@@ -510,6 +510,10 @@ xlog_recover_inode_commit_pass2(
 	switch (fields & XFS_ILOG_DFORK) {
 	case XFS_ILOG_DDATA:
 	case XFS_ILOG_DEXT:
+		if (len > XFS_DFORK_DSIZE(dip, mp)) {
+			error = -EFSCORRUPTED;
+			goto out_release;
+		}
 		memcpy(XFS_DFORK_DPTR(dip), src, len);
 		break;
 
@@ -545,8 +549,11 @@ xlog_recover_inode_commit_pass2(
 		switch (in_f->ilf_fields & XFS_ILOG_AFORK) {
 		case XFS_ILOG_ADATA:
 		case XFS_ILOG_AEXT:
+			if (len > XFS_DFORK_ASIZE(dip, mp)) {
+				error = -EFSCORRUPTED;
+				goto out_release;
+			}
 			dest = XFS_DFORK_APTR(dip);
-			ASSERT(len <= XFS_DFORK_ASIZE(dip, mp));
 			memcpy(dest, src, len);
 			break;
 
