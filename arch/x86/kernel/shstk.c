@@ -607,11 +607,13 @@ long shstk_prctl(struct task_struct *task, int option, unsigned long arg2)
 		return -EINVAL;
 	}
 
-	/* Handle ARCH_SHSTK_ENABLE */
-	if (features & ARCH_SHSTK_SHSTK)
-		return shstk_setup();
-	if (features & ARCH_SHSTK_WRSS)
-		return wrss_control(true);
+	if (option == ARCH_SHSTK_ENABLE) {
+		if (features & ARCH_SHSTK_SHSTK)
+			return shstk_setup();
+		if (features & ARCH_SHSTK_WRSS)
+			return wrss_control(true);
+	}
+
 	return -EINVAL;
 }
 
