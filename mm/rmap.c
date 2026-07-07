@@ -572,6 +572,8 @@ void __put_anon_vma(struct anon_vma *anon_vma)
 
 static struct kmem_cache *anon_node_cachep;
 
+
+
 static inline struct rw_semaphore *anon_node_rmap_sem(struct anon_node *node)
 {
 	return &node->root->rwsem;
@@ -1035,7 +1037,46 @@ void anon_node_lock_rmap(struct anon_node *anon_nod)
 
 void anon_node_unlock_rmap(struct anon_node *anon_nod)
 {
+#ifdef CONFIG_PER_VMA_LOCK
+	/* Corresponds to folio_lock_anon_vma_read(). */
+	if (anon_rmap_is_leaf_vma(anon_nod)) {
+		vma_refcount_put(anon_rmap_to_leaf_vma(anon_nod));
+		return;
+	}
+#endif
+
 	up_read(anon_node_rmap_sem(anon_nod));
+}
+
+static struct vm_area_struct *trylock_leaf_vma_rmap(
+		struct anon_node *anon_nod, const struct folio *folio,
+		struct mm_struct **other_mm)
+{
+	unsigned long pgoff_start = folio_pgoff(folio);
+	unsigned long pgoff_end = pgoff_start + folio_nr_pages(folio) - 1;
+	unsigned long addr = anon_node_rmap_address(anon_nod, pgoff_start);
+	struct mm_struct *mm = anon_nod->mm;
+	struct vm_area_struct *vma;
+	int oldcnt;
+
+	if (anon_nod->nr_children)
+		return NULL;
+
+	if (!addr || !mm || !mmget_not_zero(mm))
+		return NULL;
+
+	vma = vma_lookup(mm, addr);
+	mmput_async(mm);
+	if (!vma || vma_last_pgoff(vma) < pgoff_end)
+		return NULL;
+
+	if (!__refcount_inc_not_zero_limited_acquire(&vma->vm_refcnt, &oldcnt,
+						     VM_REFCNT_LIMIT)) {
+		return NULL;
+	}
+
+	*other_mm = (vma->vm_mm == mm) ? NULL : vma->vm_mm;
+	return vma;
 }
 
 #endif
@@ -1117,6 +1158,8 @@ struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 {
 	struct anon_vma *anon_vma = NULL;
 	struct anon_vma *root_anon_vma;
+	struct vm_area_struct *leaf_vma = NULL;
+	struct mm_struct *other_mm = NULL;
 	unsigned long anon_mapping;
 
 	VM_WARN_ON_FOLIO(!folio_test_locked(folio), folio);
@@ -1130,6 +1173,15 @@ struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 
 	anon_vma = (struct anon_vma *) (anon_mapping - FOLIO_MAPPING_ANON);
 	root_anon_vma = READ_ONCE(anon_vma->root);
+#if defined(CONFIG_PER_VMA_LOCK) && defined(CONFIG_ANON_VMA_FRACTAL)
+	leaf_vma = trylock_leaf_vma_rmap(anon_vma, folio, &other_mm);
+	if (leaf_vma && !other_mm && folio_mapped(folio)) {
+		rcu_read_unlock();
+		return (void *)leaf_vma + ANON_RMAP_LEAF_VMA;
+	}
+	if (unlikely(other_mm))
+		mmgrab(other_mm); /* put vma after unlock. */
+#endif
 	if (down_read_trylock(&root_anon_vma->rwsem)) {
 		/*
 		 * If the folio is still mapped, then this anon_vma is still
@@ -1156,9 +1208,8 @@ struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 	}
 
 	if (!folio_mapped(folio)) {
-		rcu_read_unlock();
 		put_anon_vma(anon_vma);
-		return NULL;
+		goto out;
 	}
 
 	/* we pinned the anon_vma, its safe to sleep */
@@ -1176,10 +1227,17 @@ struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 		anon_vma = NULL;
 	}
 
-	return anon_vma;
+	goto out_unlocked;
 
 out:
 	rcu_read_unlock();
+out_unlocked:
+#ifdef CONFIG_PER_VMA_LOCK
+	if (leaf_vma)
+		vma_refcount_put(leaf_vma);
+#endif
+	if (other_mm)
+		mmdrop(other_mm);
 	return anon_vma;
 }
 

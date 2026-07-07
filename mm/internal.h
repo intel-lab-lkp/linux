@@ -355,6 +355,23 @@ int anon_node_trylock_rmap(struct anon_node *anon_nod);
 void anon_node_lock_rmap(struct anon_node *anon_nod);
 void anon_node_unlock_rmap(struct anon_node *anon_nod);
 
+#define ANON_RMAP_LEAF_VMA	1
+#define ANON_RMAP_FLAGS 	(ANON_RMAP_LEAF_VMA)
+
+static inline bool anon_rmap_is_leaf_vma(void *anon_rmap)
+{
+#ifdef CONFIG_PER_VMA_LOCK
+	return ((unsigned long)anon_rmap & ANON_RMAP_FLAGS) == ANON_RMAP_LEAF_VMA;
+#else
+	return false;
+#endif
+}
+
+static inline struct vm_area_struct *anon_rmap_to_leaf_vma(void *anon_rmap)
+{
+	return (void *)((unsigned long)anon_rmap & ~ANON_RMAP_FLAGS);
+}
+
 #define ANON_RMAP_FOREACH_VMA(anon_vma, addr, start, last, rmap_proc_vma) \
 do { \
 	struct vm_area_struct *vma = NULL; /* must be named vma */ \
@@ -363,6 +380,11 @@ do { \
 	unsigned long _pgoff = (start); \
 	unsigned long _nr = 0, _total = 1; \
 	\
+	if (anon_rmap_is_leaf_vma(_anon_nod)) { \
+		vma = anon_rmap_to_leaf_vma(_anon_nod); \
+		(rmap_proc_vma); \
+		break; \
+	} \
 	while (_nod) { \
 		vma = anon_node_lookup_vma(_nod, (addr), _pgoff); \
 		if (vma) \
