@@ -637,6 +637,10 @@ free_sa_state_ctr:
 				 DMA_TO_DEVICE);
 free_sa_state:
 	kfree(rctx->sa_state);
+	if (rctx->sa_record_base)
+		dma_unmap_single(eip93->dev, rctx->sa_record_base,
+				 sizeof(rctx->sa_record), DMA_TO_DEVICE);
+	rctx->sa_record_base = 0;
 
 	return err;
 }
@@ -692,6 +696,11 @@ void eip93_handle_result(struct eip93_device *eip93, struct eip93_cipher_reqctx 
 		dma_unmap_single(eip93->dev, rctx->sa_state_ctr_base,
 				 sizeof(*rctx->sa_state_ctr),
 				 DMA_FROM_DEVICE);
+
+	if (rctx->sa_record_base)
+		dma_unmap_single(eip93->dev, rctx->sa_record_base,
+				 sizeof(rctx->sa_record), DMA_TO_DEVICE);
+	rctx->sa_record_base = 0;
 
 	if (rctx->sa_state)
 		dma_unmap_single(eip93->dev, rctx->sa_state_base,
