@@ -25,6 +25,7 @@
 #include <linux/memcontrol.h>
 #include <linux/mm_inline.h>
 #include <linux/secretmem.h>
+#include <linux/migrate.h>
 #include <linux/compaction.h>
 
 #include "internal.h"
@@ -428,6 +429,119 @@ out:
 	return 0;
 }
 
+#ifdef CONFIG_CMA
+static int mlock_collect_migratable_pte_range(pmd_t *pmd, unsigned long addr,
+			unsigned long end, struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+	struct list_head *folio_list = walk->private;
+	spinlock_t *ptl;
+	pte_t *start_pte, *pte;
+	pte_t ptent;
+	struct folio *folio;
+	unsigned int step = 1;
+
+	if (!(vma->vm_flags & VM_LOCKED))
+		return 0;
+
+	ptl = pmd_trans_huge_lock(pmd, vma);
+	if (ptl) {
+		if (!pmd_present(*pmd)) {
+			if (unlikely(softleaf_is_migration(softleaf_from_pmd(*pmd)))) {
+				spin_unlock(ptl);
+				pmd_migration_entry_wait(vma->vm_mm, pmd);
+				walk->action = ACTION_AGAIN;
+				return 0;
+			}
+			goto out;
+		}
+		if (is_huge_zero_pmd(*pmd))
+			goto out;
+		folio = pmd_folio(*pmd);
+		if (folio_is_zone_device(folio))
+			goto out;
+		if (is_migrate_cma_page(&folio->page))
+			isolate_folio_to_list(folio, folio_list);
+		goto out;
+	}
+
+	start_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+	if (!start_pte) {
+		walk->action = ACTION_AGAIN;
+		return 0;
+	}
+
+	for (pte = start_pte; addr != end; pte += step, addr += step * PAGE_SIZE) {
+		step = 1;
+		ptent = ptep_get(pte);
+		if (!pte_present(ptent)) {
+			if (unlikely(softleaf_is_migration(softleaf_from_pte(ptent)))) {
+				pte_unmap_unlock(start_pte, ptl);
+				migration_entry_wait(vma->vm_mm, pmd, addr);
+				walk->action = ACTION_AGAIN;
+				return 0;
+			}
+			continue;
+		}
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio || folio_is_zone_device(folio))
+			continue;
+		step = folio_mlock_step(folio, pte, addr, end);
+		if (is_migrate_cma_page(&folio->page))
+			continue;
+		isolate_folio_to_list(folio, folio_list);
+	}
+	pte_unmap(start_pte);
+out:
+	spin_unlock(ptl);
+	cond_resched();
+	return 0;
+}
+
+static const struct mm_walk_ops mlock_collect_migratable_ops = {
+	.pmd_entry	= mlock_collect_migratable_pte_range,
+	.walk_lock	= PGWALK_RDLOCK,
+};
+
+static void mlock_migrate_cma_range(unsigned long start, unsigned long len)
+{
+	struct mm_struct *mm = current->mm;
+	unsigned long end = start + len;
+	LIST_HEAD(folio_list);
+	struct migration_target_control mtc = {
+		.nid = NUMA_NO_NODE,
+		.gfp_mask = GFP_HIGHUSER | __GFP_NOWARN,
+		.reason = MR_SYSCALL,
+	};
+
+	if (compaction_allow_unevictable())
+		return;
+
+	lru_cache_disable();
+
+	if (mmap_read_lock_killable(mm))
+		goto out;
+
+	walk_page_range(mm, start, end, &mlock_collect_migratable_ops,
+			&folio_list);
+	mmap_read_unlock(mm);
+
+	if (list_empty(&folio_list))
+		goto out;
+
+	if (migrate_pages(&folio_list, alloc_migration_target, NULL,
+			  (unsigned long)&mtc, MIGRATE_SYNC, MR_SYSCALL, NULL))
+		putback_movable_pages(&folio_list);
+out:
+	lru_cache_enable();
+}
+#else
+static inline void mlock_migrate_cma_range(unsigned long start,
+					   unsigned long len)
+{
+}
+#endif /* CONFIG_CMA */
+
 /*
  * mlock_vma_pages_range() - mlock any pages already in the range,
  *                           or munlock all pages in the range.
@@ -678,6 +792,7 @@ static __must_check int do_mlock(unsigned long start, size_t len, vm_flags_t fla
 	error = __mm_populate(start, len, 0);
 	if (error)
 		return __mlock_posix_error_return(error);
+	mlock_migrate_cma_range(start, len);
 	return 0;
 }
 
@@ -790,8 +905,10 @@ SYSCALL_DEFINE1(mlockall, int, flags)
 	    capable(CAP_IPC_LOCK))
 		ret = apply_mlockall_flags(flags);
 	mmap_write_unlock(current->mm);
-	if (!ret && (flags & MCL_CURRENT))
+	if (!ret && (flags & MCL_CURRENT)) {
 		mm_populate(0, TASK_SIZE);
+		mlock_migrate_cma_range(0, TASK_SIZE);
+	}
 
 	return ret;
 }
