@@ -2171,6 +2171,40 @@ static inline bool ttu_anon_swapbacked_folio(struct vm_area_struct *vma, struct 
 	return true;
 }
 
+static inline bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *folio,
+		struct page *subpage, unsigned long address, pte_t *ptep,
+		pte_t pteval, unsigned long nr_pages)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	bool ret;
+
+	/*
+	 * Store the swap location in the pte.
+	 * See handle_pte_fault() ...
+	 */
+	if (unlikely(folio_test_swapbacked(folio) !=
+			folio_test_swapcache(folio))) {
+		WARN_ON_ONCE(1);
+		return false;
+	}
+
+	/* MADV_FREE page check */
+	if (!folio_test_swapbacked(folio)) {
+		ret = ttu_anon_lazyfree_folio(vma, folio);
+		if (ret)
+			add_mm_counter(mm, MM_ANONPAGES, -nr_pages);
+	} else {
+		/* nr_pages > 1 not supported yet */
+		ret = ttu_anon_swapbacked_folio(vma, folio, subpage, address,
+						ptep, pteval);
+	}
+
+	if (!ret)
+		set_ptes(mm, address, ptep, pteval, nr_pages);
+
+	return ret;
+}
+
 /*
  * @arg: enum ttu_flags will be passed to this argument
  */
@@ -2351,31 +2385,10 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			 */
 			dec_mm_counter(mm, mm_counter(folio));
 		} else if (folio_test_anon(folio)) {
-			/*
-			 * Store the swap location in the pte.
-			 * See handle_pte_fault() ...
-			 */
-			if (unlikely(folio_test_swapbacked(folio) !=
-					folio_test_swapcache(folio))) {
-				WARN_ON_ONCE(1);
+			if (!ttu_anon_folio(vma, folio, subpage, address,
+					    pvmw.pte, pteval, nr_pages))
 				goto walk_abort;
-			}
 
-			/* MADV_FREE page check */
-			if (!folio_test_swapbacked(folio)) {
-				if (!ttu_anon_lazyfree_folio(vma, folio)) {
-					set_ptes(mm, address, pvmw.pte, pteval, nr_pages);
-					goto walk_abort;
-				}
-				add_mm_counter(mm, MM_ANONPAGES, -nr_pages);
-				goto finish_unmap;
-			}
-
-			if (!ttu_anon_swapbacked_folio(vma, folio, subpage, address,
-						pvmw.pte, pteval)) {
-				set_pte_at(mm, address, pvmw.pte, pteval);
-				goto walk_abort;
-			}
 			goto finish_unmap;
 		} else {
 			/*
