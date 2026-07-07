@@ -39,6 +39,68 @@ u64 arch_adjusted_addend(struct reloc *reloc)
 	return reloc_addend(reloc);
 }
 
+/*
+ * A cross-section difference like the "key - ." field of a __jump_table
+ * entry may come out as a paired R_LARCH_ADD plus R_LARCH_SUB relocation
+ * at the same offset: clang's integrated assembler does this when the
+ * symbol is not defined in the same translation unit (GAS, and clang for
+ * locally-defined symbols, emit a single PCREL instead).  objtool allows
+ * only one relocation per offset, so the pair breaks cloning.
+ *
+ * When the SUB half points at the reloc's own position ("sym - ."), the
+ * pair means the same as a single PC-relative relocation, which the
+ * module loader also supports: rewrite the ADD half to R_LARCH_*_PCREL
+ * and tell the caller to skip the SUB half.
+ *
+ * Return 1 to skip the reloc, 0 to proceed, -1 on error.
+ */
+int arch_normalize_paired_reloc(struct elf *elf, struct reloc *reloc)
+{
+	struct section *rsec = reloc->sec;
+	unsigned int sub_type, pcrel_type;
+	struct reloc *sub, *add;
+
+	switch (reloc_type(reloc)) {
+	case R_LARCH_ADD32:
+		sub_type = R_LARCH_SUB32;
+		pcrel_type = R_LARCH_32_PCREL;
+		break;
+	case R_LARCH_ADD64:
+		sub_type = R_LARCH_SUB64;
+		pcrel_type = R_LARCH_64_PCREL;
+		break;
+	case R_LARCH_SUB32:
+	case R_LARCH_SUB64:
+		/*
+		 * Skip only if the paired ADD (the preceding reloc) has
+		 * been rewritten to PCREL; otherwise leave the pair
+		 * intact so a failed conversion stays loud.
+		 */
+		add = reloc_idx(reloc) ? reloc - 1 : NULL;
+		if (add && reloc_offset(add) == reloc_offset(reloc) &&
+		    (reloc_type(add) == R_LARCH_32_PCREL ||
+		     reloc_type(add) == R_LARCH_64_PCREL))
+			return 1;
+		return 0;
+	default:
+		return 0;
+	}
+
+	/* The paired SUB reloc immediately follows the ADD */
+	sub = rsec_next_reloc(rsec, reloc);
+	if (!sub || reloc_offset(sub) != reloc_offset(reloc) ||
+	    reloc_type(sub) != sub_type)
+		return 0;
+
+	/* Only a "sym - ." difference is PC-relative */
+	if (sub->sym->sec != rsec->base ||
+	    sub->sym->offset + reloc_addend(sub) != reloc_offset(sub))
+		return 0;
+
+	set_reloc_type(elf, reloc, pcrel_type);
+	return 0;
+}
+
 bool arch_pc_relative_reloc(struct reloc *reloc)
 {
 	return false;
