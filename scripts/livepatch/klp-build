@@ -557,8 +557,15 @@ build_kernel() {
 	local cmd=()
 
 	local ARCH_KBUILD_CFLAGS_KERNEL=""
+	local ARCH_KCFLAGS=""
 
 	if [[ -v CONFIG_LOONGARCH && "$CONFIG_LOONGARCH" == "y" ]]; then
+		# -fPIC replaces the kernel's -fPIE (added under CONFIG_RELOCATABLE);
+		# without that config there is no -fPIE to replace.
+		[[ "${CONFIG_RELOCATABLE:-}" == "y" ]] || \
+			die "LoongArch klp-build requires CONFIG_RELOCATABLE=y"
+		ARCH_KCFLAGS="-fPIC"
+
 		# -mdirect-extern-access only exists under explicit relocs, and this
 		# function replaces KBUILD_CFLAGS_KERNEL wholesale (safe only then;
 		# the non-explicit build puts -Wa,-mla-global-with-pcrel there).
@@ -599,8 +606,16 @@ build_kernel() {
 		cmd+=("-s")
 	fi
 	cmd+=("-j$JOBS")
-	cmd+=("KCFLAGS=-ffunction-sections -fdata-sections")
-	cmd+=("KBUILD_CFLAGS_KERNEL=$ARCH_KBUILD_CFLAGS_KERNEL")
+	cmd+=("KCFLAGS=-ffunction-sections -fdata-sections${ARCH_KCFLAGS:+ $ARCH_KCFLAGS}")
+	# -fPIC is added for KLP via KCFLAGS above; the arch adds -fPIE via
+	# KBUILD_CFLAGS_KERNEL, which kbuild places after KCFLAGS on the
+	# built-in compile line.  -fPIC/-fPIE is last-one-wins, so -fPIE would
+	# win.  Setting KBUILD_CFLAGS_KERNEL on the command line replaces the
+	# arch value (not append), which drops -fPIE and lets -fPIC win.  Only
+	# do this when an arch needs it (LoongArch).
+	if [[ -n "$ARCH_KBUILD_CFLAGS_KERNEL" ]]; then
+		cmd+=("KBUILD_CFLAGS_KERNEL=$ARCH_KBUILD_CFLAGS_KERNEL")
+	fi
 	cmd+=("vmlinux")
 	cmd+=("modules")
 
