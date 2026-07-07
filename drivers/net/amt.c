@@ -2330,6 +2330,12 @@ static bool amt_multicast_data_handler(struct amt_dev *amt, struct sk_buff *skb)
 	skb_reset_mac_header(skb);
 	skb_pull(skb, sizeof(*eth));
 
+	/* The L2 header is rewritten below; make the head private first so a
+	 * cloned skb (for example one taken by a packet tap) is not modified.
+	 */
+	if (skb_cow_head(skb, 0))
+		return true;
+
 	if (!pskb_may_pull(skb, sizeof(*iph)))
 		return true;
 	iph = ip_hdr(skb);
@@ -2413,6 +2419,11 @@ static bool amt_membership_query_handler(struct amt_dev *amt,
 	eth = eth_hdr(skb);
 	/* Snapshot the outer source MAC before a later pull can free it. */
 	ether_addr_copy(h_source, oeth->h_source);
+	/* The L2 header is rewritten below; make the head private first so a
+	 * cloned skb (for example one taken by a packet tap) is not modified.
+	 */
+	if (skb_cow_head(skb, 0))
+		return true;
 	if (!pskb_may_pull(skb, sizeof(*iph)))
 		return true;
 
@@ -2536,6 +2547,12 @@ static bool amt_update_handler(struct amt_dev *amt, struct sk_buff *skb)
 
 report:
 	if (!pskb_may_pull(skb, sizeof(*iph)))
+		return true;
+
+	/* The L2 header is rewritten below; make the head private first so a
+	 * cloned skb (for example one taken by a packet tap) is not modified.
+	 */
+	if (skb_cow_head(skb, 0))
 		return true;
 
 	iph = ip_hdr(skb);
