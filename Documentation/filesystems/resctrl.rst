@@ -528,6 +528,86 @@ conveyed in the error returns from file operations. E.g.
 	# cat info/last_cmd_status
 	mask f7 has non-consecutive 1-bits
 
+"kernel_mode":
+	In the top level of the "info" directory, "kernel_mode" controls how
+	resource allocation and monitoring work in kernel mode. This is used on
+	some platforms to assign dedicated allocation and/or monitoring to
+	kernel-mode work.
+
+	Reading the file lists supported kernel modes, one per line.  The
+	currently active mode is wrapped in square brackets for display only.
+
+	The modes are displayed in the following format:
+	"<mode>:group=<ctrl>/<mon>/"
+
+	The inherit_ctrl_and_mon mode is shown as "<mode>" with no ":group=" suffix.
+	Inactive global-assign modes report "group=uninitialized".
+
+	The bound group path uses empty components when they do not apply:
+
+	"//":
+		The default (root) control group.
+	"<ctrl>//":
+		The control group named <ctrl>.
+	"/<mon>/":
+		The monitor group named <mon> under the default control group.
+	"<ctrl>/<mon>/":
+		The monitor group named <mon> under the control group named <ctrl>.
+
+	Modes:
+
+	- "inherit_ctrl_and_mon": Kernel work inherits allocation and monitoring
+	  from the current user-space task (default).
+	- "global_assign_ctrl_inherit_mon_per_cpu": A single allocation is
+	  assigned for all kernel work; monitoring is still inherited from user
+	  space.  Requires a CTRL_MON group.
+	- "global_assign_ctrl_assign_mon_per_cpu": A single resource group
+	  supplies both allocation and monitoring for all kernel work.  May be
+	  a CTRL_MON or MON group.
+
+	Only modes supported by the platform are listed on read.
+	Example::
+
+	  # mount -t resctrl resctrl /sys/fs/resctrl
+	  # cd /sys/fs/resctrl
+	  # cat info/kernel_mode
+	  [inherit_ctrl_and_mon]
+	  global_assign_ctrl_inherit_mon_per_cpu:group=uninitialized
+	  global_assign_ctrl_assign_mon_per_cpu:group=uninitialized
+
+	The modes and binding can be modified by writing to the interface. Writing
+	one line (terminated by a newline) selects the active mode and binds it to
+	a resctrl group.
+
+	Writes must follow the format:
+	"<mode>:group=<ctrl>/<mon>/"
+
+	The ":group=<spec>" suffix is optional; when omitted the default (root)
+	control group is used for global-assign modes. Selecting a new mode or group
+	tears down any active global-assign binding before programming the new one,
+	including when switching between global-assign modes on the same group.
+	The inherit_ctrl_and_mon mode ignores any supplied group and clears the
+	active kernel-mode binding.  The mode must match one of the supported names
+	exactly, and modes not advertised by the platform cannot be set. The
+	display-only "group=uninitialized" form is rejected. Errors are reported in
+	"info/last_cmd_status".
+	Example::
+
+	  # mkdir ctrl1
+	  # echo "global_assign_ctrl_assign_mon_per_cpu:group=ctrl1//" \
+	         > info/kernel_mode
+
+	  # cat info/kernel_mode
+	  inherit_ctrl_and_mon
+	  global_assign_ctrl_inherit_mon_per_cpu:group=uninitialized
+	  [global_assign_ctrl_assign_mon_per_cpu:group=ctrl1//]
+
+	  # echo "inherit_ctrl_and_mon" > info/kernel_mode
+	  # cat info/kernel_mode
+	  [inherit_ctrl_and_mon]
+	  global_assign_ctrl_inherit_mon_per_cpu:group=uninitialized
+	  global_assign_ctrl_assign_mon_per_cpu:group=uninitialized
+
 Resource alloc and monitor groups
 =================================
 

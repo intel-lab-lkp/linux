@@ -1059,7 +1059,8 @@ static_assert(ARRAY_SIZE(resctrl_mode_str) == RESCTRL_NUM_KERNEL_MODES);
  * @v: unused
  *
  * Displays one line per mode set in resctrl_kcfg.kmode. Bracket the active
- * policy (resctrl_kcfg.kmode_cur).
+ * policy (resctrl_kcfg.kmode_cur). Square brackets are display-only; writes
+ * to info/kernel_mode must not include them.
  *
  * INHERIT_CTRL_AND_MON is displayed as "[inherit_ctrl_and_mon]" when active
  * or "inherit_ctrl_and_mon" when supported but inactive, with no :group=
@@ -1068,7 +1069,7 @@ static_assert(ARRAY_SIZE(resctrl_mode_str) == RESCTRL_NUM_KERNEL_MODES);
  * Global-assign modes append :group=. An inactive mode is emitted as
  * "<mode>:group=uninitialized". An active mode with a bound group is emitted
  * as "[<mode>:group=<ctrl>/<mon>/]", where <ctrl>/<mon>/ is derived from
- * resctrl_kcfg.k_rdtgrp.
+ * resctrl_kcfg.k_rdtgrp. The bracketed form is not accepted on write.
  *
  * Return: 0 on success, or -ENOENT on error.
  */
@@ -1164,6 +1165,8 @@ static void resctrl_kmode_files_set_visible(struct rdtgroup *rdtgrp, bool visibl
  * @kmode:	Kernel-mode policy currently active on @rdtgrp.
  *
  * Reset the kernel-mode binding on the CPUs in @rdtgrp's @kmode_cpu_mask.
+ * Called from resctrl_kernel_mode_write() whenever an active global-assign
+ * policy is replaced, including a mode change on the same group.
  */
 static void rdtgroup_config_kmode_reset(struct rdtgroup *rdtgrp,
 					enum resctrl_kernel_mode kmode)
@@ -1210,6 +1213,234 @@ static void rdtgroup_kmode_detach(struct rdtgroup *rdtgrp)
 
 	resctrl_kcfg.k_rdtgrp = NULL;
 	resctrl_kcfg.kmode_cur = INHERIT_CTRL_AND_MON;
+}
+
+/**
+ * rdtgroup_config_kmode() - Push @rdtgrp's kernel CLOSID/RMID to hardware
+ * @rdtgrp:	Resctrl group whose CLOSID/RMID should be programmed.
+ * @kmode:	Kernel-mode policy to program for @rdtgrp.
+ *
+ * @rdtgrp carries the CLOSID/RMID to program. For monitor groups, the CLOSID
+ * matches the parent control group while the RMID belongs to the monitor group.
+ *
+ * The caller (resctrl_kernel_mode_write()) is responsible for validating that
+ * the (kmode, group type) pair is permitted before invoking this helper.
+ * This helper records the current online CPUs in @rdtgrp->kmode_cpu_mask and
+ * programs those CPUs with @rdtgrp's CLOSID/RMID.
+ */
+static void rdtgroup_config_kmode(struct rdtgroup *rdtgrp, enum resctrl_kernel_mode kmode)
+{
+	bool assign_mon = (kmode == GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU);
+
+	/* A new binding starts with all currently online CPUs in scope. */
+	cpumask_copy(&rdtgrp->kmode_cpu_mask, cpu_online_mask);
+
+	resctrl_arch_configure_kmode(&rdtgrp->kmode_cpu_mask, rdtgrp->closid,
+				     rdtgrp->mon.rmid, assign_mon, true);
+
+	rdtgrp->kmode = true;
+	resctrl_kmode_files_set_visible(rdtgrp, true);
+}
+
+/**
+ * rdtgroup_by_kmode_path() - Resolve a "<ctrl>/<mon>/" path to an rdtgroup
+ * @ctrl_name:	Control-group name, or "" for the default control group.
+ * @mon_name:	Monitor-group name, or "" to select the control group itself.
+ *
+ * Matches the path syntax emitted by resctrl_kernel_mode_show():
+ *   "//"            - the default control group
+ *   "<ctrl>//"      - control group @ctrl_name
+ *   "/<mon>/"       - monitor group @mon_name under the default control group
+ *   "<ctrl>/<mon>/" - monitor group @mon_name under control group @ctrl_name
+ *
+ * An empty @ctrl_name selects &rdtgroup_default. Otherwise @ctrl_name must
+ * match an existing control group. If @mon_name is empty, the selected control
+ * group is returned; otherwise @mon_name is looked up in the selected control
+ * group's monitor children.
+ *
+ * Return: Pointer to the matching rdtgroup, or NULL if no such group exists.
+ */
+static struct rdtgroup *rdtgroup_by_kmode_path(const char *ctrl_name,
+					       const char *mon_name)
+{
+	struct rdtgroup *rdtg, *parent = &rdtgroup_default;
+
+	if (*ctrl_name) {
+		parent = NULL;
+		list_for_each_entry(rdtg, &rdt_all_groups, rdtgroup_list) {
+			if (rdtg->type != RDTCTRL_GROUP)
+				continue;
+			if (!strcmp(rdt_kn_name(rdtg->kn), ctrl_name)) {
+				parent = rdtg;
+				break;
+			}
+		}
+	}
+	if (!parent)
+		return NULL;
+
+	if (!*mon_name)
+		return parent;
+
+	list_for_each_entry(rdtg, &parent->mon.crdtgrp_list, mon.crdtgrp_list)
+		if (!strcmp(rdt_kn_name(rdtg->kn), mon_name))
+			return rdtg;
+	return NULL;
+}
+
+/**
+ * resctrl_kernel_mode_write() - Select kernel mode and bind group via info/kernel_mode
+ * @of:		kernfs file handle.
+ * @buf:	One line of the form "<mode>[:group=<ctrl>/<mon>/]"; must end
+ *		with a newline. Do not include the square brackets used to mark
+ *		the active mode in resctrl_kernel_mode_show(). Leading and trailing
+ *		whitespace is ignored, as is whitespace between the mode name and
+ *		an optional ":group=" suffix. The ":group=<spec>" suffix is
+ *		optional; when omitted the default control group
+ *		(&rdtgroup_default) is used.
+ * @nbytes:	Length of @buf.
+ * @off:	File offset (unused).
+ *
+ * Parses @buf, validates that <mode> is listed in resctrl_mode_str[] and is
+ * supported by the platform (resctrl_kcfg.kmode), resolves <ctrl>/<mon>/ to
+ * an existing rdtgroup (or picks &rdtgroup_default if no group was specified),
+ * treats INHERIT as an unbound mode, tears down any active global-assign
+ * binding via rdtgroup_config_kmode_reset(), programs hardware via
+ * rdtgroup_config_kmode() when the new mode is not INHERIT_CTRL_AND_MON, and
+ * on success updates resctrl_kcfg.k_rdtgrp and resctrl_kcfg.kmode_cur. The
+ * display-only "group=uninitialized" form is rejected.  Errors are reported
+ * in last_cmd_status.
+ *
+ * Return: @nbytes on success, negative errno with last_cmd_status set on error.
+ */
+static ssize_t resctrl_kernel_mode_write(struct kernfs_open_file *of,
+					 char *buf, size_t nbytes, loff_t off)
+{
+	enum resctrl_kernel_mode mode;
+	char *mode_str, *group_str, *slash;
+	const char *ctrl_name, *mon_name;
+	struct rdtgroup *rdtgrp;
+	int ret = 0;
+
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+	buf[nbytes - 1] = '\0';
+
+	/* Tolerate surrounding whitespace before mode parsing. */
+	buf = strim(buf);
+
+	/*
+	 * Split "<mode>:group=<spec>"; the ":group=<spec>" suffix is optional
+	 * and when omitted the default control group (&rdtgroup_default) is used.
+	 * Trim mode_str after the split so whitespace before ":group=" is ignored.
+	 * Square brackets from resctrl_kernel_mode_show() are not accepted.
+	 */
+	group_str = strstr(buf, ":group=");
+	if (group_str) {
+		*group_str = '\0';
+		group_str += strlen(":group=");
+	}
+	mode_str = strim(buf);
+
+	mutex_lock(&rdtgroup_mutex);
+	rdt_last_cmd_clear();
+
+	for (mode = 0; mode < RESCTRL_NUM_KERNEL_MODES; mode++)
+		if (!strcmp(mode_str, resctrl_mode_str[mode]))
+			break;
+
+	if (mode == RESCTRL_NUM_KERNEL_MODES) {
+		rdt_last_cmd_puts("Unknown kernel mode\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (!(test_bit(mode, &resctrl_kcfg.kmode))) {
+		rdt_last_cmd_puts("Kernel mode not available\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	/*
+	 * INHERIT mode binds no rdtgroup. Ignore any user-supplied :group=
+	 * suffix and let show print the mode without a group.
+	 */
+	if (mode == INHERIT_CTRL_AND_MON) {
+		rdtgrp = NULL;
+		goto update_mode;
+	}
+
+	if (!group_str) {
+		/* No ":group=" suffix: fall back to the default control group. */
+		rdtgrp = &rdtgroup_default;
+	} else if (!strcmp(group_str, "uninitialized")) {
+		/* Display-only placeholder emitted by show; not selectable. */
+		rdt_last_cmd_puts("Cannot bind to 'uninitialized' group\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	} else {
+		/* Require exactly "<ctrl>/<mon>/" format */
+		slash = strchr(group_str, '/');
+		if (!slash) {
+			rdt_last_cmd_puts("Group must be <ctrl>/<mon>/\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		*slash = '\0';
+		ctrl_name = group_str;
+		mon_name = slash + 1;
+		slash = strchr(mon_name, '/');
+		if (!slash || slash[1] != '\0') {
+			rdt_last_cmd_puts("Group must be <ctrl>/<mon>/\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		*slash = '\0';
+
+		rdtgrp = rdtgroup_by_kmode_path(ctrl_name, mon_name);
+		if (!rdtgrp) {
+			rdt_last_cmd_puts("Group not found\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+	}
+
+	if (mode == GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU &&
+	    rdtgrp->type != RDTCTRL_GROUP) {
+		rdt_last_cmd_puts("global_assign_ctrl_inherit_mon_per_cpu requires a control group\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED ||
+	    rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP) {
+		rdt_last_cmd_puts("Pseudo-locking in progress\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+update_mode:
+	/* No-op if the same mode is already active on the same group. */
+	if (resctrl_kcfg.kmode_cur == mode && resctrl_kcfg.k_rdtgrp == rdtgrp)
+		goto out_unlock;
+
+	/*
+	 * Tear down any active global-assign binding before applying the new
+	 * policy, including when only the mode changes on the same group.
+	 */
+	if (resctrl_kcfg.kmode_cur != INHERIT_CTRL_AND_MON)
+		rdtgroup_config_kmode_reset(resctrl_kcfg.k_rdtgrp,
+					    resctrl_kcfg.kmode_cur);
+
+	if (mode != INHERIT_CTRL_AND_MON)
+		rdtgroup_config_kmode(rdtgrp, mode);
+
+	resctrl_kcfg.k_rdtgrp = rdtgrp;
+	resctrl_kcfg.kmode_cur = mode;
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	return ret ?: nbytes;
 }
 
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
@@ -2117,9 +2348,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "kernel_mode",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_kernel_mode_show,
+		.write		= resctrl_kernel_mode_write,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
