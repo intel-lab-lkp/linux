@@ -221,6 +221,7 @@ static int eip93_send_hash_req(struct crypto_async_request *async, u8 *data,
 	struct eip93_device *eip93 = ctx->eip93;
 	struct eip93_descriptor cdesc = { };
 	dma_addr_t src_addr;
+	bool hmac_sa_mapped = false;
 	int ret;
 
 	/* Map block data to DMA */
@@ -258,22 +259,23 @@ static int eip93_send_hash_req(struct crypto_async_request *async, u8 *data,
 				ret = dma_mapping_error(eip93->dev, rctx->sa_record_hmac_base);
 				if (ret) {
 					rctx->sa_record_hmac_base = 0;
-					dma_unmap_single(eip93->dev, src_addr, len,
-							 DMA_TO_DEVICE);
-					return ret;
+					goto unmap_src;
 				}
 
 				cdesc.sa_addr = rctx->sa_record_hmac_base;
+				hmac_sa_mapped = true;
 			}
 
 			cdesc.pe_ctrl_stat_word |= EIP93_PE_CTRL_PE_HASH_FINAL;
 		}
 
-		scoped_guard(spinlock_bh, &eip93->ring->idr_lock)
-			crypto_async_idr = idr_alloc(&eip93->ring->crypto_async_idr, async, 0,
-						     EIP93_RING_NUM - 1, GFP_ATOMIC);
+		crypto_async_idr = eip93_alloc_request_id_wait(eip93, async);
+		if (crypto_async_idr < 0) {
+			ret = crypto_async_idr;
+			goto unmap_hmac_sa;
+		}
 
-		cdesc.user_id |= FIELD_PREP(EIP93_PE_USER_ID_CRYPTO_IDR, (u16)crypto_async_idr) |
+		cdesc.user_id |= FIELD_PREP(EIP93_PE_USER_ID_CRYPTO_IDR, crypto_async_idr) |
 				 FIELD_PREP(EIP93_PE_USER_ID_DESC_FLAGS, EIP93_DESC_LAST);
 	}
 
@@ -291,6 +293,16 @@ again:
 
 	*data_dma = src_addr;
 	return 0;
+
+unmap_hmac_sa:
+	if (hmac_sa_mapped) {
+		dma_unmap_single(eip93->dev, rctx->sa_record_hmac_base,
+				 sizeof(rctx->sa_record_hmac), DMA_TO_DEVICE);
+		rctx->sa_record_hmac_base = 0;
+	}
+unmap_src:
+	dma_unmap_single(eip93->dev, src_addr, len, DMA_TO_DEVICE);
+	return ret;
 }
 
 static int eip93_hash_init(struct ahash_request *req)

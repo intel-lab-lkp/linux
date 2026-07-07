@@ -65,6 +65,31 @@ int eip93_parse_ctrl_stat_err(struct eip93_device *eip93, int err)
 	}
 }
 
+int eip93_alloc_request_id(struct eip93_device *eip93, void *request)
+{
+	int id;
+
+	scoped_guard(spinlock_bh, &eip93->ring->idr_lock)
+		id = idr_alloc(&eip93->ring->crypto_async_idr, request, 0,
+			       EIP93_REQUEST_IDR_LIMIT, GFP_ATOMIC);
+
+	return id;
+}
+
+int eip93_alloc_request_id_wait(struct eip93_device *eip93, void *request)
+{
+	int id;
+
+	for (;;) {
+		id = eip93_alloc_request_id(eip93, request);
+		if (id != -ENOSPC)
+			return id;
+
+		usleep_range(EIP93_RING_BUSY_DELAY,
+			     EIP93_RING_BUSY_DELAY * 2);
+	}
+}
+
 static void *eip93_ring_next_wptr(struct eip93_device *eip93,
 				  struct eip93_desc_ring *ring)
 {
@@ -597,15 +622,6 @@ skip_iv:
 	cdesc.sa_addr = rctx->sa_record_base;
 	cdesc.arc4_addr = 0;
 
-	scoped_guard(spinlock_bh, &eip93->ring->idr_lock)
-		crypto_async_idr = idr_alloc(&eip93->ring->crypto_async_idr, async, 0,
-					     EIP93_RING_NUM - 1, GFP_ATOMIC);
-
-	cdesc.user_id = FIELD_PREP(EIP93_PE_USER_ID_CRYPTO_IDR, (u16)crypto_async_idr) |
-			FIELD_PREP(EIP93_PE_USER_ID_DESC_FLAGS, rctx->desc_flags);
-
-	rctx->cdesc = &cdesc;
-
 	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
 	 * implies __dma_cache_wback_inv
 	 */
@@ -620,8 +636,22 @@ skip_iv:
 		goto free_sg_dma;
 	}
 
+	crypto_async_idr = eip93_alloc_request_id_wait(eip93, async);
+	if (crypto_async_idr < 0) {
+		err = crypto_async_idr;
+		goto free_src_sg_dma;
+	}
+
+	cdesc.user_id = FIELD_PREP(EIP93_PE_USER_ID_CRYPTO_IDR, crypto_async_idr) |
+			FIELD_PREP(EIP93_PE_USER_ID_DESC_FLAGS, rctx->desc_flags);
+
+	rctx->cdesc = &cdesc;
+
 	return eip93_scatter_combine(eip93, rctx, datalen, split, offsetin);
 
+free_src_sg_dma:
+	if (src != dst)
+		dma_unmap_sg(eip93->dev, src, rctx->src_nents, DMA_TO_DEVICE);
 free_sg_dma:
 	dma_unmap_sg(eip93->dev, dst, rctx->dst_nents, DMA_BIDIRECTIONAL);
 free_sa_state_ctr_dma:

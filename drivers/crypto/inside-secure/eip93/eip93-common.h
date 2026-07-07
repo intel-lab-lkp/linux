@@ -17,6 +17,9 @@ void eip93_set_sa_record(struct sa_record *sa_record, const unsigned int keylen,
 
 int eip93_parse_ctrl_stat_err(struct eip93_device *eip93, int err);
 
+int eip93_alloc_request_id(struct eip93_device *eip93, void *request);
+int eip93_alloc_request_id_wait(struct eip93_device *eip93, void *request);
+
 int eip93_hmac_setkey(u32 ctx_flags, const u8 *key, unsigned int keylen,
 		      unsigned int hashlen, u8 *ipad, u8 *opad,
 		      bool skip_ipad);

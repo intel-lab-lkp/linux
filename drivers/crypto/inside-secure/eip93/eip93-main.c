@@ -257,6 +257,12 @@ get_more:
 		idr_remove(&eip93->ring->crypto_async_idr, crypto_idr);
 	}
 
+	if (!async) {
+		dev_warn_ratelimited(eip93->dev, "missing request id %u\n",
+				     crypto_idr);
+		goto get_more;
+	}
+
 	/* Parse error in ctrl stat word */
 	err = eip93_parse_ctrl_stat_err(eip93, err);
 
