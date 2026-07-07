@@ -351,6 +351,7 @@ static void disable_chan(struct mmp_pdma_phy *phy)
 
 static int clear_chan_irq(struct mmp_pdma_phy *phy)
 {
+	struct mmp_pdma_chan *vchan;
 	u32 dcsr;
 	u32 dint = readl(phy->base + DINT);
 	u32 reg = (phy->idx << 2) + DCSR;
@@ -361,8 +362,9 @@ static int clear_chan_irq(struct mmp_pdma_phy *phy)
 	/* clear irq */
 	dcsr = readl(phy->base + reg);
 	writel(dcsr, phy->base + reg);
-	if ((dcsr & DCSR_BUSERR) && (phy->vchan))
-		dev_warn(phy->vchan->dev, "DCSR_BUSERR\n");
+	vchan = READ_ONCE(phy->vchan);
+	if ((dcsr & DCSR_BUSERR) && vchan)
+		dev_warn(vchan->dev, "DCSR_BUSERR\n");
 
 	return 0;
 }
@@ -370,11 +372,16 @@ static int clear_chan_irq(struct mmp_pdma_phy *phy)
 static irqreturn_t mmp_pdma_chan_handler(int irq, void *dev_id)
 {
 	struct mmp_pdma_phy *phy = dev_id;
+	struct mmp_pdma_chan *vchan;
 
 	if (clear_chan_irq(phy) != 0)
 		return IRQ_NONE;
 
-	tasklet_schedule(&phy->vchan->tasklet);
+	vchan = READ_ONCE(phy->vchan);
+	if (!vchan)
+		return IRQ_HANDLED;
+
+	tasklet_schedule(&vchan->tasklet);
 	return IRQ_HANDLED;
 }
 
@@ -427,7 +434,7 @@ static struct mmp_pdma_phy *lookup_phy(struct mmp_pdma_chan *pchan)
 				continue;
 			phy = &pdev->phy[i];
 			if (!phy->vchan) {
-				phy->vchan = pchan;
+				WRITE_ONCE(phy->vchan, pchan);
 				found = phy;
 				goto out_unlock;
 			}
@@ -453,7 +460,7 @@ static void mmp_pdma_free_phy(struct mmp_pdma_chan *pchan)
 	writel(0, pchan->phy->base + reg);
 
 	spin_lock_irqsave(&pdev->phy_lock, flags);
-	pchan->phy->vchan = NULL;
+	WRITE_ONCE(pchan->phy->vchan, NULL);
 	pchan->phy = NULL;
 	spin_unlock_irqrestore(&pdev->phy_lock, flags);
 }
