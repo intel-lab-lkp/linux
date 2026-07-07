@@ -424,8 +424,7 @@ mpt_fault_reset_work(struct work_struct *work)
 	/*
 	 * Take turns polling alternate controller
 	 */
-	if (ioc->alt_ioc)
-		ioc = ioc->alt_ioc;
+	ioc = READ_ONCE(ioc->alt_ioc) ?: ioc;
 
 	/* rearm the timer */
 	spin_lock_irqsave(&ioc->taskmgmt_lock, flags);
