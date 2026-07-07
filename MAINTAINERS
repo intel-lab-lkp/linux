@@ -29556,6 +29556,12 @@ L:	netdev@vger.kernel.org
 S:	Orphan
 F:	drivers/net/ethernet/xilinx/ll_temac*
 
+XILINX PUF DRIVER
+M:	Harsh Jain <h.jain@amd.com>
+S:	Maintained
+F:	drivers/misc/xilinx_puf.c
+F:	include/uapi/misc/xilinx_puf.h
+
 XILINX PWM DRIVER
 M:	Sean Anderson <sean.anderson@linux.dev>
 S:	Maintained
