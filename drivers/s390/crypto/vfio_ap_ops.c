@@ -106,6 +106,27 @@ static inline void get_update_locks_for_mdev(struct ap_matrix_mdev *matrix_mdev)
 }
 
 /**
+ * assert_has_update_locks_for_mdev:
+ *
+ * Assert the locks required to dynamically update a KVM guest's APCB are
+ * currently held.
+ *
+ * @matrix_mdev: a pointer to a struct ap_matrix_mdev object containing the AP
+ *		 configuration data to use to update a KVM guest's APCB.
+ *
+ * Note: If @matrix_mdev is NULL or is not attached to a KVM guest, the KVM
+ *		 lock will not be taken.
+ */
+static inline void
+assert_has_update_locks_for_mdev(struct ap_matrix_mdev *matrix_mdev)
+{
+	lockdep_assert_held(&matrix_dev->guests_lock);
+	if (matrix_mdev && matrix_mdev->kvm)
+		lockdep_assert_held(&matrix_mdev->kvm->lock);
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+}
+
+/**
  * release_update_locks_for_mdev: Release the locks used to dynamically update a
  *				  KVM guest's APCB in the proper order.
  *
@@ -875,7 +896,40 @@ static void vfio_ap_mdev_unlink_fr_queues(struct ap_matrix_mdev *matrix_mdev)
 			q = vfio_ap_mdev_get_queue(matrix_mdev,
 						   AP_MKQID(apid, apqi));
 			if (q)
-				q->matrix_mdev = NULL;
+				vfio_ap_mdev_link_queue(matrix_mdev, q);
+		}
+	}
+}
+
+static void vfio_ap_unlink_queues(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_queue *q;
+	unsigned long apid, apqi;
+
+	for_each_set_bit_inv(apid, matrix_mdev->matrix.apm, AP_DEVICES) {
+		for_each_set_bit_inv(apqi, matrix_mdev->matrix.aqm,
+				     AP_DOMAINS) {
+			q = vfio_ap_mdev_get_queue(matrix_mdev,
+						   AP_MKQID(apid, apqi));
+			if (q) {
+				vfio_ap_unlink_queue_fr_mdev(q);
+				vfio_ap_unlink_mdev_fr_queue(q);
+			}
+		}
+	}
+}
+
+static void vfio_ap_link_queues(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_queue *q;
+	unsigned long apid, apqi;
+
+	for_each_set_bit_inv(apid, matrix_mdev->matrix.apm, AP_DEVICES) {
+		for_each_set_bit_inv(apqi, matrix_mdev->matrix.aqm,
+				     AP_DOMAINS) {
+			q = vfio_ap_find_queue(AP_MKQID(apid, apqi));
+			if (q)
+				vfio_ap_mdev_link_queue(matrix_mdev, q);
 		}
 	}
 }
@@ -1014,19 +1068,36 @@ static void vfio_ap_mdev_link_adapter(struct ap_matrix_mdev *matrix_mdev,
 	unsigned long apqi;
 
 	for_each_set_bit_inv(apqi, matrix_mdev->matrix.aqm, AP_DOMAINS)
-		vfio_ap_mdev_link_apqn(matrix_mdev,
-				       AP_MKQID(apid, apqi));
+		vfio_ap_mdev_link_apqn(matrix_mdev, AP_MKQID(apid, apqi));
 }
 
-static void collect_queues_to_reset(struct ap_matrix_mdev *matrix_mdev,
-				    unsigned long apid,
-				    struct list_head *qlist)
+static void collect_queues_by_apid(struct ap_matrix_mdev *matrix_mdev,
+				   unsigned long apid,
+				   struct list_head *qlist)
 {
 	struct vfio_ap_queue *q;
 	unsigned long  apqi;
 
 	for_each_set_bit_inv(apqi, matrix_mdev->shadow_apcb.aqm, AP_DOMAINS) {
-		q = vfio_ap_mdev_get_queue(matrix_mdev, AP_MKQID(apid, apqi));
+		q = matrix_mdev ?
+				vfio_ap_mdev_get_queue(matrix_mdev, AP_MKQID(apid, apqi)) :
+				vfio_ap_find_queue(AP_MKQID(apid, apqi));
+		if (q)
+			list_add_tail(&q->reset_qnode, qlist);
+	}
+}
+
+static void collect_queues_by_apqi(struct ap_matrix_mdev *matrix_mdev,
+				   unsigned long apqi,
+				   struct list_head *qlist)
+{
+	struct vfio_ap_queue *q;
+	unsigned long  apid;
+
+	for_each_set_bit_inv(apid, matrix_mdev->shadow_apcb.apm, AP_DEVICES) {
+		q = matrix_mdev ?
+			vfio_ap_mdev_get_queue(matrix_mdev, AP_MKQID(apid, apqi)) :
+			vfio_ap_find_queue(AP_MKQID(apid, apqi));
 		if (q)
 			list_add_tail(&q->reset_qnode, qlist);
 	}
@@ -1038,7 +1109,7 @@ static void reset_queues_for_apid(struct ap_matrix_mdev *matrix_mdev,
 	struct list_head qlist;
 
 	INIT_LIST_HEAD(&qlist);
-	collect_queues_to_reset(matrix_mdev, apid, &qlist);
+	collect_queues_by_apid(matrix_mdev, apid, &qlist);
 	vfio_ap_mdev_reset_qlist(&qlist);
 }
 
@@ -1054,7 +1125,7 @@ static int reset_queues_for_apids(struct ap_matrix_mdev *matrix_mdev,
 	INIT_LIST_HEAD(&qlist);
 
 	for_each_set_bit_inv(apid, apm_reset, AP_DEVICES)
-		collect_queues_to_reset(matrix_mdev, apid, &qlist);
+		collect_queues_by_apid(matrix_mdev, apid, &qlist);
 
 	return vfio_ap_mdev_reset_qlist(&qlist);
 }
@@ -1725,16 +1796,219 @@ static void ap_matrix_copy(struct ap_matrix *dst, struct ap_matrix *src)
 	bitmap_copy(dst->adm, src->adm, AP_DOMAINS);
 }
 
+static int validate_ap_matrix(struct ap_matrix_mdev *matrix_mdev)
+{
+	int rc;
+
+	lockdep_assert_held(&ap_attr_mutex);
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	rc = vfio_ap_mdev_validate_masks(matrix_mdev);
+	if (rc)
+		return rc;
+	rc = ap_matrix_overflow_check(matrix_mdev);
+	if (rc)
+		return rc;
+
+	return 0;
+}
+
+static void get_removed_matrixes(struct ap_matrix *m_removed,
+				 struct ap_matrix *m_old,
+				 struct ap_matrix *m_new)
+{
+	bitmap_andnot(m_removed->apm, m_old->apm, m_new->apm, AP_DEVICES);
+	bitmap_andnot(m_removed->aqm, m_old->aqm, m_new->aqm, AP_DOMAINS);
+	bitmap_andnot(m_removed->adm, m_old->adm, m_new->adm, AP_DOMAINS);
+}
+
+static void reset_removed_queues_by_apid(unsigned long *apm_removed,
+					 unsigned long *apm_filtered,
+					 struct list_head *qlist)
+{
+	DECLARE_BITMAP(apids_removed, AP_DEVICES);
+	unsigned long apid;
+
+	for_each_set_bit_inv(apid, apm_filtered, AP_DEVICES)
+		set_bit_inv(apid, apids_removed);
+
+	for_each_set_bit_inv(apid, apm_removed, AP_DEVICES) {
+		if (!test_bit_inv(apid, apids_removed))
+			set_bit_inv(apid, apids_removed);
+	}
+
+	if (!bitmap_empty(apids_removed, AP_DEVICES)) {
+		for_each_set_bit_inv(apid, apids_removed, AP_DEVICES)
+			collect_queues_by_apid(NULL, apid, qlist);
+	}
+
+	if (!list_empty(qlist))
+		vfio_ap_mdev_reset_qlist(qlist);
+}
+
+/**
+ * remove_queues_already_reset:
+ *
+ * Remove the queues that have already beeen reset from a list of queues that
+ * have yet to be reset.
+ *
+ * @qlist_rst:	A list of queues that have already been reset
+ * @qlist_rem:	A list of queues from which already reset queues are to be
+ *		removed.
+ */
+static void remove_queues_already_reset(struct list_head *qlist_rst,
+					struct list_head *qlist_rem)
+{
+	struct vfio_ap_queue *rq, *qr, *trq, *tqr;
+
+	if (list_empty(qlist_rst))
+		return;
+
+	/*
+	 * Each queue in qlist_reset has already been reset, so remove the
+	 * matching queues from qlist_reset so they don't get reset again
+	 */
+	list_for_each_entry_safe(qr, tqr, qlist_rem, reset_qnode) {
+		list_for_each_entry_safe(rq, trq, qlist_rst, reset_qnode) {
+			if (qr->apqn == rq->apqn)
+				list_del(&qr->reset_qnode);
+		}
+	}
+}
+
+static void reset_removed_queues(struct ap_matrix *m_removed,
+				 unsigned long *apm_filtered)
+{
+	struct list_head qlist_by_apid, qlist_by_apqi;
+	DECLARE_BITMAP(apqis, AP_DOMAINS);
+	unsigned long apqi;
+
+	INIT_LIST_HEAD(&qlist_by_apid);
+	INIT_LIST_HEAD(&qlist_by_apqi);
+	bitmap_clear(apqis, 0, AP_DOMAINS);
+
+	reset_removed_queues_by_apid(m_removed->apm, apm_filtered, &qlist_by_apid);
+
+	for_each_set_bit_inv(apqi, m_removed->aqm, AP_DEVICES) {
+		set_bit_inv(apqi, apqis);
+		collect_queues_by_apqi(NULL, apqi, &qlist_by_apqi);
+	}
+
+	if (list_empty(&qlist_by_apqi))
+		return;
+
+	remove_queues_already_reset(&qlist_by_apid, &qlist_by_apqi);
+
+	if (!list_empty(&qlist_by_apqi))
+		vfio_ap_mdev_reset_qlist(&qlist_by_apid);
+}
+
+/**
+ * restore_mdev_state:
+ *
+ * Restore the mdev to its previous state:
+ * - Unlink the queues from the updated mdev
+ * - Copy the previous matrix and shadow_apcb to the mdev
+ * - Re-link the original queues to the mdev
+ *
+ * @matrix_mdev:	The object that maintains the AP configuration for a guest
+ * @m_old:		The object containing the bitmaps specifying the guest AP
+ *			configuration profile as it was prior to the attempt to set
+ *			a new one
+ * @m_old_shadow:	The object containing the bitmaps specifying the guest AP
+ *			configuration as it was prior to the attempt to set a new
+ *			one
+ */
+static void restore_mdev_state(struct ap_matrix_mdev *matrix_mdev,
+			       struct ap_matrix *m_old,
+			       struct ap_matrix *m_old_shadow)
+{
+	vfio_ap_unlink_queues(matrix_mdev);
+	ap_matrix_copy(&matrix_mdev->matrix, m_old);
+	ap_matrix_copy(&matrix_mdev->shadow_apcb, m_old_shadow);
+	vfio_ap_link_queues(matrix_mdev);
+}
+
+/**
+ * vfio_ap_set_new_guest_config:
+ *
+ * Set a new AP configuration for a guest.
+ *
+ * @matrix_mdev: Object used to maintain the AP configuration for a guest
+ * @m_new:		 Object used to set the new AP configuration
+ * @filtering_allowable: A boolean value indicating whether any filtering of
+ *			 new AP configuration is acceptable. If the configuration
+ *			 needs to be filtered before it can be passed through to
+ *			 the guest and this flag is set to false, then
+ *			 the operation shall be terminated with an error.
+ *
+ * Returns: zero (0) if the new AP configuration is successfully set; otherwise,
+ *	    returns an error:
+ *
+ *	    ~ EADDRNOTAVAIL One or more APQNs are reserved for host use
+ *	    ~ EADDRINUSE    One or more APQNs are assigned to another mdev
+ *	    ~ ENODEV	    An adapter, domain or control domain in the new
+ *			    AP configuration exceeds the max architected value
+ *	    ~ ECANCELED	    @filtering_allowed was specified as false and the
+ *			    AP configuration needs to be filtered.
+ */
+int vfio_ap_set_new_guest_config(struct ap_matrix_mdev *matrix_mdev,
+				 struct ap_matrix *m_new,
+				 bool filtering_allowable)
+{
+	DECLARE_BITMAP(apm_filtered, AP_DEVICES);
+	struct ap_matrix m_old, m_old_shadow, m_removed;
+	bool do_update;
+	int rc;
+
+	lockdep_assert_held(&ap_attr_mutex);
+	assert_has_update_locks_for_mdev(matrix_mdev);
+
+	/* Save old state */
+	ap_matrix_copy(&m_old, &matrix_mdev->matrix);
+	ap_matrix_copy(&m_old_shadow, &matrix_mdev->shadow_apcb);
+
+	/* Reset mdev state */
+	vfio_ap_unlink_queues(matrix_mdev);
+	ap_matrix_copy(&matrix_mdev->matrix, m_new);
+	vfio_ap_link_queues(matrix_mdev);
+
+	rc = validate_ap_matrix(matrix_mdev);
+	if (rc) {
+		restore_mdev_state(matrix_mdev, &m_old, &m_old_shadow);
+		return rc;
+	}
+
+	/*
+	 * If APIDs need to be filtered from the guest AP config and filtering
+	 * is not allowable according to the caller, then terminate the operation.
+	 */
+	do_update = vfio_ap_mdev_filter_matrix(matrix_mdev, apm_filtered);
+	if (!bitmap_empty(apm_filtered, AP_DEVICES) && !filtering_allowable) {
+		restore_mdev_state(matrix_mdev, &m_old, &m_old_shadow);
+		return -ECANCELED;
+	}
+
+	do_update |= vfio_ap_mdev_filter_cdoms(matrix_mdev);
+
+	if (do_update)
+		vfio_ap_mdev_update_guest_apcb(matrix_mdev);
+
+	get_removed_matrixes(&m_removed, &m_old, m_new);
+	if (!bitmap_empty(m_removed.apm, AP_DEVICES) ||
+	    !bitmap_empty(apm_filtered, AP_DEVICES))
+		reset_removed_queues(&m_removed, apm_filtered);
+
+	return 0;
+}
+
 static ssize_t ap_config_store(struct device *dev, struct device_attribute *attr,
 			       const char *buf, size_t count)
 {
 	struct ap_matrix_mdev *matrix_mdev = dev_get_drvdata(dev);
-	struct ap_matrix m_new, m_old, m_added, m_removed;
-	DECLARE_BITMAP(apm_filtered, AP_DEVICES);
-	unsigned long newbit;
+	struct ap_matrix m_new;
 	char *newbuf, *rest;
-	int rc = count;
-	bool do_update;
+	ssize_t rc;
 
 	newbuf = kstrndup(buf, AP_CONFIG_STRLEN, GFP_KERNEL);
 	if (!newbuf)
@@ -1744,63 +2018,19 @@ static ssize_t ap_config_store(struct device *dev, struct device_attribute *attr
 	mutex_lock(&ap_attr_mutex);
 	get_update_locks_for_mdev(matrix_mdev);
 
-	/* Save old state */
-	ap_matrix_copy(&m_old, &matrix_mdev->matrix);
 	if (parse_bitmap(&rest, m_new.apm, AP_DEVICES) ||
 	    parse_bitmap(&rest, m_new.aqm, AP_DOMAINS) ||
 	    parse_bitmap(&rest, m_new.adm, AP_DOMAINS)) {
-		rc = -EINVAL;
-		goto out;
+		kfree(newbuf);
+		release_update_locks_for_mdev(matrix_mdev);
+		mutex_unlock(&ap_attr_mutex);
+		return -EINVAL;
 	}
 
-	bitmap_andnot(m_removed.apm, m_old.apm, m_new.apm, AP_DEVICES);
-	bitmap_andnot(m_removed.aqm, m_old.aqm, m_new.aqm, AP_DOMAINS);
-	bitmap_andnot(m_added.apm, m_new.apm, m_old.apm, AP_DEVICES);
-	bitmap_andnot(m_added.aqm, m_new.aqm, m_old.aqm, AP_DOMAINS);
+	rc = vfio_ap_set_new_guest_config(matrix_mdev, &m_new, true);
+	if (!rc)
+		rc = count;
 
-	/* Need new bitmaps in matrix_mdev for validation */
-	ap_matrix_copy(&matrix_mdev->matrix, &m_new);
-
-	/* Ensure new state is valid, else undo new state */
-	rc = vfio_ap_mdev_validate_masks(matrix_mdev);
-	if (rc) {
-		ap_matrix_copy(&matrix_mdev->matrix, &m_old);
-		goto out;
-	}
-	rc = ap_matrix_overflow_check(matrix_mdev);
-	if (rc) {
-		ap_matrix_copy(&matrix_mdev->matrix, &m_old);
-		goto out;
-	}
-	rc = count;
-
-	/* Need old bitmaps in matrix_mdev for unplug/unlink */
-	ap_matrix_copy(&matrix_mdev->matrix, &m_old);
-
-	/* Unlink removed adapters/domains */
-	vfio_ap_mdev_hot_unplug_adapters(matrix_mdev, m_removed.apm);
-	vfio_ap_mdev_hot_unplug_domains(matrix_mdev, m_removed.aqm);
-
-	/* Need new bitmaps in matrix_mdev for linking new adapters/domains */
-	ap_matrix_copy(&matrix_mdev->matrix, &m_new);
-
-	/* Link newly added adapters */
-	for_each_set_bit_inv(newbit, m_added.apm, AP_DEVICES)
-		vfio_ap_mdev_link_adapter(matrix_mdev, newbit);
-
-	for_each_set_bit_inv(newbit, m_added.aqm, AP_DOMAINS)
-		vfio_ap_mdev_link_domain(matrix_mdev, newbit);
-
-	/* filter resources not bound to vfio-ap */
-	do_update = vfio_ap_mdev_filter_matrix(matrix_mdev, apm_filtered);
-	do_update |= vfio_ap_mdev_filter_cdoms(matrix_mdev);
-
-	/* Apply changes to shadow apbc if things changed */
-	if (do_update) {
-		vfio_ap_mdev_update_guest_apcb(matrix_mdev);
-		reset_queues_for_apids(matrix_mdev, apm_filtered);
-	}
-out:
 	release_update_locks_for_mdev(matrix_mdev);
 	mutex_unlock(&ap_attr_mutex);
 	kfree(newbuf);
