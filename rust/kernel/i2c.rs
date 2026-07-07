@@ -14,6 +14,7 @@ use crate::{
     devres::Devres,
     driver,
     error::*,
+    io::{Io, IoCapable},
     of,
     prelude::*,
     sync::aref::{
@@ -601,3 +602,91 @@ unsafe impl Send for Registration {}
 // SAFETY: `Registration` offers no interior mutability (no mutation through &self
 // and no mutable access is exposed)
 unsafe impl Sync for Registration {}
+
+impl<Ctx: device::DeviceContext> IoCapable<u8> for I2cClient<Ctx> {
+    unsafe fn io_read(&self, address: usize) -> u8 {
+        // SAFETY: `self.as_raw()` returns a valid `struct i2c_client` pointer
+        // (type invariant). `address` was pre-validated by io_addr() before
+        // this function is called (trait contract).
+        let ret = unsafe { bindings::i2c_smbus_read_byte_data(self.as_raw(), address as u8) };
+
+        // NOTE: Error is lost here. This is only called via try_read() which
+        // first validates bounds via io_addr(). For I2C, the caller should
+        // always use try_read8() which provides proper error handling.
+        ret as u8
+    }
+
+    unsafe fn io_write(&self, value: u8, address: usize) {
+        // SAFETY: `self.as_raw()` returns a valid `struct i2c_client` pointer.
+        // `address` pre-validated by io_addr().
+        unsafe { bindings::i2c_smbus_write_byte_data(self.as_raw(), address as u8, value) };
+        // NOTE: Return value is ignored. `IoCapable` trait signature does not
+        // support error returns. Use with caution.
+    }
+}
+
+impl<Ctx: device::DeviceContext> IoCapable<u16> for I2cClient<Ctx> {
+    unsafe fn io_read(&self, address: usize) -> u16 {
+        // SAFETY: `self.as_raw()` returns a valid `struct i2c_client` pointer.
+        // `address` pre-validated by io_addr().
+        let ret = unsafe { bindings::i2c_smbus_read_word_data(self.as_raw(), address as u8) };
+
+        // NOTE: Error is lost here. See u8 implementation note.
+        ret as u16
+    }
+
+    unsafe fn io_write(&self, value: u16, address: usize) {
+        // SAFETY: `self.as_raw()` returns a valid `struct i2c_client` pointer.
+        // `address` pre-validated by io_addr().
+        unsafe { bindings::i2c_smbus_write_word_data(self.as_raw(), address as u8, value) };
+        // NOTE: Return value is ignored.
+    }
+}
+
+impl<Ctx: device::DeviceContext> Io for I2cClient<Ctx> {
+    #[inline]
+    fn addr(&self) -> usize {
+        0
+    }
+
+    /// SMBus command byte range: 0x00-0xFF (256 possible register addresses).
+    /// This is NOT the 7-bit device address; that is handled by the I2C core.
+    #[inline]
+    fn maxsize(&self) -> usize {
+        256
+    }
+
+    #[inline]
+    fn try_read8(&self, offset: usize) -> Result<u8>
+    where
+        Self: IoCapable<u8>,
+    {
+        let reg = self.io_addr::<u8>(offset)? as u8;
+        // SAFETY: `self.as_raw()` returns a valid pointer to a `struct i2c_client`
+        // as guaranteed by the type invariant of `I2cClient`. `reg` is bounds-checked
+        // by `io_addr()` above (offset + 1 <= 256).
+        let ret = unsafe { bindings::i2c_smbus_read_byte_data(self.as_raw(), reg) };
+        if ret < 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(ret as u8)
+        }
+    }
+
+    #[inline]
+    fn try_read16(&self, offset: usize) -> Result<u16>
+    where
+        Self: IoCapable<u16>,
+    {
+        let reg = self.io_addr::<u16>(offset)? as u8;
+        // SAFETY: `self.as_raw()` returns a valid pointer to a `struct i2c_client`
+        // as guaranteed by the type invariant of `I2cClient`. `reg` is bounds-checked
+        // by `io_addr()` above (offset + 2 <= 256).
+        let ret = unsafe { bindings::i2c_smbus_read_word_data(self.as_raw(), reg) };
+        if ret < 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(ret as u16)
+        }
+    }
+}
