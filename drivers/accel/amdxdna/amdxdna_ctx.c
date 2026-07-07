@@ -472,9 +472,7 @@ static int amdxdna_hwctx_expand_heap(struct amdxdna_hwctx *hwctx)
 			break;
 		}
 
-		mutex_unlock(&client->mm_lock);
 		ret = xdna->dev_info->ops->hwctx_heap_expand(hwctx, heap);
-		mutex_lock(&client->mm_lock);
 		if (ret) {
 			amdxdna_gem_unpin(heap);
 			drm_gem_object_put(to_gobj(heap));
@@ -493,18 +491,26 @@ int amdxdna_update_heap(struct amdxdna_client *client, struct amdxdna_hwctx *hwc
 	unsigned long hwctx_id;
 	int ret;
 
-	guard(mutex)(&client->mm_lock);
+	ret = amdxdna_pm_resume_get_locked(client->xdna);
+	if (ret)
+		return ret;
 
-	if (hwctx)
-		return amdxdna_hwctx_expand_heap(hwctx);
+	mutex_lock(&client->mm_lock);
 
-	amdxdna_for_each_hwctx(client, hwctx_id, hwctx) {
+	if (hwctx) {
 		ret = amdxdna_hwctx_expand_heap(hwctx);
-		if (ret)
-			return ret;
+	} else {
+		amdxdna_for_each_hwctx(client, hwctx_id, hwctx) {
+			ret = amdxdna_hwctx_expand_heap(hwctx);
+			if (ret)
+				break;
+		}
 	}
+	mutex_unlock(&client->mm_lock);
 
-	return 0;
+	amdxdna_pm_suspend_put(client->xdna);
+
+	return ret;
 }
 
 static void

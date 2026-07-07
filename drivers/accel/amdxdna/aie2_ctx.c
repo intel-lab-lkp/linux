@@ -1222,10 +1222,6 @@ int aie2_hwctx_heap_expand(struct amdxdna_hwctx *hwctx,
 	u64 addr;
 	int ret;
 
-	ret = amdxdna_pm_resume_get_locked(xdna);
-	if (ret)
-		return ret;
-
 	addr = amdxdna_obj_dma_addr(heap);
 	ret = aie2_add_host_buf(xdna->dev_handle, hwctx->fw_ctx_id,
 				addr, heap->mem.size);
@@ -1233,8 +1229,6 @@ int aie2_hwctx_heap_expand(struct amdxdna_hwctx *hwctx,
 		XDNA_ERR(xdna, "Add heap failed hwctx %s 0x%lx ret %d",
 			 hwctx->name, heap->mem.size, ret);
 	}
-
-	amdxdna_pm_suspend_put(xdna);
 
 	return ret;
 }
