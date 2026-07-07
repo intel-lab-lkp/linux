@@ -373,7 +373,10 @@ static int amdxdna_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		return ret;
 
-	drmm_mutex_init(ddev, &xdna->dev_lock);
+	ret = drmm_mutex_init(ddev, &xdna->dev_lock);
+	if (ret)
+		return ret;
+
 	init_rwsem(&xdna->notifier_lock);
 	INIT_LIST_HEAD(&xdna->client_list);
 	pci_set_drvdata(pdev, xdna);
