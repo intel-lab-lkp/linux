@@ -667,6 +667,17 @@ static inline bool try_untrack_rmap(struct anon_node *anon_nod,
 	return false;
 }
 
+static bool try_reuse_anon_node(struct anon_node *anon_nod,
+		unsigned long new_rbc)
+{
+	long old_rbase;
+
+	if (anon_node_rmap_count(anon_nod))
+		return false;
+	old_rbase = anon_node_rmap_base(anon_nod);
+	return atomic_long_try_cmpxchg(&anon_nod->rbc, &old_rbase, new_rbc);
+}
+
 /* attach an anon_node to the VMA. */
 int __anon_node_prepare(struct vm_area_struct *vma)
 {
@@ -787,6 +798,67 @@ int anon_node_clone(struct vm_area_struct *vma,  struct vm_area_struct *src,
 	VM_BUG_ON_VMA(vma->anon_vma != (void *)anon_nod, vma);
 	return anon_node_track_rmap(anon_nod, vma);
 }
+
+static struct anon_node *fork_reuse_ancestor(struct anon_node *parent,
+		struct vm_area_struct *vma)
+{
+	struct anon_node *root = parent->root;
+	struct anon_node *node;
+	unsigned long new_rbc = vma_rmap_base(vma) + 1;
+	/* At least N anon_nodes between parent and root: P -> a1 .. aN -> R */
+	const unsigned int ANON_DEPTH_REUSE_THRESHOLD = 1 + (5 << 1);
+
+	if (parent->depth < ANON_DEPTH_REUSE_THRESHOLD)
+		return NULL;
+
+	/* Release from leaf only; parent is stable, no lock needed. */
+	for (node = parent; node != root; node = node->parent) {
+		if (READ_ONCE(node->nr_children) > 1)
+			continue;
+		/* Replace with the new_rbc atomically. */
+		if (!try_reuse_anon_node(node, new_rbc))
+			continue;
+
+		node->mm = vma->vm_mm;
+		vma_set_anon_node(vma, node, false);
+		return node;
+	}
+
+	return NULL;
+}
+
+/* Clone an anon_node from prev or fork one from the parent pvma. */
+int anon_node_fork_with_prev(struct vm_area_struct *vma,
+	struct vm_area_struct *pvma, struct vm_area_struct *prev,
+	struct vm_area_struct *pvma_prev)
+{
+	struct anon_node *parent = vma_anon_node(pvma);
+	struct anon_node *anon_nod = vma_anon_node(prev);
+	unsigned long rmap_base = vma_rmap_base(vma);
+
+	if (!parent)
+		return 0;
+
+	/* Drop inherited anon_nod. */
+	vma->anon_vma = NULL;
+
+	/* 1) Fast path: clone the anon_node with the previous VMA. */
+	if (anon_nod && pvma_prev && parent == vma_anon_node(pvma_prev)) {
+		if (try_track_rmap(anon_nod, rmap_base)) {
+			vma_set_anon_node(vma, anon_nod, false);
+			return 0;
+		}
+	}
+
+	/* 2) Reuse an existing anon_node. */
+	anon_nod = fork_reuse_ancestor(parent, vma);
+	if (anon_nod)
+		return 0;
+
+	/* 3) Fork a new anon_node. */
+	return anon_node_add_child(parent, vma, true);
+}
+
 
 #endif
 
