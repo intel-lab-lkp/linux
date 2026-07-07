@@ -18,6 +18,8 @@
 #include <asm/ftrace.h>
 #include <asm/sigframe.h>
 #include <vdso/datapage.h>
+#include <asm/alternative.h>
+#include <asm/extable.h>
 
 static void __used output_ptreg_defines(void)
 {
@@ -323,3 +325,21 @@ static void __used output_vdso_defines(void)
 	DEFINE(__VDSO_PAGES, VDSO_NR_PAGES);
 	BLANK();
 }
+
+static void __used output_extable_defines(void)
+{
+	COMMENT("LoongArch exception table entry offsets.");
+
+	DEFINE(EXTABLE_SIZE, sizeof(struct exception_table_entry));
+	BLANK();
+}
+
+static void __used output_alt_instr_defines(void)
+{
+	COMMENT("LoongArch alternative instructions offsets.");
+
+	DEFINE(ALT_INSTR_SIZE, sizeof(struct alt_instr));
+	BLANK();
+}
+
+

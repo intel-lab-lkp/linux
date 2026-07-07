@@ -70,7 +70,8 @@ extern void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
 /* alternative assembly primitive: */
 #define ALTERNATIVE(oldinstr, newinstr, feature)			\
 	OLDINSTR(oldinstr, 1)						\
-	".pushsection .altinstructions,\"a\"\n"				\
+	".pushsection .altinstructions, \"aM\", @progbits, "            \
+		 __stringify(ALT_INSTR_SIZE) "\n"                       \
 	ALTINSTR_ENTRY(feature, 1)					\
 	".popsection\n"							\
 	".subsection 1\n" \
@@ -79,7 +80,8 @@ extern void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
 
 #define ALTERNATIVE_2(oldinstr, newinstr1, feature1, newinstr2, feature2)\
 	OLDINSTR_2(oldinstr, 1, 2)					\
-	".pushsection .altinstructions,\"a\"\n"				\
+	".pushsection .altinstructions, \"aM\", @progbits, "            \
+			__stringify(ALT_INSTR_SIZE) "\n"                \
 	ALTINSTR_ENTRY(feature1, 1)					\
 	ALTINSTR_ENTRY(feature2, 2)					\
 	".popsection\n"							\
