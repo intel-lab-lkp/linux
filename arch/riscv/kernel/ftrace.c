@@ -46,16 +46,19 @@ void arch_ftrace_update_code(int command)
 	flush_icache_all();
 }
 
-static int __ftrace_modify_call(unsigned long source, unsigned long target, bool validate)
+static int __ftrace_modify_call(unsigned long source, unsigned long old,
+				unsigned long target, bool validate)
 {
-	unsigned int call[2], offset;
+	unsigned int call[2], old_call[2], offset;
 	unsigned int replaced[2];
 
 	offset = target - source;
 	call[1] = to_jalr_t0(offset);
 
 	if (validate) {
-		call[0] = to_auipc_t0(offset);
+		offset = old - source;
+		old_call[0] = to_auipc_t0(offset);
+		old_call[1] = to_jalr_t0(offset);
 		/*
 		 * Read the text we want to modify;
 		 * return must be -EFAULT on read error
@@ -63,9 +66,10 @@ static int __ftrace_modify_call(unsigned long source, unsigned long target, bool
 		if (copy_from_kernel_nofault(replaced, (void *)source, 2 * MCOUNT_INSN_SIZE))
 			return -EFAULT;
 
-		if (replaced[0] != call[0]) {
-			pr_err("%p: expected (%08x) but got (%08x)\n",
-			       (void *)source, call[0], replaced[0]);
+		if (replaced[0] != old_call[0] || replaced[1] != old_call[1]) {
+			pr_err("%p: expected (%08x %08x) but got (%08x %08x)\n",
+			       (void *)source, old_call[0], old_call[1],
+			       replaced[0], replaced[1]);
 			return -EINVAL;
 		}
 	}
@@ -75,6 +79,46 @@ static int __ftrace_modify_call(unsigned long source, unsigned long target, bool
 		return -EPERM;
 
 	return 0;
+}
+
+static bool ftrace_call_target_in_range(unsigned long addr)
+{
+	unsigned long ftrace_addr = FTRACE_ADDR;
+	unsigned long distance;
+
+	distance = addr > ftrace_addr ? addr - ftrace_addr : ftrace_addr - addr;
+
+	return distance <= JALR_RANGE;
+}
+
+static int ftrace_resolve_call_addr(struct dyn_ftrace *rec, unsigned long addr,
+				    unsigned long *target)
+{
+	unsigned long direct;
+
+	/*
+	 * The AUIPC instruction is initialized for ftrace_caller and this
+	 * implementation only patches the JALR instruction afterwards. Targets
+	 * that fit in the existing AUIPC/JALR window can be called as-is.
+	 */
+	if (ftrace_call_target_in_range(addr)) {
+		*target = addr;
+		return 0;
+	}
+
+	/*
+	 * Out-of-range direct-call targets can still be reached through the
+	 * ftrace_caller path, which dispatches via op->direct_call. Do not use
+	 * this fallback for ops-specific trampolines, because ftrace_caller
+	 * invokes op->func and would not preserve the requested trampoline.
+	 */
+	direct = ftrace_find_rec_direct(rec->ip);
+	if (direct && addr == direct) {
+		*target = FTRACE_ADDR;
+		return 0;
+	}
+
+	return -EINVAL;
 }
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS
@@ -116,19 +160,18 @@ static int ftrace_rec_update_ops(struct dyn_ftrace *rec) { return 0; }
 
 int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 {
-	unsigned long distance, orig_addr, pc = rec->ip - MCOUNT_AUIPC_SIZE;
+	unsigned long pc = rec->ip - MCOUNT_AUIPC_SIZE;
 	int ret;
+
+	ret = ftrace_resolve_call_addr(rec, addr, &addr);
+	if (ret)
+		return ret;
 
 	ret = ftrace_rec_update_ops(rec);
 	if (ret)
 		return ret;
 
-	orig_addr = (unsigned long)&ftrace_caller;
-	distance = addr > orig_addr ? addr - orig_addr : orig_addr - addr;
-	if (distance > JALR_RANGE)
-		addr = FTRACE_ADDR;
-
-	return __ftrace_modify_call(pc, addr, false);
+	return __ftrace_modify_call(pc, 0, addr, false);
 }
 
 int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec, unsigned long addr)
@@ -215,11 +258,19 @@ int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 	unsigned long caller = rec->ip - MCOUNT_AUIPC_SIZE;
 	int ret;
 
+	ret = ftrace_resolve_call_addr(rec, old_addr, &old_addr);
+	if (ret)
+		return ret;
+
+	ret = ftrace_resolve_call_addr(rec, addr, &addr);
+	if (ret)
+		return ret;
+
 	ret = ftrace_rec_update_ops(rec);
 	if (ret)
 		return ret;
 
-	return __ftrace_modify_call(caller, FTRACE_ADDR, true);
+	return __ftrace_modify_call(caller, old_addr, addr, true);
 }
 #endif
 
