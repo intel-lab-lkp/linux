@@ -60,6 +60,9 @@ struct BuiltAttributes {
     inner: Opaque<bindings::soc_device_attribute>,
 }
 
+// `unwrap_or_default()` on a raw pointer requires `Default for *const T`, which is stable since
+// Rust 1.88. Remove when the MSRV allows it.
+#[allow(clippy::unwrap_or_default)]
 fn cstring_to_c(mcs: &Option<CString>) -> *const kernel::ffi::c_char {
     mcs.as_ref()
         .map(|cs| cs.as_char_ptr())
