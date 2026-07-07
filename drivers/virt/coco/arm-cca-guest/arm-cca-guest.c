@@ -14,6 +14,8 @@
 
 #include <asm/rsi.h>
 
+#include "rsi.h"
+
 /**
  * struct arm_cca_token_info - a descriptor for the token buffer.
  * @challenge:		Pointer to the challenge data
