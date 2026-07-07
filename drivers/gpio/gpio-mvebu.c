@@ -833,8 +833,8 @@ static int mvebu_pwm_probe(struct platform_device *pdev,
 		offset = 0;
 	}
 
-	if (IS_ERR(mvchip->clk))
-		return PTR_ERR(mvchip->clk);
+	if (!mvchip->clk)
+		return -ENODEV;
 
 	chip = devm_pwmchip_alloc(dev, mvchip->chip.ngpio, sizeof(*mvpwm));
 	if (IS_ERR(chip))
@@ -1181,10 +1181,10 @@ static int mvebu_gpio_probe(struct platform_device *pdev)
 		return id;
 	}
 
-	mvchip->clk = devm_clk_get(&pdev->dev, NULL);
 	/* Not all SoCs require a clock.*/
-	if (!IS_ERR(mvchip->clk))
-		clk_prepare_enable(mvchip->clk);
+	mvchip->clk = devm_clk_get_optional_enabled(&pdev->dev, NULL);
+	if (IS_ERR(mvchip->clk))
+		return PTR_ERR(mvchip->clk);
 
 	mvchip->soc_variant = soc_variant;
 	mvchip->chip.label = dev_name(&pdev->dev);
