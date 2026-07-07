@@ -3140,6 +3140,25 @@ static void free_stream(struct vip_stream *stream)
 		return;
 
 	dev = stream->port->dev;
+	/*
+	 * Quiesce the overflow IRQ and recovery work for this stream
+	 * before releasing its resources: the handler and the worker
+	 * both keep touching stream, port and device state. disable_irqs()
+	 * masks both the parser-overflow and the list-complete IRQ for
+	 * this list. Drop the stream from cap_streams[] first so a racing
+	 * overflow handler misses the lookup, wait for any in-flight
+	 * handler, cancel the worker, then disable and sync again because
+	 * the worker may have re-enabled interrupts while it ran.
+	 */
+	stream->port->cap_streams[stream->stream_id] = NULL;
+	disable_irqs(dev, dev->slice_id, stream->list_num);
+	clear_irqs(dev, dev->slice_id, stream->list_num);
+	synchronize_irq(dev->irq);
+	cancel_work_sync(&stream->recovery_work);
+	disable_irqs(dev, dev->slice_id, stream->list_num);
+	clear_irqs(dev, dev->slice_id, stream->list_num);
+	synchronize_irq(dev->irq);
+
 	/* Free up the Drop queue */
 	list_for_each_safe(pos, q, &stream->dropq) {
 		buf = list_entry(pos,
@@ -3151,7 +3170,6 @@ static void free_stream(struct vip_stream *stream)
 
 	video_unregister_device(stream->vfd);
 	vpdma_hwlist_release(dev->shared->vpdma, stream->list_num);
-	stream->port->cap_streams[stream->stream_id] = NULL;
 	kfree(stream);
 }
 

@@ -988,7 +988,8 @@ void *vpdma_hwlist_release(struct vpdma_data *vpdma, int list_num)
 
 	spin_lock_irqsave(&vpdma->lock, flags);
 	vpdma->hwlist_used[list_num] = false;
-	priv = vpdma->hwlist_priv;
+	priv = vpdma->hwlist_priv[list_num];
+	vpdma->hwlist_priv[list_num] = NULL;
 	spin_unlock_irqrestore(&vpdma->lock, flags);
 
 	return priv;
