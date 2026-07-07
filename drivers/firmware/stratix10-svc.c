@@ -23,6 +23,10 @@
 #include <linux/firmware/intel/stratix10-smc.h>
 #include <linux/firmware/intel/stratix10-svc-client.h>
 #include <linux/types.h>
+#include <linux/psci.h>
+#include <linux/of.h>
+#include <linux/cpuhplock.h>
+#include <linux/reboot.h>
 
 /**
  * SVC_NUM_DATA_IN_FIFO - number of struct stratix10_svc_data in the FIFO
@@ -94,6 +98,12 @@
 /* Macro to get the SDM mailbox error status */
 #define STRATIX10_GET_SDM_STATUS_CODE(status) \
 	(FIELD_GET(STRATIX10_SDM_STATUS_MASK, status))
+
+struct psci_cpu_off_work {
+	struct work_struct work;
+	struct stratix10_svc_controller *ctrl;
+	int cpu;
+};
 
 typedef void (svc_invoke_fn)(unsigned long, unsigned long, unsigned long,
 			     unsigned long, unsigned long, unsigned long,
@@ -279,6 +289,10 @@ struct stratix10_svc_chan {
  * @svc: manages the list of client svc drivers
  * @sdm_lock: only allows a single command single response to SDM
  * @actrl: async control structure
+ * @psci_reboot_nb: reboot notifier for PSCI secondary CPU offlining
+ * @psci_cpu_off_wq: workqueue used to offline secondary CPUs on warm reboot
+ * @psci_offline_done: completion signalled when all secondary CPUs are offline
+ * @psci_pending_cpus: number of secondary CPUs not yet offlined
  * @chans: array of service channels
  *
  * This struct is used to create communication channels for service clients, to
@@ -295,6 +309,10 @@ struct stratix10_svc_controller {
 	struct stratix10_svc *svc;
 	struct mutex sdm_lock;
 	struct stratix10_async_ctrl actrl;
+	struct notifier_block psci_reboot_nb;
+	struct workqueue_struct *psci_cpu_off_wq;
+	struct completion psci_offline_done;
+	atomic_t psci_pending_cpus;
 	struct stratix10_svc_chan chans[] __counted_by(num_chans);
 };
 
@@ -1908,6 +1926,92 @@ void stratix10_svc_free_memory(struct stratix10_svc_chan *chan, void *kaddr)
 }
 EXPORT_SYMBOL_GPL(stratix10_svc_free_memory);
 
+static void psci_cpu_off_worker(struct work_struct *work)
+{
+	struct psci_cpu_off_work *cw =
+		container_of(work, struct psci_cpu_off_work, work);
+	struct stratix10_svc_controller *ctrl = cw->ctrl;
+	int ret;
+
+	ret = remove_cpu(cw->cpu);
+	if (ret)
+		pr_err("psci_cpu_off: failed to offline CPU%d: %d\n", cw->cpu, ret);
+
+	if (atomic_dec_and_test(&ctrl->psci_pending_cpus))
+		complete(&ctrl->psci_offline_done);
+
+	kfree(cw);
+}
+
+static void psci_offline_secondary_cpus(struct stratix10_svc_controller *ctrl)
+{
+	int cpu, me;
+	struct psci_cpu_off_work *cw;
+
+	/* safely get current CPU id (disables preemption briefly) */
+	me = get_cpu();
+	put_cpu();
+
+	/* Pre-count before queuing to avoid a worker calling dec_and_test
+	 * and completing before all work items have been queued.
+	 */
+	atomic_set(&ctrl->psci_pending_cpus, 0);
+	for_each_online_cpu(cpu)
+		if (cpu != me)
+			atomic_inc(&ctrl->psci_pending_cpus);
+
+	if (!atomic_read(&ctrl->psci_pending_cpus))
+		return;
+
+	reinit_completion(&ctrl->psci_offline_done);
+
+	for_each_online_cpu(cpu) {
+		if (cpu == me)
+			continue;
+
+		cw = kzalloc_obj(*cw, GFP_KERNEL);
+		if (!cw) {
+			if (atomic_dec_and_test(&ctrl->psci_pending_cpus))
+				complete(&ctrl->psci_offline_done);
+			continue;
+		}
+
+		cw->ctrl = ctrl;
+		INIT_WORK(&cw->work, psci_cpu_off_worker);
+		cw->cpu = cpu;
+		queue_work(ctrl->psci_cpu_off_wq, &cw->work);
+	}
+
+	if (!wait_for_completion_timeout(&ctrl->psci_offline_done,
+					 msecs_to_jiffies(1000)))
+		pr_warn("psci_cpu_off: timed out waiting for secondary CPUs to offline\n");
+}
+
+static int psci_cpu_off_reboot_notifier(struct notifier_block *nb,
+					unsigned long action, void *data)
+{
+	struct stratix10_svc_controller *ctrl =
+		container_of(nb, struct stratix10_svc_controller, psci_reboot_nb);
+
+	if (reboot_mode != REBOOT_WARM)
+		return NOTIFY_DONE;
+
+	if (action == SYS_RESTART)
+		psci_offline_secondary_cpus(ctrl);
+
+	return NOTIFY_OK;
+}
+
+static void psci_cpu_off_teardown(struct stratix10_svc_controller *ctrl)
+{
+	unregister_reboot_notifier(&ctrl->psci_reboot_nb);
+	if (ctrl->psci_cpu_off_wq) {
+		flush_workqueue(ctrl->psci_cpu_off_wq);
+		destroy_workqueue(ctrl->psci_cpu_off_wq);
+		ctrl->psci_cpu_off_wq = NULL;
+	}
+}
+
 static const struct of_device_id stratix10_svc_drv_match[] = {
 	{.compatible = "intel,stratix10-svc"},
 	{.compatible = "intel,agilex-svc"},
@@ -1928,6 +2032,7 @@ static int stratix10_svc_drv_probe(struct platform_device *pdev)
 	struct gen_pool *genpool;
 	struct stratix10_svc_sh_memory *sh_memory;
 	struct stratix10_svc *svc = NULL;
+	struct device_node *node = pdev->dev.of_node;
 
 	svc_invoke_fn *invoke_fn;
 	size_t fifo_size;
@@ -1967,13 +2072,36 @@ static int stratix10_svc_drv_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&controller->node);
 	init_completion(&controller->complete_status);
 
+	if (of_device_is_compatible(node, "intel,agilex-svc") ||
+	    of_device_is_compatible(node, "intel,stratix10-svc")) {
+		init_completion(&controller->psci_offline_done);
+		atomic_set(&controller->psci_pending_cpus, 0);
+
+		controller->psci_cpu_off_wq =
+			alloc_workqueue("psci_cpu_off_wq", WQ_UNBOUND, 0);
+		if (!controller->psci_cpu_off_wq) {
+			ret = -ENOMEM;
+			goto err_destroy_pool;
+		}
+
+		controller->psci_reboot_nb.notifier_call =
+			psci_cpu_off_reboot_notifier;
+		controller->psci_reboot_nb.priority = INT_MAX;
+
+		ret = register_reboot_notifier(&controller->psci_reboot_nb);
+		if (ret) {
+			dev_err(dev, "failed to register reboot notifier: %d\n", ret);
+			goto err_free_workqueue;
+		}
+	}
+
 	ret = stratix10_svc_async_init(controller);
 	if (ret == -EOPNOTSUPP) {
 		dev_info(dev, "Intel Service Layer Driver Initialized (sync-only mode)\n");
 	} else if (ret) {
 		dev_dbg(dev, "Intel Service Layer Driver: Error on stratix10_svc_async_init %d\n",
 			ret);
-		goto err_destroy_pool;
+		goto err_free_workqueue;
 	} else {
 		dev_info(dev, "Intel Service Layer Driver Initialized\n");
 	}
@@ -2037,6 +2165,8 @@ err_free_fifos:
 	while (i--)
 		kfifo_free(&controller->chans[i].svc_fifo);
 	stratix10_svc_async_exit(controller);
+err_free_workqueue:
+	psci_cpu_off_teardown(controller);
 err_destroy_pool:
 	gen_pool_destroy(genpool);
 
@@ -2066,6 +2196,8 @@ static void stratix10_svc_drv_remove(struct platform_device *pdev)
 	if (ctrl->genpool)
 		gen_pool_destroy(ctrl->genpool);
 	list_del(&ctrl->node);
+
+	psci_cpu_off_teardown(ctrl);
 }
 
 static struct platform_driver stratix10_svc_driver = {
