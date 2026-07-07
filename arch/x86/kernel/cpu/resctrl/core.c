@@ -959,6 +959,9 @@ static __init bool get_rdt_alloc_resources(void)
 	if (get_slow_mem_config())
 		ret = true;
 
+	if (ret && rdt_cpu_has(X86_FEATURE_PLZA))
+		resctrl_set_kmode_support(GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU);
+
 	return ret;
 }
 
@@ -984,6 +987,9 @@ static __init bool get_rdt_mon_resources(void)
 
 	if (!ret)
 		return false;
+
+	if (rdt_cpu_has(X86_FEATURE_PLZA))
+		resctrl_set_kmode_support(GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU);
 
 	return !rdt_get_l3_mon_config(r);
 }
