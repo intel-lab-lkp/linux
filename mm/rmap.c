@@ -859,6 +859,94 @@ int anon_node_fork_with_prev(struct vm_area_struct *vma,
 	return anon_node_add_child(parent, vma, true);
 }
 
+/* Returns true if untrack succeeds. */
+static bool anon_node_untrack_rmap_locked(struct anon_node *anon_nod,
+		struct vm_area_struct *vma, struct anon_node **release_node)
+{
+	struct anon_node *root = anon_nod->root;
+	struct anon_node *node = anon_nod;
+	struct anon_node *empty_nod = NULL;
+	bool test_empty = false;
+
+	do {
+		if (try_untrack_rmap(node, vma_rmap_base(vma), &test_empty))
+			break;
+		node = anon_node_next_rbc_child(anon_nod, node);
+	} while (node);
+
+	if (!test_empty) {
+		VM_BUG_ON_VMA(!node, vma);
+		return (bool)node;
+	}
+
+	if (node->nr_children == 0)
+		empty_nod = node;
+	else if (node == anon_nod) {
+		/* Replace an rbc child. */
+		node = anon_node_next_rbc_child(anon_nod, anon_nod);
+		if (node && try_reuse_anon_node(anon_nod,
+						atomic_long_read(&node->rbc))) {
+			atomic_long_set(&node->rbc, 0);
+			empty_nod = node;
+		}
+	}
+	/* may be released up the parent chain */
+	*release_node = empty_nod;
+	while (empty_nod && empty_nod != root) {
+		struct anon_node *parent = empty_nod->parent;
+
+		/* delete the empty_nod first, release later. */
+		list_del_init(&empty_nod->fractal_list);
+		empty_nod->mm = NULL;
+		if (--parent->nr_children == 0 && !anon_node_rmap_count(parent))
+			empty_nod = parent;
+		else {
+			empty_nod->parent = NULL;
+			break;
+		}
+	}
+	return true;
+}
+
+static void release_anon_nodes(struct anon_node *anon_nod)
+{
+	struct anon_node *root = anon_nod->root;
+
+	while (anon_nod) {
+		struct anon_node *parent = anon_nod->parent;
+
+		put_anon_node(anon_nod);
+		anon_nod = (anon_nod != root) ? parent : NULL;
+	}
+}
+
+/* Remove link between this VMA and its anon_node. */
+void unlink_anon_nodes(struct vm_area_struct *vma)
+{
+	struct anon_node *anon_nod = vma_anon_node(vma);
+	struct rw_semaphore *rmap_sem;
+	struct anon_node *release_node = NULL;
+
+	/* Always hold mmap lock, read-lock on unmap possibly. */
+	mmap_assert_locked(vma->vm_mm);
+
+	/* Unfaulted */
+	if (!anon_nod)
+		return;
+
+	rmap_sem = anon_node_rmap_sem(anon_nod->root);
+	down_write(rmap_sem);
+	anon_nod = vma_anon_node(vma); /* Recheck after locking. */
+	if (anon_nod) {
+		anon_node_untrack_rmap_locked(anon_nod, vma, &release_node);
+		vma->anon_vma = NULL;
+	}
+	up_write(rmap_sem);
+
+	if (release_node)
+		release_anon_nodes(release_node);
+}
+
 
 #endif
 
