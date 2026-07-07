@@ -725,9 +725,9 @@ static int ssd132x_update_rect(struct ssd130x_device *ssd130x,
 			       struct drm_rect *rect, u8 *buf,
 			       u8 *data_array)
 {
-	unsigned int x = rect->x1;
-	unsigned int y = rect->y1;
 	unsigned int segment_width = SSD132X_SEGMENT_WIDTH;
+	unsigned int col = rect->x1 / segment_width;
+	unsigned int row = rect->y1;
 	unsigned int width = drm_rect_width(rect);
 	unsigned int height = drm_rect_height(rect);
 	unsigned int columns = DIV_ROUND_UP(width, segment_width);
@@ -737,7 +737,7 @@ static int ssd132x_update_rect(struct ssd130x_device *ssd130x,
 	unsigned int i, j;
 	int ret;
 
-	drm_WARN_ONCE(drm, x % segment_width != 0, "x must be aligned to screen segment\n");
+	drm_WARN_ONCE(drm, rect->x1 % segment_width != 0, "x must be aligned to screen segment\n");
 
 	/*
 	 * The screen is divided in Segment and Common outputs, where
@@ -754,12 +754,12 @@ static int ssd132x_update_rect(struct ssd130x_device *ssd130x,
 	 */
 
 	/* Set column start and end */
-	ret = ssd130x_write_cmd(ssd130x, 3, SSD132X_SET_COL_RANGE, x / segment_width, columns - 1);
+	ret = ssd130x_write_cmd(ssd130x, 3, SSD132X_SET_COL_RANGE, col, col + columns - 1);
 	if (ret < 0)
 		return ret;
 
 	/* Set row start and end */
-	ret = ssd130x_write_cmd(ssd130x, 3, SSD132X_SET_ROW_RANGE, y, rows - 1);
+	ret = ssd130x_write_cmd(ssd130x, 3, SSD132X_SET_ROW_RANGE, row, row + rows - 1);
 	if (ret < 0)
 		return ret;
 
@@ -805,12 +805,12 @@ static int ssd133x_update_rect(struct ssd130x_device *ssd130x,
 	 */
 
 	/* Set column start and end */
-	ret = ssd130x_write_cmd(ssd130x, 3, SSD133X_SET_COL_RANGE, x, columns - 1);
+	ret = ssd130x_write_cmd(ssd130x, 3, SSD133X_SET_COL_RANGE, x, x + columns - 1);
 	if (ret < 0)
 		return ret;
 
 	/* Set row start and end */
-	ret = ssd130x_write_cmd(ssd130x, 3, SSD133X_SET_ROW_RANGE, y, rows - 1);
+	ret = ssd130x_write_cmd(ssd130x, 3, SSD133X_SET_ROW_RANGE, y, y + rows - 1);
 	if (ret < 0)
 		return ret;
 
