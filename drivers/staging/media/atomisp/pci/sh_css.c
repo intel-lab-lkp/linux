@@ -4527,21 +4527,25 @@ static int load_video_binaries(struct ia_css_pipe *pipe)
 			  pipe_out_info,
 			  NULL,
 			  &cas_scaler_descr);
-		if (err)
+		if (err) {
+			ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
 			return err;
+		}
 		mycs->num_yuv_scaler = cas_scaler_descr.num_stage;
 		mycs->yuv_scaler_binary = kzalloc_objs(struct ia_css_binary,
 						       cas_scaler_descr.num_stage);
 		if (!mycs->yuv_scaler_binary) {
 			mycs->num_yuv_scaler = 0;
 			err = -ENOMEM;
+			ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
 			return err;
 		}
 		mycs->is_output_stage = kzalloc_objs(bool,
 						     cas_scaler_descr.num_stage);
 		if (!mycs->is_output_stage) {
 			err = -ENOMEM;
-			return err;
+			ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
+			goto free_yuv_scaler;
 		}
 		for (i = 0; i < cas_scaler_descr.num_stage; i++) {
 			struct ia_css_binary_descr yuv_scaler_descr;
@@ -4555,9 +4559,8 @@ static int load_video_binaries(struct ia_css_pipe *pipe)
 			err = ia_css_binary_find(&yuv_scaler_descr,
 						 &mycs->yuv_scaler_binary[i]);
 			if (err) {
-				kfree(mycs->is_output_stage);
-				mycs->is_output_stage = NULL;
-				return err;
+				ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
+				goto free_output_stage;
 			}
 		}
 		ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
@@ -4734,6 +4737,15 @@ static int load_video_binaries(struct ia_css_pipe *pipe)
 	}
 	IA_CSS_LEAVE_PRIVATE("");
 	return 0;
+
+free_output_stage:
+	kfree(mycs->is_output_stage);
+	mycs->is_output_stage = NULL;
+free_yuv_scaler:
+	kfree(mycs->yuv_scaler_binary);
+	mycs->yuv_scaler_binary = NULL;
+	mycs->num_yuv_scaler = 0;
+	return err;
 }
 
 static int
@@ -5104,6 +5116,7 @@ static int load_primary_binaries(
 			  NULL,
 			  &cas_scaler_descr);
 		if (err) {
+			ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
 			IA_CSS_LEAVE_ERR_PRIVATE(err);
 			return err;
 		}
@@ -5111,7 +5124,9 @@ static int load_primary_binaries(
 		mycs->yuv_scaler_binary = kzalloc_objs(struct ia_css_binary,
 						       cas_scaler_descr.num_stage);
 		if (!mycs->yuv_scaler_binary) {
+			mycs->num_yuv_scaler = 0;
 			err = -ENOMEM;
+			ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
 			IA_CSS_LEAVE_ERR_PRIVATE(err);
 			return err;
 		}
@@ -5119,8 +5134,8 @@ static int load_primary_binaries(
 						     cas_scaler_descr.num_stage);
 		if (!mycs->is_output_stage) {
 			err = -ENOMEM;
-			IA_CSS_LEAVE_ERR_PRIVATE(err);
-			return err;
+			ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
+			goto free_yuv_scaler;
 		}
 		for (i = 0; i < cas_scaler_descr.num_stage; i++) {
 			struct ia_css_binary_descr yuv_scaler_descr;
@@ -5134,8 +5149,8 @@ static int load_primary_binaries(
 			err = ia_css_binary_find(&yuv_scaler_descr,
 						 &mycs->yuv_scaler_binary[i]);
 			if (err) {
-				IA_CSS_LEAVE_ERR_PRIVATE(err);
-				return err;
+				ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
+				goto free_output_stage;
 			}
 		}
 		ia_css_pipe_destroy_cas_scaler_desc(&cas_scaler_descr);
@@ -5257,6 +5272,16 @@ static int load_primary_binaries(
 	}
 
 	return 0;
+
+free_output_stage:
+	kfree(mycs->is_output_stage);
+	mycs->is_output_stage = NULL;
+free_yuv_scaler:
+	kfree(mycs->yuv_scaler_binary);
+	mycs->yuv_scaler_binary = NULL;
+	mycs->num_yuv_scaler = 0;
+	IA_CSS_LEAVE_ERR_PRIVATE(err);
+	return err;
 }
 
 static int
