@@ -8,6 +8,8 @@
 
 #include <linux/arm-smccc.h>
 
+#define RSI_DEV_NAME "arm-rsi-dev"
+
 /*
  * This file describes the Realm Services Interface (RSI) Application Binary
  * Interface (ABI) for SMC calls made from within the Realm to the RMM and
