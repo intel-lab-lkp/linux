@@ -2568,6 +2568,7 @@ static void dispatch_to_local_dsq(struct scx_sched *sch, struct rq *rq,
 	struct rq *src_rq = task_rq(p);
 	struct rq *dst_rq = container_of(dst_dsq, struct rq, scx.local_dsq);
 	struct rq *locked_rq = rq;
+	struct rq *tracked_rq = scx_locked_rq();
 
 	/*
 	 * We're synchronized against dequeue through DISPATCHING. As @p can't
@@ -2586,6 +2587,16 @@ static void dispatch_to_local_dsq(struct scx_sched *sch, struct rq *rq,
 		dispatch_enqueue(sch, rq, find_global_dsq(sch, task_cpu(p)), p,
 				 enq_flags | SCX_ENQ_CLEAR_OPSS | SCX_ENQ_GDSQ_FALLBACK);
 		return;
+	}
+
+	/*
+	 * This may be called from an SCX op with @rq recorded as the currently
+	 * locked rq. Clear the tracking while switching rq locks so nested
+	 * callbacks don't restore an rq which isn't locked anymore.
+	 */
+	if (tracked_rq) {
+		WARN_ON_ONCE(tracked_rq != rq);
+		update_locked_rq(NULL);
 	}
 
 	/*
@@ -2640,6 +2651,8 @@ static void dispatch_to_local_dsq(struct scx_sched *sch, struct rq *rq,
 		raw_spin_rq_unlock(locked_rq);
 		raw_spin_rq_lock(rq);
 	}
+	if (tracked_rq)
+		update_locked_rq(tracked_rq);
 }
 
 /**
