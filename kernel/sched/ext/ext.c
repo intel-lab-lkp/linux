@@ -2974,12 +2974,18 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, bool first)
 	 */
 	if ((p->scx.slice == SCX_SLICE_INF) !=
 	    (bool)(rq->scx.flags & SCX_RQ_CAN_STOP_TICK)) {
-		if (p->scx.slice == SCX_SLICE_INF)
+		if (p->scx.slice == SCX_SLICE_INF) {
+			/*
+			 * Bypass mode always assigns finite slices, so @p
+			 * can't have an infinite slice while bypassing.
+			 * Therefore, sched_update_tick_dependency() can safely
+			 * evaluate the outgoing task.
+			 */
 			rq->scx.flags |= SCX_RQ_CAN_STOP_TICK;
-		else
+			sched_update_tick_dependency(rq);
+		} else {
 			rq->scx.flags &= ~SCX_RQ_CAN_STOP_TICK;
-
-		sched_update_tick_dependency(rq);
+		}
 
 		/*
 		 * For now, let's refresh the load_avgs just when transitioning
@@ -2989,6 +2995,14 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, bool first)
 		 */
 		update_other_load_avgs(rq);
 	}
+
+	/*
+	 * @rq still references the outgoing scheduling context. A finite slice
+	 * is sufficient by itself to require the tick.
+	 */
+	if (p->scx.slice != SCX_SLICE_INF &&
+	    tick_nohz_full_cpu(cpu_of(rq)))
+		tick_nohz_dep_set_cpu(cpu_of(rq), TICK_DEP_BIT_SCHED);
 }
 
 static enum scx_cpu_preempt_reason
@@ -4299,6 +4313,15 @@ bool scx_can_stop_tick(struct rq *rq)
 	struct scx_sched *sch = scx_task_sched(p);
 
 	if (p->sched_class != &ext_sched_class)
+		return true;
+
+	/*
+	 * @rq->curr may still reference an outgoing EXT task after it has been
+	 * dequeued. If no EXT tasks are accounted on @rq, ignore its stale
+	 * slice state. If another task is dispatched from a DSQ,
+	 * set_next_task_scx() will update the dependency for the incoming task.
+	 */
+	if (!rq->scx.nr_running)
 		return true;
 
 	if (scx_bypassing(sch, cpu_of(rq)))
