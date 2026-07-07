@@ -735,15 +735,6 @@ again:
 	if (!folio)
 		return ERR_PTR(-ENOMEM);
 
-	ret = filemap_add_folio(inode->i_mapping, folio, index, GFP_NOFS);
-	if (ret) {
-		folio_put(folio);
-		/* Did someone else insert a folio here? */
-		if (ret == -EEXIST)
-			goto again;
-		return ERR_PTR(ret);
-	}
-
 	/*
 	 * Merkle item keys are indexed from byte 0 in the merkle tree.
 	 * They have the form:
@@ -758,6 +749,15 @@ again:
 	}
 	if (ret < PAGE_SIZE)
 		folio_zero_segment(folio, ret, PAGE_SIZE);
+
+	ret = filemap_add_folio(inode->i_mapping, folio, index, GFP_NOFS);
+	if (ret) {
+		folio_put(folio);
+		/* Did someone else insert a folio here? */
+		if (ret == -EEXIST)
+			goto again;
+		return ERR_PTR(ret);
+	}
 
 	folio_mark_uptodate(folio);
 	folio_unlock(folio);
