@@ -970,6 +970,11 @@ static int iris_hfi_gen1_set_bufsize(struct iris_inst *inst, u32 plane)
 	struct hfi_buffer_size_actual bufsz;
 	int ret;
 
+	ret = inst->hfi_session_ops->session_get_property(inst,
+							  HFI_PROPERTY_CONFIG_BUFFER_REQUIREMENTS);
+	if (ret)
+		return ret;
+
 	if (iris_split_mode_enabled(inst)) {
 		bufsz.type = HFI_BUFFER_OUTPUT;
 		bufsz.size = inst->core->iris_firmware_desc->get_vpu_buffer_size(inst, BUF_DPB);
