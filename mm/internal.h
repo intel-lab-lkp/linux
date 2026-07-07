@@ -315,6 +315,17 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma);
 int  __anon_vma_prepare(struct vm_area_struct *vma);
 void unlink_anon_vmas(struct vm_area_struct *vma);
 
+#ifdef CONFIG_ANON_VMA_FRACTAL
+int anon_node_clone(struct vm_area_struct *vma, struct vm_area_struct *src,
+	enum vma_operation operation);
+int anon_node_fork_with_prev(struct vm_area_struct *vma,
+	struct vm_area_struct *pvma, struct vm_area_struct *vma_prev,
+	struct vm_area_struct *pvma_prev);
+int __anon_node_prepare(struct vm_area_struct *vma);
+void unlink_anon_nodes(struct vm_area_struct *vma);
+
+#endif
+
 static inline int anon_vma_prepare(struct vm_area_struct *vma)
 {
 	if (likely(vma->anon_vma))

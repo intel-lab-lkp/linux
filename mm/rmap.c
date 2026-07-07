@@ -645,6 +645,64 @@ static inline struct anon_node *anon_node_alloc(struct vm_area_struct *vma,
 	return anon_nod;
 }
 
+static bool try_track_rmap(struct anon_node *anon_nod, unsigned long rmap_base)
+{
+	const unsigned long rbc_max = rmap_base + ANON_RMAP_BASE_COUNT_MAX;
+
+	return rmap_base == anon_node_rmap_base(anon_nod) &&
+		atomic_long_add_unless(&anon_nod->rbc, 1, rbc_max);
+}
+
+static inline bool try_untrack_rmap(struct anon_node *anon_nod,
+		unsigned long rmap_base, bool *test_empty)
+{
+	const unsigned long rbc_max = rmap_base + ANON_RMAP_BASE_COUNT_MAX;
+	unsigned long rbc = atomic_long_read(&anon_nod->rbc);
+
+	if (rbc > rmap_base && rbc <= rbc_max) {
+		rbc = atomic_long_dec_return(&anon_nod->rbc);
+		*test_empty = (rbc == rmap_base);
+		return true;
+	}
+	return false;
+}
+
+/* attach an anon_node to the VMA. */
+int __anon_node_prepare(struct vm_area_struct *vma)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long rmap_base = vma_rmap_base(vma);
+	struct anon_node *anon_nod;
+	struct anon_vma *anon_old = NULL, *anon_new;
+	bool test_empty = false;
+
+	mmap_assert_locked(mm);
+	might_sleep();
+
+	anon_nod = NULL; /* Fix find_mergeable_anon_vma(vma) later. */
+	if (anon_nod) {
+		anon_new = (struct anon_vma *)anon_nod;
+		if (try_track_rmap(anon_nod, rmap_base) &&
+		    !try_cmpxchg(&vma->anon_vma, &anon_old, anon_new))
+			try_untrack_rmap(anon_nod, rmap_base, &test_empty);
+		if (vma->anon_vma)
+			return 0;
+	}
+
+	anon_nod = anon_node_alloc(vma, NULL, false);
+	if (unlikely(!anon_nod))
+		return -ENOMEM;
+
+	anon_new = (struct anon_vma *)anon_nod;
+	/* maybe prepared by another thread */
+	if (!try_cmpxchg(&vma->anon_vma, &anon_old, anon_new)) {
+		try_untrack_rmap(anon_nod, rmap_base, &test_empty);
+		put_anon_node(anon_nod);
+	}
+
+	return 0;
+}
+
 #endif
 
 /*
