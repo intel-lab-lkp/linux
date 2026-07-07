@@ -101,6 +101,7 @@ static void llt_ndlc_send_queue(struct llt_ndlc *ndlc)
 		r = ndlc->ops->write(ndlc->phy_id, skb);
 		if (r < 0) {
 			ndlc->hard_fault = r;
+			skb_queue_head(&ndlc->send_q, skb);
 			break;
 		}
 		time_sent = jiffies;
