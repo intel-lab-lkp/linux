@@ -371,8 +371,16 @@ static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *batch,
 		struct mm_struct *mm, unsigned long start, unsigned long end)
 {
+	unsigned int i, nr = BITS_TO_LONGS(nr_cpu_ids);
+	const unsigned long *src = cpumask_bits(mm_cpumask(mm));
+	unsigned long *dst = cpumask_bits(&batch->cpumask);
+
 	inc_mm_tlb_gen(mm);
-	cpumask_or(&batch->cpumask, &batch->cpumask, mm_cpumask(mm));
+
+	/* mm_cpumask can be concurrently modified by atomic bitops; use READ_ONCE per word to pair. */
+	for (i = 0; i < nr; i++)
+		dst[i] |= READ_ONCE(src[i]);
+
 	batch->unmapped_pages = true;
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);
 }
