@@ -1127,6 +1127,61 @@ out_unlock:
 	return ret;
 }
 
+/**
+ * rdtgroup_config_kmode_reset() - Tear down the kernel-mode binding on @rdtgrp
+ * @rdtgrp:	Resctrl group whose kernel-mode binding is being released.
+ *		May be %NULL when no group is currently bound, in which case
+ *		this is a no-op.
+ * @kmode:	Kernel-mode policy currently active on @rdtgrp.
+ *
+ * Reset the kernel-mode binding on the CPUs in @rdtgrp's @kmode_cpu_mask.
+ */
+static void rdtgroup_config_kmode_reset(struct rdtgroup *rdtgrp,
+					enum resctrl_kernel_mode kmode)
+{
+	bool assign_mon = false;
+
+	if (!rdtgrp)
+		return;
+
+	if (kmode == INHERIT_CTRL_AND_MON)
+		goto out_clear;
+
+	if (kmode == GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU)
+		assign_mon = true;
+
+	resctrl_arch_configure_kmode(&rdtgrp->kmode_cpu_mask, rdtgrp->closid,
+				     rdtgrp->mon.rmid, assign_mon, false);
+
+out_clear:
+	cpumask_clear(&rdtgrp->kmode_cpu_mask);
+	rdtgrp->kmode = false;
+}
+
+/**
+ * rdtgroup_kmode_detach() - Detach @rdtgrp from kernel-mode assignment
+ * @rdtgrp: Resctrl group being removed or torn down
+ *
+ * If @rdtgrp is bound to the active kernel-mode assignment, disable the
+ * hardware association programmed for that group and reset the kernel-mode
+ * to INHERIT_CTRL_AND_MON.
+ */
+static void rdtgroup_kmode_detach(struct rdtgroup *rdtgrp)
+{
+	if (!rdtgrp || !rdtgrp->kmode)
+		return;
+
+	if (resctrl_kcfg.k_rdtgrp != rdtgrp) {
+		pr_warn("resctrl: kernel-mode group not valid\n");
+		return;
+	}
+
+	rdtgroup_config_kmode_reset(rdtgrp, resctrl_kcfg.kmode_cur);
+
+	resctrl_kcfg.k_rdtgrp = NULL;
+	resctrl_kcfg.kmode_cur = INHERIT_CTRL_AND_MON;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -3215,6 +3270,7 @@ static void free_all_child_rdtgrp(struct rdtgroup *rdtgrp)
 
 	head = &rdtgrp->mon.crdtgrp_list;
 	list_for_each_entry_safe(sentry, stmp, head, mon.crdtgrp_list) {
+		rdtgroup_kmode_detach(sentry);
 		rdtgroup_unassign_cntrs(sentry);
 		free_rmid(sentry->closid, sentry->mon.rmid);
 		list_del(&sentry->mon.crdtgrp_list);
@@ -3252,6 +3308,7 @@ static void rmdir_all_sub(void)
 		cpumask_or(&rdtgroup_default.cpu_mask,
 			   &rdtgroup_default.cpu_mask, &rdtgrp->cpu_mask);
 
+		rdtgroup_kmode_detach(rdtgrp);
 		rdtgroup_unassign_cntrs(rdtgrp);
 
 		if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP ||
@@ -3347,6 +3404,7 @@ static void resctrl_fs_teardown(void)
 		return;
 
 	rmdir_all_sub();
+	rdtgroup_kmode_detach(&rdtgroup_default);
 	rdtgroup_unassign_cntrs(&rdtgroup_default);
 	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
@@ -4149,6 +4207,8 @@ static int rdtgroup_rmdir_mon(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 	u32 closid, rmid;
 	int cpu;
 
+	rdtgroup_kmode_detach(rdtgrp);
+
 	/* Give any tasks back to the parent group */
 	rdt_move_group_tasks(rdtgrp, prdtgrp, tmpmask);
 
@@ -4198,6 +4258,8 @@ static int rdtgroup_rmdir_ctrl(struct rdtgroup *rdtgrp, cpumask_var_t tmpmask)
 {
 	u32 closid, rmid;
 	int cpu;
+
+	rdtgroup_kmode_detach(rdtgrp);
 
 	/* Give any tasks back to the default group */
 	rdt_move_group_tasks(rdtgrp, &rdtgroup_default, tmpmask);
