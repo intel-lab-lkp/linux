@@ -26,11 +26,13 @@ Here is what the fields mean:
    name below ``/proc/sys/fs/binfmt_misc``; cannot contain slashes ``/`` for
    obvious reasons.
 - ``type``
-   is the type of recognition. Give ``M`` for magic and ``E`` for extension.
+   is the type of recognition. Give ``M`` for magic, ``E`` for extension and
+   ``B`` for a bpf-backed handler (see below).
 - ``offset``
    is the offset of the magic/mask in the file, counted in bytes. This
    defaults to 0 if you omit it (i.e. you write ``:name:type::magic...``).
-   Ignored when using filename extension matching.
+   Ignored when using filename extension matching. For ``B`` entries this
+   field carries the name of the bpf handler instead.
 - ``magic``
    is the byte sequence binfmt_misc is matching for. The magic string
    may contain hex-encoded characters like ``\x0a`` or ``\xA4``. Note that you
@@ -96,6 +98,40 @@ There are some restrictions:
  - the magic must reside in the first 128 bytes of the file, i.e.
    offset+size(magic) has to be less than 128
  - the interpreter string may not exceed 127 characters
+
+
+bpf-backed handlers
+-------------------
+
+With ``CONFIG_BINFMT_MISC_BPF`` both the matching and the interpreter
+selection can be delegated to a bpf program. A handler is an instance of the
+``binfmt_misc_ops`` struct_ops with a sleepable ``load`` program and a
+``name``. Once the struct_ops map is registered the handler can be activated
+with a ``B`` entry that references it by name and carries neither magic,
+mask, nor interpreter::
+
+    echo ':qemu:B:my_handler::::' > register
+
+At exec time the ``load`` program receives the ``linux_binprm`` of the
+binary. It can match on the header in ``bprm->buf``, read the file itself,
+e.g. to parse ELF program headers, and derive the interpreter from the
+binary's location. It selects the interpreter by calling the
+``bpf_binprm_set_interp()`` kfunc with an absolute path and returning a
+positive value. Returning ``0`` falls through to the handlers registered
+after this one, a negative errno fails the exec with that error;
+``-ENOEXEC`` ends the binfmt_misc search but lets the remaining binary
+formats have a go. The interpreter is opened with the credentials of the
+task doing the exec, exactly as a statically registered interpreter would
+be.
+
+Handlers are looked up in the user namespace the struct_ops map was
+registered in, falling back to ancestor namespaces, mirroring how
+binfmt_misc instances themselves are looked up. The entry keeps the handler
+alive; deleting the struct_ops map only prevents new registrations.
+
+The ``C`` and ``F`` flags cannot be combined with ``B`` entries: there is no
+fixed interpreter to pre-open and a program-selected interpreter must never
+inherit the credentials of a setuid binary.
 
 To use binfmt_misc you have to mount it first. You can mount it with
 ``mount -t binfmt_misc none /proc/sys/fs/binfmt_misc`` command, or you can add

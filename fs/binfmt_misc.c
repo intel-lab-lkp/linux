@@ -17,6 +17,7 @@
 #include <linux/sched/mm.h>
 #include <linux/magic.h>
 #include <linux/binfmts.h>
+#include <linux/binfmt_misc.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/string_helpers.h>
@@ -41,7 +42,7 @@ enum {
 	VERBOSE_STATUS = 1 /* make it zero to save 400 bytes kernel memory */
 };
 
-enum {Enabled, Magic};
+enum {Enabled, Magic, Bpf};
 #define MISC_FMT_PRESERVE_ARGV0 (1UL << 31)
 #define MISC_FMT_OPEN_BINARY (1UL << 30)
 #define MISC_FMT_CREDENTIALS (1UL << 29)
@@ -58,6 +59,8 @@ typedef struct {
 	char *name;
 	struct dentry *dentry;
 	struct file *interp_file;
+	const struct binfmt_misc_ops *bpf_ops;	/* bpf-backed handler ('B') */
+	const char *bpf_ops_name;
 	refcount_t users;		/* sync removal with load_misc_binary() */
 } Node;
 
@@ -82,14 +85,19 @@ static struct file_system_type bm_fs_type;
  * search_binfmt_handler - search for a binary handler for @bprm
  * @misc: handle to binfmt_misc instance
  * @bprm: binary for which we are looking for a handler
+ * @bpf_skip: number of bpf-backed handlers to skip over
  *
  * Search for a binary type handler for @bprm in the list of registered binary
- * type handlers.
+ * type handlers. A bpf-backed handler cannot be matched here as its program
+ * must run in sleepable context; it is returned as a candidate and the
+ * program decides in load_misc_binary(). @bpf_skip allows the caller to
+ * resume the search after the first @bpf_skip candidates declined.
  *
  * Return: binary type list entry on success, NULL on failure
  */
 static Node *search_binfmt_handler(struct binfmt_misc *misc,
-				   struct linux_binprm *bprm)
+				   struct linux_binprm *bprm,
+				   unsigned int bpf_skip)
 {
 	char *p = strrchr(bprm->interp, '.');
 	Node *e;
@@ -102,6 +110,15 @@ static Node *search_binfmt_handler(struct binfmt_misc *misc,
 		/* Make sure this one is currently enabled. */
 		if (!test_bit(Enabled, &e->flags))
 			continue;
+
+		/* The program decides in load_misc_binary(). */
+		if (test_bit(Bpf, &e->flags)) {
+			if (bpf_skip) {
+				bpf_skip--;
+				continue;
+			}
+			return e;
+		}
 
 		/* Do matching based on extension if applicable. */
 		if (!test_bit(Magic, &e->flags)) {
@@ -132,6 +149,7 @@ static Node *search_binfmt_handler(struct binfmt_misc *misc,
  * get_binfmt_handler - try to find a binary type handler
  * @misc: handle to binfmt_misc instance
  * @bprm: binary for which we are looking for a handler
+ * @bpf_skip: number of bpf-backed handlers to skip over
  *
  * Try to find a binfmt handler for the binary type. If one is found take a
  * reference to protect against removal via bm_{entry,status}_write().
@@ -139,12 +157,13 @@ static Node *search_binfmt_handler(struct binfmt_misc *misc,
  * Return: binary type list entry on success, NULL on failure
  */
 static Node *get_binfmt_handler(struct binfmt_misc *misc,
-				struct linux_binprm *bprm)
+				struct linux_binprm *bprm,
+				unsigned int bpf_skip)
 {
 	Node *e;
 
 	read_lock(&misc->entries_lock);
-	e = search_binfmt_handler(misc, bprm);
+	e = search_binfmt_handler(misc, bprm, bpf_skip);
 	if (e)
 		refcount_inc(&e->users);
 	read_unlock(&misc->entries_lock);
@@ -164,6 +183,8 @@ static void put_binfmt_handler(Node *e)
 	if (refcount_dec_and_test(&e->users)) {
 		if (e->flags & MISC_FMT_OPEN_FILE)
 			filp_close(e->interp_file, NULL);
+		if (e->bpf_ops)
+			binfmt_misc_put_ops(e->bpf_ops);
 		kfree(e);
 	}
 }
@@ -206,12 +227,15 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	struct file *interp_file = NULL;
 	int retval = -ENOEXEC;
 	struct binfmt_misc *misc;
+	const char *interpreter;
+	unsigned int bpf_skip = 0;
 
 	misc = load_binfmt_misc();
 	if (!misc->enabled)
 		return retval;
 
-	fmt = get_binfmt_handler(misc, bprm);
+retry:
+	fmt = get_binfmt_handler(misc, bprm, bpf_skip);
 	if (!fmt)
 		return retval;
 
@@ -219,6 +243,32 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	retval = -ENOENT;
 	if (bprm->interp_flags & BINPRM_FLAGS_PATH_INACCESSIBLE)
 		goto ret;
+
+	if (test_bit(Bpf, &fmt->flags)) {
+		retval = fmt->bpf_ops->load(bprm);
+		if (retval < 0) {
+			/* Keep a program-supplied error within errno range. */
+			if (retval < -MAX_ERRNO)
+				retval = -ENOEXEC;
+			goto ret;
+		}
+		if (!retval) {
+			/* Declined, move on to later handlers. */
+			kfree(bprm->bpf_interp);
+			bprm->bpf_interp = NULL;
+			put_binfmt_handler(fmt);
+			bpf_skip++;
+			retval = -ENOEXEC;
+			goto retry;
+		}
+		/* Selecting an interpreter is part of the contract. */
+		retval = -ENOEXEC;
+		if (!bprm->bpf_interp)
+			goto ret;
+		interpreter = bprm->bpf_interp;
+	} else {
+		interpreter = fmt->interpreter;
+	}
 
 	if (fmt->flags & MISC_FMT_PRESERVE_ARGV0) {
 		bprm->interp_flags |= BINPRM_FLAGS_PRESERVE_ARGV0;
@@ -238,13 +288,13 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	bprm->argc++;
 
 	/* add the interp as argv[0] */
-	retval = copy_string_kernel(fmt->interpreter, bprm);
+	retval = copy_string_kernel(interpreter, bprm);
 	if (retval < 0)
 		goto ret;
 	bprm->argc++;
 
 	/* Update interp in case binfmt_script needs it. */
-	retval = bprm_change_interp(fmt->interpreter, bprm);
+	retval = bprm_change_interp(interpreter, bprm);
 	if (retval < 0)
 		goto ret;
 
@@ -253,7 +303,7 @@ static int load_misc_binary(struct linux_binprm *bprm)
 		if (!IS_ERR(interp_file))
 			deny_write_access(interp_file);
 	} else {
-		interp_file = open_exec(fmt->interpreter);
+		interp_file = open_exec(interpreter);
 	}
 	retval = PTR_ERR(interp_file);
 	if (IS_ERR(interp_file))
@@ -265,6 +315,9 @@ static int load_misc_binary(struct linux_binprm *bprm)
 
 	retval = 0;
 ret:
+	/* A program-selected interpreter is consumed by this exec attempt. */
+	kfree(bprm->bpf_interp);
+	bprm->bpf_interp = NULL;
 
 	/*
 	 * If we actually put the node here all concurrent calls to
@@ -404,13 +457,47 @@ static Node *create_entry(const char __user *buffer, size_t count)
 		pr_debug("register: type: M (magic)\n");
 		e->flags = (1 << Enabled) | (1 << Magic);
 		break;
+	case 'B':
+		if (!IS_ENABLED(CONFIG_BINFMT_MISC_BPF))
+			goto einval;
+		pr_debug("register: type: B (bpf)\n");
+		e->flags = (1 << Enabled) | (1 << Bpf);
+		break;
 	default:
 		goto einval;
 	}
 	if (*p++ != del)
 		goto einval;
 
-	if (test_bit(Magic, &e->flags)) {
+	if (test_bit(Bpf, &e->flags)) {
+		char *s;
+
+		/* The 'offset' field carries the handler name. */
+		s = strchr(p, del);
+		if (!s)
+			goto einval;
+		*s++ = '\0';
+		e->bpf_ops_name = p;
+		if (!e->bpf_ops_name[0] ||
+		    strlen(e->bpf_ops_name) >= BINFMT_MISC_OPS_NAME_MAX)
+			goto einval;
+		p = s;
+		pr_debug("register: bpf handler: {%s}\n", e->bpf_ops_name);
+
+		/* The 'magic' field must be empty. */
+		s = strchr(p, del);
+		if (!s || s != p)
+			goto einval;
+		*s++ = '\0';
+		p = s;
+
+		/* The 'mask' field must be empty. */
+		s = strchr(p, del);
+		if (!s || s != p)
+			goto einval;
+		*s++ = '\0';
+		p = s;
+	} else if (test_bit(Magic, &e->flags)) {
 		/* Handle the 'M' (magic) format. */
 		char *s;
 
@@ -524,8 +611,13 @@ static Node *create_entry(const char __user *buffer, size_t count)
 	if (!p)
 		goto einval;
 	*p++ = '\0';
-	if (!e->interpreter[0])
+	if (test_bit(Bpf, &e->flags)) {
+		/* The program selects the interpreter at exec time. */
+		if (e->interpreter[0])
+			goto einval;
+	} else if (!e->interpreter[0]) {
 		goto einval;
+	}
 	pr_debug("register: interpreter: {%s}\n", e->interpreter);
 
 	/* Parse the 'flags' field. */
@@ -533,6 +625,14 @@ static Node *create_entry(const char __user *buffer, size_t count)
 	if (*p == '\n')
 		p++;
 	if (p != buf + count)
+		goto einval;
+
+	/*
+	 * A program-selected interpreter cannot be pre-opened and must not
+	 * inherit the credentials of a setuid binary it was chosen for.
+	 */
+	if (test_bit(Bpf, &e->flags) &&
+	    (e->flags & (MISC_FMT_CREDENTIALS | MISC_FMT_OPEN_FILE)))
 		goto einval;
 
 	return e;
@@ -588,7 +688,10 @@ static void entry_status(Node *e, char *page)
 		return;
 	}
 
-	dp += sprintf(dp, "%s\ninterpreter %s\n", status, e->interpreter);
+	if (test_bit(Bpf, &e->flags))
+		dp += sprintf(dp, "%s\nbpf %s\n", status, e->bpf_ops_name);
+	else
+		dp += sprintf(dp, "%s\ninterpreter %s\n", status, e->interpreter);
 
 	/* print the special flags */
 	dp += sprintf(dp, "flags: ");
@@ -602,7 +705,9 @@ static void entry_status(Node *e, char *page)
 		*dp++ = 'F';
 	*dp++ = '\n';
 
-	if (!test_bit(Magic, &e->flags)) {
+	if (test_bit(Bpf, &e->flags)) {
+		*dp = '\0';
+	} else if (!test_bit(Magic, &e->flags)) {
 		sprintf(dp, "extension .%s\n", e->magic);
 	} else {
 		dp += sprintf(dp, "offset %i\nmagic ", e->offset);
@@ -809,6 +914,16 @@ static ssize_t bm_register_write(struct file *file, const char __user *buffer,
 	if (IS_ERR(e))
 		return PTR_ERR(e);
 
+	if (test_bit(Bpf, &e->flags)) {
+		e->bpf_ops = binfmt_misc_get_ops(sb->s_user_ns, e->bpf_ops_name);
+		if (!e->bpf_ops) {
+			pr_notice("register: no bpf handler named %s\n",
+				  e->bpf_ops_name);
+			kfree(e);
+			return -ENOENT;
+		}
+	}
+
 	if (e->flags & MISC_FMT_OPEN_FILE) {
 		/*
 		 * Now that we support unprivileged binfmt_misc mounts make
@@ -834,6 +949,8 @@ static ssize_t bm_register_write(struct file *file, const char __user *buffer,
 			exe_file_allow_write_access(f);
 			filp_close(f, NULL);
 		}
+		if (e->bpf_ops)
+			binfmt_misc_put_ops(e->bpf_ops);
 		kfree(e);
 		return err;
 	}
