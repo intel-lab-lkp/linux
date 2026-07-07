@@ -246,9 +246,9 @@ sh_css_load_firmware(struct device *dev, const char *fw_data,
 		IA_CSS_ERROR("CSS code version (%s) and firmware version (%s) mismatch!",
 			     file_header->version, release_version);
 		return -EINVAL;
-	} else {
-		IA_CSS_LOG("successfully load firmware version %s", release_version);
 	}
+
+	IA_CSS_LOG("Successfully loaded firmware version %s", release_version);
 
 	sh_css_num_binaries = file_header->binary_nr;
 	/* Only allocate memory for ISP blob info */

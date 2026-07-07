@@ -408,47 +408,47 @@ static input_system_err_t input_system_configure_channel(
 {
 	input_system_err_t error = INPUT_SYSTEM_ERR_NO_ERROR;
 	// Check if channel is not already configured.
-	if (config.ch_flags[channel.ch_id] & INPUT_SYSTEM_CFG_FLAG_SET) {
+	if (config.ch_flags[channel.ch_id] & INPUT_SYSTEM_CFG_FLAG_SET)
 		return INPUT_SYSTEM_ERR_CHANNEL_ALREADY_SET;
-	} else {
-		switch (channel.source_type) {
-		case INPUT_SYSTEM_SOURCE_SENSOR:
-			error = input_system_configure_channel_sensor(channel);
-			break;
-		case INPUT_SYSTEM_SOURCE_PRBS:
-		case INPUT_SYSTEM_SOURCE_FIFO:
-		default:
-			return INPUT_SYSTEM_ERR_PARAMETER_NOT_SUPPORTED;
-		}
 
-		if (error != INPUT_SYSTEM_ERR_NO_ERROR) return error;
-		// Input switch channel configurations must be combined in united config.
-		config.input_switch_cfg.hsync_data_reg[channel.source_cfg.csi_cfg.csi_port * 2]
-		    =
-			channel.target_cfg.input_switch_channel_cfg.hsync_data_reg[0];
-		config.input_switch_cfg.hsync_data_reg[channel.source_cfg.csi_cfg.csi_port * 2 +
-											   1] =
-							       channel.target_cfg.input_switch_channel_cfg.hsync_data_reg[1];
-		config.input_switch_cfg.vsync_data_reg |=
-		    (channel.target_cfg.input_switch_channel_cfg.vsync_data_reg & 0x7) <<
-		    (channel.source_cfg.csi_cfg.csi_port * 3);
-
-		// Other targets are just copied and marked as set.
-		config.target_isp[channel.source_cfg.csi_cfg.csi_port] =
-		    channel.target_cfg.target_isp_cfg;
-		config.target_sp[channel.source_cfg.csi_cfg.csi_port] =
-		    channel.target_cfg.target_sp_cfg;
-		config.target_strm2mem[channel.source_cfg.csi_cfg.csi_port] =
-		    channel.target_cfg.target_strm2mem_cfg;
-		config.target_isp_flags[channel.source_cfg.csi_cfg.csi_port] |=
-		    INPUT_SYSTEM_CFG_FLAG_SET;
-		config.target_sp_flags[channel.source_cfg.csi_cfg.csi_port] |=
-		    INPUT_SYSTEM_CFG_FLAG_SET;
-		config.target_strm2mem_flags[channel.source_cfg.csi_cfg.csi_port] |=
-		    INPUT_SYSTEM_CFG_FLAG_SET;
-
-		config.ch_flags[channel.ch_id] = INPUT_SYSTEM_CFG_FLAG_SET;
+	switch (channel.source_type) {
+	case INPUT_SYSTEM_SOURCE_SENSOR:
+		error = input_system_configure_channel_sensor(channel);
+		break;
+	case INPUT_SYSTEM_SOURCE_PRBS:
+	case INPUT_SYSTEM_SOURCE_FIFO:
+	default:
+		return INPUT_SYSTEM_ERR_PARAMETER_NOT_SUPPORTED;
 	}
+
+	if (error != INPUT_SYSTEM_ERR_NO_ERROR)
+		return error;
+
+	// Input switch channel configurations must be combined in united config.
+	config.input_switch_cfg.hsync_data_reg[channel.source_cfg.csi_cfg.csi_port * 2] =
+	    channel.target_cfg.input_switch_channel_cfg.hsync_data_reg[0];
+	config.input_switch_cfg.hsync_data_reg[channel.source_cfg.csi_cfg.csi_port * 2 + 1] =
+	    channel.target_cfg.input_switch_channel_cfg.hsync_data_reg[1];
+	config.input_switch_cfg.vsync_data_reg |=
+	    (channel.target_cfg.input_switch_channel_cfg.vsync_data_reg & 0x7) <<
+	    (channel.source_cfg.csi_cfg.csi_port * 3);
+
+	// Other targets are just copied and marked as set.
+	config.target_isp[channel.source_cfg.csi_cfg.csi_port] =
+	    channel.target_cfg.target_isp_cfg;
+	config.target_sp[channel.source_cfg.csi_cfg.csi_port] =
+	    channel.target_cfg.target_sp_cfg;
+	config.target_strm2mem[channel.source_cfg.csi_cfg.csi_port] =
+	    channel.target_cfg.target_strm2mem_cfg;
+	config.target_isp_flags[channel.source_cfg.csi_cfg.csi_port] |=
+	    INPUT_SYSTEM_CFG_FLAG_SET;
+	config.target_sp_flags[channel.source_cfg.csi_cfg.csi_port] |=
+	    INPUT_SYSTEM_CFG_FLAG_SET;
+	config.target_strm2mem_flags[channel.source_cfg.csi_cfg.csi_port] |=
+	    INPUT_SYSTEM_CFG_FLAG_SET;
+
+	config.ch_flags[channel.ch_id] = INPUT_SYSTEM_CFG_FLAG_SET;
+
 	return INPUT_SYSTEM_ERR_NO_ERROR;
 }
 
@@ -1171,12 +1171,11 @@ static input_system_err_t set_source_type(
 
 	if ((*flags) & INPUT_SYSTEM_CFG_FLAG_SET) {
 		// Check for consistency with already set value.
-		if ((*lhs) == (rhs)) {
+		if ((*lhs) == (rhs))
 			return INPUT_SYSTEM_ERR_NO_ERROR;
-		} else {
-			*flags |= INPUT_SYSTEM_CFG_FLAG_CONFLICT;
-			return INPUT_SYSTEM_ERR_CONFLICT_ON_RESOURCE;
-		}
+
+		*flags |= INPUT_SYSTEM_CFG_FLAG_CONFLICT;
+		return INPUT_SYSTEM_ERR_CONFLICT_ON_RESOURCE;
 	}
 	// Check the value (individually).
 	if (rhs >= N_INPUT_SYSTEM_SOURCE) {
@@ -1216,12 +1215,11 @@ static input_system_err_t set_csi_cfg(
 		    && lhs->acquisition_buffer.mem_reg_size == rhs->acquisition_buffer.mem_reg_size
 		    && lhs->acquisition_buffer.nof_mem_regs  == rhs->acquisition_buffer.nof_mem_regs
 		    && lhs->nof_xmem_buffers  == rhs->nof_xmem_buffers
-		) {
+		)
 			return INPUT_SYSTEM_ERR_NO_ERROR;
-		} else {
-			*flags |= INPUT_SYSTEM_CFG_FLAG_CONFLICT;
-			return INPUT_SYSTEM_ERR_CONFLICT_ON_RESOURCE;
-		}
+
+		*flags |= INPUT_SYSTEM_CFG_FLAG_CONFLICT;
+		return INPUT_SYSTEM_ERR_CONFLICT_ON_RESOURCE;
 	}
 	// Check the value (individually).
 	// no check for backend_ch
@@ -1273,12 +1271,11 @@ static input_system_err_t input_system_multiplexer_cfg(
 
 	if ((*flags) & INPUT_SYSTEM_CFG_FLAG_SET) {
 		// Check for consistency with already set value.
-		if ((*lhs) == (rhs)) {
+		if ((*lhs) == (rhs))
 			return INPUT_SYSTEM_ERR_NO_ERROR;
-		} else {
-			*flags |= INPUT_SYSTEM_CFG_FLAG_CONFLICT;
-			return INPUT_SYSTEM_ERR_CONFLICT_ON_RESOURCE;
-		}
+
+		*flags |= INPUT_SYSTEM_CFG_FLAG_CONFLICT;
+		return INPUT_SYSTEM_ERR_CONFLICT_ON_RESOURCE;
 	}
 	// Check the value (individually).
 	if (rhs >= N_INPUT_SYSTEM_MULTIPLEX) {

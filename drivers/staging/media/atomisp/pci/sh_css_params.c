@@ -2334,9 +2334,9 @@ sh_css_create_isp_params(struct ia_css_stream *stream,
 		IA_CSS_ERROR("%s:%d error: cannot allocate memory", __FILE__, __LINE__);
 		IA_CSS_LEAVE_ERR_PRIVATE(err);
 		return err;
-	} else {
-		memset(params, 0, sizeof(struct ia_css_isp_parameters));
 	}
+
+	memset(params, 0, sizeof(struct ia_css_isp_parameters));
 
 	ddr_ptrs = &params->ddr_ptrs;
 	ddr_ptrs_size = &params->ddr_ptrs_size;
@@ -3195,31 +3195,32 @@ sh_css_param_update_isp_params(struct ia_css_pipe *curr_pipe,
 				   isp_params_info.output_frame_ptr,
 				   queue_id, thread_id);
 			break;
-		} else {
-			/* TMP: check discrepancy between nr of enqueued
-			 * parameter sets and dequeued sets
-			 */
-			g_param_buffer_enqueue_count++;
-			assert(g_param_buffer_enqueue_count < g_param_buffer_dequeue_count + 50);
-			/*
-			 * Tell the SP which queues are not empty,
-			 * by sending the software event.
-			 */
-			if (!sh_css_sp_is_running()) {
-				/* SP is not running. The queues are not valid */
-				IA_CSS_LEAVE_ERR_PRIVATE(-EBUSY);
-				return -EBUSY;
-			}
-			ia_css_bufq_enqueue_psys_event(
-			    IA_CSS_PSYS_SW_EVENT_BUFFER_ENQUEUED,
-			    (uint8_t)thread_id,
-			    (uint8_t)queue_id,
-			    0);
-			IA_CSS_LOG("pfp: added config id %d for OF %d to q %d on thread %d",
-				   isp_params_info.isp_parameters_id,
-				   isp_params_info.output_frame_ptr,
-				   queue_id, thread_id);
 		}
+
+		/*
+		 * TMP: check discrepancy between nr of enqueued
+		 * parameter sets and dequeued sets
+		 */
+		g_param_buffer_enqueue_count++;
+		assert(g_param_buffer_enqueue_count < g_param_buffer_dequeue_count + 50);
+		/*
+		 * Tell the SP which queues are not empty,
+		 * by sending the software event.
+		 */
+		if (!sh_css_sp_is_running()) {
+			/* SP is not running. The queues are not valid */
+			IA_CSS_LEAVE_ERR_PRIVATE(-EBUSY);
+			return -EBUSY;
+		}
+
+		ia_css_bufq_enqueue_psys_event(IA_CSS_PSYS_SW_EVENT_BUFFER_ENQUEUED,
+					       (uint8_t)thread_id,
+					       (uint8_t)queue_id, 0);
+		IA_CSS_LOG("pfp: added config id %d for OF %d to q %d on thread %d",
+			   isp_params_info.isp_parameters_id,
+			   isp_params_info.output_frame_ptr,
+			   queue_id, thread_id);
+
 		/* clean-up old copy */
 		ia_css_dequeue_param_buffers(/*pipe_num*/);
 		params->pipe_dvs_6axis_config_changed[pipeline->pipe_id] = false;
@@ -4105,44 +4106,47 @@ sh_css_update_uds_and_crop_info_based_on_zoom_region(
 		uds->curr_dy = HRT_GDC_N;
 	}
 
-	if (info->enable.dvs_envelope) {
-		/* Zoom region is only supported by the UDS module on ISP
-		 * 2 and higher. It is not supported in video mode on ISP 1 */
+	if (info->enable.dvs_envelope)
+		/*
+		 * Zoom region is only supported by the UDS module on ISP
+		 * 2 and higher. It is not supported in video mode on ISP 1
+		 */
 		return -EINVAL;
-	} else {
-		if (enable_zoom) {
-			/* A. Calculate dx/dy based on crop region using in_frame_info
-			* Scale the crop region if in_frame_info to the stage is not same as
-			* actual effective input of the pipeline
-			*/
-			if (in_frame_info->res.width != pipe_in_res.width ||
-			    in_frame_info->res.height != pipe_in_res.height) {
-				x0 = (x0 * in_frame_info->res.width) / (pipe_in_res.width);
-				y0 = (y0 * in_frame_info->res.height) / (pipe_in_res.height);
-				x1 = (x1 * in_frame_info->res.width) / (pipe_in_res.width);
-				y1 = (y1 * in_frame_info->res.height) / (pipe_in_res.height);
-			}
-			uds->curr_dx =
-			    ((x1 - x0 - filter_envelope) * HRT_GDC_N) / in_frame_info->res.width;
-			uds->curr_dy =
-			    ((y1 - y0 - filter_envelope) * HRT_GDC_N) / in_frame_info->res.height;
 
-			/* B. Calculate xc/yc based on crop region */
-			uds->xc = (uint16_t)x0 + (((x1) - (x0)) / 2);
-			uds->yc = (uint16_t)y0 + (((y1) - (y0)) / 2);
-		} else {
-			uds->xc = (uint16_t)in_frame_info->res.width / 2;
-			uds->yc = (uint16_t)in_frame_info->res.height / 2;
+	if (enable_zoom) {
+		/*
+		 * A. Calculate dx/dy based on crop region using in_frame_info
+		 * Scale the crop region if in_frame_info to the stage is not same as
+		 * actual effective input of the pipeline
+		 */
+		if (in_frame_info->res.width != pipe_in_res.width ||
+		    in_frame_info->res.height != pipe_in_res.height) {
+			x0 = (x0 * in_frame_info->res.width) / (pipe_in_res.width);
+			y0 = (y0 * in_frame_info->res.height) / (pipe_in_res.height);
+			x1 = (x1 * in_frame_info->res.width) / (pipe_in_res.width);
+			y1 = (y1 * in_frame_info->res.height) / (pipe_in_res.height);
 		}
+		uds->curr_dx =
+		    ((x1 - x0 - filter_envelope) * HRT_GDC_N) / in_frame_info->res.width;
+		uds->curr_dy =
+		    ((y1 - y0 - filter_envelope) * HRT_GDC_N) / in_frame_info->res.height;
 
-		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
-				    "uds->curr_dx=%d, uds->xc=%d, uds->yc=%d\n",
-				    uds->curr_dx, uds->xc, uds->yc);
-		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "x0=%d, y0=%d, x1=%d, y1=%d\n",
-				    x0, y0, x1, y1);
-		sp_out_crop_pos->x = (uint16_t)info->pipeline.left_cropping;
-		sp_out_crop_pos->y = (uint16_t)info->pipeline.top_cropping;
+		/* B. Calculate xc/yc based on crop region */
+		uds->xc = (uint16_t)x0 + (((x1) - (x0)) / 2);
+		uds->yc = (uint16_t)y0 + (((y1) - (y0)) / 2);
+	} else {
+		uds->xc = (uint16_t)in_frame_info->res.width / 2;
+		uds->yc = (uint16_t)in_frame_info->res.height / 2;
 	}
+
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
+			    "uds->curr_dx=%d, uds->xc=%d, uds->yc=%d\n",
+			    uds->curr_dx, uds->xc, uds->yc);
+	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "x0=%d, y0=%d, x1=%d, y1=%d\n",
+			    x0, y0, x1, y1);
+	sp_out_crop_pos->x = (uint16_t)info->pipeline.left_cropping;
+	sp_out_crop_pos->y = (uint16_t)info->pipeline.top_cropping;
+
 	IA_CSS_LEAVE_PRIVATE("void");
 	return err;
 }

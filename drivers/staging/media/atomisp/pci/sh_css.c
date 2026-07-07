@@ -7719,14 +7719,14 @@ ia_css_pipe_override_frame_format(struct ia_css_pipe *pipe,
 		err = -EINVAL;
 		IA_CSS_LEAVE_ERR_PRIVATE(err);
 		return err;
-	} else {
-		err = ia_css_pipe_check_format(pipe, new_format);
-		if (!err) {
-			if (pin_index == 0)
-				pipe->output_info[0].format = new_format;
-			else
-				pipe->vf_output_info[0].format = new_format;
-		}
+	}
+
+	err = ia_css_pipe_check_format(pipe, new_format);
+	if (!err) {
+		if (pin_index == 0)
+			pipe->output_info[0].format = new_format;
+		else
+			pipe->vf_output_info[0].format = new_format;
 	}
 	IA_CSS_LEAVE_ERR_PRIVATE(err);
 	return err;
