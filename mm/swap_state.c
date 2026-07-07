@@ -180,15 +180,28 @@ static int __swap_cache_add_check(struct swap_cluster_info *ci,
 	old_tb = __swap_table_get(ci, ci_off);
 	if (swp_tb_is_folio(old_tb))
 		return -EEXIST;
-	if (!__swp_tb_get_count(old_tb))
+	if (swp_tb_is_pointer(old_tb)) {
+		if (!zswap_swp_tb_get_count(old_tb))
+			return -ENOENT;
+	} else if (!__swp_tb_get_count(old_tb)) {
 		return -ENOENT;
+	}
 	if (shadowp && swp_tb_is_shadow(old_tb))
 		*shadowp = swp_tb_to_shadow(old_tb);
+	else if (shadowp && swp_tb_is_pointer(old_tb))
+		*shadowp = zswap_swp_tb_get_shadow(old_tb);
 	if (memcg_id)
 		*memcg_id = __swap_cgroup_get(ci, ci_off);
 
 	if (nr == 1)
 		return 0;
+
+	/*
+	 * For multi-slot ranges, Pointer entries are not expected since
+	 * zswap does not support large folios. Return -EBUSY for safety.
+	 */
+	if (swp_tb_is_pointer(old_tb))
+		return -EBUSY;
 
 	is_zero = __swap_table_test_zero(ci, ci_off);
 	ci_off = round_down(ci_off, nr);
@@ -206,7 +219,8 @@ static int __swap_cache_add_check(struct swap_cluster_info *ci,
 }
 
 static void __swap_cache_do_add_folio(struct swap_cluster_info *ci,
-				      struct folio *folio, swp_entry_t entry)
+				      struct folio *folio, swp_entry_t entry,
+				      void **zentry)
 {
 	unsigned int ci_off = swp_cluster_offset(entry), ci_end;
 	unsigned long nr_pages = folio_nr_pages(folio);
@@ -221,7 +235,26 @@ static void __swap_cache_do_add_folio(struct swap_cluster_info *ci,
 	do {
 		old_tb = __swap_table_get(ci, ci_off);
 		VM_WARN_ON_ONCE(swp_tb_is_folio(old_tb));
-		__swap_table_set(ci, ci_off, pfn_to_swp_tb(pfn, __swp_tb_get_flags(old_tb)));
+		/*
+		 * If the old entry is a Pointer (zswap compressed data),
+		 * extract the zswap_entry for the caller and preserve
+		 * its flags. The Pointer entry has no inline flags.
+		 */
+		if (swp_tb_is_pointer(old_tb)) {
+			unsigned char cur_count, cur_flags;
+			unsigned long new_tb;
+
+			cur_count = zswap_swp_tb_get_count(old_tb);
+			cur_flags = zswap_swp_tb_get_flags(old_tb);
+			if (zentry && !*zentry)
+				*zentry = swp_tb_to_pointer(old_tb);
+			new_tb = pfn_to_swp_tb(pfn, cur_flags);
+			new_tb = __swp_tb_mk_count(new_tb, cur_count);
+			__swap_table_set(ci, ci_off, new_tb);
+		} else {
+			__swap_table_set(ci, ci_off,
+				pfn_to_swp_tb(pfn, __swp_tb_get_flags(old_tb)));
+		}
 	} while (++ci_off < ci_end);
 
 	folio_ref_add(folio, nr_pages);
@@ -244,11 +277,12 @@ static void __swap_cache_do_add_folio(struct swap_cluster_info *ci,
  * that holds the entries.
  */
 void __swap_cache_add_folio(struct swap_cluster_info *ci,
-			    struct folio *folio, swp_entry_t entry)
+			    struct folio *folio, swp_entry_t entry,
+			    void **zentry)
 {
 	unsigned long nr_pages = folio_nr_pages(folio);
 
-	__swap_cache_do_add_folio(ci, folio, entry);
+	__swap_cache_do_add_folio(ci, folio, entry, zentry);
 	node_stat_mod_folio(folio, NR_FILE_PAGES, nr_pages);
 	lruvec_stat_mod_folio(folio, NR_SWAPCACHE, nr_pages);
 }
@@ -274,22 +308,28 @@ static void __swap_cache_do_del_folio(struct swap_cluster_info *ci,
 	ci_off = ci_start;
 	do {
 		old_tb = __swap_table_get(ci, ci_off);
-		WARN_ON_ONCE(!swp_tb_is_folio(old_tb) ||
-			     swp_tb_to_folio(old_tb) != folio);
-		if (__swp_tb_get_count(old_tb))
-			folio_swapped = true;
-		else
-			need_free = true;
-		/* If shadow is NULL, we set an empty shadow. */
-		__swap_table_set(ci, ci_off, shadow_to_swp_tb(shadow,
-				 __swp_tb_get_flags(old_tb)));
 		/*
-		 * If zswap has a compressed copy of this slot, convert the
-		 * just-written Shadow to a Pointer entry referencing the
-		 * zswap_entry, so the data can be found via the swap table.
+		 * If zswap already stored data for this slot
+		 * (zswap_store wrote a Pointer entry), leave it
+		 * in place. The count and flags are stored in the
+		 * zswap_entry struct.
 		 */
-		zswap_try_convert_to_pointer(ci, ci_off, si->type,
-					     swp_offset(entry) + ci_off - ci_start);
+		if (swp_tb_is_pointer(old_tb)) {
+			if (zswap_swp_tb_get_count(old_tb))
+				folio_swapped = true;
+			else
+				need_free = true;
+		} else {
+			WARN_ON_ONCE(!swp_tb_is_folio(old_tb) ||
+				     swp_tb_to_folio(old_tb) != folio);
+			if (__swp_tb_get_count(old_tb))
+				folio_swapped = true;
+			else
+				need_free = true;
+			/* If shadow is NULL, we set an empty shadow. */
+			__swap_table_set(ci, ci_off, shadow_to_swp_tb(shadow,
+					 __swp_tb_get_flags(old_tb)));
+		}
 	} while (++ci_off < ci_end);
 
 	folio->swap.val = 0;
@@ -300,7 +340,14 @@ static void __swap_cache_do_del_folio(struct swap_cluster_info *ci,
 	} else if (need_free) {
 		ci_off = ci_start;
 		do {
-			if (!__swp_tb_get_count(__swap_table_get(ci, ci_off)))
+			unsigned long tb = __swap_table_get(ci, ci_off);
+			unsigned char cnt;
+
+			if (swp_tb_is_pointer(tb))
+				cnt = zswap_swp_tb_get_count(tb);
+			else
+				cnt = __swp_tb_get_count(tb);
+			if (!cnt)
 				__swap_cluster_free_entries(si, ci, ci_off, 1);
 		} while (++ci_off < ci_end);
 	}
@@ -415,7 +462,8 @@ void __swap_cache_replace_folio(struct swap_cluster_info *ci,
 static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 					swp_entry_t targ_entry, gfp_t gfp,
 					unsigned int order, struct vm_fault *vmf,
-					struct mempolicy *mpol, pgoff_t ilx)
+					struct mempolicy *mpol, pgoff_t ilx,
+					void **zentry)
 {
 	int err;
 	swp_entry_t entry;
@@ -462,7 +510,7 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 
 	__folio_set_locked(folio);
 	__folio_set_swapbacked(folio);
-	__swap_cache_do_add_folio(ci, folio, entry);
+	__swap_cache_do_add_folio(ci, folio, entry, zentry);
 	spin_unlock(&ci->lock);
 
 	if (mem_cgroup_swapin_charge_folio(folio, memcg_id,
@@ -519,7 +567,8 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
  */
 struct folio *swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 				     unsigned long orders, struct vm_fault *vmf,
-				     struct mempolicy *mpol, pgoff_t ilx)
+				     struct mempolicy *mpol, pgoff_t ilx,
+				     void **zentry)
 {
 	int order, err;
 	struct folio *ret;
@@ -532,9 +581,12 @@ struct folio *swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 	if (WARN_ON_ONCE(!orders || (1UL << order) > SWAPFILE_CLUSTER))
 		return ERR_PTR(-EINVAL);
 
+	if (zentry)
+		*zentry = NULL;
+
 	do {
 		ret = __swap_cache_alloc(ci, targ_entry, gfp, order,
-					 vmf, mpol, ilx);
+					 vmf, mpol, ilx, zentry);
 		if (!IS_ERR(ret))
 			break;
 		err = PTR_ERR(ret);
@@ -650,18 +702,20 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
 					   struct swap_iocb **plug, bool readahead)
 {
 	struct folio *folio;
+	void *zentry;
 
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
-		folio = swap_cache_alloc_folio(entry, gfp, BIT(0), NULL, mpol, ilx);
+		folio = swap_cache_alloc_folio(entry, gfp, BIT(0), NULL, mpol, ilx,
+					       &zentry);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR_OR_NULL(folio))
 		return NULL;
 
-	swap_read_folio(folio, plug);
+	swap_read_folio(folio, plug, zentry);
 	if (readahead) {
 		folio_set_readahead(folio);
 		count_vm_event(SWAP_RA);
@@ -690,18 +744,20 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
 			   struct vm_fault *vmf, struct mempolicy *mpol, pgoff_t ilx)
 {
 	struct folio *folio;
+	void *zentry;
 
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
-		folio = swap_cache_alloc_folio(entry, gfp, orders, vmf, mpol, ilx);
+		folio = swap_cache_alloc_folio(entry, gfp, orders, vmf, mpol, ilx,
+					       &zentry);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR(folio))
 		return folio;
 
-	swap_read_folio(folio, NULL);
+	swap_read_folio(folio, NULL, zentry);
 	return folio;
 }
 

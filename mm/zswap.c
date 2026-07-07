@@ -1688,6 +1688,28 @@ void zswap_try_convert_to_pointer(struct swap_cluster_info *ci,
 }
 
 /*
+ * Extract the working set shadow from a Pointer-type swap table entry.
+ * The shadow is recovered from zswap_entry->swp_tb_val which preserves
+ * the original Shadow entry value. The shadow can then be used by
+ * workingset_refault() for refault distance calculation.
+ */
+void *zswap_swp_tb_get_shadow(unsigned long swp_tb)
+{
+	struct zswap_entry *entry = swp_tb_to_pointer(swp_tb);
+	unsigned long saved = entry->swp_tb_val;
+
+	/*
+	 * swp_tb_val preserves the original swap table entry.  Only
+	 * Shadow entries carry workingset information; PFN and NULL
+	 * entries have no shadow to extract.
+	 */
+	if (!swp_tb_is_shadow(saved))
+		return NULL;
+
+	return (void *)(saved & ~SWP_TB_FLAGS_MASK);
+}
+
+/*
  * Read the swap count from a Pointer-type swap table entry. The count
  * and flags are stored in zswap_entry->swp_tb_val which preserves the
  * original swap table entry value (Shadow or PFN format).

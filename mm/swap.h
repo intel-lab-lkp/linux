@@ -213,6 +213,7 @@ extern int swap_retry_table_alloc(swp_entry_t entry, gfp_t gfp);
 #ifdef CONFIG_ZSWAP
 void zswap_try_convert_to_pointer(struct swap_cluster_info *ci,
 				  unsigned int ci_off, int type, pgoff_t offset);
+void *zswap_swp_tb_get_shadow(unsigned long swp_tb);
 unsigned char zswap_swp_tb_get_count(unsigned long swp_tb);
 unsigned char zswap_swp_tb_get_flags(unsigned long swp_tb);
 int zswap_swp_tb_dup_count(unsigned long swp_tb,
@@ -223,6 +224,10 @@ void zswap_swp_tb_put_count(unsigned long swp_tb,
 static inline void zswap_try_convert_to_pointer(struct swap_cluster_info *ci,
 						unsigned int ci_off, int type,
 						pgoff_t offset) {}
+static inline void *zswap_swp_tb_get_shadow(unsigned long swp_tb)
+{
+	return NULL;
+}
 static inline unsigned char zswap_swp_tb_get_count(unsigned long swp_tb)
 {
 	return 0;
