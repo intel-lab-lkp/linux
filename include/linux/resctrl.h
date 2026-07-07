@@ -703,6 +703,37 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable);
  */
 bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
 
+/**
+ * enum resctrl_kernel_mode - Kernel-mode control and monitor association
+ *			      policy.
+ *
+ * @INHERIT_CTRL_AND_MON:
+ *	Kernel work inherits the allocation and monitoring from the user space
+ *	task. On x86 this means that kernel work shares the same CLOSID and
+ *	RMID as the user space task. This matches today's resctrl behavior.
+ *
+ * @GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU:
+ *	Kernel work uses a globally assigned allocation while monitoring is
+ *	inherited from the user space task. On x86 this means a CLOSID is
+ *	assigned for kernel work and the RMID is inherited from the user space
+ *	task. Default scope is all online CPUs; a subset may be selected via
+ *	the resctrl group interface. A CTRL_MON group is bound to this mode.
+ *
+ * @GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU:
+ *	Kernel work uses globally assigned allocation and monitoring. On x86
+ *	this means both CLOSID and RMID are assigned for kernel work. Default
+ *	scope is all online CPUs; a subset may be selected via the resctrl
+ *	group interface. A CTRL_MON or MON group is bound to this mode.
+ */
+enum resctrl_kernel_mode {
+	INHERIT_CTRL_AND_MON,
+	GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU,
+	GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU,
+	RESCTRL_KMODE_LAST = GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU,
+};
+
+#define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
