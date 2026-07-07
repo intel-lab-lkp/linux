@@ -6146,7 +6146,6 @@ __pick_next_task(struct rq *rq, struct rq_flags *rf)
 		if (!p)
 			p = pick_task_idle(rq, rf);
 
-		put_prev_set_next_task(rq, rq->donor, p);
 		return p;
 	}
 
@@ -6157,10 +6156,8 @@ restart:
 		p = class->pick_task(rq, rf);
 		if (unlikely(p == RETRY_TASK))
 			goto restart;
-		if (p) {
-			put_prev_set_next_task(rq, rq->donor, p);
+		if (p)
 			return p;
-		}
 	}
 
 	BUG(); /* The idle class should always have a runnable task. */
@@ -6257,7 +6254,7 @@ pick_next_task(struct rq *rq, struct rq_flags *rf)
 		rq->dl_server = rq->core_dl_server;
 		rq->core_pick = NULL;
 		rq->core_dl_server = NULL;
-		goto out_set_next;
+		goto out_return_next;
 	}
 
 	prev_balance(rq, rf);
@@ -6311,7 +6308,7 @@ restart_single:
 			 */
 			WARN_ON_ONCE(fi_before);
 			task_vruntime_update(rq, next, false);
-			goto out_set_next;
+			goto out_return_next;
 		}
 	}
 
@@ -6441,8 +6438,7 @@ restart_multi:
 		resched_curr(rq_i);
 	}
 
-out_set_next:
-	put_prev_set_next_task(rq, rq->donor, next);
+out_return_next:
 	if (rq->core->core_forceidle_count && next == rq->idle)
 		queue_core_balance(rq);
 
@@ -6755,15 +6751,23 @@ static void proxy_deactivate(struct rq *rq, struct task_struct *donor)
 	WARN_ON_ONCE(state == TASK_RUNNING);
 	WARN_ON_ONCE(donor->blocked_on);
 	/*
-	 * Because we got donor from pick_next_task(), it is *crucial*
-	 * that we call proxy_resched_idle() before we deactivate it.
-	 * As once we deactivate donor, donor->on_rq is set to zero,
-	 * which allows ttwu() to immediately try to wake the task on
-	 * another rq. So we cannot use *any* references to donor
-	 * after that point. So things like cfs_rq->curr or rq->donor
-	 * need to be changed from next *before* we deactivate.
+	 * A proxy candidate is not necessarily the committed rq->donor.
+	 * pick_next_task() only selected it; the class current state is
+	 * updated later, after proxy-chain resolution.
+	 *
+	 * If @donor is still the committed donor, the rq and the scheduling
+	 * class may hold current references to it, such as rq->donor or
+	 * cfs_rq->curr/h_curr. Drop those references before block_task(),
+	 * because block_task() clears donor->on_rq and a concurrent wakeup
+	 * may then move the task elsewhere.
+	 *
+	 * If @donor is only an uncommitted proxy candidate, it is still a
+	 * queued task, not the class current task, so it can be blocked
+	 * directly.
 	 */
-	proxy_resched_idle(rq);
+	if (donor == rq->donor)
+		proxy_resched_idle(rq);
+
 	block_task(rq, donor, state);
 }
 
@@ -6816,15 +6820,17 @@ static void proxy_migrate_task(struct rq *rq, struct rq_flags *rf,
 	lockdep_assert_rq_held(rq);
 	WARN_ON(p == rq->curr);
 	/*
-	 * Since we are migrating a blocked donor, it could be rq->donor,
-	 * and we want to make sure there aren't any references from this
-	 * rq to it before we drop the lock. This avoids another cpu
-	 * jumping in and grabbing the rq lock and referencing rq->donor
-	 * or cfs_rq->curr, etc after we have migrated it to another cpu,
-	 * and before we pick_again in __schedule.
+	 * Migrating a task found in the proxy chain abandons the current proxy
+	 * pick attempt and drops this rq's lock.
 	 *
-	 * So call proxy_resched_idle() to drop the rq->donor references
-	 * before we release the lock.
+	 * The picked proxy candidate has not necessarily been committed, so
+	 * @p is not necessarily rq->donor. Switch the currently committed
+	 * donor to idle before dropping the lock, leaving rq->donor and the
+	 * class current state in a well-defined state while the chain is
+	 * modified and @p is attached elsewhere.
+	 *
+	 * If @p is rq->donor, this also drops the direct rq/class-current
+	 * references to @p before it leaves this rq.
 	 */
 	proxy_resched_idle(rq);
 
@@ -7147,11 +7153,11 @@ pick_again:
 	rq->next_class = next->sched_class;
 	if (sched_proxy_exec()) {
 		struct task_struct *prev_donor = rq->donor;
+		struct task_struct *donor = next;
 
-		rq_set_donor(rq, next);
-		next->blocked_donor = NULL;
-		if (unlikely(next->is_blocked)) {
-			next = find_proxy_task(rq, next, &rf);
+		donor->blocked_donor = NULL;
+		if (unlikely(donor->is_blocked)) {
+			next = find_proxy_task(rq, donor, &rf);
 			if (!next) {
 				zap_balance_callbacks(rq);
 				goto pick_again;
@@ -7161,8 +7167,11 @@ pick_again:
 				goto keep_resched;
 			}
 		}
-		if (rq->donor == prev_donor && prev != next) {
-			struct task_struct *donor = rq->donor;
+
+		put_prev_set_next_task(rq, prev_donor, donor);
+		rq_set_donor(rq, donor);
+
+		if (donor == prev_donor && prev != next) {
 			/*
 			 * When transitioning like:
 			 *
@@ -7179,6 +7188,7 @@ pick_again:
 			donor->sched_class->set_next_task(rq, donor, true);
 		}
 	} else {
+		put_prev_set_next_task(rq, rq->donor, next);
 		rq_set_donor(rq, next);
 	}
 
