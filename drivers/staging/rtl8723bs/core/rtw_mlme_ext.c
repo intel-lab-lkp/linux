@@ -4293,7 +4293,7 @@ void report_survey_event(struct adapter *padapter, union recv_frame *precv_frame
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct survey_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_Survey);
+	pc2h_evt_hdr->ID = SURVEY_EVENT;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	psurvey_evt = (struct survey_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4343,7 +4343,7 @@ void report_surveydone_event(struct adapter *padapter)
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct surveydone_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_SurveyDone);
+	pc2h_evt_hdr->ID = SURVEY_DONE_EVENT;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	psurveydone_evt = (struct surveydone_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4385,7 +4385,7 @@ void report_join_res(struct adapter *padapter, int res)
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct joinbss_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_JoinBss);
+	pc2h_evt_hdr->ID = JOIN_BSS_EVENT;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	pjoinbss_evt = (struct joinbss_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4429,7 +4429,7 @@ void report_wmm_edca_update(struct adapter *padapter)
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct wmm_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_WMM);
+	pc2h_evt_hdr->ID = WMM_EVENT;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	pwmm_event = (struct wmm_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4472,7 +4472,7 @@ void report_del_sta_event(struct adapter *padapter, unsigned char *MacAddr, unsi
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct stadel_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_DelSTA);
+	pc2h_evt_hdr->ID = DEL_STA_EVENT;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	pdel_sta_evt = (struct stadel_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4522,7 +4522,7 @@ void report_add_sta_event(struct adapter *padapter, unsigned char *MacAddr, int 
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct stassoc_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_AddSTA);
+	pc2h_evt_hdr->ID = ADD_STA_EVENT;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	padd_sta_evt = (struct stassoc_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
