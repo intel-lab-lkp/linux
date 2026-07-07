@@ -131,3 +131,39 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable)
 
 	return 0;
 }
+
+static void resctrl_kmode_set_one_amd(void *arg)
+{
+	union msr_pqr_plza_assoc *plza = arg;
+
+	wrmsrq(MSR_IA32_PQR_PLZA_ASSOC, plza->full);
+}
+
+/*
+ * Program Privilege Level Zero Association (PLZA) on @cpu_mask.
+ *
+ * When @enable is true, CPL 0 allocation traffic on the targeted CPUs uses
+ * @closid from MSR_IA32_PQR_PLZA_ASSOC instead of the CLOSID from
+ * MSR_IA32_PQR_ASSOC. Monitoring is redirected to @rmid only when
+ * @assign_mon is true; otherwise kernel-mode monitoring continues to use the
+ * RMID associated with the current task.
+ *
+ * @cpu_mask:	CPUs whose PLZA MSR should be updated.
+ * @closid:	CLOSID to use for kernel-mode allocation when PLZA is enabled.
+ * @rmid:	RMID to use for kernel-mode monitoring when @assign_mon is true.
+ * @assign_mon:	Whether PLZA should provide the kernel-mode RMID.
+ * @enable:	Whether PLZA should provide the kernel-mode association.
+ */
+void resctrl_arch_configure_kmode(const struct cpumask *cpu_mask, u32 closid, u32 rmid,
+				  bool assign_mon, bool enable)
+{
+	union msr_pqr_plza_assoc plza = { 0 };
+
+	plza.split.rmid = rmid;
+	plza.split.rmid_en = assign_mon;
+	plza.split.closid = closid;
+	plza.split.closid_en = 1;
+	plza.split.plza_en = enable;
+
+	on_each_cpu_mask(cpu_mask, resctrl_kmode_set_one_amd, &plza, 1);
+}

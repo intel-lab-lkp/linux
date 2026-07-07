@@ -734,6 +734,21 @@ enum resctrl_kernel_mode {
 
 #define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
 
+/**
+ * resctrl_arch_configure_kmode() - Program kernel-mode association on CPUs
+ * @cpu_mask:	CPUs to update; the architecture applies the change on the
+ *		online subset of this mask.
+ * @closid:	Allocation class for kernel-mode traffic. On x86 this is the
+ *		CLOSID programmed when allocation is assigned for kernel work.
+ * @rmid:	Monitoring context for kernel-mode traffic. On x86 this is the
+ *		RMID programmed when monitoring is assigned for kernel work.
+ * @assign_mon:	true to assign @rmid for kernel work; false to inherit
+ *		monitoring from the user task.
+ * @enable:	true to enable kernel-mode association on the targeted CPUs.
+ */
+void resctrl_arch_configure_kmode(const struct cpumask *cpu_mask, u32 closid, u32 rmid,
+				  bool assign_mon, bool enable);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 

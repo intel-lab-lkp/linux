@@ -158,6 +158,11 @@ bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r)
 	return false;
 }
 
+void resctrl_arch_configure_kmode(const struct cpumask *cpu_mask, u32 closid,
+				  u32 rmid, bool assign_mon, bool enable)
+{
+}
+
 void resctrl_arch_pre_mount(void)
 {
 }
