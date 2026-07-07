@@ -96,6 +96,14 @@ drm_mock_sched_job_signal_timer(struct hrtimer *hrtimer)
 	return HRTIMER_NORESTART;
 }
 
+static void drm_mock_sched_job_cleanup_action(void *ptr)
+{
+	struct drm_mock_sched_job *job = ptr;
+
+	job->test = NULL;
+	drm_mock_sched_job_put(job);
+}
+
 /**
  * drm_mock_sched_job_new - Create a new mock scheduler job
  *
@@ -111,22 +119,33 @@ drm_mock_sched_job_new(struct kunit *test,
 	struct drm_mock_sched_job *job;
 	int ret;
 
-	job = kunit_kzalloc(test, sizeof(*job), GFP_KERNEL);
+	/* Let the DRM Scheduler manage the lifetime of the job */
+	job = kzalloc_obj(*job, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, job);
+
+	kref_init(&job->refcount);
+	job->test = test;
 
 	ret = drm_sched_job_init(&job->base,
 				 &entity->base,
 				 1,
 				 NULL,
 				 1);
-	KUNIT_ASSERT_EQ(test, ret, 0);
-
-	job->test = test;
+	if (ret) {
+		kfree(job);
+		KUNIT_ASSERT_EQ_MSG(test, ret, 0, "drm_sched_job_init failed");
+	}
 
 	init_completion(&job->done);
 	INIT_LIST_HEAD(&job->link);
 	hrtimer_setup(&job->timer, drm_mock_sched_job_signal_timer,
 		      CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+
+	ret = kunit_add_action(test, drm_mock_sched_job_cleanup_action, job);
+	if (ret) {
+		drm_mock_sched_job_put(job);
+		KUNIT_ASSERT_EQ_MSG(test, ret, 0, "kunit_add_action failed");
+	}
 
 	return job;
 }
@@ -152,7 +171,7 @@ static void drm_mock_sched_hw_fence_release(struct dma_fence *fence)
 
 	hrtimer_cancel(&job->timer);
 
-	/* Containing job is freed by the kunit framework */
+	drm_mock_sched_job_put(job);
 }
 
 static const struct dma_fence_ops drm_mock_sched_hw_fence_ops = {
@@ -172,6 +191,8 @@ static struct dma_fence *mock_sched_run_job(struct drm_sched_job *sched_job)
 		       &sched->lock,
 		       sched->hw_timeline.context,
 		       atomic_inc_return(&sched->hw_timeline.next_seqno));
+
+	kref_get(&job->refcount);
 
 	dma_fence_get(&job->hw_fence); /* Reference for the job_list */
 
@@ -198,6 +219,17 @@ static struct dma_fence *mock_sched_run_job(struct drm_sched_job *sched_job)
 	spin_unlock_irq(&sched->lock);
 
 	return &job->hw_fence;
+}
+
+static void mock_sched_free_job(struct drm_sched_job *sched_job)
+{
+	struct drm_mock_sched_job *job = drm_sched_job_to_mock_job(sched_job);
+
+	/* Only if the fence has been successfully initialized */
+	if (job->hw_fence.ops)
+		dma_fence_put(&job->hw_fence);
+
+	drm_mock_sched_job_put(job);
 }
 
 /*
@@ -232,21 +264,26 @@ mock_sched_timedout_job(struct drm_sched_job *sched_job)
 	}
 	spin_unlock_irqrestore(&sched->lock, flags);
 
-	dma_fence_put(&job->hw_fence);
-	drm_sched_job_cleanup(sched_job);
-	/* Mock job itself is freed by the kunit framework. */
+	mock_sched_free_job(sched_job);
 
 	return DRM_GPU_SCHED_STAT_RESET;
 }
 
-static void mock_sched_free_job(struct drm_sched_job *sched_job)
+static void drm_mock_sched_job_release(struct kref *ref)
 {
-	struct drm_mock_sched_job *job = drm_sched_job_to_mock_job(sched_job);
+	struct drm_mock_sched_job *job;
 
-	dma_fence_put(&job->hw_fence);
-	drm_sched_job_cleanup(sched_job);
+	job = container_of(ref, struct drm_mock_sched_job, refcount);
 
-	/* Mock job itself is freed by the kunit framework. */
+	drm_sched_job_cleanup(&job->base);
+
+	kfree(job);
+}
+
+void drm_mock_sched_job_put(struct drm_mock_sched_job *job)
+{
+	if (job)
+		kref_put(&job->refcount, drm_mock_sched_job_release);
 }
 
 static void mock_sched_cancel_job(struct drm_sched_job *sched_job)
@@ -265,10 +302,7 @@ static void mock_sched_cancel_job(struct drm_sched_job *sched_job)
 	}
 	spin_unlock_irqrestore(&sched->lock, flags);
 
-	/*
-	 * The GPU Scheduler will call drm_sched_backend_ops.free_job(), still.
-	 * Mock job itself is freed by the kunit framework.
-	 */
+	/* The GPU Scheduler will call drm_sched_backend_ops.free_job() */
 }
 
 static const struct drm_sched_backend_ops drm_mock_scheduler_ops = {

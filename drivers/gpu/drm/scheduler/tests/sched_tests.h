@@ -13,6 +13,7 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
+#include <linux/kref.h>
 
 #include <drm/gpu_scheduler.h>
 
@@ -90,6 +91,7 @@ struct drm_mock_sched_entity {
  */
 struct drm_mock_sched_job {
 	struct drm_sched_job	base;
+	struct kref		refcount;
 
 	struct completion	done;
 
@@ -144,6 +146,8 @@ struct drm_mock_sched_job *
 drm_mock_sched_job_new(struct kunit *test,
 		       struct drm_mock_sched_entity *entity);
 
+void drm_mock_sched_job_put(struct drm_mock_sched_job *job);
+
 /**
  * drm_mock_sched_job_submit - Arm and submit a job in one go
  *
@@ -151,6 +155,8 @@ drm_mock_sched_job_new(struct kunit *test,
  */
 static inline void drm_mock_sched_job_submit(struct drm_mock_sched_job *job)
 {
+	kref_get(&job->refcount);
+
 	drm_sched_job_arm(&job->base);
 	drm_sched_entity_push_job(&job->base);
 }
