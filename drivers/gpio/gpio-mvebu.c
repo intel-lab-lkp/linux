@@ -979,9 +979,9 @@ static const struct of_device_id mvebu_gpio_of_match[] = {
 	},
 };
 
-static int mvebu_gpio_suspend(struct platform_device *pdev, pm_message_t state)
+static int mvebu_gpio_suspend(struct device *dev)
 {
-	struct mvebu_gpio_chip *mvchip = platform_get_drvdata(pdev);
+	struct mvebu_gpio_chip *mvchip = dev_get_drvdata(dev);
 	int i;
 
 	regmap_read(mvchip->regs, GPIO_OUT_OFF + mvchip->offset,
@@ -1031,9 +1031,9 @@ static int mvebu_gpio_suspend(struct platform_device *pdev, pm_message_t state)
 	return 0;
 }
 
-static int mvebu_gpio_resume(struct platform_device *pdev)
+static int mvebu_gpio_resume(struct device *dev)
 {
-	struct mvebu_gpio_chip *mvchip = platform_get_drvdata(pdev);
+	struct mvebu_gpio_chip *mvchip = dev_get_drvdata(dev);
 	int i;
 
 	regmap_write(mvchip->regs, GPIO_OUT_OFF + mvchip->offset,
@@ -1332,13 +1332,16 @@ static int mvebu_gpio_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct dev_pm_ops mvebu_gpio_pm_ops = {
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(mvebu_gpio_suspend, mvebu_gpio_resume)
+};
+
 static struct platform_driver mvebu_gpio_driver = {
 	.driver		= {
 		.name		= "mvebu-gpio",
 		.of_match_table = mvebu_gpio_of_match,
+		.pm		= pm_sleep_ptr(&mvebu_gpio_pm_ops),
 	},
 	.probe		= mvebu_gpio_probe,
-	.suspend        = mvebu_gpio_suspend,
-	.resume         = mvebu_gpio_resume,
 };
 builtin_platform_driver(mvebu_gpio_driver);
