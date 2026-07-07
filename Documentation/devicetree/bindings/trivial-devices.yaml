@@ -57,6 +57,10 @@ properties:
           - adi,adt7468
             # Analog Devices LT7182S Dual Channel 6A, 20V PolyPhase Step-Down Silent Switcher
           - adi,lt7182s
+            # Analog Devices MAX20912 Dual-Output Voltage Regulator
+          - adi,max20912
+            # Analog Devices MAX20916 Dual-Output Voltage Regulator
+          - adi,max20916
             # AMS iAQ-Core VOC Sensor
           - ams,iaq-core
             # Aosong temperature & humidity sensors with I2C interface
