@@ -297,6 +297,22 @@ static inline unsigned long anon_node_rmap_count(struct anon_node *anon_nod)
 	return atomic_long_read(&anon_nod->rbc) & ANON_RMAP_BASE_COUNT_MAX;
 }
 
+static inline bool anon_node_can_share(struct anon_node *anon_nod)
+{
+	return anon_nod->depth == 0 &&
+		anon_node_rmap_count(anon_nod) <= ANON_NODE_SHARE_LIMIT;
+}
+
+static inline void anon_node_verify(struct anon_node *node)
+{
+	struct anon_node *rbc_ch = node;
+
+	WARN_ON_ONCE(anon_node_rmap_count(node) == 0 && node->nr_children == 0);
+	while ((rbc_ch = anon_node_next_rbc_child(node, rbc_ch)) != NULL) {
+		WARN_ON_ONCE(anon_node_rmap_count(rbc_ch) == 0);
+	}
+}
+
 static inline unsigned long anon_node_rmap_address(struct anon_node *anon_nod,
 		unsigned long pgoff)
 {

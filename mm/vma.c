@@ -269,19 +269,23 @@ static void __remove_shared_vm_struct(struct vm_area_struct *vma,
 static void
 anon_vma_interval_tree_pre_update_vma(struct vm_area_struct *vma)
 {
+#ifndef CONFIG_ANON_VMA_FRACTAL
 	struct anon_vma_chain *avc;
 
 	list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 		anon_vma_interval_tree_remove(avc, &avc->anon_vma->rb_root);
+#endif
 }
 
 static void
 anon_vma_interval_tree_post_update_vma(struct vm_area_struct *vma)
 {
+#ifndef CONFIG_ANON_VMA_FRACTAL
 	struct anon_vma_chain *avc;
 
 	list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 		anon_vma_interval_tree_insert(avc, &avc->anon_vma->rb_root);
+#endif
 }
 
 /*
@@ -651,10 +655,6 @@ void validate_mm(struct mm_struct *mm)
 
 	mt_validate(&mm->mm_mt);
 	for_each_vma(vmi, vma) {
-#ifdef CONFIG_DEBUG_VM_RB
-		struct anon_vma *anon_vma = vma->anon_vma;
-		struct anon_vma_chain *avc;
-#endif
 		unsigned long vmi_start, vmi_end;
 		bool warn = 0;
 
@@ -675,12 +675,19 @@ void validate_mm(struct mm_struct *mm)
 			vma_iter_dump_tree(&vmi);
 		}
 
-#ifdef CONFIG_DEBUG_VM_RB
-		if (anon_vma) {
+#if CONFIG_DEBUG_VM_RB
+		if (vma->anon_vma) {
+#ifdef CONFIG_ANON_VMA_FRACTAL
+			anon_node_verify((void *)vma->anon_vma);
+#else
+			struct anon_vma *anon_vma = vma->anon_vma;
+			struct anon_vma_chain *avc;
+
 			anon_vma_lock_read(anon_vma);
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				anon_vma_interval_tree_verify(avc);
 			anon_vma_unlock_read(anon_vma);
+#endif
 		}
 #endif
 		/* Check for a infinite loop */
@@ -2027,8 +2034,13 @@ static struct anon_vma *reusable_anon_vma(struct vm_area_struct *old,
 	if (anon_vma_compatible(a, b)) {
 		struct anon_vma *anon_vma = READ_ONCE(old->anon_vma);
 
+#ifdef CONFIG_ANON_VMA_FRACTAL
+		if (anon_vma && anon_node_can_share((void *)anon_vma))
+			return anon_vma;
+#else
 		if (anon_vma && list_is_singular(&old->anon_vma_chain))
 			return anon_vma;
+#endif
 	}
 	return NULL;
 }
@@ -2157,6 +2169,9 @@ static DEFINE_MUTEX(mm_all_locks_mutex);
 
 static void vm_lock_anon_vma(struct mm_struct *mm, struct anon_vma *anon_vma)
 {
+#ifdef CONFIG_ANON_VMA_FRACTAL
+	vm_lock_anon_node(mm, (void *)anon_vma);
+#else
 	if (!test_bit(0, (unsigned long *) &anon_vma->root->rb_root.rb_root.rb_node)) {
 		/*
 		 * The LSB of head.next can't change from under us
@@ -2176,6 +2191,7 @@ static void vm_lock_anon_vma(struct mm_struct *mm, struct anon_vma *anon_vma)
 				       &anon_vma->root->rb_root.rb_root.rb_node))
 			BUG();
 	}
+#endif
 }
 
 static void vm_lock_mapping(struct mm_struct *mm, struct address_space *mapping)
@@ -2237,7 +2253,6 @@ static void vm_lock_mapping(struct mm_struct *mm, struct address_space *mapping)
 int mm_take_all_locks(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;
-	struct anon_vma_chain *avc;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	mmap_assert_write_locked(mm);
@@ -2278,9 +2293,16 @@ int mm_take_all_locks(struct mm_struct *mm)
 	for_each_vma(vmi, vma) {
 		if (signal_pending(current))
 			goto out_unlock;
-		if (vma->anon_vma)
+		if (vma->anon_vma) {
+#ifdef CONFIG_ANON_VMA_FRACTAL
+			vm_lock_anon_vma(mm, vma->anon_vma);
+#else
+			struct anon_vma_chain *avc;
+
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				vm_lock_anon_vma(mm, avc->anon_vma);
+#endif
+		}
 	}
 
 	return 0;
@@ -2292,6 +2314,9 @@ out_unlock:
 
 static void vm_unlock_anon_vma(struct anon_vma *anon_vma)
 {
+#ifdef CONFIG_ANON_VMA_FRACTAL
+	vm_unlock_anon_node((void *)anon_vma);
+#else
 	if (test_bit(0, (unsigned long *) &anon_vma->root->rb_root.rb_root.rb_node)) {
 		/*
 		 * The LSB of head.next can't change to 0 from under
@@ -2310,6 +2335,7 @@ static void vm_unlock_anon_vma(struct anon_vma *anon_vma)
 			BUG();
 		anon_vma_unlock_write(anon_vma);
 	}
+#endif
 }
 
 static void vm_unlock_mapping(struct address_space *mapping)
@@ -2333,16 +2359,22 @@ static void vm_unlock_mapping(struct address_space *mapping)
 void mm_drop_all_locks(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;
-	struct anon_vma_chain *avc;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	mmap_assert_write_locked(mm);
 	BUG_ON(!mutex_is_locked(&mm_all_locks_mutex));
 
 	for_each_vma(vmi, vma) {
-		if (vma->anon_vma)
+		if (vma->anon_vma) {
+#ifdef CONFIG_ANON_VMA_FRACTAL
+			vm_unlock_anon_vma(vma->anon_vma);
+#else
+			struct anon_vma_chain *avc;
+
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				vm_unlock_anon_vma(avc->anon_vma);
+#endif
+		}
 		if (vma->vm_file && vma->vm_file->f_mapping)
 			vm_unlock_mapping(vma->vm_file->f_mapping);
 	}

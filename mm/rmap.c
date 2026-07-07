@@ -690,7 +690,7 @@ int __anon_node_prepare(struct vm_area_struct *vma)
 	mmap_assert_locked(mm);
 	might_sleep();
 
-	anon_nod = NULL; /* Fix find_mergeable_anon_vma(vma) later. */
+	anon_nod = (struct anon_node *)find_mergeable_anon_vma(vma);
 	if (anon_nod) {
 		anon_new = (struct anon_vma *)anon_nod;
 		if (try_track_rmap(anon_nod, rmap_base) &&
