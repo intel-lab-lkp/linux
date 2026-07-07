@@ -406,8 +406,13 @@ static int __lmtt_alloc_range(struct xe_lmtt *lmtt, struct xe_lmtt_pt *pd,
 
 		if (pt->level != 0) {
 			err = __lmtt_alloc_range(lmtt, pt, offset, next);
-			if (err)
+			if (err) {
+				pd->entries[idx] = NULL;
+				lmtt_write_pte(lmtt, pd, LMTT_PTE_INVALID, idx);
+				lmtt_invalidate_hw(lmtt);
+				lmtt_destroy_pt(lmtt, pt);
 				return err;
+			}
 		}
 
 		offset = next;
@@ -453,7 +458,10 @@ static int lmtt_alloc_range(struct xe_lmtt *lmtt, unsigned int vfid, u64 start, 
 	return 0;
 
 out_free_pt:
-	lmtt_pt_free(pt);
+	pd->entries[vfid] = NULL;
+	lmtt_write_pte(lmtt, pd, LMTT_PTE_INVALID, vfid);
+	lmtt_invalidate_hw(lmtt);
+	lmtt_destroy_pt(lmtt, pt);
 	return err;
 }
 
