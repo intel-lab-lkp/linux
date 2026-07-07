@@ -8250,7 +8250,7 @@ out:
 		free_orphan_dir_info(sctx, odi);
 	}
 
-	if (sort_clone_roots) {
+	if (sctx && sort_clone_roots) {
 		for (i = 0; i < sctx->clone_roots_cnt; i++) {
 			btrfs_root_dec_send_in_progress(
 					sctx->clone_roots[i].root);
