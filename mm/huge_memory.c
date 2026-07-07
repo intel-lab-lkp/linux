@@ -2296,6 +2296,9 @@ bool madvise_free_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	if (is_huge_zero_pmd(orig_pmd))
 		goto out;
 
+	if (pmd_is_device_private_entry(orig_pmd))
+		goto out;
+
 	if (unlikely(!pmd_present(orig_pmd))) {
 		VM_BUG_ON(thp_migration_supported() &&
 				  !pmd_is_migration_entry(orig_pmd));
