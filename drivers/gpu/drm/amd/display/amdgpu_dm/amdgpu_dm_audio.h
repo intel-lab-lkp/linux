@@ -1,4 +1,6 @@
-/* Copyright 2018 Advanced Micro Devices, Inc.
+/* SPDX-License-Identifier: MIT */
+/*
+ * Copyright 2026 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,21 +21,36 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors: AMD
- *
  */
 
-#include "power_helpers.h"
-#include "dc/inc/hw/dmcu.h"
-#include "dc/inc/hw/abm.h"
-#include "dc.h"
-#include "core_types.h"
-#include "dmub_cmd.h"
+#ifndef __AMDGPU_DM_AUDIO_H__
+#define __AMDGPU_DM_AUDIO_H__
 
-#define DIV_ROUNDUP(a, b) (((a)+((b)/2))/(b))
-#define bswap16_based_on_endian(big_endian, value) \
-	((big_endian) ? cpu_to_be16(value) : cpu_to_le16(value))
+struct amdgpu_device;
+struct drm_device;
+struct drm_atomic_state;
+struct drm_connector;
+struct audio_info;
+struct dc_sink;
 
-bool mod_power_only_edp(const struct dc_state *context, const struct dc_stream_state *stream)
-{
-	return context && context->stream_count == 1 && dc_is_embedded_signal(stream->signal);
-}
+int amdgpu_dm_audio_init(struct amdgpu_device *adev);
+void amdgpu_dm_audio_fini(struct amdgpu_device *adev);
+void amdgpu_dm_commit_audio(struct drm_device *dev,
+			    struct drm_atomic_commit *state);
+void amdgpu_dm_fill_audio_info(struct audio_info *audio_info,
+		     const struct drm_connector *drm_connector,
+		     const struct dc_sink *dc_sink);
+
+#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+struct device;
+
+int amdgpu_dm_audio_component_bind(struct device *kdev,
+				   struct device *hda_kdev, void *data);
+void amdgpu_dm_audio_component_unbind(struct device *kdev,
+				      struct device *hda_kdev, void *data);
+void amdgpu_dm_audio_eld_notify(struct amdgpu_device *adev, int pin);
+int amdgpu_dm_audio_get_param(void);
+void amdgpu_dm_audio_set_param(int val);
+#endif
+
+#endif /* __AMDGPU_DM_AUDIO_H__ */

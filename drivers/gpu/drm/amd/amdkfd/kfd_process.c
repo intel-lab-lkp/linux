@@ -153,6 +153,21 @@ static void kfd_sdma_activity_worker(struct work_struct *work)
 		    (q->properties.type != KFD_QUEUE_TYPE_SDMA_XGMI))
 			continue;
 
+		if (dqm->dev->kfd2kgd->hqd_sdma_get_counter) {
+			val = 0;
+			ret = dqm->dev->kfd2kgd->hqd_sdma_get_counter(
+					dqm->dev->adev, q->mqd,
+					dqm->dev->kfd->device_info.num_sdma_queues_per_engine,
+					&val);
+
+			if (ret)
+				pr_debug("Failed to read SDMA queue active counter %i\n", ret);
+			else
+				workarea->sdma_activity_counter += val;
+
+			continue;
+		}
+
 		sdma_q = kzalloc_obj(struct temp_sdma_queue_list);
 		if (!sdma_q) {
 			dqm_unlock(dqm);
@@ -171,7 +186,7 @@ static void kfd_sdma_activity_worker(struct work_struct *work)
 	 * count
 	 */
 	if (list_empty(&sdma_q_list.list)) {
-		workarea->sdma_activity_counter = pdd->sdma_past_activity_counter;
+		workarea->sdma_activity_counter += pdd->sdma_past_activity_counter;
 		dqm_unlock(dqm);
 		return;
 	}
@@ -721,7 +736,7 @@ static void kfd_process_free_gpuvm(struct kgd_mem *mem,
 	struct kfd_node *dev = pdd->dev;
 
 	if (kptr && *kptr) {
-		amdgpu_amdkfd_gpuvm_unmap_gtt_bo_from_kernel(mem);
+		amdgpu_amdkfd_gpuvm_unmap_bo_from_kernel(mem);
 		*kptr = NULL;
 	}
 
@@ -761,10 +776,16 @@ static int kfd_process_alloc_gpuvm(struct kfd_process_device *pdd,
 	}
 
 	if (kptr) {
-		err = amdgpu_amdkfd_gpuvm_map_gtt_bo_to_kernel(
-				(struct kgd_mem *)*mem, kptr, NULL);
+		u32 domain;
+
+		if (flags & KFD_IOC_ALLOC_MEM_FLAGS_VRAM)
+			domain = AMDGPU_GEM_DOMAIN_VRAM;
+		else
+			domain = AMDGPU_GEM_DOMAIN_GTT;
+		err = amdgpu_amdkfd_gpuvm_map_bo_to_kernel((struct kgd_mem *)*mem,
+							   kptr, NULL, domain);
 		if (err) {
-			pr_debug("Map GTT BO to kernel failed\n");
+			pr_debug("Map BO to kernel failed err %d\n", err);
 			goto sync_memory_failed;
 		}
 	}
@@ -986,6 +1007,33 @@ out:
 	return process;
 }
 
+/**
+ * amdgpu_amdkfd_set_sigbus_delay - Set per-process KFD SIGBUS delay
+ * @task: task in the target process
+ * @ms:   encoded delay value (0 = immediate, 0xFFFFFFFF = suppress,
+ *        otherwise delay in milliseconds)
+ *
+ * Stores the SIGBUS delivery option on the kfd_process associated with
+ * @task. If the calling process has not opened /dev/kfd yet (no
+ * kfd_process exists), this is a no-op - the option only applies to
+ * processes that actually use KFD.
+ */
+int amdgpu_amdkfd_set_sigbus_delay(struct task_struct *task, u32 ms)
+{
+	struct kfd_process *p;
+
+	if (!task->mm)
+		return -EINVAL;
+
+	p = kfd_lookup_process_by_mm(task->mm);
+	if (!p)
+		return 0;
+
+	atomic_set(&p->kfd_sigbus_delay_ms, ms);
+	kfd_unref_process(p);
+	return 0;
+}
+
 static struct kfd_process *find_process_by_mm(const struct mm_struct *mm)
 {
 	struct kfd_process *process;
@@ -1092,7 +1140,7 @@ static void kfd_process_kunmap_signal_bo(struct kfd_process *p)
 	if (!mem)
 		goto out;
 
-	amdgpu_amdkfd_gpuvm_unmap_gtt_bo_from_kernel(mem);
+	amdgpu_amdkfd_gpuvm_unmap_bo_from_kernel(mem);
 
 out:
 	mutex_unlock(&p->mutex);
@@ -1330,6 +1378,11 @@ void kfd_process_notifier_release_internal(struct kfd_process *p)
 	kfd_process_table_remove(p);
 	cancel_delayed_work_sync(&p->eviction_work);
 	cancel_delayed_work_sync(&p->restore_work);
+	/*
+	 * If work pending, cancel it and drop the extra ref
+	 */
+	if (cancel_delayed_work_sync(&p->signal_work))
+		kfd_unref_process(p);
 
 	/*
 	 * Dequeue and destroy user queues, it is not safe for GPU to access
@@ -1436,8 +1489,7 @@ static int kfd_process_device_init_cwsr_dgpu(struct kfd_process_device *pdd)
 {
 	struct kfd_node *dev = pdd->dev;
 	struct qcm_process_device *qpd = &pdd->qpd;
-	uint32_t flags = KFD_IOC_ALLOC_MEM_FLAGS_GTT
-			| KFD_IOC_ALLOC_MEM_FLAGS_NO_SUBSTITUTE
+	u32 flags = KFD_IOC_ALLOC_MEM_FLAGS_NO_SUBSTITUTE
 			| KFD_IOC_ALLOC_MEM_FLAGS_EXECUTABLE;
 	struct kgd_mem *mem;
 	void *kaddr;
@@ -1446,7 +1498,12 @@ static int kfd_process_device_init_cwsr_dgpu(struct kfd_process_device *pdd)
 	if (!dev->kfd->cwsr_enabled || qpd->cwsr_kaddr || !qpd->cwsr_base)
 		return 0;
 
-	/* cwsr_base is only set for dGPU */
+	if (KFD_GC_VERSION(dev) >= IP_VERSION(9, 4, 2) && !dev->adev->apu_prefer_gtt)
+		flags |= KFD_IOC_ALLOC_MEM_FLAGS_VRAM;
+	else
+		flags |= KFD_IOC_ALLOC_MEM_FLAGS_GTT;
+
+	/* Allocate CWSR TBA/TMA buffers */
 	ret = kfd_process_alloc_gpuvm(pdd, qpd->cwsr_base,
 				      KFD_CWSR_TBA_TMA_SIZE, flags, &mem, &kaddr);
 	if (ret)
@@ -1586,6 +1643,7 @@ struct kfd_process *create_process(const struct task_struct *thread, bool primar
 
 	INIT_DELAYED_WORK(&process->eviction_work, evict_process_worker);
 	INIT_DELAYED_WORK(&process->restore_work, restore_process_worker);
+	INIT_DELAYED_WORK(&process->signal_work, kfd_signal_sigbus_delayed_fn);
 	process->last_restore_timestamp = get_jiffies_64();
 	err = kfd_event_init_process(process);
 	if (err)
