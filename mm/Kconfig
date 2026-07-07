@@ -1414,7 +1414,7 @@ config LOCK_MM_AND_FIND_VMA
 
 config ANON_VMA_FRACTAL
 	bool "anon_vma fractal list"
-	def_bool n
+	def_bool y
 	depends on MMU
 	help
 	  This option uses vma_rmap_base(vma) during rmap to compute the page
@@ -1442,7 +1442,7 @@ config ANON_VMA_FRACTAL
 
 config ANON_VMA_SHARED_SEMS
 	bool "anon_vma shared semaphores"
-	def_bool n
+	def_bool y
 	depends on ANON_VMA_FRACTAL
 	help
 	  As rmap operations rarely run concurrently, and fork/delete updates
