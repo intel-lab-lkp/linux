@@ -558,6 +558,95 @@ void __init anon_vma_init(void)
 			SLAB_PANIC|SLAB_ACCOUNT);
 }
 
+#ifdef CONFIG_ANON_VMA_FRACTAL
+
+static struct kmem_cache *anon_node_cachep;
+
+static inline struct rw_semaphore *anon_node_rmap_sem(struct anon_node *node)
+{
+	return &node->root->rwsem;
+}
+
+static inline atomic_t *anon_node_vm_lock_ref(struct anon_node *node)
+{
+	return &node->root->vm_lock_ref;
+}
+
+static void anon_node_ctor(void *data)
+{
+	struct anon_node *anon_nod = data;
+
+	init_rwsem(&anon_nod->rwsem);
+	atomic_set(&anon_nod->vm_lock_ref, 0);
+	atomic_set(&anon_nod->refcount, 0);
+}
+
+static inline void anon_vma_fractal_init(void)
+{
+	struct kmem_cache_args args = {
+		.use_freeptr_offset = true,
+		.freeptr_offset = offsetof(struct anon_node, fractal_list),
+		.ctor = anon_node_ctor,
+	};
+
+	anon_node_cachep = kmem_cache_create("anon_node",
+			sizeof(struct anon_node), &args,
+			SLAB_TYPESAFE_BY_RCU|SLAB_PANIC|SLAB_ACCOUNT);
+}
+
+static inline void anon_node_free(struct anon_node *anon_nod)
+{
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
+
+	VM_BUG_ON(atomic_read(&anon_nod->refcount));
+	VM_BUG_ON(!list_empty(&anon_nod->fractal_list));
+	VM_BUG_ON(anon_nod->nr_children);
+	VM_BUG_ON(anon_node_rmap_count(anon_nod));
+
+	might_sleep();
+	if (rwsem_is_locked(rmap_sem)) {
+		down_write(rmap_sem);
+		up_write(rmap_sem);
+	}
+
+	kmem_cache_free(anon_node_cachep, anon_nod);
+}
+
+void __put_anon_node(struct anon_node *anon_nod)
+{
+	struct anon_node *root = anon_nod->root;
+
+	anon_node_free(anon_nod);
+	if (root != anon_nod && atomic_dec_and_test(&root->refcount))
+		anon_node_free(root);
+}
+
+static inline struct anon_node *anon_node_alloc(struct vm_area_struct *vma,
+		struct anon_node *parent, bool is_fork)
+{
+	struct anon_node *anon_nod;
+
+	anon_nod = kmem_cache_alloc(anon_node_cachep, GFP_KERNEL);
+	if (!anon_nod)
+		return NULL;
+
+	anon_nod->root = parent ? parent->root : anon_nod;
+	anon_nod->parent = parent;
+	atomic_set(&anon_nod->refcount, 1);
+	anon_nod->depth = 0;
+	if (parent) {
+		get_anon_node(parent->root);
+		anon_nod->depth = parent->depth + (1 << is_fork);
+	}
+	anon_nod->nr_children = 0;
+	INIT_LIST_HEAD(&anon_nod->fractal_list);
+	anon_nod->mm = vma->vm_mm;
+	atomic_long_set(&anon_nod->rbc, vma_rmap_base(vma) + 1);
+	return anon_nod;
+}
+
+#endif
+
 /*
  * Getting a lock on a stable anon_vma from a page off the LRU is tricky!
  *

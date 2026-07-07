@@ -272,6 +272,31 @@ static inline struct anon_node *anon_node_next_descendant(
 	return node->depth > anon_nod->depth ? node : NULL;
 }
 
+static inline void get_anon_node(struct anon_node *anon_nod)
+{
+	VM_BUG_ON(atomic_read(&anon_nod->refcount) == 0);
+	atomic_inc(&anon_nod->refcount);
+}
+
+void __put_anon_node(struct anon_node *anon_nod);
+
+static inline void put_anon_node(struct anon_node *anon_nod)
+{
+	VM_BUG_ON(atomic_read(&anon_nod->refcount) == 0);
+	if (atomic_dec_and_test(&anon_nod->refcount))
+		__put_anon_node(anon_nod);
+}
+
+static inline unsigned long anon_node_rmap_base(struct anon_node *anon_nod)
+{
+	return atomic_long_read(&anon_nod->rbc) & ~ANON_RMAP_BASE_COUNT_MASK;
+}
+
+static inline unsigned long anon_node_rmap_count(struct anon_node *anon_nod)
+{
+	return atomic_long_read(&anon_nod->rbc) & ANON_RMAP_BASE_COUNT_MAX;
+}
+
 #endif
 
 struct anon_vma *folio_get_anon_vma(const struct folio *folio);
