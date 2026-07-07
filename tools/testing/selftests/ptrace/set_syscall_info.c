@@ -11,9 +11,16 @@
 #include <err.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <stddef.h>
 #include <asm/unistd.h>
+#include <sys/prctl.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <linux/prctl.h>
+
 
 #if defined(_MIPS_SIM) && _MIPS_SIM == _MIPS_SIM_NABI32
 /*
@@ -36,6 +43,7 @@ struct si_exit {
 
 static unsigned int ptrace_stop;
 static pid_t tracee_pid;
+static pid_t tracer_pid;
 
 static int
 kill_tracee(pid_t pid)
@@ -63,6 +71,25 @@ sys_ptrace(int request, pid_t pid, unsigned long addr, unsigned long data)
 		TH_LOG("wait #%d: " fmt,			\
 		       ptrace_stop, ##__VA_ARGS__);		\
 	} while (0)
+
+static int sys_seccomp(unsigned int operation, unsigned int flags, void *args)
+{
+	return syscall(__NR_seccomp, operation, flags, args);
+}
+
+static struct sock_filter seccomp_filter[] = {
+	BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
+
+	BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, __NR_restart_syscall, 0, 1),
+	BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ALLOW),
+
+	BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+};
+
+static struct sock_fprog seccomp_prog = {
+	.filter = seccomp_filter,
+	.len = ARRAY_SIZE(seccomp_filter)
+};
 
 static void
 check_psi_entry(struct __test_metadata *_metadata,
@@ -128,7 +155,6 @@ check_psi_exit(struct __test_metadata *_metadata,
 
 TEST(set_syscall_info)
 {
-	const pid_t tracer_pid = getpid();
 	const kernel_ulong_t dummy[] = {
 		(kernel_ulong_t) 0xdad0bef0bad0fed0ULL,
 		(kernel_ulong_t) 0xdad1bef1bad1fed1ULL,
@@ -138,6 +164,7 @@ TEST(set_syscall_info)
 		(kernel_ulong_t) 0xdad5bef5bad5fed5ULL,
 	};
 	int splice_in[2], splice_out[2];
+	tracer_pid = getpid();
 
 	ASSERT_EQ(0, pipe(splice_in));
 	ASSERT_EQ(0, pipe(splice_out));
@@ -514,6 +541,156 @@ TEST(set_syscall_info)
 	}
 
 	ASSERT_EQ(ptrace_stop, ARRAY_SIZE(si) * 2);
+}
+
+TEST(set_syscall_info_seccomp)
+{
+	tracer_pid = getpid();
+	tracee_pid = fork();
+
+	ASSERT_LE(0, tracee_pid) {
+		TH_LOG("fork: %m");
+	}
+
+	/* tracee */
+	if (tracee_pid == 0) {
+		tracee_pid = getpid();
+		ASSERT_EQ(0, sys_ptrace(PTRACE_TRACEME, 0, 0, 0)) {
+			TH_LOG("PTRACE_TRACEME: %m");
+		}
+		ASSERT_EQ(0, kill(tracee_pid, SIGSTOP)) {
+			/* cannot happen */
+			TH_LOG("kill SIGSTOP: %m");
+		}
+
+		ASSERT_EQ(0, prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
+			TH_LOG("prctl: %m");
+			_exit(1);
+		}
+		ASSERT_EQ(0, sys_seccomp(SECCOMP_SET_MODE_FILTER, 0,
+					(void *) &seccomp_prog)) {
+			TH_LOG("seccomp: %m");
+			_exit(1);
+		}
+
+		/* run getpid unmodified */
+		ASSERT_EQ(tracee_pid, getpid()) {
+			TH_LOG("getpid seccomp unchanged: %m");
+			_exit(1);
+		}
+
+		/* run getppid instead of getpid */
+		ASSERT_EQ(tracer_pid, getpid()) {
+			TH_LOG("getpid seccomp nr changes: %m");
+			_exit(1);
+		}
+
+		/* skip getpid and return 42 */
+		ASSERT_EQ(42, getpid()) {
+			TH_LOG("getpid skip set return value changes: %m");
+			_exit(1);
+		}
+		_exit(0);
+	}
+
+	int status;
+
+	/* tracer */
+	ASSERT_LE(0, waitpid(-1,&status,0)) {
+		LOG_KILL_TRACEE("waitpid: %m");
+	}
+
+	ASSERT_EQ(0, sys_ptrace(PTRACE_SETOPTIONS, tracee_pid, 0, PTRACE_O_TRACESECCOMP | PTRACE_O_TRACESYSGOOD))
+		LOG_KILL_TRACEE("PTRACE_SETOPTIONS: %m");
+
+	ASSERT_EQ(0, sys_ptrace(PTRACE_CONT, tracee_pid, 0, 0)) {
+		LOG_KILL_TRACEE("PTRACE_CONT: %m");
+	}
+
+	while (1) {
+		ASSERT_EQ(tracee_pid, wait(&status)) {
+			/* cannot happen */
+			LOG_KILL_TRACEE("wait: %m");
+		}
+		if (WIFEXITED(status)) {
+			tracee_pid = 0; /* the tracee is no more */
+			ASSERT_EQ(0, WEXITSTATUS(status)) {
+				LOG_KILL_TRACEE("unexpected exit status %u",
+						WEXITSTATUS(status));
+			}
+			break;
+		}
+		ASSERT_FALSE(WIFSIGNALED(status)) {
+			tracee_pid = 0; /* the tracee is no more */
+			LOG_KILL_TRACEE("unexpected signal %u",
+					WTERMSIG(status));
+		}
+		ASSERT_TRUE(WIFSTOPPED(status)) {
+			LOG_KILL_TRACEE("unexpected wait status %#x", status);
+		}
+
+		if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
+			struct ptrace_syscall_info info = {
+				.op = 0xff  /* invalid PTRACE_SYSCALL_INFO_* op */
+			};
+			size_t info_size = sizeof(info);
+
+			ASSERT_LT(0, sys_ptrace(PTRACE_GET_SYSCALL_INFO, tracee_pid, info_size, (uintptr_t) &info)) {
+				LOG_KILL_TRACEE("PTRACE_GET_SYSCALL_INFO: %m");
+			};
+			ASSERT_EQ(PTRACE_SYSCALL_INFO_SECCOMP, info.op) {
+				LOG_KILL_TRACEE("entry op mismatch: %m");
+			}
+			ASSERT_TRUE(info.arch) {
+				LOG_KILL_TRACEE("entry arch mismatch: %m");
+			}
+			ASSERT_TRUE(info.instruction_pointer) {
+				LOG_KILL_TRACEE("entry instruction_pointer mismatch: %m");
+			}
+			ASSERT_TRUE(info.stack_pointer) {
+				LOG_KILL_TRACEE("entry stack_pointer mismatch: %m");
+			}
+
+			switch (ptrace_stop) {
+				case 0: ASSERT_EQ(__NR_getpid, info.seccomp.nr) {
+						LOG_KILL_TRACEE("step %d nr __NR_getpid mismatch: %m", ptrace_stop);
+					}
+					ptrace_stop++;
+					break;
+				case 1: ASSERT_EQ(__NR_getpid, info.seccomp.nr) {
+						LOG_KILL_TRACEE("step %d nr __NR_getpid mismatch: %m", ptrace_stop);
+					}
+					info.seccomp.nr = __NR_getppid;
+					ptrace_stop++;
+					break;
+				case 2: ASSERT_EQ(__NR_getpid, info.seccomp.nr) {
+						LOG_KILL_TRACEE("step %d nr __NR_getpid mismatch: %m", ptrace_stop);
+					}
+					info.op = PTRACE_SYSCALL_INFO_EXIT;
+					info.exit.rval = 42;
+					info.exit.is_error = 0;
+					ptrace_stop++;
+					break;
+				case 3:  ASSERT_EQ(__NR_exit_group, info.seccomp.nr) {
+						 LOG_KILL_TRACEE("step %d nr __NR_exit_group mismatch: %m", ptrace_stop);
+					 }
+					 break;
+				default:
+					 LOG_KILL_TRACEE("unexpected system call: %m");
+					 break;
+
+			}
+			ASSERT_EQ(0,sys_ptrace(PTRACE_SET_SYSCALL_INFO, tracee_pid, info_size, (uintptr_t) &info)) {
+				LOG_KILL_TRACEE("PTRACE_SET_SYSCALL_INFO: %m");
+			}
+
+			ASSERT_EQ(0,sys_ptrace(PTRACE_CONT, tracee_pid, 0, 0)) {
+				LOG_KILL_TRACEE("PTRACE_CONT: %m");
+			}
+		} else {
+			LOG_KILL_TRACEE("unexpected signal: %m");
+		}
+	}
 }
 
 TEST_HARNESS_MAIN
