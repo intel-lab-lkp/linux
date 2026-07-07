@@ -335,6 +335,9 @@ static void make_xfence_request(struct kvm *kvm,
 	unsigned int actual_req = req;
 	DECLARE_BITMAP(vcpu_mask, KVM_MAX_VCPUS);
 
+	if (!data || !data->type)
+		return;
+
 	bitmap_zero(vcpu_mask, KVM_MAX_VCPUS);
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		if (hbase != -1UL) {
@@ -346,9 +349,6 @@ static void make_xfence_request(struct kvm *kvm,
 		}
 
 		bitmap_set(vcpu_mask, i, 1);
-
-		if (!data || !data->type)
-			continue;
 
 		/*
 		 * Enqueue hfence data to VCPU hfence queue. If we don't
