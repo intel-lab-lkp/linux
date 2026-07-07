@@ -508,7 +508,6 @@ int main(int ac, char **av)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct kvm_vm *vm;
-	pthread_attr_t attr;
 	pthread_t thread;
 	cpu_set_t cpuset;
 	unsigned int gpages;
@@ -522,8 +521,6 @@ int main(int ac, char **av)
 	/* Set CPU affinity so we can force preemption of the VCPU */
 	CPU_ZERO(&cpuset);
 	CPU_SET(0, &cpuset);
-	pthread_attr_init(&attr);
-	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 	/* Create a VM and an identity mapped memslot for the steal time structure */
@@ -558,7 +555,11 @@ int main(int ac, char **av)
 
 		/* Steal time from the VCPU. The steal time thread has the same CPU affinity as the VCPUs. */
 		run_delay = get_run_delay();
-		pthread_create(&thread, &attr, do_steal_time, NULL);
+		pthread_create(&thread, NULL, do_steal_time, NULL);
+		pthread_getaffinity_np(thread, sizeof(cpuset), &cpuset);
+		TEST_ASSERT(CPU_COUNT(&cpuset) == 1 && CPU_ISSET(0, &cpuset),
+			    "Worker failed to inherit parent's CPU affinity");
+
 		do
 			sched_yield();
 		while (get_run_delay() - run_delay < MIN_RUN_DELAY_NS);
