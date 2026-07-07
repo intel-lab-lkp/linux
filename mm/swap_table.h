@@ -28,7 +28,7 @@ struct swap_memcg_table {
  * NULL:     |---------------- 0 ---------------| - Free slot
  * Shadow:   |SWAP_COUNT|Z|---- SHADOW_VAL ---|1| - Swapped out slot
  * PFN:      |SWAP_COUNT|Z|------ PFN -------|10| - Cached slot
- * Pointer:  |----------- Pointer ----------|100| - (Unused)
+ * Pointer:  |----------- Pointer ----------|100| - Zswap compressed entry
  * Bad:      |------------- 1 -------------|1000| - Bad slot
  *
  * COUNT is `SWP_TB_COUNT_BITS` long, Z is the `SWP_TB_ZERO_FLAG` bit,
@@ -49,9 +49,11 @@ struct swap_memcg_table {
  * - PFN: Swap slot is in use, and cached. Memcg info is recorded on the page
  *   struct.
  *
- * - Pointer: Unused yet. `0b100` is reserved for potential pointer usage
- *   because only the lower three bits can be used as a marker for 8 bytes
- *   aligned pointers.
+ * - Pointer: Stores a direct pointer to a zswap_entry when the swap slot's
+ *   compressed data resides in zswap. The swap count (if any) is stored in
+ *   the zswap_entry struct rather than inline, since the pointer occupies
+ *   all upper bits. `0b100` is used as the marker because zswap_entry
+ *   pointers are at least 8-byte aligned, leaving the lower three bits free.
  *
  * - Bad: Swap slot is reserved, protects swap header or holes on swap devices.
  */
@@ -77,6 +79,9 @@ struct swap_memcg_table {
 #define SWP_TB_COUNT_MAX       ((1 << SWP_TB_COUNT_BITS) - 1)
 /* The first flag is zero bit (SWAP_TABLE_HAS_ZEROFLAG) */
 #define SWP_TB_ZERO_FLAG	BIT(BITS_PER_LONG - SWP_TB_FLAGS_BITS)
+
+/* Pointer: zswap_entry pointer stored directly, ends with 0b100 */
+#define SWP_TB_POINTER_MARK	0b100UL
 
 /* Bad slot: ends with 0b1000 and rests of bits are all 1 */
 #define SWP_TB_BAD		((~0UL) << 3)
@@ -166,6 +171,11 @@ static inline bool swp_tb_is_bad(unsigned long swp_tb)
 	return swp_tb == SWP_TB_BAD;
 }
 
+static inline bool swp_tb_is_pointer(unsigned long swp_tb)
+{
+	return (swp_tb & (BIT(3) - 1)) == SWP_TB_POINTER_MARK;
+}
+
 static inline bool swp_tb_is_countable(unsigned long swp_tb)
 {
 	return (swp_tb_is_shadow(swp_tb) || swp_tb_is_folio(swp_tb) ||
@@ -186,6 +196,23 @@ static inline void *swp_tb_to_shadow(unsigned long swp_tb)
 	VM_WARN_ON(!swp_tb_is_shadow(swp_tb));
 	/* No shift needed, xa_value is stored as it is in the lower bits. */
 	return (void *)(swp_tb & ~SWP_TB_FLAGS_MASK);
+}
+
+static inline unsigned long pointer_to_swp_tb(void *ptr)
+{
+	unsigned long val = (unsigned long)ptr;
+
+	BUILD_BUG_ON(sizeof(unsigned long) != sizeof(void *));
+	/* Pointers are 8-byte aligned, low 3 bits must be clear */
+	VM_WARN_ON_ONCE(val & (BIT(3) - 1));
+	return val | SWP_TB_POINTER_MARK;
+}
+
+static inline void *swp_tb_to_pointer(unsigned long swp_tb)
+{
+	VM_WARN_ON(!swp_tb_is_pointer(swp_tb));
+	/* Clear the low 3-bit marker to recover the original pointer */
+	return (void *)(swp_tb & ~((unsigned long)(BIT(3) - 1)));
 }
 
 static inline unsigned char __swp_tb_get_count(unsigned long swp_tb)
