@@ -66,7 +66,7 @@ struct nullb_page {
 #define NULLB_PAGE_FREE (MAP_SZ - 2)
 
 static LIST_HEAD(nullb_list);
-static DEFINE_MUTEX(lock);
+static DEFINE_MUTEX(nullb_global_lock);
 static int null_major;
 static DEFINE_IDA(nullb_indexes);
 static struct blk_mq_tag_set tag_set;
@@ -423,9 +423,9 @@ static int nullb_apply_submit_queues(struct nullb_device *dev,
 {
 	int ret;
 
-	mutex_lock(&lock);
+	mutex_lock(&nullb_global_lock);
 	ret = nullb_update_nr_hw_queues(dev, submit_queues, dev->poll_queues);
-	mutex_unlock(&lock);
+	mutex_unlock(&nullb_global_lock);
 
 	return ret;
 }
@@ -435,9 +435,9 @@ static int nullb_apply_poll_queues(struct nullb_device *dev,
 {
 	int ret;
 
-	mutex_lock(&lock);
+	mutex_lock(&nullb_global_lock);
 	ret = nullb_update_nr_hw_queues(dev, dev->submit_queues, poll_queues);
-	mutex_unlock(&lock);
+	mutex_unlock(&nullb_global_lock);
 
 	return ret;
 }
@@ -493,7 +493,7 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		return ret;
 
 	ret = count;
-	mutex_lock(&lock);
+	mutex_lock(&nullb_global_lock);
 	if (!dev->power && newp) {
 		if (test_and_set_bit(NULLB_DEV_FL_UP, &dev->flags))
 			goto out;
@@ -516,7 +516,7 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 	}
 
 out:
-	mutex_unlock(&lock);
+	mutex_unlock(&nullb_global_lock);
 	return ret;
 }
 
@@ -707,10 +707,10 @@ nullb_group_drop_item(struct config_group *group, struct config_item *item)
 	struct nullb_device *dev = to_nullb_device(item);
 
 	if (test_and_clear_bit(NULLB_DEV_FL_UP, &dev->flags)) {
-		mutex_lock(&lock);
+		mutex_lock(&nullb_global_lock);
 		dev->power = false;
 		null_del_dev(dev->nullb);
-		mutex_unlock(&lock);
+		mutex_unlock(&nullb_global_lock);
 	}
 	nullb_del_fault_config(dev);
 	config_item_put(item);
@@ -2081,14 +2081,14 @@ static struct nullb *null_find_dev_by_name(const char *name)
 {
 	struct nullb *nullb = NULL, *nb;
 
-	mutex_lock(&lock);
+	mutex_lock(&nullb_global_lock);
 	list_for_each_entry(nb, &nullb_list, list) {
 		if (strcmp(nb->disk_name, name) == 0) {
 			nullb = nb;
 			break;
 		}
 	}
-	mutex_unlock(&lock);
+	mutex_unlock(&nullb_global_lock);
 
 	return nullb;
 }
@@ -2102,9 +2102,9 @@ static int null_create_dev(void)
 	if (!dev)
 		return -ENOMEM;
 
-	mutex_lock(&lock);
+	mutex_lock(&nullb_global_lock);
 	ret = null_add_dev(dev);
-	mutex_unlock(&lock);
+	mutex_unlock(&nullb_global_lock);
 	if (ret) {
 		null_free_dev(dev);
 		return ret;
@@ -2200,17 +2200,17 @@ static void __exit null_exit(void)
 
 	unregister_blkdev(null_major, "nullb");
 
-	mutex_lock(&lock);
+	mutex_lock(&nullb_global_lock);
 	while (!list_empty(&nullb_list)) {
 		nullb = list_entry(nullb_list.next, struct nullb, list);
 		null_destroy_dev(nullb);
 	}
-	mutex_unlock(&lock);
+	mutex_unlock(&nullb_global_lock);
 
 	if (tag_set.ops)
 		blk_mq_free_tag_set(&tag_set);
 
-	mutex_destroy(&lock);
+	mutex_destroy(&nullb_global_lock);
 }
 
 module_init(null_init);
