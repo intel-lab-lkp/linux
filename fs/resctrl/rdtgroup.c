@@ -1012,6 +1012,90 @@ static int rdt_last_cmd_status_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/* Sysfs lines for info/kernel_mode; indexed by enum resctrl_kernel_mode */
+static const char * const resctrl_mode_str[] = {
+	[INHERIT_CTRL_AND_MON]				= "inherit_ctrl_and_mon",
+	[GLOBAL_ASSIGN_CTRL_INHERIT_MON_PER_CPU]	= "global_assign_ctrl_inherit_mon_per_cpu",
+	[GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU]		= "global_assign_ctrl_assign_mon_per_cpu",
+};
+
+static_assert(ARRAY_SIZE(resctrl_mode_str) == RESCTRL_NUM_KERNEL_MODES);
+
+/**
+ * resctrl_kernel_mode_show() - Display supported and active kernel-mode policies
+ * @of: kernfs open file
+ * @seq: output seq_file
+ * @v: unused
+ *
+ * Displays one line per mode set in resctrl_kcfg.kmode. Bracket the active
+ * policy (resctrl_kcfg.kmode_cur).
+ *
+ * INHERIT_CTRL_AND_MON is displayed as "[inherit_ctrl_and_mon]" when active
+ * or "inherit_ctrl_and_mon" when supported but inactive, with no :group=
+ * suffix in either case.
+ *
+ * Global-assign modes append :group=. An inactive mode is emitted as
+ * "<mode>:group=uninitialized". An active mode with a bound group is emitted
+ * as "[<mode>:group=<ctrl>/<mon>/]", where <ctrl>/<mon>/ is derived from
+ * resctrl_kcfg.k_rdtgrp.
+ *
+ * Return: 0 on success, or -ENOENT on error.
+ */
+static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
+				    struct seq_file *seq, void *v)
+{
+	enum resctrl_kernel_mode mode;
+	struct rdtgroup *rdtgrp;
+	const char *ctrl, *mon;
+	bool active;
+	int ret = 0;
+
+	mutex_lock(&rdtgroup_mutex);
+	for (mode = 0; mode < RESCTRL_NUM_KERNEL_MODES; mode++) {
+		if (!test_bit(mode, &resctrl_kcfg.kmode))
+			continue;
+
+		active = (resctrl_kcfg.kmode_cur == mode);
+
+		if (mode == INHERIT_CTRL_AND_MON) {
+			seq_printf(seq, active ? "[%s]\n" : "%s\n",
+				   resctrl_mode_str[mode]);
+			continue;
+		}
+
+		if (!active) {
+			seq_printf(seq, "%s:group=uninitialized\n",
+				   resctrl_mode_str[mode]);
+			continue;
+		}
+
+		/*
+		 * There should be a valid group when any of the global
+		 * assign mode is active; otherwise, report an error.
+		 */
+		rdtgrp = resctrl_kcfg.k_rdtgrp;
+		if (!rdtgrp) {
+			ret = -ENOENT;
+			goto out_unlock;
+		}
+
+		ctrl = "";
+		mon = "";
+		if (rdtgrp->type == RDTMON_GROUP) {
+			ctrl = rdt_kn_name(rdtgrp->mon.parent->kn);
+			mon = rdt_kn_name(rdtgrp->kn);
+		} else {
+			ctrl = rdt_kn_name(rdtgrp->kn);
+		}
+		seq_printf(seq, "[%s:group=%s/%s/]\n",
+			   resctrl_mode_str[mode], ctrl, mon);
+	}
+
+out_unlock:
+	mutex_unlock(&rdtgroup_mutex);
+	return ret;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -1913,6 +1997,13 @@ static struct rftype res_common_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdt_last_cmd_status_show,
+		.fflags		= RFTYPE_TOP_INFO,
+	},
+	{
+		.name		= "kernel_mode",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_kernel_mode_show,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
