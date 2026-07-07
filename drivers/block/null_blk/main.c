@@ -360,13 +360,15 @@ nullb_device_##NAME##_store(struct config_item *item, const char *page,	\
 	ret = nullb_device_##TYPE##_attr_store(&new_value, page, count);\
 	if (ret < 0)							\
 		return ret;						\
-	if (apply_fn)							\
+	if (apply_fn) {							\
 		ret = apply_fn(dev, new_value);				\
-	else if (test_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags)) 	\
-		ret = -EBUSY;						\
-	if (ret < 0)							\
-		return ret;						\
-	dev->NAME = new_value;						\
+		if (ret < 0)						\
+			return ret;					\
+	} else {							\
+		if (test_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags))	\
+			return -EBUSY;					\
+		dev->NAME = new_value;					\
+	}								\
 	return count;							\
 }									\
 CONFIGFS_ATTR(nullb_device_, NAME);
