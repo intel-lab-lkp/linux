@@ -273,13 +273,13 @@ static int sar_probe(struct platform_device *device)
 	if (sar_get_device_mode(device) != AE_OK) {
 		dev_err(&device->dev, "Failed to get device mode\n");
 		result = -EIO;
-		goto r_free;
+		goto r_sar;
 	}
 
 	result = sysfs_create_group(&device->dev.kobj, &intcsar_group);
 	if (result) {
 		dev_err(&device->dev, "sysfs creation failed\n");
-		goto r_free;
+		goto r_sar;
 	}
 
 	if (acpi_install_notify_handler(ACPI_HANDLE(&device->dev), ACPI_DEVICE_NOTIFY,
@@ -292,6 +292,9 @@ static int sar_probe(struct platform_device *device)
 
 r_sys:
 	sysfs_remove_group(&device->dev.kobj, &intcsar_group);
+r_sar:
+	for (reg = 0; reg < MAX_REGULATORY; reg++)
+		kfree(context->config_data[reg].device_mode_info);
 r_free:
 	kfree(context);
 	return result;
