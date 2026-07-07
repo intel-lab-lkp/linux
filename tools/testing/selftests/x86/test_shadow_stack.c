@@ -1059,6 +1059,14 @@ int main(int argc, char *argv[])
 {
 	int ret = 0;
 
+	/* Test that ARCH_SHSTK_UNLOCK can't be called from normal (non-ptrace) context. */
+	if (!ARCH_PRCTL(ARCH_SHSTK_UNLOCK, ARCH_SHSTK_SHSTK)) {
+		printf("[FAIL]\tARCH_SHSTK_UNLOCK should fail in a non-ptrace context\n");
+		goto out;
+	}
+
+	printf("[OK]\tCouldn't enable Shadow stack via UNLOCK\n");
+
 	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)) {
 		printf("[SKIP]\tCould not enable Shadow stack\n");
 		return 1;
