@@ -935,7 +935,8 @@ static bool __swap_cluster_alloc_entries(struct swap_info_struct *si,
 		nr_pages = 1 << order;
 		swap_cluster_assert_empty(ci, ci_off, nr_pages, false);
 		__swap_cache_add_folio(ci, folio, swp_entry(si->type,
-							    ci_off + cluster_offset(si, ci)));
+							    ci_off + cluster_offset(si, ci)),
+				       NULL);
 	} else if (IS_ENABLED(CONFIG_HIBERNATION)) {
 		order = 0;
 		nr_pages = 1;
@@ -1969,11 +1970,18 @@ void __swap_cluster_free_entries(struct swap_info_struct *si,
 		 * means zswap has a compressed copy; the xarray still
 		 * holds the entry and zswap_invalidate will free it.
 		 */
-		if (swp_tb_is_pointer(old_tb))
+		if (swp_tb_is_pointer(old_tb)) {
 			VM_WARN_ON(zswap_swp_tb_get_count(old_tb) > 1);
-		else
+			/*
+			 * Free the zswap entry now under ci->lock while
+			 * the Pointer is still in the swap table.  Once
+			 * we null the slot, the entry would be leaked.
+			 */
+			zswap_entry_free(swp_tb_to_pointer(old_tb));
+		} else {
 			VM_WARN_ON(!swp_tb_is_shadow(old_tb) ||
 				   __swp_tb_get_count(old_tb) > 1);
+		}
 
 		/* Resetting the slot to NULL also clears the inline flags. */
 		__swap_table_set(ci, ci_off, null_to_swp_tb());
@@ -2073,7 +2081,7 @@ int swp_swapcount(swp_entry_t entry)
  *
  * Context: Caller must ensure the folio is locked and in the swap cache.
  */
-static bool folio_maybe_swapped(struct folio *folio)
+bool folio_maybe_swapped(struct folio *folio)
 {
 	swp_entry_t entry = folio->swap;
 	struct swap_cluster_info *ci;
