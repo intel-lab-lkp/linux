@@ -8,9 +8,23 @@
 #include <linux/ftrace.h>
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
+#include <linux/memory.h>
 
 #include <asm/inst.h>
 #include <asm/module.h>
+
+
+void ftrace_arch_code_modify_prepare(void)
+	__acquires(&text_mutex)
+{
+	mutex_lock(&text_mutex);
+}
+
+void ftrace_arch_code_modify_post_process(void)
+	__releases(&text_mutex)
+{
+	mutex_unlock(&text_mutex);
+}
 
 static int ftrace_modify_code(unsigned long pc, u32 old, u32 new, bool validate)
 {
@@ -170,6 +184,8 @@ int ftrace_init_nop(struct module *mod, struct dyn_ftrace *rec)
 {
 	u32 old, new;
 	unsigned long pc;
+
+	guard(mutex)(&text_mutex);
 
 	pc = rec->ip;
 	old = larch_insn_gen_nop();

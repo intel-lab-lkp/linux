@@ -6,6 +6,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/jump_label.h>
+#include <linux/memory.h>
 #include <asm/cacheflush.h>
 #include <asm/inst.h>
 
@@ -19,7 +20,9 @@ bool arch_jump_label_transform_queue(struct jump_entry *entry, enum jump_label_t
 	else
 		insn = larch_insn_gen_nop();
 
+	mutex_lock(&text_mutex);
 	larch_insn_write(addr, insn);
+	mutex_unlock(&text_mutex);
 
 	return true;
 }

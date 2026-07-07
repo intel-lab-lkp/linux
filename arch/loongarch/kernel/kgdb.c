@@ -21,6 +21,7 @@
 #include <asm/irq_regs.h>
 #include <asm/ptrace.h>
 #include <asm/sigcontext.h>
+#include <asm/tlbflush.h>
 
 int kgdb_watch_activated;
 static unsigned int stepped_opcode;
@@ -233,6 +234,51 @@ noinline void arch_kgdb_breakpoint(void)
 }
 STACK_FRAME_NON_STANDARD(arch_kgdb_breakpoint);
 
+static inline bool kgdb_set_page_rwx(unsigned long addr, bool protect)
+{
+	pte_t *pte = virt_to_kpte(addr);
+
+	if (WARN_ON(!pte) || pte_none(ptep_get(pte)))
+		return false;
+
+	if (protect)
+		set_pte(pte, __pte(pte_val(ptep_get(pte)) & ~(_PAGE_WRITE | _PAGE_DIRTY)));
+	else
+		set_pte(pte, __pte(pte_val(ptep_get(pte)) | (_PAGE_WRITE | _PAGE_DIRTY)));
+
+	local_flush_tlb_one(addr);
+	return true;
+}
+
+int kgdb_arch_set_breakpoint(struct kgdb_bkpt *bpt)
+{
+	int err;
+
+	err = copy_from_kernel_nofault(bpt->saved_instr, (char *)bpt->bpt_addr,
+					BREAK_INSTR_SIZE);
+	if (err)
+		return err;
+
+	kgdb_set_page_rwx(bpt->bpt_addr, 0);
+	err = copy_to_kernel_nofault((char *)bpt->bpt_addr,
+					arch_kgdb_ops.gdb_bpt_instr, BREAK_INSTR_SIZE);
+	kgdb_set_page_rwx(bpt->bpt_addr, 1);
+	return err;
+}
+
+int kgdb_arch_remove_breakpoint(struct kgdb_bkpt *bpt)
+{
+	int err;
+
+	kgdb_set_page_rwx(bpt->bpt_addr, 0);
+	err = copy_to_kernel_nofault((char *)bpt->bpt_addr,
+					(char *)bpt->saved_instr, BREAK_INSTR_SIZE);
+	kgdb_set_page_rwx(bpt->bpt_addr, 1);
+
+	return err;
+}
+
+
 /*
  * Calls linux_debug_hook before the kernel dies. If KGDB is enabled,
  * then try to fall into the debugger
@@ -394,9 +440,11 @@ static int do_single_step(struct pt_regs *regs)
 
 	stepped_address = addr;
 
+	kgdb_set_page_rwx(stepped_address, 0);
 	/* Replace the opcode with the break instruction */
 	error = copy_to_kernel_nofault((void *)stepped_address,
 				       arch_kgdb_ops.gdb_bpt_instr, BREAK_INSTR_SIZE);
+	kgdb_set_page_rwx(stepped_address, 1);
 	flush_icache_range(addr, addr + BREAK_INSTR_SIZE);
 
 	if (error) {
@@ -414,8 +462,10 @@ static int do_single_step(struct pt_regs *regs)
 static void undo_single_step(struct pt_regs *regs)
 {
 	if (stepped_opcode) {
+		kgdb_set_page_rwx(stepped_address, 0);
 		copy_to_kernel_nofault((void *)stepped_address,
 				       (void *)&stepped_opcode, BREAK_INSTR_SIZE);
+		kgdb_set_page_rwx(stepped_address, 1);
 		flush_icache_range(stepped_address, stepped_address + BREAK_INSTR_SIZE);
 	}
 
