@@ -335,7 +335,7 @@ impl<'a> Iterator for GspSeqIter<'a> {
 impl<'a> GspSequencer<'a> {
     pub(crate) fn run(
         cmdq: &Cmdq,
-        ctx: &'a GspBootContext<'_>,
+        ctx: &'a GspBootContext<'_, '_>,
         libos_dma_handle: u64,
         bootloader_app_version: u32,
     ) -> Result {

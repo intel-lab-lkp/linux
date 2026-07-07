@@ -39,7 +39,7 @@ impl super::Gsp {
     /// [`Self::unload`]) returned.
     pub(crate) fn boot(
         self: Pin<&mut Self>,
-        mut ctx: super::GspBootContext<'_>,
+        mut ctx: super::GspBootContext<'_, '_>,
     ) -> Result<Option<super::UnloadBundle>> {
         let pdev = ctx.pdev;
         let bar = ctx.bar;
@@ -125,7 +125,7 @@ impl super::Gsp {
     /// This stops all activity on the GSP.
     pub(crate) fn unload(
         &self,
-        mut ctx: super::GspBootContext<'_>,
+        mut ctx: super::GspBootContext<'_, '_>,
         unload_bundle: Option<super::UnloadBundle>,
     ) -> Result {
         let dev = ctx.dev();
