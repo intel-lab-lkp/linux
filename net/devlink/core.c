@@ -317,6 +317,7 @@ EXPORT_SYMBOL_GPL(devl_trylock);
 
 void devl_unlock(struct devlink *devlink)
 {
+	devlink_default_esw_mode_queue_apply_work(devlink);
 	mutex_unlock(&devlink->lock);
 }
 EXPORT_SYMBOL_GPL(devl_unlock);
@@ -429,6 +430,7 @@ void devl_unregister(struct devlink *devlink)
 	ASSERT_DEVLINK_REGISTERED(devlink);
 	devl_assert_locked(devlink);
 
+	devlink_default_esw_mode_apply_pending_clear(devlink);
 	devlink_notify_unregister(devlink);
 	xa_clear_mark(&devlinks, devlink->index, DEVLINK_REGISTERED);
 	devlink_rel_put(devlink);
@@ -490,6 +492,7 @@ struct devlink *__devlink_alloc(const struct devlink_ops *ops, size_t priv_size,
 	INIT_LIST_HEAD(&devlink->trap_group_list);
 	INIT_LIST_HEAD(&devlink->trap_policer_list);
 	INIT_RCU_WORK(&devlink->rwork, devlink_release);
+	devlink_default_esw_mode_instance_init(devlink);
 	lockdep_register_key(&devlink->lock_key);
 	mutex_init(&devlink->lock);
 	lockdep_set_class(&devlink->lock, &devlink->lock_key);
@@ -537,6 +540,9 @@ void devlink_free(struct devlink *devlink)
 	devl_lock(devlink);
 	WARN_ON(devlink_rates_check(devlink, NULL, NULL));
 	devl_unlock(devlink);
+
+	devlink_default_esw_mode_instance_cleanup(devlink);
+
 	devlink_rel_put(devlink);
 
 	WARN_ON(!list_empty(&devlink->trap_policer_list));
