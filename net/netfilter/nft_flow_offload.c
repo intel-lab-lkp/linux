@@ -59,7 +59,7 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 	struct flow_offload *flow;
 	enum ip_conntrack_dir dir;
 	struct nf_conn *ct;
-	int ret;
+	int ret, thoff;
 
 	if (nft_flow_offload_skip(pkt->skb, nft_pf(pkt)))
 		goto out;
@@ -70,8 +70,11 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 
 	switch (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum) {
 	case IPPROTO_TCP:
-		tcph = skb_header_pointer(pkt->skb, nft_thoff(pkt),
-					  sizeof(_tcph), &_tcph);
+		thoff = nft_thoff(pkt);
+		if (thoff == 0)
+			goto out;
+		tcph = skb_header_pointer(pkt->skb, thoff, sizeof(_tcph),
+					  &_tcph);
 		if (unlikely(!tcph || tcph->fin || tcph->rst ||
 			     !nf_conntrack_tcp_established(ct)))
 			goto out;
