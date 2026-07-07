@@ -735,6 +735,16 @@ enum resctrl_kernel_mode {
 #define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
 
 /**
+ * resctrl_set_kmode_support() - Advertise a supported kernel-mode policy
+ * @kmode:	Kernel-mode policy supported by the architecture.
+ *
+ * Architectures use this during resctrl initialization to make additional
+ * kernel-mode policies available to the filesystem. INHERIT_CTRL_AND_MON is
+ * supported by default and does not need to be registered.
+ */
+void resctrl_set_kmode_support(enum resctrl_kernel_mode kmode);
+
+/**
  * resctrl_arch_configure_kmode() - Program kernel-mode association on CPUs
  * @cpu_mask:	CPUs to update; the architecture applies the change on the
  *		online subset of this mask.

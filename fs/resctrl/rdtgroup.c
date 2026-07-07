@@ -79,6 +79,16 @@ static void mon_put_kn_priv(void);
 struct dentry *debugfs_resctrl;
 
 /*
+ * Global kernel-mode resctrl policy. Architectures add supported modes before
+ * resctrl is mounted; @kmode_cur tracks the active policy after user selection.
+ */
+static struct resctrl_kmode_cfg resctrl_kcfg = {
+	.kmode = BIT(INHERIT_CTRL_AND_MON),
+	.kmode_cur = INHERIT_CTRL_AND_MON,
+	.k_rdtgrp = NULL
+};
+
+/*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group
  * and each new CTRL_MON group created by the user.  Only relevant when
  * the filesystem is mounted with the "mba_MBps" option so it does not
@@ -886,6 +896,19 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
 	rdtgroup_kn_unlock(of->kn);
 
 	return ret;
+}
+
+/**
+ * resctrl_set_kmode_support() - Advertise support for a kernel-mode policy
+ * @kmode:	Kernel-mode policy supported by the architecture.
+ *
+ * Architectures call this during resctrl initialization to make @kmode visible
+ * to the resctrl filesystem. INHERIT_CTRL_AND_MON is always supported.
+ */
+void resctrl_set_kmode_support(enum resctrl_kernel_mode kmode)
+{
+	if (kmode <= RESCTRL_KMODE_LAST)
+		__set_bit(kmode, &resctrl_kcfg.kmode);
 }
 
 #ifdef CONFIG_PROC_CPU_RESCTRL

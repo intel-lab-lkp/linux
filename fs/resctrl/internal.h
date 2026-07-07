@@ -314,6 +314,18 @@ struct mbm_state {
 	u32	prev_bw;
 };
 
+/**
+ * struct resctrl_kmode_cfg - Kernel-mode policy snapshot from architecture
+ * @kmode:	Bitmap of supported &enum resctrl_kernel_mode values. Each
+ *		supported mode is represented by BIT(mode).
+ * @kmode_cur:	Currently selected kernel-mode policy.
+ * @k_rdtgrp:	Resource group backing global-assign modes when applicable;
+ */
+struct resctrl_kmode_cfg {
+	unsigned long			kmode;
+	enum resctrl_kernel_mode	kmode_cur;
+	struct rdtgroup			*k_rdtgrp;
+};
 extern struct mutex rdtgroup_mutex;
 
 static inline const char *rdt_kn_name(const struct kernfs_node *kn)
