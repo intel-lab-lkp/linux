@@ -703,6 +703,91 @@ int __anon_node_prepare(struct vm_area_struct *vma)
 	return 0;
 }
 
+static inline struct anon_node *vma_anon_node(struct vm_area_struct *vma)
+{
+	return vma ? (struct anon_node *)vma->anon_vma : NULL;
+}
+
+static inline void vma_set_anon_node(struct vm_area_struct *vma,
+		struct anon_node *anon_nod, bool is_locked)
+{
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
+
+	if (is_locked) {
+		vma->anon_vma = (struct anon_vma *)anon_nod;
+		return;
+	}
+	down_write(rmap_sem);
+	vma->anon_vma = (struct anon_vma *)anon_nod;
+	up_write(rmap_sem);
+}
+
+static int anon_node_add_child(struct anon_node *anon_nod,
+	struct vm_area_struct *vma, bool is_fork)
+{
+	struct anon_node *child;
+	struct anon_node *root = anon_nod->root;
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(root);
+	struct anon_node *rbc_ch = anon_nod, *next;
+
+	if (root->depth == 0)
+		root->depth = 1;
+	child = anon_node_alloc(vma, anon_nod, is_fork);
+	if (!child)
+		return -ENOMEM;
+
+	rmap_sem = anon_node_rmap_sem(root);
+	down_write(rmap_sem);
+	/* Add new child to the tail of rbc children. */
+	while ((next = anon_node_next_rbc_child(anon_nod, rbc_ch)) != NULL) {
+		rbc_ch = next;
+	}
+	list_add(&child->fractal_list, &rbc_ch->fractal_list);
+	++anon_nod->nr_children;
+
+	if (is_fork)
+		vma_set_anon_node(vma, child, true);
+	up_write(rmap_sem);
+	return 0;
+}
+
+/* Returns 0 on success, non-zero on failure. */
+static int anon_node_track_rmap(struct anon_node *anon_nod,
+		struct vm_area_struct *vma)
+{
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
+	unsigned long rmap_base = vma_rmap_base(vma);
+	struct anon_node *rbc_ch = anon_nod;
+
+	if (try_track_rmap(anon_nod, rmap_base))
+		return 0;
+
+	down_read(rmap_sem);
+	while ((rbc_ch = anon_node_next_rbc_child(anon_nod, rbc_ch)) != NULL) {
+		if (try_track_rmap(rbc_ch, rmap_base))
+			break;
+	}
+	up_read(rmap_sem);
+	if (rbc_ch)
+		return 0;
+
+	return anon_node_add_child(anon_nod, vma, false);
+}
+
+/* vma clones src anon_node and increments the count. */
+int anon_node_clone(struct vm_area_struct *vma,  struct vm_area_struct *src,
+	enum vma_operation operation)
+{
+	struct anon_node *anon_nod = vma_anon_node(src);
+
+	mmap_assert_write_locked(vma->vm_mm);
+	if (!anon_nod)
+		return 0;
+
+	VM_BUG_ON_VMA(vma->anon_vma != (void *)anon_nod, vma);
+	return anon_node_track_rmap(anon_nod, vma);
+}
+
 #endif
 
 /*
