@@ -2832,8 +2832,31 @@ retry:
 				folio_wait_writeback(folio);
 			}
 
+			/*
+			 * For folios that are under writeback or no longer dirty,
+			 * we can skip the folio.
+			 *
+			 * Here we have to call folio_clear_dirty_for_io() to clear
+			 * the folio dirty flag.
+			 *
+			 * Without that call, btrfs_folio_set_writeback() will call
+			 * folio_start_writeback() for the first block to be written back.
+			 * But since the folio can still be dirty, e.g. other
+			 * blocks inside the folio are still dirty,
+			 * PAGECACHE_TAG_DIRTY will not be cleared.
+			 *
+			 * On the other hand, for btrfs_folio_set_writeback() of the
+			 * last block, although the folio is no longer dirty,
+			 * btrfs_folio_set_writeback() won't call folio_start_writeback()
+			 * as the folio already has that flag.
+			 *
+			 * This means, if we only rely one btrfs_folio_*()
+			 * helpers for both dirty and writeback flags,
+			 * PAGECACHE_TAG_DIRTY will never be cleared for subpage cases.
+			 * The only way to break out is to clear folio dirty here.
+			 */
 			if (folio_test_writeback(folio) ||
-			    !folio_test_dirty(folio)) {
+			    !folio_clear_dirty_for_io(folio)) {
 				folio_unlock(folio);
 				continue;
 			}
