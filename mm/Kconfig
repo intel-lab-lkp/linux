@@ -1440,6 +1440,15 @@ config ANON_VMA_FRACTAL
 	  during rmap walks. Since rmap_one operations may switch tasks,
 	  semaphores are still required instead of spinlock_t protection.
 
+config ANON_VMA_SHARED_SEMS
+	bool "anon_vma shared semaphores"
+	def_bool n
+	depends on ANON_VMA_FRACTAL
+	help
+	  As rmap operations rarely run concurrently, and fork/delete updates
+	  are very short, a group of shared semaphores is used to reduce
+	  memory overhead.
+
 config IOMMU_MM_DATA
 	bool
 

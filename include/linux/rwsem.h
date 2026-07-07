@@ -75,6 +75,11 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 	return atomic_long_read(&sem->count) != RWSEM_UNLOCKED_VALUE;
 }
 
+static inline int rwsem_is_write_locked(struct rw_semaphore *sem)
+{
+	return atomic_long_read(&sem->count) & RWSEM_WRITER_LOCKED;
+}
+
 static inline void rwsem_assert_held_nolockdep(const struct rw_semaphore *sem)
 	__assumes_ctx_lock(sem)
 {
@@ -179,6 +184,11 @@ do {								\
 static __always_inline int rwsem_is_locked(const struct rw_semaphore *sem)
 {
 	return rw_base_is_locked(&sem->rwbase);
+}
+
+static inline int rwsem_is_write_locked(struct rw_semaphore *sem)
+{
+	return rw_base_is_write_locked(&sem->rwbase);
 }
 
 static __always_inline void rwsem_assert_held_nolockdep(const struct rw_semaphore *sem)

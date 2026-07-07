@@ -559,6 +559,11 @@ void __init anon_vma_init(void)
 			SLAB_PANIC|SLAB_ACCOUNT);
 }
 
+static inline struct rw_semaphore *anon_root_rmap_sem(struct anon_vma *root)
+{
+	return &root->rwsem;
+}
+
 void __put_anon_vma(struct anon_vma *anon_vma)
 {
 	struct anon_vma *root = anon_vma->root;
@@ -571,25 +576,82 @@ void __put_anon_vma(struct anon_vma *anon_vma)
 #else
 
 static struct kmem_cache *anon_node_cachep;
+static struct kmem_cache *anon_sema_cachep;
 
+/* Since rmap operations rarely run concurrently, use shared anon_root_sems. */
+#define ANON_NODE_RMAP_SEMS_BITS	12
+#define ANON_NODE_RMAP_SEMS_COUNT	(1 << ANON_NODE_RMAP_SEMS_BITS)
 
+struct anon_semaphore {
+	struct rw_semaphore sem;
+	atomic_t vm_lock_ref;	/* for vm_lock_anon_vma */
+};
+
+#ifdef CONFIG_ANON_VMA_SHARED_SEMS
+static struct anon_semaphore anon_node_root_semas[ANON_NODE_RMAP_SEMS_COUNT];
+
+static inline struct anon_semaphore *anon_root_anon_sema(struct anon_node *root)
+{
+	return (root->depth == 1 && root->root_anon_sema) ?
+		root->root_anon_sema :
+		&anon_node_root_semas[hash_ptr(root, ANON_NODE_RMAP_SEMS_BITS)];
+}
+#endif
+
+static inline void anon_sema_init(struct anon_semaphore *anon_sema)
+{
+	init_rwsem(&anon_sema->sem);
+	atomic_set(&anon_sema->vm_lock_ref, 0);
+}
+
+static inline void anon_root_sema_free(struct anon_semaphore *root_sema)
+{
+	VM_BUG_ON(rwsem_is_locked(&root_sema->sem));
+	kmem_cache_free(anon_sema_cachep, root_sema);
+}
+
+static inline struct anon_semaphore *anon_root_sema_alloc(void)
+{
+	struct anon_semaphore *root_sema;
+
+	root_sema = kmem_cache_alloc(anon_sema_cachep, GFP_KERNEL);
+	if (!root_sema)
+		return NULL;
+	anon_sema_init(root_sema);
+	return root_sema;
+}
+
+static inline struct rw_semaphore *anon_root_rmap_sem(struct anon_node *root)
+{
+#ifdef CONFIG_ANON_VMA_SHARED_SEMS
+	return &anon_root_anon_sema(root)->sem;
+#else
+	return &root->rwsem;
+#endif
+}
 
 static inline struct rw_semaphore *anon_node_rmap_sem(struct anon_node *node)
 {
-	return &node->root->rwsem;
+	return anon_root_rmap_sem(node->root);
 }
 
 static inline atomic_t *anon_node_vm_lock_ref(struct anon_node *node)
 {
+#ifdef CONFIG_ANON_VMA_SHARED_SEMS
+	return &anon_root_anon_sema(node->root)->vm_lock_ref;
+#else
 	return &node->root->vm_lock_ref;
+#endif
 }
 
 static void anon_node_ctor(void *data)
 {
 	struct anon_node *anon_nod = data;
 
+#ifndef CONFIG_ANON_VMA_SHARED_SEMS
 	init_rwsem(&anon_nod->rwsem);
 	atomic_set(&anon_nod->vm_lock_ref, 0);
+#endif
 	atomic_set(&anon_nod->refcount, 0);
 }
 
@@ -600,10 +662,16 @@ void __init anon_vma_init(void)
 		.freeptr_offset = offsetof(struct anon_node, fractal_list),
 		.ctor = anon_node_ctor,
 	};
+#ifdef CONFIG_ANON_VMA_SHARED_SEMS
+	int i;
 
+	for (i = 0; i < ANON_NODE_RMAP_SEMS_COUNT; i++)
+		anon_sema_init(&anon_node_root_semas[i]);
+#endif
 	anon_node_cachep = kmem_cache_create("anon_node",
 			sizeof(struct anon_node), &args,
 			SLAB_TYPESAFE_BY_RCU|SLAB_PANIC|SLAB_ACCOUNT);
+	anon_sema_cachep = KMEM_CACHE(anon_semaphore, SLAB_PANIC|SLAB_ACCOUNT);
 }
 
 static inline void anon_node_free(struct anon_node *anon_nod)
@@ -621,6 +689,12 @@ static inline void anon_node_free(struct anon_node *anon_nod)
 		up_write(rmap_sem);
 	}
 
+#ifdef CONFIG_ANON_VMA_SHARED_SEMS
+	if (anon_nod->depth == 1 && anon_nod->root_anon_sema) {
+		anon_root_sema_free(anon_nod->root_anon_sema);
+		anon_nod->root_anon_sema = NULL;
+	}
+#endif
 	kmem_cache_free(anon_node_cachep, anon_nod);
 }
 
@@ -736,12 +810,17 @@ static inline struct anon_node *vma_anon_node(struct vm_area_struct *vma)
 	return vma ? (struct anon_node *)vma->anon_vma : NULL;
 }
 
+static inline bool no_rmap_reader(struct rw_semaphore *rmap_sem)
+{
+	return !rwsem_is_locked(rmap_sem) || rwsem_is_write_locked(rmap_sem);
+}
+
 static inline void vma_set_anon_node(struct vm_area_struct *vma,
 		struct anon_node *anon_nod, bool is_locked)
 {
 	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
 
-	if (is_locked) {
+	if (is_locked || no_rmap_reader(rmap_sem)) {
 		vma->anon_vma = (struct anon_vma *)anon_nod;
 		return;
 	}
@@ -758,8 +837,22 @@ static int anon_node_add_child(struct anon_node *anon_nod,
 	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(root);
 	struct anon_node *rbc_ch = anon_nod, *next;
 
-	if (root->depth == 0)
+	if (root->depth == 0) {
+#ifdef CONFIG_ANON_VMA_SHARED_SEMS
+		struct anon_semaphore *root_sema = anon_root_sema_alloc();
+
+		if (!root_sema)
+			return -ENOMEM;
+		down_write(rmap_sem);
+		if (cmpxchg(&root->root_anon_sema, NULL, root_sema) != NULL)
+			anon_root_sema_free(root_sema);
 		root->depth = 1;
+		up_write(rmap_sem);
+#else
+		root->depth = 1;
+#endif
+	}
+
 	child = anon_node_alloc(vma, anon_nod, rmap_base, is_fork);
 	if (!child)
 		return -ENOMEM;
@@ -1025,14 +1118,34 @@ void vm_unlock_anon_node(struct anon_node *anon_nod)
 	}
 }
 
+static struct rw_semaphore *anon_node_lock_rmap_and_verify(
+		struct anon_node *anon_nod, bool trylock)
+{
+	struct anon_node *root = anon_nod->root;
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(root);
+
+	while (true) {
+		if (trylock) {
+			if (!down_read_trylock(rmap_sem))
+				return NULL;
+		} else {
+			down_read(rmap_sem);
+		}
+		if (rmap_sem == anon_node_rmap_sem(root))
+			return rmap_sem;
+		up_read(rmap_sem);
+		rmap_sem = anon_node_rmap_sem(root);
+	}
+}
+
 int anon_node_trylock_rmap(struct anon_node *anon_nod)
 {
-	return down_read_trylock(anon_node_rmap_sem(anon_nod));
+	return (bool)anon_node_lock_rmap_and_verify(anon_nod, true);
 }
 
 void anon_node_lock_rmap(struct anon_node *anon_nod)
 {
-	down_read(anon_node_rmap_sem(anon_nod));
+	anon_node_lock_rmap_and_verify(anon_nod, false);
 }
 
 void anon_node_unlock_rmap(struct anon_node *anon_nod)
@@ -1158,6 +1271,7 @@ struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 {
 	struct anon_vma *anon_vma = NULL;
 	struct anon_vma *root_anon_vma;
+	struct rw_semaphore *root_rwsem;
 	struct vm_area_struct *leaf_vma = NULL;
 	struct mm_struct *other_mm = NULL;
 	unsigned long anon_mapping;
@@ -1182,14 +1296,20 @@ struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 	if (unlikely(other_mm))
 		mmgrab(other_mm); /* put vma after unlock. */
 #endif
-	if (down_read_trylock(&root_anon_vma->rwsem)) {
+trylock_agian:
+	root_rwsem = anon_root_rmap_sem(root_anon_vma);
+	if (down_read_trylock(root_rwsem)) {
+		if (root_rwsem != anon_root_rmap_sem(root_anon_vma)) {
+			up_read(root_rwsem);
+			goto trylock_agian;
+		}
 		/*
 		 * If the folio is still mapped, then this anon_vma is still
 		 * its anon_vma, and holding the mutex ensures that it will
 		 * not go away, see anon_vma_free().
 		 */
 		if (!folio_mapped(folio)) {
-			up_read(&root_anon_vma->rwsem);
+			up_read(root_rwsem);
 			anon_vma = NULL;
 		}
 		goto out;

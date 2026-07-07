@@ -75,11 +75,16 @@ struct anon_vma {
 /* struct anon_node - Replace anon_vma for anonymous page reverse mapping. */
 struct anon_node {
 	struct anon_node *root;		/* Root of this anon_node fractal tree */
+#ifndef CONFIG_ANON_VMA_SHARED_SEMS
 	struct rw_semaphore rwsem;
 	atomic_t vm_lock_ref;		/* for vm_lock_anon_vma */
+#endif
 	atomic_t refcount;
 
-	struct anon_node *parent;	/* NULL if created by a page fault */
+	union {
+		struct anon_node *parent;		/* depth > 1 */
+		struct anon_semaphore *root_anon_sema;	/* depth == 1 */
+	};
 
 	/*
 	 * depth is initialized to 0. When a child is added, depth is set to 1.
