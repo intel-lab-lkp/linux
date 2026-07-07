@@ -2424,6 +2424,9 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	unsigned long pfn;
 	unsigned long hsz = 0;
 
+	if ((flags & TTU_RESPECT_MLOCK) && (vma->vm_flags & VM_LOCKED))
+		return false;
+
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
 	 * in between its ptep_get_and_clear_full() and folio_remove_rmap_*(),
@@ -2748,11 +2751,14 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 	};
 
 	/*
-	 * Migration always ignores mlock and only supports TTU_RMAP_LOCKED and
-	 * TTU_SPLIT_HUGE_PMD, TTU_SYNC, and TTU_BATCH_FLUSH flags.
+	 * Migration normally ignores mlock, but TTU_RESPECT_MLOCK asks it to
+	 * leave folios mapped into VM_LOCKED vmas alone.  Only TTU_RMAP_LOCKED,
+	 * TTU_SPLIT_HUGE_PMD, TTU_SYNC, TTU_BATCH_FLUSH and TTU_RESPECT_MLOCK
+	 * are supported.
 	 */
 	if (WARN_ON_ONCE(flags & ~(TTU_RMAP_LOCKED | TTU_SPLIT_HUGE_PMD |
-					TTU_SYNC | TTU_BATCH_FLUSH)))
+					TTU_SYNC | TTU_BATCH_FLUSH |
+					TTU_RESPECT_MLOCK)))
 		return;
 
 	if (folio_is_zone_device(folio) &&
