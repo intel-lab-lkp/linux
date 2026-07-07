@@ -2,6 +2,7 @@
 /* Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved. */
 
 #include <linux/init.h>
+#include <linux/export.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -278,6 +279,24 @@ void devlink_default_esw_mode_apply_pending_clear(struct devlink *devlink)
 
 	devlink->default_esw_mode_apply_pending = false;
 }
+
+/**
+ * devl_apply_default_esw_mode - Apply devlink eswitch mode boot default
+ * @devlink: devlink
+ *
+ * Apply the devlink eswitch mode selected by the devlink_eswitch_mode=
+ * kernel command line parameter, if any matches @devlink.
+ *
+ * The caller must hold the devlink instance lock.
+ */
+void devl_apply_default_esw_mode(struct devlink *devlink)
+{
+	devl_assert_locked(devlink);
+
+	devlink->default_esw_mode_apply_pending = false;
+	devlink_default_esw_mode_apply_locked(devlink);
+}
+EXPORT_SYMBOL_GPL(devl_apply_default_esw_mode);
 
 void devlink_default_esw_mode_instance_cleanup(struct devlink *devlink)
 {
