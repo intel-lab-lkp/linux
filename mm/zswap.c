@@ -1774,6 +1774,11 @@ void zswap_swp_tb_put_count(unsigned long swp_tb,
 	VM_WARN_ON_ONCE(count == 0);
 
 	if (count == SWP_TB_COUNT_MAX) {
+		if (!ci->extend_table) {
+			count--;
+			entry->swp_tb_val = __swp_tb_mk_count(entry->swp_tb_val, count);
+			return;
+		}
 		count = ci->extend_table[ci_off];
 		/* Overflow starts with SWP_TB_COUNT_MAX */
 		VM_WARN_ON_ONCE(count < SWP_TB_COUNT_MAX);
