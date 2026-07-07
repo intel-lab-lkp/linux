@@ -1105,6 +1105,9 @@ static int move_to_new_folio(struct folio *dst, struct folio *src,
 	VM_BUG_ON_FOLIO(!folio_test_locked(src), src);
 	VM_BUG_ON_FOLIO(!folio_test_locked(dst), dst);
 
+	if (unlikely(folio_contain_hwpoisoned_page(src)))
+		return -EHWPOISON;
+
 	if (!mapping)
 		rc = migrate_folio(mapping, dst, src, mode);
 	else if (mapping_inaccessible(mapping))
