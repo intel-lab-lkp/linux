@@ -21,6 +21,7 @@ use crate::{
         FalconFirmware, //
     },
     gpu,
+    gsp::boot_firmware_files,
     num::{
         FromSafeCast,
         IntoSafeCast, //
@@ -419,24 +420,20 @@ impl<const N: usize> ModInfoBuilder<N> {
     const fn make_entry_chipset(self, chipset: gpu::Chipset) -> Self {
         let name = chipset.name();
 
-        let this = self
+        // GSP firmware files are always present.
+        let mut this = self
             .make_entry_file(name, "bootloader")
             .make_entry_file(name, "gsp");
 
-        // FSP-based chipsets (Hopper, Blackwell and later) boot the GSP via the FMC image loaded by
-        // FSP. Older chipsets use the SEC2 booter instead.
-        let this = if chipset.uses_fsp() {
-            this.make_entry_file(name, "fmc")
-        } else {
-            this.make_entry_file(name, "booter_load")
-                .make_entry_file(name, "booter_unload")
-        };
-
-        if chipset.needs_fwsec_bootloader() {
-            this.make_entry_file(name, "gen_bootloader")
-        } else {
-            this
+        // Add the firmware files specific to the GSP boot method of `chipset`.
+        let boot_files = boot_firmware_files(chipset);
+        let mut i = 0;
+        while i < boot_files.len() {
+            this = this.make_entry_file(name, boot_files[i]);
+            i += 1;
         }
+
+        this
     }
 
     pub(crate) const fn create(

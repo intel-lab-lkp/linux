@@ -30,6 +30,7 @@ pub(crate) use fw::{
     GspFwWprMeta,
     LibosParams, //
 };
+pub(crate) use hal::boot_firmware_files;
 
 use crate::{
     driver::Bar0,
