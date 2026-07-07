@@ -393,6 +393,37 @@ static int rdtgroup_cpus_show(struct kernfs_open_file *of,
 }
 
 /*
+ * Display per-rdtgroup CPU bindings for kernel-mode enabled groups.
+ * Supports both "kmode_cpus" (bitmap format) and "kmode_cpus_list"
+ * (range list format); the output format is selected accordingly.
+ *
+ * Returns -ENOENT if the group has been deleted, and -ENODEV for
+ * pseudo-locked groups, which cannot host a kernel-mode binding.
+ */
+static int rdtgroup_kmode_cpus_show(struct kernfs_open_file *of,
+				    struct seq_file *s, void *v)
+{
+	struct rdtgroup *rdtgrp;
+	int ret = 0;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+
+	if (rdtgrp) {
+		if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED) {
+			ret = -ENODEV;
+		} else {
+			seq_printf(s, is_cpu_list(of) ? "%*pbl\n" : "%*pb\n",
+				   cpumask_pr_args(&rdtgrp->kmode_cpu_mask));
+		}
+	} else {
+		ret = -ENOENT;
+	}
+	rdtgroup_kn_unlock(of->kn);
+
+	return ret;
+}
+
+/*
  * Update the PGR_ASSOC MSR on all cpus in @cpu_mask,
  *
  * Per task closids/rmids must have been set up before calling this function.
@@ -2178,6 +2209,21 @@ static struct rftype res_common_files[] = {
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.write		= rdtgroup_cpus_write,
 		.seq_show	= rdtgroup_cpus_show,
+		.flags		= RFTYPE_FLAGS_CPUS_LIST,
+		.fflags		= RFTYPE_BASE,
+	},
+	{
+		.name		= "kmode_cpus",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdtgroup_kmode_cpus_show,
+		.fflags		= RFTYPE_BASE,
+	},
+	{
+		.name		= "kmode_cpus_list",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdtgroup_kmode_cpus_show,
 		.flags		= RFTYPE_FLAGS_CPUS_LIST,
 		.fflags		= RFTYPE_BASE,
 	},
