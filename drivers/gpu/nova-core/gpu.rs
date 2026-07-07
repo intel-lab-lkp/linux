@@ -22,6 +22,7 @@ use crate::{
         Falcon, //
     },
     fb::SysmemFlush,
+    fsp::Fsp,
     gsp::{
         self,
         commands::GetGspStaticInfoReply,
@@ -262,6 +263,10 @@ struct GspResources<'gpu> {
     gsp_falcon: Falcon<'gpu, GspFalcon>,
     /// SEC2 falcon instance, used for GSP boot up and cleanup.
     sec2_falcon: Falcon<'gpu, Sec2Falcon>,
+    /// FSP instance, if on an arch that supports it.
+    // TODO: use different resource types for each boot method, and make the relevant Gsp methods
+    // generic against them.
+    fsp: Option<Fsp<'gpu>>,
     /// GSP runtime data.
     #[pin]
     gsp: Gsp,
@@ -305,6 +310,7 @@ impl PinnedDrop for GspResources<'_> {
                     chipset: this.spec.chipset,
                     gsp_falcon: &*this.gsp_falcon,
                     sec2_falcon: &*this.sec2_falcon,
+                    fsp: this.fsp.as_mut(),
                 },
                 bundle,
             )
@@ -356,6 +362,8 @@ impl<'gpu> Gpu<'gpu> {
 
                 sec2_falcon: Falcon::new(dev, spec.chipset, bar)?,
 
+                fsp: Fsp::try_new(dev, bar, spec.chipset)?,
+
                 gsp <- Gsp::new(pdev),
 
                 // This member must be initialized last, so the `UnloadBundle` can never be dropped
@@ -367,6 +375,7 @@ impl<'gpu> Gpu<'gpu> {
                     chipset: spec.chipset,
                     gsp_falcon,
                     sec2_falcon,
+                    fsp: fsp.as_mut(),
                 })?,
             }),
 
