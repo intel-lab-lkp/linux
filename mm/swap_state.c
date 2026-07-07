@@ -283,6 +283,13 @@ static void __swap_cache_do_del_folio(struct swap_cluster_info *ci,
 		/* If shadow is NULL, we set an empty shadow. */
 		__swap_table_set(ci, ci_off, shadow_to_swp_tb(shadow,
 				 __swp_tb_get_flags(old_tb)));
+		/*
+		 * If zswap has a compressed copy of this slot, convert the
+		 * just-written Shadow to a Pointer entry referencing the
+		 * zswap_entry, so the data can be found via the swap table.
+		 */
+		zswap_try_convert_to_pointer(ci, ci_off, si->type,
+					     swp_offset(entry) + ci_off - ci_start);
 	} while (++ci_off < ci_end);
 
 	folio->swap.val = 0;

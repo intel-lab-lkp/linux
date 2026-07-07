@@ -211,6 +211,8 @@ static inline void swap_cluster_unlock_irq(struct swap_cluster_info *ci)
 extern int swap_retry_table_alloc(swp_entry_t entry, gfp_t gfp);
 
 #ifdef CONFIG_ZSWAP
+void zswap_try_convert_to_pointer(struct swap_cluster_info *ci,
+				  unsigned int ci_off, int type, pgoff_t offset);
 unsigned char zswap_swp_tb_get_count(unsigned long swp_tb);
 unsigned char zswap_swp_tb_get_flags(unsigned long swp_tb);
 int zswap_swp_tb_dup_count(unsigned long swp_tb,
@@ -218,6 +220,9 @@ int zswap_swp_tb_dup_count(unsigned long swp_tb,
 void zswap_swp_tb_put_count(unsigned long swp_tb,
 			    struct swap_cluster_info *ci, unsigned int ci_off);
 #else
+static inline void zswap_try_convert_to_pointer(struct swap_cluster_info *ci,
+						unsigned int ci_off, int type,
+						pgoff_t offset) {}
 static inline unsigned char zswap_swp_tb_get_count(unsigned long swp_tb)
 {
 	return 0;

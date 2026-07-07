@@ -1653,6 +1653,41 @@ void zswap_invalidate(swp_entry_t swp)
 }
 
 /*
+ * This is called after the Shadow entry has been written. We replace the
+ * just-written Shadow with a Pointer entry pointing to the zswap_entry.
+ *
+ * Context: cluster lock must be held. Cannot sleep.
+ */
+void zswap_try_convert_to_pointer(struct swap_cluster_info *ci,
+				  unsigned int ci_off, int type, pgoff_t offset)
+{
+	struct xarray *tree;
+	struct zswap_entry *entry;
+	unsigned long swp_tb;
+
+	tree = &zswap_trees[type][offset >> ZSWAP_ADDRESS_SPACE_SHIFT];
+	if (xa_empty(tree))
+		return;
+
+	entry = xa_load(tree, offset);
+	if (!entry)
+		return;
+
+	swp_tb = __swap_table_get(ci, ci_off);
+	/* Entry must be a Shadow (just written by __swap_cache_do_del_folio) */
+	if (!swp_tb_is_countable(swp_tb))
+		return;
+
+	/*
+	 * Save the complete original swap table entry value, which includes
+	 * the swap count, zero flag, and working set shadow information.
+	 */
+	entry->swp_tb_val = swp_tb;
+
+	__swap_table_set(ci, ci_off, pointer_to_swp_tb(entry));
+}
+
+/*
  * Read the swap count from a Pointer-type swap table entry. The count
  * and flags are stored in zswap_entry->swp_tb_val which preserves the
  * original swap table entry value (Shadow or PFN format).
