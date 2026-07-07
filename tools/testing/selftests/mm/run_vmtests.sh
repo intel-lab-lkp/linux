@@ -297,6 +297,7 @@ CATEGORY="hugetlb" run_test ./hugepage-mremap
 CATEGORY="hugetlb" run_test ./hugepage-vmemmap
 CATEGORY="hugetlb" run_test ./hugetlb-madvise
 CATEGORY="hugetlb" run_test ./hugetlb_dio
+CATEGORY="hugetlb" run_test ./hugetlb_surplus_mempolicy
 
 if [ "${HAVE_HUGEPAGES}" = "1" ]; then
 	nr_hugepages_tmp=$(cat /proc/sys/vm/nr_hugepages)
