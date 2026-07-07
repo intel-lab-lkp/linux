@@ -521,6 +521,18 @@ static inline u32 hfsplus_cat_thread_size(const struct hfsplus_cat_thread *threa
 	       be16_to_cpu(thread->nodeName.length) * sizeof(hfsplus_unichr);
 }
 
+static inline bool is_hfs_thread_record_type(u16 type)
+{
+	return type == HFSPLUS_FOLDER_THREAD || type == HFSPLUS_FILE_THREAD;
+}
+
+static inline bool is_hfsplus_cat_thread_name_length_valid(
+		const struct hfsplus_cat_thread *thread, u32 entrylength)
+{
+	return be16_to_cpu(thread->nodeName.length) <= HFSPLUS_MAX_STRLEN &&
+	       entrylength == hfsplus_cat_thread_size(thread);
+}
+
 int hfsplus_brec_read_cat(struct hfs_find_data *fd, hfsplus_cat_entry *entry);
 
 /*

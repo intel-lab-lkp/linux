@@ -322,8 +322,12 @@ int hfsplus_brec_read_cat(struct hfs_find_data *fd, hfsplus_cat_entry *entry)
 			pr_err("thread record too short (got %u)\n", fd->entrylength);
 			return -EIO;
 		}
-		expected_size = hfsplus_cat_thread_size(&entry->thread);
-		break;
+		if (!is_hfsplus_cat_thread_name_length_valid(&entry->thread,
+							     fd->entrylength)) {
+			pr_err("catalog thread name length corrupted\n");
+			return -EIO;
+		}
+		return 0;
 	default:
 		pr_err("unknown catalog record type %d\n",
 		       be16_to_cpu(entry->type));
