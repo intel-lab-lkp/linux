@@ -396,23 +396,25 @@ static bool panic_try_force_cpu(const char *fmt, va_list args)
 		return false;
 	}
 
-	/* Another panic already in progress */
-	if (panic_in_progress())
+	/* Bail only if a different CPU is already handling it. */
+	if (panic_in_progress() && atomic_read(&panic_cpu) != this_cpu)
 		return false;
 
-	/*
-	 * Only one CPU can do the redirect. Use atomic cmpxchg to ensure
-	 * we don't race with another CPU also trying to redirect.
-	 */
+	/* Which CPU won the race? */
 	if (!atomic_try_cmpxchg(&panic_redirect_cpu, &old_cpu, this_cpu))
-		return false;
+		return old_cpu != this_cpu;
 
 	/*
 	 * Use dynamically allocated buffer if available, otherwise
 	 * fall back to static message for early boot panics or allocation failure.
 	 */
 	if (panic_force_buf) {
-		vsnprintf(panic_force_buf, PANIC_MSG_BUFSZ, fmt, args);
+		va_list ap;
+
+		/* Do not consume args, the caller reuses it if we fail */
+		va_copy(ap, args);
+		vsnprintf(panic_force_buf, PANIC_MSG_BUFSZ, fmt, ap);
+		va_end(ap);
 		msg = panic_force_buf;
 	} else {
 		msg = "Redirected panic (buffer unavailable)";
@@ -437,6 +439,9 @@ static bool panic_try_force_cpu(const char *fmt, va_list args)
 			panic_force_cpu, this_cpu);
 		return false;
 	}
+
+	/* Hand panic_cpu to the target so it wins its own panic_try_start. */
+	atomic_set(&panic_cpu, panic_force_cpu);
 
 	/* IPI/NMI sent, this CPU should stop */
 	return true;
