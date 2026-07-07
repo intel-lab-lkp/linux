@@ -1891,6 +1891,90 @@ View the llc occupancy snapshot::
   11234000
 
 
+Examples on working with kernel_mode
+====================================
+
+The resctrl file, ``info/kernel_mode``, holds the global policy for
+resource allocation and monitoring of kernel work and the resource group
+(when applicable) associated with the policy. The bound group's
+``kmode_cpus`` and ``kmode_cpus_list`` files adjust the CPU scope for that
+binding when a global-assign policy is active.
+
+a. Check the kernel-mode policies supported by the platform.
+::
+
+  # mount -t resctrl resctrl /sys/fs/resctrl/
+
+  # cat /sys/fs/resctrl/info/kernel_mode
+  [inherit_ctrl_and_mon]
+  global_assign_ctrl_inherit_mon_per_cpu:group=uninitialized
+  global_assign_ctrl_assign_mon_per_cpu:group=uninitialized
+
+The "inherit_ctrl_and_mon" policy is active. Kernel work inherits the
+resource allocation and monitoring of the current user-space task.
+
+b. Create a CTRL_MON group and bind kernel-mode allocation to it.
+::
+
+  # mkdir /sys/fs/resctrl/ctrl1
+  # echo "global_assign_ctrl_inherit_mon_per_cpu:group=ctrl1//" > \
+        /sys/fs/resctrl/info/kernel_mode
+
+  # cat /sys/fs/resctrl/info/kernel_mode
+  inherit_ctrl_and_mon
+  [global_assign_ctrl_inherit_mon_per_cpu:group=ctrl1//]
+  global_assign_ctrl_assign_mon_per_cpu:group=uninitialized
+
+The "global_assign_ctrl_inherit_mon_per_cpu" policy globally assigns resource
+allocation for kernel work; monitoring is inherited from the user task.
+The group path format is "<ctrl>/<mon>/". A control group has no monitor
+group component, so it is written as "ctrl1//". When a global-assign policy is
+selected, the bound group's "kmode_cpus" and "kmode_cpus_list" files become
+visible.
+
+c. Restrict the kernel-mode binding to CPUs 0-3.
+::
+
+  # echo 0-3 > /sys/fs/resctrl/ctrl1/kmode_cpus_list
+  # cat /sys/fs/resctrl/ctrl1/kmode_cpus
+  f
+  # cat /sys/fs/resctrl/ctrl1/kmode_cpus_list
+  0-3
+
+The write updates the CPU scope incrementally. CPUs added to the mask have the
+kernel-mode association enabled, and CPUs removed from the mask have it
+disabled. The mask must not name offline CPUs.
+
+d. Bind kernel-mode allocation and monitoring to a monitor group.
+::
+
+  # mkdir /sys/fs/resctrl/ctrl1/mon_groups/mon1
+  # echo "global_assign_ctrl_assign_mon_per_cpu:group=ctrl1/mon1/" > \
+        /sys/fs/resctrl/info/kernel_mode
+
+  # cat /sys/fs/resctrl/info/kernel_mode
+  inherit_ctrl_and_mon
+  global_assign_ctrl_inherit_mon_per_cpu:group=uninitialized
+  [global_assign_ctrl_assign_mon_per_cpu:group=ctrl1/mon1/]
+
+The "global_assign_ctrl_assign_mon_per_cpu" policy assigns a dedicated
+resource allocation and monitoring for kernel work.  Rebinding through
+info/kernel_mode resets the CPU scope to all currently online CPUs, and
+the "kmode_cpus" and "kmode_cpus_list" files move from ctrl1 to mon1.
+
+e. Return to the default inherit mode.
+::
+
+  # echo "inherit_ctrl_and_mon" > /sys/fs/resctrl/info/kernel_mode
+  # cat /sys/fs/resctrl/info/kernel_mode
+  [inherit_ctrl_and_mon]
+  global_assign_ctrl_inherit_mon_per_cpu:group=uninitialized
+  global_assign_ctrl_assign_mon_per_cpu:group=uninitialized
+
+Switching back to "inherit_ctrl_and_mon" clears the active kernel-mode
+binding. The "kmode_cpus" and "kmode_cpus_list" files are hidden again because
+no rdtgroup owns kernel-mode.
+
 Examples on working with mbm_assign_mode
 ========================================
 
