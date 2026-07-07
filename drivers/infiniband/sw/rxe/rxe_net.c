@@ -19,10 +19,6 @@
 #include "rxe_loc.h"
 #include "rxe_ns.h"
 
-#ifndef SK_REF_FOR_TUNNEL
-#define SK_REF_FOR_TUNNEL	2
-#endif
-
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 /*
  * lockdep can detect false positive circular dependencies
@@ -81,9 +77,9 @@ static inline void rxe_reclassify_recv_socket(struct socket *sock)
 	 * from being called and 'rmmod rdma_rxe'
 	 * is refused because of the references.
 	 *
-	 * For the global sockets in recv_sockets,
-	 * we are sure that rxe_net_exit() will call
-	 * rxe_release_udp_tunnel -> udp_tunnel_sock_release.
+	 * For the shared per-namespace sockets, we are sure
+	 * that the pernet layer (rxe_ns_pernet_put_skX or
+	 * rxe_ns_exit) will call udp_tunnel_sock_release.
 	 *
 	 * So we don't need the additional reference to
 	 * our own (THIS_MODULE).
@@ -286,12 +282,6 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 	setup_udp_tunnel_sock(net, sock->sk, &tnl_cfg);
 
 	return sock;
-}
-
-static void rxe_release_udp_tunnel(struct sock *sk)
-{
-	if (sk)
-		udp_tunnel_sock_release(sk);
 }
 
 static void prepare_udp_hdr(struct sk_buff *skb, __be16 src_port,
@@ -620,6 +610,8 @@ int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 	if (!rxe)
 		return -ENOMEM;
 
+	rxe->net = dev_net(ndev);
+
 	ib_mark_name_assigned_by_user(&rxe->ib_dev);
 
 	err = rxe_add(rxe, ndev->mtu, ibdev_name, ndev);
@@ -631,40 +623,30 @@ int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 	return 0;
 }
 
-static void rxe_sock_put(struct sock *sk,
-					void (*set_sk)(struct net *, struct sock *),
-					struct net *net)
+void rxe_net_uninit(struct net_device *ndev)
 {
-	if (refcount_read(&sk->sk_refcnt) > SK_REF_FOR_TUNNEL) {
-		__sock_put(sk);
-	} else {
-		rxe_release_udp_tunnel(sk);
-		sk = NULL;
-		set_sk(net, sk);
-	}
+	struct net *net = dev_net(ndev);
+
+	rxe_ns_pernet_put_sk4(net);
+	rxe_ns_pernet_put_sk6(net);
 }
 
 void rxe_net_del(struct ib_device *dev)
 {
-	struct net_device *ndev;
-	struct sock *sk;
-	struct net *net;
+	struct rxe_dev *rxe = container_of(dev, struct rxe_dev, ib_dev);
 
-	ndev = ib_device_get_netdev(dev, 1);
-	if (!ndev)
+	/*
+	 * Both RDMA_NLDEV_CMD_DELLINK and the NETDEV_UNREGISTER notifier
+	 * can get here concurrently for the same device. Only the first
+	 * one drops the pernet socket references. Use the net recorded
+	 * at rxe_net_add() time: the ib_device to netdev association may
+	 * already be gone here, so the put must not depend on it.
+	 */
+	if (test_and_set_bit(RXE_NET_SK_PUT, &rxe->net_flags))
 		return;
 
-	net = dev_net(ndev);
-
-	sk = rxe_ns_pernet_sk4(net);
-	if (sk)
-		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
-
-	sk = rxe_ns_pernet_sk6(net);
-	if (sk)
-		rxe_sock_put(sk, rxe_ns_pernet_set_sk6, net);
-
-	dev_put(ndev);
+	rxe_ns_pernet_put_sk4(rxe->net);
+	rxe_ns_pernet_put_sk6(rxe->net);
 }
 
 static void rxe_port_event(struct rxe_dev *rxe,
@@ -753,52 +735,58 @@ static struct notifier_block rxe_net_notifier = {
 	.notifier_call = rxe_notify,
 };
 
-static int rxe_net_ipv4_init(struct net *net)
+static struct sock *rxe_create_sk4(struct net *net)
 {
-	struct sock *sk;
 	struct socket *sock;
-
-	sk = rxe_ns_pernet_sk4(net);
-	if (sk) {
-		sock_hold(sk);
-		return 0;
-	}
 
 	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), false);
 	if (IS_ERR(sock)) {
 		pr_err("Failed to create IPv4 UDP tunnel\n");
-		return -1;
+		return ERR_CAST(sock);
 	}
-	rxe_ns_pernet_set_sk4(net, sock->sk);
+
+	return sock->sk;
+}
+
+static int rxe_net_ipv4_init(struct net *net)
+{
+	struct sock *sk;
+
+	sk = rxe_ns_pernet_hold_sk4(net, rxe_create_sk4);
+	if (IS_ERR(sk))
+		return PTR_ERR(sk);
 
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_IPV6)
+static struct sock *rxe_create_sk6(struct net *net)
+{
+	struct socket *sock;
+
+	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), true);
+	if (PTR_ERR(sock) == -EAFNOSUPPORT) {
+		pr_warn("IPv6 is not supported, can not create a UDPv6 socket\n");
+		return NULL;
+	}
+
+	if (IS_ERR(sock)) {
+		pr_err("Failed to create IPv6 UDP tunnel\n");
+		return ERR_CAST(sock);
+	}
+
+	return sock->sk;
+}
+#endif
 
 static int rxe_net_ipv6_init(struct net *net)
 {
 #if IS_ENABLED(CONFIG_IPV6)
 	struct sock *sk;
-	struct socket *sock;
 
-	sk = rxe_ns_pernet_sk6(net);
-	if (sk) {
-		sock_hold(sk);
-		return 0;
-	}
-
-	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), true);
-	if (PTR_ERR(sock) == -EAFNOSUPPORT) {
-		pr_warn("IPv6 is not supported, can not create a UDPv6 socket\n");
-		return 0;
-	}
-
-	if (IS_ERR(sock)) {
-		pr_err("Failed to create IPv6 UDP tunnel\n");
-		return -1;
-	}
-
-	rxe_ns_pernet_set_sk6(net, sock->sk);
-
+	sk = rxe_ns_pernet_hold_sk6(net, rxe_create_sk6);
+	if (IS_ERR(sk))
+		return PTR_ERR(sk);
 #endif
 	return 0;
 }
@@ -824,7 +812,6 @@ void rxe_net_exit(void)
 int rxe_net_init(struct net_device *ndev)
 {
 	struct net *net;
-	struct sock *sk;
 	int err;
 
 	net = dev_net(ndev);
@@ -840,10 +827,8 @@ int rxe_net_init(struct net_device *ndev)
 	return 0;
 
 err_out:
-	/* If ipv6 error, release ipv4 resource */
-	sk = rxe_ns_pernet_sk4(net);
-	if (sk)
-		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
+	/* If ipv6 error, drop the ipv4 reference taken above. */
+	rxe_ns_pernet_put_sk4(net);
 
 	return err;
 }

@@ -13,6 +13,7 @@
 
 int rxe_net_add(const char *ibdev_name, struct net_device *ndev);
 void rxe_net_del(struct ib_device *dev);
+void rxe_net_uninit(struct net_device *ndev);
 
 int rxe_register_notifier(void);
 int rxe_net_init(struct net_device *ndev);
