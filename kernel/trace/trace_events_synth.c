@@ -828,7 +828,7 @@ static struct synth_field *parse_synth_field(int argc, char **argv,
 	} else if (size == 0) {
 		if (synth_field_is_string(field->type) ||
 		    synth_field_is_stack(field->type)) {
-			char *type;
+			char *type __free(kfree) = NULL;
 
 			len = sizeof("__data_loc ") + strlen(field->type) + 1;
 			type = kzalloc(len, GFP_KERNEL);
@@ -846,7 +846,7 @@ static struct synth_field *parse_synth_field(int argc, char **argv,
 			s.buffer[s.len] = '\0';
 
 			kfree(field->type);
-			field->type = type;
+			field->type = no_free_ptr(type);
 
 			field->is_dynamic = true;
 			size = sizeof(u64);
