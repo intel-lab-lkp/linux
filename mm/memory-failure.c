@@ -1822,18 +1822,17 @@ static inline struct llist_head *raw_hwp_list_head(struct folio *folio)
 	return (struct llist_head *)&folio->_hugetlb_hwpoison;
 }
 
-bool is_raw_hwpoison_page_in_hugepage(struct page *page)
+/*
+ * Check if a given @page in a hugetlb folio is HWPOISON.
+ */
+bool hugetlb_page_hwpoison(const struct folio *folio, const struct page *page)
 {
 	struct llist_head *raw_hwp_head;
 	struct raw_hwp_page *p;
-	struct folio *folio = page_folio(page);
 	bool ret = false;
 
 	if (!folio_test_hwpoison(folio))
 		return false;
-
-	if (!folio_test_hugetlb(folio))
-		return PageHWPoison(page);
 
 	/*
 	 * When RawHwpUnreliable is set, kernel lost track of which subpages
