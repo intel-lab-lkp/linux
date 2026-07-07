@@ -2469,6 +2469,7 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, bool force_link_train
 {
 	int ret = 0;
 	bool mainlink_ready = false;
+	bool stream_clk_enabled = false;
 	struct msm_dp_ctrl_private *ctrl;
 	unsigned long pixel_rate;
 	unsigned long pixel_rate_orig;
@@ -2514,6 +2515,7 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, bool force_link_train
 			goto end;
 		}
 		ctrl->stream_clks_on = true;
+		stream_clk_enabled = true;
 	}
 
 	if (force_link_train || !msm_dp_ctrl_channel_eq_ok(ctrl))
@@ -2543,13 +2545,17 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, bool force_link_train
 
 	ret = msm_dp_ctrl_wait4video_ready(ctrl);
 	if (ret)
-		return ret;
+		goto end;
 
 	mainlink_ready = msm_dp_ctrl_mainlink_ready(ctrl);
 	drm_dbg_dp(ctrl->drm_dev,
 		"mainlink %s\n", mainlink_ready ? "READY" : "NOT READY");
 
 end:
+	if (stream_clk_enabled && ret) {
+		clk_disable_unprepare(ctrl->pixel_clk);
+		ctrl->stream_clks_on = false;
+	}
 	return ret;
 }
 
