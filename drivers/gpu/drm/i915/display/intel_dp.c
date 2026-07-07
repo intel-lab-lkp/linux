@@ -6954,6 +6954,17 @@ static bool intel_edp_init_connector(struct intel_dp *intel_dp,
 
 	intel_alpm_init(intel_dp);
 
+	/*
+	 * If the connector has been forced off via the kernel cmdline
+	 * (e.g. video=eDP-1:d), skip DPCD/AUX probing.
+	 */
+	if (connector->base.force == DRM_FORCE_OFF) {
+		drm_info(display->drm,
+			 "[ENCODER:%d:%s] eDP disabled via cmdline, skipping eDP init\n",
+			 encoder->base.base.id, encoder->base.name);
+		goto out_vdd_off;
+	}
+
 	/* Cache DPCD and EDID for edp. */
 	has_dpcd = intel_edp_init_dpcd(intel_dp, connector);
 
