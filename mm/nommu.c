@@ -1222,9 +1222,16 @@ error_just_free:
 	up_write(&nommu_region_sem);
 error:
 	vma_iter_free(&vmi);
-	if (region->vm_file)
-		fput(region->vm_file);
-	kmem_cache_free(vm_region_jar, region);
+
+	/* if the error was from shared mapping/existing region, don't free the region  */
+	if (region->vm_usage == 1) {
+		if (region->vm_file)
+			fput(region->vm_file);
+		kmem_cache_free(vm_region_jar, region);
+
+	} else
+		region->vm_usage--;
+
 	if (vma->vm_file)
 		fput(vma->vm_file);
 	vm_area_free(vma);
@@ -1240,6 +1247,11 @@ error_vma_iter_prealloc:
 	up_write(&nommu_region_sem);
 	pr_warn("Failed vma_iter_prealloc()\n");
 	ret = -ENOMEM;
+
+	/* in case that the region is allocated via do_mmap_private() */
+	if ((region->vm_usage == 1) &&
+	    (!file || !(vma->vm_flags & VM_SHARED)))
+		free_page_series(region->vm_start, region->vm_top);
 	goto error;
 
 error_getting_vma:
