@@ -15,6 +15,7 @@
 #include <linux/printk.h>
 #include <linux/mm_types.h>
 #include <linux/set_memory.h>
+#include <linux/units.h>
 #include <linux/memblock.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -2042,7 +2043,8 @@ void __init snp_secure_tsc_init(void)
 	/* Extract the GUEST TSC MHZ from BIT[17:0], rest is reserved space */
 	tsc_freq_mhz &= GENMASK_ULL(17, 0);
 
-	snp_tsc_freq_khz = SNP_SCALE_TSC_FREQ(tsc_freq_mhz * 1000, secrets->tsc_factor);
+	snp_tsc_freq_khz = SNP_SCALE_TSC_FREQ(tsc_freq_mhz * KHZ_PER_MHZ,
+					      secrets->tsc_factor);
 
 	x86_platform.calibrate_cpu = securetsc_get_tsc_khz;
 	x86_platform.calibrate_tsc = securetsc_get_tsc_khz;
