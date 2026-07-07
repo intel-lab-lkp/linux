@@ -421,6 +421,15 @@ config SENSORS_MAX20860A_REGULATOR
 	  This enables the MAX20860A to be used as a regulator device,
 	  providing voltage control through the regulator framework.
 
+config SENSORS_MAX20912
+	tristate "Analog Devices MAX20912 and MAX20916"
+	help
+	  If you say yes here you get hardware monitoring support for Analog
+	  Devices MAX20912 and MAX20916 dual-output voltage regulators.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called max20912.
+
 config SENSORS_MAX31785
 	tristate "Maxim MAX31785 and compatibles"
 	help

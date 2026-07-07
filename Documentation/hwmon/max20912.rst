@@ -1,0 +1,156 @@
+.. SPDX-License-Identifier: GPL-2.0-or-later
+
+Kernel driver max20912
+======================
+
+Supported chips:
+
+  * Analog Devices MAX20912
+
+    Prefix: 'max20912'
+
+    Datasheet: Not publicly available
+
+  * Analog Devices MAX20916
+
+    Prefix: 'max20916'
+
+    Datasheet: Not publicly available
+
+Author:
+
+	Fred Chen <fredchen.openbmc@gmail.com>
+
+Description
+-----------
+
+This driver implements support for the Analog Devices MAX20912 and MAX20916
+high-density, flexible, and scalable dual-output multiphase voltage regulators.
+
+The MAX20912 supports up to 12 phases in total, configurable from 12+0 to
+6+6 phases between Rail A and Rail B.
+
+The MAX20916 supports up to 16 phases in total, configurable from 16+0 to
+8+8 phases between Rail A and Rail B.
+
+Device compliant with:
+
+- PMBus rev 1.3 interface.
+
+Both devices expose two independently regulated output voltage rails,
+Rail A and Rail B, using the VR12 VID interface. Each rail reports input
+current, output current, temperature, input power, and output power.
+Input voltage is reported on Rail A only.
+
+The driver exports the following attributes via the 'sysfs' files
+for input voltage:
+
+**in1_input**
+
+**in1_label**
+
+**in1_alarm**
+
+The driver provides the following attributes for output voltage:
+
+**in2_input**
+
+**in2_label**
+
+**in2_alarm**
+
+**in3_input**
+
+**in3_label**
+
+**in3_alarm**
+
+The driver provides the following attributes for input current:
+
+**curr1_input**
+
+**curr1_label**
+
+**curr1_max**
+
+**curr1_max_alarm**
+
+**curr2_input**
+
+**curr2_label**
+
+**curr2_max**
+
+**curr2_max_alarm**
+
+The driver provides the following attributes for output current:
+
+**curr3_input**
+
+**curr3_label**
+
+**curr3_max**
+
+**curr3_max_alarm**
+
+**curr3_crit**
+
+**curr3_crit_alarm**
+
+**curr4_input**
+
+**curr4_label**
+
+**curr4_max**
+
+**curr4_max_alarm**
+
+**curr4_crit**
+
+**curr4_crit_alarm**
+
+The driver provides the following attributes for temperature:
+
+**temp1_input**
+
+**temp1_max**
+
+**temp1_max_alarm**
+
+**temp1_crit**
+
+**temp1_crit_alarm**
+
+**temp2_input**
+
+**temp2_max**
+
+**temp2_max_alarm**
+
+**temp2_crit**
+
+**temp2_crit_alarm**
+
+The driver provides the following attributes for input power:
+
+**power1_input**
+
+**power1_label**
+
+**power1_alarm**
+
+**power2_input**
+
+**power2_label**
+
+**power2_alarm**
+
+The driver provides the following attributes for output power:
+
+**power3_input**
+
+**power3_label**
+
+**power4_input**
+
+**power4_label**
