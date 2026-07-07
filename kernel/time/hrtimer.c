@@ -1786,13 +1786,19 @@ EXPORT_SYMBOL_GPL(__hrtimer_get_remaining);
 ktime_t hrtimer_get_next_event(void)
 {
 	struct hrtimer_cpu_base *cpu_base = this_cpu_ptr(&hrtimer_bases);
-	ktime_t expires = KTIME_MAX;
+
+	/*
+	 * When HRES is active the caller (cmp_next_hrtimer_event()) expects
+	 * KTIME_MAX.  cpu_base->hres_active is written only by the local CPU
+	 * (hrtimer_switch_to_hres() from hardirq, hrtimers_cpu_starting()
+	 * during bring-up), and all callers reach this with IRQs disabled on
+	 * the same CPU, so an unlocked read is stable across the lock below.
+	 */
+	if (hrtimer_hres_active(cpu_base))
+		return KTIME_MAX;
 
 	guard(raw_spinlock_irqsave)(&cpu_base->lock);
-	if (!hrtimer_hres_active(cpu_base))
-		expires = __hrtimer_get_next_event(cpu_base, HRTIMER_ACTIVE_ALL);
-
-	return expires;
+	return __hrtimer_get_next_event(cpu_base, HRTIMER_ACTIVE_ALL);
 }
 
 /**
