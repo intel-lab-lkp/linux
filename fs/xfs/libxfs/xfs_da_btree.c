@@ -240,12 +240,18 @@ xfs_da3_node_verify(
 		return __this_address;
 
 	/*
-	 * we don't know if the node is for and attribute or directory tree,
-	 * so only fail if the count is outside both bounds
+	 * The block was read using either the attribute or the directory
+	 * geometry; its buffer size tells us which one, so bound the entry
+	 * count against that geometry's node_ents.  Only failing when the
+	 * count exceeds max(dir, attr) let a crafted attr node claim a
+	 * dir-sized count and overrun the smaller attr buffer.
 	 */
-	if (ichdr.count > mp->m_dir_geo->node_ents &&
-	    ichdr.count > mp->m_attr_geo->node_ents)
+	if (BBTOB(bp->b_length) == mp->m_attr_geo->blksize) {
+		if (ichdr.count > mp->m_attr_geo->node_ents)
+			return __this_address;
+	} else if (ichdr.count > mp->m_dir_geo->node_ents) {
 		return __this_address;
+	}
 
 	/* XXX: hash order check? */
 
