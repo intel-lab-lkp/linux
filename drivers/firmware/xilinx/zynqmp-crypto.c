@@ -236,3 +236,54 @@ int versal_pm_aes_init(void)
 	return zynqmp_pm_invoke_fn(XSECURE_API_AES_INIT, NULL, 0);
 }
 EXPORT_SYMBOL_GPL(versal_pm_aes_init);
+
+/**
+ * versal_pm_puf_registration - Invoke PUF registration through platform firmware
+ * @in_addr:	Physical address of the PUF parameter block
+ *
+ * Return:	Returns status from the firmware, or an error code.
+ */
+int versal_pm_puf_registration(const u64 in_addr)
+{
+	return zynqmp_pm_invoke_fn(XPUF_API_PUF_REGISTRATION, NULL, 2,
+				   lower_32_bits(in_addr),
+				   upper_32_bits(in_addr));
+}
+EXPORT_SYMBOL_GPL(versal_pm_puf_registration);
+
+/**
+ * versal_pm_puf_regeneration - Invoke PUF regeneration through platform firmware
+ * @in_addr:	Physical address of the PUF parameter block
+ *
+ * Return:	Returns status from the firmware, or an error code.
+ */
+int versal_pm_puf_regeneration(const u64 in_addr)
+{
+	return zynqmp_pm_invoke_fn(XPUF_API_PUF_REGENERATION, NULL, 2,
+				   lower_32_bits(in_addr),
+				   upper_32_bits(in_addr));
+}
+EXPORT_SYMBOL_GPL(versal_pm_puf_regeneration);
+
+/**
+ * versal_pm_puf_clear_id - Clear PUF ID via platform firmware
+ *
+ * Return:	Returns status from the firmware, or an error code.
+ */
+int versal_pm_puf_clear_id(void)
+{
+	return zynqmp_pm_invoke_fn(XPUF_API_PUF_CLEAR_PUF_ID, NULL, 0);
+}
+EXPORT_SYMBOL_GPL(versal_pm_puf_clear_id);
+
+/**
+ * versal_pm_puf_key_zero - Zero the PUF-derived KEK in the AES engine
+ *
+ * Return:	Returns status from the firmware, or an error code.
+ */
+int versal_pm_puf_key_zero(void)
+{
+	return zynqmp_pm_invoke_fn(XSECURE_API_AES_KEY_ZERO, NULL, 1,
+				   XSECURE_AES_PUF_KEY_SRC);
+}
+EXPORT_SYMBOL_GPL(versal_pm_puf_key_zero);

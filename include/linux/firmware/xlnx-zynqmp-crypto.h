@@ -32,6 +32,12 @@ struct xlnx_feature {
 #define XSECURE_API_AES_DECRYPT_FINAL	0x50f
 #define XSECURE_API_AES_KEY_ZERO	0x510
 #define XSECURE_API_AES_WRITE_KEY	0x511
+#define XSECURE_AES_PUF_KEY_SRC		0xb
+
+/* XilPuf API commands module id + api id */
+#define XPUF_API_PUF_REGISTRATION	0xc01
+#define XPUF_API_PUF_REGENERATION	0xc02
+#define XPUF_API_PUF_CLEAR_PUF_ID	0xc03
 
 #if IS_REACHABLE(CONFIG_ZYNQMP_FIRMWARE)
 int zynqmp_pm_aes_engine(const u64 address, u32 *out);
@@ -47,6 +53,10 @@ int versal_pm_aes_dec_update(const u64 in_params, const u64 in_addr);
 int versal_pm_aes_dec_final(const u64 gcm_addr);
 int versal_pm_aes_enc_final(const u64 gcm_addr);
 int versal_pm_aes_init(void);
+int versal_pm_puf_registration(const u64 in_addr);
+int versal_pm_puf_regeneration(const u64 in_addr);
+int versal_pm_puf_clear_id(void);
+int versal_pm_puf_key_zero(void);
 
 #else
 static inline int zynqmp_pm_aes_engine(const u64 address, u32 *out)
@@ -110,6 +120,26 @@ static inline int versal_pm_aes_dec_final(const u64 gcm_addr)
 }
 
 static inline int versal_pm_aes_init(void)
+{
+	return -ENODEV;
+}
+
+static inline int versal_pm_puf_registration(const u64 in_addr)
+{
+	return -ENODEV;
+}
+
+static inline int versal_pm_puf_regeneration(const u64 in_addr)
+{
+	return -ENODEV;
+}
+
+static inline int versal_pm_puf_clear_id(void)
+{
+	return -ENODEV;
+}
+
+static inline int versal_pm_puf_key_zero(void)
 {
 	return -ENODEV;
 }
