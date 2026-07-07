@@ -84,6 +84,7 @@
 #include "internal.h"
 #include "swap.h"
 
+#ifndef CONFIG_ANON_VMA_FRACTAL
 static struct kmem_cache *anon_vma_cachep;
 static struct kmem_cache *anon_vma_chain_cachep;
 
@@ -558,7 +559,16 @@ void __init anon_vma_init(void)
 			SLAB_PANIC|SLAB_ACCOUNT);
 }
 
-#ifdef CONFIG_ANON_VMA_FRACTAL
+void __put_anon_vma(struct anon_vma *anon_vma)
+{
+	struct anon_vma *root = anon_vma->root;
+
+	anon_vma_free(anon_vma);
+	if (root != anon_vma && atomic_dec_and_test(&root->refcount))
+		anon_vma_free(root);
+}
+
+#else
 
 static struct kmem_cache *anon_node_cachep;
 
@@ -581,7 +591,7 @@ static void anon_node_ctor(void *data)
 	atomic_set(&anon_nod->refcount, 0);
 }
 
-static inline void anon_vma_fractal_init(void)
+void __init anon_vma_init(void)
 {
 	struct kmem_cache_args args = {
 		.use_freeptr_offset = true,
@@ -619,6 +629,11 @@ void __put_anon_node(struct anon_node *anon_nod)
 	anon_node_free(anon_nod);
 	if (root != anon_nod && atomic_dec_and_test(&root->refcount))
 		anon_node_free(root);
+}
+
+static inline void __put_anon_vma(struct anon_vma *anon_vma)
+{
+	__put_anon_node((struct anon_node *)(anon_vma));
 }
 
 static inline struct anon_node *anon_node_alloc(struct vm_area_struct *vma,
@@ -679,7 +694,7 @@ static bool try_reuse_anon_node(struct anon_node *anon_nod,
 }
 
 /* attach an anon_node to the VMA. */
-int __anon_node_prepare(struct vm_area_struct *vma)
+int __anon_vma_prepare(struct vm_area_struct *vma)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long rmap_base = vma_rmap_base(vma);
@@ -785,7 +800,7 @@ static int anon_node_track_rmap(struct anon_node *anon_nod,
 }
 
 /* vma clones src anon_node and increments the count. */
-int anon_node_clone(struct vm_area_struct *vma,  struct vm_area_struct *src,
+int anon_vma_clone(struct vm_area_struct *vma,  struct vm_area_struct *src,
 	enum vma_operation operation)
 {
 	struct anon_node *anon_nod = vma_anon_node(src);
@@ -827,7 +842,7 @@ static struct anon_node *fork_reuse_ancestor(struct anon_node *parent,
 }
 
 /* Clone an anon_node from prev or fork one from the parent pvma. */
-int anon_node_fork_with_prev(struct vm_area_struct *vma,
+int anon_vma_fork_with_prev(struct vm_area_struct *vma,
 	struct vm_area_struct *pvma, struct vm_area_struct *prev,
 	struct vm_area_struct *pvma_prev)
 {
@@ -921,7 +936,7 @@ static void release_anon_nodes(struct anon_node *anon_nod)
 }
 
 /* Remove link between this VMA and its anon_node. */
-void unlink_anon_nodes(struct vm_area_struct *vma)
+void unlink_anon_vmas(struct vm_area_struct *vma)
 {
 	struct anon_node *anon_nod = vma_anon_node(vma);
 	struct rw_semaphore *rmap_sem;
@@ -3375,15 +3390,6 @@ retry:
 EXPORT_SYMBOL_GPL(make_device_exclusive);
 #endif
 
-void __put_anon_vma(struct anon_vma *anon_vma)
-{
-	struct anon_vma *root = anon_vma->root;
-
-	anon_vma_free(anon_vma);
-	if (root != anon_vma && atomic_dec_and_test(&root->refcount))
-		anon_vma_free(root);
-}
-
 static struct anon_vma *rmap_walk_anon_lock(const struct folio *folio,
 					    struct rmap_walk_control *rwc)
 {
@@ -3431,7 +3437,6 @@ static void rmap_walk_anon(struct folio *folio,
 {
 	struct anon_vma *anon_vma;
 	pgoff_t pgoff_start, pgoff_end;
-	struct anon_vma_chain *avc;
 
 	/*
 	 * The folio lock ensures that folio->mapping can't be changed under us
@@ -3451,9 +3456,7 @@ static void rmap_walk_anon(struct folio *folio,
 
 	pgoff_start = folio_pgoff(folio);
 	pgoff_end = pgoff_start + folio_nr_pages(folio) - 1;
-	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
-			pgoff_start, pgoff_end) {
-		struct vm_area_struct *vma = avc->vma;
+	ANON_RMAP_FOREACH_VMA(anon_vma, 0, pgoff_start, pgoff_end, ({
 		unsigned long address = vma_address(vma, pgoff_start,
 				folio_nr_pages(folio));
 
@@ -3467,7 +3470,7 @@ static void rmap_walk_anon(struct folio *folio,
 			break;
 		if (rwc->done && rwc->done(folio))
 			break;
-	}
+	}));
 
 	if (!locked)
 		anon_vma_unlock_read(anon_vma);

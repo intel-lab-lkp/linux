@@ -134,7 +134,9 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 		return NULL;
 	}
 	vma_lock_init(new, true);
+#ifndef CONFIG_ANON_VMA_FRACTAL
 	INIT_LIST_HEAD(&new->anon_vma_chain);
+#endif
 	vma_numab_state_init(new);
 	dup_anon_vma_name(orig, new);
 

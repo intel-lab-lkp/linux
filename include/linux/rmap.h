@@ -15,6 +15,7 @@
 #include <linux/memremap.h>
 #include <linux/bit_spinlock.h>
 
+#ifndef CONFIG_ANON_VMA_FRACTAL
 /*
  * The anon_vma heads a list of private "related" vmas, to scan if
  * an anonymous page pointing to this anon_vma needs to be unmapped:
@@ -67,7 +68,9 @@ struct anon_vma {
 	struct rb_root_cached rb_root;
 };
 
-#ifdef CONFIG_ANON_VMA_FRACTAL
+#else
+
+#define anon_node anon_vma
 
 /* struct anon_node - Replace anon_vma for anonymous page reverse mapping. */
 struct anon_node {

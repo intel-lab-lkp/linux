@@ -1730,7 +1730,8 @@ bool mmap_read_lock_maybe_expand(struct mm_struct *mm,
 
 __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 {
-	struct vm_area_struct *mpnt, *tmp;
+	struct vm_area_struct *mpnt = NULL, *tmp = NULL;
+	struct vm_area_struct *prev = NULL, *tmp_prev = NULL;
 	int retval;
 	unsigned long charge = 0;
 	LIST_HEAD(uf);
@@ -1759,7 +1760,7 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 		goto out;
 
 	mt_clear_in_rcu(vmi.mas.tree);
-	for_each_vma(vmi, mpnt) {
+	for ( ; (mpnt = vma_next(&vmi)) != NULL; prev = mpnt, tmp_prev = tmp) {
 		struct file *file;
 
 		retval = vma_start_write_killable(mpnt);
@@ -1800,7 +1801,7 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 			 * copy page for current vma.
 			 */
 			tmp->anon_vma = NULL;
-		} else if (anon_vma_fork(tmp, mpnt))
+		} else if (anon_vma_fork_with_prev(tmp, mpnt, tmp_prev, prev))
 			goto fail_nomem_anon_vma_fork;
 		vm_flags_clear(tmp, VM_LOCKED_MASK);
 		/*

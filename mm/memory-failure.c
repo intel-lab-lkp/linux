@@ -557,21 +557,17 @@ static void collect_procs_anon(const struct folio *folio,
 	pgoff = page_pgoff(folio, page);
 	rcu_read_lock();
 	for_each_process(tsk) {
-		struct vm_area_struct *vma;
-		struct anon_vma_chain *vmac;
 		struct task_struct *t = task_early_kill(tsk, force_early);
 		unsigned long addr;
 
 		if (!t)
 			continue;
-		anon_vma_interval_tree_foreach(vmac, &av->rb_root,
-					       pgoff, pgoff) {
-			vma = vmac->vma;
+		ANON_RMAP_FOREACH_VMA(av, 0, pgoff, pgoff, ({
 			if (vma->vm_mm != t->mm)
 				continue;
 			addr = page_mapped_in_vma(page, vma);
 			add_to_kill_anon_file(t, page, vma, to_kill, addr);
-		}
+		}));
 	}
 	rcu_read_unlock();
 	anon_vma_unlock_read(av);

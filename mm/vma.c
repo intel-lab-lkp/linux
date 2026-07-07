@@ -78,7 +78,11 @@ static bool vma_is_fork_child(struct vm_area_struct *vma)
 	 * parents. This can improve scalability caused by the anon_vma root
 	 * lock.
 	 */
+#ifndef CONFIG_ANON_VMA_FRACTAL
 	return vma && vma->anon_vma && !list_is_singular(&vma->anon_vma_chain);
+#else
+	return vma && vma->anon_vma && vma->anon_vma->depth > 1;
+#endif
 }
 
 static inline bool is_mergeable_vma(struct vma_merge_struct *vmg, bool merge_next)

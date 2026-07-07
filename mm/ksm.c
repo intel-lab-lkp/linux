@@ -3174,8 +3174,6 @@ again:
 		/* Ignore the stable/unstable/sqnr flags */
 		const unsigned long addr = rmap_item->address & PAGE_MASK;
 		struct anon_vma *anon_vma = rmap_item->anon_vma;
-		struct anon_vma_chain *vmac;
-		struct vm_area_struct *vma;
 
 		cond_resched();
 		if (!anon_vma_trylock_read(anon_vma)) {
@@ -3186,11 +3184,8 @@ again:
 			anon_vma_lock_read(anon_vma);
 		}
 
-		anon_vma_interval_tree_foreach(vmac, &anon_vma->rb_root,
-					       0, ULONG_MAX) {
-
+		ANON_RMAP_FOREACH_VMA(anon_vma, addr, 0, ULONG_MAX, ({
 			cond_resched();
-			vma = vmac->vma;
 
 			if (addr < vma->vm_start || addr >= vma->vm_end)
 				continue;
@@ -3214,7 +3209,7 @@ again:
 				anon_vma_unlock_read(anon_vma);
 				return;
 			}
-		}
+		}));
 		anon_vma_unlock_read(anon_vma);
 	}
 	if (!search_new_forks++)
@@ -3230,7 +3225,6 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 {
 	struct ksm_stable_node *stable_node;
 	struct ksm_rmap_item *rmap_item;
-	struct vm_area_struct *vma;
 	struct task_struct *tsk;
 
 	stable_node = folio_stable_node(folio);
@@ -3242,22 +3236,19 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 		anon_vma_lock_read(av);
 		rcu_read_lock();
 		for_each_process(tsk) {
-			struct anon_vma_chain *vmac;
 			unsigned long addr;
 			struct task_struct *t =
 				task_early_kill(tsk, force_early);
 			if (!t)
 				continue;
-			anon_vma_interval_tree_foreach(vmac, &av->rb_root, 0,
-						       ULONG_MAX)
-			{
-				vma = vmac->vma;
+			ANON_RMAP_FOREACH_VMA(av, rmap_item->address,
+					0, ULONG_MAX, ({
 				if (vma->vm_mm == t->mm) {
 					addr = rmap_item->address & PAGE_MASK;
 					add_to_kill_ksm(t, page, vma, to_kill,
 							addr);
 				}
-			}
+			}));
 		}
 		rcu_read_unlock();
 		anon_vma_unlock_read(av);
