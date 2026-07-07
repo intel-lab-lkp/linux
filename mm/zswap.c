@@ -38,6 +38,7 @@
 #include <linux/zsmalloc.h>
 
 #include "swap.h"
+#include "swap_table.h"
 #include "internal.h"
 
 /*********************************
@@ -182,6 +183,10 @@ static struct shrinker *zswap_shrinker;
  *              writeback logic. The entry is only reclaimed by the writeback
  *              logic if referenced is unset. See comments in the shrinker
  *              section for context.
+ * swp_tb_val - the original swap table entry value saved when this zswap_entry
+ *              replaced a Shadow or PFN entry. It preserves the swap count,
+ *              zero flag, and working set shadow information (SHADOW_VAL)
+ *              that the Shadow entry carried.
  * pool - the zswap_pool the entry's data is in
  * handle - zsmalloc allocation handle that stores the compressed page data
  * objcg - the obj_cgroup that the compressed memory is charged to
@@ -191,6 +196,7 @@ struct zswap_entry {
 	swp_entry_t swpentry;
 	unsigned int length;
 	bool referenced;
+	unsigned long swp_tb_val;
 	struct zswap_pool *pool;
 	unsigned long handle;
 	struct obj_cgroup *objcg;
@@ -1644,6 +1650,87 @@ void zswap_invalidate(swp_entry_t swp)
 	entry = xa_erase(tree, offset);
 	if (entry)
 		zswap_entry_free(entry);
+}
+
+/*
+ * Read the swap count from a Pointer-type swap table entry. The count
+ * and flags are stored in zswap_entry->swp_tb_val which preserves the
+ * original swap table entry value (Shadow or PFN format).
+ */
+unsigned char zswap_swp_tb_get_count(unsigned long swp_tb)
+{
+	struct zswap_entry *entry = swp_tb_to_pointer(swp_tb);
+
+	return __swp_tb_get_count(entry->swp_tb_val);
+}
+
+/*
+ * Read the flags from a Pointer-type swap table entry.
+ */
+unsigned char zswap_swp_tb_get_flags(unsigned long swp_tb)
+{
+	struct zswap_entry *entry = swp_tb_to_pointer(swp_tb);
+
+	return __swp_tb_get_flags(entry->swp_tb_val);
+}
+
+/*
+ * Increment the swap count of a Pointer-type swap table entry.
+ * The count is stored in zswap_entry->swp_tb_val for counts below
+ * SWP_TB_COUNT_MAX, and overflows into the cluster's extend_table
+ * just like normal Shadow/PFN entries do.  Returns 0 on success,
+ * -ENOMEM if count would overflow and no extend_table is available.
+ */
+int zswap_swp_tb_dup_count(unsigned long swp_tb,
+			   struct swap_cluster_info *ci, unsigned int ci_off)
+{
+	struct zswap_entry *entry = swp_tb_to_pointer(swp_tb);
+	unsigned char count = __swp_tb_get_count(entry->swp_tb_val);
+
+	if (count < SWP_TB_COUNT_MAX) {
+		entry->swp_tb_val = __swp_tb_mk_count(entry->swp_tb_val,
+						      count + 1);
+		return 0;
+	}
+	/* count == MAX, overflow into extend_table */
+	if (!ci->extend_table)
+		return -ENOMEM;
+	count = ci->extend_table[ci_off];
+	if (count == 0)
+		count = SWP_TB_COUNT_MAX;
+	count++;
+	ci->extend_table[ci_off] = count;
+	return 0;
+}
+
+/*
+ * Decrement the swap count of a Pointer-type swap table entry.
+ * Handles both inline count (in swp_tb_val) and overflowed count
+ * (in ci->extend_table), matching the logic used by normal entries.
+ */
+void zswap_swp_tb_put_count(unsigned long swp_tb,
+			    struct swap_cluster_info *ci, unsigned int ci_off)
+{
+	struct zswap_entry *entry = swp_tb_to_pointer(swp_tb);
+	unsigned char count = __swp_tb_get_count(entry->swp_tb_val);
+
+	VM_WARN_ON_ONCE(count == 0);
+
+	if (count == SWP_TB_COUNT_MAX) {
+		count = ci->extend_table[ci_off];
+		/* Overflow starts with SWP_TB_COUNT_MAX */
+		VM_WARN_ON_ONCE(count < SWP_TB_COUNT_MAX);
+		count--;
+		if (count == (SWP_TB_COUNT_MAX - 1)) {
+			ci->extend_table[ci_off] = 0;
+			entry->swp_tb_val = __swp_tb_mk_count(entry->swp_tb_val,
+							      count);
+		} else {
+			ci->extend_table[ci_off] = count;
+		}
+		return;
+	}
+	entry->swp_tb_val = __swp_tb_mk_count(entry->swp_tb_val, count - 1);
 }
 
 int zswap_swapon(int type, unsigned long nr_pages)
