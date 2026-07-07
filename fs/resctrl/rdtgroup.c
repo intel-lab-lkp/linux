@@ -1128,6 +1128,35 @@ out_unlock:
 }
 
 /**
+ * resctrl_kmode_files_set_visible() - Toggle visibility of the per-group
+ *		kernel-mode CPU files under @rdtgrp.
+ * @rdtgrp:	Resctrl group whose "kmode_cpus" / "kmode_cpus_list" files
+ *		should be hidden or shown.
+ * @visible:	%true to expose the files, %false to hide them via
+ *		kernfs_show().
+ *
+ * Each file is resolved independently as a sibling under @rdtgrp->kn.
+ * Failures from kernfs_find_and_get() are deliberately ignored, allowing
+ * callers to invoke this before activation, during group creation, or when
+ * the kernel-mode binding is updated.
+ */
+static void resctrl_kmode_files_set_visible(struct rdtgroup *rdtgrp, bool visible)
+{
+	/* Keep in sync with res_common_files[] entries for these files. */
+	static const char * const files[] = { "kmode_cpus", "kmode_cpus_list" };
+	struct kernfs_node *kn;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(files); i++) {
+		kn = kernfs_find_and_get(rdtgrp->kn, files[i]);
+		if (!kn)
+			continue;
+		kernfs_show(kn, visible);
+		kernfs_put(kn);
+	}
+}
+
+/**
  * rdtgroup_config_kmode_reset() - Tear down the kernel-mode binding on @rdtgrp
  * @rdtgrp:	Resctrl group whose kernel-mode binding is being released.
  *		May be %NULL when no group is currently bound, in which case
@@ -1155,6 +1184,7 @@ static void rdtgroup_config_kmode_reset(struct rdtgroup *rdtgrp,
 
 out_clear:
 	cpumask_clear(&rdtgrp->kmode_cpu_mask);
+	resctrl_kmode_files_set_visible(rdtgrp, false);
 	rdtgrp->kmode = false;
 }
 
@@ -3068,6 +3098,7 @@ static int rdt_get_tree(struct fs_context *fc)
 	if (ret)
 		goto out_closid_exit;
 
+	resctrl_kmode_files_set_visible(&rdtgroup_default, false);
 	kernfs_activate(rdtgroup_default.kn);
 
 	ret = rdtgroup_create_info_dir(rdtgroup_default.kn);
@@ -4098,6 +4129,7 @@ static int rdtgroup_mkdir_mon(struct kernfs_node *parent_kn,
 		goto out_unlock;
 	}
 
+	resctrl_kmode_files_set_visible(rdtgrp, false);
 	kernfs_activate(rdtgrp->kn);
 
 	/*
@@ -4142,6 +4174,7 @@ static int rdtgroup_mkdir_ctrl_mon(struct kernfs_node *parent_kn,
 	if (ret)
 		goto out_closid_free;
 
+	resctrl_kmode_files_set_visible(rdtgrp, false);
 	kernfs_activate(rdtgrp->kn);
 
 	ret = rdtgroup_init_alloc(rdtgrp);
