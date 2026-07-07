@@ -6,6 +6,7 @@
 #define _TRACE_MIGRATE_H
 
 #include <linux/tracepoint.h>
+#include <trace/events/mmflags.h>
 
 #define MIGRATE_MODE						\
 	EM( MIGRATE_ASYNC,	"MIGRATE_ASYNC")		\
@@ -135,6 +136,34 @@ DECLARE_EVENT_CLASS(migration_pte,
 DEFINE_EVENT(migration_pte, set_migration_pte,
 	TP_PROTO(unsigned long addr, unsigned long pte, int order),
 	TP_ARGS(addr, pte, order)
+);
+
+TRACE_EVENT(mm_migrate_unmap_folio,
+
+	TP_PROTO(unsigned long pfn, unsigned long addr,
+		 unsigned long page_flags, unsigned long vm_flags),
+
+	TP_ARGS(pfn, addr, page_flags, vm_flags),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, pfn)
+		__field(unsigned long, addr)
+		__field(unsigned long, page_flags)
+		__field(unsigned long, vm_flags)
+	),
+
+	TP_fast_assign(
+		__entry->pfn		= pfn;
+		__entry->addr		= addr;
+		__entry->page_flags	= page_flags;
+		__entry->vm_flags	= vm_flags;
+	),
+
+	TP_printk("pfn=0x%lx addr=0x%lx page_flags=%s vm_flags=%s",
+		__entry->pfn,
+		__entry->addr,
+		show_page_flags(__entry->page_flags & PAGEFLAGS_MASK),
+		show_vma_flags(__entry->vm_flags))
 );
 
 DEFINE_EVENT(migration_pte, remove_migration_pte,

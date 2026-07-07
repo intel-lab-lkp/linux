@@ -2723,6 +2723,10 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			hugetlb_remove_rmap(folio);
 		else
 			folio_remove_rmap_pte(folio, subpage, vma);
+
+		trace_mm_migrate_unmap_folio(folio_pfn(folio), address,
+					     folio->flags.f, vma->vm_flags);
+
 		if (vma->vm_flags & VM_LOCKED)
 			mlock_drain_local();
 		folio_put(folio);
