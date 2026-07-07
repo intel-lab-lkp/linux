@@ -842,4 +842,6 @@ void phylink_replay_link_begin(struct phylink *pl);
 
 void phylink_replay_link_end(struct phylink *pl);
 
+void phylink_set_mac_capabilities(struct phylink *pl, unsigned long mac_capabilities);
+
 #endif

@@ -1829,6 +1829,72 @@ int phylink_set_fixed_link(struct phylink *pl,
 EXPORT_SYMBOL_GPL(phylink_set_fixed_link);
 
 /**
+ * phylink_set_mac_capabilities() - Dynamically update MAC capabilities
+ * @pl: a pointer to a &struct phylink returned from phylink_create()
+ * @mac_capabilities: the new MAC capabilities mask
+ *
+ * This function allows a MAC driver to dynamically change its capabilities,
+ * such as losing/gaining Pause frame support based on MTU size.
+ * It recalculates supported link modes and triggers renegotiation if needed.
+ */
+void phylink_set_mac_capabilities(struct phylink *pl, unsigned long mac_capabilities)
+{
+	struct phylink_link_state *config = &pl->link_config;
+	unsigned long caps_added, caps_removed;
+
+	ASSERT_RTNL();
+
+	caps_added = mac_capabilities & ~pl->config->mac_capabilities;
+	caps_removed = pl->config->mac_capabilities & ~mac_capabilities;
+
+	if (!caps_added && !caps_removed)
+		return;
+
+	mutex_lock(&pl->state_mutex);
+
+	pl->config->mac_capabilities = mac_capabilities;
+
+	if (caps_removed & MAC_SYM_PAUSE)
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_Pause_BIT, pl->supported);
+	if (caps_removed & MAC_ASYM_PAUSE)
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, pl->supported);
+
+	linkmode_and(config->advertising, config->advertising, pl->supported);
+
+	if (caps_added & MAC_SYM_PAUSE) {
+		linkmode_set_bit(ETHTOOL_LINK_MODE_Pause_BIT, pl->supported);
+		if (pl->phydev && !phylink_test(pl->phydev->supported, Pause))
+			linkmode_clear_bit(ETHTOOL_LINK_MODE_Pause_BIT, pl->supported);
+	}
+	if (caps_added & MAC_ASYM_PAUSE) {
+		linkmode_set_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, pl->supported);
+		if (pl->phydev && !phylink_test(pl->phydev->supported, Asym_Pause))
+			linkmode_clear_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, pl->supported);
+	}
+
+	linkmode_and(config->advertising, config->advertising, pl->supported);
+
+	if (config->pause & MLO_PAUSE_AN) {
+		if (phylink_test(pl->supported, Pause))
+			linkmode_set_bit(ETHTOOL_LINK_MODE_Pause_BIT, config->advertising);
+
+		if (phylink_test(pl->supported, Asym_Pause))
+			linkmode_set_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, config->advertising);
+	}
+
+	if (!pl->phydev)
+		phylink_change_inband_advert(pl);
+
+	mutex_unlock(&pl->state_mutex);
+
+	if (pl->phydev) {
+		linkmode_copy(pl->phydev->advertising, config->advertising);
+		phy_start_aneg(pl->phydev);
+	}
+}
+EXPORT_SYMBOL_GPL(phylink_set_mac_capabilities);
+
+/**
  * phylink_create() - create a phylink instance
  * @config: a pointer to the target &struct phylink_config
  * @fwnode: a pointer to a &struct fwnode_handle describing the network
