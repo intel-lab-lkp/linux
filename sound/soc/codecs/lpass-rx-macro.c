@@ -3863,8 +3863,13 @@ static int rx_macro_probe(struct platform_device *pdev)
 	rx->dev = dev;
 
 	/* set MCLK and NPL rates */
-	clk_set_rate(rx->mclk, MCLK_FREQ);
-	clk_set_rate(rx->npl, MCLK_FREQ);
+	ret = clk_set_rate(rx->mclk, MCLK_FREQ);
+	if (ret)
+		return ret;
+
+	ret = clk_set_rate(rx->npl, MCLK_FREQ);
+	if (ret)
+		return ret;
 
 	ret = devm_pm_clk_create(dev);
 	if (ret)

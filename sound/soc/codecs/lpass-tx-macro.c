@@ -2319,8 +2319,13 @@ static int tx_macro_probe(struct platform_device *pdev)
 	tx->active_decimator[TX_MACRO_AIF3_CAP] = -1;
 
 	/* set MCLK and NPL rates */
-	clk_set_rate(tx->mclk, MCLK_FREQ);
-	clk_set_rate(tx->npl, MCLK_FREQ);
+	ret = clk_set_rate(tx->mclk, MCLK_FREQ);
+	if (ret)
+		goto err;
+
+	ret = clk_set_rate(tx->npl, MCLK_FREQ);
+	if (ret)
+		goto err;
 
 	ret = devm_pm_clk_create(dev);
 	if (ret)
