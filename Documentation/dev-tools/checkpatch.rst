@@ -303,6 +303,10 @@ API usage
 
     See: https://www.kernel.org/doc/html/latest/process/deprecated.html#bug-and-bug-on
 
+  **RUST_PANIC_METHODS**
+    Rust methods that panic, such as unwrap() and expect(), should be
+    avoided.  Handle the error explicitly instead.
+
   **CONSIDER_KSTRTO**
     The simple_strtol(), simple_strtoll(), simple_strtoul(), and
     simple_strtoull() functions explicitly ignore overflows, which
