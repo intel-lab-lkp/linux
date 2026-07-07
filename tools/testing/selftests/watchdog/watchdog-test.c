@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
-* Watchdog Driver Test Program
-* - Tests all ioctls
-* - Tests Magic Close - CONFIG_WATCHDOG_NOWAYOUT
-* - Could be tested against softdog driver on systems that
-*   don't have watchdog hardware.
-*
-* Reference: Documentation/watchdog/watchdog-api.rst
+ * Watchdog Driver Test Program
+ * - Tests all ioctls
+ * - Tests Magic Close - CONFIG_WATCHDOG_NOWAYOUT
+ * - Could be tested against softdog driver on systems that
+ *   don't have watchdog hardware.
+ *
+ * Reference: Documentation/watchdog/watchdog-api.rst
  */
 
 #include <errno.h>
