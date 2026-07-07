@@ -203,6 +203,16 @@ void unmap_vmas(struct mmu_gather *tlb, struct unmap_desc *unmap);
 
 #ifdef CONFIG_MMU
 
+static inline unsigned long rmap_base(unsigned long vm_start, pgoff_t pgoff)
+{
+	return vm_start - (pgoff << PAGE_SHIFT);
+}
+
+static inline unsigned long vma_rmap_base(const struct vm_area_struct *vma)
+{
+	return rmap_base(vma->vm_start, vma->vm_pgoff);
+}
+
 static inline void get_anon_vma(struct anon_vma *anon_vma)
 {
 	atomic_inc(&anon_vma->refcount);
@@ -245,6 +255,24 @@ static inline void anon_vma_unlock_read(struct anon_vma *anon_vma)
 {
 	up_read(&anon_vma->root->rwsem);
 }
+
+#ifdef CONFIG_ANON_VMA_FRACTAL
+
+static inline struct anon_node *anon_node_next_rbc_child(
+		struct anon_node *anon_nod, struct anon_node *node)
+{
+	node = list_next_entry(node, fractal_list);
+	return node->depth == anon_nod->depth + 1 ? node : NULL;
+}
+
+static inline struct anon_node *anon_node_next_descendant(
+		struct anon_node *anon_nod, struct anon_node *node)
+{
+	node = list_next_entry(node, fractal_list);
+	return node->depth > anon_nod->depth ? node : NULL;
+}
+
+#endif
 
 struct anon_vma *folio_get_anon_vma(const struct folio *folio);
 

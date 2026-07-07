@@ -67,6 +67,54 @@ struct anon_vma {
 	struct rb_root_cached rb_root;
 };
 
+#ifdef CONFIG_ANON_VMA_FRACTAL
+
+/* struct anon_node - Replace anon_vma for anonymous page reverse mapping. */
+struct anon_node {
+	struct anon_node *root;		/* Root of this anon_node fractal tree */
+	struct rw_semaphore rwsem;
+	atomic_t vm_lock_ref;		/* for vm_lock_anon_vma */
+	atomic_t refcount;
+
+	struct anon_node *parent;	/* NULL if created by a page fault */
+
+	/*
+	 * depth is initialized to 0. When a child is added, depth is set to 1.
+	 * An rbc child has depth = parent->depth + 1,
+	 * and fork child has depth = parent->depth + 2.
+	 *
+	 * A forks B and C; B remaps D and forks E and F; C forks G.
+	 * The fractal_list is as follows:
+	 *                  (1A)--------------o
+	 *                 /                   \
+	 *               (3B)      (3C)         o
+	 *               /         /  \        /
+	 *             (4D)       /    \      /
+	 *             /         /      \    /
+	 *           (5E)----(5F)        (5G)
+	 */
+	unsigned int depth;
+	unsigned int nr_children;	/* < PID_MAX_LIMIT + max_map_count. */
+	struct list_head fractal_list;
+
+	/* mm and rmap_base can be used to find the VMA a page belongs to. */
+	struct mm_struct *mm;
+	/* rmap_base with VMA count in the low PAGE_SHIFT bits. */
+	atomic_long_t rbc;
+};
+
+/* Create rbc child anon_node on VMA remap or when count exceeds MAX. */
+#define ANON_RMAP_BASE_COUNT_MASK	(PAGE_SIZE - 1)
+#define ANON_RMAP_BASE_COUNT_MAX	(ANON_RMAP_BASE_COUNT_MASK)
+
+/*
+ * Allow VMAs to share an anon_node only if the number of VMAs attached
+ * is below this limit; keep it small to reduce lock contention.
+ */
+#define ANON_NODE_SHARE_LIMIT	(ANON_RMAP_BASE_COUNT_MAX / 1000)
+
+#endif
+
 /*
  * The copy-on-write semantics of fork mean that an anon_vma
  * can become associated with multiple processes. Furthermore,

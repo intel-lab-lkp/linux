@@ -1412,6 +1412,34 @@ config LOCK_MM_AND_FIND_VMA
 	bool
 	depends on !STACK_GROWSUP
 
+config ANON_VMA_FRACTAL
+	bool "anon_vma fractal list"
+	def_bool n
+	depends on MMU
+	help
+	  This option uses vma_rmap_base(vma) during rmap to compute the page
+	  address and look up the corresponding VMA in mm_mt.
+
+	    vma_rmap_base(vma) = vma->vm_start - vma->vm_pgoff * PAGE_SIZE
+
+	    page_address(vma, pgoff)
+	     = vma->vm_start + (pgoff - vma->vm_pgoff) * PAGE_SIZE
+	     = vma->vm_start - vma->vm_pgoff * PAGE_SIZE + pgoff * PAGE_SIZE
+	     = vma_rmap_base(vma) + pgoff * PAGE_SIZE
+
+	  Since vma_rmap_base(vma) remains invariant across VMA merge and
+	  split, VMA operations only need to adjust the VMA count of the
+	  corresponding anon_vma, eliminating the need for anon_vma_chain.
+
+	  Process fork behaves like a fractal expansion of both tasks and
+	  anon_vmas. A list records forked anon_vmas, and descendant anon_vmas
+	  are derived from fork depth for rmap handling.
+
+	  The fractal list remains unchanged during VMA merge or split. It
+	  is only updated when anon_vmas are created or removed, and traversed
+	  during rmap walks. Since rmap_one operations may switch tasks,
+	  semaphores are still required instead of spinlock_t protection.
+
 config IOMMU_MM_DATA
 	bool
 
