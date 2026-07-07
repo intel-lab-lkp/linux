@@ -982,6 +982,47 @@ void vma_post_update_rmap_base(struct vm_area_struct *vma, unsigned long diff)
 		release_anon_nodes(release_node);
 }
 
+#define ANON_VM_LOCK_REF	VM_REFCNT_EXCLUDE_READERS_FLAG
+
+void vm_lock_anon_node(struct mm_struct *mm, struct anon_node *anon_nod)
+{
+	atomic_t *vm_lock_ref = anon_node_vm_lock_ref(anon_nod);
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
+
+	if (!(atomic_read(vm_lock_ref) & ANON_VM_LOCK_REF)) {
+		down_write_nest_lock(rmap_sem, &mm->mmap_lock);
+		BUG_ON(atomic_read(vm_lock_ref));
+		atomic_set(vm_lock_ref, ANON_VM_LOCK_REF);
+	}
+}
+
+void vm_unlock_anon_node(struct anon_node *anon_nod)
+{
+	atomic_t *vm_lock_ref = anon_node_vm_lock_ref(anon_nod);
+	struct rw_semaphore *rmap_sem = anon_node_rmap_sem(anon_nod);
+
+	if (atomic_read(vm_lock_ref) & ANON_VM_LOCK_REF) {
+		BUG_ON(atomic_read(vm_lock_ref) != ANON_VM_LOCK_REF);
+		atomic_set(vm_lock_ref, 0);
+		up_write(rmap_sem);
+	}
+}
+
+int anon_node_trylock_rmap(struct anon_node *anon_nod)
+{
+	return down_read_trylock(anon_node_rmap_sem(anon_nod));
+}
+
+void anon_node_lock_rmap(struct anon_node *anon_nod)
+{
+	down_read(anon_node_rmap_sem(anon_nod));
+}
+
+void anon_node_unlock_rmap(struct anon_node *anon_nod)
+{
+	up_read(anon_node_rmap_sem(anon_nod));
+}
+
 #endif
 
 /*

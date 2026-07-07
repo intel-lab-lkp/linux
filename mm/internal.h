@@ -297,6 +297,55 @@ static inline unsigned long anon_node_rmap_count(struct anon_node *anon_nod)
 	return atomic_long_read(&anon_nod->rbc) & ANON_RMAP_BASE_COUNT_MAX;
 }
 
+static inline unsigned long anon_node_rmap_address(struct anon_node *anon_nod,
+		unsigned long pgoff)
+{
+	if (!anon_node_rmap_count(anon_nod))
+		return 0;
+	return anon_node_rmap_base(anon_nod) + (pgoff << PAGE_SHIFT);
+}
+
+static inline struct vm_area_struct *anon_node_lookup_vma(
+	struct anon_node *anon_nod, unsigned long addr, unsigned long pgoff)
+{
+	struct vm_area_struct *vma;
+
+	if (!addr)
+		addr = anon_node_rmap_address(anon_nod, pgoff);
+	if (!anon_nod->mm || !addr)
+		return NULL;
+
+	vma = vma_lookup(anon_nod->mm, addr);
+	return (vma && vma->anon_vma == (void *)anon_nod) ? vma : NULL;
+}
+
+void vm_lock_anon_node(struct mm_struct *mm, struct anon_node *anon_nod);
+void vm_unlock_anon_node(struct anon_node *anon_nod);
+int anon_node_trylock_rmap(struct anon_node *anon_nod);
+void anon_node_lock_rmap(struct anon_node *anon_nod);
+void anon_node_unlock_rmap(struct anon_node *anon_nod);
+
+#define ANON_RMAP_FOREACH_VMA(anon_vma, addr, start, last, rmap_proc_vma) \
+do { \
+	struct vm_area_struct *vma = NULL; /* must be named vma */ \
+	struct anon_node *_anon_nod = (void *)(anon_vma); \
+	struct anon_node *_nod = _anon_nod; \
+	unsigned long _pgoff = (start); \
+	unsigned long _nr = 0, _total = 1; \
+	\
+	while (_nod) { \
+		vma = anon_node_lookup_vma(_nod, (addr), _pgoff); \
+		if (vma) \
+			(rmap_proc_vma); \
+		_pgoff = vma ? vma->vm_pgoff + vma_pages(vma) : _pgoff + 1; \
+		if (!(addr) && _pgoff <= (last)) \
+			continue; \
+		_pgoff = (start); \
+		BUG_ON(++_nr > (_total += _nod->nr_children)); \
+		_nod = anon_node_next_descendant(_anon_nod, _nod); \
+	} \
+} while (0)
+
 #endif
 
 struct anon_vma *folio_get_anon_vma(const struct folio *folio);
