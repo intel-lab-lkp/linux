@@ -257,8 +257,10 @@ static int st_nci_spi_probe(struct spi_device *dev)
 				st_nci_irq_thread_fn,
 				IRQF_ONESHOT,
 				ST_NCI_SPI_DRIVER_NAME, phy);
-	if (r < 0)
+	if (r < 0) {
 		nfc_err(&dev->dev, "Unable to register IRQ handler\n");
+		ndlc_remove(phy->ndlc);
+	}
 
 	return r;
 }

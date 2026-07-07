@@ -243,8 +243,10 @@ static int st_nci_i2c_probe(struct i2c_client *client)
 				st_nci_irq_thread_fn,
 				IRQF_ONESHOT,
 				ST_NCI_DRIVER_NAME, phy);
-	if (r < 0)
+	if (r < 0) {
 		nfc_err(&client->dev, "Unable to register IRQ handler\n");
+		ndlc_remove(phy->ndlc);
+	}
 
 	return r;
 }
