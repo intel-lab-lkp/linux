@@ -782,8 +782,9 @@ impl<const SIZE: usize> Mmio<SIZE> {
     ///
     /// # Safety
     ///
-    /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of size
-    /// `maxsize`.
+    /// Callers must ensure that the MMIO range described by `raw.addr()` and
+    /// `raw.maxsize()` is a valid I/O mapped memory region for the entire lifetime
+    /// of the returned reference.
     pub unsafe fn from_raw(raw: &MmioRaw<SIZE>) -> &Self {
         // SAFETY: `Mmio` is a transparent wrapper around `MmioRaw`.
         unsafe { &*core::ptr::from_ref(raw).cast() }
