@@ -204,7 +204,9 @@ static void vmw_takedown_otable_base(struct vmw_private *dev_priv,
 	if (otable->page_table == NULL)
 		return;
 
-	bo = &otable->page_table->pt_bo->tbo;
+	bo = NULL;
+	if (otable->page_table->pt_bo)
+		bo = &otable->page_table->pt_bo->tbo;
 	cmd = VMW_CMD_RESERVE(dev_priv, sizeof(*cmd));
 	if (unlikely(cmd == NULL))
 		return;
@@ -555,7 +557,10 @@ void vmw_mob_unbind(struct vmw_private *dev_priv,
 		SVGA3dCmdDestroyGBMob body;
 	} *cmd;
 	int ret;
-	struct ttm_buffer_object *bo = &mob->pt_bo->tbo;
+	struct ttm_buffer_object *bo = NULL;
+
+	if (mob->pt_bo)
+		bo = &mob->pt_bo->tbo;
 
 	if (bo) {
 		ret = ttm_bo_reserve(bo, false, true, NULL);
