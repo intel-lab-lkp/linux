@@ -423,6 +423,151 @@ static int rdtgroup_kmode_cpus_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+/**
+ * kmode_cpus_write() - Update @rdtgrp's kmode_cpu_mask from @newmask
+ * @rdtgrp:	Resctrl group whose kmode_cpu_mask is being updated.
+ * @kmode:	Kernel-mode policy currently active on @rdtgrp.
+ * @newmask:	Set of online CPUs scoped for @rdtgrp's kernel-mode binding.
+ * @tmpmask:	Caller-allocated scratch cpumask used to compute the
+ *		incremental enable/disable deltas; contents on entry are
+ *		ignored and on return are unspecified.
+ *
+ * Compute the difference between @rdtgrp->kmode_cpu_mask and @newmask
+ * and call resctrl_arch_configure_kmode() only on the CPUs whose enable
+ * state actually changes:
+ *
+ *   - disable on (old & ~new)
+ *   - enable on (new & ~old)
+ *
+ * Then copy @newmask into @rdtgrp->kmode_cpu_mask so subsequent
+ * show/write operations reflect the updated scope.
+ */
+static void kmode_cpus_write(struct rdtgroup *rdtgrp, enum resctrl_kernel_mode kmode,
+			     cpumask_var_t newmask, cpumask_var_t tmpmask)
+{
+	bool assign_mon = (kmode == GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU);
+	u32 closid, rmid;
+
+	closid = rdtgrp->closid;
+	rmid = rdtgrp->mon.rmid;
+
+	/* CPUs dropped from this group: old & ~newmask. */
+	cpumask_andnot(tmpmask, &rdtgrp->kmode_cpu_mask, newmask);
+	if (!cpumask_empty(tmpmask))
+		resctrl_arch_configure_kmode(tmpmask, closid, rmid, assign_mon, false);
+
+	/* CPUs newly added: newmask & ~old. */
+	cpumask_andnot(tmpmask, newmask, &rdtgrp->kmode_cpu_mask);
+	if (!cpumask_empty(tmpmask))
+		resctrl_arch_configure_kmode(tmpmask, closid, rmid, assign_mon, true);
+
+	cpumask_copy(&rdtgrp->kmode_cpu_mask, newmask);
+}
+
+/**
+ * rdtgroup_kmode_cpus_write() - Sysfs write handler for kmode_cpus[_list]
+ * @of:		kernfs open file (selects bitmap vs range-list parsing via
+ *		is_cpu_list()).
+ * @buf:	NUL-terminated input from userspace.
+ * @nbytes:	Length of @buf, returned on success.
+ * @off:	File offset (unused).
+ *
+ * Parses @buf into a cpumask and rejects:
+ *   - pseudo-locked / pseudo-lock-setup groups,
+ *   - writes when INHERIT_CTRL_AND_MON is active or to a group other than
+ *     resctrl_kcfg.k_rdtgrp (stale fds opened before an info/kernel_mode
+ *     change),
+ *   - malformed input,
+ *   - masks containing offline CPUs.
+ *
+ * Validated masks are passed to kmode_cpus_write() to update
+ * @rdtgrp->kmode_cpu_mask and reprogram hardware incrementally.
+ * Errors are reported in last_cmd_status.
+ *
+ * Return: @nbytes on success, -ENOENT if the group has been deleted,
+ * -EINVAL for pseudo-locked or pseudo-lock-setup groups, malformed input, or
+ * offline CPUs in the requested mask, -EBUSY if INHERIT_CTRL_AND_MON is active
+ * or the group is not resctrl_kcfg.k_rdtgrp, and -ENOMEM if the scratch
+ * cpumasks cannot be allocated.
+ */
+static ssize_t rdtgroup_kmode_cpus_write(struct kernfs_open_file *of,
+					 char *buf, size_t nbytes, loff_t off)
+{
+	cpumask_var_t tmpmask, newmask;
+	struct rdtgroup *rdtgrp;
+	int ret;
+
+	if (!buf)
+		return -EINVAL;
+
+	if (!zalloc_cpumask_var(&tmpmask, GFP_KERNEL))
+		return -ENOMEM;
+	if (!zalloc_cpumask_var(&newmask, GFP_KERNEL)) {
+		free_cpumask_var(tmpmask);
+		return -ENOMEM;
+	}
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+
+	rdt_last_cmd_clear();
+
+	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKED ||
+	    rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP) {
+		ret = -EINVAL;
+		rdt_last_cmd_puts("Pseudo-locked group cannot host kernel-mode binding\n");
+		goto unlock;
+	}
+
+	if (resctrl_kcfg.kmode_cur == INHERIT_CTRL_AND_MON) {
+		ret = -EBUSY;
+		rdt_last_cmd_puts("No active kernel-mode binding\n");
+		goto unlock;
+	}
+
+	/*
+	 * The visibility layer (kernfs_show()) prevents fresh open() on a
+	 * non-bound group, but file descriptors opened while the group was
+	 * bound stay valid across an info/kernel_mode change.  Reject those
+	 * stale-fd writes so they cannot corrupt the now-active binding.
+	 */
+	if (resctrl_kcfg.k_rdtgrp != rdtgrp) {
+		ret = -EBUSY;
+		rdt_last_cmd_puts("Group is not the active kernel-mode binding\n");
+		goto unlock;
+	}
+
+	if (is_cpu_list(of))
+		ret = cpulist_parse(buf, newmask);
+	else
+		ret = cpumask_parse(buf, newmask);
+
+	if (ret) {
+		rdt_last_cmd_puts("Bad CPU list/mask\n");
+		goto unlock;
+	}
+
+	/* kernel-mode binding is only programmed on online CPUs. */
+	cpumask_andnot(tmpmask, newmask, cpu_online_mask);
+	if (!cpumask_empty(tmpmask)) {
+		ret = -EINVAL;
+		rdt_last_cmd_puts("Can only assign online CPUs\n");
+		goto unlock;
+	}
+
+	kmode_cpus_write(rdtgrp, resctrl_kcfg.kmode_cur, newmask, tmpmask);
+
+unlock:
+	rdtgroup_kn_unlock(of->kn);
+	free_cpumask_var(tmpmask);
+	free_cpumask_var(newmask);
+
+	return ret ?: nbytes;
+}
+
 /*
  * Update the PGR_ASSOC MSR on all cpus in @cpu_mask,
  *
@@ -2531,15 +2676,17 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "kmode_cpus",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_kmode_cpus_write,
 		.seq_show	= rdtgroup_kmode_cpus_show,
 		.fflags		= RFTYPE_BASE,
 	},
 	{
 		.name		= "kmode_cpus_list",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_kmode_cpus_write,
 		.seq_show	= rdtgroup_kmode_cpus_show,
 		.flags		= RFTYPE_FLAGS_CPUS_LIST,
 		.fflags		= RFTYPE_BASE,
