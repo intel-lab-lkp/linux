@@ -4722,11 +4722,40 @@ out_unlock:
 	return err;
 }
 
+/*
+ * resctrl_kmode_online_cpu() - Configure kernel-mode binding for a CPU that
+ *				comes online
+ * @cpu: CPU that has just been brought online.
+ *
+ * Kernel-mode associations are maintained per CPU. When a CPU becomes
+ * online after a global-assign policy has been applied, it is updated
+ * with the current kernel-mode configuration. The CPU is then added to
+ * the bound group's kmode_cpu_mask, and the appropriate association is
+ * programmed for it.
+ */
+static void resctrl_kmode_online_cpu(unsigned int cpu)
+{
+	struct rdtgroup *rdtgrp = resctrl_kcfg.k_rdtgrp;
+	bool assign_mon = false;
+
+	if (resctrl_kcfg.kmode_cur == INHERIT_CTRL_AND_MON || !rdtgrp)
+		return;
+
+	assign_mon = (resctrl_kcfg.kmode_cur == GLOBAL_ASSIGN_CTRL_ASSIGN_MON_PER_CPU);
+
+	cpumask_set_cpu(cpu, &rdtgrp->kmode_cpu_mask);
+
+	resctrl_arch_configure_kmode(cpumask_of(cpu), rdtgrp->closid, rdtgrp->mon.rmid,
+				     assign_mon, true);
+}
+
 void resctrl_online_cpu(unsigned int cpu)
 {
 	mutex_lock(&rdtgroup_mutex);
 	/* The CPU is set in default rdtgroup after online. */
 	cpumask_set_cpu(cpu, &rdtgroup_default.cpu_mask);
+	/* Program any active kernel-mode binding on this CPU. */
+	resctrl_kmode_online_cpu(cpu);
 	mutex_unlock(&rdtgroup_mutex);
 }
 
