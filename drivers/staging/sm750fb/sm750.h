@@ -39,6 +39,15 @@ enum sm750_path {
 	sm750_pnc = 3,	/* panel and crt */
 };
 
+struct init_status {
+	ushort power_mode;
+	/* below three clocks are in unit of MHZ*/
+	ushort chip_clk;
+	ushort mem_clk;
+	ushort master_clk;
+	ushort set_all_eng_off;
+	ushort reset_memory;
+};
 
 struct lynx_accel {
 	/* base virtual address of DPR registers */
