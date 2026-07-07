@@ -1404,7 +1404,11 @@ static bool zswap_store_page(struct page *page,
 			     struct zswap_pool *pool)
 {
 	swp_entry_t page_swpentry = page_swap_entry(page);
-	struct zswap_entry *entry, *old;
+	struct zswap_entry *entry, *old = NULL;
+	struct swap_cluster_info *ci;
+	struct swap_info_struct *si;
+	pgoff_t offset = swp_offset(page_swpentry);
+	unsigned long swp_tb;
 
 	/* allocate entry */
 	entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
@@ -1427,20 +1431,42 @@ static bool zswap_store_page(struct page *page,
 		goto store_failed;
 	}
 
+	si = __swap_entry_to_info(page_swpentry);
+	ci = __swap_offset_to_cluster(si, offset);
+	spin_lock(&ci->lock);
+	swp_tb = __swap_table_get(ci, offset % SWAPFILE_CLUSTER);
+	if (swp_tb_is_countable(swp_tb)) {
+		/*
+		 * Save the complete original swap table entry value
+		 * (Shadow or PFN), preserving swap count, zero flag,
+		 * and working set shadow information.
+		 */
+		entry->swp_tb_val = swp_tb;
+	} else if (swp_tb_is_pointer(swp_tb)) {
+		/*
+		 * Replacing an existing Pointer entry (e.g. from a
+		 * redirtied folio). Inherit the saved swap table value.
+		 */
+		old = swp_tb_to_pointer(swp_tb);
+		entry->swp_tb_val = old->swp_tb_val;
+	}
+	__swap_table_set(ci, offset % SWAPFILE_CLUSTER,
+			 pointer_to_swp_tb(entry));
+	spin_unlock(&ci->lock);
 	/*
-	 * We may have had an existing entry that became stale when
-	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
+	 * If we had an existing zswap entry from the swap table
+	 * (e.g. from a previous redirtied folio), get rid of it
+	 * outside the lock.
 	 */
 	if (old)
 		zswap_entry_free(old);
 
 	/*
-	 * The entry is successfully compressed and stored in the tree, there is
-	 * no further possibility of failure. Grab refs to the pool and objcg,
-	 * charge zswap memory, and increment zswap_stored_pages.
-	 * The opposite actions will be performed by zswap_entry_free()
-	 * when the entry is removed from the tree.
+	 * The entry is successfully compressed and stored in the swap table,
+	 * there is no further possibility of failure. Grab refs to the pool
+	 * and objcg, charge zswap memory, and increment zswap_stored_pages.
+	 * The opposite actions will be performed by zswap_entry_put()
+	 * when the entry is removed from the swap table.
 	 */
 	zswap_pool_get(pool);
 	if (objcg) {
@@ -1452,8 +1478,8 @@ static bool zswap_store_page(struct page *page,
 		atomic_long_inc(&zswap_stored_incompressible_pages);
 
 	/*
-	 * We finish initializing the entry while it's already in xarray.
-	 * This is safe because:
+	 * We finish initializing the entry while it's already in the
+	 * swap table. This is safe because:
 	 *
 	 * 1. Concurrent stores and invalidations are excluded by folio lock.
 	 *
@@ -1553,12 +1579,25 @@ check_old:
 		pgoff_t offset = swp_offset(swp);
 		struct zswap_entry *entry;
 		struct xarray *tree;
+		struct swap_cluster_info *ci;
+		struct swap_info_struct *sis;
+		unsigned long swp_tb;
 
+		sis = __swap_type_to_info(type);
 		for (index = 0; index < nr_pages; ++index) {
 			tree = swap_zswap_tree(swp_entry(type, offset + index));
 			entry = xa_erase(tree, offset + index);
-			if (entry)
-				zswap_entry_free(entry);
+			if (!entry)
+				continue;
+			ci = __swap_offset_to_cluster(sis, offset + index);
+			spin_lock(&ci->lock);
+			swp_tb = __swap_table_get(ci, (offset + index) % SWAPFILE_CLUSTER);
+			if (swp_tb_is_pointer(swp_tb) &&
+			    swp_tb_to_pointer(swp_tb) == entry)
+				__swap_table_set(ci, (offset + index) % SWAPFILE_CLUSTER,
+						 entry->swp_tb_val);
+			spin_unlock(&ci->lock);
+			zswap_entry_free(entry);
 		}
 	}
 
@@ -1642,14 +1681,32 @@ void zswap_invalidate(swp_entry_t swp)
 {
 	pgoff_t offset = swp_offset(swp);
 	struct xarray *tree = swap_zswap_tree(swp);
+	struct swap_cluster_info *ci;
+	struct swap_info_struct *si;
+	unsigned long swp_tb;
 	struct zswap_entry *entry;
 
 	if (xa_empty(tree))
 		return;
 
 	entry = xa_erase(tree, offset);
-	if (entry)
-		zswap_entry_free(entry);
+	if (!entry)
+		return;
+
+	/*
+	 * Also clear the swap table Pointer entry if present.
+	 * This is needed because zswap_store now writes Pointer
+	 * entries to both the xarray and the swap table.
+	 */
+	si = __swap_type_to_info(swp_type(swp));
+	ci = __swap_offset_to_cluster(si, offset);
+	spin_lock(&ci->lock);
+	swp_tb = __swap_table_get(ci, offset % SWAPFILE_CLUSTER);
+	if (swp_tb_is_pointer(swp_tb) && swp_tb_to_pointer(swp_tb) == entry)
+		__swap_table_set(ci, offset % SWAPFILE_CLUSTER, entry->swp_tb_val);
+	spin_unlock(&ci->lock);
+
+	zswap_entry_free(entry);
 }
 
 /*
