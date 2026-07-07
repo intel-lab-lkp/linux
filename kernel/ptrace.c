@@ -1099,7 +1099,7 @@ ptrace_set_syscall_info_seccomp(struct task_struct *child, struct pt_regs *regs,
 
 static int
 ptrace_set_syscall_info_exit(struct task_struct *child, struct pt_regs *regs,
-			     struct ptrace_syscall_info *info)
+			     struct ptrace_syscall_info *info, bool skip_syscall)
 {
 	long rval = info->exit.rval;
 
@@ -1110,6 +1110,9 @@ ptrace_set_syscall_info_exit(struct task_struct *child, struct pt_regs *regs,
 	 */
 	if (rval != info->exit.rval)
 		return -ERANGE;
+
+	if (skip_syscall)
+		syscall_set_nr(child, regs, -1);
 
 	if (info->exit.is_error)
 		syscall_set_return_value(child, regs, rval, 0);
@@ -1125,6 +1128,8 @@ ptrace_set_syscall_info(struct task_struct *child, unsigned long user_size,
 {
 	struct pt_regs *regs = task_pt_regs(child);
 	struct ptrace_syscall_info info;
+	int child_op;
+	bool skip_syscall = false;
 
 	if (user_size < sizeof(info))
 		return -EINVAL;
@@ -1141,15 +1146,27 @@ ptrace_set_syscall_info(struct task_struct *child, unsigned long user_size,
 	if (info.flags || info.reserved)
 		return -EINVAL;
 
-	/* Changing the type of the system call stop is not supported yet. */
-	if (ptrace_get_syscall_info_op(child) != info.op)
-		return -EINVAL;
+	/*
+	 * Changing the type of the system call stop is not allowed, with the
+	 * following exception:
+	 * PTRACE_SYSCALL_INFO_SECCOMP can be changed to PTRACE_SYSCALL_INFO_EXIT
+	 * to skip the system call
+	 */
+
+	child_op = ptrace_get_syscall_info_op(child);
+	if (child_op != info.op) {
+		if (info.op == PTRACE_SYSCALL_INFO_EXIT &&
+				 child_op == PTRACE_SYSCALL_INFO_SECCOMP)
+			skip_syscall = true;
+		else
+			return -EINVAL;
+	}
 
 	switch (info.op) {
 	case PTRACE_SYSCALL_INFO_ENTRY:
 		return ptrace_set_syscall_info_entry(child, regs, &info);
 	case PTRACE_SYSCALL_INFO_EXIT:
-		return ptrace_set_syscall_info_exit(child, regs, &info);
+		return ptrace_set_syscall_info_exit(child, regs, &info, skip_syscall);
 	case PTRACE_SYSCALL_INFO_SECCOMP:
 		return ptrace_set_syscall_info_seccomp(child, regs, &info);
 	default:
