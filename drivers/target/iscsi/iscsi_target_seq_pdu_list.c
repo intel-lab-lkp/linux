@@ -549,6 +549,8 @@ int iscsit_build_pdu_and_seq_lists(
 		if (!pdu) {
 			pr_err("Unable to allocate struct iscsi_pdu list.\n");
 			kfree(seq);
+			cmd->seq_list = NULL;
+			cmd->seq_count = 0;
 			return -ENOMEM;
 		}
 		cmd->pdu_list = pdu;
