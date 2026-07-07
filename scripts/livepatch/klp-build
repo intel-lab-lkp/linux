@@ -556,6 +556,24 @@ build_kernel() {
 	local log="$TMP_DIR/build.log"
 	local cmd=()
 
+	local ARCH_KBUILD_CFLAGS_KERNEL=""
+
+	if [[ -v CONFIG_LOONGARCH && "$CONFIG_LOONGARCH" == "y" ]]; then
+		# -mdirect-extern-access only exists under explicit relocs, and this
+		# function replaces KBUILD_CFLAGS_KERNEL wholesale (safe only then;
+		# the non-explicit build puts -Wa,-mla-global-with-pcrel there).
+		[[ "${CONFIG_AS_HAS_EXPLICIT_RELOCS:-}" == "y" ]] || \
+			die "LoongArch klp-build requires CONFIG_AS_HAS_EXPLICIT_RELOCS=y"
+
+		if [[ "${CONFIG_CC_IS_CLANG:-}" == "y" ]]; then
+			ARCH_KBUILD_CFLAGS_KERNEL="-fno-direct-access-external-data"
+		else
+			ARCH_KBUILD_CFLAGS_KERNEL="-mno-direct-extern-access"
+		fi
+
+		status "LoongArch detected: adding $ARCH_KBUILD_CFLAGS_KERNEL to KBUILD_CFLAGS_KERNEL"
+	fi
+
 	cmd=("make")
 
 	# When a patch to a kernel module references a newly created unexported
@@ -582,6 +600,7 @@ build_kernel() {
 	fi
 	cmd+=("-j$JOBS")
 	cmd+=("KCFLAGS=-ffunction-sections -fdata-sections")
+	cmd+=("KBUILD_CFLAGS_KERNEL=$ARCH_KBUILD_CFLAGS_KERNEL")
 	cmd+=("vmlinux")
 	cmd+=("modules")
 
