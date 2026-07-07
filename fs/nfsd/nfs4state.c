@@ -1744,6 +1744,7 @@ static void
 free_ol_stateid_reaplist(struct list_head *reaplist)
 {
 	struct nfs4_ol_stateid *stp;
+	struct svc_export *exp;
 	struct nfs4_file *fp;
 
 	might_sleep();
@@ -1753,9 +1754,12 @@ free_ol_stateid_reaplist(struct list_head *reaplist)
 				       st_locks);
 		list_del(&stp->st_locks);
 		fp = stp->st_stid.sc_file;
+		exp = stp->st_stid.sc_export;
 		stp->st_stid.sc_free(&stp->st_stid);
 		if (fp)
 			put_nfs4_file(fp);
+		if (exp)
+			exp_put(exp);
 	}
 }
 
