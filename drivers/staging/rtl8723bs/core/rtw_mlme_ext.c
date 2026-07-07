@@ -3901,10 +3901,10 @@ u8 collect_bss_info(struct adapter *padapter, union recv_frame *precv_frame, str
 	val16 = rtw_get_capability((struct wlan_bssid_ex *)bssid);
 
 	if (val16 & BIT(0)) {
-		bssid->infrastructure_mode = Ndis802_11Infrastructure;
+		bssid->infrastructure_mode = NL80211_IFTYPE_STATION;
 		memcpy(bssid->mac_address, GetAddr2Ptr(pframe), ETH_ALEN);
 	} else {
-		bssid->infrastructure_mode = Ndis802_11IBSS;
+		bssid->infrastructure_mode = NL80211_IFTYPE_ADHOC;
 		memcpy(bssid->mac_address, GetAddr3Ptr(pframe), ETH_ALEN);
 	}
 
@@ -5039,15 +5039,15 @@ u8 setopmode_hdl(struct adapter *padapter, u8 *pbuf)
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	struct setopmode_parm *psetop = (struct setopmode_parm *)pbuf;
 
-	if (psetop->mode == Ndis802_11APMode) {
+	if (psetop->mode == NL80211_IFTYPE_AP) {
 		pmlmeinfo->state = WIFI_FW_AP_STATE;
 		type = _HW_STATE_AP_;
 		/* start_ap_mode(padapter); */
-	} else if (psetop->mode == Ndis802_11Infrastructure) {
+	} else if (psetop->mode == NL80211_IFTYPE_STATION) {
 		pmlmeinfo->state &= ~(BIT(0) | BIT(1));/*  clear state */
 		pmlmeinfo->state |= WIFI_FW_STATION_STATE;/* set to	STATION_STATE */
 		type = _HW_STATE_STATION_;
-	} else if (psetop->mode == Ndis802_11IBSS) {
+	} else if (psetop->mode == NL80211_IFTYPE_ADHOC) {
 		type = _HW_STATE_ADHOC_;
 	} else {
 		type = _HW_STATE_NOLINK_;
@@ -5056,7 +5056,7 @@ u8 setopmode_hdl(struct adapter *padapter, u8 *pbuf)
 	rtw_hal_set_hwreg(padapter, HW_VAR_SET_OPMODE, (u8 *)(&type));
 	/* set_msr(padapter, type); */
 
-	if (psetop->mode == Ndis802_11APMode) {
+	if (psetop->mode == NL80211_IFTYPE_AP) {
 		/*  Do this after port switch to */
 		/*  prevent from downloading rsvd page to wrong port */
 		rtw_btcoex_media_status_notify(padapter, 1); /* connect */
@@ -5079,7 +5079,7 @@ u8 createbss_hdl(struct adapter *padapter, u8 *pbuf)
 	}
 
 	/* below is for ad-hoc master */
-	if (pparm->network.infrastructure_mode == Ndis802_11IBSS) {
+	if (pparm->network.infrastructure_mode == NL80211_IFTYPE_ADHOC) {
 		rtw_joinbss_reset(padapter);
 
 		pmlmeext->cur_bwmode = CHANNEL_WIDTH_20;
