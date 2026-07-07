@@ -24,6 +24,7 @@
 #include <linux/execmem.h>
 
 #include <asm/alternative.h>
+#include <asm/cacheflush.h>
 #include <asm/fixmap.h>
 #include <asm/io.h>
 #include <asm/kasan.h>
