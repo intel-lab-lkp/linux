@@ -514,14 +514,12 @@ int main(int ac, char **av)
 	long stolen_time;
 	long run_delay;
 	bool verbose;
-	int i;
+	int i, cpu;
 
 	verbose = ac > 1 && (!strncmp(av[1], "-v", 3) || !strncmp(av[1], "--verbose", 10));
 
 	/* Set CPU affinity so we can force preemption of the VCPU */
-	CPU_ZERO(&cpuset);
-	CPU_SET(0, &cpuset);
-	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	cpu = pin_self_to_any_cpu();
 
 	/* Create a VM and an identity mapped memslot for the steal time structure */
 	vm = vm_create_with_vcpus(NR_VCPUS, guest_code, vcpus);
@@ -557,7 +555,7 @@ int main(int ac, char **av)
 		run_delay = get_run_delay();
 		pthread_create(&thread, NULL, do_steal_time, NULL);
 		pthread_getaffinity_np(thread, sizeof(cpuset), &cpuset);
-		TEST_ASSERT(CPU_COUNT(&cpuset) == 1 && CPU_ISSET(0, &cpuset),
+		TEST_ASSERT(CPU_COUNT(&cpuset) == 1 && CPU_ISSET(cpu, &cpuset),
 			    "Worker failed to inherit parent's CPU affinity");
 
 		do
