@@ -23,7 +23,8 @@
 /**
  * enum prio_policy - I/O priority class policy.
  * @POLICY_NO_CHANGE: (default) do not modify the I/O priority class.
- * @POLICY_PROMOTE_TO_RT: modify no-IOPRIO_CLASS_RT to IOPRIO_CLASS_RT.
+ * @POLICY_PROMOTE_TO_RT: promote non-IOPRIO_CLASS_RT classes to
+ *		IOPRIO_CLASS_RT.
  * @POLICY_RESTRICT_TO_BE: modify IOPRIO_CLASS_NONE and IOPRIO_CLASS_RT into
  *		IOPRIO_CLASS_BE.
  * @POLICY_ALL_TO_IDLE: change the I/O priority class into IOPRIO_CLASS_IDLE.
@@ -52,7 +53,7 @@ static struct blkcg_policy ioprio_policy;
 /**
  * struct ioprio_blkcg - Per cgroup data.
  * @cpd: blkcg_policy_data structure.
- * @prio_policy: One of the IOPRIO_CLASS_* values. See also <linux/ioprio.h>.
+ * @prio_policy: One of the POLICY_* values defined by enum prio_policy.
  */
 struct ioprio_blkcg {
 	struct blkcg_policy_data cpd;
