@@ -1055,7 +1055,7 @@ ip_vs_bind_dest(struct ip_vs_conn *cp, struct ip_vs_dest *dest)
 
 	if (dest->u_threshold != 0 &&
 	    ip_vs_dest_totalconns(dest) >= dest->u_threshold)
-		dest->flags |= IP_VS_DEST_F_OVERLOAD;
+		atomic_or(IP_VS_DEST_F_OVERLOAD, &dest->flags);
 }
 
 
@@ -1151,13 +1151,13 @@ static inline void ip_vs_unbind_dest(struct ip_vs_conn *cp)
 
 	if (dest->l_threshold != 0) {
 		if (ip_vs_dest_totalconns(dest) < dest->l_threshold)
-			dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
+			atomic_and(~IP_VS_DEST_F_OVERLOAD, &dest->flags);
 	} else if (dest->u_threshold != 0) {
 		if (ip_vs_dest_totalconns(dest) * 4 < dest->u_threshold * 3)
-			dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
+			atomic_and(~IP_VS_DEST_F_OVERLOAD, &dest->flags);
 	} else {
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
-			dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
+		if (atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD)
+			atomic_and(~IP_VS_DEST_F_OVERLOAD, &dest->flags);
 	}
 
 	ip_vs_dest_put(dest);
@@ -1188,7 +1188,7 @@ int ip_vs_check_template(struct ip_vs_conn *ct, struct ip_vs_dest *cdest)
 	 * Checking the dest server status.
 	 */
 	if ((dest == NULL) ||
-	    !(dest->flags & IP_VS_DEST_F_AVAILABLE) ||
+	    !(atomic_read(&dest->flags) & IP_VS_DEST_F_AVAILABLE) ||
 	    expire_quiescent_template(ipvs, dest) ||
 	    (cdest && (dest != cdest))) {
 		IP_VS_DBG_BUF(9, "check_template: dest not available for "
@@ -1929,7 +1929,7 @@ repeat:
 			cp = ip_vs_hn0_to_conn(hn);
 			resched_score++;
 			dest = cp->dest;
-			if (!dest || (dest->flags & IP_VS_DEST_F_AVAILABLE))
+			if (!dest || (atomic_read(&dest->flags) & IP_VS_DEST_F_AVAILABLE))
 				continue;
 
 			if (atomic_read(&cp->n_control))

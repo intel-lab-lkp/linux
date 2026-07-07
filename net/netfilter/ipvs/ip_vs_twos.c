@@ -52,7 +52,7 @@ static struct ip_vs_dest *ip_vs_twos_schedule(struct ip_vs_service *svc,
 
 	/* Generate a random weight between [0,sum of all weights) */
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
-		if (!(dest->flags & IP_VS_DEST_F_OVERLOAD)) {
+		if (!(atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD)) {
 			weight = atomic_read(&dest->weight);
 			if (weight > 0) {
 				total_weight += weight;
@@ -75,7 +75,7 @@ static struct ip_vs_dest *ip_vs_twos_schedule(struct ip_vs_service *svc,
 
 	/* Pick two weighted servers */
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
+		if (atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		weight = atomic_read(&dest->weight);

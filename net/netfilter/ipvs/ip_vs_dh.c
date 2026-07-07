@@ -201,7 +201,7 @@ static int ip_vs_dh_dest_changed(struct ip_vs_service *svc,
  */
 static inline int is_overloaded(struct ip_vs_dest *dest)
 {
-	return dest->flags & IP_VS_DEST_F_OVERLOAD;
+	return atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD;
 }
 
 
@@ -220,7 +220,7 @@ ip_vs_dh_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
 	s = (struct ip_vs_dh_state *) svc->sched_data;
 	dest = ip_vs_dh_get(svc->af, s, &iph->daddr);
 	if (!dest
-	    || !(dest->flags & IP_VS_DEST_F_AVAILABLE)
+	    || !(atomic_read(&dest->flags) & IP_VS_DEST_F_AVAILABLE)
 	    || atomic_read(&dest->weight) <= 0
 	    || is_overloaded(dest)) {
 		ip_vs_scheduler_err(svc, "no destination available");
