@@ -236,7 +236,7 @@ static void iwl_trans_restart_wk(struct work_struct *wk)
 	mode = iwl_trans_determine_restart_mode(trans);
 	if (mode == IWL_RESET_MODE_BACKOFF) {
 		IWL_ERR(trans, "Too many device errors - delay next reset\n");
-		queue_delayed_work(system_unbound_wq, &trans->restart.wk,
+		queue_delayed_work(system_dfl_wq, &trans->restart.wk,
 				   IWL_TRANS_RESET_DELAY);
 		return;
 	}
