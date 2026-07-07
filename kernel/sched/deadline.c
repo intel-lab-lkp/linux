@@ -2574,6 +2574,9 @@ static bool dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
  */
 static void yield_task_dl(struct rq *rq)
 {
+	if (sched_proxy_exec() && rq->curr != rq->donor)
+		return;
+
 	/*
 	 * We make the task go to sleep until its current deadline by
 	 * forcing its runtime to zero. This way, update_curr_dl() stops
