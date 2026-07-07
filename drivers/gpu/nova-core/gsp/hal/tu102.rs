@@ -121,18 +121,15 @@ impl Sec2UnloadBundle {
 }
 
 impl UnloadBundle for Sec2UnloadBundle {
-    fn run(
-        &self,
-        dev: &device::Device<device::Bound>,
-        bar: Bar0<'_>,
-        gsp_falcon: &Falcon<'_, GspEngine>,
-        sec2_falcon: &Falcon<'_, Sec2>,
-    ) -> Result {
+    fn run(&self, ctx: &GspBootContext<'_>) -> Result {
+        let dev = ctx.dev();
+        let bar = ctx.bar;
+
         // Run FWSEC-SB to reset the GSP falcon to its pre-libos state.
         // Log errors but keep going if it fails.
         let fwsec_sb_res = self
             .fwsec_sb
-            .run(dev, bar, gsp_falcon)
+            .run(dev, bar, ctx.gsp_falcon)
             .inspect_err(|e| dev_err!(dev, "FWSEC-SB failed to run: {:?}\n", e));
 
         // Remove WPR2 region if set.
@@ -142,12 +139,14 @@ impl UnloadBundle for Sec2UnloadBundle {
                 return Ok(());
             }
 
-            sec2_falcon.reset()?;
-            sec2_falcon.load(&self.booter_unloader)?;
+            ctx.sec2_falcon.reset()?;
+            ctx.sec2_falcon.load(&self.booter_unloader)?;
 
             // Sentinel value to confirm that Booter Unloader has run.
             const MAILBOX_SENTINEL: u32 = 0xff;
-            let (mbox0, _) = sec2_falcon.boot(Some(MAILBOX_SENTINEL), Some(MAILBOX_SENTINEL))?;
+            let (mbox0, _) = ctx
+                .sec2_falcon
+                .boot(Some(MAILBOX_SENTINEL), Some(MAILBOX_SENTINEL))?;
             if mbox0 != 0 {
                 dev_err!(dev, "Booter Unloader returned error 0x{:x}\n", mbox0);
                 return Err(EINVAL);
@@ -293,7 +292,7 @@ impl GspHal for Tu102 {
         // Run the unload bundle to try and recover the GSP if an error occurs.
         let unload_guard = ScopeGuard::new_with_data(unload_bundle, |unload_bundle| {
             if let Some(unload_bundle) = unload_bundle {
-                let _ = unload_bundle.0.run(dev, bar, gsp_falcon, sec2_falcon);
+                let _ = unload_bundle.0.run(ctx);
             }
         });
 
