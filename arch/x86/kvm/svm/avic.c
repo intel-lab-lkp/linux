@@ -932,6 +932,11 @@ int avic_pi_update_irte(struct kvm_kernel_irqfd *irqfd, struct kvm *kvm,
 		} else {
 			posted_intr = !!(entry & AVIC_PHYSICAL_ID_ENTRY_GA_LOG_INTR);
 			pi_data.flags = posted_intr << AMD_IOMMU_FLAG_POSTED_INTR_SHIFT;
+			/* GAPPI is disabled at this point (amd_iommu_gappi is
+			 * enabled in the following patches) hence keep the
+			 * apicid as 0.
+			 */
+			pi_data.apicid = 0;
 		}
 
 		ret = irq_set_vcpu_affinity(host_irq, &pi_data);

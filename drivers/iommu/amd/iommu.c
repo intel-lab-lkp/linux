@@ -3969,9 +3969,19 @@ static void __amd_iommu_update_ga(struct irte_ga *entry, int apicid, int flags)
 		entry->lo.fields_vapic.is_run = true;
 		entry->lo.fields_vapic.ga_log_intr = false;
 	} else {
-		entry->lo.fields_vapic.is_run = false;
-		entry->lo.fields_vapic.ga_log_intr = !!(flags &
-							AMD_IOMMU_FLAG_POSTED_INTR);
+		bool posted_intr = !!(flags & AMD_IOMMU_FLAG_POSTED_INTR);
+
+		if (amd_iommu_gappi) {
+			entry->lo.fields_vapic.gappi_dis = !posted_intr &&
+							   check_feature2(FEATURE_GAPPIDISSUP);
+			entry->lo.fields_vapic.is_run = false;
+			entry->lo.fields_vapic.destination =
+						APICID_TO_IRTE_DEST_LO(apicid);
+			entry->hi.fields.destination = APICID_TO_IRTE_DEST_HI(apicid);
+		} else {
+			entry->lo.fields_vapic.is_run = false;
+			entry->lo.fields_vapic.ga_log_intr = posted_intr;
+		}
 	}
 }
 
@@ -4034,7 +4044,11 @@ int amd_iommu_activate_guest_mode(void *data, int apicid, int flags)
 	entry->lo.fields_vapic.guest_mode  = 1;
 	entry->hi.fields.ga_root_ptr       = ir_data->ga_root_ptr;
 	entry->hi.fields.vector            = ir_data->ga_vector;
-	entry->lo.fields_vapic.ga_tag      = ir_data->ga_tag;
+
+	if (amd_iommu_gappi)
+		entry->lo.fields_vapic.ga_tag = POSTED_INTR_WAKEUP_VECTOR;
+	else
+		entry->lo.fields_vapic.ga_tag = ir_data->ga_tag;
 
 	__amd_iommu_update_ga(entry, apicid, flags);
 
