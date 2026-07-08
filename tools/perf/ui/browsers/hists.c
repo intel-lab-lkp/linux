@@ -3155,10 +3155,12 @@ do_hotkey:		 // key came straight from options ui__popup_menu()
 						continue;
 
 					actions->ms.sym = symbol__new_unresolved(bi->to.al_addr, bi->to.ms.map);
+					actions->ms.thread = bi->to.ms.thread;
 					actions->ms.map = bi->to.ms.map;
 				} else {
 					actions->ms.sym = symbol__new_unresolved(browser->he_selection->ip,
 										 browser->selection->map);
+					actions->ms.thread = browser->selection->thread;
 					actions->ms.map = browser->selection->map;
 				}
 
@@ -3173,6 +3175,7 @@ do_hotkey:		 // key came straight from options ui__popup_menu()
 					continue;
 				}
 
+				actions->ms.thread = browser->selection->thread;
 				actions->ms.map = browser->selection->map;
 				actions->ms.sym = browser->selection->sym;
 			}
