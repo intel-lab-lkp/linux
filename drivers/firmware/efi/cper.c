@@ -742,7 +742,8 @@ int cper_estatus_check_header(const struct acpi_hest_generic_status *estatus)
 	    estatus->data_length < sizeof(struct acpi_hest_generic_data))
 		return -EINVAL;
 	if (estatus->raw_data_length &&
-	    estatus->raw_data_offset < sizeof(*estatus) + estatus->data_length)
+	    (estatus->raw_data_offset < sizeof(*estatus) ||
+	     estatus->raw_data_offset - sizeof(*estatus) < estatus->data_length))
 		return -EINVAL;
 
 	return 0;

@@ -205,6 +205,21 @@ Architecture (MCA)\ [#f3]_.
 .. [#f3] For more details about the Machine Check Architecture (MCA),
   please read Documentation/arch/x86/x86_64/machinecheck.rst at the Kernel tree.
 
+Firmware-first CPER providers
+-----------------------------
+
+Some systems expose Common Platform Error Record (CPER) data through
+platform firmware, with the error source described in DeviceTree.
+Enable ``CONFIG_RAS_CPER_ESOURCE`` to support those providers. The
+current in-tree binding is
+``Documentation/devicetree/bindings/firmware/arm,ras-cper.yaml``.
+
+The DeviceTree node describes the firmware-owned status buffer and ack
+buffer used to exchange CPER data with the OS. The driver reuses the
+shared GHES CPER handling helpers, so parsing, logging, notifier
+delivery, and memory failure handling follow the same paths as ACPI
+GHES whether the error source is described by ACPI or DeviceTree.
+
 EDAC - Error Detection And Correction
 *************************************
 
