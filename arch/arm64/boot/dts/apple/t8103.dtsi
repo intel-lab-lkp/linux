@@ -24,6 +24,11 @@
 		gpu = &gpu;
 	};
 
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "efi";
+	};
+
 	cpus {
 		#address-cells = <2>;
 		#size-cells = <0>;
@@ -64,7 +69,8 @@
 			compatible = "apple,icestorm";
 			device_type = "cpu";
 			reg = <0x0 0x0>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&ecluster_opp>;
 			capacity-dmips-mhz = <714>;
@@ -78,7 +84,8 @@
 			compatible = "apple,icestorm";
 			device_type = "cpu";
 			reg = <0x0 0x1>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&ecluster_opp>;
 			capacity-dmips-mhz = <714>;
@@ -92,7 +99,8 @@
 			compatible = "apple,icestorm";
 			device_type = "cpu";
 			reg = <0x0 0x2>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&ecluster_opp>;
 			capacity-dmips-mhz = <714>;
@@ -106,7 +114,8 @@
 			compatible = "apple,icestorm";
 			device_type = "cpu";
 			reg = <0x0 0x3>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&ecluster_opp>;
 			capacity-dmips-mhz = <714>;
@@ -120,7 +129,8 @@
 			compatible = "apple,firestorm";
 			device_type = "cpu";
 			reg = <0x0 0x10100>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&pcluster_opp>;
 			capacity-dmips-mhz = <1024>;
@@ -134,7 +144,8 @@
 			compatible = "apple,firestorm";
 			device_type = "cpu";
 			reg = <0x0 0x10101>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&pcluster_opp>;
 			capacity-dmips-mhz = <1024>;
@@ -148,7 +159,8 @@
 			compatible = "apple,firestorm";
 			device_type = "cpu";
 			reg = <0x0 0x10102>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&pcluster_opp>;
 			capacity-dmips-mhz = <1024>;
@@ -162,7 +174,8 @@
 			compatible = "apple,firestorm";
 			device_type = "cpu";
 			reg = <0x0 0x10103>;
-			enable-method = "spin-table";
+			enable-method = "psci";
+			cpu-idle-states = <&cpu_retention_wfi &cpu_deep_wfi>;
 			cpu-release-addr = <0 0>; /* To be filled by loader */
 			operating-points-v2 = <&pcluster_opp>;
 			capacity-dmips-mhz = <1024>;
@@ -184,6 +197,28 @@
 			cache-level = <2>;
 			cache-unified;
 			cache-size = <0xc00000>;
+		};
+
+		idle-states {
+			entry-method = "psci";
+
+			cpu_retention_wfi: cpu-retention-wfi {
+				compatible = "arm,idle-state";
+				idle-state-name = "wfi";
+				arm,psci-suspend-param = <0x00000000>;
+				entry-latency-us = <1>;
+				exit-latency-us = <1>;
+				min-residency-us = <1>;
+			};
+
+			cpu_deep_wfi: cpu-deep-wfi {
+				compatible = "arm,idle-state";
+				idle-state-name = "deep-wfi";
+				arm,psci-suspend-param = <0x00000001>;
+				entry-latency-us = <5>;
+				exit-latency-us = <5>;
+				min-residency-us = <10000>;
+			};
 		};
 	};
 
