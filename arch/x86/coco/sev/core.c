@@ -1014,13 +1014,29 @@ void savic_ghcb_msr_write(u32 reg, u64 value)
 	struct ghcb_state state;
 	enum es_result res;
 	struct ghcb *ghcb;
+	u64 exit_info_2;
 
 	guard(irqsave)();
 
 	ghcb = __sev_get_ghcb(&state);
 	vc_ghcb_invalidate(ghcb);
 
-	res = __vc_handle_msr(ghcb, &ctxt, true);
+	if (reg == APIC_ICR) {
+		/*
+		 * Exit with AVIC_INCOMPLETE_IPI to request hypervisor to notify
+		 * the target vCPU(s). exit_info_1 is just the ICR value.
+		 * exit_info_2 encodes exit id in the upper 32-bits, and icrh
+		 * (IPI dest, since Secure AVIC is x2APIC-only) in the lower 32-bits.
+		 */
+		exit_info_2 = (u64)(AVIC_IPI_FAILURE_UNACCELERATED) << 32;
+		exit_info_2 |= upper_32_bits(value);
+
+		res = sev_es_ghcb_hv_call(ghcb, &ctxt, SVM_EXIT_AVIC_INCOMPLETE_IPI,
+					  value, exit_info_2);
+	} else {
+		res = __vc_handle_msr(ghcb, &ctxt, true);
+	}
+
 	if (res != ES_OK) {
 		pr_err("Secure AVIC MSR (0x%llx) write returned error (%d)\n", msr, res);
 		/* MSR writes should never fail. Any failure is fatal error for SNP guest */
