@@ -365,6 +365,12 @@ static inline bool ha_check_invariant_ns(struct ha_monitor *ha_mon,
 }
 /*
  * ha_invariant_passed_ns - prepare the invariant and return the time since reset
+ *
+ * If the env has not been initialised yet (first entry into a state with an
+ * invariant), anchor the guard clock at the current time so that the full
+ * budget is available from this point.  This preserves the documented
+ * guard->invariant ordering: ha_set_invariant_ns() is always preceded by a
+ * valid guard representation in env_store.
  */
 static inline u64 ha_invariant_passed_ns(struct ha_monitor *ha_mon, enum envs env,
 				   u64 expire, u64 time_ns)

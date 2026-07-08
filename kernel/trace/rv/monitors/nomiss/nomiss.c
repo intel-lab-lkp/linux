@@ -17,8 +17,8 @@
 
 #define RV_MON_TYPE RV_MON_PER_OBJ
 #define HA_TIMER_TYPE HA_TIMER_WHEEL
-/* The start condition is on sched_switch, it's dangerous to allocate there */
-#define DA_SKIP_AUTO_ALLOC
+/* Allocate storage in sched_setscheduler; sched_switch is too hot to alloc. */
+#define DA_MON_ALLOCATION_STRATEGY DA_ALLOC_MANUAL
 typedef struct sched_dl_entity *monitor_target;
 #include "nomiss.h"
 #include <rv/ha_monitor.h>
@@ -214,7 +214,7 @@ static void handle_sys_enter(void *data, struct pt_regs *regs, long id)
 	if (p->policy == SCHED_DEADLINE)
 		da_reset(EXPAND_ID_TASK(p));
 	else if (new_policy == SCHED_DEADLINE)
-		da_create_or_get(EXPAND_ID_TASK(p));
+		da_create_empty_storage(get_entity_id(&p->dl, task_cpu(p), DL_TASK));
 }
 
 static void handle_sched_wakeup(void *data, struct task_struct *tsk)
