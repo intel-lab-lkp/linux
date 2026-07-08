@@ -22,6 +22,7 @@ struct ovl_opt_set {
 struct ovl_fs_context_layer {
 	char *name;
 	struct path path;
+	struct file *origin;
 };
 
 struct ovl_fs_context {

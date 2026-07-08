@@ -1069,6 +1069,8 @@ const struct file_operations ovl_dir_operations = {
 	.iterate_shared	= shared_ovl_iterate,
 	.llseek		= ovl_dir_llseek,
 	.fsync		= ovl_dir_fsync,
+	.unlocked_ioctl	= ovl_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 	.release	= ovl_dir_release,
 	.setlease	= generic_setlease,
 };

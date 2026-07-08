@@ -8,6 +8,7 @@
 #include <linux/uuid.h>
 #include <linux/fs.h>
 #include <linux/fsverity.h>
+#include <uapi/linux/overlay.h>
 #include <linux/namei.h>
 #include <linux/posix_acl.h>
 #include <linux/posix_acl_xattr.h>
@@ -908,6 +909,9 @@ int ovl_cleanup(struct ovl_fs *ofs, struct dentry *workdir, struct dentry *dentr
 void ovl_tempname(char name[OVL_TEMPNAME_SIZE]);
 struct dentry *ovl_create_temp(struct ovl_fs *ofs, struct dentry *workdir,
 			       struct ovl_cattr *attr);
+
+/* super.c */
+long ovl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 /* file.c */
 extern const struct file_operations ovl_file_operations;

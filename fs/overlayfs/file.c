@@ -663,4 +663,6 @@ const struct file_operations ovl_file_operations = {
 	.copy_file_range	= ovl_copy_file_range,
 	.remap_file_range	= ovl_remap_file_range,
 	.setlease		= generic_setlease,
+	.unlocked_ioctl		= ovl_ioctl,
+	.compat_ioctl		= compat_ptr_ioctl,
 };

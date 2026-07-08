@@ -35,6 +35,8 @@ struct ovl_layer {
 	struct vfsmount *mnt;
 	/* Trap in ovl inode cache */
 	struct inode *trap;
+	/* Keeps the original fsmount file alive for OVL_IOC_OPEN_LAYER */
+	struct file *origin;
 	struct ovl_sb *fs;
 	/* Index of this layer in fs root (upper idx == 0) */
 	int idx;

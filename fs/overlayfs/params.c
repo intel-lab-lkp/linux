@@ -482,6 +482,11 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 			return PTR_ERR(layer_name);
 
 		err = ovl_do_parse_layer(fc, layer_name, &layer_path, layer);
+		if (!err && !is_upper_layer(layer)) {
+			struct ovl_fs_context *ctx = fc->fs_private;
+
+			ctx->lower[ctx->nr - 1].origin = get_file(param->file);
+		}
 		break;
 	}
 	default:
@@ -504,6 +509,9 @@ static void ovl_reset_lowerdirs(struct ovl_fs_context *ctx)
 		path_put(&l->path);
 		kfree(l->name);
 		l->name = NULL;
+		if (l->origin)
+			fput(l->origin);
+		l->origin = NULL;
 	}
 	ctx->nr = 0;
 	ctx->nr_data = 0;
@@ -856,6 +864,8 @@ void ovl_free_fs(struct ovl_fs *ofs)
 	mounts = (struct vfsmount **) ofs->config.lowerdirs;
 	for (i = 0; i < ofs->numlayer; i++) {
 		iput(ofs->layers[i].trap);
+		if (ofs->layers[i].origin)
+			fput(ofs->layers[i].origin);
 		kfree(ofs->config.lowerdirs[i]);
 		mounts[i] = ofs->layers[i].mnt;
 	}
