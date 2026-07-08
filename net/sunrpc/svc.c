@@ -269,10 +269,6 @@ struct svc_pool *svc_pool_for_cpu(struct svc_serv *serv)
 	if (nrpools <= 1)
 		return serv->sv_pools;
 
-	pidx = m->to_pool[cpu_to_node(raw_smp_processor_id())];
-	if (pidx >= nrpools)
-		pidx = 0;
-
 	/*
 	 * It's possible to have a pool with no threads. Userland can just set
 	 * things up this way directly. Also, when threads are autodistributed
@@ -284,6 +280,7 @@ struct svc_pool *svc_pool_for_cpu(struct svc_serv *serv)
 	 * populated pool, trading NUMA locality for a guarantee that the
 	 * transport is serviced.
 	 */
+	pidx = m->to_pool[cpu_to_node(raw_smp_processor_id())];
 	for (i = 0; i < nrpools; i++) {
 		struct svc_pool *pool = &serv->sv_pools[pidx];
 
