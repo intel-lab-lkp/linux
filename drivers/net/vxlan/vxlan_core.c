@@ -4674,10 +4674,16 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 	struct ifla_vxlan_port_range ports;
 	const struct vxlan_config *cfg;
 	const struct vxlan_rdst *dst;
+	int err = 0;
 
 	dst = &vxlan->default_dst;
 
-	cfg = rtnl_dereference(vxlan->cfg);
+	rcu_read_lock();
+	cfg = rcu_dereference(vxlan->cfg);
+	if (!cfg) {
+		err = -ENODEV;
+		goto out;
+	}
 
 	ports.low = htons(cfg->port_min);
 	ports.high = htons(cfg->port_max);
@@ -4777,9 +4783,12 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 		    &cfg->reserved_bits))
 		goto nla_put_failure;
 
-	return 0;
+out:
+	rcu_read_unlock();
+	return err;
 
 nla_put_failure:
+	rcu_read_unlock();
 	return -EMSGSIZE;
 }
 
