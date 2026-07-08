@@ -1598,7 +1598,7 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
  * page after fork() + CoW for pfn mappings. We don't always have a
  * hardware-managed access flag on arm64.
  */
-#define arch_has_hw_pte_young		cpu_has_hw_af
+#define arch_has_hw_pte_young		system_has_hw_af
 
 #ifdef CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG
 #define arch_has_hw_nonleaf_pmd_young	system_supports_haft
@@ -1608,7 +1608,7 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
  * Experimentally, it's cheap to set the access flag in hardware and we
  * benefit from prefaulting mappings as 'old' to start with.
  */
-#define arch_wants_old_prefaulted_pte	cpu_has_hw_af
+#define arch_wants_old_prefaulted_pte	system_has_hw_af
 
 /*
  * Request exec memory is read into pagecache in at least 64K folios. This size

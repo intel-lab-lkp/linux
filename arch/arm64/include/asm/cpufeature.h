@@ -910,20 +910,34 @@ static inline u32 id_aa64mmfr0_parange_to_phys_shift(int parange)
 }
 
 /* Check whether hardware update of the Access flag is supported */
-static inline bool cpu_has_hw_af(void)
+static inline bool supports_hw_af(int scope)
 {
 	u64 mmfr1;
 
 	if (!IS_ENABLED(CONFIG_ARM64_HW_AFDBM))
 		return false;
 
-	/*
-	 * Use cached version to avoid emulated msr operation on KVM
-	 * guests.
-	 */
-	mmfr1 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR1_EL1);
+	if (scope == SCOPE_SYSTEM) {
+		/*
+		 * Use cached version to avoid emulated msr operation on KVM
+		 * guests.
+		 */
+		mmfr1 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR1_EL1);
+	} else {
+		mmfr1 = read_cpuid(ID_AA64MMFR1_EL1);
+	}
 	return cpuid_feature_extract_unsigned_field(mmfr1,
 						ID_AA64MMFR1_EL1_HAFDBS_SHIFT);
+}
+
+static inline bool system_has_hw_af(void)
+{
+	return supports_hw_af(SCOPE_SYSTEM);
+}
+
+static inline bool cpu_has_hw_af(void)
+{
+	return supports_hw_af(SCOPE_LOCAL_CPU);
 }
 
 static inline bool cpu_has_pan(void)
