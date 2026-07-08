@@ -437,7 +437,9 @@ void avic_init_vmcb(struct vcpu_svm *svm, struct vmcb *vmcb)
 {
 	struct kvm_svm *kvm_svm = to_kvm_svm(svm->vcpu.kvm);
 
-	if (!snp_is_secure_avic_enabled(svm->vcpu.kvm)) {
+	if (snp_is_secure_avic_enabled(svm->vcpu.kvm)) {
+		svm_disable_intercept_for_msr(&svm->vcpu, MSR_AMD64_SAVIC_CONTROL, MSR_TYPE_RW);
+	} else {
 		vmcb->control.avic_backing_page = avic_get_backing_page_address(svm);
 		vmcb->control.avic_logical_id = __sme_set(__pa(kvm_svm->avic_logical_id_table));
 		vmcb->control.avic_physical_id = __sme_set(__pa(kvm_svm->avic_physical_id_table));
