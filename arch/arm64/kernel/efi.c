@@ -18,6 +18,7 @@
 #include <asm/stacktrace.h>
 #include <asm/vmap_stack.h>
 
+
 static bool region_is_misaligned(const efi_memory_desc_t *md)
 {
 	if (PAGE_SIZE == EFI_PAGE_SIZE)
@@ -241,6 +242,63 @@ bool efi_runtime_fixup_exception(struct pt_regs *regs, const char *msg)
 
 /* EFI requires 8 KiB of stack space for runtime services */
 static_assert(THREAD_SIZE >= SZ_8K);
+
+struct efi_psci_table efi_psci __ro_after_init;
+static unsigned long efi_psci_handler_table __initdata = EFI_INVALID_TABLE_ADDR;
+const efi_config_table_type_t efi_arch_tables[] __initconst = {
+	{LINUX_EFI_ARM_PSCI_HANDLER_TABLE_GUID, &efi_psci_handler_table},
+	{}
+};
+
+static void __init arm64_efi_init_psci(void)
+{
+	struct efi_psci_table *psci;
+
+	if (efi_psci_handler_table == EFI_INVALID_TABLE_ADDR)
+		return;
+
+	psci = early_memremap_ro(efi_psci_handler_table, sizeof(*psci));
+	if (psci == NULL) {
+		pr_warn("Unable to map PSCI table.\n");
+		return;
+	}
+
+	memcpy(&efi_psci, psci, sizeof(*psci));
+	early_memunmap(psci, sizeof(*psci));
+}
+
+void __init arm64_efi_init(void)
+{
+	efi_init();
+	arm64_efi_init_psci();
+}
+
+unsigned long arm64_efi_psci_call(unsigned long function_id, unsigned long arg0,
+				  unsigned long arg1, unsigned long arg2)
+{
+	unsigned long ret, flags;
+
+	/*
+	 * Note that unlike for regular EFI runtime calls we don't have to save
+	 * FP/SIMD state here because the handler ABI forbids using those.
+	 * Likewise, we do not take any lock here because the handler has to be
+	 * re-entrant. We couldn't take the sleeping efi_runtime_lock here
+	 * anyway because we may be called from atomic context for cpuidle
+	 * and CPU bring-up.
+	 */
+	local_irq_save(flags);
+	efi_virtmap_load();
+	uaccess_ttbr0_enable();
+	post_ttbr_update_workaround();
+
+	ret = efi_psci.psci_handler(function_id, arg0, arg1, arg2);
+
+	uaccess_ttbr0_disable();
+	efi_virtmap_unload();
+	local_irq_restore(flags);
+
+	return ret;
+}
 
 static int __init arm64_efi_rt_init(void)
 {

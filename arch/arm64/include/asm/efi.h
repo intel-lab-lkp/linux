@@ -14,10 +14,12 @@
 
 #ifdef CONFIG_EFI
 extern void efi_init(void);
+extern void arm64_efi_init(void);
 
 bool efi_runtime_fixup_exception(struct pt_regs *regs, const char *msg);
 #else
 #define efi_init()
+#define arm64_efi_init()
 
 static inline
 bool efi_runtime_fixup_exception(struct pt_regs *regs, const char *msg)
@@ -150,5 +152,59 @@ static inline void efi_capsule_flush_cache_range(void *addr, int size)
 efi_status_t efi_handle_corrupted_x18(efi_status_t s, const char *f);
 
 void efi_icache_sync(unsigned long start, unsigned long end);
+
+/*
+ * PSCI handler exposed by the firmware through
+ * LINUX_EFI_ARM_PSCI_HANDLER_TABLE_GUID.
+ *
+ * Unlike the regular EFI runtime services, this handler is invoked as a plain
+ * call under the EFI virtual mapping and not through the runtime services
+ * dispatch path. The OS therefore does not set up the usual runtime call
+ * environment around it, which imposes two requirements on the firmware:
+ *
+ *  - The handler must not corrupt FP/SIMD/SVE or any other lazily-saved CPU
+ *    state.
+ *
+ *  - The handler must be reentrant and independent of the other EFI runtime
+ *    services. It is only guaranteed to run with interrupts disabled on the
+ *    core it is called.
+ */
+typedef unsigned long efi_psci_handler_t(unsigned long function_id,
+					 unsigned long arg0,
+					 unsigned long arg1,
+					 unsigned long arg2);
+
+#define EFI_PSCI_MAX_FN 0x20
+
+/**
+ * struct efi_psci_table - firmware-provided PSCI conduit table
+ * @version:      PSCI version implemented by the firmware, in the format
+ *                returned by PSCI_VERSION (major in bits 16-30, minor in
+ *                bits 0-15).
+ * @num_features: Number of valid entries in @features. Function numbers at
+ *                or above this value are treated as not supported. Guaranteed
+ *                to be at least 0x20.
+ * @psci_handler: Firmware entry point invoked for PSCI calls that are not
+ *                served from the cached fields above. Called via
+ *                arm64_efi_psci_call() with the EFI runtime mapping active.
+ * @features:     PSCI_FEATURES results indexed by PSCI function number (the
+ *                low byte of the function ID, which is identical for the
+ *                SMC32 and SMC64 variants).
+ *
+ * Populated at boot from the firmware's PSCI handler configuration table
+ * (LINUX_EFI_ARM_PSCI_HANDLER_TABLE_GUID). @version, @num_features and
+ * @features cache the answers to the PSCI calls that must be serviced before
+ * EFI runtime services can be invoked. All other calls are forwarded to
+ * @psci_handler using arm64_efi_psci_call().
+ */
+extern struct efi_psci_table {
+	u32 version;
+	u32 num_features;
+	efi_psci_handler_t *psci_handler;
+	s32 features[EFI_PSCI_MAX_FN];
+} efi_psci;
+
+unsigned long arm64_efi_psci_call(unsigned long function_id, unsigned long arg0,
+				  unsigned long arg1, unsigned long arg2);
 
 #endif /* _ASM_EFI_H */

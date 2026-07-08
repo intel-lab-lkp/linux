@@ -320,7 +320,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	cpu_uninstall_idmap();
 
 	xen_early_init();
-	efi_init();
+	arm64_efi_init();
 
 	if (!efi_enabled(EFI_BOOT)) {
 		if ((u64)_text % MIN_KIMG_ALIGN)
