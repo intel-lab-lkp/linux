@@ -472,12 +472,17 @@ static void bnxt_aux_dev_release(struct device *dev)
 {
 	struct bnxt_aux_priv *aux_priv =
 		container_of(dev, struct bnxt_aux_priv, aux_dev.dev);
-	struct bnxt *bp = netdev_priv(aux_priv->edev->net);
+	struct bnxt_en_dev *edev = aux_priv->edev;
+	struct bnxt *bp = edev && edev->net ? netdev_priv(edev->net) : NULL;
 
-	kfree(aux_priv->edev->ulp_tbl);
-	bp->edev[aux_priv->id] = NULL;
-	kfree(aux_priv->edev);
-	bp->aux_priv[aux_priv->id] = NULL;
+	if (edev) {
+		kfree(edev->ulp_tbl);
+		if (bp)
+			bp->edev[aux_priv->id] = NULL;
+		kfree(edev);
+	}
+	if (bp)
+		bp->aux_priv[aux_priv->id] = NULL;
 	kfree(aux_priv);
 }
 
@@ -571,6 +576,7 @@ void bnxt_aux_devices_init(struct bnxt *bp)
 		aux_dev->name = bnxt_aux_devices[idx].name;
 		aux_dev->dev.parent = &bp->pdev->dev;
 		aux_dev->dev.release = bnxt_aux_dev_release;
+		aux_priv->id = idx;
 
 		rc = auxiliary_device_init(aux_dev);
 		if (rc) {
@@ -598,12 +604,12 @@ void bnxt_aux_devices_init(struct bnxt *bp)
 		bp->edev[idx] = edev;
 		if (idx == BNXT_AUXDEV_RDMA)
 			bp->ulp_num_msix_want = bnxt_set_dflt_ulp_msix(bp);
-		aux_priv->id = idx;
 		bnxt_auxdev_set_state(bp, idx, BNXT_ADEV_STATE_INIT);
 
 		continue;
 aux_dev_uninit:
 		auxiliary_device_uninit(aux_dev);
+		bp->aux_priv[idx] = NULL;
 next_auxdev:
 		if (idx == BNXT_AUXDEV_RDMA)
 			bp->flags &= ~BNXT_FLAG_ROCE_CAP;
