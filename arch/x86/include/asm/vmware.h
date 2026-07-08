@@ -115,7 +115,7 @@ unsigned long vmware_hypercall1(unsigned long cmd, unsigned long in1)
 		  "b" (in1),
 		  "c" (cmd),
 		  "d" (0)
-		: "cc", "memory");
+		: "di", "si", "cc", "memory");
 	return out0;
 }
 
