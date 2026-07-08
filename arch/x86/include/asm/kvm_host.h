@@ -1380,6 +1380,8 @@ struct kvm_arch {
 	bool apic_access_memslot_enabled;
 	bool apic_access_memslot_inhibited;
 
+	bool apicv_has_irq_bypass;
+
 	/*
 	 * Force apicv_update_lock and apicv_nr_irq_window_req to reside in a
 	 * dedicated cacheline.  They are write-mostly, whereas most everything
@@ -2063,10 +2065,4 @@ static inline void kvm_arch_vcpu_unblocking(struct kvm_vcpu *vcpu)
 {
 	kvm_x86_call(vcpu_unblocking)(vcpu);
 }
-
-static inline bool kvm_arch_has_irq_bypass(struct kvm *kvm)
-{
-	return enable_device_posted_irqs;
-}
-
 #endif /* _ASM_X86_KVM_HOST_H */

@@ -7233,6 +7233,7 @@ static void kvm_apicv_init(struct kvm *kvm)
 						       APICV_INHIBIT_REASON_DISABLED;
 
 	set_or_clear_apicv_inhibit(&kvm->arch.apicv_inhibit_reasons, reason, true);
+	kvm->arch.apicv_has_irq_bypass = true;
 
 	init_rwsem(&kvm->arch.apicv_update_lock);
 }
@@ -10571,6 +10572,12 @@ bool kvm_arch_no_poll(struct kvm_vcpu *vcpu)
 {
 	return (vcpu->arch.msr_kvm_poll_control & 1) == 0;
 }
+
+bool kvm_arch_has_irq_bypass(struct kvm *kvm)
+{
+	return enable_device_posted_irqs && kvm->arch.apicv_has_irq_bypass;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_arch_has_irq_bypass);
 
 #ifdef CONFIG_KVM_GUEST_MEMFD
 /*

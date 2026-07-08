@@ -566,6 +566,9 @@ static int __sev_guest_init(struct kvm *kvm, struct kvm_sev_cmd *argp,
 	INIT_LIST_HEAD(&sev->mirror_vms);
 	sev->need_init = false;
 
+	if (snp_is_secure_avic_enabled(kvm))
+		kvm->arch.apicv_has_irq_bypass = false;
+
 	kvm_set_apicv_inhibit(kvm, APICV_INHIBIT_REASON_SEV);
 
 	return 0;

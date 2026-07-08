@@ -920,6 +920,13 @@ int avic_pi_update_irte(struct kvm_kernel_irqfd *irqfd, struct kvm *kvm,
 			struct kvm_vcpu *vcpu, u32 vector)
 {
 	/*
+	 * Complain loudly as we should never reach here for Secure AVIC.
+	 * See kvm_arch_has_irq_bypass()
+	 */
+	if (WARN_ON_ONCE(snp_is_secure_avic_enabled(kvm)))
+		return -EINVAL;
+
+	/*
 	 * If the IRQ was affined to a different vCPU, remove the IRTE metadata
 	 * from the *previous* vCPU's list.
 	 */
