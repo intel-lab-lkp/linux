@@ -683,7 +683,7 @@ intel_th_subdevice_alloc(struct intel_th *th,
 
 	err = device_add(&thdev->dev);
 	if (err)
-		goto fail_free_res;
+		goto fail_put_device;
 
 	/* need switch driver to be loaded to enumerate the rest */
 	if (subdev->type == INTEL_TH_SWITCH && !req) {
@@ -693,9 +693,6 @@ intel_th_subdevice_alloc(struct intel_th *th,
 	}
 
 	return thdev;
-
-fail_free_res:
-	kfree(thdev->resource);
 
 fail_put_device:
 	put_device(&thdev->dev);
