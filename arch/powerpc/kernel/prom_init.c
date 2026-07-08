@@ -1841,6 +1841,7 @@ static void __init prom_instantiate_rtas(void)
 	u32 base, entry = 0;
 	__be32 val;
 	u32 size = 0;
+	u32 rtas_64 = 0;
 
 	prom_debug("prom_instantiate_rtas: start...\n");
 
@@ -1865,15 +1866,24 @@ static void __init prom_instantiate_rtas(void)
 		return;
 	}
 
+	/* Check for rtas 64-bit support */
+	if (prom_getprop(rtas_node, "ibm,rtas-64-capable",
+			 &val, sizeof(val)) != PROM_ERROR) {
+		rtas_64 = 1;
+		prom_debug("Node ibm,rtas-64-capable: %x\n", val);
+	}
+
 	prom_printf("instantiating rtas at 0x%x...", base);
 
+	const char *method = rtas_64 ? "instantiate-rtas-64" : "instantiate-rtas";
+
 	if (call_prom_ret("call-method", 3, 2, &entry,
-			  ADDR("instantiate-rtas"),
-			  rtas_inst, base) != 0
-	    || entry == 0) {
+			  ADDR(method), rtas_inst, base) != 0 ||
+			  entry == 0) {
 		prom_printf(" failed\n");
 		return;
 	}
+
 	prom_printf(" done\n");
 
 	reserve_mem(base, size);
@@ -1884,6 +1894,9 @@ static void __init prom_instantiate_rtas(void)
 	val = cpu_to_be32(entry);
 	prom_setprop(rtas_node, "/rtas", "linux,rtas-entry",
 		     &val, sizeof(val));
+	val = cpu_to_be32(rtas_64);
+	prom_setprop(rtas_node, "/rtas", "linux,rtas-64",
+		     &val, sizeof(val));
 
 	/* Check if it supports "query-cpu-stopped-state" */
 	if (prom_getprop(rtas_node, "query-cpu-stopped-state",
@@ -1893,6 +1906,7 @@ static void __init prom_instantiate_rtas(void)
 	prom_debug("rtas base     = 0x%x\n", base);
 	prom_debug("rtas entry    = 0x%x\n", entry);
 	prom_debug("rtas size     = 0x%x\n", size);
+	prom_debug("rtas 64-bit   = 0x%x\n", rtas_64);
 
 	prom_debug("prom_instantiate_rtas: end...\n");
 }

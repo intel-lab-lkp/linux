@@ -54,6 +54,10 @@ _ASM_NOKPROBE_SYMBOL(enter_rtas)
 /*
  * 32-bit rtas on 64-bit machines has the additional problem that RTAS may
  * not preserve the upper parts of registers it uses.
+ *
+ * Note: In 64-bit RTAS, the SF bit is set so that RTAS can return
+ * correctly if the return address is above 4 GB. Everything else
+ * works the same as in 32-bit RTAS.
  */
 _GLOBAL(enter_rtas)
 	mflr	r0
@@ -113,7 +117,18 @@ __enter_rtas:
 	 * from the saved MSR value and insert into the value RTAS will use.
 	 */
 	extrdi	r0, r6, 1, 63 - MSR_HV_LG
-	LOAD_REG_IMMEDIATE(r6, MSR_ME | MSR_RI)
+
+	LOAD_REG_ADDR(r7, rtas_64)	/* Load the address rtas_64 into r7 */
+	ld      r8, 0(r7)               /* Load the value of rtas_64 from memory into r8 */
+	cmpdi   r8, 0                   /* Compare r8 with 0 (check if rtas_64 is zero) */
+	beq     no_sf_bit               /* Branch to no_sf_bit if rtas_64 is zero */
+	LOAD_REG_IMMEDIATE(r6, MSR_ME | MSR_RI | MSR_SF)	/* r6 = ME|RI|SF */
+	b       continue
+
+no_sf_bit:
+	LOAD_REG_IMMEDIATE(r6, MSR_ME | MSR_RI)		/* r6 = ME|RI (NO SF bit in MSR) */
+
+continue:
 	insrdi	r6, r0, 1, 63 - MSR_HV_LG
 
 	li      r0,0
