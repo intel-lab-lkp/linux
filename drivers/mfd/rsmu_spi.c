@@ -244,7 +244,7 @@ static const struct spi_device_id rsmu_spi_id[] = {
 	{ .name = "8a34002",  .driver_data = RSMU_CM },
 	{ .name = "82p33810", .driver_data = RSMU_SABRE },
 	{ .name = "82p33811", .driver_data = RSMU_SABRE },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(spi, rsmu_spi_id);
 

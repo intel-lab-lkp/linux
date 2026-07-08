@@ -260,7 +260,7 @@ static const struct spi_device_id arizona_spi_ids[] = {
 	{ .name = "wm8280", .driver_data = WM8280 },
 	{ .name = "wm1831", .driver_data = WM1831 },
 	{ .name = "cs47l24", .driver_data = CS47L24 },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(spi, arizona_spi_ids);
 
