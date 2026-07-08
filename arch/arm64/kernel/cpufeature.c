@@ -2172,6 +2172,16 @@ static bool has_bbml2_noabort(const struct arm64_cpu_capabilities *caps, int sco
 	return cpu_supports_bbml2_noabort();
 }
 
+static bool hvo_compatible(const struct arm64_cpu_capabilities *caps, int scope)
+{
+	/*
+	 * We need BBML2 to support Block -> Table transitions without taking
+	 * faults, and we need HW AF support to support changing the OA without
+	 * taking faults.
+	 */
+	return cpu_supports_bbml2_noabort() && supports_hw_af(scope);
+}
+
 static void cpu_enable_pan(const struct arm64_cpu_capabilities *__unused)
 {
 	/*
@@ -3066,6 +3076,12 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.capability = ARM64_HAS_BBML2_NOABORT,
 		.type = ARM64_CPUCAP_EARLY_LOCAL_CPU_FEATURE,
 		.matches = has_bbml2_noabort,
+	},
+	{
+		.desc = "HugeTLB Vmemmap Optimization Support",
+		.capability = ARM64_HVO_COMPATIBLE,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = hvo_compatible,
 	},
 	{
 		.desc = "52-bit Virtual Addressing for KVM (LPA2)",
