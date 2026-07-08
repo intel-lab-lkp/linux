@@ -486,6 +486,48 @@ impl<Ctx: device::DeviceContext> I2cClient<Ctx> {
     fn as_raw(&self) -> *mut bindings::i2c_client {
         self.0.get()
     }
+
+    /// Read a byte from the device register at `command` (SMBus read-byte-data).
+    pub fn smbus_read_byte_data(&self, command: u8) -> Result<u8> {
+        // SAFETY: `self.as_raw()` returns a valid pointer to a `struct i2c_client`
+        // by the type invariant of `I2cClient`.
+        let ret = unsafe { bindings::i2c_smbus_read_byte_data(self.as_raw(), command) };
+        if ret < 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(ret as u8)
+        }
+    }
+
+    /// Write `value` to the device register at `command` (SMBus write-byte-data).
+    pub fn smbus_write_byte_data(&self, command: u8, value: u8) -> Result {
+        // SAFETY: `self.as_raw()` returns a valid pointer to a `struct i2c_client`
+        // by the type invariant of `I2cClient`.
+        to_result(unsafe { bindings::i2c_smbus_write_byte_data(self.as_raw(), command, value) })
+    }
+
+    /// Read-modify-write: set the bits selected by `mask` in the register at
+    /// `command` to `value`. Bits outside `mask` are preserved. Skips the write
+    /// if nothing changes.
+    ///
+    /// # Atomicity
+    ///
+    /// This read-modify-write is **not** atomic against concurrent callers. Two
+    /// callers updating disjoint fields of the same register can lose an update
+    /// (both read the old value; the second write clobbers the first). Rust's
+    /// safety guarantees cover memory, not device-register atomicity. Until this
+    /// is serialized by a lock (cf. `regmap`, which holds its own lock across the
+    /// RMW), callers must ensure mutual exclusion — currently safe only because
+    /// the single probe path is the sole accessor. FIXME: add a lock before the
+    /// threaded IRQ handler (Phase 4) introduces a second accessor.
+    pub fn smbus_update_bits(&self, command: u8, mask: u8, value: u8) -> Result {
+        let old = self.smbus_read_byte_data(command)?;
+        let new = (old & !mask) | (value & mask);
+        if new != old {
+            self.smbus_write_byte_data(command, new)?;
+        }
+        Ok(())
+    }
 }
 
 // SAFETY: `I2cClient` is a transparent wrapper of `struct i2c_client`.
