@@ -3196,7 +3196,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_VM_CR:
 		return svm_set_vm_cr(vcpu, data);
 	case MSR_VM_IGNNE:
-		kvm_pr_unimpl_wrmsr(vcpu, ecx, data);
+		KVM_BUG_ON(vcpu->arch.msr_hwcr & BIT_ULL(8), vcpu->kvm);
 		break;
 	case MSR_AMD64_DE_CFG: {
 		u64 supported_de_cfg;
