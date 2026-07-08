@@ -269,3 +269,11 @@ config DMA_MAP_BENCHMARK
 config DMA_LIVEUPDATE
 	bool "Enable preservation of DMA direct allocations"
 	depends on LIVEUPDATE
+
+config DMA_LIVEUPDATE_KUNIT_TEST
+	tristate "KUnit test for DMA direct liveupdate preservation"
+	depends on KUNIT
+	depends on DMA_LIVEUPDATE
+	help
+	  This builds the KUnit tests for the DMA direct liveupdate
+	  preservation and restoration logic.
