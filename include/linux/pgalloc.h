@@ -26,4 +26,24 @@
 			arch_sync_kernel_mappings(addr, addr);		\
 	} while (0)
 
+#ifndef __HAVE_ARCH_TRY_POPULATE_VMEMMAP_PMD
+/*
+ * try_populate_vmemmap_pmd - Populate a PMD that is in use by the vmemmap.
+ * @addr: Base address of the remapped PMD.
+ * @pmdp: Page table pointer to be overwritten.
+ * @pgtable: Pointer to the page table that the new PMD will point to.
+ *
+ * This function is only to be used to update PMDs that map the vmemmap to
+ * point to a page of already-populated PTEs that map the same pages.
+ *
+ * Implementations of this function must ensure that, while the update is taking
+ * place, CPUs will not fault on the remapped virtual address range.
+ */
+static inline int try_populate_vmemmap_pmd(pmd_t *pmdp, pte_t *pgtable,
+					   unsigned long addr)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 #endif /* _LINUX_PGALLOC_H */

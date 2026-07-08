@@ -24,6 +24,14 @@ static inline void pmd_populate(struct mm_struct *mm, pmd_t *pmd, pgtable_t pte)
 	set_pmd(pmd, __pmd((unsigned long)page_address(pte)));
 }
 
+#define __HAVE_ARCH_TRY_POPULATE_VMEMMAP_PMD
+static inline int try_populate_vmemmap_pmd(pmd_t *pmdp, pte_t *pgtable,
+					   unsigned long addr)
+{
+	pmd_populate_kernel(&init_mm, pmdp, pgtable);
+	return 0;
+}
+
 #ifndef __PAGETABLE_PMD_FOLDED
 
 static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)
