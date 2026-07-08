@@ -1364,6 +1364,8 @@ static void svm_vcpu_free(struct kvm_vcpu *vcpu)
 
 	WARN_ON_ONCE(!list_empty(&svm->ir_list));
 
+	avic_destroy_vcpu(svm);
+
 	svm_leave_nested(vcpu);
 	svm_free_nested(svm);
 
