@@ -7686,7 +7686,11 @@ static int kvm_check_and_inject_events(struct kvm_vcpu *vcpu,
 		if (r) {
 			int irq = kvm_cpu_get_interrupt(vcpu);
 
-			if (!WARN_ON_ONCE(irq == -1)) {
+			/*
+			 * Ignore kvm_cpu_get_interrupt() for a protected APIC guest. We know
+			 * there are injectable interrupts due to the check above.
+			 */
+			if (vcpu->arch.apic->guest_apic_protected || !WARN_ON_ONCE(irq == -1)) {
 				kvm_queue_interrupt(vcpu, irq, false);
 				kvm_x86_call(inject_irq)(vcpu, false);
 				WARN_ON(kvm_x86_call(interrupt_allowed)(vcpu, true) < 0);

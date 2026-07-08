@@ -98,6 +98,9 @@ int kvm_cpu_has_injectable_intr(struct kvm_vcpu *v)
 	if (kvm_cpu_has_extint(v))
 		return 1;
 
+	if (lapic_in_kernel(v) && v->arch.apic->guest_apic_protected)
+		return kvm_x86_call(protected_apic_has_injectable_intr)(v);
+
 	if (!is_guest_mode(v) && kvm_vcpu_apicv_active(v))
 		return 0;
 
