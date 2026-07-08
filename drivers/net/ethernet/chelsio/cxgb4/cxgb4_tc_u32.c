@@ -174,7 +174,7 @@ int cxgb4_config_knode(struct net_device *dev, struct tc_cls_u32_offload *cls)
 	 * existing rules.
 	 */
 	filter_id = cxgb4_get_free_ftid(dev, inet_family, false,
-					TC_U32_NODE(cls->knode.handle));
+					TC_U32_NODE(cls->knode.handle), 0);
 	if (filter_id < 0) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "No free LETCAM index available");

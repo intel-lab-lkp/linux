@@ -282,7 +282,7 @@ struct chcr_ktls {
 struct ch_filter_specification;
 
 int cxgb4_get_free_ftid(struct net_device *dev, u8 family, bool hash_en,
-			u32 tc_prio);
+			u32 tc_prio, u32 ethtype);
 int __cxgb4_set_filter(struct net_device *dev, int filter_id,
 		       struct ch_filter_specification *fs,
 		       struct filter_ctx *ctx);

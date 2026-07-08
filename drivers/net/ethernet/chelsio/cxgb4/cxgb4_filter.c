@@ -443,7 +443,7 @@ int cxgb4_get_filter_counters(struct net_device *dev, unsigned int fidx,
 }
 
 static bool cxgb4_filter_prio_in_range(struct tid_info *t, u32 idx, u8 nslots,
-				       u32 prio)
+				       u32 prio, u32 ethtype)
 {
 	struct filter_entry *prev_tab, *next_tab, *prev_fe, *next_fe;
 	u32 prev_ftid, next_ftid;
@@ -536,15 +536,24 @@ static bool cxgb4_filter_prio_in_range(struct tid_info *t, u32 idx, u8 nslots,
 	if (!prev_fe->fs.type)
 		prev_fe = &prev_tab[prev_ftid];
 
-	if ((prev_fe->valid && prev_fe->fs.tc_prio > prio) ||
-	    (next_fe->valid && next_fe->fs.tc_prio < prio))
+	/* Filters with different EtherTypes can never match the same
+	 * packet, so skip the priority check between them.
+	 */
+	if (prev_fe->valid && prev_fe->fs.tc_prio > prio &&
+	    (!prev_fe->fs.mask.ethtype || !ethtype ||
+	     prev_fe->fs.val.ethtype == ethtype))
+		return false;
+
+	if (next_fe->valid && next_fe->fs.tc_prio < prio &&
+	    (!next_fe->fs.mask.ethtype || !ethtype ||
+	     next_fe->fs.val.ethtype == ethtype))
 		return false;
 
 	return true;
 }
 
 int cxgb4_get_free_ftid(struct net_device *dev, u8 family, bool hash_en,
-			u32 tc_prio)
+			u32 tc_prio, u32 ethtype)
 {
 	struct adapter *adap = netdev2adap(dev);
 	struct tid_info *t = &adap->tids;
@@ -671,7 +680,7 @@ int cxgb4_get_free_ftid(struct net_device *dev, u8 family, bool hash_en,
 			 * with existing rules.
 			 */
 			if (cxgb4_filter_prio_in_range(t, ftid, n,
-						       tc_prio)) {
+						       tc_prio, ethtype)) {
 				ftid &= ~(n - 1);
 				found = true;
 				break;

@@ -885,8 +885,8 @@ int cxgb4_flow_rule_replace(struct net_device *dev, struct flow_rule *rule,
 	 * rule. Only insert rule if its prio doesn't conflict with
 	 * existing rules.
 	 */
-	fidx = cxgb4_get_free_ftid(dev, inet_family, fs->hash,
-				   tc_prio);
+	fidx = cxgb4_get_free_ftid(dev, inet_family, fs->hash, tc_prio,
+				   fs->mask.ethtype ? fs->val.ethtype : 0);
 	if (fidx < 0) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "No free LETCAM index available");

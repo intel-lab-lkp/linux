@@ -312,7 +312,7 @@ static int cxgb4_matchall_add_filter(struct net_device *dev,
 	 * existing rules.
 	 */
 	fidx = cxgb4_get_free_ftid(dev, filter_type ? PF_INET6 : PF_INET,
-				   false, cls->common.prio);
+				   false, cls->common.prio, 0);
 	if (fidx < 0) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "No free LETCAM index available");
