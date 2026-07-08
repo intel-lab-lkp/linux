@@ -815,6 +815,30 @@ static void clear_irqs(struct vip_dev *dev, int irq_num, int list_num)
 	vpdma_clear_list_stat(dev->shared->vpdma, irq_num, dev->slice_id);
 }
 
+/*
+ * Drain the overflow IRQ handler and recovery worker for this stream
+ * before its resources are released. disable_irqs() masks both the
+ * parser-overflow and the list-complete IRQ for this list.
+ * vip_overflow_recovery_work() checks irq_rearm_allowed before it
+ * re-enables IRQs, but it may have passed that check just before the
+ * flag is cleared and then enabled IRQs before cancel_work_sync()
+ * returns, so disable and synchronize one more time. Reached on
+ * close(fd) through vip_stop_streaming() and on unbind/remove through
+ * free_stream().
+ */
+static void vip_quiesce_stream(struct vip_stream *stream)
+{
+	struct vip_dev *dev = stream->port->dev;
+
+	disable_irqs(dev, dev->slice_id, stream->list_num);
+	clear_irqs(dev, dev->slice_id, stream->list_num);
+	synchronize_irq(dev->irq);
+	cancel_work_sync(&stream->recovery_work);
+	disable_irqs(dev, dev->slice_id, stream->list_num);
+	clear_irqs(dev, dev->slice_id, stream->list_num);
+	synchronize_irq(dev->irq);
+}
+
 static void populate_desc_list(struct vip_stream *stream)
 {
 	struct vip_port *port = stream->port;
@@ -1042,6 +1066,16 @@ static void vip_overflow_recovery_work(struct work_struct *work)
 	populate_desc_list(stream);
 	stream->num_recovery++;
 	if (stream->num_recovery < 5) {
+		/*
+		 * Streaming may have stopped while this work was pending or
+		 * running. If re-arming is no longer allowed, leave the
+		 * interrupts disabled and return instead of restarting the
+		 * capture path. vip_stop_streaming() and free_stream() clear
+		 * the flag before tearing the path down.
+		 */
+		if (!READ_ONCE(stream->irq_rearm_allowed))
+			return;
+
 		/* Reload the vpdma */
 		vip_load_vpdma_list_fifo(stream);
 
@@ -2429,6 +2463,7 @@ static int vip_start_streaming(struct vb2_queue *vq, unsigned int count)
 		goto err;
 
 	stream->num_recovery = 0;
+	WRITE_ONCE(stream->irq_rearm_allowed, true);
 
 	clear_irqs(dev, dev->slice_id, stream->list_num);
 	enable_irqs(dev, dev->slice_id, stream->list_num);
@@ -2453,12 +2488,18 @@ static void vip_stop_streaming(struct vb2_queue *vq)
 	struct vip_dev *dev = port->dev;
 	int ret;
 
+	/*
+	 * The stream is going down: forbid the recovery worker from
+	 * re-arming the capture path and drain any in-flight overflow IRQ
+	 * handler and worker before the descriptor list is freed by
+	 * vip_release_stream().
+	 */
+	WRITE_ONCE(stream->irq_rearm_allowed, false);
 	vip_parser_stop_imm(port, true);
 	vip_enable_parser(port, false);
 	unset_fmt_params(stream);
 
-	disable_irqs(dev, dev->slice_id, stream->list_num);
-	clear_irqs(dev, dev->slice_id, stream->list_num);
+	vip_quiesce_stream(stream);
 
 	if (port->subdev) {
 		ret = v4l2_subdev_call(port->subdev, video, s_stream, 0);
@@ -3140,6 +3181,16 @@ static void free_stream(struct vip_stream *stream)
 		return;
 
 	dev = stream->port->dev;
+	/*
+	 * Unbind/remove path: drop the stream from cap_streams[] so a
+	 * racing overflow handler misses the lookup, then drain the IRQ
+	 * handler and recovery worker (shared with vip_stop_streaming())
+	 * before releasing the stream-owned resources.
+	 */
+	WRITE_ONCE(stream->irq_rearm_allowed, false);
+	stream->port->cap_streams[stream->stream_id] = NULL;
+	vip_quiesce_stream(stream);
+
 	/* Free up the Drop queue */
 	list_for_each_safe(pos, q, &stream->dropq) {
 		buf = list_entry(pos,
@@ -3151,7 +3202,6 @@ static void free_stream(struct vip_stream *stream)
 
 	video_unregister_device(stream->vfd);
 	vpdma_hwlist_release(dev->shared->vpdma, stream->list_num);
-	stream->port->cap_streams[stream->stream_id] = NULL;
 	kfree(stream);
 }
 

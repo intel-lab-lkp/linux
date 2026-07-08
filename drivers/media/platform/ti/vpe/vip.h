@@ -215,6 +215,7 @@ struct vip_stream {
 	char			name[16];
 	struct work_struct	recovery_work;
 	int			num_recovery;
+	bool			irq_rearm_allowed;
 	enum v4l2_field		field;		/* current field */
 	unsigned int		sequence;	/* current frame/field seq */
 	enum v4l2_field		sup_field;	/* supported field value */
