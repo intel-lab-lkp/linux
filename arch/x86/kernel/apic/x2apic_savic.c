@@ -304,35 +304,6 @@ static void savic_update_vector(unsigned int cpu, unsigned int vector, bool set)
 	update_vector(cpu, SAVIC_ALLOWED_IRR, vector, set);
 }
 
-static void savic_eoi(void)
-{
-	unsigned int cpu;
-	int vec;
-
-	cpu = raw_smp_processor_id();
-	vec = apic_find_highest_vector(get_reg_bitmap(cpu, APIC_ISR));
-	if (WARN_ONCE(vec == -1, "EOI write while no active interrupt in APIC_ISR"))
-		return;
-
-	/* Is level-triggered interrupt? */
-	if (apic_test_vector(vec, get_reg_bitmap(cpu, APIC_TMR))) {
-		update_vector(cpu, APIC_ISR, vec, false);
-		/*
-		 * Propagate the EOI write to the hypervisor for level-triggered
-		 * interrupts. Return to the guest from GHCB protocol event takes
-		 * care of re-evaluating interrupt state.
-		 */
-		savic_ghcb_msr_write(APIC_EOI, 0);
-	} else {
-		/*
-		 * Hardware clears APIC_ISR and re-evaluates the interrupt state
-		 * to determine if there is any pending interrupt which can be
-		 * delivered to CPU.
-		 */
-		native_apic_msr_eoi();
-	}
-}
-
 static void savic_teardown(void)
 {
 	/* Disable Secure AVIC */
@@ -421,7 +392,7 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 
 	.read				= savic_read,
 	.write				= savic_write,
-	.eoi				= savic_eoi,
+	.eoi				= native_apic_msr_eoi,
 	.icr_read			= native_x2apic_icr_read,
 	.icr_write			= savic_icr_write,
 
