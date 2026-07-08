@@ -231,6 +231,17 @@ int dma_release_from_dev_coherent(struct device *dev, int order, void *vaddr)
 	return __dma_release_from_coherent(mem, order, vaddr);
 }
 
+bool dma_is_from_dev_coherent(struct device *dev, void *vaddr)
+{
+	struct dma_coherent_mem *mem = dev_get_coherent_memory(dev);
+
+	if (mem && vaddr >= mem->virt_base && vaddr <
+		   (mem->virt_base + ((dma_addr_t)mem->size << PAGE_SHIFT)))
+		return true;
+
+	return false;
+}
+
 static int __dma_mmap_from_coherent(struct dma_coherent_mem *mem,
 		struct vm_area_struct *vma, void *vaddr, size_t size, int *ret)
 {
