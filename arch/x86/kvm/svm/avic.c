@@ -884,6 +884,9 @@ int avic_init_vcpu(struct vcpu_svm *svm)
 	if (!enable_apicv || !irqchip_in_kernel(vcpu->kvm))
 		return 0;
 
+	if (snp_is_secure_avic_enabled(vcpu->kvm))
+		vcpu->arch.apic->guest_apic_protected = true;
+
 	ret = avic_init_backing_page(vcpu);
 	if (ret)
 		return ret;
