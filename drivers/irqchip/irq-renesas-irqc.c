@@ -194,6 +194,9 @@ static int irqc_probe(struct platform_device *pdev)
 	p->gc->chip_types[0].chip.irq_set_wake	= irqc_irq_set_wake;
 	p->gc->chip_types[0].chip.flags	= IRQCHIP_MASK_ON_SUSPEND;
 
+	/* Automatically free generic chips when interrupt domain is destroyed */
+	p->irq_domain->flags |= IRQ_DOMAIN_FLAG_DESTROY_GC;
+
 	irq_domain_set_pm_device(p->irq_domain, dev);
 
 	/* request interrupts one by one */
