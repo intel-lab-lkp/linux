@@ -78,6 +78,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/poll.h>
+#include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/pwm.h>
 #include <linux/random.h>
