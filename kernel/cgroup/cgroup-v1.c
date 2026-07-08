@@ -16,6 +16,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/cgroupstats.h>
 #include <linux/fs_parser.h>
+#include <linux/umh.h>
 
 #include <trace/events/cgroup.h>
 
