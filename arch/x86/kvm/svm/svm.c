@@ -5399,6 +5399,7 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 	.required_apicv_inhibits = AVIC_REQUIRED_APICV_INHIBITS,
 
 	.protected_apic_has_injectable_intr = snp_protected_apic_has_injectable_intr,
+	.protected_apic_has_interrupt = snp_protected_apic_has_interrupt,
 
 	.get_exit_info = svm_get_exit_info,
 	.get_entry_info = svm_get_entry_info,

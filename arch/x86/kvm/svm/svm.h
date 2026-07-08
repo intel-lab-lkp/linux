@@ -1018,6 +1018,7 @@ struct vmcb_save_area *sev_decrypt_vmsa(struct kvm_vcpu *vcpu);
 void sev_free_decrypted_vmsa(struct kvm_vcpu *vcpu, struct vmcb_save_area *vmsa);
 bool snp_is_secure_avic_enabled(struct kvm *kvm);
 bool snp_protected_apic_has_injectable_intr(struct kvm_vcpu *vcpu);
+bool snp_protected_apic_has_interrupt(struct kvm_vcpu *vcpu);
 #else
 static inline struct page *snp_safe_alloc_page_node(int node, gfp_t gfp)
 {
@@ -1057,6 +1058,7 @@ static inline struct vmcb_save_area *sev_decrypt_vmsa(struct kvm_vcpu *vcpu)
 static inline void sev_free_decrypted_vmsa(struct kvm_vcpu *vcpu, struct vmcb_save_area *vmsa) {}
 static inline bool snp_is_secure_avic_enabled(struct kvm *kvm) { return false; }
 static inline bool snp_protected_apic_has_injectable_intr(struct kvm_vcpu *vcpu) { return false; }
+static inline bool snp_protected_apic_has_interrupt(struct kvm_vcpu *vcpu) { return false; }
 #endif
 
 /* vmenter.S */

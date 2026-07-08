@@ -4947,6 +4947,11 @@ bool snp_protected_apic_has_injectable_intr(struct kvm_vcpu *vcpu)
 	return apic_find_highest_vector(vcpu->arch.apic->regs + APIC_IRR) != -1;
 }
 
+bool snp_protected_apic_has_interrupt(struct kvm_vcpu *vcpu)
+{
+	return snp_protected_apic_has_injectable_intr(vcpu);
+}
+
 void sev_vcpu_deliver_sipi_vector(struct kvm_vcpu *vcpu, u8 vector)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
