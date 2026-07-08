@@ -55,6 +55,7 @@ static const struct kvm_io_device_ops mmio_ops = {
 static int mmio_test_create(struct kvm_device *dev, u32 type)
 {
 	struct mmio_test *mmio_test;
+	int ret;
 
 	mmio_test = kzalloc_obj(struct mmio_test, GFP_KERNEL);
 	if (!mmio_test)
@@ -66,10 +67,10 @@ static int mmio_test_create(struct kvm_device *dev, u32 type)
 	dev->private = mmio_test;
 
 	kvm_iodevice_init(&mmio_test->dev, &mmio_ops);
-	mutex_lock(&kvm->slots_lock);
+	mutex_lock(&dev->kvm->slots_lock);
 	ret = kvm_io_bus_register_dev(dev->kvm, KVM_MMIO_BUS, mmio_test->start,
 				mmio_test->size, &mmio_test->dev);
-	mutex_unlock(&kvm->slots_lock);
+	mutex_unlock(&dev->kvm->slots_lock);
 
 	if (ret < 0)
 		kfree(mmio_test);
@@ -79,9 +80,7 @@ static int mmio_test_create(struct kvm_device *dev, u32 type)
 
 static void mmio_test_destroy(struct kvm_device *dev)
 {
-	struct mmio_test *mmio_test = kvm_to_mmio_test_dev(dev);
-
-	kvm_io_bus_unregister_dev(dev->kvm, KVM_MMIO_BUS, &mmio_test->dev);
+	kvm_io_bus_unregister_dev(dev->kvm, KVM_MMIO_BUS, &((struct mmio_test *)dev->private)->dev);
 	kfree(dev->private);
 	kfree(dev);
 }
