@@ -1847,6 +1847,10 @@ static int ip6_tnl_fill_forward_path(struct net_device_path_ctx *ctx,
 	struct ip6_tnl *t = netdev_priv(ctx->dev);
 	struct flowi6 fl6 = {
 		.daddr = t->parms.raddr,
+		.saddr = t->parms.laddr,
+		.flowi6_oif = t->parms.link,
+		.flowlabel = t->parms.flowinfo &
+			     (IPV6_TCLASS_MASK | IPV6_FLOWLABEL_MASK),
 	};
 	struct dst_entry *dst;
 	int err;
