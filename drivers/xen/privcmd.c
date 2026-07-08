@@ -833,6 +833,8 @@ static long privcmd_ioctl_mmap_resource(struct file *file,
 			DOMID_SELF : kdata.dom;
 		int num, *errs = (int *)pfns;
 
+		vma->vm_pgoff = pfns[0]; /* store the acquired pfn for ioeventfd access */
+
 		BUILD_BUG_ON(sizeof(*errs) > sizeof(*pfns));
 		num = xen_remap_domain_mfn_array(vma,
 						 kdata.addr & PAGE_MASK,
@@ -1264,9 +1266,37 @@ struct privcmd_kernel_ioreq *alloc_ioreq(struct privcmd_ioeventfd *ioeventfd)
 		goto error_kfree;
 	}
 
-	pages = vma->vm_private_data;
-	kioreq->ioreq = (struct ioreq *)(page_to_virt(pages[0]));
 	mmap_write_unlock(mm);
+
+	/* In a PV domain, we must manually map the pages into the kernel */
+	if (vma->vm_private_data == PRIV_VMA_LOCKED) {
+		/* This should never ever happen outside of PV */
+		if (WARN_ON_ONCE(!xen_pv_domain())) {
+			ret = -EINVAL;
+			goto error_kfree;
+		}
+
+		/* xen_remap_domain_mfn_array only really needs the mm */
+		struct vm_area_struct kern_vma = {
+			.vm_flags = VM_PFNMAP | VM_IO,
+			.vm_mm = &init_mm,
+		};
+		xen_pfn_t pfn = vma->vm_pgoff;
+		int num, err;
+
+		/* Don't provide NULL as the errors array as that results in pfn increment */
+		num = xen_remap_domain_mfn_array(&kern_vma, (unsigned long)pfn_to_kaddr(pfn),
+						&pfn, 1, &err, PAGE_KERNEL, ioeventfd->dom);
+		if (num < 0) {
+			ret = num;
+			goto error_kfree;
+		}
+
+		kioreq->ioreq = (struct ioreq *)(pfn_to_kaddr(pfn));
+	} else {
+		pages = vma->vm_private_data;
+		kioreq->ioreq = (struct ioreq *)(page_to_virt(pages[0]));
+	}
 
 	ports = memdup_array_user(u64_to_user_ptr(ioeventfd->ports),
 				  kioreq->vcpus, sizeof(*ports));
