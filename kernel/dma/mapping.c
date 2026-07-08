@@ -37,11 +37,24 @@ struct dma_devres {
 	void		*vaddr;
 	dma_addr_t	dma_handle;
 	unsigned long	attrs;
+#ifdef CONFIG_DMA_LIVEUPDATE
+	bool is_preserved;
+#endif
 };
 
 static void dmam_release(struct device *dev, void *res)
 {
 	struct dma_devres *this = res;
+
+#ifdef CONFIG_DMA_LIVEUPDATE
+	/*
+	 * Freeing the preserved memory is dangerous as it can cause UAF in the
+	 * current or next kernel if the memory is still being used by the
+	 * device.
+	 */
+	if (WARN_ON(this->is_preserved))
+		return;
+#endif
 
 	dma_free_attrs(dev, this->size, this->vaddr, this->dma_handle,
 			this->attrs);
@@ -675,6 +688,76 @@ void *dma_restore_allocation_attrs(struct device *dev, size_t size,
 	return cpu_addr;
 }
 EXPORT_SYMBOL(dma_restore_allocation_attrs);
+
+int dmam_preserve_allocation_attrs(struct device *dev, void *cpu_addr,
+				   size_t size, dma_addr_t dma_handle,
+				   unsigned long attrs, u64 *state)
+{
+	struct dma_devres match_data = { size, cpu_addr, dma_handle };
+	struct dma_devres *dr;
+	int ret;
+
+	dr = devres_find(dev, dmam_release, dmam_match, &match_data);
+	if (!dr)
+		return -EINVAL;
+
+	if (dr->is_preserved)
+		return -EINVAL;
+
+	ret = dma_preserve_allocation_attrs(dev, cpu_addr, size, dma_handle, attrs, state);
+	if (ret)
+		return ret;
+
+	dr->is_preserved = true;
+	return 0;
+}
+EXPORT_SYMBOL(dmam_preserve_allocation_attrs);
+
+void dmam_unpreserve_allocation(struct device *dev, void *cpu_addr,
+				size_t size, dma_addr_t dma_handle, u64 state)
+{
+	struct dma_devres match_data = { size, cpu_addr, dma_handle };
+	struct dma_devres *dr;
+
+	dr = devres_find(dev, dmam_release, dmam_match, &match_data);
+	if (!dr)
+		return;
+
+	if (!dr->is_preserved)
+		return;
+
+	dma_unpreserve_allocation(dev, state);
+	dr->is_preserved = false;
+}
+EXPORT_SYMBOL(dmam_unpreserve_allocation);
+
+void *dmam_restore_allocation_attrs(struct device *dev, size_t size,
+				    dma_addr_t *dma_handle, gfp_t gfp,
+				    unsigned long attrs, u64 state)
+{
+	struct dma_devres *dr;
+	void *vaddr;
+
+	dr = devres_alloc(dmam_release, sizeof(*dr), gfp);
+	if (!dr)
+		return NULL;
+
+	vaddr = dma_restore_allocation_attrs(dev, size, dma_handle, gfp, attrs, state);
+	if (!vaddr) {
+		devres_free(dr);
+		return NULL;
+	}
+
+	dr->vaddr = vaddr;
+	dr->dma_handle = *dma_handle;
+	dr->size = size;
+	dr->attrs = attrs;
+
+	devres_add(dev, dr);
+
+	return vaddr;
+}
+EXPORT_SYMBOL(dmam_restore_allocation_attrs);
 #endif
 
 void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,

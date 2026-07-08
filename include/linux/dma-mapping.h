@@ -218,6 +218,14 @@ void dma_unpreserve_allocation(struct device *dev, u64 state);
 void *dma_restore_allocation_attrs(struct device *dev, size_t size,
 				   dma_addr_t *dma_handle, gfp_t gfp,
 				   unsigned long attrs, u64 state);
+int dmam_preserve_allocation_attrs(struct device *dev, void *cpu_addr,
+				   size_t size, dma_addr_t dma_handle,
+				   unsigned long attrs, u64 *state);
+void dmam_unpreserve_allocation(struct device *dev, void *cpu_addr,
+				size_t size, dma_addr_t dma_handle, u64 state);
+void *dmam_restore_allocation_attrs(struct device *dev, size_t size,
+				    dma_addr_t *dma_handle, gfp_t gfp,
+				    unsigned long attrs, u64 state);
 #endif
 #else /* CONFIG_HAS_DMA */
 static inline dma_addr_t dma_map_page_attrs(struct device *dev,
@@ -523,6 +531,25 @@ static inline void *dma_restore_allocation_attrs(struct device *dev, size_t size
 {
 	return NULL;
 }
+
+static inline int dmam_preserve_allocation_attrs(struct device *dev, void *cpu_addr,
+						 size_t size, dma_addr_t dma_handle,
+						 unsigned long attrs, u64 *state)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void dmam_unpreserve_allocation(struct device *dev, void *cpu_addr,
+					      size_t size, dma_addr_t dma_handle, u64 state)
+{
+}
+
+static inline void *dmam_restore_allocation_attrs(struct device *dev, size_t size,
+						  dma_addr_t *dma_handle, gfp_t gfp,
+						  unsigned long attrs, u64 state)
+{
+	return NULL;
+}
 #endif
 
 struct page *dma_alloc_pages(struct device *dev, size_t size,
@@ -795,6 +822,29 @@ static inline void *dmam_alloc_coherent(struct device *dev, size_t size,
 {
 	return dmam_alloc_attrs(dev, size, dma_handle, gfp,
 			(gfp & __GFP_NOWARN) ? DMA_ATTR_NO_WARN : 0);
+}
+
+static inline int dmam_preserve_coherent_allocation(struct device *dev, void *cpu_addr,
+						    size_t size, dma_addr_t dma_handle, u64 *state)
+{
+	return dmam_preserve_allocation_attrs(dev, cpu_addr, size,
+					      dma_handle, 0, state);
+}
+
+static inline void dmam_unpreserve_coherent_allocation(struct device *dev, void *cpu_addr,
+						       size_t size, dma_addr_t dma_handle,
+						       u64 state)
+{
+	dmam_unpreserve_allocation(dev, cpu_addr, size, dma_handle, state);
+}
+
+static inline void *dmam_restore_coherent_allocation(struct device *dev, size_t size,
+						     dma_addr_t *dma_handle,
+						     gfp_t gfp, u64 state)
+{
+	return dmam_restore_allocation_attrs(dev, size, dma_handle, gfp,
+					     (gfp & __GFP_NOWARN) ? DMA_ATTR_NO_WARN : 0,
+					     state);
 }
 
 static inline void *dma_alloc_wc(struct device *dev, size_t size,
