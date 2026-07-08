@@ -3824,6 +3824,11 @@ static void svm_inject_irq(struct kvm_vcpu *vcpu, bool reinjected)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u32 type;
 
+	if (snp_is_secure_avic_enabled(vcpu->kvm)) {
+		savic_update_requested_irr(vcpu);
+		return;
+	}
+
 	if (intr->soft) {
 		if (svm_update_soft_interrupt_rip(vcpu, intr->nr))
 			return;
@@ -3896,7 +3901,7 @@ void svm_complete_interrupt_delivery(struct kvm_vcpu *vcpu, int delivery_mode,
 	bool in_guest_mode = (smp_load_acquire(&vcpu->mode) == IN_GUEST_MODE);
 
 	/* Note, this is called iff the local APIC is in-kernel. */
-	if (!READ_ONCE(vcpu->arch.apic->apicv_active)) {
+	if (!READ_ONCE(vcpu->arch.apic->apicv_active) || snp_is_secure_avic_enabled(vcpu->kvm)) {
 		/* Process the interrupt via kvm_check_and_inject_events(). */
 		kvm_make_request(KVM_REQ_EVENT, vcpu);
 		kvm_vcpu_kick(vcpu);
@@ -4050,6 +4055,14 @@ static int svm_interrupt_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 
+	/*
+	 * KVM does not have access to the Secure AVIC guest APIC backing page.
+	 * The only thing KVM can do is to queue up interrupts in the VMCB
+	 * (Requested_IRR), which is always allowed.
+	 */
+	if (snp_is_secure_avic_enabled(vcpu->kvm))
+		return 1;
+
 	if (svm_interrupt_blocked(vcpu))
 		return 0;
 
@@ -4069,6 +4082,16 @@ static int svm_interrupt_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 static void svm_enable_irq_window(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+
+	/*
+	 * Secure AVIC does not allow VINTR, so we can't request an interrupt
+	 * window. The only reason we end up here is if an interrupt arrived
+	 * just as we injected pending interrupts (from
+	 * kvm_check_and_inject_events()). Ignore and proceed, any pending
+	 * interrupt(s) will be re-injected on next entry.
+	 */
+	if (snp_is_secure_avic_enabled(vcpu->kvm))
+		return;
 
 	/*
 	 * In case GIF=0 we can't rely on the CPU to tell us when GIF becomes

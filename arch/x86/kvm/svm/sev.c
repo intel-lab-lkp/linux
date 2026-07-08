@@ -4428,6 +4428,33 @@ out_terminate:
 	return 0;
 }
 
+void savic_update_requested_irr(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	u32 *apic_irr, irr;
+
+	for (int i = 0; i < APIC_ISR_NR; i++) {
+		apic_irr = (u32 *)(vcpu->arch.apic->regs + APIC_IRR + i * 0x10);
+
+		if (!READ_ONCE(*apic_irr))
+			continue;
+
+		irr = xchg(apic_irr, 0);
+		svm->vmcb->control.requested_irr[i] |= irr;
+		vcpu->stat.irq_injections += hweight32(irr);
+
+		if (trace_kvm_inj_virq_enabled()) {
+			unsigned long irr_injected = irr;
+			unsigned int vector;
+
+			for_each_set_bit(vector, &irr_injected, BITS_PER_TYPE(irr))
+				trace_kvm_inj_virq(i * 32 + vector, false, false);
+		}
+	}
+
+	WRITE_ONCE(svm->vmcb->control.update_irr, 1);
+}
+
 static int sev_handle_savic_vmgexit(struct vcpu_svm *svm)
 {
 	struct kvm_vcpu *target_vcpu;
