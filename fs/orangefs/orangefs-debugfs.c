@@ -36,6 +36,7 @@
  * 			no need for a "verbose".
  */
 #include <linux/debugfs.h>
+#include <linux/seq_buf.h>
 #include <linux/slab.h>
 
 #include <linux/uaccess.h>
@@ -622,7 +623,7 @@ int orangefs_prepare_debugfs_help_string(int at_boot)
 	char *client_title = "Client Debug Keywords:\n";
 	char *kernel_title = "Kernel Debug Keywords:\n";
 	size_t string_size =  DEBUG_HELP_STRING_SIZE;
-	size_t result_size;
+	struct seq_buf sb;
 	size_t i;
 	char *new;
 	int rc = -EINVAL;
@@ -640,16 +641,13 @@ int orangefs_prepare_debugfs_help_string(int at_boot)
 	}
 
 	/*
-	 * strlcat(dst, src, size) will append at most
-	 * "size - strlen(dst) - 1" bytes of src onto dst,
-	 * null terminating the result, and return the total
-	 * length of the string it tried to create.
-	 *
 	 * We'll just plow through here building our new debug
-	 * help string and let strlcat take care of assuring that
-	 * dst doesn't overflow.
+	 * help string in a seq_buf, which is bounded by the buffer
+	 * size, keeps the string terminated, and records whether
+	 * anything failed to fit.
 	 */
-	strlcat(new, client_title, string_size);
+	seq_buf_init(&sb, new, string_size);
+	seq_buf_printf(&sb, "%s", client_title);
 
 	if (!at_boot) {
 
@@ -664,24 +662,18 @@ int orangefs_prepare_debugfs_help_string(int at_boot)
 			goto out;
 		}
 
-		for (i = 0; i < cdm_element_count; i++) {
-			strlcat(new, "\t", string_size);
-			strlcat(new, cdm_array[i].keyword, string_size);
-			strlcat(new, "\n", string_size);
-		}
+		for (i = 0; i < cdm_element_count; i++)
+			seq_buf_printf(&sb, "\t%s\n", cdm_array[i].keyword);
 	}
 
-	strlcat(new, "\n", string_size);
-	strlcat(new, kernel_title, string_size);
+	seq_buf_printf(&sb, "\n%s", kernel_title);
 
-	for (i = 0; i < num_kmod_keyword_mask_map; i++) {
-		strlcat(new, "\t", string_size);
-		strlcat(new, s_kmod_keyword_mask_map[i].keyword, string_size);
-		result_size = strlcat(new, "\n", string_size);
-	}
+	for (i = 0; i < num_kmod_keyword_mask_map; i++)
+		seq_buf_printf(&sb, "\t%s\n",
+			       s_kmod_keyword_mask_map[i].keyword);
 
 	/* See if we tried to put too many bytes into "new"... */
-	if (result_size >= string_size) {
+	if (seq_buf_has_overflowed(&sb)) {
 		kfree(new);
 		goto out;
 	}
@@ -691,7 +683,7 @@ int orangefs_prepare_debugfs_help_string(int at_boot)
 	} else {
 		mutex_lock(&orangefs_help_file_lock);
 		memset(debug_help_string, 0, DEBUG_HELP_STRING_SIZE);
-		strlcat(debug_help_string, new, string_size);
+		strscpy(debug_help_string, new, string_size);
 		mutex_unlock(&orangefs_help_file_lock);
 		kfree(new);
 	}
