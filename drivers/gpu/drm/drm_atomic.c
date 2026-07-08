@@ -706,6 +706,23 @@ drm_atomic_get_plane_state(struct drm_atomic_commit *state,
 }
 EXPORT_SYMBOL(drm_atomic_get_plane_state);
 
+static int drm_atomic_commit_set_colorop_state(struct drm_atomic_commit *commit,
+					       struct drm_colorop *colorop,
+					       struct drm_colorop_state *colorop_state)
+{
+	int index = drm_colorop_index(colorop);
+
+	drm_modeset_lock_assert_held(&colorop->plane->mutex);
+
+	commit->colorops[index].state_to_destroy = colorop_state;
+	commit->colorops[index].old_state = colorop->state;
+	commit->colorops[index].new_state = colorop_state;
+	commit->colorops[index].ptr = colorop;
+	colorop_state->state = commit;
+
+	return 0;
+}
+
 /**
  * drm_atomic_get_colorop_state - get colorop state
  * @state: global atomic state object
@@ -725,7 +742,7 @@ struct drm_colorop_state *
 drm_atomic_get_colorop_state(struct drm_atomic_commit *state,
 			     struct drm_colorop *colorop)
 {
-	int ret, index = drm_colorop_index(colorop);
+	int ret;
 	struct drm_colorop_state *colorop_state;
 
 	WARN_ON(!state->acquire_ctx);
@@ -742,11 +759,11 @@ drm_atomic_get_colorop_state(struct drm_atomic_commit *state,
 	if (!colorop_state)
 		return ERR_PTR(-ENOMEM);
 
-	state->colorops[index].state = colorop_state;
-	state->colorops[index].ptr = colorop;
-	state->colorops[index].old_state = colorop->state;
-	state->colorops[index].new_state = colorop_state;
-	colorop_state->state = state;
+	ret = drm_atomic_commit_set_colorop_state(state, colorop, colorop_state);
+	if (ret) {
+		drm_colorop_atomic_destroy_state(colorop, colorop_state);
+		return ERR_PTR(ret);
+	}
 
 	drm_dbg_atomic(colorop->dev, "Added [COLOROP:%d:%d] %p state to %p\n",
 		       colorop->base.id, colorop->type, colorop_state, state);
