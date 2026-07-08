@@ -22,19 +22,20 @@ static struct vport_ops ovs_vxlan_netdev_vport_ops;
 static int vxlan_get_options(const struct vport *vport, struct sk_buff *skb)
 {
 	struct vxlan_dev *vxlan = netdev_priv(vport->dev);
-	__be16 dst_port = vxlan->cfg.dst_port;
+	const struct vxlan_config *cfg = &vxlan->cfg;
+	__be16 dst_port = cfg->dst_port;
 
 	if (nla_put_u16(skb, OVS_TUNNEL_ATTR_DST_PORT, ntohs(dst_port)))
 		return -EMSGSIZE;
 
-	if (vxlan->cfg.flags & VXLAN_F_GBP) {
+	if (cfg->flags & VXLAN_F_GBP) {
 		struct nlattr *exts;
 
 		exts = nla_nest_start_noflag(skb, OVS_TUNNEL_ATTR_EXTENSION);
 		if (!exts)
 			return -EMSGSIZE;
 
-		if (vxlan->cfg.flags & VXLAN_F_GBP &&
+		if (cfg->flags & VXLAN_F_GBP &&
 		    nla_put_flag(skb, OVS_VXLAN_EXT_GBP))
 			return -EMSGSIZE;
 
