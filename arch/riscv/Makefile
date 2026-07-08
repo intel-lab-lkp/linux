@@ -176,6 +176,9 @@ BOOT_TARGETS := Image Image.gz Image.bz2 Image.lz4 Image.lzma Image.lzo Image.zs
 
 all:	$(notdir $(KBUILD_IMAGE))
 
+archprepare:
+	$(Q)$(MAKE) $(build)=arch/riscv/tools insn
+
 loader.bin: loader
 Image.gz Image.bz2 Image.lz4 Image.lzma Image.lzo Image.zst Image.xz loader xipImage vmlinuz.efi: Image
 

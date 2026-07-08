@@ -8,6 +8,36 @@
 
 #include <linux/bits.h>
 
+/*
+ * Generate a function to check if a sequence of bits matches an instruction
+ */
+#define __RISCV_INSN_FUNCS(name)							\
+static __always_inline bool riscv_insn_is_##name(u32 _insn)				\
+{											\
+	BUILD_BUG_ON(~(riscv_insn_##name##_MASK) & (riscv_insn_##name##_MATCH));	\
+	return (_insn & (riscv_insn_##name##_MASK)) == (riscv_insn_##name##_MATCH);	\
+}
+
+/*
+ * Generate a function to check if a sequence of bits matches an instruction
+ * with constraints. Some instructions require inputs to be specific values.
+ */
+#define __RISCV_INSN_FUNCS_CONSTRAINED(name, constraints)				\
+static __always_inline bool riscv_insn_is_##name(u32 _insn)				\
+{											\
+	BUILD_BUG_ON(~(riscv_insn_##name##_MASK) & (riscv_insn_##name##_MATCH));	\
+	return ((_insn & (riscv_insn_##name##_MASK)) == (riscv_insn_##name##_MATCH)) && \
+	       (constraints);								\
+}
+
+#define __RISCV_INSN_FUNCS_UNSUPPORTED(name)				\
+static __always_inline bool riscv_insn_is_##name(u32 _insn)		\
+{									\
+	return 0;							\
+}
+
+#include <asm/insn_gen.h>
+
 #define RV_INSN_FUNCT3_MASK	GENMASK(14, 12)
 #define RV_INSN_FUNCT3_OPOFF	12
 #define RV_INSN_OPCODE_MASK	GENMASK(6, 0)
@@ -233,36 +263,6 @@
 #define __INSN_OPCODE_MASK	_UL(0x7F)
 #define __INSN_BRANCH_OPCODE	_UL(RVG_OPCODE_BRANCH)
 
-#define __RISCV_INSN_FUNCS(name, mask, val)				\
-static __always_inline bool riscv_insn_is_##name(u32 code)		\
-{									\
-	BUILD_BUG_ON(~(mask) & (val));					\
-	return (code & (mask)) == (val);				\
-}									\
-
-#if __riscv_xlen == 32
-/* C.JAL is an RV32C-only instruction */
-__RISCV_INSN_FUNCS(c_jal, RVC_MASK_C_JAL, RVC_MATCH_C_JAL)
-#else
-#define riscv_insn_is_c_jal(opcode) 0
-#endif
-__RISCV_INSN_FUNCS(auipc, RVG_MASK_AUIPC, RVG_MATCH_AUIPC)
-__RISCV_INSN_FUNCS(jalr, RVG_MASK_JALR, RVG_MATCH_JALR)
-__RISCV_INSN_FUNCS(jal, RVG_MASK_JAL, RVG_MATCH_JAL)
-__RISCV_INSN_FUNCS(c_j, RVC_MASK_C_J, RVC_MATCH_C_J)
-__RISCV_INSN_FUNCS(beq, RVG_MASK_BEQ, RVG_MATCH_BEQ)
-__RISCV_INSN_FUNCS(bne, RVG_MASK_BNE, RVG_MATCH_BNE)
-__RISCV_INSN_FUNCS(blt, RVG_MASK_BLT, RVG_MATCH_BLT)
-__RISCV_INSN_FUNCS(bge, RVG_MASK_BGE, RVG_MATCH_BGE)
-__RISCV_INSN_FUNCS(bltu, RVG_MASK_BLTU, RVG_MATCH_BLTU)
-__RISCV_INSN_FUNCS(bgeu, RVG_MASK_BGEU, RVG_MATCH_BGEU)
-__RISCV_INSN_FUNCS(c_beqz, RVC_MASK_C_BEQZ, RVC_MATCH_C_BEQZ)
-__RISCV_INSN_FUNCS(c_bnez, RVC_MASK_C_BNEZ, RVC_MATCH_C_BNEZ)
-__RISCV_INSN_FUNCS(c_ebreak, RVC_MASK_C_EBREAK, RVC_MATCH_C_EBREAK)
-__RISCV_INSN_FUNCS(ebreak, RVG_MASK_EBREAK, RVG_MATCH_EBREAK)
-__RISCV_INSN_FUNCS(sret, RVG_MASK_SRET, RVG_MATCH_SRET)
-__RISCV_INSN_FUNCS(fence, RVG_MASK_FENCE, RVG_MATCH_FENCE);
-
 /* special case to catch _any_ system instruction */
 static __always_inline bool riscv_insn_is_system(u32 code)
 {
@@ -273,18 +273,6 @@ static __always_inline bool riscv_insn_is_system(u32 code)
 static __always_inline bool riscv_insn_is_branch(u32 code)
 {
 	return (code & RV_INSN_OPCODE_MASK) == RVG_OPCODE_BRANCH;
-}
-
-static __always_inline bool riscv_insn_is_c_jr(u32 code)
-{
-	return (code & RVC_MASK_C_JR) == RVC_MATCH_C_JR &&
-	       (code & RVC_INSN_J_RS1_MASK) != 0;
-}
-
-static __always_inline bool riscv_insn_is_c_jalr(u32 code)
-{
-	return (code & RVC_MASK_C_JALR) == RVC_MATCH_C_JALR &&
-	       (code & RVC_INSN_J_RS1_MASK) != 0;
 }
 
 #define INSN_MATCH_LB		0x3
