@@ -258,7 +258,7 @@ static const struct acpi_device_id crystal_cove_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, crystal_cove_acpi_match);
 
 static const struct i2c_device_id crystal_cove_i2c_match[] = {
-	{ "intel_soc_pmic_crc" },
+	{ .name = "intel_soc_pmic_crc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, crystal_cove_i2c_match);

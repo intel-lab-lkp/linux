@@ -107,7 +107,7 @@ static int rt5033_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id rt5033_i2c_id[] = {
-	{ "rt5033", },
+	{ .name = "rt5033" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, rt5033_i2c_id);

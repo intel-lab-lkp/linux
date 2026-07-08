@@ -463,8 +463,8 @@ static void max14577_i2c_remove(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id max14577_i2c_id[] = {
-	{ "max14577", MAXIM_DEVICE_TYPE_MAX14577, },
-	{ "max77836", MAXIM_DEVICE_TYPE_MAX77836, },
+	{ .name = "max14577", .driver_data = MAXIM_DEVICE_TYPE_MAX14577 },
+	{ .name = "max77836", .driver_data = MAXIM_DEVICE_TYPE_MAX77836 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max14577_i2c_id);

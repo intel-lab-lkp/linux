@@ -119,8 +119,8 @@ static int bq257xx_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id bq257xx_i2c_ids[] = {
-	{ "bq25703a", BQ25703A },
-	{ "bq25792", BQ25792 },
+	{ .name = "bq25703a", .driver_data = BQ25703A },
+	{ .name = "bq25792", .driver_data = BQ25792 },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, bq257xx_i2c_ids);

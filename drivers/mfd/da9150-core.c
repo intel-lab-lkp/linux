@@ -494,7 +494,7 @@ static void da9150_shutdown(struct i2c_client *client)
 }
 
 static const struct i2c_device_id da9150_i2c_id[] = {
-	{ "da9150", },
+	{ .name = "da9150" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, da9150_i2c_id);

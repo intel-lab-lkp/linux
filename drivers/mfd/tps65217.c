@@ -390,7 +390,7 @@ static void tps65217_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id tps65217_id_table[] = {
-	{"tps65217", TPS65217},
+	{ .name = "tps65217", .driver_data = TPS65217 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, tps65217_id_table);

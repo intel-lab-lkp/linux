@@ -40,7 +40,7 @@ static void cs40l50_i2c_remove(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id cs40l50_id_i2c[] = {
-	{ "cs40l50" },
+	{ .name = "cs40l50" },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, cs40l50_id_i2c);

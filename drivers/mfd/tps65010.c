@@ -649,11 +649,11 @@ static int tps65010_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id tps65010_id[] = {
-	{ "tps65010", TPS65010 },
-	{ "tps65011", TPS65011 },
-	{ "tps65012", TPS65012 },
-	{ "tps65013", TPS65013 },
-	{ "tps65014", TPS65011 },	/* tps65011 charging at 6.5V max */
+	{ .name = "tps65010", .driver_data = TPS65010 },
+	{ .name = "tps65011", .driver_data = TPS65011 },
+	{ .name = "tps65012", .driver_data = TPS65012 },
+	{ .name = "tps65013", .driver_data = TPS65013 },
+	{ .name = "tps65014", .driver_data = TPS65011 },	/* tps65011 charging at 6.5V max */
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tps65010_id);

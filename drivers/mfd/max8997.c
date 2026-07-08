@@ -229,8 +229,8 @@ err_i2c_haptic:
 }
 
 static const struct i2c_device_id max8997_i2c_id[] = {
-	{ "max8997", TYPE_MAX8997 },
-	{ "max8966", TYPE_MAX8966 },
+	{ .name = "max8997", .driver_data = TYPE_MAX8997 },
+	{ .name = "max8966", .driver_data = TYPE_MAX8966 },
 	{ }
 };
 

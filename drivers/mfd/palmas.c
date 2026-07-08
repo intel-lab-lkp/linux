@@ -699,10 +699,10 @@ static const struct of_device_id of_palmas_match_tbl[] = {
 MODULE_DEVICE_TABLE(of, of_palmas_match_tbl);
 
 static const struct i2c_device_id palmas_i2c_id[] = {
-	{ "palmas", (kernel_ulong_t)&palmas_data },
-	{ "twl6035", (kernel_ulong_t)&palmas_data },
-	{ "twl6037", (kernel_ulong_t)&palmas_data },
-	{ "tps65913", (kernel_ulong_t)&palmas_data },
+	{ .name = "palmas", .driver_data = (kernel_ulong_t)&palmas_data },
+	{ .name = "twl6035", .driver_data = (kernel_ulong_t)&palmas_data },
+	{ .name = "twl6037", .driver_data = (kernel_ulong_t)&palmas_data },
+	{ .name = "tps65913", .driver_data = (kernel_ulong_t)&palmas_data },
 	{ /* end */ }
 };
 MODULE_DEVICE_TABLE(i2c, palmas_i2c_id);

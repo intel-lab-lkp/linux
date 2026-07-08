@@ -225,7 +225,7 @@ err_irq_exit:
 
 
 static const struct i2c_device_id tps65090_id_table[] = {
-	{ "tps65090" },
+	{ .name = "tps65090" },
 	{ }
 };
 

@@ -101,7 +101,7 @@ menf21bmc_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id menf21bmc_id_table[] = {
-	{ "menf21bmc" },
+	{ .name = "menf21bmc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, menf21bmc_id_table);
