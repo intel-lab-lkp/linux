@@ -13,3 +13,27 @@
  * the ELF stack should not be restricted at all and set it RWX.
  */
 .section .note.GNU-stack,"",@progbits
+
+/*
+ * We need to provide .note.gnu.property section with IBT and SHSTK,
+ * saying that this object supports the same CET properties as C code
+ * built with -fcf-protection. Otherwise static linking drops CET from
+ * the final perf binary when other objects are CET-enabled.
+ */
+	.pushsection .note.gnu.property, "a"
+	.p2align 3
+	.long 1f - 0f
+	.long 4f - 1f
+	.long 5
+0:
+	.asciz "GNU"
+1:
+	.p2align 3
+	.long 0xc0000002
+	.long 3f - 2f
+2:
+	.long 3
+3:
+	.p2align 3
+4:
+	.popsection
