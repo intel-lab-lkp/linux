@@ -162,7 +162,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	int i, num_uffds = 0;
 
 	vm = memstress_create_vm(mode, nr_vcpus, guest_percpu_mem_size, 1,
-				 p->src_type, p->partition_vcpu_memory_access);
+				 p->src_type, p->partition_vcpu_memory_access, 0);
 
 	demand_paging_size = get_backing_src_pagesz(p->src_type);
 

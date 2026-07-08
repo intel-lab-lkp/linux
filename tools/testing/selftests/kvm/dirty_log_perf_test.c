@@ -119,7 +119,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 
 	vm = memstress_create_vm(mode, nr_vcpus, guest_percpu_mem_size,
 				 p->slots, p->backing_src,
-				 p->partition_vcpu_memory_access);
+				 p->partition_vcpu_memory_access, 0);
 
 	memstress_set_write_percent(vm, p->write_percent);
 
