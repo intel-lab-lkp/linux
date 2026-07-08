@@ -153,13 +153,13 @@ static int airoha_wdt_probe(struct platform_device *pdev)
 
 	/* Initialize struct watchdog device */
 	wdog_dev = &airoha_wdt->wdog_dev;
-	wdog_dev->timeout = heartbeat;
 	wdog_dev->info = &airoha_wdt_info;
 	wdog_dev->ops = &airoha_wdt_ops;
 	/* Bus 300MHz, watchdog 150MHz, 28 seconds */
 	wdog_dev->max_timeout = FIELD_MAX(WDT_TIMER_VAL) / airoha_wdt->wdt_freq;
 	wdog_dev->parent = dev;
 
+	watchdog_init_timeout(wdog_dev, heartbeat, dev);
 	watchdog_set_drvdata(wdog_dev, airoha_wdt);
 	watchdog_set_nowayout(wdog_dev, nowayout);
 	watchdog_stop_on_unregister(wdog_dev);
