@@ -257,7 +257,12 @@ static int migrate_vma_collect_pmd(pmd_t *pmdp,
 	pte_t *ptep;
 
 again:
-	if (pmd_trans_huge(*pmdp) || !pmd_present(*pmdp)) {
+	/*
+	 * Only check pmd when addr is at start, namely no pte is collected.
+	 * It avoids collecting the same address range [start, addr) twice
+	 * and overflowing the collection arrays.
+	 */
+	if (addr == start && (pmd_trans_huge(*pmdp) || !pmd_present(*pmdp))) {
 		int ret = migrate_vma_collect_huge_pmd(pmdp, start, end, walk, fault_folio);
 
 		if (ret == -EAGAIN)
@@ -267,8 +272,18 @@ again:
 	}
 
 	ptep = pte_offset_map_lock(mm, pmdp, start, &ptl);
-	if (!ptep)
+	if (!ptep) {
+		/*
+		 * Skip the rest if pmd becomes huge or cleared. Flush if any
+		 * pte is modified
+		 */
+		if (addr != start) {
+			if (unmapped)
+				flush_tlb_range(walk->vma, start, end);
+			return migrate_vma_collect_skip(addr, end, walk);
+		}
 		goto again;
+	}
 	lazy_mmu_mode_enable();
 	ptep += (addr - start) / PAGE_SIZE;
 
