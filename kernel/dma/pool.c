@@ -3,6 +3,9 @@
  * Copyright (C) 2012 ARM Ltd.
  * Copyright (C) 2020 Google LLC
  */
+
+#include <kunit/visibility.h>
+
 #include <linux/cma.h>
 #include <linux/debugfs.h>
 #include <linux/dma-map-ops.h>
@@ -320,3 +323,4 @@ bool dma_is_from_pool(void *start, size_t size)
 
 	return false;
 }
+EXPORT_SYMBOL_IF_KUNIT(dma_is_from_pool);
