@@ -18,10 +18,7 @@
     System Programming Guide; Section 9.11. (1997 edition - PPro).
 */
 
-#include <linux/types.h> /* FIXME: kvm_para.h needs this */
-
 #include <linux/stop_machine.h>
-#include <linux/kvm_para.h>
 #include <linux/uaccess.h>
 #include <linux/export.h>
 #include <linux/mutex.h>
