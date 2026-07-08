@@ -17,6 +17,7 @@
 #include <linux/pagewalk.h>
 #include <linux/pgalloc.h>
 #include <linux/hugetlb.h>
+#include <linux/hugetlb_vmemmap.h>
 
 #include <asm/tlbflush.h>
 #include "hugetlb_vmemmap_internal.h"
@@ -463,6 +464,39 @@ static int vmemmap_remap_alloc(const struct hstate *h, struct folio *folio,
 	return ret;
 }
 
+enum hugetlb_hvo_status {
+	HVO_INACTIVE = 0,
+	HVO_ACTIVE,
+	HVO_PERMANENTLY_INACTIVE,
+};
+static enum hugetlb_hvo_status hvo_status = HVO_INACTIVE;
+
+static bool hugetlb_hvo_status_try_set(enum hugetlb_hvo_status status)
+{
+	enum hugetlb_hvo_status old;
+
+	old = READ_ONCE(hvo_status);
+
+retry:
+	/* The current setting is what we want. */
+	if (old == status)
+		return true;
+
+	/* The current setting cannot be changed. */
+	if (old != HVO_INACTIVE)
+		return false;
+
+	if (!try_cmpxchg_relaxed(&hvo_status, &old, status))
+		goto retry;
+
+	return true;
+}
+
+bool hugetlb_vmemmap_optimization_try_disable(void)
+{
+	return hugetlb_hvo_status_try_set(HVO_PERMANENTLY_INACTIVE);
+}
+
 static bool vmemmap_optimize_enabled = IS_ENABLED(CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP_DEFAULT_ON);
 static int __init hugetlb_vmemmap_optimize_param(char *buf)
 {
@@ -569,6 +603,9 @@ static bool vmemmap_should_optimize_folio(const struct hstate *h, struct folio *
 		return false;
 
 	if (!hugetlb_vmemmap_optimizable(h))
+		return false;
+
+	if (!hugetlb_hvo_status_try_set(HVO_ACTIVE))
 		return false;
 
 	return true;
@@ -807,6 +844,9 @@ static bool vmemmap_should_optimize_bootmem_page(struct huge_bootmem_page *m)
 	pmd_vmemmap_size = (PMD_SIZE / (sizeof(struct page))) << PAGE_SHIFT;
 	if (!IS_ALIGNED(paddr, pmd_vmemmap_size) ||
 	    !IS_ALIGNED(psize, pmd_vmemmap_size))
+		return false;
+
+	if (!hugetlb_hvo_status_try_set(HVO_ACTIVE))
 		return false;
 
 	return true;
