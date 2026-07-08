@@ -1887,7 +1887,6 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 		 * Only allow notifications during while the connection is in an
 		 * initialized and connected state
 		 */
-		err = -EINVAL;
 		if (!fch->initialized || !fch->connected)
 			goto copy_finish;
 
@@ -1898,7 +1897,6 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 		goto copy_finish;
 	}
 
-	err = -EINVAL;
 	if (oh.error <= -512 || oh.error > 0)
 		goto copy_finish;
 
