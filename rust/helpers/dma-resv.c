@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#ifdef CONFIG_DMA_SHARED_BUFFER
+
 #include <linux/dma-resv.h>
 
 __rust_helper
@@ -12,3 +14,5 @@ __rust_helper void rust_helper_dma_resv_unlock(struct dma_resv *obj)
 {
 	dma_resv_unlock(obj);
 }
+
+#endif
