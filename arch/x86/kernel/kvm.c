@@ -495,7 +495,8 @@ static bool pv_tlb_flush_supported(void)
 static bool pv_ipi_supported(void)
 {
 	return (kvm_para_has_feature(KVM_FEATURE_PV_SEND_IPI) &&
-	       (num_possible_cpus() != 1));
+		(num_possible_cpus() != 1) &&
+		!cc_platform_has(CC_ATTR_SNP_SECURE_AVIC));
 }
 
 static bool pv_sched_yield_supported(void)
