@@ -234,6 +234,10 @@ static int rzg2l_cru_media_init(struct rzg2l_cru_dev *cru)
 		mutex_lock(&cru->mdev_lock);
 		cru->v4l2_dev.mdev = NULL;
 		mutex_unlock(&cru->mdev_lock);
+		media_device_cleanup(mdev);
+		media_entity_cleanup(&cru->vdev.entity);
+		mutex_destroy(&cru->mdev_lock);
+		return ret;
 	}
 
 	return 0;
@@ -312,6 +316,7 @@ static void rzg2l_cru_remove(struct platform_device *pdev)
 	v4l2_async_nf_cleanup(&cru->notifier);
 
 	rzg2l_cru_video_unregister(cru);
+	media_entity_cleanup(&cru->vdev.entity);
 	media_device_cleanup(&cru->mdev);
 	mutex_destroy(&cru->mdev_lock);
 
