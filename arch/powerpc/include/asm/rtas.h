@@ -561,6 +561,14 @@ static inline int page_is_rtas_user_buf(unsigned long pfn)
 	return 0;
 }
 
+static inline bool is_rtas_high_crashkernel_capable(void)
+{
+	if (rtas_64)
+		return true;
+
+	return false;
+}
+
 /* Not the best place to put pSeries_coalesce_init, will be fixed when we
  * move some of the rtas suspend-me stuff to pseries */
 void pSeries_coalesce_init(void);
@@ -569,6 +577,7 @@ void rtas_initialize(void);
 static inline int page_is_rtas_user_buf(unsigned long pfn) { return 0;}
 static inline void pSeries_coalesce_init(void) { }
 static inline void rtas_initialize(void) { }
+static inline bool is_rtas_high_crashkernel_capable(void) { return true; }
 #endif
 
 #ifdef CONFIG_HV_PERF_CTRS
