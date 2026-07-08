@@ -2455,7 +2455,6 @@ close_file_and_continue:
 
 struct popup_action {
 	unsigned long		time;
-	struct thread 		*thread;
 	int (*fn)(struct hist_browser *browser, struct popup_action *act);
 	struct map_symbol 	ms;
 	int			socket;
@@ -2572,7 +2571,7 @@ add_annotate_type_opt(struct popup_action *act, char **optstr,
 static int
 do_zoom_thread(struct hist_browser *browser, struct popup_action *act)
 {
-	struct thread *thread = act->thread;
+	struct thread *thread = act->ms.thread;
 
 	if ((!hists__has(browser->hists, thread) &&
 	     !hists__has(browser->hists, comm)) || thread == NULL)
@@ -2627,7 +2626,7 @@ add_thread_opt(struct hist_browser *browser, struct popup_action *act,
 	if (ret < 0)
 		return 0;
 
-	act->thread = thread;
+	act->ms.thread = thread;
 	act->fn = do_zoom_thread;
 	return 1;
 }
@@ -2733,8 +2732,8 @@ do_run_script(struct hist_browser *browser,
 	int n = 0;
 
 	len = 100;
-	if (act->thread)
-		len += strlen(thread__comm_str(act->thread));
+	if (act->ms.thread)
+		len += strlen(thread__comm_str(act->ms.thread));
 	else if (act->ms.sym)
 		len += strlen(act->ms.sym->name);
 	script_opt = malloc(len);
@@ -2742,9 +2741,9 @@ do_run_script(struct hist_browser *browser,
 		return -1;
 
 	script_opt[0] = 0;
-	if (act->thread) {
+	if (act->ms.thread) {
 		n = scnprintf(script_opt, len, " -c %s ",
-			  thread__comm_str(act->thread));
+			  thread__comm_str(act->ms.thread));
 	} else if (act->ms.sym) {
 		n = scnprintf(script_opt, len, " -S %s ",
 			  act->ms.sym->name);
@@ -2799,7 +2798,7 @@ add_script_opt_2(struct popup_action *act, char **optstr,
 			return 0;
 	}
 
-	act->thread = thread;
+	act->ms.thread = thread;
 	act->ms.sym = sym;
 	act->fn = do_run_script;
 	return 1;
@@ -3202,7 +3201,7 @@ do_hotkey:		 // key came straight from options ui__popup_menu()
 					   verbose);
 			continue;
 		case 't':
-			actions->thread = thread;
+			actions->ms.thread = thread;
 			do_zoom_thread(browser, actions);
 			continue;
 		case 'S':
@@ -3222,7 +3221,7 @@ do_hotkey:		 // key came straight from options ui__popup_menu()
 			continue;
 		case 'r':
 			if (is_report_browser(hbt)) {
-				actions->thread = NULL;
+				actions->ms.thread = NULL;
 				actions->ms.sym = NULL;
 				do_run_script(browser, actions);
 			}
@@ -3305,7 +3304,7 @@ do_hotkey:		 // key came straight from options ui__popup_menu()
 				 */
 				do_zoom_dso(browser, actions);
 			} else if (top == &browser->hists->thread_filter) {
-				actions->thread = thread;
+				actions->ms.thread = thread;
 				do_zoom_thread(browser, actions);
 			} else if (top == &browser->hists->socket_filter) {
 				do_zoom_socket(browser, actions);
