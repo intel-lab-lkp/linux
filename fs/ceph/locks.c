@@ -177,25 +177,32 @@ static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
 
 	doutc(cl, "request %llu was interrupted\n", req->r_tid);
 
+	/*
+	 * mdsc->mutex guards the r_session check below.  The terminal-state
+	 * arbitration against a concurrent reply/forward handler is done under
+	 * r_completion_lock (the same lock ceph_mdsc_wait_request() uses),
+	 * since those handlers no longer serialize on mdsc->mutex.
+	 * r_fill_mutex additionally fences ceph_fill_trace() /
+	 * ceph_readdir_prepopulate(), which consult CEPH_MDS_R_ABORTED while
+	 * relying on locks (dir mutex) held by our caller.
+	 * Lock ordering: mdsc->mutex -> r_fill_mutex -> r_completion_lock.
+	 */
 	mutex_lock(&mdsc->mutex);
+	mutex_lock(&req->r_fill_mutex);
+	spin_lock(&req->r_completion_lock);
 	if (test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags)) {
 		err = 0;
 	} else {
-		/*
-		 * ensure we aren't running concurrently with
-		 * ceph_fill_trace or ceph_readdir_prepopulate, which
-		 * rely on locks (dir mutex) held by our caller.
-		 */
-		mutex_lock(&req->r_fill_mutex);
 		req->r_err = err;
 		set_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags);
-		mutex_unlock(&req->r_fill_mutex);
 
 		if (!req->r_session) {
 			// haven't sent the request
 			err = 0;
 		}
 	}
+	spin_unlock(&req->r_completion_lock);
+	mutex_unlock(&req->r_fill_mutex);
 	mutex_unlock(&mdsc->mutex);
 	if (!err)
 		return 0;

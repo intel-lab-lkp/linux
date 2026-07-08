@@ -2774,6 +2774,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode)
 		return ERR_PTR(-ENOMEM);
 
 	mutex_init(&req->r_fill_mutex);
+	spin_lock_init(&req->r_completion_lock);
 	req->r_mdsc = mdsc;
 	req->r_started = jiffies;
 	req->r_start_latency = ktime_get();
@@ -3580,7 +3581,9 @@ static int __prepare_send_request(struct ceph_mds_session *session,
 	}
 	msg = create_request_message(session, req, drop_cap_releases);
 	if (IS_ERR(msg)) {
+		spin_lock(&req->r_completion_lock);
 		req->r_err = PTR_ERR(msg);
+		spin_unlock(&req->r_completion_lock);
 		return PTR_ERR(msg);
 	}
 	req->r_request = msg;
@@ -3638,9 +3641,34 @@ static void __do_request(struct ceph_mds_client *mdsc,
 	int mds = -1;
 	int err = 0;
 	bool random;
+	bool done, aborted;
 
-	if (req->r_err || test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags)) {
-		if (test_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags))
+	/*
+	 * The request may already have reached its terminal state,
+	 * either because a reply/forward arrived or because
+	 * ceph_mdsc_wait_request() aborted it.  Sample that state
+	 * under r_completion_lock so we agree with those paths, which
+	 * no longer all serialize on mdsc->mutex.
+	 *
+	 * This is only a point-in-time check.  Since the abort path
+	 * does not own mdsc->mutex, CEPH_MDS_R_ABORTED may be set
+	 * concurrently after this snapshot while we go on to choose a
+	 * MDS and send the request, so a request can be sent (or
+	 * queued) after it has been aborted.  That is harmless:
+	 * ABORTED is re-checked at every consumer: handle_reply()
+	 * discards the reply, ceph_fill_trace() skips the work that
+	 * relies on locks held by the (now returned) caller, and the
+	 * next __do_request() sees the flag and unregisters the
+	 * request.  ABORTED is an advisory "stop waiting" flag, not a
+	 * send barrier.
+	 */
+	spin_lock(&req->r_completion_lock);
+	done = req->r_err || test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags);
+	aborted = test_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags);
+	spin_unlock(&req->r_completion_lock);
+
+	if (done) {
+		if (aborted)
 			__unregister_request(mdsc, req);
 		return;
 	}
@@ -3794,7 +3822,9 @@ static void __do_request(struct ceph_mds_client *mdsc,
 					  TASK_KILLABLE);
 			if (err) {
 				mutex_lock(&req->r_fill_mutex);
+				spin_lock(&req->r_completion_lock);
 				set_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags);
+				spin_unlock(&req->r_completion_lock);
 				mutex_unlock(&req->r_fill_mutex);
 				goto out_session;
 			}
@@ -3835,7 +3865,9 @@ out_session:
 finish:
 	if (err) {
 		doutc(cl, "early error %d\n", err);
+		spin_lock(&req->r_completion_lock);
 		req->r_err = err;
+		spin_unlock(&req->r_completion_lock);
 		complete_request(mdsc, req);
 		__unregister_request(mdsc, req);
 	}
@@ -3962,6 +3994,8 @@ int ceph_mdsc_wait_request(struct ceph_mds_client *mdsc,
 			   ceph_mds_request_wait_callback_t wait_func)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
+	bool aborted = false;
+	bool got_result;
 	int err;
 
 	/* wait */
@@ -3980,32 +4014,47 @@ int ceph_mdsc_wait_request(struct ceph_mds_client *mdsc,
 			err = timeleft;  /* killed */
 	}
 	doutc(cl, "do_request waited, got %d\n", err);
-	mutex_lock(&mdsc->mutex);
 
-	/* only abort if we didn't race with a real reply */
-	if (test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags)) {
-		err = le32_to_cpu(req->r_reply_info.head->result);
-	} else if (err < 0) {
-		doutc(cl, "aborted request %lld with %d\n", req->r_tid, err);
-
+	if (err < 0) {
 		/*
-		 * ensure we aren't running concurrently with
-		 * ceph_fill_trace or ceph_readdir_prepopulate, which
-		 * rely on locks (dir mutex) held by our caller.
+		 * Timed out or killed.  A reply may be getting published
+		 * concurrently, so serialize against handle_reply() on
+		 * r_completion_lock before deciding to abort.  r_fill_mutex
+		 * additionally fences ceph_fill_trace()/ceph_readdir_prepopulate(),
+		 * which consult CEPH_MDS_R_ABORTED while relying on locks (dir
+		 * mutex) held by our caller.
 		 */
 		mutex_lock(&req->r_fill_mutex);
-		req->r_err = err;
-		set_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags);
+		spin_lock(&req->r_completion_lock);
+		got_result = test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags);
+		if (!got_result) {
+			req->r_err = err;
+			set_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags);
+			aborted = true;
+		}
+		spin_unlock(&req->r_completion_lock);
 		mutex_unlock(&req->r_fill_mutex);
+	} else {
+		/*
+		 * The wait completed, so complete_all() has run and the terminal
+		 * state stored by handle_reply()/__do_request() before it is
+		 * visible without locking.
+		 */
+		got_result = test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags);
+	}
 
+	if (got_result)
+		err = le32_to_cpu(req->r_reply_info.head->result);
+	else if (!aborted)
+		err = req->r_err;
+
+	if (aborted) {
+		doutc(cl, "aborted request %lld with %d\n", req->r_tid, err);
 		if (req->r_parent &&
 		    (req->r_op & CEPH_MDS_OP_WRITE))
 			ceph_invalidate_dir_request(req);
-	} else {
-		err = req->r_err;
 	}
 
-	mutex_unlock(&mdsc->mutex);
 	return err;
 }
 
@@ -4254,7 +4303,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		ceph_unreserve_caps(mdsc, &req->r_caps_reservation);
 	}
 out_err:
-	mutex_lock(&mdsc->mutex);
+	spin_lock(&req->r_completion_lock);
 	if (!test_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags)) {
 		if (err) {
 			req->r_err = err;
@@ -4265,7 +4314,7 @@ out_err:
 	} else {
 		doutc(cl, "reply arrived after request %lld was aborted\n", tid);
 	}
-	mutex_unlock(&mdsc->mutex);
+	spin_unlock(&req->r_completion_lock);
 
 	mutex_unlock(&session->s_mutex);
 
@@ -4327,8 +4376,10 @@ static void handle_forward(struct ceph_mds_client *mdsc,
 		 * 8 bits.
 		 */
 		mutex_lock(&req->r_fill_mutex);
+		spin_lock(&req->r_completion_lock);
 		req->r_err = -EMULTIHOP;
 		set_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags);
+		spin_unlock(&req->r_completion_lock);
 		mutex_unlock(&req->r_fill_mutex);
 		aborted = true;
 		pr_warn_ratelimited_client(cl, "forward tid %llu seq overflow\n",
@@ -4336,8 +4387,14 @@ static void handle_forward(struct ceph_mds_client *mdsc,
 	} else {
 		/* resend. forward race not possible; mds would drop */
 		doutc(cl, "forward tid %llu to mds%d (we resend)\n", tid, next_mds);
-		BUG_ON(req->r_err);
-		BUG_ON(test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags));
+		/*
+		 * The request had not reached its terminal state when sampled
+		 * above.  It may now race an abort from
+		 * ceph_mdsc_wait_request(), which no longer serializes on
+		 * mdsc->mutex; __do_request() re-checks the terminal state
+		 * under r_completion_lock and unregisters instead of resending
+		 * if that happened, so this is safe.
+		 */
 		req->r_attempts = 0;
 		req->r_num_fwd = fwd_seq;
 		req->r_resend_mds = next_mds;

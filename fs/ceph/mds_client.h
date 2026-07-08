@@ -396,6 +396,16 @@ struct ceph_mds_request {
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info_parsed r_reply_info;
 	int r_err;
+
+	/*
+	 * Serializes the request's terminal state (r_err, r_reply,
+	 * CEPH_MDS_R_GOT_RESULT and CEPH_MDS_R_ABORTED) between the reply and
+	 * forward handlers, __do_request() and ceph_mdsc_wait_request().
+	 *
+	 * Lock ordering: mdsc->mutex -> r_fill_mutex -> r_completion_lock.
+	 */
+	spinlock_t r_completion_lock;
+
 	u32               r_readdir_offset;
 
 	struct page *r_locked_page;
