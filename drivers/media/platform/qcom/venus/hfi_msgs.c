@@ -55,6 +55,9 @@ static void event_seq_changed(struct venus_core *core, struct venus_inst *inst,
 	if (!num_properties_changed)
 		goto error;
 
+	if (pkt->shdr.hdr.size < sizeof(*pkt))
+		goto error;
+
 	data_ptr = (u8 *)&pkt->ext_event_data[0];
 	rem_bytes = pkt->shdr.hdr.size - sizeof(*pkt);
 
