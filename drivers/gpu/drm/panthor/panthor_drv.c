@@ -2,6 +2,7 @@
 /* Copyright 2018 Marty E. Plummer <hanetzer@startmail.com> */
 /* Copyright 2019 Linaro, Ltd., Rob Herring <robh@kernel.org> */
 /* Copyright 2019 Collabora ltd. */
+/* Copyright 2026 NXP */
 
 #ifdef CONFIG_ARM_ARCH_TIMER
 #include <asm/arch_timer.h>
@@ -1761,6 +1762,7 @@ static void panthor_debugfs_init(struct drm_minor *minor)
 {
 	panthor_mmu_debugfs_init(minor);
 	panthor_gem_debugfs_init(minor);
+	panthor_devfreq_debugfs_init(minor);
 }
 #endif
 

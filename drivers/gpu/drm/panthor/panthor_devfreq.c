@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 /* Copyright 2019 Collabora ltd. */
+/* Copyright 2026 NXP */
 
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/devfreq.h>
 #include <linux/devfreq_cooling.h>
+#include <linux/math64.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 
+#include <drm/drm_file.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
@@ -43,6 +47,22 @@ struct panthor_devfreq {
 	 * and panthor_devfreq_record_{busy,idle}().
 	 */
 	spinlock_t lock;
+
+#ifdef CONFIG_DEBUG_FS
+	/**
+	 * @last_busy_ns: Busy time in nanoseconds of the last completed devfreq window.
+	 * Updated by panthor_devfreq_get_dev_status() before resetting the counters.
+	 * Protected by @lock.
+	 */
+	u64 last_busy_ns;
+
+	/**
+	 * @last_total_ns: Total time in nanoseconds of the last completed devfreq window.
+	 * Updated by panthor_devfreq_get_dev_status() before resetting the counters.
+	 * Protected by @lock.
+	 */
+	u64 last_total_ns;
+#endif
 };
 
 static void panthor_devfreq_update_utilization(struct panthor_devfreq *pdevfreq)
@@ -100,6 +120,11 @@ static int panthor_devfreq_get_dev_status(struct device *dev,
 						   pdevfreq->idle_time));
 
 	status->busy_time = ktime_to_ns(pdevfreq->busy_time);
+
+#ifdef CONFIG_DEBUG_FS
+	pdevfreq->last_busy_ns = status->busy_time;
+	pdevfreq->last_total_ns = status->total_time;
+#endif
 
 	panthor_devfreq_reset(pdevfreq);
 
@@ -283,6 +308,17 @@ void panthor_devfreq_suspend(struct panthor_device *ptdev)
 		return;
 
 	drm_WARN_ON(&ptdev->base, devfreq_suspend_device(pdevfreq->devfreq));
+
+#ifdef CONFIG_DEBUG_FS
+	{
+		unsigned long irqflags;
+
+		spin_lock_irqsave(&pdevfreq->lock, irqflags);
+		pdevfreq->last_busy_ns = 0;
+		pdevfreq->last_total_ns = 0;
+		spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
+	}
+#endif
 }
 
 void panthor_devfreq_record_busy(struct panthor_device *ptdev)
@@ -332,3 +368,47 @@ unsigned long panthor_devfreq_get_freq(struct panthor_device *ptdev)
 
 	return freq;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int panthor_devfreq_gpu_load_show(struct seq_file *m, void *unused)
+{
+	struct panthor_device *ptdev = m->private;
+	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
+	unsigned long irqflags;
+	unsigned int gpu_load;
+	u64 total_ns;
+	u64 busy_ns;
+
+	if (!pdevfreq->devfreq) {
+		seq_puts(m, "devfreq not initialized\n");
+		return 0;
+	}
+
+	spin_lock_irqsave(&pdevfreq->lock, irqflags);
+	busy_ns = pdevfreq->last_busy_ns;
+	total_ns = pdevfreq->last_total_ns;
+	spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
+
+	busy_ns = min(busy_ns, total_ns);
+	gpu_load = total_ns ? (unsigned int)div64_u64(busy_ns * 100ULL, total_ns) : 0;
+
+	seq_printf(m, "busy_time_ns: %llu  idle_time_ns: %llu  gpu_load: %u%%\n",
+		   busy_ns, total_ns - busy_ns, gpu_load);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(panthor_devfreq_gpu_load);
+
+/**
+ * panthor_devfreq_debugfs_init() - Initialize devfreq debugfs entries
+ * @minor: DRM minor.
+ */
+void panthor_devfreq_debugfs_init(struct drm_minor *minor)
+{
+	struct panthor_device *ptdev = container_of(minor->dev,
+						    struct panthor_device, base);
+
+	debugfs_create_file("gpu_load", 0444, minor->debugfs_root, ptdev,
+			    &panthor_devfreq_gpu_load_fops);
+}
+#endif /* CONFIG_DEBUG_FS */
