@@ -1,0 +1,154 @@
+[
+  {
+    "EventName": "cpu_read_requests_cs_0",
+    "BriefDescription": "The number of CPU read requests to memory: Data (64B): CS0",
+    "EventCode": "0x2",
+    "UMask": "0x07",
+    "ConstId": "0x0",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_read_requests_cs_1",
+    "BriefDescription": "The number of CPU read requests to memory: Data (64B): CS1",
+    "EventCode": "0x2",
+    "UMask": "0x07",
+    "ConstId": "0x1",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_read_requests_cs_2",
+    "BriefDescription": "The number of CPU read requests to memory: Data (64B): CS2",
+    "EventCode": "0x2",
+    "UMask": "0x07",
+    "ConstId": "0x2",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_read_requests_cs_3",
+    "BriefDescription": "The number of CPU read requests to memory: Data (64B): CS3",
+    "EventCode": "0x2",
+    "UMask": "0x07",
+    "ConstId": "0x3",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_write_requests_cs_0",
+    "BriefDescription": "The number of CPU write requests to memory: Data (64B): CS0",
+    "EventCode": "0x2",
+    "UMask": "0x08",
+    "ConstId": "0x0",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_write_requests_cs_1",
+    "BriefDescription": "The number of CPU write requests to memory: Data (64B): CS1",
+    "EventCode": "0x2",
+    "UMask": "0x08",
+    "ConstId": "0x1",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_write_requests_cs_2",
+    "BriefDescription": "The number of CPU write requests to memory: Data (64B): CS2",
+    "EventCode": "0x2",
+    "UMask": "0x08",
+    "ConstId": "0x2",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "cpu_write_requests_cs_3",
+    "BriefDescription": "The number of CPU write requests to memory: Data (64B): CS3",
+    "EventCode": "0x2",
+    "UMask": "0x08",
+    "ConstId": "0x3",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_read_requests_cs_0",
+    "BriefDescription": "The number of inbound I/O read requests to memory: Data (32B or 64B): CS0",
+    "EventCode": "0x3",
+    "UMask": "0x0F",
+    "ConstId": "0x0",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_read_requests_cs_1",
+    "BriefDescription": "The number of inbound I/O read requests to memory: Data (32B or 64B): CS1",
+    "EventCode": "0x3",
+    "UMask": "0x0F",
+    "ConstId": "0x1",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_read_requests_cs_2",
+    "BriefDescription": "The number of inbound I/O read requests to memory: Data (32B or 64B): CS2",
+    "EventCode": "0x3",
+    "UMask": "0x0F",
+    "ConstId": "0x2",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_read_requests_cs_3",
+    "BriefDescription": "The number of inbound I/O read requests to memory: Data (32B or 64B): CS3",
+    "EventCode": "0x3",
+    "UMask": "0x0F",
+    "ConstId": "0x3",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_write_requests_cs_0",
+    "BriefDescription": "The number of inbound I/O write requests to memory: Data (32B or 64B): CS0",
+    "EventCode": "0x3",
+    "UMask": "0x70",
+    "ConstId": "0x0",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_write_requests_cs_1",
+    "BriefDescription": "The number of inbound I/O write requests to memory: Data (32B or 64B): CS1",
+    "EventCode": "0x3",
+    "UMask": "0x70",
+    "ConstId": "0x1",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_write_requests_cs_2",
+    "BriefDescription": "The number of inbound I/O write requests to memory: Data (32B or 64B): CS2",
+    "EventCode": "0x3",
+    "UMask": "0x70",
+    "ConstId": "0x2",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "EventName": "io_write_requests_cs_3",
+    "BriefDescription": "The number of inbound I/O write requests to memory: Data (32B or 64B): CS3",
+    "EventCode": "0x3",
+    "UMask": "0x70",
+    "ConstId": "0x3",
+    "Unit": "HYGON_DF"
+  },
+  {
+    "MetricName": "cpu_memory_bandwidth",
+    "MetricExpr": "(cpu_read_requests_cs_0 + cpu_read_requests_cs_1 + cpu_read_requests_cs_2 + cpu_read_requests_cs_3 + cpu_write_requests_cs_0 + cpu_write_requests_cs_1 + cpu_write_requests_cs_2 + cpu_write_requests_cs_3) * 64 / (duration_time * 1e6)",
+    "MetricConstraint": "NO_GROUP_EVENTS",
+    "BriefDescription": "Total CPU memory access bandwidth",
+    "MetricGroup": "DF_Memory_BW",
+    "ScaleUnit": "1MB/s"
+  },
+  {
+    "MetricName": "io_memory_max_bandwidth",
+    "MetricExpr": "(io_read_requests_cs_0 + io_read_requests_cs_1 + io_read_requests_cs_2 + io_read_requests_cs_3 + io_write_requests_cs_0 + io_write_requests_cs_1 + io_write_requests_cs_2 + io_write_requests_cs_3) * 64 / (duration_time * 1e6)",
+    "MetricConstraint": "NO_GROUP_EVENTS",
+    "BriefDescription": "Maximum inbound I/O memory access bandwidth (upper bound, assuming 64B per request. Actual inbound I/O requests may be 32B or 64B)",
+    "MetricGroup": "DF_Memory_BW",
+    "ScaleUnit": "1MB/s"
+  },
+  {
+    "MetricName": "io_memory_min_bandwidth",
+    "MetricExpr": "(io_read_requests_cs_0 + io_read_requests_cs_1 + io_read_requests_cs_2 + io_read_requests_cs_3 + io_write_requests_cs_0 + io_write_requests_cs_1 + io_write_requests_cs_2 + io_write_requests_cs_3) * 32 / (duration_time * 1e6)",
+    "MetricConstraint": "NO_GROUP_EVENTS",
+    "BriefDescription": "Minimum inbound I/O memory access bandwidth (lower bound, assuming 32B per request. Actual inbound I/O requests may be 32B or 64B)",
+    "MetricGroup": "DF_Memory_BW",
+    "ScaleUnit": "1MB/s"
+  }
+]
