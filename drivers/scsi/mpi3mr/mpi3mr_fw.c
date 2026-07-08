@@ -473,6 +473,12 @@ int mpi3mr_process_admin_reply_q(struct mpi3mr_ioc *mrioc)
 		return 0;
 	}
 
+	/*
+	 * Ensure that the descriptor payload is read only after
+	 * the phase bit check is complete.
+	 */
+	dma_rmb();
+
 	do {
 		if (mrioc->unrecoverable || mrioc->io_admin_reset_sync)
 			break;
@@ -493,6 +499,13 @@ int mpi3mr_process_admin_reply_q(struct mpi3mr_ioc *mrioc)
 		if ((le16_to_cpu(reply_desc->reply_flags) &
 		    MPI3_REPLY_DESCRIPT_FLAGS_PHASE_MASK) != exp_phase)
 			break;
+
+		/*
+		 * Ensure that the descriptor payload is read only after
+		 * the phase bit check is complete.
+		 */
+		dma_rmb();
+
 		if (threshold_comps == MPI3MR_THRESHOLD_REPLY_COUNT) {
 			writel(admin_reply_ci,
 			    &mrioc->sysif_regs->admin_reply_queue_ci);
@@ -568,6 +581,12 @@ int mpi3mr_process_op_reply_q(struct mpi3mr_ioc *mrioc,
 		return 0;
 	}
 
+	/*
+	 * Ensure that the descriptor payload is read only after
+	 * the phase bit check is complete.
+	 */
+	dma_rmb();
+
 	do {
 		if (mrioc->unrecoverable || mrioc->io_admin_reset_sync)
 			break;
@@ -594,6 +613,12 @@ int mpi3mr_process_op_reply_q(struct mpi3mr_ioc *mrioc,
 		if ((le16_to_cpu(reply_desc->reply_flags) &
 		    MPI3_REPLY_DESCRIPT_FLAGS_PHASE_MASK) != exp_phase)
 			break;
+
+		/*
+		 * Ensure that the descriptor payload is read only after
+		 * the phase bit check is complete.
+		 */
+		dma_rmb();
 #ifndef CONFIG_PREEMPT_RT
 		/*
 		 * Exit completion loop to avoid CPU lockup
@@ -744,7 +769,7 @@ static irqreturn_t mpi3mr_isr_poll(int irq, void *privdata)
 			    mpi3mr_process_op_reply_q(mrioc,
 				intr_info->op_reply_q);
 
-		usleep_range(MPI3MR_IRQ_POLL_SLEEP, MPI3MR_IRQ_POLL_SLEEP + 1);
+		usleep_range(MPI3MR_IRQ_POLL_SLEEP, 10 * MPI3MR_IRQ_POLL_SLEEP);
 
 	} while (atomic_read(&intr_info->op_reply_q->pend_ios) &&
 	    (num_op_reply < mrioc->max_host_ios));
