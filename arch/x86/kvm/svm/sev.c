@@ -211,6 +211,14 @@ static bool snp_is_secure_tsc_enabled(struct kvm *kvm)
 	       !WARN_ON_ONCE(!sev_snp_guest(kvm));
 }
 
+bool snp_is_secure_avic_enabled(struct kvm *kvm)
+{
+	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
+
+	return (sev->vmsa_features & SVM_SEV_FEAT_SECURE_AVIC) &&
+	       !WARN_ON_ONCE(!sev_snp_guest(kvm));
+}
+
 /* Must be called with the sev_bitmap_lock held */
 static bool __sev_recycle_asids(unsigned int min_asid, unsigned int max_asid)
 {
