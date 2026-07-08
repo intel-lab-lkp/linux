@@ -131,6 +131,7 @@ struct kvm_svm {
 	u32 *avic_logical_id_table;
 	u64 *avic_physical_id_table;
 	struct hlist_node hnode;
+	bool avic_ipiv_is_not_supported;
 
 #ifdef CONFIG_KVM_AMD_SEV
 	struct kvm_sev_info sev_info;

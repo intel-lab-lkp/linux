@@ -76,6 +76,12 @@ static bool avic_ipiv_is_soft_disabled(void)
 	return !enable_ipiv;
 }
 
+/* IPIv is not supported in Secure AVIC mode, no AVIC tables necessary */
+static bool avic_ipiv_is_supported(struct kvm *kvm)
+{
+	return !to_kvm_svm(kvm)->avic_ipiv_is_not_supported;
+}
+
 static int avic_param_set(const char *val, const struct kernel_param *kp)
 {
 	if (val && sysfs_streq(val, "auto")) {
@@ -364,7 +370,7 @@ int avic_vcpu_precreate(struct kvm *kvm)
 {
 	int r;
 
-	if (!irqchip_in_kernel(kvm) || WARN_ON_ONCE(!enable_apicv))
+	if (!irqchip_in_kernel(kvm) || WARN_ON_ONCE(!enable_apicv) || !avic_ipiv_is_supported(kvm))
 		return 0;
 
 	/*
@@ -434,6 +440,9 @@ static int avic_init_backing_page(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u32 id = vcpu->vcpu_id;
 	u64 new_entry;
+
+	if (!avic_ipiv_is_supported(vcpu->kvm))
+		return 0;
 
 	/*
 	 * Inhibit AVIC if the vCPU ID is bigger than what is supported by AVIC
@@ -1069,6 +1078,9 @@ static void __avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu,
 
 	lockdep_assert_preemption_disabled();
 
+	if (!avic_ipiv_is_supported(vcpu->kvm))
+		return;
+
 	if (WARN_ON(h_physical_id & ~AVIC_PHYSICAL_ID_ENTRY_HOST_PHYSICAL_ID_MASK))
 		return;
 
@@ -1113,6 +1125,9 @@ static void __avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu,
 
 void avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
+	if (!avic_ipiv_is_supported(vcpu->kvm))
+		return;
+
 	/*
 	 * No need to update anything if the vCPU is blocking, i.e. if the vCPU
 	 * is being scheduled in after being preempted.  The CPU entries in the
@@ -1134,6 +1149,9 @@ static void __avic_vcpu_put(struct kvm_vcpu *vcpu, enum avic_vcpu_action action)
 	u64 entry = svm->avic_physical_id_entry;
 
 	lockdep_assert_preemption_disabled();
+
+	if (!avic_ipiv_is_supported(vcpu->kvm))
+		return;
 
 	if (WARN_ON_ONCE(vcpu->vcpu_id * sizeof(entry) >=
 			 PAGE_SIZE << avic_get_physical_id_table_order(vcpu->kvm)))
@@ -1184,6 +1202,9 @@ void avic_vcpu_put(struct kvm_vcpu *vcpu)
 	 * recursively.
 	 */
 	u64 entry = to_svm(vcpu)->avic_physical_id_entry;
+
+	if (!avic_ipiv_is_supported(vcpu->kvm))
+		return;
 
 	/*
 	 * Nothing to do if IsRunning == '0' due to vCPU blocking, i.e. if the
