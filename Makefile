@@ -863,8 +863,13 @@ export WARN_ON_UNUSED_TRACEPOINTS
 # include bitmasking and shift operations. However, because it generated
 # many hits, in Rust 1.86.0 it was split into a new `precedence_bits`
 # lint which is not enabled by default.
+#
+# `-Aclippy::unwrap_or_default`: the lint is buggy [1] and ignores our
+# MSRV. It can trigger depending on the optimization level.
+# [1] https://github.com/rust-lang/rust-clippy/issues/17379
 rust_common_flags_per_version := \
-    $(if $(call rustc-min-version,108600),,-Aclippy::precedence)
+    $(if $(call rustc-min-version,108600),,-Aclippy::precedence) \
+    -Aclippy::unwrap_or_default
 
 rust_common_flags += $(rust_common_flags_per_version)
 KBUILD_HOSTRUSTFLAGS += $(rust_common_flags_per_version) $(HOSTRUSTFLAGS)
