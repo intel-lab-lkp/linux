@@ -896,6 +896,10 @@ int avic_unaccelerated_access_interception(struct kvm_vcpu *vcpu)
 
 	trace_kvm_avic_unaccelerated_access(vcpu->vcpu_id, offset,
 					    trap, write, vector);
+
+	if (WARN_ON_ONCE(snp_is_secure_avic_enabled(vcpu->kvm)))
+		return 1;
+
 	if (trap) {
 		/* Handling Trap */
 		WARN_ONCE(!write, "svm: Handling trap read.\n");
