@@ -610,12 +610,18 @@ struct evsel *evsel__clone(struct evsel *dest, struct evsel *orig)
 	evsel->percore = orig->percore;
 	evsel->precise_max = orig->precise_max;
 	evsel->is_libpfm_event = orig->is_libpfm_event;
+	evsel->skippable = orig->skippable;
+	evsel->retire_lat = orig->retire_lat;
+	evsel->dont_regroup = orig->dont_regroup;
 
 	evsel->exclude_GH = orig->exclude_GH;
 	evsel->sample_read = orig->sample_read;
 	evsel->collect_stat = orig->collect_stat;
 	evsel->weak_group = orig->weak_group;
 	evsel->use_config_name = orig->use_config_name;
+	evsel->default_metricgroup = orig->default_metricgroup;
+	evsel->default_show_events = orig->default_show_events;
+
 	evsel->pmu = orig->pmu;
 	evsel->first_wildcard_match = orig->first_wildcard_match;
 
