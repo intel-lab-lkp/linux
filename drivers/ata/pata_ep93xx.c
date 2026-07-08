@@ -629,11 +629,11 @@ static int ep93xx_pata_bus_softreset(struct ata_port *ap, unsigned int devmask,
 
 static void ep93xx_pata_release_dma(struct ep93xx_pata_data *drv_data)
 {
-	if (drv_data->dma_rx_channel) {
+	if (!IS_ERR_OR_NULL(drv_data->dma_rx_channel)) {
 		dma_release_channel(drv_data->dma_rx_channel);
 		drv_data->dma_rx_channel = NULL;
 	}
-	if (drv_data->dma_tx_channel) {
+	if (!IS_ERR_OR_NULL(drv_data->dma_tx_channel)) {
 		dma_release_channel(drv_data->dma_tx_channel);
 		drv_data->dma_tx_channel = NULL;
 	}
@@ -664,7 +664,7 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 	if (IS_ERR(drv_data->dma_tx_channel)) {
 		ret = dev_err_probe(dev, PTR_ERR(drv_data->dma_tx_channel),
 				    "tx DMA setup failed\n");
-		goto fail_release_rx;
+		goto fail_release_dma;
 	}
 
 	/* Configure receive channel direction and source address */
@@ -691,8 +691,6 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 
 	return 0;
 
-fail_release_rx:
-	dma_release_channel(drv_data->dma_rx_channel);
 fail_release_dma:
 	ep93xx_pata_release_dma(drv_data);
 
