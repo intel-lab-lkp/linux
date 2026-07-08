@@ -69,6 +69,9 @@ static const char ucode_path[] = "kernel/x86/microcode/GenuineIntel.bin";
 
 #define MBOX_XACTION_TIMEOUT_MS	(10 * MSEC_PER_SEC)
 
+#define CPUID_EDX_ARCH_CAP	BIT(29)
+#define MCU_STATUS_FAILURE_MASK	(MCU_PARTIAL_UPDATE | AUTH_FAIL_ON_MCU_COMPONENT)
+
 /* Current microcode patch used in early patching on the APs. */
 static struct microcode_intel *ucode_patch_va __read_mostly;
 static struct microcode_intel *ucode_patch_late __read_mostly;
@@ -679,6 +682,24 @@ static void stage_microcode(void)
 	pr_info("Staging of patch revision 0x%x succeeded.\n", ucode_patch_late->hdr.rev);
 }
 
+/*
+ * __apply_microcode() is the only caller which may be invoked in the early
+ * loading path. Use raw CPUID/RDMSR functions.
+ */
+static bool update_status_available(void)
+{
+	if (native_cpuid_eax(0) < 7)
+		return false;
+
+	if (!(native_cpuid_edx(7) & CPUID_EDX_ARCH_CAP))
+		return false;
+
+	if (!(native_rdmsrq(MSR_IA32_ARCH_CAPABILITIES) & ARCH_CAP_MCU_ENUM))
+		return false;
+
+	return true;
+}
+
 static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
 					  struct microcode_intel *mc,
 					  u32 *cur_rev)
@@ -701,6 +722,22 @@ static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
 
 	/* write microcode via MSR 0x79 */
 	native_wrmsrq(MSR_IA32_UCODE_WRITE, (unsigned long)mc->bits);
+
+	/*
+	 * Warn and taint the kernel on a partial update. Fatal conditions are
+	 * expected to be handled by the CPU itself.
+	 *
+	 * Then, continue checking the revision since a partial update may still
+	 * advance the microcode revision.
+	 */
+	if (update_status_available()) {
+		u64 status = native_rdmsrq(MSR_IA32_MCU_STATUS);
+
+		if (status & MCU_STATUS_FAILURE_MASK) {
+			pr_warn_once("update incomplete (MSR_IA32_MCU_STATUS=0x%llx).\n", status);
+			add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
+		}
+	}
 
 	rev = intel_get_microcode_revision();
 	if (rev != mc->hdr.rev)
