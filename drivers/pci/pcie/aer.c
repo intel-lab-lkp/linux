@@ -1228,6 +1228,8 @@ static void aer_recover_work_func(struct work_struct *work)
 					   entry.domain, entry.bus,
 					   PCI_SLOT(entry.devfn),
 					   PCI_FUNC(entry.devfn));
+			ghes_estatus_pool_region_free((unsigned long)entry.regs,
+					      sizeof(struct aer_capability_regs));
 			continue;
 		}
 		pci_print_aer(pdev, entry.severity, entry.regs);
@@ -1274,9 +1276,12 @@ void aer_recover_queue(int domain, unsigned int bus, unsigned int devfn,
 	if (kfifo_in_spinlocked(&aer_recover_ring, &entry, 1,
 				 &aer_recover_ring_lock))
 		schedule_work(&aer_recover_work);
-	else
-		pr_err("buffer overflow in recovery for %04x:%02x:%02x.%x\n",
+	else {
+		ghes_estatus_pool_region_free((unsigned long)aer_regs,
+					      sizeof(*aer_regs));
+		pr_err_ratelimited("buffer overflow in recovery for %04x:%02x:%02x.%x\n",
 		       domain, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
+	}
 }
 EXPORT_SYMBOL_GPL(aer_recover_queue);
 #endif
