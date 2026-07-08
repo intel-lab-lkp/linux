@@ -1669,7 +1669,7 @@ void kvm_set_vm_id_reg(struct kvm *kvm, u32 reg, u64 val);
 #define kvm_has_sctlr2(k)				\
 	(kvm_has_feat((k), ID_AA64MMFR3_EL1, SCTLRX, IMP))
 
-static inline bool kvm_arch_has_irq_bypass(void)
+static inline bool kvm_arch_has_irq_bypass(struct kvm *kvm)
 {
 	return true;
 }

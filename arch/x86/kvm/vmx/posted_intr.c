@@ -151,7 +151,7 @@ static bool vmx_can_use_vtd_pi(struct kvm *kvm)
 	 * bypass IRQ being attached to the VM.  vmx_pi_start_bypass() ensures
 	 * blockng vCPUs will see an elevated count or get KVM_REQ_UNBLOCK.
 	 */
-	return irqchip_in_kernel(kvm) && kvm_arch_has_irq_bypass() &&
+	return irqchip_in_kernel(kvm) && kvm_arch_has_irq_bypass(kvm) &&
 	       READ_ONCE(kvm->arch.nr_possible_bypass_irqs);
 }
 

@@ -2064,7 +2064,7 @@ static inline void kvm_arch_vcpu_unblocking(struct kvm_vcpu *vcpu)
 	kvm_x86_call(vcpu_unblocking)(vcpu);
 }
 
-static inline bool kvm_arch_has_irq_bypass(void)
+static inline bool kvm_arch_has_irq_bypass(struct kvm *kvm)
 {
 	return enable_device_posted_irqs;
 }

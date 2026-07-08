@@ -843,7 +843,7 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
  * irq_bypass_stop and irq_bypass_start are not needed and so
  * kvm_ops are not defined for them.
  */
-bool kvm_arch_has_irq_bypass(void)
+bool kvm_arch_has_irq_bypass(struct kvm *kvm)
 {
 	return ((kvmppc_hv_ops && kvmppc_hv_ops->irq_bypass_add_producer) ||
 		(kvmppc_pr_ops && kvmppc_pr_ops->irq_bypass_add_producer));

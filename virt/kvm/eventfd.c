@@ -488,7 +488,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 		schedule_work(&irqfd->inject);
 
 #if IS_ENABLED(CONFIG_HAVE_KVM_IRQ_BYPASS)
-	if (kvm_arch_has_irq_bypass()) {
+	if (kvm_arch_has_irq_bypass(irqfd->kvm)) {
 		irqfd->consumer.add_producer = kvm_arch_irq_bypass_add_producer;
 		irqfd->consumer.del_producer = kvm_arch_irq_bypass_del_producer;
 		irqfd->consumer.stop = kvm_arch_irq_bypass_stop;
