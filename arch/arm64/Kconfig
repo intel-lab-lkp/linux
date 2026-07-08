@@ -259,7 +259,7 @@ config ARM64
 	select USER_STACKTRACE_SUPPORT
 	select VDSO_GETRANDOM
 	select VMAP_STACK
-	select ARCH_WANT_OPTIMIZE_HUGETLB_VMEMMAP if ARM64_WANT_OPTIMIZE_HUGETLB_VMEMMAP
+	select ARCH_WANT_OPTIMIZE_HUGETLB_VMEMMAP if ARM64_HW_AFDBM
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
@@ -1607,17 +1607,6 @@ source "kernel/Kconfig.hz"
 config ARCH_SPARSEMEM_ENABLE
 	def_bool y
 	select SPARSEMEM_VMEMMAP_ENABLE
-
-config ARM64_WANT_OPTIMIZE_HUGETLB_VMEMMAP
-	bool "Enable support for HugeTLB Vmemmap Optimization (HVO)"
-	default n
-	depends on HUGETLB_PAGE && SPARSEMEM_VMEMMAP && ARM64_HW_AFDBM
-	help
-	  Enable support for HVO. When enabled, late-onlining of CPUs that do
-	  not support features required by HVO will not be onlined if all boot
-	  CPUs do have such support.
-
-	  If unsure, say N
 
 config HW_PERF_EVENTS
 	def_bool y
