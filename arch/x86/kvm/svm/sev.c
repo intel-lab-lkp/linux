@@ -1034,7 +1034,7 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 
 	/* Secure AVIC loads the below from the VMSA, rather than the VMCB */
 	if (snp_is_secure_avic_enabled(vcpu->kvm))
-		save->vintr_ctrl |= V_GIF_MASK;
+		save->vintr_ctrl |= V_GIF_MASK | V_NMI_ENABLE_MASK;
 
 	/*
 	 * Skip FPU and AVX setup with KVM_SEV_ES_INIT to avoid

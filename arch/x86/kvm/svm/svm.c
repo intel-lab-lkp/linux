@@ -3768,6 +3768,10 @@ static void svm_inject_nmi(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 
+	/* We should never reach here for Secure AVIC - see svm_set_vnmi_pending() */
+	if (WARN_ON_ONCE(snp_is_secure_avic_enabled(vcpu->kvm)))
+		return;
+
 	svm->vmcb->control.event_inj = SVM_EVTINJ_VALID | SVM_EVTINJ_TYPE_NMI;
 
 	if (svm->nmi_l1_to_l2)
@@ -4017,6 +4021,10 @@ static int svm_nmi_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	if (vcpu->arch.nested_run_pending)
 		return -EBUSY;
+
+	/* Assume it is always allowed for Secure AVIC (hardware gates delivery) */
+	if (snp_is_secure_avic_enabled(vcpu->kvm))
+		return 1;
 
 	if (svm_nmi_blocked(vcpu))
 		return 0;

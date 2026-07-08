@@ -7742,8 +7742,14 @@ static void process_nmi(struct kvm_vcpu *vcpu)
 	 * waiting for a previous NMI injection to complete (which effectively
 	 * blocks NMIs).  KVM will immediately inject one of the two NMIs, and
 	 * will request an NMI window to handle the second NMI.
+	 *
+	 * For protected APIC guests, NMI window isn't visible to KVM, so the
+	 * only thing KVM can do is to collapse all pending NMIs and inject a
+	 * single NMI. The guest is expected to scan all NMI sources as part
+	 * of handling the NMI.
 	 */
-	if (kvm_x86_call(get_nmi_mask)(vcpu) || vcpu->arch.nmi_injected)
+	if (kvm_x86_call(get_nmi_mask)(vcpu) || vcpu->arch.nmi_injected ||
+	    (lapic_in_kernel(vcpu) && vcpu->arch.apic->guest_apic_protected))
 		limit = 1;
 	else
 		limit = 2;
