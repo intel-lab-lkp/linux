@@ -391,6 +391,10 @@ static void svm_inject_exception(struct kvm_vcpu *vcpu)
 	struct kvm_queued_exception *ex = &vcpu->arch.exception;
 	struct vcpu_svm *svm = to_svm(vcpu);
 
+	/* Secure AVIC does not support EVENTINJ */
+	if (snp_is_secure_avic_enabled(vcpu->kvm))
+		return;
+
 	kvm_deliver_exception_payload(vcpu, ex);
 
 	if (kvm_exception_is_soft(ex->vector) &&
