@@ -1364,6 +1364,7 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 		DEFINE_WAIT(w);
 		/* Bail out if REQ_NOWAIT is set for the bio */
 		if (bio->bi_opf & REQ_NOWAIT) {
+			free_r10bio(r10_bio);
 			bio_wouldblock_error(bio);
 			return false;
 		}
@@ -1397,6 +1398,7 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 		md_wakeup_thread(mddev->thread);
 		if (bio->bi_opf & REQ_NOWAIT) {
 			allow_barrier(conf);
+			free_r10bio(r10_bio);
 			bio_wouldblock_error(bio);
 			return false;
 		}
