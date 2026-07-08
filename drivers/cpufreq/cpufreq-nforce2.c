@@ -409,6 +409,8 @@ static int nforce2_detect_chipset(void)
  */
 static int __init nforce2_init(void)
 {
+	int ret;
+
 	/* TODO: do we need to detect the processor? */
 
 	/* detect chipset */
@@ -417,7 +419,13 @@ static int __init nforce2_init(void)
 		return -ENODEV;
 	}
 
-	return cpufreq_register_driver(&nforce2_driver);
+	ret = cpufreq_register_driver(&nforce2_driver);
+	if (ret) {
+		pci_dev_put(nforce2_dev);
+		nforce2_dev = NULL;
+	}
+
+	return ret;
 }
 
 /**
