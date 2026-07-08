@@ -63,6 +63,9 @@
 	ga_tag;								\
 })
 
+static DEFINE_PER_CPU(struct list_head, gappi_vcpu_wakeup_list);
+static DEFINE_PER_CPU(raw_spinlock_t, gappi_vcpu_wakeup_list_lock);
+
 static_assert(__AVIC_GATAG(AVIC_VM_ID_MASK, AVIC_VCPU_IDX_MASK) == -1u);
 
 #define AVIC_AUTO_MODE -1
@@ -1292,11 +1295,17 @@ static bool __init avic_want_avic_enabled(void)
  */
 bool __init avic_hardware_setup(void)
 {
+	int cpu;
 	avic = avic_want_avic_enabled();
 	if (!avic)
 		return false;
 
 	pr_info("AVIC enabled\n");
+
+	for_each_possible_cpu(cpu) {
+		INIT_LIST_HEAD(&per_cpu(gappi_vcpu_wakeup_list, cpu));
+		raw_spin_lock_init(&per_cpu(gappi_vcpu_wakeup_list_lock, cpu));
+	}
 
 	/* AVIC is a prerequisite for x2AVIC. */
 	x2avic_enabled = boot_cpu_has(X86_FEATURE_X2AVIC);
