@@ -2489,10 +2489,13 @@ static int zl3073x_dpll_ptp_adjtime_phase_step(struct zl3073x_dpll *zldpll,
  * @info: PTP clock info
  * @delta: time adjustment in nanoseconds
  *
- * For large deltas (>= 1 second), the seconds part is adjusted via ToD
- * read-modify-write at 1 Hz boundaries and the sub-second remainder via
- * output phase step. For sub-second deltas, uses phase step directly.
- * Falls back to full ToD read-modify-write if phase step is unavailable.
+ * In NCO mode, large deltas (>= 1 second) are split into a ToD
+ * read-modify-write for the seconds part and an output phase step for
+ * the sub-second remainder. Sub-second deltas use phase step directly,
+ * falling back to ToD read-modify-write if phase step is unavailable.
+ * In AUTO/REFLOCK modes, large deltas are split into ToD
+ * read-modify-write for seconds and TIE write for the sub-second
+ * remainder. Sub-second deltas use TIE write directly.
  *
  * Return: 0 on success, <0 on error
  */
@@ -2501,6 +2504,7 @@ static int zl3073x_dpll_ptp_adjtime(struct ptp_clock_info *info, s64 delta)
 	struct zl3073x_dpll *zldpll = container_of(info, struct zl3073x_dpll,
 						   ptp_info);
 	struct zl3073x_dev *zldev = zldpll->dev;
+	const struct zl3073x_chan *chan;
 	bool sec_adjusted = false;
 	struct timespec64 ts;
 	int rc;
@@ -2510,8 +2514,16 @@ static int zl3073x_dpll_ptp_adjtime(struct ptp_clock_info *info, s64 delta)
 
 	guard(mutex)(&zldpll->lock);
 
+	/* Modes without phase step or TIE use plain ToD adjust */
+	chan = zl3073x_chan_state_get(zldev, zldpll->id);
+	if (!zl3073x_chan_mode_is_nco(chan) &&
+	    !zl3073x_chan_mode_supports_tie(chan))
+		return zl3073x_chan_tod_adjust(zldev, zldpll->id,
+					       ns_to_timespec64(delta));
+
 	/* Split off seconds via ToD read-modify-write so the sub-second
-	 * remainder can be applied through the output-coherent phase step.
+	 * remainder can be applied through the output-coherent mechanism
+	 * (phase step or TIE write).
 	 */
 	if (abs(delta) >= NSEC_PER_SEC) {
 		s32 remainder;
@@ -2531,19 +2543,26 @@ static int zl3073x_dpll_ptp_adjtime(struct ptp_clock_info *info, s64 delta)
 			return 0;
 	}
 
-	rc = zl3073x_dpll_ptp_adjtime_phase_step(zldpll, delta);
-	if (!rc)
-		return 0;
+	/* Apply sub-second delta via phase step (NCO) or TIE write */
+	if (zl3073x_chan_mode_is_nco(chan)) {
+		rc = zl3073x_dpll_ptp_adjtime_phase_step(zldpll, delta);
+		if (!rc)
+			return 0;
+	} else {
+		rc = zl3073x_chan_tie_write(zldev, zldpll->id, delta);
+		if (!rc)
+			return 0;
+	}
 
-	/* Phase step failed or unavailable, fall back to ToD adjust */
+	/* Phase step or TIE write failed, fall back to ToD adjust */
 	rc = zl3073x_chan_tod_adjust(zldev, zldpll->id,
 				     ns_to_timespec64(delta));
 
-	/* In the unlikely event that both phase step and fallback ToD adjust
-	 * fail after seconds were already committed, return success to prevent
-	 * the PTP servo from retrying the full delta and applying seconds
-	 * again. The sub-second residual will self-correct in the next servo
-	 * cycle.
+	/* In the unlikely event that both phase step/TIE write and fallback
+	 * ToD adjust fail after seconds were already committed, return
+	 * success to prevent the PTP servo from retrying the full delta and
+	 * applying seconds again. The sub-second residual will self-correct
+	 * in the next servo cycle.
 	 */
 	if (rc && sec_adjusted) {
 		dev_warn(zldev->dev,
@@ -2559,9 +2578,9 @@ static int zl3073x_dpll_ptp_adjtime(struct ptp_clock_info *info, s64 delta)
  * @info: PTP clock info
  * @scaled_ppm: frequency adjustment in scaled ppm (ppm * 2^16)
  *
- * Writes the delta frequency offset register.
+ * Only supported in NCO mode. Writes the delta frequency offset register.
  *
- * Return: 0 on success, <0 on error
+ * Return: 0 on success, -EOPNOTSUPP if not in NCO mode, <0 on error
  */
 static int
 zl3073x_dpll_ptp_adjfine(struct ptp_clock_info *info, long scaled_ppm)
@@ -2583,10 +2602,51 @@ zl3073x_dpll_ptp_adjfine(struct ptp_clock_info *info, long scaled_ppm)
 	guard(mutex)(&zldpll->lock);
 
 	chan = zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+	if (!zl3073x_chan_mode_is_nco(chan))
+		return scaled_ppm ? -EOPNOTSUPP : 0;
 	if (offset == chan->df_offset)
 		return 0;
 
 	return zl3073x_chan_df_offset_set(zldpll->dev, zldpll->id, offset);
+}
+
+/**
+ * zl3073x_dpll_ptp_adjphase - adjust PTP clock phase
+ * @info: PTP clock info
+ * @delta: phase adjustment in nanoseconds
+ *
+ * Only supported in AUTO and REFLOCK modes. Uses TIE write for
+ * nanosecond resolution phase adjustment.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if mode doesn't support TIE, <0 on error
+ */
+static int zl3073x_dpll_ptp_adjphase(struct ptp_clock_info *info, s32 delta)
+{
+	struct zl3073x_dpll *zldpll = container_of(info, struct zl3073x_dpll,
+						   ptp_info);
+	struct zl3073x_dev *zldev = zldpll->dev;
+	const struct zl3073x_chan *chan;
+
+	if (!delta)
+		return 0;
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = zl3073x_chan_state_get(zldev, zldpll->id);
+
+	if (!zl3073x_chan_mode_supports_tie(chan))
+		return -EOPNOTSUPP;
+
+	return zl3073x_chan_tie_write(zldev, zldpll->id, delta);
+}
+
+static s32
+zl3073x_dpll_ptp_getmaxphase(struct ptp_clock_info *info __always_unused)
+{
+	/* HW limits TIE write to +-1 second. Return the constant HW
+	 * limit and let adjphase handle mode-specific checks.
+	 */
+	return NSEC_PER_SEC - 1;
 }
 
 /**
@@ -2678,6 +2738,8 @@ static const struct ptp_clock_info zl3073x_dpll_ptp_clock_info = {
 	.settime64	= zl3073x_dpll_ptp_settime64,
 	.adjtime	= zl3073x_dpll_ptp_adjtime,
 	.adjfine	= zl3073x_dpll_ptp_adjfine,
+	.adjphase	= zl3073x_dpll_ptp_adjphase,
+	.getmaxphase	= zl3073x_dpll_ptp_getmaxphase,
 	.enable		= zl3073x_dpll_ptp_enable,
 };
 
@@ -2685,20 +2747,12 @@ static const struct ptp_clock_info zl3073x_dpll_ptp_clock_info = {
  * zl3073x_dpll_ptp_register - register PTP clock for a DPLL channel
  * @zldpll: DPLL channel to register PTP clock for
  *
- * PTP clock is only registered when the channel is in NCO mode.
- * If the channel is not in NCO mode, this is a no-op.
- *
  * Return: 0 on success, <0 on error
  */
 static int zl3073x_dpll_ptp_register(struct zl3073x_dpll *zldpll)
 {
 	struct zl3073x_dev *zldev = zldpll->dev;
-	const struct zl3073x_chan *chan;
 	struct ptp_clock *ptp_clock;
-
-	chan = zl3073x_chan_state_get(zldev, zldpll->id);
-	if (!zl3073x_chan_mode_is_nco(chan))
-		return 0;
 
 	snprintf(zldpll->ptp_info.name, sizeof(zldpll->ptp_info.name),
 		 "zl3073x-dpll%u", zldpll->id);
