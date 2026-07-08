@@ -218,8 +218,10 @@ void tipc_named_node_up(struct net *net, u32 dnode, u16 capabilities)
 	spin_unlock_bh(&tn->nametbl_lock);
 
 	read_lock_bh(&nt->cluster_scope_lock);
-	named_distribute(net, &head, dnode, &nt->cluster_scope, seqno);
-	tipc_node_xmit(net, &head, dnode, 0);
+	if (!list_empty(&nt->cluster_scope)) {
+		named_distribute(net, &head, dnode, &nt->cluster_scope, seqno);
+		tipc_node_xmit(net, &head, dnode, 0);
+	}
 	read_unlock_bh(&nt->cluster_scope_lock);
 }
 
