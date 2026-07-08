@@ -117,7 +117,7 @@ int async_pmem_flush(struct nd_region *nd_region, struct bio *bio)
 	if (bio && bio->bi_iter.bi_sector != -1) {
 		struct bio *child = bio_alloc(bio->bi_bdev, 0,
 					      REQ_OP_WRITE | REQ_PREFLUSH,
-					      GFP_ATOMIC);
+					      GFP_NOIO);
 
 		if (!child)
 			return -ENOMEM;
