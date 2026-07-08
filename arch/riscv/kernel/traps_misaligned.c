@@ -238,8 +238,6 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 	if (get_insn(regs, epc, &insn))
 		return -1;
 
-	regs->epc = 0;
-
 	if ((insn & INSN_MASK_LW) == INSN_MATCH_LW) {
 		len = 4;
 		shift = 8 * (sizeof(unsigned long) - len);
@@ -303,7 +301,6 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 		shift = 8 * (sizeof(ulong) - len);
 		insn = RVC_RS2S(insn) << SH_RD;
 	} else {
-		regs->epc = epc;
 		return -1;
 	}
 
@@ -348,8 +345,6 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 
 	if (get_insn(regs, epc, &insn))
 		return -1;
-
-	regs->epc = 0;
 
 	val.data_ulong = GET_RS2(insn, regs);
 
@@ -405,7 +400,6 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 		len = 2;
 		val.data_ulong = GET_RS2S(insn, regs);
 	} else {
-		regs->epc = epc;
 		return -1;
 	}
 
