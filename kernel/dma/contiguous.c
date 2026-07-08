@@ -37,6 +37,8 @@
 
 #define pr_fmt(fmt) "cma: " fmt
 
+#include <kunit/visibility.h>
+
 #include <asm/page.h>
 
 #include <linux/memblock.h>
@@ -153,6 +155,7 @@ bool dma_is_from_cma(phys_addr_t phys, size_t size)
 
 	return cma_for_each_area(dma_cma_check_area, &chk) != 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(dma_is_from_cma);
 
 #ifdef CONFIG_DMA_NUMA_CMA
 
