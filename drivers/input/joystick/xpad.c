@@ -1035,8 +1035,14 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 	struct input_dev *dev = xpad->dev;
 	bool do_sync = false;
 
+	if (!len)
+		return;
+
 	/* the xbox button has its own special report */
 	if (data[0] == GIP_CMD_VIRTUAL_KEY) {
+		if (len < 3)
+			return;
+
 		/*
 		 * The Xbox One S controller requires these reports to be
 		 * acked otherwise it continues sending them forever and
@@ -1044,6 +1050,8 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 		 */
 		if (data[1] == (GIP_OPT_ACK | GIP_OPT_INTERNAL))
 			xpadone_ack_mode_report(xpad, data[2]);
+		if (len < 5)
+			return;
 
 		input_report_key(dev, BTN_MODE, data[4] & GENMASK(1, 0));
 		input_sync(dev);
@@ -1052,6 +1060,9 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 	} else if (data[0] == GIP_CMD_FIRMWARE) {
 		/* Some packet formats force us to use this separate to poll paddle inputs */
 		if (xpad->packet_type == PKT_XBE2_FW_5_11) {
+			if (len < 20)
+				return;
+
 			/* Mute paddles if controller is in a custom profile slot
 			 * Checked by looking at the active profile slot to
 			 * verify it's the default slot
@@ -1079,6 +1090,9 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 					 error);
 		}
 	} else if (data[0] == GIP_CMD_INPUT) { /* The main valid packet type for inputs */
+		if (len < 18)
+			return;
+
 		/* menu/view buttons */
 		input_report_key(dev, BTN_START,  data[4] & BIT(2));
 		input_report_key(dev, BTN_SELECT, data[4] & BIT(3));
@@ -1145,13 +1159,16 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 		}
 
 		/* Profile button has a value of 0-3, so it is reported as an axis */
-		if (xpad->mapping & MAP_PROFILE_BUTTON)
+		if ((xpad->mapping & MAP_PROFILE_BUTTON) && len > 34)
 			input_report_abs(dev, ABS_PROFILE, data[34]);
 
 		/* paddle handling */
 		/* based on SDL's SDL_hidapi_xboxone.c */
 		if (xpad->mapping & MAP_PADDLES) {
 			if (xpad->packet_type == PKT_XBE1) {
+				if (len < 33)
+					goto no_paddles;
+
 				/* Mute paddles if controller has a custom mapping applied.
 				 * Checked by comparing the current mapping
 				 * config against the factory mapping config
@@ -1165,6 +1182,9 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 				input_report_key(dev, BTN_GRIPL, data[32] & BIT(0));
 				input_report_key(dev, BTN_GRIPL2, data[32] & BIT(2));
 			} else if (xpad->packet_type == PKT_XBE2_FW_OLD) {
+				if (len < 20)
+					goto no_paddles;
+
 				/* Mute paddles if controller has a custom mapping applied.
 				 * Checked by comparing the current mapping
 				 * config against the factory mapping config
@@ -1178,6 +1198,9 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 				input_report_key(dev, BTN_GRIPL, data[18] & BIT(2));
 				input_report_key(dev, BTN_GRIPL2, data[18] & BIT(3));
 			} else if (xpad->packet_type == PKT_XBE2_FW_5_EARLY) {
+				if (len < 24)
+					goto no_paddles;
+
 				/* Mute paddles if controller has a custom mapping applied.
 				 * Checked by comparing the current mapping
 				 * config against the factory mapping config
@@ -1194,7 +1217,7 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 				input_report_key(dev, BTN_GRIPL2, data[22] & BIT(3));
 			}
 		}
-
+no_paddles:
 		do_sync = true;
 	}
 
