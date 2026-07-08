@@ -3,6 +3,7 @@
 
 #include <linux/cper.h>
 #include <linux/acpi.h>
+#include <asm/acpi.h>
 
 /*
  * We don't need a "CPER_IA" prefix since these are all locally defined.
