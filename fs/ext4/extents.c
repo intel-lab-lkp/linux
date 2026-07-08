@@ -4585,6 +4585,7 @@ static int ext4_alloc_file_blocks(struct file *file, loff_t offset, loff_t len,
 	loff_t epos = 0, old_size = i_size_read(inode);
 	unsigned int blkbits = inode->i_blkbits;
 	bool alloc_zero = false;
+	bool orphan = false;
 
 	BUG_ON(!ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS));
 	map.m_lblk = offset >> blkbits;
@@ -4659,12 +4660,35 @@ retry:
 
 		if (alloc_zero &&
 		    (map.m_flags & (EXT4_MAP_MAPPED | EXT4_MAP_UNWRITTEN))) {
+			WARN_ON_ONCE(map.m_lblk + map.m_len >
+				EXT4_B_TO_LBLK(inode, new_size ?: old_size));
+
 			ret = ext4_issue_zeroout(inode, map.m_lblk, map.m_pblk,
 						 map.m_len);
-			if (likely(!ret))
-				ret = ext4_convert_unwritten_extents(NULL,
+			if (unlikely(ret))
+				break;
+
+			handle = ext4_journal_start(inode, EXT4_HT_MAP_BLOCKS,
+						    credits);
+			if (IS_ERR(handle)) {
+				ret = PTR_ERR(handle);
+				break;
+			}
+
+			if (new_size) {
+				ret = ext4_orphan_add(handle, inode);
+				orphan = true;
+				if (ret) {
+					ext4_journal_stop(handle);
+					break;
+				}
+			}
+
+			ret = ext4_convert_unwritten_extents(handle,
 					inode, (loff_t)map.m_lblk << blkbits,
 					(loff_t)map.m_len << blkbits);
+			ret2 = ext4_journal_stop(handle);
+			ret = ret ? ret : ret2;
 			if (ret)
 				break;
 		}
@@ -4678,7 +4702,7 @@ retry:
 		goto retry;
 
 	if (!epos || !new_size)
-		return ret;
+		goto out;
 
 	/*
 	 * Allocate blocks, update the file size to match the size of the
@@ -4687,12 +4711,16 @@ retry:
 	if (epos > new_size)
 		epos = new_size;
 
-	handle = ext4_journal_start(inode, EXT4_HT_MISC, 1);
-	if (IS_ERR(handle))
-		return ret ? ret : PTR_ERR(handle);
+	handle = ext4_journal_start(inode, EXT4_HT_MISC, 2);
+	if (IS_ERR(handle)) {
+		ret = ret ? ret : PTR_ERR(handle);
+		goto out;
+	}
 
 	ext4_update_inode_size(inode, epos);
 	ret2 = ext4_mark_inode_dirty(handle, inode);
+	if (orphan && inode->i_nlink)
+		ext4_orphan_del(handle, inode);
 	ext4_update_inode_fsync_trans(handle, inode, 1);
 	ret3 = ext4_journal_stop(handle);
 	ret2 = ret3 ? ret3 : ret2;
@@ -4701,6 +4729,11 @@ retry:
 		pagecache_isize_extended(inode, old_size, epos);
 
 	return ret ? ret : ret2;
+
+out:
+	if (orphan && inode->i_nlink)
+		ext4_orphan_del(NULL, inode);
+	return ret;
 }
 
 static int ext4_collapse_range(struct file *file, loff_t offset, loff_t len);
