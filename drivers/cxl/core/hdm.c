@@ -802,6 +802,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
 	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
+	struct cxl_root_decoder *cxlrd;
 	int id = cxld->id, rc;
 
 	if (cxld->flags & CXL_DECODER_F_ENABLE)
@@ -831,6 +832,19 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 				"attempted to commit %s during sanitize\n",
 				dev_name(&cxld->dev));
 			return -EBUSY;
+		}
+	}
+
+	/*
+	 * Enforce HDM-H: reject HDM-DB if CFMWS lacks CXL_DECODER_F_TYPE2.
+	 */
+	if (cxld->target_type == CXL_DECODER_DEVMEM && cxld->region) {
+		cxlrd = to_cxl_root_decoder(cxld->region->dev.parent);
+		if (!(cxlrd->cxlsd.cxld.flags & CXL_DECODER_F_TYPE2)) {
+			dev_err(&port->dev,
+				"HDM-DB commit rejected on %s, CFMWS restricts to HDM-H only\n",
+				dev_name(&cxld->dev));
+			return -EOPNOTSUPP;
 		}
 	}
 
