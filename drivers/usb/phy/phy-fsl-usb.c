@@ -997,6 +997,7 @@ static void fsl_otg_remove(struct platform_device *pdev)
 	fsl_otg_uninit_timers();
 	kfree(fsl_otg_dev->phy.otg);
 	kfree(fsl_otg_dev);
+	fsl_otg_dev = NULL;
 
 	if (pdata->exit)
 		pdata->exit(pdev);
