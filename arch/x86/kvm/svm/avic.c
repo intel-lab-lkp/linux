@@ -141,6 +141,17 @@ static void avic_set_x2apic_msr_interception(struct vcpu_svm *svm,
 	u64 rd_regs;
 	int i;
 
+	/*
+	 * For Secure AVIC, treat all APIC MSRs as intercepted always. Secure AVIC
+	 * hardware controls MSR interception and the MSR permission bitmap is not
+	 * consulted by hardware. However, the guest is free to use GHCB to request
+	 * emulation of APIC MSR reads and writes. In that scenario, we need these
+	 * MSRs to be seen as being intercepted so that sev_es_prevent_msr_access()
+	 * does not reject those MSR accesses.
+	 */
+	if (snp_is_secure_avic_enabled(svm->vcpu.kvm))
+		return;
+
 	if (intercept == svm->x2avic_msrs_intercepted)
 		return;
 
@@ -192,9 +203,6 @@ static void avic_activate_vmcb(struct vcpu_svm *svm)
 	struct kvm_vcpu *vcpu = &svm->vcpu;
 
 	vmcb->control.int_ctl &= ~(AVIC_ENABLE_MASK | X2APIC_MODE_MASK);
-	vmcb->control.avic_physical_id &= ~AVIC_PHYSICAL_MAX_INDEX_MASK;
-	vmcb->control.avic_physical_id |= avic_get_max_physical_id(vcpu);
-	vmcb->control.int_ctl |= AVIC_ENABLE_MASK;
 
 	svm_clr_intercept(svm, INTERCEPT_CR8_WRITE);
 
@@ -226,6 +234,13 @@ static void avic_activate_vmcb(struct vcpu_svm *svm)
 	 * entries pointing to the vCPU's virtual APIC page.
 	 */
 	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, &svm->vcpu);
+
+	if (snp_is_secure_avic_enabled(vcpu->kvm))
+		return;
+
+	vmcb->control.avic_physical_id &= ~AVIC_PHYSICAL_MAX_INDEX_MASK;
+	vmcb->control.avic_physical_id |= avic_get_max_physical_id(vcpu);
+	vmcb->control.int_ctl |= AVIC_ENABLE_MASK;
 
 	/*
 	 * Note: KVM supports hybrid-AVIC mode, where KVM emulates x2APIC MSR
@@ -422,10 +437,12 @@ void avic_init_vmcb(struct vcpu_svm *svm, struct vmcb *vmcb)
 {
 	struct kvm_svm *kvm_svm = to_kvm_svm(svm->vcpu.kvm);
 
-	vmcb->control.avic_backing_page = avic_get_backing_page_address(svm);
-	vmcb->control.avic_logical_id = __sme_set(__pa(kvm_svm->avic_logical_id_table));
-	vmcb->control.avic_physical_id = __sme_set(__pa(kvm_svm->avic_physical_id_table));
-	vmcb->control.avic_vapic_bar = APIC_DEFAULT_PHYS_BASE;
+	if (!snp_is_secure_avic_enabled(svm->vcpu.kvm)) {
+		vmcb->control.avic_backing_page = avic_get_backing_page_address(svm);
+		vmcb->control.avic_logical_id = __sme_set(__pa(kvm_svm->avic_logical_id_table));
+		vmcb->control.avic_physical_id = __sme_set(__pa(kvm_svm->avic_physical_id_table));
+		vmcb->control.avic_vapic_bar = APIC_DEFAULT_PHYS_BASE;
+	}
 
 	if (kvm_vcpu_apicv_active(&svm->vcpu))
 		avic_activate_vmcb(svm);
