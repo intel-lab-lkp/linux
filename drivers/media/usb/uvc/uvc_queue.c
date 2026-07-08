@@ -196,6 +196,7 @@ static void uvc_stop_streaming_video(struct vb2_queue *vq)
 {
 	struct uvc_video_queue *queue = vb2_get_drv_priv(vq);
 	struct uvc_streaming *stream = queue->stream;
+	struct uvc_video_queue *meta_queue = &stream->meta.queue;
 
 	lockdep_assert_irqs_enabled();
 
@@ -204,6 +205,15 @@ static void uvc_stop_streaming_video(struct vb2_queue *vq)
 	uvc_pm_put(stream->dev);
 
 	uvc_queue_return_buffers(queue, UVC_BUF_STATE_ERROR);
+
+	/*
+	 * The video node acts as the stream manager, if it stops streaming,
+	 * the metadata node also stops producing frames.
+	 * To avoid metadata buffers partially filled by two runs, we need to
+	 * also flush the metadata queue.
+	 */
+	if (video_is_registered(&meta_queue->vdev))
+		uvc_queue_return_buffers(meta_queue, UVC_BUF_STATE_ERROR);
 }
 
 static void uvc_stop_streaming_meta(struct vb2_queue *vq)
