@@ -1353,7 +1353,13 @@ again:
 	if (ps->idx < MAX_FOLIO_NR_PAGES) {
 		memcpy(&ps->folio_snapshot, foliop, 2 * sizeof(struct page));
 		nr_pages = folio_nr_pages(&ps->folio_snapshot);
-		if (nr_pages > 1)
+		/*
+		 * __page_2 is the folio's third struct page and is part of the
+		 * folio only for order >= 2 (nr_pages > 2).  For an order-1
+		 * folio it is not part of the folio and may fall into an
+		 * adjacent, possibly absent, section.
+		 */
+		if (nr_pages > 2)
 			memcpy(&ps->folio_snapshot.__page_2, &foliop->__page_2,
 			       sizeof(struct page));
 		set_ps_flags(ps, foliop, page);
