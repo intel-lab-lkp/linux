@@ -2175,11 +2175,10 @@ static bool has_bbml2_noabort(const struct arm64_cpu_capabilities *caps, int sco
 static bool hvo_compatible(const struct arm64_cpu_capabilities *caps, int scope)
 {
 	/*
-	 * We need BBML2 to support Block -> Table transitions without taking
-	 * faults, and we need HW AF support to support changing the OA without
-	 * taking faults.
+	 * We need HW AF support to support changing vmemmap mapping level and
+	 * OA without taking faults.
 	 */
-	return cpu_supports_bbml2_noabort() && supports_hw_af(scope);
+	return supports_hw_af(scope);
 }
 
 static void cpu_enable_pan(const struct arm64_cpu_capabilities *__unused)
