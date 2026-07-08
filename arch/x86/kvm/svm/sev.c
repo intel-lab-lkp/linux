@@ -4862,6 +4862,22 @@ static void sev_es_init_vmcb(struct vcpu_svm *svm, bool init_event)
 	/* Can't intercept XSETBV, HV can't modify XCR0 directly */
 	svm_clr_intercept(svm, INTERCEPT_XSETBV);
 
+	if (snp_is_secure_avic_enabled(svm->vcpu.kvm)) {
+		/* Clear all exception intercepts since we can't inject those */
+		for (int i = 0; i < NUM_EXCEPTION_VECTORS; i++)
+			clr_exception_intercept(svm, i);
+
+		/*
+		 * Note that #MC is always intercepted by hardware in Secure
+		 * AVIC mode, so mark #MC as intercepted to stay consistent
+		 * with the hardware behavior. From the APM:
+		 *   "In Secure AVIC mode hardware treats physical INTR, NMI,
+		 *    INIT, and #MC events as intercepted regardless of the
+		 *    corresponding intercept bit values in the VMCB."
+		 */
+		set_exception_intercept(svm, MC_VECTOR);
+	}
+
 	/*
 	 * Set the GHCB MSR value as per the GHCB specification when emulating
 	 * vCPU RESET for an SEV-ES guest.
