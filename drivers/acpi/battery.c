@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) "ACPI: battery: " fmt
 
+#include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
 #include <linux/jiffies.h>
@@ -192,6 +193,21 @@ static int acpi_battery_handle_discharging(struct acpi_battery *battery)
 		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 
 	return POWER_SUPPLY_STATUS_DISCHARGING;
+}
+
+static void acpi_battery_remove_special_chars(char *str)
+{
+	char *out = str;
+	unsigned int i = 0;
+
+	while (*str && i < MAX_STRING_LENGTH) {
+		unsigned char c = *str++;
+
+		if (isascii(c) && isprint(c))
+			*out++ = c;
+		i++;
+	}
+	*out = '\0';
 }
 
 static int acpi_battery_get_property(struct power_supply *psy,
@@ -523,6 +539,9 @@ static int extract_battery_info(const int use_bix,
 	if (test_bit(ACPI_BATTERY_QUIRK_DEGRADED_FULL_CHARGE, &battery->flags) &&
 	    battery->capacity_now > battery->full_charge_capacity)
 		battery->capacity_now = battery->full_charge_capacity;
+
+	if (!result)
+		acpi_battery_remove_special_chars(battery->model_number);
 
 	return result;
 }
