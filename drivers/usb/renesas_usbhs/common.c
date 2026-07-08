@@ -786,6 +786,7 @@ static int usbhs_probe(struct platform_device *pdev)
 probe_assert_rest:
 	reset_control_assert(priv->rsts);
 probe_fail_rst:
+	devm_free_irq(&pdev->dev, priv->irq, priv);
 	usbhs_mod_remove(priv);
 probe_end_fifo_exit:
 	usbhs_fifo_remove(priv);
