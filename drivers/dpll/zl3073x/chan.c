@@ -451,6 +451,46 @@ int zl3073x_chan_df_offset_set(struct zl3073x_dev *zldev, u8 ch, s64 offset)
 }
 
 /**
+ * zl3073x_chan_tie_write - adjust DPLL phase using TIE write
+ * @zldev: pointer to zl3073x device
+ * @ch: DPLL channel index
+ * @delta_ns: phase adjustment in nanoseconds (must be within +-1s)
+ *
+ * Converts nanoseconds to TIE units (0.01 ps) and writes TIE data
+ * to the specified channel.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_chan_tie_write(struct zl3073x_dev *zldev, u8 ch, s64 delta_ns)
+{
+	s64 tie_data;
+	int rc;
+
+	guard(mutex)(&zldev->tie_lock);
+
+	/* Wait for any previous TIE operation to complete */
+	rc = zl3073x_poll_zero_u8(zldev, ZL_REG_DPLL_TIE_CTRL,
+				  ZL_DPLL_TIE_CTRL_OP,
+				  ZL_POLL_TIE_WR_TIMEOUT_US);
+	if (rc)
+		return rc;
+
+	/* Convert ns to TIE units (0.01 ps = 10^-14 s) */
+	tie_data = delta_ns * 100000LL;
+
+	rc = zl3073x_write_u48(zldev, ZL_REG_DPLL_TIE_DATA(ch), tie_data);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_TIE_CTRL_MASK, BIT(ch));
+	if (rc)
+		return rc;
+
+	return zl3073x_write_u8(zldev, ZL_REG_DPLL_TIE_CTRL,
+				ZL_DPLL_TIE_CTRL_OP_WR);
+}
+
+/**
  * zl3073x_chan_phase_step - execute one output phase step operation
  * @zldev: pointer to zl3073x device
  * @ch: DPLL channel index
