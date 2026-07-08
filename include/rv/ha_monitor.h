@@ -375,12 +375,12 @@ static inline bool ha_check_invariant_ns(struct ha_monitor *ha_mon,
 static inline u64 ha_invariant_passed_ns(struct ha_monitor *ha_mon, enum envs env,
 				   u64 expire, u64 time_ns)
 {
-	u64 passed = 0;
+	u64 passed;
 
 	if (env < 0 || env >= ENV_MAX_STORED)
 		return 0;
 	if (ha_monitor_env_invalid(ha_mon, env))
-		return 0;
+		ha_reset_clk_ns(ha_mon, env, time_ns);
 	passed = ha_get_env(ha_mon, env, time_ns);
 	ha_set_invariant_ns(ha_mon, env, expire - passed, time_ns);
 	return passed;
@@ -414,12 +414,12 @@ static inline bool ha_check_invariant_jiffy(struct ha_monitor *ha_mon,
 static inline u64 ha_invariant_passed_jiffy(struct ha_monitor *ha_mon, enum envs env,
 				      u64 expire, u64 time_ns)
 {
-	u64 passed = 0;
+	u64 passed;
 
 	if (env < 0 || env >= ENV_MAX_STORED)
 		return 0;
 	if (ha_monitor_env_invalid(ha_mon, env))
-		return 0;
+		ha_reset_clk_jiffy(ha_mon, env);
 	passed = ha_get_env(ha_mon, env, time_ns);
 	ha_set_invariant_jiffy(ha_mon, env, expire - passed);
 	return passed;
