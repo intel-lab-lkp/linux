@@ -657,6 +657,7 @@ void of_pci_remove_node(struct pci_dev *pdev)
 	if (!np || !of_node_check_flag(np, OF_DYNAMIC))
 		return;
 
+	fw_devlink_set_device(&np->fwnode, NULL);
 	device_remove_of_node(&pdev->dev);
 	of_changeset_revert(np->data);
 	of_changeset_destroy(np->data);
@@ -708,6 +709,13 @@ void of_pci_make_dev_node(struct pci_dev *pdev)
 	ret = of_pci_add_properties(pdev, cset, np);
 	if (ret)
 		goto out_free_node;
+
+	/*
+	 * Set the fwnode device in order to have fw_devlink creating links
+	 * pointing to this PCI device instead of walking up to the PCI host
+	 * bridge.
+	 */
+	fw_devlink_set_device(&np->fwnode, &pdev->dev);
 
 	ret = of_changeset_apply(cset);
 	if (ret)
