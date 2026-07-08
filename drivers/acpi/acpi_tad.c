@@ -819,7 +819,6 @@ static void acpi_tad_remove(void *data)
 	}
 
 	pm_runtime_suspend(dev);
-	pm_runtime_disable(dev);
 }
 
 static int acpi_tad_probe(struct platform_device *pdev)
@@ -876,8 +875,10 @@ static int acpi_tad_probe(struct platform_device *pdev)
 	 * The platform bus type probe callback tells the ACPI PM domain to
 	 * power up the device, so set the runtime PM status of it to "active".
 	 */
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
+	ret = devm_pm_runtime_set_active_enabled(dev);
+	if (ret)
+		return ret;
+
 	pm_runtime_suspend(dev);
 
 	/*
