@@ -16,10 +16,10 @@
 #include <linux/mmdebug.h>
 #include <linux/pagewalk.h>
 #include <linux/pgalloc.h>
+#include <linux/hugetlb.h>
 
-#include "linux/hugetlb.h"
 #include <asm/tlbflush.h>
-#include "hugetlb_vmemmap.h"
+#include "hugetlb_vmemmap_internal.h"
 #include "internal.h"
 
 /**

@@ -6,8 +6,8 @@
  *
  *     Author: Muchun Song <songmuchun@bytedance.com>
  */
-#ifndef _LINUX_HUGETLB_VMEMMAP_H
-#define _LINUX_HUGETLB_VMEMMAP_H
+#ifndef _MM_HUGETLB_VMEMMAP_INTERNAL_H
+#define _MM_HUGETLB_VMEMMAP_INTERNAL_H
 #include <linux/hugetlb.h>
 #include <linux/io.h>
 #include <linux/memblock.h>
@@ -95,4 +95,4 @@ static inline bool hugetlb_vmemmap_optimizable(const struct hstate *h)
 {
 	return hugetlb_vmemmap_optimizable_size(h) != 0;
 }
-#endif /* _LINUX_HUGETLB_VMEMMAP_H */
+#endif /* _MM_HUGETLB_VMEMMAP_INTERNAL_H */

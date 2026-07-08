@@ -8,7 +8,7 @@
 #include <linux/page_owner.h>
 #include <linux/page-isolation.h>
 
-#include "hugetlb_vmemmap.h"
+#include "hugetlb_vmemmap_internal.h"
 #include "hugetlb_internal.h"
 
 #define HSTATE_ATTR_RO(_name) \

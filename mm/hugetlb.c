@@ -47,7 +47,7 @@
 #include <linux/node.h>
 #include <linux/page_owner.h>
 #include "internal.h"
-#include "hugetlb_vmemmap.h"
+#include "hugetlb_vmemmap_internal.h"
 #include "hugetlb_cma.h"
 #include "hugetlb_internal.h"
 #include <linux/page-isolation.h>

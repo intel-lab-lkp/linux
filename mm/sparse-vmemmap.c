@@ -32,7 +32,7 @@
 #include <asm/dma.h>
 #include <asm/tlbflush.h>
 
-#include "hugetlb_vmemmap.h"
+#include "hugetlb_vmemmap_internal.h"
 
 /*
  * Flags for vmemmap_populate_range and friends.
