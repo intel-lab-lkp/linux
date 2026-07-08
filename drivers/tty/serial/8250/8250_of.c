@@ -122,6 +122,17 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 	if (ret)
 		goto err_pmruntime;
 
+	if (IS_ENABLED(CONFIG_CPU_XSCALE) && type == PORT_XSCALE) {
+		/*
+		 * Adjust for BE32 register accesses: drop any hardcoded
+		 * address for the big endian byte target, add it explicitly
+		 * if running on BE32.
+		 */
+		port->mapbase &= ~3;
+		if (IS_ENABLED(CONFIG_CPU_ENDIAN_BE32))
+			port->mapbase += 3;
+	}
+
 	/* Get clk rate through clk driver if present */
 	if (!port->uartclk) {
 		struct clk *bus_clk;
