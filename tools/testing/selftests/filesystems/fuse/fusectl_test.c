@@ -48,6 +48,7 @@ FIXTURE_SETUP(fusectl)
 	uid_t uid = getuid();
 	gid_t gid = getgid();
 	char buf[32];
+	char path_buf[PATH_MAX];
 
 	/* Setup userns */
 	ASSERT_EQ(unshare(CLONE_NEWNS|CLONE_NEWUSER), 0);
@@ -93,6 +94,12 @@ FIXTURE_SETUP(fusectl)
 		     strerror(errno));
 
 	self->connection = statbuf.st_dev;
+
+	sprintf(path_buf, "/sys/fs/fuse/connections/%d", self->connection);
+	if (access(path_buf, F_OK) != 0)
+		SKIP(return,
+		     "fusectl doesn't seem to be mounted: %s\n",
+		     strerror(errno));
 }
 
 FIXTURE_TEARDOWN(fusectl)
