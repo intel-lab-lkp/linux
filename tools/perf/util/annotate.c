@@ -982,21 +982,46 @@ void symbol__calc_percent(struct symbol *sym, struct evsel *evsel)
 	annotation__calc_percent(notes, evsel, symbol__size(sym));
 }
 
-int thread__get_arch(struct thread *thread, const struct arch **parch)
+int map_symbol__get_arch(struct map_symbol *ms, const struct arch **parch)
 {
+	struct machine *machine = NULL;
+	const char *cpuid = NULL;
 	const struct arch *arch;
-	struct machine *machine;
-	uint32_t e_flags;
-	uint16_t e_machine;
+	uint32_t e_flags = 0;
+	uint16_t e_machine = EM_NONE;
 
-	if (!thread) {
-		*parch = NULL;
-		return -1;
+	/*
+	 * If we have a thread then derive the e_machine using it. The thread
+	 * can determine the machine and perf_env, so is generally pretty robust
+	 * as well as benefitting from a cache.
+	 */
+	if (ms->thread) {
+		struct maps *maps = thread__maps(ms->thread);
+
+		machine = maps__machine(maps);
+		e_machine = thread__e_machine(ms->thread, machine, &e_flags);
+		if (machine && machine->env)
+			cpuid = machine->env->cpuid;
+	}
+	if (e_machine == EM_NONE && ms->map) {
+		/*
+		 * If the thread look up failed then try to use a dso that may
+		 * be associated with the map.
+		 */
+		struct dso *dso = map__dso(ms->map);
+
+		if (dso)
+			e_machine = dso__e_machine(dso, machine, &e_flags);
+	}
+	if (e_machine == EM_NONE) {
+		/*
+		 * Still no e_machine, use the default for this kind of perf
+		 * build that will determine a value using uname, etc.
+		 */
+		e_machine = thread__e_machine(ms->thread, machine, &e_flags);
 	}
 
-	machine = maps__machine(thread__maps(thread));
-	e_machine = thread__e_machine(thread, machine, &e_flags);
-	arch = arch__find(e_machine, e_flags, machine->env ? machine->env->cpuid : NULL);
+	arch = arch__find(e_machine, e_flags, cpuid);
 	if (arch == NULL) {
 		pr_err("%s: unsupported arch %d\n", __func__, e_machine);
 		return errno;
@@ -1018,7 +1043,7 @@ int symbol__annotate(struct map_symbol *ms, struct evsel *evsel,
 	const struct arch *arch = NULL;
 	int err, nr;
 
-	err = thread__get_arch(ms->thread, &arch);
+	err = map_symbol__get_arch(ms, &arch);
 	if (err)
 		return err;
 
@@ -1266,7 +1291,7 @@ int hist_entry__annotate_printf(struct hist_entry *he, struct evsel *evsel)
 
 	apd.addr_fmt_width = annotated_source__addr_fmt_width(&notes->src->source,
 							      notes->src->start);
-	thread__get_arch(ms->thread, &apd.arch);
+	map_symbol__get_arch(ms, &apd.arch);
 	apd.dbg = dso__debuginfo(dso);
 
 	list_for_each_entry(pos, &notes->src->source, node) {
@@ -1371,7 +1396,7 @@ static int symbol__annotate_fprintf2(struct symbol *sym, FILE *fp,
 	struct annotation_line *al;
 
 	if (annotate_opts.code_with_type) {
-		thread__get_arch(apd->he->ms.thread, &apd->arch);
+		map_symbol__get_arch(&apd->he->ms, &apd->arch);
 		apd->dbg = dso__debuginfo(map__dso(apd->he->ms.map));
 	}
 
