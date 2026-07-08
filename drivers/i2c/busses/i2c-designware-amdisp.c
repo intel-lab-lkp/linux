@@ -81,7 +81,7 @@ static int amd_isp_dw_i2c_plat_probe(struct platform_device *pdev)
 	ret = i2c_dw_probe(isp_i2c_dev);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret, "i2c_dw_probe failed\n");
-		goto error_release_rpm;
+		goto error_suspend_genpd;
 	}
 	dev_pm_genpd_suspend(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
@@ -89,8 +89,8 @@ static int amd_isp_dw_i2c_plat_probe(struct platform_device *pdev)
 
 	return 0;
 
-error_release_rpm:
-	amd_isp_dw_i2c_plat_pm_cleanup(isp_i2c_dev);
+error_suspend_genpd:
+	dev_pm_genpd_suspend(&pdev->dev);
 	return ret;
 }
 
