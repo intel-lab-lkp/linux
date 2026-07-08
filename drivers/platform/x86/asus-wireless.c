@@ -155,7 +155,7 @@ static int asus_wireless_probe(struct platform_device *pdev)
 
 	id = acpi_match_acpi_device(device_ids, adev);
 	if (!id)
-		return 0;
+		return -ENODEV;
 
 	data->hswc_params = (const struct hswc_params *)id->driver_data;
 
