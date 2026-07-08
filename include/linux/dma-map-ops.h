@@ -106,6 +106,7 @@ struct page *dma_alloc_contiguous(struct device *dev, size_t size, gfp_t gfp);
 void dma_free_contiguous(struct device *dev, struct page *page, size_t size);
 
 void dma_contiguous_early_fixup(phys_addr_t base, unsigned long size);
+bool dma_is_from_cma(phys_addr_t phys, size_t size);
 #else /* CONFIG_DMA_CMA */
 static inline struct cma *dev_get_cma_area(struct device *dev)
 {
@@ -144,6 +145,11 @@ static inline void dma_free_contiguous(struct device *dev, struct page *page,
 		size_t size)
 {
 	__free_pages(page, get_order(size));
+}
+
+static inline bool dma_is_from_cma(phys_addr_t phys, size_t size)
+{
+	return false;
 }
 #endif /* CONFIG_DMA_CMA*/
 
