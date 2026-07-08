@@ -484,10 +484,17 @@ static struct acpi_data_obj {
 
 #define NUM_ACPI_DATA_OBJS ARRAY_SIZE(acpi_data_objs)
 
-static int acpi_table_data_init(struct acpi_table_header *th)
+static int acpi_table_data_init(struct acpi_table_attr *table_attr)
 {
 	struct acpi_data_attr *data_attr;
+	struct acpi_table_header *th;
+	acpi_status status;
 	int i;
+
+	status = acpi_get_table(table_attr->name, table_attr->instance,
+				&th);
+	if (ACPI_FAILURE(status))
+		return -ENODEV;
 
 	for (i = 0; i < NUM_ACPI_DATA_OBJS; i++) {
 		if (ACPI_COMPARE_NAMESEG(th->signature, acpi_data_objs[i].name)) {
@@ -543,7 +550,7 @@ static int acpi_tables_sysfs_init(void)
 			return ret;
 		}
 		list_add_tail(&table_attr->node, &acpi_table_attr_list);
-		acpi_table_data_init(table_header);
+		acpi_table_data_init(table_attr);
 	}
 
 	kobject_uevent(tables_kobj, KOBJ_ADD);
