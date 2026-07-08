@@ -35,6 +35,7 @@
 #include "svm_ops.h"
 #include "cpuid.h"
 #include "trace.h"
+#include "lapic.h"
 
 #define GHCB_VERSION_MAX	2ULL
 #define GHCB_VERSION_MIN	1ULL
@@ -4939,6 +4940,11 @@ void sev_es_prepare_switch_to_guest(struct vcpu_svm *svm, struct sev_es_save_are
 	if (cpu_feature_enabled(X86_FEATURE_V_TSC_AUX) &&
 	    !WARN_ON_ONCE(tsc_aux_uret_slot < 0))
 		hostsa->tsc_aux = kvm_get_user_return_msr(tsc_aux_uret_slot);
+}
+
+bool snp_protected_apic_has_injectable_intr(struct kvm_vcpu *vcpu)
+{
+	return apic_find_highest_vector(vcpu->arch.apic->regs + APIC_IRR) != -1;
 }
 
 void sev_vcpu_deliver_sipi_vector(struct kvm_vcpu *vcpu, u8 vector)
