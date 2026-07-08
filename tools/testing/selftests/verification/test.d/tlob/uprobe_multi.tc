@@ -1,0 +1,64 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor multiple uprobe bindings (different offsets fire independently)
+# requires: tlob:monitor
+
+RV_BINDIR="${RV_BINDIR:-$(realpath "$(dirname "${1:-$0}")")}"
+UPROBE_TARGET="${RV_BINDIR}/tlob_target"
+TLOB_SYM="${RV_BINDIR}/tlob_sym"
+[ -x "$UPROBE_TARGET" ] || exit_unsupported
+[ -x "$TLOB_SYM" ]      || exit_unsupported
+TLOB_MONITOR=monitors/tlob/monitor
+
+busy_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work 2>/dev/null)
+busy_stop=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work_done 2>/dev/null)
+sleep_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_sleep_work 2>/dev/null)
+sleep_stop=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_sleep_work_done 2>/dev/null)
+[ -n "$busy_offset" ]  || exit_unsupported
+[ -n "$busy_stop" ]    || exit_unsupported
+[ -n "$sleep_offset" ] || exit_unsupported
+[ -n "$sleep_stop" ]   || exit_unsupported
+
+"$UPROBE_TARGET" 30000 &       # busy mode: tlob_busy_work fires every 200 ms
+busy_pid=$!
+"$UPROBE_TARGET" 30000 sleep & # sleep mode: tlob_sleep_work fires every 200 ms
+sleep_pid=$!
+sleep 0.05
+
+echo 1 > /sys/kernel/tracing/events/rv/error_env_tlob/enable
+echo 1 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo 1 > /sys/kernel/tracing/tracing_on
+echo 1 > monitors/tlob/enable
+echo > /sys/kernel/tracing/trace
+
+# Binding A: 5 s budget on the busy probe - must not fire in 200 ms loops.
+echo "p ${UPROBE_TARGET}:${busy_offset} ${busy_stop} threshold=5000000000" > "$TLOB_MONITOR"
+# Binding B: 10 us budget on the sleep probe - fires on first invocation.
+echo "p ${UPROBE_TARGET}:${sleep_offset} ${sleep_stop} threshold=10000" > "$TLOB_MONITOR"
+
+# Wait up to 2 s for error_env_tlob from binding B.
+found=0; i=0
+while [ "$i" -lt 20 ]; do
+	sleep 0.1
+	grep -q "error_env_tlob" /sys/kernel/tracing/trace && { found=1; break; }
+	i=$((i+1))
+done
+
+echo "-${UPROBE_TARGET}:${busy_offset}" > "$TLOB_MONITOR" 2>/dev/null
+echo "-${UPROBE_TARGET}:${sleep_offset}" > "$TLOB_MONITOR" 2>/dev/null
+kill "$sleep_pid" 2>/dev/null || true; wait "$sleep_pid" 2>/dev/null || true
+kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+
+echo 0 > monitors/tlob/enable
+echo 0 > /sys/kernel/tracing/events/rv/error_env_tlob/enable
+echo 0 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+
+[ "$found" = "1" ]
+# error_env_tlob payload: clock variable must be present.
+# The event field can be "budget_exceeded" (hrtimer path) or the DA event
+# name ("sleep", "preempt") depending on which fires first; don't constrain it.
+grep "error_env_tlob" /sys/kernel/tracing/trace | head -n 1 | grep -q "clk_elapsed="
+# detail_env_tlob must appear alongside the error.
+grep -q "detail_env_tlob" /sys/kernel/tracing/trace
+
+echo > /sys/kernel/tracing/trace

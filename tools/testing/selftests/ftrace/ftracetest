@@ -159,9 +159,21 @@ parse_opts() { # opts
   if [ -n "$OPT_TEST_CASES" ]; then
     TEST_CASES=$OPT_TEST_CASES
   fi
-  if [ -n "$OPT_TEST_DIR" -a -f "$OPT_TEST_DIR"/test.d/functions ]; then
-    TOP_DIR=$OPT_TEST_DIR
-    TEST_DIR=$TOP_DIR/test.d
+  if [ -n "$OPT_TEST_DIR" ]; then
+    # Walk up from OPT_TEST_DIR to find the nearest ancestor containing
+    # test.d/functions, allowing monitor subdirectories to be passed directly.
+    dir=$OPT_TEST_DIR
+    while [ "$dir" != "/" ]; do
+      if [ -f "$dir/test.d/functions" ]; then
+        TOP_DIR=$dir
+        TEST_DIR=$TOP_DIR/test.d
+        break
+      fi
+      dir=$(dirname "$dir")
+    done
+    if [ -z "$TOP_DIR" ]; then
+      errexit "no test.d/functions found above $OPT_TEST_DIR"
+    fi
   fi
 }
 

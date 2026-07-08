@@ -1,0 +1,51 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor detail running (running_ns dominates when task busy-spins between probes)
+# requires: tlob:monitor
+
+RV_BINDIR="${RV_BINDIR:-$(realpath "$(dirname "${1:-$0}")")}"
+UPROBE_TARGET="${RV_BINDIR}/tlob_target"
+TLOB_SYM="${RV_BINDIR}/tlob_sym"
+[ -x "$UPROBE_TARGET" ] || exit_unsupported
+[ -x "$TLOB_SYM" ]      || exit_unsupported
+TLOB_MONITOR=monitors/tlob/monitor
+
+start_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work 2>/dev/null)
+stop_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work_done 2>/dev/null)
+[ -n "$start_offset" ] || exit_unsupported
+[ -n "$stop_offset" ] || exit_unsupported
+
+"$UPROBE_TARGET" 5000 &
+busy_pid=$!
+sleep 0.05
+
+echo 1 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo 1 > /sys/kernel/tracing/tracing_on
+echo 1 > monitors/tlob/enable
+echo > /sys/kernel/tracing/trace
+
+# 10 us budget; task busy-spins 200 ms per iteration -> running_ns dominates.
+echo "p ${UPROBE_TARGET}:${start_offset} ${stop_offset} threshold=10000" > "$TLOB_MONITOR"
+
+found=0; i=0
+while [ "$i" -lt 30 ]; do
+	sleep 0.1
+	grep -q "detail_env_tlob" /sys/kernel/tracing/trace && { found=1; break; }
+	i=$((i+1))
+done
+
+echo "-${UPROBE_TARGET}:${start_offset}" > "$TLOB_MONITOR" 2>/dev/null
+kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+echo 0 > /sys/kernel/tracing/events/rv/detail_env_tlob/enable
+echo 0 > monitors/tlob/enable
+
+[ "$found" = "1" ]
+
+line=$(grep "detail_env_tlob" /sys/kernel/tracing/trace | head -n 1)
+running=$(echo "$line" | sed 's/.*running_ns=\([0-9]*\).*/\1/')
+waiting=$(echo "$line" | sed 's/.*waiting_ns=\([0-9]*\).*/\1/')
+sleeping=$(echo "$line" | sed 's/.*sleeping_ns=\([0-9]*\).*/\1/')
+# Busy-spin keeps the task on-CPU: running_ns must exceed sleeping_ns.
+[ "$running" -gt "$sleeping" ]
+
+echo > /sys/kernel/tracing/trace

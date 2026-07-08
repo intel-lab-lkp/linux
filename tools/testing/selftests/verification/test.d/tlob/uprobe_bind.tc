@@ -1,0 +1,37 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor uprobe binding (visible in monitor file, removable, duplicate rejected)
+# requires: tlob:monitor
+
+RV_BINDIR="${RV_BINDIR:-$(realpath "$(dirname "${1:-$0}")")}"
+UPROBE_TARGET="${RV_BINDIR}/tlob_target"
+TLOB_SYM="${RV_BINDIR}/tlob_sym"
+[ -x "$UPROBE_TARGET" ] || exit_unsupported
+[ -x "$TLOB_SYM" ]      || exit_unsupported
+TLOB_MONITOR=monitors/tlob/monitor
+
+busy_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work 2>/dev/null)
+stop_offset=$("$TLOB_SYM" sym_offset "$UPROBE_TARGET" tlob_busy_work_done 2>/dev/null)
+[ -n "$busy_offset" ] || exit_unsupported
+[ -n "$stop_offset" ] || exit_unsupported
+
+"$UPROBE_TARGET" 30000 &
+busy_pid=$!
+sleep 0.05
+
+echo 1 > monitors/tlob/enable
+echo "p ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=5000000000" > "$TLOB_MONITOR"
+
+# Binding must appear in monitor file with canonical hex-offset format.
+grep -qE "^p ${UPROBE_TARGET}:0x[0-9a-f]+ 0x[0-9a-f]+ threshold=[0-9]+$" "$TLOB_MONITOR"
+grep -q "threshold=5000000000" "$TLOB_MONITOR"
+
+# Duplicate offset_start must be rejected.
+! echo "p ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=9999000" > "$TLOB_MONITOR" 2>/dev/null || false
+
+# Remove the binding; it must no longer appear.
+echo "-${UPROBE_TARGET}:${busy_offset}" > "$TLOB_MONITOR"
+! grep -q "^p .*:0x${busy_offset#0x} " "$TLOB_MONITOR" || false
+
+kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+echo 0 > monitors/tlob/enable

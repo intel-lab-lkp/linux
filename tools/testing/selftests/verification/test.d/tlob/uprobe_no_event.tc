@@ -1,0 +1,19 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor no spurious events without active uprobe binding
+# requires: tlob:monitor
+
+TLOB_MONITOR=monitors/tlob/monitor
+
+echo 1 > /sys/kernel/tracing/events/rv/error_env_tlob/enable
+echo 1 > /sys/kernel/tracing/tracing_on
+echo 1 > monitors/tlob/enable
+echo > /sys/kernel/tracing/trace
+
+sleep 0.5
+
+! grep -q "error_env_tlob" /sys/kernel/tracing/trace || false
+
+echo 0 > monitors/tlob/enable
+echo 0 > /sys/kernel/tracing/events/rv/error_env_tlob/enable
+echo > /sys/kernel/tracing/trace

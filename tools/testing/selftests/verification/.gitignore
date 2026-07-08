@@ -1,2 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-only
 logs
+test.d/tlob/tlob_sym
+test.d/tlob/tlob_target
