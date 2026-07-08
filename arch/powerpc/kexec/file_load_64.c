@@ -731,6 +731,7 @@ int setup_new_fdt_ppc64(const struct kimage *image, void *fdt, struct crash_mem 
 	int i, nr_ranges, ret;
 
 #ifdef CONFIG_CRASH_DUMP
+	uint64_t crashk_start;
 	/*
 	 * Restrict memory usage for kdump kernel by setting up
 	 * usable memory ranges and memory reserve map.
@@ -750,8 +751,8 @@ int setup_new_fdt_ppc64(const struct kimage *image, void *fdt, struct crash_mem 
 		 * Ensure we don't touch crashed kernel's memory except the
 		 * first 64K of RAM, which will be backed up.
 		 */
-		ret = fdt_add_mem_rsv(fdt, BACKUP_SRC_END + 1,
-				      crashk_res.start - BACKUP_SRC_SIZE);
+		crashk_start = crashk_low_res.end ? crashk_low_res.start : crashk_res.start;
+		ret = fdt_add_mem_rsv(fdt, BACKUP_SRC_END + 1, crashk_start - BACKUP_SRC_SIZE);
 		if (ret) {
 			pr_err("Error reserving crash memory: %s\n",
 			       fdt_strerror(ret));

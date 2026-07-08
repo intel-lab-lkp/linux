@@ -52,9 +52,13 @@ static void *elf64_load(struct kimage *image, char *kernel_buf,
 	if (IS_ENABLED(CONFIG_CRASH_DUMP) && image->type == KEXEC_TYPE_CRASH) {
 		/* min & max buffer values for kdump case */
 		kbuf.buf_min = pbuf.buf_min = crashk_res.start;
-		kbuf.buf_max = pbuf.buf_max =
-				((crashk_res.end < ppc64_rma_size) ?
-				 crashk_res.end : (ppc64_rma_size - 1));
+
+		if (crashk_low_res.end)
+			kbuf.buf_max = pbuf.buf_max = crashk_res.end;
+		else
+			kbuf.buf_max = pbuf.buf_max =
+					((crashk_res.end < ppc64_rma_size) ?
+					crashk_res.end : (ppc64_rma_size - 1));
 	}
 
 	ret = kexec_elf_load(image, &ehdr, &elf_info, &kbuf, &kernel_load_addr);
