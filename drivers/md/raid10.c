@@ -1143,7 +1143,7 @@ static bool regular_request_wait(struct mddev *mddev, struct r10conf *conf,
 	return true;
 }
 
-static void raid10_read_request(struct mddev *mddev, struct bio *bio,
+static bool raid10_read_request(struct mddev *mddev, struct bio *bio,
 				struct r10bio *r10_bio)
 {
 	struct r10conf *conf = mddev->private;
@@ -1191,8 +1191,7 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 
 	if (!regular_request_wait(mddev, conf, bio, r10_bio->sectors)) {
 		bio_wouldblock_error(bio);
-		free_r10bio(r10_bio);
-		return;
+		return false;
 	}
 
 	rdev = read_balance(conf, r10_bio, &max_sectors);
@@ -1202,8 +1201,8 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 					    mdname(mddev), b,
 					    (unsigned long long)r10_bio->sector);
 		}
-		raid_end_bio_io(r10_bio);
-		return;
+		bio_io_error(bio);
+		goto err_allow_barrier;
 	}
 	if (err_rdev)
 		pr_err_ratelimited("md/raid10:%s: %pg: redirecting sector %llu to another mirror\n",
@@ -1215,10 +1214,8 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 		bio = bio_submit_split_bioset(bio, max_sectors,
 					      &conf->bio_split);
 		wait_barrier(conf, false);
-		if (!bio) {
-			set_bit(R10BIO_Returned, &r10_bio->state);
-			goto err_handle;
-		}
+		if (!bio)
+			goto err_dec_pending;
 
 		r10_bio->master_bio = bio;
 		r10_bio->sectors = max_sectors;
@@ -1244,10 +1241,16 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 	read_bio->bi_private = r10_bio;
 	mddev_trace_remap(mddev, read_bio, r10_bio->sector);
 	submit_bio_noacct(read_bio);
-	return;
-err_handle:
+
+	return true;
+
+err_dec_pending:
 	atomic_dec(&rdev->nr_pending);
-	raid_end_bio_io(r10_bio);
+
+err_allow_barrier:
+	allow_barrier(conf);
+
+	return false;
 }
 
 static void raid10_write_one_disk(struct mddev *mddev, struct r10bio *r10_bio,
@@ -1538,14 +1541,13 @@ static bool __make_request(struct mddev *mddev, struct bio *bio, int sectors)
 	memset(r10_bio->devs, 0, sizeof(r10_bio->devs[0]) *
 			conf->geo.raid_disks);
 
-	ret = true;
 	if (bio_data_dir(bio) == READ)
-		raid10_read_request(mddev, bio, r10_bio);
-	else {
+		ret = raid10_read_request(mddev, bio, r10_bio);
+	else
 		ret = raid10_write_request(mddev, bio, r10_bio);
-		if (!ret)
-			free_r10bio(r10_bio);
-	}
+
+	if (!ret)
+		free_r10bio(r10_bio);
 
 	return ret;
 }
@@ -1875,6 +1877,7 @@ static bool raid10_make_request(struct mddev *mddev, struct bio *bio)
 	sector_t chunk_mask = (conf->geo.chunk_mask & conf->prev.chunk_mask);
 	int chunk_sects = chunk_mask + 1;
 	int sectors = bio_sectors(bio);
+	bool write = bio_data_dir(bio) == WRITE;
 
 	if (unlikely(bio->bi_opf & REQ_PREFLUSH)
 	    && md_flush_request(mddev, bio))
@@ -1898,7 +1901,7 @@ static bool raid10_make_request(struct mddev *mddev, struct bio *bio)
 		sectors = chunk_sects -
 			(bio->bi_iter.bi_sector &
 			 (chunk_sects - 1));
-	if (!__make_request(mddev, bio, sectors))
+	if (!__make_request(mddev, bio, sectors) && write)
 		md_write_end(mddev);
 
 	/* In case raid10d snuck in to freeze_array */
@@ -2866,7 +2869,9 @@ static void handle_read_error(struct mddev *mddev, struct r10bio *r10_bio)
 
 	rdev_dec_pending(rdev, mddev);
 	r10_bio->state = 0;
-	raid10_read_request(mddev, r10_bio->master_bio, r10_bio);
+	if (!raid10_read_request(mddev, r10_bio->master_bio, r10_bio))
+		free_r10bio(r10_bio);
+
 	/*
 	 * allow_barrier after re-submit to ensure no sync io
 	 * can be issued while regular io pending.
