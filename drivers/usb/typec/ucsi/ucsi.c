@@ -91,8 +91,29 @@ int ucsi_sync_control_common(struct ucsi *ucsi, u64 command, u32 *cci,
 	if (ret)
 		goto out_clear_bit;
 
-	if (!wait_for_completion_timeout(&ucsi->complete, 5 * HZ))
-		ret = -ETIMEDOUT;
+	if (!wait_for_completion_timeout(&ucsi->complete, 5 * HZ)) {
+		u32 polled_cci = 0;
+
+		/*
+		 * Notification from EC did not arrive.  Poll once to check
+		 * whether the PPM actually finished without firing a notify.
+		 * If poll_cci() is missing or fails, polled_cci stays 0 and we
+		 * correctly report -ETIMEDOUT below.
+		 */
+		if (ucsi->ops->poll_cci)
+			ucsi->ops->poll_cci(ucsi, &polled_cci);
+
+		if ((ack && (polled_cci & UCSI_CCI_ACK_COMPLETE)) ||
+		    (!ack && (polled_cci & UCSI_CCI_COMMAND_COMPLETE))) {
+			/*
+			 * EC completed the command silently.  Proceed to
+			 * out_clear_bit which reads CCI+data normally, and
+			 * ucsi_run_command() will issue ACK_CC_CI as usual.
+			 */
+		} else {
+			ret = -ETIMEDOUT;
+		}
+	}
 
 out_clear_bit:
 	if (ack)
