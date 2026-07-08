@@ -22,27 +22,40 @@ static struct vport_ops ovs_vxlan_netdev_vport_ops;
 static int vxlan_get_options(const struct vport *vport, struct sk_buff *skb)
 {
 	struct vxlan_dev *vxlan = netdev_priv(vport->dev);
-	const struct vxlan_config *cfg = &vxlan->cfg;
-	__be16 dst_port = cfg->dst_port;
+	const struct vxlan_config *cfg;
+	__be16 dst_port;
+	int err = 0;
 
-	if (nla_put_u16(skb, OVS_TUNNEL_ATTR_DST_PORT, ntohs(dst_port)))
-		return -EMSGSIZE;
+	rcu_read_lock();
+	cfg = rcu_dereference(vxlan->cfg);
+	dst_port = cfg->dst_port;
+
+	if (nla_put_u16(skb, OVS_TUNNEL_ATTR_DST_PORT, ntohs(dst_port))) {
+		err = -EMSGSIZE;
+		goto out;
+	}
 
 	if (cfg->flags & VXLAN_F_GBP) {
 		struct nlattr *exts;
 
 		exts = nla_nest_start_noflag(skb, OVS_TUNNEL_ATTR_EXTENSION);
-		if (!exts)
-			return -EMSGSIZE;
+		if (!exts) {
+			err = -EMSGSIZE;
+			goto out;
+		}
 
 		if (cfg->flags & VXLAN_F_GBP &&
-		    nla_put_flag(skb, OVS_VXLAN_EXT_GBP))
-			return -EMSGSIZE;
+		    nla_put_flag(skb, OVS_VXLAN_EXT_GBP)) {
+			err = -EMSGSIZE;
+			goto out;
+		}
 
 		nla_nest_end(skb, exts);
 	}
 
-	return 0;
+out:
+	rcu_read_unlock();
+	return err;
 }
 
 static const struct nla_policy exts_policy[OVS_VXLAN_EXT_MAX + 1] = {

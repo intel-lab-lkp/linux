@@ -164,7 +164,7 @@ static int vxlan_mdb_entry_info_fill(const struct vxlan_dev *vxlan,
 				     const struct vxlan_mdb_entry *mdb_entry,
 				     const struct vxlan_mdb_remote *remote)
 {
-	const struct vxlan_config *cfg = &vxlan->cfg;
+	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
 	struct vxlan_rdst *rd = rtnl_dereference(remote->rd);
 	struct br_mdb_entry e;
 	struct nlattr *nest;
@@ -605,7 +605,9 @@ static int vxlan_mdb_config_init(struct vxlan_mdb_config *cfg,
 {
 	struct br_mdb_entry *entry = nla_data(tb[MDBA_SET_ENTRY]);
 	struct vxlan_dev *vxlan = netdev_priv(dev);
-	const struct vxlan_config *vcfg = &vxlan->cfg;
+	const struct vxlan_config *vcfg;
+
+	vcfg = rtnl_dereference(vxlan->cfg);
 
 	memset(cfg, 0, sizeof(*cfg));
 	cfg->vxlan = vxlan;
@@ -940,12 +942,12 @@ vxlan_mdb_nlmsg_remote_size(const struct vxlan_dev *vxlan,
 			    const struct vxlan_mdb_entry *mdb_entry,
 			    const struct vxlan_mdb_remote *remote)
 {
-	const struct vxlan_config *cfg = &vxlan->cfg;
+	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
 	const struct vxlan_mdb_entry_key *group = &mdb_entry->key;
 	struct vxlan_rdst *rd = rtnl_dereference(remote->rd);
 	size_t nlmsg_size;
 
-		     /* MDBA_MDB_ENTRY_INFO */
+	/* MDBA_MDB_ENTRY_INFO */
 	nlmsg_size = nla_total_size(sizeof(struct br_mdb_entry)) +
 		     /* MDBA_MDB_EATTR_TIMER */
 		     nla_total_size(sizeof(u32));
@@ -1205,7 +1207,7 @@ vxlan_mdb_entry_get(struct vxlan_dev *vxlan,
 		goto err_free_entry;
 
 	if (hlist_is_singular_node(&mdb_entry->mdb_node, &vxlan->mdb_list))
-		vxlan->cfg.flags |= VXLAN_F_MDB;
+		rtnl_dereference(vxlan->cfg)->flags |= VXLAN_F_MDB;
 
 	return mdb_entry;
 
@@ -1222,7 +1224,7 @@ static void vxlan_mdb_entry_put(struct vxlan_dev *vxlan,
 		return;
 
 	if (hlist_is_singular_node(&mdb_entry->mdb_node, &vxlan->mdb_list))
-		vxlan->cfg.flags &= ~VXLAN_F_MDB;
+		rtnl_dereference(vxlan->cfg)->flags &= ~VXLAN_F_MDB;
 
 	rhashtable_remove_fast(&vxlan->mdb_tbl, &mdb_entry->rhnode,
 			       vxlan_mdb_rht_params);
@@ -1610,12 +1612,16 @@ struct vxlan_mdb_entry *vxlan_mdb_entry_skb_get(struct vxlan_dev *vxlan,
 						struct sk_buff *skb,
 						__be32 src_vni)
 {
-	const struct vxlan_config *cfg = &vxlan->cfg;
+	const struct vxlan_config *cfg;
 	struct vxlan_mdb_entry *mdb_entry;
 	struct vxlan_mdb_entry_key group;
 
 	if (!is_multicast_ether_addr(eth_hdr(skb)->h_dest) ||
 	    is_broadcast_ether_addr(eth_hdr(skb)->h_dest))
+		return NULL;
+
+	cfg = rcu_dereference(vxlan->cfg);
+	if (!cfg)
 		return NULL;
 
 	/* When not in collect metadata mode, 'src_vni' is zero, but MDB
@@ -1691,7 +1697,10 @@ netdev_tx_t vxlan_mdb_xmit(struct vxlan_dev *vxlan,
 			   struct sk_buff *skb)
 {
 	struct vxlan_mdb_remote *remote, *fremote = NULL;
+	const struct vxlan_config *cfg;
 	__be32 src_vni = mdb_entry->key.vni;
+
+	cfg = rcu_dereference(vxlan->cfg);
 
 	list_for_each_entry_rcu(remote, &mdb_entry->remotes, list) {
 		struct sk_buff *skb1;
@@ -1708,12 +1717,12 @@ netdev_tx_t vxlan_mdb_xmit(struct vxlan_dev *vxlan,
 
 		skb1 = skb_clone(skb, GFP_ATOMIC);
 		if (skb1)
-			vxlan_xmit_one(skb1, vxlan->dev, &vxlan->cfg, src_vni,
+			vxlan_xmit_one(skb1, vxlan->dev, cfg, src_vni,
 				       rcu_dereference(remote->rd), false);
 	}
 
 	if (fremote)
-		vxlan_xmit_one(skb, vxlan->dev, &vxlan->cfg, src_vni,
+		vxlan_xmit_one(skb, vxlan->dev, cfg, src_vni,
 			       rcu_dereference(fremote->rd), false);
 	else
 		kfree_skb_reason(skb, SKB_DROP_REASON_NO_TX_TARGET);
@@ -1744,7 +1753,7 @@ void vxlan_mdb_fini(struct vxlan_dev *vxlan)
 	struct vxlan_mdb_flush_desc desc = {};
 
 	vxlan_mdb_flush(vxlan, &desc);
-	WARN_ON_ONCE(vxlan->cfg.flags & VXLAN_F_MDB);
+	WARN_ON_ONCE(rtnl_dereference(vxlan->cfg)->flags & VXLAN_F_MDB);
 	rhashtable_free_and_destroy(&vxlan->mdb_tbl, vxlan_mdb_check_empty,
 				    NULL);
 }

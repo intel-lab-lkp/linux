@@ -229,6 +229,7 @@ struct vxlan_config {
 	bool				no_share;
 	enum ifla_vxlan_df		df;
 	struct vxlanhdr			reserved_bits;
+	struct rcu_head			rcu;
 };
 
 enum {
@@ -301,7 +302,7 @@ struct vxlan_dev {
 	unsigned int	  addrcnt;
 	struct gro_cells  gro_cells;
 
-	struct vxlan_config	cfg;
+	struct vxlan_config __rcu	*cfg;
 
 	struct vxlan_vni_group  __rcu *vnigrp;
 
