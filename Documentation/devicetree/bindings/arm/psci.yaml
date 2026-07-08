@@ -28,6 +28,14 @@ description: |+
   Note that the immediate field of the trapping instruction must be set
   to #0.
 
+  Alternatively, when the "efi" method is used, the PSCI functions are not
+  invoked by trapping to a higher privilege level. Instead, they are backed
+  by EFI runtime services: the firmware exposes a PSCI handler that the OS
+  invokes through an EFI runtime call. This method is intended for platforms
+  where the kernel runs at the highest privilege level, leaving no higher level
+  to trap into; the firmware shares that same level and is instead reached
+  through EFI runtime services.
+
   [2] Power State Coordination Interface (PSCI) specification
     http://infocenter.arm.com/help/topic/com.arm.doc.den0022c/DEN0022C_Power_State_Coordination_Interface.pdf
 
@@ -69,6 +77,10 @@ properties:
       - smc
       # HVC #0, with the register assignments specified in this binding.
       - hvc
+      # The PSCI functions are implemented by EFI runtime services, and are
+      # invoked through a runtime call into the firmware rather than via an
+      # SMC or HVC trap.
+      - efi
 
   cpu_suspend:
     $ref: /schemas/types.yaml#/definitions/uint32
