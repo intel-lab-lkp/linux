@@ -92,7 +92,6 @@ static int def_reserved_size = SG_DEF_RESERVED_SIZE;
 static int sg_allow_dio = SG_ALLOW_DIO_DEF;
 
 static int scatter_elem_sz = SG_SCATTER_SZ;
-static int scatter_elem_sz_prev = SG_SCATTER_SZ;
 
 #define SG_SECTOR_SZ 512
 
@@ -1622,8 +1621,34 @@ sg_remove_device(struct device *cl_dev)
 	kref_put(&sdp->d_ref, sg_device_destroy);
 }
 
-module_param_named(scatter_elem_sz, scatter_elem_sz, int, S_IRUGO | S_IWUSR);
-module_param_named(allow_dio, sg_allow_dio, int, S_IRUGO | S_IWUSR);
+static int scatter_elem_sz_set(const char *val, const struct kernel_param *kp)
+{
+	int ret, new_val, order;
+
+	ret = kstrtoint(val, 0, &new_val);
+	if (ret)
+		return ret;
+
+	if (new_val <= 0) {
+		pr_err("sg: scatter_elem_sz must be positive, got %d\n", new_val);
+		return -EINVAL;
+	}
+
+	order = get_order(new_val);
+	if (order > MAX_PAGE_ORDER) {
+		pr_err("sg: scatter_elem_sz too large (order %d > MAX_PAGE_ORDER %d)\n",
+			order, MAX_PAGE_ORDER);
+		return -EINVAL;
+	}
+
+	scatter_elem_sz = 1 << (PAGE_SHIFT + order);
+	return 0;
+}
+
+module_param_call(scatter_elem_sz, scatter_elem_sz_set, param_get_int,
+		  &scatter_elem_sz, 0644);
+
+module_param_named(allow_dio, sg_allow_dio, int, 0644);
 
 static int def_reserved_size_set(const char *val, const struct kernel_param *kp)
 {
@@ -1649,8 +1674,7 @@ static const struct kernel_param_ops def_reserved_size_ops = {
 	.get	= param_get_int,
 };
 
-module_param_cb(def_reserved_size, &def_reserved_size_ops, &def_reserved_size,
-		   S_IRUGO | S_IWUSR);
+module_param_cb(def_reserved_size, &def_reserved_size_ops, &def_reserved_size, 0644);
 
 MODULE_AUTHOR("Douglas Gilbert");
 MODULE_DESCRIPTION("SCSI generic (sg) driver");
@@ -1667,11 +1691,6 @@ static int __init
 init_sg(void)
 {
 	int rc;
-
-	if (scatter_elem_sz < PAGE_SIZE) {
-		scatter_elem_sz = PAGE_SIZE;
-		scatter_elem_sz_prev = scatter_elem_sz;
-	}
 
 	rc = register_chrdev_region(MKDEV(SCSI_GENERIC_MAJOR, 0), 
 				    SG_MAX_DEVS, "sg");
@@ -1854,9 +1873,10 @@ sg_build_sgat(Sg_scatter_hold * schp, const Sg_fd * sfp, int tablesize)
 static int
 sg_build_indirect(Sg_scatter_hold * schp, Sg_fd * sfp, int buff_size)
 {
-	int ret_sz = 0, i, k, rem_sz, num, mx_sc_elems;
+	int ret_sz = 0, i, k, rem_sz, mx_sc_elems;
 	int sg_tablesize = sfp->parentdp->sg_tablesize;
 	int blk_size = buff_size, order;
+	int elem_sz = scatter_elem_sz;
 	gfp_t gfp_mask = GFP_ATOMIC | __GFP_COMP | __GFP_NOWARN | __GFP_ZERO;
 
 	if (blk_size < 0)
@@ -1874,39 +1894,19 @@ sg_build_indirect(Sg_scatter_hold * schp, Sg_fd * sfp, int buff_size)
 	if (mx_sc_elems < 0)
 		return mx_sc_elems;	/* most likely -ENOMEM */
 
-	num = scatter_elem_sz;
-	if (unlikely(num != scatter_elem_sz_prev)) {
-		if (num < PAGE_SIZE) {
-			scatter_elem_sz = PAGE_SIZE;
-			scatter_elem_sz_prev = PAGE_SIZE;
-		} else
-			scatter_elem_sz_prev = num;
-	}
-
-	order = get_order(num);
+	order = get_order(elem_sz);
 retry:
 	ret_sz = 1 << (PAGE_SHIFT + order);
 
 	for (k = 0, rem_sz = blk_size; rem_sz > 0 && k < mx_sc_elems;
 	     k++, rem_sz -= ret_sz) {
-
-		num = (rem_sz > scatter_elem_sz_prev) ?
-			scatter_elem_sz_prev : rem_sz;
-
 		schp->pages[k] = alloc_pages(gfp_mask, order);
 		if (!schp->pages[k])
 			goto out;
 
-		if (num == scatter_elem_sz_prev) {
-			if (unlikely(ret_sz > scatter_elem_sz_prev)) {
-				scatter_elem_sz = ret_sz;
-				scatter_elem_sz_prev = ret_sz;
-			}
-		}
-
 		SCSI_LOG_TIMEOUT(5, sg_printk(KERN_INFO, sfp->parentdp,
-				 "sg_build_indirect: k=%d, num=%d, ret_sz=%d\n",
-				 k, num, ret_sz));
+				 "%s: k=%d, ret_sz=%d\n",
+				 __func__, k, ret_sz));
 	}		/* end of for loop */
 
 	schp->page_order = order;
