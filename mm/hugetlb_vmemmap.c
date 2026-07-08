@@ -17,6 +17,7 @@
 #include <linux/pagewalk.h>
 #include <linux/pgalloc.h>
 
+#include "linux/hugetlb.h"
 #include <asm/tlbflush.h>
 #include "hugetlb_vmemmap.h"
 #include "internal.h"
@@ -556,6 +557,9 @@ static bool vmemmap_should_optimize_folio(const struct hstate *h, struct folio *
 	if (!READ_ONCE(vmemmap_optimize_enabled))
 		return false;
 
+	if (!arch_hugetlb_vmemmap_optimization_supported())
+		return false;
+
 	if (!hugetlb_vmemmap_optimizable(h))
 		return false;
 
@@ -762,6 +766,14 @@ static bool vmemmap_should_optimize_bootmem_page(struct huge_bootmem_page *m)
 	phys_addr_t paddr;
 
 	if (!READ_ONCE(vmemmap_optimize_enabled))
+		return false;
+
+	/*
+	 * Architectures may return false here but true by the time
+	 * hugetlb_init() is called. In this case, although the folios will
+	 * not be pre-HVOed, they will be optimized in hugetlb_init().
+	 */
+	if (!arch_hugetlb_vmemmap_optimization_supported())
 		return false;
 
 	if (!hugetlb_vmemmap_optimizable(m->hstate))
