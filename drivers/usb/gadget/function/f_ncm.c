@@ -1210,7 +1210,9 @@ parse_ntb:
 
 	block_len = get_ncm(&tmp, opts->block_length);
 	/* (d)wBlockLength */
-	if ((block_len < opts->nth_size + opts->ndp_size) || (block_len > ntb_max)) {
+	if ((block_len < opts->nth_size + opts->ndp_size) ||
+	    (block_len > ntb_max) ||
+	    (block_len > to_process)) {
 		INFO(port->func.config->cdev, "Bad block length: %#X\n", block_len);
 		goto err;
 	}
@@ -1254,7 +1256,8 @@ parse_ntb:
 		 */
 		if ((ndp_len < opts->ndp_size
 				+ 2 * 2 * (opts->dgram_item_len * 2)) ||
-				(ndp_len % opts->ndplen_align != 0)) {
+				(ndp_len % opts->ndplen_align != 0) ||
+				(ndp_len > block_len - ndp_index)) {
 			INFO(port->func.config->cdev, "Bad NDP length: %#X\n",
 			     ndp_len);
 			goto err;
@@ -1290,6 +1293,14 @@ parse_ntb:
 				     "Bad dgram length: %#X\n", dg_len);
 				goto err;
 			}
+
+			if (dg_len > block_len - index) {
+				INFO(port->func.config->cdev,
+				     "Datagram exceeds NTB bounds: index %#X length %#X\n",
+				     index, dg_len);
+				goto err;
+			}
+
 			if (ncm->is_crc) {
 				uint32_t crc, crc2;
 
