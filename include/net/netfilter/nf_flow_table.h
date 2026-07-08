@@ -84,6 +84,9 @@ struct nf_flowtable {
 	struct flow_block		flow_block;
 	struct rw_semaphore		flow_block_lock; /* Guards flow_block */
 	possible_net_t			net;
+	struct notifier_block		fib_nb;
+	struct work_struct		fib_work;
+	struct llist_head		fib_events;
 };
 
 static inline bool nf_flowtable_hw_offload(struct nf_flowtable *flowtable)

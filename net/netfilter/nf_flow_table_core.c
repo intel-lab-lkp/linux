@@ -5,8 +5,12 @@
 #include <linux/netfilter.h>
 #include <linux/rhashtable.h>
 #include <linux/netdevice.h>
+#include <linux/llist.h>
 #include <net/ip.h>
 #include <net/ip6_route.h>
+#include <net/fib_notifier.h>
+#include <net/ip_fib.h>
+#include <net/ip6_fib.h>
 #include <net/netfilter/nf_tables.h>
 #include <net/netfilter/nf_flow_table.h>
 #include <net/netfilter/nf_conntrack.h>
@@ -695,11 +699,179 @@ void nf_flow_dnat_port(const struct flow_offload *flow, struct sk_buff *skb,
 }
 EXPORT_SYMBOL_GPL(nf_flow_dnat_port);
 
+struct nf_flow_fib_match {
+	struct llist_node	*events;
+};
+
+struct nf_flow_fib_event {
+	struct llist_node	node;
+	u8			family;
+	u8			prefix_len;
+	union {
+		__be32		ip4;
+		struct in6_addr	ip6;
+	} addr;
+};
+
+static bool nf_flow_fib_tuple_match(const struct flow_offload_tuple *tuple,
+				    const struct nf_flow_fib_event *ev)
+{
+	if (tuple->l3proto != ev->family)
+		return false;
+
+	switch (ev->family) {
+	case NFPROTO_IPV4: {
+		__be32 mask = ev->prefix_len ?
+			htonl(~0u << (32 - ev->prefix_len)) : 0;
+		return (tuple->dst_v4.s_addr & mask) == (ev->addr.ip4 & mask);
+	}
+#if IS_ENABLED(CONFIG_IPV6)
+	case NFPROTO_IPV6:
+		return ipv6_prefix_equal(&tuple->dst_v6, &ev->addr.ip6,
+					 ev->prefix_len);
+#endif
+	default:
+		return false;
+	}
+}
+
+static bool nf_flow_fib_flow_match(const struct flow_offload *flow,
+				   const struct nf_flow_fib_match *m)
+{
+	const struct flow_offload_tuple *orig, *reply;
+	const struct nf_flow_fib_event *ev;
+	struct llist_node *node;
+
+	orig  = &flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple;
+	reply = &flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple;
+
+	for (node = m->events; node; node = node->next) {
+		ev = llist_entry(node, struct nf_flow_fib_event, node);
+		if (nf_flow_fib_tuple_match(orig, ev) ||
+		    nf_flow_fib_tuple_match(reply, ev))
+			return true;
+	}
+
+	return false;
+}
+
+static void nf_flow_offload_fib_cb(struct nf_flowtable *flow_table,
+				   struct flow_offload *flow, void *data)
+{
+	const struct nf_flow_fib_match *m = data;
+
+	if (test_bit(NF_FLOW_TEARDOWN, &flow->flags))
+		return;
+
+	if (nf_flow_fib_flow_match(flow, m))
+		flow_offload_teardown(flow);
+}
+
+static void nf_flow_table_fib_work(struct work_struct *work)
+{
+	struct nf_flowtable *flow_table =
+		container_of(work, struct nf_flowtable, fib_work);
+	struct nf_flow_fib_event *ev, *next;
+	struct nf_flow_fib_match m = {};
+	struct llist_node *events;
+
+	events = llist_del_all(&flow_table->fib_events);
+	if (!events)
+		return;
+
+	m.events = events;
+	nf_flow_table_iterate(flow_table, nf_flow_offload_fib_cb, &m);
+
+	llist_for_each_entry_safe(ev, next, events, node)
+		kfree(ev);
+}
+
+static bool nf_flowtable_fib_family_match(const struct nf_flowtable *flowtable,
+					  u8 event_family)
+{
+	switch (flowtable->type->family) {
+	case NFPROTO_IPV4:
+		return event_family == NFPROTO_IPV4;
+	case NFPROTO_IPV6:
+		return event_family == NFPROTO_IPV6;
+	case NFPROTO_INET:
+		return event_family == NFPROTO_IPV4 ||
+		       event_family == NFPROTO_IPV6;
+	default:
+		return false;
+	}
+}
+
+/* Called with rcu_read_lock() */
+static int nf_flow_table_fib_event(struct notifier_block *nb,
+				   unsigned long event, void *ptr)
+{
+	struct nf_flowtable *flow_table =
+		container_of(nb, struct nf_flowtable, fib_nb);
+	struct fib_notifier_info *info = ptr;
+	struct nf_flow_fib_event *ev;
+
+	switch (event) {
+	case FIB_EVENT_ENTRY_REPLACE:
+	case FIB_EVENT_ENTRY_APPEND:
+	case FIB_EVENT_ENTRY_DEL:
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	/* Skip events for an address family this table cannot hold. */
+	if (!nf_flowtable_fib_family_match(flow_table, info->family))
+		return NOTIFY_DONE;
+
+	ev = kzalloc(sizeof(*ev), GFP_ATOMIC);
+	if (!ev)
+		return NOTIFY_DONE;
+
+	switch (info->family) {
+	case NFPROTO_IPV4:
+		struct fib_entry_notifier_info *fen;
+
+		fen = container_of(info, struct fib_entry_notifier_info, info);
+		ev->family     = NFPROTO_IPV4;
+		ev->addr.ip4   = htonl(fen->dst);
+		ev->prefix_len = fen->dst_len;
+		break;
+
+#if IS_ENABLED(CONFIG_IPV6)
+	case NFPROTO_IPV6:
+		struct fib6_entry_notifier_info *fen6;
+
+		fen6 = container_of(info, struct fib6_entry_notifier_info, info);
+		if (!fen6->rt)
+			goto err;
+
+		ev->family     = NFPROTO_IPV6;
+		ev->addr.ip6   = fen6->rt->fib6_dst.addr;
+		ev->prefix_len = fen6->rt->fib6_dst.plen;
+		break;
+#endif
+	default:
+		goto err;
+	}
+
+	llist_add(&ev->node, &flow_table->fib_events);
+	queue_work(system_power_efficient_wq, &flow_table->fib_work);
+	return NOTIFY_DONE;
+
+err:
+	kfree(ev);
+	return NOTIFY_DONE;
+}
+
 int nf_flow_table_init(struct nf_flowtable *flowtable)
 {
+	struct net *net = read_pnet(&flowtable->net);
 	int err;
 
 	INIT_DELAYED_WORK(&flowtable->gc_work, nf_flow_offload_work_gc);
+	INIT_WORK(&flowtable->fib_work, nf_flow_table_fib_work);
+	init_llist_head(&flowtable->fib_events);
 	flow_block_init(&flowtable->flow_block);
 	init_rwsem(&flowtable->flow_block_lock);
 
@@ -711,11 +883,24 @@ int nf_flow_table_init(struct nf_flowtable *flowtable)
 	queue_delayed_work(system_power_efficient_wq,
 			   &flowtable->gc_work, HZ);
 
+	if (nf_flowtable_hw_offload(flowtable)) {
+		flowtable->fib_nb.notifier_call = nf_flow_table_fib_event;
+		err = register_fib_notifier(net, &flowtable->fib_nb,
+					    NULL, NULL);
+		if (err < 0)
+			goto err_fib;
+	}
+
 	mutex_lock(&flowtable_lock);
 	list_add(&flowtable->list, &flowtables);
 	mutex_unlock(&flowtable_lock);
 
 	return 0;
+
+err_fib:
+	cancel_delayed_work_sync(&flowtable->gc_work);
+	rhashtable_destroy(&flowtable->rhashtable);
+	return err;
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_init);
 
@@ -754,8 +939,25 @@ void nf_flow_table_cleanup(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_cleanup);
 
+static void nf_flow_table_fib_drain(struct nf_flowtable *flow_table)
+{
+	struct nf_flow_fib_event *ev, *next;
+	struct llist_node *events;
+
+	events = llist_del_all(&flow_table->fib_events);
+	llist_for_each_entry_safe(ev, next, events, node)
+		kfree(ev);
+}
+
 void nf_flow_table_free(struct nf_flowtable *flow_table)
 {
+	if (nf_flowtable_hw_offload(flow_table)) {
+		unregister_fib_notifier(read_pnet(&flow_table->net),
+					&flow_table->fib_nb);
+		cancel_work_sync(&flow_table->fib_work);
+		nf_flow_table_fib_drain(flow_table);
+	}
+
 	mutex_lock(&flowtable_lock);
 	list_del(&flow_table->list);
 	mutex_unlock(&flowtable_lock);
