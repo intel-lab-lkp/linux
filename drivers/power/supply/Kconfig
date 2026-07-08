@@ -875,6 +875,20 @@ config CHARGER_SMB347
 	  Say Y to include support for Summit Microelectronics SMB345,
 	  SMB347 or SMB358 Battery Charger.
 
+config CHARGER_SMB347_RUST
+	tristate "Summit Microelectronics SMB3XX Battery Charger RUST"
+	depends on I2C
+	depends on RUST
+	help
+    Say Y to include support for the Summit Microelectronics SMB347
+    battery charger, implemented in Rust. The driver binds over I2C
+    and reports charging status, online state and charge type through
+    the power supply class. It is a Rust port demonstrating the
+    in-tree i2c and power_supply Rust abstractions.
+
+    To compile as a module, choose M here; the module will be called
+    smb347-charger_rust.
+
 config CHARGER_TPS65090
 	tristate "TPS65090 battery charger driver"
 	depends on MFD_TPS65090
