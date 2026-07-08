@@ -145,7 +145,9 @@ int tlob_start_task(struct task_struct *task, u64 threshold_ns);
 int tlob_stop_task(struct task_struct *task);
 
 #if IS_ENABLED(CONFIG_KUNIT)
-int tlob_create_or_delete_uprobe(char *buf);
+int tlob_parse_uprobe_line(char *buf, u64 *thr_out, char **path_out,
+			   loff_t *start_out, loff_t *stop_out);
+int tlob_parse_remove_line(char *buf, char **path_out, loff_t *start_out);
 #endif /* CONFIG_KUNIT */
 
 #endif /* _RV_TLOB_H */

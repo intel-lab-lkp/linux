@@ -10,3 +10,10 @@ config RV_MON_TLOB
 	  monitor.  tlob tracks per-task elapsed wall-clock time across a
 	  user-delimited code section and emits error_env_tlob when the
 	  elapsed time exceeds a configurable per-invocation budget.
+
+config TLOB_KUNIT_TEST
+	tristate "KUnit tests for tlob monitor" if !KUNIT_ALL_TESTS
+	depends on RV_MON_TLOB && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit unit tests for the tlob RV monitor.
