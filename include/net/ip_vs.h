@@ -972,7 +972,7 @@ struct ip_vs_dest {
 	u16			af;		/* address family */
 	__be16			port;		/* port number of the server */
 	union nf_inet_addr	addr;		/* IP address of the server */
-	volatile unsigned int	flags;		/* dest status flags */
+	atomic_t		flags;		/* dest status flags */
 	atomic_t		conn_flags;	/* flags to copy to conn */
 	atomic_t		weight;		/* server weight */
 	atomic_t		last_weight;	/* server latest weight */

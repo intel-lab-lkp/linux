@@ -166,11 +166,11 @@ static inline struct ip_vs_dest *ip_vs_dest_set_min(struct ip_vs_dest_set *set)
 	/* select the first destination server, whose weight > 0 */
 	list_for_each_entry_rcu(e, &set->list, list) {
 		least = e->dest;
-		if (least->flags & IP_VS_DEST_F_OVERLOAD)
+		if (atomic_read(&least->flags) & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
-		if ((atomic_read(&least->weight) > 0)
-		    && (least->flags & IP_VS_DEST_F_AVAILABLE)) {
+		if ((atomic_read(&least->weight) > 0) &&
+		    (atomic_read(&least->flags) & IP_VS_DEST_F_AVAILABLE)) {
 			loh = ip_vs_dest_conn_overhead(least);
 			goto nextstage;
 		}
@@ -181,13 +181,13 @@ static inline struct ip_vs_dest *ip_vs_dest_set_min(struct ip_vs_dest_set *set)
   nextstage:
 	list_for_each_entry_continue_rcu(e, &set->list, list) {
 		dest = e->dest;
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
+		if (atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		doh = ip_vs_dest_conn_overhead(dest);
 		if (((__s64)loh * atomic_read(&dest->weight) >
-		     (__s64)doh * atomic_read(&least->weight))
-		    && (dest->flags & IP_VS_DEST_F_AVAILABLE)) {
+		     (__s64)doh * atomic_read(&least->weight)) &&
+		    (atomic_read(&dest->flags) & IP_VS_DEST_F_AVAILABLE)) {
 			least = dest;
 			loh = doh;
 		}
@@ -577,7 +577,7 @@ __ip_vs_lblcr_schedule(struct ip_vs_service *svc)
 	 * new connection.
 	 */
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
+		if (atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		if (atomic_read(&dest->weight) > 0) {
@@ -593,7 +593,7 @@ __ip_vs_lblcr_schedule(struct ip_vs_service *svc)
 	 */
   nextstage:
 	list_for_each_entry_continue_rcu(dest, &svc->destinations, n_list) {
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
+		if (atomic_read(&dest->flags) & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		doh = ip_vs_dest_conn_overhead(dest);
