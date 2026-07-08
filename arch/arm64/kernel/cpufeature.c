@@ -76,6 +76,7 @@
 #include <linux/kasan.h>
 #include <linux/percpu.h>
 #include <linux/sched/isolation.h>
+#include <linux/hugetlb_vmemmap.h>
 
 #include <asm/arm_pmuv3.h>
 #include <asm/cpu.h>
@@ -2181,6 +2182,22 @@ static bool hvo_compatible(const struct arm64_cpu_capabilities *caps, int scope)
 	return supports_hw_af(scope);
 }
 
+static bool late_cpu_enable_hvo(const struct arm64_cpu_capabilities *__unused)
+{
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+	if (cpu_has_hw_af())
+		return true;
+
+	/*
+	 * If the CPU does not support HW AF, we cannot online it if HVO is
+	 * currently in use.
+	 */
+	return hugetlb_vmemmap_optimization_try_disable();
+#else
+	return true;
+#endif
+}
+
 static void cpu_enable_pan(const struct arm64_cpu_capabilities *__unused)
 {
 	/*
@@ -3079,8 +3096,11 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 	{
 		.desc = "HugeTLB Vmemmap Optimization Support",
 		.capability = ARM64_HVO_COMPATIBLE,
-		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.type = ARM64_CPUCAP_SCOPE_SYSTEM |
+			ARM64_CPUCAP_OPTIONAL_FOR_LATE_CPU |
+			ARM64_CPUCAP_PERMITTED_FOR_LATE_CPU,
 		.matches = hvo_compatible,
+		.late_cpu_enable = late_cpu_enable_hvo,
 	},
 	{
 		.desc = "52-bit Virtual Addressing for KVM (LPA2)",
