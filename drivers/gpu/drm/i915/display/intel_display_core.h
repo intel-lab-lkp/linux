@@ -97,6 +97,7 @@ struct intel_wm_funcs {
 struct intel_audio_state {
 	struct intel_encoder *encoder;
 	u8 eld[MAX_ELD_BYTES];
+	bool needs_cpu_transcoder_id;  /* MST, or SST on UHBR link */
 };
 
 struct intel_audio {
