@@ -252,15 +252,6 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 		return -EINVAL;
 	}
 
-	mutex_lock(&ctx->lock);
-	if (ctx->connected == vidi->connection) {
-		mutex_unlock(&ctx->lock);
-		DRM_DEV_DEBUG_KMS(ctx->dev,
-				  "same connection request.\n");
-		return -EINVAL;
-	}
-	mutex_unlock(&ctx->lock);
-
 	if (vidi->connection) {
 		const struct drm_edid *drm_edid;
 		const void __user *edid_userptr = u64_to_user_ptr(vidi->edid);
@@ -293,20 +284,36 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 					  "edid data is invalid.\n");
 			return -EINVAL;
 		}
+
 		mutex_lock(&ctx->lock);
+		if (ctx->connected == vidi->connection) {
+			mutex_unlock(&ctx->lock);
+			drm_edid_free(drm_edid);
+			DRM_DEV_DEBUG_KMS(ctx->dev,
+					  "same connection request.\n");
+			return -EINVAL;
+		}
+
+		drm_edid_free(ctx->raw_edid);
+
 		ctx->raw_edid = drm_edid;
+		ctx->connected = vidi->connection;
 		mutex_unlock(&ctx->lock);
 	} else {
 		/* with connection = 0, free raw_edid */
 		mutex_lock(&ctx->lock);
+		if (ctx->connected == vidi->connection) {
+			mutex_unlock(&ctx->lock);
+			DRM_DEV_DEBUG_KMS(ctx->dev,
+					  "same connection request.\n");
+			return -EINVAL;
+		}
+
 		drm_edid_free(ctx->raw_edid);
 		ctx->raw_edid = NULL;
+		ctx->connected = vidi->connection;
 		mutex_unlock(&ctx->lock);
 	}
-
-	mutex_lock(&ctx->lock);
-	ctx->connected = vidi->connection;
-	mutex_unlock(&ctx->lock);
 
 	drm_helper_hpd_irq_event(ctx->drm_dev);
 
