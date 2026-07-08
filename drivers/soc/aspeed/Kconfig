@@ -55,3 +55,18 @@ config ASPEED_SOCINFO
 endmenu
 
 endif
+
+menu "ASPEED host-side drivers"
+	depends on PCI
+
+config ASPEED_HOST_BMC_DEV
+	tristate "ASPEED host-side BMC PCIe device"
+	depends on SERIAL_8250
+	help
+	  Host-side driver for the ASPEED AST2600 BMC PCIe device found on
+	  BMC expansion cards. Exposes two 8250-compatible VUART
+	  ports.
+
+	  If unsure, say N. Choose M to build aspeed-host-bmc-dev.
+
+endmenu
