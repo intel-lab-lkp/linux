@@ -875,7 +875,7 @@ static const struct of_device_id twl4030_power_of_match[] = {
 		.compatible = "ti,twl4030-power-omap3-evm",
 		.data = &omap3_idle_ac_quirk,
 	},
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, twl4030_power_of_match);
 #endif	/* CONFIG_OF */

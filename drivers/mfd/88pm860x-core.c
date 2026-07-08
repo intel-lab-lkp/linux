@@ -1238,8 +1238,8 @@ static const struct i2c_device_id pm860x_id_table[] = {
 MODULE_DEVICE_TABLE(i2c, pm860x_id_table);
 
 static const struct of_device_id pm860x_dt_ids[] = {
-	{ .compatible = "marvell,88pm860x", },
-	{},
+	{ .compatible = "marvell,88pm860x" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, pm860x_dt_ids);
 

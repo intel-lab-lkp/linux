@@ -113,8 +113,8 @@ static int stm32_lptimer_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id stm32_lptimer_of_match[] = {
-	{ .compatible = "st,stm32-lptimer", },
-	{},
+	{ .compatible = "st,stm32-lptimer" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, stm32_lptimer_of_match);
 

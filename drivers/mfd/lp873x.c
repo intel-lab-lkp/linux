@@ -62,7 +62,7 @@ static int lp873x_probe(struct i2c_client *client)
 static const struct of_device_id of_lp873x_match_table[] = {
 	{ .compatible = "ti,lp8733", },
 	{ .compatible = "ti,lp8732", },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, of_lp873x_match_table);
 

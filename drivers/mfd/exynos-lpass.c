@@ -177,7 +177,7 @@ static const struct dev_pm_ops lpass_pm_ops = {
 
 static const struct of_device_id exynos_lpass_of_match[] = {
 	{ .compatible = "samsung,exynos5433-lpass" },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, exynos_lpass_of_match);
 

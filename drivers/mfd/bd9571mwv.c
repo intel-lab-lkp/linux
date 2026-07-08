@@ -261,8 +261,8 @@ static int bd9571mwv_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id bd9571mwv_of_match_table[] = {
-	{ .compatible = "rohm,bd9571mwv", },
-	{ .compatible = "rohm,bd9574mwf", },
+	{ .compatible = "rohm,bd9571mwv" },
+	{ .compatible = "rohm,bd9574mwf" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, bd9571mwv_of_match_table);

@@ -149,7 +149,7 @@ static int altr_a10sr_spi_probe(struct spi_device *spi)
 
 static const struct of_device_id altr_a10sr_spi_of_match[] = {
 	{ .compatible = "altr,a10sr" },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, altr_a10sr_spi_of_match);
 

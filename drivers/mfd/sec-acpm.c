@@ -560,9 +560,9 @@ static const struct sec_pmic_acpm_platform_data s2mpg11_data = {
 };
 
 static const struct of_device_id sec_pmic_acpm_of_match[] = {
-	{ .compatible = "samsung,s2mpg10-pmic", .data = &s2mpg10_data, },
-	{ .compatible = "samsung,s2mpg11-pmic", .data = &s2mpg11_data, },
-	{ },
+	{ .compatible = "samsung,s2mpg10-pmic", .data = &s2mpg10_data },
+	{ .compatible = "samsung,s2mpg11-pmic", .data = &s2mpg11_data },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, sec_pmic_acpm_of_match);
 

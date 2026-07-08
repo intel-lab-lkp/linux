@@ -164,8 +164,8 @@ err_pmic_id:
 }
 
 static const struct of_device_id max77843_dt_match[] = {
-	{ .compatible = "maxim,max77843", },
-	{ },
+	{ .compatible = "maxim,max77843" },
+	{ }
 };
 
 static const struct i2c_device_id max77843_id[] = {

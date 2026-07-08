@@ -540,8 +540,8 @@ static int stmfx_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(stmfx_dev_pm_ops, stmfx_suspend, stmfx_resume);
 
 static const struct of_device_id stmfx_of_match[] = {
-	{ .compatible = "st,stmfx-0300", },
-	{},
+	{ .compatible = "st,stmfx-0300" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, stmfx_of_match);
 

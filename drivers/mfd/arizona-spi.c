@@ -271,7 +271,7 @@ static const struct of_device_id arizona_spi_of_match[] = {
 	{ .compatible = "wlf,wm8280", .data = (void *)WM8280 },
 	{ .compatible = "wlf,wm1831", .data = (void *)WM1831 },
 	{ .compatible = "cirrus,cs47l24", .data = (void *)CS47L24 },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, arizona_spi_of_match);
 #endif

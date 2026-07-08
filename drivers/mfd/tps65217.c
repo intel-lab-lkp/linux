@@ -302,8 +302,8 @@ static const struct regmap_config tps65217_regmap_config = {
 };
 
 static const struct of_device_id tps65217_of_match[] = {
-	{ .compatible = "ti,tps65217"},
-	{ /* sentinel */ },
+	{ .compatible = "ti,tps65217" },
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, tps65217_of_match);
 

@@ -175,7 +175,7 @@ static int sysmgr_probe(struct platform_device *pdev)
 static const struct of_device_id altr_sysmgr_of_match[] = {
 	{ .compatible = "altr,sys-mgr" },
 	{ .compatible = "altr,sys-mgr-s10" },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, altr_sysmgr_of_match);
 

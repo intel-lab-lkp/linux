@@ -236,17 +236,17 @@ static const struct sec_pmic_i2c_platform_data s5m8767_data = {
 };
 
 static const struct of_device_id sec_pmic_i2c_of_match[] = {
-	{ .compatible = "samsung,s2dos05", .data = &s2dos05_data, },
-	{ .compatible = "samsung,s2mpa01-pmic", .data = &s2mpa01_data, },
-	{ .compatible = "samsung,s2mps11-pmic", .data = &s2mps11_data, },
-	{ .compatible = "samsung,s2mps13-pmic", .data = &s2mps13_data, },
-	{ .compatible = "samsung,s2mps14-pmic", .data = &s2mps14_data, },
-	{ .compatible = "samsung,s2mps15-pmic", .data = &s2mps15_data, },
-	{ .compatible = "samsung,s2mpu02-pmic", .data = &s2mpu02_data, },
-	{ .compatible = "samsung,s2mpu05-pmic", .data = &s2mpu05_data, },
-	{ .compatible = "samsung,s2mu005-pmic", .data = &s2mu005_data, },
-	{ .compatible = "samsung,s5m8767-pmic", .data = &s5m8767_data, },
-	{ },
+	{ .compatible = "samsung,s2dos05", .data = &s2dos05_data },
+	{ .compatible = "samsung,s2mpa01-pmic", .data = &s2mpa01_data },
+	{ .compatible = "samsung,s2mps11-pmic", .data = &s2mps11_data },
+	{ .compatible = "samsung,s2mps13-pmic", .data = &s2mps13_data },
+	{ .compatible = "samsung,s2mps14-pmic", .data = &s2mps14_data },
+	{ .compatible = "samsung,s2mps15-pmic", .data = &s2mps15_data },
+	{ .compatible = "samsung,s2mpu02-pmic", .data = &s2mpu02_data },
+	{ .compatible = "samsung,s2mpu05-pmic", .data = &s2mpu05_data },
+	{ .compatible = "samsung,s2mu005-pmic", .data = &s2mu005_data },
+	{ .compatible = "samsung,s5m8767-pmic", .data = &s5m8767_data },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, sec_pmic_i2c_of_match);
 

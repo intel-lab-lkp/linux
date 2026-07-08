@@ -113,7 +113,7 @@ static const struct i2c_device_id rt5033_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, rt5033_i2c_id);
 
 static const struct of_device_id rt5033_dt_match[] = {
-	{ .compatible = "richtek,rt5033", },
+	{ .compatible = "richtek,rt5033" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, rt5033_dt_match);

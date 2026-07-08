@@ -294,7 +294,7 @@ static int mt6370_probe(struct i2c_client *i2c)
 
 static const struct of_device_id mt6370_match_table[] = {
 	{ .compatible = "mediatek,mt6370" },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, mt6370_match_table);
 

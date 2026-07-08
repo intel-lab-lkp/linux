@@ -432,8 +432,8 @@ static struct tps6586x_platform_data *tps6586x_parse_dt(struct i2c_client *clien
 }
 
 static const struct of_device_id tps6586x_of_match[] = {
-	{ .compatible = "ti,tps6586x", },
-	{ },
+	{ .compatible = "ti,tps6586x" },
+	{ }
 };
 #else
 static struct tps6586x_platform_data *tps6586x_parse_dt(struct i2c_client *client)

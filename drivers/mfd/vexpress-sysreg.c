@@ -142,8 +142,8 @@ static int vexpress_sysreg_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id vexpress_sysreg_match[] = {
-	{ .compatible = "arm,vexpress-sysreg", },
-	{},
+	{ .compatible = "arm,vexpress-sysreg" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, vexpress_sysreg_match);
 

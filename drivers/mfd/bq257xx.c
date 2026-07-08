@@ -128,7 +128,7 @@ MODULE_DEVICE_TABLE(i2c, bq257xx_i2c_ids);
 static const struct of_device_id bq257xx_of_match[] = {
 	{ .compatible = "ti,bq25703a", .data = (void *)BQ25703A },
 	{ .compatible = "ti,bq25792", .data = (void *)BQ25792 },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, bq257xx_of_match);
 

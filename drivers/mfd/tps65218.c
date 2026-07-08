@@ -197,8 +197,8 @@ static const struct regmap_irq_chip tps65218_irq_chip = {
 };
 
 static const struct of_device_id of_tps65218_match_table[] = {
-	{ .compatible = "ti,tps65218", },
-	{}
+	{ .compatible = "ti,tps65218" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, of_tps65218_match_table);
 

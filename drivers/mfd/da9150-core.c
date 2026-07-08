@@ -500,7 +500,7 @@ static const struct i2c_device_id da9150_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, da9150_i2c_id);
 
 static const struct of_device_id da9150_of_match[] = {
-	{ .compatible = "dlg,da9150", },
+	{ .compatible = "dlg,da9150" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, da9150_of_match);

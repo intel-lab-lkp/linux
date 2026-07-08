@@ -516,8 +516,8 @@ static int usbhs_omap_get_dt_pdata(struct device *dev,
 }
 
 static const struct of_device_id usbhs_child_match_table[] = {
-	{ .compatible = "ti,ehci-omap", },
-	{ .compatible = "ti,ohci-omap3", },
+	{ .compatible = "ti,ehci-omap" },
+	{ .compatible = "ti,ohci-omap3" },
 	{ }
 };
 

@@ -1445,7 +1445,7 @@ const struct of_device_id wm831x_of_match[] = {
 	{ .compatible = "wlf,wm8321", .data = (void *)WM8321 },
 	{ .compatible = "wlf,wm8325", .data = (void *)WM8325 },
 	{ .compatible = "wlf,wm8326", .data = (void *)WM8326 },
-	{ },
+	{ }
 };
 EXPORT_SYMBOL_GPL(wm831x_of_match);
 

@@ -1656,7 +1656,7 @@ static struct pci_driver sm501_pci_driver = {
 MODULE_ALIAS("platform:sm501");
 
 static const struct of_device_id of_sm501_match_tbl[] = {
-	{ .compatible = "smi,sm501", },
+	{ .compatible = "smi,sm501" },
 	{ /* end */ }
 };
 MODULE_DEVICE_TABLE(of, of_sm501_match_tbl);

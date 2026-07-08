@@ -200,7 +200,7 @@ static struct lochnagar_config lochnagar_configs[] = {
 static const struct of_device_id lochnagar_of_match[] = {
 	{ .compatible = "cirrus,lochnagar1", .data = &lochnagar_configs[0] },
 	{ .compatible = "cirrus,lochnagar2", .data = &lochnagar_configs[1] },
-	{},
+	{ }
 };
 
 static int lochnagar_wait_for_boot(struct regmap *regmap, unsigned int *id)

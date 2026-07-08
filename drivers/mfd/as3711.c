@@ -111,8 +111,8 @@ static const struct regmap_config as3711_regmap_config = {
 
 #ifdef CONFIG_OF
 static const struct of_device_id as3711_of_match[] = {
-	{.compatible = "ams,as3711",},
-	{}
+	{ .compatible = "ams,as3711" },
+	{ }
 };
 #endif
 

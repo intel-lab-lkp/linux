@@ -134,7 +134,7 @@ static int max77714_probe(struct i2c_client *client)
 
 static const struct of_device_id max77714_dt_match[] = {
 	{ .compatible = "maxim,max77714" },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, max77714_dt_match);
 

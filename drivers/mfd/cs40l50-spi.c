@@ -47,7 +47,7 @@ MODULE_DEVICE_TABLE(spi, cs40l50_id_spi);
 
 static const struct of_device_id cs40l50_of_match[] = {
 	{ .compatible = "cirrus,cs40l50" },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, cs40l50_of_match);
 

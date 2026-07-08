@@ -347,7 +347,7 @@ static const struct of_device_id rsmu_i2c_of_match[] = {
 	{ .compatible = "idt,82p33811", .data = (void *)RSMU_SABRE },
 	{ .compatible = "idt,8v19n850", .data = (void *)RSMU_SL },
 	{ .compatible = "idt,8v19n851", .data = (void *)RSMU_SL },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, rsmu_i2c_of_match);
 

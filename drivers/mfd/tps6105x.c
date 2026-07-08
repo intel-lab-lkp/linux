@@ -200,7 +200,7 @@ MODULE_DEVICE_TABLE(i2c, tps6105x_id);
 static const struct of_device_id tps6105x_of_match[] = {
 	{ .compatible = "ti,tps61050" },
 	{ .compatible = "ti,tps61052" },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, tps6105x_of_match);
 

@@ -195,9 +195,9 @@ static int cpcap_init_irq(struct cpcap_ddata *cpcap)
 }
 
 static const struct of_device_id cpcap_of_match[] = {
-	{ .compatible = "motorola,cpcap", },
-	{ .compatible = "st,6556002", },
-	{},
+	{ .compatible = "motorola,cpcap" },
+	{ .compatible = "st,6556002" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, cpcap_of_match);
 

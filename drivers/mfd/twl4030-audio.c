@@ -265,8 +265,8 @@ static void twl4030_audio_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id twl4030_audio_of_match[] = {
-	{.compatible = "ti,twl4030-audio", },
-	{ },
+	{ .compatible = "ti,twl4030-audio" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, twl4030_audio_of_match);
 

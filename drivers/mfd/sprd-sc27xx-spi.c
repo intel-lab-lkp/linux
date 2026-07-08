@@ -287,7 +287,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(sprd_pmic_pm_ops,
 static const struct of_device_id sprd_pmic_match[] = {
 	{ .compatible = "sprd,sc2730", .data = (void *)PMIC_TYPE_SC2730 },
 	{ .compatible = "sprd,sc2731", .data = (void *)PMIC_TYPE_SC2731 },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, sprd_pmic_match);
 

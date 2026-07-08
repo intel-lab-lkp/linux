@@ -152,8 +152,8 @@ static void hi655x_pmic_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id hi655x_pmic_match[] = {
-	{ .compatible = "hisilicon,hi655x-pmic", },
-	{},
+	{ .compatible = "hisilicon,hi655x-pmic" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, hi655x_pmic_match);
 

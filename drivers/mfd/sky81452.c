@@ -66,7 +66,7 @@ MODULE_DEVICE_TABLE(i2c, sky81452_ids);
 
 #ifdef CONFIG_OF
 static const struct of_device_id sky81452_of_match[] = {
-	{ .compatible = "skyworks,sky81452", },
+	{ .compatible = "skyworks,sky81452" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, sky81452_of_match);

@@ -123,8 +123,8 @@ static int khadas_mcu_probe(struct i2c_client *client)
 
 #ifdef CONFIG_OF
 static const struct of_device_id khadas_mcu_of_match[] = {
-	{ .compatible = "khadas,mcu", },
-	{},
+	{ .compatible = "khadas,mcu" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, khadas_mcu_of_match);
 #endif

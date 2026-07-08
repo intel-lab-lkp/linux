@@ -261,8 +261,8 @@ static int pm8008_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id pm8008_match[] = {
-	{ .compatible = "qcom,pm8008", },
-	{ },
+	{ .compatible = "qcom,pm8008" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, pm8008_match);
 

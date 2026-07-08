@@ -117,8 +117,8 @@ static struct mfd_cell mx28_cells[] = {
 };
 
 static const struct of_device_id mxs_lradc_dt_ids[] = {
-	{ .compatible = "fsl,imx23-lradc", .data = (void *)IMX23_LRADC, },
-	{ .compatible = "fsl,imx28-lradc", .data = (void *)IMX28_LRADC, },
+	{ .compatible = "fsl,imx23-lradc", .data = (void *)IMX23_LRADC },
+	{ .compatible = "fsl,imx28-lradc", .data = (void *)IMX28_LRADC },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mxs_lradc_dt_ids);
