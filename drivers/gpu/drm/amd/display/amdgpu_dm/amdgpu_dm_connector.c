@@ -2316,7 +2316,7 @@ amdgpu_dm_connector_atomic_check(struct drm_connector *conn,
 		drm_atomic_get_new_connector_state(state, conn);
 	struct drm_connector_state *old_con_state =
 		drm_atomic_get_old_connector_state(state, conn);
-	struct drm_crtc *crtc = new_con_state->crtc;
+	struct drm_crtc *crtc;
 	struct drm_crtc_state *new_crtc_state;
 	struct amdgpu_dm_connector *aconn = to_amdgpu_dm_connector(conn);
 	int ret;
@@ -2332,6 +2332,7 @@ amdgpu_dm_connector_atomic_check(struct drm_connector *conn,
 			return ret;
 	}
 
+	crtc = new_con_state->crtc;
 	if (!crtc)
 		return 0;
 
