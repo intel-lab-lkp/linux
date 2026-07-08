@@ -1873,7 +1873,7 @@ void rtl8723b_fill_fake_txdesc(
 	/*  Encrypt the data frame if under security mode excepct null data. Suggested by CCW. */
 	/*  */
 	if (bDataFrame) {
-		u32 EncAlg = padapter->securitypriv.dot11PrivacyAlgrthm;
+		u32 EncAlg = padapter->securitypriv.dot11_privacy_algrthm;
 
 		switch (EncAlg) {
 		case _NO_PRIVACY_:
