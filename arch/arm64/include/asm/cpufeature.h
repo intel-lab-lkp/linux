@@ -367,6 +367,14 @@ struct arm64_cpu_capabilities {
 	 * routine must check it before taking any action.
 	 */
 	void (*cpu_enable)(const struct arm64_cpu_capabilities *cap);
+	/*
+	 * In rare cases, capabilities are *sometimes* optional for late CPUs.
+	 * This callback allows a capability to prevent onlining of
+	 * incompatible CPUs when the capability is in fact required.
+	 *
+	 * Returns true iff onlining the CPU is permitted.
+	 */
+	bool (*late_cpu_enable)(const struct arm64_cpu_capabilities *cap);
 	union {
 		struct {	/* To be used for erratum handling only */
 			struct midr_range midr_range;

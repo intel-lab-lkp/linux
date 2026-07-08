@@ -3684,6 +3684,14 @@ static void verify_local_cpu_caps(u16 scope_mask)
 			 */
 			if (!cpu_has_cap && !cpucap_late_cpu_optional(caps))
 				break;
+
+			/*
+			 * Some optional features may in fact be required due
+			 * to particular runtime conditions.
+			 */
+			if (caps->late_cpu_enable && !caps->late_cpu_enable(caps))
+				break;
+
 			/*
 			 * We have to issue cpu_enable() irrespective of
 			 * whether the CPU has it or not, as it is enabeld
