@@ -2,3 +2,5 @@
 fuse_mnt
 fusectl_test
 symlink_fs
+acl_fs
+setgetacl
