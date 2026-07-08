@@ -536,6 +536,18 @@ void avic_ring_doorbell(struct kvm_vcpu *vcpu)
 
 static void avic_kick_vcpu(struct kvm_vcpu *vcpu, u32 icrl)
 {
+	if (snp_is_secure_avic_enabled(vcpu->kvm)) {
+		WRITE_ONCE(to_svm(vcpu)->snp_savic_has_pending_ipi, true);
+
+		/*
+		 * Ensure write to snp_savic_has_pending_ipi is visible before the
+		 * subsequent vcpu->mode read in svm_complete_interrupt_delivery().
+		 *
+		 * Pairs with smp_mb() in snp_protected_apic_has_interrupt().
+		 */
+		smp_mb();
+	}
+
 	vcpu->arch.apic->irr_pending = true;
 	svm_complete_interrupt_delivery(vcpu,
 					icrl & APIC_MODE_MASK,
@@ -716,6 +728,7 @@ int avic_incomplete_ipi_interception(struct kvm_vcpu *vcpu)
 			kvm_apic_send_ipi(apic, icrl, icrh);
 		break;
 	case AVIC_IPI_FAILURE_TARGET_NOT_RUNNING:
+	case AVIC_IPI_FAILURE_UNACCELERATED:
 		/*
 		 * At this point, we expect that the AVIC HW has already
 		 * set the appropriate IRR bits on the valid target

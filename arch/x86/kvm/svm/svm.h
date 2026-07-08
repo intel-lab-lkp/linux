@@ -368,6 +368,7 @@ struct vcpu_svm {
 	/* Guest GIF value, used when vGIF is not enabled */
 	bool guest_gif;
 
+	bool snp_savic_has_pending_ipi;
 	gpa_t snp_savic_gpa;
 };
 

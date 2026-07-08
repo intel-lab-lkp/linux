@@ -3580,6 +3580,9 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 	if (!cpumask_test_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus))
 		cpumask_set_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus);
 
+	if (snp_is_secure_avic_enabled(kvm))
+		WRITE_ONCE(svm->snp_savic_has_pending_ipi, false);
+
 	/* Assign the asid allocated with this SEV guest */
 	svm->asid = asid;
 
@@ -4514,6 +4517,7 @@ static bool is_snp_only_vmgexit(u64 exit_code)
 	case SVM_VMGEXIT_EXT_GUEST_REQUEST:
 	case SVM_VMGEXIT_PSC:
 	case SVM_VMGEXIT_SAVIC:
+	case SVM_EXIT_AVIC_INCOMPLETE_IPI:
 		return true;
 	default:
 		return false;
@@ -4577,7 +4581,9 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 		return 1;
 	}
 
-	if (control->exit_code == SVM_VMGEXIT_SAVIC && !snp_is_secure_avic_enabled(vcpu->kvm)) {
+	if ((control->exit_code == SVM_VMGEXIT_SAVIC ||
+	     control->exit_code == SVM_EXIT_AVIC_INCOMPLETE_IPI) &&
+	    !snp_is_secure_avic_enabled(vcpu->kvm)) {
 		vcpu_unimpl(vcpu, "vmgexit: exit code %#llx is only valid if Secure AVIC is enabled\n",
 			    control->exit_code);
 		svm_vmgexit_bad_input(svm, GHCB_ERR_INVALID_EVENT);
@@ -4616,6 +4622,7 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 	case SVM_EXIT_WBINVD:
 	case SVM_EXIT_MONITOR:
 	case SVM_EXIT_MWAIT:
+	case SVM_EXIT_AVIC_INCOMPLETE_IPI:
 		return svm_invoke_exit_handler(vcpu, control->exit_code);
 	case SVM_VMGEXIT_MMIO_READ:
 	case SVM_VMGEXIT_MMIO_WRITE: {
@@ -4976,7 +4983,10 @@ bool snp_protected_apic_has_injectable_intr(struct kvm_vcpu *vcpu)
 
 bool snp_protected_apic_has_interrupt(struct kvm_vcpu *vcpu)
 {
-	return snp_protected_apic_has_injectable_intr(vcpu);
+	/* Pairs with smp_mb() in avic_kick_vcpu() */
+	smp_mb();
+	return snp_protected_apic_has_injectable_intr(vcpu) ||
+	       READ_ONCE(to_svm(vcpu)->snp_savic_has_pending_ipi);
 }
 
 void sev_vcpu_deliver_sipi_vector(struct kvm_vcpu *vcpu, u8 vector)

@@ -3901,7 +3901,9 @@ void svm_complete_interrupt_delivery(struct kvm_vcpu *vcpu, int delivery_mode,
 	bool in_guest_mode = (smp_load_acquire(&vcpu->mode) == IN_GUEST_MODE);
 
 	/* Note, this is called iff the local APIC is in-kernel. */
-	if (!READ_ONCE(vcpu->arch.apic->apicv_active) || snp_is_secure_avic_enabled(vcpu->kvm)) {
+	if (!READ_ONCE(vcpu->arch.apic->apicv_active) ||
+	    (snp_is_secure_avic_enabled(vcpu->kvm) &&
+	     snp_protected_apic_has_injectable_intr(vcpu))) {
 		/* Process the interrupt via kvm_check_and_inject_events(). */
 		kvm_make_request(KVM_REQ_EVENT, vcpu);
 		kvm_vcpu_kick(vcpu);
