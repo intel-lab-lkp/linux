@@ -59,6 +59,13 @@ config RV_PER_TASK_MONITORS
 	  This option configures the maximum number of per-task RV monitors that can run
 	  simultaneously.
 
+config RV_UPROBE
+	bool
+	depends on RV && UPROBES
+	help
+	  Generic uprobe infrastructure for RV monitors.  Provides path
+	  resolution, registration, and safe synchronous teardown.
+
 source "kernel/trace/rv/monitors/wip/Kconfig"
 source "kernel/trace/rv/monitors/wwnr/Kconfig"
 
