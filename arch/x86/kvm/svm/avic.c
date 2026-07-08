@@ -938,8 +938,17 @@ int avic_init_vcpu(struct vcpu_svm *svm)
 	if (!enable_apicv || !irqchip_in_kernel(vcpu->kvm))
 		return 0;
 
-	if (snp_is_secure_avic_enabled(vcpu->kvm))
+	if (snp_is_secure_avic_enabled(vcpu->kvm)) {
+		/*
+		 * Secure AVIC can't work with the legacy PIC since there is no
+		 * way to inject ExtINT. Besides, we can't inhibit Secure AVIC,
+		 * so we can't really support KVM PIT in reinject mode.
+		 */
+		if (!irqchip_split(vcpu->kvm))
+			return -EINVAL;
+
 		vcpu->arch.apic->guest_apic_protected = true;
+	}
 
 	ret = avic_init_backing_page(vcpu);
 	if (ret)
