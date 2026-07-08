@@ -4782,7 +4782,7 @@ void _linked_info_dump(struct adapter *padapter)
 	int UndecoratedSmoothedPWDB;
 	struct dvobj_priv *pdvobj = adapter_to_dvobj(padapter);
 
-	if (padapter->bLinkInfoDump) {
+	if (padapter->link_info_dump) {
 		if ((pmlmeinfo->state&0x03) == WIFI_FW_STATION_STATE)
 			rtw_hal_get_def_var(padapter,
 					    HAL_DEF_UNDERCORATEDSMOOTHEDPWDB,

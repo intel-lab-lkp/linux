@@ -552,7 +552,7 @@ static void rtw_init_default_value(struct adapter *padapter)
 	/* misc. */
 	RTW_ENABLE_FUNC(padapter, DF_RX_BIT);
 	RTW_ENABLE_FUNC(padapter, DF_TX_BIT);
-	padapter->bLinkInfoDump = 0;
+	padapter->link_info_dump = 0;
 	padapter->bNotifyChannelChange = 0;
 
 	/* for debug purpose */
@@ -610,7 +610,7 @@ void rtw_reset_drv_sw(struct adapter *padapter)
 
 	RTW_ENABLE_FUNC(padapter, DF_RX_BIT);
 	RTW_ENABLE_FUNC(padapter, DF_TX_BIT);
-	padapter->bLinkInfoDump = 0;
+	padapter->link_info_dump = 0;
 
 	padapter->xmitpriv.tx_pkts = 0;
 	padapter->recvpriv.rx_pkts = 0;
