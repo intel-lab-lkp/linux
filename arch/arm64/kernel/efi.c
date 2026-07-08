@@ -7,6 +7,7 @@
  * Copyright (C) 2013, 2014 Linaro Ltd.
  */
 
+#include <linux/bitfield.h>
 #include <linux/efi.h>
 #include <linux/init.h>
 #include <linux/kmemleak.h>
@@ -16,6 +17,7 @@
 
 #include <asm/efi.h>
 #include <asm/stacktrace.h>
+#include <asm/sysreg.h>
 #include <asm/vmap_stack.h>
 
 
@@ -38,7 +40,27 @@ static __init ptval_t create_mapping_protection(efi_memory_desc_t *md)
 	u32 type = md->type;
 
 	if (type == EFI_MEMORY_MAPPED_IO) {
-		pgprot_t prot = __pgprot(PROT_DEVICE_nGnRE);
+		pgprot_t prot;
+
+		if (attr & EFI_MEMORY_ISA_VALID) {
+			u8 mair = FIELD_GET(EFI_MEMORY_ISA_MASK, attr);
+
+			switch (mair) {
+			case MAIR_ATTR_DEVICE_nGnRnE:
+				prot = __pgprot(PROT_DEVICE_nGnRnE);
+				break;
+			case MAIR_ATTR_DEVICE_nGnRE:
+				prot = __pgprot(PROT_DEVICE_nGnRE);
+				break;
+			default:
+				prot = __pgprot(PROT_DEVICE_nGnRE);
+				pr_warn("unsupported MAIR attribute %#x for EFI MMIO region at 0x%llx, using Device-nGnRE\n",
+					mair, md->phys_addr);
+				break;
+			}
+		} else {
+			prot = __pgprot(PROT_DEVICE_nGnRE);
+		}
 
 		if (arm64_is_protected_mmio(md->phys_addr,
 					    md->num_pages << EFI_PAGE_SHIFT))
