@@ -211,6 +211,7 @@ static int irqc_probe(struct platform_device *pdev)
 	return 0;
 
 err_remove_domain:
+	irq_domain_remove_generic_chips(p->irq_domain);
 	irq_domain_remove(p->irq_domain);
 err_runtime_pm_disable:
 	pm_runtime_put(dev);
@@ -222,6 +223,7 @@ static void irqc_remove(struct platform_device *pdev)
 {
 	struct irqc_priv *p = platform_get_drvdata(pdev);
 
+	irq_domain_remove_generic_chips(p->irq_domain);
 	irq_domain_remove(p->irq_domain);
 	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
