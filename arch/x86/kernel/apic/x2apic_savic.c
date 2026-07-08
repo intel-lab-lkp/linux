@@ -214,7 +214,6 @@ static void savic_write(u32 reg, u32 data)
 		break;
 	case APIC_TASKPRI:
 	case APIC_EOI:
-	case APIC_SPIV:
 	case SAVIC_NMI_REQ:
 	case APIC_ESR:
 	case APIC_ECTRL:
@@ -222,6 +221,10 @@ static void savic_write(u32 reg, u32 data)
 	case APIC_IER:
 	case APIC_EILVTn(0) ... APIC_EILVTn(3):
 		apic_set_reg(ap, reg, data);
+		break;
+	case APIC_SPIV:
+		apic_set_reg(ap, reg, data);
+		savic_ghcb_msr_write(reg, data);
 		break;
 	case APIC_ICR:
 		savic_icr_write(data, 0);
