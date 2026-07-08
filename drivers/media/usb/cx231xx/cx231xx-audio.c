@@ -441,6 +441,7 @@ static int snd_cx231xx_capture_open(struct snd_pcm_substream *substream)
 static int snd_cx231xx_pcm_close(struct snd_pcm_substream *substream)
 {
 	int ret;
+	unsigned long flags;
 	struct cx231xx *dev = snd_pcm_substream_chip(substream);
 
 	dev_dbg(dev->dev, "closing device\n");
@@ -470,7 +471,11 @@ static int snd_cx231xx_pcm_close(struct snd_pcm_substream *substream)
 		dev_dbg(dev->dev, "released lock\n");
 		if (atomic_read(&dev->stream_started) > 0) {
 			atomic_set(&dev->stream_started, 0);
-			schedule_work(&dev->wq_trigger);
+
+			spin_lock_irqsave(&dev->adev.slock, flags);
+			if (!dev->adev.teardown)
+				schedule_work(&dev->wq_trigger);
+			spin_unlock_irqrestore(&dev->adev.slock, flags);
 		}
 	}
 	return 0;
@@ -509,11 +514,14 @@ static int snd_cx231xx_capture_trigger(struct snd_pcm_substream *substream,
 {
 	struct cx231xx *dev = snd_pcm_substream_chip(substream);
 	int retval = 0;
+	unsigned long flags;
 
-	if (dev->state & DEV_DISCONNECTED)
+	spin_lock_irqsave(&dev->adev.slock, flags);
+	if (dev->adev.teardown || (dev->state & DEV_DISCONNECTED)) {
+		spin_unlock_irqrestore(&dev->adev.slock, flags);
 		return -ENODEV;
+	}
 
-	spin_lock(&dev->adev.slock);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		atomic_set(&dev->stream_started, 1);
@@ -525,10 +533,10 @@ static int snd_cx231xx_capture_trigger(struct snd_pcm_substream *substream,
 		retval = -EINVAL;
 		break;
 	}
-	spin_unlock(&dev->adev.slock);
 
 	schedule_work(&dev->wq_trigger);
 
+	spin_unlock_irqrestore(&dev->adev.slock, flags);
 	return retval;
 }
 
@@ -576,12 +584,20 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 	dev_dbg(dev->dev,
 		"probing for cx231xx non standard usbaudio\n");
 
+	/*
+	 * Extension init errors are ignored by the cx231xx core, so fini()
+	 * must be safe even if initialization fails part way through.
+	 */
+	spin_lock_init(&adev->slock);
+	INIT_WORK(&dev->wq_trigger, audio_trigger);
+	adev->teardown = false;
+	atomic_set(&dev->stream_started, 0);
+
 	err = snd_card_new(dev->dev, index[devnr], "Cx231xx Audio",
 			   THIS_MODULE, 0, &card);
 	if (err < 0)
 		return err;
 
-	spin_lock_init(&adev->slock);
 	err = snd_pcm_new(card, "Cx231xx Audio", 0, 0, 1, &pcm);
 	if (err < 0)
 		goto err_free_card;
@@ -595,8 +611,6 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 	strscpy(card->driver, "Cx231xx-Audio", sizeof(card->driver));
 	strscpy(card->shortname, "Cx231xx Audio", sizeof(card->shortname));
 	strscpy(card->longname, "Conexant cx231xx Audio", sizeof(card->longname));
-
-	INIT_WORK(&dev->wq_trigger, audio_trigger);
 
 	err = snd_card_register(card);
 	if (err < 0)
@@ -651,14 +665,18 @@ static int cx231xx_audio_init(struct cx231xx *dev)
 
 err_free_pkt_size:
 	kfree(adev->alt_max_pkt_size);
+	adev->alt_max_pkt_size = NULL;
 err_free_card:
 	snd_card_free(card);
+	adev->sndcard = NULL;
 
 	return err;
 }
 
 static int cx231xx_audio_fini(struct cx231xx *dev)
 {
+	unsigned long flags;
+
 	if (dev == NULL)
 		return 0;
 
@@ -668,6 +686,16 @@ static int cx231xx_audio_fini(struct cx231xx *dev)
 		   doesn't have analog audio support at all) */
 		return 0;
 	}
+
+	/*
+	 * Block new trigger work before draining already queued work.
+	 * cancel_work_sync() may sleep, so it must run after dropping slock.
+	 */
+	spin_lock_irqsave(&dev->adev.slock, flags);
+	dev->adev.teardown = true;
+	spin_unlock_irqrestore(&dev->adev.slock, flags);
+
+	cancel_work_sync(&dev->wq_trigger);
 
 	if (dev->adev.sndcard) {
 		snd_card_free_when_closed(dev->adev.sndcard);

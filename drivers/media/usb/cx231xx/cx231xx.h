@@ -418,6 +418,7 @@ struct cx231xx_audio {
 	struct snd_card *sndcard;
 
 	int users, shutdown;
+	bool teardown;		/* audio fini in progress; set under slock */
 	/* locks */
 	spinlock_t slock;
 
