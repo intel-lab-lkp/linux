@@ -10,6 +10,7 @@
 #include <linux/arm-smccc.h>
 #include <linux/cpuidle.h>
 #include <linux/debugfs.h>
+#include <linux/efi.h>
 #include <linux/errno.h>
 #include <linux/linkage.h>
 #include <linux/of.h>
@@ -24,6 +25,7 @@
 
 #include <asm/cpuidle.h>
 #include <asm/cputype.h>
+#include <asm/efi.h>
 #include <asm/hypervisor.h>
 #include <asm/system_misc.h>
 #include <asm/smp_plat.h>
@@ -130,6 +132,63 @@ __invoke_psci_fn_smc(unsigned long function_id,
 	arm_smccc_smc(function_id, arg0, arg1, arg2, 0, 0, 0, 0, &res);
 	return res.a0;
 }
+
+#if IS_ENABLED(CONFIG_EFI) && IS_ENABLED(CONFIG_ARM64)
+static bool efi_psci_fn_valid(unsigned long function_id)
+{
+	if (function_id >= PSCI_0_2_FN_BASE &&
+	    function_id <= PSCI_0_2_FN(EFI_PSCI_MAX_FN))
+		return true;
+
+	if (function_id >= PSCI_0_2_FN64_BASE &&
+	    function_id <= PSCI_0_2_FN64(EFI_PSCI_MAX_FN))
+		return true;
+
+	return false;
+}
+
+static unsigned long __invoke_psci_fn_efi(unsigned long function_id,
+					  unsigned long arg0,
+					  unsigned long arg1,
+					  unsigned long arg2)
+{
+	u32 fn;
+
+	/* These are called before EFI runtime services are available */
+	switch (function_id) {
+	case PSCI_0_2_FN_PSCI_VERSION:
+		return efi_psci.version;
+	case PSCI_0_2_FN_MIGRATE_INFO_TYPE:
+		return PSCI_0_2_TOS_MP;
+	case PSCI_1_0_FN_PSCI_FEATURES:
+		if (!efi_psci_fn_valid(arg0))
+			return PSCI_RET_NOT_SUPPORTED;
+		fn = arg0 & 0xff;
+		if (fn >= efi_psci.num_features || fn >= EFI_PSCI_MAX_FN)
+			return PSCI_RET_NOT_SUPPORTED;
+		return efi_psci.features[fn];
+	}
+
+	if (!efi_psci_fn_valid(function_id))
+		return PSCI_RET_NOT_SUPPORTED;
+
+	if (WARN_ON_ONCE(!efi_psci.psci_handler))
+		return PSCI_RET_NOT_SUPPORTED;
+	if (WARN_ON_ONCE(!efi_enabled(EFI_RUNTIME_SERVICES)))
+		return PSCI_RET_NOT_SUPPORTED;
+
+	return arm64_efi_psci_call(function_id, arg0, arg1, arg2);
+}
+#else
+static unsigned long __invoke_psci_fn_efi(unsigned long function_id,
+					  unsigned long arg0,
+					  unsigned long arg1,
+					  unsigned long arg2)
+{
+	WARN(1, "EFI PSCI conduit invoked but kernel has not EFI support");
+	return PSCI_RET_NOT_SUPPORTED;
+}
+#endif
 
 static __always_inline int psci_to_linux_errno(int errno)
 {
@@ -277,6 +336,9 @@ static void set_conduit(enum arm_smccc_conduit conduit)
 	case SMCCC_CONDUIT_SMC:
 		invoke_psci_fn = __invoke_psci_fn_smc;
 		break;
+	case SMCCC_CONDUIT_EFI:
+		invoke_psci_fn = __invoke_psci_fn_efi;
+		break;
 	default:
 		WARN(1, "Unexpected PSCI conduit %d\n", conduit);
 	}
@@ -299,6 +361,8 @@ static int get_set_conduit_method(const struct device_node *np)
 		set_conduit(SMCCC_CONDUIT_HVC);
 	} else if (!strcmp("smc", method)) {
 		set_conduit(SMCCC_CONDUIT_SMC);
+	} else if (!strcmp("efi", method)) {
+		set_conduit(SMCCC_CONDUIT_EFI);
 	} else {
 		pr_warn("invalid \"method\" property: %s\n", method);
 		return -EINVAL;

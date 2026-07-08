@@ -322,6 +322,7 @@ enum arm_smccc_conduit {
 	SMCCC_CONDUIT_NONE,
 	SMCCC_CONDUIT_SMC,
 	SMCCC_CONDUIT_HVC,
+	SMCCC_CONDUIT_EFI,
 };
 
 /**
