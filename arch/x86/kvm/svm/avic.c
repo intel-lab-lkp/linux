@@ -67,6 +67,15 @@ static_assert(__AVIC_GATAG(AVIC_VM_ID_MASK, AVIC_VCPU_IDX_MASK) == -1u);
 
 #define AVIC_AUTO_MODE -1
 
+/*
+ * IPIv is supported, but software disabled due to erratum, or because
+ * the user turned it off through the module parameter.
+ */
+static bool avic_ipiv_is_soft_disabled(void)
+{
+	return !enable_ipiv;
+}
+
 static int avic_param_set(const char *val, const struct kernel_param *kp)
 {
 	if (val && sysfs_streq(val, "auto")) {
@@ -1092,7 +1101,7 @@ static void __avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu,
 	 * Keep the APIC ID up-to-date in the entry to minimize the chances of
 	 * things going sideways if hardware peeks at the ID.
 	 */
-	if (!enable_ipiv)
+	if (avic_ipiv_is_soft_disabled())
 		entry &= ~AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
 
 	WRITE_ONCE(kvm_svm->avic_physical_id_table[vcpu->vcpu_id], entry);
@@ -1150,7 +1159,7 @@ static void __avic_vcpu_put(struct kvm_vcpu *vcpu, enum avic_vcpu_action action)
 	 */
 	entry &= ~AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
 
-	if (enable_ipiv)
+	if (!avic_ipiv_is_soft_disabled())
 		WRITE_ONCE(kvm_svm->avic_physical_id_table[vcpu->vcpu_id], entry);
 
 	/*
