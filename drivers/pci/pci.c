@@ -81,9 +81,8 @@ struct pci_pme_device {
  */
 #define PCIE_RESET_READY_POLL_MS 60000 /* msec */
 
-static void pci_dev_d3_sleep(struct pci_dev *dev)
+static void pci_dev_d3_sleep(unsigned int delay_ms)
 {
-	unsigned int delay_ms = max(dev->d3hot_delay, pci_pm_d3hot_delay);
 	unsigned int upper;
 
 	if (delay_ms) {
@@ -92,6 +91,11 @@ static void pci_dev_d3_sleep(struct pci_dev *dev)
 		usleep_range(delay_ms * USEC_PER_MSEC,
 			     (delay_ms + upper) * USEC_PER_MSEC);
 	}
+}
+
+static void pci_dev_d3hot_sleep(struct pci_dev *dev)
+{
+	pci_dev_d3_sleep(max(dev->d3hot_delay, pci_pm_d3hot_delay));
 }
 
 bool pci_reset_supported(struct pci_dev *dev)
@@ -1333,6 +1337,16 @@ int pci_power_up(struct pci_dev *dev)
 	need_restore = (state == PCI_D3hot || dev->current_state >= PCI_D3hot) &&
 			!(pmcsr & PCI_PM_CTRL_NO_SOFT_RESET);
 
+	/*
+	 * A device returning from D3cold has already been powered back on by
+	 * platform_pci_set_power_state() above, so PCI_PM_CTRL now reads back
+	 * as D0 and the transition delays below are skipped.  PCI PM 1.2 still
+	 * requires a minimum recovery time on the D3 to D0 transition, so apply
+	 * the device's D3cold recovery delay here before it is accessed.
+	 */
+	if (dev->current_state == PCI_D3cold)
+		pci_dev_d3_sleep(dev->d3cold_delay);
+
 	if (state == PCI_D0)
 		goto end;
 
@@ -1344,7 +1358,7 @@ int pci_power_up(struct pci_dev *dev)
 
 	/* Mandatory transition delays; see PCI PM 1.2. */
 	if (state == PCI_D3hot) {
-		pci_dev_d3_sleep(dev);
+		pci_dev_d3hot_sleep(dev);
 		if (!(pmcsr & PCI_PM_CTRL_NO_SOFT_RESET)) {
 			ret = pci_dev_wait(dev, "power up D3hot->D0uninitialized",
 					   PCIE_RESET_READY_POLL_MS);
@@ -1514,7 +1528,7 @@ static int pci_set_low_power_state(struct pci_dev *dev, pci_power_t state, bool 
 
 	/* Mandatory power management transition delays; see PCI PM 1.2. */
 	if (state == PCI_D3hot)
-		pci_dev_d3_sleep(dev);
+		pci_dev_d3hot_sleep(dev);
 	else if (state == PCI_D2)
 		udelay(PCI_PM_D2_DELAY);
 
@@ -4511,12 +4525,12 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	csr &= ~PCI_PM_CTRL_STATE_MASK;
 	csr |= PCI_D3hot;
 	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
-	pci_dev_d3_sleep(dev);
+	pci_dev_d3hot_sleep(dev);
 
 	csr &= ~PCI_PM_CTRL_STATE_MASK;
 	csr |= PCI_D0;
 	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
-	pci_dev_d3_sleep(dev);
+	pci_dev_d3hot_sleep(dev);
 
 	ret = pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
 	pci_dev_reset_iommu_done(dev);
