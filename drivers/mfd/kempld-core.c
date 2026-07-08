@@ -119,7 +119,6 @@ static struct resource kempld_ioresource = {
 
 static const struct kempld_platform_data kempld_platform_data_generic = {
 	.pld_clock		= KEMPLD_CLK,
-	.ioresource		= &kempld_ioresource,
 	.get_hardware_mutex	= kempld_get_hardware_mutex,
 	.release_hardware_mutex	= kempld_release_hardware_mutex,
 	.get_info		= kempld_get_info_generic,
@@ -128,15 +127,15 @@ static const struct kempld_platform_data kempld_platform_data_generic = {
 
 static struct platform_device *kempld_pdev;
 
-static int kempld_create_platform_device(const struct kempld_platform_data *pdata)
+static int kempld_create_platform_device(void)
 {
 	const struct platform_device_info pdevinfo = {
 		.name = "kempld",
 		.id = PLATFORM_DEVID_NONE,
-		.res = pdata->ioresource,
+		.res = &kempld_ioresource,
 		.num_res = 1,
-		.data = pdata,
-		.size_data = sizeof(*pdata),
+		.data = &kempld_platform_data_generic,
+		.size_data = sizeof(kempld_platform_data_generic),
 	};
 
 	kempld_pdev = platform_device_register_full(&pdevinfo);
@@ -415,11 +414,9 @@ static int kempld_probe(struct platform_device *pdev)
 		 * No kempld_pdev device has been registered in kempld_init,
 		 * so we seem to be probing an ACPI platform device.
 		 */
-		pdata = device_get_match_data(dev);
-		if (!pdata)
-			return -ENODEV;
-
-		ret = platform_device_add_data(pdev, pdata, sizeof(*pdata));
+		ret = platform_device_add_data(pdev,
+					       &kempld_platform_data_generic,
+					       sizeof(kempld_platform_data_generic));
 		if (ret)
 			return ret;
 	} else if (kempld_pdev == pdev) {
@@ -470,8 +467,8 @@ static void kempld_remove(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id kempld_acpi_table[] = {
-	{ "KEM0000", (kernel_ulong_t)&kempld_platform_data_generic },
-	{ "KEM0001", (kernel_ulong_t)&kempld_platform_data_generic },
+	{ "KEM0000" },
+	{ "KEM0001" },
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, kempld_acpi_table);
@@ -787,13 +784,13 @@ static int __init kempld_init(void)
 	if (force_device_id[0]) {
 		for (id = kempld_dmi_table; id->matches[0].slot != DMI_NONE; id++)
 			if (strstr(id->ident, force_device_id))
-				if (!kempld_create_platform_device(&kempld_platform_data_generic))
+				if (!kempld_create_platform_device())
 					break;
 		if (id->matches[0].slot == DMI_NONE)
 			return -ENODEV;
 	} else {
 		for (id = dmi_first_match(kempld_dmi_table); id; id = dmi_first_match(id+1))
-			if (kempld_create_platform_device(&kempld_platform_data_generic))
+			if (kempld_create_platform_device())
 				break;
 	}
 	return platform_driver_register(&kempld_driver);
