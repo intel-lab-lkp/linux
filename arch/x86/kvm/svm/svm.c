@@ -5731,14 +5731,6 @@ static __init int svm_hardware_setup(void)
 
 	iopm_base = __sme_set(__pa(iopm_va));
 
-	/*
-	 * Note, SEV setup consumes npt_enabled and enable_mmio_caching (which
-	 * may be modified by svm_adjust_mmio_mask()), as well as nrips.
-	 */
-	sev_hardware_setup();
-
-	svm_hv_hardware_setup();
-
 	enable_apicv = avic_hardware_setup();
 	if (!enable_apicv) {
 		enable_ipiv = false;
@@ -5780,6 +5772,15 @@ static __init int svm_hardware_setup(void)
 
 	if (!enable_pmu)
 		pr_info("PMU virtualization is disabled\n");
+
+	/*
+	 * Note, SEV setup consumes npt_enabled and enable_mmio_caching (which
+	 * may be modified by svm_adjust_mmio_mask()), as well as nrips, vnmi
+	 * and enable_apicv.
+	 */
+	sev_hardware_setup();
+
+	svm_hv_hardware_setup();
 
 	svm_set_cpu_caps();
 
