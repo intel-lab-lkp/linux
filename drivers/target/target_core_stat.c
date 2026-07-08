@@ -21,11 +21,24 @@
 #include <linux/seq_file.h>
 #include <linux/configfs.h>
 
+#include <scsi/scsi_proto.h>
+
 #include <target/target_core_base.h>
 #include <target/target_core_backend.h>
 #include <target/target_core_fabric.h>
 
 #include "target_core_internal.h"
+
+void target_stat_count_busy_status(struct se_cmd *cmd)
+{
+	struct se_lun *lun = cmd->se_lun;
+
+	if (cmd->se_cmd_flags & SCF_SCSI_TMR_CDB)
+		return;
+
+	if (cmd->scsi_status == SAM_STAT_BUSY && lun && lun->lun_stats)
+		this_cpu_inc(lun->lun_stats->busy_statuses);
+}
 
 #ifndef INITIAL_JIFFIES
 #define INITIAL_JIFFIES ((unsigned long)(unsigned int) (-300*HZ))
@@ -483,13 +496,22 @@ static ssize_t target_stat_port_busy_count_show(struct config_item *item,
 {
 	struct se_lun *lun = to_stat_port(item);
 	struct se_device *dev;
+	struct scsi_port_stats *stats;
+	unsigned int cpu;
+	u64 sum = 0;
 	ssize_t ret = -ENODEV;
 
 	rcu_read_lock();
 	dev = rcu_dereference(lun->lun_se_dev);
 	if (dev) {
-		/* FIXME: scsiPortBusyStatuses  */
-		ret = snprintf(page, PAGE_SIZE, "%u\n", 0);
+		/* scsiPortBusyStatuses */
+		if (lun->lun_stats) {
+			for_each_possible_cpu(cpu) {
+				stats = per_cpu_ptr(lun->lun_stats, cpu);
+				sum += stats->busy_statuses;
+			}
+		}
+		ret = snprintf(page, PAGE_SIZE, "%llu\n", sum);
 	}
 	rcu_read_unlock();
 	return ret;

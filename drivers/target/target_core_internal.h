@@ -161,6 +161,7 @@ void	target_queued_submit_work(struct work_struct *work);
 void	target_stat_setup_dev_default_groups(struct se_device *);
 void	target_stat_setup_port_default_groups(struct se_lun *);
 void	target_stat_setup_mappedlun_default_groups(struct se_lun_acl *);
+void	target_stat_count_busy_status(struct se_cmd *cmd);
 
 /* target_core_xcopy.c */
 extern struct se_portal_group xcopy_pt_tpg;

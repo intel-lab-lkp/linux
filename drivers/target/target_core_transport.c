@@ -829,6 +829,17 @@ void transport_copy_sense_to_cmd(struct se_cmd *cmd, unsigned char *sense)
 }
 EXPORT_SYMBOL(transport_copy_sense_to_cmd);
 
+static int target_queue_status(struct se_cmd *cmd)
+{
+	int ret;
+
+	ret = cmd->se_tfo->queue_status(cmd);
+	if (!ret)
+		target_stat_count_busy_status(cmd);
+
+	return ret;
+}
+
 static void target_handle_abort(struct se_cmd *cmd)
 {
 	bool tas = cmd->transport_state & CMD_T_TAS;
@@ -843,7 +854,7 @@ static void target_handle_abort(struct se_cmd *cmd)
 			pr_debug("Setting SAM_STAT_TASK_ABORTED status for CDB: 0x%02x, ITT: 0x%08llx\n",
 				 cmd->t_task_cdb[0], cmd->tag);
 			trace_target_cmd_complete(cmd);
-			ret = cmd->se_tfo->queue_status(cmd);
+			ret = target_queue_status(cmd);
 			if (ret) {
 				transport_handle_queue_full(cmd, cmd->se_dev,
 							    ret, false);
@@ -2170,7 +2181,7 @@ check_stop:
 
 queue_status:
 	trace_target_cmd_complete(cmd);
-	ret = cmd->se_tfo->queue_status(cmd);
+	ret = target_queue_status(cmd);
 	if (!ret)
 		goto check_stop;
 queue_full:
@@ -2487,7 +2498,7 @@ static void transport_complete_qf(struct se_cmd *cmd)
 	case DMA_NONE:
 queue_status:
 		trace_target_cmd_complete(cmd);
-		ret = cmd->se_tfo->queue_status(cmd);
+		ret = target_queue_status(cmd);
 		break;
 	default:
 		break;
@@ -2685,7 +2696,7 @@ queue_rsp:
 	case DMA_NONE:
 queue_status:
 		trace_target_cmd_complete(cmd);
-		ret = cmd->se_tfo->queue_status(cmd);
+		ret = target_queue_status(cmd);
 		if (ret)
 			goto queue_full;
 		break;
@@ -3599,7 +3610,7 @@ transport_send_check_condition_and_sense(struct se_cmd *cmd,
 		translate_sense_reason(cmd, reason);
 
 	trace_target_cmd_complete(cmd);
-	return cmd->se_tfo->queue_status(cmd);
+	return target_queue_status(cmd);
 }
 EXPORT_SYMBOL(transport_send_check_condition_and_sense);
 
@@ -3615,7 +3626,7 @@ int target_send_busy(struct se_cmd *cmd)
 
 	cmd->scsi_status = SAM_STAT_BUSY;
 	trace_target_cmd_complete(cmd);
-	return cmd->se_tfo->queue_status(cmd);
+	return target_queue_status(cmd);
 }
 EXPORT_SYMBOL(target_send_busy);
 

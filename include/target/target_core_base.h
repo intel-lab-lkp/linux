@@ -764,6 +764,7 @@ struct scsi_port_stats {
 	u64			cmd_pdus;
 	u64			tx_data_octets;
 	u64			rx_data_octets;
+	u64			busy_statuses;
 };
 
 struct se_lun {
