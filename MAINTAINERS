@@ -10742,6 +10742,8 @@ F:	Documentation/userspace-api/fwctl/
 F:	drivers/fwctl/
 F:	include/linux/fwctl.h
 F:	include/uapi/fwctl/
+F:	rust/helpers/fwctl.c
+F:	rust/kernel/fwctl.rs
 
 FWCTL BNXT DRIVER
 M:	Pavan Chebbi <pavan.chebbi@broadcom.com>
