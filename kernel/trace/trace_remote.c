@@ -1008,8 +1008,10 @@ int trace_remote_alloc_buffer(struct trace_buffer_desc *desc, size_t desc_size, 
 
 		for (id = 0; id < nr_pages; id++) {
 			rb_desc->page_va[id] = (unsigned long)__get_free_page(GFP_KERNEL);
-			if (!rb_desc->page_va[id])
+			if (!rb_desc->page_va[id]) {
+				desc->nr_cpus++; /* Free this partially-allocated rb_desc */
 				goto err;
+			}
 
 			rb_desc->nr_page_va++;
 		}
