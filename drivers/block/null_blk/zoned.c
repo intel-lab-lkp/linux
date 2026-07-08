@@ -66,7 +66,7 @@ int null_init_zoned_dev(struct nullb_device *dev,
 	}
 
 	if (!dev->zone_capacity)
-		dev->zone_capacity = dev->zone_size;
+		WRITE_ONCE(dev->zone_capacity, dev->zone_size);
 
 	if (dev->zone_capacity > dev->zone_size) {
 		pr_err("zone capacity (%lu MB) larger than zone size (%lu MB)\n",
@@ -99,29 +99,29 @@ int null_init_zoned_dev(struct nullb_device *dev,
 	spin_lock_init(&dev->zone_res_lock);
 
 	if (dev->zone_nr_conv >= dev->nr_zones) {
-		dev->zone_nr_conv = dev->nr_zones - 1;
+		WRITE_ONCE(dev->zone_nr_conv, dev->nr_zones - 1);
 		pr_info("changed the number of conventional zones to %u",
 			dev->zone_nr_conv);
 	}
 
-	dev->zone_append_max_sectors =
-		min(ALIGN_DOWN(dev->zone_append_max_sectors,
-			       dev->blocksize >> SECTOR_SHIFT),
-		    zone_capacity_sects);
+	WRITE_ONCE(dev->zone_append_max_sectors,
+		   min(ALIGN_DOWN(dev->zone_append_max_sectors,
+				  dev->blocksize >> SECTOR_SHIFT),
+		       zone_capacity_sects));
 
 	/* Max active zones has to be < nbr of seq zones in order to be enforceable */
 	if (dev->zone_max_active >= dev->nr_zones - dev->zone_nr_conv) {
-		dev->zone_max_active = 0;
+		WRITE_ONCE(dev->zone_max_active, 0);
 		pr_info("zone_max_active limit disabled, limit >= zone count\n");
 	}
 
 	/* Max open zones has to be <= max active zones */
 	if (dev->zone_max_active && dev->zone_max_open > dev->zone_max_active) {
-		dev->zone_max_open = dev->zone_max_active;
+		WRITE_ONCE(dev->zone_max_open, dev->zone_max_active);
 		pr_info("changed the maximum number of open zones to %u\n",
 			dev->zone_max_open);
 	} else if (dev->zone_max_open >= dev->nr_zones - dev->zone_nr_conv) {
-		dev->zone_max_open = 0;
+		WRITE_ONCE(dev->zone_max_open, 0);
 		pr_info("zone_max_open limit disabled, limit >= zone count\n");
 	}
 	dev->need_zone_res_mgmt = dev->zone_max_active || dev->zone_max_open;

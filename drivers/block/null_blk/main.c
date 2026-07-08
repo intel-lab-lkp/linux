@@ -346,7 +346,7 @@ static ssize_t								\
 nullb_device_##NAME##_show(struct config_item *item, char *page)	\
 {									\
 	return nullb_device_##TYPE##_attr_show(				\
-				to_nullb_device(item)->NAME, page);	\
+			READ_ONCE(to_nullb_device(item)->NAME), page);	\
 }									\
 static ssize_t								\
 nullb_device_##NAME##_store(struct config_item *item, const char *page,	\
@@ -366,7 +366,7 @@ nullb_device_##NAME##_store(struct config_item *item, const char *page,	\
 	else if (test_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags)) 	\
 		ret = -EBUSY;						\
 	if (!ret)							\
-		dev->NAME = new_value;					\
+		WRITE_ONCE(dev->NAME, new_value);			\
 	mutex_unlock(&lock);						\
 	if (ret < 0)							\
 		return ret;						\
@@ -404,8 +404,8 @@ static int nullb_update_nr_hw_queues(struct nullb_device *dev,
 	 */
 	dev->prev_submit_queues = dev->submit_queues;
 	dev->prev_poll_queues = dev->poll_queues;
-	dev->submit_queues = submit_queues;
-	dev->poll_queues = poll_queues;
+	WRITE_ONCE(dev->submit_queues, submit_queues);
+	WRITE_ONCE(dev->poll_queues, poll_queues);
 
 	set = dev->nullb->tag_set;
 	nr_hw_queues = submit_queues + poll_queues;
@@ -414,8 +414,8 @@ static int nullb_update_nr_hw_queues(struct nullb_device *dev,
 
 	if (ret) {
 		/* on error, revert the queue numbers */
-		dev->submit_queues = dev->prev_submit_queues;
-		dev->poll_queues = dev->prev_poll_queues;
+		WRITE_ONCE(dev->submit_queues, dev->prev_submit_queues);
+		WRITE_ONCE(dev->poll_queues, dev->prev_poll_queues);
 	}
 
 	return ret;
@@ -469,7 +469,8 @@ NULLB_DEVICE_ATTR(badblocks_partial_io, bool, NULL);
 
 static ssize_t nullb_device_power_show(struct config_item *item, char *page)
 {
-	return nullb_device_bool_attr_show(to_nullb_device(item)->power, page);
+	return nullb_device_bool_attr_show(
+			READ_ONCE(to_nullb_device(item)->power), page);
 }
 
 static ssize_t nullb_device_power_store(struct config_item *item,
@@ -496,11 +497,11 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		}
 
 		set_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
-		dev->power = newp;
+		WRITE_ONCE(dev->power, newp);
 		ret = count;
 	} else if (dev->power && !newp) {
 		if (test_and_clear_bit(NULLB_DEV_FL_UP, &dev->flags)) {
-			dev->power = newp;
+			WRITE_ONCE(dev->power, newp);
 			null_del_dev(dev->nullb);
 		}
 		clear_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
@@ -1783,13 +1784,13 @@ static void null_config_discard(struct nullb *nullb, struct queue_limits *lim)
 		return;
 
 	if (!nullb->dev->memory_backed) {
-		nullb->dev->discard = false;
+		WRITE_ONCE(nullb->dev->discard, false);
 		pr_info("discard option is ignored without memory backing\n");
 		return;
 	}
 
 	if (nullb->dev->zoned) {
-		nullb->dev->discard = false;
+		WRITE_ONCE(nullb->dev->discard, false);
 		pr_info("discard option is ignored in zoned mode\n");
 		return;
 	}
@@ -1881,31 +1882,31 @@ static int null_validate_conf(struct nullb_device *dev)
 	}
 	if (dev->queue_mode == NULL_Q_BIO) {
 		pr_err("BIO-based IO path is no longer available, using blk-mq instead.\n");
-		dev->queue_mode = NULL_Q_MQ;
+		WRITE_ONCE(dev->queue_mode, NULL_Q_MQ);
 	}
 
 	if (dev->use_per_node_hctx) {
 		if (dev->submit_queues != nr_online_nodes)
-			dev->submit_queues = nr_online_nodes;
+			WRITE_ONCE(dev->submit_queues, nr_online_nodes);
 	} else if (dev->submit_queues > nr_cpu_ids)
-		dev->submit_queues = nr_cpu_ids;
+		WRITE_ONCE(dev->submit_queues, nr_cpu_ids);
 	else if (dev->submit_queues == 0)
-		dev->submit_queues = 1;
+		WRITE_ONCE(dev->submit_queues, 1);
 	dev->prev_submit_queues = dev->submit_queues;
 
 	if (dev->poll_queues > g_poll_queues)
-		dev->poll_queues = g_poll_queues;
+		WRITE_ONCE(dev->poll_queues, g_poll_queues);
 	dev->prev_poll_queues = dev->poll_queues;
-	dev->irqmode = min_t(unsigned int, dev->irqmode, NULL_IRQ_TIMER);
+	WRITE_ONCE(dev->irqmode, min_t(unsigned int, dev->irqmode, NULL_IRQ_TIMER));
 
 	/* Do memory allocation, so set blocking */
 	if (dev->memory_backed)
-		dev->blocking = true;
+		WRITE_ONCE(dev->blocking, true);
 	else /* cache is meaningless */
-		dev->cache_size = 0;
-	dev->cache_size = min_t(unsigned long, ULONG_MAX / 1024 / 1024,
-						dev->cache_size);
-	dev->mbps = min_t(unsigned int, 1024 * 40, dev->mbps);
+		WRITE_ONCE(dev->cache_size, 0);
+	WRITE_ONCE(dev->cache_size, min_t(unsigned long, ULONG_MAX / 1024 / 1024,
+					  dev->cache_size));
+	WRITE_ONCE(dev->mbps, min_t(unsigned int, 1024 * 40, dev->mbps));
 
 	if (dev->zoned &&
 	    (!dev->zone_size || !is_power_of_2(dev->zone_size))) {
@@ -2015,7 +2016,7 @@ static int null_add_dev(struct nullb_device *dev)
 		goto out_cleanup_disk;
 
 	nullb->index = rv;
-	dev->index = rv;
+	WRITE_ONCE(dev->index, rv);
 
 	if (config_item_name(&dev->group.cg_item)) {
 		/* Use configfs dir name as the device name */
