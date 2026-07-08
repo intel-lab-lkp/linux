@@ -325,8 +325,9 @@ ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
 				     const char __user *buf, size_t len)
 {
 	struct xe_sriov_packet **data = pf_pick_pending(xe, vfid);
-	int ret;
 	ssize_t copied;
+	bool writing_hdr;
+	int ret;
 
 	if (IS_ERR_OR_NULL(*data)) {
 		*data = xe_sriov_packet_alloc(xe);
@@ -334,10 +335,20 @@ ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
 			return -ENOMEM;
 	}
 
-	if ((*data)->hdr_remaining)
+	writing_hdr = (*data)->hdr_remaining;
+	if (writing_hdr)
 		copied = pkt_hdr_write(*data, buf, len);
 	else
 		copied = pkt_data_write(*data, buf, len);
+
+	if (copied < 0) {
+		if (writing_hdr && !(*data)->hdr_remaining) {
+			kfree(*data);
+			*data = NULL;
+		}
+
+		rturn copied;
+	}
 
 	if ((*data)->hdr_remaining == 0 && (*data)->remaining == 0) {
 		ret = xe_sriov_pf_migration_restore_produce(xe, vfid, *data);
