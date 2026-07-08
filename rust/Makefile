@@ -7,6 +7,7 @@ obj-$(CONFIG_RUST) += core.o compiler_builtins.o ffi.o
 always-$(CONFIG_RUST) += exports_core_generated.h
 
 obj-$(CONFIG_RUST) += zerocopy.o
+always-$(CONFIG_RUST) += exports_zerocopy_generated.h
 
 ifdef CONFIG_RUST_INLINE_HELPERS
 always-$(CONFIG_RUST) += helpers/helpers.bc helpers/helpers_module.bc
@@ -564,6 +565,9 @@ $(obj)/exports_bindings_generated.h: $(obj)/bindings.o FORCE
 	$(call if_changed,exports)
 
 $(obj)/exports_kernel_generated.h: $(obj)/kernel.o FORCE
+	$(call if_changed,exports)
+
+$(obj)/exports_zerocopy_generated.h: $(obj)/zerocopy.o FORCE
 	$(call if_changed,exports)
 
 quiet_cmd_rustc_procmacrolibrary = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) PL $@

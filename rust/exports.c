@@ -18,6 +18,7 @@
 #include "exports_core_generated.h"
 #include "exports_bindings_generated.h"
 #include "exports_kernel_generated.h"
+#include "exports_zerocopy_generated.h"
 
 #ifndef CONFIG_RUST_INLINE_HELPERS
 #include "exports_helpers_generated.h"
