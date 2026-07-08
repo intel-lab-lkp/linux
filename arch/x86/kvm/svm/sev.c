@@ -3474,6 +3474,13 @@ static bool sev_es_are_required_ghcb_fields_valid(struct vcpu_svm *svm)
 	case SVM_VMGEXIT_MMIO_WRITE:
 	case SVM_VMGEXIT_PSC:
 		return kvm_ghcb_sw_scratch_is_valid(svm);
+	case SVM_VMGEXIT_SAVIC:
+		if (!kvm_ghcb_rax_is_valid(svm) ||
+		    (control->exit_info_1 == SVM_VMGEXIT_SAVIC_REGISTER_GPA &&
+		     !kvm_ghcb_rbx_is_valid(svm)))
+			return false;
+
+		return true;
 	default:
 		return true;
 	}
@@ -4420,6 +4427,57 @@ out_terminate:
 	return 0;
 }
 
+static int sev_handle_savic_vmgexit(struct vcpu_svm *svm)
+{
+	struct kvm_vcpu *target_vcpu;
+	u64 apic_id;
+	gpa_t gpa;
+
+	apic_id = kvm_rax_read_raw(&svm->vcpu);
+	if (apic_id != SVM_VMGEXIT_SAVIC_SELF_GPA && upper_32_bits(apic_id))
+		goto vmgexit_err;
+
+	/* Use invoking vCPU if apic_id is -1 (SVM_VMGEXIT_SAVIC_SELF_GPA) */
+	target_vcpu = &svm->vcpu;
+	if (apic_id != SVM_VMGEXIT_SAVIC_SELF_GPA) {
+		target_vcpu = kvm_get_vcpu_by_id(svm->vcpu.kvm, (int)apic_id);
+		if (!target_vcpu)
+			goto vmgexit_err;
+	}
+
+	switch (svm->vmcb->control.exit_info_1) {
+	case SVM_VMGEXIT_SAVIC_REGISTER_GPA:
+		gpa = kvm_rbx_read_raw(&svm->vcpu);
+		if (!PAGE_ALIGNED(gpa))
+			goto vmgexit_err;
+
+		/*
+		 * TODO: Ensure that guest (Secure AVIC hardware) accesses
+		 * to the guest APIC backing page can never cause an #NPF.
+		 */
+
+		/*
+		 * Don't bother using any synchronization here if updating the
+		 * GPA for a different vCPU. If the guest is invoking this for
+		 * a specific vCPU in parallel, then it gets to keep the pieces.
+		 */
+		to_svm(target_vcpu)->snp_savic_gpa = gpa;
+		break;
+	case SVM_VMGEXIT_SAVIC_UNREGISTER_GPA:
+		kvm_rbx_write_raw(&svm->vcpu, to_svm(target_vcpu)->snp_savic_gpa);
+		to_svm(target_vcpu)->snp_savic_gpa = 0;
+		break;
+	default:
+		goto vmgexit_err;
+	}
+
+	return 1;
+
+vmgexit_err:
+	svm_vmgexit_bad_input(svm, GHCB_ERR_INVALID_INPUT);
+	return 1;
+}
+
 static bool is_snp_only_vmgexit(u64 exit_code)
 {
 	switch (exit_code) {
@@ -4427,6 +4485,7 @@ static bool is_snp_only_vmgexit(u64 exit_code)
 	case SVM_VMGEXIT_GUEST_REQUEST:
 	case SVM_VMGEXIT_EXT_GUEST_REQUEST:
 	case SVM_VMGEXIT_PSC:
+	case SVM_VMGEXIT_SAVIC:
 		return true;
 	default:
 		return false;
@@ -4485,6 +4544,13 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 
 	if (is_snp_only_vmgexit(control->exit_code) && !is_sev_snp_guest(vcpu)) {
 		vcpu_unimpl(vcpu, "vmgexit: exit code %#llx is SNP-only\n",
+			    control->exit_code);
+		svm_vmgexit_bad_input(svm, GHCB_ERR_INVALID_EVENT);
+		return 1;
+	}
+
+	if (control->exit_code == SVM_VMGEXIT_SAVIC && !snp_is_secure_avic_enabled(vcpu->kvm)) {
+		vcpu_unimpl(vcpu, "vmgexit: exit code %#llx is only valid if Secure AVIC is enabled\n",
 			    control->exit_code);
 		svm_vmgexit_bad_input(svm, GHCB_ERR_INVALID_EVENT);
 		return 1;
@@ -4610,6 +4676,8 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 
 		return snp_handle_ext_guest_req(svm, control->exit_info_1,
 						control->exit_info_2);
+	case SVM_VMGEXIT_SAVIC:
+		return sev_handle_savic_vmgexit(svm);
 	case SVM_VMGEXIT_UNSUPPORTED_EVENT:
 		/*
 		 * Note, the _guest_ is reporting an unsupported #VC, i.e. this

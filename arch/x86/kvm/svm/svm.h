@@ -367,6 +367,8 @@ struct vcpu_svm {
 
 	/* Guest GIF value, used when vGIF is not enabled */
 	bool guest_gif;
+
+	gpa_t snp_savic_gpa;
 };
 
 struct svm_cpu_data {
