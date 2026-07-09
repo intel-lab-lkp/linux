@@ -17,10 +17,7 @@ use crate::{
         Falcon, //
     },
     fb::FbLayout,
-    fsp::{
-        FmcBootArgs,
-        Fsp, //
-    },
+    fsp::FmcBootArgs,
     gsp::{
         hal::{
             GspHal,
@@ -143,15 +140,12 @@ impl GspHal for Gh100 {
         wpr_meta: &Coherent<GspFwWprMeta>,
     ) -> Result<Option<crate::gsp::UnloadBundle>> {
         let dev = ctx.dev();
-        let bar = ctx.bar;
         let chipset = ctx.chipset;
         let gsp_falcon = ctx.gsp_falcon;
 
         let unload_bundle = crate::gsp::UnloadBundle(
             KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
         );
-
-        let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
 
         let args = FmcBootArgs::new(
             dev,
@@ -164,9 +158,12 @@ impl GspHal for Gh100 {
         // Wait for the GSP RISC-V core to halt in case of error. We create this guard after `args`
         // to make sure that boot args are kept alive until halt, in case they are still being
         // accessed.
-        let unload_guard = ScopeGuard::new_with_data(unload_bundle, |unload_bundle| {
-            let _ = unload_bundle.0.run(ctx);
-        });
+        let mut unload_guard =
+            ScopeGuard::new_with_data((unload_bundle, ctx), |(unload_bundle, ctx)| {
+                let _ = unload_bundle.0.run(ctx);
+            });
+
+        let fsp = unload_guard.1.fsp.as_mut().ok_or(ENODEV)?;
 
         fsp.boot_fmc(dev, fb_layout, &args)?;
 
@@ -174,7 +171,7 @@ impl GspHal for Gh100 {
         // anymore.
         wait_for_gsp_lockdown_release(dev, gsp_falcon, args.boot_params_dma_handle())?;
 
-        Ok(Some(unload_guard.dismiss()))
+        Ok(Some(unload_guard.dismiss().0))
     }
 }
 

@@ -231,20 +231,37 @@ pub(crate) struct Fsp<'a> {
 }
 
 impl<'a> Fsp<'a> {
+    /// Attempts to create a `Fsp` instance.
+    ///
+    /// This can involve waiting for FSP secure boot completion, but should be instantaneous in
+    /// practice.
+    ///
+    /// If `chipset` doesn't support FSP, `Ok(None)` is returned.
+    pub(crate) fn try_new(
+        dev: &'a device::Device<device::Bound>,
+        bar: Bar0<'a>,
+        chipset: Chipset,
+    ) -> Result<Option<Self>> {
+        match hal::fsp_hal(chipset) {
+            None => Ok(None),
+            Some(hal) => Self::wait_secure_boot(dev, bar, chipset, hal).map(Option::Some),
+        }
+    }
+
     /// Waits for FSP secure boot completion, then returns the [`Fsp`] interface.
     ///
     /// Polls the thermal scratch register until FSP signals boot completion or the timeout
     /// elapses. Returning an [`Fsp`] only on success guarantees, at the API level, that the
     /// interface is not used before secure boot has completed.
-    pub(crate) fn wait_secure_boot(
+    fn wait_secure_boot(
         dev: &'a device::Device<device::Bound>,
         bar: Bar0<'a>,
         chipset: Chipset,
+        hal: &'static dyn hal::FspHal,
     ) -> Result<Fsp<'a>> {
         /// FSP secure boot completion timeout in milliseconds.
         const FSP_SECURE_BOOT_TIMEOUT_MS: i64 = 5000;
 
-        let hal = hal::fsp_hal(chipset).ok_or(ENOTSUPP)?;
         let falcon = Falcon::<FspEngine>::new(dev, chipset, bar)?;
         let fsp_fw = FspFirmware::new(dev, chipset, FIRMWARE_VERSION)?;
 
