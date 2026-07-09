@@ -726,11 +726,8 @@ static int usb_dmac_chan_probe(struct usb_dmac *dmac,
 
 	ret = devm_request_irq(dmac->dev, uchan->irq, usb_dmac_isr_channel,
 			       IRQF_SHARED, irqname, uchan);
-	if (ret) {
-		dev_err(dmac->dev, "failed to request IRQ %u (%d)\n",
-			uchan->irq, ret);
+	if (ret)
 		return ret;
-	}
 
 	uchan->vc.desc_free = usb_dmac_virt_desc_free;
 	vchan_init(&uchan->vc, &dmac->engine);
