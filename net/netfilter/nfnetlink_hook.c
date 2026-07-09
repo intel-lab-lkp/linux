@@ -188,13 +188,21 @@ static int nfnl_hook_put_nft_ft_info(struct sk_buff *nlskb,
 	return 0;
 }
 
+static struct nlmsghdr *nfnl_put_get_hook_msg(struct sk_buff *nlskb,
+					      unsigned int seq, int family)
+{
+	u16 event = nfnl_msg_type(NFNL_SUBSYS_HOOK, NFNL_MSG_HOOK_GET);
+	unsigned int portid = NETLINK_CB(nlskb).portid;
+
+	return nfnl_msg_put(nlskb, portid, seq, event,
+			   NLM_F_MULTI, family, NFNETLINK_V0, 0);
+}
+
 static int nfnl_hook_dump_one(struct sk_buff *nlskb,
 			      const struct nfnl_dump_hook_data *ctx,
 			      const struct nf_hook_ops *ops, int priority,
 			      int family, unsigned int seq)
 {
-	u16 event = nfnl_msg_type(NFNL_SUBSYS_HOOK, NFNL_MSG_HOOK_GET);
-	unsigned int portid = NETLINK_CB(nlskb).portid;
 	struct nlmsghdr *nlh;
 	int ret = -EMSGSIZE;
 	u32 hooknum;
@@ -202,8 +210,7 @@ static int nfnl_hook_dump_one(struct sk_buff *nlskb,
 	char sym[KSYM_SYMBOL_LEN];
 	char *module_name;
 #endif
-	nlh = nfnl_msg_put(nlskb, portid, seq, event,
-			   NLM_F_MULTI, family, NFNETLINK_V0, 0);
+	nlh = nfnl_put_get_hook_msg(nlskb, seq, family);
 	if (!nlh)
 		goto nla_put_failure;
 
@@ -366,7 +373,7 @@ static int nfnl_hook_dump(struct sk_buff *nlskb,
 {
 	struct nfgenmsg *nfmsg = nlmsg_data(cb->nlh);
 	struct nfnl_dump_hook_data *ctx = cb->data;
-	int err, family = nfmsg->nfgen_family;
+	int err = 0, family = nfmsg->nfgen_family;
 	struct net *net = sock_net(nlskb->sk);
 	struct nf_hook_ops * const *ops;
 	const struct nf_hook_entries *e;
@@ -378,13 +385,13 @@ static int nfnl_hook_dump(struct sk_buff *nlskb,
 	if (!e)
 		goto done;
 
-	if (IS_ERR(e)) {
+	if (IS_ERR(e) ||
+	    i > e->num_hook_entries ||
+	    (unsigned long)e != ctx->headv) {
 		cb->seq++;
+		err = -EINTR;
 		goto done;
 	}
-
-	if ((unsigned long)e != ctx->headv || i >= e->num_hook_entries)
-		cb->seq++;
 
 	ops = nf_hook_entries_get_hook_ops(e);
 
@@ -401,6 +408,8 @@ static int nfnl_hook_dump(struct sk_buff *nlskb,
 	}
 
 done:
+	if (err && !nlskb->len)
+		nfnl_put_get_hook_msg(nlskb, cb->nlh->nlmsg_seq, family);
 	nl_dump_check_consistent(cb, nlmsg_hdr(nlskb));
 	rcu_read_unlock();
 	cb->args[0] = i;
