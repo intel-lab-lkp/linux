@@ -572,6 +572,8 @@ int main()
 
 	shared_scratch = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
 			      MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+	if (shared_scratch == MAP_FAILED)
+		err(1, "mmap");
 
 	/* Do these tests before we have an LDT. */
 	test_ptrace_write_gs_read_base();
