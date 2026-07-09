@@ -152,6 +152,13 @@ properties:
       HS/FS/LS modes are supported.
     type: boolean
 
+  qcom,has-eusb2-phy:
+    description:
+      If present, it indicates that the controller is working with eUSB2
+      phy. This property is used to modify dp/dm interrupt configurations
+      while entering suspend.
+    type: boolean
+
   wakeup-source: true
 
 required:
