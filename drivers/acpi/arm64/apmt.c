@@ -79,7 +79,7 @@ static int __init apmt_add_platform_device(struct acpi_apmt_node *node,
 	int ret, count;
 	struct resource res[DEV_MAX_RESOURCE_COUNT];
 
-	pdev = platform_device_alloc(DEV_NAME, PLATFORM_DEVID_AUTO);
+	pdev = platform_device_alloc(DEV_NAME, node->id);
 	if (!pdev)
 		return -ENOMEM;
 
