@@ -1669,12 +1669,8 @@ static int stm32_dma_probe(struct platform_device *pdev)
 		ret = devm_request_irq(&pdev->dev, chan->irq,
 				       stm32_dma_chan_irq, 0,
 				       dev_name(chan2dev(chan)), chan);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"request_irq failed with err %d channel %d\n",
-				ret, i);
+		if (ret)
 			goto err_unregister;
-		}
 	}
 
 	ret = of_dma_controller_register(pdev->dev.of_node,
