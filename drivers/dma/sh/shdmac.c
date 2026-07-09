@@ -800,12 +800,8 @@ static int sh_dmae_probe(struct platform_device *pdev)
 
 		err = devm_request_irq(&pdev->dev, errirq, sh_dmae_err,
 				       irqflags, "DMAC Address Error", shdev);
-		if (err) {
-			dev_err(&pdev->dev,
-				"DMA failed requesting irq #%d, error %d\n",
-				errirq, err);
+		if (err)
 			goto eirq_err;
-		}
 	} else {
 		chanirq_res = errirq_res;
 	}
