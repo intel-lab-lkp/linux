@@ -2415,10 +2415,8 @@ static int edma_probe(struct platform_device *pdev)
 
 		ret = devm_request_irq(dev, irq, dma_irq_handler, 0, irq_name,
 				       ecc);
-		if (ret) {
-			dev_err(dev, "CCINT (%d) failed --> %d\n", irq, ret);
+		if (ret)
 			goto err_disable_pm;
-		}
 		ecc->ccint = irq;
 	}
 
@@ -2436,10 +2434,8 @@ static int edma_probe(struct platform_device *pdev)
 
 		ret = devm_request_irq(dev, irq, dma_ccerr_handler, 0, irq_name,
 				       ecc);
-		if (ret) {
-			dev_err(dev, "CCERRINT (%d) failed --> %d\n", irq, ret);
+		if (ret)
 			goto err_disable_pm;
-		}
 		ecc->ccerrint = irq;
 	}
 
