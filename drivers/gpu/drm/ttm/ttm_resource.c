@@ -389,7 +389,8 @@ EXPORT_SYMBOL(ttm_resource_fini);
 int ttm_resource_alloc(struct ttm_buffer_object *bo,
 		       const struct ttm_place *place,
 		       struct ttm_resource **res_ptr,
-		       struct dmem_cgroup_pool_state **ret_limit_pool)
+		       struct dmem_cgroup_pool_state **ret_limit_pool,
+		       struct dmem_cgroup_pool_state **ret_over_high_pool)
 {
 	struct ttm_resource_manager *man =
 		ttm_manager_type(bo->bdev, place->mem_type);
@@ -397,7 +398,8 @@ int ttm_resource_alloc(struct ttm_buffer_object *bo,
 	int ret;
 
 	if (man->cg) {
-		ret = dmem_cgroup_try_charge(man->cg, bo->base.size, &pool, ret_limit_pool);
+		ret = dmem_cgroup_try_charge(man->cg, bo->base.size, &pool,
+					     ret_limit_pool, ret_over_high_pool);
 		if (ret) {
 			if (ret == -EAGAIN)
 				ret = -ENOSPC;
@@ -409,6 +411,8 @@ int ttm_resource_alloc(struct ttm_buffer_object *bo,
 	if (ret) {
 		if (pool)
 			dmem_cgroup_uncharge(pool, bo->base.size);
+		if (ret_over_high_pool)
+			dmem_cgroup_pool_state_put(*ret_over_high_pool);
 		return ret;
 	}
 
