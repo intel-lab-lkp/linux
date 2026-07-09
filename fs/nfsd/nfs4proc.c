@@ -2272,11 +2272,21 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		async_copy->cp_src = kmalloc_obj(*async_copy->cp_src);
 		if (!async_copy->cp_src)
 			goto out_dec_async_copy_err;
-		if (!nfs4_init_copy_state(nn, copy))
-			goto out_dec_async_copy_err;
-		memcpy(&result->cb_stateid, &copy->cp_stateid.cs_stid,
-			sizeof(result->cb_stateid));
 		dup_copy_fields(copy, async_copy);
+		/*
+		 * Register the copy stateid on the long-lived async_copy
+		 * rather than on the transient COMPOUND argument buffer
+		 * (&u->copy). nfs4_init_copy_state() installs a pointer to
+		 * the copy_stateid_t in nn->s2s_cp_stateids, and that pointer
+		 * outlives this call (it is removed only when the background
+		 * copy finishes). Pointing it at &u->copy would leave a stale
+		 * pointer into reused request memory that the laundromat and
+		 * OFFLOAD_CANCEL later dereference.
+		 */
+		if (!nfs4_init_copy_state(nn, async_copy))
+			goto out_dec_async_copy_err;
+		memcpy(&result->cb_stateid, &async_copy->cp_stateid.cs_stid,
+			sizeof(result->cb_stateid));
 		if ((READ_ONCE(copy->nf_dst->nf_file->f_mode) &
 			       FMODE_NOCMTIME) != 0)
 			async_copy->attr_update = true;
