@@ -577,7 +577,7 @@ alloc_workqueue_lockdep_map(const char *fmt, unsigned int flags, int max_active,
  * Pointer to the allocated workqueue on success, %NULL on failure.
  */
 #define alloc_ordered_workqueue_lockdep_map(fmt, flags, lockdep_map, args...)	\
-	alloc_hooks(alloc_workqueue_lockdep_map(fmt, WQ_UNBOUND | __WQ_ORDERED | (flags),\
+	alloc_hooks(alloc_workqueue_lockdep_map(fmt, __WQ_ORDERED | (flags),\
 						1, lockdep_map, ##args))
 #endif
 
@@ -595,14 +595,14 @@ alloc_workqueue_lockdep_map(const char *fmt, unsigned int flags, int max_active,
  * Pointer to the allocated workqueue on success, %NULL on failure.
  */
 #define alloc_ordered_workqueue(fmt, flags, args...)			\
-	alloc_workqueue(fmt, WQ_UNBOUND | __WQ_ORDERED | (flags), 1, ##args)
+	alloc_workqueue(fmt, __WQ_ORDERED | (flags), 1, ##args)
 #define devm_alloc_ordered_workqueue(dev, fmt, flags, args...)		\
-	devm_alloc_workqueue(dev, fmt, WQ_UNBOUND | __WQ_ORDERED | (flags), 1, ##args)
+	devm_alloc_workqueue(dev, fmt, __WQ_ORDERED | (flags), 1, ##args)
 
 #define create_workqueue(name)						\
 	alloc_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM | WQ_PERCPU, 1, (name))
 #define create_freezable_workqueue(name)				\
-	alloc_workqueue("%s", __WQ_LEGACY | WQ_FREEZABLE | WQ_UNBOUND |	\
+	alloc_workqueue("%s", __WQ_LEGACY | WQ_FREEZABLE |	\
 			WQ_MEM_RECLAIM, 1, (name))
 #define create_singlethread_workqueue(name)				\
 	alloc_ordered_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM, name)

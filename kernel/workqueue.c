@@ -1400,7 +1400,7 @@ restart:
 		if (wq_cpu_intensive_warning_thresh &&
 		    cnt >= wq_cpu_intensive_warning_thresh &&
 		    is_power_of_2(cnt + 1 - wq_cpu_intensive_warning_thresh))
-			printk_deferred(KERN_WARNING "workqueue: %ps hogged CPU for >%luus %llu times, consider switching to WQ_UNBOUND\n",
+			printk_deferred(KERN_WARNING "workqueue: %ps hogged CPU for >%luus %llu times, consider removing WQ_PERCPU\n",
 					ent->func, wq_cpu_intensive_thresh_us,
 					atomic64_read(&ent->cnt));
 		return;
@@ -1620,7 +1620,7 @@ work_func_t wq_worker_last_func(struct task_struct *task)
 static struct wq_node_nr_active *wq_node_nr_active(struct workqueue_struct *wq,
 						   int node)
 {
-	if (!(wq->flags & WQ_UNBOUND))
+	if (wq->flags & WQ_PERCPU)
 		return NULL;
 
 	if (node == NUMA_NO_NODE)
@@ -2357,7 +2357,7 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 retry:
 	/* pwq which will be used unless @work is executing elsewhere */
 	if (req_cpu == WORK_CPU_UNBOUND) {
-		if (wq->flags & WQ_UNBOUND)
+		if (!(wq->flags & WQ_PERCPU))
 			cpu = wq_select_unbound_cpu(raw_smp_processor_id());
 		else
 			cpu = raw_smp_processor_id();
@@ -2404,7 +2404,7 @@ retry:
 	 * on it, so the retrying is guaranteed to make forward-progress.
 	 */
 	if (unlikely(!pwq->refcnt)) {
-		if (wq->flags & WQ_UNBOUND) {
+		if (!(wq->flags & WQ_PERCPU)) {
 			raw_spin_unlock(&pool->lock);
 			cpu_relax();
 			goto retry;
@@ -2559,7 +2559,7 @@ bool queue_work_node(int node, struct workqueue_struct *wq,
 	 * workqueue_select_cpu_near would need to be updated to allow for
 	 * some round robin type logic.
 	 */
-	WARN_ON_ONCE(!(wq->flags & WQ_UNBOUND));
+	WARN_ON_ONCE(wq->flags & WQ_PERCPU);
 
 	local_irq_save(irq_flags);
 
@@ -5081,7 +5081,7 @@ static void rcu_free_wq(struct rcu_head *rcu)
 	struct workqueue_struct *wq =
 		container_of(rcu, struct workqueue_struct, rcu);
 
-	if (wq->flags & WQ_UNBOUND)
+	if (!(wq->flags & WQ_PERCPU))
 		free_node_nr_active(wq->node_nr_active);
 
 	wq_free_lockdep(wq);
@@ -5273,7 +5273,7 @@ static void pwq_release_workfn(struct kthread_work *work)
 		mutex_unlock(&wq->mutex);
 	}
 
-	if (wq->flags & WQ_UNBOUND) {
+	if (!(wq->flags & WQ_PERCPU)) {
 		mutex_lock(&wq_pool_mutex);
 		put_unbound_pool(pool);
 		mutex_unlock(&wq_pool_mutex);
@@ -5542,7 +5542,7 @@ static int apply_workqueue_attrs_locked(struct workqueue_struct *wq,
 	struct apply_wqattrs_ctx *ctx;
 
 	/* only unbound workqueues can change attributes */
-	if (WARN_ON(!(wq->flags & WQ_UNBOUND)))
+	if (WARN_ON(wq->flags & WQ_PERCPU))
 		return -EINVAL;
 
 	ctx = apply_wqattrs_prepare(wq, attrs, wq_unbound_cpumask);
@@ -5609,7 +5609,7 @@ static void unbound_wq_update_pwq(struct workqueue_struct *wq, int cpu)
 
 	lockdep_assert_held(&wq_pool_mutex);
 
-	if (!(wq->flags & WQ_UNBOUND) || wq->unbound_attrs->ordered)
+	if (wq->flags & WQ_PERCPU || wq->unbound_attrs->ordered)
 		return;
 
 	/*
@@ -5663,7 +5663,7 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 	if (!wq->cpu_pwq)
 		goto enomem;
 
-	if (!(wq->flags & WQ_UNBOUND)) {
+	if (wq->flags & WQ_PERCPU) {
 		struct worker_pool __percpu *pools;
 
 		if (wq->flags & WQ_BH)
@@ -5823,7 +5823,7 @@ static void wq_adjust_max_active(struct workqueue_struct *wq)
 	WRITE_ONCE(wq->max_active, new_max);
 	WRITE_ONCE(wq->min_active, new_min);
 
-	if (wq->flags & WQ_UNBOUND)
+	if (!(wq->flags & WQ_PERCPU))
 		wq_update_node_max_active(wq, -1);
 
 	if (new_max == 0)
@@ -5869,10 +5869,10 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 
 	/* see the comment above the definition of WQ_POWER_EFFICIENT */
 	if ((flags & WQ_POWER_EFFICIENT) && wq_power_efficient)
-		flags = (flags & ~WQ_PERCPU) | WQ_UNBOUND;
+		flags = (flags & ~WQ_PERCPU);
 
 	/* allocate wq and format name */
-	if (flags & WQ_UNBOUND)
+	if (!(flags & WQ_PERCPU))
 		wq_size = struct_size(wq, node_nr_active, nr_node_ids + 1);
 	else
 		wq_size = sizeof(*wq);
@@ -5881,7 +5881,7 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 	if (!wq)
 		return NULL;
 
-	if (flags & WQ_UNBOUND) {
+	if (!(flags & WQ_PERCPU)) {
 		wq->unbound_attrs = alloc_workqueue_attrs_noprof();
 		if (!wq->unbound_attrs)
 			goto err_free_wq;
@@ -5892,23 +5892,6 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 	if (name_len >= WQ_NAME_LEN)
 		pr_warn_once("workqueue: name exceeds WQ_NAME_LEN. Truncating to: %s\n",
 			     wq->name);
-
-	/*
-	 * One among WQ_PERCPU and WQ_UNBOUND must be set, but not both.
-	 * - If neither is set, default to WQ_PERCPU
-	 * - If both are set, default to WQ_UNBOUND
-	 *
-	 * This code can be removed after workqueue are unbound by default
-	 */
-	if (unlikely(!(flags & (WQ_UNBOUND | WQ_PERCPU)))) {
-		WARN_ONCE(1, "workqueue: %s is using neither WQ_PERCPU or WQ_UNBOUND. "
-			  "Setting WQ_PERCPU.\n", wq->name);
-		flags |= WQ_PERCPU;
-	} else if (unlikely((flags & WQ_PERCPU) && (flags & WQ_UNBOUND))) {
-		WARN_ONCE(1, "workqueue: %s uses both WQ_PERCPU and WQ_UNBOUND. "
-			  "Dropped WQ_PERCPU, keeping WQ_UNBOUND.\n", wq->name);
-		flags &= ~WQ_PERCPU;
-	}
 
 	if (flags & WQ_BH) {
 		/*
@@ -5936,7 +5919,7 @@ static struct workqueue_struct *__alloc_workqueue(const char *fmt,
 
 	INIT_LIST_HEAD(&wq->list);
 
-	if (flags & WQ_UNBOUND) {
+	if (!(flags & WQ_PERCPU)) {
 		if (alloc_node_nr_active(wq->node_nr_active) < 0)
 			goto err_free_wq;
 	}
@@ -5973,7 +5956,7 @@ err_unlock_free_node_nr_active:
 	 * flushing the pwq_release_worker ensures that the pwq_release_workfn()
 	 * completes before calling kfree(wq).
 	 */
-	if (wq->flags & WQ_UNBOUND) {
+	if (!(wq->flags & WQ_PERCPU)) {
 		kthread_flush_worker(pwq_release_worker);
 		free_node_nr_active(wq->node_nr_active);
 	}
@@ -6201,7 +6184,7 @@ void workqueue_set_max_active(struct workqueue_struct *wq, int max_active)
 	mutex_lock(&wq->mutex);
 
 	wq->saved_max_active = max_active;
-	if (wq->flags & WQ_UNBOUND)
+	if (!(wq->flags & WQ_PERCPU))
 		wq->saved_min_active = min(wq->saved_min_active, max_active);
 
 	wq_adjust_max_active(wq);
@@ -6227,8 +6210,7 @@ EXPORT_SYMBOL_GPL(workqueue_set_max_active);
 void workqueue_set_min_active(struct workqueue_struct *wq, int min_active)
 {
 	/* min_active is only meaningful for non-ordered unbound workqueues */
-	if (WARN_ON((wq->flags & (WQ_BH | WQ_UNBOUND | __WQ_ORDERED)) !=
-		    WQ_UNBOUND))
+	if (WARN_ON(wq->flags & (WQ_BH | WQ_PERCPU | __WQ_ORDERED)))
 		return;
 
 	mutex_lock(&wq->mutex);
@@ -7134,7 +7116,7 @@ static int workqueue_apply_unbound_cpumask(const cpumask_var_t unbound_cpumask)
 	lockdep_assert_held(&wq_pool_mutex);
 
 	list_for_each_entry(wq, &workqueues, list) {
-		if (!(wq->flags & WQ_UNBOUND) || (wq->flags & __WQ_DESTROYING))
+		if ((wq->flags & WQ_PERCPU) || (wq->flags & __WQ_DESTROYING))
 			continue;
 
 		ctx = apply_wqattrs_prepare(wq, wq->unbound_attrs, unbound_cpumask);
@@ -7295,7 +7277,7 @@ static ssize_t per_cpu_show(struct device *dev, struct device_attribute *attr,
 {
 	struct workqueue_struct *wq = dev_to_wq(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", (bool)!(wq->flags & WQ_UNBOUND));
+	return scnprintf(buf, PAGE_SIZE, "%d\n", (bool)(wq->flags & WQ_PERCPU));
 }
 static DEVICE_ATTR_RO(per_cpu);
 
@@ -7671,7 +7653,7 @@ int workqueue_sysfs_register(struct workqueue_struct *wq)
 		return ret;
 	}
 
-	if (wq->flags & WQ_UNBOUND) {
+	if (!(wq->flags & WQ_PERCPU)) {
 		struct device_attribute *attr;
 
 		for (attr = wq_sysfs_unbound_attrs; attr->attr.name; attr++) {
@@ -8165,8 +8147,8 @@ void __init workqueue_init_early(void)
 	system_highpri_wq = alloc_workqueue("events_highpri",
 					    WQ_HIGHPRI | WQ_PERCPU, 0);
 	system_long_wq = alloc_workqueue("events_long", WQ_PERCPU, 0);
-	system_unbound_wq = alloc_workqueue("events_unbound", WQ_UNBOUND | __WQ_DEPRECATED, WQ_MAX_ACTIVE);
-	system_dfl_wq = alloc_workqueue("events_unbound", WQ_UNBOUND, WQ_MAX_ACTIVE);
+	system_unbound_wq = alloc_workqueue("events_unbound", __WQ_DEPRECATED, WQ_MAX_ACTIVE);
+	system_dfl_wq = alloc_workqueue("events_unbound", 0, WQ_MAX_ACTIVE);
 	system_freezable_wq = alloc_workqueue("events_freezable",
 					      WQ_FREEZABLE | WQ_PERCPU, 0);
 	system_power_efficient_wq = alloc_workqueue("events_power_efficient",
@@ -8176,7 +8158,7 @@ void __init workqueue_init_early(void)
 	system_bh_wq = alloc_workqueue("events_bh", WQ_BH | WQ_PERCPU, 0);
 	system_bh_highpri_wq = alloc_workqueue("events_bh_highpri",
 					       WQ_BH | WQ_HIGHPRI | WQ_PERCPU, 0);
-	system_dfl_long_wq = alloc_workqueue("events_dfl_long", WQ_UNBOUND, WQ_MAX_ACTIVE);
+	system_dfl_long_wq = alloc_workqueue("events_dfl_long", 0, WQ_MAX_ACTIVE);
 	BUG_ON(!system_wq || !system_percpu_wq|| !system_highpri_wq || !system_long_wq ||
 	       !system_unbound_wq || !system_freezable_wq || !system_dfl_wq ||
 	       !system_power_efficient_wq ||
@@ -8554,7 +8536,7 @@ void __init workqueue_init_topology(void)
 	list_for_each_entry(wq, &workqueues, list) {
 		for_each_online_cpu(cpu)
 			unbound_wq_update_pwq(wq, cpu);
-		if (wq->flags & WQ_UNBOUND) {
+		if (!(wq->flags & WQ_PERCPU)) {
 			mutex_lock(&wq->mutex);
 			wq_update_node_max_active(wq, -1);
 			mutex_unlock(&wq->mutex);
