@@ -781,6 +781,33 @@ bool kho_scratch_overlap(phys_addr_t phys, size_t size)
 	return false;
 }
 
+/*
+ * Mark all KHO scratch pageblocks between start_pfn and end_pfn as
+ * MIGRATE_CMA.
+ */
+void kho_init_scratch_migratetype(unsigned long start_pfn, unsigned long end_pfn)
+{
+	for (unsigned int i = 0; i < kho_scratch_cnt; i++) {
+		unsigned long scratch_start, scratch_end, pfn;
+
+		scratch_start = PHYS_PFN(kho_scratch[i].addr);
+		scratch_end = PHYS_PFN(kho_scratch[i].addr + kho_scratch[i].size);
+
+		/* Target range doesn't overlap with scratch. */
+		if (start_pfn >= scratch_end || end_pfn <= scratch_start)
+			continue;
+
+		pfn = max_t(unsigned long, start_pfn, scratch_start);
+		pfn = pageblock_start_pfn(pfn);
+
+		while (pfn < end_pfn && pfn < scratch_end) {
+			init_pageblock_migratetype(pfn_to_page(pfn),
+						   MIGRATE_CMA, false);
+			pfn += pageblock_nr_pages;
+		}
+	}
+}
+
 /**
  * kho_reserve_scratch - Reserve a contiguous chunk of memory for kexec
  *

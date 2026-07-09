@@ -39,6 +39,7 @@ void kho_populate(phys_addr_t fdt_phys, u64 fdt_len, phys_addr_t scratch_phys,
 		  u64 scratch_len);
 
 bool kho_scratch_overlap(phys_addr_t phys, size_t size);
+void kho_init_scratch_migratetype(unsigned long start_pfn, unsigned long end_pfn);
 #else
 static inline bool kho_is_enabled(void)
 {
@@ -121,6 +122,11 @@ static inline void kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 static inline bool kho_scratch_overlap(phys_addr_t phys, size_t size)
 {
 	return false;
+}
+
+static inline void kho_init_scratch_migratetype(unsigned long start_pfn,
+						unsigned long end_pfn);
+{
 }
 #endif /* CONFIG_KEXEC_HANDOVER */
 

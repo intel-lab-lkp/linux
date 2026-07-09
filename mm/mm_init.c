@@ -707,9 +707,10 @@ void __meminit __init_page_from_nid(unsigned long pfn, int nid)
 	__init_single_page(pfn_to_page(pfn), pfn, zid, nid);
 
 	if (pageblock_aligned(pfn)) {
-		enum migratetype mt =
-			kho_scratch_migratetype(pfn, MIGRATE_MOVABLE);
-		init_pageblock_migratetype(pfn_to_page(pfn), mt, false);
+		init_pageblock_migratetype(pfn_to_page(pfn), MIGRATE_MOVABLE,
+					   false);
+		/* Update the migrate type in case it is KHO scratch. */
+		kho_init_scratch_migratetype(pfn, pfn + 1);
 	}
 }
 
@@ -938,13 +939,22 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 		}
 		pfn++;
 	}
+
+	/*
+	 * Update the migrate type for any pageblocks that fall in a KHO scratch
+	 * area. Do this here outside the loop because most pageblocks will not
+	 * be KHO scratch, so only search once.
+	 *
+	 * Only pageblocks up to pfn are updated, deferred pageblocks will be
+	 * updated later.
+	 */
+	kho_init_scratch_migratetype(start_pfn, pfn);
 }
 
 static void __init memmap_init_zone_range(struct zone *zone,
 					  unsigned long start_pfn,
 					  unsigned long end_pfn,
-					  unsigned long *hole_pfn,
-					  enum migratetype mt)
+					  unsigned long *hole_pfn)
 {
 	unsigned long zone_start_pfn = zone->zone_start_pfn;
 	unsigned long zone_end_pfn = zone_start_pfn + zone->spanned_pages;
@@ -957,7 +967,8 @@ static void __init memmap_init_zone_range(struct zone *zone,
 		return;
 
 	memmap_init_range(end_pfn - start_pfn, nid, zone_id, start_pfn,
-			  zone_end_pfn, MEMINIT_EARLY, NULL, mt, false);
+			  zone_end_pfn, MEMINIT_EARLY, NULL, MIGRATE_MOVABLE,
+			  false);
 
 	if (*hole_pfn < start_pfn)
 		init_unavailable_range(*hole_pfn, start_pfn, zone_id, nid);
@@ -973,8 +984,6 @@ static void __init memmap_init(void)
 
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
 		struct pglist_data *node = NODE_DATA(nid);
-		enum migratetype mt =
-			kho_scratch_migratetype(start_pfn, MIGRATE_MOVABLE);
 
 		for (j = 0; j < MAX_NR_ZONES; j++) {
 			struct zone *zone = node->node_zones + j;
@@ -983,7 +992,7 @@ static void __init memmap_init(void)
 				continue;
 
 			memmap_init_zone_range(zone, start_pfn, end_pfn,
-					       &hole_pfn, mt);
+					       &hole_pfn);
 			zone_id = j;
 		}
 	}
@@ -1973,7 +1982,7 @@ unsigned long __init node_map_pfn_alignment(void)
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 static void __init deferred_free_pages(unsigned long pfn,
-		unsigned long nr_pages, enum migratetype mt)
+		unsigned long nr_pages)
 {
 	struct page *page;
 	unsigned long i;
@@ -2012,8 +2021,7 @@ static inline void __init pgdat_init_report_one_done(void)
  * Return number of pages initialized.
  */
 static unsigned long __init deferred_init_pages(struct zone *zone,
-		unsigned long start_pfn, unsigned long end_pfn,
-		enum migratetype mt)
+		unsigned long start_pfn, unsigned long end_pfn)
 {
 	int nid = zone_to_nid(zone);
 	unsigned long nr_pages = end_pfn - start_pfn, pfn = start_pfn;
@@ -2027,7 +2035,14 @@ static unsigned long __init deferred_init_pages(struct zone *zone,
 	pfn = pageblock_align(start_pfn);
 	page = pfn_to_page(pfn);
 	for (; pfn < end_pfn; pfn += pageblock_nr_pages, page += pageblock_nr_pages)
-		init_pageblock_migratetype(page, mt, false);
+		init_pageblock_migratetype(page, MIGRATE_MOVABLE, false);
+
+	/*
+	 * Update the migrate type for any pageblocks that fall in a KHO scratch
+	 * area. Since most pageblocks will not be KHO scratch, do it outside
+	 * the loop to only do the search once.
+	 */
+	kho_init_scratch_migratetype(start_pfn, end_pfn);
 
 	return nr_pages;
 }
@@ -2057,8 +2072,6 @@ deferred_init_memmap_chunk(unsigned long start_pfn, unsigned long end_pfn,
 	for_each_free_mem_range(i, nid, 0, &start, &end, NULL) {
 		unsigned long spfn = PFN_UP(start);
 		unsigned long epfn = PFN_DOWN(end);
-		enum migratetype mt =
-			kho_scratch_migratetype(spfn, MIGRATE_MOVABLE);
 
 		if (spfn >= end_pfn)
 			break;
@@ -2070,8 +2083,8 @@ deferred_init_memmap_chunk(unsigned long start_pfn, unsigned long end_pfn,
 			unsigned long mo_pfn = ALIGN(spfn + 1, MAX_ORDER_NR_PAGES);
 			unsigned long chunk_end = min(mo_pfn, epfn);
 
-			nr_pages += deferred_init_pages(zone, spfn, chunk_end, mt);
-			deferred_free_pages(spfn, chunk_end - spfn, mt);
+			nr_pages += deferred_init_pages(zone, spfn, chunk_end);
+			deferred_free_pages(spfn, chunk_end - spfn);
 
 			spfn = chunk_end;
 
