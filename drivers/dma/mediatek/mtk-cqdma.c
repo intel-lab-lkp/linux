@@ -828,11 +828,8 @@ static int mtk_cqdma_probe(struct platform_device *pdev)
 		err = devm_request_irq(&pdev->dev, cqdma->pc[i]->irq,
 				       mtk_cqdma_irq, 0, dev_name(&pdev->dev),
 				       cqdma);
-		if (err) {
-			dev_err(&pdev->dev,
-				"request_irq failed with err %d\n", err);
+		if (err)
 			return -EINVAL;
-		}
 	}
 
 	/* allocate resource for VCs */
