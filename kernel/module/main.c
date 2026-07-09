@@ -2712,6 +2712,19 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 	mod->btf_base_data = any_section_objs(info, ".BTF.base", 1,
 					      &mod->btf_base_data_size);
 #endif
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+	/*
+	 * Use section_objs() (not any_section_objs) — both blobs carry an
+	 * ELF anchor relocation that the module loader resolves via its
+	 * standard apply_relocations() pass, which only walks SHF_ALLOC
+	 * sections.  Picking up a non-ALLOC section here would also leave
+	 * the pointer dangling into the temporary load image once freed.
+	 */
+	mod->lineinfo_data = section_objs(info, ".mod_lineinfo", 1,
+					  &mod->lineinfo_data_size);
+	mod->init_lineinfo_data = section_objs(info, ".init.mod_lineinfo", 1,
+					       &mod->init_lineinfo_data_size);
+#endif
 #ifdef CONFIG_JUMP_LABEL
 	mod->jump_entries = section_objs(info, "__jump_table",
 					sizeof(*mod->jump_entries),
@@ -3165,6 +3178,19 @@ static noinline int do_init_module(struct module *mod)
 	/* .BTF is not SHF_ALLOC and will get removed, so sanitize pointers */
 	mod->btf_data = NULL;
 	mod->btf_base_data = NULL;
+#endif
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+	/*
+	 * .init.mod_lineinfo lives in MOD_INIT_RODATA which do_free_init() is
+	 * about to release.  Clear the pointer so concurrent stack-trace
+	 * lookups stop dereferencing it; do_free_init()'s synchronize_rcu()
+	 * then waits out any reader that already captured the old pointer.
+	 * WRITE_ONCE pairs with the READ_ONCE inside module_init_lineinfo_data()
+	 * so the compiler can't tear or reorder the revocation across the
+	 * llist_add() that follows.
+	 */
+	WRITE_ONCE(mod->init_lineinfo_data, NULL);
+	WRITE_ONCE(mod->init_lineinfo_data_size, 0);
 #endif
 	/*
 	 * We want to free module_init, but be aware that kallsyms may be
