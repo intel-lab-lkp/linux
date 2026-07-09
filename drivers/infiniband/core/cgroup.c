@@ -17,6 +17,8 @@
 void ib_device_register_rdmacg(struct ib_device *device)
 {
 	device->cg_device.name = device->name;
+	device->cg_device.netns_shared = ib_devices_shared_netns;
+	write_pnet(&device->cg_device.net, rdma_dev_net(device));
 	rdmacg_register_device(&device->cg_device);
 }
 
@@ -32,6 +34,16 @@ void ib_device_register_rdmacg(struct ib_device *device)
 void ib_device_unregister_rdmacg(struct ib_device *device)
 {
 	rdmacg_unregister_device(&device->cg_device);
+}
+
+void ib_device_rdmacg_change_netns(struct ib_device *device, struct net *net)
+{
+	write_pnet(&device->cg_device.net, net);
+}
+
+void ib_device_rdmacg_set_netns_shared(struct ib_device *device, bool shared)
+{
+	WRITE_ONCE(device->cg_device.netns_shared, shared);
 }
 
 int ib_rdmacg_try_charge(struct ib_rdmacg_object *cg_obj,

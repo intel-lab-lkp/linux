@@ -15,6 +15,7 @@
 #include <linux/cgroup.h>
 #include <linux/parser.h>
 #include <linux/cgroup_rdma.h>
+#include <linux/nsproxy.h>
 
 #define RDMACG_MAX_STR "max"
 
@@ -464,6 +465,13 @@ void rdmacg_unregister_device(struct rdmacg_device *device)
 }
 EXPORT_SYMBOL(rdmacg_unregister_device);
 
+/* netns_shared is toggled without rdmacg_mutex, hence READ_ONCE(). */
+static bool rdmacg_device_visible(const struct rdmacg_device *device)
+{
+	return READ_ONCE(device->netns_shared) ||
+	       net_eq(read_pnet(&device->net), current->nsproxy->net_ns);
+}
+
 static struct rdmacg_device *rdmacg_get_device_locked(const char *name)
 {
 	struct rdmacg_device *device;
@@ -471,7 +479,8 @@ static struct rdmacg_device *rdmacg_get_device_locked(const char *name)
 	lockdep_assert_held(&rdmacg_mutex);
 
 	list_for_each_entry(device, &rdmacg_devices, dev_node)
-		if (!strcmp(name, device->name))
+		if (rdmacg_device_visible(device) &&
+		    !strcmp(name, device->name))
 			return device;
 
 	return NULL;
@@ -626,6 +635,9 @@ static int rdmacg_resource_read(struct seq_file *sf, void *v)
 	mutex_lock(&rdmacg_mutex);
 
 	list_for_each_entry(device, &rdmacg_devices, dev_node) {
+		if (!rdmacg_device_visible(device))
+			continue;
+
 		seq_printf(sf, "%s ", device->name);
 
 		rpool = find_cg_rpool_locked(cg, device);
@@ -648,6 +660,9 @@ static int rdmacg_events_show(struct seq_file *sf, void *v)
 	mutex_lock(&rdmacg_mutex);
 
 	list_for_each_entry(device, &rdmacg_devices, dev_node) {
+		if (!rdmacg_device_visible(device))
+			continue;
+
 		rpool = find_cg_rpool_locked(cg, device);
 
 		seq_printf(sf, "%s ", device->name);
@@ -677,6 +692,9 @@ static int rdmacg_events_local_show(struct seq_file *sf, void *v)
 	mutex_lock(&rdmacg_mutex);
 
 	list_for_each_entry(device, &rdmacg_devices, dev_node) {
+		if (!rdmacg_device_visible(device))
+			continue;
+
 		rpool = find_cg_rpool_locked(cg, device);
 
 		seq_printf(sf, "%s ", device->name);

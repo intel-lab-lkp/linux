@@ -7,6 +7,7 @@
 #define _CGROUP_RDMA_H
 
 #include <linux/cgroup.h>
+#include <net/net_namespace.h>
 
 enum rdmacg_resource_type {
 	RDMACG_RESOURCE_HCA_HANDLE,
@@ -34,6 +35,15 @@ struct rdmacg_device {
 	struct list_head	dev_node;
 	struct list_head	rpools;
 	char			*name;
+	/*
+	 * Net namespace the device belongs to. @netns_shared mirrors
+	 * ib_devices_shared_netns: when true the device is visible from every
+	 * net namespace (shared mode); otherwise @net is the only namespace
+	 * that may see and configure it. @netns_shared is updated when the
+	 * sharing mode changes, so use {READ,WRITE}_ONCE() to access it.
+	 */
+	possible_net_t		net;
+	bool			netns_shared;
 };
 
 /*

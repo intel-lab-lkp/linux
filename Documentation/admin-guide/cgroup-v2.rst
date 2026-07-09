@@ -2805,6 +2805,13 @@ RDMA
 The "rdma" controller regulates the distribution and accounting of
 RDMA resources.
 
+When RDMA devices are isolated per network namespace (exclusive mode),
+device names are unique only within a network namespace. The device lines
+below are therefore scoped to the reading or writing process's network
+namespace: only devices accessible from that namespace are listed, and a
+limit is applied to the device of that name in that namespace. Configure
+limits from the same network namespace as the workloads.
+
 RDMA Interface Files
 ~~~~~~~~~~~~~~~~~~~~
 

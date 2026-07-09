@@ -156,6 +156,8 @@ void ib_dispatch_event_clients(struct ib_event *event);
 #ifdef CONFIG_CGROUP_RDMA
 void ib_device_register_rdmacg(struct ib_device *device);
 void ib_device_unregister_rdmacg(struct ib_device *device);
+void ib_device_rdmacg_change_netns(struct ib_device *device, struct net *net);
+void ib_device_rdmacg_set_netns_shared(struct ib_device *device, bool shared);
 
 int ib_rdmacg_try_charge(struct ib_rdmacg_object *cg_obj,
 			 struct ib_device *device,
@@ -170,6 +172,16 @@ static inline void ib_device_register_rdmacg(struct ib_device *device)
 }
 
 static inline void ib_device_unregister_rdmacg(struct ib_device *device)
+{
+}
+
+static inline void ib_device_rdmacg_change_netns(struct ib_device *device,
+						 struct net *net)
+{
+}
+
+static inline void ib_device_rdmacg_set_netns_shared(struct ib_device *device,
+						     bool shared)
 {
 }
 

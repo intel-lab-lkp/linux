@@ -1112,6 +1112,7 @@ static int add_all_compat_devs(void)
 int rdma_compatdev_set(u8 enable)
 {
 	struct rdma_dev_net *rnet;
+	struct ib_device *dev;
 	unsigned long index;
 	int ret = 0;
 
@@ -1133,6 +1134,12 @@ int rdma_compatdev_set(u8 enable)
 	up_write(&rdma_nets_rwsem);
 	if (ret)
 		return -EBUSY;
+
+	/* Keep each registered device's rdma cgroup visibility in sync. */
+	down_read(&devices_rwsem);
+	xa_for_each_marked(&devices, index, dev, DEVICE_REGISTERED)
+		ib_device_rdmacg_set_netns_shared(dev, enable);
+	up_read(&devices_rwsem);
 
 	if (enable)
 		ret = add_all_compat_devs();
@@ -1350,6 +1357,7 @@ static int enable_device_and_get(struct ib_device *device)
 	 */
 	refcount_set(&device->refcount, 2);
 	down_write(&devices_rwsem);
+	ib_device_rdmacg_set_netns_shared(device, ib_devices_shared_netns);
 	xa_set_mark(&devices, device->index, DEVICE_REGISTERED);
 
 	/*
@@ -1823,12 +1831,14 @@ static int rdma_dev_change_netns(struct ib_device *device, struct net *cur_net,
 			     "%s: failed to pick device name during namespace teardown: %d\n",
 			     __func__, ret);
 			write_pnet(&device->coredev.rdma_net, net);
+			ib_device_rdmacg_change_netns(device, net);
 			ret = 0;
 		}
 		goto rename_done;
 	}
 
 	write_pnet(&device->coredev.rdma_net, net);
+	ib_device_rdmacg_change_netns(device, net);
 	ret = device_rename(&device->dev, new_name);
 	if (ret) {
 		if (fallback_pattern) {
@@ -1842,6 +1852,7 @@ static int rdma_dev_change_netns(struct ib_device *device, struct net *cur_net,
 				 __func__);
 			/* Try and put things back and re-enable the device */
 			write_pnet(&device->coredev.rdma_net, cur_net);
+			ib_device_rdmacg_change_netns(device, cur_net);
 		}
 	} else {
 		strscpy(device->name, dev_name(&device->dev),
