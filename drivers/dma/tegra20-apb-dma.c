@@ -1496,12 +1496,8 @@ static int tegra_dma_probe(struct platform_device *pdev)
 		snprintf(tdc->name, sizeof(tdc->name), "apbdma.%d", i);
 		ret = devm_request_irq(&pdev->dev, irq, tegra_dma_isr, 0,
 				       tdc->name, tdc);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"request_irq failed with err %d channel %d\n",
-				ret, i);
+		if (ret)
 			goto err_pm_disable;
-		}
 
 		tdc->dma_chan.device = &tdma->dma_dev;
 		dma_cookie_init(&tdc->dma_chan);
