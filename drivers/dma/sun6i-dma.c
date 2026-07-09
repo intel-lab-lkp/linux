@@ -1457,10 +1457,8 @@ static int sun6i_dma_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(&pdev->dev, sdc->irq, sun6i_dma_interrupt, 0,
 			       dev_name(&pdev->dev), sdc);
-	if (ret) {
-		dev_err(&pdev->dev, "Cannot request IRQ\n");
+	if (ret)
 		goto err_mbus_clk_disable;
-	}
 
 	ret = dma_async_device_register(&sdc->slave);
 	if (ret) {
