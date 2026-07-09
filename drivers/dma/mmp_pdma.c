@@ -1161,10 +1161,8 @@ static int mmp_pdma_chan_init(struct mmp_pdma_device *pdev, int idx, int irq)
 	if (irq) {
 		ret = devm_request_irq(pdev->dev, irq, mmp_pdma_chan_handler,
 				       IRQF_SHARED, "pdma", phy);
-		if (ret) {
-			dev_err(pdev->dev, "channel request irq fail!\n");
+		if (ret)
 			return ret;
-		}
 	}
 
 	spin_lock_init(&chan->desc_lock);
