@@ -2066,8 +2066,6 @@ void ip_vs_nat_icmp_v6(struct sk_buff *skb, struct ip_vs_protocol *pp,
 		       struct ip_vs_conn *cp, int dir);
 #endif
 
-__sum16 ip_vs_checksum_complete(struct sk_buff *skb, int offset);
-
 static inline __wsum ip_vs_check_diff4(__be32 old, __be32 new, __wsum oldsum)
 {
 	__be32 diff[2] = { ~old, new };
@@ -2092,6 +2090,9 @@ static inline __wsum ip_vs_check_diff2(__be16 old, __be16 new, __wsum oldsum)
 
 	return csum_partial(diff, sizeof(diff), oldsum);
 }
+
+bool ip_vs_checksum_common_check(int af, struct sk_buff *skb, int proto,
+				 int offset);
 
 /* Forget current conntrack (unconfirmed) and attach notrack entry */
 static inline void ip_vs_notrack(struct sk_buff *skb)
