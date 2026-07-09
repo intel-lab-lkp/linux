@@ -2135,6 +2135,14 @@ Kernel parameters
 			Hardware protection action taken on critical events like
 			overtemperature or imminent voltage loss.
 
+	hygon_smn_debugfs_enable
+			[X86] Enable the Hygon Family 0x18 SMN debugfs
+			interface at /sys/kernel/debug/x86/hygon_smn/, which
+			allows raw reads and writes of System Management
+			Network (SMN) registers.  Requires CONFIG_HYGON_NODE
+			and CONFIG_DEBUG_FS.  Off by default; intended for
+			development and debugging only.
+
 	i2c_bus=	[HW]	Override the default board specific I2C bus speed
 				or register an additional I2C bus that is not
 				registered from board initialization code.

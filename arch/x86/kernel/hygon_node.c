@@ -27,6 +27,7 @@
 #include <linux/bitops.h>
 #include <linux/cleanup.h>
 #include <linux/cpu.h>
+#include <linux/debugfs.h>
 #include <linux/export.h>
 #include <linux/init.h>
 #include <linux/mutex.h>
@@ -871,6 +872,185 @@ static void __init hygon_release_root_regions(struct pci_dev **roots,
 }
 
 /*
+ * Optional Hygon SMN debugfs interface.
+ *
+ * Disabled by default; enable with the "hygon_smn_debugfs_enable" kernel
+ * command-line option.  When enabled, this exposes four files under
+ * /sys/kernel/debug/x86/hygon_smn/:
+ *
+ *   topology  (ro) -- node count summary and the dense DF node id ->
+ *                     (socket, dfid, type, PCI BDF) mapping, so a
+ *                     developer can discover the valid range for "node"
+ *                     and what each dense id refers to in hardware.
+ *   node      (rw) -- select the target dense DF node id.
+ *   address   (rw) -- select the target SMN address.
+ *   value     (rw) -- read/write the SMN value at (node, address).
+ *
+ * A write to "value" performs an SMN write and taints the kernel with
+ * TAINT_CPU_OUT_OF_SPEC, because arbitrary SMN writes can put the CPU
+ * into an undefined state.
+ */
+static bool hygon_smn_enable_dfs __initdata;
+
+static int __init hygon_smn_enable_debugfs(char *str)
+{
+	hygon_smn_enable_dfs = true;
+	return 1;
+}
+__setup("hygon_smn_debugfs_enable", hygon_smn_enable_debugfs);
+
+static struct dentry *hygon_smn_debugfs_dir;
+
+/*
+ * The node/address/value selector layout follows the existing amd_smn
+ * debugfs model: global selector state for an opt-in, single-user
+ * developer debug interface.
+ */
+static u16 hygon_smn_debug_node;
+static u32 hygon_smn_debug_address;
+
+/*
+ * "topology" -- read-only summary plus the dense DF node id ->
+ * (socket, dfid, type, PCI BDF) mapping.  This is the discovery file
+ * for the SMN interface: it tells the user the valid range for "node"
+ * (0 .. num_nodes - 1), which dense ids are CDD vs IOD, and which PCI
+ * misc (F3) / link (F4) functions back each node.
+ *
+ * The file only exists once hygon_smn_debugfs_init() has run, which is
+ * after hygon_build_cache() set cache.ready, so a !ready state here is
+ * an internal ordering error rather than a normal transient.  Report it
+ * as -ENODEV instead of printing misleading values.
+ */
+static int hygon_smn_topology_show(struct seq_file *m, void *v)
+{
+	u16 i;
+
+	if (!hygon_cache.ready)
+		return -ENODEV;
+
+	seq_printf(m, "num_nodes:       %u\n", hygon_cache.num_nodes);
+	seq_printf(m, "num_cdd:         %u\n", hygon_cache.num_cdd);
+	seq_printf(m, "num_sockets:     %u\n", hygon_cache.num_sockets);
+	seq_printf(m, "cdd_per_socket:  %u\n", hygon_cache.cdd_per_socket);
+	seq_putc(m, '\n');
+
+	seq_printf(m, "%-4s %-6s %-4s %-4s %-12s %-12s\n",
+		   "node", "socket", "dfid", "type", "misc", "link");
+
+	for (i = 0; i < hygon_cache.num_nodes; i++) {
+		const struct hygon_node *node = &hygon_cache.nodes[i];
+
+		seq_printf(m, "%-4u %-6u %-4u %-4s %-12s %-12s\n",
+			   i, node->socket_id, node->dfid,
+			   node->is_cdd ? "CDD" : "IOD",
+			   pci_name(node->misc), pci_name(node->link));
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(hygon_smn_topology);
+
+static ssize_t hygon_smn_node_write(struct file *file,
+				    const char __user *userbuf,
+				    size_t count, loff_t *ppos)
+{
+	u16 node;
+	int ret;
+
+	ret = kstrtou16_from_user(userbuf, count, 0, &node);
+	if (ret)
+		return ret;
+
+	if (node >= hygon_node_num())
+		return -ENODEV;
+
+	hygon_smn_debug_node = node;
+	return count;
+}
+
+static int hygon_smn_node_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "0x%08x\n", hygon_smn_debug_node);
+	return 0;
+}
+
+static ssize_t hygon_smn_address_write(struct file *file,
+				       const char __user *userbuf,
+				       size_t count, loff_t *ppos)
+{
+	int ret;
+
+	ret = kstrtouint_from_user(userbuf, count, 0, &hygon_smn_debug_address);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static int hygon_smn_address_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "0x%08x\n", hygon_smn_debug_address);
+	return 0;
+}
+
+static int hygon_smn_value_show(struct seq_file *m, void *v)
+{
+	u32 val;
+	int ret;
+
+	ret = hygon_smn_read(hygon_smn_debug_node,
+			     hygon_smn_debug_address, &val);
+	if (ret)
+		return ret;
+
+	seq_printf(m, "0x%08x\n", val);
+	return 0;
+}
+
+static ssize_t hygon_smn_value_write(struct file *file,
+				     const char __user *userbuf,
+				     size_t count, loff_t *ppos)
+{
+	u32 val;
+	int ret;
+
+	ret = kstrtouint_from_user(userbuf, count, 0, &val);
+	if (ret)
+		return ret;
+
+	add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
+
+	ret = hygon_smn_write(hygon_smn_debug_node,
+			      hygon_smn_debug_address, val);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+DEFINE_SHOW_STORE_ATTRIBUTE(hygon_smn_node);
+DEFINE_SHOW_STORE_ATTRIBUTE(hygon_smn_address);
+DEFINE_SHOW_STORE_ATTRIBUTE(hygon_smn_value);
+
+static void __init hygon_smn_debugfs_init(void)
+{
+	if (!hygon_smn_enable_dfs)
+		return;
+
+	hygon_smn_debugfs_dir = debugfs_create_dir("hygon_smn",
+						   arch_debugfs_dir);
+
+	debugfs_create_file("topology", 0400, hygon_smn_debugfs_dir, NULL,
+			    &hygon_smn_topology_fops);
+	debugfs_create_file("node", 0600, hygon_smn_debugfs_dir, NULL,
+			    &hygon_smn_node_fops);
+	debugfs_create_file("address", 0600, hygon_smn_debugfs_dir, NULL,
+			    &hygon_smn_address_fops);
+	debugfs_create_file("value", 0600, hygon_smn_debugfs_dir, NULL,
+			    &hygon_smn_value_fops);
+}
+
+/*
  * Hygon SMN setup.
  *
  * On Hygon Fam18h, SMN root devices are shared per-socket: all nodes
@@ -1032,6 +1212,9 @@ static int __init hygon_smn_setup(void)
 	hygon_smn_roots = roots;
 	hygon_smn_num_nodes = num_nodes;
 	hygon_smn_exclusive = true;
+
+	hygon_smn_debugfs_init();
+
 	return 0;
 
 err_release:
