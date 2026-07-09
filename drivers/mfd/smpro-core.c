@@ -120,7 +120,7 @@ static int smpro_core_probe(struct i2c_client *i2c)
 
 static const struct of_device_id smpro_core_of_match[] = {
 	{ .compatible = "ampere,smpro", .data = &smpro_regmap_config },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, smpro_core_of_match);
 

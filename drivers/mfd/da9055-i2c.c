@@ -60,7 +60,7 @@ static const struct i2c_device_id da9055_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, da9055_i2c_id);
 
 static const struct of_device_id da9055_of_match[] = {
-	{ .compatible = "dlg,da9055-pmic", },
+	{ .compatible = "dlg,da9055-pmic" },
 	{ }
 };
 

@@ -103,7 +103,7 @@ static const struct of_device_id arizona_i2c_of_match[] = {
 	{ .compatible = "wlf,wm8997", .data = (void *)WM8997 },
 	{ .compatible = "wlf,wm8998", .data = (void *)WM8998 },
 	{ .compatible = "wlf,wm1814", .data = (void *)WM1814 },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, arizona_i2c_of_match);
 #endif

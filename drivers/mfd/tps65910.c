@@ -366,9 +366,9 @@ err_sleep_init:
 
 #ifdef CONFIG_OF
 static const struct of_device_id tps65910_of_match[] = {
-	{ .compatible = "ti,tps65910", .data = (void *)TPS65910},
-	{ .compatible = "ti,tps65911", .data = (void *)TPS65911},
-	{ },
+	{ .compatible = "ti,tps65910", .data = (void *)TPS65910 },
+	{ .compatible = "ti,tps65911", .data = (void *)TPS65911 },
+	{ }
 };
 
 static struct tps65910_board *tps65910_parse_dt(struct i2c_client *client,

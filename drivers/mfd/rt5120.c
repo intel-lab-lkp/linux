@@ -104,7 +104,7 @@ static int rt5120_probe(struct i2c_client *i2c)
 
 static const struct of_device_id rt5120_device_match_table[] = {
 	{ .compatible = "richtek,rt5120" },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, rt5120_device_match_table);
 

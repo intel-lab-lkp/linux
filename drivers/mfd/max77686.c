@@ -153,7 +153,7 @@ static const struct of_device_id max77686_pmic_dt_match[] = {
 		.compatible = "maxim,max77802",
 		.data = (void *)TYPE_MAX77802,
 	},
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, max77686_pmic_dt_match);
 

@@ -1127,8 +1127,8 @@ static const struct of_device_id bd71828_of_match[] = {
 	}, {
 		.compatible = "rohm,bd72720",
 		.data = (void *)ROHM_CHIP_TYPE_BD72720,
-	 },
-	{ },
+	},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, bd71828_of_match);
 

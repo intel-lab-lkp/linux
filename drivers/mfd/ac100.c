@@ -116,7 +116,7 @@ static int ac100_rsb_probe(struct sunxi_rsb_device *rdev)
 
 static const struct of_device_id ac100_of_match[] = {
 	{ .compatible = "x-powers,ac100" },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, ac100_of_match);
 

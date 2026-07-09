@@ -348,9 +348,9 @@ static void stm32_timers_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id stm32_timers_of_match[] = {
-	{ .compatible = "st,stm32-timers", },
+	{ .compatible = "st,stm32-timers" },
 	{ .compatible = "st,stm32mp25-timers", .data = (void *)STM32MP25_TIM_IPIDR },
-	{ /* end node */ },
+	{ /* end node */ }
 };
 MODULE_DEVICE_TABLE(of, stm32_timers_of_match);
 

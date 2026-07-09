@@ -54,15 +54,15 @@ static struct stmpe_client_info i2c_ci = {
 };
 
 static const struct of_device_id stmpe_of_match[] = {
-	{ .compatible = "st,stmpe610", .data = (void *)STMPE610, },
-	{ .compatible = "st,stmpe801", .data = (void *)STMPE801, },
-	{ .compatible = "st,stmpe811", .data = (void *)STMPE811, },
-	{ .compatible = "st,stmpe1600", .data = (void *)STMPE1600, },
-	{ .compatible = "st,stmpe1601", .data = (void *)STMPE1601, },
-	{ .compatible = "st,stmpe1801", .data = (void *)STMPE1801, },
-	{ .compatible = "st,stmpe2401", .data = (void *)STMPE2401, },
-	{ .compatible = "st,stmpe2403", .data = (void *)STMPE2403, },
-	{},
+	{ .compatible = "st,stmpe610", .data = (void *)STMPE610 },
+	{ .compatible = "st,stmpe801", .data = (void *)STMPE801 },
+	{ .compatible = "st,stmpe811", .data = (void *)STMPE811 },
+	{ .compatible = "st,stmpe1600", .data = (void *)STMPE1600 },
+	{ .compatible = "st,stmpe1601", .data = (void *)STMPE1601 },
+	{ .compatible = "st,stmpe1801", .data = (void *)STMPE1801 },
+	{ .compatible = "st,stmpe2401", .data = (void *)STMPE2401 },
+	{ .compatible = "st,stmpe2403", .data = (void *)STMPE2403 },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, stmpe_of_match);
 

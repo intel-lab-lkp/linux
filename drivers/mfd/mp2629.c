@@ -60,7 +60,7 @@ static int mp2629_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id mp2629_of_match[] = {
-	{ .compatible = "mps,mp2629"},
+	{ .compatible = "mps,mp2629" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, mp2629_of_match);

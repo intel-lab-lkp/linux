@@ -352,7 +352,7 @@ static int rz_mtu3_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id rz_mtu3_of_match[] = {
-	{ .compatible = "renesas,rz-mtu3", },
+	{ .compatible = "renesas,rz-mtu3" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, rz_mtu3_of_match);

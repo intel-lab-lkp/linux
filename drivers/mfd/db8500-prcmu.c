@@ -3073,8 +3073,8 @@ static int db8500_prcmu_probe(struct platform_device *pdev)
 	return err;
 }
 static const struct of_device_id db8500_prcmu_match[] = {
-	{ .compatible = "stericsson,db8500-prcmu"},
-	{ },
+	{ .compatible = "stericsson,db8500-prcmu" },
+	{ }
 };
 
 static struct platform_driver db8500_prcmu_driver = {

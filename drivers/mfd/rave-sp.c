@@ -755,8 +755,8 @@ static const struct of_device_id rave_sp_dt_ids[] = {
 	{ .compatible = "zii,rave-sp-niu",  .data = &rave_sp_legacy },
 	{ .compatible = "zii,rave-sp-mezz", .data = &rave_sp_legacy },
 	{ .compatible = "zii,rave-sp-esb",  .data = &rave_sp_legacy },
-	{ .compatible = "zii,rave-sp-rdu1", .data = &rave_sp_rdu1   },
-	{ .compatible = "zii,rave-sp-rdu2", .data = &rave_sp_rdu2   },
+	{ .compatible = "zii,rave-sp-rdu1", .data = &rave_sp_rdu1 },
+	{ .compatible = "zii,rave-sp-rdu2", .data = &rave_sp_rdu2 },
 	{ /* sentinel */ }
 };
 

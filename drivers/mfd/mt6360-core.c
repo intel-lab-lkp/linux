@@ -607,8 +607,8 @@ static int __maybe_unused mt6360_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(mt6360_pm_ops, mt6360_suspend, mt6360_resume);
 
 static const struct of_device_id mt6360_of_id[] = {
-	{ .compatible = "mediatek,mt6360", },
-	{},
+	{ .compatible = "mediatek,mt6360" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, mt6360_of_id);
 

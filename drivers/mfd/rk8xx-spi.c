@@ -98,7 +98,7 @@ static int rk8xx_spi_probe(struct spi_device *spi)
 }
 
 static const struct of_device_id rk8xx_spi_of_match[] = {
-	{ .compatible = "rockchip,rk806", },
+	{ .compatible = "rockchip,rk806" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, rk8xx_spi_of_match);

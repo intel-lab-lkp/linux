@@ -167,9 +167,9 @@ static int bd957x_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id bd957x_of_match[] = {
-	{ .compatible = "rohm,bd9576", .data = (void *)ROHM_CHIP_TYPE_BD9576, },
-	{ .compatible = "rohm,bd9573", .data = (void *)ROHM_CHIP_TYPE_BD9573, },
-	{ },
+	{ .compatible = "rohm,bd9576", .data = (void *)ROHM_CHIP_TYPE_BD9576 },
+	{ .compatible = "rohm,bd9573", .data = (void *)ROHM_CHIP_TYPE_BD9573 },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, bd957x_of_match);
 

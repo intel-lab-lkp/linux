@@ -39,7 +39,7 @@ static const struct mfd_cell max8997_devs[] = {
 #ifdef CONFIG_OF
 static const struct of_device_id max8997_pmic_dt_match[] = {
 	{ .compatible = "maxim,max8997-pmic", .data = (void *)TYPE_MAX8997 },
-	{},
+	{ }
 };
 #endif
 

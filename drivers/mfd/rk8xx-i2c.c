@@ -262,7 +262,7 @@ static const struct of_device_id rk8xx_i2c_of_match[] = {
 	{ .compatible = "rockchip,rk816", .data = &rk816_data },
 	{ .compatible = "rockchip,rk817", .data = &rk817_data },
 	{ .compatible = "rockchip,rk818", .data = &rk818_data },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, rk8xx_i2c_of_match);
 

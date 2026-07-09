@@ -140,7 +140,7 @@ static const struct of_device_id max14577_dt_match[] = {
 		.compatible = "maxim,max77836",
 		.data = (void *)MAXIM_DEVICE_TYPE_MAX77836,
 	},
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, max14577_dt_match);
 

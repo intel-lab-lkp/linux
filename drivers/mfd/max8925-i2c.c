@@ -230,8 +230,8 @@ static DEFINE_SIMPLE_DEV_PM_OPS(max8925_pm_ops,
 				max8925_suspend, max8925_resume);
 
 static const struct of_device_id max8925_dt_ids[] = {
-	{ .compatible = "maxim,max8925", },
-	{},
+	{ .compatible = "maxim,max8925" },
+	{ }
 };
 
 static struct i2c_driver max8925_driver = {

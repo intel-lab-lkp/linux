@@ -426,8 +426,8 @@ static int __maybe_unused as3722_i2c_resume(struct device *dev)
 }
 
 static const struct of_device_id as3722_of_match[] = {
-	{ .compatible = "ams,as3722", },
-	{},
+	{ .compatible = "ams,as3722" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, as3722_of_match);
 

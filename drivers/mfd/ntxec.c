@@ -250,8 +250,8 @@ static void ntxec_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id of_ntxec_match_table[] = {
-	{ .compatible = "netronix,ntxec", },
-	{}
+	{ .compatible = "netronix,ntxec" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, of_ntxec_match_table);
 

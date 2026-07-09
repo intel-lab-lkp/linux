@@ -99,8 +99,8 @@ static void rt4831_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id rt4831_of_match[] = {
-	{ .compatible = "richtek,rt4831", },
-	{}
+	{ .compatible = "richtek,rt4831" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, rt4831_of_match);
 

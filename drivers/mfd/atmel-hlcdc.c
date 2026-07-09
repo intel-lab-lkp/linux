@@ -149,7 +149,7 @@ static const struct of_device_id atmel_hlcdc_match[] = {
 	{ .compatible = "microchip,sam9x60-hlcdc" },
 	{ .compatible = "microchip,sam9x75-xlcdc" },
 	{ .compatible = "microchip,sama7d65-xlcdc" },
-	{ /* sentinel */ },
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, atmel_hlcdc_match);
 

@@ -38,13 +38,13 @@ static const struct regmap_config hi6421_regmap_config = {
 static const struct of_device_id of_hi6421_pmic_match[] = {
 	{
 		.compatible = "hisilicon,hi6421-pmic",
-		.data = (void *)HI6421
+		.data = (void *)HI6421,
 	},
 	{
 		.compatible = "hisilicon,hi6421v530-pmic",
-		.data = (void *)HI6421_V530
+		.data = (void *)HI6421_V530,
 	},
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, of_hi6421_pmic_match);
 

@@ -157,8 +157,8 @@ static const struct regmap_config tps65090_regmap_config = {
 
 #ifdef CONFIG_OF
 static const struct of_device_id tps65090_of_match[] = {
-	{ .compatible = "ti,tps65090",},
-	{},
+	{ .compatible = "ti,tps65090" },
+	{ }
 };
 #endif
 

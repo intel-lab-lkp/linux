@@ -152,7 +152,7 @@ static int max7360_probe(struct i2c_client *client)
 
 static const struct of_device_id max7360_dt_match[] = {
 	{ .compatible = "maxim,max7360" },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, max7360_dt_match);
 

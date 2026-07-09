@@ -110,13 +110,13 @@ static void stmpe_spi_remove(struct spi_device *spi)
 }
 
 static const struct of_device_id stmpe_spi_of_match[] = {
-	{ .compatible = "st,stmpe610", },
-	{ .compatible = "st,stmpe801", },
-	{ .compatible = "st,stmpe811", },
-	{ .compatible = "st,stmpe1601", },
-	{ .compatible = "st,stmpe2401", },
-	{ .compatible = "st,stmpe2403", },
-	{ /* sentinel */ },
+	{ .compatible = "st,stmpe610" },
+	{ .compatible = "st,stmpe801" },
+	{ .compatible = "st,stmpe811" },
+	{ .compatible = "st,stmpe1601" },
+	{ .compatible = "st,stmpe2401" },
+	{ .compatible = "st,stmpe2403" },
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, stmpe_spi_of_match);
 

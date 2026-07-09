@@ -122,7 +122,7 @@ static const struct of_device_id sun6i_prcm_dt_ids[] = {
 		.compatible = "allwinner,sun8i-a23-prcm",
 		.data = &sun8i_a23_prcm_data,
 	},
-	{ /* sentinel */ },
+	{ /* sentinel */ }
 };
 
 static int sun6i_prcm_probe(struct platform_device *pdev)

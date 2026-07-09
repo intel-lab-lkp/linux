@@ -223,8 +223,8 @@ static int stpmic1_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(stpmic1_pm, stpmic1_suspend, stpmic1_resume);
 
 static const struct of_device_id stpmic1_of_match[] = {
-	{ .compatible = "st,stpmic1", },
-	{},
+	{ .compatible = "st,stpmic1" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, stpmic1_of_match);
 

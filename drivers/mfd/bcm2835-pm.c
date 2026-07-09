@@ -113,11 +113,11 @@ static int bcm2835_pm_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id bcm2835_pm_of_match[] = {
-	{ .compatible = "brcm,bcm2835-pm-wdt", },
+	{ .compatible = "brcm,bcm2835-pm-wdt" },
 	{ .compatible = "brcm,bcm2835-pm", .data = (void *)BCM2835_PM_SOC_BCM2835 },
 	{ .compatible = "brcm,bcm2711-pm", .data = (void *)BCM2835_PM_SOC_BCM2711 },
 	{ .compatible = "brcm,bcm2712-pm", .data = (void *)BCM2835_PM_SOC_BCM2712 },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, bcm2835_pm_of_match);
 

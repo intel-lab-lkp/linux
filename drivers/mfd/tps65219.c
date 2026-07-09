@@ -554,10 +554,10 @@ static int tps65219_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id of_tps65219_match_table[] = {
-	{ .compatible = "ti,tps65214", .data = (void *)TPS65214, },
-	{ .compatible = "ti,tps65215", .data = (void *)TPS65215, },
-	{ .compatible = "ti,tps65219", .data = (void *)TPS65219, },
-	{}
+	{ .compatible = "ti,tps65214", .data = (void *)TPS65214 },
+	{ .compatible = "ti,tps65215", .data = (void *)TPS65215 },
+	{ .compatible = "ti,tps65219", .data = (void *)TPS65219 },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, of_tps65219_match_table);
 

@@ -133,7 +133,7 @@ MODULE_DEVICE_TABLE(i2c, lp3943_ids);
 
 #ifdef CONFIG_OF
 static const struct of_device_id lp3943_of_match[] = {
-	{ .compatible = "ti,lp3943", },
+	{ .compatible = "ti,lp3943" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, lp3943_of_match);

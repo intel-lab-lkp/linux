@@ -345,7 +345,7 @@ static const struct dev_pm_ops max77693_pm = {
 #ifdef CONFIG_OF
 static const struct of_device_id max77693_dt_match[] = {
 	{ .compatible = "maxim,max77693" },
-	{},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, max77693_dt_match);
 #endif

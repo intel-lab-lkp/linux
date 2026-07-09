@@ -149,8 +149,8 @@ static void ab8500_sysctrl_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id ab8500_sysctrl_match[] = {
-	{ .compatible = "stericsson,ab8500-sysctrl", },
-	{}
+	{ .compatible = "stericsson,ab8500-sysctrl" },
+	{ }
 };
 
 static struct platform_driver ab8500_sysctrl_driver = {
