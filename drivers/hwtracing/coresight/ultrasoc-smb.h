@@ -108,8 +108,7 @@ struct smb_data_buffer {
  * @miscdev:	Specifics to handle "/dev/xyz.smb" entry.
  * @spinlock:	Control data access to one at a time.
  * @reading:	Synchronise user space access to SMB buffer.
- * @pid:	Process ID of the process being monitored by the
- *		session that is using this component.
+ * @event:	Perf event using this sink if in Perf mode.
  */
 struct smb_drv_data {
 	void __iomem *base;
@@ -118,7 +117,7 @@ struct smb_drv_data {
 	struct miscdevice miscdev;
 	raw_spinlock_t spinlock;
 	bool reading;
-	pid_t pid;
+	struct perf_event *event;
 };
 
 #endif
