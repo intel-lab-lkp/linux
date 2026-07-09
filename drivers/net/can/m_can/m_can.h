@@ -96,7 +96,6 @@ struct m_can_classdev {
 	const struct m_can_ops *ops;
 
 	int version;
-	u32 irqstatus;
 
 	int pm_clock_support;
 	int pm_wake_source;
