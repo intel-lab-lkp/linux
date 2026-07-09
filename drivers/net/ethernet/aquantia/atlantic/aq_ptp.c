@@ -13,6 +13,7 @@
 #include <linux/ptp_classify.h>
 #include <linux/interrupt.h>
 #include <linux/clocksource.h>
+#include <net/xdp.h>
 
 #include "aq_nic.h"
 #include "aq_ptp.h"
@@ -1192,12 +1193,25 @@ int aq_ptp_ring_alloc(struct aq_nic_s *aq_nic)
 	if (err)
 		goto err_exit_ptp_tx;
 
+	err = xdp_rxq_info_reg(&aq_ptp->ptp_rx.xdp_rxq, aq_nic->ndev,
+			       rx_ring_idx, aq_ptp->napi.napi_id);
+	if (err < 0)
+		goto err_exit_ptp_rx;
+
+	err = xdp_rxq_info_reg_mem_model(&aq_ptp->ptp_rx.xdp_rxq,
+					 MEM_TYPE_PAGE_POOL,
+					 aq_ptp->ptp_rx.pg_pool);
+	if (err < 0) {
+		xdp_rxq_info_unreg(&aq_ptp->ptp_rx.xdp_rxq);
+		goto err_exit_ptp_rx;
+	}
+
 	if (aq_ptp->a1_ptp) {
 		err = aq_ring_hwts_rx_alloc(&aq_ptp->hwts_rx, aq_nic, PTP_HWST_RING_IDX,
 					    aq_nic->aq_nic_cfg.rxds,
 					    aq_nic->aq_nic_cfg.aq_hw_caps->rxd_size);
 		if (err)
-			goto err_exit_ptp_rx;
+			goto err_exit_xdp_rxq;
 	}
 
 	err = aq_ptp_skb_ring_init(&aq_ptp->skb_ring, aq_nic->aq_nic_cfg.rxds);
@@ -1217,6 +1231,8 @@ int aq_ptp_ring_alloc(struct aq_nic_s *aq_nic)
 err_exit_hwts_rx:
 	if (aq_ptp->a1_ptp)
 		aq_ring_hwts_rx_free(&aq_ptp->hwts_rx);
+err_exit_xdp_rxq:
+	xdp_rxq_info_unreg(&aq_ptp->ptp_rx.xdp_rxq);
 err_exit_ptp_rx:
 	aq_ring_free(&aq_ptp->ptp_rx);
 err_exit_ptp_tx:
@@ -1233,6 +1249,8 @@ void aq_ptp_ring_free(struct aq_nic_s *aq_nic)
 		return;
 
 	aq_ring_free(&aq_ptp->ptp_tx);
+	if (xdp_rxq_info_is_reg(&aq_ptp->ptp_rx.xdp_rxq))
+		xdp_rxq_info_unreg(&aq_ptp->ptp_rx.xdp_rxq);
 	aq_ring_free(&aq_ptp->ptp_rx);
 	if (aq_ptp->a1_ptp)
 		aq_ring_hwts_rx_free(&aq_ptp->hwts_rx);

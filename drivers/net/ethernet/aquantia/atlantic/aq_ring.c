@@ -14,120 +14,37 @@
 #include "aq_vec.h"
 #include "aq_main.h"
 
+#include <net/page_pool/helpers.h>
 #include <net/xdp.h>
 #include <linux/filter.h>
 #include <linux/bpf_trace.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 
-static void aq_get_rxpages_xdp(struct aq_ring_buff_s *buff,
-			       struct xdp_buff *xdp)
-{
-	struct skb_shared_info *sinfo;
-	int i;
-
-	if (xdp_buff_has_frags(xdp)) {
-		sinfo = xdp_get_shared_info_from_buff(xdp);
-
-		for (i = 0; i < sinfo->nr_frags; i++) {
-			skb_frag_t *frag = &sinfo->frags[i];
-
-			page_ref_inc(skb_frag_page(frag));
-		}
-	}
-	page_ref_inc(buff->rxdata.page);
-}
-
-static inline void aq_free_rxpage(struct aq_rxpage *rxpage, struct device *dev)
-{
-	unsigned int len = PAGE_SIZE << rxpage->order;
-
-	dma_unmap_page(dev, rxpage->daddr, len, DMA_FROM_DEVICE);
-
-	/* Drop the ref for being in the ring. */
-	__free_pages(rxpage->page, rxpage->order);
-	rxpage->page = NULL;
-}
-
-static int aq_alloc_rxpages(struct aq_rxpage *rxpage, struct aq_ring_s *rx_ring)
-{
-	struct device *dev = aq_nic_get_dev(rx_ring->aq_nic);
-	unsigned int order = rx_ring->page_order;
-	struct page *page;
-	int ret = -ENOMEM;
-	dma_addr_t daddr;
-
-	page = dev_alloc_pages(order);
-	if (unlikely(!page))
-		goto err_exit;
-
-	daddr = dma_map_page(dev, page, 0, PAGE_SIZE << order,
-			     DMA_FROM_DEVICE);
-
-	if (unlikely(dma_mapping_error(dev, daddr)))
-		goto free_page;
-
-	rxpage->page = page;
-	rxpage->daddr = daddr;
-	rxpage->order = order;
-	rxpage->pg_off = rx_ring->page_offset;
-
-	return 0;
-
-free_page:
-	__free_pages(page, order);
-
-err_exit:
-	return ret;
-}
-
 static int aq_get_rxpages(struct aq_ring_s *self, struct aq_ring_buff_s *rxbuf)
 {
-	unsigned int order = self->page_order;
-	u16 page_offset = self->page_offset;
-	u16 frame_max = self->frame_max;
-	u16 tail_size = self->tail_size;
-	int ret;
+	unsigned int size = self->page_offset + self->frame_max +
+			    self->tail_size;
+	unsigned int pg_off;
+	struct page *page;
 
-	if (rxbuf->rxdata.page) {
-		/* One means ring is the only user and can reuse */
-		if (page_ref_count(rxbuf->rxdata.page) > 1) {
-			/* Try reuse buffer */
-			rxbuf->rxdata.pg_off += frame_max + page_offset +
-						tail_size;
-			if (rxbuf->rxdata.pg_off + frame_max + tail_size <=
-			    (PAGE_SIZE << order)) {
-				u64_stats_update_begin(&self->stats.rx.syncp);
-				self->stats.rx.pg_flips++;
-				u64_stats_update_end(&self->stats.rx.syncp);
+	/* Buffers whose page was not passed up the stack are reposted
+	 * with the data they already carry discarded.
+	 */
+	if (rxbuf->rxdata.page)
+		return 0;
 
-			} else {
-				/* Buffer exhausted. We have other users and
-				 * should release this page and realloc
-				 */
-				aq_free_rxpage(&rxbuf->rxdata,
-					       aq_nic_get_dev(self->aq_nic));
-				u64_stats_update_begin(&self->stats.rx.syncp);
-				self->stats.rx.pg_losts++;
-				u64_stats_update_end(&self->stats.rx.syncp);
-			}
-		} else {
-			rxbuf->rxdata.pg_off = page_offset;
-			u64_stats_update_begin(&self->stats.rx.syncp);
-			self->stats.rx.pg_reuses++;
-			u64_stats_update_end(&self->stats.rx.syncp);
-		}
+	page = page_pool_dev_alloc_frag(self->pg_pool, &pg_off, size);
+	if (unlikely(!page)) {
+		u64_stats_update_begin(&self->stats.rx.syncp);
+		self->stats.rx.alloc_fails++;
+		u64_stats_update_end(&self->stats.rx.syncp);
+		return -ENOMEM;
 	}
 
-	if (!rxbuf->rxdata.page) {
-		ret = aq_alloc_rxpages(&rxbuf->rxdata, self);
-		if (ret) {
-			u64_stats_update_begin(&self->stats.rx.syncp);
-			self->stats.rx.alloc_fails++;
-			u64_stats_update_end(&self->stats.rx.syncp);
-		}
-		return ret;
-	}
+	rxbuf->rxdata.page = page;
+	rxbuf->rxdata.daddr = page_pool_get_dma_addr(page);
+	rxbuf->rxdata.pg_off = pg_off + self->page_offset;
 
 	return 0;
 }
@@ -179,6 +96,15 @@ int aq_ring_rx_alloc(struct aq_ring_s *self,
 		     unsigned int idx,
 		     struct aq_nic_cfg_s *aq_nic_cfg)
 {
+	struct page_pool_params pp_params = {
+		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
+		.pool_size = aq_nic_cfg->rxds,
+		.nid = NUMA_NO_NODE,
+		.dev = aq_nic_get_dev(aq_nic),
+		.dma_dir = DMA_FROM_DEVICE,
+	};
+	struct page_pool *pool;
+
 	self->aq_nic = aq_nic;
 	self->idx = idx;
 	self->size = aq_nic_cfg->rxds;
@@ -200,6 +126,18 @@ int aq_ring_rx_alloc(struct aq_ring_s *self,
 		self->tail_size = 0;
 	}
 
+	pp_params.order = self->page_order;
+	pp_params.max_len = PAGE_SIZE << self->page_order;
+
+	pool = page_pool_create(&pp_params);
+	if (IS_ERR(pool))
+		return PTR_ERR(pool);
+
+	self->pg_pool = pool;
+
+	/* On failure aq_ring_alloc() calls aq_ring_free(), which also
+	 * destroys the page pool.
+	 */
 	return aq_ring_alloc(self, aq_nic);
 }
 
@@ -346,7 +284,11 @@ bool aq_ring_tx_clean(struct aq_ring_s *self)
 			++self->stats.tx.packets;
 			self->stats.tx.bytes += xdp_get_frame_len(buff->xdpf);
 			u64_stats_update_end(&self->stats.tx.syncp);
-			xdp_return_frame_rx_napi(buff->xdpf);
+			/* Frames queued via ndo_xdp_xmit() may come from a
+			 * page pool owned by another NAPI context: no direct
+			 * recycling.
+			 */
+			xdp_return_frame(buff->xdpf);
 		}
 
 out:
@@ -438,22 +380,15 @@ int aq_xdp_xmit(struct net_device *dev, int num_frames,
 }
 
 static struct sk_buff *aq_xdp_build_skb(struct xdp_buff *xdp,
-					struct net_device *dev,
-					struct aq_ring_buff_s *buff)
+					struct net_device *dev)
 {
 	struct xdp_frame *xdpf;
-	struct sk_buff *skb;
 
 	xdpf = xdp_convert_buff_to_frame(xdp);
 	if (unlikely(!xdpf))
 		return NULL;
 
-	skb = xdp_build_skb_from_frame(xdpf, dev);
-	if (!skb)
-		return NULL;
-
-	aq_get_rxpages_xdp(buff, xdp);
-	return skb;
+	return xdp_build_skb_from_frame(xdpf, dev);
 }
 
 static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
@@ -474,8 +409,16 @@ static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
 	u64_stats_update_end(&rx_ring->stats.rx.syncp);
 
 	prog = READ_ONCE(rx_ring->xdp_prog);
-	if (!prog)
-		return aq_xdp_build_skb(xdp, aq_nic->ndev, buff);
+	if (!prog) {
+		skb = aq_xdp_build_skb(xdp, aq_nic->ndev);
+		/* The ring has already handed its page pool reference to the
+		 * xdp_buff, so if the skb could not be built the buffer must
+		 * be returned to the pool here or its fragments would leak.
+		 */
+		if (!skb)
+			xdp_return_buff(xdp);
+		return skb;
+	}
 
 	prefetchw(xdp->data_hard_start); /* xdp_frame write */
 
@@ -486,7 +429,7 @@ static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
 	act = bpf_prog_run_xdp(prog, xdp);
 	switch (act) {
 	case XDP_PASS:
-		skb = aq_xdp_build_skb(xdp, aq_nic->ndev, buff);
+		skb = aq_xdp_build_skb(xdp, aq_nic->ndev);
 		if (!skb)
 			goto out_aborted;
 		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
@@ -504,7 +447,6 @@ static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
 		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
 		++rx_ring->stats.rx.xdp_tx;
 		u64_stats_update_end(&rx_ring->stats.rx.syncp);
-		aq_get_rxpages_xdp(buff, xdp);
 		break;
 	case XDP_REDIRECT:
 		if (xdp_do_redirect(aq_nic->ndev, xdp, prog) < 0)
@@ -513,7 +455,6 @@ static struct sk_buff *aq_xdp_run_prog(struct aq_nic_s *aq_nic,
 		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
 		++rx_ring->stats.rx.xdp_redirect;
 		u64_stats_update_end(&rx_ring->stats.rx.syncp);
-		aq_get_rxpages_xdp(buff, xdp);
 		break;
 	default:
 		fallthrough;
@@ -524,11 +465,13 @@ out_aborted:
 		u64_stats_update_end(&rx_ring->stats.rx.syncp);
 		trace_xdp_exception(aq_nic->ndev, prog, act);
 		bpf_warn_invalid_xdp_action(aq_nic->ndev, prog, act);
+		xdp_return_buff(xdp);
 		break;
 	case XDP_DROP:
 		u64_stats_update_begin(&rx_ring->stats.rx.syncp);
 		++rx_ring->stats.rx.xdp_drop;
 		u64_stats_update_end(&rx_ring->stats.rx.syncp);
+		xdp_return_buff(xdp);
 		break;
 	}
 
@@ -547,8 +490,11 @@ static bool aq_add_rx_fragment(struct device *dev,
 	do {
 		skb_frag_t *frag;
 
-		if (unlikely(sinfo->nr_frags >= MAX_SKB_FRAGS))
+		if (unlikely(sinfo->nr_frags >= MAX_SKB_FRAGS)) {
+			/* Attached frags must reach xdp_return_buff() */
+			xdp_buff_set_frags_flag(xdp);
 			return true;
+		}
 
 		frag = &sinfo->frags[sinfo->nr_frags++];
 		buff_ = &ring->buff_ring[buff_->next];
@@ -571,6 +517,11 @@ static bool aq_add_rx_fragment(struct device *dev,
 
 		if (page_is_pfmemalloc(buff_->rxdata.page))
 			xdp_buff_set_frag_pfmemalloc(xdp);
+
+		/* The frag's page pool reference is owned by the xdp_buff
+		 * from now on.
+		 */
+		buff_->rxdata.page = NULL;
 
 	} while (!buff_->is_eop);
 
@@ -675,6 +626,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 			err = -ENOMEM;
 			goto err_exit;
 		}
+		skb_mark_for_recycle(skb);
 		if (is_ptp_ring)
 			buff->len -=
 				aq_ptp_extract_ts(self->aq_nic, skb_hwtstamps(skb),
@@ -695,7 +647,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 					buff->rxdata.pg_off + hdr_len,
 					buff->len - hdr_len,
 					self->frame_max);
-			page_ref_inc(buff->rxdata.page);
+			buff->rxdata.page = NULL;
 		}
 
 		if (!buff->is_eop) {
@@ -714,7 +666,7 @@ static int __aq_ring_rx_clean(struct aq_ring_s *self, struct napi_struct *napi,
 						buff_->rxdata.pg_off,
 						buff_->len,
 						self->frame_max);
-				page_ref_inc(buff_->rxdata.page);
+				buff_->rxdata.page = NULL;
 				buff_->is_cleaned = 1;
 
 				buff->is_ip_cso &= buff_->is_ip_cso;
@@ -852,6 +804,11 @@ static int __aq_ring_xdp_clean(struct aq_ring_s *rx_ring,
 		xdp_init_buff(&xdp, frame_sz, &rx_ring->xdp_rxq);
 		xdp_prepare_buff(&xdp, hard_start, rx_ring->page_offset,
 				 buff->len, false);
+		/* The xdp_buff owns the buffer's page pool reference from
+		 * here on; it comes back through the MEM_TYPE_PAGE_POOL
+		 * memory model on every XDP verdict.
+		 */
+		buff->rxdata.page = NULL;
 		if (!buff->is_eop) {
 			if (aq_add_rx_fragment(dev, rx_ring, buff, &xdp)) {
 				u64_stats_update_begin(&rx_ring->stats.rx.syncp);
@@ -859,6 +816,7 @@ static int __aq_ring_xdp_clean(struct aq_ring_s *rx_ring,
 				rx_ring->stats.rx.bytes += xdp_get_buff_len(&xdp);
 				++rx_ring->stats.rx.xdp_aborted;
 				u64_stats_update_end(&rx_ring->stats.rx.syncp);
+				xdp_return_buff(&xdp);
 				continue;
 			}
 		}
@@ -951,15 +909,37 @@ err_exit:
 
 void aq_ring_rx_deinit(struct aq_ring_s *self)
 {
-	if (!self)
+	unsigned int i;
+
+	/* The ring may already be gone: on a partial aq_ptp_ring_alloc()
+	 * failure the unwind frees it but leaves aq_nic set, so the
+	 * deinit paths still get here.
+	 */
+	if (!self || !self->buff_ring)
 		return;
 
-	for (; self->sw_head != self->sw_tail;
-		self->sw_head = aq_ring_next_dx(self, self->sw_head)) {
-		struct aq_ring_buff_s *buff = &self->buff_ring[self->sw_head];
+	/* Release every fragment still owned by the ring, or
+	 * page_pool_destroy() will stall on the outstanding references.
+	 *
+	 * Walking [sw_head, sw_tail) is not enough: refill is batched
+	 * (aq_ring_rx_fill() waits for AQ_CFG_RX_REFILL_THRES free slots),
+	 * so slots that were cleaned but not yet reposted accumulate in the
+	 * [sw_tail, sw_head) gap. Frames kept for in-place repost (RX
+	 * errors, XDP_DROP and header-only packets) still hold a fragment
+	 * there, so walk the whole ring and release whatever is left.
+	 */
+	for (i = 0; i < self->size; i++) {
+		struct aq_ring_buff_s *buff = &self->buff_ring[i];
 
-		aq_free_rxpage(&buff->rxdata, aq_nic_get_dev(self->aq_nic));
+		if (!buff->rxdata.page)
+			continue;
+
+		page_pool_put_full_page(self->pg_pool, buff->rxdata.page,
+					false);
+		buff->rxdata.page = NULL;
 	}
+
+	self->sw_head = self->sw_tail;
 }
 
 void aq_ring_free(struct aq_ring_s *self)
@@ -969,6 +949,11 @@ void aq_ring_free(struct aq_ring_s *self)
 
 	kfree(self->buff_ring);
 	self->buff_ring = NULL;
+
+	if (self->pg_pool) {
+		page_pool_destroy(self->pg_pool);
+		self->pg_pool = NULL;
+	}
 
 	if (self->dx_ring) {
 		dma_free_coherent(aq_nic_get_dev(self->aq_nic),
@@ -1008,9 +993,6 @@ unsigned int aq_ring_fill_stats_data(struct aq_ring_s *self, u64 *data)
 			data[++count] = self->stats.rx.alloc_fails;
 			data[++count] = self->stats.rx.skb_alloc_fails;
 			data[++count] = self->stats.rx.polls;
-			data[++count] = self->stats.rx.pg_flips;
-			data[++count] = self->stats.rx.pg_reuses;
-			data[++count] = self->stats.rx.pg_losts;
 			data[++count] = self->stats.rx.xdp_aborted;
 			data[++count] = self->stats.rx.xdp_drop;
 			data[++count] = self->stats.rx.xdp_pass;

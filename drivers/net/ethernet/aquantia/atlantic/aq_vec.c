@@ -146,22 +146,23 @@ int aq_vec_ring_alloc(struct aq_vec_s *self, struct aq_nic_s *aq_nic,
 		aq_nic_set_tx_ring(aq_nic, idx_ring, ring);
 
 		ring = &self->ring[i][AQ_VEC_RX_ID];
+		err = aq_ring_rx_alloc(ring, aq_nic, idx_ring, aq_nic_cfg);
+		if (err)
+			goto err_exit;
+
 		if (xdp_rxq_info_reg(&ring->xdp_rxq,
 				     aq_nic->ndev, idx,
 				     self->napi.napi_id) < 0) {
+			aq_ring_free(ring);
 			err = -ENOMEM;
 			goto err_exit;
 		}
 		if (xdp_rxq_info_reg_mem_model(&ring->xdp_rxq,
-					       MEM_TYPE_PAGE_SHARED, NULL) < 0) {
+					       MEM_TYPE_PAGE_POOL,
+					       ring->pg_pool) < 0) {
 			xdp_rxq_info_unreg(&ring->xdp_rxq);
+			aq_ring_free(ring);
 			err = -ENOMEM;
-			goto err_exit;
-		}
-
-		err = aq_ring_rx_alloc(ring, aq_nic, idx_ring, aq_nic_cfg);
-		if (err) {
-			xdp_rxq_info_unreg(&ring->xdp_rxq);
 			goto err_exit;
 		}
 
