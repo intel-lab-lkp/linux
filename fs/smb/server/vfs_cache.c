@@ -229,6 +229,16 @@ bool ksmbd_inode_pending_delete(struct ksmbd_file *fp)
 	struct ksmbd_inode *ci = fp->f_ci;
 	int ret;
 
+	/*
+	 * Stream delete-pending is tracked per-handle (see
+	 * ksmbd_fd_set_delete_pending()), not on the shared inode -- the
+	 * whole-file flags checked below would never see it set, and would
+	 * also incorrectly report a whole-file pending-delete as applying
+	 * to an unrelated stream handle on the same inode.
+	 */
+	if (ksmbd_stream_fd(fp))
+		return fp->stream_del_pending;
+
 	down_read(&ci->m_lock);
 	ret = (ci->m_flags & S_DEL_PENDING);
 	up_read(&ci->m_lock);
@@ -299,31 +309,27 @@ void ksmbd_fd_set_delete_on_close(struct ksmbd_file *fp,
  * mark the stream for deletion, not the whole file -- otherwise
  * deleting a single alternate data stream (e.g. AFP_AfpInfo) deletes
  * the entire file's data along with it.
+ *
+ * This is tracked on fp itself (stream_del_pending), not the shared
+ * ksmbd_inode: the inode-wide S_DEL_ON_CLS_STREAM flag used by
+ * ksmbd_fd_set_delete_on_close() can't record *which* stream should be
+ * deleted, so if a different stream handle on the same file closed
+ * first, it would delete the wrong stream.
  */
 void ksmbd_fd_set_delete_pending(struct ksmbd_file *fp)
 {
-	struct ksmbd_inode *ci = fp->f_ci;
-
-	if (ksmbd_stream_fd(fp)) {
-		down_write(&ci->m_lock);
-		ci->m_flags |= S_DEL_ON_CLS_STREAM;
-		up_write(&ci->m_lock);
-	} else {
+	if (ksmbd_stream_fd(fp))
+		fp->stream_del_pending = true;
+	else
 		ksmbd_set_inode_pending_delete(fp);
-	}
 }
 
 void ksmbd_fd_clear_delete_pending(struct ksmbd_file *fp)
 {
-	struct ksmbd_inode *ci = fp->f_ci;
-
-	if (ksmbd_stream_fd(fp)) {
-		down_write(&ci->m_lock);
-		ci->m_flags &= ~S_DEL_ON_CLS_STREAM;
-		up_write(&ci->m_lock);
-	} else {
+	if (ksmbd_stream_fd(fp))
+		fp->stream_del_pending = false;
+	else
 		ksmbd_clear_inode_pending_delete(fp);
-	}
 }
 
 static void ksmbd_inode_hash(struct ksmbd_inode *ci)
@@ -445,6 +451,17 @@ static void __ksmbd_inode_close(struct ksmbd_file *fp)
 			remove_stream_xattr = true;
 		}
 		up_write(&ci->m_lock);
+
+		/*
+		 * Per-handle delete-pending from ksmbd_fd_set_delete_pending()
+		 * (FileDispositionInformation on this stream) -- separate from
+		 * the inode-wide flag above, which only ever meant "some
+		 * stream on this file" with no way to say which one.
+		 */
+		if (fp->stream_del_pending) {
+			fp->stream_del_pending = false;
+			remove_stream_xattr = true;
+		}
 
 		if (remove_stream_xattr) {
 			const struct cred *saved_cred;
