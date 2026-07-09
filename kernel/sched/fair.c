@@ -1585,6 +1585,7 @@ void mm_init_sched(struct mm_struct *mm,
 		pcpu_sched->runtime = 0;
 		/* a slightly stale cpu epoch is acceptible */
 		pcpu_sched->epoch = rq->cpu_epoch;
+		pcpu_sched->epoch_timeout = rq->cpu_epoch;
 		epoch = rq->cpu_epoch;
 	}
 
@@ -1594,6 +1595,7 @@ void mm_init_sched(struct mm_struct *mm,
 	mm->sc_stat.next_scan = jiffies;
 	mm->sc_stat.nr_running_avg = 0;
 	mm->sc_stat.footprint = 0;
+	cpumask_clear(&mm->sc_stat.visited_cpus);
 	/*
 	 * The update to mm->sc_stat should not be reordered
 	 * before initialization to mm's other fields, in case
@@ -1635,10 +1637,20 @@ static inline void __update_mm_sched(struct rq *rq,
 	}
 }
 
-static unsigned long fraction_mm_sched(struct rq *rq,
-				       struct sched_cache_time *pcpu_sched)
+static unsigned long fraction_mm_sched(int cpu,
+				       struct mm_struct *mm)
 {
+	struct sched_cache_time *pcpu_sched =
+		per_cpu_ptr(mm->sc_stat.pcpu_sched, cpu);
+	struct rq *rq = cpu_rq(cpu);
+
 	guard(raw_spinlock_irqsave)(&rq->cpu_epoch_lock);
+
+	/* Skip the rq that has not been hit for a long time */
+	if ((rq->cpu_epoch - pcpu_sched->epoch_timeout) > llc_epoch_affinity_timeout) {
+		cpumask_clear_cpu(cpu, &mm->sc_stat.visited_cpus);
+		return 0;
+	}
 
 	__update_mm_sched(rq, pcpu_sched);
 
@@ -1711,6 +1723,9 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 		pcpu_sched->runtime += delta_exec;
 		rq->cpu_runtime += delta_exec;
 		epoch = rq->cpu_epoch;
+		pcpu_sched->epoch_timeout = epoch;
+		if (!cpumask_test_cpu(cpu_of(rq), &mm->sc_stat.visited_cpus))
+			cpumask_set_cpu(cpu_of(rq), &mm->sc_stat.visited_cpus);
 	}
 
 	/*
@@ -1867,6 +1882,7 @@ static void task_cache_work(struct callback_head *work)
 		guard(rcu)();
 
 		get_scan_cpumasks(cpus, p);
+		cpumask_and(cpus, cpus, &mm->sc_stat.visited_cpus);
 
 		for_each_cpu(cpu, cpus) {
 			/* XXX sched_cluster_active */
@@ -1877,19 +1893,22 @@ static void task_cache_work(struct callback_head *work)
 			if (!sd)
 				continue;
 
-			for_each_cpu(i, sched_domain_span(sd)) {
-				occ = fraction_mm_sched(cpu_rq(i),
-							per_cpu_ptr(mm->sc_stat.pcpu_sched, i));
+			for_each_cpu_and(i, sched_domain_span(sd), cpus) {
+				cur = rcu_dereference_all(cpu_rq(i)->curr);
+				if (cur && !(cur->flags & (PF_EXITING | PF_KTHREAD)) &&
+				    cur->mm == mm)
+					nr_running++;
+
+				occ = fraction_mm_sched(i, mm);
+				if (occ == 0)
+					continue;
+
 				a_occ += occ;
 				if (occ > m_occ) {
 					m_occ = occ;
 					m_cpu = i;
 				}
 
-				cur = rcu_dereference_all(cpu_rq(i)->curr);
-				if (cur && !(cur->flags & (PF_EXITING | PF_KTHREAD)) &&
-				    cur->mm == mm)
-					nr_running++;
 			}
 
 			/*
