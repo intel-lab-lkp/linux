@@ -1278,17 +1278,17 @@ static void ssd133x_primary_plane_atomic_disable(struct drm_plane *plane,
 }
 
 /* Called during init to allocate the plane's atomic state. */
-static void ssd130x_primary_plane_reset(struct drm_plane *plane)
+static struct drm_plane_state *ssd130x_primary_plane_create_state(struct drm_plane *plane)
 {
 	struct ssd130x_plane_state *ssd130x_state;
 
-	drm_WARN_ON_ONCE(plane->dev, plane->state);
-
 	ssd130x_state = kzalloc_obj(*ssd130x_state);
 	if (!ssd130x_state)
-		return;
+		return ERR_PTR(-ENOMEM);
 
-	__drm_gem_reset_shadow_plane(plane, &ssd130x_state->base);
+	__drm_gem_shadow_plane_state_init(plane, &ssd130x_state->base);
+
+	return &(&ssd130x_state->base)->base;
 }
 
 static struct drm_plane_state *ssd130x_primary_plane_duplicate_state(struct drm_plane *plane)
@@ -1351,7 +1351,7 @@ static const struct drm_plane_helper_funcs ssd130x_primary_plane_helper_funcs[] 
 static const struct drm_plane_funcs ssd130x_primary_plane_funcs = {
 	.update_plane = drm_atomic_helper_update_plane,
 	.disable_plane = drm_atomic_helper_disable_plane,
-	.reset = ssd130x_primary_plane_reset,
+	.atomic_create_state = ssd130x_primary_plane_create_state,
 	.atomic_duplicate_state = ssd130x_primary_plane_duplicate_state,
 	.atomic_destroy_state = ssd130x_primary_plane_destroy_state,
 	.destroy = drm_plane_cleanup,
