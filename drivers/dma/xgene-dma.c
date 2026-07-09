@@ -1436,11 +1436,8 @@ static int xgene_dma_request_irqs(struct xgene_dma *pdma)
 	/* Register DMA error irq */
 	ret = devm_request_irq(pdma->dev, pdma->err_irq, xgene_dma_err_isr,
 			       0, "dma_error", pdma);
-	if (ret) {
-		dev_err(pdma->dev,
-			"Failed to register error IRQ %d\n", pdma->err_irq);
+	if (ret)
 		return ret;
-	}
 
 	/* Register DMA channel rx irq */
 	for (i = 0; i < XGENE_DMA_MAX_CHANNEL; i++) {
