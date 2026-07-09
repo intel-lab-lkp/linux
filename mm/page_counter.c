@@ -172,6 +172,26 @@ failed:
 }
 
 /**
+ * page_counter_margin - remaining chargeable pages within hierarchical limits
+ * @counter: counter
+ *
+ * Returns the smallest remaining margin between @counter and the root.
+ */
+long page_counter_margin(struct page_counter *counter)
+{
+	long margin = PAGE_COUNTER_MAX;
+
+	for (; counter; counter = counter->parent) {
+		long limit = READ_ONCE(counter->max);
+		long usage = page_counter_read(counter);
+
+		margin = min(margin, limit - usage);
+	}
+
+	return margin;
+}
+
+/**
  * page_counter_uncharge - hierarchically uncharge pages
  * @counter: counter
  * @nr_pages: number of pages to uncharge
