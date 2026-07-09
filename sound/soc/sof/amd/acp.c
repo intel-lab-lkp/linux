@@ -267,8 +267,10 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 			      unsigned int image_length)
 {
 	struct snd_sof_dev *sdev = adata->dev;
+	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
 	unsigned int tx_count, fw_qualifier, val;
 	int ret;
+	u32 sem_lock = 0;
 
 	if (!image_addr) {
 		dev_err(sdev->dev, "SHA DMA image address is NULL\n");
@@ -324,6 +326,11 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 			return ret;
 	}
 
+	if (adata->pci_rev >= ACP7B_PCI_ID) {
+		sem_lock = snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset);
+		dev_dbg(sdev->dev, "HW Semaphore lock status:0x%x\n", sem_lock);
+		adata->first_boot = true;
+	}
 	ret = snd_sof_dsp_read_poll_timeout(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER,
 					    fw_qualifier, fw_qualifier & DSP_FW_RUN_ENABLE,
 					    ACP_REG_POLL_INTERVAL, ACP_DMA_COMPLETE_TIMEOUT_US);
@@ -492,8 +499,17 @@ static irqreturn_t acp_irq_thread(int irq, void *context)
 {
 	struct snd_sof_dev *sdev = context;
 	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
+	struct acp_dev_data *adata = sdev->pdata->hw_pdata;
 	unsigned int count = ACP_HW_SEM_RETRY_COUNT;
 
+	if (adata->first_boot) {
+		adata->first_boot = false;
+		spin_lock_irq(&sdev->ipc_lock);
+		sof_ops(sdev)->irq_thread(irq, sdev);
+		spin_unlock_irq(&sdev->ipc_lock);
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset, 0x0);
+		return IRQ_HANDLED;
+	}
 	spin_lock_irq(&sdev->ipc_lock);
 	/* Wait until acquired HW Semaphore lock or timeout */
 	while (snd_sof_dsp_read(sdev, ACP_DSP_BAR, desc->hw_semaphore_offset) && --count)

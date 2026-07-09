@@ -280,6 +280,7 @@ struct acp_dev_data {
 	/* acp70_sdw1_wake_event flag set to true when wake irq asserted for SW1 instance */
 	bool acp70_sdw1_wake_event;
 	unsigned int pci_rev;
+	bool first_boot;
 	int acp_sof_signed_firmware_image;
 };
 
