@@ -2316,12 +2316,10 @@ void sched_init_numa(int offline_node)
 	int *distances, *domain_distances;
 	struct cpumask ***masks;
 
-	/* Record the NUMA distances from SLIT table */
 	if (sched_record_numa_dist(offline_node, numa_node_dist, &distances,
 				   &nr_node_levels))
 		return;
 
-	/* Record modified NUMA distances for building sched domains */
 	if (modified_sched_node_distance()) {
 		if (sched_record_numa_dist(offline_node, arch_sched_node_distance,
 					   &domain_distances, &nr_levels)) {
@@ -2336,45 +2334,43 @@ void sched_init_numa(int offline_node)
 	WRITE_ONCE(sched_max_numa_distance, distances[nr_node_levels - 1]);
 	WRITE_ONCE(sched_numa_node_levels, nr_node_levels);
 
-	/*
-	 * 'nr_levels' contains the number of unique distances
-	 *
-	 * The sched_domains_numa_distance[] array includes the actual distance
-	 * numbers.
-	 */
-
-	/*
-	 * Here, we should temporarily reset sched_domains_numa_levels to 0.
-	 * If it fails to allocate memory for array sched_domains_numa_masks[][],
-	 * the array will contain less then 'nr_levels' members. This could be
-	 * dangerous when we use it to iterate array sched_domains_numa_masks[][]
-	 * in other functions.
-	 *
-	 * We reset it to 'nr_levels' at the end of this function.
-	 */
 	rcu_assign_pointer(sched_domains_numa_distance, domain_distances);
 
 	sched_domains_numa_levels = 0;
 
 	masks = kzalloc(sizeof(void *) * nr_levels, GFP_KERNEL);
 	if (!masks)
-		return;
+		goto free_distance;
 
-	/*
-	 * Now for each level, construct a mask per node which contains all
-	 * CPUs of nodes that are that many hops away from us.
-	 */
 	for (i = 0; i < nr_levels; i++) {
 		masks[i] = kzalloc(nr_node_ids * sizeof(void *), GFP_KERNEL);
-		if (!masks[i])
-			return;
+		if (!masks[i]) {
+			for (i = i - 1; i >= 0; i--) {
+				if (!masks[i])
+					continue;
+				for_each_cpu_node_but(j, offline_node)
+					kfree(masks[i][j]);
+				kfree(masks[i]);
+			}
+			kfree(masks);
+			goto free_distance;
+		}
 
 		for_each_cpu_node_but(j, offline_node) {
 			struct cpumask *mask = kzalloc(cpumask_size(), GFP_KERNEL);
 			int k;
 
-			if (!mask)
-				return;
+			if (!mask) {
+				for (i = i; i >= 0; i--) {
+					if (!masks[i])
+						continue;
+					for_each_cpu_node_but(j, offline_node)
+						kfree(masks[i][j]);
+					kfree(masks[i]);
+				}
+				kfree(masks);
+				goto free_distance;
+			}
 
 			masks[i][j] = mask;
 
@@ -2394,28 +2390,28 @@ void sched_init_numa(int offline_node)
 	}
 	rcu_assign_pointer(sched_domains_numa_masks, masks);
 
-	/* Compute default topology size */
 	for (i = 0; sched_domain_topology[i].mask; i++);
 
 	tl = kzalloc((i + nr_levels + 1) *
 			sizeof(struct sched_domain_topology_level), GFP_KERNEL);
-	if (!tl)
-		return;
+	if (!tl) {
+		rcu_assign_pointer(sched_domains_numa_masks, NULL);
+		for (i = nr_levels - 1; i >= 0; i--) {
+			if (!masks[i])
+				continue;
+			for_each_cpu_node_but(j, offline_node)
+				kfree(masks[i][j]);
+			kfree(masks[i]);
+		}
+		kfree(masks);
+		goto free_distance;
+	}
 
-	/*
-	 * Copy the default topology bits..
-	 */
 	for (i = 0; sched_domain_topology[i].mask; i++)
 		tl[i] = sched_domain_topology[i];
 
-	/*
-	 * Add the NUMA identity distance, aka single NODE.
-	 */
 	tl[i++] = SDTL_INIT(sd_numa_mask, NULL, NODE);
 
-	/*
-	 * .. and append 'j' levels of NUMA goodness.
-	 */
 	for (j = 1; j < nr_levels; i++, j++) {
 		tl[i] = SDTL_INIT(sd_numa_mask, cpu_numa_flags, NUMA);
 		tl[i].numa_level = j;
@@ -2427,6 +2423,11 @@ void sched_init_numa(int offline_node)
 	sched_domains_numa_levels = nr_levels;
 
 	init_numa_topology_type(offline_node);
+	return;
+
+free_distance:
+	if (domain_distances != distances)
+		kfree(domain_distances);
 }
 
 
@@ -2666,15 +2667,15 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 
 		sdd->sd = alloc_percpu(struct sched_domain *);
 		if (!sdd->sd)
-			return -ENOMEM;
+			goto fail;
 
 		sdd->sg = alloc_percpu(struct sched_group *);
 		if (!sdd->sg)
-			return -ENOMEM;
+			goto fail;
 
 		sdd->sgc = alloc_percpu(struct sched_group_capacity *);
 		if (!sdd->sgc)
-			return -ENOMEM;
+			goto fail;
 
 		for_each_cpu(j, cpu_map) {
 			struct sched_domain *sd;
@@ -2684,14 +2685,14 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 			sd = kzalloc_node(sizeof(struct sched_domain) + cpumask_size(),
 					GFP_KERNEL, cpu_to_node(j));
 			if (!sd)
-				return -ENOMEM;
+				goto fail;
 
 			*per_cpu_ptr(sdd->sd, j) = sd;
 
 			sg = kzalloc_node(sizeof(struct sched_group) + cpumask_size(),
 					GFP_KERNEL, cpu_to_node(j));
 			if (!sg)
-				return -ENOMEM;
+				goto fail;
 
 			sg->next = sg;
 
@@ -2700,7 +2701,7 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 			sgc = kzalloc_node(sizeof(struct sched_group_capacity) + cpumask_size(),
 					GFP_KERNEL, cpu_to_node(j));
 			if (!sgc)
-				return -ENOMEM;
+				goto fail;
 
 			sgc->id = j;
 
@@ -2709,6 +2710,10 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 	}
 
 	return 0;
+
+fail:
+	__sdt_free(cpu_map);
+	return -ENOMEM;
 }
 
 static void __sdt_free(const struct cpumask *cpu_map)
@@ -2756,8 +2761,10 @@ static int __sds_alloc(struct s_data *d, const struct cpumask *cpu_map)
 
 		sds = kzalloc_node(sizeof(struct sched_domain_shared),
 				GFP_KERNEL, cpu_to_node(j));
-		if (!sds)
+		if (!sds) {
+			__sds_free(d, cpu_map);
 			return -ENOMEM;
+		}
 
 		*per_cpu_ptr(d->sds, j) = sds;
 	}
