@@ -1337,7 +1337,7 @@ static int sun4i_dma_probe(struct platform_device *pdev)
 	ret = devm_request_irq(&pdev->dev, priv->irq, sun4i_dma_interrupt,
 			       0, dev_name(&pdev->dev), priv);
 	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Cannot request IRQ\n");
+		return ret;
 
 	ret = dmaenginem_async_device_register(&priv->slave);
 	if (ret)
