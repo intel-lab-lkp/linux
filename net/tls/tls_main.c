@@ -347,8 +347,14 @@ static void tls_sk_proto_cleanup(struct sock *sk,
 		tls_sw_release_resources_tx(sk);
 		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXSW);
 	} else if (ctx->tx_conf == TLS_HW) {
+		bool rekey_failed = test_bit(TLS_TX_REKEY_FAILED, &ctx->flags);
+
 		tls_device_free_resources_tx(sk);
-		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXDEVICE);
+
+		if (rekey_failed)
+			TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXSW);
+		else
+			TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXDEVICE);
 	}
 
 	if (ctx->rx_conf == TLS_SW) {
@@ -368,6 +374,8 @@ static void tls_sk_proto_close(struct sock *sk, long timeout)
 	bool free_ctx;
 
 	if (ctx->tx_conf == TLS_SW)
+		tls_sw_cancel_work_tx(ctx);
+	else if (ctx->tx_conf == TLS_HW && ctx->rekey.sw_ctx)
 		tls_sw_cancel_work_tx(ctx);
 
 	lock_sock(sk);
@@ -449,8 +457,16 @@ static int do_tls_getsockopt_conf(struct sock *sk, char __user *optval,
 
 	/* get user crypto info */
 	if (tx) {
-		crypto_info = &ctx->crypto_send.info;
-		cctx = &ctx->tx;
+		if (ctx->rekey.cipher_ctx) {
+			struct tls_offload_context_tx *offload_ctx =
+				tls_offload_ctx_tx(ctx);
+
+			crypto_info = &offload_ctx->rekey.crypto_send.info;
+			cctx = &offload_ctx->rekey.tx;
+		} else {
+			crypto_info = &ctx->crypto_send.info;
+			cctx = &ctx->tx;
+		}
 	} else {
 		crypto_info = &ctx->crypto_recv.info;
 		cctx = &ctx->rx;
@@ -714,32 +730,32 @@ static int do_tls_setsockopt_conf(struct sock *sk, sockptr_t optval,
 	}
 
 	if (tx) {
-		if (update && ctx->tx_conf == TLS_HW) {
-			rc = -EOPNOTSUPP;
-			goto err_crypto_info;
-		}
-
-		if (!update) {
-			rc = tls_set_device_offload(sk);
-			conf = TLS_HW;
-			if (!rc) {
+		rc = tls_set_device_offload(sk, update ? crypto_info : NULL);
+		conf = TLS_HW;
+		if (!rc) {
+			if (!update) {
 				TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXDEVICE);
 				TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXDEVICE);
-				goto out;
 			}
-		}
-
-		rc = tls_set_sw_offload(sk, 1, update ? crypto_info : NULL);
-		if (rc)
+		} else if (update && ctx->tx_conf == TLS_HW) {
+			/* HW rekey failed - return the actual error.
+			 * Cannot fall back to SW for an existing HW connection.
+			 */
 			goto err_crypto_info;
-
-		if (update) {
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXREKEYOK);
 		} else {
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXSW);
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXSW);
+			rc = tls_set_sw_offload(sk, 1,
+						update ? crypto_info : NULL);
+			if (rc)
+				goto err_crypto_info;
+
+			if (update) {
+				TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXREKEYOK);
+			} else {
+				TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXSW);
+				TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXSW);
+			}
+			conf = TLS_SW;
 		}
-		conf = TLS_SW;
 	} else {
 		if (update && ctx->rx_conf == TLS_HW) {
 			rc = -EOPNOTSUPP;
@@ -885,12 +901,29 @@ static int do_tls_setsockopt(struct sock *sk, int optname, sockptr_t optval,
 
 	switch (optname) {
 	case TLS_TX:
-	case TLS_RX:
+	case TLS_RX: {
+		struct tls_context *ctx = tls_get_ctx(sk);
+		/* A HW-offload TX rekey arrives mid-stream and races with an
+		 * in-flight tls_device_sendmsg(), which holds tx_lock across
+		 * the lock_sock drop in sk_stream_wait_memory() while an
+		 * open_record is half built. start_rekey() would flush that
+		 * record and flip the SW/HW boundary under the sender,
+		 * corrupting record framing. Serialize against the data path
+		 * with tx_lock. Only the HW TX path reaches start_rekey, and
+		 * initial setup (tx_conf == BASE) has no concurrent sender.
+		 */
+		bool tx_rekey = optname == TLS_TX && ctx->tx_conf == TLS_HW;
+
+		if (tx_rekey)
+			mutex_lock(&ctx->tx_lock);
 		lock_sock(sk);
 		rc = do_tls_setsockopt_conf(sk, optval, optlen,
 					    optname == TLS_TX);
 		release_sock(sk);
+		if (tx_rekey)
+			mutex_unlock(&ctx->tx_lock);
 		break;
+	}
 	case TLS_TX_ZEROCOPY_RO:
 		lock_sock(sk);
 		rc = do_tls_setsockopt_tx_zc(sk, optval, optlen);
