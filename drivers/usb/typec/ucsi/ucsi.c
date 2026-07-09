@@ -963,8 +963,8 @@ static int ucsi_register_plug(struct ucsi_connector *con)
 	plug = typec_register_plug(con->cable, &desc);
 	if (IS_ERR(plug)) {
 		dev_err(con->ucsi->dev,
-			"con%d: failed to register plug (%ld)\n", con->num,
-			PTR_ERR(plug));
+			"con%d: failed to register plug (%pe)\n", con->num,
+			plug);
 		return PTR_ERR(plug);
 	}
 
@@ -1022,8 +1022,8 @@ static int ucsi_register_cable(struct ucsi_connector *con)
 	cable = typec_register_cable(con->port, &desc);
 	if (IS_ERR(cable)) {
 		dev_err(con->ucsi->dev,
-			"con%d: failed to register cable (%ld)\n", con->num,
-			PTR_ERR(cable));
+			"con%d: failed to register cable (%pe)\n", con->num,
+			cable);
 		return PTR_ERR(cable);
 	}
 
@@ -1152,8 +1152,8 @@ static int ucsi_register_partner(struct ucsi_connector *con)
 	partner = typec_register_partner(con->port, &desc);
 	if (IS_ERR(partner)) {
 		dev_err(con->ucsi->dev,
-			"con%d: failed to register partner (%ld)\n", con->num,
-			PTR_ERR(partner));
+			"con%d: failed to register partner (%pe)\n", con->num,
+			partner);
 		return PTR_ERR(partner);
 	}
 
