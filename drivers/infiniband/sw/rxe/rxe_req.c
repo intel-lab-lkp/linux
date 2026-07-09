@@ -701,6 +701,28 @@ int rxe_requester(struct rxe_qp *qp)
 	if (unlikely(!wqe))
 		goto exit;
 
+	/*
+	 * Don't trust user space data: for a user QP, qp->sq.queue is a
+	 * raw ring the application writes directly, so this WQE's num_sge
+	 * and cur_sge are attacker-controlled. copy_data() dereferences
+	 * dma->sge[cur_sge] without bounding the initial cur_sge against
+	 * the per-WQE sge array, whose capacity is qp->sq.max_sge (the
+	 * loop there only bounds subsequent increments, against num_sge).
+	 * Bound num_sge to that capacity, the way get_srq_wqe() and
+	 * validate_send_wr() already do, and bound cur_sge only when the
+	 * WQE actually carries payload (dma.resid): copy_data() returns
+	 * early on a zero-length copy before it ever touches dma->sge[],
+	 * so a zero-payload WQE -- the only valid WQE on a max_sge == 0
+	 * QP -- must not be rejected here.
+	 */
+	if (unlikely(wqe->dma.num_sge > qp->sq.max_sge ||
+		     (wqe->dma.resid &&
+		      wqe->dma.cur_sge >= qp->sq.max_sge))) {
+		rxe_dbg_qp(qp, "invalid num_sge/cur_sge in send wqe\n");
+		wqe->status = IB_WC_LOC_QP_OP_ERR;
+		goto err;
+	}
+
 	if (rxe_wqe_is_fenced(qp, wqe)) {
 		qp->req.wait_fence = 1;
 		goto exit;
