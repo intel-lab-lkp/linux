@@ -187,9 +187,8 @@ resources, scheduled and executed.
   Work items queued to a per-cpu wq are bound to a specific CPU.
   This flag is the right choice when cpu locality is important.
 
-  This flag is the complement of ``WQ_UNBOUND``.
+  Workqueue allocated without ``WQ_PERCPU`` are unbound by default.
 
-``WQ_UNBOUND``
   Work items queued to an unbound wq are served by the special
   worker-pools which host workers which are not bound to any
   specific CPU.  This makes the wq behave as a simple execution
