@@ -217,7 +217,12 @@ static const struct wiphy_iftype_ext_capab rtw89_iftypes_ext_capa[] = {
 		.extended_capabilities_mask = rtw89_ext_capa_sta,
 		.extended_capabilities_len = sizeof(rtw89_ext_capa_sta),
 		/* relevant only if EHT is supported */
-		.eml_capabilities = 0,
+		.eml_capabilities =
+			IEEE80211_EML_CAP_EMLSR_SUPP |
+			IEEE80211_EML_CAP_EML_PADDING_DELAY_256US <<
+				__bf_shf(IEEE80211_EML_CAP_EML_PADDING_DELAY) |
+			IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY_32US <<
+				__bf_shf(IEEE80211_EML_CAP_EML_TRANSITION_DELAY),
 		.mld_capa_and_ops = 0,
 	},
 };
