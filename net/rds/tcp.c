@@ -363,12 +363,16 @@ int rds_tcp_laddr_check(struct net *net, const struct in6_addr *addr,
 			rcu_read_unlock();
 			return -EADDRNOTAVAIL;
 		}
+		dev_hold(dev);
 		rcu_read_unlock();
 	}
 #if IS_ENABLED(CONFIG_IPV6)
 	ret = ipv6_chk_addr(net, addr, dev, 0);
+	dev_put(dev);
 	if (ret)
 		return 0;
+#else
+	dev_put(dev);
 #endif
 	return -EADDRNOTAVAIL;
 }
