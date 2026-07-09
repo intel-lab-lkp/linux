@@ -1163,10 +1163,8 @@ static int owl_dma_probe(struct platform_device *pdev)
 	od->irq = platform_get_irq(pdev, 0);
 	ret = devm_request_irq(&pdev->dev, od->irq, owl_dma_interrupt, 0,
 			       dev_name(&pdev->dev), od);
-	if (ret) {
-		dev_err(&pdev->dev, "unable to request IRQ\n");
+	if (ret)
 		return ret;
-	}
 
 	/* Init physical channel */
 	od->pchans = devm_kcalloc(&pdev->dev, od->nr_pchans,
