@@ -1335,9 +1335,6 @@ static int rz_dmac_chan_probe(struct rz_dmac *dmac,
 	ret = devm_request_threaded_irq(dmac->dev, irq, rz_dmac_irq_handler,
 					rz_dmac_irq_handler_thread, 0,
 					irqname, channel);
-	if (ret)
-		dev_err(dmac->dev, "failed to request IRQ %u (%d)\n", irq, ret);
-
 	return ret;
 }
 
@@ -1470,11 +1467,8 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	if (irq > 0) {
 		ret = devm_request_irq(&pdev->dev, irq, rz_dmac_irq_handler, 0,
 				       irqname, NULL);
-		if (ret) {
-			dev_err(&pdev->dev, "failed to request IRQ %u (%d)\n",
-				irq, ret);
+		if (ret)
 			goto err;
-		}
 	}
 
 	/* Register the DMAC as a DMA provider for DT. */
