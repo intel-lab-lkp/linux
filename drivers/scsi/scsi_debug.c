@@ -5911,6 +5911,11 @@ static int resp_report_zones(struct scsi_cmnd *scp,
 		return check_condition_result;
 	}
 
+	if (alloc_len < RZONES_DESC_HD) {
+		mk_sense_invalid_fld(scp, SDEB_IN_CDB, 10, -1);
+		return check_condition_result;
+	}
+
 	rep_max_zones = (alloc_len - 64) >> ilog2(RZONES_DESC_HD);
 
 	arr = kzalloc(alloc_len, GFP_ATOMIC | __GFP_NOWARN);
