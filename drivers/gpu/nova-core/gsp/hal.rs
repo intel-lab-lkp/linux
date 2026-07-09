@@ -57,6 +57,25 @@ pub(super) trait GspHal: Send {
     }
 }
 
+/// Returns the names of the firmware files required to boot the GSP of `chipset`, in addition to
+/// the "bootloader" and "gsp" images required by all chipsets.
+pub(crate) const fn boot_firmware_files(chipset: Chipset) -> &'static [&'static str] {
+    match chipset.arch() {
+        // Turing chipsets boot the GSP via the SEC2 Booter, and require the FWSEC bootloader.
+        Architecture::Turing => &["booter_load", "booter_unload", "gen_bootloader"],
+        // GA100 also requires the FWSEC bootloader.
+        Architecture::Ampere if matches!(chipset, Chipset::GA100) => {
+            &["booter_load", "booter_unload", "gen_bootloader"]
+        }
+        // Other Ampere chipsets, as well as Ada chipsets, run FWSEC directly.
+        Architecture::Ampere | Architecture::Ada => &["booter_load", "booter_unload"],
+        // Hopper and later chipsets boot the GSP via the FMC image loaded by FSP.
+        Architecture::Hopper | Architecture::BlackwellGB10x | Architecture::BlackwellGB20x => {
+            &["fmc"]
+        }
+    }
+}
+
 /// Returns the GSP HAL to be used for `chipset`.
 pub(super) fn gsp_hal(chipset: Chipset) -> &'static dyn GspHal {
     match chipset.arch() {

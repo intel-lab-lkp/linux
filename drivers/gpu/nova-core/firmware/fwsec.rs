@@ -385,9 +385,8 @@ impl FwsecFirmware {
 
     /// Loads the FWSEC firmware into `falcon` and execute it.
     ///
-    /// This must only be called on chipsets that do not need the FWSEC bootloader (i.e., where
-    /// [`Chipset::needs_fwsec_bootloader()`](crate::gpu::Chipset::needs_fwsec_bootloader) returns
-    /// `false`). On chipsets that do, use [`bootloader::FwsecFirmwareWithBl`] instead.
+    /// This must only be called on chipsets that do not need the FWSEC bootloader. On chipsets
+    /// where the bootloader is required, use [`bootloader::FwsecFirmwareWithBl`] instead.
     pub(crate) fn run(&self, dev: &Device<device::Bound>, falcon: &Falcon<'_, Gsp>) -> Result<()> {
         // Reset falcon, load the firmware, and run it.
         falcon
