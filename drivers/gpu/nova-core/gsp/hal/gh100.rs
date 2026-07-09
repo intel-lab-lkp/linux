@@ -7,7 +7,8 @@ use kernel::{
     device,
     dma::Coherent,
     io::poll::read_poll_timeout,
-    time::Delta, //
+    time::Delta,
+    types::ScopeGuard, //
 };
 
 use crate::{
@@ -23,7 +24,6 @@ use crate::{
         Fsp, //
     },
     gsp::{
-        boot::BootUnloadGuard,
         hal::{
             GspHal,
             UnloadBundle, //
@@ -143,13 +143,13 @@ impl GspHal for Gh100 {
     ///
     /// This path uses FSP to establish a chain of trust and boot GSP-FMC. FSP handles
     /// the GSP boot internally - no manual GSP reset/boot is needed.
-    fn boot<'a>(
+    fn boot(
         &self,
-        gsp: &'a Gsp,
-        ctx: &GspBootContext<'a>,
+        gsp: &Gsp,
+        ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> Result<BootUnloadGuard<'a>> {
+    ) -> Result<Option<crate::gsp::UnloadBundle>> {
         let dev = ctx.dev();
         let bar = ctx.bar;
         let chipset = ctx.chipset;
@@ -159,10 +159,6 @@ impl GspHal for Gh100 {
         let unload_bundle = crate::gsp::UnloadBundle(
             KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
         );
-
-        // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
-        let unload_guard =
-            BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
 
         let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
 
@@ -174,11 +170,20 @@ impl GspHal for Gh100 {
             false,
         )?;
 
+        // Wait for the GSP RISC-V core to halt in case of error. We create this guard after `args`
+        // to make sure that boot args are kept alive until halt, in case they are still being
+        // accessed.
+        let unload_guard = ScopeGuard::new_with_data(unload_bundle, |unload_bundle| {
+            let _ = unload_bundle.0.run(dev, bar, gsp_falcon, sec2_falcon);
+        });
+
         fsp.boot_fmc(dev, fb_layout, &args)?;
 
+        // Wait for GSP-FMC to release the GSP lockdown, indicating that `args` is not accessed
+        // anymore.
         wait_for_gsp_lockdown_release(dev, gsp_falcon, args.boot_params_dma_handle())?;
 
-        Ok(unload_guard)
+        Ok(Some(unload_guard.dismiss()))
     }
 }
 
