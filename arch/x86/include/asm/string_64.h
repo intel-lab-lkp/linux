@@ -4,6 +4,7 @@
 
 #ifdef __KERNEL__
 #include <linux/jump_label.h>
+#include <asm/barrier.h>
 
 /* Written 2002 by Andi Kleen */
 
@@ -99,6 +100,27 @@ static __always_inline void memcpy_flushcache(void *dst, const void *src, size_t
 		}
 	}
 	__memcpy_flushcache(dst, src, cnt);
+}
+
+#define memcpy_nt memcpy_nt
+/*
+ * Reuse the existing x86 flushcache backend as the nt copy primitive.
+ * Callers pair it with memcpy_nt_drain() when later stores must be
+ * ordered after the copy.
+ */
+static __always_inline void memcpy_nt(void *dst, const void *src, size_t cnt)
+{
+	memcpy_flushcache(dst, src, cnt);
+}
+
+#define memcpy_nt_drain memcpy_nt_drain
+static __always_inline void memcpy_nt_drain(void)
+{
+	/*
+	 * Order the prior MOVNTI stores issued by memcpy_flushcache()
+	 * before later normal stores.
+	 */
+	wmb();
 }
 #endif
 

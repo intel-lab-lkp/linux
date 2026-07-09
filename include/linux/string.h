@@ -278,6 +278,29 @@ static inline void memcpy_flushcache(void *dst, const void *src, size_t cnt)
 }
 #endif
 
+#ifndef memcpy_nt
+/*
+ * memcpy_nt() requests a non-temporal copy when the architecture has a
+ * suitable backend. Architectures that do not override it fall back to
+ * memcpy().
+ */
+static inline void memcpy_nt(void *dst, const void *src, size_t cnt)
+{
+	memcpy(dst, src, cnt);
+}
+#endif
+
+#ifndef memcpy_nt_drain
+/*
+ * Callers use memcpy_nt_drain() before later normal stores that need to
+ * be ordered after memcpy_nt(). Architectures without a specialized
+ * backend can leave it empty.
+ */
+static inline void memcpy_nt_drain(void)
+{
+}
+#endif
+
 void *memchr_inv(const void *s, int c, size_t n);
 char *strreplace(char *str, char old, char new);
 
