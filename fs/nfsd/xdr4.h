@@ -759,26 +759,39 @@ struct nfsd4_copy {
 	struct nfsd42_write_res	cp_res;
 	struct knfsd_fh		fh;
 
-	/* offload callback */
-	struct nfsd4_cb_offload	cp_cb_offload;
-
 	struct nfs4_client      *cp_clp;
 
 	struct nfsd_file        *nf_src;
 	struct nfsd_file        *nf_dst;
 	bool			attr_update;
 
-	copy_stateid_t		cp_stateid;
-
-	struct list_head	copies;
-	struct task_struct	*copy_task;
-	refcount_t		refcount;
-	unsigned int		cp_ttl;
-
 	struct nfsd4_ssc_umount_item *ss_nsui;
 	struct nfs_fh		c_fh;
 	nfs4_stateid		stateid;
 	struct nfsd_net		*cp_nn;
+};
+
+/*
+ * Durable state for an asynchronous (background) server-side COPY.
+ *
+ * struct nfsd4_copy is a transient object that lives in the COMPOUND
+ * argument buffer (union nfsd4_op_u) and is reused once the operation
+ * returns. An async COPY, however, outlives the COMPOUND: a worker kthread
+ * keeps copying, the reaper tracks it on nfs4_client.async_copies, and a
+ * CB_OFFLOAD callback fires when it finishes. nfsd4_async_copy holds that
+ * long-lived state. The operation parameters and result are kept in the
+ * embedded cp_copy (populated by dup_copy_fields()), so the durable object
+ * never points into the request buffer.
+ */
+struct nfsd4_async_copy {
+	struct nfsd4_copy	cp_copy;	/* operation params + result */
+
+	struct list_head	copies;		/* nfs4_client.async_copies */
+	struct task_struct	*copy_task;
+	refcount_t		refcount;
+	unsigned int		cp_ttl;
+	copy_stateid_t		cp_stateid;	/* s2s_cp_stateids IDR entry */
+	struct nfsd4_cb_offload	cp_cb_offload;
 };
 
 static inline void nfsd4_copy_set_sync(struct nfsd4_copy *copy, bool sync)
