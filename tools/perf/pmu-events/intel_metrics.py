@@ -1132,6 +1132,57 @@ def UncoreUpiBw() -> Optional[MetricGroup]:
     ], description="UPI Bandwidth")
 
 
+def UncoreIioBw() -> Optional[MetricGroup]:
+    if _args.model not in [
+        "sapphirerapids",
+        "emeraldrapids",
+        "graniterapids",
+        "sierraforest",
+        "clearwaterforest",
+    ]:
+      return None
+
+    # On multi-socket x86 servers, there can be multiple IIO stacks per socket.
+    # We generate metrics up to index 23 with has_event check so runtime perf
+    # only measures the IIO instances present on the system.
+    max_iios = 24
+    metrics = []
+    scale = 4 / 1_000_000
+    for i in range(max_iios):
+      rd_event = Event(
+          f"uncore_iio_{i}/UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.ALL_PARTS/"
+      )
+      wr_event = Event(
+          f"uncore_iio_{i}/UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.ALL_PARTS/"
+      )
+      rd_bw = Select(d_ratio(rd_event, interval_sec), has_event(rd_event), 0)
+      wr_bw = Select(d_ratio(wr_event, interval_sec), has_event(wr_event), 0)
+      metrics.append(
+          MetricGroup(
+              f"iio_bandwidth_per_device_iio{i}",
+              [
+                  Metric(
+                      f"iio_bandwidth_read_per_device_{i}",
+                      f"IIO {i} read bandwidth",
+                      rd_bw,
+                      f"{scale}MB/s",
+                  ),
+                  Metric(
+                      f"iio_bandwidth_write_per_device_{i}",
+                      f"IIO {i} write bandwidth",
+                      wr_bw,
+                      f"{scale}MB/s",
+                  ),
+              ],
+          )
+      )
+    return MetricGroup(
+        "iio_bandwidth_per_device",
+        metrics,
+        description="IIO Read/Write Bandwidth per root complex",
+    )
+
+
 def main() -> None:
     global _args
 
@@ -1179,6 +1230,7 @@ def main() -> None:
         UncoreMemBw(),
         UncoreMemSat(),
         UncoreUpiBw(),
+        UncoreIioBw(),
     ])
 
     if _args.metricgroups:
