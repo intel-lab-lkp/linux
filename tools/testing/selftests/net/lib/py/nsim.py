@@ -6,7 +6,7 @@ import os
 import random
 import re
 import time
-from .utils import cmd, ip
+from .utils import cmd, ip, CmdExitFailure
 
 
 class NetdevSim:
@@ -76,8 +76,11 @@ class NetdevSimDev:
         if ns:
             cmd(f"devlink dev reload netdevsim/netdevsim{addr} netns {ns.name}")
             self.ns = ns
-
-        cmd("udevadm settle", ns=self.ns)
+            # udev daemon is not guaranteed to get notified of netdevs being created
+            # when in a new netns, so poll until we see the netdevs appear.
+            self.wait_for_netdevs(port_count)
+        else:
+            cmd("udevadm settle", ns=self.ns)
         ifnames = self.get_ifnames()
 
         self.dfs_dir = "/sys/kernel/debug/netdevsim/netdevsim%u/" % addr
@@ -116,7 +119,7 @@ class NetdevSimDev:
         while True:
             try:
                 ifnames = self.get_ifnames()
-            except FileNotFoundError as e:
+            except CmdExitFailure:
                 ifnames = []
             if len(ifnames) == port_count:
                 break
