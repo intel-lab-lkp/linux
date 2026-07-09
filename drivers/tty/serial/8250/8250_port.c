@@ -2566,9 +2566,9 @@ static void serial8250_set_divisor(struct uart_port *port, unsigned int baud,
 		serial8250_do_set_divisor(port, baud, quot);
 }
 
-static unsigned int serial8250_get_baud_rate(struct uart_port *port,
-					     struct ktermios *termios,
-					     const struct ktermios *old)
+unsigned int serial8250_get_baud_rate(struct uart_port *port,
+				      struct ktermios *termios,
+				      const struct ktermios *old)
 {
 	unsigned int tolerance = port->uartclk / 100;
 	unsigned int min;
@@ -2595,6 +2595,7 @@ static unsigned int serial8250_get_baud_rate(struct uart_port *port,
 	 */
 	return uart_get_baud_rate(port, termios, old, min, max);
 }
+EXPORT_SYMBOL_GPL(serial8250_get_baud_rate);
 
 /*
  * Note in order to avoid the tty port mutex deadlock don't use the next method

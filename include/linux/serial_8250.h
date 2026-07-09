@@ -208,6 +208,10 @@ void serial8250_console_write(struct uart_8250_port *up, const char *s,
 int serial8250_console_setup(struct uart_port *port, char *options, bool probe);
 int serial8250_console_exit(struct uart_port *port);
 
+unsigned int serial8250_get_baud_rate(struct uart_port *port,
+				      struct ktermios *termios,
+				      const struct ktermios *old);
+
 void serial8250_set_isa_configurator(void (*v)(int port, struct uart_port *up,
 					       u32 *capabilities));
 
