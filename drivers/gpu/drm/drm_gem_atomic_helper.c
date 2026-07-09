@@ -450,17 +450,22 @@ void drm_gem_simple_kms_end_shadow_fb_access(struct drm_simple_display_pipe *pip
 EXPORT_SYMBOL(drm_gem_simple_kms_end_shadow_fb_access);
 
 /**
- * drm_gem_simple_kms_reset_shadow_plane - resets a shadow-buffered plane
+ * drm_gem_simple_kms_create_shadow_plane_state - creates shadow-buffered plane state
  * @pipe: the simple display pipe
  *
- * This function implements struct drm_simple_display_funcs.reset_plane
+ * This function implements struct drm_simple_display_pipe_funcs.create_plane_state
  * for shadow-buffered planes.
+ *
+ * Returns:
+ * A pointer to a new plane state on success, or an ERR_PTR()-encoded
+ * error code otherwise.
  */
-void drm_gem_simple_kms_reset_shadow_plane(struct drm_simple_display_pipe *pipe)
+struct drm_plane_state *
+drm_gem_simple_kms_create_shadow_plane_state(struct drm_simple_display_pipe *pipe)
 {
-	drm_gem_reset_shadow_plane(&pipe->plane);
+	return drm_gem_create_shadow_plane_state(&pipe->plane);
 }
-EXPORT_SYMBOL(drm_gem_simple_kms_reset_shadow_plane);
+EXPORT_SYMBOL(drm_gem_simple_kms_create_shadow_plane_state);
 
 /**
  * drm_gem_simple_kms_duplicate_shadow_plane_state - duplicates shadow-buffered plane state
