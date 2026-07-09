@@ -134,15 +134,15 @@ int drm_sysfb_plane_helper_get_scanout_buffer(struct drm_plane *plane,
 	.atomic_disable = drm_sysfb_plane_helper_atomic_disable, \
 	.get_scanout_buffer = drm_sysfb_plane_helper_get_scanout_buffer
 
-void drm_sysfb_plane_reset(struct drm_plane *plane);
+struct drm_plane_state *drm_sysfb_plane_atomic_create_state(struct drm_plane *plane);
 struct drm_plane_state *drm_sysfb_plane_atomic_duplicate_state(struct drm_plane *plane);
 void drm_sysfb_plane_atomic_destroy_state(struct drm_plane *plane,
 					  struct drm_plane_state *plane_state);
 
 #define DRM_SYSFB_PLANE_FUNCS \
-	.reset = drm_sysfb_plane_reset, \
 	.update_plane = drm_atomic_helper_update_plane, \
 	.disable_plane = drm_atomic_helper_disable_plane, \
+	.atomic_create_state = drm_sysfb_plane_atomic_create_state, \
 	.atomic_duplicate_state = drm_sysfb_plane_atomic_duplicate_state, \
 	.atomic_destroy_state = drm_sysfb_plane_atomic_destroy_state
 
