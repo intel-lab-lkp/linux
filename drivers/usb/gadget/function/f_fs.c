@@ -846,7 +846,7 @@ static inline void *ffs_alloc_buffer(struct ffs_io_data *io_data,
 	if (io_data->use_sg)
 		return ffs_build_sg_list(&io_data->sgt, data_len);
 
-	return kmalloc(data_len, GFP_KERNEL);
+	return kmalloc(data_len, GFP_KERNEL | __GFP_NOWARN);
 }
 
 static inline void ffs_free_buffer(struct ffs_io_data *io_data)
