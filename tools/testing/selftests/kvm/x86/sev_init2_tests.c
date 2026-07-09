@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "test_util.h"
 #include "kvm_util.h"
@@ -73,19 +74,34 @@ static void test_init2_invalid(unsigned long vm_type, struct kvm_sev_init *init,
 	kvm_vm_free(vm);
 }
 
+static void test_create_invalid_type(unsigned long vm_type, const char *msg)
+{
+	int fd = __kvm_ioctl(kvm_fd, KVM_CREATE_VM, (void *)vm_type);
+
+	TEST_ASSERT(fd < 0 && errno == EINVAL,
+		    "KVM_CREATE_VM should reject unsupported type (%s), got fd=%d errno=%d",
+		    msg, fd, errno);
+	if (fd >= 0)
+		close(fd);
+}
+
 void test_vm_types(void)
 {
 	test_init2(KVM_X86_SEV_VM, &(struct kvm_sev_init){});
 
 	/*
-	 * TODO: check that unsupported types cannot be created.  Probably
-	 * a separate selftest.
+	 * Types that aren't supported by the platform must be rejected by
+	 * KVM_CREATE_VM itself, before any KVM_SEV_INIT2 can be attempted.
 	 */
 	if (have_sev_es)
 		test_init2(KVM_X86_SEV_ES_VM, &(struct kvm_sev_init){});
+	else
+		test_create_invalid_type(KVM_X86_SEV_ES_VM, "SEV-ES is unsupported");
 
 	if (have_snp)
 		test_init2(KVM_X86_SNP_VM, &(struct kvm_sev_init){});
+	else
+		test_create_invalid_type(KVM_X86_SNP_VM, "SEV-SNP is unsupported");
 
 	test_init2_invalid(0, &(struct kvm_sev_init){},
 			   "VM type is KVM_X86_DEFAULT_VM");
@@ -121,8 +137,9 @@ void test_features(u32 vm_type, u64 supported_features)
 
 int main(int argc, char *argv[])
 {
-	int kvm_fd = open_kvm_dev_path_or_exit();
 	bool have_sev;
+
+	kvm_fd = open_kvm_dev_path_or_exit();
 
 	TEST_REQUIRE(__kvm_has_device_attr(kvm_fd, KVM_X86_GRP_SEV,
 					   KVM_X86_SEV_VMSA_FEATURES) == 0);
