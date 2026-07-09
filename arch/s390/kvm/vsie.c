@@ -2014,6 +2014,43 @@ static struct vsie_page *get_vsie_page_cpu_nr(struct kvm_vcpu *vcpu, struct vsie
 	return vsie_page;
 }
 
+/*
+ * Copy the mcn from the osca to the vsie_sca to be able to detect mcn changes later on.
+ *
+ * @vsie_sca: vsie_sca to copy mcn to.
+ * @sca: Pointer to a struct bsca_block or struct esca_block to read from.
+ */
+static void sca_mcn_copy(struct vsie_sca *vsie_sca, void *sca)
+{
+	int offset = offsetof(struct bsca_block, mcn);
+	int size = BYTES_PER_LONG;
+
+	if (test_bit(VSIE_SCA_ESCA, &vsie_sca->flags)) {
+		offset = offsetof(struct esca_block, mcn);
+		size = BYTES_PER_LONG * 4;
+	}
+	memcpy(&vsie_sca->mcn, sca + offset, size);
+}
+
+/*
+ * Compare the mcn from the given sca to the vsie_sca to be able to detect mcn changes.
+ *
+ * @vsie_sca: vsie_sca to compare mcn to.
+ * @sca: Pointer to a struct bsca_block or struct esca_block to compare to.
+ */
+static bool sca_mcn_equals(struct vsie_sca *vsie_sca, void *sca)
+{
+	int offset = offsetof(struct bsca_block, mcn);
+	int size = BYTES_PER_LONG;
+
+	if (test_bit(VSIE_SCA_ESCA, &vsie_sca->flags)) {
+		size = BYTES_PER_LONG * 4;
+		offset = offsetof(struct esca_block, mcn);
+	}
+
+	return !memcmp(&vsie_sca->mcn, sca + offset, size);
+}
+
 static void vsie_sca_update(struct vsie_sca *vsie_sca, unsigned int cpu_nr,
 			    struct vsie_page *vsie_page_n, hpa_t sca_o_entry_hpa)
 {
@@ -2031,18 +2068,14 @@ static int _shadow_sca(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page,
 	unsigned int cpu_nr, cpu_slots;
 	struct vsie_page *vsie_page_n;
 	hva_t sca_o_entry_hva;
-	unsigned long *mcn;
 	gpa_t scb_o_gpa;
 	int rc;
 
-	if (is_esca)
-		mcn = phys_to_virt(sca_o_hpa) + offsetof(struct esca_block, mcn);
-	else
-		mcn = phys_to_virt(sca_o_hpa) + offsetof(struct bsca_block, mcn);
+	sca_mcn_copy(vsie_sca, phys_to_virt(sca_o_hpa));
 
 	/* pin and make shadow for ALL scb in the sca */
 	cpu_slots = is_esca ? KVM_S390_MAX_VSIE_VCPUS : KVM_S390_BSCA_CPU_SLOTS;
-	for_each_set_bit_inv(cpu_nr, mcn, cpu_slots) {
+	for_each_set_bit_inv(cpu_nr, (unsigned long *)&vsie_sca->mcn, cpu_slots) {
 		rc = get_sca_entry_addr(vcpu->kvm, vsie_sca, cpu_nr, NULL, &sca_o_entry_hpa);
 		if (rc)
 			goto err;
@@ -2074,7 +2107,7 @@ static int _shadow_sca(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page,
 	return 0;
 
 err:
-	for_each_set_bit_inv(cpu_nr, mcn, cpu_slots) {
+	for_each_set_bit_inv(cpu_nr, (unsigned long *)&vsie_sca->mcn, cpu_slots) {
 		vsie_sca->ssca.cpu[cpu_nr].ssda = 0;
 		vsie_sca->ssca.cpu[cpu_nr].ossea = 0;
 	}
@@ -2084,13 +2117,24 @@ err:
 /* Shadow or reshadow the SCA on VSIE enter. */
 static int shadow_sca(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page, struct vsie_sca *vsie_sca)
 {
-	int rc = 0;
+	struct kvm_s390_sie_block *sca_o = phys_to_virt(vsie_sca->sca_o_pages[0].hpa);
+	bool do_init_ssca;
 
-	guard(rwsem_write)(&vcpu->kvm->arch.vsie.vsie_sca_lock);
-	if (!vsie_sca->ssca.osca)
-		rc = _shadow_sca(vcpu, vsie_page, vsie_sca);
+	scoped_guard(rwsem_read, &vcpu->kvm->arch.vsie.vsie_sca_lock) {
+		do_init_ssca = !vsie_sca->ssca.osca;
+		do_init_ssca = do_init_ssca || !sca_mcn_equals(vsie_sca, sca_o);
+		if (!do_init_ssca)
+			return 0;
+	}
 
-	return rc;
+	scoped_guard(rwsem_write, &vcpu->kvm->arch.vsie.vsie_sca_lock) {
+		do_init_ssca = !vsie_sca->ssca.osca;
+		do_init_ssca = do_init_ssca || !sca_mcn_equals(vsie_sca, sca_o);
+		if (do_init_ssca)
+			return _shadow_sca(vcpu, vsie_page, vsie_sca);
+	}
+
+	return 0;
 }
 
 int kvm_s390_handle_vsie(struct kvm_vcpu *vcpu)
