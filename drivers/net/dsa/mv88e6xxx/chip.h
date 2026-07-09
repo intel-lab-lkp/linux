@@ -894,4 +894,6 @@ int mv88e6xxx_vtu_walk(struct mv88e6xxx_chip *chip,
 				 void *priv),
 		       void *priv);
 
+int mv88e6xxx_broadcast_setup(struct mv88e6xxx_chip *chip, u16 vid);
+
 #endif /* _MV88E6XXX_CHIP_H */
