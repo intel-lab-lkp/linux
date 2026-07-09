@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 #include <linux/string.h>
+#include <linux/time.h>
 #include <linux/types.h>
 #include <linux/wait.h>
 
@@ -300,7 +301,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	adap->rc->allowed_protocols = RC_PROTO_BIT_CEC;
 	adap->rc->priv = adap;
 	adap->rc->map_name = RC_MAP_CEC;
-	adap->rc->timeout = MS_TO_US(550);
+	adap->rc->timeout = 550 * USEC_PER_MSEC;
 #endif
 	return adap;
 
