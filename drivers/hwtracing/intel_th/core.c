@@ -696,6 +696,7 @@ intel_th_subdevice_alloc(struct intel_th *th,
 
 fail_free_res:
 	kfree(thdev->resource);
+	thdev->resource = NULL;
 
 fail_put_device:
 	put_device(&thdev->dev);
