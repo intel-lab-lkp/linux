@@ -5,6 +5,8 @@
  * Copyright 2016 Cisco Systems, Inc. and/or its affiliates. All rights reserved.
  */
 
+#define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
+
 #include <linux/bitops.h>
 #include <linux/bug.h>
 #include <linux/cdev.h>
@@ -107,7 +109,7 @@ static int __must_check cec_devnode_register(struct cec_devnode *devnode,
 	minor = find_first_zero_bit(cec_devnode_nums, CEC_NUM_DEVICES);
 	if (minor == CEC_NUM_DEVICES) {
 		mutex_unlock(&cec_devnode_lock);
-		pr_err("could not get a free minor\n");
+		pr_err("Could not get a free minor\n");
 		return -ENFILE;
 	}
 
@@ -130,7 +132,7 @@ static int __must_check cec_devnode_register(struct cec_devnode *devnode,
 	ret = cdev_device_add(&devnode->cdev, &devnode->dev);
 	if (ret) {
 		devnode->registered = false;
-		pr_err("%s: cdev_device_add failed\n", __func__);
+		pr_err("cdev_device_add() failed\n");
 		goto clr_bit;
 	}
 
@@ -267,7 +269,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 
 	adap->kthread = kthread_run(cec_thread_func, adap, "cec-%s", name);
 	if (IS_ERR(adap->kthread)) {
-		pr_err("cec-%s: kernel_thread() failed\n", name);
+		pr_err("%s: kernel_thread() failed\n", name);
 		res = PTR_ERR(adap->kthread);
 		goto err_free_adap;
 	}
@@ -279,8 +281,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	/* Prepare the RC input device */
 	adap->rc = rc_allocate_device(RC_DRIVER_SCANCODE);
 	if (!adap->rc) {
-		pr_err("cec-%s: failed to allocate memory for rc_dev\n",
-		       name);
+		pr_err("%s: failed to allocate memory for rc_dev\n", name);
 		kthread_stop(adap->kthread);
 		res = -ENOMEM;
 		goto err_free_adap;
@@ -336,8 +337,7 @@ int cec_register_adapter(struct cec_adapter *adap,
 		res = rc_register_device(adap->rc);
 
 		if (res) {
-			pr_err("cec-%s: failed to prepare input device\n",
-			       adap->name);
+			pr_err("%s: failed to prepare input device\n", adap->name);
 			rc_free_device(adap->rc);
 			adap->rc = NULL;
 			return res;
@@ -426,14 +426,14 @@ static int __init cec_devnode_init(void)
 	int ret = alloc_chrdev_region(&cec_dev_t, 0, CEC_NUM_DEVICES, CEC_NAME);
 
 	if (ret < 0) {
-		pr_warn("cec: unable to allocate major\n");
+		pr_warn("Unable to allocate major\n");
 		return ret;
 	}
 
 #ifdef CONFIG_DEBUG_FS
 	top_cec_dir = debugfs_create_dir("cec", NULL);
 	if (IS_ERR_OR_NULL(top_cec_dir)) {
-		pr_warn("cec: Failed to create debugfs cec dir\n");
+		pr_warn("Failed to create debugfs cec dir\n");
 		top_cec_dir = NULL;
 	}
 #endif
@@ -442,7 +442,7 @@ static int __init cec_devnode_init(void)
 	if (ret < 0) {
 		debugfs_remove_recursive(top_cec_dir);
 		unregister_chrdev_region(cec_dev_t, CEC_NUM_DEVICES);
-		pr_warn("cec: bus_register failed\n");
+		pr_warn("bus_register() failed\n");
 		return -EIO;
 	}
 
