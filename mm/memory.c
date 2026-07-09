@@ -4143,6 +4143,19 @@ static bool __wp_can_reuse_large_anon_folio(struct folio *folio,
 		folio_unlock(folio);
 	}
 
+	if (folio_may_be_lru_cached(folio) && !folio_test_lru(folio)) {
+		if (folio_ref_count(folio) > folio_large_mapcount(folio) + 1)
+			return false;
+		/*
+		 * A global LRU drain is too expensive, but a local drain
+		 * can still be beneficial. For example, large folios that
+		 * have just been swapped in and fall back from
+		 * do_swap_page() to do_wp_page() are likely still in this
+		 * CPU's LRU cache.
+		 */
+		lru_add_drain();
+	}
+
 	if (folio_large_mapcount(folio) != folio_ref_count(folio))
 		return false;
 
