@@ -694,9 +694,9 @@ out:
 }
 
 static const struct i2c_device_id max77620_id[] = {
-	{"max77620", MAX77620},
-	{"max20024", MAX20024},
-	{"max77663", MAX77663},
+	{ .name = "max77620", .driver_data = MAX77620 },
+	{ .name = "max20024", .driver_data = MAX20024 },
+	{ .name = "max77663", .driver_data = MAX77663 },
 	{},
 };
 

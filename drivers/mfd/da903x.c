@@ -439,8 +439,8 @@ static const struct da903x_chip_ops da903x_ops[] = {
 };
 
 static const struct i2c_device_id da903x_id_table[] = {
-	{ "da9030", 0 },
-	{ "da9034", 1 },
+	{ .name = "da9030", .driver_data = 0 },
+	{ .name = "da9034", .driver_data = 1 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, da903x_id_table);

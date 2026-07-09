@@ -328,13 +328,13 @@ static void rsmu_i2c_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id rsmu_i2c_id[] = {
-	{ "8a34000",  RSMU_CM },
-	{ "8a34001",  RSMU_CM },
-	{ "8a34002",  RSMU_CM },
-	{ "82p33810", RSMU_SABRE },
-	{ "82p33811", RSMU_SABRE },
-	{ "8v19n850", RSMU_SL },
-	{ "8v19n851", RSMU_SL },
+	{ .name = "8a34000",  .driver_data = RSMU_CM },
+	{ .name = "8a34001",  .driver_data = RSMU_CM },
+	{ .name = "8a34002",  .driver_data = RSMU_CM },
+	{ .name = "82p33810", .driver_data = RSMU_SABRE },
+	{ .name = "82p33811", .driver_data = RSMU_SABRE },
+	{ .name = "8v19n850", .driver_data = RSMU_SL },
+	{ .name = "8v19n851", .driver_data = RSMU_SL },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, rsmu_i2c_id);

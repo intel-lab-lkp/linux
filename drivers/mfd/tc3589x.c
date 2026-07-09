@@ -466,13 +466,13 @@ static DEFINE_SIMPLE_DEV_PM_OPS(tc3589x_dev_pm_ops,
 				tc3589x_suspend, tc3589x_resume);
 
 static const struct i2c_device_id tc3589x_id[] = {
-	{ "tc35890", TC3589X_TC35890 },
-	{ "tc35892", TC3589X_TC35892 },
-	{ "tc35893", TC3589X_TC35893 },
-	{ "tc35894", TC3589X_TC35894 },
-	{ "tc35895", TC3589X_TC35895 },
-	{ "tc35896", TC3589X_TC35896 },
-	{ "tc3589x", TC3589X_UNKNOWN },
+	{ .name = "tc35890", .driver_data = TC3589X_TC35890 },
+	{ .name = "tc35892", .driver_data = TC3589X_TC35892 },
+	{ .name = "tc35893", .driver_data = TC3589X_TC35893 },
+	{ .name = "tc35894", .driver_data = TC3589X_TC35894 },
+	{ .name = "tc35895", .driver_data = TC3589X_TC35895 },
+	{ .name = "tc35896", .driver_data = TC3589X_TC35896 },
+	{ .name = "tc3589x", .driver_data = TC3589X_UNKNOWN },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tc3589x_id);

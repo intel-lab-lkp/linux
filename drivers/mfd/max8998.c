@@ -223,8 +223,8 @@ err:
 }
 
 static const struct i2c_device_id max8998_i2c_id[] = {
-	{ "max8998", TYPE_MAX8998 },
-	{ "lp3974", TYPE_LP3974},
+	{ .name = "max8998", .driver_data = TYPE_MAX8998 },
+	{ .name = "lp3974", .driver_data = TYPE_LP3974 },
 	{ }
 };
 

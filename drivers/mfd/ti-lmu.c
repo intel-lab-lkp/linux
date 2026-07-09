@@ -206,11 +206,11 @@ static const struct of_device_id ti_lmu_of_match[] = {
 MODULE_DEVICE_TABLE(of, ti_lmu_of_match);
 
 static const struct i2c_device_id ti_lmu_ids[] = {
-	{ "lm3631", LM3631 },
-	{ "lm3632", LM3632 },
-	{ "lm3633", LM3633 },
-	{ "lm3695", LM3695 },
-	{ "lm36274", LM36274 },
+	{ .name = "lm3631", .driver_data = LM3631 },
+	{ .name = "lm3632", .driver_data = LM3632 },
+	{ .name = "lm3633", .driver_data = LM3633 },
+	{ .name = "lm3695", .driver_data = LM3695 },
+	{ .name = "lm36274", .driver_data = LM36274 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ti_lmu_ids);

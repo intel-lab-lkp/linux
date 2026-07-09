@@ -329,8 +329,8 @@ static int adp5520_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(adp5520_pm, adp5520_suspend, adp5520_resume);
 
 static const struct i2c_device_id adp5520_id[] = {
-	{ "pmic-adp5520", ID_ADP5520 },
-	{ "pmic-adp5501", ID_ADP5501 },
+	{ .name = "pmic-adp5520", .driver_data = ID_ADP5520 },
+	{ .name = "pmic-adp5501", .driver_data = ID_ADP5501 },
 	{ }
 };
 

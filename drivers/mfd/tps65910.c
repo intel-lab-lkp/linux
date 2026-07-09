@@ -532,8 +532,8 @@ static int tps65910_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id tps65910_i2c_id[] = {
-       { "tps65910", TPS65910 },
-       { "tps65911", TPS65911 },
+       { .name = "tps65910", .driver_data = TPS65910 },
+       { .name = "tps65911", .driver_data = TPS65911 },
        { }
 };
 

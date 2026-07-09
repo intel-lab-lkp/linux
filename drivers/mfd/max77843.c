@@ -169,7 +169,7 @@ static const struct of_device_id max77843_dt_match[] = {
 };
 
 static const struct i2c_device_id max77843_id[] = {
-	{ "max77843", TYPE_MAX77843, },
+	{ .name = "max77843", .driver_data = TYPE_MAX77843 },
 	{ },
 };
 

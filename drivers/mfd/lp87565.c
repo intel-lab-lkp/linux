@@ -108,7 +108,7 @@ static void lp87565_shutdown(struct i2c_client *client)
 }
 
 static const struct i2c_device_id lp87565_id_table[] = {
-	{ "lp87565-q1" },
+	{ .name = "lp87565-q1" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lp87565_id_table);

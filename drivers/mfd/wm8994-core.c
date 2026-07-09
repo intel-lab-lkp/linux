@@ -643,10 +643,10 @@ static void wm8994_i2c_remove(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id wm8994_i2c_id[] = {
-	{ "wm1811", WM1811 },
-	{ "wm1811a", WM1811 },
-	{ "wm8994", WM8994 },
-	{ "wm8958", WM8958 },
+	{ .name = "wm1811", .driver_data = WM1811 },
+	{ .name = "wm1811a", .driver_data = WM1811 },
+	{ .name = "wm8994", .driver_data = WM8994 },
+	{ .name = "wm8958", .driver_data = WM8958 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, wm8994_i2c_id);

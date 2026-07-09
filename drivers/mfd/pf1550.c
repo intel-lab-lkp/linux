@@ -340,7 +340,7 @@ static int pf1550_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(pf1550_pm, pf1550_suspend, pf1550_resume);
 
 static const struct i2c_device_id pf1550_i2c_id[] = {
-	{ "pf1550" },
+	{ .name = "pf1550" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, pf1550_i2c_id);

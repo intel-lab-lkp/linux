@@ -841,9 +841,9 @@ static void si476x_core_remove(struct i2c_client *client)
 
 
 static const struct i2c_device_id si476x_id[] = {
-	{ "si4761", SI476X_CHIP_SI4761 },
-	{ "si4764", SI476X_CHIP_SI4764 },
-	{ "si4768", SI476X_CHIP_SI4768 },
+	{ .name = "si4761", .driver_data = SI476X_CHIP_SI4761 },
+	{ .name = "si4764", .driver_data = SI476X_CHIP_SI4764 },
+	{ .name = "si4768", .driver_data = SI476X_CHIP_SI4768 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, si476x_id);

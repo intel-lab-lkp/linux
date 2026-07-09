@@ -711,8 +711,8 @@ static const struct of_device_id da9062_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, da9062_dt_ids);
 
 static const struct i2c_device_id da9062_i2c_id[] = {
-	{ "da9061", COMPAT_TYPE_DA9061 },
-	{ "da9062", COMPAT_TYPE_DA9062 },
+	{ .name = "da9061", .driver_data = COMPAT_TYPE_DA9061 },
+	{ .name = "da9062", .driver_data = COMPAT_TYPE_DA9062 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, da9062_i2c_id);
