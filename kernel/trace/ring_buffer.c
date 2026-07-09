@@ -2330,10 +2330,7 @@ static struct ring_buffer_desc *ring_buffer_desc(struct trace_buffer_desc *trace
 	size_t len;
 	int i;
 
-	if (!trace_desc)
-		return NULL;
-
-	if (cpu >= trace_desc->nr_cpus)
+	if (!trace_desc || !trace_desc->nr_cpus)
 		return NULL;
 
 	end = (struct ring_buffer_desc *)((void *)trace_desc + trace_desc->struct_len);
