@@ -139,11 +139,11 @@ void tctx_task_work(struct callback_head *cb)
  */
 static void io_ctx_mark_taskrun(struct io_ring_ctx *ctx)
 {
-	if (ctx->flags & IORING_SETUP_TASKRUN_FLAG) {
-		struct io_rings *rings;
+	lockdep_assert_in_rcu_read_lock();
 
-		guard(rcu)();
-		rings = rcu_dereference(ctx->rings_rcu);
+	if (ctx->flags & IORING_SETUP_TASKRUN_FLAG) {
+		struct io_rings *rings = rcu_dereference(ctx->rings_rcu);
+
 		atomic_or(IORING_SQ_TASKRUN, &rings->sq_flags);
 	}
 }
