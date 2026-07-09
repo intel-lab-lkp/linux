@@ -906,16 +906,30 @@ static void dw_spi_init_enh_mem_buf(struct dw_spi *dws, const struct spi_mem_op 
 	}
 }
 
-static void dw_spi_enh_write_cmd_addr(struct dw_spi *dws, const struct spi_mem_op *op)
+static void dw_spi_enh_write_cmd_addr(struct dw_spi *dws, const struct spi_mem_op *op,
+				      struct spi_mem *mem)
 {
-	/* Send cmd as 32 bit value */
-	dw_write_io_reg(dws, DW_SPI_DR, op->cmd.opcode);
-	if (op->addr.nbytes) {
-		dw_write_io_reg(dws, DW_SPI_DR, lower_32_bits(op->addr.val));
-		if (op->addr.nbytes > 4) {
-			/* address more than 32bit */
-			dw_write_io_reg(dws, DW_SPI_DR, upper_32_bits(op->addr.val));
+	if (dws->quirk_flags & DW_SPI_QUIRK_JHB100) {
+		dw_write_io_reg(dws, DW_SPI_JHB100_INST, op->cmd.opcode);
+		if (op->addr.nbytes)
+			dw_write_io_reg(dws, DW_SPI_JHB100_ADDR, op->addr.val);
+
+		dw_spi_set_cs(mem->spi, false);
+		dw_spi_enable_chip(dws, 1);
+	} else {
+		dw_spi_enable_chip(dws, 1);
+
+		/* Send cmd as 32 bit value */
+		dw_write_io_reg(dws, DW_SPI_DR, op->cmd.opcode);
+		if (op->addr.nbytes) {
+			dw_write_io_reg(dws, DW_SPI_DR, lower_32_bits(op->addr.val));
+			if (op->addr.nbytes > 4) {
+				/* address more than 32bit */
+				dw_write_io_reg(dws, DW_SPI_DR, upper_32_bits(op->addr.val));
+			}
 		}
+
+		dw_spi_set_cs(mem->spi, false);
 	}
 }
 
@@ -979,10 +993,11 @@ static int dw_spi_exec_enh_mem_op(struct spi_mem *mem, const struct spi_mem_op *
 
 	dw_spi_mask_intr(dws, 0xff);
 	reinit_completion(&ctlr->xfer_completion);
-	dw_spi_enable_chip(dws, 1);
 
-	dw_spi_enh_write_cmd_addr(dws, op);
-	dw_spi_set_cs(mem->spi, false);
+	if (dws->set_addr_nbyte)
+		dws->set_addr_nbyte(mem->spi, op->addr.nbytes);
+
+	dw_spi_enh_write_cmd_addr(dws, op, mem);
 
 	udelay(5);
 
