@@ -1087,6 +1087,10 @@
 			reg = <0 0xff700000 0 0x100000>;
 			no-map;
 		};
+
+		iris_resv: reservation-iris {
+			iommu-addresses = <&iris_non_pixel 0x0 0x0 0x0 0x25800000>;
+		};
 	};
 
 	smp2p-adsp {
@@ -3690,9 +3694,10 @@
 			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
 			reset-names = "bus";
 
-			iommus = <&apps_smmu 0x1940 0>,
-				 <&apps_smmu 0x1947 0>;
 			dma-coherent;
+
+			#address-cells = <2>;
+			#size-cells = <2>;
 
 			/*
 			 * IRIS firmware is signed by vendors, only
@@ -3700,6 +3705,15 @@
 			 * is available.
 			 */
 			status = "disabled";
+
+			iris_non_pixel: non-pixel {
+				iommus = <&apps_smmu 0x1940 0x0>;
+				memory-region = <&iris_resv>;
+			};
+
+			iris_pixel: pixel {
+				iommus = <&apps_smmu 0x1947 0x0>;
+			};
 
 			iris_opp_table: opp-table {
 				compatible = "operating-points-v2";
