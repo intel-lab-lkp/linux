@@ -162,10 +162,8 @@ static int ls1x_dma_alloc_chan_resources(struct dma_chan *dchan)
 
 	ret = devm_request_irq(dev, chan->irq, ls1x_dma_irq_handler,
 			       IRQF_SHARED, dma_chan_name(dchan), chan);
-	if (ret) {
-		dev_err(dev, "failed to request IRQ %d\n", chan->irq);
+	if (ret)
 		return ret;
-	}
 
 	chan->lli_pool = dma_pool_create(dma_chan_name(dchan), dev,
 					 sizeof(struct ls1x_dma_lli),
