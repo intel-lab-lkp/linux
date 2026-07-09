@@ -230,13 +230,17 @@ static int rzg2l_cru_media_init(struct rzg2l_cru_dev *cru)
 	media_device_init(mdev);
 
 	ret = rzg2l_cru_mc_parse_of_graph(cru);
-	if (ret) {
-		mutex_lock(&cru->mdev_lock);
-		cru->v4l2_dev.mdev = NULL;
-		mutex_unlock(&cru->mdev_lock);
-	}
+	if (ret)
+		goto error_mc_parse;
 
 	return 0;
+
+error_mc_parse:
+	media_device_cleanup(mdev);
+	cru->v4l2_dev.mdev = NULL;
+	media_entity_cleanup(&cru->vdev.entity);
+	mutex_destroy(&cru->mdev_lock);
+	return ret;
 }
 
 static int rzg2l_cru_probe(struct platform_device *pdev)
@@ -312,6 +316,7 @@ static void rzg2l_cru_remove(struct platform_device *pdev)
 	v4l2_async_nf_cleanup(&cru->notifier);
 
 	rzg2l_cru_video_unregister(cru);
+	media_entity_cleanup(&cru->vdev.entity);
 	media_device_cleanup(&cru->mdev);
 	mutex_destroy(&cru->mdev_lock);
 
