@@ -131,11 +131,11 @@ xfs_end_ioend_write(
 	}
 
 	/*
-	 * Clean up all COW blocks and underlying data fork delalloc blocks on
-	 * I/O error. The delalloc punch is required because this ioend was
-	 * mapped to blocks in the COW fork and the associated pages are no
-	 * longer dirty. If we don't remove delalloc blocks here, they become
-	 * stale and can corrupt free space accounting on unmount.
+	 * Clean up COW blocks and COW fork delalloc blocks on I/O error.
+	 * On the error path xfs_reflink_end_cow() is never called, so the
+	 * COW fork extents have not been moved to the data fork yet.  Any
+	 * overlapping delalloc that needs to be cleaned up is therefore
+	 * still in the COW fork.
 	 */
 	error = blk_status_to_errno(ioend->io_bio.bi_status);
 	if (unlikely(error)) {
@@ -153,7 +153,7 @@ xfs_end_ioend_write(
 		if (ioend->io_flags & IOMAP_IOEND_SHARED) {
 			ASSERT(!is_zoned);
 			xfs_reflink_cancel_cow_range(ip, offset, size, true);
-			xfs_bmap_punch_delalloc_range(ip, XFS_DATA_FORK, offset,
+			xfs_bmap_punch_delalloc_range(ip, XFS_COW_FORK, offset,
 					offset + size, NULL);
 		}
 		goto done;
