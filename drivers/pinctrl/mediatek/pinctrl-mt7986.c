@@ -1008,3 +1008,6 @@ static int __init mt7986_pinctrl_init(void)
 					 ARRAY_SIZE(mt7986_pinctrl_drivers));
 }
 arch_initcall(mt7986_pinctrl_init);
+
+MODULE_DESCRIPTION("MediaTek MT7986 Pinctrl Driver");
+MODULE_LICENSE("GPL v2");
