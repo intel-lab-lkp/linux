@@ -47,6 +47,7 @@ static int test_ra_error(void)
 	FAIL_IF(sigaction(SIGBUS, &act, NULL) != 0);
 
 	paste_addr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0ULL);
+	FAIL_IF(paste_addr == MAP_FAILED);
 
 	/* The following assignment triggers exception */
 	mb();
