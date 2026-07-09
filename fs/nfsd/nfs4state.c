@@ -1037,18 +1037,81 @@ void nfs4_free_copy_state(struct nfsd4_copy *copy)
 	spin_unlock(&nn->s2s_cp_lock);
 }
 
+/*
+ * Drop the parent stid's reference on a cpntf entry that has already been
+ * removed from sc_cp_list and the s2s_cp_stateids IDR. If a concurrent holder
+ * still owns a reference (acquired viamanage_cpntf_state() before the unlink),
+ * that holder's nfs4_put_cpntf_state() will perform the final free.
+ *
+ * The nn->s2s_cp_lock must be held!
+ */
+static void put_cpntf_state_unlinked_locked(struct nfs4_cpntf_state *cps)
+{
+	WARN_ON_ONCE(cps->cp_stateid.cs_type != NFS4_COPYNOTIFY_STID);
+	WARN_ON_ONCE(!list_empty(&cps->cp_list));
+
+	if (refcount_dec_and_test(&cps->cp_stateid.cs_count))
+		kfree(cps);
+}
+
+/*
+ * Unhash the stateid from the s2s stateid hash, and detach it from the sc_cp_list.
+ * Note that this is gated on a list_empty() check, to avoid problems with IDR
+ * hashval reuse.
+ */
+static void nfsd4_unhash_cpntf_state(struct nfsd_net *nn, struct nfs4_cpntf_state *cps)
+{
+	lockdep_assert_held(&nn->s2s_cp_lock);
+
+	if (!list_empty(&cps->cp_list)) {
+		list_del_init(&cps->cp_list);
+		idr_remove(&nn->s2s_cp_stateids, cps->cp_stateid.cs_stid.si_opaque.so_id);
+	}
+}
+
+/*
+ * Revoke a copy-notify stateid. Unlink it from the s2s_cp_stateids IDR and
+ * its parent's sc_cp_list first, so no new finder (OFFLOAD_CANCEL, laundromat,
+ * or find_cpntf_state()) can discover it, then drop the membership reference.
+ *
+ * This must be used by every revoke path (cancel, laundromat expiry, drain)
+ * instead of _free_cpntf_state_locked(): the latter only unlinks once the
+ * refcount reaches zero, so revoking while a concurrent reader holds a
+ * reference would leave the entry discoverable with its membership reference
+ * already consumed, allowing a second revoke to over-decrement and free it
+ * out from under the reader.
+ *
+ * If a concurrent holder still owns a reference (e.g. acquired via
+ * find_cpntf_state()), its nfs4_put_cpntf_state() performs the final free.
+ *
+ * The nn->s2s_cp_lock must be held!
+ */
+static void revoke_cpntf_state_locked(struct nfsd_net *nn,
+				      struct nfs4_cpntf_state *cps)
+{
+	nfsd4_unhash_cpntf_state(nn, cps);
+	put_cpntf_state_unlinked_locked(cps);
+}
+
 static void nfs4_free_cpntf_statelist(struct net *net, struct nfs4_stid *stid)
 {
-	struct nfs4_cpntf_state *cps;
+	struct nfs4_cpntf_state *cps, *tmp;
 	struct nfsd_net *nn;
 
 	nn = net_generic(net, nfsd_net_id);
 	spin_lock(&nn->s2s_cp_lock);
-	while (!list_empty(&stid->sc_cp_list)) {
-		cps = list_first_entry(&stid->sc_cp_list,
-				       struct nfs4_cpntf_state, cp_list);
-		_free_cpntf_state_locked(nn, cps);
-	}
+	/*
+	 * Unlink every entry from sc_cp_list and the IDR before dropping
+	 * the parent's reference.  This makes the drain terminate in one
+	 * pass per entry regardless of cs_count: a concurrent holder that
+	 * obtained the entry via manage_cpntf_state() retains its own
+	 * reference, and its eventual nfs4_put_cpntf_state() will see the
+	 * entry already unlinked (list_del_init() in
+	 * _free_cpntf_state_locked makes that a no-op) and drive the final
+	 * kfree itself.
+	 */
+	list_for_each_entry_safe(cps, tmp, &stid->sc_cp_list, cp_list)
+		revoke_cpntf_state_locked(nn, cps);
 	spin_unlock(&nn->s2s_cp_lock);
 }
 
@@ -7495,7 +7558,7 @@ nfs4_laundromat(struct nfsd_net *nn)
 		cps = container_of(cps_t, struct nfs4_cpntf_state, cp_stateid);
 		if (cps->cp_stateid.cs_type == NFS4_COPYNOTIFY_STID &&
 				state_expired(&lt, cps->cpntf_time))
-			_free_cpntf_state_locked(nn, cps);
+			revoke_cpntf_state_locked(nn, cps);
 	}
 	spin_unlock(&nn->s2s_cp_lock);
 	nfsd4_async_copy_reaper(nn);
@@ -7882,16 +7945,14 @@ nfs4_check_file(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfs4_stid *s,
 out:
 	return status;
 }
-static void
-_free_cpntf_state_locked(struct nfsd_net *nn, struct nfs4_cpntf_state *cps)
+
+static void _free_cpntf_state_locked(struct nfsd_net *nn, struct nfs4_cpntf_state *cps)
 {
 	WARN_ON_ONCE(cps->cp_stateid.cs_type != NFS4_COPYNOTIFY_STID);
-	if (!refcount_dec_and_test(&cps->cp_stateid.cs_count))
-		return;
-	list_del_init(&cps->cp_list);
-	idr_remove(&nn->s2s_cp_stateids,
-		   cps->cp_stateid.cs_stid.si_opaque.so_id);
-	kfree(cps);
+	if (refcount_dec_and_test(&cps->cp_stateid.cs_count)) {
+		nfsd4_unhash_cpntf_state(nn, cps);
+		kfree(cps);
+	}
 }
 /*
  * A READ from an inter server to server COPY will have a
@@ -7930,7 +7991,7 @@ __be32 manage_cpntf_state(struct nfsd_net *nn, stateid_t *st,
 			state = NULL;
 			goto unlock;
 		} else {
-			_free_cpntf_state_locked(nn, state);
+			revoke_cpntf_state_locked(nn, state);
 		}
 	}
 unlock:
