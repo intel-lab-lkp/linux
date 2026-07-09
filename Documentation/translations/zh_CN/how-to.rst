@@ -53,6 +53,16 @@ Linux 发行版和简单地使用 Linux 命令行，那么可以迅速开始了�
 这是 Alex 开发树的镜像库，每两个小时同步一次上游。如果您了解到更快的 mirror，
 请随时 **添加** 。
 
+或者::
+
+	git clone https://mirrors.tuna.tsinghua.edu.cn/git/linux.git
+	cd linux
+	git remote add alexs https://git.kernel.org/pub/scm/linux/kernel/git/alexs/linux.git/
+	git fetch alexs docs-next:refs/remotes/alexs/docs-next
+	git switch -c docs-next --track alexs/docs-next
+
+这将先用清华源拉取 Linus Torvalds 的开发树，再增量下载中文开发分支中的内容。
+
 命令执行完毕后，您会在当前目录下得到一个 linux 目录，该目录就是您之后的工作
 仓库，请把它放在一个稳妥的位置。
 
