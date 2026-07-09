@@ -39,7 +39,7 @@
 
 #define KVM_MAX_VCPUS VGIC_V3_MAX_CPUS
 
-#define KVM_VCPU_MAX_FEATURES 9
+#define KVM_VCPU_MAX_FEATURES 10
 #define KVM_VCPU_VALID_FEATURES	(BIT(KVM_VCPU_MAX_FEATURES) - 1)
 
 #define KVM_REQ_SLEEP \
@@ -81,6 +81,7 @@ extern unsigned int __ro_after_init kvm_max_vl[ARM64_VEC_MAX];
 extern unsigned int __ro_after_init kvm_host_max_vl[ARM64_VEC_MAX];
 
 int __init kvm_arm_init_sve(void);
+int __init kvm_arm_init_sme(void);
 
 u32 __attribute_const__ kvm_target_cpu(void);
 void kvm_reset_vcpu(struct kvm_vcpu *vcpu);
@@ -1799,5 +1800,10 @@ static __always_inline enum fgt_group_id __fgt_reg_to_group_id(enum vcpu_sysreg 
 	})
 
 long kvm_get_cap_for_kvm_ioctl(unsigned int ioctl, long *ext);
+
+static inline bool system_supports_sme_virt(void)
+{
+	return system_supports_sme() && sme_max_virtualisable_vl();
+}
 
 #endif /* __ARM64_KVM_HOST_H__ */

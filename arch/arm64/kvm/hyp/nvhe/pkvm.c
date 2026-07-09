@@ -150,10 +150,6 @@ static int pkvm_check_pvm_cpu_features(struct kvm_vcpu *vcpu)
 	    !kvm_has_feat(kvm, ID_AA64PFR0_EL1, AdvSIMD, IMP))
 		return -EINVAL;
 
-	/* No SME support in KVM right now. Check to catch if it changes. */
-	if (kvm_has_feat(kvm, ID_AA64PFR1_EL1, SME, IMP))
-		return -EINVAL;
-
 	return 0;
 }
 
@@ -386,6 +382,11 @@ static void pkvm_init_features_from_host(struct pkvm_hyp_vm *hyp_vm, const struc
 		kvm->arch.flags |= host_arch_flags & BIT(KVM_ARCH_FLAG_GUEST_HAS_SVE);
 	}
 
+	if (kvm_pkvm_ext_allowed(kvm, KVM_CAP_ARM_SME)) {
+		set_bit(KVM_ARM_VCPU_SME, allowed_features);
+		kvm->arch.flags |= host_arch_flags & BIT(KVM_ARCH_FLAG_GUEST_HAS_SME);
+	}
+
 	bitmap_and(kvm->arch.vcpu_features, host_kvm->arch.vcpu_features,
 		   allowed_features, KVM_VCPU_MAX_FEATURES);
 }
@@ -400,12 +401,25 @@ static void unpin_host_sve_state(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
 	void *sve_state;
 
-	if (!vcpu_has_feature(&hyp_vcpu->vcpu, KVM_ARM_VCPU_SVE))
+	if (!vcpu_has_feature(&hyp_vcpu->vcpu, KVM_ARM_VCPU_SVE) &&
+	    !vcpu_has_feature(&hyp_vcpu->vcpu, KVM_ARM_VCPU_SME))
 		return;
 
 	sve_state = hyp_vcpu->vcpu.arch.sve_state;
 	hyp_unpin_shared_mem(sve_state,
 			     sve_state + vcpu_sve_state_size(&hyp_vcpu->vcpu));
+}
+
+static void unpin_host_sme_state(struct pkvm_hyp_vcpu *hyp_vcpu)
+{
+	void *sme_state;
+
+	if (!vcpu_has_feature(&hyp_vcpu->vcpu, KVM_ARM_VCPU_SME))
+		return;
+
+	sme_state = hyp_vcpu->vcpu.arch.sme_state;
+	hyp_unpin_shared_mem(sme_state,
+			     sme_state + vcpu_sme_state_size(&hyp_vcpu->vcpu));
 }
 
 static void unpin_host_vcpus(struct pkvm_hyp_vcpu *hyp_vcpus[],
@@ -421,6 +435,7 @@ static void unpin_host_vcpus(struct pkvm_hyp_vcpu *hyp_vcpus[],
 
 		unpin_host_vcpu(hyp_vcpu->host_vcpu);
 		unpin_host_sve_state(hyp_vcpu);
+		unpin_host_sme_state(hyp_vcpu);
 	}
 }
 
@@ -447,23 +462,35 @@ static void init_pkvm_hyp_vm(struct kvm *host_kvm, struct pkvm_hyp_vm *hyp_vm,
 	mmu->pgt = &hyp_vm->pgt;
 }
 
-static int pkvm_vcpu_init_sve(struct pkvm_hyp_vcpu *hyp_vcpu, struct kvm_vcpu *host_vcpu)
+static int pkvm_vcpu_init_vec(struct pkvm_hyp_vcpu *hyp_vcpu, struct kvm_vcpu *host_vcpu)
 {
 	struct kvm_vcpu *vcpu = &hyp_vcpu->vcpu;
-	unsigned int sve_max_vl;
-	size_t sve_state_size;
-	void *sve_state;
+	unsigned int sve_max_vl, sme_max_vl;
+	size_t sve_state_size, sme_state_size;
+	void *sve_state, *sme_state;
 	int ret = 0;
 
-	if (!vcpu_has_feature(vcpu, KVM_ARM_VCPU_SVE)) {
+	if (!vcpu_has_feature(vcpu, KVM_ARM_VCPU_SVE) &&
+	    !vcpu_has_feature(vcpu, KVM_ARM_VCPU_SME)) {
 		vcpu_clear_flag(vcpu, VCPU_VEC_FINALIZED);
 		return 0;
 	}
 
 	/* Limit guest vector length to the maximum supported by the host. */
-	sve_max_vl = min(READ_ONCE(host_vcpu->arch.max_vl[ARM64_VEC_SVE]),
-			 kvm_host_max_vl[ARM64_VEC_SVE]);
-	sve_state_size = sve_state_size_from_vl(sve_max_vl);
+	if (vcpu_has_feature(vcpu, KVM_ARM_VCPU_SVE))
+		sve_max_vl = min(READ_ONCE(host_vcpu->arch.max_vl[ARM64_VEC_SVE]),
+				 kvm_host_max_vl[ARM64_VEC_SVE]);
+	else
+		sve_max_vl = 0;
+
+	if (vcpu_has_feature(vcpu, KVM_ARM_VCPU_SME))
+		sme_max_vl = min(READ_ONCE(host_vcpu->arch.max_vl[ARM64_VEC_SME]),
+				 kvm_host_max_vl[ARM64_VEC_SME]);
+	else
+		sme_max_vl = 0;
+
+	/* We need SVE storage for the larger of normal or streaming mode */
+	sve_state_size = sve_state_size_from_vl(max(sve_max_vl, sme_max_vl));
 	sve_state = kern_hyp_va(READ_ONCE(host_vcpu->arch.sve_state));
 
 	if (!sve_state || !sve_state_size) {
@@ -475,12 +502,37 @@ static int pkvm_vcpu_init_sve(struct pkvm_hyp_vcpu *hyp_vcpu, struct kvm_vcpu *h
 	if (ret)
 		goto err;
 
+	if (vcpu_has_feature(vcpu, KVM_ARM_VCPU_SME)) {
+		/* Space for ZT0 is always allocated to simplify the code. */
+		sme_state_size = sme_state_size_from_vl(sme_max_vl,
+							system_supports_sme2());
+		sme_state = kern_hyp_va(READ_ONCE(host_vcpu->arch.sme_state));
+
+		if (!sme_state || !sme_state_size) {
+			ret = -EINVAL;
+			goto err_sve_mapped;
+		}
+
+		ret = hyp_pin_shared_mem(sme_state, sme_state + sme_state_size);
+		if (ret)
+			goto err_sve_mapped;
+	} else {
+		sme_state = NULL;
+	}
+
 	vcpu->arch.sve_state = sve_state;
 	vcpu->arch.max_vl[ARM64_VEC_SVE] = sve_max_vl;
 
+	vcpu->arch.sme_state = sme_state;
+	vcpu->arch.max_vl[ARM64_VEC_SME] = sme_max_vl;
+
 	return 0;
+
+err_sve_mapped:
+	hyp_unpin_shared_mem(sve_state, sve_state + sve_state_size);
 err:
 	clear_bit(KVM_ARM_VCPU_SVE, vcpu->kvm->arch.vcpu_features);
+	clear_bit(KVM_ARM_VCPU_SME, vcpu->kvm->arch.vcpu_features);
 	return ret;
 }
 
@@ -540,7 +592,7 @@ static int init_pkvm_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu,
 	if (ret)
 		goto done;
 
-	ret = pkvm_vcpu_init_sve(hyp_vcpu, host_vcpu);
+	ret = pkvm_vcpu_init_vec(hyp_vcpu, host_vcpu);
 done:
 	if (ret)
 		unpin_host_vcpu(host_vcpu);
@@ -926,6 +978,7 @@ int __pkvm_init_vcpu(pkvm_handle_t handle, struct kvm_vcpu *host_vcpu,
 	if (ret) {
 		unpin_host_vcpu(host_vcpu);
 		unpin_host_sve_state(hyp_vcpu);
+		unpin_host_sme_state(hyp_vcpu);
 	}
 unlock:
 	hyp_spin_unlock(&vm_table_lock);
