@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 
+#include <linux/rculist.h>
+#include <linux/rcupdate.h>
 #include <linux/slab.h>
 
 #include <drm/drm_print.h>
@@ -599,7 +601,12 @@ struct vkms_config_connector *vkms_config_create_connector(struct vkms_config *c
 	connector_cfg->status = connector_status_connected;
 	xa_init_flags(&connector_cfg->possible_encoders, XA_FLAGS_ALLOC);
 
-	list_add_tail(&connector_cfg->link, &config->connectors);
+	/*
+	 * Paired with vkms_config_for_each_connector_rcu() in
+	 * vkms_connector_detect(), which may walk this list without holding
+	 * the configfs device lock.
+	 */
+	list_add_tail_rcu(&connector_cfg->link, &config->connectors);
 
 	return connector_cfg;
 }
@@ -607,9 +614,24 @@ EXPORT_SYMBOL_IF_KUNIT(vkms_config_create_connector);
 
 void vkms_config_destroy_connector(struct vkms_config_connector *connector_cfg)
 {
+	/*
+	 * connector_release() (vkms_configfs.c) can free a connector while
+	 * vkms_connector_detect() is concurrently walking the connectors list
+	 * under its own RCU read-side critical section (it cannot take the
+	 * configfs device lock: it already runs under
+	 * drm_device.mode_config.mutex, and vkms_destroy() takes the two
+	 * locks in the opposite order, so plain locking here would deadlock).
+	 *
+	 * Unlink from the list before destroying the object's components, so
+	 * the object is removed before it is reclaimed. After list_del_rcu()
+	 * no new reader can reach it, and the only RCU reader
+	 * (vkms_connector_detect()) never dereferences possible_encoders, so
+	 * tearing that down next is safe. Defer the free to after a grace
+	 * period so concurrent readers never touch freed memory.
+	 */
+	list_del_rcu(&connector_cfg->link);
 	xa_destroy(&connector_cfg->possible_encoders);
-	list_del(&connector_cfg->link);
-	kfree(connector_cfg);
+	kfree_rcu(connector_cfg, rcu);
 }
 EXPORT_SYMBOL_IF_KUNIT(vkms_config_destroy_connector);
 

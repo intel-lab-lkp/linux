@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 
+#include <linux/rcupdate.h>
+
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_managed.h>
@@ -26,10 +28,22 @@ static enum drm_connector_status vkms_connector_detect(struct drm_connector *con
 	 */
 	status = connector->status;
 
-	vkms_config_for_each_connector(vkmsdev->config, connector_cfg) {
+	/*
+	 * configfs can free connector_cfg concurrently (connector_release() ->
+	 * vkms_config_destroy_connector(), on an rmdir of the connector's
+	 * configfs directory) without taking drm_device.mode_config.mutex,
+	 * which this .detect callback is always called under. Walk the RCU-
+	 * protected list instead of taking the configfs device lock here: the
+	 * two locks are already nested in the opposite order by
+	 * vkms_destroy(), so acquiring the configfs lock from under
+	 * mode_config.mutex would deadlock.
+	 */
+	rcu_read_lock();
+	vkms_config_for_each_connector_rcu(vkmsdev->config, connector_cfg) {
 		if (connector_cfg->connector == vkms_connector)
 			status = vkms_config_connector_get_status(connector_cfg);
 	}
+	rcu_read_unlock();
 
 	return status;
 }

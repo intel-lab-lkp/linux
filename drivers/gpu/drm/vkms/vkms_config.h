@@ -4,6 +4,7 @@
 #define _VKMS_CONFIG_H_
 
 #include <linux/list.h>
+#include <linux/rculist.h>
 #include <linux/types.h>
 #include <linux/xarray.h>
 
@@ -108,6 +109,9 @@ struct vkms_config_encoder {
  *             It can be used to store a temporary reference to a VKMS connector
  *             during device creation. This pointer is not managed by the
  *             configuration and must be managed by other means.
+ * @rcu: Used to free the connector configuration after a grace period, so that
+ *       vkms_config_for_each_connector_rcu() readers (e.g. .detect) can safely
+ *       run concurrently with configfs teardown (see vkms_config_destroy_connector()).
  */
 struct vkms_config_connector {
 	struct list_head link;
@@ -118,6 +122,8 @@ struct vkms_config_connector {
 
 	/* Internal usage */
 	struct vkms_connector *connector;
+
+	struct rcu_head rcu;
 };
 
 /**
@@ -151,6 +157,22 @@ struct vkms_config_connector {
  */
 #define vkms_config_for_each_connector(config, connector_cfg) \
 	list_for_each_entry((connector_cfg), &(config)->connectors, link)
+
+/**
+ * vkms_config_for_each_connector_rcu - RCU-safe iteration over the vkms_config
+ * connectors
+ * @config: &struct vkms_config pointer
+ * @connector_cfg: &struct vkms_config_connector pointer used as cursor
+ *
+ * Unlike vkms_config_for_each_connector(), this may be used without holding
+ * the configfs device lock, from contexts (such as &drm_connector_funcs.detect)
+ * that must not block on it. Callers must wrap the iteration in
+ * rcu_read_lock() / rcu_read_unlock(); see vkms_config_destroy_connector(),
+ * which pairs with this by unlinking with list_del_rcu() and freeing with
+ * kfree_rcu().
+ */
+#define vkms_config_for_each_connector_rcu(config, connector_cfg) \
+	list_for_each_entry_rcu((connector_cfg), &(config)->connectors, link)
 
 /**
  * vkms_config_plane_for_each_possible_crtc - Iterate over the vkms_config_plane
