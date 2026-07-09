@@ -420,20 +420,32 @@ int drm_sysfb_plane_helper_get_scanout_buffer(struct drm_plane *plane,
 }
 EXPORT_SYMBOL(drm_sysfb_plane_helper_get_scanout_buffer);
 
-void drm_sysfb_plane_reset(struct drm_plane *plane)
+/**
+ * drm_sysfb_plane_atomic_create_state - creates sysfb plane state
+ * @plane: the plane
+ *
+ * This function implements struct &drm_plane_funcs.atomic_create_state for
+ * sysfb planes. It allocates the plane state of type
+ * struct drm_sysfb_plane_state.
+ *
+ * Returns:
+ * A pointer to a new plane state on success, or an ERR_PTR()-encoded
+ * error code otherwise.
+ */
+struct drm_plane_state *
+drm_sysfb_plane_atomic_create_state(struct drm_plane *plane)
 {
 	struct drm_sysfb_plane_state *sysfb_plane_state;
 
-	if (plane->state)
-		drm_sysfb_plane_state_destroy(to_drm_sysfb_plane_state(plane->state));
-
 	sysfb_plane_state = kzalloc_obj(*sysfb_plane_state);
-	if (sysfb_plane_state)
-		__drm_gem_reset_shadow_plane(plane, &sysfb_plane_state->base);
-	else
-		__drm_gem_reset_shadow_plane(plane, NULL);
+	if (!sysfb_plane_state)
+		return ERR_PTR(-ENOMEM);
+
+	__drm_gem_shadow_plane_state_init(plane, &sysfb_plane_state->base);
+
+	return &sysfb_plane_state->base.base;
 }
-EXPORT_SYMBOL(drm_sysfb_plane_reset);
+EXPORT_SYMBOL(drm_sysfb_plane_atomic_create_state);
 
 struct drm_plane_state *drm_sysfb_plane_atomic_duplicate_state(struct drm_plane *plane)
 {
