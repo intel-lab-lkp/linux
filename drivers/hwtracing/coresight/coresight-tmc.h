@@ -275,6 +275,7 @@ struct tmc_drvdata {
 	struct etr_buf		*perf_buf;
 	struct tmc_resrv_buf	resrv_buf;
 	struct tmc_resrv_buf	crash_mdata;
+	struct perf_event	*event;
 };
 
 struct etr_buf_operations {

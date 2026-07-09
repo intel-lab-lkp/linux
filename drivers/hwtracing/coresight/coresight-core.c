@@ -2246,6 +2246,30 @@ int coresight_get_enable_clocks(struct device *dev, struct clk **pclk,
 }
 EXPORT_SYMBOL_GPL(coresight_get_enable_clocks);
 
+/*
+ * Returns true if a sink that's potentially connected to multiple ETMs can be
+ * used in parallel with another event.
+ */
+bool coresight_sink_can_share(struct perf_event *existing,
+			      struct perf_event *new)
+{
+	/*
+	 * In per-thread mode only one event can use a sink, otherwise a sink
+	 * shared by multiple ETMs could have trace from two different threads
+	 * in it from two different events.
+	 */
+	if (existing->cpu == -1)
+		return existing == new;
+
+	/*
+	 * In per-CPU mode allow the sink to be shared across events, userspace
+	 * expects data from multiple CPUs in a shared sink. The only
+	 * restriction is the events must have the same owner.
+	 */
+	return existing->owner == new->owner;
+}
+EXPORT_SYMBOL_GPL(coresight_sink_can_share);
+
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Pratik Patel <pratikp@codeaurora.org>");
 MODULE_AUTHOR("Mathieu Poirier <mathieu.poirier@linaro.org>");

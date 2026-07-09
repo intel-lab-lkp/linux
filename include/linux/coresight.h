@@ -715,4 +715,7 @@ int coresight_etm_get_trace_id(struct coresight_device *csdev, enum cs_mode mode
 			       struct coresight_device *sink);
 int coresight_get_enable_clocks(struct device *dev, struct clk **pclk,
 				struct clk **atclk);
+bool coresight_sink_can_share(struct perf_event *existing,
+			      struct perf_event *new);
+
 #endif		/* _LINUX_COREISGHT_H */
