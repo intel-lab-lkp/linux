@@ -35,6 +35,27 @@
 
 #include "mtk_dp_reg.h"
 
+/* PHY Registers - for legacy only */
+#define DP_PHY_GLB_BIAS_GEN_00		0x0
+#  define RG_XTP_GLB_BIAS_INTR_CTRL	GENMASK(20, 16)
+#define DP_PHY_GLB_DPAUX_TX		0x8
+#  define RG_CKM_PT0_CKTX_IMPSEL	GENMASK(23, 20)
+#define MTK_DP_0034			0x34
+#  define DA_CKM_CKTX0_EN_FORCE_EN	BIT(10)
+#define DP_PHY_LANE_TX_0		0x104
+#define DP_PHY_LANE_TX_1		0x204
+#define DP_PHY_LANE_TX_2		0x304
+#define DP_PHY_LANE_TX_3		0x404
+#  define RG_XTP_LNx_TX_IMPSEL_PMOS	GENMASK(15, 12)
+#  define RG_XTP_LNx_TX_IMPSEL_NMOS	GENMASK(19, 16)
+#define DP_PHY_AUX_RX_CTL		0x1040
+#  define RG_DPAUX_RX_VALID_DEGLITCH_EN	BIT(2)
+#  define RG_XTP_GLB_CKDET_EN		BIT(1)
+#  define RG_DPAUX_RX_EN		BIT(0)
+
+/* TOP Register offset - for legacy only */
+#define MTK_DP_TOP_OFFSET_LEGACY	0x2000
+
 #define MTK_DP_SIP_CONTROL_AARCH32	MTK_SIP_SMC_CMD(0x523)
 #define MTK_DP_SIP_ATF_EDP_VIDEO_UNMUTE	33
 #define MTK_DP_SIP_ATF_VIDEO_UNMUTE	32
@@ -125,6 +146,9 @@ struct mtk_dp {
 	struct phy *phy;
 	struct regmap *regs;
 	struct timer_list debounce_timer;
+
+	/* For legacy devicetree compatibility */
+	u16 legacy_regoff;
 
 	/* For audio */
 	bool audio_enable;
@@ -394,11 +418,11 @@ static const struct mtk_dp_efuse_fmt mt8195_dp_efuse_fmt[MTK_DP_CAL_MAX] = {
 	},
 };
 
-static const struct regmap_config mtk_dp_regmap_config = {
+static const struct regmap_config mtk_dp_regmap_legacy_config = {
 	.reg_bits = 32,
 	.val_bits = 32,
 	.reg_stride = 4,
-	.max_register = SEC_OFFSET + 0x90,
+	.max_register = MTK_DP_TOP_OFFSET_LEGACY + SEC_OFFSET + 0x90,
 	.name = "mtk-dp-registers",
 };
 
@@ -412,7 +436,7 @@ static u32 mtk_dp_read(struct mtk_dp *mtk_dp, u32 offset)
 	u32 read_val;
 	int ret;
 
-	ret = regmap_read(mtk_dp->regs, offset, &read_val);
+	ret = regmap_read(mtk_dp->regs, offset + mtk_dp->legacy_regoff, &read_val);
 	if (ret) {
 		dev_err(mtk_dp->dev, "Failed to read register 0x%x: %d\n",
 			offset, ret);
@@ -424,7 +448,7 @@ static u32 mtk_dp_read(struct mtk_dp *mtk_dp, u32 offset)
 
 static int mtk_dp_write(struct mtk_dp *mtk_dp, u32 offset, u32 val)
 {
-	int ret = regmap_write(mtk_dp->regs, offset, val);
+	int ret = regmap_write(mtk_dp->regs, offset + mtk_dp->legacy_regoff, val);
 
 	if (ret)
 		dev_err(mtk_dp->dev,
@@ -436,7 +460,7 @@ static int mtk_dp_write(struct mtk_dp *mtk_dp, u32 offset, u32 val)
 static int mtk_dp_update_bits(struct mtk_dp *mtk_dp, u32 offset,
 			      u32 val, u32 mask)
 {
-	int ret = regmap_update_bits(mtk_dp->regs, offset, mask, val);
+	int ret = regmap_update_bits(mtk_dp->regs, offset + mtk_dp->legacy_regoff, mask, val);
 
 	if (ret)
 		dev_err(mtk_dp->dev,
@@ -566,7 +590,8 @@ static int mtk_dp_set_color_format(struct mtk_dp *mtk_dp,
 			   DP_TEST_COLOR_FORMAT_MASK);
 
 	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC0_P0_303C,
-			   val, PIXEL_ENCODE_FORMAT_DP_ENC0_P0_MASK);
+			   FIELD_PREP(PIXEL_ENCODE_FORMAT_DP_ENC0_P0_MASK, val),
+			   PIXEL_ENCODE_FORMAT_DP_ENC0_P0_MASK);
 	return 0;
 }
 
@@ -1219,38 +1244,26 @@ use_default_val:
 
 static void mtk_dp_set_calibration_data(struct mtk_dp *mtk_dp)
 {
+	const u32 impsel_mask = RG_XTP_LNx_TX_IMPSEL_PMOS | RG_XTP_LNx_TX_IMPSEL_NMOS;
 	u32 *cal_data = mtk_dp->cal_data;
 
-	mtk_dp_update_bits(mtk_dp, DP_PHY_GLB_DPAUX_TX,
-			   cal_data[MTK_DP_CAL_CLKTX_IMPSE] << 20,
-			   RG_CKM_PT0_CKTX_IMPSEL);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_GLB_BIAS_GEN_00,
-			   cal_data[MTK_DP_CAL_GLB_BIAS_TRIM] << 16,
-			   RG_XTP_GLB_BIAS_INTR_CTRL);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_0,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_0] << 12,
-			   RG_XTP_LN0_TX_IMPSEL_PMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_0,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_0] << 16,
-			   RG_XTP_LN0_TX_IMPSEL_NMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_1,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_1] << 12,
-			   RG_XTP_LN1_TX_IMPSEL_PMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_1,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_1] << 16,
-			   RG_XTP_LN1_TX_IMPSEL_NMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_2,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_2] << 12,
-			   RG_XTP_LN2_TX_IMPSEL_PMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_2,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_2] << 16,
-			   RG_XTP_LN2_TX_IMPSEL_NMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_3,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_3] << 12,
-			   RG_XTP_LN3_TX_IMPSEL_PMOS);
-	mtk_dp_update_bits(mtk_dp, DP_PHY_LANE_TX_3,
-			   cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_3] << 16,
-			   RG_XTP_LN3_TX_IMPSEL_NMOS);
+	/* This avoids using mtk_dp_update_bits so that legacy_regoff is not added */
+	regmap_update_bits(mtk_dp->regs, DP_PHY_GLB_DPAUX_TX, RG_CKM_PT0_CKTX_IMPSEL,
+			   cal_data[MTK_DP_CAL_CLKTX_IMPSE] << 20);
+	regmap_update_bits(mtk_dp->regs, DP_PHY_GLB_BIAS_GEN_00, RG_XTP_GLB_BIAS_INTR_CTRL,
+			   cal_data[MTK_DP_CAL_GLB_BIAS_TRIM] << 16);
+	regmap_update_bits(mtk_dp->regs, DP_PHY_LANE_TX_0, impsel_mask,
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_0] << 12) |
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_0] << 16));
+	regmap_update_bits(mtk_dp->regs, DP_PHY_LANE_TX_1, impsel_mask,
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_1] << 12) |
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_1] << 16));
+	regmap_update_bits(mtk_dp->regs, DP_PHY_LANE_TX_2, impsel_mask,
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_2] << 12) |
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_2] << 16));
+	regmap_update_bits(mtk_dp->regs, DP_PHY_LANE_TX_3, impsel_mask,
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_PMOS_3] << 12) |
+			   (cal_data[MTK_DP_CAL_LN_TX_IMPSEL_NMOS_3] << 16));
 }
 
 static int mtk_dp_phy_configure(struct mtk_dp *mtk_dp,
@@ -1401,21 +1414,21 @@ static void mtk_dp_power_enable(struct mtk_dp *mtk_dp)
 			   SW_RST_B_PHYD, SW_RST_B_PHYD);
 	mtk_dp_update_bits(mtk_dp, MTK_DP_TOP_PWR_STATE,
 			   DP_PWR_STATE_BANDGAP_TPLL, DP_PWR_STATE_MASK);
-	mtk_dp_write(mtk_dp, MTK_DP_1040,
+	regmap_write(mtk_dp->regs, DP_PHY_AUX_RX_CTL,
 		     RG_DPAUX_RX_VALID_DEGLITCH_EN | RG_XTP_GLB_CKDET_EN |
 		     RG_DPAUX_RX_EN);
-	mtk_dp_update_bits(mtk_dp, MTK_DP_0034, 0, DA_CKM_CKTX0_EN_FORCE_EN);
+	regmap_clear_bits(mtk_dp->regs, MTK_DP_0034, DA_CKM_CKTX0_EN_FORCE_EN);
 }
 
 static void mtk_dp_power_disable(struct mtk_dp *mtk_dp)
 {
 	mtk_dp_write(mtk_dp, MTK_DP_TOP_PWR_STATE, 0);
 
-	mtk_dp_update_bits(mtk_dp, MTK_DP_0034,
-			   DA_CKM_CKTX0_EN_FORCE_EN, DA_CKM_CKTX0_EN_FORCE_EN);
+	regmap_set_bits(mtk_dp->regs, MTK_DP_0034, DA_CKM_CKTX0_EN_FORCE_EN);
 
 	/* Disable RX */
-	mtk_dp_write(mtk_dp, MTK_DP_1040, 0);
+	regmap_write(mtk_dp->regs, DP_PHY_AUX_RX_CTL, 0);
+
 	mtk_dp_write(mtk_dp, MTK_DP_TOP_MEM_PD,
 		     0x550 | FUSE_SEL | MEM_ISO_EN);
 }
@@ -2067,7 +2080,8 @@ static int mtk_dp_wait_hpd_asserted(struct drm_dp_aux *mtk_aux, unsigned long wa
 	u32 val;
 	int ret;
 
-	ret = regmap_read_poll_timeout(mtk_dp->regs, MTK_DP_TRANS_P0_3414,
+	ret = regmap_read_poll_timeout(mtk_dp->regs,
+				       MTK_DP_TRANS_P0_3414 + mtk_dp->legacy_regoff,
 				       val, !!(val & HPD_DB_DP_TRANS_P0_MASK),
 				       wait_us / 100, wait_us);
 	if (ret) {
@@ -2100,7 +2114,7 @@ static int mtk_dp_dt_parse(struct mtk_dp *mtk_dp,
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	mtk_dp->regs = devm_regmap_init_mmio(dev, base, &mtk_dp_regmap_config);
+	mtk_dp->regs = devm_regmap_init_mmio(dev, base, &mtk_dp_regmap_legacy_config);
 	if (IS_ERR(mtk_dp->regs))
 		return PTR_ERR(mtk_dp->regs);
 
@@ -2773,6 +2787,7 @@ static int mtk_dp_probe(struct platform_device *pdev)
 
 	mtk_dp->dev = dev;
 	mtk_dp->data = (struct mtk_dp_data *)of_device_get_match_data(dev);
+	mtk_dp->legacy_regoff = MTK_DP_TOP_OFFSET_LEGACY;
 
 	ret = mtk_dp_dt_parse(mtk_dp, pdev);
 	if (ret)
