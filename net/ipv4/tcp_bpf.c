@@ -317,6 +317,8 @@ msg_bytes_ready:
 		}
 		if (data && !sk_psock_queue_empty(psock))
 			goto msg_bytes_ready;
+		if (!data && timeo == MAX_SCHEDULE_TIMEOUT)
+			goto msg_bytes_ready;
 		copied = -EAGAIN;
 	}
 out:
@@ -405,6 +407,8 @@ msg_bytes_ready:
 			sk_psock_put(sk, psock);
 			return tcp_recvmsg(sk, msg, len, flags);
 		}
+		if (!data && timeo == MAX_SCHEDULE_TIMEOUT)
+			goto msg_bytes_ready;
 		copied = -EAGAIN;
 	}
 	ret = copied;
