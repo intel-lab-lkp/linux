@@ -5112,7 +5112,8 @@ static bool is_large_rmp_possible(struct kvm *kvm, kvm_pfn_t pfn, int order)
 	return false;
 }
 
-int sev_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn, int max_order)
+int sev_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
+		     kvm_pfn_t nr_pages, int max_order)
 {
 	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
 	gfn_t gfn = gpa_to_gfn(gpa);
@@ -5123,6 +5124,9 @@ int sev_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn, int max_order)
 
 	if (!sev_snp_guest(kvm))
 		return 0;
+
+	if (WARN_ON_ONCE(nr_pages != 1))
+		return -EIO;
 
 	rc = snp_lookup_rmpentry(pfn, &assigned, &level);
 	if (rc) {
