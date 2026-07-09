@@ -616,6 +616,9 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 	if (IS_ERR_OR_NULL(led_cdev->dev))
 		return;
 
+	mutex_lock(&led_cdev->led_access);
+	led_sysfs_disable(led_cdev);
+
 #ifdef CONFIG_LEDS_TRIGGERS
 	down_write(&led_cdev->trigger_lock);
 	if (led_cdev->trigger)
@@ -635,6 +638,8 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 
 	if (led_cdev->flags & LED_BRIGHT_HW_CHANGED)
 		led_remove_brightness_hw_changed(led_cdev);
+
+	mutex_unlock(&led_cdev->led_access);
 
 	device_unregister(led_cdev->dev);
 
