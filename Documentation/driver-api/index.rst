@@ -138,6 +138,7 @@ Subsystem-specific APIs
    sm501
    soundwire/index
    spi
+   steal-monitor
    surface_aggregator/index
    switchtec
    sync_file
