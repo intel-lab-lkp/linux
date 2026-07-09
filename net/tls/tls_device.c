@@ -761,8 +761,14 @@ int tls_device_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	}
 
 	/* Old-key records all ACKed; switch back to HW. */
-	if (test_bit(TLS_TX_REKEY_READY, &tls_ctx->flags))
-		tls_device_complete_rekey(sk, tls_ctx, true);
+	if (test_bit(TLS_TX_REKEY_READY, &tls_ctx->flags)) {
+		rc = tls_device_complete_rekey(sk, tls_ctx, true);
+		/* On failure the READY bit is left set; the next sendmsg
+		 * retries.
+		 */
+		if (rc)
+			trace_tls_device_complete_rekey_fail(sk, rc);
+	}
 
 	/* Use SW path if rekey is in progress (PENDING) or if HW rekey
 	 * failed (FAILED).
@@ -1244,6 +1250,9 @@ int tls_device_decrypted(struct sock *sk, struct tls_context *tls_ctx)
 				return 0;
 			}
 
+			trace_tls_device_rekey_reencrypt(sk, rec_start_seq,
+							 ctx->rekey.old_nic_boundary);
+
 			/* rekey_fixup sets decrypted flags in case if NIC clears
 			 * decrypted flags on auth failure
 			 */
@@ -1254,6 +1263,8 @@ int tls_device_decrypted(struct sock *sk, struct tls_context *tls_ctx)
 							    sw_ctx, tls_ctx);
 		}
 
+		trace_tls_device_rekey_done(sk, rec_start_seq,
+					    ctx->rekey.old_nic_boundary);
 		crypto_free_aead(ctx->rekey.old_aead_recv);
 		ctx->rekey.old_aead_recv = NULL;
 
@@ -1848,6 +1859,8 @@ int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx,
 					netdev->tlsdev_ops->tls_dev_rx_rekey_fixup;
 				context->dev_add_pending = 1;
 			}
+			trace_tls_device_rekey_start(sk, copied_seq, rcv_nxt,
+						     before(copied_seq, rcv_nxt));
 		}
 	}
 
