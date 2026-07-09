@@ -1162,10 +1162,8 @@ static int sprd_dma_probe(struct platform_device *pdev)
 	if (sdev->irq > 0) {
 		ret = devm_request_irq(&pdev->dev, sdev->irq, dma_irq_handle,
 				       0, "sprd_dma", (void *)sdev);
-		if (ret < 0) {
-			dev_err(&pdev->dev, "request dma irq failed\n");
+		if (ret < 0)
 			return ret;
-		}
 	} else {
 		dev_warn(&pdev->dev, "no interrupts for the dma controller\n");
 	}
