@@ -71,8 +71,9 @@ r535_bar_bar2_fini(struct nvkm_bar *bar)
 	struct nvkm_vmm *vmm = gf100_bar(bar)->bar[0].vmm;
 	struct nvkm_gsp *gsp = bar->subdev.device->gsp;
 
+	if (bar->flushFBZero && bar->flushBAR2 != bar->flushBAR2PhysMode)
+		nvkm_done(bar->flushFBZero);
 	bar->flushBAR2 = bar->flushBAR2PhysMode;
-	nvkm_done(bar->flushFBZero);
 
 	WARN_ON(r535_bar_bar2_update_pde(gsp, vmm->func->page[0].shift, 0));
 }
@@ -86,6 +87,7 @@ r535_bar_bar2_init(struct nvkm_bar *bar)
 	struct nvkm_memory *pdb = vmm->pd->pt[0]->memory;
 	u32 pdb_offset = vmm->pd->pt[0]->base;
 	u32 pdbe_lo, pdbe_hi;
+	void __iomem *flush;
 	u64 pdbe;
 
 	nvkm_kmap(pdb);
@@ -106,12 +108,16 @@ r535_bar_bar2_init(struct nvkm_bar *bar)
 			ret = nvkm_memory_kmap(fbZero, &bar->flushFBZero);
 			nvkm_memory_unref(&fbZero);
 		}
-		WARN_ON(ret);
+		if (WARN_ON(ret))
+			return;
 	}
 
+	flush = nvkm_kmap(bar->flushFBZero);
+	if (WARN_ON(!flush))
+		return;
+
+	bar->flushBAR2 = flush;
 	bar->bar2 = true;
-	bar->flushBAR2 = nvkm_kmap(bar->flushFBZero);
-	WARN_ON(!bar->flushBAR2);
 }
 
 static void
