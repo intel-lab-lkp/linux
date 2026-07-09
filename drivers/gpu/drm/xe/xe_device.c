@@ -341,7 +341,6 @@ static int xe_pci_barrier_mmap(struct file *filp,
 	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
 	vma->vm_ops = &vm_ops_barrier;
 	vma->vm_private_data = dev;
-	drm_dev_get(vma->vm_private_data);
 
 	return 0;
 }
