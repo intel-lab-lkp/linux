@@ -1519,6 +1519,12 @@ static void nfs4_put_copy(struct nfsd4_copy *copy)
 {
 	if (!refcount_dec_and_test(&copy->refcount))
 		return;
+	/*
+	 * Drop the task_struct reference taken in nfsd4_copy(). Only async
+	 * copies have a copy_task; it is left NULL on every other path.
+	 */
+	if (copy->copy_task)
+		put_task_struct(copy->copy_task);
 	kfree(copy->cp_src);
 	kfree(copy);
 }
@@ -1528,20 +1534,23 @@ static void release_copy_files(struct nfsd4_copy *copy);
 static void nfsd4_stop_copy(struct nfsd4_copy *copy)
 {
 	trace_nfsd_copy_async_cancel(copy);
-	if (!test_and_set_bit(NFSD4_COPY_F_STOPPED, &copy->cp_flags)) {
-		kthread_stop(copy->copy_task);
-		if (!test_bit(NFSD4_COPY_F_CB_ERROR, &copy->cp_flags))
-			copy->nfserr = nfs_ok;
-		set_bit(NFSD4_COPY_F_COMPLETED, &copy->cp_flags);
-	}
-
 	/*
-	 * The copy was removed from async_copies before this function
-	 * was called, so the reaper cannot clean it up. Release files
-	 * here regardless of who won the STOPPED race. If the thread
-	 * set STOPPED, it has finished using the files. If STOPPED
-	 * was set here, kthread_stop() waited for the thread to exit.
+	 * Always join the copy kthread before touching its resources. The
+	 * task_struct is pinned by get_task_struct() in nfsd4_copy(), so
+	 * kthread_stop() is safe even if this one-shot kthread has already
+	 * returned. Joining guarantees the kthread is no longer using
+	 * copy->nf_dst or the client by the time release_copy_files() runs.
+	 *
+	 * The caller has already removed the copy from clp->async_copies and
+	 * is the sole owner of this teardown, so kthread_stop() runs exactly
+	 * once per copy.
 	 */
+	set_bit(NFSD4_COPY_F_STOPPED, &copy->cp_flags);
+	kthread_stop(copy->copy_task);
+	if (!test_bit(NFSD4_COPY_F_CB_ERROR, &copy->cp_flags))
+		copy->nfserr = nfs_ok;
+	set_bit(NFSD4_COPY_F_COMPLETED, &copy->cp_flags);
+
 	release_copy_files(copy);
 	nfs4_put_copy(copy);
 }
@@ -1555,7 +1564,11 @@ static struct nfsd4_copy *nfsd4_unhash_copy(struct nfs4_client *clp)
 		copy = list_first_entry(&clp->async_copies, struct nfsd4_copy,
 					copies);
 		refcount_inc(&copy->refcount);
-		copy->cp_clp = NULL;
+		/*
+		 * Pairs with smp_load_acquire in nfsd4_send_cb_offload();
+		 * see find_async_copy() for rationale.
+		 */
+		smp_store_release(&copy->cp_clp, NULL);
 		if (!list_empty(&copy->copies))
 			list_del_init(&copy->copies);
 	}
@@ -1567,8 +1580,16 @@ void nfsd4_shutdown_copy(struct nfs4_client *clp)
 {
 	struct nfsd4_copy *copy;
 
-	while ((copy = nfsd4_unhash_copy(clp)) != NULL)
+	while ((copy = nfsd4_unhash_copy(clp)) != NULL) {
 		nfsd4_stop_copy(copy);
+		/*
+		 * nfsd4_unhash_copy() removed the copy from
+		 * clp->async_copies and cleared cp_clp, so the reaper
+		 * can no longer reach it and drop the list-membership
+		 * reference via cleanup_async_copy(). Drop it here.
+		 */
+		nfs4_put_copy(copy);
+	}
 }
 
 static bool nfsd4_copy_on_sb(const struct nfsd4_copy *copy,
@@ -1637,6 +1658,14 @@ void nfsd4_cancel_copy_by_sb(struct net *net, struct super_block *sb)
 
 		list_del_init(&copy->copies);
 		nfsd4_stop_copy(copy);
+		/*
+		 * The copy was moved off clp->async_copies under
+		 * async_lock above, so the reaper can no longer reach
+		 * it and drop the list-membership reference via
+		 * cleanup_async_copy(). Drop it here, mirroring
+		 * nfsd4_offload_cancel() and nfsd4_shutdown_copy().
+		 */
+		nfs4_put_copy(copy);
 		nfsd4_put_client(clp);
 	}
 }
@@ -1931,6 +1960,8 @@ static void nfsd4_cb_offload_release(struct nfsd4_callback *cb)
 
 	set_bit(NFSD4_COPY_F_OFFLOAD_DONE, &copy->cp_flags);
 	nfsd4_put_client(cb->cb_clp);
+	/* Drop the copy reference taken in nfsd4_send_cb_offload(). */
+	nfs4_put_copy(copy);
 }
 
 static int nfsd4_cb_offload_done(struct nfsd4_callback *cb,
@@ -2062,28 +2093,38 @@ static void release_copy_files(struct nfsd4_copy *copy)
 	}
 }
 
+/*
+ * Called from the async copy reaper (after unlinking from async_copies
+ * under async_lock) and from nfsd4_copy()'s out_err path (where the copy
+ * was never list_add'd). In both cases the copy is unreachable from
+ * clp->async_copies.
+ */
 static void cleanup_async_copy(struct nfsd4_copy *copy)
 {
 	nfs4_free_copy_state(copy);
 	release_copy_files(copy);
-	if (copy->cp_clp) {
-		spin_lock(&copy->cp_clp->async_lock);
-		if (!list_empty(&copy->copies))
-			list_del_init(&copy->copies);
-		spin_unlock(&copy->cp_clp->async_lock);
-	}
 	nfs4_put_copy(copy);
 }
 
 static void nfsd4_send_cb_offload(struct nfsd4_copy *copy)
 {
 	struct nfsd4_cb_offload *cbo = &copy->cp_cb_offload;
-	struct nfs4_client *clp = copy->cp_clp;
+	struct nfs4_client *clp;
 
 	/*
-	 * cp_clp is NULL when called via nfsd4_shutdown_copy() during
-	 * client destruction. Skip the callback; the client is gone.
+	 * Pairs with smp_store_release(&copy->cp_clp) in find_async_copy()
+	 * and nfsd4_unhash_copy(). set_bit/clear_bit are unordered atomics
+	 * (Documentation/atomic_bitops.rst), so the acquire is needed to
+	 * prevent the cp_clp load being reordered past the clp dereference
+	 * below on weakly-ordered hardware. The kthread holds its own
+	 * reference across this call (taken before wake_up_process in
+	 * nfsd4_copy()); see commit log for per-path client lifetime.
+	 *
+	 * cp_clp is NULL when the copy was canceled (find_async_copy,
+	 * nfsd4_unhash_copy) before the kthread reached this point. Skip
+	 * the callback; the canceling path owns the notification.
 	 */
+	clp = smp_load_acquire(&copy->cp_clp);
 	if (!clp) {
 		set_bit(NFSD4_COPY_F_OFFLOAD_DONE, &copy->cp_flags);
 		return;
@@ -2095,10 +2136,16 @@ static void nfsd4_send_cb_offload(struct nfsd4_copy *copy)
 	cbo->co_retries = 5;
 
 	/*
-	 * Hold a reference on the client while the callback is in flight.
-	 * Released in nfsd4_cb_offload_release().
+	 * Hold a reference on the client and on the copy while the callback
+	 * is in flight. co_cb is embedded in the copy, so the copy must
+	 * outlive the callback; a concurrent OFFLOAD_CANCEL or shutdown can
+	 * otherwise drop the last copy reference and free it while the RPC
+	 * layer still references co_cb. Both are released in
+	 * nfsd4_cb_offload_release(). The kthread still holds its own copy
+	 * reference here, so this refcount_inc() cannot race the final free.
 	 */
 	kref_get(&clp->cl_nfsdfs.cl_ref);
+	refcount_inc(&copy->refcount);
 
 	nfsd4_init_cb(&cbo->co_cb, clp, &nfsd4_cb_offload_ops,
 		      NFSPROC4_CLNT_CB_OFFLOAD);
@@ -2150,16 +2197,27 @@ static int nfsd4_do_async_copy(void *data)
 do_callback:
 	if (!test_bit(NFSD4_COPY_F_CB_ERROR, &copy->cp_flags))
 		copy->nfserr = nfserr;
-	/* The kthread exits forthwith. Ensure that a subsequent
-	 * OFFLOAD_CANCEL won't try to kill it again. */
-	set_bit(NFSD4_COPY_F_STOPPED, &copy->cp_flags);
-
+	/*
+	 * Do not set NFSD4_COPY_F_STOPPED here. That bit tells a teardown
+	 * caller it may skip kthread_stop(); setting it before the kthread
+	 * is done using copy->nf_dst and the client lets a concurrent
+	 * nfsd4_stop_copy() release those resources out from under us.
+	 * STOPPED is now set only by nfsd4_stop_copy(), which always joins
+	 * via kthread_stop().
+	 */
 	set_bit(NFSD4_COPY_F_COMPLETED, &copy->cp_flags);
 	trace_nfsd_copy_async_done(copy);
 	atomic_dec(&copy->cp_nn->pending_async_copies);
 	if (copy->cp_res.wr_bytes_written > 0 && copy->attr_update)
 		nfsd_update_cmtime_attr(copy->nf_dst->nf_file, 0);
 	nfsd4_send_cb_offload(copy);
+	/*
+	 * Drop the kthread's own reference (taken before
+	 * wake_up_process() in nfsd4_copy()). After this point, copy
+	 * may be freed by a concurrent teardown caller's pending
+	 * nfs4_put_copy().
+	 */
+	nfs4_put_copy(copy);
 	return 0;
 }
 
@@ -2198,6 +2256,8 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	memcpy(&copy->fh, &cstate->current_fh.fh_handle,
 		sizeof(struct knfsd_fh));
 	if (nfsd4_copy_is_async(copy)) {
+		struct task_struct *task;
+
 		async_copy = kzalloc_obj(struct nfsd4_copy);
 		if (!async_copy)
 			goto out_err;
@@ -2225,15 +2285,29 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		       NFS4_MAX_SESSIONID_LEN);
 		async_copy->cp_cb_offload.co_referring_slotid = cstate->slot->sl_index;
 		async_copy->cp_cb_offload.co_referring_seqno = cstate->slot->sl_seqid;
-		async_copy->copy_task = kthread_create(nfsd4_do_async_copy,
-				async_copy, "%s", "copy thread");
-		if (IS_ERR(async_copy->copy_task))
+		task = kthread_create(nfsd4_do_async_copy, async_copy,
+				      "%s", "copy thread");
+		if (IS_ERR(task))
 			goto out_dec_async_copy_err;
+		/*
+		 * Pin the task_struct so a later nfsd4_stop_copy() can call
+		 * kthread_stop() safely even after this one-shot kthread has
+		 * exited and been reaped. Released by nfs4_put_copy().
+		 */
+		get_task_struct(task);
+		async_copy->copy_task = task;
+		/*
+		 * Take the kthread's reference and wake it before publishing
+		 * on async_copies, so the publisher does not touch async_copy
+		 * after spin_unlock and a concurrent teardown caller can drain
+		 * all remaining references safely. See commit log for details.
+		 */
+		refcount_inc(&async_copy->refcount);
+		wake_up_process(async_copy->copy_task);
 		spin_lock(&async_copy->cp_clp->async_lock);
 		list_add(&async_copy->copies,
 				&async_copy->cp_clp->async_copies);
 		spin_unlock(&async_copy->cp_clp->async_lock);
-		wake_up_process(async_copy->copy_task);
 		status = nfs_ok;
 	} else {
 		status = nfsd4_do_copy(copy, copy->nf_src->nf_file,
@@ -2287,8 +2361,19 @@ find_async_copy(struct nfs4_client *clp, stateid_t *stateid)
 
 	spin_lock(&clp->async_lock);
 	copy = find_async_copy_locked(clp, stateid);
-	if (copy)
+	if (copy) {
 		refcount_inc(&copy->refcount);
+		/*
+		 * Mirror nfsd4_unhash_copy(): unlink and clear cp_clp under
+		 * async_lock so the reaper cannot reach the copy. Caller drops
+		 * the list-membership reference via nfs4_put_copy() after
+		 * nfsd4_stop_copy(). smp_store_release() pairs with
+		 * smp_load_acquire() in nfsd4_send_cb_offload().
+		 */
+		smp_store_release(&copy->cp_clp, NULL);
+		if (!list_empty(&copy->copies))
+			list_del_init(&copy->copies);
+	}
 	spin_unlock(&clp->async_lock);
 	return copy;
 }
@@ -2307,8 +2392,16 @@ nfsd4_offload_cancel(struct svc_rqst *rqstp,
 		struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 
 		return manage_cpntf_state(nn, &os->stateid, clp, NULL);
-	} else
+	} else {
 		nfsd4_stop_copy(copy);
+		/*
+		 * find_async_copy() removed the copy from
+		 * clp->async_copies, so the reaper can no longer
+		 * reach it and drop the list-membership reference
+		 * via cleanup_async_copy(). Drop it here.
+		 */
+		nfs4_put_copy(copy);
+	}
 
 	return nfs_ok;
 }
