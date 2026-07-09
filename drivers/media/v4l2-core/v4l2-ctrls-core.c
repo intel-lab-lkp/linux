@@ -796,6 +796,7 @@ static int validate_av1_film_grain(struct v4l2_ctrl_av1_film_grain *fg)
 static int validate_av1_frame(struct v4l2_ctrl_av1_frame *f)
 {
 	int ret = 0;
+	u32 i;
 
 	ret = validate_av1_quantization(&f->quantization);
 	if (ret)
@@ -837,6 +838,14 @@ static int validate_av1_frame(struct v4l2_ctrl_av1_frame *f)
 		return -EINVAL;
 
 	if (f->superres_denom > GENMASK(2, 0) + 9)
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(f->ref_frame_idx); i++)
+		if (f->ref_frame_idx[i] < 0 ||
+		    f->ref_frame_idx[i] >= V4L2_AV1_TOTAL_REFS_PER_FRAME)
+			return -EINVAL;
+
+	if (f->primary_ref_frame >= V4L2_AV1_TOTAL_REFS_PER_FRAME)
 		return -EINVAL;
 
 	return 0;
