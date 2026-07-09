@@ -216,22 +216,15 @@ static int smb_enable_perf(struct coresight_device *csdev,
 {
 	struct smb_drv_data *drvdata = dev_get_drvdata(csdev->dev.parent);
 	struct perf_output_handle *handle = path->handle;
-	struct cs_buffers *buf = etm_perf_sink_config(handle);
-	pid_t pid;
 
-	if (!buf)
-		return -EINVAL;
-
-	/* Get a handle on the pid of the target process */
-	pid = buf->pid;
-
-	/* Device is already in used by other session */
-	if (drvdata->pid != -1 && drvdata->pid != pid)
+	/* Do not proceed if this device is associated with another session */
+	if (drvdata->event &&
+	    !coresight_sink_can_share(drvdata->event, handle->event))
 		return -EBUSY;
 
-	if (drvdata->pid == -1) {
+	if (!drvdata->event) {
 		smb_enable_hw(drvdata);
-		drvdata->pid = pid;
+		drvdata->event = handle->event;
 		coresight_set_mode(csdev, CS_MODE_PERF);
 	}
 
@@ -293,8 +286,7 @@ static int smb_disable(struct coresight_device *csdev)
 
 	smb_disable_hw(drvdata);
 
-	/* Dissociate from the target process. */
-	drvdata->pid = -1;
+	drvdata->event = NULL;
 	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	dev_dbg(&csdev->dev, "Ultrasoc SMB disabled\n");
 
@@ -316,7 +308,6 @@ static void *smb_alloc_buffer(struct coresight_device *csdev,
 	buf->snapshot = overwrite;
 	buf->nr_pages = nr_pages;
 	buf->data_pages = pages;
-	buf->pid = task_pid_nr(event->owner);
 
 	return buf;
 }
@@ -564,7 +555,6 @@ static int smb_probe(struct platform_device *pdev)
 	smb_reset_buffer(drvdata);
 	platform_set_drvdata(pdev, drvdata);
 	raw_spin_lock_init(&drvdata->spinlock);
-	drvdata->pid = -1;
 
 	ret = smb_register_sink(pdev, drvdata);
 	if (ret) {
