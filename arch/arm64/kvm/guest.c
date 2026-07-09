@@ -598,22 +598,133 @@ static int set_sme_vls(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	return set_vec_vls(ARM64_VEC_SME, vcpu, reg);
 }
 
+#define ZAH_REG_SLICE_SHIFT	0
+#define ZAH_REG_SLICE_BITS	5
+#define ZAH_REG_ID_SHIFT	(ZAH_REG_SLICE_SHIFT + ZAH_REG_SLICE_BITS)
+#define ZAH_REG_ID_BITS		8
+
+#define ZAH_REG_SLICE_MASK					\
+	GENMASK(ZAH_REG_SLICE_SHIFT + ZAH_REG_SLICE_BITS - 1,	\
+		ZAH_REG_SLICE_SHIFT)
+#define ZAH_REG_ID_MASK							\
+	GENMASK(ZAH_REG_ID_SHIFT + ZAH_REG_ID_BITS - 1, ZAH_REG_ID_SHIFT)
+
+/*
+ * Validate SME register ID and get sanitised bounds for user/kernel SME
+ * register copy
+ */
+static int sme_reg_to_region(struct vec_state_reg_region *region,
+			     struct kvm_vcpu *vcpu,
+			     const struct kvm_one_reg *reg)
+{
+	/* reg ID ranges for ZA.H[n] registers */
+	unsigned int vq = vcpu_sme_max_vq(vcpu);
+	const u64 za_h_max = vq * __SVE_VQ_BYTES;
+	const u64 zah_id_min = KVM_REG_ARM64_SME_ZAHREG(0, 0);
+	const u64 zah_id_max = KVM_REG_ARM64_SME_ZAHREG(za_h_max - 1,
+							SVE_NUM_SLICES - 1);
+	unsigned int reg_num;
+
+	unsigned int reqoffset, reqlen; /* User-requested offset and length */
+	unsigned int maxlen; /* Maximum permitted length */
+
+	size_t sme_state_size;
+
+	reg_num = (reg->id & ZAH_REG_ID_MASK) >> ZAH_REG_ID_SHIFT;
+
+	if (reg->id >= zah_id_min && reg->id <= zah_id_max) {
+		if (!vcpu_has_sme(vcpu) || (reg->id & ZAH_REG_SLICE_MASK) > 0)
+			return -ENOENT;
+
+		if (!vcpu_za_enabled(vcpu))
+			return -EBUSY;
+
+		/* ZA is exposed as SVE vectors ZA.H[n] */
+		reqoffset = ZA_SIG_ZAV_OFFSET(vq, reg_num) -
+			ZA_SIG_REGS_OFFSET;
+		reqlen = KVM_SVE_ZREG_SIZE;
+		maxlen = SVE_SIG_ZREG_SIZE(vq);
+	} else if (reg->id == KVM_REG_ARM64_SME_ZTREG(0)) {
+		if (!kvm_has_feat(vcpu->kvm, ID_AA64PFR1_EL1, SME, SME2))
+			return -ENOENT;
+
+		if (!vcpu_za_enabled(vcpu))
+			return -EBUSY;
+
+		/* ZT0 is stored after ZA */
+		reqoffset = ZA_SIG_REGS_SIZE(vq);
+		reqlen = KVM_REG_ARM64_SME_ZTREG_SIZE;
+		maxlen = KVM_REG_ARM64_SME_ZTREG_SIZE;
+	} else {
+		return -EINVAL;
+	}
+
+	sme_state_size = vcpu_sme_state_size(vcpu);
+	if (WARN_ON(!sme_state_size))
+		return -EINVAL;
+
+	region->koffset = array_index_nospec(reqoffset, sme_state_size);
+	region->klen = min(maxlen, reqlen);
+	region->upad = reqlen - region->klen;
+
+	return 0;
+}
+
+/*
+ * ZA is exposed as an array of horizontal vectors with the same
+ * format as SVE, mirroring the architecture's LDR ZA[Wv, offs], [Xn]
+ * instruction.
+ */
+
 static int get_sme_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 {
+	int ret;
+	struct vec_state_reg_region region;
+	char __user *uptr = (char __user *)reg->addr;
+
 	/* Handle the KVM_REG_ARM64_SME_VLS pseudo-reg as a special case: */
 	if (reg->id == KVM_REG_ARM64_SME_VLS)
 		return get_sme_vls(vcpu, reg);
 
-	return -EINVAL;
+	/* Try to interpret reg ID as an architectural SME register... */
+	ret = sme_reg_to_region(&region, vcpu, reg);
+	if (ret)
+		return ret;
+
+	if (!kvm_arm_vcpu_vec_finalized(vcpu))
+		return -EPERM;
+
+	if (copy_to_user(uptr, (void *)vcpu->arch.sme_state + region.koffset,
+			 region.klen) ||
+	    clear_user(uptr + region.klen, region.upad))
+		return -EFAULT;
+
+	return 0;
 }
 
 static int set_sme_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 {
+	int ret;
+	struct vec_state_reg_region region;
+	char __user *uptr = (char __user *)reg->addr;
+
 	/* Handle the KVM_REG_ARM64_SME_VLS pseudo-reg as a special case: */
 	if (reg->id == KVM_REG_ARM64_SME_VLS)
 		return set_sme_vls(vcpu, reg);
 
-	return -EINVAL;
+	/* Try to interpret reg ID as an architectural SME register... */
+	ret = sme_reg_to_region(&region, vcpu, reg);
+	if (ret)
+		return ret;
+
+	if (!kvm_arm_vcpu_vec_finalized(vcpu))
+		return -EPERM;
+
+	if (copy_from_user((void *)vcpu->arch.sme_state + region.koffset, uptr,
+			   region.klen))
+		return -EFAULT;
+
+	return 0;
 }
 
 int kvm_arch_vcpu_ioctl_get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
@@ -694,6 +805,27 @@ static unsigned long num_sve_regs(const struct kvm_vcpu *vcpu)
 	return ret;
 }
 
+static unsigned long num_sme_regs(const struct kvm_vcpu *vcpu)
+{
+	const unsigned int slices = vcpu_sve_slices(vcpu);
+	int regs;
+
+	if (!vcpu_has_sme(vcpu))
+		return 0;
+
+	/* Policed by KVM_GET_REG_LIST: */
+	WARN_ON(!kvm_arm_vcpu_vec_finalized(vcpu));
+
+	/* KVM_REG_ARM64_SME_VLS */
+	regs = 1;
+
+	/* ZA, and ZT0 if SME2 */
+	if (vcpu_za_enabled(vcpu))
+		regs += (slices * vcpu_sme_max_vl(vcpu)) + vcpu_has_sme2(vcpu);
+
+	return regs;
+}
+
 static int copy_sve_reg_indices(const struct kvm_vcpu *vcpu,
 				u64 __user *uindices)
 {
@@ -745,6 +877,50 @@ static int copy_sve_reg_indices(const struct kvm_vcpu *vcpu,
 	return num_regs;
 }
 
+static int copy_sme_reg_indices(const struct kvm_vcpu *vcpu,
+				u64 __user *uindices)
+{
+	const unsigned int slices = vcpu_sve_slices(vcpu);
+	u64 reg;
+	unsigned int i, n;
+	int num_regs = 0;
+
+	if (!vcpu_has_sme(vcpu))
+		return 0;
+
+	/* Policed by KVM_GET_REG_LIST: */
+	WARN_ON(!kvm_arm_vcpu_vec_finalized(vcpu));
+
+	/*
+	 * Enumerate this first, so that userspace can save/restore in
+	 * the order reported by KVM_GET_REG_LIST:
+	 */
+	reg = KVM_REG_ARM64_SME_VLS;
+	if (put_user(reg, uindices++))
+		return -EFAULT;
+	++num_regs;
+
+	if (vcpu_za_enabled(vcpu)) {
+		for (i = 0; i < slices; i++) {
+			for (n = 0; n < vcpu_sme_max_vl(vcpu); n++) {
+				reg = KVM_REG_ARM64_SME_ZAHREG(n, i);
+				if (put_user(reg, uindices++))
+					return -EFAULT;
+				num_regs++;
+			}
+		}
+
+		if (vcpu_has_sme2(vcpu)) {
+			reg = KVM_REG_ARM64_SME_ZTREG(0);
+			if (put_user(reg, uindices++))
+				return -EFAULT;
+			num_regs++;
+		}
+	}
+
+	return num_regs;
+}
+
 /**
  * kvm_arm_num_regs - how many registers do we present via KVM_GET_ONE_REG
  * @vcpu: the vCPU pointer
@@ -757,6 +933,7 @@ unsigned long kvm_arm_num_regs(struct kvm_vcpu *vcpu)
 
 	res += num_core_regs(vcpu);
 	res += num_sve_regs(vcpu);
+	res += num_sme_regs(vcpu);
 	res += kvm_arm_num_sys_reg_descs(vcpu);
 	res += kvm_arm_get_fw_num_regs(vcpu);
 
@@ -780,6 +957,11 @@ int kvm_arm_copy_reg_indices(struct kvm_vcpu *vcpu, u64 __user *uindices)
 	uindices += ret;
 
 	ret = copy_sve_reg_indices(vcpu, uindices);
+	if (ret < 0)
+		return ret;
+	uindices += ret;
+
+	ret = copy_sme_reg_indices(vcpu, uindices);
 	if (ret < 0)
 		return ret;
 	uindices += ret;
