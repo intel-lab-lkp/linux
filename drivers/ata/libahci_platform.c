@@ -617,10 +617,7 @@ struct ahci_host_priv *ahci_platform_get_resources(struct platform_device *pdev,
 			mask_port_map |= BIT(port);
 
 #ifdef CONFIG_OF_ADDRESS
-			of_platform_device_create(child, NULL, NULL);
-
-			port_dev = of_find_device_by_node(child);
-
+			port_dev = of_platform_device_create(child, NULL, NULL);
 			if (port_dev) {
 				rc = ahci_platform_get_regulator(hpriv, port,
 								&port_dev->dev);
