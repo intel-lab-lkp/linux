@@ -153,6 +153,9 @@ void io_req_local_work_add(struct io_kiocb *req, unsigned flags)
 	struct io_ring_ctx *ctx = req->ctx;
 	int nr_wait;
 
+	/* pairs with synchronize_rcu() in io_ring_exit_work() */
+	guard(rcu)();
+
 	/*
 	 * We don't know how many requests there are in the link and whether
 	 * they can even be queued lazily, fall back to non-lazy.
