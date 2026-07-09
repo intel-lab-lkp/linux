@@ -481,5 +481,5 @@ static struct scmi_driver scmi_clocks_driver = {
 module_scmi_driver(scmi_clocks_driver);
 
 MODULE_AUTHOR("Sudeep Holla <sudeep.holla@arm.com>");
-MODULE_DESCRIPTION("ARM SCMI clock driver");
+MODULE_DESCRIPTION("SCMI clock driver");
 MODULE_LICENSE("GPL v2");

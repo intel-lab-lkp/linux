@@ -417,5 +417,5 @@ static struct scmi_driver scmi_drv = {
 module_scmi_driver(scmi_drv);
 
 MODULE_AUTHOR("Cristian Marussi <cristian.marussi@arm.com>");
-MODULE_DESCRIPTION("ARM SCMI regulator driver");
+MODULE_DESCRIPTION("SCMI regulator driver");
 MODULE_LICENSE("GPL v2");

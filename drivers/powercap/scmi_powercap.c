@@ -546,5 +546,5 @@ static void __exit scmi_powercap_exit(void)
 module_exit(scmi_powercap_exit);
 
 MODULE_AUTHOR("Cristian Marussi <cristian.marussi@arm.com>");
-MODULE_DESCRIPTION("ARM SCMI Powercap driver");
+MODULE_DESCRIPTION("SCMI Powercap driver");
 MODULE_LICENSE("GPL");

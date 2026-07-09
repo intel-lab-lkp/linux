@@ -184,5 +184,5 @@ static struct scmi_driver scmi_perf_domain_driver = {
 module_scmi_driver(scmi_perf_domain_driver);
 
 MODULE_AUTHOR("Ulf Hansson <ulf.hansson@linaro.org>");
-MODULE_DESCRIPTION("ARM SCMI perf domain driver");
+MODULE_DESCRIPTION("SCMI perf domain driver");
 MODULE_LICENSE("GPL v2");

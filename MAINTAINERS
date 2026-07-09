@@ -26293,12 +26293,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/firmware/arm,sc[mp]i.yaml
 F:	drivers/clk/clk-sc[mp]i.c
 F:	drivers/cpufreq/sc[mp]i-cpufreq.c
-F:	drivers/firmware/arm_scmi/
+F:	drivers/firmware/scmi/
 F:	drivers/firmware/arm_scpi.c
 F:	drivers/hwmon/scmi-hwmon.c
 F:	drivers/pinctrl/pinctrl-scmi.c
 F:	drivers/pmdomain/arm/
-F:	drivers/powercap/arm_scmi_powercap.c
+F:	drivers/powercap/scmi_powercap.c
 F:	drivers/regulator/scmi-regulator.c
 F:	drivers/reset/reset-scmi.c
 F:	include/linux/sc[mp]i_protocol.h
@@ -26312,7 +26312,7 @@ L:	imx@lists.linux.dev
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/devicetree/bindings/firmware/nxp,*scmi.yaml
-F:	drivers/firmware/arm_scmi/vendors/imx/
+F:	drivers/firmware/scmi/vendors/imx/
 
 SYSTEM RESET/SHUTDOWN DRIVERS
 M:	Sebastian Reichel <sre@kernel.org>

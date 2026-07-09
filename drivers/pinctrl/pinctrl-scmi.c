@@ -595,5 +595,5 @@ module_scmi_driver(scmi_pinctrl_driver);
 
 MODULE_AUTHOR("Oleksii Moisieiev <oleksii_moisieiev@epam.com>");
 MODULE_AUTHOR("Peng Fan <peng.fan@nxp.com>");
-MODULE_DESCRIPTION("ARM SCMI pin controller driver");
+MODULE_DESCRIPTION("SCMI pin controller driver");
 MODULE_LICENSE("GPL");

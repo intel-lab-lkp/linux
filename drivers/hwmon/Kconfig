@@ -401,7 +401,7 @@ config SENSORS_ARCTIC_FAN_CONTROLLER
 	  will be called arctic_fan_controller.
 
 config SENSORS_ARM_SCMI
-	tristate "ARM SCMI Sensors"
+	tristate "SCMI Sensors"
 	depends on ARM_SCMI_PROTOCOL
 	depends on THERMAL || !THERMAL_OF
 	help

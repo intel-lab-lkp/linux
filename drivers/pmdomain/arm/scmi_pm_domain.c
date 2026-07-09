@@ -168,5 +168,5 @@ static struct scmi_driver scmi_power_domain_driver = {
 module_scmi_driver(scmi_power_domain_driver);
 
 MODULE_AUTHOR("Sudeep Holla <sudeep.holla@arm.com>");
-MODULE_DESCRIPTION("ARM SCMI power domain driver");
+MODULE_DESCRIPTION("SCMI power domain driver");
 MODULE_LICENSE("GPL v2");

@@ -264,7 +264,7 @@ config RESET_RZV2H_USB2PHY
 	  (and similar SoCs).
 
 config RESET_SCMI
-	tristate "Reset driver controlled via ARM SCMI interface"
+	tristate "Reset driver controlled via SCMI interface"
 	depends on ARM_SCMI_PROTOCOL || COMPILE_TEST
 	default ARM_SCMI_PROTOCOL
 	help

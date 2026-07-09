@@ -54,7 +54,7 @@ Documentation/driver-api/thermal/power_allocator.rst文档中找到。
                 +----------+       |       +---------+
                 |                  |                 |
         +---------------+  +---------------+  +--------------+
-        |  cpufreq-dt   |  |   arm_scmi    |  |    Other     |
+        |  cpufreq-dt   |  |      scmi     |  |    Other     |
         +---------------+  +---------------+  +--------------+
                 ^                  ^                 ^
                 |                  |                 |

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * ARM System Control and Management Interface (ARM SCMI) reset driver
+ * System Control and Management Interface (SCMI) reset driver
  *
  * Copyright (C) 2019-2021 ARM Ltd.
  */
@@ -128,5 +128,5 @@ static struct scmi_driver scmi_reset_driver = {
 module_scmi_driver(scmi_reset_driver);
 
 MODULE_AUTHOR("Sudeep Holla <sudeep.holla@arm.com>");
-MODULE_DESCRIPTION("ARM SCMI reset controller driver");
+MODULE_DESCRIPTION("SCMI reset controller driver");
 MODULE_LICENSE("GPL v2");

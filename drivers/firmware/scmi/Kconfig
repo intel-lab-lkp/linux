@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
-menu "ARM System Control and Management Interface Protocol"
+menu "System Control and Management Interface Protocol"
 
 config ARM_SCMI_PROTOCOL
-	tristate "ARM System Control and Management Interface (SCMI) Message Protocol"
-	depends on ARM || ARM64 || COMPILE_TEST
+	tristate "System Control and Management Interface (SCMI) Message Protocol"
 	help
-	  ARM System Control and Management Interface (SCMI) protocol is a
+	  System Control and Management Interface (SCMI) protocol is a
 	  set of operating system-independent software interfaces that are
 	  used in system management. SCMI is extensible and currently provides
 	  interfaces for: Discovery and self-description of the interfaces
@@ -82,8 +81,8 @@ config ARM_SCMI_QUIRKS
 	  depending on the SCMI firmware advertised versions and/or machine
 	  compatibles.
 
-source "drivers/firmware/arm_scmi/transports/Kconfig"
-source "drivers/firmware/arm_scmi/vendors/imx/Kconfig"
+source "drivers/firmware/scmi/transports/Kconfig"
+source "drivers/firmware/scmi/vendors/imx/Kconfig"
 
 endif #ARM_SCMI_PROTOCOL
 

@@ -56,7 +56,7 @@ framework, and interested clients reading the data from it::
                 +----------+       |       +---------+
                 |                  |                 |
         +---------------+  +---------------+  +--------------+
-        |  cpufreq-dt   |  |   arm_scmi    |  |    Other     |
+        |  cpufreq-dt   |  |      scmi     |  |    Other     |
         +---------------+  +---------------+  +--------------+
                 ^                  ^                 ^
                 |                  |                 |

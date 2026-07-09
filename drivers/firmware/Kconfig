@@ -6,7 +6,7 @@
 
 menu "Firmware Drivers"
 
-source "drivers/firmware/arm_scmi/Kconfig"
+source "drivers/firmware/scmi/Kconfig"
 
 config ARM_SCPI_PROTOCOL
 	tristate "ARM System Control and Power Interface (SCPI) Message Protocol"
