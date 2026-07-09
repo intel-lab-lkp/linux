@@ -150,16 +150,41 @@ static void test_sync_vmsa(u32 type, u64 policy)
 	kvm_vm_free(vm);
 }
 
+static bool is_measurement_nonzero(const u8 *measurement, size_t len)
+{
+	size_t i;
+
+	for (i = 0; i < len; i++)
+		if (measurement[i])
+			return true;
+
+	return false;
+}
+
 static void test_sev(void *guest_code, u32 type, u64 policy)
 {
+	u8 measurement[256];
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct ucall uc;
 
 	vm = vm_sev_create_with_one_vcpu(type, guest_code, &vcpu);
 
-	/* TODO: Validate the measurement is as expected. */
-	vm_sev_launch(vm, policy, NULL);
+	/*
+	 * Capture the launch measurement and sanity check it.  A full
+	 * attestation-style validation (recomputing the expected value) isn't
+	 * possible here as userspace does not possess the transport keys the
+	 * PSP uses to derive the measurement; at minimum it must be non-zero.
+	 * SNP does not return a measurement through this path, so skip it.
+	 */
+	if (is_sev_snp_vm(vm)) {
+		vm_sev_launch(vm, policy, NULL);
+	} else {
+		memset(measurement, 0, sizeof(measurement));
+		vm_sev_launch(vm, policy, measurement);
+		TEST_ASSERT(is_measurement_nonzero(measurement, sizeof(measurement)),
+			    "SEV launch measurement is unexpectedly all zeros");
+	}
 
 	for (;;) {
 		vcpu_run(vcpu);
