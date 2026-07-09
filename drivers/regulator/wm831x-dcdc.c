@@ -16,6 +16,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/gpio/consumer.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 #include <linux/mfd/wm831x/core.h>
@@ -332,14 +333,26 @@ static void wm831x_buckv_dvs_init(struct platform_device *pdev,
 	struct wm831x *wm831x = dcdc->wm831x;
 	int ret;
 	u16 ctrl;
+	int dvs_control_src;
+	u32 val;
 
 	if (!pdata)
 		return;
 
+	if (pdata->swnode) {
+		struct fwnode_handle *fwnode = software_node_fwnode(pdata->swnode);
+
+		if (fwnode)
+			device_set_node(&pdev->dev, fwnode);
+	}
+
 	/* gpiolib won't let us read the GPIO status so pick the higher
 	 * of the two existing voltages so we take it as platform data.
 	 */
-	dcdc->dvs_gpio_state = pdata->dvs_init_state;
+	if (device_property_read_u32(&pdev->dev, "wlf,dvs-init-state", &val) == 0)
+		dcdc->dvs_gpio_state = val;
+	else
+		dcdc->dvs_gpio_state = pdata->dvs_init_state;
 
 	dcdc->dvs_gpiod = devm_gpiod_get(&pdev->dev, "dvs",
 			dcdc->dvs_gpio_state ? GPIOD_OUT_HIGH : GPIOD_OUT_LOW);
@@ -349,7 +362,12 @@ static void wm831x_buckv_dvs_init(struct platform_device *pdev,
 		return;
 	}
 
-	switch (pdata->dvs_control_src) {
+	if (device_property_read_u32(&pdev->dev, "wlf,dvs-control-src", &val) == 0)
+		dvs_control_src = val;
+	else
+		dvs_control_src = pdata->dvs_control_src;
+
+	switch (dvs_control_src) {
 	case 1:
 		ctrl = 2 << WM831X_DC1_DVS_SRC_SHIFT;
 		break;
@@ -358,7 +376,7 @@ static void wm831x_buckv_dvs_init(struct platform_device *pdev,
 		break;
 	default:
 		dev_err(wm831x->dev, "Invalid DVS control source %d for %s\n",
-			pdata->dvs_control_src, dcdc->name);
+			dvs_control_src, dcdc->name);
 		return;
 	}
 
