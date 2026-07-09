@@ -15,8 +15,6 @@
 
 #include "hid-ids.h"
 
-#define STEELSERIES_SRWS1		BIT(0)
-
 #if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
     (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
 #define SRWS1_NUMBER_LEDS 15
@@ -225,7 +223,7 @@ static enum led_brightness steelseries_srws1_led_get_brightness(struct led_class
 	return value ? LED_FULL : LED_OFF;
 }
 
-static int steelseries_srws1_probe(struct hid_device *hdev,
+static int steelseries_probe(struct hid_device *hdev,
 		const struct hid_device_id *id)
 {
 	int ret, i;
@@ -319,33 +317,24 @@ out:
 err:
 	return ret;
 }
-#endif
-
-static int steelseries_probe(struct hid_device *hdev, const struct hid_device_id *id)
-{
-#if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
-    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
-	return steelseries_srws1_probe(hdev, id);
-#else
-	return -ENODEV;
-#endif
-}
 
 static void steelseries_remove(struct hid_device *hdev)
 {
-#if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
-    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
 	hid_hw_stop(hdev);
-#endif
 }
+#else
+static int steelseries_probe(struct hid_device *hdev,
+		const struct hid_device_id *id)
+{
+	return -ENODEV;
+}
+
+static void steelseries_remove(struct hid_device *hdev) {}
+#endif
 
 static const __u8 *steelseries_srws1_report_fixup(struct hid_device *hdev,
 		__u8 *rdesc, unsigned int *rsize)
 {
-	if (hdev->vendor != USB_VENDOR_ID_STEELSERIES ||
-	    hdev->product != USB_DEVICE_ID_STEELSERIES_SRWS1)
-		return rdesc;
-
 	if (*rsize >= 115 && rdesc[11] == 0x02 && rdesc[13] == 0xc8
 			&& rdesc[29] == 0xbb && rdesc[40] == 0xc5) {
 		hid_info(hdev, "Fixing up Steelseries SRW-S1 report descriptor\n");
@@ -356,8 +345,7 @@ static const __u8 *steelseries_srws1_report_fixup(struct hid_device *hdev,
 }
 
 static const struct hid_device_id steelseries_devices[] = {
-	{ HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_SRWS1),
-	  .driver_data = STEELSERIES_SRWS1 },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_SRWS1) },
 
 	{ }
 };
