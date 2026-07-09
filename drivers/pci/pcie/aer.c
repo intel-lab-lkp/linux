@@ -128,11 +128,17 @@ struct aer_info {
 					PCI_ERR_ROOT_MULTI_UNCOR_RCV)
 
 static bool pcie_aer_disable;
+static bool pcie_aer_recovery_disable;
 static pci_ers_result_t aer_root_reset(struct pci_dev *dev);
 
 void pci_no_aer(void)
 {
 	pcie_aer_disable = true;
+}
+
+void pci_no_aer_recovery(void)
+{
+	pcie_aer_recovery_disable = true;
 }
 
 bool pci_aer_available(void)
@@ -1187,10 +1193,12 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 				pdrv->err_handler->cor_error_detected(dev);
 			pcie_clear_device_status(dev);
 		}
-	} else if (info->severity == AER_NONFATAL)
-		pcie_do_recovery(dev, pci_channel_io_normal, aer_root_reset);
-	else if (info->severity == AER_FATAL)
-		pcie_do_recovery(dev, pci_channel_io_frozen, aer_root_reset);
+	} else if (!pcie_aer_recovery_disable) {
+		if (info->severity == AER_NONFATAL)
+			pcie_do_recovery(dev, pci_channel_io_normal, aer_root_reset);
+		else if (info->severity == AER_FATAL)
+			pcie_do_recovery(dev, pci_channel_io_frozen, aer_root_reset);
+	}
 }
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
@@ -1242,12 +1250,14 @@ static void aer_recover_work_func(struct work_struct *work)
 		ghes_estatus_pool_region_free((unsigned long)entry.regs,
 					    sizeof(struct aer_capability_regs));
 
-		if (entry.severity == AER_NONFATAL)
-			pcie_do_recovery(pdev, pci_channel_io_normal,
-					 aer_root_reset);
-		else if (entry.severity == AER_FATAL)
-			pcie_do_recovery(pdev, pci_channel_io_frozen,
-					 aer_root_reset);
+		if (!pcie_aer_recovery_disable) {
+			if (entry.severity == AER_NONFATAL)
+				pcie_do_recovery(pdev, pci_channel_io_normal,
+						 aer_root_reset);
+			else if (entry.severity == AER_FATAL)
+				pcie_do_recovery(pdev, pci_channel_io_frozen,
+						 aer_root_reset);
+		}
 		pci_dev_put(pdev);
 	}
 }
