@@ -5,16 +5,30 @@
  * Copyright 2016 Cisco Systems, Inc. and/or its affiliates. All rights reserved.
  */
 
+#include <linux/bitops.h>
+#include <linux/bug.h>
+#include <linux/cdev.h>
+#include <linux/container_of.h>
 #include <linux/debugfs.h>
-#include <linux/errno.h>
+#include <linux/device.h>
+#include <linux/err.h>
+#include <linux/fs.h>
 #include <linux/init.h>
-#include <linux/kernel.h>
-#include <linux/kmod.h>
-#include <linux/mm.h>
+#include <linux/kobject.h>
+#include <linux/kthread.h>
+#include <linux/list.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/printk.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/wait.h>
+
+#include <asm/page.h>
 
 #include "cec-priv.h"
 
