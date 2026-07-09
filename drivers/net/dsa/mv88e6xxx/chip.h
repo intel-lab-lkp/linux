@@ -165,16 +165,20 @@ struct mv88e6xxx_info {
 	 */
 	bool dual_chip;
 
+	/* Has a dedicated ATU FID register. */
+	bool atu_fid_reg;
+
+	/* Supports PTP */
+	bool ptp_support;
+
 	enum mv88e6xxx_edsa_support edsa_support;
 
 	/* Mask for FromPort and ToPort value of PortVec used in ATU Move
 	 * operation. 0 means that the ATU Move operation is not supported.
 	 */
 	u8 atu_move_port_mask;
-	const struct mv88e6xxx_ops *ops;
 
-	/* Supports PTP */
-	bool ptp_support;
+	const struct mv88e6xxx_ops *ops;
 
 	/* Internal PHY start index. 0 means that internal PHYs range starts at
 	 * port 0, 1 means internal PHYs range starts at port 1, etc

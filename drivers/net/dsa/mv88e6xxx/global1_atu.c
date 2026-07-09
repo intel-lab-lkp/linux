@@ -135,7 +135,7 @@ static int mv88e6xxx_g1_atu_op(struct mv88e6xxx_chip *chip, u16 fid, u16 op)
 	int err;
 
 	/* FID bits are dispatched all around gradually as more are supported */
-	if (mv88e6xxx_num_databases(chip) > 256) {
+	if (chip->info->atu_fid_reg) {
 		err = mv88e6xxx_g1_atu_fid_write(chip, fid);
 		if (err)
 			return err;
@@ -179,7 +179,7 @@ static int mv88e6xxx_g1_atu_fid_read(struct mv88e6xxx_chip *chip, u16 *fid)
 	u16 val = 0, upper = 0, op = 0;
 	int err = -EOPNOTSUPP;
 
-	if (mv88e6xxx_num_databases(chip) > 256) {
+	if (chip->info->atu_fid_reg) {
 		err = mv88e6xxx_g1_read(chip, MV88E6352_G1_ATU_FID, &val);
 		val &= 0xfff;
 		if (err)
