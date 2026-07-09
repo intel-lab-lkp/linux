@@ -70,9 +70,16 @@ void decrease_preferred_cpus(struct steal_monitor *ctx)
 	if (target_cpu >= nr_cpu_ids)
 		return;
 
+	/*
+	 * set tick bit for nohz_full CPU to push the task out. Once the tasks
+	 * are pushed out, bit will be cleared if there are no tasks.
+	 */
 	for_each_cpu_and(tmp_cpu, topology_sibling_cpumask(target_cpu),
-			 cpu_preferred_mask)
+			 cpu_active_mask) {
 		set_cpu_preferred(tmp_cpu, false);
+		if (tick_nohz_full_cpu(tmp_cpu))
+			tick_nohz_dep_set_cpu(tmp_cpu, TICK_DEP_BIT_SCHED);
+	}
 }
 
 /*

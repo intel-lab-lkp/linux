@@ -1473,6 +1473,10 @@ bool sched_can_stop_tick(struct rq *rq)
 			return false;
 	}
 
+	/* Keep the tick running until CFS tasks are pushed out */
+	if (!cpu_preferred(rq->cpu) && rq->cfs.h_nr_queued)
+		return false;
+
 	return true;
 }
 #endif /* CONFIG_NO_HZ_FULL */
