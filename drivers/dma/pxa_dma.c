@@ -1260,12 +1260,8 @@ static int pxad_init_phys(struct platform_device *op,
 			ret = devm_request_irq(&op->dev, irq0,
 					       pxad_int_handler,
 					       IRQF_SHARED, "pxa-dma", pdev);
-		if (ret) {
-			dev_err(pdev->slave.dev,
-				"%s(): can't request irq %d:%d\n", __func__,
-				irq, ret);
+		if (ret)
 			return ret;
-		}
 	}
 
 	return 0;
