@@ -88,14 +88,15 @@ static int __amd_smn_rw(u8 i_off, u8 d_off, u16 node, u32 address, u32 *value, b
 	struct pci_dev *root;
 	int err = -ENODEV;
 
-	if (node >= amd_num_nodes())
+	/*
+	 * smn_exclusive is set only after amd_roots is allocated and the
+	 * root config space reserved; test it before indexing amd_roots[].
+	 */
+	if (!smn_exclusive || node >= amd_num_nodes())
 		return err;
 
 	root = amd_roots[node];
 	if (!root)
-		return err;
-
-	if (!smn_exclusive)
 		return err;
 
 	guard(mutex)(&smn_mutex);
@@ -116,9 +117,15 @@ int __must_check amd_smn_read(u16 node, u32 address, u32 *value)
 {
 	int err = __amd_smn_rw(SMN_INDEX_OFFSET, SMN_DATA_OFFSET, node, address, value, false);
 
-	if (PCI_POSSIBLE_ERROR(*value)) {
-		err = -ENODEV;
+	/* On error *value may be untouched; do not read it back. */
+	if (err) {
 		*value = 0;
+		return err;
+	}
+
+	if (PCI_POSSIBLE_ERROR(*value)) {
+		*value = 0;
+		return -ENODEV;
 	}
 
 	return err;
@@ -225,8 +232,7 @@ static struct pci_dev *get_next_root(struct pci_dev *root)
 		if (root->devfn)
 			continue;
 
-		if (root->vendor != PCI_VENDOR_ID_AMD &&
-		    root->vendor != PCI_VENDOR_ID_HYGON)
+		if (root->vendor != PCI_VENDOR_ID_AMD)
 			continue;
 
 		break;
@@ -249,7 +255,8 @@ static int __init amd_smn_init(void)
 	u16 count, num_roots, roots_per_node, node, num_nodes;
 	struct pci_dev *root;
 
-	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+	if (!cpu_feature_enabled(X86_FEATURE_ZEN) ||
+	    boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
 		return 0;
 
 	guard(mutex)(&smn_mutex);
