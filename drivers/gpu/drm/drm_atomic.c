@@ -656,6 +656,9 @@ drm_atomic_get_plane_state(struct drm_atomic_commit *state,
 	state->planes[index].new_state = plane_state;
 	plane_state->state = state;
 
+	if (!state->plane_color_pipeline)
+		plane_state->color_pipeline = NULL;
+
 	drm_dbg_atomic(plane->dev, "Added [PLANE:%d:%s] %p state to %p\n",
 		       plane->base.id, plane->name, plane_state, state);
 
