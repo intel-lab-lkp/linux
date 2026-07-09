@@ -818,10 +818,8 @@ fsl_qdma_irq_init(struct platform_device *pdev,
 	ret = devm_request_irq(&pdev->dev, fsl_qdma->error_irq,
 			       fsl_qdma_error_handler, 0,
 			       "qDMA error", fsl_qdma);
-	if (ret) {
-		dev_err(&pdev->dev, "Can't register qDMA controller IRQ.\n");
+	if (ret)
 		return  ret;
-	}
 
 	for (i = 0; i < fsl_qdma->block_number; i++) {
 		sprintf(irq_name, "qdma-queue%d", i);
