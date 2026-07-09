@@ -600,10 +600,8 @@ static int moxart_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(dev, irq, moxart_dma_interrupt, 0,
 			       "moxart-dma-engine", mdc);
-	if (ret) {
-		dev_err(dev, "devm_request_irq failed\n");
+	if (ret)
 		return ret;
-	}
 	mdc->irq = irq;
 
 	ret = dma_async_device_register(&mdc->dma_slave);
