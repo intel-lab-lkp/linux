@@ -1687,7 +1687,8 @@ void ata_scsi_deferred_qc_work(struct work_struct *work)
 	spin_unlock_irqrestore(ap->lock, flags);
 }
 
-void ata_scsi_requeue_deferred_qc(struct ata_port *ap)
+void ata_scsi_requeue_deferred_qc(struct ata_port *ap,
+				  struct scsi_cmnd *timed_out_scmd)
 {
 	struct ata_link *link;
 
@@ -1700,12 +1701,19 @@ void ata_scsi_requeue_deferred_qc(struct ata_port *ap)
 	 */
 	ata_for_each_link(link, ap, PMP_FIRST) {
 		struct ata_queued_cmd *qc = link->deferred_qc;
+		u32 host_byte;
 
-		if (qc) {
-			link->deferred_qc = NULL;
-			cancel_work(&link->deferred_qc_work);
-			ata_scsi_qc_done(qc, true, DID_REQUEUE << 16);
-		}
+		if (!qc)
+			continue;
+
+		link->deferred_qc = NULL;
+		cancel_work(&link->deferred_qc_work);
+
+		if (qc->scsicmd == timed_out_scmd)
+			host_byte = DID_TIME_OUT;
+		else
+			host_byte = DID_REQUEUE;
+		ata_scsi_qc_done(qc, true, host_byte << 16);
 	}
 }
 
@@ -1725,12 +1733,43 @@ static void ata_scsi_schedule_deferred_qc(struct ata_link *link)
 		return;
 
 	if (ata_port_eh_scheduled(ap)) {
-		ata_scsi_requeue_deferred_qc(ap);
+		ata_scsi_requeue_deferred_qc(ap, NULL);
 		return;
 	}
 	if (!ap->ops->qc_defer(qc))
 		queue_work(system_highpri_wq, &link->deferred_qc_work);
 }
+
+static enum scsi_timeout_action
+ata_scsi_port_eh_timed_out(struct ata_port *ap, struct scsi_cmnd *scmd)
+{
+	unsigned long flags;
+
+	/*
+	 * We had a timeout, either for an NCQ command or for one deferred
+	 * queued command. If we have deferred QCs and we do not release them
+	 * immediately, we will have shost->host_failed != scsi_host_busy()
+	 * until the deferred QCs also timeout. This unnecessarilly increases
+	 * the time it takes for scsi EH to start. Terminate all deferred QCs
+	 * to avoid that.
+	 */
+	spin_lock_irqsave(ap->lock, flags);
+	ata_scsi_requeue_deferred_qc(ap, scmd);
+	spin_unlock_irqrestore(ap->lock, flags);
+
+	/*
+	 * Let scsi_timeout() know that it must continue with handling the
+	 * timeout as we in fact did not do much here.
+	 */
+	return SCSI_EH_NOT_HANDLED;
+}
+
+enum scsi_timeout_action ata_scsi_eh_timed_out(struct scsi_cmnd *scmd)
+{
+	return ata_scsi_port_eh_timed_out(ata_shost_to_port(scmd->device->host),
+					  scmd);
+}
+EXPORT_SYMBOL_GPL(ata_scsi_eh_timed_out);
 
 static void ata_scsi_qc_complete(struct ata_queued_cmd *qc)
 {
