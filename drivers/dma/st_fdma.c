@@ -771,10 +771,8 @@ static int st_fdma_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(&pdev->dev, fdev->irq, st_fdma_irq_handler, 0,
 			       dev_name(&pdev->dev), fdev);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to request irq (%d)\n", ret);
+	if (ret)
 		goto err;
-	}
 
 	fdev->slim_rproc = st_slim_rproc_alloc(pdev, fdev->fw_name);
 	if (IS_ERR(fdev->slim_rproc)) {
