@@ -123,6 +123,30 @@ struct pci_dev *hygon_node_get_func(u16 node, u8 func);
  */
 int hygon_pci_dev_to_df_node(struct pci_dev *pdev);
 
+/**
+ * hygon_smn_read() - read a 32-bit value from a Hygon SMN address
+ * @node: DF node index in [0, hygon_node_num())
+ * @address: SMN address
+ * @value: output value
+ *
+ * Return: 0 on success, -EINVAL if @value is NULL, -ENODEV if Hygon
+ * SMN is not initialised or @node is out of range, or a negative
+ * errno from the underlying PCI config access.
+ */
+int __must_check hygon_smn_read(u16 node, u32 address, u32 *value);
+
+/**
+ * hygon_smn_write() - write a 32-bit value to a Hygon SMN address
+ * @node: DF node index in [0, hygon_node_num())
+ * @address: SMN address
+ * @value: value to write
+ *
+ * Return: 0 on success, -ENODEV if Hygon SMN is not initialised or
+ * @node is out of range, or a negative errno from the underlying
+ * PCI config access.
+ */
+int __must_check hygon_smn_write(u16 node, u32 address, u32 value);
+
 #else /* !CONFIG_HYGON_NODE */
 
 static inline u16 hygon_node_num(void)
@@ -151,6 +175,16 @@ static inline struct pci_dev *hygon_node_get_func(u16 node, u8 func)
 }
 
 static inline int hygon_pci_dev_to_df_node(struct pci_dev *pdev)
+{
+	return -ENODEV;
+}
+
+static inline int hygon_smn_read(u16 node, u32 address, u32 *value)
+{
+	return -ENODEV;
+}
+
+static inline int hygon_smn_write(u16 node, u32 address, u32 value)
 {
 	return -ENODEV;
 }

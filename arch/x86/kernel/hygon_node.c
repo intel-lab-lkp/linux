@@ -25,9 +25,11 @@
 #define pr_fmt(fmt) "hygon_node: " fmt
 
 #include <linux/bitops.h>
+#include <linux/cleanup.h>
 #include <linux/cpu.h>
 #include <linux/export.h>
 #include <linux/init.h>
+#include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/pci_ids.h>
 #include <linux/processor.h>
@@ -812,6 +814,308 @@ int hygon_pci_dev_to_df_node(struct pci_dev *pdev)
 EXPORT_SYMBOL_GPL(hygon_pci_dev_to_df_node);
 
 /*
+ * SMN index/data register pair offsets in the host-bridge PCI config
+ * space.  Reads and writes to a (node, address) pair are issued as a
+ * two-step transaction: write the SMN address to the index register,
+ * then read or write the value at the data register.
+ */
+#define HYGON_SMN_INDEX_OFFSET	0x60
+#define HYGON_SMN_DATA_OFFSET	0x64
+
+/*
+ * Runtime SMN state.  hygon_smn_exclusive is false in BSS until
+ * hygon_smn_setup() succeeds; runtime API short-circuits on !exclusive.
+ */
+static struct pci_dev	**hygon_smn_roots;
+static u16		hygon_smn_num_nodes;
+static bool		hygon_smn_exclusive;
+static DEFINE_MUTEX(hygon_smn_mutex);
+
+/* Internal cache accessors used by SMN setup. */
+static u8 __init hygon_node_socket(u16 node)
+{
+	if (!hygon_cache.ready || node >= hygon_cache.num_nodes)
+		return U8_MAX;
+	return hygon_cache.nodes[node].socket_id;
+}
+
+static u16 __init hygon_socket_num(void)
+{
+	return hygon_cache.ready ? hygon_cache.num_sockets : 0;
+}
+
+/*
+ * Walk PCI host-bridge devices matching the Hygon vendor.  The SMN
+ * index/data registers live in function 0 of each root complex (class
+ * PCI_CLASS_BRIDGE_HOST, devfn 0).
+ */
+static struct pci_dev * __init hygon_get_next_root(struct pci_dev *root)
+{
+	while ((root = pci_get_class(PCI_CLASS_BRIDGE_HOST << 8, root))) {
+		if (root->devfn)
+			continue;
+		if (root->vendor != PCI_VENDOR_ID_HYGON)
+			continue;
+		break;
+	}
+	return root;
+}
+
+static void __init hygon_release_root_regions(struct pci_dev **roots,
+					      u16 count)
+{
+	u16 i;
+
+	for (i = 0; i < count; i++)
+		pci_release_config_region(roots[i], 0, PCI_CFG_SPACE_SIZE);
+}
+
+/*
+ * Hygon SMN setup.
+ *
+ * On Hygon Fam18h, SMN root devices are shared per-socket: all nodes
+ * (CDD and IOD) on the same socket use the same host-bridge root for
+ * SMN access.  These root devices are transport endpoints, not
+ * topology identifiers: socket_id / DFID come from DF registers,
+ * while the selected root only determines which socket-local SMN
+ * index/data pair is used by hygon_smn_read() / hygon_smn_write().
+ * Any root within a socket-equivalent group is sufficient, but
+ * binding a node to a root from another socket would route the
+ * transaction through the wrong SMN ingress.
+ *
+ * We therefore keep one root per socket -- grouping roots by
+ * enumeration order, which relies on the platform enumerating each
+ * socket's roots contiguously -- and expand that per-socket selection
+ * into a per-node root array.  The root's own socket id is not read
+ * back.
+ *
+ * On success, hygon_smn_exclusive is set true and the reserved PCI
+ * config regions are kept for the lifetime of the system.  On
+ * failure, partial reservations are released and all allocations
+ * freed; hygon_smn_exclusive stays false so the read/write primitive
+ * returns -ENODEV for all subsequent calls.
+ */
+static int __init hygon_smn_setup(void)
+{
+	struct pci_dev *socket_roots[HYGON_MAX_SOCKETS] = { };
+	struct pci_dev **reserved_roots, **roots, *root;
+	u16 count, num_roots, roots_per_socket, node, num_nodes;
+	u16 num_sockets, reserved, socket;
+	u8 socket_id;
+	int ret;
+
+	num_roots = 0;
+	root = NULL;
+	while ((root = hygon_get_next_root(root)))
+		num_roots++;
+
+	pr_debug("Found %u Hygon SMN root devices\n", num_roots);
+
+	if (!num_roots)
+		return -ENODEV;
+
+	num_nodes = hygon_node_num();
+	if (!num_nodes)
+		return -ENODEV;
+
+	num_sockets = hygon_socket_num();
+	if (!num_sockets)
+		return -ENODEV;
+
+	if (num_sockets > ARRAY_SIZE(socket_roots)) {
+		pr_err("Socket count %u exceeds maximum %zu\n",
+		       num_sockets, ARRAY_SIZE(socket_roots));
+		return -EINVAL;
+	}
+
+	if (num_roots % num_sockets) {
+		pr_err("Root count %u not divisible by socket count %u\n",
+		       num_roots, num_sockets);
+		return -ENODEV;
+	}
+
+	roots = kcalloc(num_nodes, sizeof(*roots), GFP_KERNEL);
+	if (!roots)
+		return -ENOMEM;
+
+	reserved_roots = kcalloc(num_roots, sizeof(*reserved_roots),
+				 GFP_KERNEL);
+	if (!reserved_roots) {
+		kfree(roots);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Keep the first of every roots_per_socket consecutive roots and
+	 * skip the rest.  This groups roots by enumeration order, relying on
+	 * the platform enumerating each socket's roots contiguously.  Roots
+	 * within the same socket are redundant SMN ingress points.
+	 */
+	roots_per_socket = num_roots / num_sockets;
+	socket = 0;
+	reserved = 0;
+	count = 0;
+	root = NULL;
+	while ((root = hygon_get_next_root(root))) {
+		/* Bail out if the walk yields more roots than first counted. */
+		if (reserved >= num_roots) {
+			ret = -ENODEV;
+			pci_dev_put(root);
+			goto err_release;
+		}
+
+		pci_dbg(root, "Reserving PCI config space\n");
+
+		/*
+		 * Reserve the entire PCI config space so user space cannot
+		 * race with SMN index/data register access.
+		 */
+		if (!pci_request_config_region_exclusive(root, 0,
+							 PCI_CFG_SPACE_SIZE,
+							 NULL)) {
+			pci_err(root, "Failed to reserve config space\n");
+			ret = -EEXIST;
+			/*
+			 * hygon_get_next_root() returns a referenced device
+			 * (and drops the previous one on the next iteration).
+			 * Breaking out of the loop here skips that drop, so
+			 * release the current root explicitly.  It is not yet
+			 * in reserved_roots[], so err_release does not cover
+			 * it.
+			 */
+			pci_dev_put(root);
+			goto err_release;
+		}
+
+		reserved_roots[reserved++] = root;
+
+		if (count++ % roots_per_socket)
+			continue;
+
+		if (socket >= num_sockets) {
+			ret = -ENODEV;
+			/*
+			 * Same as above: drop the current root's reference
+			 * before leaving the iteration.  err_release frees its
+			 * reserved config region but not the PCI reference.
+			 */
+			pci_dev_put(root);
+			goto err_release;
+		}
+
+		pci_dbg(root, "is root for Hygon socket %u\n", socket);
+		socket_roots[socket++] = root;
+	}
+
+	if (socket != num_sockets) {
+		ret = -ENODEV;
+		goto err_release;
+	}
+
+	/* Expand socket roots to a per-node array. */
+	for (node = 0; node < num_nodes; node++) {
+		socket_id = hygon_node_socket(node);
+
+		if (socket_id >= num_sockets) {
+			ret = -ENODEV;
+			goto err_release;
+		}
+
+		pci_dbg(socket_roots[socket_id],
+			"is root for Hygon node %u (socket %u)\n",
+			node, socket_id);
+		roots[node] = socket_roots[socket_id];
+	}
+
+	kfree(reserved_roots);
+
+	hygon_smn_roots = roots;
+	hygon_smn_num_nodes = num_nodes;
+	hygon_smn_exclusive = true;
+	return 0;
+
+err_release:
+	hygon_release_root_regions(reserved_roots, reserved);
+	kfree(reserved_roots);
+	kfree(roots);
+	return ret;
+}
+
+/*
+ * SMN index/data register transaction.  The PCI config write+read
+ * pair is serialized by hygon_smn_mutex against userspace and other
+ * in-kernel SMN users.
+ *
+ * Same low-level index/data transaction model as amd_smn_read/write();
+ * the Hygon-specific node-to-root binding is established during SMN
+ * setup.
+ */
+static int __hygon_smn_rw(u16 node, u32 address, u32 *value, bool write)
+{
+	struct pci_dev *root;
+	int err;
+
+	if (!hygon_smn_exclusive || node >= hygon_smn_num_nodes)
+		return -ENODEV;
+
+	root = hygon_smn_roots[node];
+	if (!root)
+		return -ENODEV;
+
+	guard(mutex)(&hygon_smn_mutex);
+
+	err = pci_write_config_dword(root, HYGON_SMN_INDEX_OFFSET, address);
+	if (err) {
+		pr_warn("SMN index write failed (addr 0x%x)\n", address);
+		return pcibios_err_to_errno(err);
+	}
+
+	err = write ? pci_write_config_dword(root, HYGON_SMN_DATA_OFFSET, *value)
+		    : pci_read_config_dword(root, HYGON_SMN_DATA_OFFSET, value);
+
+	return pcibios_err_to_errno(err);
+}
+
+int hygon_smn_read(u16 node, u32 address, u32 *value)
+{
+	int err;
+
+	if (!value)
+		return -EINVAL;
+
+	err = __hygon_smn_rw(node, address, value, false);
+
+	/*
+	 * On any failure from __hygon_smn_rw(), @value may be unchanged or
+	 * uninitialised.  Zero it so callers do not consume a stale value,
+	 * and return the real error so the caller can act on it.
+	 */
+	if (err) {
+		*value = 0;
+		return err;
+	}
+
+	/*
+	 * pci_read_config_dword() succeeded but returned the
+	 * all-ones pattern that PCI uses for "device gone".  Translate to
+	 * -ENODEV and zero @value to avoid handing back the sentinel.
+	 */
+	if (PCI_POSSIBLE_ERROR(*value)) {
+		*value = 0;
+		return -ENODEV;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(hygon_smn_read);
+
+int hygon_smn_write(u16 node, u32 address, u32 value)
+{
+	return __hygon_smn_rw(node, address, &value, true);
+}
+EXPORT_SYMBOL_GPL(hygon_smn_write);
+
+/*
  * Single Hygon fs_initcall: build the DF node cache, then run any
  * Hygon-specific subsequent setup.
  *
@@ -843,6 +1147,10 @@ static int __init hygon_node_init(void)
 		pr_warn("DF node cache build failed: %d\n", ret);
 		return ret;
 	}
+
+	ret = hygon_smn_setup();
+	if (ret)
+		pr_warn("SMN setup failed: %d\n", ret);
 
 	return 0;
 }
