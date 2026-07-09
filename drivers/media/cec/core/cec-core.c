@@ -302,6 +302,11 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	return adap;
 
 err_free_adap:
+	mutex_destroy(&adap->devnode.lock);
+	mutex_destroy(&adap->devnode.lock_fhs);
+
+	mutex_destroy(&adap->lock);
+
 	kfree(adap);
 	return ERR_PTR(res);
 }
@@ -390,14 +395,23 @@ void cec_delete_adapter(struct cec_adapter *adap)
 {
 	if (IS_ERR_OR_NULL(adap))
 		return;
+
 	if (adap->kthread_config)
 		kthread_stop(adap->kthread_config);
 	kthread_stop(adap->kthread);
+
 	if (adap->ops->adap_free)
 		adap->ops->adap_free(adap);
+
 #ifdef CONFIG_MEDIA_CEC_RC
 	rc_free_device(adap->rc);
 #endif
+
+	mutex_destroy(&adap->devnode.lock);
+	mutex_destroy(&adap->devnode.lock_fhs);
+
+	mutex_destroy(&adap->lock);
+
 	kfree(adap);
 }
 EXPORT_SYMBOL_GPL(cec_delete_adapter);
