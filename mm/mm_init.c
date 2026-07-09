@@ -1985,8 +1985,6 @@ static void __init deferred_free_pages(unsigned long pfn,
 
 	/* Free a large naturally-aligned chunk if possible */
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
-		for (i = 0; i < nr_pages; i += pageblock_nr_pages)
-			init_pageblock_migratetype(page + i, mt, false);
 		__free_pages_core(page, MAX_PAGE_ORDER, MEMINIT_EARLY);
 		return;
 	}
@@ -1994,11 +1992,8 @@ static void __init deferred_free_pages(unsigned long pfn,
 	/* Accept chunks smaller than MAX_PAGE_ORDER upfront */
 	accept_memory(PFN_PHYS(pfn), nr_pages * PAGE_SIZE);
 
-	for (i = 0; i < nr_pages; i++, page++, pfn++) {
-		if (pageblock_aligned(pfn))
-			init_pageblock_migratetype(page, mt, false);
+	for (i = 0; i < nr_pages; i++, page++, pfn++)
 		__free_pages_core(page, 0, MEMINIT_EARLY);
-	}
 }
 
 /* Completion tracking for deferred_init_memmap() threads */
@@ -2017,15 +2012,23 @@ static inline void __init pgdat_init_report_one_done(void)
  * Return number of pages initialized.
  */
 static unsigned long __init deferred_init_pages(struct zone *zone,
-		unsigned long pfn, unsigned long end_pfn)
+		unsigned long start_pfn, unsigned long end_pfn,
+		enum migratetype mt)
 {
 	int nid = zone_to_nid(zone);
-	unsigned long nr_pages = end_pfn - pfn;
+	unsigned long nr_pages = end_pfn - start_pfn, pfn = start_pfn;
 	int zid = zone_idx(zone);
 	struct page *page = pfn_to_page(pfn);
 
 	for (; pfn < end_pfn; pfn++, page++)
 		__init_single_page(page, pfn, zid, nid);
+
+	/* Now initialize migrate types for these pages. */
+	pfn = pageblock_align(start_pfn);
+	page = pfn_to_page(pfn);
+	for (; pfn < end_pfn; pfn += pageblock_nr_pages, page += pageblock_nr_pages)
+		init_pageblock_migratetype(page, mt, false);
+
 	return nr_pages;
 }
 
@@ -2067,7 +2070,7 @@ deferred_init_memmap_chunk(unsigned long start_pfn, unsigned long end_pfn,
 			unsigned long mo_pfn = ALIGN(spfn + 1, MAX_ORDER_NR_PAGES);
 			unsigned long chunk_end = min(mo_pfn, epfn);
 
-			nr_pages += deferred_init_pages(zone, spfn, chunk_end);
+			nr_pages += deferred_init_pages(zone, spfn, chunk_end, mt);
 			deferred_free_pages(spfn, chunk_end - spfn, mt);
 
 			spfn = chunk_end;
