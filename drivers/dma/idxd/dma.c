@@ -289,6 +289,7 @@ static int idxd_register_dma_channel(struct idxd_wq *wq)
 
 	rc = dma_async_device_channel_register(dma, chan, NULL);
 	if (rc < 0) {
+		list_del(&chan->device_node);
 		kfree(idxd_chan);
 		return rc;
 	}
