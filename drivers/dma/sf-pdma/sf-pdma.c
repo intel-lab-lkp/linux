@@ -412,10 +412,8 @@ static int sf_pdma_irq_init(struct platform_device *pdev, struct sf_pdma *pdma)
 
 		r = devm_request_irq(&pdev->dev, irq, sf_pdma_done_isr, 0,
 				     dev_name(&pdev->dev), (void *)chan);
-		if (r) {
-			dev_err(&pdev->dev, "Fail to attach done ISR: %d\n", r);
+		if (r)
 			return -EINVAL;
-		}
 
 		chan->txirq = irq;
 
@@ -425,10 +423,8 @@ static int sf_pdma_irq_init(struct platform_device *pdev, struct sf_pdma *pdma)
 
 		r = devm_request_irq(&pdev->dev, irq, sf_pdma_err_isr, 0,
 				     dev_name(&pdev->dev), (void *)chan);
-		if (r) {
-			dev_err(&pdev->dev, "Fail to attach err ISR: %d\n", r);
+		if (r)
 			return -EINVAL;
-		}
 
 		chan->errirq = irq;
 	}
