@@ -91,6 +91,7 @@ static const struct tz_cp_config tz_cp_config_vpu3[] = {
  */
 const struct iris_platform_data qcs8300_data = {
 	.firmware_desc = &iris_vpu30_p4_s6_gen2_desc,
+	.cb_ops = &sm8550_cb_ops,
 	.vpu_ops = &iris_vpu3_ops,
 	.icc_tbl = iris_icc_info_vpu3x,
 	.icc_tbl_size = ARRAY_SIZE(iris_icc_info_vpu3x),
@@ -120,6 +121,7 @@ const struct iris_platform_data qcs8300_data = {
 
 const struct iris_platform_data sm8550_data = {
 	.firmware_desc = &iris_vpu30_p4_gen2_desc,
+	.cb_ops = &sm8550_cb_ops,
 	.vpu_ops = &iris_vpu3_ops,
 	.icc_tbl = iris_icc_info_vpu3x,
 	.icc_tbl_size = ARRAY_SIZE(iris_icc_info_vpu3x),
@@ -155,6 +157,7 @@ const struct iris_platform_data sm8550_data = {
  */
 const struct iris_platform_data sm8650_data = {
 	.firmware_desc = &iris_vpu33_p4_gen2_desc,
+	.cb_ops = &sm8550_cb_ops,
 	.vpu_ops = &iris_vpu33_ops,
 	.icc_tbl = iris_icc_info_vpu3x,
 	.icc_tbl_size = ARRAY_SIZE(iris_icc_info_vpu3x),
@@ -221,6 +224,7 @@ const struct iris_platform_data sm8750_data = {
  */
 const struct iris_platform_data x1p42100_data = {
 	.firmware_desc = &iris_vpu30_p1_gen2_desc,
+	.cb_ops = &sm8550_cb_ops,
 	.vpu_ops = &iris_vpu3_ops,
 	.icc_tbl = iris_icc_info_vpu3x,
 	.icc_tbl_size = ARRAY_SIZE(iris_icc_info_vpu3x),
