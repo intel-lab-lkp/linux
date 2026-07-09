@@ -120,13 +120,13 @@ static int __must_check cec_devnode_register(struct cec_devnode *devnode,
 	devnode->dev.bus = &cec_bus_type;
 	devnode->dev.devt = MKDEV(MAJOR(cec_dev_t), minor);
 	devnode->dev.release = cec_devnode_release;
-	dev_set_name(&devnode->dev, "cec%d", devnode->minor);
+	dev_set_name(&devnode->dev, "%s%d", CEC_NAME, devnode->minor);
 	device_initialize(&devnode->dev);
 
 	/* Part 2: Initialize and register the character device */
 	cdev_init(&devnode->cdev, &cec_devnode_fops);
 	devnode->cdev.owner = owner;
-	kobject_set_name(&devnode->cdev.kobj, "cec%d", devnode->minor);
+	kobject_set_name(&devnode->cdev.kobj, "%s%d", CEC_NAME, devnode->minor);
 
 	devnode->registered = true;
 	ret = cdev_device_add(&devnode->cdev, &devnode->dev);
@@ -267,7 +267,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	mutex_init(&adap->devnode.lock_fhs);
 	mutex_init(&adap->devnode.lock);
 
-	adap->kthread = kthread_run(cec_thread_func, adap, "cec-%s", name);
+	adap->kthread = kthread_run(cec_thread_func, adap, "%s-%s", CEC_NAME, name);
 	if (IS_ERR(adap->kthread)) {
 		pr_err("%s: kernel_thread() failed\n", name);
 		res = PTR_ERR(adap->kthread);
@@ -431,9 +431,9 @@ static int __init cec_devnode_init(void)
 	}
 
 #ifdef CONFIG_DEBUG_FS
-	top_cec_dir = debugfs_create_dir("cec", NULL);
+	top_cec_dir = debugfs_create_dir(CEC_NAME, NULL);
 	if (IS_ERR_OR_NULL(top_cec_dir)) {
-		pr_warn("Failed to create debugfs cec dir\n");
+		pr_warn("Failed to create debugfs " CEC_NAME " dir\n");
 		top_cec_dir = NULL;
 	}
 #endif
