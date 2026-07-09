@@ -1400,6 +1400,15 @@ int renesas_sdhi_suspend(struct device *dev)
 	};
 	int ret;
 
+	if (priv->rdev) {
+		PM_RUNTIME_ACQUIRE_IF_ENABLED(dev, pm);
+		ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+		if (ret < 0)
+			return ret;
+
+		priv->cache_sd_status = sd_ctrl_read32(host, CTL_SD_STATUS);
+	}
+
 	ret = pm_runtime_force_suspend(dev);
 	if (ret)
 		return ret;
@@ -1430,6 +1439,8 @@ int renesas_sdhi_resume(struct device *dev)
 	ret = pm_runtime_force_resume(dev);
 	if (ret)
 		reset_control_bulk_assert(ARRAY_SIZE(resets), resets);
+	else if (priv->rdev)
+		sd_ctrl_write32(host, CTL_SD_STATUS, priv->cache_sd_status);
 
 	return ret;
 }
