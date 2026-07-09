@@ -1935,7 +1935,7 @@ static unsigned long folio_free_raw_hwp(struct folio *folio, bool move_flag)
 	return __folio_free_raw_hwp(folio, move_flag);
 }
 
-void folio_clear_hugetlb_hwpoison(struct folio *folio)
+static void __folio_clear_hugetlb_hwpoison(struct folio *folio)
 {
 	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
 		return;
@@ -1943,6 +1943,13 @@ void folio_clear_hugetlb_hwpoison(struct folio *folio)
 		return;
 	folio_clear_hwpoison(folio);
 	folio_free_raw_hwp(folio, true);
+}
+
+void folio_clear_hugetlb_hwpoison(struct folio *folio)
+{
+	mutex_lock(&mf_mutex);
+	__folio_clear_hugetlb_hwpoison(folio);
+	mutex_unlock(&mf_mutex);
 }
 
 static int get_huge_page_for_hwpoison(unsigned long pfn, int flags,
@@ -2051,7 +2058,7 @@ retry:
 	folio_lock(folio);
 
 	if (hwpoison_filter(p)) {
-		folio_clear_hugetlb_hwpoison(folio);
+		__folio_clear_hugetlb_hwpoison(folio);
 		if (migratable_cleared)
 			folio_set_hugetlb_migratable(folio);
 		folio_unlock(folio);
