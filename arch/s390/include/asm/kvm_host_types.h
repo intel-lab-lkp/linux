@@ -6,6 +6,8 @@
 #include <linux/atomic.h>
 #include <linux/types.h>
 
+#define BYTES_PER_LONG 8
+
 #define KVM_S390_MAX_VSIE_VCPUS 256
 #define KVM_S390_MAX_SCA_PAGES 5
 
