@@ -14,6 +14,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/topology.h>
 #include <linux/sched/isolation.h>
+#include <linux/math64.h>
 
 struct steal_monitor {
 	struct delayed_work	work;

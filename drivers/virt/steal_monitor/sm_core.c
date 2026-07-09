@@ -20,6 +20,12 @@ struct steal_monitor sm_core_ctx = {
 	.low_threshold = 200,	/* 2% */
 };
 
+enum sm_direction {
+	SM_DIR_INCREASE = -1,
+	SM_DIR_NONE	=  0,
+	SM_DIR_DECREASE	=  1,
+};
+
 static int param_set_interval_ms(const char *val, const struct kernel_param *kp)
 {
 	unsigned int interval;
@@ -106,14 +112,82 @@ module_param_cb(low_threshold, &low_threshold_ops, &sm_core_ctx.low_threshold, 0
 MODULE_PARM_DESC(low_threshold,
 		 "Low steal threshold. default: 200 i.e 2%. Must be < high_threshold");
 
+static void compute_preferred_cpus_work(struct work_struct *work)
+{
+	u64 curr_steal, delta_steal, delta_ns, steal_ratio;
+	ktime_t now;
+
+	now = ktime_get();
+	delta_ns = ktime_to_ns(ktime_sub(now, sm_core_ctx.prev_time));
+
+	if (unlikely(delta_ns < NSEC_PER_MSEC)) {
+		pr_err_ratelimited("steal_monitor: work scheduled too soon delta_ns: %llu\n",
+				   delta_ns);
+		goto requeue_work;
+	}
+
+	curr_steal = get_system_steal_time();
+	delta_steal = curr_steal > sm_core_ctx.prev_steal ?
+		      curr_steal - sm_core_ctx.prev_steal : 0;
+
+	/* Update for next calculation */
+	sm_core_ctx.prev_steal = curr_steal;
+	sm_core_ctx.prev_time = now;
+
+	/*
+	 * steal_ratio = (delta_steal * 100*100)/(delta_ns * num_cpus())
+	 * To avoid possible overflow, divide the denominator early.
+	 * Note minimum interval is 10ms.
+	 */
+	delta_ns = div_u64(delta_ns * get_num_cpus_steal_ratio(), 100 * 100);
+	steal_ratio = div64_u64(delta_steal, delta_ns);
+
+	if (sm_core_ctx.prev_direction == SM_DIR_DECREASE &&
+	    steal_ratio > sm_core_ctx.high_threshold)
+		decrease_preferred_cpus(&sm_core_ctx);
+	if (sm_core_ctx.prev_direction == SM_DIR_INCREASE &&
+	    steal_ratio <= sm_core_ctx.low_threshold)
+		increase_preferred_cpus(&sm_core_ctx);
+
+	/*
+	 * mark the direction. Increasing the gap between hi and lo_threshold
+	 * helps to avoid ping-pongs.
+	 */
+	if (steal_ratio > sm_core_ctx.high_threshold)
+		sm_core_ctx.prev_direction = SM_DIR_DECREASE;
+	else if (steal_ratio <= sm_core_ctx.low_threshold)
+		sm_core_ctx.prev_direction = SM_DIR_INCREASE;
+	else
+		sm_core_ctx.prev_direction = SM_DIR_NONE;
+
+requeue_work:
+	/* maintain design constructs always */
+	WARN_ON_ONCE(cpumask_empty(cpu_preferred_mask));
+	WARN_ON_ONCE(!cpumask_subset(cpu_preferred_mask, cpu_active_mask));
+
+	/* Trigger for next sampling */
+	schedule_delayed_work(&sm_core_ctx.work,
+			      msecs_to_jiffies(sm_core_ctx.interval_ms));
+}
+
 static int __init steal_monitor_init(void)
 {
-	pr_info("steal_monitor is enabled\n");
+	pr_info("steal_monitor is enabled. interval: %ums, high_threshold: %u, low_threshold: %u\n",
+		sm_core_ctx.interval_ms, sm_core_ctx.high_threshold, sm_core_ctx.low_threshold);
+
+	INIT_DELAYED_WORK(&sm_core_ctx.work, compute_preferred_cpus_work);
+	sm_core_ctx.prev_steal = get_system_steal_time();
+	sm_core_ctx.prev_time = ktime_get();
+
+	schedule_delayed_work(&sm_core_ctx.work,
+			      msecs_to_jiffies(sm_core_ctx.interval_ms));
+
 	return 0;
 }
 
 static void __exit steal_monitor_exit(void)
 {
+	cancel_delayed_work_sync(&sm_core_ctx.work);
 	guard(cpus_read_lock)();
 	cpumask_copy(&__cpu_preferred_mask, cpu_active_mask);
 
