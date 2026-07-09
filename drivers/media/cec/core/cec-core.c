@@ -267,8 +267,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	if (IS_ERR(adap->kthread)) {
 		pr_err("cec-%s: kernel_thread() failed\n", name);
 		res = PTR_ERR(adap->kthread);
-		kfree(adap);
-		return ERR_PTR(res);
+		goto err_free_adap;
 	}
 
 #ifdef CONFIG_MEDIA_CEC_RC
@@ -281,8 +280,8 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 		pr_err("cec-%s: failed to allocate memory for rc_dev\n",
 		       name);
 		kthread_stop(adap->kthread);
-		kfree(adap);
-		return ERR_PTR(-ENOMEM);
+		res = -ENOMEM;
+		goto err_free_adap;
 	}
 
 	snprintf(adap->input_phys, sizeof(adap->input_phys),
@@ -301,6 +300,10 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	adap->rc->timeout = MS_TO_US(550);
 #endif
 	return adap;
+
+err_free_adap:
+	kfree(adap);
+	return ERR_PTR(res);
 }
 EXPORT_SYMBOL_GPL(cec_allocate_adapter);
 
