@@ -236,8 +236,14 @@ bool ksmbd_inode_pending_delete(struct ksmbd_file *fp)
 	 * also incorrectly report a whole-file pending-delete as applying
 	 * to an unrelated stream handle on the same inode.
 	 */
-	if (ksmbd_stream_fd(fp))
-		return fp->stream_del_pending;
+	if (ksmbd_stream_fd(fp)) {
+		bool pending;
+
+		spin_lock(&fp->f_lock);
+		pending = fp->stream_del_pending;
+		spin_unlock(&fp->f_lock);
+		return pending;
+	}
 
 	down_read(&ci->m_lock);
 	ret = (ci->m_flags & S_DEL_PENDING);
@@ -318,18 +324,24 @@ void ksmbd_fd_set_delete_on_close(struct ksmbd_file *fp,
  */
 void ksmbd_fd_set_delete_pending(struct ksmbd_file *fp)
 {
-	if (ksmbd_stream_fd(fp))
+	if (ksmbd_stream_fd(fp)) {
+		spin_lock(&fp->f_lock);
 		fp->stream_del_pending = true;
-	else
+		spin_unlock(&fp->f_lock);
+	} else {
 		ksmbd_set_inode_pending_delete(fp);
+	}
 }
 
 void ksmbd_fd_clear_delete_pending(struct ksmbd_file *fp)
 {
-	if (ksmbd_stream_fd(fp))
+	if (ksmbd_stream_fd(fp)) {
+		spin_lock(&fp->f_lock);
 		fp->stream_del_pending = false;
-	else
+		spin_unlock(&fp->f_lock);
+	} else {
 		ksmbd_clear_inode_pending_delete(fp);
+	}
 }
 
 static void ksmbd_inode_hash(struct ksmbd_inode *ci)
@@ -458,10 +470,12 @@ static void __ksmbd_inode_close(struct ksmbd_file *fp)
 		 * the inode-wide flag above, which only ever meant "some
 		 * stream on this file" with no way to say which one.
 		 */
+		spin_lock(&fp->f_lock);
 		if (fp->stream_del_pending) {
 			fp->stream_del_pending = false;
 			remove_stream_xattr = true;
 		}
+		spin_unlock(&fp->f_lock);
 
 		if (remove_stream_xattr) {
 			const struct cred *saved_cred;
