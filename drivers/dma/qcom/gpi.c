@@ -617,11 +617,8 @@ static int gpi_config_interrupts(struct gpii *gpii, enum gpii_irq_settings setti
 		ret = devm_request_irq(gpii->gpi_dev->dev, gpii->irq,
 				       gpi_handle_irq, IRQF_TRIGGER_HIGH,
 				       "gpi-dma", gpii);
-		if (ret < 0) {
-			dev_err(gpii->gpi_dev->dev, "error request irq:%d ret:%d\n",
-				gpii->irq, ret);
+		if (ret < 0)
 			return ret;
-		}
 	}
 
 	if (settings == MASK_IEOB_SETTINGS) {
