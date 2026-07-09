@@ -110,7 +110,7 @@ void drm_gem_destroy_shadow_plane_state(struct drm_plane *plane,
  * macro initializes struct drm_plane_funcs to use the rsp helper functions.
  */
 #define DRM_GEM_SHADOW_PLANE_FUNCS \
-	.reset = drm_gem_reset_shadow_plane, \
+	.atomic_create_state = drm_gem_create_shadow_plane_state, \
 	.atomic_duplicate_state = drm_gem_duplicate_shadow_plane_state, \
 	.atomic_destroy_state = drm_gem_destroy_shadow_plane_state
 
