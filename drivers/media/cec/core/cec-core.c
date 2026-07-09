@@ -205,19 +205,7 @@ static int cec_error_inj_show(struct seq_file *sf, void *unused)
 
 	return call_op(adap, error_inj_show, sf);
 }
-
-static int cec_error_inj_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, cec_error_inj_show, inode->i_private);
-}
-
-static const struct file_operations cec_error_inj_fops = {
-	.open = cec_error_inj_open,
-	.write = cec_error_inj_write,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
+DEFINE_SHOW_STORE_ATTRIBUTE(cec_error_inj);
 #endif
 
 struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
