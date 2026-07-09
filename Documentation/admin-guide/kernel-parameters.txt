@@ -3248,6 +3248,20 @@ Kernel parameters
 
 			notrap: clear WFI instruction trap
 
+	kvm-riscv.wfi_trap_policy=
+			[KVM,RISCV] Control when to set the WFI instruction
+			trap for KVM VMs. When set, a VS-mode WFI traps into
+			KVM and is emulated; when clear, the guest executes
+			WFI natively and blocks until a VS-mode interrupt
+			(e.g. the sstc timer) is pending.
+
+			trap: set WFI instruction trap (HSTATUS.VTW=1)
+
+			notrap: clear WFI instruction trap (HSTATUS.VTW=0)
+
+			Defaults to trap, preserving the previous
+			unconditional behavior.
+
 	kvm_cma_resv_ratio=n [PPC,EARLY]
 			Reserves given percentage from system memory area for
 			contiguous memory allocation for KVM hash pagetable
