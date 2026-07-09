@@ -86,10 +86,20 @@ static int mlx5e_ktls_resync(struct net_device *netdev,
 	return 0;
 }
 
+static void mlx5e_ktls_rx_rekey_fixup(struct sk_buff *skb)
+{
+	struct sk_buff *frag_iter;
+
+	skb->decrypted = 1;
+	skb_walk_frags(skb, frag_iter)
+		frag_iter->decrypted = 1;
+}
+
 static const struct tlsdev_ops mlx5e_ktls_ops = {
 	.tls_dev_add = mlx5e_ktls_add,
 	.tls_dev_del = mlx5e_ktls_del,
 	.tls_dev_resync = mlx5e_ktls_resync,
+	.tls_dev_rx_rekey_fixup = mlx5e_ktls_rx_rekey_fixup,
 };
 
 bool mlx5e_is_ktls_rx(struct mlx5_core_dev *mdev)
