@@ -12,10 +12,8 @@ use kernel::{
 };
 
 use crate::{
-    driver::Bar0,
     falcon::{
         gsp::Gsp as GspEngine,
-        sec2::Sec2,
         Falcon, //
     },
     fb::FbLayout,
@@ -117,22 +115,16 @@ fn wait_for_gsp_lockdown_release(
 struct FspUnloadBundle;
 
 impl UnloadBundle for FspUnloadBundle {
-    fn run(
-        &self,
-        dev: &device::Device<device::Bound>,
-        _bar: Bar0<'_>,
-        gsp_falcon: &Falcon<'_, GspEngine>,
-        _sec2_falcon: &Falcon<'_, Sec2>,
-    ) -> Result {
+    fn run(&self, ctx: &GspBootContext<'_>) -> Result {
         // GSP falcon does most of the work of resetting, so just wait for it to finish.
         read_poll_timeout(
-            || Ok(gsp_falcon.is_riscv_active()),
+            || Ok(ctx.gsp_falcon.is_riscv_active()),
             |&active| !active,
             Delta::from_millis(10),
             Delta::from_secs(5),
         )
         .map(|_| ())
-        .inspect_err(|_| dev_err!(dev, "GSP falcon failed to halt\n"))
+        .inspect_err(|_| dev_err!(ctx.dev(), "GSP falcon failed to halt\n"))
     }
 }
 
@@ -154,7 +146,6 @@ impl GspHal for Gh100 {
         let bar = ctx.bar;
         let chipset = ctx.chipset;
         let gsp_falcon = ctx.gsp_falcon;
-        let sec2_falcon = ctx.sec2_falcon;
 
         let unload_bundle = crate::gsp::UnloadBundle(
             KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
@@ -174,7 +165,7 @@ impl GspHal for Gh100 {
         // to make sure that boot args are kept alive until halt, in case they are still being
         // accessed.
         let unload_guard = ScopeGuard::new_with_data(unload_bundle, |unload_bundle| {
-            let _ = unload_bundle.0.run(dev, bar, gsp_falcon, sec2_falcon);
+            let _ = unload_bundle.0.run(ctx);
         });
 
         fsp.boot_fmc(dev, fb_layout, &args)?;
