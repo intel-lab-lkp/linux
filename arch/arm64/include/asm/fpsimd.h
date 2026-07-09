@@ -431,6 +431,15 @@ static inline void sve_user_enable(void)
 			write_sysreg_s(__new, (reg));	\
 	} while (0)
 
+#define sme_cond_update_smcr_vq(val, reg)		\
+	do {						\
+		u64 __smcr = read_sysreg_s((reg));	\
+		u64 __new = __smcr & ~SMCR_ELx_LEN_MASK;	\
+		__new |= (val) & SMCR_ELx_LEN_MASK;	\
+		if (__smcr != __new)			\
+			write_sysreg_s(__new, (reg));	\
+	} while (0)
+
 /*
  * Probing and setup functions.
  * Calls to these functions must be serialised with one another.
@@ -549,6 +558,7 @@ static inline void sve_user_disable(void) { BUILD_BUG(); }
 static inline void sve_user_enable(void) { BUILD_BUG(); }
 
 #define sve_cond_update_zcr_vq(val, reg) do { } while (0)
+#define sme_cond_update_smcr_vq(val, reg) do { } while (0)
 
 static inline void vec_init_vq_map(enum vec_type t) { }
 static inline void vec_update_vq_map(enum vec_type t) { }
