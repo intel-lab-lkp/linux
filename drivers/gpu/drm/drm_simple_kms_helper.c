@@ -286,10 +286,29 @@ static void drm_simple_kms_plane_reset(struct drm_plane *plane)
 	struct drm_simple_display_pipe *pipe;
 
 	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
-	if (!pipe->funcs || !pipe->funcs->reset_plane)
+	if (!pipe->funcs)
 		return drm_atomic_helper_plane_reset(plane);
 
-	return pipe->funcs->reset_plane(pipe);
+	if (pipe->funcs->reset_plane)
+		return pipe->funcs->reset_plane(pipe);
+
+	if (pipe->funcs->create_plane_state) {
+		struct drm_plane_state *state;
+
+		if (plane->state) {
+			pipe->funcs->destroy_plane_state(pipe, plane->state);
+			plane->state = NULL;
+		}
+
+		state = pipe->funcs->create_plane_state(pipe);
+		if (WARN_ON(IS_ERR(state)))
+			return;
+
+		plane->state = state;
+		return;
+	}
+
+	return drm_atomic_helper_plane_reset(plane);
 }
 
 static struct drm_plane_state *drm_simple_kms_plane_duplicate_state(struct drm_plane *plane)
