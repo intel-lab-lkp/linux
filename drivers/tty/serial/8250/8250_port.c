@@ -43,27 +43,27 @@
  * Here we define the default xmit fifo size used for each type of UART.
  */
 static const struct serial8250_config uart_config[] = {
-	[PORT_UNKNOWN] = {
+	[UART_PORT_UNKNOWN] = {
 		.name		= "unknown",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
-	[PORT_8250] = {
+	[UART_PORT_8250] = {
 		.name		= "8250",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
-	[PORT_16450] = {
+	[UART_PORT_16450] = {
 		.name		= "16450",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
-	[PORT_16550] = {
+	[UART_PORT_16550] = {
 		.name		= "16550",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
-	[PORT_16550A] = {
+	[UART_PORT_16550A] = {
 		.name		= "16550A",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
@@ -71,18 +71,18 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_CIRRUS] = {
+	[UART_PORT_CIRRUS] = {
 		.name		= "Cirrus",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
-	[PORT_16650] = {
+	[UART_PORT_16650] = {
 		.name		= "ST16650",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 		.flags		= UART_CAP_FIFO | UART_CAP_EFR | UART_CAP_SLEEP,
 	},
-	[PORT_16650V2] = {
+	[UART_PORT_16650V2] = {
 		.name		= "ST16650V2",
 		.fifo_size	= 32,
 		.tx_loadsz	= 16,
@@ -91,7 +91,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {8, 16, 24, 28},
 		.flags		= UART_CAP_FIFO | UART_CAP_EFR | UART_CAP_SLEEP,
 	},
-	[PORT_16750] = {
+	[UART_PORT_16750] = {
 		.name		= "TI16750",
 		.fifo_size	= 64,
 		.tx_loadsz	= 64,
@@ -100,12 +100,12 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 16, 32, 56},
 		.flags		= UART_CAP_FIFO | UART_CAP_SLEEP | UART_CAP_AFE,
 	},
-	[PORT_STARTECH] = {
+	[UART_PORT_STARTECH] = {
 		.name		= "Startech",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1,
 	},
-	[PORT_16C950] = {
+	[UART_PORT_16C950] = {
 		.name		= "16C950/954",
 		.fifo_size	= 128,
 		.tx_loadsz	= 128,
@@ -114,7 +114,7 @@ static const struct serial8250_config uart_config[] = {
 		/* UART_CAP_EFR breaks billionon CF bluetooth card. */
 		.flags		= UART_CAP_FIFO | UART_CAP_SLEEP,
 	},
-	[PORT_16654] = {
+	[UART_PORT_16654] = {
 		.name		= "ST16654",
 		.fifo_size	= 64,
 		.tx_loadsz	= 32,
@@ -123,49 +123,49 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {8, 16, 56, 60},
 		.flags		= UART_CAP_FIFO | UART_CAP_EFR | UART_CAP_SLEEP,
 	},
-	[PORT_16850] = {
+	[UART_PORT_16850] = {
 		.name		= "XR16850",
 		.fifo_size	= 128,
 		.tx_loadsz	= 128,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
 		.flags		= UART_CAP_FIFO | UART_CAP_EFR | UART_CAP_SLEEP,
 	},
-	[PORT_RSA] = {
+	[UART_PORT_RSA] = {
 		.name		= "RSA",
 		.fifo_size	= 2048,
 		.tx_loadsz	= 2048,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_11,
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_NS16550A] = {
+	[UART_PORT_NS16550A] = {
 		.name		= "NS16550A",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
 		.flags		= UART_CAP_FIFO | UART_NATSEMI,
 	},
-	[PORT_XSCALE] = {
+	[UART_PORT_XSCALE] = {
 		.name		= "XScale",
 		.fifo_size	= 32,
 		.tx_loadsz	= 32,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
 		.flags		= UART_CAP_FIFO | UART_CAP_UUE | UART_CAP_RTOIE,
 	},
-	[PORT_OCTEON] = {
+	[UART_PORT_OCTEON] = {
 		.name		= "OCTEON",
 		.fifo_size	= 64,
 		.tx_loadsz	= 64,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_U6_16550A] = {
+	[UART_PORT_U6_16550A] = {
 		.name		= "U6_16550A",
 		.fifo_size	= 64,
 		.tx_loadsz	= 64,
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE,
 	},
-	[PORT_TEGRA] = {
+	[UART_PORT_TEGRA] = {
 		.name		= "Tegra",
 		.fifo_size	= 32,
 		.tx_loadsz	= 8,
@@ -174,7 +174,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO | UART_CAP_RTOIE,
 	},
-	[PORT_XR17D15X] = {
+	[UART_PORT_XR17D15X] = {
 		.name		= "XR17D15X",
 		.fifo_size	= 64,
 		.tx_loadsz	= 64,
@@ -182,7 +182,7 @@ static const struct serial8250_config uart_config[] = {
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE | UART_CAP_EFR |
 				  UART_CAP_SLEEP,
 	},
-	[PORT_XR17V35X] = {
+	[UART_PORT_XR17V35X] = {
 		.name		= "XR17V35X",
 		.fifo_size	= 256,
 		.tx_loadsz	= 256,
@@ -191,7 +191,7 @@ static const struct serial8250_config uart_config[] = {
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE | UART_CAP_EFR |
 				  UART_CAP_SLEEP,
 	},
-	[PORT_LPC3220] = {
+	[UART_PORT_LPC3220] = {
 		.name		= "LPC3220",
 		.fifo_size	= 64,
 		.tx_loadsz	= 32,
@@ -199,16 +199,16 @@ static const struct serial8250_config uart_config[] = {
 				  UART_FCR_R_TRIG_00 | UART_FCR_T_TRIG_00,
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_BRCM_TRUMANAGE] = {
+	[UART_PORT_BRCM_TRUMANAGE] = {
 		.name		= "TruManage",
 		.fifo_size	= 1,
 		.tx_loadsz	= 1024,
 		.flags		= UART_CAP_HFIFO,
 	},
-	[PORT_8250_CIR] = {
+	[UART_PORT_8250_CIR] = {
 		.name		= "CIR port"
 	},
-	[PORT_ALTR_16550_F32] = {
+	[UART_PORT_ALTR_16550_F32] = {
 		.name		= "Altera 16550 FIFO32",
 		.fifo_size	= 32,
 		.tx_loadsz	= 32,
@@ -216,7 +216,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 8, 16, 30},
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE,
 	},
-	[PORT_ALTR_16550_F64] = {
+	[UART_PORT_ALTR_16550_F64] = {
 		.name		= "Altera 16550 FIFO64",
 		.fifo_size	= 64,
 		.tx_loadsz	= 64,
@@ -224,7 +224,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 16, 32, 62},
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE,
 	},
-	[PORT_ALTR_16550_F128] = {
+	[UART_PORT_ALTR_16550_F128] = {
 		.name		= "Altera 16550 FIFO128",
 		.fifo_size	= 128,
 		.tx_loadsz	= 128,
@@ -237,7 +237,7 @@ static const struct serial8250_config uart_config[] = {
 	 * workaround of errata A-008006 which states that tx_loadsz should
 	 * be configured less than Maximum supported fifo bytes.
 	 */
-	[PORT_16550A_FSL64] = {
+	[UART_PORT_16550A_FSL64] = {
 		.name		= "16550A_FSL64",
 		.fifo_size	= 64,
 		.tx_loadsz	= 63,
@@ -245,7 +245,7 @@ static const struct serial8250_config uart_config[] = {
 				  UART_FCR7_64BYTE,
 		.flags		= UART_CAP_FIFO | UART_CAP_NOTEMT,
 	},
-	[PORT_RT2880] = {
+	[UART_PORT_RT2880] = {
 		.name		= "Palmchip BK-3103",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
@@ -253,7 +253,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_DA830] = {
+	[UART_PORT_DA830] = {
 		.name		= "TI DA8xx/66AK2x",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
@@ -262,7 +262,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE,
 	},
-	[PORT_MTK_BTIF] = {
+	[UART_PORT_MTK_BTIF] = {
 		.name		= "MediaTek BTIF",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
@@ -270,7 +270,7 @@ static const struct serial8250_config uart_config[] = {
 				  UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT,
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_NPCM] = {
+	[UART_PORT_NPCM] = {
 		.name		= "Nuvoton 16550",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
@@ -279,7 +279,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_SUNIX] = {
+	[UART_PORT_SUNIX] = {
 		.name		= "Sunix",
 		.fifo_size	= 128,
 		.tx_loadsz	= 128,
@@ -287,7 +287,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 32, 64, 112},
 		.flags		= UART_CAP_FIFO | UART_CAP_SLEEP,
 	},
-	[PORT_ASPEED_VUART] = {
+	[UART_PORT_ASPEED_VUART] = {
 		.name		= "ASPEED VUART",
 		.fifo_size	= 16,
 		.tx_loadsz	= 16,
@@ -295,7 +295,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO,
 	},
-	[PORT_MCHP16550A] = {
+	[UART_PORT_MCHP16550A] = {
 		.name           = "MCHP16550A",
 		.fifo_size      = 256,
 		.tx_loadsz      = 256,
@@ -303,7 +303,7 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes   = {2, 66, 130, 194},
 		.flags          = UART_CAP_FIFO,
 	},
-	[PORT_BCM7271] = {
+	[UART_PORT_BCM7271] = {
 		.name		= "Broadcom BCM7271 UART",
 		.fifo_size	= 32,
 		.tx_loadsz	= 32,
