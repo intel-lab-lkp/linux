@@ -288,6 +288,11 @@ struct iris_firmware_desc {
 	const char *fwname;
 };
 
+struct iris_context_bank_ops {
+	int (*init)(struct iris_core *core);
+	void (*deinit)(struct iris_core *core);
+};
+
 struct iris_platform_data {
 	/*
 	 * XXX: replace with gen1 / gen2 pointers once we have platforms
@@ -295,6 +300,7 @@ struct iris_platform_data {
 	 */
 	const struct iris_firmware_desc *firmware_desc;
 
+	const struct iris_context_bank_ops *cb_ops;
 	const struct vpu_ops *vpu_ops;
 	const struct icc_info *icc_tbl;
 	unsigned int icc_tbl_size;
