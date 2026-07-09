@@ -16882,6 +16882,7 @@ F:	mm/bootmem_info.c
 F:	mm/memblock.c
 F:	mm/memtest.c
 F:	mm/mm_init.c
+F:	mm/mm_init.h
 F:	mm/rodata_test.c
 F:	tools/testing/memblock/
 
