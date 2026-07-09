@@ -65,12 +65,17 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 	}
 
 	mutex_init(&vpmem->flush_lock);
+	err = bioset_init(&vpmem->flush_bio_set, BIO_POOL_SIZE, 0, 0);
+	if (err) {
+		dev_err(&vdev->dev, "failed to initialize flush bio_set\n");
+		goto out_err;
+	}
 	vpmem->vdev = vdev;
 	vdev->priv = vpmem;
 	err = init_vq(vpmem);
 	if (err) {
 		dev_err(&vdev->dev, "failed to initialize virtio pmem vq's\n");
-		goto out_err;
+		goto out_bioset;
 	}
 
 	if (virtio_has_feature(vdev, VIRTIO_PMEM_F_SHMEM_REGION)) {
@@ -131,6 +136,8 @@ out_nd:
 	nvdimm_bus_unregister(vpmem->nvdimm_bus);
 out_vq:
 	vdev->config->del_vqs(vdev);
+out_bioset:
+	bioset_exit(&vpmem->flush_bio_set);
 out_err:
 	return err;
 }
@@ -138,10 +145,12 @@ out_err:
 static void virtio_pmem_remove(struct virtio_device *vdev)
 {
 	struct nvdimm_bus *nvdimm_bus = dev_get_drvdata(&vdev->dev);
+	struct virtio_pmem *vpmem = vdev->priv;
 
 	nvdimm_bus_unregister(nvdimm_bus);
 	vdev->config->del_vqs(vdev);
 	virtio_reset_device(vdev);
+	bioset_exit(&vpmem->flush_bio_set);
 }
 
 static int virtio_pmem_freeze(struct virtio_device *vdev)

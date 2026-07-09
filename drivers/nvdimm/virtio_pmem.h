@@ -15,6 +15,7 @@
 #include <linux/libnvdimm.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/bio.h>
 
 struct virtio_pmem_request {
 	struct virtio_pmem_req req;
@@ -38,6 +39,9 @@ struct virtio_pmem {
 
 	/* Serialize flush requests to the device. */
 	struct mutex flush_lock;
+
+	/* bio_set for allocating flush child bios */
+	struct bio_set flush_bio_set;
 
 	/* nvdimm bus registers virtio pmem device */
 	struct nvdimm_bus *nvdimm_bus;
