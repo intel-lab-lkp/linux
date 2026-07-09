@@ -181,9 +181,12 @@ static int loongarch_ipi_readl(struct kvm_vcpu *vcpu, gpa_t addr, int len, void 
 	uint32_t offset;
 	uint64_t res = 0;
 
-	offset = (uint32_t)(addr & 0x1ff);
-	WARN_ON_ONCE(offset & (len - 1));
+	if (addr & (len - 1)) {
+		kvm_pr_unimpl("%s: ipi not aligned addr %llx len %d\n", __func__, addr, len);
+		return 0;
+	}
 
+	offset = addr - IOCSR_IPI_BASE;
 	switch (offset) {
 	case IOCSR_IPI_STATUS:
 		spin_lock(&vcpu->arch.ipi_state.lock);
@@ -199,11 +202,6 @@ static int loongarch_ipi_readl(struct kvm_vcpu *vcpu, gpa_t addr, int len, void 
 	case IOCSR_IPI_CLEAR:
 		break;
 	case IOCSR_IPI_BUF_20 ... IOCSR_IPI_BUF_38 + 7:
-		if (offset + len > IOCSR_IPI_BUF_38 + 8) {
-			kvm_pr_unimpl("%s: invalid offset or len: offset = %d, len = %d\n",
-				__func__, offset, len);
-			break;
-		}
 		res = read_mailbox(vcpu, offset, len);
 		break;
 	default:
@@ -222,9 +220,12 @@ static int loongarch_ipi_writel(struct kvm_vcpu *vcpu, gpa_t addr, int len, cons
 
 	data = *(uint64_t *)val;
 
-	offset = (uint32_t)(addr & 0x1ff);
-	WARN_ON_ONCE(offset & (len - 1));
+	if (addr & (len - 1)) {
+		kvm_pr_unimpl("%s: ipi not aligned addr %llx len %d\n", __func__, addr, len);
+		return 0;
+	}
 
+	offset = addr - IOCSR_IPI_BASE;
 	switch (offset) {
 	case IOCSR_IPI_STATUS:
 		break;
@@ -241,11 +242,6 @@ static int loongarch_ipi_writel(struct kvm_vcpu *vcpu, gpa_t addr, int len, cons
 		ipi_clear(vcpu, data);
 		break;
 	case IOCSR_IPI_BUF_20 ... IOCSR_IPI_BUF_38 + 7:
-		if (offset + len > IOCSR_IPI_BUF_38 + 8) {
-			kvm_pr_unimpl("%s: invalid offset or len: offset = %d, len = %d\n",
-				__func__, offset, len);
-			break;
-		}
 		write_mailbox(vcpu, offset, data, len);
 		break;
 	case IOCSR_IPI_SEND:
