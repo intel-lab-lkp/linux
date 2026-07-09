@@ -532,10 +532,8 @@ static int uniphier_xdmac_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(dev, irq, uniphier_xdmac_irq_handler,
 			       IRQF_SHARED, "xdmac", xdev);
-	if (ret) {
-		dev_err(dev, "Failed to request IRQ\n");
+	if (ret)
 		return ret;
-	}
 
 	ret = dma_async_device_register(ddev);
 	if (ret) {
