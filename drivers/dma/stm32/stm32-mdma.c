@@ -1713,10 +1713,8 @@ static int stm32_mdma_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(&pdev->dev, dmadev->irq, stm32_mdma_irq_handler,
 			       0, dev_name(&pdev->dev), dmadev);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to request IRQ\n");
+	if (ret)
 		goto err_clk;
-	}
 
 	ret = dmaenginem_async_device_register(dd);
 	if (ret)
