@@ -819,7 +819,6 @@ static bool joydev_dev_is_blacklisted(struct input_dev *dev)
 static bool joydev_dev_is_absolute_mouse(struct input_dev *dev)
 {
 	DECLARE_BITMAP(jd_scratch, KEY_CNT);
-	bool ev_match = false;
 
 	BUILD_BUG_ON(ABS_CNT > KEY_CNT || EV_CNT > KEY_CNT);
 
@@ -855,20 +854,21 @@ static bool joydev_dev_is_absolute_mouse(struct input_dev *dev)
 	__set_bit(EV_KEY, jd_scratch);
 	__set_bit(EV_SYN, jd_scratch);
 	if (bitmap_equal(jd_scratch, dev->evbit, EV_CNT))
-		ev_match = true;
+		goto ev_match_pass;
 
 	/* HP ILO2, AMI BMC firmware */
 	__set_bit(EV_MSC, jd_scratch);
 	if (bitmap_equal(jd_scratch, dev->evbit, EV_CNT))
-		ev_match = true;
+		goto ev_match_pass;
 
 	/* VMware Virtual USB Mouse, QEMU USB Tablet, ATEN BMC firmware */
 	__set_bit(EV_REL, jd_scratch);
 	if (bitmap_equal(jd_scratch, dev->evbit, EV_CNT))
-		ev_match = true;
+		goto ev_match_pass;
 
-	if (!ev_match)
-		return false;
+	return false;
+
+ev_match_pass:
 
 	bitmap_zero(jd_scratch, ABS_CNT);
 	__set_bit(ABS_X, jd_scratch);
