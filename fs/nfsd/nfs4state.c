@@ -1002,7 +1002,19 @@ struct nfs4_cpntf_state *nfs4_alloc_init_cpntf_state(struct nfsd_net *nn,
 	 */
 	INIT_LIST_HEAD(&cps->cp_list);
 	cps->cpntf_time = ktime_get_boottime_seconds();
-	refcount_set(&cps->cp_stateid.cs_count, 1);
+	/*
+	 * Record the parent stateid and the owning clientid before
+	 * nfs4_init_cp_state() publishes the entry in s2s_cp_stateids.
+	 * Once published, a concurrent OFFLOAD_CANCEL can find and free
+	 * the entry, so it must be fully initialized first. Take an extra
+	 * reference for the caller (released with nfs4_put_cpntf_state())
+	 * so the returned object stays alive while the caller reads back
+	 * the stateid.
+	 */
+	memcpy(&cps->cp_p_stateid, &p_stid->sc_stateid, sizeof(stateid_t));
+	memcpy(&cps->cp_p_clid, &p_stid->sc_client->cl_clientid,
+	       sizeof(clientid_t));
+	refcount_set(&cps->cp_stateid.cs_count, 2);
 	if (!nfs4_init_cp_state(nn, &cps->cp_stateid, NFS4_COPYNOTIFY_STID,
 				p_stid))
 		goto out_free;
