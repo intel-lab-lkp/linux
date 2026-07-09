@@ -1690,12 +1690,14 @@ failed:
  * swap cache.
  *
  * Context: Caller needs to hold the folio lock.
- * Return: Whether the folio was added to the swap cache.
+ * Return: 0 on success, -E2BIG if splitting the folio might allow swapout,
+ * or another negative error code if splitting would not help.
  */
 int folio_alloc_swap(struct folio *folio)
 {
 	unsigned int order = folio_order(folio);
 	unsigned int size = 1 << order;
+	long nr_swap_pages;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
@@ -1706,7 +1708,7 @@ int folio_alloc_swap(struct folio *folio)
 		 * the caller should split the folio and try again.
 		 */
 		if (!IS_ENABLED(CONFIG_THP_SWAP))
-			return -EAGAIN;
+			return -E2BIG;
 
 		/*
 		 * Allocation size should never exceed cluster size
@@ -1714,9 +1716,11 @@ int folio_alloc_swap(struct folio *folio)
 		 */
 		if (size > SWAPFILE_CLUSTER) {
 			VM_WARN_ON_ONCE(1);
-			return -EINVAL;
+			return -E2BIG;
 		}
 	}
+
+	nr_swap_pages = get_nr_swap_pages();
 
 again:
 	local_lock(&percpu_swap_cluster.lock);
@@ -1730,11 +1734,16 @@ again:
 	}
 
 	/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
-	if (unlikely(mem_cgroup_try_charge_swap(folio, folio->swap)))
+	if (unlikely(mem_cgroup_try_charge_swap(folio, folio->swap,
+						&nr_swap_pages))) {
 		swap_cache_del_folio(folio);
+		return order && nr_swap_pages > 0 ? -E2BIG : -ENOMEM;
+	}
 
-	if (unlikely(!folio_test_swapcache(folio)))
-		return -ENOMEM;
+	if (unlikely(!folio_test_swapcache(folio))) {
+		nr_swap_pages = get_nr_swap_pages();
+		return order && nr_swap_pages > 0 ? -E2BIG : -ENOSPC;
+	}
 
 	return 0;
 }
