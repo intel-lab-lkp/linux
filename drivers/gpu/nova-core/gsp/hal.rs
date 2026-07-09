@@ -31,7 +31,7 @@ use crate::{
 /// required for unloading is prepared at load time, and stored here until it needs to be run.
 pub(super) trait UnloadBundle: Send {
     /// Performs the steps required to properly reset the GSP after it has been stopped.
-    fn run(&self, ctx: &mut GspBootContext<'_>) -> Result;
+    fn run(&self, ctx: &mut GspBootContext<'_, '_>) -> Result;
 }
 
 /// Trait implemented by GSP HALs.
@@ -43,7 +43,7 @@ pub(super) trait GspHal: Send {
     fn boot(
         &self,
         gsp: &Gsp,
-        ctx: &mut GspBootContext<'_>,
+        ctx: &mut GspBootContext<'_, '_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
     ) -> Result<Option<crate::gsp::UnloadBundle>>;
@@ -55,7 +55,7 @@ pub(super) trait GspHal: Send {
     fn post_boot(
         &self,
         _gsp: &Gsp,
-        _ctx: &mut GspBootContext<'_>,
+        _ctx: &mut GspBootContext<'_, '_>,
         _gsp_fw: &GspFirmware,
     ) -> Result {
         Ok(())

@@ -78,7 +78,7 @@ struct Sec2UnloadBundle {
 }
 
 impl UnloadBundle for Sec2UnloadBundle {
-    fn run(&self, ctx: &mut GspBootContext<'_>) -> Result {
+    fn run(&self, ctx: &mut GspBootContext<'_, '_>) -> Result {
         let dev = ctx.dev();
         let bar = ctx.bar;
 
@@ -258,7 +258,7 @@ impl GspHal for Tu102 {
     fn boot(
         &self,
         gsp: &Gsp,
-        ctx: &mut GspBootContext<'_>,
+        ctx: &mut GspBootContext<'_, '_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
     ) -> Result<Option<crate::gsp::UnloadBundle>> {
@@ -314,7 +314,12 @@ impl GspHal for Tu102 {
         Ok(unload_guard.dismiss())
     }
 
-    fn post_boot(&self, gsp: &Gsp, ctx: &mut GspBootContext<'_>, gsp_fw: &GspFirmware) -> Result {
+    fn post_boot(
+        &self,
+        gsp: &Gsp,
+        ctx: &mut GspBootContext<'_, '_>,
+        gsp_fw: &GspFirmware,
+    ) -> Result {
         GspSequencer::run(
             &gsp.cmdq,
             ctx,
