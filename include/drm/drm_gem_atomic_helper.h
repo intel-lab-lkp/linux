@@ -94,7 +94,6 @@ void __drm_gem_destroy_shadow_plane_state(struct drm_shadow_plane_state *shadow_
 void __drm_gem_reset_shadow_plane(struct drm_plane *plane,
 				  struct drm_shadow_plane_state *shadow_plane_state);
 
-void drm_gem_reset_shadow_plane(struct drm_plane *plane);
 void __drm_gem_shadow_plane_state_init(struct drm_plane *plane,
 				       struct drm_shadow_plane_state *shadow_plane_state);
 struct drm_plane_state *drm_gem_create_shadow_plane_state(struct drm_plane *plane);
