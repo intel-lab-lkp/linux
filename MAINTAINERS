@@ -12052,9 +12052,12 @@ F:	drivers/input/touchscreen/hycon-hy46xx.c
 
 HYGON PROCESSOR SUPPORT
 M:	Pu Wen <puwen@hygon.cn>
+M:	Lin Wang <wanglin@open-hieco.net>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
+F:	arch/x86/include/asm/hygon/
 F:	arch/x86/kernel/cpu/hygon.c
+F:	arch/x86/kernel/hygon_node.c
 
 HYNIX HI556 SENSOR DRIVER
 M:	Sakari Ailus <sakari.ailus@linux.intel.com>
