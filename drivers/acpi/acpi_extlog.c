@@ -136,7 +136,7 @@ static int print_extlog_rcd(const char *pfx,
 static void extlog_print_pcie(struct cper_sec_pcie *pcie_err,
 			      int severity)
 {
-#ifdef ACPI_APEI_PCIEAER
+#ifdef CONFIG_ACPI_APEI_PCIEAER
 	struct aer_capability_regs *aer;
 	struct pci_dev *pdev;
 	unsigned int devfn;
@@ -167,7 +167,7 @@ static void
 extlog_cxl_cper_handle_prot_err(struct cxl_cper_sec_prot_err *prot_err,
 				int severity)
 {
-#ifdef ACPI_APEI_PCIEAER
+#ifdef CONFIG_ACPI_APEI_PCIEAER
 	struct cxl_cper_prot_err_work_data wd;
 
 	if (cxl_cper_sec_prot_err_valid(prot_err))
