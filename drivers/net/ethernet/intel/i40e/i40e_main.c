@@ -14449,15 +14449,6 @@ struct i40e_vsi *i40e_vsi_setup(struct i40e_pf *pf, u8 type,
 				goto err_netdev;
 			SET_NETDEV_DEVLINK_PORT(vsi->netdev, &pf->devlink_port);
 		}
-		ret = register_netdev(vsi->netdev);
-		if (ret)
-			goto err_dl_port;
-		vsi->netdev_registered = true;
-		netif_carrier_off(vsi->netdev);
-#ifdef CONFIG_I40E_DCB
-		/* Setup DCB netlink interface */
-		i40e_dcbnl_setup(vsi);
-#endif /* CONFIG_I40E_DCB */
 		fallthrough;
 	case I40E_VSI_FDIR:
 		/* set up vectors and rings if needed */
@@ -14485,6 +14476,19 @@ struct i40e_vsi *i40e_vsi_setup(struct i40e_pf *pf, u8 type,
 		if (ret)
 			goto err_config;
 	}
+
+	if (vsi->netdev) {
+		ret = register_netdev(vsi->netdev);
+		if (ret)
+			goto err_config;
+		vsi->netdev_registered = true;
+		netif_carrier_off(vsi->netdev);
+#ifdef CONFIG_I40E_DCB
+		/* Setup DCB netlink interface */
+		i40e_dcbnl_setup(vsi);
+#endif /* CONFIG_I40E_DCB */
+	}
+
 	return vsi;
 
 err_config:
@@ -14496,7 +14500,6 @@ err_rings:
 		vsi->netdev_registered = false;
 		unregister_netdev(vsi->netdev);
 	}
-err_dl_port:
 	if (vsi->type == I40E_VSI_MAIN)
 		i40e_devlink_destroy_port(pf);
 err_netdev:
