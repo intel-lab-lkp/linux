@@ -181,6 +181,48 @@ EXPORT_SYMBOL_GPL(drm_gem_plane_helper_prepare_fb);
  */
 
 /**
+ * __drm_gem_shadow_plane_state_init - initializes shadow-buffered plane state
+ * @plane: the plane
+ * @shadow_plane_state: the shadow-buffered plane state
+ *
+ * This function initializes a pre-allocated shadow-buffered plane state.
+ * Helpful for drivers that subclass struct drm_shadow_plane_state.
+ */
+void __drm_gem_shadow_plane_state_init(struct drm_plane *plane,
+				       struct drm_shadow_plane_state *shadow_plane_state)
+{
+	__drm_atomic_helper_plane_state_init(&shadow_plane_state->base, plane);
+	drm_format_conv_state_init(&shadow_plane_state->fmtcnv_state);
+}
+EXPORT_SYMBOL(__drm_gem_shadow_plane_state_init);
+
+/**
+ * drm_gem_create_shadow_plane_state - creates a shadow-buffered plane state
+ * @plane: the plane
+ *
+ * This function implements struct &drm_plane_funcs.atomic_create_state for
+ * shadow-buffered planes. It assumes the new state to be of type
+ * struct drm_shadow_plane_state.
+ *
+ * Returns:
+ * A pointer to a new plane state on success, or an ERR_PTR()-encoded
+ * error code otherwise.
+ */
+struct drm_plane_state *drm_gem_create_shadow_plane_state(struct drm_plane *plane)
+{
+	struct drm_shadow_plane_state *shadow_plane_state;
+
+	shadow_plane_state = kzalloc_obj(*shadow_plane_state);
+	if (!shadow_plane_state)
+		return ERR_PTR(-ENOMEM);
+
+	__drm_gem_shadow_plane_state_init(plane, shadow_plane_state);
+
+	return &shadow_plane_state->base;
+}
+EXPORT_SYMBOL(drm_gem_create_shadow_plane_state);
+
+/**
  * __drm_gem_duplicate_shadow_plane_state - duplicates shadow-buffered plane state
  * @plane: the plane
  * @new_shadow_plane_state: the new shadow-buffered plane state
