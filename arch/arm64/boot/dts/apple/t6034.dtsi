@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0+ OR MIT
+/*
+ * Apple T6034 "M3 Max" SoC
+ *
+ * Copyright The Asahi Linux Contributors
+ */
+
+#include "t6031.dtsi"
+
+/ {
+	compatible = "apple,t6034", "apple,arm-platform";
+};
