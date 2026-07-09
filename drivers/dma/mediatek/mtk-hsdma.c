@@ -988,11 +988,8 @@ static int mtk_hsdma_probe(struct platform_device *pdev)
 	err = devm_request_irq(&pdev->dev, hsdma->irq,
 			       mtk_hsdma_irq, 0,
 			       dev_name(&pdev->dev), hsdma);
-	if (err) {
-		dev_err(&pdev->dev,
-			"request_irq failed with err %d\n", err);
+	if (err)
 		goto err_free;
-	}
 
 	platform_set_drvdata(pdev, hsdma);
 
