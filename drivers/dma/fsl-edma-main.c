@@ -357,24 +357,18 @@ fsl_edma_irq_init(struct platform_device *pdev, struct fsl_edma_engine *fsl_edma
 	if (fsl_edma->txirq == fsl_edma->errirq) {
 		ret = devm_request_irq(&pdev->dev, fsl_edma->txirq,
 				fsl_edma_irq_handler, 0, "eDMA", fsl_edma);
-		if (ret) {
-			dev_err(&pdev->dev, "Can't register eDMA IRQ.\n");
+		if (ret)
 			return ret;
-		}
 	} else {
 		ret = devm_request_irq(&pdev->dev, fsl_edma->txirq,
 				fsl_edma_tx_handler, 0, "eDMA tx", fsl_edma);
-		if (ret) {
-			dev_err(&pdev->dev, "Can't register eDMA tx IRQ.\n");
+		if (ret)
 			return ret;
-		}
 
 		ret = devm_request_irq(&pdev->dev, fsl_edma->errirq,
 				fsl_edma_err_handler, 0, "eDMA err", fsl_edma);
-		if (ret) {
-			dev_err(&pdev->dev, "Can't register eDMA err IRQ.\n");
+		if (ret)
 			return ret;
-		}
 	}
 
 	return 0;
@@ -420,7 +414,7 @@ static int fsl_edma3_irq_init(struct platform_device *pdev, struct fsl_edma_engi
 		ret = devm_request_irq(&pdev->dev, fsl_edma->errirq, fsl_edma3_err_handler_shared,
 				       0, errirq_name, fsl_edma);
 		if (ret)
-			return dev_err_probe(&pdev->dev, ret, "Can't register eDMA err IRQ.\n");
+			return ret;
 	}
 
 	return 0;
@@ -447,24 +441,21 @@ static int fsl_edma3_or_irq_init(struct platform_device *pdev,
 			       fsl_edma3_tx_0_15_handler, 0, "eDMA tx0_15",
 			       fsl_edma);
 	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-			       "Can't register eDMA tx0_15 IRQ.\n");
+		return ret;
 
 	if (fsl_edma->n_chans > 16) {
 		ret = devm_request_irq(&pdev->dev, fsl_edma->txirq_16_31,
 				       fsl_edma3_tx_16_31_handler, 0,
 				       "eDMA tx16_31", fsl_edma);
 		if (ret)
-			return dev_err_probe(&pdev->dev, ret,
-					"Can't register eDMA tx16_31 IRQ.\n");
+			return ret;
 	}
 
 	ret = devm_request_irq(&pdev->dev, fsl_edma->errirq,
 			       fsl_edma3_or_err_handler, 0, "eDMA err",
 			       fsl_edma);
 	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Can't register eDMA err IRQ.\n");
+		return ret;
 
 	return 0;
 }
