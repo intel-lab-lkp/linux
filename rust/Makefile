@@ -92,7 +92,7 @@ zerocopy-flags := \
     $(call cfgs-to-flags,$(zerocopy-cfgs))
 
 zerocopy-envs := \
-    CARGO_PKG_VERSION=0.8.52
+    CARGO_PKG_VERSION=0.8.54
 
 proc_macro2-cfgs := \
     feature="proc-macro" \
