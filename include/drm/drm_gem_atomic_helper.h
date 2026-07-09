@@ -133,7 +133,8 @@ int drm_gem_simple_kms_begin_shadow_fb_access(struct drm_simple_display_pipe *pi
 					      struct drm_plane_state *plane_state);
 void drm_gem_simple_kms_end_shadow_fb_access(struct drm_simple_display_pipe *pipe,
 					     struct drm_plane_state *plane_state);
-void drm_gem_simple_kms_reset_shadow_plane(struct drm_simple_display_pipe *pipe);
+struct drm_plane_state *
+drm_gem_simple_kms_create_shadow_plane_state(struct drm_simple_display_pipe *pipe);
 struct drm_plane_state *
 drm_gem_simple_kms_duplicate_shadow_plane_state(struct drm_simple_display_pipe *pipe);
 void drm_gem_simple_kms_destroy_shadow_plane_state(struct drm_simple_display_pipe *pipe,
@@ -150,7 +151,7 @@ void drm_gem_simple_kms_destroy_shadow_plane_state(struct drm_simple_display_pip
 #define DRM_GEM_SIMPLE_DISPLAY_PIPE_SHADOW_PLANE_FUNCS \
 	.begin_fb_access = drm_gem_simple_kms_begin_shadow_fb_access, \
 	.end_fb_access = drm_gem_simple_kms_end_shadow_fb_access, \
-	.reset_plane = drm_gem_simple_kms_reset_shadow_plane, \
+	.create_plane_state = drm_gem_simple_kms_create_shadow_plane_state, \
 	.duplicate_plane_state = drm_gem_simple_kms_duplicate_shadow_plane_state, \
 	.destroy_plane_state = drm_gem_simple_kms_destroy_shadow_plane_state
 
