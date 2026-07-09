@@ -781,7 +781,7 @@ static int ntfs_getxattr(const struct xattr_handler *handler, struct dentry *de,
 		if (!buffer) {
 			err = sizeof(u8);
 		} else if (size < sizeof(u8)) {
-			err = -ENODATA;
+			err = -ERANGE;
 		} else {
 			err = sizeof(u8);
 			*(u8 *)buffer = le32_to_cpu(ni->std_fa);
@@ -795,7 +795,7 @@ static int ntfs_getxattr(const struct xattr_handler *handler, struct dentry *de,
 		if (!buffer) {
 			err = sizeof(u32);
 		} else if (size < sizeof(u32)) {
-			err = -ENODATA;
+			err = -ERANGE;
 		} else {
 			err = sizeof(u32);
 			*(u32 *)buffer = le32_to_cpu(ni->std_fa);
@@ -835,7 +835,7 @@ static int ntfs_getxattr(const struct xattr_handler *handler, struct dentry *de,
 		if (!buffer) {
 			err = sd_size;
 		} else if (size < sd_size) {
-			err = -ENODATA;
+			err = -ERANGE;
 		} else {
 			err = sd_size;
 			memcpy(buffer, sd, sd_size);
