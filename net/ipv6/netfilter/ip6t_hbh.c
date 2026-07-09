@@ -104,8 +104,10 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 				break;
 			tp = skb_header_pointer(skb, ptr, sizeof(_opttype),
 						&_opttype);
-			if (tp == NULL)
-				break;
+			if (!tp) {
+				par->hotdrop = true;
+				return false;
+			}
 
 			/* Type check */
 			if (*tp != (optinfo->opts[temp] & 0xFF00) >> 8) {
@@ -120,13 +122,17 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 				u16 spec_len;
 
 				/* length field exists ? */
-				if (hdrlen < 2)
-					break;
+				if (hdrlen < 2) {
+					par->hotdrop = true;
+					return false;
+				}
 				lp = skb_header_pointer(skb, ptr + 1,
 							sizeof(_optlen),
 							&_optlen);
-				if (lp == NULL)
-					break;
+				if (!lp) {
+					par->hotdrop = true;
+					return false;
+				}
 				spec_len = optinfo->opts[temp] & 0x00FF;
 
 				if (spec_len != 0x00FF && spec_len != *lp) {
@@ -147,7 +153,8 @@ hbh_mt6(const struct sk_buff *skb, struct xt_action_param *par)
 			if ((ptr > skb->len - optlen || hdrlen < optlen) &&
 			    temp < optinfo->optsnr - 1) {
 				pr_debug("new pointer is too large!\n");
-				break;
+				par->hotdrop = true;
+				return false;
 			}
 			ptr += optlen;
 			hdrlen -= optlen;
