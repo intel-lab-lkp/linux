@@ -299,18 +299,21 @@ out_unlock:
 static int sctp_sock_dump(struct sctp_endpoint *ep, struct sctp_transport *tsp, void *p)
 {
 	struct sctp_comm_param *commp = p;
-	struct sock *sk = ep->base.sk;
+	struct sock *sk = ep->base.sk, *nsk;
 	struct sk_buff *skb = commp->skb;
 	struct netlink_callback *cb = commp->cb;
 	const struct inet_diag_req_v2 *r = commp->r;
+	u32 portid = NETLINK_CB(cb->skb).portid;
 	struct sctp_association *assoc;
-	int err = 0;
+	int err = 0, idx = 0;
+
+	nsk = NETLINK_CB(cb->skb).sk;
 
 	lock_sock(sk);
 	if (ep != tsp->asoc->ep)
 		goto release;
 	list_for_each_entry(assoc, &ep->asocs, asocs) {
-		if (cb->args[4] < cb->args[1])
+		if (idx < cb->args[1])
 			goto next;
 
 		if (r->id.idiag_sport != htons(assoc->base.bind_addr.port) &&
@@ -320,32 +323,31 @@ static int sctp_sock_dump(struct sctp_endpoint *ep, struct sctp_transport *tsp, 
 		    r->id.idiag_dport)
 			goto next;
 
-		if (!cb->args[3] &&
-		    inet_sctp_diag_fill(sk, NULL, skb, r,
-					sk_user_ns(NETLINK_CB(cb->skb).sk),
-					NETLINK_CB(cb->skb).portid,
-					cb->nlh->nlmsg_seq,
-					NLM_F_MULTI, cb->nlh,
-					commp->net_admin) < 0) {
-			err = 1;
-			goto release;
+		if (!cb->args[3]) {
+			err = inet_sctp_diag_fill(sk, NULL, skb, r,
+						  sk_user_ns(nsk), portid,
+						  cb->nlh->nlmsg_seq,
+						  NLM_F_MULTI, cb->nlh,
+						  commp->net_admin);
+			if (err < 0) {
+				cb->args[1] = idx;
+				goto release;
+			}
 		}
 		cb->args[3] = 1;
 
-		if (inet_sctp_diag_fill(sk, assoc, skb, r,
-					sk_user_ns(NETLINK_CB(cb->skb).sk),
-					NETLINK_CB(cb->skb).portid,
-					cb->nlh->nlmsg_seq, 0, cb->nlh,
-					commp->net_admin) < 0) {
-			err = 1;
+		err = inet_sctp_diag_fill(sk, assoc, skb, r, sk_user_ns(nsk),
+					  portid, cb->nlh->nlmsg_seq, 0,
+					  cb->nlh, commp->net_admin);
+		if (err < 0) {
+			cb->args[1] = idx;
 			goto release;
 		}
 next:
-		cb->args[4]++;
+		idx++;
 	}
 	cb->args[1] = 0;
 	cb->args[3] = 0;
-	cb->args[4] = 0;
 release:
 	release_sock(sk);
 	return err;
@@ -505,14 +507,11 @@ static void sctp_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 	 * 1 : to record the assoc pos of this time's traversal
 	 * 2 : to record the transport pos of this time's traversal
 	 * 3 : to mark if we have dumped the ep info of the current asoc
-	 * 4 : to track position within ep->asocs list in sctp_sock_dump()
 	 */
 	pos = cb->args[2];
 	sctp_transport_traverse_process(sctp_sock_filter, sctp_sock_dump,
 					net, &pos, &commp);
 	cb->args[2] = pos;
-	cb->args[1] = cb->args[4];
-	cb->args[4] = 0;
 }
 
 static const struct inet_diag_handler sctp_diag_handler = {
