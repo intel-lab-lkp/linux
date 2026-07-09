@@ -839,6 +839,7 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 		msg.msg_controllen = optlen;
 		msg.msg_control_is_user = false;
 		msg.msg_control = (void *)(opt+1);
+		ipcm6_init_sk(&ipc6, sk);
 		ipc6.opt = opt;
 
 		retv = ip6_datagram_send_ctl(net, sk, &msg, &fl6, &ipc6);
