@@ -27,3 +27,9 @@ config AMPERE_CORESIGHT_PMU_ARCH_SYSTEM_PMU
 
 	  In the first phase, the driver enables support on MCU PMU used in
 	  AmpereOne SoC family.
+
+config ARM_BMU
+	tristate "ARM Bus Monitor Unit"
+	depends on ARM64 || COMPILE_TEST
+	help
+	  Support perf event counting on Arm Bus Monitor Unit devices.
