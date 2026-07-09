@@ -2087,12 +2087,23 @@ static void pl330_tasklet(struct tasklet_struct *t)
 	fill_queue(pch);
 
 	if (list_empty(&pch->work_list)) {
-		spin_lock(&pch->thread->dmac->lock);
-		_stop(pch->thread);
-		spin_unlock(&pch->thread->dmac->lock);
-		power_down = true;
-		pch->active = false;
-	} else {
+		/*
+		 * Verify pch->thread is still valid before dereferencing
+		 * it, as it could be set to NULL asynchronously during
+		 * channel release after transfer aborts.
+		 */
+		if (pch->thread) {
+			spin_lock(&pch->thread->dmac->lock);
+			_stop(pch->thread);
+			spin_unlock(&pch->thread->dmac->lock);
+			power_down = true;
+			pch->active = false;
+		}
+	} else if (pch->thread) {
+		/*
+		 * Verify pch->thread is valid before starting it, ensuring
+		 * safe abort cleanups when channel resources are released.
+		 */
 		/* Make sure the PL330 Channel thread is active */
 		spin_lock(&pch->thread->dmac->lock);
 		pl330_start_thread(pch->thread);
@@ -2110,7 +2121,8 @@ static void pl330_tasklet(struct tasklet_struct *t)
 		if (pch->cyclic) {
 			desc->status = PREP;
 			list_move_tail(&desc->node, &pch->work_list);
-			if (power_down) {
+			/* Verify thread validity before restarting cyclic channel */
+			if (power_down && pch->thread) {
 				pch->active = true;
 				spin_lock(&pch->thread->dmac->lock);
 				pl330_start_thread(pch->thread);
@@ -2358,7 +2370,14 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	tasklet_kill(&pch->task);
 
 	pm_runtime_get_sync(pch->dmac->ddma.dev);
-	spin_lock_irqsave(&pl330->lock, flags);
+	/*
+	 * Acquire pch->lock before pl330->lock to respect the locking hierarchy
+	 * (pch->lock -> pl330->lock) used inside the tasklet. This ensures
+	 * that setting pch->thread to NULL and checking it inside the tasklet
+	 * is fully synchronized, preventing TOCTOU race conditions.
+	 */
+	spin_lock_irqsave(&pch->lock, flags);
+	spin_lock(&pl330->lock);
 
 	pl330_release_channel(pch->thread);
 	pch->thread = NULL;
@@ -2366,7 +2385,8 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	if (pch->cyclic)
 		list_splice_tail_init(&pch->work_list, &pch->dmac->desc_pool);
 
-	spin_unlock_irqrestore(&pl330->lock, flags);
+	spin_unlock(&pl330->lock);
+	spin_unlock_irqrestore(&pch->lock, flags);
 	pm_runtime_put_autosuspend(pch->dmac->ddma.dev);
 	pl330_unprep_slave_fifo(pch);
 }
