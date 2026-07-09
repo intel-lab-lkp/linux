@@ -783,7 +783,7 @@ int cxl_cper_register_prot_err_work(struct work_struct *work)
 	if (cxl_cper_prot_err_work)
 		return -EINVAL;
 
-	guard(spinlock)(&cxl_cper_prot_err_work_lock);
+	guard(spinlock_irqsave)(&cxl_cper_prot_err_work_lock);
 	cxl_cper_prot_err_work = work;
 	return 0;
 }
@@ -794,7 +794,7 @@ int cxl_cper_unregister_prot_err_work(struct work_struct *work)
 	if (cxl_cper_prot_err_work != work)
 		return -EINVAL;
 
-	guard(spinlock)(&cxl_cper_prot_err_work_lock);
+	guard(spinlock_irqsave)(&cxl_cper_prot_err_work_lock);
 	cxl_cper_prot_err_work = NULL;
 	return 0;
 }
@@ -852,7 +852,7 @@ int cxl_cper_register_work(struct work_struct *work)
 	if (cxl_cper_work)
 		return -EINVAL;
 
-	guard(spinlock)(&cxl_cper_work_lock);
+	guard(spinlock_irqsave)(&cxl_cper_work_lock);
 	cxl_cper_work = work;
 	return 0;
 }
@@ -863,7 +863,7 @@ int cxl_cper_unregister_work(struct work_struct *work)
 	if (cxl_cper_work != work)
 		return -EINVAL;
 
-	guard(spinlock)(&cxl_cper_work_lock);
+	guard(spinlock_irqsave)(&cxl_cper_work_lock);
 	cxl_cper_work = NULL;
 	return 0;
 }
