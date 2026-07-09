@@ -10590,9 +10590,9 @@ bool kvm_arch_supports_gmem_init_shared(struct kvm *kvm)
 }
 
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_PREPARE
-int kvm_arch_gmem_prepare(struct kvm *kvm, gfn_t gfn, kvm_pfn_t pfn, int max_order)
+int kvm_arch_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn, int max_order)
 {
-	return kvm_x86_call(gmem_prepare)(kvm, pfn, gfn, max_order);
+	return kvm_x86_call(gmem_prepare)(kvm, gpa, pfn, max_order);
 }
 #endif
 
