@@ -1521,11 +1521,13 @@ static void nfs4_put_copy(struct nfsd4_async_copy *copy)
 {
 	if (!refcount_dec_and_test(&copy->refcount))
 		return;
-	/* Drop the task_struct reference taken in nfsd4_copy(). */
-	if (copy->copy_task)
-		put_task_struct(copy->copy_task);
-	kfree(copy->cp_copy.cp_src);
-	kfree(copy);
+	/*
+	 * Release the copy offload stateid. This drops the stid's sole
+	 * reference, which removes it from cl_stateids and frees the
+	 * nfsd4_async_copy via nfsd4_free_async_copy_stid(). The task_struct
+	 * pin and cp_src are released there.
+	 */
+	nfs4_put_stid(&copy->cp_stid);
 }
 
 static void release_copy_files(struct nfsd4_copy *copy);
@@ -2099,7 +2101,6 @@ static void release_copy_files(struct nfsd4_copy *copy)
  */
 static void cleanup_async_copy(struct nfsd4_async_copy *copy)
 {
-	nfs4_free_copy_state(copy);
 	release_copy_files(&copy->cp_copy);
 	nfs4_put_copy(copy);
 }
@@ -2258,7 +2259,13 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (nfsd4_copy_is_async(copy)) {
 		struct task_struct *task;
 
-		async_copy = kzalloc_obj(struct nfsd4_async_copy);
+		/*
+		 * Allocate the durable async copy. Its copy offload stateid is
+		 * a first-class nfs4_stid in cstate->clp->cl_stateids, minted
+		 * here and returned to the client; it outlives this COMPOUND and
+		 * is freed only when the background copy is torn down.
+		 */
+		async_copy = nfs4_alloc_copy_stid(cstate->clp);
 		if (!async_copy)
 			goto out_err;
 		async_copy->cp_copy.cp_nn = nn;
@@ -2273,19 +2280,7 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		if (!async_copy->cp_copy.cp_src)
 			goto out_dec_async_copy_err;
 		dup_copy_fields(copy, &async_copy->cp_copy);
-		/*
-		 * Register the copy stateid on the long-lived async_copy
-		 * rather than on the transient COMPOUND argument buffer
-		 * (&u->copy). nfs4_init_copy_state() installs a pointer to
-		 * the copy_stateid_t in nn->s2s_cp_stateids, and that pointer
-		 * outlives this call (it is removed only when the background
-		 * copy finishes). Pointing it at &u->copy would leave a stale
-		 * pointer into reused request memory that the laundromat and
-		 * OFFLOAD_CANCEL later dereference.
-		 */
-		if (!nfs4_init_copy_state(nn, async_copy))
-			goto out_dec_async_copy_err;
-		memcpy(&result->cb_stateid, &async_copy->cp_stateid.cs_stid,
+		memcpy(&result->cb_stateid, &async_copy->cp_stid.sc_stateid,
 			sizeof(result->cb_stateid));
 		if ((READ_ONCE(copy->nf_dst->nf_file->f_mode) &
 			       FMODE_NOCMTIME) != 0)
@@ -2357,7 +2352,7 @@ find_async_copy_locked(struct nfs4_client *clp, stateid_t *stateid)
 	lockdep_assert_held(&clp->async_lock);
 
 	list_for_each_entry(copy, &clp->async_copies, copies) {
-		if (memcmp(&copy->cp_stateid.cs_stid, stateid, NFS4_STATEID_SIZE))
+		if (memcmp(&copy->cp_stid.sc_stateid, stateid, NFS4_STATEID_SIZE))
 			continue;
 		return copy;
 	}

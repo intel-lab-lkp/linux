@@ -121,6 +121,7 @@ static struct kmem_cache *file_slab;
 static struct kmem_cache *stateid_slab;
 static struct kmem_cache *deleg_slab;
 static struct kmem_cache *odstate_slab;
+static struct kmem_cache *async_copy_slab;
 
 static void free_session(struct nfsd4_session *);
 
@@ -982,9 +983,41 @@ static int nfs4_init_cp_state(struct nfsd_net *nn, copy_stateid_t *stid,
 	return 1;
 }
 
-int nfs4_init_copy_state(struct nfsd_net *nn, struct nfsd4_async_copy *copy)
+/*
+ * sc_free callback for a copy offload stateid. Runs from nfs4_put_stid()
+ * once the stid's last reference is dropped and it has been removed from
+ * cl_stateids.
+ */
+static void nfsd4_free_async_copy_stid(struct nfs4_stid *stid)
 {
-	return nfs4_init_cp_state(nn, &copy->cp_stateid, NFS4_COPY_STID, NULL);
+	struct nfsd4_async_copy *copy =
+		container_of(stid, struct nfsd4_async_copy, cp_stid);
+
+	if (copy->copy_task)
+		put_task_struct(copy->copy_task);
+	kfree(copy->cp_copy.cp_src);
+	kmem_cache_free(async_copy_slab, copy);
+}
+
+/*
+ * Allocate the durable state for an asynchronous COPY. The copy offload
+ * stateid is a first-class nfs4_stid (SC_TYPE_COPY) living in the issuing
+ * client's cl_stateids IDR, so it is per-client by construction and shares
+ * the common stateid refcounting and teardown. It is never matched by the
+ * generic stateid lookups (find_stateid_locked() skips SC_TYPE_COPY);
+ * OFFLOAD_CANCEL/OFFLOAD_STATUS find it by walking clp->async_copies.
+ */
+struct nfsd4_async_copy *nfs4_alloc_copy_stid(struct nfs4_client *clp)
+{
+	struct nfs4_stid *stid;
+
+	stid = nfs4_alloc_stid(clp, async_copy_slab, nfsd4_free_async_copy_stid);
+	if (!stid)
+		return NULL;
+	stid->sc_type = SC_TYPE_COPY;
+	/* RFC 7862 Section 4.8: a copy offload stateid's seqid MUST NOT be 0 */
+	stid->sc_stateid.si_generation = 1;
+	return container_of(stid, struct nfsd4_async_copy, cp_stid);
 }
 
 struct nfs4_cpntf_state *nfs4_alloc_init_cpntf_state(struct nfsd_net *nn,
@@ -1022,19 +1055,6 @@ struct nfs4_cpntf_state *nfs4_alloc_init_cpntf_state(struct nfsd_net *nn,
 out_free:
 	kfree(cps);
 	return NULL;
-}
-
-void nfs4_free_copy_state(struct nfsd4_async_copy *copy)
-{
-	struct nfsd_net *nn;
-
-	if (copy->cp_stateid.cs_type != NFS4_COPY_STID)
-		return;
-	nn = net_generic(copy->cp_copy.cp_clp->net, nfsd_net_id);
-	spin_lock(&nn->s2s_cp_lock);
-	idr_remove(&nn->s2s_cp_stateids,
-		   copy->cp_stateid.cs_stid.si_opaque.so_id);
-	spin_unlock(&nn->s2s_cp_lock);
 }
 
 /*
@@ -3072,6 +3092,16 @@ find_stateid_locked(struct nfs4_client *cl, stateid_t *t)
 
 	ret = idr_find(&cl->cl_stateids, t->si_opaque.so_id);
 	if (!ret || !ret->sc_type)
+		return NULL;
+	/*
+	 * Copy offload stateids live in cl_stateids for id allocation and
+	 * refcounting, but they are not valid targets for the generic
+	 * stateid operations (FREE_STATEID, TEST_STATEID, I/O). Per RFC 7862
+	 * they are managed only via OFFLOAD_CANCEL/OFFLOAD_STATUS/CB_OFFLOAD,
+	 * which locate them through clp->async_copies. Hide them here so those
+	 * paths continue to return NFS4ERR_BAD_STATEID.
+	 */
+	if (ret->sc_type == SC_TYPE_COPY)
 		return NULL;
 	return ret;
 }
@@ -5408,6 +5438,7 @@ nfsd4_free_slabs(void)
 	kmem_cache_destroy(stateid_slab);
 	kmem_cache_destroy(deleg_slab);
 	kmem_cache_destroy(odstate_slab);
+	kmem_cache_destroy(async_copy_slab);
 }
 
 int
@@ -5434,8 +5465,13 @@ nfsd4_init_slabs(void)
 	odstate_slab = KMEM_CACHE(nfs4_clnt_odstate, 0);
 	if (odstate_slab == NULL)
 		goto out_free_deleg_slab;
+	async_copy_slab = KMEM_CACHE(nfsd4_async_copy, 0);
+	if (async_copy_slab == NULL)
+		goto out_free_odstate_slab;
 	return 0;
 
+out_free_odstate_slab:
+	kmem_cache_destroy(odstate_slab);
 out_free_deleg_slab:
 	kmem_cache_destroy(deleg_slab);
 out_free_stateid_slab:
