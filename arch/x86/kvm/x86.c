@@ -10589,18 +10589,11 @@ bool kvm_arch_supports_gmem_init_shared(struct kvm *kvm)
 	return !kvm_arch_has_private_mem(kvm);
 }
 
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_PREPARE
-int kvm_arch_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
-			  kvm_pfn_t nr_pages, int max_order)
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
+int kvm_arch_gmem_convert(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
+			  kvm_pfn_t nr_pages, int max_order, bool to_private)
 {
-	return kvm_x86_call(gmem_prepare)(kvm, gpa, pfn, nr_pages, max_order);
-}
-#endif
-
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
-void kvm_arch_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
-{
-	kvm_x86_call(gmem_invalidate)(start, end);
+	return kvm_x86_call(gmem_convert)(kvm, gpa, pfn, nr_pages, max_order, to_private);
 }
 void kvm_arch_gmem_invalidate_range(struct kvm *kvm, struct kvm_gfn_range *range)
 {

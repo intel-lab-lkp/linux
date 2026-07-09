@@ -66,10 +66,10 @@ static pgoff_t kvm_gmem_get_index(struct kvm_memory_slot *slot, gfn_t gfn)
  * On successful return the guest sees a zero page so as to avoid
  * leaking host data and the up-to-date flag is set.
  */
-static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
-				  gfn_t gfn, struct folio *folio)
+static int kvm_gmem_make_private(struct kvm *kvm, struct kvm_memory_slot *slot,
+				 gfn_t gfn, struct folio *folio)
 {
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_PREPARE
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
 	unsigned long nr_pages = folio_nr_pages(folio);
 	pgoff_t index;
 
@@ -90,9 +90,9 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 	gfn = ALIGN_DOWN(gfn, nr_pages);
 	index = kvm_gmem_get_index(slot, gfn);
 
-	return kvm_arch_gmem_prepare(kvm, gfn_to_gpa(gfn),
+	return kvm_arch_gmem_convert(kvm, gfn_to_gpa(gfn),
 				     folio_file_pfn(folio, index), nr_pages,
-				     folio_order(folio));
+				     folio_order(folio), true);
 #else
 	return 0;
 #endif
@@ -517,14 +517,13 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	return MF_DELAYED;
 }
 
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
 static void kvm_gmem_free_folio(struct folio *folio)
 {
-	struct page *page = folio_page(folio, 0);
-	kvm_pfn_t pfn = page_to_pfn(page);
-	int order = folio_order(folio);
-
-	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
+	WARN_ON_ONCE(kvm_arch_gmem_convert(NULL, INVALID_GPA,
+					   folio_file_pfn(folio, 0),
+					   folio_nr_pages(folio),
+					   folio_order(folio), false));
 }
 #endif
 
@@ -532,7 +531,7 @@ static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
 	.free_folio = kvm_gmem_free_folio,
 #endif
 };
@@ -802,7 +801,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		folio_mark_uptodate(folio);
 	}
 
-	r = kvm_gmem_prepare_folio(kvm, slot, gfn, folio);
+	r = kvm_gmem_make_private(kvm, slot, gfn, folio);
 
 	folio_unlock(folio);
 

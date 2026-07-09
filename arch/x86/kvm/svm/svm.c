@@ -5450,8 +5450,7 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 	.vm_copy_enc_context_from = sev_vm_copy_enc_context_from,
 	.vm_move_enc_context_from = sev_vm_move_enc_context_from,
 
-	.gmem_prepare = sev_gmem_prepare,
-	.gmem_invalidate = sev_gmem_invalidate,
+	.gmem_convert = sev_gmem_convert,
 	.gmem_invalidate_range = sev_gmem_invalidate_range,
 	.gmem_max_mapping_level = sev_gmem_max_mapping_level,
 #endif

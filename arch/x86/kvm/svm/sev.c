@@ -5112,8 +5112,8 @@ static bool is_large_rmp_possible(struct kvm *kvm, kvm_pfn_t pfn, int order)
 	return false;
 }
 
-int sev_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
-		     kvm_pfn_t nr_pages, int max_order)
+static int sev_gmem_make_private(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
+				 kvm_pfn_t nr_pages, int max_order)
 {
 	struct kvm_sev_info *sev = to_kvm_sev_info(kvm);
 	gfn_t gfn = gpa_to_gfn(gpa);
@@ -5164,8 +5164,9 @@ int sev_gmem_prepare(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
 	return 0;
 }
 
-void sev_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
+static void sev_gmem_make_shared(kvm_pfn_t start, kvm_pfn_t nr_pages)
 {
+	kvm_pfn_t end = start + nr_pages;
 	kvm_pfn_t pfn;
 
 	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
@@ -5225,6 +5226,20 @@ next_pfn:
 		pfn += use_2m_update ? PTRS_PER_PMD : 1;
 		cond_resched();
 	}
+}
+
+int sev_gmem_convert(struct kvm *kvm, gpa_t gpa, kvm_pfn_t pfn,
+		     kvm_pfn_t nr_pages, int order, bool to_private)
+{
+	if (to_private) {
+		if (WARN_ON_ONCE(!kvm || gpa == INVALID_GPA))
+			return -EIO;
+
+		return sev_gmem_make_private(kvm, gpa, pfn, nr_pages, order);
+	}
+
+	sev_gmem_make_shared(pfn, nr_pages);
+	return 0;
 }
 
 void sev_gmem_invalidate_range(struct kvm *kvm, struct kvm_gfn_range *range)
