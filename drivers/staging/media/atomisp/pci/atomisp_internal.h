@@ -19,7 +19,7 @@
 #include <media/v4l2-async.h>
 #include <media/v4l2-subdev.h>
 
-/* ISP2400*/
+/* ISP2400 */
 #include "ia_css_types.h"
 #include "sh_css_legacy.h"
 
@@ -182,7 +182,8 @@ struct atomisp_device {
 	struct atomisp_mipi_csi2_device csi2_port[ATOMISP_CAMERA_NR_PORTS];
 
 	/* Purpose of mutex is to protect and serialize use of isp data
-	 * structures and css API calls. */
+	 * structures and css API calls.
+	 */
 	struct mutex mutex;
 
 	/*

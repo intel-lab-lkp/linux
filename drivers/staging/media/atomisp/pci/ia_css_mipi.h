@@ -16,17 +16,18 @@
 #include "ia_css_stream_format.h"
 #include "ia_css_input_port.h"
 
-/* @brief Calculate the size of a mipi frame.
- *
- * @param[in]	width		The width (in pixels) of the frame.
- * @param[in]	height		The height (in lines) of the frame.
- * @param[in]	format		The frame (MIPI) format.
- * @param[in]	hasSOLandEOL	Whether frame (MIPI) contains (optional) SOL and EOF packets.
- * @param[in]	embedded_data_size_words		Embedded data size in memory words.
- * @param		size_mem_words					The mipi frame size in memory words (32B).
- * @return		The error code.
+/**
+ * ia_css_mipi_frame_calculate_size() - Calculate the size of a mipi frame.
+ * @width: The width (in pixels) of the frame.
+ * @height: The height (in lines) of the frame.
+ * @format: The frame (MIPI) format.
+ * @hasSOLandEOL: Whether frame (MIPI) contains (optional) SOL and EOF packets.
+ * @embedded_data_size_words: Embedded data size in memory words.
+ * @size_mem_words: The mipi frame size in memory words (32B).
  *
  * Calculate the size of a mipi frame, based on the resolution and format.
+ *
+ * Return: The error code.
  */
 int
 ia_css_mipi_frame_calculate_size(const unsigned int width,
