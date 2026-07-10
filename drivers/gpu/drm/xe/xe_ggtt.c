@@ -699,7 +699,7 @@ static void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
 	if (!xe_bo_is_vram(bo) && !xe_bo_is_stolen(bo)) {
 		xe_assert(xe_bo_device(bo), bo->ttm.ttm);
 
-		for (xe_res_first_sg(xe_bo_sg(bo), 0, xe_bo_size(bo), &cur);
+		for (xe_res_first_tt(bo->ttm.ttm, 0, xe_bo_size(bo), &cur);
 		     cur.remaining; xe_res_next(&cur, XE_PAGE_SIZE))
 			ggtt->pt_ops->ggtt_set_pte(ggtt, end - cur.remaining,
 						   pte | xe_res_dma(&cur));
