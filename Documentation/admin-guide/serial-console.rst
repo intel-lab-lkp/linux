@@ -32,6 +32,14 @@ The format of this option is::
 			and F is flow control ('r' for RTS). Default is
 			9600n8. The maximum baudrate is 115200.
 
+			One can also specify extra options (comma-separated)
+			to modify console printing behavior. The "sync" extra
+			option will cause console printing on that console to
+			be synchronous (printed in the context of the printk()
+			caller). This could cause adverse timing side-effects
+			for the system, but can be useful in certain debugging
+			scenarios.
+
 You can specify multiple console= options on the kernel command line.
 
 The behavior is well defined when each device type is mentioned only once.
