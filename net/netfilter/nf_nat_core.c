@@ -16,6 +16,8 @@
 #include <linux/siphash.h>
 #include <linux/rtnetlink.h>
 
+#include <net/tcp.h>
+#include <net/secure_seq.h>
 #include <net/netfilter/nf_conntrack_bpf.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_helper.h>
@@ -894,6 +896,112 @@ static bool in_vrf_postrouting(const struct nf_hook_state *state)
 	return false;
 }
 
+static unsigned char *nf_nat_tcp_ts_option_ptr(struct sk_buff *skb)
+{
+	unsigned int optlen, offset;
+	unsigned char opsize;
+	unsigned char opcode;
+	unsigned char *ptr;
+	struct tcphdr *th;
+
+	if (skb_ensure_writable(skb, tcp_hdrlen(skb)))
+		return NULL;
+
+	offset = 0;
+	th = tcp_hdr(skb);
+	optlen = tcp_optlen(skb);
+	ptr = (unsigned char *)(th + 1);
+
+	while (offset < optlen) {
+		opcode = ptr[offset];
+		if (opcode == TCPOPT_EOL)
+			break;
+
+		if (opcode == TCPOPT_NOP) {
+			offset++;
+			continue;
+		}
+
+		if (offset + 1 >= optlen)
+			break;
+
+		opsize = ptr[offset + 1];
+		if (opsize < 2 || offset + opsize > optlen)
+			break;
+
+		if (opcode == TCPOPT_TIMESTAMP && opsize == TCPOLEN_TIMESTAMP)
+			return ptr + offset + 2;
+
+		offset += opsize;
+	}
+
+	return NULL;
+}
+
+/* Update TCP TS offset for local packets after SNAT port rewrite */
+static void nf_nat_update_tcp_ts_offset(struct nf_conn *ct, struct sk_buff *skb)
+{
+	struct nf_conntrack_tuple *reply_tuple;
+	struct nf_conntrack_tuple *orig_tuple;
+	union tcp_seq_and_ts_off st;
+	unsigned char *tsptr;
+	struct tcp_sock *tp;
+	struct tcphdr *th;
+	struct net *net;
+	u32 old_ts, new_ts;
+
+	if (!skb->sk)
+		return;
+
+	orig_tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+	reply_tuple = &ct->tuplehash[IP_CT_DIR_REPLY].tuple;
+
+	/* No port rewrite? No need to update anything */
+	if (orig_tuple->src.u.tcp.port == reply_tuple->dst.u.tcp.port)
+		return;
+
+	th = tcp_hdr(skb);
+	if (!th || !th->syn || th->ack)
+		return;
+
+	net = nf_ct_net(ct);
+
+	/* Avoid bogus tsoff update for non-randomized tcp timestamps */
+	if (READ_ONCE(net->ipv4.sysctl_tcp_timestamps) != 1)
+		return;
+
+	tsptr = nf_nat_tcp_ts_option_ptr(skb);
+	if (!tsptr)
+		return;
+
+	switch (nf_ct_l3num(ct)) {
+	case NFPROTO_IPV4:
+		st = secure_tcp_seq_and_ts_off(net, reply_tuple->dst.u3.ip,
+					       reply_tuple->src.u3.ip,
+					       reply_tuple->dst.u.tcp.port,
+					       reply_tuple->src.u.tcp.port);
+		break;
+#if IS_ENABLED(CONFIG_IPV6)
+	case NFPROTO_IPV6:
+		st = secure_tcpv6_seq_and_ts_off(net, reply_tuple->dst.u3.ip6,
+						 reply_tuple->src.u3.ip6,
+						 reply_tuple->dst.u.tcp.port,
+						 reply_tuple->src.u.tcp.port);
+		break;
+#endif
+	default:
+		return;
+	}
+
+	tp = tcp_sk(skb->sk);
+	old_ts = get_unaligned_be32(tsptr);
+	new_ts = tcp_skb_timestamp_ts(tp->tcp_usec_ts, skb) + st.ts_off;
+	put_unaligned_be32(new_ts, tsptr);
+	inet_proto_csum_replace4(&th->check, skb, cpu_to_be32(old_ts),
+				 cpu_to_be32(new_ts), false);
+	WRITE_ONCE(tp->tsoffset, st.ts_off);
+}
+
 unsigned int
 nf_nat_inet_fn(void *priv, struct sk_buff *skb,
 	       const struct nf_hook_state *state)
@@ -937,8 +1045,14 @@ nf_nat_inet_fn(void *priv, struct sk_buff *skb,
 						       state);
 				if (ret != NF_ACCEPT)
 					return ret;
-				if (nf_nat_initialized(ct, maniptype))
+				if (nf_nat_initialized(ct, maniptype)) {
+					if (state->hook == NF_INET_POST_ROUTING &&
+					    nf_ct_protonum(ct) == IPPROTO_TCP &&
+					    (ct->status & IPS_SRC_NAT)) {
+						nf_nat_update_tcp_ts_offset(ct, skb);
+					}
 					goto do_nat;
+				}
 			}
 null_bind:
 			ret = nf_nat_alloc_null_binding(ct, state->hook);
