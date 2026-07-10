@@ -135,6 +135,16 @@ struct ttm_buffer_object {
 	 * reservation lock.
 	 */
 	struct sg_table *sg;
+
+	/**
+	 * @defrag_old_tt: Used internally during a defrag move to hand the BO's
+	 * previous, populated struct ttm_tt to the driver's move callback so
+	 * that it can copy the contents into the freshly allocated
+	 * beneficial-order backing. Set by TTM, consumed by the driver; the old
+	 * tt is freed (or restored on failure) by TTM once the move completes.
+	 * Protected by the reservation lock.
+	 */
+	struct ttm_tt *defrag_old_tt;
 };
 
 #define TTM_BO_MAP_IOMEM_MASK 0x80
@@ -194,6 +204,13 @@ struct ttm_operation_ctx {
 	 * reclaim/compaction before falling back to a smaller order anyway.
 	 */
 	bool beneficial_reclaim_backoff;
+	/**
+	 * @defrag: Defragmentation pass. Attempt a move even when the bo's
+	 * current resource is already compatible with the requested placement,
+	 * so that the backing store can be reallocated at the pool's beneficial
+	 * order.
+	 */
+	bool defrag;
 	/**
 	 * @resv: Reservation object to be used together with
 	 * @allow_res_evict.
