@@ -1447,7 +1447,6 @@ static signed int validate_recv_frame(struct adapter *adapter, union recv_frame 
 	u8 type;
 	u8 subtype;
 	signed int retval = _SUCCESS;
-	u8 bDumpRxPkt;
 
 	struct rx_pkt_attrib *pattrib = &precv_frame->u.hdr.attrib;
 
@@ -1473,7 +1472,6 @@ static signed int validate_recv_frame(struct adapter *adapter, union recv_frame 
 	pattrib->mdata = GetMData(ptr);
 	pattrib->privacy = GetPrivacy(ptr);
 	pattrib->order = GetOrder(ptr);
-	rtw_hal_get_def_var(adapter, HAL_DEF_DBG_DUMP_RXPKT, &(bDumpRxPkt));
 
 	switch (type) {
 	case WIFI_MGT_TYPE: /* mgnt */
