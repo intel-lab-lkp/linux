@@ -300,3 +300,23 @@ by the bus, and can then start sending messages to the remote service.
 
 The plan is also to add static creation of rpmsg channels via the virtio
 config space, but it's not implemented yet.
+
+Configurable buffer sizes
+=========================
+
+By default each rpmsg buffer is 512 bytes, and the same size is used for both
+the receive and transmit directions. Remote processors that need a different
+size (for example a larger MTU, or different RX and TX sizes) can advertise it
+through the virtio device config space by setting the VIRTIO_RPMSG_F_BUFSZ
+feature bit.
+
+When this feature is negotiated, the driver reads struct virtio_rpmsg_config
+from the config space. This structure provides the size of a single buffer for
+each direction (TX and RX). It also provides alignment field to align single
+buffer which will help decide start address of the next buffer. The total
+buffer space will be divided between total aligned buffers of tx and rx.
+However, the MTU size of a single buffer is not equal to the aligned buffer
+size. The MTU size of a single buffer and aligned buffer size can be different.
+
+If the feature is not negotiated, the default 512-byte buffers are used for
+both directions.
