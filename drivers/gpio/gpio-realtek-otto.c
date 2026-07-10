@@ -393,16 +393,19 @@ static int realtek_gpio_probe(struct platform_device *pdev)
 
 	raw_spin_lock_init(&ctrl->lock);
 
-	if (dev_flags & GPIO_PORTS_REVERSED) {
-		gen_gc_flags = 0;
-		ctrl->bank_read = realtek_gpio_bank_read;
-		ctrl->bank_write = realtek_gpio_bank_write;
+	if (dev_flags & GPIO_PORTS_REVERSED)
 		ctrl->line_imr_pos = realtek_gpio_line_imr_pos;
-	} else {
+	else
+		ctrl->line_imr_pos = realtek_gpio_line_imr_pos_swapped;
+
+	if (device_is_big_endian(dev)) {
 		gen_gc_flags = GPIO_GENERIC_BIG_ENDIAN_BYTE_ORDER;
 		ctrl->bank_read = realtek_gpio_bank_read_swapped;
 		ctrl->bank_write = realtek_gpio_bank_write_swapped;
-		ctrl->line_imr_pos = realtek_gpio_line_imr_pos_swapped;
+	} else {
+		gen_gc_flags = 0;
+		ctrl->bank_read = realtek_gpio_bank_read;
+		ctrl->bank_write = realtek_gpio_bank_write;
 	}
 
 	config = (struct gpio_generic_chip_config) {
