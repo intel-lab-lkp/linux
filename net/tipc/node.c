@@ -49,6 +49,16 @@
 #define INVALID_NODE_SIG	0x10000
 #define NODE_CLEANUP_AFTER	300000
 
+/* Hard cap on the number of live struct tipc_node entries a single net
+ * namespace will hold. Every entry (preliminary or not) also pins a
+ * broadcast-receive link, a unicast link slot and a keepalive timer, so
+ * this bounds worst-case memory from unauthenticated LINK_CONFIG discovery
+ * traffic the same way neigh_alloc()'s gc_thresh3 bounds the ARP/ND table
+ * (see net/core/neighbour.c). 8192 is far above any realistic TIPC cluster
+ * size and is not meant to be tight -- it only stops unbounded growth.
+ */
+#define TIPC_MAX_NODES		8192
+
 /* Flags used to take different actions according to flag type
  * TIPC_NOTIFY_NODE_DOWN: notify node is down
  * TIPC_NOTIFY_NODE_UP: notify node is up
@@ -535,6 +545,11 @@ update:
 
 		goto exit;
 	}
+	if (tn->num_nodes >= TIPC_MAX_NODES) {
+		pr_warn_ratelimited("Too many TIPC nodes (%u), dropping new peer %x\n",
+				    tn->num_nodes, addr);
+		goto exit;
+	}
 	n = kzalloc_obj(*n, GFP_ATOMIC);
 	if (!n) {
 		pr_warn("Node creation failed, no memory\n");
@@ -598,6 +613,7 @@ update:
 			break;
 	}
 	list_add_tail_rcu(&n->list, &temp_node->list);
+	tn->num_nodes++;
 	/* Calculate cluster capabilities */
 	tn->capabilities = TIPC_NODE_CAPABILITIES;
 	list_for_each_entry_rcu(temp_node, &tn->node_list, list) {
@@ -630,6 +646,7 @@ static void tipc_node_delete_from_list(struct tipc_node *node)
 #endif
 	list_del_rcu(&node->list);
 	hlist_del_rcu(&node->hash);
+	tipc_net(node->net)->num_nodes--;
 	tipc_node_put(node);
 }
 
