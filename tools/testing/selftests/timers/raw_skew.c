@@ -93,6 +93,15 @@ int main(int argc, char **argv)
 	struct timespec mon, raw, start, end;
 	long long delta1, delta2, interval, eppm, ppm;
 	struct timex tx1, tx2;
+	int sleep_sec = 120;
+
+	if (argc > 1) {
+		sleep_sec = atoi(argv[1]);
+		if (sleep_sec <= 0) {
+			printf("Invalid sleep time, using default 120s\n");
+			sleep_sec = 120;
+		}
+	}
 
 	setbuf(stdout, NULL);
 
@@ -110,9 +119,9 @@ int main(int argc, char **argv)
 	if (tx1.offset)
 		printf("WARNING: ADJ_OFFSET in progress, this will cause inaccurate results\n");
 
-	printf("Estimating clock drift: ");
+	printf("Estimating clock drift (%ds): ", sleep_sec);
 	fflush(stdout);
-	sleep(120);
+	sleep(sleep_sec);
 
 	get_monotonic_and_raw(&mon, &raw);
 	end = mon;
