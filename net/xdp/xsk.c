@@ -499,6 +499,23 @@ void __xsk_map_flush(struct list_head *flush_list)
 
 void xsk_tx_completed(struct xsk_buff_pool *pool, u32 nb_entries)
 {
+	u32 reclaim_descs = READ_ONCE(pool->reclaim_descs);
+
+	if (unlikely(reclaim_descs)) {
+		u32 pending_descs = READ_ONCE(pool->tx_zc_pending_descs);
+
+		if (nb_entries < pending_descs) {
+			WRITE_ONCE(pool->tx_zc_pending_descs,
+				   pending_descs - nb_entries);
+			xskq_prod_submit_n(pool->cq, nb_entries);
+			return;
+		}
+
+		WRITE_ONCE(pool->tx_zc_pending_descs, 0);
+		nb_entries += reclaim_descs;
+		WRITE_ONCE(pool->reclaim_descs, 0);
+	}
+
 	xskq_prod_submit_n(pool->cq, nb_entries);
 }
 EXPORT_SYMBOL(xsk_tx_completed);
@@ -574,22 +591,169 @@ static u32 xsk_tx_peek_release_fallback(struct xsk_buff_pool *pool, u32 max_entr
 	return nb_pkts;
 }
 
-u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
+static void xsk_tx_commit_batch(struct xsk_buff_pool *pool,
+				struct xsk_tx_batch *batch,
+				u32 cq_cached_prod)
 {
+	u32 nb_descs = xsk_tx_batch_cq_descs(batch);
+
+	if (!nb_descs)
+		return;
+
+	xskq_prod_write_addr_batch(pool->cq, pool->tx_descs, nb_descs);
+
+	if (unlikely(batch->reclaim_descs)) {
+		u32 cq_pending_descs;
+
+		/* CQ is positional. Descriptors already written but not
+		 * submitted must complete before any reclaim-only descriptors
+		 * appended below.
+		 */
+		cq_pending_descs = cq_cached_prod - xskq_get_prod(pool->cq);
+
+		WRITE_ONCE(pool->tx_zc_pending_descs, batch->tx_descs + cq_pending_descs);
+		WRITE_ONCE(pool->reclaim_descs, batch->reclaim_descs);
+		if (unlikely(!pool->tx_zc_pending_descs))
+			xsk_tx_completed(pool, 0);
+	}
+}
+
+static struct xsk_tx_batch
+__xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, struct xdp_sock *xs,
+				 struct xdp_desc *descs, u32 max_descs)
+{
+	struct xsk_tx_batch batch = {};
+	u32 entries;
+
+	entries = xskq_cons_nb_entries(xs->tx, max_descs);
+	if (!entries)
+		return batch;
+
+	batch = xskq_cons_read_desc_batch(xs, pool, descs, entries);
+	if (!xsk_tx_batch_cq_descs(&batch)) {
+		xs->tx->queue_empty_descs++;
+		if (batch.consumed_descs) {
+			__xskq_cons_release(xs->tx);
+			xs->sk.sk_write_space(&xs->sk);
+		}
+		return batch;
+	}
+
+	__xskq_cons_release(xs->tx);
+	xs->sk.sk_write_space(&xs->sk);
+	return batch;
+}
+
+static struct xsk_tx_batch
+xsk_tx_peek_release_shared_desc_batch(struct xsk_buff_pool *pool, u32 max_descs)
+{
+	u32 cq_descs_before, cq_descs_after;
+	struct xsk_tx_batch sum_batch = {};
+	bool budget_exhausted;
+	u32 per_socket_budget;
 	struct xdp_sock *xs;
 
+	max_descs = xskq_prod_nb_free(pool->cq, max_descs);
+	if (!max_descs)
+		return sum_batch;
+
+	/* The fairness quota must allow one maximum-sized valid packet. */
+	per_socket_budget = max_t(u32, MAX_PER_SOCKET_BUDGET,
+				  pool->xdp_zc_max_segs);
+
+again:
+	budget_exhausted = false;
+	cq_descs_before = xsk_tx_batch_cq_descs(&sum_batch);
+	list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list) {
+		u32 budget, budget_left, offset, remaining;
+		struct xsk_tx_batch curr_batch;
+
+		/* Once reclaim-only descriptors have been appended to the CQ address
+		 * area, do not append driver-visible Tx descriptors from another
+		 * socket after them. xsk_tx_completed() relies on all driver-visible
+		 * descriptors preceding all reclaim-only descriptors in CQ order.
+		 */
+		if (sum_batch.reclaim_descs)
+			break;
+
+		/* be gentle when playing with pool->tx_descs */
+		offset = xsk_tx_batch_cq_descs(&sum_batch);
+		if (offset >= max_descs)
+			break;
+
+		if (xs->tx_budget_spent >= per_socket_budget) {
+			if (xskq_cons_nb_entries(xs->tx, 1))
+				budget_exhausted = true;
+			continue;
+		}
+
+		budget_left = per_socket_budget - xs->tx_budget_spent;
+		remaining = max_descs - offset;
+		budget = min(remaining, budget_left);
+
+		curr_batch = __xsk_tx_peek_release_desc_batch(pool, xs,
+							      pool->tx_descs + offset,
+							      budget);
+		if (!xsk_tx_batch_cq_descs(&curr_batch)) {
+			if (curr_batch.budget_limited && budget_left < remaining)
+				budget_exhausted = true;
+			xs->tx_budget_spent += curr_batch.consumed_descs;
+			continue;
+		}
+
+		xs->tx_budget_spent += curr_batch.consumed_descs;
+		sum_batch.tx_descs += curr_batch.tx_descs;
+		sum_batch.reclaim_descs += curr_batch.reclaim_descs;
+	}
+
+	cq_descs_after = xsk_tx_batch_cq_descs(&sum_batch);
+
+	if (sum_batch.reclaim_descs || cq_descs_after >= max_descs)
+		return sum_batch;
+
+	/* Continue filling the batch while this pass made progress */
+	if (cq_descs_before != cq_descs_after)
+		goto again;
+
+	if (!budget_exhausted)
+		return sum_batch;
+
+	list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list)
+		xs->tx_budget_spent = 0;
+	goto again;
+}
+
+u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
+{
+	struct xsk_tx_batch batch = {};
+	struct xdp_sock *xs;
+	u32 cq_cached_prod;
+
 	rcu_read_lock();
+	if (unlikely(READ_ONCE(pool->reclaim_descs)))
+		goto out;
+	nb_pkts = min(nb_pkts, pool->tx_descs_nentries);
+	if (!nb_pkts)
+		goto out;
 	if (!list_is_singular(&pool->xsk_tx_list)) {
-		/* Fallback to the non-batched version */
+		/* Keep the legacy one-descriptor fallback for non-SG users.  The
+		 * shared SG path needs packet-framed parsing so invalid/overflowed
+		 * multi-buffer packets are drained as a unit.
+		 */
+		if (pool->umem->flags & XDP_UMEM_SG_FLAG) {
+			batch = xsk_tx_peek_release_shared_desc_batch(pool, nb_pkts);
+			cq_cached_prod = pool->cq->cached_prod;
+			xsk_tx_commit_batch(pool, &batch, cq_cached_prod);
+			goto out;
+		}
+
 		rcu_read_unlock();
 		return xsk_tx_peek_release_fallback(pool, nb_pkts);
 	}
 
 	xs = list_first_or_null_rcu(&pool->xsk_tx_list, struct xdp_sock, tx_list);
-	if (!xs) {
-		nb_pkts = 0;
+	if (!xs)
 		goto out;
-	}
 
 	nb_pkts = xskq_cons_nb_entries(xs->tx, nb_pkts);
 
@@ -603,19 +767,18 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 	if (!nb_pkts)
 		goto out;
 
-	nb_pkts = xskq_cons_read_desc_batch(xs->tx, pool, nb_pkts);
-	if (!nb_pkts) {
-		xs->tx->queue_empty_descs++;
+	batch = __xsk_tx_peek_release_desc_batch(pool, xs, pool->tx_descs,
+						 nb_pkts);
+	nb_pkts = xsk_tx_batch_cq_descs(&batch);
+	if (!nb_pkts)
 		goto out;
-	}
 
-	__xskq_cons_release(xs->tx);
-	xskq_prod_write_addr_batch(pool->cq, pool->tx_descs, nb_pkts);
-	xs->sk.sk_write_space(&xs->sk);
+	cq_cached_prod = pool->cq->cached_prod;
+	xsk_tx_commit_batch(pool, &batch, cq_cached_prod);
 
 out:
 	rcu_read_unlock();
-	return nb_pkts;
+	return batch.tx_descs;
 }
 EXPORT_SYMBOL(xsk_tx_peek_release_desc_batch);
 

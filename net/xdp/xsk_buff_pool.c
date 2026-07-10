@@ -48,6 +48,7 @@ int xp_alloc_tx_descs(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 	if (!pool->tx_descs)
 		return -ENOMEM;
 
+	pool->tx_descs_nentries = xs->tx->nentries;
 	return 0;
 }
 
