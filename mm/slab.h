@@ -22,6 +22,7 @@
 #define SLAB_ALLOC_NOLOCK	0x01 /* a kmalloc_nolock() allocation */
 #define SLAB_ALLOC_NEW_SLAB	0x02 /* a flag for alloc_slab_obj_exts() */
 #define SLAB_ALLOC_NO_RECURSE	0x04 /* prevent kmalloc() recursion */
+#define SLAB_ALLOC_NO_OBJ_EXT	0x08 /* prevent obj_exts array allocation */
 
 static inline bool alloc_flags_allow_spinning(const unsigned int alloc_flags)
 {
@@ -386,12 +387,19 @@ static inline unsigned int size_index_elem(unsigned int bytes)
  * KMALLOC_MAX_CACHE_SIZE and the caller must check that.
  */
 static inline struct kmem_cache *
-kmalloc_slab(size_t size, kmem_buckets *b, gfp_t flags, kmalloc_token_t token)
+kmalloc_slab(size_t size, kmem_buckets *b, gfp_t flags, kmalloc_token_t token,
+	     unsigned int alloc_flags)
 {
 	unsigned int index;
+	enum kmalloc_cache_type type = kmalloc_type(flags, token);
+
+#ifdef CONFIG_SLAB_OBJ_EXT
+	if (alloc_flags & SLAB_ALLOC_NO_OBJ_EXT)
+		type = KMALLOC_NO_OBJ_EXT;
+#endif
 
 	if (!b)
-		b = &kmalloc_caches[kmalloc_type(flags, token)];
+		b = &kmalloc_caches[type];
 	if (size <= 192)
 		index = kmalloc_size_index[size_index_elem(size)];
 	else
@@ -426,7 +434,8 @@ static inline bool is_kmalloc_normal(struct kmem_cache *s)
 {
 	if (!is_kmalloc_cache(s))
 		return false;
-	return !(s->flags & (SLAB_CACHE_DMA|SLAB_ACCOUNT|SLAB_RECLAIM_ACCOUNT));
+
+	return !(s->flags & (SLAB_CACHE_DMA|SLAB_ACCOUNT|SLAB_RECLAIM_ACCOUNT|SLAB_NO_OBJ_EXT));
 }
 
 bool __kfree_rcu_sheaf(struct kmem_cache *s, void *obj);

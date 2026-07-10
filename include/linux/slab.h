@@ -722,6 +722,9 @@ enum kmalloc_cache_type {
 #ifdef CONFIG_MEMCG
 	KMALLOC_CGROUP,
 #endif
+#ifdef CONFIG_SLAB_OBJ_EXT
+	KMALLOC_NO_OBJ_EXT,
+#endif
 	NR_KMALLOC_TYPES
 };
 
