@@ -21,6 +21,7 @@
 #include <linux/iversion.h>
 #include <linux/fileattr.h>
 #include <linux/uuid.h>
+#include <linux/blkdev.h>
 #include "ext4_jbd2.h"
 #include "ext4.h"
 #include <linux/fsmap.h>
@@ -992,6 +993,27 @@ group_add_out:
 	return err;
 }
 
+static void ext4_fileattr_get_dio(struct inode *inode, struct file_kattr *fa)
+{
+	u32 dio_align;
+
+	if (!S_ISREG(inode->i_mode))
+		return;
+
+	dio_align = ext4_dio_alignment(inode);
+	if (!dio_align)
+		return;
+
+	bdev_fill_dio_attr(inode->i_sb->s_bdev, fa);
+	if (dio_align != 1) {
+		fa->fsx_dio_mem_align = dio_align;
+		fa->fsx_dio_offset_align = dio_align;
+		fa->fsx_dio_read_offset_align = dio_align;
+	}
+
+	fa->fsx_xflags |= FS_XFLAG_DIO;
+}
+
 int ext4_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
@@ -1005,6 +1027,7 @@ int ext4_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	if (ext4_has_feature_project(inode->i_sb))
 		fa->fsx_projid = from_kprojid(&init_user_ns, ei->i_projid);
 
+	ext4_fileattr_get_dio(inode, fa);
 	return 0;
 }
 
