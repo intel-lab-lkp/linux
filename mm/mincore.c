@@ -219,7 +219,7 @@ static inline bool can_do_mincore(struct vm_area_struct *vma)
 {
 	if (vma_is_anonymous(vma))
 		return true;
-	if (!vma->vm_file)
+	if (!vma->vm_file || vma_test(vma, VMA_PFNMAP_BIT))
 		return false;
 	/*
 	 * Reveal pagecache information only for non-anonymous mappings that
@@ -257,14 +257,6 @@ static long do_mincore(unsigned long addr, unsigned long pages, unsigned char *v
 		unsigned long pages = DIV_ROUND_UP(end - addr, PAGE_SIZE);
 		memset(vec, 1, pages);
 		return pages;
-	}
-
-	/*
-	 * mincore historically reports PFNMAP mappings as non-resident.
-	 */
-	if (vma->vm_flags & VM_PFNMAP) {
-		__mincore_unmapped_range(addr, end, vma, vec);
-		return (end - addr) >> PAGE_SHIFT;
 	}
 
 	err = walk_page_range_vma(vma, addr, end, &mincore_walk_ops, vec);
