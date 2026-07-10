@@ -6,6 +6,7 @@
  * Test code for nci
  */
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -404,7 +405,7 @@ FIXTURE_SETUP(NCI)
 	struct msgtemplate msg;
 	pthread_t thread_t;
 	__u32 event_group;
-	int status;
+	intptr_t status;
 	int rc;
 
 	self->open_state = false;
@@ -497,7 +498,7 @@ error:
 FIXTURE_TEARDOWN(NCI)
 {
 	pthread_t thread_t;
-	int status;
+	intptr_t status;
 	int rc;
 
 	if (self->open_state) {
@@ -585,7 +586,7 @@ int start_polling(int dev_idx, int proto, int virtual_fd, int sd, int fid, int p
 	void *nla_start_poll_data[2] = {&dev_idx, &proto};
 	int nla_start_poll_len[2] = {4, 4};
 	pthread_t thread_t;
-	int status;
+	intptr_t status;
 	int rc;
 
 	rc = pthread_create(&thread_t, NULL, virtual_poll_start,
@@ -605,7 +606,7 @@ int start_polling(int dev_idx, int proto, int virtual_fd, int sd, int fid, int p
 int stop_polling(int dev_idx, int virtual_fd, int sd, int fid, int pid)
 {
 	pthread_t thread_t;
-	int status;
+	intptr_t status;
 	int rc;
 
 	rc = pthread_create(&thread_t, NULL, virtual_poll_stop,
@@ -816,7 +817,7 @@ int disconnect_tag(int nfc_sock, int virtual_fd)
 {
 	pthread_t thread_t;
 	char buf[256];
-	int status;
+	intptr_t status;
 	int len;
 
 	send(nfc_sock, &nci_t4t_select_cmd3[3], sizeof(nci_t4t_select_cmd3) - 3, 0);
@@ -860,7 +861,7 @@ TEST_F(NCI, deinit)
 {
 	struct msgtemplate msg;
 	pthread_t thread_t;
-	int status;
+	intptr_t status;
 	int rc;
 
 	rc = get_nci_devid(self->sd, self->fid, self->pid, self->dev_idex,
