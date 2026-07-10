@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/rwsem.h>
+#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/topology.h>
@@ -41,6 +42,14 @@
 #define MSG_RESPOFF_STR		"MsgRspOffset"
 
 static struct hsmp_plat_device *hsmp_pdev;
+
+/*
+ * Number of ACPI socket platform devices that have probed successfully.
+ * Guarded by hsmp_sock_rwsem, which probe and remove hold for write, so a
+ * plain counter is enough; no atomic is needed. The shared socket array is
+ * allocated on the first probe and freed once this drops back to zero.
+ */
+static unsigned int hsmp_acpi_sock_refs;
 
 struct hsmp_sys_attr {
 	struct device_attribute dattr;
@@ -611,6 +620,60 @@ static const struct acpi_device_id amd_hsmp_acpi_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, amd_hsmp_acpi_ids);
 
+/*
+ * Tear down the shared ACPI socket state once the last socket is gone:
+ * deregister /dev/hsmp if it was registered, unmap any metric-table DRAM,
+ * destroy the per-socket mutexes and free the socket array.
+ *
+ * Called with hsmp_sock_rwsem held for write by the remove and probe-failure
+ * paths. The write lock has drained any in-flight hsmp_send_message(), so
+ * unmapping the mailbox and freeing the array cannot race the lock-free data
+ * plane.
+ */
+static void hsmp_acpi_sock_release(void)
+{
+	lockdep_assert_held_write(&hsmp_sock_rwsem);
+
+	if (!IS_ERR_OR_NULL(hsmp_pdev->mdev.this_device))
+		hsmp_misc_deregister();
+	hsmp_unmap_metric_tbls(hsmp_pdev);
+	hsmp_destroy_metric_read_locks(hsmp_pdev);
+	kfree(hsmp_pdev->sock);
+	hsmp_pdev->sock = NULL;
+	hsmp_pdev->num_sockets = 0;
+	hsmp_pdev->proto_ver = 0;
+}
+
+/**
+ * hsmp_acpi_probe_failure_cleanup() - Undo a failed ACPI socket probe.
+ * @dev: ACPI companion device whose probe failed.
+ *
+ * This device never incremented hsmp_acpi_sock_refs, so clear its sock->dev
+ * and, if it was the only socket in play, release the shared state.
+ *
+ * Clearing sock->dev matters on multi-socket systems: when a non-first socket
+ * fails, the array stays alive (owned by an already-probed socket) and
+ * remove() is never called for this device, yet devres unmaps its mailbox once
+ * probe() returns. Without clearing dev, a later message to this index would
+ * pass every gate in hsmp_send_message() and reach the unmapped mailbox.
+ *
+ * sock is NULL if probe failed before hsmp_parse_acpi_table() set the drvdata.
+ *
+ * Called from hsmp_acpi_probe(), which already holds hsmp_sock_rwsem for write.
+ */
+static void hsmp_acpi_probe_failure_cleanup(struct device *dev)
+{
+	struct hsmp_socket *sock = dev_get_drvdata(dev);
+
+	lockdep_assert_held_write(&hsmp_sock_rwsem);
+
+	if (sock)
+		sock->dev = NULL;
+
+	if (!hsmp_acpi_sock_refs)
+		hsmp_acpi_sock_release();
+}
+
 static int hsmp_acpi_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -620,23 +683,24 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	/*
-	 * Multiple ACPI socket devices probe in parallel, but the is_probed
-	 * handshake and the one-time socket-array allocation below must run
-	 * exactly once.  Serialize the whole bring-up against concurrent
-	 * probe/remove by holding the socket rwsem for write.
+	 * Multiple ACPI socket devices probe in parallel, but the one-time
+	 * socket-array allocation and /dev/hsmp registration below must run
+	 * exactly once. Hold the socket rwsem for write across the whole
+	 * bring-up so it cannot race a concurrent probe or remove, and so the
+	 * probe-failure teardown drains the lock-free data plane.
 	 */
 	guard(rwsem_write)(&hsmp_sock_rwsem);
 
-	if (!hsmp_pdev->is_probed) {
+	if (!hsmp_pdev->sock) {
 		hsmp_pdev->num_sockets = topology_max_packages();
 		if (!hsmp_pdev->num_sockets) {
 			dev_err(&pdev->dev, "No CPU sockets detected\n");
 			return -ENODEV;
 		}
 
-		hsmp_pdev->sock = devm_kcalloc(&pdev->dev, hsmp_pdev->num_sockets,
-					       sizeof(*hsmp_pdev->sock),
-					       GFP_KERNEL);
+		hsmp_pdev->sock = kcalloc(hsmp_pdev->num_sockets,
+					  sizeof(*hsmp_pdev->sock),
+					  GFP_KERNEL);
 		if (!hsmp_pdev->sock)
 			return -ENOMEM;
 
@@ -646,35 +710,55 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 	ret = init_acpi(&pdev->dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize HSMP interface.\n");
+		hsmp_acpi_probe_failure_cleanup(&pdev->dev);
 		return ret;
 	}
 
-	if (!hsmp_pdev->is_probed) {
-		ret = hsmp_misc_register(&pdev->dev);
+	if (IS_ERR_OR_NULL(hsmp_pdev->mdev.this_device)) {
+		/*
+		 * Register /dev/hsmp unparented. It is a singleton shared by all
+		 * ACPI sockets and outlives all but the last of them, so
+		 * parenting it to this socket's device would leave a dangling
+		 * parent once that socket is unbound.
+		 */
+		ret = hsmp_misc_register(NULL);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to register misc device\n");
+			hsmp_acpi_probe_failure_cleanup(&pdev->dev);
 			return ret;
 		}
-		hsmp_pdev->is_probed = true;
-		dev_dbg(&pdev->dev, "AMD HSMP ACPI is probed successfully\n");
+		dev_dbg(&pdev->dev, "AMD HSMP ACPI misc device registered\n");
 	}
+
+	hsmp_acpi_sock_refs++;
 
 	return 0;
 }
 
 static void hsmp_acpi_remove(struct platform_device *pdev)
 {
+	struct hsmp_socket *sock = dev_get_drvdata(&pdev->dev);
+
+	/*
+	 * Serialize the decrement and any release it triggers against a
+	 * concurrent probe, and drain the lock-free data plane for the whole
+	 * teardown: this covers the per-socket unbind, whose mailbox devres
+	 * unmaps once we return, and the last unbind that frees the socket
+	 * array in hsmp_acpi_sock_release().
+	 */
 	guard(rwsem_write)(&hsmp_sock_rwsem);
 
 	/*
-	 * We register only one misc_device even on multi-socket system.
-	 * So, deregister should happen only once.
+	 * Clear this socket's dev so hsmp_send_message() rejects it before
+	 * devres unmaps the mailbox. On a non-final unbind the socket array
+	 * stays alive, so without this a later message to this index would
+	 * reach an unmapped iomem region.
 	 */
-	if (hsmp_pdev->is_probed) {
-		hsmp_misc_deregister();
-		hsmp_destroy_metric_read_locks(hsmp_pdev);
-		hsmp_pdev->is_probed = false;
-	}
+	sock->dev = NULL;
+
+	hsmp_acpi_sock_refs--;
+	if (!hsmp_acpi_sock_refs)
+		hsmp_acpi_sock_release();
 }
 
 static struct platform_driver amd_hsmp_driver = {
