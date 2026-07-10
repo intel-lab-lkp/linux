@@ -145,6 +145,16 @@ ssize_t tpm_common_read(struct file *file, char __user *buf,
 			goto out;
 		}
 
+		/*
+		 * Reject reads whose offset and length fall outside the fixed
+		 * response buffer.
+		 */
+		if (*off < 0 || *off >= TPM_BUFSIZE ||
+		    ret_size > TPM_BUFSIZE - *off) {
+			ret_size = -EINVAL;
+			goto out;
+		}
+
 		rc = copy_to_user(buf, priv->data_buffer + *off, ret_size);
 		if (rc) {
 			memset(priv->data_buffer, 0, TPM_BUFSIZE);
