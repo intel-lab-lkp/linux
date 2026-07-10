@@ -818,10 +818,257 @@ static void c2c_he__free_hierarchy(struct hist_entry *he)
 }
 
 /* Entry operations for function view */
-static struct hist_entry_ops c2c_function_entry_ops __maybe_unused = {
+static struct hist_entry_ops c2c_function_entry_ops = {
 	.new	= c2c_he_zalloc,
 	.free	= c2c_function_he_free,
 };
+
+static struct c2c_hist_entry *
+c2c_child_entry__alloc(struct hist_entry *parent_he, struct hist_entry *src_he,
+		       int depth, u64 ip)
+{
+	struct c2c_hist_entry *child_c2c;
+	struct hist_entry *child_he;
+	size_t callchain_size;
+
+	callchain_size = symbol_conf.use_callchain ? sizeof(struct callchain_root) : 0;
+	child_he = c2c_he_zalloc(callchain_size);
+	if (!child_he)
+		return NULL;
+
+	child_c2c = container_of(child_he, struct c2c_hist_entry, he);
+	child_he->callchain_size = callchain_size;
+	if (callchain_size)
+		callchain_init(child_he->callchain);
+
+	memcpy(&child_he->ms, &src_he->ms, sizeof(struct map_symbol));
+
+	if (src_he->mem_info) {
+		child_he->mem_info = mem_info__clone(src_he->mem_info);
+		if (!child_he->mem_info)
+			goto out_free;
+	}
+
+	child_he->thread = src_he->thread;
+	child_he->cpumode = src_he->cpumode;
+	child_he->cpu = src_he->cpu;
+	child_he->socket = src_he->socket;
+	child_he->level = src_he->level;
+	child_he->ip = ip;
+
+	child_he->parent_he = parent_he;
+	child_he->depth = depth;
+	child_he->leaf = (depth >= 2);
+	child_he->hists = &c2c_ext.function_hists.hists;
+	child_he->filtered = false;
+	child_he->unfolded = false;
+	child_he->has_children = false;
+	child_he->has_no_entry = false;
+	child_he->nr_rows = 0;
+	child_he->row_offset = 0;
+
+	memset(&child_he->stat, 0, sizeof(child_he->stat));
+	child_he->hroot_in = RB_ROOT_CACHED;
+	child_he->hroot_out = RB_ROOT_CACHED;
+	INIT_LIST_HEAD(&child_he->pairs.node);
+	child_he->hpp_list = &c2c_ext.function_hists.list;
+	if (symbol_conf.cumulate_callchain) {
+		child_he->stat_acc = calloc(1, sizeof(struct he_stat));
+		if (!child_he->stat_acc)
+			goto out_free;
+	}
+
+	return child_c2c;
+
+out_free:
+	if (child_he->mem_info)
+		mem_info__put(child_he->mem_info);
+	zfree(&child_c2c->cpuset);
+	zfree(&child_c2c->nodeset);
+	zfree(&child_c2c->node_stats);
+	free(child_c2c);
+	return NULL;
+}
+
+static void
+c2c_child_entry__insert(struct hist_entry *parent_he, struct hist_entry *child_he,
+			struct rb_node **p, struct rb_node *rb_parent, bool leftmost)
+{
+	rb_link_node(&child_he->rb_node, rb_parent, p);
+	rb_insert_color_cached(&child_he->rb_node, &parent_he->hroot_out, leftmost);
+
+	parent_he->has_children = true;
+	parent_he->leaf = false;
+}
+
+static __maybe_unused struct hist_entry *
+c2c_function_hists__level1_entry(struct symbol *sym, u64 iaddr,
+				 struct hist_entry *detail_he,
+				 struct thread *synthetic_thread)
+{
+	struct addr_location al;
+	struct perf_sample sample = {};
+	struct mem_info *mi;
+	struct hist_entry *he;
+
+	mi = mem_info__new();
+	if (mi) {
+		mem_info__iaddr(mi)->addr = iaddr;
+		/* mem_info__put() will map_symbol__exit() these, so take refs. */
+		mem_info__iaddr(mi)->ms.thread = thread__get(detail_he->ms.thread);
+		mem_info__iaddr(mi)->ms.map = map__get(detail_he->ms.map);
+		mem_info__iaddr(mi)->ms.sym = sym;
+		mem_info__daddr(mi)->addr = 0;
+	}
+
+	addr_location__init(&al);
+	al.thread = thread__get(synthetic_thread);
+	al.map = map__get(detail_he->ms.map);
+	al.sym = sym;
+	al.addr = iaddr;
+	al.level = detail_he->level;
+	al.cpumode = detail_he->cpumode;
+	al.cpu = 0;
+	al.socket = 0;
+	al.filtered = 0;
+	al.latency = 0;
+
+	/*
+	 * Synthetic sample: period/weight are placeholders only. The real
+	 * c2c counters live in c2c_hist_entry::stats and are added via
+	 * hist_entry__add_c2c_stats(); no function-view column or sort key
+	 * reads he->stat.period/nr_events, so the +1 that __hists__add_entry()
+	 * accrues on each dedup hit has no effect on what is displayed.
+	 */
+	sample.period = 1;
+	sample.weight = 1;
+	sample.ip = iaddr;
+	sample.pid = thread__pid(synthetic_thread);
+	sample.tid = thread__tid(synthetic_thread);
+	sample.cpu = 0;
+
+	/* Add entry - histogram handles dedup */
+	he = hists__add_entry_ops(&c2c_ext.function_hists.hists,
+				  &c2c_function_entry_ops,
+				  &al, NULL, NULL, mi,
+				  NULL, &sample, true);
+
+	addr_location__exit(&al);
+	if (mi)
+		mem_info__put(mi);
+
+	if (he)
+		he->hpp_list = &c2c_ext.function_hists.list;
+
+	return he;
+}
+
+static __maybe_unused struct c2c_hist_entry *
+c2c_function_hists__level2_entry(struct c2c_hist_entry *level1_c2c,
+				 struct symbol *sym, u64 iaddr,
+				 struct hist_entry *detail_he)
+{
+	struct hist_entry *level1_he = &level1_c2c->he;
+	struct rb_node **p = &level1_he->hroot_out.rb_root.rb_node;
+	struct rb_node *parent = NULL;
+	struct c2c_hist_entry *level2_c2c;
+	bool leftmost = true;
+
+	/*
+	 * Order by (iaddr, symbol name). Symbols are looked up by name to
+	 * coalesce identically-named symbols from different DSO/JIT copies,
+	 * which matches the dedup policy used when building the hierarchy.
+	 */
+	while (*p) {
+		struct hist_entry *iter = rb_entry(*p, struct hist_entry, rb_node);
+		u64 iter_iaddr = hist_entry__iaddr(iter);
+		int cmp;
+
+		parent = *p;
+		if (iaddr < iter_iaddr) {
+			p = &parent->rb_left;
+			continue;
+		}
+		if (iaddr > iter_iaddr) {
+			p = &parent->rb_right;
+			leftmost = false;
+			continue;
+		}
+
+		if (!sym || !iter->ms.sym)
+			/* Order NULL-symbol entries deterministically (NULL last). */
+			cmp = (iter->ms.sym ? 1 : 0) - (sym ? 1 : 0);
+		else
+			cmp = arch__compare_symbol_names(sym->name, iter->ms.sym->name);
+
+		if (cmp < 0) {
+			p = &parent->rb_left;
+		} else if (cmp > 0) {
+			p = &parent->rb_right;
+			leftmost = false;
+		} else {
+			return container_of(iter, struct c2c_hist_entry, he);
+		}
+	}
+
+	level2_c2c = c2c_child_entry__alloc(level1_he, detail_he, 1, iaddr);
+	if (!level2_c2c)
+		return NULL;
+
+	/* Key this level by the looked-up symbol, not detail_he's. */
+	level2_c2c->he.ms.sym = sym;
+
+	/* Override iaddr (and symbol) in cloned mem_info for level 2 */
+	if (level2_c2c->he.mem_info) {
+		mem_info__iaddr(level2_c2c->he.mem_info)->addr = iaddr;
+		mem_info__iaddr(level2_c2c->he.mem_info)->ms.sym = sym;
+	}
+
+	c2c_child_entry__insert(level1_he, &level2_c2c->he, p, parent, leftmost);
+
+	return level2_c2c;
+}
+
+static __maybe_unused struct c2c_hist_entry *
+c2c_function_hists__level3_entry(struct c2c_hist_entry *level2_c2c, u64 cl_addr,
+				 struct c2c_hist_entry *cacheline_src_he)
+{
+	struct hist_entry *level2_he = &level2_c2c->he;
+	struct rb_node **p = &level2_he->hroot_out.rb_root.rb_node;
+	struct rb_node *parent = NULL;
+	struct c2c_hist_entry *level3_c2c;
+	bool leftmost = true;
+
+	while (*p) {
+		struct hist_entry *iter = rb_entry(*p, struct hist_entry, rb_node);
+		u64 iter_addr = 0;
+
+		if (iter->mem_info) {
+			u64 daddr = mem_info__daddr(iter->mem_info)->addr;
+
+			iter_addr = cl_address(daddr, chk_double_cl);
+		}
+
+		parent = *p;
+		if (cl_addr < iter_addr) {
+			p = &parent->rb_left;
+		} else if (cl_addr > iter_addr) {
+			p = &parent->rb_right;
+			leftmost = false;
+		} else {
+			return container_of(iter, struct c2c_hist_entry, he);
+		}
+	}
+
+	level3_c2c = c2c_child_entry__alloc(level2_he, &cacheline_src_he->he, 2,
+					    hist_entry__iaddr(&cacheline_src_he->he));
+	if (!level3_c2c)
+		return NULL;
+
+	c2c_child_entry__insert(level2_he, &level3_c2c->he, p, parent, leftmost);
+
+	return level3_c2c;
+}
 
 int perf_c2c__browse_function_view(struct hists *hists __maybe_unused)
 {
