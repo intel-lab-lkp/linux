@@ -405,7 +405,7 @@ int rxrpc_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	trace_rxrpc_recvmsg(0, rxrpc_recvmsg_enter, 0);
 
-	if (flags & (MSG_OOB | MSG_TRUNC))
+	if (flags & MSG_TRUNC)
 		return -EOPNOTSUPP;
 
 	timeo = sock_rcvtimeo(&rx->sk, flags & MSG_DONTWAIT);
