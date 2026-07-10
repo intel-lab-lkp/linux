@@ -791,18 +791,102 @@ static unsigned int ttm_pool_alloc_find_order(unsigned int highest,
 	return min_t(unsigned int, highest, __fls(alloc->remaining_pages));
 }
 
+/**
+ * struct ttm_pool_alloc_iter - Working state for the __ttm_pool_alloc() loop
+ *
+ * Bundles the immutable inputs and the mutable per-order state that the
+ * allocation phase helpers share, so the main loop reads as a short sequence
+ * of named phases rather than one deeply nested block.
+ */
+struct ttm_pool_alloc_iter {
+	/* Immutable for the duration of the allocation. */
+	struct ttm_pool *pool;
+	struct ttm_tt *tt;
+	const struct ttm_operation_ctx *ctx;
+	struct ttm_pool_alloc_state *alloc;
+	struct ttm_pool_tt_restore *restore;
+	unsigned int beneficial_order;
+	gfp_t gfp_flags;
+
+	/* Mutated as the loop walks the orders. */
+	unsigned int order;
+	enum ttm_caching page_caching;
+	bool allow_pools;
+	struct page *p;
+};
+
+/*
+ * Acquire a single page for the current order, leaving it in @it->p (NULL on
+ * failure). Tries a same-order pool page, then a fresh system allocation.
+ */
+static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
+{
+	struct ttm_pool_type *pt;
+
+	/* First, try to allocate a page from a pool if one exists. */
+	it->p = NULL;
+	pt = ttm_pool_select_type(it->pool, it->page_caching, it->order);
+	if (!it->p && pt && it->allow_pools)
+		it->p = ttm_pool_type_take(pt, ttm_pool_nid(it->pool));
+
+	/*
+	 * If that fails or previously failed, allocate from system. Note that
+	 * this also disallows additional pool allocations using write-back
+	 * cached pools of the same order.
+	 */
+	if (!it->p) {
+		it->page_caching = ttm_cached;
+		it->allow_pools = false;
+		it->p = ttm_pool_alloc_page(it->pool, it->gfp_flags, it->order,
+					    it->ctx->beneficial_reclaim_backoff);
+	}
+}
+
+/*
+ * The current order could not be satisfied. Lower it and retry, recording a
+ * sub-optimal backing (so the driver can later re-defrag) when we drop below
+ * the beneficial order.
+ *
+ * Returns 0 to retry the (lowered) order, or a negative errno.
+ */
+static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
+{
+	if (!it->order)
+		return -ENOMEM;
+
+	/*
+	 * Failing to allocate at the device's beneficial order means we are
+	 * about to back this object with a sub-optimal (smaller order) set of
+	 * pages. Record it so the driver can later try to defragment the object
+	 * back to beneficial order.
+	 */
+	if (it->beneficial_order && it->order == it->beneficial_order)
+		it->tt->page_flags |= TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
+
+	it->order--;
+	it->page_caching = it->tt->caching;
+	it->allow_pools = true;
+
+	return 0;
+}
+
 static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			    const struct ttm_operation_ctx *ctx,
 			    struct ttm_pool_alloc_state *alloc,
 			    struct ttm_pool_tt_restore *restore)
 {
-	const unsigned int beneficial_order = ttm_pool_beneficial_order(pool);
-	enum ttm_caching page_caching;
+	struct ttm_pool_alloc_iter it = {
+		.pool = pool,
+		.tt = tt,
+		.ctx = ctx,
+		.alloc = alloc,
+		.restore = restore,
+		.beneficial_order = ttm_pool_beneficial_order(pool),
+		.page_caching = tt->caching,
+		.allow_pools = true,
+	};
 	gfp_t gfp_flags = GFP_USER;
 	pgoff_t caching_divide;
-	unsigned int order;
-	bool allow_pools;
-	struct page *p;
 	int r;
 
 	WARN_ON(!alloc->remaining_pages || ttm_tt_is_populated(tt));
@@ -819,59 +903,28 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	else
 		gfp_flags |= GFP_HIGHUSER;
 
-	page_caching = tt->caching;
-	allow_pools = true;
-	for (order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
+	it.gfp_flags = gfp_flags;
+
+	for (it.order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
 	     alloc->remaining_pages;
-	     order = ttm_pool_alloc_find_order(order, alloc)) {
-		struct ttm_pool_type *pt;
-
-		/* First, try to allocate a page from a pool if one exists. */
-		p = NULL;
-		pt = ttm_pool_select_type(pool, page_caching, order);
-		if (pt && allow_pools)
-			p = ttm_pool_type_take(pt, ttm_pool_nid(pool));
-
-		/*
-		 * If that fails or previously failed, allocate from system.
-		 * Note that this also disallows additional pool allocations using
-		 * write-back cached pools of the same order. Consider removing
-		 * that behaviour.
-		 */
-		if (!p) {
-			page_caching = ttm_cached;
-			allow_pools = false;
-			p = ttm_pool_alloc_page(pool, gfp_flags, order,
-						ctx->beneficial_reclaim_backoff);
+	     it.order = ttm_pool_alloc_find_order(it.order, alloc)) {
+		/* Acquire a page (pool / system) for this order. */
+		ttm_pool_iter_acquire_page(&it);
+		if (!it.p) {
+			r = ttm_pool_iter_lower_order(&it);
+			if (r)
+				goto error_free_all;
+			continue;
 		}
-		/* If that fails, lower the order if possible and retry. */
-		if (!p) {
-			if (order) {
-				/*
-				 * Failing to allocate at the device's beneficial
-				 * order means we are about to back this object
-				 * with a sub-optimal (smaller order) set of
-				 * pages. Record it so the driver can later try to
-				 * defragment the object back to beneficial order.
-				 */
-				if (beneficial_order && order == beneficial_order)
-					tt->page_flags |=
-						TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
-				--order;
-				page_caching = tt->caching;
-				allow_pools = true;
-				continue;
-			}
-			r = -ENOMEM;
-			goto error_free_all;
-		}
-		r = ttm_pool_page_allocated(pool, order, p, page_caching, alloc,
-					    restore);
+
+		r = ttm_pool_page_allocated(pool, it.order, it.p,
+					    it.page_caching, alloc, restore);
 		if (r)
 			goto error_free_page;
 
 		if (ttm_pool_restore_valid(restore)) {
-			r = ttm_pool_restore_commit(restore, tt->backup, ctx, alloc);
+			r = ttm_pool_restore_commit(restore, tt->backup, ctx,
+						    alloc);
 			if (r)
 				goto error_free_all;
 		}
@@ -887,7 +940,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	return 0;
 
 error_free_page:
-	ttm_pool_free_page(pool, page_caching, order, p, false);
+	ttm_pool_free_page(pool, it.page_caching, it.order, it.p, false);
 
 error_free_all:
 	if (tt->restore)
