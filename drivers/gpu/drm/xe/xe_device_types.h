@@ -38,6 +38,7 @@
 
 struct drm_pagemap_shrinker;
 struct intel_display;
+struct xe_dep_scheduler;
 struct intel_dg_nvm_dev;
 struct xe_ggtt;
 struct xe_i2c;
@@ -325,6 +326,15 @@ struct xe_device {
 			 * @mem.defrag.worker, in milliseconds.
 			 */
 			unsigned int interval_ms;
+			/**
+			 * @mem.defrag.iova_sched: Dependency scheduler used to
+			 * run the post-copy IOVA finalize job for defrag moves
+			 * of IOVA-mapped BOs. The job tears down the temporary
+			 * copy-step IOVA mapping and links the new backing into
+			 * the (transferred) reservation once the GPU copy that
+			 * its dependencies gate has completed.
+			 */
+			struct xe_dep_scheduler *iova_sched;
 		} defrag;
 	} mem;
 
