@@ -53,6 +53,7 @@
 #ifdef CONFIG_FAULT_INJECTION
 #include <linux/fault-inject.h>
 static DECLARE_FAULT_ATTR(backup_fault_inject);
+static DECLARE_FAULT_ATTR(beneficial_order_fault_inject);
 #else
 #define should_fail(...) false
 #endif
@@ -812,21 +813,34 @@ struct ttm_pool_alloc_iter {
 	unsigned int order;
 	enum ttm_caching page_caching;
 	bool allow_pools;
+	bool fail_beneficial;
 	struct page *p;
 };
 
 /*
  * Acquire a single page for the current order, leaving it in @it->p (NULL on
- * failure). Tries a same-order pool page, then a fresh system allocation.
+ * failure). Tries a same-order pool page, then a fresh system allocation. Fault
+ * injection can force the beneficial-order paths to "fail".
  */
 static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
 {
 	struct ttm_pool_type *pt;
 
-	/* First, try to allocate a page from a pool if one exists. */
 	it->p = NULL;
+
+	/*
+	 * Fault injection: pretend allocation at (or above) the device's
+	 * beneficial order failed, forcing a sub-optimal backing. Exercises the
+	 * beneficial_order_failed tracking and the driver defrag path without
+	 * driving the system into real fragmentation.
+	 */
+	it->fail_beneficial = IS_ENABLED(CONFIG_FAULT_INJECTION) &&
+		it->beneficial_order && it->order >= it->beneficial_order &&
+		should_fail(&beneficial_order_fault_inject, 1);
+
+	/* First, try to allocate a page from a pool if one exists. */
 	pt = ttm_pool_select_type(it->pool, it->page_caching, it->order);
-	if (!it->p && pt && it->allow_pools)
+	if (!it->p && pt && it->allow_pools && !it->fail_beneficial)
 		it->p = ttm_pool_type_take(pt, ttm_pool_nid(it->pool));
 
 	/*
@@ -834,7 +848,7 @@ static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
 	 * this also disallows additional pool allocations using write-back
 	 * cached pools of the same order.
 	 */
-	if (!it->p) {
+	if (!it->p && !it->fail_beneficial) {
 		it->page_caching = ttm_cached;
 		it->allow_pools = false;
 		it->p = ttm_pool_alloc_page(it->pool, it->gfp_flags, it->order,
@@ -851,6 +865,9 @@ static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
  */
 static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 {
+	bool at_beneficial = it->beneficial_order &&
+			     it->order == it->beneficial_order;
+
 	if (!it->order)
 		return -ENOMEM;
 
@@ -860,13 +877,16 @@ static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 	 * pages. Record it so the driver can later try to defragment the object
 	 * back to beneficial order.
 	 */
-	if (it->beneficial_order && it->order == it->beneficial_order) {
+	if (it->fail_beneficial || at_beneficial) {
 		it->tt->page_flags |= TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
 		if (it->ctx->defrag)
 			return -ENOMEM;
 	}
 
-	it->order--;
+	if (it->fail_beneficial)
+		it->order = it->beneficial_order - 1;
+	else
+		it->order--;
 	it->page_caching = it->tt->caching;
 	it->allow_pools = true;
 
@@ -1536,6 +1556,9 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 #ifdef CONFIG_FAULT_INJECTION
 	fault_create_debugfs_attr("backup_fault_inject", ttm_debugfs_root,
 				  &backup_fault_inject);
+	fault_create_debugfs_attr("beneficial_order_fault_inject",
+				  ttm_debugfs_root,
+				  &beneficial_order_fault_inject);
 #endif
 #endif
 
