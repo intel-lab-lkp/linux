@@ -312,6 +312,7 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 	struct msghdr msg;
 	struct kvec iov[1];
 	unsigned int debug_id = call->debug_id;
+	struct key *app_data = NULL;
 	size_t len;
 	bool write_iter = call->write_iter;
 	s64 tx_total_len;
@@ -342,8 +343,26 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 	if (call->async)
 		afs_get_call(call, afs_call_trace_get_make_async_call);
 
+	if (call->key && call->server) {
+		u32 krb5_enctype = 0;
+		u8 security_index = 0;
+
+		rxrpc_kernel_query_key(call->key, &security_index, &krb5_enctype);
+		switch (security_index) {
+#ifdef CONFIG_RXGK
+		case RXRPC_SECURITY_YFS_RXGK:
+			/* Read the key pointer before the appdata */
+			app_data = smp_load_acquire(&call->server->yfs_rxgk_appdata);
+			break;
+#endif
+		default:
+			break;
+		}
+	}
+
 	/* create a call */
-	rxcall = rxrpc_kernel_begin_call(call->net->socket, call->peer, call->key,
+	rxcall = rxrpc_kernel_begin_call(call->net->socket, call->peer,
+					 call->key, app_data,
 					 (unsigned long)call,
 					 tx_total_len,
 					 call->max_lifespan,

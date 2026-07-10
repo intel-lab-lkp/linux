@@ -12,6 +12,7 @@
 #include <linux/skbuff.h>
 #include <linux/export.h>
 #include <linux/sched/signal.h>
+#include <keys/user-type.h>
 
 #include <net/sock.h>
 #include <net/af_rxrpc.h>
@@ -530,6 +531,8 @@ out_nolock:
 static int rxrpc_sendmsg_cmsg(struct msghdr *msg, struct rxrpc_send_params *p)
 {
 	struct cmsghdr *cmsg;
+	key_serial_t key_id;
+	key_ref_t key;
 	bool got_user_ID = false;
 	int len;
 
@@ -612,6 +615,22 @@ static int rxrpc_sendmsg_cmsg(struct msghdr *msg, struct rxrpc_send_params *p)
 				return -ERANGE;
 			if (p->call.nr_timeouts >= 3 && p->call.timeouts.normal > 60 * 60 * 1000)
 				return -ERANGE;
+			break;
+
+		case RXRPC_RESPONSE_APPDATA:
+			if (len != sizeof(key_serial_t))
+				return -EINVAL;
+			if (p->call.app_data)
+				return -EINVAL;
+			key_id = *(key_serial_t *)CMSG_DATA(cmsg);
+			key = lookup_user_key(key_id, 0, KEY_NEED_SEARCH);
+			if (IS_ERR(key))
+				return PTR_ERR(key);
+			if (key_ref_to_ptr(key)->type == &key_type_user) {
+				key_ref_put(key);
+				return -EINVAL;
+			}
+			p->call.app_data = key_ref_to_ptr(key);
 			break;
 
 		default:
@@ -722,8 +741,10 @@ int rxrpc_do_sendmsg(struct rxrpc_sock *rx, struct msghdr *msg, size_t len)
 			goto error_release_sock;
 		call = rxrpc_new_client_call_for_sendmsg(rx, msg, &p);
 		/* The socket is now unlocked... */
-		if (IS_ERR(call))
+		if (IS_ERR(call)) {
+			key_put(p.call.app_data);
 			return PTR_ERR(call);
+		}
 		/* ... and we have the call lock. */
 		p.call.nr_timeouts = 0;
 		ret = 0;
@@ -808,11 +829,13 @@ out_put_unlock:
 		mutex_unlock(&call->user_mutex);
 error_put:
 	rxrpc_put_call(call, rxrpc_call_put_sendmsg);
+	key_put(p.call.app_data);
 	_leave(" = %d", ret);
 	return ret;
 
 error_release_sock:
 	release_sock(&rx->sk);
+	key_put(p.call.app_data);
 	return ret;
 }
 

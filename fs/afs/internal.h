@@ -1415,22 +1415,6 @@ static inline void afs_see_call(struct afs_call *call, enum afs_call_trace why)
 		       atomic_read(&call->net->nr_outstanding_calls));
 }
 
-static inline void afs_make_op_call(struct afs_operation *op, struct afs_call *call,
-				    gfp_t gfp)
-{
-	struct afs_addr_list *alist = op->estate->addresses;
-
-	op->call	= afs_get_call(call, afs_call_trace_get_op_call);
-	op->type	= call->type;
-	call->op	= op;
-	call->key	= op->key;
-	call->intr	= !(op->flags & AFS_OPERATION_UNINTR);
-	call->peer	= rxrpc_kernel_get_peer(alist->addrs[op->addr_index].peer);
-	call->service_id = op->server->service_id;
-	afs_make_call(call, gfp);
-	afs_put_call(call, afs_call_trace_put_made_call);
-}
-
 static inline void afs_extract_begin(struct afs_call *call, void *buf, size_t size)
 {
 	call->iov_len = size;
@@ -1748,6 +1732,23 @@ static inline struct afs_vnode *AFS_FS_I(struct inode *inode)
 static inline struct inode *AFS_VNODE_TO_I(struct afs_vnode *vnode)
 {
 	return &vnode->netfs.inode;
+}
+
+static inline void afs_make_op_call(struct afs_operation *op, struct afs_call *call,
+				    gfp_t gfp)
+{
+	struct afs_addr_list *alist = op->estate->addresses;
+
+	op->call	= afs_get_call(call, afs_call_trace_get_op_call);
+	op->type	= call->type;
+	call->op	= op;
+	call->server	= afs_use_server(op->server, false, afs_server_trace_use_call);
+	call->key	= op->key;
+	call->intr	= !(op->flags & AFS_OPERATION_UNINTR);
+	call->peer	= rxrpc_kernel_get_peer(alist->addrs[op->addr_index].peer);
+	call->service_id = op->server->service_id;
+	afs_make_call(call, gfp);
+	afs_put_call(call, afs_call_trace_put_made_call);
 }
 
 /*
