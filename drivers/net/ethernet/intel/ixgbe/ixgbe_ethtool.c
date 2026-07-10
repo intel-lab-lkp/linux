@@ -466,6 +466,9 @@ static int ixgbe_set_link_ksettings(struct net_device *netdev,
 	u32 advertised, old;
 	int err = 0;
 
+	if (!netif_device_present(netdev))
+		return -ENETDOWN;
+
 	if ((hw->phy.media_type == ixgbe_media_type_copper) ||
 	    (hw->phy.multispeed_fiber)) {
 		/*
@@ -576,9 +579,9 @@ static void ixgbe_set_pauseparam_finalize(struct net_device *netdev,
 	/* If the thing changed then we'll update and use new autoneg. */
 	if (memcmp(fc, &hw->fc, sizeof(*fc))) {
 		hw->fc = *fc;
-		if (netif_running(netdev))
+		if (ixgbe_netif_running(netdev))
 			ixgbe_reinit_locked(adapter);
-		else
+		else if (netif_device_present(netdev))
 			ixgbe_reset(adapter);
 	}
 }
@@ -1266,7 +1269,7 @@ static int ixgbe_set_ringparam(struct net_device *netdev,
 	while (test_and_set_bit(__IXGBE_RESETTING, &adapter->state))
 		usleep_range(1000, 2000);
 
-	if (!netif_running(adapter->netdev)) {
+	if (!ixgbe_netif_running(adapter->netdev)) {
 		for (i = 0; i < adapter->num_tx_queues; i++)
 			adapter->tx_ring[i]->count = new_tx_count;
 		for (i = 0; i < adapter->num_xdp_queues; i++)
@@ -2249,10 +2252,11 @@ static void ixgbe_diag_test(struct net_device *netdev,
 			    struct ethtool_test *eth_test, u64 *data)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
-	bool if_running = netif_running(netdev);
+	bool if_running = ixgbe_netif_running(netdev);
 
-	if (ixgbe_removed(adapter->hw.hw_addr)) {
-		e_err(hw, "Adapter removed - test blocked\n");
+	if (ixgbe_removed(adapter->hw.hw_addr) ||
+	    !netif_device_present(netdev)) {
+		e_err(hw, "Adapter removed or detached - test blocked\n");
 		data[0] = 1;
 		data[1] = 1;
 		data[2] = 1;
@@ -2466,7 +2470,7 @@ static int ixgbe_nway_reset(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
 
-	if (netif_running(netdev))
+	if (ixgbe_netif_running(netdev))
 		ixgbe_reinit_locked(adapter);
 
 	return 0;
@@ -2650,7 +2654,8 @@ static int ixgbe_set_coalesce(struct net_device *netdev,
 		else
 			/* rx only or mixed */
 			q_vector->itr = rx_itr_param;
-		ixgbe_write_eitr(q_vector);
+		if (netif_device_present(netdev))
+			ixgbe_write_eitr(q_vector);
 	}
 
 	/*
@@ -3694,6 +3699,9 @@ static int ixgbe_set_eee_e610(struct net_device *netdev,
 	    kedata->eee_enabled)
 		return -EOPNOTSUPP;
 
+	if (!netif_device_present(netdev))
+		return -ENETDOWN;
+
 	hw->phy.eee_speeds_advertised = kedata->eee_enabled ?
 					hw->phy.eee_speeds_supported : 0;
 
@@ -3709,9 +3717,9 @@ static int ixgbe_set_eee_e610(struct net_device *netdev,
 	else
 		adapter->flags2 &= ~IXGBE_FLAG2_EEE_ENABLED;
 
-	if (netif_running(netdev))
+	if (ixgbe_netif_running(netdev))
 		ixgbe_reinit_locked(adapter);
-	else
+	else if (netif_device_present(netdev))
 		ixgbe_reset(adapter);
 
 	return 0;
@@ -3793,9 +3801,9 @@ static int ixgbe_set_eee(struct net_device *netdev, struct ethtool_keee *edata)
 	}
 
 	/* reset link */
-	if (netif_running(netdev))
+	if (ixgbe_netif_running(netdev))
 		ixgbe_reinit_locked(adapter);
-	else
+	else if (netif_device_present(netdev))
 		ixgbe_reset(adapter);
 
 	return 0;
@@ -3851,7 +3859,7 @@ static int ixgbe_set_priv_flags(struct net_device *netdev, u32 priv_flags)
 		adapter->flags2 = flags2;
 
 		/* reset interface to repopulate queues */
-		if (netif_running(netdev))
+		if (ixgbe_netif_running(netdev))
 			ixgbe_reinit_locked(adapter);
 	}
 

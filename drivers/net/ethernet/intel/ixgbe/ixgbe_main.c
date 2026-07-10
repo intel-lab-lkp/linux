@@ -7420,7 +7420,7 @@ static int ixgbe_change_mtu(struct net_device *netdev, int new_mtu)
 	/* must set new MTU before calling down or up */
 	WRITE_ONCE(netdev->mtu, new_mtu);
 
-	if (netif_running(netdev))
+	if (ixgbe_netif_running(netdev))
 		ixgbe_reinit_locked(adapter);
 
 	return 0;
@@ -9917,6 +9917,7 @@ int ixgbe_setup_tc(struct net_device *dev, u8 tc)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(dev);
 	struct ixgbe_hw *hw = &adapter->hw;
+	bool running = ixgbe_netif_running(dev);
 
 	/* Hardware supports up to 8 traffic classes */
 	if (tc > adapter->dcb_cfg.num_tcs.pg_tcs)
@@ -9929,7 +9930,10 @@ int ixgbe_setup_tc(struct net_device *dev, u8 tc)
 	 * match packet buffer alignment. Unfortunately, the
 	 * hardware is not flexible enough to do this dynamically.
 	 */
-	if (netif_running(dev))
+	if (!netif_device_present(dev))
+		return -ENETDOWN;
+
+	if (running)
 		ixgbe_close(dev);
 	else
 		ixgbe_reset(adapter);
@@ -9942,7 +9946,7 @@ int ixgbe_setup_tc(struct net_device *dev, u8 tc)
 			e_warn(probe, "DCB is not supported with XDP\n");
 
 			ixgbe_init_interrupt_scheme(adapter);
-			if (netif_running(dev))
+			if (running)
 				ixgbe_open(dev);
 			return -EINVAL;
 		}
@@ -9977,7 +9981,7 @@ int ixgbe_setup_tc(struct net_device *dev, u8 tc)
 
 	ixgbe_defrag_macvlan_pools(dev);
 
-	if (netif_running(dev))
+	if (running)
 		return ixgbe_open(dev);
 
 	return 0;
@@ -10503,9 +10507,9 @@ void ixgbe_do_reset(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
 
-	if (netif_running(netdev))
+	if (ixgbe_netif_running(netdev))
 		ixgbe_reinit_locked(adapter);
-	else
+	else if (netif_device_present(netdev))
 		ixgbe_reset(adapter);
 }
 
@@ -10837,7 +10841,7 @@ static void *ixgbe_fwd_add(struct net_device *pdev, struct net_device *vdev)
 	accel->pool = pool;
 	accel->netdev = vdev;
 
-	if (!netif_running(pdev))
+	if (!ixgbe_netif_running(pdev))
 		return accel;
 
 	err = ixgbe_fwd_ring_up(adapter, accel);
@@ -10968,8 +10972,10 @@ static int ixgbe_xdp_setup(struct net_device *dev, struct bpf_prog *prog)
 			synchronize_rcu();
 		err = ixgbe_setup_tc(dev, adapter->hw_tcs);
 
-		if (err)
+		if (err) {
+			xchg(&adapter->xdp_prog, old_prog);
 			return -EINVAL;
+		}
 		if (!prog)
 			xdp_features_clear_redirect_target(dev);
 	} else {

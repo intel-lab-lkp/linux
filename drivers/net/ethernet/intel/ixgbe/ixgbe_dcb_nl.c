@@ -277,17 +277,23 @@ static void ixgbe_dcbnl_get_pfc_cfg(struct net_device *netdev, int priority,
 static void ixgbe_dcbnl_devreset(struct net_device *dev)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(dev);
+	bool running;
+
+	if (!netif_device_present(dev))
+		return;
+
+	running = ixgbe_netif_running(dev);
 
 	while (test_and_set_bit(__IXGBE_RESETTING, &adapter->state))
 		usleep_range(1000, 2000);
 
-	if (netif_running(dev))
+	if (running)
 		dev->netdev_ops->ndo_stop(dev);
 
 	ixgbe_clear_interrupt_scheme(adapter);
 	ixgbe_init_interrupt_scheme(adapter);
 
-	if (netif_running(dev))
+	if (running)
 		dev->netdev_ops->ndo_open(dev);
 
 	clear_bit(__IXGBE_RESETTING, &adapter->state);
@@ -514,6 +520,9 @@ static int ixgbe_dcbnl_ieee_setets(struct net_device *dev,
 
 	if (!(adapter->dcbx_cap & DCB_CAP_DCBX_VER_IEEE))
 		return -EINVAL;
+
+	if (!netif_device_present(dev))
+		return -ENETDOWN;
 
 	if (!adapter->ixgbe_ieee_ets) {
 		adapter->ixgbe_ieee_ets = kmalloc_obj(struct ieee_ets);
