@@ -365,6 +365,39 @@ TUI OUTPUT
 The TUI output provides interactive interface to navigate
 through cachelines list and to display offset details.
 
+Pressing the 'TAB' key in the cacheline view switches to the function
+view.  The function view shows a three-level hierarchy of the same data,
+organized around functions rather than cachelines:
+
+  Level 1: primary functions, sorted by Cycles % (estimated load cycles:
+           HITM, peer-snoop and other-load cycles -- on systems whose
+           default display mode is peer, such as Arm64, the peer-snoop
+           component dominates)
+  Level 2: other functions that share cachelines with the level-1 function
+  Level 3: the specific shared cachelines for each function pair
+
+In the function view the 'd' key opens the detail view of the selected
+cacheline, 'e'/'+' expands or collapses the current entry, and 'TAB',
+'ESC' or 'q' returns to the cacheline view.
+
+For example, expanding a level-1 function reveals the functions it shares
+cachelines with, and expanding one of those reveals the specific shared
+cachelines:
+
+  Shared Data Functions Table   (27 entries, sorted on Cycles %)
+   Cycles  Store
+        %  count  Code address        Symbol           Cacheline
+  ----------------------------------------------------------------------
+  - 39.03%   541  - 0xffffffffa2fc5b08  - [k] cpupri_set
+             450  - 0xffffffffa2fa28a5  - [k] pull_rt_task
+             450                                      0xff2d0082809da080
+
+Here cpupri_set is the most contended function (39.03% of the estimated
+load cycles); it shares data with pull_rt_task (450 stores into the shared
+data); and the contention is on the single cacheline 0xff2d0082809da080.
+This is the false-sharing chain that the cacheline view otherwise leaves
+to be reconstructed by hand.
+
 For details please refer to the help window by pressing '?' key.
 
 CREDITS
