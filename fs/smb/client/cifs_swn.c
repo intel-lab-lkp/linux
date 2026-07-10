@@ -323,7 +323,8 @@ cifs_swn_reg_get_tcon(const struct cifs_swn_reg *swnreg)
 /*
  * Sends a register message to the userspace daemon based on the registration.
  * The authentication information to connect to the witness service is bundled
- * into the message.
+ * into the message. This function can sleep while allocating the genlmsg so
+ * it must be called after taking a swnreg reference and release the lock.
  */
 static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg)
 {
@@ -414,7 +415,9 @@ nlmsg_fail:
 }
 
 /*
- * Sends an uregister message to the userspace daemon based on the registration
+ * Sends an unregister message to the userspace daemon based on the registration.
+ * This function can sleep while allocating the genlmsg so it must be called after
+ * taking a swnreg reference and release the lock.
  */
 static int cifs_swn_send_unregister_message(struct cifs_swn_reg *swnreg)
 {
@@ -481,6 +484,11 @@ nlmsg_fail:
 	return ret;
 }
 
+/*
+ * Release a registration. Must be called with the last reference dropped (the
+ * refcount has reached zero) and with the registration already removed from the
+ * IDR under cifs_swnreg_idr_mutex, so it is no longer discoverable.
+ */
 static void cifs_swn_reg_release(struct cifs_swn_reg *swnreg)
 {
 	int ret;
@@ -614,99 +622,6 @@ static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
 	return ERR_PTR(-ENOENT);
 }
 
-/*
- * Get a registration for the tcon's server and share name, allocating a new one if it does not
- * exists
- */
-static struct cifs_swn_reg *cifs_get_swn_reg(struct cifs_tcon *tcon)
-{
-	struct cifs_swn_reg *swnreg = NULL;
-	int ret;
-
-	mutex_lock(&cifs_swnreg_idr_mutex);
-
-	/* Check if we are already registered for this network and share names */
-	swnreg = cifs_find_swn_reg(tcon);
-	if (!IS_ERR(swnreg)) {
-		kref_get(&swnreg->ref_count);
-		goto unlock;
-	} else if (PTR_ERR(swnreg) != -ENOENT) {
-		goto unlock;
-	}
-
-	swnreg = kmalloc_obj(struct cifs_swn_reg, GFP_ATOMIC);
-	if (swnreg == NULL) {
-		ret = -ENOMEM;
-		goto fail_unlock;
-	}
-
-	kref_init(&swnreg->ref_count);
-
-	swnreg->id = idr_alloc(&cifs_swnreg_idr, swnreg, 1, 0, GFP_ATOMIC);
-	if (swnreg->id < 0) {
-		cifs_dbg(FYI, "%s: failed to allocate registration id\n", __func__);
-		ret = swnreg->id;
-		goto fail;
-	}
-
-	swnreg->net_name = extract_hostname(tcon->tree_name);
-	if (IS_ERR(swnreg->net_name)) {
-		ret = PTR_ERR(swnreg->net_name);
-		cifs_dbg(VFS, "%s: failed to extract host name from target: %d\n", __func__, ret);
-		goto fail_idr;
-	}
-
-	swnreg->share_name = extract_sharename(tcon->tree_name);
-	if (IS_ERR(swnreg->share_name)) {
-		ret = PTR_ERR(swnreg->share_name);
-		cifs_dbg(VFS, "%s: failed to extract share name from target: %d\n", __func__, ret);
-		goto fail_net_name;
-	}
-
-	ret = cifs_swn_reg_set_auth(swnreg, tcon);
-	if (ret != 0) {
-		cifs_dbg(VFS, "%s: failed to set auth info: %d\n", __func__,
-			 ret);
-		goto fail_share_name;
-	}
-
-	/*
-	 * If there is an address stored use it instead of the server address, because we are
-	 * in the process of reconnecting to it after a share has been moved or we have been
-	 * told to switch to it (client move message). In these cases we unregister from the
-	 * server address and register to the new address when we receive the notification.
-	 */
-	if (tcon->ses->server->use_swn_dstaddr)
-		swnreg->addr = tcon->ses->server->swn_dstaddr;
-	else
-		swnreg->addr = tcon->ses->server->dstaddr;
-
-	swnreg->net_name_notify = true;
-	swnreg->share_name_notify =
-		(tcon->capabilities & SMB2_SHARE_CAP_ASYMMETRIC);
-	swnreg->ip_notify = false;
-
-	swnreg->check_interval = tcon->ses->server->echo_interval;
-	INIT_DELAYED_WORK(&swnreg->check, cifs_swn_reg_check);
-
-	queue_delayed_work(cifsiod_wq, &swnreg->check, swnreg->check_interval);
-unlock:
-	mutex_unlock(&cifs_swnreg_idr_mutex);
-
-	return swnreg;
-fail_share_name:
-	kfree(swnreg->share_name);
-fail_net_name:
-	kfree(swnreg->net_name);
-fail_idr:
-	idr_remove(&cifs_swnreg_idr, swnreg->id);
-fail:
-	kfree(swnreg);
-fail_unlock:
-	mutex_unlock(&cifs_swnreg_idr_mutex);
-	return ERR_PTR(ret);
-}
-
 static void cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
 					    const char *name, int state)
 {
@@ -816,8 +731,8 @@ cifs_swn_handle_notification_tcon(const struct cifs_swn_notification *not,
 
 /*
  * This function process a notification received for a registration. It
- * searches all matching tcons to deliver it and then unregisters/registers
- * as necessary if the address has changed.
+ * unregisters/registers as necessary and applies the notification to all
+ * matching tcons.
  */
 static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
 {
@@ -986,15 +901,103 @@ int cifs_swn_register(struct cifs_tcon *tcon)
 	struct cifs_swn_reg *swnreg;
 	int ret;
 
-	swnreg = cifs_get_swn_reg(tcon);
-	if (IS_ERR(swnreg))
-		return PTR_ERR(swnreg);
+	mutex_lock(&cifs_swnreg_idr_mutex);
 
-	ret = cifs_swn_send_register_message(swnreg);
-	if (ret < 0) {
-		cifs_dbg(VFS, "%s: Failed to send swn register message: %d\n", __func__, ret);
-		/* Do not put the swnreg or return error, the check task will retry */
+	swnreg = cifs_find_swn_reg(tcon);
+	if (!IS_ERR(swnreg)) {
+		/*
+		 * There is a registration matching this tcon, could be a second mount of
+		 * the same share, increment the refcount.
+		 */
+		if (kref_get_unless_zero(&swnreg->ref_count)) {
+			mutex_unlock(&cifs_swnreg_idr_mutex);
+			return 0;
+		}
+		/* Else it is being released, allocate new one */
+	} else if (PTR_ERR(swnreg) != -ENOENT) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return PTR_ERR(swnreg);
 	}
+
+	/* Allocate new registration */
+	swnreg = kzalloc_obj(struct cifs_swn_reg, GFP_KERNEL);
+	if (swnreg == NULL) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return -ENOMEM;
+	}
+
+	kref_init(&swnreg->ref_count);
+
+	swnreg->id = idr_alloc(&cifs_swnreg_idr, swnreg, 1, 0, GFP_KERNEL);
+	if (swnreg->id < 0) {
+		ret = swnreg->id;
+		cifs_dbg(FYI, "%s: failed to allocate registration id\n",
+			 __func__);
+		kfree(swnreg);
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return ret;
+	}
+
+	swnreg->net_name = extract_hostname(tcon->tree_name);
+	if (IS_ERR(swnreg->net_name)) {
+		ret = PTR_ERR(swnreg->net_name);
+		cifs_dbg(VFS,
+			 "%s: failed to extract host name from target: %d\n",
+			 __func__, ret);
+		idr_remove(&cifs_swnreg_idr, swnreg->id);
+		kfree(swnreg);
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return ret;
+	}
+
+	swnreg->share_name = extract_sharename(tcon->tree_name);
+	if (IS_ERR(swnreg->share_name)) {
+		ret = PTR_ERR(swnreg->share_name);
+		cifs_dbg(VFS,
+			 "%s: failed to extract share name from target: %d\n",
+			 __func__, ret);
+		kfree(swnreg->net_name);
+		idr_remove(&cifs_swnreg_idr, swnreg->id);
+		kfree(swnreg);
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return ret;
+	}
+
+	ret = cifs_swn_reg_set_auth(swnreg, tcon);
+	if (ret != 0) {
+		cifs_dbg(VFS, "%s: failed to set auth info: %d\n", __func__,
+			 ret);
+		kfree(swnreg->net_name);
+		kfree(swnreg->share_name);
+		idr_remove(&cifs_swnreg_idr, swnreg->id);
+		kfree(swnreg);
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return ret;
+	}
+
+	/*
+	 * If there is an address stored use it instead of the server address, because we are
+	 * in the process of reconnecting to it after a share has been moved or we have been
+	 * told to switch to it (client move message). In these cases we unregister from the
+	 * server address and register to the new address when we receive the notification.
+	 */
+	if (tcon->ses->server->use_swn_dstaddr)
+		swnreg->addr = tcon->ses->server->swn_dstaddr;
+	else
+		swnreg->addr = tcon->ses->server->dstaddr;
+
+	swnreg->net_name_notify = true;
+	swnreg->share_name_notify =
+		(tcon->capabilities & SMB2_SHARE_CAP_ASYMMETRIC);
+	swnreg->ip_notify = false;
+
+	swnreg->check_interval = tcon->ses->server->echo_interval;
+	INIT_DELAYED_WORK(&swnreg->check, cifs_swn_reg_check);
+
+	/* Queue a immediate run to send the netlink message */
+	queue_delayed_work(cifsiod_wq, &swnreg->check, 0);
+
+	mutex_unlock(&cifs_swnreg_idr_mutex);
 
 	return 0;
 }
