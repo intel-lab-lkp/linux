@@ -951,7 +951,7 @@ static void ata_eh_set_pending(struct ata_port *ap, bool fastdrain)
 	 * If we have a deferred qc, requeue it so that it is retried once EH
 	 * completes.
 	 */
-	ata_scsi_requeue_deferred_qc(ap);
+	ata_scsi_requeue_deferred_qc(ap, NULL);
 
 	if (!fastdrain)
 		return;
