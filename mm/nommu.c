@@ -1598,7 +1598,17 @@ static unsigned long do_mremap(unsigned long addr,
 		return (unsigned long) -ENOMEM;
 
 	/* all checks complete - do it */
-	vma->vm_end = vma->vm_start + new_len;
+	if (new_len < old_len) {
+		/* shrink only happens addr + new_len and old_len are in different pages */
+		VMA_ITERATOR(vmi, current->mm, addr);
+		/* vmi_shrink_vma() needs from/to pointers to be removed,
+		 * (mainly used in munmap) so, specify them.
+		 */
+		vmi_shrink_vma(&vmi, vma, addr + new_len, addr + old_len);
+	} else {
+		/* when there are no shrink, update vma.  */
+		vma->vm_end = vma->vm_start + new_len;
+	}
 	return vma->vm_start;
 }
 
