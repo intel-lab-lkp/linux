@@ -216,7 +216,7 @@ int atomisp_freq_scaling(struct atomisp_device *isp,
 	curr_rules.fps = fps;
 	curr_rules.run_mode = isp->asd.run_mode->val;
 
-	/* search for the target frequency by looping freq rules*/
+	/* Search for the target frequency by looping freq rules. */
 	for (i = 0; i < dfs->dfs_table_size; i++) {
 		if (curr_rules.width != dfs->dfs_table[i].width &&
 		    dfs->dfs_table[i].width != ISP_FREQ_RULE_ANY)
@@ -259,7 +259,7 @@ done:
  */
 int atomisp_reset(struct atomisp_device *isp)
 {
-	/* Reset ISP by power-cycling it */
+	/* Reset ISP by power-cycling it. */
 	int ret = 0;
 
 	dev_dbg(isp->dev, "%s\n", __func__);
@@ -420,7 +420,7 @@ static void print_csi_rx_errors(enum mipi_port_id port,
 		dev_err(isp->dev, "  line sync error");
 }
 
-/* Clear irq reg */
+/* Clear irq reg. */
 static void clear_irq_reg(struct atomisp_device *isp)
 {
 	struct pci_dev *pdev = to_pci_dev(isp->dev);
@@ -431,7 +431,7 @@ static void clear_irq_reg(struct atomisp_device *isp)
 	pci_write_config_dword(pdev, PCI_INTERRUPT_CTRL, msg_ret);
 }
 
-/* interrupt handling function*/
+/* Interrupt handling function. */
 irqreturn_t atomisp_isr(int irq, void *dev)
 {
 	struct atomisp_device *isp = (struct atomisp_device *)dev;
@@ -481,7 +481,7 @@ irqreturn_t atomisp_isr(int irq, void *dev)
 
 	if ((irq_infos & IA_CSS_IRQ_INFO_INPUT_SYSTEM_ERROR) ||
 	    (irq_infos & IA_CSS_IRQ_INFO_IF_ERROR)) {
-		/* handle mipi receiver error */
+		/* Handle mipi receiver error. */
 		u32 rx_infos;
 		enum mipi_port_id port;
 
@@ -532,7 +532,7 @@ void atomisp_clear_css_buffer_counters(struct atomisp_sub_device *asd)
 	asd->dis_bufs_in_css = 0;
 }
 
-/* 0x100000 is the start of dmem inside SP */
+/* 0x100000 is the start of dmem inside SP. */
 #define SP_DMEM_BASE	0x100000
 
 void dump_sp_dmem(struct atomisp_device *isp, unsigned int addr,
@@ -614,7 +614,7 @@ void atomisp_flush_video_pipe(struct atomisp_video_pipe *pipe, enum vb2_buffer_s
 	spin_unlock_irqrestore(&pipe->irq_lock, irqflags);
 }
 
-/* clean out the parameters that did not apply */
+/* Clean out the parameters that did not apply. */
 void atomisp_flush_params_queue(struct atomisp_video_pipe *pipe)
 {
 	struct atomisp_css_params_with_list *param;
