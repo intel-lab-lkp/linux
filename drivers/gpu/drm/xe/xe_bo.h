@@ -110,6 +110,7 @@ enum xe_madv_purgeable_state {
 };
 
 struct sg_table;
+struct ttm_tt;
 
 struct xe_bo *xe_bo_alloc(void);
 void xe_bo_free(struct xe_bo *bo);
@@ -547,6 +548,7 @@ void xe_bo_dev_init(struct xe_bo_dev *bo_device);
 void xe_bo_dev_fini(struct xe_bo_dev *bo_device);
 
 struct sg_table *xe_bo_sg(struct xe_bo *bo);
+struct sg_table *xe_tt_sg(struct ttm_tt *tt);
 
 /*
  * xe_sg_segment_size() - Provides upper limit for sg segment size.
