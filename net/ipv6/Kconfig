@@ -314,6 +314,18 @@ config IPV6_SEG6_BPF
 	depends on IPV6_SEG6_LWTUNNEL
 	depends on IPV6 = y
 
+config IPV6_SEG6_MOBILE
+	bool "IPv6: SRv6 Mobile User Plane (RFC 9433) behaviors"
+	depends on IPV6_SEG6_LWTUNNEL
+	help
+	  Support for the SRv6 Mobile User Plane behaviors defined by
+	  RFC 9433.  These behaviors translate between SRv6 and GTP-U,
+	  or operate on SRv6 packets carrying mobile-user-plane traffic,
+	  and are exposed via the LWTUNNEL_ENCAP_SEG6_MOBILE lightweight
+	  tunnel encapsulation.
+
+	  If unsure, say N.
+
 config IPV6_RPL_LWTUNNEL
 	bool "IPv6: RPL Source Routing Header support"
 	depends on IPV6
