@@ -2912,6 +2912,30 @@ static void en7581_mac_port_get_caps(struct dsa_switch *ds, int port,
 	}
 }
 
+static void en7528_mac_port_get_caps(struct dsa_switch *ds, int port,
+				     struct phylink_config *config)
+{
+	switch (port) {
+	/* Ports which are connected to switch PHYs. There is no MII pinout. */
+	case 1 ... 4:
+		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
+			  config->supported_interfaces);
+
+		config->mac_capabilities |= MAC_10 | MAC_100 | MAC_1000FD;
+		break;
+
+	/* Port 6 is connected to SoC's GMAC at 1000 Mbps full duplex. There
+	 * is no MII pinout.
+	 */
+	case 6:
+		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
+			  config->supported_interfaces);
+
+		config->mac_capabilities |= MAC_1000FD;
+		break;
+	}
+}
+
 static void
 mt7530_mac_config(struct dsa_switch *ds, int port, unsigned int mode,
 		  phy_interface_t interface)
@@ -3254,7 +3278,8 @@ mt753x_conduit_state_change(struct dsa_switch *ds,
 	 * forwarded to the numerically smallest CPU port whose conduit
 	 * interface is up.
 	 */
-	if (priv->id != ID_MT7530 && priv->id != ID_MT7621)
+	if (priv->id != ID_MT7530 && priv->id != ID_MT7621 &&
+	    priv->id != ID_EN7528)
 		return;
 
 	mask = BIT(cpu_dp->index);
@@ -3319,9 +3344,17 @@ static int mt753x_setup_tc(struct dsa_switch *ds, int port,
 	}
 }
 
+/* The EN7528 LAN ports are integrated GPHYs at MDIO addresses 9..12 (switch
+ * ports 1..4) on the switch internal MDIO bus, reachable only through the PHY
+ * indirect access registers. There is no mdiodev to derive the addresses from.
+ */
+#define EN7528_GPHY_BASE		9
+#define EN7528_NUM_GPHYS		4
+
 static int mt7988_setup(struct dsa_switch *ds)
 {
 	struct mt7530_priv *priv = ds->priv;
+	int i;
 
 	/* Reset the switch */
 	reset_control_assert(priv->rstc);
@@ -3341,6 +3374,17 @@ static int mt7988_setup(struct dsa_switch *ds)
 
 	/* Reset the switch PHYs */
 	mt7530_write(priv, MT7530_SYS_CTRL, SYS_CTRL_PHY_RST);
+
+	/* The EN7528 LAN GPHYs advertise EEE by default, but negotiating EEE
+	 * with common link partners (e.g. Realtek GbE NICs) results in an
+	 * unstable link with dropped frames. Disable EEE advertisement on
+	 * them.
+	 */
+	if (priv->id == ID_EN7528)
+		for (i = EN7528_GPHY_BASE;
+		     i < EN7528_GPHY_BASE + EN7528_NUM_GPHYS; i++)
+			mt7531_ind_c45_phy_write(priv, i, MDIO_MMD_AN,
+						 MDIO_AN_EEE_ADV, 0);
 
 	return mt7531_setup_common(ds);
 }
@@ -3458,6 +3502,16 @@ const struct mt753x_info mt753x_table[] = {
 		.phy_read_c45 = mt7531_ind_c45_phy_read,
 		.phy_write_c45 = mt7531_ind_c45_phy_write,
 		.mac_port_get_caps = en7581_mac_port_get_caps,
+	},
+	[ID_EN7528] = {
+		.id = ID_EN7528,
+		.pcs_ops = &mt7530_pcs_ops,
+		.sw_setup = mt7988_setup,
+		.phy_read_c22 = mt7531_ind_c22_phy_read,
+		.phy_write_c22 = mt7531_ind_c22_phy_write,
+		.phy_read_c45 = mt7531_ind_c45_phy_read,
+		.phy_write_c45 = mt7531_ind_c45_phy_write,
+		.mac_port_get_caps = en7528_mac_port_get_caps,
 	},
 };
 EXPORT_SYMBOL_GPL(mt753x_table);
