@@ -36,6 +36,24 @@ struct cifs_swn_reg {
 	struct delayed_work check;
 };
 
+struct cifs_swn_notification {
+	int type;
+	union {
+		struct {
+			const char *name;
+			int state;
+		} resource_name_changed;
+		struct {
+			struct sockaddr_storage *addr;
+		} client_move;
+		struct {
+			struct sockaddr_storage *addr;
+		} share_move;
+	} data;
+
+	struct cifs_swn_reg *swnreg;
+};
+
 static int cifs_swn_auth_info_krb(struct cifs_tcon *tcon, struct sk_buff *skb)
 {
 	int ret;
@@ -620,70 +638,121 @@ static int cifs_swn_client_move(struct cifs_tcon *tcon,
 	return cifs_swn_reconnect(tcon, addr);
 }
 
+static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
+{
+	switch (not->type) {
+	case CIFS_SWN_NOTIFICATION_RESOURCE_CHANGE:
+		return cifs_swn_resource_state_changed(
+			not->swnreg->tcon, not->data.resource_name_changed.name,
+			not->data.resource_name_changed.state);
+	case CIFS_SWN_NOTIFICATION_CLIENT_MOVE:
+		return cifs_swn_client_move(not->swnreg->tcon,
+					    not->data.client_move.addr);
+	default:
+		cifs_dbg(FYI, "%s: unknown notification type %d\n", __func__,
+			 not->type);
+		break;
+	}
+	return 0;
+}
+
 int cifs_swn_notify(struct sk_buff *skb, struct genl_info *info)
 {
-	struct cifs_swn_reg *swnreg;
-	char name[256];
-	int type;
+	int swnreg_id;
+	struct cifs_swn_notification not;
+	int ret;
 
+	/* Get the registration ID */
 	if (info->attrs[CIFS_GENL_ATTR_SWN_REGISTRATION_ID]) {
-		int swnreg_id;
-
-		swnreg_id = nla_get_u32(info->attrs[CIFS_GENL_ATTR_SWN_REGISTRATION_ID]);
-		mutex_lock(&cifs_swnreg_idr_mutex);
-		swnreg = idr_find(&cifs_swnreg_idr, swnreg_id);
-		mutex_unlock(&cifs_swnreg_idr_mutex);
-		if (swnreg == NULL) {
-			cifs_dbg(FYI, "%s: registration id %d not found\n", __func__, swnreg_id);
-			return -EINVAL;
-		}
+		swnreg_id = nla_get_u32(
+			info->attrs[CIFS_GENL_ATTR_SWN_REGISTRATION_ID]);
 	} else {
 		cifs_dbg(FYI, "%s: missing registration id attribute\n", __func__);
 		return -EINVAL;
 	}
 
+	/* Fill the notification struct */
 	if (info->attrs[CIFS_GENL_ATTR_SWN_NOTIFICATION_TYPE]) {
-		type = nla_get_u32(info->attrs[CIFS_GENL_ATTR_SWN_NOTIFICATION_TYPE]);
+		not.type = nla_get_u32(
+			info->attrs[CIFS_GENL_ATTR_SWN_NOTIFICATION_TYPE]);
 	} else {
 		cifs_dbg(FYI, "%s: missing notification type attribute\n", __func__);
 		return -EINVAL;
 	}
 
-	switch (type) {
+	switch (not.type) {
 	case CIFS_SWN_NOTIFICATION_RESOURCE_CHANGE: {
-		int state;
-
 		if (info->attrs[CIFS_GENL_ATTR_SWN_RESOURCE_NAME]) {
-			nla_strscpy(name, info->attrs[CIFS_GENL_ATTR_SWN_RESOURCE_NAME],
-					sizeof(name));
+			not.data.resource_name_changed
+				.name = (const char *)nla_data(
+				info->attrs[CIFS_GENL_ATTR_SWN_RESOURCE_NAME]);
 		} else {
 			cifs_dbg(FYI, "%s: missing resource name attribute\n", __func__);
 			return -EINVAL;
 		}
+
 		if (info->attrs[CIFS_GENL_ATTR_SWN_RESOURCE_STATE]) {
-			state = nla_get_u32(info->attrs[CIFS_GENL_ATTR_SWN_RESOURCE_STATE]);
+			not.data.resource_name_changed.state = nla_get_u32(
+				info->attrs[CIFS_GENL_ATTR_SWN_RESOURCE_STATE]);
 		} else {
 			cifs_dbg(FYI, "%s: missing resource state attribute\n", __func__);
 			return -EINVAL;
 		}
-		return cifs_swn_resource_state_changed(swnreg->tcon, name,
-						       state);
-	}
+	} break;
 	case CIFS_SWN_NOTIFICATION_CLIENT_MOVE: {
-		struct sockaddr_storage addr;
-
 		if (info->attrs[CIFS_GENL_ATTR_SWN_IP]) {
-			nla_memcpy(&addr, info->attrs[CIFS_GENL_ATTR_SWN_IP], sizeof(addr));
+			not.data.client_move.addr =
+				nla_data(info->attrs[CIFS_GENL_ATTR_SWN_IP]);
 		} else {
 			cifs_dbg(FYI, "%s: missing IP address attribute\n", __func__);
 			return -EINVAL;
 		}
-		return cifs_swn_client_move(swnreg->tcon, &addr);
-	}
+	} break;
 	default:
-		cifs_dbg(FYI, "%s: unknown notification type %d\n", __func__, type);
-		break;
+		cifs_dbg(FYI, "%s: unknown notification type %d\n", __func__,
+			 not.type);
+		return 0;
 	}
+
+	/*
+	 * Get the registration.
+	 */
+	mutex_lock(&cifs_swnreg_idr_mutex);
+	not.swnreg = idr_find(&cifs_swnreg_idr, swnreg_id);
+	if (not.swnreg == NULL) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		cifs_dbg(FYI, "%s: registration id %d not found\n", __func__,
+			 swnreg_id);
+		return 0;
+	}
+
+	/*
+	 * Increment the refcount under the lock while processing the notification
+	 * and release the swnreg_idr_mutex because processing will take
+	 * cifs_tcp_ses_lock.
+	 */
+	if (!kref_get_unless_zero(&not.swnreg->ref_count)) {
+		/* The registration is being released, ignore the notificaiton */
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return 0;
+	}
+	mutex_unlock(&cifs_swnreg_idr_mutex);
+
+	ret = cifs_swn_handle_notification(&not);
+	if (ret) {
+		cifs_dbg(FYI,
+			"%s: Failed to process notification for registration id %d: %d\n",
+			__func__, swnreg_id, ret);
+	}
+
+	mutex_lock(&cifs_swnreg_idr_mutex);
+	if (kref_put(&not.swnreg->ref_count, cifs_swn_reg_idr_remove)) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		cancel_delayed_work_sync(&not.swnreg->check);
+		cifs_swn_reg_release(not.swnreg);
+		return 0;
+	}
+	mutex_unlock(&cifs_swnreg_idr_mutex);
 
 	return 0;
 }
