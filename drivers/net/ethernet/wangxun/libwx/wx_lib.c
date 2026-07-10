@@ -3223,12 +3223,37 @@ netdev_features_t wx_fix_features(struct net_device *netdev,
 EXPORT_SYMBOL(wx_fix_features);
 
 #define WX_MAX_TUNNEL_HDR_LEN	80
+#define WX_VLAN_MAX_DEPTH	8
 netdev_features_t wx_features_check(struct sk_buff *skb,
 				    struct net_device *netdev,
 				    netdev_features_t features)
 {
 	struct wx *wx = netdev_priv(netdev);
+	u16 parse_depth = WX_VLAN_MAX_DEPTH;
+	__be16 type = skb->protocol;
+	u16 vlan_depth = ETH_HLEN;
+	u32 vlan_num = 0;
 
+	if (!skb_vlan_tag_present(skb))
+		goto tunnel_check;
+
+	vlan_num++;
+	while (eth_type_vlan(type) && --parse_depth) {
+		struct vlan_hdr vhdr, *vh;
+
+		vh = skb_header_pointer(skb, vlan_depth, sizeof(vhdr), &vhdr);
+		if (unlikely(!vh))
+			break;
+
+		type = vh->h_vlan_encapsulated_proto;
+		vlan_depth += VLAN_HLEN;
+		vlan_num++;
+	}
+
+	if (vlan_num > 2)
+		features &= ~(NETIF_F_HW_VLAN_CTAG_TX |
+			      NETIF_F_HW_VLAN_STAG_TX);
+tunnel_check:
 	if (!skb->encapsulation)
 		return features;
 
