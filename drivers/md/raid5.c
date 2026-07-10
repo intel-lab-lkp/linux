@@ -7322,7 +7322,13 @@ static int alloc_thread_groups(struct r5conf *conf, int cnt, int *group_cnt,
 		*worker_groups = NULL;
 		return 0;
 	}
-	*group_cnt = num_possible_nodes();
+	/*
+	 * worker_groups is indexed by cpu_to_group() == cpu_to_node(), a node
+	 * id, so it must have room for the largest possible id.  Size it by
+	 * nr_node_ids (one past that id), not num_possible_nodes(), which is
+	 * only the node count and is smaller on a sparse node map.
+	 */
+	*group_cnt = nr_node_ids;
 	size = sizeof(struct r5worker) * cnt;
 	workers = kcalloc(size, *group_cnt, GFP_NOIO);
 	*worker_groups = kzalloc_objs(struct r5worker_group, *group_cnt,
