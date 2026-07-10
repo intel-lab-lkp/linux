@@ -12,10 +12,12 @@
 #include "sched.h"
 
 enum hk_flags {
-	HK_FLAG_DOMAIN_BOOT	= BIT(HK_TYPE_DOMAIN_BOOT),
-	HK_FLAG_DOMAIN		= BIT(HK_TYPE_DOMAIN),
-	HK_FLAG_MANAGED_IRQ	= BIT(HK_TYPE_MANAGED_IRQ),
-	HK_FLAG_KERNEL_NOISE	= BIT(HK_TYPE_KERNEL_NOISE),
+	HK_FLAG_DOMAIN_BOOT	  = BIT(HK_TYPE_DOMAIN_BOOT),
+	HK_FLAG_DOMAIN		  = BIT(HK_TYPE_DOMAIN),
+	HK_FLAG_KERNEL_NOISE_BOOT = BIT(HK_TYPE_KERNEL_NOISE_BOOT),
+	HK_FLAG_KERNEL_NOISE	  = BIT(HK_TYPE_KERNEL_NOISE),
+	HK_FLAG_MANAGED_IRQ_BOOT  = BIT(HK_TYPE_MANAGED_IRQ_BOOT),
+	HK_FLAG_MANAGED_IRQ	  = BIT(HK_TYPE_MANAGED_IRQ),
 };
 
 DEFINE_STATIC_KEY_FALSE(housekeeping_overridden);
@@ -34,25 +36,40 @@ bool housekeeping_enabled(enum hk_type type)
 }
 EXPORT_SYMBOL_GPL(housekeeping_enabled);
 
-static bool housekeeping_dereference_check(enum hk_type type)
+/*
+ * Types that can change at runtime via cpuset isolated partitions.
+ * Boot-only types (DOMAIN_BOOT) are always safe to read without lockdep.
+ */
+static bool housekeeping_type_can_change(enum hk_type type)
 {
-	if (IS_ENABLED(CONFIG_LOCKDEP) && type == HK_TYPE_DOMAIN) {
-		/* Cpuset isn't even writable yet? */
-		if (system_state <= SYSTEM_SCHEDULING)
-			return true;
-
-		/* CPU hotplug write locked, so cpuset partition can't be overwritten */
-		if (IS_ENABLED(CONFIG_HOTPLUG_CPU) && lockdep_is_cpus_write_held())
-			return true;
-
-		/* Cpuset lock held, partitions not writable */
-		if (IS_ENABLED(CONFIG_CPUSETS) && lockdep_is_cpuset_held())
-			return true;
-
+	switch (type) {
+	case HK_TYPE_DOMAIN:
+	case HK_TYPE_KERNEL_NOISE:
+	case HK_TYPE_MANAGED_IRQ:
+		return true;
+	default:
 		return false;
 	}
+}
 
-	return true;
+static bool housekeeping_dereference_check(enum hk_type type)
+{
+	if (!IS_ENABLED(CONFIG_LOCKDEP) || !housekeeping_type_can_change(type))
+		return true;
+
+	/* Cpuset isn't even writable yet? */
+	if (system_state <= SYSTEM_SCHEDULING)
+		return true;
+
+	/* CPU hotplug write locked, so cpuset partition can't be overwritten */
+	if (IS_ENABLED(CONFIG_HOTPLUG_CPU) && lockdep_is_cpus_write_held())
+		return true;
+
+	/* Cpuset lock held, partitions not writable */
+	if (IS_ENABLED(CONFIG_CPUSETS) && lockdep_is_cpuset_held())
+		return true;
+
+	return false;
 }
 
 static inline struct cpumask *housekeeping_cpumask_dereference(enum hk_type type)
@@ -75,12 +92,26 @@ const struct cpumask *housekeeping_cpumask(enum hk_type type)
 }
 EXPORT_SYMBOL_GPL(housekeeping_cpumask);
 
+const struct cpumask *housekeeping_cpumask_rcu(enum hk_type type)
+{
+	const struct cpumask *mask = NULL;
+
+	if (static_branch_unlikely(&housekeeping_overridden)) {
+		if (READ_ONCE(housekeeping.flags) & BIT(type))
+			mask = rcu_dereference(housekeeping.cpumasks[type]);
+	}
+	if (!mask)
+		mask = cpu_possible_mask;
+	return mask;
+}
+EXPORT_SYMBOL_GPL(housekeeping_cpumask_rcu);
+
 int housekeeping_any_cpu(enum hk_type type)
 {
 	int cpu;
 
 	if (static_branch_unlikely(&housekeeping_overridden)) {
-		if (housekeeping.flags & BIT(type)) {
+		if (READ_ONCE(housekeeping.flags) & BIT(type)) {
 			cpu = sched_numa_find_closest(housekeeping_cpumask(type), smp_processor_id());
 			if (cpu < nr_cpu_ids)
 				return cpu;
@@ -160,6 +191,130 @@ int housekeeping_update(struct cpumask *isol_mask)
 	kfree(old);
 
 	return 0;
+}
+
+/**
+ * housekeeping_update_types - Update housekeeping masks for specified types
+ * @type_mask: Bitmask of housekeeping types to update
+ * @isol_mask: CPUs being added to the isolation set
+ *
+ * For each type in @type_mask, compute the trial mask as
+ * (boot snapshot & ~@isol_mask), validate it against @cpu_online_mask,
+ * then swap the RCU mask pointer and free the old mask after
+ * synchronize_rcu().  Anchoring on the immutable boot snapshot
+ * (HK_TYPE_*_BOOT) keeps the runtime mask a subset of the boot set and
+ * lets de-isolation restore the boot configuration exactly.
+ *
+ * The updated mask only takes effect for subsystems as CPUs cycle
+ * through hotplug; callers isolate CPUs via the CPU hotplug machinery so
+ * that tick, RCU and interrupt state is reconfigured by the existing
+ * online/offline callbacks rather than reconfigured in place.
+ *
+ * HK_TYPE_KERNEL_NOISE also supports runtime first-enable: when neither
+ * nohz_full= nor isolcpus=nohz was given at boot, no boot snapshot
+ * exists, so cpu_possible_mask is the implicit boot set and the type
+ * flag is set in housekeeping.flags on the first call.
+ *
+ * Return: 0 on success, -ENOMEM on allocation failure, -EINVAL if
+ * a trial mask has no online CPUs.
+ */
+int housekeeping_update_types(unsigned long type_mask,
+			      struct cpumask *isol_mask)
+{
+	struct cpumask *trials[HK_TYPE_MAX] = {};
+	struct cpumask *old_masks[HK_TYPE_MAX] = {};
+	enum hk_type type;
+	int ret = 0;
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX) {
+		const struct cpumask *base;
+
+		if (type == HK_TYPE_DOMAIN_BOOT)
+			continue;
+		if (!housekeeping_enabled(type)) {
+			/*
+			 * HK_TYPE_KERNEL_NOISE supports runtime first-enable
+			 * for DHM isolated partitions created without nohz_full=
+			 * at boot.  All other types must be boot-enabled.
+			 */
+			if (type != HK_TYPE_KERNEL_NOISE)
+				continue;
+		}
+
+		/*
+		 * Compute the trial mask relative to the immutable boot
+		 * snapshot, never relative to the current (already shrunk)
+		 * mask.  Using the current mask would let it shrink
+		 * monotonically across isolation/de-isolation cycles and would
+		 * never recover CPUs once de-isolated.  Anchoring on the boot
+		 * snapshot keeps the runtime mask a subset of the boot set and
+		 * lets de-isolation restore exactly the boot configuration.
+		 *
+		 * HK_TYPE_KERNEL_NOISE additionally supports runtime
+		 * first-enable: when no nohz_full=/isolcpus=nohz was given at
+		 * boot, no boot snapshot exists, so cpu_possible_mask is the
+		 * implicit boot set.
+		 */
+		if (type == HK_TYPE_KERNEL_NOISE &&
+		    !(housekeeping.flags & HK_FLAG_KERNEL_NOISE_BOOT))
+			base = cpu_possible_mask;
+		else if (type == HK_TYPE_KERNEL_NOISE)
+			base = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE_BOOT);
+		else if (type == HK_TYPE_MANAGED_IRQ)
+			base = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ_BOOT);
+		else
+			base = housekeeping_cpumask(type);
+		trials[type] = kmalloc(cpumask_size(), GFP_KERNEL);
+		if (!trials[type]) {
+			ret = -ENOMEM;
+			goto err_free;
+		}
+		cpumask_andnot(trials[type], base, isol_mask);
+		if (!cpumask_intersects(trials[type], cpu_online_mask)) {
+			ret = -EINVAL;
+			goto err_free;
+		}
+	}
+
+	if (!housekeeping.flags) {
+		ret = -EINVAL;
+		goto err_free;
+	}
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX) {
+		if (!trials[type])
+			continue;
+		old_masks[type] = housekeeping_cpumask_dereference(type);
+		/* First-time runtime enable: register the type now. */
+		if (!housekeeping_enabled(type)) {
+			WRITE_ONCE(housekeeping.flags,
+				   housekeeping.flags | BIT(type));
+			/*
+			 * HK_TYPE_KERNEL_NOISE first-enable at runtime
+			 * (zero-boot-param path): tick offload percpu data
+			 * was never allocated at boot since nohz_full= was
+			 * absent.  Allocate it now before CPUs cycle through
+			 * hotplug and sched_tick_stop() dereferences
+			 * tick_work_cpu.
+			 */
+			if (type == HK_TYPE_KERNEL_NOISE)
+				WARN_ON_ONCE(sched_tick_offload_init());
+		}
+		rcu_assign_pointer(housekeeping.cpumasks[type], trials[type]);
+		trials[type] = NULL;
+	}
+
+	synchronize_rcu();
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX)
+		kfree(old_masks[type]);
+
+	return 0;
+
+err_free:
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX)
+		kfree(trials[type]);
+	return ret;
 }
 
 void __init housekeeping_init(void)
@@ -305,7 +460,7 @@ static int __init housekeeping_nohz_full_setup(char *str)
 {
 	unsigned long flags;
 
-	flags = HK_FLAG_KERNEL_NOISE;
+	flags = HK_FLAG_KERNEL_NOISE | HK_FLAG_KERNEL_NOISE_BOOT;
 
 	return housekeeping_setup(str, flags);
 }
@@ -324,7 +479,7 @@ static int __init housekeeping_isolcpus_setup(char *str)
 		 */
 		if (!strncmp(str, "nohz,", 5)) {
 			str += 5;
-			flags |= HK_FLAG_KERNEL_NOISE;
+			flags |= HK_FLAG_KERNEL_NOISE | HK_FLAG_KERNEL_NOISE_BOOT;
 			continue;
 		}
 
@@ -336,7 +491,7 @@ static int __init housekeeping_isolcpus_setup(char *str)
 
 		if (!strncmp(str, "managed_irq,", 12)) {
 			str += 12;
-			flags |= HK_FLAG_MANAGED_IRQ;
+			flags |= HK_FLAG_MANAGED_IRQ | HK_FLAG_MANAGED_IRQ_BOOT;
 			continue;
 		}
 
