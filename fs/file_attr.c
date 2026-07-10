@@ -110,6 +110,11 @@ static void fileattr_to_file_attr(const struct file_kattr *fa,
 	fattr->fa_nextents = fa->fsx_nextents;
 	fattr->fa_projid = fa->fsx_projid;
 	fattr->fa_cowextsize = fa->fsx_cowextsize;
+	fattr->fa_dio_mem_align = fa->fsx_dio_mem_align;
+	fattr->fa_dio_offset_align = fa->fsx_dio_offset_align;
+	fattr->fa_dio_read_offset_align = fa->fsx_dio_read_offset_align;
+	fattr->fa_dio_virt_boundary_align = fa->fsx_dio_virt_boundary_align;
+	fattr->fa_dio_offset_align_max_vecs = fa->fsx_dio_offset_align_max_vecs;
 }
 
 /**
@@ -144,6 +149,8 @@ static int file_attr_to_fileattr(const struct file_attr *fattr,
 	__u64 mask = FS_XFLAGS_MASK;
 
 	if (fattr->fa_xflags & ~mask)
+		return -EINVAL;
+	if (fattr->fa_pad)
 		return -EINVAL;
 
 	fileattr_fill_xflags(fa, fattr->fa_xflags & ~FS_XFLAG_RDONLY_MASK);

@@ -17,11 +17,11 @@
 /* Read-only inode flags */
 #define FS_XFLAG_RDONLY_MASK \
 	(FS_XFLAG_PREALLOC | FS_XFLAG_HASATTR | FS_XFLAG_VERITY | \
-	 FS_XFLAG_CASEFOLD | FS_XFLAG_CASENONPRESERVING)
+	 FS_XFLAG_CASEFOLD | FS_XFLAG_CASENONPRESERVING | FS_XFLAG_DIO)
 
 /* Flags to indicate valid value of fsx_ fields */
 #define FS_XFLAG_VALUES_MASK \
-	(FS_XFLAG_EXTSIZE | FS_XFLAG_COWEXTSIZE)
+	(FS_XFLAG_EXTSIZE | FS_XFLAG_COWEXTSIZE | FS_XFLAG_DIO)
 
 /* Flags for directories */
 #define FS_XFLAG_DIRONLY_MASK \
@@ -49,6 +49,12 @@ struct file_kattr {
 	u32	fsx_nextents;	/* nextents field value (get)	*/
 	u32	fsx_projid;	/* project identifier (get/set) */
 	u32	fsx_cowextsize;	/* CoW extsize field value (get/set)*/
+	/* struct file_attr dio alignment: */
+	u32	fsx_dio_mem_align;
+	u32	fsx_dio_offset_align;
+	u32	fsx_dio_read_offset_align;
+	u32	fsx_dio_virt_boundary_align;
+	u32	fsx_dio_offset_align_max_vecs;
 	/* selectors: */
 	bool	flags_valid:1;
 	bool	fsx_valid:1;

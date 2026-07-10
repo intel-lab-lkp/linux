@@ -229,10 +229,17 @@ struct file_attr {
 	__u32 fa_nextents;	/* nextents field value (get)   */
 	__u32 fa_projid;	/* project identifier (get/set) */
 	__u32 fa_cowextsize;	/* CoW extsize field value (get/set) */
+	__u32 fa_dio_mem_align;	/* DIO memory buffer align (get) */
+	__u32 fa_dio_offset_align;	/* DIO file offset align (get) */
+	__u32 fa_dio_read_offset_align;	/* DIO read offset align (get) */
+	__u32 fa_dio_virt_boundary_align;	/* DIO virt boundary (get) */
+	__u32 fa_dio_offset_align_max_vecs;	/* DIO vecs per unit (get) */
+	__u32 fa_pad;		/* alignment padding, reserved for future use */
 };
 
 #define FILE_ATTR_SIZE_VER0 24
-#define FILE_ATTR_SIZE_LATEST FILE_ATTR_SIZE_VER0
+#define FILE_ATTR_SIZE_VER1 48
+#define FILE_ATTR_SIZE_LATEST FILE_ATTR_SIZE_VER1
 
 /*
  * Flags for the fsx_xflags field
@@ -261,6 +268,7 @@ struct file_attr {
  */
 #define FS_XFLAG_CASEFOLD	0x00040000	/* case-insensitive lookups */
 #define FS_XFLAG_CASENONPRESERVING 0x00080000	/* case not preserved */
+#define FS_XFLAG_DIO		0x00100000	/* DIO alignment info valid */
 #define FS_XFLAG_HASATTR	0x80000000	/* no DIFLAG for this	*/
 
 /* the read-only stuff doesn't really belong here, but any other place is
