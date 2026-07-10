@@ -492,6 +492,7 @@ struct disk_info {
 #define HASH_MASK		(NR_HASH - 1)
 #define MAX_STRIPE_BATCH	8
 #define RAID5_SYNC_WINDOW	32	/* stripes to pre-submit per sync_request call */
+#define RAID5_SYNC_HWMARK	2	/* rebuild uses at most 1/N of stripe cache */
 
 /* NOTE NR_STRIPE_HASH_LOCKS must remain below 64.
  * This is because we sometimes take all the spinlocks

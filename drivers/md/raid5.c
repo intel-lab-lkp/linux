@@ -6656,6 +6656,27 @@ static inline sector_t raid5_sync_request(struct mddev *mddev, sector_t sector_n
 	     submitted < RAID5_SYNC_WINDOW && win_sector < max_sector &&
 	     win_sector < mddev->resync_max;
 	     submitted++, win_sector += RAID5_STRIPE_SECTORS(conf)) {
+		/*
+		 * Yield to user I/O: stop the read-ahead if anyone is waiting
+		 * for a stripe.  The check is intentionally racy -- a waiter
+		 * appearing just after is serviced by the next sync_request
+		 * call, so no barrier is needed.
+		 */
+		if (waitqueue_active(&conf->wait_for_stripe))
+			break;
+		/*
+		 * Reserve cache for user I/O only when it is actually competing.
+		 * preread_active_stripes counts stripes queued for write I/O
+		 * (including the read phase of RMW); sync stripes never set
+		 * STRIPE_PREREAD_ACTIVE, so during a pure rebuild it stays zero
+		 * and the window fills freely.  Competing user reads do not bump
+		 * the counter but are caught by the waitqueue_active() check
+		 * above.
+		 */
+		if (atomic_read(&conf->preread_active_stripes) > 0 &&
+		    atomic_read(&conf->active_stripes) >=
+		    conf->max_nr_stripes / RAID5_SYNC_HWMARK)
+			break;
 		sh = raid5_get_active_stripe(conf, NULL, win_sector,
 					     R5_GAS_NOBLOCK);
 		if (!sh)
