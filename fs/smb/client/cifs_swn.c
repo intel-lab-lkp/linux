@@ -170,7 +170,8 @@ static bool cifs_swn_reg_tcon_matches(const struct cifs_swn_reg *swnreg,
  * The authentication information to connect to the witness service is bundled
  * into the message.
  */
-static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg)
+static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg,
+					  struct cifs_tcon *tcon)
 {
 	struct sk_buff *skb;
 	struct genlmsghdr *hdr;
@@ -222,10 +223,10 @@ static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg)
 			goto nlmsg_fail;
 	}
 
-	authtype = cifs_select_sectype(swnreg->tcon->ses->server, swnreg->tcon->ses->sectype);
+	authtype = cifs_select_sectype(tcon->ses->server, tcon->ses->sectype);
 	switch (authtype) {
 	case Kerberos:
-		ret = cifs_swn_auth_info_krb(swnreg->tcon, skb);
+		ret = cifs_swn_auth_info_krb(tcon, skb);
 		if (ret < 0) {
 			cifs_dbg(VFS, "%s: Failed to get kerberos auth info: %d\n", __func__, ret);
 			goto nlmsg_fail;
@@ -233,7 +234,7 @@ static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg)
 		break;
 	case NTLMv2:
 	case RawNTLMSSP:
-		ret = cifs_swn_auth_info_ntlm(swnreg->tcon, skb);
+		ret = cifs_swn_auth_info_ntlm(tcon, skb);
 		if (ret < 0) {
 			cifs_dbg(VFS, "%s: Failed to get NTLM auth info: %d\n", __func__, ret);
 			goto nlmsg_fail;
@@ -378,7 +379,7 @@ static void cifs_swn_reg_check(struct work_struct *work)
 	 * The userspace client library tracks if registered or not
 	 * using the swnreg->id.
 	 */
-	ret = cifs_swn_send_register_message(swnreg);
+	ret = cifs_swn_send_register_message(swnreg, swnreg->tcon);
 	if (ret < 0)
 		cifs_dbg(FYI, "%s: Failed to send register message: %d\n",
 			 __func__, ret);
@@ -693,7 +694,7 @@ int cifs_swn_register(struct cifs_tcon *tcon)
 	if (IS_ERR(swnreg))
 		return PTR_ERR(swnreg);
 
-	ret = cifs_swn_send_register_message(swnreg);
+	ret = cifs_swn_send_register_message(swnreg, tcon);
 	if (ret < 0) {
 		cifs_dbg(VFS, "%s: Failed to send swn register message: %d\n", __func__, ret);
 		/* Do not put the swnreg or return error, the check task will retry */
