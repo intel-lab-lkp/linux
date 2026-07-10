@@ -122,8 +122,10 @@ enum yfs_cm_operation {
 #define afs_call_traces \
 	EM(afs_call_trace_alloc,		"ALLOC      ") \
 	EM(afs_call_trace_free,			"FREE       ") \
+	EM(afs_call_trace_get_op_call,		"GET op     ") \
 	EM(afs_call_trace_get_make_async_call,	"GET a-make ") \
 	EM(afs_call_trace_put_async_complete,	"PUT a-cmpl ") \
+	EM(afs_call_trace_put_made_call,	"PUT made   ") \
 	EM(afs_call_trace_put_discard_prealloc,	"PUT dis-pre") \
 	EM(afs_call_trace_put_get_capabilities,	"PUT get-cap") \
 	EM(afs_call_trace_put_giveupcallbacks,	"PUT gvup-cb") \

@@ -382,8 +382,6 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 	if (ret < 0)
 		goto error_do_abort;
 
-	/* We lost our ref on call if MSG_MORE was not set and ret >= 0. */
-
 	if (write_iter) {
 		msg.msg_iter = *call->write_iter;
 		msg.msg_flags &= ~MSG_MORE;
@@ -393,7 +391,6 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 					     call->rxcall, &msg,
 					     iov_iter_count(&msg.msg_iter),
 					     afs_notify_end_request_tx);
-		/* We lost our ref on call if ret >= 0. */
 
 		trace_afs_sent_data(debug_id, &msg, ret);
 		if (ret < 0)
