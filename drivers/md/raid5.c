@@ -44,6 +44,7 @@
 #include <linux/seq_file.h>
 #include <linux/cpu.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/ratelimit.h>
 #include <linux/nodemask.h>
 
@@ -71,6 +72,11 @@ static unsigned int nr_stripe_hash_locks;
 module_param(nr_stripe_hash_locks, uint, 0644);
 MODULE_PARM_DESC(nr_stripe_hash_locks,
 		 "Number of spinlocks the stripe cache hash is striped across, rounded up to a power of two and capped at 32.  0 (the default) auto-sizes it from the online CPU count (never below 8); a non-zero value overrides that.  Larger values reduce lock contention on many-core systems at a small per-array memory cost.  Read when an array is created");
+
+static unsigned int stripe_cache_size_max;
+module_param(stripe_cache_size_max, uint, 0644);
+MODULE_PARM_DESC(stripe_cache_size_max,
+		 "Maximum the per-array stripe_cache_size may be raised to.  0 (the default) derives the limit from system memory (never below the historical 32768), so large-memory hosts can grow the stripe cache without a recompile while small ones are not offered a limit above what RAM can back.  A non-zero value sets a fixed limit");
 
 static bool devices_handle_discard_safely = false;
 module_param(devices_handle_discard_safely, bool, 0644);
@@ -6922,13 +6928,42 @@ raid5_show_stripe_cache_size(struct mddev *mddev, char *page)
 	return ret;
 }
 
+/*
+ * Upper bound that the per-array stripe_cache_size may be raised to.  The
+ * stripe cache costs roughly max_nr_stripes * (sizeof(stripe_head) +
+ * pool_size * (sizeof(bio) + PAGE_SIZE)).  The limit was historically a fixed
+ * 32768 stripes, which both under-serves large-memory hosts backing wide
+ * arrays and, on a small box, still permits a cache larger than RAM.  Derive
+ * it from memory instead -- at most 1/8 of RAM -- but never below the
+ * historical 32768, so the limit only ever grows relative to today.  A
+ * non-zero stripe_cache_size_max module parameter overrides the heuristic.
+ */
+#define RAID5_CACHE_SIZE_FLOOR		32768
+#define RAID5_CACHE_SIZE_RAM_SHIFT	3	/* cap the cache at 1/8 of RAM */
+
+static unsigned long raid5_max_cache_size(struct r5conf *conf)
+{
+	unsigned long per_stripe, limit;
+
+	if (stripe_cache_size_max) {
+		limit = stripe_cache_size_max;
+	} else {
+		per_stripe = sizeof(struct stripe_head) +
+			     conf->pool_size * (sizeof(struct bio) + PAGE_SIZE);
+		limit = ((totalram_pages() << PAGE_SHIFT) >>
+			 RAID5_CACHE_SIZE_RAM_SHIFT) / per_stripe;
+		limit = max_t(unsigned long, limit, RAID5_CACHE_SIZE_FLOOR);
+	}
+	return min_t(unsigned long, limit, INT_MAX);
+}
+
 int
 raid5_set_cache_size(struct mddev *mddev, int size)
 {
 	int result = 0;
 	struct r5conf *conf = mddev->private;
 
-	if (size <= 16 || size > 32768)
+	if (size <= 16 || size > raid5_max_cache_size(conf))
 		return -EINVAL;
 
 	WRITE_ONCE(conf->min_nr_stripes, size);
