@@ -175,12 +175,12 @@ enum target_state {
  * @np:		The netpoll structure for this target.
  *		Contains the other userspace visible parameters:
  *		dev_name	(read-write)
- *		local_port	(read-write)
- *		remote_port	(read-write)
  *		local_ip	(read-write)
  *		remote_ip	(read-write)
  *		local_mac	(read-only)
  *		remote_mac	(read-write)
+ * @local_port:	Source UDP port of the target (read-write).
+ * @remote_port: Destination UDP port of the target (read-write).
  * @buf:	The buffer used to send the full msg to the network stack
  * @resume_wq:	Workqueue to resume deactivated target
  * @skb_pool:	Per-target fallback skb pool consulted by find_skb() when
@@ -208,6 +208,7 @@ struct netconsole_target {
 	bool			extended;
 	bool			release;
 	struct netpoll		np;
+	u16			local_port, remote_port;
 	/* protected by target_list_lock; +1 gives scnprintf() room for its
 	 * NUL terminator so a full MAX_PRINT_CHUNK payload is not truncated
 	 */
@@ -459,8 +460,8 @@ static struct netconsole_target *alloc_and_init(void)
 
 	nt->np.name = "netconsole";
 	strscpy(nt->np.dev_name, "eth0", IFNAMSIZ);
-	nt->np.local_port = 6665;
-	nt->np.remote_port = 6666;
+	nt->local_port = 6665;
+	nt->remote_port = 6666;
 	eth_broadcast_addr(nt->np.remote_mac);
 	nt->state = STATE_DISABLED;
 	INIT_WORK(&nt->resume_wq, process_resume_target);
@@ -499,16 +500,18 @@ static void netconsole_process_cleanups_core(void)
 	mutex_unlock(&target_cleanup_list_lock);
 }
 
-static void netconsole_print_banner(struct netpoll *np)
+static void netconsole_print_banner(struct netconsole_target *nt)
 {
-	np_info(np, "local port %d\n", np->local_port);
+	struct netpoll *np = &nt->np;
+
+	np_info(np, "local port %d\n", nt->local_port);
 	if (np->ipv6)
 		np_info(np, "local IPv6 address %pI6c\n", &np->local_ip.in6);
 	else
 		np_info(np, "local IPv4 address %pI4\n", &np->local_ip.ip);
 	np_info(np, "interface name '%s'\n", np->dev_name);
 	np_info(np, "local ethernet address '%pM'\n", np->dev_mac);
-	np_info(np, "remote port %d\n", np->remote_port);
+	np_info(np, "remote port %d\n", nt->remote_port);
 	if (np->ipv6)
 		np_info(np, "remote IPv6 address %pI6c\n", &np->remote_ip.in6);
 	else
@@ -631,12 +634,12 @@ static ssize_t dev_name_show(struct config_item *item, char *buf)
 
 static ssize_t local_port_show(struct config_item *item, char *buf)
 {
-	return sysfs_emit(buf, "%d\n", to_target(item)->np.local_port);
+	return sysfs_emit(buf, "%d\n", to_target(item)->local_port);
 }
 
 static ssize_t remote_port_show(struct config_item *item, char *buf)
 {
-	return sysfs_emit(buf, "%d\n", to_target(item)->np.remote_port);
+	return sysfs_emit(buf, "%d\n", to_target(item)->remote_port);
 }
 
 static ssize_t local_ip_show(struct config_item *item, char *buf)
@@ -826,7 +829,7 @@ static ssize_t enabled_store(struct config_item *item,
 		 * Skip netconsole_parser_cmdline() -- all the attributes are
 		 * already configured via configfs. Just print them out.
 		 */
-		netconsole_print_banner(&nt->np);
+		netconsole_print_banner(nt);
 
 		/* Initialise the skb pool before netpoll_setup() so the pool
 		 * is valid as soon as nt->np.dev becomes visible to
@@ -965,7 +968,7 @@ static ssize_t local_port_store(struct config_item *item, const char *buf,
 		goto out_unlock;
 	}
 
-	ret = kstrtou16(buf, 10, &nt->np.local_port);
+	ret = kstrtou16(buf, 10, &nt->local_port);
 	if (ret < 0)
 		goto out_unlock;
 	ret = count;
@@ -987,7 +990,7 @@ static ssize_t remote_port_store(struct config_item *item,
 		goto out_unlock;
 	}
 
-	ret = kstrtou16(buf, 10, &nt->np.remote_port);
+	ret = kstrtou16(buf, 10, &nt->remote_port);
 	if (ret < 0)
 		goto out_unlock;
 	ret = count;
@@ -1863,8 +1866,9 @@ static void netpoll_udp_checksum(struct netpoll *np, struct sk_buff *skb,
 		udph->check = CSUM_MANGLED_0;
 }
 
-static void push_udp(struct netpoll *np, struct sk_buff *skb, int len)
+static void push_udp(struct netconsole_target *nt, struct sk_buff *skb, int len)
 {
+	struct netpoll *np = &nt->np;
 	struct udphdr *udph;
 	int udp_len;
 
@@ -1874,8 +1878,8 @@ static void push_udp(struct netpoll *np, struct sk_buff *skb, int len)
 	skb_reset_transport_header(skb);
 
 	udph = udp_hdr(skb);
-	udph->source = htons(np->local_port);
-	udph->dest = htons(np->remote_port);
+	udph->source = htons(nt->local_port);
+	udph->dest = htons(nt->remote_port);
 	udph->len = htons(udp_len);
 
 	netpoll_udp_checksum(np, skb, len);
@@ -1971,7 +1975,7 @@ static int netpoll_send_udp(struct netconsole_target *nt, const char *msg,
 	skb_copy_to_linear_data(skb, msg, len);
 	skb_put(skb, len);
 
-	push_udp(np, skb, len);
+	push_udp(nt, skb, len);
 	if (np->ipv6)
 		push_ipv6(np, skb, len);
 	else
@@ -2289,8 +2293,9 @@ __releases(&target_list_lock)
 	spin_unlock_irqrestore(&target_list_lock, flags);
 }
 
-static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
+static int netconsole_parser_cmdline(struct netconsole_target *nt, char *opt)
 {
+	struct netpoll *np = &nt->np;
 	bool ipversion_set = false;
 	char *cur = opt;
 	char *delim;
@@ -2301,7 +2306,7 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 		if (!delim)
 			goto parse_failed;
 		*delim = 0;
-		if (kstrtou16(cur, 10, &np->local_port))
+		if (kstrtou16(cur, 10, &nt->local_port))
 			goto parse_failed;
 		cur = delim;
 	}
@@ -2348,7 +2353,7 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 		*delim = 0;
 		if (*cur == ' ' || *cur == '\t')
 			np_info(np, "warning: whitespace is not allowed\n");
-		if (kstrtou16(cur, 10, &np->remote_port))
+		if (kstrtou16(cur, 10, &nt->remote_port))
 			goto parse_failed;
 		cur = delim;
 	}
@@ -2374,7 +2379,7 @@ static int netconsole_parser_cmdline(struct netpoll *np, char *opt)
 			goto parse_failed;
 	}
 
-	netconsole_print_banner(np);
+	netconsole_print_banner(nt);
 
 	return 0;
 
@@ -2412,7 +2417,7 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 	}
 
 	/* Parse parameters and setup netpoll */
-	err = netconsole_parser_cmdline(&nt->np, target_config);
+	err = netconsole_parser_cmdline(nt, target_config);
 	if (err)
 		goto fail;
 
