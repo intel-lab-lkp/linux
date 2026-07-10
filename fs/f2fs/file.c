@@ -3452,6 +3452,25 @@ static int f2fs_ioc_setproject(struct inode *inode, __u32 projid)
 }
 #endif
 
+static void f2fs_fileattr_get_dio(struct inode *inode, struct file_kattr *fa)
+{
+	struct block_device *bdev;
+	unsigned int bsize;
+
+	if (!S_ISREG(inode->i_mode) || f2fs_force_buffered_io(inode, WRITE))
+		return;
+
+	bdev = inode->i_sb->s_bdev;
+	if (bdev)
+		bdev_fill_dio_attr(bdev, fa);
+
+	bsize = i_blocksize(inode);
+	fa->fsx_dio_mem_align = bsize;
+	fa->fsx_dio_offset_align = bsize;
+	fa->fsx_dio_read_offset_align = bsize;
+	fa->fsx_xflags |= FS_XFLAG_DIO;
+}
+
 int f2fs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
@@ -3472,6 +3491,7 @@ int f2fs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	if (f2fs_sb_has_project_quota(F2FS_I_SB(inode)))
 		fa->fsx_projid = from_kprojid(&init_user_ns, fi->i_projid);
 
+	f2fs_fileattr_get_dio(inode, fa);
 	return 0;
 }
 
