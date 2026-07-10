@@ -171,7 +171,7 @@ struct security_priv {
 #define GET_ENCRY_ALGO(psecuritypriv, psta, encry_algo, bmcst)\
 do {\
 	switch (psecuritypriv->dot11_auth_algrthm) {\
-	case dot11AuthAlgrthm_Open:\
+	case dot11_auth_algrthm_open:\
 	case dot11AuthAlgrthm_Shared:\
 	case dot11AuthAlgrthm_Auto:\
 		encry_algo = (u8)psecuritypriv->dot11_privacy_algrthm;\
