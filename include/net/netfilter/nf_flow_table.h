@@ -248,6 +248,8 @@ struct nft_pktinfo;
 int nft_flow_route(const struct nft_pktinfo *pkt, const struct nf_conn *ct,
 		   struct nf_flow_route *route, enum ip_conntrack_dir dir,
 		   struct nft_flowtable *ft);
+int nft_flow_bridge(struct flow_offload *flow, const struct nft_pktinfo *pkt,
+		    enum ip_conntrack_dir dir, struct nft_flowtable *ft);
 
 static inline int
 nf_flow_table_offload_add_cb(struct nf_flowtable *flow_table,
@@ -342,6 +344,8 @@ unsigned int nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 				     const struct nf_hook_state *state);
 unsigned int nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 				       const struct nf_hook_state *state);
+unsigned int nf_flow_offload_bridge_hook(void *priv, struct sk_buff *skb,
+					 const struct nf_hook_state *state);
 
 #if (IS_BUILTIN(CONFIG_NF_FLOW_TABLE) && IS_ENABLED(CONFIG_DEBUG_INFO_BTF)) || \
     (IS_MODULE(CONFIG_NF_FLOW_TABLE) && IS_ENABLED(CONFIG_DEBUG_INFO_BTF_MODULES))
@@ -377,6 +381,9 @@ int nf_flow_rule_route_ipv4(struct net *net, struct flow_offload *flow,
 int nf_flow_rule_route_ipv6(struct net *net, struct flow_offload *flow,
 			    enum flow_offload_tuple_dir dir,
 			    struct nf_flow_rule *flow_rule);
+int nf_flow_rule_bridge(struct net *net, struct flow_offload *flow,
+			enum flow_offload_tuple_dir dir,
+			struct nf_flow_rule *flow_rule);
 
 int nf_flow_table_offload_init(void);
 void nf_flow_table_offload_exit(void);
