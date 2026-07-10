@@ -167,20 +167,148 @@ static __maybe_unused u64 c2c_ext__total_cycles(void)
 	return total;
 }
 
-/* Sum child entries' store counts under a level-1 hist_entry. */
+/*
+ * Sum of the level-2 children's store counts under a level-1 hist_entry.
+ * Read from the cache populated by the hierarchy builder, so this is O(1)
+ * and safe to call from the sort comparator.
+ */
 static __maybe_unused u64 hist_entry__child_stores(struct hist_entry *he)
 {
-	struct rb_node *nd;
-	u64 sum = 0;
+	struct c2c_hist_entry *c2c_he = container_of(he, struct c2c_hist_entry, he);
 
-	for (nd = rb_first_cached(&he->hroot_out); nd; nd = rb_next(nd)) {
-		struct hist_entry *child = rb_entry(nd, struct hist_entry, rb_node);
-		struct c2c_hist_entry *c2c_child =
-			container_of(child, struct c2c_hist_entry, he);
+	return c2c_he->child_stores;
+}
 
-		sum += (u64)c2c_child->stats.store;
-	}
-	return sum;
+static __maybe_unused int
+total_stores_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he = container_of(he, struct c2c_hist_entry, he);
+	int width = c2c_width(fmt, hpp, he->hists);
+	u64 total;
+
+	/* L1 shows the sum of sharing-function stores; L2/L3 show their own. */
+	total = he->parent_he ? (u64)c2c_he->stats.store : hist_entry__child_stores(he);
+
+	return scnprintf(hpp->buf, hpp->size, "%*" PRIu64, width, total);
+}
+
+/*
+ * cacheline_symbol_entry - Render cacheline address for function view
+ */
+static __maybe_unused int
+cacheline_symbol_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[24];
+	u64 addr;
+
+	/* Only show the address on level-3 cacheline entries. */
+	if (!he->parent_he || !he->parent_he->parent_he || !he->mem_info)
+		return scnprintf(hpp->buf, hpp->size, "%*s", width, "");
+
+	addr = cl_address(mem_info__daddr(he->mem_info)->addr, chk_double_cl);
+	scnprintf(buf, sizeof(buf), "0x%" PRIx64, addr);
+
+	return scnprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+/* Render the code (instruction) address for level-1 and level-2 entries. */
+static __maybe_unused int
+iaddr_symbol_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		   struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	int iaddr_width, ret;
+	char buf[24];
+	u64 addr;
+	char folded_sign;
+
+	/* Hide for cacheline (level-3) entries. */
+	if (he->parent_he && he->parent_he->parent_he)
+		return scnprintf(hpp->buf, hpp->size, "%*s", width, "");
+
+	addr = hist_entry__iaddr(he);
+
+	folded_sign = he->has_children ? (he->unfolded ? '-' : '+') : ' ';
+	ret = scnprintf(hpp->buf, hpp->size, "%c ", folded_sign);
+
+	iaddr_width = width - ret;
+	if (iaddr_width <= 0)
+		return ret;
+
+	scnprintf(buf, sizeof(buf), "0x%" PRIx64, addr);
+	ret += scnprintf(hpp->buf + ret, hpp->size - ret, "%*.*s", iaddr_width, iaddr_width, buf);
+	return ret;
+}
+
+/*
+ * symbol_view_entry - Render symbol name for function view with expansion indicators
+ */
+static __maybe_unused int
+symbol_view_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		  struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	int sym_width;
+	int ret;
+	char symbuf[512];
+	char folded_sign;
+
+	/* Hide Symbol for cacheline entries */
+	if (he->parent_he && he->parent_he->parent_he)
+		return scnprintf(hpp->buf, hpp->size, "%*s", width, "");
+
+	folded_sign = he->has_children ? (he->unfolded ? '-' : '+') : ' ';
+
+	ret = scnprintf(hpp->buf, hpp->size, "%c ", folded_sign);
+
+	sym_width = width - ret;
+
+	if (sym_width <= 0)
+		return ret;
+
+	/* sort_sym.se_snprintf is statically set and never cleared. */
+	sort_sym.se_snprintf(he, symbuf, sizeof(symbuf), sym_width);
+
+	ret += scnprintf(hpp->buf + ret, hpp->size - ret, "%-*.*s", sym_width, sym_width, symbuf);
+	return ret;
+}
+
+/*
+ * cycles_percent_entry - Render cycles percentage column
+ */
+static __maybe_unused int
+cycles_percent_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		     struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	u64 fn_cycles, total_cycles;
+	char folded_sign;
+	double pct;
+	int ret, pct_width;
+
+	/* Hide Cycles Percent for child functions and cachelines. */
+	if (he->parent_he)
+		return scnprintf(hpp->buf, hpp->size, "%*s", width, "");
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	fn_cycles = c2c_hist_entry__cycles(c2c_he);
+	/* Populated by build_function_view_hierarchy() once the L1 tree is built. */
+	total_cycles = c2c_ext.total_cycles;
+	pct = total_cycles > 0 ? (double)fn_cycles / total_cycles * 100.0 : 0.0;
+
+	/* Add folded sign only for level-1 entries */
+	folded_sign = he->has_children ? (he->unfolded ? '-' : '+') : ' ';
+	ret = scnprintf(hpp->buf, hpp->size, "%c ", folded_sign);
+
+	pct_width = width - ret;
+	if (pct_width <= 0)
+		return ret;
+	ret += scnprintf(hpp->buf + ret, hpp->size - ret, "%*.2f%%", pct_width - 1, pct);
+	return ret;
 }
 
 int perf_c2c__browse_function_view(struct hists *hists __maybe_unused)
