@@ -88,6 +88,11 @@ module_param(stripe_cache_size_default, uint, 0644);
 MODULE_PARM_DESC(stripe_cache_size_default,
 		 "Initial stripe_cache_size for newly created arrays.  0 (the default) auto-sizes it from system memory: the historical 256 on small hosts, scaling up with RAM to a capped maximum on larger ones.  A non-zero value sets a fixed initial size.  Existing arrays are unaffected");
 
+static int group_thread_cnt_default = -1;
+module_param(group_thread_cnt_default, int, 0644);
+MODULE_PARM_DESC(group_thread_cnt_default,
+		 "Initial group_thread_cnt (raid5 worker threads per NUMA node) for newly created arrays.  A negative value (the default, -1) auto-sizes it from the CPU count; 0 forces the single-threaded raid5d; a positive value sets a fixed count (capped at 256).  The per-array group_thread_cnt sysfs attribute overrides this and allows larger values");
+
 static bool devices_handle_discard_safely = false;
 module_param(devices_handle_discard_safely, bool, 0644);
 MODULE_PARM_DESC(devices_handle_discard_safely,
@@ -7584,6 +7589,31 @@ static unsigned long raid5_cache_count(struct shrinker *shrink,
 #define RAID5_CACHE_DEFAULT_RAM_SHIFT	9	/* above it: ~1/512 of the extra RAM */
 #define RAID5_CACHE_DEFAULT_MAX		4096
 
+/*
+ * Default group_thread_cnt (worker_cnt_per_group) for a new array when the
+ * group_thread_cnt_default module parameter is left at -1.  The historical
+ * default is 0 -- a single raid5d thread -- which cannot keep a fast, wide
+ * array busy on a many-core host.  Derive a starting point from the CPU
+ * count: half the online CPUs divided across the NUMA nodes (this is a
+ * per-node count -- see alloc_thread_groups() -- so the total lands near
+ * half the online CPUs regardless of socket count), capped at
+ * RAID5_AUTO_GROUP_THREAD_MAX.  This is only a ceiling:
+ * raid5_wakeup_stripe_thread() wakes workers in proportion to the queued
+ * stripe count, so a lightly loaded array uses far fewer.  A lone worker is
+ * not worth its overhead, so 1 collapses back to 0.  The group_thread_cnt
+ * sysfs attribute overrides this per array.
+ */
+#define RAID5_AUTO_GROUP_THREAD_MAX	256
+
+static int raid5_default_group_thread_cnt(void)
+{
+	unsigned int gtc = num_online_cpus() / (2 * num_possible_nodes());
+
+	if (gtc > RAID5_AUTO_GROUP_THREAD_MAX)
+		gtc = RAID5_AUTO_GROUP_THREAD_MAX;
+	return gtc == 1 ? 0 : gtc;
+}
+
 static struct r5conf *setup_conf(struct mddev *mddev)
 {
 	struct r5conf *conf;
@@ -7594,6 +7624,7 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	int i;
 	int group_cnt;
 	struct r5worker_group *new_group;
+	int def_threads;
 	int ret = -ENOMEM;
 
 	if (mddev->new_level != 5
@@ -7677,10 +7708,18 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 		goto abort;
 	for (i = 0; i < PENDING_IO_MAX; i++)
 		list_add(&conf->pending_data[i].sibling, &conf->free_list);
-	/* Don't enable multi-threading by default*/
-	if (!alloc_thread_groups(conf, 0, &group_cnt, &new_group)) {
+	/*
+	 * Multi-threading defaults to a hardware-derived worker count (see
+	 * raid5_default_group_thread_cnt()); group_thread_cnt_default overrides
+	 * the choice, and the group_thread_cnt sysfs attribute overrides it per
+	 * array.
+	 */
+	def_threads = group_thread_cnt_default < 0 ?
+		raid5_default_group_thread_cnt() :
+		min(group_thread_cnt_default, RAID5_AUTO_GROUP_THREAD_MAX);
+	if (!alloc_thread_groups(conf, def_threads, &group_cnt, &new_group)) {
 		conf->group_cnt = group_cnt;
-		conf->worker_cnt_per_group = 0;
+		conf->worker_cnt_per_group = def_threads;
 		conf->worker_groups = new_group;
 	} else
 		goto abort;
