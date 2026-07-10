@@ -432,6 +432,11 @@ enum rtw_wow_flags {
 	RTW_WOW_FLAG_MAX,
 };
 
+enum rtw_quirk_dis_caps {
+	QUIRK_DIS_CAP_PCI_ASPM,
+	QUIRK_DIS_CAP_LPS_DEEP,
+};
+
 /* the power index is represented by differences, which cck-1s & ht40-1s are
  * the base values, so for 1s's differences, there are only ht20 & ofdm
  */
@@ -858,6 +863,7 @@ struct rtw_chip_ops {
 	int (*power_on)(struct rtw_dev *rtwdev);
 	void (*power_off)(struct rtw_dev *rtwdev);
 	int (*mac_init)(struct rtw_dev *rtwdev);
+	int (*mac_postinit)(struct rtw_dev *rtwdev);
 	int (*dump_fw_crash)(struct rtw_dev *rtwdev);
 	void (*shutdown)(struct rtw_dev *rtwdev);
 	int (*read_efuse)(struct rtw_dev *rtwdev, u8 *map);
@@ -1474,6 +1480,7 @@ struct rtw_coex_stat {
 	bool bt_game_hid_exist;
 	bool bt_hid_handle_cnt;
 	bool bt_mailbox_reply;
+	bool bt_ctr_ok;
 
 	bool wl_under_lps;
 	bool wl_under_ips;
@@ -2225,7 +2232,7 @@ enum nl80211_band rtw_hw_to_nl80211_band(enum rtw_supported_band hw_band)
 }
 
 void rtw_set_rx_freq_band(struct rtw_rx_pkt_stat *pkt_stat, u8 channel);
-void rtw_set_dtim_period(struct rtw_dev *rtwdev, int dtim_period);
+void rtw_set_dtim_period(struct rtw_dev *rtwdev, u8 dtim_period);
 void rtw_get_channel_params(struct cfg80211_chan_def *chandef,
 			    struct rtw_channel_params *ch_param);
 bool check_hw_ready(struct rtw_dev *rtwdev, u32 addr, u32 mask, u32 target);

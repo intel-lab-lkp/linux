@@ -18,7 +18,6 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/interrupt.h>
-#include <linux/mod_devicetable.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -839,12 +838,9 @@ static int _ad74413r_get_single_adc_result(struct ad74413r_state *st,
 	if (ret)
 		return ret;
 
-	ret = wait_for_completion_timeout(&st->adc_data_completion,
-					  msecs_to_jiffies(1000));
-	if (!ret) {
-		ret = -ETIMEDOUT;
-		return ret;
-	}
+	if (!wait_for_completion_timeout(&st->adc_data_completion,
+					 msecs_to_jiffies(1000)))
+		return -ETIMEDOUT;
 
 	ret = regmap_read(st->regmap, AD74413R_REG_ADC_RESULT_X(channel),
 			  &uval);
@@ -1425,8 +1421,8 @@ static int ad74413r_probe(struct spi_device *spi)
 		st->gpo_gpiochip.ngpio = st->num_gpo_gpios;
 		st->gpo_gpiochip.parent = st->dev;
 		st->gpo_gpiochip.can_sleep = true;
-		st->gpo_gpiochip.set_rv = ad74413r_gpio_set;
-		st->gpo_gpiochip.set_multiple_rv = ad74413r_gpio_set_multiple;
+		st->gpo_gpiochip.set = ad74413r_gpio_set;
+		st->gpo_gpiochip.set_multiple = ad74413r_gpio_set_multiple;
 		st->gpo_gpiochip.set_config = ad74413r_gpio_set_gpo_config;
 		st->gpo_gpiochip.get_direction =
 			ad74413r_gpio_get_gpo_direction;

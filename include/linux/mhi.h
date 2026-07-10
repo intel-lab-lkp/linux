@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include <linux/device-id/mhi.h>
 
 #define MHI_MAX_OEM_PK_HASH_SEGMENTS 16
 
@@ -86,16 +87,32 @@ enum mhi_ch_type {
 };
 
 /**
+ * struct mhi_buf - MHI Buffer description
+ * @buf: Virtual address of the buffer
+ * @name: Buffer label. For offload channel, configurations name must be:
+ *        ECA - Event context array data
+ *        CCA - Channel context array data
+ * @dma_addr: IOMMU address of the buffer
+ * @len: # of bytes
+ */
+struct mhi_buf {
+	void *buf;
+	const char *name;
+	dma_addr_t dma_addr;
+	size_t len;
+};
+
+/**
  * struct image_info - Firmware and RDDM table
  * @mhi_buf: Buffer for firmware and RDDM table
  * @entries: # of entries in table
  */
 struct image_info {
-	struct mhi_buf *mhi_buf;
 	/* private: from internal.h */
 	struct bhi_vec_entry *bhi_vec;
 	/* public: */
 	u32 entries;
+	struct mhi_buf mhi_buf[] __counted_by(entries);
 };
 
 /**
@@ -215,7 +232,6 @@ enum mhi_db_brst_mode {
  * @lpm_notify: The channel master requires low power mode notifications
  * @offload_channel: The client manages the channel completely
  * @doorbell_mode_switch: Channel switches to doorbell mode on M0 transition
- * @auto_queue: Framework will automatically queue buffers for DL traffic
  * @wake-capable: Channel capable of waking up the system
  */
 struct mhi_channel_config {
@@ -232,7 +248,6 @@ struct mhi_channel_config {
 	bool lpm_notify;
 	bool offload_channel;
 	bool doorbell_mode_switch;
-	bool auto_queue;
 	bool wake_capable;
 };
 
@@ -491,22 +506,6 @@ struct mhi_result {
 };
 
 /**
- * struct mhi_buf - MHI Buffer description
- * @buf: Virtual address of the buffer
- * @name: Buffer label. For offload channel, configurations name must be:
- *        ECA - Event context array data
- *        CCA - Channel context array data
- * @dma_addr: IOMMU address of the buffer
- * @len: # of bytes
- */
-struct mhi_buf {
-	void *buf;
-	const char *name;
-	dma_addr_t dma_addr;
-	size_t len;
-};
-
-/**
  * struct mhi_driver - Structure representing a MHI client driver
  * @probe: CB function for client driver probe function
  * @remove: CB function for client driver remove function
@@ -742,18 +741,6 @@ void mhi_device_put(struct mhi_device *mhi_dev);
  * device execution environments match and channels are in a DISABLED state.
  */
 int mhi_prepare_for_transfer(struct mhi_device *mhi_dev);
-
-/**
- * mhi_prepare_for_transfer_autoqueue - Setup UL and DL channels with auto queue
- *                                      buffers for DL traffic
- * @mhi_dev: Device associated with the channels
- *
- * Allocate and initialize the channel context and also issue the START channel
- * command to both channels. Channels can be started only if both host and
- * device execution environments match and channels are in a DISABLED state.
- * The MHI core will automatically allocate and queue buffers for the DL traffic.
- */
-int mhi_prepare_for_transfer_autoqueue(struct mhi_device *mhi_dev);
 
 /**
  * mhi_unprepare_from_transfer - Reset UL and DL channels for data transfer.

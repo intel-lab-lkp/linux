@@ -5,7 +5,6 @@
  * Copyright 2013 Freescale Semiconductor, Inc.
  */
 
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/property.h>
@@ -27,9 +26,6 @@
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
-
-/* This will be the driver name the kernel reports */
-#define DRIVER_NAME "vf610-adc"
 
 /* Vybrid/IMX ADC registers */
 #define VF610_REG_ADC_HC0		0x00
@@ -835,7 +831,7 @@ static int vf610_adc_probe(struct platform_device *pdev)
 
 	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(struct vf610_adc));
 	if (!indio_dev)
-		return dev_err_probe(&pdev->dev, -ENOMEM, "Failed allocating iio device\n");
+		return -ENOMEM;
 
 	info = iio_priv(indio_dev);
 	info->dev = &pdev->dev;
@@ -952,7 +948,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(vf610_adc_pm_ops, vf610_adc_suspend,
 static struct platform_driver vf610_adc_driver = {
 	.probe          = vf610_adc_probe,
 	.driver         = {
-		.name   = DRIVER_NAME,
+		.name   = "vf610-adc",
 		.of_match_table = vf610_adc_match,
 		.pm     = pm_sleep_ptr(&vf610_adc_pm_ops),
 	},

@@ -8,7 +8,6 @@
 #include <linux/bitops.h>
 #include <linux/gpio/driver.h>
 #include <linux/kernel.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
@@ -102,16 +101,13 @@ static int xra1403_get(struct gpio_chip *chip, unsigned int offset)
 	return !!(val & BIT(offset % 8));
 }
 
-static void xra1403_set(struct gpio_chip *chip, unsigned int offset, int value)
+static int xra1403_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
-	int ret;
 	struct xra1403 *xra = gpiochip_get_data(chip);
 
-	ret = regmap_update_bits(xra->regmap, to_reg(XRA_OCR, offset),
-			BIT(offset % 8), value ? BIT(offset % 8) : 0);
-	if (ret)
-		dev_err(chip->parent, "Failed to set pin: %d, ret: %d\n",
-				offset, ret);
+	return regmap_update_bits(xra->regmap, to_reg(XRA_OCR, offset),
+				  BIT(offset % 8),
+				  value ? BIT(offset % 8) : 0);
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -138,8 +134,7 @@ static void xra1403_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 	gcr = value[XRA_GCR + 1] << 8 | value[XRA_GCR];
 	gsr = value[XRA_GSR + 1] << 8 | value[XRA_GSR];
 	for_each_requested_gpio(chip, i, label) {
-		seq_printf(s, " gpio-%-3d (%-12s) %s %s\n",
-			   chip->base + i, label,
+		seq_printf(s, " gpio-%-3d (%-12s) %s %s\n", i, label,
 			   (gcr & BIT(i)) ? "in" : "out",
 			   str_hi_lo(gsr & BIT(i)));
 	}

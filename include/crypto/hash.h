@@ -148,7 +148,6 @@ struct ahash_request {
  * @exit_tfm: Deinitialize the cryptographic transformation object.
  *	      This is a counterpart to @init_tfm, used to remove
  *	      various changes set in @init_tfm.
- * @clone_tfm: Copy transform into new object, may allocate memory.
  * @halg: see struct hash_alg_common
  */
 struct ahash_alg {
@@ -165,7 +164,6 @@ struct ahash_alg {
 		      unsigned int keylen);
 	int (*init_tfm)(struct crypto_ahash *tfm);
 	void (*exit_tfm)(struct crypto_ahash *tfm);
-	int (*clone_tfm)(struct crypto_ahash *dst, struct crypto_ahash *src);
 
 	struct hash_alg_common halg;
 };
@@ -177,14 +175,26 @@ struct shash_desc {
 
 #define HASH_MAX_DIGESTSIZE	 64
 
+/*
+ * The size of a core hash state and a partial block.  The final byte
+ * is the length of the partial block.
+ */
+#define HASH_STATE_AND_BLOCK(state, block) ((state) + (block) + 1)
+
+
 /* Worst case is sha3-224. */
-#define HASH_MAX_STATESIZE	 200 + 144 + 1
+#define HASH_MAX_STATESIZE	 HASH_STATE_AND_BLOCK(200, 144)
+
+/* This needs to match arch/s390/crypto/sha.h. */
+#define S390_SHA_CTX_SIZE	216
 
 /*
  * Worst case is hmac(sha3-224-s390).  Its context is a nested 'shash_desc'
  * containing a 'struct s390_sha_ctx'.
  */
-#define HASH_MAX_DESCSIZE	(sizeof(struct shash_desc) + 360)
+#define SHA3_224_S390_DESCSIZE	HASH_STATE_AND_BLOCK(S390_SHA_CTX_SIZE, 144)
+#define HASH_MAX_DESCSIZE	(sizeof(struct shash_desc) + \
+				 SHA3_224_S390_DESCSIZE)
 #define MAX_SYNC_HASH_REQSIZE	(sizeof(struct ahash_request) + \
 				 HASH_MAX_DESCSIZE)
 
@@ -227,7 +237,6 @@ struct shash_desc {
  * @exit_tfm: Deinitialize the cryptographic transformation object.
  *	      This is a counterpart to @init_tfm, used to remove
  *	      various changes set in @init_tfm.
- * @clone_tfm: Copy transform into new object, may allocate memory.
  * @descsize: Size of the operational state for the message digest. This state
  * 	      size is the memory size that needs to be allocated for
  *	      shash_desc.__ctx
@@ -251,7 +260,6 @@ struct shash_alg {
 		      unsigned int keylen);
 	int (*init_tfm)(struct crypto_shash *tfm);
 	void (*exit_tfm)(struct crypto_shash *tfm);
-	int (*clone_tfm)(struct crypto_shash *dst, struct crypto_shash *src);
 
 	unsigned int descsize;
 
@@ -309,8 +317,6 @@ static inline struct crypto_ahash *__crypto_ahash_cast(struct crypto_tfm *tfm)
  */
 struct crypto_ahash *crypto_alloc_ahash(const char *alg_name, u32 type,
 					u32 mask);
-
-struct crypto_ahash *crypto_clone_ahash(struct crypto_ahash *tfm);
 
 static inline struct crypto_tfm *crypto_ahash_tfm(struct crypto_ahash *tfm)
 {
@@ -746,8 +752,6 @@ static inline void ahash_request_set_virt(struct ahash_request *req,
  */
 struct crypto_shash *crypto_alloc_shash(const char *alg_name, u32 type,
 					u32 mask);
-
-struct crypto_shash *crypto_clone_shash(struct crypto_shash *tfm);
 
 int crypto_has_shash(const char *alg_name, u32 type, u32 mask);
 
