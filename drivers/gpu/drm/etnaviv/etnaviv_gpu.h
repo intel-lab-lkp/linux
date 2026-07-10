@@ -148,6 +148,8 @@ struct etnaviv_gpu {
 	u32 hangcheck_primid;
 	u32 hangcheck_fence;
 
+	u32 reset_counter;
+
 	void __iomem *mmio;
 	int irq;
 

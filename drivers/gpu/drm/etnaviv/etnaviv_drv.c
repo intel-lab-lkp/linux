@@ -296,6 +296,32 @@ static int etnaviv_ioctl_get_param(struct drm_device *dev, void *data,
 	return etnaviv_gpu_get_param(gpu, args->param, &args->value);
 }
 
+static int etnaviv_ioctl_reset_query(struct drm_device *dev, void *data,
+		struct drm_file *file)
+{
+	struct etnaviv_drm_private *priv = dev->dev_private;
+	struct etnaviv_file_private *ctx = file->driver_priv;
+	struct drm_etnaviv_reset_query *args = data;
+	struct etnaviv_gpu *gpu;
+
+	if (args->flags)
+		return -EINVAL;
+
+	if (args->pipe >= ETNA_MAX_PIPES)
+		return -EINVAL;
+
+	gpu = priv->gpu[args->pipe];
+	if (!gpu)
+		return -ENXIO;
+
+	mutex_lock(&gpu->lock);
+	args->global_reset_counter = gpu->reset_counter;
+	args->context_reset_counter = ctx->reset_counter;
+	mutex_unlock(&gpu->lock);
+
+	return 0;
+}
+
 static int etnaviv_ioctl_gem_new(struct drm_device *dev, void *data,
 		struct drm_file *file)
 {
@@ -502,6 +528,7 @@ static const struct drm_ioctl_desc etnaviv_ioctls[] = {
 	ETNA_IOCTL(GEM_WAIT,     gem_wait,     DRM_RENDER_ALLOW),
 	ETNA_IOCTL(PM_QUERY_DOM, pm_query_dom, DRM_RENDER_ALLOW),
 	ETNA_IOCTL(PM_QUERY_SIG, pm_query_sig, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(RESET_QUERY,  reset_query,  DRM_RENDER_ALLOW),
 };
 
 static void etnaviv_show_fdinfo(struct drm_printer *p, struct drm_file *file)
@@ -530,7 +557,7 @@ static const struct drm_driver etnaviv_drm_driver = {
 	.name               = "etnaviv",
 	.desc               = "etnaviv DRM",
 	.major              = 1,
-	.minor              = 4,
+	.minor              = 5,
 };
 
 /*
