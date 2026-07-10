@@ -13,6 +13,19 @@
 #define __has_builtin(x) (0)
 #endif
 
+/*
+ * C23 introduces "auto" as a standard way to define type-inferred
+ * variables, but "auto" has been a (useless) keyword even since K&R C,
+ * so it has always been "namespace reserved."
+ *
+ * Until at some future time we require C23 support, we need the gcc
+ * extension __auto_type, but there is no reason to put that elsewhere
+ * in the source code.
+ */
+#if !defined(__cplusplus) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L)
+# define auto __auto_type
+#endif
+
 #include <linux/compiler-context-analysis.h>
 
 /* Compiler specific macros. */
