@@ -41,6 +41,14 @@
 #include "xe_vm.h"
 #include "xe_vram_types.h"
 
+/*
+ * Once this many BOs are tracked on the device defrag list (i.e. were backed
+ * with a sub-optimal page order), request that the TTM pool backs off from
+ * aggressive reclaim at the beneficial order during populate, so that
+ * allocations make forward progress instead of stalling.
+ */
+#define XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD	2
+
 const char *const xe_mem_type_to_name[TTM_NUM_MEM_TYPES]  = {
 	[XE_PL_SYSTEM] = "system",
 	[XE_PL_TT] = "gtt",
@@ -598,6 +606,12 @@ static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 	if (ttm_tt_is_backed_up(tt) && !xe_tt->purgeable) {
 		err = ttm_tt_restore(ttm_dev, tt, ctx);
 	} else {
+		struct xe_device *xe = ttm_to_xe_device(ttm_dev);
+
+		if (atomic_read(&xe->mem.defrag.count) >=
+		    XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD)
+			ctx->beneficial_reclaim_backoff = true;
+
 		ttm_tt_clear_backed_up(tt);
 		err = ttm_pool_alloc(&ttm_dev->pool, tt, ctx);
 	}
