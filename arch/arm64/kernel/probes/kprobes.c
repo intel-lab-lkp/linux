@@ -282,9 +282,31 @@ int __kprobes kprobe_fault_handler(struct pt_regs *regs, unsigned int fsr)
 	struct kprobe *cur = kprobe_running();
 	struct kprobe_ctlblk *kcb = get_kprobe_ctlblk();
 
+	/*
+	 * Simulated kprobes execute in the debug trap context and have no
+	 * XOL slot. Any page fault taken while a simulated kprobe is in
+	 * progress cannot have been caused by kprobe single-stepping and
+	 * must be left alone for the normal page fault handler, including
+	 * fixup_exception.
+	 */
+	if (cur && !cur->ainsn.xol_insn)
+		return 0;
+
 	switch (kcb->kprobe_status) {
 	case KPROBE_HIT_SS:
 	case KPROBE_REENTER:
+		/*
+		 * A page fault taken while in KPROBE_HIT_SS or
+		 * KPROBE_REENTER state is only attributable to kprobe
+		 * single-stepping if the faulting PC points to the
+		 * current kprobe's XOL instruction. If the fault occurred
+		 * elsewhere (e.g. in perf or tracing code invoked from the
+		 * debug exception path), leave it for the normal page fault
+		 * handler to process.
+		 */
+		if (instruction_pointer(regs) != (unsigned long)cur->ainsn.xol_insn)
+			break;
+
 		/*
 		 * We are here because the instruction being single
 		 * stepped caused a page fault. We reset the current
