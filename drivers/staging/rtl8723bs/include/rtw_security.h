@@ -172,7 +172,7 @@ struct security_priv {
 do {\
 	switch (psecuritypriv->dot11_auth_algrthm) {\
 	case dot11_auth_algrthm_open:\
-	case dot11AuthAlgrthm_Shared:\
+	case dot11_auth_algrthm_shared:\
 	case dot11_auth_algrthm_auto:\
 		encry_algo = (u8)psecuritypriv->dot11_privacy_algrthm;\
 		break;\

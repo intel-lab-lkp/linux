@@ -525,7 +525,7 @@ static int update_attrib_sec_info(struct adapter *padapter, struct pkt_attrib *p
 
 		switch (psecuritypriv->dot11_auth_algrthm) {
 		case dot11_auth_algrthm_open:
-		case dot11AuthAlgrthm_Shared:
+		case dot11_auth_algrthm_shared:
 		case dot11_auth_algrthm_auto:
 			pattrib->key_idx = (u8)psecuritypriv->dot11PrivacyKeyIndex;
 			break;
