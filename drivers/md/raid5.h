@@ -572,12 +572,12 @@ struct r5conf {
 	/* only protect corresponding hash list and inactive_list */
 	spinlock_t		hash_locks[NR_STRIPE_HASH_LOCKS];
 	struct mddev		*mddev;
-	int			chunk_sectors;
+	unsigned int		chunk_sectors;
 	int			level, algorithm, rmw_level;
 	int			max_degraded;
 	int			raid_disks;
-	int			max_nr_stripes;
-	int			min_nr_stripes;
+	unsigned int		max_nr_stripes;
+	unsigned int		min_nr_stripes;
 #if PAGE_SIZE != DEFAULT_STRIPE_SIZE
 	unsigned long	stripe_size;
 	unsigned int	stripe_shift;
@@ -595,7 +595,7 @@ struct r5conf {
 	 */
 	sector_t		reshape_safe;
 	int			previous_raid_disks;
-	int			prev_chunk_sectors;
+	unsigned int		prev_chunk_sectors;
 	int			prev_algo;
 	short			generation; /* increments with every reshape */
 	seqcount_spinlock_t	gen_lock;	/* lock against generation changes */

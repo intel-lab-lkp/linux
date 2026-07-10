@@ -2970,7 +2970,7 @@ sector_t raid5_compute_sector(struct r5conf *conf, sector_t r_sector,
 	sector_t new_sector;
 	int algorithm = previous ? conf->prev_algo
 				 : conf->algorithm;
-	int sectors_per_chunk = previous ? conf->prev_chunk_sectors
+	unsigned int sectors_per_chunk = previous ? conf->prev_chunk_sectors
 					 : conf->chunk_sectors;
 	int raid_disks = previous ? conf->previous_raid_disks
 				  : conf->raid_disks;
@@ -3166,7 +3166,7 @@ sector_t raid5_compute_blocknr(struct stripe_head *sh, int i, int previous)
 	int raid_disks = sh->disks;
 	int data_disks = raid_disks - conf->max_degraded;
 	sector_t new_sector = sh->sector, check;
-	int sectors_per_chunk = previous ? conf->prev_chunk_sectors
+	unsigned int sectors_per_chunk = previous ? conf->prev_chunk_sectors
 					 : conf->chunk_sectors;
 	int algorithm = previous ? conf->prev_algo
 				 : conf->algorithm;
@@ -3584,7 +3584,7 @@ static void end_reshape(struct r5conf *conf);
 static void stripe_set_idx(sector_t stripe, struct r5conf *conf, int previous,
 			    struct stripe_head *sh)
 {
-	int sectors_per_chunk =
+	unsigned int sectors_per_chunk =
 		previous ? conf->prev_chunk_sectors : conf->chunk_sectors;
 	int dd_idx;
 	int chunk_offset = sector_div(stripe, sectors_per_chunk);
@@ -6103,7 +6103,7 @@ out:
 static sector_t raid5_bio_lowest_chunk_sector(struct r5conf *conf,
 					      struct bio *bi)
 {
-	int sectors_per_chunk = conf->chunk_sectors;
+	unsigned int sectors_per_chunk = conf->chunk_sectors;
 	int raid_disks = conf->raid_disks;
 	int dd_idx;
 	struct stripe_head sh;
@@ -7930,7 +7930,7 @@ static int raid5_run(struct mddev *mddev)
 		sector_t here_new, here_old;
 		int old_disks;
 		int max_degraded = (mddev->level == 6 ? 2 : 1);
-		int chunk_sectors;
+		unsigned int chunk_sectors;
 		int new_data_disks;
 
 		if (journal_dev) {
@@ -8832,7 +8832,7 @@ static int raid5_check_reshape(struct mddev *mddev)
 	 * to be used by a reshape pass.
 	 */
 	struct r5conf *conf = mddev->private;
-	int new_chunk = mddev->new_chunk_sectors;
+	unsigned int new_chunk = mddev->new_chunk_sectors;
 
 	if (mddev->new_layout >= 0 && !algorithm_valid_raid5(mddev->new_layout))
 		return -EINVAL;
@@ -8866,7 +8866,7 @@ static int raid5_check_reshape(struct mddev *mddev)
 
 static int raid6_check_reshape(struct mddev *mddev)
 {
-	int new_chunk = mddev->new_chunk_sectors;
+	unsigned int new_chunk = mddev->new_chunk_sectors;
 
 	if (mddev->new_layout >= 0 && !algorithm_valid_raid6(mddev->new_layout))
 		return -EINVAL;
