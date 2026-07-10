@@ -7446,6 +7446,15 @@ int smb2_read(struct ksmbd_work *work)
 		goto out;
 	}
 
+	/*
+	 * ksmbd_vfs_read() fills only nbytes; the [nbytes, ALIGN(nbytes, 8))
+	 * tail of the un-zeroed buffer is transmitted as compound-response
+	 * alignment padding, leaking uninitialized kernel memory to the
+	 * client.  Zero just that tail.
+	 */
+	if (nbytes & 7)
+		memset(aux_payload_buf + nbytes, 0, ALIGN(nbytes, 8) - nbytes);
+
 	if ((nbytes == 0 && length != 0) || nbytes < mincount) {
 		kvfree(aux_payload_buf);
 		rsp->hdr.Status = STATUS_END_OF_FILE;
