@@ -1200,7 +1200,10 @@ static bool nbcon_kthread_should_wakeup(struct console *con, struct nbcon_contex
 	cookie = console_srcu_read_lock();
 
 	flags = console_srcu_read_flags(con);
-	if (console_is_usable(con, flags, false)) {
+	if (unlikely(flags & CON_SYNC)) {
+		/* Sync consoles never print from the printer thread. */
+		;
+	} else if (console_is_usable(con, flags, false)) {
 		/* Bring the sequence in @ctxt up to date */
 		ctxt->seq = nbcon_seq_read(con);
 
@@ -1653,8 +1656,9 @@ again:
  * __nbcon_atomic_flush_pending - Flush all nbcon consoles using their
  *					write_atomic() callback
  * @stop_seq:			Flush up until this record
+ * @sync_only:			Only flush sync consoles (CON_SYNC)
  */
-static void __nbcon_atomic_flush_pending(u64 stop_seq)
+static void __nbcon_atomic_flush_pending(u64 stop_seq, bool sync_only)
 {
 	struct console *con;
 	int cookie;
@@ -1664,6 +1668,9 @@ static void __nbcon_atomic_flush_pending(u64 stop_seq)
 		short flags = console_srcu_read_flags(con);
 
 		if (!(flags & CON_NBCON))
+			continue;
+
+		if (sync_only && !(flags & CON_SYNC))
 			continue;
 
 		if (!console_is_usable(con, flags, true))
@@ -1688,7 +1695,22 @@ static void __nbcon_atomic_flush_pending(u64 stop_seq)
  */
 void nbcon_atomic_flush_pending(void)
 {
-	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb));
+	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb), false);
+}
+
+/**
+ * nbcon_sync_flush_pending - Flush all nbcon sync consoles (CON_SYNC)
+ *				using their write_atomic() callback
+ *
+ * Flush the backlog of all sync consoles up through the currently newest
+ * record. This is the same as nbcon_atomic_flush_pending() except only
+ * for sync (CON_SYNC) consoles.
+ *
+ * See nbcon_atomic_flush_pending() for more details.
+ */
+void nbcon_sync_flush_pending(void)
+{
+	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb), true);
 }
 
 /**
@@ -1701,7 +1723,7 @@ void nbcon_atomic_flush_pending(void)
 void nbcon_atomic_flush_unsafe(void)
 {
 	panic_nbcon_allow_unsafe_takeover = true;
-	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb));
+	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb), false);
 	panic_nbcon_allow_unsafe_takeover = false;
 }
 
@@ -1905,6 +1927,7 @@ void nbcon_device_release(struct console *con)
 {
 	struct nbcon_context *ctxt = &ACCESS_PRIVATE(con, nbcon_device_ctxt);
 	struct console_flush_type ft;
+	short flags;
 	int cookie;
 
 	if (!nbcon_context_exit_unsafe(ctxt))
@@ -1919,8 +1942,15 @@ void nbcon_device_release(struct console *con)
 	 * usable throughout flushing.
 	 */
 	cookie = console_srcu_read_lock();
-	printk_get_console_flush_type(&ft);
-	if (console_is_usable(con, console_srcu_read_flags(con), true) &&
+	flags = console_srcu_read_flags(con);
+	if (unlikely(flags & CON_SYNC)) {
+		/* Sync consoles will always perform nbcon_atomic flushing. */
+		memset(&ft, 0, sizeof(ft));
+		ft.nbcon_atomic = true;
+	} else {
+		printk_get_console_flush_type(&ft);
+	}
+	if (console_is_usable(con, flags, true) &&
 	    !ft.nbcon_offload &&
 	    prb_read_valid(prb, nbcon_seq_read(con), NULL)) {
 		/*

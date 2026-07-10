@@ -454,6 +454,13 @@ bool have_legacy_console;
 bool have_nbcon_console;
 
 /*
+ * Specifies if a console is running in sync mode. If any consoles are running
+ * in sync mode, printk() will immediately flush such consoles using their
+ * write_atomic() callback.
+ */
+bool have_sync_console;
+
+/*
  * Specifies if a boot console is registered. If boot consoles are present,
  * nbcon consoles cannot print simultaneously and must be synchronized by
  * the console lock. This is because boot consoles and nbcon consoles may
@@ -2456,6 +2463,8 @@ asmlinkage int vprintk_emit(int facility, int level,
 
 	if (ft.nbcon_atomic)
 		nbcon_atomic_flush_pending();
+	else if (have_sync_console)
+		nbcon_sync_flush_pending();
 
 	if (ft.nbcon_offload)
 		nbcon_kthreads_wake();
@@ -4144,6 +4153,16 @@ void register_console(struct console *newcon)
 	newcon->dropped = 0;
 	init_seq = get_init_console_seq(newcon, bootcon_registered);
 
+	if (newcon->flags & CON_SYNC) {
+		if (!(newcon->flags & CON_NBCON) || (newcon->flags & CON_NBCON_ATOMIC_UNSAFE)) {
+			newcon->flags &= ~CON_SYNC;
+			con_printk(KERN_INFO, newcon, "sync mode unsupported\n");
+		}
+	}
+
+	if (newcon->flags & CON_SYNC)
+		have_sync_console = true;
+
 	if (newcon->flags & CON_NBCON) {
 		have_nbcon_console = true;
 		nbcon_seq_force(newcon, init_seq);
@@ -4231,6 +4250,7 @@ static int unregister_console_locked(struct console *console)
 	bool found_legacy_con = false;
 	bool found_nbcon_con = false;
 	bool found_boot_con = false;
+	bool found_sync_con = false;
 	unsigned long flags;
 	struct console *c;
 	int res;
@@ -4299,6 +4319,9 @@ static int unregister_console_locked(struct console *console)
 			found_nbcon_con = true;
 		else
 			found_legacy_con = true;
+
+		if (c->flags & CON_SYNC)
+			found_sync_con = true;
 	}
 	if (!found_boot_con)
 		have_boot_console = found_boot_con;
@@ -4306,6 +4329,8 @@ static int unregister_console_locked(struct console *console)
 		have_legacy_console = found_legacy_con;
 	if (!found_nbcon_con)
 		have_nbcon_console = found_nbcon_con;
+	if (!found_sync_con)
+		have_sync_console = found_sync_con;
 
 	/* @have_nbcon_console must be updated before calling nbcon_free(). */
 	if (console->flags & CON_NBCON)
