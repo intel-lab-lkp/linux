@@ -30,6 +30,9 @@ struct cifs_swn_reg {
 	bool ip_notify;
 
 	struct cifs_tcon *tcon;
+
+	unsigned long check_interval;
+	struct delayed_work check;
 };
 
 static int cifs_swn_auth_info_krb(struct cifs_tcon *tcon, struct sk_buff *skb)
@@ -241,6 +244,75 @@ nlmsg_fail:
 	return ret;
 }
 
+static void cifs_swn_reg_release(struct cifs_swn_reg *swnreg)
+{
+	int ret;
+
+	ret = cifs_swn_send_unregister_message(swnreg);
+	if (ret < 0)
+		cifs_dbg(VFS, "%s: Failed to send unregister message: %d\n", __func__, ret);
+
+	kfree(swnreg->net_name);
+	kfree(swnreg->share_name);
+	kfree(swnreg);
+}
+
+static void cifs_swn_reg_idr_remove(struct kref *ref)
+{
+	struct cifs_swn_reg *swnreg = container_of(ref, struct cifs_swn_reg, ref_count);
+
+	idr_remove(&cifs_swnreg_idr, swnreg->id);
+}
+
+/*
+ * Periodic task to enforce registration even when the userspace daemon is
+ * started after mounting the share.
+ */
+static void cifs_swn_reg_check(struct work_struct *work)
+{
+	struct cifs_swn_reg *swnreg =
+		container_of(work, struct cifs_swn_reg, check.work);
+	int ret;
+
+	/*
+	 * First take a reference to avoid other thread releasing the swnreg
+	 * on concurrent cifs_swn_unregister().
+	 *
+	 * Do not resurrect dead registrations, a concurrent cifs_swn_unregister
+	 * can drop refcount to 0 and remove this swnreg from the IDR before
+	 * releasing the mutex, but it will then wait for this callback to end
+	 * before releasing the swnreg.
+	 */
+	mutex_lock(&cifs_swnreg_idr_mutex);
+	if (!kref_get_unless_zero(&swnreg->ref_count)) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		return;
+	}
+	mutex_unlock(&cifs_swnreg_idr_mutex);
+
+
+	/*
+	 * It is safe to send the registration message multiple times.
+	 * The userspace client library tracks if registered or not
+	 * using the swnreg->id.
+	 */
+	ret = cifs_swn_send_register_message(swnreg);
+	if (ret < 0)
+		cifs_dbg(FYI, "%s: Failed to send register message: %d\n",
+			 __func__, ret);
+
+	/* Release our reference */
+	mutex_lock(&cifs_swnreg_idr_mutex);
+	if (kref_put(&swnreg->ref_count, cifs_swn_reg_idr_remove)) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		cifs_swn_reg_release(swnreg);
+		return;
+	}
+	mutex_unlock(&cifs_swnreg_idr_mutex);
+
+	queue_delayed_work(cifsiod_wq, &swnreg->check, swnreg->check_interval);
+}
+
 /*
  * Try to find a matching registration for the tcon's server name and share name.
  * Calls to this function must be protected by cifs_swnreg_idr_mutex.
@@ -350,6 +422,11 @@ static struct cifs_swn_reg *cifs_get_swn_reg(struct cifs_tcon *tcon)
 	swnreg->ip_notify = false;
 
 	swnreg->tcon = tcon;
+
+	swnreg->check_interval = tcon->ses->server->echo_interval;
+	INIT_DELAYED_WORK(&swnreg->check, cifs_swn_reg_check);
+
+	queue_delayed_work(cifsiod_wq, &swnreg->check, swnreg->check_interval);
 unlock:
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 
@@ -364,26 +441,6 @@ fail:
 fail_unlock:
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 	return ERR_PTR(ret);
-}
-
-static void cifs_swn_reg_release(struct cifs_swn_reg *swnreg)
-{
-	int ret;
-
-	ret = cifs_swn_send_unregister_message(swnreg);
-	if (ret < 0)
-		cifs_dbg(VFS, "%s: Failed to send unregister message: %d\n", __func__, ret);
-
-	kfree(swnreg->net_name);
-	kfree(swnreg->share_name);
-	kfree(swnreg);
-}
-
-static void cifs_swn_reg_idr_remove(struct kref *ref)
-{
-	struct cifs_swn_reg *swnreg = container_of(ref, struct cifs_swn_reg, ref_count);
-
-	idr_remove(&cifs_swnreg_idr, swnreg->id);
 }
 
 static int cifs_swn_resource_state_changed(struct cifs_swn_reg *swnreg, const char *name, int state)
@@ -593,7 +650,7 @@ int cifs_swn_register(struct cifs_tcon *tcon)
 	ret = cifs_swn_send_register_message(swnreg);
 	if (ret < 0) {
 		cifs_dbg(VFS, "%s: Failed to send swn register message: %d\n", __func__, ret);
-		/* Do not put the swnreg or return error, the echo task will retry */
+		/* Do not put the swnreg or return error, the check task will retry */
 	}
 
 	return 0;
@@ -604,7 +661,6 @@ int cifs_swn_unregister(struct cifs_tcon *tcon)
 	struct cifs_swn_reg *swnreg;
 
 	mutex_lock(&cifs_swnreg_idr_mutex);
-
 	swnreg = cifs_find_swn_reg(tcon);
 	if (IS_ERR(swnreg)) {
 		mutex_unlock(&cifs_swnreg_idr_mutex);
@@ -612,6 +668,7 @@ int cifs_swn_unregister(struct cifs_tcon *tcon)
 	}
 	if (kref_put(&swnreg->ref_count, cifs_swn_reg_idr_remove)) {
 		mutex_unlock(&cifs_swnreg_idr_mutex);
+		cancel_delayed_work_sync(&swnreg->check);
 		cifs_swn_reg_release(swnreg);
 		return 0;
 	}
@@ -654,19 +711,4 @@ void cifs_swn_dump(struct seq_file *m)
 	}
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 	seq_puts(m, "\n");
-}
-
-void cifs_swn_check(void)
-{
-	struct cifs_swn_reg *swnreg;
-	int id;
-	int ret;
-
-	mutex_lock(&cifs_swnreg_idr_mutex);
-	idr_for_each_entry(&cifs_swnreg_idr, swnreg, id) {
-		ret = cifs_swn_send_register_message(swnreg);
-		if (ret < 0)
-			cifs_dbg(FYI, "%s: Failed to send register message: %d\n", __func__, ret);
-	}
-	mutex_unlock(&cifs_swnreg_idr_mutex);
 }

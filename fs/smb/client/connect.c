@@ -632,9 +632,6 @@ cifs_echo_request(struct work_struct *work)
 	rc = server->ops->echo ? server->ops->echo(server) : -ENOSYS;
 	cifs_server_dbg(FYI, "send echo request: rc = %d\n", rc);
 
-	/* Check witness registrations */
-	cifs_swn_check();
-
 requeue_echo:
 	queue_delayed_work(cifsiod_wq, &server->echo, server->echo_interval);
 }
