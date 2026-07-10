@@ -183,6 +183,11 @@ enum target_state {
  *		remote_mac	(read-write)
  * @buf:	The buffer used to send the full msg to the network stack
  * @resume_wq:	Workqueue to resume deactivated target
+ * @skb_pool:	Per-target fallback skb pool consulted by find_skb() when
+ *		its GFP_ATOMIC allocation fails. Lifetime brackets a
+ *		successful netpoll_setup() / netpoll_cleanup() pair on @np.
+ * @refill_wq:	Work item that asynchronously tops @skb_pool back up to
+ *		MAX_SKBS after find_skb() drains an entry.
  */
 struct netconsole_target {
 	struct list_head	list;
@@ -208,6 +213,8 @@ struct netconsole_target {
 	 */
 	char			buf[MAX_PRINT_CHUNK + 1];
 	struct work_struct	resume_wq;
+	struct sk_buff_head	skb_pool;
+	struct work_struct	refill_wq;
 };
 
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
@@ -305,12 +312,10 @@ static void netcons_release_dev(struct netconsole_target *nt)
 		memset(&nt->np.dev_name, 0, IFNAMSIZ);
 }
 
-static void refill_skbs(struct netpoll *np)
+static void refill_skbs(struct netconsole_target *nt)
 {
-	struct sk_buff_head *skb_pool;
+	struct sk_buff_head *skb_pool = &nt->skb_pool;
 	struct sk_buff *skb;
-
-	skb_pool = &np->skb_pool;
 
 	while (READ_ONCE(skb_pool->qlen) < MAX_SKBS) {
 		skb = alloc_skb(MAX_SKB_SIZE, GFP_ATOMIC | __GFP_NOWARN);
@@ -323,10 +328,10 @@ static void refill_skbs(struct netpoll *np)
 
 static void refill_skbs_work_handler(struct work_struct *work)
 {
-	struct netpoll *np =
-		container_of(work, struct netpoll, refill_wq);
+	struct netconsole_target *nt =
+		container_of(work, struct netconsole_target, refill_wq);
 
-	refill_skbs(np);
+	refill_skbs(nt);
 }
 
 /* Seed the per-target skb pool that find_skb() falls back to. The queue
@@ -335,15 +340,13 @@ static void refill_skbs_work_handler(struct work_struct *work)
  */
 static void netconsole_skb_pool_init(struct netconsole_target *nt)
 {
-	refill_skbs(&nt->np);
+	refill_skbs(nt);
 }
 
 static void netconsole_skb_pool_flush(struct netconsole_target *nt)
 {
-	struct netpoll *np = &nt->np;
-
-	cancel_work_sync(&np->refill_wq);
-	skb_queue_purge_reason(&np->skb_pool, SKB_CONSUMED);
+	cancel_work_sync(&nt->refill_wq);
+	skb_queue_purge_reason(&nt->skb_pool, SKB_CONSUMED);
 }
 
 /* Attempts to resume logging to a deactivated target. */
@@ -462,8 +465,8 @@ static struct netconsole_target *alloc_and_init(void)
 	nt->state = STATE_DISABLED;
 	INIT_WORK(&nt->resume_wq, process_resume_target);
 	/* Set up the skb pool primitives once; enabling only refills it. */
-	skb_queue_head_init(&nt->np.skb_pool);
-	INIT_WORK(&nt->np.refill_wq, refill_skbs_work_handler);
+	skb_queue_head_init(&nt->skb_pool);
+	INIT_WORK(&nt->refill_wq, refill_skbs_work_handler);
 
 	return nt;
 }
@@ -1785,7 +1788,7 @@ static struct notifier_block netconsole_netdev_notifier = {
  * pool locks and is therefore not NMI-safe. Skip the refill when called
  * from NMI context; the next non-NMI caller will top the pool back up.
  */
-static struct sk_buff *netcons_skb_pop(struct netpoll *np, int len)
+static struct sk_buff *netcons_skb_pop(struct netconsole_target *nt, int len)
 {
 	struct sk_buff *skb;
 
@@ -1797,19 +1800,21 @@ static struct sk_buff *netcons_skb_pop(struct netpoll *np, int len)
 		if (!in_nmi())
 			net_warn_ratelimited("netconsole: dropping message, requested skb len %d exceeds pool buffer size %zu on %s\n",
 					     len, (size_t)MAX_SKB_SIZE,
-					     np->dev->name);
+					     nt->np.dev->name);
 		return NULL;
 	}
 
-	skb = skb_dequeue(&np->skb_pool);
+	skb = skb_dequeue(&nt->skb_pool);
 	if (!in_nmi())
-		schedule_work(&np->refill_wq);
+		schedule_work(&nt->refill_wq);
 
 	return skb;
 }
 
-static struct sk_buff *find_skb(struct netpoll *np, int len, int reserve)
+static struct sk_buff *find_skb(struct netconsole_target *nt, int len,
+				int reserve)
 {
+	struct netpoll *np = &nt->np;
 	int count = 0;
 	struct sk_buff *skb;
 
@@ -1818,7 +1823,7 @@ repeat:
 
 	skb = alloc_skb(len, GFP_ATOMIC | __GFP_NOWARN);
 	if (!skb)
-		skb = netcons_skb_pop(np, len);
+		skb = netcons_skb_pop(nt, len);
 
 	if (!skb) {
 		if (++count < 10) {
@@ -1940,8 +1945,10 @@ static void push_ipv6(struct netpoll *np, struct sk_buff *skb, int len)
 	skb->protocol = htons(ETH_P_IPV6);
 }
 
-static int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
+static int netpoll_send_udp(struct netconsole_target *nt, const char *msg,
+			    int len)
 {
+	struct netpoll *np = &nt->np;
 	int total_len, ip_len, udp_len;
 	struct sk_buff *skb;
 
@@ -1956,7 +1963,7 @@ static int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 
 	total_len = ip_len + LL_RESERVED_SPACE(np->dev);
 
-	skb = find_skb(np, total_len + np->dev->needed_tailroom,
+	skb = find_skb(nt, total_len + np->dev->needed_tailroom,
 		       total_len - len);
 	if (!skb)
 		return -ENOMEM;
@@ -1987,7 +1994,7 @@ static int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
  */
 static void send_udp(struct netconsole_target *nt, const char *msg, int len)
 {
-	int result = netpoll_send_udp(&nt->np, msg, len);
+	int result = netpoll_send_udp(nt, msg, len);
 
 	if (IS_ENABLED(CONFIG_NETCONSOLE_DYNAMIC)) {
 		if (result == NET_XMIT_DROP) {
