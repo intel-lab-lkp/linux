@@ -12899,6 +12899,8 @@ static int bnxt_hwrm_if_change(struct bnxt *bp, bool up)
 				bnxt_ulp_irq_stop(bp);
 			bnxt_free_ctx_mem(bp, false);
 			bnxt_dcb_free(bp);
+			if (fw_reset || caps_change)
+				bnxt_clear_crypto(bp);
 			rc = bnxt_fw_init_one(bp);
 			if (rc) {
 				clear_bit(BNXT_STATE_FW_RESET_DET, &bp->state);
@@ -14636,6 +14638,7 @@ static void bnxt_fw_reset_close(struct bnxt *bp)
 	bnxt_hwrm_func_drv_unrgtr(bp);
 	if (pci_is_enabled(bp->pdev))
 		pci_disable_device(bp->pdev);
+	bnxt_clear_crypto(bp);
 	bnxt_free_ctx_mem(bp, false);
 }
 
@@ -17292,6 +17295,12 @@ static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	rc = bnxt_dl_register(bp);
 	if (rc)
 		goto init_err_dl;
+	rc = bnxt_crypto_init(bp);
+	if (rc) {
+		bnxt_free_crypto_info(bp);
+		netdev_warn(bp->dev, "Failed to initialize crypto offload, err = %d\n",
+			    rc);
+	}
 
 	INIT_LIST_HEAD(&bp->usr_fltr_list);
 
@@ -17518,6 +17527,7 @@ static pci_ers_result_t bnxt_io_error_detected(struct pci_dev *pdev,
 
 	if (pci_is_enabled(pdev))
 		pci_disable_device(pdev);
+	bnxt_clear_crypto(bp);
 	bnxt_free_ctx_mem(bp, false);
 	netdev_unlock(netdev);
 
