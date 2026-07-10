@@ -75,7 +75,7 @@ TEST(ptrace_v_not_enabled)
 		ASSERT_EQ(-1, ret);
 
 		/* cleanup */
-
+		free(regset_data);
 		ASSERT_EQ(0, kill(pid, SIGKILL));
 	}
 }
@@ -207,7 +207,7 @@ TEST(ptrace_v_early_debug)
 		EXPECT_EQ(vl_csr, regset_data->vl);
 
 		/* cleanup */
-
+		free(regset_data);
 		ASSERT_EQ(0, kill(pid, SIGKILL));
 	}
 }
@@ -331,7 +331,7 @@ TEST(ptrace_v_syscall_clobbering)
 		EXPECT_EQ(0UL, regset_data->vl);
 
 		/* cleanup */
-
+		free(regset_data);
 		ASSERT_EQ(0, kill(pid, SIGKILL));
 	}
 }
@@ -649,7 +649,7 @@ TEST_F(v_csr_invalid, ptrace_v_invalid_values)
 		ASSERT_EQ(ret, -1);
 
 		/* cleanup */
-
+		free(regset_data);
 		ASSERT_EQ(0, kill(pid, SIGKILL));
 	}
 }
@@ -911,7 +911,7 @@ TEST_F(v_csr_valid, ptrace_v_valid_values)
 		EXPECT_EQ(regset_data->vlenb, vlenb);
 
 		/* cleanup */
-
+		free(regset_data);
 		ASSERT_EQ(0, kill(pid, SIGKILL));
 	}
 }
