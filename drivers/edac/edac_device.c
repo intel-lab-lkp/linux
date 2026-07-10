@@ -354,6 +354,10 @@ void edac_device_reset_delay_period(struct edac_device_ctl_info *edac_dev,
 	edac_dev->poll_msec = msec;
 	edac_dev->delay	    = msecs_to_jiffies(msec);
 
+	/* Don't re-arm the workqueue if the device is being torn down */
+	if (edac_dev->op_state == OP_OFFLINE)
+		return;
+
 	/* See comment in edac_device_workq_setup() above */
 	if (edac_dev->poll_msec == DEFAULT_POLL_INTERVAL)
 		edac_mod_work(&edac_dev->work, round_jiffies_relative(edac_dev->delay));
