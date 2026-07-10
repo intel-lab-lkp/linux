@@ -40,8 +40,8 @@ static int ad5686_i2c_read(struct ad5686_state *st, u8 addr)
 				      0x00);
 
 	ret = i2c_transfer(i2c->adapter, msg, 2);
-	if (ret < 0)
-		return ret;
+	if (ret != 2)
+		return ret < 0 ? ret : -EIO;
 
 	return be16_to_cpu(st->data[0].d16);
 }
