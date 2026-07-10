@@ -4351,35 +4351,55 @@ static int may_o_create(struct mnt_idmap *idmap,
  */
 static struct dentry *atomic_open(const struct path *path, struct dentry *dentry,
 				  struct file *file,
-				  int open_flag, umode_t mode)
+				  int open_flag, umode_t mode, int create_error)
 {
 	struct dentry *const DENTRY_NOT_SET = (void *) -1UL;
-	struct inode *dir =  path->dentry->d_inode;
+	struct inode *dir_inode = path->dentry->d_inode;
 	int error;
 
 	file->__f_path.dentry = DENTRY_NOT_SET;
 	file->__f_path.mnt = path->mnt;
-	error = dir->i_op->atomic_open(dir, dentry, file,
+	error = dir_inode->i_op->atomic_open(dir_inode, dentry, file,
 				       open_to_namei_flags(open_flag), mode);
 	d_lookup_done(dentry);
+
 	if (!error) {
 		if (file->f_mode & FMODE_OPENED) {
-			if (unlikely(dentry != file->f_path.dentry)) {
+			/* finish_open() called */
+			struct dentry *opened = file->f_path.dentry;
+			if (unlikely(opened != dentry)) {
 				dput(dentry);
-				dentry = dget(file->f_path.dentry);
+				dentry = dget(opened);
 			}
-		} else if (WARN_ON(file->f_path.dentry == DENTRY_NOT_SET)) {
-			error = -EIO;
-		} else {
-			if (file->f_path.dentry) {
+		} else if (likely(file->f_path.dentry != DENTRY_NOT_SET)) {
+			/* finish_no_open() called */
+			struct dentry *replaced = file->f_path.dentry;
+			if (replaced) {
 				dput(dentry);
-				dentry = file->f_path.dentry;
+				dentry = replaced;
 			}
 			if (unlikely(d_is_negative(dentry)))
 				error = -ENOENT;
+		} else {
+			const char *fsname = dentry->d_sb->s_type->name;
+			WARN(1, "%s: ->atomic_open() left file->f_path.dentry unset!\n",
+			        fsname);
+			error = -EIO;
 		}
 	}
+
 	if (error) {
+		if (unlikely(create_error) && error == -ENOENT) {
+			/*
+			 * Should have done a create, but errored before.
+			 * Some filesystems return -ENOENT directly instead of
+			 * calling finish_no_open() with a negative dentry;
+			 * either way it should only mean the child doesn't exist,
+			 * so a refused create is safe to record here.
+			 */
+			audit_inode_child(dir_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
+			error = create_error;
+		}
 		dput(dentry);
 		dentry = ERR_PTR(error);
 	}
@@ -4437,7 +4457,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		dentry = NULL;
 	}
 	if (dentry->d_inode) {
-		/* Cached positive dentry: will open in f_op->open */
+		/* Cached positive dentry: will open in do_open(). */
 		return dentry;
 	}
 
@@ -4471,10 +4491,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	if (dir_inode->i_op->atomic_open) {
 		if (nd->flags & LOOKUP_DIRECTORY)
 			open_flag |= O_DIRECTORY;
-		dentry = atomic_open(&nd->path, dentry, file, open_flag, mode);
-		if (unlikely(create_error) && dentry == ERR_PTR(-ENOENT))
-			dentry = ERR_PTR(create_error);
-		return dentry;
+		return atomic_open(&nd->path, dentry, file, open_flag, mode, create_error);
 	}
 
 	if (d_in_lookup(dentry)) {
@@ -4490,31 +4507,35 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 			dentry = res;
 		}
 	}
+	if (dentry->d_inode || !(op->open_flag & O_CREAT)) {
+		/* No need to create a file. If lookup returned a positive
+		 * dentry, the file will be opened in do_open(). */
+		return dentry;
+	}
 
-	if (unlikely(create_error) && !dentry->d_inode) {
+	/* Negative dentry with O_CREAT flag set */
+	audit_inode_child(dir_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
+
+	if (unlikely(create_error)) {
+		/* should have done a create, but we already errored */
 		error = create_error;
 		goto out_dput;
 	}
 
-	/* Negative dentry, just create the file */
-	if (!dentry->d_inode && (open_flag & O_CREAT)) {
-		/* but break the directory lease first! */
-		error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, delegated_inode);
-		if (error)
-			goto out_dput;
+	error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, delegated_inode);
+	if (error)
+		goto out_dput;
 
-		file->f_mode |= FMODE_CREATED;
-		audit_inode_child(dir_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
-		if (!dir_inode->i_op->create) {
-			error = -EACCES;
-			goto out_dput;
-		}
-
-		error = dir_inode->i_op->create(idmap, dir_inode, dentry,
-						mode, open_flag & O_EXCL);
-		if (error)
-			goto out_dput;
+	file->f_mode |= FMODE_CREATED;
+	if (!dir_inode->i_op->create) {
+		error = -EACCES;
+		goto out_dput;
 	}
+
+	error = dir_inode->i_op->create(idmap, dir_inode, dentry,
+					mode, open_flag & O_EXCL);
+	if (error)
+		goto out_dput;
 
 	return dentry;
 
@@ -5049,7 +5070,7 @@ struct file *dentry_create(struct path *path, int flags, umode_t mode,
 
 		/* atomic_open will dput(dentry) on error */
 		dget(orig_dentry);
-		dentry = atomic_open(path, dentry, file, flags, mode);
+		dentry = atomic_open(path, dentry, file, flags, mode, create_error);
 		error = PTR_ERR_OR_ZERO(dentry);
 
 		if (IS_ERR(dentry))
@@ -5058,9 +5079,6 @@ struct file *dentry_create(struct path *path, int flags, umode_t mode,
 		else
 			/* Drop the extra reference */
 			dput(orig_dentry);
-
-		if (unlikely(create_error) && error == -ENOENT)
-			error = create_error;
 
 		if (!error) {
 			if (file->f_mode & FMODE_CREATED)
