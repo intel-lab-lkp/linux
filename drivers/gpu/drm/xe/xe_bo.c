@@ -732,6 +732,13 @@ static int xe_bo_trigger_rebind(struct xe_device *xe, struct xe_bo *bo,
 			 */
 			if (!xe_device_is_l2_flush_optimized(xe))
 				continue;
+
+			/*
+			 * Attempt to flush L2 async, fallback to sync flush on
+			 * failure
+			 */
+			if (!xe_vm_flush_vm_bo_tlb_async(vm, bo, vm_bo))
+				continue;
 		}
 
 		if (!idle) {
