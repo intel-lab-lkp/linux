@@ -7,6 +7,7 @@
 #include <linux/export.h>
 #include <linux/syscalls.h>
 #include <linux/namei.h>
+#include <linux/blkdev.h>
 
 #include "internal.h"
 
@@ -88,12 +89,15 @@ int vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	struct inode *inode = d_inode(dentry);
 	int error;
 
-	if (!inode->i_op->fileattr_get)
+	if (!inode->i_op->fileattr_get && !S_ISBLK(inode->i_mode))
 		return -ENOIOCTLCMD;
 
 	error = security_inode_file_getattr(dentry, fa);
 	if (error)
 		return error;
+
+	if (!inode->i_op->fileattr_get)
+		return bdev_fileattr(inode, fa);
 
 	return inode->i_op->fileattr_get(dentry, fa);
 }

@@ -28,6 +28,7 @@
 #include <linux/part_stat.h>
 #include <linux/uaccess.h>
 #include <linux/stat.h>
+#include <linux/fileattr.h>
 #include "../fs/internal.h"
 #include "blk.h"
 
@@ -1424,6 +1425,42 @@ void bdev_statx(const struct path *path, struct kstat *stat, u32 request_mask)
 	stat->blksize = bdev_io_min(bdev);
 
 	blkdev_put_no_open(bdev);
+}
+
+/*
+ * Fill the direct I/O alignment attributes derived from a block device's
+ * queue limits.  Filesystems override the offset alignments as needed and
+ * set FS_XFLAG_DIO once they have decided direct I/O is supported.
+ */
+void bdev_fill_dio_attr(struct block_device *bdev, struct file_kattr *fa)
+{
+	fa->fsx_dio_mem_align = bdev_dma_alignment(bdev) + 1;
+	fa->fsx_dio_offset_align = bdev_logical_block_size(bdev);
+	fa->fsx_dio_read_offset_align = bdev_logical_block_size(bdev);
+	fa->fsx_dio_virt_boundary_align = bdev_virt_boundary_alignment(bdev);
+	fa->fsx_dio_offset_align_max_vecs = bdev_max_segments(bdev);
+}
+EXPORT_SYMBOL_GPL(bdev_fill_dio_attr);
+
+/*
+ * Handle DIO alignment for block devices via fileattr.
+ */
+int bdev_fileattr(const struct inode *inode, struct file_kattr *fa)
+{
+	struct block_device *bdev;
+
+	bdev = blkdev_get_no_open(inode->i_rdev, false);
+	if (!bdev)
+		return -ENODEV;
+
+	memset(fa, 0, sizeof(*fa));
+	bdev_fill_dio_attr(bdev, fa);
+	fa->fsx_valid = true;
+	fa->flags_valid = true;
+	fa->fsx_xflags |= FS_XFLAG_DIO;
+
+	blkdev_put_no_open(bdev);
+	return 0;
 }
 
 bool disk_live(struct gendisk *disk)
