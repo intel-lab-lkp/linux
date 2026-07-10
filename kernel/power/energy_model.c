@@ -331,7 +331,7 @@ int em_dev_update_perf_domain(struct device *dev,
 	struct em_perf_table *old_table;
 	struct em_perf_domain *pd;
 
-	if (!dev)
+	if (!dev || IS_ERR_OR_NULL(new_table))
 		return -EINVAL;
 
 	/* Serialize update/unregister or concurrent updates */
