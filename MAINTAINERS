@@ -22351,6 +22351,32 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/power/supply/qcom,pmi8998-charger.yaml
 F:	drivers/power/supply/qcom_smbx.c
 
+QUALCOMM PHY DRIVERS (UFS)
+R:	Manivannan Sadhasivam <mani@kernel.org>
+R:	Dmitry Baryshkov <lumag@kernel.org>
+L:	linux-arm-msm@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/phy/qcom,*ufs*.yaml
+F:	drivers/phy/qualcomm/*ufs*
+
+QUALCOMM PHY DRIVERS (USB)
+R:	Dmitry Baryshkov <lumag@kernel.org>
+R:	Konrad Dybcio <konradybcio@kernel.org>
+R:	Wesley Cheng <wesley.cheng@oss.qualcomm.com>
+L:	linux-arm-msm@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/phy/qcom,*usb*.yaml
+F:	drivers/phy/qualcomm/*usb*
+
+QUALCOMM PHY DRIVERS (PCI/PCIe)
+R:	Manivannan Sadhasivam <mani@kernel.org>
+R:	Dmitry Baryshkov <lumag@kernel.org>
+R:	Konrad Dybcio <konradybcio@kernel.org>
+L:	linux-arm-msm@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/phy/qcom,*pci*.yaml
+F:	drivers/phy/qualcomm/*pci*
+
 QUALCOMM PPE DRIVER
 M:	Luo Jie <jie.luo@oss.qualcomm.com>
 L:	netdev@vger.kernel.org
