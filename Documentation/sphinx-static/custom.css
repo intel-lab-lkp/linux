@@ -3,6 +3,8 @@
  * CSS tweaks for the Alabaster theme
  */
 
+div.body {  max-width: none; }
+
 /* Shrink the headers a bit */
 div.body h1 { font-size: 180%; }
 div.body h2 { font-size: 150%; }
