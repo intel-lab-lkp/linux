@@ -238,6 +238,17 @@ struct ttm_operation_ctx {
 	 */
 	s64 defrag_bytes_remaining;
 	/**
+	 * @prealloc: Pages preallocated outside the dma-resv lock for a defrag
+	 * move. The pool allocator consumes these instead of allocating fresh
+	 * beneficial-order pages under the lock, moving the (potentially
+	 * reclaim/compaction stalling) high-order allocations out of the
+	 * critical section. NULL means allocate in-line as usual. The pool
+	 * silently falls back to in-line allocation for any shortfall. The
+	 * allocator consumes it for beneficial-order chunks of any populate;
+	 * drivers only set it for a defrag move.
+	 */
+	struct ttm_pool_prealloc *prealloc;
+	/**
 	 * @resv: Reservation object to be used together with
 	 * @allow_res_evict.
 	 */
