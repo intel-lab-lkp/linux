@@ -20,6 +20,7 @@
 #include <asm/i8259.h>
 #include <asm/desc.h>
 #include <asm/irq_remapping.h>
+#include <asm/hypervisor.h>
 
 #include <asm/trace/irq_vectors.h>
 
@@ -152,6 +153,7 @@ static void chip_data_update(struct irq_data *irqd, unsigned int newvec, unsigne
 	struct apic_chip_data *apicd = apic_chip_data(irqd);
 	struct irq_desc *desc = irq_data_to_desc(irqd);
 	bool managed = irqd_affinity_is_managed(irqd);
+	bool hv_retrigger = false;
 
 	lockdep_assert_held(&vector_lock);
 
@@ -181,7 +183,46 @@ static void chip_data_update(struct irq_data *irqd, unsigned int newvec, unsigne
 		apicd->prev_cpu = apicd->cpu;
 		WARN_ON_ONCE(apicd->cpu == newcpu);
 	} else {
+		/*
+		 * The outgoing CPU cannot use the deferred cleanup-vector
+		 * mechanism, so its vector is freed inline below. On Hyper-V the
+		 * MSI retarget hypercall is asynchronous, so an interrupt raised
+		 * inside the stop_machine window can be posted to the outgoing
+		 * CPU's old vIRR after the free. Two complementary steps handle
+		 * that (see also the retrigger at the end of the function):
+		 *
+		 *  - Retrigger on the new target so a raced completion is drained
+		 *    there rather than lost. The retarget is asynchronous, so the
+		 *    outgoing IRR is not authoritative and the IPI is issued
+		 *    unconditionally; a spurious ISR is harmless to
+		 *    completion-draining handlers (they find an empty queue).
+		 *  - Mark the freed slot VECTOR_RETRIGGERED so a late stray is
+		 *    absorbed by reevaluate_vector() instead of logging "No irq
+		 *    handler" while the CPU still takes interrupts during
+		 *    teardown; __setup_vector_irq() resets it on re-online.
+		 *
+		 * This mirrors msi_set_affinity()'s protection, which the Hyper-V
+		 * MSI chip bypasses via IRQCHIP_MOVE_DEFERRED. The guard is
+		 * restricted to edge MSI vectors on Hyper-V (msi_desc present):
+		 * only the MSI retarget hypercall is asynchronous, so edge IOAPIC
+		 * lines (retargeted synchronously via the RTE) and level-triggered
+		 * lines never see this race and must not be force-injected.
+		 */
+		if (hypervisor_is_type(X86_HYPER_MS_HYPERV) &&
+		    apicd->vector >= FIRST_EXTERNAL_VECTOR &&
+		    !irqd_is_level_type(irqd) && irq_data_get_msi_desc(irqd))
+			hv_retrigger = true;
 		apic_free_vector(apicd->cpu, apicd->vector, managed);
+		/*
+		 * apic_free_vector() releases the matrix bit but leaves the
+		 * outgoing CPU's vector_irq[] slot pointing at the stale desc, so
+		 * the marker is written unconditionally here. (Unlike
+		 * msi_set_affinity(), which marks a genuinely unused slot and
+		 * therefore guards with IS_ERR_OR_NULL, the slot here still holds
+		 * this irq's old desc.)
+		 */
+		if (hv_retrigger)
+			per_cpu(vector_irq, apicd->cpu)[apicd->vector] = VECTOR_RETRIGGERED;
 	}
 
 setnew:
@@ -190,6 +231,13 @@ setnew:
 	BUG_ON(!IS_ERR_OR_NULL(per_cpu(vector_irq, newcpu)[newvec]));
 	per_cpu(vector_irq, newcpu)[newvec] = desc;
 	apic_update_irq_cfg(irqd, newvec, newcpu);
+	/*
+	 * Drain any completion that raced onto the freed vIRR by retriggering
+	 * on the new target (see the else-branch above). Issued after the new
+	 * mapping is installed so the handler is present when it is serviced.
+	 */
+	if (hv_retrigger)
+		__apic_send_IPI(newcpu, newvec);
 }
 
 static void vector_assign_managed_shutdown(struct irq_data *irqd)
