@@ -9,6 +9,7 @@
 
 #include "bnxt.h"
 #include "bnxt_mpc.h"
+#include "bnxt_crypto.h"
 
 void bnxt_alloc_mpc_info(struct bnxt *bp, u8 mpc_chnls_cap)
 {
@@ -501,6 +502,206 @@ int bnxt_start_xmit_mpc(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 	return 0;
 }
 
+/* Returns true if the ring is successfully marked as closing.  It
+ * means that there will be no more MPC transmissions and NAPI will now
+ * complete any MPC completions on the completion ring with NULL handles
+ * to signal abort.
+ */
+static bool bnxt_disable_mpc_ring(struct bnxt_mpc_info *mpc, int mpc_ring)
+{
+	struct bnxt_tx_ring_info *txr;
+	bool disabled = false;
+	int i;
+
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc_ring >= mpc->mpc_ring_count[i])
+			continue;
+		txr = &mpc->mpc_rings[i][mpc_ring];
+		spin_lock_bh(&txr->tx_lock);
+		if (!READ_ONCE(txr->dev_state)) {
+			disabled = true;
+			WRITE_ONCE(txr->dev_state, BNXT_DEV_STATE_CLOSING);
+		}
+		spin_unlock_bh(&txr->tx_lock);
+		if (!disabled)
+			break;
+	}
+	/* Make sure napi polls see @dev_state change */
+	if (disabled)
+		synchronize_net();
+	return disabled;
+}
+
+static void bnxt_enable_mpc_ring(struct bnxt_mpc_info *mpc, int mpc_ring)
+{
+	struct bnxt_tx_ring_info *txr;
+	int i;
+
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc_ring >= mpc->mpc_ring_count[i])
+			continue;
+		txr = &mpc->mpc_rings[i][mpc_ring];
+		WRITE_ONCE(txr->dev_state, 0);
+	}
+}
+
+static void bnxt_clear_one_mpc_entries(struct bnxt *bp,
+				       struct bnxt_tx_ring_info *txr)
+{
+	struct bnxt_sw_mpc_tx_bd *tx_buf;
+	unsigned long handle;
+	int i, max_idx;
+	u32 client;
+
+	max_idx = bp->tx_nr_pages * TX_DESC_CNT;
+
+	for (i = 0; i < max_idx; i++) {
+		tx_buf = &txr->tx_mpc_buf_ring[i];
+		handle = tx_buf->handle;
+		if (handle) {
+			client = txr->tx_ring_struct.mpc_chnl_type;
+			bnxt_crypto_mpc_cmp(bp, client, handle, NULL, 0);
+			tx_buf->handle = 0;
+		}
+	}
+}
+
+static void bnxt_mpc_ring_stop(struct bnxt *bp, struct bnxt_mpc_info *mpc,
+			       int mpc_ring)
+{
+	struct bnxt_tx_ring_info *txr;
+	struct bnxt_cp_ring_info *cpr;
+	int i;
+
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc->mpc_ring_count[i] > mpc_ring) {
+			txr = &mpc->mpc_rings[i][mpc_ring];
+			bnxt_hwrm_tx_ring_free(bp, txr, true);
+		}
+	}
+	/* CP ring must be freed at the end to guarantee that the HWRM_DONE
+	 * responses for HWRM_RING_FREE can still be seen on the CP ring.
+	 */
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc->mpc_ring_count[i] > mpc_ring) {
+			txr = &mpc->mpc_rings[i][mpc_ring];
+			cpr = txr->tx_cpr;
+			if (cpr)
+				bnxt_hwrm_cp_ring_free(bp, cpr);
+		}
+	}
+	/* No new DMA to the CP ring at this point, but we need to wait
+	 * for any in-flight NAPI poll to finish before we zero the
+	 * completion entries in the CP ring.
+	 */
+	synchronize_net();
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc->mpc_ring_count[i] > mpc_ring) {
+			txr = &mpc->mpc_rings[i][mpc_ring];
+			cpr = txr->tx_cpr;
+			if (cpr)
+				bnxt_clear_one_cp_ring(bp, cpr);
+			bnxt_clear_one_mpc_entries(bp, txr);
+		}
+	}
+}
+
+static int bnxt_mpc_ring_start(struct bnxt *bp, struct bnxt_mpc_info *mpc,
+			       int mpc_ring)
+{
+	struct bnxt_tx_ring_info *txr;
+	int i, rc;
+
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc->mpc_ring_count[i] > mpc_ring) {
+			txr = &mpc->mpc_rings[i][mpc_ring];
+			txr->tx_prod = 0;
+			txr->tx_cons = 0;
+			txr->tx_hw_cons = 0;
+			rc = bnxt_hwrm_one_mpc_ring_alloc(bp, txr);
+			if (rc)
+				return rc;
+		}
+	}
+	return 0;
+}
+
+/* Called from bnxt_sp_task() with netdev_lock held.  If the device is not
+ * open there is nothing to do: the open path will re-allocate and
+ * re-initialize all MPC rings.
+ */
+void bnxt_mpc_ring_reset_task(struct bnxt *bp)
+{
+	struct bnxt_mpc_info *mpc = bp->mpc_info;
+	struct bnxt_tx_ring_info *txr;
+	int i, j;
+
+	if (!mpc || !test_bit(BNXT_STATE_OPEN, &bp->state))
+		return;
+
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		for (j = 0; j < mpc->mpc_ring_count[i]; j++) {
+			txr = &mpc->mpc_rings[i][j];
+			if (READ_ONCE(txr->dev_state) != BNXT_DEV_STATE_CLOSING)
+				continue;
+
+			/* Resets the whole ring (both types) */
+			netdev_warn(bp->dev, "Resetting MPC ring %d\n", j);
+			bnxt_mpc_ring_stop(bp, mpc, j);
+			if (bnxt_mpc_ring_start(bp, mpc, j)) {
+				netdev_err(bp->dev, "Error starting MPC ring %d, resetting device\n",
+					   j);
+				bnxt_mpc_ring_stop(bp, mpc, j);
+				bnxt_reset_task(bp, true);
+				/* bnxt_reset_task() will clear everything */
+				return;
+			}
+			bnxt_enable_mpc_ring(mpc, j);
+		}
+	}
+}
+
+static int bnxt_mpc_ring_reset(struct bnxt *bp, int mpc_ring)
+{
+	struct bnxt_mpc_info *mpc = bp->mpc_info;
+	struct bnxt_tx_ring_info *txr;
+	int i;
+
+	if (!mpc)
+		return 0;
+	if (mpc_ring >= mpc->mpc_cp_rings)
+		return -EINVAL;
+
+	if (!bnxt_disable_mpc_ring(mpc, mpc_ring))
+		return 0;
+
+	/* Completion handles will no longer be processed at this point
+	 * from NAPI, so we can complete the outstanding commands and
+	 * release the command contexts.
+	 */
+	for (i = 0; i < BNXT_MPC_TYPE_MAX; i++) {
+		if (mpc->mpc_ring_count[i] > mpc_ring) {
+			txr = &mpc->mpc_rings[i][mpc_ring];
+			bnxt_clear_one_mpc_entries(bp, txr);
+		}
+	}
+
+	/* If the device is going down, the reopen will re-allocate and
+	 * re-initialize all MPC rings.  Otherwise defer the reset to
+	 * bnxt_sp_task() to safely hold the netdev_lock.
+	 */
+	if (test_bit(BNXT_STATE_OPEN, &bp->state))
+		bnxt_queue_sp_work(bp, BNXT_MPC_RESET_SP_EVENT);
+	return 0;
+}
+
+int bnxt_mpc_timeout(struct bnxt *bp, struct bnxt_tx_ring_info *txr)
+{
+	if (txr->tx_ring_struct.queue_id == BNXT_MPC_QUEUE_ID)
+		return bnxt_mpc_ring_reset(bp, txr->txq_index);
+	return -EINVAL;
+}
+
 static bool bnxt_mpc_unsolicit(struct mpc_cmp *mpcmp)
 {
 	u32 client = MPC_CMP_CLIENT_TYPE(mpcmp);
@@ -517,6 +718,7 @@ int bnxt_mpc_cmp(struct bnxt *bp, struct bnxt_cp_ring_info *cpr, u32 *raw_cons)
 	u16 cons = RING_CMP(*raw_cons);
 	struct mpc_cmp *mpcmp, *mpcmp1;
 	u32 tmp_raw_cons = *raw_cons;
+	unsigned long handle = 0;
 	u32 client, cmpl_num;
 	u8 type;
 
@@ -565,11 +767,15 @@ int bnxt_mpc_cmp(struct bnxt *bp, struct bnxt_cp_ring_info *cpr, u32 *raw_cons)
 			goto cmp_done;
 		}
 		mpc_buf = &txr->tx_mpc_buf_ring[RING_TX(bp, tx_cons)];
-		mpc_buf->handle = 0;
+		if (!READ_ONCE(txr->dev_state)) {
+			handle = mpc_buf->handle;
+			mpc_buf->handle = 0;
+		}
 		tx_cons += mpc_buf->inline_bds;
 		WRITE_ONCE(txr->tx_cons, tx_cons);
 		txr->tx_hw_cons = RING_TX(bp, tx_cons);
 	}
+	bnxt_crypto_mpc_cmp(bp, client, handle, cmpl_entry_arr, cmpl_num);
 
 cmp_done:
 	*raw_cons = tmp_raw_cons;

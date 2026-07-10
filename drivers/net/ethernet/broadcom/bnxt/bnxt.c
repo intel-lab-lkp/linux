@@ -394,7 +394,7 @@ static void __bnxt_queue_sp_work(struct bnxt *bp)
 		schedule_work(&bp->sp_task);
 }
 
-static void bnxt_queue_sp_work(struct bnxt *bp, unsigned int event)
+void bnxt_queue_sp_work(struct bnxt *bp, unsigned int event)
 {
 	set_bit(event, &bp->sp_event);
 	__bnxt_queue_sp_work(bp);
@@ -7720,7 +7720,7 @@ void bnxt_hwrm_cp_ring_free(struct bnxt *bp, struct bnxt_cp_ring_info *cpr)
 	ring->fw_ring_id = INVALID_HW_RING_ID;
 }
 
-static void bnxt_clear_one_cp_ring(struct bnxt *bp, struct bnxt_cp_ring_info *cpr)
+void bnxt_clear_one_cp_ring(struct bnxt *bp, struct bnxt_cp_ring_info *cpr)
 {
 	struct bnxt_ring_struct *ring = &cpr->cp_ring_struct;
 	int i, size = ring->ring_mem.page_size;
@@ -14424,7 +14424,7 @@ static int bnxt_hwrm_rx_ring_reset(struct bnxt *bp, int ring_nr)
 	return hwrm_req_send_silent(bp, req);
 }
 
-static void bnxt_reset_task(struct bnxt *bp, bool silent)
+void bnxt_reset_task(struct bnxt *bp, bool silent)
 {
 	if (!silent)
 		bnxt_dbg_dump_states(bp);
@@ -14873,6 +14873,13 @@ static void bnxt_ulp_restart(struct bnxt *bp)
 	bnxt_ulp_start(bp);
 }
 
+static void bnxt_mpc_ring_reset_sp(struct bnxt *bp)
+{
+	bnxt_rtnl_lock_sp(bp);
+	bnxt_mpc_ring_reset_task(bp);
+	bnxt_rtnl_unlock_sp(bp);
+}
+
 static void bnxt_sp_task(struct work_struct *work)
 {
 	struct bnxt *bp = container_of(work, struct bnxt, sp_task);
@@ -14964,6 +14971,9 @@ static void bnxt_sp_task(struct work_struct *work)
 
 	if (test_and_clear_bit(BNXT_RST_RING_SP_EVENT, &bp->sp_event))
 		bnxt_rx_ring_reset(bp);
+
+	if (test_and_clear_bit(BNXT_MPC_RESET_SP_EVENT, &bp->sp_event))
+		bnxt_mpc_ring_reset_sp(bp);
 
 	if (test_and_clear_bit(BNXT_FW_RESET_NOTIFY_SP_EVENT, &bp->sp_event)) {
 		if (test_bit(BNXT_STATE_FW_FATAL_COND, &bp->state) ||
