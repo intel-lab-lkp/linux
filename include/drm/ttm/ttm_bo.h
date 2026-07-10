@@ -188,6 +188,13 @@ struct ttm_operation_ctx {
 	 */
 	bool allow_res_evict;
 	/**
+	 * @beneficial_reclaim_backoff: Back off from direct reclaim at the
+	 * pool's beneficial order. Useful when beneficial-order allocation has
+	 * recently been failing, to avoid burning CPU cycles in
+	 * reclaim/compaction before falling back to a smaller order anyway.
+	 */
+	bool beneficial_reclaim_backoff;
+	/**
 	 * @resv: Reservation object to be used together with
 	 * @allow_res_evict.
 	 */
