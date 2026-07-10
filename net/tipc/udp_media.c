@@ -94,6 +94,7 @@ struct udp_replicast {
  * @ifindex:	local address scope
  * @work:	used to schedule deferred work on a bearer
  * @rcast:	associated udp_replicast container
+ * @rcast_lock:	serialize updates to @rcast.list against concurrent updaters
  */
 struct udp_bearer {
 	struct tipc_bearer __rcu *bearer;
@@ -101,6 +102,7 @@ struct udp_bearer {
 	u32 ifindex;
 	struct work_struct work;
 	struct udp_replicast rcast;
+	spinlock_t rcast_lock; /* protects rcast.list */
 };
 
 static int tipc_udp_is_mcast_addr(struct udp_media_addr *addr)
@@ -278,30 +280,10 @@ out:
 	return err;
 }
 
-static bool tipc_udp_is_known_peer(struct tipc_bearer *b,
-				   struct udp_media_addr *addr)
-{
-	struct udp_replicast *rcast, *tmp;
-	struct udp_bearer *ub;
-
-	ub = rcu_dereference_rtnl(b->media_ptr);
-	if (!ub) {
-		pr_err_ratelimited("UDP bearer instance not found\n");
-		return false;
-	}
-
-	list_for_each_entry_safe(rcast, tmp, &ub->rcast.list, list) {
-		if (!memcmp(&rcast->addr, addr, sizeof(struct udp_media_addr)))
-			return true;
-	}
-
-	return false;
-}
-
 static int tipc_udp_rcast_add(struct tipc_bearer *b,
 			      struct udp_media_addr *addr)
 {
-	struct udp_replicast *rcast;
+	struct udp_replicast *rcast, *tmp;
 	struct udp_bearer *ub;
 
 	ub = rcu_dereference_rtnl(b->media_ptr);
@@ -326,7 +308,19 @@ static int tipc_udp_rcast_add(struct tipc_bearer *b,
 		pr_info("New replicast peer: %pI6\n", &rcast->addr.ipv6);
 #endif
 	b->bcast_addr.broadcast = TIPC_REPLICAST_SUPPORT;
+
+	/* serialize with other updaters and drop duplicates under the lock */
+	spin_lock_bh(&ub->rcast_lock);
+	list_for_each_entry(tmp, &ub->rcast.list, list) {
+		if (!memcmp(&tmp->addr, addr, sizeof(*addr))) {
+			spin_unlock_bh(&ub->rcast_lock);
+			dst_cache_destroy(&rcast->dst_cache);
+			kfree(rcast);
+			return 0;
+		}
+	}
 	list_add_rcu(&rcast->list, &ub->rcast.list);
+	spin_unlock_bh(&ub->rcast_lock);
 	return 0;
 }
 
@@ -360,9 +354,6 @@ static int tipc_udp_rcast_disc(struct tipc_bearer *b, struct sk_buff *skb)
 	} else {
 		return 0;
 	}
-
-	if (likely(tipc_udp_is_known_peer(b, &src)))
-		return 0;
 
 	return tipc_udp_rcast_add(b, &src);
 }
@@ -644,9 +635,6 @@ int tipc_udp_nl_bearer_add(struct tipc_bearer *b, struct nlattr *attr)
 		return -EINVAL;
 	}
 
-	if (tipc_udp_is_known_peer(b, &addr))
-		return 0;
-
 	return tipc_udp_rcast_add(b, &addr);
 }
 
@@ -679,6 +667,7 @@ static int tipc_udp_enable(struct net *net, struct tipc_bearer *b,
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&ub->rcast.list);
+	spin_lock_init(&ub->rcast_lock);
 
 	if (!attrs[TIPC_NLA_BEARER_UDP_OPTS])
 		goto err;
@@ -819,10 +808,12 @@ static void cleanup_bearer(struct work_struct *work)
 	struct udp_replicast *rcast, *tmp;
 	struct tipc_net *tn;
 
+	spin_lock_bh(&ub->rcast_lock);
 	list_for_each_entry_safe(rcast, tmp, &ub->rcast.list, list) {
 		list_del_rcu(&rcast->list);
 		call_rcu_hurry(&rcast->rcu, rcast_free_rcu);
 	}
+	spin_unlock_bh(&ub->rcast_lock);
 
 	tn = tipc_net(sock_net(ub->sk));
 
