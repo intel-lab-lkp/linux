@@ -621,6 +621,51 @@ void __tick_nohz_task_switch(void)
 	}
 }
 
+static DEFINE_MUTEX(tick_nohz_cpu_isolate_mutex);
+
+/*
+ * tick_nohz_cpu_isolate - Add a CPU to the full-dynticks set at runtime.
+ * @cpu: the CPU to isolate; must be offline.
+ *
+ * Lazily allocates tick_nohz_full_mask on the first call so that no
+ * nohz_full= boot parameter is required.  Activates per-CPU context
+ * tracking so that kernel/user transitions suppress the scheduler tick.
+ */
+int tick_nohz_cpu_isolate(int cpu)
+{
+	mutex_lock(&tick_nohz_cpu_isolate_mutex);
+	if (!cpumask_available(tick_nohz_full_mask)) {
+		if (!zalloc_cpumask_var(&tick_nohz_full_mask, GFP_KERNEL)) {
+			mutex_unlock(&tick_nohz_cpu_isolate_mutex);
+			return -ENOMEM;
+		}
+	}
+	cpumask_set_cpu(cpu, tick_nohz_full_mask);
+	if (!tick_nohz_full_running)
+		tick_nohz_full_running = true;
+	mutex_unlock(&tick_nohz_cpu_isolate_mutex);
+
+	ct_cpu_track_user(cpu);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tick_nohz_cpu_isolate);
+
+/*
+ * tick_nohz_cpu_deisolate - Remove a CPU from the full-dynticks set.
+ * @cpu: the CPU to de-isolate; must be offline.
+ */
+void tick_nohz_cpu_deisolate(int cpu)
+{
+	ct_cpu_untrack_user(cpu);
+
+	mutex_lock(&tick_nohz_cpu_isolate_mutex);
+	cpumask_clear_cpu(cpu, tick_nohz_full_mask);
+	if (cpumask_empty(tick_nohz_full_mask))
+		tick_nohz_full_running = false;
+	mutex_unlock(&tick_nohz_cpu_isolate_mutex);
+}
+EXPORT_SYMBOL_GPL(tick_nohz_cpu_deisolate);
+
 /* Get the boot-time nohz CPU list from the kernel parameters. */
 void __init tick_nohz_full_setup(cpumask_var_t cpumask)
 {

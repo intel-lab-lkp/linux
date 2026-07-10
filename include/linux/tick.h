@@ -210,6 +210,8 @@ extern void tick_nohz_dep_set_signal(struct task_struct *tsk,
 extern void tick_nohz_dep_clear_signal(struct signal_struct *signal,
 				       enum tick_dep_bits bit);
 extern bool tick_nohz_cpu_hotpluggable(unsigned int cpu);
+extern int tick_nohz_cpu_isolate(int cpu);
+extern void tick_nohz_cpu_deisolate(int cpu);
 
 /*
  * The below are tick_nohz_[set,clear]_dep() wrappers that optimize off-cases
@@ -281,6 +283,8 @@ static inline bool tick_nohz_full_cpu(int cpu) { return false; }
 static inline void tick_nohz_dep_set_cpu(int cpu, enum tick_dep_bits bit) { }
 static inline void tick_nohz_dep_clear_cpu(int cpu, enum tick_dep_bits bit) { }
 static inline bool tick_nohz_cpu_hotpluggable(unsigned int cpu) { return true; }
+static inline int tick_nohz_cpu_isolate(int cpu) { return -EINVAL; }
+static inline void tick_nohz_cpu_deisolate(int cpu) { }
 
 static inline void tick_dep_set(enum tick_dep_bits bit) { }
 static inline void tick_dep_clear(enum tick_dep_bits bit) { }
