@@ -11,6 +11,7 @@
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "bnxt_mpc.h"
+#include "bnxt_ktls.h"
 #include "bnxt_crypto.h"
 
 static u32 bnxt_get_max_crypto_key_ctx(struct bnxt *bp, int key_type)
@@ -80,11 +81,89 @@ void bnxt_alloc_crypto_info(struct bnxt *bp,
 		kctx->max_ctx = bnxt_get_max_crypto_key_ctx(bp, i);
 	}
 	crypto->max_key_ctxs_alloc = max_keys;
-	bp->fw_cap |= BNXT_FW_CAP_KTLS;
+	if (!bp->ktls_info)
+		bnxt_alloc_ktls_info(bp);
+	if (bp->ktls_info)
+		bp->fw_cap |= BNXT_FW_CAP_KTLS;
 	return;
 
 alloc_err:
 	kfree(crypto);
+}
+
+int bnxt_crypto_del(struct bnxt *bp, u8 type, u8 kind, u32 kid)
+{
+	struct bnxt_tx_ring_info *txr;
+	struct ce_delete_cmd cmd = {};
+	u32 data;
+
+	if (BNXT_NO_FW_ACCESS(bp))
+		return 0;
+
+	txr = bnxt_select_mpc_ring(bp, type);
+	if (!txr)
+		return -ENODEV;
+	if (kind == BNXT_CTX_KIND_CK_TX)
+		data = CE_DELETE_CMD_CTX_KIND_CK_TX;
+	else if (kind == BNXT_CTX_KIND_CK_RX)
+		data = CE_DELETE_CMD_CTX_KIND_CK_RX;
+	else
+		return -EINVAL;
+
+	data |= CE_DELETE_CMD_OPCODE_DEL |
+		(BNXT_KID_HW(kid) << CE_DELETE_CMD_KID_SFT);
+
+	cmd.ctx_kind_kid_opcode = cpu_to_le32(data);
+	return bnxt_xmit_crypto_cmd(bp, txr, &cmd, sizeof(cmd),
+				    BNXT_MPC_TMO_MSECS);
+}
+
+static void bnxt_crypto_del_all_kids(struct bnxt *bp, struct bnxt_kid_info *kid)
+{
+	int i, rc;
+
+	for (i = 0; i < kid->count; i++) {
+		if (!test_bit(i, kid->ids)) {
+			rc = bnxt_crypto_del(bp, kid->type, kid->kind,
+					     kid->start_id + i);
+			if (!rc)
+				set_bit(i, kid->ids);
+		}
+	}
+}
+
+/**
+ * bnxt_crypto_del_all - Delete all crypto connections
+ * @bp: pointer to bnxt device
+ *
+ * Delete all crypto connections and free all KIDs for re-use during
+ * shutdown.  Increment the epoch counter to invalidate any outstanding
+ * key references.
+ *
+ * Locking: the caller must have cleared BNXT_STATE_OPEN and waited for all
+ * in-flight kTLS control ops to drain.  Under these preconditions there are
+ * no concurrent readers or writers of the KID lists, so the lists can be
+ * walked without rcu_read_lock() or the kctx lock.
+ *
+ * Context: Process context during shutdown/reset
+ */
+void bnxt_crypto_del_all(struct bnxt *bp)
+{
+	struct bnxt_crypto_info *crypto = bp->crypto_info;
+	struct bnxt_kid_info *kid;
+	struct bnxt_kctx *kctx;
+	int i;
+
+	if (!crypto)
+		return;
+
+	/* No concurrent access; see the locking note above. */
+	for (i = 0; i < BNXT_MAX_CRYPTO_KEY_TYPE; i++) {
+		kctx = &crypto->kctx[i];
+		list_for_each_entry(kid, &kctx->list, list)
+			bnxt_crypto_del_all_kids(bp, kid);
+		kctx->epoch = BNXT_NEXT_EPOCH(kctx->epoch);
+	}
 }
 
 /**
@@ -137,6 +216,7 @@ void bnxt_free_crypto_info(struct bnxt *bp)
 {
 	struct bnxt_crypto_info *crypto = bp->crypto_info;
 
+	bnxt_free_ktls_info(bp);
 	if (!crypto)
 		return;
 	bnxt_clear_crypto(bp);
