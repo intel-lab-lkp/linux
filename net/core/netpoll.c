@@ -213,7 +213,7 @@ void netpoll_poll_enable(struct net_device *dev)
 		up(&ni->dev_lock);
 }
 
-static void refill_skbs(struct netpoll *np)
+void refill_skbs(struct netpoll *np)
 {
 	struct sk_buff_head *skb_pool;
 	struct sk_buff *skb;
@@ -228,6 +228,7 @@ static void refill_skbs(struct netpoll *np)
 		skb_queue_tail(skb_pool, skb);
 	}
 }
+EXPORT_SYMBOL_GPL(refill_skbs);
 
 void netpoll_zap_completion_queue(void)
 {
@@ -351,7 +352,7 @@ netdev_tx_t netpoll_send_skb(struct netpoll *np, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netpoll_send_skb);
 
-static void skb_pool_flush(struct netpoll *np)
+void skb_pool_flush(struct netpoll *np)
 {
 	struct sk_buff_head *skb_pool;
 
@@ -359,14 +360,16 @@ static void skb_pool_flush(struct netpoll *np)
 	skb_pool = &np->skb_pool;
 	skb_queue_purge_reason(skb_pool, SKB_CONSUMED);
 }
+EXPORT_SYMBOL_GPL(skb_pool_flush);
 
-static void refill_skbs_work_handler(struct work_struct *work)
+void refill_skbs_work_handler(struct work_struct *work)
 {
 	struct netpoll *np =
 		container_of(work, struct netpoll, refill_wq);
 
 	refill_skbs(np);
 }
+EXPORT_SYMBOL_GPL(refill_skbs_work_handler);
 
 int __netpoll_setup(struct netpoll *np, struct net_device *ndev)
 {
