@@ -9498,11 +9498,6 @@ S:	Orphan
 W:	http://aeschi.ch.eu.org/efs/
 F:	fs/efs/
 
-EHEA (IBM pSeries eHEA 10Gb ethernet adapter) DRIVER
-L:	netdev@vger.kernel.org
-S:	Orphan
-F:	drivers/net/ethernet/ibm/ehea/
-
 ELM327 CAN NETWORK DRIVER
 M:	Max Staudt <max@enpas.org>
 L:	linux-can@vger.kernel.org
