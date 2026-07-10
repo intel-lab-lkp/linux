@@ -240,6 +240,7 @@ static int gb_audio_probe(struct gb_bundle *bundle,
 	struct gbaudio_data_connection *dai, *_dai;
 	int ret, i;
 	struct gb_audio_topology *topology;
+	size_t tplg_size;
 
 	/* There should be at least one Management and one Data cport */
 	if (bundle->num_cports < 2)
@@ -308,14 +309,15 @@ static int gb_audio_probe(struct gb_bundle *bundle,
 	 * FIXME: malloc for topology happens via audio_gb driver
 	 * should be done within codec driver itself
 	 */
-	ret = gb_audio_gb_get_topology(gbmodule->mgmt_connection, &topology);
+	ret = gb_audio_gb_get_topology(gbmodule->mgmt_connection, &topology,
+				       &tplg_size);
 	if (ret) {
 		dev_err(dev, "%d:Error while fetching topology\n", ret);
 		goto disable_connection;
 	}
 
 	/* process topology data */
-	ret = gbaudio_tplg_parse_data(gbmodule, topology);
+	ret = gbaudio_tplg_parse_data(gbmodule, topology, tplg_size);
 	if (ret) {
 		dev_err(dev, "%d:Error while parsing topology data\n",
 			ret);

@@ -10,11 +10,11 @@
 
 /* TODO: Split into separate calls */
 int gb_audio_gb_get_topology(struct gb_connection *connection,
-			     struct gb_audio_topology **topology)
+			     struct gb_audio_topology **topology, size_t *size)
 {
 	struct gb_audio_get_topology_size_response size_resp;
 	struct gb_audio_topology *topo;
-	u16 size;
+	u16 tplg_size;
 	int ret;
 
 	ret = gb_operation_sync(connection, GB_AUDIO_TYPE_GET_TOPOLOGY_SIZE,
@@ -22,22 +22,23 @@ int gb_audio_gb_get_topology(struct gb_connection *connection,
 	if (ret)
 		return ret;
 
-	size = le16_to_cpu(size_resp.size);
-	if (size < sizeof(*topo))
+	tplg_size = le16_to_cpu(size_resp.size);
+	if (tplg_size < sizeof(*topo))
 		return -ENODATA;
 
-	topo = kzalloc(size, GFP_KERNEL);
+	topo = kzalloc(tplg_size, GFP_KERNEL);
 	if (!topo)
 		return -ENOMEM;
 
 	ret = gb_operation_sync(connection, GB_AUDIO_TYPE_GET_TOPOLOGY, NULL, 0,
-				topo, size);
+				topo, tplg_size);
 	if (ret) {
 		kfree(topo);
 		return ret;
 	}
 
 	*topology = topo;
+	*size = tplg_size;
 
 	return 0;
 }

@@ -134,21 +134,35 @@ static const char **gb_generate_enum_strings(struct gbaudio_module_info *gb,
 					     struct gb_audio_enumerated *gbenum)
 {
 	const char **strings;
-	int i;
 	unsigned int items;
-	__u8 *data;
+	u16 names_length;
+	const __u8 *data;
+	const __u8 *end;
+	int i;
 
 	items = le32_to_cpu(gbenum->items);
+	names_length = le16_to_cpu(gbenum->names_length);
+	data = gbenum->names;
+	end = data + names_length;
+
+	/*
+	 * Each enumerated value is a NUL-terminated string occupying at least
+	 * one byte, so a valid names block cannot hold more items than it has
+	 * bytes. This also bounds the devm_kcalloc() request below.
+	 */
+	if (items > names_length)
+		return NULL;
+
 	strings = devm_kcalloc(gb->dev, items, sizeof(char *), GFP_KERNEL);
 	if (!strings)
 		return NULL;
 
-	data = gbenum->names;
-
 	for (i = 0; i < items; i++) {
 		strings[i] = (const char *)data;
-		while (*data != '\0')
+		while (data < end && *data != '\0')
 			data++;
+		if (data == end)
+			return NULL;
 		data++;
 	}
 
@@ -1009,9 +1023,40 @@ static const struct snd_soc_dapm_widget gbaudio_widgets[] = {
 					SND_SOC_DAPM_POST_PMD),
 };
 
+/*
+ * Return the on-wire size of the topology control at @curr, in bytes, after
+ * verifying that the whole control - including its variable-length enum names
+ * block - lies within [@curr, @end). Returns a negative errno on overrun.
+ */
+static int gbaudio_control_size(struct gb_audio_control *curr, const u8 *end)
+{
+	size_t csize;
+
+	/*
+	 * Enough of the control must be present to read its id and name and
+	 * the fixed part of the enumerated descriptor (items, names_length).
+	 */
+	csize = offsetof(struct gb_audio_control, info);
+	csize += offsetof(struct gb_audio_ctl_elem_info, value);
+	csize += offsetof(struct gb_audio_enumerated, names);
+	if ((u8 *)curr + csize > end)
+		return -EINVAL;
+
+	if (curr->info.type == GB_AUDIO_CTL_ELEM_TYPE_ENUMERATED)
+		csize += le16_to_cpu(curr->info.value.enumerated.names_length);
+	else
+		csize = sizeof(struct gb_audio_control);
+
+	if ((u8 *)curr + csize > end)
+		return -EINVAL;
+
+	return csize;
+}
+
 static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 				      struct snd_soc_dapm_widget *dw,
-				      struct gb_audio_widget *w, int *w_size)
+				      struct gb_audio_widget *w, int *w_size,
+				      const u8 *end)
 {
 	int i, ret, csize;
 	struct snd_kcontrol_new *widget_kctls;
@@ -1040,6 +1085,11 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 	/* create relevant kcontrols */
 	curr = w->ctl;
 	for (i = 0; i < w->ncontrols; i++) {
+		ret = gbaudio_control_size(curr, end);
+		if (ret < 0)
+			goto error;
+		csize = ret;
+
 		ret = gbaudio_tplg_create_wcontrol(module, &widget_kctls[i],
 						   curr);
 		if (ret) {
@@ -1063,10 +1113,6 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 			struct gb_audio_enumerated *gbenum =
 				&curr->info.value.enumerated;
 
-			csize = offsetof(struct gb_audio_control, info);
-			csize += offsetof(struct gb_audio_ctl_elem_info, value);
-			csize += offsetof(struct gb_audio_enumerated, names);
-			csize += le16_to_cpu(gbenum->names_length);
 			control->texts = (const char * const *)
 				gb_generate_enum_strings(module, gbenum);
 			if (!control->texts) {
@@ -1074,8 +1120,6 @@ static int gbaudio_tplg_create_widget(struct gbaudio_module_info *module,
 				goto error;
 			}
 			control->items = le32_to_cpu(gbenum->items);
-		} else {
-			csize = sizeof(struct gb_audio_control);
 		}
 
 		*w_size += csize;
@@ -1136,7 +1180,8 @@ error:
 }
 
 static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
-					  struct gb_audio_control *controls)
+					  struct gb_audio_control *controls,
+					  const u8 *end)
 {
 	int i, csize, ret;
 	struct snd_kcontrol_new *dapm_kctls;
@@ -1152,6 +1197,11 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 
 	curr = controls;
 	for (i = 0; i < module->num_controls; i++) {
+		ret = gbaudio_control_size(curr, end);
+		if (ret < 0)
+			goto error;
+		csize = ret;
+
 		ret = gbaudio_tplg_create_kcontrol(module, &dapm_kctls[i],
 						   curr);
 		if (ret) {
@@ -1176,10 +1226,6 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 			struct gb_audio_enumerated *gbenum =
 				&curr->info.value.enumerated;
 
-			csize = offsetof(struct gb_audio_control, info);
-			csize += offsetof(struct gb_audio_ctl_elem_info, value);
-			csize += offsetof(struct gb_audio_enumerated, names);
-			csize += le16_to_cpu(gbenum->names_length);
 			control->texts = (const char * const *)
 				gb_generate_enum_strings(module, gbenum);
 			if (!control->texts) {
@@ -1187,8 +1233,6 @@ static int gbaudio_tplg_process_kcontrols(struct gbaudio_module_info *module,
 				goto error;
 			}
 			control->items = le32_to_cpu(gbenum->items);
-		} else {
-			csize = sizeof(struct gb_audio_control);
 		}
 
 		list_add(&control->list, &module->ctl_list);
@@ -1210,7 +1254,8 @@ error:
 }
 
 static int gbaudio_tplg_process_widgets(struct gbaudio_module_info *module,
-					struct gb_audio_widget *widgets)
+					struct gb_audio_widget *widgets,
+					const u8 *end)
 {
 	int i, ret, w_size;
 	struct snd_soc_dapm_widget *dapm_widgets;
@@ -1225,8 +1270,13 @@ static int gbaudio_tplg_process_widgets(struct gbaudio_module_info *module,
 
 	curr = widgets;
 	for (i = 0; i < module->num_dapm_widgets; i++) {
+		/* The fixed part of the widget must lie within the buffer. */
+		if ((u8 *)curr + sizeof(struct gb_audio_widget) > end) {
+			ret = -EINVAL;
+			goto error;
+		}
 		ret = gbaudio_tplg_create_widget(module, &dapm_widgets[i],
-						 curr, &w_size);
+						 curr, &w_size, end);
 		if (ret) {
 			dev_err(module->dev, "%s:%d type not supported\n",
 				curr->name, curr->type);
@@ -1259,7 +1309,8 @@ error:
 }
 
 static int gbaudio_tplg_process_routes(struct gbaudio_module_info *module,
-				       struct gb_audio_route *routes)
+				       struct gb_audio_route *routes,
+				       const u8 *end)
 {
 	int i, ret;
 	struct snd_soc_dapm_route *dapm_routes;
@@ -1275,6 +1326,10 @@ static int gbaudio_tplg_process_routes(struct gbaudio_module_info *module,
 	curr = routes;
 
 	for (i = 0; i < module->num_dapm_routes; i++) {
+		if ((u8 *)curr + sizeof(struct gb_audio_route) > end) {
+			ret = -EINVAL;
+			goto error;
+		}
 		dapm_routes->sink =
 			gbaudio_map_widgetid(module, curr->destination_id);
 		if (!dapm_routes->sink) {
@@ -1320,8 +1375,12 @@ error:
 }
 
 static int gbaudio_tplg_process_header(struct gbaudio_module_info *module,
-				       struct gb_audio_topology *tplg_data)
+				       struct gb_audio_topology *tplg_data,
+				       size_t size)
 {
+	unsigned long tplg_start = (unsigned long)tplg_data;
+	unsigned long tplg_end = tplg_start + size;
+
 	/* fetch no. of kcontrols, widgets & routes */
 	module->num_controls = tplg_data->num_controls;
 	module->num_dapm_widgets = tplg_data->num_widgets;
@@ -1336,6 +1395,20 @@ static int gbaudio_tplg_process_header(struct gbaudio_module_info *module,
 	module->route_offset = module->widget_offset +
 					le32_to_cpu(tplg_data->size_widgets);
 
+	/*
+	 * The DAI, control, widget and route blocks are concatenated in that
+	 * order after the header. Their sizes come straight off the wire and
+	 * are attacker-controlled, so verify the resulting block boundaries
+	 * are ordered and stay within the allocated topology buffer. The
+	 * "< previous" tests also reject an unsigned wrap of the running
+	 * offset on 32-bit builds.
+	 */
+	if (module->control_offset < module->dai_offset ||
+	    module->widget_offset < module->control_offset ||
+	    module->route_offset < module->widget_offset ||
+	    module->route_offset > tplg_end)
+		return -EINVAL;
+
 	dev_dbg(module->dev, "DAI offset is 0x%lx\n", module->dai_offset);
 	dev_dbg(module->dev, "control offset is %lx\n",
 		module->control_offset);
@@ -1346,7 +1419,7 @@ static int gbaudio_tplg_process_header(struct gbaudio_module_info *module,
 }
 
 int gbaudio_tplg_parse_data(struct gbaudio_module_info *module,
-			    struct gb_audio_topology *tplg_data)
+			    struct gb_audio_topology *tplg_data, size_t size)
 {
 	int ret;
 	struct gb_audio_control *controls;
@@ -1357,7 +1430,10 @@ int gbaudio_tplg_parse_data(struct gbaudio_module_info *module,
 	if (!tplg_data)
 		return -EINVAL;
 
-	ret = gbaudio_tplg_process_header(module, tplg_data);
+	if (size < sizeof(*tplg_data))
+		return -EINVAL;
+
+	ret = gbaudio_tplg_process_header(module, tplg_data, size);
 	if (ret) {
 		dev_err(module->dev, "%d: Error in parsing topology header\n",
 			ret);
@@ -1366,7 +1442,8 @@ int gbaudio_tplg_parse_data(struct gbaudio_module_info *module,
 
 	/* process control */
 	controls = (struct gb_audio_control *)module->control_offset;
-	ret = gbaudio_tplg_process_kcontrols(module, controls);
+	ret = gbaudio_tplg_process_kcontrols(module, controls,
+					     (const u8 *)module->widget_offset);
 	if (ret) {
 		dev_err(module->dev,
 			"%d: Error in parsing controls data\n", ret);
@@ -1376,7 +1453,8 @@ int gbaudio_tplg_parse_data(struct gbaudio_module_info *module,
 
 	/* process widgets */
 	widgets = (struct gb_audio_widget *)module->widget_offset;
-	ret = gbaudio_tplg_process_widgets(module, widgets);
+	ret = gbaudio_tplg_process_widgets(module, widgets,
+					   (const u8 *)module->route_offset);
 	if (ret) {
 		dev_err(module->dev,
 			"%d: Error in parsing widgets data\n", ret);
@@ -1386,7 +1464,8 @@ int gbaudio_tplg_parse_data(struct gbaudio_module_info *module,
 
 	/* process route */
 	routes = (struct gb_audio_route *)module->route_offset;
-	ret = gbaudio_tplg_process_routes(module, routes);
+	ret = gbaudio_tplg_process_routes(module, routes,
+					  (const u8 *)tplg_data + size);
 	if (ret) {
 		dev_err(module->dev,
 			"%d: Error in parsing routes data\n", ret);
