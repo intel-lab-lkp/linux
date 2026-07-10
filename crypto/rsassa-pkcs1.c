@@ -291,7 +291,7 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 	/* RFC 8017 sec 8.2.2 step 4 - comparison of digest with out_buf */
 	if (dlen != dst_len - pos)
 		return -EKEYREJECTED;
-	if (memcmp(digest, out_buf + pos, dlen) != 0)
+	if (crypto_memneq(digest, out_buf + pos, dlen))
 		return -EKEYREJECTED;
 
 	return 0;
