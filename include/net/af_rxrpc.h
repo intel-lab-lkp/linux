@@ -92,24 +92,6 @@ bool rxrpc_kernel_check_life(const struct socket *, const struct rxrpc_call *);
 
 int rxrpc_sock_set_min_security_level(struct sock *sk, unsigned int val);
 int rxrpc_sock_set_security_keyring(struct sock *, struct key *);
-int rxrpc_sock_set_manage_response(struct sock *sk, bool set);
-
-enum rxrpc_oob_type rxrpc_kernel_query_oob(struct sk_buff *oob,
-					   struct rxrpc_peer **_peer,
-					   unsigned long *_peer_appdata);
-struct sk_buff *rxrpc_kernel_dequeue_oob(struct socket *sock,
-					 enum rxrpc_oob_type *_type);
-void rxrpc_kernel_free_oob(struct sk_buff *oob);
-void rxrpc_kernel_query_challenge(struct sk_buff *challenge,
-				  struct rxrpc_peer **_peer,
-				  unsigned long *_peer_appdata,
-				  u16 *_service_id, u8 *_security_index);
-int rxrpc_kernel_reject_challenge(struct sk_buff *challenge, u32 abort_code,
-				  int error, enum rxrpc_abort_reason why);
-int rxkad_kernel_respond_to_challenge(struct sk_buff *challenge);
-u32 rxgk_kernel_query_challenge(struct sk_buff *challenge);
-int rxgk_kernel_respond_to_challenge(struct sk_buff *challenge,
-				     struct krb5_buffer *appdata);
 void rxrpc_kernel_query_key(const struct key *key, u8 *_security_index,
 			    u32 *_krb5_enctype);
 u8 rxrpc_kernel_query_call_security(struct rxrpc_call *call,

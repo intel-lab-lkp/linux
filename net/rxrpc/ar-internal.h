@@ -171,9 +171,6 @@ struct rxrpc_sock {
 	const struct rxrpc_kernel_ops *app_ops;	/* Table of kernel app notification funcs */
 	struct rxrpc_local	*local;		/* local endpoint */
 	struct rxrpc_backlog	*backlog;	/* Preallocation for services */
-	struct sk_buff_head	recvmsg_oobq;	/* OOB messages for recvmsg to pick up */
-	struct rb_root		pending_oobq;	/* OOB messages awaiting userspace to respond to */
-	u64			oob_id_counter;	/* OOB message ID counter */
 	spinlock_t		incoming_lock;	/* Incoming call vs service shutdown lock */
 	struct list_head	sock_calls;	/* List of calls owned by this socket */
 	struct list_head	to_be_accepted;	/* calls awaiting acceptance */
@@ -184,7 +181,6 @@ struct rxrpc_sock {
 	struct rb_root		calls;		/* User ID -> call mapping */
 	unsigned long		flags;
 #define RXRPC_SOCK_CONNECTED		0	/* connect_srx is set */
-#define RXRPC_SOCK_MANAGE_RESPONSE	1	/* User wants to manage RESPONSE packets */
 	rwlock_t		call_lock;	/* lock for calls */
 	u32			min_sec_level;	/* minimum security level */
 #define RXRPC_SECURITY_MAX	RXRPC_SECURITY_ENCRYPT
@@ -241,7 +237,6 @@ struct rxrpc_skb_priv {
 			u8		reason;		/* Reason for ack */
 		} ack;
 		struct {
-			struct rxrpc_connection *conn;	/* Connection referred to */
 			union {
 				u32 rxkad_nonce;
 			};
@@ -309,13 +304,6 @@ struct rxrpc_security {
 	/* Validate a challenge packet */
 	bool (*validate_challenge)(struct rxrpc_connection *conn,
 				   struct sk_buff *skb);
-
-	/* Fill out the cmsg for recvmsg() to pass on a challenge to userspace.
-	 * The security class gets to add additional information.
-	 */
-	int (*challenge_to_recvmsg)(struct rxrpc_connection *conn,
-				    struct sk_buff *challenge,
-				    struct msghdr *msg);
 
 	/* Parse sendmsg() control message and respond to challenge. */
 	int (*sendmsg_respond_to_challenge)(struct sk_buff *challenge,
@@ -1378,13 +1366,6 @@ static inline struct rxrpc_net *rxrpc_net(struct net *net)
 {
 	return net_generic(net, rxrpc_net_id);
 }
-
-/*
- * oob.c
- */
-bool rxrpc_notify_socket_oob(struct rxrpc_call *call, struct sk_buff *skb);
-void rxrpc_add_pending_oob(struct rxrpc_sock *rx, struct sk_buff *skb);
-int rxrpc_sendmsg_oob(struct rxrpc_sock *rx, struct msghdr *msg, size_t len);
 
 /*
  * output.c

@@ -735,37 +735,6 @@ static bool rxgk_validate_challenge(struct rxrpc_connection *conn,
 	return true;
 }
 
-/**
- * rxgk_kernel_query_challenge - Query RxGK-specific challenge parameters
- * @challenge: The challenge packet to query
- *
- * Return: The Kerberos 5 encoding type for the challenged connection.
- */
-u32 rxgk_kernel_query_challenge(struct sk_buff *challenge)
-{
-	struct rxrpc_skb_priv *sp = rxrpc_skb(challenge);
-
-	return sp->chall.conn->rxgk.enctype;
-}
-EXPORT_SYMBOL(rxgk_kernel_query_challenge);
-
-/*
- * Fill out the control message to pass to userspace to inform about the
- * challenge.
- */
-static int rxgk_challenge_to_recvmsg(struct rxrpc_connection *conn,
-				     struct sk_buff *challenge,
-				     struct msghdr *msg)
-{
-	struct rxgk_challenge chall;
-
-	chall.base.service_id		= conn->service_id;
-	chall.base.security_index	= conn->security_ix;
-	chall.enctype			= conn->rxgk.enctype;
-
-	return put_cmsg(msg, SOL_RXRPC, RXRPC_CHALLENGED, sizeof(chall), &chall);
-}
-
 /*
  * Insert the requisite amount of XDR padding for the length given.
  */
@@ -1044,46 +1013,6 @@ static int rxgk_respond_to_challenge(struct rxrpc_connection *conn,
 	return ret;
 }
 
-/**
- * rxgk_kernel_respond_to_challenge - Respond to a challenge with appdata
- * @challenge: The challenge to respond to
- * @appdata: The application data to include in the RESPONSE authenticator
- *
- * Allow a kernel application to respond to a CHALLENGE with application data
- * to be included in the RxGK RESPONSE Authenticator.
- *
- * Return: %0 if successful and a negative error code otherwise.
- */
-int rxgk_kernel_respond_to_challenge(struct sk_buff *challenge,
-				     struct krb5_buffer *appdata)
-{
-	return -EINVAL;
-}
-EXPORT_SYMBOL(rxgk_kernel_respond_to_challenge);
-
-/*
- * Parse sendmsg() control message and respond to challenge.  We need to see if
- * there's an appdata to fish out.
- */
-static int rxgk_sendmsg_respond_to_challenge(struct sk_buff *challenge,
-					     struct msghdr *msg)
-{
-	struct krb5_buffer appdata = {};
-	struct cmsghdr *cmsg;
-
-	for_each_cmsghdr(cmsg, msg) {
-		if (cmsg->cmsg_level != SOL_RXRPC ||
-		    cmsg->cmsg_type != RXRPC_RESP_RXGK_APPDATA)
-			continue;
-		if (appdata.data)
-			return -EINVAL;
-		appdata.data = CMSG_DATA(cmsg);
-		appdata.len = cmsg->cmsg_len - sizeof(struct cmsghdr);
-	}
-
-	return rxgk_kernel_respond_to_challenge(challenge, &appdata);
-}
-
 /*
  * Verify the authenticator.
  *
@@ -1357,8 +1286,6 @@ const struct rxrpc_security rxgk_yfs = {
 	.free_call_crypto		= rxgk_free_call_crypto,
 	.issue_challenge		= rxgk_issue_challenge,
 	.validate_challenge		= rxgk_validate_challenge,
-	.challenge_to_recvmsg		= rxgk_challenge_to_recvmsg,
-	.sendmsg_respond_to_challenge	= rxgk_sendmsg_respond_to_challenge,
 	.respond_to_challenge		= rxgk_respond_to_challenge,
 	.verify_response		= rxgk_verify_response,
 	.clear				= rxgk_clear,
