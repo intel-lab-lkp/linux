@@ -1481,15 +1481,15 @@ static void drop_netconsole_target(struct config_group *group,
 
 	mutex_lock(&target_cleanup_list_lock);
 	spin_lock_irqsave(&target_list_lock, flags);
-	/* A STATE_DEACTIVATED target may have been moved to
-	 * target_cleanup_list by netconsole_netdev_event() but not yet
-	 * processed by netconsole_process_cleanups_core(). Unlinking it below
-	 * hides it from the cleanup worker, so this path has to clean it up
-	 * itself. Record that the target still owns a netpoll before the
-	 * state is downgraded.
+	/* A target moved to target_cleanup_list by netconsole_netdev_event()
+	 * but not yet processed still owns a netpoll; unlinking it below hides
+	 * it from the cleanup worker, so this path must tear it down itself.
+	 * This covers NETDEV_UNREGISTER (STATE_DEACTIVATED) and
+	 * NETDEV_RELEASE / NETDEV_JOIN (STATE_DISABLED); key off nt->np.dev,
+	 * which stays set until the netpoll is cleaned up.
 	 */
 	needs_cleanup = nt->state == STATE_ENABLED ||
-			nt->state == STATE_DEACTIVATED;
+			nt->state == STATE_DEACTIVATED || nt->np.dev;
 	/* Disable deactivated target to prevent races between resume attempt
 	 * and target removal.
 	 */
