@@ -1210,6 +1210,7 @@ static netdev_tx_t amt_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 		} else {
 			data = true;
 		}
+		iph = ip_hdr(skb);
 		v6 = false;
 		group.ip4 = iph->daddr;
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1234,6 +1235,7 @@ static netdev_tx_t amt_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 		} else {
 			data = true;
 		}
+		ip6h = ipv6_hdr(skb);
 		v6 = true;
 		group.ip6 = ip6h->daddr;
 #endif
@@ -2498,6 +2500,7 @@ report:
 			netdev_dbg(amt->dev, "Invalid IGMP\n");
 			return true;
 		}
+		iph = ip_hdr(skb);
 
 		spin_lock_bh(&tunnel->lock);
 		amt_igmp_report_handler(amt, skb, tunnel);
@@ -2517,6 +2520,7 @@ report:
 			netdev_dbg(amt->dev, "Invalid MLD\n");
 			return true;
 		}
+		ip6h = ipv6_hdr(skb);
 
 		spin_lock_bh(&tunnel->lock);
 		amt_mld_report_handler(amt, skb, tunnel);
