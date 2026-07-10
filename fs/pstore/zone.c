@@ -159,7 +159,7 @@ enum psz_flush_mode {
 
 static inline int buffer_datalen(struct pstore_zone *zone)
 {
-	return atomic_read(&zone->buffer->datalen);
+	return atomic_read_acquire(&zone->buffer->datalen);
 }
 
 static inline int buffer_start(struct pstore_zone *zone)
@@ -211,7 +211,7 @@ static int psz_zone_write(struct pstore_zone *zone,
 	wlen = min_t(size_t, len, zone->buffer_size - off);
 	if (buf && wlen) {
 		memcpy(zone->buffer->data + off, buf, wlen);
-		atomic_set(&zone->buffer->datalen, wlen + off);
+		atomic_set_release(&zone->buffer->datalen, wlen + off);
 	}
 
 	/* avoid damaging old records */
@@ -863,7 +863,7 @@ static int notrace psz_record_write(struct pstore_zone *zone,
 	 * is greater than buffer size.
 	 */
 	if (is_full_data) {
-		atomic_set(&zone->buffer->datalen, zone->buffer_size);
+		atomic_set_release(&zone->buffer->datalen, zone->buffer_size);
 		psz_zone_write(zone, FLUSH_META, NULL, 0, 0);
 	}
 	return 0;
