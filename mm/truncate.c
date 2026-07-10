@@ -69,6 +69,9 @@ static void truncate_folio_batch_exceptionals(struct address_space *mapping,
 	if (shmem_mapping(mapping))
 		return;
 
+	if (likely(nr <= 0))
+		return;
+
 	for (j = 0; j < nr; j++)
 		if (xa_is_value(fbatch->folios[j]))
 			break;
