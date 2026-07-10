@@ -303,13 +303,23 @@ static DEVICE_ATTR(isolated, 0444, print_cpus_isolated, NULL);
 static ssize_t housekeeping_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
-	const struct cpumask *hk_mask;
+	ssize_t len;
 
-	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
+	if (!housekeeping_enabled(HK_TYPE_KERNEL_NOISE))
+		return sysfs_emit(buf, "\n");
 
-	if (housekeeping_enabled(HK_TYPE_KERNEL_NOISE))
-		return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(hk_mask));
-	return sysfs_emit(buf, "\n");
+	/*
+	 * HK_TYPE_KERNEL_NOISE is runtime-mutable: the mask pointer can be
+	 * swapped and the old mask freed after an RCU grace period.  Hold the
+	 * RCU read lock across the dereference and the format so the mask
+	 * cannot be freed while it is being printed.
+	 */
+	rcu_read_lock();
+	len = sysfs_emit(buf, "%*pbl\n",
+			 cpumask_pr_args(housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE)));
+	rcu_read_unlock();
+
+	return len;
 }
 static DEVICE_ATTR_RO(housekeeping);
 

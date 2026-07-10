@@ -1272,9 +1272,8 @@ int get_nohz_timer_target(void)
 		default_cpu = cpu;
 	}
 
-	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
-
 	guard(rcu)();
+	hk_mask = housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE);
 
 	for_each_domain(cpu, sd) {
 		for_each_cpu_and(i, sched_domain_span(sd), hk_mask) {

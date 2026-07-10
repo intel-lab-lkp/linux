@@ -212,8 +212,13 @@ int arch_freq_get_on_cpu(int cpu)
 			if (!policy)
 				return -EINVAL;
 
-			if (!cpumask_intersects(policy->related_cpus,
-						housekeeping_cpumask(HK_TYPE_TICK))) {
+			bool no_hk_in_policy;
+
+			rcu_read_lock();
+			no_hk_in_policy = !cpumask_intersects(policy->related_cpus,
+							      housekeeping_cpumask_rcu(HK_TYPE_TICK));
+			rcu_read_unlock();
+			if (no_hk_in_policy) {
 				cpufreq_cpu_put(policy);
 				return -EOPNOTSUPP;
 			}
