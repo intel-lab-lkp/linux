@@ -96,6 +96,9 @@ static ssize_t edac_device_ctl_poll_msec_store(struct edac_device_ctl_info
 	 * and set a new one.
 	 */
 	value = simple_strtoul(data, NULL, 0);
+	if (value < 1)
+		return -EINVAL;
+
 	edac_device_reset_delay_period(ctl_info, value);
 
 	return count;
