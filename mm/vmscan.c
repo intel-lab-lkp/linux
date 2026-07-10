@@ -199,6 +199,9 @@ struct scan_control {
  */
 int vm_swappiness = 60;
 
+static void kswapd_try_clear_hopeless(struct pglist_data *pgdat,
+				      struct scan_control *sc);
+
 #ifdef CONFIG_MEMCG
 
 /* Returns true for reclaim through cgroup limits or cgroup interfaces. */
@@ -5192,7 +5195,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 	blk_finish_plug(&plug);
 done:
 	if (sc->nr_reclaimed > reclaimed)
-		kswapd_try_clear_hopeless(pgdat, sc->order, sc->reclaim_idx);
+		kswapd_try_clear_hopeless(pgdat, sc);
 }
 
 /******************************************************************************
@@ -6271,7 +6274,7 @@ again:
 	 * successful direct reclaim run will revive a dormant kswapd.
 	 */
 	if (reclaimable)
-		kswapd_try_clear_hopeless(pgdat, sc->order, sc->reclaim_idx);
+		kswapd_try_clear_hopeless(pgdat, sc);
 	else if (sc->cache_trim_mode)
 		sc->cache_trim_mode_failed = 1;
 }
@@ -7550,15 +7553,17 @@ void kswapd_clear_hopeless(pg_data_t *pgdat, enum kswapd_clear_hopeless_reason r
 }
 
 /*
- * Reset kswapd_failures only when the node is balanced. Without this
- * check, successful direct reclaim (e.g., from cgroup memory.high
- * throttling) can keep resetting kswapd_failures even when the node
- * cannot be balanced, causing kswapd to run endlessly.
+ * Reset kswapd_failures when the node is balanced, or when global
+ * direct reclaim makes progress - then kswapd can make progress too.
+ * Memcg reclaim can succeed where kswapd cannot (memcg protection is
+ * not enforced against the reclaim target), so its progress resets
+ * kswapd_failures only when the node is balanced.
  */
-void kswapd_try_clear_hopeless(struct pglist_data *pgdat,
-			       unsigned int order, int highest_zoneidx)
+static void kswapd_try_clear_hopeless(struct pglist_data *pgdat,
+				      struct scan_control *sc)
 {
-	if (pgdat_balanced(pgdat, order, highest_zoneidx))
+	if ((!current_is_kswapd() && !cgroup_reclaim(sc)) ||
+	    pgdat_balanced(pgdat, sc->order, sc->reclaim_idx))
 		kswapd_clear_hopeless(pgdat, current_is_kswapd() ?
 			KSWAPD_CLEAR_HOPELESS_KSWAPD : KSWAPD_CLEAR_HOPELESS_DIRECT);
 }
