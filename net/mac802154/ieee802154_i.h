@@ -300,6 +300,8 @@ static inline bool mac802154_is_beaconing(struct ieee802154_local *local)
 }
 
 void mac802154_rx_mac_cmd_worker(struct work_struct *work);
+void mac802154_flush_queued_mac_cmds(struct ieee802154_local *local,
+				     struct ieee802154_sub_if_data *sdata);
 
 int mac802154_perform_association(struct ieee802154_sub_if_data *sdata,
 				  struct ieee802154_pan_device *coord,

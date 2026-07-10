@@ -694,6 +694,16 @@ void ieee802154_if_remove(struct ieee802154_sub_if_data *sdata)
 	mutex_unlock(&sdata->local->iflist_mtx);
 
 	synchronize_rcu();
+
+	/*
+	 * Drop any rx_mac_cmd_list entry still pointing at this sdata
+	 * before it is freed below: mac802154_rx_mac_cmd_worker() runs
+	 * asynchronously on local->mac_wq and derefs mac_pkt->sdata with
+	 * no liveness check of its own (see mac802154_flush_queued_mac_cmds()
+	 * for details).
+	 */
+	mac802154_flush_queued_mac_cmds(sdata->local, sdata);
+
 	unregister_netdevice(sdata->dev);
 }
 

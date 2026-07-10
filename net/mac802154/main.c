@@ -277,6 +277,17 @@ void ieee802154_unregister_hw(struct ieee802154_hw *hw)
 	tasklet_kill(&local->tasklet);
 	flush_workqueue(local->workqueue);
 
+	/*
+	 * tasklet_kill() above stops any further frame reaching
+	 * ieee802154_subif_frame(), but mac802154_rx_mac_cmd_worker() may
+	 * still be queued/running on local->mac_wq and derefs the sdata of
+	 * every interface ieee802154_remove_interfaces() is about to free
+	 * below. flush_workqueue(local->workqueue) does not cover it --
+	 * that is the DATA workqueue, not local->mac_wq -- so drain it
+	 * explicitly first.
+	 */
+	mac802154_flush_queued_mac_cmds(local, NULL);
+
 	rtnl_lock();
 
 	ieee802154_remove_interfaces(local);

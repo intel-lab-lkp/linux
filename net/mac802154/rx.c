@@ -128,6 +128,48 @@ out:
 	kfree(mac_pkt);
 }
 
+/**
+ * mac802154_flush_queued_mac_cmds - drop pending rx_mac_cmd_list work
+ * @local: the mac802154 device the queue belongs to
+ * @sdata: interface being torn down, or %NULL to flush unconditionally
+ *
+ * Every queued &struct cfg802154_mac_pkt stashes a raw pointer to the
+ * interface it was received on (see ieee802154_subif_frame() below) which
+ * mac802154_rx_mac_cmd_worker() dereferences without ever checking whether
+ * that interface is still alive. Callers must invoke this before freeing
+ * @sdata -- or every interface on @local, when @sdata is %NULL -- so the
+ * worker can never run against freed memory:
+ *
+ *  - cancel_work_sync() waits out a run already in flight. That is still
+ *    safe to let finish because nothing has been freed yet, and it blocks
+ *    any new run from starting for as long as we hold the RTNL.
+ *  - every list entry pointing at @sdata (all of them, if @sdata is NULL)
+ *    is then dropped so no future run of the worker can see it.
+ *
+ * Mirrors mac802154_flush_queued_beacons() in scan.c, which does not need
+ * the cancel_work_sync() step because its worker never dereferences sdata.
+ */
+void mac802154_flush_queued_mac_cmds(struct ieee802154_local *local,
+				     struct ieee802154_sub_if_data *sdata)
+{
+	struct cfg802154_mac_pkt *mac_pkt, *tmp;
+
+	cancel_work_sync(&local->rx_mac_cmd_work);
+
+	list_for_each_entry_safe(mac_pkt, tmp, &local->rx_mac_cmd_list, node) {
+		if (sdata && mac_pkt->sdata != sdata)
+			continue;
+
+		list_del(&mac_pkt->node);
+		kfree_skb(mac_pkt->skb);
+		kfree(mac_pkt);
+	}
+
+	/* Other interfaces on @local may still have entries pending. */
+	if (!list_empty(&local->rx_mac_cmd_list))
+		queue_work(local->mac_wq, &local->rx_mac_cmd_work);
+}
+
 static int
 ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 		       struct sk_buff *skb, const struct ieee802154_hdr *hdr)
