@@ -117,6 +117,8 @@ int fdarray__filter(struct fdarray *fda, short revents,
 	for (fd = 0; fd < fda->nr; ++fd) {
 		if (!fda->entries[fd].events)
 			continue;
+		if (fda->priv[fd].flags & fdarray_flag__nonfilterable)
+			continue;
 
 		if (fda->entries[fd].revents & revents) {
 			if (entry_destructor)
@@ -126,8 +128,7 @@ int fdarray__filter(struct fdarray *fda, short revents,
 			continue;
 		}
 
-		if (!(fda->priv[fd].flags & fdarray_flag__nonfilterable))
-			++nr;
+		++nr;
 	}
 
 	return nr;
