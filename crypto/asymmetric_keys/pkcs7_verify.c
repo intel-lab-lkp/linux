@@ -13,6 +13,7 @@
 #include <linux/asn1.h>
 #include <crypto/hash.h>
 #include <crypto/hash_info.h>
+#include <crypto/utils.h>
 #include <crypto/public_key.h>
 #include "pkcs7_parser.h"
 
@@ -93,8 +94,8 @@ static int pkcs7_digest(struct pkcs7_message *pkcs7,
 			goto error;
 		}
 
-		if (memcmp(sig->m, sinfo->msgdigest,
-			   sinfo->msgdigest_len) != 0) {
+		if (crypto_memneq(sig->m, sinfo->msgdigest,
+				  sinfo->msgdigest_len)) {
 			pr_warn("Sig %u: Message digest doesn't match\n",
 				sinfo->index);
 			ret = -EKEYREJECTED;
