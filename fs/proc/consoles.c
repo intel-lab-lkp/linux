@@ -25,6 +25,7 @@ static int show_console_dev(struct seq_file *m, void *v)
 		{ CON_PRINTBUFFER,	'p' },
 		{ CON_BRL,		'b' },
 		{ CON_ANYTIME,		'a' },
+		{ CON_SYNC,		's' },
 	};
 	char flags[ARRAY_SIZE(con_flags) + 1];
 	struct console *con = v;
