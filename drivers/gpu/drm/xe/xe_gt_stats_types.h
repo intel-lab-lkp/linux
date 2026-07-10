@@ -122,6 +122,18 @@
  * @XE_GT_STATS_ID_PRL_ABORTED_COUNT: Times the page reclaim process was
  *   aborted.
  *
+ * @XE_GT_STATS_ID_DEFRAG_ADDED_COUNT: Times a buffer object was added to the
+ *   page defragmentation list after being backed at a sub-optimal page order.
+ * @XE_GT_STATS_ID_DEFRAG_SUCCESS_COUNT: Times the defrag worker successfully
+ *   re-backed a buffer object at the beneficial page order.
+ * @XE_GT_STATS_ID_DEFRAG_PARTIAL_SUCCESS_COUNT: Times the defrag worker
+ *   partially re-backed a buffer object at the beneficial page order.
+ * @XE_GT_STATS_ID_DEFRAG_FAILED_COUNT: Times the defrag worker failed to
+ *   re-back a buffer object at the beneficial page order.
+ * @XE_GT_STATS_ID_DEFRAG_MB_MOVED: Data (MiB) actually (re)allocated while
+ *   re-backing buffer objects at the beneficial page order. Chunks borrowed
+ *   from the old backing for free are not counted.
+ *
  * @__XE_GT_STATS_NUM_IDS: Number of valid IDs; not a real counter.
  *
  * See Documentation/gpu/xe/xe_gt_stats.rst.
@@ -181,6 +193,11 @@ enum xe_gt_stats_id {
 	XE_GT_STATS_ID_PRL_2M_ENTRY_COUNT,
 	XE_GT_STATS_ID_PRL_ISSUED_COUNT,
 	XE_GT_STATS_ID_PRL_ABORTED_COUNT,
+	XE_GT_STATS_ID_DEFRAG_ADDED_COUNT,
+	XE_GT_STATS_ID_DEFRAG_SUCCESS_COUNT,
+	XE_GT_STATS_ID_DEFRAG_PARTIAL_SUCCESS_COUNT,
+	XE_GT_STATS_ID_DEFRAG_FAILED_COUNT,
+	XE_GT_STATS_ID_DEFRAG_MB_MOVED,
 	/* must be the last entry */
 	__XE_GT_STATS_NUM_IDS,
 };

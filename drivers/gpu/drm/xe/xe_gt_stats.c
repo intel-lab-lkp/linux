@@ -154,6 +154,11 @@ static const char *const stat_description[__XE_GT_STATS_NUM_IDS] = {
 	DEF_STAT_STR(PRL_2M_ENTRY_COUNT, "prl_2m_entry_count"),
 	DEF_STAT_STR(PRL_ISSUED_COUNT, "prl_issued_count"),
 	DEF_STAT_STR(PRL_ABORTED_COUNT, "prl_aborted_count"),
+	DEF_STAT_STR(DEFRAG_ADDED_COUNT, "defrag_added_count"),
+	DEF_STAT_STR(DEFRAG_SUCCESS_COUNT, "defrag_success_count"),
+	DEF_STAT_STR(DEFRAG_PARTIAL_SUCCESS_COUNT, "defrag_partial_success_count"),
+	DEF_STAT_STR(DEFRAG_FAILED_COUNT, "defrag_failed_count"),
+	DEF_STAT_STR(DEFRAG_MB_MOVED, "defrag_mb_moved"),
 };
 
 /**
