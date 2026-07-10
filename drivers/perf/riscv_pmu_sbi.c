@@ -335,7 +335,8 @@ static int pmu_sbi_check_event_info(void)
 		goto free_mem;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(pmu_hw_event_map); i++) {
+	/* skip check for cycles and instructions as they can fall back to legacy counters */
+	for (i = 2; i < ARRAY_SIZE(pmu_hw_event_map); i++) {
 		if (!(event_info_shmem[i].output & RISCV_PMU_EVENT_INFO_OUTPUT_MASK))
 			pmu_hw_event_map[i].event_idx = -ENOENT;
 	}
