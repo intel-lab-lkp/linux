@@ -1125,6 +1125,9 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		}
 	} else {
 		switch (speed) {
+		case SPEED_10000:
+			ctrl |= priv->hw->link.xgmii.speed10000;
+			break;
 		case SPEED_2500:
 			ctrl |= priv->hw->link.speed2500;
 			break;
