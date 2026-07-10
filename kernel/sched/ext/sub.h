@@ -25,11 +25,17 @@ void scx_sub_disable(struct scx_sched *sch);
 void scx_sub_enable_workfn(struct kthread_work *work);
 bool scx_bpf_sub_dispatch(u64 cgroup_id, const struct bpf_prog_aux *aux);
 
+static inline const char *sch_cgrp_path(struct scx_sched *sch)
+{
+	return sch->cgrp_path;
+}
+
 #else	/* CONFIG_EXT_SUB_SCHED */
 
 static inline struct scx_sched *scx_next_descendant_pre(struct scx_sched *pos, struct scx_sched *root) { return pos ? NULL : root; }
 static inline void scx_set_task_sched(struct task_struct *p, struct scx_sched *sch) {}
 static inline struct cgroup *sch_cgroup(struct scx_sched *sch) { return NULL; }
+static inline const char *sch_cgrp_path(struct scx_sched *sch) { return "/"; }
 static inline void set_cgroup_sched(struct cgroup *cgrp, struct scx_sched *sch) {}
 static inline void drain_descendants(struct scx_sched *sch) { }
 static inline void scx_sub_disable(struct scx_sched *sch) { }
