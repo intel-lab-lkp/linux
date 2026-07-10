@@ -72,6 +72,72 @@ static int cifs_swn_auth_info_ntlm(struct cifs_tcon *tcon, struct sk_buff *skb)
 	return 0;
 }
 
+static bool cifs_swn_reg_tcon_matches(const struct cifs_swn_reg *swnreg,
+				      const struct cifs_tcon *tcon)
+{
+	const char *unc = tcon->tree_name;
+	struct sockaddr_storage *tcon_dstaddr;
+	const char *host, *share, *delim;
+	size_t host_len, share_len;
+
+	if (!tcon->use_witness)
+		return false;
+
+	if (tcon->ses->server->use_swn_dstaddr)
+		tcon_dstaddr = &tcon->ses->server->swn_dstaddr;
+	else
+		tcon_dstaddr = &tcon->ses->server->dstaddr;
+
+	if (!cifs_match_ipaddr((struct sockaddr *)&swnreg->addr,
+			       (struct sockaddr *)tcon_dstaddr))
+		return false;
+
+	if (swnreg->net_name_notify) {
+		/* extract hostname, requires strlen(unc) >= 3 (\\a)*/
+		if (strnlen(unc, 3) < 3)
+			return false;
+
+		/* extract_hostname: skip all leading '\' characters */
+		for (host = unc; *host && *host == '\\'; host++)
+			;
+
+		if (!*host)
+			return false;
+
+		delim = strchr(host, '\\');
+		if (!delim)
+			return false;
+
+		host_len = delim - host;
+		if (strlen(swnreg->net_name) == host_len &&
+		    !strncasecmp(swnreg->net_name, host, host_len)) {
+			return true;
+		}
+	}
+
+	if (swnreg->share_name_notify) {
+		/* extract share name, requires strlen(unc) >= 5 (\\a\b) */
+		if (strnlen(unc, 5) < 5)
+			return false;
+
+		/* extract share name, start at unc + 2, then first '\' onward */
+		share = unc + 2;
+		delim = strchr(share, '\\');
+		if (!delim)
+			return false;
+
+		share = delim + 1;
+		share_len = strlen(share);
+
+		if (strlen(swnreg->share_name) == share_len &&
+		    !strncasecmp(swnreg->share_name, share, share_len)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 /*
  * Sends a register message to the userspace daemon based on the registration.
  * The authentication information to connect to the witness service is bundled
@@ -305,63 +371,16 @@ static void cifs_swn_reg_check(struct work_struct *work)
 /*
  * Try to find a matching registration for the tcon's server name and share name.
  * Calls to this function must be protected by cifs_swnreg_idr_mutex.
- * TODO Try to avoid memory allocations
  */
 static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
 {
 	struct cifs_swn_reg *swnreg;
 	int id;
-	const char *share_name;
-	const char *net_name;
-
-	net_name = extract_hostname(tcon->tree_name);
-	if (IS_ERR(net_name)) {
-		int ret;
-
-		ret = PTR_ERR(net_name);
-		cifs_dbg(VFS, "%s: failed to extract host name from target '%s': %d\n",
-				__func__, tcon->tree_name, ret);
-		return ERR_PTR(-EINVAL);
-	}
-
-	share_name = extract_sharename(tcon->tree_name);
-	if (IS_ERR(share_name)) {
-		int ret;
-
-		ret = PTR_ERR(share_name);
-		cifs_dbg(VFS, "%s: failed to extract share name from target '%s': %d\n",
-				__func__, tcon->tree_name, ret);
-		kfree(net_name);
-		return ERR_PTR(-EINVAL);
-	}
 
 	idr_for_each_entry(&cifs_swnreg_idr, swnreg, id) {
-		struct sockaddr_storage *tcon_dstaddr;
-
-		if (tcon->ses->server->use_swn_dstaddr)
-			tcon_dstaddr = &tcon->ses->server->swn_dstaddr;
-		else
-			tcon_dstaddr = &tcon->ses->server->dstaddr;
-
-		if (strcasecmp(swnreg->net_name, net_name) != 0 ||
-		    strcasecmp(swnreg->share_name, share_name) != 0 ||
-		    !cifs_match_ipaddr((struct sockaddr *)&swnreg->addr,
-				       (struct sockaddr *)tcon_dstaddr)) {
-			continue;
-		}
-
-		cifs_dbg(FYI,
-			 "Existing swn registration for %pISc:%s:%s found\n",
-			 &swnreg->addr, swnreg->net_name, swnreg->share_name);
-
-		kfree(net_name);
-		kfree(share_name);
-
-		return swnreg;
+		if (cifs_swn_reg_tcon_matches(swnreg, tcon))
+			return swnreg;
 	}
-
-	kfree(net_name);
-	kfree(share_name);
 
 	return ERR_PTR(-EEXIST);
 }
