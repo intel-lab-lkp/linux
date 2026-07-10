@@ -1476,6 +1476,49 @@ static int af9035_tuner_attach(struct dvb_usb_adapter *adap)
 				tuner_addr, &af9035_mxl5007t_config[adap->id]);
 		break;
 	case AF9033_TUNER_TDA18218:
+		if (le16_to_cpu(d->udev->descriptor.idVendor) ==
+				USB_VID_AVERMEDIA &&
+		    le16_to_cpu(d->udev->descriptor.idProduct) == 0x0918) {
+			/*
+			 * AVerMedia A918R Express DVB-T: the tuner/antenna
+			 * front end is powered up through GPIOs, using the
+			 * same sequence as the MXL5007T based AVerMedia
+			 * devices above. Sequence captured from the vendor
+			 * Windows driver.
+			 */
+			ret = af9035_wr_reg(d, 0x00d8e0, 1);
+			if (ret < 0)
+				goto err;
+
+			ret = af9035_wr_reg(d, 0x00d8e1, 1);
+			if (ret < 0)
+				goto err;
+
+			ret = af9035_wr_reg(d, 0x00d8df, 0);
+			if (ret < 0)
+				goto err;
+
+			msleep(30);
+
+			ret = af9035_wr_reg(d, 0x00d8df, 1);
+			if (ret < 0)
+				goto err;
+
+			msleep(300);
+
+			ret = af9035_wr_reg(d, 0x00d8b4, 1);
+			if (ret < 0)
+				goto err;
+
+			ret = af9035_wr_reg(d, 0x00d8b5, 1);
+			if (ret < 0)
+				goto err;
+
+			ret = af9035_wr_reg(d, 0x00d8b3, 1);
+			if (ret < 0)
+				goto err;
+		}
+
 		/* attach tuner */
 		fe = dvb_attach(tda18218_attach, adap->fe[0],
 				&d->i2c_adap, &af9035_tda18218_config);
@@ -2122,6 +2165,8 @@ static const struct usb_device_id af9035_id_table[] = {
 		&af9035_props, "TerraTec Cinergy T Stick (rev. 2)", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_AVERMEDIA, 0x0337,
 		&af9035_props, "AVerMedia HD Volar (A867)", NULL) },
+	{ DVB_USB_DEVICE(USB_VID_AVERMEDIA, 0x0918,
+		&af9035_props, "AVerMedia A918R Express DVB-T", NULL) },
        { DVB_USB_DEVICE(USB_VID_GTEK, USB_PID_EVOLVEO_XTRATV_STICK,
 	       &af9035_props, "EVOLVEO XtraTV stick", NULL) },
 
