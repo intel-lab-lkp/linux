@@ -45,6 +45,8 @@
 #define to_amdgpu_bo_user(abo) container_of((abo), struct amdgpu_bo_user, bo)
 #define to_amdgpu_bo_vm(abo) container_of((abo), struct amdgpu_bo_vm, bo)
 
+struct ttm_pool_prealloc;
+
 struct amdgpu_bo_param {
 	unsigned long			size;
 	int				byte_align;
@@ -58,6 +60,8 @@ struct amdgpu_bo_param {
 	void				(*destroy)(struct ttm_buffer_object *bo);
 	/* xcp partition number plus 1, 0 means any partition */
 	int8_t				xcp_id_plus1;
+	/* optional out-of-lock preallocated backing (system/GTT only) */
+	struct ttm_pool_prealloc	*prealloc;
 };
 
 /* bo virtual addresses in a vm */

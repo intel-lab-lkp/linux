@@ -39,6 +39,7 @@
 #include <drm/drm_exec.h>
 #include <drm/drm_gem_ttm_helper.h>
 #include <drm/ttm/ttm_tt.h>
+#include <drm/ttm/ttm_pool.h>
 #include <drm/drm_syncobj.h>
 
 #include "amdgpu.h"
@@ -168,7 +169,8 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 			     int alignment, u32 initial_domain,
 			     u64 flags, enum ttm_bo_type type,
 			     struct dma_resv *resv,
-			     struct drm_gem_object **obj, int8_t xcp_id_plus1)
+			     struct drm_gem_object **obj, int8_t xcp_id_plus1,
+			     struct ttm_pool_prealloc *prealloc)
 {
 	struct amdgpu_bo *bo;
 	struct amdgpu_bo_user *ubo;
@@ -188,6 +190,7 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 	bp.domain = initial_domain;
 	bp.bo_ptr_size = sizeof(struct amdgpu_bo);
 	bp.xcp_id_plus1 = xcp_id_plus1;
+	bp.prealloc = prealloc;
 
 	r = amdgpu_bo_create_user(adev, &bp, &ubo);
 	if (r)
@@ -412,6 +415,8 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 	struct dma_resv *resv = NULL;
 	struct drm_gem_object *gobj;
 	uint32_t handle, initial_domain;
+	struct ttm_pool_prealloc prealloc = {};
+	struct ttm_pool *prealloc_pool = NULL;
 	int r;
 
 	/* reject invalid gem flags */
@@ -443,10 +448,29 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 		flags |= AMDGPU_GEM_CREATE_NO_CPU_ACCESS;
 	}
 
+	/*
+	 * For system-only (pure GTT) BOs, preallocate the whole page backing
+	 * up front, outside the reservation lock. Populate under the lock then
+	 * just installs these pages instead of reclaiming/compacting in the
+	 * critical section. Best-effort: a short fill falls back to the normal
+	 * in-lock allocation for the missing pages.
+	 */
+	if (args->in.domains == AMDGPU_GEM_DOMAIN_GTT) {
+		int32_t xcp_id = adev->gmc.mem_partitions ? fpriv->xcp_id : 0;
+		int32_t pool_id = amdgpu_ttm_tt_pool_id(adev, xcp_id);
+		enum ttm_caching caching =
+			(flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC) ?
+			ttm_write_combined : ttm_cached;
+
+		prealloc_pool = amdgpu_ttm_pool(adev, pool_id);
+		ttm_pool_prealloc_fill_full(prealloc_pool, caching, &prealloc,
+					    PFN_UP(size), false);
+	}
+
 	if (flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID) {
 		r = amdgpu_bo_reserve(vm->root.bo, false);
 		if (r)
-			return r;
+			goto out_prealloc;
 
 		resv = vm->root.bo->tbo.base.resv;
 	}
@@ -455,7 +479,8 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 retry:
 	r = amdgpu_gem_object_create(adev, size, args->in.alignment,
 				     initial_domain,
-				     flags, ttm_bo_type_device, resv, &gobj, fpriv->xcp_id + 1);
+				     flags, ttm_bo_type_device, resv, &gobj,
+				     fpriv->xcp_id + 1, prealloc_pool ? &prealloc : NULL);
 	if (r && r != -ERESTARTSYS) {
 		if (flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED) {
 			flags &= ~AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
@@ -479,17 +504,21 @@ retry:
 		amdgpu_bo_unreserve(vm->root.bo);
 	}
 	if (r)
-		return r;
+		goto out_prealloc;
 
 	r = drm_gem_handle_create(filp, gobj, &handle);
 	/* drop reference from allocate - handle holds it now */
 	drm_gem_object_put(gobj);
 	if (r)
-		return r;
+		goto out_prealloc;
 
 	memset(args, 0, sizeof(*args));
 	args->out.handle = handle;
-	return 0;
+
+out_prealloc:
+	if (prealloc_pool)
+		ttm_pool_prealloc_fini(prealloc_pool, &prealloc);
+	return r;
 }
 
 int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
@@ -528,7 +557,7 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
 
 	/* create a gem object to contain this object in */
 	r = amdgpu_gem_object_create(adev, args->size, 0, AMDGPU_GEM_DOMAIN_CPU,
-				     0, ttm_bo_type_device, NULL, &gobj, fpriv->xcp_id + 1);
+				     0, ttm_bo_type_device, NULL, &gobj, fpriv->xcp_id + 1, NULL);
 	if (r)
 		return r;
 
@@ -1298,7 +1327,7 @@ int amdgpu_mode_dumb_create(struct drm_file *file_priv,
 	domain = amdgpu_bo_get_preferred_domain(adev,
 				amdgpu_display_supported_domains(adev, flags));
 	r = amdgpu_gem_object_create(adev, args->size, 0, domain, flags,
-				     ttm_bo_type_device, NULL, &gobj, fpriv->xcp_id + 1);
+				     ttm_bo_type_device, NULL, &gobj, fpriv->xcp_id + 1, NULL);
 	if (r)
 		return -ENOMEM;
 
