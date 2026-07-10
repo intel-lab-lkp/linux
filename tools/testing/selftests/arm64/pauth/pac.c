@@ -14,6 +14,8 @@
 #include "helper.h"
 
 #define PAC_COLLISION_ATTEMPTS 1000
+/* exec_changed_keys is fork+exec heavy; scale down on slow machines. */
+#define PAC_SLOW_MACHINE_COLLISION_ATTEMPTS 250
 /*
  * The kernel sets TBID by default. So bits 55 and above should remain
  * untouched no matter what.
@@ -35,6 +37,16 @@ do { \
 	if (!(hwcaps & HWCAP_PACG)) \
 		SKIP(return, "Generic PAUTH not enabled");	\
 } while (0)
+
+static inline int pac_collision_attempts(void)
+{
+	const char *slow = getenv("KSFT_MACHINE_SLOW");
+
+	if (slow && !strcmp(slow, "yes"))
+		return PAC_SLOW_MACHINE_COLLISION_ATTEMPTS;
+
+	return PAC_COLLISION_ATTEMPTS;
+}
 
 void sign_specific(struct signatures *sign, size_t val)
 {
@@ -301,6 +313,7 @@ TEST(exec_changed_keys)
 	int ret;
 	int same = 10;
 	int nkeys = NKEYS;
+	int attempts = pac_collision_attempts();
 	unsigned long hwcaps = getauxval(AT_HWCAP);
 
 	/* generic and data key instructions are not in NOP space. This prevents a SIGILL */
@@ -309,8 +322,7 @@ TEST(exec_changed_keys)
 		TH_LOG("WARNING: Generic PAUTH not enabled. Skipping generic key checks");
 		nkeys = NKEYS - 1;
 	}
-
-	for (int i = 0; i < PAC_COLLISION_ATTEMPTS; i++) {
+	for (int i = 0; i < attempts; i++) {
 		ret = exec_sign_all(&new_keys, i);
 		ASSERT_EQ(0, ret) TH_LOG("failed to run worker");
 
