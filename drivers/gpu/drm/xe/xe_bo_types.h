@@ -54,6 +54,12 @@ struct xe_bo {
 	struct ttm_bo_kmap_obj kmap;
 	/** @pinned_link: link to present / evicted list of pinned BO */
 	struct list_head pinned_link;
+	/**
+	 * @defrag_link: link into @xe_device.mem.defrag.list for BOs whose
+	 * backing TT pages were allocated at a sub-optimal order. Protected by
+	 * @xe_device.mem.defrag.lock.
+	 */
+	struct list_head defrag_link;
 #ifdef CONFIG_PROC_FS
 	/**
 	 * @client: @xe_drm_client which created the bo
