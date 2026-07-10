@@ -129,6 +129,8 @@ try_next_entry:
 		end = &info->name.string.utf8[info->name.size];
 		if (WARN_ON(end > (b->buf + b->used)))
 			return false;
+		if (info->name.length > info->name.size)
+			return false;
 
 		/* Info now points to the right entry, emit it. */
 		d_type = vboxsf_get_d_type(info->info.attr.mode);
