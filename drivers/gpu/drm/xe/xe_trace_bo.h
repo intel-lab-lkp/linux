@@ -144,6 +144,37 @@ TRACE_EVENT(xe_bo_defrag_one,
 		      __entry->ret)
 );
 
+TRACE_EVENT(xe_gem_create_ioctl,
+	    TP_PROTO(struct xe_device *xe, u64 size, u32 placement,
+		     u16 caching, u32 asid, u64 ioctl_us, u64 lock_us),
+	    TP_ARGS(xe, size, placement, caching, asid, ioctl_us, lock_us),
+
+	    TP_STRUCT__entry(
+		     __string(dev, dev_name(xe->drm.dev))
+		     __field(u64, size)
+		     __field(u32, placement)
+		     __field(u16, caching)
+		     __field(u32, asid)
+		     __field(u64, ioctl_us)
+		     __field(u64, lock_us)
+		     ),
+
+	    TP_fast_assign(
+		   __assign_str(dev);
+		   __entry->size = size;
+		   __entry->placement = placement;
+		   __entry->caching = caching;
+		   __entry->asid = asid;
+		   __entry->ioctl_us = ioctl_us;
+		   __entry->lock_us = lock_us;
+		   ),
+
+	    TP_printk("dev=%s, size=%llu, placement=0x%x, caching=%u, asid=%u, ioctl_us=%llu, lock_us=%llu",
+		      __get_str(dev), __entry->size, __entry->placement,
+		      __entry->caching, __entry->asid, __entry->ioctl_us,
+		      __entry->lock_us)
+);
+
 DECLARE_EVENT_CLASS(xe_vma,
 		    TP_PROTO(struct xe_vma *vma),
 		    TP_ARGS(vma),
