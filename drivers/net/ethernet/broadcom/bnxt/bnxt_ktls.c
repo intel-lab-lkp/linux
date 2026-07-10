@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2026 Broadcom Inc. */
 
+#include <linux/tcp.h>
 #include <net/tls.h>
 #include <linux/bnxt/hsi.h>
 
@@ -342,4 +343,96 @@ int bnxt_ktls_init(struct bnxt *bp)
 	dev->hw_features |= NETIF_F_HW_TLS_TX;
 	dev->features |= NETIF_F_HW_TLS_TX;
 	return 0;
+}
+
+static void bnxt_ktls_inc_tx_stats(struct bnxt_tx_ring_info *txr, u32 bytes)
+{
+	struct bnxt_tls_sw_stats *ring_stats = txr->tls_stats;
+
+	if (!ring_stats)
+		return;
+	ring_stats->counters[BNXT_KTLS_TX_PKTS]++;
+	ring_stats->counters[BNXT_KTLS_TX_BYTES] += bytes;
+}
+
+struct sk_buff *bnxt_ktls_xmit(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
+			       struct sk_buff *skb, __le32 *lflags, u32 *kid,
+			       struct bnxt_ktls_offload_ctx_tx **kctx_tx_p)
+{
+	struct bnxt_tls_info *ktls = bp->ktls_info;
+	struct bnxt_ktls_offload_ctx_tx *kctx_tx;
+	struct tls_context *tls_ctx;
+	u32 seq, payload_len;
+
+	if (!IS_ENABLED(CONFIG_TLS_DEVICE) || !ktls ||
+	    !tls_is_skb_tx_device_offloaded(skb))
+		return skb;
+
+	seq = ntohl(tcp_hdr(skb)->seq);
+	tls_ctx = tls_get_ctx(skb->sk);
+	kctx_tx = bnxt_get_ktls_ctx_tx(tls_ctx);
+	payload_len = skb->len - skb_tcp_all_headers(skb);
+	if (!payload_len)
+		return skb;
+	if (kctx_tx->tcp_seq_no == seq) {
+		/* Stage the advance only.  tcp_seq_no and the counters are
+		 * committed by bnxt_ktls_xmit_commit() once the BD reaches the
+		 * ring.
+		 */
+		kctx_tx->next_tcp_seq_no = seq + payload_len;
+		kctx_tx->pending_bytes = payload_len;
+		*kid = BNXT_KID_HW(kctx_tx->kid);
+		*kctx_tx_p = kctx_tx;
+		*lflags |= cpu_to_le32(TX_BD_FLAGS_CRYPTO_EN |
+				       BNXT_TX_KID_LO(*kid));
+	} else {
+		skb = tls_encrypt_skb(skb);
+		if (!skb)
+			return NULL;
+	}
+	return skb;
+}
+
+void bnxt_ktls_xmit_commit(struct bnxt_tx_ring_info *txr,
+			   struct bnxt_ktls_offload_ctx_tx *kctx_tx)
+{
+	if (!kctx_tx)
+		return;
+	kctx_tx->tcp_seq_no = kctx_tx->next_tcp_seq_no;
+	bnxt_ktls_inc_tx_stats(txr, kctx_tx->pending_bytes);
+}
+
+int bnxt_ktls_alloc_tx_ring_stats(struct bnxt *bp, struct bnxt_tx_ring_info *txr)
+{
+	struct bnxt_tls_sw_stats *ring_stats;
+
+	if (!bp->ktls_info)
+		return 0;
+	ring_stats = kzalloc_obj(*ring_stats);
+	if (!ring_stats)
+		return -ENOMEM;
+	txr->tls_stats = ring_stats;
+	return 0;
+}
+
+void bnxt_ktls_free_tx_ring_stats(struct bnxt_tx_ring_info *txr)
+{
+	kfree(txr->tls_stats);
+	txr->tls_stats = NULL;
+}
+
+void bnxt_get_ring_tls_stats(struct bnxt *bp, struct bnxt_tls_sw_stats *stats)
+{
+	struct bnxt_tls_sw_stats *ring_stats;
+	int i, j;
+
+	if (!bp->ktls_info || !bp->tx_ring)
+		return;
+	for (i = 0; i < bp->tx_nr_rings; i++) {
+		ring_stats = bp->tx_ring[i].tls_stats;
+		if (!ring_stats)
+			continue;
+		for (j = 0; j < BNXT_KTLS_MAX_DATA_COUNTERS; j++)
+			stats->counters[j] += ring_stats->counters[j];
+	}
 }

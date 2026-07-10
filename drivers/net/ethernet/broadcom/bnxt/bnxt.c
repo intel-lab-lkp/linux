@@ -481,6 +481,7 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	dma_addr_t mapping;
 	unsigned int length, pad = 0;
 	u32 len, free_size, vlan_tag_flags, cfa_action, flags;
+	struct bnxt_ktls_offload_ctx_tx *kctx_tx = NULL;
 	struct bnxt_ptp_cfg *ptp = bp->ptp_cfg;
 	struct pci_dev *pdev = bp->pdev;
 	u16 prod, last_frag, txts_prod;
@@ -488,6 +489,7 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct bnxt_sw_tx_bd *tx_buf;
 	__le32 lflags = 0;
 	skb_frag_t *frag;
+	u32 kid = 0;
 
 	i = skb_get_queue_mapping(skb);
 	if (unlikely(i >= bp->tx_nr_rings)) {
@@ -525,6 +527,12 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (!netif_txq_try_stop(txq, bnxt_tx_avail(bp, txr),
 					bp->tx_wake_thresh))
 			return NETDEV_TX_BUSY;
+	}
+
+	skb = bnxt_ktls_xmit(bp, txr, skb, &lflags, &kid, &kctx_tx);
+	if (unlikely(!skb)) {
+		dev_core_stats_tx_dropped_inc(dev);
+		return NETDEV_TX_OK;
 	}
 
 	length = skb->len;
@@ -675,7 +683,7 @@ normal_tx:
 
 	prod = NEXT_TX(prod);
 	txbd1 = bnxt_init_ext_bd(bp, txr, prod, lflags, vlan_tag_flags,
-				 cfa_action);
+				 cfa_action, kid);
 
 	if (skb_is_gso(skb)) {
 		bool udp_gso = !!(skb_shinfo(skb)->gso_type & SKB_GSO_UDP_L4);
@@ -696,9 +704,10 @@ normal_tx:
 
 		txbd1->tx_bd_hsize_lflags |= cpu_to_le32(TX_BD_FLAGS_LSO |
 					TX_BD_FLAGS_T_IPID |
-					(hdr_len << (TX_BD_HSIZE_SHIFT - 1)));
+					((hdr_len >> 1) << TX_BD_HSIZE_SHIFT));
 		length = skb_shinfo(skb)->gso_size;
-		txbd1->tx_bd_mss = cpu_to_le32(length);
+		txbd1->tx_bd_kid_mss = cpu_to_le32(BNXT_TX_KID_HI(kid) |
+						   (length & TX_BD_MSS));
 		length += hdr_len;
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		txbd1->tx_bd_hsize_lflags |=
@@ -750,6 +759,9 @@ normal_tx:
 
 	prod = NEXT_TX(prod);
 	WRITE_ONCE(txr->tx_prod, prod);
+
+	/* Commit the kTLS state now that the BD is in the ring. */
+	bnxt_ktls_xmit_commit(txr, kctx_tx);
 
 	if (!netdev_xmit_more() || netif_xmit_stopped(txq)) {
 		bnxt_txr_db_kick(bp, txr, prod);
@@ -4085,6 +4097,8 @@ static void bnxt_free_tx_rings(struct bnxt *bp)
 
 		bnxt_free_tx_inline_buf(txr, pdev);
 
+		bnxt_ktls_free_tx_ring_stats(txr);
+
 		ring = &txr->tx_ring_struct;
 
 		bnxt_free_ring(bp, &ring->ring_mem);
@@ -4160,6 +4174,9 @@ static int bnxt_alloc_tx_rings(struct bnxt *bp)
 		qidx = bp->tc_to_qidx[j];
 		ring->queue_id = bp->q_info[qidx].queue_id;
 		spin_lock_init(&txr->tx_lock);
+		rc = bnxt_ktls_alloc_tx_ring_stats(bp, txr);
+		if (rc)
+			return rc;
 		if (i < bp->tx_nr_rings_xdp)
 			continue;
 		if (BNXT_RING_TO_TC_OFF(bp, i) == (bp->tx_nr_rings_per_tc - 1))
