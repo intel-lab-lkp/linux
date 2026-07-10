@@ -1054,6 +1054,7 @@ static void stratix10_rsu_remove(struct platform_device *pdev)
 {
 	struct stratix10_rsu_priv *priv = platform_get_drvdata(pdev);
 
+	stratix10_svc_remove_async_client(priv->chan);
 	stratix10_svc_free_channel(priv->chan);
 }
 
