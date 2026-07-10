@@ -815,17 +815,11 @@ int smcr_link_init(struct smc_link_group *lgr, struct smc_link *lnk,
 	lnk->lgr = lgr;
 	smc_lgr_hold(lgr); /* lgr_put in smcr_link_clear() */
 	lnk->link_idx = link_idx;
-	lnk->wr_rx_id_compl = 0;
 	smc_ibdev_cnt_inc(lnk);
 	smcr_copy_dev_info_to_link(lnk);
 	atomic_set(&lnk->conn_cnt, 0);
 	smc_llc_link_set_uid(lnk);
 	INIT_WORK(&lnk->link_down_wrk, smc_link_down_work);
-	if (!lnk->smcibdev->initialized) {
-		rc = (int)smc_ib_setup_per_ibdev(lnk->smcibdev);
-		if (rc)
-			goto out;
-	}
 	get_random_bytes(rndvec, sizeof(rndvec));
 	lnk->psn_initial = rndvec[0] + (rndvec[1] << 8) +
 		(rndvec[2] << 16);
@@ -863,6 +857,7 @@ int smcr_link_init(struct smc_link_group *lgr, struct smc_link *lnk,
 	if (rc)
 		goto free_link_mem;
 	lnk->state = SMC_LNK_ACTIVATING;
+	smc_wr_init_cqes(lnk);
 	return 0;
 
 free_link_mem:
@@ -1373,7 +1368,8 @@ void smcr_link_clear(struct smc_link *lnk, bool log)
 	smc_llc_link_clear(lnk, log);
 	smcr_buf_unmap_lgr(lnk);
 	smcr_rtoken_clear_link(lnk);
-	smc_ib_modify_qp_error(lnk);
+	smc_wr_stop_link(lnk);
+	smc_wr_drain_qp(lnk);
 	smc_wr_free_link(lnk);
 	smc_ib_destroy_queue_pair(lnk);
 	smc_ib_dealloc_protection_domain(lnk);

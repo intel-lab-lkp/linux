@@ -44,25 +44,15 @@ struct smc_wr_rx_handler {
 	u8			type;
 };
 
-/* Only used by RDMA write WRs.
- * All other WRs (CDC/LLC) use smc_wr_tx_send handling WR_ID implicitly
- */
-static inline long smc_wr_tx_get_next_wr_id(struct smc_link *link)
-{
-	return atomic_long_inc_return(&link->wr_tx_id);
-}
-
-static inline void smc_wr_tx_set_wr_id(atomic_long_t *wr_tx_id, long val)
-{
-	atomic_long_set(wr_tx_id, val);
-}
-
 static inline bool smc_wr_tx_link_hold(struct smc_link *link)
 {
+	/* We still keep this check, although percpu_ref_tryget_live()
+	 * is the real safety guarantee.
+	 * It provides a quick reject path, but nothing more than that.
+	 */
 	if (!smc_link_sendable(link))
 		return false;
-	percpu_ref_get(&link->wr_tx_refs);
-	return true;
+	return percpu_ref_tryget_live(&link->wr_tx_refs);
 }
 
 static inline void smc_wr_tx_link_put(struct smc_link *link)
@@ -70,9 +60,10 @@ static inline void smc_wr_tx_link_put(struct smc_link *link)
 	percpu_ref_put(&link->wr_tx_refs);
 }
 
-static inline void smc_wr_drain_cq(struct smc_link *lnk)
+static inline void smc_wr_drain_qp(struct smc_link *lnk)
 {
-	wait_event(lnk->wr_rx_empty_wait, lnk->wr_rx_id_compl == lnk->wr_rx_id);
+	if (lnk->qp_attr.cur_qp_state != IB_QPS_RESET)
+		ib_drain_qp(lnk->roce_qp);
 }
 
 static inline void smc_wr_wakeup_tx_wait(struct smc_link *lnk)
@@ -86,29 +77,22 @@ static inline void smc_wr_wakeup_reg_wait(struct smc_link *lnk)
 }
 
 /* post a new receive work request to fill a completed old work request entry */
-static inline int smc_wr_rx_post(struct smc_link *link)
+static inline int smc_wr_rx_post(struct smc_link *link, struct ib_cqe *cqe)
 {
-	int rc;
-	u64 wr_id, temp_wr_id;
-	u32 index;
+	struct smc_ib_recv_wr *recv_wr;
 
-	wr_id = ++link->wr_rx_id; /* tasklet context, thus not atomic */
-	temp_wr_id = wr_id;
-	index = do_div(temp_wr_id, link->wr_rx_cnt);
-	link->wr_rx_ibs[index].wr_id = wr_id;
-	rc = ib_post_recv(link->roce_qp, &link->wr_rx_ibs[index], NULL);
-	return rc;
+	recv_wr = container_of(cqe, struct smc_ib_recv_wr, cqe);
+	return ib_post_recv(link->roce_qp, &recv_wr->wr, NULL);
 }
 
 int smc_wr_create_link(struct smc_link *lnk);
 int smc_wr_alloc_link_mem(struct smc_link *lnk);
 int smc_wr_alloc_lgr_mem(struct smc_link_group *lgr);
+void smc_wr_stop_link(struct smc_link *lnk);
 void smc_wr_free_link(struct smc_link *lnk);
 void smc_wr_free_link_mem(struct smc_link *lnk);
 void smc_wr_free_lgr_mem(struct smc_link_group *lgr);
 void smc_wr_remember_qp_attr(struct smc_link *lnk);
-void smc_wr_remove_dev(struct smc_ib_device *smcibdev);
-void smc_wr_add_dev(struct smc_ib_device *smcibdev);
 
 int smc_wr_tx_get_free_slot(struct smc_link *link, smc_wr_tx_handler handler,
 			    struct smc_wr_buf **wr_buf,
@@ -126,12 +110,12 @@ int smc_wr_tx_v2_send(struct smc_link *link,
 		      struct smc_wr_tx_pend_priv *priv, int len);
 int smc_wr_tx_send_wait(struct smc_link *link, struct smc_wr_tx_pend_priv *priv,
 			unsigned long timeout);
-void smc_wr_tx_cq_handler(struct ib_cq *ib_cq, void *cq_context);
 void smc_wr_tx_wait_no_pending_sends(struct smc_link *link);
 
 int smc_wr_rx_register_handler(struct smc_wr_rx_handler *handler);
 int smc_wr_rx_post_init(struct smc_link *link);
-void smc_wr_rx_cq_handler(struct ib_cq *ib_cq, void *cq_context);
 int smc_wr_reg_send(struct smc_link *link, struct ib_mr *mr);
+
+void smc_wr_init_cqes(struct smc_link *lnk);
 
 #endif /* SMC_WR_H */
