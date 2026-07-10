@@ -212,6 +212,18 @@ struct ttm_operation_ctx {
 	 */
 	bool defrag;
 	/**
+	 * @defrag_old_tt: During a defragmentation move, the bo's existing
+	 * (populated) tt that is being relocated. The page allocator may
+	 * harvest already beneficial-order chunks from this tt to back the new
+	 * tt instead of reallocating them, avoiding alloc/free churn for large
+	 * buffers. Harvested pages are only borrowed: they stay owned by
+	 * @defrag_old_tt until the move commits, at which point
+	 * ttm_tt_defrag_disown_borrowed() clears the old tt's slots for the
+	 * transferred pages so they are not freed when the old tt is torn down.
+	 * NULL for non-defrag operations.
+	 */
+	struct ttm_tt *defrag_old_tt;
+	/**
 	 * @resv: Reservation object to be used together with
 	 * @allow_res_evict.
 	 */
