@@ -88,7 +88,11 @@ void generic_fillattr(struct mnt_idmap *idmap, u32 request_mask,
 	stat->dev = inode->i_sb->s_dev;
 	stat->ino = inode->i_ino;
 	stat->mode = inode->i_mode;
-	stat->nlink = inode->i_nlink;
+	/*
+	 * st_nlink is a snapshot. Link count updates are serialized by
+	 * inode->i_rwsem, but getattr does not take that lock.
+	 */
+	stat->nlink = data_race(READ_ONCE(inode->i_nlink));
 	stat->uid = vfsuid_into_kuid(vfsuid);
 	stat->gid = vfsgid_into_kgid(vfsgid);
 	stat->rdev = inode->i_rdev;
