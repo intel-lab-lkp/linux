@@ -42,8 +42,6 @@ struct cifs_swn_reg {
 		} ntlm;
 	} authinfo;
 
-	struct cifs_tcon *tcon;
-
 	unsigned long check_interval;
 	struct delayed_work check;
 };
@@ -288,13 +286,46 @@ static bool cifs_swn_reg_tcon_matches(const struct cifs_swn_reg *swnreg,
 	return true;
 }
 
+static struct cifs_tcon *
+cifs_swn_reg_get_tcon(const struct cifs_swn_reg *swnreg)
+{
+	struct TCP_Server_Info *server;
+	struct cifs_ses *ses;
+	struct cifs_tcon *tcon;
+
+	spin_lock(&cifs_tcp_ses_lock);
+	list_for_each_entry(server, &cifs_tcp_ses_list, tcp_ses_list) {
+		if (SERVER_IS_CHAN(server))
+			continue;
+
+		list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
+			list_for_each_entry(tcon, &ses->tcon_list, tcon_list) {
+				spin_lock(&tcon->tc_lock);
+				if (tcon->status == TID_EXITING ||
+				    !cifs_swn_reg_tcon_matches(swnreg, tcon)) {
+					spin_unlock(&tcon->tc_lock);
+					continue;
+				}
+				++tcon->tc_count;
+				trace_smb3_tcon_ref(
+					tcon->debug_id, tcon->tc_count,
+					netfs_trace_tcon_ref_get_swn);
+				spin_unlock(&tcon->tc_lock);
+				spin_unlock(&cifs_tcp_ses_lock);
+				return tcon;
+			}
+		}
+	}
+	spin_unlock(&cifs_tcp_ses_lock);
+	return ERR_PTR(-ENOENT);
+}
+
 /*
  * Sends a register message to the userspace daemon based on the registration.
  * The authentication information to connect to the witness service is bundled
  * into the message.
  */
-static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg,
-					  struct cifs_tcon *tcon)
+static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg)
 {
 	struct sk_buff *skb;
 	struct genlmsghdr *hdr;
@@ -489,6 +520,7 @@ static void cifs_swn_reg_check(struct work_struct *work)
 {
 	struct cifs_swn_reg *swnreg =
 		container_of(work, struct cifs_swn_reg, check.work);
+	struct cifs_tcon *tcon;
 	int ret;
 
 	/*
@@ -507,12 +539,48 @@ static void cifs_swn_reg_check(struct work_struct *work)
 	}
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 
+	tcon = cifs_swn_reg_get_tcon(swnreg);
+	if (IS_ERR(tcon)) {
+		ret = PTR_ERR(tcon);
+		cifs_dbg(FYI, "No matching tcon for registration id %d: %d\n",
+			 swnreg->id, ret);
+
+		/*
+		 * There is no point in keeping a live registration if there
+		 * are no matching tcons. Drop the reference that this fn
+		 * took at the top.
+		 */
+		mutex_lock(&cifs_swnreg_idr_mutex);
+		if (kref_put(&swnreg->ref_count, cifs_swn_reg_idr_remove)) {
+			mutex_unlock(&cifs_swnreg_idr_mutex);
+			cifs_swn_reg_release(swnreg);
+			return;
+		}
+
+		/*
+		 * Again, to drop the birth reference created via kref_init().
+		 * If there are other live references, next check run might release it.
+		 */
+		if (kref_put(&swnreg->ref_count, cifs_swn_reg_idr_remove)) {
+			mutex_unlock(&cifs_swnreg_idr_mutex);
+			cifs_swn_reg_release(swnreg);
+			return;
+		}
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+
+		/* References remain: retry later. */
+		queue_delayed_work(cifsiod_wq, &swnreg->check,
+				   swnreg->check_interval);
+		return;
+	}
+	cifs_put_tcon(tcon, netfs_trace_tcon_ref_put_swn);
+
 	/*
 	 * It is safe to send the registration message multiple times.
 	 * The userspace client library tracks if registered or not
 	 * using the swnreg->id.
 	 */
-	ret = cifs_swn_send_register_message(swnreg, swnreg->tcon);
+	ret = cifs_swn_send_register_message(swnreg);
 	if (ret < 0)
 		cifs_dbg(FYI, "%s: Failed to send register message: %d\n",
 			 __func__, ret);
@@ -618,8 +686,6 @@ static struct cifs_swn_reg *cifs_get_swn_reg(struct cifs_tcon *tcon)
 		(tcon->capabilities & SMB2_SHARE_CAP_ASYMMETRIC);
 	swnreg->ip_notify = false;
 
-	swnreg->tcon = tcon;
-
 	swnreg->check_interval = tcon->ses->server->echo_interval;
 	INIT_DELAYED_WORK(&swnreg->check, cifs_swn_reg_check);
 
@@ -641,8 +707,8 @@ fail_unlock:
 	return ERR_PTR(ret);
 }
 
-static int cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
-					   const char *name, int state)
+static void cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
+					    const char *name, int state)
 {
 	switch (state) {
 	case CIFS_SWN_RESOURCE_STATE_UNAVAILABLE:
@@ -657,7 +723,6 @@ static int cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
 		cifs_dbg(FYI, "%s: resource name '%s' changed to unknown state\n", __func__, name);
 		break;
 	}
-	return 0;
 }
 
 static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
@@ -691,31 +756,22 @@ static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
 	return 0;
 }
 
-static int cifs_swn_reconnect(struct cifs_tcon *tcon, struct sockaddr_storage *addr)
+static bool cifs_swn_client_move(struct cifs_tcon *tcon,
+				 struct sockaddr_storage *addr)
 {
-	int ret = 0;
+	struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr;
+	struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)addr;
+	int ret;
 
-	cifs_server_lock(tcon->ses->server);
+	if (addr->ss_family == AF_INET)
+		cifs_dbg(FYI, "%s: move to %pI4\n", __func__, &ipv4->sin_addr);
+	else if (addr->ss_family == AF_INET6)
+		cifs_dbg(FYI, "%s: move to %pI6\n", __func__, &ipv6->sin6_addr);
 
 	if (cifs_match_ipaddr((struct sockaddr *)&tcon->ses->server->dstaddr,
 			      (struct sockaddr *)addr)) {
 		/* no-op */
-		goto unlock;
-	}
-
-	/*
-	 * Unregister to stop receiving notifications for the old IP address.
-	 */
-	ret = cifs_swn_unregister(tcon);
-	if (ret < 0) {
-		cifs_dbg(VFS, "%s: Failed to unregister for witness notifications: %d\n",
-			 __func__, ret);
-		/*
-		 * Do not jump return on error, continue storing and registering for
-		 * notifications for the new address. There will be a stale registration
-		 * around running its periodic check task, which should cancel itself
-		 * if no matching any tcon.
-		 */
+		return false;
 	}
 
 	/* Store the reconnect address */
@@ -724,58 +780,103 @@ static int cifs_swn_reconnect(struct cifs_tcon *tcon, struct sockaddr_storage *a
 	if (ret < 0) {
 		cifs_dbg(VFS, "%s: failed to store address: %d\n", __func__,
 			 ret);
-		goto unlock;
+		return false;
 	}
 	tcon->ses->server->use_swn_dstaddr = true;
 
-	/*
-	 * And register to receive notifications for the new IP address now that we have
-	 * stored the new address.
-	 */
-	ret = cifs_swn_register(tcon);
-	if (ret < 0) {
-		cifs_dbg(VFS, "%s: Failed to register for witness notifications: %d\n",
-			 __func__, ret);
-		goto unlock;
-	}
-
 	cifs_signal_cifsd_for_reconnect(tcon->ses->server, false);
 
-unlock:
-	cifs_server_unlock(tcon->ses->server);
-
-	return ret;
+	return true;
 }
 
-static int cifs_swn_client_move(struct cifs_tcon *tcon,
-				struct sockaddr_storage *addr)
-{
-	struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr;
-	struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)addr;
-
-	if (addr->ss_family == AF_INET)
-		cifs_dbg(FYI, "%s: move to %pI4\n", __func__, &ipv4->sin_addr);
-	else if (addr->ss_family == AF_INET6)
-		cifs_dbg(FYI, "%s: move to %pI6\n", __func__, &ipv6->sin6_addr);
-
-	return cifs_swn_reconnect(tcon, addr);
-}
-
-static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
+/*
+ * This function applies the notification to a matching tcon.
+ * It is called holding a spinlock. Just sets the reconnect flag and
+ * store the reconnect address if necessary.
+ */
+static bool
+cifs_swn_handle_notification_tcon(const struct cifs_swn_notification *not,
+				  struct cifs_tcon *tcon)
 {
 	switch (not->type) {
 	case CIFS_SWN_NOTIFICATION_RESOURCE_CHANGE:
-		return cifs_swn_resource_state_changed(
-			not->swnreg->tcon, not->data.resource_name_changed.name,
+		cifs_swn_resource_state_changed(
+			tcon, not->data.resource_name_changed.name,
 			not->data.resource_name_changed.state);
+		return false;
 	case CIFS_SWN_NOTIFICATION_CLIENT_MOVE:
-		return cifs_swn_client_move(not->swnreg->tcon,
-					    not->data.client_move.addr);
+		return cifs_swn_client_move(tcon, not->data.client_move.addr);
 	default:
 		cifs_dbg(FYI, "%s: unknown notification type %d\n", __func__,
 			 not->type);
 		break;
 	}
+	return false;
+}
+
+/*
+ * This function process a notification received for a registration. It
+ * searches all matching tcons to deliver it and then unregisters/registers
+ * as necessary if the address has changed.
+ */
+static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
+{
+	struct TCP_Server_Info *server;
+	struct cifs_ses *ses;
+	struct cifs_tcon *tcon;
+	int ret;
+
+	/* Walk the tcons and apply the notification to matching ones */
+	spin_lock(&cifs_tcp_ses_lock);
+	list_for_each_entry(server, &cifs_tcp_ses_list, tcp_ses_list) {
+		if (SERVER_IS_CHAN(server))
+			continue;
+
+		cifs_server_lock(server);
+		list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
+			list_for_each_entry(tcon, &ses->tcon_list, tcon_list) {
+				spin_lock(&tcon->tc_lock);
+				if (tcon->status == TID_EXITING ||
+				    !cifs_swn_reg_tcon_matches(not->swnreg,
+							       tcon)) {
+					spin_unlock(&tcon->tc_lock);
+					continue;
+				}
+				cifs_swn_handle_notification_tcon(not, tcon);
+				spin_unlock(&tcon->tc_lock);
+			}
+		}
+		cifs_server_unlock(server);
+	}
+	spin_unlock(&cifs_tcp_ses_lock);
+
+	switch (not->type) {
+	case CIFS_SWN_NOTIFICATION_CLIENT_MOVE:
+		/* Unregister from the current address */
+		ret = cifs_swn_send_unregister_message(not->swnreg);
+		if (ret < 0) {
+			cifs_dbg(VFS,
+				 "%s: Failed to unregister for witness notifications: %d\n",
+				 __func__, ret);
+		}
+
+		/* Store the new address */
+		not->swnreg->addr = *not->data.client_move.addr;
+
+		/* Register for this new address */
+		ret = cifs_swn_send_register_message(not->swnreg);
+		if (ret < 0) {
+			cifs_dbg(VFS,
+				 "%s: Failed to register for witness notifications: %d\n",
+				 __func__, ret);
+		}
+		break;
+	default:
+		cifs_dbg(FYI, "%s: unknown notification type %d\n", __func__,
+			 not->type);
+		break;
+	}
+
 	return 0;
 }
 
@@ -889,7 +990,7 @@ int cifs_swn_register(struct cifs_tcon *tcon)
 	if (IS_ERR(swnreg))
 		return PTR_ERR(swnreg);
 
-	ret = cifs_swn_send_register_message(swnreg, tcon);
+	ret = cifs_swn_send_register_message(swnreg);
 	if (ret < 0) {
 		cifs_dbg(VFS, "%s: Failed to send swn register message: %d\n", __func__, ret);
 		/* Do not put the swnreg or return error, the check task will retry */
