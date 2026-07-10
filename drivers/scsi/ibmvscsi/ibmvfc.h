@@ -712,12 +712,6 @@ struct ibmvfc_async_crq {
 	__be64 reserved;
 } __packed __aligned(8);
 
-struct ibmvfc_async_work {
-	struct ibmvfc_host *vhost;
-	struct ibmvfc_async_crq crq;
-	struct work_struct async_work_s;
-};
-
 struct ibmvfc_async_subq {
 	volatile u8 valid;
 #define IBMVFC_ASYNC_ID_IS_ASSOC_ID	0x01
@@ -737,6 +731,15 @@ struct ibmvfc_async_subq {
 	} id;
 } __packed __aligned(8);
 
+struct ibmvfc_async_work {
+	struct ibmvfc_host *vhost;
+	bool is_subq;
+	union {
+		struct ibmvfc_async_crq async_crq;
+		struct ibmvfc_async_subq subq;
+	} crq;
+	struct work_struct async_work_s;
+};
 union ibmvfc_iu {
 	struct ibmvfc_mad_common mad_common;
 	struct ibmvfc_npiv_login_mad npiv_login;
@@ -1008,7 +1011,7 @@ struct ibmvfc_host {
 #endif
 
 #ifdef VISIBLE_IF_KUNIT
-VISIBLE_IF_KUNIT void ibmvfc_handle_async(struct ibmvfc_async_crq *crq, struct ibmvfc_host *vhost);
+VISIBLE_IF_KUNIT void ibmvfc_handle_async(void *crq, struct ibmvfc_host *vhost, bool is_subq);
 VISIBLE_IF_KUNIT struct list_head *ibmvfc_get_headp(void);
 #endif
 
