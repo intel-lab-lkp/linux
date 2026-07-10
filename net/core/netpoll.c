@@ -362,15 +362,6 @@ void skb_pool_flush(struct netpoll *np)
 }
 EXPORT_SYMBOL_GPL(skb_pool_flush);
 
-void refill_skbs_work_handler(struct work_struct *work)
-{
-	struct netpoll *np =
-		container_of(work, struct netpoll, refill_wq);
-
-	refill_skbs(np);
-}
-EXPORT_SYMBOL_GPL(refill_skbs_work_handler);
-
 int __netpoll_setup(struct netpoll *np, struct net_device *ndev)
 {
 	struct netpoll_info *npinfo;

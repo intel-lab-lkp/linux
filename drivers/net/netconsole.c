@@ -292,6 +292,14 @@ static void netcons_release_dev(struct netconsole_target *nt)
 		memset(&nt->np.dev_name, 0, IFNAMSIZ);
 }
 
+static void refill_skbs_work_handler(struct work_struct *work)
+{
+	struct netpoll *np =
+		container_of(work, struct netpoll, refill_wq);
+
+	refill_skbs(np);
+}
+
 /* Seed the per-target skb pool that find_skb() falls back to. The queue
  * head and refill work are set up once in alloc_and_init(); this only
  * (re)fills the pool. Pair with netconsole_skb_pool_flush().
