@@ -55,6 +55,7 @@ static int nf_netlink_dump_start_rcu(struct sock *nlsk, struct sk_buff *skb,
 struct nfnl_dump_hook_data {
 	char devname[IFNAMSIZ];
 	unsigned long headv;
+	unsigned long natv;
 	u8 hook;
 };
 
@@ -348,6 +349,15 @@ static int nfnl_hook_dump_nat(struct sk_buff *nlskb,
 	unsigned int i = cb->args[1];
 	int err = 0;
 
+	if (!ctx->natv)
+		ctx->natv = (unsigned long)e;
+
+	if ((e && i >= e->num_hook_entries) ||
+	    ctx->natv != (unsigned long)e) {
+		cb->seq++;
+		return -EINTR;
+	}
+
 	if (!e)
 		return 0;
 
@@ -362,8 +372,10 @@ static int nfnl_hook_dump_nat(struct sk_buff *nlskb,
 			break;
 	}
 
-	if (!err)
+	if (!err) {
+		ctx->natv = 0;
 		i = 0;
+	}
 	cb->args[1] = i;
 	return err;
 }
