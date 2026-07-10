@@ -1337,14 +1337,35 @@ static void balloon_up(struct work_struct *dummy)
 	}
 }
 
+static bool unballoon_request_valid(struct dm_unballoon_request *req,
+				    u32 msg_size)
+{
+	u32 max_ranges;
+
+	if (msg_size < sizeof(*req) || req->hdr.size < sizeof(*req) ||
+	    req->hdr.size > msg_size)
+		return false;
+
+	max_ranges = (req->hdr.size - sizeof(*req)) /
+		     sizeof(req->range_array[0]);
+
+	return req->range_count <= max_ranges;
+}
+
 static void balloon_down(struct hv_dynmem_device *dm,
-			 struct dm_unballoon_request *req)
+			 struct dm_unballoon_request *req, u32 msg_size)
 {
 	union dm_mem_page_range *range_array = req->range_array;
 	int range_count = req->range_count;
 	struct dm_unballoon_response resp;
 	int i;
 	unsigned int prev_pages_ballooned = dm->num_pages_ballooned;
+
+	if (!unballoon_request_valid(req, msg_size)) {
+		pr_warn_ratelimited("Invalid unballoon request: size %u, header size %u, range count %u\n",
+				    msg_size, req->hdr.size, req->range_count);
+		return;
+	}
 
 	for (i = 0; i < range_count; i++) {
 		free_balloon_pages(dm, &range_array[i]);
@@ -1527,7 +1548,8 @@ static void balloon_onchannelcallback(void *context)
 
 			dm->state = DM_BALLOON_DOWN;
 			balloon_down(dm,
-				     (struct dm_unballoon_request *)recv_buffer);
+				     (struct dm_unballoon_request *)recv_buffer,
+				     recvlen);
 			break;
 
 		case DM_MEM_HOT_ADD_REQUEST:
