@@ -4892,6 +4892,26 @@ retry:
 	/* If allocation has taken excessively long, warn about it */
 	check_alloc_stall_warn(gfp_mask, ac->nodemask, order, alloc_start_time);
 
+	/*
+	 * Costly allocations with __GFP_NORETRY are opportunistic - Don't
+	 * stall on direct compaction or reclaim; instead, kick
+	 * kcompactd on the preferred node so large pages may become
+	 * available for future allocations and let the caller fall back now.
+	 *
+	 * Direct compaction is way too costly for hot allocation paths on
+	 * large systems: each attempt calls drain_all_pages() which IPIs
+	 * every CPU.  Only wake kcompactd on the local node to avoid
+	 * cross-NUMA interference with unrelated workloads.
+	 */
+	if (costly_order && (gfp_mask & __GFP_NORETRY)) {
+		struct zone *preferred_zone = ac->preferred_zoneref->zone;
+
+		if (preferred_zone)
+			wakeup_kcompactd(preferred_zone->zone_pgdat, order,
+					 ac->highest_zoneidx);
+		goto nopage;
+	}
+
 	/* Try direct reclaim and then allocating */
 	if (!compact_first) {
 		page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags,
