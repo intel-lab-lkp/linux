@@ -311,6 +311,81 @@ cycles_percent_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return ret;
 }
 
+/*
+ * cycles_percent_cmp - Comparison function for cycles percentage sorting
+ */
+static __maybe_unused int64_t
+cycles_percent_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		   struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left = container_of(left, struct c2c_hist_entry, he);
+	struct c2c_hist_entry *c2c_right = container_of(right, struct c2c_hist_entry, he);
+	u64 cycles_left, cycles_right;
+
+	/* Cycles Percent is only shown for level-1 entries; others compare equal. */
+	if (left->parent_he || right->parent_he)
+		return 0;
+
+	cycles_left = c2c_hist_entry__cycles(c2c_left);
+	cycles_right = c2c_hist_entry__cycles(c2c_right);
+
+	return (cycles_left > cycles_right) - (cycles_left < cycles_right);
+}
+
+/*
+ * iaddr_symbol_cmp - Comparison function for instruction address sorting
+ */
+static __maybe_unused int64_t
+iaddr_symbol_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		 struct hist_entry *left, struct hist_entry *right)
+{
+	u64 left_iaddr, right_iaddr;
+
+	/* IAddr is hidden for level-3 cacheline entries; they compare equal. */
+	if ((left->parent_he && left->parent_he->parent_he) ||
+	    (right->parent_he && right->parent_he->parent_he))
+		return 0;
+
+	left_iaddr = hist_entry__iaddr(left);
+	right_iaddr = hist_entry__iaddr(right);
+
+	/*
+	 * Order by instruction address, same direction as sort__iaddr_cmp()
+	 * (which returns r - l). Uses hist_entry__iaddr(), which falls back to
+	 * he->ip when mem_info is NULL, so it matches what iaddr_symbol_entry()
+	 * displays.
+	 */
+	return (left_iaddr < right_iaddr) - (left_iaddr > right_iaddr);
+}
+
+static __maybe_unused int64_t
+empty_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	  struct hist_entry *left __maybe_unused,
+	  struct hist_entry *right __maybe_unused)
+{
+	return 0;
+}
+
+/*
+ * total_stores_cmp - Comparison function for total stores sorting
+ */
+static __maybe_unused int64_t
+total_stores_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		 struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left = container_of(left, struct c2c_hist_entry, he);
+	struct c2c_hist_entry *c2c_right = container_of(right, struct c2c_hist_entry, he);
+	u64 left_store, right_store;
+
+	/* Match total_stores_entry(): L1 sums child stores, L2/L3 use their own. */
+	left_store = left->parent_he ? (u64)c2c_left->stats.store :
+				       hist_entry__child_stores(left);
+	right_store = right->parent_he ? (u64)c2c_right->stats.store :
+					 hist_entry__child_stores(right);
+
+	return (left_store > right_store) - (left_store < right_store);
+}
+
 int perf_c2c__browse_function_view(struct hists *hists __maybe_unused)
 {
 	ui__warning("C2C function view is not implemented yet.\n");
