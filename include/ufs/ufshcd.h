@@ -804,6 +804,11 @@ enum ufshcd_quirks {
 	 * delay after enabling VCC to ensure it's stable.
 	 */
 	UFSHCD_QUIRK_VCC_ON_DELAY			= 1 << 27,
+
+	/*
+	 * This quirk enables WB buffer flush via exception event notification.
+	 */
+	UFSHCI_QUIRK_ENABLE_WB_EXCEPTION_EVENT_CTRL	= 1 << 28,
 };
 
 enum ufshcd_caps {
