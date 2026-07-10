@@ -20,6 +20,9 @@
 #include <linux/pci-epf.h>
 #include <linux/pci_regs.h>
 #include <linux/slab.h>
+#if IS_ENABLED(CONFIG_NVMET_PCI_EPF_KUNIT_TEST)
+#include <kunit/test.h>
+#endif
 
 #include "nvmet.h"
 
@@ -2667,3 +2670,120 @@ module_exit(nvmet_pci_epf_cleanup_module);
 MODULE_DESCRIPTION("NVMe PCI Endpoint Function target driver");
 MODULE_AUTHOR("Damien Le Moal <dlemoal@kernel.org>");
 MODULE_LICENSE("GPL");
+
+#if IS_ENABLED(CONFIG_NVMET_PCI_EPF_KUNIT_TEST)
+
+struct nvmet_pci_epf_kunit_ctx {
+	struct nvmet_ctrl tctrl;
+	struct nvmet_subsys subsys;
+	struct nvmet_pci_epf_ctrl ctrl;
+	struct nvmet_pci_epf nvme_epf;
+};
+
+static int nvmet_pci_epf_kunit_init(struct kunit *test)
+{
+	struct nvmet_pci_epf_kunit_ctx *ctx;
+	unsigned int qid;
+
+	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ctx);
+
+	ctx->subsys.max_qid = 8;
+	ctx->tctrl.subsys = &ctx->subsys;
+	ctx->tctrl.drvdata = &ctx->ctrl;
+	ctx->tctrl.cqs = kunit_kcalloc(test, ctx->subsys.max_qid + 1,
+				       sizeof(*ctx->tctrl.cqs), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ctx->tctrl.cqs);
+	ctx->tctrl.sqs = kunit_kcalloc(test, ctx->subsys.max_qid + 1,
+				       sizeof(*ctx->tctrl.sqs), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ctx->tctrl.sqs);
+
+	ctx->ctrl.nr_queues = 2;
+	ctx->ctrl.tctrl = &ctx->tctrl;
+	ctx->ctrl.nvme_epf = &ctx->nvme_epf;
+	ctx->ctrl.sq = kunit_kcalloc(test, ctx->ctrl.nr_queues,
+				     sizeof(*ctx->ctrl.sq), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ctx->ctrl.sq);
+	ctx->ctrl.cq = kunit_kcalloc(test, ctx->ctrl.nr_queues,
+				     sizeof(*ctx->ctrl.cq), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ctx->ctrl.cq);
+
+	for (qid = 0; qid < ctx->ctrl.nr_queues; qid++) {
+		nvmet_pci_epf_init_queue(&ctx->ctrl, qid, true);
+		nvmet_pci_epf_init_queue(&ctx->ctrl, qid, false);
+	}
+
+	test->priv = ctx;
+	return 0;
+}
+
+static void nvmet_pci_epf_qid_control_test(struct kunit *test)
+{
+	struct nvmet_pci_epf_kunit_ctx *ctx = test->priv;
+	u16 status;
+
+	status = nvmet_check_io_cqid(&ctx->tctrl, 1, true);
+	KUNIT_EXPECT_EQ(test, status, (u16)NVME_SC_SUCCESS);
+
+	status = nvmet_pci_epf_create_cq(&ctx->tctrl, 1, 0, 1, 0, 0);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_INVALID_QUEUE | NVME_STATUS_DNR));
+}
+
+static void nvmet_pci_epf_qid_oob_test(struct kunit *test)
+{
+	struct nvmet_pci_epf_kunit_ctx *ctx = test->priv;
+	u16 bad_qid = ctx->ctrl.nr_queues;
+	u16 status;
+
+	status = nvmet_check_io_cqid(&ctx->tctrl, bad_qid, true);
+	KUNIT_EXPECT_EQ(test, status, (u16)NVME_SC_SUCCESS);
+
+	status = nvmet_pci_epf_create_cq(&ctx->tctrl, bad_qid, 0, 1, 0, 0);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_QID_INVALID | NVME_STATUS_DNR));
+}
+
+static void nvmet_pci_epf_qid_reject_all_test(struct kunit *test)
+{
+	struct nvmet_pci_epf_kunit_ctx *ctx = test->priv;
+	u16 bad_qid = ctx->ctrl.nr_queues;
+	u16 status;
+
+	status = nvmet_pci_epf_create_cq(&ctx->tctrl, bad_qid, 0, 1, 0, 0);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_QID_INVALID | NVME_STATUS_DNR));
+
+	status = nvmet_pci_epf_create_sq(&ctx->tctrl, bad_qid, 1, 0, 1, 0);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_QID_INVALID | NVME_STATUS_DNR));
+
+	status = nvmet_pci_epf_create_sq(&ctx->tctrl, 1, bad_qid, 0, 1, 0);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_QID_INVALID | NVME_STATUS_DNR));
+
+	status = nvmet_pci_epf_delete_cq(&ctx->tctrl, bad_qid);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_QID_INVALID | NVME_STATUS_DNR));
+
+	status = nvmet_pci_epf_delete_sq(&ctx->tctrl, bad_qid);
+	KUNIT_EXPECT_EQ(test, status,
+			(u16)(NVME_SC_QID_INVALID | NVME_STATUS_DNR));
+}
+
+static struct kunit_case nvmet_pci_epf_qid_test_cases[] = {
+	KUNIT_CASE(nvmet_pci_epf_qid_control_test),
+	KUNIT_CASE(nvmet_pci_epf_qid_oob_test),
+	KUNIT_CASE(nvmet_pci_epf_qid_reject_all_test),
+	{}
+};
+
+static struct kunit_suite nvmet_pci_epf_qid_test_suite = {
+	.name = "nvmet_pci_epf_qid",
+	.init = nvmet_pci_epf_kunit_init,
+	.test_cases = nvmet_pci_epf_qid_test_cases,
+};
+
+kunit_test_suite(nvmet_pci_epf_qid_test_suite);
+
+#endif

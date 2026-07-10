@@ -136,3 +136,14 @@ config NVME_TARGET_PCI_EPF
 	  capable PCI controller.
 
 	  If unsure, say N.
+
+config NVMET_PCI_EPF_KUNIT_TEST
+	bool "NVMe PCI endpoint target KUnit tests" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	depends on NVME_TARGET_PCI_EPF=y
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for the NVMe PCI endpoint target transport.
+	  These tests exercise transport-private queue ID checks for
+	  Create/Delete SQ/CQ commands when target-core max_qid is larger than
+	  the endpoint controller's available queue arrays.
