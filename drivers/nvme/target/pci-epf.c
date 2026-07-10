@@ -1267,9 +1267,14 @@ static u16 nvmet_pci_epf_create_cq(struct nvmet_ctrl *tctrl,
 		u16 cqid, u16 flags, u16 qsize, u64 pci_addr, u16 vector)
 {
 	struct nvmet_pci_epf_ctrl *ctrl = tctrl->drvdata;
-	struct nvmet_pci_epf_queue *cq = &ctrl->cq[cqid];
+	struct nvmet_pci_epf_queue *cq;
 	u16 status;
 	int ret;
+
+	if (cqid >= ctrl->nr_queues)
+		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
+
+	cq = &ctrl->cq[cqid];
 
 	if (test_bit(NVMET_PCI_EPF_Q_LIVE, &cq->flags))
 		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
@@ -1348,7 +1353,12 @@ err:
 static u16 nvmet_pci_epf_delete_cq(struct nvmet_ctrl *tctrl, u16 cqid)
 {
 	struct nvmet_pci_epf_ctrl *ctrl = tctrl->drvdata;
-	struct nvmet_pci_epf_queue *cq = &ctrl->cq[cqid];
+	struct nvmet_pci_epf_queue *cq;
+
+	if (cqid >= ctrl->nr_queues)
+		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
+
+	cq = &ctrl->cq[cqid];
 
 	if (!test_and_clear_bit(NVMET_PCI_EPF_Q_LIVE, &cq->flags))
 		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
@@ -1367,9 +1377,15 @@ static u16 nvmet_pci_epf_create_sq(struct nvmet_ctrl *tctrl,
 		u16 sqid, u16 cqid, u16 flags, u16 qsize, u64 pci_addr)
 {
 	struct nvmet_pci_epf_ctrl *ctrl = tctrl->drvdata;
-	struct nvmet_pci_epf_queue *sq = &ctrl->sq[sqid];
-	struct nvmet_pci_epf_queue *cq = &ctrl->cq[cqid];
+	struct nvmet_pci_epf_queue *sq;
+	struct nvmet_pci_epf_queue *cq;
 	u16 status;
+
+	if (sqid >= ctrl->nr_queues || cqid >= ctrl->nr_queues)
+		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
+
+	sq = &ctrl->sq[sqid];
+	cq = &ctrl->cq[cqid];
 
 	if (test_bit(NVMET_PCI_EPF_Q_LIVE, &sq->flags))
 		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
@@ -1419,7 +1435,12 @@ out_destroy_sq:
 static u16 nvmet_pci_epf_delete_sq(struct nvmet_ctrl *tctrl, u16 sqid)
 {
 	struct nvmet_pci_epf_ctrl *ctrl = tctrl->drvdata;
-	struct nvmet_pci_epf_queue *sq = &ctrl->sq[sqid];
+	struct nvmet_pci_epf_queue *sq;
+
+	if (sqid >= ctrl->nr_queues)
+		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
+
+	sq = &ctrl->sq[sqid];
 
 	if (!test_and_clear_bit(NVMET_PCI_EPF_Q_LIVE, &sq->flags))
 		return NVME_SC_QID_INVALID | NVME_STATUS_DNR;
