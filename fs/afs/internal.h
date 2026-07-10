@@ -1380,7 +1380,7 @@ extern struct workqueue_struct *afs_async_calls;
 extern int __net_init afs_open_socket(struct afs_net *);
 extern void __net_exit afs_close_socket(struct afs_net *);
 extern void afs_charge_preallocation(struct work_struct *);
-extern void afs_put_call(struct afs_call *);
+void afs_put_call(struct afs_call *call, enum afs_call_trace trace);
 void afs_make_call(struct afs_call *call, gfp_t gfp);
 void afs_deliver_to_call(struct afs_call *call);
 void afs_wait_for_call_to_complete(struct afs_call *call);
@@ -1401,8 +1401,7 @@ static inline struct afs_call *afs_get_call(struct afs_call *call,
 	__refcount_inc(&call->ref, &r);
 
 	trace_afs_call(call->debug_id, why, r + 1,
-		       atomic_read(&call->net->nr_outstanding_calls),
-		       __builtin_return_address(0));
+		       atomic_read(&call->net->nr_outstanding_calls));
 	return call;
 }
 
@@ -1411,8 +1410,7 @@ static inline void afs_see_call(struct afs_call *call, enum afs_call_trace why)
 	int r = refcount_read(&call->ref);
 
 	trace_afs_call(call->debug_id, why, r,
-		       atomic_read(&call->net->nr_outstanding_calls),
-		       __builtin_return_address(0));
+		       atomic_read(&call->net->nr_outstanding_calls));
 }
 
 static inline void afs_make_op_call(struct afs_operation *op, struct afs_call *call,

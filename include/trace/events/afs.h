@@ -120,15 +120,24 @@ enum yfs_cm_operation {
  * Declare tracing information enums and their string mappings for display.
  */
 #define afs_call_traces \
-	EM(afs_call_trace_alloc,		"ALLOC") \
-	EM(afs_call_trace_async_abort,		"ASYAB") \
-	EM(afs_call_trace_async_kill,		"ASYKL") \
-	EM(afs_call_trace_async_process,	"ASYPR") \
-	EM(afs_call_trace_free,			"FREE ") \
-	EM(afs_call_trace_get,			"GET  ") \
-	EM(afs_call_trace_put,			"PUT  ") \
-	EM(afs_call_trace_wake,			"WAKE ") \
-	E_(afs_call_trace_work,			"QUEUE")
+	EM(afs_call_trace_alloc,		"ALLOC      ") \
+	EM(afs_call_trace_free,			"FREE       ") \
+	EM(afs_call_trace_get_make_async_call,	"GET a-make ") \
+	EM(afs_call_trace_put_async_complete,	"PUT a-cmpl ") \
+	EM(afs_call_trace_put_discard_prealloc,	"PUT dis-pre") \
+	EM(afs_call_trace_put_get_capabilities,	"PUT get-cap") \
+	EM(afs_call_trace_put_giveupcallbacks,	"PUT gvup-cb") \
+	EM(afs_call_trace_put_oom,		"PUT oom    ") \
+	EM(afs_call_trace_put_read_complete,	"PUT rd-cpl ") \
+	EM(afs_call_trace_put_read_op,		"PUT rd-op  ") \
+	EM(afs_call_trace_put_spare_svc,	"PUT spare-s") \
+	EM(afs_call_trace_put_vl_call,		"PUT vl-call") \
+	EM(afs_call_trace_put_vl_get_caps,	"PUT vl-gcap") \
+	EM(afs_call_trace_put_wait_op,		"PUT wt-op  ") \
+	EM(afs_call_trace_see_async_abort,	"SEE a-abort") \
+	EM(afs_call_trace_see_async_kill,	"SEE a-kill ") \
+	EM(afs_call_trace_see_async_process,	"SEE a-proc ") \
+	E_(afs_call_trace_see_async_wake,	"SEE a-wake ")
 
 #define afs_server_traces \
 	EM(afs_server_trace_callback,		"CALLBACK ") \
@@ -694,16 +703,15 @@ TRACE_EVENT(afs_cb_call,
 
 TRACE_EVENT(afs_call,
 	    TP_PROTO(unsigned int call_debug_id, enum afs_call_trace op,
-		     int ref, int outstanding, const void *where),
+		     int ref, int outstanding),
 
-	    TP_ARGS(call_debug_id, op, ref, outstanding, where),
+	    TP_ARGS(call_debug_id, op, ref, outstanding),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
 		    __field(int,			op)
 		    __field(int,			ref)
 		    __field(int,			outstanding)
-		    __field(const void *,		where)
 			     ),
 
 	    TP_fast_assign(
@@ -711,15 +719,13 @@ TRACE_EVENT(afs_call,
 		    __entry->op = op;
 		    __entry->ref = ref;
 		    __entry->outstanding = outstanding;
-		    __entry->where = where;
 			   ),
 
-	    TP_printk("c=%08x %s r=%d o=%d sp=%pSR",
+	    TP_printk("c=%08x %s r=%d o=%d",
 		      __entry->call,
 		      __print_symbolic(__entry->op, afs_call_traces),
 		      __entry->ref,
-		      __entry->outstanding,
-		      __entry->where)
+		      __entry->outstanding)
 	    );
 
 TRACE_EVENT(afs_make_fs_call,

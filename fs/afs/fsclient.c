@@ -1662,7 +1662,7 @@ int afs_fs_give_up_all_callbacks(struct afs_net *net, struct afs_server *server,
 	ret = call->error;
 	if (call->responded)
 		set_bit(AFS_SERVER_FL_RESPONDING, &server->flags);
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_giveupcallbacks);
 	return ret;
 }
 
@@ -1778,7 +1778,7 @@ bool afs_fs_get_capabilities(struct afs_net *net, struct afs_server *server,
 
 	trace_afs_make_fs_call(call, NULL);
 	afs_make_call(call, GFP_NOFS);
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_get_capabilities);
 	return true;
 }
 

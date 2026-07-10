@@ -153,7 +153,7 @@ struct afs_vldb_entry *afs_vl_get_entry_by_name_u(struct afs_vl_cursor *vc,
 	vc->call_abort_code	= call->abort_code;
 	vc->call_error		= call->error;
 	vc->call_responded	= call->responded;
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_vl_call);
 	if (vc->call_error) {
 		kfree(entry);
 		return ERR_PTR(vc->call_error);
@@ -303,7 +303,7 @@ struct afs_addr_list *afs_vl_get_addrs_u(struct afs_vl_cursor *vc,
 	vc->call_error		= call->error;
 	vc->call_responded	= call->responded;
 	alist			= call->ret_alist;
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_vl_call);
 	if (vc->call_error) {
 		afs_put_addrlist(alist, afs_alist_trace_put_getaddru);
 		return ERR_PTR(vc->call_error);
@@ -666,7 +666,7 @@ struct afs_addr_list *afs_yfsvl_get_endpoints(struct afs_vl_cursor *vc,
 	vc->call_error		= call->error;
 	vc->call_responded	= call->responded;
 	alist			= call->ret_alist;
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_vl_call);
 	if (vc->call_error) {
 		afs_put_addrlist(alist, afs_alist_trace_put_getaddru);
 		return ERR_PTR(vc->call_error);
@@ -784,7 +784,7 @@ char *afs_yfsvl_get_cell_name(struct afs_vl_cursor *vc)
 	vc->call_error		= call->error;
 	vc->call_responded	= call->responded;
 	cellname		= call->ret_str;
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_vl_call);
 	if (vc->call_error) {
 		kfree(cellname);
 		return ERR_PTR(vc->call_error);

@@ -138,7 +138,7 @@ void afs_close_socket(struct afs_net *net)
 	cancel_work_sync(&net->charge_preallocation_work);
 
 	if (net->spare_incoming_call) {
-		afs_put_call(net->spare_incoming_call);
+		afs_put_call(net->spare_incoming_call, afs_call_trace_put_spare_svc);
 		net->spare_incoming_call = NULL;
 	}
 
@@ -183,14 +183,14 @@ static struct afs_call *afs_alloc_call(struct afs_net *net,
 	call->iter = &call->def_iter;
 
 	o = atomic_inc_return(&net->nr_outstanding_calls);
-	trace_afs_call(call->debug_id, afs_call_trace_alloc, 1, o,
-		       __builtin_return_address(0));
+	trace_afs_call(call->debug_id, afs_call_trace_alloc, 1, o);
 	return call;
 }
 
 static void afs_free_call(struct afs_call *call)
 {
 	struct afs_net *net = call->net;
+	unsigned int debug_id = call->debug_id;
 	int o;
 
 	ASSERT(!work_pending(&call->async_work));
@@ -207,13 +207,10 @@ static void afs_free_call(struct afs_call *call)
 
 	afs_unuse_server_notime(call->net, call->server, afs_server_trace_unuse_call);
 	kfree(call->request);
-
-	o = atomic_read(&net->nr_outstanding_calls);
-	trace_afs_call(call->debug_id, afs_call_trace_free, 0, o,
-		       __builtin_return_address(0));
 	kfree(call);
 
 	o = atomic_dec_return(&net->nr_outstanding_calls);
+	trace_afs_call(debug_id, afs_call_trace_free, 0, o);
 	if (o == 0)
 		wake_up_var(&net->nr_outstanding_calls);
 }
@@ -221,7 +218,7 @@ static void afs_free_call(struct afs_call *call)
 /*
  * Dispose of a reference on a call.
  */
-void afs_put_call(struct afs_call *call)
+void afs_put_call(struct afs_call *call, enum afs_call_trace trace)
 {
 	struct afs_net *net = call->net;
 	unsigned int debug_id = call->debug_id;
@@ -230,8 +227,7 @@ void afs_put_call(struct afs_call *call)
 
 	zero = __refcount_dec_and_test(&call->ref, &r);
 	o = atomic_read(&net->nr_outstanding_calls);
-	trace_afs_call(debug_id, afs_call_trace_put, r - 1, o,
-		       __builtin_return_address(0));
+	trace_afs_call(debug_id, trace, r - 1, o);
 	if (zero)
 		afs_free_call(call);
 }
@@ -276,7 +272,7 @@ struct afs_call *afs_alloc_flat_call(struct afs_net *net,
 	return call;
 
 nomem_free:
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_oom);
 nomem_call:
 	return NULL;
 }
@@ -344,7 +340,7 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 	 * the call to hold itself so the caller need not hang on to its ref.
 	 */
 	if (call->async)
-		afs_get_call(call, afs_call_trace_get);
+		afs_get_call(call, afs_call_trace_get_make_async_call);
 
 	/* create a call */
 	rxcall = rxrpc_kernel_begin_call(call->net->socket, call->peer, call->key,
@@ -418,7 +414,7 @@ error_do_abort:
 					RX_USER_ABORT, ret,
 					afs_abort_send_data_error);
 	if (call->async) {
-		afs_see_call(call, afs_call_trace_async_abort);
+		afs_see_call(call, afs_call_trace_see_async_abort);
 		return;
 	}
 
@@ -434,7 +430,7 @@ error_do_abort:
 	trace_afs_call_done(call);
 error_kill_call:
 	if (call->async)
-		afs_see_call(call, afs_call_trace_async_kill);
+		afs_see_call(call, afs_call_trace_see_async_kill);
 	if (call->type->immediate_cancel)
 		call->type->immediate_cancel(call);
 
@@ -675,11 +671,7 @@ static void afs_wake_up_async_call(struct sock *sk, struct rxrpc_call *rxcall,
 	trace_afs_notify_call(rxcall, call);
 	call->need_attention = true;
 
-	trace_afs_call(call->debug_id, afs_call_trace_wake,
-		       refcount_read(&call->ref),
-		       atomic_read(&call->net->nr_outstanding_calls),
-		       __builtin_return_address(0));
-
+	afs_see_call(call, afs_call_trace_see_async_wake);
 	queue_work(afs_async_calls, &call->async_work);
 }
 
@@ -693,10 +685,7 @@ static void afs_process_async_call(struct work_struct *work)
 
 	_enter("");
 
-	trace_afs_call(call->debug_id, afs_call_trace_async_process,
-		       refcount_read(&call->ref),
-		       atomic_read(&call->net->nr_outstanding_calls),
-		       __builtin_return_address(0));
+	afs_see_call(call, afs_call_trace_see_async_process);
 
 	if (call->state < AFS_CALL_COMPLETE && call->need_attention) {
 		call->need_attention = false;
@@ -705,7 +694,7 @@ static void afs_process_async_call(struct work_struct *work)
 
 	if (call->state == AFS_CALL_COMPLETE) {
 		cancel_work(&call->async_work);
-		afs_put_call(call);
+		afs_put_call(call, afs_call_trace_put_async_complete);
 	}
 	_leave("");
 }
@@ -758,7 +747,7 @@ static void afs_rx_discard_new_call(struct rxrpc_call *rxcall,
 	struct afs_call *call = (struct afs_call *)user_call_ID;
 
 	call->rxcall = NULL;
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_discard_prealloc);
 }
 
 /*

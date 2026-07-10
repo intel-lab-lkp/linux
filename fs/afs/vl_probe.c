@@ -186,7 +186,7 @@ static bool afs_do_probe_vlserver(struct afs_net *net,
 					       server_index);
 		if (!IS_ERR(call)) {
 			afs_prioritise_error(_e, call->error, call->abort_code);
-			afs_put_call(call);
+			afs_put_call(call, afs_call_trace_put_vl_get_caps);
 			in_progress = true;
 		} else {
 			afs_prioritise_error(_e, PTR_ERR(call), 0);

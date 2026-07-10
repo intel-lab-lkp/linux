@@ -298,7 +298,7 @@ static void afs_read_receive(struct afs_call *call)
 	op->call_responded	= call->responded;
 	op->call		= NULL;
 	call->op		= NULL;
-	afs_put_call(call);
+	afs_put_call(call, afs_call_trace_put_read_op);
 
 	/* If the call failed, then we need to crank the server rotation
 	 * handle and try the next.
@@ -319,7 +319,7 @@ void afs_fetch_data_async_rx(struct work_struct *work)
 
 	if (call->state == AFS_CALL_COMPLETE) {
 		cancel_work(&call->async_work);
-		afs_put_call(call);
+		afs_put_call(call, afs_call_trace_put_read_complete);
 	}
 }
 
