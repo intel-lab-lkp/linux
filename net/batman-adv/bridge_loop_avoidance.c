@@ -154,6 +154,9 @@ static void batadv_backbone_gw_release(struct kref *ref)
 	backbone_gw = container_of(ref, struct batadv_bla_backbone_gw,
 				   refcount);
 
+	/* release the slot reserved in batadv_bla_get_backbone_gw() */
+	atomic_dec(&backbone_gw->bat_priv->bla.num_backbone_gws);
+
 	kfree_rcu(backbone_gw, rcu);
 }
 
@@ -179,6 +182,7 @@ static void batadv_claim_release(struct kref *ref)
 {
 	struct batadv_bla_claim *claim;
 	struct batadv_bla_backbone_gw *old_backbone_gw;
+	struct batadv_priv *bat_priv;
 
 	claim = container_of(ref, struct batadv_bla_claim, refcount);
 
@@ -187,11 +191,17 @@ static void batadv_claim_release(struct kref *ref)
 	claim->backbone_gw = NULL;
 	spin_unlock_bh(&claim->backbone_lock);
 
+	/* stash bat_priv before dropping our reference on old_backbone_gw */
+	bat_priv = old_backbone_gw->bat_priv;
+
 	spin_lock_bh(&old_backbone_gw->crc_lock);
 	old_backbone_gw->crc ^= crc16(0, claim->addr, ETH_ALEN);
 	spin_unlock_bh(&old_backbone_gw->crc_lock);
 
 	batadv_backbone_gw_put(old_backbone_gw);
+
+	/* release the slot reserved in batadv_bla_add_claim() */
+	atomic_dec(&bat_priv->bla.num_claims);
 
 	kfree_rcu(claim, rcu);
 }
@@ -508,9 +518,20 @@ batadv_bla_get_backbone_gw(struct batadv_priv *bat_priv, const u8 *orig,
 		   "%s(): not found (%pM, %d), creating new entry\n", __func__,
 		   orig, batadv_print_vid(vid));
 
-	entry = kzalloc_obj(*entry, GFP_ATOMIC);
-	if (!entry)
+	if (!atomic_add_unless(&bat_priv->bla.num_backbone_gws, 1,
+			       BATADV_BLA_MAX_BACKBONE_GW)) {
+		batadv_dbg(BATADV_DBG_BLA, bat_priv,
+			   "%s(): too many backbone gateways (limit %d), dropping (%pM, %d)\n",
+			   __func__, BATADV_BLA_MAX_BACKBONE_GW, orig,
+			   batadv_print_vid(vid));
 		return NULL;
+	}
+
+	entry = kzalloc_obj(*entry, GFP_ATOMIC);
+	if (!entry) {
+		atomic_dec(&bat_priv->bla.num_backbone_gws);
+		return NULL;
+	}
 
 	entry->vid = vid;
 	WRITE_ONCE(entry->lasttime, jiffies);
@@ -531,6 +552,7 @@ batadv_bla_get_backbone_gw(struct batadv_priv *bat_priv, const u8 *orig,
 
 	if (unlikely(hash_added != 0)) {
 		/* hash failed, free the structure */
+		atomic_dec(&bat_priv->bla.num_backbone_gws);
 		kfree(entry);
 		return NULL;
 	}
@@ -708,9 +730,20 @@ static void batadv_bla_add_claim(struct batadv_priv *bat_priv,
 
 	/* create a new claim entry if it does not exist yet. */
 	if (!claim) {
-		claim = kzalloc_obj(*claim, GFP_ATOMIC);
-		if (!claim)
+		if (!atomic_add_unless(&bat_priv->bla.num_claims, 1,
+				       BATADV_BLA_MAX_CLAIMS)) {
+			batadv_dbg(BATADV_DBG_BLA, bat_priv,
+				   "%s(): too many claims (limit %d), dropping %pM, vid %d\n",
+				   __func__, BATADV_BLA_MAX_CLAIMS, mac,
+				   batadv_print_vid(vid));
 			return;
+		}
+
+		claim = kzalloc_obj(*claim, GFP_ATOMIC);
+		if (!claim) {
+			atomic_dec(&bat_priv->bla.num_claims);
+			return;
+		}
 
 		ether_addr_copy(claim->addr, mac);
 		spin_lock_init(&claim->backbone_lock);
@@ -732,6 +765,7 @@ static void batadv_bla_add_claim(struct batadv_priv *bat_priv,
 
 		if (unlikely(hash_added != 0)) {
 			/* only local changes happened. */
+			atomic_dec(&bat_priv->bla.num_claims);
 			batadv_backbone_gw_put(backbone_gw);
 			kfree(claim);
 			return;

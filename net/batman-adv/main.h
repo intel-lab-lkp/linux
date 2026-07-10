@@ -110,6 +110,9 @@
 #define BATADV_BLA_WAIT_PERIODS		3
 #define BATADV_BLA_LOOPDETECT_PERIODS	6
 #define BATADV_BLA_LOOPDETECT_TIMEOUT	3000	/* 3 seconds */
+/* upper bound on claim_hash / backbone_hash entries per mesh interface */
+#define BATADV_BLA_MAX_CLAIMS		4096
+#define BATADV_BLA_MAX_BACKBONE_GW	256
 
 #define BATADV_DUPLIST_SIZE		16
 #define BATADV_DUPLIST_TIMEOUT		500	/* 500 ms */

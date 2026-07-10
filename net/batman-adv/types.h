@@ -1077,6 +1077,12 @@ struct batadv_priv_bla {
 	 */
 	spinlock_t num_requests_lock;
 
+	/** @num_claims: number of entries currently in @claim_hash */
+	atomic_t num_claims;
+
+	/** @num_backbone_gws: number of entries currently in @backbone_hash */
+	atomic_t num_backbone_gws;
+
 	/**
 	 * @claim_hash: hash table containing mesh nodes this host has claimed
 	 */
