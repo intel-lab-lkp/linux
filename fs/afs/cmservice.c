@@ -332,11 +332,8 @@ static int afs_deliver_cb_init_call_back_state3(struct afs_call *call)
 	case 1:
 		_debug("extract UUID");
 		ret = afs_extract_data(call, false);
-		switch (ret) {
-		case 0:		break;
-		case -EAGAIN:	return 0;
-		default:	return ret;
-		}
+		if (ret < 0)
+			return ret;
 
 		_debug("unmarshall UUID");
 		call->request = kmalloc_obj(struct afs_uuid);
@@ -450,11 +447,8 @@ static int afs_deliver_cb_probe_uuid(struct afs_call *call)
 	case 1:
 		_debug("extract UUID");
 		ret = afs_extract_data(call, false);
-		switch (ret) {
-		case 0:		break;
-		case -EAGAIN:	return 0;
-		default:	return ret;
-		}
+		if (ret < 0)
+			return ret;
 
 		_debug("unmarshall UUID");
 		call->request = kmalloc_obj(struct afs_uuid);
