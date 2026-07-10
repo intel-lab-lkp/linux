@@ -83,6 +83,11 @@ module_param(max_stripe_batch, uint, 0644);
 MODULE_PARM_DESC(max_stripe_batch,
 		 "Number of stripes a worker thread handles per device_lock acquisition, 1-32 (default 8).  Larger values amortise the lock over more stripes on busy multi-threaded arrays at some latency cost.  Read when an array is created");
 
+static unsigned int stripe_cache_size_default;
+module_param(stripe_cache_size_default, uint, 0644);
+MODULE_PARM_DESC(stripe_cache_size_default,
+		 "Initial stripe_cache_size for newly created arrays.  0 (the default) auto-sizes it from system memory: the historical 256 on small hosts, scaling up with RAM to a capped maximum on larger ones.  A non-zero value sets a fixed initial size.  Existing arrays are unaffected");
+
 static bool devices_handle_discard_safely = false;
 module_param(devices_handle_discard_safely, bool, 0644);
 MODULE_PARM_DESC(devices_handle_discard_safely,
@@ -7568,6 +7573,17 @@ static unsigned long raid5_cache_count(struct shrinker *shrink,
 	return max_stripes - min_stripes;
 }
 
+/*
+ * Auto-sizing of the initial stripe cache (stripe_cache_size_default == 0):
+ * stay at the historical NR_STRIPES up to RAID5_CACHE_DEFAULT_BASE_GB of RAM,
+ * then grow the count using about 1/512 of the RAM above that base, capped at
+ * RAID5_CACHE_DEFAULT_MAX.  So a system at or below the base is unchanged and
+ * keeps the historical footprint, while larger ones scale.
+ */
+#define RAID5_CACHE_DEFAULT_BASE_GB	8	/* unchanged at or below this much RAM */
+#define RAID5_CACHE_DEFAULT_RAM_SHIFT	9	/* above it: ~1/512 of the extra RAM */
+#define RAID5_CACHE_DEFAULT_MAX		4096
+
 static struct r5conf *setup_conf(struct mddev *mddev)
 {
 	struct r5conf *conf;
@@ -7801,15 +7817,37 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 		conf->prev_algo = conf->algorithm;
 	}
 
-	conf->min_nr_stripes = NR_STRIPES;
+	/*
+	 * Choose the initial stripe cache size.  stripe_cache_size_default
+	 * selects it: 0 (the default) auto-sizes from memory -- the historical
+	 * NR_STRIPES up to RAID5_CACHE_DEFAULT_BASE_GB of RAM, then scaling up
+	 * to at most RAID5_CACHE_DEFAULT_MAX -- and a non-zero value sets it
+	 * directly.  A reshape still forces at least enough stripes for its
+	 * window, below.
+	 */
+	if (stripe_cache_size_default) {
+		conf->min_nr_stripes = clamp_t(unsigned long,
+					stripe_cache_size_default, 16, INT_MAX);
+	} else {
+		unsigned long per_stripe = sizeof(struct stripe_head) +
+			max_disks * (sizeof(struct bio) + PAGE_SIZE);
+		unsigned long ram = totalram_pages() << PAGE_SHIFT;
+		unsigned long base = (unsigned long)RAID5_CACHE_DEFAULT_BASE_GB << 30;
+		unsigned long extra = ram > base ?
+			((ram - base) >> RAID5_CACHE_DEFAULT_RAM_SHIFT) / per_stripe : 0;
+
+		conf->min_nr_stripes = clamp_t(unsigned long, NR_STRIPES + extra,
+					       NR_STRIPES, RAID5_CACHE_DEFAULT_MAX);
+	}
 	if (mddev->reshape_position != MaxSector) {
 		int stripes = max_t(int,
 			((mddev->chunk_sectors << 9) / RAID5_STRIPE_SIZE(conf)) * 4,
 			((mddev->new_chunk_sectors << 9) / RAID5_STRIPE_SIZE(conf)) * 4);
-		conf->min_nr_stripes = max(NR_STRIPES, stripes);
-		if (conf->min_nr_stripes != NR_STRIPES)
+		if (stripes > conf->min_nr_stripes) {
+			conf->min_nr_stripes = stripes;
 			pr_info("md/raid:%s: force stripe size %d for reshape\n",
 				mdname(mddev), conf->min_nr_stripes);
+		}
 	}
 	memory = conf->min_nr_stripes * (sizeof(struct stripe_head) +
 		 max_disks * ((sizeof(struct bio) + PAGE_SIZE))) / 1024;
