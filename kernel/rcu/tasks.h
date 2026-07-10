@@ -30,6 +30,8 @@ typedef void (*postgp_func_t)(struct rcu_tasks *rtp);
  * @rtp_n_lock_retries: Rough lock-contention statistic.
  * @rtp_work: Work queue for invoking callbacks.
  * @rtp_irq_work: IRQ work queue for deferred wakeups.
+ * @rtp_irq_bypass_work: IRQ work queue for draining IRQ-bypassed callbacks.
+ * @rtp_irq_bypass_list: Lockless callback list for IRQ-disabled callers.
  * @barrier_q_head: RCU callback for barrier operation.
  * @rtp_blkd_tasks: List of tasks blocked as readers.
  * @rtp_exit_list: List of tasks in the latter portion of do_exit().
@@ -46,6 +48,8 @@ struct rcu_tasks_percpu {
 	unsigned int urgent_gp;
 	struct work_struct rtp_work;
 	struct irq_work rtp_irq_work;
+	struct irq_work rtp_irq_bypass_work;
+	struct llist_head rtp_irq_bypass_list;
 	struct rcu_head barrier_q_head;
 	struct list_head rtp_blkd_tasks;
 	struct list_head rtp_exit_list;
@@ -129,11 +133,14 @@ struct rcu_tasks {
 };
 
 static void call_rcu_tasks_iw_wakeup(struct irq_work *iwp);
+static void call_rcu_tasks_iw_drain_irq_bypass(struct irq_work *iwp);
+static void rcu_tasks_adjust_cbs(struct rcu_tasks *rtp);
 
 #define DEFINE_RCU_TASKS(rt_name, gp, call, n)						\
 static DEFINE_PER_CPU(struct rcu_tasks_percpu, rt_name ## __percpu) = {			\
 	.lock = __RAW_SPIN_LOCK_UNLOCKED(rt_name ## __percpu.cbs_pcpu_lock),		\
 	.rtp_irq_work = IRQ_WORK_INIT_HARD(call_rcu_tasks_iw_wakeup),			\
+	.rtp_irq_bypass_work = IRQ_WORK_INIT_HARD(call_rcu_tasks_iw_drain_irq_bypass), \
 };											\
 static struct rcu_tasks rt_name =							\
 {											\
@@ -276,6 +283,7 @@ static void cblist_init_generic(struct rcu_tasks *rtp)
 		if (rcu_segcblist_empty(&rtpcp->cblist))
 			rcu_segcblist_init(&rtpcp->cblist);
 		INIT_WORK(&rtpcp->rtp_work, rcu_tasks_invoke_cbs_wq);
+		init_llist_head(&rtpcp->rtp_irq_bypass_list);
 		rtpcp->cpu = cpu;
 		rtpcp->rtpp = rtp;
 		rtpcp->index = index;
@@ -332,6 +340,102 @@ static void call_rcu_tasks_generic_timer(struct timer_list *tlp)
 		rcuwait_wake_up(&rtp->cbs_wait);
 }
 
+static bool call_rcu_tasks_enqueue_locked(struct rcu_head *rhp,
+					  struct rcu_tasks *rtp,
+					  struct rcu_tasks_percpu *rtpcp)
+{
+	bool havekthread;
+	bool needwake;
+
+	// Queuing callbacks before initialization not yet supported.
+	if (WARN_ON_ONCE(!rcu_segcblist_is_enabled(&rtpcp->cblist)))
+		rcu_segcblist_init(&rtpcp->cblist);
+	/* Pairs with the kthread publication in rcu_tasks_kthread(). */
+	havekthread = smp_load_acquire(&rtp->kthread_ptr);
+	needwake = (rhp->func == wakeme_after_rcu) ||
+		   (rcu_segcblist_n_cbs(&rtpcp->cblist) == rcu_task_lazy_lim);
+	if (havekthread && !needwake && !timer_pending(&rtpcp->lazy_timer)) {
+		if (rtp->lazy_jiffies)
+			mod_timer(&rtpcp->lazy_timer, rcu_tasks_lazy_time(rtp));
+		else
+			needwake = rcu_segcblist_empty(&rtpcp->cblist);
+	}
+	if (needwake)
+		rtpcp->urgent_gp = 3;
+	rcu_segcblist_enqueue(&rtpcp->cblist, rhp);
+	return needwake;
+}
+
+/* Acquire the callback-list lock and report whether the acquisition contended. */
+static bool call_rcu_tasks_lock(struct rcu_tasks_percpu *rtpcp)
+{
+	if (raw_spin_trylock_rcu_node(rtpcp)) // irqs already disabled.
+		return false;
+	raw_spin_lock_rcu_node(rtpcp); // irqs already disabled.
+	return true;
+}
+
+/* Record one callback-queuing-time contention event. */
+static bool rcu_tasks_need_queue_adjust(struct rcu_tasks *rtp,
+					struct rcu_tasks_percpu *rtpcp)
+{
+	unsigned long j = jiffies;
+
+	if (rtpcp->rtp_jiffies != j) {
+		rtpcp->rtp_jiffies = j;
+		rtpcp->rtp_n_lock_retries = 0;
+	}
+
+	return rcu_task_cb_adjust &&
+	       ++rtpcp->rtp_n_lock_retries > rcu_task_contend_lim &&
+	       READ_ONCE(rtp->percpu_enqueue_lim) != rcu_task_cpu_ids;
+}
+
+static void rcu_tasks_drain_irq_bypass(struct rcu_tasks_percpu *rtpcp)
+{
+	bool contended;
+	bool needadjust = false;
+	bool needwake = false;
+	unsigned long flags;
+	struct llist_node *llnode;
+	struct llist_node *next;
+	struct rcu_head *rhp;
+	struct rcu_tasks *rtp = rtpcp->rtpp;
+
+	local_irq_save(flags);
+	rcu_read_lock();
+	contended = call_rcu_tasks_lock(rtpcp);
+
+	/*
+	 * Serialize the entire bypass-to-cblist transfer with barrier
+	 * entrainment so that a barrier cannot pass callbacks in transit.
+	 */
+	llnode = llist_del_all(&rtpcp->rtp_irq_bypass_list);
+	if (!llnode) {
+		raw_spin_unlock_irqrestore_rcu_node(rtpcp, flags);
+		rcu_read_unlock();
+		return;
+	}
+
+	if (contended)
+		needadjust = rcu_tasks_need_queue_adjust(rtp, rtpcp);
+
+	llnode = llist_reverse_order(llnode);
+	llist_for_each_safe(llnode, next, llnode) {
+		rhp = (struct rcu_head *)llnode;
+		needwake |= call_rcu_tasks_enqueue_locked(rhp, rtp, rtpcp);
+	}
+	raw_spin_unlock_irqrestore_rcu_node(rtpcp, flags);
+
+	if (unlikely(needadjust))
+		rcu_tasks_adjust_cbs(rtp);
+	rcu_read_unlock();
+
+	/* We can't create the thread unless interrupts are enabled. */
+	if (needwake && READ_ONCE(rtp->kthread_ptr))
+		rcuwait_wake_up(&rtp->cbs_wait);
+}
+
 // IRQ-work handler that does deferred wakeup for call_rcu_tasks_generic().
 static void call_rcu_tasks_iw_wakeup(struct irq_work *iwp)
 {
@@ -342,15 +446,40 @@ static void call_rcu_tasks_iw_wakeup(struct irq_work *iwp)
 	rcuwait_wake_up(&rtp->cbs_wait);
 }
 
+// IRQ-work handler that drains IRQ-bypassed callbacks.
+static void call_rcu_tasks_iw_drain_irq_bypass(struct irq_work *iwp)
+{
+	struct rcu_tasks_percpu *rtpcp;
+
+	rtpcp = container_of(iwp, struct rcu_tasks_percpu, rtp_irq_bypass_work);
+	rcu_tasks_drain_irq_bypass(rtpcp);
+}
+
+static void rcu_tasks_adjust_cbs(struct rcu_tasks *rtp)
+{
+	unsigned long flags;
+	bool expanded = false;
+
+	raw_spin_lock_irqsave(&rtp->cbs_gbl_lock, flags);
+	if (rtp->percpu_enqueue_lim != rcu_task_cpu_ids) {
+		WRITE_ONCE(rtp->percpu_enqueue_shift, 0);
+		WRITE_ONCE(rtp->percpu_dequeue_lim, rcu_task_cpu_ids);
+		smp_store_release(&rtp->percpu_enqueue_lim, rcu_task_cpu_ids);
+		expanded = true;
+	}
+	raw_spin_unlock_irqrestore(&rtp->cbs_gbl_lock, flags);
+	if (expanded)
+		pr_info("Switching %s to per-CPU callback queuing.\n", rtp->name);
+}
+
 // Enqueue a callback for the specified flavor of Tasks RCU.
 static void call_rcu_tasks_generic(struct rcu_head *rhp, rcu_callback_t func,
 				   struct rcu_tasks *rtp)
 {
 	int chosen_cpu;
 	unsigned long flags;
-	bool havekthread = smp_load_acquire(&rtp->kthread_ptr);
 	int ideal_cpu;
-	unsigned long j;
+	bool irqsoff = irqs_disabled();
 	bool needadjust = false;
 	bool needwake;
 	struct rcu_tasks_percpu *rtpcp;
@@ -363,43 +492,23 @@ static void call_rcu_tasks_generic(struct rcu_head *rhp, rcu_callback_t func,
 	chosen_cpu = cpumask_next(ideal_cpu - 1, cpu_possible_mask);
 	WARN_ON_ONCE(chosen_cpu >= rcu_task_cpu_ids);
 	rtpcp = per_cpu_ptr(rtp->rtpcpu, chosen_cpu);
-	if (!raw_spin_trylock_rcu_node(rtpcp)) { // irqs already disabled.
-		raw_spin_lock_rcu_node(rtpcp); // irqs already disabled.
-		j = jiffies;
-		if (rtpcp->rtp_jiffies != j) {
-			rtpcp->rtp_jiffies = j;
-			rtpcp->rtp_n_lock_retries = 0;
-		}
-		if (rcu_task_cb_adjust && ++rtpcp->rtp_n_lock_retries > rcu_task_contend_lim &&
-		    READ_ONCE(rtp->percpu_enqueue_lim) != rcu_task_cpu_ids)
-			needadjust = true;  // Defer adjustment to avoid deadlock.
+	if (irqsoff) {
+		llist_add((struct llist_node *)rhp, &rtpcp->rtp_irq_bypass_list);
+		rcu_read_unlock();
+		local_irq_restore(flags);
+		irq_work_queue(&rtpcp->rtp_irq_bypass_work);
+		return;
 	}
-	// Queuing callbacks before initialization not yet supported.
-	if (WARN_ON_ONCE(!rcu_segcblist_is_enabled(&rtpcp->cblist)))
-		rcu_segcblist_init(&rtpcp->cblist);
-	needwake = (func == wakeme_after_rcu) ||
-		   (rcu_segcblist_n_cbs(&rtpcp->cblist) == rcu_task_lazy_lim);
-	if (havekthread && !needwake && !timer_pending(&rtpcp->lazy_timer)) {
-		if (rtp->lazy_jiffies)
-			mod_timer(&rtpcp->lazy_timer, rcu_tasks_lazy_time(rtp));
-		else
-			needwake = rcu_segcblist_empty(&rtpcp->cblist);
-	}
-	if (needwake)
-		rtpcp->urgent_gp = 3;
-	rcu_segcblist_enqueue(&rtpcp->cblist, rhp);
+
+	if (call_rcu_tasks_lock(rtpcp))
+		needadjust = rcu_tasks_need_queue_adjust(rtp, rtpcp);
+
+	needwake = call_rcu_tasks_enqueue_locked(rhp, rtp, rtpcp);
 	raw_spin_unlock_irqrestore_rcu_node(rtpcp, flags);
-	if (unlikely(needadjust)) {
-		raw_spin_lock_irqsave(&rtp->cbs_gbl_lock, flags);
-		if (rtp->percpu_enqueue_lim != rcu_task_cpu_ids) {
-			WRITE_ONCE(rtp->percpu_enqueue_shift, 0);
-			WRITE_ONCE(rtp->percpu_dequeue_lim, rcu_task_cpu_ids);
-			smp_store_release(&rtp->percpu_enqueue_lim, rcu_task_cpu_ids);
-			pr_info("Switching %s to per-CPU callback queuing.\n", rtp->name);
-		}
-		raw_spin_unlock_irqrestore(&rtp->cbs_gbl_lock, flags);
-	}
+	if (unlikely(needadjust))
+		rcu_tasks_adjust_cbs(rtp);
 	rcu_read_unlock();
+
 	/* We can't create the thread unless interrupts are enabled. */
 	if (needwake && READ_ONCE(rtp->kthread_ptr))
 		irq_work_queue(&rtpcp->rtp_irq_work);
@@ -441,6 +550,7 @@ static void __maybe_unused rcu_barrier_tasks_generic(struct rcu_tasks *rtp)
 		if (cpu >= smp_load_acquire(&rtp->percpu_dequeue_lim))
 			break;
 		rtpcp = per_cpu_ptr(rtp->rtpcpu, cpu);
+		rcu_tasks_drain_irq_bypass(rtpcp);
 		rtpcp->barrier_q_head.func = rcu_barrier_tasks_generic_cb;
 		raw_spin_lock_irqsave_rcu_node(rtpcp, flags);
 		if (rcu_segcblist_entrain(&rtpcp->cblist, &rtpcp->barrier_q_head))
@@ -472,6 +582,8 @@ static int rcu_tasks_need_gpcb(struct rcu_tasks *rtp)
 		if (!cpu_possible(cpu))
 			continue;
 		struct rcu_tasks_percpu *rtpcp = per_cpu_ptr(rtp->rtpcpu, cpu);
+
+		rcu_tasks_drain_irq_bypass(rtpcp);
 
 		/* Advance and accelerate any new callbacks. */
 		if (!rcu_segcblist_n_cbs(&rtpcp->cblist))
