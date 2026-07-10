@@ -345,8 +345,9 @@ static struct cifs_swn_reg *cifs_get_swn_reg(struct cifs_tcon *tcon)
 	}
 
 	reg->net_name_notify = true;
-	reg->share_name_notify = true;
-	reg->ip_notify = (tcon->capabilities & SMB2_SHARE_CAP_SCALEOUT);
+	reg->share_name_notify =
+		(tcon->capabilities & SMB2_SHARE_CAP_ASYMMETRIC);
+	reg->ip_notify = false;
 
 	reg->tcon = tcon;
 unlock:
