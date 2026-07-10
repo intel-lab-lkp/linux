@@ -8,6 +8,13 @@ struct z_erofs_lzma {
 	u8 bounce[PAGE_SIZE];
 };
 
+/*
+ * One MicroLZMA decoder can pin an 8 MiB dictionary. Bound the
+ * module-global stream pool so an image cannot multiply that by large CPU
+ * counts.
+ */
+#define Z_EROFS_LZMA_MAX_STREAMS	16
+
 /* considering the LZMA performance, no need to use a lockless list for now */
 static DEFINE_SPINLOCK(z_erofs_lzma_lock);
 static unsigned int z_erofs_lzma_max_dictsize;
@@ -52,6 +59,8 @@ static int __init z_erofs_lzma_init(void)
 	/* by default, use # of possible CPUs instead */
 	if (!z_erofs_lzma_nstrms)
 		z_erofs_lzma_nstrms = num_possible_cpus();
+	z_erofs_lzma_nstrms = min_t(unsigned int, z_erofs_lzma_nstrms,
+				    Z_EROFS_LZMA_MAX_STREAMS);
 
 	for (i = 0; i < z_erofs_lzma_nstrms; ++i) {
 		struct z_erofs_lzma *strm = kzalloc_obj(*strm);
