@@ -18,6 +18,7 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
+#include <linux/limits.h>
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -25,6 +26,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/units.h>
 
@@ -1031,8 +1033,12 @@ static int hx9023s_bin_load(struct hx9023s_data *data, struct hx9023s_bin *bin)
 
 static int hx9023s_send_cfg(const struct firmware *fw, struct hx9023s_data *data)
 {
-	struct hx9023s_bin *bin __free(kfree) =
-		kzalloc(fw->size + sizeof(*bin), GFP_KERNEL);
+	struct hx9023s_bin *bin __free(kfree) = NULL;
+
+	if (fw->size < FW_DATA_OFFSET || fw->size > U16_MAX)
+		return -EINVAL;
+
+	bin = kzalloc(sizeof(*bin) + fw->size, GFP_KERNEL);
 	if (!bin)
 		return -ENOMEM;
 
@@ -1041,7 +1047,8 @@ static int hx9023s_send_cfg(const struct firmware *fw, struct hx9023s_data *data
 	bin->fw_ver = bin->data[FW_VER_OFFSET];
 	bin->reg_count = get_unaligned_le16(bin->data + FW_REG_CNT_OFFSET);
 
-	release_firmware(fw);
+	if (bin->reg_count > (bin->fw_size - FW_DATA_OFFSET) / 2)
+		return -EINVAL;
 
 	return hx9023s_bin_load(data, bin);
 }
@@ -1058,6 +1065,7 @@ static void hx9023s_cfg_update(const struct firmware *fw, void *context)
 	}
 
 	ret = hx9023s_send_cfg(fw, data);
+	release_firmware(fw);
 	if (ret) {
 		dev_warn(dev, "Firmware update failed: %d\n", ret);
 		goto no_fw;
