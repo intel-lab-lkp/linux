@@ -30,6 +30,18 @@ struct cifs_swn_reg {
 	bool share_name_notify;
 	bool ip_notify;
 
+	/* Need to keep this information to re-register when reconnecting */
+	enum securityEnum auth_type;
+	union {
+		struct {
+		} kerberos;
+		struct {
+			const char *domain_name;
+			const char *user_name;
+			const char *password;
+		} ntlm;
+	} authinfo;
+
 	struct cifs_tcon *tcon;
 
 	unsigned long check_interval;
@@ -54,7 +66,92 @@ struct cifs_swn_notification {
 	struct cifs_swn_reg *swnreg;
 };
 
-static int cifs_swn_auth_info_krb(struct cifs_tcon *tcon, struct sk_buff *skb)
+static int cifs_swn_reg_set_auth(struct cifs_swn_reg *swnreg,
+				 const struct cifs_tcon *tcon)
+{
+	swnreg->auth_type =
+		cifs_select_sectype(tcon->ses->server, tcon->ses->sectype);
+	switch (swnreg->auth_type) {
+	case Kerberos:
+		break;
+	case NTLMv2:
+	case RawNTLMSSP:
+		if (tcon->ses->user_name != NULL) {
+			swnreg->authinfo.ntlm.user_name =
+				kstrdup(tcon->ses->user_name, GFP_KERNEL);
+			if (swnreg->authinfo.ntlm.user_name == NULL)
+				return -ENOMEM;
+		}
+		if (tcon->ses->domainName != NULL) {
+			swnreg->authinfo.ntlm.domain_name =
+				kstrdup(tcon->ses->domainName, GFP_KERNEL);
+			if (swnreg->authinfo.ntlm.domain_name == NULL) {
+				kfree(swnreg->authinfo.ntlm.user_name);
+				return -ENOMEM;
+			}
+		}
+		if (tcon->ses->password != NULL) {
+			swnreg->authinfo.ntlm.password =
+				kstrdup(tcon->ses->password, GFP_KERNEL);
+			if (swnreg->authinfo.ntlm.password == NULL) {
+				kfree(swnreg->authinfo.ntlm.user_name);
+				kfree(swnreg->authinfo.ntlm.domain_name);
+				return -ENOMEM;
+			}
+		}
+		break;
+	default:
+		cifs_dbg(VFS, "%s: secType %d not supported!\n", __func__,
+			 swnreg->auth_type);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static bool cifs_swn_str_equal(const char *a, const char *b)
+{
+	if (a == b)
+		return true;
+
+	if (a == NULL || b == NULL)
+		return false;
+
+	return strcmp(a, b) == 0;
+}
+
+static bool cifs_swn_auth_info_equal(const struct cifs_swn_reg *swnreg,
+				     const struct cifs_tcon *tcon)
+{
+	enum securityEnum auth_type =
+		cifs_select_sectype(tcon->ses->server, tcon->ses->sectype);
+	if (swnreg->auth_type != auth_type)
+		return false;
+
+	switch (auth_type) {
+	case Kerberos:
+		break;
+	case NTLMv2:
+	case RawNTLMSSP:
+		if (!cifs_swn_str_equal(tcon->ses->user_name,
+					swnreg->authinfo.ntlm.user_name))
+			return false;
+		if (!cifs_swn_str_equal(tcon->ses->domainName,
+					swnreg->authinfo.ntlm.domain_name))
+			return false;
+		if (!cifs_swn_str_equal(tcon->ses->password,
+					swnreg->authinfo.ntlm.password))
+			return false;
+		break;
+	default:
+		cifs_dbg(VFS, "%s: secType %d not supported!\n", __func__,
+			 auth_type);
+		return false;
+	}
+
+	return true;
+}
+
+static int cifs_swn_auth_info_krb(struct sk_buff *skb)
 {
 	int ret;
 
@@ -65,24 +162,28 @@ static int cifs_swn_auth_info_krb(struct cifs_tcon *tcon, struct sk_buff *skb)
 	return 0;
 }
 
-static int cifs_swn_auth_info_ntlm(struct cifs_tcon *tcon, struct sk_buff *skb)
+static int cifs_swn_auth_info_ntlm(struct cifs_swn_reg *swnreg,
+				   struct sk_buff *skb)
 {
 	int ret;
 
-	if (tcon->ses->user_name != NULL) {
-		ret = nla_put_string(skb, CIFS_GENL_ATTR_SWN_USER_NAME, tcon->ses->user_name);
+	if (swnreg->authinfo.ntlm.user_name != NULL) {
+		ret = nla_put_string(skb, CIFS_GENL_ATTR_SWN_USER_NAME,
+				     swnreg->authinfo.ntlm.user_name);
 		if (ret < 0)
 			return ret;
 	}
 
-	if (tcon->ses->password != NULL) {
-		ret = nla_put_string(skb, CIFS_GENL_ATTR_SWN_PASSWORD, tcon->ses->password);
+	if (swnreg->authinfo.ntlm.password != NULL) {
+		ret = nla_put_string(skb, CIFS_GENL_ATTR_SWN_PASSWORD,
+				     swnreg->authinfo.ntlm.password);
 		if (ret < 0)
 			return ret;
 	}
 
-	if (tcon->ses->domainName != NULL) {
-		ret = nla_put_string(skb, CIFS_GENL_ATTR_SWN_DOMAIN_NAME, tcon->ses->domainName);
+	if (swnreg->authinfo.ntlm.domain_name != NULL) {
+		ret = nla_put_string(skb, CIFS_GENL_ATTR_SWN_DOMAIN_NAME,
+				     swnreg->authinfo.ntlm.domain_name);
 		if (ret < 0)
 			return ret;
 	}
@@ -160,6 +261,10 @@ static bool cifs_swn_reg_tcon_matches(const struct cifs_swn_reg *swnreg,
 	else
 		tcon_dstaddr = &tcon->ses->server->dstaddr;
 
+	/* Auth info must match */
+	if (!cifs_swn_auth_info_equal(swnreg, tcon))
+		return false;
+
 	/* Address must always match */
 	if (!cifs_match_ipaddr((struct sockaddr *)&swnreg->addr,
 			       (struct sockaddr *)tcon_dstaddr))
@@ -193,7 +298,6 @@ static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg,
 {
 	struct sk_buff *skb;
 	struct genlmsghdr *hdr;
-	enum securityEnum authtype;
 	int ret;
 
 	skb = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
@@ -241,10 +345,9 @@ static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg,
 			goto nlmsg_fail;
 	}
 
-	authtype = cifs_select_sectype(tcon->ses->server, tcon->ses->sectype);
-	switch (authtype) {
+	switch (swnreg->auth_type) {
 	case Kerberos:
-		ret = cifs_swn_auth_info_krb(tcon, skb);
+		ret = cifs_swn_auth_info_krb(skb);
 		if (ret < 0) {
 			cifs_dbg(VFS, "%s: Failed to get kerberos auth info: %d\n", __func__, ret);
 			goto nlmsg_fail;
@@ -252,14 +355,15 @@ static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg,
 		break;
 	case NTLMv2:
 	case RawNTLMSSP:
-		ret = cifs_swn_auth_info_ntlm(tcon, skb);
+		ret = cifs_swn_auth_info_ntlm(swnreg, skb);
 		if (ret < 0) {
 			cifs_dbg(VFS, "%s: Failed to get NTLM auth info: %d\n", __func__, ret);
 			goto nlmsg_fail;
 		}
 		break;
 	default:
-		cifs_dbg(VFS, "%s: secType %d not supported!\n", __func__, authtype);
+		cifs_dbg(VFS, "%s: secType %d not supported!\n", __func__,
+			 swnreg->auth_type);
 		ret = -EINVAL;
 		goto nlmsg_fail;
 	}
@@ -353,6 +457,17 @@ static void cifs_swn_reg_release(struct cifs_swn_reg *swnreg)
 	ret = cifs_swn_send_unregister_message(swnreg);
 	if (ret < 0)
 		cifs_dbg(VFS, "%s: Failed to send unregister message: %d\n", __func__, ret);
+
+	switch (swnreg->auth_type) {
+	case NTLMv2:
+	case RawNTLMSSP:
+		kfree(swnreg->authinfo.ntlm.user_name);
+		kfree(swnreg->authinfo.ntlm.domain_name);
+		kfree(swnreg->authinfo.ntlm.password);
+		break;
+	default:
+		break;
+	}
 
 	kfree(swnreg->net_name);
 	kfree(swnreg->share_name);
@@ -480,6 +595,13 @@ static struct cifs_swn_reg *cifs_get_swn_reg(struct cifs_tcon *tcon)
 		goto fail_net_name;
 	}
 
+	ret = cifs_swn_reg_set_auth(swnreg, tcon);
+	if (ret != 0) {
+		cifs_dbg(VFS, "%s: failed to set auth info: %d\n", __func__,
+			 ret);
+		goto fail_share_name;
+	}
+
 	/*
 	 * If there is an address stored use it instead of the server address, because we are
 	 * in the process of reconnecting to it after a share has been moved or we have been
@@ -506,7 +628,8 @@ unlock:
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 
 	return swnreg;
-
+fail_share_name:
+	kfree(swnreg->share_name);
 fail_net_name:
 	kfree(swnreg->net_name);
 fail_idr:
