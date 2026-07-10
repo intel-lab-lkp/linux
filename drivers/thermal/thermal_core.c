@@ -434,6 +434,38 @@ static void thermal_trip_crossed(struct thermal_zone_device *tz,
 	thermal_governor_trip_crossed(governor, tz, trip, upward);
 }
 
+static void thermal_zone_check_trip_ordering(struct thermal_zone_device *tz)
+{
+	const struct thermal_trip_desc *td;
+	int crit_temp = INT_MAX;
+
+	for_each_trip_desc(tz, td) {
+		const struct thermal_trip *trip = &td->trip;
+
+		if (trip->type == THERMAL_TRIP_CRITICAL &&
+		    trip->temperature != THERMAL_TEMP_INVALID &&
+		    trip->temperature < crit_temp)
+			crit_temp = trip->temperature;
+	}
+
+	if (crit_temp == INT_MAX)
+		return;
+
+	for_each_trip_desc(tz, td) {
+		const struct thermal_trip *trip = &td->trip;
+
+		if (trip->type == THERMAL_TRIP_CRITICAL ||
+		    trip->temperature == THERMAL_TEMP_INVALID)
+			continue;
+
+		if (trip->temperature >= crit_temp)
+			dev_warn(&tz->device,
+				 "%s trip temperature %d is not below critical trip temperature %d\n",
+				 thermal_trip_type_name(trip->type),
+				 trip->temperature, crit_temp);
+	}
+}
+
 void thermal_zone_set_trip_hyst(struct thermal_zone_device *tz,
 				struct thermal_trip *trip, int hyst)
 {
@@ -462,6 +494,7 @@ void thermal_zone_set_trip_temp(struct thermal_zone_device *tz,
 
 	WRITE_ONCE(trip->temperature, temp);
 	thermal_notify_tz_trip_change(tz, trip);
+	thermal_zone_check_trip_ordering(tz);
 
 	if (old_temp == THERMAL_TEMP_INVALID) {
 		/*
@@ -1508,6 +1541,8 @@ thermal_zone_device_register_with_trips(const char *type,
 	result = dev_set_name(&tz->device, "thermal_zone%d", tz->id);
 	if (result)
 		goto remove_id;
+
+	thermal_zone_check_trip_ordering(tz);
 
 	thermal_zone_device_init(tz);
 
