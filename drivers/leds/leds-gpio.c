@@ -323,6 +323,9 @@ static void gpio_led_shutdown(struct platform_device *pdev)
 	for (i = 0; i < priv->num_leds; i++) {
 		struct gpio_led_data *led = &priv->leds[i];
 
+		if (IS_ERR(led->gpiod))
+			continue;
+
 		if (!(led->cdev.flags & LED_RETAIN_AT_SHUTDOWN))
 			gpio_led_set(&led->cdev, LED_OFF);
 	}
