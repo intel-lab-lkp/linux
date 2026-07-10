@@ -2461,6 +2461,7 @@ struct bnxt {
 	u8			tph_mode;
 
 	struct bnxt_mpc_info	*mpc_info;
+	struct bnxt_crypto_info	*crypto_info;
 
 	unsigned int		current_interval;
 #define BNXT_TIMER_INTERVAL	HZ
@@ -2548,6 +2549,7 @@ struct bnxt {
 	#define BNXT_FW_CAP_NPAR_1_2			BIT_ULL(42)
 	#define BNXT_FW_CAP_MIRROR_ON_ROCE		BIT_ULL(43)
 	#define BNXT_FW_CAP_PTP_PTM			BIT_ULL(44)
+	#define BNXT_FW_CAP_KTLS			BIT_ULL(45)
 
 	u32			fw_dbg_cap;
 
@@ -2573,6 +2575,8 @@ struct bnxt {
 	((bp)->fw_cap & BNXT_FW_CAP_SW_MAX_RESOURCE_LIMITS)
 #define BNXT_MIRROR_ON_ROCE_CAP(bp)	\
 	((bp)->fw_cap & BNXT_FW_CAP_MIRROR_ON_ROCE)
+#define BNXT_SUPPORTS_KTLS(bp)	\
+	((bp)->fw_cap & BNXT_FW_CAP_KTLS)
 
 	u32			hwrm_spec_code;
 	u16			hwrm_cmd_seq;
