@@ -209,6 +209,26 @@ void mac802154_scan_worker(struct work_struct *work)
 		return;
 	}
 
+	/* From here on sdata->dev is dereferenced after rcu_read_unlock() and
+	 * outside the rtnl: in the dev_err()/dev_dbg() traces below, in
+	 * mac802154_transmit_beacon_req() (skb->dev = sdata->dev) and in the
+	 * end_scan mac802154_scan_cleanup_locked() call. A concurrent teardown
+	 * of that interface (NL802154_CMD_DEL_INTERFACE ->
+	 * ieee802154_if_remove(), or a full PHY removal via
+	 * ieee802154_unregister_hw()) can unregister the netdev; the actual
+	 * free then runs asynchronously from netdev_run_todo() with the rtnl
+	 * already dropped, so neither holding the rtnl nor the per-PHY
+	 * IEEE802154_IS_SCANNING flag keeps sdata->dev alive here. Pin it with
+	 * a reference taken while we still hold the RCU read lock (so the
+	 * netdev cannot be freed before we bump the refcount) and drop it at
+	 * every exit below. This blocks the teardown's netdev_run_todo() until
+	 * this worker iteration is done; it cannot self-deadlock because the
+	 * unregistering task claims the net_todo_list entry under the rtnl, so
+	 * the blocking netdev_wait_allrefs_any() always runs on that task, not
+	 * on this single-threaded worker.
+	 */
+	dev_hold(sdata->dev);
+
 	wpan_phy = scan_req->wpan_phy;
 	scan_req_type = scan_req->type;
 	scan_req_duration = scan_req->duration;
@@ -262,12 +282,14 @@ void mac802154_scan_worker(struct work_struct *work)
 		"Scan page %u channel %u for %ums\n",
 		page, channel, jiffies_to_msecs(scan_duration));
 	queue_delayed_work(local->mac_wq, &local->scan_work, scan_duration);
+	dev_put(sdata->dev);
 	return;
 
 end_scan:
 	rtnl_lock();
 	mac802154_scan_cleanup_locked(local, sdata, false);
 	rtnl_unlock();
+	dev_put(sdata->dev);
 }
 
 int mac802154_trigger_scan_locked(struct ieee802154_sub_if_data *sdata,
