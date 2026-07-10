@@ -436,6 +436,23 @@ config AMPERE_ERRATUM_AC03_CPU_38
 
 	  If unsure, say Y.
 
+config AMPERE_ERRATUM_AC03_CPU_57
+	bool "AmpereOne: AC03_CPU_57: Deactivation of the non-active, highest priority pending interrupt prevents further interrupt delivery."
+	default y
+	help
+	  This option adds an alternative code sequence to work around Ampere
+	  errata AC03_CPU_57 and AC04_CPU_29 on AmpereOne.
+
+	  Deactivating a physical interrupt through ICC_DIR_EL1 or
+	  ICC_EOIR1_EL1 (depending on EOImode) which is not active, but is the
+	  highest priority pending interrupt causes the cpu to lose the
+	  interrupt pending state and also prevents the delivery of future
+	  interrupts.
+
+	  The workaround is for KVM to not deactivate interrupts for nested vgics.
+
+	  If unsure, say Y.
+
 config AMPERE_ERRATUM_AC04_CPU_23
         bool "AmpereOne: AC04_CPU_23:  Failure to synchronize writes to HCR_EL2 may corrupt address translations."
 	default y
