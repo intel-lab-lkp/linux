@@ -201,6 +201,7 @@ void em_table_free(struct em_perf_table *table)
 {
 	kref_put(&table->kref, em_release_table_kref);
 }
+EXPORT_SYMBOL_GPL(em_table_free);
 
 /**
  * em_table_alloc() - Allocate a new EM table
@@ -225,6 +226,7 @@ struct em_perf_table *em_table_alloc(struct em_perf_domain *pd)
 
 	return table;
 }
+EXPORT_SYMBOL_GPL(em_table_alloc);
 
 static void em_init_performance(struct device *dev, struct em_perf_domain *pd,
 				struct em_perf_state *table, int nr_states)
