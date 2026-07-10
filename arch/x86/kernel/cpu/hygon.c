@@ -192,6 +192,19 @@ static void init_hygon(struct cpuinfo_x86 *c)
 
 	init_hygon_cacheinfo(c);
 
+	/*
+	 * Adjust the die_id and logical_die_id for Hygon models 0x4-0x8.
+	 * In Hygon CPU design, the NodeId field of CPUID leaf 0x8000001e (ECX)
+	 * is now fixed to represent the socket ID and die ID, allocated as
+	 * 4 bits each: socket ID = NodeId[7:4], die ID = NodeId[3:0].
+	 */
+	if (c->x86_model >= 0x4 && c->x86_model <= 0x8) {
+		c->topo.die_id = cpuid_ecx(0x8000001e) & 0xff;
+		c->topo.logical_die_id = (c->topo.die_id >> 4) *
+					 topology_amd_nodes_per_pkg() +
+					 (c->topo.die_id & 0xf);
+	}
+
 	if (cpu_has(c, X86_FEATURE_SVM)) {
 		rdmsrq(MSR_VM_CR, vm_cr);
 		if (vm_cr & SVM_VM_CR_SVM_DIS_MASK) {
