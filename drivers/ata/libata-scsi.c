@@ -2444,15 +2444,22 @@ static unsigned int ata_scsiop_inq_b9(struct ata_device *dev,
 	struct ata_cpr_log *cpr_log = dev->cpr_log;
 	u8 *desc = &rbuf[64];
 	int i;
+	int page_len;
 
 	if (!cpr_log) {
 		ata_scsi_set_invalid_field(dev, cmd, 2, 0xff);
 		return 0;
 	}
 
+	page_len = 64 + (int)cpr_log->nr_cpr * 32;
+	if (page_len > ATA_SCSI_RBUF_SIZE) {
+		ata_scsi_set_sense(dev, cmd, ABORTED_COMMAND, 0, 0);
+		return 0;
+	}
+
 	/* SCSI Concurrent Positioning Ranges VPD page: SBC-5 rev 1 or later */
 	rbuf[1] = 0xb9;
-	put_unaligned_be16(64 + (int)cpr_log->nr_cpr * 32 - 4, &rbuf[2]);
+	put_unaligned_be16(page_len - 4, &rbuf[2]);
 
 	for (i = 0; i < cpr_log->nr_cpr; i++, desc += 32) {
 		desc[0] = cpr_log->cpr[i].num;
