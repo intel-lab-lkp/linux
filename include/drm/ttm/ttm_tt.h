@@ -90,6 +90,14 @@ struct ttm_tt {
 	 * TTM_TT_FLAG_BACKED_UP: TTM internal only. This is set if the
 	 * struct ttm_tt has been (possibly partially) backed up.
 	 *
+	 * TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED: Set by the TTM pool allocator
+	 * when at least one chunk that could have been allocated at the pool's
+	 * beneficial order had to fall back to a smaller order. This indicates
+	 * that a sub-optimal set of pages was chosen for this object, and can
+	 * be used by drivers to queue the buffer object for later
+	 * defragmentation. Drivers should access this via the
+	 * ttm_tt_is_beneficial_order_failed() helper.
+	 *
 	 * TTM_TT_FLAG_PRIV_POPULATED: TTM internal only. DO NOT USE. This is
 	 * set by TTM after ttm_tt_populate() has successfully returned, and is
 	 * then unset when TTM calls ttm_tt_unpopulate().
@@ -101,8 +109,9 @@ struct ttm_tt {
 #define TTM_TT_FLAG_EXTERNAL_MAPPABLE	BIT(3)
 #define TTM_TT_FLAG_DECRYPTED		BIT(4)
 #define TTM_TT_FLAG_BACKED_UP	        BIT(5)
+#define TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED	BIT(6)
 
-#define TTM_TT_FLAG_PRIV_POPULATED	BIT(6)
+#define TTM_TT_FLAG_PRIV_POPULATED	BIT(7)
 	uint32_t page_flags;
 	/** @num_pages: Number of pages in the page array. */
 	uint32_t num_pages;
@@ -177,6 +186,19 @@ static inline bool ttm_tt_is_backed_up(const struct ttm_tt *tt)
 static inline void ttm_tt_clear_backed_up(struct ttm_tt *tt)
 {
 	tt->page_flags &= ~TTM_TT_FLAG_BACKED_UP;
+}
+
+/**
+ * ttm_tt_is_beneficial_order_failed() - Whether the tt is backed at a
+ * sub-optimal page order
+ * @tt: The struct ttm_tt.
+ *
+ * Return: true if the pool allocator had to fall back below the pool's
+ * beneficial order when backing this tt, false otherwise.
+ */
+static inline bool ttm_tt_is_beneficial_order_failed(const struct ttm_tt *tt)
+{
+	return tt->page_flags & TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
 }
 
 /**

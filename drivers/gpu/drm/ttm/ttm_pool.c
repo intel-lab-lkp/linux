@@ -796,6 +796,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			    struct ttm_pool_alloc_state *alloc,
 			    struct ttm_pool_tt_restore *restore)
 {
+	const unsigned int beneficial_order = ttm_pool_beneficial_order(pool);
 	enum ttm_caching page_caching;
 	gfp_t gfp_flags = GFP_USER;
 	pgoff_t caching_divide;
@@ -846,6 +847,16 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		/* If that fails, lower the order if possible and retry. */
 		if (!p) {
 			if (order) {
+				/*
+				 * Failing to allocate at the device's beneficial
+				 * order means we are about to back this object
+				 * with a sub-optimal (smaller order) set of
+				 * pages. Record it so the driver can later try to
+				 * defragment the object back to beneficial order.
+				 */
+				if (beneficial_order && order == beneficial_order)
+					tt->page_flags |=
+						TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
 				--order;
 				page_caching = tt->caching;
 				allow_pools = true;
@@ -910,6 +921,7 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	if (WARN_ON(ttm_tt_is_backed_up(tt)))
 		return -EINVAL;
 
+	tt->page_flags &= ~TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
 	ttm_pool_alloc_state_init(tt, &alloc);
 
 	return __ttm_pool_alloc(pool, tt, ctx, &alloc, NULL);
@@ -942,6 +954,7 @@ int ttm_pool_restore_and_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	if (!restore) {
 		gfp_t gfp = GFP_KERNEL | __GFP_NOWARN;
 
+		tt->page_flags &= ~TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
 		ttm_pool_alloc_state_init(tt, &alloc);
 		if (ctx->gfp_retry_mayfail)
 			gfp |= __GFP_RETRY_MAYFAIL;
