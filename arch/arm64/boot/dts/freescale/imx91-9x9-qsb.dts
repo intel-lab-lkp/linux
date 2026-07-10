@@ -110,6 +110,28 @@
 			linux,cma-default;
 		};
 	};
+
+	sound-wm8524 {
+		compatible = "audio-graph-card2";
+		label = "wm8524-audio";
+		links = <&sai1_port1>;
+		widgets = "Line", "Line Out Jack";
+		routing =
+			"Line Out Jack", "LINEVOUTL",
+			"Line Out Jack", "LINEVOUTR";
+	};
+
+	wm8524: audio-codec {
+		compatible = "wlf,wm8524";
+		#sound-dai-cells = <0>;
+		wlf,mute-gpios = <&pcal6524 2 GPIO_ACTIVE_LOW>;
+
+		port {
+			codec_ep: endpoint {
+				remote-endpoint = <&sai1_ep1>;
+			};
+		};
+	};
 };
 
 &adc1 {
@@ -183,6 +205,15 @@
 	pinctrl_reg_usdhc2_vmmc: regusdhc2vmmcgrp {
 		fsl,pins = <
 			MX91_PAD_SD2_RESET_B__GPIO3_IO7                         0x31e
+		>;
+	};
+
+	pinctrl_sai1: sai1grp {
+		fsl,pins = <
+			MX91_PAD_SAI1_TXC__SAI1_TX_BCLK				0x31e
+			MX91_PAD_SAI1_TXFS__SAI1_TX_SYNC			0x31e
+			MX91_PAD_SAI1_TXD0__SAI1_TX_DATA0			0x31e
+			MX91_PAD_SAI1_RXD0__SAI1_MCLK				0x31e
 		>;
 	};
 
@@ -431,6 +462,42 @@
 	pinctrl-0 = <&pinctrl_uart1>;
 	pinctrl-names = "default";
 	status = "okay";
+};
+
+&sai1 {
+	#sound-dai-cells = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sai1>, <&sai1_fun>, <&sai1_enable>;
+	assigned-clocks = <&clk IMX93_CLK_SAI1>;
+	assigned-clock-parents = <&clk IMX93_CLK_AUDIO_PLL>;
+	assigned-clock-rates = <24576000>;
+	clocks = <&clk IMX93_CLK_SAI1_IPG>, <&clk IMX93_CLK_DUMMY>,
+		 <&clk IMX93_CLK_SAI1_GATE>, <&clk IMX93_CLK_DUMMY>,
+		 <&clk IMX93_CLK_DUMMY>, <&clk IMX93_CLK_AUDIO_PLL>;
+	clock-names = "bus", "mclk0", "mclk1", "mclk2", "mclk3", "pll8k";
+	fsl,sai-mclk-direction-output;
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		sai1_port1: port@1 {
+			reg = <1>;
+			playback-only;
+
+			sai1_ep1: endpoint {
+				dai-format = "i2s";
+				dai-tdm-slot-num = <2>;
+				dai-tdm-slot-width = <32>;
+				bitclock-master;
+				frame-master;
+				mclk-fs = <256>;
+				system-clock-direction-out;
+				remote-endpoint = <&codec_ep>;
+			};
+		};
+	};
 };
 
 &usbotg1 {
