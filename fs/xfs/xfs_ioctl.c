@@ -49,6 +49,7 @@
 
 #include <linux/mount.h>
 #include <linux/fileattr.h>
+#include <linux/blkdev.h>
 
 /* Return 0 on success or positive error */
 int
@@ -469,6 +470,29 @@ out_put_rtg:
  */
 
 static void
+xfs_fill_fsxattr_dio(
+	struct xfs_inode	*ip,
+	int			whichfork,
+	struct file_kattr	*fa)
+{
+	struct xfs_buftarg *target;
+
+	if (whichfork != XFS_DATA_FORK || !S_ISREG(VFS_I(ip)->i_mode))
+		return;
+
+	target = xfs_inode_buftarg(ip);
+	bdev_fill_dio_attr(target->bt_bdev, fa);
+	/*
+	 * CoW inodes must write whole allocation units out of place, so report
+	 * the larger write alignment while leaving the smaller read alignment
+	 * from the queue limits in place.
+	 */
+	if (xfs_is_cow_inode(ip))
+		fa->fsx_dio_offset_align = xfs_inode_alloc_unitsize(ip);
+	fa->fsx_xflags |= FS_XFLAG_DIO;
+}
+
+static void
 xfs_fill_fsxattr(
 	struct xfs_inode	*ip,
 	int			whichfork,
@@ -517,6 +541,8 @@ xfs_fill_fsxattr(
 		fa->fsx_nextents = xfs_iext_count(ifp);
 	else
 		fa->fsx_nextents = xfs_ifork_nextents(ifp);
+
+	xfs_fill_fsxattr_dio(ip, whichfork, fa);
 }
 
 STATIC int
