@@ -38,7 +38,7 @@
 /* start flush with these full stripes */
 #define R5C_FULL_STRIPE_FLUSH_BATCH(conf) (conf->max_nr_stripes / 4)
 /* reclaim stripes in groups */
-#define R5C_RECLAIM_STRIPE_GROUP (NR_STRIPE_HASH_LOCKS * 2)
+#define R5C_RECLAIM_STRIPE_GROUP (NR_STRIPE_HASH_LOCKS_DEFAULT * 2)
 
 /*
  * We only need 2 bios per I/O unit to make progress, but ensure we

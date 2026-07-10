@@ -492,18 +492,27 @@ struct disk_info {
 #define HASH_MASK		(NR_HASH - 1)
 #define MAX_STRIPE_BATCH	8
 
-/* NOTE NR_STRIPE_HASH_LOCKS must remain below 64.
- * This is because we sometimes take all the spinlocks
- * and creating that much locking depth can cause
- * problems.
+/*
+ * The stripe cache hash is striped across a power-of-two number of spinlocks,
+ * chosen per array from the nr_stripe_hash_locks module parameter and stored
+ * in r5conf->nr_hash_locks (with the mask in r5conf->hash_locks_mask).  Sizing
+ * the locks per array means systems that do not tune it pay no extra memory
+ * beyond the historical default.
+ *
+ * NR_STRIPE_HASH_LOCKS_DEFAULT is that historical value, used when the module
+ * parameter is left alone.  NR_STRIPE_HASH_LOCKS_MAX bounds the count: taking
+ * all the hash locks at once in lock_all_device_hash_locks_irq(), plus
+ * device_lock, must keep the held lock count below MAX_LOCK_DEPTH (48) with
+ * lockdep enabled, and it also sizes the embedded/on-stack temp_inactive_list
+ * arrays.
  */
-#define NR_STRIPE_HASH_LOCKS 8
-#define STRIPE_HASH_LOCKS_MASK (NR_STRIPE_HASH_LOCKS - 1)
+#define NR_STRIPE_HASH_LOCKS_DEFAULT	8
+#define NR_STRIPE_HASH_LOCKS_MAX	32
 
 struct r5worker {
 	struct work_struct work;
 	struct r5worker_group *group;
-	struct list_head temp_inactive_list[NR_STRIPE_HASH_LOCKS];
+	struct list_head temp_inactive_list[NR_STRIPE_HASH_LOCKS_MAX];
 	bool working;
 };
 
@@ -570,7 +579,9 @@ struct raid5_percpu {
 struct r5conf {
 	struct hlist_head	*stripe_hashtbl;
 	/* only protect corresponding hash list and inactive_list */
-	spinlock_t		hash_locks[NR_STRIPE_HASH_LOCKS];
+	spinlock_t		*hash_locks;
+	int			nr_hash_locks;	 /* power of two, <= NR_STRIPE_HASH_LOCKS_MAX */
+	int			hash_locks_mask; /* nr_hash_locks - 1 */
 	struct mddev		*mddev;
 	int			chunk_sectors;
 	int			level, algorithm, rmw_level;
@@ -650,7 +661,7 @@ struct r5conf {
 	 * Free stripes pool
 	 */
 	atomic_t		active_stripes;
-	struct list_head	inactive_list[NR_STRIPE_HASH_LOCKS];
+	struct list_head	*inactive_list;
 
 	atomic_t		r5c_cached_full_stripes;
 	struct list_head	r5c_full_stripe_list;
@@ -675,7 +686,7 @@ struct r5conf {
 	 * the new thread here until we fully activate the array.
 	 */
 	struct md_thread __rcu	*thread;
-	struct list_head	temp_inactive_list[NR_STRIPE_HASH_LOCKS];
+	struct list_head	*temp_inactive_list;
 	struct r5worker_group	*worker_groups;
 	int			group_cnt;
 	int			worker_cnt_per_group;
