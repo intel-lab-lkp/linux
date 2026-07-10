@@ -63,7 +63,7 @@ int btmtk_setup_firmware_79xx(struct hci_dev *hdev, const char *fwname,
 	const u8 *fw_ptr;
 	const u8 *fw_bin_ptr;
 	int err, dlen, i, status;
-	u8 flag, first_block, retry;
+	u8 flag, retry;
 	u32 section_num, dl_size, section_offset;
 	u8 cmd[64];
 
@@ -79,7 +79,7 @@ int btmtk_setup_firmware_79xx(struct hci_dev *hdev, const char *fwname,
 	section_num = le32_to_cpu(globaldesc->section_num);
 
 	for (i = 0; i < section_num; i++) {
-		first_block = 1;
+		bool first_block = true;
 		fw_ptr = fw_bin_ptr;
 		sectionmap = (struct btmtk_section_map *)(fw_ptr + MTK_FW_ROM_PATCH_HEADER_SIZE +
 			      MTK_FW_ROM_PATCH_GD_SIZE + MTK_FW_ROM_PATCH_SEC_MAP_SIZE * i);
@@ -132,9 +132,9 @@ int btmtk_setup_firmware_79xx(struct hci_dev *hdev, const char *fwname,
 
 			while (dl_size > 0) {
 				dlen = min_t(int, 250, dl_size);
-				if (first_block == 1) {
+				if (first_block) {
 					flag = 1;
-					first_block = 0;
+					first_block = false;
 				} else if (dl_size - dlen <= 0) {
 					flag = 3;
 				} else {
