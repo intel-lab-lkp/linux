@@ -561,6 +561,14 @@ static void nf_flow_table_extend_ct_timeout(struct nf_conn *ct)
 	nf_ct_put(ct);
 }
 
+static bool nf_flow_check_dst(struct flow_offload *flow,
+			      enum flow_offload_tuple_dir dir)
+{
+	struct flow_offload_tuple *tuple = &flow->tuplehash[dir].tuple;
+
+	return tuple->dst_cache && dst_check(tuple->dst_cache, tuple->dst_cookie);
+}
+
 static void nf_flow_offload_gc_step(struct nf_flowtable *flow_table,
 				    struct flow_offload *flow, void *data)
 {
@@ -568,6 +576,8 @@ static void nf_flow_offload_gc_step(struct nf_flowtable *flow_table,
 
 	if (nf_flow_has_expired(flow) ||
 	    nf_ct_is_dying(flow->ct) ||
+	    nf_flow_check_dst(flow, FLOW_OFFLOAD_DIR_ORIGINAL) ||
+	    nf_flow_check_dst(flow, FLOW_OFFLOAD_DIR_REPLY) ||
 	    nf_flow_custom_gc(flow_table, flow)) {
 		flow_offload_teardown(flow);
 		teardown = true;
