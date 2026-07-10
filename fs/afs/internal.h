@@ -547,6 +547,7 @@ struct afs_server {
 	struct timer_list	timer;		/* Management timer */
 	struct mutex		cm_token_lock;	/* Lock governing creation of appdata */
 	struct krb5_buffer	cm_rxgk_appdata; /* Appdata to be included in RESPONSE packet */
+	struct key		*yfs_rxgk_appdata; /* Appdata to be included in RESPONSE packet */
 	time64_t		unuse_time;	/* Time at which last unused */
 	unsigned long		flags;
 #define AFS_SERVER_FL_RESPONDING 0		/* The server is responding */
@@ -1089,6 +1090,7 @@ extern bool afs_cm_incoming_call(struct afs_call *);
 /*
  * cm_security.c
  */
+int afs_create_server_appdata(struct afs_server *server, struct key *key);
 void afs_process_oob_queue(struct work_struct *work);
 #ifdef CONFIG_RXGK
 int afs_create_token_key(struct afs_net *net, struct socket *socket);
