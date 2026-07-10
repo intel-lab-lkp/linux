@@ -3134,3 +3134,19 @@ bool cfg80211_wdev_channel_allowed(struct wireless_dev *wdev,
 	return false;
 }
 EXPORT_SYMBOL(cfg80211_wdev_channel_allowed);
+
+bool cfg80211_validate_ies(const u8 *ies, size_t ies_len)
+{
+	size_t pos = 0;
+
+	while (pos < ies_len) {
+		if (pos + 2 > ies_len)
+			return false;
+		if (pos + 2 + ies[pos + 1] > ies_len)
+			return false;
+		pos += 2 + ies[pos + 1];
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(cfg80211_validate_ies);

@@ -11019,4 +11019,5 @@ void cfg80211_incumbent_signal_notify(struct wiphy *wiphy,
 				      u32 signal_interference_bitmap,
 				      gfp_t gfp);
 
+bool cfg80211_validate_ies(const u8 *ies, size_t ies_len);
 #endif /* __NET_CFG80211_H */
