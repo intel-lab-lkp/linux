@@ -570,7 +570,7 @@
 
 		reset-gpios = <&tlmm 109 GPIO_ACTIVE_LOW>;
 
-		pinctrl-0 = <&cam_mclk3_default &camera_front_active>;
+		pinctrl-0 = <&cam_mclk3_default>;
 		pinctrl-names = "default";
 
 		orientation = <0>; /* Front facing */
@@ -945,13 +945,6 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-up;
-	};
-
-	camera_front_active: camera-front-active-state {
-		pins = "gpio109";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-disable;
 	};
 
 	wlan_en_state: wlan-default-state {
