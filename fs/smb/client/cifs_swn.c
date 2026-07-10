@@ -72,13 +72,67 @@ static int cifs_swn_auth_info_ntlm(struct cifs_tcon *tcon, struct sk_buff *skb)
 	return 0;
 }
 
+static bool cifs_swn_reg_net_name_matches(const struct cifs_swn_reg *swnreg,
+					  const struct cifs_tcon *tcon)
+{
+	const char *unc = tcon->tree_name;
+	const char *host, *delim;
+	size_t host_len;
+
+	/* extract hostname, requires strlen(unc) >= 3 (\\a)*/
+	if (strnlen(unc, 3) < 3)
+		return false;
+
+	/* extract_hostname: skip all leading '\' characters */
+	for (host = unc; *host && *host == '\\'; host++)
+		;
+
+	if (!*host)
+		return false;
+
+	delim = strchr(host, '\\');
+	if (!delim)
+		return false;
+
+	host_len = delim - host;
+	if (strlen(swnreg->net_name) == host_len &&
+	    !strncasecmp(swnreg->net_name, host, host_len)) {
+		return true;
+	}
+	return false;
+}
+
+static bool cifs_swn_reg_share_name_matches(const struct cifs_swn_reg *swnreg,
+					    const struct cifs_tcon *tcon)
+{
+	const char *unc = tcon->tree_name;
+	const char *share, *delim;
+	size_t share_len;
+
+	/* extract share name, requires strlen(unc) >= 5 (\\a\b) */
+	if (strnlen(unc, 5) < 5)
+		return false;
+
+	/* extract share name, start at unc + 2, then first '\' onward */
+	share = unc + 2;
+	delim = strchr(share, '\\');
+	if (!delim)
+		return false;
+
+	share = delim + 1;
+	share_len = strlen(share);
+
+	if (strlen(swnreg->share_name) == share_len &&
+	    !strncasecmp(swnreg->share_name, share, share_len)) {
+		return true;
+	}
+	return false;
+}
+
 static bool cifs_swn_reg_tcon_matches(const struct cifs_swn_reg *swnreg,
 				      const struct cifs_tcon *tcon)
 {
-	const char *unc = tcon->tree_name;
 	struct sockaddr_storage *tcon_dstaddr;
-	const char *host, *share, *delim;
-	size_t host_len, share_len;
 
 	if (!tcon->use_witness)
 		return false;
@@ -88,54 +142,27 @@ static bool cifs_swn_reg_tcon_matches(const struct cifs_swn_reg *swnreg,
 	else
 		tcon_dstaddr = &tcon->ses->server->dstaddr;
 
+	/* Address must always match */
 	if (!cifs_match_ipaddr((struct sockaddr *)&swnreg->addr,
 			       (struct sockaddr *)tcon_dstaddr))
 		return false;
 
-	if (swnreg->net_name_notify) {
-		/* extract hostname, requires strlen(unc) >= 3 (\\a)*/
-		if (strnlen(unc, 3) < 3)
-			return false;
+	/* The network name notification is always enabled */
+	if (!cifs_swn_reg_net_name_matches(swnreg, tcon))
+		return false;
 
-		/* extract_hostname: skip all leading '\' characters */
-		for (host = unc; *host && *host == '\\'; host++)
-			;
+	/*
+	 * Share name notifications is enabled only if asymmetric
+	 * capability enabled otherwise ignored
+	 */
+	if (swnreg->share_name_notify !=
+	    (tcon->capabilities & SMB2_SHARE_CAP_ASYMMETRIC))
+		return false;
+	else if (swnreg->share_name_notify &&
+		 !cifs_swn_reg_share_name_matches(swnreg, tcon))
+		return false;
 
-		if (!*host)
-			return false;
-
-		delim = strchr(host, '\\');
-		if (!delim)
-			return false;
-
-		host_len = delim - host;
-		if (strlen(swnreg->net_name) == host_len &&
-		    !strncasecmp(swnreg->net_name, host, host_len)) {
-			return true;
-		}
-	}
-
-	if (swnreg->share_name_notify) {
-		/* extract share name, requires strlen(unc) >= 5 (\\a\b) */
-		if (strnlen(unc, 5) < 5)
-			return false;
-
-		/* extract share name, start at unc + 2, then first '\' onward */
-		share = unc + 2;
-		delim = strchr(share, '\\');
-		if (!delim)
-			return false;
-
-		share = delim + 1;
-		share_len = strlen(share);
-
-		if (strlen(swnreg->share_name) == share_len &&
-		    !strncasecmp(swnreg->share_name, share, share_len)) {
-			return true;
-		}
-	}
-
-	return false;
+	return true;
 }
 
 /*
