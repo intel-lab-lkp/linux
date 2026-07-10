@@ -178,7 +178,8 @@ nsim_get_fec_stats(struct net_device *dev, struct ethtool_fec_stats *fec_stats,
 {
 	struct ethtool_fec_hist_value *values = hist->values;
 
-	hist->ranges = netdevsim_fec_ranges;
+	memcpy(hist->ranges, netdevsim_fec_ranges,
+	       ARRAY_SIZE(netdevsim_fec_ranges) * sizeof(*hist->ranges));
 
 	fec_stats->corrected_blocks.total = 123;
 	fec_stats->uncorrectable_blocks.total = 4;

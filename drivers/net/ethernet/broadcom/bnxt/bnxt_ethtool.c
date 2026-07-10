@@ -3291,7 +3291,8 @@ static void bnxt_hwrm_port_phy_fdrstat(struct bnxt *bp,
 	resp = hwrm_req_hold(bp, req);
 	rc = hwrm_req_send(bp, req);
 	if (!rc) {
-		hist->ranges = bnxt_fec_ranges;
+		memcpy(hist->ranges, bnxt_fec_ranges,
+		       ETHTOOL_FEC_HIST_MAX * sizeof(*hist->ranges));
 		for (i = 0; i <= 15; i++) {
 			__le64 sum = resp->accumulated_codewords_err_s[i];
 

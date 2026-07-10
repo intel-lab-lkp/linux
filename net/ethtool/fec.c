@@ -186,7 +186,8 @@ static int fec_put_hist(struct sk_buff *skb,
 	int i, j;
 	u64 sum;
 
-	if (!ranges)
+	if (values[0].sum == ETHTOOL_STAT_NOT_SET &&
+	    values[0].per_lane[0] == ETHTOOL_STAT_NOT_SET)
 		return 0;
 
 	for (i = 0; i < ETHTOOL_FEC_HIST_MAX; i++) {
