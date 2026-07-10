@@ -3036,6 +3036,42 @@ static bool access_mdcr(struct kvm_vcpu *vcpu,
 	return true;
 }
 
+static int get_mdcr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *rd,
+		    u64 *val)
+{
+	struct kvm *kvm = vcpu->kvm;
+
+	guard(mutex)(&kvm->arch.config_lock);
+
+	*val = __vcpu_sys_reg(vcpu, MDCR_EL2);
+
+	return 0;
+}
+
+static int set_mdcr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *rd,
+		    u64 val)
+{
+	struct kvm *kvm = vcpu->kvm;
+	u64 old, hpmn = FIELD_GET(MDCR_EL2_HPMN, val);
+
+	guard(mutex)(&kvm->arch.config_lock);
+
+	if (hpmn > vcpu->kvm->arch.nr_pmu_counters)
+		return -EINVAL;
+
+	old = __vcpu_sys_reg(vcpu, MDCR_EL2);
+	__vcpu_assign_sys_reg(vcpu, MDCR_EL2, val);
+
+	/*
+	 * Request a reload of the PMU to enable/disable the counters
+	 * affected by HPME.
+	 */
+	if ((old ^ val) & MDCR_EL2_HPME)
+		kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
+
+	return 0;
+}
+
 static bool access_ras(struct kvm_vcpu *vcpu,
 		       struct sys_reg_params *p,
 		       const struct sys_reg_desc *r)
@@ -3746,7 +3782,8 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	EL2_REG_FILTERED(SCTLR2_EL2, access_vm_reg, reset_val, 0,
 			 sctlr2_el2_visibility),
 	EL2_REG_VNCR(HCR_EL2, reset_hcr, 0),
-	EL2_REG(MDCR_EL2, access_mdcr, reset_mdcr, 0),
+	SYS_REG_USER_FILTER(MDCR_EL2, access_mdcr, reset_mdcr, 0,
+			    get_mdcr, set_mdcr, el2_visibility),
 	EL2_REG(CPTR_EL2, access_rw, reset_val, CPTR_NVHE_EL2_RES1),
 	EL2_REG_VNCR(HSTR_EL2, reset_val, 0),
 	EL2_REG_VNCR_FILT(HFGRTR_EL2, fgt_visibility),
