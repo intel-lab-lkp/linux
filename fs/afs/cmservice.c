@@ -23,11 +23,11 @@ static int afs_deliver_cb_callback(struct afs_call *);
 static int afs_deliver_cb_probe_uuid(struct afs_call *);
 static int afs_deliver_cb_tell_me_about_yourself(struct afs_call *);
 static void afs_cm_destructor(struct afs_call *);
-static void SRXAFSCB_CallBack(struct work_struct *);
-static void SRXAFSCB_InitCallBackState(struct work_struct *);
-static void SRXAFSCB_Probe(struct work_struct *);
-static void SRXAFSCB_ProbeUuid(struct work_struct *);
-static void SRXAFSCB_TellMeAboutYourself(struct work_struct *);
+static void SRXAFSCB_CallBack(struct afs_call *call);
+static void SRXAFSCB_InitCallBackState(struct afs_call *call);
+static void SRXAFSCB_Probe(struct afs_call *call);
+static void SRXAFSCB_ProbeUuid(struct afs_call *call);
+static void SRXAFSCB_TellMeAboutYourself(struct afs_call *call);
 
 static int afs_deliver_yfs_cb_callback(struct afs_call *);
 
@@ -161,10 +161,8 @@ static void afs_abort_service_call(struct afs_call *call, u32 abort_code, int er
 /*
  * The server supplied a list of callbacks that it wanted to break.
  */
-static void SRXAFSCB_CallBack(struct work_struct *work)
+static void SRXAFSCB_CallBack(struct afs_call *call)
 {
-	struct afs_call *call = container_of(work, struct afs_call, work);
-
 	_enter("");
 
 	/* We need to break the callbacks before sending the reply as the
@@ -180,7 +178,6 @@ static void SRXAFSCB_CallBack(struct work_struct *work)
 	}
 
 	afs_send_empty_reply(call);
-	afs_put_call(call);
 	_leave("");
 }
 
@@ -284,16 +281,13 @@ static int afs_deliver_cb_callback(struct afs_call *call)
 /*
  * allow the fileserver to request callback state (re-)initialisation
  */
-static void SRXAFSCB_InitCallBackState(struct work_struct *work)
+static void SRXAFSCB_InitCallBackState(struct afs_call *call)
 {
-	struct afs_call *call = container_of(work, struct afs_call, work);
-
 	_enter("{%p}", call->server);
 
 	if (call->server)
 		afs_init_callback_state(call->server);
 	afs_send_empty_reply(call);
-	afs_put_call(call);
 	_leave("");
 }
 
@@ -374,13 +368,10 @@ static int afs_deliver_cb_init_call_back_state3(struct afs_call *call)
 /*
  * allow the fileserver to see if the cache manager is still alive
  */
-static void SRXAFSCB_Probe(struct work_struct *work)
+static void SRXAFSCB_Probe(struct afs_call *call)
 {
-	struct afs_call *call = container_of(work, struct afs_call, work);
-
 	_enter("");
 	afs_send_empty_reply(call);
-	afs_put_call(call);
 	_leave("");
 }
 
@@ -407,9 +398,8 @@ static int afs_deliver_cb_probe(struct afs_call *call)
  * Allow the fileserver to quickly find out if the cache manager has been
  * rebooted.
  */
-static void SRXAFSCB_ProbeUuid(struct work_struct *work)
+static void SRXAFSCB_ProbeUuid(struct afs_call *call)
 {
-	struct afs_call *call = container_of(work, struct afs_call, work);
 	struct afs_uuid *r = call->request;
 
 	_enter("");
@@ -419,7 +409,6 @@ static void SRXAFSCB_ProbeUuid(struct work_struct *work)
 	else
 		afs_abort_service_call(call, 1, 1, afs_abort_probeuuid_negative);
 
-	afs_put_call(call);
 	_leave("");
 }
 
@@ -481,9 +470,8 @@ static int afs_deliver_cb_probe_uuid(struct afs_call *call)
 /*
  * allow the fileserver to ask about the cache manager's capabilities
  */
-static void SRXAFSCB_TellMeAboutYourself(struct work_struct *work)
+static void SRXAFSCB_TellMeAboutYourself(struct afs_call *call)
 {
-	struct afs_call *call = container_of(work, struct afs_call, work);
 	int loop;
 
 	struct {
@@ -515,7 +503,6 @@ static void SRXAFSCB_TellMeAboutYourself(struct work_struct *work)
 	reply.cap.capcount = htonl(1);
 	reply.cap.caps[0] = htonl(AFS_CAP_ERROR_TRANSLATION);
 	afs_send_simple_reply(call, &reply, sizeof(reply));
-	afs_put_call(call);
 	_leave("");
 }
 

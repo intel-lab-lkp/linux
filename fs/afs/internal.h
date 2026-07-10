@@ -129,7 +129,7 @@ struct afs_call {
 	const struct afs_call_type *type;	/* type of call */
 	wait_queue_head_t	waitq;		/* processes awaiting completion */
 	struct work_struct	async_work;	/* async I/O processor */
-	struct work_struct	work;		/* actual work processor */
+	void (*work)(struct afs_call *call);	/* Worker function */
 	struct work_struct	free_work;	/* Deferred free processor */
 	struct rxrpc_call	*rxcall;	/* RxRPC call handle */
 	struct rxrpc_peer	*peer;		/* Remote endpoint */
@@ -169,7 +169,6 @@ struct afs_call {
 	unsigned		reply_max;	/* maximum size of reply */
 	unsigned		count2;		/* count used in unmarshalling */
 	unsigned char		unmarshall;	/* unmarshalling phase */
-	bool			drop_ref;	/* T if need to drop ref for incoming call */
 	bool			need_attention;	/* T if RxRPC poked us */
 	bool			async;		/* T if asynchronous */
 	bool			upgrade;	/* T to request service upgrade */
@@ -208,7 +207,7 @@ struct afs_call_type {
 	void (*async_rx)(struct work_struct *work);
 
 	/* Work function */
-	void (*work)(struct work_struct *work);
+	void (*work)(struct afs_call *call);
 
 	/* Call done function (gets called immediately on success or failure) */
 	void (*done)(struct afs_call *call);
@@ -1382,7 +1381,6 @@ extern int __net_init afs_open_socket(struct afs_net *);
 extern void __net_exit afs_close_socket(struct afs_net *);
 extern void afs_charge_preallocation(struct work_struct *);
 extern void afs_put_call(struct afs_call *);
-void afs_deferred_put_call(struct afs_call *call);
 void afs_make_call(struct afs_call *call, gfp_t gfp);
 void afs_deliver_to_call(struct afs_call *call);
 void afs_wait_for_call_to_complete(struct afs_call *call);
@@ -1495,7 +1493,6 @@ static inline void afs_set_call_complete(struct afs_call *call,
 					 int error, u32 remote_abort)
 {
 	enum afs_call_state state;
-	bool ok = false;
 
 	spin_lock_bh(&call->state_lock);
 	state = call->state;
@@ -1505,19 +1502,8 @@ static inline void afs_set_call_complete(struct afs_call *call,
 		call->state = AFS_CALL_COMPLETE;
 		trace_afs_call_state(call, state, AFS_CALL_COMPLETE,
 				     error, remote_abort);
-		ok = true;
 	}
 	spin_unlock_bh(&call->state_lock);
-	if (ok) {
-		trace_afs_call_done(call);
-
-		/* Asynchronous calls have two refs to release - one from the alloc and
-		 * one queued with the work item - and we can't just deallocate the
-		 * call because the work item may be queued again.
-		 */
-		if (call->drop_ref)
-			afs_put_call(call);
-	}
 }
 
 /*

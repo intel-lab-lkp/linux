@@ -177,7 +177,6 @@ static struct afs_call *afs_alloc_call(struct afs_net *net,
 	call->debug_id = atomic_inc_return(&rxrpc_debug_id);
 	refcount_set(&call->ref, 1);
 	INIT_WORK(&call->async_work, type->async_rx ?: afs_process_async_call);
-	INIT_WORK(&call->work, call->type->work);
 	INIT_WORK(&call->free_work, afs_deferred_free_worker);
 	init_waitqueue_head(&call->waitq);
 	spin_lock_init(&call->state_lock);
@@ -242,37 +241,6 @@ static void afs_deferred_free_worker(struct work_struct *work)
 	struct afs_call *call = container_of(work, struct afs_call, free_work);
 
 	afs_free_call(call);
-}
-
-/*
- * Dispose of a reference on a call, deferring the cleanup to a workqueue
- * to avoid lock recursion.
- */
-void afs_deferred_put_call(struct afs_call *call)
-{
-	struct afs_net *net = call->net;
-	unsigned int debug_id = call->debug_id;
-	bool zero;
-	int r, o;
-
-	zero = __refcount_dec_and_test(&call->ref, &r);
-	o = atomic_read(&net->nr_outstanding_calls);
-	trace_afs_call(debug_id, afs_call_trace_put, r - 1, o,
-		       __builtin_return_address(0));
-	if (zero)
-		schedule_work(&call->free_work);
-}
-
-/*
- * Queue the call for actual work.
- */
-static void afs_queue_call_work(struct afs_call *call)
-{
-	if (call->type->work) {
-		afs_get_call(call, afs_call_trace_work);
-		if (!queue_work(afs_wq, &call->work))
-			afs_put_call(call);
-	}
 }
 
 /*
@@ -375,10 +343,8 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 	/* If the call is going to be asynchronous, we need an extra ref for
 	 * the call to hold itself so the caller need not hang on to its ref.
 	 */
-	if (call->async) {
+	if (call->async)
 		afs_get_call(call, afs_call_trace_get);
-		call->drop_ref = true;
-	}
 
 	/* create a call */
 	rxcall = rxrpc_kernel_begin_call(call->net->socket, call->peer, call->key,
@@ -479,8 +445,7 @@ error_kill_call:
 	if (call->rxcall)
 		rxrpc_kernel_shutdown_call(call->net->socket, call->rxcall);
 	if (call->async) {
-		if (cancel_work_sync(&call->async_work))
-			afs_put_call(call);
+		cancel_work_sync(&call->async_work);
 		afs_set_call_complete(call, ret, 0);
 	}
 
@@ -566,7 +531,8 @@ void afs_deliver_to_call(struct afs_call *call)
 		switch (ret) {
 		case 0:
 			call->responded = true;
-			afs_queue_call_work(call);
+			if (call->work)
+				call->work(call);
 			if (state == AFS_CALL_CL_PROC_REPLY) {
 				if (call->op)
 					set_bit(AFS_SERVER_FL_MAY_HAVE_CB,
@@ -616,6 +582,7 @@ void afs_deliver_to_call(struct afs_call *call)
 	}
 
 done:
+	trace_afs_call_done(call);
 	if (call->type->done)
 		call->type->done(call);
 out:
@@ -704,19 +671,16 @@ static void afs_wake_up_async_call(struct sock *sk, struct rxrpc_call *rxcall,
 				   unsigned long call_user_ID)
 {
 	struct afs_call *call = (struct afs_call *)call_user_ID;
-	int r;
 
 	trace_afs_notify_call(rxcall, call);
 	call->need_attention = true;
 
-	if (__refcount_inc_not_zero(&call->ref, &r)) {
-		trace_afs_call(call->debug_id, afs_call_trace_wake, r + 1,
-			       atomic_read(&call->net->nr_outstanding_calls),
-			       __builtin_return_address(0));
+	trace_afs_call(call->debug_id, afs_call_trace_wake,
+		       refcount_read(&call->ref),
+		       atomic_read(&call->net->nr_outstanding_calls),
+		       __builtin_return_address(0));
 
-		if (!queue_work(afs_async_calls, &call->async_work))
-			afs_deferred_put_call(call);
-	}
+	queue_work(afs_async_calls, &call->async_work);
 }
 
 /*
@@ -729,12 +693,20 @@ static void afs_process_async_call(struct work_struct *work)
 
 	_enter("");
 
+	trace_afs_call(call->debug_id, afs_call_trace_async_process,
+		       refcount_read(&call->ref),
+		       atomic_read(&call->net->nr_outstanding_calls),
+		       __builtin_return_address(0));
+
 	if (call->state < AFS_CALL_COMPLETE && call->need_attention) {
 		call->need_attention = false;
 		afs_deliver_to_call(call);
 	}
 
-	afs_put_call(call);
+	if (call->state == AFS_CALL_COMPLETE) {
+		cancel_work(&call->async_work);
+		afs_put_call(call);
+	}
 	_leave("");
 }
 
@@ -760,7 +732,6 @@ void afs_charge_preallocation(struct work_struct *work)
 			if (!call)
 				break;
 
-			call->drop_ref = true;
 			call->async = true;
 			call->state = AFS_CALL_SV_AWAIT_OP_ID;
 			init_waitqueue_head(&call->waitq);
@@ -836,7 +807,7 @@ static int afs_deliver_cm_op_id(struct afs_call *call)
 							     &call->enctype);
 
 	trace_afs_cb_call(call);
-	call->work.func = call->type->work;
+	call->work = call->type->work;
 
 	/* pass responsibility for the remainder of this message off to the
 	 * cache manager op */

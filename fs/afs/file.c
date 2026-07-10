@@ -316,15 +316,17 @@ void afs_fetch_data_async_rx(struct work_struct *work)
 	struct afs_call *call = container_of(work, struct afs_call, async_work);
 
 	afs_read_receive(call);
-	afs_put_call(call);
+
+	if (call->state == AFS_CALL_COMPLETE) {
+		cancel_work(&call->async_work);
+		afs_put_call(call);
+	}
 }
 
 void afs_fetch_data_immediate_cancel(struct afs_call *call)
 {
 	if (call->async) {
-		afs_get_call(call, afs_call_trace_wake);
-		if (!queue_work(afs_async_calls, &call->async_work))
-			afs_deferred_put_call(call);
+		queue_work(afs_async_calls, &call->async_work);
 		flush_work(&call->async_work);
 	}
 }
