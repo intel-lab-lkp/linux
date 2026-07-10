@@ -1034,6 +1034,21 @@ again:
 
 	if (!attr_b->non_res) {
 		u32 data_size = le32_to_cpu(attr_b->res.data_size);
+
+		/*
+		 * A resident attribute is mapped as an IOMAP_INLINE extent,
+		 * which must fit within a single page: iomap_write_end_inline()
+		 * asserts iomap_inline_data_valid(), and the inline buffer is a
+		 * single page.  mi_enum_attr() only bounds the resident value
+		 * length against the MFT record size, so a corrupted volume with
+		 * records larger than a page can report data_size > PAGE_SIZE.
+		 * Reject it here, before it overflows the inline page or trips
+		 * the iomap BUG_ON.
+		 */
+		if (data_size > PAGE_SIZE) {
+			err = -EINVAL;
+			goto out;
+		}
 		*lcn = RESIDENT_LCN;
 		*len = data_size;
 		if (res && data_size) {
