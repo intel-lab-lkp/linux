@@ -689,7 +689,7 @@ void cifs_swn_dump(struct seq_file *m)
 	idr_for_each_entry(&cifs_swnreg_idr, swnreg, id) {
 		seq_printf(
 			m,
-			"\nId: %u Refs: %u Network name: '%s'%s Share name: '%s'%s Ip address: '%pISc'%s",
+			"\nId: %d Refs: %u Network name: '%s'%s Share name: '%s'%s Ip address: '%pISc'%s",
 			id, kref_read(&swnreg->ref_count), swnreg->net_name,
 			swnreg->net_name_notify ? "(y)" : "(n)",
 			swnreg->share_name,
