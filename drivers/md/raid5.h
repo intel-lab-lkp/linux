@@ -490,7 +490,16 @@ struct disk_info {
 #define BYPASS_THRESHOLD	1
 #define NR_HASH			(PAGE_SIZE / sizeof(struct hlist_head))
 #define HASH_MASK		(NR_HASH - 1)
-#define MAX_STRIPE_BATCH	8
+/*
+ * Stripe batch size: how many stripes a worker dequeues from its group per
+ * device_lock acquisition in handle_active_stripes(); the same value divides
+ * group->stripes_cnt in raid5_wakeup_stripe_thread() to choose how many extra
+ * workers to spawn, so the two stay coupled.  Selected per array by the
+ * max_stripe_batch module parameter: STRIPE_BATCH_DEFAULT is the historical
+ * value and STRIPE_BATCH_MAX bounds the on-stack batch[] array.
+ */
+#define STRIPE_BATCH_DEFAULT	8
+#define STRIPE_BATCH_MAX	32
 
 /*
  * The stripe cache hash is striped across a power-of-two number of spinlocks,
@@ -690,6 +699,7 @@ struct r5conf {
 	struct r5worker_group	*worker_groups;
 	int			group_cnt;
 	int			worker_cnt_per_group;
+	int			max_stripe_batch; /* stripes/dequeue, 1..STRIPE_BATCH_MAX */
 	struct r5l_log		*log;
 	void			*log_private;
 

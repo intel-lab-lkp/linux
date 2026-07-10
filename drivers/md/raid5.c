@@ -78,6 +78,11 @@ module_param(stripe_cache_size_max, uint, 0644);
 MODULE_PARM_DESC(stripe_cache_size_max,
 		 "Maximum the per-array stripe_cache_size may be raised to.  0 (the default) derives the limit from system memory (never below the historical 32768), so large-memory hosts can grow the stripe cache without a recompile while small ones are not offered a limit above what RAM can back.  A non-zero value sets a fixed limit");
 
+static unsigned int max_stripe_batch = STRIPE_BATCH_DEFAULT;
+module_param(max_stripe_batch, uint, 0644);
+MODULE_PARM_DESC(max_stripe_batch,
+		 "Number of stripes a worker thread handles per device_lock acquisition, 1-32 (default 8).  Larger values amortise the lock over more stripes on busy multi-threaded arrays at some latency cost.  Read when an array is created");
+
 static bool devices_handle_discard_safely = false;
 module_param(devices_handle_discard_safely, bool, 0644);
 MODULE_PARM_DESC(devices_handle_discard_safely,
@@ -221,7 +226,7 @@ static void raid5_wakeup_stripe_thread(struct stripe_head *sh)
 	/* at least one worker should run to avoid race */
 	queue_work_on(sh->cpu, raid5_wq, &group->workers[0].work);
 
-	thread_cnt = group->stripes_cnt / MAX_STRIPE_BATCH - 1;
+	thread_cnt = group->stripes_cnt / conf->max_stripe_batch - 1;
 	/* wakeup more workers */
 	for (i = 1; i < conf->worker_cnt_per_group && thread_cnt > 0; i++) {
 		if (group->workers[i].working == false) {
@@ -6734,11 +6739,11 @@ static int handle_active_stripes(struct r5conf *conf, int group,
 				 struct list_head *temp_inactive_list)
 		__must_hold(&conf->device_lock)
 {
-	struct stripe_head *batch[MAX_STRIPE_BATCH], *sh;
+	struct stripe_head *batch[STRIPE_BATCH_MAX], *sh;
 	int i, batch_size = 0, hash;
 	bool release_inactive = false;
 
-	while (batch_size < MAX_STRIPE_BATCH &&
+	while (batch_size < conf->max_stripe_batch &&
 			(sh = __get_priority_stripe(conf, group)) != NULL)
 		batch[batch_size++] = sh;
 
@@ -7639,6 +7644,10 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	if (!conf->hash_locks || !conf->inactive_list ||
 	    !conf->temp_inactive_list)
 		goto abort;
+
+	/* Resolve the stripe batch size (see STRIPE_BATCH_* in raid5.h). */
+	conf->max_stripe_batch = clamp_t(int, max_stripe_batch,
+					 1, STRIPE_BATCH_MAX);
 
 #if PAGE_SIZE != DEFAULT_STRIPE_SIZE
 	conf->stripe_size = DEFAULT_STRIPE_SIZE;
