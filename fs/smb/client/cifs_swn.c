@@ -301,66 +301,66 @@ static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
  */
 static struct cifs_swn_reg *cifs_get_swn_reg(struct cifs_tcon *tcon)
 {
-	struct cifs_swn_reg *reg = NULL;
+	struct cifs_swn_reg *swnreg = NULL;
 	int ret;
 
 	mutex_lock(&cifs_swnreg_idr_mutex);
 
 	/* Check if we are already registered for this network and share names */
-	reg = cifs_find_swn_reg(tcon);
-	if (!IS_ERR(reg)) {
-		kref_get(&reg->ref_count);
+	swnreg = cifs_find_swn_reg(tcon);
+	if (!IS_ERR(swnreg)) {
+		kref_get(&swnreg->ref_count);
 		goto unlock;
-	} else if (PTR_ERR(reg) != -EEXIST) {
+	} else if (PTR_ERR(swnreg) != -EEXIST) {
 		goto unlock;
 	}
 
-	reg = kmalloc_obj(struct cifs_swn_reg, GFP_ATOMIC);
-	if (reg == NULL) {
+	swnreg = kmalloc_obj(struct cifs_swn_reg, GFP_ATOMIC);
+	if (swnreg == NULL) {
 		ret = -ENOMEM;
 		goto fail_unlock;
 	}
 
-	kref_init(&reg->ref_count);
+	kref_init(&swnreg->ref_count);
 
-	reg->id = idr_alloc(&cifs_swnreg_idr, reg, 1, 0, GFP_ATOMIC);
-	if (reg->id < 0) {
+	swnreg->id = idr_alloc(&cifs_swnreg_idr, swnreg, 1, 0, GFP_ATOMIC);
+	if (swnreg->id < 0) {
 		cifs_dbg(FYI, "%s: failed to allocate registration id\n", __func__);
-		ret = reg->id;
+		ret = swnreg->id;
 		goto fail;
 	}
 
-	reg->net_name = extract_hostname(tcon->tree_name);
-	if (IS_ERR(reg->net_name)) {
-		ret = PTR_ERR(reg->net_name);
+	swnreg->net_name = extract_hostname(tcon->tree_name);
+	if (IS_ERR(swnreg->net_name)) {
+		ret = PTR_ERR(swnreg->net_name);
 		cifs_dbg(VFS, "%s: failed to extract host name from target: %d\n", __func__, ret);
 		goto fail_idr;
 	}
 
-	reg->share_name = extract_sharename(tcon->tree_name);
-	if (IS_ERR(reg->share_name)) {
-		ret = PTR_ERR(reg->share_name);
+	swnreg->share_name = extract_sharename(tcon->tree_name);
+	if (IS_ERR(swnreg->share_name)) {
+		ret = PTR_ERR(swnreg->share_name);
 		cifs_dbg(VFS, "%s: failed to extract share name from target: %d\n", __func__, ret);
 		goto fail_net_name;
 	}
 
-	reg->net_name_notify = true;
-	reg->share_name_notify =
+	swnreg->net_name_notify = true;
+	swnreg->share_name_notify =
 		(tcon->capabilities & SMB2_SHARE_CAP_ASYMMETRIC);
-	reg->ip_notify = false;
+	swnreg->ip_notify = false;
 
-	reg->tcon = tcon;
+	swnreg->tcon = tcon;
 unlock:
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 
-	return reg;
+	return swnreg;
 
 fail_net_name:
-	kfree(reg->net_name);
+	kfree(swnreg->net_name);
 fail_idr:
-	idr_remove(&cifs_swnreg_idr, reg->id);
+	idr_remove(&cifs_swnreg_idr, swnreg->id);
 fail:
-	kfree(reg);
+	kfree(swnreg);
 fail_unlock:
 	mutex_unlock(&cifs_swnreg_idr_mutex);
 	return ERR_PTR(ret);
