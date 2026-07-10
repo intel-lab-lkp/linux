@@ -42,6 +42,14 @@ static bool nft_is_valid_ether_device(const struct net_device *dev)
 	return true;
 }
 
+static void nft_dev_fill_forward_path_init(struct net_device_path_ctx *ctx,
+					   const struct net_device *dev, const u8 *daddr)
+{
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->dev	= dev;
+	memcpy(ctx->daddr, daddr, sizeof(ctx->daddr));
+}
+
 static int nft_dev_fill_forward_path(const struct nf_flow_route *route,
 				     const struct dst_entry *dst_cache,
 				     const struct nf_conn *ct,
@@ -50,6 +58,7 @@ static int nft_dev_fill_forward_path(const struct nf_flow_route *route,
 {
 	const void *daddr = &ct->tuplehash[!dir].tuple.src.u3;
 	struct net_device *dev = dst_cache->dev;
+	struct net_device_path_ctx ctx;
 	struct neighbour *n;
 	u8 nud_state;
 
@@ -70,9 +79,10 @@ static int nft_dev_fill_forward_path(const struct nf_flow_route *route,
 
 	if (!(nud_state & NUD_VALID))
 		return -1;
-
 out:
-	return dev_fill_forward_path(dev, ha, stack);
+	nft_dev_fill_forward_path_init(&ctx, dev, ha);
+
+	return dev_fill_forward_path(&ctx, stack);
 }
 
 struct nft_forward_info {
