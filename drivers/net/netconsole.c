@@ -340,7 +340,10 @@ static void netconsole_skb_pool_init(struct netconsole_target *nt)
 
 static void netconsole_skb_pool_flush(struct netconsole_target *nt)
 {
-	skb_pool_flush(&nt->np);
+	struct netpoll *np = &nt->np;
+
+	cancel_work_sync(&np->refill_wq);
+	skb_queue_purge_reason(&np->skb_pool, SKB_CONSUMED);
 }
 
 /* Attempts to resume logging to a deactivated target. */
