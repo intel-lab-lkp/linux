@@ -626,7 +626,7 @@ static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
 	return ERR_PTR(-ENOENT);
 }
 
-static void cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
+static bool cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
 					    const char *name, int state)
 {
 	switch (state) {
@@ -642,6 +642,9 @@ static void cifs_swn_resource_state_changed(struct cifs_tcon *tcon,
 		cifs_dbg(FYI, "%s: resource name '%s' changed to unknown state\n", __func__, name);
 		break;
 	}
+
+	/* Address has not changed */
+	return false;
 }
 
 static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
@@ -678,20 +681,15 @@ static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
 static bool cifs_swn_client_move(struct cifs_tcon *tcon,
 				 struct sockaddr_storage *addr)
 {
-	struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr;
-	struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)addr;
 	int ret;
-
-	if (addr->ss_family == AF_INET)
-		cifs_dbg(FYI, "%s: move to %pI4\n", __func__, &ipv4->sin_addr);
-	else if (addr->ss_family == AF_INET6)
-		cifs_dbg(FYI, "%s: move to %pI6\n", __func__, &ipv6->sin6_addr);
 
 	if (cifs_match_ipaddr((struct sockaddr *)&tcon->ses->server->dstaddr,
 			      (struct sockaddr *)addr)) {
 		/* no-op */
 		return false;
 	}
+
+	cifs_dbg(FYI, "%s: move to %pISc\n", __func__, addr);
 
 	/* Store the reconnect address */
 	ret = cifs_swn_store_swn_addr(addr, &tcon->ses->server->dstaddr,
@@ -705,6 +703,7 @@ static bool cifs_swn_client_move(struct cifs_tcon *tcon,
 
 	cifs_signal_cifsd_for_reconnect(tcon->ses->server, false);
 
+	/* Address changed */
 	return true;
 }
 
@@ -719,10 +718,9 @@ cifs_swn_handle_notification_tcon(const struct cifs_swn_notification *not,
 {
 	switch (not->type) {
 	case CIFS_SWN_NOTIFICATION_RESOURCE_CHANGE:
-		cifs_swn_resource_state_changed(
+		return cifs_swn_resource_state_changed(
 			tcon, not->data.resource_name_changed.name,
 			not->data.resource_name_changed.state);
-		return false;
 	case CIFS_SWN_NOTIFICATION_CLIENT_MOVE:
 		return cifs_swn_client_move(tcon, not->data.client_move.addr);
 	default:
@@ -743,6 +741,7 @@ static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
 	struct TCP_Server_Info *server;
 	struct cifs_ses *ses;
 	struct cifs_tcon *tcon;
+	bool addr_changed = false;
 	int ret;
 
 	/* Walk the tcons and apply the notification to matching ones */
@@ -761,7 +760,9 @@ static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
 					spin_unlock(&tcon->tc_lock);
 					continue;
 				}
-				cifs_swn_handle_notification_tcon(not, tcon);
+				addr_changed |=
+					cifs_swn_handle_notification_tcon(not,
+									  tcon);
 				spin_unlock(&tcon->tc_lock);
 			}
 		}
@@ -769,31 +770,29 @@ static int cifs_swn_handle_notification(const struct cifs_swn_notification *not)
 	}
 	spin_unlock(&cifs_tcp_ses_lock);
 
-	switch (not->type) {
-	case CIFS_SWN_NOTIFICATION_CLIENT_MOVE:
-		/* Unregister from the current address */
-		ret = cifs_swn_send_unregister_message(not->swnreg);
-		if (ret < 0) {
-			cifs_dbg(VFS,
-				 "%s: Failed to unregister for witness notifications: %d\n",
-				 __func__, ret);
-		}
+	if (!addr_changed)
+		return 0;
 
-		/* Store the new address */
-		not->swnreg->addr = *not->data.client_move.addr;
+	/*
+	 * If the address has changed, unregister from the previous and
+	 * register for the new one
+	 */
+	ret = cifs_swn_send_unregister_message(not->swnreg);
+	if (ret < 0) {
+		cifs_dbg(VFS,
+			"%s: Failed to unregister for witness notifications: %d\n",
+			__func__, ret);
+	}
 
-		/* Register for this new address */
-		ret = cifs_swn_send_register_message(not->swnreg);
-		if (ret < 0) {
-			cifs_dbg(VFS,
-				 "%s: Failed to register for witness notifications: %d\n",
-				 __func__, ret);
-		}
-		break;
-	default:
-		cifs_dbg(FYI, "%s: unknown notification type %d\n", __func__,
-			 not->type);
-		break;
+	/* Store the new address */
+	not->swnreg->addr = *not->data.client_move.addr;
+
+	/* Register for this new address */
+	ret = cifs_swn_send_register_message(not->swnreg);
+	if (ret < 0) {
+		cifs_dbg(VFS,
+			"%s: Failed to register for witness notifications: %d\n",
+			__func__, ret);
 	}
 
 	return 0;
