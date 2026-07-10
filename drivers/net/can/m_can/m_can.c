@@ -530,26 +530,17 @@ static void m_can_clean(struct net_device *net)
 	spin_unlock_irqrestore(&cdev->tx_handling_spinlock, irqflags);
 }
 
-/* For peripherals, pass skb to rx-offload, which will push skb from
- * napi. For non-peripherals, RX is done in napi already, so push
- * directly. timestamp is used to ensure good skb ordering in
- * rx-offload and is ignored for non-peripherals.
- */
 static void m_can_receive_skb(struct m_can_classdev *cdev,
 			      struct sk_buff *skb,
 			      u32 timestamp)
 {
-	if (cdev->is_peripheral) {
-		struct net_device_stats *stats = &cdev->net->stats;
-		int err;
+	struct net_device_stats *stats = &cdev->net->stats;
+	int err;
 
-		err = can_rx_offload_queue_timestamp(&cdev->offload, skb,
-						     timestamp);
-		if (err)
-			stats->rx_fifo_errors++;
-	} else {
-		netif_receive_skb(skb);
-	}
+	err = can_rx_offload_queue_timestamp(&cdev->offload, skb,
+					     timestamp);
+	if (err)
+		stats->rx_fifo_errors++;
 }
 
 static int m_can_read_fifo(struct net_device *dev, u32 fgi)
@@ -600,10 +591,7 @@ static int m_can_read_fifo(struct net_device *dev, u32 fgi)
 				      cf->data, DIV_ROUND_UP(cf->len, 4));
 		if (err)
 			goto out_free_skb;
-
-		stats->rx_bytes += cf->len;
 	}
-	stats->rx_packets++;
 
 	timestamp = FIELD_GET(RX_BUF_RXTS_MASK, fifo_header.dlc) << 16;
 
@@ -618,10 +606,9 @@ out_fail:
 	return err;
 }
 
-static int m_can_do_rx_poll(struct net_device *dev, int quota)
+static int m_can_do_rx_poll(struct net_device *dev)
 {
 	struct m_can_classdev *cdev = netdev_priv(dev);
-	u32 pkts = 0;
 	u32 rxfs;
 	u32 rx_count;
 	u32 fgi;
@@ -638,13 +625,11 @@ static int m_can_do_rx_poll(struct net_device *dev, int quota)
 	rx_count = FIELD_GET(RXFS_FFL_MASK, rxfs);
 	fgi = FIELD_GET(RXFS_FGI_MASK, rxfs);
 
-	for (i = 0; i < rx_count && quota > 0; ++i) {
+	for (i = 0; i < rx_count; ++i) {
 		err = m_can_read_fifo(dev, fgi);
 		if (err)
 			break;
 
-		quota--;
-		pkts++;
 		ack_fgi = fgi;
 		fgi = (++fgi >= cdev->mcfg[MRAM_RXF0].num ? 0 : fgi);
 	}
@@ -652,10 +637,7 @@ static int m_can_do_rx_poll(struct net_device *dev, int quota)
 	if (ack_fgi != -1)
 		m_can_write(cdev, M_CAN_RXF0A, ack_fgi);
 
-	if (err)
-		return err;
-
-	return pkts;
+	return err;
 }
 
 static int m_can_handle_lost_msg(struct net_device *dev)
@@ -678,8 +660,7 @@ static int m_can_handle_lost_msg(struct net_device *dev)
 	frame->can_id |= CAN_ERR_CRTL;
 	frame->data[1] = CAN_ERR_CRTL_RX_OVERFLOW;
 
-	if (cdev->is_peripheral)
-		timestamp = m_can_get_timestamp(cdev);
+	timestamp = m_can_get_timestamp(cdev);
 
 	m_can_receive_skb(cdev, skb, timestamp);
 
@@ -750,8 +731,7 @@ static int m_can_handle_lec_err(struct net_device *dev,
 	if (unlikely(!skb))
 		return 0;
 
-	if (cdev->is_peripheral)
-		timestamp = m_can_get_timestamp(cdev);
+	timestamp = m_can_get_timestamp(cdev);
 
 	m_can_receive_skb(cdev, skb, timestamp);
 
@@ -883,8 +863,7 @@ static int m_can_handle_state_change(struct net_device *dev,
 		break;
 	}
 
-	if (cdev->is_peripheral)
-		timestamp = m_can_get_timestamp(cdev);
+	timestamp = m_can_get_timestamp(cdev);
 
 	m_can_receive_skb(cdev, skb, timestamp);
 
@@ -973,8 +952,7 @@ static int m_can_handle_protocol_error(struct net_device *dev, u32 irqstatus)
 		return 0;
 	}
 
-	if (cdev->is_peripheral)
-		timestamp = m_can_get_timestamp(cdev);
+	timestamp = m_can_get_timestamp(cdev);
 
 	m_can_receive_skb(cdev, skb, timestamp);
 
@@ -1055,7 +1033,7 @@ static int m_can_rx_handler(struct net_device *dev, int quota, u32 irqstatus)
 						     m_can_read(cdev, M_CAN_PSR));
 
 	if (irqstatus & IR_RF0N) {
-		rx_work_or_err = m_can_do_rx_poll(dev, (quota - work_done));
+		rx_work_or_err = m_can_do_rx_poll(dev);
 		if (rx_work_or_err < 0)
 			return rx_work_or_err;
 
@@ -1065,32 +1043,6 @@ end:
 	return work_done;
 }
 
-static int m_can_poll(struct napi_struct *napi, int quota)
-{
-	struct net_device *dev = napi->dev;
-	struct m_can_classdev *cdev = netdev_priv(dev);
-	int work_done;
-	u32 irqstatus;
-
-	irqstatus = cdev->irqstatus | m_can_read(cdev, M_CAN_IR);
-
-	work_done = m_can_rx_handler(dev, quota, irqstatus);
-
-	/* Don't re-enable interrupts if the driver had a fatal error
-	 * (e.g., FIFO read failure).
-	 */
-	if (work_done >= 0 && work_done < quota) {
-		napi_complete_done(napi, work_done);
-		m_can_enable_all_interrupts(cdev);
-	}
-
-	return work_done;
-}
-
-/* Echo tx skb and update net stats. Peripherals use rx-offload for
- * echo. timestamp is used for peripherals to ensure correct ordering
- * by rx-offload, and is ignored for non-peripherals.
- */
 static unsigned int m_can_tx_update_stats(struct m_can_classdev *cdev,
 					  unsigned int msg_mark, u32 timestamp)
 {
@@ -1098,14 +1050,11 @@ static unsigned int m_can_tx_update_stats(struct m_can_classdev *cdev,
 	struct net_device_stats *stats = &dev->stats;
 	unsigned int frame_len;
 
-	if (cdev->is_peripheral)
-		stats->tx_bytes +=
-			can_rx_offload_get_echo_skb_queue_timestamp(&cdev->offload,
-								    msg_mark,
-								    timestamp,
-								    &frame_len);
-	else
-		stats->tx_bytes += can_get_echo_skb(dev, msg_mark, &frame_len);
+	stats->tx_bytes +=
+		can_rx_offload_get_echo_skb_queue_timestamp(&cdev->offload,
+							    msg_mark,
+							    timestamp,
+							    &frame_len);
 
 	stats->tx_packets++;
 
@@ -1265,21 +1214,10 @@ static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 	if (cdev->ops->clear_interrupts)
 		cdev->ops->clear_interrupts(cdev);
 
-	/* schedule NAPI in case of
-	 * - rx IRQ
-	 * - state change IRQ
-	 * - bus error IRQ and bus error reporting
-	 */
 	if (ir & (IR_RF0N | IR_RF0W | IR_ERR_ALL_30X)) {
-		cdev->irqstatus = ir;
-		if (!cdev->is_peripheral) {
-			m_can_disable_all_interrupts(cdev);
-			napi_schedule(&cdev->napi);
-		} else {
-			ret = m_can_rx_handler(dev, NAPI_POLL_WEIGHT, ir);
-			if (ret < 0)
-				return ret;
-		}
+		ret = m_can_rx_handler(dev, NAPI_POLL_WEIGHT, ir);
+		if (ret < 0)
+			return ret;
 	}
 
 	if (cdev->version == 30) {
@@ -1288,8 +1226,7 @@ static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 			u32 timestamp = 0;
 			unsigned int frame_len;
 
-			if (cdev->is_peripheral)
-				timestamp = m_can_get_timestamp(cdev);
+			timestamp = m_can_get_timestamp(cdev);
 			frame_len = m_can_tx_update_stats(cdev, 0, timestamp);
 			m_can_finish_tx(cdev, 1, frame_len);
 		}
@@ -1304,6 +1241,8 @@ static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 
 	if (cdev->is_peripheral)
 		can_rx_offload_threaded_irq_finish(&cdev->offload);
+	else
+		can_rx_offload_irq_finish(&cdev->offload);
 
 	return IRQ_HANDLED;
 }
@@ -1752,9 +1691,6 @@ static int m_can_dev_setup(struct m_can_classdev *cdev)
 	if (err)
 		return err;
 
-	if (!cdev->is_peripheral)
-		netif_napi_add(dev, &cdev->napi, m_can_poll);
-
 	/* Shared properties of all M_CAN versions */
 	cdev->version = m_can_version;
 	cdev->can.do_set_mode = m_can_set_mode;
@@ -1846,10 +1782,9 @@ static int m_can_close(struct net_device *dev)
 	if (cdev->is_peripheral) {
 		destroy_workqueue(cdev->tx_wq);
 		cdev->tx_wq = NULL;
-		can_rx_offload_disable(&cdev->offload);
-	} else {
-		napi_disable(&cdev->napi);
 	}
+
+	can_rx_offload_disable(&cdev->offload);
 
 	close_candev(dev);
 
@@ -2069,8 +2004,8 @@ static enum hrtimer_restart m_can_polling_timer(struct hrtimer *timer)
 
 	ret = m_can_interrupt_handler(cdev);
 
-	/* On error or if napi is scheduled to read, stop the timer */
-	if (ret < 0 || napi_is_scheduled(&cdev->napi))
+	/* On error stop the timer */
+	if (ret < 0)
 		return HRTIMER_NORESTART;
 
 	hrtimer_forward_now(timer, ms_to_ktime(HRTIMER_POLL_INTERVAL_MS));
@@ -2102,10 +2037,7 @@ static int m_can_open(struct net_device *dev)
 		goto out_reset_control_assert;
 	}
 
-	if (cdev->is_peripheral)
-		can_rx_offload_enable(&cdev->offload);
-	else
-		napi_enable(&cdev->napi);
+	can_rx_offload_enable(&cdev->offload);
 
 	/* register interrupt handler */
 	if (cdev->is_peripheral) {
@@ -2144,16 +2076,13 @@ static int m_can_open(struct net_device *dev)
 	return 0;
 
 exit_start_fail:
-	if (cdev->is_peripheral || dev->irq)
+	if (dev->irq)
 		free_irq(dev->irq, dev);
 exit_irq_fail:
 	if (cdev->is_peripheral)
 		destroy_workqueue(cdev->tx_wq);
 out_wq_fail:
-	if (cdev->is_peripheral)
-		can_rx_offload_disable(&cdev->offload);
-	else
-		napi_disable(&cdev->napi);
+	can_rx_offload_disable(&cdev->offload);
 	close_candev(dev);
 out_reset_control_assert:
 	reset_control_assert(cdev->rst);
@@ -2533,12 +2462,10 @@ int m_can_class_register(struct m_can_classdev *cdev)
 	if (ret)
 		goto clk_disable;
 
-	if (cdev->is_peripheral) {
-		ret = can_rx_offload_add_manual(cdev->net, &cdev->offload,
-						NAPI_POLL_WEIGHT);
-		if (ret)
-			goto out_reset_control_assert;
-	}
+	ret = can_rx_offload_add_manual(cdev->net, &cdev->offload,
+					NAPI_POLL_WEIGHT);
+	if (ret)
+		goto out_reset_control_assert;
 
 	if (!cdev->net->irq) {
 		netdev_dbg(cdev->net, "Polling enabled, initialize hrtimer");
@@ -2575,8 +2502,7 @@ int m_can_class_register(struct m_can_classdev *cdev)
 	return 0;
 
 rx_offload_del:
-	if (cdev->is_peripheral)
-		can_rx_offload_del(&cdev->offload);
+	can_rx_offload_del(&cdev->offload);
 out_reset_control_assert:
 	reset_control_assert(cdev->rst);
 clk_disable:
@@ -2589,8 +2515,7 @@ EXPORT_SYMBOL_GPL(m_can_class_register);
 void m_can_class_unregister(struct m_can_classdev *cdev)
 {
 	unregister_candev(cdev->net);
-	if (cdev->is_peripheral)
-		can_rx_offload_del(&cdev->offload);
+	can_rx_offload_del(&cdev->offload);
 }
 EXPORT_SYMBOL_GPL(m_can_class_unregister);
 
