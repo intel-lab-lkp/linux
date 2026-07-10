@@ -35,19 +35,17 @@ struct nvec_keys {
 	bool caps_lock;
 };
 
-static struct nvec_keys keys_dev;
-
-static void nvec_kbd_toggle_led(void)
+static void nvec_kbd_toggle_led(struct nvec_keys *keys)
 {
 	char buf[] = { NVEC_KBD, SET_LEDS, 0 };
 
-	keys_dev.caps_lock = !keys_dev.caps_lock;
+	keys->caps_lock = !keys->caps_lock;
 
-	if (keys_dev.caps_lock)
+	if (keys->caps_lock)
 		/* should be BIT(0) only, firmware bug? */
 		buf[2] = BIT(0) | BIT(1) | BIT(2);
 
-	nvec_write_async(keys_dev.nvec, buf, sizeof(buf));
+	nvec_write_async(keys->nvec, buf, sizeof(buf));
 }
 
 static int nvec_keys_notifier(struct notifier_block *nb,
@@ -55,6 +53,7 @@ static int nvec_keys_notifier(struct notifier_block *nb,
 {
 	int code, state;
 	unsigned char *msg = data;
+	struct nvec_keys *keys = container_of(nb, struct nvec_keys, notifier);
 
 	if (event_type == NVEC_KB_EVT) {
 		int _size = (msg[0] & (3 << 5)) >> 5;
@@ -70,11 +69,11 @@ static int nvec_keys_notifier(struct notifier_block *nb,
 		state = msg[1] & 0x80;
 
 		if (code_tabs[_size][code] == KEY_CAPSLOCK && state)
-			nvec_kbd_toggle_led();
+			nvec_kbd_toggle_led(keys);
 
-		input_report_key(keys_dev.input, code_tabs[_size][code],
+		input_report_key(keys->input, code_tabs[_size][code],
 				 !state);
-		input_sync(keys_dev.input);
+		input_sync(keys->input);
 
 		return NOTIFY_STOP;
 	}
@@ -85,7 +84,7 @@ static int nvec_keys_notifier(struct notifier_block *nb,
 static int nvec_kbd_event(struct input_dev *dev, unsigned int type,
 			  unsigned int code, int value)
 {
-	struct nvec_chip *nvec = keys_dev.nvec;
+	struct nvec_keys *keys = input_get_drvdata(dev);
 	char buf[] = { NVEC_KBD, SET_LEDS, 0 };
 
 	if (type == EV_REP)
@@ -98,7 +97,7 @@ static int nvec_kbd_event(struct input_dev *dev, unsigned int type,
 		return -1;
 
 	buf[2] = !!value;
-	nvec_write_async(nvec, buf, sizeof(buf));
+	nvec_write_async(keys->nvec, buf, sizeof(buf));
 
 	return 0;
 }
@@ -107,6 +106,7 @@ static int nvec_kbd_probe(struct platform_device *pdev)
 {
 	struct nvec_chip *nvec = dev_get_drvdata(pdev->dev.parent);
 	int i, j, err;
+	struct nvec_keys *keys;
 	struct input_dev *idev;
 	char	clear_leds[] = { NVEC_KBD, SET_LEDS, 0 },
 		enable_kbd[] = { NVEC_KBD, ENABLE_KBD },
@@ -115,6 +115,9 @@ static int nvec_kbd_probe(struct platform_device *pdev)
 						true };
 
 	j = 0;
+	keys = devm_kzalloc(&pdev->dev, sizeof(struct nvec_keys), GFP_KERNEL);
+	if (!keys)
+		return -ENOMEM;
 
 	for (i = 0; i < ARRAY_SIZE(code_tab_102us); ++i)
 		keycodes[j++] = code_tab_102us[i];
@@ -138,14 +141,18 @@ static int nvec_kbd_probe(struct platform_device *pdev)
 		set_bit(keycodes[i], idev->keybit);
 
 	clear_bit(0, idev->keybit);
+
+	input_set_drvdata(idev, keys);
+	platform_set_drvdata(pdev, keys);
+
 	err = input_register_device(idev);
 	if (err)
 		return err;
 
-	keys_dev.input = idev;
-	keys_dev.notifier.notifier_call = nvec_keys_notifier;
-	keys_dev.nvec = nvec;
-	nvec_register_notifier(nvec, &keys_dev.notifier, 0);
+	keys->input = idev;
+	keys->notifier.notifier_call = nvec_keys_notifier;
+	keys->nvec = nvec;
+	nvec_register_notifier(nvec, &keys->notifier, 0);
 
 	/* Enable keyboard */
 	nvec_write_sync(nvec, enable_kbd, 2, NULL);
@@ -165,12 +172,13 @@ static int nvec_kbd_probe(struct platform_device *pdev)
 static void nvec_kbd_remove(struct platform_device *pdev)
 {
 	struct nvec_chip *nvec = dev_get_drvdata(pdev->dev.parent);
+	struct nvec_keys *keys = platform_get_drvdata(pdev);
 	char disable_kbd[] = { NVEC_KBD, DISABLE_KBD },
 	     uncnfg_wake_key_reporting[] = { NVEC_KBD, CNFG_WAKE_KEY_REPORTING,
 						false };
 	nvec_write_async(nvec, uncnfg_wake_key_reporting, 3);
 	nvec_write_async(nvec, disable_kbd, 2);
-	nvec_unregister_notifier(nvec, &keys_dev.notifier);
+	nvec_unregister_notifier(nvec, &keys->notifier);
 }
 
 static struct platform_driver nvec_kbd_driver = {
