@@ -86,9 +86,51 @@ properties:
         description: Video port for LVDS Channel-A output (panel or bridge).
         $ref: '#/$defs/lvds-port'
 
+        properties:
+          data-lanes:
+            $ref: /schemas/types.yaml#/definitions/uint32-array
+            description: |
+              Array of physical LVDS data lane indexes
+            oneOf:
+              - items:
+                  - const: 1
+                  - const: 2
+                  - const: 3
+                  - const: 4
+                description: |
+                  This is the default layout
+              - items:
+                  - const: 4
+                  - const: 3
+                  - const: 2
+                  - const: 1
+                description: |
+                  This is the reversed layout
+
       port@3:
         description: Video port for LVDS Channel-B output (panel or bridge).
         $ref: '#/$defs/lvds-port'
+
+        properties:
+          data-lanes:
+            $ref: /schemas/types.yaml#/definitions/uint32-array
+            description: |
+              Array of physical LVDS data lane indexes
+            oneOf:
+              - items:
+                  - const: 1
+                  - const: 2
+                  - const: 3
+                  - const: 4
+                description: |
+                  This is the default layout
+              - items:
+                  - const: 4
+                  - const: 3
+                  - const: 2
+                  - const: 1
+                description: |
+                  This is the reversed layout
 
     required:
       - port@0
