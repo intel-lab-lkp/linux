@@ -366,26 +366,24 @@ fail_unlock:
 	return ERR_PTR(ret);
 }
 
-static void cifs_swn_reg_release(struct kref *ref)
+static void cifs_swn_reg_release(struct cifs_swn_reg *swnreg)
 {
-	struct cifs_swn_reg *swnreg = container_of(ref, struct cifs_swn_reg, ref_count);
 	int ret;
 
 	ret = cifs_swn_send_unregister_message(swnreg);
 	if (ret < 0)
 		cifs_dbg(VFS, "%s: Failed to send unregister message: %d\n", __func__, ret);
 
-	idr_remove(&cifs_swnreg_idr, swnreg->id);
 	kfree(swnreg->net_name);
 	kfree(swnreg->share_name);
 	kfree(swnreg);
 }
 
-static void cifs_put_swn_reg(struct cifs_swn_reg *swnreg)
+static void cifs_swn_reg_idr_remove(struct kref *ref)
 {
-	mutex_lock(&cifs_swnreg_idr_mutex);
-	kref_put(&swnreg->ref_count, cifs_swn_reg_release);
-	mutex_unlock(&cifs_swnreg_idr_mutex);
+	struct cifs_swn_reg *swnreg = container_of(ref, struct cifs_swn_reg, ref_count);
+
+	idr_remove(&cifs_swnreg_idr, swnreg->id);
 }
 
 static int cifs_swn_resource_state_changed(struct cifs_swn_reg *swnreg, const char *name, int state)
@@ -612,10 +610,13 @@ int cifs_swn_unregister(struct cifs_tcon *tcon)
 		mutex_unlock(&cifs_swnreg_idr_mutex);
 		return PTR_ERR(swnreg);
 	}
+	if (kref_put(&swnreg->ref_count, cifs_swn_reg_idr_remove)) {
+		mutex_unlock(&cifs_swnreg_idr_mutex);
+		cifs_swn_reg_release(swnreg);
+		return 0;
+	}
 
 	mutex_unlock(&cifs_swnreg_idr_mutex);
-
-	cifs_put_swn_reg(swnreg);
 
 	return 0;
 }
