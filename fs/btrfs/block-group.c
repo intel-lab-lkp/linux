@@ -2667,9 +2667,10 @@ int btrfs_read_block_groups(struct btrfs_fs_info *info)
 	u64 cache_gen;
 
 	/*
-	 * Either no extent root (with ibadroots rescue option) or we have
-	 * unsupported RO options. The fs can never be mounted read-write, so no
-	 * need to waste time searching block group items.
+	 * Either the extent tree root or the block group tree root is missing
+	 * (with the ibadroots rescue option), or we have unsupported RO options.
+	 * The fs can never be mounted read-write, so no need to waste time
+	 * searching block group items.
 	 *
 	 * This also allows new extent tree related changes to be RO compat,
 	 * no need for a full incompat flag.
