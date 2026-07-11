@@ -607,6 +607,8 @@ int xe_device_init_early(struct xe_device *xe)
 	if (err)
 		return err;
 
+	xe_bo_defrag_init_early(xe);
+
 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
 						       WQ_MEM_RECLAIM);
 	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);

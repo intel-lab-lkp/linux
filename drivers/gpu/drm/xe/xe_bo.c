@@ -926,6 +926,9 @@ static void xe_bo_set_purgeable_shrinker(struct xe_bo *bo,
 	}
 }
 
+static void xe_bo_defrag_update(struct xe_bo *bo);
+static void xe_bo_defrag_remove(struct xe_bo *bo);
+
 /**
  * xe_bo_set_purgeable_state() - Set BO purgeable state with validation
  * @bo: Buffer object
@@ -954,6 +957,7 @@ void xe_bo_set_purgeable_state(struct xe_bo *bo,
 
 	bo->purgeable.state = new_state;
 	xe_bo_set_purgeable_shrinker(bo, new_state);
+	xe_bo_defrag_update(bo);
 }
 
 /**
@@ -1003,7 +1007,98 @@ static int xe_ttm_bo_purge(struct ttm_buffer_object *ttm_bo, struct ttm_operatio
 	/* Commit the state transition only once invalidation was queued */
 	xe_bo_set_purgeable_state(bo, XE_MADV_PURGEABLE_PURGED);
 
+	/*
+	 * The backing store is gone, so the BO no longer needs defrag. Drop it
+	 * from the defrag list here so the count stays accurate even for purge
+	 * paths that don't pass through xe_bo_move() (e.g. swap_notify).
+	 */
+	xe_bo_defrag_remove(bo);
+
 	return 0;
+}
+
+/**
+ * xe_bo_defrag_init_early() - Initialize the device defrag BO tracking
+ * @xe: The xe device
+ *
+ * Initialize the list, lock and count used to track BOs whose backing TT
+ * pages were allocated at a sub-optimal order.
+ */
+void xe_bo_defrag_init_early(struct xe_device *xe)
+{
+	spin_lock_init(&xe->mem.defrag.lock);
+	INIT_LIST_HEAD(&xe->mem.defrag.list);
+	atomic_set(&xe->mem.defrag.count, 0);
+}
+
+static bool xe_bo_needs_defrag(struct xe_bo *bo)
+{
+	struct ttm_buffer_object *ttm_bo = &bo->ttm;
+	struct ttm_tt *tt = ttm_bo->ttm;
+
+	xe_bo_assert_held(bo);
+
+	return ttm_bo->type == ttm_bo_type_device && tt &&
+		!xe_bo_madv_is_dontneed(bo) &&
+		ttm_tt_is_populated(tt) &&
+		ttm_tt_is_beneficial_order_failed(tt) &&
+		ttm_bo->resource && ttm_bo->resource->mem_type == XE_PL_TT &&
+		!xe_bo_is_pinned(bo);
+}
+
+static void xe_bo_defrag_add(struct xe_bo *bo)
+{
+	struct xe_device *xe = xe_bo_device(bo);
+
+	xe_bo_assert_held(bo);
+	xe_assert(xe, xe_bo_needs_defrag(bo));
+
+	scoped_guard(spinlock, &xe->mem.defrag.lock) {
+		if (list_empty(&bo->defrag_link)) {
+			list_add_tail(&bo->defrag_link, &xe->mem.defrag.list);
+			atomic_inc(&xe->mem.defrag.count);
+		}
+	}
+}
+
+static void __xe_bo_defrag_remove(struct xe_bo *bo)
+{
+	struct xe_device *xe = xe_bo_device(bo);
+
+	guard(spinlock)(&xe->mem.defrag.lock);
+	if (!list_empty(&bo->defrag_link)) {
+		list_del_init(&bo->defrag_link);
+		atomic_dec(&xe->mem.defrag.count);
+	}
+}
+
+static void xe_bo_defrag_remove(struct xe_bo *bo)
+{
+	xe_bo_assert_held(bo);
+
+	if (list_empty(&bo->defrag_link))
+		return;
+
+	__xe_bo_defrag_remove(bo);
+}
+
+/**
+ * xe_bo_defrag_update() - Update defrag list membership for a BO
+ * @bo: The buffer object
+ *
+ * Add @bo to the device defrag list when it is a ttm_bo_type_device BO resident
+ * in XE_PL_TT with a populated TT whose pages were allocated at a sub-optimal
+ * order (ttm_tt_is_beneficial_order_failed()) and it isn't pinned. Otherwise
+ * ensure it is removed from the list.
+ */
+static void xe_bo_defrag_update(struct xe_bo *bo)
+{
+	xe_bo_assert_held(bo);
+
+	if (xe_bo_needs_defrag(bo))
+		xe_bo_defrag_add(bo);
+	else
+		xe_bo_defrag_remove(bo);
 }
 
 static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
@@ -1231,6 +1326,8 @@ out:
 		xe_tt_unmap_sg(xe, ttm_bo->ttm);
 	}
 
+	xe_bo_defrag_update(bo);
+
 	return ret;
 }
 
@@ -1267,6 +1364,15 @@ static long xe_bo_shrink_purge(struct ttm_operation_ctx *ctx,
 	if (lret > 0) {
 		xe_ttm_tt_account_subtract(xe, bo->ttm);
 		update_global_total_pages(bo->bdev, -(long)tt->num_pages);
+
+		/*
+		 * The pages are gone, so a tracked BO no longer needs defrag.
+		 * This shrinker purge path frees pages without going through
+		 * xe_bo_move(), so drop any stale defrag list entry here. Ghost
+		 * bos are never tracked, so guard for real xe bos.
+		 */
+		if (xe_bo_is_xe_bo(bo))
+			xe_bo_defrag_remove(ttm_to_xe_bo(bo));
 	}
 
 	return lret;
@@ -1909,6 +2015,8 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 		list_del(&bo->vram_userfault_link);
 	mutex_unlock(&xe->mem_access.vram_userfault.lock);
 
+	__xe_bo_defrag_remove(bo);
+
 	kfree(bo);
 }
 
@@ -2414,6 +2522,7 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
 	bo->ttm.base.funcs = &xe_gem_object_funcs;
 	bo->ttm.priority = XE_BO_PRIORITY_NORMAL;
 	INIT_LIST_HEAD(&bo->pinned_link);
+	INIT_LIST_HEAD(&bo->defrag_link);
 #ifdef CONFIG_PROC_FS
 	INIT_LIST_HEAD(&bo->client_link);
 #endif
@@ -3020,6 +3129,8 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
 		xe_ttm_tt_account_subtract(xe, bo->ttm.ttm);
 
+	xe_bo_defrag_remove(bo);
+
 	/*
 	 * FIXME: If we always use the reserve / unreserve functions for locking
 	 * we do not need this.
@@ -3078,6 +3189,8 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec)
 	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
 		xe_ttm_tt_account_subtract(xe, bo->ttm.ttm);
 
+	xe_bo_defrag_remove(bo);
+
 	/*
 	 * FIXME: If we always use the reserve / unreserve functions for locking
 	 * we do not need this.
@@ -3113,6 +3226,7 @@ void xe_bo_unpin_external(struct xe_bo *bo)
 	ttm_bo_unpin(&bo->ttm);
 	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
 		xe_ttm_tt_account_add(xe, bo->ttm.ttm);
+	xe_bo_defrag_update(bo);
 
 	/*
 	 * FIXME: If we always use the reserve / unreserve functions for locking
@@ -3145,6 +3259,7 @@ void xe_bo_unpin(struct xe_bo *bo)
 	ttm_bo_unpin(&bo->ttm);
 	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
 		xe_ttm_tt_account_add(xe, bo->ttm.ttm);
+	xe_bo_defrag_update(bo);
 }
 
 /**

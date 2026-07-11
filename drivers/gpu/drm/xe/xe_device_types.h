@@ -296,6 +296,25 @@ struct xe_device {
 		 */
 		atomic_long_t dma_mapped_pages_svm[NR_PAGE_ORDERS];
 #endif
+		/**
+		 * @mem.defrag: Tracking of BOs whose backing TT pages were
+		 * allocated at a sub-optimal (smaller than beneficial) order.
+		 *
+		 * Such BOs are candidates for a future defragmentation pass that
+		 * tries to reallocate their pages at the device's beneficial
+		 * order. Only ttm_bo_type_device BOs are tracked.
+		 */
+		struct {
+			/** @mem.defrag.lock: Protects @mem.defrag.list. */
+			spinlock_t lock;
+			/** @mem.defrag.list: List of struct xe_bo defrag_link. */
+			struct list_head list;
+			/**
+			 * @mem.defrag.count: Number of BOs currently on
+			 * @mem.defrag.list.
+			 */
+			atomic_t count;
+		} defrag;
 	} mem;
 
 	/** @sriov: device level virtualization data */
