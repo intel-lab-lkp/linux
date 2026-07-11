@@ -3953,6 +3953,10 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 	bool have_prealloc = false;
 	unsigned int bo_flags;
 	u32 handle;
+	ktime_t ioctl_start = ktime_get();
+	ktime_t lock_start = ktime_set(0, 0);
+	u64 lock_ns = 0;
+	u32 asid = 0;
 	int err;
 
 	if (XE_IOCTL_DBG(xe, args->pad[0] || args->pad[1] || args->pad[2]) ||
@@ -4031,6 +4035,7 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 		vm = xe_vm_lookup(xef, args->vm_id);
 		if (XE_IOCTL_DBG(xe, !vm))
 			return -ENOENT;
+		asid = vm->usm.asid;
 	}
 
 	/*
@@ -4100,6 +4105,10 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 			if (err)
 				break;
 		}
+
+		if (lock_start == ktime_set(0, 0))
+			lock_start = ktime_get();
+
 		bo = xe_bo_create_user(xe, vm, args->size, args->cpu_caching,
 				       bo_flags, have_prealloc ? &prealloc : NULL,
 				       &exec);
@@ -4110,6 +4119,8 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 			break;
 		}
 	}
+	if (lock_start != ktime_set(0, 0))
+		lock_ns = ktime_to_ns(ktime_sub(ktime_get(), lock_start));
 	if (have_prealloc)
 		ttm_pool_prealloc_fini(&xe->ttm.pool, &prealloc);
 	if (err)
@@ -4139,6 +4150,12 @@ out_put:
 out_vm:
 	if (vm)
 		xe_vm_put(vm);
+
+	trace_xe_gem_create_ioctl(xe, args->size, args->placement,
+				  args->cpu_caching, asid,
+				  div_u64(ktime_to_ns(ktime_sub(ktime_get(),
+							ioctl_start)), 1000),
+				  div_u64(lock_ns, 1000));
 
 	return err;
 }
