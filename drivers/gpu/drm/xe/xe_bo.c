@@ -25,6 +25,7 @@
 #include <trace/events/gpu_mem.h>
 
 #include "xe_device.h"
+#include "xe_dep_scheduler.h"
 #include "xe_dma_buf.h"
 #include "xe_drm_client.h"
 #include "xe_ggtt.h"
@@ -1306,6 +1307,10 @@ static void xe_bo_defrag_fini(void *arg)
 	struct xe_device *xe = arg;
 
 	disable_delayed_work_sync(&xe->mem.defrag.worker);
+	if (xe->mem.defrag.iova_sched) {
+		xe_dep_scheduler_fini(xe->mem.defrag.iova_sched);
+		xe->mem.defrag.iova_sched = NULL;
+	}
 }
 
 /**
@@ -1342,6 +1347,16 @@ void xe_bo_defrag_init_early(struct xe_device *xe)
  */
 int xe_bo_defrag_init(struct xe_device *xe)
 {
+#define XE_BO_MAX_IOVA_DEFRAG_JOBS	16	/* Picking a reasonable value */
+	struct xe_dep_scheduler *iova_sched;
+
+	iova_sched = xe_dep_scheduler_create(xe, NULL, "xe_iova_defrag",
+					     XE_BO_MAX_IOVA_DEFRAG_JOBS);
+	if (IS_ERR(iova_sched))
+		return PTR_ERR(iova_sched);
+	xe->mem.defrag.iova_sched = iova_sched;
+#undef XE_BO_MAX_IOVA_DEFRAG_JOBS
+
 	return devm_add_action_or_reset(xe->drm.dev, xe_bo_defrag_fini, xe);
 }
 
