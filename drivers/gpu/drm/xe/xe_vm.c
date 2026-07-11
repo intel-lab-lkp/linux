@@ -1934,15 +1934,7 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		vma->gpuva.flags |= XE_VMA_DESTROYED;
 	}
 
-	/*
-	 * All vm operations will add shared fences to resv.
-	 * The only exception is eviction for a shared object,
-	 * but even so, the unbind when evicted would still
-	 * install a fence to resv. Hence it's safe to
-	 * destroy the pagetables immediately.
-	 */
 	xe_vm_free_scratch(vm);
-	xe_vm_pt_destroy(vm);
 	xe_vm_unlock(vm);
 
 	/*
@@ -1955,6 +1947,22 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		list_del_init(&vma->combined_links.destroy);
 		xe_vma_destroy_unlocked(vma);
 	}
+
+	/*
+	 * Destroy the page tables only after every VMA has been unlinked. The
+	 * contested (external-BO) VMAs above are unlinked from their BO under
+	 * the BO's dma-resv lock, not vm->lock, so they can still be reached
+	 * via drm_gem_for_each_gpuvm_bo() by a concurrent BO move (eviction,
+	 * shrinker or the defrag worker) that only holds the BO's resv. Such a
+	 * move calls xe_vm_invalidate_vma() -> xe_pt_zap_ptes(), which
+	 * dereferences vm->pt_root[]; freeing the page tables while those VMAs
+	 * are still linked is a use-after-free. All vm operations add shared
+	 * fences to the resv (eviction of a shared object still installs an
+	 * unbind fence), so no GPU work outlives this point.
+	 */
+	xe_vm_lock(vm, false);
+	xe_vm_pt_destroy(vm);
+	xe_vm_unlock(vm);
 
 	xe_svm_fini(vm);
 
