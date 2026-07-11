@@ -268,7 +268,8 @@ int aix_partition(struct parsed_partitions *state)
 				put_partition(state, lv_ix + 1,
 				  (i + 1 - lp_ix) * pp_blocks_size + psn_part1,
 				  lvip[lv_ix].pps_per_lv * pp_blocks_size);
-				seq_buf_printf(&state->pp_buf, " <%s>\n",
+				seq_buf_printf(&state->pp_buf, " <%.*s>\n",
+					       (int)sizeof(n[lv_ix].name),
 					       n[lv_ix].name);
 				lvip[lv_ix].lv_is_contiguous = 1;
 				ret = 1;
@@ -278,12 +279,10 @@ int aix_partition(struct parsed_partitions *state)
 		}
 		for (i = 0; i < state->limit; i += 1)
 			if (lvip[i].pps_found && !lvip[i].lv_is_contiguous) {
-				char tmp[sizeof(n[i].name) + 1]; // null char
-
-				snprintf(tmp, sizeof(tmp), "%s", n[i].name);
-				pr_warn("partition %s (%u pp's found) is "
+				pr_warn("partition %.*s (%u pp's found) is "
 					"not contiguous\n",
-					tmp, lvip[i].pps_found);
+					(int)sizeof(n[i].name), n[i].name,
+					lvip[i].pps_found);
 			}
 		kfree(pvd);
 	}
