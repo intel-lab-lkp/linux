@@ -1003,12 +1003,12 @@ struct task_struct {
 	 * schedule()			  if (p->on_rq && ..) // false
 	 *   smp_mb__after_spinlock();	  if (smp_load_acquire(&p->on_cpu) && //true
 	 *   deactivate_task()		      ttwu_queue_wakelist())
-	 *     p->on_rq = 0;			p->sched_remote_wakeup = Y;
+	 *     p->on_rq = 0;			p->sched_remote_wakeup_flags = Y;
 	 *
 	 * guarantees all stores of 'current' are visible before
-	 * ->sched_remote_wakeup gets used, so it can be in this word.
+	 * ->sched_remote_wakeup_flags gets used, so it can be in this word.
 	 */
-	unsigned			sched_remote_wakeup:1;
+	unsigned			sched_remote_wakeup_flags:8;
 #ifdef CONFIG_RT_MUTEXES
 	unsigned			sched_rt_mutex:1;
 #endif
