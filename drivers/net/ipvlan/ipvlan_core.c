@@ -9,6 +9,8 @@
 
 static u32 ipvlan_jhash_secret __read_mostly;
 
+static DEFINE_PER_CPU(int, ipvlan_xmit_depth);
+
 void ipvlan_init_secret(void)
 {
 	net_get_random_once(&ipvlan_jhash_secret, sizeof(ipvlan_jhash_secret));
@@ -676,6 +678,7 @@ int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct ipvl_port *port = ipvlan_port_get_rcu_bh(ipvlan->phy_dev);
+	int ret = NET_XMIT_DROP;
 
 	if (!port)
 		goto out;
@@ -683,18 +686,32 @@ int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (unlikely(!pskb_may_pull(skb, sizeof(struct ethhdr))))
 		goto out;
 
+	if (this_cpu_read(ipvlan_xmit_depth)) {
+		net_crit_ratelimited("ipvlan: xmit recursion detected on dev %s\n",
+				     dev->name);
+		goto out;
+	}
+
+	this_cpu_inc(ipvlan_xmit_depth);
 	switch(port->mode) {
 	case IPVLAN_MODE_L2:
-		return ipvlan_xmit_mode_l2(skb, dev);
+		ret = ipvlan_xmit_mode_l2(skb, dev);
+		break;
 	case IPVLAN_MODE_L3:
 #ifdef CONFIG_IPVLAN_L3S
 	case IPVLAN_MODE_L3S:
 #endif
-		return ipvlan_xmit_mode_l3(skb, dev);
+		ret = ipvlan_xmit_mode_l3(skb, dev);
+		break;
+	default:
+		WARN_ONCE(true, "%s called for mode = [%x]\n",
+			  __func__, port->mode);
+		kfree_skb(skb);
+		break;
 	}
+	this_cpu_dec(ipvlan_xmit_depth);
+	return ret;
 
-	/* Should not reach here */
-	WARN_ONCE(true, "%s called for mode = [%x]\n", __func__, port->mode);
 out:
 	kfree_skb(skb);
 	return NET_XMIT_DROP;
