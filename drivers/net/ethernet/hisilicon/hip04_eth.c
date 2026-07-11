@@ -15,6 +15,7 @@
 #include <linux/of_net.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
+#include <linux/mutex.h>
 
 #define SC_PPE_RESET_DREQ		0x026C
 
@@ -232,6 +233,8 @@ struct hip04_priv {
 	int tx_coalesce_frames;
 	int tx_coalesce_usecs;
 	struct hrtimer tx_coalesce_timer;
+	bool closing;
+	struct mutex state_lock; /* Serializes MAC open/stop and timeout recovery. */
 
 	unsigned char *rx_buf[RX_DESC_NUM];
 	dma_addr_t rx_phys[RX_DESC_NUM];
@@ -497,6 +500,12 @@ static void hip04_start_tx_timer(struct hip04_priv *priv)
 {
 	unsigned long ns = priv->tx_coalesce_usecs * NSEC_PER_USEC / 2;
 
+	/* Do not (re-)arm the Tx coalesce timer once teardown has begun.
+	 * Both arming sites (Tx and NAPI Rx poll) go through here.
+	 */
+	if (smp_load_acquire(&priv->closing))
+		return;
+
 	/* allow timer to fire after half the time at the earliest */
 	hrtimer_start_range_ns(&priv->tx_coalesce_timer, ns_to_ktime(ns),
 			       ns, HRTIMER_MODE_REL);
@@ -649,12 +658,15 @@ refill:
 		priv->reg_inten |= RCV_INT;
 		writel_relaxed(priv->reg_inten, priv->base + PPE_INTEN);
 	}
+	/* Arm the coalesce timer BEFORE napi_complete_done(): napi_disable()
+	 * in hip04_mac_stop() returns once SCHED is cleared here, not when
+	 * the poll function returns, so arming afterwards can slip past the
+	 * stop path's hrtimer_cancel().
+	 */
+	if (tx_remaining)
+		hip04_start_tx_timer(priv);
 	napi_complete_done(napi, rx);
 done:
-	/* start a new timer if necessary */
-	if (rx < budget && tx_remaining)
-		hip04_start_tx_timer(priv);
-
 	return rx;
 }
 
@@ -720,7 +732,7 @@ static void hip04_adjust_link(struct net_device *ndev)
 	}
 }
 
-static int hip04_mac_open(struct net_device *ndev)
+static int __hip04_mac_open(struct net_device *ndev)
 {
 	struct hip04_priv *priv = netdev_priv(ndev);
 	int i;
@@ -743,6 +755,13 @@ static int hip04_mac_open(struct net_device *ndev)
 		hip04_set_recv_desc(priv, phys);
 	}
 
+	/* RX mappings are established; clear the closing flag before
+	 * re-enabling traffic.  The store-release pairs with the load-acquire
+	 * in hip04_start_tx_timer(); state_lock serializes this against
+	 * mac_stop()'s store-release.
+	 */
+	smp_store_release(&priv->closing, false);
+
 	if (priv->phy)
 		phy_start(priv->phy);
 
@@ -754,13 +773,42 @@ static int hip04_mac_open(struct net_device *ndev)
 	return 0;
 }
 
-static int hip04_mac_stop(struct net_device *ndev)
+static int hip04_mac_open(struct net_device *ndev)
+{
+	struct hip04_priv *priv = netdev_priv(ndev);
+	int ret;
+
+	mutex_lock(&priv->state_lock);
+	ret = __hip04_mac_open(ndev);
+	mutex_unlock(&priv->state_lock);
+	return ret;
+}
+
+static int __hip04_mac_stop(struct net_device *ndev)
 {
 	struct hip04_priv *priv = netdev_priv(ndev);
 	int i;
 
+	/* Stop new timer arms before draining: set the closing flag (checked
+	 * at the single arming site), wait for the NAPI poll and any in-flight
+	 * TX to finish, then cancel the timer.
+	 *
+	 * netif_tx_disable() (not netif_stop_queue()) is required because this
+	 * function is also called directly from hip04_tx_timeout_task(), not
+	 * only via .ndo_stop where the core has already deactivated TX;
+	 * netif_tx_disable() waits for an in-flight hip04_mac_start_xmit(),
+	 * which arms the timer, to finish.
+	 *
+	 * Because hip04_rx_poll() arms the timer before napi_complete_done(),
+	 * napi_disable() returning means that arm has happened, so the
+	 * hrtimer_cancel() below cannot miss it.  The store-release pairs
+	 * with the load in hip04_start_tx_timer().
+	 */
+	smp_store_release(&priv->closing, true);
+
 	napi_disable(&priv->napi);
-	netif_stop_queue(ndev);
+	netif_tx_disable(ndev);
+	hrtimer_cancel(&priv->tx_coalesce_timer);
 	hip04_mac_disable(ndev);
 	hip04_tx_reclaim(ndev, true);
 	hip04_reset_ppe(priv);
@@ -779,6 +827,16 @@ static int hip04_mac_stop(struct net_device *ndev)
 	return 0;
 }
 
+static int hip04_mac_stop(struct net_device *ndev)
+{
+	struct hip04_priv *priv = netdev_priv(ndev);
+
+	mutex_lock(&priv->state_lock);
+	__hip04_mac_stop(ndev);
+	mutex_unlock(&priv->state_lock);
+	return 0;
+}
+
 static void hip04_timeout(struct net_device *ndev, unsigned int txqueue)
 {
 	struct hip04_priv *priv = netdev_priv(ndev);
@@ -791,8 +849,23 @@ static void hip04_tx_timeout_task(struct work_struct *work)
 	struct hip04_priv *priv;
 
 	priv = container_of(work, struct hip04_priv, tx_timeout_task);
-	hip04_mac_stop(priv->ndev);
-	hip04_mac_open(priv->ndev);
+
+	/* Serialize the restart with .ndo_open/.ndo_stop, which take the
+	 * same lock.  If a close has completed or is in progress the
+	 * netif_running() check bails; if that check races the core's
+	 * running-state clear, .ndo_stop still runs under state_lock
+	 * afterwards and stops the device, so this worker cannot leave the
+	 * MAC re-enabled against a teardown.
+	 */
+	mutex_lock(&priv->state_lock);
+	if (!netif_running(priv->ndev))
+		goto out;
+
+	__hip04_mac_stop(priv->ndev);
+	if (__hip04_mac_open(priv->ndev))
+		netdev_err(priv->ndev, "restart after tx timeout failed\n");
+out:
+	mutex_unlock(&priv->state_lock);
 }
 
 static int hip04_get_coalesce(struct net_device *netdev,
@@ -983,6 +1056,7 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	}
 
 	INIT_WORK(&priv->tx_timeout_task, hip04_tx_timeout_task);
+	mutex_init(&priv->state_lock);
 
 	ndev->netdev_ops = &hip04_netdev_ops;
 	ndev->ethtool_ops = &hip04_ethtool_ops;
@@ -1026,13 +1100,24 @@ static void hip04_remove(struct platform_device *pdev)
 	struct hip04_priv *priv = netdev_priv(ndev);
 	struct device *d = &pdev->dev;
 
+	unregister_netdev(ndev);
+
+	/* The IRQ is devm-managed and would otherwise be freed only after
+	 * this function returns.  Free it now, after unregister_netdev() has
+	 * run .ndo_stop to stop the device and mask its interrupt source, but
+	 * before the manual free_netdev() below, so that hip04_mac_interrupt()
+	 * (dev_id == ndev) cannot fire against freed memory.  free_irq() also
+	 * drains any in-flight handler.
+	 */
+	devm_free_irq(d, ndev->irq, ndev);
+	cancel_work_sync(&priv->tx_timeout_task);
+	hrtimer_cancel(&priv->tx_coalesce_timer);
+
 	if (priv->phy)
 		phy_disconnect(priv->phy);
 
 	hip04_free_ring(ndev, d);
-	unregister_netdev(ndev);
 	of_node_put(priv->phy_node);
-	cancel_work_sync(&priv->tx_timeout_task);
 	free_netdev(ndev);
 }
 
