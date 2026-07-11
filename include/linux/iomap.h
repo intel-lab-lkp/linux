@@ -393,6 +393,10 @@ loff_t iomap_seek_data(struct inode *inode, loff_t offset,
 sector_t iomap_bmap(struct address_space *mapping, sector_t bno,
 		const struct iomap_ops *ops);
 
+int iomap_symlink_write(struct inode *inode, const char *target, int len,
+		const struct iomap_ops *ops,
+		const struct iomap_write_ops *write_ops, void *private);
+
 /*
  * Flags for iomap_ioend->io_flags.
  */
