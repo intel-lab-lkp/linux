@@ -77,6 +77,11 @@ struct ttm_pool_dma {
  * @dma_addr: Pointer to the next tt dma_address entry to populate if any.
  * @remaining_pages: Remaining pages to populate.
  * @tt_caching: The requested cpu-caching for the pages allocated.
+ * @defrag_bytes_remaining: Byte budget for newly (re)allocated pages on a
+ * defragmentation move, seeded from ttm_operation_ctx::defrag_bytes_remaining.
+ * Pages harvested (borrowed) from the old tt are free and do not count; once
+ * this drops to zero the allocator stops upgrading and harvests the remainder.
+ * On completion it holds the unused budget. 0 means unlimited (no defrag cap).
  */
 struct ttm_pool_alloc_state {
 	struct page **pages;
@@ -84,6 +89,7 @@ struct ttm_pool_alloc_state {
 	dma_addr_t *dma_addr;
 	pgoff_t remaining_pages;
 	enum ttm_caching tt_caching;
+	s64 defrag_bytes_remaining;
 };
 
 /**
@@ -780,6 +786,7 @@ static void ttm_pool_alloc_state_init(const struct ttm_tt *tt,
 	alloc->dma_addr = tt->dma_address;
 	alloc->remaining_pages = tt->num_pages;
 	alloc->tt_caching = tt->caching;
+	alloc->defrag_bytes_remaining = 0;
 }
 
 /*
@@ -885,8 +892,12 @@ static int ttm_pool_harvest_page(struct ttm_tt *old_tt, unsigned int order,
 
 static int ttm_pool_harvest_remaining(struct ttm_pool *pool,
 				      struct ttm_tt *old_tt, pgoff_t off,
-				      struct ttm_pool_alloc_state *alloc)
+				      struct ttm_pool_alloc_state *alloc,
+				      bool *suboptimal)
 {
+	unsigned int beneficial = ttm_pool_beneficial_order(pool);
+	pgoff_t bnr = 1UL << beneficial;
+
 	/*
 	 * @off is always an old-tt chunk head here, never a tail page, so
 	 * reading the per-chunk order below is safe. This holds because:
@@ -906,7 +917,22 @@ static int ttm_pool_harvest_remaining(struct ttm_pool *pool,
 		struct page *p = old_tt->pages[off];
 		unsigned int order = ttm_pool_page_order(pool, p);
 		pgoff_t nr = 1UL << order;
+		pgoff_t num_pages = off + alloc->remaining_pages;
 		int r;
+
+		/*
+		 * Only report a sub-optimal backing when a chunk we cannot
+		 * upgrade (out of budget/prealloc) sits in a beneficial-order
+		 * aligned region that fully fits in the tt: that region could
+		 * have been upgraded with more budget. A chunk below the
+		 * beneficial order is expected for the unaligned tail (the last
+		 * partial beneficial-order region) and for already beneficial-
+		 * order harvests - neither leaves real defrag work, so they must
+		 * not flag the tt for re-queue.
+		 */
+		if (beneficial && order < beneficial &&
+		    round_down(off, bnr) + bnr <= num_pages)
+			*suboptimal = true;
 
 		r = ttm_pool_harvest_page(old_tt, order, off, alloc);
 		if (r)
@@ -951,6 +977,7 @@ struct ttm_pool_alloc_iter {
 	struct ttm_tt *defrag_old_tt;
 	unsigned int beneficial_order;
 	gfp_t gfp_flags;
+	bool defrag_capped;
 
 	/* Mutated as the loop walks the orders. */
 	unsigned int order;
@@ -961,6 +988,44 @@ struct ttm_pool_alloc_iter {
 	pgoff_t old_cursor;
 	struct page *p;
 };
+
+/*
+ * Defrag move budget exhausted: the upgrade can make no further progress this
+ * pass. Snapshot @defrag_capped is set only when a byte budget was in force at
+ * entry.
+ */
+static bool ttm_pool_iter_defrag_exhausted(const struct ttm_pool_alloc_iter *it)
+{
+	if (!it->defrag_old_tt)
+		return false;
+
+	return it->defrag_capped && it->alloc->defrag_bytes_remaining <= 0;
+}
+
+/*
+ * Complete the new tt by harvesting the rest of the old tt as-is (borrowing its
+ * pages, including any still below beneficial order). Never fall back to in-lock
+ * reclaim for the shortfall - that would reintroduce the stall we preallocated
+ * to avoid. Only re-queue (flag) the tt when the harvested remainder is
+ * genuinely sub-optimal; if every remaining old chunk was already at beneficial
+ * order the move fully upgraded the object.
+ */
+static int ttm_pool_iter_harvest_rest(struct ttm_pool_alloc_iter *it)
+{
+	pgoff_t off = it->tt->num_pages - it->alloc->remaining_pages;
+	bool suboptimal = false;
+	int r;
+
+	r = ttm_pool_harvest_remaining(it->pool, it->defrag_old_tt, off,
+				       it->alloc, &suboptimal);
+	if (r)
+		return r;
+
+	if (suboptimal)
+		it->tt->page_flags |= TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
+
+	return 0;
+}
 
 /*
  * Defrag move: reuse an already beneficial-order chunk from the old tt at this
@@ -1062,11 +1127,12 @@ static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 		if (it->alloc_count && it->defrag_old_tt) {
 			pgoff_t off = it->tt->num_pages -
 				      it->alloc->remaining_pages;
+			bool suboptimal = false;
 			int r;
 
 			r = ttm_pool_harvest_remaining(it->pool,
 						       it->defrag_old_tt, off,
-						       it->alloc);
+						       it->alloc, &suboptimal);
 			if (r)
 				return r;
 
@@ -1121,10 +1187,23 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		gfp_flags |= GFP_HIGHUSER;
 
 	it.gfp_flags = gfp_flags;
+	it.defrag_capped = it.defrag_old_tt && alloc->defrag_bytes_remaining > 0;
 
 	for (it.order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
 	     alloc->remaining_pages;
 	     it.order = ttm_pool_alloc_find_order(it.order, alloc)) {
+		/*
+		 * Out of defrag budget: harvest the rest of the old tt as-is and
+		 * stop (the tt is re-queued if the remainder is still
+		 * sub-optimal).
+		 */
+		if (ttm_pool_iter_defrag_exhausted(&it)) {
+			r = ttm_pool_iter_harvest_rest(&it);
+			if (r)
+				goto error_free_all;
+			break;
+		}
+
 		/* Reuse an already beneficial-order chunk from the old tt. */
 		r = ttm_pool_iter_reuse_old(&it);
 		if (r < 0)
@@ -1154,6 +1233,15 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			if (r)
 				goto error_free_all;
 		}
+
+		/*
+		 * Charge a newly (re)allocated chunk against the defrag move
+		 * budget. Harvested chunks borrow the old tt's pages for free
+		 * and never reach here.
+		 */
+		if (it.defrag_capped)
+			alloc->defrag_bytes_remaining -=
+				(s64)(1UL << it.order) << PAGE_SHIFT;
 
 		it.alloc_count++;
 	}
@@ -1204,14 +1292,21 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		   struct ttm_operation_ctx *ctx)
 {
 	struct ttm_pool_alloc_state alloc;
+	int ret;
 
 	if (WARN_ON(ttm_tt_is_backed_up(tt)))
 		return -EINVAL;
 
 	tt->page_flags &= ~TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
 	ttm_pool_alloc_state_init(tt, &alloc);
+	alloc.defrag_bytes_remaining = ctx->defrag_bytes_remaining;
 
-	return __ttm_pool_alloc(pool, tt, ctx, &alloc, NULL);
+	ret = __ttm_pool_alloc(pool, tt, ctx, &alloc, NULL);
+
+	/* Report the unused defrag budget back to the caller. */
+	ctx->defrag_bytes_remaining = alloc.defrag_bytes_remaining;
+
+	return ret;
 }
 EXPORT_SYMBOL(ttm_pool_alloc);
 

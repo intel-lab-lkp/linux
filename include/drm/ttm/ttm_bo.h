@@ -224,6 +224,20 @@ struct ttm_operation_ctx {
 	 */
 	struct ttm_tt *defrag_old_tt;
 	/**
+	 * @defrag_bytes_remaining: Byte budget for newly allocated pages during
+	 * a defragmentation move. Only pages that are actually (re)allocated at
+	 * the beneficial order count against it; pages harvested (borrowed) from
+	 * @defrag_old_tt are free and do not. When the budget is exhausted the
+	 * pool allocator stops upgrading and completes the new tt by harvesting
+	 * the remainder of @defrag_old_tt, marking the tt sub-optimal so the
+	 * driver can resume on a later pass. The allocator decrements this as it
+	 * allocates, so on return it holds the unused budget (which the caller
+	 * can use to compute how many bytes were spent). A value of 0 means
+	 * unlimited (upgrade the whole object). Only consulted when
+	 * @defrag_old_tt is set.
+	 */
+	s64 defrag_bytes_remaining;
+	/**
 	 * @resv: Reservation object to be used together with
 	 * @allow_res_evict.
 	 */
