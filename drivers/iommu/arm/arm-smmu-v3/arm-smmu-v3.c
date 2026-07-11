@@ -4505,6 +4505,13 @@ static int arm_smmu_init_strtab_linear(struct arm_smmu_device *smmu)
 	return 0;
 }
 
+static void arm_smmu_deinit_strtab(void *data)
+{
+	struct arm_smmu_device *smmu = data;
+
+	ida_destroy(&smmu->vmid_map);
+}
+
 static int arm_smmu_init_strtab(struct arm_smmu_device *smmu)
 {
 	int ret;
@@ -4523,7 +4530,8 @@ static int arm_smmu_init_strtab(struct arm_smmu_device *smmu)
 out:
 	ida_init(&smmu->vmid_map);
 
-	return 0;
+	return devm_add_action_or_reset(smmu->dev, arm_smmu_deinit_strtab,
+					smmu);
 }
 
 static int arm_smmu_init_structures(struct arm_smmu_device *smmu)
@@ -5564,7 +5572,6 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 	iommu_device_sysfs_remove(&smmu->iommu);
 	arm_smmu_device_disable(smmu);
 	iopf_queue_free(smmu->evtq.iopf);
-	ida_destroy(&smmu->vmid_map);
 }
 
 static void arm_smmu_device_shutdown(struct platform_device *pdev)
