@@ -144,7 +144,13 @@ static void pse_release_pis(struct pse_controller_dev *pcdev)
 		of_node_put(pcdev->pi[i].pairset[1].np);
 		of_node_put(pcdev->pi[i].np);
 	}
+	/* Free under the lock so the NULL store is authoritative against
+	 * the regulator ops that read pcdev->pi under pcdev->lock.
+	 */
+	mutex_lock(&pcdev->lock);
 	kfree(pcdev->pi);
+	pcdev->pi = NULL;
+	mutex_unlock(&pcdev->lock);
 }
 
 /**
@@ -421,6 +427,11 @@ static int pse_pi_is_enabled(struct regulator_dev *rdev)
 
 	id = rdev_get_id(rdev);
 	mutex_lock(&pcdev->lock);
+	/* Controller may be unregistered (pcdev->pi freed) mid-teardown. */
+	if (!pcdev->pi) {
+		ret = -ENODEV;
+		goto out;
+	}
 	if (pse_pw_d_is_sw_pw_control(pcdev, pcdev->pi[id].pw_d)) {
 		ret = pcdev->pi[id].admin_state_enabled;
 		goto out;
@@ -674,6 +685,11 @@ static int pse_pi_enable(struct regulator_dev *rdev)
 
 	id = rdev_get_id(rdev);
 	mutex_lock(&pcdev->lock);
+	/* Controller may be unregistered (pcdev->pi freed) mid-teardown. */
+	if (!pcdev->pi) {
+		mutex_unlock(&pcdev->lock);
+		return -ENODEV;
+	}
 	if (pse_pw_d_is_sw_pw_control(pcdev, pcdev->pi[id].pw_d)) {
 		/* Manage enabled status by software.
 		 * Real enable process will happen if a port is connected.
@@ -702,15 +718,20 @@ static int pse_pi_enable(struct regulator_dev *rdev)
 static int pse_pi_disable(struct regulator_dev *rdev)
 {
 	struct pse_controller_dev *pcdev = rdev_get_drvdata(rdev);
-	struct pse_pi *pi;
 	int id, ret;
 
 	id = rdev_get_id(rdev);
-	pi = &pcdev->pi[id];
 	mutex_lock(&pcdev->lock);
+	/* Reached via the regulator core's deferred-disable flush after
+	 * pcdev->pi is freed on unregister.
+	 */
+	if (!pcdev->pi) {
+		mutex_unlock(&pcdev->lock);
+		return 0;
+	}
 	ret = _pse_pi_disable(pcdev, id);
 	if (!ret)
-		pi->admin_state_enabled = 0;
+		pcdev->pi[id].admin_state_enabled = 0;
 
 	mutex_unlock(&pcdev->lock);
 	return 0;
