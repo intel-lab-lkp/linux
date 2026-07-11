@@ -802,6 +802,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
 	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
+	struct cxl_root_decoder *cxlrd;
 	int id = cxld->id, rc;
 
 	if (cxld->flags & CXL_DECODER_F_ENABLE)
@@ -831,6 +832,34 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 				"attempted to commit %s during sanitize\n",
 				dev_name(&cxld->dev));
 			return -EBUSY;
+		}
+	}
+
+	/*
+	 * Enforce CFMWS memory type policy: reject commits where the decoder
+	 * target_type conflicts with the root decoder's CFMWS restrictions.
+	 * - HDM-DB (DEVMEM) requires CXL_DECODER_F_TYPE2 on the root decoder.
+	 * - HDM-H (HOSTONLYMEM) requires CXL_DECODER_F_TYPE3 on the root decoder.
+	 * - Unknown target_type values leave required_flag zero; skip enforcement.
+	 */
+	if (cxld->region) {
+		unsigned long required_flag = 0;
+		const char *type_name;
+
+		cxlrd = to_cxl_root_decoder(cxld->region->dev.parent);
+		if (cxld->target_type == CXL_DECODER_DEVMEM) {
+			required_flag = CXL_DECODER_F_TYPE2;
+			type_name = "HDM-DB";
+		} else if (cxld->target_type == CXL_DECODER_HOSTONLYMEM) {
+			required_flag = CXL_DECODER_F_TYPE3;
+			type_name = "HDM-H";
+		}
+
+		if (required_flag && !(cxlrd->cxlsd.cxld.flags & required_flag)) {
+			dev_err(&port->dev,
+				"%s commit rejected on %s, CFMWS does not permit this memory type\n",
+				type_name, dev_name(&cxld->dev));
+			return -EOPNOTSUPP;
 		}
 	}
 
