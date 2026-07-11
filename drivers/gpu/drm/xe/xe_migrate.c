@@ -835,6 +835,63 @@ static void emit_copy(struct xe_gt *gt, struct xe_bb *bb,
 		emit_xy_fast_copy(gt, bb, src_ofs, dst_ofs, size, pitch);
 }
 
+/*
+ * emit_copy_chunks() - Emit the data blits for one defrag L0 chunk, skipping
+ * borrowed pages.
+ * @gt: The GT.
+ * @bb: The batch buffer to emit into, or NULL to only count the blits needed.
+ * @src_L0_ofs: GPU offset of the source pages mapped for this L0 chunk.
+ * @dst_L0_ofs: GPU offset of the destination pages mapped for this L0 chunk.
+ * @src_L0: Byte size of the L0 chunk (page aligned).
+ * @src_tt: Source (old) tt providing the page pointers.
+ * @dst_tt: Destination (new) tt providing the page pointers.
+ * @start_page: Page offset of this L0 chunk within the tt page arrays.
+ *
+ * A defragmentation move may harvest already beneficial-order chunks from the
+ * old tt, so the new tt references (borrows) some of the same physical pages.
+ * For those pages the source and destination GPU mappings alias the same
+ * memory and the data blit is a pointless self-copy. Walk the L0 chunk and
+ * only blit runs of pages that actually differ (src page != dst page),
+ * coalescing contiguous to-copy pages into a single blit.
+ *
+ * Return: The number of blits emitted (or that would be emitted when @bb is
+ * NULL).
+ */
+static u32 emit_copy_chunks(struct xe_gt *gt, struct xe_bb *bb,
+			    u64 src_L0_ofs, u64 dst_L0_ofs, u32 src_L0,
+			    struct ttm_tt *src_tt, struct ttm_tt *dst_tt,
+			    pgoff_t start_page)
+{
+	u32 npages = src_L0 >> PAGE_SHIFT;
+	u32 i = 0, nblits = 0;
+
+	while (i < npages) {
+		u32 run = 0;
+
+		/* Skip a run of borrowed pages (src and dst alias). */
+		if (src_tt->pages[start_page + i] ==
+		    dst_tt->pages[start_page + i]) {
+			i++;
+			continue;
+		}
+
+		/* Coalesce a run of pages that actually need copying. */
+		while (i + run < npages &&
+		       src_tt->pages[start_page + i + run] !=
+		       dst_tt->pages[start_page + i + run])
+			run++;
+
+		if (bb)
+			emit_copy(gt, bb, src_L0_ofs + (u64)i * PAGE_SIZE,
+				  dst_L0_ofs + (u64)i * PAGE_SIZE,
+				  run * PAGE_SIZE, XE_PAGE_SIZE);
+		nblits++;
+		i += run;
+	}
+
+	return nblits;
+}
+
 static u64 xe_migrate_batch_base(struct xe_migrate *m, bool usm)
 {
 	return usm ? m->usm_batch_base_ofs : m->batch_base_ofs;
@@ -889,13 +946,15 @@ static u32 xe_migrate_ccs_copy(struct xe_migrate *m,
  * @is_vram_resolve: Decompression (VRAM -> system) resolve; always uses the
  * compression PAT index for the data copy.
  * @defrag_ccs: Defrag move pass that migrates only the CCS aux state between
- * two distinct page sets (old @src_sg pages -> new pages). The data blit is
+ * two distinct page sets (old @src_tt pages -> new pages). The data blit is
  * skipped (the data was copied by the @defrag_copy pass) and both the source
  * and destination data pages are mapped with the compression PAT so the aux
  * state is copied indirect -> indirect.
  * @defrag_copy: Defrag move pass that copies the data pages between two
- * distinct page sets (old @src_sg pages -> new pages) without touching the CCS
- * aux state. The data pages are mapped without the compression PAT so the
+ * distinct page sets (old @src_tt pages -> new pages) without touching the CCS
+ * aux state. Pages the new tt borrowed from @src_tt (harvested already
+ * beneficial-order chunks) alias the same memory on both sides and are skipped.
+ * The data pages are mapped without the compression PAT so the
  * (possibly compressed) bytes are copied verbatim rather than being
  * decompressed and recompressed, and no CCS aux copy is appended; the aux
  * state is migrated separately by the @defrag_ccs pass. The two passes need
@@ -913,7 +972,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 					   struct xe_bo *dst_bo,
 					   struct ttm_resource *src,
 					   struct ttm_resource *dst,
-					   struct sg_table *src_sg,
+					   struct ttm_tt *src_tt,
 					   struct xe_migrate_copy_flags flags)
 {
 	struct xe_gt *gt = m->tile->primary_gt;
@@ -938,6 +997,14 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		!flags.defrag_copy;
 	bool copy_system_ccs = copy_ccs && (!src_is_vram || !dst_is_vram) &&
 		!flags.defrag_ccs && !flags.defrag_copy;
+	/*
+	 * On the defrag data pass the new (destination) tt may have borrowed
+	 * already beneficial-order pages from the old (source) tt, so skip the
+	 * self-copy for any page they share. Compare the tt page arrays at the
+	 * matching offset.
+	 */
+	struct ttm_tt *dst_tt = dst_bo->ttm.ttm;
+	bool skip_borrowed = flags.defrag_copy && src_tt && dst_tt;
 
 	/*
 	 * For decompression operation, always use the compression PAT index.
@@ -950,7 +1017,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 
 	/*
 	 * The defrag CCS pass migrates the aux state from the old pages
-	 * (@src_sg) to the new pages with both sides accessed indirectly, so
+	 * (@src_tt) to the new pages with both sides accessed indirectly, so
 	 * keep both src_is_pltt and dst_is_pltt set (no direct staging side).
 	 */
 
@@ -962,7 +1029,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		return ERR_PTR(-EINVAL);
 
 	if (!src_is_vram)
-		xe_res_first_sg(src_sg ? src_sg : xe_bo_sg(src_bo), 0, size, &src_it);
+		xe_res_first_sg(src_tt ? xe_tt_sg(src_tt) : xe_bo_sg(src_bo), 0, size, &src_it);
 	else
 		xe_res_first(src, 0, size, &src_it);
 	if (!dst_is_vram)
@@ -971,7 +1038,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		xe_res_first(dst, 0, size, &dst_it);
 
 	if (copy_system_ccs)
-		xe_res_first_sg(src_sg ? src_sg : xe_bo_sg(src_bo),
+		xe_res_first_sg(src_tt ? xe_tt_sg(src_tt) : xe_bo_sg(src_bo),
 				xe_bo_ccs_pages_start(src_bo),
 				PAGE_ALIGN(xe_device_ccs_bytes(xe, size)),
 				&ccs_it);
@@ -985,6 +1052,8 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		u64 ccs_ofs, ccs_size;
 		u32 ccs_pt;
 		u32 pte_flags;
+		pgoff_t start_page = (xe_bo_size(src_bo) - size) >> PAGE_SHIFT;
+		u32 ndata_blits = 1;
 
 		bool usm = xe->info.has_usm;
 		u32 avail_pts = max_mem_transfer_per_pass(xe) / LEVEL0_PAGE_TABLE_ENCODE_SIZE;
@@ -1022,9 +1091,30 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 			xe_assert(xe, IS_ALIGNED(ccs_it.start, PAGE_SIZE));
 		}
 
-		/* Add copy commands size here */
+		/*
+		 * Add copy commands size here. On the defrag data pass the blit
+		 * is split into one command per run of non-borrowed pages, so
+		 * size for the number of runs actually needed.
+		 */
+		if (skip_borrowed)
+			ndata_blits = emit_copy_chunks(gt, NULL, 0, 0, src_L0,
+						       src_tt, dst_tt, start_page);
+
+		/*
+		 * If every page in this chunk was borrowed there is nothing to
+		 * copy: don't build a batch or issue any GPU commands, just
+		 * advance the cursors past the chunk. The non-vram tt cursors
+		 * would otherwise be advanced by emit_pte().
+		 */
+		if (skip_borrowed && !ndata_blits) {
+			xe_res_next(&src_it, src_L0);
+			xe_res_next(&dst_it, src_L0);
+			size -= src_L0;
+			continue;
+		}
+
 		batch_size += ((flags.copy_only_ccs || flags.defrag_ccs) ? 0 :
-			       emit_copy_cmd_len(xe)) +
+			       ndata_blits * emit_copy_cmd_len(xe)) +
 			((needs_ccs_emit ? EMIT_COPY_CCS_DW : 0));
 
 		bb = xe_bb_new(gt, batch_size, usm);
@@ -1053,7 +1143,10 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		bb->cs[bb->len++] = MI_BATCH_BUFFER_END;
 		update_idx = bb->len;
 
-		if (!flags.copy_only_ccs && !flags.defrag_ccs)
+		if (skip_borrowed)
+			emit_copy_chunks(gt, bb, src_L0_ofs, dst_L0_ofs, src_L0,
+					 src_tt, dst_tt, start_page);
+		else if (!flags.copy_only_ccs && !flags.defrag_ccs)
 			emit_copy(gt, bb, src_L0_ofs, dst_L0_ofs, src_L0, XE_PAGE_SIZE);
 
 		if (needs_ccs_emit)
@@ -1112,6 +1205,14 @@ err_sync:
 		return ERR_PTR(err);
 	}
 
+	/*
+	 * Every chunk of a defrag data pass may have been borrowed (nothing
+	 * copied), leaving no job and a NULL fence. Hand back a signaled stub
+	 * so callers always get a valid fence to wait on.
+	 */
+	if (!fence)
+		return dma_fence_get_stub();
+
 	return fence;
 }
 
@@ -1153,18 +1254,21 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
  * @bo: The buffer object being defragmented. Both @src and @dst belong to @bo.
  * @src: The source TTM resource (the old backing).
  * @dst: The dst TTM resource (the freshly reallocated backing).
- * @src_sg: Scatter-gather table of the source (old) backing pages.
+ * @src_tt: The source (old) backing tt, providing both the scatter-gather
+ * table and page pointers of the old pages.
  * @need_ccs: Whether the BO has CCS aux state that must be migrated too.
  *
  * Used by the defrag path where a single BO has its backing reallocated at a
  * more beneficial page order. The contents are relocated from the old pages
- * (@src_sg) to the new pages (the BO's current backing) entirely on the GPU,
+ * (@src_tt) to the new pages (the BO's current backing) entirely on the GPU,
  * in up to two passes:
  *
  *  - Data pass (always): copy the data pages verbatim. The pages are mapped
  *    without the compression PAT, so the (possibly compressed) bytes are copied
  *    as-is rather than being decompressed and recompressed, and no CCS aux copy
- *    is appended.
+ *    is appended. Pages the new backing borrowed from @src_tt (harvested
+ *    already beneficial-order chunks) alias the same memory on both sides and
+ *    are skipped.
  *
  *  - CCS pass (@need_ccs): copy the CCS aux (compression) state. Both the old
  *    and new data pages are mapped with the compression PAT so the copy engine
@@ -1183,11 +1287,11 @@ struct dma_fence *xe_migrate_copy_defrag(struct xe_migrate *m,
 					 struct xe_bo *bo,
 					 struct ttm_resource *src,
 					 struct ttm_resource *dst,
-					 struct sg_table *src_sg,
+					 struct ttm_tt *src_tt,
 					 bool need_ccs)
 {
 	struct dma_fence *fence2, *fence =
-		__xe_migrate_copy(m, bo, bo, src, dst, src_sg,
+		__xe_migrate_copy(m, bo, bo, src, dst, src_tt,
 				  (struct xe_migrate_copy_flags) {
 					 .defrag_copy = true,
 					 });
@@ -1195,7 +1299,7 @@ struct dma_fence *xe_migrate_copy_defrag(struct xe_migrate *m,
 	if (IS_ERR(fence) || !need_ccs)
 		return fence;
 
-	fence2 = __xe_migrate_copy(m, bo, bo, src, dst, src_sg,
+	fence2 = __xe_migrate_copy(m, bo, bo, src, dst, src_tt,
 				   (struct xe_migrate_copy_flags) {
 				   .defrag_ccs = true,
 				   });

@@ -473,6 +473,22 @@ struct sg_table *xe_bo_sg(struct xe_bo *bo)
 	return xe_tt->sg;
 }
 
+/**
+ * xe_tt_sg() - Return the DMA scatter-gather table backing a ttm_tt.
+ * @tt: The ttm_tt to query.
+ *
+ * Like xe_bo_sg(), but takes the ttm_tt directly. Used by the defrag copy
+ * path which needs the old (source) tt's sg table without a backing xe_bo.
+ *
+ * Return: The sg table, or NULL if the tt is not currently mapped.
+ */
+struct sg_table *xe_tt_sg(struct ttm_tt *tt)
+{
+	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
+
+	return xe_tt->sg;
+}
+
 /*
  * Account ttm pages against the device shrinker's shrinkable and
  * purgeable counts.
@@ -1290,11 +1306,9 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 
 		fence = xe_migrate_clear(migrate, bo, new_mem, flags);
 	} else if (ttm_bo->defrag_old_tt) {
-		struct xe_ttm_tt *old_xe_tt =
-			container_of(ttm_bo->defrag_old_tt, struct xe_ttm_tt, ttm);
-
 		fence = xe_migrate_copy_defrag(migrate, bo, old_mem, new_mem,
-					       old_xe_tt->sg, handle_system_ccs);
+					       ttm_bo->defrag_old_tt,
+					       handle_system_ccs);
 	} else {
 		fence = xe_migrate_copy(migrate, bo, bo, old_mem, new_mem,
 					handle_system_ccs);
