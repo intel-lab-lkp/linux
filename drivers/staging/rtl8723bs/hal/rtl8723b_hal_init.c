@@ -11,6 +11,13 @@
 #include <rtl8723b_hal.h>
 #include "hal_com_h2c.h"
 
+/*
+ * Bitfield layout per the comment above REG_TBTT_PROHIBIT in
+ * drivers/staging/rtl8723bs/include/hal_com_reg.h.
+ */
+#define TBTT_PROHIBIT_SETUP     0x04  /* bits 3:0: setup time, unit 32us */
+#define TBTT_PROHIBIT_HOLD_LOW  0x64  /* bits 15:8: low byte of 12-bit hold time, unit 32us */
+
 static void _FWDownloadEnable(struct adapter *padapter, bool enable)
 {
 	u8 tmp, count = 0;
@@ -859,8 +866,8 @@ void rtl8723b_InitBeaconParameters(struct adapter *padapter)
 
 	rtw_write16(padapter, REG_BCN_CTRL, val16);
 
-	/*  TODO: Remove these magic number */
-	rtw_write16(padapter, REG_TBTT_PROHIBIT, 0x6404);/*  ms */
+	rtw_write16(padapter, REG_TBTT_PROHIBIT,
+		    (TBTT_PROHIBIT_HOLD_LOW << 8) | TBTT_PROHIBIT_SETUP);/*  ms */
 	/*  Firmware will control REG_DRVERLYINT when power saving is enable, */
 	/*  so don't set this register on STA mode. */
 	if (!check_fwstate(&padapter->mlmepriv, WIFI_STATION_STATE))
