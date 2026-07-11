@@ -15,6 +15,8 @@
 
 #include <clocksource/arm_arch_timer.h>
 
+#include "../kernel/idle.h"
+
 #define USECS_TO_CYCLES(time_usecs)			\
 	xloops_to_cycles((time_usecs) * 0x10C7UL)
 
@@ -49,7 +51,8 @@ void __delay(unsigned long cycles)
 		 * Start with WFIT. If an interrupt makes us resume
 		 * early, use a WFET loop to complete the delay.
 		 */
-		wfit(end);
+		if (likely(idle == ARM64_IDLE_WFI))
+			wfit(end);
 		while ((__delay_cycles() - start) < cycles)
 			wfet(end);
 	} else 	if (arch_timer_evtstrm_available()) {
