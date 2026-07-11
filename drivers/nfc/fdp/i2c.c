@@ -128,7 +128,7 @@ static const struct nfc_phy_ops i2c_phy_ops = {
 
 static int fdp_nci_i2c_read(struct fdp_i2c_phy *phy, struct sk_buff **skb)
 {
-	int r, len;
+	int r = -EREMOTEIO, len;
 	u8 tmp[FDP_NCI_I2C_MAX_PAYLOAD], lrc, k;
 	u16 i;
 	struct i2c_client *client = phy->i2c_dev;
@@ -139,6 +139,13 @@ static int fdp_nci_i2c_read(struct fdp_i2c_phy *phy, struct sk_buff **skb)
 	for (k = 0; k < 2; k++) {
 
 		len = phy->next_read_size;
+
+		if (len > FDP_NCI_I2C_MAX_PAYLOAD) {
+			dev_dbg(&client->dev, "%s: read size %d too large\n",
+				__func__, len);
+			phy->next_read_size = FDP_NCI_I2C_MIN_PAYLOAD;
+			goto flush;
+		}
 
 		r = i2c_master_recv(client, tmp, len);
 		if (r != len) {
