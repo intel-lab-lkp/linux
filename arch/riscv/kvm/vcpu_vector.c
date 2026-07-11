@@ -96,6 +96,24 @@ void kvm_riscv_vcpu_free_vector_context(struct kvm_vcpu *vcpu)
 	kfree(vcpu->arch.guest_context.vector.datap);
 	kfree(vcpu->arch.host_context.vector.datap);
 }
+
+bool kvm_riscv_vcpu_flush_vector(void)
+{
+	struct kvm_vcpu *vcpu;
+
+	vcpu = *this_cpu_ptr(kvm_get_running_vcpus());
+	if (vcpu && riscv_isa_extension_available(vcpu->arch.isa, v)) {
+		kvm_riscv_vcpu_guest_vector_save(&vcpu->arch.guest_context,
+						 vcpu->arch.isa);
+
+		if (vcpu->arch.guest_context.sstatus != SR_VS_OFF)
+			current->thread.riscv_v_flags |= RISCV_V_VCPU_NEED_RESTORE;
+
+		return true;
+	}
+	return false;
+}
+
 #endif
 
 static int kvm_riscv_vcpu_vreg_addr(struct kvm_vcpu *vcpu,
