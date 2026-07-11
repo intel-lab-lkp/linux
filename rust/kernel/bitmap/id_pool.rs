@@ -3,6 +3,14 @@
 // Copyright (C) 2025 Google LLC.
 
 //! Rust API for an ID pool backed by a [`BitmapVec`].
+//!
+//! The id pool provided by this file is designed for specialized use-cases
+//! that need an implementation backed by a bitmap. If you just want a generic
+//! ID allocator, please use [`XArray`] instead. Or for use-cases that require
+//! contiguous ranges of IDs, use the [`MapleTree`].
+//!
+//! [`XArray`]: crate::xarray::XArray
+//! [`MapleTree`]: crate::maple_tree::MapleTree
 
 use crate::alloc::{AllocError, Flags};
 use crate::bitmap::BitmapVec;
@@ -23,8 +31,10 @@ use crate::bitmap::BitmapVec;
 /// Basic usage
 ///
 /// ```
-/// use kernel::alloc::AllocError;
-/// use kernel::id_pool::{IdPool, UnusedId};
+/// use kernel::{
+///     alloc::AllocError,
+///     bitmap::id_pool::{IdPool, UnusedId},
+/// };
 ///
 /// let mut pool = IdPool::with_capacity(64, GFP_KERNEL)?;
 /// for i in 0..64 {
@@ -47,7 +57,7 @@ use crate::bitmap::BitmapVec;
 /// ```no_run
 /// use kernel::alloc::{AllocError, flags::GFP_KERNEL};
 /// use kernel::sync::{new_spinlock, SpinLock};
-/// use kernel::id_pool::IdPool;
+/// use kernel::bitmap::id_pool::IdPool;
 ///
 /// fn get_id_maybe_realloc(guarded_pool: &SpinLock<IdPool>) -> Result<usize, AllocError> {
 ///     let mut pool = guarded_pool.lock();
@@ -134,10 +144,12 @@ impl IdPool {
     /// ```
     /// use kernel::{
     ///     alloc::AllocError,
-    ///     bitmap::BitmapVec,
-    ///     id_pool::{
-    ///         IdPool,
-    ///         ReallocRequest,
+    ///     bitmap::{
+    ///         id_pool::{
+    ///             IdPool,
+    ///             ReallocRequest,
+    ///         },
+    ///         BitmapVec,
     ///     },
     /// };
     ///

@@ -77,7 +77,6 @@ pub mod fs;
 pub mod gpu;
 #[cfg(CONFIG_I2C = "y")]
 pub mod i2c;
-pub mod id_pool;
 #[doc(hidden)]
 pub mod impl_flags;
 pub mod init;

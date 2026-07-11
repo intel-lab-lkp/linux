@@ -12,6 +12,8 @@ use crate::bindings;
 use crate::pr_err;
 use core::ptr::NonNull;
 
+pub mod id_pool;
+
 /// Represents a C bitmap. Wraps underlying C bitmap API.
 ///
 /// # Invariants

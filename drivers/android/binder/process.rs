@@ -16,10 +16,10 @@ use core::mem::take;
 
 use kernel::{
     bindings,
+    bitmap::id_pool::IdPool,
     cred::Credential,
     error::Error,
     fs::file::{self, File},
-    id_pool::IdPool,
     list::{List, ListArc, ListArcField, ListLinks},
     mm,
     prelude::*,
