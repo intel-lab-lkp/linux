@@ -145,7 +145,8 @@ static int ttm_pool_nid(struct ttm_pool *pool)
 
 /* Allocate pages of size 1 << order with the given gfp_flags */
 static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
-					unsigned int order)
+					unsigned int order,
+					bool beneficial_reclaim_backoff)
 {
 	const unsigned int beneficial_order = ttm_pool_beneficial_order(pool);
 	unsigned long attr = DMA_ATTR_FORCE_CONTIGUOUS;
@@ -165,10 +166,12 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 	 * Do not add latency to the allocation path for allocations orders
 	 * device tolds us do not bring them additional performance gains.
 	 */
-	if (order && beneficial_order && order != beneficial_order)
+	if (order && beneficial_order &&
+	    (beneficial_reclaim_backoff || order != beneficial_order))
 		gfp_flags &= ~__GFP_RECLAIM;
 
-	if (beneficial_order && order == beneficial_order) {
+	if (!beneficial_reclaim_backoff &&
+	    beneficial_order && order == beneficial_order) {
 		gfp_flags &= ~__GFP_NORETRY;
 		gfp_flags |= __GFP_RETRY_MAYFAIL;
 	}
@@ -814,7 +817,8 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		if (!p) {
 			page_caching = ttm_cached;
 			allow_pools = false;
-			p = ttm_pool_alloc_page(pool, gfp_flags, order);
+			p = ttm_pool_alloc_page(pool, gfp_flags, order,
+						ctx->beneficial_reclaim_backoff);
 		}
 		/* If that fails, lower the order if possible and retry. */
 		if (!p) {
