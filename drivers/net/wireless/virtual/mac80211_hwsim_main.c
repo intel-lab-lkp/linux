@@ -6351,6 +6351,17 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 	    !info->attrs[HWSIM_ATTR_TX_INFO])
 		goto out;
 
+	/*
+	 * HWSIM_ATTR_TX_INFO is NLA_BINARY with only a maximum length in
+	 * its policy entry, so nla_validate() accepts any shorter (incl.
+	 * zero-length) payload. The read loop below unconditionally walks
+	 * IEEE80211_TX_MAX_RATES entries, so reject undersized attributes
+	 * here before any data is touched.
+	 */
+	if (nla_len(info->attrs[HWSIM_ATTR_TX_INFO]) <
+	    IEEE80211_TX_MAX_RATES * sizeof(struct hwsim_tx_rate))
+		goto out;
+
 	src = (void *)nla_data(info->attrs[HWSIM_ATTR_ADDR_TRANSMITTER]);
 	hwsim_flags = nla_get_u32(info->attrs[HWSIM_ATTR_FLAGS]);
 	ret_skb_cookie = nla_get_u64(info->attrs[HWSIM_ATTR_COOKIE]);
