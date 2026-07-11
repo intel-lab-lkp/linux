@@ -742,9 +742,26 @@ static int ses_intf_add(struct device *cdev)
 	/* begin at the enclosure descriptor */
 	type_ptr = buf + 8;
 	/* skip all the enclosure descriptors */
-	for (i = 0; i < num_enclosures && type_ptr < buf + len; i++) {
+	for (i = 0; i < num_enclosures && type_ptr + 4 <= buf + len; i++) {
 		types += type_ptr[2];
 		type_ptr += type_ptr[3] + 4;
+	}
+
+	/*
+	 * Validate the device-reported page 1 geometry before the accessors
+	 * walk it.  page1_types and page1_num_types come straight from the
+	 * enclosure; the page 2 descriptor walks (ses_get_page2_descriptor(),
+	 * ses_set_page2_descriptor()), ses_enclosure_data_process() and the
+	 * logical-id read in ses_show_id() all trust them.  Reject a page 1
+	 * shorter than its logical id, one whose descriptors ran past the end,
+	 * or one declaring more type descriptors than it carries.  Bounding the
+	 * count before it is stored also keeps it within its short.
+	 */
+	if (len < 8 + 4 + (int)sizeof(u64) ||
+	    type_ptr > buf + len ||
+	    types > (buf + len - type_ptr) / 4) {
+		err = -EINVAL;
+		goto err_free;
 	}
 
 	ses_dev->page1_types = type_ptr;
