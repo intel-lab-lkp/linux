@@ -332,6 +332,18 @@ void ieee80211_set_bitrate_flags(struct wiphy *wiphy);
 void cfg80211_bss_expire(struct cfg80211_registered_device *rdev);
 void cfg80211_bss_age(struct cfg80211_registered_device *rdev,
                       unsigned long age_secs);
+
+/* why __cfg80211_get_bss() found no usable BSS entry */
+#define CFG80211_BSS_MISS_EXPIRED	BIT(0)
+#define CFG80211_BSS_MISS_USE_FOR	BIT(1)
+
+u32 cfg80211_get_bss_miss_reasons(struct wiphy *wiphy,
+				  struct ieee80211_channel *channel,
+				  const u8 *bssid,
+				  const u8 *ssid, size_t ssid_len,
+				  enum ieee80211_bss_type bss_type,
+				  enum ieee80211_privacy privacy,
+				  u32 use_for);
 void cfg80211_update_assoc_bss_entry(struct wireless_dev *wdev,
 				     unsigned int link,
 				     struct ieee80211_channel *channel);

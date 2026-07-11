@@ -1655,6 +1655,55 @@ struct cfg80211_bss *__cfg80211_get_bss(struct wiphy *wiphy,
 }
 EXPORT_SYMBOL(__cfg80211_get_bss);
 
+/*
+ * Report why __cfg80211_get_bss() with the same arguments found no
+ * usable entry: matching entries exist but are expired, or are not
+ * usable for the requested use. Returns 0 if no entry matches at all.
+ */
+u32 cfg80211_get_bss_miss_reasons(struct wiphy *wiphy,
+				  struct ieee80211_channel *channel,
+				  const u8 *bssid,
+				  const u8 *ssid, size_t ssid_len,
+				  enum ieee80211_bss_type bss_type,
+				  enum ieee80211_privacy privacy,
+				  u32 use_for)
+{
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct cfg80211_internal_bss *bss;
+	unsigned long now = jiffies;
+	u32 reasons = 0;
+	int bss_privacy;
+
+	spin_lock_bh(&rdev->bss_lock);
+
+	list_for_each_entry(bss, &rdev->bss_list, list) {
+		if (!cfg80211_bss_type_match(bss->pub.capability,
+					     bss->pub.channel->band, bss_type))
+			continue;
+
+		bss_privacy = (bss->pub.capability & WLAN_CAPABILITY_PRIVACY);
+		if ((privacy == IEEE80211_PRIVACY_ON && !bss_privacy) ||
+		    (privacy == IEEE80211_PRIVACY_OFF && bss_privacy))
+			continue;
+		if (channel && bss->pub.channel != channel)
+			continue;
+		if (!is_valid_ether_addr(bss->pub.bssid))
+			continue;
+		if (!is_bss(&bss->pub, bssid, ssid, ssid_len))
+			continue;
+
+		if (time_after(now, bss->ts + IEEE80211_SCAN_RESULT_EXPIRE) &&
+		    !atomic_read(&bss->hold))
+			reasons |= CFG80211_BSS_MISS_EXPIRED;
+		else if ((bss->pub.use_for & use_for) != use_for)
+			reasons |= CFG80211_BSS_MISS_USE_FOR;
+	}
+
+	spin_unlock_bh(&rdev->bss_lock);
+
+	return reasons;
+}
+
 static bool rb_insert_bss(struct cfg80211_registered_device *rdev,
 			  struct cfg80211_internal_bss *bss)
 {
