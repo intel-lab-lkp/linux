@@ -966,6 +966,10 @@ drm_gtf_mode_complex(struct drm_device *dev, int hdisplay, int vdisplay,
 	/* 18.Find the ideal blanking duty cycle from blanking duty cycle */
 	ideal_duty_cycle = GTF_C_PRIME * 1000 -
 				(GTF_M_PRIME * 1000000 / hfreq_est);
+	if (ideal_duty_cycle >= 100000) {
+		drm_mode_destroy(dev, drm_mode);
+		return NULL;
+	}
 	/* 19.Find the number of pixels in the blanking time to the nearest
 	 * double character cell: */
 	hblank = total_active_pixels * ideal_duty_cycle /
