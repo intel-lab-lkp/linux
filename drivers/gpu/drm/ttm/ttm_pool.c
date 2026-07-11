@@ -461,6 +461,29 @@ static unsigned int ttm_pool_shrink(int nid, unsigned long num_to_free)
 	return num_pages;
 }
 
+/**
+ * ttm_pool_page_order_nodma() - Allocation order of a non-dma_alloc TTM page
+ * @p: The page to query.
+ *
+ * Return the allocation order that the TTM pool allocator recorded in
+ * @p->private at allocation time. This only works for pages that were
+ * allocated from a pool which does *not* use dma_alloc (i.e. pages backed by
+ * alloc_pages_node()), where TTM stores the order directly in page->private.
+ *
+ * For dma_alloc pools, page->private instead holds a struct ttm_pool_dma
+ * pointer and this helper must not be used. Whether a TTM device uses
+ * dma_alloc is fixed at ttm device init time, so callers are expected to know
+ * from their TTM device configuration that their pages are not dma_alloc
+ * backed before using this helper.
+ *
+ * Return: The allocation order of the page.
+ */
+unsigned int ttm_pool_page_order_nodma(struct page *p)
+{
+	return p->private;
+}
+EXPORT_SYMBOL(ttm_pool_page_order_nodma);
+
 /* Return the allocation order based for a page */
 static unsigned int ttm_pool_page_order(struct ttm_pool *pool, struct page *p)
 {
@@ -470,7 +493,7 @@ static unsigned int ttm_pool_page_order(struct ttm_pool *pool, struct page *p)
 		return dma->vaddr & ~PAGE_MASK;
 	}
 
-	return p->private;
+	return ttm_pool_page_order_nodma(p);
 }
 
 /*
