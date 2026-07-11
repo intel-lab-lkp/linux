@@ -1042,6 +1042,9 @@ static int sock_reserve_memory(struct sock *sk, int bytes)
 
 	pages = sk_mem_pages(bytes);
 
+	if ((u64)sk->sk_forward_alloc + ((u64)pages << PAGE_SHIFT) > INT_MAX)
+		return -EINVAL;
+
 	/* pre-charge to memcg */
 	charged = mem_cgroup_sk_charge(sk, pages,
 				       GFP_KERNEL | __GFP_RETRY_MAYFAIL);
