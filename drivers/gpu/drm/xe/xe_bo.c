@@ -49,7 +49,11 @@
  * aggressive reclaim at the beneficial order during populate, so that
  * allocations make forward progress instead of stalling.
  */
+#ifdef CONFIG_DRM_XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD
+#define XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD	CONFIG_DRM_XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD
+#else
 #define XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD	2
+#endif
 
 /*
  * Maximum number of bytes of newly (re)allocated backing the defrag worker will
@@ -65,17 +69,31 @@
  * Only pages a move truly reallocates are charged; pages harvested from the old
  * backing are free, so an object larger than the budget is upgraded in
  * budget-sized slices across runs.
+ *
+ * Set to 0 to disable defrag completely.
  */
+#ifdef CONFIG_DRM_XE_BO_DEFRAG_SIZE_LIMIT
+#define XE_BO_DEFRAG_SIZE_LIMIT			CONFIG_DRM_XE_BO_DEFRAG_SIZE_LIMIT
+#else
 #define XE_BO_DEFRAG_SIZE_LIMIT			SZ_32M
+#endif
 
 /* Default delay before (re)running the defrag worker, in milliseconds. */
+#ifdef CONFIG_DRM_XE_BO_DEFRAG_INTERVAL_MS
+#define XE_BO_DEFRAG_INTERVAL_MS		CONFIG_DRM_XE_BO_DEFRAG_INTERVAL_MS
+#else
 #define XE_BO_DEFRAG_INTERVAL_MS		25
+#endif
 
 /*
  * Upper bound for the (exponentially backed off) defrag worker interval, in
  * milliseconds, so repeated failures don't push the retry arbitrarily far out.
  */
+#ifdef CONFIG_DRM_XE_BO_DEFRAG_INTERVAL_MAX_MS
+#define XE_BO_DEFRAG_INTERVAL_MAX_MS		CONFIG_DRM_XE_BO_DEFRAG_INTERVAL_MAX_MS
+#else
 #define XE_BO_DEFRAG_INTERVAL_MAX_MS		15000	/* 15 seconds */
+#endif
 
 static void xe_bo_defrag_worker(struct work_struct *w);
 static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place);
@@ -1126,6 +1144,7 @@ int xe_bo_defrag_init(struct xe_device *xe)
 
 static void xe_bo_defrag_schedule(struct xe_device *xe)
 {
+	xe_assert(xe, XE_BO_DEFRAG_SIZE_LIMIT >= SZ_2M);
 	schedule_delayed_work(&xe->mem.defrag.worker,
 			      msecs_to_jiffies(xe->mem.defrag.interval_ms));
 }
@@ -1152,6 +1171,7 @@ static void xe_bo_defrag_add(struct xe_bo *bo)
 
 	xe_bo_assert_held(bo);
 	xe_assert(xe, xe_bo_needs_defrag(bo));
+	xe_assert(xe, XE_BO_DEFRAG_SIZE_LIMIT >= SZ_2M);
 
 	scoped_guard(spinlock, &xe->mem.defrag.lock) {
 		if (list_empty(&bo->defrag_link)) {
@@ -1185,6 +1205,9 @@ static void xe_bo_defrag_remove(struct xe_bo *bo)
 {
 	xe_bo_assert_held(bo);
 
+	if (XE_BO_DEFRAG_SIZE_LIMIT < SZ_2M)
+		return;
+
 	if (list_empty(&bo->defrag_link))
 		return;
 
@@ -1203,6 +1226,9 @@ static void xe_bo_defrag_remove(struct xe_bo *bo)
 static void xe_bo_defrag_update(struct xe_bo *bo)
 {
 	xe_bo_assert_held(bo);
+
+	if (XE_BO_DEFRAG_SIZE_LIMIT < SZ_2M)
+		return;
 
 	if (xe_bo_needs_defrag(bo))
 		xe_bo_defrag_add(bo);

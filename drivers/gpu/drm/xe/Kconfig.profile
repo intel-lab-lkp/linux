@@ -74,3 +74,43 @@ config DRM_XE_ENABLE_SCHEDTIMEOUT_LIMIT
 	  to apply to applicable user. For elevated user, all above MIN
 	  and MAX values will apply when this configuration is enable to
 	  apply limitation. By default limitation is applied.
+
+config DRM_XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD
+	int "BO defrag reclaim backoff threshold"
+	default 2
+	range 1 1000
+	help
+	  Once this many BOs are tracked on the device defrag list (i.e. were
+	  backed with a sub-optimal page order), request that the TTM pool backs
+	  off from aggressive reclaim at the beneficial order during populate,
+	  so that allocations make forward progress instead of stalling.
+
+config DRM_XE_BO_DEFRAG_SIZE_LIMIT
+	int "Maximum bytes to defrag per work run"
+	default 33554432
+	range 0 1073741824
+	help
+	  Maximum number of bytes the defrag worker will process in a single run
+	  before yielding and rescheduling itself. Set to less than large page
+	  size (2M) to disable defrag. A defrag move synchronously reallocates
+	  and re-copies a BO's backing store, which is not free. If a large
+	  number of BOs become eligible at once, processing them all in one
+	  worker run would hold things up for a long, unbounded stretch.
+	  Instead, cap the work done per run and requeue, spreading the defrag
+	  effort out over time.
+
+config DRM_XE_BO_DEFRAG_INTERVAL_MS
+	int "Default delay before defrag worker run (ms)"
+	default 25
+	range 1 1000
+	help
+	  Default delay before (re)running the defrag worker, in milliseconds.
+
+config DRM_XE_BO_DEFRAG_INTERVAL_MAX_MS
+	int "Upper bound for defrag worker interval (ms)"
+	default 15000
+	range 100 1000000
+	help
+	  Upper bound for the (exponentially backed off) defrag worker interval,
+	  in milliseconds, so repeated failures don't push the retry arbitrarily
+	  far out. 15000 ms = 15 seconds.
