@@ -394,9 +394,8 @@ static int __sgx_virt_einit(void __user *sigstruct, void __user *token,
 	 * All other checks deferred to ENCLS itself.  Also see comment
 	 * for @secs in sgx_virt_ecreate().
 	 */
-#define SGX_EINITTOKEN_SIZE	304
 	if (WARN_ON_ONCE(!access_ok(sigstruct, sizeof(struct sgx_sigstruct)) ||
-			 !access_ok(token, SGX_EINITTOKEN_SIZE) ||
+			 !access_ok(token, SGX_LAUNCH_TOKEN_SIZE) ||
 			 !access_ok(secs, PAGE_SIZE)))
 		return -EINVAL;
 
