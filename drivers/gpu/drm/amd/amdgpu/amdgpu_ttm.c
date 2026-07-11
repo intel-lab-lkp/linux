@@ -1173,6 +1173,30 @@ void amdgpu_ttm_mmio_remap_free_sgt(struct device *dev,
 	kfree(sgt);
 }
 
+/*
+ * amdgpu_ttm_tt_pool_id - compute the ttm pool id backing a given xcp
+ *
+ * Mirrors the mapping used when creating the gtt ttm_tt, so callers that only
+ * have an xcp id (e.g. an out-of-lock preallocation before the bo exists) pick
+ * the same pool the populate will use.
+ */
+int32_t amdgpu_ttm_tt_pool_id(struct amdgpu_device *adev, int32_t xcp_id)
+{
+	if (adev->gmc.mem_partitions && xcp_id >= 0)
+		return KFD_XCP_MEM_ID(adev, xcp_id);
+
+	return xcp_id;
+}
+
+/* amdgpu_ttm_pool - select the ttm pool for a given pool id */
+struct ttm_pool *amdgpu_ttm_pool(struct amdgpu_device *adev, int32_t pool_id)
+{
+	if (adev->mman.ttm_pools && pool_id >= 0)
+		return &adev->mman.ttm_pools[pool_id];
+
+	return &adev->mman.bdev.pool;
+}
+
 /**
  * amdgpu_ttm_tt_create - Create a ttm_tt object for a given BO
  *
@@ -1194,10 +1218,7 @@ static struct ttm_tt *amdgpu_ttm_tt_create(struct ttm_buffer_object *bo,
 		return NULL;
 
 	gtt->gobj = &bo->base;
-	if (adev->gmc.mem_partitions && abo->xcp_id >= 0)
-		gtt->pool_id = KFD_XCP_MEM_ID(adev, abo->xcp_id);
-	else
-		gtt->pool_id = abo->xcp_id;
+	gtt->pool_id = amdgpu_ttm_tt_pool_id(adev, abo->xcp_id);
 
 	if (abo->flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC)
 		caching = ttm_write_combined;
@@ -1239,10 +1260,7 @@ static int amdgpu_ttm_tt_populate(struct ttm_device *bdev,
 	if (ttm->page_flags & TTM_TT_FLAG_EXTERNAL)
 		return 0;
 
-	if (adev->mman.ttm_pools && gtt->pool_id >= 0)
-		pool = &adev->mman.ttm_pools[gtt->pool_id];
-	else
-		pool = &adev->mman.bdev.pool;
+	pool = amdgpu_ttm_pool(adev, gtt->pool_id);
 	ret = ttm_pool_alloc(pool, ttm, ctx);
 	if (ret)
 		return ret;
@@ -1284,10 +1302,7 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_device *bdev,
 
 	adev = amdgpu_ttm_adev(bdev);
 
-	if (adev->mman.ttm_pools && gtt->pool_id >= 0)
-		pool = &adev->mman.ttm_pools[gtt->pool_id];
-	else
-		pool = &adev->mman.bdev.pool;
+	pool = amdgpu_ttm_pool(adev, gtt->pool_id);
 
 	return ttm_pool_free(pool, ttm);
 }
