@@ -42,9 +42,9 @@ config UDMABUF
 
 config UDMABUF_SIZE_LIMIT_MBYTES
 	int "Size limit in Mega Bytes"
-	default 64
+	default 256
 	help
-	  Maximum size of a udmabuf, in megabytes. Default is 64.
+	  Maximum size of a udmabuf, in megabytes. Default is 256.
 
 config DMABUF_DEBUG
 	bool "DMA-BUF debug checks"
