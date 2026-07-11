@@ -51,12 +51,9 @@ impl FwFunc {
 /// # Examples
 ///
 /// ```no_run
-/// # use kernel::{device::Device, firmware::Firmware};
+/// # use kernel::{device::Device, firmware::Firmware, sync::aref::ARef};
 ///
-/// # fn no_run() -> Result<(), Error> {
-/// # // SAFETY: *NOT* safe, just for the example to get an `ARef<Device>` instance
-/// # let dev = unsafe { Device::get_device(core::ptr::null_mut()) };
-///
+/// # fn no_run(dev: ARef<Device>) -> Result<(), Error> {
 /// let fw = Firmware::request(c"path/to/firmware.bin", &dev)?;
 /// let blob = fw.data();
 ///
