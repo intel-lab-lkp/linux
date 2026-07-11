@@ -724,6 +724,7 @@ static void unix_release_sock(struct sock *sk, int embrion)
 
 		/* passed fds are erased in the kfree_skb hook */
 		kfree_skb_reason(skb, SKB_DROP_REASON_SOCKET_CLOSE);
+		cond_resched();
 	}
 
 	if (path.dentry)
