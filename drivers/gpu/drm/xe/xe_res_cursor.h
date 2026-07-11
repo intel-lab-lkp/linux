@@ -24,6 +24,7 @@
 #ifndef _XE_RES_CURSOR_H_
 #define _XE_RES_CURSOR_H_
 
+#include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
 
 #include <drm/drm_pagemap.h>
@@ -67,6 +68,12 @@ struct xe_res_cursor {
 	u64 dma_start;
 	/** @dma_seg_size: Size of the current DMA segment. */
 	u64 dma_seg_size;
+	/**
+	 * @is_iova: Whether the cursor walks a single contiguous IOVA
+	 * mapping described by a struct dma_iova_state. When true, the
+	 * DMA address is @dma_start + @start and never points to VRAM.
+	 */
+	bool is_iova;
 };
 
 static struct gpu_buddy *xe_res_get_buddy(struct ttm_resource *res)
@@ -93,6 +100,7 @@ static inline void xe_res_first(struct ttm_resource *res,
 {
 	cur->sgl = NULL;
 	cur->dma_addr = NULL;
+	cur->is_iova = false;
 	if (!res)
 		goto fallback;
 
@@ -224,6 +232,7 @@ static inline void xe_res_first_sg(const struct sg_table *sg,
 	cur->dma_addr = NULL;
 	cur->sgl = sg->sgl;
 	cur->mem_type = XE_PL_TT;
+	cur->is_iova = false;
 	__xe_res_sg_next(cur);
 }
 
@@ -255,6 +264,41 @@ static inline void xe_res_first_dma(const struct drm_pagemap_addr *dma_addr,
 	__xe_res_dma_next(cur);
 	cur->sgl = NULL;
 	cur->mem_type = XE_PL_TT;
+	cur->is_iova = false;
+}
+
+/**
+ * xe_res_first_iova() - initialize a xe_res_cursor with a dma_iova_state
+ *
+ * @state: struct dma_iova_state describing a single contiguous IOVA mapping
+ * @start: Start of the range
+ * @size: Size of the range
+ * @cur: cursor object to initialize
+ *
+ * Start walking over the range of an allocation that was DMA mapped using the
+ * IOVA-based DMA API (see dma_iova_try_alloc()). Such a mapping is a single
+ * contiguous IOVA range, so the cursor walks it as one segment. Subsequent
+ * calls to xe_res_next() advance within that range and xe_res_dma() returns
+ * the IOVA backing the current position. xe_res_is_vram() always returns false
+ * for such a cursor.
+ */
+static inline void xe_res_first_iova(struct dma_iova_state *state,
+				     u64 start, u64 size,
+				     struct xe_res_cursor *cur)
+{
+	XE_WARN_ON(!state);
+	XE_WARN_ON(start + size > dma_iova_size(state));
+
+	cur->node = NULL;
+	cur->start = start;
+	cur->remaining = size;
+	cur->size = size;
+	cur->dma_addr = NULL;
+	cur->sgl = NULL;
+	cur->dma_start = state->addr;
+	cur->dma_seg_size = dma_iova_size(state);
+	cur->mem_type = XE_PL_TT;
+	cur->is_iova = true;
 }
 
 /**
@@ -280,6 +324,13 @@ static inline void xe_res_next(struct xe_res_cursor *cur, u64 size)
 	if (cur->size > size) {
 		cur->size -= size;
 		cur->start += size;
+		return;
+	}
+
+	if (cur->is_iova) {
+		/* Single contiguous IOVA segment. */
+		cur->start += size;
+		cur->size = cur->remaining;
 		return;
 	}
 
@@ -334,7 +385,7 @@ static inline void xe_res_next(struct xe_res_cursor *cur, u64 size)
  */
 static inline u64 xe_res_dma(const struct xe_res_cursor *cur)
 {
-	if (cur->dma_addr)
+	if (cur->is_iova || cur->dma_addr)
 		return cur->dma_start + cur->start;
 	else if (cur->sgl)
 		return sg_dma_address(cur->sgl) + cur->start;
@@ -351,6 +402,9 @@ static inline u64 xe_res_dma(const struct xe_res_cursor *cur)
  */
 static inline bool xe_res_is_vram(const struct xe_res_cursor *cur)
 {
+	if (cur->is_iova)
+		return false;
+
 	if (cur->dma_addr)
 		return cur->dma_addr->proto == XE_INTERCONNECT_VRAM;
 
