@@ -253,7 +253,7 @@ static void xe_migrate_sanity_test(struct xe_migrate *m, struct kunit *test,
 	if (xe_bo_is_vram(pt))
 		xe_res_first(pt->ttm.resource, 0, xe_bo_size(pt), &src_it);
 	else
-		xe_res_first_sg(xe_bo_sg(pt), 0, xe_bo_size(pt), &src_it);
+		xe_res_first_tt(pt->ttm.ttm, 0, xe_bo_size(pt), &src_it);
 
 	emit_pte(m, bb, NUM_KERNEL_PDE - 1, xe_bo_is_vram(pt), false,
 		 &src_it, XE_PAGE_SIZE, pt->ttm.resource);
@@ -385,12 +385,12 @@ static struct dma_fence *blt_copy(struct xe_tile *tile,
 	bool dst_is_vram = mem_type_is_vram(dst->mem_type);
 
 	if (!src_is_vram)
-		xe_res_first_sg(xe_bo_sg(src_bo), 0, size, &src_it);
+		xe_res_first_tt(src_bo->ttm.ttm, 0, size, &src_it);
 	else
 		xe_res_first(src, 0, size, &src_it);
 
 	if (!dst_is_vram)
-		xe_res_first_sg(xe_bo_sg(dst_bo), 0, size, &dst_it);
+		xe_res_first_tt(dst_bo->ttm.ttm, 0, size, &dst_it);
 	else
 		xe_res_first(dst, 0, size, &dst_it);
 

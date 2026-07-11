@@ -552,8 +552,9 @@ void xe_bo_dev_init(struct xe_bo_dev *bo_device);
 
 void xe_bo_dev_fini(struct xe_bo_dev *bo_device);
 
-struct sg_table *xe_bo_sg(struct xe_bo *bo);
-struct sg_table *xe_tt_sg(struct ttm_tt *tt);
+struct xe_res_cursor;
+void xe_res_first_tt(struct ttm_tt *tt, u64 start, u64 size,
+		     struct xe_res_cursor *cur);
 
 /*
  * xe_sg_segment_size() - Provides upper limit for sg segment size.

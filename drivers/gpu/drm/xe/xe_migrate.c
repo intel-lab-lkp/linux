@@ -1029,16 +1029,16 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 		return ERR_PTR(-EINVAL);
 
 	if (!src_is_vram)
-		xe_res_first_sg(src_tt ? xe_tt_sg(src_tt) : xe_bo_sg(src_bo), 0, size, &src_it);
+		xe_res_first_tt(src_tt ? src_tt : src_bo->ttm.ttm, 0, size, &src_it);
 	else
 		xe_res_first(src, 0, size, &src_it);
 	if (!dst_is_vram)
-		xe_res_first_sg(xe_bo_sg(dst_bo), 0, size, &dst_it);
+		xe_res_first_tt(dst_bo->ttm.ttm, 0, size, &dst_it);
 	else
 		xe_res_first(dst, 0, size, &dst_it);
 
 	if (copy_system_ccs)
-		xe_res_first_sg(src_tt ? xe_tt_sg(src_tt) : xe_bo_sg(src_bo),
+		xe_res_first_tt(src_tt ? src_tt : src_bo->ttm.ttm,
 				xe_bo_ccs_pages_start(src_bo),
 				PAGE_ALIGN(xe_device_ccs_bytes(xe, size)),
 				&ccs_it);
@@ -1407,9 +1407,9 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
 
 	ctx = &xe->sriov.vf.ccs.contexts[read_write];
 
-	xe_res_first_sg(xe_bo_sg(src_bo), 0, size, &src_it);
+	xe_res_first_tt(src_bo->ttm.ttm, 0, size, &src_it);
 
-	xe_res_first_sg(xe_bo_sg(src_bo), xe_bo_ccs_pages_start(src_bo),
+	xe_res_first_tt(src_bo->ttm.ttm, xe_bo_ccs_pages_start(src_bo),
 			PAGE_ALIGN(xe_device_ccs_bytes(xe, size)),
 			&ccs_it);
 
@@ -1612,7 +1612,7 @@ struct dma_fence *xe_migrate_vram_copy_chunk(struct xe_bo *vram_bo, u64 vram_off
 	xe_assert(xe, !range_overflows(sysmem_offset, size, (u64)sysmem_bo->ttm.base.size));
 
 	xe_res_first(vram, vram_offset, size, &vram_it);
-	xe_res_first_sg(xe_bo_sg(sysmem_bo), sysmem_offset, size, &sysmem_it);
+	xe_res_first_tt(sysmem_bo->ttm.ttm, sysmem_offset, size, &sysmem_it);
 
 	while (size) {
 		u32 pte_flags = PTE_UPDATE_FLAG_IS_VRAM;
@@ -1824,7 +1824,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 		clear_only_system_ccs = true;
 
 	if (!clear_vram)
-		xe_res_first_sg(xe_bo_sg(bo), 0, xe_bo_size(bo), &src_it);
+		xe_res_first_tt(bo->ttm.ttm, 0, xe_bo_size(bo), &src_it);
 	else
 		xe_res_first(src, 0, xe_bo_size(bo), &src_it);
 

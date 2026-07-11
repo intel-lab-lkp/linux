@@ -6,6 +6,7 @@
 #include "xe_bo.h"
 
 #include <linux/dma-buf.h>
+#include <linux/dma-mapping.h>
 #include <linux/nospec.h>
 
 #include <drm/drm_drv.h>
@@ -15,6 +16,7 @@
 #include <drm/ttm/ttm_backup.h>
 #include <drm/ttm/ttm_device.h>
 #include <drm/ttm/ttm_placement.h>
+#include <drm/ttm/ttm_pool.h>
 #include <drm/ttm/ttm_tt.h>
 #include <uapi/drm/xe_drm.h>
 
@@ -420,6 +422,32 @@ struct xe_ttm_tt {
 	struct ttm_tt ttm;
 	struct sg_table sgt;
 	struct sg_table *sg;
+	/**
+	 * @iova: IOVA state describing the single contiguous IOVA mapping of
+	 * the tt pages. Only valid when @use_iova is true.
+	 */
+	struct dma_iova_state iova;
+	/**
+	 * @use_iova: Whether this tt is DMA mapped using the IOVA-based DMA
+	 * API instead of a scatter-gather list. Decided once at tt creation
+	 * time and stable for the lifetime of the tt.
+	 */
+	bool use_iova;
+	/**
+	 * @iova_linked: Whether the tt pages are currently linked into the
+	 * IOVA mapping. Only meaningful when @use_iova is true.
+	 */
+	bool iova_linked;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	/**
+	 * @iova_dma_pages: Per-order count of DMA-mapped pages this tt
+	 * accounted into xe->mem.dma_mapped_pages[] for its IOVA mapping,
+	 * recorded at link time so the unlink can apply an exactly matching
+	 * decrement without re-walking tt->pages (which TTM may mutate, e.g.
+	 * during defrag). Counter ownership stays isolated in xe_bo.c.
+	 */
+	unsigned long iova_dma_pages[NR_PAGE_ORDERS];
+#endif
 	/** @purgeable: Whether the content of the pages of @ttm is purgeable. */
 	bool purgeable;
 };
@@ -464,6 +492,52 @@ static void xe_tt_account_dma_pages(struct xe_device *xe,
 #else
 static void xe_tt_account_dma_pages(struct xe_device *xe,
 				    struct xe_ttm_tt *xe_tt, int sign)
+{
+}
+#endif
+
+/*
+ * xe_tt_account_iova_add - account one freshly linked IOVA folio
+ * @xe: the xe device
+ * @xe_tt: the xe_ttm_tt being mapped
+ * @order: page order of the linked folio
+ *
+ * Add the folio's 2^order pages to xe->mem.dma_mapped_pages[order] and record
+ * the same amount in @xe_tt so xe_tt_unaccount_iova() can later subtract an
+ * exactly matching count without re-walking tt->pages.
+ */
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+static void xe_tt_account_iova_add(struct xe_device *xe,
+				   struct xe_ttm_tt *xe_tt, unsigned int order)
+{
+	unsigned long chunk = 1UL << order;
+
+	xe_tt->iova_dma_pages[order] += chunk;
+	atomic_long_add(chunk, &xe->mem.dma_mapped_pages[order]);
+}
+
+static void xe_tt_unaccount_iova(struct xe_device *xe,
+				 struct xe_ttm_tt *xe_tt)
+{
+	unsigned int order;
+
+	for (order = 0; order < NR_PAGE_ORDERS; order++) {
+		unsigned long pages = xe_tt->iova_dma_pages[order];
+
+		if (pages) {
+			atomic_long_sub(pages, &xe->mem.dma_mapped_pages[order]);
+			xe_tt->iova_dma_pages[order] = 0;
+		}
+	}
+}
+#else
+static void xe_tt_account_iova_add(struct xe_device *xe,
+				   struct xe_ttm_tt *xe_tt, unsigned int order)
+{
+}
+
+static void xe_tt_unaccount_iova(struct xe_device *xe,
+				 struct xe_ttm_tt *xe_tt)
 {
 }
 #endif
@@ -514,28 +588,129 @@ static void xe_tt_unmap_sg(struct xe_device *xe, struct ttm_tt *tt)
 	}
 }
 
-struct sg_table *xe_bo_sg(struct xe_bo *bo)
+/*
+ * xe_tt_map_iova - DMA map a tt using the IOVA-based DMA API.
+ *
+ * Link all of the tt's pages into the IOVA range reserved at tt creation
+ * time, one folio at a time, and sync the IOTLB once at the end. The IOVA
+ * reservation itself is kept across map/unmap cycles and only released when
+ * the tt is destroyed.
+ */
+static int xe_tt_map_iova(struct xe_device *xe, struct ttm_tt *tt)
 {
-	struct ttm_tt *tt = bo->ttm.ttm;
+	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
+	struct device *dev = xe->drm.dev;
+	unsigned long num_pages = tt->num_pages;
+	unsigned long i = 0;
+	size_t mapped = 0;
+	int ret;
+
+	if (xe_tt->iova_linked)
+		return 0;
+
+	while (i < num_pages) {
+		struct page *page = tt->pages[i];
+		unsigned int order = ttm_pool_page_order_nodma(page);
+		size_t len = PAGE_SIZE << order;
+
+		ret = dma_iova_link(dev, &xe_tt->iova, page_to_phys(page),
+				    mapped, len, DMA_BIDIRECTIONAL,
+				    DMA_ATTR_SKIP_CPU_SYNC);
+		if (ret)
+			goto err_unlink;
+
+		xe_tt_account_iova_add(xe, xe_tt, order);
+		mapped += len;
+		i += 1UL << order;
+	}
+
+	ret = dma_iova_sync(dev, &xe_tt->iova, 0, mapped);
+	if (ret)
+		goto err_unlink;
+
+	xe_tt->iova_linked = true;
+	return 0;
+
+err_unlink:
+	if (mapped) {
+		dma_iova_unlink(dev, &xe_tt->iova, 0, mapped,
+				DMA_BIDIRECTIONAL, DMA_ATTR_SKIP_CPU_SYNC);
+		xe_tt_unaccount_iova(xe, xe_tt);
+	}
+	return ret;
+}
+
+/*
+ * xe_tt_unmap_iova - Unlink a tt's pages from its IOVA mapping.
+ *
+ * Unlink the pages but keep the IOVA reservation so the tt can be remapped
+ * later without re-allocating IOVA space.
+ */
+static void xe_tt_unmap_iova(struct xe_device *xe, struct ttm_tt *tt)
+{
 	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
 
-	return xe_tt->sg;
+	if (xe_tt->iova_linked) {
+		/*
+		 * Unmap with attrs 0 (matching the sg unmap path) so that the
+		 * CPU copy-back sync is performed for non-coherent or bounced
+		 * (SWIOTLB) mappings, even though the link was done with
+		 * DMA_ATTR_SKIP_CPU_SYNC.
+		 */
+		dma_iova_unlink(xe->drm.dev, &xe_tt->iova, 0,
+				dma_iova_size(&xe_tt->iova),
+				DMA_BIDIRECTIONAL, 0);
+		xe_tt_unaccount_iova(xe, xe_tt);
+		xe_tt->iova_linked = false;
+	}
+}
+
+/*
+ * xe_tt_map - DMA map a tt, using IOVA when available and sg otherwise.
+ */
+static int xe_tt_map(struct xe_device *xe, struct ttm_tt *tt)
+{
+	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
+
+	if (xe_tt->use_iova)
+		return xe_tt_map_iova(xe, tt);
+
+	return xe_tt_map_sg(xe, tt);
+}
+
+/*
+ * xe_tt_unmap - Undo xe_tt_map().
+ */
+static void xe_tt_unmap(struct xe_device *xe, struct ttm_tt *tt)
+{
+	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
+
+	if (xe_tt->use_iova)
+		xe_tt_unmap_iova(xe, tt);
+	else
+		xe_tt_unmap_sg(xe, tt);
 }
 
 /**
- * xe_tt_sg() - Return the DMA scatter-gather table backing a ttm_tt.
- * @tt: The ttm_tt to query.
+ * xe_res_first_tt() - Initialize a resource cursor over a ttm_tt's DMA mapping.
+ * @tt: The ttm_tt to walk.
+ * @start: Start of the range, in bytes.
+ * @size: Size of the range, in bytes.
+ * @cur: The cursor to initialize.
  *
- * Like xe_bo_sg(), but takes the ttm_tt directly. Used by the defrag copy
- * path which needs the old (source) tt's sg table without a backing xe_bo.
- *
- * Return: The sg table, or NULL if the tt is not currently mapped.
+ * Initialize @cur to walk the DMA addresses backing @tt, transparently
+ * handling both the IOVA-based mapping (single contiguous range) and the
+ * scatter-gather list fallback.
  */
-struct sg_table *xe_tt_sg(struct ttm_tt *tt)
+void xe_res_first_tt(struct ttm_tt *tt, u64 start, u64 size,
+		     struct xe_res_cursor *cur)
 {
 	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
 
-	return xe_tt->sg;
+	if (xe_tt->use_iova)
+		xe_res_first_iova(&xe_tt->iova, start, size, cur);
+	else
+		xe_res_first_sg(xe_tt->sg, start, size, cur);
 }
 
 /*
@@ -651,6 +826,21 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 		}
 	}
 
+	/*
+	 * Eligible BOs are DMA mapped using the IOVA-based DMA API, which
+	 * yields a single contiguous IOVA range instead of a scatter-gather
+	 * list. Only device BOs that are not GGTT-mapped qualify: dma-buf
+	 * imports manage their own mapping and GGTT bindings are programmed
+	 * directly from the sg list. dma_iova_try_alloc() may still fail
+	 * depending on the IOMMU mode, in which case we transparently fall
+	 * back to the sg list. The reservation lives for the tt's lifetime.
+	 */
+	if (ttm_bo->type != ttm_bo_type_sg &&
+	    !(bo->flags & (XE_BO_FLAG_GGTT | XE_BO_FLAG_GGTT_ALL)) &&
+	    dma_iova_try_alloc(xe->drm.dev, &xe_tt->iova, 0,
+			       (size_t)tt->num_pages << PAGE_SHIFT))
+		xe_tt->use_iova = true;
+
 	return tt;
 }
 
@@ -700,7 +890,7 @@ static void xe_ttm_tt_unpopulate(struct ttm_device *ttm_dev, struct ttm_tt *tt)
 	    !(tt->page_flags & TTM_TT_FLAG_EXTERNAL_MAPPABLE))
 		return;
 
-	xe_tt_unmap_sg(xe, tt);
+	xe_tt_unmap(xe, tt);
 
 	ttm_pool_free(&ttm_dev->pool, tt);
 	xe_ttm_tt_account_subtract(xe, tt);
@@ -709,6 +899,19 @@ static void xe_ttm_tt_unpopulate(struct ttm_device *ttm_dev, struct ttm_tt *tt)
 
 static void xe_ttm_tt_destroy(struct ttm_device *ttm_dev, struct ttm_tt *tt)
 {
+	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
+
+	/*
+	 * Release the IOVA reservation made in xe_ttm_tt_create(). The pages
+	 * must already have been unlinked by xe_tt_unmap().
+	 */
+	if (xe_tt->use_iova) {
+		struct xe_device *xe = ttm_to_xe_device(ttm_dev);
+
+		xe_assert(xe, !xe_tt->iova_linked);
+		dma_iova_free(xe->drm.dev, &xe_tt->iova);
+	}
+
 	ttm_tt_fini(tt);
 	kfree(tt);
 }
@@ -1557,7 +1760,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	/* Bo creation path, moving to system or TT. */
 	if ((!old_mem && ttm) && !handle_system_ccs) {
 		if (new_mem->mem_type == XE_PL_TT)
-			ret = xe_tt_map_sg(xe, ttm);
+			ret = xe_tt_map(xe, ttm);
 		if (!ret)
 			ttm_bo_move_null(ttm_bo, new_mem);
 		goto out;
@@ -1587,7 +1790,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		(!ttm && ttm_bo->type == ttm_bo_type_device);
 
 	if (new_mem->mem_type == XE_PL_TT) {
-		ret = xe_tt_map_sg(xe, ttm);
+		ret = xe_tt_map(xe, ttm);
 		if (ret)
 			goto out;
 	}
@@ -1757,7 +1960,7 @@ out:
 		if (IS_VF_CCS_READY(xe))
 			xe_sriov_vf_ccs_detach_bo(bo);
 
-		xe_tt_unmap_sg(xe, ttm_bo->ttm);
+		xe_tt_unmap(xe, ttm_bo->ttm);
 	}
 
 	xe_bo_defrag_update(bo);
@@ -1785,7 +1988,7 @@ static long xe_bo_shrink_purge(struct ttm_operation_ctx *ctx,
 		if (lret)
 			return lret;
 
-		xe_tt_unmap_sg(xe, bo->ttm);
+		xe_tt_unmap(xe, bo->ttm);
 		ttm_bo_move_null(bo, new_resource);
 	}
 
@@ -2212,6 +2415,8 @@ int xe_bo_dma_unmap_pinned(struct xe_bo *bo)
 						 DMA_BIDIRECTIONAL);
 			ttm_bo->sg = NULL;
 			xe_tt->sg = NULL;
+		} else if (xe_tt->use_iova) {
+			xe_tt_unmap_iova(ttm_to_xe_device(ttm_bo->bdev), tt);
 		} else if (xe_tt->sg) {
 			dma_unmap_sgtable(ttm_to_xe_device(ttm_bo->bdev)->drm.dev,
 					  xe_tt->sg,
@@ -3779,7 +3984,7 @@ dma_addr_t __xe_bo_addr(struct xe_bo *bo, u64 offset, size_t page_size)
 	if (!xe_bo_is_vram(bo) && !xe_bo_is_stolen(bo)) {
 		xe_assert(xe, bo->ttm.ttm);
 
-		xe_res_first_sg(xe_bo_sg(bo), page << PAGE_SHIFT,
+		xe_res_first_tt(bo->ttm.ttm, page << PAGE_SHIFT,
 				page_size, &cur);
 		return xe_res_dma(&cur) + offset;
 	} else {
