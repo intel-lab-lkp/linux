@@ -626,10 +626,22 @@ static int ttm_bo_move_to_ghost(struct ttm_buffer_object *bo,
 	 * bo to be unbound and destroyed.
 	 */
 
-	if (dst_use_tt)
+	if (bo->defrag_old_tt) {
+		/*
+		 * Defrag move: @bo already points at the freshly allocated,
+		 * beneficial-order tt that the move copied into. Hand the old
+		 * tt (the move's source) to the ghost so it is kept populated
+		 * until @fence signals and then unbound and destroyed, instead
+		 * of being torn down synchronously. @bo keeps its new tt.
+		 */
+		ghost_obj->ttm = bo->defrag_old_tt;
+		ghost_obj->defrag_old_tt = NULL;
+		bo->defrag_old_tt = NULL;
+	} else if (dst_use_tt) {
 		ghost_obj->ttm = NULL;
-	else
+	} else {
 		bo->ttm = NULL;
+	}
 
 	dma_resv_unlock(&ghost_obj->base._resv);
 	ttm_bo_put(ghost_obj);

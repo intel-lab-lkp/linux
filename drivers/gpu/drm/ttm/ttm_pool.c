@@ -860,8 +860,11 @@ static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 	 * pages. Record it so the driver can later try to defragment the object
 	 * back to beneficial order.
 	 */
-	if (it->beneficial_order && it->order == it->beneficial_order)
+	if (it->beneficial_order && it->order == it->beneficial_order) {
 		it->tt->page_flags |= TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
+		if (it->ctx->defrag)
+			return -ENOMEM;
+	}
 
 	it->order--;
 	it->page_caching = it->tt->caching;

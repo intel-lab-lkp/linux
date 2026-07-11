@@ -125,49 +125,133 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 {
 	struct ttm_device *bdev = bo->bdev;
 	bool old_use_tt, new_use_tt;
+	bool defrag;
 	int ret;
 
 	old_use_tt = !bo->resource || ttm_manager_type(bdev, bo->resource->mem_type)->use_tt;
 	new_use_tt = ttm_manager_type(bdev, mem->mem_type)->use_tt;
 
-	ttm_bo_unmap_virtual(bo);
+	/*
+	 * Only the BO that is the actual defrag target (moved in place via
+	 * ttm_bo_validate(), evict == false) is being defragmented. The same
+	 * ctx->defrag is threaded into evictions triggered while allocating
+	 * that target's new backing (ttm_bo_evict_alloc()), so guard against
+	 * an unrelated victim BO (evict == true) being misclassified as a
+	 * defrag move and needlessly reallocating its backing.
+	 */
+	defrag = ctx->defrag && !evict && new_use_tt && bo->ttm &&
+		 ttm_tt_is_populated(bo->ttm);
+
+	/*
+	 * Tear down userspace mappings up front for ordinary moves. A defrag
+	 * move is likely to leave the BO in place (beneficial-order allocation
+	 * commonly fails), so defer the unmap until the new backing has been
+	 * populated and the move is about to commit. This avoids a needless
+	 * zap and refault of every userspace mapping on the common failure,
+	 * where the BO keeps its original, still-mapped backing.
+	 */
+	if (!defrag)
+		ttm_bo_unmap_virtual(bo);
 
 	/*
 	 * Create and bind a ttm if required.
 	 */
 
 	if (new_use_tt) {
+		struct ttm_tt *defrag_old_tt = NULL;
+
+		/*
+		 * For a defrag move, stash the current populated tt and force a
+		 * fresh one to be created and populated (at beneficial order).
+		 * The old tt is handed to the driver move callback to copy the
+		 * contents from, and freed once the move completes.
+		 */
+		if (defrag) {
+			defrag_old_tt = bo->ttm;
+			bo->ttm = NULL;
+		}
+
 		/* Zero init the new TTM structure if the old location should
 		 * have used one as well.
 		 */
-		ret = ttm_tt_create(bo, old_use_tt);
-		if (ret)
+		ret = ttm_tt_create(bo, old_use_tt && !defrag_old_tt);
+		if (ret) {
+			if (defrag_old_tt)
+				bo->ttm = defrag_old_tt;
 			goto out_err;
-
-		if (mem->mem_type != TTM_PL_SYSTEM) {
-			ret = ttm_bo_populate(bo, ctx);
-			if (ret)
-				goto out_err;
 		}
+
+		if (defrag_old_tt || mem->mem_type != TTM_PL_SYSTEM) {
+			ret = ttm_bo_populate(bo, ctx);
+			if (ret) {
+				/*
+				 * Discharge the freshly allocated backing and
+				 * leave the BO on its original tt/placement.
+				 */
+				if (defrag_old_tt) {
+					ttm_tt_destroy(bo->bdev, bo->ttm);
+					bo->ttm = defrag_old_tt;
+				}
+				goto out_err;
+			}
+		}
+
+		bo->defrag_old_tt = defrag_old_tt;
 	}
 
 	ret = dma_resv_reserve_fences(bo->base.resv, 1);
 	if (ret)
 		goto out_err;
 
+	/*
+	 * A defrag move deferred its virtual unmap until the new backing was
+	 * successfully populated; tear the userspace mappings down now, before
+	 * the move swaps in the new pages, so the next fault re-establishes
+	 * them against the new backing.
+	 */
+	if (defrag)
+		ttm_bo_unmap_virtual(bo);
+
 	ret = bdev->funcs->move(bo, evict, ctx, mem, hop);
 	if (ret) {
-		if (ret == -EMULTIHOP)
+		if (ret == -EMULTIHOP) {
+			/*
+			 * A defrag move targets the BO's current placement and
+			 * must complete in a single hop. A driver requesting a
+			 * bounce here is unsupported: restore the original
+			 * backing and fail the defrag rather than retrying the
+			 * multihop with ctx->defrag still set, which would
+			 * misclassify the bounce as another defrag move and
+			 * overwrite/leak bo->defrag_old_tt.
+			 */
+			if (unlikely(defrag)) {
+				WARN_ON_ONCE(1);
+				ret = -EINVAL;
+				goto out_err;
+			}
 			return ret;
+		}
 		goto out_err;
+	}
+
+	if (bo->defrag_old_tt) {
+		ttm_tt_unpopulate(bo->bdev, bo->defrag_old_tt);
+		ttm_tt_destroy(bo->bdev, bo->defrag_old_tt);
+		bo->defrag_old_tt = NULL;
 	}
 
 	ctx->bytes_moved += bo->base.size;
 	return 0;
 
 out_err:
-	if (!old_use_tt)
+	if (bo->defrag_old_tt) {
+		/* Failed defrag move: restore the original backing. */
 		ttm_bo_tt_destroy(bo);
+		bo->ttm = bo->defrag_old_tt;
+		bo->defrag_old_tt = NULL;
+	} else if (!old_use_tt) {
+		ttm_bo_tt_destroy(bo);
+	}
 
 	return ret;
 }
@@ -835,7 +919,7 @@ int ttm_bo_validate(struct ttm_buffer_object *bo,
 	force_space = false;
 	do {
 		/* Check whether we need to move buffer. */
-		if (bo->resource &&
+		if (bo->resource && !ctx->defrag &&
 		    ttm_resource_compatible(bo->resource, placement,
 					    force_space))
 			return 0;
