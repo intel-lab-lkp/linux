@@ -353,7 +353,8 @@ void btrfs_update_global_block_rsv(struct btrfs_fs_info *fs_info)
 		min_items++;
 	}
 
-	if (btrfs_fs_incompat(fs_info, RAID_STRIPE_TREE)) {
+	if (btrfs_fs_incompat(fs_info, RAID_STRIPE_TREE) &&
+	    fs_info->stripe_root) {
 		num_bytes += btrfs_root_used(&fs_info->stripe_root->root_item);
 		min_items++;
 	}
