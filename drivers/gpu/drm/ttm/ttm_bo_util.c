@@ -633,7 +633,12 @@ static int ttm_bo_move_to_ghost(struct ttm_buffer_object *bo,
 		 * tt (the move's source) to the ghost so it is kept populated
 		 * until @fence signals and then unbound and destroyed, instead
 		 * of being torn down synchronously. @bo keeps its new tt.
+		 *
+		 * Any pages the new tt borrowed from the old tt are now owned by
+		 * the new tt; disown them from the old tt so the ghost teardown
+		 * leaves them alone.
 		 */
+		ttm_tt_defrag_disown_borrowed(bo->defrag_old_tt, bo->ttm);
 		ghost_obj->ttm = bo->defrag_old_tt;
 		ghost_obj->defrag_old_tt = NULL;
 		bo->defrag_old_tt = NULL;

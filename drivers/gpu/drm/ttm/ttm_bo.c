@@ -182,7 +182,14 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 		}
 
 		if (defrag_old_tt || mem->mem_type != TTM_PL_SYSTEM) {
+			/*
+			 * Let the page allocator harvest already
+			 * beneficial-order chunks out of the old tt to back
+			 * the new one, rather than reallocating them.
+			 */
+			ctx->defrag_old_tt = defrag_old_tt;
 			ret = ttm_bo_populate(bo, ctx);
+			ctx->defrag_old_tt = NULL;
 			if (ret) {
 				/*
 				 * Discharge the freshly allocated backing and
@@ -235,6 +242,12 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 	}
 
 	if (bo->defrag_old_tt) {
+		/*
+		 * Successful defrag move: any pages the new tt borrowed from the
+		 * old tt are now owned by the new tt. Disown them from the old
+		 * tt before it is torn down so they are not freed.
+		 */
+		ttm_tt_defrag_disown_borrowed(bo->defrag_old_tt, bo->ttm);
 		ttm_tt_unpopulate(bo->bdev, bo->defrag_old_tt);
 		ttm_tt_destroy(bo->bdev, bo->defrag_old_tt);
 		bo->defrag_old_tt = NULL;
@@ -245,7 +258,12 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 
 out_err:
 	if (bo->defrag_old_tt) {
-		/* Failed defrag move: restore the original backing. */
+		/*
+		 * Failed defrag move: drop any pages the new tt borrowed from
+		 * the old tt (still owned by the old tt) before destroying the
+		 * new tt, then restore the original backing.
+		 */
+		ttm_tt_defrag_disown_borrowed(bo->ttm, bo->defrag_old_tt);
 		ttm_bo_tt_destroy(bo);
 		bo->ttm = bo->defrag_old_tt;
 		bo->defrag_old_tt = NULL;

@@ -792,6 +792,148 @@ static unsigned int ttm_pool_alloc_find_order(unsigned int highest,
 	return min_t(unsigned int, highest, __fls(alloc->remaining_pages));
 }
 
+/*
+ * Defragmentation page harvesting.
+ *
+ * A defrag move relocates a populated tt into a freshly allocated one in order
+ * to upgrade sub-beneficial-order chunks to the device's beneficial order.
+ * Chunks in the old tt (ctx->defrag_old_tt) that are ALREADY at the beneficial
+ * order do not need to be reallocated: their physical pages can simply be
+ * transferred ("harvested") into the new tt at the same offset, avoiding the
+ * alloc/free churn that is significant for large buffers.
+ *
+ * Harvesting only borrows the pages: the new tt simply references the old tt's
+ * pages, which remain owned by the old tt. This keeps the unwind paths simple -
+ * if the (re)allocation or the move later fails, the new tt is torn down without
+ * freeing the borrowed pages and the old tt is restored fully intact. Ownership
+ * of the shared pages is transferred to the new tt only once the move has
+ * committed, via ttm_tt_defrag_disown_borrowed() (see ttm_tt.c).
+ */
+
+/*
+ * Return the allocation order of the old tt chunk whose head sits at @off, or 0
+ * if @off is not an old chunk head (it falls inside a chunk, or the slot is
+ * empty / backed up). @cursor monotonically tracks the old chunk boundary and
+ * must be advanced past every offset that has already been queried; a page
+ * order may only be read from a chunk head page, hence the lazy walk.
+ */
+static unsigned int ttm_pool_defrag_old_order(struct ttm_pool *pool,
+					      struct ttm_tt *old_tt,
+					      pgoff_t off, pgoff_t *cursor)
+{
+	struct page *p;
+
+	while (*cursor < off) {
+		p = old_tt->pages[*cursor];
+		if (!p || ttm_backup_page_ptr_is_handle(p))
+			return 0;
+		*cursor += 1UL << ttm_pool_page_order(pool, p);
+	}
+
+	if (*cursor != off)
+		return 0;
+
+	p = old_tt->pages[off];
+	if (!p || ttm_backup_page_ptr_is_handle(p))
+		return 0;
+
+	return ttm_pool_page_order(pool, p);
+}
+
+/*
+ * Borrow an already beneficial-order chunk from the old tt into @alloc. The
+ * pages stay owned by the old tt until the move commits.
+ */
+static int ttm_pool_harvest_page(struct ttm_tt *old_tt, unsigned int order,
+				 pgoff_t off, struct ttm_pool_alloc_state *alloc)
+{
+	pgoff_t nr = 1UL << order;
+	int r;
+
+	/*
+	 * A harvested chunk keeps the (same) bo's caching, so the deferred
+	 * caching range is consistent here; flush it before committing, exactly
+	 * like the caching-consistent path in ttm_pool_page_allocated().
+	 */
+	r = ttm_pool_apply_caching(alloc);
+	if (r)
+		return r;
+
+	/*
+	 * The borrowed chunk's page pointers (consecutive struct pages of one
+	 * compound allocation) and dma addresses already sit contiguously in
+	 * the old tt at @off. Copy the whole run with memcpy() instead of the
+	 * per-page increment loop in ttm_pool_allocated_page_commit(): for a
+	 * large defrag the borrowed pages dominate the new tt, so this turns
+	 * the populate fill from O(num_pages) individual stores into a handful
+	 * of bulk copies.
+	 */
+	memcpy(alloc->pages, &old_tt->pages[off], nr * sizeof(*alloc->pages));
+	alloc->pages += nr;
+	alloc->remaining_pages -= nr;
+
+	if (alloc->dma_addr) {
+		memcpy(alloc->dma_addr, &old_tt->dma_address[off],
+		       nr * sizeof(*alloc->dma_addr));
+		alloc->dma_addr += nr;
+	}
+
+	alloc->caching_divide = alloc->pages;
+
+	return 0;
+}
+
+static int ttm_pool_harvest_remaining(struct ttm_pool *pool,
+				      struct ttm_tt *old_tt, pgoff_t off,
+				      struct ttm_pool_alloc_state *alloc)
+{
+	/*
+	 * @off is always an old-tt chunk head here, never a tail page, so
+	 * reading the per-chunk order below is safe. This holds because:
+	 *  - Old chunks are self-aligned: greedy largest-power-of-two fill
+	 *    places an order-k chunk at a 2^k-aligned offset, so any
+	 *    beneficial-order-aligned offset is a chunk boundary.
+	 *  - Fresh defrag allocations are capped at the beneficial order (see
+	 *    ttm_pool_iter_acquire_page()), so they advance @off in beneficial
+	 *    steps and never overshoot into the middle of a larger old chunk;
+	 *    super-beneficial old chunks are always harvested whole by
+	 *    ttm_pool_iter_reuse_old().
+	 *  - We are only reached once the defrag budget/prealloc is exhausted,
+	 *    which in the capped/prealloc config leaves @off beneficial-aligned
+	 *    (or, in the sub-beneficial tail, already walking old boundaries).
+	 */
+	while (alloc->remaining_pages) {
+		struct page *p = old_tt->pages[off];
+		unsigned int order = ttm_pool_page_order(pool, p);
+		pgoff_t nr = 1UL << order;
+		int r;
+
+		r = ttm_pool_harvest_page(old_tt, order, off, alloc);
+		if (r)
+			return r;
+
+		off += nr;
+	}
+
+	return 0;
+}
+
+/**
+ * enum ttm_pool_iter_action - Outcome of a per-order allocation phase
+ * @TTM_POOL_ITER_FILL: A page (@it->p) was acquired; proceed to fill it in.
+ * @TTM_POOL_ITER_RETRY: Loop state was adjusted (e.g. order lowered or a chunk
+ *	harvested); re-enter the loop body for the next order.
+ * @TTM_POOL_ITER_STOP: The allocation is complete; stop the loop.
+ *
+ * Phase helpers return one of these (>= 0) on success, or a negative errno on
+ * failure (the caller then unwinds via error_free_all).
+ */
+enum ttm_pool_iter_action {
+	TTM_POOL_ITER_FILL,
+	TTM_POOL_ITER_RETRY,
+	TTM_POOL_ITER_STOP,
+};
+
 /**
  * struct ttm_pool_alloc_iter - Working state for the __ttm_pool_alloc() loop
  *
@@ -806,6 +948,7 @@ struct ttm_pool_alloc_iter {
 	const struct ttm_operation_ctx *ctx;
 	struct ttm_pool_alloc_state *alloc;
 	struct ttm_pool_tt_restore *restore;
+	struct ttm_tt *defrag_old_tt;
 	unsigned int beneficial_order;
 	gfp_t gfp_flags;
 
@@ -814,8 +957,49 @@ struct ttm_pool_alloc_iter {
 	enum ttm_caching page_caching;
 	bool allow_pools;
 	bool fail_beneficial;
+	unsigned int alloc_count;
+	pgoff_t old_cursor;
 	struct page *p;
 };
+
+/*
+ * Defrag move: reuse an already beneficial-order chunk from the old tt at this
+ * offset rather than reallocating it. Harvest whatever order the old chunk has
+ * (>= beneficial order), which may exceed the order the new tt would otherwise
+ * pick. An order below beneficial_order is only reused for the unaligned tail
+ * (where there is no benefit to reallocating). Only borrows the pages; the alloc
+ * unwind path can drop them again.
+ *
+ * Returns TTM_POOL_ITER_RETRY when a chunk was harvested, TTM_POOL_ITER_FILL to
+ * fall through to a fresh allocation, or a negative errno.
+ */
+static int ttm_pool_iter_reuse_old(struct ttm_pool_alloc_iter *it)
+{
+	unsigned int harvest_order;
+	pgoff_t off;
+	int r;
+
+	if (!it->defrag_old_tt || !it->beneficial_order)
+		return TTM_POOL_ITER_FILL;
+
+	off = it->tt->num_pages - it->alloc->remaining_pages;
+	harvest_order = ttm_pool_defrag_old_order(it->pool, it->defrag_old_tt,
+						  off, &it->old_cursor);
+
+	if (harvest_order < it->beneficial_order &&
+	    it->order >= it->beneficial_order)
+		return TTM_POOL_ITER_FILL;
+
+	it->order = harvest_order;
+	r = ttm_pool_harvest_page(it->defrag_old_tt, it->order, off, it->alloc);
+	if (r)
+		return r;
+
+	it->page_caching = it->tt->caching;
+	it->allow_pools = true;
+
+	return TTM_POOL_ITER_RETRY;
+}
 
 /*
  * Acquire a single page for the current order, leaving it in @it->p (NULL on
@@ -859,9 +1043,10 @@ static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
 /*
  * The current order could not be satisfied. Lower it and retry, recording a
  * sub-optimal backing (so the driver can later re-defrag) when we drop below
- * the beneficial order.
+ * the beneficial order. For a defrag move that has already made partial
+ * progress, harvest the remaining old pages and stop instead.
  *
- * Returns 0 to retry the (lowered) order, or a negative errno.
+ * Returns TTM_POOL_ITER_RETRY, TTM_POOL_ITER_STOP, or a negative errno.
  */
 static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 {
@@ -871,16 +1056,24 @@ static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 	if (!it->order)
 		return -ENOMEM;
 
-	/*
-	 * Failing to allocate at the device's beneficial order means we are
-	 * about to back this object with a sub-optimal (smaller order) set of
-	 * pages. Record it so the driver can later try to defragment the object
-	 * back to beneficial order.
-	 */
 	if (it->fail_beneficial || at_beneficial) {
 		it->tt->page_flags |= TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
-		if (it->ctx->defrag)
+
+		if (it->alloc_count && it->defrag_old_tt) {
+			pgoff_t off = it->tt->num_pages -
+				      it->alloc->remaining_pages;
+			int r;
+
+			r = ttm_pool_harvest_remaining(it->pool,
+						       it->defrag_old_tt, off,
+						       it->alloc);
+			if (r)
+				return r;
+
+			return TTM_POOL_ITER_STOP;
+		} else if (it->defrag_old_tt) {
 			return -ENOMEM;
+		}
 	}
 
 	if (it->fail_beneficial)
@@ -890,7 +1083,7 @@ static int ttm_pool_iter_lower_order(struct ttm_pool_alloc_iter *it)
 	it->page_caching = it->tt->caching;
 	it->allow_pools = true;
 
-	return 0;
+	return TTM_POOL_ITER_RETRY;
 }
 
 static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
@@ -904,6 +1097,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		.ctx = ctx,
 		.alloc = alloc,
 		.restore = restore,
+		.defrag_old_tt = restore ? NULL : ctx->defrag_old_tt,
 		.beneficial_order = ttm_pool_beneficial_order(pool),
 		.page_caching = tt->caching,
 		.allow_pools = true,
@@ -931,13 +1125,22 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	for (it.order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
 	     alloc->remaining_pages;
 	     it.order = ttm_pool_alloc_find_order(it.order, alloc)) {
+		/* Reuse an already beneficial-order chunk from the old tt. */
+		r = ttm_pool_iter_reuse_old(&it);
+		if (r < 0)
+			goto error_free_all;
+		if (r == TTM_POOL_ITER_RETRY)
+			continue;
+
 		/* Acquire a page (pool / system) for this order. */
 		ttm_pool_iter_acquire_page(&it);
 		if (!it.p) {
 			r = ttm_pool_iter_lower_order(&it);
-			if (r)
+			if (r < 0)
 				goto error_free_all;
-			continue;
+			if (r == TTM_POOL_ITER_RETRY)
+				continue;
+			break;	/* TTM_POOL_ITER_STOP */
 		}
 
 		r = ttm_pool_page_allocated(pool, it.order, it.p,
@@ -951,6 +1154,8 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 			if (r)
 				goto error_free_all;
 		}
+
+		it.alloc_count++;
 	}
 
 	r = ttm_pool_apply_caching(alloc);
@@ -968,6 +1173,12 @@ error_free_page:
 error_free_all:
 	if (tt->restore)
 		return r;
+
+	/*
+	 * Drop any pages borrowed from the old tt during a defrag move: they are
+	 * still owned by the old tt and must not be freed here.
+	 */
+	ttm_tt_defrag_disown_borrowed(tt, it.defrag_old_tt);
 
 	caching_divide = alloc->caching_divide - tt->pages;
 	ttm_pool_free_range(pool, tt, tt->caching, 0, caching_divide);

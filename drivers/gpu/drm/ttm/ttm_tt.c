@@ -450,6 +450,73 @@ void ttm_tt_unpopulate(struct ttm_device *bdev, struct ttm_tt *ttm)
 }
 EXPORT_SYMBOL_FOR_TESTS_ONLY(ttm_tt_unpopulate);
 
+/**
+ * ttm_tt_defrag_disown_borrowed() - Drop borrowed defrag pages from a tt
+ * @tt: The tt to drop the borrowed page references from.
+ * @src: The tt the pages may have been harvested from, or NULL.
+ *
+ * During a defragmentation move the freshly (re)allocated tt may harvest
+ * already beneficial-order chunks from the BO's old tt, sharing the underlying
+ * pages instead of reallocating them. Until the move commits these pages stay
+ * owned by the old tt. Clearing a tt's slots for every page it shares with
+ * @src (the same struct page at the same index) makes that tt's teardown leave
+ * the shared pages alone, so they are freed exactly once by their owner.
+ *
+ * This is used both to unwind a failed defrag move (disown the borrowed pages
+ * from the new tt, leaving the old tt intact) and to commit a successful one
+ * (disown the now-transferred pages from the old tt, leaving them owned by the
+ * new tt).
+ */
+void ttm_tt_defrag_disown_borrowed(struct ttm_tt *tt, const struct ttm_tt *src)
+{
+	pgoff_t i = 0, run_start = 0;
+	bool in_run = false;
+
+	if (!tt || !src)
+		return;
+
+	/*
+	 * Borrowing happens at chunk granularity: a borrowed chunk shares the
+	 * same struct page on both tts across its whole allocation order, while
+	 * a non-borrowed chunk differs across its whole order. Stride by @src's
+	 * chunk order instead of walking every page, coalescing the borrowed
+	 * (matching) chunks into runs and clearing each run with a single
+	 * memset rather than a per-page store. @src is a fully populated,
+	 * non-dma_alloc tt (the defrag path), so its page order is recorded in
+	 * page->private and read via ttm_pool_page_order_nodma().
+	 */
+	while (i < tt->num_pages) {
+		struct page *sp = src->pages[i];
+		unsigned int order = sp ? ttm_pool_page_order_nodma(sp) : 0;
+		pgoff_t nr = 1UL << order;
+
+		if (sp && tt->pages[i] == sp) {
+			if (!in_run) {
+				run_start = i;
+				in_run = true;
+			}
+		} else if (in_run) {
+			memset(&tt->pages[run_start], 0,
+			       (i - run_start) * sizeof(*tt->pages));
+			if (tt->dma_address)
+				memset(&tt->dma_address[run_start], 0,
+				       (i - run_start) *
+				       sizeof(*tt->dma_address));
+			in_run = false;
+		}
+
+		i += nr;
+	}
+
+	if (in_run) {
+		memset(&tt->pages[run_start], 0,
+		       (i - run_start) * sizeof(*tt->pages));
+		if (tt->dma_address)
+			memset(&tt->dma_address[run_start], 0,
+			       (i - run_start) * sizeof(*tt->dma_address));
+	}
+}
+
 #ifdef CONFIG_DEBUG_FS
 
 /* Test the shrinker functions and dump the result */
