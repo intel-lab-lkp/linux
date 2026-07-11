@@ -141,6 +141,14 @@ struct dma_fence *xe_migrate_copy_defrag(struct xe_migrate *m,
 					 struct ttm_tt *src_tt,
 					 bool need_ccs);
 
+struct dma_fence *xe_migrate_copy_defrag_iova(struct xe_migrate *m,
+					      struct xe_bo *bo,
+					      struct ttm_resource *src,
+					      struct ttm_resource *dst,
+					      struct ttm_tt *src_tt,
+					      pgoff_t dst_packed_pages,
+					      bool need_ccs);
+
 struct dma_fence *xe_migrate_resolve(struct xe_migrate *m,
 				     struct xe_bo *bo,
 				     struct ttm_resource *res);
