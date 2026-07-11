@@ -80,7 +80,7 @@ static ssize_t broken_parity_status_show(struct device *dev,
 					 char *buf)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	return sysfs_emit(buf, "%u\n", pdev->broken_parity_status);
+	return sysfs_emit(buf, "%u\n", pci_dev_broken_parity_status(pdev));
 }
 
 static ssize_t broken_parity_status_store(struct device *dev,
@@ -93,7 +93,7 @@ static ssize_t broken_parity_status_store(struct device *dev,
 	if (kstrtoul(buf, 0, &val) < 0)
 		return -EINVAL;
 
-	pdev->broken_parity_status = !!val;
+	pci_dev_assign_broken_parity_status(pdev, val);
 
 	return count;
 }

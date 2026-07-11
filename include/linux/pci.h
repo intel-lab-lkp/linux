@@ -347,10 +347,13 @@ struct rcec_ea;
  *		bookkeeping state, maintained by pci_set_master(),
  *		pci_clear_master() and pci_disable_device(); modifying it
  *		does not itself change the hardware state.
+ * @PCI_DEV_FLAG_BROKEN_PARITY_STATUS: Device generates false positive
+ *		parity errors; set via sysfs.
  * @PCI_DEV_FLAG_COUNT: Number of defined struct_pci_dev_flags.
  */
 enum struct_pci_dev_flags {
 	PCI_DEV_FLAG_BUSMASTER = 0,
+	PCI_DEV_FLAG_BROKEN_PARITY_STATUS = 1,
 
 	PCI_DEV_FLAG_COUNT
 };
@@ -482,7 +485,6 @@ struct pci_dev {
 
 	unsigned int	no_msi:1;		/* May not use MSI */
 	unsigned int	block_cfg_access:1;	/* Config space access blocked */
-	unsigned int	broken_parity_status:1;	/* Generates false positive parity */
 	unsigned int	irq_reroute_variant:2;	/* Needs IRQ rerouting variant */
 	unsigned int	msi_enabled:1;
 	unsigned int	msix_enabled:1;
@@ -626,6 +628,7 @@ static inline void pci_dev_assign_##accessor_name(struct pci_dev *pdev, bool val
 }
 
 __create_pci_dev_flag_accessors(busmaster, PCI_DEV_FLAG_BUSMASTER);
+__create_pci_dev_flag_accessors(broken_parity_status, PCI_DEV_FLAG_BROKEN_PARITY_STATUS);
 
 #undef __create_pci_dev_flag_accessors
 
