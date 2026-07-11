@@ -39,6 +39,7 @@
 #include "xe_sync.h"
 #include "xe_tile.h"
 #include "xe_tlb_inval.h"
+#include "xe_tlb_inval_job.h"
 #include "xe_trace_bo.h"
 #include "xe_vm_madvise.h"
 #include "xe_wa.h"
@@ -4399,6 +4400,130 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
 
 	xe_tlb_inval_batch_wait(&batch);
 	return ret;
+}
+
+/*
+ * xe_vma_tlb_flush_client - Queue an async TLB flush for one VMA on one client
+ *
+ * Create and push a TLB invalidation job on the tile migrate (kernel) exec
+ * queue covering @vma's range, depending on @dep (the BO's in-flight GPU work)
+ * so the flush only fires once the GPU is done with the current mapping. The
+ * job's completion fence is installed into @resv as a KERNEL fence so the
+ * subsequent migration waits on the flush. No PTEs are zapped; this only
+ * flushes L2 via the TLB invalidation.
+ */
+static int xe_vma_tlb_flush_client(struct xe_vm *vm, struct xe_vma *vma,
+				   struct xe_tile *tile, struct xe_gt *gt,
+				   struct dma_resv *resv, struct dma_fence *dep,
+				   int type)
+{
+	struct xe_exec_queue *q = xe_migrate_exec_queue(tile->migrate);
+	struct xe_tlb_inval_job *job;
+	struct dma_fence *fence;
+	int err;
+
+	job = xe_tlb_inval_job_create(q, &gt->tlb_inval,
+				      q->tlb_inval[type].dep_scheduler, vm,
+				      xe_vma_start(vma), xe_vma_end(vma), type);
+	if (IS_ERR(job))
+		return PTR_ERR(job);
+
+	err = xe_tlb_inval_job_alloc_dep(job);
+	if (err)
+		goto out_put;
+
+	err = dma_resv_reserve_fences(resv, 1);
+	if (err)
+		goto out_put;
+
+	/* Cannot fail; consumes a ref on @dep and returns a referenced fence. */
+	fence = xe_tlb_inval_job_push(job, tile->migrate, dep);
+	dma_resv_add_fence(resv, fence, DMA_RESV_USAGE_KERNEL);
+	dma_fence_put(fence);
+
+out_put:
+	/* Drop the creation reference (destroys the job if it was not pushed). */
+	xe_tlb_inval_job_put(job);
+	return err;
+}
+
+/**
+ * xe_vm_flush_vm_bo_tlb_async - Asynchronously flush TLBs for a vm_bo's mappings
+ * @vm: The VM @vm_bo belongs to
+ * @bo: The buffer object being moved
+ * @vm_bo: The gpuvm_bo linking @bo into @vm
+ *
+ * On L2-flush-optimized HW a BO move only needs to flush L2 (via a TLB
+ * invalidation) for the BO's live mappings; the mappings themselves are torn
+ * down and rebuilt lazily via the eviction/rebind path, so no PTEs need to be
+ * zapped here. Rather than blocking the caller on a synchronous invalidation,
+ * issue a TLB invalidation job per VMA per TLB-invalidation client (per present
+ * tile, primary and media GT). Each job waits on the BO's in-flight GPU work
+ * (all dma-resv usages) and its completion fence is installed into the BO's
+ * dma-resv KERNEL slots, so the following migration waits on the flush without
+ * stalling this thread.
+ *
+ * The caller must hold the BO's dma-resv lock and @vm must not be in fault
+ * mode.
+ *
+ * Return: 0 on success, negative error code on failure. On failure the caller
+ * should fall back to the blocking xe_vm_invalidate_vma() path; any jobs
+ * already queued install harmless extra flush fences.
+ */
+int xe_vm_flush_vm_bo_tlb_async(struct xe_vm *vm, struct xe_bo *bo,
+				struct drm_gpuvm_bo *vm_bo)
+{
+	struct xe_device *xe = vm->xe;
+	struct dma_resv *resv = bo->ttm.base.resv;
+	struct dma_fence *dep = NULL;
+	struct drm_gpuva *gpuva;
+	int err;
+
+	dma_resv_assert_held(resv);
+	xe_assert(xe, !xe_vm_in_fault_mode(vm));
+
+	/*
+	 * Single fence capturing all in-flight GPU work on the BO; the TLB
+	 * invalidation jobs depend on it so the flush fires only once the GPU
+	 * is done with the current mapping.
+	 */
+	err = dma_resv_get_singleton(resv, DMA_RESV_USAGE_BOOKKEEP, &dep);
+	if (err)
+		return err;
+	if (!dep)
+		dep = dma_fence_get_stub();
+
+	drm_gpuvm_bo_for_each_va(gpuva, vm_bo) {
+		struct xe_vma *vma = gpuva_to_vma(gpuva);
+		struct xe_tile *tile;
+		u8 id;
+
+		if (xe_vma_is_null(vma) || xe_vma_is_cpu_addr_mirror(vma))
+			continue;
+
+		for_each_tile(tile, xe, id) {
+			if (!(vma->tile_present & BIT(id)))
+				continue;
+
+			err = xe_vma_tlb_flush_client(vm, vma, tile,
+						      tile->primary_gt, resv, dep,
+						      XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT);
+			if (err)
+				goto out;
+
+			if (tile->media_gt) {
+				err = xe_vma_tlb_flush_client(vm, vma, tile,
+							      tile->media_gt, resv, dep,
+							      XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT);
+				if (err)
+					goto out;
+			}
+		}
+	}
+
+out:
+	dma_fence_put(dep);
+	return err;
 }
 
 int xe_vm_validate_protected(struct xe_vm *vm)

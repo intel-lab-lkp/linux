@@ -26,6 +26,8 @@ struct ttm_buffer_object;
 
 struct dma_fence;
 
+struct xe_bo;
+struct drm_gpuvm_bo;
 struct xe_exec_queue;
 struct xe_file;
 struct xe_pagefault;
@@ -253,6 +255,9 @@ struct dma_fence *xe_vm_range_unbind(struct xe_vm *vm,
 int xe_vm_invalidate_vma(struct xe_vma *vma);
 
 int xe_vm_invalidate_vma_submit(struct xe_vma *vma, struct xe_tlb_inval_batch *batch);
+
+int xe_vm_flush_vm_bo_tlb_async(struct xe_vm *vm, struct xe_bo *bo,
+				struct drm_gpuvm_bo *vm_bo);
 
 int xe_vm_validate_protected(struct xe_vm *vm);
 

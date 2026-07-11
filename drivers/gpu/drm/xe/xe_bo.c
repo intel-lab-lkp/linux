@@ -732,6 +732,19 @@ static int xe_bo_trigger_rebind(struct xe_device *xe, struct xe_bo *bo,
 			 */
 			if (!xe_device_is_l2_flush_optimized(xe))
 				continue;
+
+			/*
+			 * Attempt to flush L2 async, fallback to sync flush on
+			 * failure. Skip the async attempt under no_wait_gpu
+			 * (e.g. the shrinker's reclaim pass): job creation
+			 * allocates with GFP_KERNEL, which must not run while
+			 * holding the dma-resv lock under fs_reclaim. The sync
+			 * fallback below honors no_wait_gpu (returns -EBUSY if
+			 * the BO is not idle).
+			 */
+			if (!ctx->no_wait_gpu &&
+			    !xe_vm_flush_vm_bo_tlb_async(vm, bo, vm_bo))
+				continue;
 		}
 
 		if (!idle) {
