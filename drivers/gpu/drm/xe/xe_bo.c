@@ -26,6 +26,7 @@
 #include "xe_dma_buf.h"
 #include "xe_drm_client.h"
 #include "xe_ggtt.h"
+#include "xe_gt_stats.h"
 #include "xe_map.h"
 #include "xe_migrate.h"
 #include "xe_pat.h"
@@ -1160,6 +1161,8 @@ static void xe_bo_defrag_add(struct xe_bo *bo)
 				xe->mem.defrag.interval_ms = XE_BO_DEFRAG_INTERVAL_MS;
 			list_add_tail(&bo->defrag_link, &xe->mem.defrag.list);
 			atomic_inc(&xe->mem.defrag.count);
+			xe_gt_stats_incr(xe_root_mmio_gt(xe),
+					 XE_GT_STATS_ID_DEFRAG_ADDED_COUNT, 1);
 		}
 	}
 
@@ -1274,8 +1277,21 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 	xe_dbg(xe, "Defrag attempt on BO size=%zu: ret=%pe consumed=%llu\n",
 	       xe_bo_size(bo), ERR_PTR(ret), *consumed);
 
-	if (!ret && ttm_tt_is_beneficial_order_failed(bo->ttm.ttm))
+	if (!ret && ttm_tt_is_beneficial_order_failed(bo->ttm.ttm)) {
 		*needs_more = true;
+		xe_gt_stats_incr(xe_root_mmio_gt(xe),
+				 XE_GT_STATS_ID_DEFRAG_PARTIAL_SUCCESS_COUNT,
+				 1);
+	} else {
+		xe_gt_stats_incr(xe_root_mmio_gt(xe),
+				 ret ? XE_GT_STATS_ID_DEFRAG_FAILED_COUNT :
+				       XE_GT_STATS_ID_DEFRAG_SUCCESS_COUNT, 1);
+	}
+
+	if (!ret)
+		xe_gt_stats_incr(xe_root_mmio_gt(xe),
+				 XE_GT_STATS_ID_DEFRAG_MB_MOVED,
+				 *consumed >> 20);
 
 unlock:
 	xe_bo_unlock(bo);
