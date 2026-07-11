@@ -108,9 +108,6 @@ enum sgx_miscselect {
 
 #define SGX_MISC_RESERVED_MASK	GENMASK_ULL(63, 1)
 
-#define SGX_SSA_GPRS_SIZE		184
-#define SGX_SSA_MISC_EXINFO_SIZE	16
-
 /**
  * enum sgx_attribute - the attributes field in &struct sgx_secs
  * @SGX_ATTR_INIT:		Enclave can be entered (is initialized).
@@ -227,7 +224,6 @@ enum sgx_page_type {
 	SGX_PAGE_TYPE_TRIM,
 };
 
-#define SGX_NR_PAGE_TYPES	5
 #define SGX_PAGE_TYPE_MASK	GENMASK(7, 0)
 
 /**
@@ -287,11 +283,6 @@ struct sgx_pcmd {
 	u8  reserved[SGX_PCMD_RESERVED_SIZE];
 	u8  mac[16];
 } __packed __aligned(128);
-
-#define SGX_SIGSTRUCT_RESERVED1_SIZE 84
-#define SGX_SIGSTRUCT_RESERVED2_SIZE 20
-#define SGX_SIGSTRUCT_RESERVED3_SIZE 32
-#define SGX_SIGSTRUCT_RESERVED4_SIZE 12
 
 /**
  * struct sgx_sigstruct_header -  defines author of the enclave
