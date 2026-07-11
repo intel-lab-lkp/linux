@@ -75,6 +75,25 @@ struct drm_gpusvm_ops {
 	void (*invalidate)(struct drm_gpusvm *gpusvm,
 			   struct drm_gpusvm_notifier *notifier,
 			   const struct mmu_notifier_range *mmu_range);
+
+	/**
+	 * @dma_map_account: Account a DMA-mapping change (optional)
+	 * @gpusvm: Pointer to the GPU SVM
+	 * @addr: The address descriptor of the chunk being (un)mapped
+	 * @sign: +1 when @addr has just been DMA-mapped, -1 when it is being
+	 *        unmapped
+	 *
+	 * Called once per &drm_pagemap_addr entry, when the entry is
+	 * DMA-mapped by drm_gpusvm_get_pages() (@sign == +1) and when it is
+	 * unmapped (@sign == -1), so the driver can keep symmetric accounting
+	 * of the pages it has mapped for GPU access. The @addr->proto field
+	 * can be used to distinguish system-memory mappings from device
+	 * interconnect mappings. May be provided in both full SVM mode and the
+	 * core drm_gpusvm_pages-only mode.
+	 */
+	void (*dma_map_account)(struct drm_gpusvm *gpusvm,
+				const struct drm_pagemap_addr *addr,
+				int sign);
 };
 
 /**
