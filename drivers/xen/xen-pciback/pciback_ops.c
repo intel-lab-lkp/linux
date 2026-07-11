@@ -125,14 +125,14 @@ void xen_pcibk_reset_device(struct pci_dev *dev)
 		if (pci_is_enabled(dev))
 			pci_disable_device(dev);
 
-		dev->is_busmaster = 0;
+		pci_dev_assign_busmaster(dev, false);
 	} else {
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
 		if (cmd & (PCI_COMMAND_INVALIDATE)) {
 			cmd &= ~(PCI_COMMAND_INVALIDATE);
 			pci_write_config_word(dev, PCI_COMMAND, cmd);
 
-			dev->is_busmaster = 0;
+			pci_dev_assign_busmaster(dev, false);
 		}
 	}
 }

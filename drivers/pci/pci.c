@@ -2045,7 +2045,7 @@ static void pci_enable_bridge(struct pci_dev *dev)
 		pci_enable_bridge(bridge);
 
 	if (pci_is_enabled(dev)) {
-		if (!dev->is_busmaster)
+		if (!pci_dev_busmaster(dev))
 			pci_set_master(dev);
 		return;
 	}
@@ -2205,7 +2205,7 @@ void pci_disable_device(struct pci_dev *dev)
 
 	do_pci_disable_device(dev);
 
-	dev->is_busmaster = 0;
+	pci_dev_assign_busmaster(dev, false);
 }
 EXPORT_SYMBOL(pci_disable_device);
 
@@ -4120,7 +4120,7 @@ static void __pci_set_master(struct pci_dev *dev, bool enable)
 			enable ? "enabling" : "disabling");
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
-	dev->is_busmaster = enable;
+	pci_dev_assign_busmaster(dev, enable);
 }
 
 /**

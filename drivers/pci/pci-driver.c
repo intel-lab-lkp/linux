@@ -649,7 +649,7 @@ static int pci_pm_reenable_device(struct pci_dev *pci_dev)
 	 * if the device was busmaster before the suspend, make it busmaster
 	 * again
 	 */
-	if (pci_dev->is_busmaster)
+	if (pci_dev_busmaster(pci_dev))
 		pci_set_master(pci_dev);
 
 	return retval;

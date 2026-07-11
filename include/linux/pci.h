@@ -336,6 +336,25 @@ struct pci_sriov;
 struct pci_p2pdma;
 struct rcec_ea;
 
+/**
+ * enum struct_pci_dev_flags - Flags in struct pci_dev
+ *
+ * Each flag has a set of accessor functions created via
+ * __create_pci_dev_flag_accessors() and must only be accessed through
+ * them.
+ *
+ * @PCI_DEV_FLAG_BUSMASTER: Bus mastering is enabled on the device. Pure
+ *		bookkeeping state, maintained by pci_set_master(),
+ *		pci_clear_master() and pci_disable_device(); modifying it
+ *		does not itself change the hardware state.
+ * @PCI_DEV_FLAG_COUNT: Number of defined struct_pci_dev_flags.
+ */
+enum struct_pci_dev_flags {
+	PCI_DEV_FLAG_BUSMASTER = 0,
+
+	PCI_DEV_FLAG_COUNT
+};
+
 /* struct pci_dev - describes a PCI device
  *
  * @supported_speeds:	PCIe Supported Link Speeds Vector (+ reserved 0 at
@@ -461,7 +480,6 @@ struct pci_dev {
 	unsigned int	pref_64_window:1;	/* Pref mem window is 64-bit */
 	unsigned int	multifunction:1;	/* Multi-function device */
 
-	unsigned int	is_busmaster:1;		/* Is busmaster */
 	unsigned int	no_msi:1;		/* May not use MSI */
 	unsigned int	block_cfg_access:1;	/* Config space access blocked */
 	unsigned int	broken_parity_status:1;	/* Generates false positive parity */
@@ -592,7 +610,24 @@ struct pci_dev {
 	u8		tph_mode;	/* TPH mode */
 	u8		tph_req_type;	/* TPH requester type */
 #endif
+
+	/* PCI_DEV_FLAG_XXX flags. Use atomic bitfield operations to modify. */
+	DECLARE_BITMAP(flags, PCI_DEV_FLAG_COUNT);
 };
+
+#define __create_pci_dev_flag_accessors(accessor_name, flag_name) \
+static inline bool pci_dev_##accessor_name(const struct pci_dev *pdev) \
+{ \
+	return test_bit(flag_name, pdev->flags); \
+} \
+static inline void pci_dev_assign_##accessor_name(struct pci_dev *pdev, bool value) \
+{ \
+	assign_bit(flag_name, pdev->flags, value); \
+}
+
+__create_pci_dev_flag_accessors(busmaster, PCI_DEV_FLAG_BUSMASTER);
+
+#undef __create_pci_dev_flag_accessors
 
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
 {

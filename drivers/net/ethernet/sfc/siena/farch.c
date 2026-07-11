@@ -723,7 +723,7 @@ int efx_farch_fini_dmaq(struct efx_nic *efx)
 	/* Do not attempt to write to the NIC during EEH recovery */
 	if (efx->state != STATE_RECOVERY) {
 		/* Only perform flush if DMA is enabled */
-		if (efx->pci_dev->is_busmaster) {
+		if (pci_dev_busmaster(efx->pci_dev)) {
 			efx->type->prepare_flush(efx);
 			rc = efx_farch_do_flush(efx);
 			efx->type->finish_flush(efx);

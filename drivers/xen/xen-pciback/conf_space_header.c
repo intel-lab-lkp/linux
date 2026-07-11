@@ -81,10 +81,10 @@ static int command_write(struct pci_dev *dev, int offset, u16 value, void *data)
 			dev_data->enable_intx = 0;
 	}
 
-	if (!dev->is_busmaster && is_master_cmd(value)) {
+	if (!pci_dev_busmaster(dev) && is_master_cmd(value)) {
 		dev_dbg(&dev->dev, "set bus master\n");
 		pci_set_master(dev);
-	} else if (dev->is_busmaster && !is_master_cmd(value)) {
+	} else if (pci_dev_busmaster(dev) && !is_master_cmd(value)) {
 		dev_dbg(&dev->dev, "clear bus master\n");
 		pci_clear_master(dev);
 	}

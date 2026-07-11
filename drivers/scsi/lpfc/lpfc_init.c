@@ -14398,7 +14398,7 @@ lpfc_io_slot_reset_s3(struct pci_dev *pdev)
 
 	pci_restore_state(pdev);
 
-	if (pdev->is_busmaster)
+	if (pci_dev_busmaster(pdev))
 		pci_set_master(pdev);
 
 	spin_lock_irq(&phba->hbalock);
@@ -15251,7 +15251,7 @@ lpfc_io_slot_reset_s4(struct pci_dev *pdev)
 	 */
 	pci_save_state(pdev);
 
-	if (pdev->is_busmaster)
+	if (pci_dev_busmaster(pdev))
 		pci_set_master(pdev);
 
 	spin_lock_irq(&phba->hbalock);
