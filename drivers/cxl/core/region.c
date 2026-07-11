@@ -1521,12 +1521,20 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		parent_iw = parent_cxld->interleave_ways;
 	}
 
-	rc = granularity_to_eig(parent_ig, &peig);
-	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid parent granularity: %d\n",
-			dev_name(parent_port->uport_dev),
-			dev_name(&parent_port->dev), parent_ig);
-		return rc;
+	/*
+	 * A non-interleaving parent does not encode its granularity, so its
+	 * stored value may exceed the maximum encodable and need not be
+	 * validated here.
+	 */
+	if (parent_iw > 1) {
+		rc = granularity_to_eig(parent_ig, &peig);
+		if (rc) {
+			dev_dbg(&cxlr->dev,
+				"%s:%s: invalid parent granularity: %d\n",
+				dev_name(parent_port->uport_dev),
+				dev_name(&parent_port->dev), parent_ig);
+			return rc;
+		}
 	}
 
 	rc = ways_to_eiw(parent_iw, &peiw);
@@ -1549,20 +1557,21 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	 * Interleave granularity is a multiple of @parent_port granularity.
 	 * Multiplier is the parent port interleave ways.
 	 */
-	rc = granularity_to_eig(parent_ig * parent_iw, &eig);
-	if (rc) {
-		dev_dbg(&cxlr->dev,
-			"%s: invalid granularity calculation (%d * %d)\n",
-			dev_name(&parent_port->dev), parent_ig, parent_iw);
-		return rc;
-	}
+	ig = parent_ig * parent_iw;
 
-	rc = eig_to_granularity(eig, &ig);
-	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid interleave: %d\n",
-			dev_name(port->uport_dev), dev_name(&port->dev),
-			256 << eig);
-		return rc;
+	/*
+	 * Keep the computed granularity for descendant setup. Only
+	 * interleaving decoders require an encodable granularity.
+	 */
+	if (iw > 1) {
+		rc = granularity_to_eig(ig, &eig);
+		if (rc) {
+			dev_dbg(&cxlr->dev,
+				"%s: invalid granularity calculation (%d * %d)\n",
+				dev_name(&parent_port->dev), parent_ig,
+				parent_iw);
+			return rc;
+		}
 	}
 
 	if (iw > 8 || iw > cxlsd->nr_targets) {
