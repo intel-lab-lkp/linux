@@ -226,6 +226,7 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec);
 void xe_bo_unpin_external(struct xe_bo *bo);
 void xe_bo_unpin(struct xe_bo *bo);
 void xe_bo_defrag_init_early(struct xe_device *xe);
+int xe_bo_defrag_init(struct xe_device *xe);
 int xe_bo_validate(struct xe_bo *bo, struct xe_vm *vm, bool allow_res_evict,
 		   struct drm_exec *exec);
 

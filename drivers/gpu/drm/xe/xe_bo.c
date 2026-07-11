@@ -31,6 +31,7 @@
 #include "xe_pat.h"
 #include "xe_pm.h"
 #include "xe_preempt_fence.h"
+#include "xe_printk.h"
 #include "xe_pxp.h"
 #include "xe_res_cursor.h"
 #include "xe_shrinker.h"
@@ -48,6 +49,35 @@
  * allocations make forward progress instead of stalling.
  */
 #define XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD	2
+
+/*
+ * Maximum number of bytes of newly (re)allocated backing the defrag worker will
+ * produce in a single run before yielding and rescheduling itself.
+ *
+ * A defrag move synchronously reallocates and re-copies a BO's backing store,
+ * which is not free. If a large number of BOs (or one very large BO) become
+ * eligible at once (e.g. after a burst of memory pressure), processing them all
+ * in one worker run would hold things up for a long, unbounded stretch and can
+ * visibly starve concurrent active work (e.g. a large FPS drop). Instead, cap
+ * the bytes actually upgraded per run and requeue, spreading the defrag effort
+ * out over time so it stays in the background and yields to userspace progress.
+ * Only pages a move truly reallocates are charged; pages harvested from the old
+ * backing are free, so an object larger than the budget is upgraded in
+ * budget-sized slices across runs.
+ */
+#define XE_BO_DEFRAG_SIZE_LIMIT			SZ_32M
+
+/* Default delay before (re)running the defrag worker, in milliseconds. */
+#define XE_BO_DEFRAG_INTERVAL_MS		25
+
+/*
+ * Upper bound for the (exponentially backed off) defrag worker interval, in
+ * milliseconds, so repeated failures don't push the retry arbitrarily far out.
+ */
+#define XE_BO_DEFRAG_INTERVAL_MAX_MS		15000	/* 15 seconds */
+
+static void xe_bo_defrag_worker(struct work_struct *w);
+static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place);
 
 const char *const xe_mem_type_to_name[TTM_NUM_MEM_TYPES]  = {
 	[XE_PL_SYSTEM] = "system",
@@ -624,8 +654,10 @@ static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 	} else {
 		struct xe_device *xe = ttm_to_xe_device(ttm_dev);
 
-		if (atomic_read(&xe->mem.defrag.count) >=
-		    XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD)
+		if (ctx->defrag)
+			ctx->beneficial_reclaim_backoff = false;
+		else if (atomic_read(&xe->mem.defrag.count) >=
+			 XE_BO_DEFRAG_RECLAIM_BACKOFF_THRESHOLD)
 			ctx->beneficial_reclaim_backoff = true;
 
 		ttm_tt_clear_backed_up(tt);
@@ -1047,18 +1079,54 @@ static int xe_ttm_bo_purge(struct ttm_buffer_object *ttm_bo, struct ttm_operatio
 	return 0;
 }
 
+static void xe_bo_defrag_fini(void *arg)
+{
+	struct xe_device *xe = arg;
+
+	disable_delayed_work_sync(&xe->mem.defrag.worker);
+}
+
 /**
  * xe_bo_defrag_init_early() - Initialize the device defrag BO tracking
  * @xe: The xe device
  *
- * Initialize the list, lock and count used to track BOs whose backing TT
- * pages were allocated at a sub-optimal order.
+ * Initialize the list, lock, count and delayed worker used to track and
+ * defragment BOs whose backing TT pages were allocated at a sub-optimal order.
+ *
+ * The devm action that cancels the worker on teardown is registered separately
+ * by xe_bo_defrag_init(), which must run after the migrate contexts the
+ * worker depends on have been initialized.
  */
 void xe_bo_defrag_init_early(struct xe_device *xe)
 {
 	spin_lock_init(&xe->mem.defrag.lock);
 	INIT_LIST_HEAD(&xe->mem.defrag.list);
 	atomic_set(&xe->mem.defrag.count, 0);
+	xe->mem.defrag.interval_ms = XE_BO_DEFRAG_INTERVAL_MS;
+	INIT_DELAYED_WORK(&xe->mem.defrag.worker, xe_bo_defrag_worker);
+}
+
+/**
+ * xe_bo_defrag_init() - Register defrag worker teardown
+ * @xe: The xe device
+ *
+ * Register the devm action that disables and drains the defrag worker on
+ * device teardown. This must be called after xe_migrate_init() so that, with
+ * devm's reverse-order cleanup, the worker is stopped before the migrate
+ * contexts it relies on (via xe_bo_defrag_one() -> ttm_bo_validate() ->
+ * xe_bo_move() -> xe_migrate_copy_defrag()) are torn down.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int xe_bo_defrag_init(struct xe_device *xe)
+{
+	return devm_add_action_or_reset(xe->drm.dev, xe_bo_defrag_fini, xe);
+}
+
+static void xe_bo_defrag_schedule(struct xe_device *xe)
+{
+	schedule_delayed_work(&xe->mem.defrag.worker,
+			      msecs_to_jiffies(xe->mem.defrag.interval_ms));
 }
 
 static bool xe_bo_needs_defrag(struct xe_bo *bo)
@@ -1079,16 +1147,24 @@ static bool xe_bo_needs_defrag(struct xe_bo *bo)
 static void xe_bo_defrag_add(struct xe_bo *bo)
 {
 	struct xe_device *xe = xe_bo_device(bo);
+	bool kick = false;
 
 	xe_bo_assert_held(bo);
 	xe_assert(xe, xe_bo_needs_defrag(bo));
 
 	scoped_guard(spinlock, &xe->mem.defrag.lock) {
 		if (list_empty(&bo->defrag_link)) {
+			/* Kick the worker when the list transitions to non-empty. */
+			kick = list_empty(&xe->mem.defrag.list);
+			if (kick)
+				xe->mem.defrag.interval_ms = XE_BO_DEFRAG_INTERVAL_MS;
 			list_add_tail(&bo->defrag_link, &xe->mem.defrag.list);
 			atomic_inc(&xe->mem.defrag.count);
 		}
 	}
+
+	if (kick)
+		xe_bo_defrag_schedule(xe);
 }
 
 static void __xe_bo_defrag_remove(struct xe_bo *bo)
@@ -1129,6 +1205,218 @@ static void xe_bo_defrag_update(struct xe_bo *bo)
 		xe_bo_defrag_add(bo);
 	else
 		xe_bo_defrag_remove(bo);
+}
+
+/*
+ * Attempt to defragment a single BO by forcing a move that reallocates its
+ * backing at the device's beneficial order. @budget bounds how many bytes of
+ * new pages the move may (re)allocate; the remainder of the object is completed
+ * by harvesting the old backing, and the BO stays flagged for a later pass. On
+ * return *@consumed holds the bytes actually (re)allocated (0 on failure or
+ * when nothing needed reallocating). *@needs_more is set to true when the move
+ * succeeded but the BO still has sub-beneficial backing (partial upgrade) and
+ * should be revisited; it is computed under the BO lock so the caller does not
+ * need to re-inspect bo->ttm.ttm after the lock is dropped. Returns 0 if the BO
+ * no longer needs to be tracked (either defragmented or no longer eligible), or
+ * a negative error code if the attempt should be retried later.
+ */
+static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
+			    u64 budget, u64 *consumed, bool *needs_more)
+{
+	struct ttm_operation_ctx ctx = {
+		.gfp_retry_mayfail = true,
+		.defrag = true,
+		.defrag_bytes_remaining = budget,
+	};
+	struct ttm_buffer_object *ttm_bo = &bo->ttm;
+	struct ttm_placement placement;
+	struct ttm_place place;
+	int ret = 0;
+
+	*consumed = 0;
+	*needs_more = false;
+
+	xe_bo_lock(bo, false);
+
+	/* Re-check eligibility under the BO lock. */
+	if (!xe_bo_needs_defrag(bo)) {
+		xe_bo_defrag_remove(bo);
+		goto unlock;
+	}
+
+	xe_place_from_ttm_type(ttm_bo->resource->mem_type, &place);
+	place.flags |= TTM_PL_FLAG_TEMPORARY;
+	placement.num_placement = 1;
+	placement.placement = &place;
+
+	/*
+	 * On success the move reallocates the backing at beneficial order and
+	 * drops the BO from the defrag list. On failure the BO keeps its
+	 * original backing and stays on the list for a later retry.
+	 */
+	ret = ttm_bo_validate(ttm_bo, &placement, &ctx);
+
+	/*
+	 * The pool allocator decremented defrag_bytes_remaining as it
+	 * (re)allocated pages, so the unused budget tells us how much was spent.
+	 * Only meaningful when the move succeeded. A successful move may spend
+	 * nothing - e.g. when the object was already fully upgraded and every
+	 * chunk is harvested (borrowed) from the old backing for free - so a
+	 * zero spend is legitimate and must be charged as zero, not the whole
+	 * budget.
+	 */
+	if (!ret) {
+		s64 spent = (s64)budget - ctx.defrag_bytes_remaining;
+
+		*consumed = spent > 0 ? spent : 0;
+	}
+
+	xe_dbg(xe, "Defrag attempt on BO size=%zu: ret=%pe consumed=%llu\n",
+	       xe_bo_size(bo), ERR_PTR(ret), *consumed);
+
+	if (!ret && ttm_tt_is_beneficial_order_failed(bo->ttm.ttm))
+		*needs_more = true;
+
+unlock:
+	xe_bo_unlock(bo);
+	return ret;
+}
+
+static void xe_bo_defrag_worker(struct work_struct *w)
+{
+	struct delayed_work *dwork = to_delayed_work(w);
+	struct xe_device *xe =
+		container_of(dwork, struct xe_device, mem.defrag.worker);
+	u64 defrag_bytes = 0;
+	bool requeue = false;
+	int idx;
+
+	if (!drm_dev_enter(&xe->drm, &idx))
+		return;
+
+	if (!xe_pm_runtime_get_if_in_use(xe)) {
+		/*
+		 * The device is (runtime) suspending/suspended. Reschedule so
+		 * the pass retries once it is active again: the enqueue-time
+		 * kick in xe_bo_defrag_add() only fires on an empty->non-empty
+		 * transition, so it will not re-arm the worker while the list
+		 * is still non-empty. Requeue here to avoid stranding tracked
+		 * BOs. The get attempt does not resume the device, so this is
+		 * just a lightweight CPU-side timer while suspended.
+		 */
+		if (atomic_read(&xe->mem.defrag.count))
+			xe_bo_defrag_schedule(xe);
+		drm_dev_exit(idx);
+		return;
+	}
+
+	/*
+	 * Process at most XE_BO_DEFRAG_SIZE_LIMIT bytes of newly (re)allocated
+	 * backing per run rather than draining the whole list in one go. Only
+	 * the pages a move actually reallocates are charged - pages harvested
+	 * (borrowed) from the old backing are free and do not count - so the
+	 * budget tracks real defrag work. A single object larger than the
+	 * budget is upgraded in slices across successive runs. Each defrag is
+	 * synchronous and relatively expensive, so bounding the work per run
+	 * keeps the worker from monopolising resources and lets concurrent
+	 * active work make progress; any remaining work is handled by a
+	 * follow-up run scheduled below.
+	 */
+	while (defrag_bytes < XE_BO_DEFRAG_SIZE_LIMIT) {
+		struct xe_bo *first, *bo;
+		u64 consumed = 0;
+		bool needs_more = false;
+		int ret;
+
+		scoped_guard(spinlock, &xe->mem.defrag.lock) {
+			bool again;
+
+			/* Progress, reset interval */
+			if (defrag_bytes)
+				xe->mem.defrag.interval_ms = XE_BO_DEFRAG_INTERVAL_MS;
+
+			do {
+				first = list_first_entry_or_null(&xe->mem.defrag.list,
+								 struct xe_bo,
+								 defrag_link);
+				bo = first ? xe_bo_get_unless_zero(first) : NULL;
+				again = first && !bo;
+				if (again) {
+					list_del_init(&first->defrag_link);
+					atomic_dec(&xe->mem.defrag.count);
+				}
+			} while (again);
+		}
+
+		if (!bo)
+			break;
+
+		/*
+		 * Bound the per-BO move to the run's remaining byte budget. A
+		 * large object is upgraded in budget-sized slices across runs;
+		 * the slices already upgraded come back as free already-
+		 * beneficial harvests, so each run only spends budget on new
+		 * forward progress.
+		 */
+		ret = xe_bo_defrag_one(xe, bo, XE_BO_DEFRAG_SIZE_LIMIT - defrag_bytes,
+				       &consumed, &needs_more);
+		defrag_bytes += consumed;
+
+		if (ret || needs_more) {
+			scoped_guard(spinlock, &xe->mem.defrag.lock) {
+				if (ret)
+					/*
+					 * Abort the pass and retry the whole
+					 * list later, backing off exponentially
+					 * on every failure.
+					 */
+					xe->mem.defrag.interval_ms =
+						min(xe->mem.defrag.interval_ms * 2,
+						    (unsigned int)XE_BO_DEFRAG_INTERVAL_MAX_MS);
+				else
+					/* Progress, reset interval */
+					xe->mem.defrag.interval_ms = XE_BO_DEFRAG_INTERVAL_MS;
+			}
+
+			xe_bo_put(bo);
+			requeue = true;
+			break;
+		}
+
+		xe_bo_put(bo);
+	}
+
+	/*
+	 * Decide whether to reschedule:
+	 *
+	 *  - The loop hit its per-run limit (defrag_bytes >=
+	 *    XE_BO_DEFRAG_SIZE_LIMIT): we stopped early to spread the work out,
+	 *    so requeue at the default interval (reset here since this run made
+	 *    progress) whenever the list still has entries.
+	 *
+	 *  - The loop aborted on a failed defrag (requeue): retry later at the
+	 *    backed-off interval computed above.
+	 *
+	 *  - The loop drained the list (broke on the empty list): nothing left to
+	 *    do, so stop scheduling. A fresh enqueue will kick the worker again.
+	 */
+	if (defrag_bytes >= XE_BO_DEFRAG_SIZE_LIMIT) {
+		struct xe_bo *bo;
+
+		scoped_guard(spinlock, &xe->mem.defrag.lock) {
+			bo = list_first_entry_or_null(&xe->mem.defrag.list,
+						      struct xe_bo, defrag_link);
+			xe->mem.defrag.interval_ms = XE_BO_DEFRAG_INTERVAL_MS;
+		}
+
+		if (bo)
+			xe_bo_defrag_schedule(xe);
+	} else if (requeue) {
+		xe_bo_defrag_schedule(xe);
+	}
+
+	xe_pm_runtime_put(xe);
+	drm_dev_exit(idx);
 }
 
 static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,

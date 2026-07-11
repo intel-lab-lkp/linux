@@ -1069,6 +1069,15 @@ int xe_device_probe(struct xe_device *xe)
 			return err;
 	}
 
+	/*
+	 * Register the defrag worker teardown now that the migrate contexts it
+	 * depends on are initialized, so devm's reverse-order cleanup stops the
+	 * worker before those contexts are torn down.
+	 */
+	err = xe_bo_defrag_init(xe);
+	if (err)
+		return err;
+
 	err = xe_pagefault_init(xe);
 	if (err)
 		return err;

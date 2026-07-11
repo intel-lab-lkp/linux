@@ -314,6 +314,17 @@ struct xe_device {
 			 * @mem.defrag.list.
 			 */
 			atomic_t count;
+			/**
+			 * @mem.defrag.worker: Delayed worker that walks
+			 * @mem.defrag.list trying to reallocate BO backing
+			 * store at the device's beneficial order.
+			 */
+			struct delayed_work worker;
+			/**
+			 * @mem.defrag.interval_ms: Reschedule interval for
+			 * @mem.defrag.worker, in milliseconds.
+			 */
+			unsigned int interval_ms;
 		} defrag;
 	} mem;
 
