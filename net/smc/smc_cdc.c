@@ -446,7 +446,7 @@ static void smcd_cdc_rx_tsklet(struct tasklet_struct *t)
 	struct smcd_cdc_msg cdc;
 	struct smc_sock *smc;
 
-	if (!conn || conn->killed)
+	if (!conn || conn->killed || !conn->rmb_desc)
 		return;
 
 	data_cdc = (struct smcd_cdc_msg *)conn->rmb_desc->cpu_addr;
@@ -483,7 +483,7 @@ static void smc_cdc_rx_handler(struct ib_wc *wc, void *buf)
 	lgr = smc_get_lgr(link);
 	read_lock_bh(&lgr->conns_lock);
 	conn = smc_lgr_find_conn(ntohl(cdc->token), lgr);
-	if (!conn || conn->out_of_sync) {
+	if (!conn || conn->out_of_sync || !conn->rmb_desc) {
 		read_unlock_bh(&lgr->conns_lock);
 		return;
 	}
