@@ -1258,16 +1258,56 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 		.defrag_bytes_remaining = budget,
 	};
 	struct ttm_buffer_object *ttm_bo = &bo->ttm;
+	struct ttm_pool *pool = &ttm_bo->bdev->pool;
+	struct ttm_pool_prealloc pp = {};
 	struct ttm_placement placement;
 	struct ttm_place place;
+	enum ttm_caching tt_caching;
+	unsigned int order, want = 0;
 	int ret = 0;
 
 	*consumed = 0;
 	*needs_more = false;
 
+	/*
+	 * Phase 1: under the BO lock, re-check eligibility and estimate how
+	 * many beneficial-order chunks the move will (re)allocate, bounded by
+	 * the run's byte budget. Then drop the lock so the high-order, possibly
+	 * reclaim/compaction stalling allocations happen unlocked.
+	 */
+	xe_bo_lock(bo, false);
+	if (!xe_bo_needs_defrag(bo)) {
+		xe_bo_defrag_remove(bo);
+		xe_bo_unlock(bo);
+		goto out;
+	}
+	tt_caching = bo->ttm.ttm->caching;
+	order = ttm_pool_prealloc_order(pool);
+	if (order && ttm_bo->ttm) {
+		u32 suboptimal = ttm_tt_suboptimal_pages(ttm_bo->ttm);
+		u64 cap = min_t(u64, budget, xe_bo_size(bo)) >> PAGE_SHIFT;
+
+		/* Prealloc only the beneficial-order chunks the move replaces. */
+		want = DIV_ROUND_UP_ULL(min_t(u64, suboptimal, cap), 1UL << order);
+	}
+	xe_bo_unlock(bo);
+
+	/* Phase 2: preallocate outside the lock; */
+	if (want) {
+		ret = ttm_pool_prealloc_fill(pool, tt_caching, &pp, want);
+		if (ret || !pp.count) {
+			ret = ret ?: -ENOMEM;
+			xe_gt_stats_incr(xe_root_mmio_gt(xe),
+					 XE_GT_STATS_ID_DEFRAG_FAILED_COUNT, 1);
+			goto out_err;
+		}
+	}
+
+	/*
+	 * Phase 3: re-take the lock, re-check, and validate using the prealloc.
+	 */
 	xe_bo_lock(bo, false);
 
-	/* Re-check eligibility under the BO lock. */
 	if (!xe_bo_needs_defrag(bo)) {
 		xe_bo_defrag_remove(bo);
 		goto unlock;
@@ -1277,6 +1317,7 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 	place.flags |= TTM_PL_FLAG_TEMPORARY;
 	placement.num_placement = 1;
 	placement.placement = &place;
+	ctx.prealloc = &pp;
 
 	/*
 	 * On success the move reallocates the backing at beneficial order and
@@ -1321,6 +1362,9 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 
 unlock:
 	xe_bo_unlock(bo);
+out_err:
+	ttm_pool_prealloc_fini(pool, &pp);
+out:
 	return ret;
 }
 
