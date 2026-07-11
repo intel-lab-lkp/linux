@@ -2684,6 +2684,15 @@ config FIND_BIT_BENCHMARK
 
 	  If unsure, say N.
 
+config REGION_ALLOC_BENCHMARK
+	tristate "Benchmark bitmap, IDA and Maple Tree region allocation"
+	help
+	  This builds a microbenchmark comparing variable-sized region
+	  allocation using bitmaps, IDA and Maple Tree. The benchmark
+	  runs at module load time.
+
+	  If unsure, say N.
+
 config FIND_BIT_BENCHMARK_RUST
 	tristate "Test find_bit functions in Rust"
 	depends on RUST
