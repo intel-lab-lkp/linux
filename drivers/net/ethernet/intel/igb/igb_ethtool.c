@@ -3031,8 +3031,6 @@ void igb_write_rss_key(struct igb_adapter *adapter)
 {
 	struct e1000_hw *hw = &adapter->hw;
 
-	ASSERT_RTNL();
-
 	for (int i = 0; i < IGB_RSS_KEY_SIZE / 4; i++) {
 		u32 val = get_unaligned_le32(&adapter->rss_key[i * 4]);
 
