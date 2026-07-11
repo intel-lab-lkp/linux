@@ -1170,6 +1170,13 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	move_lacks_source = !old_mem || (handle_system_ccs ? (!bo->ccs_cleared) :
 					 (!mem_type_is_vram(old_mem_type) && !tt_has_data));
 
+	/*
+	 * A defrag move always copies the existing contents from the stashed
+	 * old tt into the freshly (re)allocated backing.
+	 */
+	if (ttm_bo->defrag_old_tt)
+		move_lacks_source = false;
+
 	needs_clear = (ttm && ttm->page_flags & TTM_TT_FLAG_ZERO_ALLOC) ||
 		(!ttm && ttm_bo->type == ttm_bo_type_device);
 
@@ -1206,9 +1213,12 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	/*
 	 * Failed multi-hop where the old_mem is still marked as
 	 * TTM_PL_FLAG_TEMPORARY, should just be a dummy move.
+	 *
+	 * For a defrag move the old and new tt differ, so fallthrough to the
+	 * copy path instead of treating it as a no-op.
 	 */
 	if (old_mem_type == XE_PL_TT &&
-	    new_mem->mem_type == XE_PL_TT) {
+	    new_mem->mem_type == XE_PL_TT && !ttm_bo->defrag_old_tt) {
 		ttm_bo_move_null(ttm_bo, new_mem);
 		goto out;
 	}
@@ -1279,6 +1289,12 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 			flags |= XE_MIGRATE_CLEAR_FLAG_CCS_DATA;
 
 		fence = xe_migrate_clear(migrate, bo, new_mem, flags);
+	} else if (ttm_bo->defrag_old_tt) {
+		struct xe_ttm_tt *old_xe_tt =
+			container_of(ttm_bo->defrag_old_tt, struct xe_ttm_tt, ttm);
+
+		fence = xe_migrate_copy_defrag(migrate, bo, old_mem, new_mem,
+					       old_xe_tt->sg, handle_system_ccs);
 	} else {
 		fence = xe_migrate_copy(migrate, bo, bo, old_mem, new_mem,
 					handle_system_ccs);
@@ -1315,13 +1331,13 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	 * BBs from BO as it is no longer needed.
 	 */
 	if (IS_VF_CCS_READY(xe) && old_mem_type == XE_PL_TT &&
-	    new_mem->mem_type == XE_PL_SYSTEM)
+	    (new_mem->mem_type == XE_PL_SYSTEM || ctx->defrag))
 		xe_sriov_vf_ccs_detach_bo(bo);
 
 	if (IS_VF_CCS_READY(xe) &&
 	    ((move_lacks_source && new_mem->mem_type == XE_PL_TT) ||
-	     (old_mem_type == XE_PL_SYSTEM && new_mem->mem_type == XE_PL_TT)) &&
-	    handle_system_ccs)
+	     ((old_mem_type == XE_PL_SYSTEM || ctx->defrag) &&
+	      new_mem->mem_type == XE_PL_TT)) && handle_system_ccs)
 		ret = xe_sriov_vf_ccs_attach_bo(bo);
 
 out:
