@@ -81,6 +81,35 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		   struct ttm_operation_ctx *ctx);
 void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt);
 
+/**
+ * struct ttm_pool_prealloc - Pages preallocated outside the dma-resv lock
+ * @pages: Array of @count beneficial-order pages (or fewer if a fill fell
+ *         short); each entry is the head page of a 1 << @order chunk.
+ * @order: Page order of every preallocated chunk.
+ * @caching: CPU caching applied to the pages, so leftovers can be restored
+ *           to write-back before being freed.
+ * @count: Number of valid entries in @pages.
+ * @used: Number of entries already consumed by the pool allocator.
+ *
+ * Defrag pages are interchangeable, so only a count of beneficial-order chunks
+ * is needed. ttm_pool_prealloc_fill() populates this outside the lock and
+ * __ttm_pool_alloc() drains it; any unused tail is released by
+ * ttm_pool_prealloc_fini().
+ */
+struct ttm_pool_prealloc {
+	struct page **pages;
+	unsigned int order;
+	enum ttm_caching caching;
+	unsigned int count;
+	unsigned int used;
+};
+
+int ttm_pool_prealloc_fill(struct ttm_pool *pool, enum ttm_caching tt_caching,
+			   struct ttm_pool_prealloc *pp, unsigned int count);
+void ttm_pool_prealloc_fini(struct ttm_pool *pool,
+			    struct ttm_pool_prealloc *pp);
+unsigned int ttm_pool_prealloc_order(struct ttm_pool *pool);
+
 void ttm_pool_init(struct ttm_pool *pool, struct device *dev,
 		   int nid, unsigned int alloc_flags);
 void ttm_pool_fini(struct ttm_pool *pool);

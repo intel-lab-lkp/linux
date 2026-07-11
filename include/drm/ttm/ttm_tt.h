@@ -135,6 +135,12 @@ struct ttm_tt {
 	enum ttm_caching caching;
 	/** @restore: Partial restoration from backup state. TTM private */
 	struct ttm_pool_tt_restore *restore;
+	/**
+	 * @nr_suboptimal_pages: Number of pages backed below the pool's
+	 * beneficial order. Recorded by the pool allocator after populate; a
+	 * defrag pass reads it to size its out-of-lock preallocation exactly.
+	 */
+	u32 nr_suboptimal_pages;
 };
 
 /**
@@ -199,6 +205,17 @@ static inline void ttm_tt_clear_backed_up(struct ttm_tt *tt)
 static inline bool ttm_tt_is_beneficial_order_failed(const struct ttm_tt *tt)
 {
 	return tt->page_flags & TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
+}
+
+/**
+ * ttm_tt_suboptimal_pages() - Pages backed below the pool's beneficial order
+ * @tt: The struct ttm_tt.
+ *
+ * Return: Number of pages a defrag move would (re)allocate at beneficial order.
+ */
+static inline u32 ttm_tt_suboptimal_pages(const struct ttm_tt *tt)
+{
+	return tt->nr_suboptimal_pages;
 }
 
 /**
