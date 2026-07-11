@@ -76,6 +76,9 @@ static bool get_name_filldir(struct dir_context *ctx, const char *name,
 	if (inum != gnfd->inum.no_addr)
 		return true;
 
+	if (length > GFS2_FNAMESIZE)
+		return false;
+
 	memcpy(gnfd->name, name, length);
 	gnfd->name[length] = 0;
 
