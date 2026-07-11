@@ -11,6 +11,7 @@
 struct dma_fence;
 struct drm_pagemap_addr;
 struct iosys_map;
+struct sg_table;
 struct ttm_resource;
 
 struct xe_bo;
@@ -131,6 +132,13 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
 				  struct ttm_resource *src,
 				  struct ttm_resource *dst,
 				  bool copy_only_ccs);
+
+struct dma_fence *xe_migrate_copy_defrag(struct xe_migrate *m,
+					 struct xe_bo *bo,
+					 struct ttm_resource *src,
+					 struct ttm_resource *dst,
+					 struct sg_table *src_sg,
+					 bool need_ccs);
 
 struct dma_fence *xe_migrate_resolve(struct xe_migrate *m,
 				     struct xe_bo *bo,
