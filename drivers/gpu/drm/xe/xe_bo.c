@@ -1263,7 +1263,9 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 	struct ttm_placement placement;
 	struct ttm_place place;
 	enum ttm_caching tt_caching;
-	unsigned int order, want = 0;
+	unsigned int order, want = 0, got = 0;
+	u64 lock_ns = 0, prealloc_ns = 0, lockwait_ns = 0;
+	ktime_t t0;
 	int ret = 0;
 
 	*consumed = 0;
@@ -1294,6 +1296,7 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 
 	/* Phase 2: preallocate outside the lock; */
 	if (want) {
+		t0 = ktime_get();
 		ret = ttm_pool_prealloc_fill(pool, tt_caching, &pp, want);
 		if (ret || !pp.count) {
 			ret = ret ?: -ENOMEM;
@@ -1301,12 +1304,16 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 					 XE_GT_STATS_ID_DEFRAG_FAILED_COUNT, 1);
 			goto out_err;
 		}
+		prealloc_ns = ktime_to_ns(ktime_sub(ktime_get(), t0));
 	}
 
 	/*
 	 * Phase 3: re-take the lock, re-check, and validate using the prealloc.
 	 */
+	t0 = ktime_get();
 	xe_bo_lock(bo, false);
+	lockwait_ns = ktime_to_ns(ktime_sub(ktime_get(), t0));
+	t0 = ktime_get();
 
 	if (!xe_bo_needs_defrag(bo)) {
 		xe_bo_defrag_remove(bo);
@@ -1362,9 +1369,13 @@ static int xe_bo_defrag_one(struct xe_device *xe, struct xe_bo *bo,
 
 unlock:
 	xe_bo_unlock(bo);
+	lock_ns = ktime_to_ns(ktime_sub(ktime_get(), t0));
+	got = pp.used;
 out_err:
 	ttm_pool_prealloc_fini(pool, &pp);
 out:
+	trace_xe_bo_defrag_one(bo, budget, want, got, lock_ns, prealloc_ns,
+			       lockwait_ns, *consumed, ret);
 	return ret;
 }
 
@@ -1395,6 +1406,9 @@ static void xe_bo_defrag_worker(struct work_struct *w)
 		drm_dev_exit(idx);
 		return;
 	}
+
+	trace_xe_bo_defrag_worker(xe, 0, atomic_read(&xe->mem.defrag.count),
+				  true);
 
 	/*
 	 * Process at most XE_BO_DEFRAG_SIZE_LIMIT bytes of newly (re)allocated
@@ -1503,6 +1517,8 @@ static void xe_bo_defrag_worker(struct work_struct *w)
 
 	xe_pm_runtime_put(xe);
 	drm_dev_exit(idx);
+	trace_xe_bo_defrag_worker(xe, defrag_bytes,
+				  atomic_read(&xe->mem.defrag.count), false);
 }
 
 static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,

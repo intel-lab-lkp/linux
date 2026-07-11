@@ -85,6 +85,65 @@ TRACE_EVENT(xe_bo_move,
 		      __get_str(new_placement_name), __get_str(device_id))
 );
 
+TRACE_EVENT(xe_bo_defrag_worker,
+	    TP_PROTO(struct xe_device *xe, u64 defrag_bytes, int count,
+		     bool enter),
+	    TP_ARGS(xe, defrag_bytes, count, enter),
+	    TP_STRUCT__entry(
+		     __string(dev, dev_name(xe->drm.dev))
+		     __field(u64, defrag_bytes)
+		     __field(int, count)
+		     __field(bool, enter)
+		     ),
+	    TP_fast_assign(
+		   __assign_str(dev);
+		   __entry->defrag_bytes = defrag_bytes;
+		   __entry->count = count;
+		   __entry->enter = enter;
+		   ),
+	    TP_printk("dev=%s %s defrag_bytes=%llu count=%d",
+		      __get_str(dev), __entry->enter ? "enter" : "exit",
+		      __entry->defrag_bytes, __entry->count)
+);
+
+TRACE_EVENT(xe_bo_defrag_one,
+	    TP_PROTO(struct xe_bo *bo, u64 budget, unsigned int prealloc_want,
+		     unsigned int prealloc_got, u64 lock_ns, u64 prealloc_ns,
+		     u64 lockwait_ns, u64 consumed, int ret),
+	    TP_ARGS(bo, budget, prealloc_want, prealloc_got, lock_ns,
+		    prealloc_ns, lockwait_ns, consumed, ret),
+	    TP_STRUCT__entry(
+		     __string(dev, __dev_name_bo(bo))
+		     __field(size_t, size)
+		     __field(u64, budget)
+		     __field(unsigned int, prealloc_want)
+		     __field(unsigned int, prealloc_got)
+		     __field(u64, lock_us)
+		     __field(u64, prealloc_us)
+		     __field(u64, lockwait_us)
+		     __field(u64, consumed)
+		     __field(int, ret)
+		     ),
+	    TP_fast_assign(
+		   __assign_str(dev);
+		   __entry->size = xe_bo_size(bo);
+		   __entry->budget = budget;
+		   __entry->prealloc_want = prealloc_want;
+		   __entry->prealloc_got = prealloc_got;
+		   __entry->lock_us = div_u64(lock_ns, 1000);
+		   __entry->prealloc_us = div_u64(prealloc_ns, 1000);
+		   __entry->lockwait_us = div_u64(lockwait_ns, 1000);
+		   __entry->consumed = consumed;
+		   __entry->ret = ret;
+		   ),
+	    TP_printk("dev=%s size=%zu budget=%llu prealloc=%u/%u lock_us=%llu lockwait_us=%llu prealloc_us=%llu consumed=%llu ret=%d",
+		      __get_str(dev), __entry->size, __entry->budget,
+		      __entry->prealloc_got, __entry->prealloc_want,
+		      __entry->lock_us, __entry->lockwait_us,
+		      __entry->prealloc_us, __entry->consumed,
+		      __entry->ret)
+);
+
 DECLARE_EVENT_CLASS(xe_vma,
 		    TP_PROTO(struct xe_vma *vma),
 		    TP_ARGS(vma),
