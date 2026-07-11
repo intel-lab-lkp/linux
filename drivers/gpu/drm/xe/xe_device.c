@@ -455,11 +455,41 @@ bool xe_device_is_admin_only(const struct xe_device *xe)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+static void xe_device_assert_dma_pages_zero(struct xe_device *xe)
+{
+	unsigned int i;
+
+	/*
+	 * All BOs, userptr VMAs and SVM ranges must have been torn down by the
+	 * time the device is destroyed, so every DMA-mapped-pages counter must
+	 * have returned to zero. A non-zero value indicates unbalanced
+	 * accounting, i.e. a missing unmap-side decrement.
+	 */
+	for (i = 0; i < NR_PAGE_ORDERS; i++) {
+		xe_assert(xe, !atomic_long_read(&xe->mem.dma_mapped_pages[i]));
+		xe_assert(xe, !atomic_long_read(&xe->mem.dma_mapped_pages_svm[i]));
+	}
+}
+#else
+static void xe_device_assert_dma_pages_zero(struct xe_device *xe)
+{
+}
+#endif
+
 static void xe_device_destroy(struct drm_device *dev, void *dummy)
 {
 	struct xe_device *xe = to_xe_device(dev);
 
 	xe_bo_dev_fini(&xe->bo_device);
+
+	/*
+	 * Assert the DMA-mapped-pages accounting only after xe_bo_dev_fini()
+	 * has flushed the async BO-free worker: BOs pending async free still
+	 * hold their DMA mappings (and counts) until the worker runs, so
+	 * asserting before the flush could trip a false positive.
+	 */
+	xe_device_assert_dma_pages_zero(xe);
 
 	if (xe->preempt_fence_wq)
 		destroy_workqueue(xe->preempt_fence_wq);

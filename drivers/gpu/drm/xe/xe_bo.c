@@ -367,6 +367,50 @@ struct xe_ttm_tt {
 	bool purgeable;
 };
 
+/*
+ * xe_tt_account_dma_pages - account DMA-mapped tt pages per order
+ * @xe: the xe device
+ * @xe_tt: the xe_ttm_tt whose sg table to walk
+ * @sign: +1 to add, -1 to subtract
+ *
+ * Walk the tt's DMA scatter-gather table and split each (physically
+ * contiguous) segment into the largest power-of-two page runs: a segment of N
+ * pages contributes a 2^k chunk for the largest k with 2^k <= N, repeated for
+ * the remainder. Accumulate the count of 2^k pages into
+ * xe->mem.dma_mapped_pages[k]. Driving this off the sg table rather than
+ * tt->pages keeps the accounting correct even when pages[] entries are cleared
+ * while still DMA-mapped (e.g. the defrag page-borrowing path).
+ */
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+static void xe_tt_account_dma_pages(struct xe_device *xe,
+				    struct xe_ttm_tt *xe_tt, int sign)
+{
+	struct scatterlist *sg;
+	unsigned int i;
+
+	for_each_sgtable_sg(xe_tt->sg, sg, i) {
+		unsigned long nr_pages = sg->length >> PAGE_SHIFT;
+
+		while (nr_pages) {
+			unsigned int order = min_t(unsigned int,
+						   __fls(nr_pages),
+						   MAX_PAGE_ORDER);
+			unsigned long chunk = 1UL << order;
+
+			atomic_long_add((long)chunk * sign,
+					&xe->mem.dma_mapped_pages[order]);
+
+			nr_pages -= chunk;
+		}
+	}
+}
+#else
+static void xe_tt_account_dma_pages(struct xe_device *xe,
+				    struct xe_ttm_tt *xe_tt, int sign)
+{
+}
+#endif
+
 static int xe_tt_map_sg(struct xe_device *xe, struct ttm_tt *tt)
 {
 	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
@@ -396,6 +440,7 @@ static int xe_tt_map_sg(struct xe_device *xe, struct ttm_tt *tt)
 		return ret;
 	}
 
+	xe_tt_account_dma_pages(xe, xe_tt, 1);
 	return 0;
 }
 
@@ -404,6 +449,7 @@ static void xe_tt_unmap_sg(struct xe_device *xe, struct ttm_tt *tt)
 	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
 
 	if (xe_tt->sg) {
+		xe_tt_account_dma_pages(xe, xe_tt, -1);
 		dma_unmap_sgtable(xe->drm.dev, xe_tt->sg,
 				  DMA_BIDIRECTIONAL, 0);
 		sg_free_table(xe_tt->sg);

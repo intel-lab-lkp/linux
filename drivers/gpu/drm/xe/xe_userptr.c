@@ -8,8 +8,71 @@
 
 #include <linux/mm.h>
 
+#include <drm/drm_pagemap.h>
+
 #include "xe_tlb_inval.h"
 #include "xe_trace_bo.h"
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+/*
+ * xe_userptr_dma_map_account - drm_gpusvm DMA-mapping accounting callback
+ * @gpusvm: The GPU SVM the mapping belongs to
+ * @addr: The address descriptor of the chunk being (un)mapped
+ * @sign: +1 when @addr was DMA-mapped, -1 when it is being unmapped
+ *
+ * Account, per page order, the system-memory pages DMA-mapped for GPU access
+ * through the drm_gpusvm_pages instance shared by userptr (and, in fault mode,
+ * SVM). Only DRM_INTERCONNECT_SYSTEM entries are real DMA maps and counted;
+ * device interconnect (VRAM, P2P) entries are skipped. The counts are solely
+ * exposed through debugfs, so the callback is only registered when
+ * CONFIG_DEBUG_FS is enabled.
+ */
+static void xe_userptr_dma_map_account(struct drm_gpusvm *gpusvm,
+				       const struct drm_pagemap_addr *addr,
+				       int sign)
+{
+	struct xe_vm *vm = container_of(gpusvm, struct xe_vm, svm.gpusvm);
+	unsigned int order = addr->order;
+
+	if (addr->proto != DRM_INTERCONNECT_SYSTEM)
+		return;
+
+	/*
+	 * The CPU-PTE map order reported by hmm can exceed MAX_PAGE_ORDER
+	 * (e.g. an order-18 1GB mapping), so clamp the array index to avoid an
+	 * out-of-bounds access. Clamping is symmetric across the +1/-1 calls,
+	 * so the per-order counters stay balanced.
+	 */
+	order = min(order, (unsigned int)NR_PAGE_ORDERS - 1);
+
+	atomic_long_add((long)(1UL << addr->order) * sign,
+			&vm->xe->mem.dma_mapped_pages_svm[order]);
+}
+
+static const struct drm_gpusvm_ops xe_userptr_gpusvm_ops = {
+	.dma_map_account = xe_userptr_dma_map_account,
+};
+#endif
+
+/**
+ * xe_userptr_gpusvm_ops_get() - Accounting ops for the simple gpusvm instance
+ *
+ * The core drm_gpusvm_pages-only instance used for userptr (and, in fault
+ * mode, shared with SVM) is initialised with these ops so that DMA-mapped
+ * system pages are accounted and exposed through debugfs. Returns NULL when
+ * CONFIG_DEBUG_FS is disabled, in which case no accounting is kept and the
+ * instance is initialised without ops.
+ *
+ * Return: Pointer to the restricted &drm_gpusvm_ops, or NULL.
+ */
+const struct drm_gpusvm_ops *xe_userptr_gpusvm_ops_get(void)
+{
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	return &xe_userptr_gpusvm_ops;
+#else
+	return NULL;
+#endif
+}
 
 static void xe_userptr_assert_in_notifier(struct xe_vm *vm)
 {

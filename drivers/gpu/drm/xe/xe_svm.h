@@ -194,6 +194,7 @@ struct drm_pagemap *xe_drm_pagemap_from_fd(int fd, u32 region_instance);
 
 #else
 #include <linux/interval_tree.h>
+#include "xe_userptr.h"
 #include "xe_vm.h"
 
 struct drm_pagemap_addr;
@@ -236,7 +237,8 @@ int xe_svm_init(struct xe_vm *vm)
 {
 #if IS_ENABLED(CONFIG_DRM_GPUSVM)
 	return drm_gpusvm_init(&vm->svm.gpusvm, "Xe SVM (simple)",
-			       NULL, 0, 0, 0, NULL, NULL, 0);
+			       NULL, 0, 0, 0,
+			       xe_userptr_gpusvm_ops_get(), NULL, 0);
 #else
 	return 0;
 #endif
