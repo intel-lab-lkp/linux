@@ -3304,6 +3304,7 @@ static void sd_read_io_hints(struct scsi_disk *sdkp, unsigned char *buffer)
 	struct scsi_sense_hdr sshdr;
 	struct scsi_mode_data data;
 	int res;
+	u32 len;
 
 	if (sdp->sdev_bflags & BLIST_SKIP_IO_HINTS)
 		return;
@@ -3313,9 +3314,17 @@ static void sd_read_io_hints(struct scsi_disk *sdkp, unsigned char *buffer)
 			      sdkp->max_retries, &data, &sshdr);
 	if (res < 0)
 		return;
+	/*
+	 * The device-reported mode data length can exceed the buffer that
+	 * was actually transferred; clamp it so the descriptor walk stays
+	 * within buffer[SD_BUF_SIZE].
+	 */
+	if (data.length > SD_BUF_SIZE - data.header_length)
+		len = SD_BUF_SIZE;
+	else
+		len = data.header_length + data.length;
 	start = (void *)buffer + data.header_length + 16;
-	end = (void *)buffer + ALIGN_DOWN(data.header_length + data.length,
-					  sizeof(*end));
+	end = (void *)buffer + ALIGN_DOWN(len, sizeof(*end));
 	/*
 	 * From "SBC-5 Constrained Streams with Data Lifetimes": Device severs
 	 * should assign the lowest numbered stream identifiers to permanent
