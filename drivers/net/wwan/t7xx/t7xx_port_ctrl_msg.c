@@ -186,10 +186,15 @@ static int control_msg_handler(struct t7xx_port *port, struct sk_buff *skb)
 			int event = port_conf->rx_ch == PORT_CH_CONTROL_RX ?
 				    FSM_EVENT_MD_HS2 : FSM_EVENT_AP_HS2;
 
-			ret = t7xx_fsm_append_event(ctl, event, skb->data,
-						    le32_to_cpu(ctrl_msg_h->data_length));
-			if (ret)
-				dev_err(port->dev, "Failed to append Handshake 2 event");
+			if (le32_to_cpu(ctrl_msg_h->data_length) > skb->len) {
+				dev_err(port->dev, "Invalid Handshake 2 data length\n");
+				ret = -EINVAL;
+			} else {
+				ret = t7xx_fsm_append_event(ctl, event, skb->data,
+							    le32_to_cpu(ctrl_msg_h->data_length));
+				if (ret)
+					dev_err(port->dev, "Failed to append Handshake 2 event");
+			}
 		}
 
 		dev_kfree_skb_any(skb);
