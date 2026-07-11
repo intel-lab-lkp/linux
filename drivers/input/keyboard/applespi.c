@@ -45,6 +45,7 @@
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/dmi.h>
 #include <linux/efi.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
@@ -1605,6 +1606,13 @@ static void applespi_save_bl_level(struct applespi_data *applespi,
 			 "Error saving backlight level to EFI vars: 0x%lx\n", sts);
 }
 
+static bool applespi_can_not_dma(struct spi_controller *controller,
+				 struct spi_device *spi,
+				 struct spi_transfer *xfer)
+{
+	return false;
+}
+
 static int applespi_probe(struct spi_device *spi)
 {
 	struct applespi_data *applespi;
@@ -1612,6 +1620,15 @@ static int applespi_probe(struct spi_device *spi)
 	acpi_status acpi_sts;
 	int sts, i;
 	unsigned long long gpe, usb_status;
+
+	/*
+	 * MacBook8,1's SPI host controller DMA is broken (timeout errors).
+	 * Force PIO mode by overriding the controller's can_dma callback.
+	 */
+	if (dmi_match(DMI_PRODUCT_NAME, "MacBook8,1")) {
+		dev_info(&spi->dev, "Disabling DMA for MacBook8,1 SPI to force PIO mode\n");
+		spi->controller->can_dma = applespi_can_not_dma;
+	}
 
 	/* check if the USB interface is present and enabled already */
 	acpi_sts = acpi_evaluate_integer(spi_handle, "UIST", NULL, &usb_status);
