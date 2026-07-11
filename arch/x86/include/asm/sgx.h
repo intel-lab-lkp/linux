@@ -194,56 +194,6 @@ struct sgx_secs {
 } __packed;
 
 /**
- * enum sgx_tcs_flags - execution flags for TCS
- * @SGX_TCS_DBGOPTIN:	If enabled allows single-stepping and breakpoints
- *			inside an enclave. It is cleared by EADD but can
- *			be set later with EDBGWR.
- */
-enum sgx_tcs_flags {
-	SGX_TCS_DBGOPTIN	= 0x01,
-};
-
-#define SGX_TCS_RESERVED_MASK	GENMASK_ULL(63, 1)
-#define SGX_TCS_RESERVED_SIZE	4024
-
-/**
- * struct sgx_tcs - Thread Control Structure (TCS)
- * @state:		used to mark an entered TCS
- * @flags:		execution flags (cleared by EADD)
- * @ssa_offset:		SSA stack offset relative to the enclave base
- * @ssa_index:		the current SSA frame index (cleard by EADD)
- * @nr_ssa_frames:	the number of frame in the SSA stack
- * @entry_offset:	entry point offset relative to the enclave base
- * @exit_addr:		address outside the enclave to exit on an exception or
- *			interrupt
- * @fs_offset:		offset relative to the enclave base to become FS
- *			segment inside the enclave
- * @gs_offset:		offset relative to the enclave base to become GS
- *			segment inside the enclave
- * @fs_limit:		size to become a new FS-limit (only 32-bit enclaves)
- * @gs_limit:		size to become a new GS-limit (only 32-bit enclaves)
- *
- * Thread Control Structure (TCS) is an enclave page visible in its address
- * space that defines an entry point inside the enclave. A thread enters inside
- * an enclave by supplying address of TCS to ENCLU(EENTER). A TCS can be entered
- * by only one thread at a time.
- */
-struct sgx_tcs {
-	u64 state;
-	u64 flags;
-	u64 ssa_offset;
-	u32 ssa_index;
-	u32 nr_ssa_frames;
-	u64 entry_offset;
-	u64 exit_addr;
-	u64 fs_offset;
-	u64 gs_offset;
-	u32 fs_limit;
-	u32 gs_limit;
-	u8  reserved[SGX_TCS_RESERVED_SIZE];
-} __packed;
-
-/**
  * struct sgx_pageinfo - an enclave page descriptor
  * @addr:	address of the enclave page
  * @contents:	pointer to the page contents
