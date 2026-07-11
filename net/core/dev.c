@@ -5461,6 +5461,65 @@ bad_dev:
 	return NET_RX_DROP;
 }
 
+#ifdef CONFIG_RPS
+static inline int __netif_rps(struct sk_buff *skb)
+{
+	int cpu;
+	int ret = NET_RX_UNHANDLED;
+	struct rps_dev_flow voidflow, *rflow = &voidflow;
+
+	cpu = get_rps_cpu(skb->dev, skb, &rflow);
+	if (cpu >= 0)
+		ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
+
+	return ret;
+}
+#endif
+
+static inline int netif_rps(struct sk_buff *skb)
+{
+	int ret = NET_RX_UNHANDLED;
+
+#ifdef CONFIG_RPS
+	if (!static_branch_unlikely(&rps_needed))
+		return ret;
+
+	rcu_read_lock();
+	ret = __netif_rps(skb);
+	rcu_read_unlock();
+#endif
+
+	return ret;
+}
+
+static inline int netif_rps_list(struct list_head *head)
+{
+	int ret = NET_RX_UNHANDLED;
+
+#ifdef CONFIG_RPS
+	LIST_HEAD(undo_list);
+	struct sk_buff *skb, *next;
+
+	if (!static_branch_unlikely(&rps_needed))
+		return ret;
+
+	rcu_read_lock();
+	list_for_each_entry_safe(skb, next, head, list) {
+		skb_list_del_init(skb);
+		if (__netif_rps(skb) == NET_RX_UNHANDLED)
+			list_add_tail(&skb->list, &undo_list);
+	}
+	rcu_read_unlock();
+
+	if (list_empty(&undo_list))
+		ret = NET_RX_SUCCESS;
+	else
+		list_splice_init(&undo_list, head);
+#endif
+
+	return ret;
+}
+
 static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
@@ -5730,34 +5789,18 @@ EXPORT_SYMBOL_GPL(do_xdp_generic);
 
 static int netif_rx_internal(struct sk_buff *skb)
 {
+	unsigned int qtail;
 	int ret;
 
 	net_timestamp_check(READ_ONCE(net_hotdata.tstamp_prequeue), skb);
 
 	trace_netif_rx(skb);
 
-#ifdef CONFIG_RPS
-	if (static_branch_unlikely(&rps_needed)) {
-		struct rps_dev_flow voidflow, *rflow = &voidflow;
-		int cpu;
+	ret = netif_rps(skb);
+	if (ret != NET_RX_UNHANDLED)
+		return ret;
 
-		rcu_read_lock();
-
-		cpu = get_rps_cpu(skb->dev, skb, &rflow);
-		if (cpu < 0)
-			cpu = smp_processor_id();
-
-		ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
-
-		rcu_read_unlock();
-	} else
-#endif
-	{
-		unsigned int qtail;
-
-		ret = enqueue_to_backlog(skb, smp_processor_id(), &qtail);
-	}
-	return ret;
+	return enqueue_to_backlog(skb, smp_processor_id(), &qtail);
 }
 
 /**
@@ -6424,19 +6467,11 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 	if (skb_defer_rx_timestamp(skb))
 		return NET_RX_SUCCESS;
 
-	rcu_read_lock();
-#ifdef CONFIG_RPS
-	if (static_branch_unlikely(&rps_needed)) {
-		struct rps_dev_flow voidflow, *rflow = &voidflow;
-		int cpu = get_rps_cpu(skb->dev, skb, &rflow);
+	ret = netif_rps(skb);
+	if (ret != NET_RX_UNHANDLED)
+		return ret;
 
-		if (cpu >= 0) {
-			ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
-			rcu_read_unlock();
-			return ret;
-		}
-	}
-#endif
+	rcu_read_lock();
 	ret = __netif_receive_skb(skb);
 	rcu_read_unlock();
 	return ret;
@@ -6456,21 +6491,10 @@ void netif_receive_skb_list_internal(struct list_head *head)
 	}
 	list_splice_init(&sublist, head);
 
-	rcu_read_lock();
-#ifdef CONFIG_RPS
-	if (static_branch_unlikely(&rps_needed)) {
-		list_for_each_entry_safe(skb, next, head, list) {
-			struct rps_dev_flow voidflow, *rflow = &voidflow;
-			int cpu = get_rps_cpu(skb->dev, skb, &rflow);
+	if (netif_rps_list(head) == NET_RX_SUCCESS)
+		return;
 
-			if (cpu >= 0) {
-				/* Will be handled, remove from list */
-				skb_list_del_init(skb);
-				enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
-			}
-		}
-	}
-#endif
+	rcu_read_lock();
 	__netif_receive_skb_list(head);
 	rcu_read_unlock();
 }
