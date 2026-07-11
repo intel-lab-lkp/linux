@@ -490,7 +490,7 @@ static sector_t minix_bmap(struct address_space *mapping, sector_t block)
 	return generic_block_bmap(mapping,block,minix_get_block);
 }
 
-static const struct address_space_operations minix_aops = {
+const struct address_space_operations minix_aops = {
 	.dirty_folio	= block_dirty_folio,
 	.invalidate_folio = block_invalidate_folio,
 	.read_folio = minix_read_folio,
