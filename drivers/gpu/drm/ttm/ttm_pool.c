@@ -1046,6 +1046,7 @@ int ttm_pool_prealloc_fill(struct ttm_pool *pool, enum ttm_caching tt_caching,
 	pp->caching = tt_caching;
 	pp->count = 0;
 	pp->used = 0;
+	pp->full = false;
 
 	/* Nothing to gain without a beneficial order or for DMA-alloc pools. */
 	if (!order || !count || ttm_pool_uses_dma_alloc(pool))
@@ -1102,6 +1103,187 @@ int ttm_pool_prealloc_fill(struct ttm_pool *pool, enum ttm_caching tt_caching,
 }
 EXPORT_SYMBOL(ttm_pool_prealloc_fill);
 
+/*
+ * Acquire a single *@order chunk, trying a same-order pool page first (already
+ * carries @caching) then a fresh system allocation (write-back). Runs unlocked.
+ * When @beneficial_reclaim_backoff is set, higher-order system allocations skip
+ * aggressive reclaim/compaction (see ttm_pool_alloc_page()).
+ *
+ * A fresh system page is write-back and needs the tt's caching applied later in
+ * bulk; *@need_caching is set true for it and false for a (pre-cached) pool
+ * page.
+ *
+ * On a genuine failure *@order is left untouched (the caller lowers it by one
+ * and retries). Fault injection instead pretends allocation at (or above) the
+ * beneficial order failed and lowers *@order to the beneficial order, so the
+ * caller's next attempt lands below it - mirroring the in-line acquire path's
+ * fail_beneficial jump and exercising the beneficial_order_failed tracking
+ * without driving the system into real fragmentation.
+ *
+ * Returns NULL if no page of *@order could be obtained.
+ */
+static struct page *ttm_pool_take_page(struct ttm_pool *pool,
+				       enum ttm_caching caching,
+				       unsigned int *order, gfp_t gfp,
+				       bool *need_caching,
+				       bool beneficial_reclaim_backoff)
+{
+	unsigned int beneficial = ttm_pool_beneficial_order(pool);
+	struct ttm_pool_type *pt;
+	struct page *p;
+
+	*need_caching = false;
+
+	if (IS_ENABLED(CONFIG_FAULT_INJECTION) && beneficial &&
+	    *order >= beneficial &&
+	    should_fail(&beneficial_order_fault_inject, 1)) {
+		*order = beneficial;
+		return NULL;
+	}
+
+	pt = ttm_pool_select_type(pool, caching, *order);
+	if (pt) {
+		p = ttm_pool_type_take(pt, ttm_pool_nid(pool));
+		if (p)
+			return p;	/* pool page already carries @caching */
+	}
+
+	p = ttm_pool_alloc_page(pool, gfp, *order, beneficial_reclaim_backoff);
+	if (!p)
+		return NULL;
+
+	/* Fresh system page is write-back; caller applies @caching in bulk. */
+	*need_caching = true;
+	return p;
+}
+
+/**
+ * ttm_pool_prealloc_fill_full() - Preallocate a whole tt's backing outside any
+ * lock
+ * @pool: The pool to allocate from.
+ * @tt_caching: The requested cpu-caching for the pages allocated.
+ * @pp: Prealloc bag to fill; marked @full and tiled with mixed-order chunks.
+ * @num_pages: Number of 4K pages the tt needs backed.
+ *
+ * Unlike ttm_pool_prealloc_fill() (which parks a bag of interchangeable
+ * beneficial-order defrag chunks), this allocates the ENTIRE backing for a tt
+ * of @num_pages pages up front, at whatever mix of orders is available (pool
+ * pages included), so that the subsequent __ttm_pool_alloc() under the dma-resv
+ * lock merely installs the pages without stalling in reclaim/compaction. The
+ * chunk orders mirror the in-line allocator's order walk; each chunk's order is
+ * recorded on the page itself and read back at consume time.
+ *
+ * May sleep/reclaim freely as it runs unlocked. When
+ * @beneficial_reclaim_backoff is set, higher-order chunks are taken without
+ * aggressive reclaim/compaction: the caller relies on a background
+ * defragmenter to upgrade to beneficial-order pages in place later, so there
+ * is no need to stall the user context reclaiming for contiguity here. A short
+ * fill is fine: the pool falls back to in-line allocation for the shortfall.
+ * DMA-alloc pools are not supported (the bag stays empty). Returns 0 (release
+ * with ttm_pool_prealloc_fini()).
+ */
+int ttm_pool_prealloc_fill_full(struct ttm_pool *pool,
+				enum ttm_caching tt_caching,
+				struct ttm_pool_prealloc *pp,
+				unsigned int num_pages,
+				bool beneficial_reclaim_backoff)
+{
+	gfp_t gfp = ttm_pool_prealloc_gfp(pool) | __GFP_ZERO |
+		__GFP_RETRY_MAYFAIL | __GFP_NOWARN;
+	unsigned int highest = MAX_PAGE_ORDER;
+	unsigned int remaining = num_pages;
+	struct page **cpages = NULL;
+	unsigned int ncpages = 0;
+	int r;
+
+	pp->pages = NULL;
+	pp->order = 0;
+	pp->caching = tt_caching;
+	pp->count = 0;
+	pp->used = 0;
+	pp->full = true;
+
+	/* Caching is applied on the kernel mapping, so DMA-alloc is unsupported. */
+	if (!num_pages || ttm_pool_uses_dma_alloc(pool))
+		return 0;
+
+	/* Worst case is one order-0 chunk per page. */
+	pp->pages = kvzalloc_objs(*pp->pages, num_pages);
+	if (!pp->pages)
+		return 0;
+
+	/*
+	 * Fresh write-back chunks get their caching changed in a single
+	 * set_pages_array_*() after the fill; collect their constituent pages
+	 * into an unpacked scratch array (one entry per 4K page) since the
+	 * packed bag holds mixed-order chunks. Cached tts and pool pages need
+	 * no change (and non-x86 handles caching at map time).
+	 */
+	if (IS_ENABLED(CONFIG_X86) && tt_caching != ttm_cached) {
+		cpages = kvzalloc_objs(*cpages, num_pages);
+		if (!cpages) {
+			kvfree(pp->pages);
+			pp->pages = NULL;
+			return 0;
+		}
+	}
+
+	while (remaining) {
+		unsigned int order = min_t(unsigned int, highest,
+					   __fls(remaining));
+		bool need_caching;
+		struct page *p;
+
+		for (;;) {
+			p = ttm_pool_take_page(pool, tt_caching, &order, gfp,
+					       &need_caching,
+					       beneficial_reclaim_backoff);
+			if (p)
+				break;
+			if (!order)
+				goto apply_caching;	/* short fill */
+			/*
+			 * Genuine failure: retry one order down. A fault
+			 * injection lowered @order to the beneficial order
+			 * above, so this drops it below - landing on a
+			 * sub-optimal (defrag-worthy) chunk.
+			 */
+			order--;
+		}
+
+		pp->pages[pp->count++] = p;
+		if (cpages && need_caching)
+			ttm_pool_prealloc_stage_caching(cpages, &ncpages, p,
+							order);
+		remaining -= 1u << order;
+		highest = order;
+	}
+
+apply_caching:
+	/*
+	 * Apply the requested caching to every collected page in one shot. On
+	 * failure the pages' caching is indeterminate, so drop the whole bag
+	 * (freeing restores write-back) and let the consumer allocate in-line.
+	 */
+	r = ttm_pool_prealloc_apply_caching(tt_caching, cpages, ncpages);
+	kvfree(cpages);
+	if (r) {
+		unsigned int i;
+
+		for (i = 0; i < pp->count; i++) {
+			struct page *p = pp->pages[i];
+
+			ttm_pool_free_page(pool, tt_caching,
+					   ttm_pool_page_order_nodma(p), p,
+					   false);
+		}
+		pp->count = 0;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(ttm_pool_prealloc_fill_full);
+
 /**
  * ttm_pool_prealloc_fini() - Release unconsumed preallocated pages
  * @pool: The pool the pages came from.
@@ -1111,9 +1293,13 @@ void ttm_pool_prealloc_fini(struct ttm_pool *pool, struct ttm_pool_prealloc *pp)
 {
 	unsigned int i;
 
-	for (i = pp->used; i < pp->count; ++i)
-		ttm_pool_free_page(pool, pp->caching, pp->order, pp->pages[i],
-				   false);
+	for (i = pp->used; i < pp->count; ++i) {
+		struct page *p = pp->pages[i];
+		unsigned int order = pp->full ?
+			ttm_pool_page_order_nodma(p) : pp->order;
+
+		ttm_pool_free_page(pool, pp->caching, order, p, false);
+	}
 	kvfree(pp->pages);
 	pp->pages = NULL;
 	pp->count = 0;
@@ -1251,9 +1437,10 @@ static int ttm_pool_iter_reuse_old(struct ttm_pool_alloc_iter *it)
 
 /*
  * Acquire a single page for the current order, leaving it in @it->p (NULL on
- * failure). Tries, in order: a beneficial-order page preallocated outside the
- * dma-resv lock (defrag), a same-order pool page, then a fresh system
- * allocation. Fault injection can force the beneficial-order paths to "fail".
+ * failure). Tries, in order: a chunk from a full out-of-lock prealloc (populate
+ * of the whole tt), a beneficial-order page preallocated outside the dma-resv
+ * lock (defrag), a same-order pool page, then a fresh system allocation. Fault
+ * injection can force the beneficial-order paths to "fail".
  */
 static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
 {
@@ -1261,6 +1448,39 @@ static void ttm_pool_iter_acquire_page(struct ttm_pool_alloc_iter *it)
 	struct ttm_pool_type *pt;
 
 	it->p = NULL;
+
+	/*
+	 * Full prealloc: the entire backing was allocated (pool + system, at
+	 * mixed orders) outside the dma-resv lock. Install the next chunk as-is,
+	 * taking its order from the page. Falls through to in-line allocation
+	 * once the best-effort bag is drained.
+	 */
+	if (pp && pp->full && pp->used < pp->count) {
+		it->fail_beneficial = false;
+		it->p = pp->pages[pp->used++];
+		it->order = ttm_pool_page_order_nodma(it->p);
+		it->page_caching = it->tt->caching;
+
+		/*
+		 * The full prealloc tiles at whatever orders were available
+		 * without stalling in reclaim. A sub-beneficial chunk only
+		 * means a sub-optimal backing (defrag-worthy) when it sits in a
+		 * beneficial-order aligned region that fully fits in the tt -
+		 * that region could have been a beneficial-order page. A low
+		 * order in the unaligned trailing tail is expected and must not
+		 * flag the tt (mirrors ttm_pool_harvest_remaining()).
+		 */
+		if (it->beneficial_order && it->order < it->beneficial_order) {
+			pgoff_t bnr = 1UL << it->beneficial_order;
+			pgoff_t off = it->tt->num_pages -
+				      it->alloc->remaining_pages;
+
+			if (round_down(off, bnr) + bnr <= it->tt->num_pages)
+				it->tt->page_flags |=
+					TTM_TT_FLAG_BENEFICIAL_ORDER_FAILED;
+		}
+		return;
+	}
 
 	/*
 	 * Fault injection: pretend allocation at (or above) the device's

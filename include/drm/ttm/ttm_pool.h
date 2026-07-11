@@ -83,18 +83,27 @@ void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt);
 
 /**
  * struct ttm_pool_prealloc - Pages preallocated outside the dma-resv lock
- * @pages: Array of @count beneficial-order pages (or fewer if a fill fell
- *         short); each entry is the head page of a 1 << @order chunk.
- * @order: Page order of every preallocated chunk.
+ * @pages: Array of @count preallocated chunks; each entry is the head page of a
+ *         chunk. In defrag mode every chunk is @order pages; in @full mode the
+ *         chunks tile a whole tt at mixed orders and the per-chunk order is read
+ *         back from the page itself.
+ * @order: Page order of every preallocated chunk (defrag mode only; 0 in @full
+ *         mode where each chunk carries its own order).
  * @caching: CPU caching applied to the pages, so leftovers can be restored
  *           to write-back before being freed.
  * @count: Number of valid entries in @pages.
  * @used: Number of entries already consumed by the pool allocator.
+ * @full: When set the bag holds a full, mixed-order tiling of an entire tt
+ *        (produced by ttm_pool_prealloc_fill_full()) rather than a bag of
+ *        interchangeable beneficial-order defrag chunks. The pool allocator
+ *        then drains the bag in order for every populate, taking each chunk's
+ *        order from the page, and falls back to in-line allocation only for any
+ *        shortfall.
  *
  * Defrag pages are interchangeable, so only a count of beneficial-order chunks
- * is needed. ttm_pool_prealloc_fill() populates this outside the lock and
- * __ttm_pool_alloc() drains it; any unused tail is released by
- * ttm_pool_prealloc_fini().
+ * is needed. ttm_pool_prealloc_fill() / ttm_pool_prealloc_fill_full() populate
+ * this outside the lock and __ttm_pool_alloc() drains it; any unused tail is
+ * released by ttm_pool_prealloc_fini().
  */
 struct ttm_pool_prealloc {
 	struct page **pages;
@@ -102,10 +111,16 @@ struct ttm_pool_prealloc {
 	enum ttm_caching caching;
 	unsigned int count;
 	unsigned int used;
+	bool full;
 };
 
 int ttm_pool_prealloc_fill(struct ttm_pool *pool, enum ttm_caching tt_caching,
 			   struct ttm_pool_prealloc *pp, unsigned int count);
+int ttm_pool_prealloc_fill_full(struct ttm_pool *pool,
+				enum ttm_caching tt_caching,
+				struct ttm_pool_prealloc *pp,
+				unsigned int num_pages,
+				bool beneficial_reclaim_backoff);
 void ttm_pool_prealloc_fini(struct ttm_pool *pool,
 			    struct ttm_pool_prealloc *pp);
 unsigned int ttm_pool_prealloc_order(struct ttm_pool *pool);
