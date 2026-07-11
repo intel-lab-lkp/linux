@@ -3532,6 +3532,7 @@ static int virtnet_tx_resize(struct virtnet_info *vi, struct send_queue *sq,
 	return err;
 }
 
+
 /*
  * Send command via the control virtqueue and check status.  Commands
  * supported by the hypervisor, as indicated by feature bits, should
@@ -3545,6 +3546,7 @@ static bool virtnet_send_command_reply(struct virtnet_info *vi, u8 class, u8 cmd
 	u32 out_num = 0, tmp, in_num = 0;
 	bool ok;
 	int ret;
+
 
 	/* Caller should know better */
 	BUG_ON(!virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ));
@@ -4927,6 +4929,32 @@ drv_stats:
 	}
 }
 
+static int virtnet_stats_reply_size(u8 type)
+{
+	switch (type) {
+	case VIRTIO_NET_STATS_TYPE_REPLY_CVQ:
+		return sizeof(struct virtio_net_stats_cvq);
+	case VIRTIO_NET_STATS_TYPE_REPLY_RX_BASIC:
+		return sizeof(struct virtio_net_stats_rx_basic);
+	case VIRTIO_NET_STATS_TYPE_REPLY_RX_CSUM:
+		return sizeof(struct virtio_net_stats_rx_csum);
+	case VIRTIO_NET_STATS_TYPE_REPLY_RX_GSO:
+		return sizeof(struct virtio_net_stats_rx_gso);
+	case VIRTIO_NET_STATS_TYPE_REPLY_RX_SPEED:
+		return sizeof(struct virtio_net_stats_rx_speed);
+	case VIRTIO_NET_STATS_TYPE_REPLY_TX_BASIC:
+		return sizeof(struct virtio_net_stats_tx_basic);
+	case VIRTIO_NET_STATS_TYPE_REPLY_TX_CSUM:
+		return sizeof(struct virtio_net_stats_tx_csum);
+	case VIRTIO_NET_STATS_TYPE_REPLY_TX_GSO:
+		return sizeof(struct virtio_net_stats_tx_gso);
+	case VIRTIO_NET_STATS_TYPE_REPLY_TX_SPEED:
+		return sizeof(struct virtio_net_stats_tx_speed);
+	default:
+		return sizeof(struct virtio_net_stats_reply_hdr);
+	}
+}
+
 static int __virtnet_get_hw_stats(struct virtnet_info *vi,
 				  struct virtnet_stats_ctx *ctx,
 				  struct virtio_net_ctrl_queue_stats *req,
@@ -4936,7 +4964,7 @@ static int __virtnet_get_hw_stats(struct virtnet_info *vi,
 	struct scatterlist sgs_in, sgs_out;
 	void *p;
 	u32 qid;
-	int ok;
+	int hdr_size, ok, remaining;
 
 	sg_init_one(&sgs_out, req, req_size);
 	sg_init_one(&sgs_in, reply, res_size);
@@ -4948,8 +4976,17 @@ static int __virtnet_get_hw_stats(struct virtnet_info *vi,
 	if (!ok)
 		return ok;
 
-	for (p = reply; p - reply < res_size; p += le16_to_cpu(hdr->size)) {
+	for (p = reply; p - reply < res_size; p += hdr_size) {
+		remaining = res_size - (p - reply);
+		if (remaining < sizeof(*hdr))
+			return -EINVAL;
+
 		hdr = p;
+		hdr_size = le16_to_cpu(hdr->size);
+		if (hdr_size < virtnet_stats_reply_size(hdr->type) ||
+		    hdr_size > remaining)
+			return -EINVAL;
+
 		qid = le16_to_cpu(hdr->vq_index);
 		virtnet_fill_stats(vi, qid, ctx, p, false, hdr->type);
 	}
@@ -7305,3 +7342,4 @@ module_exit(virtio_net_driver_exit);
 MODULE_DEVICE_TABLE(virtio, id_table);
 MODULE_DESCRIPTION("Virtio network driver");
 MODULE_LICENSE("GPL");
+
