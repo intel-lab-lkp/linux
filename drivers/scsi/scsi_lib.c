@@ -3375,6 +3375,7 @@ int scsi_vpd_lun_id(struct scsi_device *sdev, char *id, size_t id_len)
 	u8 cur_id_size = 0;
 	const unsigned char *d, *cur_id_str;
 	const struct scsi_vpd *vpd_pg83;
+	size_t off;
 	int id_size = -EINVAL;
 
 	rcu_read_lock();
@@ -3391,11 +3392,17 @@ int scsi_vpd_lun_id(struct scsi_device *sdev, char *id, size_t id_len)
 	}
 
 	memset(id, 0, id_len);
-	for (d = vpd_pg83->data + 4;
-	     d < vpd_pg83->data + vpd_pg83->len;
-	     d += d[3] + 4) {
-		u8 prio = designator_prio(d);
+	for (off = 4; off < vpd_pg83->len; off += d[3] + 4) {
+		u8 prio;
 
+		if (vpd_pg83->len - off < 4)
+			break;
+
+		d = vpd_pg83->data + off;
+		if (d[3] > vpd_pg83->len - off - 4)
+			break;
+
+		prio = designator_prio(d);
 		if (prio == 0 || cur_id_prio > prio)
 			continue;
 
@@ -3545,6 +3552,7 @@ int scsi_vpd_tpg_id(struct scsi_device *sdev, int *rel_id)
 {
 	const unsigned char *d;
 	const struct scsi_vpd *vpd_pg83;
+	size_t off;
 	int group_id = -EAGAIN, rel_port = -1;
 
 	rcu_read_lock();
@@ -3554,8 +3562,14 @@ int scsi_vpd_tpg_id(struct scsi_device *sdev, int *rel_id)
 		return -ENXIO;
 	}
 
-	d = vpd_pg83->data + 4;
-	while (d < vpd_pg83->data + vpd_pg83->len) {
+	for (off = 4; off < vpd_pg83->len; off += d[3] + 4) {
+		if (vpd_pg83->len - off < 4)
+			break;
+
+		d = vpd_pg83->data + off;
+		if (d[3] > vpd_pg83->len - off - 4)
+			break;
+
 		switch (d[1] & 0xf) {
 		case 0x4:
 			/* Relative target port */
@@ -3568,7 +3582,6 @@ int scsi_vpd_tpg_id(struct scsi_device *sdev, int *rel_id)
 		default:
 			break;
 		}
-		d += d[3] + 4;
 	}
 	rcu_read_unlock();
 

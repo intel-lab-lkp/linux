@@ -1949,6 +1949,7 @@ static int sd_get_unique_id(struct gendisk *disk, u8 id[16],
 	struct scsi_device *sdev = scsi_disk(disk)->device;
 	const struct scsi_vpd *vpd;
 	const unsigned char *d;
+	size_t off;
 	int ret = -ENXIO, len;
 
 	rcu_read_lock();
@@ -1957,7 +1958,14 @@ static int sd_get_unique_id(struct gendisk *disk, u8 id[16],
 		goto out_unlock;
 
 	ret = -EINVAL;
-	for (d = vpd->data + 4; d < vpd->data + vpd->len; d += d[3] + 4) {
+	for (off = 4; off < vpd->len; off += d[3] + 4) {
+		if (vpd->len - off < 4)
+			break;
+
+		d = vpd->data + off;
+		if (d[3] > vpd->len - off - 4)
+			break;
+
 		/* we only care about designators with LU association */
 		if (((d[1] >> 4) & 0x3) != 0x00)
 			continue;
