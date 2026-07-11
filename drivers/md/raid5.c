@@ -5722,9 +5722,11 @@ static void make_discard_request(struct mddev *mddev, struct bio *bi)
 	if (WARN_ON_ONCE(bi->bi_opf & REQ_NOWAIT))
 		return;
 
-	if (mddev->reshape_position != MaxSector)
+	if (mddev->reshape_position != MaxSector) {
 		/* Skip discard while reshape is happening */
+		bio_endio_status(bi, BLK_STS_AGAIN);
 		return;
+	}
 
 	if (!raid5_discard_limits(mddev, bi))
 		return;
