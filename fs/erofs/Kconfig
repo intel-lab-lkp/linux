@@ -131,6 +131,26 @@ config EROFS_FS_ZIP_LZMA
 
 	  Say N if you want to disable LZMA compression support.
 
+config EROFS_FS_ZIP_LZMA_MAX_STREAMS
+	int "EROFS LZMA maximum decompression stream pool size"
+	depends on EROFS_FS_ZIP_LZMA
+	range 1 1024
+	default 16
+	help
+	  EROFS preallocates a pool of MicroLZMA decoder streams, one per
+	  possible CPU by default, or as set by the lzma_streams module
+	  parameter.  Each stream can hold a dictionary of up to 8 MiB taken
+	  from the mounted image, so on systems with a large number of CPUs a
+	  single small image can pin a large amount of vmalloc memory until the
+	  erofs module is unloaded.
+
+	  This bounds the number of preallocated streams.  The worst-case
+	  preallocated dictionary memory is 8 MiB times this value.  Lower it on
+	  memory-constrained or embedded systems; raise it on large servers that
+	  decompress many EROFS images in parallel.
+
+	  If unsure, keep the default of 16.
+
 config EROFS_FS_ZIP_DEFLATE
 	bool "EROFS DEFLATE compressed data support"
 	depends on EROFS_FS_ZIP
