@@ -40,6 +40,12 @@ config UDMABUF
 	  A driver to let userspace turn memfd regions into dma-bufs.
 	  Qemu can use this to create host dmabufs for guest framebuffers.
 
+config UDMABUF_SIZE_LIMIT_MBYTES
+	int "Size limit in Mega Bytes"
+	default 64
+	help
+	  Maximum size of a udmabuf, in megabytes. Default is 64.
+
 config DMABUF_DEBUG
 	bool "DMA-BUF debug checks"
 	depends on DMA_SHARED_BUFFER
