@@ -4516,22 +4516,21 @@ static int arm_smmu_init_strtab(struct arm_smmu_device *smmu)
 {
 	int ret;
 
+	/* Init first, as a kdump adoption reserves in-use VMIDs in the ida */
+	ida_init(&smmu->vmid_map);
+	ret = devm_add_action_or_reset(smmu->dev, arm_smmu_deinit_strtab, smmu);
+	if (ret)
+		return ret;
+
 	if ((smmu->options & ARM_SMMU_OPT_KDUMP_ADOPT) &&
 	    !arm_smmu_kdump_adopt_strtab(smmu))
-		goto out;
+		return 0;
 
 	if (smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB)
 		ret = arm_smmu_init_strtab_2lvl(smmu);
 	else
 		ret = arm_smmu_init_strtab_linear(smmu);
-	if (ret)
-		return ret;
-
-out:
-	ida_init(&smmu->vmid_map);
-
-	return devm_add_action_or_reset(smmu->dev, arm_smmu_deinit_strtab,
-					smmu);
+	return ret;
 }
 
 static int arm_smmu_init_structures(struct arm_smmu_device *smmu)

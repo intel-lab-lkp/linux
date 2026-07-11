@@ -32,6 +32,247 @@
 
 #include "arm-smmu-v3.h"
 
+/*
+ * Commit or roll back an entire scan atomically, so that a concurrently
+ * probing SMMU (e.g. forced by driver_async_probe) can only dedup against
+ * the reservations that will persist
+ */
+static DEFINE_MUTEX(arm_smmu_kdump_resv_lock);
+
+/* Identifies the current scan's reservations; serialized by the lock above */
+static unsigned long arm_smmu_kdump_scan_id;
+
+/*
+ * The adopted stream table keeps translating in-flight DMAs, so the SMMU also
+ * keeps caching TLB entries tagged with the crashed kernel's ASIDs and VMIDs.
+ * Reserve all the in-use IDs, so that this kernel cannot give its own domains
+ * an overlapping ID that would alias the crashed kernel's TLB entries.
+ *
+ * The reservations are only released when the entire adoption is tossed, as
+ * the full-reset fallback flushes the entire TLB. Otherwise, they are kept
+ * for the lifetime of the kdump kernel, which reboots after saving a vmcore.
+ */
+static int arm_smmu_kdump_resv_asid(struct arm_smmu_device *smmu, u32 asid)
+{
+	int ret;
+
+	/* A valid CD never has ASID 0; both kernels share the same HW limit */
+	if (!asid || asid >= 1UL << smmu->asid_bits)
+		return -EINVAL;
+
+	guard(mutex)(&arm_smmu_asid_lock);
+
+	/* The value entry marks the ASID as in-use and identifies its scan */
+	ret = xa_insert(&arm_smmu_asid_xa, asid,
+			xa_mk_value(arm_smmu_kdump_scan_id), GFP_KERNEL);
+	/*
+	 * An -EBUSY against a value entry is just a safe dedup against another
+	 * permanent reservation. A pointer entry means a live domain that will
+	 * free its ASID for reuse eventually: keep -EBUSY to toss the adoption.
+	 */
+	if (ret == -EBUSY && xa_is_value(xa_load(&arm_smmu_asid_xa, asid)))
+		ret = 0;
+	return ret;
+}
+
+static int arm_smmu_kdump_resv_vmid(struct arm_smmu_device *smmu, u32 vmid)
+{
+	int ret;
+
+	/* A translating STE never has VMID 0, which is reserved for bypass */
+	if (!vmid || vmid >= 1UL << smmu->vmid_bits)
+		return -EINVAL;
+
+	ret = ida_alloc_range(&smmu->vmid_map, vmid, vmid, GFP_KERNEL);
+	if (ret < 0 && ret != -ENOSPC) /* -ENOSPC means already reserved */
+		return ret;
+	return 0;
+}
+
+static int arm_smmu_kdump_resv_cd_asids(struct arm_smmu_device *smmu,
+					struct arm_smmu_cd *cds, u32 num_cds)
+{
+	int ret = 0;
+	u32 i;
+
+	for (i = 0; i < num_cds; i++) {
+		u64 val = le64_to_cpu(cds[i].data[0]);
+		u32 asid = FIELD_GET(CTXDESC_CD_0_ASID, val);
+
+		if (!(val & CTXDESC_CD_0_V))
+			continue;
+		ret = arm_smmu_kdump_resv_asid(smmu, asid);
+		if (ret)
+			break;
+	}
+	return ret;
+}
+
+static int arm_smmu_kdump_resv_s1_asids(struct arm_smmu_device *smmu, u64 ste0)
+{
+	phys_addr_t cdtab = ste0 & STRTAB_STE_0_S1CTXPTR_MASK;
+	u32 s1cdmax = FIELD_GET(STRTAB_STE_0_S1CDMAX, ste0);
+	u32 s1fmt = FIELD_GET(STRTAB_STE_0_S1FMT, ste0);
+	size_t max_contexts = 1UL << s1cdmax;
+	struct arm_smmu_cdtab_l1 *l1tab;
+	u32 num_l1_ents, num_cds, i;
+	int ret = 0;
+
+	if (!cdtab || s1cdmax > smmu->ssid_bits)
+		return -EINVAL;
+
+	if (s1fmt == STRTAB_STE_0_S1FMT_LINEAR) {
+		struct arm_smmu_cd *cds;
+
+		/*
+		 * A crashed kernel might have used a linear CD table on the
+		 * 2-level capable hardware like the linear stream table case.
+		 * So, accept it here as well. s1cdmax is capped by ssid_bits.
+		 */
+		cds = memremap(cdtab, max_contexts * sizeof(*cds), MEMREMAP_WB);
+		if (!cds)
+			return -ENOMEM;
+		ret = arm_smmu_kdump_resv_cd_asids(smmu, cds, max_contexts);
+		memunmap(cds);
+		return ret;
+	}
+
+	if (s1fmt != STRTAB_STE_0_S1FMT_64K_L2)
+		return -EINVAL;
+
+	num_l1_ents = DIV_ROUND_UP(max_contexts, CTXDESC_L2_ENTRIES);
+	l1tab = memremap(cdtab, num_l1_ents * sizeof(*l1tab), MEMREMAP_WB);
+	if (!l1tab)
+		return -ENOMEM;
+
+	/* max_contexts being under a full leaf makes the only leaf partial */
+	num_cds = min_t(size_t, max_contexts, CTXDESC_L2_ENTRIES);
+
+	/* Aliased L2 tables cannot extend the walk; they only repeat a scan */
+	for (i = 0; i < num_l1_ents; i++) {
+		u64 l1_desc = le64_to_cpu(l1tab[i].l2ptr);
+		struct arm_smmu_cdtab_l2 *l2;
+
+		if (!(l1_desc & CTXDESC_L1_DESC_V))
+			continue;
+
+		l2 = memremap(l1_desc & CTXDESC_L1_DESC_L2PTR_MASK,
+			      num_cds * sizeof(*l2->cds), MEMREMAP_WB);
+		if (!l2) {
+			ret = -ENOMEM;
+			break;
+		}
+		ret = arm_smmu_kdump_resv_cd_asids(smmu, l2->cds, num_cds);
+		memunmap(l2);
+		if (ret)
+			break;
+	}
+	memunmap(l1tab);
+	return ret;
+}
+
+static int arm_smmu_kdump_resv_ste_ids(struct arm_smmu_device *smmu,
+				       struct arm_smmu_ste *ste)
+{
+	u32 vmid = FIELD_GET(STRTAB_STE_2_S2VMID, le64_to_cpu(ste->data[2]));
+	u64 val = le64_to_cpu(ste->data[0]);
+
+	if (!(val & STRTAB_STE_0_V))
+		return 0;
+
+	switch (FIELD_GET(STRTAB_STE_0_CFG, val)) {
+	case STRTAB_STE_0_CFG_ABORT:
+	case STRTAB_STE_0_CFG_BYPASS:
+		return 0;
+	case STRTAB_STE_0_CFG_S1_TRANS:
+		return arm_smmu_kdump_resv_s1_asids(smmu, val);
+	case STRTAB_STE_0_CFG_NESTED:
+		/*
+		 * A guest-owned CD table is in IPA space, unreachable. Its
+		 * ASIDs are only tagged with the S2VMID reserved below, so
+		 * they cannot alias this kernel's VMID-0 or EL2 S1 domains.
+		 */
+		fallthrough;
+	case STRTAB_STE_0_CFG_S2_TRANS:
+		return arm_smmu_kdump_resv_vmid(smmu, vmid);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int arm_smmu_kdump_resv_ids(struct arm_smmu_device *smmu)
+{
+	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	int ret = 0;
+	u32 i, j;
+
+	lockdep_assert_held(&arm_smmu_kdump_resv_lock);
+
+	/* Allocate a new ID for this scan, to scope its rollback */
+	arm_smmu_kdump_scan_id++;
+
+	if (!(smmu->features & ARM_SMMU_FEAT_2_LVL_STRTAB)) {
+		for (i = 0; i < cfg->linear.num_ents; i++) {
+			ret = arm_smmu_kdump_resv_ste_ids(
+				smmu, &cfg->linear.table[i]);
+			if (ret)
+				return ret;
+		}
+		return 0;
+	}
+
+	/* Aliased L2 tables cannot extend the walk; they only repeat a scan */
+	for (i = 0; i < cfg->l2.num_l1_ents; i++) {
+		u64 l1_desc = le64_to_cpu(cfg->l2.l1tab[i].l2ptr);
+		phys_addr_t base = l1_desc & STRTAB_L1_DESC_L2PTR_MASK;
+		u32 span = FIELD_GET(STRTAB_L1_DESC_SPAN, l1_desc);
+		struct arm_smmu_strtab_l2 *l2;
+
+		if (!span)
+			continue;
+
+		/* Validated at adopt time, so a change means live corruption */
+		if (span != STRTAB_SPLIT + 1 || !base)
+			return -EINVAL;
+
+		/* Transient map: L2 tables are only adopted upon device use */
+		l2 = memremap(base, sizeof(*l2), MEMREMAP_WB);
+		if (!l2)
+			return -ENOMEM;
+		for (j = 0; j < ARRAY_SIZE(l2->stes); j++) {
+			ret = arm_smmu_kdump_resv_ste_ids(smmu, &l2->stes[j]);
+			if (ret)
+				break;
+		}
+		memunmap(l2);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+/*
+ * Roll back a scan that has not committed yet. Committed reservations are
+ * never released, as another SMMU's scan might have deduped against them.
+ */
+static void arm_smmu_kdump_unresv_ids(struct arm_smmu_device *smmu)
+{
+	unsigned long index;
+	void *entry;
+
+	lockdep_assert_held(&arm_smmu_kdump_resv_lock);
+
+	mutex_lock(&arm_smmu_asid_lock);
+	xa_for_each(&arm_smmu_asid_xa, index, entry) {
+		if (entry == xa_mk_value(arm_smmu_kdump_scan_id))
+			xa_erase(&arm_smmu_asid_xa, index);
+	}
+	mutex_unlock(&arm_smmu_asid_lock);
+
+	/* No domain exists yet, so the ida holds only the reservations */
+	ida_destroy(&smmu->vmid_map);
+}
+
 int arm_smmu_kdump_adopt_deferred_l2_strtab(struct arm_smmu_device *smmu,
 					    u32 sid, phys_addr_t base, u32 span,
 					    struct arm_smmu_strtab_l2 **l2table)
@@ -255,24 +496,37 @@ int arm_smmu_kdump_adopt_strtab(struct arm_smmu_device *smmu)
 		goto err;
 	}
 
+	mutex_lock(&arm_smmu_kdump_resv_lock);
+	ret = arm_smmu_kdump_resv_ids(smmu);
+	if (ret) {
+		dev_warn(smmu->dev, "failed to reserve in-use ASIDs/VMIDs\n");
+		arm_smmu_kdump_adopt_cleanup(smmu);
+		goto err_unresv;
+	}
+
 	ret = devm_add_action_or_reset(smmu->dev, arm_smmu_kdump_adopt_cleanup,
 				       smmu);
 	/* devm_add_action_or_reset ran the cleanup upon failure */
 	if (ret) {
 		dev_warn(smmu->dev, "failed to set up cleanup action\n");
-		/*
-		 * Undo the linear adoption's clearing of FEAT_2_LVL_STRTAB so
-		 * the full-reset fallback uses the hardware-supported format.
-		 */
-		if (was_2lvl)
-			smmu->features |= ARM_SMMU_FEAT_2_LVL_STRTAB;
-		goto err;
+		goto err_unresv;
 	}
+	mutex_unlock(&arm_smmu_kdump_resv_lock);
 
 	return 0;
 
+err_unresv:
+	/* The full reset will flush the entire TLB, so release everything */
+	arm_smmu_kdump_unresv_ids(smmu);
+	mutex_unlock(&arm_smmu_kdump_resv_lock);
 err:
 	dev_warn(smmu->dev, "falling back to full reset\n");
+	/*
+	 * Undo the linear adoption's clearing of FEAT_2_LVL_STRTAB so that the
+	 * full-reset fallback uses the hardware-supported format.
+	 */
+	if (was_2lvl)
+		smmu->features |= ARM_SMMU_FEAT_2_LVL_STRTAB;
 	memset(&smmu->strtab_cfg, 0, sizeof(smmu->strtab_cfg));
 	smmu->options &= ~ARM_SMMU_OPT_KDUMP_ADOPT;
 	return ret;
