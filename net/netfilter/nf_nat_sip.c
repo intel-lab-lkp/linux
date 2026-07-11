@@ -637,7 +637,8 @@ static unsigned int nf_nat_sdp_media(struct sk_buff *skb, unsigned int protoff,
 			break;
 		else if (ret == -EBUSY) {
 			nf_ct_unexpect_related(rtp_exp);
-			continue;
+			port = 0;
+			break;
 		} else if (ret < 0) {
 			nf_ct_unexpect_related(rtp_exp);
 			port = 0;
