@@ -1948,7 +1948,7 @@ int xe_bo_notifier_prepare_pinned(struct xe_bo *bo)
 		backup = xe_bo_init_locked(xe, NULL, NULL, bo->ttm.base.resv, NULL, xe_bo_size(bo),
 					   DRM_XE_GEM_CPU_CACHING_WB, ttm_bo_type_kernel,
 					   XE_BO_FLAG_SYSTEM | XE_BO_FLAG_NEEDS_CPU_ACCESS |
-					   XE_BO_FLAG_PINNED, &exec);
+					   XE_BO_FLAG_PINNED, NULL, &exec);
 		if (IS_ERR(backup)) {
 			drm_exec_retry_on_contention(&exec);
 			ret = PTR_ERR(backup);
@@ -2089,7 +2089,7 @@ int xe_bo_evict_pinned(struct xe_bo *bo)
 						   xe_bo_size(bo),
 						   DRM_XE_GEM_CPU_CACHING_WB, ttm_bo_type_kernel,
 						   XE_BO_FLAG_SYSTEM | XE_BO_FLAG_NEEDS_CPU_ACCESS |
-						   XE_BO_FLAG_PINNED, &exec);
+						   XE_BO_FLAG_PINNED, NULL, &exec);
 			if (IS_ERR(backup)) {
 				drm_exec_retry_on_contention(&exec);
 				ret = PTR_ERR(backup);
@@ -2884,6 +2884,8 @@ void xe_bo_free(struct xe_bo *bo)
  * @cpu_caching: The cpu caching used for system memory backing store.
  * @type: The TTM buffer object type.
  * @flags: XE_BO_FLAG_ flags.
+ * @prealloc: Optional pages preallocated outside the dma-resv lock to back the
+ * bo (see ttm_operation_ctx::prealloc), or NULL.
  * @exec: The drm_exec transaction to use for exhaustive eviction.
  *
  * Initialize or create an xe buffer object. On failure, any allocated buffer
@@ -2895,12 +2897,14 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
 				struct xe_tile *tile, struct dma_resv *resv,
 				struct ttm_lru_bulk_move *bulk, size_t size,
 				u16 cpu_caching, enum ttm_bo_type type,
-				u32 flags, struct drm_exec *exec)
+				u32 flags, struct ttm_pool_prealloc *prealloc,
+				struct drm_exec *exec)
 {
 	struct ttm_operation_ctx ctx = {
 		.interruptible = true,
 		.no_wait_gpu = false,
 		.gfp_retry_mayfail = true,
+		.prealloc = prealloc,
 	};
 	struct ttm_placement *placement;
 	uint32_t alignment;
@@ -3077,7 +3081,8 @@ __xe_bo_create_locked(struct xe_device *xe,
 		      struct xe_tile *tile, struct xe_vm *vm,
 		      size_t size, u64 start, u64 end,
 		      u16 cpu_caching, enum ttm_bo_type type, u32 flags,
-		      u64 alignment, struct drm_exec *exec)
+		      u64 alignment, struct ttm_pool_prealloc *prealloc,
+		      struct drm_exec *exec)
 {
 	struct xe_bo *bo = NULL;
 	int err;
@@ -3102,7 +3107,7 @@ __xe_bo_create_locked(struct xe_device *xe,
 			       vm && !xe_vm_in_fault_mode(vm) &&
 			       flags & XE_BO_FLAG_USER ?
 			       &vm->lru_bulk_move : NULL, size,
-			       cpu_caching, type, flags, exec);
+			       cpu_caching, type, flags, prealloc, exec);
 	if (IS_ERR(bo))
 		return bo;
 
@@ -3177,7 +3182,7 @@ struct xe_bo *xe_bo_create_locked(struct xe_device *xe, struct xe_tile *tile,
 				  struct drm_exec *exec)
 {
 	return __xe_bo_create_locked(xe, tile, vm, size, 0, ~0ULL, 0, type,
-				     flags, 0, exec);
+				     flags, 0, NULL, exec);
 }
 
 static struct xe_bo *xe_bo_create_novm(struct xe_device *xe, struct xe_tile *tile,
@@ -3193,7 +3198,7 @@ static struct xe_bo *xe_bo_create_novm(struct xe_device *xe, struct xe_tile *til
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {.interruptible = intr},
 			    ret) {
 		bo = __xe_bo_create_locked(xe, tile, NULL, size, 0, ~0ULL,
-					   cpu_caching, type, flags, alignment, &exec);
+					   cpu_caching, type, flags, alignment, NULL, &exec);
 		drm_exec_retry_on_contention(&exec);
 		if (IS_ERR(bo)) {
 			ret = PTR_ERR(bo);
@@ -3213,6 +3218,9 @@ static struct xe_bo *xe_bo_create_novm(struct xe_device *xe, struct xe_tile *til
  * @size: The storage size to use for the bo.
  * @cpu_caching: The caching mode to be used for system backing store.
  * @flags: XE_BO_FLAG_ flags.
+ * @prealloc: Optional pages preallocated outside the dma-resv lock to back the
+ * bo (see ttm_operation_ctx::prealloc), or NULL. Only consumed on the locked
+ * (@vm or @exec) path.
  * @exec: The drm_exec transaction to use for exhaustive eviction, or NULL
  * if such a transaction should be initiated by the call.
  *
@@ -3223,7 +3231,8 @@ static struct xe_bo *xe_bo_create_novm(struct xe_device *xe, struct xe_tile *til
 struct xe_bo *xe_bo_create_user(struct xe_device *xe,
 				struct xe_vm *vm, size_t size,
 				u16 cpu_caching,
-				u32 flags, struct drm_exec *exec)
+				u32 flags, struct ttm_pool_prealloc *prealloc,
+				struct drm_exec *exec)
 {
 	struct xe_bo *bo;
 
@@ -3233,7 +3242,7 @@ struct xe_bo *xe_bo_create_user(struct xe_device *xe,
 		xe_assert(xe, exec);
 		bo = __xe_bo_create_locked(xe, NULL, vm, size, 0, ~0ULL,
 					   cpu_caching, ttm_bo_type_device,
-					   flags, 0, exec);
+					   flags, 0, prealloc, exec);
 		if (!IS_ERR(bo))
 			xe_bo_unlock_vm_held(bo);
 	} else {
@@ -3272,7 +3281,7 @@ struct xe_bo *xe_bo_create_pin_range_novm(struct xe_device *xe, struct xe_tile *
 
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
 		bo = __xe_bo_create_locked(xe, tile, NULL, size, start, end,
-					   0, type, flags, 0, &exec);
+					   0, type, flags, 0, NULL, &exec);
 		if (IS_ERR(bo)) {
 			drm_exec_retry_on_contention(&exec);
 			err = PTR_ERR(bo);
@@ -3311,7 +3320,7 @@ static struct xe_bo *xe_bo_create_pin_map_at_aligned(struct xe_device *xe,
 
 	bo = __xe_bo_create_locked(xe, tile, vm, size, start, end, 0, type,
 				   flags | XE_BO_FLAG_NEEDS_CPU_ACCESS | XE_BO_FLAG_PINNED,
-				   alignment, exec);
+				   alignment, NULL, exec);
 	if (IS_ERR(bo))
 		return bo;
 
@@ -3926,6 +3935,10 @@ static int gem_create_user_extensions(struct xe_device *xe, struct xe_bo *bo,
 	return 0;
 }
 
+static bool __xe_bo_needs_ccs_pages(struct xe_device *xe,
+				    enum ttm_bo_type type, u32 flags,
+				    u16 cpu_caching);
+
 int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file)
 {
@@ -3936,6 +3949,8 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 	struct drm_exec exec;
 	struct xe_vm *vm = NULL;
 	struct xe_bo *bo;
+	struct ttm_pool_prealloc prealloc = {};
+	bool have_prealloc = false;
 	unsigned int bo_flags;
 	u32 handle;
 	int err;
@@ -4018,6 +4033,64 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 			return -ENOENT;
 	}
 
+	/*
+	 * For system-only BOs, preallocate the whole backing outside the
+	 * dma-resv lock so the populate under the validation guard does not
+	 * stall in reclaim/compaction. The caching mirrors the system-BO path
+	 * in xe_ttm_tt_create(); the pool falls back to in-line allocation for
+	 * any shortfall, so a failed fill is harmless.
+	 */
+	if ((bo_flags & XE_BO_FLAG_SYSTEM) &&
+	    !(bo_flags & (XE_BO_FLAG_DEFER_BACKING | XE_BO_FLAG_VRAM_MASK |
+			  XE_BO_FLAG_STOLEN))) {
+		struct ttm_resource_manager *tt_man =
+			ttm_manager_type(&xe->ttm, XE_PL_TT);
+		enum ttm_caching caching = ttm_cached;
+		unsigned long num_pages = args->size >> PAGE_SHIFT;
+
+		if (!IS_DGFX(xe) &&
+		    args->cpu_caching == DRM_XE_GEM_CPU_CACHING_WC)
+			caching = ttm_write_combined;
+
+		/*
+		 * Cover the CCS backup pages appended to the tt (see
+		 * xe_ttm_tt_create()) so the whole tt is preallocated.
+		 */
+		if (__xe_bo_needs_ccs_pages(xe, ttm_bo_type_device, bo_flags,
+					    args->cpu_caching))
+			num_pages += DIV_ROUND_UP(xe_device_ccs_bytes(xe,
+								      args->size),
+						  PAGE_SIZE);
+
+		/*
+		 * Only prealloc when the backing fits the currently-available
+		 * TT space (manager size minus current usage). This skips the
+		 * up-front reclaim/compaction both for over-large,
+		 * user-controlled sizes and when TT is already near full; the
+		 * populate under the validation guard handles those cases.
+		 */
+		if (tt_man) {
+			u64 used = ttm_resource_manager_usage(tt_man);
+			u64 shift_size = tt_man->size << PAGE_SHIFT;
+			u64 avail = shift_size > used ? shift_size - used : 0;
+
+			if ((u64)num_pages << PAGE_SHIFT <= avail) {
+				/*
+				 * Back off aggressive reclaim/compaction for
+				 * higher-order chunks here: Xe runs a background
+				 * defragmenter that upgrades suboptimal pages to
+				 * beneficial order in place later, so there is no
+				 * need to stall this user context reclaiming for
+				 * contiguity.
+				 */
+				ttm_pool_prealloc_fill_full(&xe->ttm.pool,
+							    caching, &prealloc,
+							    num_pages, true);
+				have_prealloc = true;
+			}
+		}
+	}
+
 	err = 0;
 	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {.interruptible = true},
 			    err) {
@@ -4028,7 +4101,8 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 				break;
 		}
 		bo = xe_bo_create_user(xe, vm, args->size, args->cpu_caching,
-				       bo_flags, &exec);
+				       bo_flags, have_prealloc ? &prealloc : NULL,
+				       &exec);
 		drm_exec_retry_on_contention(&exec);
 		if (IS_ERR(bo)) {
 			err = PTR_ERR(bo);
@@ -4036,6 +4110,8 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 			break;
 		}
 	}
+	if (have_prealloc)
+		ttm_pool_prealloc_fini(&xe->ttm.pool, &prealloc);
 	if (err)
 		goto out_vm;
 
@@ -4331,6 +4407,44 @@ int xe_bo_evict(struct xe_bo *bo, struct drm_exec *exec)
 	return 0;
 }
 
+/*
+ * Whether a bo with the given attributes needs to back up CCS pages when placed
+ * in system memory. Split out so callers can query before the xe_bo exists (see
+ * xe_gem_create_ioctl() preallocation).
+ */
+static bool __xe_bo_needs_ccs_pages(struct xe_device *xe,
+				    enum ttm_bo_type type, u32 flags,
+				    u16 cpu_caching)
+{
+	if (GRAPHICS_VER(xe) >= 20 && IS_DGFX(xe))
+		return false;
+
+	if (!xe_device_has_flat_ccs(xe) || type != ttm_bo_type_device)
+		return false;
+
+	/* On discrete GPUs, if the GPU can access this buffer from
+	 * system memory (i.e., it allows XE_PL_TT placement), FlatCCS
+	 * can't be used since there's no CCS storage associated with
+	 * non-VRAM addresses.
+	 */
+	if (IS_DGFX(xe) && (flags & XE_BO_FLAG_SYSTEM))
+		return false;
+
+	/* Check if userspace explicitly requested no compression */
+	if (flags & XE_BO_FLAG_NO_COMPRESSION)
+		return false;
+
+	/*
+	 * For WB (Write-Back) CPU caching mode, check if the device
+	 * supports WB compression with coherency.
+	 */
+	if (cpu_caching == DRM_XE_GEM_CPU_CACHING_WB &&
+	    xe->pat.idx[XE_CACHE_WB_COMPRESSION] == XE_PAT_INVALID_IDX)
+		return false;
+
+	return true;
+}
+
 /**
  * xe_bo_needs_ccs_pages - Whether a bo needs to back up CCS pages when
  * placed in system memory.
@@ -4340,35 +4454,8 @@ int xe_bo_evict(struct xe_bo *bo, struct drm_exec *exec)
  */
 bool xe_bo_needs_ccs_pages(struct xe_bo *bo)
 {
-	struct xe_device *xe = xe_bo_device(bo);
-
-	if (GRAPHICS_VER(xe) >= 20 && IS_DGFX(xe))
-		return false;
-
-	if (!xe_device_has_flat_ccs(xe) || bo->ttm.type != ttm_bo_type_device)
-		return false;
-
-	/* On discrete GPUs, if the GPU can access this buffer from
-	 * system memory (i.e., it allows XE_PL_TT placement), FlatCCS
-	 * can't be used since there's no CCS storage associated with
-	 * non-VRAM addresses.
-	 */
-	if (IS_DGFX(xe) && (bo->flags & XE_BO_FLAG_SYSTEM))
-		return false;
-
-	/* Check if userspace explicitly requested no compression */
-	if (bo->flags & XE_BO_FLAG_NO_COMPRESSION)
-		return false;
-
-	/*
-	 * For WB (Write-Back) CPU caching mode, check if the device
-	 * supports WB compression with coherency.
-	 */
-	if (bo->cpu_caching == DRM_XE_GEM_CPU_CACHING_WB &&
-	    xe->pat.idx[XE_CACHE_WB_COMPRESSION] == XE_PAT_INVALID_IDX)
-		return false;
-
-	return true;
+	return __xe_bo_needs_ccs_pages(xe_bo_device(bo), bo->ttm.type,
+				       bo->flags, bo->cpu_caching);
 }
 
 /**
@@ -4477,7 +4564,7 @@ int xe_bo_dumb_create(struct drm_file *file_priv,
 			       DRM_XE_GEM_CPU_CACHING_WC,
 			       XE_BO_FLAG_VRAM_IF_DGFX(xe_device_get_root_tile(xe)) |
 			       XE_BO_FLAG_FORCE_WC |
-			       XE_BO_FLAG_NEEDS_CPU_ACCESS, NULL);
+			       XE_BO_FLAG_NEEDS_CPU_ACCESS, NULL, NULL);
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
 
