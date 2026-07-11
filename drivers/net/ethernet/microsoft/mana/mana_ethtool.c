@@ -646,6 +646,7 @@ static int mana_set_channels(struct net_device *ndev,
 	struct mana_port_context *apc = netdev_priv(ndev);
 	unsigned int new_count = channels->combined_count;
 	unsigned int old_count = apc->num_queues;
+	bool schedule_port_reset = false;
 	int err;
 
 	/* Set channel_changing to block RDMA from grabbing the vport
@@ -675,8 +676,19 @@ static int mana_set_channels(struct net_device *ndev,
 	apc->num_queues = new_count;
 	err = mana_attach(ndev);
 	if (err) {
-		apc->num_queues = old_count;
 		netdev_err(ndev, "mana_attach failed: %d\n", err);
+
+		/* Choose a retry queue count that maximizes recovery
+		 * chances in the reset work handler.
+		 */
+		if (old_count < new_count)
+			apc->num_queues = old_count;
+		else if (new_count > MANA_DEF_NUM_QUEUES)
+			apc->num_queues = MANA_DEF_NUM_QUEUES;
+		else
+			apc->num_queues = 1;
+
+		schedule_port_reset = true;
 	}
 
 out:
@@ -685,6 +697,11 @@ clear_flag:
 	mutex_lock(&apc->vport_mutex);
 	apc->channel_changing = false;
 	mutex_unlock(&apc->vport_mutex);
+
+	if (schedule_port_reset)
+		queue_work(apc->ac->per_port_queue_reset_wq,
+			   &apc->queue_reset_work);
+
 	return err;
 }
 
@@ -707,6 +724,7 @@ static int mana_set_ringparam(struct net_device *ndev,
 			      struct netlink_ext_ack *extack)
 {
 	struct mana_port_context *apc = netdev_priv(ndev);
+	bool schedule_port_reset = false;
 	u32 new_tx, new_rx;
 	u32 old_tx, old_rx;
 	int err;
@@ -752,11 +770,35 @@ static int mana_set_ringparam(struct net_device *ndev,
 	err = mana_attach(ndev);
 	if (err) {
 		netdev_err(ndev, "mana_attach failed: %d\n", err);
-		apc->tx_queue_size = old_tx;
-		apc->rx_queue_size = old_rx;
+		NL_SET_ERR_MSG_FMT(extack, "failed to change ring params: %d",
+				   err);
+
+		/* Choose retry ring sizes that maximize recovery
+		 * chances in the reset work handler. Handle RX and
+		 * TX independently.
+		 */
+		if (old_rx < new_rx)
+			apc->rx_queue_size = old_rx;
+		else if (new_rx > DEF_RX_BUFFERS_PER_QUEUE)
+			apc->rx_queue_size = DEF_RX_BUFFERS_PER_QUEUE;
+		else
+			apc->rx_queue_size = MIN_RX_BUFFERS_PER_QUEUE;
+
+		if (old_tx < new_tx)
+			apc->tx_queue_size = old_tx;
+		else if (new_tx > DEF_TX_BUFFERS_PER_QUEUE)
+			apc->tx_queue_size = DEF_TX_BUFFERS_PER_QUEUE;
+		else
+			apc->tx_queue_size = MIN_TX_BUFFERS_PER_QUEUE;
+
+		schedule_port_reset = true;
 	}
 out:
 	mana_pre_dealloc_rxbufs(apc);
+
+	if (schedule_port_reset)
+		queue_work(apc->ac->per_port_queue_reset_wq,
+			   &apc->queue_reset_work);
 	return err;
 }
 
