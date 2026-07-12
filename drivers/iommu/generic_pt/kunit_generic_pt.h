@@ -419,40 +419,35 @@ static void test_table_radix(struct kunit *test)
 	}
 }
 
-static unsigned int safe_pt_num_items_lg2(const struct pt_state *pts)
-{
-	struct pt_range top_range = pt_top_range(pts->range->common);
-	struct pt_state top_pts = pt_init_top(&top_range);
-
-	/*
-	 * Avoid calling pt_num_items_lg2() on the top, instead we can derive
-	 * the size of the top table from the top range.
-	 */
-	if (pts->level == top_range.top_level)
-		return ilog2(pt_range_to_end_index(&top_pts));
-	return pt_num_items_lg2(pts);
-}
-
 static void test_lvl_possible_sizes(struct kunit *test, struct pt_state *pts,
 				    void *arg)
 {
-	unsigned int num_items_lg2 = safe_pt_num_items_lg2(pts);
 	pt_vaddr_t pgsize_bitmap = pt_possible_sizes(pts);
 	/* Matches get_info() */
 	pt_vaddr_t limited_pgsize_bitmap =
 		log2_mod(pgsize_bitmap, pts->range->common->max_vasz_lg2 - 1);
 	unsigned int isz_lg2 = pt_table_item_lg2sz(pts);
+	unsigned int sz_lg2;
 
 	if (!pt_can_have_leaf(pts)) {
 		KUNIT_ASSERT_EQ(test, pgsize_bitmap, 0);
 		return;
 	}
 
-	/* No bits for sizes that would be outside this table */
+	/* A page size cannot be smaller than the span of a single entry. */
 	KUNIT_ASSERT_EQ(test, log2_mod(pgsize_bitmap, isz_lg2), 0);
-	KUNIT_ASSERT_EQ(
-		test,
-		fvalog2_div(limited_pgsize_bitmap, num_items_lg2 + isz_lg2), 0);
+
+	/*
+	 * Ensure every page size claimed to be supported at this level
+	 * actually routes back to this level
+	 */
+	for (sz_lg2 = 0; sz_lg2 < PT_VADDR_MAX_LG2; sz_lg2++) {
+		if (limited_pgsize_bitmap & log2_to_int(sz_lg2)) {
+			KUNIT_ASSERT_EQ(test,
+				pt_pgsz_lg2_to_level(pts->range->common, sz_lg2),
+				pts->level);
+		}
+	}
 
 	/*
 	 * Non contiguous must be supported. AMDv1 has a HW bug where it does
@@ -463,12 +458,6 @@ static void test_lvl_possible_sizes(struct kunit *test, struct pt_state *pts,
 		KUNIT_ASSERT_TRUE(test, pgsize_bitmap & log2_to_int(isz_lg2));
 	else
 		KUNIT_ASSERT_NE(test, pgsize_bitmap, 0);
-
-	/* A contiguous entry should not span the whole table */
-	if (num_items_lg2 + isz_lg2 != PT_VADDR_MAX_LG2)
-		KUNIT_ASSERT_FALSE(
-			test, limited_pgsize_bitmap &
-					log2_to_int(num_items_lg2 + isz_lg2));
 }
 
 static void test_entry_possible_sizes(struct kunit *test)
