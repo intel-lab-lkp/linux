@@ -2586,6 +2586,48 @@ walk_done:
 	return ret;
 }
 
+static inline unsigned int folio_migrate_pte_batch(struct folio *folio,
+		struct page_vma_mapped_walk *pvmw, pte_t pte,
+		struct page *subpage, bool anon_exclusive)
+{
+	unsigned long end_addr, addr = pvmw->address;
+	struct vm_area_struct *vma = pvmw->vma;
+	unsigned int max_nr, nr, i;
+
+#ifdef __HAVE_ARCH_UNMAP_ONE
+	/* Cannot batch unmap if arch_unmap_one() is defined. */
+	return 1;
+#endif
+
+	if (!folio_test_large(folio))
+		return 1;
+	if (folio_is_zone_device(folio) || folio_test_has_hwpoisoned(folio))
+		return 1;
+	if (pte_unused(pte))
+		return 1;
+
+	/* We may only batch within a single VMA and a single page table. */
+	end_addr = pmd_addr_end(addr, vma->vm_end);
+	max_nr = (end_addr - addr) >> PAGE_SHIFT;
+	/*
+	 * If unmap fails, we need to restore the ptes. To avoid accidentally
+	 * upgrading write permissions for ptes that were not originally writable,
+	 * and to avoid losing the soft-dirty bit, use the appropriate FPB flags.
+	 */
+	nr = folio_pte_batch_flags(folio, vma, pvmw->pte, &pte, max_nr,
+				   FPB_RESPECT_WRITE | FPB_RESPECT_SOFT_DIRTY);
+
+	/* Limit possible batch count to a uniform PageAnonExclusive value */
+	if (folio_test_anon(folio)) {
+		for (i = 1; i < nr; i++)
+			if (PageAnonExclusive(subpage + i) != anon_exclusive)
+				break;
+		nr = i;
+	}
+
+	return nr;
+}
+
 /*
  * @arg: enum ttu_flags will be passed to this argument.
  *
@@ -2602,7 +2644,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	struct page *subpage;
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
-	unsigned long pfn;
+	unsigned long pfn, end_addr, nr_pages;
 
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
@@ -2655,11 +2697,8 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			VM_BUG_ON_FOLIO(folio_test_hugetlb(folio) ||
 					!folio_test_pmd_mappable(folio), folio);
 
-			if (set_pmd_migration_entry(&pvmw, subpage)) {
-				ret = false;
-				page_vma_mapped_walk_done(&pvmw);
-				break;
-			}
+			if (set_pmd_migration_entry(&pvmw, subpage))
+				goto walk_abort;
 			continue;
 #endif
 		}
@@ -2685,9 +2724,16 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 		anon_exclusive = folio_test_anon(folio) &&
 				 PageAnonExclusive(subpage);
 
+		nr_pages = 1;
 		if (likely(pte_present(pteval))) {
-			flush_cache_page(vma, address, pfn);
-			/* Nuke the page table entry. */
+			nr_pages = folio_migrate_pte_batch(folio, &pvmw, pteval,
+							   subpage, anon_exclusive);
+
+			end_addr = address + nr_pages * PAGE_SIZE;
+			flush_cache_range(vma, address, end_addr);
+
+			/* Nuke the page table entries. */
+			pteval = get_and_clear_ptes(mm, address, pvmw.pte, nr_pages);
 			if (should_defer_flush(mm, flags)) {
 				/*
 				 * We clear the PTE but do not flush so potentially
@@ -2697,11 +2743,9 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				 * transition on a cached TLB entry is written through
 				 * and traps if the PTE is unmapped.
 				 */
-				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
-
-				set_tlb_ubc_flush_pending(mm, pteval, address, address + PAGE_SIZE);
+				set_tlb_ubc_flush_pending(mm, pteval, address, end_addr);
 			} else {
-				pteval = ptep_clear_flush(vma, address, pvmw.pte);
+				flush_tlb_range(vma, address, end_addr);
 			}
 			if (pte_dirty(pteval))
 				folio_mark_dirty(folio);
@@ -2741,6 +2785,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			dec_mm_counter(mm, mm_counter(folio));
 		} else {
 			pte_t swp_pte;
+			unsigned int i;
 
 			/*
 			 * arch_unmap_one() is expected to be a NOP on
@@ -2748,19 +2793,15 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			 * so we'll not check/care.
 			 */
 			if (arch_unmap_one(mm, vma, address, pteval) < 0) {
-				set_pte_at(mm, address, pvmw.pte, pteval);
-				ret = false;
-				page_vma_mapped_walk_done(&pvmw);
-				break;
+				set_ptes(mm, address, pvmw.pte, pteval, nr_pages);
+				goto walk_abort;
 			}
 
-			/* See folio_try_share_anon_rmap_pte(): clear PTE first. */
+			/* See folio_try_share_anon_rmap_ptes(): clear PTE first. */
 			if (anon_exclusive &&
-			    folio_try_share_anon_rmap_pte(folio, subpage)) {
-				set_pte_at(mm, address, pvmw.pte, pteval);
-				ret = false;
-				page_vma_mapped_walk_done(&pvmw);
-				break;
+			    folio_try_share_anon_rmap_ptes(folio, subpage, nr_pages)) {
+				set_ptes(mm, address, pvmw.pte, pteval, nr_pages);
+				goto walk_abort;
 			}
 
 			/*
@@ -2770,19 +2811,38 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			 */
 			swp_pte = make_migration_swp_pte(subpage, pteval,
 							 writable, anon_exclusive);
-			set_pte_at(mm, address, pvmw.pte, swp_pte);
 			trace_set_migration_pte(address, pte_val(swp_pte),
 						folio_order(folio));
+
+			/* Set nr_pages migration entries, advancing the PFN. */
+			for (i = 0; i < nr_pages; i++) {
+				set_pte_at(mm, address + (unsigned long)i * PAGE_SIZE,
+					   pvmw.pte + i, swp_pte);
+				swp_pte = pte_next_swp_offset(swp_pte);
+			}
 			/*
 			 * No need to invalidate here it will synchronize on
 			 * against the special swap migration pte.
 			 */
 		}
 
-		folio_remove_rmap_pte(folio, subpage, vma);
+		folio_remove_rmap_ptes(folio, subpage, nr_pages, vma);
 		if (vma->vm_flags & VM_LOCKED)
 			mlock_drain_local();
-		folio_put(folio);
+		folio_put_refs(folio, nr_pages);
+
+		/*
+		 * If we batched the entire folio, there is nothing left to
+		 * walk; stop right here.
+		 */
+		if (nr_pages == folio_nr_pages(folio))
+			goto walk_done;
+		continue;
+walk_abort:
+		ret = false;
+walk_done:
+		page_vma_mapped_walk_done(&pvmw);
+		break;
 	}
 
 	mmu_notifier_invalidate_range_end(&range);
