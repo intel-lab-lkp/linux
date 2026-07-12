@@ -1714,6 +1714,7 @@ validate_return:
  */
 void cipso_v4_error(struct sk_buff *skb, int error, u32 gateway)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct inet_skb_parm parm;
 	int res;
 
@@ -1738,6 +1739,7 @@ void cipso_v4_error(struct sk_buff *skb, int error, u32 gateway)
 		__icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_ANO, 0, &parm);
 	else
 		__icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_ANO, 0, &parm);
+#endif
 }
 
 /**
@@ -2171,6 +2173,7 @@ int cipso_v4_skbuff_setattr(struct sk_buff *skb,
 			    const struct cipso_v4_doi *doi_def,
 			    const struct netlbl_lsm_secattr *secattr)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	int ret_val;
 	struct iphdr *iph;
 	struct ip_options *opt = &IPCB(skb)->opt;
@@ -2235,6 +2238,9 @@ int cipso_v4_skbuff_setattr(struct sk_buff *skb,
 	ip_send_check(iph);
 
 	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 /**
@@ -2248,6 +2254,7 @@ int cipso_v4_skbuff_setattr(struct sk_buff *skb,
  */
 int cipso_v4_skbuff_delattr(struct sk_buff *skb)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	int ret_val, cipso_len, hdr_len_actual, new_hdr_len_actual, new_hdr_len,
 	    hdr_len_delta;
 	struct iphdr *iph;
@@ -2296,6 +2303,9 @@ int cipso_v4_skbuff_delattr(struct sk_buff *skb)
 	ip_send_check(iph);
 
 	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 /*
