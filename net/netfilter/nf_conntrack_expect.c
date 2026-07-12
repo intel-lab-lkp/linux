@@ -524,6 +524,11 @@ int nf_ct_expect_related_report(struct nf_conntrack_expect *expect,
 	int ret;
 
 	spin_lock_bh(&nf_conntrack_expect_lock);
+	if (expect->flags & NF_CT_EXPECT_DEAD) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	master_help = nfct_help(expect->master);
 	if (!master_help) {
 		ret = -ESHUTDOWN;
