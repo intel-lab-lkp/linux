@@ -18,6 +18,7 @@ int hfs_find_init(struct hfs_btree *tree, struct hfs_find_data *fd)
 
 	fd->tree = tree;
 	fd->bnode = NULL;
+	hfs_find_reset(fd);
 	ptr = kzalloc(tree->max_key_len * 2 + 4, GFP_KERNEL);
 	if (!ptr)
 		return -ENOMEM;
@@ -106,12 +107,14 @@ int __hfs_brec_find(struct hfs_bnode *bnode, struct hfs_find_data *fd,
 	u16 off, len, keylen;
 	int rec;
 	int b, e;
-	int res;
+	int res = -ENOENT;
 
 	BUG_ON(!rec_found);
+	if (!hfs_bnode_num_recs_valid(bnode))
+		goto fail;
+
 	b = 0;
 	e = bnode->num_recs - 1;
-	res = -ENOENT;
 	do {
 		rec = (e + b) / 2;
 		len = hfs_brec_lenoff(bnode, rec, &off);
@@ -158,11 +161,7 @@ int hfs_brec_find(struct hfs_find_data *fd, search_strategy_t do_key_compare)
 	__be32 data;
 	int height, res;
 
-	fd->record = -1;
-	fd->keyoffset = -1;
-	fd->keylength = -1;
-	fd->entryoffset = -1;
-	fd->entrylength = -1;
+	hfs_find_reset(fd);
 
 	tree = fd->tree;
 	if (fd->bnode)
