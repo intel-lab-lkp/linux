@@ -266,6 +266,8 @@ struct printk_buffers;
  *				might cause a system freeze when the console
  *				is used later.
  * @backlog:			Ringbuffer has pending records
+ * @emitted:			The context attempted to emit the message. Might
+ *				be incomplete.
  * @pbufs:			Pointer to the text buffer for this context
  * @seq:			The sequence number to print for this context
  */
@@ -278,6 +280,7 @@ struct nbcon_context {
 
 	/* members set by emit */
 	unsigned int		backlog			: 1;
+	unsigned char		emitted			: 1;
 
 	/* members set by acquire */
 	struct printk_buffers	*pbufs;
@@ -298,7 +301,7 @@ struct nbcon_write_context {
 	struct nbcon_context	__private ctxt;
 	char			*outbuf;
 	unsigned int		len;
-	bool			unsafe_takeover;
+	unsigned char		unsafe_takeover : 1;
 #ifdef CONFIG_PRINTK_EXECUTION_CTX
 	int			cpu;
 	pid_t			pid;
