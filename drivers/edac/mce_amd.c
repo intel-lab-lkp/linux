@@ -870,11 +870,9 @@ amd_decode_mce(struct notifier_block *nb, unsigned long val, void *data)
 				memcpy(&frutext[0], &err->vendor.amd.synd1, 8);
 				memcpy(&frutext[8], &err->vendor.amd.synd2, 8);
 
-				pr_emerg(HW_ERR "FRU Text: %s", frutext);
+				pr_emerg(HW_ERR "FRU Text: %s\n", frutext);
 			}
 		}
-
-		pr_cont("\n");
 
 		decode_smca_error(m);
 		goto err_code;
