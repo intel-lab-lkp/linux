@@ -48,7 +48,16 @@ static const char *vc4_fence_get_driver_name(struct dma_fence *fence)
 
 static const char *vc4_fence_get_timeline_name(struct dma_fence *fence)
 {
-	return "vc4-v3d";
+	struct vc4_fence *f = to_vc4_fence(fence);
+
+	switch (f->queue) {
+	case VC4_BIN:
+		return "vc4-bin";
+	case VC4_RENDER:
+		return "vc4-render";
+	default:
+		return "vc4-unknown";
+	}
 }
 
 const struct dma_fence_ops vc4_fence_ops = {
