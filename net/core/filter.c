@@ -7003,9 +7003,13 @@ static struct sock *sk_lookup(struct net *net, struct bpf_sock_tuple *tuple,
 					   dst4, tuple->ipv4.dport,
 					   dif, sdif, &refcounted);
 		else
+#if IS_ENABLED(CONFIG_IPV4)
 			sk = __udp4_lib_lookup(net, src4, tuple->ipv4.sport,
 					       dst4, tuple->ipv4.dport,
 					       dif, sdif, NULL);
+#else
+			sk = NULL;
+#endif
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
 		struct in6_addr *src6 = (struct in6_addr *)&tuple->ipv6.saddr;

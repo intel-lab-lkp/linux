@@ -848,7 +848,9 @@ out:
 static struct sock *udp4_gro_lookup_skb(struct sk_buff *skb, __be16 sport,
 					__be16 dport)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	const struct iphdr *iph = skb_gro_network_header(skb);
+#endif
 	struct net *net = dev_net_rcu(skb->dev);
 	struct sock *sk;
 	int iif, sdif;
@@ -859,8 +861,12 @@ static struct sock *udp4_gro_lookup_skb(struct sk_buff *skb, __be16 sport,
 
 	inet_get_iif_sdif(skb, &iif, &sdif);
 
+#if IS_ENABLED(CONFIG_IPV4)
 	return __udp4_lib_lookup(net, iph->saddr, sport,
 				 iph->daddr, dport, iif, sdif, NULL);
+#else
+	return NULL;
+#endif
 }
 
 INDIRECT_CALLABLE_SCOPE
@@ -951,6 +957,7 @@ int udp_gro_complete(struct sk_buff *skb, int nhoff,
 
 INDIRECT_CALLABLE_SCOPE int udp4_gro_complete(struct sk_buff *skb, int nhoff)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	const u16 offset = NAPI_GRO_CB(skb)->network_offsets[skb->encapsulation];
 	const struct iphdr *iph = (struct iphdr *)(skb->data + offset);
 	struct udphdr *uh = (struct udphdr *)(skb->data + nhoff);
@@ -972,6 +979,9 @@ INDIRECT_CALLABLE_SCOPE int udp4_gro_complete(struct sk_buff *skb, int nhoff)
 					  iph->daddr, 0);
 
 	return udp_gro_complete(skb, nhoff, udp4_lib_lookup_skb);
+#else
+	return -EAFNOSUPPORT;
+#endif
 }
 
 int __init udpv4_offload_init(void)

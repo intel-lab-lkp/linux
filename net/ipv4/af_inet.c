@@ -890,8 +890,13 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 		return -EAGAIN;
 
 	prot = READ_ONCE(sk->sk_prot);
+#if IS_ENABLED(CONFIG_IPV4)
 	return INDIRECT_CALL_2(prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			       sk, msg, size);
+#else
+	return INDIRECT_CALL_1(prot->sendmsg, tcp_sendmsg,
+			       sk, msg, size);
+#endif
 }
 EXPORT_SYMBOL(inet_sendmsg);
 
@@ -919,8 +924,13 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 		sock_rps_record_flow(sk);
 
 	prot = READ_ONCE(sk->sk_prot);
+#if IS_ENABLED(CONFIG_IPV4)
 	return INDIRECT_CALL_2(prot->recvmsg, tcp_recvmsg, udp_recvmsg,
 			       sk, msg, size, flags);
+#else
+	return INDIRECT_CALL_1(prot->recvmsg, tcp_recvmsg,
+			       sk, msg, size, flags);
+#endif
 }
 EXPORT_SYMBOL(inet_recvmsg);
 

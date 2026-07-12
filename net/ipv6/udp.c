@@ -326,10 +326,12 @@ static void udp6_hash4(struct sock *sk)
 	struct net *net = sock_net(sk);
 	unsigned int hash;
 
+#if IS_ENABLED(CONFIG_IPV4)
 	if (ipv6_addr_v4mapped(&sk->sk_v6_rcv_saddr)) {
 		udp4_hash4(sk);
 		return;
 	}
+#endif
 
 	if (sk_unhashed(sk) || ipv6_addr_any(&sk->sk_v6_rcv_saddr))
 		return;
@@ -466,7 +468,9 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 {
 	int off, is_udp4, err, peeking = flags & MSG_PEEK;
 	struct ipv6_pinfo *np = inet6_sk(sk);
+#if IS_ENABLED(CONFIG_IPV4)
 	struct inet_sock *inet = inet_sk(sk);
+#endif
 	struct udp_mib __percpu *mib;
 	bool checksum_valid = false;
 	unsigned int ulen, copied;
@@ -558,9 +562,11 @@ try_again:
 		ip6_datagram_recv_common_ctl(sk, msg, skb);
 
 	if (is_udp4) {
+#if IS_ENABLED(CONFIG_IPV4)
 		if (inet_cmsg_flags(inet))
 			ip_cmsg_recv_offset(msg, sk, skb,
 					    sizeof(struct udphdr), off);
+#endif
 	} else {
 		if (np->rxopt.all)
 			ip6_datagram_recv_specific_ctl(sk, msg, skb);
@@ -1439,7 +1445,11 @@ static int udp_v6_push_pending_frames(struct sock *sk)
 	int err = 0;
 
 	if (up->pending == AF_INET)
+#if IS_ENABLED(CONFIG_IPV4)
 		return udp_push_pending_frames(sk);
+#else
+		return -EAFNOSUPPORT;
+#endif
 
 	skb = ip6_finish_skb(sk);
 	if (!skb)
@@ -1519,8 +1529,12 @@ int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 			msg->msg_name = &sin;
 			msg->msg_namelen = sizeof(sin);
 do_udp_sendmsg:
+#if IS_ENABLED(CONFIG_IPV4)
 			err = ipv6_only_sock(sk) ?
 				-ENETUNREACH : udp_sendmsg(sk, msg, len);
+#else
+			err = -ENETUNREACH;
+#endif
 			msg->msg_name = sin6;
 			msg->msg_namelen = addr_len;
 			return err;
@@ -1535,7 +1549,11 @@ do_udp_sendmsg:
 
 	if (READ_ONCE(up->pending)) {
 		if (READ_ONCE(up->pending) == AF_INET)
+#if IS_ENABLED(CONFIG_IPV4)
 			return udp_sendmsg(sk, msg, len);
+#else
+			return -EAFNOSUPPORT;
+#endif
 		/*
 		 * There are pending frames.
 		 * The socket lock must be held while it's corked.
