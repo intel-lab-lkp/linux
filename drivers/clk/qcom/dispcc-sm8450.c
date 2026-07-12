@@ -1833,11 +1833,9 @@ static int disp_cc_sm8450_probe(struct platform_device *pdev)
 
 	if (of_device_is_compatible(pdev->dev.of_node, "qcom,sm8475-dispcc")) {
 		/* Update DISPCC PLL0 */
-		disp_cc_pll0.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_OLE];
 		disp_cc_pll0.clkr.hw.init = &sm8475_disp_cc_pll0_init;
 
 		/* Update DISPCC PLL1 */
-		disp_cc_pll1.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_OLE];
 		disp_cc_pll1.clkr.hw.init = &sm8475_disp_cc_pll1_init;
 
 		disp_cc_pll0.config = &sm8475_disp_cc_pll0_config;
