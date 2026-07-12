@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config ISCSI_TARGET
 	tristate "SCSI Target Mode Stack"
-	depends on INET
+	depends on INET && IPV4
 	select CRC32
 	select CRYPTO
 	select CRYPTO_HASH

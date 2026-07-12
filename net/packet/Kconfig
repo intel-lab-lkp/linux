@@ -5,6 +5,7 @@
 
 config PACKET
 	tristate "Packet socket"
+	depends on IPV4
 	help
 	  The Packet protocol is used by applications which communicate
 	  directly with network devices without an intermediate network

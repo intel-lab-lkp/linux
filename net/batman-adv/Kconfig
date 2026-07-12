@@ -9,6 +9,7 @@
 
 config BATMAN_ADV
 	tristate "B.A.T.M.A.N. Advanced Meshing Protocol"
+	depends on IPV4
 	select CRC32
 	help
 	  B.A.T.M.A.N. (better approach to mobile ad-hoc networking) is

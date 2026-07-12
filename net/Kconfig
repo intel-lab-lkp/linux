@@ -385,7 +385,7 @@ menu "Network testing"
 
 config NET_PKTGEN
 	tristate "Packet Generator (USE WITH CAUTION)"
-	depends on INET && PROC_FS
+	depends on INET && IPV4 && PROC_FS
 	help
 	  This module will inject preconfigured packets, at a configurable
 	  rate, out of a given interface.  It is used for network interface
@@ -452,7 +452,7 @@ config LWTUNNEL
 
 config LWTUNNEL_BPF
 	bool "Execute BPF program as route nexthop action"
-	depends on LWTUNNEL && INET
+	depends on LWTUNNEL && INET && IPV4
 	default y if LWTUNNEL=y
 	help
 	  Allows to run BPF programs as a nexthop action following a route
@@ -474,7 +474,7 @@ config NET_IEEE8021Q_HELPERS
 
 config NET_SELFTESTS
 	def_tristate PHYLIB
-	depends on PHYLIB && INET
+	depends on PHYLIB && INET && IPV4
 
 config NET_SOCK_MSG
 	bool

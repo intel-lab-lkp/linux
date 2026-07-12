@@ -5,7 +5,7 @@
 
 config AF_RXRPC
 	tristate "RxRPC session sockets"
-	depends on INET
+	depends on INET && IPV4
 	select CRYPTO
 	select CRYPTO_LIB_DES if RXKAD
 	select KEYS

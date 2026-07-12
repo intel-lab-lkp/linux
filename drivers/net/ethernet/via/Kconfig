@@ -45,6 +45,7 @@ config VIA_RHINE_MMIO
 
 config VIA_VELOCITY
 	tristate "VIA Velocity support"
+	depends on IPV4
 	depends on (PCI || (OF_ADDRESS && OF_IRQ))
 	depends on HAS_DMA
 	select CRC32

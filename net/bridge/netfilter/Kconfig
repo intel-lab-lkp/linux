@@ -4,7 +4,7 @@
 #
 #
 menuconfig NF_TABLES_BRIDGE
-	depends on BRIDGE && NETFILTER && NF_TABLES
+	depends on BRIDGE && NETFILTER && NF_TABLES && IPV4
 	select NETFILTER_FAMILY_BRIDGE
 	tristate "Ethernet Bridge nf_tables support"
 
@@ -43,7 +43,7 @@ config NF_CONNTRACK_BRIDGE
 config BRIDGE_NF_EBTABLES_LEGACY
 	tristate "Legacy EBTABLES support"
 	depends on BRIDGE && NETFILTER_XTABLES_LEGACY
-	depends on NETFILTER_XTABLES
+	depends on NETFILTER_XTABLES && IPV4
 	default	n
 	help
 	 Legacy ebtables packet/frame classifier.
@@ -52,7 +52,7 @@ config BRIDGE_NF_EBTABLES_LEGACY
 
 menuconfig BRIDGE_NF_EBTABLES
 	tristate "Ethernet Bridge tables (ebtables) support"
-	depends on BRIDGE && NETFILTER && NETFILTER_XTABLES
+	depends on BRIDGE && NETFILTER && NETFILTER_XTABLES && IPV4
 	select NETFILTER_FAMILY_BRIDGE
 	help
 	  ebtables is a general, extensible frame/packet identification

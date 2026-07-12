@@ -18,6 +18,7 @@ if NET_VENDOR_SOLARFLARE
 
 config SFC
 	tristate "Solarflare SFC9100/EF100-family support"
+	depends on IPV4
 	depends on PCI
 	depends on PTP_1588_CLOCK_OPTIONAL
 	select MDIO

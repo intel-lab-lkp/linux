@@ -4,7 +4,7 @@
 #
 
 menu "IPv6: Netfilter Configuration"
-	depends on INET && IPV6 && NETFILTER
+	depends on INET && IPV6 && NETFILTER && IPV4
 
 # old sockopt interface and eval loop
 config IP6_NF_IPTABLES_LEGACY

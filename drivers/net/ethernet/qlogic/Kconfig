@@ -29,6 +29,7 @@ config QLA3XXX
 config QLCNIC
 	tristate "QLOGIC QLCNIC 1/10Gb Converged Ethernet NIC Support"
 	depends on PCI
+	depends on IPV4
 	select FW_LOADER
 	help
 	  This driver supports QLogic QLE8240 and QLE8242 Converged Ethernet
@@ -68,6 +69,7 @@ config QLCNIC_HWMON
 
 config NETXEN_NIC
 	tristate "NetXen Multi port (1/10) Gigabit Ethernet NIC"
+	depends on IPV4
 	depends on PCI
 	select FW_LOADER
 	help

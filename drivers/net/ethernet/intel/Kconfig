@@ -193,6 +193,7 @@ config IXGBE_DCB
 
 config IXGBE_IPSEC
 	bool "IPSec XFRM cryptography-offload acceleration"
+	depends on IPV4
 	depends on IXGBE
 	depends on XFRM_OFFLOAD
 	default y
@@ -219,6 +220,7 @@ config IXGBEVF
 
 config IXGBEVF_IPSEC
 	bool "IPSec XFRM cryptography-offload acceleration"
+	depends on IPV4
 	depends on IXGBEVF
 	depends on XFRM_OFFLOAD
 	default y

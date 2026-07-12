@@ -2,6 +2,7 @@
 config SCSI_BNX2_ISCSI
 	tristate "QLogic NetXtreme II iSCSI support"
 	depends on NET
+	depends on IPV4
 	depends on PCI
 	select SCSI_ISCSI_ATTRS
 	select NETDEVICES

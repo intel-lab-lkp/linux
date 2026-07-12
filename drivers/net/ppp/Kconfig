@@ -160,6 +160,7 @@ config PPPOE_HASH_BITS
 
 config PPTP
 	tristate "PPP over IPv4 (PPTP)"
+	depends on IPV4
 	depends on NET_IPGRE_DEMUX
 	select PPPOX
 	help

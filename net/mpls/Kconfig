@@ -25,6 +25,7 @@ config NET_MPLS_GSO
 
 config MPLS_ROUTING
 	tristate "MPLS: routing support"
+	depends on IPV4
 	depends on NET_IP_TUNNEL || NET_IP_TUNNEL=n
 	depends on PROC_SYSCTL
 	help

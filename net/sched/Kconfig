@@ -807,7 +807,7 @@ config NET_ACT_SKBEDIT
 
 config NET_ACT_CSUM
 	tristate "Checksum Updating"
-	depends on NET_CLS_ACT && INET
+	depends on NET_CLS_ACT && INET && IPV4
 	select NET_CRC32C
 	help
 	  Say Y here to update some common checksum after some direct

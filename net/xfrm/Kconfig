@@ -4,7 +4,7 @@
 #
 config XFRM
 	bool
-	depends on INET
+	depends on INET && IPV4
 	select GRO_CELLS
 	select SKB_EXTENSIONS
 
@@ -13,6 +13,7 @@ config XFRM_OFFLOAD
 
 config XFRM_ALGO
 	tristate
+	depends on IPV4
 	select XFRM
 	select CRYPTO
 	select CRYPTO_AEAD
@@ -23,6 +24,7 @@ if INET
 config XFRM_USER
 	tristate "Transformation user configuration interface"
 	select XFRM_ALGO
+	depends on IPV4
 	help
 	  Support for Transformation(XFRM) user configuration interface
 	  like IPsec used by native Linux tools.
@@ -42,7 +44,7 @@ config XFRM_USER_COMPAT
 
 config XFRM_INTERFACE
 	tristate "Transformation virtual interface"
-	depends on XFRM && IPV6
+	depends on XFRM && IPV4 && IPV6
 	help
 	  This provides a virtual interface to route IPsec traffic.
 
@@ -83,6 +85,7 @@ config XFRM_STATISTICS
 # RFC 8221 lists as MUST be implemented.
 config XFRM_AH
 	tristate
+	depends on IPV4
 	select XFRM_ALGO
 	select CRYPTO
 	select CRYPTO_HMAC
@@ -92,6 +95,7 @@ config XFRM_AH
 # algorithms that RFC 8221 lists as MUST be implemented.
 config XFRM_ESP
 	tristate
+	depends on IPV4
 	select XFRM_ALGO
 	select CRYPTO
 	select CRYPTO_AES
@@ -105,12 +109,14 @@ config XFRM_ESP
 
 config XFRM_IPCOMP
 	tristate
+	depends on IPV4
 	select XFRM_ALGO
 	select CRYPTO
 	select CRYPTO_DEFLATE
 
 config NET_KEY
 	tristate "PF_KEY sockets (deprecated)"
+	depends on IPV4
 	select XFRM_ALGO
 	help
 	  PF_KEYv2 socket family, compatible to KAME ones.
@@ -140,6 +146,7 @@ config NET_KEY_MIGRATE
 
 config XFRM_IPTFS
 	tristate "IPsec IP-TFS/AGGFRAG (RFC 9347) encapsulation support"
+	depends on IPV4
 	depends on XFRM
 	help
 	  Information on the IP-TFS/AGGFRAG encapsulation can be found
@@ -156,5 +163,6 @@ config XFRM_IPTFS
 
 config XFRM_ESPINTCP
 	bool
+	depends on IPV4
 
 endif # INET

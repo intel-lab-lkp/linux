@@ -5,7 +5,7 @@
 
 menuconfig IP_SCTP
 	tristate "The SCTP Protocol"
-	depends on INET
+	depends on INET && IPV4
 	select CRYPTO_LIB_SHA1
 	select CRYPTO_LIB_SHA256
 	select CRYPTO_LIB_UTILS

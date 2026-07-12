@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config NFSD
 	tristate "NFS server support"
-	depends on INET
+	depends on INET && IPV4
 	depends on FILE_LOCKING
 	depends on FSNOTIFY
 	select CRC32

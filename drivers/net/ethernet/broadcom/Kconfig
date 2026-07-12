@@ -97,6 +97,7 @@ config BNX2
 
 config CNIC
 	tristate "QLogic CNIC support"
+	depends on IPV4
 	depends on PCI
 	select BNX2
 	select UIO
@@ -208,6 +209,7 @@ config BNXT
 	tristate "Broadcom NetXtreme-C/E support"
 	depends on PCI
 	depends on PTP_1588_CLOCK_OPTIONAL
+	depends on IPV4
 	select FW_LOADER
 	select CRC32
 	select NET_DEVLINK

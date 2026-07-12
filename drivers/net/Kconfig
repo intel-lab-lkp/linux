@@ -40,7 +40,7 @@ if NET_CORE
 
 config BONDING
 	tristate "Bonding driver support"
-	depends on INET
+	depends on INET && IPV4
 	depends on TLS || TLS_DEVICE=n
 	help
 	  Say 'Y' or 'M' if you wish to be able to 'bond' multiple Ethernet
@@ -73,7 +73,7 @@ config DUMMY
 
 config WIREGUARD
 	tristate "WireGuard secure network tunnel"
-	depends on NET && INET
+	depends on NET && INET && IPV4
 	select NET_UDP_TUNNEL
 	select DST_CACHE
 	select CRYPTO_LIB_CURVE25519
@@ -102,7 +102,7 @@ config WIREGUARD_DEBUG
 
 config OVPN
 	tristate "OpenVPN data channel offload"
-	depends on NET && INET
+	depends on NET && INET && IPV4
 	select DST_CACHE
 	select NET_UDP_TUNNEL
 	select CRYPTO
@@ -164,6 +164,7 @@ source "drivers/net/team/Kconfig"
 
 config MACVLAN
 	tristate "MAC-VLAN support"
+	depends on IPV4
 	help
 	  This allows one to create virtual interfaces that map packets to
 	  or from specific MAC addresses to a particular interface.
@@ -198,7 +199,7 @@ config IPVLAN_L3S
 
 config IPVLAN
 	tristate "IP-VLAN support"
-	depends on INET
+	depends on INET && IPV4
 	help
 	  This allows one to create virtual devices off of a main interface
 	  and packets will be delivered based on the dest L3 (IPv6/IPv4 addr)
@@ -229,7 +230,7 @@ config IPVTAP
 
 config VXLAN
 	tristate "Virtual eXtensible Local Area Network (VXLAN)"
-	depends on INET
+	depends on INET && IPV4
 	select NET_UDP_TUNNEL
 	select GRO_CELLS
 	help
@@ -244,7 +245,7 @@ config VXLAN
 
 config GENEVE
 	tristate "Generic Network Virtualization Encapsulation"
-	depends on INET
+	depends on INET && IPV4
 	select NET_UDP_TUNNEL
 	select GRO_CELLS
 	help
@@ -259,7 +260,7 @@ config GENEVE
 
 config BAREUDP
 	tristate "Bare UDP Encapsulation"
-	depends on INET
+	depends on INET && IPV4
 	select NET_UDP_TUNNEL
 	select GRO_CELLS
 	help
@@ -271,7 +272,7 @@ config BAREUDP
 
 config GTP
 	tristate "GPRS Tunneling Protocol datapath (GTP-U)"
-	depends on INET
+	depends on INET && IPV4
 	select NET_UDP_TUNNEL
 	help
 	  This allows one to create gtp virtual interfaces that provide
@@ -288,7 +289,7 @@ config GTP
 
 config PFCP
 	tristate "Packet Forwarding Control Protocol (PFCP)"
-	depends on INET
+	depends on INET && IPV4
 	select NET_UDP_TUNNEL
 	help
 	  This allows one to create PFCP virtual interfaces that allows to
@@ -301,7 +302,7 @@ config PFCP
 
 config AMT
 	tristate "Automatic Multicast Tunneling (AMT)"
-	depends on INET && IP_MULTICAST
+	depends on INET && IP_MULTICAST && IPV4
 	select NET_UDP_TUNNEL
 	help
 	  This allows one to create AMT(Automatic Multicast Tunneling)
@@ -471,6 +472,7 @@ config NETKIT
 
 config NET_VRF
 	tristate "Virtual Routing and Forwarding (Lite)"
+	depends on IPV4
 	depends on IP_MULTIPLE_TABLES
 	depends on NET_L3_MASTER_DEV
 	depends on IPV6_MULTIPLE_TABLES || IPV6=n
@@ -604,7 +606,7 @@ source "drivers/net/hyperv/Kconfig"
 config NETDEVSIM
 	tristate "Simulated networking device"
 	depends on DEBUG_FS
-	depends on INET
+	depends on INET && IPV4
 	depends on PSAMPLE || PSAMPLE=n
 	depends on PTP_1588_CLOCK_MOCK || PTP_1588_CLOCK_MOCK=n
 	select NET_DEVLINK
