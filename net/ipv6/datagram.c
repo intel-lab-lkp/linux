@@ -33,10 +33,12 @@
 #include <linux/errqueue.h>
 #include <linux/uaccess.h>
 
+#if IS_ENABLED(CONFIG_IPV4)
 static bool ipv6_mapped_addr_any(const struct in6_addr *a)
 {
 	return ipv6_addr_v4mapped(a) && (a->s6_addr32[3] == 0);
 }
+#endif
 
 static void ip6_datagram_flow_key_init(struct flowi6 *fl6,
 				       const struct sock *sk)
@@ -153,10 +155,14 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 	int			err;
 
 	if (usin->sin6_family == AF_INET) {
+#if IS_ENABLED(CONFIG_IPV4)
 		if (ipv6_only_sock(sk))
 			return -EAFNOSUPPORT;
 		err = __ip4_datagram_connect(sk, uaddr, addr_len);
 		goto ipv4_connected;
+#else
+		return -EAFNOSUPPORT;
+#endif
 	}
 
 	if (addr_len < SIN6_LEN_RFC2133)
@@ -184,6 +190,7 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 	daddr = &usin->sin6_addr;
 
 	if (addr_type & IPV6_ADDR_MAPPED) {
+#if IS_ENABLED(CONFIG_IPV4)
 		struct sockaddr_in sin;
 
 		if (ipv6_only_sock(sk)) {
@@ -217,6 +224,9 @@ ipv4_connected:
 		}
 
 		goto out;
+#else
+		return -ENETUNREACH;
+#endif
 	}
 
 	if (__ipv6_addr_needs_scope_id(addr_type)) {
@@ -522,10 +532,12 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 				ipv6_iface_scope_id(&sin->sin6_addr,
 						    IP6CB(skb)->iif);
 		} else {
+#if IS_ENABLED(CONFIG_IPV4)
 			ipv6_addr_set_v4mapped(ip_hdr(skb)->saddr,
 					       &sin->sin6_addr);
 			if (inet_cmsg_flags(inet_sk(sk)))
 				ip_cmsg_recv(msg, skb);
+#endif
 		}
 	}
 

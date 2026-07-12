@@ -299,6 +299,7 @@ int __inet6_bind(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len,
 
 	/* Check if the address belongs to the host. */
 	if (addr_type == IPV6_ADDR_MAPPED) {
+#if IS_ENABLED(CONFIG_IPV4)
 		struct net_device *dev = NULL;
 		int chk_addr_ret;
 
@@ -329,6 +330,10 @@ int __inet6_bind(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len,
 			err = -EADDRNOTAVAIL;
 			goto out;
 		}
+#else
+		err = -EADDRNOTAVAIL;
+		goto out;
+#endif
 	} else {
 		if (addr_type != IPV6_ADDR_ANY) {
 			struct net_device *dev = NULL;

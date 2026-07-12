@@ -129,6 +129,28 @@
 int disable_ipv6_mod;
 EXPORT_SYMBOL(disable_ipv6_mod);
 
+/* Keep the function here for now as it is generic, it should be moved
+ * to a common L3 place
+ */
+int
+ip_generic_getfrag(void *from, char *to, int offset, int len, int odd, struct sk_buff *skb)
+{
+	struct msghdr *msg = from;
+
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {
+		if (!copy_from_iter_full(to, len, &msg->msg_iter))
+			return -EFAULT;
+	} else {
+		__wsum csum = 0;
+
+		if (!csum_and_copy_from_iter_full(to, len, &csum, &msg->msg_iter))
+			return -EFAULT;
+		skb->csum = csum_block_add(skb->csum, csum, odd);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(ip_generic_getfrag);
+
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
  */
@@ -425,8 +447,10 @@ int inet_release(struct socket *sock)
 		if (!sk->sk_kern_sock)
 			BPF_CGROUP_RUN_PROG_INET_SOCK_RELEASE(sk);
 
+#if IS_ENABLED(CONFIG_IPV4)
 		/* Applications forget to leave groups before exiting */
 		ip_mc_drop_socket(sk);
+#endif
 
 		/* If linger is set, we don't return until the close
 		 * is complete.  Otherwise we return immediately. The
@@ -478,6 +502,7 @@ EXPORT_SYMBOL(inet_bind);
 int __inet_bind(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len,
 		u32 flags)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct sockaddr_in *addr = (struct sockaddr_in *)uaddr;
 	struct inet_sock *inet = inet_sk(sk);
 	struct net *net = sock_net(sk);
@@ -570,6 +595,9 @@ out_release_sock:
 		release_sock(sk);
 out:
 	return err;
+#else
+	return -EAFNOSUPPORT;
+#endif
 }
 
 int inet_dgram_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
@@ -965,18 +993,24 @@ EXPORT_SYMBOL(inet_shutdown);
 int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
-	int err = 0;
-	struct net *net = sock_net(sk);
+#if IS_ENABLED(CONFIG_IPV4)
 	void __user *p = (void __user *)arg;
-	struct ifreq ifr;
+	struct net *net = sock_net(sk);
 	struct rtentry rt;
+	struct ifreq ifr;
+#endif
+	int err = 0;
 
 	switch (cmd) {
 	case SIOCADDRT:
 	case SIOCDELRT:
+#if IS_ENABLED(CONFIG_IPV4)
 		if (copy_from_user(&rt, p, sizeof(struct rtentry)))
 			return -EFAULT;
 		err = ip_rt_ioctl(net, cmd, &rt);
+#else
+		err = -EOPNOTSUPP;
+#endif
 		break;
 	case SIOCRTMSG:
 		err = -EINVAL;
@@ -984,18 +1018,26 @@ int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCDARP:
 	case SIOCGARP:
 	case SIOCSARP:
+#if IS_ENABLED(CONFIG_IPV4)
 		err = arp_ioctl(net, cmd, (void __user *)arg);
+#else
+		err = -EOPNOTSUPP;
+#endif
 		break;
 	case SIOCGIFADDR:
 	case SIOCGIFBRDADDR:
 	case SIOCGIFNETMASK:
 	case SIOCGIFDSTADDR:
 	case SIOCGIFPFLAGS:
+#if IS_ENABLED(CONFIG_IPV4)
 		if (get_user_ifreq(&ifr, NULL, p))
 			return -EFAULT;
 		err = devinet_ioctl(net, cmd, &ifr);
 		if (!err && put_user_ifreq(&ifr, p))
 			err = -EFAULT;
+#else
+		err = -EOPNOTSUPP;
+#endif
 		break;
 
 	case SIOCSIFADDR:
@@ -1004,9 +1046,13 @@ int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCSIFDSTADDR:
 	case SIOCSIFPFLAGS:
 	case SIOCSIFFLAGS:
+#if IS_ENABLED(CONFIG_IPV4)
 		if (get_user_ifreq(&ifr, NULL, p))
 			return -EFAULT;
 		err = devinet_ioctl(net, cmd, &ifr);
+#else
+		err = -EOPNOTSUPP;
+#endif
 		break;
 	default:
 		if (sk->sk_prot->ioctl)
@@ -1023,6 +1069,7 @@ EXPORT_SYMBOL(inet_ioctl);
 static int inet_compat_routing_ioctl(struct sock *sk, unsigned int cmd,
 		struct compat_rtentry __user *ur)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	compat_uptr_t rtdev;
 	struct rtentry rt;
 
@@ -1038,6 +1085,9 @@ static int inet_compat_routing_ioctl(struct sock *sk, unsigned int cmd,
 
 	rt.rt_dev = compat_ptr(rtdev);
 	return ip_rt_ioctl(sock_net(sk), cmd, &rt);
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 static int inet_compat_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
@@ -1156,6 +1206,7 @@ static const struct net_proto_family inet_family_ops = {
 	.owner	= THIS_MODULE,
 };
 
+#if IS_ENABLED(CONFIG_IPV4)
 /* Upon startup we insert all the elements in inetsw_array[] into
  * the linked list inetsw.
  */
@@ -1169,7 +1220,6 @@ static struct inet_protosw inetsw_array[] =
 		.flags =      INET_PROTOSW_PERMANENT |
 			      INET_PROTOSW_ICSK,
 	},
-
 	{
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_UDP,
@@ -1196,6 +1246,7 @@ static struct inet_protosw inetsw_array[] =
 };
 
 #define INETSW_ARRAY_LEN ARRAY_SIZE(inetsw_array)
+#endif
 
 void inet_register_protosw(struct inet_protosw *p)
 {
@@ -1261,6 +1312,7 @@ EXPORT_SYMBOL(inet_unregister_protosw);
 
 static int inet_sk_reselect_saddr(struct sock *sk)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct inet_sock *inet = inet_sk(sk);
 	__be32 old_saddr = inet->inet_saddr;
 	__be32 daddr = inet->inet_daddr;
@@ -1312,6 +1364,9 @@ static int inet_sk_reselect_saddr(struct sock *sk)
 	 * uniqueness. Wait for troubles.
 	 */
 	return __sk_prot_rehash(sk);
+#else
+	return -EAFNOSUPPORT;
+#endif
 }
 
 int inet_sk_rebuild_header(struct sock *sk)
@@ -1364,6 +1419,7 @@ void inet_sk_state_store(struct sock *sk, int newstate)
 struct sk_buff *inet_gso_segment(struct sk_buff *skb,
 				 netdev_features_t features)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	bool udpfrag = false, fixedid = false, gso_partial, encap;
 	struct sk_buff *segs = ERR_PTR(-EINVAL);
 	const struct net_offload *ops;
@@ -1454,6 +1510,9 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
 
 out:
 	return segs;
+#else
+	return ERR_PTR(-EPROTONOSUPPORT);
+#endif
 }
 
 static struct sk_buff *ipip_gso_segment(struct sk_buff *skb,
@@ -1777,6 +1836,10 @@ static int __init init_ipv4_mibs(void)
 	return register_pernet_subsys(&ipv4_mib_ops);
 }
 
+#if IS_ENABLED(CONFIG_IPV4)
+static int ipv4_proc_init(void);
+#endif
+
 static __net_init int inet_init_net(struct net *net)
 {
 	/*
@@ -1827,8 +1890,6 @@ static int __init init_inet_pernet_ops(void)
 	return register_pernet_subsys(&af_inet_ops);
 }
 
-static int ipv4_proc_init(void);
-
 /*
  *	IP protocol layer initialiser
  */
@@ -1873,26 +1934,30 @@ static int __init ipv4_offload_init(void)
 
 fs_initcall(ipv4_offload_init);
 
+#if IS_ENABLED(CONFIG_IPV4)
 static struct packet_type ip_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_IP),
 	.func = ip_rcv,
 	.list_func = ip_list_rcv,
 };
+#endif
 
 static int __init inet_init(void)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct inet_protosw *q;
 	struct list_head *r;
 	int rc;
+#endif
 
 	sock_skb_cb_check_size(sizeof(struct inet_skb_parm));
 
+#if IS_ENABLED(CONFIG_IPV4)
 	raw_hashinfo_init(&raw_v4_hashinfo);
 
 	rc = proto_register(&tcp_prot, 1);
 	if (rc)
 		goto out;
-
 	rc = proto_register(&udp_prot, 1);
 	if (rc)
 		goto out_unregister_tcp_proto;
@@ -1929,7 +1994,6 @@ static int __init inet_init(void)
 	};
 	if (inet_add_protocol(&net_hotdata.udp_protocol, IPPROTO_UDP) < 0)
 		pr_crit("%s: Cannot add UDP protocol\n", __func__);
-
 	net_hotdata.tcp_protocol = (struct net_protocol) {
 		.handler	=	tcp_v4_rcv,
 		.err_handler	=	tcp_v4_err,
@@ -1961,7 +2025,7 @@ static int __init inet_init(void)
 	 */
 
 	ip_init();
-
+#endif /* CONFIG_IPV4 */
 	/* Initialise per-cpu ipv4 mibs */
 	if (init_ipv4_mibs())
 		panic("%s: Cannot init ipv4 mibs\n", __func__);
@@ -1983,6 +2047,9 @@ static int __init inet_init(void)
 	if (icmp_init() < 0)
 		panic("Failed to create the ICMP control socket.\n");
 
+	if (init_inet_pernet_ops())
+		pr_crit("%s: Cannot init ipv4 inet pernet ops\n", __func__);
+#if IS_ENABLED(CONFIG_IPV4)
 	/*
 	 *	Initialise the multicast router
 	 */
@@ -1990,19 +2057,17 @@ static int __init inet_init(void)
 	if (ip_mr_init())
 		pr_crit("%s: Cannot init ipv4 mroute\n", __func__);
 #endif
-
-	if (init_inet_pernet_ops())
-		pr_crit("%s: Cannot init ipv4 inet pernet ops\n", __func__);
-
 	ipv4_proc_init();
 
 	ipfrag_init();
 
 	dev_add_pack(&ip_packet_type);
+#endif /* CONFIG_IPV4 */
 
 	ip_tunnel_core_init();
 
-	rc = 0;
+	return 0;
+#if IS_ENABLED(CONFIG_IPV4)
 out:
 	return rc;
 out_unregister_raw_proto:
@@ -2012,12 +2077,14 @@ out_unregister_udp_proto:
 out_unregister_tcp_proto:
 	proto_unregister(&tcp_prot);
 	goto out;
+#endif
 }
 
 fs_initcall(inet_init);
 
 /* ------------------------------------------------------------------------ */
 
+#if IS_ENABLED(CONFIG_IPV4)
 #ifdef CONFIG_PROC_FS
 static int __init ipv4_proc_init(void)
 {
@@ -2054,3 +2121,4 @@ static int __init ipv4_proc_init(void)
 	return 0;
 }
 #endif /* CONFIG_PROC_FS */
+#endif
