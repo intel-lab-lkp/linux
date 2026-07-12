@@ -234,10 +234,7 @@ static int nat_rtp_rtcp(struct sk_buff *skb, struct nf_conn *ct,
 			ret = nf_ct_expect_related(rtcp_exp, 0);
 			if (ret == 0)
 				break;
-			else if (ret == -EBUSY) {
-				nf_ct_unexpect_related(rtp_exp);
-				continue;
-			} else if (ret < 0) {
+			else if (ret < 0) {
 				nf_ct_unexpect_related(rtp_exp);
 				nated_port = 0;
 				break;
