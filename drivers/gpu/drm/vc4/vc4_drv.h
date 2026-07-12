@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/refcount.h>
 #include <linux/uaccess.h>
+#include <linux/xarray.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_debugfs.h>
@@ -777,6 +778,10 @@ struct vc4_render_job {
 	 * Must remain allocated until the render job completes.
 	 */
 	uint32_t bin_slots;
+
+	/* For userspace fence tracking. */
+	struct vc4_file *file;
+	u32 seqno;
 };
 
 struct vc4_exec_info {
@@ -910,6 +915,12 @@ struct vc4_file {
 	struct xarray perfmons;
 
 	struct drm_sched_entity sched_entity[VC4_MAX_QUEUES];
+
+	/* Mapping of seqno to dma_fence for job completion tracking.
+	 * Allows userspace to wait on specific submissions.
+	 */
+	struct xarray seqno_xa;
+	u32 next_seqno;
 
 	bool bin_bo_used;
 };

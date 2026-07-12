@@ -168,6 +168,7 @@ static int vc4_open(struct drm_device *dev, struct drm_file *file)
 	}
 
 	kref_init(&vc4file->refcount);
+	xa_init_flags(&vc4file->seqno_xa, XA_FLAGS_ALLOC1);
 	vc4_perfmon_open_file(vc4file);
 	file->driver_priv = vc4file;
 
@@ -185,6 +186,7 @@ void vc4_file_release(struct kref *ref)
 {
 	struct vc4_file *vc4file = container_of(ref, struct vc4_file, refcount);
 
+	xa_destroy(&vc4file->seqno_xa);
 	vc4_perfmon_close_file(vc4file);
 	kfree(vc4file);
 }

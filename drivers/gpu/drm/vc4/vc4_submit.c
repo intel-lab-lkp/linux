@@ -232,6 +232,57 @@ fail:
 	return ret;
 }
 
+int
+vc4_wait_seqno_ioctl(struct drm_device *dev, void *data,
+		     struct drm_file *file_priv)
+{
+	struct vc4_file *vc4_priv = file_priv->driver_priv;
+	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	struct drm_vc4_wait_seqno *args = data;
+	unsigned long timeout_jiffies = nsecs_to_jiffies(args->timeout_ns);
+	unsigned long start = jiffies;
+	struct dma_fence *fence;
+	long ret;
+
+	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
+		return -ENODEV;
+
+	/*
+	 * While RCU guarantees the xarray entry won't be freed during the
+	 * lookup, it does not prevent the fence's refcount from being
+	 * concurrently dropped to zero from the IRQ context.
+	 *
+	 * dma_fence_get_rcu() pretends we didn't find a fence in that case.
+	 */
+	rcu_read_lock();
+	fence = xa_load(&vc4_priv->seqno_xa, args->seqno);
+	if (fence)
+		fence = dma_fence_get_rcu(fence);
+	rcu_read_unlock();
+
+	if (!fence)
+		return 0;
+
+	trace_vc4_wait_for_seqno_begin(dev, args->seqno, args->timeout_ns);
+	ret = dma_fence_wait_timeout(fence, true, timeout_jiffies);
+	trace_vc4_wait_for_seqno_end(dev, args->seqno);
+
+	dma_fence_put(fence);
+
+	if (ret == -ERESTARTSYS) {
+		u64 delta = jiffies_to_nsecs(jiffies - start);
+
+		if (args->timeout_ns >= delta)
+			args->timeout_ns -= delta;
+		else
+			args->timeout_ns = 0;
+
+		return ret;
+	}
+
+	return ret > 0 ? 0 : -ETIME;
+}
+
 static void
 vc4_job_free(struct kref *ref)
 {
@@ -290,6 +341,10 @@ vc4_render_job_free(struct kref *ref)
 	vc4->bin_alloc_used &= ~job->bin_slots;
 	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 
+	if (job->seqno)
+		xa_erase(&job->file->seqno_xa, job->seqno);
+
+	vc4_file_put(job->file);
 	vc4_job_free(ref);
 }
 
@@ -365,7 +420,7 @@ fail_free:
 }
 
 static int
-vc4_push_jobs(struct vc4_exec_info *exec)
+vc4_push_jobs(struct vc4_file *vc4_priv, struct vc4_exec_info *exec)
 {
 	struct vc4_render_job *render = exec->render;
 	struct vc4_job *jobs[VC4_MAX_QUEUES];
@@ -390,6 +445,14 @@ vc4_push_jobs(struct vc4_exec_info *exec)
 		if (ret)
 			goto err;
 	}
+
+	/*
+	 * The slot was already reserved by xa_alloc_cyclic() (which allocates
+	 * the node), so storing the fence into the same index reuses that slot
+	 * and cannot fail.
+	 */
+	xa_store(&vc4_priv->seqno_xa, render->seqno, render->base.done_fence,
+		 GFP_KERNEL);
 
 	for (int i = 0; i < num_jobs; i++)
 		drm_sched_entity_push_job(&jobs[i]->base);
@@ -498,6 +561,7 @@ vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
 	}
 
 	exec.render = render;
+	render->file = vc4_file_get(vc4_priv);
 	INIT_LIST_HEAD(&render->unref_list);
 
 	ret = vc4_lookup_bos(dev, file_priv, render, args->bo_handles,
@@ -547,11 +611,20 @@ vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
 		goto fail_exec;
 
 	scoped_guard(mutex, &vc4->sched_lock) {
-		ret = vc4_push_jobs(&exec);
+		ret = xa_alloc_cyclic(&vc4_priv->seqno_xa, &render->seqno,
+				      NULL, xa_limit_32b, &vc4_priv->next_seqno,
+				      GFP_KERNEL);
+		if (ret < 0)
+			goto fail_exec;
+
+		ret = vc4_push_jobs(vc4_priv, &exec);
 	}
 
 	if (!ret) {
 		vc4_attach_fences(render, sync_out, render->base.done_fence);
+
+		/* Return the seqno for our job. */
+		args->seqno = render->seqno;
 	} else if (sync_out) {
 		/* The jobs were never submitted, so release the unpublished syncobj */
 		drm_syncobj_put(sync_out);
