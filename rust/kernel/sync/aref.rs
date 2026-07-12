@@ -124,7 +124,8 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// struct Empty {}
     ///
-    /// # // SAFETY: TODO.
+    /// # // SAFETY: `Empty` has no data, so `inc_ref` and `dec_ref` being no-ops is trivially
+    /// # // sound.
     /// unsafe impl AlwaysRefCounted for Empty {
     ///     fn inc_ref(&self) {}
     ///     unsafe fn dec_ref(_obj: NonNull<Self>) {}
@@ -132,7 +133,8 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// let mut data = Empty {};
     /// let ptr = NonNull::<Empty>::new(&mut data).unwrap();
-    /// # // SAFETY: TODO.
+    /// # // SAFETY: `ptr` is derived from a valid reference and is therefore non-null, properly
+    /// # // aligned, and points to a valid `Empty` instance.
     /// let data_ref: ARef<Empty> = unsafe { ARef::from_raw(ptr) };
     /// let raw_ptr: NonNull<Empty> = ARef::into_raw(data_ref);
     ///
