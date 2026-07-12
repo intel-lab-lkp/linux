@@ -145,7 +145,10 @@ static int vc4_get_param_ioctl(struct drm_device *dev, void *data,
 static int vc4_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	struct drm_gpu_scheduler *sched;
 	struct vc4_file *vc4file;
+	enum vc4_queue q;
+	int ret;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
@@ -155,21 +158,42 @@ static int vc4_open(struct drm_device *dev, struct drm_file *file)
 		return -ENOMEM;
 	vc4file->dev = vc4;
 
+	for (q = 0; q < VC4_MAX_QUEUES; q++) {
+		sched = &vc4->queue[q].sched;
+		ret = drm_sched_entity_init(&vc4file->sched_entity[q],
+					    DRM_SCHED_PRIORITY_NORMAL, &sched,
+					    1, NULL);
+		if (ret)
+			goto err_sched;
+	}
+
 	vc4_perfmon_open_file(vc4file);
 	file->driver_priv = vc4file;
+
 	return 0;
+
+err_sched:
+	for (q--; q >= 0; q--)
+		drm_sched_entity_destroy(&vc4file->sched_entity[q]);
+	kfree(vc4file);
+	return ret;
+
 }
 
 static void vc4_close(struct drm_device *dev, struct drm_file *file)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
 	struct vc4_file *vc4file = file->driver_priv;
+	enum vc4_queue q;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
 	if (vc4file->bin_bo_used)
 		vc4_v3d_bin_bo_put(vc4);
+
+	for (q = 0; q < VC4_MAX_QUEUES; q++)
+		drm_sched_entity_destroy(&vc4file->sched_entity[q]);
 
 	vc4_perfmon_close_file(vc4file);
 	kfree(vc4file);

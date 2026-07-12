@@ -20,6 +20,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_mm.h>
 #include <drm/drm_modeset_lock.h>
+#include <drm/gpu_scheduler.h>
 
 #include <kunit/test-bug.h>
 
@@ -30,6 +31,19 @@ struct drm_gem_object;
 
 extern const struct drm_driver vc4_drm_driver;
 extern const struct drm_driver vc5_drm_driver;
+
+enum vc4_queue {
+	VC4_BIN,
+	VC4_RENDER,
+	VC4_MAX_QUEUES,
+};
+
+struct vc4_queue_state {
+	struct drm_gpu_scheduler sched;
+
+	u64 fence_context;
+	u64 emit_seqno;
+};
 
 /* Don't forget to update vc4_bo.c: bo_type_names[] when adding to
  * this.
@@ -152,6 +166,12 @@ struct vc4_dev {
 	 */
 	uint64_t emit_seqno;
 
+	struct vc4_queue_state queue[VC4_MAX_QUEUES];
+
+	struct vc4_bin_job *bin_job;
+
+	struct vc4_render_job *render_job;
+
 	/* Sequence number for the last completed job on the GPU.
 	 * Starts at 0 (no jobs completed).
 	 */
@@ -174,6 +194,18 @@ struct vc4_dev {
 	 * job_done_work.
 	 */
 	struct list_head job_done_list;
+
+	/* Lock taken when resetting the GPU, to keep multiple
+	 * processes from trying to park the scheduler threads and
+	 * reset at once.
+	 */
+	struct mutex reset_lock;
+
+	/* Lock taken when creating and pushing the GPU scheduler
+	 * jobs. This lock protects the DRM scheduler arm + push pair.
+	 */
+	struct mutex sched_lock;
+
 	/* Spinlock used to synchronize the job_list and seqno
 	 * accesses between the IRQ handler and GEM ioctls.
 	 */
@@ -289,8 +321,8 @@ struct vc4_bo {
 struct vc4_fence {
 	struct dma_fence base;
 	struct drm_device *dev;
-	/* vc4 seqno for signaled() test */
 	uint64_t seqno;
+	enum vc4_queue queue;
 };
 
 #define to_vc4_fence(_fence)					\
@@ -675,8 +707,83 @@ struct vc4_crtc_state {
 
 #define VC4_REG32(reg) { .name = #reg, .offset = reg }
 
+struct vc4_job {
+	struct drm_sched_job base;
+
+	struct kref refcount;
+
+	struct vc4_dev *vc4;
+
+	/* Fence to be signaled by IRQ handler when the job is complete. */
+	struct dma_fence *irq_fence;
+
+	/* Scheduler fence for when the job is considered complete and
+	 * the BO reservations can be released.
+	 */
+	struct dma_fence *done_fence;
+
+	/* Last current and return addresses the hardware was processing when
+	 * the job timedout.
+	 */
+	u32 timedout_ctca, timedout_ctra;
+
+	/* Pointer to a performance monitor object if the user requested it,
+	 * NULL otherwise.
+	 */
+	struct vc4_perfmon *perfmon;
+
+	/* Callback for the freeing of the job on refcount going to 0. */
+	void (*free)(struct kref *ref);
+};
+
+struct vc4_bin_job {
+	struct vc4_job base;
+
+	uint32_t ct0ca, ct0ea;
+
+	/* Corresponding render job, for attaching our overflow memory. */
+	struct vc4_render_job *render;
+
+	/* Whether the exec has taken a reference to the binner BO, which should
+	 * happen with a VC4_PACKET_TILE_BINNING_MODE_CONFIG packet.
+	 */
+	bool bin_bo_used;
+};
+
+struct vc4_render_job {
+	struct vc4_job base;
+
+	uint32_t ct1ca, ct1ea;
+
+	/* This is the array of BOs that were looked up at the start of submission.
+	 * Command validation will use indices into this array.
+	 */
+	struct drm_gem_object **bo;
+	u32 bo_count;
+
+	/* List of other BOs used in the job that need to be released
+	 * once the job is complete.
+	 */
+	struct list_head unref_list;
+
+	/* List of BOs that are being written by the RCL. Other than
+	 * the binner temporary storage, this is all the BOs written
+	 * by the job.
+	 */
+	struct drm_gem_dma_object *rcl_write_bo[4];
+	uint32_t rcl_write_bo_count;
+
+	/* Bitmask of which binner slots are freed when this job completes.
+	 * Must remain allocated until the render job completes.
+	 */
+	uint32_t bin_slots;
+};
+
 struct vc4_exec_info {
 	struct vc4_dev *dev;
+
+	struct vc4_bin_job *bin;
+	struct vc4_render_job *render;
 
 	/* Sequence number for this bin/render job. */
 	uint64_t seqno;
@@ -799,6 +906,8 @@ struct vc4_file {
 	struct vc4_dev *dev;
 
 	struct xarray perfmons;
+
+	struct drm_sched_entity sched_entity[VC4_MAX_QUEUES];
 
 	bool bin_bo_used;
 };
@@ -992,6 +1101,7 @@ extern struct platform_driver vc4_dsi_driver;
 
 /* vc4_fence.c */
 extern const struct dma_fence_ops vc4_fence_ops;
+struct dma_fence *vc4_fence_create(struct vc4_dev *vc4, enum vc4_queue queue);
 
 /* vc4_gem.c */
 int vc4_gem_init(struct drm_device *dev);
@@ -1007,6 +1117,7 @@ int vc4_wait_for_seqno(struct drm_device *dev, uint64_t seqno,
 void vc4_job_handle_completed(struct vc4_dev *vc4);
 int vc4_gem_madvise_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv);
+void vc4_save_hang_state(struct drm_device *dev);
 
 /* vc4_hdmi.c */
 extern struct platform_driver vc4_hdmi_driver;
@@ -1104,5 +1215,9 @@ int vc4_perfmon_destroy_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv);
 int vc4_perfmon_get_values_ioctl(struct drm_device *dev, void *data,
 				 struct drm_file *file_priv);
+
+/* vc4_sched.c */
+int vc4_sched_init(struct vc4_dev *vc4);
+void vc4_sched_fini(struct vc4_dev *vc4);
 
 #endif /* _VC4_DRV_H_ */

@@ -150,7 +150,7 @@ err_free:
 	return ret;
 }
 
-static void
+void
 vc4_save_hang_state(struct drm_device *dev)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
@@ -1139,6 +1139,12 @@ int vc4_gem_init(struct drm_device *dev)
 	INIT_LIST_HEAD(&vc4->job_done_list);
 	spin_lock_init(&vc4->job_lock);
 	spin_lock_init(&vc4->perfmon_state.lock);
+	ret = drmm_mutex_init(dev, &vc4->reset_lock);
+	if (ret)
+		return ret;
+	ret = drmm_mutex_init(dev, &vc4->sched_lock);
+	if (ret)
+		return ret;
 
 	INIT_WORK(&vc4->hangcheck.reset_work, vc4_reset_work);
 	timer_setup(&vc4->hangcheck.timer, vc4_hangcheck_elapsed, 0);
