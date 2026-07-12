@@ -51,8 +51,10 @@ void vc4_perfmon_start(struct vc4_dev *vc4, struct vc4_perfmon *perfmon)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	if (WARN_ON_ONCE(!perfmon || vc4->active_perfmon))
+	if (!perfmon)
 		return;
+
+	guard(spinlock_irqsave)(&vc4->perfmon_state.lock);
 
 	for (i = 0; i < perfmon->ncounters; i++)
 		V3D_WRITE(V3D_PCTRS(i), perfmon->events[i]);
@@ -60,7 +62,7 @@ void vc4_perfmon_start(struct vc4_dev *vc4, struct vc4_perfmon *perfmon)
 	mask = GENMASK(perfmon->ncounters - 1, 0);
 	V3D_WRITE(V3D_PCTRC, mask);
 	V3D_WRITE(V3D_PCTRE, V3D_PCTRE_EN | mask);
-	vc4->active_perfmon = perfmon;
+	vc4->perfmon_state.active = perfmon;
 }
 
 void vc4_perfmon_stop(struct vc4_dev *vc4, struct vc4_perfmon *perfmon,
@@ -71,8 +73,12 @@ void vc4_perfmon_stop(struct vc4_dev *vc4, struct vc4_perfmon *perfmon,
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	if (WARN_ON_ONCE(!vc4->active_perfmon ||
-			 perfmon != vc4->active_perfmon))
+	if (!perfmon)
+		return;
+
+	guard(spinlock_irqsave)(&vc4->perfmon_state.lock);
+
+	if (perfmon != vc4->perfmon_state.active)
 		return;
 
 	if (capture) {
@@ -81,7 +87,7 @@ void vc4_perfmon_stop(struct vc4_dev *vc4, struct vc4_perfmon *perfmon,
 	}
 
 	V3D_WRITE(V3D_PCTRE, 0);
-	vc4->active_perfmon = NULL;
+	vc4->perfmon_state.active = NULL;
 }
 
 struct vc4_perfmon *vc4_perfmon_find(struct vc4_file *vc4file, int id)
@@ -116,8 +122,7 @@ static void vc4_perfmon_delete(struct vc4_file *vc4file,
 	struct vc4_dev *vc4 = vc4file->dev;
 
 	/* If the active perfmon is being destroyed, stop it first */
-	if (perfmon == vc4->active_perfmon)
-		vc4_perfmon_stop(vc4, perfmon, false);
+	vc4_perfmon_stop(vc4, perfmon, false);
 
 	vc4_perfmon_put(perfmon);
 }
@@ -222,8 +227,10 @@ int vc4_perfmon_get_values_ioctl(struct drm_device *dev, void *data,
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
 	struct vc4_file *vc4file = file_priv->driver_priv;
 	struct drm_vc4_perfmon_get_values *req = data;
+	u64 values[DRM_VC4_MAX_PERF_COUNTERS];
 	struct vc4_perfmon *perfmon;
-	int ret;
+	size_t size;
+	int ret = 0;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
@@ -237,11 +244,14 @@ int vc4_perfmon_get_values_ioctl(struct drm_device *dev, void *data,
 	if (!perfmon)
 		return -EINVAL;
 
-	if (copy_to_user(u64_to_user_ptr(req->values_ptr), perfmon->counters,
-			 perfmon->ncounters * sizeof(u64)))
+	size = perfmon->ncounters * sizeof(u64);
+
+	/* Snapshot the counters under the perfmon lock */
+	scoped_guard(spinlock_irqsave, &vc4->perfmon_state.lock)
+		memcpy(values, perfmon->counters, size);
+
+	if (copy_to_user(u64_to_user_ptr(req->values_ptr), values, size))
 		ret = -EFAULT;
-	else
-		ret = 0;
 
 	vc4_perfmon_put(perfmon);
 	return ret;
