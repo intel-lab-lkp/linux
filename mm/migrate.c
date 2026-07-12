@@ -345,6 +345,89 @@ struct rmap_walk_arg {
 	bool map_unused_to_zeropage;
 };
 
+static pte_t migration_softleaf_entry_to_pte(struct folio *folio, struct page *new,
+		softleaf_t entry, pte_t old_pte, struct vm_area_struct *vma,
+		rmap_t *rmap_flags)
+{
+	pte_t pte = mk_pte(new, READ_ONCE(vma->vm_page_prot));
+
+	if (!softleaf_is_migration_young(entry))
+		pte = pte_mkold(pte);
+	if (folio_test_dirty(folio) && softleaf_is_migration_dirty(entry))
+		pte = pte_mkdirty(pte);
+	if (pte_swp_soft_dirty(old_pte))
+		pte = pte_mksoft_dirty(pte);
+	else
+		pte = pte_clear_soft_dirty(pte);
+
+	if (softleaf_is_migration_write(entry))
+		pte = pte_mkwrite(pte, vma);
+	else if (pte_swp_uffd(old_pte))
+		pte = pte_mkuffd(pte);
+
+	/* See do_swap_page(): restore PAGE_NONE for RWP */
+	if (pte_swp_uffd(old_pte) && userfaultfd_rwp(vma))
+		pte = pte_modify(pte, PAGE_NONE);
+
+	if (folio_test_anon(folio) && !softleaf_is_migration_read(entry))
+		*rmap_flags |= RMAP_EXCLUSIVE;
+
+	return pte;
+}
+
+/*
+ * Restore a potential migration pte to a working pte entry for hugetlb folios.
+ */
+#ifdef CONFIG_HUGETLB_PAGE
+static bool remove_migration_pte_hugetlb(struct folio *folio,
+		struct vm_area_struct *vma, unsigned long addr, void *arg)
+{
+	struct rmap_walk_arg *rmap_walk_arg = arg;
+	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->folio, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
+	struct hstate *h = hstate_vma(vma);
+	unsigned int shift = huge_page_shift(h);
+	unsigned long psize = huge_page_size(h);
+
+	if (page_vma_mapped_walk(&pvmw)) {
+		rmap_t rmap_flags = RMAP_NONE;
+		struct page *new = folio_page(folio, 0);
+		pte_t old_pte, pte;
+		softleaf_t entry;
+
+		old_pte = huge_ptep_get(vma->vm_mm, pvmw.address, pvmw.pte);
+		entry = softleaf_from_pte(old_pte);
+
+		folio_get(folio);
+		pte = migration_softleaf_entry_to_pte(folio, new, entry, old_pte,
+						      vma, &rmap_flags);
+		pte = arch_make_huge_pte(pte, shift, vma->vm_flags);
+		if (folio_test_anon(folio))
+			hugetlb_add_anon_rmap(folio, vma, pvmw.address,
+					      rmap_flags);
+		else
+			hugetlb_add_file_rmap(folio);
+		set_huge_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte, psize);
+
+		if (READ_ONCE(vma->vm_flags) & VM_LOCKED)
+			mlock_drain_local();
+
+		trace_remove_migration_pte(pvmw.address, pte_val(pte),
+					   compound_order(new));
+
+		/* No need to invalidate - it was non-present before */
+		update_mmu_cache(vma, pvmw.address, pvmw.pte);
+	}
+
+	return true;
+}
+#else
+static bool remove_migration_pte_hugetlb(struct folio *folio,
+		struct vm_area_struct *vma, unsigned long addr, void *arg)
+{
+	return false;
+}
+#endif /* CONFIG_HUGETLB_PAGE */
+
 /*
  * Restore a potential migration pte to a working pte entry
  */
@@ -363,52 +446,28 @@ static bool remove_migration_pte(struct folio *folio,
 		unsigned long idx = 0;
 
 		/* pgoff is invalid for ksm pages, but they are never large */
-		if (folio_test_large(folio) && !folio_test_hugetlb(folio))
+		if (folio_test_large(folio))
 			idx = linear_page_index(vma, pvmw.address) - pvmw.pgoff;
 		new = folio_page(folio, idx);
 
 #ifdef CONFIG_ARCH_HAS_PMD_SOFTLEAVES
 		/* PMD-mapped THP migration entry */
 		if (!pvmw.pte) {
-			VM_BUG_ON_FOLIO(folio_test_hugetlb(folio) ||
-					!folio_test_pmd_mappable(folio), folio);
+			VM_WARN_ON_ONCE_FOLIO(!folio_test_pmd_mappable(folio), folio);
 			remove_migration_pmd(&pvmw, new);
 			continue;
 		}
 #endif
-		if (folio_test_hugetlb(folio))
-			old_pte = huge_ptep_get(vma->vm_mm, pvmw.address,
-						pvmw.pte);
-		else
-			old_pte = ptep_get(pvmw.pte);
+		old_pte = ptep_get(pvmw.pte);
 		if (rmap_walk_arg->map_unused_to_zeropage &&
 		    try_to_map_unused_to_zeropage(&pvmw, folio, old_pte, idx))
 			continue;
 
-		folio_get(folio);
-		pte = mk_pte(new, READ_ONCE(vma->vm_page_prot));
-
 		entry = softleaf_from_pte(old_pte);
-		if (!softleaf_is_migration_young(entry))
-			pte = pte_mkold(pte);
-		if (folio_test_dirty(folio) && softleaf_is_migration_dirty(entry))
-			pte = pte_mkdirty(pte);
-		if (pte_swp_soft_dirty(old_pte))
-			pte = pte_mksoft_dirty(pte);
-		else
-			pte = pte_clear_soft_dirty(pte);
 
-		if (softleaf_is_migration_write(entry))
-			pte = pte_mkwrite(pte, vma);
-		else if (pte_swp_uffd(old_pte))
-			pte = pte_mkuffd(pte);
-
-		/* See do_swap_page(): restore PAGE_NONE for RWP */
-		if (pte_swp_uffd(old_pte) && userfaultfd_rwp(vma))
-			pte = pte_modify(pte, PAGE_NONE);
-
-		if (folio_test_anon(folio) && !softleaf_is_migration_read(entry))
-			rmap_flags |= RMAP_EXCLUSIVE;
+		folio_get(folio);
+		pte = migration_softleaf_entry_to_pte(folio, new, entry, old_pte,
+						      vma, &rmap_flags);
 
 		if (unlikely(is_device_private_page(new))) {
 			if (pte_write(pte))
@@ -424,30 +483,12 @@ static bool remove_migration_pte(struct folio *folio,
 				pte = pte_swp_mkuffd(pte);
 		}
 
-#ifdef CONFIG_HUGETLB_PAGE
-		if (folio_test_hugetlb(folio)) {
-			struct hstate *h = hstate_vma(vma);
-			unsigned int shift = huge_page_shift(h);
-			unsigned long psize = huge_page_size(h);
-
-			pte = arch_make_huge_pte(pte, shift, vma->vm_flags);
-			if (folio_test_anon(folio))
-				hugetlb_add_anon_rmap(folio, vma, pvmw.address,
-						      rmap_flags);
-			else
-				hugetlb_add_file_rmap(folio);
-			set_huge_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte,
-					psize);
-		} else
-#endif
-		{
-			if (folio_test_anon(folio))
-				folio_add_anon_rmap_pte(folio, new, vma,
-							pvmw.address, rmap_flags);
-			else
-				folio_add_file_rmap_pte(folio, new, vma);
-			set_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte);
-		}
+		if (folio_test_anon(folio))
+			folio_add_anon_rmap_pte(folio, new, vma,
+						pvmw.address, rmap_flags);
+		else
+			folio_add_file_rmap_pte(folio, new, vma);
+		set_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte);
 		if (READ_ONCE(vma->vm_flags) & VM_LOCKED)
 			mlock_drain_local();
 
@@ -474,7 +515,9 @@ void remove_migration_ptes(struct folio *src, struct folio *dst,
 	};
 
 	struct rmap_walk_control rwc = {
-		.rmap_one = remove_migration_pte,
+		.rmap_one = folio_test_hugetlb(src) ?
+				remove_migration_pte_hugetlb :
+				remove_migration_pte,
 		.arg = &rmap_walk_arg,
 	};
 
