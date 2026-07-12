@@ -2469,7 +2469,8 @@ out1:
 out:
 	for (i = 0; i < pages_per_frame; i++) {
 		pg = pages[i];
-		SetPageUptodate(pg);
+		if (!err)
+			SetPageUptodate(pg);
 	}
 
 	return err;
