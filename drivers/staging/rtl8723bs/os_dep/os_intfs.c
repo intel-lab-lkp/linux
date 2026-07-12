@@ -175,7 +175,7 @@ MODULE_PARM_DESC(rtw_tx_pwr_by_rate, "0:Disable, 1:Enable, 2: Depend on efuse");
 
 static int netdev_close(struct net_device *pnetdev);
 
-static void loadparam(struct adapter *padapter, struct net_device *pnetdev)
+static void loadparam(struct adapter *padapter)
 {
 	struct registry_priv  *registry_par = &padapter->registrypriv;
 
@@ -439,7 +439,7 @@ struct net_device *rtw_init_netdev(struct adapter *old_padapter)
 	pnetdev->watchdog_timeo = HZ * 3; /* 3 second timeout */
 
 	/* step 2. */
-	loadparam(padapter, pnetdev);
+	loadparam(padapter);
 
 	return pnetdev;
 }
