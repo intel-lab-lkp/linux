@@ -523,7 +523,7 @@ TEST(test_robust_list_multiple_elements)
 static int child_circular_list(void *arg)
 {
 	static struct robust_list_head head;
-	struct lock_struct a, b, c;
+	static struct lock_struct a, b, c;
 	int ret;
 
 	ret = set_list(&head);
