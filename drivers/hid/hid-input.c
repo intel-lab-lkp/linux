@@ -431,18 +431,28 @@ static int hidinput_scale_battery_capacity(struct hid_battery *bat,
 
 static int hidinput_query_battery_capacity(struct hid_battery *bat)
 {
+	u8 *buf __free(kfree) = NULL;
+	unsigned int field_end;
+	unsigned int report_len;
+	u32 value;
 	int ret;
 
-	u8 *buf __free(kfree) = kmalloc(4, GFP_KERNEL);
+	report_len = hid_report_len(bat->report) + !bat->report->id;
+	buf = hid_alloc_report_buf(bat->report, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	ret = hid_hw_raw_request(bat->dev, bat->report_id, buf, 4,
+	ret = hid_hw_raw_request(bat->dev, bat->report_id, buf, report_len,
 				 bat->report_type, HID_REQ_GET_REPORT);
-	if (ret < 2)
+	field_end = DIV_ROUND_UP(bat->report_offset + bat->report_size, 8) +
+		    1;
+	if (ret < 0 || (unsigned int)ret < field_end)
 		return -ENODATA;
 
-	return hidinput_scale_battery_capacity(bat, buf[1]);
+	value = hid_field_extract(bat->dev, buf + 1, bat->report_offset,
+				  bat->report_size);
+
+	return hidinput_scale_battery_capacity(bat, value);
 }
 
 static int hidinput_get_battery_property(struct power_supply *psy,
@@ -529,7 +539,8 @@ static void hidinput_cleanup_battery(void *res)
 }
 
 static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
-				  struct hid_field *field, bool is_percentage)
+				  struct hid_field *field, unsigned int usage_index,
+				  bool is_percentage)
 {
 	struct hid_battery *bat;
 	struct power_supply_desc *psy_desc;
@@ -593,6 +604,10 @@ static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
 	bat->max = max;
 	bat->report_type = report_type;
 	bat->report_id = field->report->id;
+	bat->report = field->report;
+	bat->report_offset = field->report_offset +
+			     usage_index * field->report_size;
+	bat->report_size = field->report_size;
 	bat->charge_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	bat->status = HID_BATTERY_UNKNOWN;
 
@@ -687,7 +702,8 @@ static void hidinput_update_battery(struct hid_device *dev, int report_id,
 }
 #else  /* !CONFIG_HID_BATTERY_STRENGTH */
 static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
-				  struct hid_field *field, bool is_percentage)
+				  struct hid_field *field, unsigned int usage_index,
+				  bool is_percentage)
 {
 	return 0;
 }
@@ -1035,7 +1051,8 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 			break;
 
 		case 0x3b: /* Battery Strength */
-			hidinput_setup_battery(device, HID_INPUT_REPORT, field, false);
+			hidinput_setup_battery(device, HID_INPUT_REPORT, field,
+					       usage_index, false);
 			usage->type = EV_PWR;
 			return;
 
@@ -1313,7 +1330,8 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 	case HID_UP_GENDEVCTRLS:
 		switch (usage->hid) {
 		case HID_DC_BATTERYSTRENGTH:
-			hidinput_setup_battery(device, HID_INPUT_REPORT, field, false);
+			hidinput_setup_battery(device, HID_INPUT_REPORT, field,
+					       usage_index, false);
 			usage->type = EV_PWR;
 			return;
 		}
@@ -1322,7 +1340,8 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 	case HID_UP_BATTERY:
 		switch (usage->hid) {
 		case HID_BAT_ABSOLUTESTATEOFCHARGE:
-			hidinput_setup_battery(device, HID_INPUT_REPORT, field, true);
+			hidinput_setup_battery(device, HID_INPUT_REPORT, field,
+					       usage_index, true);
 			usage->type = EV_PWR;
 			return;
 		case HID_BAT_CHARGING:
@@ -2040,7 +2059,7 @@ static void report_features(struct hid_device *hid)
 				/* Verify if Battery Strength feature is available */
 				if (usage->hid == HID_DC_BATTERYSTRENGTH)
 					hidinput_setup_battery(hid, HID_FEATURE_REPORT,
-							       rep->field[i], false);
+							       rep->field[i], j, false);
 
 				if (drv->feature_mapping)
 					drv->feature_mapping(hid, rep->field[i], usage);

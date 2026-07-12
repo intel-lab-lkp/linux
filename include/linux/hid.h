@@ -642,6 +642,9 @@ enum hid_battery_status {
  * @max: maximum battery value from HID descriptor
  * @report_type: HID report type (input/feature)
  * @report_id: HID report ID for this battery
+ * @report: HID report containing the capacity field
+ * @report_offset: bit offset of the capacity field in the report
+ * @report_size: size of the capacity field in bits
  * @charge_status: current charging status
  * @status: battery reporting status
  * @capacity: current battery capacity (0-100)
@@ -657,6 +660,9 @@ struct hid_battery {
 	__s32 max;
 	__s32 report_type;
 	__s32 report_id;
+	struct hid_report *report;
+	__u32 report_offset;
+	__u32 report_size;
 	__s32 charge_status;
 	enum hid_battery_status status;
 	__s32 capacity;
