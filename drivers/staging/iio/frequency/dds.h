@@ -7,7 +7,7 @@
 #ifndef IIO_DDS_H_
 #define IIO_DDS_H_
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_frequencyY
  */
 
@@ -15,14 +15,14 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_frequency##_num,	\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_frequencyY_scale
  */
 
 #define IIO_CONST_ATTR_FREQ_SCALE(_channel, _string)			\
 	IIO_CONST_ATTR(out_altvoltage##_channel##_frequency_scale, _string)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_frequencysymbol
  */
 
@@ -30,7 +30,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_frequencysymbol,	\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_phaseY
  */
 
@@ -38,14 +38,14 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_phase##_num,		\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_phaseY_scale
  */
 
 #define IIO_CONST_ATTR_PHASE_SCALE(_channel, _string)			\
 	IIO_CONST_ATTR(out_altvoltage##_channel##_phase_scale, _string)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_phasesymbol
  */
 
@@ -53,7 +53,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_phasesymbol,		\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_pincontrol_en
  */
 
@@ -61,7 +61,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_pincontrol_en,	\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_pincontrol_frequency_en
  */
 
@@ -69,7 +69,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_pincontrol_frequency_en,\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_pincontrol_phase_en
  */
 
@@ -77,7 +77,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_pincontrol_phase_en,	\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_out_enable
  */
 
@@ -85,7 +85,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_out_enable,		\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_outY_enable
  */
 
@@ -94,7 +94,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_out##_output##_enable,\
 			_mode, _show, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_outY_wavetype
  */
 
@@ -102,7 +102,7 @@
 	IIO_DEVICE_ATTR(out_altvoltage##_channel##_out##_output##_wavetype,\
 			_mode, NULL, _store, _addr)
 
-/**
+/*
  * /sys/bus/iio/devices/.../out_altvoltageX_outY_wavetype_available
  */
 
