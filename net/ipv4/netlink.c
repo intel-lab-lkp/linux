@@ -16,10 +16,12 @@ int rtm_getroute_parse_ip_proto(struct nlattr *attr, u8 *ip_proto, u8 family,
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
 		return 0;
+#if IS_ENABLED(CONFIG_IPV4)
 	case IPPROTO_ICMP:
 		if (family != AF_INET)
 			break;
 		return 0;
+#endif
 #if IS_ENABLED(CONFIG_IPV6)
 	case IPPROTO_ICMPV6:
 		if (family != AF_INET6)

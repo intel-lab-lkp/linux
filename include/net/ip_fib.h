@@ -250,7 +250,13 @@ int call_fib4_notifiers(struct net *net, enum fib_event_type event_type,
 int __net_init fib4_notifier_init(struct net *net);
 void __net_exit fib4_notifier_exit(struct net *net);
 
+#if IS_ENABLED(CONFIG_IPV4)
 void fib_info_notify_update(struct net *net, struct nl_info *info);
+#else
+static inline void fib_info_notify_update(struct net *net, struct nl_info *info)
+{
+}
+#endif
 int fib_notify(struct net *net, struct notifier_block *nb,
 	       struct netlink_ext_ack *extack);
 
@@ -578,10 +584,23 @@ void fib_select_multipath(struct fib_result *res, int hash,
 void fib_select_path(struct net *net, struct fib_result *res,
 		     struct flowi4 *fl4, const struct sk_buff *skb);
 
+#if IS_ENABLED(CONFIG_IPV4)
 int fib_nh_init(struct net *net, struct fib_nh *fib_nh,
 		struct fib_config *cfg, int nh_weight,
 		struct netlink_ext_ack *extack);
 void fib_nh_release(struct net *net, struct fib_nh *fib_nh);
+#else
+static inline int fib_nh_init(struct net *net, struct fib_nh *fib_nh,
+			      struct fib_config *cfg, int gfp,
+			      struct netlink_ext_ack *extack)
+{
+	return -EAFNOSUPPORT;
+}
+
+static inline void fib_nh_release(struct net *net, struct fib_nh *fib_nh)
+{
+}
+#endif
 int fib_nh_common_init(struct net *net, struct fib_nh_common *nhc,
 		       struct nlattr *fc_encap, u16 fc_encap_type,
 		       void *cfg, gfp_t gfp_flags,
@@ -620,7 +639,13 @@ static inline void fib_combine_itag(u32 *itag, const struct fib_result *res)
 #endif
 }
 
+#if IS_ENABLED(CONFIG_IPV4)
 void fib_flush(struct net *net);
+#else
+static inline void fib_flush(struct net *net)
+{
+}
+#endif
 void free_fib_info(struct fib_info *fi);
 
 static inline void fib_info_hold(struct fib_info *fi)
@@ -658,8 +683,26 @@ int ip_valid_fib_dump_req(struct net *net, const struct nlmsghdr *nlh,
 			  struct fib_dump_filter *filter,
 			  struct netlink_callback *cb);
 
+#if IS_ENABLED(CONFIG_IPV4)
 int fib_nexthop_info(struct sk_buff *skb, const struct fib_nh_common *nh,
 		     u8 rt_family, unsigned char *flags, bool skip_oif);
 int fib_add_nexthop(struct sk_buff *skb, const struct fib_nh_common *nh,
 		    int nh_weight, u8 rt_family, u32 nh_tclassid);
+#else
+static inline int fib_nexthop_info(struct sk_buff *skb,
+				   const struct fib_nh_common *nh,
+				   u8 rt_family, unsigned char *flags,
+				   bool skip_oif)
+{
+	return 0;
+}
+
+static inline int fib_add_nexthop(struct sk_buff *skb,
+				  const struct fib_nh_common *nh,
+				  int nh_weight, u8 rt_family,
+				  u32 nh_tclassid)
+{
+	return 0;
+}
+#endif
 #endif  /* _NET_FIB_H */

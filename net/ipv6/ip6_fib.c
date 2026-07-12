@@ -645,9 +645,11 @@ static int inet6_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 
 	rcu_read_lock();
 	if (cb->strict_check) {
+#if IS_ENABLED(CONFIG_IPV4)
 		err = ip_valid_fib_dump_req(net, nlh, &arg.filter, cb);
 		if (err < 0)
 			goto unlock;
+#endif
 	} else if (nlmsg_len(nlh) >= sizeof(struct rtmsg)) {
 		struct rtmsg *rtm = nlmsg_data(nlh);
 

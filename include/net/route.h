@@ -128,7 +128,13 @@ extern struct ip_rt_acct __percpu *ip_rt_acct;
 struct in_device;
 
 int ip_rt_init(void);
+#if IS_ENABLED(CONFIG_IPV4)
 void rt_cache_flush(struct net *net);
+#else
+static inline void rt_cache_flush(struct net *net)
+{
+}
+#endif
 void rt_flush_dev(struct net_device *dev);
 
 static inline void inet_sk_init_flowi4(const struct inet_sock *inet,
