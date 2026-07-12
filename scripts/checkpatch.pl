@@ -3750,6 +3750,15 @@ sub process {
 					}
 				}
 			}
+# check MAINTAINERS file entry for file existence
+			if ($rawline =~ /^\+[FX]:\s*+(.*)/) {
+				my $entry = $1;
+				my @matches = glob($entry);
+				if (!@matches) {
+					WARN("MAINTAINERS_FILE_MISSING",
+					     "MAINTAINERS file entry references nonexistent file: '$entry'\n" . $herecurr);
+				}
+			}
 		}
 
 # check for DT compatible documentation
