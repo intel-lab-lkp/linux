@@ -377,6 +377,20 @@ impl Delta {
     /// A span of time equal to zero.
     pub const ZERO: Self = Self { nanos: 0 };
 
+    /// Create a new [`Delta`] from a number of jiffies.
+    ///
+    /// If `jiffies` is large enough that the corresponding number of nanoseconds
+    /// would overflow an `i64`, the result saturates to `i64::MAX` nanoseconds.
+    /// The exact threshold depends on `CONFIG_HZ`.
+    #[inline]
+    pub fn from_jiffies(jiffies: u64) -> Self {
+        let nanos = (u128::from(jiffies) * NSEC_PER_SEC as u128 / u128::from(bindings::HZ))
+            .min(i64::MAX as u128);
+        Self {
+            nanos: nanos as i64,
+        }
+    }
+
     /// Create a new [`Delta`] from a number of nanoseconds.
     #[inline]
     pub const fn from_nanos(nanos: i64) -> Self {
@@ -429,6 +443,22 @@ impl Delta {
     #[inline]
     pub fn is_negative(self) -> bool {
         self.as_nanos() < 0
+    }
+
+    /// Return the smallest number of jiffies greater than or equal
+    /// to the value in the [`Delta`].
+    ///
+    /// If the value is negative, `0` is returned.
+    #[inline]
+    pub fn as_jiffies_ceil(self) -> crate::ffi::c_ulong {
+        // Mirrors `MAX_JIFFY_OFFSET` in C side. bindgen doesn't generate a constant for it
+        // since it's a compound expression rather than a plain integer literal.
+        const MAX_JIFFY_OFFSET: u128 = ((crate::ffi::c_long::MAX >> 1) - 1) as u128;
+
+        let nanos = self.as_nanos().max(0) as u128;
+        let jiffies = (nanos * u128::from(bindings::HZ)).div_ceil(NSEC_PER_SEC as u128);
+
+        jiffies.min(MAX_JIFFY_OFFSET) as crate::ffi::c_ulong
     }
 
     /// Return the number of nanoseconds in the [`Delta`].
