@@ -6335,6 +6335,16 @@ static void unregister_field_var_hists(struct hist_trigger_data *hist_data)
 	}
 }
 
+static void hist_trigger_free_private(struct event_trigger_data *data)
+{
+	destroy_hist_data(data->private_data);
+}
+
+static void hist_trigger_named_free_private(struct event_trigger_data *data)
+{
+	kfree(data->cmd_ops);
+}
+
 static void event_hist_trigger_free(struct event_trigger_data *data)
 {
 	struct hist_trigger_data *hist_data = data->private_data;
@@ -6347,13 +6357,12 @@ static void event_hist_trigger_free(struct event_trigger_data *data)
 		if (data->name)
 			del_named_trigger(data);
 
-		trigger_data_free(data);
-
 		remove_hist_vars(hist_data);
 
 		unregister_field_var_hists(hist_data);
 
-		destroy_hist_data(hist_data);
+		data->free_private = hist_trigger_free_private;
+		trigger_data_free(data);
 	}
 	free_hist_pad();
 }
@@ -6384,11 +6393,9 @@ static void event_hist_trigger_named_free(struct event_trigger_data *data)
 
 	data->ref--;
 	if (!data->ref) {
-		struct event_command *cmd_ops = data->cmd_ops;
-
 		del_named_trigger(data);
+		data->free_private = hist_trigger_named_free_private;
 		trigger_data_free(data);
-		kfree(cmd_ops);
 	}
 }
 
