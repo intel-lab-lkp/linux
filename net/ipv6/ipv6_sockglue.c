@@ -559,6 +559,7 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 		if (optlen < sizeof(int))
 			goto e_inval;
 		if (val == PF_INET) {
+#if IS_ENABLED(CONFIG_IPV4)
 			if (sk->sk_type == SOCK_RAW)
 				break;
 
@@ -624,6 +625,10 @@ int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 			module_put(THIS_MODULE);
 			retv = 0;
 			break;
+#else
+			retv = -EAFNOSUPPORT;
+			break;
+#endif
 		}
 		goto e_inval;
 

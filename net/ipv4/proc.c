@@ -50,6 +50,7 @@
  */
 static int sockstat_seq_show(struct seq_file *seq, void *v)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct net *net = seq->private;
 	int orphans, sockets;
 
@@ -69,6 +70,7 @@ static int sockstat_seq_show(struct seq_file *seq, void *v)
 	seq_printf(seq,  "FRAG: inuse %u memory %lu\n",
 		   atomic_read(&net->ipv4.fqdir->rhashtable.nelems),
 		   frag_mem_limit(net->ipv4.fqdir));
+#endif
 	return 0;
 }
 

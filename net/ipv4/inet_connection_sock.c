@@ -1371,7 +1371,7 @@ static void inet_child_forget(struct sock *sk, struct request_sock *req,
 		 * an inbound pkt destined for child is
 		 * blocked by sock lock in tcp_v4_rcv().
 		 * Also to satisfy an assertion in
-		 * tcp_v4_destroy_sock().
+		 * tcp_destroy_sock().
 		 */
 		RCU_INIT_POINTER(tcp_sk(child)->fastopen_rsk, NULL);
 	}

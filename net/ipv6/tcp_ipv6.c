@@ -217,6 +217,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 	 */
 
 	if (addr_type & IPV6_ADDR_MAPPED) {
+#if IS_ENABLED(CONFIG_IPV4)
 		u32 exthdrlen = icsk->icsk_ext_hdr_len;
 		struct sockaddr_in sin;
 
@@ -253,6 +254,9 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 		np->saddr = sk->sk_v6_rcv_saddr;
 
 		return err;
+#else
+		return -ENETUNREACH;
+#endif
 	}
 
 	if (!ipv6_addr_any(&sk->sk_v6_rcv_saddr))
@@ -1314,7 +1318,11 @@ u16 tcp_v6_get_syncookie(struct sock *sk, struct ipv6hdr *iph,
 static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 {
 	if (skb->protocol == htons(ETH_P_IP))
+#if IS_ENABLED(CONFIG_IPV4)
 		return tcp_v4_conn_request(sk, skb);
+#else
+		goto drop;
+#endif
 
 	if (!ipv6_unicast_destination(skb))
 		goto drop;
@@ -1342,6 +1350,7 @@ static void tcp_v6_restore_cb(struct sk_buff *skb)
 		sizeof(struct inet6_skb_parm));
 }
 
+#if IS_ENABLED(CONFIG_IPV4)
 /* Called from tcp_v4_syn_recv_sock() for v6_mapped children. */
 static void tcp_v6_mapped_child_init(struct sock *newsk, const struct sock *sk)
 {
@@ -1376,6 +1385,7 @@ static void tcp_v6_mapped_child_init(struct sock *newsk, const struct sock *sk)
 	if (inet6_test_bit(REPFLOW, sk))
 		newnp->flow_label = 0;
 }
+#endif
 
 static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 					 struct request_sock *req,
@@ -1400,9 +1410,14 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 	struct flowi6 fl6;
 
 	if (skb->protocol == htons(ETH_P_IP))
+#if IS_ENABLED(CONFIG_IPV4)
 		return tcp_v4_syn_recv_sock(sk, skb, req, dst,
 					    req_unhash, own_req,
 					    tcp_v6_mapped_child_init);
+#else
+		return NULL;
+#endif
+
 	ireq = inet_rsk(req);
 
 	if (sk_acceptq_is_full(sk))
@@ -1577,8 +1592,14 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	   tcp_v6_hnd_req and tcp_v6_send_reset().   --ANK
 	 */
 
-	if (skb->protocol == htons(ETH_P_IP))
+	if (skb->protocol == htons(ETH_P_IP)) {
+#if IS_ENABLED(CONFIG_IPV4)
 		return tcp_v4_do_rcv(sk, skb);
+#else
+		kfree_skb(skb);
+		return 0;
+#endif
+	}
 
 	reason = psp_sk_rx_policy_check(sk, skb);
 	if (reason)
@@ -2279,7 +2300,7 @@ struct proto tcpv6_prot = {
 	.accept			= inet_csk_accept,
 	.ioctl			= tcp_ioctl,
 	.init			= tcp_v6_init_sock,
-	.destroy		= tcp_v4_destroy_sock,
+	.destroy		= tcp_destroy_sock,
 	.shutdown		= tcp_shutdown,
 	.setsockopt		= tcp_setsockopt,
 	.getsockopt		= tcp_getsockopt,

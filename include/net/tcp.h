@@ -2420,7 +2420,7 @@ struct tcp_iter_state {
 extern struct request_sock_ops tcp_request_sock_ops;
 extern struct request_sock_ops tcp6_request_sock_ops;
 
-void tcp_v4_destroy_sock(struct sock *sk);
+void tcp_destroy_sock(struct sock *sk);
 
 struct sk_buff *tcp_gso_segment(struct sk_buff *skb,
 				netdev_features_t features);
@@ -2838,6 +2838,20 @@ struct sk_psock;
 #ifdef CONFIG_BPF_SYSCALL
 int tcp_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore);
 void tcp_bpf_clone(const struct sock *sk, struct sock *newsk);
+
+union bpf_tcp_iter_batch_item {
+	struct sock *sk;
+	__u64 cookie;
+};
+
+struct bpf_tcp_iter_state {
+	struct tcp_iter_state state;
+	unsigned int cur_sk;
+	unsigned int end_sk;
+	unsigned int max_sk;
+	union bpf_tcp_iter_batch_item *batch;
+};
+
 #ifdef CONFIG_BPF_STREAM_PARSER
 struct strparser;
 int tcp_bpf_strp_read_sock(struct strparser *strp, read_descriptor_t *desc,

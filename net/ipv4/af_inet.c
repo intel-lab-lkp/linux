@@ -1955,6 +1955,7 @@ static int __init inet_init(void)
 #if IS_ENABLED(CONFIG_IPV4)
 	raw_hashinfo_init(&raw_v4_hashinfo);
 
+#if IS_ENABLED(CONFIG_IPV4)
 	rc = proto_register(&tcp_prot, 1);
 	if (rc)
 		goto out;
@@ -2002,6 +2003,7 @@ static int __init inet_init(void)
 	};
 	if (inet_add_protocol(&net_hotdata.tcp_protocol, IPPROTO_TCP) < 0)
 		pr_crit("%s: Cannot add TCP protocol\n", __func__);
+#endif
 #ifdef CONFIG_IP_MULTICAST
 	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
 		pr_crit("%s: Cannot add IGMP protocol\n", __func__);
@@ -2075,7 +2077,9 @@ out_unregister_raw_proto:
 out_unregister_udp_proto:
 	proto_unregister(&udp_prot);
 out_unregister_tcp_proto:
+#if IS_ENABLED(CONFIG_IPV4)
 	proto_unregister(&tcp_prot);
+#endif
 	goto out;
 #endif
 }
@@ -2092,8 +2096,10 @@ static int __init ipv4_proc_init(void)
 
 	if (raw_proc_init())
 		goto out_raw;
+#if IS_ENABLED(CONFIG_IPV4)
 	if (tcp4_proc_init())
 		goto out_tcp;
+#endif
 	if (udp4_proc_init())
 		goto out_udp;
 	if (ping_proc_init())
@@ -2107,8 +2113,10 @@ out_misc:
 out_ping:
 	udp4_proc_exit();
 out_udp:
+#if IS_ENABLED(CONFIG_IPV4)
 	tcp4_proc_exit();
 out_tcp:
+#endif
 	raw_proc_exit();
 out_raw:
 	rc = -ENOMEM;
