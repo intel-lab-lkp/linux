@@ -204,6 +204,13 @@ struct pt_x86_64 {
 	struct pt_common common;
 };
 
+struct pt_bcm2712 {
+	struct pt_common common;
+	u64 pgsize_bitmap;
+	u8 bigpage_lg2;
+	u8 superpage_lg2;
+};
+
 enum {
 	/*
 	 * The memory backing the tables is encrypted. Use __sme_set() to adjust
