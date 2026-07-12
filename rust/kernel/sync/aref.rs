@@ -124,7 +124,10 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// struct Empty {}
     ///
-    /// # // SAFETY: TODO.
+    /// // SAFETY: `Empty` owns no data and has no destructor, so its `inc_ref`/`dec_ref`
+    /// // are no-ops that cannot free or leak anything. This doc example keeps the backing
+    /// // `Empty` (`data`) alive for the whole lifetime of `data_ref`, so the `ARef` never
+    /// // dereferences freed memory.
     /// unsafe impl AlwaysRefCounted for Empty {
     ///     fn inc_ref(&self) {}
     ///     unsafe fn dec_ref(_obj: NonNull<Self>) {}
@@ -132,7 +135,10 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// let mut data = Empty {};
     /// let ptr = NonNull::<Empty>::new(&mut data).unwrap();
-    /// # // SAFETY: TODO.
+    /// // SAFETY: `ptr` comes from a valid `&mut data` reference, hence it is non-null,
+    /// // aligned and points to a valid `Empty`. `ARef::from_raw` also requires owning a
+    /// // refcount increment; this is trivially met because `Empty`'s `AlwaysRefCounted` uses
+    /// // no-op `inc_ref`/`dec_ref` and so manages no actual refcount.
     /// let data_ref: ARef<Empty> = unsafe { ARef::from_raw(ptr) };
     /// let raw_ptr: NonNull<Empty> = ARef::into_raw(data_ref);
     ///
