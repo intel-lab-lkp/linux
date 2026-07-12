@@ -1101,9 +1101,11 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	return offload;
 }
 
-static bool nf_flow_offload_unsupported(struct flow_offload *flow)
+static bool nf_flow_offload_unsupported(struct nf_flowtable *flowtable,
+					struct flow_offload *flow)
 {
-	if (flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple.tun_num ||
+	if (flowtable->type->family == NFPROTO_BRIDGE ||
+	    flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple.tun_num ||
 	    flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple.tun_num)
 		return true;
 
@@ -1125,7 +1127,7 @@ void nf_flow_offload_refresh(struct nf_flowtable *flowtable,
 void nf_flow_offload_add(struct nf_flowtable *flowtable,
 			 struct flow_offload *flow)
 {
-	if (nf_flow_offload_unsupported(flow))
+	if (nf_flow_offload_unsupported(flowtable, flow))
 		return;
 
 	set_bit(NF_FLOW_HW, &flow->flags);
