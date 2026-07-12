@@ -822,8 +822,10 @@ ext2_xattr_delete_inode(struct inode *inode)
 	 * here to avoid false-positive warning from lockdep about reclaim
 	 * circular dependency.
 	 */
-	if (WARN_ON_ONCE(!down_write_trylock(&EXT2_I(inode)->xattr_sem)))
+	if (!down_write_trylock(&EXT2_I(inode)->xattr_sem)) {
+		WARN_ON_ONCE(1);
 		return;
+	}
 	if (!EXT2_I(inode)->i_file_acl)
 		goto cleanup;
 
