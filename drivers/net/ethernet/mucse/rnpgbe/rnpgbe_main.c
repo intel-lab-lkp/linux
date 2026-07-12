@@ -245,7 +245,6 @@ err_disable_dev:
 static void rnpgbe_rm_adapter(struct pci_dev *pdev)
 {
 	struct mucse *mucse = pci_get_drvdata(pdev);
-	struct mucse_hw *hw = &mucse->hw;
 	struct net_device *netdev;
 	int err;
 
@@ -253,7 +252,7 @@ static void rnpgbe_rm_adapter(struct pci_dev *pdev)
 		return;
 	netdev = mucse->netdev;
 	unregister_netdev(netdev);
-	err = rnpgbe_send_notify(hw, false, mucse_fw_powerup);
+	err = rnpgbe_send_notify(&mucse->hw, false, mucse_fw_powerup);
 	if (err)
 		dev_warn(&pdev->dev, "Send powerdown to hw failed %d\n", err);
 	free_netdev(netdev);
