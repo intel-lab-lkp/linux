@@ -17,6 +17,8 @@
  */
 extern void __init lpc32xx_map_io(void);
 extern void __init lpc32xx_serial_init(void);
+extern bool __init lpc32xx_is_present(void);
+extern const char *const lpc32xx_dt_compat[];
 
 /*
  * Returns the LPC32xx unique 128-bit chip ID

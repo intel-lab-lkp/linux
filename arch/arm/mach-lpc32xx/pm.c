@@ -122,6 +122,9 @@ static const struct platform_suspend_ops lpc32xx_pm_ops = {
 #define EMC_CTRL_REG io_p2v(LPC32XX_EMC_BASE + EMC_DYN_MEM_CTRL_OFS)
 static int __init lpc32xx_pm_init(void)
 {
+	if (!lpc32xx_is_present())
+		return 0;
+
 	/*
 	 * Setup SDRAM self-refresh clock to automatically disable o
 	 * start of self-refresh. This only needs to be done once.

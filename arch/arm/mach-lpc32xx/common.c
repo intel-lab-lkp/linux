@@ -8,6 +8,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/of.h>
 #include <linux/soc/nxp/lpc32xx-misc.h>
 
 #include <asm/mach/map.h>
@@ -106,9 +107,18 @@ void __init lpc32xx_map_io(void)
 	iotable_init(lpc32xx_io_desc, ARRAY_SIZE(lpc32xx_io_desc));
 }
 
+/* The arch_initcalls below poke LPC32xx-only registers; skip other SoCs. */
+bool __init lpc32xx_is_present(void)
+{
+	return of_machine_compatible_match(lpc32xx_dt_compat);
+}
+
 static int __init lpc32xx_check_uid(void)
 {
 	u32 uid[4];
+
+	if (!lpc32xx_is_present())
+		return 0;
 
 	lpc32xx_get_uid(uid);
 
