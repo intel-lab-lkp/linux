@@ -505,6 +505,26 @@ static inline pte_t pte_next_swp_offset(pte_t pte)
 	return pte_move_swp_offset(pte, 1);
 }
 
+static inline int softleaf_pte_batch(pte_t *start_ptep, int max_nr, pte_t pte)
+{
+	pte_t expected_pte = pte_next_swp_offset(pte);
+	const pte_t *end_ptep = start_ptep + max_nr;
+	pte_t *ptep = start_ptep + 1;
+
+	VM_WARN_ON(max_nr < 1);
+
+	while (ptep < end_ptep) {
+		pte = ptep_get(ptep);
+
+		if (!pte_same(pte, expected_pte))
+			break;
+		expected_pte = pte_next_swp_offset(expected_pte);
+		ptep++;
+	}
+
+	return ptep - start_ptep;
+}
+
 /**
  * swap_pte_batch - detect a PTE batch for a set of contiguous swap entries
  * @start_ptep: Page table pointer for the first entry.
@@ -522,23 +542,9 @@ static inline pte_t pte_next_swp_offset(pte_t pte)
  */
 static inline int swap_pte_batch(pte_t *start_ptep, int max_nr, pte_t pte)
 {
-	pte_t expected_pte = pte_next_swp_offset(pte);
-	const pte_t *end_ptep = start_ptep + max_nr;
-	pte_t *ptep = start_ptep + 1;
-
-	VM_WARN_ON(max_nr < 1);
 	VM_WARN_ON(!softleaf_is_swap(softleaf_from_pte(pte)));
 
-	while (ptep < end_ptep) {
-		pte = ptep_get(ptep);
-
-		if (!pte_same(pte, expected_pte))
-			break;
-		expected_pte = pte_next_swp_offset(expected_pte);
-		ptep++;
-	}
-
-	return ptep - start_ptep;
+	return softleaf_pte_batch(start_ptep, max_nr, pte);
 }
 #endif /* CONFIG_MMU */
 
