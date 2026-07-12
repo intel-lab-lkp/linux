@@ -345,6 +345,8 @@ class MaintainersProfile(Include):
             elif entry.startswith("`"):
                 new_entry = f"- {name}: {entry}\n"
                 self.warning(f"{profile}: Invalid 'P' tag: {entry}\n")
+            elif name:
+                new_entry = f"- {name}: {entry}\n"
             else:
                 new_entry = f"- {entry}\n"
 
