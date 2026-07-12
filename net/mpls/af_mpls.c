@@ -2185,13 +2185,16 @@ static int mpls_valid_fib_dump_req(struct net *net, const struct nlmsghdr *nlh,
 	for (i = 0; i <= RTA_MAX; ++i) {
 		int ifindex;
 
+		if (!tb[i])
+			continue;
+
 		if (i == RTA_OIF) {
 			ifindex = nla_get_u32(tb[i]);
 			filter->dev = dev_get_by_index_rcu(net, ifindex);
 			if (!filter->dev)
 				return -ENODEV;
 			filter->filter_set = 1;
-		} else if (tb[i]) {
+		} else {
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported attribute in dump request");
 			return -EINVAL;
 		}
