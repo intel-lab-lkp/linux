@@ -21,6 +21,7 @@
 /* route_me_harder function, used by iptable_nat, iptable_mangle + ip_queue */
 int ip_route_me_harder(struct net *net, struct sock *sk, struct sk_buff *skb, unsigned int addr_type)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct net_device *dev = skb_dst_dev(skb);
 	const struct iphdr *iph = ip_hdr(skb);
 	struct rtable *rt;
@@ -85,6 +86,9 @@ int ip_route_me_harder(struct net *net, struct sock *sk, struct sk_buff *skb, un
 		return -ENOMEM;
 
 	return 0;
+#else
+	return -EPROTONOSUPPORT;
+#endif
 }
 EXPORT_SYMBOL(ip_route_me_harder);
 
