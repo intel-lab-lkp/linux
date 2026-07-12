@@ -249,7 +249,20 @@ static inline unsigned int pt_max_sw_bit(struct pt_common *common)
 	return 0;
 }
 
+/*
+ * In the DMA_INCOHERENT case, if no SW bit has been defined, produce a linker
+ * error (undefined symbol __pt_no_sw_bit) to alert the developer that they
+ * will suffer a performance penalty due to defensive flushing. The driver
+ * can either implement pt_sw_bit (if supported by the hardware) for optimal
+ * performance, or otherwise set PT_SW_BIT_NOT_PRESENT to acknowledge the
+ * performance penalty.
+ */
+#ifdef PT_SW_BIT_NOT_PRESENT
+static inline void __pt_no_sw_bit(void) {}
+#else
 extern void __pt_no_sw_bit(void);
+#endif
+
 static inline bool pt_test_sw_bit_acquire(struct pt_state *pts,
 					  unsigned int bitnr)
 {
