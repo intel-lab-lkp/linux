@@ -1291,19 +1291,22 @@ static bool suppress_message_printing(int level)
 
 #ifdef CONFIG_BOOT_PRINTK_DELAY
 
-static int boot_delay; /* msecs delay after each printk during bootup */
+static unsigned int boot_delay; /* msecs delay after each printk during bootup */
 static unsigned long long loops_per_msec;	/* based on boot_delay */
 
 static int __init boot_delay_setup(char *str)
 {
 	unsigned long lpj;
+	int boot_delay_val;
 
 	lpj = preset_lpj ? preset_lpj : 1000000;	/* some guess */
 	loops_per_msec = (unsigned long long)lpj / 1000 * HZ;
 
-	get_option(&str, &boot_delay);
-	if (boot_delay > 10 * 1000)
-		boot_delay = 0;
+	get_option(&str, &boot_delay_val);
+	if (boot_delay_val < 0 || boot_delay_val > 10 * 1000)
+		return 0;
+
+	boot_delay = (unsigned int)boot_delay_val;
 
 	pr_debug("boot_delay: %u, preset_lpj: %ld, lpj: %lu, "
 		"HZ: %d, loops_per_msec: %llu\n",
