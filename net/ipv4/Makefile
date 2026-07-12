@@ -8,12 +8,13 @@ obj-y     := inetpeer.o protocol.o inet_hashtables.o inet_timewait_sock.o \
 	     tcp_minisocks.o tcp_cong.o tcp_metrics.o tcp_fastopen.o \
 	     tcp_recovery.o tcp_ulp.o tcp_offload.o tcp_plb.o raw.o udp.o \
 	     udp_offload.o af_inet.o inet_fragment.o ping.o ip_tunnel_core.o \
-	     gre_offload.o metrics.o netlink.o nexthop.o udp_tunnel_stub.o
+	     gre_offload.o metrics.o netlink.o nexthop.o udp_tunnel_stub.o \
+	     icmp.o
 
 obj-$(CONFIG_IPV4) += route.o ip_input.o ip_fragment.o ip_forward.o ip_options.o \
-		      ip_sockglue.o tcp_ipv4.o datagram.o icmp.o arp.o devinet.o \
-		      igmp.o fib_notifier.o ip_output.o fib_frontend.o \
-		      fib_semantics.o fib_trie.o raw_ipv4.o udp_ipv4.o
+		      ip_sockglue.o tcp_ipv4.o datagram.o arp.o devinet.o igmp.o \
+		      fib_notifier.o ip_output.o fib_frontend.o fib_semantics.o \
+		      fib_trie.o raw_ipv4.o udp_ipv4.o icmp_ipv4.o
 
 obj-$(CONFIG_NET_IP_TUNNEL) += ip_tunnel.o
 obj-$(CONFIG_SYSCTL) += sysctl_net_ipv4.o

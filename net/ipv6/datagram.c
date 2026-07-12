@@ -205,7 +205,9 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 					     (struct sockaddr_unsized *)&sin,
 					     sizeof(sin));
 
+#if IS_ENABLED(CONFIG_IPV4)
 ipv4_connected:
+#endif
 		if (err)
 			goto out;
 
