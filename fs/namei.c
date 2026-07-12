@@ -4483,9 +4483,6 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	if (unlikely(IS_DEADDIR(dir_inode)))
 		return ERR_PTR(-ENOENT);
 
-	if (create_dir && dir_inode->i_op->atomic_open)
-		open_flag &= ~O_CREAT;
-
 	file->f_mode &= ~FMODE_CREATED;
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
