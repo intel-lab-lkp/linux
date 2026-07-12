@@ -10216,6 +10216,7 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 		struct extent_buffer *leaf;
 		struct btrfs_file_extent_item *ei;
 		struct btrfs_block_group *bg;
+		struct btrfs_root *csum_root;
 		u64 logical_block_start;
 		u64 physical_block_start;
 		u64 extent_gen;
@@ -10296,6 +10297,34 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 		} else if (ret > 0) {
 			btrfs_warn(fs_info,
 				   "swapfile must not be copy-on-write");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		/*
+		 * The extents may have csums despite the NODATASUM inode flag,
+		 * from a reflink of a checksummed file into this file. Writes
+		 * to an active swap file bypass the COW fallback that protects
+		 * such extents everywhere else (see can_nocow_file_extent()),
+		 * so they would invalidate the csums and make scrub and read
+		 * repair report false corruption.
+		 */
+		csum_root = btrfs_csum_root(fs_info, logical_block_start);
+		if (unlikely(!csum_root)) {
+			btrfs_err(fs_info,
+				  "missing csum root for extent at bytenr %llu",
+				  logical_block_start);
+			ret = -EUCLEAN;
+			goto out;
+		}
+		ret = btrfs_lookup_csums_list(csum_root, logical_block_start,
+					      logical_block_start + len - 1,
+					      NULL, false);
+		if (ret < 0)
+			goto out;
+		if (ret > 0) {
+			btrfs_warn(fs_info,
+				   "swapfile must not have checksummed extents");
 			ret = -EINVAL;
 			goto out;
 		}
