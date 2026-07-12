@@ -1986,8 +1986,11 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 {
 	struct tls_context *tls_ctx = tls_get_ctx(sock->sk);
 	struct tls_sw_context_rx *ctx = tls_sw_ctx_rx(tls_ctx);
+	struct tls_prot_info *prot = &tls_ctx->prot_info;
 	struct strp_msg *rxm = NULL;
 	struct sock *sk = sock->sk;
+	size_t flushed_at = 0;
+	bool released = true;
 	struct tls_msg *tlm;
 	struct sk_buff *skb;
 	ssize_t copied = 0;
@@ -1998,47 +2001,81 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (err < 0)
 		return err;
 
-	if (!skb_queue_empty(&ctx->rx_list)) {
-		skb = __skb_dequeue(&ctx->rx_list);
-	} else {
-		struct tls_decrypt_arg darg;
+	/* Coalesce successive DATA records into the pipe, the way
+	 * tls_sw_recvmsg() coalesces into the msg buffer, instead of
+	 * returning one record per call. Only the first record may block.
+	 */
+	while (copied < len) {
+		bool first = !copied;
 
-		err = tls_rx_rec_wait(sk, flags & SPLICE_F_NONBLOCK,
-				      true, false);
-		if (err <= 0)
-			goto splice_read_end;
+		if (!skb_queue_empty(&ctx->rx_list)) {
+			skb = __skb_dequeue(&ctx->rx_list);
+		} else {
+			struct tls_decrypt_arg darg;
 
-		memset(&darg.inargs, 0, sizeof(darg.inargs));
+			err = tls_rx_rec_wait(sk,
+					      first ? (flags & SPLICE_F_NONBLOCK) : true,
+					      released, !first);
+			if (err <= 0)
+				goto splice_read_end;
 
-		err = tls_rx_one_record(sk, NULL, &darg);
-		if (err < 0)
-			goto splice_read_end;
+			memset(&darg.inargs, 0, sizeof(darg.inargs));
 
-		tls_rx_rec_done(ctx);
-		skb = darg.skb;
+			err = tls_rx_one_record(sk, NULL, &darg);
+			if (err < 0)
+				goto splice_read_end;
+
+			released = tls_read_flush_backlog(sk, prot,
+							  len - copied, 0,
+							  copied, &flushed_at);
+			tls_rx_rec_done(ctx);
+			skb = darg.skb;
+		}
+
+		rxm = strp_msg(skb);
+		tlm = tls_msg(skb);
+
+		/* splice does not support reading control messages
+		 * mid batch the record is left on rx_list for the next call
+		 */
+		if (tlm->control != TLS_RECORD_TYPE_DATA) {
+			err = -EINVAL;
+			goto splice_requeue;
+		}
+
+		/* Records after the first must not block on pipe space,
+		 * stop if this one does not already fit
+		 */
+		if (!first) {
+			unsigned int need = DIV_ROUND_UP(rxm->full_len,
+							 PAGE_SIZE);
+
+			if (pipe_occupancy(pipe->head, pipe->tail) + need >
+			    pipe->max_usage) {
+				__skb_queue_head(&ctx->rx_list, skb);
+				goto splice_read_end;
+			}
+		}
+
+		chunk = min_t(unsigned int, rxm->full_len, len - copied);
+		chunk = skb_splice_bits(skb, sk, rxm->offset, pipe, chunk,
+					flags);
+		if (chunk < 0) {
+			err = chunk;
+			goto splice_requeue;
+		}
+
+		copied += chunk;
+
+		/* pipe full, requeue the remainder */
+		if (chunk < rxm->full_len) {
+			rxm->offset += chunk;
+			rxm->full_len -= chunk;
+			goto splice_requeue;
+		}
+
+		consume_skb(skb);
 	}
-
-	rxm = strp_msg(skb);
-	tlm = tls_msg(skb);
-
-	/* splice does not support reading control messages */
-	if (tlm->control != TLS_RECORD_TYPE_DATA) {
-		err = -EINVAL;
-		goto splice_requeue;
-	}
-
-	chunk = min_t(unsigned int, rxm->full_len, len);
-	copied = skb_splice_bits(skb, sk, rxm->offset, pipe, chunk, flags);
-	if (copied < 0)
-		goto splice_requeue;
-
-	if (copied < rxm->full_len) {
-		rxm->offset += copied;
-		rxm->full_len -= copied;
-		goto splice_requeue;
-	}
-
-	consume_skb(skb);
 
 splice_read_end:
 	tls_rx_reader_unlock(sk, ctx);
