@@ -858,11 +858,21 @@ static int btrfs_remap_file_range_prep(struct file *file_in, loff_t pos_in,
 	if (IS_ENCRYPTED(&inode_in->vfs_inode) != IS_ENCRYPTED(&inode_out->vfs_inode))
 		return -EINVAL;
 
-	/* Don't make the dst file partly checksummed */
-	if ((inode_in->flags & BTRFS_INODE_NODATASUM) !=
-	    (inode_out->flags & BTRFS_INODE_NODATASUM)) {
+	/*
+	 * Reflinking from a NODATASUM inode into a checksummed inode would
+	 * make the destination refer to extents that have no csum items in
+	 * the csum tree, and reads of those extents would then fail with
+	 * -EIO. We can't create the missing csums here, so reject it.
+	 *
+	 * The other direction is safe: the destination inode has NODATASUM
+	 * set, so reads through it never verify csums, and any write over a
+	 * range whose extent has csums is forced to COW into a new extent
+	 * (see can_nocow_file_extent()), so the csums shared with the source
+	 * extents can never be invalidated by in-place writes.
+	 */
+	if ((inode_in->flags & BTRFS_INODE_NODATASUM) &&
+	    !(inode_out->flags & BTRFS_INODE_NODATASUM))
 		return -EINVAL;
-	}
 
 	/*
 	 * Now that the inodes are locked, we need to start writeback ourselves
