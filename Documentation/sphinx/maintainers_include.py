@@ -336,16 +336,24 @@ class MaintainersProfile(Include):
         # Produce a list with all maintainer profiles, sorted by subsystem name
         #
         output = ""
-        for profile, entry in sorted(maint_parser.profile_entries.items()):
+        entries = set()
+        for profile, entry in maint_parser.profile_entries.items():
             name = profile.title()
 
             if entry.startswith("http"):
-                output += f"- `{name} <{entry}>`_\n"
+                new_entry = f"- `{name} <{entry}>`_\n"
             elif entry.startswith("`"):
-                output += f"- {name}: {entry}\n"
+                new_entry = f"- {name}: {entry}\n"
                 self.warning(f"{profile}: Invalid 'P' tag: {entry}\n")
             else:
-                output += f"- {entry}\n"
+                new_entry = f"- {entry}\n"
+
+            if new_entry not in entries:
+                entries.add(new_entry)
+
+        for entry in sorted(entries):
+            output += entry
+
 
         #
         # Create a hidden TOC table with all profiles. That allows adding
