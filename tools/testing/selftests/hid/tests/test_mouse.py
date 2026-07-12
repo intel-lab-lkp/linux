@@ -11,6 +11,7 @@ import hidtools.hid
 from hidtools.util import BusType
 import libevdev
 import logging
+import threading
 import pytest
 
 logger = logging.getLogger("hidtools.test.mouse")
@@ -598,6 +599,35 @@ class ResolutionMultiplierHWheelMouse(TwoWheelMouse):
         return 0
 
 
+class BatteryOffsetMouse(BaseMouse):
+    report_descriptor = [
+        # Mouse report
+        0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x12,
+        0x05, 0x09, 0x19, 0x01, 0x29, 0x02, 0x15, 0x00,
+        0x25, 0x01, 0x95, 0x02, 0x75, 0x01, 0x81, 0x02,
+        0x95, 0x01, 0x75, 0x06, 0x81, 0x01, 0x05, 0x01,
+        0x09, 0x01, 0xa1, 0x00, 0x09, 0x30, 0x09, 0x31,
+        0x15, 0x81, 0x25, 0x7f, 0x75, 0x08, 0x95, 0x02,
+        0x81, 0x06, 0xc0, 0xc0,
+        # Battery report: one status byte followed by capacity
+        0x06, 0x00, 0xff, 0x09, 0x14, 0xa1, 0x01, 0x85,
+        0x90, 0x05, 0x84, 0x75, 0x01, 0x95, 0x03, 0x15,
+        0x00, 0x25, 0x01, 0x09, 0x61, 0x05, 0x85, 0x09,
+        0x44, 0x09, 0x46, 0x81, 0x02, 0x95, 0x05, 0x81,
+        0x01, 0x75, 0x08, 0x95, 0x01, 0x15, 0x00, 0x26,
+        0xff, 0x00, 0x09, 0x65, 0x81, 0x02, 0xc0,
+    ]
+
+    def __init__(self, rdesc=report_descriptor, name=None, input_info=None):
+        super().__init__(rdesc, name, input_info)
+
+    def get_report(self, req, rnum, rtype):
+        if rtype != self.UHID_INPUT_REPORT or rnum != 0x90:
+            return (1, [])
+
+        return (0, [0x90, 0x04, 0x5F])
+
+
 class BaseTest:
     class TestMouse(base.BaseTestCase.TestUhid):
         def test_buttons(self):
@@ -1045,3 +1075,27 @@ class TestBadReportDescriptorMouse(base.BaseTestCase.TestUhid):
 
     def assertName(self, uhdev):
         pass
+
+
+class TestBatteryOffsetMouse(base.BaseTestCase.TestUhid):
+    def create_device(self):
+        return BatteryOffsetMouse()
+
+    def test_queried_battery_field_offset(self):
+        uhdev = self.uhdev
+        power_supply = uhdev.power_supply_class
+        assert power_supply is not None
+
+        done = False
+
+        def dispatch():
+            while not done:
+                uhdev.dispatch(1)
+
+        thread = threading.Thread(target=dispatch)
+        thread.start()
+        try:
+            assert power_supply.capacity == 95
+        finally:
+            done = True
+            thread.join()
