@@ -125,7 +125,7 @@ pub trait Driver {
     /// Sets the `DRIVER_RENDER` feature for this driver.
     ///
     /// When enabled, the driver exposes `/dev/dri/renderDXX` render nodes to
-    /// userspace. The render node is an alternate low-priviledge way to access
+    /// userspace. The render node is an alternate low-privilege way to access
     /// the driver, which is enforced on a per-ioctl level. Userspace processes
     /// that open the render node can only invoke ioctls explicitly listed as
     /// usable from the render node (i.e. marked DRM_RENDER_ALLOW), whereas
