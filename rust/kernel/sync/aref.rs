@@ -124,7 +124,11 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// struct Empty {}
     ///
-    /// # // SAFETY: TODO.
+    /// // SAFETY: `Empty` has no data and its `inc_ref`/`dec_ref` are no-ops, so the
+    /// // `AlwaysRefCounted` contract holds: `inc_ref` need not keep anything alive (the
+    /// // zero-sized object lives on the stack while `data` is in scope) and `dec_ref` frees
+    /// // nothing. The caller ensures `data` outlives any `ARef<Empty>` (here `data` is a
+    /// // local that outlives `data_ref`).
     /// unsafe impl AlwaysRefCounted for Empty {
     ///     fn inc_ref(&self) {}
     ///     unsafe fn dec_ref(_obj: NonNull<Self>) {}
@@ -132,7 +136,10 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// let mut data = Empty {};
     /// let ptr = NonNull::<Empty>::new(&mut data).unwrap();
-    /// # // SAFETY: TODO.
+    /// // SAFETY: `ptr` comes from a valid `&mut data` reference, hence it is non-null,
+    /// // aligned and points to a valid `Empty`. `ARef::from_raw` also requires owning a
+    /// // refcount increment; this is trivially met because `Empty`'s `AlwaysRefCounted` uses
+    /// // no-op `inc_ref`/`dec_ref` and so manages no actual refcount.
     /// let data_ref: ARef<Empty> = unsafe { ARef::from_raw(ptr) };
     /// let raw_ptr: NonNull<Empty> = ARef::into_raw(data_ref);
     ///
