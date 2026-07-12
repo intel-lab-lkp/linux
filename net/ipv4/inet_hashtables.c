@@ -581,6 +581,7 @@ static int __inet_check_established(struct inet_timewait_death_row *death_row,
 				    bool rcu_lookup,
 				    u32 hash)
 {
+#if IS_ENABLED(CONFIG_IPV4) //TODO: should this be moved out of here?
 	struct inet_hashinfo *hinfo = death_row->hashinfo;
 	struct inet_sock *inet = inet_sk(sk);
 	__be32 daddr = inet->inet_rcv_saddr;
@@ -651,6 +652,9 @@ static int __inet_check_established(struct inet_timewait_death_row *death_row,
 not_unique:
 	spin_unlock(lock);
 	return -EADDRNOTAVAIL;
+#else
+	return -EAFNOSUPPORT;
+#endif
 }
 
 static u64 inet_sk_port_offset(const struct sock *sk)

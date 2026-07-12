@@ -3208,9 +3208,13 @@ int neigh_xmit(int index, struct net_device *dev,
 			goto out_kfree_skb;
 		}
 		if (index == NEIGH_ARP_TABLE) {
+#if IS_ENABLED(CONFIG_IPV4)
 			u32 key = *((u32 *)addr);
 
 			neigh = __ipv4_neigh_lookup_noref(dev, key);
+#else
+			goto out_kfree_skb;
+#endif
 		} else {
 			neigh = __neigh_lookup_noref(tbl, addr, dev);
 		}

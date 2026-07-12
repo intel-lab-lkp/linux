@@ -39,6 +39,7 @@ static int dev_ifname(struct net *net, struct ifreq *ifr)
  */
 int dev_ifconf(struct net *net, struct ifconf __user *uifc)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	struct net_device *dev;
 	void __user *pos;
 	size_t size;
@@ -82,6 +83,9 @@ int dev_ifconf(struct net *net, struct ifconf __user *uifc)
 	rtnl_net_unlock(net);
 
 	return put_user(total, &uifc->ifc_len);
+#else
+	return -EAFNOSUPPORT;
+#endif
 }
 
 static int dev_getifmap(struct net_device *dev, struct ifreq *ifr)

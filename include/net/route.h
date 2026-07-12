@@ -169,8 +169,16 @@ static inline struct rtable *__ip_route_output_key(struct net *net,
 	return ip_route_output_key_hash(net, flp, NULL);
 }
 
+#if IS_ENABLED(CONFIG_IPV4)
 struct rtable *ip_route_output_flow(struct net *, struct flowi4 *flp,
 				    const struct sock *sk);
+#else
+static inline struct rtable *ip_route_output_flow(struct net *, struct flowi4 *flp,
+						  const struct sock *sk)
+{
+	return ERR_PTR(-EAFNOSUPPORT);
+}
+#endif
 struct dst_entry *ipv4_blackhole_route(struct net *net,
 				       struct dst_entry *dst_orig);
 

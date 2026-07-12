@@ -171,8 +171,17 @@ int ip_mr_input(struct sk_buff *skb);
 int ip_mr_output(struct net *net, struct sock *sk, struct sk_buff *skb);
 int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb);
 int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb);
+#if IS_ENABLED(CONFIG_IPV4)
 int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 		   int (*output)(struct net *, struct sock *, struct sk_buff *));
+#else
+static inline int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
+				 int (*output)(struct net *, struct sock *, struct sk_buff *))
+{
+	kfree_skb(skb);
+	return -EAFNOSUPPORT;
+}
+#endif
 
 struct ip_fraglist_iter {
 	struct sk_buff	*frag;
@@ -218,6 +227,7 @@ int ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb);
 int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 		    __u8 tos);
 void ip_init(void);
+#if IS_ENABLED(CONFIG_IPV4)
 int ip_append_data(struct sock *sk, struct flowi4 *fl4,
 		   int getfrag(void *from, char *to, int offset, int len,
 			       int odd, struct sk_buff *skb),
@@ -225,27 +235,58 @@ int ip_append_data(struct sock *sk, struct flowi4 *fl4,
 		   struct ipcm_cookie *ipc,
 		   struct rtable **rt,
 		   unsigned int flags);
-int ip_generic_getfrag(void *from, char *to, int offset, int len, int odd,
-		       struct sk_buff *skb);
-struct sk_buff *__ip_make_skb(struct sock *sk, struct flowi4 *fl4,
-			      struct sk_buff_head *queue,
-			      struct inet_cork *cork);
-int ip_send_skb(struct net *net, struct sk_buff *skb);
-int ip_push_pending_frames(struct sock *sk, struct flowi4 *fl4);
-void ip_flush_pending_frames(struct sock *sk);
 struct sk_buff *ip_make_skb(struct sock *sk, struct flowi4 *fl4,
 			    int getfrag(void *from, char *to, int offset,
 					int len, int odd, struct sk_buff *skb),
 			    void *from, int length, int transhdrlen,
 			    struct ipcm_cookie *ipc, struct rtable **rtp,
 			    struct inet_cork *cork, unsigned int flags);
-
-int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl);
+struct sk_buff *__ip_make_skb(struct sock *sk, struct flowi4 *fl4,
+			      struct sk_buff_head *queue,
+			      struct inet_cork *cork);
+void ip_flush_pending_frames(struct sock *sk);
 
 static inline struct sk_buff *ip_finish_skb(struct sock *sk, struct flowi4 *fl4)
 {
 	return __ip_make_skb(sk, fl4, &sk->sk_write_queue, &inet_sk(sk)->cork.base);
 }
+#else
+static inline int ip_append_data(struct sock *sk, struct flowi4 *fl4,
+				 int getfrag(void *from, char *to, int offset, int len,
+					     int odd, struct sk_buff *skb),
+				 void *from, int len, int protolen,
+				 struct ipcm_cookie *ipc,
+				 struct rtable **rt,
+				 unsigned int flags)
+{
+	return -EAFNOSUPPORT;
+}
+
+static inline struct sk_buff *ip_make_skb(struct sock *sk, struct flowi4 *fl4,
+					  int getfrag(void *from, char *to, int offset,
+						      int len, int odd, struct sk_buff *skb),
+					  void *from, int length, int transhdrlen,
+					  struct ipcm_cookie *ipc, struct rtable **rtp,
+					  struct inet_cork *cork, unsigned int flags)
+{
+	return ERR_PTR(-EAFNOSUPPORT);
+}
+
+static inline struct sk_buff *ip_finish_skb(struct sock *sk, struct flowi4 *fl4)
+{
+	return ERR_PTR(-EAFNOSUPPORT);
+}
+
+static inline void ip_flush_pending_frames(struct sock *sk)
+{
+}
+#endif
+
+int ip_generic_getfrag(void *from, char *to, int offset, int len, int odd,
+		       struct sk_buff *skb);
+int ip_send_skb(struct net *net, struct sk_buff *skb);
+int ip_push_pending_frames(struct sock *sk, struct flowi4 *fl4);
+int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl);
 
 /* Get the route scope that should be used when sending a packet. */
 static inline u8 ip_sendmsg_scope(const struct inet_sock *inet,
@@ -787,24 +828,55 @@ int ip_options_rcv_srr(struct sk_buff *skb, struct net_device *dev);
  *	Functions provided by ip_sockglue.c
  */
 
-void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *skb, bool drop_dst);
 void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 			 struct sk_buff *skb, int tlen, int offset);
+#if IS_ENABLED(CONFIG_IPV4)
+void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *skb, bool drop_dst);
 int ip_cmsg_send(struct sock *sk, struct msghdr *msg,
 		 struct ipcm_cookie *ipc, bool allow_ipv6);
+int ip_recv_error(struct sock *sk, struct msghdr *msg, int len);
+int ip_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
+		  unsigned int optlen);
+int ip_getsockopt(struct sock *sk, int level, int optname, char __user *optval,
+		  int __user *optlen);
+#else
+static inline void ipv4_pktinfo_prepare(const struct sock *sk,
+					struct sk_buff *skb,
+					bool drop_dst)
+{
+}
+
+static inline int ip_cmsg_send(struct sock *sk, struct msghdr *msg,
+			       struct ipcm_cookie *ipc, bool allow_ipv6)
+{
+	return 0;
+}
+
+static inline int ip_recv_error(struct sock *sk, struct msghdr *msg, int len)
+{
+	return -EAFNOSUPPORT;
+}
+
+static inline int ip_setsockopt(struct sock *sk, int level, int optname,
+				sockptr_t optval, unsigned int optlen)
+{
+	return -EAFNOSUPPORT;
+}
+
+static inline int ip_getsockopt(struct sock *sk, int level, int optname,
+				char __user *optval, int __user *optlen)
+{
+	return -EAFNOSUPPORT;
+}
+#endif
 DECLARE_STATIC_KEY_FALSE(ip4_min_ttl);
 int do_ip_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
 		     unsigned int optlen);
-int ip_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
-		  unsigned int optlen);
 int do_ip_getsockopt(struct sock *sk, int level, int optname,
 		     sockptr_t optval, sockptr_t optlen);
-int ip_getsockopt(struct sock *sk, int level, int optname, char __user *optval,
-		  int __user *optlen);
 int ip_ra_control(struct sock *sk, unsigned char on,
 		  void (*destructor)(struct sock *));
 
-int ip_recv_error(struct sock *sk, struct msghdr *msg, int len);
 void ip_icmp_error(struct sock *sk, struct sk_buff *skb, int err, __be16 port,
 		   u32 info, u8 *payload);
 void ip_local_error(struct sock *sk, int err, __be32 daddr, __be16 dport,
