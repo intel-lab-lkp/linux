@@ -197,7 +197,7 @@ use crate::{
         Arc,
         LockClassKey, //
     },
-    time::Jiffies,
+    time::Delta,
     types::Opaque,
 };
 use core::{marker::PhantomData, ptr::NonNull};
@@ -303,7 +303,7 @@ impl Queue {
     /// This may fail if the work item is already enqueued in a workqueue.
     ///
     /// The work item will be submitted using `WORK_CPU_UNBOUND`.
-    pub fn enqueue_delayed<W, const ID: u64>(&self, w: W, delay: Jiffies) -> W::EnqueueOutput
+    pub fn enqueue_delayed<W, const ID: u64>(&self, w: W, delay: Delta) -> W::EnqueueOutput
     where
         W: RawDelayedWorkItem<ID> + Send + 'static,
     {
@@ -328,7 +328,7 @@ impl Queue {
                     bindings::wq_misc_consts_WORK_CPU_UNBOUND as ffi::c_int,
                     queue_ptr,
                     container_of!(work_ptr, bindings::delayed_work, work),
-                    delay,
+                    delay.as_jiffies_ceil(),
                 )
             })
         }
