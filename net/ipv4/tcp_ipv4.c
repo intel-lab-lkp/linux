@@ -2310,6 +2310,14 @@ do_time_wait:
 							inet_iif(skb),
 							sdif);
 		if (sk2) {
+			if (inet_csk_reqsk_queue_is_full(sk2)) {
+				drop_reason = SKB_DROP_REASON_TCP_LISTEN_OVERFLOW;
+				__NET_INC_STATS(net, LINUX_MIB_TCPREQQFULLDROP);
+				tcp_listendrop(sk2);
+				inet_twsk_put(inet_twsk(sk));
+				goto discard_it;
+			}
+
 			inet_twsk_deschedule_put(inet_twsk(sk));
 			sk = sk2;
 			tcp_v4_restore_cb(skb);

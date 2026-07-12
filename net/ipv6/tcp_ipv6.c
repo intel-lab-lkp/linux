@@ -1969,6 +1969,15 @@ do_time_wait:
 					    sdif);
 		if (sk2) {
 			struct inet_timewait_sock *tw = inet_twsk(sk);
+
+			if (inet_csk_reqsk_queue_is_full(sk2)) {
+				drop_reason = SKB_DROP_REASON_TCP_LISTEN_OVERFLOW;
+				__NET_INC_STATS(net, LINUX_MIB_TCPREQQFULLDROP);
+				tcp_listendrop(sk2);
+				inet_twsk_put(tw);
+				goto discard_it;
+			}
+
 			inet_twsk_deschedule_put(tw);
 			sk = sk2;
 			tcp_v6_restore_cb(skb);
