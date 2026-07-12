@@ -228,7 +228,7 @@ static int opt4001_power_down(struct opt4001_chip *chip)
 	int ret;
 	unsigned int reg;
 
-	ret = regmap_read(chip->regmap, OPT4001_DEVICE_ID, &reg);
+	ret = regmap_read(chip->regmap, OPT4001_CTRL, &reg);
 	if (ret) {
 		dev_err(dev, "Failed to read configuration\n");
 		return ret;
