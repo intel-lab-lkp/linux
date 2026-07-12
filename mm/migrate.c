@@ -345,6 +345,28 @@ struct rmap_walk_arg {
 	bool map_unused_to_zeropage;
 };
 
+/*
+ * Detect a batch of contiguous migration entries: consecutive (non-present) PTEs
+ * containing migration entries with consecutive offsets and matching pte bits.
+ */
+static unsigned int migration_pte_batch(struct page_vma_mapped_walk *pvmw,
+		struct folio *folio, pte_t first_pte, unsigned long start_idx)
+{
+	struct vm_area_struct *vma = pvmw->vma;
+	unsigned long end_addr = pmd_addr_end(pvmw->address, vma->vm_end);
+	unsigned int folio_nr = folio_nr_pages(folio);
+	unsigned int max_nr;
+
+	VM_WARN_ON(!softleaf_is_migration(softleaf_from_pte(first_pte)));
+
+	/* Bound by VMA / PMD end and by the remaining subpages of the folio. */
+	max_nr = min((end_addr - pvmw->address) >> PAGE_SHIFT, folio_nr - start_idx);
+	if (max_nr <= 1)
+		return 1;
+
+	return softleaf_pte_batch(pvmw->pte, max_nr, first_pte);
+}
+
 static pte_t migration_softleaf_entry_to_pte(struct folio *folio, struct page *new,
 		softleaf_t entry, pte_t old_pte, struct vm_area_struct *vma,
 		rmap_t *rmap_flags)
@@ -435,6 +457,7 @@ static bool remove_migration_pte(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
 	struct rmap_walk_arg *rmap_walk_arg = arg;
+	bool is_devpriv = folio_is_device_private(folio);
 	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->folio, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
 
 	while (page_vma_mapped_walk(&pvmw)) {
@@ -444,6 +467,7 @@ static bool remove_migration_pte(struct folio *folio,
 		softleaf_t entry;
 		struct page *new;
 		unsigned long idx = 0;
+		unsigned int nr = 1;
 
 		/* pgoff is invalid for ksm pages, but they are never large */
 		if (folio_test_large(folio))
@@ -465,11 +489,18 @@ static bool remove_migration_pte(struct folio *folio,
 
 		entry = softleaf_from_pte(old_pte);
 
-		folio_get(folio);
+		/*
+		 * Try to restore nr>1 contiguous PTEs in one shot. Falls back
+		 * to original per-PTE path (nr=1) if batching is not possible.
+		 */
+		if (!rmap_walk_arg->map_unused_to_zeropage && likely(!is_devpriv))
+			nr = migration_pte_batch(&pvmw, folio, old_pte, idx);
+
+		folio_ref_add(folio, nr);
 		pte = migration_softleaf_entry_to_pte(folio, new, entry, old_pte,
 						      vma, &rmap_flags);
 
-		if (unlikely(is_device_private_page(new))) {
+		if (unlikely(is_devpriv)) {
 			if (pte_write(pte))
 				entry = make_writable_device_private_entry(
 							page_to_pfn(new));
@@ -484,11 +515,11 @@ static bool remove_migration_pte(struct folio *folio,
 		}
 
 		if (folio_test_anon(folio))
-			folio_add_anon_rmap_pte(folio, new, vma,
-						pvmw.address, rmap_flags);
+			folio_add_anon_rmap_ptes(folio, new, nr, vma,
+						 pvmw.address, rmap_flags);
 		else
-			folio_add_file_rmap_pte(folio, new, vma);
-		set_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte);
+			folio_add_file_rmap_ptes(folio, new, nr, vma);
+		set_ptes(vma->vm_mm, pvmw.address, pvmw.pte, pte, nr);
 		if (READ_ONCE(vma->vm_flags) & VM_LOCKED)
 			mlock_drain_local();
 
@@ -496,7 +527,11 @@ static bool remove_migration_pte(struct folio *folio,
 					   compound_order(new));
 
 		/* No need to invalidate - it was non-present before */
-		update_mmu_cache(vma, pvmw.address, pvmw.pte);
+		update_mmu_cache_range(NULL, vma, pvmw.address, pvmw.pte, nr);
+
+		/* Skip the batched PTEs */
+		pvmw.pte += nr - 1;
+		pvmw.address += (nr - 1) * PAGE_SIZE;
 	}
 
 	return true;
