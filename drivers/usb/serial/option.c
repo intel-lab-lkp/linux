@@ -2689,6 +2689,13 @@ static void option_instat_callback(struct urb *urb)
 			dev_dbg(dev, "%s: NULL req_pkt\n", __func__);
 			return;
 		}
+
+		if (urb->actual_length < sizeof(struct usb_ctrlrequest) + 1) {
+			dev_dbg(dev, "%s: short interrupt transfer: %d bytes\n",
+				__func__, urb->actual_length);
+			return;
+		}
+
 		if ((req_pkt->bRequestType == 0xA1) &&
 				(req_pkt->bRequest == 0x20)) {
 			int old_dcd_state;
