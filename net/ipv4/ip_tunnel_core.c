@@ -52,6 +52,7 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 		   __u8 tos, __u8 ttl, __be16 df, bool xnet,
 		   u16 ipcb_flags)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	int pkt_len = skb->len - skb_inner_network_offset(skb);
 	struct net *net = dev_net(rt->dst.dev);
 	struct net_device *dev = skb->dev;
@@ -103,6 +104,12 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 	}
 
 	dev_xmit_recursion_dec();
+#else
+	if (skb->dev)
+		DEV_STATS_INC(skb->dev, tx_errors);
+	ip_rt_put(rt);
+	kfree_skb(skb);
+#endif
 }
 EXPORT_SYMBOL_GPL(iptunnel_xmit);
 
@@ -212,6 +219,7 @@ EXPORT_SYMBOL_GPL(iptunnel_handle_offloads);
  */
 static int iptunnel_pmtud_build_icmp(struct sk_buff *skb, int mtu)
 {
+#if IS_ENABLED(CONFIG_IPV4)
 	const struct iphdr *iph;
 	struct icmphdr *icmph;
 	struct iphdr *niph;
@@ -269,6 +277,9 @@ static int iptunnel_pmtud_build_icmp(struct sk_buff *skb, int mtu)
 	skb_reset_mac_header(skb);
 
 	return skb->len;
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 /**
