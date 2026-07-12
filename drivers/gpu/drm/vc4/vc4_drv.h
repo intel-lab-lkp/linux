@@ -160,41 +160,11 @@ struct vc4_dev {
 		struct mutex lock;
 	} purgeable;
 
-	uint64_t dma_fence_context;
-
-	/* Sequence number for the last job queued in bin_job_list.
-	 * Starts at 0 (no jobs emitted).
-	 */
-	uint64_t emit_seqno;
-
 	struct vc4_queue_state queue[VC4_MAX_QUEUES];
 
 	struct vc4_bin_job *bin_job;
 
 	struct vc4_render_job *render_job;
-
-	/* Sequence number for the last completed job on the GPU.
-	 * Starts at 0 (no jobs completed).
-	 */
-	uint64_t finished_seqno;
-
-	/* List of all struct vc4_exec_info for jobs to be executed in
-	 * the binner.  The first job in the list is the one currently
-	 * programmed into ct0ca for execution.
-	 */
-	struct list_head bin_job_list;
-
-	/* List of all struct vc4_exec_info for jobs that have
-	 * completed binning and are ready for rendering.  The first
-	 * job in the list is the one currently programmed into ct1ca
-	 * for execution.
-	 */
-	struct list_head render_job_list;
-
-	/* List of the finished vc4_exec_infos waiting to be freed by
-	 * job_done_work.
-	 */
-	struct list_head job_done_list;
 
 	/* Lock taken when resetting the GPU, to keep multiple
 	 * processes from trying to park the scheduler threads and
@@ -211,8 +181,6 @@ struct vc4_dev {
 	 * accesses between the IRQ handler and GEM ioctls.
 	 */
 	spinlock_t job_lock;
-	wait_queue_head_t job_wait_queue;
-	struct work_struct job_done_work;
 
 	/* Tracks the performance monitor state. The V3D block exposes a single
 	 * set of performance counters, so at most one perfmon can be active at
@@ -259,11 +227,6 @@ struct vc4_dev {
 
 	/* Mutex controlling the power refcount. */
 	struct mutex power_lock;
-
-	struct {
-		struct timer_list timer;
-		struct work_struct reset_work;
-	} hangcheck;
 
 	struct drm_modeset_lock ctm_state_lock;
 	struct drm_private_obj ctm_manager;
@@ -790,49 +753,13 @@ struct vc4_exec_info {
 	struct vc4_bin_job *bin;
 	struct vc4_render_job *render;
 
-	/* Sequence number for this bin/render job. */
-	uint64_t seqno;
-
-	struct dma_fence *fence;
-
-	/* Last current addresses the hardware was processing when the
-	 * hangcheck timer checked on us.
-	 */
-	uint32_t last_ct0ca, last_ct1ca;
-
 	/* Kernel-space copy of the ioctl arguments */
 	struct drm_vc4_submit_cl *args;
-
-	/* This is the array of BOs that were looked up at the start of exec.
-	 * Command validation will use indices into this array.
-	 */
-	struct drm_gem_object **bo;
-	uint32_t bo_count;
-
-	/* List of BOs that are being written by the RCL.  Other than
-	 * the binner temporary storage, this is all the BOs written
-	 * by the job.
-	 */
-	struct drm_gem_dma_object *rcl_write_bo[4];
-	uint32_t rcl_write_bo_count;
-
-	/* Pointers for our position in vc4->job_list */
-	struct list_head head;
-
-	/* List of other BOs used in the job that need to be released
-	 * once the job is complete.
-	 */
-	struct list_head unref_list;
 
 	/* Current unvalidated indices into @bo loaded by the non-hardware
 	 * VC4_PACKET_GEM_HANDLES.
 	 */
 	uint32_t bo_index[2];
-
-	/* This is the BO where we store the validated command lists, shader
-	 * records, and uniforms.
-	 */
-	struct drm_gem_dma_object *exec_bo;
 
 	/**
 	 * This tracks the per-shader-record state (packet 64) that
@@ -862,15 +789,6 @@ struct vc4_exec_info {
 	 * (where each tile's binned CL will start)
 	 */
 	uint32_t tile_alloc_offset;
-	/* Bitmask of which binner slots are freed when this job completes. */
-	uint32_t bin_slots;
-
-	/**
-	 * Computed addresses pointing into exec_bo where we start the
-	 * bin thread (ct0) and render thread (ct1).
-	 */
-	uint32_t ct0ca, ct0ea;
-	uint32_t ct1ca, ct1ea;
 
 	/* Pointer to the unvalidated bin CL (if present). */
 	void *bin_u;
@@ -892,16 +810,6 @@ struct vc4_exec_info {
 	void *uniforms_v;
 	uint32_t uniforms_p;
 	uint32_t uniforms_size;
-
-	/* Pointer to a performance monitor object if the user requested it,
-	 * NULL otherwise.
-	 */
-	struct vc4_perfmon *perfmon;
-
-	/* Whether the exec has taken a reference to the binner BO, which should
-	 * happen with a VC4_PACKET_TILE_BINNING_MODE_CONFIG packet.
-	 */
-	bool bin_bo_used;
 };
 
 /* Per-open file private data. Any driver-specific resource that has to be
@@ -924,29 +832,6 @@ struct vc4_file {
 
 	bool bin_bo_used;
 };
-
-static inline struct vc4_exec_info *
-vc4_first_bin_job(struct vc4_dev *vc4)
-{
-	return list_first_entry_or_null(&vc4->bin_job_list,
-					struct vc4_exec_info, head);
-}
-
-static inline struct vc4_exec_info *
-vc4_first_render_job(struct vc4_dev *vc4)
-{
-	return list_first_entry_or_null(&vc4->render_job_list,
-					struct vc4_exec_info, head);
-}
-
-static inline struct vc4_exec_info *
-vc4_last_render_job(struct vc4_dev *vc4)
-{
-	if (list_empty(&vc4->render_job_list))
-		return NULL;
-	return list_last_entry(&vc4->render_job_list,
-			       struct vc4_exec_info, head);
-}
 
 /**
  * struct vc4_texture_sample_info - saves the offsets into the UBO for texture
@@ -1133,19 +1018,16 @@ struct dma_fence *vc4_fence_create(struct vc4_dev *vc4, enum vc4_queue queue);
 
 /* vc4_gem.c */
 int vc4_gem_init(struct drm_device *dev);
-int vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-int vc4_wait_seqno_ioctl(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv);
-void vc4_submit_next_bin_job(struct drm_device *dev);
-void vc4_submit_next_render_job(struct drm_device *dev);
-void vc4_move_job_to_render(struct drm_device *dev, struct vc4_exec_info *exec);
-int vc4_wait_for_seqno(struct drm_device *dev, uint64_t seqno,
-		       uint64_t timeout_ns, bool interruptible);
-void vc4_job_handle_completed(struct vc4_dev *vc4);
 int vc4_gem_madvise_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv);
 void vc4_save_hang_state(struct drm_device *dev);
+
+/* vc4_submit.c */
+void vc4_job_cleanup(struct vc4_job *job);
+int vc4_wait_seqno_ioctl(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv);
+int vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
+			struct drm_file *file_priv);
 
 /* vc4_hdmi.c */
 extern struct platform_driver vc4_hdmi_driver;

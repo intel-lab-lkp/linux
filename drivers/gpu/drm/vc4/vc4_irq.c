@@ -64,7 +64,6 @@ vc4_overflow_mem_work(struct work_struct *work)
 		container_of(work, struct vc4_dev, overflow_mem_work);
 	struct vc4_bo *bo;
 	int bin_bo_slot;
-	struct vc4_exec_info *exec;
 	unsigned long irqflags;
 
 	mutex_lock(&vc4->bin_bo_lock);
@@ -84,16 +83,14 @@ vc4_overflow_mem_work(struct work_struct *work)
 
 	if (vc4->bin_alloc_overflow) {
 		/* If we had overflow memory allocated previously,
-		 * then that chunk will free when the current bin job
-		 * is done.  If we don't have a bin job running, then
-		 * the chunk will be done whenever the list of render
-		 * jobs has drained.
+		 * then that chunk will free when the current render job
+		 * is done. If we don't have a render job running, then
+		 * the chunk is free immediately.
 		 */
-		exec = vc4_first_bin_job(vc4);
-		if (!exec)
-			exec = vc4_last_render_job(vc4);
-		if (exec) {
-			exec->bin_slots |= vc4->bin_alloc_overflow;
+		if (vc4->bin_job) {
+			vc4->bin_job->render->bin_slots |= vc4->bin_alloc_overflow;
+		} else if (vc4->render_job) {
+			vc4->render_job->bin_slots |= vc4->bin_alloc_overflow;
 		} else {
 			/* There's nothing queued in the hardware, so
 			 * the old slot is free immediately.
@@ -111,92 +108,6 @@ vc4_overflow_mem_work(struct work_struct *work)
 
 complete:
 	mutex_unlock(&vc4->bin_bo_lock);
-}
-
-static void
-vc4_irq_finish_bin_job(struct drm_device *dev)
-{
-	struct vc4_dev *vc4 = to_vc4_dev(dev);
-	struct vc4_exec_info *next, *exec = vc4_first_bin_job(vc4);
-
-	if (!exec)
-		return;
-
-	trace_vc4_bcl_end_irq(dev, exec->seqno);
-
-	vc4_move_job_to_render(dev, exec);
-	next = vc4_first_bin_job(vc4);
-
-	/* Only submit the next job in the bin list if it matches the perfmon
-	 * attached to the one that just finished (or if both jobs don't have
-	 * perfmon attached to them).
-	 */
-	if (next && next->perfmon == exec->perfmon)
-		vc4_submit_next_bin_job(dev);
-}
-
-static void
-vc4_cancel_bin_job(struct drm_device *dev)
-{
-	struct vc4_dev *vc4 = to_vc4_dev(dev);
-	struct vc4_exec_info *exec = vc4_first_bin_job(vc4);
-
-	if (!exec)
-		return;
-
-	/* Stop the perfmon so that the next bin job can be started. */
-	if (exec->perfmon)
-		vc4_perfmon_stop(vc4, exec->perfmon, false);
-
-	list_move_tail(&exec->head, &vc4->bin_job_list);
-	vc4_submit_next_bin_job(dev);
-}
-
-static void
-vc4_irq_finish_render_job(struct drm_device *dev)
-{
-	struct vc4_dev *vc4 = to_vc4_dev(dev);
-	struct vc4_exec_info *exec = vc4_first_render_job(vc4);
-	struct vc4_exec_info *nextbin, *nextrender;
-
-	if (!exec)
-		return;
-
-	trace_vc4_rcl_end_irq(dev, exec->seqno);
-
-	vc4->finished_seqno++;
-	list_move_tail(&exec->head, &vc4->job_done_list);
-
-	nextbin = vc4_first_bin_job(vc4);
-	nextrender = vc4_first_render_job(vc4);
-
-	/* Only stop the perfmon if following jobs in the queue don't expect it
-	 * to be enabled.
-	 */
-	if (exec->perfmon && !nextrender &&
-	    (!nextbin || nextbin->perfmon != exec->perfmon))
-		vc4_perfmon_stop(vc4, exec->perfmon, true);
-
-	/* If there's a render job waiting, start it. If this is not the case
-	 * we may have to unblock the binner if it's been stalled because of
-	 * perfmon (this can be checked by comparing the perfmon attached to
-	 * the finished renderjob to the one attached to the next bin job: if
-	 * they don't match, this means the binner is stalled and should be
-	 * restarted).
-	 */
-	if (nextrender)
-		vc4_submit_next_render_job(dev);
-	else if (nextbin && nextbin->perfmon != exec->perfmon)
-		vc4_submit_next_bin_job(dev);
-
-	if (exec->fence) {
-		dma_fence_signal_locked(exec->fence);
-		dma_fence_put(exec->fence);
-		exec->fence = NULL;
-	}
-
-	wake_up_all(&vc4->job_wait_queue);
-	schedule_work(&vc4->job_done_work);
 }
 
 static irqreturn_t
@@ -225,16 +136,42 @@ vc4_irq(int irq, void *arg)
 	}
 
 	if (intctl & V3D_INT_FLDONE) {
+		struct vc4_bin_job *bin_job;
+		struct vc4_fence *fence;
+
 		spin_lock(&vc4->job_lock);
-		vc4_irq_finish_bin_job(dev);
+		bin_job = vc4->bin_job;
+		vc4->bin_job = NULL;
 		spin_unlock(&vc4->job_lock);
+
+		fence = to_vc4_fence(bin_job->base.irq_fence);
+
+		vc4_perfmon_stop(vc4, bin_job->base.perfmon, true);
+
+		trace_vc4_bcl_end_irq(dev, fence->seqno);
+
+		dma_fence_signal(&fence->base);
+
 		status = IRQ_HANDLED;
 	}
 
 	if (intctl & V3D_INT_FRDONE) {
+		struct vc4_render_job *render_job;
+		struct vc4_fence *fence;
+
 		spin_lock(&vc4->job_lock);
-		vc4_irq_finish_render_job(dev);
+		render_job = vc4->render_job;
+		vc4->render_job = NULL;
 		spin_unlock(&vc4->job_lock);
+
+		fence = to_vc4_fence(render_job->base.irq_fence);
+
+		vc4_perfmon_stop(vc4, render_job->base.perfmon, true);
+
+		trace_vc4_rcl_end_irq(dev, fence->seqno);
+
+		dma_fence_signal(&fence->base);
+
 		status = IRQ_HANDLED;
 	}
 
@@ -295,7 +232,6 @@ int vc4_irq_install(struct drm_device *dev, int irq)
 	if (irq == IRQ_NOTCONNECTED)
 		return -ENOTCONN;
 
-	init_waitqueue_head(&vc4->job_wait_queue);
 	INIT_WORK(&vc4->overflow_mem_work, vc4_overflow_mem_work);
 
 	/* Clear any pending interrupts someone might have left around
@@ -327,7 +263,6 @@ void vc4_irq_uninstall(struct drm_device *dev)
 void vc4_irq_reset(struct drm_device *dev)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
-	unsigned long irqflags;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
@@ -342,9 +277,4 @@ void vc4_irq_reset(struct drm_device *dev)
 	 * memory yet.
 	 */
 	V3D_WRITE(V3D_INTENA, V3D_DRIVER_IRQS);
-
-	spin_lock_irqsave(&vc4->job_lock, irqflags);
-	vc4_cancel_bin_job(dev);
-	vc4_irq_finish_render_job(dev);
-	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 }

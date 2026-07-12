@@ -254,6 +254,7 @@ static void emit_tile(struct vc4_exec_info *exec,
 static int vc4_create_rcl_bo(struct drm_device *dev, struct vc4_exec_info *exec,
 			     struct vc4_rcl_setup *setup)
 {
+	struct vc4_render_job *render = exec->render;
 	struct drm_vc4_submit_cl *args = exec->args;
 	bool has_bin = args->bin_cl_size != 0;
 	uint8_t min_x_tile = args->min_x_tile;
@@ -333,7 +334,7 @@ static int vc4_create_rcl_bo(struct drm_device *dev, struct vc4_exec_info *exec,
 	if (IS_ERR(setup->rcl))
 		return PTR_ERR(setup->rcl);
 	list_add_tail(&to_vc4_bo(&setup->rcl->base)->unref_head,
-		      &exec->unref_list);
+		      &render->unref_list);
 
 	/* The tile buffer gets cleared when the previous tile is stored.  If
 	 * the clear values changed between frames, then the tile buffer has
@@ -375,8 +376,8 @@ static int vc4_create_rcl_bo(struct drm_device *dev, struct vc4_exec_info *exec,
 	}
 
 	BUG_ON(setup->next_offset != size);
-	exec->ct1ca = setup->rcl->dma_addr;
-	exec->ct1ea = setup->rcl->dma_addr + setup->next_offset;
+	render->ct1ca = setup->rcl->dma_addr;
+	render->ct1ea = setup->rcl->dma_addr + setup->next_offset;
 
 	return 0;
 }
@@ -411,6 +412,8 @@ static int vc4_rcl_msaa_surface_setup(struct vc4_exec_info *exec,
 				      struct drm_gem_dma_object **obj,
 				      struct drm_vc4_submit_rcl_surface *surf)
 {
+	struct vc4_render_job *render = exec->render;
+
 	if (surf->flags != 0 || surf->bits != 0) {
 		DRM_DEBUG("MSAA surface had nonzero flags/bits\n");
 		return -EINVAL;
@@ -423,7 +426,7 @@ static int vc4_rcl_msaa_surface_setup(struct vc4_exec_info *exec,
 	if (!*obj)
 		return -EINVAL;
 
-	exec->rcl_write_bo[exec->rcl_write_bo_count++] = *obj;
+	render->rcl_write_bo[render->rcl_write_bo_count++] = *obj;
 
 	if (surf->offset & 0xf) {
 		DRM_DEBUG("MSAA write must be 16b aligned.\n");
@@ -438,6 +441,7 @@ static int vc4_rcl_surface_setup(struct vc4_exec_info *exec,
 				 struct drm_vc4_submit_rcl_surface *surf,
 				 bool is_write)
 {
+	struct vc4_render_job *render = exec->render;
 	uint8_t tiling = VC4_GET_FIELD(surf->bits,
 				       VC4_LOADSTORE_TILE_BUFFER_TILING);
 	uint8_t buffer = VC4_GET_FIELD(surf->bits,
@@ -460,7 +464,7 @@ static int vc4_rcl_surface_setup(struct vc4_exec_info *exec,
 		return -EINVAL;
 
 	if (is_write)
-		exec->rcl_write_bo[exec->rcl_write_bo_count++] = *obj;
+		render->rcl_write_bo[render->rcl_write_bo_count++] = *obj;
 
 	if (surf->flags & VC4_SUBMIT_RCL_SURFACE_READ_IS_FULL_RES) {
 		if (surf == &exec->args->zs_write) {
@@ -537,6 +541,7 @@ vc4_rcl_render_config_surface_setup(struct vc4_exec_info *exec,
 				    struct drm_gem_dma_object **obj,
 				    struct drm_vc4_submit_rcl_surface *surf)
 {
+	struct vc4_render_job *render = exec->render;
 	uint8_t tiling = VC4_GET_FIELD(surf->bits,
 				       VC4_RENDER_CONFIG_MEMORY_FORMAT);
 	uint8_t format = VC4_GET_FIELD(surf->bits,
@@ -564,7 +569,7 @@ vc4_rcl_render_config_surface_setup(struct vc4_exec_info *exec,
 	if (!*obj)
 		return -EINVAL;
 
-	exec->rcl_write_bo[exec->rcl_write_bo_count++] = *obj;
+	render->rcl_write_bo[render->rcl_write_bo_count++] = *obj;
 
 	if (tiling > VC4_TILING_FORMAT_LT) {
 		DRM_DEBUG("Bad tiling format\n");

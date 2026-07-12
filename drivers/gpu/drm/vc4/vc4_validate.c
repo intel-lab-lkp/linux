@@ -107,18 +107,19 @@ struct drm_gem_dma_object *
 vc4_use_bo(struct vc4_exec_info *exec, uint32_t hindex)
 {
 	struct vc4_dev *vc4 = exec->dev;
+	struct vc4_render_job *render = exec->render;
 	struct drm_gem_dma_object *obj;
 	struct vc4_bo *bo;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return NULL;
 
-	if (hindex >= exec->bo_count) {
+	if (hindex >= render->bo_count) {
 		DRM_DEBUG("BO index %d greater than BO count %d\n",
-			  hindex, exec->bo_count);
+			  hindex, render->bo_count);
 		return NULL;
 	}
-	obj = to_drm_gem_dma_obj(exec->bo[hindex]);
+	obj = to_drm_gem_dma_obj(render->bo[hindex]);
 	bo = to_vc4_bo(&obj->base);
 
 	if (bo->validated_shader) {
@@ -354,8 +355,8 @@ validate_gl_shader_state(VALIDATE_ARGS)
 static int
 validate_tile_binning_config(VALIDATE_ARGS)
 {
-	struct drm_device *dev = exec->exec_bo->base.dev;
-	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	struct vc4_dev *vc4 = exec->dev;
+	struct drm_device *dev = &vc4->base;
 	uint8_t flags;
 	uint32_t tile_state_size;
 	uint32_t tile_count, bin_addr;
@@ -397,7 +398,7 @@ validate_tile_binning_config(VALIDATE_ARGS)
 	/* The slot we allocated will only be used by this job, and is
 	 * free when the job completes rendering.
 	 */
-	exec->bin_slots |= BIT(bin_slot);
+	exec->render->bin_slots |= BIT(bin_slot);
 	bin_addr = vc4->bin_bo->base.dma_addr + bin_slot * vc4->bin_alloc_size;
 
 	/* The tile state data array is 48 bytes per tile, and we put it at
@@ -488,6 +489,7 @@ vc4_validate_bin_cl(struct drm_device *dev,
 		    void *unvalidated,
 		    struct vc4_exec_info *exec)
 {
+	struct vc4_bin_job *bin = exec->bin;
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
 	uint32_t len = exec->args->bin_cl_size;
 	uint32_t dst_offset = 0;
@@ -544,7 +546,7 @@ vc4_validate_bin_cl(struct drm_device *dev,
 			break;
 	}
 
-	exec->ct0ea = exec->ct0ca + dst_offset;
+	bin->ct0ea = bin->ct0ca + dst_offset;
 
 	if (!exec->found_start_tile_binning_packet) {
 		DRM_DEBUG("Bin CL missing VC4_PACKET_START_TILE_BINNING\n");
@@ -760,6 +762,7 @@ validate_gl_shader_rec(struct drm_device *dev,
 	uint32_t shader_reloc_count = ARRAY_SIZE(shader_reloc_offsets);
 	struct drm_gem_dma_object *bo[ARRAY_SIZE(shader_reloc_offsets) + 8];
 	uint32_t nr_attributes, nr_relocs, packet_size;
+	struct vc4_render_job *render = exec->render;
 	int i;
 
 	nr_attributes = state->addr & 0x7;
@@ -798,12 +801,12 @@ validate_gl_shader_rec(struct drm_device *dev,
 	exec->shader_rec_size -= packet_size;
 
 	for (i = 0; i < shader_reloc_count; i++) {
-		if (src_handles[i] > exec->bo_count) {
+		if (src_handles[i] > render->bo_count) {
 			DRM_DEBUG("Shader handle %d too big\n", src_handles[i]);
 			return -EINVAL;
 		}
 
-		bo[i] = to_drm_gem_dma_obj(exec->bo[src_handles[i]]);
+		bo[i] = to_drm_gem_dma_obj(render->bo[src_handles[i]]);
 		if (!bo[i])
 			return -EINVAL;
 	}

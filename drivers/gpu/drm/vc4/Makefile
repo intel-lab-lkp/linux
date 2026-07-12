@@ -19,6 +19,8 @@ vc4-y := \
 	vc4_perfmon.o \
 	vc4_plane.o \
 	vc4_render_cl.o \
+	vc4_sched.o \
+	vc4_submit.o \
 	vc4_trace_points.o \
 	vc4_txp.o \
 	vc4_v3d.o \
