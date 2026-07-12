@@ -8,6 +8,7 @@
 #ifndef __DMA_IDMA64_H__
 #define __DMA_IDMA64_H__
 
+#include <linux/bits.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/spinlock.h>
@@ -51,7 +52,7 @@
 #define IDMA64C_CTLL_LLP_S_EN		(1 << 28)	/* src block chain */
 
 /* Bitfields in CTL_HI */
-#define IDMA64C_CTLH_BLOCK_TS_MASK	((1 << 17) - 1)
+#define IDMA64C_CTLH_BLOCK_TS_MASK	GENMASK_U32(16, 0)
 #define IDMA64C_CTLH_BLOCK_TS(x)	((x) & IDMA64C_CTLH_BLOCK_TS_MASK)
 #define IDMA64C_CTLH_DONE		(1 << 17)
 

@@ -287,27 +287,43 @@ static struct dma_async_tx_descriptor *idma64_prep_slave_sg(
 	struct idma64_chan *idma64c = to_idma64_chan(chan);
 	struct idma64_desc *desc;
 	struct scatterlist *sg;
-	unsigned int i;
+	unsigned int i, nents;
+	int ndesc;
 
-	desc = kzalloc_flex(*desc, hw, sg_len, GFP_NOWAIT);
+	ndesc = sg_nents_for_dma(sgl, sg_len, IDMA64C_CTLH_BLOCK_TS_MASK);
+	if (ndesc <= 0)
+		return NULL;
+
+	desc = kzalloc_flex(*desc, hw, ndesc, GFP_NOWAIT);
 	if (!desc)
 		return NULL;
 
-	desc->ndesc = sg_len;
+	desc->ndesc = ndesc;
 
+	nents = 0;
 	for_each_sg(sgl, sg, sg_len, i) {
-		struct idma64_hw_desc *hw = &desc->hw[i];
+		dma_addr_t addr = sg_dma_address(sg);
+		unsigned int len = sg_dma_len(sg);
 
-		/* Allocate DMA capable memory for hardware descriptor */
-		hw->lli = dma_pool_alloc(idma64c->pool, GFP_NOWAIT, &hw->llp);
-		if (!hw->lli) {
-			desc->ndesc = i;
-			idma64_desc_free(idma64c, desc);
-			return NULL;
+		while (len) {
+			struct idma64_hw_desc *hwdesc = &desc->hw[nents++];
+			unsigned int chunk = min(len, IDMA64C_CTLH_BLOCK_TS_MASK);
+
+			hwdesc->lli = dma_pool_alloc(idma64c->pool, GFP_NOWAIT,
+						     &hwdesc->llp);
+			if (!hwdesc->lli) {
+				/* nents was already incremented by ++ above */
+				desc->ndesc = nents - 1;
+				idma64_desc_free(idma64c, desc);
+				return NULL;
+			}
+
+			hwdesc->phys = addr;
+			hwdesc->len = chunk;
+
+			addr += chunk;
+			len -= chunk;
 		}
-
-		hw->phys = sg_dma_address(sg);
-		hw->len = sg_dma_len(sg);
 	}
 
 	desc->direction = direction;
