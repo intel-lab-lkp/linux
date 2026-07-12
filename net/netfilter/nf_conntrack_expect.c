@@ -465,13 +465,14 @@ static void evict_oldest_expect(struct nf_conn_help *master_help,
 
 static inline int __nf_ct_expect_check(struct nf_conntrack_expect *expect,
 				       struct nf_conn_help *master_help,
-				       unsigned int flags)
+				       unsigned int flags, unsigned int new_expects)
 {
 	const struct nf_conntrack_expect_policy *p;
 	struct nf_conntrack_expect *i;
 	struct nf_conntrack_net *cnet;
 	struct nf_conntrack_helper *helper;
 	struct net *net = nf_ct_exp_net(expect);
+	unsigned int num_expects;
 	struct hlist_node *next;
 	unsigned int h;
 	int ret = 0;
@@ -497,19 +498,22 @@ static inline int __nf_ct_expect_check(struct nf_conntrack_expect *expect,
 			goto out;
 		}
 	}
+
+	num_expects = master_help->expecting[expect->class];
+
 	/* Will be over limit? */
 	helper = rcu_dereference_protected(master_help->helper,
 					   lockdep_is_held(&nf_conntrack_expect_lock));
 	if (helper) {
 		p = &helper->expect_policy[expect->class];
-		if (master_help->expecting[expect->class] >= p->max_expected)
+		if (num_expects + new_expects >= p->max_expected)
 			evict_oldest_expect(master_help, expect, p);
 	} else {
 		const struct nf_conntrack_expect_policy default_exp_policy = {
 			.max_expected = NF_CT_EXPECT_MAX_CNT,
 		};
 
-		if (master_help->expecting[expect->class] >= default_exp_policy.max_expected)
+		if (num_expects + new_expects >= default_exp_policy.max_expected)
 			evict_oldest_expect(master_help, expect, &default_exp_policy);
 	}
 
@@ -535,7 +539,7 @@ int nf_ct_expect_related_report(struct nf_conntrack_expect *expect,
 		goto out;
 	}
 
-	ret = __nf_ct_expect_check(expect, master_help, flags);
+	ret = __nf_ct_expect_check(expect, master_help, flags, 1);
 	if (ret < 0)
 		goto out;
 
@@ -550,6 +554,35 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(nf_ct_expect_related_report);
+
+int nf_ct_expect_related_pair(struct nf_conntrack_expect *expect[],
+			      unsigned int flags)
+{
+	struct nf_conn_help *master_help;
+	int i, ret;
+
+	spin_lock_bh(&nf_conntrack_expect_lock);
+	master_help = nfct_help(expect[0]->master);
+	if (!master_help || master_help != nfct_help(expect[1]->master)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	for (i = 0; i < 2; i++) {
+		ret = __nf_ct_expect_check(expect[i], master_help, flags, 2);
+		if (ret < 0)
+			goto out;
+	}
+
+	for (i = 0; i < 2; i++) {
+		nf_ct_expect_insert(expect[i], master_help);
+		nf_ct_expect_event_report(IPEXP_NEW, expect[i], 0, 0);
+	}
+out:
+	spin_unlock_bh(&nf_conntrack_expect_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nf_ct_expect_related_pair);
 
 void nf_ct_expect_iterate_destroy(bool (*iter)(struct nf_conntrack_expect *e, void *data),
 				  void *data)
