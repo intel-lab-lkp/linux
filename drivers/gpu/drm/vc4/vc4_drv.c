@@ -167,6 +167,7 @@ static int vc4_open(struct drm_device *dev, struct drm_file *file)
 			goto err_sched;
 	}
 
+	kref_init(&vc4file->refcount);
 	vc4_perfmon_open_file(vc4file);
 	file->driver_priv = vc4file;
 
@@ -178,6 +179,14 @@ err_sched:
 	kfree(vc4file);
 	return ret;
 
+}
+
+void vc4_file_release(struct kref *ref)
+{
+	struct vc4_file *vc4file = container_of(ref, struct vc4_file, refcount);
+
+	vc4_perfmon_close_file(vc4file);
+	kfree(vc4file);
 }
 
 static void vc4_close(struct drm_device *dev, struct drm_file *file)
@@ -195,8 +204,7 @@ static void vc4_close(struct drm_device *dev, struct drm_file *file)
 	for (q = 0; q < VC4_MAX_QUEUES; q++)
 		drm_sched_entity_destroy(&vc4file->sched_entity[q]);
 
-	vc4_perfmon_close_file(vc4file);
-	kfree(vc4file);
+	vc4_file_put(vc4file);
 }
 
 DEFINE_DRM_GEM_FOPS(vc4_drm_fops);
