@@ -1252,6 +1252,9 @@ struct task_struct {
 	struct mutex			*blocked_on;	/* lock we're blocked on */
 	raw_spinlock_t			blocked_lock;
 
+#ifdef CONFIG_DETECT_HUNG_TASK
+	u8				hung_task_reported;
+#endif
 	/*
 	 * The task that is boosting this task; a back link for the current
 	 * donor stack. Set in schedule() -> find_proxy_task() and only stable

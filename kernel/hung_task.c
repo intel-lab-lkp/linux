@@ -25,6 +25,8 @@
 #include <linux/hung_task.h>
 #include <linux/rwsem.h>
 #include <linux/sys_info.h>
+#include <linux/hash.h>
+#include <linux/array_size.h>
 
 #include <trace/events/sched.h>
 
@@ -58,6 +60,16 @@ unsigned long __read_mostly sysctl_hung_task_timeout_secs = CONFIG_DEFAULT_HUNG_
 static unsigned long __read_mostly sysctl_hung_task_check_interval_secs;
 
 static int __read_mostly sysctl_hung_task_warnings = 10;
+
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+#define HUNG_TASK_BLOCKERS_MAX 32
+static unsigned long hung_task_blockers[HUNG_TASK_BLOCKERS_MAX];
+static int hung_task_blockers_count;
+static bool hung_task_has_active;
+static int warnings_decremented;
+static_assert(HUNG_TASK_BLOCKERS_MAX <= BITS_PER_LONG,
+	      "HUNG_TASK_BLOCKERS_MAX exceeds BITS_PER_LONG");
+#endif
 
 static int __read_mostly did_panic;
 static bool hung_task_call_panic;
@@ -125,6 +137,7 @@ static bool task_is_hung(struct task_struct *t, unsigned long timeout)
 	if (switch_count != t->last_switch_count) {
 		t->last_switch_count = switch_count;
 		t->last_switch_time = jiffies;
+		t->hung_task_reported = 0;
 		return false;
 	}
 	if (time_is_after_jiffies(t->last_switch_time + timeout * HZ))
@@ -228,12 +241,14 @@ static inline void debug_show_blocker(struct task_struct *task, unsigned long ti
  * @t: Pointer to the detected hung task.
  * @timeout: Timeout threshold for detecting hung tasks
  * @this_round_count: Count of hung tasks detected in the current iteration
+ * @skip_show_task: Indicating if stack trace should be skipped
  *
  * Print structured information about the specified hung task, if warnings
  * are enabled or if the panic batch threshold is exceeded.
  */
 static void hung_task_info(struct task_struct *t, unsigned long timeout,
-			   unsigned long this_round_count)
+			   unsigned long this_round_count,
+			   unsigned int skip_show_task)
 {
 	trace_sched_process_hang(t);
 
@@ -248,8 +263,16 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 	 * accordingly
 	 */
 	if (sysctl_hung_task_warnings || hung_task_call_panic) {
-		if (sysctl_hung_task_warnings > 0)
+		/*
+		 * Do not exhaust the global warning budget for duplicates;
+		 * only decrement if a full stack trace is being printed.
+		 */
+		if (!skip_show_task && sysctl_hung_task_warnings > 0) {
 			sysctl_hung_task_warnings--;
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+			warnings_decremented++;
+#endif
+		}
 		pr_err("INFO: task %s:%d blocked%s for more than %ld seconds.\n",
 		       t->comm, t->pid, t->in_iowait ? " in I/O wait" : "",
 		       (jiffies - t->last_switch_time) / HZ);
@@ -261,8 +284,12 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 			pr_err("      Blocked by coredump.\n");
 		pr_err("\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
 			" disables this message.\n");
-		sched_show_task(t);
-		debug_show_blocker(t, timeout);
+		if (!skip_show_task) {
+			sched_show_task(t);
+			debug_show_blocker(t, timeout);
+		} else {
+			pr_err("      Stack trace suppressed. Already reported or duplicate\n");
+		}
 
 		if (!sysctl_hung_task_warnings)
 			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
@@ -306,6 +333,13 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	unsigned long this_round_count;
 	int need_warning = sysctl_hung_task_warnings;
 	unsigned long si_mask = hung_task_si_mask;
+	unsigned int skip_show_task;
+	bool scan_completed = false;
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+	unsigned long blocker;
+	static int warnings_reset_value;
+	unsigned long seen_blockers_mask = 0;
+#endif
 
 	/*
 	 * If the system crashed already then all bets are off,
@@ -326,6 +360,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 		}
 
 		if (task_is_hung(t, timeout)) {
+			skip_show_task = t->hung_task_reported;
 			/*
 			 * Increment the global counter so that userspace could
 			 * start migrating tasks ASAP. But count the current
@@ -334,14 +369,86 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 			 */
 			atomic_long_inc(&sysctl_hung_task_detect_count);
 			this_round_count++;
-			hung_task_info(t, timeout, this_round_count);
+
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+			if (!hung_task_has_active) {
+				warnings_reset_value = sysctl_hung_task_warnings;
+				warnings_decremented = 0;
+				hung_task_has_active = true;
+			}
+			blocker = READ_ONCE(t->blocker);
+			if (blocker) {
+				bool found = false;
+				int i, blocker_idx = -1;
+
+				blocker &= ~BLOCKER_TYPE_MASK;
+				for (i = 0; i < hung_task_blockers_count; i++) {
+					if (hung_task_blockers[i] == blocker) {
+						found = true;
+						blocker_idx = i;
+						break;
+					}
+				}
+				if (found || t->hung_task_reported) {
+					skip_show_task = 1;
+					if (found)
+						seen_blockers_mask |= (1UL << blocker_idx);
+				} else {
+					skip_show_task = 0;
+					if (hung_task_blockers_count < ARRAY_SIZE(hung_task_blockers)) {
+						blocker_idx = hung_task_blockers_count;
+						hung_task_blockers[hung_task_blockers_count++] = blocker;
+						seen_blockers_mask |= (1UL << blocker_idx);
+					} else {
+						pr_warn_once("INFO: tracked blocker array full. Untracked blockers may trigger duplicate warnings\n");
+					}
+				}
+			}
+#endif
+
+			hung_task_info(t, timeout, this_round_count,
+				       skip_show_task);
+			t->hung_task_reported = 1;
 		}
 	}
+	scan_completed = true;
  unlock:
 	rcu_read_unlock();
 
-	if (!this_round_count)
+	if (!this_round_count) {
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+		if (scan_completed && hung_task_has_active) {
+			if (sysctl_hung_task_warnings == warnings_reset_value - warnings_decremented) {
+				pr_info("INFO: hung tasks resolved. Cleared %d tracked blocker(s). Warning budget restored to %d\n",
+					hung_task_blockers_count, warnings_reset_value);
+				sysctl_hung_task_warnings = warnings_reset_value;
+			} else {
+				pr_info("INFO: hung tasks resolved. Cleared %d tracked blocker(s). Warning budget manual change retained at %d\n",
+					hung_task_blockers_count, sysctl_hung_task_warnings);
+			}
+			for (int i = 0; i < ARRAY_SIZE(hung_task_blockers); i++)
+				hung_task_blockers[i] = 0;
+			hung_task_blockers_count = 0;
+			hung_task_has_active = false;
+		}
+#endif
 		return;
+	}
+
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+	if (scan_completed) {
+		int i, write_idx = 0;
+		for (i = 0; i < hung_task_blockers_count; i++) {
+			if (seen_blockers_mask & (1UL << i)) {
+				hung_task_blockers[write_idx++] = hung_task_blockers[i];
+			}
+		}
+		for (i = write_idx; i < hung_task_blockers_count; i++) {
+			hung_task_blockers[i] = 0;
+		}
+		hung_task_blockers_count = write_idx;
+	}
+#endif
 
 	if (need_warning || hung_task_call_panic) {
 		si_mask |= SYS_INFO_LOCKS;

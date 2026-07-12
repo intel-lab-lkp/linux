@@ -1574,6 +1574,7 @@ static int copy_mm(u64 clone_flags, struct task_struct *tsk)
 #ifdef CONFIG_DETECT_HUNG_TASK
 	tsk->last_switch_count = tsk->nvcsw + tsk->nivcsw;
 	tsk->last_switch_time = 0;
+	tsk->hung_task_reported = 0;
 #endif
 
 	tsk->mm = NULL;

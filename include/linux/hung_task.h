@@ -37,6 +37,7 @@
 
 #define BLOCKER_TYPE_MASK		0x03UL
 
+
 #ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
 static inline void hung_task_set_blocker(void *lock, unsigned long type)
 {
