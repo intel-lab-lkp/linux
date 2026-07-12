@@ -633,6 +633,7 @@ static int ext2_parse_param(struct fs_context *fc, struct fs_parameter *param)
 static int ext2_setup_super (struct super_block * sb,
 			      struct ext2_super_block * es,
 			      int read_only)
+	__must_hold(&EXT2_SB(sb)->s_lock)
 {
 	int res = 0;
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
@@ -1035,7 +1036,8 @@ static int ext2_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbi->s_desc_per_block = sb->s_blocksize /
 					sizeof (struct ext2_group_desc);
 	sbi->s_sbh = bh;
-	sbi->s_mount_state = le16_to_cpu(es->s_state);
+	/* concurrent access is not possible before the mount completes */
+	context_unsafe(sbi->s_mount_state = le16_to_cpu(es->s_state));
 	sbi->s_addr_per_block_bits =
 		ilog2 (EXT2_ADDR_PER_BLOCK(sb));
 	sbi->s_desc_per_block_bits =
@@ -1203,7 +1205,8 @@ static int ext2_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (EXT2_HAS_COMPAT_FEATURE(sb, EXT3_FEATURE_COMPAT_HAS_JOURNAL))
 		ext2_msg(sb, KERN_WARNING,
 			"warning: mounting ext3 filesystem as ext2");
-	if (ext2_setup_super (sb, es, sb_rdonly(sb)))
+	/* concurrent access is not possible before the mount completes */
+	if (context_unsafe(ext2_setup_super(sb, es, sb_rdonly(sb))))
 		sb->s_flags |= SB_RDONLY;
 	ext2_write_super(sb);
 	return 0;
