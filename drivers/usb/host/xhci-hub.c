@@ -386,25 +386,22 @@ static unsigned int xhci_port_speed(int portsc)
 	return 0;
 }
 
-/**
- * xhci_port_state_to_neutral() - Clean up read portsc value back into writeable
- * @portsc: u32 port value read from portsc register to be cleanup up
+/*
+ * Given a PORTSC register value, return a "neutral" value that can be written
+ * back to the register without changing the current port state.
  *
- * Given a portsc, this function returns a value that would result in the
- * port being in the same state, if the value was written to the port status
- * control register.
- * Save Read Only (RO) bits and save read/write bits where
- * writing a 0 clears the bit and writing a 1 sets the bit (RWS).
- * For all other types (RW1S, RW1CS, RW, and RZ), writing a '0' has no effect.
+ * The function preserves:
+ *  - Read-Only (RO) bits
+ *  - Read/Write (RW) bits
+ *  - Read/Write Sticky (RWS) bits
  *
- * Return: u32 value that can be written back to portsc register without
- * changing port state.
+ * For other bit types (e.g. RW1S, RW1CS, and RsvdZ), writing 0 has no effect,
+ * so they are intentionally cleared in the returned value to avoid unintended
+ * side effects.
  */
-
 u32 xhci_port_state_to_neutral(u32 portsc)
 {
-	/* Save read-only status and port state */
-	return (portsc & PORTSC_RO_BITS) | (portsc & PORTSC_RWS_BITS);
+	return (portsc & PORTSC_RO_BITS) | (portsc & PORTSC_RWS_BITS) | (portsc & PORTSC_RW_BITS);
 }
 EXPORT_SYMBOL_GPL(xhci_port_state_to_neutral);
 
