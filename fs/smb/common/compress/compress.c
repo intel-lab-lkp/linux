@@ -213,7 +213,6 @@ EXPORT_SYMBOL_GPL(smb_compression_decompress);
 struct smb_compression_builder {
 	u8 *pos;
 	u32 remaining;
-	bool first;
 };
 
 /*
@@ -236,14 +235,12 @@ smb_compression_add_payload(struct smb_compression_builder *builder,
 
 	payload = (struct smb2_compression_payload_hdr *)builder->pos;
 	payload->CompressionAlgorithm = alg;
-	payload->Flags = cpu_to_le16(builder->first ?
-		SMB2_COMPRESSION_FLAG_CHAINED : SMB2_COMPRESSION_FLAG_NONE);
+	payload->Flags = cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE);
 	payload->Length = cpu_to_le32(payload_len +
 		(orig_size ? sizeof(payload->OriginalPayloadSize) : 0));
 
 	builder->pos += hdr_len;
 	builder->remaining -= hdr_len;
-	builder->first = false;
 	return payload;
 }
 
@@ -279,7 +276,7 @@ static int smb_compression_add_none(struct smb_compression_builder *builder,
 }
 
 static int smb_compression_add_lz77(struct smb_compression_builder *builder,
-				    const u8 *src, u32 len)
+				    const u8 *src, u32 len, bool chained)
 {
 	struct smb2_compression_payload_hdr *payload;
 	u32 comp_len;
@@ -288,32 +285,40 @@ static int smb_compression_add_lz77(struct smb_compression_builder *builder,
 	if (builder->remaining <= sizeof(*payload))
 		return -ENOSPC;
 
-	comp_len = builder->remaining - sizeof(*payload);
-	payload = smb_compression_add_payload(builder, SMB3_COMPRESS_LZ77,
-					      comp_len, true);
-	if (!payload)
-		return -ENOSPC;
+	comp_len = builder->remaining;
+	if (chained) {
+		comp_len -= sizeof(*payload);
+		payload = smb_compression_add_payload(builder, SMB3_COMPRESS_LZ77,
+						      comp_len, true);
+		if (!payload)
+			return -ENOSPC;
+	}
 
 	rc = smb_lz77_compress(src, len, builder->pos, &comp_len);
 	if (rc)
 		return rc;
 
-	payload->Length = cpu_to_le32(comp_len +
-				      sizeof(payload->OriginalPayloadSize));
-	payload->OriginalPayloadSize = cpu_to_le32(len);
+	if (chained) {
+		payload->Length = cpu_to_le32(comp_len + sizeof(payload->OriginalPayloadSize));
+		payload->OriginalPayloadSize = cpu_to_le32(len);
+	}
+
 	builder->pos += comp_len;
 	builder->remaining -= comp_len;
 	return 0;
 }
 
 /**
- * smb_compression_compress_chained() - build a chained SMB2 transform
+ * smb_compression_compress() - build a SMB2 compression transform (chained optional)
  * @alg: negotiated general-purpose compression algorithm
+ * @chained: is chained compression was negotiated
  * @allow_pattern: whether Pattern_V1 was negotiated
  * @src: complete uncompressed SMB2 message
  * @slen: size of @src
  * @dst: output buffer for the transform
  * @dlen: input capacity of @dst and output transform size
+ * @uncomp: (optional) uncompressed data to be included in the compressed payload
+ * @uncomp_len: (optional) @uncomp size, or amount of bytes to copy uncompressed from @src
  *
  * Following the algorithm in [MS-SMB2] 3.1.4.4, encode sufficiently long
  * repeated runs at the front and back as Pattern_V1 payloads. Compress a
@@ -323,14 +328,18 @@ static int smb_compression_add_lz77(struct smb_compression_builder *builder,
  * This helper does not decide whether the final transform is smaller than the
  * original message. The transport caller owns that policy decision.
  *
+ * If @uncomp is not NULL, copy @uncomp_len from it, as is, to right after the compression header.
+ * Otherwise, if @uncomp_len is >0, copy that many bytes from @src to right after compression
+ * header.
+ *
  * Return: 0 on success, otherwise a negative errno.
  */
-int smb_compression_compress_chained(__le16 alg, bool allow_pattern,
-				     const void *src, u32 slen,
-				     void *dst, u32 *dlen)
+int smb_compression_compress(__le16 alg, bool chained, bool allow_pattern,
+			     const void *src, u32 slen, void *dst, u32 *dlen,
+			     const void *uncomp, u32 uncomp_len)
 {
-	struct smb2_compression_hdr *hdr = dst;
 	struct smb_compression_builder builder;
+	struct smb2_compression_hdr *hdr;
 	const u8 *input = src;
 	u32 forward = 0, backward = 0, middle_len;
 	int rc;
@@ -339,11 +348,38 @@ int smb_compression_compress_chained(__le16 alg, bool allow_pattern,
 	    *dlen <= SMB2_COMPRESSION_CHAINED_HDR_LEN || !slen)
 		return -EINVAL;
 
-	hdr->ProtocolId = SMB2_COMPRESSION_TRANSFORM_ID;
-	hdr->OriginalCompressedSegmentSize = cpu_to_le32(slen);
+	/* Note that the below is a bug, but (chained && !allow_pattern) is a valid combination */
+	if (WARN_ON_ONCE(!chained && allow_pattern))
+		return -EINVAL;
+
+	/*
+	 * Offset @dst for both unchained and chained cases, header is setup at the end.
+	 *
+	 * Note the layouts:
+	 *
+	 * smb2_compression_hdr			| smb2_compression_payload_hdr
+	 * -------------------------------------|-------------------------------
+	 *   ProtocolId				|
+	 *   OriginalCompressedSegmentSize	|
+	 *   CompressionAlgorithm		| CompressionAlgorithm
+	 *   Flags				| Flags
+	 *   Offset				| Length
+	 *
+	 * By aligning @dst to start at the "first payload header", @uncomp_len fits nicely for
+	 * both unchained and chained cases as well.
+	 */
 	builder.pos = (u8 *)dst + SMB2_COMPRESSION_CHAINED_HDR_LEN;
 	builder.remaining = *dlen - SMB2_COMPRESSION_CHAINED_HDR_LEN;
-	builder.first = true;
+
+	if (uncomp_len) {
+		smb_compression_add_none(&builder, uncomp ?: input, uncomp_len);
+
+		if (!uncomp)
+			input += uncomp_len;
+	}
+
+	if (!chained)
+		goto do_lz;
 
 	if (allow_pattern && slen > 32) {
 		for (forward = 1; forward < slen; forward++) {
@@ -366,16 +402,14 @@ int smb_compression_compress_chained(__le16 alg, bool allow_pattern,
 		if (rc)
 			return rc;
 	}
-
+do_lz:
+	rc = 0;
 	middle_len = slen - forward - backward;
-	if (middle_len > 1024)
-		rc = smb_compression_add_lz77(&builder, input + forward,
-					      middle_len);
-	else if (middle_len)
+	if (middle_len > 1024 || !chained)
+		rc = smb_compression_add_lz77(&builder, input + forward, middle_len, chained);
+	else if (middle_len && chained)
 		rc = smb_compression_add_none(&builder,
 					      input + forward, middle_len);
-	else
-		rc = 0;
 	if (rc)
 		return rc;
 
@@ -387,6 +421,28 @@ int smb_compression_compress_chained(__le16 alg, bool allow_pattern,
 	}
 
 	*dlen = builder.pos - (u8 *)dst;
+
+	/*
+	 * Set header at the end so we overwrite the flag of first payload (when chained).
+	 * Also when chained, if @uncomp_len > 0, that uncompressed chunk is also part of the whole
+	 * payload, so we must account for that.
+	 */
+	hdr = dst;
+	hdr->ProtocolId = SMB2_COMPRESSION_TRANSFORM_ID;
+	hdr->OriginalCompressedSegmentSize = cpu_to_le32(slen);
+	hdr->Flags = cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE);
+
+	if (chained) {
+		hdr->OriginalCompressedSegmentSize += cpu_to_le32(uncomp_len);
+		hdr->Flags = cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED);
+	} else if (uncomp_len) {
+		/*
+		 * If we copied an uncompressed chunk, it was added with a "NONE" algorithm,
+		 * so set the correct one when unchained.
+		 */
+		hdr->CompressionAlgorithm = alg;
+	}
+
 	return 0;
 }
-EXPORT_SYMBOL_GPL(smb_compression_compress_chained);
+EXPORT_SYMBOL_GPL(smb_compression_compress);
