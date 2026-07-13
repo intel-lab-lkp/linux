@@ -788,7 +788,6 @@ struct TCP_Server_Info {
 	unsigned int	rdma_readwrite_threshold;
 	unsigned int	retrans;
 	struct {
-		bool requested; /* "compress" mount option set*/
 		bool enabled; /* actually negotiated with server */
 		bool chained; /* chained transforms were negotiated */
 		bool pattern; /* Pattern_V1 chained payloads were negotiated */

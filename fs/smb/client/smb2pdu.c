@@ -785,7 +785,7 @@ assemble_neg_contexts(struct smb2_negotiate_req *req,
 	pneg_ctxt += sizeof(struct smb2_posix_neg_context);
 	neg_context_count++;
 
-	if (server->compression.requested) {
+	if (server->compression.enabled) {
 		build_compression_ctxt((struct smb2_compression_capabilities_context *)
 				pneg_ctxt);
 		ctxt_len = ALIGN(sizeof(struct smb2_compression_capabilities_context), 8);
@@ -835,11 +835,6 @@ static void decode_compress_ctx(struct TCP_Server_Info *server,
 	unsigned int len = le16_to_cpu(ctxt->DataLength);
 	unsigned int count, i;
 
-	server->compression.enabled = false;
-	server->compression.chained = false;
-	server->compression.pattern = false;
-	server->compression.alg = SMB3_COMPRESS_NONE;
-
 	/*
 	 * Caller checked that DataLength remains within SMB boundary. We still
 	 * need to confirm that one CompressionAlgorithms member is accounted
@@ -876,6 +871,12 @@ static void decode_compress_ctx(struct TCP_Server_Info *server,
 	/*
 	 * Pattern_V1 cannot appear in an unchained transform even if a broken
 	 * peer lists it in the algorithm array.
+	 *
+	 * OTOH, the chained flag might have been negotiated without either/both peers having not
+	 * advertised Pattern_V1 algorithm support.
+	 *
+	 * (which doesn't make much sense, but we'll still have to send compressed payloads with
+	 * the chained flag set in "chained && !pattern_v1" cases)
 	 */
 	server->compression.chained =
 		ctxt->Flags == SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED;
@@ -1336,11 +1337,19 @@ SMB2_negotiate(const unsigned int xid,
 	}
 
 	if (server->dialect == SMB311_PROT_ID) {
-		if (rsp->NegotiateContextCount)
+		bool compression_enabled = server->compression.enabled;
+
+		/* Reset compression settings in case of server not supporting it */
+		memset(&server->compression, 0, sizeof(server->compression));
+
+		if (rsp->NegotiateContextCount) {
 			rc = smb311_decode_neg_context(rsp, server,
 						       rsp_iov.iov_len);
-		else
+			if (!rc && compression_enabled && !server->compression.enabled)
+				cifs_server_dbg(VFS, "Server doesn't support compression, disabling\n");
+		} else {
 			cifs_server_dbg(VFS, "Missing expected negotiate contexts\n");
+		}
 	}
 
 	if (server->cipher_type && !rc)

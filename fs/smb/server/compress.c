@@ -133,10 +133,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	max_dst_len = smb_lz77_compressed_alloc_size(src_len) +
-		sizeof(struct smb2_compression_hdr) +
-		3 * sizeof(struct smb2_compression_payload_hdr) +
-		2 * sizeof(struct smb2_compression_pattern_v1);
+	max_dst_len = smb_compress_alloc_size(src_len, work->conn->compress_pattern);
 	out = kvzalloc(sizeof(__be32) + max_dst_len,
 		       KSMBD_DEFAULT_GFP);
 	if (!out) {

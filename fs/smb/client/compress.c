@@ -338,8 +338,9 @@ bool should_compress(const struct cifs_tcon *tcon, const struct smb_rqst *rq)
 int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_send_fn send_fn)
 {
 	struct iov_iter iter;
-	u32 slen, dlen;
+	u32 slen, dlen, shdr_len;
 	void *src, *dst = NULL;
+	bool use_pattern;
 	int ret;
 
 	if (!server || !rq || !rq->rq_iov || !rq->rq_iov->iov_base)
@@ -380,32 +381,27 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 		goto err_free;
 	}
 
-	dlen = smb_lz77_compressed_alloc_size(slen);
+	use_pattern = server->compression.pattern;
+	shdr_len = rq->rq_iov[0].iov_len;
+	dlen = smb_compress_alloc_size(slen, use_pattern) + shdr_len;
 	dst = kvzalloc(dlen, GFP_KERNEL);
 	if (!dst) {
 		ret = -ENOMEM;
 		goto err_free;
 	}
 
-	ret = smb_lz77_compress(src, slen, dst, &dlen);
+	ret = smb_compression_compress(SMB3_COMPRESS_LZ77, server->compression.chained, use_pattern,
+				       src, slen, dst, &dlen, rq->rq_iov[0].iov_base, shdr_len);
 	if (!ret) {
-		struct smb2_compression_hdr hdr = { 0 };
-		struct smb_rqst comp_rq = { .rq_nvec = 3, };
-		struct kvec iov[3];
+		struct smb_rqst comp_rq = { .rq_nvec = 1, };
+		struct kvec iov = {
+			.iov_base = dst,
+			.iov_len = dlen,
+		};
 
-		hdr.ProtocolId = SMB2_COMPRESSION_TRANSFORM_ID;
-		hdr.OriginalCompressedSegmentSize = cpu_to_le32(slen);
-		hdr.CompressionAlgorithm = SMB3_COMPRESS_LZ77;
-		hdr.Flags = SMB2_COMPRESSION_FLAG_NONE;
-		hdr.Offset = cpu_to_le32(rq->rq_iov[0].iov_len);
-
-		iov[0].iov_base = &hdr;
-		iov[0].iov_len = sizeof(hdr);
-		iov[1] = rq->rq_iov[0];
-		iov[2].iov_base = dst;
-		iov[2].iov_len = dlen;
-
-		comp_rq.rq_iov = iov;
+		iov.iov_base = dst;
+		iov.iov_len = dlen;
+		comp_rq.rq_iov = &iov;
 
 		ret = send_fn(server, 1, &comp_rq);
 	} else if (ret == -EMSGSIZE || dlen >= slen) {

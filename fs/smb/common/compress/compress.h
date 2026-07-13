@@ -145,6 +145,34 @@ static __always_inline bool smb_compress_alg_valid(__le16 alg, bool valid_none)
 	return alg == SMB3_COMPRESS_LZ77 || alg == SMB3_COMPRESS_PATTERN;
 }
 
+/**
+ * smb_compress_alloc_size() - Compute total allocation size required for compressed (dst) buffer.
+ * @size:		uncompressed size
+ * @use_pattern:	if Pattern_V1 is enabled
+ *
+ * For any case:
+ * - SMB2 compression hdr
+ * - LZ* payload
+ *
+ * If @use_pattern, also account for:
+ * - 2x payload hdr for Pattern_V1
+ * - 2x Pattern_V1 payloads
+ * - 1x NONE payload hdr
+ *
+ * (possible uncompressed leftovers are included in LZ alloc size)
+ */
+static __always_inline u32 smb_compress_alloc_size(const u32 size, const bool use_pattern)
+{
+	u32 alloc_size;
+
+	alloc_size = sizeof(struct smb2_compression_hdr) + smb_lz77_compressed_alloc_size(size);
+	if (use_pattern)
+		alloc_size += (SMB2_COMPRESSION_PAYLOAD_BASE_LEN * 3) +
+			(sizeof(struct smb2_compression_pattern_v1) * 2);
+
+	return alloc_size;
+}
+
 int smb_compression_decompress(__le16 alg, bool allow_chained,
 			       const void *src, u32 slen, void *dst, u32 dlen);
 int smb_compression_compress(__le16 alg, bool chained, bool allow_pattern,
