@@ -117,6 +117,18 @@ static irqreturn_t host_irq(struct ci_hdrc *ci)
 	return usb_hcd_irq(ci->irq, ci->hcd);
 }
 
+#ifdef CONFIG_SOC_IMX28
+/*
+ * The i.MX28 needs a swp instruction rather than a normal write to the
+ * EHCI registers; provide it through the generic ehci_writel override.
+ */
+static void ci_hdrc_ehci_writel(const struct ehci_hcd *ehci,
+				const unsigned int val, __u32 __iomem *regs)
+{
+	asm("swp %0, %0, [%1]" : : "r"(val), "r"(regs));
+}
+#endif
+
 static int host_start(struct ci_hdrc *ci)
 {
 	struct usb_hcd *hcd;
@@ -150,7 +162,10 @@ static int host_start(struct ci_hdrc *ci)
 	ehci->caps = ci->hw_bank.cap;
 	ehci->has_hostpc = ci->hw_bank.lpm;
 	ehci->has_tdi_phy_lpm = ci->hw_bank.lpm;
-	ehci->imx28_write_fix = ci->imx28_write_fix;
+#ifdef CONFIG_SOC_IMX28
+	if (ci->imx28_write_fix)
+		ehci->ehci_writel = ci_hdrc_ehci_writel;
+#endif
 	ehci->has_ci_pec_bug = ci->has_portsc_pec_bug;
 
 	priv = (struct ehci_ci_priv *)ehci->priv;
