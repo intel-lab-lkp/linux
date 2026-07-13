@@ -376,7 +376,7 @@ static void compliance_mode_recovery(struct timer_list *t)
 
 	for (i = 0; i < rhub->num_ports; i++) {
 		temp = xhci_portsc_readl(rhub->ports[i]);
-		if ((temp & PORT_PLS_MASK) == USB_SS_PORT_LS_COMP_MOD) {
+		if (FIELD_GET(PORT_PLS_MASK, temp) == PLS_COMP_MODE) {
 			/*
 			 * Compliance Mode Detected. Letting USB Core
 			 * handle the Warm Reset
@@ -928,7 +928,7 @@ static bool xhci_pending_portevent(struct xhci_hcd *xhci)
 	while (port_index--) {
 		portsc = xhci_portsc_readl(ports[port_index]);
 		if (portsc & PORT_CHANGE_MASK ||
-		    (portsc & PORT_PLS_MASK) == XDEV_RESUME)
+		    FIELD_GET(PORT_PLS_MASK, portsc) == PLS_RESUME)
 			return true;
 	}
 	port_index = xhci->usb3_rhub.num_ports;
@@ -936,7 +936,7 @@ static bool xhci_pending_portevent(struct xhci_hcd *xhci)
 	while (port_index--) {
 		portsc = xhci_portsc_readl(ports[port_index]);
 		if (portsc & (PORT_CHANGE_MASK | PORT_CAS) ||
-		    (portsc & PORT_PLS_MASK) == XDEV_RESUME)
+		    FIELD_GET(PORT_PLS_MASK, portsc) == PLS_RESUME)
 			return true;
 	}
 	return false;
@@ -4740,7 +4740,7 @@ static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 			spin_unlock_irqrestore(&xhci->lock, flags);
 			xhci_change_max_exit_latency(xhci, udev, 0);
 			readl_poll_timeout(&ports[port_num]->port_reg->portsc, pm_val,
-					   (pm_val & PORT_PLS_MASK) == XDEV_U0,
+					   (pm_val & PORT_PLS_MASK) == PLS_U0,
 					   100, 10000);
 			return 0;
 		}

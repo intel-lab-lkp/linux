@@ -13,26 +13,28 @@
 #define PORT_OC		BIT(3)
 /* true: port reset signaling asserted */
 #define PORT_RESET	BIT(4)
-/* Port Link State - bits 5:8
- * A read gives the current link PM state of the port,
- * a write with Link State Write Strobe set sets the link state.
+/*
+ * bits 8:5 - Port Link State, by default '5'.
+ * Reading gives the current link PM state of the port.
+ * Writing sets the link state, Port Link State Write Strobe (LWS) must be set.
+ * PLS values 0-11 are defined in USB chaper 11.
  */
-#define PORT_PLS_MASK	(0xf << 5)
-#define XDEV_U0		(0x0 << 5)
-#define XDEV_U1		(0x1 << 5)
-#define XDEV_U2		(0x2 << 5)
-#define XDEV_U3		(0x3 << 5)
-#define XDEV_DISABLED	(0x4 << 5)
-#define XDEV_RXDETECT	(0x5 << 5)
-#define XDEV_INACTIVE	(0x6 << 5)
-#define XDEV_POLLING	(0x7 << 5)
-#define XDEV_RECOVERY	(0x8 << 5)
-#define XDEV_HOT_RESET	(0x9 << 5)
-#define XDEV_COMP_MODE	(0xa << 5)
-#define XDEV_TEST_MODE	(0xb << 5)
-#define XDEV_RESUME	(0xf << 5)
-
-/* true: port has power (see HCC_PPC) */
+#define PORT_PLS_MASK	GENMASK(8, 5)
+#define PLS_U0		0
+#define PLS_U1		1
+#define PLS_U2		2
+#define PLS_U3		3
+#define PLS_DISABLED	4
+#define PLS_RXDETECT	5
+#define PLS_INACTIVE	6
+#define PLS_POLLING	7
+#define PLS_RECOVERY	8
+#define PLS_HOT_RESET	9
+#define PLS_COMP_MODE	10
+#define PLS_TEST_MODE	11
+/* Values 12-14 are Reserved */
+#define PLS_RESUME	15
+/* bit 9 - Port Power (PP) */
 #define PORT_POWER	BIT(9)
 /*
  * bits 13:10 - Port Speed

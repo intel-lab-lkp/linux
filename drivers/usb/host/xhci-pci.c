@@ -912,7 +912,7 @@ static int xhci_pci_poweroff_late(struct usb_hcd *hcd, bool do_wakeup)
 		port = &xhci->hw_ports[i];
 		portsc = xhci_portsc_readl(port);
 
-		if ((portsc & PORT_PLS_MASK) != XDEV_U3)
+		if (FIELD_GET(PORT_PLS_MASK, portsc) != PLS_U3)
 			continue;
 
 		if (!port->slot_id || !xhci->devs[port->slot_id]) {

@@ -2375,32 +2375,32 @@ static inline const char *xhci_decode_slot_context(char *str,
 
 static inline const char *xhci_portsc_link_state_string(u32 portsc)
 {
-	switch (portsc & PORT_PLS_MASK) {
-	case XDEV_U0:
+	switch (FIELD_GET(PORT_PLS_MASK, portsc)) {
+	case PLS_U0:
 		return "U0";
-	case XDEV_U1:
+	case PLS_U1:
 		return "U1";
-	case XDEV_U2:
+	case PLS_U2:
 		return "U2";
-	case XDEV_U3:
+	case PLS_U3:
 		return "U3";
-	case XDEV_DISABLED:
+	case PLS_DISABLED:
 		return "Disabled";
-	case XDEV_RXDETECT:
+	case PLS_RXDETECT:
 		return "RxDetect";
-	case XDEV_INACTIVE:
+	case PLS_INACTIVE:
 		return "Inactive";
-	case XDEV_POLLING:
+	case PLS_POLLING:
 		return "Polling";
-	case XDEV_RECOVERY:
+	case PLS_RECOVERY:
 		return "Recovery";
-	case XDEV_HOT_RESET:
+	case PLS_HOT_RESET:
 		return "Hot Reset";
-	case XDEV_COMP_MODE:
+	case PLS_COMP_MODE:
 		return "Compliance mode";
-	case XDEV_TEST_MODE:
+	case PLS_TEST_MODE:
 		return "Test mode";
-	case XDEV_RESUME:
+	case PLS_RESUME:
 		return "Resume";
 	default:
 		break;
