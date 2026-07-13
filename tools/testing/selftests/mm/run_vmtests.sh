@@ -267,6 +267,7 @@ CATEGORY="hugetlb" run_test ./hugetlb-madvise
 CATEGORY="hugetlb" run_test ./hugetlb_dio
 CATEGORY="hugetlb" run_test ./hugetlb_fault_after_madv
 CATEGORY="hugetlb" run_test ./hugetlb_madv_vs_map
+CATEGORY="hugetlb" run_test ./hugetlb_region_cache_race
 
 if test_selected "hugetlb"; then
 	echo "NOTE: These hugetlb tests provide minimal coverage.  Use"	  | tap_prefix
