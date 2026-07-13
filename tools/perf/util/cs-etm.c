@@ -1710,6 +1710,11 @@ static int cs_etm__synth_branch_sample(struct cs_etm_queue *etmq,
 		!(etm->branches_filter & tidq->prev_packet->flags))
 		return 0;
 
+	/* Generate branch sample only for tracing on or taken branches */
+	if (tidq->prev_packet->sample_type != CS_ETM_DISCONTINUITY &&
+	    !cs_etm__packet_has_taken_branch(tidq->prev_packet))
+		return 0;
+
 	perf_sample__init(&sample, /*all=*/true);
 	ip = cs_etm__last_executed_instr(tidq->prev_packet);
 
@@ -1946,21 +1951,9 @@ static int cs_etm__sample(struct cs_etm_queue *etmq,
 	}
 
 	if (etm->synth_opts.branches) {
-		bool generate_sample = false;
-
-		/* Generate sample for tracing on packet */
-		if (tidq->prev_packet->sample_type == CS_ETM_DISCONTINUITY)
-			generate_sample = true;
-
-		/* Generate sample for branch taken packet */
-		if (cs_etm__packet_has_taken_branch(tidq->prev_packet))
-			generate_sample = true;
-
-		if (generate_sample) {
-			ret = cs_etm__synth_branch_sample(etmq, tidq);
-			if (ret)
-				return ret;
-		}
+		ret = cs_etm__synth_branch_sample(etmq, tidq);
+		if (ret)
+			return ret;
 	}
 
 	cs_etm__packet_swap(etm, tidq);
