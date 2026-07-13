@@ -396,7 +396,11 @@ static void call_rcu_tasks_generic(struct rcu_head *rhp, rcu_callback_t func,
 		raw_spin_unlock_irqrestore(&rtp->cbs_gbl_lock, flags);
 	}
 	rcu_read_unlock();
-	/* We can't create the thread unless interrupts are enabled. */
+	// We can't create the kthread with interrupts disabled,
+	// or a spinlock might be held, the kthread creation has
+	// been move to core_initcall() time.
+	// at the same time, use the irq_work does deferred wakeup
+	// to avoid potential lockdep splat.
 	if (needwake && READ_ONCE(rtp->kthread_ptr))
 		irq_work_queue(&rtpcp->rtp_irq_work);
 }
