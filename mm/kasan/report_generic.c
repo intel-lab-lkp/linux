@@ -113,6 +113,9 @@ static const char *get_shadow_bug_type(struct kasan_report_info *info)
 	case KASAN_SLAB_FREE_META:
 		bug_type = "slab-use-after-free";
 		break;
+	case KASAN_LAZY_MMU_PTE:
+		bug_type = "lazy-mmu-pte-access";
+		break;
 	case KASAN_ALLOCA_LEFT:
 	case KASAN_ALLOCA_RIGHT:
 		bug_type = "alloca-out-of-bounds";
