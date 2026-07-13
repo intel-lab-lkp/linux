@@ -1084,6 +1084,24 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 		cxld->interleave_ways, cxld->interleave_granularity);
 
 	if (!cxled) {
+		struct cxl_switch_decoder *cxlsd =
+			to_cxl_switch_decoder(&cxld->dev);
+
+		if (cxld->interleave_ways > CXL_HDM_DECODER0_TL_TARGETS) {
+			dev_err(&port->dev,
+				"decoder%d.%d: interleave ways: %d exceeds target list capacity: %d\n",
+				port->id, cxld->id, cxld->interleave_ways,
+				CXL_HDM_DECODER0_TL_TARGETS);
+			return -ENXIO;
+		}
+		if (cxld->interleave_ways > cxlsd->nr_targets) {
+			dev_err(&port->dev,
+				"decoder%d.%d: interleave ways: %d exceeds targets: %d\n",
+				port->id, cxld->id, cxld->interleave_ways,
+				cxlsd->nr_targets);
+			return -ENXIO;
+		}
+
 		lo = readl(hdm + CXL_HDM_DECODER0_TL_LOW(which));
 		hi = readl(hdm + CXL_HDM_DECODER0_TL_HIGH(which));
 		target_list.value = (hi << 32) + lo;
