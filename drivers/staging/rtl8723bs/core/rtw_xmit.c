@@ -1064,7 +1064,7 @@ u32 rtw_calculate_wlan_pkt_size_by_attribue(struct pkt_attrib *pattrib)
  * 5. move frag chunk from pframe to pxmitframe->mem
  * 6. apply sw-encrypt, if necessary.
  */
-s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct xmit_frame *pxmitframe)
+int rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct xmit_frame *pxmitframe)
 {
 	struct pkt_file pktfile;
 
@@ -1085,7 +1085,7 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	int ret;
 
 	if (!pxmitframe->buf_addr)
-		return _FAIL;
+		return -EINVAL;
 
 	pbuf_start = pxmitframe->buf_addr;
 
@@ -1094,7 +1094,7 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 
 	ret = rtw_make_wlanhdr(padapter, mem_start, pattrib);
 	if (ret)
-		return _FAIL;
+		return ret;
 
 	_rtw_open_pktfile(pkt, &pktfile);
 	ret = _rtw_pktfile_read(&pktfile, NULL, pattrib->pkt_hdrlen);
@@ -1174,7 +1174,7 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 
 	ret = xmitframe_addmic(padapter, pxmitframe);
 	if (ret)
-		return _FAIL;
+		return ret;
 
 	xmitframe_swencrypt(padapter, pxmitframe);
 
@@ -1183,7 +1183,7 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	else
 		pattrib->vcs_mode = NONE_VCS;
 
-	return _SUCCESS;
+	return 0;
 }
 
 /* broadcast or multicast management pkt use BIP, unicast management pkt use CCMP encryption */
