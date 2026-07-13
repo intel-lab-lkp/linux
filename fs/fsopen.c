@@ -15,6 +15,7 @@
 #include <linux/namei.h>
 #include <linux/file.h>
 #include <uapi/linux/mount.h>
+#include <linux/audit.h>
 #include "internal.h"
 #include "mount.h"
 
@@ -357,6 +358,7 @@ SYSCALL_DEFINE5(fsconfig,
 	struct fs_context *fc;
 	int ret;
 	int lookup_flags = 0;
+	const char *value_str = NULL;
 
 	struct fs_parameter param = {
 		.type	= fs_value_is_undefined,
@@ -423,6 +425,7 @@ SYSCALL_DEFINE5(fsconfig,
 			goto out_key;
 		}
 		param.size = strlen(param.string);
+		value_str = param.string;
 		break;
 	case FSCONFIG_SET_BINARY:
 		param.type = fs_value_is_blob;
@@ -432,6 +435,7 @@ SYSCALL_DEFINE5(fsconfig,
 			ret = PTR_ERR(param.blob);
 			goto out_key;
 		}
+		value_str = "<binary>";
 		break;
 	case FSCONFIG_SET_PATH_EMPTY:
 		lookup_flags = LOOKUP_EMPTY;
@@ -445,6 +449,7 @@ SYSCALL_DEFINE5(fsconfig,
 		}
 		param.dirfd = aux;
 		param.size = strlen(param.name->name);
+		value_str = param.name->name;
 		break;
 	case FSCONFIG_SET_FD:
 		param.type = fs_value_is_file;
@@ -457,6 +462,8 @@ SYSCALL_DEFINE5(fsconfig,
 	default:
 		break;
 	}
+
+	audit_log_fsconfig(cmd, param.key, value_str, aux);
 
 	ret = mutex_lock_interruptible(&fc->uapi_mutex);
 	if (ret == 0) {
