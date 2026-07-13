@@ -2943,6 +2943,14 @@ init_sched_domain_shared(struct s_data *d, struct sched_domain *sd, int flags)
 	int cpu;
 
 	/*
+	 * sd->shared is already assigned for this domain level for a
+	 * different flag. Nothing to do since this allocation is
+	 * already accounted for.
+	 */
+	if (sd->shared)
+		return;
+
+	/*
 	 * Multiple domains can try to claim a shared object like
 	 * SD_ASYM_CPUCAPACITY and SD_SHARE_LLC which can alias to
 	 * same cpumask_first(sched_domain_span(sd)) CPU and can
@@ -2970,7 +2978,7 @@ init_sched_domain_shared(struct s_data *d, struct sched_domain *sd, int flags)
 
 	/*
 	 * Use the sd_shared corresponding to the last
-	 * CPU in the span if none are avaialable.
+	 * CPU in the span if none are available.
 	 */
 	if (WARN_ON_ONCE(!sd->shared))
 		sd->shared = sds;
