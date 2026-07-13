@@ -80,4 +80,5 @@ static inline int amd_iommu_snp_disable(void) { return 0; }
 static inline bool amd_iommu_sev_tio_supported(void) { return false; }
 #endif
 
+extern bool amd_iommu_gappi;
 #endif /* _ASM_X86_AMD_IOMMU_H */
