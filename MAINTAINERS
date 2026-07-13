@@ -15057,6 +15057,7 @@ F:	include/linux/llc.h
 F:	include/net/llc*
 F:	include/uapi/linux/llc.h
 F:	net/llc/
+F:	tools/testing/selftests/net/llc_jumbo.py
 
 LM73 HARDWARE MONITOR DRIVER
 M:	Guillaume Ligneul <guillaume.ligneul@gmail.com>

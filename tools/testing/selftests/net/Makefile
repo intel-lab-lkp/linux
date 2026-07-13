@@ -57,6 +57,7 @@ TEST_PROGS := \
 	l2_tos_ttl_inherit.sh \
 	l2tp.sh \
 	link_netns.py \
+	llc_jumbo.py \
 	lwt_dst_cache_ref_loop.sh \
 	macvlan_mcast_shared_mac.sh \
 	msg_zerocopy.sh \
