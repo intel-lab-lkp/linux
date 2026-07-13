@@ -1238,23 +1238,21 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			retval = -ENODEV;
 			break;
 		}
-		portsc = xhci_port_state_to_neutral(portsc);
 		/* FIXME: What new port features do we need to support? */
 		switch (wValue) {
 		case USB_PORT_FEAT_SUSPEND:
-			portsc = xhci_portsc_readl(port);
 			if (FIELD_GET(PORT_PLS_MASK, portsc) != PLS_U0) {
 				/* Resume the port to U0 first */
 				xhci_set_link_state(xhci, port, PLS_U0);
 				spin_unlock_irqrestore(&xhci->lock, flags);
 				msleep(10);
 				spin_lock_irqsave(&xhci->lock, flags);
+				portsc = xhci_portsc_readl(port);
 			}
 			/* In spec software should not attempt to suspend
 			 * a port unless the port reports that it is in the
 			 * enabled (PED = ‘1’,PLS < ‘3’) state.
 			 */
-			portsc = xhci_portsc_readl(port);
 			if ((portsc & PORT_PED) == 0 || (portsc & PORT_PR) ||
 			    FIELD_GET(PORT_PLS_MASK, portsc) >= PLS_U3) {
 				xhci_warn(xhci, "USB core suspending port %d-%d not in U0/U1/U2\n",
@@ -1282,7 +1280,6 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			break;
 		case USB_PORT_FEAT_LINK_STATE:
 			link_state = (wIndex & 0xff00) >> 3;
-			portsc = xhci_portsc_readl(port);
 			/* Disable port */
 			if (link_state == USB_SS_PORT_LS_SS_DISABLED) {
 				xhci_dbg(xhci, "Disable port %d-%d\n",
@@ -1334,8 +1331,8 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 
 				xhci_dbg(xhci, "Enable compliance mode transition for port %d-%d\n",
 					 hcd->self.busnum, portnum + 1);
-				xhci_set_link_state(xhci, port, PLS_COMP_MODE);
 
+				xhci_set_link_state(xhci, port, PLS_COMP_MODE);
 				portsc = xhci_portsc_readl(port);
 				break;
 			}
@@ -1407,7 +1404,6 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 						break;
 				}
 				spin_lock_irqsave(&xhci->lock, flags);
-				portsc = xhci_portsc_readl(port);
 				bus_state->suspended_ports |= 1 << portnum;
 			}
 			break;
@@ -1421,6 +1417,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			xhci_set_port_power(xhci, port, true, &flags);
 			break;
 		case USB_PORT_FEAT_RESET:
+			portsc = xhci_port_state_to_neutral(portsc);
 			portsc |= PORT_PR;
 			xhci_portsc_writel(port, portsc);
 
@@ -1436,6 +1433,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				 hcd->self.busnum, portnum + 1, portsc);
 			break;
 		case USB_PORT_FEAT_BH_PORT_RESET:
+			portsc = xhci_port_state_to_neutral(portsc);
 			portsc |= PORT_WPR;
 			xhci_portsc_writel(port, portsc);
 			portsc = xhci_portsc_readl(port);
@@ -1472,8 +1470,6 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		default:
 			goto error;
 		}
-		/* unblock any posted writes */
-		portsc = xhci_portsc_readl(port);
 		break;
 	case ClearPortFeature:
 		portnum = (wIndex & 0xff) - 1;
@@ -1488,10 +1484,8 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			break;
 		}
 		/* FIXME: What new port features do we need to support? */
-		portsc = xhci_port_state_to_neutral(portsc);
 		switch (wValue) {
 		case USB_PORT_FEAT_SUSPEND:
-			portsc = xhci_portsc_readl(port);
 			xhci_dbg(xhci, "clear USB_PORT_FEAT_SUSPEND\n");
 			xhci_dbg(xhci, "PORTSC %04x\n", portsc);
 			if (portsc & PORT_PR)
@@ -1528,6 +1522,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_C_ENABLE:
 		case USB_PORT_FEAT_C_PORT_LINK_STATE:
 		case USB_PORT_FEAT_C_PORT_CONFIG_ERROR:
+			portsc = xhci_port_state_to_neutral(portsc);
 			xhci_clear_port_change_bit(xhci, wValue, port, portsc);
 			break;
 		case USB_PORT_FEAT_ENABLE:
