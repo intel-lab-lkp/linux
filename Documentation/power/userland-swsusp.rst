@@ -115,6 +115,22 @@ SNAPSHOT_S2RAM
 	to resume the system from RAM if there's enough battery power or restore
 	its state on the basis of the saved suspend image otherwise)
 
+SNAPSHOT_ENABLE_ENCRYPTION
+	Enables encryption of the hibernate image within the kernel. Upon suspend
+	(ie when the snapshot device was opened for reading), returns a blob
+	representing the random encryption key the kernel created to encrypt the
+	hibernate image with. Upon resume (ie when the snapshot device was opened
+	for writing), receives a blob from usermode containing the key material
+	previously returned during hibernate.
+
+SNAPSHOT_SET_USER_KEY
+	Mixes additional user key material into the data portion of an encrypted
+	hibernate image. The ioctl argument points to struct uswsusp_user_key.
+	key_len must be between 8 and USWSUSP_USER_KEY_SIZE bytes, and reserved
+	must be zero. The kernel writes meta_size with the encrypted metadata
+	size that userspace may transfer before providing the user key during
+	resume.
+
 The device's read() operation can be used to transfer the snapshot image from
 the kernel.  It has the following limitations:
 
