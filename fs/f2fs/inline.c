@@ -427,8 +427,11 @@ static int f2fs_move_inline_dirents(struct inode *dir, struct folio *ifolio,
 
 	set_new_dnode(&dn, dir, ifolio, NULL, 0);
 	err = f2fs_reserve_block(&dn, 0);
-	if (err)
+	if (err) {
+		if (dn.inode_folio)
+			f2fs_folio_put(ifolio, true);
 		goto out;
+	}
 
 	if (unlikely(dn.data_blkaddr != NEW_ADDR)) {
 		f2fs_put_dnode(&dn);
