@@ -48,7 +48,6 @@ struct ftmac100_descs {
 };
 
 struct ftmac100 {
-	struct resource *res;
 	void __iomem *base;
 	int irq;
 
@@ -1136,11 +1135,9 @@ static int ftmac100_probe(struct platform_device *pdev)
 		return irq;
 
 	/* setup net_device */
-	netdev = alloc_etherdev(sizeof(*priv));
-	if (!netdev) {
-		err = -ENOMEM;
-		goto err_alloc_etherdev;
-	}
+	netdev = devm_alloc_etherdev(&pdev->dev, sizeof(*priv));
+	if (!netdev)
+		return -ENOMEM;
 
 	SET_NETDEV_DEV(netdev, &pdev->dev);
 	netdev->ethtool_ops = &ftmac100_ethtool_ops;
@@ -1149,7 +1146,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 
 	err = platform_get_ethdev_address(&pdev->dev, netdev);
 	if (err == -EPROBE_DEFER)
-		goto defer_get_mac;
+		return err;
 
 	platform_set_drvdata(pdev, netdev);
 
@@ -1164,20 +1161,9 @@ static int ftmac100_probe(struct platform_device *pdev)
 	netif_napi_add(netdev, &priv->napi, ftmac100_poll);
 
 	/* map io memory */
-	priv->res = request_mem_region(res->start, resource_size(res),
-				       dev_name(&pdev->dev));
-	if (!priv->res) {
-		dev_err(&pdev->dev, "Could not reserve memory region\n");
-		err = -ENOMEM;
-		goto err_req_mem;
-	}
-
-	priv->base = ioremap(res->start, resource_size(res));
-	if (!priv->base) {
-		dev_err(&pdev->dev, "Failed to ioremap ethernet registers\n");
-		err = -EIO;
-		goto err_ioremap;
-	}
+	priv->base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(priv->base))
+		return PTR_ERR(priv->base);
 
 	priv->irq = irq;
 
@@ -1207,32 +1193,17 @@ static int ftmac100_probe(struct platform_device *pdev)
 	return 0;
 
 err_register_netdev:
-	iounmap(priv->base);
-err_ioremap:
-	release_resource(priv->res);
-err_req_mem:
 	netif_napi_del(&priv->napi);
-defer_get_mac:
-	free_netdev(netdev);
-err_alloc_etherdev:
 	return err;
 }
 
 static void ftmac100_remove(struct platform_device *pdev)
 {
-	struct net_device *netdev;
-	struct ftmac100 *priv;
-
-	netdev = platform_get_drvdata(pdev);
-	priv = netdev_priv(netdev);
+	struct net_device *netdev = platform_get_drvdata(pdev);
+	struct ftmac100 *priv = netdev_priv(netdev);
 
 	unregister_netdev(netdev);
-
-	iounmap(priv->base);
-	release_resource(priv->res);
-
 	netif_napi_del(&priv->napi);
-	free_netdev(netdev);
 }
 
 static const struct of_device_id ftmac100_of_ids[] = {
