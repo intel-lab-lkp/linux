@@ -668,12 +668,16 @@ void riscv_iommu_disable(struct riscv_iommu_device *iommu)
 	riscv_iommu_writel(iommu, RISCV_IOMMU_REG_PQCSR, 0);
 }
 
-#define riscv_iommu_read_ddtp(iommu) ({ \
-	u64 ddtp; \
-	riscv_iommu_readq_timeout((iommu), RISCV_IOMMU_REG_DDTP, ddtp, \
-				  !(ddtp & RISCV_IOMMU_DDTP_BUSY), 10, \
-				  RISCV_IOMMU_DDTP_TIMEOUT); \
-	ddtp; })
+static u64 riscv_iommu_read_ddtp(struct riscv_iommu_device *iommu)
+{
+	u32 ddtp_lo;
+
+	riscv_iommu_readl_timeout(iommu, RISCV_IOMMU_REG_DDTP, ddtp_lo,
+				  !(ddtp_lo & RISCV_IOMMU_DDTP_BUSY), 10,
+				  RISCV_IOMMU_DDTP_TIMEOUT);
+
+	return riscv_iommu_readq(iommu, RISCV_IOMMU_REG_DDTP);
+}
 
 static int riscv_iommu_iodir_alloc(struct riscv_iommu_device *iommu)
 {
@@ -1501,7 +1505,7 @@ static int riscv_iommu_init_check(struct riscv_iommu_device *iommu)
 	 * regular boot flow and disable translation when we boot into a kexec
 	 * kernel and the previous kernel left them enabled.
 	 */
-	ddtp = riscv_iommu_readq(iommu, RISCV_IOMMU_REG_DDTP);
+	ddtp = riscv_iommu_read_ddtp(iommu);
 	if (ddtp & RISCV_IOMMU_DDTP_BUSY)
 		return -EBUSY;
 
