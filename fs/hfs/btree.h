@@ -93,6 +93,7 @@ extern void hfs_btree_write(struct hfs_btree *tree);
 extern int hfs_bmap_reserve(struct hfs_btree *tree, u32 rsvd_nodes);
 extern struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree);
 extern void hfs_bmap_free(struct hfs_bnode *node);
+extern bool hfs_bmap_test_bit(struct hfs_bnode *node, u32 node_bit_idx);
 
 /* bnode.c */
 extern void hfs_bnode_read(struct hfs_bnode *node, void *buf, u32 off, u32 len);
@@ -129,3 +130,43 @@ extern int __hfs_brec_find(struct hfs_bnode *bnode, struct hfs_find_data *fd);
 extern int hfs_brec_find(struct hfs_find_data *fd);
 extern int hfs_brec_read(struct hfs_find_data *fd, void *rec, u32 rec_len);
 extern int hfs_brec_goto(struct hfs_find_data *fd, int cnt);
+
+static inline bool is_bnode_offset_valid(struct hfs_bnode *node, u32 off)
+{
+	bool is_valid;
+
+	if (!node || !node->tree)
+		return false;
+
+	is_valid = off < node->tree->node_size;
+
+	if (!is_valid) {
+		pr_err("invalid offset: id %u, type %x, h %u, sz %u, off %u\n",
+		       node->this, node->type, node->height,
+		       node->tree->node_size, off);
+	}
+
+	return is_valid;
+}
+
+static inline u32 check_and_correct_requested_length(struct hfs_bnode *node, u32 off, u32 len)
+{
+	unsigned int node_size;
+
+	if (!is_bnode_offset_valid(node, off))
+		return 0;
+
+	node_size = node->tree->node_size;
+
+	if ((u64)off + len > node_size) {
+		u32 new_len = node_size - off;
+
+		pr_err("corrected len: id %u, type %x, h %u, sz %u, off %u, len %u->%u\n",
+		       node->this, node->type, node->height,
+		       node_size, off, len, new_len);
+
+		return new_len;
+	}
+
+	return len;
+}
