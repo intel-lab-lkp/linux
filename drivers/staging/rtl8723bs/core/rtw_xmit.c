@@ -1082,7 +1082,6 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	u8 *pbuf_start;
 
 	s32 bmcst = is_multicast_ether_addr(pattrib->ra);
-	s32 res = _SUCCESS;
 	int ret;
 
 	if (!pxmitframe->buf_addr)
@@ -1094,10 +1093,8 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	mem_start = pbuf_start +	hw_hdr_offset;
 
 	ret = rtw_make_wlanhdr(padapter, mem_start, pattrib);
-	if (ret) {
-		res = _FAIL;
-		goto exit;
-	}
+	if (ret)
+		return _FAIL;
 
 	_rtw_open_pktfile(pkt, &pktfile);
 	ret = _rtw_pktfile_read(&pktfile, NULL, pattrib->pkt_hdrlen);
@@ -1176,10 +1173,8 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	}
 
 	ret = xmitframe_addmic(padapter, pxmitframe);
-	if (ret) {
-		res = _FAIL;
-		goto exit;
-	}
+	if (ret)
+		return _FAIL;
 
 	xmitframe_swencrypt(padapter, pxmitframe);
 
@@ -1188,8 +1183,7 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	else
 		pattrib->vcs_mode = NONE_VCS;
 
-exit:
-	return res;
+	return _SUCCESS;
 }
 
 /* broadcast or multicast management pkt use BIP, unicast management pkt use CCMP encryption */
