@@ -448,12 +448,14 @@ hid_bpf_hw_request(struct hid_bpf_ctx *ctx, __u8 *buf, size_t buf__sz,
 					      reqtype,
 					      (u64)(long)ctx,
 					      true); /* prevent infinite recursions */
-
+	if (ret < 0)
+		goto done;
 	if (ret > size)
 		ret = size;
 	if (ret > 0)
 		memcpy(buf, dma_data, ret);
 
+done:
 	kfree(dma_data);
 	return ret;
 }
