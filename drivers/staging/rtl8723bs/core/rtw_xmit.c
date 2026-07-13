@@ -911,7 +911,6 @@ s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattr
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	struct qos_priv *pqospriv = &pmlmepriv->qospriv;
 	u8 qos_option = false;
-	signed int res = _SUCCESS;
 	__le16 *fctrl = &pwlanhdr->frame_control;
 
 	memset(hdr, 0, WLANHDR_OFFSET);
@@ -951,8 +950,7 @@ s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattr
 			if (pattrib->qos_en)
 				qos_option = true;
 		} else {
-			res = _FAIL;
-			goto exit;
+			return _FAIL;
 		}
 
 		if (pattrib->mdata)
@@ -1026,8 +1024,7 @@ s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattr
 	} else {
 	}
 
-exit:
-	return res;
+	return _SUCCESS;
 }
 
 s32 rtw_txframes_pending(struct adapter *padapter)
