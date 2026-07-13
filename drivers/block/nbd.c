@@ -1302,6 +1302,13 @@ static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg,
 		goto put_socket;
 	}
 
+	if (nbd->pid) {
+		dev_err(disk_to_dev(nbd->disk),
+			"Cannot add socket to a running device\n");
+		err = -EBUSY;
+		goto put_socket;
+	}
+
 	nsock = kzalloc_obj(*nsock);
 	if (!nsock) {
 		err = -ENOMEM;
