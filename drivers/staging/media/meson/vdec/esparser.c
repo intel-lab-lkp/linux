@@ -399,6 +399,7 @@ void esparser_queue_all_src(struct work_struct *work)
 	struct amvdec_session *sess =
 		container_of(work, struct amvdec_session, esparser_queue_work);
 	struct device *dev = sess->core->dev_dec;
+	struct amvdec_core *core = sess->core;
 	int ret;
 
 	while (1) {
@@ -436,6 +437,9 @@ void esparser_queue_all_src(struct work_struct *work)
 				v4l2_m2m_buf_done(vbuf, VB2_BUF_STATE_ERROR);
 			else
 				v4l2_m2m_buf_done(vbuf, VB2_BUF_STATE_DONE);
+
+			/* Safely notify the V4L2 core sub-framework */
+			v4l2_m2m_job_finish(core->m2m_dev, sess->m2m_ctx);
 
 			/* Set tracking flag indicating transaction completion */
 			processed_frame = true;
