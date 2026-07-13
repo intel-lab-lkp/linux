@@ -291,6 +291,9 @@ static int topstar_acpi_probe(struct platform_device *pdev)
 	struct topstar_laptop *topstar;
 	int err;
 
+	if (!device)
+		return -ENODEV;
+
 	dmi_check_system(topstar_dmi_ids);
 
 	topstar = kzalloc_obj(struct topstar_laptop);
