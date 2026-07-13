@@ -3354,7 +3354,7 @@ static void set_cpus_allowed_dl(struct task_struct *p,
 bool dl_task_needs_bw_move(struct task_struct *p,
 			   const struct cpumask *new_mask)
 {
-	if (!dl_task(p))
+	if (!dl_task(p) || dl_entity_is_special(&p->dl))
 		return false;
 
 	return !cpumask_intersects(task_rq(p)->rd->span, new_mask);
