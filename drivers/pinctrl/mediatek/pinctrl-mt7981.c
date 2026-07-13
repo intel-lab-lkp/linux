@@ -1059,4 +1059,6 @@ static int __init mt7981_pinctrl_init(void)
 }
 arch_initcall(mt7981_pinctrl_init);
 
+MODULE_DESCRIPTION("MediaTek MT7981 Pinctrl Driver");
+MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS("MTK_PINCTRL");

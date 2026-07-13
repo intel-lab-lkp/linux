@@ -60,4 +60,6 @@ static struct platform_driver mtk_pinctrl_driver = {
 
 builtin_platform_driver(mtk_pinctrl_driver);
 
+MODULE_DESCRIPTION("MediaTek MT6397 Pinctrl Driver");
+MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS("MTK_PINCTRL");

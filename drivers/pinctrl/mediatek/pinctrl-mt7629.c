@@ -450,4 +450,6 @@ static int __init mt7629_pinctrl_init(void)
 }
 arch_initcall(mt7629_pinctrl_init);
 
+MODULE_DESCRIPTION("MediaTek MT7629 Pinctrl Driver");
+MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS("MTK_PINCTRL");
