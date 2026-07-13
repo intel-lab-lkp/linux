@@ -1477,6 +1477,7 @@ struct folio *f2fs_get_new_data_folio(struct inode *inode,
 	err = f2fs_reserve_block(&dn, index);
 	if (err) {
 		f2fs_folio_put(folio, true);
+		f2fs_folio_put(ifolio, true);
 		return ERR_PTR(err);
 	}
 	if (!ifolio)
