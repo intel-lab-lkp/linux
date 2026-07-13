@@ -56,11 +56,13 @@ affs_grow_extcache(struct inode *inode, u32 lc_idx)
 	int i, j, key;
 
 	if (!AFFS_I(inode)->i_lc) {
-		char *ptr = (char *)get_zeroed_page(GFP_NOFS);
-		if (!ptr)
+		u32 *lc;
+
+		lc = kzalloc(AFFS_CACHE_SIZE, GFP_NOFS);
+		if (!lc)
 			return -ENOMEM;
-		AFFS_I(inode)->i_lc = (u32 *)ptr;
-		AFFS_I(inode)->i_ac = (struct affs_ext_key *)(ptr + AFFS_CACHE_SIZE / 2);
+		AFFS_I(inode)->i_lc = lc;
+		AFFS_I(inode)->i_ac = (struct affs_ext_key *)(lc + AFFS_LC_SIZE);
 	}
 
 	lc_max = AFFS_LC_SIZE << AFFS_I(inode)->i_lc_shift;
