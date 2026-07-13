@@ -215,6 +215,9 @@ struct hw_perf_event {
 
 	/* Last sync'ed generation of filters */
 	unsigned long			addr_filters_gen;
+#ifdef ARCH_NEED_PERF_HW_NOTIF
+	struct callback_head		arch_hw_notif;
+#endif
 
 /*
  * hw_perf_event::state flags; used to track the PERF_EF_* state.
