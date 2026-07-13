@@ -72,7 +72,7 @@ ip_vs_nq_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
 
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
 
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD ||
+		if (test_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2) ||
 		    !atomic_read(&dest->weight))
 			continue;
 

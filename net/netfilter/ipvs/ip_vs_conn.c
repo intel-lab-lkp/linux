@@ -1006,7 +1006,7 @@ __always_inline void ip_vs_dest_update_overload(struct ip_vs_dest *dest)
 		goto unset;
 	conns = ip_vs_dest_totalconns(dest);
 	if (conns >= u) {
-		dest->flags |= IP_VS_DEST_F_OVERLOAD;
+		set_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2);
 		return;
 	}
 	/* Low threshold defaults to 75% of upper threshold */
@@ -1015,7 +1015,8 @@ __always_inline void ip_vs_dest_update_overload(struct ip_vs_dest *dest)
 		return;
 
 unset:
-	dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
+	if (test_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2))
+		clear_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2);
 }
 
 /*
@@ -1174,7 +1175,7 @@ static inline void ip_vs_unbind_dest(struct ip_vs_conn *cp)
 		atomic_dec(&dest->persistconns);
 	}
 
-	if (dest->flags & IP_VS_DEST_F_OVERLOAD)
+	if (test_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2))
 		ip_vs_dest_update_overload(dest);
 
 	ip_vs_dest_put(dest);

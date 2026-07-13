@@ -73,7 +73,7 @@ struct ip_vs_sh_state {
 static inline bool is_unavailable(struct ip_vs_dest *dest)
 {
 	return atomic_read(&dest->weight) <= 0 ||
-	       dest->flags & IP_VS_DEST_F_OVERLOAD;
+	       test_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2);
 }
 
 /*

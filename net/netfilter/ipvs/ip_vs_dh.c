@@ -196,12 +196,12 @@ static int ip_vs_dh_dest_changed(struct ip_vs_service *svc,
 
 
 /*
- *      If the dest flags is set with IP_VS_DEST_F_OVERLOAD,
+ *      If the dest flags is set with IP_VS_DEST_FL_OVERLOAD,
  *      consider that the server is overloaded here.
  */
 static inline int is_overloaded(struct ip_vs_dest *dest)
 {
-	return dest->flags & IP_VS_DEST_F_OVERLOAD;
+	return test_bit(IP_VS_DEST_FL_OVERLOAD, &dest->flags2);
 }
 
 
