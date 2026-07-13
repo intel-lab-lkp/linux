@@ -71,6 +71,8 @@ separated by spaces:
 	tests for VM_PFNMAP handling
 - process_madv
 	test for process_madv
+- swap_tier
+	test the /sys/kernel/mm/swap/tiers configuration interface
 - cow
 	test copy-on-write semantics
 - thp
@@ -351,6 +353,9 @@ CATEGORY="madv_populate" run_test ./madv_populate
 CATEGORY="process_madv" run_test ./process_madv
 
 CATEGORY="vma_merge" run_test ./merge
+
+# swap tier configuration interface (/sys/kernel/mm/swap/tiers)
+CATEGORY="swap_tier" run_test ./swap_tier
 
 if [ -x ./memfd_secret ]
 then

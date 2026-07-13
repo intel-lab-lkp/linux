@@ -44,6 +44,7 @@ hmm-tests
 memfd_secret
 soft-dirty
 split_huge_page_test
+swap_tier
 ksm_tests
 local_config.h
 local_config.mk
