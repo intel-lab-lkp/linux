@@ -4673,12 +4673,25 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 {
 	struct ceph_mds_request *req, *nreq;
 	unsigned long idx;
+	LIST_HEAD(replay_list);
 
 	doutc(mdsc->fsc->client, "mds%d\n", session->s_mds);
 
+	/* collect unsafe requests under the mutex */
 	mutex_lock(&mdsc->mutex);
-	list_for_each_entry_safe(req, nreq, &session->s_unsafe, r_unsafe_item)
+	list_for_each_entry_safe(req, nreq, &session->s_unsafe,
+				 r_unsafe_item) {
+		ceph_mdsc_get_request(req);
+		list_move(&req->r_unsafe_item, &replay_list);
+	}
+	mutex_unlock(&mdsc->mutex);
+
+	/* replay unsafe requests — __send_request is lockless */
+	list_for_each_entry_safe(req, nreq, &replay_list, r_unsafe_item) {
 		__send_request(session, req, true);
+		list_del_init(&req->r_unsafe_item);
+		ceph_mdsc_put_request(req);
+	}
 
 	/*
 	 * also re-send old requests when MDS enters reconnect stage. So that MDS
@@ -4699,7 +4712,6 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 
 		__send_request(session, req, true);
 	}
-	mutex_unlock(&mdsc->mutex);
 }
 
 static int send_reconnect_partial(struct ceph_reconnect_state *recon_state)
