@@ -124,6 +124,8 @@ static inline void kvm_riscv_vcpu_aia_sync_interrupts(struct kvm_vcpu *vcpu)
 {
 }
 #endif
+bool kvm_riscv_vcpu_aia_has_pending_interrupts(struct kvm_vcpu *vcpu,
+					       u64 mask);
 bool kvm_riscv_vcpu_aia_has_interrupts(struct kvm_vcpu *vcpu, u64 mask);
 
 void kvm_riscv_vcpu_aia_update_hvip(struct kvm_vcpu *vcpu);
