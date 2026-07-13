@@ -455,9 +455,9 @@ static int initialize_controller(struct scsi_device *sdev,
 		else {
 			h->sdev = sdev;
 			list_add_rcu(&h->node, &h->ctlr->dh_list);
+			err = SCSI_DH_OK;
 		}
 		spin_unlock(&list_lock);
-		err = SCSI_DH_OK;
 	}
 	return err;
 }
