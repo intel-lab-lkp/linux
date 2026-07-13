@@ -623,7 +623,7 @@ static int usb_parse_interface(struct device *ddev, int cfgno,
 
 	/* Parse all the endpoint descriptors */
 	n = 0;
-	while (size > 0) {
+	while (size >= sizeof(struct usb_descriptor_header)) {
 		if (((struct usb_descriptor_header *) buffer)->bDescriptorType
 		     == USB_DT_INTERFACE)
 			break;
