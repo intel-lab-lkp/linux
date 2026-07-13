@@ -309,7 +309,7 @@ static void add_rmid_to_limbo(struct rmid_entry *entry)
 	idx = resctrl_arch_rmid_idx_encode(entry->closid, entry->rmid);
 
 	entry->busy = 0;
-	list_for_each_entry(d, &r->mon_domains, hdr.list) {
+	list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 		/*
 		 * For the first limbo RMID in the domain,
 		 * setup up the limbo worker.
@@ -507,6 +507,11 @@ static int __l3_mon_event_count_sum(struct rdtgroup *rdtgrp, struct rmid_read *r
 	 * all domains fail for any reason.
 	 */
 	ret = -EINVAL;
+	/*
+	 * RCU list being traversed with CPU hotplug lock held. lockdep
+	 * unable to help prove this here since this work is scheduled via
+	 * smp_call*(). Not called from MBM overflow handler.
+	 */
 	list_for_each_entry(d, &rr->r->mon_domains, hdr.list) {
 		if (d->ci_id != rr->ci->id)
 			continue;
@@ -1231,7 +1236,7 @@ static int rdtgroup_assign_cntr_event(struct rdt_l3_mon_domain *d, struct rdtgro
 	int ret = 0;
 
 	if (!d) {
-		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+		list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 			int err;
 
 			err = rdtgroup_alloc_assign_cntr(r, d, rdtgrp, mevt);
@@ -1303,7 +1308,7 @@ static void rdtgroup_unassign_cntr_event(struct rdt_l3_mon_domain *d, struct rdt
 	struct rdt_resource *r = resctrl_arch_get_resource(mevt->rid);
 
 	if (!d) {
-		list_for_each_entry(d, &r->mon_domains, hdr.list)
+		list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held())
 			rdtgroup_free_unassign_cntr(r, d, rdtgrp, mevt);
 	} else {
 		rdtgroup_free_unassign_cntr(r, d, rdtgrp, mevt);
@@ -1375,7 +1380,7 @@ static void rdtgroup_update_cntr_event(struct rdt_resource *r, struct rdtgroup *
 	struct rdt_l3_mon_domain *d;
 	int cntr_id;
 
-	list_for_each_entry(d, &r->mon_domains, hdr.list) {
+	list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 		cntr_id = mbm_cntr_get(r, d, rdtgrp, evtid);
 		if (cntr_id >= 0)
 			rdtgroup_assign_cntr(r, d, evtid, rdtgrp->mon.rmid,
@@ -1545,7 +1550,7 @@ ssize_t resctrl_mbm_assign_mode_write(struct kernfs_open_file *of, char *buf,
 		/*
 		 * Reset all the non-achitectural RMID state and assignable counters.
 		 */
-		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+		list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 			mbm_cntr_free_all(r, d);
 			resctrl_reset_rmid_all(r, d);
 		}
@@ -1568,7 +1573,7 @@ int resctrl_num_mbm_cntrs_show(struct kernfs_open_file *of,
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 
-	list_for_each_entry(dom, &r->mon_domains, hdr.list) {
+	list_for_each_entry_rcu(dom, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 		if (sep)
 			seq_putc(s, ';');
 
@@ -1602,7 +1607,7 @@ int resctrl_available_mbm_cntrs_show(struct kernfs_open_file *of,
 		goto out_unlock;
 	}
 
-	list_for_each_entry(dom, &r->mon_domains, hdr.list) {
+	list_for_each_entry_rcu(dom, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 		if (sep)
 			seq_putc(s, ';');
 
@@ -1652,7 +1657,7 @@ int mbm_L3_assignments_show(struct kernfs_open_file *of, struct seq_file *s, voi
 
 		sep = false;
 		seq_printf(s, "%s:", mevt->name);
-		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+		list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 			if (sep)
 				seq_putc(s, ';');
 
@@ -1750,7 +1755,7 @@ next:
 	}
 
 	/* Verify if the dom_id is valid */
-	list_for_each_entry(d, &r->mon_domains, hdr.list) {
+	list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 		if (d->hdr.id == dom_id) {
 			ret = rdtgroup_modify_assign_state(dom_str, d, rdtgrp, mevt);
 			if (ret) {
