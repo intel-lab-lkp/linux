@@ -198,25 +198,32 @@ static inline void unaccount_mem(unsigned long nr_pages)
 		atomic_long_sub(nr_pages, &user->locked_vm);
 	if (current->mm)
 		atomic64_sub(nr_pages, &current->mm->pinned_vm);
+
+	free_uid(user);
 }
 
 static inline int account_mem(unsigned long nr_pages)
 {
 	struct user_struct *user = get_uid(current_user());
 	unsigned long page_limit, cur_pages, new_pages;
+	int rc = 0;
 
 	page_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
 	cur_pages = atomic_long_read(&user->locked_vm);
 	do {
 		new_pages = cur_pages + nr_pages;
-		if (new_pages > page_limit)
-			return -ENOMEM;
+		if (new_pages > page_limit) {
+			rc = -ENOMEM;
+			goto out;
+		}
 	} while (!atomic_long_try_cmpxchg(&user->locked_vm, &cur_pages, new_pages));
 
 	atomic64_add(nr_pages, &current->mm->pinned_vm);
 
-	return 0;
+out:
+	free_uid(user);
+	return rc;
 }
 
 static int kvm_s390_pci_aif_enable(struct zpci_dev *zdev, struct zpci_fib *fib,
