@@ -1772,6 +1772,11 @@ static int drbd_drain_block(struct drbd_peer_device *peer_device, int data_size)
 	int err = 0;
 	void *data;
 
+	if (data_size < 0) {
+		drbd_err(peer_device, "Invalid data block size\n");
+		return -EIO;
+	}
+
 	if (!data_size)
 		return 0;
 
