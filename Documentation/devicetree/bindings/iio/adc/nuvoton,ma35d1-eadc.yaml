@@ -1,0 +1,163 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/nuvoton,ma35d1-eadc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton MA35D1 Enhanced Analog to Digital Converter
+
+maintainers:
+  - Chi-Wen Weng <cwweng@nuvoton.com>
+
+description:
+  The Nuvoton MA35D1 Enhanced Analog to Digital Converter is a 12-bit
+  ADC controller with 8 external input channels, 4 fixed differential
+  input pairs and 1 internal VBAT input. Board wired ADC inputs are
+  described using channel child nodes.
+
+properties:
+  compatible:
+    const: nuvoton,ma35d1-eadc
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 1
+    maxItems: 4
+    items:
+      - description: ADINT0 end-of-conversion interrupt
+      - description: ADINT1 end-of-conversion interrupt
+      - description: ADINT2 end-of-conversion interrupt
+      - description: ADINT3 end-of-conversion interrupt
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  vref-supply:
+    description:
+      External reference voltage supply connected to the VREF pin. If this
+      property is omitted, the internal 1.6 V reference is used.
+
+  dmas:
+    maxItems: 1
+
+  dma-names:
+    const: rx
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  '^channel@[0-7]$':
+    type: object
+    $ref: adc.yaml
+    unevaluatedProperties: false
+
+    properties:
+      reg:
+        maximum: 7
+
+      diff-channels: true
+
+    allOf:
+      - if:
+          properties:
+            reg:
+              const: 0
+        then:
+          properties:
+            diff-channels:
+              items:
+                - const: 0
+                - const: 4
+      - if:
+          properties:
+            reg:
+              const: 1
+        then:
+          properties:
+            diff-channels:
+              items:
+                - const: 1
+                - const: 5
+      - if:
+          properties:
+            reg:
+              const: 2
+        then:
+          properties:
+            diff-channels:
+              items:
+                - const: 2
+                - const: 6
+      - if:
+          properties:
+            reg:
+              const: 3
+        then:
+          properties:
+            diff-channels:
+              items:
+                - const: 3
+                - const: 7
+      - if:
+          properties:
+            reg:
+              enum: [4, 5, 6, 7]
+        then:
+          not:
+            required:
+              - diff-channels
+
+    required:
+      - reg
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - '#address-cells'
+  - '#size-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/nuvoton,ma35d1-clk.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/reset/nuvoton,ma35d1-reset.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        adc@40430000 {
+            compatible = "nuvoton,ma35d1-eadc";
+            reg = <0x0 0x40430000 0x0 0x10000>;
+            interrupts = <GIC_SPI 65 IRQ_TYPE_LEVEL_HIGH>;
+            clocks = <&clk EADC_GATE>;
+            resets = <&reset MA35D1_RESET_EADC0>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            channel@0 {
+                reg = <0>;
+            };
+
+            channel@2 {
+                reg = <2>;
+                diff-channels = <2 6>;
+            };
+        };
+    };
+...
