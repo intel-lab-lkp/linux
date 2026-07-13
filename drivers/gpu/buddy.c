@@ -700,6 +700,41 @@ static void __gpu_buddy_undo_splits(struct gpu_buddy *mm,
 	}
 }
 
+/**
+ * __get_candidate_block - Get a candidate block for allocation.
+ * @mm: GPU buddy manager
+ * @dfs: List of candidate blocks. Populated in two ways: (1) pre-filled by
+ *       the caller before allocation with blocks available for allocation,
+ *       and (2) extended during allocation by block splits, which add the
+ *       resulting sub-blocks for subsequent finer-grained allocation.
+ * @cursor: Pointer to current root index, advanced when iterating roots.
+ *          Pass in a value >= mm->n_roots to disable root iteration entirely,
+ *          restricting block acquisition to @dfs only; this is used in the
+ *          trim scenario where only pre-split sub-blocks should be considered.
+ *
+ * Return: Pointer to the acquired block on success, ERR_PTR(-ENOSPC) when no
+ * more blocks are available.
+ */
+static inline struct gpu_buddy_block*
+__get_candidate_block(struct gpu_buddy *mm, struct list_head *dfs,
+		uint32_t *cursor)
+{
+	struct gpu_buddy_block *block;
+
+	block = list_first_entry_or_null(dfs,
+					struct gpu_buddy_block,
+					tmp_link);
+	if (block) {
+		list_del(&block->tmp_link);
+		return block;
+	}
+
+	if (*cursor >= mm->n_roots)
+		return ERR_PTR(-ENOSPC);
+
+	return mm->roots[(*cursor)++];
+}
+
 static struct gpu_buddy_block *
 __alloc_range_bias(struct gpu_buddy *mm,
 		   u64 start, u64 end,
@@ -711,24 +746,17 @@ __alloc_range_bias(struct gpu_buddy *mm,
 	struct gpu_buddy_block *block;
 	LIST_HEAD(dfs);
 	int err;
-	int i;
+	uint32_t cursor = 0;
 
 	end = end - 1;
-
-	for (i = 0; i < mm->n_roots; ++i)
-		list_add_tail(&mm->roots[i]->tmp_link, &dfs);
 
 	do {
 		u64 block_start;
 		u64 block_end;
 
-		block = list_first_entry_or_null(&dfs,
-						 struct gpu_buddy_block,
-						 tmp_link);
-		if (!block)
+		block = __get_candidate_block(mm, &dfs, &cursor);
+		if (IS_ERR(block))
 			break;
-
-		list_del(&block->tmp_link);
 
 		if (gpu_buddy_block_order(block) < order)
 			continue;
@@ -1023,6 +1051,7 @@ static int __alloc_range(struct gpu_buddy *mm,
 	LIST_HEAD(allocated);
 	u64 end;
 	int err;
+	uint32_t cursor = list_empty(dfs) ? 0 : mm->n_roots;
 
 	end = start + size - 1;
 
@@ -1030,13 +1059,9 @@ static int __alloc_range(struct gpu_buddy *mm,
 		u64 block_start;
 		u64 block_end;
 
-		block = list_first_entry_or_null(dfs,
-						 struct gpu_buddy_block,
-						 tmp_link);
-		if (!block)
+		block = __get_candidate_block(mm, dfs, &cursor);
+		if (IS_ERR(block))
 			break;
-
-		list_del(&block->tmp_link);
 
 		block_start = gpu_buddy_block_offset(block);
 		block_end = block_start + gpu_buddy_block_size(mm, block) - 1;
@@ -1109,10 +1134,6 @@ static int __gpu_buddy_alloc_range(struct gpu_buddy *mm,
 				   struct list_head *blocks)
 {
 	LIST_HEAD(dfs);
-	int i;
-
-	for (i = 0; i < mm->n_roots; ++i)
-		list_add_tail(&mm->roots[i]->tmp_link, &dfs);
 
 	return __alloc_range(mm, &dfs, start, size,
 			     blocks, total_allocated_on_err);
