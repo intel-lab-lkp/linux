@@ -1838,8 +1838,6 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 	}
 	port_index = max_ports;
 	while (port_index--) {
-		portsc = xhci_portsc_readl(ports[port_index]);
-
 		/* warm reset CAS limited ports stuck in polling/compliance */
 		if ((xhci->quirks & XHCI_MISSING_CAS) &&
 		    (hcd->speed >= HCD_USB3) &&
@@ -1849,11 +1847,17 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 			clear_bit(port_index, &bus_state->bus_suspended);
 			continue;
 		}
+
+		portsc = xhci_portsc_readl(ports[port_index]);
+		portsc = xhci_port_state_to_neutral(portsc);
+
+		/* Disable wake for all ports */
+		portsc &= ~PORT_WAKE_BITS;
+
 		/* resume if we suspended the link, and it is still suspended */
-		if (test_bit(port_index, &bus_state->bus_suspended))
+		if (test_bit(port_index, &bus_state->bus_suspended)) {
 			switch (FIELD_GET(PORT_PLS_MASK, portsc)) {
 			case PLS_U3:
-				portsc = xhci_port_state_to_neutral(portsc);
 				FIELD_MODIFY(PORT_PLS_MASK, &portsc, next_state);
 				portsc |= PORT_LWS;
 				break;
@@ -1866,8 +1870,8 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 					  &bus_state->bus_suspended);
 				break;
 			}
-		/* disable wake for all ports, write new link state if needed */
-		portsc &= ~(PORTSC_RW1CS_BITS | PORT_WAKE_BITS);
+		}
+
 		xhci_portsc_writel(ports[port_index], portsc);
 	}
 
