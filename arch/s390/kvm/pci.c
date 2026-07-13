@@ -229,13 +229,15 @@ out:
 static int kvm_s390_pci_aif_enable(struct zpci_dev *zdev, struct zpci_fib *fib,
 				   bool assist)
 {
-	struct page *pages[1], *aibv_page, *aisb_page = NULL;
-	unsigned int msi_vecs, idx;
+	struct page *aibv_page, *aisb_page = NULL;
+	int gisc, npages, npinned, pcount = 0;
+	unsigned int msi_vecs, idx, size;
 	struct zpci_gaite *gaite;
 	unsigned long hva, bit;
+	struct kvm_zdev *kzdev;
 	struct kvm *kvm;
 	phys_addr_t gaddr;
-	int rc = 0, gisc, npages, pcount = 0;
+	int rc = 0;
 
 	/*
 	 * Interrupt forwarding is only applicable if the device is already
@@ -244,6 +246,7 @@ static int kvm_s390_pci_aif_enable(struct zpci_dev *zdev, struct zpci_fib *fib,
 	if (zdev->gisa == 0)
 		return -EINVAL;
 
+	kzdev = zdev->kzdev;
 	kvm = zdev->kzdev->kvm;
 	msi_vecs = min_t(unsigned int, fib->fmt0.noi, zdev->max_msi);
 
@@ -253,32 +256,63 @@ static int kvm_s390_pci_aif_enable(struct zpci_dev *zdev, struct zpci_fib *fib,
 		return gisc;
 
 	/* Replace AIBV address */
+	size = BITS_TO_LONGS(msi_vecs) * sizeof(unsigned long);
+	npages = DIV_ROUND_UP((fib->fmt0.aibv & ~PAGE_MASK) + size, PAGE_SIZE);
+	if (npages > MAX_AIF_PAGES) {
+		rc = -EINVAL;
+		goto out;
+	}
+
 	idx = srcu_read_lock(&kvm->srcu);
 	hva = gfn_to_hva(kvm, gpa_to_gfn((gpa_t)fib->fmt0.aibv));
-	npages = pin_user_pages_fast(hva, 1, FOLL_WRITE | FOLL_LONGTERM, pages);
+	npinned = pin_user_pages_fast(hva, npages, FOLL_WRITE | FOLL_LONGTERM,
+				      kzdev->aibv_pages);
 	srcu_read_unlock(&kvm->srcu, idx);
-	if (npages < 1) {
+	if (npinned <= 0) {
 		rc = -EIO;
 		goto out;
 	}
-	aibv_page = pages[0];
-	pcount++;
+
+	kzdev->aibv_npages = npinned;
+	if (npinned < npages) {
+		rc = -EIO;
+		goto unpin1;
+	}
+
+	pcount += npinned;
+	aibv_page = kzdev->aibv_pages[0];
 	gaddr = page_to_phys(aibv_page) + (fib->fmt0.aibv & ~PAGE_MASK);
 	fib->fmt0.aibv = gaddr;
 
 	/* Pin the guest AISB if one was specified */
 	if (fib->fmt0.sum == 1) {
+		size = (fib->fmt0.aisbo / 8) + 1;
+		npages = DIV_ROUND_UP((fib->fmt0.aisb & ~PAGE_MASK) + size,
+				      PAGE_SIZE);
+
+		if (npages > MAX_AIF_PAGES) {
+			rc = -EINVAL;
+			goto unpin1;
+		}
+
 		idx = srcu_read_lock(&kvm->srcu);
 		hva = gfn_to_hva(kvm, gpa_to_gfn((gpa_t)fib->fmt0.aisb));
-		npages = pin_user_pages_fast(hva, 1, FOLL_WRITE | FOLL_LONGTERM,
-					     pages);
+		npinned = pin_user_pages_fast(hva, npages,
+					     FOLL_WRITE | FOLL_LONGTERM,
+					     kzdev->aisb_pages);
 		srcu_read_unlock(&kvm->srcu, idx);
-		if (npages < 1) {
+		if (npinned <= 0) {
 			rc = -EIO;
 			goto unpin1;
 		}
-		aisb_page = pages[0];
-		pcount++;
+
+		kzdev->aisb_npages = npinned;
+		if (npinned < npages) {
+			rc = -EIO;
+			goto unpin2;
+		}
+		aisb_page = kzdev->aisb_pages[0];
+		pcount += npinned;
 	}
 
 	/* Account for pinned pages, roll back on failure */
@@ -366,10 +400,14 @@ unlock:
 		unaccount_mem(pcount);
 	mutex_unlock(&aift->aift_lock);
 unpin2:
-	if (fib->fmt0.sum == 1)
-		unpin_user_page(aisb_page);
+	if (fib->fmt0.sum == 1) {
+		unpin_user_pages(kzdev->aisb_pages,
+				 kzdev->aisb_npages);
+		kzdev->aisb_npages = 0;
+	}
 unpin1:
-	unpin_user_page(aibv_page);
+	unpin_user_pages(kzdev->aibv_pages, kzdev->aibv_npages);
+	kzdev->aibv_npages = 0;
 out:
 	kvm_s390_gisc_unregister(kvm, fib->fmt0.isc);
 	return rc;
@@ -426,12 +464,14 @@ static int kvm_s390_pci_aif_disable(struct zpci_dev *zdev, bool force)
 	kzdev->fib.fmt0.aibv = 0;
 
 	if (vpage) {
-		unpin_user_page(vpage);
-		pcount++;
+		unpin_user_pages(kzdev->aibv_pages, kzdev->aibv_npages);
+		pcount += kzdev->aibv_npages;
+		kzdev->aibv_npages = 0;
 	}
 	if (spage) {
-		unpin_user_page(spage);
-		pcount++;
+		unpin_user_pages(kzdev->aisb_pages, kzdev->aisb_npages);
+		pcount += kzdev->aisb_npages;
+		kzdev->aisb_npages = 0;
 	}
 	if (pcount > 0)
 		unaccount_mem(pcount);

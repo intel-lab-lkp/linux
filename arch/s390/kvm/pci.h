@@ -17,10 +17,15 @@
 #include <asm/airq.h>
 #include <asm/cpu.h>
 
+#define MAX_AIF_PAGES 2
 struct kvm_zdev {
 	struct zpci_dev *zdev;
 	struct kvm *kvm;
 	struct zpci_fib fib;
+	struct page *aibv_pages[MAX_AIF_PAGES];
+	int aibv_npages;
+	struct page *aisb_pages[MAX_AIF_PAGES];
+	int aisb_npages;
 	struct list_head entry;
 };
 
