@@ -797,7 +797,7 @@ static int update_attrib(struct adapter *padapter, struct sk_buff *pkt, struct p
 	return 0;
 }
 
-static s32 xmitframe_addmic(struct adapter *padapter, struct xmit_frame *pxmitframe)
+static int xmitframe_addmic(struct adapter *padapter, struct xmit_frame *pxmitframe)
 {
 	signed int			curfragnum, length;
 	u8 *pframe, *payload, mic[8];
@@ -820,12 +820,12 @@ static s32 xmitframe_addmic(struct adapter *padapter, struct xmit_frame *pxmitfr
 
 			if (bmcst) {
 				if (!memcmp(psecuritypriv->dot118021XGrptxmickey[psecuritypriv->dot118021XGrpKeyid].skey, null_key, 16))
-					return _FAIL;
+					return -EINVAL;
 				/* start to calculate the mic code */
 				rtw_secmicsetkey(&micdata, psecuritypriv->dot118021XGrptxmickey[psecuritypriv->dot118021XGrpKeyid].skey);
 			} else {
 				if (!memcmp(&pattrib->dot11tkiptxmickey.skey[0], null_key, 16))
-					return _FAIL;
+					return -EINVAL;
 				/* start to calculate the mic code */
 				rtw_secmicsetkey(&micdata, &pattrib->dot11tkiptxmickey.skey[0]);
 			}
@@ -876,7 +876,7 @@ static s32 xmitframe_addmic(struct adapter *padapter, struct xmit_frame *pxmitfr
 			pattrib->last_txcmdsz += 8;
 			}
 	}
-	return _SUCCESS;
+	return 0;
 }
 
 static s32 xmitframe_swencrypt(struct adapter *padapter, struct xmit_frame *pxmitframe)
@@ -1175,7 +1175,8 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 		memcpy(mem_start, pbuf_start + hw_hdr_offset, pattrib->hdrlen);
 	}
 
-	if (xmitframe_addmic(padapter, pxmitframe) == _FAIL) {
+	ret = xmitframe_addmic(padapter, pxmitframe);
+	if (ret) {
 		res = _FAIL;
 		goto exit;
 	}
