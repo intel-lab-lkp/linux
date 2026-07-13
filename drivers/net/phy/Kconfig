@@ -237,6 +237,16 @@ config DAVICOM_PHY
 	help
 	  Currently supports dm9161e and dm9131
 
+config DAP8211R_PHY
+	tristate "DAPU Telecom DAP8211R(I) Gigabit Ethernet PHY"
+	depends on OF
+	help
+	  Support for the DAPU Telecom DAP8211R(I) Gigabit Ethernet PHY.
+	  This PHY is designed for enterprise and industrial networking
+	  applications, supporting 10/100/1000 Mbps operation.
+	  RGMII with: configurable TX/RX clock delays, optional flag to enable
+	  180-degree TX clock phase shift and internal packet generator.
+
 config ICPLUS_PHY
 	tristate "ICPlus PHYs"
 	help
