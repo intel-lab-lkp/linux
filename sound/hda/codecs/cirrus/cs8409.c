@@ -766,6 +766,9 @@ static int cs42l42_handle_tip_sense(struct sub_codec *cs42l42, unsigned int reg_
 	/* TIP_SENSE INSERT/REMOVE */
 	switch (reg_ts_status) {
 	case CS42L42_TS_PLUG:
+		// if jack is already plugged, ignore plug event
+		if (cs42l42->hp_jack_in)
+			break;
 		if (cs42l42->no_type_dect) {
 			status_changed = 1;
 			cs42l42->hp_jack_in = 1;
@@ -776,6 +779,9 @@ static int cs42l42_handle_tip_sense(struct sub_codec *cs42l42, unsigned int reg_
 		break;
 
 	case CS42L42_TS_UNPLUG:
+		// if jack is already unplugged, ignore unplug event
+		if (!cs42l42->hp_jack_in && !cs42l42->mic_jack_in)
+			break;
 		status_changed = 1;
 		cs42l42->hp_jack_in = 0;
 		cs42l42->mic_jack_in = 0;
@@ -1092,12 +1098,14 @@ static int cs8409_cs42l42_exec_verb(struct hdac_device *dev, unsigned int cmd, u
 	switch (nid) {
 	case CS8409_CS42L42_HP_PIN_NID:
 		if (verb == AC_VERB_GET_PIN_SENSE) {
+			cs42l42_jack_unsol_event(cs42l42);
 			*res = (cs42l42->hp_jack_in) ? AC_PINSENSE_PRESENCE : 0;
 			return 0;
 		}
 		break;
 	case CS8409_CS42L42_AMIC_PIN_NID:
 		if (verb == AC_VERB_GET_PIN_SENSE) {
+			cs42l42_jack_unsol_event(cs42l42);
 			*res = (cs42l42->mic_jack_in) ? AC_PINSENSE_PRESENCE : 0;
 			return 0;
 		}
@@ -1157,6 +1165,11 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 		case CS8409_WARLOCK_MLK_DUAL_MIC:
 			spec->scodecs[CS8409_CODEC0]->full_scale_vol = CS42L42_FULL_SCALE_VOL_0DB;
 			spec->speaker_pdn_gpio = CS8409_WARLOCK_SPEAKER_PDN;
+			// if Dell Inspiron 15 3520, poll jack at 250ms
+			if (codec->bus->pci->subsystem_vendor == 0x1028 &&
+			    codec->bus->pci->subsystem_device == 0x0bb2) {
+				codec->jackpoll_interval = msecs_to_jiffies(250);
+			}
 			break;
 		default:
 			spec->scodecs[CS8409_CODEC0]->full_scale_vol =
@@ -1208,8 +1221,10 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 		 * Run immediately after init.
 		 */
 		if (spec->init_done && spec->build_ctrl_done
-			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in)
+			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in) {
 			cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+			cs42l42_enable_jack_detect(spec->scodecs[CS8409_CODEC0]);
+		}
 		break;
 	default:
 		break;
