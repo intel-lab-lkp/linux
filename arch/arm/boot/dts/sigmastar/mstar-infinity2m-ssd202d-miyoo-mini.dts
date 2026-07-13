@@ -18,6 +18,12 @@
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
+
+	vibrator {
+		compatible = "gpio-vibrator";
+		enable-gpios = <&gpio SSD20XD_GPIO_UART0_TX GPIO_ACTIVE_LOW>;
+	};
+
 };
 
 &pm_uart {
