@@ -430,7 +430,7 @@ static struct sk_buff *lan937x_xmit(struct sk_buff *skb,
 	u16 queue_mapping = skb_get_queue_mapping(skb);
 	u8 prio = netdev_txq_to_tc(dev, queue_mapping);
 	struct dsa_port *dp = dsa_user_to_port(dev);
-	const struct ethhdr *hdr = eth_hdr(skb);
+	const struct ethhdr *hdr = skb_eth_hdr(skb);
 	__be16 *tag;
 	u16 val;
 
