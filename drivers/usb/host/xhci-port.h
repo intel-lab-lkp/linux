@@ -168,6 +168,10 @@
 #define PORT_TDR_MASK		GENMASK(7, 4)
 /* bits 31:8 - RsvdP */
 
+/* USB3 Port Hardware LPM Control Register (PORTHLPMC) 5.4.11.1 */
+/* bits 15:0 - Link Soft Error Count, if LSECC=1 else RsvdP */
+/* bits 31:16 - RsvdP */
+
 /* USB2 Protocol PORTHLPMC */
 #define PORT_HIRDM(p)((p) & 3)
 #define PORT_L1_TIMEOUT(p)(((p) & 0xff) << 2)
