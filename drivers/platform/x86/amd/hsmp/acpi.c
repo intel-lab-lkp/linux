@@ -71,6 +71,8 @@ static inline int hsmp_get_uid(struct device *dev, u16 *sock_ind)
 {
 	char *uid;
 
+	if (!ACPI_COMPANION(dev))
+		return -ENODEV;
 	/*
 	 * UID (ID00, ID01..IDXX) is used for differentiating sockets,
 	 * read it and strip the "ID" part of it and convert the remaining
