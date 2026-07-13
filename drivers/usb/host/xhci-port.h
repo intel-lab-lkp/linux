@@ -56,11 +56,11 @@
 #define	PORT_SPEED_SS		4
 #define	PORT_SPEED_SSP		5
 
-/* Port Indicator Control */
-#define PORT_LED_OFF	(0 << 14)
-#define PORT_LED_AMBER	(1 << 14)
-#define PORT_LED_GREEN	(2 << 14)
-#define PORT_LED_MASK	(3 << 14)
+/* bits 15:14 - Port Indicator Control */
+#define PORT_PIC_MASK	GENMASK(15, 14)
+#define PIC_OFF		0
+#define PIC_AMBER	1
+#define PIC_GREEN	2
 /* Port Link State Write Strobe - set this when changing link state */
 #define PORT_LINK_STROBE	BIT(16)
 /* true: connect status change */
