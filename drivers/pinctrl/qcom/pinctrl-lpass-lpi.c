@@ -559,31 +559,25 @@ int lpi_pinctrl_probe(struct platform_device *pdev)
 	pctrl->chip.label = dev_name(dev);
 	pctrl->chip.can_sleep = true;
 
-	mutex_init(&pctrl->lock);
+	ret = devm_mutex_init(&pdev->dev, &pctrl->lock);
+	if (ret)
+		return ret;
 
 	pctrl->ctrl = devm_pinctrl_register(dev, &pctrl->desc, pctrl);
-	if (IS_ERR(pctrl->ctrl)) {
-		ret = PTR_ERR(pctrl->ctrl);
-		dev_err(dev, "failed to add pin controller\n");
-		goto err_pinctrl;
-	}
+	if (IS_ERR(pctrl->ctrl))
+		return PTR_ERR(pctrl->ctrl);
 
 	ret = lpi_build_pin_desc_groups(pctrl);
 	if (ret)
-		goto err_pinctrl;
+		return ret;
 
 	ret = devm_gpiochip_add_data(dev, &pctrl->chip, pctrl);
 	if (ret) {
 		dev_err(pctrl->dev, "can't add gpio chip\n");
-		goto err_pinctrl;
+		return ret;
 	}
 
 	return 0;
-
-err_pinctrl:
-	mutex_destroy(&pctrl->lock);
-
-	return ret;
 }
 EXPORT_SYMBOL_GPL(lpi_pinctrl_probe);
 
@@ -591,8 +585,6 @@ void lpi_pinctrl_remove(struct platform_device *pdev)
 {
 	struct lpi_pinctrl *pctrl = platform_get_drvdata(pdev);
 	int i;
-
-	mutex_destroy(&pctrl->lock);
 
 	for (i = 0; i < pctrl->data->npins; i++)
 		pinctrl_generic_remove_group(pctrl->ctrl, i);
