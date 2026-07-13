@@ -28,19 +28,16 @@ num_mb=8
 mode=211
 
 # base speed test
-lsmod | grep pcrypt && modprobe -r pcrypt
 dmesg -C
-modprobe tcrypt alg="pcrypt(rfc4106(gcm(aes)))" type=3
+modprobe tcrypt alg="rfc4106(gcm(aes))" type=3
 modprobe tcrypt mode=${mode} sec=${sec} num_mb=${num_mb}
 dmesg > ${seq_num}_base_dmesg.log
 
 # new speed test
-lsmod | grep pcrypt && modprobe -r pcrypt
 dmesg -C
-modprobe tcrypt alg="pcrypt(rfc4106(gcm(aes)))" type=3
+modprobe tcrypt alg="rfc4106(gcm(aes))" type=3
 modprobe tcrypt mode=${mode} sec=${sec} num_mb=${num_mb}
 dmesg > ${seq_num}_new_dmesg.log
-lsmod | grep pcrypt && modprobe -r pcrypt
 
 tools/crypto/tcrypt/tcrypt_speed_compare.py \
     ${seq_num}_base_dmesg.log \
