@@ -328,8 +328,8 @@ static int io_ring_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg,
 		buf = io_ring_head_to_buf(br, ++head, bl->mask);
 	} while (--nr_iovs);
 
-	if (arg->mode & KBUF_MODE_FREE)
-		kfree(arg->iovs);
+	if ((arg->mode & KBUF_MODE_FREE) && arg->iovs != org_iovs)
+		kfree(org_iovs);
 
 	if (head == tail)
 		req->flags |= REQ_F_BL_EMPTY;
