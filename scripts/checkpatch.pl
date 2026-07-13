@@ -879,6 +879,9 @@ our %deprecated_apis = (
 	"DEFINE_IDR"				=> "DEFINE_XARRAY",
 	"idr_init"				=> "xa_init",
 	"idr_init_base"				=> "xa_init_flags",
+	"v4l2_pipeline_link_notify"		=> "",
+	"v4l2_pipeline_pm_get"			=> "",
+	"v4l2_pipeline_pm_put"			=> "",
 );
 
 #Create a search pattern for all these strings to speed up a loop below
