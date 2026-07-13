@@ -112,14 +112,24 @@
 #define PORT_WDE	BIT(26)
 /* bit 27 - Wake on Over-current Enable */
 #define PORT_WOE	BIT(27)
+#define	PORT_WAKE_BITS	(PORT_WOE | PORT_WDE | PORT_WCE)
 /* bits 29:28 - RsvdZ */
 /* bit 30 - Device Removable, for USB 3.0 roothub emulation */
 #define PORT_DR		BIT(30)
 /* bit 31 - Warm Port Reset, complete when PORT_WRC is '1' */
 #define PORT_WPR	BIT(31)
+/* These bits are read-only, should be saved and written to the registers. */
+#define	PORTSC_RO_BITS		(PORT_CCS | PORT_OCA | PORT_SPEED_MASK | PORT_CAS | PORT_DR)
+/* Writing 0 clears the bit, writing 1 sets the bit. */
+#define PORTSC_RWS_BITS		(PORT_PLS_MASK | PORT_PP | PORT_PIC_MASK | PORT_WCE | \
+				 PORT_WDE | PORT_WOE)
 /* Writing 1 clears the bit, writing 0 sets the bit. */
 #define PORTSC_RW1CS_BITS	(PORT_PED | PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | PORT_PRC | \
 				 PORT_PLC | PORT_CEC)
+/* Writing 1 sets the bit, writing 0 has no effect. */
+#define PORTSC_RW1S_BITS	(PORT_PR | PORT_WPR)
+/* Writing 1 sets the bit, writing 0 clears the bit. */
+#define	PORTSC_RW_BITS		(PORT_LWS)
 
 /* We mark duplicate entries with -1 */
 #define DUPLICATE_ENTRY ((u8)(-1))
