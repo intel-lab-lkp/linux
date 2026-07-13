@@ -903,7 +903,7 @@ static s32 xmitframe_swencrypt(struct adapter *padapter, struct xmit_frame *pxmi
 	return _SUCCESS;
 }
 
-s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattrib)
+int rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattrib)
 {
 	u16 *qc;
 
@@ -950,7 +950,7 @@ s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattr
 			if (pattrib->qos_en)
 				qos_option = true;
 		} else {
-			return _FAIL;
+			return -EINVAL;
 		}
 
 		if (pattrib->mdata)
@@ -978,13 +978,13 @@ s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattr
 
 			psta = rtw_get_stainfo(&padapter->stapriv, pattrib->ra);
 			if (pattrib->psta != psta)
-				return _FAIL;
+				return -EINVAL;
 
 			if (!psta)
-				return _FAIL;
+				return -ENOENT;
 
 			if (!(psta->state & _FW_LINKED))
-				return _FAIL;
+				return -ENOLINK;
 
 			if (psta) {
 				psta->sta_xmitpriv.txseq_tid[pattrib->priority]++;
@@ -1024,7 +1024,7 @@ s32 rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattr
 	} else {
 	}
 
-	return _SUCCESS;
+	return 0;
 }
 
 s32 rtw_txframes_pending(struct adapter *padapter)
@@ -1093,7 +1093,8 @@ s32 rtw_xmitframe_coalesce(struct adapter *padapter, struct sk_buff *pkt, struct
 	hw_hdr_offset = TXDESC_OFFSET;
 	mem_start = pbuf_start +	hw_hdr_offset;
 
-	if (rtw_make_wlanhdr(padapter, mem_start, pattrib) == _FAIL) {
+	ret = rtw_make_wlanhdr(padapter, mem_start, pattrib);
+	if (ret) {
 		res = _FAIL;
 		goto exit;
 	}
