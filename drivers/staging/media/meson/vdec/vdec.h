@@ -64,8 +64,10 @@ struct amvdec_session;
  * @esparser_reset: RESET for the PARSER
  * @vdev_dec: video device for the decoder
  * @v4l2_dev: v4l2 device
+ * @m2m_dev: v4l2 m2m device
  * @cur_sess: current decoding session
  * @lock: video device lock
+ * @irq: decoder irq
  */
 struct amvdec_core {
 	void __iomem *dos_base;
@@ -88,9 +90,11 @@ struct amvdec_core {
 
 	struct video_device *vdev_dec;
 	struct v4l2_device v4l2_dev;
+	struct v4l2_m2m_dev *m2m_dev;
 
 	struct amvdec_session *cur_sess;
 	struct mutex lock;
+	int irq;
 };
 
 /**
@@ -183,7 +187,6 @@ enum amvdec_status {
  *
  * @core: reference to the vdec core struct
  * @fh: v4l2 file handle
- * @m2m_dev: v4l2 m2m device
  * @m2m_ctx: v4l2 m2m context
  * @ctrl_handler: V4L2 control handler
  * @ctrl_min_buf_capture: V4L2 control V4L2_CID_MIN_BUFFERS_FOR_CAPTURE
@@ -230,7 +233,6 @@ struct amvdec_session {
 	struct amvdec_core *core;
 
 	struct v4l2_fh fh;
-	struct v4l2_m2m_dev *m2m_dev;
 	struct v4l2_m2m_ctx *m2m_ctx;
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct v4l2_ctrl *ctrl_min_buf_capture;
