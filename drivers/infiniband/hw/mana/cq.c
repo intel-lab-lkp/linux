@@ -27,7 +27,8 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	is_rnic_cq = mana_ib_is_rnic(mdev);
 
 	if (udata) {
-		err = ib_copy_validate_udata_in(udata, ucmd, buf_addr);
+		err = ib_copy_validate_udata_in_cm(udata, ucmd, buf_addr,
+						   MANA_IB_CREATE_RNIC_CQ);
 		if (err)
 			return err;
 
@@ -105,6 +106,11 @@ int mana_ib_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 	struct mana_ib_cq *cq = container_of(ibcq, struct mana_ib_cq, ibcq);
 	struct ib_device *ibdev = ibcq->device;
 	struct mana_ib_dev *mdev;
+	int err;
+
+	err = ib_is_udata_in_empty(udata);
+	if (err)
+		return err;
 
 	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 
@@ -117,7 +123,7 @@ int mana_ib_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 
 	mana_ib_destroy_queue(mdev, &cq->queue);
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 static void mana_ib_cq_handler(void *ctx, struct gdma_queue *gdma_cq)
