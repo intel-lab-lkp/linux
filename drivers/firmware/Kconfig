@@ -172,6 +172,22 @@ config INTEL_STRATIX10_RSU
 
 	  Say Y here if you want Intel RSU support.
 
+config ALTERA_SOCFPGA_FCS
+	tristate "Altera SoCFPGA Crypto Service (FCS) configuration"
+	depends on INTEL_STRATIX10_SERVICE
+	default n
+	help
+	  Altera SoCFPGA Crypto Service (FCS) driver exposes interfaces access
+	  through the Intel Service Layer to user space via sysfs device
+	  attribute nodes. It exposes the crypto and key-management services
+	  of the Secure Device Manager (SDM) to the host software stack and
+	  requests are forwarded to Arm Trusted Firmware. The SDM then
+	  executes or authorizes them using device-rooted security resources.
+	  Protected key material remains within the secure firmware boundary
+	  and is not directly exposed to non-secure host software.
+
+	  Say Y here if you want Altera SoCFPGA FCS support.
+
 config MTK_ADSP_IPC
 	tristate "MTK ADSP IPC Protocol driver"
 	depends on MTK_ADSP_MBOX
