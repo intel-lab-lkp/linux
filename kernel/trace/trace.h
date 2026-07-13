@@ -1386,6 +1386,7 @@ struct trace_parser {
 	char		*buffer;
 	unsigned	idx;
 	unsigned	size;
+	struct mutex	lock;
 };
 
 static inline bool trace_parser_loaded(struct trace_parser *parser)

@@ -1100,6 +1100,7 @@ int trace_parser_get_init(struct trace_parser *parser, int size)
 		return 1;
 
 	parser->size = size;
+	mutex_init(&parser->lock);
 	return 0;
 }
 
@@ -1108,6 +1109,7 @@ int trace_parser_get_init(struct trace_parser *parser, int size)
  */
 void trace_parser_put(struct trace_parser *parser)
 {
+	mutex_destroy(&parser->lock);
 	kfree(parser->buffer);
 	parser->buffer = NULL;
 }
