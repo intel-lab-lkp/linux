@@ -59,6 +59,7 @@ hugetlb_madv_vs_map
 mseal_test
 droppable
 hugetlb_dio
+hugetlb_region_cache_race
 pkey_sighandler_tests_32
 pkey_sighandler_tests_64
 guard-regions
