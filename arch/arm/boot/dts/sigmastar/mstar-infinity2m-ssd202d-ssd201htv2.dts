@@ -7,6 +7,8 @@
 /dts-v1/;
 #include "mstar-infinity2m-ssd202d.dtsi"
 
+#include <dt-bindings/gpio/gpio.h>
+
 / {
 	model = "SSD201_HT_V2";
 	compatible = "honestar,ssd201htv2", "mstar,infinity2m";
@@ -17,6 +19,14 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
+	};
+
+	reg_sd_vdd: regulator-sd-vdd {
+		compatible = "regulator-fixed";
+		regulator-name = "sd_vdd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio SSD20XD_GPIO_GPIO0 GPIO_ACTIVE_HIGH>;
 	};
 };
 
