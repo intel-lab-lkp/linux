@@ -152,6 +152,33 @@ static __always_inline bool smb_compress_alg_valid(__le16 alg, bool valid_none)
 	return false;
 }
 
+static __always_inline bool is_compress_hdr(const void *buf)
+{
+	const struct smb2_compression_hdr *hdr = buf;
+
+	if (!buf)
+		return false;
+
+	return (hdr->ProtocolId == SMB2_COMPRESSION_TRANSFORM_ID);
+}
+
+static __always_inline u32 decompressed_size(const void *buf)
+{
+	const struct smb2_compression_hdr *hdr = buf;
+	u32 len;
+
+	if (!buf || !is_compress_hdr(buf))
+		return 0;
+
+	len = le32_to_cpu(hdr->OriginalCompressedSegmentSize);
+
+	/* When unchained, we must account for the offset part (usually SMB2 header) as well. */
+	if (le16_to_cpu(hdr->Flags) == SMB2_COMPRESSION_FLAG_NONE)
+		len += le32_to_cpu(hdr->Offset);
+
+	return len;
+}
+
 /**
  * smb_compress_alloc_size() - Compute total allocation size required for compressed (dst) buffer.
  * @size:		uncompressed size

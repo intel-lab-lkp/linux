@@ -30,6 +30,8 @@
 #include "fs_context.h"
 #include "cached_dir.h"
 #include "reparse.h"
+#include "../common/compress/compress.h"
+#include "compress.h"
 
 /* Change credits for different ops and return the total number of credits */
 static int
@@ -4779,7 +4781,7 @@ smb3_is_transform_hdr(void *buf)
 {
 	struct smb2_transform_hdr *trhdr = buf;
 
-	return trhdr->ProtocolId == SMB2_TRANSFORM_PROTO_NUM;
+	return (trhdr->ProtocolId == SMB2_TRANSFORM_PROTO_NUM) || is_compress_hdr(buf);
 }
 
 static int
@@ -5311,6 +5313,136 @@ one_more:
 	return ret;
 }
 
+static int receive_compressed(struct TCP_Server_Info *server)
+{
+	struct mid_q_entry *mid;
+	void *src, *dst = NULL;
+	u32 slen, dlen;
+	int ret;
+
+	slen = server->pdu_size;
+	src = kvzalloc(slen, GFP_KERNEL);
+	if (unlikely(!src))
+		return -ENOMEM;
+
+	ret = server->total_read;
+	memcpy(src, server->smallbuf, ret);
+
+	ret = cifs_read_from_socket(server, src + ret, slen - ret);
+	if (ret < 0)
+		goto err_free;
+
+	server->total_read += ret;
+
+	dlen = decompressed_size(src);
+	dst = kvzalloc(dlen, GFP_KERNEL);
+	if (unlikely(!dst)) {
+		ret = -ENOMEM;
+
+		goto err_free;
+	}
+
+	ret = smb_compression_decompress(server->compression.alg, server->compression.pattern,
+					 src, slen, dst, dlen);
+	if (likely(!ret)) {
+		const struct smb2_hdr *shdr = dst;
+
+		if (unlikely(shdr->ProtocolId != SMB2_PROTO_NUMBER)) {
+			cifs_dbg(VFS, "decompressed message is not an SMB2 message (got ProtocolId 0x%x)\n",
+				 shdr->ProtocolId);
+			ret = -ECONNRESET;
+			goto err_free;
+		}
+	} else {
+		/*
+		 * We _must_ disconnect on any failed decompression.
+		 * Actually, there's not much we can do to handle different decompression errors
+		 * here, so forcing a reconnect (which will disable compression) is our best option
+		 * as the request should be retried.
+		 */
+		ret = -ECONNRESET;
+		goto err_free;
+	}
+
+	mid = smb2_find_dequeue_mid(server, dst);
+	if (!mid) {
+		ret = -EIO;
+
+		goto err_free;
+	}
+
+	ret = handle_read_data(server, mid, dst, dlen, NULL, 0, true);
+	if (!ret) {
+		struct cifs_io_subrequest *rdata = mid->callback_data;
+#ifdef CONFIG_CIFS_STATS2
+		mid->when_received = jiffies;
+#endif
+		if (server->ops->is_network_name_deleted)
+			server->ops->is_network_name_deleted(dst, server);
+
+		rdata->iov[0].iov_base = dst;
+		rdata->iov[0].iov_len = server->vals->read_rsp_size;
+		mid_execute_callback(server, mid);
+	} else {
+		spin_lock(&server->srv_lock);
+		if (server->tcpStatus == CifsNeedReconnect) {
+			spin_lock(&server->mid_queue_lock);
+			mid->mid_state = MID_RETRY_NEEDED;
+			spin_unlock(&server->mid_queue_lock);
+			spin_unlock(&server->srv_lock);
+
+			mid_execute_callback(server, mid);
+		} else {
+			spin_lock(&server->mid_queue_lock);
+			mid->mid_state = MID_REQUEST_SUBMITTED;
+			mid->deleted_from_q = false;
+			list_add_tail(&mid->qhead, &server->pending_mid_q);
+			spin_unlock(&server->mid_queue_lock);
+			spin_unlock(&server->srv_lock);
+		}
+	}
+
+	release_mid(server, mid);
+err_free:
+	kvfree(src);
+	kvfree(dst);
+
+	if (unlikely(ret == -ECONNRESET)) {
+		spin_lock(&server->srv_lock);
+		server->tcpStatus = CifsNeedReconnect;
+		spin_unlock(&server->srv_lock);
+	}
+
+	return ret;
+}
+
+static inline int check_decompress(struct TCP_Server_Info *server, const void *buf)
+{
+	const u32 len = decompressed_size(buf);
+	u32 max_len;
+
+	if (len == 0)
+		return 0;
+
+	if (WARN_ON_ONCE(!server))
+		return -EINVAL;
+
+	if (unlikely(len < server->vals->read_rsp_size)) {
+		cifs_server_dbg(VFS, "uncompressed message too small (%u, min %zu)\n", len,
+				server->vals->read_rsp_size);
+		return -EINVAL;
+	}
+
+	max_len = 256 + SMB2_COMPRESSION_PAYLOAD_BASE_LEN +
+		  max3(server->maxBuf, server->max_read, server->max_write);
+	if (unlikely(len > max_len)) {
+		cifs_server_dbg(VFS, "uncompressed message too big (%u, max %u)\n", len, max_len);
+		return -EINVAL;
+	}
+
+	return 1;
+}
+
 static int
 smb3_receive_transform(struct TCP_Server_Info *server,
 		       struct mid_q_entry **mids, char **bufs, int *num_mids)
@@ -5319,6 +5451,15 @@ smb3_receive_transform(struct TCP_Server_Info *server,
 	unsigned int pdu_length = server->pdu_size;
 	struct smb2_transform_hdr *tr_hdr = (struct smb2_transform_hdr *)buf;
 	unsigned int orig_len = le32_to_cpu(tr_hdr->OriginalMessageSize);
+	int ret;
+
+	ret = check_decompress(server, buf);
+	if (ret > 0)
+		return receive_compressed(server);
+
+	if (unlikely(ret < 0))
+		/* Reset connection on any error */
+		return -ECONNABORTED;
 
 	if (pdu_length < sizeof(struct smb2_transform_hdr) +
 						sizeof(struct smb2_hdr)) {
@@ -5361,6 +5502,8 @@ static int smb2_next_header(struct TCP_Server_Info *server, char *buf,
 		*noff = le32_to_cpu(t_hdr->OriginalMessageSize);
 		if (unlikely(check_add_overflow(*noff, sizeof(*t_hdr), noff)))
 			return -EINVAL;
+	} else if (hdr->ProtocolId == SMB2_COMPRESSION_TRANSFORM_ID) {
+		*noff = 0;
 	} else {
 		*noff = le32_to_cpu(hdr->NextCommand);
 	}
