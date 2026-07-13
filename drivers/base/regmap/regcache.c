@@ -410,6 +410,7 @@ int regcache_sync(struct regmap *map)
 	unsigned int i;
 	const char *name;
 	bool bypass;
+	bool cache_only;
 	struct rb_node *node;
 
 	if (WARN_ON(map->cache_type == REGCACHE_NONE))
@@ -465,6 +466,9 @@ out:
 	 * have gone out of sync, force writes of all the paging
 	 * registers.
 	 */
+	cache_only = map->cache_only;
+	map->cache_only = false;
+
 	rb_for_each(node, NULL, &map->range_tree, rbtree_all) {
 		struct regmap_range_node *this =
 			rb_entry(node, struct regmap_range_node, node);
@@ -481,6 +485,8 @@ out:
 			break;
 		}
 	}
+
+	map->cache_only = cache_only;
 
 	map->unlock(map->lock_arg);
 
