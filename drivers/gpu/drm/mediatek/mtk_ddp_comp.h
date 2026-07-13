@@ -20,6 +20,7 @@ struct drm_crtc;
 struct drm_device;
 struct mtk_plane_state;
 struct drm_crtc_state;
+struct drm_dsc_config;
 
 enum mtk_ddp_comp_type {
 	MTK_DISP_AAL,
@@ -56,6 +57,7 @@ struct mtk_ddp_comp_funcs {
 	void (*config)(struct device *dev, unsigned int w,
 		       unsigned int h, unsigned int vrefresh,
 		       unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
+	void (*dsc_setup)(struct device *dev, struct drm_dsc_config *dsc);
 	void (*start)(struct device *dev);
 	void (*stop)(struct device *dev);
 	void (*register_vblank_cb)(struct device *dev,
@@ -147,6 +149,13 @@ static inline void mtk_ddp_comp_config(struct mtk_ddp_comp *comp,
 {
 	if (comp->funcs && comp->funcs->config)
 		comp->funcs->config(comp->dev, w, h, vrefresh, bpc, cmdq_pkt);
+}
+
+static inline void mtk_ddp_comp_dsc_setup(struct mtk_ddp_comp *comp,
+					  struct drm_dsc_config *dsc)
+{
+	if (comp->funcs && comp->funcs->dsc_setup)
+		comp->funcs->dsc_setup(comp->dev, dsc);
 }
 
 static inline void mtk_ddp_comp_start(struct mtk_ddp_comp *comp)

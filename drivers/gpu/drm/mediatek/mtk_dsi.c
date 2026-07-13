@@ -18,6 +18,8 @@
 #include <video/mipi_display.h>
 #include <video/videomode.h>
 
+#include <drm/display/drm_dsc.h>
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_bridge_connector.h>
@@ -71,11 +73,12 @@
 
 #define DSI_PSCTRL		0x1c
 #define DSI_PS_WC			GENMASK(13, 0)
-#define DSI_PS_SEL			GENMASK(17, 16)
+#define DSI_PS_SEL			GENMASK(19, 16)
 #define PACKED_PS_16BIT_RGB565		0
 #define PACKED_PS_18BIT_RGB666		1
 #define LOOSELY_PS_24BIT_RGB666		2
 #define PACKED_PS_24BIT_RGB888		3
+#define COMPRESSED_PS_DSC		5
 
 #define DSI_VSA_NL		0x20
 #define DSI_VBP_NL		0x24
@@ -203,6 +206,7 @@ struct mtk_dsi {
 	struct drm_bridge bridge;
 	struct drm_bridge *next_bridge;
 	struct drm_connector *connector;
+	struct drm_dsc_config *dsc;
 	struct phy *phy;
 
 	void __iomem *regs;
@@ -395,7 +399,7 @@ static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 
 static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 {
-	u32 dsi_buf_bpp, ps_val, ps_wc, vact_nl;
+	u32 dsi_buf_bpp, ps_val, ps_wc, size_val, vact_nl;
 
 	if (dsi->format == MIPI_DSI_FMT_RGB565)
 		dsi_buf_bpp = 2;
@@ -403,7 +407,10 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 		dsi_buf_bpp = 3;
 
 	/* Word count */
-	ps_wc = FIELD_PREP(DSI_PS_WC, dsi->vm.hactive * dsi_buf_bpp);
+	if (dsi->dsc)
+		ps_wc = FIELD_PREP(DSI_PS_WC, 2 * dsi->dsc->slice_chunk_size);
+	else
+		ps_wc = FIELD_PREP(DSI_PS_WC, dsi->vm.hactive * dsi_buf_bpp);
 	ps_val = ps_wc;
 
 	/* Pixel Stream type */
@@ -411,7 +418,10 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 	default:
 		fallthrough;
 	case MIPI_DSI_FMT_RGB888:
-		ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_24BIT_RGB888);
+		if (dsi->dsc)
+			ps_val |= FIELD_PREP(DSI_PS_SEL, COMPRESSED_PS_DSC);
+		else
+			ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_24BIT_RGB888);
 		break;
 	case MIPI_DSI_FMT_RGB666:
 		ps_val |= FIELD_PREP(DSI_PS_SEL, LOOSELY_PS_24BIT_RGB666);
@@ -430,6 +440,18 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 		writel(ps_wc, dsi->regs + DSI_HSTX_CKL_WC);
 	}
 	writel(ps_val, dsi->regs + DSI_PSCTRL);
+
+	if (dsi->driver_data->has_size_ctl) {
+		size_val = FIELD_PREP(DSI_HEIGHT, dsi->vm.vactive);
+		if (dsi->dsc)
+			size_val |= FIELD_PREP(DSI_WIDTH,
+					       (ps_wc + dsi_buf_bpp - 1) /
+					       dsi_buf_bpp);
+		else
+			size_val |= FIELD_PREP(DSI_WIDTH, dsi->vm.hactive);
+
+		writel(size_val, dsi->regs + DSI_SIZE_CON);
+	}
 }
 
 static void mtk_dsi_config_vdo_timing_per_frame_lp(struct mtk_dsi *dsi)
@@ -565,7 +587,43 @@ static void mtk_dsi_config_vdo_timing_per_line_lp(struct mtk_dsi *dsi)
 	writel(horizontal_frontporch_byte, dsi->regs + DSI_HFP_WC);
 }
 
-static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
+static int mtk_dsi_set_dsc_params(struct mtk_dsi *dsi)
+{
+	struct drm_dsc_config *dsc = dsi->dsc;
+	struct device *dev = dsi->host.dev;
+	int ret;
+
+	if (dsc->bits_per_pixel & GENMASK(7, 0)) {
+		dev_err(dev, "Fractional bits_per_pixel not supported\n");
+		return -EINVAL;
+	}
+
+	if (dsc->bits_per_component != 8) {
+		dev_err(dev, "%u bits per component is not supported\n",
+			dsc->bits_per_component);
+		return -EINVAL;
+	}
+
+	dsc->simple_422 = false;
+	dsc->convert_rgb = true;
+	dsc->vbr_enable = false;
+
+	drm_dsc_set_const_params(dsc);
+	drm_dsc_set_rc_buf_thresh(dsc);
+
+	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (ret) {
+		dev_err(dev, "Cannot find DSC RC params\n");
+		return ret;
+	}
+
+	dsc->initial_scale_value = drm_dsc_initial_scale_value(dsc);
+	dsc->line_buf_depth = dsc->bits_per_component + 1;
+
+	return drm_dsc_compute_rc_parameters(dsc);
+}
+
+static int mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 {
 	struct videomode *vm = &dsi->vm;
 
@@ -574,17 +632,17 @@ static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 	writel(vm->vfront_porch, dsi->regs + DSI_VFP_NL);
 	writel(vm->vactive, dsi->regs + DSI_VACT_NL);
 
-	if (dsi->driver_data->has_size_ctl)
-		writel(FIELD_PREP(DSI_HEIGHT, vm->vactive) |
-			FIELD_PREP(DSI_WIDTH, vm->hactive),
-			dsi->regs + DSI_SIZE_CON);
-
 	if (dsi->driver_data->support_per_frame_lp)
 		mtk_dsi_config_vdo_timing_per_frame_lp(dsi);
 	else
 		mtk_dsi_config_vdo_timing_per_line_lp(dsi);
 
 	mtk_dsi_ps_control(dsi, false);
+
+	if (dsi->dsc)
+		return mtk_dsi_set_dsc_params(dsi);
+
+	return 0;
 }
 
 static void mtk_dsi_start(struct mtk_dsi *dsi)
@@ -741,12 +799,17 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	mtk_dsi_ps_control(dsi, true);
 	mtk_dsi_set_vm_cmd(dsi);
-	mtk_dsi_config_vdo_timing(dsi);
+	ret = mtk_dsi_config_vdo_timing(dsi);
+	if (ret)
+		goto err_disable_digital_clk;
+
 	mtk_dsi_set_interrupt_enable(dsi);
 	mtk_dsi_lane_ready(dsi);
 	mtk_dsi_clk_hs_mode(dsi, 1);
 
 	return 0;
+err_disable_digital_clk:
+	clk_disable_unprepare(dsi->digital_clk);
 err_disable_engine_clk:
 	clk_disable_unprepare(dsi->engine_clk);
 err_phy_power_off:
@@ -883,6 +946,21 @@ mtk_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 	if (mode->clock * bpp / dsi->lanes > 1500000)
 		return MODE_CLOCK_HIGH;
 
+	if (dsi->dsc) {
+		if (mode->hdisplay % dsi->dsc->slice_width) {
+			dev_err(dsi->host.dev,
+				"DSC: hdisplay %u is not a multiple of slice width %u\n",
+				dsi->dsc->slice_width, mode->hdisplay);
+			return MODE_H_ILLEGAL;
+		}
+		if (mode->vdisplay % dsi->dsc->slice_height) {
+			dev_err(dsi->host.dev,
+				"DSC: vdisplay %u is not a multiple of slice height %u\n",
+				dsi->dsc->slice_height, mode->vdisplay);
+			return MODE_V_ILLEGAL;
+		}
+	}
+
 	return MODE_OK;
 }
 
@@ -911,6 +989,13 @@ void mtk_dsi_ddp_stop(struct device *dev)
 	struct mtk_dsi *dsi = dev_get_drvdata(dev);
 
 	mtk_dsi_poweroff(dsi);
+}
+
+struct drm_dsc_config *mtk_dsi_get_dsc_config(struct device *dev)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+
+	return dsi->dsc;
 }
 
 static int mtk_dsi_encoder_init(struct drm_device *drm, struct mtk_dsi *dsi)
@@ -1005,6 +1090,9 @@ static int mtk_dsi_host_attach(struct mipi_dsi_host *host,
 		if (IS_ERR(dsi->next_bridge))
 			return PTR_ERR(dsi->next_bridge);
 	}
+
+	if (device->dsc)
+		dsi->dsc = device->dsc;
 
 	drm_bridge_add(&dsi->bridge);
 
