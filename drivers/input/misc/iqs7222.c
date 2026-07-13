@@ -16,7 +16,6 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/slab.h>
@@ -2426,6 +2425,9 @@ static int iqs7222_parse_chan(struct iqs7222_private *iqs7222,
 					    &iqs7222->kp_code[chan_index][i]);
 		if (error)
 			return error;
+
+		if (!iqs7222->kp_type[chan_index][i])
+			continue;
 
 		if (!dev_desc->event_offset)
 			continue;

@@ -209,7 +209,7 @@ void dccg401_disable_symclk32_le(
 		struct dccg *dccg,
 		int hpo_le_inst);
 void dccg401_disable_dpstreamclk(struct dccg *dccg, int dp_hpo_inst);
-void dccg401_set_dto_dscclk(struct dccg *dccg, uint32_t inst);
+void dccg401_set_dto_dscclk(struct dccg *dccg, uint32_t inst, uint32_t num_slices_h);
 void dccg401_set_ref_dscclk(struct dccg *dccg,
 				uint32_t dsc_inst);
 void dccg401_set_src_sel(
@@ -230,7 +230,6 @@ void dccg401_set_dp_dto(
 		const struct dp_dto_params *params);
 void dccg401_enable_symclk_se(struct dccg *dccg, uint32_t stream_enc_inst, uint32_t link_enc_inst);
 void dccg401_disable_symclk_se(struct dccg *dccg, uint32_t stream_enc_inst, uint32_t link_enc_inst);
-void dccg401_set_dto_dscclk(struct dccg *dccg, uint32_t inst);
 void dccg401_set_dtbclk_p_src(
 		struct dccg *dccg,
 		enum streamclk_source src,
@@ -246,5 +245,9 @@ void dccg401_set_physymclk(
 	int phy_inst,
 	enum physymclk_clock_source clk_src,
 	bool force_enable);
+
+void dccg401_set_hdmistreamclk(struct dccg *dccg, enum streamclk_source src, uint32_t otg_inst);
+void dccg401_enable_hdmicharclk(struct dccg *dccg, int hpo_inst, int phypll_inst);
+void dccg401_disable_hdmicharclk(struct dccg *dccg, int hpo_inst);
 
 #endif //__DCN401_DCCG_H__

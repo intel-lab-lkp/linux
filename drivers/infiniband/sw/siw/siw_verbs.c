@@ -102,7 +102,7 @@ int siw_alloc_ucontext(struct ib_ucontext *base_ctx, struct ib_udata *udata)
 		rv = -EINVAL;
 		goto err_out;
 	}
-	rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
+	rv = ib_respond_udata(udata, uresp);
 	if (rv)
 		goto err_out;
 
@@ -130,9 +130,11 @@ int siw_query_device(struct ib_device *base_dev, struct ib_device_attr *attr,
 		     struct ib_udata *udata)
 {
 	struct siw_device *sdev = to_siw_dev(base_dev);
+	int rv;
 
-	if (udata->inlen || udata->outlen)
-		return -EINVAL;
+	rv = ib_is_udata_in_empty(udata);
+	if (rv)
+		return rv;
 
 	memset(attr, 0, sizeof(*attr));
 
@@ -165,7 +167,7 @@ int siw_query_device(struct ib_device *base_dev, struct ib_device_attr *attr,
 	addrconf_addr_eui48((u8 *)&attr->sys_image_guid,
 			    sdev->raw_gid);
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 int siw_query_port(struct ib_device *base_dev, u32 port,
@@ -274,7 +276,7 @@ siw_mmap_entry_insert(struct siw_ucontext *uctx,
 		      void *address, size_t length,
 		      u64 *offset)
 {
-	struct siw_user_mmap_entry *entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	struct siw_user_mmap_entry *entry = kzalloc_obj(*entry);
 	int rv;
 
 	*offset = SIW_INVAL_UOBJ_KEY;
@@ -472,7 +474,7 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 			rv = -EINVAL;
 			goto err_out_xa;
 		}
-		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
+		rv = ib_respond_udata(udata, uresp);
 		if (rv)
 			goto err_out_xa;
 	}
@@ -769,7 +771,7 @@ int siw_post_send(struct ib_qp *base_qp, const struct ib_send_wr *wr,
 	struct siw_wqe *wqe = tx_wqe(qp);
 
 	unsigned long flags;
-	int rv = 0;
+	int rv = 0, imm_err = 0;
 
 	if (wr && !rdma_is_kernel_res(&qp->base_qp.res)) {
 		siw_dbg_qp(qp, "wr must be empty for user mapped sq\n");
@@ -955,9 +957,17 @@ int siw_post_send(struct ib_qp *base_qp, const struct ib_send_wr *wr,
 	 * Send directly if SQ processing is not in progress.
 	 * Eventual immediate errors (rv < 0) do not affect the involved
 	 * RI resources (Verbs, 8.3.1) and thus do not prevent from SQ
-	 * processing, if new work is already pending. But rv must be passed
-	 * to caller.
+	 * processing, if new work is already pending. But rv and pointer
+	 * to failed work request must be passed to caller.
 	 */
+	if (unlikely(rv < 0)) {
+		/*
+		 * Immediate error
+		 */
+		siw_dbg_qp(qp, "Immediate error %d\n", rv);
+		imm_err = rv;
+		*bad_wr = wr;
+	}
 	if (wqe->wr_status != SIW_WR_IDLE) {
 		spin_unlock_irqrestore(&qp->sq_lock, flags);
 		goto skip_direct_sending;
@@ -982,15 +992,10 @@ skip_direct_sending:
 
 	up_read(&qp->state_lock);
 
-	if (rv >= 0)
-		return 0;
-	/*
-	 * Immediate error
-	 */
-	siw_dbg_qp(qp, "error %d\n", rv);
+	if (unlikely(imm_err))
+		return imm_err;
 
-	*bad_wr = wr;
-	return rv;
+	return (rv >= 0) ? 0 : rv;
 }
 
 /*
@@ -1202,7 +1207,7 @@ int siw_create_cq(struct ib_cq *base_cq, const struct ib_cq_init_attr *attr,
 			rv = -EINVAL;
 			goto err_out;
 		}
-		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
+		rv = ib_respond_udata(udata, uresp);
 		if (rv)
 			goto err_out;
 	}
@@ -1321,10 +1326,12 @@ int siw_dereg_mr(struct ib_mr *base_mr, struct ib_udata *udata)
  * @len:	len of MR
  * @rnic_va:	not used by siw
  * @rights:	MR access rights
+ * @dmah:	dma handle
  * @udata:	user buffer to communicate STag and Key.
  */
 struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
-			      u64 rnic_va, int rights, struct ib_udata *udata)
+			      u64 rnic_va, int rights,  struct ib_dmah *dmah,
+			      struct ib_udata *udata)
 {
 	struct siw_mr *mr = NULL;
 	struct siw_umem *umem = NULL;
@@ -1335,6 +1342,9 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 	siw_dbg_pd(pd, "start: 0x%p, va: 0x%p, len: %llu\n",
 		   (void *)(uintptr_t)start, (void *)(uintptr_t)rnic_va,
 		   (unsigned long long)len);
+
+	if (dmah)
+		return ERR_PTR(-EOPNOTSUPP);
 
 	if (atomic_inc_return(&sdev->num_mr) > SIW_MAX_MR) {
 		siw_dbg_pd(pd, "too many mr's\n");
@@ -1352,7 +1362,7 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 		umem = NULL;
 		goto err_out;
 	}
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	mr = kzalloc_obj(*mr);
 	if (!mr) {
 		rv = -ENOMEM;
 		goto err_out;
@@ -1365,11 +1375,7 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 		struct siw_uresp_reg_mr uresp = {};
 		struct siw_mem *mem = mr->mem;
 
-		if (udata->inlen < sizeof(ureq)) {
-			rv = -EINVAL;
-			goto err_out;
-		}
-		rv = ib_copy_from_udata(&ureq, udata, sizeof(ureq));
+		rv = ib_copy_validate_udata_in(udata, ureq, pad);
 		if (rv)
 			goto err_out;
 
@@ -1382,7 +1388,7 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 			rv = -EINVAL;
 			goto err_out;
 		}
-		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
+		rv = ib_respond_udata(udata, uresp);
 		if (rv)
 			goto err_out;
 	}
@@ -1433,7 +1439,7 @@ struct ib_mr *siw_alloc_mr(struct ib_pd *pd, enum ib_mr_type mr_type,
 		pbl = NULL;
 		goto err_out;
 	}
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	mr = kzalloc_obj(*mr);
 	if (!mr) {
 		rv = -ENOMEM;
 		goto err_out;
@@ -1548,7 +1554,7 @@ struct ib_mr *siw_get_dma_mr(struct ib_pd *pd, int rights)
 		rv = -ENOMEM;
 		goto err_out;
 	}
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	mr = kzalloc_obj(*mr);
 	if (!mr) {
 		rv = -ENOMEM;
 		goto err_out;
@@ -1642,7 +1648,7 @@ int siw_create_srq(struct ib_srq *base_srq,
 			rv = -EINVAL;
 			goto err_out;
 		}
-		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
+		rv = ib_respond_udata(udata, uresp);
 		if (rv)
 			goto err_out;
 	}

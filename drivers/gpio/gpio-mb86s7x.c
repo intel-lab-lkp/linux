@@ -10,7 +10,6 @@
 #include <linux/io.h>
 #include <linux/init.h>
 #include <linux/clk.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -180,7 +179,7 @@ static int mb86s70_gpio_probe(struct platform_device *pdev)
 	gchip->gc.request = mb86s70_gpio_request;
 	gchip->gc.free = mb86s70_gpio_free;
 	gchip->gc.get = mb86s70_gpio_get;
-	gchip->gc.set_rv = mb86s70_gpio_set;
+	gchip->gc.set = mb86s70_gpio_set;
 	gchip->gc.to_irq = mb86s70_gpio_to_irq;
 	gchip->gc.label = dev_name(&pdev->dev);
 	gchip->gc.ngpio = 32;

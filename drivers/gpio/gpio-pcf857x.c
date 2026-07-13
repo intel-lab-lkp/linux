@@ -13,26 +13,25 @@
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/kernel.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
 static const struct i2c_device_id pcf857x_id[] = {
-	{ "pcf8574", 8 },
-	{ "pcf8574a", 8 },
-	{ "pca8574", 8 },
-	{ "pca9670", 8 },
-	{ "pca9672", 8 },
-	{ "pca9674", 8 },
-	{ "pcf8575", 16 },
-	{ "pca8575", 16 },
-	{ "pca9671", 16 },
-	{ "pca9673", 16 },
-	{ "pca9675", 16 },
-	{ "max7328", 8 },
-	{ "max7329", 8 },
+	{ .name = "pcf8574", .driver_data = 8 },
+	{ .name = "pcf8574a", .driver_data = 8 },
+	{ .name = "pca8574", .driver_data = 8 },
+	{ .name = "pca9670", .driver_data = 8 },
+	{ .name = "pca9672", .driver_data = 8 },
+	{ .name = "pca9674", .driver_data = 8 },
+	{ .name = "pcf8575", .driver_data = 16 },
+	{ .name = "pca8575", .driver_data = 16 },
+	{ .name = "pca9671", .driver_data = 16 },
+	{ .name = "pca9673", .driver_data = 16 },
+	{ .name = "pca9675", .driver_data = 16 },
+	{ .name = "max7328", .driver_data = 8 },
+	{ .name = "max7329", .driver_data = 8 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, pcf857x_id);
@@ -171,21 +170,24 @@ static int pcf857x_output(struct gpio_chip *chip, unsigned int offset, int value
 	return status;
 }
 
-static void pcf857x_set(struct gpio_chip *chip, unsigned int offset, int value)
+static int pcf857x_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
-	pcf857x_output(chip, offset, value);
+	return pcf857x_output(chip, offset, value);
 }
 
-static void pcf857x_set_multiple(struct gpio_chip *chip, unsigned long *mask,
-				 unsigned long *bits)
+static int pcf857x_set_multiple(struct gpio_chip *chip, unsigned long *mask,
+				unsigned long *bits)
 {
 	struct pcf857x *gpio = gpiochip_get_data(chip);
+	int status;
 
 	mutex_lock(&gpio->lock);
 	gpio->out &= ~*mask;
 	gpio->out |= *bits & *mask;
-	gpio->write(gpio->client, gpio->out);
+	status = gpio->write(gpio->client, gpio->out);
 	mutex_unlock(&gpio->lock);
+
+	return status;
 }
 
 /*-------------------------------------------------------------------------*/

@@ -18,7 +18,6 @@
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/math.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/platform_device.h>
@@ -159,7 +158,7 @@ static const struct gpio_chip gnr_gpio_chip = {
 	.owner		  = THIS_MODULE,
 	.request	  = gnr_gpio_request,
 	.get		  = gnr_gpio_get,
-	.set_rv		  = gnr_gpio_set,
+	.set		  = gnr_gpio_set,
 	.get_direction    = gnr_gpio_get_direction,
 	.direction_input  = gnr_gpio_direction_input,
 	.direction_output = gnr_gpio_direction_output,
