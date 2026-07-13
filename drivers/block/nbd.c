@@ -32,6 +32,7 @@
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <net/af_unix.h>
 #include <net/sock.h>
 #include <linux/net.h>
 #include <linux/kthread.h>
@@ -1241,6 +1242,7 @@ static struct socket *nbd_get_socket(struct nbd_device *nbd, unsigned long fd,
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 static struct lock_class_key nbd_key[3];
 static struct lock_class_key nbd_slock_key[3];
+static struct lock_class_key nbd_unix_iolock_key;
 
 static void nbd_reclassify_socket(struct socket *sock)
 {
@@ -1267,6 +1269,17 @@ static void nbd_reclassify_socket(struct socket *sock)
 					      &nbd_slock_key[2],
 					      "sk_lock-AF_UNIX-NBD",
 					      &nbd_key[2]);
+		/*
+		 * The AF_UNIX stream recvmsg/sendmsg paths serialize on
+		 * u->iolock, not sk_lock, so it must be reclassified as
+		 * well.  A held mutex cannot be reclassified; skip it in
+		 * that case, as sock_allow_reclassification() does for
+		 * sk_lock.
+		 */
+		if (!mutex_is_locked(&unix_sk(sk)->iolock))
+			lockdep_set_class_and_name(&unix_sk(sk)->iolock,
+						   &nbd_unix_iolock_key,
+						   "&u->iolock-NBD");
 		break;
 	}
 }
