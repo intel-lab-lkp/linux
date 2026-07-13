@@ -9808,22 +9808,21 @@ void smb3_preauth_hash_rsp(struct ksmbd_work *work)
 	}
 
 	if (le16_to_cpu(rsp->Command) == SMB2_SESSION_SETUP_HE && sess) {
-		__u8 *hash_value;
+		ksmbd_conn_lock(conn);
 
 		if (conn->binding) {
 			struct preauth_session *preauth_sess;
 
 			preauth_sess = ksmbd_preauth_session_lookup(conn, sess->id);
-			if (!preauth_sess)
-				return;
-			hash_value = preauth_sess->Preauth_HashValue;
-		} else {
-			hash_value = sess->Preauth_HashValue;
-			if (!hash_value)
-				return;
+			if (preauth_sess)
+				ksmbd_gen_preauth_integrity_hash(conn,
+					work->response_buf,
+					preauth_sess->Preauth_HashValue);
+		} else if (sess->Preauth_HashValue) {
+			ksmbd_gen_preauth_integrity_hash(conn, work->response_buf,
+					 sess->Preauth_HashValue);
 		}
-		ksmbd_gen_preauth_integrity_hash(conn, work->response_buf,
-						 hash_value);
+		ksmbd_conn_unlock(conn);
 	}
 }
 
