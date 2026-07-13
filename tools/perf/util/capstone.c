@@ -182,10 +182,12 @@ static bool e_machine_to_capstone(uint16_t e_machine, bool is64, bool is_big_end
 		*arch = CS_ARCH_SPARC;
 		*mode |= CS_MODE_V9;
 		return true;
+#if defined(CS_VERSION_MAJOR) && CS_VERSION_MAJOR >= 6
 	case EM_RISCV:
 		*arch = CS_ARCH_RISCV;
-		*mode |= (is64 ? CS_MODE_RISCV64 : CS_MODE_RISCV32) | CS_MODE_RISCVC;
+		*mode |= (is64 ? CS_MODE_RISCV64 : CS_MODE_RISCV32) | CS_MODE_RISCV_C;
 		return true;
+#endif
 	default:
 		return false;
 	}
