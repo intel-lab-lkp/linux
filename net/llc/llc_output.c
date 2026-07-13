@@ -26,12 +26,14 @@ int llc_mac_hdr_init(struct sk_buff *skb,
 		     const unsigned char *sa, const unsigned char *da)
 {
 	int rc = -EINVAL;
+	unsigned short proto;
 
 	switch (skb->dev->type) {
 	case ARPHRD_ETHER:
 	case ARPHRD_LOOPBACK:
-		rc = dev_hard_header(skb, skb->dev, ETH_P_802_2, da, sa,
-				     skb->len);
+		proto = skb->len > 1500 ? ETH_P_8021AC : ETH_P_802_2;
+		skb->protocol = htons(proto);
+		rc = dev_hard_header(skb, skb->dev, proto, da, sa, skb->len);
 		if (rc > 0)
 			rc = 0;
 		break;

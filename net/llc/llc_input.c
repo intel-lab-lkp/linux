@@ -120,6 +120,11 @@ static inline int llc_fixup_skb(struct sk_buff *skb)
 
 	skb_pull(skb, llc_len);
 	skb_reset_transport_header(skb);
+
+	/* trimming the checksum is not necessary for 802.1AC since the
+	 * frames are required to be larger than 1500 bytes, thus have no
+	 * ethernet padding
+	 */
 	if (skb->protocol == htons(ETH_P_802_2)) {
 		__be16 pdulen;
 		s32 data_size;
@@ -134,6 +139,12 @@ static inline int llc_fixup_skb(struct sk_buff *skb)
 		    !pskb_may_pull(skb, data_size))
 			return 0;
 		if (unlikely(pskb_trim_rcsum(skb, data_size)))
+			return 0;
+	} else if (skb->protocol == htons(ETH_P_8021AC)) {
+		/* don't accept non-jumbo 802.1AC frames, it could be used to
+		 * bypass filters on 802.2.  Minimum 1497 + 1 byte.
+		 */
+		if (!pskb_may_pull(skb, 1497 + 1))
 			return 0;
 	}
 	return 1;

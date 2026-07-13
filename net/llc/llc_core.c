@@ -129,14 +129,21 @@ static struct packet_type llc_packet_type __read_mostly = {
 	.func = llc_rcv,
 };
 
+static struct packet_type llc_packet_type_8021ac __read_mostly = {
+	.type = cpu_to_be16(ETH_P_8021AC),
+	.func = llc_rcv,
+};
+
 static int __init llc_init(void)
 {
 	dev_add_pack(&llc_packet_type);
+	dev_add_pack(&llc_packet_type_8021ac);
 	return 0;
 }
 
 static void __exit llc_exit(void)
 {
+	dev_remove_pack(&llc_packet_type_8021ac);
 	dev_remove_pack(&llc_packet_type);
 }
 
