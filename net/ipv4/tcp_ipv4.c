@@ -922,7 +922,7 @@ static void tcp_v4_send_ack(const struct sock *sk,
 	struct sock *ctl_sk;
 	u64 transmit_time;
 
-	memset(&rep.th, 0, sizeof(struct tcphdr));
+	memset(&rep, 0, sizeof(rep));
 	memset(&arg, 0, sizeof(arg));
 
 	arg.iov[0].iov_base = (unsigned char *)&rep;
