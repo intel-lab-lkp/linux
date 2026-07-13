@@ -875,21 +875,50 @@ void mptcp_pm_mp_fail_received(struct sock *sk, u64 fail_seq)
 
 	pr_debug("fail_seq=%llu\n", fail_seq);
 
-	/* After accepting the fail, we can't create any other subflows */
+	/* MP_FAIL on a single contiguous subflow: fall back to TCP.
+	 * allow_infinite_fallback is cleared once other subflows join or
+	 * non-contiguous data is retransmitted; in that case ignore MP_FAIL
+	 * here (the peer should reset the failing subflow instead).
+	 *
+	 * Send the MP_FAIL (+ DSS) response before setting FALLBACK_DONE,
+	 * otherwise mptcp_established_options() would drop all MPTCP options
+	 * on this ACK. InfiniteMapTx is accounted later when the map is sent.
+	 */
 	spin_lock_bh(&msk->fallback_lock);
 	if (!msk->allow_infinite_fallback) {
 		spin_unlock_bh(&msk->fallback_lock);
 		return;
 	}
-	msk->allow_subflows = false;
+	WRITE_ONCE(msk->allow_subflows, false);
 	spin_unlock_bh(&msk->fallback_lock);
 
 	if (!subflow->fail_tout) {
 		pr_debug("send MP_FAIL response and infinite map\n");
 
+		/* Infinite mapping requires contiguous data. With OoO still
+		 * queued, do not leave allow_subflows=false without
+		 * FALLBACK_DONE; tear the subflow down instead (RFC8684 §3.7).
+		 */
+		if (!RB_EMPTY_ROOT(&msk->out_of_order_queue)) {
+			MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_FALLBACKFAILED);
+			subflow->send_mp_fail = 1;
+			mptcp_subflow_reset(sk);
+			return;
+		}
+
 		subflow->send_mp_fail = 1;
 		subflow->send_infinite_map = 1;
 		tcp_send_ack(sk);
+
+		/* RFC8684 §3.7: after accepting MP_FAIL with a single
+		 * subflow, leave MPTCP mode and never revert. Use
+		 * mptcp_try_fallback() so pending DATA_FIN is handled.
+		 * InfiniteMapTx is counted when the map is transmitted.
+		 */
+		if (!mptcp_try_fallback(sk, MPTCP_MIB_MPFAILFALLBACK)) {
+			MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_FALLBACKFAILED);
+			mptcp_subflow_reset(sk);
+		}
 	} else {
 		pr_debug("MP_FAIL response received\n");
 		WRITE_ONCE(subflow->fail_tout, 0);

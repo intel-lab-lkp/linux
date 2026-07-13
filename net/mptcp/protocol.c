@@ -93,7 +93,7 @@ bool __mptcp_try_fallback(struct mptcp_sock *msk, int fb_mib)
 		return false;
 	}
 
-	msk->allow_subflows = false;
+	WRITE_ONCE(msk->allow_subflows, false);
 	set_bit(MPTCP_FALLBACK_DONE, &msk->flags);
 	__MPTCP_INC_STATS(net, fb_mib);
 	spin_unlock_bh(&msk->fallback_lock);
@@ -964,7 +964,7 @@ static bool __mptcp_finish_join(struct mptcp_sock *msk, struct sock *ssk)
 		return false;
 
 	spin_lock_bh(&msk->fallback_lock);
-	if (!msk->allow_subflows) {
+	if (!READ_ONCE(msk->allow_subflows)) {
 		spin_unlock_bh(&msk->fallback_lock);
 		return false;
 	}
@@ -1305,7 +1305,12 @@ static void mptcp_update_infinite_map(struct mptcp_sock *msk,
 	mpext->infinite_map = 1;
 	mpext->data_len = 0;
 
-	if (!mptcp_try_fallback(ssk, MPTCP_MIB_INFINITEMAPTX)) {
+	/* Fallback may already have been completed on MP_FAIL reception;
+	 * still account for the infinite mapping being transmitted.
+	 */
+	if (__mptcp_check_fallback(msk)) {
+		MPTCP_INC_STATS(sock_net(ssk), MPTCP_MIB_INFINITEMAPTX);
+	} else if (!mptcp_try_fallback(ssk, MPTCP_MIB_INFINITEMAPTX)) {
 		MPTCP_INC_STATS(sock_net(ssk), MPTCP_MIB_FALLBACKFAILED);
 		mptcp_subflow_reset(ssk);
 		return;
@@ -2850,7 +2855,7 @@ static void __mptcp_retrans(struct sock *sk)
 			 */
 			spin_lock_bh(&msk->fallback_lock);
 			if (__mptcp_check_fallback(msk) ||
-			    !msk->allow_subflows) {
+			    !READ_ONCE(msk->allow_subflows)) {
 				spin_unlock_bh(&msk->fallback_lock);
 				release_sock(ssk);
 				goto clear_scheduled;
@@ -3061,7 +3066,7 @@ static void __mptcp_init_sock(struct sock *sk)
 	inet_csk(sk)->icsk_sync_mss = mptcp_sync_mss;
 	WRITE_ONCE(msk->csum_enabled, mptcp_is_checksum_enabled(sock_net(sk)));
 	msk->allow_infinite_fallback = true;
-	msk->allow_subflows = true;
+	WRITE_ONCE(msk->allow_subflows, true);
 	msk->recovery = false;
 	msk->subflow_id = 1;
 	msk->last_data_sent = tcp_jiffies32;
@@ -3479,7 +3484,7 @@ static int mptcp_disconnect(struct sock *sk, int flags)
 	 * can't overlap with a fallback anymore
 	 */
 	spin_lock_bh(&msk->fallback_lock);
-	msk->allow_subflows = true;
+	WRITE_ONCE(msk->allow_subflows, true);
 	msk->allow_infinite_fallback = true;
 	WRITE_ONCE(msk->flags, 0);
 	spin_unlock_bh(&msk->fallback_lock);
@@ -3879,7 +3884,7 @@ bool mptcp_finish_join(struct sock *ssk)
 	 */
 	if (!list_empty(&subflow->node)) {
 		spin_lock_bh(&msk->fallback_lock);
-		if (!msk->allow_subflows) {
+		if (!READ_ONCE(msk->allow_subflows)) {
 			spin_unlock_bh(&msk->fallback_lock);
 			return false;
 		}

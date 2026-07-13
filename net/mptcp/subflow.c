@@ -1318,7 +1318,7 @@ static bool mptcp_subflow_fail(struct mptcp_sock *msk, struct sock *ssk)
 		spin_unlock_bh(&msk->fallback_lock);
 		return false;
 	}
-	msk->allow_subflows = false;
+	WRITE_ONCE(msk->allow_subflows, false);
 	spin_unlock_bh(&msk->fallback_lock);
 
 	/* graceful failure can happen only on the MPC subflow */
