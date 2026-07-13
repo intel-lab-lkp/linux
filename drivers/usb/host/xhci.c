@@ -8,6 +8,7 @@
  * Some code borrowed from the Linux EHCI driver.
  */
 
+#include <linux/bitfield.h>
 #include <linux/jiffies.h>
 #include <linux/pci.h>
 #include <linux/iommu.h>
@@ -4723,8 +4724,9 @@ static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 			hird = xhci_calculate_hird_besl(xhci, udev);
 		}
 
-		pm_val &= ~PORT_HIRD_MASK;
-		pm_val |= PORT_HIRD(hird) | PORT_RWE | PORT_L1DS(udev->slot_id);
+		FIELD_MODIFY(PORT_BESL_MASK, &pm_val, hird);
+		FIELD_MODIFY(PORT_L1DS_MASK, &pm_val, udev->slot_id);
+		pm_val |= PORT_RWE;
 		writel(pm_val, &port_reg->portpmsc);
 		pm_val = readl(&port_reg->portpmsc);
 		pm_val |= PORT_HLE;
@@ -4732,7 +4734,7 @@ static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 		/* flush write */
 		readl(&port_reg->portpmsc);
 	} else {
-		pm_val &= ~(PORT_HLE | PORT_RWE | PORT_HIRD_MASK | PORT_L1DS_MASK);
+		pm_val &= ~(PORT_HLE | PORT_RWE | PORT_BESL_MASK | PORT_L1DS_MASK);
 		writel(pm_val, &port_reg->portpmsc);
 		/* flush write */
 		readl(&port_reg->portpmsc);

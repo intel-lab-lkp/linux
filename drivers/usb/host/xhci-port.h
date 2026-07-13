@@ -133,16 +133,24 @@
 /* bit 16 - Force Link PM Accept (FLA) */
 /* bits 31:17 - RsvdP */
 
-/* USB2 Protocol PORTSPMSC */
-#define	PORT_L1S_MASK		7
-#define	PORT_L1S_SUCCESS	1
+/* USB2 Port Power Management Status and Control (PORTPMSC) 5.4.9.2 */
+/* bits 2:0 - L1 Status */
+#define	PORT_L1S_MASK		GENMASK(2, 0)
+/* bit 3 - Remote Wake Enable */
 #define	PORT_RWE		BIT(3)
-#define	PORT_HIRD(p)		(((p) & 0xf) << 4)
-#define	PORT_HIRD_MASK		(0xf << 4)
-#define	PORT_L1DS_MASK		(0xff << 8)
-#define	PORT_L1DS(p)		(((p) & 0xff) << 8)
+/*
+ * bits 7:4 - Best Effort Service Latency
+ * Some host controllers may implement the pre-2011 USB 2.0 LPM definition,
+ * where this field is interpreted as Host Initiated Resume Duration (HIRD).
+ */
+#define	PORT_BESL_MASK		GENMASK(7, 4)
+/* bits 15:8 - L1 Device Slot */
+#define	PORT_L1DS_MASK		GENMASK(15, 8)
+/* bit 16 - Hardware LPM Enable */
 #define	PORT_HLE		BIT(16)
-#define PORT_TEST_MODE_SHIFT	28
+/* bits 27:17 - RsvdP */
+/* bits 31:28 - Port Test Control */
+#define PORT_TEST_MODE_MASK	GENMASK(31, 28)
 
 /* USB3 Protocol PORTLI  Port Link Information */
 #define PORT_LEC(p)		((p) & 0xffff)
