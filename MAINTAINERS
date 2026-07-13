@@ -21087,13 +21087,6 @@ L:	netdev@vger.kernel.org
 S:	Maintained
 F:	drivers/net/ethernet/amd/pcnet32.c
 
-PCRYPT PARALLEL CRYPTO ENGINE
-M:	Steffen Klassert <steffen.klassert@secunet.com>
-L:	linux-crypto@vger.kernel.org
-S:	Maintained
-F:	crypto/pcrypt.c
-F:	include/crypto/pcrypt.h
-
 PDS DSC VIRTIO DATA PATH ACCELERATOR
 R:	Brett Creeley <brett.creeley@amd.com>
 F:	drivers/vdpa/pds/
