@@ -1029,7 +1029,7 @@ static int erofs_show_options(struct seq_file *seq, struct dentry *root)
 				",user_xattr" : ",nouser_xattr");
 	if (IS_ENABLED(CONFIG_EROFS_FS_POSIX_ACL))
 		seq_puts(seq, test_opt(opt, POSIX_ACL) ? ",acl" : ",noacl");
-	if (IS_ENABLED(CONFIG_EROFS_FS_ZIP))
+	if (IS_ENABLED(CONFIG_EROFS_FS_ZIP) && sbi->available_compr_algs)
 		seq_printf(seq, ",cache_strategy=%s",
 			  erofs_param_cache_strategy[opt->cache_strategy].name);
 	if (test_opt(opt, DAX_ALWAYS))
