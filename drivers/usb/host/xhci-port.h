@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
+#include <linux/bitfield.h>
 #include <linux/bits.h>
 
 /* PORTSC - Port Status and Control Register - port_status_base bitmasks */
@@ -33,35 +34,26 @@
 
 /* true: port has power (see HCC_PPC) */
 #define PORT_POWER	BIT(9)
-/* bits 10:13 indicate device speed:
+/*
+ * bits 13:10 - Port Speed
+ * Values defined in xHCI specification 7.2.2.1.1:
  * 0 - undefined speed - port hasn't be initialized by a reset yet
- * 1 - full speed
- * 2 - low speed
- * 3 - high speed
- * 4 - super speed
- * 5-15 reserved
+ * 1 - Full-speed
+ * 2 - Low-speed
+ * 3 - High-speed
+ * 4 - SuperSpeed Gen1 x1
+ * 5 - SuperSpeed Gen2 x1
+ * 6 - SuperSpeed Gen1 x2
+ * 7 - SuperSpeed Gen2 x2
+ * 8-15 Reserved
  */
-#define DEV_SPEED_MASK		(0xf << 10)
-#define	XDEV_FS			(0x1 << 10)
-#define	XDEV_LS			(0x2 << 10)
-#define	XDEV_HS			(0x3 << 10)
-#define	XDEV_SS			(0x4 << 10)
-#define	XDEV_SSP		(0x5 << 10)
-#define DEV_UNDEFSPEED(p)	(((p) & DEV_SPEED_MASK) == (0x0<<10))
-#define DEV_FULLSPEED(p)	(((p) & DEV_SPEED_MASK) == XDEV_FS)
-#define DEV_LOWSPEED(p)		(((p) & DEV_SPEED_MASK) == XDEV_LS)
-#define DEV_HIGHSPEED(p)	(((p) & DEV_SPEED_MASK) == XDEV_HS)
-#define DEV_SUPERSPEED(p)	(((p) & DEV_SPEED_MASK) == XDEV_SS)
-#define DEV_SUPERSPEEDPLUS(p)	(((p) & DEV_SPEED_MASK) == XDEV_SSP)
-#define DEV_SUPERSPEED_ANY(p)	(((p) & DEV_SPEED_MASK) >= XDEV_SS)
-#define DEV_PORT_SPEED(p)	(((p) >> 10) & 0x0f)
+#define PORT_SPEED_MASK		GENMASK(13, 10)
+#define	PORT_SPEED_FS		1
+#define	PORT_SPEED_LS		2
+#define	PORT_SPEED_HS		3
+#define	PORT_SPEED_SS		4
+#define	PORT_SPEED_SSP		5
 
-/* Bits 20:23 in the Slot Context are the speed for the device */
-#define	SLOT_SPEED_FS		(XDEV_FS << 10)
-#define	SLOT_SPEED_LS		(XDEV_LS << 10)
-#define	SLOT_SPEED_HS		(XDEV_HS << 10)
-#define	SLOT_SPEED_SS		(XDEV_SS << 10)
-#define	SLOT_SPEED_SSP		(XDEV_SSP << 10)
 /* Port Indicator Control */
 #define PORT_LED_OFF	(0 << 14)
 #define PORT_LED_AMBER	(1 << 14)

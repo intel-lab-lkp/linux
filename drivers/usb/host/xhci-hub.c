@@ -376,9 +376,11 @@ static void xhci_hub_descriptor(struct usb_hcd *hcd, struct xhci_hcd *xhci,
 
 static unsigned int xhci_port_speed(int portsc)
 {
-	if (DEV_LOWSPEED(portsc))
+	u32 port_speed = FIELD_GET(PORT_SPEED_MASK, portsc);
+
+	if (port_speed == PORT_SPEED_LS)
 		return USB_PORT_STAT_LOW_SPEED;
-	if (DEV_HIGHSPEED(portsc))
+	if (port_speed == PORT_SPEED_HS)
 		return USB_PORT_STAT_HIGH_SPEED;
 	/*
 	 * FIXME: Yes, we should check for full speed, but the core uses that as
@@ -1007,7 +1009,7 @@ static u32 xhci_get_ext_port_status(u32 portsc, u32 port_li)
 	int speed_id;
 
 	/* only support rx and tx lane counts of 1 in usb3.1 spec */
-	speed_id = DEV_PORT_SPEED(portsc);
+	speed_id = FIELD_GET(PORT_SPEED_MASK, portsc);
 	ext_stat |= speed_id;		/* bits 3:0, RX speed id */
 	ext_stat |= speed_id << 4;	/* bits 7:4, TX speed id */
 
