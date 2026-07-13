@@ -7,15 +7,8 @@
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/string.h>
-#include <linux/unaligned.h>
 
 #include "compress.h"
-#include "lz77.h"
-
-#define SMB2_COMPRESSION_CHAINED_HDR_LEN \
-	offsetof(struct smb2_compression_hdr, CompressionAlgorithm)
-#define SMB2_COMPRESSION_PAYLOAD_BASE_LEN \
-	(sizeof(struct smb2_compression_payload_hdr) - sizeof(__le32))
 
 /*
  * A NONE payload carries bytes verbatim. Keep both cursors and remaining
@@ -75,7 +68,7 @@ static int smb_decompress_lz77_payload(const u8 **src, u32 *slen, u8 **dst,
 	if (len < sizeof(__le32) || len > *slen)
 		return -EINVAL;
 
-	orig_size = get_unaligned_le32(*src);
+	orig_size = mem_read32(*src);
 	if (orig_size > *dlen)
 		return -EINVAL;
 
