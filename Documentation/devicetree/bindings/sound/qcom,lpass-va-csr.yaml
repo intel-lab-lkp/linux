@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/qcom,lpass-va-csr.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm LPASS VA CSR heartbeat pulse clock provider
+
+maintainers:
+  - Srinivas Kandagatla <srinivas.kandagatla@oss.qualcomm.com>
+  - Sarath Ganapathiraju <sarath.ganapathiraju@oss.qualcomm.com>
+
+description:
+  The LPASS VA CSR block contains the rate generator hardware which
+  produces the heartbeatpulse consumed by the Bolero codec macros
+  (rx, tx, wsa, va). It is modelled as a clock provider
+  so consumers can reference it by name in their clocks list.
+
+properties:
+  compatible:
+    enum:
+      - qcom,hawi-lpass-va-csr
+
+  reg:
+    maxItems: 1
+    description: Must cover the full VA CSR block (base 0x7EE0000, size 0xE000).
+
+  "#clock-cells":
+    const: 0
+    description:
+      Single clock output "lpass_heartbeat_pulse". Consumers reference
+      it by clock-name "heartbeatpulse" in their clocks list.
+
+required:
+  - compatible
+  - reg
+  - "#clock-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    va-csr@7ee0000 {
+      compatible = "qcom,hawi-lpass-va-csr";
+      reg = <0x0 0x07ee0000 0x0 0xe000>;
+      #clock-cells = <0>;
+    };
