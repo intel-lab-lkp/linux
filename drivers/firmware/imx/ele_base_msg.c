@@ -8,6 +8,7 @@
 #include <linux/cleanup.h>
 #include <linux/completion.h>
 #include <linux/dma-mapping.h>
+#include <linux/firmware/imx/se_api.h>
 #include <linux/genalloc.h>
 
 #include "ele_base_msg.h"
@@ -79,9 +80,9 @@ int ele_get_info(struct se_if_priv *priv, struct ele_dev_info *s_info)
 		return -ENOMEM;
 	}
 
-	ret = se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
-				  ELE_GET_INFO_REQ, ELE_GET_INFO_REQ_MSG_SZ,
-				  true);
+	ret = imx_se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
+				      ELE_GET_INFO_REQ, ELE_GET_INFO_REQ_MSG_SZ,
+				      true);
 	if (ret)
 		goto exit;
 
@@ -93,8 +94,8 @@ int ele_get_info(struct se_if_priv *priv, struct ele_dev_info *s_info)
 	if (ret < 0)
 		goto exit;
 
-	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_GET_INFO_REQ,
-				      ELE_GET_INFO_RSP_MSG_SZ, true);
+	ret = imx_se_val_rsp_hdr_n_status(priv, rx_msg, ELE_GET_INFO_REQ,
+					  ELE_GET_INFO_RSP_MSG_SZ, true);
 	if (ret < 0)
 		goto exit;
 
@@ -132,10 +133,10 @@ int ele_ping(struct se_if_priv *priv)
 	if (!rx_msg)
 		return -ENOMEM;
 
-	ret = se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
-				  ELE_PING_REQ, ELE_PING_REQ_SZ, true);
+	ret = imx_se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
+				      ELE_PING_REQ, ELE_PING_REQ_SZ, true);
 	if (ret) {
-		dev_err(priv->dev, "Error: se_fill_cmd_msg_hdr failed.");
+		dev_err(priv->dev, "Error: imx_se_fill_cmd_msg_hdr failed.");
 		return ret;
 	}
 
@@ -144,8 +145,8 @@ int ele_ping(struct se_if_priv *priv)
 	if (ret < 0)
 		return ret;
 
-	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_PING_REQ,
-				      ELE_PING_RSP_SZ, true);
+	ret = imx_se_val_rsp_hdr_n_status(priv, rx_msg, ELE_PING_REQ,
+					  ELE_PING_RSP_SZ, true);
 
 	return ret;
 }
@@ -169,9 +170,9 @@ int ele_service_swap(struct se_if_priv *priv,
 	if (!rx_msg)
 		return -ENOMEM;
 
-	ret = se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
-				  ELE_SERVICE_SWAP_REQ,
-				  ELE_SERVICE_SWAP_REQ_MSG_SZ, true);
+	ret = imx_se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
+				      ELE_SERVICE_SWAP_REQ,
+				      ELE_SERVICE_SWAP_REQ_MSG_SZ, true);
 	if (ret)
 		return ret;
 
@@ -189,8 +190,8 @@ int ele_service_swap(struct se_if_priv *priv,
 	if (ret < 0)
 		return ret;
 
-	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_SERVICE_SWAP_REQ,
-				      ELE_SERVICE_SWAP_RSP_MSG_SZ, true);
+	ret = imx_se_val_rsp_hdr_n_status(priv, rx_msg, ELE_SERVICE_SWAP_REQ,
+					  ELE_SERVICE_SWAP_RSP_MSG_SZ, true);
 	if (ret)
 		return ret;
 
@@ -225,8 +226,8 @@ int ele_fw_authenticate(struct se_if_priv *priv, phys_addr_t contnr_addr,
 	if (!rx_msg)
 		return -ENOMEM;
 
-	ret = se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
-				  ELE_FW_AUTH_REQ, ELE_FW_AUTH_REQ_SZ, true);
+	ret = imx_se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
+				      ELE_FW_AUTH_REQ, ELE_FW_AUTH_REQ_SZ, true);
 	if (ret)
 		return ret;
 
@@ -239,8 +240,8 @@ int ele_fw_authenticate(struct se_if_priv *priv, phys_addr_t contnr_addr,
 	if (ret < 0)
 		return ret;
 
-	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_FW_AUTH_REQ,
-				      ELE_FW_AUTH_RSP_MSG_SZ, true);
+	ret = imx_se_val_rsp_hdr_n_status(priv, rx_msg, ELE_FW_AUTH_REQ,
+					  ELE_FW_AUTH_RSP_MSG_SZ, true);
 
 	return ret;
 }
@@ -265,8 +266,8 @@ int ele_debug_dump(struct se_if_priv *priv)
 	if (!rx_msg)
 		return -ENOMEM;
 
-	ret = se_fill_cmd_msg_hdr(priv, &tx_msg->header, ELE_DEBUG_DUMP_REQ,
-				  ELE_DEBUG_DUMP_REQ_SZ, true);
+	ret = imx_se_fill_cmd_msg_hdr(priv, &tx_msg->header, ELE_DEBUG_DUMP_REQ,
+				      ELE_DEBUG_DUMP_REQ_SZ, true);
 	if (ret)
 		return ret;
 
@@ -279,8 +280,8 @@ int ele_debug_dump(struct se_if_priv *priv)
 		if (ret < 0)
 			return ret;
 
-		ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_DEBUG_DUMP_REQ,
-					      ELE_DEBUG_DUMP_RSP_SZ, true);
+		ret = imx_se_val_rsp_hdr_n_status(priv, rx_msg, ELE_DEBUG_DUMP_REQ,
+						  ELE_DEBUG_DUMP_RSP_SZ, true);
 		if (ret) {
 			dev_err(priv->dev, "Dump_Debug_Buffer Error: %x.", ret);
 			break;

@@ -3,8 +3,23 @@
  * Copyright 2025 NXP
  */
 
+#include <linux/export.h>
+
 #include "ele_base_msg.h"
 #include "ele_common.h"
+
+/* Fill a command message header with a given command ID and length in bytes. */
+int imx_se_fill_cmd_msg_hdr(struct se_if_priv *priv, struct se_msg_hdr *hdr,
+			u8 cmd, u32 len, bool is_base_api)
+{
+	hdr->tag = priv->if_defs->cmd_tag;
+	hdr->ver = (is_base_api) ? priv->if_defs->base_api_ver : priv->if_defs->fw_api_ver;
+	hdr->command = cmd;
+	hdr->size = len >> 2;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(imx_se_fill_cmd_msg_hdr);
 
 int se_chk_tx_msg_hdr(struct se_if_priv *priv, struct se_msg_hdr *header)
 {
@@ -155,6 +170,21 @@ int ele_msg_send_rcv(struct se_if_device_ctx *dev_ctx, void *tx_msg,
 	return err;
 }
 
+/*
+ * Send/receive blocking call for external drivers, operating on the SE
+ * interface private data (the misc device context is resolved internally).
+ */
+int imx_se_msg_send_rcv(struct se_if_priv *priv, void *tx_msg, int tx_msg_sz,
+			void *rx_msg, int exp_rx_msg_sz)
+{
+	if (!priv)
+		return -EINVAL;
+
+	return ele_msg_send_rcv(priv->priv_dev_ctx, tx_msg, tx_msg_sz,
+				rx_msg, exp_rx_msg_sz);
+}
+EXPORT_SYMBOL_GPL(imx_se_msg_send_rcv);
+
 static bool check_hdr_exception_for_sz(struct se_if_priv *priv,
 				       struct se_msg_hdr *header)
 {
@@ -239,8 +269,8 @@ void se_if_rx_callback(struct mbox_client *mbox_cl, void *msg)
 	complete(&se_clbk_hdl->done);
 }
 
-int se_val_rsp_hdr_n_status(struct se_if_priv *priv, struct se_api_msg *msg,
-			    u8 msg_id, u8 sz, bool is_base_api)
+int imx_se_val_rsp_hdr_n_status(struct se_if_priv *priv, struct se_api_msg *msg,
+				u8 msg_id, u8 sz, bool is_base_api)
 {
 	struct se_msg_hdr *header = &msg->header;
 	u32 status;
@@ -285,6 +315,7 @@ int se_val_rsp_hdr_n_status(struct se_if_priv *priv, struct se_api_msg *msg,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(imx_se_val_rsp_hdr_n_status);
 
 int se_save_imem_state(struct se_if_priv *priv, struct se_imem_buf *imem)
 {

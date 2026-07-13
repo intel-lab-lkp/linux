@@ -7,6 +7,7 @@
 #define SE_MU_H
 
 #include <linux/bitfield.h>
+#include <linux/firmware/imx/se_api.h>
 #include <linux/miscdevice.h>
 #include <linux/semaphore.h>
 #include <linux/mailbox_client.h>
@@ -73,20 +74,7 @@ struct se_if_device_ctx {
 	struct list_head link;
 };
 
-/* Header of the messages exchange with the EdgeLock Enclave */
-struct se_msg_hdr {
-	u8 ver;
-	u8 size;
-	u8 command;
-	u8 tag;
-}  __packed;
-
 #define SE_MU_HDR_SZ	4
-
-struct se_api_msg {
-	struct se_msg_hdr header;
-	u32 data[];
-};
 
 struct se_if_defines {
 	const u8 se_if_type;
