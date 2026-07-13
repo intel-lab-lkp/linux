@@ -1042,20 +1042,6 @@ struct mlx5_ifc_wqe_based_flow_table_cap_bits {
 	u8         reserved_at_1c1[0x1f];
 };
 
-struct mlx5_ifc_esw_cap_bits {
-	u8         reserved_at_0[0x1d];
-	u8         merged_eswitch[0x1];
-	u8         reserved_at_1e[0x2];
-
-	u8         reserved_at_20[0x40];
-
-	u8         esw_manager_vport_number_valid[0x1];
-	u8         reserved_at_61[0xf];
-	u8         esw_manager_vport_number[0x10];
-
-	u8         reserved_at_80[0x780];
-};
-
 enum {
 	MLX5_COUNTER_SOURCE_ESWITCH = 0x0,
 	MLX5_COUNTER_FLOW_ESWITCH   = 0x1,
@@ -1096,7 +1082,11 @@ struct mlx5_ifc_e_switch_cap_bits {
 	u8         log_max_esw_sf[0x5];
 	u8         esw_sf_base_id[0x10];
 
-	u8         reserved_at_60[0x7a0];
+	u8         esw_manager_vport_number_valid[0x1];
+	u8         reserved_at_61[0xf];
+	u8         esw_manager_vport_number[0x10];
+
+	u8         reserved_at_80[0x780];
 
 };
 
@@ -3855,7 +3845,6 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_flow_table_nic_cap_bits flow_table_nic_cap;
 	struct mlx5_ifc_flow_table_eswitch_cap_bits flow_table_eswitch_cap;
 	struct mlx5_ifc_wqe_based_flow_table_cap_bits wqe_based_flow_table_cap;
-	struct mlx5_ifc_esw_cap_bits esw_cap;
 	struct mlx5_ifc_e_switch_cap_bits e_switch_cap;
 	struct mlx5_ifc_port_selection_cap_bits port_selection_cap;
 	struct mlx5_ifc_qos_cap_bits qos_cap;
