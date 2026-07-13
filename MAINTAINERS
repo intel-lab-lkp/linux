@@ -19207,7 +19207,7 @@ L:	linux-nvme@lists.infradead.org
 S:	Supported
 W:	http://git.infradead.org/nvme.git
 T:	git git://git.infradead.org/nvme.git
-F:	Documentation/ABI/stable/sysfs-nvme
+F:	Documentation/ABI/*/sysfs-nvme
 F:	Documentation/admin-guide/nvme-multipath.rst
 F:	Documentation/fault-injection/nvme-fault-injection.rst
 F:	Documentation/nvme/

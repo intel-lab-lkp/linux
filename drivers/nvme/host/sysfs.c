@@ -36,6 +36,37 @@ static ssize_t nvme_sysfs_rescan(struct device *dev,
 }
 static DEVICE_ATTR(rescan_controller, S_IWUSR, NULL, nvme_sysfs_rescan);
 
+static ssize_t timestamps_enabled_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct nvme_ctrl *ctrl = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", READ_ONCE(ctrl->timestamps_enabled));
+}
+
+static ssize_t timestamps_enabled_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct nvme_ctrl *ctrl = dev_get_drvdata(dev);
+	bool enabled, was_enabled;
+	int ret;
+
+	ret = kstrtobool(buf, &enabled);
+	if (ret)
+		return ret;
+
+	was_enabled = READ_ONCE(ctrl->timestamps_enabled);
+	WRITE_ONCE(ctrl->timestamps_enabled, enabled);
+
+	if (enabled && !was_enabled &&
+	    nvme_ctrl_state(ctrl) == NVME_CTRL_LIVE)
+		nvme_configure_timestamp(ctrl);
+
+	return count;
+}
+static DEVICE_ATTR_RW(timestamps_enabled);
+
 static ssize_t nvme_adm_passthru_err_log_enabled_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -929,6 +960,7 @@ static DEVICE_ATTR(dhchap_ctrl_secret, S_IRUGO | S_IWUSR,
 static struct attribute *nvme_dev_attrs[] = {
 	&dev_attr_reset_controller.attr,
 	&dev_attr_rescan_controller.attr,
+	&dev_attr_timestamps_enabled.attr,
 	&dev_attr_model.attr,
 	&dev_attr_serial.attr,
 	&dev_attr_firmware_rev.attr,

@@ -71,6 +71,11 @@ module_param(default_ps_max_latency_us, ulong, 0644);
 MODULE_PARM_DESC(default_ps_max_latency_us,
 		 "max power saving latency for new devices; use PM QOS to change per device");
 
+static bool timestamps_enabled_default;
+module_param(timestamps_enabled_default, bool, 0644);
+MODULE_PARM_DESC(timestamps_enabled_default,
+		 "default value of the per-controller timestamps_enabled sysfs attribute");
+
 static bool force_apst;
 module_param(force_apst, bool, 0644);
 MODULE_PARM_DESC(force_apst, "allow APST for newly enumerated devices even if quirked off");
@@ -2824,21 +2829,21 @@ int nvme_enable_ctrl(struct nvme_ctrl *ctrl)
 }
 EXPORT_SYMBOL_GPL(nvme_enable_ctrl);
 
-static int nvme_configure_timestamp(struct nvme_ctrl *ctrl)
+void nvme_configure_timestamp(struct nvme_ctrl *ctrl)
 {
 	__le64 ts;
 	int ret;
 
-	if (!(ctrl->oncs & NVME_CTRL_ONCS_TIMESTAMP))
-		return 0;
+	if (!READ_ONCE(ctrl->timestamps_enabled) ||
+	    !(ctrl->oncs & NVME_CTRL_ONCS_TIMESTAMP))
+		return;
 
 	ts = cpu_to_le64(ktime_to_ms(ktime_get_real()));
 	ret = nvme_set_features(ctrl, NVME_FEAT_TIMESTAMP, 0, &ts, sizeof(ts),
 			NULL);
 	if (ret)
-		dev_warn_once(ctrl->device,
-			"could not set timestamp (%d)\n", ret);
-	return ret;
+		dev_warn(ctrl->device,
+			 "could not set timestamp (%d)\n", ret);
 }
 
 static int nvme_configure_host_options(struct nvme_ctrl *ctrl)
@@ -3771,9 +3776,7 @@ int nvme_init_ctrl_finish(struct nvme_ctrl *ctrl, bool was_suspended)
 	if (ret < 0)
 		return ret;
 
-	ret = nvme_configure_timestamp(ctrl);
-	if (ret < 0)
-		return ret;
+	nvme_configure_timestamp(ctrl);
 
 	ret = nvme_configure_host_options(ctrl);
 	if (ret < 0)
@@ -5168,6 +5171,7 @@ int nvme_init_ctrl(struct nvme_ctrl *ctrl, struct device *dev,
 
 	WRITE_ONCE(ctrl->state, NVME_CTRL_NEW);
 	ctrl->passthru_err_log_enabled = false;
+	ctrl->timestamps_enabled = READ_ONCE(timestamps_enabled_default);
 	clear_bit(NVME_CTRL_FAILFAST_EXPIRED, &ctrl->flags);
 	spin_lock_init(&ctrl->lock);
 	mutex_init(&ctrl->namespaces_lock);

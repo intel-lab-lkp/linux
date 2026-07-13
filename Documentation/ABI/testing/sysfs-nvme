@@ -1,0 +1,21 @@
+What:		/sys/class/nvme/nvmeX/timestamps_enabled
+Date:		July 2026
+KernelVersion:	7.3
+Contact:	Linux NVMe mailing list <linux-nvme@lists.infradead.org>
+Description:
+		Shows or sets whether the kernel sends wall-clock time to the
+		controller using the NVMe Timestamp feature. Reading returns 1
+		(enabled) or 0 (disabled). Writing accepts a boolean value. The
+		attribute is present for every controller. On controllers that
+		do not support the Timestamp feature, the setting has no effect.
+
+		The per-controller value is initialized from
+		nvme_core.timestamps_enabled_default, which defaults to false. When
+		enabled, the kernel sends a timestamp whenever the controller
+		starts, including on controller resets and resume from suspend.
+		Changing the value from 0 to 1 on a live controller
+		sends a timestamp immediately. Disabling does not affect a
+		timestamp already sent.
+
+		Writes latch the requested value. Sending timestamps to the
+		controller is best-effort; every failure generates a warning.
