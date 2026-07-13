@@ -261,117 +261,201 @@ out:
 }
 EXPORT_SYMBOL_GPL(smb_lz77_compress);
 
-static int lz77_decode_match_len(const u8 **src, const u8 *end, u16 token,
-				 u8 *nibble, bool *have_nibble, u32 *len)
+static __always_inline const void *lz77_decode_match_len(const void *src, const void *end,
+							 const void **nib, u32 *len)
 {
-	u8 extra;
+	u32 mlen = *len & 7;
 
-	*len = (token & 0x7) + 3;
-	if ((token & 0x7) != 0x7)
-		return 0;
+	/*
+	 * *@len points to the initial match length decoded.
+	 * We'll keep checking + decoding further if extra bits/bytes were used to encode larger
+	 * lengths.
+	 *
+	 * Since we're reading from @src itself, this means any OOB read is an error
+	 * (bug, malformed payload, etc).
+	 */
+	if (mlen == 7) {
+		if (!*nib) {
+			*nib = src;
+			if (unlikely(src >= end))
+				return NULL;
 
-	if (!*have_nibble) {
-		if (*src >= end)
-			return -EINVAL;
-		*nibble = *(*src)++;
-		extra = *nibble & 0xf;
-		*have_nibble = true;
-	} else {
-		extra = *nibble >> 4;
-		*have_nibble = false;
-	}
-
-	*len += extra;
-	if (extra == 0xf) {
-		u8 b;
-
-		if (*src >= end)
-			return -EINVAL;
-		b = *(*src)++;
-		if (b != 0xff) {
-			*len += b;
+			mlen = mem_read8(src) & 15;
+			src++;
 		} else {
-			u16 w;
-
-			if (end - *src < 2)
-				return -EINVAL;
-			w = mem_read16(*src);
-			*src += 2;
-			if (w) {
-				*len = w + 3;
-			} else {
-				u32 long_len;
-
-				if (end - *src < 4)
-					return -EINVAL;
-				long_len = mem_read32(*src);
-				*src += 4;
-				if (check_add_overflow(long_len, 3, len))
-					return -EINVAL;
-			}
+			mlen = mem_read8(*nib) >> 4;
+			*nib = NULL;
 		}
-	}
 
-	return 0;
+		if (mlen == 15) {
+			if (unlikely(src >= end))
+				return NULL;
+
+			mlen = mem_read8(src);
+			src++;
+
+			if (mlen == 255) {
+				if (unlikely(src + sizeof(u16) > end))
+					return NULL;
+
+				mlen = mem_read16(src);
+				src += sizeof(u16);
+
+				if (mlen == 0) {
+					if (unlikely(src + sizeof(u32) > end))
+						return NULL;
+
+					mlen = mem_read32(src);
+					src += sizeof(u32);
+				}
+
+				/* Unexpected match len < 15 + 7 (decoding bug) */
+				if (unlikely(mlen < 23))
+					return NULL;
+
+				mlen -= (15 + 7);
+			}
+			mlen += 15;
+		}
+		mlen += 7;
+	}
+	mlen += 3;
+	*len = mlen;
+
+	return src;
 }
 
-int smb_lz77_decompress(const void *src, const u32 slen, void *dst,
-			const u32 dlen)
+noinline int smb_lz77_decompress(const void *src, const u32 slen, void *dst, const u32 dlen)
 {
-	const u8 *sp = src, *send = sp + slen;
-	u8 *dp = dst, *dend = dp + dlen;
-	u32 flags = 0;
-	int flag_count = 0;
-	u8 nibble = 0;
-	bool have_nibble = false;
+	const void *srcp, *end, *nib = NULL;
+	void *dstp, *dst_end;
 
-	while (dp < dend) {
-		u32 len, dist;
-		u16 token;
+	srcp = src;
+	end = srcp + slen;
+	dstp = dst;
+	dst_end = dstp + dlen;
 
-		if (!flag_count) {
-			if (send - sp < 4)
-				return -EINVAL;
-			flags = mem_read32(sp);
-			sp += 4;
-			flag_count = 32;
-		}
+	do {
+		u32 flag, flag_count = LZ77_FLAG_MAX;
 
-		if (!(flags & 0x80000000)) {
-			if (sp >= send)
-				return -EINVAL;
-			*dp++ = *sp++;
-			flags <<= 1;
-			flag_count--;
-			continue;
-		}
+		/*
+		 * Read flag.
+		 *
+		 * LZ77 flags are 32-bit bitmaps where 0s indicates a literal in the stream
+		 * (straight copied from @srcp to @dstp) and 1s indicates a match (decoded from
+		 * @srcp).
+		 *
+		 * Compressed payloads always starts with a flag.
+		 */
+		flag = mem_read32(srcp);
+		srcp += SMB_COMPRESS_RSTEP_SIZE;
 
-		flags <<= 1;
-		flag_count--;
+		do {
+			u32 m, l;
 
-		if (send - sp < 2)
-			return -EINVAL;
+			/*
+			 * Decode flag.
+			 *
+			 * Each bit in @flag represents a literal (0) or a match (1).
+			 * Instead of processing them as individual bits, do it in batches:
+			 *   (@m matches, @l literals)
+			 *
+			 * Count leading zeroes for that (flip @flag bits to compute matches).
+			 *
+			 * Notes:
+			 * - @flag == 0 means we're are bound by @flag_count literals
+			 * - __builtin_clz() yields UB if arg is 0
+			 * - unlike smb_lz77_compress(), we don't use a 'long' flag here because
+			 *   of CLZ (in order to avoid extra math (sizeof(long) == 8))
+			 * - we can't rely on bit counting alone as bound-checking because the
+			 *   final flag in compressed payload might contain lots of 1s
+			 *   (((1 << (32 - @flag_count)) - 1), cf. smb_lz77_compress()).
+			 *
+			 * Also, matches can be encoded from 2 up to 10 bytes each, and since we
+			 * don't know the size of each match beforehand, we can't determine a
+			 * fixed limit, so we have to check @srcp limits before each match read.
+			 */
+			m = flag ? __builtin_clz(~flag) : 0;
+			flag_count -= m;
+			flag <<= m;
 
-		token = mem_read16(sp);
-		sp += 2;
+			l = flag ? umin(__builtin_clz(flag), flag_count) : flag_count;
+			flag_count -= l;
+			flag <<= l;
 
-		dist = (token >> 3) + 1;
-		if (dist > dp - (u8 *)dst)
-			return -EINVAL;
+			/* Decoding bug (or, unlikely, __builtin_clz() bug) */
+			if (WARN_ON_ONCE(l + m > LZ77_FLAG_MAX))
+				return -EIO;
 
-		if (lz77_decode_match_len(&sp, send, token, &nibble,
-					  &have_nibble, &len))
-			return -EINVAL;
+			while (m--) {
+				const void *match;
+				u32 dist, len;
 
-		if (len > dend - dp)
-			return -EINVAL;
+				/*
+				 * Final flag done (not a bug).
+				 *
+				 * Note that even if we reached here (@m wasn't 0), we can't rely
+				 * on that value alone as a "true match flag counter" because of
+				 * how the last flag is encoded (cf. smb_lz77_compress()).
+				 */
+				if (unlikely(srcp + sizeof(u16) > end))
+					goto out;
 
-		while (len--) {
-			*dp = *(dp - dist);
-			dp++;
-		}
-	}
+				/* Store match symbol in @len */
+				len = mem_read16(srcp);
+				srcp += sizeof(u16);
+				dist = (len >> 3) + 1;
+				srcp = lz77_decode_match_len(srcp, end, &nib, &len);
+				if (unlikely(!srcp))
+					return -EFAULT;
 
+				/*
+				 * Check bogus match values.
+				 *
+				 * We don't know what compression parameters (e.g. match max dist,
+				 * min len) the server is using, so check against limits allowed
+				 * by spec.
+				 *
+				 * Also check if within @dst boundaries so we can do a straight
+				 * copy.
+				 */
+				if (unlikely(!dist || dist > SZ_8K || dstp - dst < dist))
+					return -EFAULT;
+
+				if (unlikely(len < 3 || len == U32_MAX || dstp + len > dst_end))
+					return -EFAULT;
+
+				/*
+				 * If non-overlapping memory, we can use memcpy() (common case).
+				 * Otherwise, we have to do it byte by byte.
+				 *
+				 * Note @match is always behind @dstp (@dist is at least 1).
+				 */
+				match = dstp - dist;
+				if (likely(len < dist)) {
+					memcpy(dstp, match, len);
+					dstp += len;
+				} else {
+					while (len--)
+						mem_write8(dstp++, mem_read8(match++));
+				}
+			}
+
+			if (l) {
+				if (unlikely(srcp + l > end || dstp + l > dst_end))
+					return -EFAULT;
+
+				memcpy(dstp, srcp, l);
+				srcp += l;
+				dstp += l;
+			}
+		} while (flag_count);
+	} while (srcp + SMB_COMPRESS_RSTEP_SIZE <= end);
+out:
+	/*
+	 * We've now fully parsed the compressed buffer without any processing errors.
+	 * However, it's up to callers to determine the validity of @dst.
+	 */
 	return 0;
 }
 EXPORT_SYMBOL_GPL(smb_lz77_decompress);
