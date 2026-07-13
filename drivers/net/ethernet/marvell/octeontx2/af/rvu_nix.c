@@ -338,6 +338,7 @@ static int nix_interface_init(struct rvu *rvu, u16 pcifunc, int type, int nixlf,
 	struct sdp_node_info *sdp_info;
 	int pkind, pf, vf, lbkid, vfid;
 	u8 cgx_id, lmac_id;
+	struct cgx *cgxd;
 	bool from_vf;
 	int err;
 
@@ -363,8 +364,15 @@ static int nix_interface_init(struct rvu *rvu, u16 pcifunc, int type, int nixlf,
 		pfvf->tx_chan_cnt = 1;
 		rsp->tx_link = cgx_id * hw->lmac_per_cgx + lmac_id;
 
-		cgx_set_pkind(rvu_cgx_pdata(cgx_id, rvu), lmac_id, pkind);
-		rvu_npc_set_pkind(rvu, pkind, pfvf);
+		cgxd = rvu_cgx_pdata(cgx_id, rvu);
+
+		mutex_lock(&cgxd->lock);
+		if (rvu_cgx_is_pkind_config_permitted(rvu, pcifunc)) {
+			cgx_set_pkind(rvu_cgx_pdata(cgx_id, rvu), lmac_id,
+				      pkind);
+			rvu_npc_set_pkind(rvu, pkind, pfvf);
+		}
+		mutex_unlock(&cgxd->lock);
 		break;
 	case NIX_INTF_TYPE_LBK:
 		vf = (pcifunc & RVU_PFVF_FUNC_MASK) - 1;
@@ -1685,8 +1693,10 @@ int rvu_mbox_handler_nix_lf_alloc(struct rvu *rvu,
 	rvu_write64(rvu, blkaddr, NIX_AF_LFX_RX_CFG(nixlf), req->rx_cfg);
 
 	/* Configure pkind for TX parse config */
-	cfg = NPC_TX_DEF_PKIND;
-	rvu_write64(rvu, blkaddr, NIX_AF_LFX_TX_PARSE_CFG(nixlf), cfg);
+	if (rvu_cgx_is_pkind_config_permitted(rvu, pcifunc)) {
+		cfg = NPC_TX_DEF_PKIND;
+		rvu_write64(rvu, blkaddr, NIX_AF_LFX_TX_PARSE_CFG(nixlf), cfg);
+	}
 
 	if (is_rep_dev(rvu, pcifunc)) {
 		pfvf->tx_chan_base = RVU_SWITCH_LBK_CHAN;

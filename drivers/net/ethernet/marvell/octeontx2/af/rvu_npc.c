@@ -17,6 +17,7 @@
 #include "npc_profile.h"
 #include "rvu_npc_hash.h"
 #include "cn20k/npc.h"
+#include "lmac_common.h"
 #include "rvu_npc.h"
 #include "cn20k/reg.h"
 
@@ -4204,6 +4205,7 @@ int rvu_npc_set_parse_mode(struct rvu *rvu, u16 pcifunc, u64 mode, u8 dir,
 	int pf = rvu_get_pf(rvu->pdev, pcifunc);
 	u64 rxpkind, txpkind;
 	u8 cgx_id, lmac_id;
+	struct cgx *cgxd;
 
 	/* use default pkind to disable edsa/higig */
 	rxpkind = rvu_npc_get_pkind(rvu, pf);
@@ -4228,9 +4230,11 @@ int rvu_npc_set_parse_mode(struct rvu *rvu, u16 pcifunc, u64 mode, u8 dir,
 		if (!is_cgx_config_permitted(rvu, pcifunc))
 			return 0;
 		rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
+		cgxd = rvu_cgx_pdata(cgx_id, rvu);
 
-		rc = cgx_set_pkind(rvu_cgx_pdata(cgx_id, rvu), lmac_id,
-				   rxpkind);
+		mutex_lock(&cgxd->lock);
+		rc = cgx_set_pkind(cgxd, lmac_id, rxpkind);
+		mutex_unlock(&cgxd->lock);
 		if (rc)
 			return rc;
 	}
@@ -4240,6 +4244,9 @@ int rvu_npc_set_parse_mode(struct rvu *rvu, u16 pcifunc, u64 mode, u8 dir,
 		rc = nix_get_nixlf(rvu, pcifunc, &nixlf, &blkaddr);
 		if (rc)
 			return rc;
+
+		if (!rvu_cgx_is_pkind_config_permitted(rvu, pcifunc))
+			return -EINVAL;
 
 		rvu_write64(rvu, blkaddr, NIX_AF_LFX_TX_PARSE_CFG(nixlf),
 			    txpkind);
