@@ -7,6 +7,7 @@
  * Author: Lu Baolu <baolu.lu@linux.intel.com>
  */
 
+#include <linux/bitfield.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -401,8 +402,10 @@ static int xhci_portli_show(struct seq_file *s, void *unused)
 
 	/* PORTLI fields are valid if port is a USB3 or eUSB2V2 port */
 	if (port->rhub == &xhci->usb3_rhub)
-		seq_printf(s, "0x%08x LEC=%u RLC=%u TLC=%u\n", portli,
-			   PORT_LEC(portli), PORT_RX_LANES(portli), PORT_TX_LANES(portli));
+		seq_printf(s, "0x%08x LEC=%lu RLC=%lu TLC=%lu\n", portli,
+			   FIELD_GET(PORT_LEC_MASK, portli),
+			   FIELD_GET(PORT_RLC_MASK, portli),
+			   FIELD_GET(PORT_TLC_MASK, portli));
 	else if (xhci->hcc_params2 & HCC2_E2V2C)
 		seq_printf(s, "0x%08x RDR=%u TDR=%u\n", portli,
 			   PORTLI_RDR(portli), PORTLI_TDR(portli));

@@ -152,10 +152,14 @@
 /* bits 31:28 - Port Test Control */
 #define PORT_TEST_MODE_MASK	GENMASK(31, 28)
 
-/* USB3 Protocol PORTLI  Port Link Information */
-#define PORT_LEC(p)		((p) & 0xffff)
-#define PORT_RX_LANES(p)	(((p) >> 16) & 0xf)
-#define PORT_TX_LANES(p)	(((p) >> 20) & 0xf)
+/* USB3 Port Link Info Register (PORTLI) 5.4.10.1 */
+/* bits 15:0 - Link Error Count */
+#define PORT_LEC_MASK		GENMASK(15, 0)
+/* bits 19:16 - Rx Lane Count */
+#define PORT_RLC_MASK		GENMASK(19, 16)
+/* bits 23:20 - Tx Lane Count */
+#define PORT_TLC_MASK		GENMASK(23, 20)
+/* bits 31:24 - RsvdP */
 
 /* eUSB2v2 protocol PORTLI Port Link information, RsvdP for normal USB2 */
 #define PORTLI_RDR(p)		((p) & 0xf)

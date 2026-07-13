@@ -1013,8 +1013,8 @@ static u32 xhci_get_ext_port_status(u32 portsc, u32 port_li)
 	ext_stat |= speed_id;		/* bits 3:0, RX speed id */
 	ext_stat |= speed_id << 4;	/* bits 7:4, TX speed id */
 
-	ext_stat |= PORT_RX_LANES(port_li) << 8;  /* bits 11:8 Rx lane count */
-	ext_stat |= PORT_TX_LANES(port_li) << 12; /* bits 15:12 Tx lane count */
+	ext_stat |= FIELD_PREP(PORT_RLC_MASK, port_li) << 8;  /* bits 11:8 Rx lane count */
+	ext_stat |= FIELD_PREP(PORT_TLC_MASK, port_li) << 12; /* bits 15:12 Tx lane count */
 
 	return ext_stat;
 }
