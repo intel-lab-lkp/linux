@@ -1124,7 +1124,7 @@ void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 	struct ceph_mds_session *session = cap->session;
 	struct ceph_client *cl = session->s_mdsc->fsc->client;
 	struct ceph_inode_info *ci = cap->ci;
-	struct inode *inode = &ci->netfs.inode;
+	struct inode *inode;
 	struct ceph_mds_client *mdsc;
 	int removed = 0;
 
@@ -1135,7 +1135,7 @@ void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 	}
 
 	lockdep_assert_held(&ci->i_ceph_lock);
-
+	inode = &ci->netfs.inode;
 	doutc(cl, "%p from %p %llx.%llx\n", cap, inode, ceph_vinop(inode));
 
 	mdsc = ceph_inode_to_fs_client(&ci->netfs.inode)->mdsc;
