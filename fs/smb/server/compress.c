@@ -99,10 +99,11 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 	struct smb2_hdr *req_hdr;
 	u32 src_len, dst_len, compressed_pdu_len, max_dst_len;
 	u8 *src = NULL, *out = NULL, *p;
+	__le16 alg = work->conn->compress_algorithm;
 	int i, rc;
 
 	if (!work->compress_response || work->encrypted ||
-	    work->conn->compress_algorithm != SMB3_COMPRESS_LZ77)
+	    smb_compress_alg_valid(alg, false))
 		return 0;
 
 	req_hdr = smb_get_msg(work->request_buf);
@@ -133,7 +134,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	max_dst_len = smb_compress_alloc_size(src_len, work->conn->compress_pattern);
+	max_dst_len = smb_compress_alloc_size(src_len, work->conn->compress_pattern, alg);
 	out = kvzalloc(sizeof(__be32) + max_dst_len,
 		       KSMBD_DEFAULT_GFP);
 	if (!out) {
@@ -143,7 +144,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 
 	if (work->conn->compress_chained) {
 		dst_len = max_dst_len;
-		rc = smb_compression_compress(SMB3_COMPRESS_LZ77,
+		rc = smb_compression_compress(alg,
 					      work->conn->compress_chained,
 					      work->conn->compress_pattern,
 					      src, src_len,
@@ -170,7 +171,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		chdr = (struct smb2_compression_hdr *)(out + sizeof(__be32));
 		chdr->ProtocolId = SMB2_COMPRESSION_TRANSFORM_ID;
 		chdr->OriginalCompressedSegmentSize = cpu_to_le32(src_len);
-		chdr->CompressionAlgorithm = SMB3_COMPRESS_LZ77;
+		chdr->CompressionAlgorithm = alg;
 		chdr->Flags = cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE);
 		chdr->Offset = 0;
 	}

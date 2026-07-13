@@ -227,14 +227,16 @@ static int check_compressible_chunks(const u8 *buf, const u32 len, u32 *freqs)
 /*
  * Check @buf heuristics (entropy/distribution) to determine its compressibility level.
  *
+ * If @maybe_ok is false, alias MAYBE_COMPRESSIBLE to UNCOMPRESSIBLE.
+ *
  * Tests shows that this function is quite reliable in predicting data compressibility, matching
- * very close with the behaviour of LZ77 compression success and failures.
+ * very close with the behaviour of LZ* compression success and failures.
  *
  * This function allocates memory, callers must check for -ENOMEM.
  *
  * Return: one of the *COMPRESSIBLE values on success, -errno otherwise.
  */
-static __must_check int check_compressible(const u8 *buf, u32 len)
+static __must_check int check_compressible(const u8 *buf, u32 len, bool maybe_ok)
 {
 	u32 entropy, *freqs, rle = 0, rle_boost = 0;
 	const u32 min_reps = (len / 100); /* ~1% of @len */
@@ -296,6 +298,9 @@ static __must_check int check_compressible(const u8 *buf, u32 len)
 
 	kfree(freqs);
 
+	if (!maybe_ok && ret == MAYBE_COMPRESSIBLE)
+		ret = UNCOMPRESSIBLE;
+
 	return ret;
 }
 
@@ -340,6 +345,7 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 	struct iov_iter iter;
 	u32 slen, dlen, shdr_len;
 	void *src, *dst = NULL;
+	__le16 lzalg;
 	bool use_pattern;
 	int ret;
 
@@ -347,6 +353,10 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 		return -EINVAL;
 
 	if (rq->rq_iov->iov_len != sizeof(struct smb2_write_req))
+		return -EINVAL;
+
+	lzalg = server->compression.alg;
+	if (unlikely(!smb_compress_alg_valid(lzalg, false)))
 		return -EINVAL;
 
 	slen = iov_iter_count(&rq->rq_iter);
@@ -372,7 +382,7 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 	 * uncompressible low-hanging fruits here and let smb_lz77_compress() handle the
 	 * exceptions/rare cases.
 	 */
-	ret = check_compressible(src, slen);
+	ret = check_compressible(src, slen, lzalg == SMB3_COMPRESS_LZ77_HUFF);
 
 	/* XXX: do something with MAYBE_COMPRESSIBLE */
 	if (ret != COMPRESSIBLE) {
@@ -383,14 +393,14 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 
 	use_pattern = server->compression.pattern;
 	shdr_len = rq->rq_iov[0].iov_len;
-	dlen = smb_compress_alloc_size(slen, use_pattern) + shdr_len;
+	dlen = smb_compress_alloc_size(slen, use_pattern, lzalg) + shdr_len;
 	dst = kvzalloc(dlen, GFP_KERNEL);
 	if (!dst) {
 		ret = -ENOMEM;
 		goto err_free;
 	}
 
-	ret = smb_compression_compress(SMB3_COMPRESS_LZ77, server->compression.chained, use_pattern,
+	ret = smb_compression_compress(lzalg, server->compression.chained, use_pattern,
 				       src, slen, dst, &dlen, rq->rq_iov[0].iov_base, shdr_len);
 	if (!ret && dlen < slen) {
 		struct smb_rqst comp_rq = { .rq_nvec = 1, };

@@ -44,6 +44,7 @@
 #include "cached_dir.h"
 #include "compress.h"
 #include "fs_context.h"
+#include "../common/compress/compress.h"
 
 /*
  *  The following table defines the expected "StructureSize" of SMB2 requests
@@ -859,14 +860,25 @@ static void decode_compress_ctx(struct TCP_Server_Info *server,
 	}
 
 	for (i = 0; i < count; i++) {
-		/* Record the intersection supported by the shared SMB codec. */
-		if (ctxt->CompressionAlgorithms[i] == SMB3_COMPRESS_LZ77)
-			server->compression.alg = SMB3_COMPRESS_LZ77;
-		else if (ctxt->CompressionAlgorithms[i] == SMB3_COMPRESS_PATTERN)
+		__le16 alg = ctxt->CompressionAlgorithms[i];
+
+		/*
+		 * Servers only return 1 LZ* algorithm, or + Pattern_V1 if chained.
+		 * server->compression.alg only tracks LZ* algs.
+		 */
+		if (alg == SMB3_COMPRESS_PATTERN)
 			server->compression.pattern = true;
+		else if (smb_compress_alg_valid(alg, false))
+			server->compression.alg = alg;
+		else
+			pr_warn_once("invalid compression algorithm '0x%04x'\n", le16_to_cpu(alg));
 	}
-	if (server->compression.alg != SMB3_COMPRESS_LZ77)
+
+	if (!server->compression.alg) {
+		memset(&server->compression, 0, sizeof(server->compression));
+		pr_warn_once("no LZ compression algorithm negotiated\n");
 		return;
+	}
 
 	/*
 	 * Pattern_V1 cannot appear in an unchained transform even if a broken

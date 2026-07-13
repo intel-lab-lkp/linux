@@ -1175,18 +1175,27 @@ static __le32 decode_compress_ctxt(struct ksmbd_conn *conn,
 		__le16 alg = algs[i];
 
 		/*
-		 * LZ77 is the required general-purpose codec. Pattern_V1 is an
+		 * LZ* are the required general-purpose codecs. Pattern_V1 is an
 		 * optional chained payload type and cannot stand alone.
+		 *
+		 * Use the first LZ algorithm found in the request array.  It's sorted by
+		 * client-preferred order, so don't overwrite it if already set.
 		 */
-		if (alg == SMB3_COMPRESS_LZ77) {
-			conn->compress_algorithm = alg;
-			conn->compress_chained =
-				pneg_ctxt->Flags ==
-				SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED;
-			ksmbd_debug(SMB, "Compression Algorithm ID = 0x%x\n",
-				    le16_to_cpu(alg));
-		} else if (alg == SMB3_COMPRESS_PATTERN) {
+		switch (alg) {
+		case SMB3_COMPRESS_LZ77:
+		case SMB3_COMPRESS_LZ77_HUFF:
+			if (conn->compress_algorithm == SMB3_COMPRESS_NONE) {
+				conn->compress_algorithm = alg;
+				conn->compress_chained =
+					pneg_ctxt->Flags ==
+					SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED;
+				ksmbd_debug(SMB, "Compression Algorithm ID = 0x%x\n",
+					    le16_to_cpu(alg));
+			}
+			break;
+		case SMB3_COMPRESS_PATTERN:
 			conn->compress_pattern = true;
+			break;
 		}
 	}
 

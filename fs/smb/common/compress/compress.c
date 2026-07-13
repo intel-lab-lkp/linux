@@ -56,11 +56,11 @@ static int smb_decompress_pattern(const u8 **src, u32 *slen, u8 **dst,
 }
 
 /*
- * LZ77 payload Length includes the four-byte OriginalPayloadSize field.
+ * LZ* payload Length includes the four-byte OriginalPayloadSize field.
  * Consume that field before passing the compressed stream to the raw codec.
  */
-static int smb_decompress_lz77_payload(const u8 **src, u32 *slen, u8 **dst,
-				       u32 *dlen, u32 len)
+static int smb_decompress_lz_payload(const u8 **src, u32 *slen, u8 **dst,
+				     u32 *dlen, u32 len, __le16 alg)
 {
 	u32 orig_size;
 	int rc;
@@ -76,7 +76,11 @@ static int smb_decompress_lz77_payload(const u8 **src, u32 *slen, u8 **dst,
 	*slen -= sizeof(__le32);
 	len -= sizeof(__le32);
 
-	rc = smb_lz77_decompress(*src, len, *dst, orig_size);
+	rc = -EINVAL;
+	if (alg == SMB3_COMPRESS_LZ77)
+		rc = smb_lz77_decompress(*src, len, *dst, orig_size);
+	else if (alg == SMB3_COMPRESS_LZ77_HUFF)
+		rc = smb_huff_decompress(*src, len, *dst, orig_size);
 	if (rc)
 		return rc;
 
@@ -132,17 +136,17 @@ static int smb_decompress_chained(__le16 alg, bool allow_chained,
 		src += SMB2_COMPRESSION_PAYLOAD_BASE_LEN;
 		remaining -= SMB2_COMPRESSION_PAYLOAD_BASE_LEN;
 
+		rc = -EINVAL;
 		if (payload_alg == SMB3_COMPRESS_NONE) {
 			rc = smb_decompress_none(&src, &remaining, &out,
 						 &out_remaining, len);
 		} else if (payload_alg == SMB3_COMPRESS_PATTERN) {
 			rc = smb_decompress_pattern(&src, &remaining, &out,
 						    &out_remaining, len);
-		} else if (payload_alg == alg && alg == SMB3_COMPRESS_LZ77) {
-			rc = smb_decompress_lz77_payload(&src, &remaining, &out,
-							 &out_remaining, len);
 		} else {
-			return -EINVAL;
+			/* payload_alg is validated by the function below */
+			rc = smb_decompress_lz_payload(&src, &remaining, &out,
+						       &out_remaining, len, payload_alg);
 		}
 		if (rc)
 			return rc;
@@ -170,7 +174,15 @@ static int smb_decompress_unchained(__le16 alg,
 
 	memcpy(dst, (const u8 *)hdr + sizeof(*hdr), offset);
 	comp_size = slen - sizeof(*hdr) - offset;
-	return smb_lz77_decompress((const u8 *)hdr + sizeof(*hdr) + offset,
+
+	if (alg == SMB3_COMPRESS_LZ77)
+		return smb_lz77_decompress((const u8 *)hdr + sizeof(*hdr) + offset,
+					   comp_size, (u8 *)dst + offset, orig_size);
+
+	if (WARN_ON_ONCE(alg != SMB3_COMPRESS_LZ77_HUFF))
+		return -EINVAL;
+
+	return smb_huff_decompress((const u8 *)hdr + sizeof(*hdr) + offset,
 				   comp_size, (u8 *)dst + offset, orig_size);
 }
 
@@ -195,8 +207,7 @@ int smb_compression_decompress(__le16 alg, bool allow_chained,
 	const struct smb2_compression_hdr *hdr = src;
 
 	if (!src || !dst || slen < sizeof(*hdr) ||
-	    hdr->ProtocolId != SMB2_COMPRESSION_TRANSFORM_ID ||
-	    alg == SMB3_COMPRESS_NONE)
+	    hdr->ProtocolId != SMB2_COMPRESSION_TRANSFORM_ID)
 		return -EINVAL;
 
 	if (hdr->Flags == cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED))
@@ -275,8 +286,8 @@ static int smb_compression_add_none(struct smb_compression_builder *builder,
 	return 0;
 }
 
-static int smb_compression_add_lz77(struct smb_compression_builder *builder,
-				    const u8 *src, u32 len, bool chained)
+static int smb_compression_add_lz(struct smb_compression_builder *builder, const u8 *src, u32 len,
+				  __le16 alg, bool chained)
 {
 	struct smb2_compression_payload_hdr *payload;
 	u32 comp_len;
@@ -288,13 +299,16 @@ static int smb_compression_add_lz77(struct smb_compression_builder *builder,
 	comp_len = builder->remaining;
 	if (chained) {
 		comp_len -= sizeof(*payload);
-		payload = smb_compression_add_payload(builder, SMB3_COMPRESS_LZ77,
-						      comp_len, true);
+		payload = smb_compression_add_payload(builder, alg, comp_len, true);
 		if (!payload)
 			return -ENOSPC;
 	}
 
-	rc = smb_lz77_compress(src, len, builder->pos, &comp_len);
+	rc = -EIO;
+	if (alg == SMB3_COMPRESS_LZ77)
+		rc = smb_lz77_compress(src, len, builder->pos, &comp_len);
+	else if (alg == SMB3_COMPRESS_LZ77_HUFF)
+		rc = smb_huff_compress(src, len, builder->pos, &comp_len);
 	if (rc)
 		return rc;
 
@@ -344,8 +358,8 @@ int smb_compression_compress(__le16 alg, bool chained, bool allow_pattern,
 	u32 forward = 0, backward = 0, middle_len;
 	int rc;
 
-	if (!src || !dst || !dlen || alg != SMB3_COMPRESS_LZ77 ||
-	    *dlen <= SMB2_COMPRESSION_CHAINED_HDR_LEN || !slen)
+	if (!src || !dst || !dlen || *dlen <= SMB2_COMPRESSION_CHAINED_HDR_LEN || !slen ||
+	    !smb_compress_alg_valid(alg, false))
 		return -EINVAL;
 
 	/* Note that the below is a bug, but (chained && !allow_pattern) is a valid combination */
@@ -406,10 +420,9 @@ do_lz:
 	rc = 0;
 	middle_len = slen - forward - backward;
 	if (middle_len > 1024 || !chained)
-		rc = smb_compression_add_lz77(&builder, input + forward, middle_len, chained);
+		rc = smb_compression_add_lz(&builder, input + forward, middle_len, alg, chained);
 	else if (middle_len && chained)
-		rc = smb_compression_add_none(&builder,
-					      input + forward, middle_len);
+		rc = smb_compression_add_none(&builder, input + forward, middle_len);
 	if (rc)
 		return rc;
 
