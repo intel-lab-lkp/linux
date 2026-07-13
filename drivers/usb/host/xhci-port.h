@@ -1,17 +1,21 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * xHCI Host Controller USB Port Register Set
+ * xHCI Specification Section 5.4, Revision 1.2.
+ */
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
 
-/* PORTSC - Port Status and Control Register - port_status_base bitmasks */
-/* true: device connected */
+/* Port Status and Control (PORTSC) 5.4.8 */
+/* bit 0 - Current Connect Status (CCS) */
 #define PORT_CONNECT	BIT(0)
-/* true: port enabled */
+/* bit 1 - Port Enabled/Disabled (PED) */
 #define PORT_PE		BIT(1)
-/* bit 2 reserved and zeroed */
-/* true: port has an over-current condition */
+/* bit 2 - Rsvd */
+/* bit 3 - Over-current Active (OCA) */
 #define PORT_OC		BIT(3)
-/* true: port reset signaling asserted */
+/* bit 4 - Port Reset (PR) */
 #define PORT_RESET	BIT(4)
 /*
  * bits 8:5 - Port Link State, by default '5'.
@@ -61,23 +65,26 @@
 #define PIC_OFF		0
 #define PIC_AMBER	1
 #define PIC_GREEN	2
-/* Port Link State Write Strobe - set this when changing link state */
+/* bit 16 - Port Link State Write Strobe (LWS), set this when changing link state */
 #define PORT_LINK_STROBE	BIT(16)
-/* true: connect status change */
+/* bit 17 - Connect Status Change */
 #define PORT_CSC	BIT(17)
-/* true: port enable change */
+/* bit 18 - Port Enabled/Disabled Change */
 #define PORT_PEC	BIT(18)
-/* true: warm reset for a USB 3.0 device is done.  A "hot" reset puts the port
+/*
+ * bit 19 - Warm Port Reset Change
+ * Warm reset for a USB 3.0 device is done.  A "hot" reset puts the port
  * into an enabled state, and the device into the default state.  A "warm" reset
  * also resets the link, forcing the device through the link training sequence.
  * SW can also look at the Port Reset register to see when warm reset is done.
  */
 #define PORT_WRC	BIT(19)
-/* true: over-current change */
+/* bit 20 - Over-current Change */
 #define PORT_OCC	BIT(20)
-/* true: reset change - 1 to 0 transition of PORT_RESET */
+/* bit 21 - Port Reset Change (PRC) */
 #define PORT_RC		BIT(21)
-/* port link status change - set on some port link state transitions:
+/*
+ * bit 22 - Port Link State Change, set on some port link state transitions:
  *  Transition				Reason
  *  ------------------------------------------------------------------------------
  *  - U3 to Resume			Wakeup signaling from a device
@@ -91,28 +98,27 @@
  *  - Any state to inactive		Error on USB 3.0 port
  */
 #define PORT_PLC	BIT(22)
-/* port configure error change - port failed to configure its link partner */
+/* bit 23 - Port Config Error Change, port failed to configure its link partner */
 #define PORT_CEC	BIT(23)
-#define PORT_CHANGE_MASK	(PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | \
-				 PORT_RC | PORT_PLC | PORT_CEC)
-
-
-/* Cold Attach Status - xHC can set this bit to report device attached during
- * Sx state. Warm port reset should be perfomed to clear this bit and move port
- * to connected state.
+/*
+ * bit 24 - Cold Attach Status
+ * xHC can set this bit to report device attached during Sx state.
+ * Warm port reset should be perfomed to clear this bit and move port to connected state.
  */
 #define PORT_CAS	BIT(24)
-/* wake on connect (enable) */
+/* bit 25 - Wake on Connect Enable (WCE) */
 #define PORT_WKCONN_E	BIT(25)
-/* wake on disconnect (enable) */
+/* bit 26 - Wake on Disconnect Enable (WDE) */
 #define PORT_WKDISC_E	BIT(26)
-/* wake on over-current (enable) */
+/* bit 27 - Wake on Over-current Enable (WOE) */
 #define PORT_WKOC_E	BIT(27)
-/* bits 28:29 reserved */
-/* true: device is non-removable - for USB 3.0 roothub emulation */
+/* bits 29:28 - RsvdZ */
+/* bit 30 - Device Removable (DR), for USB 3.0 roothub emulation */
 #define PORT_DEV_REMOVE	BIT(30)
-/* Initiate a warm port reset - complete when PORT_WRC is '1' */
+/* bit 31 - Warm Port Reset (WPR), complete when PORT_WRC is '1' */
 #define PORT_WR		BIT(31)
+#define PORT_CHANGE_MASK	(PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | \
+				 PORT_RC | PORT_PLC | PORT_CEC)
 
 /* We mark duplicate entries with -1 */
 #define DUPLICATE_ENTRY ((u8)(-1))
@@ -185,7 +191,8 @@
 #define PORT_BESLD_MASK		GENMASK(13, 10)
 /* bits 31:14 - RsvdP */
 
-/* Set default HIRD/BESL value to 4 (350/400us) for USB2 L1 LPM resume latency.
+/*
+ * Set default HIRD/BESL value to 4 (350/400us) for USB2 L1 LPM resume latency.
  * Safe to use with mixed HIRD and BESL systems (host and device) and is used
  * by other operating systems.
  *

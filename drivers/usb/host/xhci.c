@@ -4699,7 +4699,7 @@ static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 		if (udev->usb2_hw_lpm_besl_capable) {
 			/* if device doesn't have a preferred BESL value use a
 			 * default one which works with mixed HIRD and BESL
-			 * systems. See XHCI_DEFAULT_BESL definition in xhci.h
+			 * systems. See XHCI_DEFAULT_BESL definition in xhci-ports.h
 			 */
 			field = le32_to_cpu(udev->bos->ext_cap->bmAttributes);
 			if ((field & USB_BESL_SUPPORT) &&
