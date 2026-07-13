@@ -1199,3 +1199,158 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 	return nf_flow_queue_xmit(state->net, skb, &xmit);
 }
 EXPORT_SYMBOL_GPL(nf_flow_offload_ipv6_hook);
+
+/* Based on is_skb_forwardable(), adding ETH_HLEN to skb->len. */
+static bool nft_br_is_skb_forwardable(const struct net_device *dev,
+				      const struct sk_buff *skb)
+{
+	const u32 vlan_hdr_len = VLAN_HLEN;
+	unsigned int dev_len, skb_len;
+
+	if (!(dev->flags & IFF_UP))
+		return false;
+
+	dev_len = dev->mtu + dev->hard_header_len + vlan_hdr_len;
+	skb_len = skb->len + ETH_HLEN;
+	if (skb_len <= dev_len || skb_is_gso(skb))
+		return true;
+
+	return false;
+}
+
+static int nf_flow_bridge_xmit(struct net *net,
+			       struct nf_flowtable *flow_table,
+			       struct flow_offload *flow,
+			       enum flow_offload_tuple_dir dir,
+			       struct sk_buff *skb)
+{
+	struct flow_offload_tuple *other_tuple = &flow->tuplehash[!dir].tuple;
+	struct flow_offload_tuple *this_tuple = &flow->tuplehash[dir].tuple;
+	struct nf_flow_xmit xmit = {};
+
+	xmit.outdev = dev_get_by_index_rcu(net, this_tuple->out.ifidx);
+	if (!xmit.outdev) {
+		flow_offload_teardown(flow);
+		return NF_DROP;
+	}
+
+	if (!nft_br_is_skb_forwardable(xmit.outdev, skb))
+		return NF_DROP;
+
+	if (flow_table->flags & NF_FLOWTABLE_COUNTER)
+		nf_ct_acct_update(flow->ct, dir, skb->len);
+
+	xmit.dest = this_tuple->out.h_dest;
+	xmit.source = this_tuple->out.h_source;
+	xmit.tuple = other_tuple;
+	xmit.needs_gso_segment = this_tuple->needs_gso_segment;
+
+	return nf_flow_queue_xmit(net, skb, &xmit);
+}
+
+static unsigned int
+nf_flow_offload_ip_bridge(void *priv, struct sk_buff *skb,
+			  const struct nf_hook_state *state)
+{
+	struct flow_offload_tuple_rhash *tuplehash;
+	struct nf_flowtable *flow_table = priv;
+	enum flow_offload_tuple_dir dir;
+	struct nf_flowtable_ctx ctx = {
+		.in	= state->in,
+	};
+	struct flow_offload *flow;
+	unsigned int thoff;
+	struct iphdr *iph;
+
+	tuplehash = nf_flow_offload_lookup(&ctx, flow_table, skb);
+	if (!tuplehash)
+		return NF_ACCEPT;
+
+	dir = tuplehash->tuple.dir;
+	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
+
+	iph = (struct iphdr *)(skb_network_header(skb) + ctx.offset);
+	thoff = (iph->ihl * 4) + ctx.offset;
+	if (nf_flow_state_check(flow, iph->protocol, skb, thoff))
+		return NF_ACCEPT;
+
+	if (skb_ensure_writable(skb, thoff + ctx.hdrsize))
+		return NF_DROP;
+
+	flow_offload_refresh(flow_table, flow, false);
+	nf_flow_encap_pop(&ctx, skb, tuplehash);
+	skb_clear_tstamp(skb);
+
+	return nf_flow_bridge_xmit(state->net, flow_table, flow, dir, skb);
+}
+
+static unsigned int
+nf_flow_offload_ipv6_bridge(void *priv, struct sk_buff *skb,
+			    const struct nf_hook_state *state)
+{
+	struct flow_offload_tuple_rhash *tuplehash;
+	struct nf_flowtable *flow_table = priv;
+	enum flow_offload_tuple_dir dir;
+	struct nf_flowtable_ctx ctx = {
+		.in	= state->in,
+	};
+	struct flow_offload *flow;
+	struct ipv6hdr *ip6h;
+	unsigned int thoff;
+
+	tuplehash = nf_flow_offload_ipv6_lookup(&ctx, flow_table, skb);
+	if (!tuplehash)
+		return NF_ACCEPT;
+
+	dir = tuplehash->tuple.dir;
+	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
+
+	ip6h = (struct ipv6hdr *)(skb_network_header(skb) + ctx.offset);
+	thoff = sizeof(*ip6h) + ctx.offset;
+	if (nf_flow_state_check(flow, ip6h->nexthdr, skb, thoff))
+		return NF_ACCEPT;
+
+	if (skb_ensure_writable(skb, thoff + ctx.hdrsize))
+		return NF_DROP;
+
+	flow_offload_refresh(flow_table, flow, false);
+	nf_flow_encap_pop(&ctx, skb, tuplehash);
+	skb_clear_tstamp(skb);
+
+	return nf_flow_bridge_xmit(state->net, flow_table, flow, dir, skb);
+}
+
+unsigned int
+nf_flow_offload_bridge_hook(void *priv, struct sk_buff *skb,
+			    const struct nf_hook_state *state)
+{
+	struct vlan_ethhdr *veth;
+	__be16 proto;
+
+	switch (skb->protocol) {
+	case htons(ETH_P_8021Q):
+		if (!pskb_may_pull(skb, skb_mac_offset(skb) + sizeof(*veth)))
+			return NF_ACCEPT;
+
+		veth = (struct vlan_ethhdr *)skb_mac_header(skb);
+		proto = veth->h_vlan_encapsulated_proto;
+		break;
+	case htons(ETH_P_PPP_SES):
+		if (!nf_flow_pppoe_proto(skb, &proto))
+			return NF_ACCEPT;
+		break;
+	default:
+		proto = skb->protocol;
+		break;
+	}
+
+	switch (proto) {
+	case htons(ETH_P_IP):
+		return nf_flow_offload_ip_bridge(priv, skb, state);
+	case htons(ETH_P_IPV6):
+		return nf_flow_offload_ipv6_bridge(priv, skb, state);
+	}
+
+	return NF_ACCEPT;
+}
+EXPORT_SYMBOL_GPL(nf_flow_offload_bridge_hook);

@@ -9,6 +9,7 @@
 #include <linux/spinlock.h>
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <linux/netfilter/nf_tables.h>
+#include <linux/netfilter_bridge.h>
 #include <net/ip.h>
 #include <net/flow.h>
 #include <net/netfilter/nf_tables.h>
@@ -135,6 +136,77 @@ out:
 	regs->verdict.code = NFT_BREAK;
 }
 
+static void nft_flow_offload_bridge_eval(const struct nft_expr *expr,
+					 struct nft_regs *regs,
+					 const struct nft_pktinfo *pkt)
+{
+	struct nft_flow_offload *priv = nft_expr_priv(expr);
+	struct nf_flowtable *flowtable = &priv->flowtable->data;
+	struct tcphdr _tcph, *tcph = NULL;
+	enum ip_conntrack_info ctinfo;
+	struct flow_offload *flow;
+	enum ip_conntrack_dir dir;
+	struct nf_conn *ct;
+	int ret;
+
+	/* Is this a non-IP packet or br_netfilter? If so, skip. */
+	if (!pkt->flags || nf_bridge_info_exists(pkt->skb))
+		goto out;
+
+	ct = nf_ct_get(pkt->skb, &ctinfo);
+	if (!ct || !nf_ct_is_confirmed(ct))
+		goto out;
+
+	/* Unlikely, conntrack bridge should not see neither helpers nor NAT in
+	 * the bridge forward path.
+	 */
+	if (nf_ct_ext_exist(ct, NF_CT_EXT_HELPER) ||
+	    ct->status & (IPS_SEQ_ADJUST | IPS_NAT_CLASH))
+		goto out;
+
+	switch (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum) {
+	case IPPROTO_TCP:
+		tcph = skb_header_pointer(pkt->skb, nft_thoff(pkt),
+					  sizeof(_tcph), &_tcph);
+		if (unlikely(!tcph || tcph->fin || tcph->rst ||
+			     !nf_conntrack_tcp_established(ct)))
+			goto out;
+		break;
+	case IPPROTO_UDP:
+		break;
+	default:
+		goto out;
+	}
+
+	if (test_and_set_bit(IPS_OFFLOAD_BIT, &ct->status))
+		goto out;
+
+	flow = flow_offload_alloc(ct);
+	if (!flow)
+		goto err_flow_forward;
+
+	dir = CTINFO2DIR(ctinfo);
+	if (nft_flow_bridge(flow, pkt, dir, priv->flowtable) < 0)
+		goto err_flow_add;
+
+	if (tcph)
+		flow_offload_ct_tcp(ct);
+
+	__set_bit(NF_FLOW_HW_BIDIRECTIONAL, &flow->flags);
+	ret = flow_offload_add(flowtable, flow);
+	if (ret < 0)
+		goto err_flow_add;
+
+	return;
+
+err_flow_add:
+	flow_offload_free(flow);
+err_flow_forward:
+	clear_bit(IPS_OFFLOAD_BIT, &ct->status);
+out:
+	regs->verdict.code = NFT_BREAK;
+}
+
 static int nft_flow_offload_validate(const struct nft_ctx *ctx,
 				     const struct nft_expr *expr)
 {
@@ -142,7 +214,8 @@ static int nft_flow_offload_validate(const struct nft_ctx *ctx,
 
 	if (ctx->family != NFPROTO_IPV4 &&
 	    ctx->family != NFPROTO_IPV6 &&
-	    ctx->family != NFPROTO_INET)
+	    ctx->family != NFPROTO_INET &&
+	    ctx->family != NFPROTO_BRIDGE)
 		return -EOPNOTSUPP;
 
 	return nft_chain_validate_hooks(ctx->chain, hook_mask);
@@ -235,6 +308,28 @@ static struct nft_expr_type nft_flow_offload_type __read_mostly = {
 	.owner		= THIS_MODULE,
 };
 
+static struct nft_expr_type nft_flow_offload_bridge_type;
+static const struct nft_expr_ops nft_flow_offload_bridge_ops = {
+	.type		= &nft_flow_offload_bridge_type,
+	.size		= NFT_EXPR_SIZE(sizeof(struct nft_flow_offload)),
+	.eval		= nft_flow_offload_bridge_eval,
+	.init		= nft_flow_offload_init,
+	.activate	= nft_flow_offload_activate,
+	.deactivate	= nft_flow_offload_deactivate,
+	.destroy	= nft_flow_offload_destroy,
+	.validate	= nft_flow_offload_validate,
+	.dump		= nft_flow_offload_dump,
+};
+
+static struct nft_expr_type nft_flow_offload_bridge_type __read_mostly = {
+	.name		= "flow_offload",
+	.family		= NFPROTO_BRIDGE,
+	.ops		= &nft_flow_offload_bridge_ops,
+	.policy		= nft_flow_offload_policy,
+	.maxattr	= NFTA_FLOW_MAX,
+	.owner		= THIS_MODULE,
+};
+
 static int flow_offload_netdev_event(struct notifier_block *this,
 				     unsigned long event, void *ptr)
 {
@@ -264,8 +359,14 @@ static int __init nft_flow_offload_module_init(void)
 	if (err < 0)
 		goto register_expr;
 
+	err = nft_register_expr(&nft_flow_offload_bridge_type);
+	if (err < 0)
+		goto register_bridge_expr;
+
 	return 0;
 
+register_bridge_expr:
+	nft_unregister_expr(&nft_flow_offload_type);
 register_expr:
 	unregister_netdevice_notifier(&flow_offload_netdev_notifier);
 err:
@@ -274,6 +375,7 @@ err:
 
 static void __exit nft_flow_offload_module_exit(void)
 {
+	nft_unregister_expr(&nft_flow_offload_bridge_type);
 	nft_unregister_expr(&nft_flow_offload_type);
 	unregister_netdevice_notifier(&flow_offload_netdev_notifier);
 }

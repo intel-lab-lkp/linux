@@ -8,6 +8,7 @@
 #include <linux/spinlock.h>
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <linux/netfilter/nf_tables.h>
+#include <linux/if_vlan.h>
 #include <net/ip.h>
 #include <net/inet_dscp.h>
 #include <net/netfilter/nf_tables.h>
@@ -350,3 +351,65 @@ err_dst_release:
 	return -ENOENT;
 }
 EXPORT_SYMBOL_GPL(nft_flow_route);
+
+static int nft_dev_fill_bridge_path(struct flow_offload *flow,
+				    struct nft_flowtable *ft,
+				    enum ip_conntrack_dir dir,
+				    const struct net_device *dev,
+				    unsigned char *src_ha,
+				    unsigned char *dst_ha)
+{
+	struct flow_offload_tuple *this_tuple = &flow->tuplehash[dir].tuple;
+	struct net_device_path_stack stack;
+	struct nft_forward_info info = {};
+	int i, j = 0;
+
+	if (dev_fill_forward_path(dev, dst_ha, &stack) < 0 ||
+	    nft_dev_path_info(&stack, &info, dst_ha, &ft->data) < 0)
+		return -1;
+
+	if (!nft_flowtable_find_dev(info.indev, ft))
+		return -1;
+
+	this_tuple->iifidx = info.indev->ifindex;
+	for (i = info.num_encaps - 1; i >= 0; i--) {
+		this_tuple->encap[j].id = info.encap[i].id;
+		this_tuple->encap[j].proto = info.encap[i].proto;
+		j++;
+	}
+	this_tuple->encap_num = info.num_encaps;
+
+	ether_addr_copy(this_tuple->out.h_source, src_ha);
+	ether_addr_copy(this_tuple->out.h_dest, dst_ha);
+	this_tuple->needs_gso_segment = info.needs_gso_segment;
+	this_tuple->xmit_type = FLOW_OFFLOAD_XMIT_DIRECT;
+
+	return 0;
+}
+
+int nft_flow_bridge(struct flow_offload *flow, const struct nft_pktinfo *pkt,
+		    enum ip_conntrack_dir dir, struct nft_flowtable *ft)
+{
+	struct flow_offload_tuple *other_tuple = &flow->tuplehash[!dir].tuple;
+	struct flow_offload_tuple *this_tuple = &flow->tuplehash[dir].tuple;
+	const struct net_device *outdev = nft_out(pkt);
+	const struct net_device *indev = nft_in(pkt);
+	struct ethhdr *eth = eth_hdr(pkt->skb);
+	int err;
+
+	err = nft_dev_fill_bridge_path(flow, ft, dir, indev,
+				       eth->h_source, eth->h_dest);
+	if (err < 0)
+		return err;
+
+	err = nft_dev_fill_bridge_path(flow, ft, !dir, outdev,
+				       eth->h_dest, eth->h_source);
+	if (err < 0)
+		return err;
+
+	this_tuple->out.ifidx = other_tuple->iifidx;
+	other_tuple->out.ifidx = this_tuple->iifidx;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(nft_flow_bridge);
