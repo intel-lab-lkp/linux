@@ -247,8 +247,10 @@ static int ltrf216a_get_lux(struct ltrf216a_data *data)
 		return ret;
 
 	greendata = ltrf216a_read_data(data, LTRF216A_ALS_DATA_0);
-	if (greendata < 0)
+	if (greendata < 0) {
+		ltrf216a_set_power_state(data, false);
 		return greendata;
+	}
 
 	ltrf216a_set_power_state(data, false);
 
