@@ -302,11 +302,34 @@ nfsd_proc_create(struct svc_rqst *rqstp)
 	if (resp->status != nfs_ok)
 		goto done; /* must fh_put dirfhp even on error */
 
+	fh_init(newfhp, NFS_FHSIZE);
+
 	/* Check for NFSD_MAY_WRITE in nfsd_create if necessary */
 
 	resp->status = nfserr_exist;
 	if (name_is_dot_dotdot(argp->name, argp->len))
 		goto done;
+
+	/*
+	 * If name is already in dcache we need to check for mountpoints
+	 */
+	dchild = try_lookup_noperm(&QSTR_LEN(argp->name, argp->len),
+				   dirfhp->fh_export);
+	if (dchild && !IS_ERR(dchild) && d_is_reg(child) &&
+	    unlikely(nfsd_mountpoint(dchild, fhp->fh_export))) {
+		struct svc_export *exp = fhp->fh_export;
+		if (nfsd_cross_mnt(rqstp, &dchild, &exp) == 0 &&
+		    d_isreg(dchild)) {
+			resp->status = check_nfsd_access(exp, rqstp, false);
+			if (resp->status == nfs_ok)
+				resp->status = fh_compose(newfhp, dirfhp->fh_export,
+							  dchild, dirfhp);
+			goto done;
+		}
+	}
+	if (!IS_ERR(dchild))
+		dput(dchild);
+
 	hosterr = fh_want_write(dirfhp);
 	if (hosterr) {
 		resp->status = nfserrno(hosterr);
@@ -319,7 +342,6 @@ nfsd_proc_create(struct svc_rqst *rqstp)
 		resp->status = nfserrno(PTR_ERR(dchild));
 		goto out_write;
 	}
-	fh_init(newfhp, NFS_FHSIZE);
 	resp->status = fh_compose(newfhp, dirfhp->fh_export, dchild, dirfhp);
 	if (!resp->status && d_really_is_negative(dchild))
 		resp->status = nfserr_noent;

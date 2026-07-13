@@ -303,6 +303,34 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	parent = fhp->fh_dentry;
 	inode = d_inode(parent);
 
+	if (argp->createmode == NFS3_CREATE_UNCHECKED) {
+		/*
+		 * If name is already in dcache we need to check for mountpoints
+		 */
+		child = try_lookup_noperm(&QSTR_LEN(argp->name,
+						    argp->len),
+					  parent);
+		if (child && !IS_ERR(child) && d_is_reg(child) &&
+		    unlikely(nfsd_mountpoint(child, fhp->fh_export))) {
+			struct svc_export *exp = exp_get(fhp->fh_export);
+			if (nfsd_cross_mnt(rqstp, &child, &exp) == 0) {
+				status = check_nfsd_access(exp, rqstp, false);
+				if (status == nfs_ok)
+					status = fh_compose(resfhp, exp,
+							    child, fhp);
+				if (status == nfs_ok)
+					status = nfsd_create_setattr(
+						rqstp, fhp, resfhp, &attrs);
+				dput(child);
+				exp_put(exp);
+				return status;
+			}
+			exp_put(exp);
+		}
+		if (!IS_ERR(child))
+			dput(child);
+	}
+
 	host_err = fh_want_write(fhp);
 	if (host_err)
 		return nfserrno(host_err);
