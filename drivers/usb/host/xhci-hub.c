@@ -603,29 +603,27 @@ static void xhci_set_port_power(struct xhci_hcd *xhci, struct xhci_port *port,
 	__must_hold(&xhci->lock)
 {
 	struct usb_hcd *hcd;
-	u32 temp;
+	u32 portsc;
 
 	hcd = port->rhub->hcd;
-	temp = xhci_portsc_readl(port);
+	portsc = xhci_portsc_readl(port);
 
 	xhci_dbg(xhci, "set port power %d-%d %s, portsc: 0x%x\n",
-		 hcd->self.busnum, port->hcd_portnum + 1, on ? "ON" : "OFF", temp);
+		 hcd->self.busnum, port->hcd_portnum + 1, on ? "ON" : "OFF", portsc);
 
-	temp = xhci_port_state_to_neutral(temp);
+	portsc = xhci_port_state_to_neutral(portsc);
 
 	if (on) {
 		/* Power on */
-		xhci_portsc_writel(port, temp | PORT_PP);
+		xhci_portsc_writel(port, portsc | PORT_PP);
 		xhci_portsc_readl(port);
 	} else {
 		/* Power off */
-		xhci_portsc_writel(port, temp & ~PORT_PP);
+		xhci_portsc_writel(port, portsc & ~PORT_PP);
 	}
 
 	spin_unlock_irqrestore(&xhci->lock, *flags);
-	temp = usb_acpi_power_manageable(hcd->self.root_hub,
-					 port->hcd_portnum);
-	if (temp)
+	if (usb_acpi_power_manageable(hcd->self.root_hub, port->hcd_portnum))
 		usb_acpi_set_power_state(hcd->self.root_hub,
 					 port->hcd_portnum, on);
 	spin_lock_irqsave(&xhci->lock, *flags);
@@ -768,40 +766,40 @@ void xhci_set_link_state(struct xhci_hcd *xhci, struct xhci_port *port,
 static void xhci_set_remote_wake_mask(struct xhci_hcd *xhci,
 				      struct xhci_port *port, u16 wake_mask)
 {
-	u32 temp;
+	u32 portsc;
 
-	temp = xhci_portsc_readl(port);
-	temp = xhci_port_state_to_neutral(temp);
+	portsc = xhci_portsc_readl(port);
+	portsc = xhci_port_state_to_neutral(portsc);
 
 	if (wake_mask & USB_PORT_FEAT_REMOTE_WAKE_CONNECT)
-		temp |= PORT_WCE;
+		portsc |= PORT_WCE;
 	else
-		temp &= ~PORT_WCE;
+		portsc &= ~PORT_WCE;
 
 	if (wake_mask & USB_PORT_FEAT_REMOTE_WAKE_DISCONNECT)
-		temp |= PORT_WDE;
+		portsc |= PORT_WDE;
 	else
-		temp &= ~PORT_WDE;
+		portsc &= ~PORT_WDE;
 
 	if (wake_mask & USB_PORT_FEAT_REMOTE_WAKE_OVER_CURRENT)
-		temp |= PORT_WOE;
+		portsc |= PORT_WOE;
 	else
-		temp &= ~PORT_WOE;
+		portsc &= ~PORT_WOE;
 
-	xhci_portsc_writel(port, temp);
+	xhci_portsc_writel(port, portsc);
 }
 
 /* Test and clear port RWC bit */
 void xhci_test_and_clear_bit(struct xhci_hcd *xhci, struct xhci_port *port,
 			     u32 port_bit)
 {
-	u32 temp;
+	u32 portsc;
 
-	temp = xhci_portsc_readl(port);
-	if (temp & port_bit) {
-		temp = xhci_port_state_to_neutral(temp);
-		temp |= port_bit;
-		xhci_portsc_writel(port, temp);
+	portsc = xhci_portsc_readl(port);
+	if (portsc & port_bit) {
+		portsc = xhci_port_state_to_neutral(portsc);
+		portsc |= port_bit;
+		xhci_portsc_writel(port, portsc);
 	}
 }
 
@@ -1559,7 +1557,7 @@ EXPORT_SYMBOL_GPL(xhci_hub_control);
 int xhci_hub_status_data(struct usb_hcd *hcd, char *buf)
 {
 	unsigned long flags;
-	u32 temp, status;
+	u32 portsc, status;
 	u32 mask;
 	int i, retval;
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
@@ -1601,24 +1599,24 @@ int xhci_hub_status_data(struct usb_hcd *hcd, char *buf)
 
 	/* For each port, did anything change?  If so, set that bit in buf. */
 	for (i = 0; i < max_ports; i++) {
-		temp = xhci_portsc_readl(ports[i]);
-		if (temp == ~(u32)0) {
+		portsc = xhci_portsc_readl(ports[i]);
+		if (portsc == ~(u32)0) {
 			xhci_hc_died(xhci);
 			retval = -ENODEV;
 			break;
 		}
-		trace_xhci_hub_status_data(ports[i], temp);
+		trace_xhci_hub_status_data(ports[i], portsc);
 
-		if ((temp & mask) != 0 ||
+		if ((portsc & mask) != 0 ||
 			(bus_state->port_c_suspend & 1 << i) ||
 			(ports[i]->resume_timestamp && time_after_eq(
 			    jiffies, ports[i]->resume_timestamp))) {
 			buf[(i + 1) / 8] |= 1 << (i + 1) % 8;
 			status = 1;
 		}
-		if ((temp & PORT_PRC))
+		if ((portsc & PORT_PRC))
 			reset_change = true;
-		if (temp & PORT_OCA)
+		if (portsc & PORT_OCA)
 			status = 1;
 	}
 	if (!status && !reset_change) {

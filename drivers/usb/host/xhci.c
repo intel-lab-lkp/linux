@@ -363,7 +363,7 @@ static void compliance_mode_recovery(struct timer_list *t)
 	struct xhci_hcd *xhci;
 	struct usb_hcd *hcd;
 	struct xhci_hub *rhub;
-	u32 temp;
+	u32 portsc;
 	int i;
 
 	xhci = timer_container_of(xhci, t, comp_mode_recovery_timer);
@@ -374,8 +374,8 @@ static void compliance_mode_recovery(struct timer_list *t)
 		return;
 
 	for (i = 0; i < rhub->num_ports; i++) {
-		temp = xhci_portsc_readl(rhub->ports[i]);
-		if (FIELD_GET(PORT_PLS_MASK, temp) == PLS_COMP_MODE) {
+		portsc = xhci_portsc_readl(rhub->ports[i]);
+		if (FIELD_GET(PORT_PLS_MASK, portsc) == PLS_COMP_MODE) {
 			/*
 			 * Compliance Mode Detected. Letting USB Core
 			 * handle the Warm Reset
