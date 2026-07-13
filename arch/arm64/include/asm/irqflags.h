@@ -60,7 +60,8 @@ static __always_inline void __pmr_local_irq_disable(void)
 {
 	if (IS_ENABLED(CONFIG_ARM64_DEBUG_PRIORITY_MASKING)) {
 		u32 pmr = read_sysreg_s(SYS_ICC_PMR_EL1);
-		WARN_ON_ONCE(pmr != GIC_PRIO_IRQON && pmr != GIC_PRIO_IRQOFF);
+		WARN_ON_ONCE(pmr != GIC_PRIO_IRQON && pmr != GIC_PRIO_IRQOFF &&
+			     pmr != (GIC_PRIO_IRQON | GICV3_PRIO_PSR_I_SET));
 	}
 
 	barrier();
