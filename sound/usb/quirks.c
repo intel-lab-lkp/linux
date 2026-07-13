@@ -1939,6 +1939,14 @@ void snd_usb_endpoint_start_quirk(struct snd_usb_endpoint *ep)
 		ep->skip_packets = 4;
 
 	/*
+	 * Generic USB Audio (0x1e0b:d01e) - skip initial sync packets
+	 * to avoid crackling noise during system boot
+	 */
+	if (ep->chip->usb_id == USB_ID(0x1e0b, 0xd01e) &&
+	    ep->type == SND_USB_ENDPOINT_TYPE_SYNC)
+		ep->skip_packets = 4;
+
+	/*
 	 * M-Audio Fast Track C400/C600 - when packets are not skipped, real
 	 * world latency varies by approx. +/- 50 frames (at 96kHz) each time
 	 * the stream is (re)started. When skipping packets 16 at endpoint

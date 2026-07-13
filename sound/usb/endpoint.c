@@ -1260,6 +1260,9 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep)
 			goto out_of_memory;
 		u->urb->pipe = ep->pipe;
 		u->urb->transfer_flags = URB_NO_TRANSFER_DMA_MAP;
+		/* Generic USB Audio (0x1e0b:d01e): use SIA for consistent scheduling */
+		if (ep->chip->usb_id == USB_ID(0x1e0b, 0xd01e))
+			u->urb->transfer_flags |= URB_ISO_ASAP;
 		u->urb->interval = 1 << ep->datainterval;
 		u->urb->context = u;
 		u->urb->complete = snd_complete_urb;
