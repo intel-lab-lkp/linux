@@ -29,14 +29,14 @@ vdec_1_load_firmware(struct amvdec_session *sess, const char *fwname)
 	struct amvdec_core *core = sess->core;
 	struct device *dev = core->dev_dec;
 	struct amvdec_codec_ops *codec_ops = sess->fmt_out->codec_ops;
-	static void *mc_addr;
-	static dma_addr_t mc_addr_map;
+	void *mc_addr;
+	dma_addr_t mc_addr_map;
 	int ret;
-	u32 i = 1000;
+	u32 val;
 
 	ret = request_firmware(&fw, fwname, dev);
 	if (ret < 0)
-		return -EINVAL;
+		return ret;
 
 	if (fw->size < MC_SIZE) {
 		dev_err(dev, "Firmware size %zu is too small. Expected %u.\n",
@@ -63,11 +63,11 @@ vdec_1_load_firmware(struct amvdec_session *sess, const char *fwname)
 	amvdec_write_dos(core, IMEM_DMA_COUNT, MC_SIZE / 4);
 	amvdec_write_dos(core, IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
 
-	while (--i && amvdec_read_dos(core, IMEM_DMA_CTRL) & 0x8000);
-
-	if (i == 0) {
+	ret = readl_poll_timeout_atomic(core->dos_base + IMEM_DMA_CTRL, val,
+					!(val & 0x8000), 10, 10000);
+	if (ret) {
 		dev_err(dev, "Firmware load fail (DMA hang?)\n");
-		ret = -EINVAL;
+		ret = -ETIMEDOUT;
 		goto free_mc;
 	}
 
