@@ -1164,6 +1164,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		if (comp_type == MTK_DISP_AAL ||
 		    comp_type == MTK_DISP_CCORR ||
 		    comp_type == MTK_DISP_COLOR ||
+		    comp_type == MTK_DISP_DSC ||
 		    comp_type == MTK_DISP_GAMMA ||
 		    comp_type == MTK_DISP_MERGE ||
 		    comp_type == MTK_DISP_OVL ||
@@ -1272,6 +1273,7 @@ static struct platform_driver * const mtk_drm_drivers[] = {
 	&mtk_disp_aal_driver,
 	&mtk_disp_ccorr_driver,
 	&mtk_disp_color_driver,
+	&mtk_disp_dsc_driver,
 	&mtk_disp_gamma_driver,
 	&mtk_disp_merge_driver,
 	&mtk_disp_ovl_adaptor_driver,

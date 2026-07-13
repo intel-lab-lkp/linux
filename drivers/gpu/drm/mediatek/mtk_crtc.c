@@ -22,6 +22,7 @@
 
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
+#include "mtk_disp_drv.h"
 #include "mtk_drm_drv.h"
 #include "mtk_plane.h"
 
@@ -344,6 +345,8 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
 	struct drm_connector_list_iter conn_iter;
+	struct mtk_ddp_comp *comp_dsi = NULL, *comp_dsc = NULL;
+	struct drm_dsc_config *dsc_cfg;
 	struct drm_device *dev = mtk_crtc->base.dev;
 	unsigned int width, height, vrefresh, bpc = MTK_MAX_BPC;
 	int ret;
@@ -398,6 +401,17 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 		if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
 			mtk_mutex_add_comp(mtk_crtc->mutex,
 					   mtk_crtc->ddp_comp[i]->id);
+
+		/* For now, only single DSI is supported */
+		if (mtk_crtc->ddp_comp[i]->id >= DDP_COMPONENT_DSI0 &&
+		    mtk_crtc->ddp_comp[i]->id <= DDP_COMPONENT_DSI3)
+			if (!comp_dsi)
+				comp_dsi = mtk_crtc->ddp_comp[i];
+
+		if (mtk_crtc->ddp_comp[i]->id == DDP_COMPONENT_DSC0 ||
+		    mtk_crtc->ddp_comp[i]->id == DDP_COMPONENT_DSC1)
+			if (!comp_dsc)
+				comp_dsc = mtk_crtc->ddp_comp[i];
 	}
 	if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
 		mtk_mutex_add_comp(mtk_crtc->mutex, mtk_crtc->ddp_comp[i]->id);
@@ -411,6 +425,13 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 
 		mtk_ddp_comp_config(comp, width, height, vrefresh, bpc, NULL);
 		mtk_ddp_comp_start(comp);
+	}
+
+	/* Setup the DSC if present, with the config coming from DSI */
+	if (comp_dsc && comp_dsi) {
+		dsc_cfg = mtk_dsi_get_dsc_config(comp_dsi->dev);
+		if (dsc_cfg)
+			mtk_ddp_comp_dsc_setup(comp_dsc, dsc_cfg);
 	}
 
 	/* Initially configure all planes */

@@ -71,6 +71,7 @@ struct mtk_drm_private {
 extern struct platform_driver mtk_disp_aal_driver;
 extern struct platform_driver mtk_disp_ccorr_driver;
 extern struct platform_driver mtk_disp_color_driver;
+extern struct platform_driver mtk_disp_dsc_driver;
 extern struct platform_driver mtk_disp_gamma_driver;
 extern struct platform_driver mtk_disp_merge_driver;
 extern struct platform_driver mtk_disp_ovl_adaptor_driver;
