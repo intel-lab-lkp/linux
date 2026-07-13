@@ -450,16 +450,6 @@ static int rtw_sdio_resume(struct device *dev)
 	return ret;
 }
 
-static int __init rtw_drv_entry(void)
-{
-	return sdio_register_driver(&rtl8723bs_sdio_driver);
-}
-module_init(rtw_drv_entry);
-
-static void __exit rtw_drv_halt(void)
-{
-	sdio_unregister_driver(&rtl8723bs_sdio_driver);
-}
-module_exit(rtw_drv_halt);
+module_sdio_driver(rtl8723bs_sdio_driver);
 
 MODULE_DESCRIPTION("Realtek RTL8723BS SDIO WiFi driver");
