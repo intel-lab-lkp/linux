@@ -991,6 +991,33 @@ static inline int ip_vs_dest_totalconns(struct ip_vs_dest *dest)
 		+ atomic_read(&dest->inactconns);
 }
 
+/* Update overload flag based on number of dest conns and lower/upper
+ * connection thresholds:
+ * - conns reach u_threshold and exceed it: set the flag
+ * - conns go below l_threshold (or 75% of u_threshold): clear the flag
+ */
+__always_inline void ip_vs_dest_update_overload(struct ip_vs_dest *dest)
+{
+	int conns;
+	u32 l, u;
+
+	u = READ_ONCE(dest->u_threshold);
+	if (!u)
+		goto unset;
+	conns = ip_vs_dest_totalconns(dest);
+	if (conns >= u) {
+		dest->flags |= IP_VS_DEST_F_OVERLOAD;
+		return;
+	}
+	/* Low threshold defaults to 75% of upper threshold */
+	l = READ_ONCE(dest->l_threshold) ? : (u - (u >> 2));
+	if (conns >= l)
+		return;
+
+unset:
+	dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
+}
+
 /*
  *	Bind a connection entry with a virtual service destination
  *	Called just after a new connection entry is created.
@@ -1053,9 +1080,7 @@ ip_vs_bind_dest(struct ip_vs_conn *cp, struct ip_vs_dest *dest)
 		atomic_inc(&dest->persistconns);
 	}
 
-	if (dest->u_threshold != 0 &&
-	    ip_vs_dest_totalconns(dest) >= dest->u_threshold)
-		dest->flags |= IP_VS_DEST_F_OVERLOAD;
+	ip_vs_dest_update_overload(dest);
 }
 
 
@@ -1149,16 +1174,8 @@ static inline void ip_vs_unbind_dest(struct ip_vs_conn *cp)
 		atomic_dec(&dest->persistconns);
 	}
 
-	if (dest->l_threshold != 0) {
-		if (ip_vs_dest_totalconns(dest) < dest->l_threshold)
-			dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
-	} else if (dest->u_threshold != 0) {
-		if (ip_vs_dest_totalconns(dest) * 4 < dest->u_threshold * 3)
-			dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
-	} else {
-		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
-			dest->flags &= ~IP_VS_DEST_F_OVERLOAD;
-	}
+	if (dest->flags & IP_VS_DEST_F_OVERLOAD)
+		ip_vs_dest_update_overload(dest);
 
 	ip_vs_dest_put(dest);
 }

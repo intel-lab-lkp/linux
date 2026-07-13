@@ -1907,6 +1907,8 @@ static inline void ip_vs_dest_put_and_free(struct ip_vs_dest *dest)
 		kfree(dest);
 }
 
+void ip_vs_dest_update_overload(struct ip_vs_dest *dest);
+
 /* IPVS sync daemon data and function prototypes
  * (from ip_vs_sync.c)
  */
