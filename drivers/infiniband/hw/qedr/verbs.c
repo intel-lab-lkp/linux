@@ -118,8 +118,6 @@ int qedr_query_device(struct ib_device *ibdev,
 	if (rc)
 		return rc;
 
-	memset(attr, 0, sizeof(*attr));
-
 	attr->fw_ver = qattr->fw_ver;
 	attr->sys_image_guid = qattr->sys_image_guid;
 	attr->max_mr_size = qattr->max_mr_size;

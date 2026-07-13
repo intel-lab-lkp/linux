@@ -22,7 +22,6 @@ static int irdma_query_device(struct ib_device *ibdev,
 	if (err)
 		return err;
 
-	memset(props, 0, sizeof(*props));
 	addrconf_addr_eui48((u8 *)&props->sys_image_guid,
 			    iwdev->netdev->dev_addr);
 	props->fw_ver = (u64)irdma_fw_major_ver(&rf->sc_dev) << 32 |

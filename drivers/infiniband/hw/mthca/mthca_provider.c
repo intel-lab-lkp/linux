@@ -69,8 +69,6 @@ static int mthca_query_device(struct ib_device *ibdev, struct ib_device_attr *pr
 		goto out;
 	}
 
-	memset(props, 0, sizeof *props);
-
 	props->fw_ver              = mdev->fw_ver;
 
 	ib_init_query_mad(in_mad);
