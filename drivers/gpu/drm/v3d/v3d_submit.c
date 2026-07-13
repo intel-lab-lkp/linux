@@ -127,11 +127,8 @@ v3d_render_job_free(struct kref *ref)
 }
 
 static void
-v3d_cpu_job_free(struct kref *ref)
+v3d_cpu_job_free_resources(struct v3d_cpu_job *job)
 {
-	struct v3d_cpu_job *job = container_of(ref, struct v3d_cpu_job,
-					       base.refcount);
-
 	v3d_timestamp_query_info_free(&job->timestamp_query,
 				      job->timestamp_query.count);
 
@@ -140,7 +137,15 @@ v3d_cpu_job_free(struct kref *ref)
 
 	if (job->indirect_csd.indirect)
 		drm_gem_object_put(job->indirect_csd.indirect);
+}
 
+static void
+v3d_cpu_job_free(struct kref *ref)
+{
+	struct v3d_cpu_job *job = container_of(ref, struct v3d_cpu_job,
+					       base.refcount);
+
+	v3d_cpu_job_free_resources(job);
 	v3d_job_free(ref);
 }
 
@@ -1313,6 +1318,7 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, cpu_job);
 		if (ret) {
 			drm_dbg(dev, "Failed to get extensions.\n");
+			v3d_cpu_job_free_resources(cpu_job);
 			goto fail;
 		}
 	}
@@ -1320,12 +1326,14 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	/* Every CPU job must have a CPU job user extension */
 	if (!cpu_job->job_type) {
 		drm_dbg(dev, "CPU job must have a CPU job user extension.\n");
+		v3d_cpu_job_free_resources(cpu_job);
 		ret = -EINVAL;
 		goto fail;
 	}
 
 	if (args->bo_handle_count != cpu_job_bo_handle_count[cpu_job->job_type]) {
 		drm_dbg(dev, "This CPU job was not submitted with the proper number of BOs.\n");
+		v3d_cpu_job_free_resources(cpu_job);
 		ret = -EINVAL;
 		goto fail;
 	}
@@ -1335,6 +1343,7 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	ret = v3d_job_init(v3d, file_priv, &cpu_job->base,
 			   v3d_cpu_job_free, 0, &se, V3D_CPU);
 	if (ret) {
+		v3d_cpu_job_free_resources(cpu_job);
 		v3d_job_deallocate((void *)&cpu_job);
 		goto fail;
 	}
