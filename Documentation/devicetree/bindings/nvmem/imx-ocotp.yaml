@@ -20,6 +20,16 @@ description: |
 allOf:
   - $ref: nvmem.yaml#
   - $ref: nvmem-deprecated-cells.yaml#
+  - if:
+      properties:
+        compatible:
+          enum:
+            - fsl,imx93-ocotp
+    then:
+      properties:
+        secure-enclave:
+          $ref: /schemas/types.yaml#/definitions/phandle
+          description: A phandle to the secure enclave node
 
 properties:
   compatible:
