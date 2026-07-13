@@ -1999,17 +1999,20 @@ err:
 static int cs_etm__exception(struct cs_etm_traceid_queue *tidq)
 {
 	/*
-	 * When the exception packet is inserted, whether the last instruction
-	 * in previous range packet is taken branch or not, we need to force
-	 * to set 'prev_packet->last_instr_taken_branch' to true.  This ensures
-	 * to generate branch sample for the instruction range before the
-	 * exception is trapped to kernel or before the exception returning.
+	 * cs_etm__set_sample_flags() has already copied exception flags to
+	 * the previous range packet. Do not mark every exception boundary as a
+	 * taken branch: an async exception can arrive after an untaken branch,
+	 * and forcing the flag would synthesize a bogus branch sample.
 	 *
-	 * The exception packet includes the dummy address values, so don't
-	 * swap PACKET with PREV_PACKET.  This keeps PREV_PACKET to be useful
-	 * for generating instruction and branch samples.
+	 * Keep the fixup only for SVC. The decoder reports the range ending in
+	 * SVC without last_instr_taken_branch set, but perf represents SVC
+	 * exception entry as a syscall branch and needs the flag to emit that
+	 * branch sample.
 	 */
-	if (tidq->prev_packet->sample_type == CS_ETM_RANGE)
+	if (tidq->prev_packet->sample_type == CS_ETM_RANGE &&
+	    tidq->prev_packet->flags == (PERF_IP_FLAG_BRANCH |
+					 PERF_IP_FLAG_CALL |
+					 PERF_IP_FLAG_SYSCALLRET))
 		tidq->prev_packet->last_instr_taken_branch = true;
 
 	return 0;
