@@ -228,6 +228,7 @@ static int adu_open(struct inode *inode, struct file *file)
 {
 	struct adu_device *dev = NULL;
 	struct usb_interface *interface;
+	unsigned long flags;
 	int subminor;
 	int retval;
 
@@ -265,7 +266,9 @@ static int adu_open(struct inode *inode, struct file *file)
 	file->private_data = dev;
 
 	/* initialize in direction */
+	spin_lock_irqsave(&dev->buflock, flags);
 	dev->read_buffer_length = 0;
+	spin_unlock_irqrestore(&dev->buflock, flags);
 
 	/* fixup first read by having urb waiting for it */
 	usb_fill_int_urb(dev->interrupt_in_urb, dev->udev,
