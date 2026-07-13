@@ -265,8 +265,10 @@ static int uclogic_probe(struct hid_device *hdev,
 	return 0;
 failure:
 	/* Assume "remove" might not be called if "probe" failed */
-	if (params_initialized)
+	if (params_initialized) {
+		kfree(drvdata->desc_ptr);
 		uclogic_params_cleanup(&drvdata->params);
+	}
 	/*
 	 * If hid_hw_start() started I/O and then failed, raw_event may have
 	 * armed the timer; shut it down so it cannot fire on the devm-freed
