@@ -152,6 +152,7 @@ static int llcp_raw_sock_bind(struct socket *sock, struct sockaddr_unsized *addr
 	struct sock *sk = sock->sk;
 	struct nfc_llcp_sock *llcp_sock = nfc_llcp_sock(sk);
 	struct nfc_llcp_local *local;
+	struct nfc_llcp_local *old_local;
 	struct nfc_dev *dev;
 	struct sockaddr_nfc_llcp llcp_addr;
 	int len, ret = 0;
@@ -184,6 +185,11 @@ static int llcp_raw_sock_bind(struct socket *sock, struct sockaddr_unsized *addr
 		ret = -ENODEV;
 		goto put_dev;
 	}
+
+	old_local = llcp_sock->local;
+	llcp_sock->local = NULL;
+	llcp_sock->dev = NULL;
+	nfc_llcp_local_put(old_local);
 
 	llcp_sock->dev = dev;
 	llcp_sock->local = local;
