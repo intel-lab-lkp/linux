@@ -149,12 +149,10 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 					      src, src_len,
 					      out + sizeof(__be32), &dst_len,
 					      NULL, 0);
-		if (rc == -EMSGSIZE || dst_len >= src_len) {
-			rc = 0;
+		/* if dst_len >= src_len, rc is 0 */
+		if (rc || dst_len >= src_len)
 			goto out;
-		}
-		if (rc)
-			goto out;
+
 		compressed_pdu_len = dst_len;
 	} else {
 		/*
@@ -165,12 +163,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		rc = smb_lz77_compress(src, src_len,
 				       out + sizeof(__be32) + sizeof(*chdr),
 				       &dst_len);
-		if (rc == -EMSGSIZE ||
-		    dst_len + sizeof(*chdr) >= src_len) {
-			rc = 0;
-			goto out;
-		}
-		if (rc)
+		if (rc || dst_len + sizeof(*chdr) >= src_len)
 			goto out;
 
 		compressed_pdu_len = sizeof(*chdr) + dst_len;
