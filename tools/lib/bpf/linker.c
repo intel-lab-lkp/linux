@@ -973,7 +973,7 @@ static int linker_sanity_check_elf_symtab(struct src_obj *obj, struct src_sec *s
 			return -EINVAL;
 		}
 		if (sym_type == STT_SECTION) {
-			if (sym->st_value != 0)
+			if (sym->st_value != 0 || sym->st_shndx >= obj->sec_cnt)
 				return -EINVAL;
 			continue;
 		}
