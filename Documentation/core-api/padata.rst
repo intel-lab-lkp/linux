@@ -55,9 +55,9 @@ processors are allowed to be used as the serialization callback processor.
 cpumask specifies the new cpumask to use.
 
 There may be sysfs files for an instance's cpumasks.  For example, pcrypt's
-live in /sys/kernel/pcrypt/<instance-name>.  Within an instance's directory
-there are two files, parallel_cpumask and serial_cpumask, and either cpumask
-may be changed by echoing a bitmask into the file, for example::
+used to live in /sys/kernel/pcrypt/<instance-name>.  Within an instance's
+directory there are two files, parallel_cpumask and serial_cpumask, and either
+cpumask may be changed by echoing a bitmask into the file, for example::
 
     echo f > /sys/kernel/pcrypt/pencrypt/parallel_cpumask
 
