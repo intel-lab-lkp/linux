@@ -1068,7 +1068,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct net_device *dev, str
 	/* Parse extensions */
 	if (ext_len >= 4 &&
 	    !memcmp(b->exten, ic_bootp_cookie, 4)) { /* Check magic cookie */
-		u8 *end = (u8 *) b + ntohs(b->iph.tot_len);
+		u8 *end = (u8 *)b + sizeof(struct iphdr) + ntohs(b->udph.len);
 		u8 *ext;
 
 #ifdef IPCONFIG_DHCP
