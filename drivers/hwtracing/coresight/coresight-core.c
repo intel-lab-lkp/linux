@@ -63,6 +63,8 @@ static LIST_HEAD(coresight_dev_idx_list);
 
 static const struct cti_assoc_op *cti_assoc_ops;
 
+static struct workqueue_struct *coresight_wq;
+
 static struct coresight_node *
 coresight_path_first_node(struct coresight_path *path)
 {
@@ -132,6 +134,16 @@ static void coresight_clear_percpu_source(struct coresight_device *csdev)
 	per_cpu(csdev_source, csdev->cpu) = NULL;
 }
 
+static void coresight_put_device_work(struct work_struct *work)
+{
+	struct coresight_device *csdev =
+		container_of(work, struct coresight_device, put_work);
+	int n = atomic_xchg(&csdev->put_pending, 0);
+
+	while (n--)
+		put_device(&csdev->dev);
+}
+
 struct coresight_device *coresight_get_percpu_source_ref(int cpu)
 {
 	struct coresight_device *csdev;
@@ -163,16 +175,9 @@ void coresight_put_percpu_source_ref(struct coresight_device *csdev)
 	if (!csdev || !coresight_is_percpu_source(csdev))
 		return;
 
-	guard(raw_spinlock_irqsave)(&coresight_dev_lock);
+	atomic_inc(&csdev->put_pending);
 
-	/*
-	 * TODO: coresight_device_release() is invoked to release resources when
-	 * the device's refcount reaches zero. It then calls free_percpu(),
-	 * which acquires pcpu_lock — a sleepable lock when PREEMPT_RT is
-	 * enabled. Since the raw spinlock coresight_dev_lock is held, this can
-	 * lead to a potential "scheduling while atomic" issue.
-	 */
-	put_device(&csdev->dev);
+	queue_work(coresight_wq, &csdev->put_work);
 }
 
 struct coresight_device *coresight_get_source(struct coresight_path *path)
@@ -1563,6 +1568,9 @@ coresight_init_device(struct coresight_desc *desc)
 	csdev->dev.release = coresight_device_release;
 	csdev->dev.bus = &coresight_bustype;
 
+	INIT_WORK(&csdev->put_work, coresight_put_device_work);
+	atomic_set(&csdev->put_pending, 0);
+
 	return csdev;
 }
 
@@ -2090,9 +2098,13 @@ static int __init coresight_init(void)
 {
 	int ret;
 
+	coresight_wq = alloc_workqueue("coresight_wq", 0, 0);
+	if (!coresight_wq)
+		return -ENOMEM;
+
 	ret = bus_register(&coresight_bustype);
 	if (ret)
-		return ret;
+		goto exit_wq;
 
 	ret = etm_perf_init();
 	if (ret)
@@ -2121,6 +2133,8 @@ exit_perf:
 	etm_perf_exit();
 exit_bus_unregister:
 	bus_unregister(&coresight_bustype);
+exit_wq:
+	destroy_workqueue(coresight_wq);
 	return ret;
 }
 
@@ -2133,6 +2147,9 @@ static void __exit coresight_exit(void)
 	etm_perf_exit();
 	bus_unregister(&coresight_bustype);
 	coresight_release_device_list();
+
+	if (coresight_wq)
+		destroy_workqueue(coresight_wq);
 }
 
 module_init(coresight_init);

@@ -13,6 +13,7 @@
 #include <linux/perf_event.h>
 #include <linux/sched.h>
 #include <linux/platform_device.h>
+#include <linux/workqueue.h>
 
 /* Peripheral id registers (0xFD0-0xFEC) */
 #define CORESIGHT_PERIPHIDR4	0xfd0
@@ -293,6 +294,8 @@ struct coresight_device {
 	struct csdev_access access;
 	struct device dev;
 	struct coresight_path *path;
+	struct work_struct put_work;
+	atomic_t put_pending;
 	atomic_t mode;
 	int refcnt;
 	int cpu;
