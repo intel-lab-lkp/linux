@@ -1289,8 +1289,14 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 			cifs_errorf(fc, "CONFIG_CIFS_COMPRESSION kernel config option is unset\n");
 			goto cifs_parse_mount_err;
 		}
-		ctx->compress = true;
-		cifs_dbg(VFS, "SMB3 compression support is experimental\n");
+
+		/* This is more of a "TODO" than a final statement */
+		if (BITS_PER_LONG < 64 || 0x1234 != cpu_to_le16(0x1234)) {
+			cifs_dbg(VFS, "SMB3 compression is currently only supported on 64-bit little endian architectures, disabling\n");
+		} else {
+			ctx->compress = true;
+			cifs_dbg(VFS, "SMB3 compression support is experimental\n");
+		}
 		break;
 	case Opt_nodfs:
 		ctx->nodfs = 1;
