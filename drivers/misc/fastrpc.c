@@ -1781,6 +1781,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->sctx = fastrpc_session_alloc(fl);
 	if (!fl->sctx) {
 		dev_err(&cctx->rpdev->dev, "No session available\n");
+		fastrpc_channel_ctx_put(cctx);
 		mutex_destroy(&fl->mutex);
 		kfree(fl);
 
