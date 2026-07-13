@@ -548,8 +548,35 @@ static void uclogic_remove(struct hid_device *hdev)
 {
 	struct uclogic_drvdata *drvdata = hid_get_drvdata(hdev);
 
-	timer_delete_sync(&drvdata->inrange_timer);
+	/*
+	 * Quiesce the device, and the report-delivery path it feeds, before
+	 * tearing down anything the report path can still touch.
+	 *
+	 * hid_hw_stop() disconnects hid->inputs (hid_disconnect() ->
+	 * hidinput_disconnect()) and stops the underlying transport. Only
+	 * once it has returned is uclogic_raw_event_pen() guaranteed unable
+	 * to run again, since that is the only place inrange_timer gets
+	 * re-armed (mod_timer() on every report while pen->inrange ==
+	 * UCLOGIC_PARAMS_PEN_INRANGE_NONE).
+	 *
+	 * Calling timer_delete_sync() first, as the old order did, cancels
+	 * the timer while the device can still deliver reports: a report
+	 * processed between the timer_delete_sync() call and the eventual
+	 * URB shutdown inside hid_hw_stop() re-arms inrange_timer, which is
+	 * now left pending across the devm_kzalloc()'d drvdata (and
+	 * drvdata->pen_input) being freed. uclogic_inrange_timeout() then
+	 * fires ~100 ms later on freed memory.
+	 *
+	 * Stopping the hardware first and only then deleting the timer
+	 * closes that window: hid_hw_stop() will not return until the
+	 * device can no longer feed uclogic_raw_event_pen(), so the
+	 * timer_delete_sync() call below is guaranteed to be the last write
+	 * to inrange_timer. This also matches the ordering already used by
+	 * other HID drivers whose timers are re-armed from the report path,
+	 * e.g. hid-appleir.c's key_up_timer.
+	 */
 	hid_hw_stop(hdev);
+	timer_delete_sync(&drvdata->inrange_timer);
 	kfree(drvdata->desc_ptr);
 	uclogic_params_cleanup(&drvdata->params);
 }
