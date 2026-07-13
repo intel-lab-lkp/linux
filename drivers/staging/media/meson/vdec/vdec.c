@@ -926,10 +926,14 @@ static int vdec_close(struct file *file)
 {
 	struct amvdec_session *sess = file_to_amvdec_session(file);
 
+	cancel_work_sync(&sess->esparser_queue_work);
+
 	v4l2_m2m_ctx_release(sess->m2m_ctx);
 	v4l2_m2m_release(sess->m2m_dev);
 	v4l2_fh_del(&sess->fh, file);
 	v4l2_fh_exit(&sess->fh);
+
+	v4l2_ctrl_handler_free(&sess->ctrl_handler);
 
 	mutex_destroy(&sess->lock);
 	mutex_destroy(&sess->bufs_recycle_lock);
@@ -953,6 +957,9 @@ static irqreturn_t vdec_isr(int irq, void *data)
 	struct amvdec_core *core = data;
 	struct amvdec_session *sess = core->cur_sess;
 
+	if (!sess)
+		return IRQ_NONE;
+
 	sess->last_irq_jiffies = get_jiffies_64();
 
 	return sess->fmt_out->codec_ops->isr(sess);
@@ -962,6 +969,9 @@ static irqreturn_t vdec_threaded_isr(int irq, void *data)
 {
 	struct amvdec_core *core = data;
 	struct amvdec_session *sess = core->cur_sess;
+
+	if (!sess)
+		return IRQ_NONE;
 
 	return sess->fmt_out->codec_ops->threaded_isr(sess);
 }
@@ -1020,6 +1030,8 @@ static int vdec_probe(struct platform_device *pdev)
 		return PTR_ERR(core->canvas);
 
 	of_id = of_match_node(vdec_dt_match, dev->of_node);
+	if (!of_id)
+		return -ENODEV;
 	core->platform = of_id->data;
 
 	if (core->platform->revision == VDEC_REVISION_G12A ||
