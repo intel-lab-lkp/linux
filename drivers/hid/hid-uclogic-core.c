@@ -267,6 +267,13 @@ failure:
 	/* Assume "remove" might not be called if "probe" failed */
 	if (params_initialized)
 		uclogic_params_cleanup(&drvdata->params);
+	/*
+	 * If hid_hw_start() started I/O and then failed, raw_event may have
+	 * armed the timer; shut it down so it cannot fire on the devm-freed
+	 * drvdata after probe returns.
+	 */
+	if (drvdata)
+		timer_shutdown_sync(&drvdata->inrange_timer);
 	return rc;
 }
 
@@ -548,7 +555,15 @@ static void uclogic_remove(struct hid_device *hdev)
 {
 	struct uclogic_drvdata *drvdata = hid_get_drvdata(hdev);
 
-	timer_delete_sync(&drvdata->inrange_timer);
+	/*
+	 * timer_delete_sync() does not prevent re-arming, so a pen report
+	 * delivered before hid_hw_stop() kills the URBs could re-arm the
+	 * timer; hid_hw_stop() then frees the hidinput pen_input and the
+	 * pending timer fires on freed memory.  timer_shutdown_sync() drains
+	 * the callback while pen_input is still valid and permanently blocks
+	 * re-arming, so an in-flight raw_event cannot revive it.
+	 */
+	timer_shutdown_sync(&drvdata->inrange_timer);
 	hid_hw_stop(hdev);
 	kfree(drvdata->desc_ptr);
 	uclogic_params_cleanup(&drvdata->params);
