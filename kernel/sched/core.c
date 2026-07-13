@@ -3902,13 +3902,16 @@ void sched_ttwu_pending(void *arg)
 	update_rq_clock(rq);
 
 	llist_for_each_entry_safe(p, t, llist, wake_entry.llist) {
+		int wake_flags;
+
 		if (WARN_ON_ONCE(p->on_cpu))
 			smp_cond_load_acquire(&p->on_cpu, !VAL);
 
 		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
 			set_task_cpu(p, cpu_of(rq));
 
-		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &rf);
+		wake_flags = p->sched_remote_wakeup_flags;
+		ttwu_do_activate(rq, p, wake_flags, &rf);
 	}
 
 	/*
@@ -3951,7 +3954,7 @@ static void __ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags
 {
 	struct rq *rq = cpu_rq(cpu);
 
-	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+	p->sched_remote_wakeup_flags = wake_flags & WF_TTWU_QUEUE_MASK;
 
 	WRITE_ONCE(rq->ttwu_pending, 1);
 #ifdef CONFIG_SMP
