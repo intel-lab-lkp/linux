@@ -3,7 +3,7 @@
 # Makefile for the linux s390-specific parts of the memory manager.
 #
 
-obj-y		:= init.o fault.o extmem.o mmap.o vmem.o maccess.o
+obj-y		:= init.o fault.o extmem.o mmap.o vmem.o maccess.o lazy_mmu.o
 obj-y		+= page-states.o pageattr.o pgtable.o pgalloc.o extable.o
 
 obj-$(CONFIG_CMM)		+= cmm.o

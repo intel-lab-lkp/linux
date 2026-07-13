@@ -59,6 +59,7 @@
 #include <asm/topology.h>
 #include <asm/vdso.h>
 #include <asm/maccess.h>
+#include <asm/lazy_mmu.h>
 #include "entry.h"
 
 enum {
@@ -866,6 +867,11 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 	rc = pcpu_alloc_lowcore(pcpu, cpu);
 	if (rc)
 		return rc;
+	rc = lazy_mmu_online_cpu(GFP_KERNEL, cpu);
+	if (rc) {
+		pcpu_free_lowcore(pcpu, cpu);
+		return rc;
+	}
 	/*
 	 * Make sure global control register contents do not change
 	 * until new CPU has initialized control registers.
@@ -921,6 +927,7 @@ void __cpu_die(unsigned int cpu)
 	pcpu = per_cpu_ptr(&pcpu_devices, cpu);
 	while (!pcpu_stopped(pcpu))
 		cpu_relax();
+	lazy_mmu_offline_cpu(cpu);
 	pcpu_free_lowcore(pcpu, cpu);
 	cpumask_clear_cpu(cpu, mm_cpumask(&init_mm));
 	cpumask_clear_cpu(cpu, &init_mm.context.cpu_attach_mask);
