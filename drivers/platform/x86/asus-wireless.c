@@ -132,6 +132,9 @@ static int asus_wireless_probe(struct platform_device *pdev)
 	const struct acpi_device_id *id;
 	int err;
 
+	if (!adev)
+		return -ENODEV;
+
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
