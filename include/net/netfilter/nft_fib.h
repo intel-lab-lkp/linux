@@ -33,6 +33,9 @@ static inline bool nft_fib_can_skip(const struct nft_pktinfo *pkt)
 		return false;
 	}
 
+	if (!indev)
+		return false;
+
 	sk = pkt->skb->sk;
 	if (sk && sk_fullsock(sk))
 	       return sk->sk_rx_dst_ifindex == indev->ifindex;
