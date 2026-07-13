@@ -2973,7 +2973,8 @@ static void virtnet_poll_cleantx(struct receive_queue *rq, int budget)
 		do {
 			virtqueue_disable_cb(sq->vq);
 			free_old_xmit(sq, txq, !!budget);
-		} while (unlikely(!virtqueue_enable_cb_delayed(sq->vq)));
+		} while (!virtqueue_is_broken(sq->vq) &&
+			 unlikely(!virtqueue_enable_cb_delayed(sq->vq)));
 
 		if (sq->vq->num_free >= MAX_SKB_FRAGS + 2)
 			virtnet_tx_wake_queue(vi, sq);
