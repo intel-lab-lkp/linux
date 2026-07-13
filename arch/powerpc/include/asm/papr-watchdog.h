@@ -55,4 +55,6 @@
 #define PSERIES_WDTQ_MIN_TIMEOUT(cap)	(((cap) >> 48) & 0xffff)
 #define PSERIES_WDTQ_MAX_NUMBER(cap)	(((cap) >> 32) & 0xffff)
 
+#define PSERIES_WDT_NUM_ALL	((unsigned long)-1)
+
 #endif /* _ASM_POWERPC_CRASHDUMP_PPC64_H */
