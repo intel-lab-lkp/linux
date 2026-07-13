@@ -407,8 +407,9 @@ static int xhci_portli_show(struct seq_file *s, void *unused)
 			   FIELD_GET(PORT_RLC_MASK, portli),
 			   FIELD_GET(PORT_TLC_MASK, portli));
 	else if (xhci->hcc_params2 & HCC2_E2V2C)
-		seq_printf(s, "0x%08x RDR=%u TDR=%u\n", portli,
-			   PORTLI_RDR(portli), PORTLI_TDR(portli));
+		seq_printf(s, "0x%08x RDR=%lu TDR=%lu\n", portli,
+			   FIELD_GET(PORT_RDR_MASK, portli),
+			   FIELD_GET(PORT_TDR_MASK, portli));
 	else
 		seq_printf(s, "0x%08x RsvdP\n", portli);
 

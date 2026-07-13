@@ -161,9 +161,12 @@
 #define PORT_TLC_MASK		GENMASK(23, 20)
 /* bits 31:24 - RsvdP */
 
-/* eUSB2v2 protocol PORTLI Port Link information, RsvdP for normal USB2 */
-#define PORTLI_RDR(p)		((p) & 0xf)
-#define PORTLI_TDR(p)		(((p) >> 4) & 0xf)
+/* USB2 Port Link Info Register (PORTLI) 5.4.10.2 */
+/* bits 3:0 - Rx Data Rate, if E2V2C=1 else RsvdP */
+#define PORT_RDR_MASK		GENMASK(3, 0)
+/* bits 7:4 - Tx Data Rate, if E2V2C=1 else RsvdP */
+#define PORT_TDR_MASK		GENMASK(7, 4)
+/* bits 31:8 - RsvdP */
 
 /* USB2 Protocol PORTHLPMC */
 #define PORT_HIRDM(p)((p) & 3)
