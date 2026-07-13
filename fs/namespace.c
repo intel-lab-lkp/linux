@@ -34,6 +34,7 @@
 #include <linux/mnt_idmapping.h>
 #include <linux/pidfs.h>
 #include <linux/nstree.h>
+#include <linux/audit.h>
 
 #include "pnode.h"
 #include "internal.h"
@@ -4624,6 +4625,8 @@ SYSCALL_DEFINE5(move_mount,
 	uflags = 0;
 	if (flags & MOVE_MOUNT_F_EMPTY_PATH)
 		uflags = AT_EMPTY_PATH;
+
+	audit_log_move_mount(flags);
 
 	CLASS(filename_maybe_null,from_name)(from_pathname, uflags);
 	if (!from_name && from_dfd >= 0) {
