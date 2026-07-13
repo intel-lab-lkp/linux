@@ -5,10 +5,12 @@
 
 #include <linux/bitfield.h>
 #include <linux/stddef.h>
+#include <linux/time64.h>
 #include <linux/types.h>
 
 #include "regs.h"
 
+struct ptp_system_timestamp;
 struct zl3073x_dev;
 
 /**
@@ -16,6 +18,7 @@ struct zl3073x_dev;
  * @ctrl: DPLL control register value
  * @mode_refsel: mode and reference selection register value
  * @ref_prio: reference priority registers (4 bits per ref, P/N packed)
+ * @out_step_time_mask: output step-time mask
  * @mon_status: monitor status register value
  * @refsel_status: reference selection status register value
  * @df_offset: frequency offset vs tracked reference in 2^-48 steps
@@ -25,6 +28,9 @@ struct zl3073x_chan {
 		u8	ctrl;
 		u8	mode_refsel;
 		u8	ref_prio[ZL3073X_NUM_REFS / 2];
+	);
+	struct_group(inv, /* Invariants */
+		u16	out_step_time_mask;
 	);
 	struct_group(stat,
 		u8	mon_status;
@@ -41,6 +47,20 @@ int zl3073x_chan_state_set(struct zl3073x_dev *zldev, u8 index,
 
 int zl3073x_chan_state_update(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_chan_nco_mode_set(struct zl3073x_dev *zldev, u8 index);
+
+int zl3073x_chan_tod_read(struct zl3073x_dev *zldev, u8 ch,
+			  bool next_hz, struct timespec64 *ts,
+			  struct ptp_system_timestamp *sts);
+int zl3073x_chan_tod_write(struct zl3073x_dev *zldev, u8 ch,
+			   struct timespec64 ts);
+int zl3073x_chan_tod_adjust(struct zl3073x_dev *zldev, u8 ch,
+			    struct timespec64 delta);
+int zl3073x_chan_phase_step(struct zl3073x_dev *zldev, u8 ch,
+			    u16 out_mask, s32 step_cycles, bool tod_step);
+
+int zl3073x_chan_df_offset_set(struct zl3073x_dev *zldev, u8 ch, s64 offset);
+
+int zl3073x_chan_tie_write(struct zl3073x_dev *zldev, u8 ch, s64 delta_ns);
 
 /**
  * zl3073x_chan_df_offset_get - get cached df_offset vs tracked reference
@@ -201,6 +221,21 @@ static inline bool zl3073x_chan_mode_is_reflock(const struct zl3073x_chan *chan)
 }
 
 /**
+ * zl3073x_chan_mode_supports_tie - check if channel mode supports TIE write
+ * @chan: pointer to channel state
+ *
+ * TIE write is supported in AUTO and REFLOCK modes regardless of lock state.
+ *
+ * Return: true if TIE write is supported, false otherwise
+ */
+static inline bool
+zl3073x_chan_mode_supports_tie(const struct zl3073x_chan *chan)
+{
+	return zl3073x_chan_mode_is_auto(chan) ||
+		zl3073x_chan_mode_is_reflock(chan);
+}
+
+/**
  * zl3073x_chan_is_ho_ready - check if holdover is ready
  * @chan: pointer to channel state
  *
@@ -231,6 +266,19 @@ static inline u8 zl3073x_chan_refsel_state_get(const struct zl3073x_chan *chan)
 static inline u8 zl3073x_chan_refsel_ref_get(const struct zl3073x_chan *chan)
 {
 	return FIELD_GET(ZL_DPLL_REFSEL_STATUS_REFSEL, chan->refsel_status);
+}
+
+/**
+ * zl3073x_chan_is_out_stepped - check if output is in step-time mask
+ * @chan: pointer to channel state
+ * @out: output index
+ *
+ * Return: true if output is affected by step-time operations
+ */
+static inline bool
+zl3073x_chan_is_out_stepped(const struct zl3073x_chan *chan, u8 out)
+{
+	return !!(chan->out_step_time_mask & BIT(out));
 }
 
 #endif /* _ZL3073X_CHAN_H */
