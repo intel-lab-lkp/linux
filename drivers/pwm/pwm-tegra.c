@@ -163,9 +163,15 @@ static int tegra_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 		pc->clk_rate = clk_get_rate(pc->clk);
 	}
 
-	/* Consider precision in PWM_SCALE_WIDTH rate calculation */
-	rate = mul_u64_u64_div_u64(pc->clk_rate, period_ns,
+	/*
+	 * Consider precision in PWM_SCALE_WIDTH rate calculation. Round to
+	 * the closest integer: there is no round-closest variant of
+	 * mul_u64_u64_div_u64(), so compute twice the quotient and round up
+	 * the halving.
+	 */
+	rate = mul_u64_u64_div_u64(pc->clk_rate, 2 * (u64)period_ns,
 				   (u64)NSEC_PER_SEC << PWM_DUTY_WIDTH);
+	rate = DIV_ROUND_UP_ULL(rate, 2);
 
 	/*
 	 * Since the actual PWM divider is the register's frequency divider
