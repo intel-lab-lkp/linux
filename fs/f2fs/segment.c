@@ -565,22 +565,94 @@ static int __submit_flush_wait(struct f2fs_sb_info *sbi,
 	return ret;
 }
 
-static int submit_flush_wait(struct f2fs_sb_info *sbi, nid_t ino)
+static void f2fs_flush_end_io(struct bio *bio)
+{
+	complete(bio->bi_private);
+}
+
+struct f2fs_flush_bio {
+	struct bio bio;
+	struct completion wait;
+};
+
+/*
+ * Flush every dirty device best-effort: a failure on one device must not
+ * skip the flush on the remaining dirty devices, since each device still
+ * needs its own data made durable. Report the first error.
+ */
+static int submit_flush_wait_serial(struct f2fs_sb_info *sbi, nid_t ino)
 {
 	int ret = 0;
 	int i;
 
-	if (!f2fs_is_multi_device(sbi))
-		return __submit_flush_wait(sbi, sbi->sb->s_bdev);
+	for (i = 0; i < sbi->s_ndevs; i++) {
+		int err;
+
+		if (!f2fs_is_dirty_device(sbi, ino, i, FLUSH_INO))
+			continue;
+		err = __submit_flush_wait(sbi, FDEV(i).bdev);
+		if (err && !ret)
+			ret = err;
+	}
+	return ret;
+}
+
+/*
+ * Same best-effort/first-error contract as submit_flush_wait_serial(), but
+ * issue every dirty device's flush before waiting for any of them, so the
+ * per-device flush latencies overlap instead of adding up in series. Fall
+ * back to the serial path if the bio array cannot be allocated.
+ */
+static int submit_flush_wait_parallel(struct f2fs_sb_info *sbi, nid_t ino)
+{
+	struct f2fs_flush_bio *flush_bio;
+	unsigned long devices = 0;
+	int ret = 0;
+	int i;
+
+	flush_bio = kcalloc(sbi->s_ndevs, sizeof(*flush_bio), GFP_NOFS);
+	if (!flush_bio)
+		return submit_flush_wait_serial(sbi, ino);
 
 	for (i = 0; i < sbi->s_ndevs; i++) {
 		if (!f2fs_is_dirty_device(sbi, ino, i, FLUSH_INO))
 			continue;
-		ret = __submit_flush_wait(sbi, FDEV(i).bdev);
-		if (ret)
-			break;
+
+		bio_init(&flush_bio[i].bio, FDEV(i).bdev, NULL, 0,
+			 REQ_OP_WRITE | REQ_PREFLUSH);
+		init_completion(&flush_bio[i].wait);
+		flush_bio[i].bio.bi_private = &flush_bio[i].wait;
+		flush_bio[i].bio.bi_end_io = f2fs_flush_end_io;
+		submit_bio(&flush_bio[i].bio);
+		devices |= BIT(i);
 	}
+
+	for (i = 0; i < sbi->s_ndevs; i++) {
+		int err;
+
+		if (!(devices & BIT(i)))
+			continue;
+
+		wait_for_completion(&flush_bio[i].wait);
+		err = blk_status_to_errno(flush_bio[i].bio.bi_status);
+		trace_f2fs_issue_flush(FDEV(i).bdev, test_opt(sbi, NOBARRIER),
+				       test_opt(sbi, FLUSH_MERGE), err);
+		if (!err)
+			f2fs_update_iostat(sbi, NULL, FS_FLUSH_IO, 0);
+		else if (!ret)
+			ret = err;
+		bio_uninit(&flush_bio[i].bio);
+	}
+	kfree(flush_bio);
 	return ret;
+}
+
+static int submit_flush_wait(struct f2fs_sb_info *sbi, nid_t ino)
+{
+	if (!f2fs_is_multi_device(sbi))
+		return __submit_flush_wait(sbi, sbi->sb->s_bdev);
+
+	return submit_flush_wait_parallel(sbi, ino);
 }
 
 static int issue_flush_thread(void *data)
