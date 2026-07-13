@@ -329,7 +329,6 @@ typedef int (*ceph_mds_request_wait_callback_t) (struct ceph_mds_client *mdsc,
  */
 struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
-	struct rb_node r_node;
 	struct ceph_mds_client *r_mdsc;
 
 	struct kref       r_kref;
@@ -534,7 +533,7 @@ struct ceph_mds_client {
 	u64                    last_tid;      /* most recent mds request */
 	atomic64_t             oldest_tid;    /* oldest incomplete mds request,
 						 excluding setfilelock requests */
-	struct rb_root         request_tree;  /* pending mds requests */
+	struct xarray           request_tree;  /* pending mds requests */
 	struct delayed_work    delayed_work;  /* delayed work */
 	unsigned long    last_renew_caps;  /* last time we renewed our caps */
 	struct list_head cap_delay_list;   /* caps with delayed release */
