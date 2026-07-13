@@ -196,7 +196,14 @@ u16 pcie_tph_get_st_table_size(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL(pcie_tph_get_st_table_size);
 
-/* Return device's Root Port completer capability */
+/*
+ * Return device's Root Port completer capability.
+ *
+ * The "TPH Completer Supported" field (bits 13:12 of Device Capabilities 2)
+ * has a reserved 0b10 encoding. Fold it into "not supported" so only the
+ * three defined values can propagate into pdev->tph_req_type via the min()
+ * in pcie_enable_tph().
+ */
 static u8 get_rp_completer_type(struct pci_dev *pdev)
 {
 	struct pci_dev *rp;
@@ -211,7 +218,14 @@ static u8 get_rp_completer_type(struct pci_dev *pdev)
 	if (ret)
 		return 0;
 
-	return FIELD_GET(PCI_EXP_DEVCAP2_TPH_COMP_MASK, reg);
+	switch (FIELD_GET(PCI_EXP_DEVCAP2_TPH_COMP_MASK, reg)) {
+	case PCI_EXP_DEVCAP2_TPH_COMP_TPH_ONLY:
+		return PCI_EXP_DEVCAP2_TPH_COMP_TPH_ONLY;
+	case PCI_EXP_DEVCAP2_TPH_COMP_EXT_TPH:
+		return PCI_EXP_DEVCAP2_TPH_COMP_EXT_TPH;
+	default:
+		return PCI_EXP_DEVCAP2_TPH_COMP_NONE;
+	}
 }
 
 /* Write tag to ST table - Return 0 if OK, otherwise -errno */
