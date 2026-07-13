@@ -6255,9 +6255,17 @@ no_empty:
 static void free_to_pcs_bulk(struct kmem_cache *s, size_t size, void **p)
 {
 	bool init = slab_want_init_on_free(s);
-	void *remote_objects[PCS_BATCH_MAX];
+	void **remote_objects = p;
 	unsigned int remote_nr = 0;
 
+	/*
+	 * Process the free hooks and separate out remote objects by
+	 * partitioning the 'p' array in place:
+	 *
+	 * [0, remote_nr) - processed remote objects
+	 * [remote_nr, i) - processed local objects
+	 * [i, size)      - unprocessed objects
+	 */
 	for (unsigned int i = 0; i < size;) {
 		struct slab *slab = virt_to_slab(p[i]);
 
@@ -6270,18 +6278,16 @@ static void free_to_pcs_bulk(struct kmem_cache *s, size_t size, void **p)
 		}
 
 		if (unlikely(!can_free_to_pcs(slab))) {
-			remote_objects[remote_nr] = p[i];
-			p[i] = p[--size];
-			if (++remote_nr >= PCS_BATCH_MAX) {
-				__kmem_cache_free_bulk(s, remote_nr, &remote_objects[0]);
-				stat_add(s, FREE_SLOWPATH, remote_nr);
-				remote_nr = 0;
-			}
-			continue;
+			if (i != remote_nr)
+				swap(remote_objects[remote_nr], p[i]);
+			remote_nr++;
 		}
 
 		i++;
 	}
+
+	p += remote_nr;
+	size -= remote_nr;
 
 	while (size) {
 		unsigned int batch_freed = __free_to_pcs_batch(s, size, p);
@@ -6296,8 +6302,12 @@ static void free_to_pcs_bulk(struct kmem_cache *s, size_t size, void **p)
 		size -= batch_freed;
 	}
 
+	/*
+	 * Processing remote objects last decreases the chances of cpu migration
+	 * while freeing to sheaves and compromising object locality
+	 */
 	if (remote_nr) {
-		__kmem_cache_free_bulk(s, remote_nr, &remote_objects[0]);
+		__kmem_cache_free_bulk(s, remote_nr, remote_objects);
 		stat_add(s, FREE_SLOWPATH, remote_nr);
 	}
 }
