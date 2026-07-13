@@ -1493,8 +1493,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 
 			timeout = (wIndex & 0xff00) >> 8;
 			portpmsc = readl(&port->port_reg->portpmsc);
-			portpmsc &= ~PORT_U1_TIMEOUT_MASK;
-			portpmsc |= PORT_U1_TIMEOUT(timeout);
+			FIELD_MODIFY(PORT_U1_TIMEOUT_MASK, &portpmsc, timeout);
 			writel(portpmsc, &port->port_reg->portpmsc);
 			break;
 		case USB_PORT_FEAT_U2_TIMEOUT:
@@ -1503,8 +1502,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 
 			timeout = (wIndex & 0xff00) >> 8;
 			portpmsc = readl(&port->port_reg->portpmsc);
-			portpmsc &= ~PORT_U2_TIMEOUT_MASK;
-			portpmsc |= PORT_U2_TIMEOUT(timeout);
+			FIELD_MODIFY(PORT_U2_TIMEOUT_MASK, &portpmsc, timeout);
 			writel(portpmsc, &port->port_reg->portpmsc);
 			break;
 		case USB_PORT_FEAT_TEST:
