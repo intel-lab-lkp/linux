@@ -11,9 +11,19 @@
 #[cfg(all(CONFIG_BUG, not(CONFIG_UML), not(CONFIG_LOONGARCH), not(CONFIG_ARM)))]
 #[cfg(CONFIG_DEBUG_BUGVERBOSE)]
 macro_rules! warn_flags {
-    ($file:expr, $flags:expr) => {
-        const FLAGS: u32 = $crate::bindings::BUGFLAG_WARNING | $flags;
-        const _FILE: &[u8] = $file.as_bytes();
+    ($cond:expr, 0, $asm_tail:expr) => {
+        $crate::warn_flags!(@inner $cond, 0, $asm_tail, options(noreturn))
+    };
+    ($cond:expr, $flags:expr, $asm_tail:expr) => {
+        $crate::warn_flags!(@inner $cond, $flags, $asm_tail,)
+    };
+    (@inner $cond:expr, $flags:expr, $asm_tail:expr, $($opts:tt)*) => {{
+        #[cfg(CONFIG_DEBUG_BUGVERBOSE_DETAILED)]
+        const _COND_STR: &str = concat!("[", stringify!($cond), "] ", file!());
+        #[cfg(not(CONFIG_DEBUG_BUGVERBOSE_DETAILED))]
+        const _COND_STR: &str = file!();
+
+        const _FILE: &[u8] = _COND_STR.as_bytes();
         // Plus one for null-terminator.
         static FILE: [u8; _FILE.len() + 1] = {
             let mut bytes = [0; _FILE.len() + 1];
@@ -24,6 +34,7 @@ macro_rules! warn_flags {
             }
             bytes
         };
+        const FLAGS: u32 = $flags;
 
         // SAFETY:
         // - `file`, `line`, `flags`, and `size` are all compile-time constants or
@@ -35,14 +46,15 @@ macro_rules! warn_flags {
                 concat!(
                     "/* {size} */",
                     include!(concat!(env!("OBJTREE"), "/rust/kernel/generated_arch_warn_asm.rs")),
-                    include!(concat!(env!("OBJTREE"), "/rust/kernel/generated_arch_reachable_asm.rs")));
+                    $asm_tail);
                 file = sym FILE,
                 line = const line!(),
                 flags = const FLAGS,
                 size = const ::core::mem::size_of::<$crate::bindings::bug_entry>(),
-            );
+                $($opts)*
+            )
         }
-    }
+    }};
 }
 
 #[macro_export]
@@ -50,8 +62,14 @@ macro_rules! warn_flags {
 #[cfg(all(CONFIG_BUG, not(CONFIG_UML), not(CONFIG_LOONGARCH), not(CONFIG_ARM)))]
 #[cfg(not(CONFIG_DEBUG_BUGVERBOSE))]
 macro_rules! warn_flags {
-    ($file:expr, $flags:expr) => {
-        const FLAGS: u32 = $crate::bindings::BUGFLAG_WARNING | $flags;
+    ($cond:expr, 0, $asm_tail:expr) => {
+        $crate::warn_flags!(@inner $cond, 0, $asm_tail, options(noreturn))
+    };
+    ($cond:expr, $flags:expr, $asm_tail:expr) => {
+        $crate::warn_flags!(@inner $cond, $flags, $asm_tail,)
+    };
+    (@inner $cond:expr, $flags:expr, $asm_tail:expr, $($opts:tt)*) => {{
+        const FLAGS: u32 = $flags;
 
         // SAFETY:
         // - `flags` and `size` are all compile-time constants, preventing
@@ -63,24 +81,29 @@ macro_rules! warn_flags {
                 concat!(
                     "/* {size} */",
                     include!(concat!(env!("OBJTREE"), "/rust/kernel/generated_arch_warn_asm.rs")),
-                    include!(concat!(env!("OBJTREE"), "/rust/kernel/generated_arch_reachable_asm.rs")));
+                    $asm_tail);
                 flags = const FLAGS,
                 size = const ::core::mem::size_of::<$crate::bindings::bug_entry>(),
-            );
+                $($opts)*
+            )
         }
-    }
+    }};
 }
 
 #[macro_export]
 #[doc(hidden)]
 #[cfg(all(CONFIG_BUG, CONFIG_UML))]
 macro_rules! warn_flags {
-    ($file:expr, $flags:expr) => {
+    ($cond:expr, 0, $asm_tail:expr) => {
+        // SAFETY: It is always safe to call `BUG()`.
+        unsafe { $crate::bindings::BUG() }
+    };
+    ($cond:expr, $flags:expr, $asm_tail:expr) => {
         // SAFETY: It is always safe to call `warn_slowpath_fmt()`
         // with a valid null-terminated string.
         unsafe {
             $crate::bindings::warn_slowpath_fmt(
-                $crate::c_str!(::core::file!()).as_char_ptr(),
+                $crate::str::CStrExt::as_char_ptr($crate::c_str!(::core::file!())),
                 line!() as $crate::ffi::c_int,
                 $flags as $crate::ffi::c_uint,
                 ::core::ptr::null(),
@@ -93,7 +116,11 @@ macro_rules! warn_flags {
 #[doc(hidden)]
 #[cfg(all(CONFIG_BUG, any(CONFIG_LOONGARCH, CONFIG_ARM)))]
 macro_rules! warn_flags {
-    ($file:expr, $flags:expr) => {
+    ($cond:expr, 0, $asm_tail:expr) => {
+        // SAFETY: It is always safe to call `BUG()`.
+        unsafe { $crate::bindings::BUG() }
+    };
+    ($cond:expr, $flags:expr, $asm_tail:expr) => {
         // SAFETY: It is always safe to call `WARN_ON()`.
         unsafe { $crate::bindings::WARN_ON(true) }
     };
@@ -103,7 +130,10 @@ macro_rules! warn_flags {
 #[doc(hidden)]
 #[cfg(not(CONFIG_BUG))]
 macro_rules! warn_flags {
-    ($file:expr, $flags:expr) => {};
+    ($cond:expr, 0, $asm_tail:expr) => {
+        loop {}
+    };
+    ($cond:expr, $flags:expr, $asm_tail:expr) => {};
 }
 
 #[doc(hidden)]
@@ -117,16 +147,31 @@ macro_rules! warn_on {
     ($cond:expr) => {{
         let cond = $cond;
 
-        #[cfg(CONFIG_DEBUG_BUGVERBOSE_DETAILED)]
-        const _COND_STR: &str = concat!("[", stringify!($cond), "] ", file!());
-        #[cfg(not(CONFIG_DEBUG_BUGVERBOSE_DETAILED))]
-        const _COND_STR: &str = file!();
-
         if cond {
-            const WARN_ON_FLAGS: u32 = $crate::bug::bugflag_taint($crate::bindings::TAINT_WARN);
+            #[cfg(any(not(CONFIG_BUG), CONFIG_UML))]
+            const WARN_ON_FLAGS: u32 = $crate::bindings::TAINT_WARN;
+            #[cfg(all(CONFIG_BUG, not(CONFIG_UML)))]
+            const WARN_ON_FLAGS: u32 = $crate::bindings::BUGFLAG_WARNING
+                | $crate::bug::bugflag_taint($crate::bindings::TAINT_WARN);
 
-            $crate::warn_flags!(_COND_STR, WARN_ON_FLAGS);
+            $crate::warn_flags!(
+                $cond,
+                WARN_ON_FLAGS,
+                include!(concat!(
+                    env!("OBJTREE"),
+                    "/rust/kernel/generated_arch_reachable_asm.rs"
+                ))
+            );
         }
         cond
+    }};
+}
+
+/// Reports an unrecoverable kernel bug.
+#[macro_export]
+#[doc(hidden)]
+macro_rules! bug {
+    () => {{
+        $crate::warn_flags!(true, 0, "")
     }};
 }

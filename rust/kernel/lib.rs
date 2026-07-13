@@ -217,8 +217,7 @@ impl ThisModule {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     pr_emerg!("{}\n", info);
-    // SAFETY: FFI call.
-    unsafe { bindings::BUG() };
+    crate::bug!();
 }
 
 /// Produces a pointer to an object from a pointer to one of its fields.
