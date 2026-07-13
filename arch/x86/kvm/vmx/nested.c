@@ -1147,8 +1147,26 @@ static bool nested_vmx_get_vmexit_msr_value(struct kvm_vcpu *vcpu,
 	if (msr_index == MSR_IA32_TSC && vmx->nested.tsc_autostore_slot >= 0) {
 		int slot = vmx->nested.tsc_autostore_slot;
 		u64 host_tsc = vmx->msr_autostore.val[slot].value;
+		u64 l2_multiplier = vmx_get_l2_tsc_multiplier(vcpu);
+		u64 l2_offset, l2_ratio;
 
-		*data = kvm_read_l1_tsc(vcpu, host_tsc);
+		/*
+		 * The guest that just exited is L2, so the value auto-stored on
+		 * its behalf must be L2's frame: RDMSR(IA32_TSC) in L2 reads
+		 * (host_tsc scaled by the composed ratio) + the composed offset
+		 * (SDM Vol 3C 27.4).  nested_vmx_vmexit() has already restored
+		 * the composed TSC state to L1's by the time the MSR-store list
+		 * is processed, so recompose L2's frame from L1 state and the
+		 * vmcs12 TSC controls.  kvm_read_l1_tsc() would instead record
+		 * L1's frame, dropping L2's offset (and scaling) entirely.
+		 */
+		l2_offset = kvm_calc_nested_tsc_offset(vcpu->arch.l1_tsc_offset,
+						       vmx_get_l2_tsc_offset(vcpu),
+						       l2_multiplier);
+		l2_ratio = kvm_calc_nested_tsc_multiplier(vcpu->arch.l1_tsc_scaling_ratio,
+							  l2_multiplier);
+
+		*data = kvm_scale_tsc(host_tsc, l2_ratio) + l2_offset;
 		return true;
 	}
 
