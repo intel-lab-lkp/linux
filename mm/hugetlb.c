@@ -3073,6 +3073,19 @@ out_subpool_put:
 	if (map_chg && !gbl_chg) {
 		gbl_reserve = hugepage_subpool_put_pages(spool, 1);
 		hugetlb_acct_memory(h, -gbl_reserve);
+	} else if (map_chg && gbl_chg > 0 && spool) {
+		/*
+		 * Restore used_hpages for the globally-requested page that
+		 * hugepage_subpool_get_pages() counted against the subpool's
+		 * maximum, but which we failed to back from the global pool.
+		 * Mirrors the fix in hugetlb_reserve_pages() (1d3f9bb4c8af).
+		 */
+		unsigned long flags;
+
+		spin_lock_irqsave(&spool->lock, flags);
+		if (spool->max_hpages != -1)
+			spool->used_hpages -= gbl_chg;
+		unlock_or_release_subpool(spool, flags);
 	}
 
 out_end_reservation:
