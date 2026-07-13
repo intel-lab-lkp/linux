@@ -2048,9 +2048,9 @@ static void handle_port_status(struct xhci_hcd *xhci, union xhci_trb *event)
 	}
 
 	if (vdev && FIELD_GET(PORT_PLS_MASK, portsc) == PLS_INACTIVE) {
-		if (!(portsc & PORT_RESET))
+		if (!(portsc & PORT_PR))
 			vdev->flags |= VDEV_PORT_ERROR;
-	} else if (vdev && portsc & PORT_RC) {
+	} else if (vdev && portsc & PORT_PRC) {
 		vdev->flags &= ~VDEV_PORT_ERROR;
 	}
 
@@ -2133,7 +2133,7 @@ static void handle_port_status(struct xhci_hcd *xhci, union xhci_trb *event)
 	if (hcd->speed < HCD_USB3) {
 		xhci_test_and_clear_bit(xhci, port, PORT_PLC);
 		if ((xhci->quirks & XHCI_RESET_PLL_ON_DISCONNECT) &&
-		    (portsc & PORT_CSC) && !(portsc & PORT_CONNECT))
+		    (portsc & PORT_CSC) && !(portsc & PORT_CCS))
 			xhci_cavium_reset_phy_quirk(xhci);
 	}
 

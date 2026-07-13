@@ -2421,37 +2421,37 @@ static inline const char *xhci_decode_portsc(char *str, u32 portsc)
 	ret += sprintf(str + ret, "Link=%s ", xhci_portsc_link_state_string(portsc));
 
 	/* RO/ROS: Read-only */
-	if (portsc & PORT_CONNECT)
+	if (portsc & PORT_CCS)
 		ret += sprintf(str + ret, "CCS ");
-	if (portsc & PORT_OC)
+	if (portsc & PORT_OCA)
 		ret += sprintf(str + ret, "OCA "); /* No set for USB2 ports */
 	if (portsc & PORT_CAS)
 		ret += sprintf(str + ret, "CAS ");
-	if (portsc & PORT_DEV_REMOVE)
+	if (portsc & PORT_DR)
 		ret += sprintf(str + ret, "DR ");
 
 	/* RWS; writing 1 sets the bit, writing 0 clears the bit. */
-	if (portsc & PORT_POWER)
+	if (portsc & PORT_PP)
 		ret += sprintf(str + ret, "PP ");
-	if (portsc & PORT_WKCONN_E)
+	if (portsc & PORT_WCE)
 		ret += sprintf(str + ret, "WCE ");
-	if (portsc & PORT_WKDISC_E)
+	if (portsc & PORT_WDE)
 		ret += sprintf(str + ret, "WDE ");
-	if (portsc & PORT_WKOC_E)
+	if (portsc & PORT_WOE)
 		ret += sprintf(str + ret, "WOE ");
 
 	/* RW; writing 1 sets the bit, writing 0 clears the bit */
-	if (portsc & PORT_LINK_STROBE)
+	if (portsc & PORT_LWS)
 		ret += sprintf(str + ret, "LWS "); /* LWS 0 write is ignored */
 
 	/* RW1S; writing 1 sets the bit, writing 0 has no effect */
-	if (portsc & PORT_RESET)
+	if (portsc & PORT_PR)
 		ret += sprintf(str + ret, "PR ");
-	if (portsc & PORT_WR)
+	if (portsc & PORT_WPR)
 		ret += sprintf(str + ret, "WPR "); /* RsvdZ for USB2 ports */
 
 	/* RW1CS; writing 1 clears the bit, writing 0 has no effect. */
-	if (portsc & PORT_PE)
+	if (portsc & PORT_PED)
 		ret += sprintf(str + ret, "PED ");
 	if (portsc & PORT_CSC)
 		ret += sprintf(str + ret, "CSC ");
@@ -2461,7 +2461,7 @@ static inline const char *xhci_decode_portsc(char *str, u32 portsc)
 		ret += sprintf(str + ret, "WRC "); /* RsvdZ for USB2 ports */
 	if (portsc & PORT_OCC)
 		ret += sprintf(str + ret, "OCC ");
-	if (portsc & PORT_RC)
+	if (portsc & PORT_PRC)
 		ret += sprintf(str + ret, "PRC ");
 	if (portsc & PORT_PLC)
 		ret += sprintf(str + ret, "PLC ");

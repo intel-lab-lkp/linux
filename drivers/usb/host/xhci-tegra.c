@@ -2034,7 +2034,7 @@ static bool xhci_hub_ports_suspended(struct xhci_hub *hub)
 
 	for (i = 0; i < hub->num_ports; i++) {
 		value = xhci_portsc_readl(hub->ports[i]);
-		if ((value & PORT_PE) == 0)
+		if ((value & PORT_PED) == 0)
 			continue;
 
 		if (FIELD_GET(PORT_PLS_MASK, value) != PLS_U3) {
@@ -2822,7 +2822,7 @@ static int tegra_xhci_hub_control(struct usb_hcd *hcd, u16 type_req, u16 value, 
 				return -EPIPE;
 			ports = rhub->ports;
 			portsc = xhci_portsc_readl(ports[port]);
-			if (portsc & PORT_CONNECT)
+			if (portsc & PORT_CCS)
 				tegra_phy_xusb_utmi_pad_power_on(phy);
 		}
 	}
@@ -2841,7 +2841,7 @@ static int tegra_xhci_hub_control(struct usb_hcd *hcd, u16 type_req, u16 value, 
 		if ((type_req == ClearPortFeature) && (value == USB_PORT_FEAT_C_CONNECTION)) {
 			ports = rhub->ports;
 			portsc = xhci_portsc_readl(ports[port]);
-			if (!(portsc & PORT_CONNECT)) {
+			if (!(portsc & PORT_CCS)) {
 				/* We don't suspend the PAD while HNP role swap happens on the OTG
 				 * port
 				 */

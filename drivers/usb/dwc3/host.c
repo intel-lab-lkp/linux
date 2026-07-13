@@ -53,7 +53,7 @@ static void dwc3_power_off_all_roothub_ports(struct dwc3 *dwc)
 		for (i = 1; i <= port_num; i++) {
 			offset = op_regs_base + XHCI_PORTSC_BASE + 0x10 * (i - 1);
 			reg = readl(xhci_regs + offset);
-			reg &= ~PORT_POWER;
+			reg &= ~PORT_PP;
 			writel(reg, xhci_regs + offset);
 		}
 

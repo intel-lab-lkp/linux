@@ -8,15 +8,15 @@
 #include <linux/bits.h>
 
 /* Port Status and Control (PORTSC) 5.4.8 */
-/* bit 0 - Current Connect Status (CCS) */
-#define PORT_CONNECT	BIT(0)
-/* bit 1 - Port Enabled/Disabled (PED) */
-#define PORT_PE		BIT(1)
+/* bit 0 - Current Connect Status */
+#define PORT_CCS	BIT(0)
+/* bit 1 - Port Enabled/Disabled */
+#define PORT_PED	BIT(1)
 /* bit 2 - Rsvd */
-/* bit 3 - Over-current Active (OCA) */
-#define PORT_OC		BIT(3)
-/* bit 4 - Port Reset (PR) */
-#define PORT_RESET	BIT(4)
+/* bit 3 - Over-current Active */
+#define PORT_OCA	BIT(3)
+/* bit 4 - Port Reset */
+#define PORT_PR		BIT(4)
 /*
  * bits 8:5 - Port Link State, by default '5'.
  * Reading gives the current link PM state of the port.
@@ -38,8 +38,8 @@
 #define PLS_TEST_MODE	11
 /* Values 12-14 are Reserved */
 #define PLS_RESUME	15
-/* bit 9 - Port Power (PP) */
-#define PORT_POWER	BIT(9)
+/* bit 9 - Port Power */
+#define PORT_PP		BIT(9)
 /*
  * bits 13:10 - Port Speed
  * Values defined in xHCI specification 7.2.2.1.1:
@@ -65,8 +65,8 @@
 #define PIC_OFF		0
 #define PIC_AMBER	1
 #define PIC_GREEN	2
-/* bit 16 - Port Link State Write Strobe (LWS), set this when changing link state */
-#define PORT_LINK_STROBE	BIT(16)
+/* bit 16 - Port Link State Write Strobe, set this when changing link state */
+#define PORT_LWS	BIT(16)
 /* bit 17 - Connect Status Change */
 #define PORT_CSC	BIT(17)
 /* bit 18 - Port Enabled/Disabled Change */
@@ -81,8 +81,8 @@
 #define PORT_WRC	BIT(19)
 /* bit 20 - Over-current Change */
 #define PORT_OCC	BIT(20)
-/* bit 21 - Port Reset Change (PRC) */
-#define PORT_RC		BIT(21)
+/* bit 21 - Port Reset Change */
+#define PORT_PRC	BIT(21)
 /*
  * bit 22 - Port Link State Change, set on some port link state transitions:
  *  Transition				Reason
@@ -106,19 +106,19 @@
  * Warm port reset should be perfomed to clear this bit and move port to connected state.
  */
 #define PORT_CAS	BIT(24)
-/* bit 25 - Wake on Connect Enable (WCE) */
-#define PORT_WKCONN_E	BIT(25)
-/* bit 26 - Wake on Disconnect Enable (WDE) */
-#define PORT_WKDISC_E	BIT(26)
-/* bit 27 - Wake on Over-current Enable (WOE) */
-#define PORT_WKOC_E	BIT(27)
+/* bit 25 - Wake on Connect Enable */
+#define PORT_WCE	BIT(25)
+/* bit 26 - Wake on Disconnect Enable */
+#define PORT_WDE	BIT(26)
+/* bit 27 - Wake on Over-current Enable */
+#define PORT_WOE	BIT(27)
 /* bits 29:28 - RsvdZ */
-/* bit 30 - Device Removable (DR), for USB 3.0 roothub emulation */
-#define PORT_DEV_REMOVE	BIT(30)
-/* bit 31 - Warm Port Reset (WPR), complete when PORT_WRC is '1' */
-#define PORT_WR		BIT(31)
+/* bit 30 - Device Removable, for USB 3.0 roothub emulation */
+#define PORT_DR		BIT(30)
+/* bit 31 - Warm Port Reset, complete when PORT_WRC is '1' */
+#define PORT_WPR		BIT(31)
 #define PORT_CHANGE_MASK	(PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | \
-				 PORT_RC | PORT_PLC | PORT_CEC)
+				 PORT_PRC | PORT_PLC | PORT_CEC)
 
 /* We mark duplicate entries with -1 */
 #define DUPLICATE_ENTRY ((u8)(-1))

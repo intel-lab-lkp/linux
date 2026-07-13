@@ -31,7 +31,7 @@
 #define DRIVER_AUTHOR "Sarah Sharp"
 #define DRIVER_DESC "'eXtensible' Host Controller (xHC) Driver"
 
-#define	PORT_WAKE_BITS	(PORT_WKOC_E | PORT_WKDISC_E | PORT_WKCONN_E)
+#define	PORT_WAKE_BITS	(PORT_WOE | PORT_WDE | PORT_WCE)
 
 /* Some 0.95 hardware can't handle the chain bit on a Link TRB being cleared */
 static int link_quirk;
@@ -896,7 +896,7 @@ static void xhci_disable_hub_port_wake(struct xhci_hcd *xhci,
 			t2 &= ~PORT_WAKE_BITS;
 
 		/* Don't touch csc bit if connected or connect change is set */
-		if (!(portsc & (PORT_CSC | PORT_CONNECT)))
+		if (!(portsc & (PORT_CSC | PORT_CCS)))
 			t2 |= PORT_CSC;
 
 		if (t1 != t2) {

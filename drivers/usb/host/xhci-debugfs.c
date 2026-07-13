@@ -367,7 +367,7 @@ static ssize_t xhci_port_write(struct file *file,  const char __user *ubuf,
 		}
 		portsc = xhci_port_state_to_neutral(portsc);
 		FIELD_MODIFY(PORT_PLS_MASK, &portsc, PLS_COMP_MODE);
-		portsc |= PORT_LINK_STROBE;
+		portsc |= PORT_LWS;
 		xhci_portsc_writel(port, portsc);
 		spin_unlock_irqrestore(&xhci->lock, flags);
 	} else {
