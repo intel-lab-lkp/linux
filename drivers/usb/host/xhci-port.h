@@ -131,9 +131,6 @@
 /* Writing 1 sets the bit, writing 0 clears the bit. */
 #define	PORTSC_RW_BITS		(PORT_LWS)
 
-/* We mark duplicate entries with -1 */
-#define DUPLICATE_ENTRY ((u8)(-1))
-
 /* USB3 Port Power Management Status and Control (PORTPMSC) 5.4.9.1 */
 /*
  * bits 7:0 - U1 Timeout, inactivity timer value for transitions into U1.

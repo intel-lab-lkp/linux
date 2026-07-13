@@ -1483,6 +1483,9 @@ struct xhci_port_cap {
 	u32			protocol_caps;
 };
 
+/* We mark duplicate 'hcd_portnum' entries with -1 */
+#define DUPLICATE_ENTRY ((u8)(-1))
+
 struct xhci_port {
 	struct xhci_port_regs __iomem	*port_reg;
 	int			hw_portnum;
