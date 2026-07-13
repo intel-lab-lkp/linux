@@ -475,7 +475,7 @@ static ssize_t in_illuminance_input_target_show(struct device *dev,
 	int ret;
 
 	mutex_lock(&chip->als_mutex);
-	ret = sprintf(buf, "%d\n", chip->als_settings.als_cal_target);
+	ret = sysfs_emit(buf, "%d\n", chip->als_settings.als_cal_target);
 	mutex_unlock(&chip->als_mutex);
 
 	return ret;
@@ -533,7 +533,7 @@ static ssize_t in_illuminance_lux_table_show(struct device *dev,
 	int offset = 0;
 
 	for (i = 0; i < ARRAY_SIZE(chip->als_settings.als_device_lux); i++) {
-		offset += sprintf(buf + offset, "%u,%u,%u,",
+		offset += sysfs_emit_at(buf, offset, "%u,%u,%u,",
 				  chip->als_settings.als_device_lux[i].ratio,
 				  chip->als_settings.als_device_lux[i].ch0,
 				  chip->als_settings.als_device_lux[i].ch1);
@@ -547,7 +547,7 @@ static ssize_t in_illuminance_lux_table_show(struct device *dev,
 		}
 	}
 
-	offset += sprintf(buf + offset, "\n");
+	offset += sysfs_emit_at(buf, offset, "\n");
 
 	return offset;
 }
