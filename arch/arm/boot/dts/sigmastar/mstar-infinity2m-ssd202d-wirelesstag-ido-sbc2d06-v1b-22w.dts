@@ -20,4 +20,21 @@
 			linux,default-trigger = "heartbeat";
 		};
 	};
+
+	vcc_vbus: regulator-vcc-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&gpio SSD20XD_GPIO_GPIO14 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	vcc_sd: regulator-vcc-sd {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_sd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio SSD20XD_GPIO_GPIO90 GPIO_ACTIVE_HIGH>;
+	};
 };
