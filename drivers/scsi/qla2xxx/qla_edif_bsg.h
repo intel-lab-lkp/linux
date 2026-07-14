@@ -36,16 +36,26 @@ struct extra_auth_els {
 } __packed;
 
 struct qla_bsg_auth_els_request {
-	struct fc_bsg_request r;
-	struct extra_auth_els e;
+	union {
+		struct fc_bsg_request r;
+		struct {
+			unsigned char __fc_bsg_request_sz[sizeof(struct fc_bsg_request)];
+			struct extra_auth_els e;
+		};
+	};
 };
 
 struct qla_bsg_auth_els_reply {
-	struct fc_bsg_reply r;
-	uint32_t rx_xchg_address;
-	uint8_t version;
-	uint8_t pad[VND_CMD_PAD_SIZE];
-	uint8_t reserved[VND_CMD_APP_RESERVED_SIZE];
+	union {
+		struct fc_bsg_reply r;
+		struct {
+			unsigned char __fc_bsg_reply_sz[sizeof(struct fc_bsg_reply)];
+			uint32_t rx_xchg_address;
+			uint8_t version;
+			uint8_t pad[VND_CMD_PAD_SIZE];
+			uint8_t reserved[VND_CMD_APP_RESERVED_SIZE];
+		};
+	};
 };
 
 struct app_id {
