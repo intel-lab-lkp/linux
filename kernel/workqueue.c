@@ -5703,14 +5703,10 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 	if (!(wq->flags & WQ_UNBOUND)) {
 		for_each_possible_cpu(cpu) {
 			struct pool_workqueue **pwq_p = per_cpu_ptr(wq->cpu_pwq, cpu);
-			struct worker_pool *pool = get_percpu_pool(wq, cpu);
 
-			*pwq_p = kmem_cache_alloc_node(pwq_cache, GFP_KERNEL,
-						       pool->node);
+			*pwq_p = alloc_pwq(wq, cpu, NULL);
 			if (!*pwq_p)
 				goto enomem;
-
-			init_pwq(*pwq_p, wq, pool);
 
 			mutex_lock(&wq->mutex);
 			link_pwq(*pwq_p);
