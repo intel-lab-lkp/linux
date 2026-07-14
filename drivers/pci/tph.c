@@ -409,21 +409,18 @@ void pcie_disable_tph(struct pci_dev *pdev)
 EXPORT_SYMBOL(pcie_disable_tph);
 
 /**
- * pcie_enable_tph - Enable TPH support for device using a specific ST mode
+ * pcie_enable_tph_ext - Enable TPH support with specific ST mode and
+ * requester type
  * @pdev: PCI device
- * @mode: ST mode to enable. Current supported modes include:
+ * @mode: ST mode to enable: PCI_TPH_ST_(NS_MODE / IV_MODE / DS_MODE)
+ * @req_type: Requester type to enable: PCI_TPH_REQ_(TPH_ONLY / EXT_TPH)
  *
- *   - PCI_TPH_ST_NS_MODE: NO ST Mode
- *   - PCI_TPH_ST_IV_MODE: Interrupt Vector Mode
- *   - PCI_TPH_ST_DS_MODE: Device Specific Mode
- *
- * Check whether the mode is actually supported by the device before enabling
- * and return an error if not. Automatically uses the pre-cached tph_max_type
- * value, the negotiated maximum requester type between device and root port.
+ * Check whether the mode and requester type is actually supported by the
+ * device before enabling and return an error if not.
  *
  * Return: 0 on success, otherwise negative value (-errno)
  */
-int pcie_enable_tph(struct pci_dev *pdev, int mode)
+int pcie_enable_tph_ext(struct pci_dev *pdev, u8 mode, u8 req_type)
 {
 	u32 reg;
 	u8 dev_modes;
@@ -441,6 +438,11 @@ int pcie_enable_tph(struct pci_dev *pdev, int mode)
 	if (pdev->tph_max_type == PCI_TPH_REQ_DISABLE)
 		return -EINVAL;
 
+	/* Sanitize and check TPH requester type compatibility */
+	if (req_type == PCI_TPH_REQ_DISABLE || req_type == 2 ||
+		req_type > pdev->tph_max_type)
+		return -EINVAL;
+
 	/* Sanitize and check ST mode compatibility */
 	mode &= PCI_TPH_CTRL_MODE_SEL_MASK;
 	dev_modes = get_st_modes(pdev);
@@ -449,7 +451,7 @@ int pcie_enable_tph(struct pci_dev *pdev, int mode)
 
 	pdev->tph_mode = mode;
 
-	pdev->tph_req_type = pdev->tph_max_type;
+	pdev->tph_req_type = req_type;
 
 	/* Write them into TPH control register */
 	pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, &reg);
@@ -462,6 +464,23 @@ int pcie_enable_tph(struct pci_dev *pdev, int mode)
 	pdev->tph_enabled = 1;
 
 	return 0;
+}
+EXPORT_SYMBOL(pcie_enable_tph_ext);
+
+/**
+ * pcie_enable_tph - Enable TPH support for device using a specific ST mode
+ * @pdev: PCI device
+ * @mode: ST mode to enable: PCI_TPH_ST_(NS_MODE / IV_MODE / DS_MODE)
+ *
+ * Wrapper for pcie_enable_tph_ext(), automatically uses the pre-cached
+ * tph_max_type value (negotiated maximum requester type between device and
+ * root port).
+ *
+ * Return: 0 on success, otherwise negative value (-errno)
+ */
+int pcie_enable_tph(struct pci_dev *pdev, u8 mode)
+{
+	return pcie_enable_tph_ext(pdev, mode, pdev->tph_max_type);
 }
 EXPORT_SYMBOL(pcie_enable_tph);
 
