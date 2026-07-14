@@ -1437,6 +1437,41 @@ The following nested keys are defined.
 	The valid range for swappiness is [0-200, max], setting
 	swappiness=max exclusively reclaims anonymous memory.
 
+  memory.aging
+	A write-only file which exists for all cgroups when
+	CONFIG_LRU_GEN is enabled.
+
+	This interface triggers MGLRU aging (generation advancement)
+	without page reclaim. It is useful for proactively rebalancing
+	the distribution of pages across generations before invoking
+	memory.reclaim, particularly for workloads (such as the Android
+	application lifecycle) where anonymous pages concentrate in
+	the youngest generations while file pages fill up the oldest
+	generation and get over-reclaimed.
+
+	The single argument is the number of generations to age, in
+	the range [1, MAX_NR_GENS]. MAX_NR_GENS is currently 4.
+
+	Example::
+
+	  echo 2 > memory.aging
+
+	Each aging pass advances both anonymous and file generations
+	simultaneously, matching MGLRU's max_seq semantics. There is
+	no way to age only one type - this is a property of MGLRU,
+	not of this interface.
+
+	Proactive aging should be followed by memory.reclaim to
+	actually free pages::
+
+	  echo 2 > /sys/fs/cgroup/foo/memory.aging
+	  echo "100M" > /sys/fs/cgroup/foo/memory.reclaim
+
+	Returns -EAGAIN if this call did not advance the generation
+	window (typically because a concurrent caller on the same
+	cgroup got there first). Returns -EINVAL if the argument is
+	missing, zero, or out of range.
+
   memory.peak
 	A read-write single value file which exists on non-root cgroups.
 

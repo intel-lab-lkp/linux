@@ -5025,6 +5025,29 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	return nbytes;
 }
 
+#ifdef CONFIG_LRU_GEN
+static ssize_t memory_aging(struct kernfs_open_file *of, char *buf,
+			    size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned long nr_gens;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &nr_gens);
+	if (ret)
+		return ret;
+
+	if (nr_gens == 0 || nr_gens > MAX_NR_GENS)
+		return -EINVAL;
+
+	ret = lru_gen_age_memcg(memcg, nr_gens);
+	if (ret)
+		return ret;
+
+	return nbytes;
+}
+#endif
+
 static struct cftype memory_files[] = {
 	{
 		.name = "current",
@@ -5096,6 +5119,13 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
 	},
+#ifdef CONFIG_LRU_GEN
+	{
+		.name = "aging",
+		.flags = CFTYPE_NS_DELEGATABLE,
+		.write = memory_aging,
+	},
+#endif
 	{ }	/* terminate */
 };
 

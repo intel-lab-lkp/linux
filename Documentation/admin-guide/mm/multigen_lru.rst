@@ -161,3 +161,16 @@ cold pages because of the overestimation, it retries on the next
 server according to the ranking result obtained from the working set
 estimation step. This less forceful approach limits the impacts on the
 existing jobs.
+
+Proactive aging
+---------------
+For workloads where it is useful to rebalance the distribution of
+anonymous and file pages across generations before reclaiming (for
+example, the Android application lifecycle, where an application
+that has just been backgrounded has most of its anonymous pages
+clustered in the youngest generations while file pages dominate
+the oldest), the ``memory.aging`` cgroup v2 file can be used to
+advance the generation counter without eviction. The file returns
+-EAGAIN if no advance happened, so callers can correlate with the
+``aging`` counter to verify how many passes actually took
+effect. See Documentation/admin-guide/cgroup-v2.rst.
