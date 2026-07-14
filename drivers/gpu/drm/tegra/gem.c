@@ -314,8 +314,10 @@ static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
 	size = round_up(size, PAGE_SIZE);
 
 	err = drm_gem_object_init(drm, &bo->gem, size);
-	if (err < 0)
+	if (err < 0) {
+		drm_gem_private_object_fini(&bo->gem);
 		goto free;
+	}
 
 	err = drm_gem_create_mmap_offset(&bo->gem);
 	if (err < 0)
