@@ -5,6 +5,9 @@
 
 #include <net/dsa.h>
 
+struct mxl862xx_priv;
+
+bool mxl862xx_rescue_mode_detect(struct mxl862xx_priv *priv);
 int mxl862xx_devlink_info_get(struct dsa_switch *ds,
 			      struct devlink_info_req *req,
 			      struct netlink_ext_ack *extack);

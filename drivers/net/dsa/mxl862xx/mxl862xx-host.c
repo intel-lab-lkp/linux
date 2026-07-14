@@ -340,6 +340,9 @@ int mxl862xx_api_wrap(struct mxl862xx_priv *priv, u16 cmd, void *_data,
 	if (priv->skip_teardown)
 		return 0;
 
+	if (priv->rescue_mode)
+		return -ENODEV;
+
 	if (priv->block_host && cmd != SYS_MISC_FW_UPDATE)
 		return -EBUSY;
 

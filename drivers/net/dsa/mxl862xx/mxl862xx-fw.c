@@ -92,6 +92,24 @@ static void mxl862xx_flash_notify(struct devlink *dl, const char *status,
 	devlink_flash_update_status_notify(dl, status, NULL, done, total);
 }
 
+/**
+ * mxl862xx_rescue_mode_detect - check whether the switch sits in MCUboot
+ * @priv: driver private data
+ *
+ * MCUboot signals readiness for a firmware download with the SB PDI
+ * ready magic; only the clause-22 SMDIO interface works in this state.
+ *
+ * Return: true if MCUboot is waiting for a firmware download.
+ */
+bool mxl862xx_rescue_mode_detect(struct mxl862xx_priv *priv)
+{
+	int ret;
+
+	ret = mxl862xx_smdio_read(priv, MXL862XX_SB_PDI_STAT);
+
+	return ret == MXL862XX_SB_PDI_READY;
+}
+
 /* device_reprobe() -> remove() frees priv while the work runs, so
  * the work struct cannot live in mxl862xx_priv.
  */
@@ -172,13 +190,15 @@ static int mxl862xx_flash_firmware(struct mxl862xx_priv *priv,
 	}
 
 	/* Step 1: reboot the firmware into MCUboot rescue mode */
-	ret = mxl862xx_api_wrap(priv, SYS_MISC_FW_UPDATE, NULL, 0,
-				false, false);
-	if (ret) {
-		dev_err(&priv->mdiodev->dev,
-			"flash: FW_UPDATE command failed: %pe\n",
-			ERR_PTR(ret));
-		return ret;
+	if (!priv->rescue_mode) {
+		ret = mxl862xx_api_wrap(priv, SYS_MISC_FW_UPDATE, NULL, 0,
+					false, false);
+		if (ret) {
+			dev_err(&priv->mdiodev->dev,
+				"flash: FW_UPDATE command failed: %pe\n",
+				ERR_PTR(ret));
+			return ret;
+		}
 	}
 
 	/* Failures from here on must go through end_magic so MCUboot
@@ -328,6 +348,10 @@ int mxl862xx_devlink_info_get(struct dsa_switch *ds,
 			return ret;
 	}
 
+	if (priv->rescue_mode)
+		return devlink_info_version_running_put(req, "fw",
+							"mcuboot-rescue");
+
 	snprintf(ver_str, sizeof(ver_str), "%u.%u.%u",
 		 priv->fw_version.major, priv->fw_version.minor,
 		 priv->fw_version.revision);
@@ -350,9 +374,13 @@ int mxl862xx_devlink_flash_update(struct dsa_switch *ds,
 		return -EOPNOTSUPP;
 	}
 
-	dev_info(ds->dev, "flash: running firmware %u.%u.%u\n",
-		 priv->fw_version.major, priv->fw_version.minor,
-		 priv->fw_version.revision);
+	if (priv->rescue_mode)
+		dev_info(ds->dev,
+			 "flash: recovering switch from MCUboot rescue mode\n");
+	else
+		dev_info(ds->dev, "flash: running firmware %u.%u.%u\n",
+			 priv->fw_version.major, priv->fw_version.minor,
+			 priv->fw_version.revision);
 
 	/* Close ports while the firmware is still alive so the DSA
 	 * core's MDB/FDB tracking is drained, and detach user ports
@@ -383,6 +411,7 @@ int mxl862xx_devlink_flash_update(struct dsa_switch *ds,
 	if (!ret) {
 		/* lift the block to query the new firmware version */
 		priv->block_host = false;
+		priv->rescue_mode = false;
 		memset(&ver, 0, sizeof(ver));
 		if (!MXL862XX_API_READ_QUIET(priv, SYS_MISC_FW_VERSION, ver) &&
 		    ver.iv_major)
