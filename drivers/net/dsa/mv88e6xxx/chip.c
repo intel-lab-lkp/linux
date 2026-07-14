@@ -2523,7 +2523,7 @@ static int mv88e6xxx_port_add_broadcast(struct mv88e6xxx_chip *chip, int port,
 	return mv88e6xxx_port_db_load_purge(chip, port, broadcast, vid, state);
 }
 
-static int mv88e6xxx_broadcast_setup(struct mv88e6xxx_chip *chip, u16 vid)
+int mv88e6xxx_broadcast_setup(struct mv88e6xxx_chip *chip, u16 vid)
 {
 	int port;
 	int err;
