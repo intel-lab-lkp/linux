@@ -1606,6 +1606,10 @@ struct vfio_device_feature_tph {
 #define VFIO_DEVICE_TPH_CAP_ST_CPU		(1u << 2)
 /* NONE source (means steering tag is zero) TPH_ST batch programming supported */
 #define VFIO_DEVICE_TPH_CAP_ST_NONE		(1u << 3)
+/* DMABUF source resolve steering tag supported */
+#define VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_ST	(1u << 4)
+/* CPU source resolve steering tag supported */
+#define VFIO_DEVICE_TPH_CAP_RESOLVE_CPU_ST	(1u << 5)
 
 /*
  * VFIO_DEVICE_FEATURE_TPH_RESOLVE - Resolve TPH attributes from given source
@@ -1622,15 +1626,16 @@ struct vfio_device_feature_tph {
  * @valid: OUT - bitmap indicating valid output fields, see
  *         VFIO_DEVICE_TPH_VALID_*
  * @ph:    OUT - TPH processing hint (valid when VALID_PH is set in valid)
- * @rsv:   Must be zero, reserved for future extensions
+ * @st:    OUT - TPH steering tag (valid when VALID_ST is set in valid)
  */
 struct vfio_device_feature_tph_resolve {
 	__u32 flags;
 	__u32 src;
 	__u8  valid;
 #define VFIO_DEVICE_TPH_VALID_PH (1u << 0) /* ph holds valid processing hint */
+#define VFIO_DEVICE_TPH_VALID_ST (1u << 1) /* st holds valid steering tag */
 	__u8  ph;
-	__u16 rsv;
+	__u16 st;
 };
 
 /*

@@ -1611,6 +1611,24 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static u32 vfio_pci_get_tph_st_size(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	u32 loc = pcie_tph_get_st_table_loc(pdev);
+	int ret;
+
+	if (loc == PCI_TPH_LOC_CAP) {
+		return pcie_tph_get_st_table_size(pdev);
+	} else if (loc == PCI_TPH_LOC_MSIX) {
+		ret = pci_msix_vec_count(pdev);
+		if (ret < 0)
+			return 0;
+		return ret;
+	} else {
+		return 0;
+	}
+}
+
 static u32 vfio_pci_get_tph_capability(struct vfio_pci_core_device *vdev)
 {
 	u32 flags = VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH;
@@ -1621,6 +1639,17 @@ static u32 vfio_pci_get_tph_capability(struct vfio_pci_core_device *vdev)
 		flags |= VFIO_DEVICE_TPH_CAP_ST_DMABUF;
 		if (pcie_tph_dsm_supported(vdev->pdev))
 			flags |= VFIO_DEVICE_TPH_CAP_ST_CPU;
+	}
+	if (vdev->tph_policy >= VFIO_PCI_TPH_POLICY_DS_ST &&
+		(vdev->tph_cap_virt & PCI_TPH_CAP_ST_DS)) {
+		if (vfio_pci_get_tph_st_size(vdev) > 0) {
+			flags |= VFIO_DEVICE_TPH_CAP_ST_NONE;
+			flags |= VFIO_DEVICE_TPH_CAP_ST_DMABUF;
+			if (pcie_tph_dsm_supported(vdev->pdev))
+				flags |= VFIO_DEVICE_TPH_CAP_ST_CPU;
+		}
+		if (pcie_tph_dsm_supported(vdev->pdev))
+			flags |= VFIO_DEVICE_TPH_CAP_RESOLVE_CPU_ST;
 	}
 
 	return flags;
@@ -1666,8 +1695,12 @@ static u32 vfio_pci_get_tph_resolve_allow_src(struct vfio_pci_core_device *vdev)
 	u32 flags = vfio_pci_get_tph_capability(vdev);
 	u32 allow_src = 0;
 
-	if (flags & VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH)
+	if (flags & (VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH |
+		     VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_ST))
 		allow_src |= VFIO_DEVICE_TPH_SRC_DMABUF;
+	if (flags & VFIO_DEVICE_TPH_CAP_RESOLVE_CPU_ST)
+		allow_src |= VFIO_DEVICE_TPH_SRC_CPU_VOLATILE |
+			     VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT;
 
 	return allow_src;
 }
@@ -1751,6 +1784,7 @@ static int vfio_pci_core_feature_tph_resolve(struct vfio_pci_core_device *vdev,
 
 	resolve.valid = 0;
 	resolve.ph = 0;
+	resolve.st = 0;
 
 	if (user_flags & VFIO_DEVICE_TPH_SRC_DMABUF) {
 		ret = vfio_pci_get_dmabuf_tph(resolve.src, extended,
@@ -1759,8 +1793,21 @@ static int vfio_pci_core_feature_tph_resolve(struct vfio_pci_core_device *vdev,
 			return ret;
 		resolve.ph = ph;
 		resolve.valid = VFIO_DEVICE_TPH_VALID_PH;
+		if (vdev->tph_policy >= VFIO_PCI_TPH_POLICY_DS_ST) {
+			resolve.st = tag;
+			resolve.valid |= VFIO_DEVICE_TPH_VALID_ST;
+		}
+		goto out;
 	}
 
+	ret = vfio_pci_get_tph_st_tag(vdev->pdev, user_flags, resolve.src,
+				      extended, &tag);
+	if (ret)
+		return ret;
+	resolve.valid |= VFIO_DEVICE_TPH_VALID_ST;
+	resolve.st = tag;
+
+out:
 	return copy_to_user(arg, &resolve, sizeof(resolve)) ? -EFAULT : 0;
 }
 
@@ -1778,24 +1825,6 @@ static u32 vfio_pci_get_tph_st_allow_src(struct vfio_pci_core_device *vdev)
 		allow_src |= VFIO_DEVICE_TPH_SRC_NONE;
 
 	return allow_src;
-}
-
-static u32 vfio_pci_get_tph_st_size(struct vfio_pci_core_device *vdev)
-{
-	struct pci_dev *pdev = vdev->pdev;
-	u32 loc = pcie_tph_get_st_table_loc(pdev);
-	int ret;
-
-	if (loc == PCI_TPH_LOC_CAP) {
-		return pcie_tph_get_st_table_size(pdev);
-	} else if (loc == PCI_TPH_LOC_MSIX) {
-		ret = pci_msix_vec_count(pdev);
-		if (ret < 0)
-			return 0;
-		return ret;
-	} else {
-		return 0;
-	}
 }
 
 static int vfio_pci_core_feature_tph_st(struct vfio_pci_core_device *vdev,
