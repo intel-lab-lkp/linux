@@ -798,7 +798,8 @@ static void psi_group_change(struct psi_group *group, int cpu,
 			     u64 now, bool wake_clock)
 {
 	struct psi_group_cpu *groupc;
-	unsigned int t, m;
+	unsigned long clear_bits, set_bits;
+	unsigned int t;
 	u32 state_mask;
 
 	lockdep_assert_rq_held(cpu_rq(cpu));
@@ -824,9 +825,8 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	 * The rest of the state mask is calculated based on the task
 	 * counts. Update those first, then construct the mask.
 	 */
-	for (t = 0, m = clear; m; m &= ~(1 << t), t++) {
-		if (!(m & (1 << t)))
-			continue;
+	clear_bits = clear;
+	for_each_set_bit(t, &clear_bits, NR_PSI_TASK_COUNTS) {
 		if (groupc->tasks[t]) {
 			groupc->tasks[t]--;
 		} else if (!psi_bug) {
@@ -838,9 +838,9 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		}
 	}
 
-	for (t = 0; set; set &= ~(1 << t), t++)
-		if (set & (1 << t))
-			groupc->tasks[t]++;
+	set_bits = set;
+	for_each_set_bit(t, &set_bits, NR_PSI_TASK_COUNTS)
+		groupc->tasks[t]++;
 
 	if (!group->enabled) {
 		/*
