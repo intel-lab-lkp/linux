@@ -1367,7 +1367,7 @@ static void damon_test_commit_filter(struct kunit *test)
 			});
 }
 
-struct damon_ctx *damon_test_help_setup_probes(unsigned int weights[],
+static struct damon_ctx *damon_test_help_setup_probes(unsigned int weights[],
 		int nr_weights)
 {
 	struct damon_ctx *ctx;
