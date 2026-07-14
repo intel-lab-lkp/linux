@@ -1613,7 +1613,17 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 
 static u32 vfio_pci_get_tph_capability(struct vfio_pci_core_device *vdev)
 {
-	return VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH;
+	u32 flags = VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH;
+
+	if (vdev->tph_policy >= VFIO_PCI_TPH_POLICY_IV_ST &&
+		(vdev->tph_cap_virt & PCI_TPH_CAP_ST_IV)) {
+		flags |= VFIO_DEVICE_TPH_CAP_ST_NONE;
+		flags |= VFIO_DEVICE_TPH_CAP_ST_DMABUF;
+		if (pcie_tph_dsm_supported(vdev->pdev))
+			flags |= VFIO_DEVICE_TPH_CAP_ST_CPU;
+	}
+
+	return flags;
 }
 
 static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
@@ -1680,6 +1690,32 @@ static int vfio_pci_get_dmabuf_tph(int fd, bool extended, u16 *st, u8 *ph)
 	return ret;
 }
 
+static int vfio_pci_get_tph_st_tag(struct pci_dev *pdev, u32 src_bits,
+				   u32 src_hndl, bool extended, u16 *st)
+{
+	u8 req_type = extended ? PCI_TPH_REQ_EXT_TPH : PCI_TPH_REQ_TPH_ONLY;
+	int ret = 0;
+	u8 ph;
+
+	if (src_bits & VFIO_DEVICE_TPH_SRC_DMABUF)
+		ret = vfio_pci_get_dmabuf_tph(src_hndl, extended, st, &ph);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_CPU_VOLATILE)
+		ret = pcie_tph_get_cpu_st_ext(pdev, TPH_MEM_TYPE_VM,
+					      req_type, src_hndl, st);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT)
+		ret = pcie_tph_get_cpu_st_ext(pdev, TPH_MEM_TYPE_PM,
+					      req_type, src_hndl, st);
+	else if (src_bits & VFIO_DEVICE_TPH_SRC_NONE)
+		*st = 0;
+	else
+		ret = -EINVAL;
+
+	if (ret != 0)
+		*st = 0;
+
+	return ret;
+}
+
 static int vfio_pci_core_feature_tph_resolve(struct vfio_pci_core_device *vdev,
 			u32 flags,
 			struct vfio_device_feature_tph_resolve __user *arg,
@@ -1728,6 +1764,117 @@ static int vfio_pci_core_feature_tph_resolve(struct vfio_pci_core_device *vdev,
 	return copy_to_user(arg, &resolve, sizeof(resolve)) ? -EFAULT : 0;
 }
 
+static u32 vfio_pci_get_tph_st_allow_src(struct vfio_pci_core_device *vdev)
+{
+	u32 flags = vfio_pci_get_tph_capability(vdev);
+	u32 allow_src = 0;
+
+	if (flags & VFIO_DEVICE_TPH_CAP_ST_DMABUF)
+		allow_src |= VFIO_DEVICE_TPH_SRC_DMABUF;
+	if (flags & VFIO_DEVICE_TPH_CAP_ST_CPU)
+		allow_src |= VFIO_DEVICE_TPH_SRC_CPU_VOLATILE |
+			     VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT;
+	if (flags & VFIO_DEVICE_TPH_CAP_ST_NONE)
+		allow_src |= VFIO_DEVICE_TPH_SRC_NONE;
+
+	return allow_src;
+}
+
+static u32 vfio_pci_get_tph_st_size(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	u32 loc = pcie_tph_get_st_table_loc(pdev);
+	int ret;
+
+	if (loc == PCI_TPH_LOC_CAP) {
+		return pcie_tph_get_st_table_size(pdev);
+	} else if (loc == PCI_TPH_LOC_MSIX) {
+		ret = pci_msix_vec_count(pdev);
+		if (ret < 0)
+			return 0;
+		return ret;
+	} else {
+		return 0;
+	}
+}
+
+static int vfio_pci_core_feature_tph_st(struct vfio_pci_core_device *vdev,
+				u32 flags,
+				struct vfio_device_feature_tph_st __user *arg,
+				size_t argsz)
+{
+	struct vfio_device_feature_tph_st tph_st;
+	u32 user_flags, allow_src, st_size;
+	struct pci_dev *pdev = vdev->pdev;
+	bool extended, stop_on_zero;
+	u32 *src_hndl = NULL;
+	u16 *tags = NULL;
+	int ret, i;
+	u16 cmd;
+
+	if (!vdev->tph_opt_in || vdev->tph_policy == VFIO_PCI_TPH_POLICY_NO_ST)
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(tph_st));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&tph_st, arg, sizeof(tph_st)))
+		return -EFAULT;
+
+	user_flags = tph_st.flags;
+	extended = !!(user_flags & VFIO_DEVICE_TPH_EXTENDED);
+	if (extended && !pcie_ext_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+	user_flags &= ~VFIO_DEVICE_TPH_EXTENDED;
+
+	stop_on_zero = !!(user_flags & VFIO_DEVICE_TPH_REQUIRE_ST);
+	if (stop_on_zero && (user_flags & VFIO_DEVICE_TPH_SRC_NONE))
+		return -EINVAL;
+	user_flags &= ~VFIO_DEVICE_TPH_REQUIRE_ST;
+
+	allow_src = vfio_pci_get_tph_st_allow_src(vdev);
+	if (user_flags & ~allow_src || !is_power_of_2(user_flags))
+		return -EINVAL;
+
+	st_size = vfio_pci_get_tph_st_size(vdev);
+	if (tph_st.start >= st_size || tph_st.count > st_size - tph_st.start ||
+		tph_st.count == 0)
+		return -EINVAL;
+
+	if (!(user_flags & VFIO_DEVICE_TPH_SRC_NONE)) {
+		src_hndl = memdup_array_user(u64_to_user_ptr(tph_st.dests),
+					     tph_st.count, sizeof(u32));
+		if (IS_ERR(src_hndl))
+			return PTR_ERR(src_hndl);
+	}
+	tags = kcalloc(tph_st.count, sizeof(u16), GFP_KERNEL_ACCOUNT);
+	if (!tags) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	for (i = 0; i < tph_st.count; i++) {
+		ret = vfio_pci_get_tph_st_tag(pdev, user_flags,
+					      src_hndl ? src_hndl[i] : 0,
+					      extended, &tags[i]);
+		if (ret || (stop_on_zero && tags[i] == 0))
+			break;
+	}
+
+	if (i > 0) {
+		cmd = vfio_pci_memory_lock_and_enable(vdev);
+		ret = pcie_tph_set_st_entries(pdev, tph_st.start, i, tags);
+		vfio_pci_memory_unlock_and_restore(vdev, cmd);
+	}
+
+out:
+	kfree(tags);
+	kfree(src_hndl);
+	return ret;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1754,6 +1901,8 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 	case VFIO_DEVICE_FEATURE_TPH_RESOLVE:
 		return vfio_pci_core_feature_tph_resolve(vdev, flags,
 							 arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_ST:
+		return vfio_pci_core_feature_tph_st(vdev, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}

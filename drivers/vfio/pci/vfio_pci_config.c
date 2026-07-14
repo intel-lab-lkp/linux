@@ -1119,6 +1119,12 @@ static void vfio_update_tph_vconfig_bytes(struct vfio_pci_core_device *vdev,
 		/* Report only No-ST mode supported */
 		val &= ~(PCI_TPH_CAP_ST_IV | PCI_TPH_CAP_ST_DS |
 			 PCI_TPH_CAP_LOC_MASK | PCI_TPH_CAP_ST_MASK);
+	} else if (vdev->tph_policy == VFIO_PCI_TPH_POLICY_IV_ST) {
+		/* Report only No-ST and IV modes supported */
+		val &= ~PCI_TPH_CAP_ST_DS;
+		/* Remove ST location and size if dev doesn't support IV mode */
+		if (!(val & PCI_TPH_CAP_ST_IV))
+			val &= ~(PCI_TPH_CAP_LOC_MASK | PCI_TPH_CAP_ST_MASK);
 	}
 
 	*vptr = cpu_to_le32(val);
@@ -1195,7 +1201,7 @@ static int vfio_tph_config_write(struct vfio_pci_core_device *vdev, int pos,
 	cap = le32_to_cpu(*(__le32 *)&vdev->vconfig[start + PCI_TPH_CAP]);
 	mode = FIELD_GET(PCI_TPH_CTRL_MODE_SEL_MASK, new_ctrl);
 	req = FIELD_GET(PCI_TPH_CTRL_REQ_EN_MASK, new_ctrl);
-	if (mode != PCI_TPH_ST_NS_MODE || !(cap & (1u << mode)) || req == 0x2 ||
+	if (mode > PCI_TPH_ST_IV_MODE || !(cap & (1u << mode)) || req == 0x2 ||
 		(req == PCI_TPH_REQ_EXT_TPH && !(cap & PCI_TPH_CAP_EXT_TPH)))
 		goto restore; /* Drop invalid or unsupported write value */
 

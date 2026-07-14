@@ -64,7 +64,7 @@ static unsigned int tph_policy;
 static int tph_policy_set(const char *val, const struct kernel_param *kp)
 {
 	return param_set_uint_minmax(val, kp, VFIO_PCI_TPH_POLICY_NO_ST,
-				     VFIO_PCI_TPH_POLICY_NO_ST);
+				     VFIO_PCI_TPH_POLICY_IV_ST);
 }
 static const struct kernel_param_ops tph_param_ops = {
 	.set = tph_policy_set,
@@ -74,7 +74,9 @@ module_param_cb(tph_policy, &tph_param_ops, &tph_policy, 0644);
 MODULE_PARM_DESC(tph_policy,
 	"Global TPH policy level (0=default No-ST):\n"
 	"0 = No-ST mode: RESOLVE only returns PH for DMABUF source;\n"
-	"                ST programming unavailable\n");
+	"                ST programming unavailable\n"
+	"1 = Add IV mode: RESOLVE only returns PH for DMABUF source;\n"
+	"                 ST program supports NONE/DMABUF/CPU sources\n");
 
 static bool vfio_pci_dev_in_denylist(struct pci_dev *pdev)
 {

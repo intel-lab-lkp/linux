@@ -1580,6 +1580,7 @@ struct vfio_device_feature_dma_buf_tph {
 /* PCIe TPH device feature definitions for VFIO_DEVICE_FEATURE ioctl */
 #define VFIO_DEVICE_FEATURE_TPH		14
 #define VFIO_DEVICE_FEATURE_TPH_RESOLVE	15
+#define VFIO_DEVICE_FEATURE_TPH_ST	16
 
 /*
  * VFIO_DEVICE_FEATURE_TPH - Control and query PCI TPH capabilities
@@ -1590,8 +1591,8 @@ struct vfio_device_feature_dma_buf_tph {
  *
  * Userspace must first invoke SET on this feature to enable TPH support,
  * receive valid capability bits via GET, gain permission for using
- * VFIO_DEVICE_FEATURE_TPH_RESOLVE, and access the virtualized TPH
- * capability registers via VFIO config space accesses.
+ * VFIO_DEVICE_FEATURE_TPH_RESOLVE / VFIO_DEVICE_FEATURE_TPH_ST, and access
+ * the virtualized TPH capability registers via VFIO config space accesses.
  */
 struct vfio_device_feature_tph {
 	__u32 flags;
@@ -1599,6 +1600,12 @@ struct vfio_device_feature_tph {
 
 /* DMABUF source resolve processing hint supported */
 #define VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH	(1u << 0)
+/* DMABUF source TPH_ST batch programming supported */
+#define VFIO_DEVICE_TPH_CAP_ST_DMABUF		(1u << 1)
+/* CPU source TPH_ST batch programming supported */
+#define VFIO_DEVICE_TPH_CAP_ST_CPU		(1u << 2)
+/* NONE source (means steering tag is zero) TPH_ST batch programming supported */
+#define VFIO_DEVICE_TPH_CAP_ST_NONE		(1u << 3)
 
 /*
  * VFIO_DEVICE_FEATURE_TPH_RESOLVE - Resolve TPH attributes from given source
@@ -1626,10 +1633,45 @@ struct vfio_device_feature_tph_resolve {
 	__u16 rsv;
 };
 
+/*
+ * VFIO_DEVICE_FEATURE_TPH_ST - Batch program architected steering tag
+ * table entries
+ * Return value: >=0 = number of successfully written entries;
+ *               <0  = negative errno
+ *
+ * SET only
+ *
+ * Additional constraint: Userspace must complete two prerequisite steps
+ * before invoking this feature:
+ * 1. Call VFIO_DEVICE_FEATURE_TPH with SET to enable vfio TPH permission;
+ * 2. Write the TPH control register to activate device hardware TPH logic.
+ *
+ * @flags: IN - source type selector (see VFIO_DEVICE_TPH_SRC_*) and
+ *         steering tag namespace selector (see VFIO_DEVICE_TPH_EXTENDED) and
+ *         failure policy (see VFIO_DEVICE_TPH_REQUIRE_ST)
+ * @start: IN - first steering tag table index / MSI-X vector
+ * @count: IN - number of contiguous entries to program
+ * @dests: IN - user pointer to array of source u32 values
+ */
+struct vfio_device_feature_tph_st {
+	__u32 flags;
+	__u16 start;
+	__u16 count;
+	__aligned_u64 dests;
+};
+
 /* Source holds dma-buf fd */
 #define VFIO_DEVICE_TPH_SRC_DMABUF      (1u << 0)
 /* Use extended 16-bit steering tag namespace */
 #define VFIO_DEVICE_TPH_EXTENDED	(1u << 1)
+/* Source holds volatile memory CPU ID */
+#define VFIO_DEVICE_TPH_SRC_CPU_VOLATILE	(1u << 2)
+/* Source holds persistent memory CPU ID */
+#define VFIO_DEVICE_TPH_SRC_CPU_PERSISTENT	(1u << 3)
+/* TPH_ST only: set steering tag to zero */
+#define VFIO_DEVICE_TPH_SRC_NONE	(1u << 4)
+/* TPH_ST only: fail if resolved steering tag is zero */
+#define VFIO_DEVICE_TPH_REQUIRE_ST	(1u << 5)
 
 /* -------- API for Type1 VFIO IOMMU -------- */
 
