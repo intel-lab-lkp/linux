@@ -1015,6 +1015,11 @@ static int rk3576_combphy_cfg(struct rockchip_combphy_priv *priv)
 		break;
 
 	case PHY_TYPE_USB3:
+		/* Set SSC downward spread spectrum */
+		val = FIELD_PREP(RK3568_PHYREG32_SSC_MASK, RK3568_PHYREG32_SSC_DOWNWARD);
+		rockchip_combphy_updatel(priv, RK3568_PHYREG32_SSC_MASK, val,
+					 RK3568_PHYREG32);
+
 		/* Enable adaptive CTLE for USB3.0 Rx */
 		val = readl(priv->mmio + RK3568_PHYREG15);
 		val |= RK3568_PHYREG15_CTLE_EN;
