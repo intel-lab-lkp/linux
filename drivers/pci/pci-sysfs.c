@@ -1932,6 +1932,9 @@ const struct attribute_group *pci_dev_attr_groups[] = {
 	&aer_stats_attr_group,
 	&aer_attr_group,
 #endif
+#ifdef CONFIG_PCIE_FLIT
+	&flit_attr_group,
+#endif
 #ifdef CONFIG_PCIEASPM
 	&aspm_ctrl_attr_group,
 #endif

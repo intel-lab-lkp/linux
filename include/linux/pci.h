@@ -40,6 +40,7 @@
 #include <linux/io.h>
 #include <linux/resource_ext.h>
 #include <linux/msi_api.h>
+#include <linux/ratelimit_types.h>
 #include <uapi/linux/pci.h>
 
 #include <linux/pci_ids.h>
@@ -595,6 +596,7 @@ struct pci_dev {
 
 #ifdef CONFIG_PCIE_FLIT
 	u16		flit_cap;	/* Flit Logging Capabilities */
+	struct ratelimit_state flit_ratelimit;	/* Flit error log ratelimit */
 #endif
 };
 

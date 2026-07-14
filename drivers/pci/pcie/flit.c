@@ -12,9 +12,12 @@
 #define pr_fmt(fmt) "Flit: " fmt
 #define dev_fmt pr_fmt
 
+#include <linux/capability.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/ratelimit.h>
+#include <linux/sysfs.h>
 #include <ras/ras_event.h>
 #include "portdrv.h"
 #include "../pci.h"
@@ -30,9 +33,105 @@ void pci_flit_init(struct pci_dev *pdev)
 		return;
 
 	pdev->flit_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_FLIT);
-	if (pdev->flit_cap)
-		pci_dbg(pdev, "Flit Mode Error Logging Capability present.\n");
+	if (!pdev->flit_cap)
+		return;
+
+	ratelimit_state_init(&pdev->flit_ratelimit, DEFAULT_RATELIMIT_INTERVAL,
+			     DEFAULT_RATELIMIT_BURST);
+
+	pci_dbg(pdev, "Flit Mode Error Logging Capability present.\n");
 }
+
+/*
+ * Ratelimit interval
+ * <=0: disabled with ratelimit.interval = 0
+ * >0: enabled with ratelimit.interval in ms
+ */
+static ssize_t flit_ratelimit_interval_ms_show(struct device *dev,
+					       struct device_attribute *attr,
+					       char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	return sysfs_emit(buf, "%d\n",
+			  jiffies_to_msecs(pdev->flit_ratelimit.interval));
+}
+
+static ssize_t flit_ratelimit_interval_ms_store(struct device *dev,
+						struct device_attribute *attr,
+						const char *buf, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int interval;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 0, &interval) < 0)
+		return -EINVAL;
+
+	if (interval <= 0)
+		interval = 0;
+	else
+		interval = msecs_to_jiffies(interval);
+
+	pdev->flit_ratelimit.interval = interval;
+
+	return count;
+}
+static DEVICE_ATTR_RW(flit_ratelimit_interval_ms);
+
+static ssize_t flit_ratelimit_burst_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	return sysfs_emit(buf, "%d\n", pdev->flit_ratelimit.burst);
+}
+
+static ssize_t flit_ratelimit_burst_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int burst;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 0, &burst) < 0)
+		return -EINVAL;
+
+	pdev->flit_ratelimit.burst = burst;
+
+	return count;
+}
+static DEVICE_ATTR_RW(flit_ratelimit_burst);
+
+static struct attribute *flit_attrs[] = {
+	&dev_attr_flit_ratelimit_interval_ms.attr,
+	&dev_attr_flit_ratelimit_burst.attr,
+	NULL
+};
+
+static umode_t flit_attrs_are_visible(struct kobject *kobj,
+				      struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (!pdev->flit_cap)
+		return 0;
+
+	return a->mode;
+}
+
+const struct attribute_group flit_attr_group = {
+	.name = "flit",
+	.attrs = flit_attrs,
+	.is_visible = flit_attrs_are_visible,
+};
 
 static void flit_cntr_enable(struct pci_dev *pdev)
 {
@@ -70,12 +169,22 @@ static irqreturn_t flit_isr(int irq, void *context)
 	u16 flit = pdev->flit_cap;
 	u16 cntr_ctrl, cntr_sta;
 	u32 err_log1, err_log2;
+	bool print;
 
 	/* Read and log Counter and Error Log Registers. */
 	pci_read_config_word(pdev, flit + PCI_FLIT_ERR_CNTR_CTRL, &cntr_ctrl);
 	pci_read_config_word(pdev, flit + PCI_FLIT_ERR_CNTR_STA, &cntr_sta);
 
-	pci_info(pdev, HW_ERR "Counter Control: 0x%04x Counter Status: 0x%04x\n", cntr_ctrl, cntr_sta);
+	/*
+	 * Take a single ratelimit decision per interrupt and use it to gate
+	 * the console output.  The trace event is always emitted so RAS
+	 * tooling records every erroneous flit even while the log is throttled.
+	 */
+	print = __ratelimit(&pdev->flit_ratelimit);
+
+	if (print)
+		pci_info(pdev, HW_ERR "Counter Control: 0x%04x Counter Status: 0x%04x\n",
+			 cntr_ctrl, cntr_sta);
 
 	do {
 		pci_read_config_dword(pdev, flit + PCI_FLIT_ERR_LOG1, &err_log1);
@@ -84,7 +193,9 @@ static irqreturn_t flit_isr(int irq, void *context)
 			break;
 
 		pci_read_config_dword(pdev, flit + PCI_FLIT_ERR_LOG2, &err_log2);
-		pci_info(pdev, HW_ERR "  Error Log1: 0x%08x Error Log2: 0x%08x\n", err_log1, err_log2);
+		if (print)
+			pci_info(pdev, HW_ERR "  Error Log1: 0x%08x Error Log2: 0x%08x\n",
+				 err_log1, err_log2);
 		trace_flit_event(pci_name(pdev), cntr_ctrl, cntr_sta, err_log1, err_log2);
 
 		pci_write_config_dword(pdev, flit + PCI_FLIT_ERR_LOG1, err_log1);

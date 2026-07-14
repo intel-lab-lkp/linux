@@ -896,6 +896,7 @@ static inline bool pci_dpc_recovered(struct pci_dev *pdev) { return false; }
 
 #ifdef CONFIG_PCIE_FLIT
 void pci_flit_init(struct pci_dev *pdev);
+extern const struct attribute_group flit_attr_group;
 #else
 static inline void pci_flit_init(struct pci_dev *pdev) { }
 #endif
