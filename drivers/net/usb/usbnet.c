@@ -2351,12 +2351,12 @@ void usbnet_cdc_status(struct usbnet *dev, struct urb *urb)
 }
 EXPORT_SYMBOL_GPL(usbnet_cdc_status);
 
-/* Make sure packets have correct destination MAC address
+/* Make sure packets have the correct destination MAC address
  *
  * A firmware bug observed on some devices (ZTE MF823/831/910) is that the
- * device sends packets with a static, bogus, random MAC address (event if
- * device MAC address has been updated). Always set MAC address to that of the
- * device.
+ * device sends packets with a static, bogus, random MAC address (event if the
+ * device MAC address has been updated). Always set the MAC address to that
+ * of the device.
  */
 int usbnet_cdc_zte_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
