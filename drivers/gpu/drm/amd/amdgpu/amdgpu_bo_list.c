@@ -211,7 +211,7 @@ int amdgpu_bo_list_ioctl(struct drm_device *dev, void *data,
 
 	default:
 		return -EINVAL;
-	};
+	}
 
 	switch (args->in.operation) {
 	case AMDGPU_BO_LIST_OP_CREATE:
