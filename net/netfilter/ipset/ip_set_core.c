@@ -346,7 +346,8 @@ void
 ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 		    const struct ip_set_ext *ext)
 {
-	struct ip_set_comment_rcu *c = rcu_dereference_protected(comment->c, 1);
+	struct ip_set_comment_rcu *c = rcu_dereference_protected(comment->c,
+								 lockdep_is_held(&set->lock));
 	size_t len = ext->comment ? strlen(ext->comment) : 0;
 
 	if (unlikely(c)) {

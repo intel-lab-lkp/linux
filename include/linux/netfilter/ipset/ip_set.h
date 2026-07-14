@@ -503,6 +503,15 @@ void ip_set_init_comment(struct ip_set *set, struct ip_set_comment *comment,
 			 const struct ip_set_ext *ext);
 
 static inline void
+ip_set_init_comment_slow(struct ip_set *set, struct ip_set_comment *comment,
+			 const struct ip_set_ext *ext)
+{
+	spin_lock_bh(&set->lock);
+	ip_set_init_comment(set, comment, ext);
+	spin_unlock_bh(&set->lock);
+}
+
+static inline void
 ip_set_init_counter(struct ip_set_counter *counter,
 		    const struct ip_set_ext *ext)
 {
