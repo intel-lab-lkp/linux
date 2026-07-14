@@ -103,6 +103,15 @@ run_one()
 		ktap_print_msg "timeout set to $kselftest_timeout" >> "$logfile"
 	fi
 
+	# Exported environment variable overrides the settings file
+	eval kselftest_eval_cmd_args="\$${kselftest_cmd_args_ref:-}"
+	if [ -n "$kselftest_eval_cmd_args" ]; then
+		kselftest_cmd_args=$kselftest_eval_cmd_args
+		ktap_print_msg "overriding cmd_args to $kselftest_cmd_args" >> "$logfile"
+	elif [ -n "$kselftest_cmd_args" ]; then
+		ktap_print_msg "cmd_args set to $kselftest_cmd_args" >> "$logfile"
+	fi
+
 	TEST_HDR_MSG="selftests: $DIR: $BASENAME_TEST"
 	echo "# $TEST_HDR_MSG"
 	if [ ! -e "$TEST" ]; then
@@ -113,7 +122,6 @@ run_one()
 		if [ -x /usr/bin/stdbuf ]; then
 			stdbuf="/usr/bin/stdbuf --output=L "
 		fi
-		eval kselftest_cmd_args="\$${kselftest_cmd_args_ref:-}"
 		if [ -x "$TEST" ]; then
 			cmd="$stdbuf ./$BASENAME_TEST $kselftest_cmd_args"
 		elif [ -x "./ksft_runner.sh" ]; then
