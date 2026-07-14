@@ -7284,21 +7284,48 @@ static irqreturn_t ufshcd_tmc_handler(struct ufs_hba *hba)
 /**
  * ufshcd_handle_mcq_cq_events - handle MCQ completion queue events
  * @hba: per adapter instance
- * @reset_iag: true, to reset MCQ IAG counter and timer of the CQ
+ * @reset_iag: on an IAGES (aggregated) interrupt, true: use the vendor IAG
+ *	group bitmap as the completion source and reset each fired group's
+ *	counter/timer before reaping its member CQs. On a CQES interrupt, false:
+ *	use the CQ bitmap directly with no group reset.
  *
  * Return: IRQ_HANDLED if interrupt is handled.
  */
 static irqreturn_t ufshcd_handle_mcq_cq_events(struct ufs_hba *hba, bool reset_iag)
 {
 	struct ufs_hw_queue *hwq;
-	unsigned long outstanding_cqs;
+	unsigned long outstanding_cqs = 0;
 	unsigned int nr_queues;
 	int i, ret;
 	u32 events, reg;
 
-	ret = ufshcd_vops_get_outstanding_cqs(hba, &outstanding_cqs);
-	if (ret)
-		outstanding_cqs = (1ULL << hba->nr_hw_queues) - 1;
+	if (reset_iag) {
+		u32 nr_groups = ufshcd_mcq_nr_iag_groups(hba);
+		unsigned long groups = 0;
+		int g;
+
+		/*
+		 * Completions were aggregated per interrupt-aggregation group,
+		 * so the vendor reports which groups fired (VS_IAG). If the hook
+		 * is absent, assume every group may have fired.
+		 */
+		ret = ufshcd_vops_get_outstanding_iags(hba, &groups);
+		if (ret)
+			groups = (1ULL << nr_groups) - 1;
+
+		for_each_set_bit(g, &groups, nr_groups) {
+			reg = ufshcd_mcq_read_mcqiacr(hba, g);
+			reg |= INT_AGGR_COUNTER_AND_TIMER_RESET;
+			ufshcd_mcq_write_mcqiacr(hba, reg, g);
+
+			outstanding_cqs |= hba->iag_grp_cqs[g];
+		}
+	} else {
+		/* Non-aggregated CQ events: the vendor reports the CQs directly. */
+		ret = ufshcd_vops_get_outstanding_cqs(hba, &outstanding_cqs);
+		if (ret)
+			outstanding_cqs = (1ULL << hba->nr_hw_queues) - 1;
+	}
 
 	/* Exclude the poll queues */
 	nr_queues = hba->nr_hw_queues - hba->nr_queues[HCTX_TYPE_POLL];
@@ -7308,13 +7335,6 @@ static irqreturn_t ufshcd_handle_mcq_cq_events(struct ufs_hba *hba, bool reset_i
 		events = ufshcd_mcq_read_cqis(hba, i);
 		if (events)
 			ufshcd_mcq_write_cqis(hba, events, i);
-
-		if (reset_iag) {
-			reg = ufshcd_mcq_read_mcqiacr(hba, i);
-			reg |= INT_AGGR_COUNTER_AND_TIMER_RESET;
-			ufshcd_mcq_write_mcqiacr(hba, reg, i);
-		}
-
 		if (events & UFSHCD_MCQ_CQIS_TAIL_ENT_PUSH_STS)
 			ufshcd_mcq_poll_cqe_lock(hba, hwq);
 	}

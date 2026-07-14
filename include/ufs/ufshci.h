@@ -96,6 +96,7 @@ enum {
 	REG_CQUBA		= 0x28,
 	REG_CQDAO		= 0x2C,
 	REG_CQISAO		= 0x30,
+	REG_CQCFG		= 0x34,
 };
 
 /* Operation and Runtime Registers - Submission Queues and Completion Queues */
@@ -190,6 +191,11 @@ static inline u32 ufshci_version(u32 major, u32 minor)
 #define CRYPTO_ENGINE_FATAL_ERROR		0x40000
 #define MCQ_CQ_EVENT_STATUS			0x100000
 #define MCQ_IAG_EVENT_STATUS			0x200000
+
+/* MCQ Interrupt Aggregation: MCQCAP.MIAG and CQCFGy fields */
+#define MCQCAP_MIAG_MASK			UFS_MASK(0xFF, 24)
+#define CQCFG_IAGVLD				0x100
+#define CQCFG_IAG_MASK				0x1F
 
 #define UFSHCD_UIC_HIBERN8_MASK	(UIC_HIBERNATE_ENTER |\
 				UIC_HIBERNATE_EXIT)

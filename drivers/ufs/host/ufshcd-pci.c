@@ -532,6 +532,12 @@ static struct ufs_hba_variant_ops ufs_intel_mtl_hba_vops = {
 	.device_reset		= ufs_intel_device_reset,
 };
 
+static int ufs_amd_init(struct ufs_hba *hba)
+{
+	hba->caps |= UFSHCD_CAP_MCQ_INTR_AGGR;
+	return 0;
+}
+
 static int ufs_amd_mcq_config_resource(struct ufs_hba *hba)
 {
 	/* MCQ registers are at an offset from the MMIO base */
@@ -567,11 +573,20 @@ static int ufs_amd_get_outstanding_cqs(struct ufs_hba *hba, unsigned long *ocqs)
 	return 0;
 }
 
+static int ufs_amd_get_outstanding_iags(struct ufs_hba *hba, unsigned long *oiags)
+{
+	*oiags = ufshcd_readl(hba, REG_UFS_AMD_VS_IAG);
+
+	return 0;
+}
+
 static struct ufs_hba_variant_ops ufs_amd_hba_vops = {
 	.name			= "amd-pci",
+	.init			= ufs_amd_init,
 	.mcq_config_resource	= ufs_amd_mcq_config_resource,
 	.op_runtime_config	= ufs_amd_op_runtime_config,
 	.get_outstanding_cqs	= ufs_amd_get_outstanding_cqs,
+	.get_outstanding_iags	= ufs_amd_get_outstanding_iags,
 };
 
 #ifdef CONFIG_PM_SLEEP

@@ -465,6 +465,8 @@ struct ufs_hba_variant_ops {
 	int	(*op_runtime_config)(struct ufs_hba *hba);
 	int	(*get_outstanding_cqs)(struct ufs_hba *hba,
 				       unsigned long *ocqs);
+	int	(*get_outstanding_iags)(struct ufs_hba *hba,
+					unsigned long *oiags);
 	int	(*config_esi)(struct ufs_hba *hba);
 	void	(*config_scsi_dev)(struct scsi_device *sdev);
 	u32	(*freq_to_gear_speed)(struct ufs_hba *hba, unsigned long freq);
@@ -897,6 +899,15 @@ enum ufshcd_caps {
 	 * specific operations and TX Equaliztion Training procedure.
 	 */
 	UFSHCD_CAP_TX_EQUALIZATION			= 1 << 13,
+
+	/*
+	 * This capability enables MCQ interrupt aggregation (IAG): completion
+	 * queues are bound to aggregation groups and each group's counter
+	 * threshold (IACTH) and timeout (IATOVAL) are programmed so completions
+	 * are batched into fewer interrupts. Distinct from UFSHCD_CAP_INTR_AGGR,
+	 * which controls the legacy single-doorbell (SDB) UTRIACR aggregation.
+	 */
+	UFSHCD_CAP_MCQ_INTR_AGGR			= 1 << 14,
 };
 
 struct ufs_hba_variant_params {
@@ -945,6 +956,9 @@ enum ufshcd_mcq_opr {
 	OPR_CQIS,
 	OPR_MAX,
 };
+
+/* Max MCQ interrupt aggregation groups (CQCFGy.IAG is 5 bits) */
+#define UFS_MAX_IAG_GROUPS	32
 
 /**
  * struct ufs_hba - per adapter private structure
@@ -1063,6 +1077,9 @@ enum ufshcd_mcq_opr {
  * @mcq_base: Multi circular queue registers base address
  * @uhq: array of supported hardware queues
  * @mcq_opr: MCQ operation and runtime registers
+ * @iag_grp_cqs: MCQ interrupt-aggregation group to member-CQ bitmap, indexed
+ *	by group id; built by ufshcd_mcq_config_iag() and used to reap a group's
+ *	CQs on an IAGES interrupt
  * @ufs_rtc_update_work: A work for UFS RTC periodic update
  * @pm_qos_req: PM QoS request handle
  * @pm_qos_enabled: flag to check if pm qos is enabled
@@ -1245,6 +1262,7 @@ struct ufs_hba {
 	void __iomem *mcq_base;
 	struct ufs_hw_queue *uhq;
 	struct ufshcd_mcq_opr_info_t mcq_opr[OPR_MAX];
+	u32 iag_grp_cqs[UFS_MAX_IAG_GROUPS];
 
 	struct delayed_work ufs_rtc_update_work;
 	struct pm_qos_request pm_qos_req;

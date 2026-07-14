@@ -37,6 +37,12 @@
 /* Max mcq register polling time in microseconds */
 #define MCQ_POLL_US 500000
 
+/* MCQ interrupt aggregation timeout, unit: 40us (0x02 = 80us) */
+#define UFS_MCQ_IAG_TIMEOUT 0x02
+
+/* MCQ interrupt aggregation counter threshold (IACTH) is a 5-bit field */
+#define UFS_MCQ_IAG_MAX_IACTH 31
+
 static int rw_queue_count_set(const char *val, const struct kernel_param *kp)
 {
 	return param_set_uint_minmax(val, kp, UFS_MCQ_MIN_RW_QUEUES,
@@ -284,6 +290,59 @@ void ufshcd_mcq_write_mcqiacr(struct ufs_hba *hba, u32 val, int i)
 }
 
 /*
+ * ufshcd_mcq_cq_to_group - map a completion queue to its aggregation group
+ * @hba: per adapter instance
+ * @cq: completion queue id
+ *
+ * One group per CQ when the controller has enough groups (MCQCAP.MIAG); if
+ * there are more CQs than groups, fold densely so every CQ maps to a valid
+ * group id (0..MIAG-1).
+ */
+static u32 ufshcd_mcq_cq_to_group(struct ufs_hba *hba, int cq)
+{
+	u32 nr_groups = ufshcd_mcq_nr_iag_groups(hba);
+	u32 nr_cq = hba->nr_hw_queues - hba->nr_queues[HCTX_TYPE_POLL];
+
+	if (!nr_groups)
+		return 0;
+
+	return (nr_cq <= nr_groups) ? cq : cq % nr_groups;
+}
+
+/*
+ * ufshcd_mcq_config_iag - bind CQ @i to its aggregation group
+ * @hba: per adapter instance
+ * @i: completion queue id
+ *
+ * Associates the CQ with its group (CQCFGy.IAG) and programs the group's
+ * counter threshold and timeout once, on the first CQ that maps to it.
+ * IAPWEN is set so IACTH/IATOVAL are latched. The counter/timer are re-armed
+ * after each IAG interrupt by ufshcd_handle_mcq_cq_events(). @iag_grp_cqs
+ * records the group -> member-CQ map used to reap on an IAG event.
+ */
+static void ufshcd_mcq_config_iag(struct ufs_hba *hba, int i)
+{
+	u32 grp = ufshcd_mcq_cq_to_group(hba, i);
+	u32 cqcfg;
+
+	cqcfg = ufsmcq_readl(hba, ufshcd_mcq_cfg_offset(REG_CQCFG, i));
+	cqcfg &= ~CQCFG_IAG_MASK;
+	cqcfg |= CQCFG_IAGVLD | (grp & CQCFG_IAG_MASK);
+	ufsmcq_writel(hba, cqcfg, ufshcd_mcq_cfg_offset(REG_CQCFG, i));
+
+	/* Program the group's counter/timer once, on its first member CQ. */
+	if (!hba->iag_grp_cqs[grp]) {
+		u32 iacth = min(hba->nutrs - 1, UFS_MCQ_IAG_MAX_IACTH);
+		u32 mcqiacr = INT_AGGR_ENABLE | INT_AGGR_PARAM_WRITE |
+			      INT_AGGR_COUNTER_THLD_VAL(iacth) |
+			      INT_AGGR_TIMEOUT_VAL(UFS_MCQ_IAG_TIMEOUT);
+
+		ufshcd_mcq_write_mcqiacr(hba, mcqiacr, grp);
+	}
+	hba->iag_grp_cqs[grp] |= BIT(i);
+}
+
+/*
  * UFSHCI 4.0 MCQ specification doesn't provide a Task Tag or its equivalent in
  * the Completion Queue Entry. Find the Task Tag using an indirect method.
  * UFSHCI 4.1 and above can directly return the Task Tag in the Completion Queue
@@ -383,6 +442,10 @@ void ufshcd_mcq_make_queues_operational(struct ufs_hba *hba)
 		intrs &= ~MCQ_CQ_EVENT_STATUS;
 	ufshcd_enable_intr(hba, intrs);
 
+	/* Rebuild the group -> member-CQ map from scratch on (re)init. */
+	if (ufshcd_is_mcq_iag_allowed(hba))
+		memset(hba->iag_grp_cqs, 0, sizeof(hba->iag_grp_cqs));
+
 	for (i = 0; i < hba->nr_hw_queues; i++) {
 		hwq = &hba->uhq[i];
 		hwq->id = i;
@@ -424,8 +487,13 @@ void ufshcd_mcq_make_queues_operational(struct ufs_hba *hba)
 		hwq->sq_tail_slot = hwq->cq_tail_slot = hwq->cq_head_slot = 0;
 
 		/* Enable Tail Entry Push Status interrupt only for non-poll queues */
-		if (i < hba->nr_hw_queues - hba->nr_queues[HCTX_TYPE_POLL])
+		if (i < hba->nr_hw_queues - hba->nr_queues[HCTX_TYPE_POLL]) {
 			writel(1, mcq_opr_base(hba, OPR_CQIS, i) + REG_CQIE);
+
+			/* Batch completions via interrupt aggregation, if enabled */
+			if (ufshcd_is_mcq_iag_allowed(hba))
+				ufshcd_mcq_config_iag(hba, i);
+		}
 
 		/* Completion Queue Enable|Size to Completion Queue Attribute */
 		ufsmcq_writel(hba, (1 << QUEUE_EN_OFFSET) | qsize,

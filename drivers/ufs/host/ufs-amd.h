@@ -13,5 +13,6 @@
 #define REG_UFS_AMD_CQIS        0x2224  /* CQ Interrupt Status base */
 #define REG_UFS_AMD_MCQ_STRIDE  0x40    /* 64 bytes per queue */
 #define REG_UFS_AMD_VS_CQES     0xE0    /* Vendor Specific: CQES CQ ID bitmap */
+#define REG_UFS_AMD_VS_IAG      0xDC    /* Vendor Specific: IAGES fired-group bitmap */
 
 #endif /* !_UFS_AMD_H */

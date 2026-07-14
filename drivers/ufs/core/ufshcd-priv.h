@@ -299,6 +299,39 @@ static inline int ufshcd_vops_get_outstanding_cqs(struct ufs_hba *hba,
 	return -EOPNOTSUPP;
 }
 
+static inline int ufshcd_vops_get_outstanding_iags(struct ufs_hba *hba,
+						   unsigned long *oiags)
+{
+	if (hba->vops && hba->vops->get_outstanding_iags)
+		return hba->vops->get_outstanding_iags(hba, oiags);
+
+	return -EOPNOTSUPP;
+}
+
+/*
+ * Number of MCQ interrupt-aggregation groups the controller advertises,
+ * clamped to what the driver can track: CQCFGy.IAG is a 5-bit field and
+ * iag_grp_cqs[] has UFS_MAX_IAG_GROUPS entries. Clamping here keeps the
+ * group id in range for both the iag_grp_cqs[] index and the for_each_set_bit()
+ * iteration bound, and avoids a (1ULL << nr_groups) shift past the type width.
+ */
+static inline u32 ufshcd_mcq_nr_iag_groups(struct ufs_hba *hba)
+{
+	return min_t(u32, FIELD_GET(MCQCAP_MIAG_MASK, hba->mcq_capabilities),
+		     UFS_MAX_IAG_GROUPS);
+}
+
+/*
+ * MCQ interrupt aggregation (IAG) is available when the platform opts in
+ * (UFSHCD_CAP_MCQ_INTR_AGGR) and the controller advertises aggregation
+ * groups (MCQCAP.MIAG).
+ */
+static inline bool ufshcd_is_mcq_iag_allowed(struct ufs_hba *hba)
+{
+	return (hba->caps & UFSHCD_CAP_MCQ_INTR_AGGR) &&
+	       ufshcd_mcq_nr_iag_groups(hba);
+}
+
 static inline int ufshcd_mcq_vops_config_esi(struct ufs_hba *hba)
 {
 	if (hba->vops && hba->vops->config_esi)
