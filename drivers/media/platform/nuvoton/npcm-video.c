@@ -120,6 +120,7 @@ struct npcm_video {
 
 	struct list_head buffers;
 	struct mutex buffer_lock; /* buffer list lock */
+	int irq;
 	unsigned long flags;
 	unsigned int sequence;
 
@@ -1707,6 +1708,7 @@ static int npcm_video_init(struct npcm_video *video)
 		dev_err(dev, "Failed to find VCD IRQ\n");
 		return -ENODEV;
 	}
+	video->irq = irq;
 
 	rc = devm_request_threaded_irq(dev, irq, NULL, npcm_video_irq,
 				       IRQF_ONESHOT, DEVICE_NAME, video);
@@ -1808,6 +1810,8 @@ static void npcm_video_remove(struct platform_device *pdev)
 	struct npcm_video *video = to_npcm_video(v4l2_dev);
 
 	video_unregister_device(&video->vdev);
+	regmap_write(video->vcd_regmap, VCD_INTE, 0);
+	devm_free_irq(dev, video->irq, video);
 	vb2_queue_release(&video->queue);
 	v4l2_ctrl_handler_free(&video->ctrl_handler);
 	v4l2_device_unregister(v4l2_dev);
