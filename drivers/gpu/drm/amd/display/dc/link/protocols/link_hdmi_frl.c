@@ -710,7 +710,7 @@ enum link_result hdmi_frl_perform_link_training_with_retries(
 				msleep(200);
 			status = hdmi_frl_perform_link_training(link->ddc,
 					&link->frl_link_settings);
-		};
+		}
 		retry_count++;
 		FRL_INFO("FRL LINK TRAINING: Retry count = %u out of %u\n", retry_count, max_retries);
 		if (retry_count > max_retries) {
