@@ -598,6 +598,10 @@ static int __init devlink_init(void)
 {
 	int err;
 
+	err = devlink_default_esw_mode_init();
+	if (err)
+		goto out;
+
 	err = register_pernet_subsys(&devlink_pernet_ops);
 	if (err)
 		goto out;
@@ -613,7 +617,10 @@ static int __init devlink_init(void)
 out_unreg_pernet_subsys:
 	unregister_pernet_subsys(&devlink_pernet_ops);
 out:
+	if (err)
+		devlink_default_esw_mode_cleanup();
 	WARN_ON(err);
+
 	return err;
 }
 
