@@ -276,20 +276,22 @@ static int write_tag_to_st_table(struct pci_dev *pdev, int index, u16 tag)
 }
 
 /**
- * pcie_tph_get_cpu_st() - Retrieve Steering Tag for a target memory associated
- * with a specific CPU
+ * pcie_tph_get_cpu_st_ext() - Retrieve Steering Tag for a target memory
+ * associated with a specific CPU, with explicit requester type selection
  * @pdev: PCI device
  * @mem_type: target memory type (volatile or persistent RAM)
+ * @req_type: TPH requester type to select ST namespace
  * @cpu: associated CPU id
  * @tag: Steering Tag to be returned
  *
- * Return the Steering Tag for a target memory that is associated with a
- * specific CPU as indicated by cpu.
+ * Return the Steering Tag for a target memory associated with a specific CPU,
+ * using the specified TPH requester type to select the correct ST namespace.
+ * Validates requester type against hardware negotiated capability limits.
  *
  * Return: 0 if success, otherwise negative value (-errno)
  */
-int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
-			unsigned int cpu, u16 *tag)
+int pcie_tph_get_cpu_st_ext(struct pci_dev *pdev, enum tph_mem_type mem_type,
+			    u8 req_type, unsigned int cpu, u16 *tag)
 {
 #ifdef CONFIG_ACPI
 	struct pci_dev *rp;
@@ -297,6 +299,10 @@ int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
 	union st_info info;
 	u32 cpu_uid;
 	int ret;
+
+	if (req_type == PCI_TPH_REQ_DISABLE || req_type == 2 ||
+		req_type > pdev->tph_max_type)
+		return -EINVAL;
 
 	ret = acpi_get_cpu_uid(cpu, &cpu_uid);
 	if (ret != 0)
@@ -313,16 +319,37 @@ int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
 		return -EINVAL;
 	}
 
-	*tag = tph_extract_tag(mem_type, pdev->tph_req_type, &info);
+	*tag = tph_extract_tag(mem_type, req_type, &info);
 
-	pci_dbg(pdev, "get steering tag: mem_type=%s, cpu=%d, tag=%#04x\n",
+	pci_dbg(pdev, "get steering tag: mem_type=%s, req_type=%u, cpu=%d, tag=%#04x\n",
 		(mem_type == TPH_MEM_TYPE_VM) ? "volatile" : "persistent",
-		cpu, *tag);
+		req_type, cpu, *tag);
 
 	return 0;
 #else
 	return -ENODEV;
 #endif
+}
+EXPORT_SYMBOL(pcie_tph_get_cpu_st_ext);
+
+/**
+ * pcie_tph_get_cpu_st() - Retrieve Steering Tag for a target memory associated
+ * with a specific CPU
+ * @pdev: PCI device
+ * @mem_type: target memory type (volatile or persistent RAM)
+ * @cpu: associated CPU id
+ * @tag: Steering Tag to be returned
+ *
+ * Return the Steering Tag for a target memory associated with a specific CPU,
+ * using the default negotiated TPH requester type.
+ *
+ * Return: 0 if success, otherwise negative value (-errno)
+ */
+int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
+			unsigned int cpu, u16 *tag)
+{
+	return pcie_tph_get_cpu_st_ext(pdev, mem_type, pdev->tph_max_type,
+				       cpu, tag);
 }
 EXPORT_SYMBOL(pcie_tph_get_cpu_st);
 
