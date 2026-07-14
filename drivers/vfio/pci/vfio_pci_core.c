@@ -614,6 +614,8 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 
 	vdev->reset_works = !ret;
 	vdev->tph_opt_in = false;
+	/* Reset TPH status on new user session */
+	pcie_disable_tph(vdev->pdev);
 	pci_save_state(pdev);
 	vdev->pci_saved_state = pci_store_saved_state(pdev);
 	if (!vdev->pci_saved_state)
@@ -760,6 +762,9 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	vdev->needs_reset = true;
 
 	vfio_pci_zdev_close_device(vdev);
+
+	/* Reset TPH status on exit user session */
+	pcie_disable_tph(vdev->pdev);
 
 	/*
 	 * If we have saved state, restore it.  If we can reset the device,
@@ -1562,6 +1567,7 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 	void __user *uarg = (void __user *)arg;
+	int ret;
 
 	switch (cmd) {
 	case VFIO_DEVICE_GET_INFO:
@@ -1573,9 +1579,15 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 	case VFIO_DEVICE_IOEVENTFD:
 		return vfio_pci_ioctl_ioeventfd(vdev, uarg);
 	case VFIO_DEVICE_PCI_HOT_RESET:
-		return vfio_pci_ioctl_pci_hot_reset(vdev, uarg);
+		ret = vfio_pci_ioctl_pci_hot_reset(vdev, uarg);
+		if (!ret)
+			pcie_disable_tph(vdev->pdev);
+		return ret;
 	case VFIO_DEVICE_RESET:
-		return vfio_pci_ioctl_reset(vdev, uarg);
+		ret = vfio_pci_ioctl_reset(vdev, uarg);
+		if (!ret)
+			pcie_disable_tph(vdev->pdev);
+		return ret;
 	case VFIO_DEVICE_SET_IRQS:
 		return vfio_pci_ioctl_set_irqs(vdev, uarg);
 	default:
