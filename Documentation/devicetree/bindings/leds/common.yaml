@@ -179,6 +179,15 @@ properties:
       initialization. If the option is not set then max brightness is used.
     $ref: /schemas/types.yaml#/definitions/uint32
 
+  default-intensity:
+    description:
+      The initial intensity of the LED color component. As the intensity of
+      each sub-LED is multiplied by the overall brightness, without this
+      property on a sub-LED, it may effectively be initialized at a brightness
+      of 0 regardless of its linux,default-trigger and default-brightness
+      properties.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
   panic-indicator:
     description:
       This property specifies that the LED should be used, if at all possible,
