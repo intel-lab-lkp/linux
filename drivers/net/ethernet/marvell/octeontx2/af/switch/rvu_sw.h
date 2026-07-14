@@ -12,5 +12,6 @@
 #define RVU_SW_INVALID_PORT_ID	((u32)~0U)
 
 u32 rvu_sw_port_id(struct rvu *rvu, u16 pcifunc);
+void rvu_sw_shutdown(void);
 
 #endif
