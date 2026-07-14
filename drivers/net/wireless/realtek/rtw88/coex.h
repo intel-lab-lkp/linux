@@ -430,4 +430,8 @@ static inline void rtw_coex_active_query_bt_info(struct rtw_dev *rtwdev)
 		rtw_coex_query_bt_info(rtwdev);
 }
 
+void rtw_coex_8723bs_scan_workaround(struct rtw_dev *rtwdev);
+void rtw_coex_8723bs_pre_auth_h2c(struct rtw_dev *rtwdev);
+void rtw_coex_8723bs_ensure_pta_path(struct rtw_dev *rtwdev);
+
 #endif
