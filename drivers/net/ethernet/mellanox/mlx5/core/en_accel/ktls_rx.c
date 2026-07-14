@@ -620,12 +620,15 @@ void mlx5e_ktls_handle_ctx_completion(struct mlx5e_icosq_wqe_info *wi)
 	queue_work(rule->priv->tls->rx_wq, &rule->work);
 }
 
-static int mlx5e_ktls_sk_get_rxq(struct sock *sk)
+static int mlx5e_ktls_sk_get_rxq(struct mlx5e_priv *priv, struct sock *sk)
 {
 	int rxq = sk_rx_queue_get(sk);
 
 	if (unlikely(rxq == -1))
-		rxq = 0;
+		return 0;
+
+	if (unlikely(rxq >= priv->channels.num))
+		return -EINVAL;
 
 	return rxq;
 }
@@ -673,7 +676,11 @@ int mlx5e_ktls_add_rx(struct net_device *netdev, struct sock *sk,
 	INIT_LIST_HEAD(&priv_rx->list);
 	spin_lock_init(&priv_rx->lock);
 
-	rxq = mlx5e_ktls_sk_get_rxq(sk);
+	rxq = mlx5e_ktls_sk_get_rxq(priv, sk);
+	if (unlikely(rxq < 0)) {
+		err = rxq;
+		goto err_create_tir;
+	}
 	priv_rx->rxq = rxq;
 	priv_rx->sk = sk;
 
