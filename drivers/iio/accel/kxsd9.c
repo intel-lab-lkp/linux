@@ -433,10 +433,9 @@ int kxsd9_common_probe(struct device *dev,
 	ret = devm_regulator_bulk_get(dev,
 				      ARRAY_SIZE(st->regs),
 				      st->regs);
-	if (ret) {
-		dev_err(dev, "Cannot get regulators\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Cannot get regulators\n");
+
 	/* Default scaling */
 	st->scale = KXSD9_CTRL_C_FS_2G;
 
@@ -447,13 +446,15 @@ int kxsd9_common_probe(struct device *dev,
 					 kxsd9_trigger_handler,
 					 &kxsd9_buffer_setup_ops);
 	if (ret) {
-		dev_err(dev, "triggered buffer setup failed\n");
+		dev_err_probe(dev, ret, "triggered buffer setup failed\n");
 		goto err_power_down;
 	}
 
 	ret = iio_device_register(indio_dev);
-	if (ret)
+	if (ret) {
+		dev_err_probe(dev, ret, "device register failed\n");
 		goto err_cleanup_buffer;
+	}
 
 	dev_set_drvdata(dev, indio_dev);
 
