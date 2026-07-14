@@ -602,10 +602,10 @@ static inline int pdev_enable_cap_pri(struct pci_dev *pdev)
 
 	if (dev_data->flags & AMD_IOMMU_DEVICE_FLAG_PRI_SUP) {
 		/*
-		 * First reset the PRI state of the device.
-		 * FIXME: Hardcode number of outstanding requests for now
+		 * Reset PRI then enable with the device-advertised maximum.
+		 * pci_enable_pri() clamps @reqs to PCI_PRI_MAX_REQ.
 		 */
-		if (!pci_reset_pri(pdev) && !pci_enable_pri(pdev, 32)) {
+		if (!pci_reset_pri(pdev) && !pci_enable_pri(pdev, ~0U)) {
 			dev_data->pri_enabled = 1;
 			dev_data->pri_tlp     = pci_prg_resp_pasid_required(pdev);
 
