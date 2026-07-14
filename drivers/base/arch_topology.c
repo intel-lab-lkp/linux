@@ -850,6 +850,29 @@ static bool __init acpi_cpu_is_threaded(int cpu)
 	return !!is_threaded;
 }
 
+unsigned int nr_possible_packages __ro_after_init;
+EXPORT_SYMBOL(nr_possible_packages);
+
+static int package_ids[1 << CONFIG_NODES_SHIFT] __initdata;
+static inline void count_packages(unsigned int pkg_id)
+{
+	int max_packages = 1 << CONFIG_NODES_SHIFT;
+	int i;
+
+	/* This check will be skipped for the first caller */
+	for (i = 0; i < nr_possible_packages; i++)
+		if (package_ids[i] == pkg_id)
+			return;
+
+	if (nr_possible_packages == max_packages) {
+		pr_warn("Number of packages exceeds kernel NUMA node limits [%d]!\n",
+			max_packages);
+		return;
+	}
+
+	package_ids[nr_possible_packages++] = pkg_id;
+}
+
 /*
  * Propagate the topology information of the processor_topology_node tree to the
  * cpu_topology array.
@@ -912,6 +935,7 @@ __weak int __init parse_acpi_topology(void)
 		cpu_topology[cpu].cluster_id = topology_id;
 		topology_id = find_acpi_cpu_topology_package(cpu);
 		cpu_topology[cpu].package_id = topology_id;
+		count_packages(topology_id);
 	}
 
 	/*
@@ -927,6 +951,8 @@ __weak int __init parse_acpi_topology(void)
 
 	cpu_smt_set_num_threads(max_smt_thread_num, max_smt_thread_num);
 	xa_destroy(&hetero_cpu);
+
+	pr_info("ACPI: System has %u Package(s) detected\n", nr_possible_packages);
 	return 0;
 }
 
