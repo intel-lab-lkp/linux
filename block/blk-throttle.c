@@ -1489,47 +1489,37 @@ static struct cftype throtl_legacy_files[] = {
 	{ }	/* terminate */
 };
 
+static void tg_prfill_limit_field(struct seq_file *sf, const char *key,
+				  u64 val, bool is_uint)
+{
+	u64 dflt = is_uint ? UINT_MAX : U64_MAX;
+
+	if (val == dflt)
+		seq_printf(sf, " %s=max", key);
+	else if (is_uint)
+		seq_printf(sf, " %s=%u", key, (unsigned int)val);
+	else
+		seq_printf(sf, " %s=%llu", key, val);
+}
+
 static u64 tg_prfill_limit(struct seq_file *sf, struct blkg_policy_data *pd,
 			 int off)
 {
 	struct throtl_grp *tg = pd_to_tg(pd);
 	const char *dname = blkg_dev_name(pd->blkg);
-	u64 bps_dft;
-	unsigned int iops_dft;
 
 	if (!dname)
 		return 0;
 
-	bps_dft = U64_MAX;
-	iops_dft = UINT_MAX;
-
-	if (tg->bps[READ] == bps_dft &&
-	    tg->bps[WRITE] == bps_dft &&
-	    tg->iops[READ] == iops_dft &&
-	    tg->iops[WRITE] == iops_dft)
+	if (tg->bps[READ] == U64_MAX && tg->bps[WRITE] == U64_MAX &&
+	    tg->iops[READ] == UINT_MAX && tg->iops[WRITE] == UINT_MAX)
 		return 0;
 
 	seq_printf(sf, "%s", dname);
-	if (tg->bps[READ] == U64_MAX)
-		seq_printf(sf, " rbps=max");
-	else
-		seq_printf(sf, " rbps=%llu", tg->bps[READ]);
-
-	if (tg->bps[WRITE] == U64_MAX)
-		seq_printf(sf, " wbps=max");
-	else
-		seq_printf(sf, " wbps=%llu", tg->bps[WRITE]);
-
-	if (tg->iops[READ] == UINT_MAX)
-		seq_printf(sf, " riops=max");
-	else
-		seq_printf(sf, " riops=%u", tg->iops[READ]);
-
-	if (tg->iops[WRITE] == UINT_MAX)
-		seq_printf(sf, " wiops=max");
-	else
-		seq_printf(sf, " wiops=%u", tg->iops[WRITE]);
-
+	tg_prfill_limit_field(sf, "rbps",  tg->bps[READ],  false);
+	tg_prfill_limit_field(sf, "wbps",  tg->bps[WRITE], false);
+	tg_prfill_limit_field(sf, "riops", tg->iops[READ], true);
+	tg_prfill_limit_field(sf, "wiops", tg->iops[WRITE], true);
 	seq_printf(sf, "\n");
 	return 0;
 }
