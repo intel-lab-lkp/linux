@@ -124,13 +124,6 @@ static int ufs_rpmb_route_frames(struct device *dev, u8 *req, unsigned int req_l
 	return ret;
 }
 
-static void ufs_rpmb_device_release(struct device *dev)
-{
-	struct ufs_rpmb_dev *ufs_rpmb = dev_get_drvdata(dev);
-
-	rpmb_dev_unregister(ufs_rpmb->rdev);
-}
-
 /* UFS RPMB device registration */
 int ufs_rpmb_probe(struct ufs_hba *hba)
 {
@@ -140,6 +133,8 @@ int ufs_rpmb_probe(struct ufs_hba *hba)
 	int region;
 	u32 cap;
 	int ret;
+
+	INIT_LIST_HEAD(&hba->rpmbs);
 
 	if (!hba->ufs_rpmb_wlun || hba->dev_info.b_advanced_rpmb_en) {
 		dev_info(hba->dev, "Skip OP-TEE RPMB registration\n");
@@ -151,8 +146,6 @@ int ufs_rpmb_probe(struct ufs_hba *hba)
 		dev_err(hba->dev, "UFS Device ID not available\n");
 		return -EINVAL;
 	}
-
-	INIT_LIST_HEAD(&hba->rpmbs);
 
 	struct rpmb_descr descr = {
 		.type = RPMB_TYPE_UFS,
@@ -174,7 +167,6 @@ int ufs_rpmb_probe(struct ufs_hba *hba)
 		ufs_rpmb->hba = hba;
 		ufs_rpmb->dev.parent = &hba->ufs_rpmb_wlun->sdev_gendev;
 		ufs_rpmb->dev.bus = &ufs_rpmb_bus_type;
-		ufs_rpmb->dev.release = ufs_rpmb_device_release;
 		dev_set_name(&ufs_rpmb->dev, "ufs_rpmb%d", region);
 
 		/* Set driver data BEFORE device_register */
@@ -224,6 +216,7 @@ err_out:
 	kfree(cid);
 	list_for_each_entry_safe(it, tmp, &hba->rpmbs, node) {
 		list_del(&it->node);
+		rpmb_dev_unregister(it->rdev);
 		device_unregister(&it->dev);
 	}
 
@@ -244,6 +237,7 @@ void ufs_rpmb_remove(struct ufs_hba *hba)
 		/* Remove from list first */
 		list_del(&ufs_rpmb->node);
 		/* Unregister device */
+		rpmb_dev_unregister(ufs_rpmb->rdev);
 		device_unregister(&ufs_rpmb->dev);
 	}
 
