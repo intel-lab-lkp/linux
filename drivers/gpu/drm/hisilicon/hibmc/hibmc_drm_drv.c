@@ -424,6 +424,16 @@ err:
 	return ret;
 }
 
+static inline void hibmc_set_enable_flag(struct hibmc_drm_private *priv)
+{
+	writel(HIBMC_ENABLE_STATE, priv->mmio + HIBMC_ENABLE_FLAG);
+}
+
+static inline void hibmc_set_disable_flag(struct hibmc_drm_private *priv)
+{
+	writel(0, priv->mmio + HIBMC_ENABLE_FLAG);
+}
+
 static int hibmc_pci_probe(struct pci_dev *pdev,
 			   const struct pci_device_id *ent)
 {
@@ -468,6 +478,8 @@ static int hibmc_pci_probe(struct pci_dev *pdev,
 
 	drm_client_setup(dev, NULL);
 
+	hibmc_set_enable_flag(priv);
+
 	return 0;
 
 err_unload:
@@ -480,6 +492,7 @@ static void hibmc_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
+	hibmc_set_disable_flag(to_hibmc_drm_private(dev));
 	drm_dev_unregister(dev);
 	hibmc_unload(dev);
 }
