@@ -469,7 +469,8 @@ static int __init rtas_fadump_process(struct fw_dump *fadump_conf)
 				pr_err("Dump taken by platform is not valid (%d)\n", i);
 				rc = -EINVAL;
 			}
-			if (fdm_active->rgn[i].bytes_dumped != fdm_active->rgn[i].source_len) {
+			if (be64_to_cpu(fdm_active->rgn[i].bytes_dumped)
+			    > be64_to_cpu(fdm_active->rgn[i].source_len)) {
 				pr_err("Dump taken by platform is incomplete (%d)\n", i);
 				rc = -EINVAL;
 			}
