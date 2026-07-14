@@ -1289,3 +1289,4 @@
 };
 
 #include "t8112-pmgr.dtsi"
+#include "hwmon-common.dtsi"
