@@ -778,17 +778,21 @@ static int process_msg_open(struct rnbd_srv_session *srv_sess,
 		}
 	}
 
-	ret = rnbd_srv_create_dev_session_sysfs(srv_sess_dev);
-	if (ret) {
-		mutex_unlock(&srv_dev->lock);
-		rnbd_srv_err(srv_sess_dev,
-			      "Opening device failed, failed to create dev client sysfs files, err: %d\n",
-			      ret);
-		goto free_srv_sess_dev;
-	}
-
+	/*
+	 * Add the session device to the list before initializing its
+	 * kobject. If sysfs creation fails, kobject_put() invokes the
+	 * release callback, which removes the object from this list and
+	 * releases all resources associated with the session device.
+	 */
 	list_add(&srv_sess_dev->dev_list, &srv_dev->sess_dev_list);
 	mutex_unlock(&srv_dev->lock);
+
+	ret = rnbd_srv_create_dev_session_sysfs(srv_sess_dev);
+	if (ret) {
+		pr_err("Opening device '%s' on session %s failed, failed to create dev client sysfs files, err: %d\n",
+		       full_path, srv_sess->sessname, ret);
+		goto free_path;
+	}
 
 	rnbd_srv_info(srv_sess_dev, "Opened device '%s'\n", srv_dev->name);
 
