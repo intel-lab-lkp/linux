@@ -9,7 +9,7 @@
 #ifndef LINUX_PCI_TPH_H
 #define LINUX_PCI_TPH_H
 
-#include <linux/pci_regs.h>
+#include <linux/pci.h>
 
 /*
  * According to the ECN for PCI Firmware Spec, Steering Tag can be different
@@ -23,6 +23,18 @@ enum tph_mem_type {
 };
 
 #ifdef CONFIG_PCIE_TPH
+/**
+ * pcie_std_tph_supported - check standard TPH requester support
+ * @pdev: PCI device
+ */
+#define pcie_std_tph_supported(pdev) \
+	((pdev)->tph_max_type >= PCI_TPH_REQ_TPH_ONLY)
+/**
+ * pcie_ext_tph_supported - check extended TPH requester support
+ * @pdev: PCI device
+ */
+#define pcie_ext_tph_supported(pdev) \
+	((pdev)->tph_max_type == PCI_TPH_REQ_EXT_TPH)
 int pcie_tph_set_st_entry(struct pci_dev *pdev,
 			  unsigned int index, u16 tag);
 int pcie_tph_get_cpu_st_ext(struct pci_dev *dev, enum tph_mem_type mem_type,
@@ -37,6 +49,8 @@ u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev);
 u8 pcie_tph_enabled_req_type(struct pci_dev *pdev);
 u8 pcie_tph_completer_type(struct pci_dev *pdev);
 #else
+#define pcie_std_tph_supported(pdev) false
+#define pcie_ext_tph_supported(pdev) false
 static inline int pcie_tph_set_st_entry(struct pci_dev *pdev,
 					unsigned int index, u16 tag)
 { return -EINVAL; }
