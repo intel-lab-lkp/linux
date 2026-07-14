@@ -1993,6 +1993,7 @@ lpfc_cmpl_reglogin_reglogin_issue(struct lpfc_vport *vport,
 	LPFC_MBOXQ_t *pmb = (LPFC_MBOXQ_t *) arg;
 	MAILBOX_t *mb = &pmb->u.mb;
 	uint32_t did  = mb->un.varWords[1];
+	int rc;
 
 	if (mb->mbxStatus) {
 		/* RegLogin failed */
@@ -2071,7 +2072,13 @@ lpfc_cmpl_reglogin_reglogin_issue(struct lpfc_vport *vport,
 
 		ndlp->nlp_prev_state = NLP_STE_REG_LOGIN_ISSUE;
 		lpfc_nlp_set_state(vport, ndlp, NLP_STE_PRLI_ISSUE);
-		if (lpfc_issue_els_prli(vport, ndlp, 0)) {
+		rc = lpfc_issue_els_prli(vport, ndlp, 0);
+		if (rc) {
+			lpfc_vlog_msg(vport, KERN_NOTICE,
+				      LOG_ELS | LOG_DISCOVERY | LOG_NODE,
+				      "3015 PRLI Issue returning %d to DID "
+				      "x%06x, Send LOGO\n",
+				      rc, ndlp->nlp_DID);
 			lpfc_issue_els_logo(vport, ndlp, 0);
 			ndlp->nlp_prev_state = NLP_STE_REG_LOGIN_ISSUE;
 			lpfc_nlp_set_state(vport, ndlp, NLP_STE_NPR_NODE);
