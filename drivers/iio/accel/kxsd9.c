@@ -139,18 +139,21 @@ static int kxsd9_write_raw(struct iio_dev *indio_dev,
 			   int val2,
 			   long mask)
 {
-	int ret = -EINVAL;
 	struct kxsd9_state *st = iio_priv(indio_dev);
+	int ret;
 
-	pm_runtime_get_sync(st->dev);
+	if (mask != IIO_CHAN_INFO_SCALE)
+		return -EINVAL;
 
-	if (mask == IIO_CHAN_INFO_SCALE) {
-		/* Check no integer component */
-		if (val)
-			ret = -EINVAL;
-		else
-			ret = kxsd9_write_scale(indio_dev, val2);
-	}
+	/* Check no integer component */
+	if (val)
+		return -EINVAL;
+
+	ret = pm_runtime_resume_and_get(st->dev);
+	if (ret < 0)
+		return ret;
+
+	ret = kxsd9_write_scale(indio_dev, val2);
 
 	pm_runtime_put_autosuspend(st->dev);
 
