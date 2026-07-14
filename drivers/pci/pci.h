@@ -773,6 +773,7 @@ static inline int pci_dev_set_disconnected(struct pci_dev *dev, void *unused)
 #define PCI_LINK_CHANGING 5
 #define PCI_LINK_LBMS_SEEN	6
 #define PCI_DEV_ALLOW_BINDING 7
+#define PCI_DEV_BUSMASTER 8
 
 static inline void pci_dev_assign_added(struct pci_dev *dev)
 {

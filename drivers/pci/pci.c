@@ -2045,7 +2045,7 @@ static void pci_enable_bridge(struct pci_dev *dev)
 		pci_enable_bridge(bridge);
 
 	if (pci_is_enabled(dev)) {
-		if (!dev->is_busmaster)
+		if (!pci_dev_is_busmaster(dev))
 			pci_set_master(dev);
 		return;
 	}
@@ -2205,7 +2205,7 @@ void pci_disable_device(struct pci_dev *dev)
 
 	do_pci_disable_device(dev);
 
-	dev->is_busmaster = 0;
+	pci_dev_assign_busmaster(dev, false);
 }
 EXPORT_SYMBOL(pci_disable_device);
 
@@ -4106,6 +4106,33 @@ void pci_unmap_iospace(struct resource *res)
 }
 EXPORT_SYMBOL(pci_unmap_iospace);
 
+/**
+ * pci_dev_is_busmaster - Query the bus mastering bookkeeping flag
+ * @pdev: the PCI device to query
+ *
+ * Returns: the current value of the bookkeeping flag; the PCI_COMMAND
+ * register is not consulted.
+ */
+bool pci_dev_is_busmaster(const struct pci_dev *pdev)
+{
+	return test_bit(PCI_DEV_BUSMASTER, &pdev->priv_flags);
+}
+EXPORT_SYMBOL(pci_dev_is_busmaster);
+
+/**
+ * pci_dev_assign_busmaster - Set the bus mastering bookkeeping flag
+ * @pdev: the PCI device
+ * @busmaster: new flag value
+ *
+ * Only updates the bookkeeping flag; the PCI_COMMAND register is left
+ * untouched.
+ */
+void pci_dev_assign_busmaster(struct pci_dev *pdev, bool busmaster)
+{
+	assign_bit(PCI_DEV_BUSMASTER, &pdev->priv_flags, busmaster);
+}
+EXPORT_SYMBOL(pci_dev_assign_busmaster);
+
 static void __pci_set_master(struct pci_dev *dev, bool enable)
 {
 	u16 old_cmd, cmd;
@@ -4120,7 +4147,7 @@ static void __pci_set_master(struct pci_dev *dev, bool enable)
 			enable ? "enabling" : "disabling");
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
-	dev->is_busmaster = enable;
+	pci_dev_assign_busmaster(dev, enable);
 }
 
 /**
