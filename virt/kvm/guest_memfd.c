@@ -66,10 +66,10 @@ static pgoff_t kvm_gmem_get_index(struct kvm_memory_slot *slot, gfn_t gfn)
  * On successful return the guest sees a zero page so as to avoid
  * leaking host data and the up-to-date flag is set.
  */
-static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
-				  gfn_t gfn, struct folio *folio)
+static int kvm_gmem_make_private(struct kvm *kvm, struct kvm_memory_slot *slot,
+				 gfn_t gfn, struct folio *folio)
 {
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_PREPARE
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_CONVERT
 	unsigned long nr_pages = folio_nr_pages(folio);
 	pgoff_t index;
 
@@ -90,8 +90,8 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 	gfn = ALIGN_DOWN(gfn, nr_pages);
 	index = kvm_gmem_get_index(slot, gfn);
 
-	return kvm_arch_gmem_prepare(kvm, gfn, folio_file_pfn(folio, index),
-				     nr_pages, folio_order(folio));
+	return kvm_arch_gmem_convert(kvm, gfn, folio_file_pfn(folio, index),
+				     nr_pages, folio_order(folio), true);
 #else
 	return 0;
 #endif
@@ -798,7 +798,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		folio_mark_uptodate(folio);
 	}
 
-	r = kvm_gmem_prepare_folio(kvm, slot, gfn, folio);
+	r = kvm_gmem_make_private(kvm, slot, gfn, folio);
 
 	folio_unlock(folio);
 
