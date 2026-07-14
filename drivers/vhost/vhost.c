@@ -729,6 +729,21 @@ static void vhost_workers_free(struct vhost_dev *dev)
 
 	for (i = 0; i < dev->nvqs; i++)
 		rcu_assign_pointer(dev->vqs[i]->worker, NULL);
+
+	/*
+	 * vhost_vq_work_queue() reads vq->worker under rcu_read_lock(), so a
+	 * caller that fetched a worker before we cleared the pointers above
+	 * may still be about to queue work on it.  Wait for those RCU readers
+	 * to finish before freeing the worker, then run whatever they queued
+	 * so nothing is left with VHOST_WORK_QUEUED set.  Mirrors
+	 * vhost_worker_killed().
+	 */
+	if (!xa_empty(&dev->worker_xa)) {
+		synchronize_rcu();
+		xa_for_each(&dev->worker_xa, i, worker)
+			vhost_run_work_list(worker);
+	}
+
 	/*
 	 * Free the default worker we created and cleanup workers userspace
 	 * created but couldn't clean up (it forgot or crashed).
