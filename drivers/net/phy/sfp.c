@@ -477,6 +477,16 @@ static void sfp_quirk_2500basex(const struct sfp_eeprom_id *id,
 	__set_bit(PHY_INTERFACE_MODE_2500BASEX, caps->interfaces);
 }
 
+static void sfp_quirk_no_sgmii(const struct sfp_eeprom_id *id,
+			       struct sfp_module_caps *caps)
+{
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
+			   caps->link_modes);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
+			   caps->link_modes);
+	__clear_bit(PHY_INTERFACE_MODE_SGMII, caps->interfaces);
+}
+
 static void sfp_quirk_disable_autoneg(const struct sfp_eeprom_id *id,
 				      struct sfp_module_caps *caps)
 {
@@ -537,6 +547,10 @@ static const struct sfp_quirk sfp_quirks[] = {
 	// protocol to talk to the PHY and needs 4 sec wait before probing the
 	// PHY.
 	SFP_QUIRK_F("FS", "SFP-10G-T", sfp_fixup_fs_10gt),
+
+	// These are sold as 1000base-X compatible. Thus, make sure we don't
+	// use SGMII.
+	SFP_QUIRK_S("FINISAR CORP.", "FCLF8521P2BTL", sfp_quirk_no_sgmii),
 
 	// Fiberstore SFP-2.5G-T and SFP-10GM-T uses Rollball protocol to talk
 	// to the PHY and needs 4 sec wait before probing the PHY.
