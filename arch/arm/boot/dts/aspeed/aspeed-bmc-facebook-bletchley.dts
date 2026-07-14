@@ -6,6 +6,7 @@
 #include <dt-bindings/gpio/aspeed-gpio.h>
 #include <dt-bindings/usb/pd.h>
 #include <dt-bindings/leds/leds-pca955x.h>
+#include <dt-bindings/leds/leds-pca9532.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/i2c/i2c.h>
 
@@ -113,6 +114,58 @@
 		};
 	};
 
+	fan_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "fan0_blue";
+			retain-state-shutdown;
+			default-state = "on";
+			gpios = <&fan_leds_alt 8 GPIO_ACTIVE_HIGH>;
+		};
+		led-1 {
+			label = "fan1_blue";
+			retain-state-shutdown;
+			default-state = "on";
+			gpios = <&fan_leds_alt 9 GPIO_ACTIVE_HIGH>;
+		};
+		led-2 {
+			label = "fan2_blue";
+			retain-state-shutdown;
+			default-state = "on";
+			gpios = <&fan_leds_alt 10 GPIO_ACTIVE_HIGH>;
+		};
+		led-3 {
+			label = "fan3_blue";
+			retain-state-shutdown;
+			default-state = "on";
+			gpios = <&fan_leds_alt 11 GPIO_ACTIVE_HIGH>;
+		};
+		led-4 {
+			label = "fan0_amber";
+			retain-state-shutdown;
+			default-state = "off";
+			gpios = <&fan_leds_alt 12 GPIO_ACTIVE_HIGH>;
+		};
+		led-5 {
+			label = "fan1_amber";
+			retain-state-shutdown;
+			default-state = "off";
+			gpios = <&fan_leds_alt 13 GPIO_ACTIVE_HIGH>;
+		};
+		led-6 {
+			label = "fan2_amber";
+			retain-state-shutdown;
+			default-state = "off";
+			gpios = <&fan_leds_alt 14 GPIO_ACTIVE_HIGH>;
+		};
+		led-7 {
+			label = "fan3_amber";
+			retain-state-shutdown;
+			default-state = "off";
+			gpios = <&fan_leds_alt 15 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
 	sled1_gpio_leds {
 		compatible = "gpio-leds";
 		led-0 {
@@ -126,6 +179,22 @@
 			retain-state-shutdown;
 			default-state = "keep";
 			gpios = <&sled1_leds 1 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	sled1_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "sled1_amber";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled1_leds_alt 0 GPIO_ACTIVE_LOW>;
+		};
+		led-1 {
+			label = "sled1_blue";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled1_leds_alt 1 GPIO_ACTIVE_LOW>;
 		};
 	};
 
@@ -145,6 +214,22 @@
 		};
 	};
 
+	sled2_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "sled2_amber";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled2_leds_alt 0 GPIO_ACTIVE_LOW>;
+		};
+		led-1 {
+			label = "sled2_blue";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled2_leds_alt 1 GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	sled3_gpio_leds {
 		compatible = "gpio-leds";
 		led-0 {
@@ -158,6 +243,22 @@
 			retain-state-shutdown;
 			default-state = "keep";
 			gpios = <&sled3_leds 1 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	sled3_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "sled3_amber";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled3_leds_alt 0 GPIO_ACTIVE_LOW>;
+		};
+		led-1 {
+			label = "sled3_blue";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled3_leds_alt 1 GPIO_ACTIVE_LOW>;
 		};
 	};
 
@@ -177,6 +278,22 @@
 		};
 	};
 
+	sled4_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "sled4_amber";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled4_leds_alt 0 GPIO_ACTIVE_LOW>;
+		};
+		led-1 {
+			label = "sled4_blue";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled4_leds_alt 1 GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	sled5_gpio_leds {
 		compatible = "gpio-leds";
 		led-0 {
@@ -193,6 +310,22 @@
 		};
 	};
 
+	sled5_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "sled5_amber";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled5_leds_alt 0 GPIO_ACTIVE_LOW>;
+		};
+		led-1 {
+			label = "sled5_blue";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled5_leds_alt 1 GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	sled6_gpio_leds {
 		compatible = "gpio-leds";
 		led-0 {
@@ -206,6 +339,22 @@
 			retain-state-shutdown;
 			default-state = "keep";
 			gpios = <&sled6_leds 1 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	sled6_gpio_leds_alt {
+		compatible = "gpio-leds";
+		led-0 {
+			label = "sled6_amber";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled6_leds_alt 0 GPIO_ACTIVE_LOW>;
+		};
+		led-1 {
+			label = "sled6_blue";
+			retain-state-shutdown;
+			default-state = "keep";
+			gpios = <&sled6_leds_alt 1 GPIO_ACTIVE_LOW>;
 		};
 	};
 
@@ -401,6 +550,24 @@
 		"","","","";
 	};
 
+	sled1_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"led-sled1-amber","led-sled1-blue","SLED1_RST_IOEXP","SLED1_MD_REF_PWM",
+		"","","","",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
+	};
+
 	sled1_fusb302: typec-portc@22 {
 		compatible = "fcs,fusb302";
 		reg = <0x22>;
@@ -485,6 +652,24 @@
 		"","","","",
 		"","","","",
 		"","","","";
+	};
+
+	sled2_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"led-sled2-amber","led-sled2-blue","SLED2_RST_IOEXP","SLED2_MD_REF_PWM",
+		"","","","",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
 	};
 
 	sled2_fusb302: typec-portc@22 {
@@ -573,6 +758,24 @@
 		"","","","";
 	};
 
+	sled3_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"led-sled3-amber","led-sled3-blue","SLED3_RST_IOEXP","SLED3_MD_REF_PWM",
+		"","","","",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
+	};
+
 	sled3_fusb302: typec-portc@22 {
 		compatible = "fcs,fusb302";
 		reg = <0x22>;
@@ -657,6 +860,24 @@
 		"","","","",
 		"","","","",
 		"","","","";
+	};
+
+	sled4_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"led-sled4-amber","led-sled4-blue","SLED4_RST_IOEXP","SLED4_MD_REF_PWM",
+		"","","","",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
 	};
 
 	sled4_fusb302: typec-portc@22 {
@@ -745,6 +966,24 @@
 		"","","","";
 	};
 
+	sled5_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"led-sled5-amber","led-sled5-blue","SLED5_RST_IOEXP","SLED5_MD_REF_PWM",
+		"","","","",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
+	};
+
 	sled5_fusb302: typec-portc@22 {
 		compatible = "fcs,fusb302";
 		reg = <0x22>;
@@ -829,6 +1068,24 @@
 		"","","","",
 		"","","","",
 		"","","","";
+	};
+
+	sled6_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"led-sled6-amber","led-sled6-blue","SLED6_RST_IOEXP","SLED6_MD_REF_PWM",
+		"","","","",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
 	};
 
 	sled6_fusb302: typec-portc@22 {
@@ -956,6 +1213,38 @@
 		"power-fan2-good","power-fan3-good",
 		"","","","",
 		"","","","";
+	};
+
+	fan_leds_alt: pca9532@66 {
+		compatible = "nxp,pca9532";
+		reg = <0x66>;
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		gpio-line-names =
+		"presence-fan0","presence-fan1",
+		"presence-fan2","presence-fan3",
+		"power-fan0-good","power-fan1-good",
+		"power-fan2-good","power-fan3-good",
+		"","","","",
+		"","","","";
+
+		led-0 { type = <PCA9532_TYPE_GPIO>; };
+		led-1 { type = <PCA9532_TYPE_GPIO>; };
+		led-2 { type = <PCA9532_TYPE_GPIO>; };
+		led-3 { type = <PCA9532_TYPE_GPIO>; };
+		led-4 { type = <PCA9532_TYPE_GPIO>; };
+		led-5 { type = <PCA9532_TYPE_GPIO>; };
+		led-6 { type = <PCA9532_TYPE_GPIO>; };
+		led-7 { type = <PCA9532_TYPE_GPIO>; };
+		led-8 { type = <PCA9532_TYPE_GPIO>; };
+		led-9 { type = <PCA9532_TYPE_GPIO>; };
+		led-10 { type = <PCA9532_TYPE_GPIO>; };
+		led-11 { type = <PCA9532_TYPE_GPIO>; };
+		led-12 { type = <PCA9532_TYPE_GPIO>; };
+		led-13 { type = <PCA9532_TYPE_GPIO>; };
+		led-14 { type = <PCA9532_TYPE_GPIO>; };
+		led-15 { type = <PCA9532_TYPE_GPIO>; };
 	};
 };
 
