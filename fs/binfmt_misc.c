@@ -296,6 +296,7 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	const char *interpreter;
 	struct file *interp_file;
 	struct binfmt_misc *misc;
+	bool transparent = false;
 	bool preserve_argv0;
 	int retval;
 
@@ -306,10 +307,6 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	fmt = get_binfmt_handler(misc, bprm);
 	if (!fmt)
 		return -ENOEXEC;
-
-	/* Need to be able to load the file after exec */
-	if (bprm->interp_flags & BINPRM_FLAGS_PATH_INACCESSIBLE)
-		return -ENOENT;
 
 	interpreter = entry_select_interpreter(fmt, bprm);
 	if (IS_ERR(interpreter))
@@ -326,10 +323,13 @@ static int load_misc_binary(struct linux_binprm *bprm)
 		/* Clear so it can't accumulate into a nested interpreter level. */
 		bprm->bpf_flags = 0;
 
-		preserve_argv0 = f & BPF_BINPRM_PRESERVE_ARGV0;
+		transparent = f & BPF_BINPRM_TRANSPARENT;
+		/* In transparent mode argv[0] is already the caller's. */
+		preserve_argv0 = (f & BPF_BINPRM_PRESERVE_ARGV0) && !transparent;
 		if (f & BPF_BINPRM_CREDENTIALS)
 			bprm->execfd_creds = 1;
-		if (f & (BPF_BINPRM_CREDENTIALS | BPF_BINPRM_EXECFD))
+		if (f & (BPF_BINPRM_CREDENTIALS | BPF_BINPRM_EXECFD |
+			 BPF_BINPRM_TRANSPARENT))
 			bprm->have_execfd = 1;
 	} else {
 		preserve_argv0 = fmt->flags & MISC_FMT_PRESERVE_ARGV0;
@@ -339,45 +339,63 @@ static int load_misc_binary(struct linux_binprm *bprm)
 			bprm->have_execfd = 1;
 	}
 
-	/* The entry's own choice - not one accumulated from an earlier level. */
-	if (preserve_argv0) {
-		bprm->interp_flags |= BINPRM_FLAGS_PRESERVE_ARGV0;
+	if (transparent) {
+		/*
+		 * Transparent execution: the interpreter takes the binary from
+		 * AT_EXECFD, so leave the argument vector and bprm->interp as
+		 * the caller set them. argv[0] and /proc/pid/cmdline then look
+		 * like a direct execution of the binary, and a binary passed as
+		 * an inaccessible O_CLOEXEC fd to execveat() can be run at all.
+		 */
+
+		/* No argv is built, so drop any staged interpreter argument. */
+		kfree(bprm->bpf_interp_arg);
+		bprm->bpf_interp_arg = NULL;
 	} else {
-		retval = remove_arg_zero(bprm);
-		if (retval)
-			return retval;
-	}
+		/* The interpreter has to be able to load the binary by path. */
+		if (bprm->interp_flags & BINPRM_FLAGS_PATH_INACCESSIBLE)
+			return -ENOENT;
 
-	/* make the binary the last argument to the interpreter */
-	retval = copy_string_kernel(bprm->interp, bprm);
-	if (retval < 0)
-		return retval;
-	bprm->argc++;
+		/* The entry's own choice - not one accumulated from an earlier level. */
+		if (preserve_argv0) {
+			bprm->interp_flags |= BINPRM_FLAGS_PRESERVE_ARGV0;
+		} else {
+			retval = remove_arg_zero(bprm);
+			if (retval)
+				return retval;
+		}
 
-	/*
-	 * A single optional argument to the interpreter, inserted between it
-	 * and the binary just like the argument of a #! interpreter line.
-	 */
-	if (bprm->bpf_interp_arg) {
-		retval = copy_string_kernel(bprm->bpf_interp_arg, bprm);
+		/* make the binary the last argument to the interpreter */
+		retval = copy_string_kernel(bprm->interp, bprm);
 		if (retval < 0)
 			return retval;
 		bprm->argc++;
-		/* Consumed - don't let it leak into a nested interpreter's argv. */
-		kfree(bprm->bpf_interp_arg);
-		bprm->bpf_interp_arg = NULL;
+
+		/*
+		 * A single optional argument to the interpreter, inserted
+		 * between it and the binary like a #! interpreter line's.
+		 */
+		if (bprm->bpf_interp_arg) {
+			retval = copy_string_kernel(bprm->bpf_interp_arg, bprm);
+			if (retval < 0)
+				return retval;
+			bprm->argc++;
+			/* Consumed - don't leak it into a nested interpreter's argv. */
+			kfree(bprm->bpf_interp_arg);
+			bprm->bpf_interp_arg = NULL;
+		}
+
+		/* add the interp as argv[0] */
+		retval = copy_string_kernel(interpreter, bprm);
+		if (retval < 0)
+			return retval;
+		bprm->argc++;
+
+		/* Update interp in case binfmt_script needs it. */
+		retval = bprm_change_interp(interpreter, bprm);
+		if (retval < 0)
+			return retval;
 	}
-
-	/* add the interp as argv[0] */
-	retval = copy_string_kernel(interpreter, bprm);
-	if (retval < 0)
-		return retval;
-	bprm->argc++;
-
-	/* Update interp in case binfmt_script needs it. */
-	retval = bprm_change_interp(interpreter, bprm);
-	if (retval < 0)
-		return retval;
 
 	if (fmt->flags & MISC_FMT_OPEN_FILE) {
 		interp_file = file_clone_open(fmt->interp_file);
