@@ -245,6 +245,8 @@ static ssize_t vfio_ccw_mdev_read(struct vfio_device *vdev,
 	if (index >= VFIO_CCW_NUM_REGIONS + private->num_regions)
 		return -EINVAL;
 
+	index = array_index_nospec(index, VFIO_CCW_NUM_REGIONS + private->num_regions);
+
 	switch (index) {
 	case VFIO_CCW_CONFIG_REGION_INDEX:
 		return vfio_ccw_mdev_read_io_region(private, buf, count, ppos);
@@ -296,6 +298,8 @@ static ssize_t vfio_ccw_mdev_write(struct vfio_device *vdev,
 
 	if (index >= VFIO_CCW_NUM_REGIONS + private->num_regions)
 		return -EINVAL;
+
+	index = array_index_nospec(index, VFIO_CCW_NUM_REGIONS + private->num_regions);
 
 	switch (index) {
 	case VFIO_CCW_CONFIG_REGION_INDEX:
