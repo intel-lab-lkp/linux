@@ -1903,9 +1903,9 @@ static int ip_set_utest(struct sk_buff *skb, const struct nfnl_info *info,
 			     set->type->adt_policy, NULL))
 		return -IPSET_ERR_PROTOCOL;
 
-	rcu_read_lock_bh();
+	rcu_read_lock();
 	ret = set->variant->uadt(set, tb, IPSET_TEST, &lineno, 0, 0);
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 	/* Userspace can't trigger element to be re-added */
 	if (ret == -EAGAIN)
 		ret = 1;

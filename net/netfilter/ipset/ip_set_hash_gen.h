@@ -16,9 +16,6 @@
 #define ipset_dereference_nfnl(p)	\
 	rcu_dereference_protected(p,	\
 		lockdep_nfnl_is_held(NFNL_SUBSYS_IPSET))
-#define ipset_dereference_bh_nfnl(p)	\
-	rcu_dereference_bh_check(p, 	\
-		lockdep_nfnl_is_held(NFNL_SUBSYS_IPSET))
 
 struct htable_gc {
 	struct delayed_work dwork;
@@ -533,18 +530,18 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 #endif
 
 	/* Check for an existing entry with the same key */
-	rcu_read_lock_bh();
+	rcu_read_lock();
 	old = rhashtable_lookup(&h->ht, d, mtype_rht_params);
 	if (old) {
 		if (!SET_ELEM_EXPIRED(set, &old->elem)) {
 			if (!flag_exist) {
-				rcu_read_unlock_bh();
+				rcu_read_unlock();
 				return -IPSET_ERR_EXIST;
 			}
 			/* flag_exist: overwrite extensions in-place.
 			 * Hold set->lock to serialize ext_size accounting in
 			 * ip_set_init_comment against concurrent kernel-side adds.
-			 * rcu_read_lock_bh() must remain held to keep old alive.
+			 * rcu_read_lock() must remain held to keep old alive.
 			 */
 			spin_lock_bh(&set->lock);
 #ifdef IP_SET_HASH_WITH_NETS
@@ -564,7 +561,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 				ip_set_timeout_set(ext_timeout(&old->elem, set),
 						   ext->timeout);
 			spin_unlock_bh(&set->lock);
-			rcu_read_unlock_bh();
+			rcu_read_unlock();
 			return 0;
 		}
 		/* Expired entry: remove it to make room */
@@ -575,7 +572,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			kfree_rcu(old, rcu);
 		}
 	}
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 
 	if (atomic_read(&h->ht.nelems) >= h->maxelem) {
 		if (net_ratelimit())
@@ -629,14 +626,14 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct mtype_rht_elem *e;
 	int ret = -IPSET_ERR_EXIST;
 
-	rcu_read_lock_bh();
+	rcu_read_lock();
 	e = rhashtable_lookup(&h->ht, d, mtype_rht_params);
 	if (!e) {
-		rcu_read_unlock_bh();
+		rcu_read_unlock();
 		return -IPSET_ERR_EXIST;
 	}
 	ret = rhashtable_remove_fast(&h->ht, &e->node, mtype_rht_params);
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 
 	if (ret)
 		return -IPSET_ERR_EXIST;
@@ -679,9 +676,9 @@ mtype_test_cidrs(struct ip_set *set, struct mtype_elem *d,
 	u32 multi = 0;
 
 	pr_debug("test by nets\n");
-	nets0 = ipset_dereference_bh_nfnl(h->rnets[0]);
+	nets0 = rcu_dereference(h->rnets[0]);
 #if IPSET_NET_COUNT == 2
-	nets1 = ipset_dereference_bh_nfnl(h->rnets[1]);
+	nets1 = rcu_dereference(h->rnets[1]);
 #endif
 	for (j = 0; j < nets0->len && !multi; j++) {
 		if (!nets0->nets[j].count)
@@ -727,7 +724,7 @@ mtype_test(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	int i;
 #endif
 
-	rcu_read_lock_bh();
+	rcu_read_lock();
 #ifdef IP_SET_HASH_WITH_NETS
 	/* If we test an IP address and not a network address,
 	 * try all possible network sizes
@@ -749,7 +746,7 @@ mtype_test(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 
 	ret = mtype_data_match(&e->elem, ext, mext, set, flags);
 out:
-	rcu_read_unlock_bh();
+	rcu_read_unlock();
 	return ret;
 }
 
