@@ -5622,7 +5622,7 @@ lpfc_abort_handler(struct scsi_cmnd *cmnd)
 						      lpfc_sli_abort_fcp_cmpl);
 	} else {
 		pring = &phba->sli.sli3_ring[LPFC_FCP_RING];
-		ret_val = lpfc_sli_issue_abort_iotag(phba, pring, iocb,
+		ret_val = lpfc_sli_issue_abort_iotag(phba, pring, iocb, false,
 						     lpfc_sli_abort_fcp_cmpl);
 	}
 
