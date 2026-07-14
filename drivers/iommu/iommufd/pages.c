@@ -412,6 +412,7 @@ static void batch_from_domain(struct pfn_batch *batch,
 	unsigned int page_offset = 0;
 	unsigned long iova;
 	phys_addr_t phys;
+	int i = 0;
 
 	iova = iopt_area_index_to_iova(area, start_index);
 	if (start_index == iopt_area_index(area))
@@ -428,6 +429,9 @@ static void batch_from_domain(struct pfn_batch *batch,
 		iova += PAGE_SIZE - page_offset;
 		page_offset = 0;
 		start_index++;
+
+		if ((++i % BIT(PUD_ORDER)) == 0)
+			cond_resched();
 	}
 }
 
