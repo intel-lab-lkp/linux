@@ -146,3 +146,13 @@ config PCIE_EDR
 	  the PCI Firmware Specification r3.2.  Enable this if you want to
 	  support hybrid DPC model which uses both firmware and OS to
 	  implement DPC.
+
+config PCIE_FLIT
+	bool "PCI Express Flit Mode Error Logging support"
+	depends on PCIEPORTBUS
+	help
+	  This enables support for the PCI Express Flit Logging Extended
+	  Capability, which logs errors encountered by a port operating
+	  in PCIe Gen6 Flit Mode.  If your system doesn't have this
+	  capability or you do not want to use this feature, it is safe
+	  to answer N.

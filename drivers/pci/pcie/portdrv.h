@@ -22,8 +22,10 @@
 #define PCIE_PORT_SERVICE_DPC		(1 << PCIE_PORT_SERVICE_DPC_SHIFT)
 #define PCIE_PORT_SERVICE_BWCTRL_SHIFT	4	/* Bandwidth Controller (notifications) */
 #define PCIE_PORT_SERVICE_BWCTRL	(1 << PCIE_PORT_SERVICE_BWCTRL_SHIFT)
+#define PCIE_PORT_SERVICE_FLIT_SHIFT	5 /* Flit Logging */
+#define PCIE_PORT_SERVICE_FLIT		(1 << PCIE_PORT_SERVICE_FLIT_SHIFT)
 
-#define PCIE_PORT_DEVICE_MAXSERVICES   5
+#define PCIE_PORT_DEVICE_MAXSERVICES   6
 
 extern bool pcie_ports_dpc_native;
 
@@ -49,6 +51,12 @@ static inline int pcie_pme_init(void) { return 0; }
 int pcie_dpc_init(void);
 #else
 static inline int pcie_dpc_init(void) { return 0; }
+#endif
+
+#ifdef CONFIG_PCIE_FLIT
+int pcie_flit_init(void);
+#else
+static inline int pcie_flit_init(void) { return 0; }
 #endif
 
 int pcie_bwctrl_init(void);

@@ -31,7 +31,8 @@
 
 #define PCIE_PORT_SERVICE_EXPCAP	(PCIE_PORT_SERVICE_PME | \
 					 PCIE_PORT_SERVICE_HP | \
-					 PCIE_PORT_SERVICE_BWCTRL)
+					 PCIE_PORT_SERVICE_BWCTRL | \
+					 PCIE_PORT_SERVICE_FLIT)
 
 #define get_descriptor_id(type, service) (((type - 4) << 8) | service)
 
@@ -151,12 +152,16 @@ static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
 			return nr_entries;
 	}
 
-	/* PME, hotplug and bandwidth notification share an MSI/MSI-X vector */
+	/*
+	 * PME, hotplug, flit error counter, and bandwidth notification share
+	 * an MSI/MSI-X vector
+	 */
 	if (mask & PCIE_PORT_SERVICE_EXPCAP) {
 		pcie_irq = pci_irq_vector(dev, pme);
 		irqs[PCIE_PORT_SERVICE_PME_SHIFT] = pcie_irq;
 		irqs[PCIE_PORT_SERVICE_HP_SHIFT] = pcie_irq;
 		irqs[PCIE_PORT_SERVICE_BWCTRL_SHIFT] = pcie_irq;
+		irqs[PCIE_PORT_SERVICE_FLIT_SHIFT] = pcie_irq;
 	}
 
 	if (mask & PCIE_PORT_SERVICE_AER)
@@ -279,6 +284,11 @@ static int get_port_device_capability(struct pci_dev *dev)
 		    hweight8(dev->supported_speeds) > 1)
 			services |= PCIE_PORT_SERVICE_BWCTRL;
 	}
+
+#ifdef CONFIG_PCIE_FLIT
+	if (dev->flit_cap)
+		services |= PCIE_PORT_SERVICE_FLIT;
+#endif
 
 	return services;
 }
@@ -836,6 +846,7 @@ static void __init pcie_init_services(void)
 	pcie_dpc_init();
 	pcie_bwctrl_init();
 	pcie_hp_init();
+	pcie_flit_init();
 }
 
 static int __init pcie_portdrv_init(void)

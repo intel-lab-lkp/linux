@@ -592,6 +592,10 @@ struct pci_dev {
 	u8		tph_mode;	/* TPH mode */
 	u8		tph_req_type;	/* TPH requester type */
 #endif
+
+#ifdef CONFIG_PCIE_FLIT
+	u16		flit_cap;	/* Flit Logging Capabilities */
+#endif
 };
 
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
