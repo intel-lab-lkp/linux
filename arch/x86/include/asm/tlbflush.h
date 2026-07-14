@@ -159,10 +159,10 @@ struct tlb_state_shared {
 	 *  - Actively using an mm.  Our CPU's bit will be set in
 	 *    mm_cpumask(loaded_mm) and is_lazy == false;
 	 *
-	 *  - Not using a real mm.  loaded_mm == &init_mm.  Our CPU's bit
-	 *    will not be set in mm_cpumask(&init_mm) and is_lazy == false.
+	 *  - Not using a real mm. loaded_mm is a kernel mm. Our CPU's bit
+	 *    will not be set in mm_cpumask(loaded_mm) and is_lazy == false.
 	 *
-	 *  - Lazily using a real mm.  loaded_mm != &init_mm, our bit
+	 *  - Lazily using a real mm. loaded_mm is not a kernel mm, our bit
 	 *    is set in mm_cpumask(loaded_mm), but is_lazy == true.
 	 *    We're heuristically guessing that the CR3 load we
 	 *    skipped more than makes up for the overhead added by
@@ -188,7 +188,7 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_state_shared, cpu_tlbstate_shared);
 #define enter_lazy_tlb enter_lazy_tlb
 static __always_inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 {
-	if (this_cpu_read(cpu_tlbstate.loaded_mm) == &init_mm)
+	if (mm_is_kernel(this_cpu_read(cpu_tlbstate.loaded_mm)))
 		return;
 
 	this_cpu_write(cpu_tlbstate_shared.is_lazy, true);

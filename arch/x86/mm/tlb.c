@@ -594,7 +594,7 @@ void leave_mm(void)
 	 * This needs to happen before any other sanity checks due to
 	 * intel_idle's shenanigans.
 	 */
-	if (loaded_mm == &init_mm)
+	if (mm_is_kernel(loaded_mm))
 		return;
 
 	/* Warn if we're not lazy. */
@@ -855,7 +855,7 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 		 * cpu_tlbstate_shared.is_lazy whether or not to send an IPI.
 		 */
 		if (IS_ENABLED(CONFIG_DEBUG_VM) &&
-		    WARN_ON_ONCE(prev != &init_mm && !is_notrack_mm(prev) &&
+		    WARN_ON_ONCE(!mm_is_kernel(prev) && !is_notrack_mm(prev) &&
 				 !cpumask_test_cpu(cpu, mm_cpumask(next))))
 			cpumask_set_cpu(cpu, mm_cpumask(next));
 
@@ -932,7 +932,8 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 		 * This way switch_mm() must see the new tlb_gen or
 		 * flush_tlb_mm_range() must see the new loaded_mm, or both.
 		 */
-		if (next != &init_mm && !cpumask_test_cpu(cpu, mm_cpumask(next)))
+		if (!mm_is_kernel(next) &&
+		    !cpumask_test_cpu(cpu, mm_cpumask(next)))
 			cpumask_set_cpu(cpu, mm_cpumask(next));
 		else
 			smp_mb();
@@ -1134,7 +1135,7 @@ static void flush_tlb_func(void *info)
 		return;
 	}
 
-	if (unlikely(loaded_mm == &init_mm))
+	if (unlikely(mm_is_kernel(loaded_mm)))
 		return;
 
 	/* Reload the ASID if transitioning into or out of a global ASID */
