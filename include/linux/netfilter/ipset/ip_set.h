@@ -282,6 +282,9 @@ struct ip_set {
 	void *data;
 };
 
+#define ipset_dereference_locked(p, set)		\
+	rcu_dereference_protected(p, lockdep_is_held(&set->lock))
+
 static inline void
 __ip_set_destroy_comment(struct ip_set *set, void *data)
 {

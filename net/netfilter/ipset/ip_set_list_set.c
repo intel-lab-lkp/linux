@@ -326,6 +326,8 @@ list_set_udel(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	struct set_adt_elem *d = value;
 	struct set_elem *e, *n, *next, *prev = NULL;
 
+	lockdep_assert_held(&set->lock);
+
 	list_for_each_entry_safe(e, n, &map->members, list) {
 		if (SET_WITH_TIMEOUT(set) &&
 		    ip_set_timeout_expired(ext_timeout(e, set)))
