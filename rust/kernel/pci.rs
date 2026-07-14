@@ -31,10 +31,17 @@ use core::{
     },
 };
 
+mod cap;
 mod id;
 mod io;
 mod irq;
 
+pub use self::cap::{
+    ExtCapId,
+    ExtCapability,
+    ExtSriovCapability,
+    ExtSriovRegs, //
+};
 pub use self::id::{
     Class,
     ClassMask,
