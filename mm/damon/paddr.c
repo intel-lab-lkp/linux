@@ -459,6 +459,6 @@ static int __init damon_pa_initcall(void)
 	};
 
 	return damon_register_ops(&ops);
-};
+}
 
 subsys_initcall(damon_pa_initcall);
