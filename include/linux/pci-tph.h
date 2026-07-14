@@ -45,6 +45,10 @@ static inline int pcie_tph_get_cpu_st(struct pci_dev *dev,
 static inline void pcie_disable_tph(struct pci_dev *pdev) { }
 static inline int pcie_enable_tph(struct pci_dev *pdev, int mode)
 { return -EINVAL; }
+static inline u16 pcie_tph_get_st_table_size(struct pci_dev *pdev)
+{ return 0; }
+static inline u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev)
+{ return PCI_TPH_LOC_NONE; }
 static inline u8 pcie_tph_enabled_req_type(struct pci_dev *pdev)
 { return PCI_TPH_REQ_DISABLE; }
 static inline u8 pcie_tph_completer_type(struct pci_dev *pdev)
