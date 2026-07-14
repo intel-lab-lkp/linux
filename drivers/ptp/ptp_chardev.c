@@ -190,6 +190,8 @@ static long ptp_clock_getcaps(struct ptp_clock *ptp, void __user *arg)
 		.cross_timestamping	= ptp->info->getcrosststamp != NULL,
 		.adjust_phase		= ptp->info->adjphase != NULL &&
 					  ptp->info->getmaxphase != NULL,
+		.extended_attrs		= ptp->info->gettimexattrs64 != NULL,
+		.precise_attrs		= ptp->info->getcrosststampattrs != NULL,
 	};
 
 	if (caps.adjust_phase)
@@ -347,11 +349,28 @@ typedef int (*ptp_gettimex_fn)(struct ptp_clock_info *,
 			       struct timespec64 *,
 			       struct ptp_system_timestamp *);
 
+static int ptp_validate_sys_offset_clockid(__kernel_clockid_t clockid)
+{
+	switch (clockid) {
+	case CLOCK_REALTIME:
+	case CLOCK_MONOTONIC:
+	case CLOCK_MONOTONIC_RAW:
+		return 0;
+	case CLOCK_AUX ... CLOCK_AUX_LAST:
+		if (IS_ENABLED(CONFIG_POSIX_AUX_CLOCKS))
+			return 0;
+		fallthrough;
+	default:
+		return -EINVAL;
+	}
+}
+
 static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg,
 				    ptp_gettimex_fn gettimex_fn)
 {
 	struct ptp_sys_offset_extended *extoff __free(kfree) = NULL;
 	struct ptp_system_timestamp sts;
+	int err;
 
 	if (!gettimex_fn)
 		return -EOPNOTSUPP;
@@ -363,23 +382,13 @@ static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg,
 	if (extoff->n_samples > PTP_MAX_SAMPLES || extoff->rsv[0] || extoff->rsv[1])
 		return -EINVAL;
 
-	switch (extoff->clockid) {
-	case CLOCK_REALTIME:
-	case CLOCK_MONOTONIC:
-	case CLOCK_MONOTONIC_RAW:
-		break;
-	case CLOCK_AUX ... CLOCK_AUX_LAST:
-		if (IS_ENABLED(CONFIG_POSIX_AUX_CLOCKS))
-			break;
-		fallthrough;
-	default:
-		return -EINVAL;
-	}
+	err = ptp_validate_sys_offset_clockid(extoff->clockid);
+	if (err)
+		return err;
 
 	sts.clockid = extoff->clockid;
 	for (unsigned int i = 0; i < extoff->n_samples; i++) {
 		struct timespec64 ts;
-		int err;
 
 		err = gettimex_fn(ptp->info, &ts, &sts);
 		if (err)
@@ -402,6 +411,131 @@ static long ptp_sys_offset_extended(struct ptp_clock *ptp, void __user *arg,
 	}
 
 	return copy_to_user(arg, extoff, sizeof(*extoff)) ? -EFAULT : 0;
+}
+
+static long ptp_sys_offset_extended_attrs(struct ptp_clock *ptp, void __user *arg)
+{
+	struct ptp_sys_offset_attrs *data __free(kfree) = NULL;
+	struct ptp_system_timestamp sts;
+	unsigned int n_samples;
+	int err;
+
+	data = memdup_user(arg, sizeof(*data));
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	if (data->request.valid ||
+	    data->request.num_samples > PTP_MAX_SAMPLES ||
+	    data->request.num_samples == 0)
+		return -EINVAL;
+
+	err = ptp_validate_sys_offset_clockid(data->request.clock_id);
+	if (err)
+		return err;
+
+	n_samples = data->request.num_samples;
+	sts.clockid = data->request.clock_id;
+	kfree(data);
+	data = kzalloc(struct_size(data, timestamps, n_samples), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->request.num_samples = n_samples;
+
+	for (unsigned int i = 0; i < n_samples; i++) {
+		struct ptp_clock_attrs att = {};
+		struct timespec64 ts;
+
+		if (ptp->info->gettimexattrs64)
+			err = ptp->info->gettimexattrs64(ptp->info, &ts,
+							 &sts, &att);
+		else if (ptp->info->gettimex64)
+			err = ptp->info->gettimex64(ptp->info, &ts, &sts);
+		else
+			return -EOPNOTSUPP;
+
+		if (err)
+			return err;
+
+		/* Filter out disabled or unavailable clocks */
+		if (!sts.pre_sts.valid || !sts.post_sts.valid)
+			return -EINVAL;
+
+		data->timestamps[i].pre_systime.sys_time =
+			ktime_to_ns(sts.pre_sts.systime);
+		data->timestamps[i].pre_systime.sys_rawtime =
+			ktime_to_ns(sts.pre_sts.monoraw);
+		data->timestamps[i].pre_systime.sys_counter =
+			sts.pre_sts.cycles;
+		data->timestamps[i].pre_systime.sys_counter_id =
+			sts.pre_sts.cs_id;
+		data->timestamps[i].devtime.device_time.sec = ts.tv_sec;
+		data->timestamps[i].devtime.device_time.nsec = ts.tv_nsec;
+		data->timestamps[i].devtime.attrs = att;
+		data->timestamps[i].post_systime.sys_time =
+			ktime_to_ns(sts.post_sts.systime);
+		data->timestamps[i].post_systime.sys_rawtime =
+			ktime_to_ns(sts.post_sts.monoraw);
+		data->timestamps[i].post_systime.sys_counter =
+			sts.post_sts.cycles;
+		data->timestamps[i].post_systime.sys_counter_id =
+			sts.post_sts.cs_id;
+	}
+
+	return copy_to_user(arg, data,
+			    struct_size(data, timestamps, n_samples)) ? -EFAULT : 0;
+}
+
+static long ptp_sys_offset_precise_attrs(struct ptp_clock *ptp, void __user *arg)
+{
+	struct ptp_sys_offset_attrs *data __free(kfree) = NULL;
+	struct system_device_crosststamp xtstamp;
+	struct ptp_clock_attrs att = {};
+	struct timespec64 ts;
+	int err;
+
+	data = memdup_user(arg, sizeof(*data));
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	if (data->request.valid ||
+	    data->request.num_samples != 1)
+		return -EINVAL;
+
+	err = ptp_validate_sys_offset_clockid(data->request.clock_id);
+	if (err)
+		return err;
+
+	kfree(data);
+	data = kzalloc(struct_size(data, timestamps, 1), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	if (ptp->info->getcrosststampattrs)
+		err = ptp->info->getcrosststampattrs(ptp->info, &xtstamp, &att);
+	else if (ptp->info->getcrosststamp)
+		err = ptp->info->getcrosststamp(ptp->info, &xtstamp);
+	else
+		return -EOPNOTSUPP;
+
+	if (err)
+		return err;
+
+	ts = ktime_to_timespec64(xtstamp.device);
+	data->timestamps[0].systime.sys_time =
+		ktime_to_ns(xtstamp.sys_systime);
+	data->timestamps[0].systime.sys_rawtime =
+		ktime_to_ns(xtstamp.sys_monoraw);
+	data->timestamps[0].systime.sys_counter =
+		xtstamp.sys_counter.cycles;
+	data->timestamps[0].systime.sys_counter_id =
+		xtstamp.sys_counter.cs_id;
+	data->timestamps[0].devtime.device_time.sec = ts.tv_sec;
+	data->timestamps[0].devtime.device_time.nsec = ts.tv_nsec;
+	data->timestamps[0].devtime.attrs = att;
+
+	return copy_to_user(arg, data,
+			    struct_size(data, timestamps, 1)) ? -EFAULT : 0;
 }
 
 static long ptp_sys_offset(struct ptp_clock *ptp, void __user *arg)
@@ -539,10 +673,16 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 		return ptp_sys_offset_precise(ptp, argptr,
 					      ptp->info->getcrosststamp);
 
+	case PTP_SYS_OFFSET_PRECISE_ATTRS:
+		return ptp_sys_offset_precise_attrs(ptp, argptr);
+
 	case PTP_SYS_OFFSET_EXTENDED:
 	case PTP_SYS_OFFSET_EXTENDED2:
 		return ptp_sys_offset_extended(ptp, argptr,
 					       ptp->info->gettimex64);
+
+	case PTP_SYS_OFFSET_EXTENDED_ATTRS:
+		return ptp_sys_offset_extended_attrs(ptp, argptr);
 
 	case PTP_SYS_OFFSET:
 	case PTP_SYS_OFFSET2:
