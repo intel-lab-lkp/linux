@@ -3,6 +3,8 @@
 # define _GNU_SOURCE
 #endif
 
+#include <dirent.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,13 +82,46 @@ void put_tracing_file(char *file)
 	free(file);
 }
 
+char *get_events_dir(void)
+{
+	const char *eventfs;
+	char *path;
+	int saved_errno;
+
+	path = get_tracing_file("events");
+	if (path && faccessat(AT_FDCWD, path, R_OK, AT_EACCESS) == 0)
+		return path;
+
+	saved_errno = errno;
+	put_tracing_file(path);
+
+	eventfs = eventfs__mount();
+	if (eventfs && faccessat(AT_FDCWD, eventfs, R_OK, AT_EACCESS) == 0 &&
+	    eventfs__configured())
+		return strdup(eventfs);
+
+	/*
+	 * Prefer EACCES over other errors: it tells the user that events
+	 * exist but are not accessible, which is more actionable than
+	 * ENOENT from a missing filesystem.
+	 */
+	if (errno != EACCES)
+		errno = saved_errno;
+	return NULL;
+}
+
 char *get_events_file(const char *name)
 {
-	char *file;
+	char *dir, *file;
 
-	if (asprintf(&file, "%s/events/%s", tracing_path_mount(), name) < 0)
+	dir = get_events_dir();
+	if (!dir)
 		return NULL;
 
+	if (asprintf(&file, "%s/%s", dir, name) < 0)
+		file = NULL;
+
+	free(dir);
 	return file;
 }
 
@@ -97,8 +132,8 @@ void put_events_file(char *file)
 
 DIR *tracing_events__opendir(void)
 {
+	char *path = get_events_dir();
 	DIR *dir = NULL;
-	char *path = get_tracing_file("events");
 
 	if (path) {
 		dir = opendir(path);
@@ -110,7 +145,7 @@ DIR *tracing_events__opendir(void)
 
 int tracing_events__scandir_alphasort(struct dirent ***namelist)
 {
-	char *path = get_tracing_file("events");
+	char *path = get_events_dir();
 	int ret;
 
 	if (!path) {
@@ -120,6 +155,9 @@ int tracing_events__scandir_alphasort(struct dirent ***namelist)
 
 	ret = scandir(path, namelist, NULL, alphasort);
 	put_events_file(path);
+
+	if (ret < 0)
+		*namelist = NULL;
 
 	return ret;
 }
@@ -162,12 +200,12 @@ int tracing_path__strerror_open_tp(int err, char *buf, size_t size,
 			 "Hint:\tIs the debugfs/tracefs filesystem mounted?\n"
 			 "Hint:\tTry 'sudo mount -t debugfs nodev /sys/kernel/debug'");
 		break;
-	case EACCES: {
+	case EACCES:
 		snprintf(buf, size,
 			 "Error:\tNo permissions to read %s/events/%s\n"
-			 "Hint:\tTry 'sudo mount -o remount,mode=755 %s'\n",
+			 "Hint:\tTry 'sudo mount -o remount,mode=755 %s'\n"
+			 "Hint:\tOr check if /sys/kernel/events is available\n",
 			 tracing_path, filename, tracing_path_mount());
-	}
 		break;
 	default:
 		snprintf(buf, size, "%s", str_error_r(err, sbuf, sizeof(sbuf)));
