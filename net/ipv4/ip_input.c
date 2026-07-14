@@ -316,6 +316,7 @@ static bool ip_can_use_hint(const struct sk_buff *skb, const struct iphdr *iph,
 			    const struct sk_buff *hint)
 {
 	return hint && !skb_dst(skb) && ip_hdr(hint)->daddr == iph->daddr &&
+	       ip_hdr(hint)->saddr == iph->saddr &&
 	       ip_hdr(hint)->tos == iph->tos;
 }
 
