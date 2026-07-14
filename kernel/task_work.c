@@ -189,6 +189,20 @@ bool task_work_cancel(struct task_struct *task, struct callback_head *cb)
 	return ret == cb;
 }
 
+bool task_work_has_func(struct task_struct *task, task_work_func_t func)
+{
+	struct callback_head *work;
+
+	if (!task_work_pending(task))
+		return false;
+	guard(raw_spinlock_irqsave)(&task->pi_lock);
+	for (work = READ_ONCE(task->task_works); work; work = READ_ONCE(work->next)) {
+		if (work->func == func)
+			return true;
+	}
+	return false;
+}
+
 /**
  * task_work_run - execute the works added by task_work_add()
  *

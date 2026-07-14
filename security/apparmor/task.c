@@ -14,6 +14,7 @@
 
 #include <linux/gfp.h>
 #include <linux/ptrace.h>
+#include <linux/task_work.h>
 
 #include "include/path.h"
 #include "include/audit.h"
@@ -87,6 +88,34 @@ int aa_replace_current_label(struct aa_label *label)
 
 	commit_creds(new);
 	return 0;
+}
+
+static void aa_replace_stale_label_tw_func(struct callback_head *tw)
+{
+	struct aa_label *label;
+
+	kfree(tw);
+	label = aa_current_raw_label();
+	if (!label_is_stale(label))
+		return;
+	label = aa_get_newest_label(label);
+	aa_replace_current_label(label);
+	aa_put_label(label);
+}
+
+/* replace the current task's stale label on syscall return */
+void aa_schedule_stale_label_replacement(void)
+{
+	struct callback_head *tw;
+
+	if (task_work_has_func(current, aa_replace_stale_label_tw_func))
+		return;
+	tw = kmalloc_obj(struct callback_head);
+	if (!tw)
+		return;
+	init_task_work(tw, aa_replace_stale_label_tw_func);
+	if (task_work_add(current, tw, TWA_RESUME))
+		kfree(tw);
 }
 
 
