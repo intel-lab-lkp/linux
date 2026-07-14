@@ -560,8 +560,13 @@ EXPORT_SYMBOL_GPL(plda_pcie_setup_iomems);
 static void plda_pcie_irq_domain_deinit(struct plda_pcie_rp *pcie)
 {
 	irq_set_chained_handler_and_data(pcie->irq, NULL, NULL);
+	synchronize_irq(pcie->irq);
+
 	irq_set_chained_handler_and_data(pcie->msi_irq, NULL, NULL);
+	synchronize_irq(pcie->msi_irq);
+
 	irq_set_chained_handler_and_data(pcie->intx_irq, NULL, NULL);
+	synchronize_irq(pcie->intx_irq);
 
 	irq_domain_remove(pcie->msi.dev_domain);
 
