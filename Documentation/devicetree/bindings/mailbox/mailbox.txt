@@ -6,8 +6,7 @@ assign appropriate mailbox channel to client drivers.
 * Mailbox Controller
 
 Required property:
-- #mbox-cells: Must be at least 1. Number of cells in a mailbox
-		specifier.
+- #mbox-cells: Number of cells in a mailbox specifier.
 
 Example:
 	mailbox: mailbox {
@@ -19,7 +18,8 @@ Example:
 * Mailbox Client
 
 Required property:
-- mboxes: List of phandle and mailbox channel specifiers.
+- mboxes: List of phandle and mailbox channel specifiers. If #mbox-cells is 0
+          then a mailbox only provides one channel and only a phandle is needed.
 
 Optional property:
 - mbox-names: List of identifier strings for each mailbox channel.
