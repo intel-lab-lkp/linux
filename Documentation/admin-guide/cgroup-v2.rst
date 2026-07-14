@@ -1658,6 +1658,24 @@ The following nested keys are defined.
 		the value for the foo counter, since the foo counter is type-based, not
 		list-based.
 
+	  nr_oldest_anon, nr_oldest_file
+		Number of pages in the oldest generation of the anonymous and
+		file types. Only present when CONFIG_LRU_GEN is enabled.
+
+		With MGLRU, page reclaim starts from the oldest generation
+		(min_seq) of each type, so these counts show how much anonymous
+		and file memory the next reclaim pass (or a proactive
+		memory.reclaim) can directly evict. They are aggregated across
+		this cgroup's subtree and all NUMA nodes, and are reported in
+		pages, matching the per-generation breakdown in the ``lru_gen``
+		debugfs file.
+
+		Proactive-aging policy can use them together with the ``aging``
+		counter and ``workingset_refault_*``: a large ``nr_oldest_file``
+		with near-zero ``nr_oldest_anon`` indicates file cache piling up
+		in the oldest generation while anonymous pages stay young, which
+		is the condition ``memory.aging`` is meant to rebalance.
+
 	  slab_reclaimable
 		Part of "slab" that might be reclaimed, such as
 		dentries and inodes.

@@ -1738,6 +1738,30 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 		}
 	}
 
+#ifdef CONFIG_LRU_GEN
+	/* Oldest-generation (min_seq) anon/file pages over this cgroup's
+	 * subtree and all N_MEMORY nodes; see lru_gen_nr_oldest_pages().
+	 */
+	{
+		struct mem_cgroup *mi;
+		int nid;
+		unsigned long oldest_anon = 0, oldest_file = 0;
+
+		for_each_mem_cgroup_tree(mi, memcg) {
+			for_each_node_state(nid, N_MEMORY) {
+				unsigned long nr_anon, nr_file;
+				struct lruvec *lruvec = mem_cgroup_lruvec(mi, NODE_DATA(nid));
+
+				lru_gen_nr_oldest_pages(lruvec, &nr_anon, &nr_file);
+				oldest_anon += nr_anon;
+				oldest_file += nr_file;
+			}
+		}
+		seq_buf_printf(s, "nr_oldest_anon %lu\n", oldest_anon);
+		seq_buf_printf(s, "nr_oldest_file %lu\n", oldest_file);
+	}
+#endif
+
 	/* Accumulated memory events */
 	seq_buf_printf(s, "pgscan %lu\n",
 		       memcg_page_state(memcg, PGSCAN_KSWAPD) +

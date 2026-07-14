@@ -701,6 +701,8 @@ int user_proactive_reclaim(char *buf,
 
 #ifdef CONFIG_LRU_GEN
 int lru_gen_age_memcg(struct mem_cgroup *memcg, unsigned long nr_gens);
+void lru_gen_nr_oldest_pages(struct lruvec *lruvec,
+			     unsigned long *nr_anon, unsigned long *nr_file);
 #endif
 
 /*

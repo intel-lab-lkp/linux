@@ -5922,6 +5922,34 @@ done:
 	return ret;
 }
 
+/**
+ * lru_gen_nr_oldest_pages - pages in the oldest generation of a lruvec
+ * @lruvec: target lruvec
+ * @nr_anon: filled with oldest-generation anonymous page count
+ * @nr_file: filled with oldest-generation file page count
+ *
+ * Reclaim starts from the oldest generation (min_seq) of each type, so these
+ * count what the next reclaim can evict directly.  Computed from
+ * lrugen->nr_pages[min_seq type][zone]; eventually consistent, clamped to 0.
+ */
+void lru_gen_nr_oldest_pages(struct lruvec *lruvec,
+			     unsigned long *nr_anon, unsigned long *nr_file)
+{
+	int type, zone;
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	unsigned long size[ANON_AND_FILE] = {};
+
+	for (type = 0; type < ANON_AND_FILE; type++) {
+		int gen = lru_gen_from_seq(READ_ONCE(lrugen->min_seq[type]));
+
+		for (zone = 0; zone < MAX_NR_ZONES; zone++)
+			size[type] += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+	}
+
+	*nr_anon = size[LRU_GEN_ANON];
+	*nr_file = size[LRU_GEN_FILE];
+}
+
 #else /* !CONFIG_LRU_GEN */
 
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
