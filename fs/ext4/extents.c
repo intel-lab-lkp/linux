@@ -521,11 +521,12 @@ int ext4_ext_check_inode(struct inode *inode)
 	return ext4_ext_check(inode, ext_inode_hdr(inode), ext_depth(inode), 0);
 }
 
-static void ext4_cache_extents(struct inode *inode,
+static bool ext4_cache_extents(struct inode *inode,
 			       struct ext4_extent_header *eh)
 {
 	struct ext4_extent *ex = EXT_FIRST_EXTENT(eh);
 	ext4_lblk_t prev = 0;
+	bool cached = true;
 	int i;
 
 	KUNIT_STATIC_STUB_REDIRECT(ext4_cache_extents, inode, eh);
@@ -541,21 +542,26 @@ static void ext4_cache_extents(struct inode *inode,
 
 		if (ext4_ext_is_unwritten(ex))
 			status = EXTENT_STATUS_UNWRITTEN;
-		ext4_es_cache_extent(inode, lblk, len,
-				     ext4_ext_pblock(ex), status);
+		cached &= ext4_es_cache_extent(inode, lblk, len,
+					  ext4_ext_pblock(ex), status);
 		prev = lblk + len;
 	}
+
+	return cached;
 }
 
 static struct buffer_head *
 __read_extent_tree_block(const char *function, unsigned int line,
 			 struct inode *inode, struct ext4_extent_idx *idx,
-			 int depth, int flags)
+			 int depth, int flags, bool *es_cached)
 {
 	struct buffer_head		*bh;
 	int				err;
 	gfp_t				gfp_flags = __GFP_MOVABLE | GFP_NOFS;
 	ext4_fsblk_t			pblk;
+
+	if (es_cached)
+		*es_cached = false;
 
 	if (flags & EXT4_EX_NOFAIL)
 		gfp_flags |= __GFP_NOFAIL;
@@ -583,7 +589,11 @@ __read_extent_tree_block(const char *function, unsigned int line,
 	 */
 	if (!(flags & EXT4_EX_NOCACHE) && depth == 0) {
 		struct ext4_extent_header *eh = ext_block_hdr(bh);
-		ext4_cache_extents(inode, eh);
+
+		if (es_cached)
+			*es_cached = ext4_cache_extents(inode, eh);
+		else
+			ext4_cache_extents(inode, eh);
 	}
 	return bh;
 errout:
@@ -594,7 +604,10 @@ errout:
 
 #define read_extent_tree_block(inode, idx, depth, flags)		\
 	__read_extent_tree_block(__func__, __LINE__, (inode), (idx),	\
-				 (depth), (flags))
+				 (depth), (flags), NULL)
+#define read_extent_tree_block_cached(inode, idx, depth, flags, cached) \
+	__read_extent_tree_block(__func__, __LINE__, (inode), (idx),	\
+				 (depth), (flags), (cached))
 
 /*
  * This function is called to cache a file's extent information in the
@@ -888,6 +901,7 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 {
 	struct ext4_extent_header *eh;
 	struct buffer_head *bh;
+	bool es_cached = false;
 	short int depth, i, ppos = 0;
 	int ret;
 	gfp_t gfp_flags = GFP_NOFS;
@@ -925,7 +939,7 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 
 	i = depth;
 	if (!(flags & EXT4_EX_NOCACHE) && depth == 0)
-		ext4_cache_extents(inode, eh);
+		es_cached = ext4_cache_extents(inode, eh);
 	/* walk through the tree */
 	while (i) {
 		ext_debug(inode, "depth %d: num %d, max %d\n",
@@ -936,7 +950,8 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 		path[ppos].p_depth = i;
 		path[ppos].p_ext = NULL;
 
-		bh = read_extent_tree_block(inode, path[ppos].p_idx, --i, flags);
+		bh = read_extent_tree_block_cached(inode, path[ppos].p_idx,
+						   --i, flags, &es_cached);
 		if (IS_ERR(bh)) {
 			ret = PTR_ERR(bh);
 			goto err;
@@ -949,6 +964,7 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 	}
 
 	path[ppos].p_depth = i;
+	path[ppos].p_flags = es_cached ? EXT4_EX_PATH_ES_CACHED : 0;
 	path[ppos].p_ext = NULL;
 	path[ppos].p_idx = NULL;
 
@@ -4322,6 +4338,9 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 
 		/* if found extent covers block, simply return it */
 		if (in_range(map->m_lblk, ee_block, ee_len)) {
+			if ((flags & EXT4_GET_BLOCKS_TRACK_ES_CACHE) &&
+			    (path[depth].p_flags & EXT4_EX_PATH_ES_CACHED))
+				map->m_flags |= EXT4_MAP_ES_CACHED;
 			newblock = map->m_lblk - ee_block + ee_start;
 			/* number of remaining blocks in the extent */
 			allocated = ee_len - (map->m_lblk - ee_block);

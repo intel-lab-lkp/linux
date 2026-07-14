@@ -250,6 +250,8 @@ struct ext4_allocation_request {
  * - We use the next available bit after BH_BITMAP_UPTODATE.
  */
 #define EXT4_MAP_QUERY_LAST_IN_LEAF	BIT(BH_BITMAP_UPTODATE + 1)
+/* Internal flag reporting that the queried extent is already in the ES tree. */
+#define EXT4_MAP_ES_CACHED		BIT(BH_BITMAP_UPTODATE + 2)
 #define EXT4_MAP_FLAGS		(EXT4_MAP_NEW | EXT4_MAP_MAPPED |\
 				 EXT4_MAP_UNWRITTEN | EXT4_MAP_BOUNDARY |\
 				 EXT4_MAP_DELAYED | EXT4_MAP_QUERY_LAST_IN_LEAF)
@@ -736,6 +738,8 @@ enum {
  * Look EXT4_MAP_QUERY_LAST_IN_LEAF.
  */
 #define EXT4_GET_BLOCKS_QUERY_LAST_IN_LEAF	0x1000
+	/* Report successful extent status cache population to the query path. */
+#define EXT4_GET_BLOCKS_TRACK_ES_CACHE		0x2000
 
 /*
  * The bit position of these flags must not overlap with any of the

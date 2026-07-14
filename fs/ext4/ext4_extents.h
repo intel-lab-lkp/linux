@@ -106,11 +106,14 @@ struct ext4_ext_path {
 	ext4_fsblk_t			p_block;
 	__u16				p_depth;
 	__u16				p_maxdepth;
+	__u16				p_flags;
 	struct ext4_extent		*p_ext;
 	struct ext4_extent_idx		*p_idx;
 	struct ext4_extent_header	*p_hdr;
 	struct buffer_head		*p_bh;
 };
+
+#define EXT4_EX_PATH_ES_CACHED		0x0001
 
 /*
  * Used to record a portion of a cluster found at the beginning or end
@@ -277,4 +280,3 @@ extern struct ext4_ext_path *ext4_split_convert_extents_test(
 				int flags, unsigned int *allocated);
 #endif
 #endif /* _EXT4_EXTENTS */
-

@@ -504,6 +504,8 @@ static int ext4_map_query_blocks_next_in_leaf(handle_t *handle,
 {
 	struct ext4_map_blocks map2;
 	unsigned int status, status2;
+	bool es_cached = map->m_flags & EXT4_MAP_ES_CACHED;
+	bool es2_cached;
 	int retval;
 
 	status = map->m_flags & EXT4_MAP_UNWRITTEN ?
@@ -516,11 +518,14 @@ static int ext4_map_query_blocks_next_in_leaf(handle_t *handle,
 	map2.m_lblk = map->m_lblk + map->m_len;
 	map2.m_len = orig_mlen - map->m_len;
 	map2.m_flags = 0;
-	retval = ext4_ext_map_blocks(handle, inode, &map2, 0);
+	retval = ext4_ext_map_blocks(handle, inode, &map2,
+				     EXT4_GET_BLOCKS_TRACK_ES_CACHE);
+	es2_cached = map2.m_flags & EXT4_MAP_ES_CACHED;
 
 	if (retval <= 0) {
-		ext4_es_cache_extent(inode, map->m_lblk, map->m_len,
-				     map->m_pblk, status);
+		if (!es_cached)
+			ext4_es_cache_extent(inode, map->m_lblk, map->m_len,
+					     map->m_pblk, status);
 		return map->m_len;
 	}
 
@@ -541,11 +546,12 @@ static int ext4_map_query_blocks_next_in_leaf(handle_t *handle,
 	 */
 	if (map->m_pblk + map->m_len == map2.m_pblk &&
 			status == status2) {
-		ext4_es_cache_extent(inode, map->m_lblk,
-				     map->m_len + map2.m_len, map->m_pblk,
-				     status);
+		if (!es_cached || !es2_cached)
+			ext4_es_cache_extent(inode, map->m_lblk,
+					     map->m_len + map2.m_len,
+					     map->m_pblk, status);
 		map->m_len += map2.m_len;
-	} else {
+	} else if (!es_cached) {
 		ext4_es_cache_extent(inode, map->m_lblk, map->m_len,
 				     map->m_pblk, status);
 	}
@@ -560,13 +566,17 @@ int ext4_map_query_blocks(handle_t *handle, struct inode *inode,
 	int retval;
 	unsigned int orig_mlen = map->m_len;
 
+	map->m_flags &= ~EXT4_MAP_ES_CACHED;
 	flags &= EXT4_EX_QUERY_FILTER;
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
-		retval = ext4_ext_map_blocks(handle, inode, map, flags);
+		retval = ext4_ext_map_blocks(handle, inode, map,
+					     flags | EXT4_GET_BLOCKS_TRACK_ES_CACHE);
 	else
 		retval = ext4_ind_map_blocks(handle, inode, map, flags);
-	if (retval < 0)
+	if (retval < 0) {
+		map->m_flags &= ~EXT4_MAP_ES_CACHED;
 		return retval;
+	}
 
 	/* A hole? */
 	if (retval == 0)
@@ -589,13 +599,15 @@ int ext4_map_query_blocks(handle_t *handle, struct inode *inode,
 			map->m_len == orig_mlen) {
 		status = map->m_flags & EXT4_MAP_UNWRITTEN ?
 				EXTENT_STATUS_UNWRITTEN : EXTENT_STATUS_WRITTEN;
-		ext4_es_cache_extent(inode, map->m_lblk, map->m_len,
-				     map->m_pblk, status);
+		if (!(map->m_flags & EXT4_MAP_ES_CACHED))
+			ext4_es_cache_extent(inode, map->m_lblk, map->m_len,
+					     map->m_pblk, status);
 	} else {
 		retval = ext4_map_query_blocks_next_in_leaf(handle, inode, map,
 							    orig_mlen);
 	}
 out:
+	map->m_flags &= ~EXT4_MAP_ES_CACHED;
 	map->m_seq = READ_ONCE(EXT4_I(inode)->i_es_seq);
 	return retval;
 }

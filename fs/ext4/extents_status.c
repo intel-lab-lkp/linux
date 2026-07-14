@@ -1020,26 +1020,29 @@ error:
  * information and cannot be used to convert existing extents in the extent
  * status tree. To convert existing extents, use ext4_es_insert_extent()
  * instead.
+ *
+ * Return true if the requested range is present in the cache on return.
  */
-void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
+bool ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 			  ext4_lblk_t len, ext4_fsblk_t pblk,
 			  unsigned int status)
 {
 	struct extent_status *es;
 	struct extent_status chkes, newes;
 	ext4_lblk_t end = lblk + len - 1;
+	bool cached = false;
 	bool conflict = false;
 	int err;
 
 	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
-		return;
+		return false;
 
 	newes.es_lblk = lblk;
 	newes.es_len = len;
 	ext4_es_store_pblock_status(&newes, pblk, status);
 
 	if (!len)
-		return;
+		return false;
 
 	BUG_ON(end < lblk);
 
@@ -1050,6 +1053,8 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 		if (es->es_lblk <= lblk && es->es_lblk + es->es_len > end) {
 			if (__es_check_extent_status(es, status, &chkes))
 				conflict = true;
+			else
+				cached = true;
 			goto unlock;
 		}
 		/* Check and remove all extents in range. */
@@ -1061,25 +1066,28 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 			goto unlock;
 		}
 	}
-	__es_insert_extent(inode, &newes, NULL);
+	err = __es_insert_extent(inode, &newes, NULL);
+	if (!err)
+		cached = true;
 	trace_ext4_es_cache_extent(inode, &newes);
 	ext4_es_print_tree(inode);
 unlock:
 	write_unlock(&EXT4_I(inode)->i_es_lock);
 	if (!conflict)
-		return;
+		return cached;
 	/*
 	 * A hole in the on-disk extent but a delayed extent in the extent
 	 * status tree, is allowed.
 	 */
 	if (status == EXTENT_STATUS_HOLE &&
 	    ext4_es_type(&chkes) == EXTENT_STATUS_DELAYED)
-		return;
+		return false;
 
 	ext4_warning_inode(inode,
 			   "ES cache extent failed: add [%d,%d,%llu,0x%x] conflict with existing [%d,%d,%llu,0x%x]\n",
 			   lblk, len, pblk, status, chkes.es_lblk, chkes.es_len,
 			   ext4_es_pblock(&chkes), ext4_es_status(&chkes));
+	return false;
 }
 
 /*
