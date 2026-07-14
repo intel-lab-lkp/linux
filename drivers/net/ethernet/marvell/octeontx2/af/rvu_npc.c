@@ -2210,8 +2210,8 @@ static int npc_load_kpu_profile_from_fw(struct rvu *rvu)
 				rvu->kpu_prfl_addr = NULL;
 			} else {
 				kfree(rvu->kpu_fwdata);
+				rvu->kpu_fwdata = NULL;
 			}
-			rvu->kpu_fwdata = NULL;
 			rvu->kpu_fwdata_sz = 0;
 		}
 
