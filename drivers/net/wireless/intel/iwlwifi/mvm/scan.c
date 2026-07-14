@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2025 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2026 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -3216,6 +3216,10 @@ void iwl_mvm_rx_umac_scan_complete_notif(struct iwl_mvm *mvm,
 	bool aborted = (notif->status == IWL_SCAN_OFFLOAD_ABORTED);
 
 	mvm->mei_scan_filter.is_mei_limited_scan = false;
+
+	if (IWL_FW_CHECK(mvm, uid >= ARRAY_SIZE(mvm->scan_uid_status),
+			 "FW reports out-of-range scan UID %d\n", uid))
+		return;
 
 	IWL_DEBUG_SCAN(mvm,
 		       "Scan completed: uid=%u type=%u, status=%s, EBS=%s\n",
