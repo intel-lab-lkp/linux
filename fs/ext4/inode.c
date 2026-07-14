@@ -3802,6 +3802,7 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		unsigned flags, struct iomap *iomap, struct iomap *srcmap)
 {
 	int ret;
+	int map_flags = 0;
 	struct ext4_map_blocks map;
 	u8 blkbits = inode->i_blkbits;
 	unsigned int orig_mlen;
@@ -3849,7 +3850,10 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		}
 		ret = ext4_iomap_alloc(inode, &map, flags);
 	} else {
-		ret = ext4_map_blocks(NULL, inode, &map, 0);
+		if ((flags & IOMAP_DIRECT) &&
+		    ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
+			map_flags = EXT4_GET_BLOCKS_CACHE_READ_EXTENT;
+		ret = ext4_map_blocks(NULL, inode, &map, map_flags);
 	}
 
 	if (ret < 0)

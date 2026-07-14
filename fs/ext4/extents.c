@@ -4341,6 +4341,14 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 			if ((flags & EXT4_GET_BLOCKS_TRACK_ES_CACHE) &&
 			    (path[depth].p_flags & EXT4_EX_PATH_ES_CACHED))
 				map->m_flags |= EXT4_MAP_ES_CACHED;
+			if ((flags & EXT4_GET_BLOCKS_CACHE_READ_EXTENT) &&
+			    !(map->m_flags & EXT4_MAP_ES_CACHED) &&
+			    !ext4_ext_is_unwritten(ex)) {
+				if (ext4_es_cache_extent(inode, ee_block, ee_len,
+							 ee_start,
+							 EXTENT_STATUS_WRITTEN))
+					map->m_flags |= EXT4_MAP_ES_CACHED;
+			}
 			newblock = map->m_lblk - ee_block + ee_start;
 			/* number of remaining blocks in the extent */
 			allocated = ee_len - (map->m_lblk - ee_block);

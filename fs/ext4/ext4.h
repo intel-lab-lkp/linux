@@ -740,6 +740,8 @@ enum {
 #define EXT4_GET_BLOCKS_QUERY_LAST_IN_LEAF	0x1000
 	/* Report successful extent status cache population to the query path. */
 #define EXT4_GET_BLOCKS_TRACK_ES_CACHE		0x2000
+	/* Cache the full written extent found by a read-only query. */
+#define EXT4_GET_BLOCKS_CACHE_READ_EXTENT	0x4000
 
 /*
  * The bit position of these flags must not overlap with any of the
@@ -759,7 +761,8 @@ enum {
  */
 #define EXT4_EX_QUERY_FILTER	(EXT4_EX_NOCACHE | EXT4_EX_FORCE_CACHE |\
 				 EXT4_EX_NOFAIL |\
-				 EXT4_GET_BLOCKS_QUERY_LAST_IN_LEAF)
+				 EXT4_GET_BLOCKS_QUERY_LAST_IN_LEAF |\
+				 EXT4_GET_BLOCKS_CACHE_READ_EXTENT)
 
 /*
  * Flags used by ext4_free_blocks
