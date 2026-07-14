@@ -184,9 +184,8 @@ static void __iomem *_sparc_alloc_io(unsigned int busno, unsigned long phys,
 			printed_full = 1;
 		}
 		tlen = strlen(name);
-		tack = kmalloc(sizeof (struct resource) + tlen + 1, GFP_KERNEL);
+		tack = kzalloc(sizeof (struct resource) + tlen + 1, GFP_KERNEL);
 		if (tack == NULL) return NULL;
-		memset(tack, 0, sizeof(struct resource));
 		res = (struct resource *) tack;
 		tack += sizeof (struct resource);
 	}
