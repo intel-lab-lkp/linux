@@ -83,7 +83,7 @@ static inline void switch_mm(struct mm_struct *old_mm, struct mm_struct *mm, str
 	int cpu = smp_processor_id();
 
 	per_cpu(per_cpu_secondary_mm, cpu) = mm;
-	if (unlikely(mm == &init_mm))
+	if (unlikely(mm_is_kernel(mm)))
 		return;
 
 	spin_lock_irqsave(&mm->context.lock, flags);

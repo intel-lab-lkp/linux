@@ -86,6 +86,7 @@ extern unsigned long VMALLOC_END;
 #define vmemmap			((struct page *)VMEMMAP_BASE)
 
 #include <linux/sched.h>
+#include <linux/mm_types.h>
 #include <asm/tlbflush.h>
 
 bool kern_addr_valid(unsigned long addr);
@@ -885,9 +886,6 @@ static inline unsigned long pud_pfn(pud_t pud)
 #define p4d_set(p4dp, pudp)	\
 	(p4d_val(*(p4dp)) = (__pa((unsigned long) (pudp))))
 
-/* We cannot include <linux/mm_types.h> at this point yet: */
-extern struct mm_struct init_mm;
-
 /* Actual page table PTE updates.  */
 void tlb_batch_add(struct mm_struct *mm, unsigned long vaddr,
 		   pte_t *ptep, pte_t orig, int fullmm,
@@ -903,7 +901,7 @@ static void maybe_tlb_batch_add(struct mm_struct *mm, unsigned long vaddr,
 	 * SUN4V NOTE: _PAGE_VALID is the same value in both the SUN4U
 	 *             and SUN4V pte layout, so this inline test is fine.
 	 */
-	if (likely(mm != &init_mm) && pte_accessible(mm, orig))
+	if (likely(!mm_is_kernel(mm)) && pte_accessible(mm, orig))
 		tlb_batch_add(mm, vaddr, ptep, orig, fullmm, hugepage_shift);
 }
 

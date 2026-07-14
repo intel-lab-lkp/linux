@@ -788,7 +788,7 @@ static void mmu_context_wrap(void)
 		 */
 		mm = per_cpu(per_cpu_secondary_mm, cpu);
 
-		if (unlikely(!mm || mm == &init_mm))
+		if (unlikely(!mm || mm_is_kernel(mm)))
 			continue;
 
 		old_ctx = mm->context.sparc64_ctx_val;

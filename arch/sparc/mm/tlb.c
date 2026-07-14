@@ -179,7 +179,7 @@ static void tlb_batch_pmd_scan(struct mm_struct *mm, unsigned long vaddr,
 static void __set_pmd_acct(struct mm_struct *mm, unsigned long addr,
 			   pmd_t orig, pmd_t pmd)
 {
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	if ((pmd_val(pmd) ^ pmd_val(orig)) & _PAGE_PMD_HUGE) {
