@@ -535,6 +535,9 @@ static bool ghes_handle_memory_failure(struct acpi_hest_generic_data *gdata,
 	int sec_sev = ghes_severity(gdata->error_severity);
 	struct cper_sec_mem_err *mem_err = acpi_hest_get_payload(gdata);
 
+	if (gdata->error_data_length < sizeof(*mem_err))
+		return false;
+
 	if (!(mem_err->validation_bits & CPER_MEM_VALID_PA))
 		return false;
 
