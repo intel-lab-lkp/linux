@@ -425,6 +425,9 @@ static const unsigned int memcg_node_stat_items[] = {
 	PGSCAN_ANON,
 	PGSCAN_FILE,
 	PGREFILL,
+#ifdef CONFIG_LRU_GEN
+	AGING,
+#endif
 #ifdef CONFIG_HUGETLB_PAGE
 	NR_HUGETLB,
 #endif
@@ -1611,6 +1614,9 @@ static const struct memory_stat memory_stats[] = {
 #ifdef CONFIG_NUMA_BALANCING
 	{ "pgpromote_success",		PGPROMOTE_SUCCESS	},
 #endif
+#ifdef CONFIG_LRU_GEN
+	{ "aging",		AGING	},
+#endif
 };
 
 /* The actual unit of the state item, not the same as the output unit */
@@ -1660,6 +1666,9 @@ static int memcg_page_state_output_unit(int item)
 	case PGSCAN_KHUGEPAGED:
 	case PGSCAN_PROACTIVE:
 	case PGREFILL:
+#ifdef CONFIG_LRU_GEN
+	case AGING:
+#endif
 #ifdef CONFIG_NUMA_BALANCING
 	case PGPROMOTE_SUCCESS:
 #endif

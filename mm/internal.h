@@ -699,6 +699,10 @@ extern void reclaim_throttle(pg_data_t *pgdat, enum vmscan_throttle_state reason
 int user_proactive_reclaim(char *buf,
 			   struct mem_cgroup *memcg, pg_data_t *pgdat);
 
+#ifdef CONFIG_LRU_GEN
+int lru_gen_age_memcg(struct mem_cgroup *memcg, unsigned long nr_gens);
+#endif
+
 /*
  * in mm/rmap.c:
  */
