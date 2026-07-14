@@ -270,6 +270,12 @@ static int cougar_raw_event(struct hid_device *hdev, struct hid_report *report,
 	if (!shared->enabled || !shared->input)
 		return -EPERM;
 
+	if (size < 3) {
+		hid_err(hdev, "Received HID report of bad size (%d)",
+			size);
+		return -EPERM;
+	}
+
 	code = data[COUGAR_FIELD_CODE];
 	action = data[COUGAR_FIELD_ACTION];
 	for (i = 0; cougar_mapping[i][0]; i++) {
