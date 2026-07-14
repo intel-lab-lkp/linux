@@ -1190,9 +1190,28 @@ int xhci_resume(struct xhci_hcd *xhci, bool power_lost, bool is_auto_resume)
 		xhci_for_each_ring_seg(xhci->cmd_ring->first_seg, seg)
 			memset(seg->trbs, 0, sizeof(union xhci_trb) * TRBS_PER_SEGMENT);
 
+		/* XHCI_RESET_ON_RESUME hosts are fully reset on every resume.
+		 * On some of them (e.g. ASMedia 3042) the MSI/MSI-X delivery
+		 * path is no longer valid after the reset + D3->D0 cycle, so
+		 * tear the vectors down here and let xhci_try_enable_msi()
+		 * re-allocate them below, matching pre-6.4 behaviour.
+		 */
+		if (xhci->quirks & XHCI_RESET_ON_RESUME)
+			xhci_cleanup_msix(xhci);
+
 		xhci_debugfs_exit(xhci);
 
 		xhci_init(hcd);
+
+		/* Re-arm the MSI/MSI-X delivery path for RESET_ON_RESUME PCI
+		 * hosts. xhci_run() no longer does this (it was moved to the
+		 * probe-only xhci_pci_run()), and the stale vectors left over
+		 * from before suspend cannot carry the first post-resume
+		 * command-completion event on affected hardware.
+		 */
+		if ((xhci->quirks & XHCI_RESET_ON_RESUME) &&
+		    dev_is_pci(hcd->self.controller))
+			xhci_try_enable_msi(hcd);
 
 		/*
 		 * USB core calls the PCI reinit and start functions twice:

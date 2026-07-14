@@ -126,7 +126,7 @@ static void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
 }
 
 /* Legacy IRQ is freed by usb_remove_hcd() or usb_hcd_pci_shutdown() */
-static void xhci_cleanup_msix(struct xhci_hcd *xhci)
+void xhci_cleanup_msix(struct xhci_hcd *xhci)
 {
 	struct usb_hcd *hcd = xhci_to_hcd(xhci);
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
@@ -138,9 +138,10 @@ static void xhci_cleanup_msix(struct xhci_hcd *xhci)
 	pci_free_irq_vectors(pdev);
 	hcd->msix_enabled = 0;
 }
+EXPORT_SYMBOL_GPL(xhci_cleanup_msix);
 
 /* Try enabling MSI-X with MSI and legacy IRQ as fallback */
-static int xhci_try_enable_msi(struct usb_hcd *hcd)
+int xhci_try_enable_msi(struct usb_hcd *hcd)
 {
 	struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
@@ -207,6 +208,7 @@ legacy_irq:
 	hcd->irq = pdev->irq;
 	return 0;
 }
+EXPORT_SYMBOL_GPL(xhci_try_enable_msi);
 
 static int xhci_pci_run(struct usb_hcd *hcd)
 {
