@@ -250,6 +250,8 @@ bool neigh_remove_one(struct neighbour *n)
 	return retval;
 }
 
+#define NEIGH_FORCED_GC_LARGE_TABLE_THRESH    16384
+
 static int neigh_forced_gc(struct neigh_table *tbl)
 {
 	int max_clean = atomic_read(&tbl->gc_entries) -
@@ -259,6 +261,15 @@ static int neigh_forced_gc(struct neigh_table *tbl)
 	struct neighbour *n, *tmp;
 	int shrunk = 0;
 	int loop = 0;
+
+	/*
+	 * For large neighbor tables, repeated forced GC passes can spend
+	 * significant CPU scanning neighbor entries when most remain active.
+	 * Rate-limit consecutive forced GC passes to reduce CPU overhead.
+	 */
+	if (READ_ONCE(tbl->gc_thresh3) >= NEIGH_FORCED_GC_LARGE_TABLE_THRESH &&
+	    time_before(jiffies, READ_ONCE(tbl->last_flush) + msecs_to_jiffies(50)))
+		return 0;
 
 	NEIGH_CACHE_STAT_INC(tbl, forced_gc_runs);
 
