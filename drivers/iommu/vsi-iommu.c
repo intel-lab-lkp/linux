@@ -220,10 +220,15 @@ static struct vsi_iommu *vsi_iommu_get_from_dev(struct device *dev)
 	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
 	struct device *iommu_dev = bus_find_device_by_fwnode(&platform_bus_type,
 							     fwspec->iommu_fwnode);
+	struct vsi_iommu *iommu;
 
+	if (!iommu_dev)
+		return NULL;
+
+	iommu = dev_get_drvdata(iommu_dev);
 	put_device(iommu_dev);
 
-	return iommu_dev ? dev_get_drvdata(iommu_dev) : NULL;
+	return iommu;
 }
 
 static struct iommu_domain *vsi_iommu_domain_alloc_paging(struct device *dev)
@@ -618,6 +623,9 @@ static struct iommu_device *vsi_iommu_probe_device(struct device *dev)
 {
 	struct vsi_iommu *iommu = vsi_iommu_get_from_dev(dev);
 	struct device_link *link;
+
+	if (!iommu)
+		return ERR_PTR(-ENODEV);
 
 	link = device_link_add(dev, iommu->dev,
 			       DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME);
