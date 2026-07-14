@@ -393,9 +393,9 @@ static int ccwchain_calc_length(u64 iova, struct channel_program *cp)
 			break;
 
 		ccw++;
-	} while (cnt < CCWCHAIN_LEN_MAX + 1);
+	} while (cnt < CCWCHAIN_LEN_MAX);
 
-	if (cnt == CCWCHAIN_LEN_MAX + 1)
+	if (cnt >= CCWCHAIN_LEN_MAX)
 		cnt = -EINVAL;
 
 	return cnt;
