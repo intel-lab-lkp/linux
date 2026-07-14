@@ -1009,12 +1009,16 @@ static int viommu_match_node(struct device *dev, const void *data)
 
 static struct viommu_dev *viommu_get_by_fwnode(struct fwnode_handle *fwnode)
 {
+	struct viommu_dev *viommu = NULL;
 	struct device *dev = bus_find_device(virtio_bus_type, NULL, fwnode,
 					     viommu_match_node);
 
-	put_device(dev);
+	if (dev) {
+		viommu = dev_to_virtio(dev)->priv;
+		put_device(dev);
+	}
 
-	return dev ? dev_to_virtio(dev)->priv : NULL;
+	return viommu;
 }
 
 static struct iommu_device *viommu_probe_device(struct device *dev)
