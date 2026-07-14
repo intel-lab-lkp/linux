@@ -728,8 +728,7 @@ static void *__init late_alloc(unsigned long sz)
 	void *ptdesc = pagetable_alloc(GFP_PGTABLE_KERNEL & ~__GFP_HIGHMEM,
 			get_order(sz));
 
-	if (!ptdesc || !pagetable_pte_ctor(NULL, ptdesc))
-		BUG();
+	BUG_ON(!ptdesc);
 	return ptdesc_address(ptdesc);
 }
 
