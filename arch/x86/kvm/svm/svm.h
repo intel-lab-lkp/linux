@@ -205,6 +205,12 @@ struct vmcb_ctrl_area_cached {
 	};
 };
 
+struct nested_svm_insn_bytes {
+	bool prepared;
+	u8 insn_len;
+	u8 insn_bytes[15];
+};
+
 struct svm_nested_state {
 	struct kvm_vmcb_info vmcb02;
 	u64 hsave_msr;
@@ -242,9 +248,16 @@ struct svm_nested_state {
 	/*
 	 * True if VMCB02's DecodeAssist instruction bytes belong to the hardware
 	 * VM-Exit currently being reflected to L1.  KVM-synthesized exits leave
-	 * it clear.
+	 * it clear, in which case the #NPF/#PF instruction bytes are synthesized
+	 * from the emulator fetch cache when possible.
 	 */
 	bool vmcb02_insn_bytes_fresh;
+
+	/*
+	 * DecodeAssist instruction bytes for a KVM-synthesized nested #NPF/#PF.
+	 * Populated from the emulator's fetch cache when possible.
+	 */
+	struct nested_svm_insn_bytes synthesized_insn_bytes;
 };
 
 struct vcpu_sev_es_state {

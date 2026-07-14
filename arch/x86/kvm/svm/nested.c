@@ -69,26 +69,72 @@ static bool nested_svm_vmexit_supports_insn_bytes(struct kvm_vcpu *vcpu,
 	return !(vmcb12->control.exit_info_1 & PFERR_FETCH_MASK);
 }
 
+static void nested_svm_clear_synthesized_insn_bytes(struct vcpu_svm *svm)
+{
+	svm->nested.synthesized_insn_bytes.prepared = false;
+	svm->nested.synthesized_insn_bytes.insn_len = 0;
+}
+
+static void nested_svm_prepare_synthesized_insn_bytes(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	struct nested_svm_insn_bytes *insn_bytes =
+		&svm->nested.synthesized_insn_bytes;
+	const u8 max_bytes = sizeof(insn_bytes->insn_bytes);
+	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
+
+	nested_svm_clear_synthesized_insn_bytes(svm);
+
+	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_DECODEASSISTS))
+		return;
+
+	if (!ctxt || ctxt->eip != kvm_rip_read(vcpu) ||
+	    ctxt->fetch.end < ctxt->fetch.data ||
+	    ctxt->fetch.end > ctxt->fetch.data + max_bytes)
+		return;
+
+	insn_bytes->insn_len = ctxt->fetch.end - ctxt->fetch.data;
+	memcpy(insn_bytes->insn_bytes, ctxt->fetch.data,
+	       insn_bytes->insn_len);
+	insn_bytes->prepared = true;
+}
+
 /*
  * Rebuild VMCB12's DecodeAssist bytes for the nested VM-Exit.  Use fresh
- * hardware VMCB02 state when available; otherwise report a zero byte count.
+ * hardware VMCB02 state when available; otherwise use synthesized bytes from
+ * the emulator fetch cache for KVM-generated #NPF/#PF exits.
  */
 static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 						struct vmcb *vmcb12,
 						struct vmcb *vmcb02)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	struct nested_svm_insn_bytes *insn_bytes =
+		&svm->nested.synthesized_insn_bytes;
+	const u8 max_bytes = sizeof(vmcb12->control.insn_bytes);
 	bool vmcb02_insn_bytes_fresh = svm->nested.vmcb02_insn_bytes_fresh;
+	bool synthesized_prepared = insn_bytes->prepared;
+	u8 synthesized_len = insn_bytes->insn_len;
 
 	svm->nested.vmcb02_insn_bytes_fresh = false;
+	insn_bytes->prepared = false;
 
 	nested_svm_clear_insn_bytes(vmcb12);
 
 	if (!nested_svm_vmexit_supports_insn_bytes(vcpu, vmcb12))
 		return;
 
-	if (vmcb02_insn_bytes_fresh)
+	if (vmcb02_insn_bytes_fresh) {
 		nested_svm_copy_insn_bytes(vmcb12, vmcb02);
+		return;
+	}
+
+	if (synthesized_prepared) {
+		vmcb12->control.insn_len = min(synthesized_len, max_bytes);
+		memcpy(vmcb12->control.insn_bytes, insn_bytes->insn_bytes,
+		       vmcb12->control.insn_len);
+		return;
+	}
 }
 
 static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
@@ -112,6 +158,8 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 	vmcb->control.exit_info_1 |= fault->error_code;
 
 	svm->nested.vmcb02_insn_bytes_fresh = from_hardware;
+	if (!from_hardware && !(fault->error_code & PFERR_FETCH_MASK))
+		nested_svm_prepare_synthesized_insn_bytes(vcpu);
 	nested_svm_vmexit(svm);
 }
 
@@ -902,6 +950,7 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	 */
 	nested_svm_clear_insn_bytes(vmcb02);
 	svm->nested.vmcb02_insn_bytes_fresh = false;
+	nested_svm_clear_synthesized_insn_bytes(svm);
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_VGIF) &&
 	    (vmcb12_ctrl->int_ctl & V_GIF_ENABLE_MASK))
@@ -1709,6 +1758,9 @@ static void nested_svm_inject_exception_vmexit(struct kvm_vcpu *vcpu)
 			vmcb->control.exit_info_2 = ex->payload;
 		else
 			vmcb->control.exit_info_2 = vcpu->arch.cr2;
+
+		if (!ex->has_error_code || !(ex->error_code & PFERR_FETCH_MASK))
+			nested_svm_prepare_synthesized_insn_bytes(vcpu);
 	} else if (ex->vector == DB_VECTOR) {
 		/* See kvm_check_and_inject_events().  */
 		kvm_deliver_exception_payload(vcpu, ex);
