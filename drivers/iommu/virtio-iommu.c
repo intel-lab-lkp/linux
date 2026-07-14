@@ -1240,7 +1240,9 @@ static int viommu_probe(struct virtio_device *vdev)
 
 	vdev->priv = viommu;
 
-	iommu_device_register(&viommu->iommu, &viommu_ops, parent_dev);
+	ret = iommu_device_register(&viommu->iommu, &viommu_ops, parent_dev);
+	if (ret)
+		goto err_remove_sysfs;
 
 	dev_info(dev, "input address: %u bits\n",
 		 order_base_2(viommu->geometry.aperture_end));
@@ -1248,8 +1250,11 @@ static int viommu_probe(struct virtio_device *vdev)
 
 	return 0;
 
+err_remove_sysfs:
+	iommu_device_sysfs_remove(&viommu->iommu);
 err_free_vqs:
 	vdev->config->del_vqs(vdev);
+	vdev->priv = NULL;
 
 	return ret;
 }
