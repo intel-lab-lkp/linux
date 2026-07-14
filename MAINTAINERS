@@ -18912,6 +18912,7 @@ F:	Documentation/netlink/specs/rt-addr.yaml
 F:	Documentation/netlink/specs/rt-neigh.yaml
 F:	Documentation/netlink/specs/rt-route.yaml
 F:	Documentation/netlink/specs/rt-rule.yaml
+F:	Documentation/networking/ipv6-addrsel.rst
 F:	include/linux/inetdevice.h
 F:	include/linux/mroute*
 F:	include/net/addrconf.h
