@@ -382,6 +382,14 @@ void __set_fixmap(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot)
 	local_flush_tlb_page(addr);
 }
 
+static phys_addr_t __meminit alloc_pgtable_late(uintptr_t va)
+{
+	struct ptdesc *ptdesc = pagetable_alloc(GFP_KERNEL, 0);
+
+	BUG_ON(!ptdesc);
+	return __pa(ptdesc_address(ptdesc));
+}
+
 static inline pte_t *__init get_pte_virt_early(phys_addr_t pa)
 {
 	return (pte_t *)((uintptr_t)pa);
@@ -410,19 +418,6 @@ static inline phys_addr_t __init alloc_pte_early(uintptr_t va)
 static inline phys_addr_t __init alloc_pte_fixmap(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
-}
-
-static phys_addr_t __meminit alloc_pte_late(uintptr_t va)
-{
-	struct ptdesc *ptdesc = pagetable_alloc(GFP_KERNEL, 0);
-
-	/*
-	 * We do not know which mm the PTE page is associated to at this point.
-	 * Passing NULL to the ctor is the safe option, though it may result
-	 * in unnecessary work (e.g. initialising the ptlock for init_mm).
-	 */
-	BUG_ON(!ptdesc || !pagetable_pte_ctor(NULL, ptdesc));
-	return __pa((pte_t *)ptdesc_address(ptdesc));
 }
 
 static void __meminit create_pte_mapping(pte_t *ptep, uintptr_t va, phys_addr_t pa, phys_addr_t sz,
@@ -477,15 +472,6 @@ static phys_addr_t __init alloc_pmd_early(uintptr_t va)
 static phys_addr_t __init alloc_pmd_fixmap(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
-}
-
-static phys_addr_t __meminit alloc_pmd_late(uintptr_t va)
-{
-	struct ptdesc *ptdesc = pagetable_alloc(GFP_KERNEL, 0);
-
-	/* See comment in alloc_pte_late() regarding NULL passed the ctor */
-	BUG_ON(!ptdesc || !pagetable_pmd_ctor(NULL, ptdesc));
-	return __pa((pmd_t *)ptdesc_address(ptdesc));
 }
 
 static void __meminit create_pmd_mapping(pmd_t *pmdp,
@@ -544,15 +530,6 @@ static phys_addr_t __init alloc_pud_fixmap(uintptr_t va)
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
 }
 
-static phys_addr_t __meminit alloc_pud_late(uintptr_t va)
-{
-	struct ptdesc *ptdesc = pagetable_alloc(GFP_KERNEL, 0);
-
-	BUG_ON(!ptdesc);
-	pagetable_pud_ctor(ptdesc);
-	return __pa((pud_t *)ptdesc_address(ptdesc));
-}
-
 static p4d_t *__init get_p4d_virt_early(phys_addr_t pa)
 {
 	return (p4d_t *)((uintptr_t)pa);
@@ -580,15 +557,6 @@ static phys_addr_t __init alloc_p4d_early(uintptr_t va)
 static phys_addr_t __init alloc_p4d_fixmap(uintptr_t va)
 {
 	return memblock_phys_alloc(PAGE_SIZE, PAGE_SIZE);
-}
-
-static phys_addr_t __meminit alloc_p4d_late(uintptr_t va)
-{
-	struct ptdesc *ptdesc = pagetable_alloc(GFP_KERNEL, 0);
-
-	BUG_ON(!ptdesc);
-	pagetable_p4d_ctor(ptdesc);
-	return __pa((p4d_t *)ptdesc_address(ptdesc));
 }
 
 static void __meminit create_pud_mapping(pud_t *pudp, uintptr_t va, phys_addr_t pa, phys_addr_t sz,
@@ -1003,14 +971,14 @@ static void __init pt_ops_set_fixmap(void)
  */
 static void __init pt_ops_set_late(void)
 {
-	pt_ops.alloc_pte = alloc_pte_late;
+	pt_ops.alloc_pte = alloc_pgtable_late;
 	pt_ops.get_pte_virt = get_pte_virt_late;
 #ifndef __PAGETABLE_PMD_FOLDED
-	pt_ops.alloc_pmd = alloc_pmd_late;
+	pt_ops.alloc_pmd = alloc_pgtable_late;
 	pt_ops.get_pmd_virt = get_pmd_virt_late;
-	pt_ops.alloc_pud = alloc_pud_late;
+	pt_ops.alloc_pud = alloc_pgtable_late;
 	pt_ops.get_pud_virt = get_pud_virt_late;
-	pt_ops.alloc_p4d = alloc_p4d_late;
+	pt_ops.alloc_p4d = alloc_pgtable_late;
 	pt_ops.get_p4d_virt = get_p4d_virt_late;
 #endif
 }
@@ -1488,7 +1456,6 @@ static void __meminit free_pte_table(pte_t *pte_start, pmd_t *pmd)
 			return;
 	}
 
-	pagetable_dtor(ptdesc);
 	if (PageReserved(page))
 		free_reserved_page(page);
 	else
@@ -1496,7 +1463,7 @@ static void __meminit free_pte_table(pte_t *pte_start, pmd_t *pmd)
 	pmd_clear(pmd);
 }
 
-static void __meminit free_pmd_table(pmd_t *pmd_start, pud_t *pud, bool is_vmemmap)
+static void __meminit free_pmd_table(pmd_t *pmd_start, pud_t *pud)
 {
 	struct page *page = pud_page(*pud);
 	struct ptdesc *ptdesc = page_ptdesc(page);
@@ -1509,8 +1476,6 @@ static void __meminit free_pmd_table(pmd_t *pmd_start, pud_t *pud, bool is_vmemm
 			return;
 	}
 
-	if (!is_vmemmap)
-		pagetable_dtor(ptdesc);
 	if (PageReserved(page))
 		free_reserved_page(page);
 	else
@@ -1634,7 +1599,7 @@ static void __meminit remove_pud_mapping(pud_t *pud_base, unsigned long addr, un
 		remove_pmd_mapping(pmd_base, addr, next, is_vmemmap, altmap);
 
 		if (pgtable_l4_enabled)
-			free_pmd_table(pmd_base, pudp, is_vmemmap);
+			free_pmd_table(pmd_base, pudp);
 	}
 }
 
