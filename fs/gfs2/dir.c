@@ -521,6 +521,10 @@ static int gfs2_check_dirent(struct gfs2_sbd *sdp,
 	    unlikely(sizeof(struct gfs2_dirent)+be16_to_cpu(dent->de_name_len) >
 		     size))
 		goto error;
+	msg = "name length exceeds GFS2_FNAMESIZE";
+	if (!gfs2_dirent_sentinel(dent) &&
+	    unlikely(be16_to_cpu(dent->de_name_len) > GFS2_FNAMESIZE))
+		goto error;
 	return 0;
 error:
 	fs_warn(sdp, "%s: %s (%s)\n",
