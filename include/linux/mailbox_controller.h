@@ -63,6 +63,9 @@ struct mbox_chan_ops {
 /**
  * struct mbox_controller - Controller of a class of communication channels
  * @dev:		Device backing this controller. Required.
+ * @fwnode:		Firmware node related to this controller. If NULL
+ *			the firmware node of `dev` will be used. Register
+ *			will grab a refcount and unregister will drop it.
  * @ops:		Operators that work on each communication chan. Required.
  * @chans:		Array of channels. Required.
  * @num_chans:		Number of channels in the 'chans' array. Required.
@@ -83,6 +86,7 @@ struct mbox_chan_ops {
  */
 struct mbox_controller {
 	struct device *dev;
+	struct fwnode_handle *fwnode;
 	const struct mbox_chan_ops *ops;
 	struct mbox_chan *chans;
 	int num_chans;

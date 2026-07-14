@@ -463,7 +463,7 @@ struct mbox_chan *mbox_request_channel(struct mbox_client *cl, int index)
 	scoped_guard(mutex, &con_mutex) {
 		chan = ERR_PTR(-EPROBE_DEFER);
 		list_for_each_entry(mbox, &mbox_cons, node) {
-			if (device_match_fwnode(mbox->dev, fwspec.fwnode)) {
+			if (mbox->fwnode == fwspec.fwnode) {
 				if (mbox->fw_xlate) {
 					chan = mbox->fw_xlate(mbox, &fwspec);
 					if (!IS_ERR(chan))
@@ -580,6 +580,10 @@ int mbox_controller_register(struct mbox_controller *mbox)
 	if (!mbox->fw_xlate && !mbox->of_xlate)
 		mbox->fw_xlate = fw_mbox_index_xlate;
 
+	if (!mbox->fwnode)
+		mbox->fwnode = dev_fwnode(mbox->dev);
+	mbox->fwnode = fwnode_handle_get(mbox->fwnode);
+
 	scoped_guard(mutex, &con_mutex)
 		list_add_tail(&mbox->node, &mbox_cons);
 
@@ -607,6 +611,8 @@ void mbox_controller_unregister(struct mbox_controller *mbox)
 		if (mbox->txdone_poll)
 			hrtimer_cancel(&mbox->poll_hrt);
 	}
+
+	fwnode_handle_put(mbox->fwnode);
 }
 EXPORT_SYMBOL_GPL(mbox_controller_unregister);
 
