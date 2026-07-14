@@ -625,6 +625,18 @@ static int test_cgfreezer_ptrace(const char *root)
 	if (ptrace(PTRACE_DETACH, pid, NULL, NULL))
 		goto cleanup;
 
+	/*
+	 * The ptrace(PTRACE_DETACH) call will temporaily unfreeze the cgroup
+	 * and then freeze it again afterward in the detaching process. The
+	 * reading of the frozen flag from cgroup.events is done from a
+	 * different process running maybe on a different CPU. As a result,
+	 * racing is possible and the intermediate unfrozen state can be read
+	 * leading to occasional test failure especially on architectures with
+	 * a weak memory model like arm64. This intermittent test failure can
+	 * be avoided by adding a 1ms short delay before reading the frozen
+	 * state.
+	 */
+	usleep(1000);
 	if (cg_check_frozen(cgroup, true))
 		goto cleanup;
 
