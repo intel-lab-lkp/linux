@@ -1538,10 +1538,21 @@ void set_load_weight(struct task_struct *p, bool update_load)
 	 * SCHED_OTHER tasks have to update their load when changing their
 	 * weight
 	 */
-	if (update_load && p->sched_class->reweight_task)
+	if (update_load && p->sched_class->reweight_task) {
 		p->sched_class->reweight_task(task_rq(p), p, &lw);
-	else
+
+		/*
+		 * If modify nice while task runs under ext class, only
+		 * static_prio updates, p->se.load stays stale and mismatches
+		 * the new nice value. After switching back to CFS, outdated
+		 * load leads to incorrect weight. Synchronously refresh
+		 * se.load to keep priority state consistent.
+		 */
+		if (task_on_scx(p))
+			p->se.load = lw;
+	} else {
 		p->se.load = lw;
+	}
 }
 
 #ifdef CONFIG_UCLAMP_TASK
