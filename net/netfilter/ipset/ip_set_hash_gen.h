@@ -116,6 +116,7 @@ static const union nf_inet_addr zeromask = {};
 #undef mtype_bucket_size
 #undef mtype_hash_size
 
+#undef mtype_remove_random
 #undef mtype_add
 #undef mtype_del
 #undef mtype_test_cidrs
@@ -165,6 +166,7 @@ static const union nf_inet_addr zeromask = {};
 #define mtype_bucket_size	IPSET_TOKEN(MTYPE, _bucket_size)
 #define mtype_hash_size		IPSET_TOKEN(MTYPE, _hash_size)
 
+#define mtype_remove_random	IPSET_TOKEN(MTYPE, _remove_random)
 #define mtype_add		IPSET_TOKEN(MTYPE, _add)
 #define mtype_del		IPSET_TOKEN(MTYPE, _del)
 #define mtype_test_cidrs	IPSET_TOKEN(MTYPE, _test_cidrs)
@@ -511,6 +513,33 @@ mtype_ext_size(struct ip_set *set, u32 *elements, size_t *ext_size)
 		    (offsetof(struct mtype_rht_elem, elem) + set->dsize);
 }
 
+/* Evict one element from the set to make room for a new one (forceadd) */
+static void __maybe_unused
+mtype_remove_random(struct ip_set *set, struct htype *h)
+{
+	struct rhashtable_iter hti;
+	struct mtype_rht_elem *e;
+	bool removed = false;
+
+	rhashtable_walk_enter(&h->ht, &hti);
+	rhashtable_walk_start(&hti);
+	e = rhashtable_walk_next(&hti);
+	if (IS_ERR(e))
+		e = NULL;
+
+	if (e && !rhashtable_remove_fast(&h->ht, &e->node, mtype_rht_params))
+		removed = true;
+
+	rhashtable_walk_stop(&hti);
+	rhashtable_walk_exit(&hti);
+
+	if (removed) {
+		mtype_del_cidr_all(set, h, &e->elem);
+		ip_set_ext_destroy_slow(set, &e->elem);
+		kfree_rcu(e, rcu);
+	}
+}
+
 /* Add an element to a hash and update the internal counters when succeeded,
  * otherwise report the proper error code.
  */
@@ -573,11 +602,15 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	rcu_read_unlock();
 
 	if (atomic_read(&h->ht.nelems) >= h->maxelem) {
-		if (net_ratelimit())
-			pr_warn("Set %s is full, maxelem %u reached\n",
-				set->name, h->maxelem);
-		mtype_data_next(&h->next, d);
-		return -IPSET_ERR_HASH_FULL;
+		if (SET_WITH_FORCEADD(set)) {
+			mtype_remove_random(set, h);
+		} else {
+			if (net_ratelimit())
+				pr_warn("Set %s is full, maxelem %u reached\n",
+					set->name, h->maxelem);
+			mtype_data_next(&h->next, d);
+			return -IPSET_ERR_HASH_FULL;
+		}
 	}
 
 	e = kzalloc(offsetof(struct mtype_rht_elem, elem) + set->dsize,
