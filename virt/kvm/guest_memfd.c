@@ -70,6 +70,7 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 				  gfn_t gfn, struct folio *folio)
 {
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_PREPARE
+	unsigned long nr_pages = folio_nr_pages(folio);
 	pgoff_t index;
 
 	/*
@@ -85,12 +86,12 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 	 * The order will be passed when creating the guest_memfd, and
 	 * checked when creating memslots.
 	 */
-	WARN_ON_ONCE(!IS_ALIGNED(slot->gmem.pgoff, folio_nr_pages(folio)));
-	gfn = ALIGN_DOWN(gfn, folio_nr_pages(folio));
+	WARN_ON_ONCE(!IS_ALIGNED(slot->gmem.pgoff, nr_pages));
+	gfn = ALIGN_DOWN(gfn, nr_pages);
 	index = kvm_gmem_get_index(slot, gfn);
 
 	return kvm_arch_gmem_prepare(kvm, gfn, folio_file_pfn(folio, index),
-				     folio_order(folio));
+				     nr_pages, folio_order(folio));
 #else
 	return 0;
 #endif
