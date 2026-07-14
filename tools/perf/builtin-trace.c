@@ -226,6 +226,7 @@ struct trace {
 	bool			force;
 	bool			vfs_getname;
 	bool			force_btf;
+	bool			bitmask_list;
 	bool			summary_bpf;
 	int			trace_pgfaults;
 	char			*perfconfig_events;
@@ -3216,7 +3217,7 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct perf_sample *
 	const struct tep_event *tp_format = evsel__tp_format(evsel);
 	struct tep_format_field *field = tp_format ? tp_format->format.fields : NULL;
 	struct syscall_arg_fmt *arg = __evsel__syscall_arg_fmt(evsel);
-	size_t printed = 0, btf_printed;
+	size_t printed = 0, btf_printed, saved_printed;
 	unsigned long val;
 	u8 bit = 1;
 	struct syscall_arg syscall_arg = {
@@ -3238,17 +3239,65 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct perf_sample *
 		syscall_arg.len = 0;
 		syscall_arg.fmt = arg;
 		if (field->flags & TEP_FIELD_IS_ARRAY) {
-			int offset = field->offset;
+			void *ptr = format_field__get_raw_data(field, sample,
+							       evsel->needs_swap,
+							       &syscall_arg.len);
 
-			if (field->flags & TEP_FIELD_IS_DYNAMIC) {
-				offset = format_field__intval(field, sample, evsel->needs_swap);
-				syscall_arg.len = offset >> 16;
-				offset &= 0xffff;
-				if (tep_field_is_relative(field->flags))
-					offset += field->offset + field->size;
+			if (!ptr) {
+				pr_err("Problem processing %s field, skipping...\n", field->name);
+				continue;
 			}
+			val = (uintptr_t)ptr;
+		} else if ((field->flags & TEP_FIELD_IS_DYNAMIC) &&
+			   strstr(field->type, "cpumask")) {
+			void *ptr = format_field__get_raw_data(field, sample,
+							       evsel->needs_swap,
+							       &syscall_arg.len);
 
-			val = (uintptr_t)(sample->raw_data + offset);
+			if (!ptr) {
+				pr_err("Problem processing %s field, skipping...\n", field->name);
+				continue;
+			}
+			val = (uintptr_t)ptr;
+
+			saved_printed = printed;
+
+			printed += scnprintf(bf + printed, size - printed, "%s", printed ? ", " : "");
+			if (trace->show_arg_names)
+				printed += scnprintf(bf + printed, size - printed, "%s: ", field->name);
+
+			if (trace->bitmask_list) {
+				if (syscall_arg.len > 0) {
+					unsigned long *mask = zalloc(BITS_TO_LONGS(syscall_arg.len * 8) * sizeof(unsigned long));
+					if (!mask) {
+						pr_err("Problem processing %s field, skipping...\n", field->name);
+						printed = saved_printed;
+						continue;
+					}
+					memcpy(mask, (void *)val, syscall_arg.len);
+					printed += bitmap_scnprintf(mask, syscall_arg.len * 8,
+								    bf + printed, size - printed);
+					free(mask);
+				}
+			} else {
+				unsigned char *b = (unsigned char *)val;
+				int i;
+				bool skip_zero = true;
+
+				printed += scnprintf(bf + printed, size - printed, "0x");
+				/* Print in little-endian order */
+				for (i = syscall_arg.len - 1; i >= 0; i--) {
+					if (skip_zero && b[i] == 0 && i > 0)
+						continue;
+					if (skip_zero) {
+						printed += scnprintf(bf + printed, size - printed, "%x", b[i]);
+						skip_zero = false;
+					} else {
+						printed += scnprintf(bf + printed, size - printed, "%02x", b[i]);
+					}
+				}
+			}
+			continue;
 		} else
 			val = format_field__intval(field, sample, evsel->needs_swap);
 		/*
@@ -5537,6 +5586,7 @@ int cmd_trace(int argc, const char **argv)
 		     "start"),
 	OPT_BOOLEAN(0, "force-btf", &trace.force_btf, "Prefer btf_dump general pretty printer"
 		       "to customized ones"),
+	OPT_BOOLEAN(0, "bitmask-list", &trace.bitmask_list, "Show bitmask as a human-readable list"),
 	OPT_BOOLEAN(0, "bpf-summary", &trace.summary_bpf, "Summary syscall stats in BPF"),
 	OPT_INTEGER(0, "max-summary", &trace.max_summary,
 		     "Max number of entries in the summary."),
