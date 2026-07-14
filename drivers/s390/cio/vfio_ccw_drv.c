@@ -293,7 +293,9 @@ static void vfio_ccw_queue_crw(struct vfio_ccw_private *private,
 	crw->crw.erc = erc;
 	crw->crw.rsid = rsid;
 
+	mutex_lock(&private->io_mutex);
 	list_add_tail(&crw->next, &private->crw);
+	mutex_unlock(&private->io_mutex);
 	queue_work(vfio_ccw_work_q, &private->crw_work);
 }
 
