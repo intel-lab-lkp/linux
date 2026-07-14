@@ -46,6 +46,7 @@
 #define SPI_ENGINE_REG_SDI_DATA_FIFO_PEEK	0xec
 
 #define SPI_ENGINE_MAX_NUM_OFFLOADS		32
+#define SPI_ENGINE_MAX_CS			8
 
 #define SPI_ENGINE_REG_OFFLOAD_CTRL(x)		(0x100 + SPI_ENGINE_MAX_NUM_OFFLOADS * (x))
 #define SPI_ENGINE_REG_OFFLOAD_STATUS(x)	(0x104 + SPI_ENGINE_MAX_NUM_OFFLOADS * (x))
@@ -279,12 +280,17 @@ static void spi_engine_gen_sleep(struct spi_engine_program *p, bool dry,
 }
 
 static void spi_engine_gen_cs(struct spi_engine_program *p, bool dry,
-		struct spi_device *spi, bool assert)
+		struct spi_device *spi, bool assert, unsigned long xfer_cs_mask)
 {
+	unsigned long cs_index_mask = !xfer_cs_mask
+		? spi->cs_index_mask
+		: spi->cs_index_mask & xfer_cs_mask;
 	unsigned int mask = 0xff;
+	unsigned int cs_bit;
 
 	if (assert)
-		mask ^= BIT(spi_get_chipselect(spi, 0));
+		for_each_set_bit(cs_bit, &cs_index_mask, SPI_ENGINE_MAX_CS)
+			mask ^= BIT(spi_get_chipselect(spi, cs_bit));
 
 	spi_engine_program_add_cmd(p, dry, SPI_ENGINE_CMD_ASSERT(0, mask));
 }
@@ -406,7 +412,7 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 	}
 
 	xfer = list_first_entry(&msg->transfers, struct spi_transfer, transfer_list);
-	spi_engine_gen_cs(p, dry, spi, !xfer->cs_off);
+	spi_engine_gen_cs(p, dry, spi, !xfer->cs_off, xfer->cs_select_mask);
 
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
 		if (xfer->rx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_RX_STREAM ||
@@ -451,28 +457,33 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 		spi_engine_gen_sleep(p, dry, spi_delay_to_ns(&xfer->delay, xfer),
 				     inst_ns, xfer->effective_speed_hz);
 
+		struct spi_transfer *next_xfer = list_next_entry(xfer, transfer_list);
 		if (xfer->cs_change) {
 			if (list_is_last(&xfer->transfer_list, &msg->transfers)) {
 				keep_cs = true;
 			} else {
 				if (!xfer->cs_off)
-					spi_engine_gen_cs(p, dry, spi, false);
+					spi_engine_gen_cs(p, dry, spi, false, xfer->cs_select_mask);
 
 				spi_engine_gen_sleep(p, dry, spi_delay_to_ns(
 					&xfer->cs_change_delay, xfer), inst_ns,
 					xfer->effective_speed_hz);
 
-				if (!list_next_entry(xfer, transfer_list)->cs_off)
-					spi_engine_gen_cs(p, dry, spi, true);
+				if (!next_xfer->cs_off)
+					spi_engine_gen_cs(p, dry, spi, true,
+							  next_xfer->cs_select_mask);
 			}
 		} else if (!list_is_last(&xfer->transfer_list, &msg->transfers) &&
-			   xfer->cs_off != list_next_entry(xfer, transfer_list)->cs_off) {
-			spi_engine_gen_cs(p, dry, spi, xfer->cs_off);
+			   xfer->cs_off != next_xfer->cs_off) {
+			spi_engine_gen_cs(p, dry, spi, xfer->cs_off, xfer->cs_select_mask);
+		} else if (!list_is_last(&xfer->transfer_list, &msg->transfers) &&
+			   xfer->cs_select_mask != next_xfer->cs_select_mask) {
+			spi_engine_gen_cs(p, dry, spi, true, next_xfer->cs_select_mask);
 		}
 	}
 
 	if (!keep_cs)
-		spi_engine_gen_cs(p, dry, spi, false);
+		spi_engine_gen_cs(p, dry, spi, false, 0);
 
 	/*
 	 * Restore clockdiv to default so that future gen_sleep commands don't
@@ -886,12 +897,18 @@ static int spi_engine_setup(struct spi_device *device)
 {
 	struct spi_controller *host = device->controller;
 	struct spi_engine *spi_engine = spi_controller_get_devdata(host);
+	unsigned long cs_index_mask = device->cs_index_mask;
 	unsigned int reg;
+	u32 cs_bit;
 
-	if (device->mode & SPI_CS_HIGH)
-		spi_engine->cs_inv |= BIT(spi_get_chipselect(device, 0));
-	else
-		spi_engine->cs_inv &= ~BIT(spi_get_chipselect(device, 0));
+	for_each_set_bit(cs_bit, &cs_index_mask, SPI_ENGINE_MAX_CS) {
+		if (device->mode & SPI_CS_HIGH)
+			spi_engine->cs_inv |= BIT(spi_get_chipselect(device,
+								     cs_bit));
+		else
+			spi_engine->cs_inv &= ~BIT(spi_get_chipselect(device,
+								      cs_bit));
+	}
 
 	writel_relaxed(SPI_ENGINE_CMD_SYNC(0),
 		       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
@@ -1222,6 +1239,7 @@ static int spi_engine_probe(struct platform_device *pdev)
 	host->unoptimize_message = spi_engine_unoptimize_message;
 	host->get_offload = spi_engine_get_offload;
 	host->put_offload = spi_engine_put_offload;
+	host->flags |= SPI_CONTROLLER_MULTI_CS;
 	host->num_chipselect = 8;
 
 	if (adi_axi_pcore_ver_gteq(version, 1, 2)) {
