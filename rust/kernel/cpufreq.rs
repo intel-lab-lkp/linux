@@ -377,8 +377,14 @@ impl TableBuilder {
     /// Consumes the [`TableBuilder`] and returns [`TableBox`].
     pub fn to_table(mut self) -> Result<TableBox> {
         // Add last entry to the table.
-        self.add(Hertz(c_ulong::MAX), 0, 0)?;
-
+        self.entries.push(
+            bindings::cpufreq_frequency_table {
+                flags: 0,
+                driver_data: 0,
+                frequency: bindings::CPUFREQ_TABLE_END as u32,
+            },
+            GFP_KERNEL,
+        )?;
         TableBox::new(self.entries)
     }
 }
