@@ -43,6 +43,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/dax.h>
+#include <linux/hashtable.h>
 #include <linux/ksm.h>
 #include <linux/rmap.h>
 #include <linux/export.h>
@@ -1808,24 +1809,18 @@ EXPORT_SYMBOL_GPL(mf_dax_kill_procs);
 
 #ifdef CONFIG_HUGETLB_PAGE
 
-/*
- * Struct raw_hwp_page represents information about "raw error page",
- * constructing singly linked list from ->_hugetlb_hwpoison field of folio.
- */
-struct raw_hwp_page {
-	struct llist_node node;
+/* Protects hugetlb_hwpoison list */
+static DEFINE_SPINLOCK(htlb_hwpoison_lock);
+static DEFINE_HASHTABLE(htlb_hwpoison, 5);
+
+struct hwp_page {
+	struct hlist_node node;
 	struct page *page;
 };
 
-static inline struct llist_head *raw_hwp_list_head(struct folio *folio)
-{
-	return (struct llist_head *)&folio->_hugetlb_hwpoison;
-}
-
 bool is_raw_hwpoison_page_in_hugepage(struct page *page)
 {
-	struct llist_head *raw_hwp_head;
-	struct raw_hwp_page *p;
+	struct hwp_page *p;
 	struct folio *folio = page_folio(page);
 	bool ret = false;
 
@@ -1842,36 +1837,39 @@ bool is_raw_hwpoison_page_in_hugepage(struct page *page)
 	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
 		return true;
 
-	mutex_lock(&mf_mutex);
+	spin_lock(&htlb_hwpoison_lock);
 
-	raw_hwp_head = raw_hwp_list_head(folio);
-	llist_for_each_entry(p, raw_hwp_head->first, node) {
+	hash_for_each_possible(htlb_hwpoison, p, node, (unsigned long)page) {
 		if (page == p->page) {
 			ret = true;
 			break;
 		}
 	}
 
-	mutex_unlock(&mf_mutex);
+	spin_unlock(&htlb_hwpoison_lock);
 
 	return ret;
 }
 
-static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
+static unsigned long __folio_free_hwp(struct folio *folio, bool move_flag)
 {
-	struct llist_node *head;
-	struct raw_hwp_page *p, *next;
+	int b;
+	struct hwp_page *p;
+	struct hlist_node *tmp;
 	unsigned long count = 0;
 
-	head = llist_del_all(raw_hwp_list_head(folio));
-	llist_for_each_entry_safe(p, next, head, node) {
+	hash_for_each_safe(htlb_hwpoison, b, tmp, p, node) {
+		if (page_folio(p->page) != folio)
+			continue;
 		if (move_flag)
 			SetPageHWPoison(p->page);
 		else
 			num_poisoned_pages_sub(page_to_pfn(p->page), 1);
+		hash_del(&p->node);
 		kfree(p);
 		count++;
 	}
+
 	return count;
 }
 
@@ -1887,9 +1885,7 @@ static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
  */
 static int hugetlb_update_hwpoison(struct folio *folio, struct page *page)
 {
-	struct llist_head *head;
-	struct raw_hwp_page *raw_hwp;
-	struct raw_hwp_page *p;
+	struct hwp_page *p;
 	int ret = folio_test_set_hwpoison(folio) ? MF_HUGETLB_FOLIO_PRE_POISONED : 0;
 
 	/*
@@ -1899,16 +1895,18 @@ static int hugetlb_update_hwpoison(struct folio *folio, struct page *page)
 	 */
 	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
 		return MF_HUGETLB_FOLIO_PRE_POISONED;
-	head = raw_hwp_list_head(folio);
-	llist_for_each_entry(p, head->first, node) {
-		if (p->page == page)
+	spin_lock(&htlb_hwpoison_lock);
+	hash_for_each_possible(htlb_hwpoison, p, node, (unsigned long)page) {
+		if (p->page == page) {
+			spin_unlock(&htlb_hwpoison_lock);
 			return MF_HUGETLB_PAGE_PRE_POISONED;
+		}
 	}
 
-	raw_hwp = kmalloc_obj(struct raw_hwp_page, GFP_ATOMIC);
-	if (raw_hwp) {
-		raw_hwp->page = page;
-		llist_add(&raw_hwp->node, head);
+	p = kmalloc_obj(struct hwp_page, GFP_ATOMIC);
+	if (p) {
+		p->page = page;
+		hash_add(htlb_hwpoison, &p->node, (unsigned long)page);
 	} else {
 		/*
 		 * Failed to save raw error info.  We no longer trace all
@@ -1920,13 +1918,15 @@ static int hugetlb_update_hwpoison(struct folio *folio, struct page *page)
 		 * Once hugetlb_raw_hwp_unreliable is set, raw_hwp_page is not
 		 * used any more, so free it.
 		 */
-		__folio_free_raw_hwp(folio, false);
+		__folio_free_hwp(folio, false);
 	}
+	spin_unlock(&htlb_hwpoison_lock);
 	return ret;
 }
 
 static unsigned long folio_free_raw_hwp(struct folio *folio, bool move_flag)
 {
+	unsigned long count;
 	/*
 	 * hugetlb_vmemmap_optimized hugepages can't be freed because struct
 	 * pages for tail pages are required but they don't exist.
@@ -1941,7 +1941,10 @@ static unsigned long folio_free_raw_hwp(struct folio *folio, bool move_flag)
 	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
 		return 0;
 
-	return __folio_free_raw_hwp(folio, move_flag);
+	spin_lock(&htlb_hwpoison_lock);
+	count = __folio_free_hwp(folio, move_flag);
+	spin_unlock(&htlb_hwpoison_lock);
+	return count;
 }
 
 void folio_clear_hugetlb_hwpoison(struct folio *folio)
