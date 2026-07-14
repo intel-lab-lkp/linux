@@ -1285,7 +1285,8 @@ static struct folio *folio_alloc_greedy(gfp_t gfp, size_t *size,
 	struct folio *folio;
 
 	while (*size > minsize) {
-		folio = folio_alloc(gfp | __GFP_NORETRY, get_order(*size));
+		folio = folio_alloc(gfp | __GFP_NORETRY | __GFP_NOWARN,
+				    get_order(*size));
 		if (folio)
 			return folio;
 		*size = rounddown_pow_of_two(*size - 1);
