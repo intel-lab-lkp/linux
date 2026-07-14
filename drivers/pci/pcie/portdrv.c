@@ -29,6 +29,10 @@
  */
 #define PCIE_PORT_MAX_MSI_ENTRIES	32
 
+#define PCIE_PORT_SERVICE_EXPCAP	(PCIE_PORT_SERVICE_PME | \
+					 PCIE_PORT_SERVICE_HP | \
+					 PCIE_PORT_SERVICE_BWCTRL)
+
 #define get_descriptor_id(type, service) (((type - 4) << 8) | service)
 
 struct portdrv_service_data {
@@ -67,8 +71,7 @@ static int pcie_message_numbers(struct pci_dev *dev, int mask,
 	 * 7.8.2, 7.10.10, 7.31.2.
 	 */
 
-	if (mask & (PCIE_PORT_SERVICE_PME | PCIE_PORT_SERVICE_HP |
-		    PCIE_PORT_SERVICE_BWCTRL)) {
+	if (mask & PCIE_PORT_SERVICE_EXPCAP) {
 		pcie_capability_read_word(dev, PCI_EXP_FLAGS, &reg16);
 		*pme = FIELD_GET(PCI_EXP_FLAGS_IRQ, reg16);
 		nvec = *pme + 1;
@@ -149,8 +152,7 @@ static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
 	}
 
 	/* PME, hotplug and bandwidth notification share an MSI/MSI-X vector */
-	if (mask & (PCIE_PORT_SERVICE_PME | PCIE_PORT_SERVICE_HP |
-		    PCIE_PORT_SERVICE_BWCTRL)) {
+	if (mask & PCIE_PORT_SERVICE_EXPCAP) {
 		pcie_irq = pci_irq_vector(dev, pme);
 		irqs[PCIE_PORT_SERVICE_PME_SHIFT] = pcie_irq;
 		irqs[PCIE_PORT_SERVICE_HP_SHIFT] = pcie_irq;
