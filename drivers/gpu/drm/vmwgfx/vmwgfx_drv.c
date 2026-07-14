@@ -1181,10 +1181,11 @@ static void vmw_driver_unload(struct drm_device *dev)
 	vmw_devcaps_destroy(dev_priv);
 	vmw_vram_manager_fini(dev_priv);
 	ttm_device_fini(&dev_priv->bdev);
-	vmw_release_device_late(dev_priv);
-	vmw_fence_manager_takedown(dev_priv->fman);
+	vmw_fence_fifo_down(dev_priv->fman);
 	if (dev_priv->capabilities & SVGA_CAP_IRQMASK)
 		vmw_irq_uninstall(&dev_priv->drm);
+	vmw_release_device_late(dev_priv);
+	vmw_fence_manager_takedown(dev_priv->fman);
 
 	ttm_object_device_release(&dev_priv->tdev);
 
