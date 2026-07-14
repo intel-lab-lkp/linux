@@ -159,6 +159,10 @@ static int amd_pstate_ut_check_perf(u32 index)
 		if (!policy)
 			continue;
 		cpudata = policy->driver_data;
+		if (!cpudata) {
+			pr_err("%s driver_data of %s is empty!\n", __func__, policy->kobj.name);
+			return -EINVAL;
+		}
 
 		if (get_shared_mem()) {
 			ret = cppc_get_perf_caps(cpu, &cppc_perf);
@@ -231,6 +235,10 @@ static int amd_pstate_ut_check_freq(u32 index)
 		if (!policy)
 			continue;
 		cpudata = policy->driver_data;
+		if (!cpudata) {
+			pr_err("%s driver_data of %s is empty!\n", __func__, policy->kobj.name);
+			return -EINVAL;
+		}
 
 		if (!((policy->cpuinfo.max_freq >= cpudata->nominal_freq) &&
 			(cpudata->nominal_freq > cpudata->lowest_nonlinear_freq) &&
