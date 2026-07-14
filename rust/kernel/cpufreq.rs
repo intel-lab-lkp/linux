@@ -1349,12 +1349,12 @@ impl<T: Driver> Registration<T> {
     unsafe extern "C" fn bios_limit_callback(cpu: c_int, limit: *mut c_uint) -> c_int {
         // SAFETY: The C API guarantees that `cpu` refers to a valid CPU number.
         let cpu_id = unsafe { CpuId::from_i32_unchecked(cpu) };
-
+        unsafe { core::ptr::write(limit, 0); }
         from_result(|| {
             let mut policy = PolicyCpu::from_cpu(cpu_id)?;
 
             // SAFETY: `limit` is guaranteed by the C code to be valid.
-            T::bios_limit(&mut policy, &mut (unsafe { *limit })).map(|()| 0)
+            T::bios_limit(&mut policy, unsafe { &mut *limit }).map(|()| 0)
         })
     }
 
