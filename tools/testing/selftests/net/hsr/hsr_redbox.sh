@@ -23,10 +23,6 @@ do_complete_ping_test()
 	do_ping "${ns5}" 100.64.0.1
 	stop_if_error "Initial validation failed."
 
-	# Wait for MGNT HSR frames being received and nodes being
-	# merged.
-	sleep 5
-
 	echo "INFO: Longer ping test (HSR-SAN/RedBox)."
 	# Ping from SAN to hsr1 (via hsr2)
 	do_ping_long "${ns3}" 100.64.0.1
@@ -96,16 +92,15 @@ setup_hsr_interfaces()
 	ip -n "${ns4}" link set ns4eth1 up
 	ip -n "${ns5}" link set ns5eth1 up
 
+	# Setting MAC addresses to help with debugging
 	ip -net "$ns1" link set address 00:11:22:00:01:01 dev ns1eth1
-	ip -net "$ns1" link set address 00:11:22:00:01:02 dev ns1eth2
 
 	ip -net "$ns2" link set address 00:11:22:00:02:01 dev ns2eth1
-	ip -net "$ns2" link set address 00:11:22:00:02:02 dev ns2eth2
 	ip -net "$ns2" link set address 00:11:22:00:02:03 dev ns2eth3
 
-	ip -net "$ns3" link set address 00:11:22:00:03:11 dev ns3eth1
-	ip -net "$ns3" link set address 00:11:22:00:03:11 dev ns3eth2
-	ip -net "$ns3" link set address 00:11:22:00:03:11 dev ns3eth3
+	ip -net "$ns3" link set address 00:11:22:00:03:01 dev ns3eth1
+	ip -net "$ns3" link set address 00:11:22:00:03:02 dev ns3eth2
+	ip -net "$ns3" link set address 00:11:22:00:03:03 dev ns3eth3
 	ip -net "$ns3" link set address 00:11:22:00:03:11 dev ns3br1
 
 	ip -net "$ns4" link set address 00:11:22:00:04:01 dev ns4eth1

@@ -51,25 +51,6 @@ do_ping_tests()
 	do_ping "$ns3" "dead:beef:$netid::2"
 	stop_if_error "Initial validation failed on IPv6."
 
-# Wait until supervisor all supervision frames have been processed and the node
-# entries have been merged. Otherwise duplicate frames will be observed which is
-# valid at this stage.
-	echo "INFO: Wait for node table entries to be merged."
-	WAIT=5
-	while [ ${WAIT} -gt 0 ]
-	do
-		grep 00:00:00:00:00:00 /sys/kernel/debug/hsr/hsr*/node_table
-		if [ $? -ne 0 ]
-		then
-			break
-		fi
-		sleep 1
-		let "WAIT = WAIT - 1"
-	done
-
-# Just a safety delay in case the above check didn't handle it.
-	sleep 1
-
 	echo "INFO: Longer ping test."
 	do_ping_long "$ns1" "100.64.$netid.2"
 	do_ping_long "$ns1" "dead:beef:$netid::2"
@@ -110,6 +91,11 @@ setup_hsr_interfaces()
 	ip link add ns1eth2 netns "$ns1" type veth peer name ns3eth1 netns "$ns3"
 	ip link add ns3eth2 netns "$ns3" type veth peer name ns2eth2 netns "$ns2"
 
+	# MAC addresses will be copied from LAN A interfaces
+	ip -net "$ns1" link set address 00:11:22:00:01:01 dev ns1eth1
+	ip -net "$ns2" link set address 00:11:22:00:02:01 dev ns2eth1
+	ip -net "$ns3" link set address 00:11:22:00:03:01 dev ns3eth1
+
 	# HSRv0/1
 	ip -net "$ns1" link add name hsr1 type hsr slave1 ns1eth1 \
 		slave2 ns1eth2 supervision 45 version "$HSRv" proto 0
@@ -125,15 +111,6 @@ setup_hsr_interfaces()
 	ip -net "$ns2" addr add dead:beef:0::2/64 dev hsr2 nodad
 	ip -net "$ns3" addr add 100.64.0.3/24 dev hsr3
 	ip -net "$ns3" addr add dead:beef:0::3/64 dev hsr3 nodad
-
-	ip -net "$ns1" link set address 00:11:22:00:01:01 dev ns1eth1
-	ip -net "$ns1" link set address 00:11:22:00:01:02 dev ns1eth2
-
-	ip -net "$ns2" link set address 00:11:22:00:02:01 dev ns2eth1
-	ip -net "$ns2" link set address 00:11:22:00:02:02 dev ns2eth2
-
-	ip -net "$ns3" link set address 00:11:22:00:03:01 dev ns3eth1
-	ip -net "$ns3" link set address 00:11:22:00:03:02 dev ns3eth2
 
 	# All Links up
 	ip -net "$ns1" link set ns1eth1 up

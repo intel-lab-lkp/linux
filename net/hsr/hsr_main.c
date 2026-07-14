@@ -79,13 +79,11 @@ static int hsr_netdev_notify(struct notifier_block *nb, unsigned long event,
 			call_netdevice_notifiers(NETDEV_CHANGEADDR,
 						 master->dev);
 
-			if (hsr->prot_version == PRP_V1) {
-				port = hsr_port_get_hsr(hsr, HSR_PT_SLAVE_B);
-				if (port) {
-					eth_hw_addr_set(port->dev, dev->dev_addr);
-					call_netdevice_notifiers(NETDEV_CHANGEADDR,
-								 port->dev);
-				}
+			port = hsr_port_get_hsr(hsr, HSR_PT_SLAVE_B);
+			if (port) {
+				eth_hw_addr_set(port->dev, dev->dev_addr);
+				call_netdevice_notifiers(NETDEV_CHANGEADDR,
+							 port->dev);
 			}
 		}
 

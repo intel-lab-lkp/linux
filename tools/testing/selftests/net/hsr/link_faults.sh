@@ -59,13 +59,8 @@ setup_hsr_topo()
 
 	# MAC addresses (not needed for HSR operation, but helps with debugging)
 	ip -net "$node1" link set address 00:11:22:00:01:01 dev vethA
-	ip -net "$node1" link set address 00:11:22:00:01:02 dev vethB
-
 	ip -net "$node2" link set address 00:11:22:00:02:01 dev vethA
-	ip -net "$node2" link set address 00:11:22:00:02:02 dev vethB
-
 	ip -net "$node3" link set address 00:11:22:00:03:01 dev vethA
-	ip -net "$node3" link set address 00:11:22:00:03:02 dev vethB
 
 	# HSR interfaces
 	ip -net "$node1" link add name hsr1 type hsr proto 0 version "$ver" \
@@ -134,35 +129,14 @@ setup_prp_topo()
 	ip -net "$node2" link set prp2 up
 }
 
-wait_for_hsr_node_table()
-{
-	log_info "Wait for node table entries to be merged."
-	WAIT=5
-	while [ "${WAIT}" -gt 0 ]; do
-		nts=$(cat /sys/kernel/debug/hsr/hsr*/node_table)
-
-		# We need entries in the node tables, and they need to be merged
-		if (echo "$nts" | grep -qE "^([0-9a-f]{2}:){5}") && \
-		    ! (echo "$nts" | grep -q "00:00:00:00:00:00"); then
-			return
-		fi
-
-		sleep 1
-		((WAIT--))
-	done
-	check_err 1 "Failed to wait for merged node table entries"
-}
-
 setup_topo()
 {
 	local proto="$1"
 
 	if [ "$proto" = "HSRv0" ]; then
 		setup_hsr_topo 0
-		wait_for_hsr_node_table
 	elif [ "$proto" = "HSRv1" ]; then
 		setup_hsr_topo 1
-		wait_for_hsr_node_table
 	elif [ "$proto" = "PRP" ]; then
 		setup_prp_topo
 	else
