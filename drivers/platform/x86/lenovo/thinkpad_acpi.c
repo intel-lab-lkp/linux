@@ -309,6 +309,7 @@ struct tp_acpi_drv_struct {
 
 struct ibm_struct {
 	char *name;
+	acpi_device_class device_class;
 
 	int (*read) (struct seq_file *);
 	int (*write) (char *);
@@ -838,9 +839,8 @@ static int __init setup_acpi_notify(struct ibm_struct *ibm)
 	}
 
 	ibm->acpi->device->driver_data = ibm;
-	scnprintf(acpi_device_class(ibm->acpi->device),
-		  sizeof(acpi_device_class(ibm->acpi->device)),
-		  "%s/%s", TPACPI_ACPI_EVENT_PREFIX, ibm->name);
+	scnprintf(ibm->device_class, sizeof(ibm->device_class), "%s/%s",
+		  TPACPI_ACPI_EVENT_PREFIX, ibm->name);
 
 	status = acpi_install_notify_handler(*ibm->acpi->handle,
 			ibm->acpi->type, dispatch_acpi_notify, ibm);
@@ -3869,7 +3869,7 @@ static void hotkey_notify(struct ibm_struct *ibm, u32 event)
 		pr_err("unknown HKEY notification event %d\n", event);
 		/* forward it to userspace, maybe it knows how to handle it */
 		acpi_bus_generate_netlink_event(
-					ibm->acpi->device->pnp.device_class,
+					ibm->device_class,
 					dev_name(&ibm->acpi->device->dev),
 					event, 0);
 		return;
@@ -3949,7 +3949,7 @@ static void hotkey_notify(struct ibm_struct *ibm, u32 event)
 		/* netlink events */
 		if (send_acpi_ev) {
 			acpi_bus_generate_netlink_event(
-					ibm->acpi->device->pnp.device_class,
+					ibm->device_class,
 					dev_name(&ibm->acpi->device->dev),
 					event, hkey);
 		}
