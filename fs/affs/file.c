@@ -569,6 +569,7 @@ affs_extent_file_ofs(struct inode *inode, u32 newsize)
 	pr_debug("%s(%llu, %d)\n", __func__, inode->i_ino, newsize);
 	bsize = AFFS_SB(sb)->s_data_blksize;
 	bh = NULL;
+	prev_bh = NULL;
 	size = AFFS_I(inode)->mmu_private;
 	bidx = size / bsize;
 	boff = size % bsize;
@@ -625,7 +626,9 @@ affs_extent_file_ofs(struct inode *inode, u32 newsize)
 	return 0;
 
 out:
-	inode->i_size = AFFS_I(inode)->mmu_private = newsize;
+	affs_brelse(prev_bh);
+	/* Keep i_size/mmu_private at how far we actually extended. */
+	inode->i_size = AFFS_I(inode)->mmu_private = size;
 	return PTR_ERR(bh);
 }
 
@@ -662,9 +665,6 @@ static int affs_write_begin_ofs(const struct kiocb *iocb,
 	pr_debug("%s(%llu, %llu, %llu)\n", __func__, inode->i_ino, pos,
 		 pos + len);
 	if (pos > AFFS_I(inode)->mmu_private) {
-		/* XXX: this probably leaves a too-big i_size in case of
-		 * failure. Should really be updating i_size at write_end time
-		 */
 		err = affs_extent_file_ofs(inode, pos);
 		if (err)
 			return err;
