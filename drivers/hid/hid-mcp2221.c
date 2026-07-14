@@ -861,12 +861,17 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 	u8 *buf;
 	struct mcp2221 *mcp = hid_get_drvdata(hdev);
 
+	if (size < 1)
+		return 1;
+
 	switch (data[0]) {
 
 	case MCP2221_I2C_WR_DATA:
 	case MCP2221_I2C_WR_NO_STOP:
 	case MCP2221_I2C_RD_DATA:
 	case MCP2221_I2C_RD_RPT_START:
+		if (size < 3)
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			mcp->status = 0;
@@ -878,6 +883,12 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_I2C_PARAM_OR_STATUS:
+		if (size < 21)
+			return 1;
+#if IS_REACHABLE(CONFIG_IIO)
+		if (size < 50 + sizeof(mcp->adc_values))
+			return 1;
+#endif
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			if ((mcp->txbuf[3] == MCP2221_I2C_SET_SPEED) &&
@@ -901,6 +912,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_I2C_GET_DATA:
+		if (size < 4)
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			if (data[2] == MCP2221_I2C_ADDR_NACK) {
@@ -918,7 +931,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 			}
 			if (data[2] == MCP2221_I2C_READ_COMPL ||
 			    data[2] == MCP2221_I2C_READ_PARTIAL) {
-				if (!mcp->rxbuf || mcp->rxbuf_idx < 0 || data[3] > 60) {
+				if (!mcp->rxbuf || mcp->rxbuf_idx < 0 ||
+				    data[3] > 60 || size < 4 + data[3]) {
 					mcp->status = -EINVAL;
 					break;
 				}
@@ -941,6 +955,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_GPIO_GET:
+		if (size < sizeof(struct mcp_get_gpio))
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			if ((data[mcp->gp_idx] == MCP2221_ALT_F_NOT_GPIOV) ||
@@ -958,6 +974,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_GPIO_SET:
+		if (size < sizeof(struct mcp_set_gpio))
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			if ((data[mcp->gp_idx] == MCP2221_ALT_F_NOT_GPIOV) ||
@@ -974,6 +992,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_SET_SRAM_SETTINGS:
+		if (size < 2)
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			mcp->status = 0;
@@ -985,6 +1005,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_GET_SRAM_SETTINGS:
+		if (size < 26)
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			memcpy(&mcp->mode, &data[22], 4);
@@ -1000,6 +1022,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		break;
 
 	case MCP2221_READ_FLASH_DATA:
+		if (size < 8)
+			return 1;
 		switch (data[1]) {
 		case MCP2221_SUCCESS:
 			mcp->status = 0;
