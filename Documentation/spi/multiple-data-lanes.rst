@@ -200,6 +200,36 @@ The possible values for this field have the following semantics:
     After the transfer, ``rx_buf[0] == 0x11`` (word from SDO 0) and
     ``rx_buf[1] == 0x88`` (word from SDO 1).
 
+    When ``rx_lane_mask`` or ``tx_lane_mask`` is set, STRIPE operates over
+    active lanes only. Buffer size must be sized as a multiple of the number
+    of active lanes, not the total number of lanes. The mask must be a subset
+    of the total lanes, bits that correspond to lanes not defined for the device
+    are ignored. When ``rx_lane_mask`` or ``tx_lane_mask`` is set to zero, all
+    lanes are considered active.
+
+    Example::
+
+        struct spi_transfer xfer = {
+            .rx_buf = rx_buf,
+            .len = 2,
+            .multi_lane_mode = SPI_MULTI_BUS_MODE_STRIPE,
+            .rx_lane_mask = 0x0A, /* only lanes 1 and 3 are active */
+        };
+
+        spi_sync_transfer(spi, &xfer, 1);
+
+    Each rx wire has a different data word sent simultaneously::
+
+        controller    < data bits <     peripheral
+        ----------   ----------------   ----------
+            SDI 0    1-1-0-1-0-1-1-0    SDO 0
+            SDI 1    0-1-1-0-0-1-0-1    SDO 1
+            SDI 2    1-0-1-1-0-0-1-1    SDO 2
+            SDI 3    0-0-1-0-1-1-0-1    SDO 3
+
+    After the transfer, ``rx_buf[0] == 0x65`` (word from SDO 1) and
+    ``rx_buf[1] == 0x2D`` (word from SDO 3).
+
 
 -----------------------------
 SPI controller driver support
