@@ -590,7 +590,7 @@ static int omfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		ret = -ENOMEM;
 		goto out_brelse_bh2;
 	}
-	printk(KERN_DEBUG "omfs: Mounted volume %s\n", omfs_rb->r_name);
+	pr_debug("Mounted volume %.*s\n", OMFS_NAMELEN, omfs_rb->r_name);
 
 	ret = 0;
 out_brelse_bh2:
