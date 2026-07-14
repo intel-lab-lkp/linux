@@ -164,10 +164,19 @@ struct ps_led_info {
 #define DS_OUTPUT_VALID_FLAG1_AUDIO_CONTROL2_ENABLE		BIT(7)
 #define DS_OUTPUT_VALID_FLAG2_LIGHTBAR_SETUP_CONTROL_ENABLE	BIT(1)
 #define DS_OUTPUT_VALID_FLAG2_COMPATIBLE_VIBRATION2		BIT(2)
+#define DS_OUTPUT_VALID_FLAG2_LED_BRIGHTNESS_CONTROL_ENABLE	BIT(0)
 #define DS_OUTPUT_AUDIO_FLAGS_OUTPUT_PATH_SEL			GENMASK(5, 4)
 #define DS_OUTPUT_AUDIO_FLAGS2_SP_PREAMP_GAIN			GENMASK(2, 0)
 #define DS_OUTPUT_POWER_SAVE_CONTROL_MIC_MUTE			BIT(4)
 #define DS_OUTPUT_LIGHTBAR_SETUP_LIGHT_OUT			BIT(1)
+
+/*
+ * Player LED brightness levels. Lower values are brighter; this is inverted
+ * from the LED subsystem's convention where higher values mean brighter.
+ */
+#define DS_OUTPUT_PLAYER_LED_BRIGHTNESS_HIGH			0
+#define DS_OUTPUT_PLAYER_LED_BRIGHTNESS_MEDIUM			1
+#define DS_OUTPUT_PLAYER_LED_BRIGHTNESS_LOW			2
 
 /* DualSense hardware limits */
 #define DS_ACC_RES_PER_G	8192
@@ -225,6 +234,7 @@ struct dualsense {
 	/* Player leds */
 	bool update_player_leds;
 	u8 player_leds_state;
+	u8 player_leds_brightness;
 	struct led_classdev player_leds[5];
 
 	struct work_struct output_worker;
@@ -1219,12 +1229,24 @@ static int dualsense_lightbar_set_brightness(struct led_classdev *cdev,
 	return 0;
 }
 
+/*
+ * The DualSense's player LEDs only support a single, shared brightness level
+ * for all lit LEDs -- there is no per-LED brightness control. We still expose
+ * per-LED on/off state plus 3 brightness levels through each LED classdev's
+ * max_brightness of 3; the last value written by any player LED classdev sets
+ * the shared level for all of them.
+ */
 static enum led_brightness dualsense_player_led_get_brightness(struct led_classdev *led)
 {
 	struct hid_device *hdev = to_hid_device(led->dev->parent);
 	struct dualsense *ds = hid_get_drvdata(hdev);
 
-	return !!(ds->player_leds_state & BIT(led - ds->player_leds));
+	guard(spinlock_irqsave)(&ds->base.lock);
+
+	if (!(ds->player_leds_state & BIT(led - ds->player_leds)))
+		return LED_OFF;
+
+	return DS_OUTPUT_PLAYER_LED_BRIGHTNESS_LOW + 1 - ds->player_leds_brightness;
 }
 
 static int dualsense_player_led_set_brightness(struct led_classdev *led, enum led_brightness value)
@@ -1235,10 +1257,18 @@ static int dualsense_player_led_set_brightness(struct led_classdev *led, enum le
 
 	scoped_guard(spinlock_irqsave, &ds->base.lock) {
 		led_index = led - ds->player_leds;
-		if (value == LED_OFF)
+		if (value == LED_OFF) {
 			ds->player_leds_state &= ~BIT(led_index);
-		else
+		} else {
 			ds->player_leds_state |= BIT(led_index);
+			/* Convert Linux brightness (1=dimmest) to firmware
+			 * scale (0=brightest), clamping to the valid range.
+			 */
+			value = clamp_t(enum led_brightness, value, 1,
+					 DS_OUTPUT_PLAYER_LED_BRIGHTNESS_LOW + 1);
+			ds->player_leds_brightness =
+				DS_OUTPUT_PLAYER_LED_BRIGHTNESS_LOW + 1 - value;
+		}
 
 		ds->update_player_leds = true;
 	}
@@ -1354,6 +1384,10 @@ static void dualsense_output_worker(struct work_struct *work)
 			common->valid_flag1 |=
 				DS_OUTPUT_VALID_FLAG1_PLAYER_INDICATOR_CONTROL_ENABLE;
 			common->player_leds = ds->player_leds_state;
+
+			common->valid_flag2 |=
+				DS_OUTPUT_VALID_FLAG2_LED_BRIGHTNESS_CONTROL_ENABLE;
+			common->led_brightness = ds->player_leds_brightness;
 
 			ds->update_player_leds = false;
 		}
@@ -1742,15 +1776,15 @@ static struct ps_device *dualsense_create(struct hid_device *hdev)
 	int i, ret;
 
 	static const struct ps_led_info player_leds_info[] = {
-		{ LED_FUNCTION_PLAYER1, "white", 1, dualsense_player_led_get_brightness,
+		{ LED_FUNCTION_PLAYER1, "white", 3, dualsense_player_led_get_brightness,
 				dualsense_player_led_set_brightness },
-		{ LED_FUNCTION_PLAYER2, "white", 1, dualsense_player_led_get_brightness,
+		{ LED_FUNCTION_PLAYER2, "white", 3, dualsense_player_led_get_brightness,
 				dualsense_player_led_set_brightness },
-		{ LED_FUNCTION_PLAYER3, "white", 1, dualsense_player_led_get_brightness,
+		{ LED_FUNCTION_PLAYER3, "white", 3, dualsense_player_led_get_brightness,
 				dualsense_player_led_set_brightness },
-		{ LED_FUNCTION_PLAYER4, "white", 1, dualsense_player_led_get_brightness,
+		{ LED_FUNCTION_PLAYER4, "white", 3, dualsense_player_led_get_brightness,
 				dualsense_player_led_set_brightness },
-		{ LED_FUNCTION_PLAYER5, "white", 1, dualsense_player_led_get_brightness,
+		{ LED_FUNCTION_PLAYER5, "white", 3, dualsense_player_led_get_brightness,
 				dualsense_player_led_set_brightness }
 	};
 
