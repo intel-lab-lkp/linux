@@ -783,9 +783,15 @@ int radeon_dummy_page_init(struct radeon_device *rdev)
 {
 	if (rdev->dummy_page.page)
 		return 0;
-	rdev->dummy_page.page = alloc_page(GFP_DMA32 | GFP_KERNEL | __GFP_ZERO);
-	if (rdev->dummy_page.page == NULL)
-		return -ENOMEM;
+	rdev->dummy_page.page = alloc_page(GFP_DMA32 | GFP_KERNEL | __GFP_ZERO |
+				    __GFP_NOWARN);
+	/* Retry without GFP_DMA32 for platforms where DMA32 is not available */
+	if (rdev->dummy_page.page == NULL) {
+		rdev->dummy_page.page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+		if (rdev->dummy_page.page == NULL)
+			return -ENOMEM;
+		dev_warn(&rdev->pdev->dev, "Falling back to non-DMA32 dummy page allocation\n");
+	}
 	rdev->dummy_page.addr = dma_map_page(&rdev->pdev->dev, rdev->dummy_page.page,
 					0, PAGE_SIZE, DMA_BIDIRECTIONAL);
 	if (dma_mapping_error(&rdev->pdev->dev, rdev->dummy_page.addr)) {
