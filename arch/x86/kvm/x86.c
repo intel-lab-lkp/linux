@@ -10623,14 +10623,14 @@ bool kvm_arch_supports_gmem_init_shared(struct kvm *kvm)
 int kvm_arch_gmem_prepare(struct kvm *kvm, gfn_t gfn, kvm_pfn_t pfn,
 			  kvm_pfn_t nr_pages, int max_order)
 {
-	return kvm_x86_call(gmem_prepare)(kvm, gfn, pfn, nr_pages, max_order);
+	return kvm_x86_call(gmem_convert)(kvm, gfn, pfn, nr_pages, max_order, true);
 }
 #endif
 
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_RECLAIM
 void kvm_arch_gmem_reclaim(kvm_pfn_t pfn, kvm_pfn_t nr_pages, int max_order)
 {
-	kvm_x86_call(gmem_invalidate)(pfn, pfn + nr_pages);
+	WARN_ON_ONCE(kvm_x86_call(gmem_convert)(NULL, -1ull, pfn, nr_pages, max_order, false));
 }
 #endif
 
