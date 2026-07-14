@@ -4065,6 +4065,20 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		end = DIV_ROUND_UP(i_size_read(mapping->host), PAGE_SIZE);
 		if (shmem_mapping(mapping))
 			end = shmem_fallocend(mapping->host, end);
+
+		/*
+		 * @lock_at is returned locked to the caller, and while it is
+		 * locked and present in the page cache it is what keeps the
+		 * inode alive: the mapping is still dereferenced after the split
+		 * (shmem_uncharge(), i_mmap_unlock_read()).  If it lies beyond
+		 * EOF the split would drop it from the page cache while handing
+		 * it back locked, removing that pin.  Such a folio is racing
+		 * truncation and there is nothing useful to split; bail out.
+		 */
+		if (folio->index + folio_page_idx(folio, lock_at) >= end) {
+			ret = -EBUSY;
+			goto out_unlock;
+		}
 	}
 
 	/*
