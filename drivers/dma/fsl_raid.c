@@ -242,9 +242,9 @@ static void fill_cfd_frame(struct fsl_re_cmpnd_frame *cf, u8 index,
 	u32 efrl = length & FSL_RE_CF_LENGTH_MASK;
 
 	efrl |= final << FSL_RE_CF_FINAL_SHIFT;
-	cf[index].efrl32 = efrl;
-	cf[index].addr_high = upper_32_bits(addr);
-	cf[index].addr_low = lower_32_bits(addr);
+	cf[index].efrl32 = cpu_to_be32(efrl);
+	cf[index].addr_high = cpu_to_be32(upper_32_bits(addr));
+	cf[index].addr_low = cpu_to_be32(lower_32_bits(addr));
 }
 
 static struct fsl_re_desc *fsl_re_init_desc(struct fsl_re_chan *re_chan,
@@ -256,9 +256,10 @@ static struct fsl_re_desc *fsl_re_init_desc(struct fsl_re_chan *re_chan,
 	dma_async_tx_descriptor_init(&desc->async_tx, &re_chan->chan);
 	INIT_LIST_HEAD(&desc->node);
 
-	desc->hwdesc.fmt32 = FSL_RE_FRAME_FORMAT << FSL_RE_HWDESC_FMT_SHIFT;
-	desc->hwdesc.lbea32 = upper_32_bits(paddr);
-	desc->hwdesc.addr_low = lower_32_bits(paddr);
+	desc->hwdesc.fmt32 = cpu_to_be32(FSL_RE_FRAME_FORMAT <<
+					  FSL_RE_HWDESC_FMT_SHIFT);
+	desc->hwdesc.lbea32 = cpu_to_be32(upper_32_bits(paddr));
+	desc->hwdesc.addr_low = cpu_to_be32(lower_32_bits(paddr));
 	desc->cf_addr = cf;
 	desc->cf_paddr = paddr;
 
@@ -374,11 +375,11 @@ static struct dma_async_tx_descriptor *fsl_re_prep_dma_genq(
 	for (i = 2, j = 0; j < save_src_cnt; i++, j++)
 		fill_cfd_frame(cf, i, len, src[j], 0);
 
+	/* Fill the last frame and mark it final */
 	if (cont_q)
-		fill_cfd_frame(cf, i++, len, dest, 0);
-
-	/* Setting the final bit in the last source buffer frame in CFD */
-	cf[i - 1].efrl32 |= 1 << FSL_RE_CF_FINAL_SHIFT;
+		fill_cfd_frame(cf, i, len, dest, 1);
+	else
+		fill_cfd_frame(cf, i - 1, len, src[j - 1], 1);
 
 	return &desc->async_tx;
 }
@@ -504,15 +505,15 @@ static struct dma_async_tx_descriptor *fsl_re_prep_dma_pq(
 			p[save_src_cnt + 2] = 1;
 			fill_cfd_frame(cf, i++, len, dest[0], 0);
 			fill_cfd_frame(cf, i++, len, dest[1], 0);
-			fill_cfd_frame(cf, i++, len, dest[1], 0);
+			fill_cfd_frame(cf, i++, len, dest[1], 1);
 		} else {
 			dev_err(re_chan->dev, "PQ tx continuation error!\n");
 			return NULL;
 		}
+	} else {
+		/* Mark the last source buffer frame final */
+		fill_cfd_frame(cf, i - 1, len, src[j - 1], 1);
 	}
-
-	/* Setting the final bit in the last source buffer frame in CFD */
-	cf[i - 1].efrl32 |= 1 << FSL_RE_CF_FINAL_SHIFT;
 
 	return &desc->async_tx;
 }
