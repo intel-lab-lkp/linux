@@ -416,6 +416,7 @@ struct trace_array {
 	struct dentry		*options;
 	struct dentry		*percpu_dir;
 	struct eventfs_inode	*event_dir;
+	struct eventfs_inode	*event_dir_ro;
 	struct trace_options	*topts;
 	struct list_head	systems;
 	struct list_head	events;
@@ -1604,6 +1605,7 @@ struct trace_subsystem_dir {
 	struct event_subsystem		*subsystem;
 	struct trace_array		*tr;
 	struct eventfs_inode		*ei;
+	struct eventfs_inode		*ei_ro;
 	int				ref_count;
 	int				nr_events;
 };
