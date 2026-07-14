@@ -553,6 +553,21 @@ static irqreturn_t moxart_dma_interrupt(int irq, void *devid)
 	return IRQ_HANDLED;
 }
 
+static void moxart_dma_free_channels(struct moxart_dmadev *mdc)
+{
+	struct moxart_chan *ch;
+	int i;
+
+	for (i = 0; i < APB_DMA_MAX_CHANNEL; i++) {
+		ch = &mdc->slave_chans[i];
+		/*
+		 * Wait for any scheduled tasklet to complete before channel
+		 * memory is freed by devres.
+		 */
+		tasklet_kill(&ch->vc.task);
+	}
+}
+
 static int moxart_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -609,19 +624,23 @@ static int moxart_probe(struct platform_device *pdev)
 	ret = dma_async_device_register(&mdc->dma_slave);
 	if (ret) {
 		dev_err(dev, "dma_async_device_register failed\n");
-		return ret;
+		goto err_dma_register;
 	}
 
 	ret = of_dma_controller_register(node, moxart_of_xlate, mdc);
 	if (ret) {
 		dev_err(dev, "of_dma_controller_register failed\n");
 		dma_async_device_unregister(&mdc->dma_slave);
-		return ret;
+		goto err_dma_register;
 	}
 
 	dev_dbg(dev, "%s: IRQ=%u\n", __func__, irq);
 
 	return 0;
+
+err_dma_register:
+	moxart_dma_free_channels(mdc);
+	return ret;
 }
 
 static void moxart_remove(struct platform_device *pdev)
@@ -630,10 +649,12 @@ static void moxart_remove(struct platform_device *pdev)
 
 	devm_free_irq(&pdev->dev, m->irq, m);
 
-	dma_async_device_unregister(&m->dma_slave);
+	moxart_dma_free_channels(m);
 
 	if (pdev->dev.of_node)
 		of_dma_controller_free(pdev->dev.of_node);
+
+	dma_async_device_unregister(&m->dma_slave);
 }
 
 static const struct of_device_id moxart_dma_match[] = {
