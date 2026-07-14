@@ -123,7 +123,7 @@ MODULE_PARM_DESC(report_undeciphered, "Report undeciphered multi-touch state fie
  * @tracking_ids: Mapping of current touch input data to @touches.
  * @hdev: Pointer to the underlying HID device.
  * @work: Workqueue to handle initialization retry for quirky devices.
- * @battery_timer: Timer for obtaining battery level information.
+ * @battery_work: Delayed work for obtaining battery level information.
  */
 struct magicmouse_sc {
 	struct input_dev *input;
@@ -148,7 +148,7 @@ struct magicmouse_sc {
 
 	struct hid_device *hdev;
 	struct delayed_work work;
-	struct timer_list battery_timer;
+	struct delayed_work battery_work;
 };
 
 static int magicmouse_firm_touch(struct magicmouse_sc *msc)
@@ -828,6 +828,19 @@ static bool is_usb_magictrackpad2(__u32 vendor, __u32 product)
 	       product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2_USBC;
 }
 
+/*
+ * Magic Mouse 2 and Magic Trackpad 2 expose a battery over both USB and
+ * Bluetooth (the pre-2 Magic Mouse/Trackpad do not). Transport-agnostic:
+ * over Bluetooth the vendor is BT_VENDOR_ID_APPLE but the product id matches.
+ */
+static bool magicmouse_has_battery(struct hid_device *hdev)
+{
+	return hdev->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2 ||
+	       hdev->product == USB_DEVICE_ID_APPLE_MAGICMOUSE2_USBC ||
+	       hdev->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2 ||
+	       hdev->product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD2_USBC;
+}
+
 static int magicmouse_fetch_battery(struct hid_device *hdev)
 {
 #ifdef CONFIG_HID_BATTERY_STRENGTH
@@ -836,18 +849,13 @@ static int magicmouse_fetch_battery(struct hid_device *hdev)
 	struct hid_battery *bat;
 
 	bat = hid_get_battery(hdev);
-	if (!bat ||
-	    (!is_usb_magicmouse2(hdev->vendor, hdev->product) &&
-	     !is_usb_magictrackpad2(hdev->vendor, hdev->product)))
+	if (!bat || !magicmouse_has_battery(hdev))
 		return -1;
 
 	report_enum = &hdev->report_enum[bat->report_type];
 	report = report_enum->report_id_hash[bat->report_id];
 
 	if (!report || report->maxfield < 1)
-		return -1;
-
-	if (bat->capacity == bat->max)
 		return -1;
 
 	hid_hw_request(hdev, report, HID_REQ_GET_REPORT);
@@ -857,15 +865,21 @@ static int magicmouse_fetch_battery(struct hid_device *hdev)
 #endif
 }
 
-static void magicmouse_battery_timer_tick(struct timer_list *t)
+static void magicmouse_battery_work(struct work_struct *work)
 {
-	struct magicmouse_sc *msc = timer_container_of(msc, t, battery_timer);
+	struct magicmouse_sc *msc = container_of(work, struct magicmouse_sc,
+						 battery_work.work);
 	struct hid_device *hdev = msc->hdev;
 
-	if (magicmouse_fetch_battery(hdev) == 0) {
-		mod_timer(&msc->battery_timer,
-			  jiffies + secs_to_jiffies(USB_BATTERY_TIMEOUT_SEC));
-	}
+	/*
+	 * Runs in process context (workqueue), so the battery GET_REPORT may
+	 * sleep. This is required for the uhid/Bluetooth transport, whose
+	 * raw_request blocks on userspace -- unlike a timer_list callback,
+	 * which runs in atomic softirq context and would deadlock.
+	 */
+	if (magicmouse_fetch_battery(hdev) == 0)
+		schedule_delayed_work(&msc->battery_work,
+				      secs_to_jiffies(USB_BATTERY_TIMEOUT_SEC));
 }
 
 static int magicmouse_probe(struct hid_device *hdev,
@@ -900,12 +914,10 @@ static int magicmouse_probe(struct hid_device *hdev,
 		return ret;
 	}
 
-	if (is_usb_magicmouse2(id->vendor, id->product) ||
-	    is_usb_magictrackpad2(id->vendor, id->product)) {
-		timer_setup(&msc->battery_timer, magicmouse_battery_timer_tick, 0);
-		mod_timer(&msc->battery_timer,
-			  jiffies + secs_to_jiffies(USB_BATTERY_TIMEOUT_SEC));
-		magicmouse_fetch_battery(hdev);
+	if (magicmouse_has_battery(hdev)) {
+		INIT_DELAYED_WORK(&msc->battery_work, magicmouse_battery_work);
+		/* Kick an initial fetch; the work re-arms itself each timeout. */
+		schedule_delayed_work(&msc->battery_work, 0);
 	}
 
 	if (is_usb_magicmouse2(id->vendor, id->product) ||
@@ -973,9 +985,8 @@ static int magicmouse_probe(struct hid_device *hdev,
 
 	return 0;
 err_stop_hw:
-	if (is_usb_magicmouse2(id->vendor, id->product) ||
-	    is_usb_magictrackpad2(id->vendor, id->product))
-		timer_delete_sync(&msc->battery_timer);
+	if (magicmouse_has_battery(hdev))
+		cancel_delayed_work_sync(&msc->battery_work);
 
 	hid_hw_stop(hdev);
 	return ret;
@@ -987,9 +998,8 @@ static void magicmouse_remove(struct hid_device *hdev)
 
 	if (msc) {
 		cancel_delayed_work_sync(&msc->work);
-		if (is_usb_magicmouse2(hdev->vendor, hdev->product) ||
-		    is_usb_magictrackpad2(hdev->vendor, hdev->product))
-			timer_delete_sync(&msc->battery_timer);
+		if (magicmouse_has_battery(hdev))
+			cancel_delayed_work_sync(&msc->battery_work);
 	}
 
 	hid_hw_stop(hdev);
