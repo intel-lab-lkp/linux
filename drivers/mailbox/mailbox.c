@@ -47,26 +47,34 @@ static int add_to_rbuf(struct mbox_chan *chan, void *mssg)
 
 static void msg_submit(struct mbox_chan *chan)
 {
+	struct mbox_controller *mbox = chan->mbox;
 	unsigned count, idx;
 	void *data;
 	int err = -EBUSY;
 
 	scoped_guard(spinlock_irqsave, &chan->lock) {
-		if (!chan->msg_count || chan->active_req != MBOX_NO_MSG)
-			break;
+		while (true) {
+			count = chan->msg_count - chan->num_queued;
+			if (!count || (!mbox->has_queue && chan->active_req != MBOX_NO_MSG))
+				break;
 
-		count = chan->msg_count;
-		idx = (chan->msg_free + MBOX_TX_QUEUE_LEN - count) % MBOX_TX_QUEUE_LEN;
+			idx = (chan->msg_free + MBOX_TX_QUEUE_LEN - count) % MBOX_TX_QUEUE_LEN;
 
-		data = chan->msg_data[idx];
+			data = chan->msg_data[idx];
 
-		if (chan->cl->tx_prepare)
-			chan->cl->tx_prepare(chan->cl, data);
-		/* Try to submit a message to the MBOX controller */
-		err = chan->mbox->ops->send_data(chan, data);
-		if (!err) {
-			chan->active_req = data;
-			chan->msg_count--;
+			if (chan->cl->tx_prepare)
+				chan->cl->tx_prepare(chan->cl, data);
+			/* Try to submit a message to the MBOX controller */
+			err = chan->mbox->ops->send_data(chan, data);
+			if (err)
+				break;
+
+			if (chan->active_req == MBOX_NO_MSG) {
+				chan->active_req = data;
+				chan->msg_count--;
+			} else {
+				chan->num_queued++;
+			}
 		}
 	}
 
@@ -83,7 +91,17 @@ static void tx_tick(struct mbox_chan *chan, int r)
 
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		mssg = chan->active_req;
-		chan->active_req = MBOX_NO_MSG;
+		if (chan->num_queued) {
+			unsigned int idx;
+
+			idx = (chan->msg_free + MBOX_TX_QUEUE_LEN - chan->msg_count) %
+			      MBOX_TX_QUEUE_LEN;
+			chan->active_req = chan->msg_data[idx];
+			chan->num_queued--;
+			chan->msg_count--;
+		} else {
+			chan->active_req = MBOX_NO_MSG;
+		}
 	}
 
 	/* Submit next message */
@@ -339,6 +357,7 @@ static void mbox_clean_and_put_channel(struct mbox_chan *chan)
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		chan->cl = NULL;
 		chan->active_req = MBOX_NO_MSG;
+		chan->num_queued = 0;
 		if (chan->txdone_method == MBOX_TXDONE_BY_ACK)
 			chan->txdone_method = MBOX_TXDONE_BY_POLL;
 	}
@@ -359,6 +378,7 @@ static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		chan->msg_free = 0;
 		chan->msg_count = 0;
+		chan->num_queued = 0;
 		chan->active_req = MBOX_NO_MSG;
 		chan->cl = cl;
 		init_completion(&chan->tx_complete);
@@ -552,6 +572,17 @@ int mbox_controller_register(struct mbox_controller *mbox)
 	else /* It has to be ACK then */
 		txdone = MBOX_TXDONE_BY_ACK;
 
+	/*
+	 * While it should be possible to make queued controllers work with
+	 * other txdone mechanisms, extra care would be needed when
+	 * scheduling the hrtimer (for "BY_POLL") and extra testing would be
+	 * needed in general. For now, disallow.
+	 */
+	if (mbox->has_queue && txdone != MBOX_TXDONE_BY_IRQ) {
+		dev_err(mbox->dev, "Queued mailboxes currently need a txdone irq\n");
+		return -EINVAL;
+	}
+
 	if (txdone == MBOX_TXDONE_BY_POLL) {
 
 		if (!mbox->ops->last_tx_done) {
@@ -569,6 +600,7 @@ int mbox_controller_register(struct mbox_controller *mbox)
 		chan->cl = NULL;
 		chan->mbox = mbox;
 		chan->active_req = MBOX_NO_MSG;
+		chan->num_queued = 0;
 		chan->txdone_method = txdone;
 		spin_lock_init(&chan->lock);
 	}

@@ -27,7 +27,9 @@ struct mbox_chan;
  *		if the remote hasn't yet read the last data sent. Actual
  *		transmission of data is reported by the controller via
  *		mbox_chan_txdone (if it has some TX ACK irq). It must not
- *		sleep.
+ *		sleep. If `has_queue` and the controller's queue is full,
+ *		-EBUSY should be returned to maintain consistency with the
+ *		non-queue case.
  * @flush:	Called when a client requests transmissions to be blocking but
  *		the context doesn't allow sleeping. Typically the controller
  *		will implement a busy loop waiting for the data to flush out.
@@ -69,6 +71,8 @@ struct mbox_chan_ops {
  * @ops:		Operators that work on each communication chan. Required.
  * @chans:		Array of channels. Required.
  * @num_chans:		Number of channels in the 'chans' array. Required.
+ * @has_queue:		Indicates if the controller can have more than one
+ *			active message at once. Requires txdone_irq.
  * @txdone_irq:		Indicates if the controller can report to API when
  *			the last transmitted data was read by the remote.
  *			Eg, if it has some TX ACK irq.
@@ -90,6 +94,7 @@ struct mbox_controller {
 	const struct mbox_chan_ops *ops;
 	struct mbox_chan *chans;
 	int num_chans;
+	bool has_queue;
 	bool txdone_irq;
 	bool txdone_poll;
 	unsigned txpoll_period;
@@ -129,6 +134,9 @@ struct mbox_controller {
  * @msg_count:		No. of mssg currently queued
  * @msg_free:		Index of next available mssg slot
  * @msg_data:		Hook for data packet
+ * @num_queued:		If the mbox `has_queue` then we'll go ahead and try
+ *			to send data in the `msg_data` queue. This is the
+ *			number that have been successfully queued.
  * @lock:		Serialise access to the channel
  * @con_priv:		Hook for controller driver to attach private data
  */
@@ -140,6 +148,7 @@ struct mbox_chan {
 	int tx_status;
 	void *active_req;
 	unsigned msg_count, msg_free;
+	unsigned num_queued;
 	void *msg_data[MBOX_TX_QUEUE_LEN];
 	spinlock_t lock; /* Serialise access to the channel */
 	void *con_priv;
