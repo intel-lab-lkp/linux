@@ -14,6 +14,7 @@
 
 #include <linux/acpi.h>
 #include <linux/acpi_rimt.h>
+#include <linux/auxiliary_bus.h>
 #include <linux/compiler.h>
 #include <linux/crash_dump.h>
 #include <linux/init.h>
@@ -563,6 +564,21 @@ static irqreturn_t riscv_iommu_fltq_process(int irq, void *data)
 	}
 
 	return IRQ_HANDLED;
+}
+
+/*
+ * IOMMU Hardware performance monitor
+ */
+static int riscv_iommu_hpm_enable(struct riscv_iommu_device *iommu)
+{
+	struct auxiliary_device *auxdev;
+
+	auxdev = __devm_auxiliary_device_create(iommu->dev, KBUILD_MODNAME,
+						"pmu", iommu, iommu->ddt_phys);
+	if (!auxdev)
+		return -ENODEV;
+
+	return 0;
 }
 
 /* Lookup and initialize device context info structure. */
@@ -1612,6 +1628,9 @@ int riscv_iommu_init(struct riscv_iommu_device *iommu)
 		dev_err_probe(iommu->dev, rc, "cannot register iommu interface\n");
 		goto err_remove_sysfs;
 	}
+
+	if (iommu->caps & RISCV_IOMMU_CAPABILITIES_HPM)
+		riscv_iommu_hpm_enable(iommu);
 
 	return 0;
 
