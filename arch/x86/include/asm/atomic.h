@@ -168,6 +168,13 @@ static __always_inline int arch_atomic_fetch_xor(int i, atomic_t *v)
 }
 #define arch_atomic_fetch_xor arch_atomic_fetch_xor
 
+static __always_inline void arch_atomic_not(atomic_t *v)
+{
+	asm_inline volatile(LOCK_PREFIX "notl %0"
+			: "+m" (v->counter) :: "memory");
+}
+#define arch_atomic_not arch_atomic_not
+
 #ifdef CONFIG_X86_32
 # include <asm/atomic64_32.h>
 #else
