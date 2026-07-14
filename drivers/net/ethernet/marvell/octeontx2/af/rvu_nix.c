@@ -1600,7 +1600,11 @@ int rvu_mbox_handler_nix_lf_alloc(struct rvu *rvu,
 	if (rc)
 		goto free_mem;
 
-	pfvf->sq_bmap = kcalloc(req->sq_cnt, sizeof(long), GFP_KERNEL);
+	if (rvu_is_switch_pcifunc(rvu, pcifunc))
+		pfvf->sq_bmap = kcalloc(BITS_TO_LONGS(NIX_SQ_BMAP_BITS),
+					sizeof(long), GFP_KERNEL);
+	else
+		pfvf->sq_bmap = kcalloc(req->sq_cnt, sizeof(long), GFP_KERNEL);
 	if (!pfvf->sq_bmap) {
 		rc = -ENOMEM;
 		goto free_mem;
@@ -2127,6 +2131,25 @@ static void nix_get_txschq_range(struct rvu *rvu, u16 pcifunc,
 	}
 }
 
+static int nix_get_pan_tx_link(struct rvu *rvu)
+{
+	struct rvu_hwinfo *hw = rvu->hw;
+
+	return hw->cgx_links + hw->lbk_links + 1;
+}
+
+static bool nix_txsch_is_pan_schq(struct rvu *rvu, int schq)
+{
+	int pan_link = nix_get_pan_tx_link(rvu);
+
+	return schq >= pan_link && schq <= pan_link + 1;
+}
+
+static bool nix_txsch_pan_allowed(struct rvu *rvu, u16 pcifunc)
+{
+	return rvu_is_switch_pcifunc(rvu, pcifunc);
+}
+
 static int nix_check_txschq_alloc_req(struct rvu *rvu, int lvl, u16 pcifunc,
 				      struct nix_hw *nix_hw,
 				      struct nix_txsch_alloc_req *req)
@@ -2142,12 +2165,27 @@ static int nix_check_txschq_alloc_req(struct rvu *rvu, int lvl, u16 pcifunc,
 	if (!req_schq)
 		return 0;
 
-	link = nix_get_tx_link(rvu, pcifunc);
+	if (req->flags & NIX_TXSCH_ALLOC_FLAG_PAN) {
+		if (!nix_txsch_pan_allowed(rvu, pcifunc))
+			return NIX_AF_ERR_TLX_ALLOC_FAIL;
+		link = nix_get_pan_tx_link(rvu);
+	} else {
+		link = nix_get_tx_link(rvu, pcifunc);
+	}
 
 	/* For traffic aggregating scheduler level, one queue is enough */
 	if (lvl >= hw->cap.nix_tx_aggr_lvl) {
-		if (req_schq != 1)
+		if (req_schq != 1 && !(req->flags & NIX_TXSCH_ALLOC_FLAG_PAN))
 			return NIX_AF_ERR_TLX_ALLOC_FAIL;
+		if (req->schq[lvl] > MAX_TXSCHQ_PER_FUNC ||
+		    req->schq_contig[lvl] > MAX_TXSCHQ_PER_FUNC)
+			return NIX_AF_ERR_TLX_ALLOC_FAIL;
+		if (req->flags & NIX_TXSCH_ALLOC_FLAG_PAN) {
+			if (link >= txsch->schq.max || link + 1 >= txsch->schq.max)
+				return NIX_AF_ERR_TLX_ALLOC_FAIL;
+			if (req_schq > 2)
+				return NIX_AF_ERR_TLX_ALLOC_FAIL;
+		}
 		return 0;
 	}
 
@@ -2176,9 +2214,9 @@ static int nix_check_txschq_alloc_req(struct rvu *rvu, int lvl, u16 pcifunc,
 	return 0;
 }
 
-static void nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
-			    struct nix_txsch_alloc_rsp *rsp,
-			    int lvl, int start, int end)
+static int nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
+			   struct nix_txsch_alloc_rsp *rsp,
+			   int lvl, int start, int end)
 {
 	struct rvu_hwinfo *hw = rvu->hw;
 	u16 pcifunc = rsp->hdr.pcifunc;
@@ -2188,6 +2226,46 @@ static void nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
 	 * on transmit link to which PF_FUNC is mapped to.
 	 */
 	if (lvl >= hw->cap.nix_tx_aggr_lvl) {
+		if (start != end) {
+			int want_contig = rsp->schq_contig[lvl];
+			int got_contig = 0, got = 0;
+			int want = rsp->schq[lvl];
+
+			for (schq = start; schq <= end; schq++) {
+				if (test_bit(schq, txsch->schq.bmap))
+					continue;
+
+				if (got_contig < want_contig) {
+					set_bit(schq, txsch->schq.bmap);
+					rsp->schq_contig_list[lvl][got_contig++] = schq;
+					continue;
+				}
+
+				if (got < want) {
+					set_bit(schq, txsch->schq.bmap);
+					rsp->schq_list[lvl][got++] = schq;
+				}
+			}
+
+			rsp->schq_contig[lvl] = got_contig;
+			rsp->schq[lvl] = got;
+
+			if (got_contig < want_contig || got < want) {
+				for (idx = 0; idx < got_contig; idx++)
+					clear_bit(rsp->schq_contig_list[lvl][idx],
+						  txsch->schq.bmap);
+				for (idx = 0; idx < got; idx++)
+					clear_bit(rsp->schq_list[lvl][idx],
+						  txsch->schq.bmap);
+				rsp->schq_contig[lvl] = 0;
+				rsp->schq[lvl] = 0;
+				dev_err(rvu->dev,
+					"Could not allocate schq at lvl=%u start=%u end=%u\n",
+					lvl, start, end);
+				return -ENOMEM;
+			}
+			return 0;
+		}
 		/* A single TL queue is allocated */
 		if (rsp->schq_contig[lvl]) {
 			rsp->schq_contig[lvl] = 1;
@@ -2202,7 +2280,7 @@ static void nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
 			rsp->schq[lvl] = 1;
 			rsp->schq_list[lvl][0] = start;
 		}
-		return;
+		return 0;
 	}
 
 	/* Adjust the queue request count if HW supports
@@ -2214,7 +2292,7 @@ static void nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
 		if (idx >= (end - start) || test_bit(schq, txsch->schq.bmap)) {
 			rsp->schq_contig[lvl] = 0;
 			rsp->schq[lvl] = 0;
-			return;
+			return 0;
 		}
 
 		if (rsp->schq_contig[lvl]) {
@@ -2227,7 +2305,7 @@ static void nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
 			set_bit(schq, txsch->schq.bmap);
 			rsp->schq_list[lvl][0] = schq;
 		}
-		return;
+		return 0;
 	}
 
 	/* Allocate contiguous queue indices requesty first */
@@ -2258,6 +2336,8 @@ static void nix_txsch_alloc(struct rvu *rvu, struct nix_txsch *txsch,
 		/* Update how many were allocated */
 		rsp->schq[lvl] = idx;
 	}
+
+	return 0;
 }
 
 int rvu_mbox_handler_nix_txsch_alloc(struct rvu *rvu,
@@ -2282,6 +2362,10 @@ int rvu_mbox_handler_nix_txsch_alloc(struct rvu *rvu,
 	if (!nix_hw)
 		return NIX_AF_ERR_INVALID_NIXBLK;
 
+	if ((req->flags & NIX_TXSCH_ALLOC_FLAG_PAN) &&
+	    !nix_txsch_pan_allowed(rvu, pcifunc))
+		return NIX_AF_ERR_TLX_ALLOC_FAIL;
+
 	mutex_lock(&rvu->rsrc_lock);
 
 	/* Check if request is valid as per HW capabilities
@@ -2304,11 +2388,14 @@ int rvu_mbox_handler_nix_txsch_alloc(struct rvu *rvu,
 		rsp->schq[lvl] = req->schq[lvl];
 		rsp->schq_contig[lvl] = req->schq_contig[lvl];
 
-		link = nix_get_tx_link(rvu, pcifunc);
+		if (req->flags & NIX_TXSCH_ALLOC_FLAG_PAN)
+			link = nix_get_pan_tx_link(rvu);
+		else
+			link = nix_get_tx_link(rvu, pcifunc);
 
 		if (lvl >= hw->cap.nix_tx_aggr_lvl) {
 			start = link;
-			end = link;
+			end = link + !!(req->flags & NIX_TXSCH_ALLOC_FLAG_PAN);
 		} else if (hw->cap.nix_fixed_txschq_mapping) {
 			nix_get_txschq_range(rvu, pcifunc, link, &start, &end);
 		} else {
@@ -2316,10 +2403,11 @@ int rvu_mbox_handler_nix_txsch_alloc(struct rvu *rvu,
 			end = txsch->schq.max;
 		}
 
-		nix_txsch_alloc(rvu, txsch, rsp, lvl, start, end);
+		if (nix_txsch_alloc(rvu, txsch, rsp, lvl, start, end))
+			goto err;
 
 		/* Reset queue config */
-		for (idx = 0; idx < req->schq_contig[lvl]; idx++) {
+		for (idx = 0; idx < rsp->schq_contig[lvl]; idx++) {
 			schq = rsp->schq_contig_list[lvl][idx];
 			if (!(TXSCH_MAP_FLAGS(pfvf_map[schq]) &
 			    NIX_TXSCHQ_CFG_DONE))
@@ -2329,7 +2417,7 @@ int rvu_mbox_handler_nix_txsch_alloc(struct rvu *rvu,
 			nix_reset_tx_schedule(rvu, blkaddr, lvl, schq);
 		}
 
-		for (idx = 0; idx < req->schq[lvl]; idx++) {
+		for (idx = 0; idx < rsp->schq[lvl]; idx++) {
 			schq = rsp->schq_list[lvl][idx];
 			if (!(TXSCH_MAP_FLAGS(pfvf_map[schq]) &
 			    NIX_TXSCHQ_CFG_DONE))
@@ -2625,11 +2713,11 @@ static int nix_txschq_free(struct rvu *rvu, u16 pcifunc)
 		 /* TLs above aggregation level are shared across all PF
 		  * and it's VFs, hence skip freeing them.
 		  */
-		if (lvl >= hw->cap.nix_tx_aggr_lvl)
-			continue;
-
 		txsch = &nix_hw->txsch[lvl];
 		for (schq = 0; schq < txsch->schq.max; schq++) {
+			if (lvl >= hw->cap.nix_tx_aggr_lvl &&
+			    !nix_txsch_is_pan_schq(rvu, schq))
+				continue;
 			if (TXSCH_MAP_FUNC(txsch->pfvf_map[schq]) != pcifunc)
 				continue;
 			nix_reset_tx_schedule(rvu, blkaddr, lvl, schq);
@@ -2673,7 +2761,16 @@ static int nix_txschq_free_one(struct rvu *rvu,
 	schq = req->schq;
 	txsch = &nix_hw->txsch[lvl];
 
-	if (lvl >= hw->cap.nix_tx_aggr_lvl || schq >= txsch->schq.max)
+	if (req->flags & TXSCHQ_FREE_PAN_TL1) {
+		if (!nix_txsch_pan_allowed(rvu, pcifunc))
+			return NIX_AF_ERR_TLX_INVALID;
+		if (!nix_txsch_is_pan_schq(rvu, schq))
+			return NIX_AF_ERR_TLX_INVALID;
+	} else if (lvl >= hw->cap.nix_tx_aggr_lvl) {
+		return 0;
+	}
+
+	if (schq >= txsch->schq.max)
 		return 0;
 
 	pfvf_map = txsch->pfvf_map;

@@ -2054,8 +2054,12 @@ int rvu_mbox_handler_iface_get_info(struct rvu *rvu, struct msg_req *req,
 		info->rq_cnt = 0;
 
 		mutex_lock(&rvu->rsrc_lock);
-		if (pfvf->sq_bmap)
-			info->sq_cnt = bitmap_weight(pfvf->sq_bmap, BITS_PER_LONG * 16);
+		if (pfvf->sq_bmap) {
+			int sq_bmap_bits = rvu_is_switch_pcifunc(rvu, pcifunc) ?
+					   NIX_SQ_BMAP_BITS : pfvf->sq_ctx->qsize;
+
+			info->sq_cnt = bitmap_weight(pfvf->sq_bmap, sq_bmap_bits);
+		}
 
 		if (pfvf->cq_bmap)
 			info->cq_cnt = bitmap_weight(pfvf->cq_bmap, BITS_PER_LONG);
@@ -2101,8 +2105,12 @@ chk_vfs:
 			info->rq_cnt = 0;
 
 			mutex_lock(&rvu->rsrc_lock);
-			if (pfvf->sq_bmap)
-				info->sq_cnt = bitmap_weight(pfvf->sq_bmap, BITS_PER_LONG * 16);
+			if (pfvf->sq_bmap) {
+				int sq_bmap_bits = rvu_is_switch_pcifunc(rvu, pcifunc) ?
+						   NIX_SQ_BMAP_BITS : pfvf->sq_ctx->qsize;
+
+				info->sq_cnt = bitmap_weight(pfvf->sq_bmap, sq_bmap_bits);
+			}
 
 			if (pfvf->cq_bmap)
 				info->cq_cnt = bitmap_weight(pfvf->cq_bmap, BITS_PER_LONG);

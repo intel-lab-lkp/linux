@@ -1828,8 +1828,11 @@ process_flow:
 		target = req->hdr.pcifunc;
 	}
 
-	/* ignore chan_mask in case pf func is not AF, revisit later */
-	if (!is_pffunc_af(req->hdr.pcifunc))
+	/* Non-AF requesters normally get the CPT default chan_mask. set_chanmask
+	 * preserves caller-supplied chan_mask for switchdev-installed flows; see
+	 * npc_install_flow_req.set_chanmask.
+	 */
+	if (!is_pffunc_af(req->hdr.pcifunc) && !req->set_chanmask)
 		req->chan_mask = rvu_get_cpt_chan_mask(rvu);
 
 	err = npc_check_unsupported_flows(rvu, req->features, req->intf);
