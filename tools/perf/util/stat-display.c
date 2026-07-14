@@ -397,6 +397,8 @@ static void print_aggr_id_json(struct perf_stat_config *config, struct outstate 
 			json_out(os, "\"cpu\" : \"%d\"",
 				id.cpu.cpu);
 		}
+		if (evsel && evsel->pmu && (!evsel->pmu->is_core || evsel__is_hybrid(evsel)))
+			json_out(os, "\"pmu\" : \"%s\"", evsel->pmu->name);
 		break;
 	case AGGR_THREAD:
 		json_out(os, "\"thread\" : \"%s-%d\"",
@@ -1012,11 +1014,12 @@ static void print_counter_aggrdata(struct perf_stat_config *config,
 
 static void print_metric_begin(struct perf_stat_config *config,
 			       struct evlist *evlist,
-			       struct outstate *os, int aggr_idx)
+			       struct outstate *os, int aggr_idx,
+			       struct evsel *counter)
 {
 	struct perf_stat_aggr *aggr;
 	struct aggr_cpu_id id;
-	struct evsel *evsel;
+	struct evsel *evsel = counter ?: evlist__first(evlist);
 
 	os->first = true;
 	if (!config->metric_only)
@@ -1031,7 +1034,6 @@ static void print_metric_begin(struct perf_stat_config *config,
 		else
 			fprintf(config->output, "%s", os->timestamp);
 	}
-	evsel = evlist__first(evlist);
 	id = config->aggr_map->map[aggr_idx];
 	aggr = &evsel->stats->aggr[aggr_idx];
 	aggr_printout(config, os, evsel, id, aggr->nr);
@@ -1069,7 +1071,7 @@ static void print_aggr(struct perf_stat_config *config,
 	 * Without each counter has its own line.
 	 */
 	cpu_aggr_map__for_each_idx(aggr_idx, config->aggr_map) {
-		print_metric_begin(config, evlist, os, aggr_idx);
+		print_metric_begin(config, evlist, os, aggr_idx, NULL);
 
 		evlist__for_each_entry(evlist, counter) {
 			print_counter_aggrdata(config, counter, aggr_idx, os);
@@ -1095,7 +1097,7 @@ static void print_aggr_cgroup(struct perf_stat_config *config,
 		os->cgrp = evsel->cgrp;
 
 		cpu_aggr_map__for_each_idx(aggr_idx, config->aggr_map) {
-			print_metric_begin(config, evlist, os, aggr_idx);
+			print_metric_begin(config, evlist, os, aggr_idx, NULL);
 
 			evlist__for_each_entry(evlist, counter) {
 				if (counter->cgrp != os->cgrp)
@@ -1131,7 +1133,8 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 
 	perf_cpu_map__for_each_cpu(cpu, all_idx, evlist__core(evlist)->user_requested_cpus) {
 		struct evsel *counter;
-		bool first = true;
+		struct perf_pmu *last_pmu = NULL;
+		bool line_open = false;
 
 		evlist__for_each_entry(evlist, counter) {
 			u64 ena, run, val;
@@ -1149,10 +1152,24 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 
 			os->evsel = counter;
 			os->id = aggr_cpu_id__cpu(cpu, /*data=*/NULL);
-			if (first) {
-				print_metric_begin(config, evlist, os, aggr_idx);
-				first = false;
+
+			if (config->metric_only) {
+				struct perf_pmu *pmu = counter->pmu;
+
+				if (!evsel__is_tool(counter)) {
+					if (config->json_output && line_open && pmu != last_pmu) {
+						print_metric_end(config, os);
+						line_open = false;
+					}
+					if (!line_open) {
+						print_metric_begin(config, evlist, os,
+								   aggr_idx, counter);
+						line_open = true;
+						last_pmu = pmu;
+					}
+				}
 			}
+
 			val = ps->aggr[aggr_idx].counts.val;
 			ena = ps->aggr[aggr_idx].counts.ena;
 			run = ps->aggr[aggr_idx].counts.run;
@@ -1160,7 +1177,7 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 			uval = val * counter->scale;
 			printout(config, os, uval, run, ena, 1.0, aggr_idx);
 		}
-		if (!first)
+		if (line_open)
 			print_metric_end(config, os);
 	}
 }
@@ -1523,7 +1540,7 @@ static void print_cgroup_counter(struct perf_stat_config *config, struct evlist 
 				print_metric_end(config, os);
 
 			os->cgrp = counter->cgrp;
-			print_metric_begin(config, evlist, os, /*aggr_idx=*/0);
+			print_metric_begin(config, evlist, os, /*aggr_idx=*/0, NULL);
 		}
 
 		print_counter(config, counter, os);
@@ -1573,7 +1590,7 @@ void evlist__print_counters(struct evlist *evlist, struct perf_stat_config *conf
 		} else if (config->cgroup_list) {
 			print_cgroup_counter(config, evlist, &os);
 		} else {
-			print_metric_begin(config, evlist, &os, /*aggr_idx=*/0);
+			print_metric_begin(config, evlist, &os, /*aggr_idx=*/0, NULL);
 			evlist__for_each_entry(evlist, counter) {
 				print_counter(config, counter, &os);
 			}
