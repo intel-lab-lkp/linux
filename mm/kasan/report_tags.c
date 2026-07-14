@@ -39,7 +39,7 @@ void kasan_complete_mode_report_info(struct kasan_report_info *info)
 		return;
 	}
 
-	write_lock_irqsave(&stack_ring.lock, flags);
+	read_lock_irqsave(&stack_ring.lock, flags);
 
 	pos = atomic64_read(&stack_ring.pos);
 
@@ -99,7 +99,7 @@ void kasan_complete_mode_report_info(struct kasan_report_info *info)
 		}
 	}
 
-	write_unlock_irqrestore(&stack_ring.lock, flags);
+	read_unlock_irqrestore(&stack_ring.lock, flags);
 
 	/* Assign the common bug type if no entries were found. */
 	if (!info->bug_type)

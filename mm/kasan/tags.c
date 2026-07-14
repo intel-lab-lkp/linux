@@ -110,7 +110,7 @@ static void save_stack_info(struct kmem_cache *cache, void *object,
 	 * Prevent save_stack_info() from modifying stack ring
 	 * when kasan_complete_mode_report_info() is walking it.
 	 */
-	read_lock_irqsave(&stack_ring.lock, flags);
+	write_lock_irqsave(&stack_ring.lock, flags);
 
 next:
 	pos = atomic64_fetch_add(1, &stack_ring.pos);
@@ -131,7 +131,7 @@ next:
 
 	entry->ptr = object;
 
-	read_unlock_irqrestore(&stack_ring.lock, flags);
+	write_unlock_irqrestore(&stack_ring.lock, flags);
 
 	if (old_stack)
 		stack_depot_put(old_stack);
