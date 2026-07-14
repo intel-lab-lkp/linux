@@ -97,11 +97,8 @@ struct io_tlb_pool {
  * @lock:	Lock to synchronize changes to the list.
  * @pools:	List of IO TLB memory pool descriptors (if dynamic).
  * @dyn_alloc:	Dynamic IO TLB pool allocation work.
- * @total_used:	The total number of slots in the pool that are currently used
- *		across all areas. Used only for calculating used_hiwater in
- *		debugfs.
- * @used_hiwater: The high water mark for total_used.  Used only for reporting
- *		in debugfs.
+ * @used_hiwater: The high watermark of used slots. Can be enabled at
+ *              boot time via swiotlb=track_hiwater.
  * @transient_nslabs: The total number of slots in all transient pools that
  *		are currently used across all areas.
  */
@@ -119,9 +116,8 @@ struct io_tlb_mem {
 	struct work_struct dyn_alloc;
 #endif
 #ifdef CONFIG_DEBUG_FS
-	atomic_long_t total_used;
-	atomic_long_t used_hiwater;
 	atomic_long_t transient_nslabs;
+	atomic_long_t used_hiwater;
 #endif
 };
 

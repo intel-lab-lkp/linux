@@ -180,8 +180,55 @@ static unsigned int limit_nareas(unsigned int nareas, unsigned long nslots)
 	return nareas;
 }
 
-static int __init
-setup_io_tlb_npages(char *str)
+#ifdef CONFIG_DEBUG_FS
+static unsigned long mem_used(struct io_tlb_mem *mem);
+
+/*
+ * Track the total used slots to determine the high watermark.
+ * Unlike the previous total_used atomic counter which provided
+ * exact values, mem_used() iterates areas without cross-area
+ * locking and may return imprecise results under concurrent
+ * alloc/free. This is acceptable for high watermark statistics
+ * and avoids the overhead of maintaining a dedicated atomic
+ * counter on every allocation and free.
+ */
+static void account_hiwater_real(struct io_tlb_mem *mem)
+{
+	unsigned long old_hiwater, new_used;
+
+	new_used = mem_used(mem);
+	old_hiwater = atomic_long_read(&mem->used_hiwater);
+	do {
+		if (new_used <= old_hiwater)
+			break;
+	} while (!atomic_long_try_cmpxchg(&mem->used_hiwater,
+					  &old_hiwater, new_used));
+}
+
+static void account_hiwater_nop(struct io_tlb_mem *mem)
+{
+}
+
+DEFINE_STATIC_CALL(swiotlb_account_hiwater, account_hiwater_nop);
+
+static __always_inline void account_hiwater(struct io_tlb_mem *mem)
+{
+	static_call(swiotlb_account_hiwater)(mem);
+}
+
+#else
+static __always_inline void account_hiwater(struct io_tlb_mem *mem)
+{
+}
+#endif
+
+/*
+ * The tracking of used slots high watermark can be enabled
+ * by appending "track_hiwater" to the swiotlb= boot parameter.
+ * When disabled the tracking functions are no-ops with near-zero
+ * overhead via static_call.
+ */
+static int __init setup_io_tlb_npages(char *str)
 {
 	if (isdigit(*str)) {
 		/* avoid tail segment of size < IO_TLB_SEGSIZE */
@@ -194,10 +241,21 @@ setup_io_tlb_npages(char *str)
 		swiotlb_adjust_nareas(simple_strtoul(str, &str, 0));
 	if (*str == ',')
 		++str;
-	if (!strcmp(str, "force"))
+	if (!strncmp(str, "force", 5)) {
 		swiotlb_force_bounce = true;
-	else if (!strcmp(str, "noforce"))
+		str += 5;
+	} else if (!strncmp(str, "noforce", 7)) {
 		swiotlb_force_disable = true;
+		str += 7;
+	}
+#ifdef CONFIG_DEBUG_FS
+	if (*str == ',')
+		++str;
+	if (!strncmp(str, "track_hiwater", 13)) {
+		static_call_update(swiotlb_account_hiwater,
+				   account_hiwater_real);
+	}
+#endif
 
 	return 0;
 }
@@ -959,40 +1017,6 @@ static unsigned int wrap_area_index(struct io_tlb_pool *mem, unsigned int index)
 	return index;
 }
 
-/*
- * Track the total used slots with a global atomic value in order to have
- * correct information to determine the high water mark. The mem_used()
- * function gives imprecise results because there's no locking across
- * multiple areas.
- */
-#ifdef CONFIG_DEBUG_FS
-static void inc_used_and_hiwater(struct io_tlb_mem *mem, unsigned int nslots)
-{
-	unsigned long old_hiwater, new_used;
-
-	new_used = atomic_long_add_return(nslots, &mem->total_used);
-	old_hiwater = atomic_long_read(&mem->used_hiwater);
-	do {
-		if (new_used <= old_hiwater)
-			break;
-	} while (!atomic_long_try_cmpxchg(&mem->used_hiwater,
-					  &old_hiwater, new_used));
-}
-
-static void dec_used(struct io_tlb_mem *mem, unsigned int nslots)
-{
-	atomic_long_sub(nslots, &mem->total_used);
-}
-
-#else /* !CONFIG_DEBUG_FS */
-static void inc_used_and_hiwater(struct io_tlb_mem *mem, unsigned int nslots)
-{
-}
-static void dec_used(struct io_tlb_mem *mem, unsigned int nslots)
-{
-}
-#endif /* CONFIG_DEBUG_FS */
-
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 #ifdef CONFIG_DEBUG_FS
 static void inc_transient_used(struct io_tlb_mem *mem, unsigned int nslots)
@@ -1134,7 +1158,7 @@ found:
 	area->used += nslots;
 	spin_unlock_irqrestore(&area->lock, flags);
 
-	inc_used_and_hiwater(dev->dma_io_tlb_mem, nslots);
+	account_hiwater(dev->dma_io_tlb_mem);
 	return slot_index;
 }
 
@@ -1295,24 +1319,6 @@ static int swiotlb_find_slots(struct device *dev, phys_addr_t orig_addr,
 
 #endif /* CONFIG_SWIOTLB_DYNAMIC */
 
-#ifdef CONFIG_DEBUG_FS
-
-/**
- * mem_used() - get number of used slots in an allocator
- * @mem:	Software IO TLB allocator.
- *
- * The result is accurate in this version of the function, because an atomic
- * counter is available if CONFIG_DEBUG_FS is set.
- *
- * Return: Number of used slots.
- */
-static unsigned long mem_used(struct io_tlb_mem *mem)
-{
-	return atomic_long_read(&mem->total_used);
-}
-
-#else /* !CONFIG_DEBUG_FS */
-
 /**
  * mem_pool_used() - get number of used slots in a memory pool
  * @pool:	Software IO TLB memory pool.
@@ -1356,8 +1362,6 @@ static unsigned long mem_used(struct io_tlb_mem *mem)
 	return mem_pool_used(&mem->defpool);
 #endif
 }
-
-#endif /* CONFIG_DEBUG_FS */
 
 /**
  * swiotlb_tbl_map_single() - bounce buffer map a single contiguous physical area
@@ -1508,8 +1512,6 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 		mem->slots[i].list = ++count;
 	area->used -= nslots;
 	spin_unlock_irqrestore(&area->lock, flags);
-
-	dec_used(dev->dma_io_tlb_mem, nslots);
 }
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
@@ -1531,7 +1533,6 @@ static bool swiotlb_del_transient(struct device *dev, phys_addr_t tlb_addr,
 	if (!pool->transient)
 		return false;
 
-	dec_used(dev->dma_io_tlb_mem, pool->nslabs);
 	swiotlb_del_pool(dev, pool);
 	dec_transient_used(dev->dma_io_tlb_mem, pool->nslabs);
 	return true;
