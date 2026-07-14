@@ -193,6 +193,13 @@ static int ultrarisc_pcie_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void ultrarisc_pcie_remove(struct platform_device *pdev)
+{
+	struct ultrarisc_pcie *ultra = platform_get_drvdata(pdev);
+
+	dw_pcie_host_deinit(&ultra->pci.pp);
+}
+
 static int ultrarisc_pcie_suspend_noirq(struct device *dev)
 {
 	struct ultrarisc_pcie *ultra = dev_get_drvdata(dev);
@@ -256,8 +263,9 @@ static struct platform_driver ultrarisc_pcie_driver = {
 		.pm = &ultrarisc_pcie_pm_ops,
 	},
 	.probe = ultrarisc_pcie_probe,
+	.remove = ultrarisc_pcie_remove,
 };
-builtin_platform_driver(ultrarisc_pcie_driver);
+module_platform_driver(ultrarisc_pcie_driver);
 
 MODULE_DESCRIPTION("UltraRISC DP1000 DWC PCIe host controller");
 MODULE_LICENSE("GPL");
