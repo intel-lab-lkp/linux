@@ -194,6 +194,7 @@ enum rtw_chip_type {
 	RTW_CHIP_TYPE_8723D,
 	RTW_CHIP_TYPE_8821C,
 	RTW_CHIP_TYPE_8703B,
+	RTW_CHIP_TYPE_8723B,
 	RTW_CHIP_TYPE_8821A,
 	RTW_CHIP_TYPE_8812A,
 	RTW_CHIP_TYPE_8814A,
@@ -369,6 +370,7 @@ enum rtw_flags {
 	RTW_FLAG_FW_RUNNING,
 	RTW_FLAG_SCANNING,
 	RTW_FLAG_POWERON,
+	RTW_FLAG_SOFT_IPS,
 	RTW_FLAG_LEISURE_PS,
 	RTW_FLAG_LEISURE_PS_DEEP,
 	RTW_FLAG_DIG_DISABLE,
@@ -616,6 +618,7 @@ struct rtw_tx_pkt_info {
 	u8 bw;
 	u8 sec_type;
 	u8 sn;
+	u8 data_retry_limit;
 	bool ampdu_en;
 	u8 ampdu_factor;
 	u8 ampdu_density;
@@ -623,6 +626,8 @@ struct rtw_tx_pkt_info {
 	bool stbc;
 	bool ldpc;
 	bool dis_rate_fallback;
+	bool retry_limit_en;
+	bool disable_data_rate_fb_limit;
 	bool bmc;
 	bool use_rate;
 	bool ls;
@@ -781,6 +786,7 @@ struct rtw_sta_info {
 	bool vht_enable;
 	u8 init_ra_lv;
 	u64 ra_mask;
+	u64 ra_mask_last;	/* 8723BS SDIO: last mask sent, to gate no_update */
 
 	DECLARE_BITMAP(tid_ba, IEEE80211_NUM_TIDS);
 
@@ -828,6 +834,10 @@ struct rtw_vif {
 	u8 bssid[ETH_ALEN];
 	u8 port;
 	u8 bcn_ctrl;
+	/* 8723BS SDIO join-state tracking (see mac80211.c mgd_prepare_tx path) */
+	bool fw_media_connected;
+	bool pre_auth_h2c_sent;
+	bool pre_auth_join_done;
 	struct list_head rsvd_page_list;
 	struct ieee80211_tx_queue_params tx_params[IEEE80211_NUM_ACS];
 	const struct rtw_vif_port *conf;
@@ -2057,6 +2067,18 @@ struct rtw_hw_scan_info {
 	u8 op_bw;
 };
 
+/* 8723BS SDIO: synchronises the pre-auth wait on a beacon/probe-resp from the
+ * target BSSID, so the join sequence mirrors the vendor start_clnt_join().
+ */
+struct rtw_auth_sync {
+	wait_queue_head_t wait;
+	spinlock_t lock;
+	u8 bssid[ETH_ALEN];
+	bool active;
+	bool seen;
+	u32 seen_count;
+};
+
 struct rtw_dev {
 	struct ieee80211_hw *hw;
 	struct device *dev;
@@ -2130,8 +2152,11 @@ struct rtw_dev {
 	struct rtw_wow_param wow;
 
 	bool need_rfk;
+	bool initial_rfk_done;	/* 8723BS SDIO: run IQK once, not per IPS-leave */
 	struct completion fw_scan_density;
 	bool ap_active;
+
+	struct rtw_auth_sync auth_sync;
 
 	bool led_registered;
 	char led_name[32];
@@ -2192,6 +2217,12 @@ static inline bool rtw_chip_has_rx_ldpc(struct rtw_dev *rtwdev)
 static inline bool rtw_chip_has_tx_stbc(struct rtw_dev *rtwdev)
 {
 	return rtwdev->chip->tx_stbc;
+}
+
+static inline bool rtw_is_8723bs_sdio(struct rtw_dev *rtwdev)
+{
+	return rtwdev->chip->id == RTW_CHIP_TYPE_8723B &&
+	       rtwdev->hci.type == RTW_HCI_TYPE_SDIO;
 }
 
 static inline u8 rtw_acquire_macid(struct rtw_dev *rtwdev)
@@ -2284,4 +2315,8 @@ bool rtw_core_check_sta_active(struct rtw_dev *rtwdev);
 void rtw_core_enable_beacon(struct rtw_dev *rtwdev, bool enable);
 void rtw_set_ampdu_factor(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 			  struct ieee80211_bss_conf *bss_conf);
+void rtw8723bs_auth_sync_rx(struct rtw_dev *rtwdev,
+			    const struct ieee80211_hdr *hdr, u32 len,
+			    const struct rtw_rx_pkt_stat *pkt_stat,
+			    const struct ieee80211_rx_status *rx_status);
 #endif
