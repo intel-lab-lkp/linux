@@ -81,6 +81,11 @@ struct fuse_req {
 	/** @flags: Request flags, updated with test/set/clear_bit() */
 	unsigned long flags;
 
+	/*
+	 * @in and @out are the usercopy region of this cache (see
+	 * fuse_dev_init()); keep them adjacent.
+	 */
+
 	/** @in: The request input header */
 	struct {
 		/** @in.h: The request input header */

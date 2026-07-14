@@ -2404,10 +2404,15 @@ static struct miscdevice fuse_miscdevice = {
 
 int __init fuse_dev_init(void)
 {
+	struct kmem_cache_args args = {
+		.useroffset = offsetof(struct fuse_req, in.h),
+		.usersize = sizeof_field(struct fuse_req, in.h) +
+			    sizeof_field(struct fuse_req, out.h),
+	};
 	int err = -ENOMEM;
+
 	fuse_req_cachep = kmem_cache_create("fuse_request",
-					    sizeof(struct fuse_req),
-					    0, 0, NULL);
+					    sizeof(struct fuse_req), &args, 0);
 	if (!fuse_req_cachep)
 		goto out;
 
