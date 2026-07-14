@@ -3303,26 +3303,17 @@ find_compressor(int type)
 static void
 ppp_get_stats(struct ppp *ppp, struct ppp_stats *st)
 {
+	struct rtnl_link_stats64 stats64 = {};
 	struct slcompress *vj = ppp->vj;
-	int cpu;
 
 	memset(st, 0, sizeof(*st));
-	for_each_possible_cpu(cpu) {
-		struct pcpu_sw_netstats *p = per_cpu_ptr(ppp->dev->tstats, cpu);
-		u64 rx_packets, rx_bytes, tx_packets, tx_bytes;
-
-		rx_packets = u64_stats_read(&p->rx_packets);
-		rx_bytes = u64_stats_read(&p->rx_bytes);
-		tx_packets = u64_stats_read(&p->tx_packets);
-		tx_bytes = u64_stats_read(&p->tx_bytes);
-
-		st->p.ppp_ipackets += rx_packets;
-		st->p.ppp_ibytes += rx_bytes;
-		st->p.ppp_opackets += tx_packets;
-		st->p.ppp_obytes += tx_bytes;
-	}
-	st->p.ppp_ierrors = ppp->dev->stats.rx_errors;
-	st->p.ppp_oerrors = ppp->dev->stats.tx_errors;
+	ppp_get_stats64(ppp->dev, &stats64);
+	st->p.ppp_ipackets = stats64.rx_packets;
+	st->p.ppp_ibytes = stats64.rx_bytes;
+	st->p.ppp_opackets = stats64.tx_packets;
+	st->p.ppp_obytes = stats64.tx_bytes;
+	st->p.ppp_ierrors = stats64.rx_errors;
+	st->p.ppp_oerrors = stats64.tx_errors;
 	if (!vj)
 		return;
 	st->vj.vjs_packets = vj->sls_o_compressed + vj->sls_o_uncompressed;
