@@ -7704,7 +7704,8 @@ struct bpf_insn_array_value {
 
 /* Flags to control bpf_dynptr_from_skb_ext() behavior. */
 enum {
-	BPF_SKB_EXT_F_CREATE = (1ULL << 0),
+	BPF_SKB_EXT_F_CREATE	= (1ULL << 0),
+	BPF_SKB_EXT_F_NO_SCRUB	= (1ULL << 1),
 };
 
 #endif /* _UAPI__LINUX_BPF_H__ */

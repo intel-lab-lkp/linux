@@ -12237,6 +12237,7 @@ __bpf_kfunc int bpf_dynptr_from_skb(struct __sk_buff *s, u64 flags,
  * @skb_: socket buffer to attach the extension to
  * @size: dynptr size in bytes, 0 for maximum (BPF_SKB_EXT_SIZE_MAX)
  * @flags: BPF_SKB_EXT_F_CREATE to create/COW (read-write), 0 to find (read-only)
+ *	   BPF_SKB_EXT_F_NO_SCRUB to keep the extension across skb_scrub_packet()
  * @ptr__uninit: dynptr to initialize
  *
  * Return:
@@ -12253,14 +12254,16 @@ __bpf_kfunc int bpf_dynptr_from_skb_ext(struct __sk_buff *skb_, u32 size,
 	struct bpf_dynptr_kern *ptr = (struct bpf_dynptr_kern *)ptr__uninit;
 	struct sk_buff *skb = (struct sk_buff *)skb_;
 	bool create = flags & BPF_SKB_EXT_F_CREATE;
+	bool no_scrub = flags & BPF_SKB_EXT_F_NO_SCRUB;
 	struct bpf_skb_ext *ext;
 	bool exists;
 	int err;
 
-	if (flags & ~BPF_SKB_EXT_F_CREATE) {
-		err = -EINVAL;
+	err = -EINVAL;
+	if (flags & ~(BPF_SKB_EXT_F_CREATE | BPF_SKB_EXT_F_NO_SCRUB))
 		goto error;
-	}
+	if (!create && no_scrub)
+		goto error;
 
 	if (size > ARRAY_SIZE(ext->buf)) {
 		err = -E2BIG;
@@ -12285,6 +12288,8 @@ __bpf_kfunc int bpf_dynptr_from_skb_ext(struct __sk_buff *skb_, u32 size,
 	}
 	if (!exists)
 		memset(ext, 0, sizeof(*ext));
+	if (no_scrub)
+		ext->flags |= BPF_SKB_EXT_F_NO_SCRUB;
 out:
 	bpf_dynptr_init(ptr, skb, BPF_DYNPTR_TYPE_SKB_EXT, 0, size);
 	if (!create)

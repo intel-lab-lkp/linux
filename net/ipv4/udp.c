@@ -1536,7 +1536,7 @@ static bool udp_try_make_stateless(struct sk_buff *skb)
 		return true;
 
 	if (!secpath_exists(skb)) {
-		skb_ext_reset(skb);
+		skb_ext_scrub(skb);
 		return true;
 	}
 

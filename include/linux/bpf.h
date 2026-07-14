@@ -4021,6 +4021,7 @@ static inline int bpf_map_check_op_flags(struct bpf_map *map, u64 flags, u64 all
 #ifdef CONFIG_BPF_SKB_EXT
 
 struct bpf_skb_ext {
+	u64 flags;
 	u8 buf[CONFIG_BPF_SKB_EXT_SIZE] __aligned(8);
 };
 
