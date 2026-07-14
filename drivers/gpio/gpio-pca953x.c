@@ -177,6 +177,7 @@ static const struct dmi_system_id pca953x_dmi_acpi_irq_info[] = {
 	},
 	{}
 };
+MODULE_DEVICE_TABLE(dmi, pca953x_dmi_acpi_irq_info);
 #endif
 
 static const struct acpi_device_id pca953x_acpi_ids[] = {

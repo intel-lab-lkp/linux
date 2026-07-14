@@ -394,6 +394,7 @@ static const struct dmi_system_id gpiolib_acpi_quirks[] __initconst = {
 	},
 	{} /* Terminating entry */
 };
+MODULE_DEVICE_TABLE(dmi, gpiolib_acpi_quirks);
 
 static int __init acpi_gpio_setup_params(void)
 {
