@@ -18,8 +18,32 @@ static int rtw_ips_pwr_up(struct rtw_dev *rtwdev)
 	if (ret)
 		rtw_err(rtwdev, "leave idle state failed\n");
 
-	rtw_coex_ips_notify(rtwdev, COEX_IPS_LEAVE);
+	if (rtw_is_8723bs_sdio(rtwdev)) {
+		/* The BT-side coex init in rtw_power_on switches 8723BS SDIO to
+		 * the BT antenna path (BB_SEL_BTG=0x280), corrupting the RF
+		 * 3-wire bus. Run the scan-path PS-TDMA/coex-table/PTA setup
+		 * (which restores the WiFi PTA path) instead of the generic
+		 * COEX_IPS_LEAVE notify that would re-run the BT-path init.
+		 */
+		rtwdev->coex.stat.wl_under_ips = false;
+		rtw_coex_write_scbd(rtwdev,
+				    COEX_SCBD_ACTIVE | COEX_SCBD_ONOFF, true);
+		rtw_coex_8723bs_scan_workaround(rtwdev);
+	} else {
+		rtw_coex_ips_notify(rtwdev, COEX_IPS_LEAVE);
+	}
+
 	rtw_set_channel(rtwdev);
+
+	if (rtw_is_8723bs_sdio(rtwdev)) {
+		/* The first set_channel after IPS-leave can read back an
+		 * incorrect RF00 because power_on wrote RF registers on the BT
+		 * antenna path. Re-run set_channel after a settling delay so
+		 * the RF PLL re-locks from a clean baseline.
+		 */
+		usleep_range(1500, 2000);
+		rtw_set_channel(rtwdev);
+	}
 
 	return ret;
 }
@@ -28,6 +52,17 @@ int rtw_enter_ips(struct rtw_dev *rtwdev)
 {
 	if (!test_bit(RTW_FLAG_POWERON, rtwdev->flags))
 		return 0;
+
+	/* 8723BS SDIO: a full power-off/on cycle between scan and connect
+	 * corrupts the 8051 firmware's management TX scheduler. The vendor
+	 * driver keeps the chip powered on across that boundary. Enter a
+	 * "soft IPS" instead: keep the chip powered and the coex/RF state
+	 * intact, so leave-IPS needs no power-on / phy_set_param reload.
+	 */
+	if (rtw_is_8723bs_sdio(rtwdev)) {
+		set_bit(RTW_FLAG_SOFT_IPS, rtwdev->flags);
+		return 0;
+	}
 
 	rtw_coex_ips_notify(rtwdev, COEX_IPS_ENTER);
 
@@ -49,6 +84,19 @@ static void rtw_restore_port_cfg_iter(void *data, struct ieee80211_vif *vif)
 int rtw_leave_ips(struct rtw_dev *rtwdev)
 {
 	int ret;
+
+	/* 8723BS SDIO soft IPS: the chip was never powered off. Clear the
+	 * soft-IPS flag and refresh the active WLAN scoreboard / PTA antenna
+	 * path; no power-on / phy_set_param is needed.
+	 */
+	if (test_bit(RTW_FLAG_SOFT_IPS, rtwdev->flags)) {
+		clear_bit(RTW_FLAG_SOFT_IPS, rtwdev->flags);
+		rtwdev->coex.stat.wl_under_ips = false;
+		rtw_coex_write_scbd(rtwdev,
+				    COEX_SCBD_ACTIVE | COEX_SCBD_ONOFF, true);
+		rtw_coex_8723bs_scan_workaround(rtwdev);
+		return 0;
+	}
 
 	if (test_bit(RTW_FLAG_POWERON, rtwdev->flags))
 		return 0;
