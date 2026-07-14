@@ -103,7 +103,7 @@ pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 }
 EXPORT_SYMBOL(phys_mem_access_prot);
 
-static phys_addr_t __init early_pgtable_alloc(enum pgtable_level pgtable_level)
+static phys_addr_t __init early_pgtable_alloc(void)
 {
 	phys_addr_t phys;
 
@@ -195,7 +195,7 @@ static bool pte_range_has_valid_noncont(pte_t *ptep)
 static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 			       unsigned long end, phys_addr_t phys,
 			       pgprot_t prot,
-			       phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+			       phys_addr_t (*pgtable_alloc)(void),
 			       int flags)
 {
 	unsigned long next;
@@ -210,7 +210,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		if (flags & NO_EXEC_MAPPINGS)
 			pmdval |= PMD_TABLE_PXN;
 		BUG_ON(!pgtable_alloc);
-		pte_phys = pgtable_alloc(PGTABLE_LEVEL_PTE);
+		pte_phys = pgtable_alloc();
 		if (pte_phys == INVALID_PHYS_ADDR)
 			return -ENOMEM;
 		ptep = pte_set_fixmap(pte_phys);
@@ -251,7 +251,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 
 static int init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		    phys_addr_t phys, pgprot_t prot,
-		    phys_addr_t (*pgtable_alloc)(enum pgtable_level), int flags)
+		    phys_addr_t (*pgtable_alloc)(void), int flags)
 {
 	unsigned long next;
 
@@ -303,7 +303,7 @@ static bool pmd_range_has_valid_noncont(pmd_t *pmdp)
 static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 			       unsigned long end, phys_addr_t phys,
 			       pgprot_t prot,
-			       phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+			       phys_addr_t (*pgtable_alloc)(void),
 			       int flags)
 {
 	int ret;
@@ -322,7 +322,7 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		if (flags & NO_EXEC_MAPPINGS)
 			pudval |= PUD_TABLE_PXN;
 		BUG_ON(!pgtable_alloc);
-		pmd_phys = pgtable_alloc(PGTABLE_LEVEL_PMD);
+		pmd_phys = pgtable_alloc();
 		if (pmd_phys == INVALID_PHYS_ADDR)
 			return -ENOMEM;
 		pmdp = pmd_set_fixmap(pmd_phys);
@@ -361,7 +361,7 @@ out:
 
 static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 			  phys_addr_t phys, pgprot_t prot,
-			  phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+			  phys_addr_t (*pgtable_alloc)(void),
 			  int flags)
 {
 	int ret = 0;
@@ -376,7 +376,7 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		if (flags & NO_EXEC_MAPPINGS)
 			p4dval |= P4D_TABLE_PXN;
 		BUG_ON(!pgtable_alloc);
-		pud_phys = pgtable_alloc(PGTABLE_LEVEL_PUD);
+		pud_phys = pgtable_alloc();
 		if (pud_phys == INVALID_PHYS_ADDR)
 			return -ENOMEM;
 		pudp = pud_set_fixmap(pud_phys);
@@ -428,7 +428,7 @@ out:
 
 static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 			  phys_addr_t phys, pgprot_t prot,
-			  phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+			  phys_addr_t (*pgtable_alloc)(void),
 			  int flags)
 {
 	int ret;
@@ -443,7 +443,7 @@ static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		if (flags & NO_EXEC_MAPPINGS)
 			pgdval |= PGD_TABLE_PXN;
 		BUG_ON(!pgtable_alloc);
-		p4d_phys = pgtable_alloc(PGTABLE_LEVEL_P4D);
+		p4d_phys = pgtable_alloc();
 		if (p4d_phys == INVALID_PHYS_ADDR)
 			return -ENOMEM;
 		p4dp = p4d_set_fixmap(p4d_phys);
@@ -480,7 +480,7 @@ out:
 static int __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 				       unsigned long virt, phys_addr_t size,
 				       pgprot_t prot,
-				       phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+				       phys_addr_t (*pgtable_alloc)(void),
 				       int flags)
 {
 	int ret;
@@ -513,7 +513,7 @@ static int __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 static int __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				unsigned long virt, phys_addr_t size,
 				pgprot_t prot,
-				phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+				phys_addr_t (*pgtable_alloc)(void),
 				int flags)
 {
 	int ret;
@@ -529,7 +529,7 @@ static int __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 static void early_create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				     unsigned long virt, phys_addr_t size,
 				     pgprot_t prot,
-				     phys_addr_t (*pgtable_alloc)(enum pgtable_level),
+				     phys_addr_t (*pgtable_alloc)(void),
 				     int flags)
 {
 	int ret;
@@ -540,55 +540,20 @@ static void early_create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 		panic("Failed to create page tables\n");
 }
 
-static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm, gfp_t gfp,
-				       enum pgtable_level pgtable_level)
+static phys_addr_t pgd_pgtable_alloc_gfp(gfp_t gfp)
 {
 	/* Page is zeroed by init_clear_pgtable() so don't duplicate effort. */
 	struct ptdesc *ptdesc = pagetable_alloc(gfp & ~__GFP_ZERO, 0);
-	phys_addr_t pa;
 
 	if (!ptdesc)
 		return INVALID_PHYS_ADDR;
 
-	pa = page_to_phys(ptdesc_page(ptdesc));
-
-	switch (pgtable_level) {
-	case PGTABLE_LEVEL_PTE:
-		BUG_ON(!pagetable_pte_ctor(mm, ptdesc));
-		break;
-	case PGTABLE_LEVEL_PMD:
-		BUG_ON(!pagetable_pmd_ctor(mm, ptdesc));
-		break;
-	case PGTABLE_LEVEL_PUD:
-		pagetable_pud_ctor(ptdesc);
-		break;
-	case PGTABLE_LEVEL_P4D:
-		pagetable_p4d_ctor(ptdesc);
-		break;
-	case PGTABLE_LEVEL_PGD:
-		VM_WARN_ON(1);
-		break;
-	}
-
-	return pa;
+	return page_to_phys(ptdesc_page(ptdesc));
 }
 
-static phys_addr_t
-pgd_pgtable_alloc_init_mm_gfp(enum pgtable_level pgtable_level, gfp_t gfp)
+static phys_addr_t pgd_pgtable_alloc(void)
 {
-	return __pgd_pgtable_alloc(&init_mm, gfp, pgtable_level);
-}
-
-static phys_addr_t __maybe_unused
-pgd_pgtable_alloc_init_mm(enum pgtable_level pgtable_level)
-{
-	return pgd_pgtable_alloc_init_mm_gfp(pgtable_level, GFP_PGTABLE_KERNEL);
-}
-
-static phys_addr_t
-pgd_pgtable_alloc_special_mm(enum pgtable_level pgtable_level)
-{
-	return  __pgd_pgtable_alloc(NULL, GFP_PGTABLE_KERNEL, pgtable_level);
+	return pgd_pgtable_alloc_gfp(GFP_PGTABLE_KERNEL);
 }
 
 static void split_contpte(pte_t *ptep)
@@ -609,7 +574,7 @@ static int split_pmd(pmd_t *pmdp, pmd_t pmd, gfp_t gfp, bool to_cont)
 	pte_t *ptep;
 	int i;
 
-	pte_phys = pgd_pgtable_alloc_init_mm_gfp(PGTABLE_LEVEL_PTE, gfp);
+	pte_phys = pgd_pgtable_alloc_gfp(gfp);
 	if (pte_phys == INVALID_PHYS_ADDR)
 		return -ENOMEM;
 	ptep = (pte_t *)phys_to_virt(pte_phys);
@@ -656,7 +621,7 @@ static int split_pud(pud_t *pudp, pud_t pud, gfp_t gfp, bool to_cont)
 	pmd_t *pmdp;
 	int i;
 
-	pmd_phys = pgd_pgtable_alloc_init_mm_gfp(PGTABLE_LEVEL_PMD, gfp);
+	pmd_phys = pgd_pgtable_alloc_gfp(gfp);
 	if (pmd_phys == INVALID_PHYS_ADDR)
 		return -ENOMEM;
 	pmdp = (pmd_t *)phys_to_virt(pmd_phys);
@@ -1035,7 +1000,7 @@ void __init create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
 		flags = NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
 
 	early_create_pgd_mapping(mm->pgd, phys, virt, size, prot,
-				 pgd_pgtable_alloc_special_mm, flags);
+				 pgd_pgtable_alloc, flags);
 }
 
 static void update_mapping_prot(phys_addr_t phys, unsigned long virt,
@@ -1249,7 +1214,7 @@ static void __init declare_vma(struct vm_struct *vma,
 
 static phys_addr_t kpti_ng_temp_alloc __initdata;
 
-static phys_addr_t __init kpti_ng_pgd_alloc(enum pgtable_level pgtable_level)
+static phys_addr_t __init kpti_ng_pgd_alloc(void)
 {
 	kpti_ng_temp_alloc -= PAGE_SIZE;
 	return kpti_ng_temp_alloc;
@@ -1357,7 +1322,7 @@ static int __init map_entry_trampoline(void)
 	memset(tramp_pg_dir, 0, PGD_SIZE);
 	early_create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS,
 				 entry_tramp_text_size(), prot,
-				 pgd_pgtable_alloc_init_mm, NO_BLOCK_MAPPINGS);
+				 pgd_pgtable_alloc, NO_BLOCK_MAPPINGS);
 
 	/* Map both the text and data into the kernel page table */
 	for (i = 0; i < DIV_ROUND_UP(entry_tramp_text_size(), PAGE_SIZE); i++)
@@ -1445,7 +1410,6 @@ static void free_hotplug_page_range(struct page *page, size_t size,
 
 static void free_hotplug_pgtable_page(struct page *page)
 {
-	pagetable_dtor(page_ptdesc(page));
 	free_hotplug_page_range(page, PAGE_SIZE, NULL);
 }
 
@@ -1958,7 +1922,7 @@ int arch_add_memory(int nid, u64 start, u64 size,
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
 
 	ret = __create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
-				   size, params->pgprot, pgd_pgtable_alloc_init_mm,
+				   size, params->pgprot, pgd_pgtable_alloc,
 				   flags);
 	if (ret)
 		goto err;
