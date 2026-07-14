@@ -262,6 +262,19 @@ static int uclogic_probe(struct hid_device *hdev,
 		goto failure;
 	}
 
+	/*
+	 * hid_hw_start() -> hid_connect() returns success even when
+	 * hidinput_connect() failed, because this driver provides a
+	 * ->raw_event callback and the hidraw interface was claimed.  In that
+	 * case the input_dev that ->input_configured() cached in
+	 * drvdata->pen_input has already been freed by hidinput_connect()'s
+	 * error unwinding, leaving a dangling pointer that the in-range timer
+	 * would dereference.  Drop it so uclogic_inrange_timeout()'s NULL
+	 * check takes effect.
+	 */
+	if (!(hdev->claimed & HID_CLAIMED_INPUT))
+		drvdata->pen_input = NULL;
+
 	return 0;
 failure:
 	/* Assume "remove" might not be called if "probe" failed */
