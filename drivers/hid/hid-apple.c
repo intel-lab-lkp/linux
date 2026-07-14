@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/timer.h>
+#include <linux/workqueue.h>
 #include <linux/string.h>
 #include <linux/leds.h>
 #include <dt-bindings/leds/common.h>
@@ -116,7 +117,7 @@ struct apple_sc {
 	unsigned int fn_on;
 	unsigned int fn_found;
 	DECLARE_BITMAP(pressed_numlock, KEY_CNT);
-	struct timer_list battery_timer;
+	struct delayed_work battery_work;
 	struct apple_sc_backlight *backlight;
 };
 
@@ -635,9 +636,6 @@ static int apple_fetch_battery(struct hid_device *hdev)
 	if (!report || report->maxfield < 1)
 		return -1;
 
-	if (bat->capacity == bat->max)
-		return -1;
-
 	hid_hw_request(hdev, report, HID_REQ_GET_REPORT);
 	return 0;
 #else
@@ -645,15 +643,20 @@ static int apple_fetch_battery(struct hid_device *hdev)
 #endif
 }
 
-static void apple_battery_timer_tick(struct timer_list *t)
+static void apple_battery_work(struct work_struct *work)
 {
-	struct apple_sc *asc = timer_container_of(asc, t, battery_timer);
+	struct apple_sc *asc = container_of(work, struct apple_sc, battery_work.work);
 	struct hid_device *hdev = asc->hdev;
 
-	if (apple_fetch_battery(hdev) == 0) {
-		mod_timer(&asc->battery_timer,
-			  jiffies + secs_to_jiffies(APPLE_BATTERY_TIMEOUT_SEC));
-	}
+	/*
+	 * Runs in process context (workqueue), so the battery GET_REPORT is
+	 * allowed to sleep. This is required for the uhid/Bluetooth transport,
+	 * whose raw_request blocks waiting on userspace -- unlike a timer_list
+	 * callback, which runs in atomic softirq context and would deadlock.
+	 */
+	if (apple_fetch_battery(hdev) == 0)
+		schedule_delayed_work(&asc->battery_work,
+				      secs_to_jiffies(APPLE_BATTERY_TIMEOUT_SEC));
 }
 
 /*
@@ -968,10 +971,9 @@ static int apple_probe(struct hid_device *hdev,
 	}
 
 	if (quirks & APPLE_RDESC_BATTERY) {
-		timer_setup(&asc->battery_timer, apple_battery_timer_tick, 0);
-		mod_timer(&asc->battery_timer,
-			  jiffies + secs_to_jiffies(APPLE_BATTERY_TIMEOUT_SEC));
-		apple_fetch_battery(hdev);
+		INIT_DELAYED_WORK(&asc->battery_work, apple_battery_work);
+		/* Kick an initial fetch; the work re-arms itself every timeout. */
+		schedule_delayed_work(&asc->battery_work, 0);
 	}
 
 	if (quirks & APPLE_BACKLIGHT_CTL)
@@ -987,7 +989,7 @@ static int apple_probe(struct hid_device *hdev,
 
 out_err:
 	if (quirks & APPLE_RDESC_BATTERY)
-		timer_delete_sync(&asc->battery_timer);
+		cancel_delayed_work_sync(&asc->battery_work);
 
 	hid_hw_stop(hdev);
 	return ret;
@@ -998,7 +1000,7 @@ static void apple_remove(struct hid_device *hdev)
 	struct apple_sc *asc = hid_get_drvdata(hdev);
 
 	if (asc->quirks & APPLE_RDESC_BATTERY)
-		timer_delete_sync(&asc->battery_timer);
+		cancel_delayed_work_sync(&asc->battery_work);
 
 	hid_hw_stop(hdev);
 }
@@ -1201,7 +1203,7 @@ static const struct hid_device_id apple_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_MAGIC_KEYBOARD_2021),
 		.driver_data = APPLE_HAS_FN | APPLE_ISO_TILDE_QUIRK | APPLE_RDESC_BATTERY },
 	{ HID_BLUETOOTH_DEVICE(BT_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_MAGIC_KEYBOARD_2021),
-		.driver_data = APPLE_HAS_FN | APPLE_ISO_TILDE_QUIRK },
+		.driver_data = APPLE_HAS_FN | APPLE_ISO_TILDE_QUIRK | APPLE_RDESC_BATTERY },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_MAGIC_KEYBOARD_FINGERPRINT_2021),
 		.driver_data = APPLE_HAS_FN | APPLE_ISO_TILDE_QUIRK | APPLE_RDESC_BATTERY },
 	{ HID_BLUETOOTH_DEVICE(BT_VENDOR_ID_APPLE, USB_DEVICE_ID_APPLE_MAGIC_KEYBOARD_FINGERPRINT_2021),
