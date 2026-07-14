@@ -314,17 +314,16 @@ static struct ext4_dir_entry_tail *get_dirent_tail(struct inode *inode,
 						   struct buffer_head *bh)
 {
 	struct ext4_dir_entry_tail *t;
-	int blocksize = EXT4_BLOCK_SIZE(inode->i_sb);
 
 #ifdef PARANOID
 	struct ext4_dir_entry_2 *d, *top;
 
 	d = (struct ext4_dir_entry_2 *)bh->b_data;
 	top = (struct ext4_dir_entry_2 *)(bh->b_data +
-		(blocksize - sizeof(struct ext4_dir_entry_tail)));
-	while (d < top && ext4_rec_len_from_disk(d->rec_len, blocksize))
+		(EXT4_BLOCK_SIZE(inode->i_sb) - sizeof(struct ext4_dir_entry_tail)));
+	while (d < top && ext4_rec_len_from_disk(d->rec_len, EXT4_BLOCK_SIZE(inode->i_sb)))
 		d = (struct ext4_dir_entry_2 *)(((void *)d) +
-		    ext4_rec_len_from_disk(d->rec_len, blocksize));
+		    ext4_rec_len_from_disk(d->rec_len, EXT4_BLOCK_SIZE(inode->i_sb)));
 
 	if (d != top)
 		return NULL;
@@ -334,11 +333,7 @@ static struct ext4_dir_entry_tail *get_dirent_tail(struct inode *inode,
 	t = EXT4_DIRENT_TAIL(bh->b_data, EXT4_BLOCK_SIZE(inode->i_sb));
 #endif
 
-	if (t->det_reserved_zero1 ||
-	    (ext4_rec_len_from_disk(t->det_rec_len, blocksize) !=
-	     sizeof(struct ext4_dir_entry_tail)) ||
-	    t->det_reserved_zero2 ||
-	    t->det_reserved_ft != EXT4_FT_DIR_CSUM)
+	if (!ext4_dir_entry_is_tail((struct ext4_dir_entry_2 *)t))
 		return NULL;
 
 	return t;
