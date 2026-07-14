@@ -414,10 +414,6 @@ static inline int split_huge_page_to_list_to_order(struct page *page, struct lis
 {
 	return __split_huge_page_to_list_to_order(page, list, new_order);
 }
-static inline int split_huge_page_to_order(struct page *page, unsigned int new_order)
-{
-	return split_huge_page_to_list_to_order(page, NULL, new_order);
-}
 
 static inline int split_huge_page(struct page *page)
 {
@@ -629,11 +625,6 @@ can_split_folio(struct folio *folio, int caller_pins, int *pextra_pins)
 static inline int
 split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
 		unsigned int new_order)
-{
-	VM_WARN_ON_ONCE_PAGE(1, page);
-	return -EINVAL;
-}
-static inline int split_huge_page_to_order(struct page *page, unsigned int new_order)
 {
 	VM_WARN_ON_ONCE_PAGE(1, page);
 	return -EINVAL;
