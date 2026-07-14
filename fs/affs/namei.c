@@ -401,6 +401,38 @@ affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	return affs_add_entry(dir, inode, dentry, ST_LINKFILE);
 }
 
+/* Write dentry name into header and insert into dir (success or rollback). */
+static int affs_reinsert_with_name(struct inode *dir, struct buffer_head *bh,
+				   struct dentry *dentry)
+{
+	struct super_block *sb = dir->i_sb;
+	int err;
+
+	affs_copy_name(AFFS_TAIL(sb, bh)->name, dentry);
+	affs_fix_checksum(sb, bh);
+	affs_lock_dir(dir);
+	err = affs_insert_hash(dir, bh);
+	affs_unlock_dir(dir);
+	return err;
+}
+
+/* Put both exchange objects back under their original names/dirs. */
+static void affs_xrename_restore(struct inode *old_dir, struct inode *new_dir,
+				 struct buffer_head *bh_old,
+				 struct buffer_head *bh_new,
+				 struct dentry *old_dentry,
+				 struct dentry *new_dentry)
+{
+	if (affs_reinsert_with_name(old_dir, bh_old, old_dentry))
+		affs_warning(old_dir->i_sb, "xrename",
+			     "failed to restore inode %lu",
+			     (unsigned long)bh_old->b_blocknr);
+	if (affs_reinsert_with_name(new_dir, bh_new, new_dentry))
+		affs_warning(new_dir->i_sb, "xrename",
+			     "failed to restore inode %lu",
+			     (unsigned long)bh_new->b_blocknr);
+}
+
 static int
 affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	    struct inode *new_dir, struct dentry *new_dentry)
@@ -434,13 +466,15 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (retval)
 		goto done;
 
-	/* And insert it into the new directory with the new name. */
-	affs_copy_name(AFFS_TAIL(sb, bh)->name, new_dentry);
-	affs_fix_checksum(sb, bh);
-	affs_lock_dir(new_dir);
-	retval = affs_insert_hash(new_dir, bh);
-	affs_unlock_dir(new_dir);
-	/* TODO: move it back to old_dir, if error? */
+	/* Insert into the new directory with the new name. */
+	retval = affs_reinsert_with_name(new_dir, bh, new_dentry);
+	if (retval) {
+		/* old_dentry still has the original name; put the object back. */
+		if (affs_reinsert_with_name(old_dir, bh, old_dentry))
+			affs_warning(sb, "rename",
+				     "failed to restore inode %lu",
+				     (unsigned long)bh->b_blocknr);
+	}
 
 done:
 	mmb_mark_buffer_dirty(bh,
@@ -453,11 +487,10 @@ static int
 affs_xrename(struct inode *old_dir, struct dentry *old_dentry,
 	     struct inode *new_dir, struct dentry *new_dentry)
 {
-
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *bh_old = NULL;
 	struct buffer_head *bh_new = NULL;
-	int retval;
+	int retval, retval2;
 
 	bh_old = affs_bread(sb, d_inode(old_dentry)->i_ino);
 	if (!bh_old)
@@ -480,25 +513,41 @@ affs_xrename(struct inode *old_dir, struct dentry *old_dentry,
 	affs_lock_dir(new_dir);
 	retval = affs_remove_hash(new_dir, bh_new);
 	affs_unlock_dir(new_dir);
-	if (retval)
+	if (retval) {
+		/* Names unchanged; only put old back into old_dir. */
+		if (affs_reinsert_with_name(old_dir, bh_old, old_dentry))
+			affs_warning(sb, "xrename",
+				     "failed to restore inode %lu",
+				     (unsigned long)bh_old->b_blocknr);
 		goto done;
+	}
 
 	/* Insert old into the new directory with the new name. */
-	affs_copy_name(AFFS_TAIL(sb, bh_old)->name, new_dentry);
-	affs_fix_checksum(sb, bh_old);
-	affs_lock_dir(new_dir);
-	retval = affs_insert_hash(new_dir, bh_old);
-	affs_unlock_dir(new_dir);
+	retval = affs_reinsert_with_name(new_dir, bh_old, new_dentry);
+	if (retval) {
+		affs_xrename_restore(old_dir, new_dir, bh_old, bh_new,
+				     old_dentry, new_dentry);
+		goto done;
+	}
 
 	/* Insert new into the old directory with the old name. */
-	affs_copy_name(AFFS_TAIL(sb, bh_new)->name, old_dentry);
-	affs_fix_checksum(sb, bh_new);
-	affs_lock_dir(old_dir);
-	retval = affs_insert_hash(old_dir, bh_new);
-	affs_unlock_dir(old_dir);
+	retval = affs_reinsert_with_name(old_dir, bh_new, old_dentry);
+	if (retval) {
+		/* Undo the first insert, then restore both originals. */
+		affs_lock_dir(new_dir);
+		retval2 = affs_remove_hash(new_dir, bh_old);
+		affs_unlock_dir(new_dir);
+		if (retval2)
+			affs_warning(sb, "xrename",
+				     "undo insert of inode %lu failed (%d)",
+				     (unsigned long)bh_old->b_blocknr, retval2);
+		affs_xrename_restore(old_dir, new_dir, bh_old, bh_new,
+				     old_dentry, new_dentry);
+	}
+
 done:
-	mmb_mark_buffer_dirty(bh_old, &AFFS_I(new_dir)->i_metadata_bhs);
-	mmb_mark_buffer_dirty(bh_new, &AFFS_I(old_dir)->i_metadata_bhs);
+	mmb_mark_buffer_dirty(bh_old, &AFFS_I(retval ? old_dir : new_dir)->i_metadata_bhs);
+	mmb_mark_buffer_dirty(bh_new, &AFFS_I(retval ? new_dir : old_dir)->i_metadata_bhs);
 	affs_brelse(bh_old);
 	affs_brelse(bh_new);
 	return retval;
