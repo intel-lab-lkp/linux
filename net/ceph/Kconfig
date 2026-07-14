@@ -45,3 +45,15 @@ config CEPH_LIB_USE_DNS_RESOLVER
 	  Documentation/networking/dns_resolver.rst
 
 	  If unsure, say N.
+
+config CEPH_LIB_KUNIT_TEST
+	bool "KUnit tests for the Ceph core library" if !KUNIT_ALL_TESTS
+	depends on CEPH_LIB && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit coverage for selected Ceph core-library parser
+	  and state-machine helpers. The tests exercise internal libceph
+	  behavior with synthesized state and are intended for developer
+	  validation rather than production systems.
+
+	  If unsure, say N.

@@ -5951,3 +5951,7 @@ static const struct ceph_connection_operations osd_con_ops = {
 	.handle_auth_done = osd_handle_auth_done,
 	.handle_auth_bad_method = osd_handle_auth_bad_method,
 };
+
+#ifdef CONFIG_CEPH_LIB_KUNIT_TEST
+#include "osd_client-kunit.c"
+#endif
