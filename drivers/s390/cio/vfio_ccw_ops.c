@@ -55,9 +55,13 @@ static int vfio_ccw_mdev_init_dev(struct vfio_device *vdev)
 	INIT_WORK(&private->io_work, vfio_ccw_sch_io_todo);
 	INIT_WORK(&private->crw_work, vfio_ccw_crw_todo);
 
+	private->cp.guest_idal = kzalloc_objs(dma64_t, 512);
+	if (!private->cp.guest_idal)
+		goto out_free_private;
+
 	private->cp.guest_cp = kzalloc_objs(struct ccw1, CCWCHAIN_LEN_MAX);
 	if (!private->cp.guest_cp)
-		goto out_free_private;
+		goto out_free_idal;
 
 	private->io_region = kmem_cache_zalloc(vfio_ccw_io_region,
 					       GFP_KERNEL | GFP_DMA);
@@ -89,6 +93,8 @@ out_free_io:
 	kmem_cache_free(vfio_ccw_io_region, private->io_region);
 out_free_cp:
 	kfree(private->cp.guest_cp);
+out_free_idal:
+	kfree(private->cp.guest_idal);
 out_free_private:
 	mutex_destroy(&private->io_mutex);
 	return -ENOMEM;
@@ -141,6 +147,7 @@ static void vfio_ccw_mdev_release_dev(struct vfio_device *vdev)
 	kmem_cache_free(vfio_ccw_cmd_region, private->cmd_region);
 	kmem_cache_free(vfio_ccw_io_region, private->io_region);
 	kfree(private->cp.guest_cp);
+	kfree(private->cp.guest_idal);
 	mutex_destroy(&private->io_mutex);
 }
 

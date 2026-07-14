@@ -523,16 +523,24 @@ static int ccwchain_fetch_tic(struct ccw1 *ccw,
 	return -EFAULT;
 }
 
+static int calc_max_idal_len(struct ccw1 *ccw, struct channel_program *cp)
+{
+	int idal_size = idal_is_2k(cp) ? PAGE_SIZE / 2 : PAGE_SIZE;
+	int idal_mask = ~(idal_size - 1);
+	int idal_len = idal_size - (ccw->cda & ~idal_mask);
+
+	/* This overestimates for Format-1 or 2K-Format-2 IDAWs */
+	return idal_len / 8;
+}
+
 static dma64_t *get_guest_idal(struct ccw1 *ccw, struct channel_program *cp, int idaw_nr)
 {
-	struct vfio_device *vdev =
-		&container_of(cp, struct vfio_ccw_private, cp)->vdev;
 	dma64_t *idaws;
 	dma32_t *idaws_f1;
 	int idal_len = idaw_nr * sizeof(*idaws);
 	int idaw_size = idal_is_2k(cp) ? PAGE_SIZE / 2 : PAGE_SIZE;
 	int idaw_mask = ~(idaw_size - 1);
-	int i, ret;
+	int i;
 
 	idaws = kzalloc_objs(*idaws, idaw_nr, GFP_DMA | GFP_KERNEL);
 	if (!idaws)
@@ -540,11 +548,7 @@ static dma64_t *get_guest_idal(struct ccw1 *ccw, struct channel_program *cp, int
 
 	if (ccw_is_idal(ccw)) {
 		/* Copy IDAL from guest */
-		ret = vfio_dma_rw(vdev, dma32_to_u32(ccw->cda), idaws, idal_len, false);
-		if (ret) {
-			kfree(idaws);
-			return ERR_PTR(ret);
-		}
+		memcpy(idaws, cp->guest_idal, idal_len);
 	} else {
 		/* Fabricate an IDAL based off CCW data address */
 		if (cp->orb.cmd.c64) {
@@ -586,7 +590,7 @@ static int ccw_count_idaws(struct ccw1 *ccw,
 	struct vfio_device *vdev =
 		&container_of(cp, struct vfio_ccw_private, cp)->vdev;
 	u64 iova;
-	int size = cp->orb.cmd.c64 ? sizeof(u64) : sizeof(u32);
+	int size = calc_max_idal_len(ccw, cp);
 	int ret;
 	int bytes = 1;
 
@@ -596,9 +600,12 @@ static int ccw_count_idaws(struct ccw1 *ccw,
 	if (ccw_is_idal(ccw)) {
 		/* Read first IDAW to check its starting address. */
 		/* All subsequent IDAWs will be 2K- or 4K-aligned. */
-		ret = vfio_dma_rw(vdev, dma32_to_u32(ccw->cda), &iova, size, false);
+		ret = vfio_dma_rw(vdev, dma32_to_u32(ccw->cda),
+				  cp->guest_idal, size, false);
 		if (ret)
 			return ret;
+
+		iova = cp->guest_idal[0];
 
 		/*
 		 * Format-1 IDAWs only occupy the first 32 bits,

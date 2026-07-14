@@ -43,6 +43,7 @@ struct channel_program {
 	union orb orb;
 	bool initialized;
 	struct ccw1 *guest_cp;
+	dma64_t *guest_idal;
 	int ccwchain_count;
 };
 
