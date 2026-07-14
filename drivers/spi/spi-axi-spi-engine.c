@@ -115,6 +115,10 @@
 #define SPI_ENGINE_MULTI_BUS_MODE_UNKNOWN	-1
 #define SPI_ENGINE_MULTI_BUS_MODE_CONFLICTING	-2
 
+/* Extending lane_mask values for optimizing messages. */
+#define SPI_ENGINE_LANE_MASK_UNKNOWN		-1
+#define SPI_ENGINE_LANE_MASK_CONFLICTING	-2
+
 struct spi_engine_program {
 	unsigned int length;
 	uint16_t instructions[] __counted_by(length);
@@ -155,8 +159,8 @@ struct spi_engine_offload {
 	unsigned int multi_lane_mode;
 	u8 rx_primary_lane_mask;
 	u8 tx_primary_lane_mask;
-	u8 rx_all_lanes_mask;
-	u8 tx_all_lanes_mask;
+	u8 rx_lanes_mask;
+	u8 tx_lanes_mask;
 	u8 bits_per_word;
 };
 
@@ -312,6 +316,8 @@ static int spi_engine_precompile_message(struct spi_message *msg)
 	unsigned int clk_div, max_hz = msg->spi->controller->max_speed_hz;
 	struct spi_transfer *xfer;
 	int multi_lane_mode = SPI_ENGINE_MULTI_BUS_MODE_UNKNOWN;
+	int rx_lane_mask = SPI_ENGINE_LANE_MASK_UNKNOWN;
+	int tx_lane_mask = SPI_ENGINE_LANE_MASK_UNKNOWN;
 	u8 min_bits_per_word = U8_MAX;
 	u8 max_bits_per_word = 0;
 
@@ -339,11 +345,21 @@ static int spi_engine_precompile_message(struct spi_message *msg)
 				return -EINVAL;
 			}
 
-			/* If all xfers have the same multi-lane mode, we can optimize. */
+			/* If all xfers have the same multi-lane mode and mask, we can optimize. */
 			if (multi_lane_mode == SPI_ENGINE_MULTI_BUS_MODE_UNKNOWN)
 				multi_lane_mode = xfer->multi_lane_mode;
 			else if (multi_lane_mode != xfer->multi_lane_mode)
 				multi_lane_mode = SPI_ENGINE_MULTI_BUS_MODE_CONFLICTING;
+
+			if (rx_lane_mask == SPI_ENGINE_LANE_MASK_UNKNOWN)
+				rx_lane_mask = xfer->rx_lane_mask;
+			else if (xfer->rx_lane_mask != rx_lane_mask)
+				rx_lane_mask = SPI_ENGINE_LANE_MASK_CONFLICTING;
+
+			if (tx_lane_mask == SPI_ENGINE_LANE_MASK_UNKNOWN)
+				tx_lane_mask = xfer->tx_lane_mask;
+			else if (xfer->tx_lane_mask != tx_lane_mask)
+				tx_lane_mask = SPI_ENGINE_LANE_MASK_CONFLICTING;
 		}
 	}
 
@@ -364,8 +380,13 @@ static int spi_engine_precompile_message(struct spi_message *msg)
 					     &priv->rx_primary_lane_mask,
 					     &priv->tx_primary_lane_mask);
 		spi_engine_all_lanes_flags(msg->spi,
-					   &priv->rx_all_lanes_mask,
-					   &priv->tx_all_lanes_mask);
+					   &priv->rx_lanes_mask,
+					   &priv->tx_lanes_mask);
+		if (rx_lane_mask > 0)
+			priv->rx_lanes_mask &= rx_lane_mask;
+
+		if (tx_lane_mask > 0)
+			priv->tx_lanes_mask &= tx_lane_mask;
 	}
 
 	return 0;
@@ -380,6 +401,9 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 	struct spi_transfer *xfer;
 	int clk_div, new_clk_div, inst_ns;
 	int prev_multi_lane_mode = SPI_MULTI_LANE_MODE_SINGLE;
+	int prev_rx_lane_mask = 0;
+	int prev_tx_lane_mask = 0;
+	u8 num_rx_active_lanes;
 	bool keep_cs = false;
 	u8 bits_per_word = 0;
 
@@ -405,6 +429,8 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 		 */
 		bits_per_word = priv->bits_per_word;
 		prev_multi_lane_mode = priv->multi_lane_mode;
+		prev_rx_lane_mask = priv->rx_lanes_mask;
+		prev_tx_lane_mask = priv->tx_lanes_mask;
 	} else {
 		spi_engine_program_add_cmd(p, dry,
 			SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_CONFIG,
@@ -417,15 +443,27 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
 		if (xfer->rx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_RX_STREAM ||
 		    xfer->tx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_TX_STREAM) {
-			if (xfer->multi_lane_mode != prev_multi_lane_mode) {
+			num_rx_active_lanes = spi->num_rx_lanes;
+
+			if (xfer->multi_lane_mode != prev_multi_lane_mode ||
+			    xfer->rx_lane_mask != prev_rx_lane_mask ||
+			    xfer->tx_lane_mask != prev_tx_lane_mask) {
 				u8 tx_lane_flags, rx_lane_flags;
 
-				if (xfer->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE)
+				if (xfer->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE) {
 					spi_engine_all_lanes_flags(spi, &rx_lane_flags,
 								   &tx_lane_flags);
-				else
+					if (xfer->rx_lane_mask) {
+						rx_lane_flags &= xfer->rx_lane_mask;
+						num_rx_active_lanes = hweight8(rx_lane_flags);
+					}
+
+					if (xfer->tx_lane_mask)
+						tx_lane_flags &= xfer->tx_lane_mask;
+				} else {
 					spi_engine_primary_lane_flag(spi, &rx_lane_flags,
 								     &tx_lane_flags);
+				}
 
 				spi_engine_program_add_cmd(p, dry,
 					SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK,
@@ -435,6 +473,8 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 							     tx_lane_flags));
 			}
 			prev_multi_lane_mode = xfer->multi_lane_mode;
+			prev_rx_lane_mask = xfer->rx_lane_mask;
+			prev_tx_lane_mask = xfer->tx_lane_mask;
 		}
 
 		new_clk_div = host->max_speed_hz / xfer->effective_speed_hz;
@@ -453,7 +493,7 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 					bits_per_word));
 		}
 
-		spi_engine_gen_xfer(p, dry, xfer, spi->num_rx_lanes);
+		spi_engine_gen_xfer(p, dry, xfer, num_rx_active_lanes);
 		spi_engine_gen_sleep(p, dry, spi_delay_to_ns(&xfer->delay, xfer),
 				     inst_ns, xfer->effective_speed_hz);
 
@@ -1034,10 +1074,10 @@ static int spi_engine_trigger_enable(struct spi_offload *offload)
 
 	if (priv->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE) {
 		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK,
-						    priv->rx_all_lanes_mask),
+						    priv->rx_lanes_mask),
 			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
 		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDO_MASK,
-						    priv->tx_all_lanes_mask),
+						    priv->tx_lanes_mask),
 			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
 	}
 
