@@ -87,7 +87,7 @@ static inline void activate_mm(struct mm_struct *prev, struct mm_struct *next)
 	 * already, so we should be OK.
 	 */
 
-	BUG_ON(next == &init_mm); /* Should never happen */
+	BUG_ON(mm_is_kernel(next)); /* Should never happen */
 
 	if (next->context.space_id == 0)
 		next->context.space_id = alloc_sid();
