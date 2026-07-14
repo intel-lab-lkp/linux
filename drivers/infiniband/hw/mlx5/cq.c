@@ -618,6 +618,9 @@ int mlx5_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc)
 	int soft_polled = 0;
 	int npolled;
 
+	if (mlx5_core_is_shutting_down(mdev))
+		return 0;
+
 	spin_lock_irqsave(&cq->lock, flags);
 	if (mdev->state == MLX5_DEVICE_STATE_INTERNAL_ERROR) {
 		/* make sure no soft wqe's are waiting */
@@ -652,6 +655,9 @@ int mlx5_ib_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 	void __iomem *uar_page = mdev->priv.bfreg.up->map;
 	unsigned long irq_flags;
 	int ret = 0;
+
+	if (mlx5_core_is_shutting_down(mdev))
+		return 0;
 
 	spin_lock_irqsave(&cq->lock, irq_flags);
 	if (cq->notify_flags != IB_CQ_NEXT_COMP)

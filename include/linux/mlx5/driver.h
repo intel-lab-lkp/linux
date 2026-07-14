@@ -653,7 +653,13 @@ enum mlx5_device_state {
 enum mlx5_interface_state {
 	MLX5_INTERFACE_STATE_UP = BIT(0),
 	MLX5_BREAK_FW_WAIT = BIT(1),
+	MLX5_INTERFACE_STATE_SHUTTING_DOWN = BIT(2),
 };
+
+static inline bool mlx5_core_is_shutting_down(struct mlx5_core_dev *dev)
+{
+	return test_bit(MLX5_INTERFACE_STATE_SHUTTING_DOWN, &dev->intf_state);
+}
 
 enum mlx5_pci_status {
 	MLX5_PCI_STATUS_DISABLED,

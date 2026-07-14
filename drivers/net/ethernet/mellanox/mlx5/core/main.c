@@ -2192,6 +2192,7 @@ static void shutdown(struct pci_dev *pdev)
 	int err;
 
 	mlx5_core_info(dev, "Shutdown was called\n");
+	set_bit(MLX5_INTERFACE_STATE_SHUTTING_DOWN, &dev->intf_state);
 	set_bit(MLX5_BREAK_FW_WAIT, &dev->intf_state);
 	mlx5_drain_fw_reset(dev);
 	mlx5_drain_health_wq(dev);

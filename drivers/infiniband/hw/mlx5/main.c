@@ -2976,6 +2976,9 @@ static void mlx5_ib_handle_internal_error(struct mlx5_ib_dev *ibdev)
 	unsigned long flags_cq;
 	unsigned long flags;
 
+	if (mlx5_core_is_shutting_down(ibdev->mdev))
+		return;
+
 	INIT_LIST_HEAD(&cq_armed_list);
 
 	/* Go over qp list reside on that ibdev, sync with create/destroy qp.*/
@@ -3200,6 +3203,9 @@ static void mlx5_ib_handle_sys_error_event(struct work_struct *_work)
 	struct mlx5_ib_dev *ibdev = work->dev;
 	struct ib_event ibev;
 
+	if (mlx5_core_is_shutting_down(ibdev->mdev))
+		goto out;
+
 	ibev.event = IB_EVENT_DEVICE_FATAL;
 	mlx5_ib_handle_internal_error(ibdev);
 	ibev.element.port_num = (u8)(unsigned long)work->param;
@@ -3222,9 +3228,14 @@ static int mlx5_ib_sys_error_event(struct notifier_block *nb,
 				   unsigned long event, void *param)
 {
 	struct mlx5_ib_event_work *work;
+	struct mlx5_ib_dev *ibdev;
 
 	if (event != MLX5_DEV_EVENT_SYS_ERROR)
 		return NOTIFY_DONE;
+
+	ibdev = container_of(nb, struct mlx5_ib_dev, sys_error_events);
+	if (mlx5_core_is_shutting_down(ibdev->mdev))
+		return NOTIFY_OK;
 
 	work = kmalloc_obj(*work, GFP_ATOMIC);
 	if (!work)
