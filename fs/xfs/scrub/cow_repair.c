@@ -225,6 +225,29 @@ xrep_cow_mark_missing_staging_rmap(
 }
 
 /*
+ * Trim the start and end of the current mapping by up to 1/4 of the length
+ * and mark that as "bad" to test the cow fork repair mechanism.
+ */
+static inline int
+xrep_cow_debug_replacement(
+	struct xrep_cow		*xc)
+{
+	xfs_fsblock_t		fsbno = xc->irec.br_startblock;
+	xfs_extlen_t		len = xc->irec.br_blockcount;
+	uint32_t		trim;
+
+	/* get_random_u32_below requires a nonzero argument */
+	trim = len > 4 ? get_random_u32_below(len / 4) : 0;
+	len -= trim;
+
+	trim = len > 4 ? get_random_u32_below(len / 4) : 0;
+	fsbno += trim;
+	len -= trim;
+
+	return xrep_cow_mark_file_range(xc, fsbno, len);
+}
+
+/*
  * Find any part of the CoW fork mapping that isn't a single-owner CoW staging
  * extent and mark the corresponding part of the file range in the bitmap.
  */
@@ -293,8 +316,9 @@ xrep_cow_find_bad(
 	 * If userspace is forcing us to rebuild the CoW fork or someone turned
 	 * on the debugging knob, replace everything in the CoW fork.
 	 */
-	if ((sc->sm->sm_flags & XFS_SCRUB_IFLAG_FORCE_REBUILD) ||
-	    XFS_TEST_ERROR(sc->mp, XFS_ERRTAG_FORCE_SCRUB_REPAIR))
+	if (XFS_TEST_ERROR(sc->mp, XFS_ERRTAG_FORCE_SCRUB_REPAIR))
+		error = xrep_cow_debug_replacement(xc);
+	else if (sc->sm->sm_flags & XFS_SCRUB_IFLAG_FORCE_REBUILD)
 		error = xrep_cow_mark_file_range(xc, xc->irec.br_startblock,
 				xc->irec.br_blockcount);
 
@@ -375,8 +399,9 @@ xrep_cow_find_bad_rt(
 	 * turned on the debugging knob, replace everything in the
 	 * CoW fork and then scan for staging extents in the refcountbt.
 	 */
-	if ((sc->sm->sm_flags & XFS_SCRUB_IFLAG_FORCE_REBUILD) ||
-	    XFS_TEST_ERROR(sc->mp, XFS_ERRTAG_FORCE_SCRUB_REPAIR))
+	if (XFS_TEST_ERROR(sc->mp, XFS_ERRTAG_FORCE_SCRUB_REPAIR))
+		error = xrep_cow_debug_replacement(xc);
+	else if (sc->sm->sm_flags & XFS_SCRUB_IFLAG_FORCE_REBUILD)
 		error = xrep_cow_mark_file_range(xc, xc->irec.br_startblock,
 				xc->irec.br_blockcount);
 
