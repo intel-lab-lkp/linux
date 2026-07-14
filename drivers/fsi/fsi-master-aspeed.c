@@ -626,8 +626,12 @@ static int fsi_master_aspeed_probe(struct platform_device *pdev)
 	aspeed_master_init(aspeed);
 
 	rc = fsi_master_register(&aspeed->master);
-	if (rc)
-		goto err_release;
+	if (rc) {
+		if (aspeed->master.idx < 0)
+			goto err_release;
+
+		goto err_put_master;
+	}
 
 	/* At this point, fsi_master_register performs the device_initialize(),
 	 * and holds the sole reference on master.dev. This means the device
@@ -638,6 +642,10 @@ static int fsi_master_aspeed_probe(struct platform_device *pdev)
 	 */
 	get_device(&aspeed->master.dev);
 	return 0;
+err_put_master:
+	clk_disable_unprepare(aspeed->clk);
+	put_device(&aspeed->master.dev);
+	return rc;
 
 err_release:
 	clk_disable_unprepare(aspeed->clk);
