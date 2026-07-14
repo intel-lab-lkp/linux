@@ -239,7 +239,7 @@ static int mv88e6xxx_g1_atu_data_write(struct mv88e6xxx_chip *chip,
 		if (entry->trunk)
 			data |= MV88E6XXX_G1_ATU_DATA_TRUNK;
 
-		data |= (entry->portvec & mv88e6xxx_port_mask(chip)) << 4;
+		data |= entry->portvec << 4;
 	}
 
 	return mv88e6xxx_g1_write(chip, MV88E6XXX_G1_ATU_DATA, data);
@@ -325,6 +325,11 @@ int mv88e6xxx_g1_atu_loadpurge(struct mv88e6xxx_chip *chip, u16 fid,
 	err = mv88e6xxx_g1_atu_mac_write(chip, entry);
 	if (err)
 		return err;
+
+	/* Mask portvec to a chip's real ports so they cannot spill into
+	 * adjacent ATU Data register fields.
+	 */
+	entry->portvec &= mv88e6xxx_port_mask(chip);
 
 	err = mv88e6xxx_g1_atu_data_write(chip, entry);
 	if (err)
