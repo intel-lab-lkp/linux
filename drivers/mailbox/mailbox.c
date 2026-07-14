@@ -56,11 +56,7 @@ static void msg_submit(struct mbox_chan *chan)
 			break;
 
 		count = chan->msg_count;
-		idx = chan->msg_free;
-		if (idx >= count)
-			idx -= count;
-		else
-			idx += MBOX_TX_QUEUE_LEN - count;
+		idx = (chan->msg_free + MBOX_TX_QUEUE_LEN - count) % MBOX_TX_QUEUE_LEN;
 
 		data = chan->msg_data[idx];
 
