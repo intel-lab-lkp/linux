@@ -1489,7 +1489,7 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		 *   based purely on segment lengths without needing to know
 		 *   the actual addresses beforehand.
 		 * - The mask must be a power of 2, so pad_len == 0 if
-		 *   iova_len == 0, thus we cannot dereference prev the first
+		 *   iova_len == 0, thus we cannot dereference prev, the first
 		 *   time through here (i.e. before it has a meaningful value).
 		 */
 		if (pad_len && pad_len < s_length - 1) {
@@ -1593,7 +1593,7 @@ static void __iommu_dma_free(struct device *dev, size_t size, void *cpu_addr)
 
 	if (is_vmalloc_addr(cpu_addr)) {
 		/*
-		 * If it the address is remapped, then it's either non-coherent
+		 * If the address is remapped, then it is either non-coherent
 		 * or highmem CMA, or an iommu_dma_alloc_remap() construction.
 		 */
 		pages = dma_common_find_pages(cpu_addr);
