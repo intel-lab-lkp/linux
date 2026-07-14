@@ -599,6 +599,8 @@ static int handle_mailbox_cmd_from_user(struct cxl_mailbox *cxl_mbox,
 					u32 *retval)
 {
 	struct device *dev = cxl_mbox->host;
+	bool is_feature_cmd = mbox_cmd->opcode == CXL_MBOX_OP_GET_FEATURE ||
+			      mbox_cmd->opcode == CXL_MBOX_OP_SET_FEATURE;
 	int rc;
 
 	dev_dbg(dev,
@@ -608,7 +610,11 @@ static int handle_mailbox_cmd_from_user(struct cxl_mailbox *cxl_mbox,
 		cxl_mem_opcode_to_name(mbox_cmd->opcode),
 		mbox_cmd->opcode, mbox_cmd->size_in);
 
+	if (is_feature_cmd)
+		mutex_lock(&cxl_mbox->feat_mutex);
 	rc = cxl_mbox->mbox_send(cxl_mbox, mbox_cmd);
+	if (is_feature_cmd)
+		mutex_unlock(&cxl_mbox->feat_mutex);
 	if (rc)
 		goto out;
 
