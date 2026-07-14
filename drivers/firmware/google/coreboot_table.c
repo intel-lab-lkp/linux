@@ -13,8 +13,10 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/device-id/coreboot.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -123,7 +125,7 @@ static int coreboot_table_populate(struct device *dev, void *ptr, resource_size_
 
 	ptr_end = ptr + len;
 	ptr_entry = ptr + header->header_bytes;
-	for (i = 0; i < header->table_entries; i++) {
+	for (i = 0; i < header->table_entries; i++, ptr_entry += entry->size) {
 		if (ptr_entry + sizeof(*entry) > ptr_end)
 			return -EINVAL;
 		entry = ptr_entry;
@@ -147,6 +149,23 @@ static int coreboot_table_populate(struct device *dev, void *ptr, resource_size_
 
 		switch (device->entry.tag) {
 		case LB_TAG_CBMEM_ENTRY:
+			/*
+			 * Skip entries that are not exclusively System RAM or
+			 * Reserved memory.
+			 * On ARM, no-map reserved regions are not System RAM.
+			 * On x86, CBMEM often resides in IORES_DESC_RESERVED regions.
+			 */
+			if (region_intersects(device->cbmem_entry.address,
+					      device->cbmem_entry.entry_size,
+					      IORESOURCE_SYSTEM_RAM,
+					      IORES_DESC_NONE) != REGION_INTERSECTS &&
+			    region_intersects(device->cbmem_entry.address,
+					      device->cbmem_entry.entry_size,
+					      IORESOURCE_MEM,
+					      IORES_DESC_RESERVED) != REGION_INTERSECTS) {
+				kfree(device);
+				continue;
+			}
 			dev_set_name(&device->dev, "cbmem-%08x",
 				     device->cbmem_entry.id);
 			break;
@@ -154,8 +173,6 @@ static int coreboot_table_populate(struct device *dev, void *ptr, resource_size_
 			dev_set_name(&device->dev, "coreboot%d", i);
 			break;
 		}
-
-		ptr_entry += entry->size;
 
 		ret = device_register(&device->dev);
 		if (ret) {
