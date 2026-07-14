@@ -851,7 +851,7 @@ EXPORT_SYMBOL_NS_GPL(iio_backend_filter_type_set, "IIO_BACKEND");
  * @back: Backend device
  * @timeout_us: Timeout value in us.
  *
- * When activated, it initates a proccess that aligns the sample's most
+ * When activated, it initiates a process that aligns the sample's most
  * significant bit (MSB) based solely on the captured data, without
  * considering any other external signals.
  *
