@@ -438,13 +438,12 @@ int rtrs_clt_create_path_files(struct rtrs_clt_path *clt_path)
 				   "%s", str);
 	if (err) {
 		pr_err("kobject_init_and_add: %pe\n", ERR_PTR(err));
-		kobject_put(&clt_path->kobj);
-		return err;
+		goto free_stats;
 	}
 	err = sysfs_create_group(&clt_path->kobj, &rtrs_clt_path_attr_group);
 	if (err) {
 		pr_err("sysfs_create_group(): %pe\n", ERR_PTR(err));
-		goto put_kobj;
+		goto del_kobj_free_stats;
 	}
 	err = kobject_init_and_add(&clt_path->stats->kobj_stats, &ktype_stats,
 				   &clt_path->kobj, "stats");
@@ -468,9 +467,20 @@ put_kobj_stats:
 	kobject_put(&clt_path->stats->kobj_stats);
 remove_group:
 	sysfs_remove_group(&clt_path->kobj, &rtrs_clt_path_attr_group);
-put_kobj:
+del_kobj:
 	kobject_del(&clt_path->kobj);
-	kobject_put(&clt_path->kobj);
+	return err;
+
+del_kobj_free_stats:
+	kobject_del(&clt_path->kobj);
+free_stats:
+	free_percpu(clt_path->stats->pcpu_stats);
+	kfree(clt_path->stats);
+
+	/*
+	 * Leave the path kobject reference to the caller so it can tear
+	 * down the connections before rtrs_clt_path_release() frees it.
+	 */
 
 	return err;
 }

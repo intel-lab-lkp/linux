@@ -2862,8 +2862,7 @@ struct rtrs_clt_sess *rtrs_clt_open(struct rtrs_clt_ops *ops,
 		if (err) {
 			list_del_rcu(&clt_path->s.entry);
 			rtrs_clt_close_conns(clt_path, true);
-			free_percpu(clt_path->stats->pcpu_stats);
-			free_path(clt_path);
+			kobject_put(&clt_path->kobj);
 			goto close_all_path;
 		}
 	}
@@ -3147,9 +3146,16 @@ int rtrs_clt_create_path_from_sysfs(struct rtrs_clt_sess *clt,
 
 	err = rtrs_clt_create_path_files(clt_path);
 	if (err)
-		goto close_path;
+		goto put_path;
 
 	return 0;
+put_path:
+	rtrs_clt_remove_path_from_arr(clt_path);
+	rtrs_clt_close_conns(clt_path, true);
+
+	/* rtrs_clt_path_release() performs the final free_path(). */
+	kobject_put(&clt_path->kobj);
+	return err;
 
 close_path:
 	rtrs_clt_remove_path_from_arr(clt_path);
