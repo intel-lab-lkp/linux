@@ -381,6 +381,54 @@ TRACE_EVENT(aer_event,
 			"Not available")
 );
 #endif /* CONFIG_PCIEAER */
+
+/*
+ * PCIe Flit Error Logging trace event
+ *
+ * These events are generated when the Flit Error Counter of a PCIe Gen6
+ * Flit Mode port records one or more erroneous flits.
+ *
+ * char * dev_name -	The name of the slot where the device resides
+ *			([domain:]bus:device.function).
+ * u16 cntr_ctrl -	Flit Error Counter Control register value.
+ * u16 cntr_sta -	Flit Error Counter Status register value.
+ * u32 err_log1 -	Flit Error Log 1 register value.
+ * u32 err_log2 -	Flit Error Log 2 register value.
+ */
+#ifdef CONFIG_PCIE_FLIT
+TRACE_EVENT(flit_event,
+	TP_PROTO(const char *dev_name,
+		 const u16 cntr_ctrl,
+		 const u16 cntr_sta,
+		 const u32 err_log1,
+		 const u32 err_log2),
+
+	TP_ARGS(dev_name, cntr_ctrl, cntr_sta, err_log1, err_log2),
+
+	TP_STRUCT__entry(
+		__string(	dev_name,	dev_name	)
+		__field(	u16,		cntr_ctrl	)
+		__field(	u16,		cntr_sta	)
+		__field(	u32,		err_log1	)
+		__field(	u32,		err_log2	)
+	),
+
+	TP_fast_assign(
+		__assign_str(dev_name);
+		__entry->cntr_ctrl	= cntr_ctrl;
+		__entry->cntr_sta	= cntr_sta;
+		__entry->err_log1	= err_log1;
+		__entry->err_log2	= err_log2;
+	),
+
+	TP_printk("%s cntr_ctrl:0x%04x cntr_sta:0x%04x err_log1:0x%08x err_log2:0x%08x",
+		__get_str(dev_name),
+		__entry->cntr_ctrl,
+		__entry->cntr_sta,
+		__entry->err_log1,
+		__entry->err_log2)
+);
+#endif /* CONFIG_PCIE_FLIT */
 #endif /* _TRACE_HW_EVENT_MC_H */
 
 /* This part must be outside protection */

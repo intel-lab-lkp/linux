@@ -150,6 +150,7 @@ config PCIE_EDR
 config PCIE_FLIT
 	bool "PCI Express Flit Mode Error Logging support"
 	depends on PCIEPORTBUS
+	select RAS
 	help
 	  This enables support for the PCI Express Flit Logging Extended
 	  Capability, which logs errors encountered by a port operating

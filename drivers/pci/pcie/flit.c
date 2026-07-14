@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <ras/ras_event.h>
 #include "portdrv.h"
 #include "../pci.h"
 
@@ -84,6 +85,7 @@ static irqreturn_t flit_isr(int irq, void *context)
 
 		pci_read_config_dword(pdev, flit + PCI_FLIT_ERR_LOG2, &err_log2);
 		pci_info(pdev, HW_ERR "  Error Log1: 0x%08x Error Log2: 0x%08x\n", err_log1, err_log2);
+		trace_flit_event(pci_name(pdev), cntr_ctrl, cntr_sta, err_log1, err_log2);
 
 		pci_write_config_dword(pdev, flit + PCI_FLIT_ERR_LOG1, err_log1);
 	} while (err_log1 & PCI_FLIT_ERR_LOG_MORE);
