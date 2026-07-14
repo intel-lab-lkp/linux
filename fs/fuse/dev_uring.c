@@ -11,6 +11,7 @@
 
 #include <linux/fs.h>
 #include <linux/io_uring/cmd.h>
+#include <linux/topology.h>
 
 static bool __read_mostly enable_uring;
 module_param(enable_uring, bool, 0644);
@@ -1318,10 +1319,46 @@ static void fuse_uring_send_in_task(struct io_tw_req tw_req, io_tw_token_t tw)
 	}
 }
 
+static inline bool fuse_uring_queue_has_avail_ent(struct fuse_ring_queue *queue)
+{
+	bool has;
+
+	if (!queue)
+		return false;
+
+	spin_lock(&queue->lock);
+	has = !list_empty(&queue->ent_avail_queue);
+	spin_unlock(&queue->lock);
+
+	return has;
+}
+
+static struct fuse_ring_queue *
+fuse_uring_find_avail_queue(struct fuse_ring *ring, int node, unsigned int skip)
+{
+	unsigned int i;
+	struct fuse_ring_queue *queue;
+
+	for (i = 0; i < ring->nr_queues; i++) {
+
+		if (i == skip)
+			continue;
+		if (node >= 0 && cpu_to_node(i) != node)
+			continue;
+
+		queue = ring->queues[i];
+		if (fuse_uring_queue_has_avail_ent(queue))
+			return queue;
+	}
+
+	return NULL;
+}
+
 static struct fuse_ring_queue *fuse_uring_task_to_queue(struct fuse_ring *ring)
 {
 	unsigned int qid;
 	struct fuse_ring_queue *queue;
+	int node;
 
 	qid = task_cpu(current);
 
@@ -1331,7 +1368,15 @@ static struct fuse_ring_queue *fuse_uring_task_to_queue(struct fuse_ring *ring)
 		qid = 0;
 
 	queue = ring->queues[qid];
-	WARN_ONCE(!queue, "Missing queue for qid %d\n", qid);
+	if (fuse_uring_queue_has_avail_ent(queue))
+		return queue;
+
+	node = cpu_to_node(qid);
+	queue = fuse_uring_find_avail_queue(ring, node, qid);
+	if (!queue) {
+		queue = ring->queues[qid];
+		WARN_ONCE(!queue, "Missing queue for qid %d\n", qid);
+	}
 
 	return queue;
 }
