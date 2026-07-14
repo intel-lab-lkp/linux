@@ -1674,6 +1674,20 @@ enum v4l2_mpeg_video_h264_hierarchical_coding_type -
     Codecs need to always use the specified range, rather then a HW custom range.
     Applicable to encoders
 
+``V4L2_CID_MPEG_VIDEO_ROI_MB_DELTA_QP (integer)``
+    This custom control is used to set ROI MB map delta_Qp for whole frame.
+    The frame is divided into grid with MB Size returned from querying
+    V4L2_CID_MPEG_VIDEO_ROI_MB_SIZE. Each block is configured with delta_Qp
+    in raster order. The valid range for delta_Qp is encoder dependent.
+    Applicable to encoders.
+
+``V4L2_CID_MPEG_VIDEO_ROI_MB_SIZE (integer)``
+    This read-only control returns the MB Size for ROI MB delta_Qp map.
+    Its valid range depends on encoder supported codec format.
+    Example: For H.264, 16 is returned for 16x16 MB size.
+    For HEVC, 32 is returned for 32x32 MB size.
+    Depending on the size returned, delta_Qp Map is set to the encoder.
+
 .. raw:: latex
 
     \normalsize
