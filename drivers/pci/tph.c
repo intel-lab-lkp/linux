@@ -354,21 +354,19 @@ int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
 EXPORT_SYMBOL(pcie_tph_get_cpu_st);
 
 /**
- * pcie_tph_set_st_entry() - Set Steering Tag in the ST table entry
+ * pcie_tph_set_st_entries - Batch set Steering Tag entries in the ST table
  * @pdev: PCI device
- * @index: ST table entry index
- * @tag: Steering Tag to be written
+ * @start: starting ST table index
+ * @count: number of contiguous entries to write
+ * @tags: array of u16 tag values to program
  *
- * Figure out the proper location of ST table, either in the MSI-X table or
- * in the TPH Extended Capability space, and write the Steering Tag into
- * the ST entry pointed by index.
- *
- * Return: 0 if success, otherwise negative value (-errno)
+ * Return: number of successfully written entries, or negative errno
  */
-int pcie_tph_set_st_entry(struct pci_dev *pdev, unsigned int index, u16 tag)
+int pcie_tph_set_st_entries(struct pci_dev *pdev, unsigned int start,
+			    unsigned int count, const u16 *tags)
 {
-	u32 loc;
 	int err = 0;
+	u32 loc, i;
 
 	if (!pdev->tph_cap)
 		return -EINVAL;
@@ -378,7 +376,7 @@ int pcie_tph_set_st_entry(struct pci_dev *pdev, unsigned int index, u16 tag)
 
 	/* No need to write tag if device is in "No ST Mode" */
 	if (pdev->tph_mode == PCI_TPH_ST_NS_MODE)
-		return 0;
+		return count;
 
 	/*
 	 * Disable TPH before updating ST to avoid potential instability as
@@ -387,29 +385,47 @@ int pcie_tph_set_st_entry(struct pci_dev *pdev, unsigned int index, u16 tag)
 	set_ctrl_reg_req_en(pdev, PCI_TPH_REQ_DISABLE);
 
 	loc = pcie_tph_get_st_table_loc(pdev);
-
-	switch (loc) {
-	case PCI_TPH_LOC_MSIX:
-		err = pci_msix_write_tph_tag(pdev, index, tag);
-		break;
-	case PCI_TPH_LOC_CAP:
-		err = write_tag_to_st_table(pdev, index, tag);
-		break;
-	default:
-		err = -EINVAL;
-	}
-
-	if (err) {
-		pcie_disable_tph(pdev);
-		return err;
+	for (i = 0; i < count; i++) {
+		switch (loc) {
+		case PCI_TPH_LOC_MSIX:
+			err = pci_msix_write_tph_tag(pdev, start + i, tags[i]);
+			break;
+		case PCI_TPH_LOC_CAP:
+			err = write_tag_to_st_table(pdev, start + i, tags[i]);
+			break;
+		default:
+			err = -EINVAL;
+		}
+		if (err != 0) {
+			pci_err(pdev, "failed to set steering tag: %s table, index=%u, tags=%u, ret=%d\n",
+				(loc == PCI_TPH_LOC_MSIX) ? "MSI-X" : "ST",
+				start + i, tags[i], err);
+			pcie_disable_tph(pdev);
+			return i > 0 ? i : err;
+		}
 	}
 
 	set_ctrl_reg_req_en(pdev, pdev->tph_req_type);
 
-	pci_dbg(pdev, "set steering tag: %s table, index=%d, tag=%#04x\n",
-		(loc == PCI_TPH_LOC_MSIX) ? "MSI-X" : "ST", index, tag);
+	pci_dbg(pdev, "batch set steering tag: %s table, start=%u, count=%u success!\n",
+		(loc == PCI_TPH_LOC_MSIX) ? "MSI-X" : "ST", start, count);
 
-	return 0;
+	return count;
+}
+EXPORT_SYMBOL(pcie_tph_set_st_entries);
+
+/**
+ * pcie_tph_set_st_entry() - Set Steering Tag in the ST table entry
+ * @pdev: PCI device
+ * @index: ST table entry index
+ * @tag: Steering Tag to be written
+ *
+ * Return: 0 if success, otherwise negative value (-errno)
+ */
+int pcie_tph_set_st_entry(struct pci_dev *pdev, unsigned int index, u16 tag)
+{
+	int ret = pcie_tph_set_st_entries(pdev, index, 1, &tag);
+	return ret == 1 ? 0 : ret;
 }
 EXPORT_SYMBOL(pcie_tph_set_st_entry);
 
