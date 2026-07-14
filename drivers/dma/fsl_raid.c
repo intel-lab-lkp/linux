@@ -747,24 +747,20 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	u32 off;
 	u8 ridx = 0;
 	struct dma_device *dma_dev;
-	struct resource *res;
 	struct fsl_re_ctrl __iomem *re_regs;
 	int rc;
 	struct device *dev = &ofdev->dev;
+
+	/* IOMAP the entire RAID Engine region */
+	re_regs = devm_platform_ioremap_resource(ofdev, 0);
+	if (IS_ERR(re_regs))
+		return PTR_ERR(re_regs);
 
 	re_priv = devm_kzalloc(dev, sizeof(*re_priv), GFP_KERNEL);
 	if (!re_priv)
 		return -ENOMEM;
 
-	res = platform_get_resource(ofdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -ENODEV;
-
-	/* IOMAP the entire RAID Engine region */
-	re_priv->re_regs = devm_ioremap(dev, res->start, resource_size(res));
-	if (!re_priv->re_regs)
-		return -EBUSY;
-	re_regs = re_priv->re_regs;
+	re_priv->re_regs = re_regs;
 
 	/* Program the RE mode */
 	out_be32(&re_regs->global_config, FSL_RE_NON_DPAA_MODE);
