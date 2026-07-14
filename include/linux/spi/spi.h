@@ -986,6 +986,12 @@ struct spi_res {
  *      (SPI_NBITS_SINGLE) is used.
  * @multi_lane_mode: How to serialize data on multiple lanes. One of the
  *      SPI_MULTI_LANE_MODE_* values.
+ * @rx_lane_mask: Bitmask of lanes to use for receive in
+ *      SPI_MULTI_LANE_MODE_STRIPE mode. Each set bit enables the corresponding
+ *      lane. If 0 all available lanes are used.
+ * @tx_lane_mask: Bitmask of lanes to use for transmit in
+ *      SPI_MULTI_LANE_MODE_STRIPE mode. Each set bit enables the corresponding
+ *      lane. If 0 all available lanes are used.
  * @len: size of rx and tx buffers (in bytes)
  * @speed_hz: Select a speed other than the device default for this
  *      transfer. If 0 the default (from @spi_device) is used.
@@ -1131,6 +1137,8 @@ struct spi_transfer {
 #define SPI_MULTI_LANE_MODE_STRIPE	1 /* one data word per lane */
 #define SPI_MULTI_LANE_MODE_MIRROR	2 /* same word sent on all lanes */
 	unsigned	multi_lane_mode: 2;
+	unsigned	rx_lane_mask: 8;
+	unsigned	tx_lane_mask: 8;
 
 	unsigned	timestamped:1;
 	bool		dtr_mode;
