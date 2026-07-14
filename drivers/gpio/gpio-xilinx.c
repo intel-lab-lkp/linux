@@ -667,7 +667,7 @@ err_pm_put:
 }
 
 static const struct of_device_id xgpio_of_match[] = {
-	{ .compatible = "xlnx,xps-gpio-1.00.a", },
+	{ .compatible = "xlnx,xps-gpio-1.00.a" },
 	{ /* end of list */ },
 };
 

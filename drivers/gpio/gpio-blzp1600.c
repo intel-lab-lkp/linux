@@ -270,7 +270,7 @@ static int blzp1600_gpio_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id blzp1600_gpio_of_match[] = {
-	{ .compatible = "blaize,blzp1600-gpio", },
+	{ .compatible = "blaize,blzp1600-gpio" },
 	{ /* Sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, blzp1600_gpio_of_match);

@@ -669,7 +669,7 @@ static const struct dev_pm_ops tegra_gpio_pm_ops = {
 };
 
 static const struct of_device_id tegra_pmc_of_match[] = {
-	{ .compatible = "nvidia,tegra210-pmc", },
+	{ .compatible = "nvidia,tegra210-pmc" },
 	{ /* sentinel */ },
 };
 
