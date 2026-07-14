@@ -740,6 +740,8 @@ static int corsair_void_raw_event(struct hid_device *hid_dev,
 	struct corsair_void_drvdata *drvdata = hid_get_drvdata(hid_dev);
 	bool was_connected = drvdata->connected;
 
+	if (size < 5)
+		return 0;
 	/* Description of packets are documented at the top of this file */
 	if (hid_report->id == CORSAIR_VOID_STATUS_REPORT_ID) {
 		drvdata->mic_up = FIELD_GET(CORSAIR_VOID_MIC_MASK, data[2]);
