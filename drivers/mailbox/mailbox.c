@@ -524,7 +524,13 @@ EXPORT_SYMBOL_GPL(mbox_free_channel);
 static struct mbox_chan *fw_mbox_index_xlate(struct mbox_controller *mbox,
 					     const struct fwnode_reference_args *sp)
 {
-	if (sp->nargs < 1 || sp->args[0] >= mbox->num_chans)
+	if (!sp->nargs) {
+		if (mbox->num_chans == 1)
+			return &mbox->chans[0];
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (sp->args[0] >= mbox->num_chans)
 		return ERR_PTR(-EINVAL);
 
 	return &mbox->chans[sp->args[0]];
