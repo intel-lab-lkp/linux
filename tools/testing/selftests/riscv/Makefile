@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0
 # Originally tools/testing/arm64/Makefile
 
+# A proper top_srcdir is needed by KSFT(lib.mk)
+top_srcdir = $(realpath ../../../../)
+
 # When ARCH not overridden for crosscompiling, lookup machine
-ARCH ?= $(shell uname -m 2>/dev/null || echo not)
+include $(top_srcdir)/scripts/subarch.include
+ARCH ?= $(SUBARCH)
 
 ifneq (,$(filter $(ARCH),riscv))
 RISCV_SUBTARGETS ?= abi hwprobe mm sigreturn vector cfi
@@ -11,9 +15,6 @@ RISCV_SUBTARGETS :=
 endif
 
 CFLAGS := -Wall -O2 -g
-
-# A proper top_srcdir is needed by KSFT(lib.mk)
-top_srcdir = $(realpath ../../../../)
 
 # Additional include paths needed by kselftest.h and local headers
 CFLAGS += -I$(top_srcdir)/tools/testing/selftests/
