@@ -133,7 +133,7 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 	 */
 	err = edac_device_register_sysfs_main_kobj(dev_ctl);
 	if (err)
-		goto free;
+		return NULL;
 
 	/* at this point, the root kobj is valid, and in order to
 	 * 'free' the object, then the function:
