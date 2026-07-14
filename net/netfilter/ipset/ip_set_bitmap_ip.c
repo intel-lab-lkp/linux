@@ -115,6 +115,7 @@ bitmap_ip_kadt(struct ip_set *set, const struct sk_buff *skb,
 	ipset_adtfn adtfn = set->variant->adt[adt];
 	struct bitmap_ip_adt_elem e = { .id = 0 };
 	struct ip_set_ext ext = IP_SET_INIT_KEXT(skb, opt, set);
+	int ret;
 	u32 ip;
 
 	ip = ntohl(ip4addr(skb, opt->flags & IPSET_DIM_ONE_SRC));
@@ -123,7 +124,11 @@ bitmap_ip_kadt(struct ip_set *set, const struct sk_buff *skb,
 
 	e.id = ip_to_id(map, ip);
 
-	return adtfn(set, &e, &ext, &opt->ext, opt->cmdflags);
+	spin_lock_bh(&set->lock);
+	ret = adtfn(set, &e, &ext, &opt->ext, opt->cmdflags);
+	spin_unlock_bh(&set->lock);
+
+	return ret;
 }
 
 static int
@@ -178,15 +183,17 @@ bitmap_ip_uadt(struct ip_set *set, struct nlattr *tb[],
 	if (ip < map->first_ip || ip_to > map->last_ip)
 		return -IPSET_ERR_BITMAP_RANGE;
 
+	spin_lock_bh(&set->lock);
 	for (; !before(ip_to, ip); ip += map->hosts) {
 		e.id = ip_to_id(map, ip);
 		ret = adtfn(set, &e, &ext, &ext, flags);
 
 		if (ret && !ip_set_eexist(ret, flags))
-			return ret;
+			break;
 
 		ret = 0;
 	}
+	spin_unlock_bh(&set->lock);
 	return ret;
 }
 

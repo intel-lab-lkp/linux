@@ -214,6 +214,7 @@ bitmap_ipmac_kadt(struct ip_set *set, const struct sk_buff *skb,
 	ipset_adtfn adtfn = set->variant->adt[adt];
 	struct bitmap_ipmac_adt_elem e = { .id = 0, .add_mac = 1 };
 	struct ip_set_ext ext = IP_SET_INIT_KEXT(skb, opt, set);
+	int ret;
 	u32 ip;
 
 	ip = ntohl(ip4addr(skb, opt->flags & IPSET_DIM_ONE_SRC));
@@ -235,7 +236,11 @@ bitmap_ipmac_kadt(struct ip_set *set, const struct sk_buff *skb,
 	if (is_zero_ether_addr(e.ether))
 		return -EINVAL;
 
-	return adtfn(set, &e, &ext, &opt->ext, opt->cmdflags);
+	spin_lock_bh(&set->lock);
+	ret = adtfn(set, &e, &ext, &opt->ext, opt->cmdflags);
+	spin_unlock_bh(&set->lock);
+
+	return ret;
 }
 
 static int
@@ -273,7 +278,9 @@ bitmap_ipmac_uadt(struct ip_set *set, struct nlattr *tb[],
 		memcpy(e.ether, nla_data(tb[IPSET_ATTR_ETHER]), ETH_ALEN);
 		e.add_mac = 1;
 	}
+	spin_lock_bh(&set->lock);
 	ret = adtfn(set, &e, &ext, &ext, flags);
+	spin_unlock_bh(&set->lock);
 
 	return ip_set_eexist(ret, flags) ? 0 : ret;
 }

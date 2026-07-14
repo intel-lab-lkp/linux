@@ -188,14 +188,6 @@ struct ip_set_type_variant {
 	bool (*same_set)(const struct ip_set *a, const struct ip_set *b);
 	/* Cancel ongoing garbage collectors before destroying the set*/
 	void (*cancel_gc)(struct ip_set *set);
-	/* Region-locking is used */
-	bool region_lock;
-};
-
-struct ip_set_region {
-	spinlock_t lock;	/* Region lock */
-	size_t ext_size;	/* Size of the dynamic extensions */
-	u32 elements;		/* Number of elements vs timeout */
 };
 
 /* Max range where every element is added/deleted in one step */

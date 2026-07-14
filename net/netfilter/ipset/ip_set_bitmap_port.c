@@ -134,6 +134,7 @@ bitmap_port_kadt(struct ip_set *set, const struct sk_buff *skb,
 	struct ip_set_ext ext = IP_SET_INIT_KEXT(skb, opt, set);
 	__be16 __port;
 	u16 port = 0;
+	int ret;
 
 	if (!ip_set_get_ip_port(skb, opt->family,
 				opt->flags & IPSET_DIM_ONE_SRC, &__port))
@@ -146,7 +147,11 @@ bitmap_port_kadt(struct ip_set *set, const struct sk_buff *skb,
 
 	e.id = port_to_id(map, port);
 
-	return adtfn(set, &e, &ext, &opt->ext, opt->cmdflags);
+	spin_lock_bh(&set->lock);
+	ret = adtfn(set, &e, &ext, &opt->ext, opt->cmdflags);
+	spin_unlock_bh(&set->lock);
+
+	return ret;
 }
 
 static int
@@ -194,15 +199,17 @@ bitmap_port_uadt(struct ip_set *set, struct nlattr *tb[],
 	if (port_to > map->last_port)
 		return -IPSET_ERR_BITMAP_RANGE;
 
+	spin_lock_bh(&set->lock);
 	for (; port <= port_to; port++) {
 		e.id = port_to_id(map, port);
 		ret = adtfn(set, &e, &ext, &ext, flags);
 
 		if (ret && !ip_set_eexist(ret, flags))
-			return ret;
+			break;
 
 		ret = 0;
 	}
+	spin_unlock_bh(&set->lock);
 	return ret;
 }
 

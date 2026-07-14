@@ -119,6 +119,7 @@ list_set_kadt(struct ip_set *set, const struct sk_buff *skb,
 	int ret = -EINVAL;
 
 	rcu_read_lock();
+	spin_lock_bh(&set->lock);
 	switch (adt) {
 	case IPSET_TEST:
 		ret = list_set_ktest(set, skb, par, opt, &ext);
@@ -132,6 +133,7 @@ list_set_kadt(struct ip_set *set, const struct sk_buff *skb,
 	default:
 		break;
 	}
+	spin_unlock_bh(&set->lock);
 	rcu_read_unlock();
 
 	return ret;
@@ -404,10 +406,13 @@ list_set_uadt(struct ip_set *set, struct nlattr *tb[],
 		if (!e.before)
 			e.before = -1;
 	}
+
+	spin_lock_bh(&set->lock);
 	if (adt != IPSET_TEST && SET_WITH_TIMEOUT(set))
 		set_cleanup_entries(set);
 
 	ret = adtfn(set, &e, &ext, &ext, flags);
+	spin_unlock_bh(&set->lock);
 
 finish:
 	if (e.refid != IPSET_INVALID_ID)
@@ -424,10 +429,12 @@ list_set_flush(struct ip_set *set)
 	struct list_set *map = set->data;
 	struct set_elem *e, *n;
 
+	spin_lock_bh(&set->lock);
 	list_for_each_entry_safe(e, n, &map->members, list)
 		list_set_del(set, e);
 	set->elements = 0;
 	set->ext_size = 0;
+	spin_unlock_bh(&set->lock);
 }
 
 static void

@@ -73,11 +73,13 @@ mtype_flush(struct ip_set *set)
 {
 	struct mtype *map = set->data;
 
+	spin_lock_bh(&set->lock);
 	if (set->extensions & IPSET_EXT_DESTROY)
 		mtype_ext_cleanup(set);
 	bitmap_zero(map->members, map->elements);
 	set->elements = 0;
 	set->ext_size = 0;
+	spin_unlock_bh(&set->lock);
 }
 
 /* Calculate the actual memory size of the set data */

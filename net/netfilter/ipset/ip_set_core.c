@@ -722,20 +722,6 @@ ip_set_rcu_get(struct net *net, ip_set_id_t index)
 	return ip_set_dereference_nfnl(inst->ip_set_list)[index];
 }
 
-static inline void
-ip_set_lock(struct ip_set *set)
-{
-	if (!set->variant->region_lock)
-		spin_lock_bh(&set->lock);
-}
-
-static inline void
-ip_set_unlock(struct ip_set *set)
-{
-	if (!set->variant->region_lock)
-		spin_unlock_bh(&set->lock);
-}
-
 int
 ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 	    const struct xt_action_param *par, struct ip_set_adt_opt *opt)
@@ -755,9 +741,7 @@ ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 	if (ret == -EAGAIN) {
 		/* Type requests element to be completed */
 		pr_debug("element must be completed, ADD is triggered\n");
-		ip_set_lock(set);
 		set->variant->kadt(set, skb, par, IPSET_ADD, opt);
-		ip_set_unlock(set);
 		ret = 1;
 	} else {
 		/* --return-nomatch: invert matched element */
@@ -786,9 +770,7 @@ ip_set_add(ip_set_id_t index, const struct sk_buff *skb,
 	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
 		return -IPSET_ERR_TYPE_MISMATCH;
 
-	ip_set_lock(set);
 	ret = set->variant->kadt(set, skb, par, IPSET_ADD, opt);
-	ip_set_unlock(set);
 
 	return ret;
 }
@@ -799,7 +781,6 @@ ip_set_del(ip_set_id_t index, const struct sk_buff *skb,
 	   const struct xt_action_param *par, struct ip_set_adt_opt *opt)
 {
 	struct ip_set *set = ip_set_rcu_get(xt_net(par), index);
-	int ret = 0;
 
 	BUG_ON(!set);
 	pr_debug("set %s, index %u\n", set->name, index);
@@ -808,11 +789,7 @@ ip_set_del(ip_set_id_t index, const struct sk_buff *skb,
 	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
 		return -IPSET_ERR_TYPE_MISMATCH;
 
-	ip_set_lock(set);
-	ret = set->variant->kadt(set, skb, par, IPSET_DEL, opt);
-	ip_set_unlock(set);
-
-	return ret;
+	return set->variant->kadt(set, skb, par, IPSET_DEL, opt);
 }
 EXPORT_SYMBOL_GPL(ip_set_del);
 
@@ -1298,9 +1275,7 @@ ip_set_flush_set(struct ip_set *set)
 {
 	pr_debug("set: %s\n",  set->name);
 
-	ip_set_lock(set);
 	set->variant->flush(set);
-	ip_set_unlock(set);
 }
 
 static int ip_set_flush(struct sk_buff *skb, const struct nfnl_info *info,
@@ -1754,9 +1729,7 @@ call_ad(struct net *net, struct sock *ctnl, struct sk_buff *skb,
 			__ip_set_put_netlink(set);
 		}
 
-		ip_set_lock(set);
 		ret = set->variant->uadt(set, tb, adt, &lineno, flags, retried);
-		ip_set_unlock(set);
 		retried = true;
 	} while (ret == -ERANGE ||
 		 (ret == -EAGAIN &&

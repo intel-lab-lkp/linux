@@ -957,7 +957,6 @@ static const struct ip_set_type_variant mtype_variant = {
 	.resize	= NULL,
 	.same_set = mtype_same_set,
 	.cancel_gc = mtype_cancel_gc,
-	.region_lock = true,
 };
 
 #ifdef IP_SET_EMIT_CREATE
