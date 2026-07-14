@@ -171,7 +171,7 @@ int um_tlb_sync(struct mm_struct *mm)
 		return 0;
 
 	ops.mm_idp = &mm->context.id;
-	if (mm == &init_mm) {
+	if (mm_is_kernel(mm)) {
 		ops.mmap = kern_map;
 		ops.unmap = kern_unmap;
 	} else {
