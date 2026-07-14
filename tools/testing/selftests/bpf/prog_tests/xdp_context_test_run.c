@@ -847,47 +847,6 @@ void test_xdp_context_tuntap(void)
 			    skel->progs.helper_skb_change_proto,
 			    NULL, /* tc prio 2 */
 			    &skel->bss->test_pass);
-	/* Tests for BPF dynptr from skb_ext */
-	if (test__start_subtest("tc_skb_ext__write_read"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_write,
-			    skel->progs.tc_skb_ext_read,
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__write_clone_read"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_write,
-			    skel->progs.tc_skb_ext_clone_read,
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__write_slice_read"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_write,
-			    skel->progs.tc_skb_ext_slice_read,
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__slice_write_read"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_slice_write,
-			    skel->progs.tc_skb_ext_read,
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__no_alloc"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_no_alloc,
-			    NULL, /* tc prio 2 */
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__invalid_flags"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_invalid_flags,
-			    NULL, /* tc prio 2 */
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__rdonly"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_rdonly,
-			    NULL, /* tc prio 2 */
-			    &skel->bss->test_pass);
-	if (test__start_subtest("tc_skb_ext__double_alloc"))
-		test_tuntap(NULL, /* xdp */
-			    skel->progs.tc_skb_ext_double_alloc,
-			    NULL, /* tc prio 2 */
-			    &skel->bss->test_pass);
 
 	test_xdp_meta__destroy(skel);
 }
@@ -905,7 +864,172 @@ static void test_mirred_clone_ext_cow(struct test_xdp_meta *skel)
 	bpf_link__destroy(tp_link);
 }
 
-void test_skb_ext_cross_hook(void)
+/* Test skb_ext across veth cross-netns forwarding.
+ * Writer on TX_NAME egress, reader on RX_NAME ingress.
+ * When no_scrub is true, ext should survive. Otherwise it should be scrubbed.
+ */
+static void test_skb_ext_scrub_veth(struct test_xdp_meta *skel, bool no_scrub)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tx_hook, .attach_point = BPF_TC_EGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, tx_opts, .handle = 1, .priority = 1);
+	LIBBPF_OPTS(bpf_tc_hook, rx_hook, .attach_point = BPF_TC_INGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, rx_opts, .handle = 1, .priority = 1);
+	struct netns_obj *rx_ns = NULL, *tx_ns = NULL;
+	struct nstoken *nstoken = NULL;
+	int rx_ifindex, tx_ifindex;
+	int ret;
+
+	tx_ns = netns_new(TX_NETNS, false);
+	if (!ASSERT_OK_PTR(tx_ns, "create tx_ns"))
+		return;
+
+	rx_ns = netns_new(RX_NETNS, false);
+	if (!ASSERT_OK_PTR(rx_ns, "create rx_ns"))
+		goto close;
+
+	SYS(close, "ip link add " RX_NAME " netns " RX_NETNS
+	    " type veth peer name " TX_NAME " netns " TX_NETNS);
+
+	/* Setup RX side: TC ingress reader */
+	nstoken = open_netns(RX_NETNS);
+	if (!ASSERT_OK_PTR(nstoken, "setns rx_ns"))
+		goto close;
+
+	SYS(close, "ip link set dev " RX_NAME " up");
+
+	rx_ifindex = if_nametoindex(RX_NAME);
+	if (!ASSERT_GE(rx_ifindex, 0, "if_nametoindex rx"))
+		goto close;
+
+	rx_hook.ifindex = rx_ifindex;
+	ret = bpf_tc_hook_create(&rx_hook);
+	if (!ASSERT_OK(ret, "bpf_tc_hook_create rx"))
+		goto close;
+
+	rx_opts.prog_fd = bpf_program__fd(skel->progs.tc_skb_ext_read);
+	ret = bpf_tc_attach(&rx_hook, &rx_opts);
+	if (!ASSERT_OK(ret, "bpf_tc_attach rx"))
+		goto close;
+
+	close_netns(nstoken);
+
+	/* Setup TX side: TC egress writer */
+	nstoken = open_netns(TX_NETNS);
+	if (!ASSERT_OK_PTR(nstoken, "setns tx_ns"))
+		goto close;
+
+	SYS(close, "ip link set dev " TX_NAME " up");
+
+	tx_ifindex = if_nametoindex(TX_NAME);
+	if (!ASSERT_GE(tx_ifindex, 0, "if_nametoindex tx"))
+		goto close;
+
+	tx_hook.ifindex = tx_ifindex;
+	ret = bpf_tc_hook_create(&tx_hook);
+	if (!ASSERT_OK(ret, "bpf_tc_hook_create tx"))
+		goto close;
+
+	tx_opts.prog_fd = no_scrub
+		? bpf_program__fd(skel->progs.tc_skb_ext_write_no_scrub)
+		: bpf_program__fd(skel->progs.tc_skb_ext_write);
+	ret = bpf_tc_attach(&tx_hook, &tx_opts);
+	if (!ASSERT_OK(ret, "bpf_tc_attach tx"))
+		goto close;
+
+	skel->bss->test_pass = false;
+
+	ret = send_test_packet(tx_ifindex);
+	if (!ASSERT_OK(ret, "send_test_packet"))
+		goto close;
+
+	if (no_scrub)
+		ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+	else
+		ASSERT_FALSE(skel->bss->test_pass, "ext_scrubbed");
+
+close:
+	close_netns(nstoken);
+	netns_free(rx_ns);
+	netns_free(tx_ns);
+}
+
+/* Test skb_ext across GRE tunnel encap+decap.
+ * When no_scrub is true, ext should survive. Otherwise it should be scrubbed.
+ */
+static void test_skb_ext_scrub_gre(struct test_xdp_meta *skel, bool no_scrub)
+{
+	LIBBPF_OPTS(bpf_tc_hook, tx_hook, .attach_point = BPF_TC_EGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, tx_opts, .handle = 1, .priority = 1);
+	LIBBPF_OPTS(bpf_tc_hook, rx_hook, .attach_point = BPF_TC_INGRESS);
+	LIBBPF_OPTS(bpf_tc_opts, rx_opts, .handle = 1, .priority = 1);
+	struct netns_obj *ns = NULL;
+	int tx_ifindex;
+	int rx_ifindex;
+	int ret;
+
+	skel->bss->test_pass = false;
+
+	ns = netns_new("gre_test", true);
+	if (!ASSERT_OK_PTR(ns, "netns_new"))
+		return;
+
+	/* Setup: gre_tx -> lo -> gre_rx */
+	SYS(close, "ip link set lo up");
+	SYS(close, "ip link add gre_tx type gretap"
+	    " local 127.0.0.1 remote 127.0.0.2");
+	SYS(close, "ip link set gre_tx up");
+	SYS(close, "ip addr add 127.0.0.2/8 dev lo");
+	SYS(close, "ip link add gre_rx type gretap"
+	    " local 127.0.0.2 remote 127.0.0.1");
+	SYS(close, "ip link set gre_rx up");
+
+	/* Write skb_ext on TC egress on GRE tx */
+	tx_ifindex = if_nametoindex("gre_tx");
+	if (!ASSERT_GE(tx_ifindex, 0, "tx_ifindex"))
+		goto close;
+
+	tx_hook.ifindex = tx_ifindex;
+	ret = bpf_tc_hook_create(&tx_hook);
+	if (!ASSERT_OK(ret, "tx_hook_create"))
+		goto close;
+
+	tx_opts.prog_fd = no_scrub
+		? bpf_program__fd(skel->progs.tc_skb_ext_write_no_scrub)
+		: bpf_program__fd(skel->progs.tc_skb_ext_write);
+	ret = bpf_tc_attach(&tx_hook, &tx_opts);
+	if (!ASSERT_OK(ret, "tx_attach"))
+		goto close;
+
+	/* Read skb_ext on TC ingress on GRE rx */
+	rx_ifindex = if_nametoindex("gre_rx");
+	if (!ASSERT_GE(rx_ifindex, 0, "rx_ifindex"))
+		goto close;
+
+	rx_hook.ifindex = rx_ifindex;
+	ret = bpf_tc_hook_create(&rx_hook);
+	if (!ASSERT_OK(ret, "rx_hook_create"))
+		goto close;
+
+	rx_opts.prog_fd = bpf_program__fd(skel->progs.tc_skb_ext_read);
+	ret = bpf_tc_attach(&rx_hook, &rx_opts);
+	if (!ASSERT_OK(ret, "rx_attach"))
+		goto close;
+
+	/* Then use send_test_packet on GRE tx */
+	ret = send_test_packet(tx_ifindex);
+	if (!ASSERT_OK(ret, "send_test_packet"))
+		goto close;
+
+	if (no_scrub)
+		ASSERT_TRUE(skel->bss->test_pass, "test_pass");
+	else
+		ASSERT_FALSE(skel->bss->test_pass, "ext_scrubbed");
+
+close:
+	netns_free(ns);
+}
+
+void test_skb_ext(void)
 {
 	struct test_xdp_meta *skel = NULL;
 
@@ -913,6 +1037,46 @@ void test_skb_ext_cross_hook(void)
 	if (!ASSERT_OK_PTR(skel, "open and load skeleton"))
 		return;
 
+	if (test__start_subtest("tc_write_read"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_write,
+			    skel->progs.tc_skb_ext_read,
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_write_clone_read"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_write,
+			    skel->progs.tc_skb_ext_clone_read,
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_write_slice_read"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_write,
+			    skel->progs.tc_skb_ext_slice_read,
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_slice_write_read"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_slice_write,
+			    skel->progs.tc_skb_ext_read,
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_no_alloc"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_no_alloc,
+			    NULL, /* tc prio 2 */
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_invalid_flags"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_invalid_flags,
+			    NULL, /* tc prio 2 */
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_rdonly"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_rdonly,
+			    NULL, /* tc prio 2 */
+			    &skel->bss->test_pass);
+	if (test__start_subtest("tc_double_alloc"))
+		test_tuntap(NULL, /* xdp */
+			    skel->progs.tc_skb_ext_double_alloc,
+			    NULL, /* tc prio 2 */
+			    &skel->bss->test_pass);
 	if (test__start_subtest("tc_to_cgrp"))
 		test_skb_ext_udp(skel, "tc_to_cgrp", READER_CGRP_SKB);
 	if (test__start_subtest("tc_to_sk_filter"))
@@ -927,6 +1091,14 @@ void test_skb_ext_cross_hook(void)
 		test_mirred_clone_ext(skel, skel->progs.tc_skb_ext_read);
 	if (test__start_subtest("clone_ext_cow"))
 		test_mirred_clone_ext_cow(skel);
+	if (test__start_subtest("no_scrub_veth"))
+		test_skb_ext_scrub_veth(skel, true);
+	if (test__start_subtest("scrubbed_veth"))
+		test_skb_ext_scrub_veth(skel, false);
+	if (test__start_subtest("no_scrub_gre"))
+		test_skb_ext_scrub_gre(skel, true);
+	if (test__start_subtest("scrubbed_gre"))
+		test_skb_ext_scrub_gre(skel, false);
 
 	test_xdp_meta__destroy(skel);
 }

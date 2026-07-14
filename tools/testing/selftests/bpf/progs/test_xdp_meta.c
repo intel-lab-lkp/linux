@@ -703,6 +703,24 @@ int tc_skb_ext_write(struct __sk_buff *ctx)
 	return TC_ACT_UNSPEC;
 }
 
+/* Write to skb_ext with NO_SCRUB flag to survive scrubbing */
+SEC("tc")
+int tc_skb_ext_write_no_scrub(struct __sk_buff *ctx)
+{
+	struct bpf_dynptr meta;
+
+	if (!is_test_packet_tc(ctx))
+		return TC_ACT_SHOT;
+	if (bpf_dynptr_from_skb_ext(ctx, 0,
+				    BPF_SKB_EXT_F_CREATE | BPF_SKB_EXT_F_NO_SCRUB,
+				    &meta))
+		return TC_ACT_SHOT;
+	if (bpf_dynptr_write(&meta, 0, (void *)meta_want, ARRAY_SIZE(meta_want), 0))
+		return TC_ACT_SHOT;
+
+	return TC_ACT_UNSPEC;
+}
+
 /* Read from skb-ext metadata using bpf_dynptr_read helper */
 SEC("tc")
 int tc_skb_ext_read(struct __sk_buff *ctx)
