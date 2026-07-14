@@ -179,4 +179,20 @@ config CRASH_MAX_MEMORY_RANGES
 	  the computation behind the value provided through the
 	  /sys/kernel/crash_elfcorehdr_size attribute.
 
+
+config PCI_CRASH
+	bool "Capture PCI config space at panic time"
+	depends on VMCORE_INFO && PCI && (ARM64 || X86)
+	help
+	  Capture PCI configuration space (including AER extended capability
+	  registers) for all PCI devices at panic time.  The data is stored
+	  in a buffer whose pages are recorded in VMCOREINFO for off-site
+	  crash analysis.
+
+	  This is useful for diagnosing PCI errors that caused or contributed
+	  to the crash, especially when AER registers are volatile and cleared
+	  by device reset during kexec.
+
+	  If unsure, say Y.
+
 endmenu
