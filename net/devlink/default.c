@@ -10,6 +10,7 @@
 
 static char *devlink_default_esw_mode_param;
 static bool devlink_default_esw_mode_match_all;
+static bool devlink_default_esw_mode_enabled;
 static enum devlink_eswitch_mode devlink_default_esw_mode;
 static LIST_HEAD(devlink_default_esw_mode_nodes);
 
@@ -154,6 +155,7 @@ static void __init devlink_default_esw_mode_nodes_clear(void)
 	}
 
 	devlink_default_esw_mode_match_all = false;
+	devlink_default_esw_mode_enabled = false;
 }
 
 static int __init devlink_default_esw_mode_parse(char *str)
@@ -180,12 +182,76 @@ static int __init devlink_default_esw_mode_parse(char *str)
 		return err;
 
 	err = devlink_default_esw_mode_handles_parse(handles);
-	if (err)
+	if (err) {
 		devlink_default_esw_mode_nodes_clear();
-	else
+	} else {
 		devlink_default_esw_mode = esw_mode;
+		devlink_default_esw_mode_enabled = true;
+	}
 
 	return err;
+}
+
+static bool devlink_default_esw_mode_match(struct devlink *devlink)
+{
+	const char *bus_name = devlink_bus_name(devlink);
+	const char *dev_name = devlink_dev_name(devlink);
+	struct devlink_default_esw_mode_node *node;
+
+	if (devlink_default_esw_mode_match_all)
+		return true;
+
+	node = devlink_default_esw_mode_node_find(bus_name, dev_name);
+	return !!node;
+}
+
+void devlink_default_esw_mode_apply_locked(struct devlink *devlink)
+{
+	const struct devlink_ops *ops = devlink->ops;
+	int err;
+
+	devl_assert_locked(devlink);
+
+	if (!devlink_default_esw_mode_match(devlink))
+		return;
+
+	if (!ops->eswitch_mode_set) {
+		if (!devlink_default_esw_mode_match_all)
+			devl_warn(devlink,
+				  "devlink_eswitch_mode= selected this device but eswitch mode setting is not supported\n");
+		return;
+	}
+
+	err = devlink_eswitch_mode_set(devlink, devlink_default_esw_mode, NULL);
+	if (err)
+		devl_warn(devlink,
+			  "Couldn't apply default eswitch mode, err %d\n",
+			  err);
+}
+
+void devlink_default_esw_mode_apply_pending(struct devlink *devlink)
+{
+	devl_assert_locked(devlink);
+
+	if (!devlink->default_esw_mode_apply_pending ||
+	    !__devl_is_registered(devlink))
+		return;
+
+	devlink->default_esw_mode_apply_pending = false;
+	devlink_default_esw_mode_apply_locked(devlink);
+}
+
+void devlink_default_esw_mode_instance_init(struct devlink *devlink)
+{
+	devlink->default_esw_mode_apply_pending =
+		devlink_default_esw_mode_enabled;
+}
+
+void devlink_default_esw_mode_apply_pending_clear(struct devlink *devlink)
+{
+	devl_assert_locked(devlink);
+
+	devlink->default_esw_mode_apply_pending = false;
 }
 
 static int __init devlink_default_esw_mode_setup(char *str)
