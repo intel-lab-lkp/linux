@@ -416,7 +416,7 @@ static int __skb_datagram_iter(const struct sk_buff *skb, int offset,
 		int end;
 		const skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 
-		WARN_ON(start > offset + len);
+		WARN_ON_ONCE(start > offset + len);
 
 		end = start + skb_frag_size(frag);
 		if ((copy = end - offset) > 0) {
@@ -449,7 +449,7 @@ static int __skb_datagram_iter(const struct sk_buff *skb, int offset,
 	skb_walk_frags(skb, frag_iter) {
 		int end;
 
-		WARN_ON(start > offset + len);
+		WARN_ON_ONCE(start > offset + len);
 
 		end = start + frag_iter->len;
 		if ((copy = end - offset) > 0) {
@@ -570,7 +570,7 @@ int skb_copy_datagram_from_iter(struct sk_buff *skb, int offset,
 		int end;
 		const skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 
-		WARN_ON(start > offset + len);
+		WARN_ON_ONCE(start > offset + len);
 
 		end = start + skb_frag_size(frag);
 		if ((copy = end - offset) > 0) {
@@ -594,7 +594,7 @@ int skb_copy_datagram_from_iter(struct sk_buff *skb, int offset,
 	skb_walk_frags(skb, frag_iter) {
 		int end;
 
-		WARN_ON(start > offset + len);
+		WARN_ON_ONCE(start > offset + len);
 
 		end = start + frag_iter->len;
 		if ((copy = end - offset) > 0) {
