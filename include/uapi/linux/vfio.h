@@ -1577,6 +1577,60 @@ struct vfio_device_feature_dma_buf_tph {
 	__u8	ph;
 };
 
+/* PCIe TPH device feature definitions for VFIO_DEVICE_FEATURE ioctl */
+#define VFIO_DEVICE_FEATURE_TPH		14
+#define VFIO_DEVICE_FEATURE_TPH_RESOLVE	15
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH - Control and query PCI TPH capabilities
+ *
+ * SET: Opt-in to TPH feature for the device; flags must be zero.
+ * GET: Return supported TPH capability bits (see VFIO_DEVICE_TPH_CAP_*)
+ *      in flags. Returns error if SET has not been invoked first.
+ *
+ * Userspace must first invoke SET on this feature to enable TPH support,
+ * receive valid capability bits via GET, gain permission for using
+ * VFIO_DEVICE_FEATURE_TPH_RESOLVE, and access the virtualized TPH
+ * capability registers via VFIO config space accesses.
+ */
+struct vfio_device_feature_tph {
+	__u32 flags;
+};
+
+/* DMABUF source resolve processing hint supported */
+#define VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH	(1u << 0)
+
+/*
+ * VFIO_DEVICE_FEATURE_TPH_RESOLVE - Resolve TPH attributes from given source
+ *
+ * GET only
+ *
+ * Requires prior successful SET on VFIO_DEVICE_FEATURE_TPH, otherwise
+ * this feature will return error.
+ *
+ * @flags: IN - source type selector (see VFIO_DEVICE_TPH_SRC_*)
+ *         and steering tag namespace selector (see VFIO_DEVICE_TPH_EXTENDED)
+ * @src:   IN - source identifier, e.g. dmabuf fd when SRC_DMABUF is set in
+ *         flags
+ * @valid: OUT - bitmap indicating valid output fields, see
+ *         VFIO_DEVICE_TPH_VALID_*
+ * @ph:    OUT - TPH processing hint (valid when VALID_PH is set in valid)
+ * @rsv:   Must be zero, reserved for future extensions
+ */
+struct vfio_device_feature_tph_resolve {
+	__u32 flags;
+	__u32 src;
+	__u8  valid;
+#define VFIO_DEVICE_TPH_VALID_PH (1u << 0) /* ph holds valid processing hint */
+	__u8  ph;
+	__u16 rsv;
+};
+
+/* Source holds dma-buf fd */
+#define VFIO_DEVICE_TPH_SRC_DMABUF      (1u << 0)
+/* Use extended 16-bit steering tag namespace */
+#define VFIO_DEVICE_TPH_EXTENDED	(1u << 1)
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**

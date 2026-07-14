@@ -149,6 +149,9 @@ struct vfio_pci_core_device {
 	struct notifier_block	nb;
 	struct rw_semaphore	memory_lock;
 	struct list_head	dmabufs;
+	u8			tph_opt_in;
+	u8			tph_policy;
+	u32			tph_cap_virt;
 };
 
 enum vfio_pci_io_width {

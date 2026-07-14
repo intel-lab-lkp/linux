@@ -13,6 +13,8 @@
 #include <linux/aperture.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/dma-buf.h>
+#include <linux/dma-resv.h>
 #include <linux/eventfd.h>
 #include <linux/file.h>
 #include <linux/interrupt.h>
@@ -30,6 +32,7 @@
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/pci-tph.h>
 #include <linux/seq_file.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
@@ -610,6 +613,7 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 		goto out_disable_device;
 
 	vdev->reset_works = !ret;
+	vdev->tph_opt_in = false;
 	pci_save_state(pdev);
 	vdev->pci_saved_state = pci_store_saved_state(pdev);
 	if (!vdev->pci_saved_state)
@@ -1607,6 +1611,123 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static u32 vfio_pci_get_tph_capability(struct vfio_pci_core_device *vdev)
+{
+	return VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH;
+}
+
+static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
+				     u32 flags,
+				     struct vfio_device_feature_tph __user *arg,
+				     size_t argsz)
+{
+	struct vfio_device_feature_tph tph;
+	int ret;
+
+	if (!pcie_std_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz,
+			VFIO_DEVICE_FEATURE_GET | VFIO_DEVICE_FEATURE_SET,
+			sizeof(tph));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&tph, arg, sizeof(tph)))
+		return -EFAULT;
+
+	if (flags & VFIO_DEVICE_FEATURE_SET) {
+		if (tph.flags != 0)
+			return -EINVAL;
+		vdev->tph_opt_in = 1;
+		return 0;
+	}
+
+	if (!vdev->tph_opt_in)
+		return -EINVAL;
+
+	tph.flags = vfio_pci_get_tph_capability(vdev);
+
+	return copy_to_user(arg, &tph, sizeof(tph)) ? -EFAULT : 0;
+}
+
+static u32 vfio_pci_get_tph_resolve_allow_src(struct vfio_pci_core_device *vdev)
+{
+	u32 flags = vfio_pci_get_tph_capability(vdev);
+	u32 allow_src = 0;
+
+	if (flags & VFIO_DEVICE_TPH_CAP_RESOLVE_DMABUF_PH)
+		allow_src |= VFIO_DEVICE_TPH_SRC_DMABUF;
+
+	return allow_src;
+}
+
+static int vfio_pci_get_dmabuf_tph(int fd, bool extended, u16 *st, u8 *ph)
+{
+	struct dma_buf *dmabuf;
+	int ret;
+
+	dmabuf = dma_buf_get(fd);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	ret = dma_resv_lock_interruptible(dmabuf->resv, NULL);
+	if (ret == 0)
+		ret = dma_buf_get_pci_tph(dmabuf, extended, st, ph);
+	dma_resv_unlock(dmabuf->resv);
+
+	dma_buf_put(dmabuf);
+	return ret;
+}
+
+static int vfio_pci_core_feature_tph_resolve(struct vfio_pci_core_device *vdev,
+			u32 flags,
+			struct vfio_device_feature_tph_resolve __user *arg,
+			size_t argsz)
+{
+	struct vfio_device_feature_tph_resolve resolve;
+	u32 user_flags, allow_src;
+	bool extended;
+	u16 tag = 0;
+	u8 ph = 0;
+	int ret;
+
+	if (!vdev->tph_opt_in)
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_GET,
+				 sizeof(resolve));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&resolve, arg, sizeof(resolve)))
+		return -EFAULT;
+
+	user_flags = resolve.flags;
+	extended = !!(user_flags & VFIO_DEVICE_TPH_EXTENDED);
+	if (extended && !pcie_ext_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+	user_flags &= ~VFIO_DEVICE_TPH_EXTENDED;
+
+	allow_src = vfio_pci_get_tph_resolve_allow_src(vdev);
+	if (user_flags & ~allow_src || !is_power_of_2(user_flags))
+		return -EINVAL;
+
+	resolve.valid = 0;
+	resolve.ph = 0;
+
+	if (user_flags & VFIO_DEVICE_TPH_SRC_DMABUF) {
+		ret = vfio_pci_get_dmabuf_tph(resolve.src, extended,
+					      &tag, &ph);
+		if (ret)
+			return ret;
+		resolve.ph = ph;
+		resolve.valid = VFIO_DEVICE_TPH_VALID_PH;
+	}
+
+	return copy_to_user(arg, &resolve, sizeof(resolve)) ? -EFAULT : 0;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1628,6 +1749,11 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 	case VFIO_DEVICE_FEATURE_DMA_BUF_TPH:
 		return vfio_pci_core_feature_dma_buf_tph(vdev, flags, arg,
 							 argsz);
+	case VFIO_DEVICE_FEATURE_TPH:
+		return vfio_pci_core_feature_tph(vdev, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_RESOLVE:
+		return vfio_pci_core_feature_tph_resolve(vdev, flags,
+							 arg, argsz);
 	default:
 		return -ENOTTY;
 	}

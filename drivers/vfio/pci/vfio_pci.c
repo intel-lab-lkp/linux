@@ -60,6 +60,22 @@ static bool disable_denylist;
 module_param(disable_denylist, bool, 0444);
 MODULE_PARM_DESC(disable_denylist, "Disable use of device denylist. Disabling the denylist allows binding to devices with known errata that may lead to exploitable stability or security issues when accessed by untrusted users.");
 
+static unsigned int tph_policy;
+static int tph_policy_set(const char *val, const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, VFIO_PCI_TPH_POLICY_NO_ST,
+				     VFIO_PCI_TPH_POLICY_NO_ST);
+}
+static const struct kernel_param_ops tph_param_ops = {
+	.set = tph_policy_set,
+	.get = param_get_uint,
+};
+module_param_cb(tph_policy, &tph_param_ops, &tph_policy, 0644);
+MODULE_PARM_DESC(tph_policy,
+	"Global TPH policy level (0=default No-ST):\n"
+	"0 = No-ST mode: RESOLVE only returns PH for DMABUF source;\n"
+	"                ST programming unavailable\n");
+
 static bool vfio_pci_dev_in_denylist(struct pci_dev *pdev)
 {
 	switch (pdev->vendor) {
@@ -141,6 +157,9 @@ static int vfio_pci_init_dev(struct vfio_device *core_vdev)
 	vdev->disable_idle_d3 = disable_idle_d3;
 #ifdef CONFIG_VFIO_PCI_VGA
 	vdev->disable_vga = disable_vga;
+#endif
+#ifdef CONFIG_PCIE_TPH
+	vdev->tph_policy = tph_policy;
 #endif
 
 	return vfio_pci_core_init_dev(core_vdev);
