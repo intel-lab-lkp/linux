@@ -5689,6 +5689,24 @@ out_unlock:
 	put_pwq_unlocked(old_pwq);
 }
 
+static int alloc_and_link_percpu_pwqs(struct workqueue_struct *wq)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct pool_workqueue **pwq_p = per_cpu_ptr(wq->cpu_pwq, cpu);
+
+		*pwq_p = alloc_pwq(wq, cpu, NULL);
+		if (!*pwq_p)
+			return -ENOMEM;
+
+		mutex_lock(&wq->mutex);
+		link_pwq(*pwq_p);
+		mutex_unlock(&wq->mutex);
+	}
+	return 0;
+}
+
 static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 {
 	bool highpri = wq->flags & WQ_HIGHPRI;
@@ -5701,21 +5719,8 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 		goto enomem;
 
 	if (!(wq->flags & WQ_UNBOUND)) {
-		for_each_possible_cpu(cpu) {
-			struct pool_workqueue **pwq_p = per_cpu_ptr(wq->cpu_pwq, cpu);
-
-			*pwq_p = alloc_pwq(wq, cpu, NULL);
-			if (!*pwq_p)
-				goto enomem;
-
-			mutex_lock(&wq->mutex);
-			link_pwq(*pwq_p);
-			mutex_unlock(&wq->mutex);
-		}
-		return 0;
-	}
-
-	if (wq->flags & __WQ_ORDERED) {
+		ret = alloc_and_link_percpu_pwqs(wq);
+	} else if (wq->flags & __WQ_ORDERED) {
 		struct pool_workqueue *dfl_pwq;
 
 		ret = apply_workqueue_attrs_locked(wq, ordered_wq_attrs[highpri]);
