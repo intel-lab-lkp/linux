@@ -343,6 +343,13 @@ static void resync_handle_work(struct work_struct *work)
 		return;
 	}
 
+	if (unlikely(priv_rx->rxq >= resync->priv->channels.num)) {
+		priv_rx->rq_stats->tls_resync_req_skip++;
+		tls_offload_rx_resync_async_request_cancel(&resync->core);
+		mlx5e_ktls_priv_rx_put(priv_rx);
+		return;
+	}
+
 	c = resync->priv->channels.c[priv_rx->rxq];
 	sq = c->async_icosq;
 
@@ -568,6 +575,10 @@ void mlx5e_ktls_rx_resync(struct net_device *netdev, struct sock *sk,
 	resync->seq = seq;
 
 	priv = netdev_priv(netdev);
+	if (unlikely(priv_rx->rxq >= priv->channels.num)) {
+		priv_rx->rq_stats->tls_resync_req_skip++;
+		return;
+	}
 	c = priv->channels.c[priv_rx->rxq];
 
 	resync_handle_seq_match(priv_rx, c);
