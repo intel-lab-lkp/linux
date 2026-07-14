@@ -283,6 +283,14 @@ config MARVELL_88X2222_PHY
 	  Support for the Marvell 88X2222 Dual-port Multi-speed Ethernet
 	  Transceiver.
 
+config MAXIO_PHY
+	tristate "Maxio Ethernet PHYs"
+	help
+	  Support for Maxio Ethernet PHYs. Currently this driver supports the
+	  MAE0621A Gigabit Ethernet PHY. The driver optionally selects a 125 MHz
+	  clock on the CLKOUT pin while preserving the hardware configuration on
+	  boards which do not request it.
+
 config MAXLINEAR_GPHY
 	tristate "Maxlinear Ethernet PHYs"
 	select POLYNOMIAL if HWMON
