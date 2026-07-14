@@ -1071,7 +1071,7 @@ static void spi_toggle_csgpiod(struct spi_device *spi, u8 idx, bool enable, bool
 		spi_delay_exec(&spi->cs_inactive, NULL);
 }
 
-static void spi_set_cs(struct spi_device *spi, bool enable, bool force)
+static void _spi_set_cs(struct spi_device *spi, bool enable, bool force)
 {
 	bool activate = enable;
 	u8 idx;
@@ -1127,6 +1127,61 @@ static void spi_set_cs(struct spi_device *spi, bool enable, bool force)
 		else
 			spi_delay_exec(&spi->cs_inactive, NULL);
 	}
+}
+
+static void spi_set_cs(struct spi_device *spi,
+		       struct spi_transfer *xfer,
+		       bool enable, bool force)
+{
+	struct spi_controller *ctlr = spi->controller;
+	struct spi_device temp_spi;
+	u8 cs_mask, cs_count, idx;
+
+	/*
+	 * If no transfer-specific CS mask, or device does not support multi-CS,
+	 * fall back to device default
+	 */
+	if (!xfer || !(ctlr->flags & SPI_CONTROLLER_MULTI_CS))
+		goto out_default_cs;
+
+	if (!xfer->cs_select_mask)
+		goto out_default_cs;
+
+	/*
+	 * Handle multi-CS controller path.
+	 * For multi-CS controllers, we need to create a temporary spi_device
+	 * structure that reflects the transfer's CS selection
+	 */
+	cs_mask = xfer->cs_select_mask & spi->cs_index_mask;
+	temp_spi = *spi;
+	cs_count = 0;
+
+	temp_spi.cs_index_mask = 0;
+	for (idx = 0; idx < spi->num_chipselect; idx++) {
+		if (cs_mask & BIT(idx)) {
+			temp_spi.chip_select[cs_count] = spi->chip_select[idx];
+			if (spi->cs_gpiod[idx])
+				temp_spi.cs_gpiod[cs_count] = spi->cs_gpiod[idx];
+			temp_spi.cs_index_mask |= BIT(cs_count);
+			cs_count++;
+		}
+	}
+	temp_spi.num_chipselect = cs_count;
+
+	_spi_set_cs(&temp_spi, enable, force);
+
+	/*
+	 * Copy the last CS state from temp device back to original controller
+	 * to keep the tracking.
+	 */
+	ctlr->last_cs_index_mask = temp_spi.controller->last_cs_index_mask;
+	ctlr->last_cs_mode_high = temp_spi.controller->last_cs_mode_high;
+	memcpy(ctlr->last_cs, temp_spi.controller->last_cs, sizeof(ctlr->last_cs));
+
+	return;
+
+out_default_cs:
+	_spi_set_cs(spi, enable, force);
 }
 
 #ifdef CONFIG_HAS_DMA
@@ -1612,7 +1667,7 @@ static int spi_transfer_one_message(struct spi_controller *ctlr,
 	struct spi_statistics __percpu *stats = msg->spi->pcpu_statistics;
 
 	xfer = list_first_entry(&msg->transfers, struct spi_transfer, transfer_list);
-	spi_set_cs(msg->spi, !xfer->cs_off, false);
+	spi_set_cs(msg->spi, xfer, !xfer->cs_off, false);
 
 	SPI_STATISTICS_INCREMENT_FIELD(statm, messages);
 	SPI_STATISTICS_INCREMENT_FIELD(stats, messages);
@@ -1680,28 +1735,39 @@ fallback_pio:
 
 		spi_transfer_delay_exec(xfer);
 
+		struct spi_transfer *next_xfer = list_next_entry(xfer, transfer_list);
 		if (xfer->cs_change) {
 			if (list_is_last(&xfer->transfer_list,
 					 &msg->transfers)) {
 				keep_cs = true;
 			} else {
 				if (!xfer->cs_off)
-					spi_set_cs(msg->spi, false, false);
+					spi_set_cs(msg->spi, xfer, false, false);
 				_spi_transfer_cs_change_delay(msg, xfer);
-				if (!list_next_entry(xfer, transfer_list)->cs_off)
-					spi_set_cs(msg->spi, true, false);
+				if (!next_xfer->cs_off)
+					spi_set_cs(msg->spi, next_xfer, true, false);
 			}
 		} else if (!list_is_last(&xfer->transfer_list, &msg->transfers) &&
-			   xfer->cs_off != list_next_entry(xfer, transfer_list)->cs_off) {
-			spi_set_cs(msg->spi, xfer->cs_off, false);
+			   xfer->cs_off != next_xfer->cs_off) {
+			spi_set_cs(msg->spi, next_xfer, xfer->cs_off, false);
+		} else if (!list_is_last(&xfer->transfer_list, &msg->transfers) &&
+			   xfer->cs_select_mask != next_xfer->cs_select_mask) {
+			/* disable the current xfer CS before enabling the next xfer CS */
+			spi_set_cs(msg->spi, xfer, false, false);
+			spi_set_cs(msg->spi, next_xfer, true, false);
 		}
 
 		msg->actual_length += xfer->len;
 	}
 
 out:
-	if (ret != 0 || !keep_cs)
-		spi_set_cs(msg->spi, false, false);
+	if (ret != 0 || !keep_cs) {
+		/* Use the last transfer's CS configuration for proper cleanup */
+		struct spi_transfer *last_xfer = list_last_entry(&msg->transfers,
+								 struct spi_transfer,
+								 transfer_list);
+		spi_set_cs(msg->spi, last_xfer, false, false);
+	}
 
 	if (msg->status == -EINPROGRESS)
 		msg->status = ret;
@@ -4138,10 +4204,10 @@ static int __spi_setup(struct spi_device *spi, bool initial_setup)
 		 */
 		status = 0;
 
-		spi_set_cs(spi, false, true);
+		spi_set_cs(spi, NULL, false, true);
 		pm_runtime_put_autosuspend(spi->controller->dev.parent);
 	} else {
-		spi_set_cs(spi, false, true);
+		spi_set_cs(spi, NULL, false, true);
 	}
 
 	mutex_unlock(&spi->controller->io_mutex);

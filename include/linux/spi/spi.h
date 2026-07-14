@@ -993,6 +993,9 @@ struct spi_res {
  *      for this transfer. If 0 the default (from @spi_device) is used.
  * @dummy_data: indicates transfer is dummy bytes transfer.
  * @cs_off: performs the transfer with chipselect off.
+ * @cs_select_mask: bitmask of chipselects from the @spi_device chipselect
+ *      array to assert for this transfer, overriding @spi_device.cs_index_mask.
+ *      If 0 the device default (@spi_device.cs_index_mask) is used.
  * @cs_change: affects chipselect after this transfer completes
  * @cs_change_delay: delay between cs deassert and assert when
  *      @cs_change is set and @spi_transfer is not the last in @spi_message
@@ -1120,6 +1123,7 @@ struct spi_transfer {
 	unsigned	dummy_data:1;
 	unsigned	cs_off:1;
 	unsigned	cs_change:1;
+	unsigned	cs_select_mask:8;
 	unsigned	tx_nbits:4;
 	unsigned	rx_nbits:4;
 
