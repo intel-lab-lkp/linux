@@ -6724,6 +6724,8 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 }
 
 #ifdef CONFIG_SCHED_PROXY_EXEC
+#define MAX_PROXY_CHAIN_DEPTH	1024
+
 static inline void proxy_set_task_cpu(struct task_struct *p, int cpu)
 {
 	unsigned int wake_cpu;
@@ -6873,6 +6875,7 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 	int this_cpu = cpu_of(rq);
 	struct task_struct *p;
 	int owner_cpu;
+	int chain_depth = 0;
 
 	/* Follow blocked_on chain. */
 	for (p = donor; p->is_blocked; p = owner) {
@@ -6905,6 +6908,13 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 			return NULL;
 		}
 
+		if (++chain_depth > MAX_PROXY_CHAIN_DEPTH) {
+			WARN_ONCE(1, "sched/pe: proxy chain depth exceeded %d, pid %d\n",
+				  MAX_PROXY_CHAIN_DEPTH, p->pid);
+			__clear_task_blocked_on(p, NULL);
+			goto deactivate;
+		}
+
 		if (task_current(rq, p))
 			curr_in_chain = true;
 
@@ -6920,6 +6930,13 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 				p->is_blocked = 0;
 				return p;
 			}
+			goto deactivate;
+		}
+
+		if (owner == donor) {
+			WARN_ONCE(1, "sched/pe: deadlock cycle detected, pid %d\n",
+				  p->pid);
+			__clear_task_blocked_on(p, NULL);
 			goto deactivate;
 		}
 
