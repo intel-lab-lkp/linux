@@ -37,14 +37,20 @@ void rtw_tx_fill_tx_desc(struct rtw_dev *rtwdev,
 {
 	struct rtw_tx_desc *tx_desc = (struct rtw_tx_desc *)skb->data;
 	bool more_data = false;
+	bool first_seg = false;
 
 	if (pkt_info->qsel == TX_DESC_QSEL_HIGH)
 		more_data = true;
+
+	if (rtw_is_8723bs_sdio(rtwdev) &&
+	    pkt_info->qsel != TX_DESC_QSEL_MGMT)
+		first_seg = true;
 
 	tx_desc->w0 = le32_encode_bits(pkt_info->tx_pkt_size, RTW_TX_DESC_W0_TXPKTSIZE) |
 		      le32_encode_bits(pkt_info->offset, RTW_TX_DESC_W0_OFFSET) |
 		      le32_encode_bits(pkt_info->bmc, RTW_TX_DESC_W0_BMC) |
 		      le32_encode_bits(pkt_info->ls, RTW_TX_DESC_W0_LS) |
+		      le32_encode_bits(first_seg, RTW_TX_DESC_W0_FS) |
 		      le32_encode_bits(pkt_info->dis_qselseq, RTW_TX_DESC_W0_DISQSELSEQ);
 
 	tx_desc->w1 = le32_encode_bits(pkt_info->mac_id, RTW_TX_DESC_W1_MACID) |
@@ -68,8 +74,14 @@ void rtw_tx_fill_tx_desc(struct rtw_dev *rtwdev,
 
 	tx_desc->w4 = le32_encode_bits(pkt_info->rate, RTW_TX_DESC_W4_DATARATE);
 
-	if (rtwdev->chip->old_datarate_fb_limit)
+	if (rtwdev->chip->old_datarate_fb_limit &&
+	    !pkt_info->disable_data_rate_fb_limit)
 		tx_desc->w4 |= le32_encode_bits(0x1f, RTW_TX_DESC_W4_DATARATE_FB_LIMIT);
+
+	if (pkt_info->retry_limit_en)
+		tx_desc->w4 |= le32_encode_bits(true, RTW_TX_DESC_W4_RETRY_LIMIT_EN) |
+			       le32_encode_bits(pkt_info->data_retry_limit,
+						RTW_TX_DESC_W4_DATA_RETRY_LIMIT);
 
 	tx_desc->w5 = le32_encode_bits(pkt_info->short_gi, RTW_TX_DESC_W5_DATA_SHORT) |
 		      le32_encode_bits(pkt_info->bw, RTW_TX_DESC_W5_DATA_BW) |
@@ -262,6 +274,36 @@ void rtw_tx_report_handle(struct rtw_dev *rtwdev, struct sk_buff *skb, int src)
 	spin_unlock_irqrestore(&tx_report->q_lock, flags);
 }
 
+/* 8723BS SDIO v41 firmware reports management TX through the vendor CCX C2H
+ * (0x12 for auth/assoc/data, 0x32 for scan probe). Payload byte 0 is the
+ * report type/status (bit 6 lifetime-over, bit 7 retry-over); byte 6 is the
+ * W6 SW_DEFINE (sequence number) the vendor driver reads back.
+ */
+void rtw_tx_report_handle_8723b(struct rtw_dev *rtwdev, u8 report_type,
+				u8 *payload, u8 len)
+{
+	struct rtw_tx_report *tx_report = &rtwdev->tx_report;
+	struct sk_buff *cur, *tmp;
+	unsigned long flags;
+	bool failed = len > 0 && (payload[0] & (BIT(6) | BIT(7)));
+	u8 sn = len >= 7 ? payload[6] : 0xff;
+	u8 *n;
+
+	if (len < 7)
+		return;
+
+	spin_lock_irqsave(&tx_report->q_lock, flags);
+	skb_queue_walk_safe(&tx_report->queue, cur, tmp) {
+		n = (u8 *)IEEE80211_SKB_CB(cur)->status.status_driver_data;
+		if (*n == sn) {
+			__skb_unlink(cur, &tx_report->queue);
+			rtw_tx_report_tx_status(rtwdev, cur, !failed);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&tx_report->q_lock, flags);
+}
+
 static u8 rtw_get_mgmt_rate(struct rtw_dev *rtwdev, struct sk_buff *skb,
 			    u8 lowest_rate, bool ignore_rate)
 {
@@ -275,15 +317,118 @@ static u8 rtw_get_mgmt_rate(struct rtw_dev *rtwdev, struct sk_buff *skb,
 	return __ffs(vif->bss_conf.basic_rates) + lowest_rate;
 }
 
+static bool rtw_tx_8723bs_sdio_2g(struct rtw_dev *rtwdev)
+{
+	return rtw_is_8723bs_sdio(rtwdev) &&
+	       rtwdev->hal.current_band_type == RTW_BAND_2G;
+}
+
+static bool rtw_tx_8723bs_rates_have_cck(const u8 *ie)
+{
+	int i;
+
+	if (!ie)
+		return false;
+
+	for (i = 2; i < ie[1] + 2; i++) {
+		switch (ie[i] & 0x7f) {
+		case 2:  /* 1 Mbps */
+		case 4:  /* 2 Mbps */
+		case 11: /* 5.5 Mbps */
+		case 22: /* 11 Mbps */
+			return true;
+		default:
+			break;
+		}
+	}
+
+	return false;
+}
+
+static bool rtw_tx_8723bs_bss_has_cck(struct rtw_dev *rtwdev,
+				      struct ieee80211_vif *vif,
+				      const u8 *bssid,
+				      bool *known)
+{
+	struct cfg80211_bss *bss;
+	const u8 *rates;
+	const u8 *ext_rates;
+	bool has_cck = false;
+
+	*known = false;
+
+	if (!vif || !bssid || !is_valid_ether_addr(bssid))
+		return false;
+
+	bss = cfg80211_get_bss(rtwdev->hw->wiphy, NULL, bssid, NULL, 0,
+			       IEEE80211_BSS_TYPE_ESS, IEEE80211_PRIVACY_ANY);
+	if (!bss)
+		return false;
+
+	rcu_read_lock();
+	rates = ieee80211_bss_get_ie(bss, WLAN_EID_SUPP_RATES);
+	ext_rates = ieee80211_bss_get_ie(bss, WLAN_EID_EXT_SUPP_RATES);
+	if (rates || ext_rates) {
+		*known = true;
+		has_cck = rtw_tx_8723bs_rates_have_cck(rates) ||
+			  rtw_tx_8723bs_rates_have_cck(ext_rates);
+	}
+	rcu_read_unlock();
+
+	cfg80211_put_bss(rtwdev->hw->wiphy, bss);
+
+	return has_cck;
+}
+
+/* 8723BS SDIO follows the vendor driver's tx_rate rule: the initial scan
+ * default is 1 Mbps CCK, and join-time update_wireless_mode() keeps 1 Mbps
+ * whenever the selected BSS rate set includes CCK; only pure-G BSSes use 6
+ * Mbps OFDM.
+ */
+static void rtw_tx_8723bs_sdio_rate(struct rtw_dev *rtwdev,
+				    struct rtw_tx_pkt_info *pkt_info,
+				    struct sk_buff *skb)
+{
+	struct ieee80211_tx_info *tx_info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_vif *vif = tx_info->control.vif;
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+	const u8 *bssid = NULL;
+	bool known = false;
+	bool has_cck = true;
+
+	if (ieee80211_is_data(hdr->frame_control) ||
+	    ieee80211_is_mgmt(hdr->frame_control))
+		bssid = hdr->addr1;
+
+	has_cck = rtw_tx_8723bs_bss_has_cck(rtwdev, vif, bssid, &known);
+	if (!known && vif && vif->bss_conf.basic_rates)
+		has_cck = vif->bss_conf.basic_rates & 0xf;
+	else if (!known)
+		has_cck = true;
+
+	if (has_cck) {
+		pkt_info->rate_id = RTW_RATEID_B_20M;
+		pkt_info->rate = DESC_RATE1M;
+	} else {
+		pkt_info->rate_id = RTW_RATEID_G;
+		pkt_info->rate = DESC_RATE6M;
+	}
+}
+
 static void rtw_tx_pkt_info_update_rate(struct rtw_dev *rtwdev,
 					struct rtw_tx_pkt_info *pkt_info,
 					struct sk_buff *skb,
 					bool ignore_rate)
 {
 	if (rtwdev->hal.current_band_type == RTW_BAND_2G) {
-		pkt_info->rate_id = RTW_RATEID_B_20M;
-		pkt_info->rate = rtw_get_mgmt_rate(rtwdev, skb, DESC_RATE1M,
-						   ignore_rate);
+		if (rtw_tx_8723bs_sdio_2g(rtwdev)) {
+			rtw_tx_8723bs_sdio_rate(rtwdev, pkt_info, skb);
+		} else {
+			pkt_info->rate_id = RTW_RATEID_B_20M;
+			pkt_info->rate = rtw_get_mgmt_rate(rtwdev, skb,
+							   DESC_RATE1M,
+							   ignore_rate);
+		}
 	} else {
 		pkt_info->rate_id = RTW_RATEID_G;
 		pkt_info->rate = rtw_get_mgmt_rate(rtwdev, skb, DESC_RATE6M,
@@ -292,6 +437,12 @@ static void rtw_tx_pkt_info_update_rate(struct rtw_dev *rtwdev,
 
 	pkt_info->use_rate = true;
 	pkt_info->dis_rate_fallback = true;
+
+	/* 8723BS SDIO 2.4 GHz: the vendor path leaves dis_rate_fallback=0 for
+	 * MGNT_FRAMETAG and EAPOL/ARP data frames.
+	 */
+	if (rtw_tx_8723bs_sdio_2g(rtwdev))
+		pkt_info->dis_rate_fallback = false;
 }
 
 static void rtw_tx_pkt_info_update_sec(struct rtw_dev *rtwdev,
@@ -326,7 +477,30 @@ static void rtw_tx_mgmt_pkt_info_update(struct rtw_dev *rtwdev,
 					struct ieee80211_sta *sta,
 					struct sk_buff *skb)
 {
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
 	rtw_tx_pkt_info_update_rate(rtwdev, pkt_info, skb, false);
+
+	if (rtw_is_8723bs_sdio(rtwdev)) {
+		/* The vendor v41 firmware requires SPE_RPT=1 in the TX
+		 * descriptor to schedule a management frame for air
+		 * transmission (report=true), with SW_DEFINE/sn=0. Keep the
+		 * retry limit and rate-fallback control aligned with the
+		 * vendor rtl8723b_fill_default_txdesc() contract.
+		 */
+		pkt_info->seq = (le16_to_cpu(hdr->seq_ctrl) &
+				 IEEE80211_SCTL_SEQ) >> 4;
+		pkt_info->en_hwseq = true;
+		pkt_info->hw_ssn_sel = 0;
+		pkt_info->dis_rate_fallback = false;
+		pkt_info->retry_limit_en = true;
+		pkt_info->data_retry_limit = 6;
+		pkt_info->disable_data_rate_fb_limit = true;
+		pkt_info->report = true;
+		pkt_info->sn = 0;
+		return;
+	}
+
 	pkt_info->dis_qselseq = true;
 	pkt_info->en_hwseq = true;
 	pkt_info->hw_ssn_sel = 0;
@@ -396,6 +570,30 @@ out:
 	pkt_info->stbc = stbc;
 	pkt_info->ldpc = ldpc;
 
+	/* 8723BS SDIO keys the CCK floor on air regardless of the rate mask
+	 * unless the firmware-reported rate is forced through the descriptor.
+	 * Apply the rate the firmware last reported via C2H as the initial TX
+	 * rate. Leave rate fallback enabled (dis_rate_fallback stays 0): the
+	 * applied rate is only the initial one, so a transiently-stale value -
+	 * e.g. right after a power-save wake - can still step down and recover.
+	 */
+	if (sta && rtw_is_8723bs_sdio(rtwdev)) {
+		si = (struct rtw_sta_info *)sta->drv_priv;
+		if (si->ra_report.desc_rate >= DESC_RATEMCS0 &&
+		    si->ra_report.desc_rate < DESC_RATE_MAX) {
+			pkt_info->rate = si->ra_report.desc_rate;
+			pkt_info->use_rate = true;
+		}
+	}
+
+	if (skb->protocol == cpu_to_be16(ETH_P_PAE)) {
+		rtw_tx_pkt_info_update_rate(rtwdev, pkt_info, skb, true);
+
+		if (rtw_is_8723bs_sdio(rtwdev) && info->control.vif &&
+		    info->control.vif->bss_conf.use_short_preamble)
+			pkt_info->short_gi = true;
+	}
+
 	fix_rate = dm_info->fix_rate;
 	if (fix_rate < DESC_RATE_MAX) {
 		pkt_info->rate = fix_rate;
@@ -416,6 +614,7 @@ void rtw_tx_pkt_info_update(struct rtw_dev *rtwdev,
 	struct rtw_sta_info *si;
 	struct rtw_vif *rtwvif;
 	__le16 fc = hdr->frame_control;
+	bool is_mgmt = ieee80211_is_mgmt(fc);
 	bool bmc;
 
 	if (sta) {
@@ -426,7 +625,14 @@ void rtw_tx_pkt_info_update(struct rtw_dev *rtwdev,
 		pkt_info->mac_id = rtwvif->mac_id;
 	}
 
-	if (ieee80211_is_mgmt(fc) || ieee80211_is_any_nullfunc(fc))
+	/* The vendor 8723BS SDIO path sends management frames through the
+	 * shared BCMC station context (macid 1 in station mode). Data frames
+	 * keep the normal peer/vif macid.
+	 */
+	if (rtw_is_8723bs_sdio(rtwdev) && is_mgmt)
+		pkt_info->mac_id = 1;
+
+	if (is_mgmt || ieee80211_is_any_nullfunc(fc))
 		rtw_tx_mgmt_pkt_info_update(rtwdev, pkt_info, sta, skb);
 	else if (ieee80211_is_data(fc))
 		rtw_tx_data_pkt_info_update(rtwdev, pkt_info, sta, skb);
@@ -434,7 +640,12 @@ void rtw_tx_pkt_info_update(struct rtw_dev *rtwdev,
 	bmc = is_broadcast_ether_addr(hdr->addr1) ||
 	      is_multicast_ether_addr(hdr->addr1);
 
-	if (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS)
+	/* 8723BS SDIO management frames carry the vendor SPE_RPT/sn=0 contract
+	 * set above; skip rtw_tx_report_enable() so the sn stays 0. Data
+	 * frames still use the normal CCX TX-report path.
+	 */
+	if (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS &&
+	    !(rtw_is_8723bs_sdio(rtwdev) && is_mgmt))
 		rtw_tx_report_enable(rtwdev, pkt_info);
 
 	pkt_info->bmc = bmc;
@@ -442,7 +653,7 @@ void rtw_tx_pkt_info_update(struct rtw_dev *rtwdev,
 	pkt_info->tx_pkt_size = skb->len;
 	pkt_info->offset = chip->tx_pkt_desc_sz;
 	pkt_info->qsel = skb->priority;
-	pkt_info->ls = true;
+	pkt_info->ls = !(rtw_is_8723bs_sdio(rtwdev) && is_mgmt);
 
 	/* maybe merge with tx status ? */
 	rtw_tx_stats(rtwdev, vif, skb);
