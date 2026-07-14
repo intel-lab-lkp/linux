@@ -106,15 +106,17 @@ static dma_cookie_t fsl_re_tx_submit(struct dma_async_tx_descriptor *tx)
 static void fsl_re_issue_pending(struct dma_chan *chan)
 {
 	struct fsl_re_chan *re_chan;
+	struct fsl_re_chan_cfg __iomem *jr;
 	int avail;
 	struct fsl_re_desc *desc, *_desc;
 	unsigned long flags;
 
 	re_chan = container_of(chan, struct fsl_re_chan, chan);
+	jr = re_chan->jrregs;
 
 	spin_lock_irqsave(&re_chan->desc_lock, flags);
 	avail = FSL_RE_SLOT_AVAIL(
-		in_be32(&re_chan->jrregs->inbring_slot_avail));
+		in_be32(&jr->inbring_slot_avail));
 
 	list_for_each_entry_safe(desc, _desc, &re_chan->submit_q, node) {
 		if (!avail)
@@ -127,7 +129,7 @@ static void fsl_re_issue_pending(struct dma_chan *chan)
 
 		re_chan->inb_count = (re_chan->inb_count + 1) &
 						FSL_RE_RING_SIZE_MASK;
-		out_be32(&re_chan->jrregs->inbring_add_job, FSL_RE_ADD_JOB(1));
+		out_be32(&jr->inbring_add_job, FSL_RE_ADD_JOB(1));
 		avail--;
 	}
 	spin_unlock_irqrestore(&re_chan->desc_lock, flags);
@@ -158,6 +160,7 @@ static void fsl_re_cleanup_descs(struct fsl_re_chan *re_chan)
 static void fsl_re_dequeue(struct tasklet_struct *t)
 {
 	struct fsl_re_chan *re_chan = from_tasklet(re_chan, t, irqtask);
+	struct fsl_re_chan_cfg __iomem *jr = re_chan->jrregs;
 	struct fsl_re_desc *desc, *_desc;
 	struct fsl_re_hw_desc *hwdesc;
 	unsigned long flags;
@@ -167,7 +170,7 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 	fsl_re_cleanup_descs(re_chan);
 
 	spin_lock_irqsave(&re_chan->desc_lock, flags);
-	count =	FSL_RE_SLOT_FULL(in_be32(&re_chan->jrregs->oubring_slot_full));
+	count =	FSL_RE_SLOT_FULL(in_be32(&jr->oubring_slot_full));
 	while (count--) {
 		found = 0;
 		hwdesc = &re_chan->oub_ring_virt_addr[re_chan->oub_count];
@@ -192,8 +195,7 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 		oub_count = (re_chan->oub_count + 1) & FSL_RE_RING_SIZE_MASK;
 		re_chan->oub_count = oub_count;
 
-		out_be32(&re_chan->jrregs->oubring_job_rmvd,
-			 FSL_RE_RMVD_JOB(1));
+		out_be32(&jr->oubring_job_rmvd, FSL_RE_RMVD_JOB(1));
 	}
 	spin_unlock_irqrestore(&re_chan->desc_lock, flags);
 }
@@ -201,12 +203,12 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 /* Per Job Ring interrupt handler */
 static irqreturn_t fsl_re_isr(int irq, void *data)
 {
-	struct fsl_re_chan *re_chan;
+	struct device *dev = data;
+	struct fsl_re_chan *re_chan = dev_get_drvdata(dev);
+	struct fsl_re_chan_cfg __iomem *jr = re_chan->jrregs;
 	u32 irqstate, status;
 
-	re_chan = dev_get_drvdata((struct device *)data);
-
-	irqstate = in_be32(&re_chan->jrregs->jr_interrupt_status);
+	irqstate = in_be32(&jr->jr_interrupt_status);
 	if (!irqstate)
 		return IRQ_NONE;
 
@@ -216,13 +218,13 @@ static irqreturn_t fsl_re_isr(int irq, void *data)
 	 * need to do something more than just crashing
 	 */
 	if (irqstate & FSL_RE_ERROR) {
-		status = in_be32(&re_chan->jrregs->jr_status);
+		status = in_be32(&jr->jr_status);
 		dev_err(re_chan->dev, "chan error irqstate: %x, status: %x\n",
 			irqstate, status);
 	}
 
 	/* Clear interrupt */
-	out_be32(&re_chan->jrregs->jr_interrupt_status, FSL_RE_CLR_INTR);
+	out_be32(&jr->jr_interrupt_status, FSL_RE_CLR_INTR);
 
 	tasklet_schedule(&re_chan->irqtask);
 
@@ -627,6 +629,7 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	struct device *dev, *chandev;
 	struct fsl_re_drv_private *re_priv;
 	struct fsl_re_chan *chan;
+	struct fsl_re_chan_cfg __iomem *jr;
 	struct dma_device *dma_dev;
 	u32 ptr;
 	u32 status;
@@ -657,8 +660,8 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 		goto err_free;
 	}
 
-	chan->jrregs = (struct fsl_re_chan_cfg *)((u8 *)re_priv->re_regs +
-			off + ptr);
+	jr = re_priv->re_regs + off + ptr;
+	chan->jrregs = jr;
 
 	/* read irq property from dts */
 	chan->irq = irq_of_parse_and_map(np, 0);
@@ -709,30 +712,23 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	}
 
 	/* Program the Inbound/Outbound ring base addresses and size */
-	out_be32(&chan->jrregs->inbring_base_h,
-		 chan->inb_phys_addr & FSL_RE_ADDR_BIT_MASK);
-	out_be32(&chan->jrregs->oubring_base_h,
-		 chan->oub_phys_addr & FSL_RE_ADDR_BIT_MASK);
-	out_be32(&chan->jrregs->inbring_base_l,
-		 chan->inb_phys_addr >> FSL_RE_ADDR_BIT_SHIFT);
-	out_be32(&chan->jrregs->oubring_base_l,
-		 chan->oub_phys_addr >> FSL_RE_ADDR_BIT_SHIFT);
-	out_be32(&chan->jrregs->inbring_size,
-		 FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
-	out_be32(&chan->jrregs->oubring_size,
-		 FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
+	out_be32(&jr->inbring_base_h, chan->inb_phys_addr & FSL_RE_ADDR_BIT_MASK);
+	out_be32(&jr->oubring_base_h, chan->oub_phys_addr & FSL_RE_ADDR_BIT_MASK);
+	out_be32(&jr->inbring_base_l, chan->inb_phys_addr >> FSL_RE_ADDR_BIT_SHIFT);
+	out_be32(&jr->oubring_base_l, chan->oub_phys_addr >> FSL_RE_ADDR_BIT_SHIFT);
+	out_be32(&jr->inbring_size, FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
+	out_be32(&jr->oubring_size, FSL_RE_RING_SIZE << FSL_RE_RING_SIZE_SHIFT);
 
 	/* Read LIODN value from u-boot */
-	status = in_be32(&chan->jrregs->jr_config_1) & FSL_RE_REG_LIODN_MASK;
+	status = in_be32(&jr->jr_config_1) & FSL_RE_REG_LIODN_MASK;
 
 	/* Program the CFG reg */
-	out_be32(&chan->jrregs->jr_config_1,
-		 FSL_RE_CFG1_CBSI | FSL_RE_CFG1_CBS0 | status);
+	out_be32(&jr->jr_config_1, FSL_RE_CFG1_CBSI | FSL_RE_CFG1_CBS0 | status);
 
 	dev_set_drvdata(chandev, chan);
 
 	/* Enable RE/CHAN */
-	out_be32(&chan->jrregs->jr_command, FSL_RE_ENABLE);
+	out_be32(&jr->jr_command, FSL_RE_ENABLE);
 
 	return 0;
 
@@ -752,6 +748,7 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	u8 ridx = 0;
 	struct dma_device *dma_dev;
 	struct resource *res;
+	struct fsl_re_ctrl __iomem *re_regs;
 	int rc;
 	struct device *dev = &ofdev->dev;
 
@@ -767,17 +764,18 @@ static int fsl_re_probe(struct platform_device *ofdev)
 	re_priv->re_regs = devm_ioremap(dev, res->start, resource_size(res));
 	if (!re_priv->re_regs)
 		return -EBUSY;
+	re_regs = re_priv->re_regs;
 
 	/* Program the RE mode */
-	out_be32(&re_priv->re_regs->global_config, FSL_RE_NON_DPAA_MODE);
+	out_be32(&re_regs->global_config, FSL_RE_NON_DPAA_MODE);
 
 	/* Program Galois Field polynomial */
-	out_be32(&re_priv->re_regs->galois_field_config, FSL_RE_GFM_POLY);
+	out_be32(&re_regs->galois_field_config, FSL_RE_GFM_POLY);
 
 	dev_info(dev, "version %x, mode %x, gfp %x\n",
-		 in_be32(&re_priv->re_regs->re_version_id),
-		 in_be32(&re_priv->re_regs->global_config),
-		 in_be32(&re_priv->re_regs->galois_field_config));
+		 in_be32(&re_regs->re_version_id),
+		 in_be32(&re_regs->global_config),
+		 in_be32(&re_regs->galois_field_config));
 
 	dma_dev = &re_priv->dma_dev;
 	dma_dev->dev = dev;
