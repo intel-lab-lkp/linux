@@ -75,6 +75,54 @@ static void nested_svm_clear_synthesized_insn_bytes(struct vcpu_svm *svm)
 	svm->nested.synthesized_insn_bytes.insn_len = 0;
 }
 
+/*
+ * Fetch up to 15 bytes at L2's instruction pointer.  Honor the architectural
+ * fetch boundaries by stopping at a translation failure, read failure, or CS
+ * limit.
+ */
+static u8 nested_svm_fetch_insn_bytes(struct kvm_vcpu *vcpu, u8 *bytes,
+				      u8 count, u8 max_bytes)
+{
+	struct kvm_mmu *mmu = vcpu->arch.walk_mmu;
+	u64 access = PFERR_FETCH_MASK;
+	gva_t rip = kvm_get_linear_rip(vcpu);
+	struct x86_exception e;
+
+	if (to_svm(vcpu)->vmcb->save.cpl == 3)
+		access |= PFERR_USER_MASK;
+
+	/*
+	 * Hardware truncates the fetch at the CS limit.  CS.base and CS.limit
+	 * checks do not apply in 64-bit mode.
+	 */
+	if (!is_64_bit_mode(vcpu)) {
+		u32 eip = kvm_rip_read(vcpu);
+		u32 limit = to_svm(vcpu)->vmcb->save.cs.limit;
+
+		if (eip > limit)
+			return 0;
+		max_bytes = min_t(u64, max_bytes, (u64)limit - eip + 1);
+	}
+
+	count = min(count, max_bytes);
+
+	while (count < max_bytes) {
+		unsigned int chunk = min_t(unsigned int, max_bytes - count,
+				PAGE_SIZE - offset_in_page(rip + count));
+		gpa_t gpa = mmu->gva_to_gpa(vcpu, mmu, rip + count, access, &e);
+
+		if (gpa == INVALID_GPA ||
+		    kvm_vcpu_read_guest_page(vcpu, gpa_to_gfn(gpa),
+					     bytes + count,
+					     offset_in_page(gpa), chunk))
+			break;
+
+		count += chunk;
+	}
+
+	return count;
+}
+
 static void nested_svm_prepare_synthesized_insn_bytes(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -102,7 +150,8 @@ static void nested_svm_prepare_synthesized_insn_bytes(struct kvm_vcpu *vcpu)
 /*
  * Rebuild VMCB12's DecodeAssist bytes for the nested VM-Exit.  Use fresh
  * hardware VMCB02 state when available; otherwise use synthesized bytes from
- * the emulator fetch cache for KVM-generated #NPF/#PF exits.
+ * the emulator fetch cache for KVM-generated #NPF/#PF exits, or fetch from
+ * L2 RIP as a last resort.
  */
 static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 						struct vmcb *vmcb12,
@@ -133,8 +182,22 @@ static void nested_svm_update_vmcb12_insn_bytes(struct kvm_vcpu *vcpu,
 		vmcb12->control.insn_len = min(synthesized_len, max_bytes);
 		memcpy(vmcb12->control.insn_bytes, insn_bytes->insn_bytes,
 		       vmcb12->control.insn_len);
+
+		if (!is_sev_guest(vcpu))
+			vmcb12->control.insn_len =
+				nested_svm_fetch_insn_bytes(vcpu,
+							    vmcb12->control.insn_bytes,
+							    vmcb12->control.insn_len,
+							    max_bytes);
 		return;
 	}
+
+	if (is_sev_guest(vcpu))
+		return;
+
+	vmcb12->control.insn_len =
+		nested_svm_fetch_insn_bytes(vcpu, vmcb12->control.insn_bytes,
+					    0, max_bytes);
 }
 
 static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
