@@ -1426,9 +1426,15 @@ static
 struct arm_smmu_device *arm_smmu_get_by_fwnode(struct fwnode_handle *fwnode)
 {
 	struct device *dev = bus_find_device_by_fwnode(&platform_bus_type, fwnode);
+	struct arm_smmu_device *smmu;
 
+	if (!dev)
+		return NULL;
+
+	smmu = dev_get_drvdata(dev);
 	put_device(dev);
-	return dev ? dev_get_drvdata(dev) : NULL;
+
+	return smmu;
 }
 
 static struct iommu_device *arm_smmu_probe_device(struct device *dev)
@@ -1451,6 +1457,10 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 			goto out_free;
 	} else {
 		smmu = arm_smmu_get_by_fwnode(fwspec->iommu_fwnode);
+		if (!smmu) {
+			ret = -ENODEV;
+			goto out_free;
+		}
 	}
 
 	ret = -EINVAL;
