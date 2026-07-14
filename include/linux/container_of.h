@@ -21,7 +21,7 @@
 	static_assert(__same_type(*(ptr), typeof_member(type, member)) || \
 		      __same_type(*(ptr), void),			\
 		      "pointer type mismatch in container_of()");	\
-	((type *)(__mptr - offsetof(type, member))); })
+	(type *)(__mptr - offsetof(type, member)); })
 
 /**
  * container_of_const - cast a member of a structure out to the containing
