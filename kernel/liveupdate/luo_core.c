@@ -254,18 +254,7 @@ bool liveupdate_enabled(void)
  * which allows a userspace agent to manage the LUO state machine and its
  * associated resources, such as preservable file descriptors.
  *
- * To ensure that the state machine is controlled by a single entity, access
- * to this device is exclusive: only one process is permitted to have
- * ``/dev/liveupdate`` open at any given time. Subsequent open attempts will
- * fail with -EBUSY until the first process closes its file descriptor.
- * This singleton model simplifies state management by preventing conflicting
- * commands from multiple userspace agents.
  */
-
-struct luo_device_state {
-	struct miscdevice miscdev;
-	atomic_t in_use;
-};
 
 static int luo_ioctl_create_session(struct luo_ucmd *ucmd)
 {
@@ -329,28 +318,9 @@ err_put_fd:
 
 static int luo_open(struct inode *inodep, struct file *filep)
 {
-	struct luo_device_state *ldev = container_of(filep->private_data,
-						     struct luo_device_state,
-						     miscdev);
-
-	if (atomic_cmpxchg(&ldev->in_use, 0, 1))
-		return -EBUSY;
-
 	/* Always return -EIO to user if deserialization fail */
-	if (luo_session_deserialize()) {
-		atomic_set(&ldev->in_use, 0);
+	if (luo_session_deserialize())
 		return -EIO;
-	}
-
-	return 0;
-}
-
-static int luo_release(struct inode *inodep, struct file *filep)
-{
-	struct luo_device_state *ldev = container_of(filep->private_data,
-						     struct luo_device_state,
-						     miscdev);
-	atomic_set(&ldev->in_use, 0);
 
 	return 0;
 }
@@ -419,17 +389,13 @@ static long luo_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 static const struct file_operations luo_fops = {
 	.owner		= THIS_MODULE,
 	.open		= luo_open,
-	.release	= luo_release,
 	.unlocked_ioctl	= luo_ioctl,
 };
 
-static struct luo_device_state luo_dev = {
-	.miscdev = {
-		.minor = MISC_DYNAMIC_MINOR,
-		.name  = "liveupdate",
-		.fops  = &luo_fops,
-	},
-	.in_use = ATOMIC_INIT(0),
+static struct miscdevice luo_dev = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name  = "liveupdate",
+	.fops  = &luo_fops,
 };
 
 static int __init liveupdate_ioctl_init(void)
@@ -437,6 +403,6 @@ static int __init liveupdate_ioctl_init(void)
 	if (!liveupdate_enabled())
 		return 0;
 
-	return misc_register(&luo_dev.miscdev);
+	return misc_register(&luo_dev);
 }
 late_initcall(liveupdate_ioctl_init);

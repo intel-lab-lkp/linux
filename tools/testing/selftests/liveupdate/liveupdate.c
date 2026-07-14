@@ -11,7 +11,7 @@
  * /dev/liveupdate character device and its session management capabilities.
  *
  * Tests include:
- * - Device access: basic open/close, and enforcement of exclusive access.
+ * - Device access: basic open/close, and support for multiple openers.
  * - Session management: creation of unique sessions, and duplicate name detection.
  * - Resource preservation: successfully preserving individual and multiple memfds,
  *   verifying contents remain accessible.
@@ -70,13 +70,12 @@ TEST_F(liveupdate_device, basic_open_close)
 }
 
 /*
- * Test Case: Exclusive Open Enforcement
+ * Test Case: Multiple Open Support
  *
- * Verifies that the /dev/liveupdate device can only be opened by one process
- * at a time. It checks that a second attempt to open the device fails with
- * the EBUSY error code.
+ * Verifies that the /dev/liveupdate device can be opened by multiple openers
+ * concurrently without errors.
  */
-TEST_F(liveupdate_device, exclusive_open)
+TEST_F(liveupdate_device, multiple_open)
 {
 	self->fd1 = open(LIVEUPDATE_DEV, O_RDWR);
 
@@ -85,8 +84,7 @@ TEST_F(liveupdate_device, exclusive_open)
 
 	ASSERT_GE(self->fd1, 0);
 	self->fd2 = open(LIVEUPDATE_DEV, O_RDWR);
-	EXPECT_LT(self->fd2, 0);
-	EXPECT_EQ(errno, EBUSY);
+	ASSERT_GE(self->fd2, 0);
 }
 
 /* Helper function to create a LUO session via ioctl. */

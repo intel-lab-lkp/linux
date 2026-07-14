@@ -584,12 +584,16 @@ static int luo_session_deserialize_one(struct luo_session_header *sh,
 
 int luo_session_deserialize(void)
 {
-	struct luo_session_header *sh = &luo_session_global.incoming;
+	static DEFINE_MUTEX(luo_session_deserialize_lock);
 	static bool is_deserialized;
+	static int saved_err;
+
+	struct luo_session_header *sh = &luo_session_global.incoming;
 	struct luo_session_ser *ser;
 	struct kho_block_set_it it;
-	static int saved_err;
 	int err;
+
+	guard(mutex)(&luo_session_deserialize_lock);
 
 	/* If has been deserialized, always return the same error code */
 	if (is_deserialized)
