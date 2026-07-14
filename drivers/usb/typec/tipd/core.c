@@ -159,6 +159,7 @@ struct tipd_data {
 	int (*init)(struct tps6598x *tps);
 	int (*switch_power_state)(struct tps6598x *tps, u8 target_state);
 	bool (*read_data_status)(struct tps6598x *tps);
+	bool (*read_power_status)(struct tps6598x *tps);
 	int (*reset)(struct tps6598x *tps);
 	int (*connect)(struct tps6598x *tps, u32 status);
 };
@@ -897,7 +898,7 @@ static irqreturn_t cd321x_interrupt(int irq, void *data)
 		goto err_unlock;
 
 	if (event & APPLE_CD_REG_INT_POWER_STATUS_UPDATE) {
-		if (!tps6598x_read_power_status(tps))
+		if (!tps->data->read_power_status(tps))
 			goto err_unlock;
 		if (TPS_POWER_STATUS_PWROPMODE(tps->pwr_status) == TYPEC_PWR_MODE_PD) {
 			if (tps6598x_read_partner_identity(tps)) {
@@ -952,7 +953,7 @@ static irqreturn_t tps25750_interrupt(int irq, void *data)
 		goto err_clear_ints;
 
 	if (event[0] & TPS_REG_INT_POWER_STATUS_UPDATE)
-		if (!tps6598x_read_power_status(tps))
+		if (!tps->data->read_power_status(tps))
 			goto err_clear_ints;
 
 	if (event[0] & TPS_REG_INT_DATA_STATUS_UPDATE)
@@ -1026,7 +1027,7 @@ static irqreturn_t tps6598x_interrupt(int irq, void *data)
 		goto err_unlock;
 
 	if ((event1[0] | event2[0]) & TPS_REG_INT_POWER_STATUS_UPDATE)
-		if (!tps6598x_read_power_status(tps))
+		if (!tps->data->read_power_status(tps))
 			goto err_unlock;
 
 	if ((event1[0] | event2[0]) & TPS_REG_INT_DATA_STATUS_UPDATE)
@@ -1839,7 +1840,7 @@ static int tps6598x_probe(struct i2c_client *client)
 
 	if (status & TPS_STATUS_PLUG_PRESENT) {
 		ret = -EINVAL;
-		if (!tps6598x_read_power_status(tps))
+		if (!tps->data->read_power_status(tps))
 			goto err_unregister_port;
 		if (!tps->data->read_data_status(tps))
 			goto err_unregister_port;
@@ -1981,6 +1982,7 @@ static const struct tipd_data cd321x_data = {
 	.trace_status = trace_tps6598x_status,
 	.init = cd321x_init,
 	.read_data_status = cd321x_read_data_status,
+	.read_power_status = tps6598x_read_power_status,
 	.reset = cd321x_reset,
 	.switch_power_state = cd321x_switch_power_state,
 	.connect = cd321x_connect,
@@ -2000,6 +2002,7 @@ static const struct tipd_data tps6598x_data = {
 	.apply_patch = tps6598x_apply_patch,
 	.init = tps6598x_init,
 	.read_data_status = tps6598x_read_data_status,
+	.read_power_status = tps6598x_read_power_status,
 	.reset = tps6598x_reset,
 	.connect = tps6598x_connect,
 };
@@ -2018,6 +2021,7 @@ static const struct tipd_data tps25750_data = {
 	.apply_patch = tps25750_apply_patch,
 	.init = tps25750_init,
 	.read_data_status = tps6598x_read_data_status,
+	.read_power_status = tps6598x_read_power_status,
 	.reset = tps25750_reset,
 	.connect = tps6598x_connect,
 };
