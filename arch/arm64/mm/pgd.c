@@ -19,7 +19,7 @@ static struct kmem_cache *pgd_cache __ro_after_init;
 
 static bool pgdir_is_page_size(void)
 {
-	if (PGD_SIZE == PAGE_SIZE)
+	if (PGD_TABLE_SIZE == PAGE_SIZE)
 		return true;
 	if (CONFIG_PGTABLE_LEVELS == 4)
 		return !pgtable_l4_enabled();
@@ -56,12 +56,12 @@ void __init pgtable_cache_init(void)
 	 * With 52-bit physical addresses, the architecture requires the
 	 * top-level table to be aligned to at least 64 bytes.
 	 */
-	BUILD_BUG_ON(!IS_ALIGNED(PGD_SIZE, 64));
+	BUILD_BUG_ON(!IS_ALIGNED(PGD_TABLE_SIZE, 64));
 #endif
 
 	/*
 	 * Naturally aligned pgds required by the architecture.
 	 */
-	pgd_cache = kmem_cache_create("pgd_cache", PGD_SIZE, PGD_SIZE,
+	pgd_cache = kmem_cache_create("pgd_cache", PGD_TABLE_SIZE, PGD_TABLE_SIZE,
 				      SLAB_PANIC, NULL);
 }

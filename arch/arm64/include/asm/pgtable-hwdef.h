@@ -83,6 +83,7 @@
 #define PGDIR_SIZE		(_AC(1, UL) << PGDIR_SHIFT)
 #define PGDIR_MASK		(~(PGDIR_SIZE-1))
 #define PTRS_PER_PGD		(1 << (VA_BITS - PGDIR_SHIFT))
+#define PGD_TABLE_SIZE		(PTRS_PER_PGD * sizeof(pgd_t))
 
 /*
  * Contiguous page definitions.
