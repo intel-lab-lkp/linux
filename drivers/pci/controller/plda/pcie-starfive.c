@@ -303,13 +303,19 @@ static int starfive_pcie_host_init(struct plda_pcie_rp *plda)
 			   STG_SYSCON_CLKREQ, STG_SYSCON_CLKREQ);
 
 	ret = starfive_pcie_clk_rst_init(pcie);
-	if (ret)
+	if (ret) {
+		starfive_pcie_disable_phy(pcie);
 		return ret;
+	}
 
 	if (pcie->vpcie3v3) {
 		ret = regulator_enable(pcie->vpcie3v3);
-		if (ret)
+		if (ret) {
 			dev_err_probe(dev, ret, "failed to enable vpcie3v3 regulator\n");
+			starfive_pcie_clk_rst_deinit(pcie);
+			starfive_pcie_disable_phy(pcie);
+			return ret;
+		}
 	}
 
 	if (pcie->reset_gpio)
