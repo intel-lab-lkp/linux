@@ -3394,13 +3394,13 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	spinlock_t *ptl;
 
 	if (create) {
-		mapped_pte = pte = (mm == &init_mm) ?
+		mapped_pte = pte = mm_is_kernel(mm) ?
 			pte_alloc_kernel_track(pmd, addr, mask) :
 			pte_alloc_map_lock(mm, pmd, addr, &ptl);
 		if (!pte)
 			return -ENOMEM;
 	} else {
-		mapped_pte = pte = (mm == &init_mm) ?
+		mapped_pte = pte = mm_is_kernel(mm) ?
 			pte_offset_kernel(pmd, addr) :
 			pte_offset_map_lock(mm, pmd, addr, &ptl);
 		if (!pte)
@@ -3422,7 +3422,7 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 
 	lazy_mmu_mode_disable();
 
-	if (mm != &init_mm)
+	if (!mm_is_kernel(mm))
 		pte_unmap_unlock(mapped_pte, ptl);
 	return err;
 }

@@ -148,7 +148,7 @@ void __page_table_check_zero(struct page *page, unsigned int order)
 void __page_table_check_pte_clear(struct mm_struct *mm, unsigned long addr,
 				  pte_t pte)
 {
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	if (pte_user_accessible_page(mm, addr, pte))
@@ -159,7 +159,7 @@ EXPORT_SYMBOL(__page_table_check_pte_clear);
 void __page_table_check_pmd_clear(struct mm_struct *mm, unsigned long addr,
 				  pmd_t pmd)
 {
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	if (pmd_user_accessible_page(mm, addr, pmd))
@@ -170,7 +170,7 @@ EXPORT_SYMBOL(__page_table_check_pmd_clear);
 void __page_table_check_pud_clear(struct mm_struct *mm, unsigned long addr,
 				  pud_t pud)
 {
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	if (pud_user_accessible_page(mm, addr, pud))
@@ -201,7 +201,7 @@ void __page_table_check_ptes_set(struct mm_struct *mm, unsigned long addr,
 {
 	unsigned int i;
 
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	page_table_check_pte_flags(pte);
@@ -231,7 +231,7 @@ void __page_table_check_pmds_set(struct mm_struct *mm, unsigned long addr,
 	unsigned long stride = PMD_SIZE >> PAGE_SHIFT;
 	unsigned int i;
 
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	page_table_check_pmd_flags(pmd);
@@ -249,7 +249,7 @@ void __page_table_check_puds_set(struct mm_struct *mm, unsigned long addr,
 	unsigned long stride = PUD_SIZE >> PAGE_SHIFT;
 	unsigned int i;
 
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	for (i = 0; i < nr; i++)
@@ -263,7 +263,7 @@ void __page_table_check_pte_clear_range(struct mm_struct *mm,
 					unsigned long addr,
 					pmd_t pmd)
 {
-	if (&init_mm == mm)
+	if (mm_is_kernel(mm))
 		return;
 
 	if (!pmd_bad(pmd) && !pmd_leaf(pmd)) {

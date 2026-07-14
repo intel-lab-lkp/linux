@@ -138,7 +138,7 @@ static inline pmd_t *pmd_alloc_one_noprof(struct mm_struct *mm, unsigned long ad
 	struct ptdesc *ptdesc;
 	gfp_t gfp = GFP_PGTABLE_USER;
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		gfp = GFP_PGTABLE_KERNEL;
 	ptdesc = pagetable_alloc_noprof(gfp, 0);
 	if (!ptdesc)
@@ -148,7 +148,7 @@ static inline pmd_t *pmd_alloc_one_noprof(struct mm_struct *mm, unsigned long ad
 		return NULL;
 	}
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		ptdesc_set_kernel(ptdesc);
 
 	return ptdesc_address(ptdesc);
@@ -175,7 +175,7 @@ static inline pud_t *__pud_alloc_one_noprof(struct mm_struct *mm, unsigned long 
 	gfp_t gfp = GFP_PGTABLE_USER;
 	struct ptdesc *ptdesc;
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		gfp = GFP_PGTABLE_KERNEL;
 
 	ptdesc = pagetable_alloc_noprof(gfp, 0);
@@ -184,7 +184,7 @@ static inline pud_t *__pud_alloc_one_noprof(struct mm_struct *mm, unsigned long 
 
 	pagetable_pud_ctor(ptdesc);
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		ptdesc_set_kernel(ptdesc);
 
 	return ptdesc_address(ptdesc);
@@ -232,7 +232,7 @@ static inline p4d_t *__p4d_alloc_one_noprof(struct mm_struct *mm, unsigned long 
 	gfp_t gfp = GFP_PGTABLE_USER;
 	struct ptdesc *ptdesc;
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		gfp = GFP_PGTABLE_KERNEL;
 
 	ptdesc = pagetable_alloc_noprof(gfp, 0);
@@ -241,7 +241,7 @@ static inline p4d_t *__p4d_alloc_one_noprof(struct mm_struct *mm, unsigned long 
 
 	pagetable_p4d_ctor(ptdesc);
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		ptdesc_set_kernel(ptdesc);
 
 	return ptdesc_address(ptdesc);
@@ -279,7 +279,7 @@ static inline pgd_t *__pgd_alloc_noprof(struct mm_struct *mm, unsigned int order
 	gfp_t gfp = GFP_PGTABLE_USER;
 	struct ptdesc *ptdesc;
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		gfp = GFP_PGTABLE_KERNEL;
 
 	ptdesc = pagetable_alloc_noprof(gfp, order);
@@ -288,7 +288,7 @@ static inline pgd_t *__pgd_alloc_noprof(struct mm_struct *mm, unsigned int order
 
 	pagetable_pgd_ctor(ptdesc);
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		ptdesc_set_kernel(ptdesc);
 
 	return ptdesc_address(ptdesc);
