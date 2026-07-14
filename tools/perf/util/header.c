@@ -92,6 +92,7 @@
 #define MAX_PMU_CAPS		512
 #define MAX_PMU_MAPPINGS	4096
 #define MAX_SCHED_DOMAINS	64
+#define MAX_MEMORY_RANGES	256
 
 /*
  * magic2 = "PERFILE2"
@@ -1892,6 +1893,130 @@ out:
 	return ret;
 }
 
+static int memory_range__read(struct memory_range *range, int idx)
+{
+	char path[PATH_MAX], file[PATH_MAX];
+	struct stat st;
+	int tmp;
+
+	scnprintf(path, PATH_MAX, "firmware/acpi/memory_ranges/range%d", idx);
+	scnprintf(file, PATH_MAX, "%s/%s", sysfs__mountpoint(), path);
+	if (stat(file, &st))
+		return -1;
+
+	scnprintf(file, PATH_MAX, "%s/base", path);
+	if (sysfs__read_xll(file, (unsigned long long *) &range->base))
+		return -1;
+
+	scnprintf(file, PATH_MAX, "%s/length", path);
+	if (sysfs__read_xll(file, (unsigned long long *) &range->length))
+		return -1;
+
+	scnprintf(file, PATH_MAX, "%s/node", path);
+	if (sysfs__read_int(file, (int *) &range->node))
+		return -1;
+
+	scnprintf(file, PATH_MAX, "%s/local_region_id", path);
+	if (sysfs__read_int(file, &tmp))
+		return -1;
+
+	if (tmp < 0 || tmp > 255)
+		return -1;
+	range->local_region_id = tmp;
+
+	scnprintf(file, PATH_MAX, "%s/remote_region_id", path);
+	if (sysfs__read_int(file, &tmp))
+		return -1;
+
+	if (tmp < 0 || tmp > 255)
+		return -1;
+	range->remote_region_id = tmp;
+
+	return 0;
+}
+
+static int memory_range__parse(struct memory_range **ranges)
+{
+	const char *sysfs = sysfs__mountpoint();
+	int i, err, nr_memory_ranges = 0;
+	char path[PATH_MAX];
+	struct stat st;
+
+	if (!sysfs)
+		return 0;
+
+	scnprintf(path, PATH_MAX, "%s/firmware/acpi/memory_ranges", sysfs);
+	if (stat(path, &st))
+		return 0;
+
+	while (1) {
+		scnprintf(path, PATH_MAX, "%s/firmware/acpi/memory_ranges/range%d", sysfs, nr_memory_ranges);
+		if (stat(path, &st))
+			break;
+
+		nr_memory_ranges++;
+	}
+
+	if (nr_memory_ranges == 0)
+		return 0;
+
+	*ranges = zalloc(nr_memory_ranges * sizeof(struct memory_range));
+	if (!(*ranges))
+		return -ENOMEM;
+
+	for (i = 0; i < nr_memory_ranges; i++) {
+		struct memory_range range;
+
+		err = memory_range__read(&range, i);
+		if (err < 0)
+			goto out_error;
+
+		(*ranges)[i] = range;
+	}
+
+	return nr_memory_ranges;
+
+out_error:
+	zfree(ranges);
+	return -1;
+}
+
+static int write_memory_ranges(struct feat_fd *ff,
+			 struct evlist *evlist __maybe_unused)
+{
+	struct memory_range *ranges = NULL;
+	int nr_memory_ranges = 0, ret;
+
+	nr_memory_ranges = memory_range__parse(&ranges);
+	if (nr_memory_ranges < 0)
+		return nr_memory_ranges;
+
+	ret = do_write(ff, &nr_memory_ranges, sizeof(nr_memory_ranges));
+	if (ret < 0)
+		goto out;
+
+	for (int i = 0; i < nr_memory_ranges; i++) {
+		ret = do_write(ff, &ranges[i].base, sizeof(u64));
+		if (ret < 0)
+			goto out;
+		ret = do_write(ff, &ranges[i].length, sizeof(u64));
+		if (ret < 0)
+			goto out;
+		ret = do_write(ff, &ranges[i].node, sizeof(u32));
+		if (ret < 0)
+			goto out;
+		ret = do_write(ff, &ranges[i].local_region_id, sizeof(u8));
+		if (ret < 0)
+			goto out;
+		ret = do_write(ff, &ranges[i].remote_region_id, sizeof(u8));
+		if (ret < 0)
+			goto out;
+	}
+out:
+	zfree(&ranges);
+	return ret;
+}
+
 static void print_hostname(struct feat_fd *ff, FILE *fp)
 {
 	fprintf(fp, "# hostname : %s\n", ff->ph->env.hostname);
@@ -2626,6 +2751,23 @@ static void print_cpu_domain_info(struct feat_fd *ff, FILE *fp)
 			fprintf(fp, "# Domain cpu map   : %s\n", d_info->cpumask);
 			fprintf(fp, "# Domain cpu list  : %s\n", d_info->cpulist);
 		}
+	}
+}
+
+static void print_memory_ranges(struct feat_fd *ff, FILE *fp)
+{
+	struct memory_range *ranges = ff->ph->env.memory_ranges;
+	int nr_memory_ranges = ff->ph->env.nr_memory_ranges;
+	int i;
+
+	fprintf(fp, "# memory ranges (nr %d):\n", nr_memory_ranges);
+
+	for (i = 0; i < nr_memory_ranges; i++) {
+		fprintf(fp, "# range%u: 0x%16" PRIx64 "-0x%16" PRIx64,
+			i, ranges[i].base, ranges[i].base + ranges[i].length - 1);
+		fprintf(fp, ", node = %d, local_region_id = %d, remote_region_id = %d\n",
+			ranges[i].node, ranges[i].local_region_id,
+			ranges[i].remote_region_id);
 	}
 }
 
@@ -4202,6 +4344,58 @@ static int process_cpu_domain_info(struct feat_fd *ff, void *data __maybe_unused
 	return ret;
 }
 
+static int process_memory_ranges(struct feat_fd *ff, void *data __maybe_unused)
+{
+	struct perf_env *env = &ff->ph->env;
+	struct memory_range *ranges, *r;
+	u32 nr_memory_ranges, i;
+
+	if (do_read_u32(ff, &nr_memory_ranges))
+		return -1;
+
+	if (!nr_memory_ranges) {
+		pr_debug("memory ranges not available\n");
+		return 0;
+	}
+
+	/* According to version 1.1 of the ACPI MRRM table, the maximum
+	 * number of memory regions can be at most 255. Do a sanity check
+	 * here to guard against a malformed perf.data file.
+	 */
+	if (nr_memory_ranges >= MAX_MEMORY_RANGES) {
+		pr_err("Invalid memory_ranges: nr_memory_ranges (%u) > %u\n",
+		       nr_memory_ranges, MAX_MEMORY_RANGES);
+		return -1;
+	}
+
+	ranges = zalloc(nr_memory_ranges * sizeof(*ranges));
+	if (!ranges)
+		return -1;
+
+	for (i = 0; i < nr_memory_ranges; i++) {
+		r = &ranges[i];
+
+		if (do_read_u64(ff, &r->base))
+			goto error;
+		if (do_read_u64(ff, &r->length))
+			goto error;
+		if (do_read_u32(ff, (u32 *) &r->node))
+			goto error;
+		if (__do_read(ff, &r->local_region_id, sizeof(u8)))
+			goto error;
+		if (__do_read(ff, &r->remote_region_id, sizeof(u8)))
+			goto error;
+	}
+
+	env->memory_ranges = ranges;
+	env->nr_memory_ranges = nr_memory_ranges;
+
+	return 0;
+error:
+	zfree(&ranges);
+	return -1;
+}
+
 #define FEAT_OPR(n, func, __full_only) \
 	[HEADER_##n] = {					\
 		.name	    = __stringify(n),			\
@@ -4266,6 +4460,7 @@ const struct perf_header_feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPR(CPU_DOMAIN_INFO,	cpu_domain_info,	true),
 	FEAT_OPR(E_MACHINE,	e_machine,	false),
 	FEAT_OPR(CLN_SIZE,	cln_size,	false),
+	FEAT_OPR(MEMORY_RANGES,	memory_ranges,	false),
 };
 
 struct header_print_data {
