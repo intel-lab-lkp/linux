@@ -182,6 +182,8 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	const struct mtype_adt_elem *e = value;
 	void *x = get_ext(set, map, e->id);
 
+	lockdep_assert_held(&set->lock);
+
 	if (mtype_do_del(e, map))
 		return -IPSET_ERR_EXIST;
 

@@ -283,16 +283,32 @@ struct ip_set {
 };
 
 static inline void
+__ip_set_destroy_comment(struct ip_set *set, void *data)
+{
+	struct ip_set_comment *c = ext_comment(data, set);
+
+	ip_set_extensions[IPSET_EXT_ID_COMMENT].destroy(set, c);
+}
+
+static inline void
 ip_set_ext_destroy(struct ip_set *set, void *data)
 {
 	/* Check that the extension is enabled for the set and
 	 * call it's destroy function for its extension part in data.
 	 */
-	if (SET_WITH_COMMENT(set)) {
-		struct ip_set_comment *c = ext_comment(data, set);
+	if (SET_WITH_COMMENT(set))
+		__ip_set_destroy_comment(set, data);
+}
 
-		ip_set_extensions[IPSET_EXT_ID_COMMENT].destroy(set, c);
-	}
+static inline void
+ip_set_ext_destroy_slow(struct ip_set *set, void *data)
+{
+	if (!SET_WITH_COMMENT(set))
+		return;
+
+	spin_lock_bh(&set->lock);
+	__ip_set_destroy_comment(set, data);
+	spin_unlock_bh(&set->lock);
 }
 
 int ip_set_put_flags(struct sk_buff *skb, struct ip_set *set);

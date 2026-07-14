@@ -443,7 +443,7 @@ mtype_ext_cleanup(struct ip_set *set, struct hbucket *n)
 
 	for (i = 0; i < pos; i++)
 		if (test_bit(i, n->used))
-			ip_set_ext_destroy(set, ahash_data(n, i, set->dsize));
+			ip_set_ext_destroy_slow(set, ahash_data(n, i, set->dsize));
 }
 
 /* Flush a hash type of set: destroy all elements */
@@ -587,7 +587,7 @@ mtype_gc_do(struct ip_set *set, struct htype *h, struct htable *t, u32 r)
 			smp_mb__after_atomic();
 			mtype_del_cidr_all(set, h, data);
 			t->hregion[r].elements--;
-			ip_set_ext_destroy(set, data);
+			ip_set_ext_destroy_slow(set, data);
 			d++;
 		}
 		if (d >= AHASH_INIT_SIZE) {
@@ -1012,7 +1012,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 		data = ahash_data(n, j, set->dsize);
 		if (!deleted) {
 			mtype_del_cidr_all(set, h, data);
-			ip_set_ext_destroy(set, data);
+			ip_set_ext_destroy_slow(set, data);
 			t->hregion[r].elements--;
 		}
 		goto copy_data;
@@ -1167,7 +1167,7 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			smp_store_release(&n->pos, --pos);
 		t->hregion[r].elements--;
 		mtype_del_cidr_all(set, h, d);
-		ip_set_ext_destroy(set, data);
+		ip_set_ext_destroy_slow(set, data);
 
 		if (t->resizing && ext && ext->target) {
 			/* Resize is in process and kernel side del,
