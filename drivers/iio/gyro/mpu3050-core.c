@@ -988,20 +988,21 @@ static int mpu3050_drdy_trigger_set_state(struct iio_trigger *trig,
 		return 0;
 	} else {
 		/* Else we're enabling the trigger from this point */
-		pm_runtime_get_sync(mpu3050->dev);
-		mpu3050->hw_irq_trigger = true;
+		ret = pm_runtime_resume_and_get(mpu3050->dev);
+		if (ret)
+			return ret;
 
 		/* Disable all things in the FIFO */
 		ret = regmap_write(mpu3050->map, MPU3050_FIFO_EN, 0);
 		if (ret)
-			return ret;
+			goto err_pm_put;
 
 		/* Reset and enable the FIFO */
 		ret = regmap_set_bits(mpu3050->map, MPU3050_USR_CTRL,
 				      MPU3050_USR_CTRL_FIFO_EN |
 				      MPU3050_USR_CTRL_FIFO_RST);
 		if (ret)
-			return ret;
+			goto err_pm_put;
 
 		mpu3050->pending_fifo_footer = false;
 
@@ -1013,12 +1014,12 @@ static int mpu3050_drdy_trigger_set_state(struct iio_trigger *trig,
 				   MPU3050_FIFO_EN_GYRO_ZOUT |
 				   MPU3050_FIFO_EN_FOOTER);
 		if (ret)
-			return ret;
+			goto err_pm_put;
 
 		/* Configure the sample engine */
 		ret = mpu3050_start_sampling(mpu3050);
 		if (ret)
-			return ret;
+			goto err_pm_put;
 
 		/* Clear IRQ flag */
 		ret = regmap_read(mpu3050->map, MPU3050_INT_STATUS, &val);
@@ -1035,12 +1036,20 @@ static int mpu3050_drdy_trigger_set_state(struct iio_trigger *trig,
 		if (mpu3050->irq_opendrain)
 			val |= MPU3050_INT_OPEN;
 
+		mpu3050->hw_irq_trigger = true;
 		ret = regmap_write(mpu3050->map, MPU3050_INT_CFG, val);
 		if (ret)
-			return ret;
+			goto err_clear_trigger;
 	}
 
 	return 0;
+
+err_clear_trigger:
+	mpu3050->hw_irq_trigger = false;
+err_pm_put:
+	pm_runtime_put_autosuspend(mpu3050->dev);
+
+	return ret;
 }
 
 static const struct iio_trigger_ops mpu3050_trigger_ops = {
