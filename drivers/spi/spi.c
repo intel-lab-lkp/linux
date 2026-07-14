@@ -1090,7 +1090,7 @@ static void spi_set_cs(struct spi_device *spi, bool enable, bool force)
 	spi->controller->last_cs_index_mask = spi->cs_index_mask;
 	for (idx = 0; idx < SPI_DEVICE_CS_CNT_MAX; idx++) {
 		if (enable && idx < spi->num_chipselect)
-			spi->controller->last_cs[idx] = spi_get_chipselect(spi, 0);
+			spi->controller->last_cs[idx] = spi_get_chipselect(spi, idx);
 		else
 			spi->controller->last_cs[idx] = SPI_INVALID_CS;
 	}
@@ -2594,10 +2594,11 @@ static int of_spi_parse_dt(struct spi_controller *ctlr, struct spi_device *spi,
 		spi_set_chipselect(spi, idx, cs[idx]);
 
 	/*
-	 * By default spi->chip_select[0] will hold the physical CS number,
-	 * so set bit 0 in spi->cs_index_mask.
+	 * Set cs_index_mask to indicate which logical CS indices are active.
+	 * Each bit corresponds to a logical CS index in the spi->chip_select array.
 	 */
-	spi->cs_index_mask = BIT(0);
+	for (idx = 0; idx < rc; idx++)
+		spi->cs_index_mask |= BIT(idx);
 
 	/* Device speed */
 	if (!of_property_read_u32(nc, "spi-max-frequency", &value))
