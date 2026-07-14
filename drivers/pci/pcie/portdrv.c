@@ -286,7 +286,7 @@ static int get_port_device_capability(struct pci_dev *dev)
 	}
 
 #ifdef CONFIG_PCIE_FLIT
-	if (dev->flit_cap)
+	if (dev->flit_cap && host->native_flit)
 		services |= PCIE_PORT_SERVICE_FLIT;
 #endif
 
