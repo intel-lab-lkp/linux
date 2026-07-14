@@ -38,10 +38,6 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame);
 bool hsr_addr_is_self(struct hsr_priv *hsr, unsigned char *addr);
 bool hsr_addr_is_redbox(struct hsr_priv *hsr, unsigned char *addr);
 
-void hsr_addr_subst_source(struct hsr_node *node, struct sk_buff *skb);
-void hsr_addr_subst_dest(struct hsr_node *node_src, struct sk_buff *skb,
-			 struct hsr_port *port);
-
 void hsr_register_frame_in(struct hsr_node *node, struct hsr_port *port,
 			   u16 sequence_nr);
 int hsr_register_frame_out(struct hsr_port *port, struct hsr_frame_info *frame);
@@ -50,16 +46,13 @@ void hsr_prune_nodes(struct timer_list *t);
 void hsr_prune_proxy_nodes(struct timer_list *t);
 
 int hsr_create_self_node(struct hsr_priv *hsr,
-			 const unsigned char addr_a[ETH_ALEN],
-			 const unsigned char addr_b[ETH_ALEN]);
+			 const unsigned char addr[ETH_ALEN]);
 
 void *hsr_get_next_node(struct hsr_priv *hsr, void *_pos,
 			unsigned char addr[ETH_ALEN]);
 
 int hsr_get_node_data(struct hsr_priv *hsr,
 		      const unsigned char *addr,
-		      unsigned char addr_b[ETH_ALEN],
-		      unsigned int *addr_b_ifindex,
 		      int *if1_age,
 		      u16 *if1_seq,
 		      int *if2_age,
@@ -99,10 +92,7 @@ struct hsr_node {
 	struct list_head	mac_list;
 	/* Protect R/W access seq_blocks */
 	spinlock_t		seq_out_lock;
-	unsigned char		macaddress_A[ETH_ALEN];
-	unsigned char		macaddress_B[ETH_ALEN];
-	/* Local slave through which AddrB frames are received from this node */
-	enum hsr_port_type	addr_B_port;
+	unsigned char		macaddress[ETH_ALEN];
 	unsigned long		time_in[HSR_PT_PORTS];
 	bool			time_in_stale[HSR_PT_PORTS];
 	/* if the node is a SAN */

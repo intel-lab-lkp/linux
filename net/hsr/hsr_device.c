@@ -341,9 +341,9 @@ static void send_hsr_supervision_frame(struct hsr_port *port,
 	hsr_stag->tlv.HSR_TLV_length = hsr->prot_version ?
 				sizeof(struct hsr_sup_payload) : 12;
 
-	/* Payload: MacAddressA / SAN MAC from ProxyNodeTable */
+	/* Payload: MacAddress / SAN MAC from ProxyNodeTable */
 	hsr_sp = skb_put(skb, sizeof(struct hsr_sup_payload));
-	ether_addr_copy(hsr_sp->macaddress_A, addr);
+	ether_addr_copy(hsr_sp->macaddress, addr);
 
 	if (hsr->redbox &&
 	    hsr_is_node_in_db(&hsr->proxy_node_db, addr)) {
@@ -353,7 +353,7 @@ static void send_hsr_supervision_frame(struct hsr_port *port,
 
 		/* Payload: MacAddressRedBox */
 		hsr_sp = skb_put(skb, sizeof(struct hsr_sup_payload));
-		ether_addr_copy(hsr_sp->macaddress_A, hsr->macaddress_redbox);
+		ether_addr_copy(hsr_sp->macaddress, hsr->macaddress_redbox);
 	}
 
 	if (skb_put_padto(skb, ETH_ZLEN)) {
@@ -393,9 +393,9 @@ static void send_prp_supervision_frame(struct hsr_port *master,
 	hsr_stag->tlv.HSR_TLV_type = PRP_TLV_LIFE_CHECK_DD;
 	hsr_stag->tlv.HSR_TLV_length = sizeof(struct hsr_sup_payload);
 
-	/* Payload: MacAddressA */
+	/* Payload: MacAddress */
 	hsr_sp = skb_put(skb, sizeof(struct hsr_sup_payload));
-	ether_addr_copy(hsr_sp->macaddress_A, master->dev->dev_addr);
+	ether_addr_copy(hsr_sp->macaddress, master->dev->dev_addr);
 
 	if (skb_put_padto(skb, ETH_ZLEN)) {
 		spin_unlock_bh(&hsr->seqnr_lock);
@@ -445,10 +445,10 @@ static void hsr_proxy_announce(struct timer_list *t)
 		goto done;
 
 	list_for_each_entry_rcu(node, &hsr->proxy_node_db, mac_list) {
-		if (hsr_addr_is_redbox(hsr, node->macaddress_A))
+		if (hsr_addr_is_redbox(hsr, node->macaddress))
 			continue;
 		hsr->proto_ops->send_sv_frame(interlink, &interval,
-					      node->macaddress_A);
+					      node->macaddress);
 	}
 
 	if (is_admin_up(interlink->dev)) {
@@ -745,8 +745,7 @@ int hsr_dev_finalize(struct net_device *hsr_dev, struct net_device *slave[2],
 	}
 
 	/* Make sure we recognize frames from ourselves in hsr_handle_frame() */
-	res = hsr_create_self_node(hsr, hsr_dev->dev_addr,
-				   slave[1]->dev_addr);
+	res = hsr_create_self_node(hsr, hsr_dev->dev_addr);
 	if (res < 0)
 		return res;
 

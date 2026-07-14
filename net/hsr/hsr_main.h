@@ -97,7 +97,7 @@ struct hsr_sup_tag {
 } __packed;
 
 struct hsr_sup_payload {
-	unsigned char	macaddress_A[ETH_ALEN];
+	unsigned char	macaddress[ETH_ALEN];
 } __packed;
 
 static inline void set_hsr_stag_path(struct hsr_sup_tag *hst, u16 path)
@@ -181,8 +181,7 @@ struct hsr_proto_ops {
 };
 
 struct hsr_self_node {
-	unsigned char	macaddress_A[ETH_ALEN];
-	unsigned char	macaddress_B[ETH_ALEN];
+	unsigned char	macaddress[ETH_ALEN];
 	struct rcu_head	rcu_head;
 };
 

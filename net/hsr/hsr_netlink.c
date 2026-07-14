@@ -327,12 +327,10 @@ static int hsr_get_node_status(struct sk_buff *skb_in, struct genl_info *info)
 	void *msg_head;
 	struct hsr_priv *hsr;
 	struct hsr_port *port;
-	unsigned char hsr_node_addr_b[ETH_ALEN];
 	int hsr_node_if1_age;
 	u16 hsr_node_if1_seq;
 	int hsr_node_if2_age;
 	u16 hsr_node_if2_seq;
-	int addr_b_ifindex;
 	int res;
 
 	if (!info)
@@ -376,8 +374,6 @@ static int hsr_get_node_status(struct sk_buff *skb_in, struct genl_info *info)
 	res = hsr_get_node_data(hsr,
 				(unsigned char *)
 				nla_data(info->attrs[HSR_A_NODE_ADDR]),
-					 hsr_node_addr_b,
-					 &addr_b_ifindex,
 					 &hsr_node_if1_age,
 					 &hsr_node_if1_seq,
 					 &hsr_node_if2_age,
@@ -389,18 +385,6 @@ static int hsr_get_node_status(struct sk_buff *skb_in, struct genl_info *info)
 		      nla_data(info->attrs[HSR_A_NODE_ADDR]));
 	if (res < 0)
 		goto nla_put_failure;
-
-	if (addr_b_ifindex > -1) {
-		res = nla_put(skb_out, HSR_A_NODE_ADDR_B, ETH_ALEN,
-			      hsr_node_addr_b);
-		if (res < 0)
-			goto nla_put_failure;
-
-		res = nla_put_u32(skb_out, HSR_A_ADDR_B_IFINDEX,
-				  addr_b_ifindex);
-		if (res < 0)
-			goto nla_put_failure;
-	}
 
 	res = nla_put_u32(skb_out, HSR_A_IF1_AGE, hsr_node_if1_age);
 	if (res < 0)
@@ -450,7 +434,7 @@ fail:
 	return res;
 }
 
-/* Get a list of MacAddressA of all nodes known to this node (including self).
+/* Get a list of MAC addresses of all nodes known to this node (including self).
  */
 static int hsr_get_node_list(struct sk_buff *skb_in, struct genl_info *info)
 {

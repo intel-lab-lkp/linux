@@ -23,8 +23,7 @@ hsr_node_table_show(struct seq_file *sfp, void *data)
 
 	seq_printf(sfp, "Node Table entries for (%s) device\n",
 		   (priv->prot_version == PRP_V1 ? "PRP" : "HSR"));
-	seq_puts(sfp, "MAC-Address-A,    MAC-Address-B,    time_in[A], ");
-	seq_puts(sfp, "time_in[B], Address-B port, ");
+	seq_puts(sfp, "MAC-Address-A,    time_in[A], time_in[B], ");
 	if (priv->prot_version == PRP_V1)
 		seq_puts(sfp, "SAN-A, SAN-B, DAN-P\n");
 	else
@@ -33,13 +32,11 @@ hsr_node_table_show(struct seq_file *sfp, void *data)
 	rcu_read_lock();
 	list_for_each_entry_rcu(node, &priv->node_db, mac_list) {
 		/* skip self node */
-		if (hsr_addr_is_self(priv, node->macaddress_A))
+		if (hsr_addr_is_self(priv, node->macaddress))
 			continue;
-		seq_printf(sfp, "%pM ", &node->macaddress_A[0]);
-		seq_printf(sfp, "%pM ", &node->macaddress_B[0]);
+		seq_printf(sfp, "%pM ", &node->macaddress[0]);
 		seq_printf(sfp, "%10lx, ", node->time_in[HSR_PT_SLAVE_A]);
 		seq_printf(sfp, "%10lx, ", node->time_in[HSR_PT_SLAVE_B]);
-		seq_printf(sfp, "%14x, ", node->addr_B_port);
 
 		if (priv->prot_version == PRP_V1)
 			seq_printf(sfp, "%5x, %5x, %5x\n",

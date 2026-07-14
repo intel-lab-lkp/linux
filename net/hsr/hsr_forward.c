@@ -28,9 +28,6 @@ struct hsr_node;
  * 2) Use the LifeCheck frames to detect ring breaks. I.e. if no LifeCheck
  *    frame is received from a particular node, we know something is wrong.
  *    We just register these (as with normal frames) and throw them away.
- *
- * 3) Allow different MAC addresses for the two slave interfaces, using the
- *    MacAddressA field.
  */
 static bool is_supervision_frame(struct hsr_priv *hsr, struct sk_buff *skb)
 {
@@ -143,7 +140,7 @@ static bool is_proxy_supervision_frame(struct hsr_priv *hsr,
 	 * frame with MAC addresses from own ProxyNodeTable.
 	 */
 	return hsr_is_node_in_db(&hsr->proxy_node_db,
-				 payload->macaddress_A);
+				 payload->macaddress);
 }
 
 static struct sk_buff *create_stripped_skb_hsr(struct sk_buff *skb_in,
@@ -403,7 +400,6 @@ static void hsr_deliver_master(struct sk_buff *skb, struct net_device *dev,
 	int res, recv_len;
 
 	was_multicast_frame = (skb->pkt_type == PACKET_MULTICAST);
-	hsr_addr_subst_source(node_src, skb);
 	skb_pull(skb, ETH_HLEN);
 	recv_len = skb->len;
 	res = netif_rx(skb);
@@ -421,8 +417,6 @@ static int hsr_xmit(struct sk_buff *skb, struct hsr_port *port,
 		    struct hsr_frame_info *frame)
 {
 	if (frame->port_rcv->type == HSR_PT_MASTER) {
-		hsr_addr_subst_dest(frame->node_src, skb, port);
-
 		/* Address substitution (IEC62439-3 pp 26, 50): replace mac
 		 * address of outgoing frame with that of the outgoing slave's.
 		 */
