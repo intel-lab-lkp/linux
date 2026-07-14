@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/power_supply.h>
 
 #include "hid-ids.h"
 
@@ -60,6 +61,10 @@ MODULE_PARM_DESC(report_undeciphered, "Report undeciphered multi-touch state fie
 #define MOUSE_REPORT_ID    0x29
 #define MOUSE2_REPORT_ID   0x12
 #define DOUBLE_REPORT_ID   0xf7
+/* Battery Input Report 0x90 = [report_id, status, capacity]. */
+#define MAGICMOUSE_BATTERY_REPORT_ID	0x90
+#define MAGICMOUSE_BATTERY_POWERED	0x02	/* external power connected */
+#define MAGICMOUSE_BATTERY_CHARGED	0x01	/* charge complete (on charger) */
 #define USB_BATTERY_TIMEOUT_SEC 60
 
 /* These definitions are not precise, but they're close enough.  (Bits
@@ -383,6 +388,35 @@ static void magicmouse_emit_touch(struct magicmouse_sc *msc, int raw_id, u8 *tda
 	}
 }
 
+/*
+ * The battery report carries a charge-status byte the generic HID battery code
+ * doesn't map, so translate the vendor status bits into a power_supply status.
+ * This makes charging/discharging honest -- e.g. "discharging" as soon as the
+ * cable is pulled, even at 100%.
+ */
+static void magicmouse_report_charge_status(struct hid_device *hdev, u8 status)
+{
+#ifdef CONFIG_HID_BATTERY_STRENGTH
+	struct hid_battery *bat = hid_get_battery(hdev);
+	int cs;
+
+	if (!bat || !bat->ps)
+		return;
+
+	if (!(status & MAGICMOUSE_BATTERY_POWERED))
+		cs = POWER_SUPPLY_STATUS_DISCHARGING;
+	else if (status & MAGICMOUSE_BATTERY_CHARGED)
+		cs = POWER_SUPPLY_STATUS_FULL;
+	else
+		cs = POWER_SUPPLY_STATUS_CHARGING;
+
+	if (bat->charge_status != cs) {
+		bat->charge_status = cs;
+		power_supply_changed(bat->ps);
+	}
+#endif
+}
+
 static int magicmouse_raw_event(struct hid_device *hdev,
 		struct hid_report *report, u8 *data, int size)
 {
@@ -393,6 +427,9 @@ static int magicmouse_raw_event(struct hid_device *hdev,
 	/* Protect against zero sized recursive calls from DOUBLE_REPORT_ID */
 	if (size < 1)
 		return 0;
+
+	if (data[0] == MAGICMOUSE_BATTERY_REPORT_ID && size >= 3)
+		magicmouse_report_charge_status(hdev, data[1]);
 
 	switch (data[0]) {
 	case TRACKPAD_REPORT_ID:
