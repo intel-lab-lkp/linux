@@ -16,6 +16,9 @@ II. How does it work?
 
 There is one per-task flag (PF_NOFREEZE) and three per-task states
 (TASK_FROZEN, TASK_FREEZABLE and __TASK_FREEZABLE_UNSAFE) used for that.
+Tasks sleeping in TASK_FREEZABLE_UNSAFE may hold locks or other resources
+that make them unsafe to freeze for administrative freezer requests, so the
+freezer only freezes them during system-wide suspend or hibernation.
 The tasks that have PF_NOFREEZE unset (all user space tasks and some kernel
 threads) are regarded as 'freezable' and treated in a special way before the
 system enters a sleep state as well as before a hibernation image is created

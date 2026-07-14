@@ -125,6 +125,16 @@ static int __set_task_frozen(struct task_struct *p, void *arg)
 		return 0;
 
 	/*
+	 * TASK_FREEZABLE_UNSAFE waiters may hold locks or other resources that
+	 * other tasks need in order to make forward progress.  Only freeze
+	 * them for system-wide suspend or hibernation, where failing to freeze
+	 * them can prevent the sleep transition from making progress.
+	 */
+	if ((state & __TASK_FREEZABLE_UNSAFE) &&
+	    !pm_freezing && !pm_nosig_freezing)
+		return 0;
+
+	/*
 	 * Only TASK_NORMAL can be augmented with TASK_FREEZABLE, since they
 	 * can suffer spurious wakeups.
 	 */
