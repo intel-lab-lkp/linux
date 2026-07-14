@@ -4527,7 +4527,7 @@ lpfc_sli_handle_slow_ring_event_s4(struct lpfc_hba *phba,
 	struct hbq_dmabuf *dmabuf;
 	struct lpfc_cq_event *cq_event;
 	unsigned long iflag;
-	int count = 0;
+	u32 count = 0;
 
 	clear_bit(HBA_SP_QUEUE_EVT, &phba->hba_flag);
 	while (!list_empty(&phba->sli4_hba.sp_queue_event)) {
@@ -4547,22 +4547,39 @@ lpfc_sli_handle_slow_ring_event_s4(struct lpfc_hba *phba,
 			if (irspiocbq)
 				lpfc_sli_sp_handle_rspiocb(phba, pring,
 							   irspiocbq);
-			count++;
 			break;
 		case CQE_CODE_RECEIVE:
 		case CQE_CODE_RECEIVE_V1:
 			dmabuf = container_of(cq_event, struct hbq_dmabuf,
 					      cq_event);
 			lpfc_sli4_handle_received_buffer(phba, dmabuf);
-			count++;
 			break;
 		default:
+			lpfc_printf_log(phba, KERN_INFO, LOG_ELS,
+					"7771 Unknown WCQE completion code "
+					"x%x, ignoring.\n",
+					bf_get(lpfc_wcqe_c_code,
+					       &cq_event->cqe.wcqe_cmpl));
 			break;
 		}
 
-		/* Limit the number of events to 64 to avoid soft lockups */
-		if (count == 64)
-			break;
+		/* This loop runs until the ELS/CT CQ is empty.  Post a one
+		 * time message for debug support when ELS WQ ecount
+		 * completions are processed - this represent 1 full ELS WQ
+		 * wrap.
+		 */
+		if (++count == LPFC_WQE_DEF_COUNT) {
+			lpfc_printf_log(phba, KERN_INFO, LOG_ELS,
+					"7772 %s SP CQE count %d\n",
+					__func__, count);
+		}
+	}
+
+	/* Log a final message to note how many CQEs were processed. */
+	if (count > LPFC_WQE_DEF_COUNT) {
+		lpfc_printf_log(phba, KERN_INFO, LOG_ELS,
+				"7773 %s SP CQEs complete, count %d\n",
+				__func__, count);
 	}
 }
 
