@@ -603,6 +603,10 @@ static unsigned int calculate_io_allowed(u32 iops_limit,
 
 static u64 calculate_bytes_allowed(u64 bps_limit, unsigned long jiffy_elapsed)
 {
+	/* 0 elapsed => 0 bytes allowed; also avoids ilog2(0) below. */
+	if (!jiffy_elapsed)
+		return 0;
+
 	/*
 	 * Can result be wider than 64 bits?
 	 * We check against 62, not 64, due to ilog2 truncation.
