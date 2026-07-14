@@ -48,7 +48,8 @@ static int ptp_s390_qpt_gettime(struct ptp_clock_info *ptp,
 {
 	unsigned long tod;
 
-	ptff(&tod, sizeof(tod), PTFF_QPT);
+	if (ptff(&tod, sizeof(tod), PTFF_QPT) != 0)
+		return -EOPNOTSUPP;
 	*ts = tod_to_timespec64(tod);
 	return 0;
 }
