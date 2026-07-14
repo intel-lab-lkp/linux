@@ -20,7 +20,7 @@ unsigned long *crst_table_alloc_noprof(struct mm_struct *mm)
 	struct ptdesc *ptdesc;
 	unsigned long *table;
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		gfp &= ~__GFP_ACCOUNT;
 	ptdesc = pagetable_alloc_noprof(gfp, CRST_ALLOC_ORDER);
 	if (!ptdesc)
@@ -120,7 +120,7 @@ unsigned long *page_table_alloc_noprof(struct mm_struct *mm)
 	struct ptdesc *ptdesc;
 	unsigned long *table;
 
-	if (mm == &init_mm)
+	if (mm_is_kernel(mm))
 		gfp &= ~__GFP_ACCOUNT;
 	ptdesc = pagetable_alloc_noprof(gfp, 0);
 	if (!ptdesc)

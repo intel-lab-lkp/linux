@@ -69,7 +69,7 @@ static inline void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *
 {
 	int cpu = smp_processor_id();
 
-	if (next == &init_mm)
+	if (mm_is_kernel(next))
 		get_lowcore()->user_asce = s390_invalid_asce;
 	else
 		get_lowcore()->user_asce.val = next->context.asce;
