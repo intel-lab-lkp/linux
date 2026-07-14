@@ -1153,6 +1153,7 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 	int unmapped_region_cnt = 0;
 	long unlocked = 0;
 	size_t pos = 0;
+	int i = 0;
 
 	if (!dma->size)
 		return 0;
@@ -1196,6 +1197,8 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 			next = iommu_iova_to_phys(domain->domain, iova + len);
 			if (next != phys + len)
 				break;
+			if ((++i % BIT(PUD_ORDER)) == 0)
+				cond_resched();
 		}
 
 		/*
