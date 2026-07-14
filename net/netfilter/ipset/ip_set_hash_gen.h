@@ -338,8 +338,11 @@ mtype_add_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 	len++;
 	tmp = kzalloc(sizeof(struct net_prefixes) +
 		      len * sizeof(struct net_prefix), GFP_ATOMIC);
-	if (!tmp)
-		return -ENOMEM;
+	if (!tmp) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
 	tmp->len = len;
 	for (i = 0, j = 0; i < nets->len; i++) {
 		if (!nets->nets[i].count)
@@ -366,7 +369,8 @@ static void
 mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 {
 	struct net_prefixes *nets, *tmp;
-	u8 i, j, found, len = 0;
+	u8 i, j, len = 0;
+	int found;
 
 	spin_lock_bh(&set->lock);
 	nets = __ipset_dereference(h->rnets[n]);
@@ -377,7 +381,8 @@ mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 			found = i;
 	}
 	if (unlikely(found == -1))
-		return;
+		goto unlock;
+
 	nets->nets[found].count--;
 	if (nets->nets[found].count)
 		goto unlock;
@@ -386,7 +391,8 @@ mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 		      len * sizeof(struct net_prefix), GFP_ATOMIC);
 	if (!tmp)
 		/* Leave a hole */
-		return;
+		goto unlock;
+
 	tmp->len = len;
 	for (i = 0, j = 0; i < nets->len; i++) {
 		if (!nets->nets[i].count || i == found)
