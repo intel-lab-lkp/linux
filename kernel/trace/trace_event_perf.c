@@ -24,6 +24,16 @@ typedef typeof(unsigned long [PERF_MAX_TRACE_SIZE / sizeof(unsigned long)])
 /* Count the events in use (per event id, not per instance) */
 static int	total_ref_count;
 
+/* Check if perf tracepoint is restricted for unprivileged users */
+static bool perf_tp_is_restricted(struct perf_event *p_event)
+{
+	if (p_event->attr.exclude_kernel)
+		return false;
+	if (sysctl_perf_event_paranoid <= 1 || perfmon_capable())
+		return false;
+	return true;
+}
+
 static int perf_trace_event_perm(struct trace_event_call *tp_event,
 				 struct perf_event *p_event)
 {
@@ -72,9 +82,25 @@ static int perf_trace_event_perm(struct trace_event_call *tp_event,
 			return -EINVAL;
 	}
 
+	/*
+	 * PERF_SAMPLE_IP on kernel tracepoints exposes a kernel text
+	 * address, weakening KASLR. Block for unprivileged users unless
+	 * the tracepoint is a uprobe (userspace IP, safe to expose).
+	 */
+	if ((p_event->attr.sample_type & PERF_SAMPLE_IP) &&
+	    !(tp_event->flags & TRACE_EVENT_FL_UPROBE) &&
+	    perf_tp_is_restricted(p_event))
+		return -EACCES;
+
 	/* No tracing, just counting, so no obvious leak */
-	if (!(p_event->attr.sample_type & PERF_SAMPLE_RAW))
+	if (!(p_event->attr.sample_type & PERF_SAMPLE_RAW)) {
+		/* Prevent unprivileged users from counting kernel tracepoints */
+		if (perf_tp_is_restricted(p_event) &&
+		    !(p_event->attach_state == PERF_ATTACH_TASK &&
+		      (tp_event->flags & TRACE_EVENT_FL_CAP_ANY)))
+			return -EACCES;
 		return 0;
+	}
 
 	/* Some events are ok to be traced by non-root users... */
 	if (p_event->attach_state == PERF_ATTACH_TASK) {
