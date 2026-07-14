@@ -34,6 +34,7 @@ static const struct acpi_device_id usbio_gpio_acpi_hids[] = {
 	{ "INTC1116" }, /* NVL */
 	{ }
 };
+MODULE_DEVICE_TABLE(acpi, usbio_gpio_acpi_hids);
 
 static void usbio_gpio_get_bank_and_pin(struct gpio_chip *gc, unsigned int offset,
 					struct usbio_gpio_bank **bank_ret,
