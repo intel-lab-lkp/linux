@@ -7,6 +7,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/pinctrl/amlogic,pinctrl.h>
+#include "amlogic-a9-reset.h"
 
 / {
 	interrupt-parent = <&gic>;
@@ -104,6 +105,13 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 			ranges = <0x0 0x0 0x0 0xfe000000 0x0 0x480000>;
+
+			reset: reset-controller@2000 {
+				compatible = "amlogic,a9-reset",
+					     "amlogic,t7-reset";
+				reg = <0x0 0x2000 0x0 0x98>;
+				#reset-cells = <1>;
+			};
 
 			periphs_pinctrl: pinctrl@4000 {
 				compatible = "amlogic,pinctrl-a9";
@@ -203,6 +211,12 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 			ranges = <0x0 0x0 0x0 0xffa00000 0x0 0x100000>;
+
+			ao_reset: reset-controller@2000 {
+				compatible = "amlogic,a9-ao-reset";
+				reg = <0x0 0x2000 0x0 0xc>;
+				#reset-cells = <1>;
+			};
 
 			aobus_pinctrl: pinctrl@4000 {
 				compatible = "amlogic,pinctrl-a9";
