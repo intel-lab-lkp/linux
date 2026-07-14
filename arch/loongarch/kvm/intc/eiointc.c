@@ -7,19 +7,27 @@
 #include <asm/kvm_vcpu.h>
 #include <linux/count_zeros.h>
 
+static int eiointc_get_ipnum(struct loongarch_eiointc *s, int irq)
+{
+	int ipnum = (s->ipmap >> (irq / 32 * 8)) & 0xff;
+
+	if (!(s->status & BIT(EIOINTC_ENABLE_INT_ENCODE))) {
+		ipnum = count_trailing_zeros(ipnum);
+		ipnum = ipnum < 4 ? ipnum : 0;
+	} else {
+		ipnum = (ipnum < LOONGSON_IP_NUM) ? ipnum : 0;
+	}
+
+	return ipnum;
+}
+
 static void eiointc_set_sw_coreisr(struct loongarch_eiointc *s)
 {
 	int ipnum, cpu, cpuid, irq;
 	struct kvm_vcpu *vcpu;
 
 	for (irq = 0; irq < EIOINTC_IRQS; irq++) {
-		ipnum = (s->ipmap >> (irq / 32 * 8)) & 0xff;
-		if (!(s->status & BIT(EIOINTC_ENABLE_INT_ENCODE))) {
-			ipnum = count_trailing_zeros(ipnum);
-			ipnum = ipnum < 4 ? ipnum : 0;
-		} else {
-			ipnum = (ipnum < LOONGSON_IP_NUM) ? ipnum : 0;
-		}
+		ipnum = eiointc_get_ipnum(s, irq);
 
 		cpuid = ((u8 *)s->coremap)[irq];
 		vcpu = kvm_get_vcpu_by_cpuid(s->kvm, cpuid);
@@ -40,13 +48,7 @@ static void eiointc_update_irq(struct loongarch_eiointc *s, int irq, int level)
 	struct kvm_vcpu *vcpu;
 	struct kvm_interrupt vcpu_irq;
 
-	ipnum = (s->ipmap >> (irq / 32 * 8)) & 0xff;
-	if (!(s->status & BIT(EIOINTC_ENABLE_INT_ENCODE))) {
-		ipnum = count_trailing_zeros(ipnum);
-		ipnum = ipnum < 4 ? ipnum : 0;
-	} else {
-		ipnum = (ipnum < LOONGSON_IP_NUM) ? ipnum : 0;
-	}
+	ipnum = eiointc_get_ipnum(s, irq);
 
 	cpu = s->sw_coremap[irq];
 	vcpu = kvm_get_vcpu_by_id(s->kvm, cpu);
