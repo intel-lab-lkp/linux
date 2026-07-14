@@ -250,6 +250,8 @@ affs_getzeroblk(struct super_block *sb, int block)
 	pr_debug("%s: %d\n", __func__, block);
 	if (affs_validblock(sb, block)) {
 		bh = sb_getblk(sb, block);
+		if (!bh)
+			return NULL;
 		lock_buffer(bh);
 		memset(bh->b_data, 0 , sb->s_blocksize);
 		set_buffer_uptodate(bh);
@@ -265,6 +267,8 @@ affs_getemptyblk(struct super_block *sb, int block)
 	pr_debug("%s: %d\n", __func__, block);
 	if (affs_validblock(sb, block)) {
 		bh = sb_getblk(sb, block);
+		if (!bh)
+			return NULL;
 		wait_on_buffer(bh);
 		set_buffer_uptodate(bh);
 		return bh;
