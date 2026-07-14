@@ -1657,11 +1657,18 @@ static int identify_page_state(unsigned long pfn, struct page *p,
 static int try_to_split_thp_page(struct page *page, unsigned int new_order,
 		bool release)
 {
+	struct folio *folio = page_folio(page);
 	int ret;
 
-	lock_page(page);
-	ret = split_huge_page_to_order(page, new_order);
-	unlock_page(page);
+	/*
+	 * Lock and split at the head, not the poisoned subpage: __folio_split()
+	 * keeps the anchor folio locked and needs it to stay in the page cache
+	 * to pin the inode. A tail beyond EOF would be dropped yet returned
+	 * locked, losing that pin. The caller re-locks @page afterwards.
+	 */
+	folio_lock(folio);
+	ret = split_folio_to_order(folio, new_order);
+	folio_unlock(folio);
 
 	if (ret && release)
 		put_page(page);
