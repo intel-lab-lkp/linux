@@ -313,7 +313,7 @@ static void mctp_serial_push_header(struct mctp_serial *dev, u8 c)
 		}
 		break;
 	case 2:
-		if (c > MCTP_SERIAL_FRAME_MTU) {
+		if (c == 0 || c > MCTP_SERIAL_FRAME_MTU) {
 			dev->rxstate = STATE_ERR;
 		} else {
 			dev->rxlen = c;
