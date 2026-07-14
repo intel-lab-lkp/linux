@@ -510,6 +510,11 @@ struct hfs_btree_header_rec {
 						   b-tree but not in extents
 						   b-tree (hfsplus). */
 
+/* HFS BTree misc info */
+#define HFS_TREE_HEAD				0
+#define HFS_BTREE_HDR_MAP_REC_INDEX		2	/* Map (bitmap) record in Header node */
+#define HFS_BTREE_MAP_NODE_REC_INDEX		0	/* Map record in Map Node */
+
 /* HFS+ BTree misc info */
 #define HFSPLUS_TREE_HEAD			0
 #define HFSPLUS_NODE_MXSZ			32768
