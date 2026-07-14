@@ -63,12 +63,8 @@ static int hibmc_dp_detect(struct drm_connector *connector,
 	struct hibmc_dp_dev *dp_dev = dp->dp_dev;
 	int ret = connector_status_disconnected;
 
-	if (dp->irq_status) {
-		if (dp_dev->hpd_status != HIBMC_HPD_IN) {
-			ret = connector_status_disconnected;
-			goto exit;
-		}
-	}
+	if (dp->hpd_status != HIBMC_HPD_IN)
+		goto exit;
 
 	if (!hibmc_dp_get_dpcd(dp_dev)) {
 		ret = connector_status_disconnected;
@@ -166,6 +162,9 @@ static void hibmc_dp_encoder_enable(struct drm_encoder *drm_encoder,
 	struct hibmc_dp *dp = container_of(drm_encoder, struct hibmc_dp, encoder);
 	struct drm_display_mode *mode = &drm_encoder->crtc->state->mode;
 
+	if (dp->hpd_status != HIBMC_HPD_IN)
+		return;
+
 	if (hibmc_dp_prepare(dp, mode))
 		return;
 
@@ -189,24 +188,31 @@ irqreturn_t hibmc_dp_hpd_isr(int irq, void *arg)
 {
 	struct drm_device *dev = (struct drm_device *)arg;
 	struct hibmc_drm_private *priv = to_hibmc_drm_private(dev);
-	int idx, exp_status;
+	int status = priv->dp.hpd_status;
+	int idx;
 
 	if (!drm_dev_enter(dev, &idx))
 		return -ENODEV;
 
 	if (priv->dp.irq_status & DP_MASKED_SINK_HPD_PLUG_INT) {
 		drm_dbg_dp(&priv->dev, "HPD IN isr occur!\n");
+		if (status != HIBMC_HPD_IN) {
+			drm_err(&priv->dev, "HPD status (%d) error", status);
+			goto exit;
+		}
 		hibmc_dp_hpd_cfg(&priv->dp);
-		exp_status = HIBMC_HPD_IN;
 	} else {
 		drm_dbg_dp(&priv->dev, "HPD OUT isr occur!\n");
+		if (status != HIBMC_HPD_OUT) {
+			drm_err(&priv->dev, "HPD status (%d) error", status);
+			goto exit;
+		}
 		hibmc_dp_reset_link(&priv->dp);
-		exp_status = HIBMC_HPD_OUT;
 	}
 
-	if (hibmc_dp_check_hpd_status(&priv->dp, exp_status))
-		drm_connector_helper_hpd_irq_event(&priv->dp.connector);
+	drm_connector_helper_hpd_irq_event(&priv->dp.connector);
 
+exit:
 	drm_dev_exit(idx);
 
 	return IRQ_HANDLED;
@@ -223,6 +229,7 @@ int hibmc_dp_init(struct hibmc_drm_private *priv)
 
 	dp->mmio = priv->mmio;
 	dp->drm_dev = dev;
+	dp->hpd_status = HIBMC_HPD_OUT;
 
 	ret = hibmc_dp_hw_init(&priv->dp);
 	if (ret) {
