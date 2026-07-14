@@ -21,6 +21,8 @@ void dmsintc_inject_irq(struct kvm_vcpu *vcpu)
 		old = atomic64_read(&(ds->vector_map[i]));
 		if (old)
 			vector[i] = atomic64_xchg(&(ds->vector_map[i]), 0);
+		else
+			vector[i] = 0;
 	}
 
 	if (vector[0]) {
