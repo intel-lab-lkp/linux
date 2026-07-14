@@ -880,15 +880,31 @@ static void dispose_list(struct list_head *head)
  * called by superblock shutdown after having SB_ACTIVE flag removed,
  * so any inode reaching zero refcount during or after that call will
  * be immediately evicted.
+ *
+ * Use a cursor node embedded in sb->s_inodes to resume traversal after
+ * dropping s_inode_list_lock for cond_resched() + dispose_list().  This
+ * avoids restarting the scan from the list head on each reschedule, giving
+ * O(n) total traversal instead of O(n * r) where r is the reschedule count.
  */
 void evict_inodes(struct super_block *sb)
 {
 	struct inode *inode;
 	LIST_HEAD(dispose);
+	/*
+	 * Embed a cursor node directly in sb->s_inodes.  list_move() advances
+	 * it past each visited inode in O(1), so the loop resumes from exactly
+	 * the current position after lock drop rather than from the list head.
+	 */
+	struct list_head cursor;
 
-again:
 	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+	list_add(&cursor, &sb->s_inodes);
+
+	while (cursor.next != &sb->s_inodes) {
+		inode = list_entry(cursor.next, struct inode, i_sb_list);
+		/* Leave the cursor immediately after the current inode. */
+		list_move(&cursor, &inode->i_sb_list);
+
 		if (icount_read_once(inode))
 			continue;
 
@@ -916,9 +932,11 @@ again:
 			spin_unlock(&sb->s_inode_list_lock);
 			cond_resched();
 			dispose_list(&dispose);
-			goto again;
+			spin_lock(&sb->s_inode_list_lock);
 		}
 	}
+
+	list_del(&cursor);
 	spin_unlock(&sb->s_inode_list_lock);
 
 	dispose_list(&dispose);
