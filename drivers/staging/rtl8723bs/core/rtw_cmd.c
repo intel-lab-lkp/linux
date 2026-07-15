@@ -463,7 +463,7 @@ post_process:
 					   FUNC_ADPT_ARG(pcmd->padapter));
 
 				if (pcmd->res == H2C_SUCCESS)
-					rtw_sctx_done(&pcmd->sctx);
+					rtw_sctx_done_err(&pcmd->sctx, RTW_SCTX_DONE_SUCCESS);
 				else
 					rtw_sctx_done_err(&pcmd->sctx, RTW_SCTX_DONE_CMD_ERROR);
 			}
