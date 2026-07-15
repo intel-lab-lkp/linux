@@ -406,6 +406,16 @@ config HID_GFRM
 	help
 	Support for Google Fiber TV Box remote controls
 
+config HID_GIGABYTE_AERO
+	tristate "Gigabyte Aero laptop vendor-specific keys"
+	depends on USB_HID
+	help
+	  Support for vendor-specific keyboard keys on Gigabyte Aero
+	  laptops
+
+	  Currently the following device is known to be supported:
+	   - Gigabyte Aero 15 XB
+
 config HID_GLORIOUS
 	tristate "Glorious PC Gaming Race mice"
 	help
