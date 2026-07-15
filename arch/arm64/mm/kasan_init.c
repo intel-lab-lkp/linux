@@ -324,7 +324,7 @@ static void __init kasan_init_shadow(void)
 
 	mod_shadow_start = (u64)kasan_mem_to_shadow((void *)MODULES_VADDR);
 
-	vmalloc_shadow_end = (u64)kasan_mem_to_shadow((void *)VMALLOC_END);
+	vmalloc_shadow_end = (u64)kasan_mem_to_shadow((void *)LOCAL_PERCPU_END);
 
 	/*
 	 * We are going to perform proper setup of shadow memory.
