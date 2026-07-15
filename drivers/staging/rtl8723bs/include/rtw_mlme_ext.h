@@ -418,7 +418,6 @@ struct mlme_ext_priv {
 	u8 active_keep_alive_check;
 };
 
-void init_mlme_default_rate_set(struct adapter *padapter);
 void init_mlme_ext_priv(struct adapter *padapter);
 void init_hw_mlme_ext(struct adapter *padapter);
 void free_mlme_ext_priv(struct mlme_ext_priv *pmlmeext);

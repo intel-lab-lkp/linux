@@ -184,19 +184,6 @@ void init_hw_mlme_ext(struct adapter *padapter)
 			   pmlmeext->cur_ch_offset, pmlmeext->cur_bwmode);
 }
 
-void init_mlme_default_rate_set(struct adapter *padapter)
-{
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-
-	unsigned char mixed_datarate[NumRates] = {_1M_RATE_, _2M_RATE_, _5M_RATE_, _11M_RATE_, _6M_RATE_, _9M_RATE_, _12M_RATE_, _18M_RATE_, _24M_RATE_, _36M_RATE_, _48M_RATE_, _54M_RATE_, 0xff};
-	unsigned char mixed_basicrate[NumRates] = {_1M_RATE_, _2M_RATE_, _5M_RATE_, _11M_RATE_, _6M_RATE_, _12M_RATE_, _24M_RATE_, 0xff,};
-	unsigned char supported_mcs_set[16] = {0xff, 0xff, 0x00, 0x00, 0x01, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-
-	memcpy(pmlmeext->datarate, mixed_datarate, NumRates);
-	memcpy(pmlmeext->basicrate, mixed_basicrate, NumRates);
-
-	memcpy(pmlmeext->default_supported_mcs_set, supported_mcs_set, sizeof(pmlmeext->default_supported_mcs_set));
-}
 
 static void init_mlme_ext_priv_value(struct adapter *padapter)
 {
@@ -216,7 +203,26 @@ static void init_mlme_ext_priv_value(struct adapter *padapter)
 
 	pmlmeext->cur_wireless_mode = padapter->registrypriv.wireless_mode;
 
-	init_mlme_default_rate_set(padapter);
+
+	u8 mixed_datarate[NumRates] = {
+		_1M_RATE_, _2M_RATE_, _5M_RATE_, _11M_RATE_, _6M_RATE_,
+		_9M_RATE_, _12M_RATE_, _18M_RATE_, _24M_RATE_, _36M_RATE_,
+		_48M_RATE_, _54M_RATE_, 0xff
+	};
+	u8 mixed_basicrate[NumRates] = {
+		_1M_RATE_, _2M_RATE_, _5M_RATE_, _11M_RATE_, _6M_RATE_,
+		_12M_RATE_, _24M_RATE_, 0xff
+	};
+	u8 supported_mcs_set[16] = {
+		0xff, 0xff, 0x00, 0x0, 0x01, 0x0, 0x0, 0x0, 0x0,
+		0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
+	};
+
+	memcpy(pmlmeext->datarate, mixed_datarate, NumRates);
+	memcpy(pmlmeext->basicrate, mixed_basicrate, NumRates);
+
+	memcpy(pmlmeext->default_supported_mcs_set, supported_mcs_set,
+		sizeof(pmlmeext->default_supported_mcs_set));
 
 	pmlmeext->tx_rate = IEEE80211_CCK_RATE_1MB;
 	pmlmeext->sitesurvey_res.state = SCAN_DISABLE;
