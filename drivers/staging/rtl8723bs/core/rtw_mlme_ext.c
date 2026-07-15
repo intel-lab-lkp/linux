@@ -5817,10 +5817,7 @@ u8 set_chplan_hdl(struct adapter *padapter, unsigned char *pbuf)
 /*  TDLS_P_BASE_CH	: periodically go back to base channel */
 /*  TDLS_RS_RCR		: restore RCR */
 /*  TDLS_TEAR_STA	: free tdls sta */
-u8 tdls_hdl(struct adapter *padapter, unsigned char *pbuf)
-{
-	return H2C_REJECTED;
-}
+
 
 u8 run_in_thread_hdl(struct adapter *padapter, u8 *pbuf)
 {
