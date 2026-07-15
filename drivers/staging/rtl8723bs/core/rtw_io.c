@@ -144,9 +144,3 @@ int rtw_inc_and_chk_continual_io_error(struct dvobj_priv *dvobj)
 
 	return false;
 }
-
-/* Set the continual_io_error of this @param dvobjprive to 0 */
-void rtw_reset_continual_io_error(struct dvobj_priv *dvobj)
-{
-	atomic_set(&dvobj->continual_io_error, 0);
-}

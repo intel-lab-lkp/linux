@@ -170,7 +170,7 @@ static struct dvobj_priv *sdio_dvobj_init(struct sdio_func *func)
 	if (ret)
 		goto free_dvobj;
 
-	rtw_reset_continual_io_error(dvobj);
+	atomic_set(&dvobj->continual_io_error, 0);
 
 	return dvobj;
 

@@ -217,7 +217,7 @@ u32 sd_read32(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
 				sdio_release_host(func);
 
 			if (*err == 0) {
-				rtw_reset_continual_io_error(psdiodev);
+				atomic_set(&psdiodev->continual_io_error, 0);
 				break;
 			}
 
@@ -293,7 +293,7 @@ void sd_write32(struct intf_hdl *pintfhdl, u32 addr, u32 v, s32 *err)
 			if (claim_needed)
 				sdio_release_host(func);
 			if (*err == 0) {
-				rtw_reset_continual_io_error(psdiodev);
+				atomic_set(&psdiodev->continual_io_error, 0);
 				break;
 			}
 
