@@ -90,7 +90,8 @@ enum {
 	MCP2221_DIR_IN = 0x01,
 };
 
-#define MCP_NGPIO	4
+#define MCP2221_REPORT_SIZE	64
+#define MCP_NGPIO		4
 
 /* MCP GPIO set command layout */
 struct mcp_set_gpio {
@@ -126,7 +127,7 @@ struct mcp2221 {
 	struct completion wait_in_report;
 	struct delayed_work init_work;
 	u8 *rxbuf;
-	u8 txbuf[64];
+	u8 txbuf[MCP2221_REPORT_SIZE];
 	int rxbuf_idx;
 	int rxbuf_size;
 	int status;
@@ -639,11 +640,11 @@ static int mcp_gpio_read_sram(struct mcp2221 *mcp)
 {
 	int ret;
 
-	memset(mcp->txbuf, 0, 64);
+	memset(mcp->txbuf, 0, sizeof(mcp->txbuf));
 	mcp->txbuf[0] = MCP2221_GET_SRAM_SETTINGS;
 
 	mutex_lock(&mcp->lock);
-	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 64);
+	ret = mcp_send_data_req_status(mcp, mcp->txbuf, sizeof(mcp->txbuf));
 	mutex_unlock(&mcp->lock);
 
 	return ret;
@@ -682,7 +683,7 @@ static int mcp2221_check_gpio_pinfunc(struct mcp2221 *mcp)
 	 * Set all bytes to 0, so Bit 7 is not set. The chip
 	 * only changes content of a register when bit 7 is set.
 	 */
-	memset(mcp->txbuf, 0, 64);
+	memset(mcp->txbuf, 0, sizeof(mcp->txbuf));
 	mcp->txbuf[0] = MCP2221_SET_SRAM_SETTINGS;
 
 	/*
@@ -703,7 +704,7 @@ static int mcp2221_check_gpio_pinfunc(struct mcp2221 *mcp)
 	}
 
 	mutex_lock(&mcp->lock);
-	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 64);
+	ret = mcp_send_data_req_status(mcp, mcp->txbuf, sizeof(mcp->txbuf));
 	mutex_unlock(&mcp->lock);
 
 	return ret;
@@ -860,6 +861,12 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 {
 	u8 *buf;
 	struct mcp2221 *mcp = hid_get_drvdata(hdev);
+
+	if (size < MCP2221_REPORT_SIZE) {
+		mcp->status = -EINVAL;
+		complete(&mcp->wait_in_report);
+		return 1;
+	}
 
 	switch (data[0]) {
 
