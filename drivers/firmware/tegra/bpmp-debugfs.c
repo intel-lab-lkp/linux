@@ -32,7 +32,7 @@ static size_t seqbuf_avail(struct seqbuf *seqbuf)
 	return seqbuf->pos < seqbuf->size ? seqbuf->size - seqbuf->pos : 0;
 }
 
-static size_t seqbuf_status(struct seqbuf *seqbuf)
+static int seqbuf_status(struct seqbuf *seqbuf)
 {
 	return seqbuf->pos <= seqbuf->size ? 0 : -EOVERFLOW;
 }
@@ -44,7 +44,9 @@ static int seqbuf_eof(struct seqbuf *seqbuf)
 
 static int seqbuf_read(struct seqbuf *seqbuf, void *buf, size_t nbyte)
 {
-	nbyte = min(nbyte, seqbuf_avail(seqbuf));
+	if (nbyte > seqbuf_avail(seqbuf))
+		return -EOVERFLOW;
+
 	memcpy(buf, seqbuf->buf + seqbuf->pos, nbyte);
 	seqbuf->pos += nbyte;
 	return seqbuf_status(seqbuf);
@@ -57,9 +59,16 @@ static int seqbuf_read_u32(struct seqbuf *seqbuf, u32 *v)
 
 static int seqbuf_read_str(struct seqbuf *seqbuf, const char **str)
 {
+	size_t avail;
+	size_t len;
+
+	avail = seqbuf_avail(seqbuf);
 	*str = seqbuf->buf + seqbuf->pos;
-	seqbuf->pos += strnlen(*str, seqbuf_avail(seqbuf));
-	seqbuf->pos++;
+	len = strnlen(*str, avail);
+	if (len == avail)
+		return -EOVERFLOW;
+
+	seqbuf->pos += len + 1;
 	return seqbuf_status(seqbuf);
 }
 
