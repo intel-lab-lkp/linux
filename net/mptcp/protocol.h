@@ -372,7 +372,7 @@ struct mptcp_sock {
 
 	spinlock_t	fallback_lock;	/* protects fallback,
 					 * allow_infinite_fallback and
-					 * allow_join
+					 * allow_subflows
 					 */
 
 	struct list_head backlog_list;	/* protected by the data lock */
@@ -952,12 +952,6 @@ static inline void mptcp_start_tout_timer(struct sock *sk)
 	mptcp_reset_tout_timer(mptcp_sk(sk), 0);
 }
 
-static inline bool mptcp_is_fully_established(struct sock *sk)
-{
-	return inet_sk_state_load(sk) == TCP_ESTABLISHED &&
-	       READ_ONCE(mptcp_sk(sk)->fully_established);
-}
-
 static inline u64 mptcp_stamp(void)
 {
 	return div_u64(tcp_clock_ns(), NSEC_PER_USEC);
@@ -1288,6 +1282,16 @@ static inline bool mptcp_check_fallback(const struct sock *sk)
 	struct mptcp_sock *msk = mptcp_sk(subflow->conn);
 
 	return __mptcp_check_fallback(msk);
+}
+
+static inline bool mptcp_is_fully_established(struct sock *sk)
+{
+	struct mptcp_sock *msk = mptcp_sk(sk);
+
+	return inet_sk_state_load(sk) == TCP_ESTABLISHED &&
+	       READ_ONCE(msk->fully_established) &&
+	       !__mptcp_check_fallback(msk) &&
+	       msk->allow_subflows;
 }
 
 static inline bool __mptcp_has_initial_subflow(const struct mptcp_sock *msk)
