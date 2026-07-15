@@ -1858,6 +1858,17 @@ unsigned long vmalloc_to_pfn(const void *addr);
 #ifdef CONFIG_MMU
 extern bool is_vmalloc_addr(const void *x);
 extern int is_vmalloc_or_module_addr(const void *x);
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+static inline bool is_percpu_addr(unsigned long addr)
+{
+	return addr >= PERCPU_START && addr < LOCAL_PERCPU_END;
+}
+#else
+static inline bool is_percpu_addr(unsigned long addr)
+{
+	return false;
+}
+#endif
 #else
 static inline bool is_vmalloc_addr(const void *x)
 {
