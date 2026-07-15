@@ -20,7 +20,6 @@
  * Test /proc/$PID/smaps_rollup
  * Test /proc/$PID/statm
  *
- * FIXME require CONFIG_TMPFS which can be disabled
  * FIXME test other values from "smaps"
  * FIXME support other archs
  */
@@ -409,6 +408,10 @@ int main(void)
 			"AnonHugePages:         0 kB\n",
 			"Shared_Hugetlb:        0 kB\n",
 			"Private_Hugetlb:       0 kB\n",
+			"Private_Clean:         4 kB\n",
+			"Private_Dirty:         0 kB\n",
+			"Swap:                  0 kB\n",
+			"SwapPss:               0 kB\n",
 			"Locked:                0 kB\n",
 		};
 		int i;
