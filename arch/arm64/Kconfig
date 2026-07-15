@@ -415,6 +415,11 @@ config KASAN_SHADOW_OFFSET
 config UNWIND_TABLES
 	bool
 
+config HAVE_LOCAL_PER_CPU_MAP
+	def_bool y
+	depends on (ARM64_VA_BITS_48 && (ARM64_4K_PAGES || ARM64_64K_PAGES)) || \
+		   (ARM64_VA_BITS_47 && ARM64_16K_PAGES)
+
 source "arch/arm64/Kconfig.platforms"
 
 menu "Kernel Features"
