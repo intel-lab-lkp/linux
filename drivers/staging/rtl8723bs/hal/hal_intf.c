@@ -197,7 +197,7 @@ void rtw_hal_set_odm_var(struct adapter *padapter, enum hal_odm_variable eVariab
 
 u8 rtw_hal_check_ips_status(struct adapter *padapter)
 {
-	return CheckIPSStatus(padapter);
+	return rtw_read8(padapter, REG_FW_PWR_STATUS) == FW_PWR_STATUS_IPS_DONE;
 }
 
 int rtw_hal_xmitframe_enqueue(struct adapter *padapter, struct xmit_frame *pxmitframe)

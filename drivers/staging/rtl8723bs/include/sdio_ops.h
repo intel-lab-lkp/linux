@@ -23,7 +23,9 @@ u32 _sdio_read32(struct adapter *padapter, u32 addr);
 s32 _sdio_write32(struct adapter *padapter, u32 addr, u32 val);
 
 extern void sd_int_hdl(struct adapter *padapter);
-extern u8 CheckIPSStatus(struct adapter *padapter);
+
+#define REG_FW_PWR_STATUS 0x100
+#define FW_PWR_STATUS_IPS_DONE 0xEA
 
 extern void InitInterrupt8723BSdio(struct adapter *padapter);
 void rtw_sdio_enable_interrupt(struct adapter *padapter);

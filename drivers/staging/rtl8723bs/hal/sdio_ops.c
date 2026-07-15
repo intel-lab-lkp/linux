@@ -620,22 +620,6 @@ void rtw_sdio_disable_interrupt(struct adapter *adapter)
 	sdio_local_write(adapter, SDIO_REG_HIMR, 4, (u8 *)&himr);
 }
 
-/*  */
-/*	Description: */
-/*		Using 0x100 to check the power status of FW. */
-/*  */
-/*	Assumption: */
-/*		Using SDIO Local register ONLY for configuration. */
-/*  */
-/*	Created by Isaac, 2013.09.10. */
-/*  */
-u8 CheckIPSStatus(struct adapter *adapter)
-{
-	if (rtw_read8(adapter, 0x100) == 0xEA)
-		return true;
-	else
-		return false;
-}
 
 static struct recv_buf *sd_recv_rxfifo(struct adapter *adapter, u32 size)
 {
