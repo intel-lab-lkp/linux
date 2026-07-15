@@ -1720,6 +1720,11 @@ static void in_intr(struct virtqueue *vq)
 	}
 
 	spin_lock_irqsave(&port->inbuf_lock, flags);
+	if (!port->portdev) {
+		/* Port is being unplugged, ignore further data. */
+		spin_unlock_irqrestore(&port->inbuf_lock, flags);
+		return;
+	}
 	port->inbuf = get_inbuf(port);
 
 	/*
