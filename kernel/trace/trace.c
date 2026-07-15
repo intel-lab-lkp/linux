@@ -1100,6 +1100,7 @@ int trace_parser_get_init(struct trace_parser *parser, int size)
 		return 1;
 
 	parser->size = size;
+	mutex_init(&parser->lock);
 	return 0;
 }
 
@@ -1108,6 +1109,7 @@ int trace_parser_get_init(struct trace_parser *parser, int size)
  */
 void trace_parser_put(struct trace_parser *parser)
 {
+	mutex_destroy(&parser->lock);
 	kfree(parser->buffer);
 	parser->buffer = NULL;
 }
@@ -1129,6 +1131,8 @@ int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
 	char ch;
 	size_t read = 0;
 	ssize_t ret;
+
+	lockdep_assert_held(&parser->lock);
 
 	if (!*ppos)
 		trace_parser_clear(parser);

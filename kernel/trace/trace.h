@@ -1386,26 +1386,31 @@ struct trace_parser {
 	char		*buffer;
 	unsigned	idx;
 	unsigned	size;
+	struct mutex	lock;
 };
 
 static inline bool trace_parser_loaded(struct trace_parser *parser)
 {
+	lockdep_assert_held(&parser->lock);
 	return !parser->fail && parser->idx != 0;
 }
 
 static inline bool trace_parser_cont(struct trace_parser *parser)
 {
+	lockdep_assert_held(&parser->lock);
 	return parser->cont;
 }
 
 static inline void trace_parser_clear(struct trace_parser *parser)
 {
+	lockdep_assert_held(&parser->lock);
 	parser->cont = false;
 	parser->idx = 0;
 }
 
 static inline void trace_parser_fail(struct trace_parser *parser)
 {
+	lockdep_assert_held(&parser->lock);
 	parser->fail = true;
 }
 

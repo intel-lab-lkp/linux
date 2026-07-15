@@ -195,6 +195,7 @@ int trace_pid_write(struct trace_pid_list *filtered_pids,
 	}
 
 	ret = 0;
+	mutex_lock(&parser.lock);
 	while (cnt > 0) {
 
 		pos = 0;
@@ -225,6 +226,7 @@ int trace_pid_write(struct trace_pid_list *filtered_pids,
 		trace_parser_clear(&parser);
 		ret = 0;
 	}
+	mutex_unlock(&parser.lock);
  out:
 	trace_parser_put(&parser);
 

@@ -1535,6 +1535,7 @@ ftrace_event_write(struct file *file, const char __user *ubuf,
 	if (trace_parser_get_init(&parser, EVENT_BUF_SIZE + 1))
 		return -ENOMEM;
 
+	mutex_lock(&parser.lock);
 	read = trace_get_user(&parser, ubuf, cnt, ppos);
 
 	if (read >= 0 && trace_parser_loaded((&parser))) {
@@ -1551,6 +1552,7 @@ ftrace_event_write(struct file *file, const char __user *ubuf,
 	ret = read;
 
  out_put:
+	mutex_unlock(&parser.lock);
 	trace_parser_put(&parser);
 
 	return ret;
