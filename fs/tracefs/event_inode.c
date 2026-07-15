@@ -813,6 +813,67 @@ struct eventfs_inode *eventfs_create_events_dir(const char *name, struct dentry 
 }
 
 /**
+ * eventfs_create_events_dir_ro - create a read-only events directory
+ * @name: The name of the top level directory to create.
+ * @entries: A list of entries that represent the files under this directory
+ * @size: The number of @entries
+ * @data: The default data to pass to the files (an entry may override it).
+ *
+ * This function configures the eventfs filesystem root as a read-only
+ * trace event directory using the existing eventfs_inode lazy-lookup
+ * infrastructure.
+ *
+ * See eventfs_create_dir() for use of @entries.
+ */
+struct eventfs_inode *eventfs_create_events_dir_ro(const char *name,
+						   const struct eventfs_entry *entries,
+						   int size, void *data)
+{
+	struct dentry *dentry;
+	struct eventfs_root_inode *rei;
+	struct eventfs_inode *ei;
+	struct tracefs_inode *ti;
+	struct inode *inode;
+
+	dentry = eventfs_ro_get_root();
+	if (IS_ERR(dentry))
+		return ERR_CAST(dentry);
+
+	inode = d_inode(dentry);
+
+	ei = alloc_root_ei(name);
+	if (!ei)
+		goto fail;
+
+	rei = get_root_inode(ei);
+	rei->events_dir = dentry;
+
+	ei->entries = entries;
+	ei->nr_entries = size;
+	ei->data = data;
+
+	INIT_LIST_HEAD(&ei->children);
+	INIT_LIST_HEAD(&ei->list);
+
+	ti = get_tracefs(inode);
+	ti->flags |= TRACEFS_EVENT_INODE;
+	ti->private = ei;
+
+	inode->i_op = &eventfs_dir_inode_operations;
+	inode->i_fop = &eventfs_file_operations;
+
+	dentry->d_fsdata = get_ei(ei);
+
+	return ei;
+
+ fail:
+	cleanup_ei(ei);
+	dput(dentry);
+	eventfs_ro_put_root();
+	return ERR_PTR(-ENOMEM);
+}
+
+/**
  * eventfs_remove_rec - remove eventfs dir or file from list
  * @ei: eventfs_inode to be removed.
  * @level: prevent recursion from going more than 3 levels deep.

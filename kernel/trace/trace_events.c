@@ -1306,6 +1306,7 @@ static void remove_subsystem(struct trace_subsystem_dir *dir)
 
 	if (!--dir->nr_events) {
 		eventfs_remove_dir(dir->ei);
+		eventfs_remove_dir(dir->ei_ro);
 		list_del(&dir->list);
 		__put_system_dir(dir);
 	}
@@ -1335,6 +1336,7 @@ void event_file_put(struct trace_event_file *file)
 static void remove_event_file_dir(struct trace_event_file *file)
 {
 	eventfs_remove_dir(file->ei);
+	eventfs_remove_dir(file->ei_ro);
 	list_del(&file->list);
 	remove_subsystem(file->system);
 	free_event_filter(file->filter);
@@ -3077,6 +3079,7 @@ event_subsystem_dir(struct trace_array *tr, const char *name,
 	}
 
 	dir->ei = ei;
+	dir->ei_ro = NULL;
 	dir->tr = tr;
 	dir->ref_count = 1;
 	dir->nr_events = 1;
@@ -3225,6 +3228,33 @@ static void event_release(const char *name, void *data)
 	event_file_put(file);
 }
 
+static int event_callback_ro(const char *name, umode_t *mode, void **data,
+			     const struct file_operations **fops)
+{
+	int ret = event_callback(name, mode, data, fops);
+
+	/* Skip writable entries in the read-only tree */
+	if (ret && (*mode & 0222))
+		return 0;
+	if (ret)
+		*mode = 0444;
+	return ret;
+}
+
+static struct eventfs_entry event_entries_ro[] = {
+	{
+		.name		= "format",
+		.callback	= event_callback_ro,
+		.release	= event_release,
+	},
+#ifdef CONFIG_PERF_EVENTS
+	{
+		.name		= "id",
+		.callback	= event_callback_ro,
+	},
+#endif
+};
+
 static int
 event_create_dir(struct eventfs_inode *parent, struct trace_event_file *file)
 {
@@ -3323,6 +3353,28 @@ event_create_dir(struct eventfs_inode *parent, struct trace_event_file *file)
 
 	/* Gets decremented on freeing of the "enable" file */
 	event_file_get(file);
+
+	/* Create read only eventfs directory */
+	if (!(call->flags & TRACE_EVENT_FL_DYNAMIC) &&
+	    !IS_ERR_OR_NULL(tr->event_dir_ro)) {
+		struct trace_subsystem_dir *sdir = file->system;
+
+		if (!sdir->ei_ro) {
+			sdir->ei_ro = eventfs_create_dir(call->class->system,
+					tr->event_dir_ro, NULL, 0, sdir);
+			if (IS_ERR(sdir->ei_ro))
+				sdir->ei_ro = NULL;
+		}
+		if (sdir->ei_ro) {
+			file->ei_ro = eventfs_create_dir(name, sdir->ei_ro,
+					event_entries_ro,
+					ARRAY_SIZE(event_entries_ro), file);
+			if (IS_ERR(file->ei_ro))
+				file->ei_ro = NULL;
+			else
+				event_file_get(file);
+		}
+	}
 
 	return 0;
 }
@@ -4652,10 +4704,35 @@ static int events_callback(const char *name, umode_t *mode, void **data,
 	return 1;
 }
 
+static int events_callback_ro(const char *name, umode_t *mode, void **data,
+			      const struct file_operations **fops)
+{
+	int ret = events_callback(name, mode, data, fops);
+
+	/* Skip writable entries in the read-only tree */
+	if (ret && (*mode & 0222))
+		return 0;
+	if (ret)
+		*mode = 0444;
+	return ret;
+}
+
+static struct eventfs_entry events_entries_ro[] = {
+	{
+		.name		= "header_page",
+		.callback	= events_callback_ro,
+	},
+	{
+		.name		= "header_event",
+		.callback	= events_callback_ro,
+	},
+};
+
 /* Expects to have event_mutex held when called */
 static int
 create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 {
+	static bool event_dir_ro_created;
 	struct eventfs_inode *e_events;
 	struct dentry *entry;
 	int nr_entries;
@@ -4708,6 +4785,16 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 	}
 
 	tr->event_dir = e_events;
+
+	if (!event_dir_ro_created && (tr->flags & TRACE_ARRAY_FL_GLOBAL)) {
+		tr->event_dir_ro = eventfs_create_events_dir_ro(
+				"events", events_entries_ro,
+				ARRAY_SIZE(events_entries_ro), tr);
+		if (IS_ERR(tr->event_dir_ro))
+			tr->event_dir_ro = NULL;
+		else
+			event_dir_ro_created = true;
+	}
 
 	return 0;
 }
