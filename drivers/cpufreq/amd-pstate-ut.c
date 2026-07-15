@@ -157,6 +157,10 @@ static int amd_pstate_ut_check_perf(u32 index)
 		if (!policy)
 			continue;
 		cpudata = policy->driver_data;
+		if (!cpudata) {
+			pr_err("%s empty driver_data on cpu %d\n", __func__, policy->cpu);
+			return -EINVAL;
+		}
 
 		if (get_shared_mem()) {
 			ret = cppc_get_perf_caps(cpu, &cppc_perf);
@@ -229,6 +233,10 @@ static int amd_pstate_ut_check_freq(u32 index)
 		if (!policy)
 			continue;
 		cpudata = policy->driver_data;
+		if (!cpudata) {
+			pr_err("%s empty driver_data on cpu %d\n", __func__, policy->cpu);
+			return -EINVAL;
+		}
 
 		if (!((policy->cpuinfo.max_freq >= cpudata->nominal_freq) &&
 			(cpudata->nominal_freq > cpudata->lowest_nonlinear_freq) &&
@@ -560,6 +568,15 @@ out:
 static int __init amd_pstate_ut_init(void)
 {
 	u32 i = 0, arr_size = ARRAY_SIZE(amd_pstate_ut_cases);
+	const char *driver_name = NULL;
+
+	driver_name = cpufreq_get_current_driver();
+	if (!driver_name)
+		return -ENOENT;
+	/* don't test if non-amd cpufreq_driver exists */
+	else if (strcmp(driver_name, "amd-pstate") &&
+		 strcmp(driver_name, "amd-pstate-epp"))
+		return -EEXIST;
 
 	for (i = 0; i < arr_size; i++) {
 		int ret;
