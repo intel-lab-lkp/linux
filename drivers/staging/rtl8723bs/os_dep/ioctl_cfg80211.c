@@ -436,7 +436,7 @@ check_bss:
 			   FUNC_ADPT_FMT " BSS not found !!\n",
 			   FUNC_ADPT_ARG(padapter));
 
-	if (rtw_to_roam(padapter) > 0) {
+	if (padapter->mlmepriv.to_roam > 0) {
 		struct wiphy *wiphy = pwdev->wiphy;
 		struct ieee80211_channel *notify_channel;
 		u32 freq;

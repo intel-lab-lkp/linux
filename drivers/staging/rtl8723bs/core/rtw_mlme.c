@@ -744,7 +744,7 @@ void rtw_surveydone_event_callback(struct adapter	*adapter, u8 *pbuf)
 				_clr_fwstate_(pmlmepriv, _FW_UNDER_LINKING);
 				rtw_indicate_connect(adapter);
 			} else {
-				if (rtw_to_roam(adapter) != 0) {
+				if (adapter->mlmepriv.to_roam != 0) {
 					if (rtw_dec_to_roam(adapter) == 0 ||
 					    rtw_sitesurvey_cmd(adapter, &pmlmepriv->assoc_ssid,
 							       1, NULL, 0) != _SUCCESS) {
@@ -893,10 +893,10 @@ void rtw_indicate_disconnect(struct adapter *padapter)
 
 	_clr_fwstate_(pmlmepriv, _FW_UNDER_LINKING | WIFI_UNDER_WPS);
 
-	if (rtw_to_roam(padapter) > 0)
+	if (padapter->mlmepriv.to_roam > 0)
 		_clr_fwstate_(pmlmepriv, _FW_LINKED);
 
-	if (check_fwstate(&padapter->mlmepriv, _FW_LINKED) || rtw_to_roam(padapter) <= 0) {
+	if (check_fwstate(&padapter->mlmepriv, _FW_LINKED) || padapter->mlmepriv.to_roam <= 0) {
 		/*  Do it first for tx broadcast pkt after disconnection issue! */
 		netif_carrier_off(padapter->pnetdev);
 
@@ -1420,9 +1420,9 @@ void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf)
 		}
 
 		if (roam) {
-			if (rtw_to_roam(adapter) > 0)
+			if (adapter->mlmepriv.to_roam > 0)
 				rtw_dec_to_roam(adapter); /* this stadel_event is caused by roaming, decrease to_roam */
-			else if (rtw_to_roam(adapter) == 0)
+			else if (adapter->mlmepriv.to_roam == 0)
 				rtw_set_to_roam(adapter, adapter->registrypriv.max_roaming_times);
 		} else {
 			rtw_set_to_roam(adapter, 0);
@@ -1516,10 +1516,10 @@ void _rtw_join_timeout_handler(struct timer_list *t)
 
 	spin_lock_bh(&pmlmepriv->lock);
 
-	if (rtw_to_roam(adapter) > 0) { /* join timeout caused by roaming */
+	if (adapter->mlmepriv.to_roam > 0) { /* join timeout caused by roaming */
 		while (1) {
 			rtw_dec_to_roam(adapter);
-			if (rtw_to_roam(adapter) != 0) { /* try another */
+			if (adapter->mlmepriv.to_roam != 0) { /* try another */
 				int do_join_r;
 
 				do_join_r = rtw_do_join(adapter);
@@ -1773,7 +1773,7 @@ static int rtw_check_join_candidate(struct mlme_priv *mlme
 	if (!rtw_is_desired_network(adapter, competitor))
 		goto exit;
 
-	if (rtw_to_roam(adapter) > 0) {
+	if (adapter->mlmepriv.to_roam > 0) {
 		if (jiffies_to_msecs(jiffies - competitor->last_scanned) >=
 		    mlme->roam_scanr_exp_ms ||
 		    rtw_ssid_differ(&competitor->network, &mlme->cur_network.network))
@@ -2540,10 +2540,6 @@ inline u8 rtw_dec_to_roam(struct adapter *adapter)
 	return adapter->mlmepriv.to_roam;
 }
 
-inline u8 rtw_to_roam(struct adapter *adapter)
-{
-	return adapter->mlmepriv.to_roam;
-}
 
 void rtw_roaming(struct adapter *padapter, struct wlan_network *tgt_network)
 {
@@ -2559,14 +2555,14 @@ void _rtw_roaming(struct adapter *padapter, struct wlan_network *tgt_network)
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	struct wlan_network *cur_network = &pmlmepriv->cur_network;
 
-	if (rtw_to_roam(padapter) > 0) {
+	if (padapter->mlmepriv.to_roam > 0) {
 		memcpy(&pmlmepriv->assoc_ssid, &cur_network->network.ssid, sizeof(struct ndis_802_11_ssid));
 
 		pmlmepriv->assoc_by_bssid = false;
 
 		while (rtw_do_join(padapter) != _SUCCESS) {
 			rtw_dec_to_roam(padapter);
-			if (rtw_to_roam(padapter) <= 0) {
+			if (padapter->mlmepriv.to_roam <= 0) {
 				rtw_indicate_disconnect(padapter);
 				break;
 			}
