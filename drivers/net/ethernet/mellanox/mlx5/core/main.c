@@ -2186,12 +2186,22 @@ succeed:
 	return 0;
 }
 
+void (*mlx5_rdma_shutdown_quiesce)(void);
+EXPORT_SYMBOL_GPL(mlx5_rdma_shutdown_quiesce);
+
 static void shutdown(struct pci_dev *pdev)
 {
 	struct mlx5_core_dev *dev  = pci_get_drvdata(pdev);
 	int err;
 
 	mlx5_core_info(dev, "Shutdown was called\n");
+	set_bit(MLX5_INTERFACE_STATE_SHUTTING_DOWN, &dev->intf_state);
+	/*
+	 * Ensure in-flight CQ pollers observe SHUTTING_DOWN before
+	 * fast_unload tears the device down.
+	 */
+	if (mlx5_rdma_shutdown_quiesce)
+		mlx5_rdma_shutdown_quiesce();
 	set_bit(MLX5_BREAK_FW_WAIT, &dev->intf_state);
 	mlx5_drain_fw_reset(dev);
 	mlx5_drain_health_wq(dev);

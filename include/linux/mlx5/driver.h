@@ -653,7 +653,13 @@ enum mlx5_device_state {
 enum mlx5_interface_state {
 	MLX5_INTERFACE_STATE_UP = BIT(0),
 	MLX5_BREAK_FW_WAIT = BIT(1),
+	MLX5_INTERFACE_STATE_SHUTTING_DOWN = BIT(2),
 };
+
+/* Optional hook installed by mlx5_ib to flush CQ poll work after the
+ * SHUTTING_DOWN flag is set and before teardown continues.
+ */
+extern void (*mlx5_rdma_shutdown_quiesce)(void);
 
 enum mlx5_pci_status {
 	MLX5_PCI_STATUS_DISABLED,
@@ -1218,6 +1224,11 @@ enum {
 static inline bool mlx5_core_is_pf(const struct mlx5_core_dev *dev)
 {
 	return dev->coredev_type == MLX5_COREDEV_PF;
+}
+
+static inline bool mlx5_core_is_shutting_down(struct mlx5_core_dev *dev)
+{
+	return test_bit(MLX5_INTERFACE_STATE_SHUTTING_DOWN, &dev->intf_state);
 }
 
 static inline bool mlx5_core_is_vf(const struct mlx5_core_dev *dev)

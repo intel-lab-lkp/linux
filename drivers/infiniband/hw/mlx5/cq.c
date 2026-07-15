@@ -619,6 +619,10 @@ int mlx5_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc)
 	int npolled;
 
 	spin_lock_irqsave(&cq->lock, flags);
+	if (mlx5_core_is_shutting_down(mdev)) {
+		spin_unlock_irqrestore(&cq->lock, flags);
+		return 0;
+	}
 	if (mdev->state == MLX5_DEVICE_STATE_INTERNAL_ERROR) {
 		/* make sure no soft wqe's are waiting */
 		if (unlikely(!list_empty(&cq->wc_list)))
@@ -654,12 +658,19 @@ int mlx5_ib_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 	int ret = 0;
 
 	spin_lock_irqsave(&cq->lock, irq_flags);
+	if (mlx5_core_is_shutting_down(mdev)) {
+		spin_unlock_irqrestore(&cq->lock, irq_flags);
+		return 0;
+	}
 	if (cq->notify_flags != IB_CQ_NEXT_COMP)
 		cq->notify_flags = flags & IB_CQ_SOLICITED_MASK;
 
 	if ((flags & IB_CQ_REPORT_MISSED_EVENTS) && !list_empty(&cq->wc_list))
 		ret = 1;
 	spin_unlock_irqrestore(&cq->lock, irq_flags);
+
+	if (mlx5_core_is_shutting_down(mdev))
+		return ret;
 
 	mlx5_cq_arm(&cq->mcq,
 		    (flags & IB_CQ_SOLICITED_MASK) == IB_CQ_SOLICITED ?
