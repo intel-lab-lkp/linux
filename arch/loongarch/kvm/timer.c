@@ -132,6 +132,14 @@ void kvm_restore_timer(struct kvm_vcpu *vcpu)
 		 * during injecting intr async
 		 */
 		kvm_queue_irq(vcpu, INT_TI);
+	} else if (!expire) {
+		/*
+		 * One-shot timer on the migration destination: vcpu->arch.expire
+		 * is host-internal and is not migrated, so it is still 0 here.
+		 * Reload the remaining countdown from the migrated TVAL instead
+		 * of firing the timer immediately.
+		 */
+		delta = ticks;
 	}
 
 	write_gcsr_timertick(delta);
