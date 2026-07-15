@@ -8,7 +8,7 @@
 #include <drv_types.h>
 #include <rtl8723b_hal.h>
 
-static void initrecvbuf(struct recv_buf *precvbuf, struct adapter *padapter)
+void initrecvbuf(struct recv_buf *precvbuf, struct adapter *padapter)
 {
 	INIT_LIST_HEAD(&precvbuf->list);
 	spin_lock_init(&precvbuf->recvbuf_lock);
@@ -213,7 +213,7 @@ static inline bool pkt_exceeds_tail(struct recv_priv *precvpriv,
 	return false;
 }
 
-static void rtl8723bs_recv_tasklet(struct tasklet_struct *t)
+void rtl8723bs_recv_tasklet(struct tasklet_struct *t)
 {
 	struct adapter *padapter = from_tasklet(padapter, t,
 						recvpriv.recv_tasklet);
@@ -357,90 +357,6 @@ static void rtl8723bs_recv_tasklet(struct tasklet_struct *t)
 	} while (1);
 }
 
-/*
- * Initialize recv private variable for hardware dependent
- * 1. recv buf
- * 2. recv tasklet
- *
- */
-s32 rtl8723bs_init_recv_priv(struct adapter *padapter)
-{
-	s32 res;
-	u32 i, n;
-	struct recv_priv *precvpriv;
-	struct recv_buf *precvbuf;
-
-	res = _SUCCESS;
-	precvpriv = &padapter->recvpriv;
-
-	/* 3 1. init recv buffer */
-	INIT_LIST_HEAD(&precvpriv->free_recv_buf_queue.queue);
-	spin_lock_init(&precvpriv->free_recv_buf_queue.lock);
-	INIT_LIST_HEAD(&precvpriv->recv_buf_pending_queue.queue);
-	spin_lock_init(&precvpriv->recv_buf_pending_queue.lock);
-
-	n = NR_RECVBUFF * sizeof(struct recv_buf) + 4;
-	precvpriv->pallocated_recv_buf = kzalloc(n, GFP_KERNEL);
-	if (!precvpriv->pallocated_recv_buf) {
-		res = _FAIL;
-		goto exit;
-	}
-
-	precvpriv->precv_buf = (u8 *)N_BYTE_ALIGMENT((SIZE_PTR)(precvpriv->pallocated_recv_buf), 4);
-
-	/*  init each recv buffer */
-	precvbuf = (struct recv_buf *)precvpriv->precv_buf;
-	for (i = 0; i < NR_RECVBUFF; i++) {
-		initrecvbuf(precvbuf, padapter);
-
-		if (!precvbuf->pskb) {
-			SIZE_PTR tmpaddr = 0;
-			SIZE_PTR alignment = 0;
-
-			precvbuf->pskb = __dev_alloc_skb(MAX_RECVBUF_SZ + RECVBUFF_ALIGN_SZ, GFP_ATOMIC);
-			if (precvbuf->pskb) {
-				precvbuf->pskb->dev = padapter->pnetdev;
-
-				tmpaddr = (SIZE_PTR)precvbuf->pskb->data;
-				alignment = tmpaddr & (RECVBUFF_ALIGN_SZ-1);
-				skb_reserve(precvbuf->pskb, (RECVBUFF_ALIGN_SZ - alignment));
-			}
-		}
-
-		list_add_tail(&precvbuf->list, &precvpriv->free_recv_buf_queue.queue);
-
-		precvbuf++;
-	}
-	precvpriv->free_recv_buf_queue_cnt = i;
-
-	if (res == _FAIL)
-		goto initbuferror;
-
-	/* 3 2. init tasklet */
-	tasklet_setup(&precvpriv->recv_tasklet, rtl8723bs_recv_tasklet);
-
-	goto exit;
-
-initbuferror:
-	precvbuf = (struct recv_buf *)precvpriv->precv_buf;
-	if (precvbuf) {
-		n = precvpriv->free_recv_buf_queue_cnt;
-		precvpriv->free_recv_buf_queue_cnt = 0;
-		for (i = 0; i < n ; i++) {
-			list_del_init(&precvbuf->list);
-			if (precvbuf->pskb)
-				dev_kfree_skb_any(precvbuf->pskb);
-			precvbuf++;
-		}
-		precvpriv->precv_buf = NULL;
-	}
-
-	kfree(precvpriv->pallocated_recv_buf);
-	precvpriv->pallocated_recv_buf = NULL;
-
-exit:
-	return res;
-}
 
 /*
  * Free recv private variable of hardware dependent

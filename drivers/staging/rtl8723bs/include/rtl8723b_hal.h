@@ -242,5 +242,7 @@ void Hal_ReadRFGainOffset(struct adapter *padapter, u8 *hwinfo,
 
 void phy_StoreTxPowerByRateBase(struct adapter *padapter);
 void phy_ConvertTxPowerByRateInDbmToRelativeValues(struct adapter *padapter);
+void initrecvbuf(struct recv_buf *precvbuf, struct adapter *padapter);
+void rtl8723bs_recv_tasklet(struct tasklet_struct *t);
 
 #endif

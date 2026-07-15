@@ -81,7 +81,7 @@ struct rxreport_8723b {
 	u32 tsfl;
 };
 
-s32 rtl8723bs_init_recv_priv(struct adapter *padapter);
+
 void rtl8723bs_free_recv_priv(struct adapter *padapter);
 
 void rtl8723b_query_rx_phy_status(union recv_frame *prframe, struct phy_stat *pphy_stat);
