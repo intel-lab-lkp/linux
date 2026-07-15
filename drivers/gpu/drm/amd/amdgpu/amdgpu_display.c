@@ -746,7 +746,7 @@ static int convert_tiling_flags_to_modifier_gfx12(struct amdgpu_framebuffer *afb
 	return 0;
 }
 
-static int convert_tiling_flags_to_modifier(struct amdgpu_framebuffer *afb)
+static int convert_tiling_flags_to_modifier_gfx9(struct amdgpu_framebuffer *afb)
 {
 	struct amdgpu_device *adev = drm_to_adev(afb->base.dev);
 	uint64_t modifier = 0;
@@ -940,6 +940,55 @@ static int convert_tiling_flags_to_modifier(struct amdgpu_framebuffer *afb)
 	return 0;
 }
 
+static int convert_tiling_flags_to_modifier_gfx6(struct amdgpu_framebuffer *afb)
+{
+	const uint32_t array_mode = AMDGPU_TILING_GET(afb->tiling_flags, ARRAY_MODE);
+	const uint32_t pipe_config = AMDGPU_TILING_GET(afb->tiling_flags, PIPE_CONFIG);
+	const uint32_t tile_split = AMDGPU_TILING_GET(afb->tiling_flags, TILE_SPLIT);
+	const uint32_t micro_tile_mode = AMDGPU_TILING_GET(afb->tiling_flags, MICRO_TILE_MODE);
+	const uint32_t bank_width = AMDGPU_TILING_GET(afb->tiling_flags, BANK_WIDTH);
+	const uint32_t bank_height = AMDGPU_TILING_GET(afb->tiling_flags, BANK_HEIGHT);
+	const uint32_t macro_tile_aspect = AMDGPU_TILING_GET(afb->tiling_flags, MACRO_TILE_ASPECT);
+	const uint32_t num_banks = AMDGPU_TILING_GET(afb->tiling_flags, NUM_BANKS);
+	struct amdgpu_device *adev = drm_to_adev(afb->base.dev);
+	uint64_t modifier = 0;
+
+	switch (array_mode) {
+	case DC_ARRAY_LINEAR_GENERAL:
+	case DC_ARRAY_LINEAR_ALLIGNED:
+		modifier = DRM_FORMAT_MOD_LINEAR;
+		break;
+
+	case DC_ARRAY_2D_TILED_THIN1:
+		/* Macro tiled modes only */
+		modifier |=
+			AMD_FMT_MOD_SET(PIPE_CONFIG, pipe_config) |
+			AMD_FMT_MOD_SET(TILE_SPLIT, tile_split) |
+			AMD_FMT_MOD_SET(BANK_WIDTH, bank_width) |
+			AMD_FMT_MOD_SET(BANK_HEIGHT, bank_height) |
+			AMD_FMT_MOD_SET(MACRO_TILE_ASPECT, macro_tile_aspect) |
+			AMD_FMT_MOD_SET(NUM_BANKS, num_banks);
+		fallthrough;
+
+	case DC_ARRAY_1D_TILED_THIN1:
+		/* Micro and macro tiled modes */
+		modifier |=
+			AMD_FMT_MOD |
+			AMD_FMT_MOD_SET(TILE_VERSION, AMD_FMT_MOD_TILE_VER_GFX6) |
+			AMD_FMT_MOD_SET(TILE, array_mode) |
+			AMD_FMT_MOD_SET(MICROTILE, micro_tile_mode);
+		break;
+
+	default:
+		drm_err(&adev->ddev, "array mode 0x%x not supported by DCE\n", array_mode);
+		return -EINVAL;
+	}
+
+	afb->base.modifier = modifier;
+	afb->base.flags |= DRM_MODE_FB_MODIFIERS;
+	return 0;
+}
+
 /* Mirrors the is_displayable check in radeonsi's gfx6_compute_surface */
 static int check_tiling_flags_gfx6(struct amdgpu_framebuffer *afb)
 {
@@ -1093,7 +1142,7 @@ static int amdgpu_display_verify_sizes(struct amdgpu_framebuffer *rfb)
 
 			get_block_dimensions(block_size_log2, format_info->cpp[i],
 					     &block_width, &block_height);
-		} else {
+		} else if (AMD_FMT_MOD_GET(TILE_VERSION, modifier) >= AMD_FMT_MOD_TILE_VER_GFX9) {
 			int swizzle = AMD_FMT_MOD_GET(TILE, modifier);
 
 			switch ((swizzle & ~3) + 1) {
@@ -1120,6 +1169,60 @@ static int amdgpu_display_verify_sizes(struct amdgpu_framebuffer *rfb)
 
 			get_block_dimensions(block_size_log2, format_info->cpp[i],
 					     &block_width, &block_height);
+		} else if (AMD_FMT_MOD_GET(TILE_VERSION, modifier) == AMD_FMT_MOD_TILE_VER_GFX6) {
+			const u32 display_micro_tile_pitch = 32; /* required by DCE */
+			const u32 micro_tile_width = 8;
+			const u32 micro_tile_height = 8;
+			const u32 micro_tile_mode = AMD_FMT_MOD_GET(MICROTILE, modifier);
+			const u32 array_mode = AMD_FMT_MOD_GET(TILE, modifier);
+			u32 num_banks, bank_width, bank_height, pipe_config, macro_tile_aspect;
+			u32 num_pipes;
+
+			if (AMD_FMT_MOD_GET(DCC, modifier)) {
+				drm_dbg_kms(rfb->base.dev, "DCC is not displayable on GFX6-8\n");
+				return -EINVAL;
+			}
+			if (array_mode != AMD_FMT_MOD_TILE_GFX6_1D_TILED_THIN1 &&
+			    array_mode != AMD_FMT_MOD_TILE_GFX6_2D_TILED_THIN1) {
+				drm_dbg_kms(rfb->base.dev,
+					"Array mode %u is not supported by the display driver\n",
+					array_mode);
+				return -EINVAL;
+			}
+			if (micro_tile_mode != AMD_FMT_MOD_MICROTILE_DISPLAY) {
+				drm_dbg_kms(rfb->base.dev,
+					"Micro tile mode %u is not displayable on GFX6-8\n",
+					micro_tile_mode);
+				return -EINVAL;
+			}
+
+			num_banks = 2 << AMD_FMT_MOD_GET(NUM_BANKS, modifier);
+			bank_width = 1 << AMD_FMT_MOD_GET(BANK_WIDTH, modifier);
+			bank_height = 1 << AMD_FMT_MOD_GET(BANK_HEIGHT, modifier);
+			pipe_config = AMD_FMT_MOD_GET(PIPE_CONFIG, modifier);
+			macro_tile_aspect = 1 << AMD_FMT_MOD_GET(MACRO_TILE_ASPECT, modifier);
+
+			if (pipe_config >= AMD_FMT_MOD_PIPE_CONFIG_P16_32x32_8x16)
+				num_pipes = 16;
+			else if (pipe_config >= AMD_FMT_MOD_PIPE_CONFIG_P8_16x16_8x16)
+				num_pipes = 8;
+			else if (pipe_config >= AMD_FMT_MOD_PIPE_CONFIG_P4_8x16)
+				num_pipes = 4;
+			else if (pipe_config == AMD_FMT_MOD_PIPE_CONFIG_P2)
+				num_pipes = 2;
+			else
+				unreachable();
+
+			if (array_mode < AMD_FMT_MOD_TILE_GFX6_2D_TILED_THIN1) {
+				block_width = display_micro_tile_pitch;
+				block_height = micro_tile_height;
+			} else {
+				/* Assume non-PRT macro tiling modes */
+				block_width = num_pipes * micro_tile_width *
+					      bank_width * macro_tile_aspect;
+				block_height = micro_tile_height * bank_height *
+					       num_banks / macro_tile_aspect;
+			}
 		}
 
 		ret = amdgpu_display_verify_plane(rfb, i, format_info,
@@ -1271,8 +1374,10 @@ static int amdgpu_display_framebuffer_init(struct drm_device *dev,
 	    !(rfb->base.flags & DRM_MODE_FB_MODIFIERS)) {
 		if (amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(12, 0, 0))
 			ret = convert_tiling_flags_to_modifier_gfx12(rfb);
+		else if (amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(9, 0, 0))
+			ret = convert_tiling_flags_to_modifier_gfx9(rfb);
 		else
-			ret = convert_tiling_flags_to_modifier(rfb);
+			ret = convert_tiling_flags_to_modifier_gfx6(rfb);
 
 		if (ret) {
 			drm_dbg_kms(dev, "Failed to convert tiling flags 0x%llX to a modifier",
