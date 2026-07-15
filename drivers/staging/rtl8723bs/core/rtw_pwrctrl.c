@@ -139,7 +139,7 @@ void rtw_ps_processor(struct adapter *padapter)
 	u32 ps_deny = 0;
 
 	mutex_lock(&adapter_to_pwrctl(padapter)->lock);
-	ps_deny = rtw_ps_deny_get(padapter);
+	ps_deny = adapter_to_pwrctl(padapter)->ps_deny;
 	mutex_unlock(&adapter_to_pwrctl(padapter)->lock);
 	if (ps_deny != 0)
 		goto exit;
@@ -1132,14 +1132,4 @@ void rtw_ps_deny_cancel(struct adapter *padapter, enum ps_deny_reason reason)
 	mutex_lock(&pwrpriv->lock);
 	pwrpriv->ps_deny &= ~BIT(reason);
 	mutex_unlock(&pwrpriv->lock);
-}
-
-/*
- * ATTENTION:
- *Before calling this function pwrctrl lock should be occupied already,
- *otherwise it may return incorrect value.
- */
-u32 rtw_ps_deny_get(struct adapter *padapter)
-{
-	return adapter_to_pwrctl(padapter)->ps_deny;
 }
