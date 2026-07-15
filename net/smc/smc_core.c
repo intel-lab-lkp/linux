@@ -2499,7 +2499,13 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 	}
 
 	if (is_rmb) {
-		conn->rmb_desc = buf_desc;
+		/* Publish with release semantics: the connection is already in
+		 * the link group's token tree, so a concurrent CDC receive
+		 * handler must observe a fully initialised buffer once it sees
+		 * a non-NULL rmb_desc.  Pairs with the smp_load_acquire() in
+		 * the CDC receive path.
+		 */
+		smp_store_release(&conn->rmb_desc, buf_desc);
 		conn->rmbe_size_comp = bufsize_comp;
 		smc->sk.sk_rcvbuf = bufsize * 2;
 		atomic_set(&conn->bytes_to_rcv, 0);
@@ -2599,7 +2605,13 @@ int smcd_buf_attach(struct smc_sock *smc)
 	buf_desc->cpu_addr =
 		(u8 *)buf_desc->cpu_addr + sizeof(struct smcd_cdc_msg);
 	buf_desc->len -= sizeof(struct smcd_cdc_msg);
-	conn->sndbuf_desc = buf_desc;
+	/* Publish with release semantics: the connection is already reachable
+	 * to the ISM device (smc_ism_set_conn() ran in __smc_buf_create()), so
+	 * the CDC receive tasklet must observe a fully initialised ghost buffer
+	 * once it sees a non-NULL sndbuf_desc.  Pairs with smp_load_acquire()
+	 * in smc_cdc_msg_recv_action().
+	 */
+	smp_store_release(&conn->sndbuf_desc, buf_desc);
 	conn->sndbuf_desc->used = 1;
 	atomic_set(&conn->sndbuf_space, conn->sndbuf_desc->len);
 	return 0;

@@ -332,6 +332,7 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 {
 	union smc_host_cursor cons_old, prod_old;
 	struct smc_connection *conn = &smc->conn;
+	struct smc_buf_desc *sndbuf_desc;
 	int diff_cons, diff_prod, diff_tx;
 
 	smc_curs_copy(&prod_old, &conn->local_rx_ctrl.prod, conn);
@@ -353,12 +354,20 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 		 * peer RMB, then update tx_curs_fin and sndbuf_space
 		 * here since peer has already consumed the data.
 		 */
+		/* Pair with smp_store_release() in smcd_buf_attach(): the ghost
+		 * sndbuf_desc is attached after the connection is reachable to
+		 * the ISM device, so acquire it and skip the update while it is
+		 * unset -- avoids a NULL deref and a load of an uninitialised
+		 * buffer.
+		 */
+		sndbuf_desc = smp_load_acquire(&conn->sndbuf_desc);
 		if (conn->lgr->is_smcd &&
-		    smc_ism_support_dmb_nocopy(conn->lgr->smcd)) {
+		    smc_ism_support_dmb_nocopy(conn->lgr->smcd) &&
+		    sndbuf_desc) {
 			/* Calculate consumed data and
 			 * increment free send buffer space.
 			 */
-			diff_tx = smc_curs_diff(conn->sndbuf_desc->len,
+			diff_tx = smc_curs_diff(sndbuf_desc->len,
 						&conn->tx_curs_fin,
 						&conn->local_rx_ctrl.cons);
 			/* increase local sndbuf space and fin_curs */
@@ -443,13 +452,21 @@ static void smcd_cdc_rx_tsklet(struct tasklet_struct *t)
 {
 	struct smc_connection *conn = from_tasklet(conn, t, rx_tsklet);
 	struct smcd_cdc_msg *data_cdc;
+	struct smc_buf_desc *rmb_desc;
 	struct smcd_cdc_msg cdc;
 	struct smc_sock *smc;
 
 	if (!conn || conn->killed)
 		return;
+	/* Pair with smp_store_release() in __smc_buf_create(): the connection
+	 * is published before its RMB is allocated, so bail while rmb_desc is
+	 * unset to avoid a NULL deref and a load of an uninitialised buffer.
+	 */
+	rmb_desc = smp_load_acquire(&conn->rmb_desc);
+	if (!rmb_desc)
+		return;
 
-	data_cdc = (struct smcd_cdc_msg *)conn->rmb_desc->cpu_addr;
+	data_cdc = (struct smcd_cdc_msg *)rmb_desc->cpu_addr;
 	smcd_curs_copy(&cdc.prod, &data_cdc->prod, conn);
 	smcd_curs_copy(&cdc.cons, &data_cdc->cons, conn);
 	smc = container_of(conn, struct smc_sock, conn);
@@ -483,7 +500,11 @@ static void smc_cdc_rx_handler(struct ib_wc *wc, void *buf)
 	lgr = smc_get_lgr(link);
 	read_lock_bh(&lgr->conns_lock);
 	conn = smc_lgr_find_conn(ntohl(cdc->token), lgr);
-	if (!conn || conn->out_of_sync) {
+	/* Pair with smp_store_release() in __smc_buf_create(): bail while the
+	 * RMB is unset (smc_cdc_msg_recv_action() dereferences it) to avoid a
+	 * NULL deref and a stale-buffer read in the connection setup window.
+	 */
+	if (!conn || conn->out_of_sync || !smp_load_acquire(&conn->rmb_desc)) {
 		read_unlock_bh(&lgr->conns_lock);
 		return;
 	}
