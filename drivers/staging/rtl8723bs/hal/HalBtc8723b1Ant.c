@@ -2018,7 +2018,7 @@ static void halbtc8723b1ant_InitCoexDm(struct btc_coexist *pBtCoexist)
 	pCoexSta->popEventCnt = 0;
 }
 
-static void halbtc8723b1ant_InitHwConfig(
+void halbtc8723b1ant_InitHwConfig(
 	struct btc_coexist *pBtCoexist,
 	bool bBackUp,
 	bool bWifiOnly
@@ -2107,10 +2107,6 @@ void EXhalbtc8723b1ant_PowerOnSetting(struct btc_coexist *pBtCoexist)
 	}
 }
 
-void EXhalbtc8723b1ant_InitHwConfig(struct btc_coexist *pBtCoexist, bool bWifiOnly)
-{
-	halbtc8723b1ant_InitHwConfig(pBtCoexist, true, bWifiOnly);
-}
 
 void EXhalbtc8723b1ant_InitCoexDm(struct btc_coexist *pBtCoexist)
 {

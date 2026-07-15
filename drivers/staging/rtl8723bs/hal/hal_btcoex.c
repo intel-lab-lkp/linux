@@ -835,7 +835,7 @@ void EXhalbtcoutsrc_InitHwConfig(struct btc_coexist *pBtCoexist, u8 bWifiOnly)
 	if (pBtCoexist->boardInfo.btdmAntNum == 2)
 		halbtc8723b2ant_InitHwConfig(pBtCoexist);
 	else if (pBtCoexist->boardInfo.btdmAntNum == 1)
-		EXhalbtc8723b1ant_InitHwConfig(pBtCoexist, bWifiOnly);
+		halbtc8723b1ant_InitHwConfig(pBtCoexist, true, bWifiOnly);
 }
 
 void EXhalbtcoutsrc_InitCoexDm(struct btc_coexist *pBtCoexist)

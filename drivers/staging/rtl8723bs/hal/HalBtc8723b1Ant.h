@@ -168,7 +168,6 @@ struct coex_sta_8723b_1ant {
 /*  The following is interface which will notify coex module. */
 /*  */
 void EXhalbtc8723b1ant_PowerOnSetting(struct btc_coexist *pBtCoexist);
-void EXhalbtc8723b1ant_InitHwConfig(struct btc_coexist *pBtCoexist, bool bWifiOnly);
 void EXhalbtc8723b1ant_InitCoexDm(struct btc_coexist *pBtCoexist);
 void EXhalbtc8723b1ant_IpsNotify(struct btc_coexist *pBtCoexist, u8 type);
 void EXhalbtc8723b1ant_LpsNotify(struct btc_coexist *pBtCoexist, u8 type);
@@ -182,3 +181,5 @@ void EXhalbtc8723b1ant_BtInfoNotify(
 void EXhalbtc8723b1ant_HaltNotify(struct btc_coexist *pBtCoexist);
 void EXhalbtc8723b1ant_PnpNotify(struct btc_coexist *pBtCoexist, u8 pnpState);
 void EXhalbtc8723b1ant_Periodical(struct btc_coexist *pBtCoexist);
+
+void halbtc8723b1ant_InitHwConfig(struct btc_coexist *pBtCoexist, bool bBackUp,	bool bWifiOnly);
