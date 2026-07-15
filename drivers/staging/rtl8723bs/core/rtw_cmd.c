@@ -1262,8 +1262,7 @@ static void dynamic_chk_wk_hdl(struct adapter *padapter)
 	rtw_ps_processor(padapter);
 }
 
-void lps_ctrl_wk_hdl(struct adapter *padapter, u8 lps_ctrl_type);
-void lps_ctrl_wk_hdl(struct adapter *padapter, u8 lps_ctrl_type)
+static void lps_ctrl_wk_hdl(struct adapter *padapter, u8 lps_ctrl_type)
 {
 	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
