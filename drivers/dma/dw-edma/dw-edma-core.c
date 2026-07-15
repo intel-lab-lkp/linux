@@ -30,6 +30,11 @@ struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
 	return container_of(vd, struct dw_edma_desc, vd);
 }
 
+enum dw_edma_irq_event {
+	DW_EDMA_IRQ_DONE	= BIT(0),
+	DW_EDMA_IRQ_ABORT	= BIT(1),
+};
+
 static inline
 u64 dw_edma_get_pci_address(struct dw_edma_chan *chan, phys_addr_t cpu_addr)
 {
@@ -759,6 +764,39 @@ static void dw_edma_abort_interrupt(struct dw_edma_chan *chan)
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
 
+static void dw_edma_irq_work(struct work_struct *work)
+{
+	struct dw_edma_chan *chan = container_of(work, struct dw_edma_chan,
+						 irq_work);
+	unsigned int events;
+
+	do {
+		events = atomic_xchg(&chan->irq_pending, 0);
+
+		if (events & DW_EDMA_IRQ_DONE)
+			dw_edma_done_interrupt(chan);
+		if (events & DW_EDMA_IRQ_ABORT)
+			dw_edma_abort_interrupt(chan);
+	} while (atomic_read(&chan->irq_pending));
+}
+
+static void dw_edma_queue_irq_work(struct dw_edma_chan *chan,
+				   enum dw_edma_irq_event event)
+{
+	atomic_or(event, &chan->irq_pending);
+	queue_work(chan->dw->wq, &chan->irq_work);
+}
+
+static void dw_edma_done_interrupt_deferred(struct dw_edma_chan *chan)
+{
+	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_DONE);
+}
+
+static void dw_edma_abort_interrupt_deferred(struct dw_edma_chan *chan)
+{
+	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_ABORT);
+}
+
 static void dw_edma_emul_irq_ack(struct irq_data *d)
 {
 	struct dw_edma *dw = irq_data_get_irq_chip_data(d);
@@ -853,8 +891,8 @@ static inline irqreturn_t dw_edma_interrupt_write_inner(int irq, void *data)
 	struct dw_edma_irq *dw_irq = data;
 
 	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_WRITE,
-				       dw_edma_done_interrupt,
-				       dw_edma_abort_interrupt);
+				       dw_edma_done_interrupt_deferred,
+				       dw_edma_abort_interrupt_deferred);
 }
 
 static inline irqreturn_t dw_edma_interrupt_read_inner(int irq, void *data)
@@ -862,8 +900,8 @@ static inline irqreturn_t dw_edma_interrupt_read_inner(int irq, void *data)
 	struct dw_edma_irq *dw_irq = data;
 
 	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_READ,
-				       dw_edma_done_interrupt,
-				       dw_edma_abort_interrupt);
+				       dw_edma_done_interrupt_deferred,
+				       dw_edma_abort_interrupt_deferred);
 }
 
 static inline irqreturn_t dw_edma_interrupt_write(int irq, void *data)
@@ -940,6 +978,8 @@ static void dw_edma_device_synchronize(struct dma_chan *dchan)
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
 
 	dw_edma_wait_termination(dchan);
+	cancel_work_sync(&chan->irq_work);
+	atomic_set(&chan->irq_pending, 0);
 	vchan_synchronize(&chan->vc);
 }
 
@@ -982,6 +1022,8 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->configured = false;
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
+		INIT_WORK(&chan->irq_work, dw_edma_irq_work);
+		atomic_set(&chan->irq_pending, 0);
 
 		if (chan->dir == EDMA_DIR_WRITE)
 			chan->ll_max = (chip->ll_region_wr[chan->id].sz / EDMA_LL_SZ);
@@ -1195,10 +1237,21 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 	/* Disable eDMA, only to establish the ideal initial conditions */
 	dw_edma_core_off(dw);
 
+	/*
+	 * Deferred IRQ works are queued from the hard IRQ handlers, so the
+	 * workqueue must exist before any IRQ is requested.
+	 */
+	dw->wq = alloc_workqueue("dw-edma:%s", WQ_UNBOUND | WQ_HIGHPRI, 0,
+				 dev_name(chip->dev));
+	if (!dw->wq)
+		return -ENOMEM;
+
 	/* Request IRQs */
 	err = dw_edma_irq_request(dw, &wr_alloc, &rd_alloc);
-	if (err)
+	if (err) {
+		destroy_workqueue(dw->wq);
 		return err;
+	}
 
 	/* Allocate a dedicated virtual IRQ for interrupt-emulation doorbells */
 	err = dw_edma_emul_irq_alloc(dw);
@@ -1221,6 +1274,7 @@ err_irq_free:
 	for (i = (dw->nr_irqs - 1); i >= 0; i--)
 		free_irq(chip->ops->irq_vector(dev, i), &dw->irq[i]);
 	dw_edma_emul_irq_free(dw);
+	destroy_workqueue(dw->wq);
 
 	return err;
 }
@@ -1244,6 +1298,11 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	for (i = (dw->nr_irqs - 1); i >= 0; i--)
 		free_irq(chip->ops->irq_vector(dev, i), &dw->irq[i]);
 	dw_edma_emul_irq_free(dw);
+
+	for (i = 0; i < dw->wr_ch_cnt + dw->rd_ch_cnt; i++)
+		cancel_work_sync(&dw->chan[i].irq_work);
+
+	destroy_workqueue(dw->wq);
 
 	/* Deregister eDMA device */
 	dma_async_device_unregister(&dw->dma);
