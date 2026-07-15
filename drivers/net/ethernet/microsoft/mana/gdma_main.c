@@ -761,6 +761,7 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 	union gdma_eqe_info eqe_info;
 	enum gdma_eqe_type type;
 	struct gdma_event event;
+	struct gdma_queue __rcu **cq_table;
 	struct gdma_queue *cq;
 	struct gdma_eqe *eqe;
 	u32 cq_id;
@@ -772,10 +773,11 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 	switch (type) {
 	case GDMA_EQE_COMPLETION:
 		cq_id = eqe->details[0] & 0xFFFFFF;
-		if (WARN_ON_ONCE(cq_id >= gc->max_num_cqs))
+		cq_table = rcu_dereference(gc->cq_table);
+		if (WARN_ON_ONCE(cq_id >= gc->max_num_cqs || !cq_table))
 			break;
 
-		cq = gc->cq_table[cq_id];
+		cq = rcu_dereference(cq_table[cq_id]);
 		if (WARN_ON_ONCE(!cq || cq->type != GDMA_CQ || cq->id != cq_id))
 			break;
 
@@ -1082,15 +1084,28 @@ static void mana_gd_create_cq(const struct gdma_queue_spec *spec,
 static void mana_gd_destroy_cq(struct gdma_context *gc,
 			       struct gdma_queue *queue)
 {
+	struct gdma_queue __rcu **cq_table;
 	u32 id = queue->id;
 
-	if (id >= gc->max_num_cqs)
+	/* No rcu_read_lock() here: mana_gd_destroy_cq() runs only on the
+	 * CQ-destroy/teardown path, where the base cq_table is stable.  See
+	 * the lifecycle note on gdma_context::cq_table in gdma.h for why the
+	 * "true" predicate is sound.
+	 */
+	cq_table = rcu_dereference_protected(gc->cq_table, true);
+	if (!cq_table || id >= gc->max_num_cqs)
 		return;
 
-	if (!gc->cq_table[id])
+	if (!rcu_access_pointer(cq_table[id]))
 		return;
 
-	gc->cq_table[id] = NULL;
+	rcu_assign_pointer(cq_table[id], NULL);
+
+	/* Wait for in-flight EQ handlers that may have loaded the old
+	 * pointer via rcu_dereference() to finish before the caller
+	 * frees the CQ memory.
+	 */
+	synchronize_rcu();
 }
 
 int mana_gd_create_hwc_queue(struct gdma_dev *gd,

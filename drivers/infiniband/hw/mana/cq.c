@@ -131,12 +131,20 @@ static void mana_ib_cq_handler(void *ctx, struct gdma_queue *gdma_cq)
 int mana_ib_install_cq_cb(struct mana_ib_dev *mdev, struct mana_ib_cq *cq)
 {
 	struct gdma_context *gc = mdev_to_gc(mdev);
+	struct gdma_queue __rcu **cq_table;
 	struct gdma_queue *gdma_cq;
 
-	if (cq->queue.id >= gc->max_num_cqs)
+	/* No rcu_read_lock(): install/remove run within the IB device
+	 * lifetime, which mana_rdma_remove() (ib_unregister_device) drains
+	 * before the base cq_table can be freed.  See gdma_context::cq_table
+	 * in gdma.h for why "true" is sound.
+	 */
+	cq_table = rcu_dereference_protected(gc->cq_table, true);
+	if (!cq_table || cq->queue.id >= gc->max_num_cqs)
 		return -EINVAL;
+
 	/* Create CQ table entry, sharing a CQ between WQs is not supported */
-	if (gc->cq_table[cq->queue.id])
+	if (rcu_access_pointer(cq_table[cq->queue.id]))
 		return -EINVAL;
 	if (cq->queue.kmem)
 		gdma_cq = cq->queue.kmem;
@@ -149,23 +157,49 @@ int mana_ib_install_cq_cb(struct mana_ib_dev *mdev, struct mana_ib_cq *cq)
 	gdma_cq->type = GDMA_CQ;
 	gdma_cq->cq.callback = mana_ib_cq_handler;
 	gdma_cq->id = cq->queue.id;
-	gc->cq_table[cq->queue.id] = gdma_cq;
+	rcu_assign_pointer(cq_table[cq->queue.id], gdma_cq);
 	return 0;
 }
 
 void mana_ib_remove_cq_cb(struct mana_ib_dev *mdev, struct mana_ib_cq *cq)
 {
 	struct gdma_context *gc = mdev_to_gc(mdev);
+	struct gdma_queue __rcu **cq_table;
+	struct gdma_queue *gdma_cq;
 
-	if (cq->queue.id >= gc->max_num_cqs || cq->queue.id == INVALID_QUEUE_ID)
+	if (cq->queue.id == INVALID_QUEUE_ID)
 		return;
 
 	if (cq->queue.kmem)
 	/* Then it will be cleaned and removed by the mana */
 		return;
 
-	kfree(gc->cq_table[cq->queue.id]);
-	gc->cq_table[cq->queue.id] = NULL;
+	/* No rcu_read_lock(): like mana_ib_install_cq_cb(), this runs within
+	 * the IB device lifetime that mana_rdma_remove() drains before the
+	 * base cq_table can be freed.  See gdma_context::cq_table in gdma.h.
+	 */
+	cq_table = rcu_dereference_protected(gc->cq_table, true);
+	if (!cq_table || cq->queue.id >= gc->max_num_cqs)
+		return;
+	/* Removers for a given CQ are serialized by the IB core, so the slot
+	 * is read and cleared without rcu_read_lock() or atomicity: a CQ is
+	 * never torn down while a live QP references it (cq->usecnt), nor
+	 * while the QP-create that installed the entry is still running (that
+	 * create holds a reference on the CQ uobject across its error path,
+	 * before usecnt is taken).  Any double-remove is therefore sequential
+	 * -- the later caller sees the NULL stored below and returns.
+	 */
+	gdma_cq = rcu_dereference_protected(cq_table[cq->queue.id], true);
+	if (!gdma_cq)
+		return;  /* already removed by a prior teardown path */
+
+	rcu_assign_pointer(cq_table[cq->queue.id], NULL);
+
+	/* Wait for in-flight EQ handlers that may have loaded the old
+	 * pointer via rcu_dereference() to finish before freeing.
+	 */
+	synchronize_rcu();
+	kfree(gdma_cq);
 }
 
 int mana_ib_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
