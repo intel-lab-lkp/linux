@@ -18,6 +18,8 @@
 #include <video/mipi_display.h>
 #include <video/videomode.h>
 
+#include <drm/display/drm_dsc.h>
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_bridge_connector.h>
@@ -71,11 +73,12 @@
 
 #define DSI_PSCTRL		0x1c
 #define DSI_PS_WC			GENMASK(13, 0)
-#define DSI_PS_SEL			GENMASK(17, 16)
+#define DSI_PS_SEL			GENMASK(19, 16)
 #define PACKED_PS_16BIT_RGB565		0
 #define PACKED_PS_18BIT_RGB666		1
 #define LOOSELY_PS_24BIT_RGB666		2
 #define PACKED_PS_24BIT_RGB888		3
+#define COMPRESSED_PS_DSC		5
 
 #define DSI_VSA_NL		0x20
 #define DSI_VBP_NL		0x24
@@ -203,6 +206,7 @@ struct mtk_dsi {
 	struct drm_bridge bridge;
 	struct drm_bridge *next_bridge;
 	struct drm_connector *connector;
+	struct drm_dsc_config *dsc;
 	struct phy *phy;
 
 	void __iomem *regs;
@@ -393,9 +397,35 @@ static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 	writel(regval, dsi->regs + DSI_TXRX_CTRL);
 }
 
-static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
+static void mtk_dsi_ps_control_dsc(struct mtk_dsi *dsi, bool config_vact)
 {
-	u32 dsi_buf_bpp, ps_val, ps_wc, vact_nl;
+	const struct mtk_dsi_driver_data *data = dsi->driver_data;
+	const u16 *reg_main = dsi->driver_data->reg_main;
+	const short dsi_buf_bpp = 3;
+	u32 ps_wc;
+
+	/* Word count */
+	ps_wc = FIELD_PREP(DSI_PS_WC, 2 * dsi->dsc->slice_chunk_size);
+
+	if (config_vact) {
+		writel(FIELD_PREP(VACT_NL, dsi->vm.vactive),
+		       dsi->regs + reg_main[DSI_VACT_NL]);
+		writel(ps_wc, dsi->regs + reg_main[DSI_HSTX_CKL_WC]);
+	}
+
+	/* Always use DSC Pixel Stream type */
+	writel(ps_wc | FIELD_PREP(DSI_PS_SEL, COMPRESSED_PS_DSC),
+	       dsi->regs + reg_main[DSI_PSCTRL]);
+
+	if (data->has_size_ctl)
+		writel(FIELD_PREP(DSI_HEIGHT, dsi->vm.vactive) |
+		       FIELD_PREP(DSI_WIDTH, (ps_wc + dsi_buf_bpp - 1) / dsi_buf_bpp),
+		       dsi->regs + reg_main[DSI_SIZE_CON]);
+}
+
+static void mtk_dsi_ps_control_uncompressed(struct mtk_dsi *dsi, bool config_vact)
+{
+	u32 dsi_buf_bpp, ps_val, ps_wc, size_val, vact_nl;
 
 	if (dsi->format == MIPI_DSI_FMT_RGB565)
 		dsi_buf_bpp = 2;
@@ -430,6 +460,21 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 		writel(ps_wc, dsi->regs + DSI_HSTX_CKL_WC);
 	}
 	writel(ps_val, dsi->regs + DSI_PSCTRL);
+
+	if (dsi->driver_data->has_size_ctl) {
+		size_val = FIELD_PREP(DSI_HEIGHT, dsi->vm.vactive);
+		size_val |= FIELD_PREP(DSI_WIDTH, dsi->vm.hactive);
+
+		writel(size_val, dsi->regs + DSI_SIZE_CON);
+	}
+}
+
+static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
+{
+	if (dsi->dsc)
+		mtk_dsi_ps_control_dsc(dsi, config_vact);
+	else
+		mtk_dsi_ps_control_uncompressed(dsi, config_vact);
 }
 
 static void mtk_dsi_config_vdo_timing_per_frame_lp(struct mtk_dsi *dsi)
@@ -565,26 +610,68 @@ static void mtk_dsi_config_vdo_timing_per_line_lp(struct mtk_dsi *dsi)
 	writel(horizontal_frontporch_byte, dsi->regs + DSI_HFP_WC);
 }
 
-static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
+static int mtk_dsi_set_dsc_params(struct mtk_dsi *dsi)
+{
+	struct drm_dsc_config *dsc = dsi->dsc;
+	struct device *dev = dsi->host.dev;
+	int ret;
+
+	if (dsc->bits_per_pixel & GENMASK(3, 0)) {
+		dev_err(dev, "Fractional bits_per_pixel not supported\n");
+		return -EINVAL;
+	}
+
+	if (dsc->bits_per_component != 8) {
+		dev_err(dev, "%u bits per component is not supported\n",
+			dsc->bits_per_component);
+		return -EINVAL;
+	}
+
+	dsc->simple_422 = false;
+	dsc->convert_rgb = true;
+	dsc->vbr_enable = false;
+
+	drm_dsc_set_const_params(dsc);
+	drm_dsc_set_rc_buf_thresh(dsc);
+
+	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (ret) {
+		dev_err(dev, "Cannot find DSC RC params\n");
+		return ret;
+	}
+
+	dsc->initial_scale_value = drm_dsc_initial_scale_value(dsc);
+	dsc->line_buf_depth = dsc->bits_per_component + 1;
+
+	return drm_dsc_compute_rc_parameters(dsc);
+}
+
+static int mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 {
 	struct videomode *vm = &dsi->vm;
+	int ret;
 
 	writel(vm->vsync_len, dsi->regs + DSI_VSA_NL);
 	writel(vm->vback_porch, dsi->regs + DSI_VBP_NL);
 	writel(vm->vfront_porch, dsi->regs + DSI_VFP_NL);
 	writel(vm->vactive, dsi->regs + DSI_VACT_NL);
 
-	if (dsi->driver_data->has_size_ctl)
-		writel(FIELD_PREP(DSI_HEIGHT, vm->vactive) |
-			FIELD_PREP(DSI_WIDTH, vm->hactive),
-			dsi->regs + DSI_SIZE_CON);
-
 	if (dsi->driver_data->support_per_frame_lp)
 		mtk_dsi_config_vdo_timing_per_frame_lp(dsi);
 	else
 		mtk_dsi_config_vdo_timing_per_line_lp(dsi);
 
-	mtk_dsi_ps_control(dsi, false);
+	if (dsi->dsc) {
+		ret = mtk_dsi_set_dsc_params(dsi);
+		if (ret)
+			return ret;
+
+		mtk_dsi_ps_control(dsi, true);
+	} else {
+		mtk_dsi_ps_control(dsi, false);
+	}
+
+	return 0;
 }
 
 static void mtk_dsi_start(struct mtk_dsi *dsi)
@@ -741,12 +828,19 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	mtk_dsi_ps_control(dsi, true);
 	mtk_dsi_set_vm_cmd(dsi);
-	mtk_dsi_config_vdo_timing(dsi);
+	ret = mtk_dsi_config_vdo_timing(dsi);
+	if (ret)
+		goto err_disable_dsi_and_digital_clk;
+
 	mtk_dsi_set_interrupt_enable(dsi);
 	mtk_dsi_lane_ready(dsi);
 	mtk_dsi_clk_hs_mode(dsi, 1);
 
 	return 0;
+
+err_disable_dsi_and_digital_clk:
+	mtk_dsi_disable(dsi);
+	clk_disable_unprepare(dsi->digital_clk);
 err_disable_engine_clk:
 	clk_disable_unprepare(dsi->engine_clk);
 err_phy_power_off:
@@ -883,6 +977,28 @@ mtk_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 	if (mode->clock * bpp / dsi->lanes > 1500000)
 		return MODE_CLOCK_HIGH;
 
+	if (dsi->dsc) {
+		if (dsi->dsc->slice_width == 0 || dsi->dsc->slice_height == 0) {
+			dev_err(dsi->host.dev,
+				"DSC: Slice width %u height %u not valid!\n",
+				dsi->dsc->slice_width, dsi->dsc->slice_height);
+			return MODE_BAD;
+		}
+
+		if (mode->hdisplay % dsi->dsc->slice_width) {
+			dev_dbg(dsi->host.dev,
+				"DSC: hdisplay %u is not a multiple of slice width %u\n",
+				dsi->dsc->slice_width, mode->hdisplay);
+			return MODE_H_ILLEGAL;
+		}
+		if (mode->vdisplay % dsi->dsc->slice_height) {
+			dev_dbg(dsi->host.dev,
+				"DSC: vdisplay %u is not a multiple of slice height %u\n",
+				dsi->dsc->slice_height, mode->vdisplay);
+			return MODE_V_ILLEGAL;
+		}
+	}
+
 	return MODE_OK;
 }
 
@@ -911,6 +1027,13 @@ void mtk_dsi_ddp_stop(struct device *dev)
 	struct mtk_dsi *dsi = dev_get_drvdata(dev);
 
 	mtk_dsi_poweroff(dsi);
+}
+
+struct drm_dsc_config *mtk_dsi_get_dsc_config(struct device *dev)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+
+	return dsi->dsc;
 }
 
 static int mtk_dsi_encoder_init(struct drm_device *drm, struct mtk_dsi *dsi)
@@ -1006,12 +1129,16 @@ static int mtk_dsi_host_attach(struct mipi_dsi_host *host,
 			return PTR_ERR(dsi->next_bridge);
 	}
 
+	if (device->dsc)
+		dsi->dsc = device->dsc;
+
 	drm_bridge_add(&dsi->bridge);
 
 	ret = component_add(host->dev, &mtk_dsi_component_ops);
 	if (ret) {
 		drm_err(drm, "failed to add dsi_host component: %d\n", ret);
 		drm_bridge_remove(&dsi->bridge);
+		dsi->dsc = NULL;
 		return ret;
 	}
 
@@ -1025,6 +1152,8 @@ static int mtk_dsi_host_detach(struct mipi_dsi_host *host,
 
 	component_del(host->dev, &mtk_dsi_component_ops);
 	drm_bridge_remove(&dsi->bridge);
+	dsi->dsc = NULL;
+
 	return 0;
 }
 

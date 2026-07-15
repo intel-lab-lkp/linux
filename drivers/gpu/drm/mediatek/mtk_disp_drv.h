@@ -12,6 +12,8 @@
 #include "mtk_mdp_rdma.h"
 #include "mtk_plane.h"
 
+struct drm_dsc_config;
+
 int mtk_aal_clk_enable(struct device *dev);
 void mtk_aal_clk_disable(struct device *dev);
 void mtk_aal_config(struct device *dev, unsigned int w,
@@ -47,9 +49,16 @@ void mtk_dpi_start(struct device *dev);
 void mtk_dpi_stop(struct device *dev);
 unsigned int mtk_dpi_encoder_index(struct device *dev);
 
+int mtk_dsc_clk_enable(struct device *dev);
+void mtk_dsc_clk_disable(struct device *dev);
+void mtk_dsc_setup(struct device *dev, struct drm_dsc_config *dsc_cfg);
+void mtk_dsc_start(struct device *dev);
+void mtk_dsc_stop(struct device *dev);
+
 void mtk_dsi_ddp_start(struct device *dev);
 void mtk_dsi_ddp_stop(struct device *dev);
 unsigned int mtk_dsi_encoder_index(struct device *dev);
+struct drm_dsc_config *mtk_dsi_get_dsc_config(struct device *dev);
 
 int mtk_gamma_clk_enable(struct device *dev);
 void mtk_gamma_clk_disable(struct device *dev);
