@@ -181,6 +181,26 @@ void mtk_mdp_rdma_config(struct device *dev, struct mtk_mdp_rdma_cfg *cfg,
 const u32 *mtk_mdp_rdma_get_formats(struct device *dev);
 size_t mtk_mdp_rdma_get_num_formats(struct device *dev);
 
+int mtk_wdma_clk_enable(struct device *dev);
+void mtk_wdma_clk_disable(struct device *dev);
+void mtk_wdma_config(struct device *dev, unsigned int width,
+		     unsigned int height, unsigned int vrefresh,
+		     unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
+unsigned int mtk_wdma_layer_nr(struct device *dev);
+void mtk_wdma_layer_config(struct device *dev, unsigned int idx,
+			   struct mtk_plane_state *state,
+			   struct cmdq_pkt *cmdq_pkt);
+void mtk_wdma_start(struct device *dev);
+void mtk_wdma_stop(struct device *dev);
+void mtk_wdma_register_vblank_cb(struct device *dev,
+				 void (*vblank_cb)(void *),
+				 void *vblank_cb_data);
+void mtk_wdma_unregister_vblank_cb(struct device *dev);
+void mtk_wdma_enable_vblank(struct device *dev);
+void mtk_wdma_disable_vblank(struct device *dev);
+const u32 *mtk_wdma_get_formats(struct device *dev);
+size_t mtk_wdma_get_num_formats(struct device *dev);
+
 int mtk_padding_clk_enable(struct device *dev);
 void mtk_padding_clk_disable(struct device *dev);
 void mtk_padding_start(struct device *dev);
