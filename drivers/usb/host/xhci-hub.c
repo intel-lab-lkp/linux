@@ -766,17 +766,30 @@ static int xhci_exit_test_mode(struct xhci_hcd *xhci)
 enum usb_link_tunnel_mode xhci_port_is_tunneled(struct xhci_hcd *xhci,
 						struct xhci_port *port)
 {
+	void __iomem *base = &xhci->cap_regs->hc_capbase;
 	struct usb_hcd *hcd;
-	void __iomem *base;
 	u32 offset;
+	u32 val;
 
-	/* Don't try and probe this capability for non-Intel hosts */
+	/* Prefer the XHCI v1.2 ext_cap if advertised */
+	offset = xhci_find_next_ext_cap(base, 0, XHCI_EXT_CAPS_USB3_TUNNELING);
+	if (offset) {
+		if (!(readl(base + offset) & XHCI_USB3_TUNNELING_SUPPORTED))
+			return USB_LINK_NATIVE;
+
+		val = xhci_portsc_readl(port);
+		if (val & PORT_TM)
+			return USB_LINK_TUNNELED;
+
+		return USB_LINK_NATIVE;
+	}
+
+	/* Fall back to the legacy Intel-specific ext_cap */
 	hcd = xhci_to_hcd(xhci);
 	if (!dev_is_pci(hcd->self.controller) ||
 	    to_pci_dev(hcd->self.controller)->vendor != PCI_VENDOR_ID_INTEL)
 		return USB_LINK_UNKNOWN;
 
-	base = &xhci->cap_regs->hc_capbase;
 	offset = xhci_find_next_ext_cap(base, 0, XHCI_EXT_CAPS_INTEL_SPR_SHADOW);
 
 	if (offset && offset <= XHCI_INTEL_SPR_ESS_PORT_OFFSET) {

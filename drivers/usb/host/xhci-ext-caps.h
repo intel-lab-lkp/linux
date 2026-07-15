@@ -66,6 +66,9 @@
 #define XHCI_HLC               (1 << 19)
 #define XHCI_BLC               (1 << 20)
 
+/* USB3 tunneling support capability - section 7.11 */
+#define XHCI_USB3_TUNNELING_SUPPORTED	BIT(16)
+
 /* Intel SPR shadow capability */
 #define XHCI_INTEL_SPR_ESS_PORT_OFFSET  0x8ac4	/* SuperSpeed port control */
 #define XHCI_INTEL_SPR_TUNEN	BIT(4)		/* Tunnel mode enabled */
