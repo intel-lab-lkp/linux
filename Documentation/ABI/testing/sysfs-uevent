@@ -49,3 +49,28 @@ Description:
 
 Users:
                 udev, userspace tools generating synthetic uevents
+
+What:          DEVICE_ENUMERATION_FAILURE
+Date:          July 2026
+KernelVersion: 7.3
+Description:
+               Some devices may be detected but fail to enumerate
+               due to protocol-level errors or invalid responses.
+
+               A KOBJ_CHANGE uevent includes the following environment
+               variable when this occurs:
+
+                 DEVICE_ENUMERATION_FAILURE=<dev_name>
+
+               The value is the kernel device name of the device for
+               which enumeration failed, as returned by dev_name().
+
+               Example (USB):
+
+               ACTION=change
+               SUBSYSTEM=usb
+               DEVTYPE=usb_interface
+               DEVICE_ENUMERATION_FAILURE=usb1-port1
+
+Users:
+               udev, userspace tools monitoring device enumeration failures
