@@ -71,7 +71,40 @@ uint rtw_hal_deinit(struct adapter *padapter)
 
 void rtw_hal_set_hwreg(struct adapter *padapter, u8 variable, u8 *val)
 {
-	SetHwReg8723BS(padapter, variable, val);
+	u8 val8;
+
+	switch (variable) {
+	case HW_VAR_SET_RPWM:
+		/*  rpwm value only use BIT0(clock bit) , BIT6(Ack bit), and BIT7(Toggle bit) */
+		/*  BIT0 value - 1: 32k, 0:40MHz. */
+		/*  BIT6 value - 1: report cpwm value after success set, 0:do not report. */
+		/*  BIT7 value - Toggle bit change. */
+		{
+			val8 = *val;
+			val8 &= 0xC1;
+			rtw_write8(padapter, SDIO_LOCAL_BASE | SDIO_REG_HRPWM1, val8);
+		}
+		break;
+	case HW_VAR_SET_REQ_FW_PS:
+		{
+			u8 req_fw_ps = 0;
+
+			req_fw_ps = rtw_read8(padapter, 0x8f);
+			req_fw_ps |= 0x10;
+			rtw_write8(padapter, 0x8f, req_fw_ps);
+		}
+		break;
+	case HW_VAR_RXDMA_AGG_PG_TH:
+		val8 = *val;
+		break;
+
+	case HW_VAR_DM_IN_LPS:
+		rtl8723b_hal_dm_in_lps(padapter);
+		break;
+	default:
+		SetHwReg8723B(padapter, variable, val);
+		break;
+	}
 }
 
 void rtw_hal_get_hwreg(struct adapter *padapter, u8 variable, u8 *val)

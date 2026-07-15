@@ -5467,7 +5467,7 @@ u8 setkey_hdl(struct adapter *padapter, u8 *pbuf)
 		rtw_hal_set_hwreg(padapter, HW_VAR_SEC_DK_CFG, (u8 *)true);
 
 	/* allow multicast packets to driver */
-	SetHwReg8723BS(padapter, HW_VAR_ON_RCR_AM, null_addr);
+	rtw_hal_set_hwreg(padapter, HW_VAR_ON_RCR_AM, null_addr);
 
 	return H2C_SUCCESS;
 }
