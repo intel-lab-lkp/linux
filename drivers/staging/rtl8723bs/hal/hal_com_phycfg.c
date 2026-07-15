@@ -367,20 +367,22 @@ void PHY_StoreTxPowerByRate(
 	}
 }
 
-static void
-phy_ConvertTxPowerByRateInDbmToRelativeValues(
-struct adapter *padapter
-	)
+static void phy_ConvertTxPowerByRateInDbmToRelativeValues(struct adapter *padapter)
 {
-	u8	base = 0, i = 0, value = 0, path = 0;
+	u8 base = 0;
+	u8 i = 0;
+	u8 value = 0;
+	u8 path = 0;
 	u8	cckRates[4] = {
 		MGN_1M, MGN_2M, MGN_5_5M, MGN_11M
 	};
 	u8	ofdmRates[8] = {
-		MGN_6M, MGN_9M, MGN_12M, MGN_18M, MGN_24M, MGN_36M, MGN_48M, MGN_54M
+		MGN_6M, MGN_9M, MGN_12M, MGN_18M,
+		MGN_24M, MGN_36M, MGN_48M, MGN_54M
 	};
 	u8 mcs0_7Rates[8] = {
-		MGN_MCS0, MGN_MCS1, MGN_MCS2, MGN_MCS3, MGN_MCS4, MGN_MCS5, MGN_MCS6, MGN_MCS7
+		MGN_MCS0, MGN_MCS1, MGN_MCS2, MGN_MCS3,
+		MGN_MCS4, MGN_MCS5, MGN_MCS6, MGN_MCS7
 	};
 	for (path = RF_PATH_A; path < RF_PATH_MAX; ++path) {
 		/*  CCK */
@@ -392,14 +394,14 @@ struct adapter *padapter
 
 		/*  OFDM */
 		base = PHY_GetTxPowerByRate(padapter, path, MGN_54M);
-		for (i = 0; i < sizeof(ofdmRates); ++i) {
+		for (i = 0; i < ARRAY_SIZE(ofdmRates); ++i) {
 			value = PHY_GetTxPowerByRate(padapter, path, ofdmRates[i]);
 			PHY_SetTxPowerByRate(padapter, path, ofdmRates[i], value - base);
 		}
 
 		/*  HT MCS0~7 */
 		base = PHY_GetTxPowerByRate(padapter, path, MGN_MCS7);
-		for (i = 0; i < sizeof(mcs0_7Rates); ++i) {
+		for (i = 0; i < ARRAY_SIZE(mcs0_7Rates); ++i) {
 			value = PHY_GetTxPowerByRate(padapter, path, mcs0_7Rates[i]);
 			PHY_SetTxPowerByRate(padapter, path, mcs0_7Rates[i], value - base);
 		}
