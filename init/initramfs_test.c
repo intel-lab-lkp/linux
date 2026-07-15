@@ -186,6 +186,9 @@ static void __init initramfs_test_fname_overrun(struct kunit *test)
 	 * are already available (e.g. no compression).
 	 */
 	cpio_srcbuf = kmalloc(CPIO_HDRLEN + PATH_MAX + 3, GFP_KERNEL);
+	if (!cpio_srcbuf)
+		return;
+
 	memset(cpio_srcbuf, 'B', CPIO_HDRLEN + PATH_MAX + 3);
 	/* limit overrun to avoid crashes / filp_open() ENAMETOOLONG */
 	cpio_srcbuf[CPIO_HDRLEN + strlen(c[0].fname) + 20] = '\0';
