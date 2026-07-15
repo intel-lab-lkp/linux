@@ -66,8 +66,17 @@ get_cpuid(char *buffer, size_t sz, struct perf_cpu cpu __maybe_unused)
 char *get_cpuid_str(struct perf_cpu cpu __maybe_unused)
 {
 	char *buf = malloc(128);
+	char vendor[16];
+	unsigned int lvl;
 
-	if (buf && __get_cpuid(buf, 128, "%s-%u-%X-%X$") < 0) {
+	if (!buf)
+		return NULL;
+
+	get_cpuid_0(vendor, &lvl);
+	/* Intel mapfile entries use 2-character hex model numbers */
+	const char *fmt = !strcmp(vendor, "GenuineIntel") ? "%s-%u-%02X-%X$" : "%s-%u-%X-%X$";
+
+	if (__get_cpuid(buf, 128, fmt) < 0) {
 		free(buf);
 		return NULL;
 	}
