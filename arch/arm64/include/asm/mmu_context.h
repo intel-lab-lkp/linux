@@ -27,6 +27,7 @@
 #include <asm/tlbflush.h>
 
 extern bool rodata_full;
+extern pgd_t *percpu_pgd[NR_CPUS];
 
 static inline void contextidr_thread_switch(struct task_struct *next)
 {
@@ -138,7 +139,13 @@ void __cpu_replace_ttbr1(pgd_t *pgdp, bool cnp);
 
 static inline void cpu_enable_swapper_cnp(void)
 {
-	__cpu_replace_ttbr1(lm_alias(swapper_pg_dir), true);
+	unsigned int cpu = smp_processor_id();
+	pgd_t *ttbr1 = percpu_pgd[cpu];
+
+	if (cpu == 0)
+		ttbr1 = lm_alias(swapper_pg_dir);
+
+	__cpu_replace_ttbr1(ttbr1, false);
 }
 
 static inline void cpu_replace_ttbr1(pgd_t *pgdp)
