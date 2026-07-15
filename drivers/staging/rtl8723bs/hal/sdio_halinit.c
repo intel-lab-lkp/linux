@@ -1077,28 +1077,7 @@ void rtw_read_adapter_info(struct adapter *padapter)
 
 	_ReadAdapterInfo8723BS(padapter);
 }
-/*
- * If variable not handled here,
- * some variables will be processed in GetHwReg8723B()
- */
-void GetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
-{
-	switch (variable) {
-	case HW_VAR_CPWM:
-		*val = rtw_read8(padapter, SDIO_LOCAL_BASE | SDIO_REG_HCPWM1_8723B);
-		break;
 
-	case HW_VAR_FW_PS_STATE:
-		{
-			/* 3. read dword 0x88               driver read fw ps state */
-			*((u16 *)val) = rtw_read16(padapter, 0x88);
-		}
-		break;
-	default:
-		GetHwReg8723B(padapter, variable, val);
-		break;
-	}
-}
 
 void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
 {

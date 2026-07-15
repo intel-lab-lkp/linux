@@ -109,7 +109,21 @@ void rtw_hal_set_hwreg(struct adapter *padapter, u8 variable, u8 *val)
 
 void rtw_hal_get_hwreg(struct adapter *padapter, u8 variable, u8 *val)
 {
-	GetHwReg8723BS(padapter, variable, val);
+	switch (variable) {
+	case HW_VAR_CPWM:
+		*val = rtw_read8(padapter, SDIO_LOCAL_BASE | SDIO_REG_HCPWM1_8723B);
+		break;
+
+	case HW_VAR_FW_PS_STATE:
+		{
+			/* 3. read dword 0x88               driver read fw ps state */
+			*((u16 *)val) = rtw_read16(padapter, 0x88);
+		}
+		break;
+	default:
+		GetHwReg8723B(padapter, variable, val);
+		break;
+		}
 }
 
 void rtw_hal_set_hwreg_with_buf(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
