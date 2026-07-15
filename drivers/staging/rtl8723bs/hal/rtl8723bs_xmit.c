@@ -496,26 +496,6 @@ s32 rtl8723bs_hal_xmit(
 	return false;
 }
 
-s32	rtl8723bs_hal_xmitframe_enqueue(
-	struct adapter *padapter, struct xmit_frame *pxmitframe
-)
-{
-	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
-	s32 err;
-
-	err = rtw_xmitframe_enqueue(padapter, pxmitframe);
-	if (err) {
-		rtw_free_xmitframe(pxmitpriv, pxmitframe);
-
-		pxmitpriv->tx_drop++;
-	} else {
-		complete(&pxmitpriv->SdioXmitStart);
-	}
-
-	return err;
-
-}
-
 /*
  * Return
  *_SUCCESS	start thread ok

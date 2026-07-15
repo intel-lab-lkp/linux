@@ -202,7 +202,19 @@ u8 rtw_hal_check_ips_status(struct adapter *padapter)
 
 int rtw_hal_xmitframe_enqueue(struct adapter *padapter, struct xmit_frame *pxmitframe)
 {
-	return rtl8723bs_hal_xmitframe_enqueue(padapter, pxmitframe);
+	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
+	s32 err;
+
+	err = rtw_xmitframe_enqueue(padapter, pxmitframe);
+	if (err) {
+		rtw_free_xmitframe(pxmitpriv, pxmitframe);
+
+		pxmitpriv->tx_drop++;
+	} else {
+		complete(&pxmitpriv->SdioXmitStart);
+	}
+
+	return err;
 }
 
 s32	rtw_hal_xmit(struct adapter *padapter, struct xmit_frame *pxmitframe)
