@@ -33,11 +33,27 @@ static inline void pud_populate(struct mm_struct *mm, pud_t *pudp, pmd_t *pmdp)
 	pudval |= (mm == &init_mm) ? PUD_TABLE_UXN : PUD_TABLE_PXN;
 	__pud_populate(pudp, __pa(pmdp), pudval);
 }
+
+#ifdef CONFIG_ARCH_HAS_PUD_POPULATE_SYNC
+static inline void pud_populate_sync(unsigned long addr, pud_t *pudp, pmd_t *pmdp)
+{
+	pud_populate(&init_mm, pudp, pmdp);
+	if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_PUD_MODIFIED)
+		arch_sync_kernel_mappings(addr, addr);
+}
+#endif
 #else
 static inline void __pud_populate(pud_t *pudp, phys_addr_t pmdp, pudval_t prot)
 {
 	BUILD_BUG();
 }
+
+#ifdef CONFIG_ARCH_HAS_PUD_POPULATE_SYNC
+static inline void pud_populate_sync(unsigned long addr, pud_t *pudp, pmd_t *pmdp)
+{
+	BUILD_BUG();
+}
+#endif
 #endif	/* CONFIG_PGTABLE_LEVELS > 2 */
 
 #if CONFIG_PGTABLE_LEVELS > 3
@@ -121,4 +137,12 @@ pmd_populate(struct mm_struct *mm, pmd_t *pmdp, pgtable_t ptep)
 		       PMD_TYPE_TABLE | PMD_TABLE_AF | PMD_TABLE_PXN);
 }
 
+#ifdef CONFIG_ARCH_HAS_PMD_POPULATE_SYNC
+static inline void pmd_populate_sync(unsigned long addr, pmd_t *pmdp, pte_t *ptep)
+{
+	pmd_populate_kernel(&init_mm, pmdp, ptep);
+	if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_PMD_MODIFIED)
+		arch_sync_kernel_mappings(addr, addr);
+}
+#endif
 #endif
