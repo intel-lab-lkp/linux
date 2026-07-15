@@ -3831,6 +3831,50 @@ name_error:
 EXPORT_SYMBOL_GPL(device_add);
 
 /**
+ * device_enumeration_failure_notify - notify userspace of enumeration failure
+ * @dev: device that failed to enumerate a connected child
+ *
+ * Emit a KOBJ_CHANGE uevent with
+ * DEVICE_ENUMERATION_FAILURE=<dev_name>.
+ *
+ * If @dev has not yet emitted its ADD uevent, the event may be sent
+ * from the parent device instead.
+ *
+ * The caller must hold a reference to @dev.
+ *
+ * See Documentation/ABI/testing/sysfs-uevent for more details.
+ */
+void device_enumeration_failure_notify(struct device *dev)
+{
+	char *envp[2] = { NULL, NULL };
+	struct device *uevent_dev;
+
+	if (!dev)
+		return;
+
+	/*
+	 * If enumeration fails before @dev has emitted its ADD uevent, the
+	 * device may still be in an early state (e.g. without a bus or class
+	 * assigned). Emit the event from the parent device instead, while
+	 * including DEVICE_ENUMERATION_FAILURE=<dev_name>.
+	 *
+	 * The caller holds a reference to @dev, so dev->parent remains valid.
+	 */
+	uevent_dev = dev->kobj.state_add_uevent_sent ? dev : dev->parent;
+	if (!uevent_dev)
+		return;
+
+	envp[0] = kasprintf(GFP_KERNEL, "DEVICE_ENUMERATION_FAILURE=%s",
+			    dev_name(dev));
+	if (!envp[0])
+		return;
+
+	kobject_uevent_env(&uevent_dev->kobj, KOBJ_CHANGE, envp);
+	kfree(envp[0]);
+}
+EXPORT_SYMBOL_GPL(device_enumeration_failure_notify);
+
+/**
  * device_register - register a device with the system.
  * @dev: pointer to the device structure
  *

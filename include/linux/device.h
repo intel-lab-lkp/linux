@@ -1394,4 +1394,6 @@ static inline bool device_link_test(const struct device_link *link, u32 flags)
 #define MODULE_ALIAS_CHARDEV_MAJOR(major) \
 	MODULE_ALIAS("char-major-" __stringify(major) "-*")
 
+void device_enumeration_failure_notify(struct device *dev);
+
 #endif /* _DEVICE_H_ */
