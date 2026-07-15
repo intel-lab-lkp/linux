@@ -2378,10 +2378,7 @@ void EXhalbtc8723b2ant_InitHwConfig(struct btc_coexist *pBtCoexist, bool bWifiOn
 	halbtc8723b2ant_InitHwConfig(pBtCoexist, true);
 }
 
-void EXhalbtc8723b2ant_InitCoexDm(struct btc_coexist *pBtCoexist)
-{
-	halbtc8723b2ant_InitCoexDm(pBtCoexist);
-}
+
 
 void EXhalbtc8723b2ant_IpsNotify(struct btc_coexist *pBtCoexist, u8 type)
 {

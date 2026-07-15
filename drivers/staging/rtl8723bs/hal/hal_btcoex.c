@@ -846,7 +846,7 @@ void EXhalbtcoutsrc_InitCoexDm(struct btc_coexist *pBtCoexist)
 	pBtCoexist->statistics.cntInitCoexDm++;
 
 	if (pBtCoexist->boardInfo.btdmAntNum == 2)
-		EXhalbtc8723b2ant_InitCoexDm(pBtCoexist);
+		halbtc8723b2ant_InitCoexDm(pBtCoexist);
 	else if (pBtCoexist->boardInfo.btdmAntNum == 1)
 		EXhalbtc8723b1ant_InitCoexDm(pBtCoexist);
 
