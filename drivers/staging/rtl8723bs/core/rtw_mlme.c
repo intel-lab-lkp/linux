@@ -340,10 +340,12 @@ bool rtw_is_same_ibss(struct adapter *adapter, struct wlan_network *pnetwork)
 	return true;
 }
 
-inline int is_same_ess(struct wlan_bssid_ex *a, struct wlan_bssid_ex *b)
+static inline bool rtw_ssid_differ(struct wlan_bssid_ex *a, struct wlan_bssid_ex *b)
 {
-	return (a->ssid.ssid_length == b->ssid.ssid_length)
-		&&  !memcmp(a->ssid.ssid, b->ssid.ssid, a->ssid.ssid_length);
+	if (a->ssid.ssid_length != b->ssid.ssid_length)
+		return true;
+
+	return memcmp(a->ssid.ssid, b->ssid.ssid, a->ssid.ssid_length) != 0;
 }
 
 int is_same_network(struct wlan_bssid_ex *src, struct wlan_bssid_ex *dst, u8 feature)
@@ -1673,7 +1675,7 @@ static int rtw_check_roaming_candidate(struct mlme_priv *mlme
 	int updated = false;
 	struct adapter *adapter = container_of(mlme, struct adapter, mlmepriv);
 
-	if (!is_same_ess(&competitor->network, &mlme->cur_network.network))
+	if (rtw_ssid_differ(&competitor->network, &mlme->cur_network.network))
 		goto exit;
 
 	if (!rtw_is_desired_network(adapter, competitor))
@@ -1774,7 +1776,7 @@ static int rtw_check_join_candidate(struct mlme_priv *mlme
 	if (rtw_to_roam(adapter) > 0) {
 		if (jiffies_to_msecs(jiffies - competitor->last_scanned) >=
 		    mlme->roam_scanr_exp_ms ||
-		    !is_same_ess(&competitor->network, &mlme->cur_network.network))
+		    rtw_ssid_differ(&competitor->network, &mlme->cur_network.network))
 			goto exit;
 	}
 
