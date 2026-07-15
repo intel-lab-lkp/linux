@@ -98,6 +98,7 @@ static struct iopf_group *iopf_group_alloc(struct iommu_fault_param *iopf_param,
 	group->last_fault.fault = evt->fault;
 	INIT_LIST_HEAD(&group->faults);
 	INIT_LIST_HEAD(&group->pending_node);
+	group->response_pending = true;
 	list_add(&group->last_fault.list, &group->faults);
 
 	/* See if we have partial faults for this group */
@@ -314,13 +315,8 @@ int iopf_queue_flush_dev(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(iopf_queue_flush_dev);
 
-/**
- * iopf_group_response - Respond a group of page faults
- * @group: the group of faults with the same group id
- * @status: the response code
- */
-void iopf_group_response(struct iopf_group *group,
-			 enum iommu_page_response_code status)
+static void iopf_group_response_locked(struct iopf_group *group,
+				       enum iommu_page_response_code status)
 {
 	struct iommu_fault_param *fault_param = group->fault_param;
 	struct iopf_fault *iopf = &group->last_fault;
@@ -332,15 +328,50 @@ void iopf_group_response(struct iopf_group *group,
 		.code = status,
 	};
 
+	lockdep_assert_held(&fault_param->lock);
+
 	/* Only send response if there is a fault report pending */
-	mutex_lock(&fault_param->lock);
-	if (!list_empty(&group->pending_node)) {
-		ops->page_response(dev, &group->last_fault, &resp);
+	if (!group->response_pending)
+		return;
+
+	ops->page_response(dev, &group->last_fault, &resp);
+	group->response_pending = false;
+	if (!list_empty(&group->pending_node))
 		list_del_init(&group->pending_node);
-	}
+}
+
+/**
+ * iopf_group_response - Respond a group of page faults
+ * @group: the group of faults with the same group id
+ * @status: the response code
+ */
+void iopf_group_response(struct iopf_group *group,
+			 enum iommu_page_response_code status)
+{
+	struct iommu_fault_param *fault_param = group->fault_param;
+
+	mutex_lock(&fault_param->lock);
+	iopf_group_response_locked(group, status);
 	mutex_unlock(&fault_param->lock);
 }
 EXPORT_SYMBOL_GPL(iopf_group_response);
+
+/**
+ * iopf_group_take_ownership - Take ownership of a group of page faults
+ * @group: the group of faults whose ownership is transferred to the fault handler
+ *
+ * Remove the group from the generic IOPF pending list. The fault handler is
+ * responsible for responding to and freeing the group after this returns.
+ */
+void iopf_group_take_ownership(struct iopf_group *group)
+{
+	struct iommu_fault_param *fault_param = group->fault_param;
+
+	mutex_lock(&fault_param->lock);
+	list_del_init(&group->pending_node);
+	mutex_unlock(&fault_param->lock);
+}
+EXPORT_SYMBOL_GPL(iopf_group_take_ownership);
 
 /**
  * iopf_queue_discard_partial - Remove all pending partial fault
@@ -454,7 +485,6 @@ void iopf_queue_remove_device(struct iopf_queue *queue, struct device *dev)
 	struct iopf_group *group, *temp;
 	struct dev_iommu *param = dev->iommu;
 	struct iommu_fault_param *fault_param;
-	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	mutex_lock(&queue->lock);
 	mutex_lock(&param->lock);
@@ -469,15 +499,7 @@ void iopf_queue_remove_device(struct iopf_queue *queue, struct device *dev)
 		kfree(partial_iopf);
 
 	list_for_each_entry_safe(group, temp, &fault_param->faults, pending_node) {
-		struct iopf_fault *iopf = &group->last_fault;
-		struct iommu_page_response resp = {
-			.pasid = iopf->fault.prm.pasid,
-			.grpid = iopf->fault.prm.grpid,
-			.code = IOMMU_PAGE_RESP_INVALID
-		};
-
-		ops->page_response(dev, iopf, &resp);
-		list_del_init(&group->pending_node);
+		iopf_group_response_locked(group, IOMMU_PAGE_RESP_INVALID);
 		iopf_free_group(group);
 	}
 	mutex_unlock(&fault_param->lock);
