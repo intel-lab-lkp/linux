@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: GPL-2.0
+// Test: with tcp_purge_receive_queue disabled (default), receiving RST
+// in CLOSE_WAIT state does NOT purge the receive queue.
+// The unread data in the receive queue is still accessible to the
+// application.
+
+`./defaults.sh
+./set_sysctls.py /proc/sys/net/ipv4/tcp_purge_receive_queue=0`
+
+// Establish a connection (server side).
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+ +.1 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+// Remote sends 4KiB data so that receive queue is populated.
+ +.1 < . 1:4097(4096) ack 1 win 257
+   +0 > . 1:1(0) ack 4097
+
+// Remote sends FIN -> socket enters CLOSE_WAIT.
+ +.1 < F. 4097:4097(0) ack 1 win 257
+   +0~+.04 > . 1:1(0) ack 4098
+
+// Inject RST directly while in CLOSE_WAIT.
+ +.1 < R. 4098:4098(0) ack 1 win 257
+
+// With tcp_purge_receive_queue=0, the receive queue is NOT purged.
+// Data is still in the receive queue; read returns data.
+   +0 read(4, ..., 1) = 1
+
+   +0 close(4) = 0
+
+// Restore sysctls.
+`/tmp/sysctl_restore_${PPID}.sh`
