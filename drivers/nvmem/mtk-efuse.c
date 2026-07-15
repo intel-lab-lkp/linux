@@ -4,6 +4,7 @@
  * Author: Andrew-CT Chen <andrew-ct.chen@mediatek.com>
  */
 
+#include <linux/align.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
@@ -14,10 +15,12 @@
 
 struct mtk_efuse_pdata {
 	bool uses_post_processing;
+	bool needs_aligned_read;
 };
 
 struct mtk_efuse_priv {
 	void __iomem *base;
+	const struct mtk_efuse_pdata *data;
 };
 
 static int mtk_reg_read(void *context,
@@ -27,6 +30,26 @@ static int mtk_reg_read(void *context,
 	void __iomem *addr = priv->base + reg;
 	u8 *val = _val;
 	int i;
+
+	if (priv->data->needs_aligned_read) {
+		u32 pos, shift, val32;
+
+		for (i = 0; i < bytes; i++, val++) {
+			pos = reg + i;
+
+			/*
+			 * Read on 32-bit word boundary or if it's the first
+			 * iteration
+			 */
+			if (i == 0 || IS_ALIGNED(pos, 4))
+				val32 = readl(priv->base + (pos & ~3));
+
+			shift = (pos & 3) * 8;
+			*val = (val32 >> shift) & 0xff;
+		}
+
+		return 0;
+	}
 
 	for (i = 0; i < bytes; i++, val++)
 		*val = readb(addr + i);
@@ -67,7 +90,6 @@ static int mtk_efuse_probe(struct platform_device *pdev)
 	struct nvmem_device *nvmem;
 	struct nvmem_config econfig = {};
 	struct mtk_efuse_priv *priv;
-	const struct mtk_efuse_pdata *pdata;
 	struct platform_device *socinfo;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
@@ -78,7 +100,8 @@ static int mtk_efuse_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
-	pdata = device_get_match_data(dev);
+	priv->data = device_get_match_data(dev);
+
 	econfig.add_legacy_fixed_of_cells = true;
 	econfig.stride = 1;
 	econfig.word_size = 1;
@@ -86,7 +109,7 @@ static int mtk_efuse_probe(struct platform_device *pdev)
 	econfig.size = resource_size(res);
 	econfig.priv = priv;
 	econfig.dev = dev;
-	if (pdata->uses_post_processing)
+	if (priv->data->uses_post_processing)
 		econfig.fixup_dt_cell_info = &mtk_efuse_fixup_dt_cell_info;
 	nvmem = devm_nvmem_register(dev, &econfig);
 	if (IS_ERR(nvmem))
@@ -103,10 +126,12 @@ static int mtk_efuse_probe(struct platform_device *pdev)
 
 static const struct mtk_efuse_pdata mtk_mt8186_efuse_pdata = {
 	.uses_post_processing = true,
+	.needs_aligned_read = false,
 };
 
 static const struct mtk_efuse_pdata mtk_efuse_pdata = {
 	.uses_post_processing = false,
+	.needs_aligned_read = false,
 };
 
 static const struct of_device_id mtk_efuse_of_match[] = {
