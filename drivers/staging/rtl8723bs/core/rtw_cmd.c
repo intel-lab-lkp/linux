@@ -212,7 +212,7 @@ int rtw_init_evt_priv(struct evt_priv *pevtpriv)
 	return 0;
 }
 
-void _rtw_free_evt_priv(struct	evt_priv *pevtpriv)
+void rtw_free_evt_priv(struct	evt_priv *pevtpriv)
 {
 	_cancel_workitem_sync(&pevtpriv->c2h_wk);
 	while (pevtpriv->c2h_wk_alive)
@@ -286,10 +286,6 @@ struct	cmd_obj	*_rtw_dequeue_cmd(struct __queue *queue)
 	return obj;
 }
 
-void rtw_free_evt_priv(struct	evt_priv *pevtpriv)
-{
-	_rtw_free_evt_priv(pevtpriv);
-}
 
 void rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
 {
