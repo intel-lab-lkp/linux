@@ -729,11 +729,6 @@ static void halbtcoutsrc_SetBtReg(void *pBtcContext, u8 RegType, u32 RegAddr, u3
 	rtw_hal_fill_h2c_cmd(padapter, 0x67, 4, &(CmdBuffer2[0]));
 }
 
-static u32 halbtcoutsrc_GetBtReg(void *pBtcContext, u8 RegType, u32 RegAddr)
-{
-	/* To be implemented. Always return 0 temporarily */
-	return 0;
-}
 
 static void halbtcoutsrc_FillH2cCmd(void *pBtcContext, u8 elementId, u32 cmdLen, u8 *pCmdBuffer)
 {
@@ -808,7 +803,7 @@ void hal_btcoex_Initialize(void *padapter)
 
 	pBtCoexist->fBtcGet = halbtcoutsrc_Get;
 	pBtCoexist->fBtcSet = halbtcoutsrc_Set;
-	pBtCoexist->fBtcGetBtReg = halbtcoutsrc_GetBtReg;
+	pBtCoexist->fBtcGetBtReg = 0; /*not be implemented*/
 	pBtCoexist->fBtcSetBtReg = halbtcoutsrc_SetBtReg;
 
 	pBtCoexist->boardInfo.singleAntPath = 0;
