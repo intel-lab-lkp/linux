@@ -936,11 +936,16 @@ static ssize_t response_parse_tiny(struct opal_resp_tok *tok,
 }
 
 static ssize_t response_parse_short(struct opal_resp_tok *tok,
-				    const u8 *pos)
+				    const u8 *pos, size_t remaining)
 {
 	tok->pos = pos;
 	tok->len = (pos[0] & SHORT_ATOM_LEN_MASK) + 1;
 	tok->width = OPAL_WIDTH_SHORT;
+
+	if (tok->len > remaining) {
+		pr_debug("Short atom exceeds response subpacket\n");
+		return -EINVAL;
+	}
 
 	if (pos[0] & SHORT_ATOM_BYTESTRING) {
 		tok->type = OPAL_DTA_TOKENID_BYTESTRING;
@@ -966,11 +971,21 @@ static ssize_t response_parse_short(struct opal_resp_tok *tok,
 }
 
 static ssize_t response_parse_medium(struct opal_resp_tok *tok,
-				     const u8 *pos)
+				     const u8 *pos, size_t remaining)
 {
+	if (remaining < 2) {
+		pr_debug("Truncated medium atom header\n");
+		return -EINVAL;
+	}
+
 	tok->pos = pos;
 	tok->len = (((pos[0] & MEDIUM_ATOM_LEN_MASK) << 8) | pos[1]) + 2;
 	tok->width = OPAL_WIDTH_MEDIUM;
+
+	if (tok->len > remaining) {
+		pr_debug("Medium atom exceeds response subpacket\n");
+		return -EINVAL;
+	}
 
 	if (pos[0] & MEDIUM_ATOM_BYTESTRING)
 		tok->type = OPAL_DTA_TOKENID_BYTESTRING;
@@ -983,11 +998,21 @@ static ssize_t response_parse_medium(struct opal_resp_tok *tok,
 }
 
 static ssize_t response_parse_long(struct opal_resp_tok *tok,
-				   const u8 *pos)
+				   const u8 *pos, size_t remaining)
 {
+	if (remaining < 4) {
+		pr_debug("Truncated long atom header\n");
+		return -EINVAL;
+	}
+
 	tok->pos = pos;
 	tok->len = ((pos[1] << 16) | (pos[2] << 8) | pos[3]) + 4;
 	tok->width = OPAL_WIDTH_LONG;
+
+	if (tok->len > remaining) {
+		pr_debug("Long atom exceeds response subpacket\n");
+		return -EINVAL;
+	}
 
 	if (pos[0] & LONG_ATOM_BYTESTRING)
 		tok->type = OPAL_DTA_TOKENID_BYTESTRING;
@@ -1016,7 +1041,7 @@ static int response_parse(const u8 *buf, size_t length,
 	const struct opal_header *hdr;
 	struct opal_resp_tok *iter;
 	int num_entries = 0;
-	int total;
+	size_t total;
 	ssize_t token_length;
 	const u8 *pos;
 	u32 clen, plen, slen;
@@ -1026,6 +1051,9 @@ static int response_parse(const u8 *buf, size_t length,
 
 	if (!resp)
 		return -EFAULT;
+
+	if (length < sizeof(*hdr))
+		return -EINVAL;
 
 	hdr = (struct opal_header *)buf;
 	pos = buf;
@@ -1038,10 +1066,10 @@ static int response_parse(const u8 *buf, size_t length,
 		 clen, plen, slen);
 
 	if (clen == 0 || plen == 0 || slen == 0 ||
-	    slen > IO_BUFFER_LENGTH - sizeof(*hdr)) {
+	    slen > length - sizeof(*hdr)) {
 		pr_debug("Bad header length. cp: %u, pkt: %u, subpkt: %u\n",
 			 clen, plen, slen);
-		print_buffer(pos, sizeof(*hdr));
+		print_buffer(buf, sizeof(*hdr));
 		return -EINVAL;
 	}
 
@@ -1052,14 +1080,17 @@ static int response_parse(const u8 *buf, size_t length,
 	total = slen;
 	print_buffer(pos, total);
 	while (total > 0) {
+		if (iter == resp->toks + MAX_TOKS)
+			return -E2BIG;
+
 		if (pos[0] <= TINY_ATOM_BYTE) /* tiny atom */
 			token_length = response_parse_tiny(iter, pos);
 		else if (pos[0] <= SHORT_ATOM_BYTE) /* short atom */
-			token_length = response_parse_short(iter, pos);
+			token_length = response_parse_short(iter, pos, total);
 		else if (pos[0] <= MEDIUM_ATOM_BYTE) /* medium atom */
-			token_length = response_parse_medium(iter, pos);
+			token_length = response_parse_medium(iter, pos, total);
 		else if (pos[0] <= LONG_ATOM_BYTE) /* long atom */
-			token_length = response_parse_long(iter, pos);
+			token_length = response_parse_long(iter, pos, total);
 		else if (pos[0] == EMPTY_ATOM_BYTE) /* empty atom */
 			token_length = 1;
 		else /* TOKEN */
