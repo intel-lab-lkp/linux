@@ -70,6 +70,8 @@
 #define REG_EXTCAP_DBC_DEVINFO1				0x38
 #define REG_EXTCAP_DBC_DEVINFO2				0x3c
 
+#define REG_EXTCAP_USB3_TUNNELING			0x00
+
 #define dump_register(nm)				\
 {							\
 	.name	= __stringify(nm),			\

@@ -81,6 +81,10 @@ static const struct debugfs_reg32 xhci_extcap_dbc[] = {
 	dump_register(EXTCAP_DBC_DEVINFO2),
 };
 
+static const struct debugfs_reg32 xhci_extcap_usb3_tunneling[] = {
+	dump_register(EXTCAP_USB3_TUNNELING),
+};
+
 static struct dentry *xhci_debugfs_root;
 
 static struct xhci_regset *xhci_debugfs_alloc_regset(struct xhci_hcd *xhci)
@@ -814,6 +818,11 @@ void xhci_debugfs_init(struct xhci_hcd *xhci)
 				   xhci_extcap_dbc,
 				   ARRAY_SIZE(xhci_extcap_dbc),
 				   "reg-ext-dbc");
+
+	xhci_debugfs_extcap_regset(xhci, XHCI_EXT_CAPS_USB3_TUNNELING,
+				   xhci_extcap_usb3_tunneling,
+				   ARRAY_SIZE(xhci_extcap_usb3_tunneling),
+				   "reg-usb3-tunneling");
 
 	xhci_debugfs_create_ring_dir(xhci, &xhci->cmd_ring,
 				     "command-ring",
