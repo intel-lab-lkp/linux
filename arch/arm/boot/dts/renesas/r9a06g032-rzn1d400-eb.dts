@@ -57,6 +57,12 @@
 	status = "okay";
 };
 
+&gpio2b {
+	pinctrl-0 = <&pins_gpio2b>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &i2c2 {
 	/* Sensors are different across revisions. All are LM75B compatible */
 	sensor@49 {
@@ -132,6 +138,17 @@
 			 <RZN1_PINMUX(33, RZN1_FUNC_CLK_ETH_MII_RGMII_RMII)>,
 			 <RZN1_PINMUX(34, RZN1_FUNC_CLK_ETH_MII_RGMII_RMII)>,
 			 <RZN1_PINMUX(35, RZN1_FUNC_CLK_ETH_MII_RGMII_RMII)>;
+		drive-strength = <6>;
+		bias-disable;
+	};
+
+	pins_gpio2b: pins-gpio2b {
+		pinmux = <RZN1_PINMUX(164, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(165, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(166, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(167, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(168, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(169, RZN1_FUNC_GPIO)>;
 		drive-strength = <6>;
 		bias-disable;
 	};
