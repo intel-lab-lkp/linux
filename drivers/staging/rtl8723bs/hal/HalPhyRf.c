@@ -8,10 +8,7 @@
 /* include "Mp_Precomp.h" */
 #include "odm_precomp.h"
 
-void ConfigureTxpowerTrack(struct dm_odm_t *pDM_Odm, struct txpwrtrack_cfg *pConfig)
-{
-	ConfigureTxpowerTrack_8723B(pConfig);
-}
+
 
 /*  */
 /*  <20121113, Kordan> This function should be called when TxAGC changed. */
@@ -78,7 +75,7 @@ void ODM_TXPowerTrackingCallback_ThermalMeter(struct adapter *Adapter)
 
 	/* 4 2. Initialization (7 steps in total) */
 
-	ConfigureTxpowerTrack(pDM_Odm, &c);
+	ConfigureTxpowerTrack_8723B(&c);
 
 	(*c.GetDeltaSwingTable)(
 		pDM_Odm,

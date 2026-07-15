@@ -30,7 +30,6 @@ struct txpwrtrack_cfg {
 	FuncSwing GetDeltaSwingTable;
 };
 
-void ConfigureTxpowerTrack(struct dm_odm_t *pDM_Odm, struct txpwrtrack_cfg *pConfig);
 
 void ODM_ClearTxPowerTrackingState(struct dm_odm_t *pDM_Odm);
 
