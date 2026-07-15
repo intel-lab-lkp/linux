@@ -602,7 +602,6 @@ void sa_query_timer_hdl(struct timer_list *t);
 extern void process_addba_req(struct adapter *padapter, u8 *paddba_req, u8 *addr);
 
 extern void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len);
-extern void correct_TSF(struct adapter *padapter, struct mlme_ext_priv *pmlmeext);
 extern void adaptive_early_32k(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len);
 extern bool traffic_status_watchdog(struct adapter *padapter, bool from_timer);
 
