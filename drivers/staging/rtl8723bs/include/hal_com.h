@@ -121,7 +121,7 @@ struct adapter *padapter,
 u8 NumOutPipe
 	);
 
-void hal_init_macaddr(struct adapter *adapter);
+
 
 void rtw_init_hal_com_default_value(struct adapter *Adapter);
 

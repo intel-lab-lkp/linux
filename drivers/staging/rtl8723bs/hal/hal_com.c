@@ -420,10 +420,6 @@ bool Hal_MappingOutPipe(struct adapter *padapter, u8 NumOutPipe)
 
 }
 
-void hal_init_macaddr(struct adapter *adapter)
-{
-	rtw_hal_set_hwreg(adapter, HW_VAR_MAC_ADDR, adapter->eeprompriv.mac_addr);
-}
 
 void rtw_init_hal_com_default_value(struct adapter *Adapter)
 {

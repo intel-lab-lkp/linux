@@ -688,7 +688,7 @@ u32 rtl8723bs_hal_init(struct adapter *padapter)
 
 	/*  Get Rx PHY status in order to report RSSI and others. */
 	_InitDriverInfoSize(padapter, DRVINFO_SZ);
-	hal_init_macaddr(padapter);
+	rtw_hal_set_hwreg(padapter, HW_VAR_MAC_ADDR, padapter->eeprompriv.mac_addr);
 	_InitNetworkType(padapter);
 	_InitWMACSetting(padapter);
 	_InitAdaptiveCtrl(padapter);
