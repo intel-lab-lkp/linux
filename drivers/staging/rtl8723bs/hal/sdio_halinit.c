@@ -1077,32 +1077,3 @@ void rtw_read_adapter_info(struct adapter *padapter)
 
 	_ReadAdapterInfo8723BS(padapter);
 }
-
-
-/*  */
-/*	Description: */
-/*		Query setting of specified variable. */
-/*  */
-u8 GetHalDefVar8723BSDIO(
-	struct adapter *Adapter, enum hal_def_variable eVariable, void *pValue
-)
-{
-	u8 bResult = _SUCCESS;
-
-	switch (eVariable) {
-	case HAL_DEF_IS_SUPPORT_ANT_DIV:
-		break;
-	case HAL_DEF_CURRENT_ANTENNA:
-		break;
-	case HW_VAR_MAX_RX_AMPDU_FACTOR:
-		/*  Stanley@BB.SD3 suggests 16K can get stable performance */
-		/*  coding by Lucas@20130730 */
-		*(u32 *)pValue = IEEE80211_HT_MAX_AMPDU_16K;
-		break;
-	default:
-		bResult = GetHalDefVar8723B(Adapter, eVariable, pValue);
-		break;
-	}
-
-	return bResult;
-}

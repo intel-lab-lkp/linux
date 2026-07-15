@@ -139,7 +139,24 @@ void rtw_hal_set_hwreg_with_buf(struct adapter *padapter, u8 variable, u8 *pbuf,
 
 u8 rtw_hal_get_def_var(struct adapter *padapter, enum hal_def_variable eVariable, void *pValue)
 {
-	return GetHalDefVar8723BSDIO(padapter, eVariable, pValue);
+	u8 bResult = _SUCCESS;
+
+	switch (eVariable) {
+	case HAL_DEF_IS_SUPPORT_ANT_DIV:
+		break;
+	case HAL_DEF_CURRENT_ANTENNA:
+		break;
+	case HW_VAR_MAX_RX_AMPDU_FACTOR:
+		/*  Stanley@BB.SD3 suggests 16K can get stable performance */
+		/*  coding by Lucas@20130730 */
+		*(u32 *)pValue = IEEE80211_HT_MAX_AMPDU_16K;
+		break;
+	default:
+		bResult = GetHalDefVar8723B(padapter, eVariable, pValue);
+		break;
+	}
+
+	return bResult;
 }
 
 void rtw_hal_set_odm_var(struct adapter *padapter, enum hal_odm_variable eVariable, void *pValue1, bool bSet)
