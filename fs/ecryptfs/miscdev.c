@@ -360,7 +360,7 @@ ecryptfs_miscdev_write(struct file *file, const char __user *buf,
 	u32 seq;
 	size_t packet_size, packet_size_length;
 	char *data;
-	unsigned char packet_size_peek[ECRYPTFS_MAX_PKT_LEN_SIZE];
+	unsigned char packet_size_peek[ECRYPTFS_MAX_PKT_LEN_SIZE] = { 0 };
 	ssize_t rc;
 
 	if (count == 0) {
@@ -376,10 +376,16 @@ ecryptfs_miscdev_write(struct file *file, const char __user *buf,
 	}
 
 	if (copy_from_user(packet_size_peek, &buf[PKT_LEN_OFFSET],
-			   sizeof(packet_size_peek))) {
+			   min_t(size_t, count - PKT_LEN_OFFSET,
+				 sizeof(packet_size_peek)))) {
 		printk(KERN_WARNING "%s: Error while inspecting packet size\n",
 		       __func__);
 		return -EFAULT;
+	}
+	if (packet_size_peek[0] >= 192 && packet_size_peek[0] < 224 &&
+	    count - PKT_LEN_OFFSET < ECRYPTFS_MAX_PKT_LEN_SIZE) {
+		ecryptfs_printk(KERN_WARNING, "Truncated packet length\n");
+		return -EINVAL;
 	}
 
 	rc = ecryptfs_parse_packet_length(packet_size_peek, &packet_size,
