@@ -232,6 +232,17 @@ static int rpi_power_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void rpi_power_remove(struct platform_device *pdev)
+{
+	struct rpi_power_domains *rpi_domains = platform_get_drvdata(pdev);
+	int nr_domains = RPI_POWER_DOMAIN_COUNT - 1;
+
+	of_genpd_del_provider(pdev->dev.of_node);
+
+	for (int i = nr_domains; i >= 0; i--)
+		pm_genpd_remove(&rpi_domains->domains[i].base);
+}
+
 static const struct of_device_id rpi_power_of_match[] = {
 	{ .compatible = "raspberrypi,bcm2835-power", },
 	{},
@@ -244,6 +255,7 @@ static struct platform_driver rpi_power_driver = {
 		.of_match_table = rpi_power_of_match,
 	},
 	.probe		= rpi_power_probe,
+	.remove		= rpi_power_remove,
 };
 builtin_platform_driver(rpi_power_driver);
 
