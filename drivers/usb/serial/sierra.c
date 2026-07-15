@@ -575,10 +575,19 @@ static void sierra_instat_callback(struct urb *urb)
 				__func__);
 			return;
 		}
+
+		if (urb->actual_length < sizeof(struct usb_ctrlrequest))
+			goto skip_too_short;
+
 		if ((req_pkt->bRequestType == 0xA1) &&
 				(req_pkt->bRequest == 0x20)) {
 			int old_dcd_state;
-			unsigned char signals = *((unsigned char *)
+			unsigned char signals;
+
+			if (urb->actual_length < sizeof(struct usb_ctrlrequest) + 1)
+				goto skip_too_short;
+
+			signals = *((unsigned char *)
 					urb->transfer_buffer +
 					sizeof(struct usb_ctrlrequest));
 
@@ -603,6 +612,7 @@ static void sierra_instat_callback(struct urb *urb)
 
 	/* Resubmit urb so we continue receiving IRQ data */
 	if (status != -ESHUTDOWN && status != -ENOENT) {
+skip_too_short:
 		usb_mark_last_busy(serial->dev);
 		err = usb_submit_urb(urb, GFP_ATOMIC);
 		if (err && err != -EPERM)
