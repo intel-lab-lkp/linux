@@ -1413,7 +1413,7 @@ static void rtw_lps_change_dtim_hdl(struct adapter *padapter, u8 dtim)
 static void rtw_dm_ra_mask_hdl(struct adapter *padapter, struct sta_info *psta)
 {
 	if (psta)
-		set_sta_rate(padapter, psta);
+		rtw_hal_update_ra_mask(psta, 0);
 }
 
 u8 rtw_dm_ra_mask_wk_cmd(struct adapter *padapter, u8 *psta)

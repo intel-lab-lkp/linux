@@ -4688,7 +4688,7 @@ void mlmeext_joinbss_event_callback(struct adapter *padapter, int join_res)
 		psta->wireless_mode = pmlmeext->cur_wireless_mode;
 
 		/* set per sta rate after updating HT cap. */
-		set_sta_rate(padapter, psta);
+		rtw_hal_update_ra_mask(psta, 0);
 
 		rtw_sta_media_status_rpt(padapter, psta, 1);
 
@@ -4761,7 +4761,7 @@ void mlmeext_sta_add_event_callback(struct adapter *padapter, struct sta_info *p
 	psta->raid = networktype_to_raid_ex(padapter, psta);
 
 	/* rate radaptive */
-	Update_RA_Entry(padapter, psta);
+	rtw_hal_update_ra_mask(psta, 0);
 }
 
 void mlmeext_sta_del_event_callback(struct adapter *padapter)
