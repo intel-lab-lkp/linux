@@ -667,11 +667,6 @@ static void pwr_rpwm_timeout_handler(struct timer_list *t)
 	_set_workitem(&pwrpriv->rpwmtimeoutwi);
 }
 
-static inline void unregister_task_alive(struct pwrctrl_priv *pwrctrl, u32 tag)
-{
-	pwrctrl->alives &= ~tag;
-}
-
 /*
  * Description:
  *Check if the fw_pwrstate is okay for I/O.
@@ -747,7 +742,7 @@ void rtw_unregister_task_alive(struct adapter *padapter, u32 task)
 
 	mutex_lock(&pwrctrl->lock);
 
-	unregister_task_alive(pwrctrl, task);
+	pwrctrl->alives &= task;
 
 	if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
 		if (pwrctrl->cpwm > pslv) {
@@ -874,7 +869,7 @@ void rtw_unregister_tx_alive(struct adapter *padapter)
 
 	mutex_lock(&pwrctrl->lock);
 
-	unregister_task_alive(pwrctrl, XMIT_ALIVE);
+	pwrctrl->alives &= XMIT_ALIVE;
 
 	if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
 		if (pwrctrl->cpwm > pslv)
@@ -910,7 +905,7 @@ void rtw_unregister_cmd_alive(struct adapter *padapter)
 
 	mutex_lock(&pwrctrl->lock);
 
-	unregister_task_alive(pwrctrl, CMD_ALIVE);
+	pwrctrl->alives &= CMD_ALIVE;
 
 	if ((pwrctrl->pwr_mode != PS_MODE_ACTIVE) && pwrctrl->fw_current_in_ps_mode) {
 		if (pwrctrl->cpwm > pslv) {
