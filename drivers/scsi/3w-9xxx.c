@@ -149,6 +149,24 @@ static int twa_scsiop_execute_scsi(TW_Device_Extension *tw_dev, int request_id,
 static void twa_scsiop_execute_scsi_complete(TW_Device_Extension *tw_dev, int request_id);
 static char *twa_string_lookup(twa_message_type *table, unsigned int aen_code);
 
+/*
+ * The firmware field contains two NUL-terminated strings in one fixed-size
+ * array.  Make the last byte a terminator before finding the optional second
+ * string, and never form a pointer one byte past the array.
+ */
+static const char *twa_error_string(TW_Command_Apache_Header *header)
+{
+	size_t description_len;
+
+	header->err_specific_desc[sizeof(header->err_specific_desc) - 1] = '\0';
+	description_len = strnlen(header->err_specific_desc,
+				  sizeof(header->err_specific_desc));
+	if (description_len == sizeof(header->err_specific_desc) - 1)
+		return "";
+
+	return &header->err_specific_desc[description_len + 1];
+}
+
 /* Functions */
 
 /* Show some statistics about the card */
@@ -376,7 +394,7 @@ static void twa_aen_queue_event(TW_Device_Extension *tw_dev, TW_Command_Apache_H
 	TW_Event *event;
 	unsigned short aen;
 	char host[16];
-	char *error_str;
+	const char *error_str;
 
 	tw_dev->aen_count++;
 
@@ -404,10 +422,9 @@ static void twa_aen_queue_event(TW_Device_Extension *tw_dev, TW_Command_Apache_H
 	tw_dev->error_sequence_id++;
 
 	/* Check for embedded error string */
-	error_str = &(header->err_specific_desc[strlen(header->err_specific_desc)+1]);
-
-	header->err_specific_desc[sizeof(header->err_specific_desc) - 1] = '\0';
-	event->parameter_len = strlen(header->err_specific_desc);
+	error_str = twa_error_string(header);
+	event->parameter_len = strnlen(header->err_specific_desc,
+				       sizeof(header->err_specific_desc));
 	memcpy(event->parameter_data, header->err_specific_desc, event->parameter_len + (error_str[0] == '\0' ? 0 : (1 + strlen(error_str))));
 	if (event->severity != TW_AEN_SEVERITY_DEBUG)
 		printk(KERN_WARNING "3w-9xxx:%s AEN: %s (0x%02X:0x%04X): %s:%s.\n",
@@ -992,12 +1009,12 @@ static int twa_fill_sense(TW_Device_Extension *tw_dev, int request_id, int copy_
 	TW_Command_Full *full_command_packet;
 	unsigned short error;
 	int retval = 1;
-	char *error_str;
+	const char *error_str;
 
 	full_command_packet = tw_dev->command_packet_virt[request_id];
 
 	/* Check for embedded error string */
-	error_str = &(full_command_packet->header.err_specific_desc[strlen(full_command_packet->header.err_specific_desc) + 1]);
+	error_str = twa_error_string(&full_command_packet->header);
 
 	/* Don't print error for Logical unit not supported during rollcall */
 	error = le16_to_cpu(full_command_packet->header.status_block.error);
