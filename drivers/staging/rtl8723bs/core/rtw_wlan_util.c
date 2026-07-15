@@ -260,16 +260,6 @@ inline void rtw_set_oper_ch(struct adapter *adapter, u8 ch)
 	dvobj->oper_channel = ch;
 }
 
-inline void rtw_set_oper_bw(struct adapter *adapter, u8 bw)
-{
-	adapter_to_dvobj(adapter)->oper_bwmode = bw;
-}
-
-inline void rtw_set_oper_choffset(struct adapter *adapter, u8 offset)
-{
-	adapter_to_dvobj(adapter)->oper_ch_offset = offset;
-}
-
 u8 rtw_get_center_ch(u8 channel, u8 chnl_bw, u8 chnl_offset)
 {
 	u8 center_ch = channel;
@@ -317,8 +307,8 @@ void set_channel_bwmode(struct adapter *padapter, unsigned char channel, unsigne
 
 	/* saved channel/bw info */
 	rtw_set_oper_ch(padapter, channel);
-	rtw_set_oper_bw(padapter, bwmode);
-	rtw_set_oper_choffset(padapter, channel_offset);
+	adapter_to_dvobj(padapter)->oper_bwmode = bwmode;
+	adapter_to_dvobj(padapter)->oper_ch_offset =  channel_offset;
 
 	rtw_hal_set_chnl_bw(padapter, center_ch, bwmode, channel_offset, chnl_offset80); /*  set center channel */
 
