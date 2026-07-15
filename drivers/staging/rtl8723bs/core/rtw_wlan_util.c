@@ -683,7 +683,7 @@ static void sort_wmm_ac_params(u32 *inx, u32 *edca)
 	}
 }
 
-void WMMOnAssocRsp(struct adapter *padapter)
+void WMMOnAssocRsp(struct adapter *padapter, u8 *pbuf)
 {
 	u8 ACI, ACM, AIFS, ECWMin, ECWMax, aSifsTime;
 	u8 acm_mask;

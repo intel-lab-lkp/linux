@@ -1483,10 +1483,6 @@ void rtw_cpwm_event_callback(struct adapter *padapter, u8 *pbuf)
 	cpwm_int_hdl(padapter, preportpwrstate);
 }
 
-void rtw_wmm_event_callback(struct adapter *padapter, u8 *pbuf)
-{
-	WMMOnAssocRsp(padapter);
-}
 
 /*
  * _rtw_join_timeout_handler - Timeout/failure handler for CMD JoinBss

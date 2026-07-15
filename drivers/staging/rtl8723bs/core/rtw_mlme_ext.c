@@ -4672,7 +4672,7 @@ void mlmeext_joinbss_event_callback(struct adapter *padapter, int join_res)
 	update_capinfo(padapter, pmlmeinfo->capability);
 
 	/* WMM, Update EDCA param */
-	WMMOnAssocRsp(padapter);
+	WMMOnAssocRsp(padapter, NULL);
 
 	/* HT */
 	HTOnAssocRsp(padapter);
@@ -5632,7 +5632,7 @@ static struct fwevent wlanevents[] = {
 	{0, NULL},
 	{0, &rtw_cpwm_event_callback},
 	{0, NULL},
-	{0, &rtw_wmm_event_callback},
+	{0, &WMMOnAssocRsp},
 
 };
 

@@ -478,7 +478,7 @@ int is_IBSS_empty(struct adapter *padapter);
 unsigned char check_assoc_AP(u8 *pframe, uint len);
 
 int WMM_param_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
-void WMMOnAssocRsp(struct adapter *padapter);
+void WMMOnAssocRsp(struct adapter *padapter, u8 *pbuf);
 
 void HT_caps_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
 void HT_info_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);

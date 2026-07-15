@@ -264,7 +264,6 @@ extern void rtw_stassoc_event_callback(struct adapter *adapter, u8 *pbuf);
 extern void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf);
 extern void rtw_atimdone_event_callback(struct adapter *adapter, u8 *pbuf);
 extern void rtw_cpwm_event_callback(struct adapter *adapter, u8 *pbuf);
-extern void rtw_wmm_event_callback(struct adapter *padapter, u8 *pbuf);
 
 extern void rtw_join_timeout_handler(struct timer_list *t);
 extern void _rtw_scan_timeout_handler(struct timer_list *t);
