@@ -14,9 +14,11 @@
 #include "kselftest.h"
 #include "cgroup_util.h"
 
+static bool suppress_debug_msg;
+
 #define DEBUG
 #ifdef DEBUG
-#define debug(args...) fprintf(stderr, args)
+#define debug(args...) do { if (!suppress_debug_msg) fprintf(stderr, args); } while (0)
 #else
 #define debug(args...)
 #endif
@@ -585,7 +587,8 @@ static int test_cgfreezer_ptrace(const char *root)
 	int ret = KSFT_FAIL;
 	char *cgroup = NULL;
 	siginfo_t siginfo;
-	int pid;
+	int fd = -1, pid, retries;
+	bool frozen;
 
 	cgroup = cg_name(root, "cg_test_ptrace");
 	if (!cgroup)
@@ -622,15 +625,47 @@ static int test_cgfreezer_ptrace(const char *root)
 	if (ptrace(PTRACE_GETSIGINFO, pid, NULL, &siginfo))
 		goto cleanup;
 
+	/*
+	 * The ptrace(PTRACE_DETACH) call spawns a different a process to
+	 * temporarily unfreeze the cgroup and then freeze it again in the
+	 * detaching process. The reading of the frozen flag from cgroup.events
+	 * is done by the main test process running probably on a different CPU.
+	 * As a result, racing is possible and the intermediate unfrozen state
+	 * can be read leading to occasional test failure especially on
+	 * architectures with a weak memory model like arm64.
+	 *
+	 * This intermittent test failure can be avoided by using the
+	 * cg_prepare_for_wait() and cg_wait_for() helpers to wait for change
+	 * in the frozen state if necessary.
+	 */
+	fd = cg_prepare_for_wait(cgroup);
+	if (fd < 0)
+		goto cleanup;
+
 	if (ptrace(PTRACE_DETACH, pid, NULL, NULL))
 		goto cleanup;
 
-	if (cg_check_frozen(cgroup, true))
+	suppress_debug_msg = true;
+	frozen = !cg_check_frozen(cgroup, true);
+	if (!frozen) {
+		/* Attempt to wait until frozen */
+		for (retries = 0; retries < 3; retries++) {
+			if (cg_wait_for(fd))
+				break;
+			frozen = !cg_check_frozen(cgroup, true);
+			if (frozen)
+				break;
+		}
+	}
+	suppress_debug_msg = false;
+	if (!frozen)
 		goto cleanup;
 
 	ret = KSFT_PASS;
 
 cleanup:
+	if (fd >= 0)
+		close(fd);
 	if (cgroup)
 		cg_destroy(cgroup);
 	free(cgroup);
