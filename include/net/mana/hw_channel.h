@@ -164,6 +164,9 @@ struct hwc_wq {
 	u16 queue_depth;
 
 	struct hwc_cq *hwc_cq;
+
+	/* Serializes concurrent mana_gd_post_and_ring() calls. */
+	spinlock_t lock;
 };
 
 struct hwc_caller_ctx {
@@ -173,6 +176,17 @@ struct hwc_caller_ctx {
 
 	u32 error; /* Linux error code */
 	u32 status_code;
+
+	/* Protects output_buf against concurrent access from
+	 * handle_resp() (CQ interrupt) and the sender timeout path.
+	 */
+	spinlock_t lock;
+
+	/* Tracks sender + handle_resp ownership.  The last put
+	 * (refcount reaches 0) releases the bitmap slot.
+	 */
+	refcount_t refcnt;
+	u16 msg_id;
 };
 
 struct hw_channel_context {
@@ -193,12 +207,23 @@ struct hw_channel_context {
 	struct hwc_wq *txq;
 	struct hwc_cq *cq;
 
-	struct semaphore sema;
 	struct gdma_resource inflight_msg_res;
+	/* Waitqueue for senders blocked on a full inflight bitmap. */
+	wait_queue_head_t msg_waitq;
 
 	u32 pf_dest_vrq_id;
 	u32 pf_dest_vrcq_id;
 	u32 hwc_timeout;
+
+	/* Set after channel is fully established; cleared on teardown to
+	 * abort waiters in mana_hwc_get_msg_index() and reject new sends.
+	 */
+	bool channel_up;
+
+	/* Set on first HWC timeout.  Causes get_msg_index() to return
+	 * -ETIMEDOUT instead of waiting, draining all queued senders.
+	 */
+	bool hwc_timed_out;
 
 	/* Set after mana_smc_setup_hwc() succeeds (hardware has active
 	 * MST entries).  On recoverable paths (establish_channel)
@@ -207,6 +232,8 @@ struct hw_channel_context {
 	 * unconditionally since hwc is about to be freed.
 	 */
 	bool setup_active;
+
+	atomic_t active_senders;
 
 	struct hwc_caller_ctx *caller_ctx;
 };
