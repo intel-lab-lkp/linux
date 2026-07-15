@@ -2146,7 +2146,6 @@ static void __free_dma_rx_desc_resources(struct stmmac_priv *priv,
 					 u32 queue)
 {
 	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
-	size_t size;
 	void *addr;
 
 	/* Release the DMA RX socket buffers */
@@ -2158,15 +2157,21 @@ static void __free_dma_rx_desc_resources(struct stmmac_priv *priv,
 	rx_q->buf_alloc_num = 0;
 	rx_q->xsk_pool = NULL;
 
-	/* Free DMA regions of consistent memory previously allocated */
-	if (priv->extend_desc)
+	if (priv->extend_desc) {
 		addr = rx_q->dma_erx;
-	else
+		rx_q->dma_erx = NULL;
+	} else {
 		addr = rx_q->dma_rx;
+		rx_q->dma_rx = NULL;
+	}
 
-	size = stmmac_get_rx_desc_size(priv) * dma_conf->dma_rx_size;
+	/* Free DMA regions of consistent memory if previously allocated */
+	if (addr) {
+		size_t size;
+		size = stmmac_get_rx_desc_size(priv) * dma_conf->dma_rx_size;
 
-	dma_free_coherent(priv->device, size, addr, rx_q->dma_rx_phy);
+		dma_free_coherent(priv->device, size, addr, rx_q->dma_rx_phy);
+	}
 
 	if (xdp_rxq_info_is_reg(&rx_q->xdp_rxq))
 		xdp_rxq_info_unreg(&rx_q->xdp_rxq);
@@ -2198,7 +2203,6 @@ static void __free_dma_tx_desc_resources(struct stmmac_priv *priv,
 					 u32 queue)
 {
 	struct stmmac_tx_queue *tx_q = &dma_conf->tx_queue[queue];
-	size_t size;
 	void *addr;
 
 	/* Release the DMA TX socket buffers */
@@ -2206,15 +2210,21 @@ static void __free_dma_tx_desc_resources(struct stmmac_priv *priv,
 
 	if (priv->extend_desc) {
 		addr = tx_q->dma_etx;
+		tx_q->dma_etx = NULL;
 	} else if (tx_q->tbs & STMMAC_TBS_AVAIL) {
 		addr = tx_q->dma_entx;
+		tx_q->dma_entx = NULL;
 	} else {
 		addr = tx_q->dma_tx;
+		tx_q->dma_tx = NULL;
 	}
 
-	size = stmmac_get_tx_desc_size(priv, tx_q) * dma_conf->dma_tx_size;
+	if (addr) {
+		size_t size;
+		size = stmmac_get_tx_desc_size(priv, tx_q) * dma_conf->dma_tx_size;
 
-	dma_free_coherent(priv->device, size, addr, tx_q->dma_tx_phy);
+		dma_free_coherent(priv->device, size, addr, tx_q->dma_tx_phy);
+	}
 
 	kfree(tx_q->tx_skbuff_dma);
 	kfree(tx_q->tx_skbuff);
