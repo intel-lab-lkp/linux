@@ -4744,30 +4744,66 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 #else
 	struct rb_node *p;
 #endif
+	LIST_HEAD(replay_list);
 
 	doutc(mdsc->fsc->client, "mds%d\n", session->s_mds);
 
+#if BITS_PER_LONG == 64
+	/* collect unsafe requests under the mutex */
 	mutex_lock(&mdsc->mutex);
-	list_for_each_entry_safe(req, nreq, &session->s_unsafe, r_unsafe_item)
+	list_for_each_entry_safe(req, nreq, &session->s_unsafe,
+				 r_unsafe_item) {
+		ceph_mdsc_get_request(req);
+		list_move(&req->r_unsafe_item, &replay_list);
+	}
+	mutex_unlock(&mdsc->mutex);
+
+	/* replay unsafe requests (local list, no mutex needed) */
+	list_for_each_entry_safe(req, nreq, &replay_list, r_unsafe_item) {
+		__send_request(session, req, true);
+		list_del_init(&req->r_unsafe_item);
+		ceph_mdsc_put_request(req);
+	}
+
+	/*
+	 * also re-send old requests when MDS enters reconnect stage.
+	 * xa_for_each() is internally locked.
+	 */
+	idx = 0;
+	xa_for_each(&mdsc->request_tree, idx, req) {
+		if (test_bit(CEPH_MDS_R_GOT_UNSAFE, &req->r_req_flags))
+			continue;
+		if (req->r_attempts == 0)
+			continue;
+		if (!req->r_session)
+			continue;
+		if (req->r_session->s_mds != session->s_mds)
+			continue;
+
+		ceph_mdsc_release_dir_caps_async(req);
+
+		ceph_mdsc_get_request(req);
+		__send_request(session, req, true);
+		ceph_mdsc_put_request(req);
+	}
+#else /* BITS_PER_LONG != 64 — keep mutex for rb-tree iteration */
+	mutex_lock(&mdsc->mutex);
+	list_for_each_entry_safe(req, nreq, &session->s_unsafe,
+				 r_unsafe_item)
 		__send_request(session, req, true);
 
 	/*
-	 * also re-send old requests when MDS enters reconnect stage. So that MDS
-	 * can process completed request in clientreplay stage.
+	 * also re-send old requests when MDS enters reconnect stage.
+	 * Must hold mutex for rb_first()/rb_next().
 	 */
-#if BITS_PER_LONG == 64
-	idx = 0;
-	xa_for_each(&mdsc->request_tree, idx, req) {
-#else
 	p = rb_first(&mdsc->request_tree);
 	while (p) {
 		req = rb_entry(p, struct ceph_mds_request, r_node);
 		p = rb_next(p);
-#endif
 		if (test_bit(CEPH_MDS_R_GOT_UNSAFE, &req->r_req_flags))
 			continue;
 		if (req->r_attempts == 0)
-			continue; /* only old requests */
+			continue;
 		if (!req->r_session)
 			continue;
 		if (req->r_session->s_mds != session->s_mds)
@@ -4778,6 +4814,7 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 		__send_request(session, req, true);
 	}
 	mutex_unlock(&mdsc->mutex);
+#endif
 }
 
 static int send_reconnect_partial(struct ceph_reconnect_state *recon_state)
