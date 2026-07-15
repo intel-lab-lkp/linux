@@ -346,6 +346,7 @@ init_free_asq_bufs:
 	iavf_free_virt_mem(hw, &hw->aq.asq.dma_head);
 
 init_adminq_free_rings:
+	iavf_free_virt_mem(hw, &hw->aq.asq.cmd_buf);
 	iavf_free_adminq_asq(hw);
 
 init_adminq_exit:
