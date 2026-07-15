@@ -166,14 +166,14 @@ pte_t ptep_xchg_lazy(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL(ptep_xchg_lazy);
 
-pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
-			     pte_t *ptep)
+pte_t ___ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
+				pte_t *ptep)
 {
 	return ptep_flush_lazy(vma->vm_mm, addr, ptep, 1);
 }
 
-void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
-			     pte_t *ptep, pte_t old_pte, pte_t pte)
+void ___ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
+				pte_t *ptep, pte_t old_pte, pte_t pte)
 {
 	set_pte(ptep, pte);
 }
