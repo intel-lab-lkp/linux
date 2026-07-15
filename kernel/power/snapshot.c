@@ -13,6 +13,7 @@
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/mm.h>
+#include <linux/sched/clock.h>
 #include <linux/suspend.h>
 #include <linux/delay.h>
 #include <linux/bitops.h>
@@ -2109,6 +2110,7 @@ static int swsusp_alloc(struct memory_bitmap *copy_bm,
 asmlinkage __visible int swsusp_save(void)
 {
 	unsigned int nr_pages, nr_highmem;
+	ktime_t start, stop;
 
 	pm_deferred_pr_dbg("Creating image\n");
 
@@ -2130,7 +2132,14 @@ asmlinkage __visible int swsusp_save(void)
 	 * Kill them.
 	 */
 	drain_local_pages(NULL);
+	start = ns_to_ktime(local_clock());
 	nr_copy_pages = copy_data_pages(&copy_bm, &orig_bm, &zero_bm);
+	stop = ns_to_ktime(local_clock());
+	/*
+	 * Zero pages are overwritten but still copied, so account for them
+	 * in speed calculation.
+	 */
+	swsusp_show_speed(start, stop, nr_pages + nr_highmem, "Copied");
 
 	/*
 	 * End of critical section. From now on, we can write to memory,
