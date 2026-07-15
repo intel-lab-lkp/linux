@@ -98,9 +98,12 @@ int mlx5dr_domain_get_recalc_cs_ft_addr(struct mlx5dr_domain *dmn,
 
 static int dr_domain_init_mem_resources(struct mlx5dr_domain *dmn)
 {
+	char name[80];
 	int ret;
 
-	dmn->chunks_kmem_cache = kmem_cache_create("mlx5_dr_chunks",
+	snprintf(name, sizeof(name), "%s-mlx5_dr_chunks",
+		 dev_name(dmn->mdev->device));
+	dmn->chunks_kmem_cache = kmem_cache_create(name,
 						   sizeof(struct mlx5dr_icm_chunk), 0,
 						   SLAB_HWCACHE_ALIGN, NULL);
 	if (!dmn->chunks_kmem_cache) {
@@ -108,7 +111,9 @@ static int dr_domain_init_mem_resources(struct mlx5dr_domain *dmn)
 		return -ENOMEM;
 	}
 
-	dmn->htbls_kmem_cache = kmem_cache_create("mlx5_dr_htbls",
+	snprintf(name, sizeof(name), "%s-mlx5_dr_htbls",
+		 dev_name(dmn->mdev->device));
+	dmn->htbls_kmem_cache = kmem_cache_create(name,
 						  sizeof(struct mlx5dr_ste_htbl), 0,
 						  SLAB_HWCACHE_ALIGN, NULL);
 	if (!dmn->htbls_kmem_cache) {
