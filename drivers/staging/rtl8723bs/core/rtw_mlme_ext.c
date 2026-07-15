@@ -20,8 +20,8 @@ static struct mlme_handler mlme_sta_tbl[] = {
 	{WIFI_PROBERSP,		"OnProbeRsp",		&OnProbeRsp},
 
 	/* below 2 are reserved */
-	{0,					"DoReserved",		&DoReserved},
-	{0,					"DoReserved",		&DoReserved},
+	{0,					"DoReserved",		NULL},
+	{0,					"DoReserved",		NULL},
 	{WIFI_BEACON,		"OnBeacon",		&OnBeacon},
 	{WIFI_ATIM,			"OnATIM",		NULL},
 	{WIFI_DISASSOC,		"OnDisassoc",		&OnDisassoc},
@@ -33,18 +33,10 @@ static struct mlme_handler mlme_sta_tbl[] = {
 
 static struct action_handler OnAction_tbl[] = {
 	{RTW_WLAN_CATEGORY_SPECTRUM_MGMT,	 "ACTION_SPECTRUM_MGMT", on_action_spct},
-	{RTW_WLAN_CATEGORY_QOS, "ACTION_QOS", &DoReserved},
-	{RTW_WLAN_CATEGORY_DLS, "ACTION_DLS", &DoReserved},
 	{RTW_WLAN_CATEGORY_BACK, "ACTION_BACK", &OnAction_back},
 	{RTW_WLAN_CATEGORY_PUBLIC, "ACTION_PUBLIC", on_action_public},
-	{RTW_WLAN_CATEGORY_RADIO_MEASUREMENT, "ACTION_RADIO_MEASUREMENT", &DoReserved},
-	{RTW_WLAN_CATEGORY_FT, "ACTION_FT",	&DoReserved},
 	{RTW_WLAN_CATEGORY_HT,	"ACTION_HT",	&OnAction_ht},
 	{RTW_WLAN_CATEGORY_SA_QUERY, "ACTION_SA_QUERY", &OnAction_sa_query},
-	{RTW_WLAN_CATEGORY_UNPROTECTED_WNM, "ACTION_UNPROTECTED_WNM", &DoReserved},
-	{RTW_WLAN_CATEGORY_SELF_PROTECTED, "ACTION_SELF_PROTECTED", &DoReserved},
-	{RTW_WLAN_CATEGORY_WMM, "ACTION_WMM", &DoReserved},
-	{RTW_WLAN_CATEGORY_P2P, "ACTION_P2P", &DoReserved},
 };
 
 static u8 null_addr[ETH_ALEN] = {0, 0, 0, 0, 0, 0};
@@ -1846,10 +1838,6 @@ unsigned int OnAction(struct adapter *padapter, union recv_frame *precv_frame)
 	return _SUCCESS;
 }
 
-unsigned int DoReserved(struct adapter *padapter, union recv_frame *precv_frame)
-{
-	return _SUCCESS;
-}
 
 static struct xmit_frame *_alloc_mgtxmitframe(struct xmit_priv *pxmitpriv, bool once)
 {
