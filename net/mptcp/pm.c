@@ -890,7 +890,7 @@ void mptcp_pm_mp_fail_received(struct sock *sk, u64 fail_seq)
 		spin_unlock_bh(&msk->fallback_lock);
 		return;
 	}
-	msk->allow_subflows = false;
+	WRITE_ONCE(msk->allow_subflows, false);
 	spin_unlock_bh(&msk->fallback_lock);
 
 	if (!subflow->fail_tout) {

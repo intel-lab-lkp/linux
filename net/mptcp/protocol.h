@@ -1291,7 +1291,7 @@ static inline bool mptcp_is_fully_established(struct sock *sk)
 	return inet_sk_state_load(sk) == TCP_ESTABLISHED &&
 	       READ_ONCE(msk->fully_established) &&
 	       !__mptcp_check_fallback(msk) &&
-	       msk->allow_subflows;
+	       READ_ONCE(msk->allow_subflows);
 }
 
 static inline bool __mptcp_has_initial_subflow(const struct mptcp_sock *msk)
