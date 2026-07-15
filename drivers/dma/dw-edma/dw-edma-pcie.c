@@ -555,9 +555,6 @@ static void dw_edma_pcie_remove(struct pci_dev *pdev)
 	err = dw_edma_remove(chip);
 	if (err)
 		pci_warn(pdev, "can't remove device properly: %d\n", err);
-
-	/* Freeing IRQs */
-	pci_free_irq_vectors(pdev);
 }
 
 static const struct pci_device_id dw_edma_pcie_id_table[] = {
