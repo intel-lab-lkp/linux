@@ -1926,16 +1926,6 @@ void update_mgntframe_attrib(struct adapter *padapter, struct pkt_attrib *pattri
 	pattrib->mbssid = 0;
 }
 
-void update_mgntframe_attrib_addr(struct adapter *padapter, struct xmit_frame *pmgntframe)
-{
-	u8 *pframe;
-	struct pkt_attrib	*pattrib = &pmgntframe->attrib;
-
-	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-
-	memcpy(pattrib->ra, GetAddr1Ptr(pframe), ETH_ALEN);
-	memcpy(pattrib->ta, GetAddr2Ptr(pframe), ETH_ALEN);
-}
 
 void dump_mgntframe(struct adapter *padapter, struct xmit_frame *pmgntframe)
 {
