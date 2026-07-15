@@ -745,7 +745,7 @@ void rtw_surveydone_event_callback(struct adapter	*adapter, u8 *pbuf)
 				rtw_indicate_connect(adapter);
 			} else {
 				if (adapter->mlmepriv.to_roam != 0) {
-					if (rtw_dec_to_roam(adapter) == 0 ||
+					if (--adapter->mlmepriv.to_roam == 0 ||
 					    rtw_sitesurvey_cmd(adapter, &pmlmepriv->assoc_ssid,
 							       1, NULL, 0) != _SUCCESS) {
 						rtw_set_to_roam(adapter, 0);
@@ -1421,7 +1421,8 @@ void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf)
 
 		if (roam) {
 			if (adapter->mlmepriv.to_roam > 0)
-				rtw_dec_to_roam(adapter); /* this stadel_event is caused by roaming, decrease to_roam */
+				/* this stadel_event is caused by roaming, decrease to_roam */
+				--adapter->mlmepriv.to_roam;
 			else if (adapter->mlmepriv.to_roam == 0)
 				rtw_set_to_roam(adapter, adapter->registrypriv.max_roaming_times);
 		} else {
@@ -1518,7 +1519,7 @@ void _rtw_join_timeout_handler(struct timer_list *t)
 
 	if (adapter->mlmepriv.to_roam > 0) { /* join timeout caused by roaming */
 		while (1) {
-			rtw_dec_to_roam(adapter);
+			--adapter->mlmepriv.to_roam;
 			if (adapter->mlmepriv.to_roam != 0) { /* try another */
 				int do_join_r;
 
@@ -2534,12 +2535,6 @@ inline void rtw_set_to_roam(struct adapter *adapter, u8 to_roam)
 	adapter->mlmepriv.to_roam = to_roam;
 }
 
-inline u8 rtw_dec_to_roam(struct adapter *adapter)
-{
-	adapter->mlmepriv.to_roam--;
-	return adapter->mlmepriv.to_roam;
-}
-
 
 void rtw_roaming(struct adapter *padapter, struct wlan_network *tgt_network)
 {
@@ -2561,7 +2556,7 @@ void _rtw_roaming(struct adapter *padapter, struct wlan_network *tgt_network)
 		pmlmepriv->assoc_by_bssid = false;
 
 		while (rtw_do_join(padapter) != _SUCCESS) {
-			rtw_dec_to_roam(padapter);
+			--padapter->mlmepriv.to_roam;
 			if (padapter->mlmepriv.to_roam <= 0) {
 				rtw_indicate_disconnect(padapter);
 				break;
