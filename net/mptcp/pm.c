@@ -912,33 +912,13 @@ void mptcp_pm_mp_fail_received(struct sock *sk, u64 fail_seq)
 		tcp_send_ack(sk);
 
 		/* RFC8684 §3.7: after accepting MP_FAIL with a single
-		 * subflow, leave MPTCP mode and never revert. No dedicated
-		 * fallback MIB yet; InfiniteMapTx is counted when the map
-		 * is transmitted. Handle pending DATA_FIN like
-		 * mptcp_try_fallback().
+		 * subflow, leave MPTCP mode and never revert. Use
+		 * mptcp_try_fallback() so pending DATA_FIN is handled.
+		 * InfiniteMapTx is counted when the map is transmitted.
 		 */
-		spin_lock_bh(&msk->fallback_lock);
-		if (__mptcp_check_fallback(msk)) {
-			spin_unlock_bh(&msk->fallback_lock);
-			return;
-		}
-		if (!msk->allow_infinite_fallback) {
-			spin_unlock_bh(&msk->fallback_lock);
+		if (!mptcp_try_fallback(sk, MPTCP_MIB_MPFAILFALLBACK)) {
 			MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_FALLBACKFAILED);
 			mptcp_subflow_reset(sk);
-			return;
-		}
-		set_bit(MPTCP_FALLBACK_DONE, &msk->flags);
-		spin_unlock_bh(&msk->fallback_lock);
-
-		if (READ_ONCE(msk->snd_data_fin_enable) &&
-		    !(sk->sk_shutdown & SEND_SHUTDOWN)) {
-			gfp_t saved_allocation = sk->sk_allocation;
-
-			sk->sk_allocation = GFP_ATOMIC;
-			sk->sk_shutdown |= SEND_SHUTDOWN;
-			tcp_shutdown(sk, SEND_SHUTDOWN);
-			sk->sk_allocation = saved_allocation;
 		}
 	} else {
 		pr_debug("MP_FAIL response received\n");
