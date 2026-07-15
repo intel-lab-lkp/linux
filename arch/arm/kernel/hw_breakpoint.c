@@ -904,33 +904,6 @@ unlock:
 	watchpoint_single_step_handler(addr);
 }
 
-#ifdef CONFIG_CFI
-static void hw_breakpoint_cfi_handler(struct pt_regs *regs)
-{
-	/*
-	 * TODO: implementing target and type to pass to CFI using the more
-	 * elaborate report_cfi_failure() requires compiler work. To be able
-	 * to properly extract target information the compiler needs to
-	 * emit a stable instructions sequence for the CFI checks so we can
-	 * decode the instructions preceding the trap and figure out which
-	 * registers were used.
-	 */
-
-	switch (report_cfi_failure_noaddr(regs, instruction_pointer(regs))) {
-	case BUG_TRAP_TYPE_BUG:
-		die("Oops - CFI", regs, 0);
-		break;
-	case BUG_TRAP_TYPE_WARN:
-		/* Skip the breaking instruction */
-		instruction_pointer(regs) += 4;
-		break;
-	default:
-		die("Unknown CFI error", regs, 0);
-		break;
-	}
-}
-#endif
-
 /*
  * Called from either the Data Abort Handler [watchpoint] or the
  * Prefetch Abort Handler [breakpoint] with interrupts disabled.
@@ -962,10 +935,19 @@ static int hw_breakpoint_pending(unsigned long addr, unsigned int fsr,
 		break;
 #ifdef CONFIG_CFI
 	case ARM_ENTRY_CFI_BREAKPOINT:
+		/*
+		 * Clang lowers its CFI checks to a plain breakpoint that does not
+		 * encode the call target or expected type, so (unlike the GCC UDF
+		 * handler in traps.c) this can only report via
+		 * report_cfi_failure_noaddr(). Recovering the target would require
+		 * the compiler to emit a stable instruction sequence around the
+		 * check to decode the registers used.
+		 */
 		if (user_mode(regs))
 			ret = 1; /* Don't handle userspace BKPT */
-		else
-			hw_breakpoint_cfi_handler(regs);
+		else if (!arm_cfi_handle_failure(regs,
+				report_cfi_failure_noaddr(regs, instruction_pointer(regs))))
+			die("Unknown CFI error", regs, 0);
 		break;
 #endif
 	default:

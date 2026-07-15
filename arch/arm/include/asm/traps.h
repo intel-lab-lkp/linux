@@ -2,6 +2,7 @@
 #ifndef _ASMARM_TRAP_H
 #define _ASMARM_TRAP_H
 
+#include <linux/bug.h>
 #include <linux/linkage.h>
 #include <linux/list.h>
 
@@ -19,6 +20,8 @@ struct undef_hook {
 
 void register_undef_hook(struct undef_hook *hook);
 void unregister_undef_hook(struct undef_hook *hook);
+
+bool arm_cfi_handle_failure(struct pt_regs *regs, enum bug_trap_type type);
 
 static inline int __in_irqentry_text(unsigned long ptr)
 {

@@ -27,6 +27,7 @@
 #include <linux/sched/task_stack.h>
 #include <linux/irq.h>
 #include <linux/vmalloc.h>
+#include <linux/cfi.h>
 
 #include <linux/atomic.h>
 #include <asm/cacheflush.h>
@@ -40,6 +41,7 @@
 #include <asm/stacktrace.h>
 #include <asm/system_misc.h>
 #include <asm/opcodes.h>
+#include <linux/bitfield.h>
 
 
 static const char *handler[]= {
@@ -442,6 +444,141 @@ int call_undef_hook(struct pt_regs *regs, unsigned int instr)
 	return fn ? fn(regs, instr) : 1;
 }
 
+#ifdef CONFIG_CFI
+/**
+ * arm_cfi_handle_failure() - Act on a report_cfi_failure() result
+ * @regs: registers at the trapping instruction
+ * @type: the bug_trap_type returned by report_cfi_failure*()
+ *
+ * Shared by the GCC UDF handler in this file and the Clang breakpoint handler
+ * in hw_breakpoint.c: oops on a fatal violation, or under CFI permissive mode
+ * skip the (4-byte, ARM state) trapping instruction and continue.
+ *
+ * Return: true if @type was a recognized CFI failure and has been handled;
+ * false otherwise, so the caller can escalate.
+ */
+bool arm_cfi_handle_failure(struct pt_regs *regs, enum bug_trap_type type)
+{
+	switch (type) {
+	case BUG_TRAP_TYPE_BUG:
+		die("Oops - CFI", regs, 0);
+		break;
+	case BUG_TRAP_TYPE_WARN:
+		/* Permissive mode: skip the trapping instruction and continue. */
+		instruction_pointer(regs) += 4;
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * ARM32 KCFI trap handler.
+ * UDF instruction format: cccc 0111 1111 imm12 1111 imm4
+ * Immediate is reconstructed from bits 19-8 (12 bits) and bits 3-0 (4 bits)
+ * KCFI immediate encoding: 0x8000 | (0x1F << 5) | (target_reg_num & 31)
+ * - Bit 15: KCFI trap identifier (0x8000)
+ * - Bits 9-5: Type ID register field (0x1F when invalid due to stack spilling)
+ * - Bits 4-0: Target address register number
+ */
+#define CFI_UDF_KCFI_BIT    BIT(15)	  /* KCFI identifier bit (0x8000) */
+#define CFI_UDF_IMM_TARGET  GENMASK(4, 0) /* Target register (bits 4:0) */
+#define CFI_UDF_IMM_TYPE    GENMASK(9, 5) /* Type register (bits 9:5) */
+
+/* UDF base pattern with KCFI bit: cond=0xe, 0x7f, xxxx, 1xxx, 0xf, xxxx */
+#define CFI_UDF_IMM_BASE    0xe7f008f0
+#define CFI_UDF_IMM_MASK    0xfff008f0	/* Mask for UDF + KCFI bit matching */
+
+/**
+ * cfi_udf_handler() - Decode and report a GCC KCFI UDF trap
+ * @regs: registers at the trapping instruction
+ * @instr: the trapping instruction word
+ *
+ * Called for every kernel-mode undefined instruction. If @instr is a GCC
+ * KCFI UDF, decode its target and expected type and hand them to
+ * report_cfi_failure(), which oopses (fatal) or, under CFI permissive mode,
+ * warns and skips the instruction.
+ *
+ * Return: 0 if this was a KCFI failure and has been handled (the caller
+ * should return to the interrupted context); 1 otherwise when the UDF was not
+ * a KCFI trap (user mode, non-KCFI encoding, malformed operands, or an
+ * unrecognized report), so the caller should keep looking for a handler.
+ */
+static int cfi_udf_handler(struct pt_regs *regs, unsigned int instr)
+{
+	unsigned long target;
+	u32 target_reg, type_reg, type, imm16;
+
+	/*
+	 * KCFI checks are only emitted in kernel code, so ignore user-mode UDFs
+	 * (this also stops a user process spoofing the KCFI encoding), and only
+	 * handle UDFs carrying the KCFI pattern.
+	 */
+	if (processor_mode(regs) != SVC_MODE)
+		return 1;
+	if ((instr & CFI_UDF_IMM_MASK) != CFI_UDF_IMM_BASE)
+		return 1;
+
+	/* Reconstruct 16-bit immediate from bits 19-8 and 3-0 */
+	imm16 = ((instr >> 4) & 0xfff0) | (instr & 0x0f);
+
+	target_reg = FIELD_GET(CFI_UDF_IMM_TARGET, imm16);
+	type_reg = FIELD_GET(CFI_UDF_IMM_TYPE, imm16);
+
+	if (target_reg >= 16) {
+		pr_err("CFI UDF handler: invalid target register %u\n", target_reg);
+		return 1;
+	}
+
+	target = regs->uregs[target_reg];
+
+	/* Type register field is set to all 1s (0x1F) when spilled; extract from EOR sequence */
+	if (type_reg == 0x1F) {
+		u32 *pc = (u32 *)regs->ARM_pc;
+		int eor_count = 0;
+		int i;
+
+		type = 0;
+		/* Walk back up to 6 instructions to find EOR sequence for type ID */
+		for (i = 1; i <= 6 && eor_count < 4; i++) {
+			u32 instr_prev = __mem_to_opcode_arm(pc[-i]);
+
+			/* Check for EOR/EORS immediate: cccc 0010 0x1n Rn Rd immediate */
+			if ((instr_prev & 0x0fe00000) == 0x02200000) {
+				/* Extract EOR immediate value and XOR to reconstruct type */
+				u32 rotate = (instr_prev >> 8) & 0xf;
+				u32 imm8 = instr_prev & 0xff;
+				u32 imm32 = (imm8 >> (rotate * 2)) | (imm8 << (32 - rotate * 2));
+				type ^= imm32;
+				eor_count++;
+			}
+		}
+		if (eor_count != 4)
+			pr_err("CFI UDF handler: found %d EOR instructions, expected 4\n", eor_count);
+	} else {
+		if (type_reg >= 16) {
+			pr_err("CFI UDF handler: invalid type register %u\n", type_reg);
+			return 1;
+		}
+
+		type = regs->uregs[type_reg];
+	}
+
+	if (!arm_cfi_handle_failure(regs,
+			report_cfi_failure(regs, regs->ARM_pc, &target, type)))
+		return 1;
+
+	return 0;
+}
+#else
+static inline int cfi_udf_handler(struct pt_regs *regs, unsigned int instr)
+{
+	return 1;
+}
+#endif /* CONFIG_CFI */
+
 asmlinkage void do_undefinstr(struct pt_regs *regs)
 {
 	unsigned int instr;
@@ -477,6 +614,13 @@ asmlinkage void do_undefinstr(struct pt_regs *regs)
 			goto die_sig;
 		instr = __mem_to_opcode_arm(instr);
 	}
+
+	/*
+	 * Decode KCFI failures directly (not via register_undef_hook) so they
+	 * are diagnosed even when they fire before initcalls have run.
+	 */
+	if (cfi_udf_handler(regs, instr) == 0)
+		return;
 
 	if (call_undef_hook(regs, instr) == 0)
 		return;
