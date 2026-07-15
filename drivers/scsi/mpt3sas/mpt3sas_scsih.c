@@ -3186,6 +3186,16 @@ mpt3sas_scsih_issue_tm(struct MPT3SAS_ADAPTER *ioc, u16 handle, uint channel,
 	int_to_scsilun(lun, (struct scsi_lun *)mpi_request->LUN);
 	mpt3sas_scsih_set_tm_flag(ioc, handle);
 	init_completion(&ioc->tm_cmds.done);
+	/*
+	 * A task management reply must be posted to an interrupt-serviced
+	 * reply queue. If the associated command was submitted on an io_uring
+	 * poll queue, that queue has no MSI-X interrupt and is drained only by
+	 * mpt3sas_blk_mq_poll(); a task management request is not a block layer
+	 * request, so nothing would process its reply and the command would
+	 * time out. Fall back to reply queue 0 in that case.
+	 */
+	if (msix_task >= ioc->iopoll_q_start_index)
+		msix_task = 0;
 	ioc->put_smid_hi_priority(ioc, smid, msix_task);
 	wait_for_completion_timeout(&ioc->tm_cmds.done, timeout*HZ);
 	if (!(ioc->tm_cmds.status & MPT3_CMD_COMPLETE)) {
