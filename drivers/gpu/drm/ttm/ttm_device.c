@@ -266,7 +266,7 @@ void ttm_device_fini(struct ttm_device *bdev)
 
 	spin_lock(&bdev->lru_lock);
 	for (i = 0; i < TTM_MAX_BO_PRIORITY; ++i)
-		if (list_empty(&man->lru[0]))
+		if (list_empty(&man->lru[i]))
 			pr_debug("Swap list %d was clean\n", i);
 	spin_unlock(&bdev->lru_lock);
 
