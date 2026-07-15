@@ -123,7 +123,6 @@ u8 NumOutPipe
 
 
 
-void rtw_init_hal_com_default_value(struct adapter *Adapter);
 
 void c2h_evt_clear(struct adapter *adapter);
 s32 c2h_evt_read_88xx(struct adapter *adapter, u8 *buf);

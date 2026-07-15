@@ -640,7 +640,10 @@ u8 rtw_init_drv_sw(struct adapter *padapter)
 
 	rtw_init_default_value(padapter);
 
-	rtw_init_hal_com_default_value(padapter);
+	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
+
+	pHalData->AntDetection = 1;
+
 
 	if (rtw_init_cmd_priv(&padapter->cmdpriv))
 		return _FAIL;
@@ -665,7 +668,7 @@ u8 rtw_init_drv_sw(struct adapter *padapter)
 	spin_lock_init(&padapter->security_key_mutex);
 
 	/*  We don't need to memset padapter->XXX to zero, because adapter is allocated by vzalloc(). */
-	/* memset((unsigned char *)&padapter->securitypriv, 0, sizeof (struct security_priv)); */
+	/* memset((u8 *)&padapter->securitypriv, 0, sizeof (struct security_priv)); */
 
 	if (_rtw_init_sta_priv(&padapter->stapriv) == _FAIL)
 		goto free_recv_priv;

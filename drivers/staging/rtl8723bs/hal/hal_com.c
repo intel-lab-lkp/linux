@@ -420,14 +420,6 @@ bool Hal_MappingOutPipe(struct adapter *padapter, u8 NumOutPipe)
 
 }
 
-
-void rtw_init_hal_com_default_value(struct adapter *Adapter)
-{
-	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
-
-	pHalData->AntDetection = 1;
-}
-
 /*
  * C2H event format:
  * Field	 TRIGGER		CONTENT	   CMD_SEQ	CMD_LEN		 CMD_ID
