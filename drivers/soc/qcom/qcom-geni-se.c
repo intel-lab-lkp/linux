@@ -7,6 +7,9 @@
 /* Disable MMIO tracing to prevent excessive logging of unwanted MMIO traces */
 #define __DISABLE_TRACE_MMIO__
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/qcom_geni_se.h>
+
 #include <linux/acpi.h>
 #include <linux/bitfield.h>
 #include <linux/clk.h>
