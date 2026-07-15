@@ -798,7 +798,10 @@ static signed int ap2sta_data_frame(struct adapter *adapter, union recv_frame *p
 		    is_zero_ether_addr(mybssid) ||
 		    (memcmp(pattrib->bssid, mybssid, ETH_ALEN))) {
 			if (!bmcast)
-				issue_deauth(adapter, pattrib->bssid, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);
+				issue_deauth(adapter,
+							 pattrib->bssid,
+							 WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA,
+							 false);
 
 			ret = _FAIL;
 			goto exit;
@@ -852,7 +855,10 @@ static signed int ap2sta_data_frame(struct adapter *adapter, union recv_frame *p
 				if (jiffies_to_msecs(jiffies - send_issue_deauth_time) > 10000 || send_issue_deauth_time == 0) {
 					send_issue_deauth_time = jiffies;
 
-					issue_deauth(adapter, pattrib->bssid, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);
+					issue_deauth(adapter,
+						pattrib->bssid,
+						WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA,
+						false);
 				}
 			}
 		}
@@ -883,7 +889,10 @@ static signed int sta2ap_data_frame(struct adapter *adapter, union recv_frame *p
 
 		*psta = rtw_get_stainfo(pstapriv, pattrib->src);
 		if (!*psta) {
-			issue_deauth(adapter, pattrib->src, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);
+			issue_deauth(adapter,
+						 pattrib->src,
+						 WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA,
+						 false);
 
 			ret = RTW_RX_HANDLED;
 			goto exit;
@@ -907,7 +916,10 @@ static signed int sta2ap_data_frame(struct adapter *adapter, union recv_frame *p
 			ret = RTW_RX_HANDLED;
 			goto exit;
 		}
-		issue_deauth(adapter, pattrib->src, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);
+		issue_deauth(adapter,
+					 pattrib->src,
+					 WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA,
+					 false);
 		ret = RTW_RX_HANDLED;
 		goto exit;
 	}

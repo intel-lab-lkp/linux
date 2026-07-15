@@ -1302,7 +1302,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 
 asoc_class2_error:
 
-	issue_deauth(padapter, GetAddr2Ptr(pframe), status);
+	issue_deauth(padapter, GetAddr2Ptr(pframe), status, false);
 
 	return _FAIL;
 
@@ -3166,7 +3166,7 @@ exit:
 	return ret;
 }
 
-static int _issue_deauth(struct adapter *padapter, unsigned char *da,
+int issue_deauth(struct adapter *padapter, unsigned char *da,
 			 unsigned short reason, bool wait_ack)
 {
 	struct xmit_frame			*pmgntframe;
@@ -3224,11 +3224,6 @@ exit:
 	return ret;
 }
 
-int issue_deauth(struct adapter *padapter, unsigned char *da, unsigned short reason)
-{
-	return _issue_deauth(padapter, da, reason, false);
-}
-
 int issue_deauth_ex(struct adapter *padapter, u8 *da, unsigned short reason, int try_cnt,
 	int wait_ms)
 {
@@ -3236,7 +3231,7 @@ int issue_deauth_ex(struct adapter *padapter, u8 *da, unsigned short reason, int
 	int i = 0;
 
 	do {
-		ret = _issue_deauth(padapter, da, reason, wait_ms > 0);
+		ret = issue_deauth(padapter, da, reason, wait_ms > 0);
 
 		i++;
 

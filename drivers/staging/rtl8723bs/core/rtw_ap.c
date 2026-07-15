@@ -1775,7 +1775,7 @@ u8 ap_free_sta(struct adapter *padapter,
 		/* tear down TX AMPDU */
 		send_delba(padapter, 1, psta->hwaddr);/*  // originator */
 
-		issue_deauth(padapter, psta->hwaddr, reason);
+		issue_deauth(padapter, psta->hwaddr, reason, false);
 	}
 
 	psta->htpriv.agg_enable_bitmap = 0x0;/* reset */
@@ -1824,7 +1824,7 @@ void rtw_sta_flush(struct adapter *padapter)
 	}
 	spin_unlock_bh(&pstapriv->asoc_list_lock);
 
-	issue_deauth(padapter, bc_addr, WLAN_REASON_DEAUTH_LEAVING);
+	issue_deauth(padapter, bc_addr, WLAN_REASON_DEAUTH_LEAVING, false);
 
 	associated_clients_update(padapter, true);
 }

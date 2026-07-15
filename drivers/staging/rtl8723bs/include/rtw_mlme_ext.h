@@ -546,7 +546,7 @@ s32 issue_probereq_ex(struct adapter *padapter, struct ndis_802_11_ssid *pssid, 
 int issue_nulldata(struct adapter *padapter, unsigned char *da, unsigned int power_mode, int try_cnt, int wait_ms);
 s32 issue_nulldata_in_interrupt(struct adapter *padapter, u8 *da);
 int issue_qos_nulldata(struct adapter *padapter, unsigned char *da, u16 tid, int try_cnt, int wait_ms);
-int issue_deauth(struct adapter *padapter, unsigned char *da, unsigned short reason);
+int issue_deauth(struct adapter *padapter, unsigned char *da, unsigned short reason, bool wait_ack);
 int issue_deauth_ex(struct adapter *padapter, u8 *da, unsigned short reason, int try_cnt, int wait_ms);
 void issue_action_BA(struct adapter *padapter, unsigned char *raddr, unsigned char action, unsigned short status);
 void issue_action_SA_Query(struct adapter *padapter, unsigned char *raddr, unsigned char action, unsigned short tid);
