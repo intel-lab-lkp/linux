@@ -3883,7 +3883,7 @@ u8 collect_bss_info(struct adapter *padapter, union recv_frame *precv_frame, str
 
 			bssid->configuration.ds_config = HT_info->primary_channel;
 		} else { /*  use current channel */
-			bssid->configuration.ds_config = rtw_get_oper_ch(padapter);
+			bssid->configuration.ds_config = adapter_to_dvobj(padapter)->oper_channel;
 		}
 	}
 
@@ -3924,7 +3924,7 @@ u8 collect_bss_info(struct adapter *padapter, union recv_frame *precv_frame, str
 	}
 
 	/*  mark bss info receiving from nearby channel as signal_quality 101 */
-	if (bssid->configuration.ds_config != rtw_get_oper_ch(padapter))
+	if (bssid->configuration.ds_config != adapter_to_dvobj(padapter)->oper_channel)
 		bssid->phy_info.signal_quality = 101;
 
 	return _SUCCESS;

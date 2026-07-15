@@ -1986,7 +1986,7 @@ static int cfg80211_rtw_get_channel(struct wiphy *wiphy, struct wireless_dev *wd
 	if (!adapter->rtw_wdev)
 		return -ENODEV;
 
-	channel = rtw_get_oper_ch(adapter);
+	channel = adapter_to_dvobj(adapter)->oper_channel;
 	if (!channel)
 		return -ENODATA;
 
@@ -2460,7 +2460,7 @@ void rtw_cfg80211_rx_action(struct adapter *adapter, u8 *frame, uint frame_len, 
 	int channel;
 	u8 category, action;
 
-	channel = rtw_get_oper_ch(adapter);
+	channel = adapter_to_dvobj(adapter)->oper_channel;
 
 	rtw_action_frame_parse(frame, frame_len, &category, &action);
 
@@ -2483,7 +2483,7 @@ static int _cfg80211_rtw_mgmt_tx(struct adapter *padapter, u8 tx_ch, const u8 *b
 	rtw_set_scan_deny(padapter, 1000);
 
 	rtw_scan_abort(padapter);
-	if (tx_ch != rtw_get_oper_ch(padapter)) {
+	if (tx_ch != adapter_to_dvobj(padapter)->oper_channel) {
 		if (!check_fwstate(&padapter->mlmepriv, _FW_LINKED))
 			pmlmeext->cur_channel = tx_ch;
 		set_channel_bwmode(padapter, tx_ch, HAL_PRIME_CHNL_OFFSET_DONT_CARE, CHANNEL_WIDTH_20);

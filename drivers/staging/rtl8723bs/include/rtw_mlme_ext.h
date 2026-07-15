@@ -439,7 +439,6 @@ void Switch_DM_Func(struct adapter *padapter, u32 mode, u8 enable);
 
 void set_msr(struct adapter *padapter, u8 type);
 
-u8 rtw_get_oper_ch(struct adapter *adapter);
 void rtw_set_oper_ch(struct adapter *adapter, u8 ch);
 void rtw_set_oper_bw(struct adapter *adapter, u8 bw);
 void rtw_set_oper_choffset(struct adapter *adapter, u8 offset);

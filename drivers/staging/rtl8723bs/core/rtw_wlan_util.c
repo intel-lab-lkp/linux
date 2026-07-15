@@ -247,10 +247,7 @@ void set_msr(struct adapter *padapter, u8 type)
 	rtw_hal_set_hwreg(padapter, HW_VAR_MEDIA_STATUS, (u8 *)(&type));
 }
 
-inline u8 rtw_get_oper_ch(struct adapter *adapter)
-{
-	return adapter_to_dvobj(adapter)->oper_channel;
-}
+
 
 inline void rtw_set_oper_ch(struct adapter *adapter, u8 ch)
 {

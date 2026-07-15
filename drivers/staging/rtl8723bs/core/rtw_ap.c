@@ -267,8 +267,8 @@ void expire_timeout_chk(struct adapter *padapter)
 		struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 
 		/* switch to correct channel of current network  before issue keep-alive frames */
-		if (rtw_get_oper_ch(padapter) != pmlmeext->cur_channel) {
-			backup_oper_channel = rtw_get_oper_ch(padapter);
+		if (adapter_to_dvobj(padapter)->oper_channel != pmlmeext->cur_channel) {
+			backup_oper_channel = adapter_to_dvobj(padapter)->oper_channel;
 			r8723bs_select_channel(padapter, pmlmeext->cur_channel);
 		}
 
