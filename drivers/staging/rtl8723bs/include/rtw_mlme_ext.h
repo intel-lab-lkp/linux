@@ -449,7 +449,6 @@ unsigned int decide_wait_for_beacon_timeout(unsigned int bcn_interval);
 
 /* modify HW only */
 void _write_cam(struct adapter *padapter, u8 entry, u16 ctrl, u8 *mac, u8 *key);
-void _clear_cam_entry(struct adapter *padapter, u8 entry);
 
 /* modify both HW and cache */
 void write_cam(struct adapter *padapter, u8 id, u16 ctrl, u8 *mac, u8 *key);

@@ -423,14 +423,6 @@ void _write_cam(struct adapter *padapter, u8 entry, u16 ctrl, u8 *mac, u8 *key)
 	}
 }
 
-void _clear_cam_entry(struct adapter *padapter, u8 entry)
-{
-	unsigned char null_sta[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-	unsigned char null_key[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-	_write_cam(padapter, entry, 0, null_sta, null_key);
-}
-
 inline void write_cam(struct adapter *adapter, u8 id, u16 ctrl, u8 *mac, u8 *key)
 {
 	_write_cam(adapter, id, ctrl, mac, key);
@@ -439,7 +431,10 @@ inline void write_cam(struct adapter *adapter, u8 id, u16 ctrl, u8 *mac, u8 *key
 
 inline void clear_cam_entry(struct adapter *adapter, u8 id)
 {
-	_clear_cam_entry(adapter, id);
+	u8 null_sta[6] = {0};
+	u8 null_key[16] = {0};
+
+	_write_cam(adapter, id, 0, null_sta, null_key);
 	clear_cam_cache(adapter, id);
 }
 
