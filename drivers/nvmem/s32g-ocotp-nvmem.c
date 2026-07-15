@@ -60,6 +60,7 @@ static const struct of_device_id ocotp_of_match[] = {
 	{ .compatible = "nxp,s32g2-ocotp" },
 	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(of, ocotp_of_match);
 
 static int s32g_ocotp_probe(struct platform_device *pdev)
 {
