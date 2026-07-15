@@ -2049,6 +2049,18 @@ static const struct dev_pm_ops qcom_geni_serial_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(qcom_geni_serial_suspend, qcom_geni_serial_resume)
 };
 
+static void qcom_geni_serial_sys_shutdown(struct platform_device *pdev)
+{
+	struct qcom_geni_serial_port *port = platform_get_drvdata(pdev);
+	struct uart_port *uport = &port->uport;
+
+	if (pm_runtime_status_suspended(uport->dev))
+		return;
+
+	qcom_geni_serial_stop_tx(uport);
+	qcom_geni_serial_stop_rx(uport);
+}
+
 static const struct of_device_id qcom_geni_serial_match_table[] = {
 #if IS_ENABLED(CONFIG_SERIAL_QCOM_GENI_CONSOLE)
 	{
@@ -2075,6 +2087,7 @@ MODULE_DEVICE_TABLE(of, qcom_geni_serial_match_table);
 static struct platform_driver qcom_geni_serial_platform_driver = {
 	.remove = qcom_geni_serial_remove,
 	.probe = qcom_geni_serial_probe,
+	.shutdown = qcom_geni_serial_sys_shutdown,
 	.driver = {
 		.name = "qcom_geni_serial",
 		.of_match_table = qcom_geni_serial_match_table,
