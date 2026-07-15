@@ -1553,7 +1553,8 @@ void __init tsc_init(void)
 		return;
 	}
 
-	if (tsc_clocksource_reliable || tsc_watchdog == TSC_WATCHDOG_OFF)
+	if (tsc_clocksource_reliable || tsc_watchdog == TSC_WATCHDOG_OFF ||
+	    boot_cpu_has(X86_FEATURE_HYPERVISOR))
 		tsc_disable_clocksource_watchdog();
 
 	clocksource_register_khz(&clocksource_tsc_early, tsc_khz);
