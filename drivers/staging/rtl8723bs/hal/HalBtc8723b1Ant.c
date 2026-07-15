@@ -755,12 +755,6 @@ static void halbtc8723b1ant_LpsRpwm(
 	pCoexDm->preRpwm = pCoexDm->curRpwm;
 }
 
-static void halbtc8723b1ant_SwMechanism(
-	struct btc_coexist *pBtCoexist, bool bLowPenaltyRA
-)
-{
-	halbtc8723b1ant_LowPenaltyRa(pBtCoexist, NORMAL_EXEC, bLowPenaltyRA);
-}
 
 static void halbtc8723b1ant_SetAntPath(
 	struct btc_coexist *pBtCoexist, u8 antPosType, bool bInitHwCfg, bool bWifiOff
@@ -1271,35 +1265,32 @@ static bool halbtc8723b1ant_IsCommonAction(struct btc_coexist *pBtCoexist)
 		!bWifiConnected &&
 		pCoexDm->btStatus == BT_8723B_1ANT_BT_STATUS_NON_CONNECTED_IDLE
 	) {
-		/* halbtc8723b1ant_SwMechanism(pBtCoexist, false); */
 
 		bCommon = true;
 	} else if (
 		bWifiConnected &&
 		(pCoexDm->btStatus == BT_8723B_1ANT_BT_STATUS_NON_CONNECTED_IDLE)
 	) {
-		/* halbtc8723b1ant_SwMechanism(pBtCoexist, false); */
 
 		bCommon = true;
 	} else if (
 		!bWifiConnected &&
 		(pCoexDm->btStatus == BT_8723B_1ANT_BT_STATUS_CONNECTED_IDLE)
 	) {
-		/* halbtc8723b1ant_SwMechanism(pBtCoexist, false); */
 
 		bCommon = true;
 	} else if (
 		bWifiConnected &&
 		(pCoexDm->btStatus == BT_8723B_1ANT_BT_STATUS_CONNECTED_IDLE)
 	) {
-		/* halbtc8723b1ant_SwMechanism(pBtCoexist, false); */
+
 
 		bCommon = true;
 	} else if (
 		!bWifiConnected &&
 		(pCoexDm->btStatus != BT_8723B_1ANT_BT_STATUS_CONNECTED_IDLE)
 	) {
-		/* halbtc8723b1ant_SwMechanism(pBtCoexist, false); */
+
 
 		bCommon = true;
 	} else {
@@ -1975,14 +1966,14 @@ static void halbtc8723b1ant_RunCoexistMechanism(struct btc_coexist *pBtCoexist)
 		else
 			halbtc8723b1ant_LimitedRx(pBtCoexist, NORMAL_EXEC, false, true, 0x8);
 
-		halbtc8723b1ant_SwMechanism(pBtCoexist, true);
+		halbtc8723b1ant_LowPenaltyRa(pBtCoexist, NORMAL_EXEC, true);
 		halbtc8723b1ant_RunSwCoexistMechanism(pBtCoexist);  /* just print debug message */
 	} else {
 		halbtc8723b1ant_LimitedTx(pBtCoexist, NORMAL_EXEC, 0, 0, 0, 0);
 
 		halbtc8723b1ant_LimitedRx(pBtCoexist, NORMAL_EXEC, false, false, 0x5);
 
-		halbtc8723b1ant_SwMechanism(pBtCoexist, false);
+		halbtc8723b1ant_LowPenaltyRa(pBtCoexist, NORMAL_EXEC, false);
 		halbtc8723b1ant_RunSwCoexistMechanism(pBtCoexist); /* just print debug message */
 	}
 
@@ -2019,7 +2010,7 @@ static void halbtc8723b1ant_InitCoexDm(struct btc_coexist *pBtCoexist)
 	/*  force to reset coex mechanism */
 
 	/*  sw all off */
-	halbtc8723b1ant_SwMechanism(pBtCoexist, false);
+	halbtc8723b1ant_LowPenaltyRa(pBtCoexist, NORMAL_EXEC, false);
 
 	/* halbtc8723b1ant_PsTdma(pBtCoexist, FORCE_EXEC, false, 8); */
 	halbtc8723b1ant_CoexTableWithType(pBtCoexist, FORCE_EXEC, 0);
