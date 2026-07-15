@@ -356,6 +356,11 @@ specification that mandates those terms. For new specifications
 translate specification usage of the terminology to the kernel coding
 standard where possible.
 
+Variable holding sysctl value should have ``sysctl`` in its name.
+
+Variable measuring time should be suffixed with the unit of time it is measured in:
+``_s`` for seconds, ``_ms`` for milliseconds, ``_us`` for microseconds, ``_ns`` for nanoseconds.
+
 5) Typedefs
 -----------
 
