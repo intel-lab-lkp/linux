@@ -1,0 +1,22 @@
+
+config ARCH_SUPPORTS_RMM
+	bool
+
+config ARM_RMM
+	bool "Realm Management Monitor (RMM) Support"
+	depends on ARCH_SUPPORTS_RMM
+	default y
+	help
+	  Support the Realm Management Monitor (RMM) on Arm systems that
+	  implement the Realm Management Extension (RME), as defined by the
+	  Arm Confidential Compute Architecture.
+
+	  The RMM runs in the Realm world and provides the Realm Management
+	  Interface (RMI) used by a Normal World host to create, manage and run
+	  protected virtual machines called Realms. This option builds the
+	  host-side RMI support used by KVM to detect a compatible RMM,
+	  configure it, manage delegated memory and enable Realm guests.
+
+	  Selecting this option does not by itself make Realm guests available:
+	  the system must also provide RME-capable hardware and firmware with a
+	  compatible RMM implementation.
