@@ -2133,6 +2133,12 @@ static bool hvhe_possible(const struct arm64_cpu_capabilities *entry,
 
 bool cpu_supports_bbml3(void)
 {
+	u64 mmfr2;
+
+	mmfr2 = __read_sysreg_by_encoding(SYS_ID_AA64MMFR2_EL1);
+	if (SYS_FIELD_GET(ID_AA64MMFR2_EL1, BBM, mmfr2) >= ID_AA64MMFR2_EL1_BBM_3)
+		return true;
+
 	/* CPUs that support BBML3 but dont advertise through MMFR2 ID */
 	static const struct midr_range supports_bbml3_list[] = {
 		MIDR_REV_RANGE(MIDR_CORTEX_X4, 0, 3, 0xf),
@@ -2154,15 +2160,10 @@ bool cpu_supports_bbml3(void)
 		{}
 	};
 
-	if (!is_midr_in_range_list(supports_bbml3_list))
-		return false;
+	if (is_midr_in_range_list(supports_bbml3_list))
+		return true;
 
-	/*
-	 * We currently ignore the ID_AA64MMFR2_EL1 register, and only care
-	 * about whether the MIDR check passes.
-	 */
-
-	return true;
+	return false;
 }
 
 static bool has_bbml3(const struct arm64_cpu_capabilities *caps, int scope)
