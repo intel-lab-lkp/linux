@@ -31,6 +31,7 @@ struct intel_dg_nvm {
 	void __iomem *base;
 	void __iomem *base2;
 	bool non_posted_erase;
+	bool survivability_enabled;
 
 	size_t size;
 	unsigned int nregions;
@@ -204,6 +205,13 @@ static int idg_nvm_is_valid(struct intel_dg_nvm *nvm)
 static unsigned int idg_nvm_get_region(const struct intel_dg_nvm *nvm, loff_t from)
 {
 	unsigned int i;
+
+	/*
+	 * When survivability region is enabled it positioned on index 0 and has region_id = 0
+	 * Region 0 is special, via this region whole device memory can be accessed.
+	 */
+	if (nvm->survivability_enabled)
+		return 0;
 
 	for (i = 0; i < nvm->nregions; i++) {
 		if ((nvm->regions[i].offset + nvm->regions[i].size - 1) >= from &&
@@ -443,32 +451,39 @@ static int intel_dg_nvm_init(struct intel_dg_nvm *nvm, struct device *device,
 		u32 address, base, limit, region;
 		u8 id = nvm->regions[i].id;
 
-		address = NVM_FLREG(id);
-		region = idg_nvm_read32(nvm, address);
+		if (nvm->regions[i].size) { /* pre-defined survivability region */
+			limit = nvm->regions[i].offset + nvm->regions[i].size - 1;
 
-		base = FIELD_GET(NVM_FREG_BASE_MASK, region) << NVM_FREG_ADDR_SHIFT;
-		limit = (FIELD_GET(NVM_FREG_ADDR_MASK, region) << NVM_FREG_ADDR_SHIFT) |
-			NVM_FREG_MIN_REGION_SIZE;
+			if (nvm->size < limit)
+				nvm->size = limit;
+		} else {
+			address = NVM_FLREG(id);
+			region = idg_nvm_read32(nvm, address);
 
-		dev_dbg(device, "[%d] %s: region: 0x%08X base: 0x%08x limit: 0x%08x\n",
-			id, nvm->regions[i].name, region, base, limit);
+			base = FIELD_GET(NVM_FREG_BASE_MASK, region) << NVM_FREG_ADDR_SHIFT;
+			limit = (FIELD_GET(NVM_FREG_ADDR_MASK, region) << NVM_FREG_ADDR_SHIFT) |
+				NVM_FREG_MIN_REGION_SIZE;
 
-		if (base >= limit || (i > 0 && limit == 0)) {
-			dev_dbg(device, "[%d] %s: disabled\n",
-				id, nvm->regions[i].name);
-			nvm->regions[i].is_readable = 0;
-			continue;
+			dev_dbg(device, "[%d] %s: region: 0x%08X base: 0x%08x limit: 0x%08x\n",
+				id, nvm->regions[i].name, region, base, limit);
+
+			if (base >= limit || (i > 0 && limit == 0)) {
+				dev_dbg(device, "[%d] %s: disabled\n",
+					id, nvm->regions[i].name);
+				nvm->regions[i].is_readable = 0;
+				continue;
+			}
+
+			if (nvm->size < limit)
+				nvm->size = limit;
+
+			nvm->regions[i].offset = base;
+			nvm->regions[i].size = limit - base + 1;
+			/* No write access to descriptor; mask it out*/
+			nvm->regions[i].is_writable = idg_nvm_region_writable(access_map, id);
+
+			nvm->regions[i].is_readable = idg_nvm_region_readable(access_map, id);
 		}
-
-		if (nvm->size < limit)
-			nvm->size = limit;
-
-		nvm->regions[i].offset = base;
-		nvm->regions[i].size = limit - base + 1;
-		/* No write access to descriptor; mask it out*/
-		nvm->regions[i].is_writable = idg_nvm_region_writable(access_map, id);
-
-		nvm->regions[i].is_readable = idg_nvm_region_readable(access_map, id);
 		dev_dbg(device, "Registered, %s id=%d offset=%lld size=%lld rd=%d wr=%d\n",
 			nvm->regions[i].name,
 			nvm->regions[i].id,
@@ -748,7 +763,7 @@ static int intel_dg_mtd_probe(struct auxiliary_device *aux_dev,
 	struct intel_dg_nvm *nvm;
 	struct device *device;
 	unsigned int nregions;
-	unsigned int i, n;
+	unsigned int i, n = 0;
 	int ret;
 
 	device = &aux_dev->dev;
@@ -764,6 +779,9 @@ static int intel_dg_mtd_probe(struct auxiliary_device *aux_dev,
 		return -ENODEV;
 	}
 
+	if (invm->survivability_size)
+		nregions++;
+
 	nvm = kzalloc_flex(*nvm, regions, nregions);
 	if (!nvm)
 		return -ENOMEM;
@@ -771,8 +789,26 @@ static int intel_dg_mtd_probe(struct auxiliary_device *aux_dev,
 	kref_init(&nvm->refcnt);
 	mutex_init(&nvm->lock);
 	nvm->nregions = nregions;
+	nvm->survivability_enabled = !!invm->survivability_size;
 
-	for (n = 0, i = 0; i < INTEL_DG_NVM_REGIONS; i++) {
+	if (invm->survivability_size) { /* this partition should be at idx 0 */
+		char *name = kasprintf(GFP_KERNEL, "%s.%s",
+				       dev_name(&aux_dev->dev), "DATA");
+		if (!name) {
+			ret = -ENOMEM;
+			goto err_norpm;
+		}
+
+		nvm->regions[n].name = name;
+		nvm->regions[n].id = 0;
+		nvm->regions[n].offset  = 0;
+		nvm->regions[n].size = invm->survivability_size;
+		nvm->regions[n].is_readable = true;
+		nvm->regions[n].is_writable = true;
+		n++;
+	}
+
+	for (i = 0; i < INTEL_DG_NVM_REGIONS; i++) {
 		if (!invm->regions[i].name)
 			continue;
 
