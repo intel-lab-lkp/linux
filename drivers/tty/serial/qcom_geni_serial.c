@@ -14,6 +14,7 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/panic_notifier.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
 #include <linux/platform_device.h>
@@ -151,6 +152,7 @@ struct qcom_geni_serial_port {
 	struct qcom_geni_private_data private_data;
 	const struct qcom_geni_device_data *dev_data;
 	struct dev_pm_domain_list *pd_list;
+	struct notifier_block panic_nb;
 };
 
 static const struct uart_ops qcom_geni_console_pops;
@@ -1798,6 +1800,22 @@ static const struct uart_ops qcom_geni_uart_pops = {
 	.pm = qcom_geni_serial_pm,
 };
 
+static int qcom_geni_serial_panic_notifier(struct notifier_block *nb,
+					   unsigned long action, void *data)
+{
+	struct qcom_geni_serial_port *port =
+		container_of(nb, struct qcom_geni_serial_port, panic_nb);
+	struct uart_port *uport = &port->uport;
+
+	if (pm_runtime_status_suspended(uport->dev))
+		return NOTIFY_OK;
+
+	qcom_geni_serial_stop_tx(uport);
+	qcom_geni_serial_stop_rx(uport);
+
+	return NOTIFY_OK;
+}
+
 static int qcom_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1925,6 +1943,9 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto error;
 
+	port->panic_nb.notifier_call = qcom_geni_serial_panic_notifier;
+	atomic_notifier_chain_register(&panic_notifier_list, &port->panic_nb);
+
 	return 0;
 
 error:
@@ -1937,6 +1958,8 @@ static void qcom_geni_serial_remove(struct platform_device *pdev)
 	struct qcom_geni_serial_port *port = platform_get_drvdata(pdev);
 	struct uart_port *uport = &port->uport;
 	struct uart_driver *drv = port->private_data.drv;
+
+	atomic_notifier_chain_unregister(&panic_notifier_list, &port->panic_nb);
 
 	dev_pm_clear_wake_irq(&pdev->dev);
 	device_init_wakeup(&pdev->dev, false);
