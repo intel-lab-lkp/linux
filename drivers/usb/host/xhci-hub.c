@@ -749,7 +749,7 @@ static int xhci_exit_test_mode(struct xhci_hcd *xhci)
 }
 
 /**
- * xhci_port_is_tunneled() - Check if USB3 connection is tunneled over USB4
+ * xhci_port_tunnel_mode() - Check if USB3 connection is tunneled over USB4
  * @xhci: xhci host controller
  * @port: USB3 port to be checked.
  *
@@ -763,7 +763,7 @@ static int xhci_exit_test_mode(struct xhci_hcd *xhci)
  * detecting USB3 over USB4 tunnels. USB_LINK_NATIVE or USB_LINK_TUNNELED
  * otherwise.
  */
-enum usb_link_tunnel_mode xhci_port_is_tunneled(struct xhci_hcd *xhci,
+enum usb_link_tunnel_mode xhci_port_tunnel_mode(struct xhci_hcd *xhci,
 						struct xhci_port *port)
 {
 	void __iomem *base = &xhci->cap_regs->hc_capbase;
@@ -787,8 +787,13 @@ enum usb_link_tunnel_mode xhci_port_is_tunneled(struct xhci_hcd *xhci,
 	/* Fall back to the legacy Intel-specific ext_cap */
 	hcd = xhci_to_hcd(xhci);
 	if (!dev_is_pci(hcd->self.controller) ||
-	    to_pci_dev(hcd->self.controller)->vendor != PCI_VENDOR_ID_INTEL)
-		return USB_LINK_UNKNOWN;
+	    to_pci_dev(hcd->self.controller)->vendor != PCI_VENDOR_ID_INTEL) {
+		/* Last chance - if the controller has a custom tunnel_mode op, try that */
+		if (xhci->tunnel_mode)
+			return xhci->tunnel_mode(xhci_to_hcd(xhci), port->hcd_portnum);
+		else
+			return USB_LINK_UNKNOWN;
+	}
 
 	offset = xhci_find_next_ext_cap(base, 0, XHCI_EXT_CAPS_INTEL_SPR_SHADOW);
 
