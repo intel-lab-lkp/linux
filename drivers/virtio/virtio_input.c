@@ -312,6 +312,10 @@ static int virtinput_probe(struct virtio_device *vdev)
 
 		if (test_bit(ABS_MT_SLOT, vi->idev->absbit)) {
 			nslots = input_abs_get_max(vi->idev, ABS_MT_SLOT) + 1;
+			if (nslots <= 0) {
+				err = -EINVAL;
+				goto err_mt_init_slots;
+			}
 			err = input_mt_init_slots(vi->idev, nslots, 0);
 			if (err)
 				goto err_mt_init_slots;
