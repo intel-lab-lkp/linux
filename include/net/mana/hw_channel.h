@@ -197,7 +197,7 @@ struct hw_channel_context {
 	u32 max_req_msg_size;
 	u32 max_resp_msg_size;
 
-	u16 hwc_init_q_depth_max;
+	u32 hwc_init_q_depth_max;
 	u32 hwc_init_max_req_msg_size;
 	u32 hwc_init_max_resp_msg_size;
 
