@@ -97,6 +97,8 @@ static void event_handler(struct work_struct *work)
 	}
 }
 
+static DECLARE_WORK(usbip_work, event_handler);
+
 int usbip_start_eh(struct usbip_device *ud)
 {
 	init_waitqueue_head(&ud->eh_waitq);
@@ -116,6 +118,14 @@ void usbip_stop_eh(struct usbip_device *ud)
 		usbip_dbg_eh("usbip_eh waiting completion %lx\n", pending);
 
 	wait_event_interruptible(ud->eh_waitq, !(ud->event & ~USBIP_EH_BYE));
+
+	/*
+	 * The wait only tracks ud->event, which event_handler() clears before
+	 * its last dereferences of ud; flush so it cannot touch freed memory.
+	 */
+	if (!usbip_in_eh(current))
+		flush_work(&usbip_work);
+
 	usbip_dbg_eh("usbip_eh has stopped\n");
 }
 EXPORT_SYMBOL_GPL(usbip_stop_eh);
@@ -123,7 +133,6 @@ EXPORT_SYMBOL_GPL(usbip_stop_eh);
 #define WORK_QUEUE_NAME "usbip_event"
 
 static struct workqueue_struct *usbip_queue;
-static DECLARE_WORK(usbip_work, event_handler);
 
 int usbip_init_eh(void)
 {
