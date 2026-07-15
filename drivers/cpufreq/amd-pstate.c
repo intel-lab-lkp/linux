@@ -2044,10 +2044,28 @@ static int amd_pstate_cpu_online(struct cpufreq_policy *policy)
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
 	union perf_cached perf = READ_ONCE(cpudata->perf);
+	u64 cppc_req_cached = cpudata->cppc_req_cached;
+	u8 min_perf, max_perf, des_perf, epp;
 	u8 cached_floor_perf;
 	int ret;
 
 	ret = amd_pstate_cppc_enable(policy);
+	if (ret)
+		return ret;
+
+
+	max_perf = FIELD_GET(AMD_CPPC_MAX_PERF_MASK, cppc_req_cached);
+	des_perf = FIELD_GET(AMD_CPPC_DES_PERF_MASK, cppc_req_cached);
+	min_perf = FIELD_GET(AMD_CPPC_MIN_PERF_MASK, cppc_req_cached);
+	epp = FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cppc_req_cached);
+
+	/*
+	 * During offline, cppc_req_cached is clobbered with the state at the time of
+	 * hotplug. Retrieve the relevant fields and then force a mismatch for the H/W
+	 * to update with the correct values.
+	 */
+	cpudata->cppc_req_cached++;
+	ret = amd_pstate_update_perf(policy, min_perf, des_perf, max_perf, epp, false);
 	if (ret)
 		return ret;
 
@@ -2059,6 +2077,7 @@ static int amd_pstate_cpu_offline(struct cpufreq_policy *policy)
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
 	union perf_cached perf = READ_ONCE(cpudata->perf);
+	u64 cppc_req_cached = cpudata->cppc_req_cached;
 	int ret;
 
 	/*
@@ -2066,13 +2085,12 @@ static int amd_pstate_cpu_offline(struct cpufreq_policy *policy)
 	 * min_perf value across kexec reboots. If this CPU is just onlined normally after this, the
 	 * limits, epp and desired perf will get reset to the cached values in cpudata struct
 	 */
-	ret = amd_pstate_update_perf(policy, perf.bios_min_perf,
-				     FIELD_GET(AMD_CPPC_DES_PERF_MASK, cpudata->cppc_req_cached),
-				     FIELD_GET(AMD_CPPC_MAX_PERF_MASK, cpudata->cppc_req_cached),
-				     FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cpudata->cppc_req_cached),
-				     false);
+	ret = amd_pstate_update_perf(policy, perf.bios_min_perf, 0U, 0U, 0U, false);
 	if (ret)
 		return ret;
+
+	/* HACK: See the comment in amd_pstate_suspend() below. */
+	cpudata->cppc_req_cached = cppc_req_cached;
 
 	return amd_pstate_set_floor_perf(policy, cpudata->bios_floor_perf);
 }
@@ -2081,6 +2099,7 @@ static int amd_pstate_suspend(struct cpufreq_policy *policy)
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
 	union perf_cached perf = READ_ONCE(cpudata->perf);
+	u64 cppc_req_cached = cpudata->cppc_req_cached;
 	int ret;
 
 	/*
@@ -2088,13 +2107,16 @@ static int amd_pstate_suspend(struct cpufreq_policy *policy)
 	 * min_perf value across kexec reboots. If this CPU is just resumed back without kexec,
 	 * the limits, epp and desired perf will get reset to the cached values in cpudata struct
 	 */
-	ret = amd_pstate_update_perf(policy, perf.bios_min_perf,
-				     FIELD_GET(AMD_CPPC_DES_PERF_MASK, cpudata->cppc_req_cached),
-				     FIELD_GET(AMD_CPPC_MAX_PERF_MASK, cpudata->cppc_req_cached),
-				     FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cpudata->cppc_req_cached),
-				     false);
+	ret = amd_pstate_update_perf(policy, perf.bios_min_perf, 0U, 0U, 0U, false);
 	if (ret)
 		return ret;
+
+	/*
+	 * HACK: Restore the cppc_req_cached at the time of suspend. This is
+	 * used during amd_pstate_epp_resume() to restore the correct EPP value
+	 * when this CPU resumes.
+	 */
+	cpudata->cppc_req_cached = cppc_req_cached;
 
 	ret = amd_pstate_set_floor_perf(policy, cpudata->bios_floor_perf);
 	if (ret)
@@ -2131,9 +2153,26 @@ static int amd_pstate_epp_resume(struct cpufreq_policy *policy)
 	u8 cached_floor_perf;
 
 	if (cpudata->suspended) {
+		u64 cppc_req_cached = cpudata->cppc_req_cached;
+		u8 min_perf, max_perf, des_perf, epp;
 		int ret;
 
-		/* enable amd pstate from suspend state*/
+		max_perf = FIELD_GET(AMD_CPPC_MAX_PERF_MASK, cppc_req_cached);
+		des_perf = FIELD_GET(AMD_CPPC_DES_PERF_MASK, cppc_req_cached);
+		min_perf = FIELD_GET(AMD_CPPC_MIN_PERF_MASK, cppc_req_cached);
+		epp = FIELD_GET(AMD_CPPC_EPP_PERF_MASK, cppc_req_cached);
+
+		/*
+		 * Enable amd-pstate from suspend state. During suspend, cppc_req_cached
+		 * is clobbered with the state at the time of suspend. Retrieve the
+		 * relevant fields and then force a mismatch for the H/W to update with
+		 * the correct values.
+		 */
+		cpudata->cppc_req_cached++;
+		ret = amd_pstate_update_perf(policy, min_perf, des_perf, max_perf, epp, false);
+		if (ret)
+			return ret;
+
 		ret = amd_pstate_epp_update_limit(policy, false);
 		if (ret)
 			return ret;
