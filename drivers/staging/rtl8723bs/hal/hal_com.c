@@ -420,16 +420,6 @@ bool Hal_MappingOutPipe(struct adapter *padapter, u8 NumOutPipe)
 
 }
 
-/*
- * C2H event format:
- * Field	 TRIGGER		CONTENT	   CMD_SEQ	CMD_LEN		 CMD_ID
- * BITS	 [127:120]	[119:16]      [15:8]		  [7:4]		   [3:0]
- */
-
-void c2h_evt_clear(struct adapter *adapter)
-{
-	rtw_write8(adapter, REG_C2HEVT_CLEAR, C2H_EVT_HOST_CLOSE);
-}
 
 /*
  * C2H event format:
@@ -472,7 +462,7 @@ clear_evt:
 	 * Clear event to notify FW we have read the command.
 	 * If this field isn't clear, the FW won't update the next command message.
 	 */
-	c2h_evt_clear(adapter);
+	rtw_write8(adapter, REG_C2HEVT_CLEAR, C2H_EVT_HOST_CLOSE);
 exit:
 	return ret;
 }

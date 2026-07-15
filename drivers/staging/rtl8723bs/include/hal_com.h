@@ -124,7 +124,6 @@ u8 NumOutPipe
 
 
 
-void c2h_evt_clear(struct adapter *adapter);
 s32 c2h_evt_read_88xx(struct adapter *adapter, u8 *buf);
 
 u8 rtw_get_mgntframe_raid(struct adapter *adapter, unsigned char network_type);
