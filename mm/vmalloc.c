@@ -4426,8 +4426,56 @@ void *vrealloc_node_align_noprof(const void *p, size_t size, unsigned long align
 		return (void *)p;
 	}
 
+	{
+		unsigned int new_nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+		unsigned int old_nr_pages = vm->nr_pages;
+
+		if (new_nr_pages > old_nr_pages && !vm_area_page_order(vm) &&
+		    !(vm->flags & (VM_FLUSH_RESET_PERMS | VM_USERMAP)) &&
+		    gfp_has_io_fs(flags)) {
+			unsigned int extra = new_nr_pages - old_nr_pages;
+			unsigned long addr = (unsigned long)kasan_reset_tag(p);
+			struct vmap_node *vn = addr_to_node(addr);
+			struct page **pages;
+			int ret;
+
+			pages = kvmalloc_array(extra, sizeof(struct page *), gfp);
+			if (!pages)
+				goto need_realloc;
+
+			if (vm_area_alloc_pages(vmalloc_gfp_adjust(gfp, 0), nid,
+						0, extra, pages) != extra) {
+				kvfree(pages);
+				goto need_realloc;
+			}
+
+			spin_lock(&vn->busy.lock);
+			ret = vmap_pages_range(addr + ((unsigned long)old_nr_pages
+						       << PAGE_SHIFT),
+					       addr + ((unsigned long)new_nr_pages
+						       << PAGE_SHIFT),
+					       PAGE_KERNEL, pages, PAGE_SHIFT);
+			spin_unlock(&vn->busy.lock);
+			if (ret < 0) {
+				free_pages_bulk(pages, extra);
+				kvfree(pages);
+				goto need_realloc;
+			}
+
+			memcpy(&vm->pages[old_nr_pages], pages,
+			       extra * sizeof(struct page *));
+			kvfree(pages);
+			vm->nr_pages = new_nr_pages;
+			vm->requested_size = size;
+			kasan_vrealloc(p, old_size, size);
+			if (want_init_on_alloc(flags))
+				memset((void *)p + old_size, 0, size - old_size);
+			return (void *)p;
+		}
+	}
+
 need_realloc:
-	/* TODO: Grow the vm_area, i.e. allocate and map additional pages. */
+	/* Fall back to a fresh vm_area when in-place grow is not possible. */
 	n = __vmalloc_node_noprof(size, align, flags, nid, __builtin_return_address(0));
 
 	if (!n)
