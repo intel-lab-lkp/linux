@@ -338,7 +338,7 @@ xrep_cntbt_extent_cmp(
 }
 
 /*
- * Sort the free extents by length so so that we can put the records into the
+ * Sort the free extents by length so that we can put the records into the
  * cntbt in the correct order.  Don't let userspace kill us if we're resorting
  * after allocating btree blocks.
  */
@@ -751,7 +751,7 @@ xrep_abt_build_new_trees(
 		goto err_cur;
 
 	/*
-	 * If we need to re-sort the free extents by length, do so so that we
+	 * If we need to re-sort the free extents by length, do so that we
 	 * can put the records into the cntbt in the correct order.
 	 */
 	if (needs_resort) {

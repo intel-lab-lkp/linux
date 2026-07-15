@@ -1607,7 +1607,7 @@ xfs_swap_extents(
 		goto out_unlock;
 
 	/*
-	 * Lock and join the inodes to the tansaction so that transaction commit
+	 * Lock and join the inodes to the transaction so that transaction commit
 	 * or cancel will unlock the inodes from this point onwards.
 	 */
 	xfs_lock_two_inodes(ip, XFS_ILOCK_EXCL, tip, XFS_ILOCK_EXCL);

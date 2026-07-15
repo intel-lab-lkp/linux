@@ -37,7 +37,7 @@ struct workqueue_struct *xfs_alloc_wq;
 #define	XFSA_FIXUP_CNT_OK	2
 
 /*
- * Size of the AGFL.  For CRC-enabled filesystes we steal a couple of slots in
+ * Size of the AGFL.  For CRC-enabled filesystems we steal a couple of slots in
  * the beginning of the block for a proper header with the location information
  * and CRC.
  */
@@ -770,7 +770,7 @@ xfs_alloc_fixup_trees(
  *
  * However, we can't even do that for v4 format filesystems because there are
  * old versions of mkfs out there that does not initialise the AGFL to known,
- * verifiable values. HEnce we can't tell the difference between a AGFL block
+ * verifiable values. Hence we can't tell the difference between a AGFL block
  * allocated by mkfs and a corrupted AGFL block here on v4 filesystems.
  *
  * As a result, we can only fully validate AGFL block numbers when we pull them
@@ -3608,7 +3608,7 @@ xfs_alloc_vextent_finish(
 	 * ABBA AGF deadlocks because a future allocation attempt in this
 	 * transaction may attempt to lock a lower number AGF.
 	 *
-	 * We can't release the AGF until the transaction is commited, so at
+	 * We can't release the AGF until the transaction is committed, so at
 	 * this point we must update the "first allocation" tracker to point at
 	 * this AG if the tracker is empty or points to a lower AG. This allows
 	 * the next allocation attempt to be modified appropriately to avoid
