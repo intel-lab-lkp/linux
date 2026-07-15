@@ -13,6 +13,9 @@ static int tuner_lock_debug;
 module_param(tuner_lock_debug, int, 0644);
 MODULE_PARM_DESC(tuner_lock_debug, "if set, signal lock is briefly waited on after setting params");
 
+#define SI2157_FIRMWARE_RECORD_SIZE 17
+#define SI2157_FIRMWARE_RECORD_PAYLOAD_SIZE (SI2157_FIRMWARE_RECORD_SIZE - 1)
+
 /* execute firmware command */
 static int si2157_cmd_execute(struct i2c_client *client, struct si2157_cmd *cmd)
 {
@@ -103,7 +106,7 @@ static int si2157_load_firmware(struct dvb_frontend *fe,
 		return ret;
 
 	/* firmware should be n chunks of 17 bytes */
-	if (fw->size % 17 != 0) {
+	if (fw->size % SI2157_FIRMWARE_RECORD_SIZE != 0) {
 		dev_err(&client->dev, "firmware file '%s' is invalid\n",
 			fw_name);
 		ret = -EINVAL;
@@ -113,9 +116,11 @@ static int si2157_load_firmware(struct dvb_frontend *fe,
 	dev_info(&client->dev, "downloading firmware from file '%s'\n",
 		 fw_name);
 
-	for (remaining = fw->size; remaining > 0; remaining -= 17) {
+	for (remaining = fw->size; remaining > 0;
+	     remaining -= SI2157_FIRMWARE_RECORD_SIZE) {
 		len = fw->data[fw->size - remaining];
-		if (len > SI2157_ARGLEN) {
+		if (len > SI2157_FIRMWARE_RECORD_PAYLOAD_SIZE ||
+		    len > SI2157_ARGLEN) {
 			dev_err(&client->dev, "Bad firmware length\n");
 			ret = -EINVAL;
 			goto err_release_firmware;
