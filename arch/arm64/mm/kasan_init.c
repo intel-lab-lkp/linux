@@ -60,13 +60,14 @@ static phys_addr_t __init kasan_alloc_raw_page(int node)
 }
 
 static pte_t *__init kasan_pte_offset(pmd_t *pmdp, unsigned long addr, int node,
-				      bool early)
+				      bool early, pgtbl_mod_mask *mask)
 {
 	if (pmd_none(READ_ONCE(*pmdp))) {
 		phys_addr_t pte_phys = early ?
 				__pa_symbol(kasan_early_shadow_pte)
 					: kasan_alloc_zeroed_page(node);
 		__pmd_populate(pmdp, pte_phys, PMD_TYPE_TABLE);
+		*mask |= PGTBL_PMD_MODIFIED;
 	}
 
 	return early ? pte_offset_kimg(pmdp, addr)
@@ -74,49 +75,53 @@ static pte_t *__init kasan_pte_offset(pmd_t *pmdp, unsigned long addr, int node,
 }
 
 static pmd_t *__init kasan_pmd_offset(pud_t *pudp, unsigned long addr, int node,
-				      bool early)
+				      bool early, pgtbl_mod_mask *mask)
 {
 	if (pud_none(READ_ONCE(*pudp))) {
 		phys_addr_t pmd_phys = early ?
 				__pa_symbol(kasan_early_shadow_pmd)
 					: kasan_alloc_zeroed_page(node);
 		__pud_populate(pudp, pmd_phys, PUD_TYPE_TABLE);
+		*mask |= PGTBL_PUD_MODIFIED;
 	}
 
 	return early ? pmd_offset_kimg(pudp, addr) : pmd_offset(pudp, addr);
 }
 
 static pud_t *__init kasan_pud_offset(p4d_t *p4dp, unsigned long addr, int node,
-				      bool early)
+				      bool early, pgtbl_mod_mask *mask)
 {
 	if (p4d_none(READ_ONCE(*p4dp))) {
 		phys_addr_t pud_phys = early ?
 				__pa_symbol(kasan_early_shadow_pud)
 					: kasan_alloc_zeroed_page(node);
 		__p4d_populate(p4dp, pud_phys, P4D_TYPE_TABLE);
+		*mask |= PGTBL_P4D_MODIFIED;
 	}
 
 	return early ? pud_offset_kimg(p4dp, addr) : pud_offset(p4dp, addr);
 }
 
 static p4d_t *__init kasan_p4d_offset(pgd_t *pgdp, unsigned long addr, int node,
-				      bool early)
+				      bool early, pgtbl_mod_mask *mask)
 {
 	if (pgd_none(READ_ONCE(*pgdp))) {
 		phys_addr_t p4d_phys = early ?
 				__pa_symbol(kasan_early_shadow_p4d)
 					: kasan_alloc_zeroed_page(node);
 		__pgd_populate(pgdp, p4d_phys, PGD_TYPE_TABLE);
+		*mask |= PGTBL_PGD_MODIFIED;
 	}
 
 	return early ? p4d_offset_kimg(pgdp, addr) : p4d_offset(pgdp, addr);
 }
 
 static void __init kasan_pte_populate(pmd_t *pmdp, unsigned long addr,
-				      unsigned long end, int node, bool early)
+				      unsigned long end, int node, bool early,
+				      pgtbl_mod_mask *mask)
 {
 	unsigned long next;
-	pte_t *ptep = kasan_pte_offset(pmdp, addr, node, early);
+	pte_t *ptep = kasan_pte_offset(pmdp, addr, node, early, mask);
 
 	do {
 		phys_addr_t page_phys = early ?
@@ -130,38 +135,41 @@ static void __init kasan_pte_populate(pmd_t *pmdp, unsigned long addr,
 }
 
 static void __init kasan_pmd_populate(pud_t *pudp, unsigned long addr,
-				      unsigned long end, int node, bool early)
+				      unsigned long end, int node, bool early,
+				      pgtbl_mod_mask *mask)
 {
 	unsigned long next;
-	pmd_t *pmdp = kasan_pmd_offset(pudp, addr, node, early);
+	pmd_t *pmdp = kasan_pmd_offset(pudp, addr, node, early, mask);
 
 	do {
 		next = pmd_addr_end(addr, end);
-		kasan_pte_populate(pmdp, addr, next, node, early);
+		kasan_pte_populate(pmdp, addr, next, node, early, mask);
 	} while (pmdp++, addr = next, addr != end && pmd_none(READ_ONCE(*pmdp)));
 }
 
 static void __init kasan_pud_populate(p4d_t *p4dp, unsigned long addr,
-				      unsigned long end, int node, bool early)
+				      unsigned long end, int node, bool early,
+				      pgtbl_mod_mask *mask)
 {
 	unsigned long next;
-	pud_t *pudp = kasan_pud_offset(p4dp, addr, node, early);
+	pud_t *pudp = kasan_pud_offset(p4dp, addr, node, early, mask);
 
 	do {
 		next = pud_addr_end(addr, end);
-		kasan_pmd_populate(pudp, addr, next, node, early);
+		kasan_pmd_populate(pudp, addr, next, node, early, mask);
 	} while (pudp++, addr = next, addr != end && pud_none(READ_ONCE(*pudp)));
 }
 
 static void __init kasan_p4d_populate(pgd_t *pgdp, unsigned long addr,
-				      unsigned long end, int node, bool early)
+				      unsigned long end, int node, bool early,
+				      pgtbl_mod_mask *mask)
 {
 	unsigned long next;
-	p4d_t *p4dp = kasan_p4d_offset(pgdp, addr, node, early);
+	p4d_t *p4dp = kasan_p4d_offset(pgdp, addr, node, early, mask);
 
 	do {
 		next = p4d_addr_end(addr, end);
-		kasan_pud_populate(p4dp, addr, next, node, early);
+		kasan_pud_populate(p4dp, addr, next, node, early, mask);
 	} while (p4dp++, addr = next, addr != end && p4d_none(READ_ONCE(*p4dp)));
 }
 
@@ -170,12 +178,17 @@ static void __init kasan_pgd_populate(unsigned long addr, unsigned long end,
 {
 	unsigned long next;
 	pgd_t *pgdp;
+	pgtbl_mod_mask mask = 0;
+	unsigned long start = addr;
 
 	pgdp = pgd_offset_k(addr);
 	do {
 		next = pgd_addr_end(addr, end);
-		kasan_p4d_populate(pgdp, addr, next, node, early);
+		kasan_p4d_populate(pgdp, addr, next, node, early, &mask);
 	} while (pgdp++, addr = next, addr != end);
+
+	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
+		arch_sync_kernel_mappings(start, end);
 }
 
 #if defined(CONFIG_ARM64_64K_PAGES) || CONFIG_PGTABLE_LEVELS > 4
