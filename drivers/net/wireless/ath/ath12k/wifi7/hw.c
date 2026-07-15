@@ -1148,9 +1148,72 @@ skip_peer_find:
 	}
 }
 
+static void ath12k_wifi7_mac_op_wake_tx_queue(struct ieee80211_hw *hw,
+					      struct ieee80211_txq *txq)
+{
+	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(txq->vif);
+	struct ath12k_link_vif *arvif = &ahvif->deflink;
+	struct ieee80211_tx_control control = {
+		.sta = txq->sta,
+	};
+	const struct sk_buff *peek_skb;
+	struct dp_tx_ring *tx_ring;
+	struct hal_srng *tcl_ring;
+	struct ath12k_dp *dp;
+	struct sk_buff *skb;
+	struct ath12k *ar;
+	u32 ring_selector;
+	int num_free;
+	u8 ring_id;
+
+	ar = arvif->ar;
+	if (!ar)
+		return;
+
+	dp = ar->ab->dp;
+
+	while (1) {
+		if (unlikely(test_bit(ATH12K_FLAG_CRASH_FLUSH,
+				      &ar->ab->dev_flags)))
+			break;
+
+		peek_skb = ieee80211_tx_peek(hw, txq);
+		if (!peek_skb)
+			break;
+
+		ring_selector = dp->hw_params->hw_ops->get_ring_selector(
+					(struct sk_buff *)peek_skb);
+		ring_id = ring_selector % dp->hw_params->max_tx_ring;
+
+		tx_ring = &dp->tx_ring[ring_id];
+		tcl_ring = &dp->hal->srng_list[tx_ring->tcl_data_ring.ring_id];
+
+		spin_lock_bh(&tx_ring->wake_tx_lock);
+
+		spin_lock(&tcl_ring->lock);
+		num_free = ath12k_hal_srng_src_num_free(ar->ab, tcl_ring, true);
+		spin_unlock(&tcl_ring->lock);
+
+		if (num_free == 0) {
+			spin_unlock_bh(&tx_ring->wake_tx_lock);
+			break;
+		}
+
+		skb = ieee80211_tx_dequeue(hw, txq);
+		if (!skb) {
+			spin_unlock_bh(&tx_ring->wake_tx_lock);
+			break;
+		}
+
+		ath12k_wifi7_mac_op_tx(hw, &control, skb);
+
+		spin_unlock_bh(&tx_ring->wake_tx_lock);
+	}
+}
+
 static const struct ieee80211_ops ath12k_ops_wifi7 = {
 	.tx				= ath12k_wifi7_mac_op_tx,
-	.wake_tx_queue			= ieee80211_handle_wake_tx_queue,
+	.wake_tx_queue			= ath12k_wifi7_mac_op_wake_tx_queue,
 	.start                          = ath12k_mac_op_start,
 	.stop                           = ath12k_mac_op_stop,
 	.reconfig_complete              = ath12k_mac_op_reconfig_complete,
