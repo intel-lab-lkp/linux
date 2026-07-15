@@ -1079,17 +1079,6 @@ void rtw_read_adapter_info(struct adapter *padapter)
 }
 
 
-void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
-{
-	switch (variable) {
-	case HW_VAR_C2H_HANDLE:
-		C2HPacketHandler_8723B(padapter, pbuf, len);
-		break;
-	default:
-		break;
-	}
-}
-
 /*  */
 /*	Description: */
 /*		Query setting of specified variable. */

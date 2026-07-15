@@ -128,7 +128,13 @@ void rtw_hal_get_hwreg(struct adapter *padapter, u8 variable, u8 *val)
 
 void rtw_hal_set_hwreg_with_buf(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
 {
-	SetHwRegWithBuf8723B(padapter, variable, pbuf, len);
+	switch (variable) {
+	case HW_VAR_C2H_HANDLE:
+		C2HPacketHandler_8723B(padapter, pbuf, len);
+		break;
+	default:
+		break;
+		}
 }
 
 u8 rtw_hal_get_def_var(struct adapter *padapter, enum hal_def_variable eVariable, void *pValue)
