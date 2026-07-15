@@ -85,7 +85,6 @@ void PHY_InitTxPowerByRate(struct adapter *padapter);
 void PHY_StoreTxPowerByRate(struct adapter *padapter, u32 RfPath,
 			    u32	RegAddr, u32 BitMask, u32 Data);
 
-void PHY_TxPowerByRateConfiguration(struct adapter *padapter);
 
 u8 PHY_GetTxPowerIndexBase(struct adapter *padapter, u8 RFPath, u8 Rate,
 			   enum channel_width BandWidth, u8 Channel);

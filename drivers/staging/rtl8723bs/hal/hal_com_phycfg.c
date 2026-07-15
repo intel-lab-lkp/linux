@@ -60,7 +60,7 @@ phy_SetTxPowerByRateBase(struct adapter *Adapter, u8 RfPath,
 	}
 }
 
-static void phy_StoreTxPowerByRateBase(struct adapter *padapter)
+void phy_StoreTxPowerByRateBase(struct adapter *padapter)
 {
 	u8 path, base;
 
@@ -367,7 +367,7 @@ void PHY_StoreTxPowerByRate(
 	}
 }
 
-static void phy_ConvertTxPowerByRateInDbmToRelativeValues(struct adapter *padapter)
+void phy_ConvertTxPowerByRateInDbmToRelativeValues(struct adapter *padapter)
 {
 	u8 base = 0;
 	u8 i = 0;
@@ -408,15 +408,6 @@ static void phy_ConvertTxPowerByRateInDbmToRelativeValues(struct adapter *padapt
 	}
 }
 
-/*
- * This function must be called if the value in the PHY_REG_PG.txt(or header)
- * is exact dBm values
- */
-void PHY_TxPowerByRateConfiguration(struct adapter *padapter)
-{
-	phy_StoreTxPowerByRateBase(padapter);
-	phy_ConvertTxPowerByRateInDbmToRelativeValues(padapter);
-}
 
 void PHY_SetTxPowerIndexByRateSection(
 	struct adapter *padapter, u8 RFPath, u8 Channel, u8 RateSection

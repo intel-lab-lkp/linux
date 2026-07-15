@@ -239,4 +239,8 @@ s32 c2h_handler_8723b(struct adapter *padapter, u8 *pC2hEvent);
 void Hal_ReadRFGainOffset(struct adapter *padapter, u8 *hwinfo,
 			  bool AutoLoadFail);
 
+
+void phy_StoreTxPowerByRateBase(struct adapter *padapter);
+void phy_ConvertTxPowerByRateInDbmToRelativeValues(struct adapter *padapter);
+
 #endif

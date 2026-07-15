@@ -346,9 +346,10 @@ static int phy_BB8723b_Config_ParaFile(struct adapter *Adapter)
 	   pHalData->EEPROMRegulatory != 2)) {
 		ODM_ConfigBBWithHeaderFile(&pHalData->odmpriv, CONFIG_BB_PHY_REG_PG);
 
-		if (pHalData->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE)
-			PHY_TxPowerByRateConfiguration(Adapter);
-
+		if (pHalData->odmpriv.PhyRegPgValueType == PHY_REG_PG_EXACT_VALUE) {
+			phy_StoreTxPowerByRateBase(Adapter);
+			phy_ConvertTxPowerByRateInDbmToRelativeValues(Adapter);
+		}
 		if (Adapter->registrypriv.reg_enable_tx_power_limit == 1 ||
 		    (Adapter->registrypriv.reg_enable_tx_power_limit == 2 &&
 		   pHalData->EEPROMRegulatory == 1))
