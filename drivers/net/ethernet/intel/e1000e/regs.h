@@ -242,4 +242,7 @@
 /* PHY registers */
 #define I82579_DFT_CTRL	PHY_REG(769, 20)
 
+/* Minimum MMIO (BAR0) len, the largest offset is lower than 64K */
+#define E1000_MMIO_LEN_MIN	0x10000
+
 #endif
