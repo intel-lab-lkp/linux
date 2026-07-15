@@ -643,42 +643,6 @@ u8 GetHalDefVar(
 	return bResult;
 }
 
-void SetHalODMVar(
-	struct adapter *Adapter,
-	enum hal_odm_variable eVariable,
-	void *pValue1,
-	bool bSet
-)
-{
-	struct hal_com_data	*pHalData = GET_HAL_DATA(Adapter);
-	struct dm_odm_t *podmpriv = &pHalData->odmpriv;
-	/* _irqL irqL; */
-	switch (eVariable) {
-	case HAL_ODM_STA_INFO:
-		{
-			struct sta_info *psta = pValue1;
-
-			if (bSet) {
-				ODM_CmnInfoPtrArrayHook(podmpriv, ODM_CMNINFO_STA_STATUS, psta->mac_id, psta);
-			} else {
-				/* spin_lock_bh(&pHalData->odm_stainfo_lock); */
-				ODM_CmnInfoPtrArrayHook(podmpriv, ODM_CMNINFO_STA_STATUS, psta->mac_id, NULL);
-
-				/* spin_unlock_bh(&pHalData->odm_stainfo_lock); */
-		    }
-		}
-		break;
-	case HAL_ODM_P2P_STATE:
-			ODM_CmnInfoUpdate(podmpriv, ODM_CMNINFO_WIFI_DIRECT, bSet);
-		break;
-	case HAL_ODM_WIFI_DISPLAY_STATE:
-			ODM_CmnInfoUpdate(podmpriv, ODM_CMNINFO_WIFI_DISPLAY, bSet);
-		break;
-
-	default:
-		break;
-	}
-}
 
 bool GetU1ByteIntegerFromStringInDecimal(char *Str, u8 *pInt)
 {

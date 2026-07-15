@@ -141,9 +141,4 @@ bool GetU1ByteIntegerFromStringInDecimal(char *str, u8 *in);
 
 void rtw_bb_rf_gain_offset(struct adapter *padapter);
 
-void SetHalODMVar(
-	struct adapter *Adapter,
-	enum hal_odm_variable		eVariable,
-	void *pValue1,
-	bool					bSet);
 #endif /* __HAL_COMMON_H__ */
