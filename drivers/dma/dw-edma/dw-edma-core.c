@@ -369,6 +369,8 @@ static int dw_edma_device_terminate_all(struct dma_chan *dchan)
 	} else {
 		chan->request = EDMA_REQ_STOP;
 	}
+	if (!chan->configured)
+		chan->request = EDMA_REQ_NONE;
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 
 	return err;
