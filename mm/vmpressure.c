@@ -33,9 +33,29 @@
  * SWAP_CLUSTER_MAX, it makes sense to use it for the window size as well.
  *
  * TODO: Make the window size depend on machine size, as we do for vmstat
- * thresholds. Currently we set it to 512 pages (2MB for 4KB pages).
+ * thresholds. Scales with CPU count and total memory at boot.
  */
-static const unsigned long vmpressure_win = SWAP_CLUSTER_MAX * 16;
+static unsigned long vmpressure_win;
+
+static unsigned long __init vmpressure_window_size(void)
+{
+	unsigned long win;
+	int mem;
+
+	mem = totalram_pages() >> (27 - PAGE_SHIFT);
+	win = SWAP_CLUSTER_MAX * (unsigned long)fls(num_online_cpus()) *
+	      (1 + fls(mem));
+	win = max(win, SWAP_CLUSTER_MAX * 4UL);
+	win = min(win, SWAP_CLUSTER_MAX * 64UL);
+	return win;
+}
+
+static int __init vmpressure_win_init(void)
+{
+	vmpressure_win = vmpressure_window_size();
+	return 0;
+}
+core_initcall(vmpressure_win_init);
 
 /*
  * These thresholds are used when we account memory pressure through
