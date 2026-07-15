@@ -819,16 +819,18 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	}
 }
 
-#ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
+#ifdef CONFIG_NUMA
 extern int cpu_to_node_map[NR_CPUS];
-
-unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
-EXPORT_SYMBOL(__per_cpu_offset);
 
 int early_cpu_to_node(int cpu)
 {
 	return cpu_to_node_map[cpu];
 }
+#endif
+
+#ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
+unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
+EXPORT_SYMBOL(__per_cpu_offset);
 
 static int __init pcpu_cpu_distance(unsigned int from, unsigned int to)
 {
