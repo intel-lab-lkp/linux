@@ -129,7 +129,7 @@ void rtw_free_mlme_priv_ie_data(struct mlme_priv *pmlmepriv)
 	rtw_free_mlme_ie_data(&pmlmepriv->p2p_assoc_req_ie, &pmlmepriv->p2p_assoc_req_ie_len);
 }
 
-void _rtw_free_mlme_priv(struct mlme_priv *pmlmepriv)
+void rtw_free_mlme_priv(struct mlme_priv *pmlmepriv)
 {
 	if (pmlmepriv) {
 		rtw_free_mlme_priv_ie_data(pmlmepriv);
@@ -300,11 +300,6 @@ u16 rtw_get_capability(struct wlan_bssid_ex *bss)
 u8 *rtw_get_beacon_interval_from_ie(u8 *ie)
 {
 	return ie + 8;
-}
-
-void rtw_free_mlme_priv(struct mlme_priv *pmlmepriv)
-{
-	_rtw_free_mlme_priv(pmlmepriv);
 }
 
 void rtw_free_network_nolock(struct adapter *padapter, struct wlan_network *pnetwork);
