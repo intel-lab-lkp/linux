@@ -81,6 +81,8 @@
 #define  MMA8452_CTRL_REG2_RST			BIT(6)
 #define  MMA8452_CTRL_REG2_MODS_SHIFT		3
 #define  MMA8452_CTRL_REG2_MODS_MASK		0x1b
+#define MMA8452_CTRL_REG3			0x2c
+#define  MMA8452_CTRL_REG3_PP_OD		BIT(0)
 #define MMA8452_CTRL_REG4			0x2d
 #define MMA8452_CTRL_REG5			0x2e
 #define MMA8452_OFF_X				0x2f
@@ -108,6 +110,7 @@ struct mma8452_data {
 	struct iio_mount_matrix orientation;
 	u8 ctrl_reg1;
 	u8 data_cfg;
+	bool open_drain;
 	const struct mma_chip_info *chip_info;
 	int sleep_val;
 	struct regulator *vdd_reg;
@@ -644,6 +647,22 @@ static int mma8452_set_power_mode(struct mma8452_data *data, u8 mode)
 	reg |= mode << MMA8452_CTRL_REG2_MODS_SHIFT;
 
 	return mma8452_change_config(data, MMA8452_CTRL_REG2, reg);
+}
+
+static int mma8452_set_interrupt_pin_mode(struct mma8452_data *data)
+{
+	int reg;
+
+	reg = i2c_smbus_read_byte_data(data->client, MMA8452_CTRL_REG3);
+	if (reg < 0)
+		return reg;
+
+	if (data->open_drain)
+		reg |= MMA8452_CTRL_REG3_PP_OD;
+	else
+		reg &= ~MMA8452_CTRL_REG3_PP_OD;
+
+	return i2c_smbus_write_byte_data(data->client, MMA8452_CTRL_REG3, reg);
 }
 
 /* returns >0 if in freefall mode, 0 if not or <0 if an error occurred */
@@ -1666,6 +1685,9 @@ static int mma8452_probe(struct i2c_client *client)
 			goto disable_regulators;
 	}
 
+	data->open_drain = device_property_read_bool(&client->dev, "drive-open-drain");
+	mma8452_set_interrupt_pin_mode(data);
+
 	data->ctrl_reg1 = MMA8452_CTRL_ACTIVE |
 			  (MMA8452_CTRL_DR_DEFAULT << MMA8452_CTRL_DR_SHIFT);
 
@@ -1683,7 +1705,8 @@ static int mma8452_probe(struct i2c_client *client)
 
 	if (client->irq) {
 		ret = request_threaded_irq(client->irq, NULL, mma8452_interrupt,
-					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					   IRQF_TRIGGER_LOW | IRQF_ONESHOT |
+					   data->open_drain ? IRQF_SHARED : 0,
 					   client->name, indio_dev);
 		if (ret)
 			goto buffer_cleanup;
@@ -1799,6 +1822,10 @@ static int mma8452_runtime_resume(struct device *dev)
 		regulator_disable(data->vdd_reg);
 		return ret;
 	}
+
+	ret = mma8452_set_interrupt_pin_mode(data);
+	if (ret < 0)
+		goto runtime_resume_failed;
 
 	ret = mma8452_active(data);
 	if (ret < 0)
