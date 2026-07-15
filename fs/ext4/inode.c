@@ -6700,7 +6700,8 @@ int __ext4_mark_inode_dirty(handle_t *handle, struct inode *inode,
 	if (err)
 		goto out;
 
-	if (EXT4_I(inode)->i_extra_isize < sbi->s_want_extra_isize)
+	if (EXT4_I(inode)->i_extra_isize < sbi->s_want_extra_isize &&
+	    !(inode_state_read_once(inode) & (I_FREEING | I_WILL_FREE)))
 		ext4_try_to_expand_extra_isize(inode, sbi->s_want_extra_isize,
 					       iloc, handle);
 
