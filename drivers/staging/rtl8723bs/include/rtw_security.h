@@ -243,7 +243,7 @@ struct mic_data {
  * public domain by Tom St Denis.
  */
 
-int omac1_aes_128(u8 *key, u8 *data, size_t data_len, u8 *mac);
+int rtw_bip_cmac(u8 *key, u8 *data, size_t data_len, u8 *mac);
 void rtw_secmicsetkey(struct mic_data *pmicdata, u8 *key);
 void rtw_secmicappendbyte(struct mic_data *pmicdata, u8 b);
 void rtw_secmicappend(struct mic_data *pmicdata, u8 *src, u32 nBytes);

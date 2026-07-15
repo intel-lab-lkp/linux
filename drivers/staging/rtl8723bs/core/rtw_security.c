@@ -9,6 +9,7 @@
 #include <drv_types.h>
 #include <crypto/aes.h>
 #include <crypto/utils.h>
+#include <crypto/hash.h>
 
 static const char * const _security_type_str[] = {
 	"N/A",
@@ -1315,7 +1316,8 @@ u32 rtw_BIP_verify(struct adapter *padapter, u8 *precvframe)
 		/* conscruct AAD, copy address 1 to address 3 */
 		memcpy(BIP_AAD + 2, &pwlanhdr->addrs, sizeof(pwlanhdr->addrs));
 
-		if (omac1_aes_128(padapter->securitypriv.dot11wBIPKey[padapter->securitypriv.dot11wBIPKeyid].skey
+		if (rtw_bip_cmac(
+		padapter->securitypriv.dot11wBIPKey[padapter->securitypriv.dot11wBIPKeyid].skey
 			, BIP_AAD, ori_len, mic))
 			goto BIP_exit;
 
@@ -1335,109 +1337,23 @@ BIP_exit:
 	return res;
 }
 
-static void gf_mulx(u8 *pad)
+
+int rtw_bip_cmac(u8 *key, u8 *data, size_t data_len, u8 *mac)
 {
-	int i, carry;
+	struct crypto_shash *tfm;
+	int err;
 
-	carry = pad[0] & 0x80;
-	for (i = 0; i < AES_BLOCK_SIZE - 1; i++)
-		pad[i] = (pad[i] << 1) | (pad[i + 1] >> 7);
+	tfm = crypto_alloc_shash("cmac(aes)", 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
 
-	pad[AES_BLOCK_SIZE - 1] <<= 1;
-	if (carry)
-		pad[AES_BLOCK_SIZE - 1] ^= 0x87;
-}
-
-/**
- * omac1_aes_128_vector - One-Key CBC MAC (OMAC1) hash with AES-128
- * @key: 128-bit key for the hash operation
- * @num_elem: Number of elements in the data vector
- * @addr: Pointers to the data areas
- * @len: Lengths of the data blocks
- * @mac: Buffer for MAC (128 bits, i.e., 16 bytes)
- * Returns: 0 on success, -1 on failure
- *
- * This is a mode for using block cipher (AES in this case) for authentication.
- * OMAC1 was standardized with the name CMAC by NIST in a Special Publication
- * (SP) 800-38B.
- */
-static int omac1_aes_128_vector(u8 *key, size_t num_elem,
-				u8 *addr[], size_t *len, u8 *mac)
-{
-	struct aes_enckey aes;
-	u8 cbc[AES_BLOCK_SIZE], pad[AES_BLOCK_SIZE];
-	u8 *pos, *end;
-	size_t i, e, left, total_len;
-	int ret;
-
-	ret = aes_prepareenckey(&aes, key, 16);
-	if (ret)
-		return -1;
-	memset(cbc, 0, AES_BLOCK_SIZE);
-
-	total_len = 0;
-	for (e = 0; e < num_elem; e++)
-		total_len += len[e];
-	left = total_len;
-
-	e = 0;
-	pos = addr[0];
-	end = pos + len[0];
-
-	while (left >= AES_BLOCK_SIZE) {
-		for (i = 0; i < AES_BLOCK_SIZE; i++) {
-			cbc[i] ^= *pos++;
-			if (pos >= end) {
-				e++;
-				pos = addr[e];
-				end = pos + len[e];
-			}
-		}
-		if (left > AES_BLOCK_SIZE)
-			aes_encrypt(&aes, cbc, cbc);
-		left -= AES_BLOCK_SIZE;
+	err = crypto_shash_setkey(tfm, key, 16);
+	if (err) {
+		crypto_free_shash(tfm);
+		return err;
 	}
 
-	memset(pad, 0, AES_BLOCK_SIZE);
-	aes_encrypt(&aes, pad, pad);
-	gf_mulx(pad);
-
-	if (left || total_len == 0) {
-		for (i = 0; i < left; i++) {
-			cbc[i] ^= *pos++;
-			if (pos >= end) {
-				e++;
-				pos = addr[e];
-				end = pos + len[e];
-			}
-		}
-		cbc[left] ^= 0x80;
-		gf_mulx(pad);
-	}
-
-	for (i = 0; i < AES_BLOCK_SIZE; i++)
-		pad[i] ^= cbc[i];
-	aes_encrypt(&aes, pad, mac);
-	memzero_explicit(&aes, sizeof(aes));
-	return 0;
-}
-
-/**
- * omac1_aes_128 - One-Key CBC MAC (OMAC1) hash with AES-128 (aka AES-CMAC)
- * @key: 128-bit key for the hash operation
- * @data: Data buffer for which a MAC is determined
- * @data_len: Length of data buffer in bytes
- * @mac: Buffer for MAC (128 bits, i.e., 16 bytes)
- * Returns: 0 on success, -1 on failure
- *
- * This is a mode for using block cipher (AES in this case) for authentication.
- * OMAC1 was standardized with the name CMAC by NIST in a Special Publication
- * (SP) 800-38B.
- * modify for CONFIG_IEEE80211W
- */
-int omac1_aes_128(u8 *key, u8 *data, size_t data_len, u8 *mac)
-{
-	return omac1_aes_128_vector(key, 1, &data, &data_len, mac);
+	return crypto_shash_tfm_digest(tfm, data, data_len, mac);
 }
 
 /* Restore HW wep key setting according to key_mask */
