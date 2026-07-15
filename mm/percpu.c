@@ -3163,7 +3163,7 @@ void __init __weak pcpu_populate_pte(unsigned long addr)
 	pud = pud_offset(p4d, addr);
 	if (pud_none(*pud)) {
 		pmd = memblock_alloc_or_panic(PMD_TABLE_SIZE, PMD_TABLE_SIZE);
-		pud_populate(&init_mm, pud, pmd);
+		pud_populate_sync(addr, pud, pmd);
 	}
 
 	pmd = pmd_offset(pud, addr);
@@ -3171,7 +3171,7 @@ void __init __weak pcpu_populate_pte(unsigned long addr)
 		pte_t *new;
 
 		new = memblock_alloc_or_panic(PTE_TABLE_SIZE, PTE_TABLE_SIZE);
-		pmd_populate_kernel(&init_mm, pmd, new);
+		pmd_populate_sync(addr, pmd, new);
 	}
 
 	return;

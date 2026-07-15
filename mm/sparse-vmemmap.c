@@ -198,7 +198,7 @@ static pmd_t * __meminit vmemmap_pmd_populate(pud_t *pud, unsigned long addr, in
 		if (!p)
 			return NULL;
 		kernel_pte_init(p);
-		pmd_populate_kernel(&init_mm, pmd, p);
+		pmd_populate_sync(addr, pmd, p);
 	}
 	return pmd;
 }
@@ -211,7 +211,7 @@ static pud_t * __meminit vmemmap_pud_populate(p4d_t *p4d, unsigned long addr, in
 		if (!p)
 			return NULL;
 		pmd_init(p);
-		pud_populate(&init_mm, pud, p);
+		pud_populate_sync(addr, pud, p);
 	}
 	return pud;
 }

@@ -1509,6 +1509,12 @@ config LAZY_MMU_MODE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config ARCH_HAS_PMD_POPULATE_SYNC
+	bool
+
+config ARCH_HAS_PUD_POPULATE_SYNC
+	bool
+
 source "mm/damon/Kconfig"
 
 endmenu

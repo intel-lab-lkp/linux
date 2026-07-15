@@ -26,4 +26,17 @@
 			arch_sync_kernel_mappings(addr, addr);		\
 	} while (0)
 
+#ifndef CONFIG_ARCH_HAS_PUD_POPULATE_SYNC
+#define pud_populate_sync(addr, pud, pmd)				\
+	do {								\
+		pud_populate(&init_mm, pud, pmd);			\
+	} while (0)
+#endif
+
+#ifndef CONFIG_ARCH_HAS_PMD_POPULATE_SYNC
+#define pmd_populate_sync(addr, pmd, pte)				\
+	do {								\
+		pmd_populate_kernel(&init_mm, pmd, pte);		\
+	} while (0)
+#endif
 #endif /* _LINUX_PGALLOC_H */
