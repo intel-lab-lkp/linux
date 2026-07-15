@@ -155,10 +155,10 @@ enum network_type {
 
 #define is_legacy_only(net_type)  ((net_type) == ((net_type) & (WIRELESS_11BG)))
 
-#define is_supported_24g(net_type) ((net_type) & SUPPORTED_24G_NETTYPE_MSK ? true : false)
+#define is_supported_24g(net_type) ((net_type) & SUPPORTED_24G_NETTYPE_MSK)
 
-#define is_supported_tx_cck(net_type) (((net_type) & (WIRELESS_11B)) ? true : false)
-#define is_supported_ht(net_type) (((net_type) & (WIRELESS_11_24N)) ? true : false)
+#define is_supported_tx_cck(net_type) (((net_type) & (WIRELESS_11B)))
+#define is_supported_ht(net_type) (((net_type) & (WIRELESS_11_24N)))
 
 struct ieee_param {
 	u32 cmd;

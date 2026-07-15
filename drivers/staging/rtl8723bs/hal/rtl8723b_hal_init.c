@@ -2752,7 +2752,7 @@ void GetHwReg8723B(struct adapter *padapter, u8 variable, u8 *val)
 		{
 			/*  BCN_VALID, BIT16 of REG_TDECTRL = BIT0 of REG_TDECTRL+2 */
 			val8 = rtw_read8(padapter, REG_TDECTRL+2);
-			*val = (BIT(0) & val8) ? true : false;
+			*val = BIT(0) & val8;
 		}
 		break;
 
@@ -2806,7 +2806,7 @@ void GetHwReg8723B(struct adapter *padapter, u8 variable, u8 *val)
 		break;
 	case HW_VAR_CHK_HI_QUEUE_EMPTY:
 		val16 = rtw_read16(padapter, REG_TXPKT_EMPTY);
-		*val = (val16 & BIT(10)) ? true : false;
+		*val = val16 & BIT(10);
 		break;
 	default:
 		GetHwReg(padapter, variable, val);

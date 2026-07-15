@@ -396,7 +396,7 @@ bool Hal_MappingOutPipe(struct adapter *padapter, u8 NumOutPipe)
 {
 	struct registry_priv *pregistrypriv = &padapter->registrypriv;
 
-	bool bWIFICfg = (pregistrypriv->wifi_spec) ? true : false;
+	bool bWIFICfg = pregistrypriv->wifi_spec;
 
 	bool result = true;
 

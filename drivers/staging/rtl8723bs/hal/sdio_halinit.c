@@ -1032,8 +1032,8 @@ static void _ReadPROMContent(struct adapter *padapter)
 
 	eeValue = rtw_read8(padapter, REG_9346CR);
 	/*  To check system boot selection. */
-	pEEPROM->EepromOrEfuse = (eeValue & BOOT_FROM_EEPROM) ? true : false;
-	pEEPROM->bautoload_fail_flag = (eeValue & EEPROM_EN) ? false : true;
+	pEEPROM->EepromOrEfuse = eeValue & BOOT_FROM_EEPROM;
+	pEEPROM->bautoload_fail_flag = eeValue & EEPROM_EN;
 
 	_ReadEfuseInfo8723BS(padapter);
 }

@@ -268,7 +268,7 @@ static void odm_Process_RSSIForDM(
 	if (pPktinfo->is_beacon)
 		pDM_Odm->PhyDbgInfo.NumQryBeaconPkt++;
 
-	isCCKrate = ((pPktinfo->data_rate <= DESC_RATE11M)) ? true : false;
+	isCCKrate = pPktinfo->data_rate <= DESC_RATE11M;
 	pDM_Odm->RxRate = pPktinfo->data_rate;
 
 	/* Statistic for antenna/path diversity------------------ */

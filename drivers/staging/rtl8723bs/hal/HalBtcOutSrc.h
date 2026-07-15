@@ -93,9 +93,14 @@ enum {
 	BTC_RSSI_STATE_STAY_LOW			= 0x5,
 	BTC_RSSI_MAX
 };
-#define BTC_RSSI_HIGH(_rssi_)	((_rssi_ == BTC_RSSI_STATE_HIGH || _rssi_ == BTC_RSSI_STATE_STAY_HIGH) ? true : false)
-#define BTC_RSSI_MEDIUM(_rssi_)	((_rssi_ == BTC_RSSI_STATE_MEDIUM || _rssi_ == BTC_RSSI_STATE_STAY_MEDIUM) ? true : false)
-#define BTC_RSSI_LOW(_rssi_)	((_rssi_ == BTC_RSSI_STATE_LOW || _rssi_ == BTC_RSSI_STATE_STAY_LOW) ? true : false)
+#define BTC_RSSI_HIGH(_rssi_) \
+	((_rssi_) == BTC_RSSI_STATE_HIGH || (_rssi_) == BTC_RSSI_STATE_STAY_HIGH)
+
+#define BTC_RSSI_MEDIUM(_rssi_) \
+	((_rssi_) == BTC_RSSI_STATE_MEDIUM || (_rssi_) == BTC_RSSI_STATE_STAY_MEDIUM)
+
+#define BTC_RSSI_LOW(_rssi_) \
+	((_rssi_) == BTC_RSSI_STATE_LOW || (_rssi_) == BTC_RSSI_STATE_STAY_LOW)
 
 enum {
 	BTC_WIFI_BW_LEGACY			= 0x0,
