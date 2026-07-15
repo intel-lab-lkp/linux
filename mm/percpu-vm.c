@@ -112,6 +112,10 @@ err:
 	return -ENOMEM;
 }
 
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+extern pgd_t *percpu_pgd[NR_CPUS];
+#endif
+
 /**
  * pcpu_pre_unmap_flush - flush cache prior to unmapping
  * @chunk: chunk the regions to be flushed belongs to
@@ -130,12 +134,31 @@ static void pcpu_pre_unmap_flush(struct pcpu_chunk *chunk,
 	flush_cache_vunmap(
 		pcpu_chunk_addr(chunk, pcpu_low_unit_cpu, page_start),
 		pcpu_chunk_addr(chunk, pcpu_high_unit_cpu, page_end));
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+	flush_cache_vunmap((unsigned long)chunk->local_base + (page_start << PAGE_SHIFT),
+			(unsigned long)chunk->local_base + (page_end << PAGE_SHIFT));
+#endif
 }
 
 static void __pcpu_unmap_pages(unsigned long addr, int nr_pages)
 {
 	vunmap_range_noflush(addr, addr + (nr_pages << PAGE_SHIFT));
 }
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+static void __pcpu_unmap_pages_local(unsigned int cpu, unsigned long virt,
+			    int nr_pages)
+{
+	__vunmap_range_noflush(percpu_pgd[cpu], virt, virt + (nr_pages << PAGE_SHIFT));
+}
+#else
+static void __pcpu_unmap_pages_local(unsigned int cpu, unsigned long virt,
+			    int nr_pages)
+{
+	return;
+}
+#endif
 
 /**
  * pcpu_unmap_pages - unmap pages out of a pcpu_chunk
@@ -166,6 +189,10 @@ static void pcpu_unmap_pages(struct pcpu_chunk *chunk,
 		}
 		__pcpu_unmap_pages(pcpu_chunk_addr(chunk, cpu, page_start),
 				   page_end - page_start);
+
+		__pcpu_unmap_pages_local(cpu,
+					(unsigned long)chunk->local_base + (page_start << PAGE_SHIFT),
+					page_end - page_start);
 	}
 }
 
@@ -188,6 +215,12 @@ static void pcpu_post_unmap_tlb_flush(struct pcpu_chunk *chunk,
 	flush_tlb_kernel_range(
 		pcpu_chunk_addr(chunk, pcpu_low_unit_cpu, page_start),
 		pcpu_chunk_addr(chunk, pcpu_high_unit_cpu, page_end));
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+	flush_tlb_kernel_range(
+		(unsigned long)chunk->local_base + (page_start << PAGE_SHIFT),
+		(unsigned long)chunk->local_base + (page_end << PAGE_SHIFT));
+#endif
 }
 
 static int __pcpu_map_pages(unsigned long addr, struct page **pages,
@@ -196,6 +229,32 @@ static int __pcpu_map_pages(unsigned long addr, struct page **pages,
 	return vmap_pages_range_noflush(addr, addr + (nr_pages << PAGE_SHIFT),
 			PAGE_KERNEL, pages, PAGE_SHIFT, GFP_KERNEL);
 }
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+static int __pcpu_map_pages_local(unsigned int cpu, unsigned long virt, struct page **pages,
+			    int nr_pages)
+{
+	unsigned int i;
+	int err = 0;
+
+	for (i = 0; i < nr_pages; i++) {
+		err = vmap_range_noflush(percpu_pgd[cpu], virt, virt + PAGE_SIZE,
+				page_to_phys(pages[i]), PAGE_KERNEL, PAGE_SHIFT);
+		if (err)
+			return err;
+
+		virt += PAGE_SIZE;
+	}
+
+	return err;
+}
+#else
+static int __pcpu_map_pages_local(unsigned int cpu, unsigned long virt, struct page **pages,
+			    int nr_pages)
+{
+	return 0;
+}
+#endif
 
 /**
  * pcpu_map_pages - map pages into a pcpu_chunk
@@ -224,6 +283,13 @@ static int pcpu_map_pages(struct pcpu_chunk *chunk,
 		if (err < 0)
 			goto err;
 
+		err = __pcpu_map_pages_local(cpu,
+					(unsigned long)chunk->local_base + (page_start << PAGE_SHIFT),
+					&pages[pcpu_page_idx(cpu, page_start)],
+					page_end - page_start);
+		if (err < 0)
+			goto err;
+
 		for (i = page_start; i < page_end; i++)
 			pcpu_set_page_chunk(pages[pcpu_page_idx(cpu, i)],
 					    chunk);
@@ -233,6 +299,9 @@ err:
 	for_each_possible_cpu(tcpu) {
 		__pcpu_unmap_pages(pcpu_chunk_addr(chunk, tcpu, page_start),
 				   page_end - page_start);
+		__pcpu_unmap_pages_local(tcpu,
+					(unsigned long)chunk->local_base + (page_start << PAGE_SHIFT),
+					page_end - page_start);
 		if (tcpu == cpu)
 			break;
 	}
@@ -258,6 +327,11 @@ static void pcpu_post_map_flush(struct pcpu_chunk *chunk,
 	flush_cache_vmap(
 		pcpu_chunk_addr(chunk, pcpu_low_unit_cpu, page_start),
 		pcpu_chunk_addr(chunk, pcpu_high_unit_cpu, page_end));
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+	flush_cache_vmap((unsigned long)chunk->local_base + (page_start << PAGE_SHIFT),
+			 (unsigned long)chunk->local_base + (page_end << PAGE_SHIFT));
+#endif
 }
 
 /**
@@ -349,6 +423,24 @@ static struct pcpu_chunk *pcpu_create_chunk(gfp_t gfp)
 	chunk->data = vms;
 	chunk->base_addr = vms[0]->addr - pcpu_group_offsets[0];
 
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+	unsigned long delta = (unsigned long)chunk->base_addr - (unsigned long)pcpu_base_addr;
+	unsigned long hint = delta + (unsigned long)pcpu_local_base;
+	struct vm_struct *local_vm = pcpu_get_local_vm_area(hint,
+					pcpu_unit_size, pcpu_atom_size);
+	if (!local_vm) {
+		pcpu_free_vm_areas(vms, pcpu_nr_groups);
+		pcpu_free_chunk(chunk);
+		return NULL;
+	}
+
+	chunk->local_base = local_vm->addr;
+	chunk->local_data = (void *)local_vm;
+#else
+	chunk->local_base = 0;
+	chunk->local_data = NULL;
+#endif
+
 	pcpu_stats_chunk_alloc();
 	trace_percpu_create_chunk(chunk->base_addr);
 
@@ -365,6 +457,8 @@ static void pcpu_destroy_chunk(struct pcpu_chunk *chunk)
 
 	if (chunk->data)
 		pcpu_free_vm_areas(chunk->data, pcpu_nr_groups);
+	if (chunk->local_data)
+		free_vm_area((struct vm_struct *)chunk->local_data);
 	pcpu_free_chunk(chunk);
 }
 

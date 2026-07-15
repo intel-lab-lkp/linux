@@ -4923,17 +4923,21 @@ pvm_find_va_enclose_addr(unsigned long addr)
  *   in - the VA we start the search(reverse order);
  *   out - the VA with the highest aligned end address.
  * @align: alignment for required highest address
+ * @pcpu: whether request allocation from local percpu area
  *
  * Returns: determined end address within vmap_area
  */
 static unsigned long
-pvm_determine_end_from_reverse(struct vmap_area **va, unsigned long align)
+pvm_determine_end_from_reverse(struct vmap_area **va, unsigned long align, bool pcpu)
 {
 	unsigned long vmalloc_end;
 	unsigned long addr;
 
 #ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
-	vmalloc_end = PERCPU_END & ~(align - 1);
+	if (pcpu)
+		vmalloc_end = LOCAL_PERCPU_END & ~(align - 1);
+	else
+		vmalloc_end = PERCPU_END & ~(align - 1);
 #else
 	vmalloc_end = VMALLOC_END & ~(align - 1);
 #endif
@@ -5042,7 +5046,7 @@ retry:
 	end = start + sizes[area];
 
 	va = pvm_find_va_enclose_addr(vmalloc_end);
-	base = pvm_determine_end_from_reverse(&va, align) - end;
+	base = pvm_determine_end_from_reverse(&va, align, false) - end;
 
 	while (true) {
 		/*
@@ -5063,7 +5067,7 @@ retry:
 		 * base downwards and then recheck.
 		 */
 		if (base + end > va->va_end) {
-			base = pvm_determine_end_from_reverse(&va, align) - end;
+			base = pvm_determine_end_from_reverse(&va, align, false) - end;
 			term_area = area;
 			continue;
 		}
@@ -5073,7 +5077,7 @@ retry:
 		 */
 		if (base + start < va->va_start) {
 			va = node_to_va(rb_prev(&va->rb_node));
-			base = pvm_determine_end_from_reverse(&va, align) - end;
+			base = pvm_determine_end_from_reverse(&va, align, false) - end;
 			term_area = area;
 			continue;
 		}
@@ -5236,6 +5240,84 @@ void pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms)
 		free_vm_area(vms[i]);
 	kfree(vms);
 }
+
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+/* Find free vm area starts from hint */
+struct vm_struct *pcpu_get_local_vm_area(unsigned long hint,
+				     int unit_size, size_t align)
+{
+	struct vmap_area *tmp_va, *va;
+	struct vm_struct *vm;
+	struct vmap_node *vn;
+	unsigned long end;
+	int ret;
+
+	va = kmem_cache_zalloc(vmap_area_cachep, GFP_KERNEL);
+	vm = kzalloc(sizeof(struct vm_struct), GFP_KERNEL);
+	if (!va || !vm)
+		goto err_free;
+
+	spin_lock(&free_vmap_area_lock);
+
+	tmp_va = pvm_find_va_enclose_addr(hint);
+	if (!tmp_va) {
+		spin_unlock(&free_vmap_area_lock);
+		goto err_free;
+	}
+
+	end = pvm_determine_end_from_reverse(&tmp_va, align, true);
+
+	if (hint + unit_size > end) {
+		spin_unlock(&free_vmap_area_lock);
+		goto err_free;
+	}
+
+	ret = va_clip(&free_vmap_area_root,
+			&free_vmap_area_list, tmp_va, hint, unit_size);
+	if (ret) {
+		spin_unlock(&free_vmap_area_lock);
+		goto err_free;
+	}
+
+	va->va_start = hint;
+	va->va_end = hint + unit_size;
+
+	spin_unlock(&free_vmap_area_lock);
+
+	if (kasan_populate_vmalloc(va->va_start, unit_size, GFP_KERNEL))
+		goto err_free_shadow;
+
+	vn = addr_to_node(va->va_start);
+
+	spin_lock(&vn->busy.lock);
+	insert_vmap_area(va, &vn->busy.root, &vn->busy.head);
+	setup_vmalloc_vm(vm, va, VM_ALLOC,
+			 pcpu_get_local_vm_area);
+	spin_unlock(&vn->busy.lock);
+
+	kasan_unpoison_vmap_areas(&vm, 1, KASAN_VMALLOC_PROT_NORMAL);
+
+	return vm;
+
+err_free:
+	kmem_cache_free(vmap_area_cachep, va);
+	kfree(vm);
+
+	return NULL;
+
+err_free_shadow:
+	spin_lock(&free_vmap_area_lock);
+	va = merge_or_add_vmap_area_augment(va, &free_vmap_area_root,
+			&free_vmap_area_list);
+	if (va)
+		kasan_release_vmalloc(va->va_start, va->va_end, va->va_start, va->va_end,
+			       KASAN_VMALLOC_PAGE_RANGE | KASAN_VMALLOC_TLB_FLUSH);
+	kfree(vm);
+	spin_unlock(&free_vmap_area_lock);
+	return NULL;
+
+}
+#endif
 #endif	/* CONFIG_SMP */
 
 #ifdef CONFIG_PRINTK
