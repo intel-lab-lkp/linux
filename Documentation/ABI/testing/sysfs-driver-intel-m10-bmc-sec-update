@@ -59,3 +59,26 @@ Contact:	Matthew Gerlach <matthew.gerlach@altera.com>
 Description:	Read only. Returns number of times the secure update
 		staging area has been flashed.
 		Format: "%u".
+
+What:		/sys/bus/platform/drivers/intel-m10bmc-sec-update/.../control/available_images
+Date:		Jul 2026
+KernelVersion:	6.18
+Contact:	Ionut Nechita <ionut.nechita@windriver.com>
+Description:	Read only. Returns a space separated list of key words
+		that may be written into the image_load file described
+		below. These key words describe a BMC or retimer firmware
+		image in FLASH or EEPROM storage that may be reloaded.
+		This file is only visible if the underlying device
+		supports image reload.
+
+What:		/sys/bus/platform/drivers/intel-m10bmc-sec-update/.../control/image_load
+Date:		Jul 2026
+KernelVersion:	6.18
+Contact:	Ionut Nechita <ionut.nechita@windriver.com>
+Description:	Write only. A key word may be written to this file to
+		trigger a reload of a BMC or retimer firmware image from
+		FLASH or EEPROM. Refer to the available_images file for
+		the list of key words supported by the underlying device.
+		Writing an unsupported string to this file results in
+		-EINVAL being returned. This file is only visible if the
+		underlying device supports image reload.
