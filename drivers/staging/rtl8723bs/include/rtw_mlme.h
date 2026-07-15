@@ -360,7 +360,6 @@ extern struct wlan_network *rtw_alloc_network(struct mlme_priv *pmlmepriv);
 
 
 extern void _rtw_free_network(struct mlme_priv *pmlmepriv, struct wlan_network *pnetwork, u8 isfreeall);
-extern void _rtw_free_network_nolock(struct mlme_priv *pmlmepriv, struct wlan_network *pnetwork);
 
 
 extern struct wlan_network *_rtw_find_network(struct __queue *scanned_queue, u8 *addr);
@@ -395,4 +394,5 @@ int rtw_select_roaming_candidate(struct mlme_priv *pmlmepriv);
 void rtw_sta_media_status_rpt(struct adapter *adapter, struct sta_info *psta, u32 mstatus);
 void rtw_reset_securitypriv(struct adapter *adapter);
 
+void rtw_free_network_nolock(struct adapter *padapter, struct wlan_network *pnetwork);
 #endif /* __RTL871X_MLME_H_ */

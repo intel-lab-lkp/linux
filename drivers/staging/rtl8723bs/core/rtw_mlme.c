@@ -198,20 +198,6 @@ void _rtw_free_network(struct	mlme_priv *pmlmepriv, struct wlan_network *pnetwor
 	spin_unlock_bh(&free_queue->lock);
 }
 
-void _rtw_free_network_nolock(struct	mlme_priv *pmlmepriv, struct wlan_network *pnetwork)
-{
-	struct __queue *free_queue = &pmlmepriv->free_bss_pool;
-
-	if (!pnetwork)
-		return;
-
-	if (pnetwork->fixed)
-		return;
-
-	list_del_init(&pnetwork->list);
-
-	list_add_tail(&pnetwork->list, get_list_head(free_queue));
-}
 
 /*
  * return the wlan_network with the matching addr
@@ -300,7 +286,17 @@ u16 rtw_get_capability(struct wlan_bssid_ex *bss)
 
 void rtw_free_network_nolock(struct adapter *padapter, struct wlan_network *pnetwork)
 {
-	_rtw_free_network_nolock(&padapter->mlmepriv, pnetwork);
+	struct __queue *free_queue = &padapter->mlmepriv.free_bss_pool;
+
+	if (!pnetwork)
+		return;
+
+	if (pnetwork->fixed)
+		return;
+
+	list_del_init(&pnetwork->list);
+
+	list_add_tail(&pnetwork->list, get_list_head(free_queue));
 	rtw_cfg80211_unlink_bss(padapter, pnetwork);
 }
 
