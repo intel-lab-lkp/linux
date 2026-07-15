@@ -22,7 +22,7 @@ int rtw_acl_add_sta(struct adapter *padapter, u8 *addr);
 void rtw_acl_remove_sta(struct adapter *padapter, u8 *addr);
 
 u8 rtw_ap_set_pairwise_key(struct adapter *padapter, struct sta_info *psta);
-int rtw_ap_set_group_key(struct adapter *padapter, u8 *key, u8 alg, int keyid);
+int rtw_ap_set_key(struct adapter *padapter, u8 *key, u8 alg, int keyid, u8 set_tx);
 int rtw_ap_set_wep_key(struct adapter *padapter, u8 *key, u8 keylen, int keyid, u8 set_tx);
 
 void associated_clients_update(struct adapter *padapter, u8 updated);

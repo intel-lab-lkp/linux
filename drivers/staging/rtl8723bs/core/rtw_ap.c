@@ -1195,7 +1195,7 @@ exit:
 	return res;
 }
 
-static int rtw_ap_set_key(struct adapter *padapter,
+int rtw_ap_set_key(struct adapter *padapter,
 			  u8 *key,
 			  u8 alg,
 			  int keyid,
@@ -1256,11 +1256,6 @@ static int rtw_ap_set_key(struct adapter *padapter,
 exit:
 
 	return res;
-}
-
-int rtw_ap_set_group_key(struct adapter *padapter, u8 *key, u8 alg, int keyid)
-{
-	return rtw_ap_set_key(padapter, key, alg, keyid, 1);
 }
 
 int rtw_ap_set_wep_key(struct adapter *padapter,
