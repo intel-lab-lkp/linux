@@ -882,6 +882,9 @@ static void fc_fcp_resp(struct fc_fcp_pkt *fsp, struct fc_frame *fp)
 				if ((respl != FCP_RESP_RSP_INFO_LEN4) &&
 				    (respl != FCP_RESP_RSP_INFO_LEN8))
 					goto len_err;
+				if (fsp->wait_for_comp &&
+				    plen < sizeof(*fc_rp) + sizeof(*rp_ex) + respl)
+					goto len_err;
 				if (fsp->wait_for_comp) {
 					/* Abuse cdb_status for rsp code */
 					fsp->cdb_status = fc_rp_info->rsp_code;
@@ -897,6 +900,8 @@ static void fc_fcp_resp(struct fc_fcp_pkt *fsp, struct fc_frame *fp)
 				snsl = ntohl(rp_ex->fr_sns_len);
 				if (snsl > SCSI_SENSE_BUFFERSIZE)
 					snsl = SCSI_SENSE_BUFFERSIZE;
+				if (plen < sizeof(*fc_rp) + sizeof(*rp_ex) + respl + snsl)
+					goto len_err;
 				memcpy(fsp->cmd->sense_buffer,
 				       (char *)fc_rp_info + respl, snsl);
 			}
