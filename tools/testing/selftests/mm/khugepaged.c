@@ -100,6 +100,22 @@ static void skip(const char *msg)
 	exit_status = KSFT_SKIP;
 }
 
+static bool swap_available(void)
+{
+	char buf[256];
+	bool ret;
+	FILE *fp = fopen("/proc/swaps", "r");
+
+	if (!fp)
+		return false;
+
+	fgets(buf, sizeof(buf), fp);
+	ret = !!fgets(buf, sizeof(buf), fp);
+
+	fclose(fp);
+	return ret;
+}
+
 static void save_settings(void)
 {
 	ksft_print_msg("Save THP and khugepaged settings...");
@@ -742,6 +758,9 @@ static void collapse_swapin_single_pte(struct collapse_context *c, struct mem_op
 		ksft_exit_fail_perror("madvise(MADV_PAGEOUT)");
 	if (check_swap(p, page_size)) {
 		success("OK");
+	} else if (!swap_available()) {
+		skip("Swap is not available");
+		goto out;
 	} else {
 		fail("Fail");
 		goto out;
@@ -768,6 +787,9 @@ static void collapse_max_ptes_swap(struct collapse_context *c, struct mem_ops *o
 		ksft_exit_fail_perror("madvise(MADV_PAGEOUT)");
 	if (check_swap(p, (max_ptes_swap + 1) * page_size)) {
 		success("OK");
+	} else if (!swap_available()) {
+		skip("Swap is not available");
+		goto out;
 	} else {
 		fail("Fail");
 		goto out;
@@ -785,6 +807,9 @@ static void collapse_max_ptes_swap(struct collapse_context *c, struct mem_ops *o
 			ksft_exit_fail_perror("madvise(MADV_PAGEOUT)");
 		if (check_swap(p, max_ptes_swap * page_size)) {
 			success("OK");
+		} else if (!swap_available()) {
+			skip("Swap is not available");
+			goto out;
 		} else {
 			fail("Fail");
 			goto out;
