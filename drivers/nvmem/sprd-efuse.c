@@ -192,7 +192,7 @@ static void sprd_efuse_set_prog_en(struct sprd_efuse *efuse, bool en)
 }
 
 static int sprd_efuse_raw_prog(struct sprd_efuse *efuse, u32 blk, bool doub,
-			       bool lock, u32 *data)
+			       bool lock, const u32 *data)
 {
 	u32 status;
 	int ret = 0;
@@ -321,7 +321,7 @@ unlock:
 	return ret;
 }
 
-static int sprd_efuse_write(void *context, u32 offset, void *val, size_t bytes)
+static int sprd_efuse_write(void *context, u32 offset, const void *val, size_t bytes)
 {
 	struct sprd_efuse *efuse = context;
 	bool blk_double = efuse->data->blk_double;
@@ -410,7 +410,7 @@ static int sprd_efuse_probe(struct platform_device *pdev)
 	econfig.size = efuse->data->blk_nums * SPRD_EFUSE_BLOCK_WIDTH;
 	econfig.add_legacy_fixed_of_cells = true;
 	econfig.reg_read = sprd_efuse_read;
-	econfig.reg_write = sprd_efuse_write;
+	econfig.reg_write_const = sprd_efuse_write;
 	econfig.priv = efuse;
 	econfig.dev = &pdev->dev;
 	nvmem = devm_nvmem_register(&pdev->dev, &econfig);
