@@ -54,35 +54,38 @@ static const u8 nf_ct_ext_type_len[NF_CT_EXT_NUM] = {
 #endif
 };
 
+#define NF_CT_EXT_TYPE_SIZE(type) \
+	ALIGN(sizeof(type), __alignof__(struct nf_ct_ext))
+
 static __always_inline unsigned int total_extension_size(void)
 {
 	/* remember to add new extensions below */
 	BUILD_BUG_ON(NF_CT_EXT_NUM > 10);
 
 	return sizeof(struct nf_ct_ext) +
-	       sizeof(struct nf_conn_help)
+	       NF_CT_EXT_TYPE_SIZE(struct nf_conn_help)
 #if IS_ENABLED(CONFIG_NF_NAT)
-		+ sizeof(struct nf_conn_nat)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_nat)
 #endif
-		+ sizeof(struct nf_conn_seqadj)
-		+ sizeof(struct nf_conn_acct)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_seqadj)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_acct)
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
-		+ sizeof(struct nf_conntrack_ecache)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conntrack_ecache)
 #endif
 #ifdef CONFIG_NF_CONNTRACK_TIMESTAMP
-		+ sizeof(struct nf_conn_tstamp)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_tstamp)
 #endif
 #ifdef CONFIG_NF_CONNTRACK_TIMEOUT
-		+ sizeof(struct nf_conn_timeout)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_timeout)
 #endif
 #ifdef CONFIG_NF_CONNTRACK_LABELS
-		+ sizeof(struct nf_conn_labels)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_labels)
 #endif
 #if IS_ENABLED(CONFIG_NETFILTER_SYNPROXY)
-		+ sizeof(struct nf_conn_synproxy)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_synproxy)
 #endif
 #if IS_ENABLED(CONFIG_NET_ACT_CT)
-		+ sizeof(struct nf_conn_act_ct_ext)
+		+ NF_CT_EXT_TYPE_SIZE(struct nf_conn_act_ct_ext)
 #endif
 	;
 }
@@ -112,6 +115,14 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	newlen = newoff + nf_ct_ext_type_len[id];
 
 	alloc = max(newlen, NF_CT_EXT_PREALLOC);
+	/*
+	 * nf_conn_help contains the expectation list head.  Once an
+	 * expectation is linked, its lnode.pprev points into this allocation,
+	 * so later extension additions must not be allowed to relocate it.
+	 */
+	if (id == NF_CT_EXT_HELPER)
+		alloc = max(alloc, total_extension_size());
+
 	new = krealloc(ct->ext, alloc, gfp);
 	if (!new)
 		return NULL;
