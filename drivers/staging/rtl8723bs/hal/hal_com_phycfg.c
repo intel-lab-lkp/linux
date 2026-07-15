@@ -643,10 +643,7 @@ static s8 phy_GetWorldWideLimit(s8 *LimitTable)
 	return min;
 }
 
-static s8 phy_GetChannelIndexOfTxPowerLimit(u8 Channel)
-{
-	return Channel - 1;
-}
+
 
 static s16 get_bandwidth_idx(const enum channel_width bandwidth)
 {
@@ -721,7 +718,7 @@ s8 phy_get_tx_pwr_lmt(struct adapter *adapter, u32 reg_pwr_tbl_sel,
 	if (idx_rate_sctn == 0 || idx_rate_sctn == 1)
 		idx_bandwidth = 0;
 
-	channel = phy_GetChannelIndexOfTxPowerLimit(channel);
+	channel--;
 
 	if (idx_regulation == -1 || idx_bandwidth == -1 ||
 	    idx_rate_sctn == -1 || idx_channel == -1)
@@ -838,7 +835,7 @@ void PHY_SetTxPowerLimit(
 	else if (strcmp(Bandwidth, "40M") == 0)
 		bandwidth = 1;
 
-	channelIndex = phy_GetChannelIndexOfTxPowerLimit(channel);
+	channelIndex = channel-1;
 
 	if (channelIndex == -1)
 		return;
