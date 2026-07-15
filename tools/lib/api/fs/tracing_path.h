@@ -14,6 +14,7 @@ const char *tracing_path_mount(void);
 char *get_tracing_file(const char *name);
 void put_tracing_file(char *file);
 
+char *get_events_dir(void);
 char *get_events_file(const char *name);
 void put_events_file(char *file);
 

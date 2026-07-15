@@ -46,6 +46,10 @@
 #define BPF_FS_MAGIC           0xcafe4a11
 #endif
 
+#ifndef EVENTFS_SUPER_MAGIC
+#define EVENTFS_SUPER_MAGIC    0x65766673
+#endif
+
 static const char * const sysfs__known_mountpoints[] = {
 	"/sys",
 	0,
@@ -85,6 +89,11 @@ static const char * const hugetlbfs__known_mountpoints[] = {
 
 static const char * const bpf_fs__known_mountpoints[] = {
 	"/sys/fs/bpf",
+	0,
+};
+
+static const char * const eventfs__known_mountpoints[] = {
+	"/sys/kernel/events",
 	0,
 };
 
@@ -150,6 +159,7 @@ FS(debugfs, debugfs, DEBUGFS);
 FS(tracefs, tracefs, TRACEFS);
 FS(hugetlbfs, hugetlbfs, HUGETLBFS);
 FS(bpf_fs, bpf, BPF_FS);
+FS(eventfs, eventfs, EVENTFS_SUPER);
 
 static bool fs__read_mounts(struct fs *fs)
 {

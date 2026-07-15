@@ -36,6 +36,7 @@ FS(debugfs)
 FS(tracefs)
 FS(hugetlbfs)
 FS(bpf_fs)
+FS(eventfs)
 
 #undef FS
 

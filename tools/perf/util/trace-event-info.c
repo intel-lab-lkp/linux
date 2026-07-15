@@ -92,8 +92,9 @@ static int record_header_files(void)
 	int err = -EIO;
 
 	if (!path) {
+		err = -errno;
 		pr_debug("can't get tracing/events/header_page");
-		return -ENOMEM;
+		return err;
 	}
 
 	if (stat(path, &st) < 0) {
@@ -115,8 +116,8 @@ static int record_header_files(void)
 
 	path = get_events_file("header_event");
 	if (!path) {
+		err = -errno;
 		pr_debug("can't get tracing/events/header_event");
-		err = -ENOMEM;
 		goto out;
 	}
 
@@ -228,13 +229,14 @@ static int record_ftrace_files(struct tracepoint_path *tps)
 
 	path = get_events_file("ftrace");
 	if (!path) {
+		ret = -errno;
 		pr_debug("can't get tracing/events/ftrace");
-		return -ENOMEM;
+		return ret;
 	}
 
 	ret = copy_event_system(path, tps);
 
-	put_tracing_file(path);
+	put_events_file(path);
 
 	return ret;
 }
@@ -256,15 +258,16 @@ static int record_event_files(struct tracepoint_path *tps)
 	struct stat st;
 	char *path;
 	char *sys;
-	DIR *dir;
+	DIR *dir = NULL;
 	int count = 0;
 	int ret;
 	int err;
 
-	path = get_tracing_file("events");
+	path = get_events_dir();
 	if (!path) {
+		err = -errno;
 		pr_debug("can't get tracing/events");
-		return -ENOMEM;
+		goto out;
 	}
 
 	dir = opendir(path);
@@ -315,7 +318,7 @@ static int record_event_files(struct tracepoint_path *tps)
 out:
 	if (dir)
 		closedir(dir);
-	put_tracing_file(path);
+	put_events_file(path);
 
 	return err;
 }

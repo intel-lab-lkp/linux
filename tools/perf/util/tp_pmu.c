@@ -6,6 +6,7 @@
 #include <api/io_dir.h>
 #include <linux/kernel.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 int tp_pmu__id(const char *sys, const char *name)
@@ -15,7 +16,7 @@ int tp_pmu__id(const char *sys, const char *name)
 	int id, err;
 
 	if (!tp_dir)
-		return -1;
+		return -errno;
 
 	scnprintf(path, PATH_MAX, "%s/%s/id", tp_dir, name);
 	put_events_file(tp_dir);
@@ -66,7 +67,7 @@ int tp_pmu__for_each_tp_sys(void *state, tp_sys_callback cb)
 	struct io_dirent64 *events_ent;
 	struct io_dir events_dir;
 	int ret = 0;
-	char *events_dir_path = get_tracing_file("events");
+	char *events_dir_path = get_events_dir();
 
 	if (!events_dir_path)
 		return -errno;
