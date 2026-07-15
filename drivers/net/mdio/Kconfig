@@ -199,7 +199,7 @@ config MDIO_THUNDER
 	  ThunderX SoCs when the MDIO bus device appears as a PCI
 	  device.
 
-comment "MDIO Multiplexers"
+menu "MDIO Multiplexers"
 
 config MDIO_BUS_MUX
 	tristate
@@ -289,4 +289,5 @@ config MDIO_BUS_MUX_MMIOREG
 
 	  Currently, only 8/16/32 bits registers are supported.
 
+endmenu
 endmenu
