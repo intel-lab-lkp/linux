@@ -2367,7 +2367,7 @@ void issue_probersp(struct adapter *padapter, unsigned char *da, u8 is_valid_p2p
 	dump_mgntframe(padapter, pmgntframe);
 }
 
-static int _issue_probereq(struct adapter *padapter,
+int issue_probereq(struct adapter *padapter,
 			   struct ndis_802_11_ssid *pssid,
 			   u8 *da, u8 ch, bool append_wps, bool wait_ack)
 {
@@ -2460,10 +2460,6 @@ exit:
 	return ret;
 }
 
-inline void issue_probereq(struct adapter *padapter, struct ndis_802_11_ssid *pssid, u8 *da)
-{
-	_issue_probereq(padapter, pssid, da, 0, 1, false);
-}
 
 int issue_probereq_ex(struct adapter *padapter, struct ndis_802_11_ssid *pssid, u8 *da, u8 ch, bool append_wps,
 	int try_cnt, int wait_ms)
@@ -2472,7 +2468,7 @@ int issue_probereq_ex(struct adapter *padapter, struct ndis_802_11_ssid *pssid, 
 	int i = 0;
 
 	do {
-		ret = _issue_probereq(padapter, pssid, da, ch, append_wps,
+		ret = issue_probereq(padapter, pssid, da, ch, append_wps,
 				      wait_ms > 0);
 
 		i++;
@@ -3717,20 +3713,26 @@ void site_survey(struct adapter *padapter)
 
 					/* IOT issue, When wifi_spec is not set, send one probe req without WPS IE. */
 					if (padapter->registrypriv.wifi_spec)
-						issue_probereq(padapter, &(pmlmeext->sitesurvey_res.ssid[i]), NULL);
+						issue_probereq(padapter,
+							&pmlmeext->sitesurvey_res.ssid[i],
+							NULL, 0, 1, false);
 					else
-						issue_probereq_ex(padapter, &(pmlmeext->sitesurvey_res.ssid[i]), NULL, 0, 0, 0, 0);
+						issue_probereq_ex(padapter,
+							&pmlmeext->sitesurvey_res.ssid[i],
+							NULL, 0, 0, 0, 0);
 
-					issue_probereq(padapter, &(pmlmeext->sitesurvey_res.ssid[i]), NULL);
+					issue_probereq(padapter,
+						&pmlmeext->sitesurvey_res.ssid[i],
+						NULL, 0, 1, false);
 				}
 
 				if (pmlmeext->sitesurvey_res.scan_mode == SCAN_ACTIVE) {
 					/* IOT issue, When wifi_spec is not set, send one probe req without WPS IE. */
 					if (padapter->registrypriv.wifi_spec)
-						issue_probereq(padapter, NULL, NULL);
+						issue_probereq(padapter, NULL, NULL, 0, 1, false);
 					else
 						issue_probereq_ex(padapter, NULL, NULL, 0, 0, 0, 0);
-					issue_probereq(padapter, NULL, NULL);
+					issue_probereq(padapter, NULL, NULL, 0, 1, false);
 				}
 			}
 		}
