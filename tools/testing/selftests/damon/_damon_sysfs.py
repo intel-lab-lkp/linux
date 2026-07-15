@@ -634,7 +634,7 @@ class DamonAttrs:
         self.min_nr_regions = min_nr_regions
         self.max_nr_regions = max_nr_regions
         if probes is None:
-            probes = []
+            probes = DamonProbes()
         self.probes = probes
         self.probes.attrs = self
 
@@ -645,6 +645,9 @@ class DamonAttrs:
     def nr_regions_range_sysfs_dir(self):
         return os.path.join(self.context.sysfs_dir(), 'monitoring_attrs',
                 'nr_regions')
+
+    def sysfs_dir(self):
+        return os.path.join(self.context.sysfs_dir(), 'monitoring_attrs')
 
     def stage(self):
         err = write_file(os.path.join(self.interval_sysfs_dir(), 'sample_us'),
