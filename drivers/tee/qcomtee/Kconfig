@@ -5,7 +5,6 @@ config QCOMTEE
 	depends on ARCH_QCOM || COMPILE_TEST
 	depends on !CPU_BIG_ENDIAN
 	select QCOM_SCM
-	select QCOM_TZMEM_MODE_SHMBRIDGE
 	help
 	  This option enables the Qualcomm Trusted Execution Environment (QTEE)
 	  driver. It provides an API to access services offered by QTEE and
