@@ -1687,7 +1687,7 @@ EXPORT_SYMBOL(follow_down);
 static bool __follow_mount_rcu(struct nameidata *nd, struct path *path)
 {
 	struct dentry *dentry = path->dentry;
-	unsigned int flags = dentry->d_flags;
+	unsigned int flags = READ_ONCE(dentry->d_flags);
 
 	if (unlikely(nd->flags & LOOKUP_NO_XDEV))
 		return false;
@@ -1701,7 +1701,7 @@ static bool __follow_mount_rcu(struct nameidata *nd, struct path *path)
 			int res = dentry->d_op->d_manage(path, true);
 			if (res)
 				return res == -EISDIR;
-			flags = dentry->d_flags;
+			flags = READ_ONCE(dentry->d_flags);
 		}
 
 		if (flags & DCACHE_MOUNTED) {
@@ -1711,7 +1711,7 @@ static bool __follow_mount_rcu(struct nameidata *nd, struct path *path)
 				dentry = path->dentry = mounted->mnt.mnt_root;
 				nd->state |= ND_JUMPED;
 				nd->next_seq = read_seqcount_begin(&dentry->d_seq);
-				flags = dentry->d_flags;
+				flags = READ_ONCE(dentry->d_flags);
 				// makes sure that non-RCU pathwalk could reach
 				// this state.
 				if (read_seqretry(&mount_lock, nd->m_seq))
