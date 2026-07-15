@@ -214,7 +214,7 @@ static void init_clear_pgtable(void *table)
 }
 
 static void init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
-		     phys_addr_t phys, pgprot_t prot)
+		     phys_addr_t phys, pgprot_t prot, pgtbl_mod_mask *mask)
 {
 	do {
 		pte_t old_pte = __ptep_get(ptep);
@@ -224,6 +224,7 @@ static void init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
 		 * are deferred to the end of alloc_init_cont_pte().
 		 */
 		__set_pte_nosync(ptep, pfn_pte(__phys_to_pfn(phys), prot));
+		*mask |= PGTBL_PTE_MODIFIED;
 
 		/*
 		 * After the PTE entry has been populated once, we
@@ -251,7 +252,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 			       unsigned long end, phys_addr_t phys,
 			       pgprot_t prot,
 			       phys_addr_t (*pgtable_alloc)(enum pgtable_level),
-			       int flags)
+			       int flags, pgtbl_mod_mask *mask)
 {
 	unsigned long next;
 	pmd_t pmd = READ_ONCE(*pmdp);
@@ -272,6 +273,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		init_clear_pgtable(ptep);
 		ptep += pte_index(addr);
 		__pmd_populate(pmdp, pte_phys, pmdval);
+		*mask |= PGTBL_PMD_MODIFIED;
 	} else {
 		BUG_ON(pmd_bad(pmd));
 		ptep = pte_set_fixmap_offset(pmdp, addr);
@@ -288,7 +290,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		    !pte_range_has_valid_noncont(ptep))
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
-		init_pte(ptep, addr, next, phys, __prot);
+		init_pte(ptep, addr, next, phys, __prot, mask);
 
 		ptep += pte_index(next) - pte_index(addr);
 		phys += next - addr;
@@ -306,7 +308,8 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 
 static int init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		    phys_addr_t phys, pgprot_t prot,
-		    phys_addr_t (*pgtable_alloc)(enum pgtable_level), int flags)
+		    phys_addr_t (*pgtable_alloc)(enum pgtable_level), int flags,
+		    pgtbl_mod_mask *mask)
 {
 	unsigned long next;
 
@@ -319,7 +322,10 @@ static int init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		if (((addr | next | phys) & ~PMD_MASK) == 0 &&
 		    (flags & NO_BLOCK_MAPPINGS) == 0 &&
 		    !pmd_table(old_pmd)) {
-			WARN_ON(!pmd_set_huge(pmdp, phys, prot));
+			if (pmd_set_huge(pmdp, phys, prot))
+				*mask |= PGTBL_PMD_MODIFIED;
+			else
+				WARN_ON(1);
 
 			/*
 			 * After the PMD entry has been populated once, we
@@ -331,7 +337,7 @@ static int init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 			int ret;
 
 			ret = alloc_init_cont_pte(pmdp, addr, next, phys, prot,
-						  pgtable_alloc, flags);
+						  pgtable_alloc, flags, mask);
 			if (ret)
 				return ret;
 
@@ -359,7 +365,7 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 			       unsigned long end, phys_addr_t phys,
 			       pgprot_t prot,
 			       phys_addr_t (*pgtable_alloc)(enum pgtable_level),
-			       int flags)
+			       int flags, pgtbl_mod_mask *mask)
 {
 	int ret;
 	unsigned long next;
@@ -384,6 +390,7 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		init_clear_pgtable(pmdp);
 		pmdp += pmd_index(addr);
 		__pud_populate(pudp, pmd_phys, pudval);
+		*mask |= PGTBL_PUD_MODIFIED;
 	} else {
 		BUG_ON(pud_bad(pud));
 		pmdp = pmd_set_fixmap_offset(pudp, addr);
@@ -400,7 +407,8 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		    !pmd_range_has_valid_noncont(pmdp))
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
-		ret = init_pmd(pmdp, addr, next, phys, __prot, pgtable_alloc, flags);
+		ret = init_pmd(pmdp, addr, next, phys, __prot, pgtable_alloc, flags,
+			       mask);
 		if (ret)
 			goto out;
 
@@ -417,7 +425,7 @@ out:
 static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 			  phys_addr_t phys, pgprot_t prot,
 			  phys_addr_t (*pgtable_alloc)(enum pgtable_level),
-			  int flags)
+			  int flags, pgtbl_mod_mask *mask)
 {
 	int ret = 0;
 	unsigned long next;
@@ -438,6 +446,7 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		init_clear_pgtable(pudp);
 		pudp += pud_index(addr);
 		__p4d_populate(p4dp, pud_phys, p4dval);
+		*mask |= PGTBL_P4D_MODIFIED;
 	} else {
 		BUG_ON(p4d_bad(p4d));
 		pudp = pud_set_fixmap_offset(p4dp, addr);
@@ -455,7 +464,10 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		   ((addr | next | phys) & ~PUD_MASK) == 0 &&
 		    (flags & NO_BLOCK_MAPPINGS) == 0 &&
 		    !pud_table(old_pud)) {
-			WARN_ON(!pud_set_huge(pudp, phys, prot));
+			if (pud_set_huge(pudp, phys, prot))
+				*mask |= PGTBL_PUD_MODIFIED;
+			else
+				WARN_ON(1);
 
 			/*
 			 * After the PUD entry has been populated once, we
@@ -465,7 +477,7 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 						      READ_ONCE(pud_val(*pudp))));
 		} else {
 			ret = alloc_init_cont_pmd(pudp, addr, next, phys, prot,
-						  pgtable_alloc, flags);
+						  pgtable_alloc, flags, mask);
 			if (ret)
 				goto out;
 
@@ -484,7 +496,7 @@ out:
 static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 			  phys_addr_t phys, pgprot_t prot,
 			  phys_addr_t (*pgtable_alloc)(enum pgtable_level),
-			  int flags)
+			  int flags, pgtbl_mod_mask *mask)
 {
 	int ret;
 	unsigned long next;
@@ -505,6 +517,7 @@ static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		init_clear_pgtable(p4dp);
 		p4dp += p4d_index(addr);
 		__pgd_populate(pgdp, p4d_phys, pgdval);
+		*mask |= PGTBL_PGD_MODIFIED;
 	} else {
 		BUG_ON(pgd_bad(pgd));
 		p4dp = p4d_set_fixmap_offset(pgdp, addr);
@@ -516,7 +529,7 @@ static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		next = p4d_addr_end(addr, end);
 
 		ret = alloc_init_pud(p4dp, addr, next, phys, prot,
-				     pgtable_alloc, flags);
+				     pgtable_alloc, flags, mask);
 		if (ret)
 			goto out;
 
@@ -536,7 +549,7 @@ static int __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 				       unsigned long virt, phys_addr_t size,
 				       pgprot_t prot,
 				       phys_addr_t (*pgtable_alloc)(enum pgtable_level),
-				       int flags)
+				       int flags, pgtbl_mod_mask *mask)
 {
 	int ret;
 	unsigned long addr, end, next;
@@ -556,7 +569,7 @@ static int __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 	do {
 		next = pgd_addr_end(addr, end);
 		ret = alloc_init_p4d(pgdp, addr, next, phys, prot, pgtable_alloc,
-				     flags);
+				     flags, mask);
 		if (ret)
 			return ret;
 		phys += next - addr;
@@ -569,13 +582,13 @@ static int __create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				unsigned long virt, phys_addr_t size,
 				pgprot_t prot,
 				phys_addr_t (*pgtable_alloc)(enum pgtable_level),
-				int flags)
+				int flags, pgtbl_mod_mask *mask)
 {
 	int ret;
 
 	mutex_lock(&fixmap_lock);
 	ret = __create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
-					  pgtable_alloc, flags);
+					  pgtable_alloc, flags, mask);
 	mutex_unlock(&fixmap_lock);
 
 	return ret;
@@ -588,9 +601,10 @@ static void early_create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 				     int flags)
 {
 	int ret;
+	pgtbl_mod_mask mask = 0;
 
 	ret = __create_pgd_mapping(pgdir, phys, virt, size, prot, pgtable_alloc,
-				   flags);
+				   flags, &mask);
 	if (ret)
 		panic("Failed to create page tables\n");
 }
@@ -1332,6 +1346,7 @@ static int __init __kpti_install_ng_mappings(void *__unused)
 
 	if (!cpu) {
 		int ret;
+		pgtbl_mod_mask mask = 0;
 
 		alloc = __get_free_pages(GFP_ATOMIC | __GFP_ZERO, order);
 		kpti_ng_temp_pgd = (pgd_t *)(alloc + (levels - 1) * PAGE_SIZE);
@@ -1355,7 +1370,7 @@ static int __init __kpti_install_ng_mappings(void *__unused)
 		//
 		ret = __create_pgd_mapping_locked(kpti_ng_temp_pgd, __pa(alloc),
 						  KPTI_NG_TEMP_VA, PAGE_SIZE, PAGE_KERNEL,
-						  kpti_ng_pgd_alloc, 0);
+						  kpti_ng_pgd_alloc, 0, &mask);
 		if (ret)
 			panic("Failed to create page tables\n");
 	}
@@ -1668,7 +1683,7 @@ static void unmap_hotplug_range(unsigned long addr, unsigned long end,
 
 static void free_empty_pte_table(pmd_t *pmdp, unsigned long addr,
 				 unsigned long end, unsigned long floor,
-				 unsigned long ceiling)
+				 unsigned long ceiling, pgtbl_mod_mask *mask)
 {
 	pte_t *ptep, pte;
 	unsigned long i, start = addr;
@@ -1684,6 +1699,7 @@ static void free_empty_pte_table(pmd_t *pmdp, unsigned long addr,
 		WARN_ON(!pte_none(pte));
 	} while (addr += PAGE_SIZE, addr < end);
 
+	*mask |= PGTBL_PTE_MODIFIED;
 	if (!pgtable_range_aligned(start, end, floor, ceiling, PMD_MASK))
 		return;
 
@@ -1699,13 +1715,14 @@ static void free_empty_pte_table(pmd_t *pmdp, unsigned long addr,
 	}
 
 	pmd_clear(pmdp);
+	*mask |= PGTBL_PMD_MODIFIED;
 	__flush_tlb_kernel_pgtable(start);
 	free_hotplug_pgtable_page(virt_to_page(ptep));
 }
 
 static void free_empty_pmd_table(pud_t *pudp, unsigned long addr,
 				 unsigned long end, unsigned long floor,
-				 unsigned long ceiling)
+				 unsigned long ceiling, pgtbl_mod_mask *mask)
 {
 	pmd_t *pmdp, pmd;
 	unsigned long i, next, start = addr;
@@ -1718,7 +1735,7 @@ static void free_empty_pmd_table(pud_t *pudp, unsigned long addr,
 			continue;
 
 		WARN_ON(!pmd_present(pmd) || !pmd_table(pmd));
-		free_empty_pte_table(pmdp, addr, next, floor, ceiling);
+		free_empty_pte_table(pmdp, addr, next, floor, ceiling, mask);
 	} while (addr = next, addr < end);
 
 	if (CONFIG_PGTABLE_LEVELS <= 2)
@@ -1739,13 +1756,14 @@ static void free_empty_pmd_table(pud_t *pudp, unsigned long addr,
 	}
 
 	pud_clear(pudp);
+	*mask |= PGTBL_PUD_MODIFIED;
 	__flush_tlb_kernel_pgtable(start);
 	free_hotplug_pgtable_page(virt_to_page(pmdp));
 }
 
 static void free_empty_pud_table(p4d_t *p4dp, unsigned long addr,
 				 unsigned long end, unsigned long floor,
-				 unsigned long ceiling)
+				 unsigned long ceiling, pgtbl_mod_mask *mask)
 {
 	pud_t *pudp, pud;
 	unsigned long i, next, start = addr;
@@ -1758,7 +1776,7 @@ static void free_empty_pud_table(p4d_t *p4dp, unsigned long addr,
 			continue;
 
 		WARN_ON(!pud_present(pud) || !pud_table(pud));
-		free_empty_pmd_table(pudp, addr, next, floor, ceiling);
+		free_empty_pmd_table(pudp, addr, next, floor, ceiling, mask);
 	} while (addr = next, addr < end);
 
 	if (!pgtable_l4_enabled())
@@ -1779,13 +1797,14 @@ static void free_empty_pud_table(p4d_t *p4dp, unsigned long addr,
 	}
 
 	p4d_clear(p4dp);
+	*mask |= PGTBL_P4D_MODIFIED;
 	__flush_tlb_kernel_pgtable(start);
 	free_hotplug_pgtable_page(virt_to_page(pudp));
 }
 
 static void free_empty_p4d_table(pgd_t *pgdp, unsigned long addr,
 				 unsigned long end, unsigned long floor,
-				 unsigned long ceiling)
+				 unsigned long ceiling, pgtbl_mod_mask *mask)
 {
 	p4d_t *p4dp, p4d;
 	unsigned long i, next, start = addr;
@@ -1798,7 +1817,7 @@ static void free_empty_p4d_table(pgd_t *pgdp, unsigned long addr,
 			continue;
 
 		WARN_ON(!p4d_present(p4d));
-		free_empty_pud_table(p4dp, addr, next, floor, ceiling);
+		free_empty_pud_table(p4dp, addr, next, floor, ceiling, mask);
 	} while (addr = next, addr < end);
 
 	if (!pgtable_l5_enabled())
@@ -1819,6 +1838,7 @@ static void free_empty_p4d_table(pgd_t *pgdp, unsigned long addr,
 	}
 
 	pgd_clear(pgdp);
+	*mask |= PGTBL_PGD_MODIFIED;
 	__flush_tlb_kernel_pgtable(start);
 	free_hotplug_pgtable_page(virt_to_page(p4dp));
 }
@@ -1828,6 +1848,8 @@ static void free_empty_tables(unsigned long addr, unsigned long end,
 {
 	unsigned long next;
 	pgd_t *pgdp, pgd;
+	pgtbl_mod_mask mask = 0;
+	unsigned long start = addr;
 
 	do {
 		next = pgd_addr_end(addr, end);
@@ -1837,8 +1859,11 @@ static void free_empty_tables(unsigned long addr, unsigned long end,
 			continue;
 
 		WARN_ON(!pgd_present(pgd));
-		free_empty_p4d_table(pgdp, addr, next, floor, ceiling);
+		free_empty_p4d_table(pgdp, addr, next, floor, ceiling, &mask);
 	} while (addr = next, addr < end);
+
+	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
+		arch_sync_kernel_mappings(start, end);
 }
 #endif
 
@@ -2046,6 +2071,7 @@ int arch_add_memory(int nid, u64 start, u64 size,
 		    struct mhp_params *params)
 {
 	int ret, flags = NO_EXEC_MAPPINGS;
+	pgtbl_mod_mask mask = 0;
 
 	VM_BUG_ON(!mhp_range_allowed(start, size, true));
 
@@ -2054,9 +2080,12 @@ int arch_add_memory(int nid, u64 start, u64 size,
 
 	ret = __create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
 				   size, params->pgprot, pgd_pgtable_alloc_init_mm,
-				   flags);
+				   flags, &mask);
 	if (ret)
 		goto err;
+
+	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
+		arch_sync_kernel_mappings(start, start + size);
 
 	memblock_clear_nomap(start, size);
 
