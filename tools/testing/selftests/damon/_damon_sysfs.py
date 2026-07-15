@@ -558,6 +558,35 @@ class IntervalsGoal:
             return err
         return None
 
+class DamonProbe:
+    weight = None
+    filters = None
+    probes = None
+    idx = None
+
+    def __init__(self, weight=0, filters=None):
+        self.weight = weight
+        if filters is None:
+            filters = []
+        self.filters = filters
+        for idx, filter in enumerate(self.filters):
+            filter.probe = self
+            filter.idx = idx
+
+    def sysfs_dir(self):
+        return os.path.join(self.probes.sysfs_dir(), '%d' % self.idx)
+
+    def stage(self):
+        err = write_file(os.path.join(self.sysfs_dir(), 'nr_filters'),
+                         len(self.filters))
+        if err is not None:
+            return err
+        for filter in self.filters:
+            err = filter.stage()
+            if err is not None:
+                return err
+        return None
+
 class DamonProbes:
     probes = None
     attrs = None
@@ -566,6 +595,9 @@ class DamonProbes:
         if probes is None:
             probes = []
         self.probes = probes
+        for idx, probe in enumerate(self.probes):
+            probe.probes = self
+            probe.idx = idx
 
     def sysfs_dir(self):
         return os.path.join(self.attrs.sysfs_dir(), 'probes')
@@ -575,6 +607,10 @@ class DamonProbes:
                          len(self.probes))
         if err is not None:
             return err
+        for probe in self.probes:
+            err = probe.stage()
+            if err is not None:
+                return err
         return None
 
 class DamonAttrs:
