@@ -9,6 +9,8 @@
 #include <linux/export.h>
 #include "led.h"
 
+static void ieee80211_stop_tpt_led_trig(struct ieee80211_local *local);
+
 void ieee80211_led_assoc(struct ieee80211_local *local, bool associated)
 {
 	if (!atomic_read(&local->assoc_led_active))
@@ -206,6 +208,7 @@ void ieee80211_led_exit(struct ieee80211_local *local)
 		led_trigger_unregister(&local->rx_led);
 
 	if (local->tpt_led_trigger) {
+		ieee80211_stop_tpt_led_trig(local);
 		led_trigger_unregister(&local->tpt_led);
 		kfree(local->tpt_led_trigger);
 	}
