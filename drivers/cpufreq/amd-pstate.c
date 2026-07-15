@@ -2228,6 +2228,9 @@ static int __init amd_pstate_init(void)
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
 		return -ENODEV;
 
+	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR) && !xen_initial_domain())
+		return -ENODEV;
+
 	/* show debug message only if CPPC is not supported */
 	if (!amd_cppc_supported())
 		return -EOPNOTSUPP;
