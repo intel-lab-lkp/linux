@@ -467,10 +467,6 @@ exit:
 	return ret;
 }
 
-u8 rtw_get_mgntframe_raid(struct adapter *adapter, unsigned char network_type)
-{
-	return (network_type & WIRELESS_11B) ? RATEID_IDX_B : RATEID_IDX_G;
-}
 
 void rtw_hal_update_sta_rate_mask(struct adapter *padapter, struct sta_info *psta)
 {

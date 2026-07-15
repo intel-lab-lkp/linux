@@ -126,7 +126,6 @@ u8 NumOutPipe
 
 s32 c2h_evt_read_88xx(struct adapter *adapter, u8 *buf);
 
-u8 rtw_get_mgntframe_raid(struct adapter *adapter, unsigned char network_type);
 void rtw_hal_update_sta_rate_mask(struct adapter *padapter, struct sta_info *psta);
 
 void SetHwReg(struct adapter *padapter, u8 variable, u8 *val);

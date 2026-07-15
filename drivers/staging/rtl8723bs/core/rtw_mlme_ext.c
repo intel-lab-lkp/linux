@@ -1907,7 +1907,7 @@ void update_mgntframe_attrib(struct adapter *padapter, struct pkt_attrib *pattri
 		wireless_mode = WIRELESS_11B;
 	else
 		wireless_mode = WIRELESS_11G;
-	pattrib->raid =  rtw_get_mgntframe_raid(padapter, wireless_mode);
+	pattrib->raid = (wireless_mode & WIRELESS_11B) ? RATEID_IDX_B : RATEID_IDX_G;
 	pattrib->rate = pmlmeext->tx_rate;
 
 	pattrib->encrypt = _NO_PRIVACY_;
