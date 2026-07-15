@@ -34,6 +34,7 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
+		bootph-pre-ram;
 
 		mcuram2: mcuram2@10000000 {
 			compatible = "shared-dma-pool";
@@ -74,6 +75,7 @@
 		optee@fe000000 {
 			reg = <0xfe000000 0x02000000>;
 			no-map;
+			bootph-pre-ram;
 		};
 	};
 
