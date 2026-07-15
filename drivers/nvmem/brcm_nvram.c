@@ -181,15 +181,21 @@ static int brcm_nvram_parse(struct brcm_nvram *priv)
 	size_t len;
 	int err;
 
+	if (priv->data_len < sizeof(*header)) {
+		dev_err(dev, "NVRAM content (%zu) is smaller than header (%zu)\n",
+			priv->data_len, sizeof(*header));
+		return -EINVAL;
+	}
+
 	if (memcmp(header->magic, NVRAM_MAGIC, 4)) {
 		dev_err(dev, "Invalid NVRAM magic\n");
 		return -EINVAL;
 	}
 
 	len = le32_to_cpu(header->len);
-	if (len > priv->nvmem_size) {
-		dev_err(dev, "NVRAM length (%zd) exceeds mapped size (%zd)\n", len,
-			priv->nvmem_size);
+	if (len < sizeof(*header) || len > priv->data_len) {
+		dev_err(dev, "NVRAM length (%zu) is outside cached content (%zu)\n",
+			len, priv->data_len);
 		return -EINVAL;
 	}
 
