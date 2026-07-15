@@ -5019,10 +5019,7 @@ void sa_query_timer_hdl(struct timer_list *t)
 	spin_unlock_bh(&pmlmepriv->lock);
 }
 
-u8 NULL_hdl(struct adapter *padapter, u8 *pbuf)
-{
-	return H2C_SUCCESS;
-}
+
 
 u8 setopmode_hdl(struct adapter *padapter, u8 *pbuf)
 {
