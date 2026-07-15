@@ -1077,10 +1077,6 @@ void ODM_SetIQCbyRFpath(struct dm_odm_t *pDM_Odm, u32 RFpath)
 	}
 }
 
-static bool ODM_CheckPowerStatus(struct adapter *Adapter)
-{
-	return true;
-}
 
 static void _PHY_SaveADDARegisters8723B(
 	struct adapter *padapter,
@@ -1093,8 +1089,6 @@ static void _PHY_SaveADDARegisters8723B(
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 	struct dm_odm_t *pDM_Odm = &pHalData->odmpriv;
 
-	if (!ODM_CheckPowerStatus(padapter))
-		return;
 
 	for (i = 0 ; i < RegisterNum ; i++) {
 		ADDABackup[i] = PHY_QueryBBReg(pDM_Odm->Adapter, ADDAReg[i], bMaskDWord);
@@ -1556,8 +1550,6 @@ void PHY_IQCalibrate_8723B(
 /* 	u32 		Path_SEL_BB = 0; */
 	u32 		GNT_BT_default;
 
-	if (!ODM_CheckPowerStatus(padapter))
-		return;
 
 	if (!(pDM_Odm->SupportAbility & ODM_RF_CALIBRATION))
 		return;
