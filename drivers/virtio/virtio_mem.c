@@ -2847,6 +2847,13 @@ static int virtio_mem_init(struct virtio_mem *vm)
 			&vm->plugged_size);
 	virtio_cread_le(vm->vdev, struct virtio_mem_config, block_size,
 			&vm->device_block_size);
+	if (!vm->device_block_size ||
+	    !is_power_of_2(vm->device_block_size)) {
+		dev_err(&vm->vdev->dev,
+			"invalid device block size: 0x%llx\n",
+			(unsigned long long)vm->device_block_size);
+		return -EINVAL;
+	}
 	virtio_cread_le(vm->vdev, struct virtio_mem_config, node_id,
 			&node_id);
 	vm->nid = virtio_mem_translate_node_id(vm, node_id);
