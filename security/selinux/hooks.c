@@ -4918,7 +4918,7 @@ static bool sock_skip_has_perm(u32 sid)
 }
 
 
-static int sock_has_perm(struct sock *sk, u32 perms)
+static int __sock_has_perm(struct sock *sk, u32 sid, u32 perms)
 {
 	struct sk_security_struct *sksec = selinux_sock(sk);
 	struct common_audit_data ad;
@@ -4929,8 +4929,13 @@ static int sock_has_perm(struct sock *sk, u32 perms)
 
 	ad_net_init_from_sk(&ad, &net, sk);
 
-	return avc_has_perm(current_sid(), sksec->sid, sksec->sclass, perms,
+	return avc_has_perm(sid, sksec->sid, sksec->sclass, perms,
 			    &ad);
+}
+
+static int sock_has_perm(struct sock *sk, u32 perms)
+{
+	return __sock_has_perm(sk, current_sid(), perms);
 }
 
 static int selinux_socket_create(int family, int type,
@@ -5002,13 +5007,14 @@ static int selinux_socket_socketpair(struct socket *socka,
    Need to determine whether we should perform a name_bind
    permission check between the socket and the port number. */
 
-static int __selinux_socket_bind(struct sock *sk, struct sockaddr *address, int addrlen)
+static int __selinux_socket_bind(struct sock *sk, u32 caller_sid,
+				struct sockaddr *address, int addrlen)
 {
 	struct sk_security_struct *sksec = selinux_sock(sk);
 	u16 family;
 	int err;
 
-	err = sock_has_perm(sk, SOCKET__BIND);
+	err = __sock_has_perm(sk, caller_sid, SOCKET__BIND);
 	if (err)
 		goto out;
 
@@ -5135,19 +5141,19 @@ err_af:
 
 static int selinux_socket_bind(struct socket *sock, struct sockaddr *address, int addrlen)
 {
-	return __selinux_socket_bind(sock->sk, address, addrlen);
+	return __selinux_socket_bind(sock->sk, current_sid(), address, addrlen);
 }
 
 /* This supports connect(2) and SCTP connect services such as sctp_connectx(3)
  * and sctp_sendmsg(3) as described in Documentation/security/SCTP.rst
  */
-static int selinux_socket_connect_helper(struct sock *sk,
+static int selinux_socket_connect_helper(struct sock *sk, u32 caller_sid,
 					 struct sockaddr *address, int addrlen)
 {
 	struct sk_security_struct *sksec = selinux_sock(sk);
 	int err;
 
-	err = sock_has_perm(sk, SOCKET__CONNECT);
+	err = __sock_has_perm(sk, caller_sid, SOCKET__CONNECT);
 	if (err)
 		return err;
 	if (addrlen < offsetofend(struct sockaddr, sa_family))
@@ -5232,7 +5238,7 @@ static int selinux_socket_connect(struct socket *sock,
 	int err;
 	struct sock *sk = sock->sk;
 
-	err = selinux_socket_connect_helper(sk, address, addrlen);
+	err = selinux_socket_connect_helper(sk, current_sid(), address, addrlen);
 	if (err)
 		return err;
 
@@ -5731,6 +5737,7 @@ static int selinux_sctp_bind_connect(struct sock *sk, int optname,
 				     struct sockaddr *address,
 				     int addrlen)
 {
+	struct sk_security_struct *sksec = selinux_sock(sk);
 	int len, err = 0, walk_size = 0;
 	void *addr_buf;
 	struct sockaddr *addr;
@@ -5767,14 +5774,14 @@ static int selinux_sctp_bind_connect(struct sock *sk, int optname,
 		case SCTP_PRIMARY_ADDR:
 		case SCTP_SET_PEER_PRIMARY_ADDR:
 		case SCTP_SOCKOPT_BINDX_ADD:
-			err = __selinux_socket_bind(sk, addr, len);
+			err = __selinux_socket_bind(sk, sksec->sid, addr, len);
 			break;
 		/* Connect checks */
 		case SCTP_SOCKOPT_CONNECTX:
 		case SCTP_PARAM_SET_PRIMARY:
 		case SCTP_PARAM_ADD_IP:
 		case SCTP_SENDMSG_CONNECT:
-			err = selinux_socket_connect_helper(sk, addr, len);
+			err = selinux_socket_connect_helper(sk, sksec->sid, addr, len);
 			if (err)
 				return err;
 
