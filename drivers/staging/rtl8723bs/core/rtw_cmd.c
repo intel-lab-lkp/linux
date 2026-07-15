@@ -227,7 +227,7 @@ void rtw_free_evt_priv(struct	evt_priv *pevtpriv)
 	kfree(pevtpriv->c2h_queue);
 }
 
-void _rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
+void rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
 {
 	if (pcmdpriv) {
 		kfree(pcmdpriv->cmd_allocated_buf);
@@ -287,10 +287,6 @@ struct	cmd_obj	*_rtw_dequeue_cmd(struct __queue *queue)
 }
 
 
-void rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
-{
-	_rtw_free_cmd_priv(pcmdpriv);
-}
 
 int rtw_cmd_filter(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj);
 int rtw_cmd_filter(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj)
