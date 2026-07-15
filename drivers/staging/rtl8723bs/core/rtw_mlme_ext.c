@@ -2123,7 +2123,7 @@ void issue_beacon(struct adapter *padapter, int timeout_ms)
 
 	/*  beacon interval: 2 bytes */
 
-	memcpy(pframe, (unsigned char *)(rtw_get_beacon_interval_from_ie(cur_network->ies)), 2);
+	memcpy(pframe, (unsigned char *)(cur_network->ies+RTW_BEACON_INTERVAL_IE_OFFSET), 2);
 
 	pframe += 2;
 	pattrib->pktlen += 2;
@@ -2319,14 +2319,14 @@ void issue_probersp(struct adapter *padapter, unsigned char *da, u8 is_valid_p2p
 
 		/*  beacon interval: 2 bytes */
 
-		memcpy(pframe, (unsigned char *)(rtw_get_beacon_interval_from_ie(cur_network->ies)), 2);
+		memcpy(pframe, (u8 *)(cur_network->ies+RTW_BEACON_INTERVAL_IE_OFFSET), 2);
 
 		pframe += 2;
 		pattrib->pktlen += 2;
 
 		/*  capability info: 2 bytes */
 
-		memcpy(pframe, (unsigned char *)(rtw_get_capability_from_ie(cur_network->ies)), 2);
+		memcpy(pframe, (u8 *)(rtw_get_capability_from_ie(cur_network->ies)), 2);
 
 		pframe += 2;
 		pattrib->pktlen += 2;
@@ -3895,7 +3895,7 @@ u8 collect_bss_info(struct adapter *padapter, union recv_frame *precv_frame, str
 		}
 	}
 
-	memcpy(&le32_tmp, rtw_get_beacon_interval_from_ie(bssid->ies), 2);
+	memcpy(&le32_tmp, bssid->ies+RTW_BEACON_INTERVAL_IE_OFFSET, 2);
 	bssid->configuration.beacon_period = le32_to_cpu(le32_tmp);
 
 	val16 = rtw_get_capability((struct wlan_bssid_ex *)bssid);

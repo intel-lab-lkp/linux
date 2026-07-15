@@ -791,7 +791,7 @@ int rtw_check_beacon_data(struct adapter *padapter, u8 *pbuf,  int len)
 
 	/* beacon interval */
 	/* ie + 8;	8: TimeStamp, 2: Beacon Interval 2:Capability */
-	p = rtw_get_beacon_interval_from_ie(ie);
+	p = ie+RTW_BEACON_INTERVAL_IE_OFFSET;
 	pbss_network->configuration.beacon_period = get_unaligned_le16(p);
 
 	/* capability */

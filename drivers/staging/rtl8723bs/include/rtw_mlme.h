@@ -43,6 +43,10 @@
 #define _FW_UNDER_SURVEY	WIFI_SITE_MONITOR
 
 
+#define RTW_BEACON_INTERVAL_IE_OFFSET 8
+
+
+
 enum {
  dot11AuthAlgrthm_Open = 0,
  dot11AuthAlgrthm_Shared,
@@ -366,7 +370,6 @@ bool rtw_if_up(struct adapter *padapter);
 bool rtw_linked_check(struct adapter *padapter);
 
 u8 *rtw_get_capability_from_ie(u8 *ie);
-u8 *rtw_get_beacon_interval_from_ie(u8 *ie);
 
 
 void rtw_joinbss_reset(struct adapter *padapter);

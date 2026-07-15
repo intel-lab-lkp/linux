@@ -324,7 +324,7 @@ u16 get_beacon_interval(struct wlan_bssid_ex *bss)
 {
 	__le16 val;
 
-	memcpy((unsigned char *)&val, rtw_get_beacon_interval_from_ie(bss->ies), 2);
+	memcpy((unsigned char *)&val, bss->ies+RTW_BEACON_INTERVAL_IE_OFFSET, 2);
 
 	return le16_to_cpu(val);
 }

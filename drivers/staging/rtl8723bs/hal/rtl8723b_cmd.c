@@ -128,7 +128,7 @@ static void ConstructBeacon(struct adapter *padapter, u8 *pframe, u32 *pLength)
 	pktlen += 8;
 
 	/*  beacon interval: 2 bytes */
-	memcpy(pframe, (unsigned char *)(rtw_get_beacon_interval_from_ie(cur_network->ies)), 2);
+	memcpy(pframe, (unsigned char *)(cur_network->ies+RTW_BEACON_INTERVAL_IE_OFFSET), 2);
 
 	pframe += 2;
 	pktlen += 2;
