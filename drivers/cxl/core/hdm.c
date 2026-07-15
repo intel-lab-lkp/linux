@@ -955,7 +955,8 @@ static int cxl_setup_hdm_decoder_from_dvsec(
 	 * change the range registers at run time.
 	 */
 	cxld->flags |= CXL_DECODER_F_ENABLE | CXL_DECODER_F_LOCK;
-	port->commit_end = cxld->id;
+	scoped_guard(rwsem_write, &cxl_rwsem.region)
+		port->commit_end = cxld->id;
 
 	rc = devm_cxl_dpa_reserve(cxled, *dpa_base, len, 0);
 	if (rc) {
@@ -1181,13 +1182,13 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 {
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
 	struct cxl_port *port = cxlhdm->port;
-	int i;
 	u64 dpa_base = 0;
+	int i, rc;
 
 	cxl_settle_decoders(cxlhdm);
 
 	for (i = 0; i < cxlhdm->decoder_count; i++) {
-		int rc, target_count = cxlhdm->target_count;
+		int target_count = cxlhdm->target_count;
 		struct cxl_decoder *cxld;
 
 		if (is_cxl_endpoint(port)) {
@@ -1198,7 +1199,8 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 				dev_warn(&port->dev,
 					 "Failed to allocate decoder%d.%d\n",
 					 port->id, i);
-				return PTR_ERR(cxled);
+				rc = PTR_ERR(cxled);
+				goto err;
 			}
 			cxld = &cxled->cxld;
 		} else {
@@ -1209,7 +1211,8 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 				dev_warn(&port->dev,
 					 "Failed to allocate decoder%d.%d\n",
 					 port->id, i);
-				return PTR_ERR(cxlsd);
+				rc = PTR_ERR(cxlsd);
+				goto err;
 			}
 			cxld = &cxlsd->cxld;
 		}
@@ -1220,17 +1223,23 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 				 "Failed to initialize decoder%d.%d\n",
 				 port->id, i);
 			put_device(&cxld->dev);
-			return rc;
+			goto err;
 		}
 		rc = add_hdm_decoder(port, cxld);
 		if (rc) {
 			dev_warn(&port->dev,
 				 "Failed to add decoder%d.%d\n", port->id, i);
-			return rc;
+			goto err;
 		}
 	}
 
 	return 0;
+
+err:
+	/* Reset to the none committed baseline for a fresh enumeration */
+	scoped_guard(rwsem_write, &cxl_rwsem.region)
+		port->commit_end = -1;
+	return rc;
 }
 
 /**
