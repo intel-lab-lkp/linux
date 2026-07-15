@@ -153,6 +153,18 @@
 #define FORCE_COMMIT			BIT(0)
 #define BYPASS_SHADOW			BIT(1)
 
+/* DSI_VDE */
+#define VDE_BLOCK_ULTRA			BIT(29)
+
+/* DSI_BUF_CON0 */
+#define DSI_QOS_BUF_EN			BIT(0)
+
+/* DSI_BUF_CON1 */
+#define BUF_OUT_VALID_THRESH		GENMASK(14, 0)
+
+/* DSI_BUF_SODI_HIGH, SODI_LOW and other BUF registers */
+#define BUF_THRESHOLD_PARAM		GENMASK(19, 0)
+
 /* CMDQ related bits */
 #define CONFIG				GENMASK(7, 0)
 #define SHORT_PACKET			0
@@ -164,6 +176,17 @@
 #define DATA_1				GENMASK(31, 24)
 
 #define NS_TO_CYCLE(n, c)    ((n) / (c) + (((n) % (c)) ? 1 : 0))
+
+/* HW QoS and Anti-Latency Buffer related bits */
+#define MTK_DSI_MAX_FIFO_BYTES			1554
+#define MTK_DSI_DEFAULT_QOS_VALID_FIFO_US	25
+#define MTK_DSI_DEFAULT_QOS_SODI_LO_OVERHEAD	(23 + 5)
+#define MTK_DSI_DEFAULT_QOS_PREULTRA_HI_US	36
+#define MTK_DSI_DEFAULT_QOS_PREULTRA_LO_US	35
+#define MTK_DSI_DEFAULT_QOS_ULTRA_HI_US		26
+#define MTK_DSI_DEFAULT_QOS_ULTRA_LO_US		25
+#define MTK_DSI_DEFAULT_QOS_URGENT_LO_US	11
+#define MTK_DSI_DEFAULT_QOS_URGENT_HI_US	12
 
 #define MTK_DSI_HOST_IS_READ(type) \
 	((type == MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM) || \
@@ -207,7 +230,24 @@ enum mtk_dsi_adv_regidx {
 	DSI_VM_CMD_CON,
 	DSI_SHADOW_DEBUG,
 	DSI_CMDQ,
+	DSI_VDE,
 	DSI_ADV_REG_MAX
+};
+
+enum mtk_dsi_qos_regidx {
+	DSI_QOS_BUF_CON0,
+	DSI_QOS_BUF_CON1,
+	DSI_QOS_TX_BUF_RW_TIMES,
+	DSI_QOS_SODI_HIGH,
+	DSI_QOS_SODI_LOW,
+	DSI_QOS_PREULTRA_HIGH,
+	DSI_QOS_PREULTRA_LOW,
+	DSI_QOS_ULTRA_HIGH,
+	DSI_QOS_ULTRA_LOW,
+	DSI_QOS_URGENT_HIGH,
+	DSI_QOS_URGENT_LOW,
+	DSI_QOS_PREURGENT_HIGH,
+	DSI_QOS_REG_MAX
 };
 
 struct mtk_phy_timing {
@@ -234,8 +274,12 @@ struct phy;
 struct mtk_dsi_driver_data {
 	const u16 *reg_main;
 	const u16 *reg_adv;
+	const u16 *reg_qos;
 
 	const u16 max_link_rate_mbps;
+	const u8 dsi_sram_bytes;
+	const u8 pixels_per_iter;
+	const u8 num_burst_lines;
 
 	bool has_size_ctl;
 	bool cmdq_long_packet_ctl;
@@ -327,6 +371,59 @@ static const u16 mtk_dsi_regs_mt8186[DSI_ADV_REG_MAX] = {
 	[DSI_VM_CMD_CON] = 0x200,
 	[DSI_SHADOW_DEBUG] = 0xc00,
 	[DSI_CMDQ] = 0xd00,
+};
+
+static const u16 mtk_dsi_regs_main_v2[DSI_MAIN_REG_MAX] = {
+	[DSI_START] = 0x00,
+	[DSI_INTEN] = 0x08,
+	[DSI_INTSTA] = 0x0c,
+	[DSI_CON_CTRL] = 0x30,
+	[DSI_MODE_CTRL] = 0x34,
+	[DSI_TXRX_CTRL] = 0x38,
+	[DSI_PSCTRL] = 0x3c,
+	[DSI_VSA_NL] = 0x60,
+	[DSI_VBP_NL] = 0x64,
+	[DSI_VFP_NL] = 0x68,
+	[DSI_VACT_NL] = 0x6c,
+	[DSI_SIZE_CON] = 0x2c,
+	[DSI_HSA_WC] = 0x80,
+	[DSI_HBP_WC] = 0x84,
+	[DSI_HFP_WC] = 0x88,
+	[DSI_CMDQ_SIZE] = 0x44,
+	[DSI_HSTX_CKL_WC] = 0x100,
+	[DSI_RX_DATA0] = 0xa4,
+	[DSI_RX_DATA1] = 0xa8,
+	[DSI_RX_DATA2] = 0xac,
+	[DSI_RX_DATA3] = 0xb0,
+	[DSI_RACK] = 0xb4,
+	[DSI_PHY_LCCON] = 0x7d0,
+	[DSI_PHY_LD0CON] = 0x7d4,
+	[DSI_PHY_TIMECON0] = 0x600,
+	[DSI_PHY_TIMECON1] = 0x604,
+	[DSI_PHY_TIMECON2] = 0x608,
+	[DSI_PHY_TIMECON3] = 0x60c,
+};
+
+static const u16 mtk_dsi_regs_qos_v2[DSI_QOS_REG_MAX] = {
+	[DSI_QOS_BUF_CON0] = 0x300,
+	[DSI_QOS_BUF_CON1] = 0x304,
+	[DSI_QOS_TX_BUF_RW_TIMES] = 0x310,
+	[DSI_QOS_SODI_HIGH] = 0x314,
+	[DSI_QOS_SODI_LOW] = 0x318,
+	[DSI_QOS_PREULTRA_HIGH] = 0x324,
+	[DSI_QOS_PREULTRA_LOW] = 0x328,
+	[DSI_QOS_ULTRA_HIGH] = 0x32c,
+	[DSI_QOS_ULTRA_LOW] = 0x330,
+	[DSI_QOS_URGENT_HIGH] = 0x334,
+	[DSI_QOS_URGENT_LOW] = 0x338,
+	[DSI_QOS_PREURGENT_HIGH] = 0x33c
+};
+
+static const u16 mtk_dsi_regs_mt8196[DSI_ADV_REG_MAX] = {
+	[DSI_VM_CMD_CON] = 0x110,
+	[DSI_SHADOW_DEBUG] = 0xd0,
+	[DSI_CMDQ] = 0x400,
+	[DSI_VDE] = 0x3f8,
 };
 
 static inline struct mtk_dsi *bridge_to_dsi(struct drm_bridge *b)
@@ -776,6 +873,102 @@ static int mtk_dsi_set_dsc_params(struct mtk_dsi *dsi)
 	return drm_dsc_compute_rc_parameters(dsc);
 }
 
+static void mtk_dsi_config_hw_buffers(struct mtk_dsi *dsi)
+{
+	const struct mtk_dsi_driver_data *data = dsi->driver_data;
+	const u16 *reg_qos = data->reg_qos;
+	u32 buffer_unit, sram_unit, num_hw_buffers;
+	u32 preultra_hi, preultra_lo;
+	u32 urgent_hi, urgent_lo;
+	u32 ultra_hi, ultra_lo;
+	u32 sodi_hi, sodi_lo;
+	u32 data_rate_per_buf;
+	u32 out_valid_thresh;
+	u32 dsi_buf_bpp;
+	u32 fill_rate;
+	u32 pclk_mhz;
+	u32 rw_times;
+	u32 val;
+	u64 tmp;
+
+	/*
+	 * At the time of writing, only MT8196 is implemented and, for this SoC,
+	 * the buffer unit is equal to the SRAM bytes.
+	 *
+	 * There are other SoCs already out in the wild that do support the HW
+	 * buffers and that have different sizes, so keep the calculation as-is!
+	 */
+	buffer_unit = data->dsi_sram_bytes;
+	sram_unit = data->dsi_sram_bytes;
+	num_hw_buffers = sram_unit / buffer_unit;
+
+	if (data->support_per_frame_lp)
+		val = CMDMODE_WAIT_DATA_EVERY_LINE_EN;
+	else
+		val = 0;
+
+	mtk_dsi_mask(dsi, data->reg_main[DSI_CON_CTRL],
+		     CMDMODE_WAIT_DATA_EVERY_LINE_EN, val);
+
+	/* Read as: [Data rate (MHz)] * [Number of DSI lanes] / [8 buffer blocks] */
+	tmp = (u64)dsi->data_rate * dsi->lanes;
+	data_rate_per_buf = div_u64(tmp, 8 * buffer_unit * HZ_PER_MHZ);
+
+	/*
+	 * Anti-latency buffer output threshold for absolute timer mode: this
+	 * parameter controls the maximum amount of output data that the FIFO
+	 * can hold before running out of buffer space.
+	 *
+	 * The data will therefore be sent either when the DSI IP0s internal
+	 * vblank vs bus QoS timer expires or when it reaches the amount of
+	 * buffers set in BUF_OUT_VALID_THRESHOLD (regardless of QoS) to avoid
+	 * partially, or entirely, losing frame(s).
+	 */
+	out_valid_thresh = MTK_DSI_DEFAULT_QOS_VALID_FIFO_US * data_rate_per_buf;
+	out_valid_thresh = min(out_valid_thresh, MTK_DSI_MAX_FIFO_BYTES - 1);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_BUF_CON1], BUF_OUT_VALID_THRESH, out_valid_thresh);
+
+	/* Enable ULTRA signal trigger between SOF and VACT */
+	mtk_dsi_mask(dsi, data->reg_adv[DSI_VDE], VDE_BLOCK_ULTRA, 0);
+
+	/* Calculate fill rate with line counter mode for DSI Video Mode */
+	if (dsi->format == MIPI_DSI_FMT_RGB565)
+		dsi_buf_bpp = 2;
+	else
+		dsi_buf_bpp = 3;
+
+	pclk_mhz = dsi->vm.pixelclock / HZ_PER_MHZ;
+	fill_rate = div_u64((u64)pclk_mhz * data->pixels_per_iter * dsi_buf_bpp,
+			    buffer_unit);
+
+	/* Calculate QoS Anti-Latency parameters */
+	sodi_hi = MTK_DSI_MAX_FIFO_BYTES * num_hw_buffers;
+	sodi_hi -= (fill_rate - data_rate_per_buf) * 12 / 10;
+	sodi_lo = MTK_DSI_DEFAULT_QOS_SODI_LO_OVERHEAD * data_rate_per_buf;
+	preultra_hi = MTK_DSI_DEFAULT_QOS_PREULTRA_HI_US * data_rate_per_buf;
+	preultra_lo = MTK_DSI_DEFAULT_QOS_PREULTRA_LO_US * data_rate_per_buf;
+	ultra_hi = MTK_DSI_DEFAULT_QOS_ULTRA_HI_US * data_rate_per_buf;
+	ultra_lo = MTK_DSI_DEFAULT_QOS_ULTRA_LO_US * data_rate_per_buf;
+	urgent_hi = MTK_DSI_DEFAULT_QOS_URGENT_HI_US * data_rate_per_buf;
+	urgent_lo = MTK_DSI_DEFAULT_QOS_URGENT_LO_US * data_rate_per_buf;
+	rw_times = dsi->vm.vactive * dsi_buf_bpp;
+	rw_times /= data->num_burst_lines * data->pixels_per_iter;
+
+	/* Write all QoS parameters: Screen On Deep Idle, (pre)Ultra, Urgent, RW times */
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_SODI_HIGH], BUF_THRESHOLD_PARAM, sodi_hi);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_SODI_LOW], BUF_THRESHOLD_PARAM, sodi_lo);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_PREULTRA_HIGH], BUF_THRESHOLD_PARAM, preultra_hi);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_PREULTRA_LOW], BUF_THRESHOLD_PARAM, preultra_lo);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_ULTRA_HIGH], BUF_THRESHOLD_PARAM, ultra_hi);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_ULTRA_LOW], BUF_THRESHOLD_PARAM, ultra_lo);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_URGENT_HIGH], BUF_THRESHOLD_PARAM, urgent_hi);
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_URGENT_LOW], BUF_THRESHOLD_PARAM, urgent_lo);
+	writel(rw_times, dsi->regs + reg_qos[DSI_QOS_TX_BUF_RW_TIMES]);
+
+	/* Finally, activate internal line-buffering */
+	mtk_dsi_mask(dsi, reg_qos[DSI_QOS_BUF_CON0], DSI_QOS_BUF_EN, DSI_QOS_BUF_EN);
+}
+
 static int mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 {
 	const struct mtk_dsi_driver_data *data = dsi->driver_data;
@@ -960,6 +1153,10 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	mtk_dsi_reset_engine(dsi);
 	mtk_dsi_phy_timconfig(dsi);
+
+	/* Setup HW FIFO if DSI supports QoS Anti-Latency buffers */
+	if (data->dsi_sram_bytes && data->reg_qos)
+		mtk_dsi_config_hw_buffers(dsi);
 
 	mtk_dsi_ps_control(dsi, true);
 	mtk_dsi_set_vm_cmd(dsi);
@@ -1598,6 +1795,19 @@ static const struct mtk_dsi_driver_data mt8189_dsi_driver_data = {
 	.support_per_frame_lp = true,
 };
 
+static const struct mtk_dsi_driver_data mt8196_dsi_driver_data = {
+	.reg_main = mtk_dsi_regs_main_v2,
+	.reg_qos = mtk_dsi_regs_qos_v2,
+	.reg_adv = mtk_dsi_regs_mt8196,
+	.max_link_rate_mbps = 2000,
+	.dsi_sram_bytes = 32,
+	.pixels_per_iter = 2,
+	.num_burst_lines = 8,
+	.has_size_ctl = true,
+	.cmdq_long_packet_ctl = true,
+	.support_per_frame_lp = true,
+};
+
 static const struct of_device_id mtk_dsi_of_match[] = {
 	{ .compatible = "mediatek,mt2701-dsi", .data = &mt2701_dsi_driver_data },
 	{ .compatible = "mediatek,mt8167-dsi", .data = &mt2701_dsi_driver_data },
@@ -1606,6 +1816,7 @@ static const struct of_device_id mtk_dsi_of_match[] = {
 	{ .compatible = "mediatek,mt8186-dsi", .data = &mt8186_dsi_driver_data },
 	{ .compatible = "mediatek,mt8188-dsi", .data = &mt8188_dsi_driver_data },
 	{ .compatible = "mediatek,mt8189-dsi", .data = &mt8189_dsi_driver_data },
+	{ .compatible = "mediatek,mt8196-dsi", .data = &mt8196_dsi_driver_data },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mtk_dsi_of_match);
