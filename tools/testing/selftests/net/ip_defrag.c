@@ -378,7 +378,7 @@ static void run_test(struct sockaddr *addr, socklen_t alen, bool ipv6)
 		} else {
 			/* Without overlaps, each packet reassembly (== one
 			 * send/receive pair below) takes very little time to
-			 * run, so we can easily afford more thourough testing
+			 * run, so we can easily afford more thorough testing
 			 * with a nested loop: the full non-overlap test takes
 			 * less than one second).
 			 */
