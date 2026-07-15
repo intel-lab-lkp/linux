@@ -2188,6 +2188,8 @@ next_item:
 		dput(dn);
 	}
 out:
+	if (err)
+		ceph_unreserve_caps(req->r_mdsc, &req->r_caps_reservation);
 	if (err == 0 && skipped == 0) {
 		set_bit(CEPH_MDS_R_DID_PREPOPULATE, &req->r_req_flags);
 		req->r_readdir_cache_idx = cache_ctl.index;
