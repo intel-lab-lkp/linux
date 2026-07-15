@@ -453,48 +453,6 @@ s32 rtl8723bs_mgnt_xmit(
 	return ret;
 }
 
-/*
- * Description:
- *Handle xmitframe(packet) come from rtw_xmit()
- *
- * Return:
- * true      dump packet directly ok
- * false     enqueue, temporary can't transmit packets to hardware
- */
-s32 rtl8723bs_hal_xmit(
-	struct adapter *padapter, struct xmit_frame *pxmitframe
-)
-{
-	struct xmit_priv *pxmitpriv;
-	s32 err;
-
-	pxmitframe->attrib.qsel = pxmitframe->attrib.priority;
-	pxmitpriv = &padapter->xmitpriv;
-
-	if (
-		(pxmitframe->frame_tag == DATA_FRAMETAG) &&
-		(pxmitframe->attrib.ether_type != 0x0806) &&
-		(pxmitframe->attrib.ether_type != 0x888e) &&
-		(pxmitframe->attrib.dhcp_pkt != 1)
-	) {
-		if (padapter->mlmepriv.link_detect_info.busy_traffic)
-			rtw_issue_addbareq_cmd(padapter, pxmitframe);
-	}
-
-	spin_lock_bh(&pxmitpriv->lock);
-	err = rtw_xmitframe_enqueue(padapter, pxmitframe);
-	spin_unlock_bh(&pxmitpriv->lock);
-	if (err) {
-		rtw_free_xmitframe(pxmitpriv, pxmitframe);
-
-		pxmitpriv->tx_drop++;
-		return true;
-	}
-
-	complete(&pxmitpriv->SdioXmitStart);
-
-	return false;
-}
 
 /*
  * Return

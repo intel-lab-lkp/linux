@@ -219,10 +219,36 @@ int rtw_hal_xmitframe_enqueue(struct adapter *padapter, struct xmit_frame *pxmit
 
 s32	rtw_hal_xmit(struct adapter *padapter, struct xmit_frame *pxmitframe)
 {
-	if (rtl8723bs_hal_xmit(padapter, pxmitframe))
+	struct xmit_priv *pxmitpriv;
+	s32 err;
+
+	pxmitframe->attrib.qsel = pxmitframe->attrib.priority;
+	pxmitpriv = &padapter->xmitpriv;
+
+	if (
+		(pxmitframe->frame_tag == DATA_FRAMETAG) &&
+		(pxmitframe->attrib.ether_type != 0x0806) &&
+		(pxmitframe->attrib.ether_type != 0x888e) &&
+		(pxmitframe->attrib.dhcp_pkt != 1)
+	) {
+		if (padapter->mlmepriv.link_detect_info.busy_traffic)
+			rtw_issue_addbareq_cmd(padapter, pxmitframe);
+	}
+
+	spin_lock_bh(&pxmitpriv->lock);
+	err = rtw_xmitframe_enqueue(padapter, pxmitframe);
+	spin_unlock_bh(&pxmitpriv->lock);
+	if (err) {
+		rtw_free_xmitframe(pxmitpriv, pxmitframe);
+
+		pxmitpriv->tx_drop++;
 		return _FAIL;
+	}
+
+	complete(&pxmitpriv->SdioXmitStart);
 
 	return _SUCCESS;
+
 }
 
 /*
