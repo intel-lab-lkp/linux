@@ -397,6 +397,10 @@ static int rbtree_all(const void *key, const struct rb_node *node)
  * volatile.  In general drivers can choose not to use the provided
  * syncing functionality if they so require.
  *
+ * This pushes cached changes made while cache_only (e.g. suspend) down
+ * to hardware. The caller must clear cache_only first, or writes will
+ * only update the cache.
+ *
  * Return a negative value on failure, 0 on success.
  */
 int regcache_sync(struct regmap *map)
@@ -408,6 +412,9 @@ int regcache_sync(struct regmap *map)
 	struct rb_node *node;
 
 	if (WARN_ON(map->cache_type == REGCACHE_NONE))
+		return -EINVAL;
+
+	if (WARN_ON(map->cache_only))
 		return -EINVAL;
 
 	BUG_ON(!map->cache_ops);
