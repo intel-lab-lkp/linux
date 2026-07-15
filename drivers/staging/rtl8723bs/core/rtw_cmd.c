@@ -1354,10 +1354,6 @@ exit:
 	return res;
 }
 
-static void rtw_dm_in_lps_hdl(struct adapter *padapter)
-{
-	rtw_hal_set_hwreg(padapter, HW_VAR_DM_IN_LPS, NULL);
-}
 
 u8 rtw_dm_in_lps_wk_cmd(struct adapter *padapter)
 {
@@ -1753,7 +1749,7 @@ u8 rtw_drvextra_cmd_hdl(struct adapter *padapter, unsigned char *pbuf)
 		lps_ctrl_wk_hdl(padapter, (u8)pdrvextra_cmd->type);
 		break;
 	case DM_IN_LPS_WK_CID:
-		rtw_dm_in_lps_hdl(padapter);
+		rtw_hal_set_hwreg(padapter, HW_VAR_DM_IN_LPS, NULL);
 		break;
 	case LPS_CHANGE_DTIM_CID:
 		rtw_lps_change_dtim_hdl(padapter, (u8)pdrvextra_cmd->type);
