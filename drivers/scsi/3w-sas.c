@@ -92,6 +92,24 @@ MODULE_PARM_DESC(use_msi, "Use Message Signaled Interrupts. Default: 0");
 /* Function prototypes */
 static int twl_reset_device_extension(TW_Device_Extension *tw_dev, int ioctl_reset);
 
+/*
+ * The firmware field contains two NUL-terminated strings in one fixed-size
+ * array.  Make the last byte a terminator before finding the optional second
+ * string, and never form a pointer one byte past the array.
+ */
+static const char *twl_error_string(TW_Command_Apache_Header *header)
+{
+	size_t description_len;
+
+	header->err_specific_desc[sizeof(header->err_specific_desc) - 1] = '\0';
+	description_len = strnlen(header->err_specific_desc,
+				  sizeof(header->err_specific_desc));
+	if (description_len == sizeof(header->err_specific_desc) - 1)
+		return "";
+
+	return &header->err_specific_desc[description_len + 1];
+}
+
 /* Functions */
 
 /* This function returns AENs through sysfs */
@@ -226,7 +244,7 @@ static void twl_aen_queue_event(TW_Device_Extension *tw_dev, TW_Command_Apache_H
 	TW_Event *event;
 	unsigned short aen;
 	char host[16];
-	char *error_str;
+	const char *error_str;
 
 	tw_dev->aen_count++;
 
@@ -250,10 +268,9 @@ static void twl_aen_queue_event(TW_Device_Extension *tw_dev, TW_Command_Apache_H
 	tw_dev->error_sequence_id++;
 
 	/* Check for embedded error string */
-	error_str = &(header->err_specific_desc[strlen(header->err_specific_desc)+1]);
-
-	header->err_specific_desc[sizeof(header->err_specific_desc) - 1] = '\0';
-	event->parameter_len = strlen(header->err_specific_desc);
+	error_str = twl_error_string(header);
+	event->parameter_len = strnlen(header->err_specific_desc,
+				       sizeof(header->err_specific_desc));
 	memcpy(event->parameter_data, header->err_specific_desc, event->parameter_len + 1 + strlen(error_str));
 	if (event->severity != TW_AEN_SEVERITY_DEBUG)
 		printk(KERN_WARNING "3w-sas:%s AEN: %s (0x%02X:0x%04X): %s:%s.\n",
@@ -861,13 +878,13 @@ static int twl_fill_sense(TW_Device_Extension *tw_dev, int i, int request_id, in
 	TW_Command_Apache_Header *header;
 	TW_Command_Full *full_command_packet;
 	unsigned short error;
-	char *error_str;
+	const char *error_str;
 
 	header = tw_dev->sense_buffer_virt[i];
 	full_command_packet = tw_dev->command_packet_virt[request_id];
 
 	/* Get embedded firmware error string */
-	error_str = &(header->err_specific_desc[strlen(header->err_specific_desc) + 1]);
+	error_str = twl_error_string(header);
 
 	/* Don't print error for Logical unit not supported during rollcall */
 	error = le16_to_cpu(header->status_block.error);
