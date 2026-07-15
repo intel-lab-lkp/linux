@@ -196,34 +196,6 @@ void rtw_secgetmic(struct mic_data *pmicdata, u8 *dst)
 	secmicclear(pmicdata);
 }
 
-void rtw_seccalctkipmic(u8 *key, u8 *header, u8 *data, u32 data_len, u8 *mic_code, u8 pri)
-{
-	struct mic_data	micdata;
-	u8 priority[4] = {0x0, 0x0, 0x0, 0x0};
-
-	rtw_secmicsetkey(&micdata, key);
-	priority[0] = pri;
-
-	/* Michael MIC pseudo header: DA, SA, 3 x 0, Priority */
-	if (header[1] & 1) {   /* ToDS == 1 */
-		rtw_secmicappend(&micdata, &header[16], 6);  /* DA */
-		if (header[1] & 2)  /* From Ds == 1 */
-			rtw_secmicappend(&micdata, &header[24], 6);
-		else
-			rtw_secmicappend(&micdata, &header[10], 6);
-	} else {	/* ToDS == 0 */
-		rtw_secmicappend(&micdata, &header[4], 6);   /* DA */
-		if (header[1] & 2)  /* From Ds == 1 */
-			rtw_secmicappend(&micdata, &header[16], 6);
-		else
-			rtw_secmicappend(&micdata, &header[10], 6);
-	}
-	rtw_secmicappend(&micdata, &priority[0], 4);
-
-	rtw_secmicappend(&micdata, data, data_len);
-
-	rtw_secgetmic(&micdata, mic_code);
-}
 
 /* macros for extraction/creation of unsigned char/unsigned short values  */
 #define RotR1(v16)   ((((v16) >> 1) & 0x7FFF) ^ (((v16) & 1) << 15))

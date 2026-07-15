@@ -378,7 +378,32 @@ static signed int recvframe_chkmic(struct adapter *adapter,  union recv_frame *p
 			pframe = precvframe->u.hdr.rx_data;
 			payload = pframe + prxattrib->hdrlen + prxattrib->iv_len;
 
-			rtw_seccalctkipmic(mickey, pframe, payload, datalen, &miccode[0], (unsigned char)prxattrib->priority); /* care the length of the data */
+			/* care the length of the data */
+			struct mic_data	micdata;
+			u8 priority[4] = {0};
+
+			rtw_secmicsetkey(&micdata, mickey);
+			priority[0] = (unsigned char)prxattrib->priority;
+
+			/* Michael MIC pseudo header: DA, SA, 3 x 0, Priority */
+			if (pframe[1] & 1) {   /* ToDS == 1 */
+				rtw_secmicappend(&micdata, &pframe[16], 6);  /* DA */
+				if (pframe[1] & 2)  /* From Ds == 1 */
+					rtw_secmicappend(&micdata, &pframe[24], 6);
+				else
+					rtw_secmicappend(&micdata, &pframe[10], 6);
+			} else {	/* ToDS == 0 */
+				rtw_secmicappend(&micdata, &pframe[4], 6);   /* DA */
+				if (pframe[1] & 2)  /* From Ds == 1 */
+					rtw_secmicappend(&micdata, &pframe[16], 6);
+				else
+					rtw_secmicappend(&micdata, &pframe[10], 6);
+			}
+			rtw_secmicappend(&micdata, priority, 4);
+
+			rtw_secmicappend(&micdata, payload, datalen);
+
+			rtw_secgetmic(&micdata, &miccode[0]);
 
 			pframemic = payload + datalen;
 
