@@ -2688,6 +2688,16 @@ const struct block_device_operations nvme_bdev_ops = {
 	.pr_ops		= &nvme_pr_ops,
 };
 
+/*
+ * Wait between CSTS reads in nvme_wait_ready() and nvme_fw_act_work().
+ * A 1 to 2 ms interval avoids excessive register reads while allowing
+ * changes in controller status to be detected promptly.
+ */
+static void nvme_busy_wait(void)
+{
+	usleep_range(1000, 2000);
+}
+
 static int nvme_wait_ready(struct nvme_ctrl *ctrl, u32 mask, u32 val,
 		u32 timeout, const char *op)
 {
@@ -2701,7 +2711,7 @@ static int nvme_wait_ready(struct nvme_ctrl *ctrl, u32 mask, u32 val,
 		if ((csts & mask) == val)
 			break;
 
-		usleep_range(1000, 2000);
+		nvme_busy_wait();
 		if (fatal_signal_pending(current))
 			return -EINTR;
 		if (time_after(jiffies, timeout_jiffies)) {
@@ -4813,7 +4823,7 @@ static void nvme_fw_act_work(struct work_struct *work)
 			nvme_try_sched_reset(ctrl);
 			return;
 		}
-		msleep(100);
+		nvme_busy_wait();
 	}
 
 	if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_CONNECTING) ||
