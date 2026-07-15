@@ -1654,6 +1654,13 @@ static void cio2_queues_exit(struct cio2_device *cio2)
 
 /**************** PCI interface ****************/
 
+static void cio2_disable_msi(void *data)
+{
+	struct pci_dev *pci_dev = data;
+
+	pci_disable_msi(pci_dev);
+}
+
 static int cio2_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -1706,6 +1713,10 @@ static int cio2_pci_probe(struct pci_dev *pci_dev,
 		dev_err(dev, "failed to enable MSI (%d)\n", r);
 		return r;
 	}
+
+	r = devm_add_action_or_reset(dev, cio2_disable_msi, pci_dev);
+	if (r)
+		return r;
 
 	r = cio2_fbpt_init_dummy(cio2);
 	if (r)
