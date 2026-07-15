@@ -1018,6 +1018,13 @@ static int axienet_tx_poll(struct napi_struct *napi, int budget)
 			netif_wake_queue(ndev);
 	}
 
+	/* Clear stale IOC/DELAY bits that may have latched during the
+	 * poll window to prevent a stale interrupt when there is no
+	 * work pending.
+	 */
+	axienet_dma_out32(lp, XAXIDMA_TX_SR_OFFSET,
+			  XAXIDMA_IRQ_IOC_MASK | XAXIDMA_IRQ_DELAY_MASK);
+
 	if (packets < budget && napi_complete_done(napi, packets)) {
 		/* Re-enable TX completion interrupts. This should
 		 * cause an immediate interrupt if any TX packets are
@@ -1292,6 +1299,13 @@ static int axienet_rx_poll(struct napi_struct *napi, int budget)
 			lp->rx_bd_ci = 0;
 		cur_p = &lp->rx_bd_v[lp->rx_bd_ci];
 	}
+
+	/* Clear stale IOC/DELAY bits that may have latched during the
+	 * poll window to prevent a stale interrupt when there is no
+	 * work pending.
+	 */
+	axienet_dma_out32(lp, XAXIDMA_RX_SR_OFFSET,
+			  XAXIDMA_IRQ_IOC_MASK | XAXIDMA_IRQ_DELAY_MASK);
 
 	u64_stats_update_begin(&lp->rx_stat_sync);
 	u64_stats_add(&lp->rx_packets, packets);
