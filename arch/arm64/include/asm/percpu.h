@@ -142,6 +142,27 @@ PERCPU_RET_OP(add, add, ldadd)
 #undef PERCPU_OP
 #undef PERCPU_RET_OP
 
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+extern unsigned long __per_cpu_local_off;
+
+#define local_cpu_ptr(ptr)						\
+({									\
+	__verify_pcpu_ptr(ptr);						\
+	SHIFT_PERCPU_PTR(ptr, __per_cpu_local_off);			\
+})
+
+#define _pcp_protect(op, pcp, ...)					\
+({									\
+	op(local_cpu_ptr(&(pcp)), __VA_ARGS__);				\
+})
+
+#define _pcp_protect_return(op, pcp, args...)				\
+({									\
+	typeof(pcp) __retval;						\
+	__retval = (typeof(pcp))op(local_cpu_ptr(&(pcp)), ##args);	\
+	__retval;							\
+})
+#else
 /*
  * It would be nice to avoid the conditional call into the scheduler when
  * re-enabling preemption for preemptible kernels, but doing that in a way
@@ -152,7 +173,6 @@ PERCPU_RET_OP(add, add, ldadd)
  * preemption point when TIF_NEED_RESCHED gets set while preemption is
  * disabled.
  */
-
 #define _pcp_protect(op, pcp, ...)					\
 ({									\
 	preempt_disable_notrace();					\
@@ -168,6 +188,7 @@ PERCPU_RET_OP(add, add, ldadd)
 	preempt_enable_notrace();					\
 	__retval;							\
 })
+#endif
 
 #define this_cpu_read_1(pcp)		\
 	_pcp_protect_return(__percpu_read_8, pcp)
@@ -243,6 +264,19 @@ PERCPU_RET_OP(add, add, ldadd)
 
 #define this_cpu_cmpxchg64(pcp, o, n)	this_cpu_cmpxchg_8(pcp, o, n)
 
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+#define this_cpu_cmpxchg128(pcp, o, n)					\
+({									\
+	typedef typeof(pcp) pcp_op_T__;					\
+	u128 old__, new__, ret__;					\
+	pcp_op_T__ *ptr__;						\
+	old__ = o;							\
+	new__ = n;							\
+	ptr__ = local_cpu_ptr(&(pcp));					\
+	ret__ = cmpxchg128_local((void *)ptr__, old__, new__);		\
+	ret__;								\
+})
+#else
 #define this_cpu_cmpxchg128(pcp, o, n)					\
 ({									\
 	typedef typeof(pcp) pcp_op_T__;					\
@@ -256,6 +290,7 @@ PERCPU_RET_OP(add, add, ldadd)
 	preempt_enable_notrace();					\
 	ret__;								\
 })
+#endif
 
 #ifdef __KVM_NVHE_HYPERVISOR__
 extern unsigned long __hyp_per_cpu_offset(unsigned int cpu);
