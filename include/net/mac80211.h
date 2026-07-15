@@ -7766,6 +7766,26 @@ struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
 				     struct ieee80211_txq *txq);
 
 /**
+ * ieee80211_tx_peek - peek at the next packet in a software tx queue
+ *
+ * @hw: pointer as obtained from ieee80211_alloc_hw()
+ * @txq: pointer obtained from station or virtual interface, or from
+ *	ieee80211_next_txq()
+ *
+ * Return: the next skb without dequeuing it, or %NULL if the queue is empty.
+ * The returned pointer is const — the caller must not modify or free the skb.
+ * The skb remains queued and will be returned by a subsequent
+ * ieee80211_tx_dequeue() call.
+ *
+ * This is useful for drivers that need to inspect the next frame (e.g. to
+ * determine the target TX ring) before deciding whether to dequeue.
+ *
+ * Must be called in the same context as ieee80211_tx_dequeue().
+ */
+const struct sk_buff *ieee80211_tx_peek(struct ieee80211_hw *hw,
+					struct ieee80211_txq *txq);
+
+/**
  * ieee80211_tx_dequeue_ni - dequeue a packet from a software tx queue
  * (in process context)
  *
