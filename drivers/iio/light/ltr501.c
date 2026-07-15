@@ -94,6 +94,7 @@ enum {
 	ltr559,
 	ltr301,
 	ltr303,
+	ltr329,
 };
 
 struct ltr501_gain {
@@ -177,6 +178,11 @@ static const struct ltr501_samp_table ltr501_ps_samp_table[] = {
 			{500000, 2000000}, {500000, 2000000},
 			{500000, 2000000}
 };
+
+static bool ltr501_has_irq_support(const struct ltr501_chip_info *chip_info)
+{
+	return chip_info->info != chip_info->info_no_irq;
+}
 
 static int ltr501_match_samp_freq(const struct ltr501_samp_table *tab,
 					   int len, int val, int val2)
@@ -428,6 +434,9 @@ static int ltr501_read_intr_prst(const struct ltr501_data *data,
 {
 	int ret, samp_period, prst;
 
+	if (!ltr501_has_irq_support(data->chip_info))
+		return 0;
+
 	switch (type) {
 	case IIO_INTENSITY:
 		ret = regmap_field_read(data->reg_als_prst, &prst);
@@ -465,6 +474,9 @@ static int ltr501_write_intr_prst(struct ltr501_data *data,
 {
 	int ret, samp_period, new_val;
 	unsigned long period;
+
+	if (!ltr501_has_irq_support(data->chip_info))
+		return 0;
 
 	if (val < 0 || val2 < 0)
 		return -EINVAL;
@@ -1257,6 +1269,18 @@ static const struct ltr501_chip_info ltr501_chip_info_tbl[] = {
 		.channels = ltr301_channels,
 		.no_channels = ARRAY_SIZE(ltr301_channels),
 	},
+	[ltr329] = {
+		.partid = 0x0A,
+		.als_gain = ltr559_als_gain_tbl,
+		.als_gain_tbl_size = ARRAY_SIZE(ltr559_als_gain_tbl),
+		.als_mode_active = BIT(0),
+		.als_gain_mask = BIT(2) | BIT(3) | BIT(4),
+		.als_gain_shift = 2,
+		.info = &ltr301_info_no_irq,
+		.info_no_irq = &ltr301_info_no_irq,
+		.channels = ltr301_channels,
+		.no_channels = ARRAY_SIZE(ltr301_channels),
+	},
 };
 
 static int ltr501_write_contr(struct ltr501_data *data, u8 als_val, u8 ps_val)
@@ -1531,6 +1555,11 @@ static int ltr501_probe(struct i2c_client *client)
 		return ret;
 
 	if (client->irq > 0) {
+		if (!ltr501_has_irq_support(data->chip_info)) {
+			dev_err(&client->dev, "chip does not support irq\n");
+			return -EINVAL;
+		}
+
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
 						NULL, ltr501_interrupt_handler,
 						IRQF_TRIGGER_FALLING |
@@ -1604,6 +1633,7 @@ static const struct i2c_device_id ltr501_id[] = {
 	{ .name = "ltr559", .driver_data = ltr559 },
 	{ .name = "ltr301", .driver_data = ltr301 },
 	{ .name = "ltr303", .driver_data = ltr303 },
+	{ .name = "ltr329", .driver_data = ltr329 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ltr501_id);
@@ -1613,6 +1643,7 @@ static const struct of_device_id ltr501_of_match[] = {
 	{ .compatible = "liteon,ltr559", },
 	{ .compatible = "liteon,ltr301", },
 	{ .compatible = "liteon,ltr303", },
+	{ .compatible = "liteon,ltr329", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ltr501_of_match);
