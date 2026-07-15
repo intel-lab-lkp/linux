@@ -78,6 +78,13 @@ properties:
       The phandle of the syscon node for the Video Output GRF register
       to enable EDID transfer through SDAIN and SCLIN.
 
+  "#sound-dai-cells":
+    const: 1
+    description:
+      The HDMI RX controller registers a generic HDMI audio codec so the
+      audio embedded in the incoming stream can be captured. A value of 1
+      lets a sound card reference the audio DAI as <&hdmirx 0>.
+
 required:
   - compatible
   - reg
