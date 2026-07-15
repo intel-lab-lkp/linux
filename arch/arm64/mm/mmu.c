@@ -1080,6 +1080,29 @@ void __init linear_map_maybe_split_to_ptes(void)
 	}
 }
 
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+void __init map_local_percpu_first_chunk(unsigned int cpu, unsigned long virt,
+			    struct page **pages, unsigned int nr)
+{
+	int i, ret;
+	pgtbl_mod_mask mask = 0;
+
+	arch_enter_lazy_mmu_mode();
+
+	for (i = 0; i < nr; i++) {
+		phys_addr_t phys = page_to_phys(pages[i]);
+		ret = __create_pgd_mapping(percpu_pgd[cpu], phys, virt, PAGE_SIZE, PAGE_KERNEL,
+					   early_pgtable_alloc, NO_EXEC_MAPPINGS, &mask);
+		if (ret)
+			panic("Failed to create local percpu first chunk\n");
+
+		virt += PAGE_SIZE;
+	}
+
+	arch_leave_lazy_mmu_mode();
+}
+#endif
+
 /*
  * This function can only be used to modify existing table entries,
  * without allocating new levels of table. Note that this permits the

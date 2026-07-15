@@ -162,6 +162,17 @@ static inline size_t pcpu_obj_full_size(size_t size)
 	return size * num_possible_cpus() + extra_size;
 }
 
+#ifdef CONFIG_HAVE_LOCAL_PER_CPU_MAP
+extern void __init map_local_percpu_first_chunk(unsigned int cpu, unsigned long virt,
+                            struct page **pages, unsigned int nr);
+#else
+static inline void __init map_local_percpu_first_chunk(unsigned int cpu, unsigned long virt,
+                            struct page **pages, unsigned int nr)
+{
+	return;
+}
+#endif
+
 #ifdef CONFIG_PERCPU_STATS
 
 #include <linux/spinlock.h>
