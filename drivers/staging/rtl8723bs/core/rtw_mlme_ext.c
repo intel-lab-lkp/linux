@@ -23,7 +23,7 @@ static struct mlme_handler mlme_sta_tbl[] = {
 	{0,					"DoReserved",		&DoReserved},
 	{0,					"DoReserved",		&DoReserved},
 	{WIFI_BEACON,		"OnBeacon",		&OnBeacon},
-	{WIFI_ATIM,			"OnATIM",		&OnAtim},
+	{WIFI_ATIM,			"OnATIM",		NULL},
 	{WIFI_DISASSOC,		"OnDisassoc",		&OnDisassoc},
 	{WIFI_AUTH,			"OnAuth",		&OnAuthClient},
 	{WIFI_DEAUTH,		"OnDeAuth",		&OnDeAuth},
@@ -1538,11 +1538,6 @@ unsigned int OnDisassoc(struct adapter *padapter, union recv_frame *precv_frame)
 	receive_disconnect(padapter, GetAddr3Ptr(pframe), reason);
 
 	pmlmepriv->link_detect_info.busy_traffic = false;
-	return _SUCCESS;
-}
-
-unsigned int OnAtim(struct adapter *padapter, union recv_frame *precv_frame)
-{
 	return _SUCCESS;
 }
 

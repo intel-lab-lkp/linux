@@ -564,7 +564,6 @@ unsigned int OnProbeReq(struct adapter *padapter, union recv_frame *precv_frame)
 unsigned int OnProbeRsp(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int DoReserved(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int OnBeacon(struct adapter *padapter, union recv_frame *precv_frame);
-unsigned int OnAtim(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int OnDisassoc(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int OnAuth(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int OnAuthClient(struct adapter *padapter, union recv_frame *precv_frame);
