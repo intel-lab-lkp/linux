@@ -546,7 +546,7 @@ static int dtpm_for_each_child(const struct dtpm_node *hierarchy,
  * Return: zero on success, a negative value in case of error. Errors
  * are reported back from the underlying functions.
  */
-int dtpm_create_hierarchy(struct of_device_id *dtpm_match_table)
+int dtpm_create_hierarchy(const struct of_device_id *dtpm_match_table)
 {
 	const struct dtpm_node *hierarchy;
 	int i, ret;

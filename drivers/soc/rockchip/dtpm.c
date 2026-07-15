@@ -41,7 +41,7 @@ static struct dtpm_node __initdata rk3399_hierarchy[] = {
 	[9] = { /* sentinel */ }
 };
 
-static struct of_device_id __initdata rockchip_dtpm_match_table[] = {
+static const struct of_device_id rockchip_dtpm_match_table[] __initconst = {
         { .compatible = "rockchip,rk3399", .data = rk3399_hierarchy },
         {},
 };
