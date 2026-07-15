@@ -1031,7 +1031,7 @@ static void halbtc8723b2ant_CoexAllOff(struct btc_coexist *pBtCoexist)
 	halbtc8723b2ant_CoexTableWithType(pBtCoexist, NORMAL_EXEC, 0);
 }
 
-static void halbtc8723b2ant_InitCoexDm(struct btc_coexist *pBtCoexist)
+void halbtc8723b2ant_InitCoexDm(struct btc_coexist *pBtCoexist)
 {
 	/*  force to reset coex mechanism */
 

@@ -356,38 +356,3 @@ void rtl8723bs_recv_tasklet(struct tasklet_struct *t)
 		rtw_enqueue_recvbuf(precvbuf, &precvpriv->free_recv_buf_queue);
 	} while (1);
 }
-
-
-/*
- * Free recv private variable of hardware dependent
- * 1. recv buf
- * 2. recv tasklet
- *
- */
-void rtl8723bs_free_recv_priv(struct adapter *padapter)
-{
-	u32 i;
-	struct recv_priv *precvpriv;
-	struct recv_buf *precvbuf;
-
-	precvpriv = &padapter->recvpriv;
-
-	/* 3 1. kill tasklet */
-	tasklet_kill(&precvpriv->recv_tasklet);
-
-	/* 3 2. free all recv buffers */
-	precvbuf = (struct recv_buf *)precvpriv->precv_buf;
-	if (precvbuf) {
-		precvpriv->free_recv_buf_queue_cnt = 0;
-		for (i = 0; i < NR_RECVBUFF; i++) {
-			list_del_init(&precvbuf->list);
-			if (precvbuf->pskb)
-				dev_kfree_skb_any(precvbuf->pskb);
-			precvbuf++;
-		}
-		precvpriv->precv_buf = NULL;
-	}
-
-	kfree(precvpriv->pallocated_recv_buf);
-	precvpriv->pallocated_recv_buf = NULL;
-}

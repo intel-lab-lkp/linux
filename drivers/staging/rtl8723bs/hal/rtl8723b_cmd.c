@@ -697,38 +697,8 @@ void rtl8723b_set_FwJoinBssRpt_cmd(struct adapter *padapter, u8 mstatus)
 		rtl8723b_download_rsvd_page(padapter, RT_MEDIA_CONNECT);
 }
 
-/* arg[0] = macid */
-/* arg[1] = raid */
-/* arg[2] = shortGIrate */
-/* arg[3] = init_rate */
-void rtl8723b_Add_RateATid(
-	struct adapter *padapter,
-	u32 bitmap,
-	u8 *arg,
-	u8 rssi_level
-)
-{
-	struct hal_com_data	*pHalData = GET_HAL_DATA(padapter);
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
-	struct sta_info *psta;
-	u8 mac_id = arg[0];
-	u8 raid = arg[1];
-	u8 shortGI = arg[2];
-	u8 bw;
-	u32 mask = bitmap&0x0FFFFFFF;
 
-	psta = pmlmeinfo->FW_sta_info[mac_id].psta;
-	if (!psta)
-		return;
 
-	bw = psta->bw_mode;
-
-	if (rssi_level != DM_RATR_STA_INIT)
-		mask = ODM_Get_Rate_Bitmap(&pHalData->odmpriv, mac_id, mask, rssi_level);
-
-	rtl8723b_set_FwMacIdConfig_cmd(padapter, mac_id, raid, bw, shortGI, mask);
-}
 
 static void ConstructBtNullFunctionData(
 	struct adapter *padapter,

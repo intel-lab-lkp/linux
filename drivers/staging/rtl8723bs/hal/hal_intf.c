@@ -405,7 +405,30 @@ exit:
 
 void rtw_hal_free_recv_priv(struct adapter *padapter)
 {
-	rtl8723bs_free_recv_priv(padapter);
+	u32 i;
+	struct recv_priv *precvpriv;
+	struct recv_buf *precvbuf;
+
+	precvpriv = &padapter->recvpriv;
+
+	/* 3 1. kill tasklet */
+	tasklet_kill(&precvpriv->recv_tasklet);
+
+	/* 3 2. free all recv buffers */
+	precvbuf = (struct recv_buf *)precvpriv->precv_buf;
+	if (precvbuf) {
+		precvpriv->free_recv_buf_queue_cnt = 0;
+		for (i = 0; i < NR_RECVBUFF; i++) {
+			list_del_init(&precvbuf->list);
+			if (precvbuf->pskb)
+				dev_kfree_skb_any(precvbuf->pskb);
+			precvbuf++;
+		}
+		precvpriv->precv_buf = NULL;
+	}
+
+	kfree(precvpriv->pallocated_recv_buf);
+	precvpriv->pallocated_recv_buf = NULL;
 }
 
 void rtw_hal_update_ra_mask(struct sta_info *psta, u8 rssi_level)
@@ -427,9 +450,32 @@ void rtw_hal_update_ra_mask(struct sta_info *psta, u8 rssi_level)
 	}
 }
 
+/* arg[0] = macid */
+/* arg[1] = raid */
+/* arg[2] = shortGIrate */
+/* arg[3] = init_rate */
 void rtw_hal_add_ra_tid(struct adapter *padapter, u32 bitmap, u8 *arg, u8 rssi_level)
 {
-	rtl8723b_Add_RateATid(padapter, bitmap, arg, rssi_level);
+	struct hal_com_data	*pHalData = GET_HAL_DATA(padapter);
+	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
+	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
+	struct sta_info *psta;
+	u8 mac_id = arg[0];
+	u8 raid = arg[1];
+	u8 shortGI = arg[2];
+	u8 bw;
+	u32 mask = bitmap&0x0FFFFFFF;
+
+	psta = pmlmeinfo->FW_sta_info[mac_id].psta;
+	if (!psta)
+		return;
+
+	bw = psta->bw_mode;
+
+	if (rssi_level != DM_RATR_STA_INIT)
+		mask = ODM_Get_Rate_Bitmap(&pHalData->odmpriv, mac_id, mask, rssi_level);
+
+	rtl8723b_set_FwMacIdConfig_cmd(padapter, mac_id, raid, bw, shortGI, mask);
 }
 
 u32 rtw_hal_read_bbreg(struct adapter *padapter, u32 RegAddr, u32 BitMask)
