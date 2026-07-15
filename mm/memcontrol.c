@@ -2865,6 +2865,7 @@ struct mem_cgroup *mem_cgroup_from_obj_slab(struct slab *slab, void *p)
 	 */
 	unsigned long obj_exts;
 	struct slabobj_ext *obj_ext;
+	struct obj_cgroup *objcg;
 
 	obj_exts = slab_obj_exts(slab);
 	if (!obj_exts)
@@ -2872,9 +2873,8 @@ struct mem_cgroup *mem_cgroup_from_obj_slab(struct slab *slab, void *p)
 
 	get_slab_obj_exts(obj_exts);
 	obj_ext = slab_obj_ext(slab->slab_cache, slab, obj_exts, p);
-	if (obj_ext->objcg) {
-		struct obj_cgroup *objcg = obj_ext->objcg;
-
+	objcg = *slab_obj_ext_objcgp(obj_ext);
+	if (objcg) {
 		put_slab_obj_exts(obj_exts);
 		return obj_cgroup_memcg(objcg);
 	}
@@ -3577,6 +3577,7 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		unsigned long obj_exts;
 		struct slabobj_ext *obj_ext;
 		struct obj_stock_pcp *stock;
+		struct obj_cgroup **objcgp;
 
 		slab = virt_to_slab(p[i]);
 
@@ -3612,10 +3613,15 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		unlock_stock(stock);
 
 		obj_exts = slab_obj_exts(slab);
+
 		get_slab_obj_exts(obj_exts);
+
 		obj_ext = slab_obj_ext(s, slab, obj_exts, p[i]);
+		objcgp = slab_obj_ext_objcgp(obj_ext);
+
 		obj_cgroup_get(objcg);
-		obj_ext->objcg = objcg;
+		*objcgp = objcg;
+
 		put_slab_obj_exts(obj_exts);
 	}
 
@@ -3628,16 +3634,17 @@ void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 	size_t obj_size = obj_full_size(s);
 
 	for (int i = 0; i < objects; i++) {
-		struct obj_cgroup *objcg;
+		struct obj_cgroup **objcgp, *objcg;
 		struct slabobj_ext *obj_ext;
 		struct obj_stock_pcp *stock;
 
 		obj_ext = slab_obj_ext(s, slab, obj_exts, p[i]);
-		objcg = obj_ext->objcg;
-		if (!objcg)
+		objcgp = slab_obj_ext_objcgp(obj_ext);
+		if (!*objcgp)
 			continue;
 
-		obj_ext->objcg = NULL;
+		objcg = *objcgp;
+		*objcgp = NULL;
 
 		stock = trylock_stock();
 		__refill_obj_stock(objcg, stock, obj_size, true);
