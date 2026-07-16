@@ -24,7 +24,7 @@ hyp_spinlock_t pkvm_pgd_lock;
 struct memblock_region hyp_memory[HYP_MEMBLOCK_REGIONS];
 unsigned int hyp_memblock_nr;
 
-static u64 __io_map_base;
+static u64 __hyp_private_va_base;
 
 struct hyp_fixmap_slot {
 	u64 addr;
@@ -50,7 +50,7 @@ static int __pkvm_alloc_private_va_range(unsigned long start, size_t size)
 
 	hyp_assert_lock_held(&pkvm_pgd_lock);
 
-	if (!start || start < __io_map_base)
+	if (!start || start < __hyp_private_va_base)
 		return -EINVAL;
 
 	/* The allocated size is always a multiple of PAGE_SIZE */
@@ -60,7 +60,7 @@ static int __pkvm_alloc_private_va_range(unsigned long start, size_t size)
 	if (cur > __hyp_vmemmap)
 		return -ENOMEM;
 
-	__io_map_base = cur;
+	__hyp_private_va_base = cur;
 
 	return 0;
 }
@@ -70,8 +70,8 @@ static int __pkvm_alloc_private_va_range(unsigned long start, size_t size)
  * @size:	The size of the VA range to reserve.
  * @haddr:	The hypervisor virtual start address of the allocation.
  *
- * The private virtual address (VA) range is allocated above __io_map_base
- * and aligned based on the order of @size.
+ * The private virtual address (VA) range is allocated from
+ * __hyp_private_va_base and aligned based on the order of @size.
  *
  * Return: 0 on success or negative error code on failure.
  */
@@ -81,7 +81,7 @@ int pkvm_alloc_private_va_range(size_t size, unsigned long *haddr)
 	int ret;
 
 	hyp_spin_lock(&pkvm_pgd_lock);
-	addr = __io_map_base;
+	addr = __hyp_private_va_base;
 	ret = __pkvm_alloc_private_va_range(addr, size);
 	hyp_spin_unlock(&pkvm_pgd_lock);
 
@@ -365,7 +365,7 @@ static int create_fixblock(void)
 		return -EINVAL;
 
 	hyp_spin_lock(&pkvm_pgd_lock);
-	addr = ALIGN(__io_map_base, PMD_SIZE);
+	addr = ALIGN(__hyp_private_va_base, PMD_SIZE);
 	ret = __pkvm_alloc_private_va_range(addr, PMD_SIZE);
 	if (ret)
 		goto unlock;
@@ -446,12 +446,13 @@ int hyp_create_idmap(u32 hyp_va_bits)
 	 * memory -- see va_layout.c for more details. The other half of the VA
 	 * space contains the trampoline page, and needs some care. Split that
 	 * second half in two and find the quarter of VA space not conflicting
-	 * with the idmap to place the IOs and the vmemmap. IOs use the lower
-	 * half of the quarter and the vmemmap the upper half.
+	 * with the idmap to place private mappings and the vmemmap. Private
+	 * mappings use the lower half of the quarter and the vmemmap the upper
+	 * half.
 	 */
-	__io_map_base = start & BIT(hyp_va_bits - 2);
-	__io_map_base ^= BIT(hyp_va_bits - 2);
-	__hyp_vmemmap = __io_map_base | BIT(hyp_va_bits - 3);
+	__hyp_private_va_base = start & BIT(hyp_va_bits - 2);
+	__hyp_private_va_base ^= BIT(hyp_va_bits - 2);
+	__hyp_vmemmap = __hyp_private_va_base | BIT(hyp_va_bits - 3);
 
 	return __pkvm_create_mappings(start, end - start, start, PAGE_HYP_EXEC);
 }
@@ -464,13 +465,13 @@ int pkvm_create_stack(phys_addr_t phys, unsigned long *haddr)
 
 	hyp_spin_lock(&pkvm_pgd_lock);
 
-	prev_base = __io_map_base;
+	prev_base = __hyp_private_va_base;
 	/*
 	 * Efficient stack verification using the NVHE_STACK_SHIFT bit implies
 	 * an alignment of our allocation on the order of the size.
 	 */
 	size = NVHE_STACK_SIZE * 2;
-	addr = ALIGN(__io_map_base, size);
+	addr = ALIGN(__hyp_private_va_base, size);
 
 	ret = __pkvm_alloc_private_va_range(addr, size);
 	if (!ret) {
@@ -486,7 +487,7 @@ int pkvm_create_stack(phys_addr_t phys, unsigned long *haddr)
 		ret = kvm_pgtable_hyp_map(&pkvm_pgtable, addr + NVHE_STACK_SIZE,
 					  NVHE_STACK_SIZE, phys, PAGE_HYP);
 		if (ret)
-			__io_map_base = prev_base;
+			__hyp_private_va_base = prev_base;
 	}
 	hyp_spin_unlock(&pkvm_pgd_lock);
 
