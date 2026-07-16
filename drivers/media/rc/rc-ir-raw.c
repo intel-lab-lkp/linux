@@ -637,6 +637,7 @@ int ir_raw_event_register(struct rc_dev *dev)
 	if (IS_ERR(thread))
 		return PTR_ERR(thread);
 
+	get_task_struct(thread);
 	dev->raw->thread = thread;
 
 	mutex_lock(&ir_raw_handler_lock);
@@ -648,8 +649,12 @@ int ir_raw_event_register(struct rc_dev *dev)
 
 void ir_raw_event_free(struct rc_dev *dev)
 {
-	kfree(dev->raw);
-	dev->raw = NULL;
+	if (dev->raw) {
+		if (dev->raw->thread)
+			put_task_struct(dev->raw->thread);
+		kfree(dev->raw);
+		dev->raw = NULL;
+	}
 }
 
 void ir_raw_event_unregister(struct rc_dev *dev)
