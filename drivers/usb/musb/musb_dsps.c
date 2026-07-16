@@ -618,6 +618,36 @@ static int dsps_musb_recover(struct musb *musb)
 	return session_restart ? 0 : -EPIPE;
 }
 
+static int dsps_musb_vbus_status(struct musb *musb)
+{
+	u8 devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+
+	return (devctl & MUSB_DEVCTL_VBUS) == MUSB_DEVCTL_VBUS;
+}
+
+static void dsps_musb_set_vbus(struct musb *musb, int is_on)
+{
+	u8 devctl;
+
+	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+
+	if (is_on) {
+		devctl |= MUSB_DEVCTL_SESSION;
+	} else {
+		/* Since we drop the session to turn off vbus, the connection cannot survive */
+		if( musb->port1_status & USB_PORT_STAT_CONNECTION )
+			musb->port1_status |= (USB_PORT_STAT_C_CONNECTION << 16);
+		musb->port1_status &= ~( USB_PORT_STAT_CONNECTION |
+			                     USB_PORT_STAT_HIGH_SPEED |
+								 USB_PORT_STAT_LOW_SPEED );
+		devctl &= ~MUSB_DEVCTL_SESSION;
+		usb_hcd_poll_rh_status(musb->hcd);
+		musb->is_active = 0;
+	}
+
+	musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+}
+
 /* Similar to am35x, dm81xx support only 32-bit read operation */
 static void dsps_read_fifo32(struct musb_hw_ep *hw_ep, u16 len, u8 *dst)
 {
@@ -702,6 +732,8 @@ static struct musb_platform_ops dsps_ops = {
 
 	.set_mode	= dsps_musb_set_mode,
 	.recover	= dsps_musb_recover,
+	.vbus_status	= dsps_musb_vbus_status,
+	.set_vbus	= dsps_musb_set_vbus,
 	.clear_ep_rxintr = dsps_musb_clear_ep_rxintr,
 };
 
