@@ -434,6 +434,7 @@ extern struct static_key_false flow_dissector_qinq_key;
 extern struct static_key_false flow_dissector_pppoe_key;
 extern struct static_key_false flow_dissector_mpls_key;
 extern struct static_key_false flow_dissector_ipip_key;
+extern struct static_key_false flow_dissector_gre_key;
 
 /* struct flow_keys_digest:
  *

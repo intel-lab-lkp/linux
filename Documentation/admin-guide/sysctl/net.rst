@@ -572,6 +572,31 @@ that the inner IP fast-path itself would defer.
 
 Default: 0
 
+gre
+~~~
+
+GRE-encapsulated inner IP (``IPPROTO_GRE`` 47). The fast-path
+mirrors the slow path's __skb_flow_dissect_gre() descent for the
+common subset:
+
+- GRE version 0 (the v1 PPTP variant defers to slow path)
+- All GRE flags clear (no GRE_CSUM, GRE_KEY, GRE_SEQ, GRE_ROUTING —
+  i.e. plain 4-byte GRE base header)
+- protocol field is ``ETH_P_IP`` 0x0800 or ``ETH_P_IPV6`` 0x86DD
+  (no Transparent Ethernet Bridging, no PPP-over-GRE, no MPLS-
+  over-GRE)
+
+In that subset, slow path also descends to inner IP and stamps
+``key_control->flags |= FLOW_DIS_ENCAPSULATION``; the fast-path
+produces the same output.
+
+GRE-with-KEY (common in MPLS-over-GRE deployments and some cloud
+overlays) is a follow-up patch — same descent shape with an
+additional 4-byte key field read and a write to
+``FLOW_DISSECTOR_KEY_GRE_KEYID``.
+
+Default: 0
+
 3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 

@@ -52,6 +52,8 @@ DEFINE_STATIC_KEY_FALSE(flow_dissector_mpls_key);
 EXPORT_SYMBOL(flow_dissector_mpls_key);
 DEFINE_STATIC_KEY_FALSE(flow_dissector_ipip_key);
 EXPORT_SYMBOL(flow_dissector_ipip_key);
+DEFINE_STATIC_KEY_FALSE(flow_dissector_gre_key);
+EXPORT_SYMBOL(flow_dissector_gre_key);
 
 /* IPv4 version/IHL byte of an option-less header: version 4, IHL 5. */
 #define FLOW_DIS_IPV4_VIHL_NOOPT	0x45
@@ -73,6 +75,11 @@ static bool flow_dissect_fast_ipip_inner(const struct sk_buff *skb,
 					 const void *data,
 					 __be16 inner_eth_proto,
 					 int inner_nhoff, int hlen);
+static bool flow_dissect_fast_gre_inner(const struct sk_buff *skb,
+					struct flow_dissector *flow_dissector,
+					void *target_container,
+					const void *data,
+					int nhoff, int hlen);
 
 /* One of the two dissectors the fast-path eligibility check admits;
  * defined here so flow_dissect_fast() below can reference it (its keys
@@ -1139,6 +1146,11 @@ static bool flow_dissect_fast_ipv4(const struct sk_buff *skb,
 						data, htons(ETH_P_IPV6),
 						nhoff + (int)sizeof(*iph), hlen);
 		}
+		if (static_branch_unlikely(&flow_dissector_gre_key) &&
+		    iph->protocol == IPPROTO_GRE)
+			return flow_dissect_fast_gre_inner(skb, flow_dissector,
+					target_container, data,
+					nhoff + (int)sizeof(*iph), hlen);
 		return false;
 	}
 
@@ -1236,8 +1248,10 @@ static bool flow_dissect_fast_ipv6(const struct sk_buff *skb,
 		bool ipip = static_branch_unlikely(&flow_dissector_ipip_key) &&
 			    (iph->nexthdr == IPPROTO_IPIP ||
 			     iph->nexthdr == IPPROTO_IPV6);
+		bool gre = static_branch_unlikely(&flow_dissector_gre_key) &&
+			   iph->nexthdr == IPPROTO_GRE;
 
-		if (!ipip)
+		if (!ipip && !gre)
 			return false;
 
 		/* Mirror the slow path's outer-IPv6 writes before the
@@ -1264,11 +1278,15 @@ static bool flow_dissect_fast_ipv6(const struct sk_buff *skb,
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 		}
 
-		return flow_dissect_fast_ipip_inner(skb,
-				flow_dissector, target_container,
-				data,
-				iph->nexthdr == IPPROTO_IPIP ?
-				htons(ETH_P_IP) : htons(ETH_P_IPV6),
+		if (ipip)
+			return flow_dissect_fast_ipip_inner(skb,
+					flow_dissector, target_container,
+					data,
+					iph->nexthdr == IPPROTO_IPIP ?
+					htons(ETH_P_IP) : htons(ETH_P_IPV6),
+					nhoff + (int)sizeof(*iph), hlen);
+		return flow_dissect_fast_gre_inner(skb, flow_dissector,
+				target_container, data,
 				nhoff + (int)sizeof(*iph), hlen);
 	}
 
@@ -1559,6 +1577,70 @@ static bool flow_dissect_fast_ipip_inner(const struct sk_buff *skb,
 	if (!ok)
 		return false;
 
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_CONTROL)) {
+		key_control = skb_flow_dissector_target(flow_dissector,
+							FLOW_DISSECTOR_KEY_CONTROL,
+							target_container);
+		key_control->flags |= FLOW_DIS_ENCAPSULATION;
+	}
+	return true;
+}
+
+/* Plain-GRE inner descent (version 0, no flags, inner IP): a 4-byte
+ * base header the slow path steps over with PROTO_AGAIN. Any flags,
+ * version 1 (PPTP) or a non-IP inner defers. ENCAP is stamped after
+ * the inner pass, which zeros key_control->flags.
+ */
+static bool flow_dissect_fast_gre_inner(const struct sk_buff *skb,
+					struct flow_dissector *flow_dissector,
+					void *target_container,
+					const void *data,
+					int nhoff, int hlen)
+{
+	struct flow_dissector_key_control *key_control;
+	const struct gre_base_hdr *hdr;
+	__be16 inner_proto;
+	int inner_nhoff;
+	bool ok;
+
+	if (unlikely(hlen - nhoff < (int)sizeof(*hdr)))
+		return false;
+	hdr = (const struct gre_base_hdr *)((const u8 *)data + nhoff);
+
+	/* flags field carries the GRE control flags *and* the 3-bit
+	 * version in its low bits. A zero word means "no flags set
+	 * AND version 0" — the byte-identical fast subset.
+	 */
+	if (hdr->flags != 0)
+		return false;
+
+	switch (hdr->protocol) {
+	case htons(ETH_P_IP):
+		inner_proto = htons(ETH_P_IP);
+		break;
+	case htons(ETH_P_IPV6):
+		inner_proto = htons(ETH_P_IPV6);
+		break;
+	default:
+		return false;
+	}
+
+	inner_nhoff = nhoff + (int)sizeof(*hdr);
+
+	if (inner_proto == htons(ETH_P_IP))
+		ok = flow_dissect_fast_ipv4(skb, flow_dissector,
+					    target_container, data,
+					    inner_nhoff, hlen);
+	else
+		ok = flow_dissect_fast_ipv6(skb, flow_dissector,
+					    target_container, data,
+					    inner_nhoff, hlen);
+
+	if (!ok)
+		return false;
+
+	/* Re-establish ENCAP after the inner pass zeroed key_control->flags. */
 	if (dissector_uses_key(flow_dissector,
 			       FLOW_DISSECTOR_KEY_CONTROL)) {
 		key_control = skb_flow_dissector_target(flow_dissector,
@@ -2789,6 +2871,13 @@ static struct ctl_table flow_dissector_sysctl_table[] = {
 		.procname	= "ipip",
 		.data		= &flow_dissector_ipip_key.key,
 		.maxlen		= sizeof(flow_dissector_ipip_key),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
+	},
+	{
+		.procname	= "gre",
+		.data		= &flow_dissector_gre_key.key,
+		.maxlen		= sizeof(flow_dissector_gre_key),
 		.mode		= 0644,
 		.proc_handler	= proc_do_static_key,
 	},
