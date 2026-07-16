@@ -538,6 +538,22 @@ reterr:
 	return ERR_PTR(err);
 }
 
+static void p9_client_abort(struct p9_client *c, struct p9_req_t *req)
+{
+	/*
+	 * A fatal signal cannot wait for TFLUSH, but a sent request must keep
+	 * its tag until a late reply arrives or the transport is torn down.
+	 */
+	if (!c->trans_mod->supports_async_abort ||
+	    READ_ONCE(req->status) >= REQ_STATUS_RCVD)
+		return;
+
+	if (!c->trans_mod->cancel(c, req))
+		return;
+
+	cmpxchg(&req->status, REQ_STATUS_SENT, REQ_STATUS_ABORTED);
+}
+
 /**
  * p9_client_rpc - issue a request and wait for a response
  * @c: client session
@@ -614,6 +630,15 @@ again:
 	if (err == -ERESTARTSYS && c->status == Connected) {
 		if (READ_ONCE(req->status) == REQ_STATUS_RCVD) {
 			err = 0;
+			goto recalc_sigpending;
+		}
+
+		if (fatal_signal_pending(current) &&
+		    c->trans_mod->supports_async_abort) {
+			p9_debug(P9_DEBUG_MUX, "fatal signal: skip flush\n");
+			p9_client_abort(c, req);
+			if (READ_ONCE(req->status) == REQ_STATUS_RCVD)
+				err = 0;
 			goto recalc_sigpending;
 		}
 
