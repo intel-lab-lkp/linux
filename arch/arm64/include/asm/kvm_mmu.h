@@ -107,6 +107,28 @@ u32 kvm_hyp_va_bits(void);
 void kvm_apply_hyp_relocations(void);
 
 #define __hyp_pa(x) (((phys_addr_t)(x)) + hyp_physvirt_offset)
+/**
+ * kvm_hyp_kimg_kaddr - Select the kernel address used for an EL2 mapping
+ * @ptr: Address within the kernel image
+ *
+ * Return @ptr when EL2 uses the kernel-image address directly, as with
+ * VHE. Otherwise return the corresponding linear-map alias used as input
+ * to the legacy nVHE VA conversion.
+ *
+ * Return: A kernel address suitable as the basis for an EL2 virtual address.
+ */
+static __always_inline void *kvm_hyp_kimg_kaddr(void *ptr)
+{
+	/*
+	 * With VHE, the host runs at EL2 using the kernel mapping, so
+	 * kernel-image VAs need no translation.
+	 * Only legacy nVHE requires a linear-map alias.
+	 */
+	if (is_kernel_in_hyp_mode())
+		return ptr;
+
+	return lm_alias(ptr);
+}
 
 /*
  * Convert a kernel VA into a HYP VA.
@@ -139,6 +161,17 @@ static __always_inline unsigned long __kern_hyp_va(unsigned long v)
 }
 
 #define kern_hyp_va(v) 	((typeof(v))(__kern_hyp_va((unsigned long)(v))))
+
+/**
+ * kern_sym_hyp_va - Convert a kernel image symbol address to its runtime hyp VA
+ * @ptr: Address of a symbol in the kernel image
+ *
+ * Return: The runtime hyp virtual address corresponding to @ptr.
+ */
+static __always_inline void *kern_sym_hyp_va(void *ptr)
+{
+	return kern_hyp_va(kvm_hyp_kimg_kaddr(ptr));
+}
 
 extern u32 __hyp_va_bits;
 

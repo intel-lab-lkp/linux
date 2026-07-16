@@ -233,16 +233,6 @@ struct kvm_nvhe_stacktrace_info {
 	unsigned long pc;
 };
 
-/* Translate a kernel address @ptr into its equivalent linear mapping */
-#define kvm_ksym_ref(ptr)						\
-	({								\
-		void *val = (ptr);					\
-		if (!is_kernel_in_hyp_mode())				\
-			val = lm_alias((ptr));				\
-		val;							\
-	 })
-#define kvm_ksym_ref_nvhe(sym)	kvm_ksym_ref(kvm_nvhe_sym(sym))
-
 struct kvm;
 struct kvm_vcpu;
 struct kvm_s2_mmu;

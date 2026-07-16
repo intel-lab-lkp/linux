@@ -2105,10 +2105,10 @@ static int kvm_init_vector_slots(void)
 	int err;
 	void *base;
 
-	base = kern_hyp_va(kvm_ksym_ref(__kvm_hyp_vector));
+	base = kern_sym_hyp_va(__kvm_hyp_vector);
 	kvm_init_vector_slot(base, HYP_VECTOR_DIRECT);
 
-	base = kern_hyp_va(kvm_ksym_ref(__bp_harden_hyp_vecs));
+	base = kern_sym_hyp_va(__bp_harden_hyp_vecs);
 	kvm_init_vector_slot(base, HYP_VECTOR_SPECTRE_DIRECT);
 
 	if (kvm_system_needs_idmapped_vectors() &&
@@ -2136,7 +2136,7 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 	 * Also drop the KASAN tag which gets in the way...
 	 */
 	params->tpidr_el2 = (unsigned long)kasan_reset_tag(per_cpu_ptr_nvhe_sym(__per_cpu_start, cpu)) -
-			    (unsigned long)kvm_ksym_ref(CHOOSE_NVHE_SYM(__per_cpu_start));
+			    (unsigned long)kvm_hyp_kimg_kaddr(CHOOSE_NVHE_SYM(__per_cpu_start));
 
 	params->mair_el2 = read_sysreg(mair_el1);
 
@@ -2532,13 +2532,13 @@ static void __init teardown_hyp_mode(void)
 
 static int __init do_pkvm_init(u32 hyp_va_bits)
 {
-	void *per_cpu_base = kvm_ksym_ref(kvm_nvhe_sym(kvm_arm_hyp_percpu_base));
+	void *per_cpu_base = kvm_nvhe_sym(kvm_arm_hyp_percpu_base);
 	int ret;
 
 	preempt_disable();
 	cpu_hyp_init_context();
 	ret = kvm_call_hyp_nvhe(__pkvm_init, hyp_mem_base, hyp_mem_size,
-				kern_hyp_va(per_cpu_base),
+				kern_sym_hyp_va(per_cpu_base),
 				hyp_va_bits);
 	cpu_hyp_init_features();
 
@@ -2611,8 +2611,8 @@ static void kvm_hyp_init_symbols(void)
 	 * Flush entire BSS since part of its data containing init symbols is read
 	 * while the MMU is off.
 	 */
-	kvm_flush_dcache_to_poc(kvm_ksym_ref(__hyp_bss_start),
-				kvm_ksym_ref(__hyp_bss_end) - kvm_ksym_ref(__hyp_bss_start));
+	kvm_flush_dcache_to_poc(lm_alias(__hyp_bss_start),
+				lm_alias(__hyp_bss_end) - lm_alias(__hyp_bss_start));
 }
 
 static int __init kvm_hyp_init_protection(u32 hyp_va_bits)
@@ -2772,29 +2772,29 @@ static int __init init_hyp_mode(void)
 	/*
 	 * Map the Hyp-code called directly from the host
 	 */
-	err = create_hyp_mappings(kvm_ksym_ref(__hyp_text_start),
-				  kvm_ksym_ref(__hyp_text_end), PAGE_HYP_EXEC);
+	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_text_start),
+				  kvm_hyp_kimg_kaddr(__hyp_text_end), PAGE_HYP_EXEC);
 	if (err) {
 		kvm_err("Cannot map world-switch code\n");
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_ksym_ref(__hyp_data_start),
-				  kvm_ksym_ref(__hyp_data_end), PAGE_HYP);
+	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_data_start),
+				  kvm_hyp_kimg_kaddr(__hyp_data_end), PAGE_HYP);
 	if (err) {
 		kvm_err("Cannot map .hyp.data section\n");
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_ksym_ref(__hyp_rodata_start),
-				  kvm_ksym_ref(__hyp_rodata_end), PAGE_HYP_RO);
+	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_rodata_start),
+				  kvm_hyp_kimg_kaddr(__hyp_rodata_end), PAGE_HYP_RO);
 	if (err) {
 		kvm_err("Cannot map .hyp.rodata section\n");
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_ksym_ref(__start_rodata),
-				  kvm_ksym_ref(__end_rodata), PAGE_HYP_RO);
+	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__start_rodata),
+				  kvm_hyp_kimg_kaddr(__end_rodata), PAGE_HYP_RO);
 	if (err) {
 		kvm_err("Cannot map rodata section\n");
 		goto out_err;
@@ -2805,15 +2805,15 @@ static int __init init_hyp_mode(void)
 	 * section thanks to an assertion in the linker script. Map it RW and
 	 * the rest of .bss RO.
 	 */
-	err = create_hyp_mappings(kvm_ksym_ref(__hyp_bss_start),
-				  kvm_ksym_ref(__hyp_bss_end), PAGE_HYP);
+	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_bss_start),
+				  kvm_hyp_kimg_kaddr(__hyp_bss_end), PAGE_HYP);
 	if (err) {
 		kvm_err("Cannot map hyp bss section: %d\n", err);
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_ksym_ref(__hyp_bss_end),
-				  kvm_ksym_ref(__bss_stop), PAGE_HYP_RO);
+	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_bss_end),
+				  kvm_hyp_kimg_kaddr(__bss_stop), PAGE_HYP_RO);
 	if (err) {
 		kvm_err("Cannot map bss section\n");
 		goto out_err;
