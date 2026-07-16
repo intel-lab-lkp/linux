@@ -1253,10 +1253,14 @@ static void hp_wmi_notify(union acpi_object *obj, void *context)
 		platform_profile_cycle();
 		break;
 	case HPWMI_OMEN_KEY:
-		if (event_data) /* Only should be true for HP Omen */
+		if (event_data) {
+			/* Only should be true for HP Omen */
 			key_code = event_data;
-		else
+		} else {
 			key_code = hp_wmi_read_int(HPWMI_HOTKEY_QUERY);
+			if (key_code < 0)
+				break;
+		}
 
 		if (!sparse_keymap_report_event(hp_wmi_input_dev,
 						key_code, 1, true))
