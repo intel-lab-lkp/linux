@@ -21,6 +21,8 @@ struct kvm_zdev {
 	struct zpci_dev *zdev;
 	struct kvm *kvm;
 	struct zpci_fib fib;
+	struct user_struct *user_account;
+	struct mm_struct *mm_account;
 	struct list_head entry;
 };
 
