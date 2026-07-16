@@ -1315,9 +1315,11 @@ static bool intel_fbc_surface_size_ok(const struct intel_plane_state *plane_stat
 	return effective_w <= max_w && effective_h <= max_h;
 }
 
-static void intel_fbc_max_plane_size(struct intel_display *display,
+static void intel_fbc_max_plane_size(const struct intel_plane_state *plane_state,
 				     unsigned int *w, unsigned int *h)
 {
+	struct intel_display *display = to_intel_display(plane_state);
+
 	if (DISPLAY_VER(display) >= 10) {
 		*w = 5120;
 		*h = 4096;
@@ -1335,10 +1337,9 @@ static void intel_fbc_max_plane_size(struct intel_display *display,
 
 static bool intel_fbc_plane_size_valid(const struct intel_plane_state *plane_state)
 {
-	struct intel_display *display = to_intel_display(plane_state);
 	unsigned int w, h, max_w, max_h;
 
-	intel_fbc_max_plane_size(display, &max_w, &max_h);
+	intel_fbc_max_plane_size(plane_state, &max_w, &max_h);
 
 	w = drm_rect_width(&plane_state->uapi.src) >> 16;
 	h = drm_rect_height(&plane_state->uapi.src) >> 16;
