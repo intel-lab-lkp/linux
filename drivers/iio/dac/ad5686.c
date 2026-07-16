@@ -479,6 +479,9 @@ int ad5686_probe(struct device *dev,
 	struct iio_dev *indio_dev;
 	int ret, i;
 
+	if (!chip_info)
+		return -ENODEV;
+
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
 	if (indio_dev == NULL)
 		return  -ENOMEM;
