@@ -19,6 +19,8 @@
 struct xilinx_selectmap_conf {
 	struct xilinx_fpga_core core;
 	void __iomem *base;
+	struct gpio_desc *csi_b;
+	struct gpio_desc *rdwr_b;
 };
 
 #define to_xilinx_selectmap_conf(obj) \
@@ -30,8 +32,20 @@ static int xilinx_selectmap_write(struct xilinx_fpga_core *core,
 	struct xilinx_selectmap_conf *conf = to_xilinx_selectmap_conf(core);
 	size_t i;
 
+	if (conf->csi_b)
+		gpiod_set_value(conf->csi_b, GPIOD_OUT_HIGH);
+
+	if (conf->rdwr_b)
+		gpiod_set_value(conf->rdwr_b, GPIOD_OUT_HIGH);
+
 	for (i = 0; i < count; ++i)
 		writeb(buf[i], conf->base);
+
+	if (conf->rdwr_b)
+		gpiod_set_value(conf->rdwr_b, GPIOD_OUT_LOW);
+
+	if (conf->csi_b)
+		gpiod_set_value(conf->csi_b, GPIOD_OUT_LOW);
 
 	return 0;
 }
@@ -56,16 +70,18 @@ static int xilinx_selectmap_probe(struct platform_device *pdev)
 	conf->base = base;
 
 	/* CSI_B is active low */
-	gpio = devm_gpiod_get_optional(&pdev->dev, "csi", GPIOD_OUT_HIGH);
+	gpio = devm_gpiod_get_optional(&pdev->dev, "csi", GPIOD_OUT_LOW);
 	if (IS_ERR(gpio))
 		return dev_err_probe(&pdev->dev, PTR_ERR(gpio),
 				     "Failed to get CSI_B gpio\n");
+	conf->csi_b = gpio;
 
 	/* RDWR_B is active low */
-	gpio = devm_gpiod_get_optional(&pdev->dev, "rdwr", GPIOD_OUT_HIGH);
+	gpio = devm_gpiod_get_optional(&pdev->dev, "rdwr", GPIOD_OUT_LOW);
 	if (IS_ERR(gpio))
 		return dev_err_probe(&pdev->dev, PTR_ERR(gpio),
 				     "Failed to get RDWR_B gpio\n");
+	conf->rdwr_b = gpio;
 
 	return xilinx_core_probe(&conf->core);
 }
