@@ -836,7 +836,8 @@ static void fuse_short_read(struct inode *inode, u64 attr_ver, size_t num_read,
 	 * reached the client fs yet.  So the hole is not present there.
 	 */
 	if (!fc->writeback_cache) {
-		loff_t pos = folio_pos(ap->folios[0]) + num_read;
+		loff_t pos = folio_pos(ap->folios[0]) +
+			     ap->descs[0].offset + num_read;
 		fuse_read_update_size(inode, pos, attr_ver);
 	}
 }
@@ -1057,7 +1058,8 @@ static void fuse_send_readpages(struct fuse_io_args *ia, struct file *file,
 	struct fuse_file *ff = file->private_data;
 	struct fuse_mount *fm = ff->fm;
 	struct fuse_args_pages *ap = &ia->ap;
-	loff_t pos = folio_pos(ap->folios[0]);
+	loff_t pos = folio_pos(ap->folios[0]) +
+		     ap->descs[0].offset;
 	ssize_t res;
 	int err;
 
