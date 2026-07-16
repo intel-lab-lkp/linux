@@ -485,6 +485,37 @@ when this is 0.
 
 Default: 0
 
+vlan
+~~~~
+
+Single 802.1Q or 802.1AD tagged frames over Eth + IPv4/IPv6 +
+TCP/UDP. Handles both the hardware-stripped form (tag in skb
+metadata, inner ethertype in skb->protocol) and the in-band form
+(4-byte vlan_hdr at data + nhoff). Writes FLOW_DISSECTOR_KEY_VLAN
+and bumps FLOW_DISSECTOR_KEY_NUM_OF_VLANS when those keys are
+requested by the dissector. Byte-identical with the slow path for
+the eligible shape; defers on any miss (QinQ defers; see the qinq
+sysctl).
+
+Default: 0
+
+qinq
+~~~~
+
+Lifts the vlan fast-path's depth limit from 1 to 2 so two stacked
+802.1AD / 802.1Q tags (canonical QinQ S-tag + C-tag, or two stacked
+802.1Q tags) are also fast-pathed. Outer tag is written to
+FLOW_DISSECTOR_KEY_VLAN, inner to FLOW_DISSECTOR_KEY_CVLAN, mirroring
+the slow-path's MAX → VLAN → CVLAN state machine. Byte-identical
+with the slow path for the eligible shape.
+
+Auto-toggle: writing qinq=1 also enables vlan (QinQ extends VLAN;
+the depth-0 entry of the helper is gated by the vlan key). Turning
+vlan off (writing 0) also clears qinq (depth-2 cannot fire when
+the outer entry is off).
+
+Default: 0
+
 3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 

@@ -429,6 +429,8 @@ extern struct flow_dissector flow_keys_basic_dissector;
  * /proc/sys/net/flow_dissector/<shape>. All default off.
  */
 extern struct static_key_false flow_dissector_eth_ip_key;
+extern struct static_key_false flow_dissector_vlan_key;
+extern struct static_key_false flow_dissector_qinq_key;
 
 /* struct flow_keys_digest:
  *
