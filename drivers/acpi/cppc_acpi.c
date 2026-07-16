@@ -1801,6 +1801,46 @@ int cppc_set_auto_sel(int cpu, bool enable)
 EXPORT_SYMBOL_GPL(cppc_set_auto_sel);
 
 /**
+ * cppc_get_auto_sel_u64 - Read the autonomous selection register as a u64.
+ * @cpu: CPU from which to read the register.
+ * @val: Return address, set to 0 or 1.
+ *
+ * u64-typed wrapper around cppc_get_auto_sel() for callers that keep CPPC
+ * register accessors in a common table.
+ *
+ * Return: 0 for success, -ERRNO otherwise.
+ */
+int cppc_get_auto_sel_u64(int cpu, u64 *val)
+{
+	bool enable;
+	int ret;
+
+	ret = cppc_get_auto_sel(cpu, &enable);
+	if (ret)
+		return ret;
+
+	*val = enable;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cppc_get_auto_sel_u64);
+
+/**
+ * cppc_set_auto_sel_u64 - Write the autonomous selection register from a u64.
+ * @cpu: CPU to which to write the register.
+ * @val: Value to write, any non-zero value enables autonomous selection.
+ *
+ * u64-typed wrapper around cppc_set_auto_sel().
+ *
+ * Return: 0 for success, -ERRNO otherwise.
+ */
+int cppc_set_auto_sel_u64(int cpu, u64 val)
+{
+	return cppc_set_auto_sel(cpu, !!val);
+}
+EXPORT_SYMBOL_GPL(cppc_set_auto_sel_u64);
+
+/**
  * cppc_set_enable - Set to enable CPPC on the processor by writing the
  * Continuous Performance Control package EnableRegister field.
  * @cpu: CPU for which to enable CPPC register.
