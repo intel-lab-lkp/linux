@@ -41,7 +41,7 @@ static bool range_contains_unmapped(struct mm_struct *mm,
 {
 	struct vm_area_struct *vma;
 	unsigned long prev_end = start;
-	VMA_ITERATOR(vmi, current->mm, start);
+	VMA_ITERATOR(vmi, mm, start);
 
 	for_each_vma_range(vmi, vma, end) {
 		if (vma->vm_start > prev_end)
