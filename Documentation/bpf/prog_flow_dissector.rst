@@ -9,6 +9,8 @@ Overview
 
 Flow dissector is a routine that parses metadata out of the packets. It's
 used in the various places in the networking subsystem (RFS, flow hash, etc).
+See :doc:`/networking/flow_dissector` for an overview of the flow dissector
+and the built-in C implementation this program type overrides.
 
 BPF flow dissector is an attempt to reimplement C-based flow dissector logic
 in BPF to gain all the benefits of BPF verifier (namely, limits on the

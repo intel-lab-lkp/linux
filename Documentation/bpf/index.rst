@@ -23,6 +23,7 @@ that goes into great technical depth about the BPF Architecture.
    cpumasks
    fs_kfuncs
    programs
+   prog_flow_dissector
    maps
    bpf_prog_run
    classic_vs_extended.rst
