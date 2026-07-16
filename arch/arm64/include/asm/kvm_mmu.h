@@ -105,6 +105,7 @@ alternative_cb_end
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_host.h>
 #include <asm/kvm_nested.h>
+#include <asm/virt.h>
 
 void kvm_update_va_mask(struct alt_instr *alt,
 			__le32 *origptr, __le32 *updptr, int nr_inst);
@@ -112,13 +113,28 @@ void kvm_compute_layout(void);
 u32 kvm_hyp_va_bits(void);
 void kvm_apply_hyp_relocations(void);
 
+static __always_inline bool kvm_hyp_init_uses_ttbr1(void)
+{
+	BUILD_BUG_ON(__is_defined(__KVM_NVHE_HYPERVISOR__));
+
+	return arm64_test_sw_feature_override(ARM64_SW_FEATURE_OVERRIDE_HVHE);
+}
+
+static __always_inline bool kvm_hyp_uses_ttbr1(void)
+{
+	return cpus_have_final_cap(ARM64_KVM_HVHE);
+}
+
 /**
  * kvm_hyp_kimg_kaddr - Select the kernel address used for an EL2 mapping
  * @ptr: Address within the kernel image
  *
- * Return @ptr when EL2 uses the kernel-image address directly, as with
- * VHE. Otherwise return the corresponding linear-map alias used as input
- * to the legacy nVHE VA conversion.
+ * Return @ptr when EL2 uses the kernel-image address directly, as with VHE
+ * or hVHE TTBR1. Otherwise return the corresponding linear-map alias used
+ * as input to the legacy nVHE VA conversion.
+ *
+ * This helper relies on finalized CPU capabilities and must not be used from
+ * earlier boot stages.
  *
  * Return: A kernel address suitable as the basis for an EL2 virtual address.
  */
@@ -126,10 +142,11 @@ static __always_inline void *kvm_hyp_kimg_kaddr(void *ptr)
 {
 	/*
 	 * With VHE, the host runs at EL2 using the kernel mapping, so
-	 * kernel-image VAs need no translation.
-	 * Only legacy nVHE requires a linear-map alias.
+	 * kernel-image VAs need no translation. hVHE similarly retains
+	 * kernel-image VAs in its TTBR1 EL2 mapping. Only legacy nVHE
+	 * requires a linear-map alias.
 	 */
-	if (is_kernel_in_hyp_mode())
+	if (is_kernel_in_hyp_mode() || kvm_hyp_uses_ttbr1())
 		return ptr;
 
 	return lm_alias(ptr);
@@ -137,6 +154,22 @@ static __always_inline void *kvm_hyp_kimg_kaddr(void *ptr)
 
 #define __hyp_linear_pa(x) (((phys_addr_t)(x)) + hyp_physvirt_offset)
 #define __hyp_symbol_pa(x) (((phys_addr_t)(x)) + hyp_symbol_physvirt_offset)
+
+static __always_inline unsigned long kvm_hyp_ttbr1_private_start(void)
+{
+	return PAGE_ALIGN((unsigned long)__hyp_bss_end);
+}
+
+static __always_inline unsigned long kvm_hyp_ttbr1_private_end(void)
+{
+	return VMALLOC_END;
+}
+
+static __always_inline unsigned long kvm_hyp_ttbr1_vmemmap_base(void)
+{
+	return kvm_hyp_ttbr1_private_start() + SZ_1G;
+}
+
 /*
  * Convert a kernel VA into a HYP VA.
  *
@@ -228,6 +261,7 @@ int kvm_handle_guest_sea(struct kvm_vcpu *vcpu);
 int kvm_handle_guest_abort(struct kvm_vcpu *vcpu);
 
 phys_addr_t kvm_mmu_get_httbr(void);
+phys_addr_t kvm_mmu_get_hyp_ttbr1(void);
 phys_addr_t kvm_get_idmap_vector(void);
 int __init kvm_mmu_init(u32 hyp_va_bits);
 

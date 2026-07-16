@@ -292,6 +292,9 @@ static int __init finalize_pkvm(void)
 	ret = pkvm_drop_host_privileges();
 	if (ret)
 		pr_err("Failed to finalize Hyp protection: %d\n", ret);
+	else
+		kvm_info("pKVM finalized in %s mode\n",
+			 kvm_hyp_uses_ttbr1() ? "hVHE" : "nVHE");
 
 	return ret;
 }

@@ -127,12 +127,21 @@ SYM_CODE_START_LOCAL(___kvm_hyp_init)
 	ldr	x1, [x0, #NVHE_INIT_VTCR]
 	msr	vtcr_el2, x1
 
-	ldr	x1, [x0, #NVHE_INIT_PGD_PA]
+	ldr	x1, [x0, #NVHE_INIT_TTBR0_PGD_PA]
 	phys_to_ttbr x2, x1
 alternative_if ARM64_HAS_CNP
 	orr	x2, x2, #TTBRx_EL1_CnP
 alternative_else_nop_endif
 	msr	ttbr0_el2, x2
+
+	ldr	x1, [x0, #NVHE_INIT_TTBR1_PGD_PA]
+	cbz	x1, 2f
+	phys_to_ttbr x2, x1
+alternative_if ARM64_HAS_CNP
+	orr	x2, x2, #TTBRx_EL1_CnP
+alternative_else_nop_endif
+	msr_s	SYS_TTBR1_EL2, x2
+2:
 
 	ldr	x0, [x0, #NVHE_INIT_TCR_EL2]
 	msr	tcr_el2, x0
@@ -261,13 +270,15 @@ reset:
 SYM_CODE_END(__kvm_handle_stub_hvc)
 
 /*
- * void __pkvm_init_switch_pgd(phys_addr_t pgd, unsigned long sp,
- *                             void (*fn)(void));
+ * void __pkvm_init_switch_pgd(phys_addr_t ttbr0, phys_addr_t ttbr1,
+ *                             unsigned long sp, void (*fn)(void));
  *
  * SYM_TYPED_FUNC_START() allows C to call this ID-mapped function indirectly
  * using a physical pointer without triggering a kCFI failure.
  */
 SYM_TYPED_FUNC_START(__pkvm_init_switch_pgd)
+	mov	x6, x3
+
 	/* Turn the MMU off */
 	pre_disable_mmu_workaround
 	mrs	x3, sctlr_el2
@@ -284,14 +295,22 @@ alternative_if ARM64_HAS_CNP
 alternative_else_nop_endif
 	msr	ttbr0_el2, x5
 
+	cbz	x1, 1f
+	phys_to_ttbr x5, x1
+alternative_if ARM64_HAS_CNP
+	orr	x5, x5, #TTBRx_EL1_CnP
+alternative_else_nop_endif
+	msr_s	SYS_TTBR1_EL2, x5
+1:
+
 	/* Set the new stack pointer */
-	mov	sp, x1
+	mov	sp, x2
 
 	/* And turn the MMU back on! */
 	dsb	nsh
 	isb
 	set_sctlr_el2	x3
-	ret	x2
+	ret	x6
 SYM_FUNC_END(__pkvm_init_switch_pgd)
 
 	.popsection

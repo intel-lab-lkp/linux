@@ -33,19 +33,29 @@ static u64 __early_kern_hyp_va(u64 addr)
 	return addr;
 }
 
+static u64 __early_kern_sym_hyp_va(void *ptr)
+{
+	if (is_kernel_in_hyp_mode() || kvm_hyp_init_uses_ttbr1())
+		return  (u64)ptr;
+
+	return __early_kern_hyp_va((u64)lm_alias(ptr));
+}
+
 /*
  * Store a hyp VA <-> PA offset into a EL2-owned variable.
  */
 static void init_hyp_physvirt_offset(void)
 {
-	u64 kern_va, hyp_va;
+	u64 kern_va, hyp_va, sym_va;
 
 	/* Compute the offset from the hyp VA and PA of a random symbol. */
 	kern_va = (u64)lm_alias(__hyp_text_start);
 	hyp_va = __early_kern_hyp_va(kern_va);
 	hyp_physvirt_offset = (s64)__pa(kern_va) - (s64)hyp_va;
 
-	hyp_symbol_physvirt_offset = hyp_physvirt_offset;
+	sym_va = __early_kern_sym_hyp_va(__hyp_text_start);
+	hyp_symbol_physvirt_offset = (s64)__pa_symbol(__hyp_text_start) -
+				     (s64)sym_va;
 }
 
 /*
@@ -87,6 +97,14 @@ __init void kvm_compute_layout(void)
 	u64 hyp_va_msb;
 	u32 hyp_va_bits = kvm_hyp_va_bits();
 
+	if (kvm_hyp_init_uses_ttbr1()) {
+		tag_lsb = 0;
+		tag_val = 0;
+		va_mask = ~0ULL;
+		init_hyp_physvirt_offset();
+		return;
+	}
+
 	/* Where is my RAM region? */
 	hyp_va_msb  = idmap_addr & BIT(hyp_va_bits - 1);
 	hyp_va_msb ^= BIT(hyp_va_bits - 1);
@@ -116,6 +134,9 @@ __init void kvm_apply_hyp_relocations(void)
 	int32_t *rel;
 	int32_t *begin = (int32_t *)__hyp_reloc_begin;
 	int32_t *end = (int32_t *)__hyp_reloc_end;
+
+	if (kvm_hyp_init_uses_ttbr1())
+		return;
 
 	for (rel = begin; rel < end; ++rel) {
 		uintptr_t *ptr, kimg_va;
@@ -187,14 +208,15 @@ void __init kvm_update_va_mask(struct alt_instr *alt,
 		u32 rd, rn, insn, oinsn;
 
 		/*
-		 * VHE doesn't need any address translation, let's NOP
+		 * VHE/hVHE doesn't need any address translation, let's NOP
 		 * everything.
 		 *
 		 * Alternatively, if the tag is zero (because the layout
 		 * dictates it and we don't have any spare bits in the
 		 * address), NOP everything after masking the kernel VA.
 		 */
-		if (cpus_have_cap(ARM64_HAS_VIRT_HOST_EXTN) || (!tag_val && i > 0)) {
+		if (cpus_have_cap(ARM64_HAS_VIRT_HOST_EXTN) ||
+		    kvm_hyp_init_uses_ttbr1() || (!tag_val && i > 0)) {
 			updptr[i] = cpu_to_le32(aarch64_insn_gen_nop());
 			continue;
 		}
@@ -225,7 +247,7 @@ void kvm_patch_vector_branch(struct alt_instr *alt,
 	/*
 	 * Compute HYP VA by using the same computation as kern_hyp_va()
 	 */
-	addr = __early_kern_hyp_va((u64)kvm_hyp_kimg_kaddr(__kvm_hyp_vector));
+	addr = __early_kern_sym_hyp_va(__kvm_hyp_vector);
 
 	/* Use PC[10:7] to branch to the same vector in KVM */
 	addr |= ((u64)origptr & GENMASK_ULL(10, 7));

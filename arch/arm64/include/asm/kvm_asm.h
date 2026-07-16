@@ -210,7 +210,8 @@ struct kvm_nvhe_init_params {
 	unsigned long tpidr_el2;
 	unsigned long stack_hyp_va;
 	unsigned long stack_pa;
-	phys_addr_t pgd_pa;
+	phys_addr_t ttbr0_pgd_pa;
+	phys_addr_t ttbr1_pgd_pa;
 	unsigned long hcr_el2;
 	unsigned long vttbr;
 	unsigned long vtcr;

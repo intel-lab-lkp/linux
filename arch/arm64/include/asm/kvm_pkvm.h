@@ -139,6 +139,9 @@ static inline unsigned long hyp_s1_pgtable_pages(void)
 	/* Allow 1 GiB for private mappings */
 	res += __hyp_pgtable_max_pages(SZ_1G >> PAGE_SHIFT);
 
+	/* Allow a separate TTBR0 idmap page-table. */
+	res += __hyp_pgtable_max_pages(1);
+
 	return res;
 }
 

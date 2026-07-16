@@ -256,6 +256,14 @@ enum kvm_pgtable_stage2_flags {
 };
 
 /**
+ * enum kvm_pgtable_hyp_flags - Hypervisor page-table flags.
+ * @KVM_PGTABLE_HYP_TTBR1:	Walk TTBR1 canonical virtual addresses.
+ */
+enum kvm_pgtable_hyp_flags {
+	KVM_PGTABLE_HYP_TTBR1			= BIT(0),
+};
+
+/**
  * enum kvm_pgtable_prot - Page-table permissions and attributes.
  * @KVM_PGTABLE_PROT_UX:	Unprivileged execute permission.
  * @KVM_PGTABLE_PROT_PX:	Privileged execute permission.
@@ -443,6 +451,7 @@ static inline bool kvm_pgtable_walk_lock_held(void)
  * @start_level:	Level at which the page-table walk starts.
  * @pgd:		Pointer to the first top-level entry of the page-table.
  * @mm_ops:		Memory management callbacks.
+ * @hyp_flags:		Hypervisor page-table flags.
  * @mmu:		Stage-2 KVM MMU struct. Unused for stage-1 page-tables.
  * @flags:		Stage-2 page-table flags.
  * @force_pte_cb:	Function that returns true if page level mappings must
@@ -457,6 +466,9 @@ struct kvm_pgtable {
 			kvm_pteref_t				pgd;
 			struct kvm_pgtable_mm_ops		*mm_ops;
 
+			/* Hyp only */
+			enum kvm_pgtable_hyp_flags		hyp_flags;
+
 			/* Stage-2 only */
 			enum kvm_pgtable_stage2_flags		flags;
 			kvm_pgtable_force_pte_cb_t		force_pte_cb;
@@ -464,6 +476,11 @@ struct kvm_pgtable {
 	};
 	struct kvm_s2_mmu					*mmu;
 };
+
+static inline void kvm_pgtable_hyp_enable_ttbr1(struct kvm_pgtable *pgt)
+{
+	pgt->hyp_flags |= KVM_PGTABLE_HYP_TTBR1;
+}
 
 /**
  * kvm_pgtable_hyp_init() - Initialise a hypervisor stage-1 page-table.
@@ -850,6 +867,16 @@ int kvm_pgtable_stage2_split(struct kvm_pgtable *pgt, u64 addr, u64 size,
  */
 int kvm_pgtable_walk(struct kvm_pgtable *pgt, u64 addr, u64 size,
 		     struct kvm_pgtable_walker *walker);
+
+/**
+ * kvm_pgtable_hyp_walk() - Walk the entire usable VA range of a hyp pgtable.
+ * @pgt:	Page-table structure initialised by kvm_pgtable_hyp_init().
+ * @walker:	Walker callback description.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int kvm_pgtable_hyp_walk(struct kvm_pgtable *pgt,
+			 struct kvm_pgtable_walker *walker);
 
 /**
  * kvm_pgtable_get_leaf() - Walk a page-table and retrieve the leaf entry

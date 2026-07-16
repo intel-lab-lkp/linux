@@ -10,6 +10,7 @@
 #include <linux/bitfield.h>
 #include <asm/kvm_pgtable.h>
 #include <asm/stage2_pgtable.h>
+#include <asm/kvm_mmu.h>
 
 struct kvm_pgtable_walk_data {
 	struct kvm_pgtable_walker	*walker;
@@ -69,6 +70,31 @@ static u32 kvm_pgd_pages(u32 ia_bits, s8 start_level)
 	};
 
 	return kvm_pgd_page_idx(&pgt, -1ULL) + 1;
+}
+
+static bool kvm_pgtable_walk_range_valid(struct kvm_pgtable *pgt,
+					 struct kvm_pgtable_walk_data *data)
+{
+	u64 limit = BIT(pgt->ia_bits);
+	u64 mask = limit - 1;
+	u64 last = data->end - 1;
+
+	if (data->addr > data->end)
+		return false;
+
+	if (!(pgt->hyp_flags & KVM_PGTABLE_HYP_TTBR1))
+		return data->addr <= limit && data->end <= limit;
+
+	/*
+	 * TTBR1 hyp walks use canonical virtual addresses supplied by the
+	 * caller. The index helpers extract the relevant bits for each level;
+	 * the masked comparison here only rejects ranges that cross out of the
+	 * single TTBR1 address window described by ia_bits.
+	 */
+	if ((data->addr | mask) != ~0ULL || (last | mask) != ~0ULL)
+		return false;
+
+	return (data->addr & mask) <= (last & mask);
 }
 
 static bool kvm_pte_table(kvm_pte_t pte, s8 level)
@@ -193,8 +219,13 @@ static inline int __kvm_pgtable_visit(struct kvm_pgtable_walk_data *data,
 		goto out;
 
 	if (!table) {
-		data->addr = ALIGN_DOWN(data->addr, kvm_granule_size(level));
-		data->addr += kvm_granule_size(level);
+		u64 granule = kvm_granule_size(level);
+		u64 addr = ALIGN_DOWN(data->addr, granule);
+
+		if (granule > data->end - addr)
+			data->addr = data->end;
+		else
+			data->addr = addr + granule;
 		goto out;
 	}
 
@@ -241,9 +272,8 @@ static int _kvm_pgtable_walk(struct kvm_pgtable *pgt, struct kvm_pgtable_walk_da
 {
 	u32 idx;
 	int ret = 0;
-	u64 limit = BIT(pgt->ia_bits);
 
-	if (data->addr > limit || data->end > limit)
+	if (!kvm_pgtable_walk_range_valid(pgt, data))
 		return -ERANGE;
 
 	if (!pgt->pgd)
@@ -279,6 +309,26 @@ int kvm_pgtable_walk(struct kvm_pgtable *pgt, u64 addr, u64 size,
 	kvm_pgtable_walk_end(walker);
 
 	return r;
+}
+
+int kvm_pgtable_hyp_walk(struct kvm_pgtable *pgt,
+			 struct kvm_pgtable_walker *walker)
+{
+	u64 size = BIT(pgt->ia_bits);
+	u64 addr = 0;
+
+	if (pgt->hyp_flags & KVM_PGTABLE_HYP_TTBR1) {
+		addr = -size;
+
+		/*
+		 * The exclusive end of the TTBR1 range cannot be represented in
+		 * a u64. Exclude the last page, which cannot be mapped through
+		 * kvm_pgtable_walk() for the same reason.
+		 */
+		size -= PAGE_SIZE;
+	}
+
+	return kvm_pgtable_walk(pgt, addr, size, walker);
 }
 
 struct leaf_walk_data {
@@ -539,6 +589,7 @@ int kvm_pgtable_hyp_init(struct kvm_pgtable *pgt, u32 va_bits,
 	pgt->ia_bits		= va_bits;
 	pgt->start_level	= start_level;
 	pgt->mm_ops		= mm_ops;
+	pgt->hyp_flags		= 0;
 	pgt->mmu		= NULL;
 	pgt->force_pte_cb	= NULL;
 
@@ -568,7 +619,7 @@ void kvm_pgtable_hyp_destroy(struct kvm_pgtable *pgt)
 		.flags	= KVM_PGTABLE_WALK_LEAF | KVM_PGTABLE_WALK_TABLE_POST,
 	};
 
-	WARN_ON(kvm_pgtable_walk(pgt, 0, BIT(pgt->ia_bits), &walker));
+	WARN_ON(kvm_pgtable_hyp_walk(pgt, &walker));
 	pgt->mm_ops->put_page(kvm_dereference_pteref(&walker, pgt->pgd));
 	pgt->pgd = NULL;
 }
@@ -1589,6 +1640,7 @@ int __kvm_pgtable_stage2_init(struct kvm_pgtable *pgt, struct kvm_s2_mmu *mmu,
 	pgt->start_level	= start_level;
 	pgt->mm_ops		= mm_ops;
 	pgt->mmu		= mmu;
+	pgt->hyp_flags		= 0;
 	pgt->flags		= flags;
 	pgt->force_pte_cb	= force_pte_cb;
 

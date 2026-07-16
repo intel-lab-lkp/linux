@@ -2124,26 +2124,19 @@ static int kvm_init_vector_slots(void)
 	return 0;
 }
 
-static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
+static unsigned long __init kvm_compute_hyp_tcr(u32 hyp_va_bits)
 {
-	struct kvm_nvhe_init_params *params = per_cpu_ptr_nvhe_sym(kvm_init_params, cpu);
-	unsigned long tcr;
+	unsigned long tcr = read_sysreg(tcr_el1);
 
-	/*
-	 * Calculate the raw per-cpu offset without a translation from the
-	 * kernel's mapping to the linear mapping, and store it in tpidr_el2
-	 * so that we can use adr_l to access per-cpu variables in EL2.
-	 * Also drop the KASAN tag which gets in the way...
-	 */
-	params->tpidr_el2 = (unsigned long)kasan_reset_tag(per_cpu_ptr_nvhe_sym(__per_cpu_start, cpu)) -
-			    (unsigned long)kvm_hyp_kimg_kaddr(CHOOSE_NVHE_SYM(__per_cpu_start));
-
-	params->mair_el2 = read_sysreg(mair_el1);
-
-	tcr = read_sysreg(tcr_el1);
 	if (cpus_have_final_cap(ARM64_KVM_HVHE)) {
-		tcr &= ~(TCR_HD | TCR_HA | TCR_A1 | TCR_T0SZ_MASK);
-		tcr |= TCR_EPD1_MASK;
+		tcr &= ~(TCR_HD | TCR_HA | TCR_A1 | TCR_T0SZ_MASK |
+			 TCR_T1SZ_MASK |
+			 TCR_EPD0_MASK | TCR_EPD1_MASK);
+
+		if (kvm_hyp_uses_ttbr1())
+			tcr |= TCR_T1SZ(hyp_va_bits);
+		else
+			tcr |= TCR_EPD1_MASK;
 	} else {
 		unsigned long ips = FIELD_GET(TCR_IPS_MASK, tcr);
 
@@ -2152,10 +2145,30 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 		if (lpa2_is_enabled())
 			tcr |= TCR_EL2_DS;
 	}
-	tcr |= TCR_T0SZ(hyp_va_bits);
-	params->tcr_el2 = tcr;
 
-	params->pgd_pa = kvm_mmu_get_httbr();
+	return tcr | TCR_T0SZ(hyp_va_bits);
+}
+
+static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
+{
+	struct kvm_nvhe_init_params *params = per_cpu_ptr_nvhe_sym(kvm_init_params, cpu);
+
+	/*
+	 * Calculate the raw per-cpu offset without a translation from the
+	 * kernel's mapping to the linear mapping, and store it in tpidr_el2
+	 * so that we can use adr_l to access per-cpu variables in EL2.
+	 * In TTBR1 mode, this is the delta from the canonical hyp symbol to
+	 * the linear-map VA at which the allocated per-cpu copy is mapped.
+	 * Also drop the KASAN tag which gets in the way...
+	 */
+	params->tpidr_el2 = (unsigned long)kasan_reset_tag(per_cpu_ptr_nvhe_sym(__per_cpu_start, cpu)) -
+			    (unsigned long)kvm_hyp_kimg_kaddr(CHOOSE_NVHE_SYM(__per_cpu_start));
+
+	params->mair_el2 = read_sysreg(mair_el1);
+	params->tcr_el2 = kvm_compute_hyp_tcr(hyp_va_bits);
+
+	params->ttbr0_pgd_pa = kvm_mmu_get_httbr();
+	params->ttbr1_pgd_pa = kvm_mmu_get_hyp_ttbr1();
 	if (is_protected_kvm_enabled())
 		params->hcr_el2 = HCR_HOST_NVHE_PROTECTED_FLAGS;
 	else

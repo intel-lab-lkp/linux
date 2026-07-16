@@ -19,6 +19,7 @@
 #include <nvhe/spinlock.h>
 
 struct kvm_pgtable pkvm_pgtable;
+struct kvm_pgtable pkvm_idmap_pgtable;
 hyp_spinlock_t pkvm_pgd_lock;
 
 struct memblock_region hyp_memory[HYP_MEMBLOCK_REGIONS];
@@ -431,6 +432,22 @@ int hyp_create_fixmap(void)
 	return create_fixblock();
 }
 
+static int pkvm_map_idmap_text(unsigned long start, unsigned long end)
+{
+	unsigned long idmap_start, idmap_end;
+
+	idmap_start = __hyp_symbol_pa(__hyp_idmap_text_start);
+	idmap_start = ALIGN_DOWN(idmap_start, PAGE_SIZE);
+	idmap_end = __hyp_symbol_pa(__hyp_idmap_text_end);
+	idmap_end = ALIGN(idmap_end, PAGE_SIZE);
+
+	if (WARN_ON(start != idmap_start || end != idmap_end))
+		return -EINVAL;
+
+	return kvm_pgtable_hyp_map(&pkvm_idmap_pgtable, start,
+				   end - start, start, PAGE_HYP_EXEC);
+}
+
 int hyp_create_idmap(u32 hyp_va_bits)
 {
 	unsigned long start, end;
@@ -440,6 +457,13 @@ int hyp_create_idmap(u32 hyp_va_bits)
 
 	end = __hyp_symbol_pa(__hyp_idmap_text_end);
 	end = ALIGN(end, PAGE_SIZE);
+
+	if (kvm_hyp_uses_ttbr1()) {
+		__hyp_private_va_base = kvm_hyp_ttbr1_private_start();
+		__hyp_vmemmap = kvm_hyp_ttbr1_vmemmap_base();
+
+		return pkvm_map_idmap_text(start, end);
+	}
 
 	/*
 	 * One half of the VA space is reserved to linearly map portions of

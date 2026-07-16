@@ -20,11 +20,13 @@
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_emulate.h>
+#include <asm/sections.h>
 #include <asm/virt.h>
 
 #include "trace.h"
 
 static struct kvm_pgtable *hyp_pgtable;
+static struct kvm_pgtable *hyp_idmap_pgtable;
 static DEFINE_MUTEX(kvm_hyp_pgd_mutex);
 
 static unsigned long __ro_after_init hyp_idmap_start;
@@ -392,6 +394,11 @@ static void stage2_flush_vm(struct kvm *kvm)
 void __init free_hyp_pgds(void)
 {
 	mutex_lock(&kvm_hyp_pgd_mutex);
+	if (hyp_idmap_pgtable) {
+		kvm_pgtable_hyp_destroy(hyp_idmap_pgtable);
+		kfree(hyp_idmap_pgtable);
+		hyp_idmap_pgtable = NULL;
+	}
 	if (hyp_pgtable) {
 		kvm_pgtable_hyp_destroy(hyp_pgtable);
 		kfree(hyp_pgtable);
@@ -2481,6 +2488,17 @@ bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 
 phys_addr_t kvm_mmu_get_httbr(void)
 {
+	if (hyp_idmap_pgtable)
+		return __pa(hyp_idmap_pgtable->pgd);
+
+	return __pa(hyp_pgtable->pgd);
+}
+
+phys_addr_t kvm_mmu_get_hyp_ttbr1(void)
+{
+	if (!kvm_hyp_uses_ttbr1())
+		return 0;
+
 	return __pa(hyp_pgtable->pgd);
 }
 
@@ -2491,9 +2509,15 @@ phys_addr_t kvm_get_idmap_vector(void)
 
 static int kvm_map_idmap_text(void)
 {
+	struct kvm_pgtable *pgt = hyp_idmap_pgtable ?: hyp_pgtable;
 	unsigned long size = hyp_idmap_end - hyp_idmap_start;
-	int err = __create_hyp_mappings(hyp_idmap_start, size, hyp_idmap_start,
-					PAGE_HYP_EXEC);
+	int err;
+
+	if (WARN_ON(kvm_hyp_uses_ttbr1() && !hyp_idmap_pgtable))
+		return -EINVAL;
+
+	err = kvm_pgtable_hyp_map(pgt, hyp_idmap_start, size, hyp_idmap_start,
+				  PAGE_HYP_EXEC);
 	if (err)
 		kvm_err("Failed to idmap %lx-%lx\n",
 			hyp_idmap_start, hyp_idmap_end);
@@ -2559,14 +2583,39 @@ int __init kvm_mmu_init(u32 hyp_va_bits)
 	if (err)
 		goto out_free_pgtable;
 
+	if (kvm_hyp_uses_ttbr1()) {
+		kvm_pgtable_hyp_enable_ttbr1(hyp_pgtable);
+
+		hyp_idmap_pgtable = kzalloc_obj(*hyp_idmap_pgtable);
+		if (!hyp_idmap_pgtable) {
+			kvm_err("Hyp mode idmap page-table not allocated\n");
+			err = -ENOMEM;
+			goto out_destroy_pgtable;
+		}
+
+		err = kvm_pgtable_hyp_init(hyp_idmap_pgtable, hyp_va_bits,
+					   &kvm_hyp_mm_ops);
+		if (err)
+			goto out_free_idmap_pgtable;
+	}
+
 	err = kvm_map_idmap_text();
 	if (err)
-		goto out_destroy_pgtable;
+		goto out_destroy_idmap_pgtable;
 
-	io_map_base = hyp_idmap_start;
+	if (kvm_hyp_uses_ttbr1())
+		io_map_base = kvm_hyp_ttbr1_private_end();
+	else
+		io_map_base = hyp_idmap_start;
 	__hyp_va_bits = hyp_va_bits;
 	return 0;
 
+out_destroy_idmap_pgtable:
+	if (hyp_idmap_pgtable)
+		kvm_pgtable_hyp_destroy(hyp_idmap_pgtable);
+out_free_idmap_pgtable:
+	kfree(hyp_idmap_pgtable);
+	hyp_idmap_pgtable = NULL;
 out_destroy_pgtable:
 	kvm_pgtable_hyp_destroy(hyp_pgtable);
 out_free_pgtable:

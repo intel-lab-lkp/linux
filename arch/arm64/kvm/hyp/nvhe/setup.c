@@ -109,6 +109,15 @@ static int recreate_hyp_mappings(phys_addr_t phys, unsigned long size,
 	if (ret)
 		return ret;
 
+	if (kvm_hyp_uses_ttbr1()) {
+		kvm_pgtable_hyp_enable_ttbr1(&pkvm_pgtable);
+
+		ret = kvm_pgtable_hyp_init(&pkvm_idmap_pgtable, hyp_va_bits,
+					   &hyp_early_alloc_mm_ops);
+		if (ret)
+			return ret;
+	}
+
 	ret = hyp_create_idmap(hyp_va_bits);
 	if (ret)
 		return ret;
@@ -169,10 +178,25 @@ static void update_nvhe_init_params(void)
 
 	for (i = 0; i < hyp_nr_cpus; i++) {
 		params = per_cpu_ptr(&kvm_init_params, i);
-		params->pgd_pa = __hyp_linear_pa(pkvm_pgtable.pgd);
+		params->ttbr0_pgd_pa = kvm_hyp_uses_ttbr1() ?
+					__hyp_linear_pa(pkvm_idmap_pgtable.pgd) :
+					__hyp_linear_pa(pkvm_pgtable.pgd);
+		params->ttbr1_pgd_pa = kvm_hyp_uses_ttbr1() ?
+					__hyp_linear_pa(pkvm_pgtable.pgd) : 0;
 		dcache_clean_inval_poc((unsigned long)params,
 				    (unsigned long)params + sizeof(*params));
 	}
+}
+
+static bool pkvm_init_ttbrs_valid(struct kvm_nvhe_init_params *params)
+{
+	if (!params->ttbr0_pgd_pa)
+		return false;
+
+	if (kvm_hyp_uses_ttbr1())
+		return params->ttbr1_pgd_pa;
+
+	return !params->ttbr1_pgd_pa;
 }
 
 static void *hyp_zalloc_hyp_page(void *arg)
@@ -284,8 +308,7 @@ static int fix_hyp_pgtable_refcnt(void)
 		.arg	= pkvm_pgtable.mm_ops,
 	};
 
-	return kvm_pgtable_walk(&pkvm_pgtable, 0, BIT(pkvm_pgtable.ia_bits),
-				&walker);
+	return kvm_pgtable_hyp_walk(&pkvm_pgtable, &walker);
 }
 
 void __noreturn __pkvm_init_finalise(void)
@@ -371,8 +394,12 @@ int __pkvm_init(phys_addr_t phys, unsigned long size, unsigned long *per_cpu_bas
 
 	/* Jump in the idmap page to switch to the new page-tables */
 	params = this_cpu_ptr(&kvm_init_params);
+	if (WARN_ON(!pkvm_init_ttbrs_valid(params)))
+		return -EINVAL;
+
 	fn = (typeof(fn))__hyp_symbol_pa(__pkvm_init_switch_pgd);
-	fn(params->pgd_pa, params->stack_hyp_va, __pkvm_init_finalise);
+	fn(params->ttbr0_pgd_pa, params->ttbr1_pgd_pa,
+	   params->stack_hyp_va, __pkvm_init_finalise);
 
 	unreachable();
 }

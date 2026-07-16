@@ -11,6 +11,7 @@
 #include <nvhe/spinlock.h>
 
 extern struct kvm_pgtable pkvm_pgtable;
+extern struct kvm_pgtable pkvm_idmap_pgtable;
 extern hyp_spinlock_t pkvm_pgd_lock;
 
 int hyp_create_fixmap(void);
