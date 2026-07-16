@@ -798,8 +798,8 @@ static int hp_wmi_get_tablet_mode(void)
 	ret = hp_wmi_perform_query(HPWMI_SYSTEM_DEVICE_MODE, HPWMI_READ,
 				   system_device_mode, zero_if_sup(system_device_mode),
 				   sizeof(system_device_mode));
-	if (ret < 0)
-		return ret;
+	if (ret)
+		return ret < 0 ? ret : -EINVAL;
 
 	return system_device_mode[0] == DEVICE_MODE_TABLET;
 }
@@ -1198,7 +1198,7 @@ static void hp_wmi_notify(union acpi_object *obj, void *context)
 {
 	u32 event_id, event_data;
 	u32 *location;
-	int key_code;
+	int key_code, state;
 
 	if (!obj)
 		return;
@@ -1228,9 +1228,12 @@ static void hp_wmi_notify(union acpi_object *obj, void *context)
 		if (test_bit(SW_DOCK, hp_wmi_input_dev->swbit))
 			input_report_switch(hp_wmi_input_dev, SW_DOCK,
 					    hp_wmi_get_dock_state());
-		if (test_bit(SW_TABLET_MODE, hp_wmi_input_dev->swbit))
-			input_report_switch(hp_wmi_input_dev, SW_TABLET_MODE,
-					    hp_wmi_get_tablet_mode());
+		if (test_bit(SW_TABLET_MODE, hp_wmi_input_dev->swbit)) {
+			state = hp_wmi_get_tablet_mode();
+			if (state >= 0)
+				input_report_switch(hp_wmi_input_dev,
+						    SW_TABLET_MODE, state);
+		}
 		input_sync(hp_wmi_input_dev);
 		break;
 	case HPWMI_PARK_HDD:
@@ -2431,6 +2434,8 @@ static void __exit hp_wmi_bios_remove(struct platform_device *device)
 
 static int hp_wmi_resume_handler(struct device *device)
 {
+	int state;
+
 	/*
 	 * Hardware state may have changed while suspended, so trigger
 	 * input events for the current state. As this is a switch,
@@ -2441,9 +2446,12 @@ static int hp_wmi_resume_handler(struct device *device)
 		if (test_bit(SW_DOCK, hp_wmi_input_dev->swbit))
 			input_report_switch(hp_wmi_input_dev, SW_DOCK,
 					    hp_wmi_get_dock_state());
-		if (test_bit(SW_TABLET_MODE, hp_wmi_input_dev->swbit))
-			input_report_switch(hp_wmi_input_dev, SW_TABLET_MODE,
-					    hp_wmi_get_tablet_mode());
+		if (test_bit(SW_TABLET_MODE, hp_wmi_input_dev->swbit)) {
+			state = hp_wmi_get_tablet_mode();
+			if (state >= 0)
+				input_report_switch(hp_wmi_input_dev,
+						    SW_TABLET_MODE, state);
+		}
 		input_sync(hp_wmi_input_dev);
 	}
 
