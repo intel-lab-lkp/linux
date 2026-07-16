@@ -395,6 +395,11 @@ static int dmaengine_pcm_request_chan_of(struct dmaengine_pcm *pcm,
 			 */
 			if (PTR_ERR(chan) == -EPROBE_DEFER)
 				return -EPROBE_DEFER;
+
+			if (device_property_match_string(dev, "dma-names", name) >= 0)
+				dev_warn(dev, "dma-names has '%s' but request failed (%ld)\n",
+					 name, PTR_ERR(chan));
+
 			pcm->chan[i] = NULL;
 		} else {
 			pcm->chan[i] = chan;
@@ -405,6 +410,12 @@ static int dmaengine_pcm_request_chan_of(struct dmaengine_pcm *pcm,
 
 	if (pcm->flags & SND_DMAENGINE_PCM_FLAG_HALF_DUPLEX)
 		pcm->chan[1] = pcm->chan[0];
+
+	if (!pcm->chan[SNDRV_PCM_STREAM_PLAYBACK] &&
+	    !pcm->chan[SNDRV_PCM_STREAM_CAPTURE]) {
+		dev_err(dev, "no DMA chanel found for either playback or capture\n");
+		return -ENODEV;
+	}
 
 	return 0;
 }
