@@ -534,6 +534,25 @@ code != 0).
 
 Default: 0
 
+mpls
+~~~~
+
+Single-label MPLS frames (EtherType ``ETH_P_MPLS_UC`` 0x8847 or
+``ETH_P_MPLS_MC`` 0x8848 with bottom-of-stack bit set on the first
+label). The fast-path reads the 4-byte label entry, extracts
+label / TC / TTL / BoS, and writes them to FLOW_DISSECTOR_KEY_MPLS
+lse[0] when requested. Byte-identical with the slow path's
+__skb_flow_dissect_mpls() for lse_index=0, bos=1: the slow path
+returns OUT_GOOD on BoS without descending into the inner packet
+(MPLS hashing is on the label stack, not inner 5-tuple), so this
+fast-path does the same.
+
+Multi-label stacks (BoS=0 on the first label) defer to slow path —
+extending to depth-2 or more is a follow-up, mirroring the
+vlan -> qinq staging used earlier in this series.
+
+Default: 0
+
 3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 

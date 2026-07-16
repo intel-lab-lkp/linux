@@ -432,6 +432,7 @@ extern struct static_key_false flow_dissector_eth_ip_key;
 extern struct static_key_false flow_dissector_vlan_key;
 extern struct static_key_false flow_dissector_qinq_key;
 extern struct static_key_false flow_dissector_pppoe_key;
+extern struct static_key_false flow_dissector_mpls_key;
 
 /* struct flow_keys_digest:
  *

@@ -48,6 +48,8 @@ DEFINE_STATIC_KEY_FALSE(flow_dissector_qinq_key);
 EXPORT_SYMBOL(flow_dissector_qinq_key);
 DEFINE_STATIC_KEY_FALSE(flow_dissector_pppoe_key);
 EXPORT_SYMBOL(flow_dissector_pppoe_key);
+DEFINE_STATIC_KEY_FALSE(flow_dissector_mpls_key);
+EXPORT_SYMBOL(flow_dissector_mpls_key);
 
 /* IPv4 version/IHL byte of an option-less header: version 4, IHL 5. */
 #define FLOW_DIS_IPV4_VIHL_NOOPT	0x45
@@ -1396,6 +1398,73 @@ static bool flow_dissect_fast_pppoe(const struct sk_buff *skb,
 				      nhoff, hlen);
 }
 
+/* Single MPLS label (BoS=1): write FLOW_DISSECTOR_KEY_MPLS lse[0]
+ * when requested and stop -- the slow path returns OUT_GOOD on BoS
+ * without descending into the inner packet, so the fast path must
+ * not tail-call either. Multi-label stacks defer.
+ */
+static bool flow_dissect_fast_mpls(const struct sk_buff *skb,
+				   struct flow_dissector *flow_dissector,
+				   void *target_container,
+				   const void *data,
+				   __be16 proto, int nhoff, int hlen)
+{
+	struct flow_dissector_key_control *key_control;
+	struct flow_dissector_key_basic *key_basic;
+	struct flow_dissector_key_mpls *key_mpls;
+	struct flow_dissector_mpls_lse *lse;
+	const struct mpls_label *hdr;
+	u32 entry, label, bos;
+
+	if (unlikely(hlen - nhoff < (int)sizeof(*hdr)))
+		return false;
+	hdr = (const struct mpls_label *)((const u8 *)data + nhoff);
+	entry = ntohl(hdr->entry);
+	bos = (entry & MPLS_LS_S_MASK) >> MPLS_LS_S_SHIFT;
+
+	/* Multi-label stack: defer. */
+	if (!bos)
+		return false;
+
+	/* Neither MPLS key requested: the slow path returns OUT_GOOD without
+	 * writing the key; skipping the write block matches it.
+	 */
+	label = (entry & MPLS_LS_LABEL_MASK) >> MPLS_LS_LABEL_SHIFT;
+
+	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_MPLS)) {
+		key_mpls = skb_flow_dissector_target(flow_dissector,
+						     FLOW_DISSECTOR_KEY_MPLS,
+						     target_container);
+		lse = &key_mpls->ls[0];
+		lse->mpls_ttl = (entry & MPLS_LS_TTL_MASK) >> MPLS_LS_TTL_SHIFT;
+		lse->mpls_bos = bos;
+		lse->mpls_tc = (entry & MPLS_LS_TC_MASK) >> MPLS_LS_TC_SHIFT;
+		lse->mpls_label = label;
+		dissector_set_mpls_lse(key_mpls, 0);
+	}
+
+	/* Mirror the slow path's out_good terminal: nhoff advances past the
+	 * LSE, then thoff/basic are written from the final proto/ip_proto.
+	 */
+	nhoff += (int)sizeof(*hdr);
+	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_CONTROL)) {
+		key_control = skb_flow_dissector_target(flow_dissector,
+							FLOW_DISSECTOR_KEY_CONTROL,
+							target_container);
+		key_control->thoff = min_t(u16, nhoff,
+					   skb ? skb->len : hlen);
+	}
+	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_BASIC)) {
+		key_basic = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_BASIC,
+						      target_container);
+		key_basic->n_proto = proto;
+		key_basic->ip_proto = 0;
+	}
+
+	return true;
+}
+
 /* Top-level dispatcher: eligibility check (only the two standard
  * dissectors and flag subset) + per-proto switch with per-shape
  * static_branch gating. Each case's branch is a forward not-taken JMP
@@ -1449,6 +1518,13 @@ static bool flow_dissect_fast(const struct sk_buff *skb,
 		return flow_dissect_fast_pppoe(skb, flow_dissector,
 					       target_container, data,
 					       nhoff, hlen);
+	case htons(ETH_P_MPLS_UC):
+	case htons(ETH_P_MPLS_MC):
+		if (!static_branch_unlikely(&flow_dissector_mpls_key))
+			return false;
+		return flow_dissect_fast_mpls(skb, flow_dissector,
+					      target_container, data,
+					      proto, nhoff, hlen);
 	default:
 		return false;
 	}
@@ -2595,6 +2671,13 @@ static struct ctl_table flow_dissector_sysctl_table[] = {
 		.procname	= "pppoe",
 		.data		= &flow_dissector_pppoe_key.key,
 		.maxlen		= sizeof(flow_dissector_pppoe_key),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
+	},
+	{
+		.procname	= "mpls",
+		.data		= &flow_dissector_mpls_key.key,
+		.maxlen		= sizeof(flow_dissector_mpls_key),
 		.mode		= 0644,
 		.proc_handler	= proc_do_static_key,
 	},
