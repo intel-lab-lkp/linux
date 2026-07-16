@@ -18,11 +18,23 @@ CONFIG_ZSMALLOC=y
 
 ZRAM Testcases
 --------------
-zram_lib.sh: create library with initialization/cleanup functions
-zram.sh: For sanity check of CONFIG_ZRAM and to run zram01 and zram02
+zram_lib.sh: library with initialization/cleanup functions and helpers;
+             includes zram_check_alg_support() which verifies a requested
+             compression algorithm is available and exits with ksft_skip
+             when it is not.
+zram.sh: sanity check of CONFIG_ZRAM; runs zram01 and zram02.
+         Accepts an optional -a <algorithm> flag (default: lzo) to select
+         the compression algorithm forwarded to zram01.sh.
+         Usage: zram.sh [-a <algorithm>]
+           -a <algorithm>  compression algorithm to test (default: lzo)
+                           must be listed in /sys/block/zramN/comp_algorithm
+           -h              show help message
 
 Two functional tests: zram01 and zram02:
-zram01.sh: creates general purpose ram disks with ext4 filesystems
+zram01.sh: creates general purpose ram disks with ext4 filesystems.
+           Accepts the compression algorithm as an optional first positional
+           argument (default: lzo).  Verifies kernel support for the
+           requested algorithm before running.
 zram02.sh: creates block device for swap
 
 Commands required for testing:

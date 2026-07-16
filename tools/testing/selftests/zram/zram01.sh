@@ -29,7 +29,9 @@ zram_max_streams="2"
 zram_sizes="2097152" # 2MB
 zram_mem_limits="2M"
 zram_filesystems="ext4"
-zram_algs="lzo"
+# Accept the compression algorithm as the first positional argument;
+# fall back to lzo when not provided.
+zram_algs="${1:-lzo}"
 
 zram_fill_fs()
 {
@@ -58,6 +60,7 @@ zram_fill_fs()
 
 check_prereqs
 zram_load
+zram_check_alg_support "$zram_algs" "$dev_start"
 zram_max_streams
 zram_compress_alg
 zram_set_disksizes

@@ -30,6 +30,26 @@ check_prereqs()
 	fi
 }
 
+# zram_check_alg_support <alg> <dev_idx>
+# Verify <alg> appears in comp_algorithm of zram device <dev_idx>.
+# Must be called after zram_load so the device already exists.
+# Exits with ksft_skip if the algorithm is not supported by this kernel build.
+zram_check_alg_support()
+{
+	local alg=$1
+	local idx=$2
+
+	[ -z "$alg" ] && { echo "skip: no compression algorithm specified" >&2; \
+		zram_cleanup; exit $ksft_skip; }
+
+	if ! tr -d '[]' < /sys/block/zram${idx}/comp_algorithm 2>/dev/null \
+			| grep -qw "${alg}"; then
+		echo "skip: compression algorithm '$alg' is not available" >&2
+		zram_cleanup
+		exit $ksft_skip
+	fi
+}
+
 kernel_gte()
 {
 	major=${1%.*}
