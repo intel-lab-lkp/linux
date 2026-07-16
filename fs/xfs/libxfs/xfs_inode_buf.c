@@ -480,7 +480,7 @@ xfs_dinode_verify_fork(
 	return NULL;
 }
 
-static xfs_failaddr_t
+xfs_failaddr_t
 xfs_dinode_verify_forkoff(
 	struct xfs_dinode	*dip,
 	struct xfs_mount	*mp)

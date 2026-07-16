@@ -27,6 +27,8 @@ int	xfs_inode_from_disk(struct xfs_inode *ip, struct xfs_dinode *from);
 
 xfs_failaddr_t xfs_dinode_verify(struct xfs_mount *mp, xfs_ino_t ino,
 			   struct xfs_dinode *dip);
+xfs_failaddr_t xfs_dinode_verify_forkoff(struct xfs_dinode *dip,
+			   struct xfs_mount *mp);
 xfs_failaddr_t xfs_dinode_verify_metadir(struct xfs_mount *mp,
 		struct xfs_dinode *dip, uint16_t mode, uint16_t flags,
 		uint64_t flags2);

@@ -366,11 +366,23 @@ xlog_recover_inode_commit_pass2(
 		error = -EFSCORRUPTED;
 		goto out_release;
 	}
+	/* ri_buf[1] may be absent or shorter than a log dinode */
+	if (XFS_IS_CORRUPT(mp, item->ri_cnt < 2) ||
+	    XFS_IS_CORRUPT(mp,
+			   item->ri_buf[1].iov_len < xfs_log_dinode_size(mp))) {
+		error = -EFSCORRUPTED;
+		goto out_release;
+	}
 	ldip = item->ri_buf[1].iov_base;
 	if (XFS_IS_CORRUPT(mp, ldip->di_magic != XFS_DINODE_MAGIC)) {
 		xfs_alert(mp,
 			"%s: Bad inode log record, rec ptr "PTR_FMT", ino %lld",
 			__func__, item, in_f->ilf_ino);
+		error = -EFSCORRUPTED;
+		goto out_release;
+	}
+	/* the size gate and fork offsets assume the mount's inode version */
+	if (XFS_IS_CORRUPT(mp, !xfs_dinode_good_version(mp, ldip->di_version))) {
 		error = -EFSCORRUPTED;
 		goto out_release;
 	}
@@ -462,15 +474,6 @@ xlog_recover_inode_commit_pass2(
 	if (error)
 		goto out_release;
 
-	if (unlikely(ldip->di_forkoff > mp->m_sb.sb_inodesize)) {
-		XFS_CORRUPTION_ERROR("Bad log dinode fork offset",
-				XFS_ERRLEVEL_LOW, mp, ldip, sizeof(*ldip));
-		xfs_alert(mp,
-			"Bad inode 0x%llx, di_forkoff 0x%x",
-			in_f->ilf_ino, ldip->di_forkoff);
-		error = -EFSCORRUPTED;
-		goto out_release;
-	}
 	isize = xfs_log_dinode_size(mp);
 	if (unlikely(item->ri_buf[1].iov_len > isize)) {
 		XFS_CORRUPTION_ERROR("Bad log dinode size", XFS_ERRLEVEL_LOW,
@@ -495,6 +498,30 @@ xlog_recover_inode_commit_pass2(
 	xfs_log_dinode_to_disk(ldip, dip, current_lsn);
 
 	fields = in_f->ilf_fields;
+
+	/* forks are otherwise ASSERT-only; check di_forkoff and presence */
+	if (fields & (XFS_ILOG_DFORK | XFS_ILOG_AFORK)) {
+		if (XFS_IS_CORRUPT(mp, xfs_dinode_verify_forkoff(dip, mp) != NULL)) {
+			error = -EFSCORRUPTED;
+			goto out_release;
+		}
+	}
+	if (fields & XFS_ILOG_DFORK) {
+		if (XFS_IS_CORRUPT(mp, item->ri_cnt < 3) ||
+		    XFS_IS_CORRUPT(mp, item->ri_buf[2].iov_base == NULL)) {
+			error = -EFSCORRUPTED;
+			goto out_release;
+		}
+	}
+	if (fields & XFS_ILOG_AFORK) {
+		attr_index = (fields & XFS_ILOG_DFORK) ? 3 : 2;
+
+		if (XFS_IS_CORRUPT(mp, item->ri_cnt < attr_index + 1) ||
+		    XFS_IS_CORRUPT(mp, item->ri_buf[attr_index].iov_base == NULL)) {
+			error = -EFSCORRUPTED;
+			goto out_release;
+		}
+	}
 	if (fields & XFS_ILOG_DEV)
 		xfs_dinode_put_rdev(dip, in_f->ilf_u.ilfu_rdev);
 
@@ -510,6 +537,10 @@ xlog_recover_inode_commit_pass2(
 	switch (fields & XFS_ILOG_DFORK) {
 	case XFS_ILOG_DDATA:
 	case XFS_ILOG_DEXT:
+		if (XFS_IS_CORRUPT(mp, len > XFS_DFORK_DSIZE(dip, mp))) {
+			error = -EFSCORRUPTED;
+			goto out_release;
+		}
 		memcpy(XFS_DFORK_DPTR(dip), src, len);
 		break;
 
@@ -533,11 +564,6 @@ xlog_recover_inode_commit_pass2(
 	 * transaction.
 	 */
 	if (in_f->ilf_fields & XFS_ILOG_AFORK) {
-		if (in_f->ilf_fields & XFS_ILOG_DFORK) {
-			attr_index = 3;
-		} else {
-			attr_index = 2;
-		}
 		len = item->ri_buf[attr_index].iov_len;
 		src = item->ri_buf[attr_index].iov_base;
 		ASSERT(len == xlog_calc_iovec_len(in_f->ilf_asize));
@@ -546,7 +572,10 @@ xlog_recover_inode_commit_pass2(
 		case XFS_ILOG_ADATA:
 		case XFS_ILOG_AEXT:
 			dest = XFS_DFORK_APTR(dip);
-			ASSERT(len <= XFS_DFORK_ASIZE(dip, mp));
+			if (XFS_IS_CORRUPT(mp, len > XFS_DFORK_ASIZE(dip, mp))) {
+				error = -EFSCORRUPTED;
+				goto out_release;
+			}
 			memcpy(dest, src, len);
 			break;
 
