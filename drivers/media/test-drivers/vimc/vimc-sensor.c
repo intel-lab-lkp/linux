@@ -104,7 +104,7 @@ static int vimc_sensor_update_frame_timing(struct v4l2_subdev *sd,
 	u64 frame_interval_ns;
 
 	frame_interval_ns = total_pixels * NSEC_PER_SEC;
-	do_div(frame_interval_ns, pixel_rate);
+	frame_interval_ns = div64_u64(frame_interval_ns, pixel_rate);
 	vsensor->hw.fps_jiffies = nsecs_to_jiffies(frame_interval_ns);
 	if (vsensor->hw.fps_jiffies == 0)
 		vsensor->hw.fps_jiffies = 1;
