@@ -6363,10 +6363,14 @@ static void ipv6_ifa_notify(int event, struct inet6_ifaddr *ifp)
 static int addrconf_sysctl_forward(const struct ctl_table *ctl, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
+	struct net *net = ctl->extra2;
 	struct ctl_table lctl;
 	int *valp = ctl->data;
 	int val = *valp;
 	int ret;
+
+	if (write && !ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
 
 	/*
 	 * ctl->data points to idev->cnf.forwarding, we should
@@ -6804,6 +6808,9 @@ static int addrconf_sysctl_force_forwarding(const struct ctl_table *ctl, int wri
 	int new_val = *valp;
 	int old_val = *valp;
 	int ret;
+
+	if (write && !ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
 
 	tmp_ctl.extra1 = SYSCTL_ZERO;
 	tmp_ctl.extra2 = SYSCTL_ONE;
