@@ -293,7 +293,9 @@ static void p9_read_work(struct work_struct *work)
 			 m, m->rc.size, m->rc.tag);
 
 		m->rreq = p9_tag_lookup(m->client, m->rc.tag);
-		if (!m->rreq || (m->rreq->status != REQ_STATUS_SENT)) {
+		if (!m->rreq ||
+		    (m->rreq->status != REQ_STATUS_SENT &&
+		     m->rreq->status != REQ_STATUS_ABORTED)) {
 			p9_debug(P9_DEBUG_ERROR, "Unexpected packet tag %d\n",
 				 m->rc.tag);
 			err = -EIO;
@@ -332,6 +334,9 @@ static void p9_read_work(struct work_struct *work)
 		if (m->rreq->status == REQ_STATUS_SENT) {
 			list_del(&m->rreq->req_list);
 			p9_client_cb(m->client, m->rreq, REQ_STATUS_RCVD);
+		} else if (m->rreq->status == REQ_STATUS_ABORTED) {
+			list_del(&m->rreq->req_list);
+			p9_client_cb(m->client, m->rreq, REQ_STATUS_ABORTED);
 		} else if (m->rreq->status == REQ_STATUS_FLSHD) {
 			/* Ignore replies associated with a cancelled request. */
 			p9_debug(P9_DEBUG_TRANS,
@@ -996,6 +1001,7 @@ static struct p9_trans_module p9_tcp_trans = {
 	.pooled_rbuffers = false,
 	.def = false,
 	.supports_vmalloc = true,
+	.supports_async_abort = true,
 	.create = p9_fd_create_tcp,
 	.close = p9_fd_close,
 	.request = p9_fd_request,
@@ -1011,6 +1017,7 @@ static struct p9_trans_module p9_unix_trans = {
 	.maxsize = MAX_SOCK_BUF,
 	.def = false,
 	.supports_vmalloc = true,
+	.supports_async_abort = true,
 	.create = p9_fd_create_unix,
 	.close = p9_fd_close,
 	.request = p9_fd_request,
@@ -1026,6 +1033,7 @@ static struct p9_trans_module p9_fd_trans = {
 	.maxsize = MAX_SOCK_BUF,
 	.def = false,
 	.supports_vmalloc = true,
+	.supports_async_abort = true,
 	.create = p9_fd_create,
 	.close = p9_fd_close,
 	.request = p9_fd_request,

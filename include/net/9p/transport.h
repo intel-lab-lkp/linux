@@ -34,6 +34,9 @@
  * @supports_vmalloc: set if this transport can work with vmalloc'd buffers
  *                    (non-physically contiguous memory). Transports requiring
  *                    DMA should leave this as false.
+ * @supports_async_abort: set if a sent request remains referenced by the
+ *                        transport until its reply is consumed or the
+ *                        transport is closed
  * @create: member function to create a new connection on this transport
  * @close: member function to discard a connection on this transport
  * @request: member function to issue a request to the transport
@@ -55,6 +58,7 @@ struct p9_trans_module {
 	bool pooled_rbuffers;
 	bool def;		/* this transport should be default */
 	bool supports_vmalloc;	/* can work with vmalloc'd buffers */
+	bool supports_async_abort; /* keeps sent requests alive after caller exits */
 	struct module *owner;
 	int (*create)(struct p9_client *client,
 		      struct fs_context *fc);
