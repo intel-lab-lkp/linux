@@ -37,7 +37,7 @@
 #define PID_LEN       7
 #define CPUS_LEN      4
 
-static int aggr_header_lens[] = {
+const int aggr_header_lens[] = {
 	[AGGR_CORE] 	= 18,
 	[AGGR_CACHE]	= 22,
 	[AGGR_CLUSTER]	= 20,
@@ -49,7 +49,7 @@ static int aggr_header_lens[] = {
 	[AGGR_GLOBAL] 	= 0,
 };
 
-static const char *aggr_header_csv[] = {
+const char *aggr_header_csv[] = {
 	[AGGR_CORE]	=	"core,ctrs,",
 	[AGGR_CACHE]	=	"cache,ctrs,",
 	[AGGR_CLUSTER]	=	"cluster,ctrs,",
@@ -61,7 +61,7 @@ static const char *aggr_header_csv[] = {
 	[AGGR_GLOBAL]	=	""
 };
 
-static const char *aggr_header_std[] = {
+const char *aggr_header_std[] = {
 	[AGGR_CORE] 	= 	"core",
 	[AGGR_CACHE] 	= 	"cache",
 	[AGGR_CLUSTER]	= 	"cluster",

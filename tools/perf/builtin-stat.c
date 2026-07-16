@@ -40,62 +40,64 @@
  *   Jaswinder Singh Rajput <jaswinder@kernel.org>
  */
 
-#include "builtin.h"
-#include "util/cgroup.h"
-#include <subcmd/parse-options.h>
-#include "util/parse-events.h"
-#include "util/pmus.h"
-#include "util/pmu.h"
-#include "util/tool_pmu.h"
-#include "util/event.h"
-#include "util/evlist.h"
-#include "util/evsel.h"
-#include "util/debug.h"
-#include "util/color.h"
-#include "util/stat.h"
-#include "util/header.h"
-#include "util/cpumap.h"
-#include "util/thread_map.h"
-#include "util/counts.h"
-#include "util/topdown.h"
-#include "util/session.h"
-#include "util/tool.h"
-#include "util/string2.h"
-#include "util/metricgroup.h"
-#include "util/synthetic-events.h"
-#include "util/target.h"
-#include "util/time-utils.h"
-#include "util/top.h"
-#include "util/affinity.h"
-#include "util/pfm.h"
-#include "util/bpf_counter.h"
-#include "util/iostat.h"
-#include "util/util.h"
-#include "util/intel-tpebs.h"
-#include "asm/bug.h"
-
-#include <linux/list_sort.h>
-#include <linux/time64.h>
-#include <linux/zalloc.h>
-#include <api/fs/fs.h>
 #include <errno.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/prctl.h>
 #include <inttypes.h>
 #include <locale.h>
 #include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <linux/err.h>
+#include <signal.h>
+#include <stdlib.h>
 
 #include <linux/ctype.h>
-#include <perf/evlist.h>
+#include <linux/err.h>
+#include <linux/list_sort.h>
+#include <linux/time64.h>
+#include <linux/zalloc.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <api/fs/fs.h>
 #include <internal/threadmap.h>
+#include <perf/evlist.h>
+#include <subcmd/parse-options.h>
+
+#include "asm/bug.h"
+#include "builtin.h"
+#include "util/affinity.h"
+#include "util/bpf_counter.h"
+#include "util/cgroup.h"
+#include "util/color.h"
+#include "util/counts.h"
+#include "util/cpumap.h"
+#include "util/debug.h"
+#include "util/event.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/header.h"
+#include "util/intel-tpebs.h"
+#include "util/iostat.h"
+#include "util/metricgroup.h"
+#include "util/parse-events.h"
+#include "util/pfm.h"
+#include "util/pmu.h"
+#include "util/pmus.h"
+#include "util/session.h"
+#include "util/stat-print.h"
+#include "util/stat.h"
+#include "util/string2.h"
+#include "util/synthetic-events.h"
+#include "util/target.h"
+#include "util/thread_map.h"
+#include "util/time-utils.h"
+#include "util/tool.h"
+#include "util/tool_pmu.h"
+#include "util/top.h"
+#include "util/topdown.h"
+#include "util/util.h"
 
 #ifdef HAVE_BPF_SKEL
 #include "util/bpf_skel/bperf_cgroup.h"
@@ -123,6 +125,7 @@ static struct target target;
 static volatile sig_atomic_t	child_pid			= -1;
 static int			detailed_run			=  0;
 static bool			transaction_run;
+static bool use_perf_stat_print;
 static bool			topdown_run			= false;
 static bool			smi_cost			= false;
 static bool			smi_reset			= false;
@@ -1094,7 +1097,10 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 	if (quiet)
 		return;
 
-	evlist__print_counters(evsel_list, &stat_config, &target, ts, argc, argv);
+	if (use_perf_stat_print)
+		perf_stat__print(evsel_list, &stat_config, &target, ts, argc, argv);
+	else
+		evlist__print_counters(evsel_list, &stat_config, &target, ts, argc, argv);
 }
 
 static volatile sig_atomic_t signr = -1;
@@ -2595,6 +2601,8 @@ int cmd_stat(int argc, const char **argv)
 			"Use with 'percore' event qualifier to show the event "
 			"counts of one hardware thread by sum up total hardware "
 			"threads of same physical core"),
+		OPT_BOOLEAN(0, "new", &use_perf_stat_print,
+			"use new clean API code for display output"),
 		OPT_BOOLEAN(0, "summary", &stat_config.summary,
 			"print summary for interval mode"),
 		OPT_BOOLEAN(0, "no-csv-summary", &stat_config.no_csv_summary,
