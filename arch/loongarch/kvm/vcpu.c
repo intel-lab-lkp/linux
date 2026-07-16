@@ -1164,11 +1164,14 @@ static int kvm_loongarch_cpucfg_set_attr(struct kvm_vcpu *vcpu,
 		if (val & ~valid)
 			return -EINVAL;
 
-		/* All vCPUs need set the same PV features */
-		if ((kvm->arch.pv_features & LOONGARCH_PV_FEAT_UPDATED)
-				&& ((kvm->arch.pv_features & valid) != val))
+		if ((kvm->arch.pv_features & valid) == val)
+			return 0;
+
+		if (vcpu->arch.ran_atleast_once)
 			return -EINVAL;
-		kvm->arch.pv_features = val | LOONGARCH_PV_FEAT_UPDATED;
+
+		/* All vCPUs need set the same PV features */
+		kvm->arch.pv_features = val;
 		return 0;
 	default:
 		return -ENXIO;
@@ -1850,6 +1853,10 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 {
 	int r = -EINTR;
 	struct kvm_run *run = vcpu->run;
+
+	/* Mark this VCPU ran at least once */
+	if (!vcpu->arch.ran_atleast_once)
+		vcpu->arch.ran_atleast_once = true;
 
 	if (vcpu->mmio_needed) {
 		if (!vcpu->mmio_is_write)
