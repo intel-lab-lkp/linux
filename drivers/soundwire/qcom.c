@@ -1629,10 +1629,8 @@ static int qcom_swrm_probe(struct platform_device *pdev)
 					IRQF_TRIGGER_RISING |
 					IRQF_ONESHOT,
 					"soundwire", ctrl);
-	if (ret) {
-		dev_err(dev, "Failed to request soundwire irq\n");
+	if (ret)
 		goto err_clk;
-	}
 
 	ctrl->wake_irq = of_irq_get(dev->of_node, 1);
 	if (ctrl->wake_irq > 0) {
@@ -1640,10 +1638,8 @@ static int qcom_swrm_probe(struct platform_device *pdev)
 						qcom_swrm_wake_irq_handler,
 						IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 						"swr_wake_irq", ctrl);
-		if (ret) {
-			dev_err(dev, "Failed to request soundwire wake irq\n");
+		if (ret)
 			goto err_init;
-		}
 	}
 
 	ctrl->bus.controller_id = -1;
