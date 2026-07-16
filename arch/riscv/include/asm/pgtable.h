@@ -9,7 +9,6 @@
 #include <linux/mmzone.h>
 #include <linux/sizes.h>
 
-#include <asm/cmpxchg.h>
 #include <asm/pgtable-bits.h>
 
 #ifndef CONFIG_MMU
@@ -124,6 +123,7 @@
 
 #ifndef __ASSEMBLER__
 
+#include <asm/cmpxchg.h>
 #include <asm/page.h>
 #include <asm/tlbflush.h>
 #include <linux/mm_types.h>
@@ -468,6 +468,11 @@ static inline pte_t pte_mkdirty(pte_t pte)
 	return __pte(pte_val(pte) | _PAGE_DIRTY | _PAGE_SOFT_DIRTY);
 }
 
+static inline pte_t riscv_pte_mkhwdirty(pte_t pte)
+{
+	return __pte(pte_val(pte) | _PAGE_DIRTY);
+}
+
 static inline pte_t pte_mkclean(pte_t pte)
 {
 	return __pte(pte_val(pte) & ~(_PAGE_DIRTY));
@@ -755,6 +760,13 @@ static inline pte_t __ptep_get_and_clear(struct mm_struct *mm,
 }
 
 #define __ptep_get_and_clear __ptep_get_and_clear
+
+static inline pte_t __ptep_get_and_clear_noptc(pte_t *ptep)
+{
+	return __pte(atomic_long_xchg((atomic_long_t *)ptep, 0));
+}
+
+#define __ptep_get_and_clear_noptc __ptep_get_and_clear_noptc
 
 static inline pte_t __ptep_clear_flush(struct vm_area_struct *vma,
 				       unsigned long address, pte_t *ptep)

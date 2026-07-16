@@ -7,7 +7,7 @@ pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 {
 	unsigned long pte_num;
 	int i;
-	pte_t orig_pte = ptep_get(ptep);
+	pte_t orig_pte = __ptep_get(ptep);
 
 	if (!pte_present(orig_pte) || !pte_napot(orig_pte))
 		return orig_pte;
@@ -15,10 +15,10 @@ pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 	pte_num = napot_pte_num(napot_cont_order(orig_pte));
 
 	for (i = 0; i < pte_num; i++, ptep++) {
-		pte_t pte = ptep_get(ptep);
+		pte_t pte = __ptep_get(ptep);
 
 		if (pte_dirty(pte))
-			orig_pte = pte_mkdirty(orig_pte);
+			orig_pte = riscv_pte_mkhwdirty(orig_pte);
 
 		if (pte_young(pte))
 			orig_pte = pte_mkyoung(orig_pte);
@@ -74,7 +74,7 @@ pte_t *huge_pte_alloc(struct mm_struct *mm,
 
 out:
 	if (pte) {
-		pte_t pteval = ptep_get_lockless(pte);
+		pte_t pteval = __ptep_get_lockless(pte);
 
 		WARN_ON_ONCE(pte_present(pteval) && !pte_huge(pteval));
 	}
@@ -145,28 +145,52 @@ unsigned long hugetlb_mask_last_page(struct hstate *h)
 	return 0UL;
 }
 
+static unsigned long napot_hugetlb_block_addr(pte_t pte, unsigned long addr)
+{
+	unsigned long order;
+
+	if (!pte_napot(pte))
+		return addr;
+
+	order = napot_cont_order(pte);
+
+	return addr & napot_cont_mask(order);
+}
+
+static pte_t napot_hugetlb_get_and_clear(struct mm_struct *mm,
+					 unsigned long addr, pte_t *ptep)
+{
+	pte_t pte;
+
+	pte = __ptep_get_and_clear_noptc(ptep);
+	page_table_check_pte_clear(mm, addr, pte_mknonnapot(pte, addr));
+
+	return pte;
+}
+
 static pte_t get_clear_contig(struct mm_struct *mm,
 			      unsigned long addr,
 			      pte_t *ptep,
 			      unsigned long ncontig)
 {
-	pte_t pte, tmp_pte;
-	bool present;
+	pte_t orig_pte = __ptep_get(ptep);
+	unsigned long i;
 
-	pte = ptep_get_and_clear(mm, addr, ptep);
-	present = pte_present(pte);
-	while (--ncontig) {
-		ptep++;
-		addr += PAGE_SIZE;
-		tmp_pte = ptep_get_and_clear(mm, addr, ptep);
-		if (present) {
-			if (pte_dirty(tmp_pte))
-				pte = pte_mkdirty(pte);
-			if (pte_young(tmp_pte))
-				pte = pte_mkyoung(pte);
-		}
+	addr = napot_hugetlb_block_addr(orig_pte, addr);
+	if (pte_napot(orig_pte))
+		ptep = huge_pte_offset(mm, addr,
+				       napot_cont_size(napot_cont_order(orig_pte)));
+
+	for (i = 0; i < ncontig; i++, addr += PAGE_SIZE, ptep++) {
+		pte_t pte = napot_hugetlb_get_and_clear(mm, addr, ptep);
+
+		if (pte_dirty(pte))
+			orig_pte = riscv_pte_mkhwdirty(orig_pte);
+		if (pte_young(pte))
+			orig_pte = pte_mkyoung(orig_pte);
 	}
-	return pte;
+
+	return orig_pte;
 }
 
 static pte_t get_clear_contig_flush(struct mm_struct *mm,
@@ -174,9 +198,12 @@ static pte_t get_clear_contig_flush(struct mm_struct *mm,
 				    pte_t *ptep,
 				    unsigned long pte_num)
 {
+	pte_t pte = __ptep_get(ptep);
 	pte_t orig_pte = get_clear_contig(mm, addr, ptep, pte_num);
 	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
 	bool valid = !pte_none(orig_pte);
+
+	addr = napot_hugetlb_block_addr(pte, addr);
 
 	if (valid)
 		flush_tlb_range(&vma, addr, addr + (PAGE_SIZE * pte_num));
@@ -207,12 +234,29 @@ static void clear_flush(struct mm_struct *mm,
 			unsigned long ncontig)
 {
 	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	pte_t pte = __ptep_get(ptep);
 	unsigned long i, saddr = addr;
 
+	addr = napot_hugetlb_block_addr(pte, addr);
+	if (pte_napot(pte))
+		ptep = huge_pte_offset(mm, addr,
+				       napot_cont_size(napot_cont_order(pte)));
+	saddr = addr;
+
 	for (i = 0; i < ncontig; i++, addr += pgsize, ptep++)
-		ptep_get_and_clear(mm, addr, ptep);
+		napot_hugetlb_get_and_clear(mm, addr, ptep);
 
 	flush_tlb_range(&vma, saddr, addr);
+}
+
+static void set_huge_napot_ptes(struct mm_struct *mm, unsigned long addr,
+				pte_t *ptep, pte_t pte, unsigned long pte_num)
+{
+	unsigned long i;
+
+	page_table_check_ptes_set(mm, addr, ptep, pte, pte_num);
+	for (i = 0; i < pte_num; i++)
+		__set_pte_at(mm, ptep + i, pte);
 }
 
 static int num_contig_ptes_from_size(unsigned long sz, size_t *pgsize)
@@ -256,19 +300,18 @@ void set_huge_pte_at(struct mm_struct *mm,
 
 	if (!pte_present(pte)) {
 		for (i = 0; i < pte_num; i++, ptep++, addr += pgsize)
-			set_ptes(mm, addr, ptep, pte, 1);
+			__set_ptes(mm, addr, ptep, pte, 1);
 		return;
 	}
 
 	if (!pte_napot(pte)) {
-		set_ptes(mm, addr, ptep, pte, 1);
+		__set_ptes(mm, addr, ptep, pte, 1);
 		return;
 	}
 
 	clear_flush(mm, addr, ptep, pgsize, pte_num);
 
-	for (i = 0; i < pte_num; i++, ptep++, addr += pgsize)
-		set_pte_at(mm, addr, ptep, pte);
+	set_huge_napot_ptes(mm, addr, ptep, pte, pte_num);
 }
 
 int huge_ptep_set_access_flags(struct vm_area_struct *vma,
@@ -280,10 +323,10 @@ int huge_ptep_set_access_flags(struct vm_area_struct *vma,
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long order;
 	pte_t orig_pte;
-	int i, pte_num;
+	int pte_num;
 
 	if (!pte_napot(pte))
-		return ptep_set_access_flags(vma, addr, ptep, pte, dirty);
+		return __ptep_set_access_flags(vma, addr, ptep, pte, dirty);
 
 	order = napot_cont_order(pte);
 	pte_num = napot_pte_num(order);
@@ -291,13 +334,12 @@ int huge_ptep_set_access_flags(struct vm_area_struct *vma,
 	orig_pte = get_clear_contig_flush(mm, addr, ptep, pte_num);
 
 	if (pte_dirty(orig_pte))
-		pte = pte_mkdirty(pte);
+		pte = riscv_pte_mkhwdirty(pte);
 
 	if (pte_young(orig_pte))
 		pte = pte_mkyoung(pte);
 
-	for (i = 0; i < pte_num; i++, addr += PAGE_SIZE, ptep++)
-		set_pte_at(mm, addr, ptep, pte);
+	set_huge_napot_ptes(mm, addr, ptep, pte, pte_num);
 
 	return true;
 }
@@ -306,14 +348,13 @@ pte_t huge_ptep_get_and_clear(struct mm_struct *mm,
 			      unsigned long addr,
 			      pte_t *ptep, unsigned long sz)
 {
-	size_t pgsize;
-	pte_t orig_pte = ptep_get(ptep);
+	pte_t orig_pte = __ptep_get(ptep);
 	int pte_num;
 
 	if (!pte_napot(orig_pte))
-		return ptep_get_and_clear(mm, addr, ptep);
+		return __ptep_get_and_clear(mm, addr, ptep);
 
-	pte_num = num_contig_ptes_from_size(sz, &pgsize);
+	pte_num = napot_pte_num(napot_cont_order(orig_pte));
 
 	return get_clear_contig(mm, addr, ptep, pte_num);
 }
@@ -322,13 +363,13 @@ void huge_ptep_set_wrprotect(struct mm_struct *mm,
 			     unsigned long addr,
 			     pte_t *ptep)
 {
-	pte_t pte = ptep_get(ptep);
+	pte_t pte = __ptep_get(ptep);
 	unsigned long order;
 	pte_t orig_pte;
-	int i, pte_num;
+	int pte_num;
 
 	if (!pte_napot(pte)) {
-		ptep_set_wrprotect(mm, addr, ptep);
+		__ptep_set_wrprotect(mm, addr, ptep);
 		return;
 	}
 
@@ -339,19 +380,18 @@ void huge_ptep_set_wrprotect(struct mm_struct *mm,
 
 	orig_pte = pte_wrprotect(orig_pte);
 
-	for (i = 0; i < pte_num; i++, addr += PAGE_SIZE, ptep++)
-		set_pte_at(mm, addr, ptep, orig_pte);
+	set_huge_napot_ptes(mm, addr, ptep, orig_pte, pte_num);
 }
 
 pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
 			    unsigned long addr,
 			    pte_t *ptep)
 {
-	pte_t pte = ptep_get(ptep);
+	pte_t pte = __ptep_get(ptep);
 	int pte_num;
 
 	if (!pte_napot(pte))
-		return ptep_clear_flush(vma, addr, ptep);
+		return __ptep_clear_flush(vma, addr, ptep);
 
 	pte_num = napot_pte_num(napot_cont_order(pte));
 
@@ -363,19 +403,16 @@ void huge_pte_clear(struct mm_struct *mm,
 		    pte_t *ptep,
 		    unsigned long sz)
 {
-	size_t pgsize;
-	pte_t pte = ptep_get(ptep);
-	int i, pte_num;
+	pte_t pte = __ptep_get(ptep);
+	int pte_num;
 
 	if (!pte_napot(pte)) {
-		pte_clear(mm, addr, ptep);
+		__pte_clear(mm, addr, ptep);
 		return;
 	}
 
-	pte_num = num_contig_ptes_from_size(sz, &pgsize);
-
-	for (i = 0; i < pte_num; i++, addr += pgsize, ptep++)
-		pte_clear(mm, addr, ptep);
+	pte_num = napot_pte_num(napot_cont_order(pte));
+	get_clear_contig(mm, addr, ptep, pte_num);
 }
 
 static bool is_napot_size(unsigned long size)
