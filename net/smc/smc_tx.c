@@ -321,7 +321,6 @@ static int smc_tx_rdma_write(struct smc_connection *conn, int peer_rmbe_offset,
 	struct smc_link *link = conn->lnk;
 	int rc;
 
-	rdma_wr->wr.wr_id = smc_wr_tx_get_next_wr_id(link);
 	rdma_wr->wr.num_sge = num_sges;
 	rdma_wr->remote_addr =
 		lgr->rtokens[conn->rtoken_idx][link->link_idx].dma_addr +
