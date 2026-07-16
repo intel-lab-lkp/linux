@@ -849,12 +849,22 @@ static struct nfc_llcp_sock *nfc_llcp_sock_get_sn(struct nfc_llcp_local *local,
 static const u8 *nfc_llcp_connect_sn(const struct sk_buff *skb, size_t *sn_len)
 {
 	u8 type, length;
-	const u8 *tlv = &skb->data[2];
-	size_t tlv_array_len = skb->len - LLCP_HEADER_SIZE, offset = 0;
+	const u8 *tlv;
+	size_t tlv_array_len, offset = 0;
+
+	if (skb->len < LLCP_HEADER_SIZE)
+		return NULL;
+
+	tlv = &skb->data[LLCP_HEADER_SIZE];
+	tlv_array_len = skb->len - LLCP_HEADER_SIZE;
 
 	while (offset < tlv_array_len) {
+		if (tlv_array_len - offset < 2)
+			break;
 		type = tlv[0];
 		length = tlv[1];
+		if (tlv_array_len - offset - 2 < length)
+			break;
 
 		pr_debug("type 0x%x length %d\n", type, length);
 
