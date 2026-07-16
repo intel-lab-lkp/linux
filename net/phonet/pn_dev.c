@@ -356,7 +356,12 @@ int __init phonet_device_init(void)
 
 	proc_create_net("pnresource", 0, init_net.proc_net, &pn_res_seq_ops,
 			sizeof(struct seq_net_private));
-	register_netdevice_notifier(&phonet_device_notifier);
+	err = register_netdevice_notifier(&phonet_device_notifier);
+	if (err) {
+		remove_proc_entry("pnresource", init_net.proc_net);
+		unregister_pernet_subsys(&phonet_net_ops);
+		return err;
+	}
 	err = phonet_netlink_register();
 	if (err)
 		phonet_device_exit();
