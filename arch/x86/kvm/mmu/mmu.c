@@ -8078,8 +8078,14 @@ static void hugepage_set_mixed(struct kvm_memory_slot *slot, gfn_t gfn,
 bool kvm_arch_pre_set_memory_attributes(struct kvm *kvm,
 					struct kvm_gfn_range *range)
 {
+	unsigned long attrs = range->arg.attributes;
 	struct kvm_memory_slot *slot = range->slot;
 	int level;
+
+	if (!kvm_arch_has_private_mem(kvm)) {
+		WARN_ON(attrs & KVM_MEMORY_ATTRIBUTE_PRIVATE);
+		attrs &= ~KVM_MEMORY_ATTRIBUTE_PRIVATE;
+	}
 
 	/*
 	 * Zap SPTEs even if the slot can't be mapped PRIVATE.  KVM x86 only
@@ -8092,9 +8098,6 @@ bool kvm_arch_pre_set_memory_attributes(struct kvm *kvm,
 	 * Zapping SPTEs in this case ensures KVM will reassess whether or not
 	 * a hugepage can be used for affected ranges.
 	 */
-	if (WARN_ON_ONCE(!kvm_arch_has_private_mem(kvm)))
-		return false;
-
 	if (WARN_ON_ONCE(range->end <= range->start))
 		return false;
 
@@ -8165,16 +8168,17 @@ bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
 	lockdep_assert_held_write(&kvm->mmu_lock);
 	lockdep_assert_held(&kvm->slots_lock);
 
+	if (!kvm_arch_has_private_mem(kvm)) {
+		WARN_ON(attrs & KVM_MEMORY_ATTRIBUTE_PRIVATE);
+		attrs &= ~KVM_MEMORY_ATTRIBUTE_PRIVATE;
+	}
+
 	/*
 	 * Calculate which ranges can be mapped with hugepages even if the slot
 	 * can't map memory PRIVATE.  KVM mustn't create a SHARED hugepage over
 	 * a range that has PRIVATE GFNs, and conversely converting a range to
 	 * SHARED may now allow hugepages.
-	 */
-	if (WARN_ON_ONCE(!kvm_arch_has_private_mem(kvm)))
-		return false;
-
-	/*
+	 *
 	 * The sequence matters here: upper levels consume the result of lower
 	 * level's scanning.
 	 */
