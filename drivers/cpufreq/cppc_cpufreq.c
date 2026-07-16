@@ -735,6 +735,31 @@ out:
 	return ret;
 }
 
+/*
+ * With offline() defined, the cpufreq core keeps the policy alive when
+ * a CPU is hotplugged out.
+ */
+static int cppc_cpufreq_cpu_offline(struct cpufreq_policy *policy)
+{
+	return 0;
+}
+
+/*
+ * Re-enable CPPC when the policy's CPU comes back online, since the platform
+ * may have disabled it while the CPU was offline.
+ */
+static int cppc_cpufreq_cpu_online(struct cpufreq_policy *policy)
+{
+	unsigned int cpu = policy->cpu;
+	int ret;
+
+	ret = cppc_set_enable(cpu, true);
+	if (ret && ret != -EOPNOTSUPP)
+		pr_warn("Failed to re-enable CPPC for CPU%d (%d)\n", cpu, ret);
+
+	return 0;
+}
+
 static void cppc_cpufreq_cpu_exit(struct cpufreq_policy *policy)
 {
 	struct cppc_cpudata *cpu_data = policy->driver_data;
@@ -1047,6 +1072,8 @@ static struct cpufreq_driver cppc_cpufreq_driver = {
 	.fast_switch = cppc_cpufreq_fast_switch,
 	.init = cppc_cpufreq_cpu_init,
 	.exit = cppc_cpufreq_cpu_exit,
+	.online = cppc_cpufreq_cpu_online,
+	.offline = cppc_cpufreq_cpu_offline,
 	.set_boost = cppc_cpufreq_set_boost,
 	.attr = cppc_cpufreq_attr,
 	.name = "cppc_cpufreq",
