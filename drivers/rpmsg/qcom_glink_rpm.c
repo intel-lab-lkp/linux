@@ -320,10 +320,8 @@ static int glink_rpm_probe(struct platform_device *pdev)
 	ret = devm_request_irq(dev, rpm->irq, qcom_glink_rpm_intr,
 			       IRQF_NO_SUSPEND | IRQF_NO_AUTOEN,
 			       "glink-rpm", rpm);
-	if (ret) {
-		dev_err(dev, "failed to request IRQ\n");
+	if (ret)
 		return ret;
-	}
 
 	rpm->mbox_client.dev = dev;
 	rpm->mbox_client.knows_txdone = true;
