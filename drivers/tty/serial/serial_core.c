@@ -2492,7 +2492,7 @@ static const char *uart_get_mmio_width(struct uart_port *port)
 		return "16";
 	case UPIO_MEM32:
 	case UPIO_MEM32BE:
-		return "32be";
+		return "32";
 	case UPIO_AU:
 	case UPIO_MEM:
 	default:
