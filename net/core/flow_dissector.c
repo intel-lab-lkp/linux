@@ -73,6 +73,14 @@ void skb_flow_dissector_init(struct flow_dissector *flow_dissector,
 }
 EXPORT_SYMBOL(skb_flow_dissector_init);
 
+/* Enabled while any netns has a BPF flow dissector program attached;
+ * lets __skb_flow_dissect() skip the program lookup entirely in the
+ * common no-program case. Maintained by the netns-BPF attach/detach
+ * paths in kernel/bpf/net_namespace.c.
+ */
+DEFINE_STATIC_KEY_FALSE(netns_bpf_flow_dissector_enabled);
+EXPORT_SYMBOL(netns_bpf_flow_dissector_enabled);
+
 #ifdef CONFIG_BPF_SYSCALL
 int flow_dissector_bpf_prog_attach_check(struct net *net,
 					 struct bpf_prog *prog)
@@ -1117,59 +1125,63 @@ bool __skb_flow_dissect(const struct net *net,
 					      FLOW_DISSECTOR_KEY_BASIC,
 					      target_container);
 
-	rcu_read_lock();
+	if (static_branch_unlikely(&netns_bpf_flow_dissector_enabled)) {
+		rcu_read_lock();
 
-	if (skb) {
-		if (!net) {
-			if (skb->dev)
-				net = dev_net_rcu(skb->dev);
-			else if (skb->sk)
-				net = sock_net(skb->sk);
-		}
-	}
-
-	DEBUG_NET_WARN_ON_ONCE(!net);
-	if (net) {
-		enum netns_bpf_attach_type type = NETNS_BPF_FLOW_DISSECTOR;
-		struct bpf_prog_array *run_array;
-
-		run_array = rcu_dereference(init_net.bpf.run_array[type]);
-		if (!run_array)
-			run_array = rcu_dereference(net->bpf.run_array[type]);
-
-		if (run_array) {
-			struct bpf_flow_keys flow_keys;
-			struct bpf_flow_dissector ctx = {
-				.flow_keys = &flow_keys,
-				.data = data,
-				.data_end = data + hlen,
-			};
-			__be16 n_proto = proto;
-			struct bpf_prog *prog;
-			u32 result;
-
-			if (skb) {
-				ctx.skb = skb;
-				/* we can't use 'proto' in the skb case
-				 * because it might be set to skb->vlan_proto
-				 * which has been pulled from the data
-				 */
-				n_proto = skb->protocol;
-			}
-
-			prog = READ_ONCE(run_array->items[0].prog);
-			result = bpf_flow_dissect(prog, &ctx, n_proto, nhoff,
-						  hlen, flags);
-			if (result != BPF_FLOW_DISSECTOR_CONTINUE) {
-				__skb_flow_bpf_to_target(&flow_keys, flow_dissector,
-							 target_container);
-				rcu_read_unlock();
-				return result == BPF_OK;
+		if (skb) {
+			if (!net) {
+				if (skb->dev)
+					net = dev_net_rcu(skb->dev);
+				else if (skb->sk)
+					net = sock_net(skb->sk);
 			}
 		}
-	}
 
-	rcu_read_unlock();
+		DEBUG_NET_WARN_ON_ONCE(!net);
+		if (net) {
+			enum netns_bpf_attach_type type = NETNS_BPF_FLOW_DISSECTOR;
+			struct bpf_prog_array *run_array;
+
+			run_array = rcu_dereference(init_net.bpf.run_array[type]);
+			if (!run_array)
+				run_array = rcu_dereference(net->bpf.run_array[type]);
+
+			if (run_array) {
+				struct bpf_flow_keys flow_keys;
+				struct bpf_flow_dissector ctx = {
+					.flow_keys = &flow_keys,
+					.data = data,
+					.data_end = data + hlen,
+				};
+				__be16 n_proto = proto;
+				struct bpf_prog *prog;
+				u32 result;
+
+				if (skb) {
+					ctx.skb = skb;
+					/* we can't use 'proto' in the skb case
+					 * because it might be set to
+					 * skb->vlan_proto which has been pulled
+					 * from the data
+					 */
+					n_proto = skb->protocol;
+				}
+
+				prog = READ_ONCE(run_array->items[0].prog);
+				result = bpf_flow_dissect(prog, &ctx, n_proto,
+							  nhoff, hlen, flags);
+				if (result != BPF_FLOW_DISSECTOR_CONTINUE) {
+					__skb_flow_bpf_to_target(&flow_keys,
+								 flow_dissector,
+								 target_container);
+					rcu_read_unlock();
+					return result == BPF_OK;
+				}
+			}
+		}
+
+		rcu_read_unlock();
+	}
 
 	if (dissector_uses_key(flow_dissector,
 			       FLOW_DISSECTOR_KEY_ETH_ADDRS)) {

@@ -1588,6 +1588,7 @@ void skb_flow_dissector_init(struct flow_dissector *flow_dissector,
 			     unsigned int key_count);
 
 struct bpf_flow_dissector;
+extern struct static_key_false netns_bpf_flow_dissector_enabled;
 u32 bpf_flow_dissect(struct bpf_prog *prog, struct bpf_flow_dissector *ctx,
 		     __be16 proto, int nhoff, int hlen, unsigned int flags);
 

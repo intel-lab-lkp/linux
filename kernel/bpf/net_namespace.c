@@ -28,6 +28,9 @@ DEFINE_MUTEX(netns_bpf_mutex);
 static void netns_bpf_attach_type_unneed(enum netns_bpf_attach_type type)
 {
 	switch (type) {
+	case NETNS_BPF_FLOW_DISSECTOR:
+		static_branch_dec(&netns_bpf_flow_dissector_enabled);
+		break;
 #ifdef CONFIG_INET
 	case NETNS_BPF_SK_LOOKUP:
 		static_branch_dec(&bpf_sk_lookup_enabled);
@@ -41,6 +44,9 @@ static void netns_bpf_attach_type_unneed(enum netns_bpf_attach_type type)
 static void netns_bpf_attach_type_need(enum netns_bpf_attach_type type)
 {
 	switch (type) {
+	case NETNS_BPF_FLOW_DISSECTOR:
+		static_branch_inc(&netns_bpf_flow_dissector_enabled);
+		break;
 #ifdef CONFIG_INET
 	case NETNS_BPF_SK_LOOKUP:
 		static_branch_inc(&bpf_sk_lookup_enabled);
@@ -352,6 +358,11 @@ int netns_bpf_prog_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 	net->bpf.progs[type] = prog;
 	if (attached)
 		bpf_prog_put(attached);
+	else
+		/* Mark attach point as used on a fresh attach; a
+		 * replacement keeps the existing count.
+		 */
+		netns_bpf_attach_type_need(type);
 
 out_unlock:
 	mutex_unlock(&netns_bpf_mutex);
@@ -373,6 +384,8 @@ static int __netns_bpf_prog_detach(struct net *net,
 	attached = net->bpf.progs[type];
 	if (!attached || attached != old)
 		return -ENOENT;
+	/* Mark attach point as unused */
+	netns_bpf_attach_type_unneed(type);
 	netns_bpf_run_array_detach(net, type);
 	net->bpf.progs[type] = NULL;
 	bpf_prog_put(attached);
@@ -546,8 +559,10 @@ static void __net_exit netns_bpf_pernet_pre_exit(struct net *net)
 			net_link->net = NULL; /* auto-detach link */
 			netns_bpf_attach_type_unneed(type);
 		}
-		if (net->bpf.progs[type])
+		if (net->bpf.progs[type]) {
+			netns_bpf_attach_type_unneed(type);
 			bpf_prog_put(net->bpf.progs[type]);
+		}
 	}
 	mutex_unlock(&netns_bpf_mutex);
 }
