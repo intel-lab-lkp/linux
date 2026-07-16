@@ -147,6 +147,7 @@ struct ksm_scan {
 /**
  * struct ksm_stable_node - node of the stable rbtree
  * @node: rb node of this ksm page in the stable tree
+ * @checksum: checksum of this ksm page
  * @head: (overlaying parent) &migrate_nodes indicates temporarily on that list
  * @hlist_dup: linked into the stable_node->hlist with a stable_node chain
  * @list: linked into migrate_nodes, pending placement in the proper node tree
@@ -158,7 +159,10 @@ struct ksm_scan {
  */
 struct ksm_stable_node {
 	union {
-		struct rb_node node;	/* when node of stable tree */
+		struct {
+			struct rb_node node;	/* when node of stable tree */
+			unsigned int checksum;
+		};
 		struct {		/* when listed for migration */
 			struct list_head *head;
 			struct {
@@ -863,6 +867,7 @@ static struct ksm_stable_node *alloc_stable_node_chain(struct ksm_stable_node *d
 		INIT_HLIST_HEAD(&chain->hlist);
 		chain->chain_prune_time = jiffies;
 		chain->rmap_hlist_len = STABLE_NODE_CHAIN;
+		chain->checksum = dup->checksum;
 #if defined (CONFIG_DEBUG_VM) && defined(CONFIG_NUMA)
 		chain->nid = NUMA_NO_NODE; /* debug */
 #endif
@@ -1842,6 +1847,18 @@ static __always_inline struct folio *chain(struct ksm_stable_node **s_n_d,
 	return __stable_node_chain(s_n_d, s_n, root, false);
 }
 
+static __always_inline int ksm_memcmp_pages(struct page *page1,
+					    unsigned int checksum1,
+					    struct page *page2,
+					    unsigned int checksum2)
+{
+	if (checksum1 < checksum2)
+		return -1;
+	if (checksum1 > checksum2)
+		return 1;
+	return memcmp_pages(page1, page2);
+}
+
 /*
  * stable_tree_search - search for page inside the stable tree
  *
@@ -1851,7 +1868,7 @@ static __always_inline struct folio *chain(struct ksm_stable_node **s_n_d,
  * This function returns the stable tree node of identical content if found,
  * -EBUSY if the stable node's page is being migrated, NULL otherwise.
  */
-static struct folio *stable_tree_search(struct page *page)
+static struct folio *stable_tree_search(struct page *page, unsigned int checksum)
 {
 	int nid;
 	struct rb_root *root;
@@ -1895,7 +1912,8 @@ again:
 			goto again;
 		}
 
-		ret = memcmp_pages(page, &tree_folio->page);
+		ret = ksm_memcmp_pages(page, checksum, &tree_folio->page,
+				       stable_node->checksum);
 		folio_put(tree_folio);
 
 		parent = *new;
@@ -1972,6 +1990,7 @@ again:
 	DO_NUMA(page_node->nid = nid);
 	rb_link_node(&page_node->node, parent, new);
 	rb_insert_color(&page_node->node, root);
+	page_node->checksum = checksum;
 out:
 	if (is_page_sharing_candidate(page_node)) {
 		folio_get(folio);
@@ -1999,6 +2018,7 @@ replace:
 			rb_replace_node(&stable_node_dup->node,
 					&page_node->node,
 					root);
+			page_node->checksum = checksum;
 			if (is_page_sharing_candidate(page_node))
 				folio_get(folio);
 			else
@@ -2015,6 +2035,7 @@ replace:
 			list_del(&page_node->list);
 			DO_NUMA(page_node->nid = nid);
 			stable_node_chain_add_dup(page_node, stable_node);
+			page_node->checksum = checksum;
 			if (is_page_sharing_candidate(page_node))
 				folio_get(folio);
 			else
@@ -2053,6 +2074,7 @@ chain_append:
 	VM_BUG_ON(!is_stable_node_dup(stable_node_dup));
 	VM_BUG_ON(page_node->head != &migrate_nodes);
 	list_del(&page_node->list);
+	page_node->checksum = checksum;
 	DO_NUMA(page_node->nid = nid);
 	stable_node_chain_add_dup(page_node, stable_node);
 	goto out;
@@ -2074,10 +2096,12 @@ static struct ksm_stable_node *stable_tree_insert(struct folio *kfolio)
 	struct rb_node *parent;
 	struct ksm_stable_node *stable_node, *stable_node_dup;
 	bool need_chain = false;
+	unsigned int checksum;
 
 	kpfn = folio_pfn(kfolio);
 	nid = get_kpfn_nid(kpfn);
 	root = root_stable_tree + nid;
+	checksum = calc_checksum(&kfolio->page);
 again:
 	parent = NULL;
 	new = &root->rb_node;
@@ -2102,7 +2126,9 @@ again:
 			goto again;
 		}
 
-		ret = memcmp_pages(&kfolio->page, &tree_folio->page);
+		ret = ksm_memcmp_pages(&kfolio->page, checksum,
+				       &tree_folio->page,
+				       stable_node->checksum);
 		folio_put(tree_folio);
 
 		parent = *new;
@@ -2142,6 +2168,7 @@ again:
 
 	folio_set_stable_node(kfolio, stable_node_dup);
 
+	stable_node_dup->checksum = checksum;
 	return stable_node_dup;
 }
 
@@ -2176,43 +2203,52 @@ struct ksm_rmap_item *unstable_tree_search_insert(struct ksm_rmap_item *rmap_ite
 	while (*new) {
 		struct ksm_rmap_item *tree_rmap_item;
 		struct page *tree_page;
-		int ret;
 
 		cond_resched();
 		tree_rmap_item = rb_entry(*new, struct ksm_rmap_item, node);
-		tree_page = get_mergeable_page(tree_rmap_item);
-		if (!tree_page)
-			return NULL;
-
-		/*
-		 * Don't substitute a ksm page for a forked page.
-		 */
-		if (page == tree_page) {
-			put_page(tree_page);
-			return NULL;
-		}
-
-		ret = memcmp_pages(page, tree_page);
 
 		parent = *new;
-		if (ret < 0) {
-			put_page(tree_page);
+		if (rmap_item->oldchecksum < tree_rmap_item->oldchecksum) {
 			new = &parent->rb_left;
-		} else if (ret > 0) {
-			put_page(tree_page);
+		} else if (rmap_item->oldchecksum >
+				tree_rmap_item->oldchecksum) {
 			new = &parent->rb_right;
-		} else if (!ksm_merge_across_nodes &&
-			   page_to_nid(tree_page) != nid) {
-			/*
-			 * If tree_page has been migrated to another NUMA node,
-			 * it will be flushed out and put in the right unstable
-			 * tree next time: only merge with it when across_nodes.
-			 */
-			put_page(tree_page);
-			return NULL;
 		} else {
-			*tree_pagep = tree_page;
-			return tree_rmap_item;
+			int ret;
+
+			tree_page = get_mergeable_page(tree_rmap_item);
+			if (!tree_page)
+				return NULL;
+
+			/*
+			 * Don't substitute a ksm page for a forked page.
+			 */
+			if (page == tree_page) {
+				put_page(tree_page);
+				return NULL;
+			}
+
+			ret = memcmp_pages(page, tree_page);
+
+			if (ret < 0) {
+				put_page(tree_page);
+				new = &parent->rb_left;
+			} else if (ret > 0) {
+				put_page(tree_page);
+				new = &parent->rb_right;
+			} else if (!ksm_merge_across_nodes &&
+				page_to_nid(tree_page) != nid) {
+				/*
+				 * If tree_page has been migrated to another NUMA node,
+				 * it will be flushed out and put in the right unstable
+				 * tree next time: only merge with it when across_nodes.
+				 */
+				put_page(tree_page);
+				return NULL;
+			} else {
+				*tree_pagep = tree_page;
+				return tree_rmap_item;
+			}
 		}
 	}
 
@@ -2298,6 +2334,14 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		    rmap_item->head == stable_node)
 			return;
 		/*
+		 * If stable_node is in migrate_nodes list its checksum field
+		 * is not valid, so calculate it here
+		 */
+		if (stable_node->head == &migrate_nodes)
+			checksum = calc_checksum(page);
+		else
+			checksum = stable_node->checksum;
+		/*
 		 * If it's a KSM fork, allow it to go over the sharing limit
 		 * without warnings.
 		 */
@@ -2321,15 +2365,15 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		if (!try_to_merge_with_zero_page(rmap_item, page))
 			return;
 	}
-
 	/* Start by searching for the folio in the stable tree */
-	kfolio = stable_tree_search(page);
+	kfolio = stable_tree_search(page, checksum);
 	if (kfolio == folio && rmap_item->head == stable_node) {
 		folio_put(kfolio);
 		return;
 	}
 
 	remove_rmap_item_from_tree(rmap_item);
+	rmap_item->oldchecksum = checksum;
 
 	if (kfolio) {
 		if (kfolio == ERR_PTR(-EBUSY))
