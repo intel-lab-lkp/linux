@@ -88,6 +88,9 @@ int sdca_irq_populate(struct sdca_function_data *function,
 void sdca_irq_cleanup(struct device *dev,
 		      struct sdca_function_data *function,
 		      struct sdca_interrupt_info *info);
+void sdca_irq_cleanup_late(struct device *dev,
+			   struct sdca_function_data *function,
+			   struct sdca_interrupt_info *info);
 struct sdca_interrupt_info *sdca_irq_allocate(struct device *dev,
 					      struct regmap *regmap, int irq);
 
