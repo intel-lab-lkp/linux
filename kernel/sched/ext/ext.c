@@ -2950,6 +2950,8 @@ has_tasks:
 static void set_next_task_scx(struct rq *rq, struct task_struct *p, bool first)
 {
 	struct scx_sched *sch = scx_task_sched(p);
+	bool can_stop_tick;
+	bool tick_state_changed;
 
 	if (p->scx.flags & SCX_TASK_QUEUED) {
 		/*
@@ -2972,15 +2974,28 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, bool first)
 	 * @p is getting newly scheduled or got kicked after someone updated its
 	 * slice. Refresh whether tick can be stopped. See scx_can_stop_tick().
 	 */
-	if ((p->scx.slice == SCX_SLICE_INF) !=
-	    (bool)(rq->scx.flags & SCX_RQ_CAN_STOP_TICK)) {
-		if (p->scx.slice == SCX_SLICE_INF)
+	can_stop_tick = p->scx.slice == SCX_SLICE_INF;
+	tick_state_changed = can_stop_tick !=
+		(bool)(rq->scx.flags & SCX_RQ_CAN_STOP_TICK);
+	if (tick_state_changed) {
+		if (can_stop_tick)
 			rq->scx.flags |= SCX_RQ_CAN_STOP_TICK;
 		else
 			rq->scx.flags &= ~SCX_RQ_CAN_STOP_TICK;
+	}
 
+	/*
+	 * If @p has a finite slice, it needs the scheduler tick to make
+	 * forward progress on slice expiration. Don't rely on
+	 * sched_update_tick_dependency() here because rq->curr may still be
+	 * the previous task while set_next_task_scx() is running.
+	 */
+	if (!can_stop_tick)
+		sched_set_tick_dependency(rq);
+	else if (tick_state_changed)
 		sched_update_tick_dependency(rq);
 
+	if (tick_state_changed) {
 		/*
 		 * For now, let's refresh the load_avgs just when transitioning
 		 * in and out of nohz. In the future, we might want to add a

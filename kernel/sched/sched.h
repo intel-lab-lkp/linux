@@ -3015,9 +3015,20 @@ static inline void sched_update_tick_dependency(struct rq *rq)
 	else
 		tick_nohz_dep_set_cpu(cpu, TICK_DEP_BIT_SCHED);
 }
+
+static inline void sched_set_tick_dependency(struct rq *rq)
+{
+	int cpu = cpu_of(rq);
+
+	if (!tick_nohz_full_cpu(cpu))
+		return;
+
+	tick_nohz_dep_set_cpu(cpu, TICK_DEP_BIT_SCHED);
+}
 #else /* !CONFIG_NO_HZ_FULL: */
 static inline int sched_tick_offload_init(void) { return 0; }
 static inline void sched_update_tick_dependency(struct rq *rq) { }
+static inline void sched_set_tick_dependency(struct rq *rq) { }
 #endif /* !CONFIG_NO_HZ_FULL */
 
 static inline void add_nr_running(struct rq *rq, unsigned count)
