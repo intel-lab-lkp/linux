@@ -1141,6 +1141,21 @@ sub deparenthesize {
 	return $string;
 }
 
+sub is_asm_statement {
+	my ($realfile, $line) = @_;
+
+	return 0 if (!defined($line));
+	return 0 if ($realfile !~ /\.(?:h|s|S)$/);
+
+	$line =~ s/^[\+ ]\s*//;
+	$line =~ s@/\*.*?\*/@@g;
+
+	return 0 if ($line =~ /[;{}]/);
+	return 1 if ($line =~ /^(?:[A-Za-z_.\$][\w.\$]*:\s*)?\.?[A-Za-z_][\w.]*\s+[^,]+,\s*.+$/);
+
+	return 0;
+}
+
 sub seed_camelcase_file {
 	my ($file) = @_;
 
@@ -4186,6 +4201,8 @@ sub process {
 			     $pl =~ /^\+\s+$Ident(?:\s+|\s*\*\s*)$Ident\s*[=,;\[]/ ||
 			# known declaration macros
 			     $pl =~ /^\+\s+$declaration_macros/) &&
+			# assembler statements can look like declarations
+			    !is_asm_statement($realfile, $prevrawline) &&
 			# for "else if" which can look like "$Ident $Ident"
 			    !($pl =~ /^\+\s+$c90_Keywords\b/ ||
 			# other possible extensions of declaration lines
