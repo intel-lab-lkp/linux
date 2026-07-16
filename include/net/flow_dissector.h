@@ -453,6 +453,12 @@ enum flow_dissector_shape {
 	FLOW_DISSECTOR_SHAPE__MAX,
 };
 
+#if IS_ENABLED(CONFIG_FLOW_DISSECTOR_KUNIT_TEST)
+/* Test-only accessors, defined in flow_dissector.c. */
+struct flow_dissector *flow_keys_dissector_symmetric_kunit(void);
+u64 flow_dissector_fast_hits_kunit(void);
+#endif
+
 /* struct flow_keys_digest:
  *
  * This structure is used to hold a digest of the full flow keys. This is a

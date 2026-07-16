@@ -540,4 +540,16 @@ config NET_TEST
 
 	  If unsure, say N.
 
+config FLOW_DISSECTOR_KUNIT_TEST
+	tristate "KUnit tests for flow dissector fast/slow path equivalence" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests asserting the flow dissector's opt-in per-shape
+	  fast paths produce byte-identical struct flow_keys output to
+	  the slow path for every corpus packet, with the gates on and
+	  off.
+
+	  If unsure, say N.
+
 endif   # if NET

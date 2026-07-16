@@ -2909,6 +2909,36 @@ EXPORT_SYMBOL(flow_keys_dissector);
 struct flow_dissector flow_keys_basic_dissector __read_mostly;
 EXPORT_SYMBOL(flow_keys_basic_dissector);
 
+#if IS_ENABLED(CONFIG_FLOW_DISSECTOR_KUNIT_TEST)
+/* Test-only accessor: the symmetric dissector is file-static but is
+ * the second dissector the fast-path eligibility gate admits.
+ */
+struct flow_dissector *flow_keys_dissector_symmetric_kunit(void)
+{
+	return &flow_keys_dissector_symmetric;
+}
+EXPORT_SYMBOL_GPL(flow_keys_dissector_symmetric_kunit);
+
+/* Test-only accessor: summed fast-path hits, the observable for the
+ * suite's gates-off negative.
+ */
+u64 flow_dissector_fast_hits_kunit(void)
+{
+	u64 sum = 0;
+	int cpu, i;
+
+	for_each_possible_cpu(cpu) {
+		const struct flow_dissector_stats *s =
+			per_cpu_ptr(&flow_dissector_pcpu_stats, cpu);
+
+		for (i = 0; i < FLOW_DISSECTOR_SHAPE__MAX; i++)
+			sum += READ_ONCE(s->fast_hits[i]);
+	}
+	return sum;
+}
+EXPORT_SYMBOL_GPL(flow_dissector_fast_hits_kunit);
+#endif
+
 static int __init init_default_flow_dissectors(void)
 {
 	skb_flow_dissector_init(&flow_keys_dissector,
