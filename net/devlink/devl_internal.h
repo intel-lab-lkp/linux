@@ -71,6 +71,8 @@ extern struct genl_family devlink_nl_family;
 struct devlink *__devlink_alloc(const struct devlink_ops *ops, size_t priv_size,
 				struct net *net, struct device *dev,
 				const struct device_driver *dev_driver);
+int devlink_default_eswitch_mode_cmdline_init(void);
+void devlink_default_eswitch_mode_cleanup(void);
 
 #define devl_warn(devlink, format, args...)				\
 	do {								\
