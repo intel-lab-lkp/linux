@@ -679,7 +679,7 @@ static int vfat_add_entry(struct inode *dir, const struct qstr *qname,
 	/* update timestamp */
 	fat_truncate_time(dir, ts, FAT_UPDATE_CMTIME);
 	if (IS_DIRSYNC(dir))
-		(void)fat_sync_inode(dir);
+		err = fat_sync_inode(dir);
 	else
 		mark_inode_dirty(dir);
 cleanup:
@@ -921,14 +921,14 @@ static int vfat_update_dotdot_de(struct inode *dir, struct inode *inode,
 	return 0;
 }
 
-static void vfat_update_dir_metadata(struct inode *dir, struct timespec64 *ts)
+static int vfat_update_dir_metadata(struct inode *dir, struct timespec64 *ts)
 {
 	inode_inc_iversion(dir);
 	fat_truncate_time(dir, ts, FAT_UPDATE_CMTIME);
 	if (IS_DIRSYNC(dir))
-		(void)fat_sync_inode(dir);
-	else
-		mark_inode_dirty(dir);
+		return fat_sync_inode(dir);
+	mark_inode_dirty(dir);
+	return 0;
 }
 
 static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
@@ -996,7 +996,7 @@ static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 	old_sinfo.bh = NULL;
 	if (err)
 		goto error_dotdot;
-	vfat_update_dir_metadata(old_dir, &ts);
+	err = vfat_update_dir_metadata(old_dir, &ts);
 
 	if (new_inode) {
 		drop_nlink(new_inode);
@@ -1123,10 +1123,13 @@ static int vfat_rename_exchange(struct inode *old_dir, struct dentry *old_dentry
 			vfat_move_nlink(new_dir, old_dir);
 	}
 
-	vfat_update_dir_metadata(old_dir, &ts);
+	err = vfat_update_dir_metadata(old_dir, &ts);
 	/* if directories are not the same, update new_dir as well */
-	if (old_dir != new_dir)
-		vfat_update_dir_metadata(new_dir, &ts);
+	if (old_dir != new_dir) {
+		int err2 = vfat_update_dir_metadata(new_dir, &ts);
+		if (!err)
+			err = err2;
+	}
 
 out:
 	brelse(old_dotdot_bh);

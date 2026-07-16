@@ -253,11 +253,11 @@ static int msdos_add_entry(struct inode *dir, const unsigned char *name,
 
 	fat_truncate_time(dir, ts, FAT_UPDATE_CMTIME);
 	if (IS_DIRSYNC(dir))
-		(void)fat_sync_inode(dir);
+		err = fat_sync_inode(dir);
 	else
 		mark_inode_dirty(dir);
 
-	return 0;
+	return err;
 }
 
 /***** Create a file */
@@ -485,7 +485,7 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 			inode_inc_iversion(old_dir);
 			fat_truncate_time(old_dir, NULL, FAT_UPDATE_CMTIME);
 			if (IS_DIRSYNC(old_dir))
-				(void)fat_sync_inode(old_dir);
+				err = fat_sync_inode(old_dir);
 			else
 				mark_inode_dirty(old_dir);
 			goto out;
@@ -518,26 +518,21 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 		MSDOS_I(old_inode)->i_attrs |= ATTR_HIDDEN;
 	else
 		MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
-	if (IS_DIRSYNC(new_dir)) {
-		err = fat_sync_inode(old_inode);
-		if (err)
-			goto error_inode;
-	} else
-		mark_inode_dirty(old_inode);
-
 	if (update_dotdot) {
 		fat_set_start(dotdot_de, MSDOS_I(new_dir)->i_logstart);
 		mmb_mark_buffer_dirty(dotdot_bh,
 				      &MSDOS_I(old_inode)->i_metadata_bhs);
-		if (IS_DIRSYNC(new_dir)) {
-			err = sync_dirty_buffer(dotdot_bh);
-			if (err)
-				goto error_dotdot;
-		}
 		drop_nlink(old_dir);
 		if (!new_inode)
 			inc_nlink(new_dir);
 	}
+	if (IS_DIRSYNC(new_dir)) {
+		err = fat_sync_inode(old_inode);
+		if (err)
+			goto error_dotdot;
+	} else
+		mark_inode_dirty(old_inode);
+
 
 	err = fat_remove_entries(old_dir, &old_sinfo);	/* and releases bh */
 	old_sinfo.bh = NULL;
@@ -546,7 +541,7 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 	inode_inc_iversion(old_dir);
 	fat_truncate_time(old_dir, &ts, FAT_UPDATE_CMTIME);
 	if (IS_DIRSYNC(old_dir))
-		(void)fat_sync_inode(old_dir);
+		err = fat_sync_inode(old_dir);
 	else
 		mark_inode_dirty(old_dir);
 
@@ -571,7 +566,6 @@ error_dotdot:
 				      &MSDOS_I(old_inode)->i_metadata_bhs);
 		corrupt |= sync_dirty_buffer(dotdot_bh);
 	}
-error_inode:
 	fat_detach(old_inode);
 	fat_attach(old_inode, old_sinfo.i_pos);
 	MSDOS_I(old_inode)->i_attrs = old_attrs;
