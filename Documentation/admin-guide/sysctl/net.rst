@@ -516,6 +516,24 @@ the outer entry is off).
 
 Default: 0
 
+pppoe
+~~~~~
+
+PPPoE session frames (RFC 2516, EtherType ``ETH_P_PPP_SES`` 0x8864)
+carrying IPv4 or IPv6 inside PPP. The fast-path strips the 6-byte
+PPPoE session header + 2-byte PPP protocol field, writes
+FLOW_DISSECTOR_KEY_PPPOE (session_id, ppp_proto, type) when the
+dissector requests it, and tail-calls into the eth_ip fast-path for
+the inner IPv4 / IPv6 + TCP/UDP. Byte-identical with the slow path
+for the eligible shape.
+
+Defers to slow path for: PPP_MPLS_UC / PPP_MPLS_MC (until an MPLS
+fast-path lands), PFC-compressed PPP protocol fields, LCP/IPCP/etc.
+control frames, and any malformed PPPoE header (ver != 1, type != 1,
+code != 0).
+
+Default: 0
+
 3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 

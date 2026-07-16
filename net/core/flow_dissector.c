@@ -46,6 +46,8 @@ DEFINE_STATIC_KEY_FALSE(flow_dissector_vlan_key);
 EXPORT_SYMBOL(flow_dissector_vlan_key);
 DEFINE_STATIC_KEY_FALSE(flow_dissector_qinq_key);
 EXPORT_SYMBOL(flow_dissector_qinq_key);
+DEFINE_STATIC_KEY_FALSE(flow_dissector_pppoe_key);
+EXPORT_SYMBOL(flow_dissector_pppoe_key);
 
 /* IPv4 version/IHL byte of an option-less header: version 4, IHL 5. */
 #define FLOW_DIS_IPV4_VIHL_NOOPT	0x45
@@ -1333,6 +1335,67 @@ static bool flow_dissect_fast_vlan(const struct sk_buff *skb,
 	}
 }
 
+/* PPPoE session (RFC 2516) + 2-byte PPP protocol: write
+ * FLOW_DISSECTOR_KEY_PPPOE if requested, then tail-call the eth_ip
+ * fast-path for PPP_IP / PPP_IPV6. Anything else (PFC-compressed
+ * protocol, LCP, MPLS) defers.
+ */
+static bool flow_dissect_fast_pppoe(const struct sk_buff *skb,
+				    struct flow_dissector *flow_dissector,
+				    void *target_container,
+				    const void *data,
+				    int nhoff, int hlen)
+{
+	struct flow_dissector_key_pppoe *key_pppoe;
+	const struct {
+		struct pppoe_hdr hdr;
+		__be16 proto;
+	} *hdr;
+	__be16 inner_eth_proto;
+	u16 ppp_proto;
+
+	if (unlikely(hlen - nhoff < (int)sizeof(*hdr)))
+		return false;
+	hdr = (const void *)((const u8 *)data + nhoff);
+	if (!is_pppoe_ses_hdr_valid(&hdr->hdr))
+		return false;
+
+	ppp_proto = ntohs(hdr->proto);
+	switch (ppp_proto) {
+	case PPP_IP:
+		inner_eth_proto = htons(ETH_P_IP);
+		break;
+	case PPP_IPV6:
+		inner_eth_proto = htons(ETH_P_IPV6);
+		break;
+	default:
+		/* MPLS unicast/multicast + everything else (LCP, IPCP,
+		 * compressed PFC, ...) defers to the slow path.
+		 */
+		return false;
+	}
+
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_PPPOE)) {
+		key_pppoe = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_PPPOE,
+						      target_container);
+		key_pppoe->session_id = hdr->hdr.sid;
+		key_pppoe->ppp_proto = htons(ppp_proto);
+		key_pppoe->type = htons(ETH_P_PPP_SES);
+	}
+
+	nhoff += PPPOE_SES_HLEN;
+
+	if (inner_eth_proto == htons(ETH_P_IP))
+		return flow_dissect_fast_ipv4(skb, flow_dissector,
+					      target_container, data,
+					      nhoff, hlen);
+	return flow_dissect_fast_ipv6(skb, flow_dissector,
+				      target_container, data,
+				      nhoff, hlen);
+}
+
 /* Top-level dispatcher: eligibility check (only the two standard
  * dissectors and flag subset) + per-proto switch with per-shape
  * static_branch gating. Each case's branch is a forward not-taken JMP
@@ -1380,6 +1443,12 @@ static bool flow_dissect_fast(const struct sk_buff *skb,
 		return flow_dissect_fast_ipv6(skb, flow_dissector,
 					      target_container, data,
 					      nhoff, hlen);
+	case htons(ETH_P_PPP_SES):
+		if (!static_branch_unlikely(&flow_dissector_pppoe_key))
+			return false;
+		return flow_dissect_fast_pppoe(skb, flow_dissector,
+					       target_container, data,
+					       nhoff, hlen);
 	default:
 		return false;
 	}
@@ -2521,6 +2590,13 @@ static struct ctl_table flow_dissector_sysctl_table[] = {
 		.maxlen		= sizeof(flow_dissector_qinq_key),
 		.mode		= 0644,
 		.proc_handler	= proc_set_qinq_key,
+	},
+	{
+		.procname	= "pppoe",
+		.data		= &flow_dissector_pppoe_key.key,
+		.maxlen		= sizeof(flow_dissector_pppoe_key),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
 	},
 };
 
