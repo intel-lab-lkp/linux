@@ -1668,8 +1668,14 @@ ret_uninit:
 static void cxusb_disconnect(struct usb_interface *intf)
 {
 	struct dvb_usb_device *d = usb_get_intfdata(intf);
-	struct cxusb_state *st = d->priv;
+	struct cxusb_state *st;
 	struct i2c_client *client;
+
+	if (!d)
+		goto exit;
+	st = d->priv;
+	if (!st)
+		goto exit;
 
 	if (d->props.devices[0].warm_ids[0] == &cxusb_table[MEDION_MD95700])
 		cxusb_medion_unregister_analog(d);
@@ -1688,6 +1694,7 @@ static void cxusb_disconnect(struct usb_interface *intf)
 		i2c_unregister_device(client);
 	}
 
+exit:
 	dvb_usb_device_exit(intf);
 }
 
