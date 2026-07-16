@@ -121,6 +121,17 @@ fi
 # New API basic checks
 perf_cmd="--new -o ${stat_output}"
 check_no_args "STD (New API)" "$perf_cmd"
+check_system_wide "STD (New API)" "$perf_cmd"
+check_interval "STD (New API)" "$perf_cmd"
+check_per_thread "STD (New API)" "$perf_cmd"
+check_per_node "STD (New API)" "$perf_cmd"
+if [ $skip_test -ne 1 ]
+then
+	check_system_wide_no_aggr "STD (New API)" "$perf_cmd"
+	check_per_core "STD (New API)" "$perf_cmd"
+	check_per_die "STD (New API)" "$perf_cmd"
+	check_per_socket "STD (New API)" "$perf_cmd"
+fi
 
 cleanup
 exit 0
