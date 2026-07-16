@@ -365,23 +365,29 @@ TRACE_EVENT(kvm_dirty_ring_exit,
  * @attr:	The value of the attribute being set.
  */
 TRACE_EVENT(kvm_vm_set_mem_attributes,
-	TP_PROTO(gfn_t start, gfn_t end, unsigned long attr),
-	TP_ARGS(start, end, attr),
+	TP_PROTO(gfn_t start, gfn_t end, unsigned long attr, bool sync, u64 generation),
+	TP_ARGS(start, end, attr, sync, generation),
 
 	TP_STRUCT__entry(
 		__field(gfn_t,		start)
 		__field(gfn_t,		end)
 		__field(unsigned long,	attr)
+		__field(bool,		sync)
+		__field(u64,		generation)
 	),
 
 	TP_fast_assign(
 		__entry->start		= start;
 		__entry->end		= end;
 		__entry->attr		= attr;
+		__entry->sync		= sync;
+		__entry->generation	= generation;
 	),
 
-	TP_printk("%#016llx -- %#016llx [0x%lx]",
-		  __entry->start, __entry->end, __entry->attr)
+	TP_printk("%#016llx -- %#016llx [0x%lx], sync %d gen %llu",
+		  __entry->start, __entry->end, __entry->attr,
+		  __entry->sync, __entry->generation)
+
 );
 #endif /* CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES */
 

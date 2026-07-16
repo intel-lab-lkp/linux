@@ -2047,7 +2047,7 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	if (WARN_ON_ONCE(current->mm != vcpu->kvm->mm))
 		return;
 
-	if (unlikely(!kvm_check_gen(vcpu->kvm, ghc->generation) ||
+	if (unlikely(!kvm_check_gen(vcpu->kvm, ghc->slots_generation, ghc->attrs_generation) ||
 		     gpa != ghc->gpa ||
 		     kvm_is_error_hva(ghc->hva) || !ghc->memslot)) {
 		/* We rely on the fact that it fits in a single page. */
@@ -2624,7 +2624,7 @@ static void kvm_steal_time_set_preempted(struct kvm_vcpu *vcpu)
 	if (unlikely(current->mm != vcpu->kvm->mm))
 		return;
 
-	if (unlikely(!kvm_check_gen(vcpu->kvm, ghc->generation) ||
+	if (unlikely(!kvm_check_gen(vcpu->kvm, ghc->slots_generation, ghc->attrs_generation) ||
 		     gpa != ghc->gpa ||
 		     kvm_is_error_hva(ghc->hva) || !ghc->memslot))
 		return;

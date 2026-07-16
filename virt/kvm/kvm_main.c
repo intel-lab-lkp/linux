@@ -1117,6 +1117,7 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 	xa_init(&kvm->vcpu_array);
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 	xa_init(&kvm->mem_attrs.array);
+	kvm->mem_attrs.generation = 0;
 #endif
 
 	INIT_LIST_HEAD(&kvm->gpc_list);
@@ -2467,6 +2468,51 @@ bool kvm_range_has_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	return true;
 }
 
+/*
+ * Returns true if _any_ gfns in the range [@start, @end) have attributes that
+ * match _any_ bit in @mask.
+ */
+bool kvm_range_has_any_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
+					unsigned long mask)
+{
+	XA_STATE(xas, &kvm->mem_attrs.array, start);
+	void *entry;
+
+	mask &= kvm_supported_mem_attributes(kvm);
+	if (!mask)
+		return false;
+
+	if (end == start + 1)
+		return !!(kvm_get_memory_attributes(kvm, start) & mask);
+
+	guard(rcu)();
+	for (;;) {
+		do {
+			entry = xas_next(&xas);
+		} while (xas_retry(&xas, entry));
+
+		if (xas.xa_index >= end)
+			break;
+
+		if (xa_to_value(entry) & mask)
+			return true;
+	}
+
+	return false;
+}
+
+static bool kvm_range_memory_attributes_need_sync(struct kvm *kvm,
+						  gfn_t start, gfn_t end,
+						  unsigned long attributes)
+{
+	u64 mask = KVM_MEMORY_ATTRIBUTE_NEEDS_SYNC_MASK;
+
+	if (attributes & mask)
+		return true;
+
+	return kvm_range_has_any_memory_attributes(kvm, start, end, mask);
+}
+
 static __always_inline void kvm_handle_gfn_range(struct kvm *kvm,
 						 struct kvm_mmu_notifier_range *range)
 {
@@ -2559,19 +2605,24 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		.on_lock = kvm_mmu_invalidate_end,
 		.may_block = true,
 	};
+	bool sync = false;
 	unsigned long i;
 	void *entry;
 	int r = 0;
 
 	entry = attributes ? xa_mk_value(attributes) : NULL;
 
-	trace_kvm_vm_set_mem_attributes(start, end, attributes);
-
 	mutex_lock(&kvm->slots_lock);
 
 	/* Nothing to do if the entire range has the desired attributes. */
 	if (kvm_range_has_memory_attributes(kvm, start, end, ~0, attributes))
 		goto out_unlock;
+
+	sync = kvm_range_memory_attributes_need_sync(kvm, start, end,
+						     attributes);
+
+	trace_kvm_vm_set_mem_attributes(start, end, attributes, sync,
+					kvm->mem_attrs.generation + 1);
 
 	/*
 	 * Reserve memory ahead of time to avoid having to deal with failures
@@ -2594,10 +2645,16 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		cond_resched();
 	}
 
+	/* Pairs with acquire in kvm_mem_attributes_generation() */
+	smp_store_release(&kvm->mem_attrs.generation,
+			  kvm->mem_attrs.generation + 1);
+
 	kvm_handle_gfn_range(kvm, &post_set_range);
 
 out_unlock:
 	mutex_unlock(&kvm->slots_lock);
+	if (sync)
+		synchronize_srcu_expedited(&kvm->srcu);
 
 	return r;
 }
@@ -3449,7 +3506,8 @@ int kvm_vcpu_write_guest(struct kvm_vcpu *vcpu, gpa_t gpa, const void *data,
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_vcpu_write_guest);
 
-static int __kvm_gfn_to_hva_cache_init(struct kvm_memslots *slots,
+static int __kvm_gfn_to_hva_cache_init(struct kvm *kvm,
+				       struct kvm_memslots *slots,
 				       struct gfn_to_hva_cache *ghc,
 				       gpa_t gpa, unsigned long len)
 {
@@ -3459,8 +3517,8 @@ static int __kvm_gfn_to_hva_cache_init(struct kvm_memslots *slots,
 	gfn_t nr_pages_needed = end_gfn - start_gfn + 1;
 	gfn_t nr_pages_avail;
 
-	/* Update ghc->generation before performing any error checks. */
-	ghc->generation = slots->generation;
+	/* Update ghc->slots_generation before performing any error checks. */
+	ghc->slots_generation = slots->generation;
 
 	if (start_gfn > end_gfn) {
 		ghc->hva = KVM_HVA_ERR_BAD;
@@ -3479,6 +3537,8 @@ static int __kvm_gfn_to_hva_cache_init(struct kvm_memslots *slots,
 			return -EFAULT;
 	}
 
+	ghc->attrs_generation = kvm_mem_attributes_generation(kvm);
+
 	/* Use the slow path for cross page reads and writes. */
 	if (nr_pages_needed == 1)
 		ghc->hva += offset;
@@ -3494,7 +3554,7 @@ int kvm_gfn_to_hva_cache_init(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 			      gpa_t gpa, unsigned long len)
 {
 	struct kvm_memslots *slots = kvm_memslots(kvm);
-	return __kvm_gfn_to_hva_cache_init(slots, ghc, gpa, len);
+	return __kvm_gfn_to_hva_cache_init(kvm, slots, ghc, gpa, len);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_gfn_to_hva_cache_init);
 
@@ -3509,8 +3569,8 @@ int kvm_write_guest_offset_cached(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 	if (WARN_ON_ONCE(len + offset > ghc->len))
 		return -EINVAL;
 
-	if (unlikely(!kvm_memslots_check_gen(kvm, ghc->generation, &slots))) {
-		if (__kvm_gfn_to_hva_cache_init(slots, ghc, ghc->gpa, ghc->len))
+	if (unlikely(!kvm_memslots_check_gen(kvm, ghc->slots_generation, ghc->attrs_generation, &slots))) {
+		if (__kvm_gfn_to_hva_cache_init(kvm, slots, ghc, ghc->gpa, ghc->len))
 			return -EFAULT;
 	}
 
@@ -3547,8 +3607,8 @@ int kvm_read_guest_offset_cached(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 	if (WARN_ON_ONCE(len + offset > ghc->len))
 		return -EINVAL;
 
-	if (unlikely(!kvm_memslots_check_gen(kvm, ghc->generation, &slots))) {
-		if (__kvm_gfn_to_hva_cache_init(slots, ghc, ghc->gpa, ghc->len))
+	if (unlikely(!kvm_memslots_check_gen(kvm, ghc->slots_generation, ghc->attrs_generation, &slots))) {
+		if (__kvm_gfn_to_hva_cache_init(kvm, slots, ghc, ghc->gpa, ghc->len))
 			return -EFAULT;
 	}
 
