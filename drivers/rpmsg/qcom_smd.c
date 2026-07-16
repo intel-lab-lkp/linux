@@ -1421,10 +1421,8 @@ static int qcom_smd_parse_edge(struct device *dev,
 	ret = devm_request_irq(dev, irq,
 			       qcom_smd_edge_intr, IRQF_TRIGGER_RISING,
 			       node->name, edge);
-	if (ret) {
-		dev_err(dev, "failed to request smd irq\n");
+	if (ret)
 		goto put_node;
-	}
 
 	edge->irq = irq;
 
