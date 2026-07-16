@@ -150,6 +150,11 @@ struct adt7470_cooling_device {
 	int pwm_index;
 };
 
+struct adt7470_thermal_sensor {
+	struct adt7470_data *data;
+	int id;
+};
+
 struct adt7470_data {
 	struct regmap		*regmap;
 	struct mutex		lock;
@@ -181,6 +186,7 @@ struct adt7470_data {
 	unsigned int		auto_update_interval;
 
 	struct adt7470_cooling_device cooling_devices[ADT7470_PWM_COUNT];
+	struct adt7470_thermal_sensor thermal_sensors[ADT7470_TEMP_COUNT];
 };
 
 /*
@@ -957,6 +963,47 @@ static int adt7470_register_cooling_devices(struct device *dev,
 	return 0;
 }
 
+static int adt7470_get_temp(struct thermal_zone_device *tz, int *temp)
+{
+	struct adt7470_thermal_sensor *sensor = thermal_zone_device_priv(tz);
+	struct adt7470_data *data = sensor->data;
+
+	mutex_lock(&data->lock);
+	*temp = 1000 * data->temp[sensor->id];
+	mutex_unlock(&data->lock);
+
+	return 0;
+}
+
+static const struct thermal_zone_device_ops adt7470_thermal_ops = {
+	.get_temp = adt7470_get_temp,
+};
+
+static int adt7470_register_thermal_sensors(struct device *dev,
+					    struct adt7470_data *data)
+{
+	int i;
+
+	for (i = 0; i < ADT7470_TEMP_COUNT; i++) {
+		struct thermal_zone_device *tz;
+
+		data->thermal_sensors[i].data = data;
+		data->thermal_sensors[i].id = i;
+
+		tz = devm_thermal_of_zone_register(dev, i, &data->thermal_sensors[i],
+						   &adt7470_thermal_ops);
+		if (IS_ERR(tz)) {
+			if (PTR_ERR(tz) == -ENODEV)
+				continue;
+			return dev_warn_probe(dev, PTR_ERR(tz),
+					      "failed to register thermal zone %d\n",
+					      i);
+		}
+	}
+
+	return 0;
+}
+
 static ssize_t pwm_max_show(struct device *dev,
 			    struct device_attribute *devattr, char *buf)
 {
@@ -1399,6 +1446,10 @@ static int adt7470_probe(struct i2c_client *client)
 			return err;
 
 		err = adt7470_register_cooling_devices(dev, data);
+		if (err)
+			return err;
+
+		err = adt7470_register_thermal_sensors(dev, data);
 		if (err)
 			return err;
 	}
