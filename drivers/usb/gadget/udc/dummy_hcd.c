@@ -2015,9 +2015,9 @@ return_urb:
 			ep->already_seen = ep->setup_stage = 0;
 
 		usb_hcd_unlink_urb_from_ep(dummy_hcd_to_hcd(dum_hcd), urb);
-		spin_unlock(&dum->lock);
+		spin_unlock_irqrestore(&dum->lock, flags);
 		usb_hcd_giveback_urb(dummy_hcd_to_hcd(dum_hcd), urb, status);
-		spin_lock(&dum->lock);
+		spin_lock_irqsave(&dum->lock, flags);
 
 		goto restart;
 	}
