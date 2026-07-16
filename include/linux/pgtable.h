@@ -3,6 +3,35 @@
 #define _LINUX_PGTABLE_H
 
 #include <linux/pfn.h>
+
+#ifndef __ASSEMBLY__
+#ifndef __LINUX_FPB_T
+#define __LINUX_FPB_T
+typedef int __bitwise fpb_t;
+#endif
+
+/* Compare PTEs respecting the dirty bit. */
+#define FPB_RESPECT_DIRTY		((__force fpb_t)BIT(0))
+
+/* Compare PTEs respecting the soft-dirty bit. */
+#define FPB_RESPECT_SOFT_DIRTY		((__force fpb_t)BIT(1))
+
+/* Compare PTEs respecting the writable bit. */
+#define FPB_RESPECT_WRITE		((__force fpb_t)BIT(2))
+
+/*
+ * Merge PTE write bits: if any PTE in the batch is writable, modify the
+ * PTE at @ptentp to be writable.
+ */
+#define FPB_MERGE_WRITE			((__force fpb_t)BIT(3))
+
+/*
+ * Merge PTE young and dirty bits: if any PTE in the batch is young or dirty,
+ * modify the PTE at @ptentp to be young or dirty, respectively.
+ */
+#define FPB_MERGE_YOUNG_DIRTY		((__force fpb_t)BIT(4))
+#endif /* !__ASSEMBLY__ */
+
 #include <asm/pgtable.h>
 
 #define PMD_ORDER	(PMD_SHIFT - PAGE_SHIFT)
@@ -397,6 +426,7 @@ static inline void lazy_mmu_mode_resume(void) {}
  * pte_batch_hint - Number of pages that can be added to batch without scanning.
  * @ptep: Page table pointer for the entry.
  * @pte: Page table entry.
+ * @flags: Flags that control PTE normalization for batch comparisons.
  *
  * Some architectures know that a set of contiguous ptes all map the same
  * contiguous memory with the same permissions. In this case, it can provide a
@@ -407,7 +437,7 @@ static inline void lazy_mmu_mode_resume(void) {}
  *
  * May be overridden by the architecture, else pte_batch_hint is always 1.
  */
-static inline unsigned int pte_batch_hint(pte_t *ptep, pte_t pte)
+static inline unsigned int pte_batch_hint(pte_t *ptep, pte_t pte, fpb_t flags)
 {
 	return 1;
 }
@@ -1855,6 +1885,7 @@ static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
 	return pmd;
 }
 #endif
+
 #else /* !CONFIG_HAVE_ARCH_SOFT_DIRTY */
 static inline int pte_soft_dirty(pte_t pte)
 {
@@ -1916,6 +1947,17 @@ static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
 	return pmd;
 }
 #endif
+
+static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
+{
+	if (!(flags & FPB_RESPECT_DIRTY))
+		pte = pte_mkclean(pte);
+	if (likely(!(flags & FPB_RESPECT_SOFT_DIRTY)))
+		pte = pte_clear_soft_dirty(pte);
+	if (likely(!(flags & FPB_RESPECT_WRITE)))
+		pte = pte_wrprotect(pte);
+	return pte_mkold(pte);
+}
 
 #ifndef __HAVE_PFNMAP_TRACKING
 /*
@@ -2412,6 +2454,15 @@ static inline const char *pgtable_level_to_str(enum pgtable_level level)
 #define pte_leaf_size(x) PAGE_SIZE
 #endif
 #define __pte_leaf_size(x,y) pte_leaf_size(y)
+#endif
+
+#ifndef __ptep_leaf_size
+#ifndef __ASSEMBLY__
+static inline unsigned long __ptep_leaf_size(pmd_t pmd, pte_t *ptep, pte_t pte)
+{
+	return __pte_leaf_size(pmd, pte);
+}
+#endif /* !__ASSEMBLY__ */
 #endif
 
 /*

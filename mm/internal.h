@@ -343,41 +343,6 @@ static inline int anon_vma_prepare(struct vm_area_struct *vma)
 	return __anon_vma_prepare(vma);
 }
 
-/* Flags for folio_pte_batch(). */
-typedef int __bitwise fpb_t;
-
-/* Compare PTEs respecting the dirty bit. */
-#define FPB_RESPECT_DIRTY		((__force fpb_t)BIT(0))
-
-/* Compare PTEs respecting the soft-dirty bit. */
-#define FPB_RESPECT_SOFT_DIRTY		((__force fpb_t)BIT(1))
-
-/* Compare PTEs respecting the writable bit. */
-#define FPB_RESPECT_WRITE		((__force fpb_t)BIT(2))
-
-/*
- * Merge PTE write bits: if any PTE in the batch is writable, modify the
- * PTE at @ptentp to be writable.
- */
-#define FPB_MERGE_WRITE			((__force fpb_t)BIT(3))
-
-/*
- * Merge PTE young and dirty bits: if any PTE in the batch is young or dirty,
- * modify the PTE at @ptentp to be young or dirty, respectively.
- */
-#define FPB_MERGE_YOUNG_DIRTY		((__force fpb_t)BIT(4))
-
-static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
-{
-	if (!(flags & FPB_RESPECT_DIRTY))
-		pte = pte_mkclean(pte);
-	if (likely(!(flags & FPB_RESPECT_SOFT_DIRTY)))
-		pte = pte_clear_soft_dirty(pte);
-	if (likely(!(flags & FPB_RESPECT_WRITE)))
-		pte = pte_wrprotect(pte);
-	return pte_mkold(pte);
-}
-
 /**
  * folio_pte_batch_flags - detect a PTE batch for a large folio
  * @folio: The large folio to detect a PTE batch for.
@@ -430,7 +395,7 @@ static inline unsigned int folio_pte_batch_flags(struct folio *folio,
 	max_nr = min_t(unsigned long, max_nr,
 		       folio_pfn(folio) + folio_nr_pages(folio) - pte_pfn(pte));
 
-	nr = pte_batch_hint(ptep, pte);
+	nr = pte_batch_hint(ptep, pte, flags);
 	expected_pte = __pte_batch_clear_ignored(pte_advance_pfn(pte, nr), flags);
 	ptep = ptep + nr;
 
@@ -447,7 +412,7 @@ static inline unsigned int folio_pte_batch_flags(struct folio *folio,
 			any_dirty |= pte_dirty(pte);
 		}
 
-		cur_nr = pte_batch_hint(ptep, pte);
+		cur_nr = pte_batch_hint(ptep, pte, flags);
 		expected_pte = pte_advance_pfn(expected_pte, cur_nr);
 		ptep += cur_nr;
 		nr += cur_nr;

@@ -191,7 +191,7 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			__mincore_unmapped_range(addr, addr + PAGE_SIZE,
 						 vma, vec);
 		else if (pte_present(pte)) {
-			unsigned int batch = pte_batch_hint(ptep, pte);
+			unsigned int batch = pte_batch_hint(ptep, pte, 0);
 
 			if (batch > 1) {
 				unsigned int max_nr = (end - addr) >> PAGE_SHIFT;
