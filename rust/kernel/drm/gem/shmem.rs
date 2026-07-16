@@ -688,7 +688,7 @@ mod tests {
         // Ensure the ordering in memory is correct
         let expected = 0xFEDCBA98_u32.to_ne_bytes().into_iter();
         for (offset, expected) in (0x20..=0x23).zip(expected) {
-            assert_eq!(vmap.read8(offset), expected);
+            assert_eq!(vmap.try_read8(offset).unwrap(), expected);
         }
 
         Ok(())
