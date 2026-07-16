@@ -134,6 +134,7 @@ then
 	check_per_cache_instance "STD (New API)" "$perf_cmd"
 	check_per_cluster "STD (New API)" "$perf_cmd"
 fi
+check_metric_only "STD (New API)" "$perf_cmd"
 
 cleanup
 exit 0
