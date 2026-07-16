@@ -328,9 +328,9 @@ out:
 
 		take_dentry_name_snapshot(&filename, file->f_path.dentry);
 
-		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
-				    filename.name.name, "collect_data",
-				    audit_cause, result, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_DATA, inode,
+					filename.name.name, "collect_data",
+					audit_cause, result, 0, result);
 
 		release_dentry_name_snapshot(&filename);
 	}

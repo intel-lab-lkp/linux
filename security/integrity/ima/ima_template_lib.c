@@ -390,9 +390,9 @@ int ima_eventdigest_init(struct ima_event_data *event_data,
 	    ima_hash_algo : HASH_ALGO_SHA1;
 	result = ima_calc_file_hash(event_data->file, hash_hdr);
 	if (result) {
-		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
-				    event_data->filename, "collect_data",
-				    "failed", result, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_DATA, inode,
+					event_data->filename, "collect_data",
+					"failed", result, 0, result);
 		return result;
 	}
 	cur_digest = hash_hdr->digest;
