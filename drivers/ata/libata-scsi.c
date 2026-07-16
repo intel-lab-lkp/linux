@@ -1710,8 +1710,7 @@ static void ata_scsi_schedule_deferred_qc(struct ata_link *link)
 		queue_work(system_highpri_wq, &link->deferred_qc_work);
 }
 
-static void ata_scsi_retry_deferred_qc(struct ata_port *ap,
-				       struct scsi_cmnd *scmd)
+void ata_scsi_retry_deferred_qc(struct ata_port *ap, struct scsi_cmnd *scmd)
 {
 	unsigned long flags;
 
@@ -1719,6 +1718,7 @@ static void ata_scsi_retry_deferred_qc(struct ata_port *ap,
 	ata_eh_retry_deferred_qc(ap, scmd);
 	spin_unlock_irqrestore(ap->lock, flags);
 }
+EXPORT_SYMBOL_GPL(ata_scsi_retry_deferred_qc);
 
 enum scsi_timeout_action ata_scsi_eh_timed_out(struct scsi_cmnd *scmd)
 {
