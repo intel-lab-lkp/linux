@@ -418,24 +418,27 @@ static inline void vm_enable_cap(struct kvm_vm *vm, u32 cap, u64 arg0)
 	vm_ioctl(vm, KVM_ENABLE_CAP, &enable_cap);
 }
 
-static inline void vm_set_memory_attributes(struct kvm_vm *vm, gpa_t gpa,
-					    u64 size, u64 attributes)
+static inline int __vm_set_memory_attributes(struct kvm_vm *vm, u64 gpa,
+					     u64 size, u64 attributes,
+					     u64 flags)
 {
 	struct kvm_memory_attributes attr = {
 		.attributes = attributes,
 		.address = gpa,
 		.size = size,
-		.flags = 0,
+		.flags = flags,
 	};
 
-	/*
-	 * KVM_SET_MEMORY_ATTRIBUTES overwrites _all_ attributes.  These flows
-	 * need significant enhancements to support multiple attributes.
-	 */
-	TEST_ASSERT(!attributes || attributes == KVM_MEMORY_ATTRIBUTE_PRIVATE,
-		    "Update me to support multiple attributes!");
+	return __vm_ioctl(vm, KVM_SET_MEMORY_ATTRIBUTES, &attr);
+}
 
-	vm_ioctl(vm, KVM_SET_MEMORY_ATTRIBUTES, &attr);
+static inline void vm_set_memory_attributes(struct kvm_vm *vm, gpa_t gpa,
+					    u64 size, u64 attributes)
+{
+	int rc;
+
+	rc = __vm_set_memory_attributes(vm, gpa, size, attributes, 0);
+	TEST_ASSERT_VM_VCPU_IOCTL(!rc, KVM_SET_MEMORY_ATTRIBUTES, rc, vm);
 }
 
 
