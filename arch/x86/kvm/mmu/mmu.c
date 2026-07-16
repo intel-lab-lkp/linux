@@ -4603,7 +4603,7 @@ static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
 		return r;
 	}
 
-	fault->map_writable = !(fault->slot->flags & KVM_MEM_READONLY);
+	fault->map_writable &= !(fault->slot->flags & KVM_MEM_READONLY);
 	fault->max_level = kvm_max_level_for_order(max_order);
 
 	return RET_PF_CONTINUE;
@@ -4613,13 +4613,14 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 				 struct kvm_page_fault *fault)
 {
 	unsigned int foll = fault->write ? FOLL_WRITE : 0;
+	bool writable;
 
 	if (fault->is_private || kvm_memslot_is_gmem_only(fault->slot))
 		return kvm_mmu_faultin_pfn_gmem(vcpu, fault);
 
 	foll |= FOLL_NOWAIT;
 	fault->pfn = __kvm_faultin_pfn(fault->slot, fault->gfn, foll,
-				       &fault->map_writable, &fault->refcounted_page);
+				       &writable, &fault->refcounted_page);
 
 	/*
 	 * If resolving the page failed because I/O is needed to fault-in the
@@ -4628,7 +4629,7 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 	 * other failures are terminal, i.e. retrying won't help.
 	 */
 	if (fault->pfn != KVM_PFN_ERR_NEEDS_IO)
-		return RET_PF_CONTINUE;
+		goto out_pf_continue;
 
 	if (!fault->prefetch && kvm_can_do_async_pf(vcpu)) {
 		trace_kvm_try_async_get_page(fault->addr, fault->gfn);
@@ -4649,8 +4650,10 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 	foll |= FOLL_INTERRUPTIBLE;
 	foll &= ~FOLL_NOWAIT;
 	fault->pfn = __kvm_faultin_pfn(fault->slot, fault->gfn, foll,
-				       &fault->map_writable, &fault->refcounted_page);
+				       &writable, &fault->refcounted_page);
 
+out_pf_continue:
+	fault->map_writable &= writable;
 	return RET_PF_CONTINUE;
 }
 
@@ -4968,6 +4971,7 @@ static int kvm_mmu_do_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 		.is_private = err & PFERR_PRIVATE_ACCESS,
 
 		.pfn = KVM_PFN_ERR_FAULT,
+		.map_writable = true,
 	};
 	int r;
 
