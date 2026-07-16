@@ -22,6 +22,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/util_macros.h>
+#include <linux/thermal.h>
 
 /* Addresses to scan */
 static const unsigned short normal_i2c[] = { 0x2C, 0x2E, 0x2F, I2C_CLIENT_END };
@@ -142,6 +143,13 @@ static const unsigned short normal_i2c[] = { 0x2C, 0x2E, 0x2F, I2C_CLIENT_END };
 #define ADT7470_FREQ_MASK	0x70
 #define ADT7470_FREQ_SHIFT	4
 
+struct adt7470_data;
+
+struct adt7470_cooling_device {
+	struct adt7470_data *data;
+	int pwm_index;
+};
+
 struct adt7470_data {
 	struct regmap		*regmap;
 	struct mutex		lock;
@@ -171,6 +179,8 @@ struct adt7470_data {
 
 	struct task_struct	*auto_update;
 	unsigned int		auto_update_interval;
+
+	struct adt7470_cooling_device cooling_devices[ADT7470_PWM_COUNT];
 };
 
 /*
@@ -846,6 +856,107 @@ static int adt7470_pwm_write(struct device *dev, u32 attr, int channel, long val
 	return err;
 }
 
+static int adt7470_get_max_state(struct thermal_cooling_device *cdev,
+				 unsigned long *state)
+{
+	*state = ADT7470_PWM_MAX;
+	return 0;
+}
+
+static int adt7470_get_cur_state(struct thermal_cooling_device *cdev,
+				 unsigned long *state)
+{
+	struct adt7470_cooling_device *cooling = cdev->devdata;
+	struct adt7470_data *data = cooling->data;
+
+	mutex_lock(&data->lock);
+	*state = data->pwm[cooling->pwm_index];
+	mutex_unlock(&data->lock);
+
+	return 0;
+}
+
+static int adt7470_set_cur_state(struct thermal_cooling_device *cdev,
+				 unsigned long state)
+{
+	struct adt7470_cooling_device *cooling = cdev->devdata;
+	struct adt7470_data *data = cooling->data;
+	unsigned int pwm_auto_reg_mask;
+	int err;
+
+	if (cooling->pwm_index & 1)
+		pwm_auto_reg_mask = ADT7470_PWM2_AUTO_MASK;
+	else
+		pwm_auto_reg_mask = ADT7470_PWM1_AUTO_MASK;
+
+	state = clamp_val(state, 0, ADT7470_PWM_MAX);
+
+	mutex_lock(&data->lock);
+
+	if (data->pwm[cooling->pwm_index] == state &&
+	    data->pwm_automatic[cooling->pwm_index] == 0) {
+		mutex_unlock(&data->lock);
+		return 0;
+	}
+
+	/* Put the PWM channel in manual mode before updating it. */
+	err = regmap_update_bits(data->regmap,
+				 ADT7470_REG_PWM_CFG(cooling->pwm_index),
+				 pwm_auto_reg_mask, 0);
+	if (err < 0)
+		goto out;
+
+	data->pwm_automatic[cooling->pwm_index] = 0;
+
+	err = regmap_write(data->regmap,
+			   ADT7470_REG_PWM(cooling->pwm_index), state);
+
+	if (err < 0)
+		goto out;
+
+	data->pwm[cooling->pwm_index] = state;
+out:
+	mutex_unlock(&data->lock);
+
+	return err;
+}
+
+static const struct thermal_cooling_device_ops adt7470_cooling_ops = {
+	.get_max_state = adt7470_get_max_state,
+	.get_cur_state = adt7470_get_cur_state,
+	.set_cur_state = adt7470_set_cur_state,
+};
+
+static int adt7470_register_cooling_devices(struct device *dev,
+					    struct adt7470_data *data)
+{
+	int i;
+
+	for (i = 0; i < ADT7470_PWM_COUNT; i++) {
+		struct thermal_cooling_device *cdev;
+		char cdev_name[THERMAL_NAME_LENGTH];
+
+		data->cooling_devices[i].data = data;
+		data->cooling_devices[i].pwm_index = i;
+
+		snprintf(cdev_name, sizeof(cdev_name), "adt7470-pwm%d", i);
+		cdev = devm_thermal_of_child_cooling_device_register(dev,
+								     dev->of_node, cdev_name,
+								     &data->cooling_devices[i],
+								     &adt7470_cooling_ops);
+
+		if (IS_ERR(cdev)) {
+			if (PTR_ERR(cdev) == -ENODEV)
+				continue;
+			return dev_warn_probe(dev, PTR_ERR(cdev),
+					      "failed to register cooling device %s\n",
+					      cdev_name);
+		}
+	}
+
+	return 0;
+}
+
 static ssize_t pwm_max_show(struct device *dev,
 			    struct device_attribute *devattr, char *buf)
 {
@@ -1280,6 +1391,17 @@ static int adt7470_probe(struct i2c_client *client)
 
 	if (IS_ERR(hwmon_dev))
 		return PTR_ERR(hwmon_dev);
+
+	if (IS_ENABLED(CONFIG_THERMAL)) {
+		/* fill the cache before registering the cooling devices */
+		err = adt7470_update_sensors(data);
+		if (err)
+			return err;
+
+		err = adt7470_register_cooling_devices(dev, data);
+		if (err)
+			return err;
+	}
 
 	data->auto_update = kthread_run(adt7470_update_thread, client, "%s",
 					dev_name(hwmon_dev));
