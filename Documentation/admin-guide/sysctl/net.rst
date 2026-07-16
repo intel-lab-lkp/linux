@@ -460,7 +460,32 @@ historical importance.
 
 Default: 0
 
-2. /proc/sys/net/unix - Parameters for Unix domain sockets
+2. /proc/sys/net/flow_dissector - Flow dissector fast-path per-shape sysctls
+---------------------------------------------------------------------------
+
+The flow dissector is invoked on every packet that needs a flow hash
+(RPS, RFS, ECMP, sch_cake, cls_flower, ...). For common shapes
+(Eth+IPv4/IPv6+TCP/UDP, plus per-shape extensions for VLAN/QinQ,
+PPPoE, MPLS, IP-in-IP and GRE added by this series), an opt-in
+fast-path bypasses the slow-path graph walk and writes
+``struct flow_keys`` directly. Each shape is gated by its own static
+key + sysctl so operators enable only what their deployment uses.
+
+All defaults are 0 (off). Flipping any of these on takes effect
+immediately; no kernel rebuild needed.
+
+eth_ip
+~~~~~~
+
+Eth + IPv4 (IHL=5, no fragmentation) + TCP/UDP, and Eth + IPv6 (no
+extension headers) + TCP/UDP. Output is byte-identical to the slow
+path on the eligible shape; non-matching packets fall through to the
+slow path unchanged. The dispatcher costs one not-taken JMP per call
+when this is 0.
+
+Default: 0
+
+3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 
 There is only one file in this directory.

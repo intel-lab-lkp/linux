@@ -425,6 +425,11 @@ __be32 flow_get_u32_dst(const struct flow_keys *flow);
 extern struct flow_dissector flow_keys_dissector;
 extern struct flow_dissector flow_keys_basic_dissector;
 
+/* Per-shape fast-path static-branch keys, toggled via
+ * /proc/sys/net/flow_dissector/<shape>. All default off.
+ */
+extern struct static_key_false flow_dissector_eth_ip_key;
+
 /* struct flow_keys_digest:
  *
  * This structure is used to hold a digest of the full flow keys. This is a

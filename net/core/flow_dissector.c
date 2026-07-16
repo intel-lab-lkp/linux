@@ -37,6 +37,33 @@
 #endif
 #include <linux/bpf-netns.h>
 
+/* Per-shape fast-path gates, one static_branch per shape so operators
+ * enable only what their deployment carries. All default off.
+ */
+DEFINE_STATIC_KEY_FALSE(flow_dissector_eth_ip_key);
+EXPORT_SYMBOL(flow_dissector_eth_ip_key);
+
+/* IPv4 version/IHL byte of an option-less header: version 4, IHL 5. */
+#define FLOW_DIS_IPV4_VIHL_NOOPT	0x45
+
+/* Fast-path helper forward declarations. */
+static bool flow_dissect_fast_ipv4(const struct sk_buff *skb,
+				   struct flow_dissector *flow_dissector,
+				   void *target_container,
+				   const void *data,
+				   int nhoff, int hlen);
+static bool flow_dissect_fast_ipv6(const struct sk_buff *skb,
+				   struct flow_dissector *flow_dissector,
+				   void *target_container,
+				   const void *data,
+				   int nhoff, int hlen);
+
+/* One of the two dissectors the fast-path eligibility check admits;
+ * defined here so flow_dissect_fast() below can reference it (its keys
+ * and init live near the bottom of the file).
+ */
+static struct flow_dissector flow_keys_dissector_symmetric __read_mostly;
+
 static void dissector_set_key(struct flow_dissector *flow_dissector,
 			      enum flow_dissector_key_id key_id)
 {
@@ -1043,6 +1070,223 @@ static bool is_pppoe_ses_hdr_valid(const struct pppoe_hdr *hdr)
 	return hdr->ver == 1 && hdr->type == 1 && hdr->code == 0;
 }
 
+/* The IPv4 fast-path assumes a 20-byte IPv4 header (IHL == 5). The
+ * runtime IHL check below is the dynamic invariant; this static
+ * assertion is the compile-time one, in the unlikely case struct
+ * iphdr ever grows.
+ */
+static_assert(sizeof(struct iphdr) == 20);
+
+/* Straight-line eth + IPv4 (IHL=5, not fragmented) + TCP|UDP. Returns
+ * true when @target_container has been filled byte-identically to the
+ * slow path; false on any miss (caller falls back to the slow path).
+ */
+static bool flow_dissect_fast_ipv4(const struct sk_buff *skb,
+				   struct flow_dissector *flow_dissector,
+				   void *target_container,
+				   const void *data,
+				   int nhoff, int hlen)
+{
+	struct flow_dissector_key_control *key_control;
+	struct flow_dissector_key_addrs *key_addrs;
+	struct flow_dissector_key_basic *key_basic;
+	struct flow_dissector_key_ports *key_ports;
+	const struct iphdr *iph;
+	int thoff;
+
+	if (unlikely(hlen - nhoff < (int)sizeof(*iph) + 4))
+		return false;
+
+	iph = (const struct iphdr *)((const u8 *)data + nhoff);
+
+	if (unlikely(*(const u8 *)iph != FLOW_DIS_IPV4_VIHL_NOOPT))
+		return false;
+
+	if (unlikely(iph->frag_off & htons(IP_MF | IP_OFFSET)))
+		return false;
+
+	if (unlikely(iph->protocol != IPPROTO_TCP &&
+		     iph->protocol != IPPROTO_UDP))
+		return false;
+
+	thoff = nhoff + (int)sizeof(*iph);
+
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_CONTROL)) {
+		key_control = skb_flow_dissector_target(flow_dissector,
+							FLOW_DISSECTOR_KEY_CONTROL,
+							target_container);
+		key_control->addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
+		key_control->thoff = min_t(u16, thoff,
+					   skb ? skb->len : hlen);
+		key_control->flags = 0;
+	}
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_BASIC)) {
+		key_basic = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_BASIC,
+						      target_container);
+		key_basic->n_proto = htons(ETH_P_IP);
+		key_basic->ip_proto = iph->protocol;
+	}
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
+		key_addrs = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_IPV4_ADDRS,
+						      target_container);
+		memcpy(&key_addrs->v4addrs.src, &iph->saddr,
+		       sizeof(key_addrs->v4addrs.src));
+		memcpy(&key_addrs->v4addrs.dst, &iph->daddr,
+		       sizeof(key_addrs->v4addrs.dst));
+	}
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_PORTS)) {
+		const __be32 *ports = (const __be32 *)
+			((const u8 *)data + thoff);
+
+		key_ports = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_PORTS,
+						      target_container);
+		key_ports->ports = *ports;
+	}
+
+	return true;
+}
+
+/* Same as flow_dissect_fast_ipv4 but for a fixed 40-byte IPv6 header
+ * (no extension headers). The nexthdr check below holds the run-time
+ * invariant; the static_assert holds the compile-time one.
+ */
+static_assert(sizeof(struct ipv6hdr) == 40);
+
+static bool flow_dissect_fast_ipv6(const struct sk_buff *skb,
+				   struct flow_dissector *flow_dissector,
+				   void *target_container,
+				   const void *data,
+				   int nhoff, int hlen)
+{
+	struct flow_dissector_key_control *key_control;
+	struct flow_dissector_key_addrs *key_addrs;
+	struct flow_dissector_key_basic *key_basic;
+	struct flow_dissector_key_ports *key_ports;
+	const struct ipv6hdr *iph;
+	int thoff;
+
+	if (unlikely(hlen - nhoff < (int)sizeof(*iph) + 4))
+		return false;
+
+	iph = (const struct ipv6hdr *)((const u8 *)data + nhoff);
+
+	if (unlikely((*(const u8 *)iph >> 4) != 6))
+		return false;
+
+	/* Any non-zero flow label defers, checked before everything else
+	 * (including the tunnel descents below). Callers passing
+	 * FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL (skb_get_hash() -- so
+	 * RPS/RFS, fq, cake) make the slow path stop at a non-zero label
+	 * even on a tunnel outer, and dissectors requesting the label key
+	 * write it; both diverge from the plain parse. Deferring on the
+	 * label itself covers every combination without threading flags
+	 * into the helpers, and zero-label IPv6 (the overwhelmingly
+	 * common case) stays on the fast path.
+	 */
+	if (unlikely((iph->flow_lbl[0] & 0x0f) |
+		     iph->flow_lbl[1] | iph->flow_lbl[2]))
+		return false;
+
+	if (unlikely(iph->nexthdr != IPPROTO_TCP &&
+		     iph->nexthdr != IPPROTO_UDP))
+		return false;
+
+	thoff = nhoff + (int)sizeof(*iph);
+
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_CONTROL)) {
+		key_control = skb_flow_dissector_target(flow_dissector,
+							FLOW_DISSECTOR_KEY_CONTROL,
+							target_container);
+		key_control->addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
+		key_control->thoff = min_t(u16, thoff,
+					   skb ? skb->len : hlen);
+		key_control->flags = 0;
+	}
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_BASIC)) {
+		key_basic = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_BASIC,
+						      target_container);
+		key_basic->n_proto = htons(ETH_P_IPV6);
+		key_basic->ip_proto = iph->nexthdr;
+	}
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_IPV6_ADDRS)) {
+		key_addrs = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_IPV6_ADDRS,
+						      target_container);
+		memcpy(&key_addrs->v6addrs.src, &iph->saddr,
+		       sizeof(key_addrs->v6addrs.src));
+		memcpy(&key_addrs->v6addrs.dst, &iph->daddr,
+		       sizeof(key_addrs->v6addrs.dst));
+	}
+	if (dissector_uses_key(flow_dissector,
+			       FLOW_DISSECTOR_KEY_PORTS)) {
+		const __be32 *ports = (const __be32 *)
+			((const u8 *)data + thoff);
+
+		key_ports = skb_flow_dissector_target(flow_dissector,
+						      FLOW_DISSECTOR_KEY_PORTS,
+						      target_container);
+		key_ports->ports = *ports;
+	}
+
+	return true;
+}
+
+/* Top-level dispatcher: eligibility check (only the two standard
+ * dissectors and flag subset) + per-proto switch with per-shape
+ * static_branch gating. Each case's branch is a forward not-taken JMP
+ * when its sysctl is 0 — matches the slow-path cost.
+ */
+static bool flow_dissect_fast(const struct sk_buff *skb,
+			      struct flow_dissector *flow_dissector,
+			      void *target_container,
+			      const void *data,
+			      __be16 proto, int nhoff, int hlen,
+			      unsigned int flags)
+{
+	if (flow_dissector != &flow_keys_dissector &&
+	    flow_dissector != &flow_keys_dissector_symmetric)
+		return false;
+
+	/* skb_get_hash() -- behind RPS/RFS, fq, fq_codel, cake -- passes
+	 * FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL on every dissect, so the
+	 * flag must be admitted or the fast path never runs for the
+	 * kernel's main consumers. Its only semantic (stop early on a
+	 * non-zero IPv6 flow label) is subsumed by the IPv6 fast path
+	 * deferring on any non-zero label. Any other flag defers.
+	 */
+	if (flags & ~(unsigned int)(FLOW_DISSECTOR_F_PARSE_1ST_FRAG |
+				    FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL))
+		return false;
+
+	switch (proto) {
+	case htons(ETH_P_IP):
+		if (!static_branch_unlikely(&flow_dissector_eth_ip_key))
+			return false;
+		return flow_dissect_fast_ipv4(skb, flow_dissector,
+					      target_container, data,
+					      nhoff, hlen);
+	case htons(ETH_P_IPV6):
+		if (!static_branch_unlikely(&flow_dissector_eth_ip_key))
+			return false;
+		return flow_dissect_fast_ipv6(skb, flow_dissector,
+					      target_container, data,
+					      nhoff, hlen);
+	default:
+		return false;
+	}
+}
+
 /**
  * __skb_flow_dissect - extract the flow_keys struct and return it
  * @net: associated network namespace, derived from @skb if NULL
@@ -1182,6 +1426,13 @@ bool __skb_flow_dissect(const struct net *net,
 
 		rcu_read_unlock();
 	}
+
+	/* Opt-in fast-path; flow_dissect_fast() does the eligibility check
+	 * and per-shape gating.
+	 */
+	if (flow_dissect_fast(skb, flow_dissector, target_container,
+			      data, proto, nhoff, hlen, flags))
+		return true;
 
 	if (dissector_uses_key(flow_dissector,
 			       FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
@@ -1879,8 +2130,6 @@ void make_flow_keys_digest(struct flow_keys_digest *digest,
 }
 EXPORT_SYMBOL(make_flow_keys_digest);
 
-static struct flow_dissector flow_keys_dissector_symmetric __read_mostly;
-
 u32 __skb_get_hash_symmetric_net(const struct net *net, const struct sk_buff *skb)
 {
 	struct flow_keys keys;
@@ -2116,3 +2365,23 @@ static int __init init_default_flow_dissectors(void)
 	return 0;
 }
 core_initcall(init_default_flow_dissectors);
+
+/* Per-shape fast-path sysctls under /proc/sys/net/flow_dissector/. */
+static struct ctl_table flow_dissector_sysctl_table[] = {
+	{
+		.procname	= "eth_ip",
+		.data		= &flow_dissector_eth_ip_key.key,
+		.maxlen		= sizeof(flow_dissector_eth_ip_key),
+		.mode		= 0644,
+		.proc_handler	= proc_do_static_key,
+	},
+};
+
+static int __init flow_dissector_sysctl_init(void)
+{
+	if (!register_net_sysctl(&init_net, "net/flow_dissector",
+				 flow_dissector_sysctl_table))
+		return -ENOMEM;
+	return 0;
+}
+late_initcall(flow_dissector_sysctl_init);
