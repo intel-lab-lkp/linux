@@ -873,7 +873,7 @@ static int panel_edp_probe(struct device *dev, const struct panel_desc *desc,
 
 	ddc = of_parse_phandle(dev->of_node, "ddc-i2c-bus", 0);
 	if (ddc) {
-		panel->ddc = of_find_i2c_adapter_by_node(ddc);
+		panel->ddc = of_get_i2c_adapter_by_node(ddc);
 		of_node_put(ddc);
 
 		if (!panel->ddc)
@@ -938,7 +938,7 @@ err_finished_pm_runtime:
 	pm_runtime_disable(dev);
 err_finished_ddc_init:
 	if (panel->ddc && (!panel->aux || panel->ddc != &panel->aux->ddc))
-		put_device(&panel->ddc->dev);
+		i2c_put_adapter(panel->ddc);
 
 	return err;
 }
@@ -983,7 +983,7 @@ static void panel_edp_remove(struct device *dev)
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
 	if (panel->ddc && (!panel->aux || panel->ddc != &panel->aux->ddc))
-		put_device(&panel->ddc->dev);
+		i2c_put_adapter(panel->ddc);
 
 	drm_edid_free(panel->drm_edid);
 	panel->drm_edid = NULL;
