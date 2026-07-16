@@ -11,10 +11,18 @@
 #define __DRM_UTILS_H__
 
 #include <linux/types.h>
+#include <drm/drm_connector.h>
 
 struct drm_edid;
 
+#ifdef CONFIG_DRM_PANEL_ORIENTATION_QUIRKS
 int drm_get_panel_orientation_quirk(int width, int height);
+#else
+static inline int drm_get_panel_orientation_quirk(int width, int height)
+{
+	return DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
+}
+#endif
 
 struct drm_panel_backlight_quirk {
 	u16 min_brightness;

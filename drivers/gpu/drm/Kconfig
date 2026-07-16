@@ -8,7 +8,6 @@
 menuconfig DRM
 	tristate "Direct Rendering Manager (XFree86 4.1.0 and higher DRI support)"
 	depends on (AGP || AGP=n) && !EMULATED_CMPXCHG && HAS_DMA
-	select DRM_PANEL_ORIENTATION_QUIRKS
 	select HDMI
 	select I2C
 	select DMA_SHARED_BUFFER
@@ -369,4 +368,15 @@ endif
 
 # Separate option because drm_panel_orientation_quirks.c is shared with fbdev
 config DRM_PANEL_ORIENTATION_QUIRKS
-	tristate
+	tristate "Panel orientation quirks for DMI-based detection"
+	depends on DRM
+	help
+	  Enable DMI-based quirk detection for devices where the
+	  built-in LCD panel is mounted in a non-standard orientation
+	  relative to the casing (e.g., handheld PCs, tablets).
+
+	  This allows userspace to automatically rotate the display
+	  to match the physical orientation of the device.
+
+	  Desktop and server systems with external monitors do not
+	  need this. If unsure, say N.

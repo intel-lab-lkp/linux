@@ -14,7 +14,7 @@
 #include <drm/drm_connector.h>
 #include <drm/drm_utils.h>
 
-#ifdef CONFIG_DMI
+#if defined(CONFIG_DMI) && defined(CONFIG_DRM_PANEL_ORIENTATION_QUIRKS)
 
 /*
  * Some x86 clamshell design devices use portrait tablet screens and a display
@@ -589,7 +589,7 @@ EXPORT_SYMBOL(drm_get_panel_orientation_quirk);
 
 #else
 
-/* There are no quirks for non x86 devices yet */
+/* Fallback stub when DMI or the entire quirk module is disabled. */
 int drm_get_panel_orientation_quirk(int width, int height)
 {
 	return DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
@@ -598,5 +598,7 @@ EXPORT_SYMBOL(drm_get_panel_orientation_quirk);
 
 #endif
 
+#ifdef CONFIG_DRM_PANEL_ORIENTATION_QUIRKS
 MODULE_DESCRIPTION("Quirks for non-normal panel orientation");
 MODULE_LICENSE("Dual MIT/GPL");
+#endif
