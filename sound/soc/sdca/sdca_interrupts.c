@@ -375,7 +375,7 @@ int sdca_irq_data_populate(struct device *dev, struct regmap *regmap,
 	if (!dev)
 		return -ENODEV;
 
-	name = kasprintf(GFP_KERNEL, "%s %s", entity->label, control->label);
+	name = devm_kasprintf(dev, GFP_KERNEL, "%s %s", entity->label, control->label);
 	if (!name)
 		return -ENOMEM;
 
@@ -448,27 +448,43 @@ int sdca_irq_populate_early(struct device *dev, struct regmap *regmap,
 			else if (!interrupt)
 				continue;
 
+			ret = sdca_irq_data_populate(dev, regmap, NULL, function,
+						     entity, control, interrupt);
+			if (ret)
+				return ret;
+
+			interrupt->handler = base_handler;
+
 			switch (SDCA_CTL_TYPE(entity->type, control->sel)) {
-			case SDCA_CTL_TYPE_S(XU, FDL_CURRENTOWNER):
-				ret = sdca_irq_data_populate(dev, regmap, NULL,
-							     function, entity,
-							     control, interrupt);
+			case SDCA_CTL_TYPE_S(ENTITY_0, FUNCTION_STATUS):
+				interrupt->handler = function_status_handler;
+				break;
+			case SDCA_CTL_TYPE_S(GE, DETECTED_MODE):
+				ret = sdca_jack_alloc_state(interrupt);
 				if (ret)
 					return ret;
 
+				interrupt->handler = detected_mode_handler;
+				break;
+			case SDCA_CTL_TYPE_S(XU, FDL_CURRENTOWNER):
 				ret = sdca_fdl_alloc_state(interrupt);
 				if (ret)
 					return ret;
 
+				interrupt->handler = fdl_owner_handler;
+
 				ret = sdca_irq_request_locked(dev, info, irq,
 							      interrupt->name,
-							      fdl_owner_handler,
+							      interrupt->handler,
 							      interrupt);
 				if (ret) {
 					dev_err(dev, "failed to request irq %s: %d\n",
 						interrupt->name, ret);
 					return ret;
 				}
+				break;
+			case SDCA_CTL_TYPE_S(HIDE, HIDTX_CURRENTOWNER):
+				interrupt->handler = hid_handler;
 				break;
 			default:
 				break;
@@ -495,66 +511,26 @@ int sdca_irq_populate(struct sdca_function_data *function,
 		      struct sdca_interrupt_info *info)
 {
 	struct device *dev = component->dev;
-	int i, j;
+	int i, ret;
 
 	guard(mutex)(&info->irq_lock);
 
-	for (i = 0; i < function->num_entities; i++) {
-		struct sdca_entity *entity = &function->entities[i];
+	for (i = 0; i < SDCA_MAX_INTERRUPTS; i++) {
+		struct sdca_interrupt *interrupt = &info->irqs[i];
+		int irq;
 
-		for (j = 0; j < entity->num_controls; j++) {
-			struct sdca_control *control = &entity->controls[j];
-			int irq = control->interrupt_position;
-			struct sdca_interrupt *interrupt;
-			irq_handler_t handler;
-			int ret;
+		if (interrupt->function != function || interrupt->irq)
+			continue;
 
-			interrupt = get_interrupt_data(dev, irq, info);
-			if (IS_ERR(interrupt))
-				return PTR_ERR(interrupt);
-			else if (!interrupt)
-				continue;
+		interrupt->component = component;
 
-			ret = sdca_irq_data_populate(dev, NULL, component,
-						     function, entity, control,
-						     interrupt);
-			if (ret)
-				return ret;
-
-			handler = base_handler;
-
-			switch (SDCA_CTL_TYPE(entity->type, control->sel)) {
-			case SDCA_CTL_TYPE_S(ENTITY_0, FUNCTION_STATUS):
-				handler = function_status_handler;
-				break;
-			case SDCA_CTL_TYPE_S(GE, DETECTED_MODE):
-				ret = sdca_jack_alloc_state(interrupt);
-				if (ret)
-					return ret;
-
-				handler = detected_mode_handler;
-				break;
-			case SDCA_CTL_TYPE_S(XU, FDL_CURRENTOWNER):
-				ret = sdca_fdl_alloc_state(interrupt);
-				if (ret)
-					return ret;
-
-				handler = fdl_owner_handler;
-				break;
-			case SDCA_CTL_TYPE_S(HIDE, HIDTX_CURRENTOWNER):
-				handler = hid_handler;
-				break;
-			default:
-				break;
-			}
-
-			ret = sdca_irq_request_locked(dev, info, irq, interrupt->name,
-						      handler, interrupt);
-			if (ret) {
-				dev_err(dev, "failed to request irq %s: %d\n",
-					interrupt->name, ret);
-				return ret;
-			}
+		irq = interrupt->control->interrupt_position;
+		ret = sdca_irq_request_locked(dev, info, irq, interrupt->name,
+					      interrupt->handler, interrupt);
+		if (ret) {
+			dev_err(dev, "failed to request irq %s: %d\n",
+				interrupt->name, ret);
+			return ret;
 		}
 	}
 
@@ -585,8 +561,6 @@ void sdca_irq_cleanup(struct device *dev,
 			continue;
 
 		sdca_irq_free_locked(dev, info, i, interrupt->name, interrupt);
-
-		kfree(interrupt->name);
 	}
 }
 EXPORT_SYMBOL_NS_GPL(sdca_irq_cleanup, "SND_SOC_SDCA");
