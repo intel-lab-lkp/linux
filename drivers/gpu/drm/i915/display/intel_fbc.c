@@ -59,6 +59,7 @@
 #include "intel_fbc_regs.h"
 #include "intel_frontbuffer.h"
 #include "intel_parent.h"
+#include "skl_universal_plane.h"
 
 #define for_each_fbc_id(__display, __fbc_id) \
 	for ((__fbc_id) = INTEL_FBC_A; (__fbc_id) < I915_MAX_FBCS; (__fbc_id)++) \
@@ -1319,8 +1320,14 @@ static void intel_fbc_max_plane_size(const struct intel_plane_state *plane_state
 				     unsigned int *w, unsigned int *h)
 {
 	struct intel_display *display = to_intel_display(plane_state);
+	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
+	const struct drm_framebuffer *fb = plane_state->hw.fb;
+	unsigned int rotation = plane_state->hw.rotation;
 
-	if (DISPLAY_VER(display) >= 10) {
+	if (DISPLAY_VER(display) >= 20) {
+		*w = intel_plane_max_width(plane, fb, 0, rotation);
+		*h = 4096;
+	} else if (DISPLAY_VER(display) >= 10) {
 		*w = 5120;
 		*h = 4096;
 	} else if (DISPLAY_VER(display) >= 8 || display->platform.haswell) {
