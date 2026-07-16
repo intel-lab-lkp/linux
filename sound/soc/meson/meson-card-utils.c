@@ -52,19 +52,18 @@ int meson_card_reallocate_links(struct snd_soc_card *card,
 	if (!links)
 		goto err_links;
 
+	priv->card.dai_link = links;
+
 	ldata = krealloc(priv->link_data,
 			 num_links * sizeof(*priv->link_data),
 			 GFP_KERNEL | __GFP_ZERO);
 	if (!ldata)
-		goto err_ldata;
+		goto err_links;
 
-	priv->card.dai_link = links;
 	priv->link_data = ldata;
 	priv->card.num_links = num_links;
 	return 0;
 
-err_ldata:
-	kfree(links);
 err_links:
 	dev_err(priv->card.dev, "failed to allocate links\n");
 	return -ENOMEM;
