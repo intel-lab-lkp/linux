@@ -26,13 +26,29 @@ echo "Output will be stored in: $tmpdir"
 for cputype in /sys/bus/event_source/devices/cpu_*; do
 	cputype=$(basename "$cputype")
 	echo "Testing metrics for: $cputype"
-	$PYTHON $pythonvalidator -rule $rulefile -output_dir $tmpdir -wl "${workload}" \
+	mkdir -p "$tmpdir/legacy"
+	$PYTHON $pythonvalidator -rule $rulefile -output_dir "$tmpdir/legacy" -wl "${workload}" \
 		-cputype "${cputype}"
 	ret=$?
-	rm -rf $tmpdir
 	if [ $ret -ne 0 ]; then
-		echo "Metric validation return with errors. Please check metrics reported with errors."
+		echo "Metric validation return with errors. " \
+			"Please check metrics reported with errors in: " \
+			"$tmpdir/legacy"
+		exit $ret
+	fi
+
+	echo "Testing metrics for: $cputype (New API)"
+	mkdir -p "$tmpdir/new"
+	$PYTHON $pythonvalidator -rule $rulefile -output_dir "$tmpdir/new" -wl "${workload}" \
+		-cputype "${cputype}" -new
+	ret=$?
+	if [ $ret -ne 0 ]; then
+		echo "Metric validation return with errors (New API). " \
+			"Please check metrics reported with errors in: " \
+			"$tmpdir/new"
+		exit $ret
 	fi
 done
+rm -rf "$tmpdir"
 exit $ret
 
