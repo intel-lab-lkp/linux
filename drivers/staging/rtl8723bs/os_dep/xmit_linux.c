@@ -15,8 +15,10 @@ unsigned int rtw_remainder_len(struct pkt_file *pfile)
 void _rtw_open_pktfile(struct sk_buff *pktptr, struct pkt_file *pfile)
 {
 	pfile->pkt = pktptr;
-	pfile->cur_addr = pfile->buf_start = pktptr->data;
-	pfile->pkt_len = pfile->buf_len = pktptr->len;
+	pfile->buf_start = pktptr->data;
+	pfile->cur_addr = pktptr->data;
+	pfile->buf_len = pktptr->len;
+	pfile->pkt_len = pktptr->len;
 
 	pfile->cur_buffer = pfile->buf_start;
 }
