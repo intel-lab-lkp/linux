@@ -1356,6 +1356,10 @@ static Elf_Addr addend_mips_rel(uint32_t *location, unsigned int r_type)
 #define EM_RISCV		243
 #endif
 
+#ifndef R_RISCV_ADD32
+#define R_RISCV_ADD32		35
+#endif
+
 #ifndef R_RISCV_SUB32
 #define R_RISCV_SUB32		39
 #endif
@@ -1406,6 +1410,76 @@ static void get_rel_type_and_sym(struct elf_info *elf, uint64_t r_info,
 	*r_sym = ELF_R_SYM(r_info);
 }
 
+static bool section_contains_addr(struct elf_info *elf, unsigned int secndx,
+				  Elf_Addr addr)
+{
+	Elf_Shdr *sechdr;
+
+	if (secndx >= elf->num_sections)
+		return false;
+
+	sechdr = &elf->sechdrs[secndx];
+
+	return addr >= sechdr->sh_addr &&
+	       addr - sechdr->sh_addr < sechdr->sh_size;
+}
+
+static bool addr_is_executable(struct elf_info *elf, Elf_Addr addr)
+{
+	unsigned int i;
+
+	for (i = 1; i < elf->num_sections; i++) {
+		if ((elf->sechdrs[i].sh_flags & SHF_EXECINSTR) &&
+		    section_contains_addr(elf, i, addr))
+			return true;
+	}
+
+	return false;
+}
+
+static bool is_debug_section(const char *secname)
+{
+	return match(secname, PATTERNS(".debug*", ".zdebug*"));
+}
+
+static bool riscv_extable_rela_valid(struct elf_info *elf,
+				     const Elf_Rela *start,
+				     const Elf_Rela *stop,
+				     const Elf_Rela *rela,
+				     Elf_Addr r_offset,
+				     Elf_Sym *add_sym)
+{
+	Elf_Addr add_addr, sub_addr, target_addr;
+	unsigned int r_type, r_sym;
+	const Elf_Rela *pair;
+	Elf_Sym *sub_sym;
+
+	/*
+	 * RISC-V relative exception tables emit an ADD32/SUB32 pair for each
+	 * field. After ld -r, the ADD32 symbol may name an unrelated local
+	 * debug symbol. Otherwise, validate the resolved relative target.
+	 */
+	for (pair = start; pair < stop; pair++) {
+		get_rel_type_and_sym(elf, pair->r_info, &r_type, &r_sym);
+		if (TO_NATIVE(pair->r_offset) == r_offset &&
+		    r_type == R_RISCV_SUB32)
+			break;
+	}
+
+	if (pair == stop)
+		return false;
+
+	sub_sym = elf->symtab_start + r_sym;
+	if (is_debug_section(sec_name(elf, get_secindex(elf, add_sym))))
+		return true;
+
+	add_addr = add_sym->st_value + TO_NATIVE(rela->r_addend);
+	sub_addr = sub_sym->st_value + TO_NATIVE(pair->r_addend);
+	target_addr = r_offset + add_addr - sub_addr;
+
+	return addr_is_executable(elf, target_addr);
+}
+
 static void section_rela(struct module *mod, struct elf_info *elf,
 			 unsigned int fsecndx, const char *fromsec,
 			 const Elf_Rela *start, const Elf_Rela *stop)
@@ -1427,6 +1501,11 @@ static void section_rela(struct module *mod, struct elf_info *elf,
 		case EM_RISCV:
 			if (!strcmp("__ex_table", fromsec) &&
 			    r_type == R_RISCV_SUB32)
+				continue;
+			if (!strcmp("__ex_table", fromsec) &&
+			    r_type == R_RISCV_ADD32 &&
+			    riscv_extable_rela_valid(elf, start, stop, rela,
+						     r_offset, tsym))
 				continue;
 			break;
 		case EM_LOONGARCH:
