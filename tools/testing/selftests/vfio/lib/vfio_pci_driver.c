@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "kselftest.h"
+#include <linux/sizes.h>
+#include <linux/log2.h>
 #include <libvfio.h>
 
 #ifdef __x86_64__
@@ -28,6 +30,11 @@ void vfio_pci_driver_probe(struct vfio_pci_device *device)
 			continue;
 
 		device->driver.ops = ops;
+
+		VFIO_ASSERT_NE(ops->region_size, 0);
+		device->driver.region.size =
+			max_t(u64, roundup_pow_of_two(ops->region_size),
+			      getpagesize());
 	}
 }
 
