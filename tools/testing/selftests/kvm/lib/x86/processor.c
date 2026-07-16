@@ -397,6 +397,11 @@ u64 *tdp_get_pte(struct kvm_vm *vm, u64 l2_gpa)
 	return __vm_get_page_table_entry(vm, &vm->stage2_mmu, l2_gpa, &level);
 }
 
+u64 *vm_get_pte_level(struct kvm_vm *vm, gva_t gva, int *level)
+{
+	return __vm_get_page_table_entry(vm, &vm->mmu, gva, level);
+}
+
 u64 *vm_get_pte(struct kvm_vm *vm, gva_t gva)
 {
 	int level = PG_LEVEL_4K;

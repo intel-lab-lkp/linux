@@ -19,6 +19,8 @@
 	(KVM_MEMORY_ATTRIBUTE_NR | KVM_MEMORY_ATTRIBUTE_NW | \
 	 KVM_MEMORY_ATTRIBUTE_NX)
 
+#define HV_STATUS_INVALID_HYPERCALL_INPUT	3
+
 #define MMIO_GPA	0x700000000
 #define MMIO_GVA	MMIO_GPA
 
@@ -26,12 +28,35 @@
 #define PT_ACCESSED_MASK	BIT_ULL(5)
 #define PTE_VADDR		0x1000000000
 
+static volatile uint64_t ipis_rcvd;
+
+static pthread_t vcpu_thread;
+
+struct hv_vpset {
+	u64 format;
+	u64 valid_bank_mask;
+	u64 bank_contents[2];
+};
+
+enum HV_GENERIC_SET_FORMAT {
+	HV_GENERIC_SET_SPARSE_4K,
+	HV_GENERIC_SET_ALL,
+};
+
+struct hv_send_ipi_ex {
+	u32 vector;
+	u32 reserved;
+	struct hv_vpset vp_set;
+};
+
 enum {
 	TEST_OP_NOP,
 	TEST_OP_READ,
 	TEST_OP_WRITE,
 	TEST_OP_EXEC,
 	TEST_OP_INVPLG,
+	TEST_OP_HYPERV_HYPERCALL_INPUT,
+	TEST_OP_MONITOR_ADDRESS,
 	TEST_OP_EXIT,
 };
 
@@ -41,6 +66,8 @@ const char *test_op_names[] =
 	[TEST_OP_WRITE] = "Write",
 	[TEST_OP_EXEC] = "Exec",
 	[TEST_OP_INVPLG] = "Invplg",
+	[TEST_OP_HYPERV_HYPERCALL_INPUT] = "HvHcall input",
+	[TEST_OP_MONITOR_ADDRESS] = "Monitor address",
 	[TEST_OP_EXIT] = "Exit",
 };
 
@@ -48,6 +75,8 @@ struct test_data {
 	uint8_t op;
 	int stage;
 	gva_t vaddr;
+	gpa_t paddr;
+	uint8_t confirm_read;
 	uint64_t expected_val;
 
 	struct kvm_vcpu *vcpu;
@@ -59,19 +88,27 @@ static uint64_t arch_controlled_read(gva_t addr);
 static void arch_controlled_write(gva_t addr, uint64_t val);
 static void arch_controlled_exec(gva_t addr);
 static void arch_write_return_insn(struct kvm_vm *vm, gpa_t vaddr);
+static void arch_guest_init(void);
 
 static void guest_code(void *data)
 {
 	struct test_data *test_data = data;
 	int stage = 1;
 
+	arch_guest_init();
+
 	while (true) {
 		uint64_t expected_val = READ_ONCE(test_data->expected_val);
+		bool confirm_read = READ_ONCE(test_data->confirm_read);
 		gva_t vaddr = READ_ONCE(test_data->vaddr);
+		gpa_t paddr = READ_ONCE(test_data->paddr);
+		u64 val;
 
 		switch(READ_ONCE(test_data->op)) {
 		case TEST_OP_READ:
-			(void) arch_controlled_read(vaddr);
+			val = arch_controlled_read(vaddr);
+			if (confirm_read)
+				GUEST_ASSERT_EQ(expected_val, val);
 			GUEST_SYNC(stage++);
 			break;
 		case TEST_OP_WRITE:
@@ -88,6 +125,25 @@ static void guest_code(void *data)
 				     :: "b" (vaddr): "memory");
 			GUEST_SYNC(stage++);
 			break;
+		case TEST_OP_HYPERV_HYPERCALL_INPUT: {
+			hyperv_hypercall(HVCALL_SEND_IPI_EX, paddr, 0);
+			asm volatile ("sti; hlt; cli;");
+			GUEST_ASSERT_EQ(ipis_rcvd, 1);
+			GUEST_SYNC(stage++);
+			break;
+		}
+		case TEST_OP_MONITOR_ADDRESS: {
+			uint64_t *pval = (uint64_t *)vaddr;
+			uint64_t val = READ_ONCE(*pval);
+
+			while (READ_ONCE(*pval) == val &&
+			       /* So host can force the op out of the loop */
+			       READ_ONCE(test_data->op) == TEST_OP_MONITOR_ADDRESS)
+				asm volatile("nop");
+
+			GUEST_SYNC(stage++);
+			break;
+		}
 #endif
 		default:
 			goto exit;
@@ -145,6 +201,7 @@ static void test_page_restricted(struct kvm_vcpu *vcpu, int op,
 
 	test_data->op = op;
 	test_data->vaddr = vaddr;
+	test_data->paddr = fault_paddr;
 
 	rc = _vcpu_run(vcpu);
 	TEST_ASSERT(rc == -1 && errno == EFAULT,
@@ -382,12 +439,16 @@ int main(int argc, char *argv[])
 	test_mem = vm_alloc(vm, size, KVM_UTIL_MIN_VADDR);
 	virt_map(vcpu->vm, MMIO_GVA, MMIO_GPA, 1);
 	test_data = init_test_data(vcpu);
+#ifdef __x86_64__
+	vcpu_set_hv_cpuid(vcpu);
+#endif
 
 	test_input_validation(vm);
 	test_memory_access(vcpu, test_mem, size);
 	test_memattrs_ignore_mmio(vcpu);
 #ifdef __x86_64__
 	arch_test_memory_access_pte(vcpu, test_mem);
+	arch_test_side_channels(vcpu, test_mem, size);
 #endif
 	test_finalize(vcpu);
 
