@@ -1242,7 +1242,9 @@ static int record__alloc_thread_data(struct record *rec, struct evlist *evlist)
 				goto out_free;
 			}
 			ret = fdarray__add(&thread_data[t].pollfd, thread_data[t].pipes.msg[0],
-					   POLLIN | POLLERR | POLLHUP, fdarray_flag__nonfilterable);
+					   POLLIN | POLLERR | POLLHUP,
+					   fdarray_flag__nonfilterable |
+					   fdarray_flag__non_perf_event);
 			if (ret < 0) {
 				pr_err("Failed to add descriptor to thread[%d] pollfd\n", t);
 				goto out_free;
