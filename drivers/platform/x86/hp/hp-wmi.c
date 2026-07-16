@@ -907,8 +907,10 @@ static int hp_wmi_fan_speed_set(struct hp_wmi_hwmon_priv *priv)
 		return ret;
 	ret = hp_wmi_perform_query(HPWMI_VICTUS_S_FAN_SPEED_SET_QUERY, HPWMI_GM,
 				   &fan_speed, sizeof(fan_speed), 0);
+	if (ret)
+		return ret < 0 ? ret : -EINVAL;
 
-	return ret;
+	return 0;
 }
 
 static int hp_wmi_fan_speed_reset(struct hp_wmi_hwmon_priv *priv)
