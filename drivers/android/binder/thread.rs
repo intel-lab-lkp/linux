@@ -1340,7 +1340,15 @@ impl Thread {
             let process = orig.from.process.clone();
             let allow_fds = orig.flags & TF_ACCEPT_FDS != 0;
             let reply = Transaction::new_reply(self, process, info, allow_fds)?;
-            self.inner.lock().push_work(completion);
+            {
+                // This performs a deferred push so that `read` can wait for the next incoming
+                // transaction without a userspace roundtrip.
+                let mut inner = self.inner.lock();
+                inner.push_work_deferred(completion);
+                // However, if `TF_DEFER_COMPLETE` is not set, then set `process_work_list` to make
+                // the push non-deferred. This forces a userspace roundtrip.
+                inner.process_work_list |= info.flags & TF_DEFER_COMPLETE == 0;
+            }
             orig.from.deliver_reply(Ok(reply), &orig, None);
             Ok(())
         })()
