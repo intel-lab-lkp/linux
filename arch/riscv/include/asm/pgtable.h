@@ -6,6 +6,13 @@
 #ifndef _ASM_RISCV_PGTABLE_H
 #define _ASM_RISCV_PGTABLE_H
 
+#ifndef __ASSEMBLY__
+#ifndef __LINUX_FPB_T
+#define __LINUX_FPB_T
+typedef int __bitwise fpb_t;
+#endif
+#endif
+
 #include <linux/mmzone.h>
 #include <linux/sizes.h>
 
@@ -591,6 +598,8 @@ void napotpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
 				     unsigned int nr, cydp_t flags);
 void napotpte_wrprotect_ptes(struct mm_struct *mm, unsigned long addr,
 			     pte_t *ptep, unsigned int nr);
+unsigned int napotpte_pte_batch_hint_from_pte(pte_t *ptep, pte_t orig_pte,
+					      fpb_t flags);
 int napotpte_ptep_set_access_flags(struct vm_area_struct *vma,
 				   unsigned long address, pte_t *ptep,
 				   pte_t entry, int dirty);
@@ -1033,6 +1042,16 @@ static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
 	return napotpte_ptep_clear_flush_young(vma, address, ptep);
 }
 
+#define pte_batch_hint pte_batch_hint
+static inline unsigned int
+pte_batch_hint(pte_t *ptep, pte_t pte, fpb_t flags)
+{
+	if (!pte_present(pte))
+		return 1;
+
+	return napotpte_pte_batch_hint_from_pte(ptep, pte, flags);
+}
+
 #else /* CONFIG_RISCV_ISA_SVNAPOT */
 
 #define napotpte_ptep_set_access_flags(vma, address, ptep, entry, dirty) \
@@ -1094,6 +1113,13 @@ static inline pte_t __get_and_clear_full_ptes(struct mm_struct *mm,
 #define ptep_set_wrprotect __ptep_set_wrprotect
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
 #define ptep_clear_flush_young __ptep_clear_flush_young
+
+#define pte_batch_hint pte_batch_hint
+static inline unsigned int
+pte_batch_hint(pte_t *ptep, pte_t pte, fpb_t flags)
+{
+	return 1;
+}
 
 #endif /* CONFIG_RISCV_ISA_SVNAPOT */
 

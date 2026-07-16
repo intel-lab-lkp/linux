@@ -176,6 +176,32 @@ static inline bool napotpte_is_consistent(pte_t pte, pte_t orig_pte)
 	       pte_val(pte_mask_ad(pte)) == pte_val(pte_mask_ad(orig_pte));
 }
 
+static inline bool
+napotpte_is_batch_consistent(pte_t pte, pte_t batch_pte, fpb_t flags)
+{
+	return pte_present_napot(pte) &&
+	       pte_val(__pte_batch_clear_ignored(pte, flags)) ==
+	       pte_val(batch_pte);
+}
+
+static inline pte_t
+napotpte_normalize_batch_pte(pte_t *ptep, pte_t orig_pte, fpb_t flags)
+{
+	unsigned long pfn;
+	pgprot_t prot;
+	unsigned int off;
+
+	if (pte_present_napot(orig_pte))
+		return __pte_batch_clear_ignored(orig_pte, flags);
+
+	off = ptep - napot_align_ptep(ptep);
+	pfn = pte_pfn(orig_pte) - off;
+	prot = __pgprot(pte_protval_no_pfn_no_napot(orig_pte));
+
+	return __pte_batch_clear_ignored(pte_mknapot(pfn_pte(pfn, prot),
+					     napotpte_order()), flags);
+}
+
 static bool napotpte_all_subptes_same(pte_t *ptep, pte_t expected_pte)
 {
 	pte_t *start;
@@ -327,6 +353,46 @@ retry:
 	return napotpte_subpte(orig_ptep, orig_pte);
 }
 EXPORT_SYMBOL(napotpte_ptep_get_lockless);
+
+unsigned int napotpte_pte_batch_hint_from_pte(pte_t *ptep, pte_t orig_pte,
+					      fpb_t flags)
+{
+	pte_t batch_pte, pte;
+	pte_t *start;
+	unsigned int i, nr, off;
+
+	if (!napot_hw_supported())
+		return 1;
+
+	if (!pte_present_napot(orig_pte) && !pte_present_napot(READ_ONCE(*ptep)))
+		return 1;
+
+	/*
+	 * @orig_pte may be either the raw NAPOT entry read from the page
+	 * table or the logical sub-PTE returned by ptep_get(). In the latter
+	 * case, the public view has the NAPOT bit stripped and the PFN adjusted
+	 * by the slot offset within the folded block.
+	 *
+	 * If the caller passes a logical sub-PTE, rebuild the corresponding
+	 * block PTE first. Then apply the same folio batch flags as the generic
+	 * batching code, and only return a multi-entry hint if every remaining
+	 * raw PTE in the folded block still matches.
+	 */
+	batch_pte = napotpte_normalize_batch_pte(ptep, orig_pte, flags);
+
+	start = napot_align_ptep(ptep);
+	nr = napotpte_pte_num();
+	off = ptep - start;
+
+	for (i = off; i < nr; i++) {
+		pte = READ_ONCE(start[i]);
+		if (!napotpte_is_batch_consistent(pte, batch_pte, flags))
+			return 1;
+	}
+
+	return nr - off;
+}
+EXPORT_SYMBOL(napotpte_pte_batch_hint_from_pte);
 
 static void napotpte_try_unfold_range(struct mm_struct *mm,
 				      unsigned long addr, pte_t *ptep,
