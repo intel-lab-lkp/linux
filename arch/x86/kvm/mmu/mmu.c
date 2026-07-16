@@ -6989,11 +6989,11 @@ restart:
  * not use any resource of the being-deleted slot or all slots
  * after calling the function.
  */
-static void kvm_mmu_zap_all_fast(struct kvm *kvm)
+static void __kvm_mmu_zap_all_fast(struct kvm *kvm)
 {
 	lockdep_assert_held(&kvm->slots_lock);
+	lockdep_assert_held_write(&kvm->mmu_lock);
 
-	write_lock(&kvm->mmu_lock);
 	trace_kvm_mmu_zap_all_fast(kvm);
 
 	/*
@@ -7030,7 +7030,21 @@ static void kvm_mmu_zap_all_fast(struct kvm *kvm)
 	kvm_make_all_cpus_request(kvm, KVM_REQ_MMU_FREE_OBSOLETE_ROOTS);
 
 	kvm_zap_obsolete_pages(kvm);
+}
 
+/*
+ * Fast invalidate all shadow pages and use lock-break technique
+ * to zap obsolete pages.
+ *
+ * It's required when memslot is being deleted or VM is being
+ * destroyed, in these cases, we should ensure that KVM MMU does
+ * not use any resource of the being-deleted slot or all slots
+ * after calling the function.
+ */
+static void kvm_mmu_zap_all_fast(struct kvm *kvm)
+{
+	write_lock(&kvm->mmu_lock);
+	__kvm_mmu_zap_all_fast(kvm);
 	write_unlock(&kvm->mmu_lock);
 
 	/*
@@ -8221,6 +8235,8 @@ bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
 {
 	unsigned long attrs = range->arg.attributes;
 	struct kvm_memory_slot *slot = range->slot;
+	bool gen_update = false;
+	struct kvm_mmu_page *sp;
 	int level;
 
 	lockdep_assert_held_write(&kvm->mmu_lock);
@@ -8281,6 +8297,33 @@ bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
 				hugepage_set_mixed(slot, gfn, level);
 		}
 	}
+
+	/*
+	 * There are special considerations when applying an memory protection
+	 * attibute against a GPTE page. If set read-only, access/dirty bits
+	 * within that page shouldn't be updated. If set non-accesible,
+	 * accessing a virtual address that requires traversing that GPTE page
+	 * should fault.
+	 *
+	 * On TDP enabled guests, the CPU faults on the GPTE address upon
+	 * detecting such a situation.
+	 *
+	 * On non-TDP, upon detecting this situation, and based on the fact it
+	 * should be a rare occasion, invalidate all the mmu roots.
+	 */
+	for (gfn_t gfn = range->start; gfn < range->end; gfn++) {
+		for_each_gfn_valid_sp_with_gptes(kvm, sp, gfn) {
+			gen_update = true;
+			trace_printk("needs gen update! %llx\n", gfn);
+			goto exit_loop;
+		}
+	}
+exit_loop:
+	if (gen_update)
+		__kvm_mmu_zap_all_fast(kvm);
+
+	// todo: what to do with kvm_tdp_mmu_zap_invalidated_roots()?
+	// add kvm_arch_post_set_memory_attributes_unlocked?
 	return false;
 }
 
