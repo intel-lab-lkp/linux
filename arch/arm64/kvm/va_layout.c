@@ -44,6 +44,8 @@ static void init_hyp_physvirt_offset(void)
 	kern_va = (u64)lm_alias(__hyp_text_start);
 	hyp_va = __early_kern_hyp_va(kern_va);
 	hyp_physvirt_offset = (s64)__pa(kern_va) - (s64)hyp_va;
+
+	hyp_symbol_physvirt_offset = hyp_physvirt_offset;
 }
 
 /*

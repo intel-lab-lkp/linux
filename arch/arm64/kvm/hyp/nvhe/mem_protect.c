@@ -175,7 +175,7 @@ int kvm_host_prepare_stage2(void *pgt_pool_base)
 	if (ret)
 		return ret;
 
-	mmu->pgd_phys = __hyp_pa(host_mmu.pgt.pgd);
+	mmu->pgd_phys = __hyp_linear_pa(host_mmu.pgt.pgd);
 	mmu->pgt = &host_mmu.pgt;
 	atomic64_set(&mmu->vmid.id, 0);
 
@@ -243,9 +243,9 @@ static void __apply_guest_page(void *va, size_t size,
 		void *map;
 
 		if (IS_ALIGNED((unsigned long)va, PMD_SIZE) && size >= PMD_SIZE)
-			map = hyp_fixblock_map(__hyp_pa(va), &map_size);
+			map = hyp_fixblock_map(__hyp_linear_pa(va), &map_size);
 		else
-			map = hyp_fixmap_map(__hyp_pa(va));
+			map = hyp_fixmap_map(__hyp_linear_pa(va));
 
 		func(map, map_size);
 
@@ -300,7 +300,7 @@ int kvm_guest_prepare_stage2(struct pkvm_hyp_vm *vm, void *pgd)
 	if (ret)
 		return ret;
 
-	vm->kvm.arch.mmu.pgd_phys = __hyp_pa(vm->pgt.pgd);
+	vm->kvm.arch.mmu.pgd_phys = __hyp_linear_pa(vm->pgt.pgd);
 
 	return 0;
 }
@@ -1092,7 +1092,7 @@ int __pkvm_host_donate_hyp(u64 pfn, u64 nr_pages)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
 	u64 size = PAGE_SIZE * nr_pages;
-	void *virt = __hyp_va(phys);
+	void *virt = __hyp_linear_va(phys);
 	int ret;
 
 	if (!pfn_range_is_valid(pfn, nr_pages))
@@ -1123,7 +1123,7 @@ int __pkvm_hyp_donate_host(u64 pfn, u64 nr_pages)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
 	u64 size = PAGE_SIZE * nr_pages;
-	u64 virt = (u64)__hyp_va(phys);
+	u64 virt = (u64)__hyp_linear_va(phys);
 	int ret;
 
 	if (!pfn_range_is_valid(pfn, nr_pages))
@@ -1158,7 +1158,7 @@ int hyp_pin_shared_mem(void *from, void *to)
 {
 	u64 cur, start = ALIGN_DOWN((u64)from, PAGE_SIZE);
 	u64 end = PAGE_ALIGN((u64)to);
-	u64 phys = __hyp_pa(start);
+	u64 phys = __hyp_linear_pa(start);
 	u64 size = end - start;
 	struct hyp_page *p;
 	int ret;

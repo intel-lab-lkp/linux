@@ -11,6 +11,7 @@
 
 struct kvm_pgtable_mm_ops hyp_early_alloc_mm_ops;
 s64 __ro_after_init hyp_physvirt_offset;
+s64 __ro_after_init hyp_symbol_physvirt_offset;
 
 static unsigned long base;
 static unsigned long end;

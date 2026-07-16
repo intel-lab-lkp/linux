@@ -169,7 +169,7 @@ static void update_nvhe_init_params(void)
 
 	for (i = 0; i < hyp_nr_cpus; i++) {
 		params = per_cpu_ptr(&kvm_init_params, i);
-		params->pgd_pa = __hyp_pa(pkvm_pgtable.pgd);
+		params->pgd_pa = __hyp_linear_pa(pkvm_pgtable.pgd);
 		dcache_clean_inval_poc((unsigned long)params,
 				    (unsigned long)params + sizeof(*params));
 	}
@@ -371,7 +371,7 @@ int __pkvm_init(phys_addr_t phys, unsigned long size, unsigned long *per_cpu_bas
 
 	/* Jump in the idmap page to switch to the new page-tables */
 	params = this_cpu_ptr(&kvm_init_params);
-	fn = (typeof(fn))__hyp_pa(__pkvm_init_switch_pgd);
+	fn = (typeof(fn))__hyp_symbol_pa(__pkvm_init_switch_pgd);
 	fn(params->pgd_pa, params->stack_hyp_va, __pkvm_init_finalise);
 
 	unreachable();

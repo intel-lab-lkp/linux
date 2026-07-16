@@ -139,8 +139,8 @@ static int psci_cpu_on(u64 func_id, struct kvm_cpu_context *host_ctxt)
 	wmb();
 
 	ret = psci_call(func_id, mpidr,
-			__hyp_pa(&kvm_hyp_cpu_entry),
-			__hyp_pa(init_params));
+			__hyp_symbol_pa(&kvm_hyp_cpu_entry),
+			__hyp_linear_pa(init_params));
 
 	/* If successful, the lock will be released by the target CPU. */
 	if (ret != PSCI_RET_SUCCESS)
@@ -173,8 +173,8 @@ static int psci_cpu_suspend(u64 func_id, struct kvm_cpu_context *host_ctxt)
 	 * point if it is a deep sleep state.
 	 */
 	return psci_call(func_id, power_state,
-			 __hyp_pa(&kvm_hyp_cpu_resume),
-			 __hyp_pa(init_params));
+			 __hyp_symbol_pa(&kvm_hyp_cpu_resume),
+			 __hyp_linear_pa(init_params));
 }
 
 static int psci_system_suspend(u64 func_id, struct kvm_cpu_context *host_ctxt)
@@ -197,8 +197,8 @@ static int psci_system_suspend(u64 func_id, struct kvm_cpu_context *host_ctxt)
 
 	/* Will only return on error. */
 	return psci_call(func_id,
-			 __hyp_pa(&kvm_hyp_cpu_resume),
-			 __hyp_pa(init_params), 0);
+			 __hyp_symbol_pa(&kvm_hyp_cpu_resume),
+			 __hyp_linear_pa(init_params), 0);
 }
 
 static void __noreturn __kvm_host_psci_cpu_entry(unsigned long pc, unsigned long r0)

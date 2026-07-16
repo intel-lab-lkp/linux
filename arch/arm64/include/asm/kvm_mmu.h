@@ -54,12 +54,18 @@
 #include <asm/alternative.h>
 
 /*
- * Convert a hypervisor VA to a PA
+ * Convert an address in the hypervisor linear map to a PA
  * reg: hypervisor address to be converted in place
  * tmp: temporary register
  */
-.macro hyp_pa reg, tmp
+.macro hyp_linear_pa reg, tmp
 	ldr_l	\tmp, hyp_physvirt_offset
+	add	\reg, \reg, \tmp
+.endm
+
+/* Convert a hypervisor kernel-image VA to a PA. */
+.macro hyp_symbol_pa reg, tmp
+	ldr_l	\tmp, hyp_symbol_physvirt_offset
 	add	\reg, \reg, \tmp
 .endm
 
@@ -74,8 +80,8 @@
  * specific registers encoded in the instructions).
  */
 .macro hyp_kimg_va reg, tmp
-	/* Convert hyp VA -> PA. */
-	hyp_pa	\reg, \tmp
+	/* Convert hyp kernel-image VA -> PA. */
+	hyp_symbol_pa	\reg, \tmp
 
 	/* Load kimage_voffset. */
 alternative_cb ARM64_ALWAYS_SYSTEM, kvm_get_kimage_voffset
@@ -106,7 +112,6 @@ void kvm_compute_layout(void);
 u32 kvm_hyp_va_bits(void);
 void kvm_apply_hyp_relocations(void);
 
-#define __hyp_pa(x) (((phys_addr_t)(x)) + hyp_physvirt_offset)
 /**
  * kvm_hyp_kimg_kaddr - Select the kernel address used for an EL2 mapping
  * @ptr: Address within the kernel image
@@ -130,6 +135,8 @@ static __always_inline void *kvm_hyp_kimg_kaddr(void *ptr)
 	return lm_alias(ptr);
 }
 
+#define __hyp_linear_pa(x) (((phys_addr_t)(x)) + hyp_physvirt_offset)
+#define __hyp_symbol_pa(x) (((phys_addr_t)(x)) + hyp_symbol_physvirt_offset)
 /*
  * Convert a kernel VA into a HYP VA.
  *

@@ -133,7 +133,7 @@ SYM_FUNC_START(__hyp_do_panic)
 	mrs	x0, esr_el2
 	mov	x4, x3
 	mov	x3, x2
-	hyp_pa	x3, x6
+	hyp_symbol_pa	x3, x6
 	get_vcpu_ptr x5, x6
 	mrs	x6, far_el2
 	mrs	x7, hpfar_el2
@@ -163,7 +163,7 @@ alternative_else_nop_endif
 	 * Preserve x0-x4, which may contain stub parameters.
 	 */
 	adr_l	x5, __kvm_handle_stub_hvc
-	hyp_pa	x5, x6
+	hyp_symbol_pa	x5, x6
 	br	x5
 SYM_FUNC_END(__host_hvc)
 

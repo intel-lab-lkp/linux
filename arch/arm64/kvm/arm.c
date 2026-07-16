@@ -2835,7 +2835,7 @@ static int __init init_hyp_mode(void)
 		/*
 		 * Save the stack PA in nvhe_init_params. This will be needed
 		 * to recreate the stack mapping in protected nVHE mode.
-		 * __hyp_pa() won't do the right thing there, since the stack
+		 * __hyp_linear_pa() won't do the right thing there, since the stack
 		 * has been mapped in the flexible private VA space.
 		 */
 		params->stack_pa = __pa(stack_base);

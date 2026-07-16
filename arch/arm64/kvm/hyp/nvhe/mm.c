@@ -159,7 +159,7 @@ int pkvm_create_symbol_mappings(void *from, void *to,
 				enum kvm_pgtable_prot prot)
 {
 	unsigned long start = (unsigned long)from & PAGE_MASK;
-	phys_addr_t phys = __hyp_pa(start);
+	phys_addr_t phys = __hyp_symbol_pa(start);
 	int ret;
 
 	hyp_spin_lock(&pkvm_pgd_lock);
@@ -242,7 +242,7 @@ int hyp_map_vectors(void)
 		return 0;
 	}
 
-	phys = __hyp_pa(__bp_harden_hyp_vecs);
+	phys = __hyp_symbol_pa(__bp_harden_hyp_vecs);
 	ret = __pkvm_create_private_mapping(phys, __BP_HARDEN_HYP_VECS_SZ,
 					    PAGE_HYP_EXEC, &bp_base);
 	if (ret)
@@ -418,7 +418,8 @@ int hyp_create_fixmap(void)
 			return ret;
 
 		ret = kvm_pgtable_hyp_map(&pkvm_pgtable, addr, PAGE_SIZE,
-					  __hyp_pa(__hyp_bss_start), PAGE_HYP);
+					  __hyp_symbol_pa(__hyp_bss_start),
+					  PAGE_HYP);
 		if (ret)
 			return ret;
 
@@ -434,10 +435,10 @@ int hyp_create_idmap(u32 hyp_va_bits)
 {
 	unsigned long start, end;
 
-	start = hyp_virt_to_phys((void *)__hyp_idmap_text_start);
+	start = __hyp_symbol_pa(__hyp_idmap_text_start);
 	start = ALIGN_DOWN(start, PAGE_SIZE);
 
-	end = hyp_virt_to_phys((void *)__hyp_idmap_text_end);
+	end = __hyp_symbol_pa(__hyp_idmap_text_end);
 	end = ALIGN(end, PAGE_SIZE);
 
 	/*

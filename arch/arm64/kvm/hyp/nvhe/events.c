@@ -17,7 +17,7 @@ int __tracing_enable_event(unsigned short id, bool enable)
 	if (event_id >= __hyp_event_ids_end)
 		return -EINVAL;
 
-	enabled = hyp_fixmap_map(__hyp_pa(&event_id->enabled));
+	enabled = hyp_fixmap_map(__hyp_symbol_pa(&event_id->enabled));
 	atomic_set(enabled, enable);
 	hyp_fixmap_unmap();
 

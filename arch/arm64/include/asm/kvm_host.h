@@ -827,6 +827,8 @@ extern struct kvm_host_psci_config kvm_nvhe_sym(kvm_host_psci_config);
 
 extern s64 kvm_nvhe_sym(hyp_physvirt_offset);
 #define hyp_physvirt_offset CHOOSE_NVHE_SYM(hyp_physvirt_offset)
+extern s64 kvm_nvhe_sym(hyp_symbol_physvirt_offset);
+#define hyp_symbol_physvirt_offset CHOOSE_NVHE_SYM(hyp_symbol_physvirt_offset)
 
 extern u64 kvm_nvhe_sym(hyp_cpu_logical_map)[NR_CPUS];
 #define hyp_cpu_logical_map CHOOSE_NVHE_SYM(hyp_cpu_logical_map)
