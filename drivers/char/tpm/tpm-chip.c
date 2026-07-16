@@ -244,8 +244,8 @@ static void tpm_dev_release(struct device *dev)
 	idr_remove(&dev_nums_idr, chip->dev_num);
 	mutex_unlock(&idr_lock);
 
-	kfree(chip->work_space.context_buf);
-	kfree(chip->work_space.session_buf);
+	kfree_sensitive(chip->work_space.context_buf);
+	kfree_sensitive(chip->work_space.session_buf);
 #ifdef CONFIG_TCG_TPM2_HMAC
 	kfree_sensitive(chip->auth);
 #endif

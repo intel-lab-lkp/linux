@@ -46,7 +46,7 @@ int tpm2_init_space(struct tpm_space *space, unsigned int buf_size)
 
 	space->session_buf = kzalloc(buf_size, GFP_KERNEL);
 	if (space->session_buf == NULL) {
-		kfree(space->context_buf);
+		kfree_sensitive(space->context_buf);
 		/* Prevent caller getting a dangling pointer. */
 		space->context_buf = NULL;
 		return -ENOMEM;
@@ -64,8 +64,8 @@ void tpm2_del_space(struct tpm_chip *chip, struct tpm_space *space)
 		tpm_put_ops(chip);
 	}
 
-	kfree(space->context_buf);
-	kfree(space->session_buf);
+	kfree_sensitive(space->context_buf);
+	kfree_sensitive(space->session_buf);
 }
 
 int tpm2_load_context(struct tpm_chip *chip, u8 *buf,
