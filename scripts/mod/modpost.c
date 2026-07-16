@@ -951,8 +951,50 @@ static const struct sectioncheck *section_mismatch(
  *   refsymname = *.constprop.*
  *
  **/
+#ifndef R_RISCV_BRANCH
+#define R_RISCV_BRANCH		16
+#endif
+
+#ifndef R_RISCV_PCREL_HI20
+#define R_RISCV_PCREL_HI20	23
+#endif
+
+#ifndef R_RISCV_PCREL_LO12_I
+#define R_RISCV_PCREL_LO12_I	24
+#endif
+
+#ifndef R_RISCV_PCREL_LO12_S
+#define R_RISCV_PCREL_LO12_S	25
+#endif
+
+#ifndef R_RISCV_RVC_BRANCH
+#define R_RISCV_RVC_BRANCH	44
+#endif
+
+#ifndef R_RISCV_RVC_JUMP
+#define R_RISCV_RVC_JUMP	45
+#endif
+
+static bool is_gcov_generated_symbol(const char *sym)
+{
+	return strstarts(sym, "_sub_I_") ||
+	       strstarts(sym, "__gcov_.");
+}
+
+static bool is_riscv_local_reloc(unsigned int r_type)
+{
+	return r_type == R_RISCV_BRANCH ||
+	       r_type == R_RISCV_RVC_BRANCH ||
+	       r_type == R_RISCV_RVC_JUMP ||
+	       r_type == R_RISCV_PCREL_HI20 ||
+	       r_type == R_RISCV_PCREL_LO12_I ||
+	       r_type == R_RISCV_PCREL_LO12_S;
+}
+
 static int secref_whitelist(const char *fromsec, const char *fromsym,
-			    const char *tosec, const char *tosym)
+			    const char *tosec, const char *tosym,
+			    const char *raw_tosym, unsigned int r_type,
+			    unsigned int e_machine)
 {
 	/* Check for pattern 1 */
 	if (match(tosec, PATTERNS(ALL_INIT_DATA_SECTIONS)) &&
@@ -979,6 +1021,21 @@ static int secref_whitelist(const char *fromsec, const char *fromsym,
 
 	/* Check for pattern 4 */
 	if (match(tosym, PATTERNS("__init_begin", "_sinittext", "_einittext")))
+		return 0;
+
+	/*
+	 * Compiler-generated local labels and GCOV constructors can produce
+	 * relocations that are later reported as section mismatches against
+	 * nearby init/exit symbols. Do not use those generated symbols as
+	 * evidence of a real section lifetime dependency.
+	 */
+	if (match(tosec, PATTERNS(ALL_INIT_SECTIONS, ALL_EXIT_SECTIONS)) &&
+	    (is_mapping_symbol(raw_tosym) || is_gcov_generated_symbol(fromsym)))
+		return 0;
+
+	if (e_machine == EM_RISCV &&
+	    is_riscv_local_reloc(r_type) &&
+	    match(tosec, PATTERNS(ALL_INIT_SECTIONS, ALL_EXIT_SECTIONS)))
 		return 0;
 
 	/* Check for pattern 5 */
@@ -1025,21 +1082,25 @@ static void default_mismatch_handler(const char *modname, struct elf_info *elf,
 				     const struct sectioncheck* const mismatch,
 				     Elf_Sym *tsym,
 				     unsigned int fsecndx, const char *fromsec, Elf_Addr faddr,
-				     const char *tosec, Elf_Addr taddr)
+				     const char *tosec, Elf_Addr taddr,
+				     unsigned int r_type)
 {
 	Elf_Sym *from;
 	const char *tosym;
 	const char *fromsym;
 	char taddr_str[16];
+	const char *raw_tosym;
 
 	from = find_fromsym(elf, faddr, fsecndx);
 	fromsym = sym_name(elf, from);
 
+	raw_tosym = sym_name(elf, tsym);
 	tsym = find_tosym(elf, taddr, tsym);
 	tosym = sym_name(elf, tsym);
 
 	/* check whitelist - we may ignore it */
-	if (!secref_whitelist(fromsec, fromsym, tosec, tosym))
+	if (!secref_whitelist(fromsec, fromsym, tosec, tosym, raw_tosym,
+			      r_type, elf->hdr->e_machine))
 		return;
 
 	sec_mismatch_count++;
@@ -1152,7 +1213,8 @@ static void check_export_symbol(struct module *mod, struct elf_info *elf,
 static void check_section_mismatch(struct module *mod, struct elf_info *elf,
 				   Elf_Sym *sym,
 				   unsigned int fsecndx, const char *fromsec,
-				   Elf_Addr faddr, Elf_Addr taddr)
+				   Elf_Addr faddr, Elf_Addr taddr,
+				   unsigned int r_type)
 {
 	const char *tosec = sec_name(elf, get_secindex(elf, sym));
 	const struct sectioncheck *mismatch;
@@ -1168,7 +1230,7 @@ static void check_section_mismatch(struct module *mod, struct elf_info *elf,
 
 	default_mismatch_handler(mod->name, elf, mismatch, sym,
 				 fsecndx, fromsec, faddr,
-				 tosec, taddr);
+				 tosec, taddr, r_type);
 }
 
 static Elf_Addr addend_386_rel(uint32_t *location, unsigned int r_type)
@@ -1382,7 +1444,8 @@ static void section_rela(struct module *mod, struct elf_info *elf,
 		}
 
 		check_section_mismatch(mod, elf, tsym,
-				       fsecndx, fromsec, r_offset, taddr);
+				       fsecndx, fromsec, r_offset, taddr,
+				       r_type);
 	}
 }
 
@@ -1419,7 +1482,8 @@ static void section_rel(struct module *mod, struct elf_info *elf,
 		}
 
 		check_section_mismatch(mod, elf, tsym,
-				       fsecndx, fromsec, r_offset, taddr);
+				       fsecndx, fromsec, r_offset, taddr,
+				       r_type);
 	}
 }
 
