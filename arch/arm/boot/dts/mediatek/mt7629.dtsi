@@ -141,8 +141,7 @@
 		};
 
 		watchdog: watchdog@10212000 {
-			compatible = "mediatek,mt7629-wdt",
-				     "mediatek,mt6589-wdt";
+			compatible = "mediatek,mt7629-wdt";
 			reg = <0x10212000 0x100>;
 		};
 

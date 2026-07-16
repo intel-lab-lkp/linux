@@ -53,7 +53,7 @@
 		ranges;
 
 		watchdog: watchdog@10007000 {
-			compatible = "mediatek,mt6572-wdt", "mediatek,mt6589-wdt";
+			compatible = "mediatek,mt6572-wdt";
 			reg = <0x10007000 0x100>;
 			interrupts = <GIC_SPI 126 IRQ_TYPE_LEVEL_LOW>;
 			timeout-sec = <15>;
