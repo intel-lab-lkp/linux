@@ -716,57 +716,69 @@ static inline pgprot_t verify_rwx(pgprot_t old, pgprot_t new, unsigned long star
  * page table levels.
  */
 pte_t *lookup_address_in_pgd_attr(pgd_t *pgd, unsigned long address,
-				  unsigned int *level, bool *nx, bool *rw)
+				  unsigned int *level,
+				  bool *ret_nx, bool *ret_rw)
 {
+	unsigned long rw = _PAGE_RW;
+	unsigned long nx = 0;
+	pte_t *pte = NULL;
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
 
 	*level = PG_LEVEL_256T;
-	*nx = false;
-	*rw = true;
-
 	if (pgd_none(*pgd))
-		return NULL;
+		goto out;
 
 	*level = PG_LEVEL_512G;
-	*nx |= pgd_flags(*pgd) & _PAGE_NX;
-	*rw &= pgd_flags(*pgd) & _PAGE_RW;
+	nx |= pgd_flags(*pgd) & _PAGE_NX;
+	rw &= pgd_flags(*pgd) & _PAGE_RW;
 
 	p4d = p4d_offset(pgd, address);
 	if (p4d_none(*p4d))
-		return NULL;
+		goto out;
 
-	if (p4d_leaf(*p4d) || !p4d_present(*p4d))
-		return (pte_t *)p4d;
+	if (p4d_leaf(*p4d) || !p4d_present(*p4d)) {
+		pte = (pte_t *)p4d;
+		goto out;
+	}
 
 	*level = PG_LEVEL_1G;
-	*nx |= p4d_flags(*p4d) & _PAGE_NX;
-	*rw &= p4d_flags(*p4d) & _PAGE_RW;
+	nx |= p4d_flags(*p4d) & _PAGE_NX;
+	rw &= p4d_flags(*p4d) & _PAGE_RW;
 
 	pud = pud_offset(p4d, address);
 	if (pud_none(*pud))
-		return NULL;
+		goto out;
 
-	if (pud_leaf(*pud) || !pud_present(*pud))
-		return (pte_t *)pud;
+	if (pud_leaf(*pud) || !pud_present(*pud)) {
+		pte = (pte_t *)pud;
+		goto out;
+	}
 
 	*level = PG_LEVEL_2M;
-	*nx |= pud_flags(*pud) & _PAGE_NX;
-	*rw &= pud_flags(*pud) & _PAGE_RW;
+	nx |= pud_flags(*pud) & _PAGE_NX;
+	rw &= pud_flags(*pud) & _PAGE_RW;
 
 	pmd = pmd_offset(pud, address);
 	if (pmd_none(*pmd))
-		return NULL;
+		goto out;
 
-	if (pmd_leaf(*pmd) || !pmd_present(*pmd))
-		return (pte_t *)pmd;
+	if (pmd_leaf(*pmd) || !pmd_present(*pmd)) {
+		pte = (pte_t *)pmd;
+		goto out;
+	}
 
 	*level = PG_LEVEL_4K;
-	*nx |= pmd_flags(*pmd) & _PAGE_NX;
-	*rw &= pmd_flags(*pmd) & _PAGE_RW;
+	nx |= pmd_flags(*pmd) & _PAGE_NX;
+	rw &= pmd_flags(*pmd) & _PAGE_RW;
+	pte = pte_offset_kernel(pmd, address);
 
-	return pte_offset_kernel(pmd, address);
+out:
+	*ret_nx = !!nx;
+	*ret_rw = !!rw;
+
+	return pte;
 }
 
 /*
