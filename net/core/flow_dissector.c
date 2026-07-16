@@ -36,6 +36,10 @@
 #include <net/netfilter/nf_conntrack_labels.h>
 #endif
 #include <linux/bpf-netns.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/string_choices.h>
+#include <linux/math64.h>
 
 /* Per-shape fast-path gates, one static_branch per shape so operators
  * enable only what their deployment carries. All default off.
@@ -54,6 +58,35 @@ DEFINE_STATIC_KEY_FALSE(flow_dissector_ipip_key);
 EXPORT_SYMBOL(flow_dissector_ipip_key);
 DEFINE_STATIC_KEY_FALSE(flow_dissector_gre_key);
 EXPORT_SYMBOL(flow_dissector_gre_key);
+
+/* Per-cpu, summed on read via /proc/net/flow_dissector_stats.
+ * occurrences[]: shape handled by the slow path (with the gate off,
+ * the shape's eligible-fraction signal); fast_hits[]: fast body ran;
+ * dissects: denominator.
+ */
+struct flow_dissector_stats {
+	u64 occurrences[FLOW_DISSECTOR_SHAPE__MAX];
+	u64 fast_hits[FLOW_DISSECTOR_SHAPE__MAX];
+	u64 dissects;
+};
+
+static DEFINE_PER_CPU(struct flow_dissector_stats, flow_dissector_pcpu_stats);
+
+static inline void flow_dissector_count_slow(enum flow_dissector_shape shape)
+{
+	this_cpu_inc(flow_dissector_pcpu_stats.occurrences[shape]);
+}
+
+static inline void flow_dissector_count_fast(enum flow_dissector_shape shape)
+{
+	this_cpu_inc(flow_dissector_pcpu_stats.fast_hits[shape]);
+}
+
+/* Counting map: eth_ip counts in the dispatcher (only when the leaf
+ * did not set ENCAP), vlan/qinq/pppoe/mpls in their helpers, ipip/gre
+ * in the inner-descent helpers. The slow path counts where it
+ * recognises each shape, gate on or off.
+ */
 
 /* IPv4 version/IHL byte of an option-less header: version 4, IHL 5. */
 #define FLOW_DIS_IPV4_VIHL_NOOPT	0x45
@@ -1354,6 +1387,7 @@ static bool flow_dissect_fast_vlan(const struct sk_buff *skb,
 	__be16 saved_tpid;
 	u16 tci_prio;
 	u16 tci_id;
+	bool ok;
 
 	if (vlan_depth >= 1 &&
 	    !static_branch_unlikely(&flow_dissector_qinq_key))
@@ -1403,22 +1437,35 @@ static bool flow_dissect_fast_vlan(const struct sk_buff *skb,
 
 	switch (inner_proto) {
 	case htons(ETH_P_IP):
-		return flow_dissect_fast_ipv4(skb, flow_dissector,
-					      target_container, data,
-					      nhoff, hlen);
+		ok = flow_dissect_fast_ipv4(skb, flow_dissector,
+					    target_container, data,
+					    nhoff, hlen);
+		break;
 	case htons(ETH_P_IPV6):
-		return flow_dissect_fast_ipv6(skb, flow_dissector,
-					      target_container, data,
-					      nhoff, hlen);
+		ok = flow_dissect_fast_ipv6(skb, flow_dissector,
+					    target_container, data,
+					    nhoff, hlen);
+		break;
 	case htons(ETH_P_8021Q):
 	case htons(ETH_P_8021AD):
-		return flow_dissect_fast_vlan(skb, flow_dissector,
-					      target_container, data,
-					      inner_proto, nhoff, hlen,
-					      vlan_depth + 1);
+		ok = flow_dissect_fast_vlan(skb, flow_dissector,
+					    target_container, data,
+					    inner_proto, nhoff, hlen,
+					    vlan_depth + 1);
+		break;
 	default:
 		return false;
 	}
+
+	/* Count only on full success -- a miss defers and the slow path
+	 * counts the occurrence. Depth 0 counts vlan, depth >= 1 qinq; a
+	 * double-tagged hit counts both, as the slow path does.
+	 */
+	if (ok)
+		flow_dissector_count_fast(vlan_depth == 0 ?
+					  FLOW_DISSECTOR_SHAPE_VLAN :
+					  FLOW_DISSECTOR_SHAPE_QINQ);
+	return ok;
 }
 
 /* PPPoE session (RFC 2516) + 2-byte PPP protocol: write
@@ -1439,6 +1486,7 @@ static bool flow_dissect_fast_pppoe(const struct sk_buff *skb,
 	} *hdr;
 	__be16 inner_eth_proto;
 	u16 ppp_proto;
+	bool ok;
 
 	if (unlikely(hlen - nhoff < (int)sizeof(*hdr)))
 		return false;
@@ -1474,12 +1522,17 @@ static bool flow_dissect_fast_pppoe(const struct sk_buff *skb,
 	nhoff += PPPOE_SES_HLEN;
 
 	if (inner_eth_proto == htons(ETH_P_IP))
-		return flow_dissect_fast_ipv4(skb, flow_dissector,
-					      target_container, data,
-					      nhoff, hlen);
-	return flow_dissect_fast_ipv6(skb, flow_dissector,
-				      target_container, data,
-				      nhoff, hlen);
+		ok = flow_dissect_fast_ipv4(skb, flow_dissector,
+					    target_container, data,
+					    nhoff, hlen);
+	else
+		ok = flow_dissect_fast_ipv6(skb, flow_dissector,
+					    target_container, data,
+					    nhoff, hlen);
+
+	if (ok)
+		flow_dissector_count_fast(FLOW_DISSECTOR_SHAPE_PPPOE);
+	return ok;
 }
 
 /* Single MPLS label (BoS=1): write FLOW_DISSECTOR_KEY_MPLS lse[0]
@@ -1546,6 +1599,7 @@ static bool flow_dissect_fast_mpls(const struct sk_buff *skb,
 		key_basic->ip_proto = 0;
 	}
 
+	flow_dissector_count_fast(FLOW_DISSECTOR_SHAPE_MPLS);
 	return true;
 }
 
@@ -1584,6 +1638,7 @@ static bool flow_dissect_fast_ipip_inner(const struct sk_buff *skb,
 							target_container);
 		key_control->flags |= FLOW_DIS_ENCAPSULATION;
 	}
+	flow_dissector_count_fast(FLOW_DISSECTOR_SHAPE_IPIP);
 	return true;
 }
 
@@ -1648,7 +1703,25 @@ static bool flow_dissect_fast_gre_inner(const struct sk_buff *skb,
 							target_container);
 		key_control->flags |= FLOW_DIS_ENCAPSULATION;
 	}
+	flow_dissector_count_fast(FLOW_DISSECTOR_SHAPE_GRE);
 	return true;
+}
+
+/* Did a fast-path leaf stamp FLOW_DIS_ENCAPSULATION? The dispatcher
+ * counts eth_ip only for plain top-level IP; descents count under
+ * their own shape (UDP-tunnel descents not at all).
+ */
+static bool flow_dissect_fast_is_encap(struct flow_dissector *flow_dissector,
+				       void *target_container)
+{
+	struct flow_dissector_key_control *key_control;
+
+	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_CONTROL))
+		return false;
+	key_control = skb_flow_dissector_target(flow_dissector,
+						FLOW_DISSECTOR_KEY_CONTROL,
+						target_container);
+	return key_control->flags & FLOW_DIS_ENCAPSULATION;
 }
 
 /* Top-level dispatcher: eligibility check (only the two standard
@@ -1689,15 +1762,24 @@ static bool flow_dissect_fast(const struct sk_buff *skb,
 	case htons(ETH_P_IP):
 		if (!static_branch_unlikely(&flow_dissector_eth_ip_key))
 			return false;
-		return flow_dissect_fast_ipv4(skb, flow_dissector,
-					      target_container, data,
-					      nhoff, hlen);
+		if (!flow_dissect_fast_ipv4(skb, flow_dissector,
+					    target_container, data,
+					    nhoff, hlen))
+			return false;
+		/* Plain top-level eth+IP only; descents count under their own shape. */
+		if (!flow_dissect_fast_is_encap(flow_dissector, target_container))
+			flow_dissector_count_fast(FLOW_DISSECTOR_SHAPE_ETH_IP);
+		return true;
 	case htons(ETH_P_IPV6):
 		if (!static_branch_unlikely(&flow_dissector_eth_ip_key))
 			return false;
-		return flow_dissect_fast_ipv6(skb, flow_dissector,
-					      target_container, data,
-					      nhoff, hlen);
+		if (!flow_dissect_fast_ipv6(skb, flow_dissector,
+					    target_container, data,
+					    nhoff, hlen))
+			return false;
+		if (!flow_dissect_fast_is_encap(flow_dissector, target_container))
+			flow_dissector_count_fast(FLOW_DISSECTOR_SHAPE_ETH_IP);
+		return true;
 	case htons(ETH_P_PPP_SES):
 		if (!static_branch_unlikely(&flow_dissector_pppoe_key))
 			return false;
@@ -1751,6 +1833,8 @@ bool __skb_flow_dissect(const struct net *net,
 	bool mpls_el = false;
 	int mpls_lse = 0;
 	int num_hdrs = 0;
+	int nhoff_init = 0;
+	bool eth_ip_top = false;
 	u8 ip_proto = 0;
 	bool ret;
 
@@ -1859,6 +1943,8 @@ bool __skb_flow_dissect(const struct net *net,
 	/* Opt-in fast-path; flow_dissect_fast() does the eligibility check
 	 * and per-shape gating.
 	 */
+	this_cpu_inc(flow_dissector_pcpu_stats.dissects);
+
 	if (flow_dissect_fast(skb, flow_dissector, target_container,
 			      data, proto, nhoff, hlen, flags))
 		return true;
@@ -1892,6 +1978,8 @@ bool __skb_flow_dissect(const struct net *net,
 		key_num_of_vlans->num_of_vlans = 0;
 	}
 
+	nhoff_init = nhoff;
+
 proto_again:
 	fdret = FLOW_DISSECT_RET_CONTINUE;
 
@@ -1905,6 +1993,10 @@ proto_again:
 			fdret = FLOW_DISSECT_RET_OUT_BAD;
 			break;
 		}
+
+		/* Top-level eth+IPv4: eth_ip shape candidate (confirmed at out:). */
+		if (nhoff == nhoff_init)
+			eth_ip_top = true;
 
 		nhoff += iph->ihl * 4;
 
@@ -1953,6 +2045,9 @@ proto_again:
 			fdret = FLOW_DISSECT_RET_OUT_BAD;
 			break;
 		}
+
+		if (nhoff == nhoff_init)
+			eth_ip_top = true;
 
 		ip_proto = iph->nexthdr;
 		nhoff += sizeof(struct ipv6hdr);
@@ -2027,8 +2122,12 @@ proto_again:
 
 		if (dissector_vlan == FLOW_DISSECTOR_KEY_MAX) {
 			dissector_vlan = FLOW_DISSECTOR_KEY_VLAN;
+			/* First (outer) tag: the vlan fast-path shape. */
+			flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_VLAN);
 		} else if (dissector_vlan == FLOW_DISSECTOR_KEY_VLAN) {
 			dissector_vlan = FLOW_DISSECTOR_KEY_CVLAN;
+			/* Second tag: the qinq (double-tag) fast-path shape. */
+			flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_QINQ);
 		} else {
 			fdret = FLOW_DISSECT_RET_PROTO_AGAIN;
 			break;
@@ -2073,6 +2172,8 @@ proto_again:
 			fdret = FLOW_DISSECT_RET_OUT_BAD;
 			break;
 		}
+
+		flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_PPPOE);
 
 		/* PFC (compressed 1-byte protocol) frames are not processed.
 		 * A compressed protocol field has the least significant bit of
@@ -2138,6 +2239,7 @@ proto_again:
 
 	case htons(ETH_P_MPLS_UC):
 	case htons(ETH_P_MPLS_MC):
+		flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_MPLS);
 		fdret = __skb_flow_dissect_mpls(skb, flow_dissector,
 						target_container, data,
 						nhoff, hlen, mpls_lse,
@@ -2235,6 +2337,7 @@ ip_proto_again:
 			fdret = FLOW_DISSECT_RET_OUT_GOOD;
 			break;
 		}
+		flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_GRE);
 
 		fdret = __skb_flow_dissect_gre(skb, key_control, flow_dissector,
 					       target_container, data,
@@ -2297,6 +2400,10 @@ ip_proto_again:
 			fdret = FLOW_DISSECT_RET_OUT_GOOD;
 			break;
 		}
+		/* Counted below the STOP check: a stop-flagged dissect is
+		 * one the fast path could never have handled.
+		 */
+		flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_IPIP);
 
 		proto = htons(ETH_P_IP);
 
@@ -2387,6 +2494,15 @@ out:
 	key_control->thoff = min_t(u16, nhoff, skb ? skb->len : hlen);
 	key_basic->n_proto = proto;
 	key_basic->ip_proto = ip_proto;
+
+	/* eth_ip shape: top-level eth+IP, TCP/UDP, no encap -- counted here
+	 * because the fast path returns earlier; with the gate off this is
+	 * the shape's eligible-fraction signal.
+	 */
+	if (ret && eth_ip_top &&
+	    !(key_control->flags & FLOW_DIS_ENCAPSULATION) &&
+	    (ip_proto == IPPROTO_TCP || ip_proto == IPPROTO_UDP))
+		flow_dissector_count_slow(FLOW_DISSECTOR_SHAPE_ETH_IP);
 
 	return ret;
 
@@ -2883,11 +2999,87 @@ static struct ctl_table flow_dissector_sysctl_table[] = {
 	},
 };
 
+static const char * const flow_dissector_shape_names[FLOW_DISSECTOR_SHAPE__MAX] = {
+	[FLOW_DISSECTOR_SHAPE_ETH_IP] = "eth_ip",
+	[FLOW_DISSECTOR_SHAPE_VLAN]   = "vlan",
+	[FLOW_DISSECTOR_SHAPE_QINQ]   = "qinq",
+	[FLOW_DISSECTOR_SHAPE_PPPOE]  = "pppoe",
+	[FLOW_DISSECTOR_SHAPE_MPLS]   = "mpls",
+	[FLOW_DISSECTOR_SHAPE_IPIP]   = "ipip",
+	[FLOW_DISSECTOR_SHAPE_GRE]    = "gre",
+};
+
+static bool flow_dissector_shape_gate(enum flow_dissector_shape shape)
+{
+	switch (shape) {
+	case FLOW_DISSECTOR_SHAPE_ETH_IP:
+		return static_key_enabled(&flow_dissector_eth_ip_key);
+	case FLOW_DISSECTOR_SHAPE_VLAN:
+		return static_key_enabled(&flow_dissector_vlan_key);
+	case FLOW_DISSECTOR_SHAPE_QINQ:
+		return static_key_enabled(&flow_dissector_qinq_key);
+	case FLOW_DISSECTOR_SHAPE_PPPOE:
+		return static_key_enabled(&flow_dissector_pppoe_key);
+	case FLOW_DISSECTOR_SHAPE_MPLS:
+		return static_key_enabled(&flow_dissector_mpls_key);
+	case FLOW_DISSECTOR_SHAPE_IPIP:
+		return static_key_enabled(&flow_dissector_ipip_key);
+	case FLOW_DISSECTOR_SHAPE_GRE:
+		return static_key_enabled(&flow_dissector_gre_key);
+	default:
+		return false;
+	}
+}
+
+/* /proc/net/flow_dissector_stats: per-shape occurrences (slow path),
+ * fast_hits, and eligible% = (occurrences + fast_hits) / dissects --
+ * the signal a policy layer thresholds against a per-shape
+ * break-even.
+ */
+static int flow_dissector_stats_show(struct seq_file *seq, void *v)
+{
+	u64 occ[FLOW_DISSECTOR_SHAPE__MAX] = {};
+	u64 fast[FLOW_DISSECTOR_SHAPE__MAX] = {};
+	u64 dissects = 0;
+	int cpu, i;
+
+	for_each_possible_cpu(cpu) {
+		const struct flow_dissector_stats *s =
+			per_cpu_ptr(&flow_dissector_pcpu_stats, cpu);
+
+		for (i = 0; i < FLOW_DISSECTOR_SHAPE__MAX; i++) {
+			occ[i]  += READ_ONCE(s->occurrences[i]);
+			fast[i] += READ_ONCE(s->fast_hits[i]);
+		}
+		dissects += READ_ONCE(s->dissects);
+	}
+
+	seq_printf(seq, "%-8s %16s %16s %10s %5s\n",
+		   "shape", "occurrences", "fast_hits", "eligible%", "gate");
+	for (i = 0; i < FLOW_DISSECTOR_SHAPE__MAX; i++) {
+		u64 total = occ[i] + fast[i];
+		u64 pct_x100 = dissects ? div64_u64(total * 10000, dissects) : 0;
+
+		seq_printf(seq, "%-8s %16llu %16llu %7llu.%02llu %5s\n",
+			   flow_dissector_shape_names[i], occ[i], fast[i],
+			   pct_x100 / 100, pct_x100 % 100,
+			   str_on_off(flow_dissector_shape_gate(i)));
+	}
+	seq_printf(seq, "dissects: %llu\n", dissects);
+	return 0;
+}
+
 static int __init flow_dissector_sysctl_init(void)
 {
 	if (!register_net_sysctl(&init_net, "net/flow_dissector",
 				 flow_dissector_sysctl_table))
 		return -ENOMEM;
+
+	/* Global (init_net) counters — matches the global gates; per-netns
+	 * is a noted follow-up. A missing proc file is not fatal.
+	 */
+	proc_create_single("flow_dissector_stats", 0444, init_net.proc_net,
+			   flow_dissector_stats_show);
 	return 0;
 }
 late_initcall(flow_dissector_sysctl_init);

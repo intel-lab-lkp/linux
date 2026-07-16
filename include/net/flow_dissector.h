@@ -436,6 +436,23 @@ extern struct static_key_false flow_dissector_mpls_key;
 extern struct static_key_false flow_dissector_ipip_key;
 extern struct static_key_false flow_dissector_gre_key;
 
+/* Per-shape counters for /proc/net/flow_dissector_stats.
+ * occurrences[]: shape seen by the slow path (the eligible-fraction
+ * signal while its gate is off); fast_hits[]: fast path ran.
+ * Byte-identical shapes only; the behaviour-changing descents are
+ * never counted or auto-managed.
+ */
+enum flow_dissector_shape {
+	FLOW_DISSECTOR_SHAPE_ETH_IP,
+	FLOW_DISSECTOR_SHAPE_VLAN,
+	FLOW_DISSECTOR_SHAPE_QINQ,
+	FLOW_DISSECTOR_SHAPE_PPPOE,
+	FLOW_DISSECTOR_SHAPE_MPLS,
+	FLOW_DISSECTOR_SHAPE_IPIP,
+	FLOW_DISSECTOR_SHAPE_GRE,
+	FLOW_DISSECTOR_SHAPE__MAX,
+};
+
 /* struct flow_keys_digest:
  *
  * This structure is used to hold a digest of the full flow keys. This is a

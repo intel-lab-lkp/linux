@@ -597,6 +597,45 @@ additional 4-byte key field read and a write to
 
 Default: 0
 
+The ``/proc/net/flow_dissector_stats`` observability file
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Read-only. Reports, per byte-identical shape, the number of packets the
+slow path handled (``occurrences``), the number the fast body handled
+(``fast_hits``), the resulting eligible fraction, and the current gate
+state, plus a total dissect count. Because the fast path returns before
+the slow-path classification, exactly one of the two counters is
+incremented per shaped packet depending on gate state, so
+``(occurrences + fast_hits) / dissects`` is a gate-invariant measure of
+how much traffic each shape's fast body would handle -- the signal an
+operator uses to decide whether a gate is worth enabling. The slow-path
+counts sit at protocol recognition points, a superset of fast-path
+eligibility (a VLAN+ARP frame counts as vlan), so the eligible fraction
+is an upper bound; the exact hit rate once a gate is on is
+``fast_hits / (occurrences + fast_hits)``. The counters
+are per-cpu and summed on read; the per-packet cost is one increment on
+the already-hot classification path.
+
+An example snapshot, from a host that mostly sees plain Eth + IP traffic
+with some VLAN, before any gate has been enabled::
+
+  # cat /proc/net/flow_dissector_stats
+  shape         occurrences        fast_hits  eligible%  gate
+  eth_ip            1866909                0      75.71   off
+  vlan               598847                0      24.28   off
+  qinq                    0                0       0.00   off
+  pppoe                   0                0       0.00   off
+  mpls                    0                0       0.00   off
+  ipip                    0                0       0.00   off
+  gre                     0                0       0.00   off
+  dissects: 2465765
+
+Read top-down: 76% of dissects are plain Eth + IP and 24% are
+VLAN-tagged, so ``eth_ip`` and ``vlan`` are the shapes worth enabling on
+this host; the other shapes are absent. Every gate is still off, so all
+the traffic sits under ``occurrences``; enabling a gate moves that
+shape's packets to ``fast_hits``.
+
 3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 
