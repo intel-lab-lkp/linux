@@ -555,8 +555,8 @@ static int ufshcd_mcq_sq_start(struct ufs_hba *hba, struct ufs_hw_queue *hwq)
 int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 {
 	struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, task_tag);
-	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
-	struct request *rq = scsi_cmd_to_rq(cmd);
+	struct ufshcd_lrb *lrbp;
+	struct request *rq;
 	struct ufs_hw_queue *hwq;
 	void __iomem *reg, *opr_sqd_base;
 	u32 nexus, id, val;
@@ -568,6 +568,8 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 	if (!cmd)
 		return -EINVAL;
 
+	lrbp = scsi_cmd_priv(cmd);
+	rq = scsi_cmd_to_rq(cmd);
 	hwq = ufshcd_mcq_req_to_hwq(hba, rq);
 	if (!hwq)
 		return 0;

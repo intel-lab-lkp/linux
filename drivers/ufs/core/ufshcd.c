@@ -5857,13 +5857,14 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
 			  struct cq_entry *cqe)
 {
 	struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, task_tag);
-	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+	struct ufshcd_lrb *lrbp;
 	enum utp_ocs ocs;
 
-	if (WARN_ONCE(!cmd, "cqe->command_desc_base_addr = %#llx\n",
-		      le64_to_cpu(cqe->command_desc_base_addr)))
+	if (WARN_ONCE(!cmd, "invalid completion tag %d, cqe->command_desc_base_addr = %#llx\n",
+		      task_tag, cqe ? le64_to_cpu(cqe->command_desc_base_addr) : 0ULL))
 		return;
 
+	lrbp = scsi_cmd_priv(cmd);
 	if (hba->monitor.enabled) {
 		lrbp->compl_time_stamp = ktime_get();
 		lrbp->compl_time_stamp_local_clock = local_clock();
