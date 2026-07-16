@@ -678,10 +678,9 @@ static int vfat_add_entry(struct inode *dir, const struct qstr *qname,
 
 	/* update timestamp */
 	fat_truncate_time(dir, ts, FAT_UPDATE_CMTIME);
+	mark_inode_dirty(dir);
 	if (IS_DIRSYNC(dir))
-		err = fat_sync_inode(dir);
-	else
-		mark_inode_dirty(dir);
+		err = sync_inode_metadata(dir, 1);
 cleanup:
 	kfree(slots);
 	return err;
@@ -904,9 +903,9 @@ static int vfat_get_dotdot_de(struct inode *inode, struct buffer_head **bh,
 
 static int vfat_sync_ipos(struct inode *dir, struct inode *inode)
 {
-	if (IS_DIRSYNC(dir))
-		return fat_sync_inode(inode);
 	mark_inode_dirty(inode);
+	if (IS_DIRSYNC(dir))
+		return sync_inode_metadata(inode, 1);
 	return 0;
 }
 
@@ -925,9 +924,9 @@ static int vfat_update_dir_metadata(struct inode *dir, struct timespec64 *ts)
 {
 	inode_inc_iversion(dir);
 	fat_truncate_time(dir, ts, FAT_UPDATE_CMTIME);
-	if (IS_DIRSYNC(dir))
-		return fat_sync_inode(dir);
 	mark_inode_dirty(dir);
+	if (IS_DIRSYNC(dir))
+		return sync_inode_metadata(dir, 1);
 	return 0;
 }
 
@@ -1024,8 +1023,10 @@ error_inode:
 	fat_attach(old_inode, old_sinfo.i_pos);
 	if (new_inode) {
 		fat_attach(new_inode, new_i_pos);
-		if (corrupt)
-			corrupt |= fat_sync_inode(new_inode);
+		if (corrupt) {
+			mark_inode_dirty(new_inode);
+			corrupt |= sync_inode_metadata(new_inode, 1);
+		}
 	} else {
 		/*
 		 * If new entry was not sharing the data cluster, it
