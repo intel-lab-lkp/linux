@@ -553,6 +553,25 @@ vlan -> qinq staging used earlier in this series.
 
 Default: 0
 
+ipip
+~~~~
+
+IPv4-in-IPv4 (``IPPROTO_IPIP`` 4), IPv6-in-IPv4 (``IPPROTO_IPV6`` 41
+inside an IPv4 outer), IPv4-in-IPv6 and IPv6-in-IPv6 tunnels. When
+the outer IP fast-path notices the outer protocol/nexthdr is one of
+these and this gate is on, it skips the outer header and tail-calls
+into the inner IPv4 / IPv6 fast-path. The flow_keys ends up with the
+inner 5-tuple (matching the slow path's behaviour, where the inner
+parse overwrites the outer addrs/basic), plus
+FLOW_DIS_ENCAPSULATION set on key_control->flags.
+
+Byte-identical with the slow path's IPPROTO_IPIP / IPPROTO_IPV6
+switch cases for the eligible shape. Defers on any miss — including
+fragmented outer, unusual outer IHL, or unsupported inner shapes
+that the inner IP fast-path itself would defer.
+
+Default: 0
+
 3. /proc/sys/net/unix - Parameters for Unix domain sockets
 ----------------------------------------------------------
 
