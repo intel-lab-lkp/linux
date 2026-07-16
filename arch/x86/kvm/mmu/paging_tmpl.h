@@ -990,7 +990,7 @@ static int FNAME(sync_spte)(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp, int 
 
 	sptep = &sp->spt[i];
 	spte = *sptep;
-	host_access = ACC_ALL;
+	host_access = kvm_get_gfn_protections(vcpu, gfn);
 	if (!(spte & shadow_host_writable_mask))
 		host_access &= ~ACC_WRITE_MASK;
 	slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);

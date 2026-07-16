@@ -4611,6 +4611,50 @@ static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
 	return RET_PF_CONTINUE;
 }
 
+static inline unsigned kvm_get_gfn_protections(struct kvm_vcpu *vcpu, gfn_t gfn)
+{
+	struct kvm *kvm = vcpu->kvm;
+	unsigned int access = vcpu->arch.mmu->root_role.access;
+	unsigned long attrs = kvm_get_memory_attributes(kvm, gfn);
+	if (!attrs)
+		return access;
+
+	WARN_ON_ONCE(!kvm_mem_attributes_valid(kvm, attrs));
+
+	if (!kvm_mem_attributes_may_read(attrs))
+		access &= ~ACC_READ_MASK;
+	if (!kvm_mem_attributes_may_write(attrs))
+		access &= ~ACC_WRITE_MASK;
+	if (!kvm_mem_attributes_may_exec(attrs)) {
+		access &= ~ACC_EXEC_MASK;
+		if (shadow_xu_mask)
+			access &= ~ACC_USER_EXEC_MASK;
+	}
+
+	return access;
+}
+
+static int kvm_faultin_memory_protections(struct kvm_vcpu *vcpu,
+					  struct kvm_page_fault *fault)
+{
+	unsigned access;
+
+	/* Memory attributes don't apply to MMIO regions */
+	if (unlikely(!fault->slot))
+		return RET_PF_CONTINUE;
+
+	access = kvm_get_gfn_protections(vcpu, fault->gfn);
+	if (access == ACC_ALL)
+		return RET_PF_CONTINUE;
+
+	trace_kvm_faultin_memory_protections(vcpu, fault, access);
+	if (__permission_fault(vcpu->arch.mmu, access, fault))
+		return -EFAULT;
+
+	fault->host_access &= access;
+	return RET_PF_CONTINUE;
+}
+
 static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 				 struct kvm_page_fault *fault)
 {
@@ -4690,6 +4734,11 @@ static int kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 
 	if (unlikely(!slot))
 		return kvm_handle_noslot_fault(vcpu, fault, access);
+
+	if (kvm_faultin_memory_protections(vcpu, fault)) {
+		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
+		return -EFAULT;
+	}
 
 	/*
 	 * Retry the page fault if the gfn hit a memslot that is being deleted

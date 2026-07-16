@@ -491,7 +491,7 @@ static inline bool is_mmu_writable_spte(u64 spte)
 static inline bool spte_permission_fault(struct kvm_mmu *mmu, u64 spte,
 					 struct kvm_page_fault *fault)
 {
-	unsigned pfec, pte_access;
+	unsigned pte_access;
 
 	if (!is_shadow_present_pte(spte))
 		return true;
@@ -511,14 +511,7 @@ static inline bool spte_permission_fault(struct kvm_mmu *mmu, u64 spte,
 		pte_access |= spte & shadow_xu_mask ? ACC_USER_EXEC_MASK : 0;
 	}
 
-	/*
-	 * RSVD is handled elsewhere, and is used for SMAP in the context
-	 * of accessing fmt.permissions[].  SPTEs never use PK or SS, as
-	 * they are not supported for shadow paging and irrelevant for TDP.
-	 */
-	pfec = fault->error_code & (
-		PFERR_WRITE_MASK | PFERR_USER_MASK | PFERR_FETCH_MASK);
-	return (mmu->fmt.permissions[pfec >> 1] >> pte_access) & 1;
+	return __permission_fault(mmu, pte_access, fault);
 }
 
 /*
