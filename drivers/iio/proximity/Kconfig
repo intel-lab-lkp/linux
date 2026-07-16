@@ -139,6 +139,7 @@ config SRF04
 	  ranger sensor. This driver can be used to measure the distance
 	  of objects. It is using two GPIOs.
 	  Actually Supported types are:
+	  - Cytron HC-SR04
 	  - Devantech SRF04
 	  - Maxbotix mb1000
 	  - Maxbotix mb1010
