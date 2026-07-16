@@ -1948,6 +1948,7 @@ struct nftables_pernet {
 	struct list_head	module_list;
 	struct list_head	notify_list;
 	struct mutex		commit_mutex;
+	struct rhltable		objname_ht;
 	u64			table_handle;
 	u64			tstamp;
 	unsigned int		gc_seq;
