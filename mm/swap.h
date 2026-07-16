@@ -337,7 +337,7 @@ static inline unsigned int folio_swap_flags(struct folio *folio)
 #else /* CONFIG_SWAP */
 struct swap_iocb;
 static inline struct swap_cluster_info *swap_cluster_lock(
-	struct swap_info_struct *si, pgoff_t offset, bool irq)
+		struct swap_info_struct *si, unsigned long offset)
 {
 	return NULL;
 }
