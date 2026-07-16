@@ -1850,25 +1850,15 @@ static void coresight_release_device_list(void)
 static struct coresight_path *coresight_cpu_get_active_path(enum cs_mode mode)
 {
 	struct coresight_device *source;
-	bool is_active = false;
+	struct coresight_path *path = NULL;
 
-	source = coresight_get_percpu_source_ref(smp_processor_id());
-	if (!source)
-		return NULL;
+	guard(raw_spinlock_irqsave)(&coresight_dev_lock);
 
-	if (coresight_get_mode(source) & mode)
-		is_active = true;
+	source = per_cpu(csdev_source, smp_processor_id());
+	if (source && (coresight_get_mode(source) & mode))
+		path = source->path;
 
-	coresight_put_percpu_source_ref(source);
-
-	/*
-	 * It is expected to run in atomic context or with the CPU lock held for
-	 * sysfs mode, so it cannot be preempted to disable the path. Here
-	 * returns the active path pointer without concern that its state may
-	 * change. Since the build path has taken a reference on the component,
-	 * the path can be safely used by the caller.
-	 */
-	return is_active ? source->path : NULL;
+	return path;
 }
 
 /* Return: 1 if PM is required, 0 if skip, or a negative error */
