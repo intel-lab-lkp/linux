@@ -1311,7 +1311,7 @@ static void bio_free_folios(struct bio *bio)
 	bio_for_each_bvec_all(bv, bio, i) {
 		struct folio *folio = bvec_folio(bv);
 
-		if (!is_zero_folio(folio))
+		if (!is_zero_folio(folio) && !is_huge_zero_folio(folio))
 			folio_put(folio);
 	}
 }
