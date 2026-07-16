@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/iio/proximity/devantech-srf04.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Devantech SRF04 and Maxbotix mb1000 ultrasonic range finder
+title: Devantech SRF04 and Maxbotix mb1000 and Cytron HC-SR04 ultrasonic range finder
 
 maintainers:
   - Andreas Klinger <ak@it-klinger.de>
@@ -21,9 +21,12 @@ description: |
 
   https://www.maxbotix.com/documents/LV-MaxSonar-EZ_Datasheet.pdf
 
+  https://botland.com.pl/index.php?controller=attachment&id_attachment=476
+
 properties:
   compatible:
     enum:
+      - cytron,hc-sr04
       - devantech,srf04
       - maxbotix,mb1000
       - maxbotix,mb1010
