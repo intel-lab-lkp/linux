@@ -8056,7 +8056,6 @@ void kvm_mmu_pre_destroy_vm(struct kvm *kvm)
 		vhost_task_stop(kvm->arch.nx_huge_page_recovery_thread);
 }
 
-#ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 static bool hugepage_test_mixed(struct kvm_memory_slot *slot, gfn_t gfn,
 				int level)
 {
@@ -8088,16 +8087,23 @@ bool kvm_arch_pre_set_memory_attributes(struct kvm *kvm,
 	}
 
 	/*
-	 * Zap SPTEs even if the slot can't be mapped PRIVATE.  KVM x86 only
-	 * supports KVM_MEMORY_ATTRIBUTE_PRIVATE, and so it *seems* like KVM
-	 * can simply ignore such slots.  But if userspace is making memory
-	 * PRIVATE, then KVM must prevent the guest from accessing the memory
-	 * as shared.  And if userspace is making memory SHARED and this point
-	 * is reached, then at least one page within the range was previously
-	 * PRIVATE, i.e. the slot's possible hugepage ranges are changing.
-	 * Zapping SPTEs in this case ensures KVM will reassess whether or not
-	 * a hugepage can be used for affected ranges.
+	 * For KVM_MEMORY_ATTRIBUTE_PRIVATE:
+	 *  Zap SPTEs even if the slot can't be mapped PRIVATE.  KVM x86 only
+	 *  supports KVM_MEMORY_ATTRIBUTE_PRIVATE, and so it *seems* like KVM
+	 *  can simply ignore such slots.  But if userspace is making memory
+	 *  PRIVATE, then KVM must prevent the guest from accessing the memory
+	 *  as shared.  And if userspace is making memory SHARED and this point
+	 *  is reached, then at least one page within the range was previously
+	 *  PRIVATE, i.e. the slot's possible hugepage ranges are changing.
+	 *  Zapping SPTEs in this case ensures KVM will reassess whether or not
+	 *  a hugepage can be used for affected ranges.
+	 *
+	 * For KVM_MEMORY_ATTRIBUTE_NR/NW/NX:
+	 *  Zap even when loosening restrictions R=>RW, which is nost strictly
+	 *  necessary, but will allow KVM to reasses whether a hugepage can be
+	 *  used for the affected pages.
 	 */
+
 	if (WARN_ON_ONCE(range->end <= range->start))
 		return false;
 
@@ -8262,4 +8268,23 @@ void kvm_mmu_init_memslot_memory_attributes(struct kvm *kvm,
 		}
 	}
 }
-#endif
+
+/* The bits are flipped but remain in the same position.  */
+#define KVM_PROT_READ  KVM_MEMORY_ATTRIBUTE_NR
+#define KVM_PROT_WRITE KVM_MEMORY_ATTRIBUTE_NW
+#define KVM_PROT_EXEC  KVM_MEMORY_ATTRIBUTE_NX
+
+bool kvm_arch_mem_attributes_supported_prot(struct kvm *kvm, unsigned long attrs)
+{
+	unsigned long prot = (attrs & KVM_MEMORY_ATTRIBUTE_PROT) ^ KVM_MEMORY_ATTRIBUTE_PROT;
+
+        /* Private memory and access permissions are incompatible */
+	if (attrs & KVM_MEMORY_ATTRIBUTE_PRIVATE)
+		return false;
+
+	/* For now do now support exec-only, even though EPT can handle it.  */
+	if (prot && !(prot & KVM_PROT_READ))
+		return false;
+
+	return true;
+}

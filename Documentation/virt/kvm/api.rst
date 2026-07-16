@@ -6394,15 +6394,23 @@ of guest physical memory.
 	__u64 flags;
   };
 
+  #define KVM_MEMORY_ATTRIBUTE_NR                (1ULL << 0)
+  #define KVM_MEMORY_ATTRIBUTE_NW                (1ULL << 1)
+  #define KVM_MEMORY_ATTRIBUTE_NX                (1ULL << 2)
   #define KVM_MEMORY_ATTRIBUTE_PRIVATE           (1ULL << 3)
 
 The address and size must be page aligned.  The supported attributes can be
 retrieved via ioctl(KVM_CHECK_EXTENSION) on KVM_CAP_MEMORY_ATTRIBUTES.  If
 executed on a VM, KVM_CAP_MEMORY_ATTRIBUTES precisely returns the attributes
 supported by that VM.  If executed at system scope, KVM_CAP_MEMORY_ATTRIBUTES
-returns all attributes supported by KVM.  The only attribute defined at this
-time is KVM_MEMORY_ATTRIBUTE_PRIVATE, which marks the associated gfn as being
-guest private memory.
+returns all attributes supported by KVM.  The attribute defined at this
+time are:
+
+ - KVM_MEMORY_ATTRIBUTE_NR/NW/NX - Respectively marks the memory region as
+   non-read, non-write and/or non-exec.  Note that write-only, exec-only and
+   write-exec mappings are not supported.
+ - KVM_MEMORY_ATTRIBUTE_PRIVATE - Which marks the associated gfn as being guest
+   private memory.
 
 Note, there is no "get" API.  Userspace is responsible for explicitly tracking
 the state of a gfn/page as needed.
