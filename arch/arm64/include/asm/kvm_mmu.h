@@ -190,7 +190,10 @@ extern u32 __hyp_va_bits;
 
 int kvm_share_hyp(void *from, void *to);
 void kvm_unshare_hyp(void *from, void *to);
-int create_hyp_mappings(void *from, void *to, enum kvm_pgtable_prot prot);
+int create_hyp_linear_mappings(void *from, void *to,
+			       enum kvm_pgtable_prot prot);
+int create_hyp_symbol_mappings(void *from, void *to,
+			       enum kvm_pgtable_prot prot);
 int __create_hyp_mappings(unsigned long start, unsigned long size,
 			  unsigned long phys, enum kvm_pgtable_prot prot);
 int hyp_alloc_private_va_range(size_t size, unsigned long *haddr);

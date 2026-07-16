@@ -2620,7 +2620,7 @@ static int __init kvm_hyp_init_protection(u32 hyp_va_bits)
 	void *addr = phys_to_virt(hyp_mem_base);
 	int ret;
 
-	ret = create_hyp_mappings(addr, addr + hyp_mem_size, PAGE_HYP);
+	ret = create_hyp_linear_mappings(addr, addr + hyp_mem_size, PAGE_HYP);
 	if (ret)
 		return ret;
 
@@ -2772,29 +2772,29 @@ static int __init init_hyp_mode(void)
 	/*
 	 * Map the Hyp-code called directly from the host
 	 */
-	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_text_start),
-				  kvm_hyp_kimg_kaddr(__hyp_text_end), PAGE_HYP_EXEC);
+	err = create_hyp_symbol_mappings(__hyp_text_start, __hyp_text_end,
+					 PAGE_HYP_EXEC);
 	if (err) {
 		kvm_err("Cannot map world-switch code\n");
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_data_start),
-				  kvm_hyp_kimg_kaddr(__hyp_data_end), PAGE_HYP);
+	err = create_hyp_symbol_mappings(__hyp_data_start, __hyp_data_end,
+					 PAGE_HYP);
 	if (err) {
 		kvm_err("Cannot map .hyp.data section\n");
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_rodata_start),
-				  kvm_hyp_kimg_kaddr(__hyp_rodata_end), PAGE_HYP_RO);
+	err = create_hyp_symbol_mappings(__hyp_rodata_start, __hyp_rodata_end,
+					 PAGE_HYP_RO);
 	if (err) {
 		kvm_err("Cannot map .hyp.rodata section\n");
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__start_rodata),
-				  kvm_hyp_kimg_kaddr(__end_rodata), PAGE_HYP_RO);
+	err = create_hyp_symbol_mappings(__start_rodata, __end_rodata,
+					 PAGE_HYP_RO);
 	if (err) {
 		kvm_err("Cannot map rodata section\n");
 		goto out_err;
@@ -2805,15 +2805,15 @@ static int __init init_hyp_mode(void)
 	 * section thanks to an assertion in the linker script. Map it RW and
 	 * the rest of .bss RO.
 	 */
-	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_bss_start),
-				  kvm_hyp_kimg_kaddr(__hyp_bss_end), PAGE_HYP);
+	err = create_hyp_symbol_mappings(__hyp_bss_start, __hyp_bss_end,
+					 PAGE_HYP);
 	if (err) {
 		kvm_err("Cannot map hyp bss section: %d\n", err);
 		goto out_err;
 	}
 
-	err = create_hyp_mappings(kvm_hyp_kimg_kaddr(__hyp_bss_end),
-				  kvm_hyp_kimg_kaddr(__bss_stop), PAGE_HYP_RO);
+	err = create_hyp_symbol_mappings(__hyp_bss_end, __bss_stop,
+					 PAGE_HYP_RO);
 	if (err) {
 		kvm_err("Cannot map bss section\n");
 		goto out_err;
@@ -2846,7 +2846,8 @@ static int __init init_hyp_mode(void)
 		char *percpu_end = percpu_begin + nvhe_percpu_size();
 
 		/* Map Hyp percpu pages */
-		err = create_hyp_mappings(percpu_begin, percpu_end, PAGE_HYP);
+		err = create_hyp_linear_mappings(percpu_begin, percpu_end,
+						 PAGE_HYP);
 		if (err) {
 			kvm_err("Cannot map hyp percpu region\n");
 			goto out_err;

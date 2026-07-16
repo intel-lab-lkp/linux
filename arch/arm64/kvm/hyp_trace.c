@@ -142,7 +142,7 @@ static int __map_hyp(void *start, size_t size)
 	if (is_protected_kvm_enabled())
 		return 0;
 
-	return create_hyp_mappings(start, start + size, PAGE_HYP);
+	return create_hyp_linear_mappings(start, start + size, PAGE_HYP);
 }
 
 static int __share_page(unsigned long va)

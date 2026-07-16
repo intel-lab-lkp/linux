@@ -86,7 +86,7 @@ static int pkvm_create_host_sve_mappings(void)
 
 		start = kern_hyp_va(sve_regs);
 		end = start + PAGE_ALIGN(pkvm_host_sve_state_size());
-		ret = pkvm_create_mappings(start, end, PAGE_HYP);
+		ret = pkvm_create_linear_mappings(start, end, PAGE_HYP);
 		if (ret)
 			return ret;
 	}
@@ -121,23 +121,27 @@ static int recreate_hyp_mappings(phys_addr_t phys, unsigned long size,
 	if (ret)
 		return ret;
 
-	ret = pkvm_create_mappings(__hyp_text_start, __hyp_text_end, PAGE_HYP_EXEC);
+	ret = pkvm_create_symbol_mappings(__hyp_text_start, __hyp_text_end,
+					  PAGE_HYP_EXEC);
 	if (ret)
 		return ret;
 
-	ret = pkvm_create_mappings(__hyp_data_start, __hyp_data_end, PAGE_HYP);
+	ret = pkvm_create_symbol_mappings(__hyp_data_start, __hyp_data_end,
+					  PAGE_HYP);
 	if (ret)
 		return ret;
 
-	ret = pkvm_create_mappings(__hyp_rodata_start, __hyp_rodata_end, PAGE_HYP_RO);
+	ret = pkvm_create_symbol_mappings(__hyp_rodata_start, __hyp_rodata_end,
+					  PAGE_HYP_RO);
 	if (ret)
 		return ret;
 
-	ret = pkvm_create_mappings(__hyp_bss_start, __hyp_bss_end, PAGE_HYP);
+	ret = pkvm_create_symbol_mappings(__hyp_bss_start, __hyp_bss_end,
+					  PAGE_HYP);
 	if (ret)
 		return ret;
 
-	ret = pkvm_create_mappings(virt, virt + size, PAGE_HYP);
+	ret = pkvm_create_linear_mappings(virt, virt + size, PAGE_HYP);
 	if (ret)
 		return ret;
 
@@ -146,7 +150,7 @@ static int recreate_hyp_mappings(phys_addr_t phys, unsigned long size,
 
 		start = (void *)kern_hyp_va(per_cpu_base[i]);
 		end = start + PAGE_ALIGN(hyp_percpu_size);
-		ret = pkvm_create_mappings(start, end, PAGE_HYP);
+		ret = pkvm_create_linear_mappings(start, end, PAGE_HYP);
 		if (ret)
 			return ret;
 

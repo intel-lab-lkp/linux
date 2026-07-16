@@ -436,17 +436,6 @@ int __create_hyp_mappings(unsigned long start, unsigned long size,
 	return err;
 }
 
-static phys_addr_t kvm_kaddr_to_phys(void *kaddr)
-{
-	if (!is_vmalloc_addr(kaddr)) {
-		BUG_ON(!virt_addr_valid(kaddr));
-		return __pa(kaddr);
-	} else {
-		return page_to_phys(vmalloc_to_page(kaddr)) +
-		       offset_in_page(kaddr);
-	}
-}
-
 struct hyp_shared_pfn {
 	u64 pfn;
 	int count;
@@ -559,7 +548,7 @@ int kvm_share_hyp(void *from, void *to)
 		return -EINVAL;
 
 	if (kvm_host_owns_hyp_mappings())
-		return create_hyp_mappings(from, to, PAGE_HYP);
+		return create_hyp_linear_mappings(from, to, PAGE_HYP);
 
 	start = ALIGN_DOWN(__pa(from), PAGE_SIZE);
 	end = PAGE_ALIGN(__pa(to));
@@ -608,23 +597,10 @@ void kvm_unshare_hyp(void *from, void *to)
 	}
 }
 
-/**
- * create_hyp_mappings - duplicate a kernel virtual address range in Hyp mode
- * @from:	The virtual kernel start address of the range
- * @to:		The virtual kernel end address of the range (exclusive)
- * @prot:	The protection to be applied to this range
- *
- * The same virtual address as the kernel virtual address is also used
- * in Hyp-mode mapping (modulo HYP_PAGE_OFFSET) to the same underlying
- * physical pages.
- */
-int create_hyp_mappings(void *from, void *to, enum kvm_pgtable_prot prot)
+static int __create_hyp_mapping_range(unsigned long start, unsigned long end,
+				      phys_addr_t phys,
+				      enum kvm_pgtable_prot prot)
 {
-	phys_addr_t phys_addr;
-	unsigned long virt_addr;
-	unsigned long start = kern_hyp_va((unsigned long)from);
-	unsigned long end = kern_hyp_va((unsigned long)to);
-
 	if (is_kernel_in_hyp_mode())
 		return 0;
 
@@ -633,18 +609,49 @@ int create_hyp_mappings(void *from, void *to, enum kvm_pgtable_prot prot)
 
 	start = start & PAGE_MASK;
 	end = PAGE_ALIGN(end);
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
 
-	for (virt_addr = start; virt_addr < end; virt_addr += PAGE_SIZE) {
+	for (; start < end; start += PAGE_SIZE, phys += PAGE_SIZE) {
 		int err;
 
-		phys_addr = kvm_kaddr_to_phys(from + virt_addr - start);
-		err = __create_hyp_mappings(virt_addr, PAGE_SIZE, phys_addr,
-					    prot);
+		err = __create_hyp_mappings(start, PAGE_SIZE, phys, prot);
 		if (err)
 			return err;
 	}
 
 	return 0;
+}
+
+/**
+ * create_hyp_linear_mappings - map a host linear-map range at EL2
+ * @from:	The host linear-map start address
+ * @to:		The host linear-map end address (exclusive)
+ * @prot:	The protection to apply to the mapping
+ */
+int create_hyp_linear_mappings(void *from, void *to,
+			       enum kvm_pgtable_prot prot)
+{
+	unsigned long start = kern_hyp_va((unsigned long)from);
+	unsigned long end = kern_hyp_va((unsigned long)to);
+	phys_addr_t phys = __pa((unsigned long)from & PAGE_MASK);
+
+	return __create_hyp_mapping_range(start, end, phys, prot);
+}
+
+/**
+ * create_hyp_symbol_mappings - map a kernel-image symbol range at EL2
+ * @from:	The kernel-image symbol at the start of the range
+ * @to:		The kernel-image symbol at the end of the range (exclusive)
+ * @prot:	The protection to apply to the mapping
+ */
+int create_hyp_symbol_mappings(void *from, void *to,
+			       enum kvm_pgtable_prot prot)
+{
+	unsigned long start = (unsigned long)kern_sym_hyp_va(from);
+	unsigned long end = (unsigned long)kern_sym_hyp_va(to);
+	phys_addr_t phys = __pa_symbol((unsigned long)from & PAGE_MASK);
+
+	return __create_hyp_mapping_range(start, end, phys, prot);
 }
 
 static int __hyp_alloc_private_va_range(unsigned long base)

@@ -1109,7 +1109,7 @@ int __pkvm_host_donate_hyp(u64 pfn, u64 nr_pages)
 		goto unlock;
 
 	__hyp_set_page_state_range(phys, size, PKVM_PAGE_OWNED);
-	WARN_ON(pkvm_create_mappings_locked(virt, virt + size, PAGE_HYP));
+	WARN_ON(pkvm_create_linear_mappings_locked(virt, virt + size, PAGE_HYP));
 	WARN_ON(host_stage2_set_owner_locked(phys, size, PKVM_ID_HYP));
 
 unlock:
@@ -1175,12 +1175,18 @@ int hyp_pin_shared_mem(void *from, void *to)
 		goto unlock;
 
 	for (cur = start; cur < end; cur += PAGE_SIZE) {
+		void *addr = (void *)cur;
+
 		p = hyp_virt_to_page(cur);
 		hyp_page_ref_inc(p);
-		if (p->refcount == 1)
-			WARN_ON(pkvm_create_mappings_locked((void *)cur,
-							    (void *)cur + PAGE_SIZE,
-							    PAGE_HYP));
+		if (p->refcount == 1) {
+			int err;
+
+			err = pkvm_create_linear_mappings_locked(addr,
+								 addr + PAGE_SIZE,
+								 PAGE_HYP);
+			WARN_ON(err);
+		}
 	}
 
 unlock:

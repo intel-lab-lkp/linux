@@ -110,23 +110,21 @@ int __pkvm_create_private_mapping(phys_addr_t phys, size_t size,
 	return err;
 }
 
-int pkvm_create_mappings_locked(void *from, void *to, enum kvm_pgtable_prot prot)
+static int __pkvm_create_mappings_locked(unsigned long start,
+					 unsigned long end,
+					 phys_addr_t phys,
+					 enum kvm_pgtable_prot prot)
 {
-	unsigned long start = (unsigned long)from;
-	unsigned long end = (unsigned long)to;
-	unsigned long virt_addr;
-	phys_addr_t phys;
-
 	hyp_assert_lock_held(&pkvm_pgd_lock);
 
 	start = start & PAGE_MASK;
 	end = PAGE_ALIGN(end);
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
 
-	for (virt_addr = start; virt_addr < end; virt_addr += PAGE_SIZE) {
+	for (; start < end; start += PAGE_SIZE, phys += PAGE_SIZE) {
 		int err;
 
-		phys = hyp_virt_to_phys((void *)virt_addr);
-		err = kvm_pgtable_hyp_map(&pkvm_pgtable, virt_addr, PAGE_SIZE,
+		err = kvm_pgtable_hyp_map(&pkvm_pgtable, start, PAGE_SIZE,
 					  phys, prot);
 		if (err)
 			return err;
@@ -135,12 +133,38 @@ int pkvm_create_mappings_locked(void *from, void *to, enum kvm_pgtable_prot prot
 	return 0;
 }
 
-int pkvm_create_mappings(void *from, void *to, enum kvm_pgtable_prot prot)
+int pkvm_create_linear_mappings_locked(void *from, void *to,
+				       enum kvm_pgtable_prot prot)
+{
+	unsigned long start = (unsigned long)from & PAGE_MASK;
+	phys_addr_t phys = hyp_virt_to_phys((void *)start);
+
+	return __pkvm_create_mappings_locked(start, (unsigned long)to,
+					     phys, prot);
+}
+
+int pkvm_create_linear_mappings(void *from, void *to,
+				enum kvm_pgtable_prot prot)
 {
 	int ret;
 
 	hyp_spin_lock(&pkvm_pgd_lock);
-	ret = pkvm_create_mappings_locked(from, to, prot);
+	ret = pkvm_create_linear_mappings_locked(from, to, prot);
+	hyp_spin_unlock(&pkvm_pgd_lock);
+
+	return ret;
+}
+
+int pkvm_create_symbol_mappings(void *from, void *to,
+				enum kvm_pgtable_prot prot)
+{
+	unsigned long start = (unsigned long)from & PAGE_MASK;
+	phys_addr_t phys = __hyp_pa(start);
+	int ret;
+
+	hyp_spin_lock(&pkvm_pgd_lock);
+	ret = __pkvm_create_mappings_locked(start, (unsigned long)to,
+					    phys, prot);
 	hyp_spin_unlock(&pkvm_pgd_lock);
 
 	return ret;
