@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <asm/pgalloc.h>
+#include <linux/cpufeature.h>
 #include <linux/gfp.h>
 #include <linux/kernel.h>
 #include <linux/pgtable.h>
@@ -32,6 +33,16 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 			  unsigned long address, pte_t *ptep,
 			  pte_t entry, int dirty)
 {
+	pte_t raw_pte;
+
+	entry = pte_mknonnapot(entry, address);
+
+	raw_pte = READ_ONCE(*ptep);
+	if (riscv_has_extension_unlikely(RISCV_ISA_EXT_SVNAPOT) &&
+	    pte_present_napot(raw_pte))
+		return napotpte_ptep_set_access_flags(vma, address, ptep, entry,
+					      dirty);
+
 	return __ptep_set_access_flags(vma, address, ptep, entry, dirty);
 }
 
@@ -50,6 +61,13 @@ bool ptep_test_and_clear_young(struct vm_area_struct *vma,
 			       unsigned long address,
 			       pte_t *ptep)
 {
+	pte_t raw_pte;
+
+	raw_pte = READ_ONCE(*ptep);
+	if (riscv_has_extension_unlikely(RISCV_ISA_EXT_SVNAPOT) &&
+	    pte_present_napot(raw_pte))
+		return napotpte_ptep_test_and_clear_young(vma, address, ptep);
+
 	return __ptep_test_and_clear_young(vma, address, ptep);
 }
 EXPORT_SYMBOL_GPL(ptep_test_and_clear_young);
