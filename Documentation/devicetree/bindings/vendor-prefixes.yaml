@@ -397,6 +397,8 @@ patternProperties:
     description: CUI Devices
   "^cypress,.*":
     description: Cypress Semiconductor Corporation
+  "^cytron,.*":
+    description: Cytron Technologies Sdn. Bhd.
   "^cyx,.*":
     description: Shenzhen CYX Industrial Co., Ltd
   "^cznic,.*":
