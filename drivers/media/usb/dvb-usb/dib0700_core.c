@@ -911,8 +911,14 @@ static int dib0700_probe(struct usb_interface *intf,
 static void dib0700_disconnect(struct usb_interface *intf)
 {
 	struct dvb_usb_device *d = usb_get_intfdata(intf);
-	struct dib0700_state *st = d->priv;
+	struct dib0700_state *st;
 	struct i2c_client *client;
+
+	if (!d)
+		goto exit;
+	st = d->priv;
+	if (!st)
+		goto exit;
 
 	/* remove I2C client for tuner */
 	client = st->i2c_client_tuner;
@@ -928,6 +934,7 @@ static void dib0700_disconnect(struct usb_interface *intf)
 		i2c_unregister_device(client);
 	}
 
+exit:
 	dvb_usb_device_exit(intf);
 }
 
