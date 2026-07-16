@@ -60,6 +60,7 @@ struct ls_scfg_msi {
 #define MPIC_MSI_FLAGS_REQUIRED (MSI_FLAG_USE_DEF_DOM_OPS | \
 				 MSI_FLAG_USE_DEF_CHIP_OPS)
 #define MPIC_MSI_FLAGS_SUPPORTED (MSI_FLAG_PCI_MSIX       | \
+				  MSI_FLAG_MULTI_PCI_MSI  | \
 				  MSI_GENERIC_FLAGS_MASK)
 
 static const struct msi_parent_ops ls_scfg_msi_parent_ops = {
@@ -144,8 +145,6 @@ static int ls_scfg_msi_domain_irq_alloc(struct irq_domain *domain,
 	int order = get_count_order(nr_irqs);
 	int pos, err;
 	unsigned int i;
-
-	WARN_ON(nr_irqs != 1);
 
 	spin_lock(&msi_data->lock);
 	pos = bitmap_find_free_region(msi_data->used, msi_data->irqs_num,
@@ -271,8 +270,12 @@ static int ls_scfg_msi_setup_hwirq(struct ls_scfg_msi *msi_data, int index)
 		/* Associate MSIR interrupt to the cpu */
 		irq_set_affinity(msir->gic_irq, get_cpu_mask(index));
 		msir->srs = 0; /* This value is determined by the CPU */
-	} else
+	} else {
 		msir->srs = index;
+		/* Statically pin each MSIR to its matching CPU */
+		if (index < num_possible_cpus())
+			irq_set_affinity(msir->gic_irq, get_cpu_mask(index));
+	}
 
 	/* Release the hwirqs corresponding to this MSIR */
 	if (!msi_affinity_flag || msir->index == 0) {
