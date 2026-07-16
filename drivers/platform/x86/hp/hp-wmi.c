@@ -670,6 +670,11 @@ static int hp_wmi_perform_query(int query, enum hp_wmi_command command,
 		ret = -EINVAL;
 		goto out_free;
 	}
+	if (obj->buffer.length < sizeof(*bios_return)) {
+		pr_warn("query 0x%x returned a short buffer\n", query);
+		ret = -EINVAL;
+		goto out_free;
+	}
 
 	bios_return = (struct bios_return *)obj->buffer.pointer;
 	ret = bios_return->return_code;
