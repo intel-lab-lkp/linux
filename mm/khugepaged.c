@@ -23,6 +23,7 @@
 #include <linux/ksm.h>
 #include <linux/pgalloc.h>
 #include <linux/backing-dev.h>
+#include <linux/sizes.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -3066,6 +3067,7 @@ void set_recommended_min_free_kbytes(void)
 {
 	struct zone *zone;
 	int nr_zones = 0;
+	unsigned long capped_pageblock_nr_pages;
 	unsigned long recommended_min;
 
 	if (!hugepage_enabled()) {
@@ -3084,16 +3086,23 @@ void set_recommended_min_free_kbytes(void)
 		nr_zones++;
 	}
 
-	/* Ensure 2 pageblocks are free to assist fragmentation avoidance */
-	recommended_min = pageblock_nr_pages * nr_zones * 2;
+	/*
+	 * Limit the pageblock contribution to 2 MiB. Larger pageblocks can
+	 * otherwise make min_free_kbytes disproportionately large.
+	 */
+	capped_pageblock_nr_pages =
+		min(pageblock_nr_pages, SZ_2M / PAGE_SIZE);
+
+	/* Ensure 2 capped units are free to assist fragmentation avoidance */
+	recommended_min = capped_pageblock_nr_pages * nr_zones * 2;
 
 	/*
-	 * Make sure that on average at least two pageblocks are almost free
+	 * Make sure that on average at least two capped units are almost free
 	 * of another type, one for a migratetype to fall back to and a
 	 * second to avoid subsequent fallbacks of other types There are 3
 	 * MIGRATE_TYPES we care about.
 	 */
-	recommended_min += pageblock_nr_pages * nr_zones *
+	recommended_min += capped_pageblock_nr_pages * nr_zones *
 			   MIGRATE_PCPTYPES * MIGRATE_PCPTYPES;
 
 	/* don't ever allow to reserve more than 5% of the lowmem */
