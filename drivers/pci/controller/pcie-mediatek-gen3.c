@@ -906,25 +906,6 @@ static void mtk_pcie_irq_handler(struct irq_desc *desc)
 	chained_irq_exit(irqchip, desc);
 }
 
-static int mtk_pcie_setup_irq(struct mtk_gen3_pcie *pcie)
-{
-	struct device *dev = pcie->dev;
-	struct platform_device *pdev = to_platform_device(dev);
-	int err;
-
-	pcie->irq = platform_get_irq(pdev, 0);
-	if (pcie->irq < 0)
-		return pcie->irq;
-
-	err = mtk_pcie_init_irq_domains(pcie);
-	if (err)
-		return err;
-
-	irq_set_chained_handler_and_data(pcie->irq, mtk_pcie_irq_handler, pcie);
-
-	return 0;
-}
-
 static int mtk_pcie_parse_port(struct mtk_gen3_pcie *pcie)
 {
 	int i, ret, num_resets = pcie->soc->phy_resets.num_resets;
@@ -941,6 +922,10 @@ static int mtk_pcie_parse_port(struct mtk_gen3_pcie *pcie)
 		return dev_err_probe(dev, PTR_ERR(pcie->base), "failed to map register base\n");
 
 	pcie->reg_base = regs->start;
+
+	pcie->irq = platform_get_irq(pdev, 0);
+	if (pcie->irq < 0)
+		return pcie->irq;
 
 	for (i = 0; i < num_resets; i++)
 		pcie->phy_resets[i].id = pcie->soc->phy_resets.id[i];
@@ -1178,10 +1163,6 @@ static int mtk_pcie_setup(struct mtk_gen3_pcie *pcie)
 {
 	int err, max_speed;
 
-	err = mtk_pcie_parse_port(pcie);
-	if (err)
-		return err;
-
 	/*
 	 * Deassert the line in order to avoid unbalance in deassert_count
 	 * counter since the bulk is shared.
@@ -1207,6 +1188,9 @@ static int mtk_pcie_setup(struct mtk_gen3_pcie *pcie)
 				 max_speed, pcie->max_link_speed);
 		}
 	}
+
+	/* All resources are now available: install the chained handler */
+	irq_set_chained_handler_and_data(pcie->irq, mtk_pcie_irq_handler, pcie);
 
 	/* Try link up */
 	err = mtk_pcie_startup_port(pcie);
@@ -1236,9 +1220,12 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 
 	pcie->dev = dev;
 	pcie->soc = device_get_match_data(dev);
-	platform_set_drvdata(pdev, pcie);
 
-	err = mtk_pcie_setup_irq(pcie);
+	err = mtk_pcie_parse_port(pcie);
+	if (err)
+		return err;
+
+	err = mtk_pcie_init_irq_domains(pcie);
 	if (err)
 		return dev_err_probe(dev, err, "Failed to setup IRQ domains\n");
 
@@ -1248,12 +1235,13 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 		goto err_tear_down_irq;
 	}
 
+	host->ops = &mtk_pcie_ops;
+	host->sysdata = pcie;
+	platform_set_drvdata(pdev, pcie);
+
 	err = mtk_pcie_setup(pcie);
 	if (err)
 		goto err_destroy_pwrctrl;
-
-	host->ops = &mtk_pcie_ops;
-	host->sysdata = pcie;
 
 	err = pci_host_probe(host);
 	if (err)
