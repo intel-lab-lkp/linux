@@ -1306,8 +1306,10 @@ static int vhost_vdpa_process_iotlb_msg(struct vhost_dev *dev, u32 asid,
 		v->in_batch = true;
 		break;
 	case VHOST_IOTLB_BATCH_END:
-		if (v->in_batch && ops->set_map)
-			ops->set_map(vdpa, asid, iotlb);
+		if (v->in_batch && ops->set_map) {
+			r = ops->set_map(vdpa, asid, iotlb);
+			break;
+		}
 		v->in_batch = false;
 		break;
 	default:
