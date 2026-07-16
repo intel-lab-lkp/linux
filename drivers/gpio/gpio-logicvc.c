@@ -8,7 +8,6 @@
 #include <linux/gpio/driver.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
@@ -91,7 +90,6 @@ static int logicvc_gpio_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *of_node = dev->of_node;
 	struct logicvc_gpio *logicvc;
-	int ret;
 
 	logicvc = devm_kzalloc(dev, sizeof(*logicvc), GFP_KERNEL);
 	if (!logicvc)
@@ -102,20 +100,14 @@ static int logicvc_gpio_probe(struct platform_device *pdev)
 
 	/* Grab our own regmap if that fails. */
 	if (IS_ERR(logicvc->regmap)) {
-		struct resource res;
+		struct resource *res;
 		void __iomem *base;
 
-		ret = of_address_to_resource(of_node, 0, &res);
-		if (ret) {
-			dev_err(dev, "Failed to get resource from address\n");
-			return ret;
-		}
-
-		base = devm_ioremap_resource(dev, &res);
+		base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 		if (IS_ERR(base))
 			return PTR_ERR(base);
 
-		logicvc_gpio_regmap_config.max_register = resource_size(&res) -
+		logicvc_gpio_regmap_config.max_register = resource_size(res) -
 			logicvc_gpio_regmap_config.reg_stride;
 
 		logicvc->regmap =
