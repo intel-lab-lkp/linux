@@ -38,6 +38,7 @@ static int __kprobes spurious_fault(unsigned long write, unsigned long address)
 	pud_t *pud;
 	pmd_t *pmd;
 	pte_t *pte;
+	unsigned long prot;
 
 	if (!(address & __UA_LIMIT))
 		return 0;
@@ -58,15 +59,30 @@ static int __kprobes spurious_fault(unsigned long write, unsigned long address)
 	if (!pmd_present(pmdp_get(pmd)))
 		return 0;
 
-	if (pmd_leaf(*pmd)) {
-		return write ? pmd_write(pmdp_get(pmd)) : 1;
+	if (p4d_leaf(p4dp_get(p4d))) {
+		prot = p4d_val(p4dp_get(p4d));
+	} else if (pud_leaf(pudp_get(pud))) {
+		prot = pud_val(pudp_get(pud));
+	} else if (pmd_leaf(*pmd)) {
+		prot = pmd_val(pmdp_get(pmd));
 	} else {
 		pte = pte_offset_kernel(pmd, address);
 		if (!pte_present(ptep_get(pte)))
 			return 0;
-
-		return write ? pte_write(ptep_get(pte)) : 1;
+		prot = pte_val(ptep_get(pte));
 	}
+
+	/*
+	 * The TLB-protect handler passes write=0 for read (TLBNR), exec (TLBNX)
+	 * and privilege (TLBPE) faults alike, so recover the real cause from the
+	 * exception code; otherwise an exec into a present NX page (or a read of
+	 * a NO_READ page) is wrongly treated as spurious and loops forever.
+	 */
+	if (write)
+		return prot & _PAGE_WRITE;
+	if (read_csr_excode() == EXCCODE_TLBNX)
+		return !(prot & _PAGE_NO_EXEC);
+	return !(prot & _PAGE_NO_READ);
 }
 
 static void __kprobes no_context(struct pt_regs *regs,
