@@ -7,6 +7,7 @@
  * Copyright 2018 Analog Devices Inc.
  */
 
+#include <linux/array_size.h>
 #include <linux/errno.h>
 #include <linux/i2c.h>
 #include <linux/mod_devicetable.h>
@@ -39,9 +40,11 @@ static int ad5686_i2c_read(struct ad5686_state *st, u8 addr)
 				      AD5686_ADDR(addr) |
 				      0x00);
 
-	ret = i2c_transfer(i2c->adapter, msg, 2);
+	ret = i2c_transfer(i2c->adapter, msg, ARRAY_SIZE(msg));
 	if (ret < 0)
 		return ret;
+	if (ret != ARRAY_SIZE(msg))
+		return -EIO;
 
 	return be16_to_cpu(st->data[0].d16);
 }
