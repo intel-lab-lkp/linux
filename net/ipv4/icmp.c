@@ -548,10 +548,16 @@ static struct rtable *icmp_route_lookup(struct net *net, struct flowi4 *fl4,
 		if (IS_ERR(rt2))
 			err = PTR_ERR(rt2);
 	} else {
-		struct flowi4 fl4_2 = {};
+		struct flowi4 fl4_2 = {
+			.daddr = fl4_dec.saddr,
+			.saddr = fl4_dec.daddr,
+			.flowi4_dscp = dscp,
+			.flowi4_proto = IPPROTO_ICMP,
+			.flowi4_mark = mark,
+			.flowi4_uid = sock_net_uid(net, NULL),
+		};
 		unsigned long orefdst;
 
-		fl4_2.daddr = fl4_dec.saddr;
 		rt2 = ip_route_output_key(net, &fl4_2);
 		if (IS_ERR(rt2)) {
 			err = PTR_ERR(rt2);
