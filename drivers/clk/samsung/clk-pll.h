@@ -45,6 +45,7 @@ enum samsung_pll_type {
 	pll_531x,
 	pll_1051x,
 	pll_1052x,
+	pll_1061x,
 	pll_0717x,
 	pll_0718x,
 	pll_0732x,

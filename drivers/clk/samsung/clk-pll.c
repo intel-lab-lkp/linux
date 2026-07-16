@@ -781,15 +781,20 @@ static unsigned long samsung_pll46xx_recalc_rate(struct clk_hw *hw,
 	u64 fvco = parent_rate;
 
 	pll_con0 = readl_relaxed(pll->con_reg);
-	pll_con1 = readl_relaxed(pll->con_reg + 4);
-	mdiv = (pll_con0 >> PLL46XX_MDIV_SHIFT) & ((pll->type == pll_1460x) ?
+	if (pll->type == pll_1061x)
+		pll_con1 = readl_relaxed(pll->con_reg + 0xc);
+	else
+		pll_con1 = readl_relaxed(pll->con_reg + 0x4);
+	mdiv = (pll_con0 >> PLL46XX_MDIV_SHIFT) & (((pll->type == pll_1460x)
+				|| (pll->type == pll_1061x)) ?
 				PLL1460X_MDIV_MASK : PLL46XX_MDIV_MASK);
 	pdiv = (pll_con0 >> PLL46XX_PDIV_SHIFT) & PLL46XX_PDIV_MASK;
 	sdiv = (pll_con0 >> PLL46XX_SDIV_SHIFT) & PLL46XX_SDIV_MASK;
 	kdiv = pll->type == pll_4650c ? pll_con1 & PLL4650C_KDIV_MASK :
 					pll_con1 & PLL46XX_KDIV_MASK;
 
-	shift = ((pll->type == pll_4600) || (pll->type == pll_1460x)) ? 16 : 10;
+	shift = ((pll->type == pll_4600) || (pll->type == pll_1460x)
+		 || (pll->type == pll_1061x)) ? 16 : 10;
 
 	fvco *= (mdiv << shift) + kdiv;
 	do_div(fvco, (pdiv << sdiv));
@@ -827,7 +832,10 @@ static int samsung_pll46xx_set_rate(struct clk_hw *hw, unsigned long drate,
 	}
 
 	con0 = readl_relaxed(pll->con_reg);
-	con1 = readl_relaxed(pll->con_reg + 0x4);
+	if (pll->type == pll_1061x)
+		con1 = readl_relaxed(pll->con_reg + 0xc);
+	else
+		con1 = readl_relaxed(pll->con_reg + 0x4);
 
 	if (!(samsung_pll46xx_mpk_change(con0, con1, rate))) {
 		/* If only s change, change just s value only*/
@@ -845,7 +853,7 @@ static int samsung_pll46xx_set_rate(struct clk_hw *hw, unsigned long drate,
 		lock = 0xffff;
 
 	/* Set PLL PMS and VSEL values. */
-	if (pll->type == pll_1460x) {
+	if ((pll->type == pll_1460x) || (pll->type == pll_1061x)) {
 		con0 &= ~((PLL1460X_MDIV_MASK << PLL46XX_MDIV_SHIFT) |
 			(PLL46XX_PDIV_MASK << PLL46XX_PDIV_SHIFT) |
 			(PLL46XX_SDIV_MASK << PLL46XX_SDIV_SHIFT));
@@ -862,7 +870,10 @@ static int samsung_pll46xx_set_rate(struct clk_hw *hw, unsigned long drate,
 			(rate->sdiv << PLL46XX_SDIV_SHIFT);
 
 	/* Set PLL K, MFR and MRR values. */
-	con1 = readl_relaxed(pll->con_reg + 0x4);
+	if (pll->type == pll_1061x)
+		con1 = readl_relaxed(pll->con_reg + 0xc);
+	else
+		con1 = readl_relaxed(pll->con_reg + 0x4);
 	con1 &= ~((PLL46XX_KDIV_MASK << PLL46XX_KDIV_SHIFT) |
 			(PLL46XX_MFR_MASK << PLL46XX_MFR_SHIFT) |
 			(PLL46XX_MRR_MASK << PLL46XX_MRR_SHIFT));
@@ -873,7 +884,10 @@ static int samsung_pll46xx_set_rate(struct clk_hw *hw, unsigned long drate,
 	/* Write configuration to PLL */
 	writel_relaxed(lock, pll->lock_reg);
 	writel_relaxed(con0, pll->con_reg);
-	writel_relaxed(con1, pll->con_reg + 0x4);
+	if (pll->type == pll_1061x)
+		writel_relaxed(con1, pll->con_reg + 0xc);
+	else
+		writel_relaxed(con1, pll->con_reg + 0x4);
 
 	/* Wait for PLL lock */
 	return samsung_pll_lock_wait(pll, PLL46XX_LOCKED);
@@ -1703,6 +1717,7 @@ static void __init _samsung_clk_register_pll(struct samsung_clk_provider *ctx,
 	case pll_4650:
 	case pll_4650c:
 	case pll_1460x:
+	case pll_1061x:
 		if (!pll->rate_table)
 			init.ops = &samsung_pll46xx_clk_min_ops;
 		else
