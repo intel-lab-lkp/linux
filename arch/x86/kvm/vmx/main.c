@@ -78,6 +78,14 @@ static int vt_vcpu_create(struct kvm_vcpu *vcpu)
 	return vmx_vcpu_create(vcpu);
 }
 
+static void vt_vcpu_postcreate(struct kvm_vcpu *vcpu)
+{
+	if (is_td_vcpu(vcpu))
+		return;
+
+	vmx_vcpu_postcreate(vcpu);
+}
+
 static void vt_vcpu_free(struct kvm_vcpu *vcpu)
 {
 	if (is_td_vcpu(vcpu)) {
@@ -898,6 +906,7 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 
 	.vcpu_precreate = vt_op(vcpu_precreate),
 	.vcpu_create = vt_op(vcpu_create),
+	.vcpu_postcreate = vt_op(vcpu_postcreate),
 	.vcpu_free = vt_op(vcpu_free),
 	.vcpu_reset = vt_op(vcpu_reset),
 

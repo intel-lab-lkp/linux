@@ -9383,6 +9383,7 @@ void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
 		return;
 	vcpu_load(vcpu);
 	kvm_synchronize_tsc(vcpu, NULL);
+	kvm_x86_call(vcpu_postcreate)(vcpu);
 	vcpu_put(vcpu);
 
 	/* poll control enabled by default */

@@ -7768,10 +7768,6 @@ int vmx_vcpu_create(struct kvm_vcpu *vcpu)
 		vmx->ve_info = page_to_virt(page);
 	}
 
-	if (vmx_can_use_ipiv(vcpu))
-		WRITE_ONCE(to_kvm_vmx(vcpu->kvm)->pid_table[vcpu->vcpu_id],
-			   __pa(&vmx->vt.pi_desc) | PID_TABLE_ENTRY_VALID);
-
 	return 0;
 
 free_vmcs:
@@ -7781,6 +7777,13 @@ free_pml:
 free_vpid:
 	free_vpid(vmx->vpid);
 	return err;
+}
+
+void vmx_vcpu_postcreate(struct kvm_vcpu *vcpu)
+{
+	if (vmx_can_use_ipiv(vcpu))
+		WRITE_ONCE(to_kvm_vmx(vcpu->kvm)->pid_table[vcpu->vcpu_id],
+			   __pa(&to_vmx(vcpu)->vt.pi_desc) | PID_TABLE_ENTRY_VALID);
 }
 
 #define L1TF_MSG_SMT "L1TF CPU bug present and SMT on, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
