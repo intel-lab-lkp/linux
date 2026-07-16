@@ -2618,8 +2618,14 @@ static int dw2102_probe(struct usb_interface *intf,
 static void dw2102_disconnect(struct usb_interface *intf)
 {
 	struct dvb_usb_device *d = usb_get_intfdata(intf);
-	struct dw2102_state *st = d->priv;
+	struct dw2102_state *st;
 	struct i2c_client *client;
+
+	if (!d)
+		goto exit;
+	st = d->priv;
+	if (!st)
+		goto exit;
 
 	/* remove I2C client for tuner */
 	client = st->i2c_client_tuner;
@@ -2635,6 +2641,7 @@ static void dw2102_disconnect(struct usb_interface *intf)
 		i2c_unregister_device(client);
 	}
 
+exit:
 	dvb_usb_device_exit(intf);
 }
 
