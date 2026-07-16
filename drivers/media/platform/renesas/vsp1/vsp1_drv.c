@@ -641,8 +641,11 @@ static int vsp1_pm_suspend(struct device *dev)
 static int vsp1_pm_resume(struct device *dev)
 {
 	struct vsp1_device *vsp1 = dev_get_drvdata(dev);
+	int ret;
 
-	pm_runtime_force_resume(vsp1->dev);
+	ret = pm_runtime_force_resume(vsp1->dev);
+	if (ret)
+		return ret;
 
 	/*
 	 * When used as part of a display pipeline, the VSP is stopped and
