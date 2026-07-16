@@ -3190,7 +3190,7 @@ static int virtnet_open(struct net_device *dev)
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		if (i < vi->curr_queue_pairs)
-			/* Pre-fill rq agressively, to make sure we are ready to
+			/* Pre-fill rq aggressively, to make sure we are ready to
 			 * get packets immediately.
 			 */
 			try_fill_recv(vi, &vi->rq[i], GFP_KERNEL);
@@ -3419,7 +3419,7 @@ static void virtnet_rx_resume(struct virtnet_info *vi,
 			      bool refill)
 {
 	if (netif_running(vi->dev)) {
-		/* Pre-fill rq agressively, to make sure we are ready to get
+		/* Pre-fill rq aggressively, to make sure we are ready to get
 		 * packets immediately.
 		 */
 		if (refill)
