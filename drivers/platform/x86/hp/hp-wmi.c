@@ -1885,20 +1885,21 @@ static int victus_s_gpu_thermal_profile_get(bool *ctgp_enable,
 					    u8 *dstate,
 					    u8 *gpu_slowdown_temp)
 {
-	struct victus_gpu_power_modes gpu_power_modes;
+	struct victus_gpu_power_modes gpu_power_modes = {};
 	int ret;
 
 	ret = hp_wmi_perform_query(HPWMI_GET_GPU_THERMAL_MODES_QUERY, HPWMI_GM,
 				   &gpu_power_modes, sizeof(gpu_power_modes),
 				   sizeof(gpu_power_modes));
-	if (ret == 0) {
-		*ctgp_enable = gpu_power_modes.ctgp_enable ? true : false;
-		*ppab_enable = gpu_power_modes.ppab_enable ? true : false;
-		*dstate = gpu_power_modes.dstate;
-		*gpu_slowdown_temp = gpu_power_modes.gpu_slowdown_temp;
-	}
+	if (ret)
+		return ret < 0 ? ret : -EINVAL;
 
-	return ret;
+	*ctgp_enable = gpu_power_modes.ctgp_enable ? true : false;
+	*ppab_enable = gpu_power_modes.ppab_enable ? true : false;
+	*dstate = gpu_power_modes.dstate;
+	*gpu_slowdown_temp = gpu_power_modes.gpu_slowdown_temp;
+
+	return 0;
 }
 
 static int victus_s_gpu_thermal_profile_set(bool ctgp_enable,
@@ -1929,8 +1930,10 @@ static int victus_s_gpu_thermal_profile_set(bool ctgp_enable,
 
 	ret = hp_wmi_perform_query(HPWMI_SET_GPU_THERMAL_MODES_QUERY, HPWMI_GM,
 				   &gpu_power_modes, sizeof(gpu_power_modes), 0);
+	if (ret)
+		return ret < 0 ? ret : -EINVAL;
 
-	return ret;
+	return 0;
 }
 
 /* Note: HP_POWER_LIMIT_DEFAULT can be used to restore default PL1 and PL2 */
