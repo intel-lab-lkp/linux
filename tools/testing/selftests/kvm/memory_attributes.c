@@ -22,11 +22,16 @@
 #define MMIO_GPA	0x700000000
 #define MMIO_GVA	MMIO_GPA
 
+#define PT_WRITABLE_MASK	BIT_ULL(1)
+#define PT_ACCESSED_MASK	BIT_ULL(5)
+#define PTE_VADDR		0x1000000000
+
 enum {
 	TEST_OP_NOP,
 	TEST_OP_READ,
 	TEST_OP_WRITE,
 	TEST_OP_EXEC,
+	TEST_OP_INVPLG,
 	TEST_OP_EXIT,
 };
 
@@ -35,6 +40,7 @@ const char *test_op_names[] =
 	[TEST_OP_READ] = "Read",
 	[TEST_OP_WRITE] = "Write",
 	[TEST_OP_EXEC] = "Exec",
+	[TEST_OP_INVPLG] = "Invplg",
 	[TEST_OP_EXIT] = "Exit",
 };
 
@@ -42,6 +48,7 @@ struct test_data {
 	uint8_t op;
 	int stage;
 	gva_t vaddr;
+	uint64_t expected_val;
 
 	struct kvm_vcpu *vcpu;
 };
@@ -59,6 +66,7 @@ static void guest_code(void *data)
 	int stage = 1;
 
 	while (true) {
+		uint64_t expected_val = READ_ONCE(test_data->expected_val);
 		gva_t vaddr = READ_ONCE(test_data->vaddr);
 
 		switch(READ_ONCE(test_data->op)) {
@@ -67,13 +75,20 @@ static void guest_code(void *data)
 			GUEST_SYNC(stage++);
 			break;
 		case TEST_OP_WRITE:
-			arch_controlled_write(vaddr, 1);
+			arch_controlled_write(vaddr, expected_val);
 			GUEST_SYNC(stage++);
 			break;
 		case TEST_OP_EXEC:
 			arch_controlled_exec(vaddr);
 			GUEST_SYNC(stage++);
 			break;
+#ifdef __x86_64__
+		case TEST_OP_INVPLG:
+			asm volatile("invlpg (%0)"
+				     :: "b" (vaddr): "memory");
+			GUEST_SYNC(stage++);
+			break;
+#endif
 		default:
 			goto exit;
 		};
@@ -106,6 +121,21 @@ static void vcpu_run_and_inc_stage(struct kvm_vcpu *vcpu)
 	test_data->stage++;
 }
 
+static int test_page(struct kvm_vcpu *vcpu, int op, gva_t vaddr)
+{
+	int rc;
+
+	test_data->op = op;
+	test_data->vaddr = vaddr;
+
+	rc = _vcpu_run(vcpu);
+
+	if (rc >= 0)
+		test_data->stage++;
+
+	return rc < 0 ? -errno : rc;
+}
+
 static void test_page_restricted(struct kvm_vcpu *vcpu, int op,
 				 gva_t vaddr, gpa_t fault_paddr,
 				 uint64_t fault_reason)
@@ -122,7 +152,8 @@ static void test_page_restricted(struct kvm_vcpu *vcpu, int op,
 		    test_op_names[op], rc, errno);
 	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_MEMORY_FAULT);
 	TEST_ASSERT_EQ(vcpu->run->memory_fault.gpa, fault_paddr);
-	TEST_ASSERT_EQ(vcpu->run->memory_fault.flags, fault_reason);
+	if (fault_reason)
+		TEST_ASSERT_EQ(vcpu->run->memory_fault.flags, fault_reason);
 	TEST_ASSERT_EQ(vcpu->run->memory_fault.size, vm->page_size);
 }
 
@@ -355,6 +386,9 @@ int main(int argc, char *argv[])
 	test_input_validation(vm);
 	test_memory_access(vcpu, test_mem, size);
 	test_memattrs_ignore_mmio(vcpu);
+#ifdef __x86_64__
+	arch_test_memory_access_pte(vcpu, test_mem);
+#endif
 	test_finalize(vcpu);
 
 	kvm_vm_free(vm);
