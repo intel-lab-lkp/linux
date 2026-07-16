@@ -2128,10 +2128,8 @@ static int trf7970a_probe(struct spi_device *spi)
 					trf7970a_irq,
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					"trf7970a", trf);
-	if (ret) {
-		dev_err(trf->dev, "Can't request IRQ#%d: %d\n", spi->irq, ret);
+	if (ret)
 		return ret;
-	}
 
 	mutex_init(&trf->lock);
 	INIT_DELAYED_WORK(&trf->timeout_work, trf7970a_timeout_work_handler);
