@@ -2910,11 +2910,11 @@ static int scrub_assemble_read_bios(struct btrfs_raid_bio *rbio)
 
 		/*
 		 * We want to find all the sectors missing from the rbio and
-		 * read them from the disk. If sector_paddr_in_rbio() finds a sector
-		 * in the bio list we don't need to read it off the stripe.
+		 * read them from the disk. If sector_paddrs_in_rbio() finds a
+		 * sector in the bio list we don't need to read it off the
+		 * stripe.
 		 */
-		paddrs = sector_paddrs_in_rbio(rbio, stripe, sectornr, 1);
-		if (paddrs == NULL)
+		if (sector_paddrs_in_rbio(rbio, stripe, sectornr, 1))
 			continue;
 
 		paddrs = rbio_stripe_paddrs(rbio, stripe, sectornr);
