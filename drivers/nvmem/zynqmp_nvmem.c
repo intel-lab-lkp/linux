@@ -183,7 +183,7 @@ static int zynqmp_nvmem_read(void *context, unsigned int offset, void *val, size
 }
 
 static int zynqmp_nvmem_write(void *context,
-			      unsigned int offset, void *val, size_t bytes)
+			      unsigned int offset, const void *val, size_t bytes)
 {
 	int pufflag = 0;
 
@@ -194,7 +194,7 @@ static int zynqmp_nvmem_write(void *context,
 		pufflag = 1;
 
 	return zynqmp_efuse_access(context, offset,
-				   val, bytes, EFUSE_WRITE, pufflag);
+				   (void *)val, bytes, EFUSE_WRITE, pufflag);
 }
 
 static const struct of_device_id zynqmp_nvmem_match[] = {
@@ -216,7 +216,7 @@ static int zynqmp_nvmem_probe(struct platform_device *pdev)
 	econfig.priv = dev;
 	econfig.add_legacy_fixed_of_cells = true;
 	econfig.reg_read = zynqmp_nvmem_read;
-	econfig.reg_write = zynqmp_nvmem_write;
+	econfig.reg_write_const = zynqmp_nvmem_write;
 
 	return PTR_ERR_OR_ZERO(devm_nvmem_register(dev, &econfig));
 }

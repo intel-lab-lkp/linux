@@ -179,11 +179,11 @@ static int bcm_otpc_read(void *context, unsigned int offset, void *val,
 	return 0;
 }
 
-static int bcm_otpc_write(void *context, unsigned int offset, void *val,
-	size_t bytes)
+static int bcm_otpc_write(void *context, unsigned int offset, const void *val,
+			  size_t bytes)
 {
 	struct otpc_priv *priv = context;
-	u32 *buf = val;
+	const u32 *buf = val;
 	u32 bytes_written;
 	u32 address = offset / priv->config->word_size;
 	int i, ret;
@@ -223,7 +223,7 @@ static struct nvmem_config bcm_otpc_nvmem_config = {
 	.word_size = 4,
 	.stride = 4,
 	.reg_read = bcm_otpc_read,
-	.reg_write = bcm_otpc_write,
+	.reg_write_const = bcm_otpc_write,
 };
 
 static const struct of_device_id bcm_otpc_dt_ids[] = {

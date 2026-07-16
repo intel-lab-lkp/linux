@@ -310,11 +310,11 @@ static void imx_ocotp_set_imx7_timing(struct ocotp_priv *priv)
 	writel(timing, priv->base + IMX_OCOTP_ADDR_TIMING);
 }
 
-static int imx_ocotp_write(void *context, unsigned int offset, void *val,
+static int imx_ocotp_write(void *context, unsigned int offset, const void *val,
 			   size_t bytes)
 {
 	struct ocotp_priv *priv = context;
-	u32 *buf = val;
+	const u32 *buf = val;
 	int ret;
 
 	u32 ctrl;
@@ -483,7 +483,7 @@ static struct nvmem_config imx_ocotp_nvmem_config = {
 	.word_size = 4,
 	.stride = 1,
 	.reg_read = imx_ocotp_read,
-	.reg_write = imx_ocotp_write,
+	.reg_write_const = imx_ocotp_write,
 };
 
 static const struct ocotp_params imx6q_params = {
