@@ -667,6 +667,22 @@ static int vop2_convert_csc_mode(int csc_mode)
 	}
 }
 
+static int vop2_convert_color_encoding(enum drm_color_encoding color_encoding,
+				       enum drm_color_range color_range)
+{
+	bool full_range = color_range == DRM_COLOR_YCBCR_FULL_RANGE;
+
+	switch (color_encoding) {
+	case DRM_COLOR_YCBCR_BT601:
+		return full_range ? CSC_BT601F : CSC_BT601L;
+	case DRM_COLOR_YCBCR_BT2020:
+		return CSC_BT2020L;
+	case DRM_COLOR_YCBCR_BT709:
+	default:
+		return CSC_BT709L;
+	}
+}
+
 /*
  * colorspace path:
  *      Input        Win csc                     Output
@@ -707,7 +723,6 @@ static void vop2_setup_csc_mode(struct vop2_video_port *vp,
 	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(vp->crtc.state);
 	int is_input_yuv = pstate->fb->format->is_yuv;
 	int is_output_yuv = is_yuv_output(vcstate->bus_format);
-	int input_csc = V4L2_COLORSPACE_DEFAULT;
 	int output_csc = vcstate->color_space;
 	bool r2y_en, y2r_en;
 	int csc_mode;
@@ -715,7 +730,8 @@ static void vop2_setup_csc_mode(struct vop2_video_port *vp,
 	if (is_input_yuv && !is_output_yuv) {
 		y2r_en = true;
 		r2y_en = false;
-		csc_mode = vop2_convert_csc_mode(input_csc);
+		csc_mode = vop2_convert_color_encoding(pstate->color_encoding,
+						       pstate->color_range);
 	} else if (!is_input_yuv && is_output_yuv) {
 		y2r_en = false;
 		r2y_en = true;
@@ -1108,6 +1124,18 @@ static int vop2_plane_atomic_check(struct drm_plane *plane,
 	/* We shouldn't be able to create a fb for an unsupported format */
 	if (WARN_ON(format < 0))
 		return format;
+
+	/*
+	 * The window CSC hardware has no full range mode for the BT.709 and
+	 * BT.2020 encodings, so reject that combination.
+	 */
+	if (fb->format->is_yuv &&
+	    pstate->color_range == DRM_COLOR_YCBCR_FULL_RANGE &&
+	    pstate->color_encoding != DRM_COLOR_YCBCR_BT601) {
+		drm_dbg_kms(vop2->drm,
+			    "Full range is only supported with BT.601 encoding\n");
+		return -EINVAL;
+	}
 
 	/* Co-ordinates have now been clipped */
 	src_x = src->x1 >> 16;
@@ -2472,6 +2500,14 @@ static int vop2_plane_init(struct vop2 *vop2, struct vop2_win *win,
 	drm_plane_create_blend_mode_property(&win->base, blend_caps);
 	drm_plane_create_zpos_property(&win->base, win->win_id, 0,
 				       vop2->registered_num_wins - 1);
+	drm_plane_create_color_properties(&win->base,
+					  BIT(DRM_COLOR_YCBCR_BT601) |
+					  BIT(DRM_COLOR_YCBCR_BT709) |
+					  BIT(DRM_COLOR_YCBCR_BT2020),
+					  BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
+					  BIT(DRM_COLOR_YCBCR_FULL_RANGE),
+					  DRM_COLOR_YCBCR_BT709,
+					  DRM_COLOR_YCBCR_LIMITED_RANGE);
 
 	return 0;
 }
