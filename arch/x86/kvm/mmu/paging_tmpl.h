@@ -933,7 +933,7 @@ static gpa_t FNAME(gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
  */
 static int FNAME(sync_spte)(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp, int i)
 {
-	bool host_writable;
+	u8 host_access;
 	gpa_t first_pte_gpa;
 	u64 *sptep, spte;
 	struct kvm_memory_slot *slot;
@@ -990,11 +990,13 @@ static int FNAME(sync_spte)(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp, int 
 
 	sptep = &sp->spt[i];
 	spte = *sptep;
-	host_writable = spte & shadow_host_writable_mask;
+	host_access = ACC_ALL;
+	if (!(spte & shadow_host_writable_mask))
+		host_access &= ~ACC_WRITE_MASK;
 	slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
 	make_spte(vcpu, sp, slot, pte_access, gfn,
 		  spte_to_pfn(spte), spte, true, true,
-		  host_writable, &spte);
+		  host_access, &spte);
 
 	/*
 	 * There is no need to mark the pfn dirty, as the new protections must
