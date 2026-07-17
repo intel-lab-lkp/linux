@@ -184,6 +184,8 @@
 #define DEFINE_PER_CPU_DECRYPTED(type, name)				\
 	DEFINE_PER_CPU_SECTION(type, name, "..decrypted")
 #else
+#define DECLARE_PER_CPU_DECRYPTED(type, name)	DECLARE_PER_CPU(type, name)
+
 #define DEFINE_PER_CPU_DECRYPTED(type, name)	DEFINE_PER_CPU(type, name)
 #endif
 
