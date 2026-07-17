@@ -1185,7 +1185,20 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
+	bool cxl_pending = false;
+
 	cxl_rch_handle_error(dev, info);
+
+	if (is_cxl_error(dev, info))
+		cxl_pending |= cxl_forward_error(dev, info);
+
+	/*
+	 * Wait for UCE CXL work to complete before AER recovery
+	 * tears down the device. CE can run asynchronously.
+	 */
+	if (cxl_pending && info->severity != AER_CORRECTABLE)
+		cxl_proto_err_flush();
+
 	pci_aer_handle_error(dev, info);
 	pci_dev_put(dev);
 }

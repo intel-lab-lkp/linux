@@ -49,8 +49,22 @@ bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 	if (!info || !info->is_cxl)
 		return false;
 
-	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_ENDPOINT)
+	/*
+	 * RC_END (Restricted CXL Device) is not included here because RC_END
+	 * reports errors on behalf of upstream RCH Downstream Port and thus
+	 * requires a unique discovery detailed in CXL4.0 spec (12.2.1.1).
+	 * The RCH device error discovery and RC_END forwarding flow begins
+	 * in cxl_rch_handle_error().
+	 */
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		break;
+	default:
 		return false;
+	}
 
 	return is_aer_internal_error(info);
 }
