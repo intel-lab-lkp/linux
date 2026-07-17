@@ -471,12 +471,12 @@ out:
 /* Runs in NAPI.
  * Function elevates the refcount, unless no work is queued.
  */
-static bool resync_queue_get_psv(struct sock *sk)
+static bool resync_queue_get_psv(struct tls_context *tls_ctx)
 {
 	struct mlx5e_ktls_offload_context_rx *priv_rx;
 	struct mlx5e_ktls_rx_resync_ctx *resync;
 
-	priv_rx = mlx5e_get_ktls_rx_priv_ctx(tls_get_ctx(sk));
+	priv_rx = mlx5e_get_ktls_rx_priv_ctx(tls_ctx);
 	if (unlikely(!priv_rx))
 		return false;
 
@@ -500,6 +500,7 @@ static void resync_update_sn(struct mlx5e_rq *rq, struct sk_buff *skb)
 	struct tls_offload_resync_async *resync_async;
 	struct net_device *netdev = rq->netdev;
 	struct net *net = dev_net(netdev);
+	struct tls_context *tls_ctx;
 	struct sock *sk = NULL;
 	unsigned int datalen;
 	struct iphdr *iph;
@@ -538,12 +539,20 @@ static void resync_update_sn(struct mlx5e_rq *rq, struct sk_buff *skb)
 	if (unlikely(sk->sk_state == TCP_TIME_WAIT))
 		goto unref;
 
-	if (unlikely(!resync_queue_get_psv(sk)))
+	/* Established lookup is tuple-based and may return a socket without
+	 * a TLS ULP attached. Sample the TLS context once and bail out if
+	 * none is present.
+	 */
+	tls_ctx = tls_get_ctx(sk);
+	if (unlikely(!tls_ctx))
+		goto unref;
+
+	if (unlikely(!resync_queue_get_psv(tls_ctx)))
 		goto unref;
 
 	seq = th->seq;
 	datalen = skb->len - depth;
-	resync_async = tls_offload_ctx_rx(tls_get_ctx(sk))->resync_async;
+	resync_async = tls_offload_ctx_rx(tls_ctx)->resync_async;
 	tls_offload_rx_resync_async_request_start(resync_async, seq, datalen);
 	rq->stats->tls_resync_req_start++;
 
