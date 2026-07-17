@@ -184,7 +184,7 @@ static int efa_com_admin_init_cq(struct efa_com_dev *edev)
 	if (!cq->entries)
 		return -ENOMEM;
 
-	spin_lock_init(&cq->lock);
+	guard(spinlock_init)(&cq->lock);
 
 	EFA_SET(&crc_min_ver, EFA_REGS_VERSION_MAJOR_VERSION, EFA_CRC_MIN_ADMIN_API_VERSION_MAJOR);
 	EFA_SET(&crc_min_ver, EFA_REGS_VERSION_MINOR_VERSION, EFA_CRC_MIN_ADMIN_API_VERSION_MINOR);
@@ -424,6 +424,7 @@ static int efa_com_submit_admin_cmd(struct efa_com_admin_queue *aq,
 
 static bool efa_com_cqe_checksum_valid(struct efa_com_admin_queue *aq,
 				       struct efa_admin_acq_entry *cqe)
+	__must_hold(&aq->cq.lock)
 {
 	u16 cqe_checksum = cqe->acq_common_descriptor.checksum;
 	u16 calc_checksum;
@@ -444,6 +445,7 @@ static bool efa_com_cqe_checksum_valid(struct efa_com_admin_queue *aq,
 
 static int efa_com_handle_single_admin_completion(struct efa_com_admin_queue *aq,
 						  struct efa_admin_acq_entry *cqe)
+	__must_hold(&aq->cq.lock)
 {
 	struct efa_comp_ctx *comp_ctx;
 	u16 cmd_id;
@@ -473,6 +475,7 @@ static int efa_com_handle_single_admin_completion(struct efa_com_admin_queue *aq
 }
 
 static void efa_com_handle_admin_completion(struct efa_com_admin_queue *aq)
+	__must_hold(&aq->cq.lock)
 {
 	struct efa_admin_acq_entry *cqe;
 	u16 queue_size_mask;
@@ -589,6 +592,7 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 
 		atomic64_inc(&aq->stats.no_completion);
 
+		/* racy reads of the queue counters for diagnostics only */
 		if (comp_ctx->status == EFA_CMD_COMPLETED)
 			ibdev_err_ratelimited(
 				aq->efa_dev,
@@ -596,7 +600,7 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 				efa_com_cmd_str(comp_ctx->cmd_opcode),
 				comp_ctx->cmd_opcode, comp_ctx->status,
 				comp_ctx->cmd_id, aq->sq.pc, aq->sq.cc,
-				aq->cq.cc);
+				context_unsafe(aq->cq.cc));
 		else
 			ibdev_err_ratelimited(
 				aq->efa_dev,
@@ -604,7 +608,7 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 				efa_com_cmd_str(comp_ctx->cmd_opcode),
 				comp_ctx->cmd_opcode, comp_ctx->status,
 				comp_ctx->cmd_id, aq->sq.pc, aq->sq.cc,
-				aq->cq.cc);
+				context_unsafe(aq->cq.cc));
 
 		clear_bit(EFA_AQ_STATE_RUNNING_BIT, &aq->state);
 		return -ETIME;

@@ -28,8 +28,8 @@ struct efa_com_admin_cq {
 	spinlock_t lock; /* Protects ACQ */
 	bool validate_checksum;
 
-	u16 cc; /* consumer counter */
-	u8 phase;
+	u16 cc __guarded_by(&lock); /* consumer counter */
+	u8 phase __guarded_by(&lock);
 };
 
 struct efa_com_admin_sq {
