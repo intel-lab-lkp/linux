@@ -545,9 +545,6 @@ static int vcnl4035_probe_trigger(struct iio_dev *indio_dev)
 			NULL, vcnl4035_drdy_irq_thread,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 			"vcnl4035_event", indio_dev);
-	if (ret < 0)
-		dev_err(&data->client->dev, "request irq %d for trigger0 failed\n",
-				data->client->irq);
 	return ret;
 }
 
