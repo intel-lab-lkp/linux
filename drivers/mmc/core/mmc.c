@@ -1972,6 +1972,9 @@ err:
 
 static bool mmc_card_can_sleep(struct mmc_card *card)
 {
+	if (card->host->caps2 & MMC_CAP2_NO_SLEEP_CMD)
+		return false;
+
 	return card->ext_csd.rev >= 3;
 }
 
