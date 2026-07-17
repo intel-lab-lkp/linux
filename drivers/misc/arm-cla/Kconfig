@@ -1,0 +1,10 @@
+config ARM_CLA
+	tristate "Arm Core Local Accelerator"
+	default n
+	depends on ARM64
+	help
+	  Arm Core Local Accelerator (CLA) is coupled with a specific CPU and
+	  provides an interface to enumerate and access attached hardware
+	  accelerators. It is only accessible from its associated CPU.
+
+	  If unsure, say N.
