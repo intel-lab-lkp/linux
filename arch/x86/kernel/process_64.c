@@ -814,7 +814,7 @@ static void enable_lam_func(void *__mm)
 static void mm_enable_lam(struct mm_struct *mm)
 {
 	mm->context.lam_cr3_mask = X86_CR3_LAM_U57;
-	mm->context.untag_mask =  ~GENMASK(62, 57);
+	WRITE_ONCE(mm->context.untag_mask, ~GENMASK(62, 57));
 
 	/*
 	 * Even though the process must still be single-threaded at this
@@ -952,7 +952,7 @@ long do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2)
 #endif
 #ifdef CONFIG_ADDRESS_MASKING
 	case ARCH_GET_UNTAG_MASK:
-		return put_user(task->mm->context.untag_mask,
+		return put_user(mm_untag_mask(task->mm),
 				(unsigned long __user *)arg2);
 	case ARCH_ENABLE_TAGGED_ADDR:
 		return prctl_enable_tagged_addr(task->mm, arg2);

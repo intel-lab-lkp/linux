@@ -100,18 +100,18 @@ static inline unsigned long mm_lam_cr3_mask(struct mm_struct *mm)
 static inline void dup_lam(struct mm_struct *oldmm, struct mm_struct *mm)
 {
 	mm->context.lam_cr3_mask = oldmm->context.lam_cr3_mask;
-	mm->context.untag_mask = oldmm->context.untag_mask;
+	WRITE_ONCE(mm->context.untag_mask, READ_ONCE(oldmm->context.untag_mask));
 }
 
 #define mm_untag_mask mm_untag_mask
 static inline unsigned long mm_untag_mask(struct mm_struct *mm)
 {
-	return mm->context.untag_mask;
+	return READ_ONCE(mm->context.untag_mask);
 }
 
 static inline void mm_reset_untag_mask(struct mm_struct *mm)
 {
-	mm->context.untag_mask = -1UL;
+	WRITE_ONCE(mm->context.untag_mask, -1UL);
 }
 
 #define arch_pgtable_dma_compat arch_pgtable_dma_compat
