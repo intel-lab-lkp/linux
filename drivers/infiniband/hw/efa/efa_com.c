@@ -386,6 +386,8 @@ static inline int efa_com_init_comp_ctxt(struct efa_com_admin_queue *aq)
 		return -ENOMEM;
 	}
 
+	guard(spinlock_init)(&aq->comp_ctx_lock);
+
 	for (i = 0; i < aq->depth; i++) {
 		comp_ctx = &aq->comp_ctx[i];
 		comp_ctx->status = EFA_CMD_UNUSED;
@@ -393,8 +395,6 @@ static inline int efa_com_init_comp_ctxt(struct efa_com_admin_queue *aq)
 
 		aq->comp_ctx_pool[i] = i;
 	}
-
-	spin_lock_init(&aq->comp_ctx_lock);
 
 	aq->comp_ctx_pool_next = 0;
 
