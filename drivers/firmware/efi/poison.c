@@ -4,6 +4,10 @@
  * record and clear poisoned frames so the next kexec kernel can keep them out
  * of its allocator.
  *
+ * Handling for the LINUX_EFI_POISONED_MEMORY configuration table: record and
+ * clear poisoned frames at runtime, and reserve frames inherited across a kexec
+ * before the allocator comes up, so the next kernel keeps them out.
+ *
  * Copyright (c) 2026 Meta Platforms, Inc. and affiliates.
  * Copyright (c) 2026 Breno Leitao <leitao@debian.org>
  */
@@ -12,7 +16,9 @@
 
 #include <linux/efi.h>
 #include <linux/io.h>
+#include <linux/memblock.h>
 #include <linux/mm.h>
+#include <linux/overflow.h>
 #include <linux/sizes.h>
 #include <linux/spinlock.h>
 
@@ -124,4 +130,51 @@ void efi_hwpoison_unrecord_pfn(unsigned long pfn)
 		ppm = pm->next;
 		memunmap(pm);
 	}
+}
+
+/*
+ * Reserve every frame recorded in the poisoned-memory table inherited across
+ * kexec, before the page allocator is up. Called from efi_config_parse_tables().
+ */
+int __init efi_reserve_poisoned_memory(void)
+{
+	unsigned long ppm = efi.poisoned_memory;
+	unsigned int nr_poison = 0;
+	int i;
+
+	if (ppm == EFI_INVALID_TABLE_ADDR)
+		return 0;
+
+	while (ppm) {
+		struct linux_efi_poisoned_memory *pm;
+		u8 *p;
+
+		p = early_memremap(ALIGN_DOWN(ppm, PAGE_SIZE), PAGE_SIZE);
+		if (!p) {
+			pr_err("Could not map poisoned-memory entry!\n");
+			return -ENOMEM;
+		}
+
+		pm = (void *)(p + ppm % PAGE_SIZE);
+
+		/* reserve the list entry itself */
+		memblock_reserve(ppm, struct_size(pm, entry, pm->size));
+
+		for (i = 0; i < atomic_read(&pm->count); i++) {
+			/* skip entries cleared by a later unpoison */
+			if (pm->entry[i].size) {
+				memblock_reserve(pm->entry[i].base,
+						 pm->entry[i].size);
+				nr_poison++;
+			}
+		}
+
+		ppm = pm->next;
+		early_memunmap(p, PAGE_SIZE);
+	}
+
+	if (nr_poison)
+		pr_info("reserved %u hardware-poisoned frame(s) inherited across kexec\n",
+			nr_poison);
+	return 0;
 }

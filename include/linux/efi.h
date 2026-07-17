@@ -1293,9 +1293,11 @@ struct linux_efi_poisoned_memory {
 	/ sizeof_field(struct linux_efi_poisoned_memory, entry[0]))
 
 #ifdef CONFIG_EFI_POISONED_MEMORY
+int efi_reserve_poisoned_memory(void);
 void efi_hwpoison_record_pfn(unsigned long pfn);
 void efi_hwpoison_unrecord_pfn(unsigned long pfn);
 #else
+static inline int efi_reserve_poisoned_memory(void) { return 0; }
 static inline void efi_hwpoison_record_pfn(unsigned long pfn) { }
 static inline void efi_hwpoison_unrecord_pfn(unsigned long pfn) { }
 #endif
