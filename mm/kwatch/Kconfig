@@ -1,0 +1,16 @@
+config KWATCH
+	tristate "Kernel Watch Framework"
+	depends on PERF_EVENTS && HAVE_HW_BREAKPOINT && DEBUG_FS
+	depends on HAVE_REINSTALL_HW_BREAKPOINT
+	depends on KPROBES && KRETPROBES
+	depends on STACKTRACE
+	help
+	  A generalized hardware-assisted memory monitor utility.
+	  It provides a low-overhead, real-time trigger mechanism to monitor
+	  kernel memory safely in atomic contexts using hardware breakpoints.
+
+	  KWatch is designed to catch silent memory corruptions, stack
+	  overwrites, and complex Heisenbugs by synchronously trapping the
+	  exact instruction causing the illegal access.
+
+	  If unsure, say N.

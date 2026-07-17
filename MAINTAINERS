@@ -14578,6 +14578,14 @@ S:	Supported
 T:	git git://git.kernel.org/pub/scm/virt/kvm/kvm.git
 F:	arch/x86/kvm/xen.*
 
+KWATCH
+M:	Jinchao Wang <wangjinchao600@gmail.com>
+L:	linux-mm@kvack.org
+S:	Maintained
+F:	Documentation/dev-tools/kwatch.rst
+F:	include/trace/events/kwatch.h
+F:	mm/kwatch/
+
 L3MDEV
 M:	David Ahern <dsahern@kernel.org>
 L:	netdev@vger.kernel.org

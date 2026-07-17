@@ -1501,5 +1501,6 @@ config LAZY_MMU_MODE_KUNIT_TEST
 	  If unsure, say N.
 
 source "mm/damon/Kconfig"
+source "mm/kwatch/Kconfig"
 
 endmenu
