@@ -436,7 +436,21 @@ static int rk_iommu_enable_stall(struct rk_iommu *iommu)
 	if (!rk_iommu_is_paging_enabled(iommu))
 		return 0;
 
-	rk_iommu_command(iommu, RK_MMU_CMD_ENABLE_STALL);
+	/*
+	 * Do not send CMD_ENABLE_STALL to orphaned-fault banks
+	 * (PAGE_FAULT_ACTIVE & !STALL_ACTIVE & IDLE): the command is ignored
+	 * by such a bank but its presence on the shared bus delays the other
+	 * banks from reaching STALL_ACTIVE within the poll timeout.
+	 */
+	for (i = 0; i < iommu->num_mmu; i++) {
+		u32 status = rk_iommu_read(iommu->bases[i], RK_MMU_STATUS);
+
+		if ((status & RK_MMU_STATUS_PAGE_FAULT_ACTIVE) &&
+		    !(status & RK_MMU_STATUS_STALL_ACTIVE) &&
+		    (status & RK_MMU_STATUS_IDLE))
+			continue;
+		writel(RK_MMU_CMD_ENABLE_STALL, iommu->bases[i] + RK_MMU_COMMAND);
+	}
 
 	ret = readx_poll_timeout(rk_iommu_is_stall_active, iommu, val,
 				 val, RK_MMU_POLL_PERIOD_US,
