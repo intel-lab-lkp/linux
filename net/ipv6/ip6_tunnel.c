@@ -569,6 +569,7 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 {
 	__u32 rel_info = ntohl(info);
 	const struct iphdr *eiph;
+	unsigned int rt_flags;
 	struct sk_buff *skb2;
 	int err, rel_msg = 0;
 	u8 rel_type = type;
@@ -627,10 +628,11 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		goto out;
 
 	skb2->dev = rt->dst.dev;
+	rt_flags = rt->rt_flags;
 	ip_rt_put(rt);
 
 	/* route "incoming" packet */
-	if (rt->rt_flags & RTCF_LOCAL) {
+	if (rt_flags & RTCF_LOCAL) {
 		rt = ip_route_output_ports(dev_net(skb->dev), &fl4, NULL,
 					   eiph->daddr, eiph->saddr, 0, 0,
 					   IPPROTO_IPIP,
