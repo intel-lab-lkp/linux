@@ -627,11 +627,12 @@ struct ath12k {
 		struct completion started;
 		struct completion completed;
 		struct completion on_channel;
-		struct delayed_work timeout;
+		struct wiphy_delayed_work timeout;
 		enum ath12k_scan_state state;
 		bool is_roc;
 		int roc_freq;
 		bool roc_notify;
+		bool finish_queued;
 		struct wiphy_work vdev_clean_wk;
 		struct ath12k_link_vif *arvif;
 	} scan;
