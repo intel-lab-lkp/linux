@@ -130,9 +130,15 @@ struct aer_err_info;
 bool is_aer_internal_error(struct aer_err_info *info);
 void cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info);
 void cxl_rch_enable_rcec(struct pci_dev *rcec);
+bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info);
+bool cxl_forward_error(struct pci_dev *pdev, struct aer_err_info *info);
+void cxl_proto_err_flush(void);
 #else
 static inline bool is_aer_internal_error(struct aer_err_info *info) { return false; }
 static inline void cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info) { }
 static inline void cxl_rch_enable_rcec(struct pci_dev *rcec) { }
+static inline bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info) { return false; }
+static inline bool cxl_forward_error(struct pci_dev *pdev, struct aer_err_info *info) { return false; }
+static inline void cxl_proto_err_flush(void) { }
 #endif /* CONFIG_CXL_RAS */
 #endif /* _PORTDRV_H_ */
