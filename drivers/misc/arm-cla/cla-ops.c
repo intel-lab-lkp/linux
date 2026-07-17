@@ -143,6 +143,25 @@ int cla_op_reset(struct cla_dev *dev, unsigned int accid)
 	return ret;
 }
 
+/**
+ * cla_op_reset_all - Reset all attached accelerators
+ * @dev: CLA device.
+ *
+ * Return: 0 on success, or an error
+ */
+int cla_op_reset_all(struct cla_dev *dev)
+{
+	int ret;
+	unsigned int accid;
+
+	cla_for_each_accid(dev, accid) {
+		ret = cla_op_reset(dev, accid);
+		if (ret)
+			return ret < 0 ? ret : -ENODEV;
+	}
+	return 0;
+}
+
 static int cla_op_access_reg(struct cla_dev *dev, u8 op,
 			     enum cla_launch_data_mode data_mode,
 			     unsigned int accid, unsigned int regidx,

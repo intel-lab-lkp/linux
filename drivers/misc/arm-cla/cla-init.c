@@ -17,18 +17,192 @@
 
 static int cla_cpuhp_state = -1;
 
+static int cla_reset_ts(struct cla_dev *dev, unsigned int accid)
+{
+	int ret;
+	u64 reg;
+
+	ret = cla_op_regread(dev, accid, CLA_REG_ACAP, 1, &reg);
+	if (ret)
+		return ret;
+	if (!FIELD_GET(CLA_ACAP_TS, reg))
+		return 0;
+
+	/*
+	 * Disable TS control from userspace, provide TS from CNTP. If we do
+	 * have to provide a timer to userspace or a virtual offset to a guest,
+	 * we'll need to make sure we have access to both TSCTRLOWNER and
+	 * TSOFFOWNER. For now best effort.
+	 */
+	reg = FIELD_PREP(CLA_TSCTRLOWNER_PL, cla_kernel_pl);
+	ret = cla_op_regwrite(dev, accid, CLA_REG_TSCTRLOWNER, 1, &reg);
+	if (!ret) {
+		reg = FIELD_PREP(CLA_TSCTRL_TS, CLA_TSCTRL_PHYSICAL);
+		ret = cla_op_regwrite(dev, accid, CLA_REG_TSCTRL, 1, &reg);
+		if (ret)
+			return ret;
+	}
+
+	reg = FIELD_PREP(CLA_TSOFFOWNER_PL, cla_kernel_pl);
+	ret = cla_op_regread(dev, accid, CLA_REG_TSOFFOWNER, 1, &reg);
+	if (!ret) {
+		reg = 0;
+		ret = cla_op_regwrite(dev, accid, CLA_REG_TSVOFF, 1, &reg);
+		if (ret)
+			return ret;
+		ret = cla_op_regwrite(dev, accid, CLA_REG_TSPOFF, 1, &reg);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static int cla_reset_pmu(struct cla_dev *dev, unsigned int accid)
+{
+	int ret;
+	u64 reg;
+
+	/* Disable PMU access */
+	reg = FIELD_PREP(CLA_PMUOWNER_PL, cla_kernel_pl);
+	ret = cla_op_regwrite(dev, accid, CLA_REG_PMUOWNER, 1, &reg);
+	if (!ret) {
+		reg = 0;
+		ret = cla_op_regwrite(dev, accid, CLA_REG_PMURESET, 1, &reg);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+/*
+ * Return: 0 on success, 1 if the accelerator is not attached or not usable, or
+ * an error
+ */
+static int cla_dev_setup_accel(struct cla_dev *dev, unsigned int accid)
+{
+	u64 status;
+	int ret;
+
+	/*
+	 * Probe and reset. Return 1 if no accelerator is attached, happy days.
+	 * If the accelerator is unavailable (masked by higher PL with PLxCTRL),
+	 * return an error. Individual accelerators cannot be owned by a higher
+	 * PL, since the MTC is shared between all accelerators attached to this
+	 * CLA.
+	 *
+	 * Some accelerators will be masked due to returning 1 further down this
+	 * function. If we end up with no dev->accelerators because of that we
+	 * won't setup the MTC, but as long as this reset succeeds, the
+	 * accelerator is not issuing memory transactions.
+	 */
+	ret = cla_op_reset(dev, accid);
+	if (ret)
+		return ret;
+
+	status = cla_reg_read(dev, CLA_REG_STATUS(accid));
+	if ((status & CLA_STATUS_STATE_MASK) != CLA_STATUS_STATE_IDLE) {
+		cla_err(dev, "unexpected status 0x%llx for accelerator %d\n",
+			status, accid);
+		return -EIO;
+	}
+
+	/*
+	 * The following are nice to have, but the accelerator should work
+	 * without them.
+	 */
+	ret = cla_reset_ts(dev, accid);
+	if (ret)
+		cla_err(dev, "[%u] could not reset TS: %d\n", accid, ret);
+
+	ret = cla_reset_pmu(dev, accid);
+	if (ret)
+		cla_err(dev, "[%u] could not reset PMU: %d\n", accid, ret);
+
+	return 0;
+}
+
+/* Clean the device before releasing it */
+static void cla_dev_reinit(struct cla_dev *dev)
+{
+	int i;
+	bool broken;
+
+	mutex_lock(&dev->lock);
+	broken = dev->broken;
+	mutex_unlock(&dev->lock);
+	if (broken)
+		return;
+
+	if (WARN_ON(cla_op_reset_all(dev))) {
+		mutex_lock(&dev->lock);
+		dev->broken = true;
+		mutex_unlock(&dev->lock);
+		return;
+	}
+
+	if (is_kernel_in_hyp_mode())
+		cla_reg_write(dev, CLA_REG_PL1CTRL, ~0ULL);
+	cla_reg_write(dev, CLA_REG_PL0CTRL, ~0ULL);
+	for (i = 0; i < CLA_NUM_DATA_REGS; i++)
+		cla_reg_write(dev, CLA_REG_DATA(i), 0);
+	cla_reg_write(dev, CLA_REG_LRESP, 0);
+}
+
 static int cla_dev_setup(unsigned int cpu)
 {
+	int i;
+	int ret;
+	bool broken;
+	unsigned int accid;
 	struct cla_dev *dev;
+	u64 plxctrl_val = 0;
 
 	dev = cla_lut_cpu[cpu];
 	if (!dev)
 		return 0;
 
+	mutex_lock(&dev->lock);
+	broken = dev->broken;
+	mutex_unlock(&dev->lock);
+	if (broken)
+		return 0;
+
 	if (WARN_ON(smp_processor_id() != cpu || dev->cpu != cpu))
 		return -EINVAL;
 
+	/* Clear DATA and LRESP_DATANZ */
+	for (i = 0; i < CLA_NUM_DATA_REGS; i++)
+		cla_reg_write(dev, CLA_REG_DATA(i), 0);
+
+	/*
+	 * Reset all accelerators. We restrict PLxCTRL to the accelerators that
+	 * are attached and well behaved.
+	 */
+	for (accid = 0; accid < CLA_NUM_ACC; accid++) {
+		ret = cla_dev_setup_accel(dev, accid);
+		if (ret > 0)
+			continue;
+		else if (ret < 0)
+			goto err;
+
+		dev->accelerators |= (1 << accid);
+		plxctrl_val |= CLA_PLxCTRL_PREP(accid,
+						FIELD_PREP(CLA_PLxCTRL_AVAIL, 1));
+	}
+
+	if (is_kernel_in_hyp_mode())
+		cla_reg_write(dev, CLA_REG_PL1CTRL, plxctrl_val);
+
+	cla_reg_write(dev, CLA_REG_PL0CTRL, plxctrl_val);
+
+	if (dev->accelerators)
+		cla_info(dev, "available accelerators: 0x%02x\n",
+			 dev->accelerators);
+
 	return 0;
+err:
+	cla_dev_reinit(dev);
+	return ret;
 }
 
 static int cla_dev_teardown(unsigned int cpu)
@@ -42,6 +216,8 @@ static int cla_dev_teardown(unsigned int cpu)
 	dev = cla_lut_cpu[cpu];
 	if (!dev)
 		return 0;
+
+	cla_dev_reinit(dev);
 
 	return 0;
 }
@@ -83,6 +259,8 @@ static struct cla_dev *cla_dev_alloc(struct device *parent, int cpu,
 	dev->regs = cla_get_regs(regs, cla_kernel_pl);
 	dev->cpu = cpu;
 	dev->dev = parent;
+
+	mutex_init(&dev->lock);
 
 	/* Attempt to find device domain, or allocate a new one */
 	dev->domain = cla_dev_domain_get(dev);

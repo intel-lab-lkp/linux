@@ -28,16 +28,25 @@ struct cla_domain;
  * @regs:		Registers accessed by the kernel.
  * @dev:		The platform device.
  * @pfn:		Page of registers assigned to user.
+ * @accelerators:	Available accelerators.
  * @pg_offset:		Mmap offset of this device.
  * @domain:		The domain this CLA belongs to.
+ *
+ * Mutable, only accessed under @lock:
+ * @lock:		Protects the following members.
+ * @broken:		Hardware failure.
  */
 struct cla_dev {
 	unsigned int cpu;
 	void __iomem *regs;
 	struct device *dev;
 	unsigned long pfn;
+	u8 accelerators;
 	unsigned long pg_offset;
 	struct cla_domain *domain;
+
+	struct mutex lock;
+	bool broken;
 };
 
 /**
@@ -61,6 +70,10 @@ extern unsigned int cla_nr_domains;
 extern struct cla_dev **cla_lut_cpu;
 extern struct cla_dev **cla_lut_pg;
 extern unsigned int cla_nr_devs;
+
+#define cla_for_each_accid(dev, accid) \
+	for ((accid) = 0; (accid) < CLA_NUM_ACC; (accid)++) \
+		for_each_if((dev)->accelerators & BIT(accid))
 
 #define cla_dbg(dev, fmt, ...) \
 	dev_dbg((dev)->dev, "[%u] " fmt, (dev)->cpu, ##__VA_ARGS__)
@@ -97,6 +110,7 @@ void cla_domains_free(void);
 
 int cla_op_wait_lresp(struct cla_dev *dev, u64 *lresp);
 int cla_op_reset(struct cla_dev *dev, unsigned int accid);
+int cla_op_reset_all(struct cla_dev *dev);
 int cla_op_regread(struct cla_dev *dev, unsigned int accid, unsigned int regidx,
 		   size_t nregs, u64 *regs);
 int cla_op_regwrite(struct cla_dev *dev, unsigned int accid,
