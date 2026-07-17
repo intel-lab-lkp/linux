@@ -2481,6 +2481,8 @@ static int yt8521_get_features(struct phy_device *phydev)
 
 	if (priv->reg_page != YT8521_RSSR_TO_BE_ARBITRATED) {
 		ret = yt8521_get_features_paged(phydev, priv->reg_page);
+		if (ret < 0)
+			return ret;
 	} else {
 		ret = yt8521_get_features_paged(phydev,
 						YT8521_RSSR_UTP_SPACE);
@@ -2490,7 +2492,8 @@ static int yt8521_get_features(struct phy_device *phydev)
 		/* add fiber's features to phydev->supported */
 		yt8521_prepare_fiber_features(phydev, phydev->supported);
 	}
-	return ret;
+
+	return genphy_c45_read_eee_abilities(phydev);
 }
 
 /**
