@@ -1268,9 +1268,7 @@ static void ti_csi2rx_cleanup_ctx(struct ti_csi2rx_ctx *ctx)
 	if (!pm_runtime_status_suspended(ctx->csi->dev))
 		dma_release_channel(ctx->dma.chan);
 
-	vb2_queue_release(&ctx->vidq);
-
-	video_unregister_device(&ctx->vdev);
+	vb2_video_unregister_device(&ctx->vdev);
 
 	mutex_destroy(&ctx->mutex);
 }
