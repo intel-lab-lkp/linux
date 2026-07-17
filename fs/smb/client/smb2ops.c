@@ -14,6 +14,7 @@
 #include <crypto/aead.h>
 #include <linux/fiemap.h>
 #include <linux/folio_queue.h>
+#include <linux/xattr.h>
 #include <uapi/linux/magic.h>
 #include "cifsfs.h"
 #include "cifsglob.h"
@@ -1043,6 +1044,15 @@ static int smb2_query_file_info(const unsigned int xid, struct cifs_tcon *tcon,
 }
 
 #ifdef CONFIG_CIFS_XATTR
+static bool cifs_passthrough(const char *name, size_t name_len)
+{
+	if (name_len == sizeof(XATTR_NAME_CAPS) - 1 &&
+	    !memcmp(name, XATTR_NAME_CAPS, name_len))
+		return true;
+
+	return false;
+}
+
 static ssize_t
 move_smb2_ea_to_cifs(char *dst, size_t dst_size,
 		     struct smb2_file_full_ea_info *src, size_t src_size,
@@ -1085,16 +1095,24 @@ move_smb2_ea_to_cifs(char *dst, size_t dst_size,
 				goto out;
 			}
 		} else {
-			/* 'user.' plus a terminating null */
-			user_name_len = 5 + 1 + name_len;
+			bool passthrough_name;
+
+			passthrough_name = cifs_passthrough(name, name_len);
+			if (passthrough_name)
+				user_name_len = name_len + 1;
+			else
+				/* 'user.' plus a terminating null */
+				user_name_len = 5 + 1 + name_len;
 
 			if (buf_size == 0) {
 				/* skip copy - calc size only */
 				rc += user_name_len;
 			} else if (dst_size >= user_name_len) {
 				dst_size -= user_name_len;
-				memcpy(dst, "user.", 5);
-				dst += 5;
+				if (!passthrough_name) {
+					memcpy(dst, "user.", 5);
+					dst += 5;
+				}
 				memcpy(dst, src->ea_data, name_len);
 				dst += name_len;
 				*dst = 0;

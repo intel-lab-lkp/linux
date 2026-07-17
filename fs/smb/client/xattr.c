@@ -36,11 +36,37 @@
 #define SMB3_XATTR_CIFS_NTSD_FULL "system.smb3_ntsd_full" /* owner/DACL/SACL */
 #define SMB3_XATTR_ATTRIB "smb3.dosattrib"  /* full name: user.smb3.dosattrib */
 #define SMB3_XATTR_CREATETIME "smb3.creationtime"  /* user.smb3.creationtime */
-/* BB need to add server (Samba e.g) support for security and trusted prefix */
-
-enum { XATTR_USER, XATTR_CIFS_ACL, XATTR_ACL_ACCESS, XATTR_ACL_DEFAULT,
+enum { XATTR_USER, XATTR_SECURITY,
+	XATTR_CIFS_ACL, XATTR_ACL_ACCESS, XATTR_ACL_DEFAULT,
 	XATTR_CIFS_NTSD_SACL, XATTR_CIFS_NTSD_OWNER,
 	XATTR_CIFS_NTSD, XATTR_CIFS_NTSD_FULL };
+
+static int cifs_build_ea_name(int xattr_flag, const char *name, char *ea_name,
+			      size_t ea_name_size)
+{
+	size_t name_len;
+
+	switch (xattr_flag) {
+	case XATTR_SECURITY:
+		/*
+		 * Only security.capability has native Linux security xattr
+		 * semantics on POSIX-capable servers.
+		 */
+		if (strcmp(name, XATTR_CAPS_SUFFIX))
+			return -EOPNOTSUPP;
+		name_len = strlen(name);
+		if (ea_name_size <= XATTR_SECURITY_PREFIX_LEN ||
+		    name_len > ea_name_size - XATTR_SECURITY_PREFIX_LEN - 1)
+			return -ERANGE;
+		memcpy(ea_name, XATTR_SECURITY_PREFIX,
+		       XATTR_SECURITY_PREFIX_LEN);
+		memcpy(ea_name + XATTR_SECURITY_PREFIX_LEN, name,
+		       name_len + 1);
+		return XATTR_SECURITY_PREFIX_LEN + name_len;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
 
 static int cifs_attrib_set(unsigned int xid, struct cifs_tcon *pTcon,
 			   struct inode *inode, const char *full_path,
@@ -104,6 +130,8 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 	struct cifs_tcon *pTcon;
 	const char *full_path;
 	void *page;
+	char ea_name[XATTR_NAME_MAX + 1];
+	const char *server_ea_name = name;
 
 	tlink = cifs_sb_tlink(cifs_sb);
 	if (IS_ERR(tlink))
@@ -131,6 +159,16 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 	}
 
 	switch (handler->flags) {
+	case XATTR_SECURITY:
+		rc = cifs_build_ea_name(handler->flags, name, ea_name,
+					sizeof(ea_name));
+		if (rc < 0)
+			goto out;
+		server_ea_name = ea_name;
+		cifs_dbg(FYI, "%s: setting security xattr %s\n",
+			 __func__, name);
+		goto set_ea;
+
 	case XATTR_USER:
 		cifs_dbg(FYI, "%s:setting user xattr %s\n", __func__, name);
 		if ((strcmp(name, CIFS_XATTR_ATTRIB) == 0) ||
@@ -149,12 +187,13 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 			break;
 		}
 
+set_ea:
 		if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_NO_XATTR)
 			goto out;
 
 		if (pTcon->ses->server->ops->set_EA) {
 			rc = pTcon->ses->server->ops->set_EA(xid, pTcon,
-				full_path, name, value, (__u16)size,
+				full_path, server_ea_name, value, (__u16)size,
 				cifs_sb->local_nls, cifs_sb);
 			if (rc == 0)
 				inode_set_ctime_current(inode);
@@ -280,6 +319,8 @@ static int cifs_xattr_get(const struct xattr_handler *handler,
 	struct cifs_tcon *pTcon;
 	const char *full_path;
 	void *page;
+	char ea_name[XATTR_NAME_MAX + 1];
+	const char *server_ea_name = name;
 
 	tlink = cifs_sb_tlink(cifs_sb);
 	if (IS_ERR(tlink))
@@ -297,6 +338,16 @@ static int cifs_xattr_get(const struct xattr_handler *handler,
 
 	/* return alt name if available as pseudo attr */
 	switch (handler->flags) {
+	case XATTR_SECURITY:
+		rc = cifs_build_ea_name(handler->flags, name, ea_name,
+					sizeof(ea_name));
+		if (rc < 0)
+			goto out;
+		server_ea_name = ea_name;
+		cifs_dbg(FYI, "%s: querying security xattr %s\n",
+			 __func__, name);
+		goto query_ea;
+
 	case XATTR_USER:
 		cifs_dbg(FYI, "%s:querying user xattr %s\n", __func__, name);
 		if ((strcmp(name, CIFS_XATTR_ATTRIB) == 0) ||
@@ -309,12 +360,13 @@ static int cifs_xattr_get(const struct xattr_handler *handler,
 			break;
 		}
 
+query_ea:
 		if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_NO_XATTR)
 			goto out;
 
 		if (pTcon->ses->server->ops->query_all_EAs)
 			rc = pTcon->ses->server->ops->query_all_EAs(xid, pTcon,
-				full_path, name, value, size, cifs_sb);
+				full_path, server_ea_name, value, size, cifs_sb);
 		break;
 
 	case XATTR_CIFS_ACL:
@@ -438,6 +490,13 @@ static const struct xattr_handler cifs_user_xattr_handler = {
 	.set = cifs_xattr_set,
 };
 
+static const struct xattr_handler cifs_security_xattr_handler = {
+	.prefix = XATTR_SECURITY_PREFIX,
+	.flags = XATTR_SECURITY,
+	.get = cifs_xattr_get,
+	.set = cifs_xattr_set,
+};
+
 /* os2.* attributes are treated like user.* attributes */
 static const struct xattr_handler cifs_os2_xattr_handler = {
 	.prefix = XATTR_OS2_PREFIX,
@@ -522,6 +581,7 @@ static const struct xattr_handler smb3_ntsd_full_xattr_handler = {
 
 const struct xattr_handler * const cifs_xattr_handlers[] = {
 	&cifs_user_xattr_handler,
+	&cifs_security_xattr_handler,
 	&cifs_os2_xattr_handler,
 	&cifs_cifs_acl_xattr_handler,
 	&smb3_acl_xattr_handler, /* alias for above since avoiding "cifs" */
