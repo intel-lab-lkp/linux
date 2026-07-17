@@ -956,7 +956,7 @@ int efa_com_mmio_reg_read_init(struct efa_com_dev *edev)
 {
 	struct efa_com_mmio_read *mmio_read = &edev->mmio_read;
 
-	spin_lock_init(&mmio_read->lock);
+	guard(spinlock_init)(&mmio_read->lock);
 	mmio_read->read_resp =
 		dma_alloc_coherent(edev->dmadev, sizeof(*mmio_read->read_resp),
 				   &mmio_read->read_resp_dma_addr, GFP_KERNEL);

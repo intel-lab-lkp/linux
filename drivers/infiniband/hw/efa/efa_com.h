@@ -99,7 +99,7 @@ struct efa_com_aenq {
 struct efa_com_mmio_read {
 	struct efa_admin_mmio_req_read_less_resp *read_resp;
 	dma_addr_t read_resp_dma_addr;
-	u16 seq_num;
+	u16 seq_num __guarded_by(&lock);
 	u16 mmio_read_timeout; /* usecs */
 	/* serializes mmio reads */
 	spinlock_t lock;
