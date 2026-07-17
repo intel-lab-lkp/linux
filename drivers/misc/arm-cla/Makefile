@@ -2,6 +2,7 @@
 
 arm-cla-y := \
 	cla-init.o \
+	cla-mtc.o \
 	cla-ops.o \
 	cla-regs.o \
 	cla-topology.o

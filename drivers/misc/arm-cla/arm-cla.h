@@ -134,6 +134,10 @@ int cla_op_regread(struct cla_dev *dev, unsigned int accid, unsigned int regidx,
 		   size_t nregs, u64 *regs);
 int cla_op_regwrite(struct cla_dev *dev, unsigned int accid,
 		    unsigned int regidx, size_t nregs, u64 *regs);
+int cla_op_setctx(struct cla_dev *dev, unsigned int regidx, size_t nregs,
+		  u64 *regs);
+int cla_op_getctx(struct cla_dev *dev, unsigned int regidx, size_t nregs,
+		  u64 *regs);
 int cla_op_entersr(struct cla_dev *dev, unsigned int accid, u64 *srstate);
 int cla_op_exitsr(struct cla_dev *dev, unsigned int accid, u64 *srstate);
 
@@ -142,5 +146,10 @@ int cla_regs_switch_out(struct cla_dev *dev, struct cla_regs *regs,
 int cla_regs_switch_in(struct cla_dev *dev, struct cla_regs *regs);
 struct cla_regs **cla_regs_alloc_domain(struct cla_domain *domain);
 void cla_regs_free_domain(struct cla_domain *domain, struct cla_regs **regs);
+
+int cla_mtc_setup(struct cla_dev *dev);
+int cla_mtc_clear(struct cla_dev *dev);
+int cla_mtc_install(struct cla_dev *dev, pgd_t *pgd, unsigned long asid);
+int cla_mtc_uninstall(struct cla_dev *dev);
 
 #endif /* _ARM_CLA_H_ */

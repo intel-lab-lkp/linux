@@ -180,6 +180,10 @@ static int cla_op_access_reg(struct cla_dev *dev, u8 op,
 	case CLA_LAUNCH_OP_REGWRITE:
 		max_regidx = 0x100000000;
 		break;
+	case CLA_LAUNCH_OP_SETCTX:
+	case CLA_LAUNCH_OP_GETCTX:
+		max_regidx = 0x80;
+		break;
 	default:
 		WARN_ON(1);
 		return -EINVAL;
@@ -244,6 +248,54 @@ int cla_op_regwrite(struct cla_dev *dev, unsigned int accid,
 {
 	return cla_op_access_reg(dev, CLA_LAUNCH_OP_REGWRITE, CLA_DATA_IN,
 				 accid, regidx, nregs, regs);
+}
+
+/**
+ * cla_op_setctx - launch SETCTX operation.
+ * @dev: CLA device.
+ * @regidx: first MTC register index.
+ * @nregs: number of registers to set. Can be greater than 8 (accessed with
+ *         multiple SETCTX operations).
+ * @regs: register content, array of length @nregs.
+ *
+ * Return: 0 on success, or an error.
+ */
+int cla_op_setctx(struct cla_dev *dev, unsigned int regidx, size_t nregs,
+		  u64 *regs)
+{
+	/*
+	 * Even though the MTC is shared between all accelerators, accid must be
+	 * valid. If no accelerator is attached, the op fails.
+	 */
+	if (!dev->accelerators)
+		return -ENODEV;
+
+	return cla_op_access_reg(dev, CLA_LAUNCH_OP_SETCTX, CLA_DATA_IN,
+				 __ffs(dev->accelerators), regidx, nregs, regs);
+}
+
+/**
+ * cla_op_getctx - launch GETCTX operation.
+ * @dev: CLA device.
+ * @regidx: first MTC register index.
+ * @nregs: number of registers to set. Can be greater than 8 (accessed with
+ *         multiple GETCTX operations).
+ * @regs: register content, array of length @nregs.
+ *
+ * Return: 0 on success, or an error.
+ */
+int cla_op_getctx(struct cla_dev *dev, unsigned int regidx, size_t nregs,
+		  u64 *regs)
+{
+	/*
+	 * Even though the MTC is shared between all accelerators, accid must be
+	 * valid. If no accelerator is attached, the op fails.
+	 */
+	if (!dev->accelerators)
+		return -ENODEV;
+
+	return cla_op_access_reg(dev, CLA_LAUNCH_OP_GETCTX, CLA_DATA_OUT,
+				 __ffs(dev->accelerators), regidx, nregs, regs);
 }
 
 /**

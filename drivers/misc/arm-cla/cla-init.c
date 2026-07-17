@@ -155,7 +155,8 @@ static void cla_dev_reinit(struct cla_dev *dev)
 	if (broken)
 		return;
 
-	if (WARN_ON(cla_op_reset_all(dev))) {
+	if (WARN_ON(cla_op_reset_all(dev)) ||
+	    WARN_ON(cla_mtc_clear(dev))) {
 		mutex_lock(&dev->lock);
 		dev->broken = true;
 		mutex_unlock(&dev->lock);
@@ -217,9 +218,14 @@ static int cla_dev_setup(unsigned int cpu)
 
 	cla_reg_write(dev, CLA_REG_PL0CTRL, plxctrl_val);
 
-	if (dev->accelerators)
+	if (dev->accelerators) {
+		ret = cla_mtc_setup(dev);
+		if (ret)
+			goto err;
+
 		cla_info(dev, "available accelerators: 0x%02x\n",
 			 dev->accelerators);
+	}
 
 	return 0;
 err:
