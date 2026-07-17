@@ -20,9 +20,9 @@ static int list_limit = 1024;
 module_param(list_limit, int, 0644);
 MODULE_PARM_DESC(list_limit, "udmabuf_create_list->count limit. Default is 1024.");
 
-static int size_limit_mb = 64;
+static int size_limit_mb = 0;
 module_param(size_limit_mb, int, 0644);
-MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Default is 64.");
+MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Setting 0 disables the limit. Default is 0.");
 
 struct udmabuf {
 	pgoff_t pagecount;
@@ -373,7 +373,7 @@ static long udmabuf_create(struct miscdevice *device,
 
 		subpgcnt = list[i].size >> PAGE_SHIFT;
 		pgcnt += subpgcnt;
-		if (pgcnt > pglimit)
+		if (pglimit && pglimit < pgcnt)
 			goto err_noinit;
 
 		max_nr_folios = max_t(unsigned long, subpgcnt, max_nr_folios);
