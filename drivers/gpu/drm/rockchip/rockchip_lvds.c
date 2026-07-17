@@ -129,7 +129,15 @@ rockchip_lvds_encoder_atomic_check(struct drm_encoder *encoder,
 				   struct drm_connector_state *conn_state)
 {
 	struct rockchip_crtc_state *s = to_rockchip_crtc_state(crtc_state);
+	struct drm_connector *connector = conn_state->connector;
 
+	/*
+	 * The VOP derives the pixel clock polarity from this. Without it a
+	 * panel that declares pixelclk-active = <0> is clocked on the wrong
+	 * edge. panel-lvds fills the connector's bus_flags in from the DT
+	 * display timing.
+	 */
+	s->bus_flags = connector->display_info.bus_flags;
 	s->output_mode = ROCKCHIP_OUT_MODE_P888;
 	s->output_type = DRM_MODE_CONNECTOR_LVDS;
 
