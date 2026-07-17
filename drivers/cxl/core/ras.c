@@ -104,8 +104,11 @@ void cxl_cper_handle_prot_err(struct cxl_cper_prot_err_work_data *data)
 	}
 
 	guard(device)(&pdev->dev);
-	if (!pdev->dev.driver)
+	if (!pdev->dev.driver) {
+		dev_warn_ratelimited(&pdev->dev,
+				     "Device is unbound, abort CPER error handling\n");
 		return;
+	}
 
 	struct device *mem_dev __free(put_device) = bus_find_device(
 		&cxl_bus_type, NULL, pdev, match_memdev_by_parent);
@@ -129,15 +132,14 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
-int cxl_ras_init(void)
+void cxl_ras_init(void)
 {
-	return cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
 }
 
 void cxl_ras_exit(void)
 {
-	cxl_cper_unregister_prot_err_work(&cxl_cper_prot_err_work);
-	cancel_work_sync(&cxl_cper_prot_err_work);
+	cxl_cper_unregister_prot_err_work();
 }
 
 static void cxl_dport_map_ras(struct cxl_dport *dport)
