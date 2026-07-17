@@ -2643,6 +2643,19 @@ out:
 	return err;
 }
 
+static bool ksmbd_is_internal_acl_ea_name(const char *name, size_t name_len)
+{
+	return (name_len == sizeof(XATTR_NAME_POSIX_ACL_ACCESS) - 1 &&
+		!strncmp(name, XATTR_NAME_POSIX_ACL_ACCESS, name_len)) ||
+	       (name_len == sizeof(XATTR_NAME_POSIX_ACL_DEFAULT) - 1 &&
+		!strncmp(name, XATTR_NAME_POSIX_ACL_DEFAULT, name_len)) ||
+	       (name_len == sizeof(XATTR_TRUSTED_PREFIX "SGI_ACL_FILE") - 1 &&
+		!strncmp(name, XATTR_TRUSTED_PREFIX "SGI_ACL_FILE", name_len)) ||
+	       (name_len == sizeof(XATTR_TRUSTED_PREFIX "SGI_ACL_DEFAULT") - 1 &&
+		!strncmp(name, XATTR_TRUSTED_PREFIX "SGI_ACL_DEFAULT",
+			 name_len));
+}
+
 static bool ksmbd_is_security_capability_ea_name(const char *name,
 						 size_t name_len)
 {
@@ -2665,6 +2678,18 @@ static bool ksmbd_is_posix_ea_name(const char *name, size_t name_len)
 	if (ksmbd_is_security_xfstests_ea_name(name, name_len))
 		return true;
 
+	/*
+	 * POSIX ACL xattrs are filesystem-internal ACL records, not
+	 * user-visible EAs.  XFS may also expose trusted.SGI_ACL_* aliases
+	 * through listxattr(), so filter those as well.
+	 */
+	if (ksmbd_is_internal_acl_ea_name(name, name_len))
+		return false;
+
+	if (name_len > XATTR_TRUSTED_PREFIX_LEN &&
+	    !strncmp(name, XATTR_TRUSTED_PREFIX, XATTR_TRUSTED_PREFIX_LEN))
+		return true;
+
 	return false;
 }
 
@@ -2672,6 +2697,9 @@ static int ksmbd_map_ea_name_to_xattr(bool posix_extensions,
 				      const char *ea_name, size_t ea_name_len,
 				      char *attr_name)
 {
+	if (ksmbd_is_internal_acl_ea_name(ea_name, ea_name_len))
+		return -EINVAL;
+
 	if (posix_extensions &&
 	    ksmbd_is_posix_ea_name(ea_name, ea_name_len)) {
 		if (ea_name_len > XATTR_NAME_MAX)
