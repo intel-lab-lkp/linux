@@ -1581,13 +1581,16 @@ void perf_event_print_debug(void)
 		rdmsrq(MSR_CORE_PERF_GLOBAL_CTRL, ctrl);
 		rdmsrq(MSR_CORE_PERF_GLOBAL_STATUS, status);
 		rdmsrq(MSR_CORE_PERF_GLOBAL_OVF_CTRL, overflow);
-		rdmsrq(MSR_ARCH_PERFMON_FIXED_CTR_CTRL, fixed);
 
 		pr_info("\n");
 		pr_info("CPU#%d: ctrl:       %016llx\n", cpu, ctrl);
 		pr_info("CPU#%d: status:     %016llx\n", cpu, status);
 		pr_info("CPU#%d: overflow:   %016llx\n", cpu, overflow);
-		pr_info("CPU#%d: fixed:      %016llx\n", cpu, fixed);
+
+		if (x86_pmu.fixedctr) {
+			rdmsrq(MSR_ARCH_PERFMON_FIXED_CTR_CTRL, fixed);
+			pr_info("CPU#%d: fixed:      %016llx\n", cpu, fixed);
+		}
 		if (pebs_constraints) {
 			rdmsrq(MSR_IA32_PEBS_ENABLE, pebs);
 			pr_info("CPU#%d: pebs:       %016llx\n", cpu, pebs);
