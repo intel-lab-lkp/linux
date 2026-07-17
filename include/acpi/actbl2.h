@@ -892,6 +892,9 @@ struct acpi_iovt_header {
 
 /* Values for Type field above */
 
+#define ACPI_IOVT_PCI_DEVICE		BIT(0)
+#define ACPI_IOVT_PXM_VALID		BIT(1)
+#define ACPI_IOVT_MAGAGE_BY_SEGMENT	BIT(2)
 enum acpi_iovt_iommu_type {
 	ACPI_IOVT_IOMMU_V1 = 0x00,
 	ACPI_IOVT_IOMMU_RESERVED = 0x01	/* 1 and greater are reserved */
