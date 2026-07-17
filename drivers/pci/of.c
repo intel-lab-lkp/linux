@@ -654,7 +654,7 @@ void of_pci_remove_node(struct pci_dev *pdev)
 	struct device_node *np;
 
 	np = pci_device_to_OF_node(pdev);
-	if (!np || !of_node_check_flag(np, OF_DYNAMIC))
+	if (!np || !of_node_check_flag(np, OF_DYNAMIC) || !np->data)
 		return;
 
 	fw_devlink_set_device(&np->fwnode, NULL);
@@ -750,7 +750,7 @@ void of_pci_remove_host_bridge_node(struct pci_host_bridge *bridge)
 	struct device_node *np;
 
 	np = pci_bus_to_OF_node(bridge->bus);
-	if (!np || !of_node_check_flag(np, OF_DYNAMIC))
+	if (!np || !of_node_check_flag(np, OF_DYNAMIC) || !np->data)
 		return;
 
 	fw_devlink_set_device(&np->fwnode, NULL);
