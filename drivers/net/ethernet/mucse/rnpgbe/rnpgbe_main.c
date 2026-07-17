@@ -249,8 +249,6 @@ static void rnpgbe_rm_adapter(struct pci_dev *pdev)
 	struct net_device *netdev;
 	int err;
 
-	if (!mucse)
-		return;
 	netdev = mucse->netdev;
 	unregister_netdev(netdev);
 	err = rnpgbe_send_notify(hw, false, mucse_fw_powerup);
