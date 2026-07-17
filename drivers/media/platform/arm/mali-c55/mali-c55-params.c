@@ -922,15 +922,13 @@ int mali_c55_register_params(struct mali_c55 *mali_c55)
 	if (ret) {
 		dev_err(mali_c55->dev,
 			"failed to register params video device\n");
-		goto err_release_vb2q;
+		goto err_cleanup_entity;
 	}
 
 	params->mali_c55 = mali_c55;
 
 	return 0;
 
-err_release_vb2q:
-	vb2_queue_release(vb2q);
 err_cleanup_entity:
 	media_entity_cleanup(&params->vdev.entity);
 err_destroy_mutex:

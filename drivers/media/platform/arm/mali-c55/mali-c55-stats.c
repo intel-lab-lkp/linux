@@ -304,15 +304,13 @@ int mali_c55_register_stats(struct mali_c55 *mali_c55)
 	if (ret) {
 		dev_err(mali_c55->dev,
 			"failed to register stats video device\n");
-		goto err_release_vb2q;
+		goto err_cleanup_entity;
 	}
 
 	stats->mali_c55 = mali_c55;
 
 	return 0;
 
-err_release_vb2q:
-	vb2_queue_release(vb2q);
 err_cleanup_entity:
 	media_entity_cleanup(&stats->vdev.entity);
 err_destroy_mutex:

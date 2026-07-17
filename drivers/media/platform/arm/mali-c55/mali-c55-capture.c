@@ -904,13 +904,11 @@ static int mali_c55_register_cap_dev(struct mali_c55 *mali_c55,
 		dev_err(mali_c55->dev,
 			"%s failed to register video device\n",
 			cap_dev->vdev.name);
-		goto err_release_vb2q;
+		goto err_cleanup_media_entity;
 	}
 
 	return 0;
 
-err_release_vb2q:
-	vb2_queue_release(vb2q);
 err_cleanup_media_entity:
 	media_entity_cleanup(&cap_dev->vdev.entity);
 err_destroy_mutex:
