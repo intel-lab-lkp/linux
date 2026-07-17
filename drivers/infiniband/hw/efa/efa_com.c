@@ -148,7 +148,7 @@ static int efa_com_admin_init_sq(struct efa_com_dev *edev)
 	if (!sq->entries)
 		return -ENOMEM;
 
-	spin_lock_init(&sq->lock);
+	guard(spinlock_init)(&sq->lock);
 
 	sq->cc = 0;
 	sq->pc = 0;
@@ -329,6 +329,7 @@ static void __efa_com_submit_admin_cmd(struct efa_com_admin_queue *aq,
 				       size_t cmd_size_in_bytes,
 				       struct efa_admin_acq_entry *comp,
 				       size_t comp_size_in_bytes)
+	__must_hold(&aq->sq.lock)
 {
 	struct efa_admin_aq_entry *aqe;
 	u16 queue_size_mask;
@@ -433,10 +434,11 @@ static bool efa_com_cqe_checksum_valid(struct efa_com_admin_queue *aq,
 
 	calc_checksum = crc16(EFA_CRC16_INIT_VAL, (u8 *)cqe, sizeof(*cqe)) ^ EFA_CRC16_INIT_VAL;
 	if (calc_checksum != cqe_checksum) {
+		/* racy read of the SQ producer counter for diagnostics only */
 		ibdev_err(aq->efa_dev,
 			  "Received completion with invalid checksum, cqe[%u], calc[%u], sq producer[%d], sq consumer[%d], cq consumer[%d]\n",
-			  cqe_checksum, calc_checksum, aq->sq.pc, aq->sq.cc,
-			  aq->cq.cc);
+			  cqe_checksum, calc_checksum,
+			  context_unsafe(aq->sq.pc), aq->sq.cc, aq->cq.cc);
 		return false;
 	}
 
@@ -458,10 +460,11 @@ static int efa_com_handle_single_admin_completion(struct efa_com_admin_queue *aq
 
 	comp_ctx = efa_com_get_comp_ctx_by_cmd_id(aq, cmd_id);
 	if (comp_ctx->status != EFA_CMD_SUBMITTED || comp_ctx->cmd_id != cmd_id) {
+		/* racy read of the SQ producer counter for diagnostics only */
 		ibdev_err(aq->efa_dev,
 			  "Received completion with unexpected command id[%x], status[%d] sq producer[%d], sq consumer[%d], cq consumer[%d]\n",
-			  cmd_id, comp_ctx->status, aq->sq.pc, aq->sq.cc,
-			  aq->cq.cc);
+			  cmd_id, comp_ctx->status,
+			  context_unsafe(aq->sq.pc), aq->sq.cc, aq->cq.cc);
 		return -EINVAL;
 	}
 
@@ -599,16 +602,16 @@ static int efa_com_wait_and_process_admin_cq_interrupts(struct efa_comp_ctx *com
 				"The device sent a completion but the driver didn't receive any MSI-X interrupt for admin cmd %s(%d) status %d (id: %d, sq producer: %d, sq consumer: %d, cq consumer: %d)\n",
 				efa_com_cmd_str(comp_ctx->cmd_opcode),
 				comp_ctx->cmd_opcode, comp_ctx->status,
-				comp_ctx->cmd_id, aq->sq.pc, aq->sq.cc,
-				context_unsafe(aq->cq.cc));
+				comp_ctx->cmd_id, context_unsafe(aq->sq.pc),
+				aq->sq.cc, context_unsafe(aq->cq.cc));
 		else
 			ibdev_err_ratelimited(
 				aq->efa_dev,
 				"The device didn't send any completion for admin cmd %s(%d) status %d (id: %d, sq producer: %d, sq consumer: %d, cq consumer: %d)\n",
 				efa_com_cmd_str(comp_ctx->cmd_opcode),
 				comp_ctx->cmd_opcode, comp_ctx->status,
-				comp_ctx->cmd_id, aq->sq.pc, aq->sq.cc,
-				context_unsafe(aq->cq.cc));
+				comp_ctx->cmd_id, context_unsafe(aq->sq.pc),
+				aq->sq.cc, context_unsafe(aq->cq.cc));
 
 		clear_bit(EFA_AQ_STATE_RUNNING_BIT, &aq->state);
 		return -ETIME;

@@ -40,8 +40,8 @@ struct efa_com_admin_sq {
 	u32 __iomem *db_addr;
 
 	u16 cc; /* consumer counter */
-	u16 pc; /* producer counter */
-	u8 phase;
+	u16 pc __guarded_by(&lock); /* producer counter */
+	u8 phase __guarded_by(&lock);
 
 };
 
