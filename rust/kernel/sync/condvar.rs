@@ -7,7 +7,7 @@
 
 use super::{lock::Backend, lock::Guard, LockClassKey};
 use crate::{
-    ffi::{c_int, c_long},
+    ffi::{c_int, c_long, c_ulong},
     str::{CStr, CStrExt as _},
     task::{
         MAX_SCHEDULE_TIMEOUT, TASK_FREEZABLE, TASK_INTERRUPTIBLE, TASK_NORMAL, TASK_UNINTERRUPTIBLE,
@@ -186,15 +186,24 @@ impl CondVar {
     pub fn wait_interruptible_timeout<T: ?Sized, B: Backend>(
         &self,
         guard: &mut Guard<'_, T, B>,
-        jiffies: Jiffies,
+        duration: impl Into<Jiffies>,
     ) -> CondVarTimeoutResult {
-        let jiffies = jiffies.try_into().unwrap_or(MAX_SCHEDULE_TIMEOUT);
+        let raw_jiffies: c_ulong = duration.into().as_raw();
+        let jiffies = c_long::try_from(raw_jiffies).unwrap_or(MAX_SCHEDULE_TIMEOUT);
         let res = self.wait_internal(TASK_INTERRUPTIBLE, guard, jiffies);
 
-        match (res as Jiffies, crate::current!().signal_pending()) {
-            (jiffies, true) => CondVarTimeoutResult::Signal { jiffies },
+        match (res, crate::current!().signal_pending()) {
+            (jiffies, true) => CondVarTimeoutResult::Signal {
+                // CAST: `wait_internal()` never returns negative,
+                // so it is safe to cast `jiffies` to `c_ulong`.
+                jiffies: Jiffies::new(jiffies as c_ulong),
+            },
             (0, false) => CondVarTimeoutResult::Timeout,
-            (jiffies, false) => CondVarTimeoutResult::Woken { jiffies },
+            (jiffies, false) => CondVarTimeoutResult::Woken {
+                // CAST: `wait_internal()` never returns negative,
+                // so it is safe to cast `jiffies` to `c_ulong`.
+                jiffies: Jiffies::new(jiffies as c_ulong),
+            },
         }
     }
 

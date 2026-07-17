@@ -40,17 +40,40 @@ pub const NSEC_PER_MSEC: i64 = bindings::NSEC_PER_MSEC as i64;
 pub const NSEC_PER_SEC: i64 = bindings::NSEC_PER_SEC as i64;
 
 /// The time unit of Linux kernel. One jiffy equals (1/HZ) second.
-pub type Jiffies = crate::ffi::c_ulong;
+#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub struct Jiffies(crate::ffi::c_ulong);
 
-/// The millisecond time unit.
-pub type Msecs = crate::ffi::c_uint;
+impl Jiffies {
+    /// A jiffies value of zero.
+    pub const ZERO: Self = Self(0);
 
-/// Converts milliseconds to jiffies.
-#[inline]
-pub fn msecs_to_jiffies(msecs: Msecs) -> Jiffies {
-    // SAFETY: The `__msecs_to_jiffies` function is always safe to call no
-    // matter what the argument is.
-    unsafe { bindings::__msecs_to_jiffies(msecs) }
+    /// Create a new [`Jiffies`] from the C side's `jiffies` value.
+    #[inline]
+    pub const fn new(jiffies: crate::ffi::c_ulong) -> Self {
+        Self(jiffies)
+    }
+
+    #[inline]
+    pub(crate) const fn as_raw(self) -> crate::ffi::c_ulong {
+        self.0
+    }
+
+    /// Return `true` if the [`Jiffies`] has a value of zero.
+    #[inline]
+    pub fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl From<Delta> for Jiffies {
+    #[inline]
+    fn from(delta: Delta) -> Self {
+        let millis = u32::try_from(delta.as_millis_ceil().max(0)).unwrap_or(u32::MAX);
+        // SAFETY: The `__msecs_to_jiffies` function is always safe to call no
+        // matter what the argument is.
+        let jiffies = unsafe { bindings::__msecs_to_jiffies(millis) };
+        Self(jiffies)
+    }
 }
 
 /// Trait for clock sources.

@@ -1482,8 +1482,9 @@ impl Process {
         inner.is_frozen = IsFrozen::InProgress;
 
         if info.timeout_ms > 0 {
-            let mut jiffies = kernel::time::msecs_to_jiffies(info.timeout_ms);
-            while jiffies > 0 {
+            let mut jiffies: kernel::time::Jiffies =
+                kernel::time::Delta::from_millis(info.timeout_ms.into()).into();
+            while !jiffies.is_zero() {
                 if inner.outstanding_txns == 0 {
                     break;
                 }
@@ -1500,7 +1501,7 @@ impl Process {
                         jiffies = remaining;
                     }
                     CondVarTimeoutResult::Timeout => {
-                        jiffies = 0;
+                        jiffies = kernel::time::Jiffies::ZERO;
                     }
                 }
             }
