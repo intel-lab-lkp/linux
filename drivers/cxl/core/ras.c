@@ -12,69 +12,37 @@
 static_assert(CXL_HEADERLOG_TRACE_SIZE_U32 == 128,
 	      "rasdaemon ABI requires exactly 128 u32s");
 
-static void cxl_cper_trace_corr_port_prot_err(struct pci_dev *pdev,
-					      struct cxl_ras_capability_regs ras_cap)
-{
-	u32 status = ras_cap.cor_status & ~ras_cap.cor_mask;
-
-	trace_cxl_port_aer_correctable_error(&pdev->dev, status);
-}
-
-static void cxl_cper_trace_uncorr_port_prot_err(struct pci_dev *pdev,
-						struct cxl_ras_capability_regs ras_cap)
+static void cxl_cper_trace_uncorr_prot_err(struct cxl_port *port, struct cxl_dport *dport,
+					   u64 serial, struct cxl_ras_capability_regs *ras_cap)
 {
 	u32 hl[CXL_HEADERLOG_TRACE_SIZE_U32] = {};
-	u32 status = ras_cap.uncor_status & ~ras_cap.uncor_mask;
+	u32 status = ras_cap->uncor_status & ~ras_cap->uncor_mask;
 	u32 fe;
 
 	if (hweight32(status) > 1)
 		fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
-				   ras_cap.cap_control));
-	else
-		fe = status;
-
-	memcpy(hl, ras_cap.header_log, CXL_HEADERLOG_SIZE);
-	trace_cxl_port_aer_uncorrectable_error(&pdev->dev, status, fe, hl);
-}
-
-static void cxl_cper_trace_corr_prot_err(struct cxl_memdev *cxlmd,
-					 struct cxl_ras_capability_regs ras_cap)
-{
-	u32 status = ras_cap.cor_status & ~ras_cap.cor_mask;
-
-	trace_cxl_aer_correctable_error(cxlmd, status);
-}
-
-static void
-cxl_cper_trace_uncorr_prot_err(struct cxl_memdev *cxlmd,
-			       struct cxl_ras_capability_regs ras_cap)
-{
-	u32 hl[CXL_HEADERLOG_TRACE_SIZE_U32] = {};
-	u32 status = ras_cap.uncor_status & ~ras_cap.uncor_mask;
-	u32 fe;
-
-	if (hweight32(status) > 1)
-		fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
-				   ras_cap.cap_control));
+				   ras_cap->cap_control));
 	else
 		fe = status;
 
 	/*
-	 * ras_cap.header_log[] holds CXL_HEADERLOG_SIZE_U32 (16) hardware
+	 * ras_cap->header_log[] holds CXL_HEADERLOG_SIZE_U32 (16) hardware
 	 * dwords.  Copy them into the front of a zero-filled
 	 * CXL_HEADERLOG_TRACE_SIZE_U32 (128) u32 staging buffer so the trace
 	 * event memcpy sees a full 512-byte source and the userspace ABI
 	 * (rasdaemon) is preserved.
 	 */
-	memcpy(hl, ras_cap.header_log, CXL_HEADERLOG_SIZE);
-	trace_cxl_aer_uncorrectable_error(cxlmd, status, fe, hl);
+	memcpy(hl, ras_cap->header_log, CXL_HEADERLOG_SIZE);
+	trace_cxl_aer_uncorrectable_error(port, dport, status, fe,
+					  hl, serial);
 }
 
-static int match_memdev_by_parent(struct device *dev, const void *uport)
+static void cxl_cper_trace_corr_prot_err(struct cxl_port *port, struct cxl_dport *dport,
+					 u64 serial, struct cxl_ras_capability_regs *ras_cap)
 {
-	if (is_cxl_memdev(dev) && dev->parent == uport)
-		return 1;
-	return 0;
+	u32 status = ras_cap->cor_status & ~ras_cap->cor_mask;
+
+	trace_cxl_aer_correctable_error(port, dport, status, serial);
 }
 
 
@@ -109,47 +77,34 @@ static struct cxl_port *find_cxl_port_by_dev(struct device *dev, struct cxl_dpor
 
 void cxl_cper_handle_prot_err(struct cxl_cper_prot_err_work_data *data)
 {
+	struct cxl_dport *dport;
 	unsigned int devfn = PCI_DEVFN(data->prot_err.agent_addr.device,
 				       data->prot_err.agent_addr.function);
-	struct pci_dev *pdev __free(pci_dev_put) =
-		pci_get_domain_bus_and_slot(data->prot_err.agent_addr.segment,
-					    data->prot_err.agent_addr.bus,
-					    devfn);
-	struct cxl_memdev *cxlmd;
-	int port_type;
-
-	if (!pdev)
-		return;
-
-	port_type = pci_pcie_type(pdev);
-	if (port_type == PCI_EXP_TYPE_ROOT_PORT ||
-	    port_type == PCI_EXP_TYPE_DOWNSTREAM ||
-	    port_type == PCI_EXP_TYPE_UPSTREAM) {
-		if (data->severity == AER_CORRECTABLE)
-			cxl_cper_trace_corr_port_prot_err(pdev, data->ras_cap);
-		else
-			cxl_cper_trace_uncorr_port_prot_err(pdev, data->ras_cap);
-
+	struct pci_dev *pdev __free(pci_dev_put) = pci_get_domain_bus_and_slot(
+		data->prot_err.agent_addr.segment, data->prot_err.agent_addr.bus, devfn);
+	if (!pdev) {
+		pr_err_ratelimited("Failed to find CPER device in CXL topology\n");
 		return;
 	}
 
-	guard(device)(&pdev->dev);
-	if (!pdev->dev.driver) {
-		dev_warn_ratelimited(&pdev->dev,
-				     "Device is unbound, abort CPER error handling\n");
+	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_dev(&pdev->dev, NULL);
+	if (!port) {
+		dev_err_ratelimited(&pdev->dev,
+				    "Failed to find parent port device in CXL topology\n");
 		return;
 	}
 
-	struct device *mem_dev __free(put_device) = bus_find_device(
-		&cxl_bus_type, NULL, pdev, match_memdev_by_parent);
-	if (!mem_dev)
-		return;
+	guard(device)(&port->dev);
 
-	cxlmd = to_cxl_memdev(mem_dev);
+	/* dport is NULL for Endpoint and Upstream Port devices */
+	dport = cxl_find_dport_by_dev(port, &pdev->dev);
+
 	if (data->severity == AER_CORRECTABLE)
-		cxl_cper_trace_corr_prot_err(cxlmd, data->ras_cap);
+		cxl_cper_trace_corr_prot_err(port, dport, pci_get_dsn(pdev),
+					     &data->ras_cap);
 	else
-		cxl_cper_trace_uncorr_prot_err(cxlmd, data->ras_cap);
+		cxl_cper_trace_uncorr_prot_err(port, dport, pci_get_dsn(pdev),
+					       &data->ras_cap);
 }
 EXPORT_SYMBOL_GPL(cxl_cper_handle_prot_err);
 
@@ -240,14 +195,14 @@ void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port, struct cxl_dpo
 		return;
 	}
 
-	if (cxl_handle_ras(port, dport, ras_base))
+	if (cxl_handle_ras(port, dport, ras_base, pci_get_dsn(pdev)))
 		panic("CXL cachemem error");
 
 	dev_dbg(&pdev->dev,
 		"CXL UCE signaled but no CXL RAS status bits set\n");
 }
 
-void cxl_handle_cor_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem *ras_base)
+void cxl_handle_cor_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem *ras_base, u64 serial)
 {
 	u32 status;
 	void __iomem *addr;
@@ -259,12 +214,7 @@ void cxl_handle_cor_ras(struct cxl_port *port, struct cxl_dport *dport, void __i
 	status = readl(addr);
 	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
 		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
-		if (is_cxl_endpoint(port))
-			trace_cxl_aer_correctable_error(to_cxl_memdev(port->uport_dev), status);
-		else if (dport)
-			trace_cxl_port_aer_correctable_error(dport->dport_dev, status);
-		else
-			trace_cxl_port_aer_correctable_error(port->uport_dev, status);
+		trace_cxl_aer_correctable_error(port, dport, status, serial);
 	}
 }
 
@@ -289,7 +239,8 @@ static void header_log_copy(void __iomem *ras_base, u32 *log)
  * Log the state of the RAS status registers and prepare them to log the
  * next error status. Return 1 if reset needed.
  */
-bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem *ras_base)
+bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport,
+		    void __iomem *ras_base, u64 serial)
 {
 	u32 hl[CXL_HEADERLOG_TRACE_SIZE_U32] = {};
 	void __iomem *addr;
@@ -316,12 +267,7 @@ bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem
 	}
 
 	header_log_copy(ras_base, hl);
-	if (is_cxl_endpoint(port))
-		trace_cxl_aer_uncorrectable_error(to_cxl_memdev(port->uport_dev), status, fe, hl);
-	else if (dport)
-		trace_cxl_port_aer_uncorrectable_error(dport->dport_dev, status, fe, hl);
-	else
-		trace_cxl_port_aer_uncorrectable_error(port->uport_dev, status, fe, hl);
+	trace_cxl_aer_uncorrectable_error(port, dport, status, fe, hl, serial);
 
 	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
 
@@ -360,7 +306,8 @@ pci_ers_result_t cxl_pci_error_detected(struct pci_dev *pdev,
 		 * cases below handle AER recovery for devices without active
 		 * CXL.mem traffic.
 		 */
-		ue = cxl_handle_ras(port, NULL, to_ras_base(port, NULL));
+		ue = cxl_handle_ras(port, NULL, to_ras_base(port, NULL),
+				    pci_get_dsn(pdev));
 	}
 
 	/*
@@ -392,7 +339,7 @@ static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
 				   struct cxl_dport *dport, int severity)
 {
 	if (severity == AER_CORRECTABLE)
-		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport));
+		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport), pci_get_dsn(pdev));
 	else
 		cxl_do_recovery(pdev, port, dport);
 }
