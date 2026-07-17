@@ -1595,6 +1595,7 @@ struct vm_struct *__get_vm_area_node(unsigned long size,
  */
 int __must_check try_grab_folio(struct folio *folio, int refs,
 				unsigned int flags);
+int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags);
 struct page *get_user_page_vma(struct vm_area_struct *vma, unsigned long addr,
 			       unsigned int gup_flags);
 

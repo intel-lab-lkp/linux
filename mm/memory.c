@@ -7015,82 +7015,161 @@ EXPORT_SYMBOL_GPL(generic_access_phys);
 #endif
 
 /*
+ * VM_IO / VM_PFNMAP memory, such as an ioremapped device mapping, maps
+ * PFNs that have no struct page, so get_user_page_vma() cannot fetch it
+ * even though the page tables are populated. It can still be reached
+ * through vma->vm_ops->access().
+ *
+ * Returns the number of bytes transferred, or <= 0 if @vma cannot be
+ * accessed this way.
+ */
+static int access_remote_vma_ops(struct vm_area_struct *vma, unsigned long addr,
+				 void *buf, int len, int write)
+{
+#ifdef CONFIG_HAVE_IOREMAP_PROT
+	if (vma->vm_ops && vma->vm_ops->access)
+		return vma->vm_ops->access(vma, addr, buf, len, write);
+#endif
+	return 0;
+}
+
+/*
  * Access another process' address space as given in mm.
+ *
+ * Use the per-VMA lock when the access fits in a single VMA, and fall back
+ * to the mmap lock for multi-VMA accesses, stack expansion, or when the
+ * VMA lock cannot be taken.
+ *
+ * Both paths fetch each page with get_user_page_vma(), which faults it in
+ * under whichever lock is held. The per-VMA path hands an access it cannot
+ * complete (a fault that dropped the lock, or a userfaultfd VMA) back to
+ * the mmap lock path.
  */
 static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
 			      void *buf, int len, unsigned int gup_flags)
 {
 	void *old_buf = buf;
 	int write = gup_flags & FOLL_WRITE;
+	bool have_mmap_lock = false;
+	struct vm_area_struct *vma = NULL;
 
-	if (mmap_read_lock_killable(mm))
-		return 0;
+	/*
+	 * Set FOLL_REMOTE so check_vma_flags() applies the same protection key
+	 * rules as get_user_pages_remote() did: the current PKRU is not checked
+	 * against a VMA reached on @mm's behalf.
+	 */
+	gup_flags |= FOLL_REMOTE;
 
-	/* Untag the address before looking up the VMA */
-	addr = untagged_addr_remote(mm, addr);
+	addr = untagged_addr_remote_unlocked(mm, addr);
 
-	/* Avoid triggering the temporary warning in __get_user_pages */
-	if (!vma_lookup(mm, addr) && !expand_stack(mm, addr))
-		return 0;
+	/*
+	 * The RCU freed page tables prevent page table memory from being
+	 * re-used and filled with unexpected contents. Ensure the access
+	 * is entirely within a single VMA.
+	 */
+#if defined(CONFIG_PER_VMA_LOCK) && defined(CONFIG_MMU_GATHER_RCU_TABLE_FREE)
+	vma = lock_vma_under_rcu(mm, addr);
+	if (vma) {
+		if (addr + len > vma->vm_end || check_vma_flags(vma, gup_flags)) {
+			vma_end_read(vma);
+			vma = NULL;
+		}
+	}
+#endif
 
-	/* ignore errors, just check how much was successfully transferred */
+	if (!vma) {
+		if (mmap_read_lock_killable(mm))
+			return 0;
+		have_mmap_lock = true;
+	}
+
 	while (len) {
+		unsigned int foll_flags = gup_flags;
+		struct page *page;
+		struct folio *folio;
 		int bytes, offset;
 		void *maddr;
-		struct folio *folio;
-		struct vm_area_struct *vma = NULL;
-		struct page *page = get_user_page_lookup_vma(mm, addr,
-							     gup_flags, &vma);
+		unsigned long idx;
 
-		if (IS_ERR(page)) {
-			/* We might need to expand the stack to access it */
+		if (!vma || addr >= vma->vm_end) {
+			/*
+			 * The per-VMA path never re-looks-up (its access fits
+			 * one VMA), so any lookup here holds the mmap lock.
+			 */
+			VM_BUG_ON(!have_mmap_lock);
 			vma = vma_lookup(mm, addr);
 			if (!vma) {
+				/* expand_stack() drops the mmap lock if it fails */
 				vma = expand_stack(mm, addr);
+				if (!vma) {
+					have_mmap_lock = false;
+					break;
+				}
+			}
+		}
 
-				/* mmap_lock was dropped on failure */
-				if (!vma)
-					return buf - old_buf;
-
-				/* Try again if stack expansion worked */
+		/*
+		 * FOLL_UNLOCKABLE lets the per-VMA fault retry, dropping the
+		 * lock, so the access can fall back to the mmap lock.
+		 */
+		if (!have_mmap_lock)
+			foll_flags |= FOLL_VMA_LOCK | FOLL_UNLOCKABLE;
+		page = get_user_page_vma(vma, addr, foll_flags);
+		if (IS_ERR(page)) {
+			/*
+			 * get_user_page_vma() returns -EAGAIN, with the per-VMA
+			 * lock released, for anything it could not finish under
+			 * it; retake the mmap lock and retry. A different error
+			 * therefore only arrives under the mmap lock, where
+			 * ->access() can run.
+			 */
+			if (PTR_ERR(page) == -EAGAIN) {
+				vma = NULL;
+				if (mmap_read_lock_killable(mm))
+					break;
+				have_mmap_lock = true;
 				continue;
 			}
-
+			if (WARN_ON_ONCE(!have_mmap_lock))
+				break;
 			/*
-			 * Check if this is a VM_IO | VM_PFNMAP VMA, which
-			 * we can access using slightly different code.
+			 * Memory with no struct page: VM_IO / VM_PFNMAP reached
+			 * through vma->vm_ops->access(); anything else stops.
 			 */
-			bytes = 0;
-#ifdef CONFIG_HAVE_IOREMAP_PROT
-			if (vma->vm_ops && vma->vm_ops->access)
-				bytes = vma->vm_ops->access(vma, addr, buf,
-							    len, write);
-#endif
+			bytes = access_remote_vma_ops(vma, addr, buf, len, write);
 			if (bytes <= 0)
 				break;
-		} else {
-			folio = page_folio(page);
-			bytes = len;
-			offset = addr & (PAGE_SIZE-1);
-			if (bytes > PAGE_SIZE-offset)
-				bytes = PAGE_SIZE-offset;
-
-			maddr = kmap_local_folio(folio, folio_page_idx(folio, page) * PAGE_SIZE);
-			if (write) {
-				copy_to_user_page(vma, page, addr,
-						  maddr + offset, buf, bytes);
-				folio_mark_dirty_lock(folio);
-			} else {
-				copy_from_user_page(vma, page, addr,
-						    buf, maddr + offset, bytes);
-			}
-			folio_release_kmap(folio, maddr);
+			goto advance;
 		}
+
+		folio = page_folio(page);
+		bytes = len;
+		offset = addr & (PAGE_SIZE - 1);
+		if (bytes > PAGE_SIZE - offset)
+			bytes = PAGE_SIZE - offset;
+
+		idx = folio_page_idx(folio, page);
+		maddr = kmap_local_folio(folio, idx * PAGE_SIZE);
+		if (write) {
+			copy_to_user_page(vma, page, addr,
+					  maddr + offset, buf, bytes);
+			folio_mark_dirty_lock(folio);
+		} else {
+			copy_from_user_page(vma, page, addr,
+					    buf, maddr + offset, bytes);
+		}
+		folio_release_kmap(folio, maddr);
+
+advance:
 		len -= bytes;
 		buf += bytes;
 		addr += bytes;
 	}
-	mmap_read_unlock(mm);
+
+	if (have_mmap_lock)
+		mmap_read_unlock(mm);
+	else if (vma)
+		vma_end_read(vma);
 
 	return buf - old_buf;
 }

@@ -1311,7 +1311,7 @@ static bool writable_file_mapping_allowed(struct vm_area_struct *vma,
 	return !vma_needs_dirty_tracking(vma);
 }
 
-static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
+int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
 {
 	vm_flags_t vm_flags = vma->vm_flags;
 	int write = (gup_flags & FOLL_WRITE);
