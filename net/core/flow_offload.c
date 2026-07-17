@@ -606,15 +606,20 @@ int flow_indr_dev_setup_offload(struct net_device *dev,	struct Qdisc *sch,
 				void (*cleanup)(struct flow_block_cb *block_cb))
 {
 	struct flow_indr_dev *this;
+	bool replay_added = false;
 	u32 count = 0;
 	int err;
 
 	mutex_lock(&flow_indr_block_lock);
 	if (bo) {
-		if (bo->command == FLOW_BLOCK_BIND)
-			indir_dev_add(data, dev, sch, type, cleanup, bo);
-		else if (bo->command == FLOW_BLOCK_UNBIND)
+		if (bo->command == FLOW_BLOCK_BIND) {
+			int add_err;
+
+			add_err = indir_dev_add(data, dev, sch, type, cleanup, bo);
+			replay_added = add_err == 0;
+		} else if (bo->command == FLOW_BLOCK_UNBIND) {
 			indir_dev_remove(data);
+		}
 	}
 
 	list_for_each_entry(this, &flow_block_indr_dev_list, list) {
@@ -623,9 +628,17 @@ int flow_indr_dev_setup_offload(struct net_device *dev,	struct Qdisc *sch,
 			count++;
 	}
 
+	if (bo && list_empty(&bo->cb_list)) {
+		if (replay_added)
+			indir_dev_remove(data);
+		err = -EOPNOTSUPP;
+	} else {
+		err = count;
+	}
+
 	mutex_unlock(&flow_indr_block_lock);
 
-	return (bo && list_empty(&bo->cb_list)) ? -EOPNOTSUPP : count;
+	return err;
 }
 EXPORT_SYMBOL(flow_indr_dev_setup_offload);
 
