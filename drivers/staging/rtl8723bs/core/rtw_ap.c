@@ -684,7 +684,7 @@ void start_bss_network(struct adapter *padapter)
 
 	if (!pmlmepriv->cur_network.join_res) { /* setting only at  first time */
 		/* turn on all dynamic functions */
-		Switch_DM_Func(padapter, DYNAMIC_ALL_FUNC_ENABLE, true);
+		switch_dm_func(padapter, DYNAMIC_ALL_FUNC_ENABLE, true);
 	}
 
 	/* set channel, bwmode */
