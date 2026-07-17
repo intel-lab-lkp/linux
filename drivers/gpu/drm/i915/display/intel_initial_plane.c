@@ -55,13 +55,8 @@ intel_reuse_initial_plane_fb(struct intel_crtc *this,
 			to_intel_plane(crtc->base.primary);
 		const struct intel_plane_state *plane_state =
 			to_intel_plane_state(plane->base.state);
-		const struct intel_crtc_state *crtc_state =
-			to_intel_crtc_state(crtc->base.state);
 
-		if (!crtc_state->hw.active)
-			continue;
-
-		if (!plane_state->ggtt_vma)
+		if (!plane_state->hw.fb)
 			continue;
 
 		if (all_plane_configs->config[this->pipe].base ==
