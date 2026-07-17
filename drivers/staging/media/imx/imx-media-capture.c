@@ -808,14 +808,10 @@ static int capture_release(struct file *file)
 
 	mutex_lock(&priv->mutex);
 
-	if (file->private_data == vq->owner) {
-		vb2_queue_release(vq);
-		vq->owner = NULL;
-	}
+	_vb2_fop_release(file, NULL);
 
 	v4l2_pipeline_pm_put(&vfd->entity);
 
-	v4l2_fh_release(file);
 	mutex_unlock(&priv->mutex);
 	return 0;
 }
@@ -938,7 +934,7 @@ int imx_media_capture_device_register(struct imx_media_video_dev *vdev,
 				    &vfd->entity, 0, link_flags);
 	if (ret) {
 		dev_err(priv->dev, "failed to create link to device node\n");
-		video_unregister_device(vfd);
+		vb2_video_unregister_device(vfd);
 		return ret;
 	}
 
@@ -955,7 +951,7 @@ void imx_media_capture_device_unregister(struct imx_media_video_dev *vdev)
 	struct video_device *vfd = priv->vdev.vfd;
 
 	media_entity_cleanup(&vfd->entity);
-	video_unregister_device(vfd);
+	vb2_video_unregister_device(vfd);
 }
 EXPORT_SYMBOL_GPL(imx_media_capture_device_unregister);
 
