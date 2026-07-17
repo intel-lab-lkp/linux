@@ -939,6 +939,22 @@ config NET_ACT_GATE
 	  To compile this code as a module, choose M here: the
 	  module will be called act_gate.
 
+config NET_ACT_FRER
+	tristate "IEEE 802.1CB FRER tc action"
+	depends on NET_CLS_ACT
+	help
+	  Say Y here to enable the IEEE 802.1CB FRER tc action.  The action
+	  implements the Sequence Generation Function (egress R-TAG insertion
+	  with shared per-stream sequence counter) and the Sequence Recovery
+	  Function (ingress duplicate detection and elimination) described in
+	  IEEE 802.1CB-2017.
+
+	  Both Sequence Recovery (cross-port shared state via rcvy-id) and
+	  Individual Recovery (per-port independent state) are supported.
+
+	  To compile this code as a module, choose M here: the
+	  module will be called act_frer.
+
 config NET_IFE_SKBMARK
 	tristate "Support to encoding decoding skb mark on IFE action"
 	depends on NET_ACT_IFE
