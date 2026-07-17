@@ -124,10 +124,16 @@ static DEFINE_PER_CPU(struct cpc_desc *, cpc_desc_ptr);
 				(reg)->bit_offset == 0 &&		\
 				(reg)->access_width == 0)
 
-/* Evaluates to True if an optional cpc field is supported */
-#define CPC_SUPPORTED(cpc) ((cpc)->type == ACPI_TYPE_INTEGER ?		\
-				!!(cpc)->cpc_entry.int_value :		\
-				!IS_NULL_REG(&(cpc)->cpc_entry.reg))
+/*
+ * Evaluates to True if an optional cpc field is supported.
+ * Integer: non-zero value; Buffer: non-NULL register; Package: non-empty.
+ */
+#define CPC_SUPPORTED(cpc) (((cpc)->type == ACPI_TYPE_INTEGER &&	\
+			     !!(cpc)->cpc_entry.int_value) ||		\
+			    ((cpc)->type == ACPI_TYPE_BUFFER &&		\
+			     !IS_NULL_REG(&(cpc)->cpc_entry.reg)) ||	\
+			    ((cpc)->type == ACPI_TYPE_PACKAGE &&	\
+			     (cpc)->cpc_entry.package.count != 0))
 
 /*
  * Each bit indicates the optionality of the register in per-cpu
@@ -871,8 +877,9 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 			 * Mark the register as unsupported for now.
 			 */
 			pr_debug("CPU:%d Resource Priority not supported\n", pr->id);
-			cpc_ptr->cpc_regs[i-2].type = ACPI_TYPE_INTEGER;
-			cpc_ptr->cpc_regs[i-2].cpc_entry.int_value = 0;
+			cpc_ptr->cpc_regs[i-2].type = ACPI_TYPE_PACKAGE;
+			cpc_ptr->cpc_regs[i-2].cpc_entry.package.count = 0;
+			cpc_ptr->cpc_regs[i-2].cpc_entry.package.elements = NULL;
 		} else {
 			pr_debug("Invalid entry type (%d) in _CPC for CPU:%d\n",
 				 i, pr->id);
