@@ -767,7 +767,6 @@ void rzg2l_cru_dma_unregister(struct rzg2l_cru_dev *cru)
 	mutex_destroy(&cru->lock);
 
 	v4l2_device_unregister(&cru->v4l2_dev);
-	vb2_queue_release(&cru->queue);
 }
 
 int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru)
