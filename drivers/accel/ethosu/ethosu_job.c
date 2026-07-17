@@ -315,6 +315,14 @@ int ethosu_job_init(struct ethosu_device *edev)
 	if (edev->irq < 0)
 		return edev->irq;
 
+	edev->fence_context = dma_fence_context_alloc(1);
+
+	ret = drm_sched_init(&edev->sched, &args);
+	if (ret) {
+		dev_err(dev, "Failed to create scheduler: %d\n", ret);
+		return ret;
+	}
+
 	ret = devm_request_threaded_irq(dev, edev->irq,
 					ethosu_job_irq_handler,
 					ethosu_job_irq_handler_thread,
@@ -322,14 +330,6 @@ int ethosu_job_init(struct ethosu_device *edev)
 					edev);
 	if (ret) {
 		dev_err(dev, "failed to request irq\n");
-		return ret;
-	}
-
-	edev->fence_context = dma_fence_context_alloc(1);
-
-	ret = drm_sched_init(&edev->sched, &args);
-	if (ret) {
-		dev_err(dev, "Failed to create scheduler: %d\n", ret);
 		goto err_sched;
 	}
 
@@ -342,6 +342,7 @@ err_sched:
 
 void ethosu_job_fini(struct ethosu_device *dev)
 {
+	devm_free_irq(dev->base.dev, dev->irq, dev);
 	drm_sched_fini(&dev->sched);
 }
 
