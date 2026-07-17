@@ -860,6 +860,7 @@ nv50_wndw_new_(const struct nv50_wndw_func *func, struct drm_device *dev,
 	struct nv50_disp *disp = nv50_disp(dev);
 	struct nv50_wndw *wndw;
 	const u64 *format_modifiers;
+	unsigned int blend_modes = BIT(DRM_MODE_BLEND_PIXEL_NONE);
 	int nformat;
 	int ret;
 
@@ -909,18 +910,17 @@ nv50_wndw_new_(const struct nv50_wndw_func *func, struct drm_device *dev,
 		if (ret)
 			return ret;
 
-		ret = drm_plane_create_blend_mode_property(&wndw->plane,
-				BIT(DRM_MODE_BLEND_PIXEL_NONE) |
-				BIT(DRM_MODE_BLEND_PREMULTI) |
-				BIT(DRM_MODE_BLEND_COVERAGE));
-		if (ret)
-			return ret;
+		blend_modes |= BIT(DRM_MODE_BLEND_PREMULTI) | BIT(DRM_MODE_BLEND_COVERAGE);
 	} else {
 		ret = drm_plane_create_zpos_immutable_property(&wndw->plane,
 				nv50_wndw_zpos_default(&wndw->plane));
 		if (ret)
 			return ret;
 	}
+
+	ret = drm_plane_create_blend_mode_property(&wndw->plane, blend_modes);
+	if (ret)
+		return ret;
 
 	return 0;
 }
