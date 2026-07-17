@@ -149,3 +149,33 @@ examples:
             motorcomm,auto-sleep-disabled;
         };
     };
+  - |
+    mdio {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet-phy-package@4 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            compatible = "motorcomm,phy8824";
+            reg = <4>;
+
+            motorcomm,interface-mode = "usxgmii";
+
+            ethernet-phy@4 {
+                reg = <0>;
+            };
+
+            ethernet-phy@5 {
+                reg = <5>;
+            };
+
+            ethernet-phy@6 {
+                reg = <6>;
+            };
+
+            ethernet-phy@7 {
+                reg = <7>;
+            };
+        };
+    };
