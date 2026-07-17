@@ -1140,6 +1140,11 @@ magic_found:
 
 	uspi->s_cssize = fs32_to_cpu(sb, usb1->fs_cssize);
 	uspi->s_cgsize = fs32_to_cpu(sb, usb1->fs_cgsize);
+	if (uspi->s_cgsize == 0 || uspi->s_cgsize > uspi->s_bsize) {
+		pr_err("%s(): invalid cylinder group size %u\n",
+		       __func__, uspi->s_cgsize);
+		goto failed;
+	}
 	uspi->s_ntrak = fs32_to_cpu(sb, usb1->fs_ntrak);
 	uspi->s_nsect = fs32_to_cpu(sb, usb1->fs_nsect);
 	uspi->s_spc = fs32_to_cpu(sb, usb1->fs_spc);
