@@ -331,7 +331,9 @@ static int ethosu_init(struct ethosu_device *ethosudev)
 	ethosudev->npu_info.id = id = readl_relaxed(ethosudev->regs + NPU_REG_ID);
 	ethosudev->npu_info.config = config = readl_relaxed(ethosudev->regs + NPU_REG_CONFIG);
 
-	ethosu_sram_init(ethosudev);
+	ret = ethosu_sram_init(ethosudev);
+	if (ret)
+		goto err_runtime_suspend;
 
 	dev_info(ethosudev->base.dev,
 		 "Ethos-U NPU, arch v%ld.%ld.%ld, rev r%ldp%ld, cmd stream ver%ld, %d MACs, %dKB SRAM\n",
@@ -346,6 +348,9 @@ static int ethosu_init(struct ethosu_device *ethosudev)
 
 	return 0;
 
+err_runtime_suspend:
+	ethosu_runtime_suspend(ethosudev);
+	return ret;
 err_suspend:
 	pm_runtime_dont_use_autosuspend(ethosudev->base.dev);
 	ethosu_device_suspend(ethosudev->base.dev);
