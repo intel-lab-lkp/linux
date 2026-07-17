@@ -16,7 +16,7 @@
 static inline unsigned long __untagged_addr_remote(struct mm_struct *mm, unsigned long addr)
 {
 	if (riscv_has_extension_unlikely(RISCV_ISA_EXT_SUPM)) {
-		u8 pmlen = mm->context.pmlen;
+		u8 pmlen = READ_ONCE(mm->context.pmlen);
 
 		/* Virtual addresses are sign-extended; physical addresses are zero-extended. */
 		if (IS_ENABLED(CONFIG_MMU))
@@ -33,10 +33,14 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm, unsigne
 	(__force __typeof__(addr))__untagged_addr_remote(current->mm, __addr);	\
 })
 
-#define untagged_addr_remote(mm, addr) ({					\
+#define untagged_addr_remote_unlocked(mm, addr) ({				\
 	unsigned long __addr = (__force unsigned long)(addr);			\
-	mmap_assert_locked(mm);							\
 	(__force __typeof__(addr))__untagged_addr_remote(mm, __addr);		\
+})
+
+#define untagged_addr_remote(mm, addr) ({					\
+	mmap_assert_locked(mm);							\
+	untagged_addr_remote_unlocked(mm, addr);				\
 })
 
 #define access_ok(addr, size) likely(__access_ok(untagged_addr(addr), size))
