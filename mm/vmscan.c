@@ -668,7 +668,7 @@ static pageout_t pageout(struct folio *folio, struct address_space *mapping,
 		folio_clear_reclaim(folio);
 
 	trace_mm_vmscan_write_folio(folio);
-	node_stat_add_folio(folio, NR_VMSCAN_WRITE);
+	lruvec_stat_mod_folio(folio, NR_VMSCAN_WRITE, folio_nr_pages(folio));
 	return PAGE_SUCCESS;
 }
 
@@ -1413,8 +1413,6 @@ retry:
 					sc->nr_scanned -= (nr_pages - 1);
 					nr_pages = 1;
 				}
-				stat->nr_pageout += nr_pages;
-
 				if (folio_test_writeback(folio))
 					goto keep;
 				if (folio_test_dirty(folio))
@@ -2038,10 +2036,10 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	item = PGSTEAL_KSWAPD + reclaimer_offset(sc);
 	mod_lruvec_state(lruvec, item, nr_reclaimed);
 	mod_lruvec_state(lruvec, PGSTEAL_ANON + file, nr_reclaimed);
+	if (nr_scanned > nr_reclaimed)
+		mod_lruvec_state(lruvec, PGROTATE_ANON + file,
+				 nr_scanned - nr_reclaimed);
 
-	lruvec_lock_irq(lruvec);
-	lru_note_cost_unlock_irq(lruvec, file, stat.nr_pageout,
-					nr_scanned - nr_reclaimed);
 	handle_reclaim_writeback(nr_taken, pgdat, sc, &stat);
 	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
 			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
@@ -2147,9 +2145,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	count_vm_events(PGDEACTIVATE, nr_deactivate);
 	count_memcg_events(lruvec_memcg(lruvec), PGDEACTIVATE, nr_deactivate);
 	mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
+	if (nr_rotated)
+		mod_lruvec_state(lruvec, PGROTATE_ANON + file, nr_rotated);
 
-	lruvec_lock_irq(lruvec);
-	lru_note_cost_unlock_irq(lruvec, file, 0, nr_rotated);
 	trace_mm_vmscan_lru_shrink_active(pgdat->node_id, nr_taken, nr_activate,
 			nr_deactivate, nr_rotated, sc->priority, file);
 }
@@ -2298,12 +2296,63 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 	mem_cgroup_flush_stats_ratelimited(sc->target_mem_cgroup);
 
 	/*
-	 * Determine the scan balance between anon and file LRUs.
+	 * Determine the scan balance between anon and file LRUs from per-LRU
+	 * vmstat counters. The raw cost per side is:
+	 *
+	 *	PGROTATE	   - reclaim-driven rotations, bumped from both
+	 *			     shrink_inactive_list and shrink_active_list
+	 *			     (CPU work).
+	 *	NR_VMSCAN_WRITE    - reclaim-driven anon pageout IO.
+	 *	WORKINGSET_RESTORE - refaults of previously-workingset pages.
+	 *
+	 * The two IO terms are weighted by SWAP_CLUSTER_MAX to reflect the
+	 * higher cost of an IO over a rotation.
+	 *
+	 * Reads are lock-free per-cpu sum collations, rstat-aggregated up
+	 * the memcg hierarchy by mem_cgroup_flush_stats_ratelimited() above.
+	 * Use lruvec_page_state_monotonic() so the unsigned subtraction
+	 * `now - prev_cost[f]` yields the correct delta across a signed-long
+	 * wraparound of the underlying counter (a real hazard on 32-bit that
+	 * the clamp in lruvec_page_state() would otherwise turn into a huge
+	 * spurious delta).
+	 *
+	 * The delta against prev_cost is folded into cost_accum, which is
+	 * halved on both sides until their sum is within lrusize/4.
+	 * cost_lock serialises concurrent reclaimers in the same memcg+node.
 	 */
-	spin_lock_irq(&target_lruvec->lru_lock);
-	sc->anon_cost = target_lruvec->anon_cost;
-	sc->file_cost = target_lruvec->file_cost;
-	spin_unlock_irq(&target_lruvec->lru_lock);
+	spin_lock(&target_lruvec->cost_lock);
+	for (int f = 0; f <= 1; f++) {
+		unsigned long now, delta;
+
+		now = lruvec_page_state_monotonic(target_lruvec, PGROTATE_ANON + f) +
+		      lruvec_page_state_monotonic(target_lruvec,
+						  WORKINGSET_RESTORE_BASE + f) *
+				SWAP_CLUSTER_MAX;
+		if (f == WORKINGSET_ANON)
+			now += lruvec_page_state_monotonic(target_lruvec,
+							   NR_VMSCAN_WRITE) *
+				SWAP_CLUSTER_MAX;
+		delta = now - target_lruvec->prev_cost[f];
+		target_lruvec->prev_cost[f] = now;
+		target_lruvec->cost_accum[f] += delta;
+	}
+	unsigned long lrusize =
+		lruvec_page_state(target_lruvec, NR_INACTIVE_ANON) +
+		lruvec_page_state(target_lruvec, NR_ACTIVE_ANON) +
+		lruvec_page_state(target_lruvec, NR_INACTIVE_FILE) +
+		lruvec_page_state(target_lruvec, NR_ACTIVE_FILE);
+	unsigned long cost_limit = lrusize / 4;
+
+	while (target_lruvec->cost_accum[WORKINGSET_ANON] > cost_limit ||
+	       target_lruvec->cost_accum[WORKINGSET_FILE] > cost_limit ||
+	       target_lruvec->cost_accum[WORKINGSET_ANON] +
+	       target_lruvec->cost_accum[WORKINGSET_FILE] > cost_limit) {
+		target_lruvec->cost_accum[WORKINGSET_ANON] /= 2;
+		target_lruvec->cost_accum[WORKINGSET_FILE] /= 2;
+	}
+	sc->anon_cost = target_lruvec->cost_accum[WORKINGSET_ANON];
+	sc->file_cost = target_lruvec->cost_accum[WORKINGSET_FILE];
+	spin_unlock(&target_lruvec->cost_lock);
 
 	/*
 	 * Target desirable inactive:active list ratios for the anon
@@ -4810,7 +4859,8 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	struct reclaim_stat stat;
 	struct lru_gen_mm_walk *walk;
 	int scanned, reclaimed;
-	int isolated = 0, type, type_scanned;
+	int isolated = 0, nr_isolated = 0, type, type_scanned;
+	unsigned long total_reclaimed = 0;
 	bool skip_retry = false;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
@@ -4822,6 +4872,7 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 
 	scanned = isolate_folios(nr_to_scan, lruvec, sc, swappiness,
 				 &list, &isolated, &type, &type_scanned);
+	nr_isolated = isolated;
 
 	/* Scanning may have emptied the oldest gen, flush it */
 	if (scanned)
@@ -4834,6 +4885,7 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 retry:
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false, memcg);
 	sc->nr_reclaimed += reclaimed;
+	total_reclaimed += reclaimed;
 	/* Retry pass is only meant for clean folios without new isolation */
 	if (isolated)
 		handle_reclaim_writeback(isolated, pgdat, sc, &stat);
@@ -4886,6 +4938,10 @@ retry:
 		isolated = 0;
 		goto retry;
 	}
+
+	if (nr_isolated > total_reclaimed)
+		mod_lruvec_state(lruvec, PGROTATE_ANON + type,
+				 nr_isolated - total_reclaimed);
 
 	return scanned;
 }
