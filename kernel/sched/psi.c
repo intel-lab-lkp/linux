@@ -1496,6 +1496,7 @@ void psi_trigger_destroy(struct psi_trigger *t)
 				 */
 				synchronize_rcu();
 				timer_delete_sync(&group->rtpoll_timer);
+				atomic_set(&group->rtpoll_scheduled, 0);
 			}
 		}
 		mutex_unlock(&group->rtpoll_trigger_lock);
@@ -1515,7 +1516,6 @@ void psi_trigger_destroy(struct psi_trigger *t)
 		 * can no longer be found through group->rtpoll_task.
 		 */
 		kthread_stop(task_to_destroy);
-		atomic_set(&group->rtpoll_scheduled, 0);
 	}
 	kfree(t);
 }
