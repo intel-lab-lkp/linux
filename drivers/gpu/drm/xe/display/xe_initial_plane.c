@@ -161,8 +161,7 @@ err_bo:
 static int
 xe_initial_plane_setup(struct drm_plane_state *_plane_state,
 		       struct intel_initial_plane_config *plane_config,
-		       struct drm_framebuffer *fb,
-		       struct i915_vma *_unused)
+		       struct drm_framebuffer *fb)
 {
 	struct intel_plane_state *plane_state = to_intel_plane_state(_plane_state);
 	struct i915_vma *vma;

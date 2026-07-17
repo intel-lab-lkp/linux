@@ -250,11 +250,16 @@ err_vma:
 static int
 i915_initial_plane_setup(struct drm_plane_state *_plane_state,
 			 struct intel_initial_plane_config *plane_config,
-			 struct drm_framebuffer *fb,
-			 struct i915_vma *vma)
+			 struct drm_framebuffer *fb)
 {
 	struct intel_plane_state *plane_state = to_intel_plane_state(_plane_state);
 	struct drm_i915_private *dev_priv = to_i915(_plane_state->plane->dev);
+	struct drm_gem_object *obj = intel_fb_bo(fb);
+	struct i915_vma *vma;
+
+	vma = i915_vma_instance(to_intel_bo(obj), &to_gt(dev_priv)->ggtt->vm, NULL);
+	if (IS_ERR(vma))
+		return PTR_ERR(vma);
 
 	__i915_vma_pin(vma);
 	plane_state->ggtt_vma = i915_vma_get(vma);

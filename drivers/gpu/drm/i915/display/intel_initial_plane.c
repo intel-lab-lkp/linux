@@ -123,7 +123,6 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 	struct intel_plane *plane = to_intel_plane(crtc->base.primary);
 	struct intel_plane_state *plane_state = to_intel_plane_state(plane->base.state);
 	struct drm_framebuffer *fb;
-	struct i915_vma *vma;
 	int ret;
 
 	/*
@@ -135,7 +134,6 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 
 	if (intel_alloc_initial_plane_obj(display, plane_config)) {
 		fb = plane_config->fb;
-		vma = plane_config->vma;
 	} else {
 		const struct intel_plane_state *other_plane_state;
 
@@ -144,14 +142,13 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 			goto nofb;
 
 		fb = other_plane_state->hw.fb;
-		vma = other_plane_state->ggtt_vma;
 	}
 
 	plane_state->uapi.rotation = plane_config->rotation;
 	intel_fb_fill_view(to_intel_framebuffer(fb),
 			   plane_state->uapi.rotation, &plane_state->view);
 
-	ret = display->parent->initial_plane->setup(plane->base.state, plane_config, fb, vma);
+	ret = display->parent->initial_plane->setup(plane->base.state, plane_config, fb);
 	if (ret)
 		goto nofb;
 
