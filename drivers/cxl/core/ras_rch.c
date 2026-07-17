@@ -80,7 +80,8 @@ static bool cxl_rch_get_aer_severity(struct aer_capability_regs *aer_regs,
 				     int *severity)
 {
 	if (aer_regs->uncor_status & ~aer_regs->uncor_mask) {
-		if (aer_regs->uncor_status & PCI_ERR_ROOT_FATAL_RCV)
+		if ((aer_regs->uncor_status & ~aer_regs->uncor_mask) &
+		    aer_regs->uncor_severity)
 			*severity = AER_FATAL;
 		else
 			*severity = AER_NONFATAL;
