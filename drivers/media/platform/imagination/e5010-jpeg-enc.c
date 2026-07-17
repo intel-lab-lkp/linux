@@ -606,13 +606,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *ds
 	dst_vq->lock = &e5010->mutex;
 	dst_vq->dev = e5010->v4l2_dev.dev;
 
-	ret = vb2_queue_init(dst_vq);
-	if (ret) {
-		vb2_queue_release(src_vq);
-		return ret;
-	}
-
-	return 0;
+	return vb2_queue_init(dst_vq);
 }
 
 static int e5010_s_ctrl(struct v4l2_ctrl *ctrl)
