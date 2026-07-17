@@ -2283,9 +2283,9 @@ This throttling takes 2 forms:
   throttled without possibly adversely affecting higher priority groups.  This
   includes swapping and metadata IO.  These types of IO are allowed to occur
   normally, however they are "charged" to the originating group.  If the
-  originating group is being throttled you will see the use_delay and delay
-  fields in io.stat increase.  The delay value is how many microseconds that are
-  being added to any process that runs in this group.  Because this number can
+  originating group is being throttled you will see the use_delay and delay_nsec
+  fields in io.stat increase.  The delay_nsec value is how many nanoseconds that
+  are being added to any process that runs in this group.  Because this number can
   grow quite large if there is a lot of swapping or metadata IO occurring we
   limit the individual delay events to 1 second at a time.
 
