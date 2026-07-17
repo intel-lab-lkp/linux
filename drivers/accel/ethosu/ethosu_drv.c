@@ -272,6 +272,17 @@ static int ethosu_device_suspend(struct device *dev)
 	return 0;
 }
 
+static void ethosu_runtime_suspend(struct ethosu_device *ethosudev)
+{
+	struct device *dev = ethosudev->base.dev;
+
+	pm_runtime_dont_use_autosuspend(dev);
+	if (pm_runtime_enabled(dev))
+		pm_runtime_put_sync_suspend(dev);
+	else
+		ethosu_device_suspend(dev);
+}
+
 static int ethosu_sram_init(struct ethosu_device *ethosudev)
 {
 	ethosudev->npu_info.sram_size = 0;
@@ -293,6 +304,14 @@ static int ethosu_sram_init(struct ethosu_device *ethosudev)
 	return 0;
 }
 
+static void ethosu_sram_fini(struct ethosu_device *ethosudev)
+{
+	if (ethosudev->sram)
+		gen_pool_free(ethosudev->srampool,
+			      (unsigned long)ethosudev->sram,
+			      ethosudev->npu_info.sram_size);
+}
+
 static int ethosu_init(struct ethosu_device *ethosudev)
 {
 	int ret;
@@ -306,7 +325,7 @@ static int ethosu_init(struct ethosu_device *ethosudev)
 	pm_runtime_use_autosuspend(ethosudev->base.dev);
 	ret = devm_pm_runtime_set_active_enabled(ethosudev->base.dev);
 	if (ret)
-		return ret;
+		goto err_suspend;
 	pm_runtime_get_noresume(ethosudev->base.dev);
 
 	ethosudev->npu_info.id = id = readl_relaxed(ethosudev->regs + NPU_REG_ID);
@@ -326,6 +345,11 @@ static int ethosu_init(struct ethosu_device *ethosudev)
 		 ethosudev->npu_info.sram_size / 1024);
 
 	return 0;
+
+err_suspend:
+	pm_runtime_dont_use_autosuspend(ethosudev->base.dev);
+	ethosu_device_suspend(ethosudev->base.dev);
+	return ret;
 }
 
 static int ethosu_probe(struct platform_device *pdev)
@@ -355,13 +379,20 @@ static int ethosu_probe(struct platform_device *pdev)
 
 	ret = ethosu_init(ethosudev);
 	if (ret)
-		return ret;
+		goto err_job_fini;
 
 	ret = drm_dev_register(&ethosudev->base, 0);
 	if (ret)
-		pm_runtime_dont_use_autosuspend(ethosudev->base.dev);
+		goto err_runtime_suspend;
 
 	pm_runtime_put_autosuspend(ethosudev->base.dev);
+	return 0;
+
+err_runtime_suspend:
+	ethosu_runtime_suspend(ethosudev);
+	ethosu_sram_fini(ethosudev);
+err_job_fini:
+	ethosu_job_fini(ethosudev);
 	return ret;
 }
 
@@ -371,9 +402,7 @@ static void ethosu_remove(struct platform_device *pdev)
 
 	drm_dev_unregister(&ethosudev->base);
 	ethosu_job_fini(ethosudev);
-	if (ethosudev->sram)
-		gen_pool_free(ethosudev->srampool, (unsigned long)ethosudev->sram,
-			      ethosudev->npu_info.sram_size);
+	ethosu_sram_fini(ethosudev);
 }
 
 static const struct of_device_id dt_match[] = {
