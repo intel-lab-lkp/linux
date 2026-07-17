@@ -1178,6 +1178,97 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 }
 EXPORT_SYMBOL_GPL(dw_edma_remove);
 
+struct dw_edma_delegated_chan_filter_args {
+	struct device *dma_dev;
+	bool write;
+	u16 id;
+};
+
+static bool dw_edma_delegated_chan_filter(struct dma_chan *dchan, void *param)
+{
+	struct dw_edma_delegated_chan_filter_args *filter = param;
+	struct dw_edma_chan *chan;
+
+	if (!filter || dchan->device->dev != filter->dma_dev)
+		return false;
+
+	chan = dchan2dw_edma_chan(dchan);
+
+	return chan->dir == (filter->write ? EDMA_DIR_WRITE : EDMA_DIR_READ) &&
+	       chan->id == filter->id;
+}
+
+static int dw_edma_delegate_chan(struct dma_chan *dchan)
+{
+	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	int ret = 0;
+
+	if (!(chan->dw->chip->flags & DW_EDMA_CHIP_LOCAL))
+		return -EINVAL;
+
+	guard(spinlock_irqsave)(&chan->vc.lock);
+
+	if (chan->configured || chan->status != EDMA_ST_IDLE ||
+	    chan->request != EDMA_REQ_NONE)
+		ret = -EBUSY;
+	else
+		chan->irq_mode = DW_EDMA_CH_IRQ_REMOTE;
+
+	return ret;
+}
+
+struct dma_chan *dw_edma_request_delegated_chan(struct device *dma_dev,
+						bool write, u16 id)
+{
+	struct dw_edma_delegated_chan_filter_args filter = {
+		.dma_dev = dma_dev,
+		.write = write,
+		.id = id,
+	};
+	struct dma_chan *dchan;
+	dma_cap_mask_t mask;
+
+	if (!dma_dev)
+		return NULL;
+
+	dma_cap_zero(mask);
+	dma_cap_set(DMA_SLAVE, mask);
+
+	dchan = dma_request_channel(mask, dw_edma_delegated_chan_filter,
+				    &filter);
+	if (!dchan)
+		return NULL;
+
+	if (dw_edma_delegate_chan(dchan)) {
+		dma_release_channel(dchan);
+		return NULL;
+	}
+
+	return dchan;
+}
+EXPORT_SYMBOL_GPL(dw_edma_request_delegated_chan);
+
+void dw_edma_release_delegated_chan(struct dma_chan *dchan, bool quiesce)
+{
+	struct dw_edma_chan *chan;
+
+	if (!dchan)
+		return;
+
+	chan = dchan2dw_edma_chan(dchan);
+	if (quiesce && dw_edma_core_ch_quiesce(chan))
+		dev_warn(chan->dw->chip->dev,
+			 "failed to quiesce delegated %s channel %u\n",
+			 chan->dir == EDMA_DIR_WRITE ? "write" : "read",
+			 chan->id);
+
+	scoped_guard(spinlock_irqsave, &chan->vc.lock)
+		chan->irq_mode = dw_edma_get_default_irq_mode(chan);
+
+	dma_release_channel(dchan);
+}
+EXPORT_SYMBOL_GPL(dw_edma_release_delegated_chan);
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Synopsys DesignWare eDMA controller core driver");
 MODULE_AUTHOR("Gustavo Pimentel <gustavo.pimentel@synopsys.com>");
