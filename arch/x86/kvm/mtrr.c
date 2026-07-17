@@ -105,6 +105,7 @@ int kvm_mtrr_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 		return 1;
 
 	*mtrr = data;
+	kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
 	return 0;
 }
 
