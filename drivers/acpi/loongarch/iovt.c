@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/acpi.h>
+#include <linux/acpi_iovt.h>
 #include <linux/pci.h>
 #include "init.h"
 
@@ -216,4 +217,64 @@ void __init acpi_iovt_late_init(void)
 
 	iovt_init_devices(hdr);
 	acpi_put_table(hdr);
+}
+
+static int iovt_pci_dev_iommu_init(struct pci_dev *pdev, u16 dev_id, void *data)
+{
+	u32 sbdf;
+	struct iovt_fwnode *np;
+	struct device *aliased_dev = data;
+	u32 domain = pci_domain_nr(pdev->bus);
+	struct iovt_device_entry *entry;
+	bool found = false;
+
+	list_for_each_entry(np, &iovt_fwnode_list, list) {
+		if (domain != np->segment)
+			continue;
+
+		/* We're not translating ourself */
+		if (dev_id == np->devid)
+			return -EINVAL;
+
+		if (np->flag & ACPI_IOVT_MAGAGE_BY_SEGMENT) {
+			found = true;
+			break;
+		}
+
+		list_for_each_entry(entry, &np->ep_list, list) {
+			if (dev_id < entry->start_devid)
+				continue;
+
+			if (dev_id > entry->end_devid)
+				continue;
+
+			found = true;
+			break;
+		}
+
+		if (found)
+			break;
+	}
+
+	if (!found)
+		return -ENODEV;
+
+	sbdf = (domain << 16) + dev_id;
+	return acpi_iommu_fwspec_init(aliased_dev, sbdf, np->fwnode);
+}
+
+/*
+ * iovt_iommu_configure_id - Set-up IOMMU configuration for a device.
+ *
+ * @dev: device to configure
+ * @id_in: optional input id const value pointer
+ *
+ * Returns: 0 on success, <0 on failure
+ */
+int iovt_iommu_configure_id(struct device *dev, const u32 *id_in)
+{
+	if (!dev_is_pci(dev))
+		return -ENODEV;
+
+	return pci_for_each_dma_alias(to_pci_dev(dev), iovt_pci_dev_iommu_init, dev);
 }
