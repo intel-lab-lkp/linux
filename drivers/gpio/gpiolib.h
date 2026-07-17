@@ -45,7 +45,6 @@ struct fwnode_handle;
  * at device creation time.
  * @label: a descriptive name for the GPIO device, such as the part number
  * or name of the IP component in a System on Chip.
- * @data: per-instance data assigned by the driver
  * @list: links gpio_device:s together for traversal
  * @line_state_notifier: used to notify subscribers about lines being
  *                       requested, released or reconfigured
@@ -75,7 +74,6 @@ struct gpio_device {
 	u16			ngpio;
 	bool			can_sleep;
 	const char		*label;
-	void			*data;
 	struct list_head        list;
 	struct raw_notifier_head line_state_notifier;
 	rwlock_t		line_state_lock;

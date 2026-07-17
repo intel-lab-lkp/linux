@@ -1103,7 +1103,7 @@ static void gpiochip_setup_devs(void)
 
 static void gpiochip_set_data(struct gpio_chip *gc, void *data)
 {
-	gc->gpiodev->data = data;
+	dev_set_drvdata(&gc->gpiodev->dev, data);
 }
 
 /**
@@ -1115,7 +1115,7 @@ static void gpiochip_set_data(struct gpio_chip *gc, void *data)
  */
 void *gpiochip_get_data(struct gpio_chip *gc)
 {
-	return gc->gpiodev->data;
+	return dev_get_drvdata(&gc->gpiodev->dev);
 }
 EXPORT_SYMBOL_GPL(gpiochip_get_data);
 
