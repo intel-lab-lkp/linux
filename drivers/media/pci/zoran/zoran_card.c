@@ -884,7 +884,7 @@ static int zoran_init_video_device(struct zoran *zr, struct video_device *video_
 
 static void zoran_exit_video_devices(struct zoran *zr)
 {
-	video_unregister_device(zr->video_dev);
+	vb2_video_unregister_device(zr->video_dev);
 	kfree(zr->video_dev);
 }
 
@@ -1070,8 +1070,6 @@ static void zoran_remove(struct pci_dev *pdev)
 		goto exit_free;
 
 	debugfs_remove_recursive(zr->dbgfs_dir);
-
-	zoran_queue_exit(zr);
 
 	/* unregister videocodec bus */
 	if (zr->codec)

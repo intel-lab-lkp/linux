@@ -976,8 +976,3 @@ int zoran_queue_init(struct zoran *zr, struct vb2_queue *vq, int dir)
 	zr->video_dev->queue = vq;
 	return 0;
 }
-
-void zoran_queue_exit(struct zoran *zr)
-{
-	vb2_queue_release(zr->video_dev->queue);
-}
