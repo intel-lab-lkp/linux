@@ -815,12 +815,11 @@ static void iolatency_clear_scaling(struct blkcg_gq *blkg)
 			return;
 
 		lat_info = &iolat->child_lat;
-		spin_lock(&lat_info->lock);
+		guard(spinlock_irqsave)(&lat_info->lock);
 		atomic_set(&lat_info->scale_cookie, DEFAULT_SCALE_COOKIE);
 		lat_info->last_scale_event = 0;
 		lat_info->scale_grp = NULL;
 		lat_info->scale_lat = 0;
-		spin_unlock(&lat_info->lock);
 	}
 }
 
