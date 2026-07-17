@@ -12,7 +12,9 @@
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
+#include <linux/media-bus-format.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/pm_runtime.h>
@@ -211,7 +213,10 @@ static int mxsfb_load(struct drm_device *drm,
 		      const struct mxsfb_devdata *devdata)
 {
 	struct platform_device *pdev = to_platform_device(drm->dev);
+	struct device_node *np = pdev->dev.of_node;
 	struct mxsfb_drm_private *mxsfb;
+	u32 bus_format = 0;
+	const char *fmt;
 	int ret;
 
 	mxsfb = devm_kzalloc(&pdev->dev, sizeof(*mxsfb), GFP_KERNEL);
@@ -237,6 +242,17 @@ static int mxsfb_load(struct drm_device *drm,
 	mxsfb->clk_disp_axi = devm_clk_get(drm->dev, "disp_axi");
 	if (IS_ERR(mxsfb->clk_disp_axi))
 		mxsfb->clk_disp_axi = NULL;
+
+	ret = of_property_read_string(np, "interface-pix-fmt", &fmt);
+	if (!ret) {
+		if (!strcmp(fmt, "rgb24"))
+			bus_format = MEDIA_BUS_FMT_RGB888_1X24;
+		else if (!strcmp(fmt, "rgb565"))
+			bus_format = MEDIA_BUS_FMT_RGB565_1X16;
+		else if (!strcmp(fmt, "rgb666"))
+			bus_format = MEDIA_BUS_FMT_RGB666_1X18;
+	}
+	mxsfb->bus_format = bus_format;
 
 	ret = dma_set_mask_and_coherent(drm->dev, DMA_BIT_MASK(32));
 	if (ret)
