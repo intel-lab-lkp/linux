@@ -31,9 +31,9 @@ struct padata_work {
 	void			*pw_data;
 };
 
-static DEFINE_SPINLOCK(padata_works_lock);
-static struct padata_work *padata_works;
-static LIST_HEAD(padata_free_works);
+static __initdata DEFINE_SPINLOCK(padata_works_lock);
+static __initdata struct padata_work *padata_works;
+static __initdata LIST_HEAD(padata_free_works);
 
 struct padata_mt_job_state {
 	spinlock_t		lock;
@@ -46,7 +46,7 @@ struct padata_mt_job_state {
 
 static void __init padata_mt_helper(struct work_struct *work);
 
-static struct padata_work *padata_work_alloc(void)
+static struct padata_work *__init padata_work_alloc(void)
 {
 	struct padata_work *pw;
 
@@ -60,16 +60,8 @@ static struct padata_work *padata_work_alloc(void)
 	return pw;
 }
 
-/*
- * This function is marked __ref because this function may be optimized in such
- * a way that it directly refers to work_fn's address, which causes modpost to
- * complain when work_fn is marked __init. This scenario was observed with clang
- * LTO, where padata_work_init() was optimized to refer directly to
- * padata_mt_helper() because the calls to padata_work_init() with other work_fn
- * values were eliminated or inlined.
- */
-static void __ref padata_work_init(struct padata_work *pw, work_func_t work_fn,
-				   void *data, int flags)
+static void __init padata_work_init(struct padata_work *pw, work_func_t work_fn,
+				    void *data, int flags)
 {
 	if (flags & PADATA_WORK_ONSTACK)
 		INIT_WORK_ONSTACK(&pw->pw_work, work_fn);
@@ -98,7 +90,7 @@ static int __init padata_work_alloc_mt(int nworks, void *data,
 	return i;
 }
 
-static void padata_work_free(struct padata_work *pw)
+static void __init padata_work_free(struct padata_work *pw)
 {
 	lockdep_assert_held(&padata_works_lock);
 	list_add(&pw->pw_list, &padata_free_works);
