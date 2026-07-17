@@ -43,6 +43,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/dax.h>
+#include <linux/efi.h>
 #include <linux/ksm.h>
 #include <linux/rmap.h>
 #include <linux/export.h>
@@ -87,13 +88,16 @@ void num_poisoned_pages_inc(unsigned long pfn)
 {
 	atomic_long_inc(&num_poisoned_pages);
 	memblk_nr_poison_inc(pfn);
+	efi_hwpoison_record_pfn(pfn);
 }
 
 void num_poisoned_pages_sub(unsigned long pfn, long i)
 {
 	atomic_long_sub(i, &num_poisoned_pages);
-	if (pfn != -1UL)
+	if (pfn != -1UL) {
 		memblk_nr_poison_sub(pfn, i);
+		efi_hwpoison_unrecord_pfn(pfn);
+	}
 }
 
 /**
