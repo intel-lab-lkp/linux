@@ -22,6 +22,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/util_macros.h>
+#include <linux/pwm.h>
 
 /* Addresses to scan */
 static const unsigned short normal_i2c[] = { 0x2C, 0x2E, 0x2F, I2C_CLIENT_END };
@@ -864,6 +865,57 @@ static int adt7470_pwm_write(struct device *dev, u32 attr, int channel, long val
 	return err;
 }
 
+static int adt7470_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
+			     const struct pwm_state *state)
+{
+	struct adt7470_data *data = pwmchip_get_drvdata(chip);
+	unsigned int pwm_auto_reg_mask;
+	int err;
+	u8 val;
+
+	if (pwm->hwpwm % 2)
+		pwm_auto_reg_mask = ADT7470_PWM2_AUTO_MASK;
+	else
+		pwm_auto_reg_mask = ADT7470_PWM1_AUTO_MASK;
+
+	if (state->enabled && state->period > 0)
+		val = DIV_ROUND_CLOSEST_ULL(state->duty_cycle * 255, state->period);
+	else
+		val = 0;
+
+	mutex_lock(&data->lock);
+
+	if (data->pwm[pwm->hwpwm] == val &&
+	    data->pwm_automatic[pwm->hwpwm] == 0) {
+		mutex_unlock(&data->lock);
+		return 0;
+	}
+
+	/* Put the PWM channel in manual mode before updating it. */
+	err = regmap_update_bits(data->regmap,
+				 ADT7470_REG_PWM_CFG(pwm->hwpwm),
+				 pwm_auto_reg_mask, 0);
+	if (err < 0)
+		goto out;
+
+	data->pwm_automatic[pwm->hwpwm] = 0;
+
+	err = regmap_write(data->regmap,
+			   ADT7470_REG_PWM(pwm->hwpwm), val);
+	if (err < 0)
+		goto out;
+
+	data->pwm[pwm->hwpwm] = val;
+out:
+	mutex_unlock(&data->lock);
+
+	return err;
+}
+
+static const struct pwm_ops adt7470_pwm_ops = {
+	.apply = adt7470_pwm_apply,
+};
+
 static ssize_t pwm_max_show(struct device *dev,
 			    struct device_attribute *devattr, char *buf)
 {
@@ -1298,6 +1350,21 @@ static int adt7470_probe(struct i2c_client *client)
 
 	if (IS_ERR(hwmon_dev))
 		return PTR_ERR(hwmon_dev);
+
+	if (IS_REACHABLE(CONFIG_PWM)) {
+		struct pwm_chip *chip;
+
+		chip = devm_pwmchip_alloc(dev, ADT7470_PWM_COUNT, 0);
+		if (IS_ERR(chip))
+			return PTR_ERR(chip);
+
+		chip->ops = &adt7470_pwm_ops;
+		pwmchip_set_drvdata(chip, data);
+
+		err = devm_pwmchip_add(dev, chip);
+		if (err)
+			return dev_warn_probe(dev, err, "failed to register PWM chip\n");
+	}
 
 	data->auto_update = kthread_run(adt7470_update_thread, client, "%s",
 					dev_name(hwmon_dev));
