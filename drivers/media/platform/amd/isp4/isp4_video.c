@@ -742,13 +742,13 @@ int isp4vid_dev_init(struct isp4vid_dev *isp_vdev, struct v4l2_subdev *isp_sd)
 	ret = isp4vid_fill_buffer_size(&isp_vdev->format);
 	if (ret) {
 		dev_err(v4l2_dev->dev, "fail to fill buffer size: %d\n", ret);
-		goto err_release_vb2_queue;
+		return ret;
 	}
 
 	ret = isp4vid_set_fmt_2_isp(isp_sd, &isp_vdev->format);
 	if (ret) {
 		dev_err(v4l2_dev->dev, "fail init format :%d\n", ret);
-		goto err_release_vb2_queue;
+		return ret;
 	}
 
 	/* Initialize the video_device struct */
@@ -760,7 +760,7 @@ int isp4vid_dev_init(struct isp4vid_dev *isp_vdev, struct v4l2_subdev *isp_sd)
 
 	if (ret) {
 		dev_err(v4l2_dev->dev, "init media entity pad fail:%d\n", ret);
-		goto err_release_vb2_queue;
+		return ret;
 	}
 
 	vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE |
@@ -786,8 +786,6 @@ int isp4vid_dev_init(struct isp4vid_dev *isp_vdev, struct v4l2_subdev *isp_sd)
 
 err_entity_cleanup:
 	media_entity_cleanup(&isp_vdev->vdev.entity);
-err_release_vb2_queue:
-	vb2_queue_release(q);
 	return ret;
 }
 
