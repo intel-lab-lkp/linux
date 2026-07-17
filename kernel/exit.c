@@ -998,7 +998,7 @@ void __noreturn do_exit(long code)
 	exit_sem(tsk);
 	exit_shm(tsk);
 	exit_files(tsk);
-	unix_schedule_gc(NULL); /* Must be after exit_files() */
+	unix_schedule_gc(); /* Must be after exit_files() */
 	exit_fs(tsk);
 	if (group_dead)
 		disassociate_ctty(1);
