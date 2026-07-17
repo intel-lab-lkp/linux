@@ -1256,6 +1256,10 @@ struct task_struct {
 	 * under preempt_disable().
 	 */
 	struct task_struct		*blocked_donor;
+#ifdef CONFIG_SCHED_PROXY_EXEC
+	int				proxy_pick_cpu;
+	u64				proxy_pick_seq; /* find_proxy_task() seq */
+#endif
 
 #ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
 	/*

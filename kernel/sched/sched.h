@@ -1154,6 +1154,7 @@ struct rq {
 #ifdef CONFIG_SCHED_PROXY_EXEC
 	struct task_struct __rcu	*donor;  /* Scheduling context */
 	struct task_struct __rcu	*curr;   /* Execution context */
+	u64				proxy_pick_seq;  /* find_proxy_task() seq */
 #else
 	union {
 		struct task_struct __rcu *donor; /* Scheduler context */
