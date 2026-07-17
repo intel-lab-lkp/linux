@@ -1638,11 +1638,8 @@ static int interrupt_init_v1_hw(struct hisi_hba *hisi_hba)
 
 			rc = devm_request_irq(dev, irq, phy_interrupts[j], 0,
 					      DRV_NAME " phy", phy);
-			if (rc) {
-				dev_err(dev, "irq init: could not request phy interrupt %d, rc=%d\n",
-					irq, rc);
+			if (rc)
 				return rc;
-			}
 		}
 	}
 
@@ -1654,11 +1651,8 @@ static int interrupt_init_v1_hw(struct hisi_hba *hisi_hba)
 
 		rc = devm_request_irq(dev, irq, cq_interrupt_v1_hw, 0,
 				      DRV_NAME " cq", &hisi_hba->cq[i]);
-		if (rc) {
-			dev_err(dev, "irq init: could not request cq interrupt %d, rc=%d\n",
-				irq, rc);
+		if (rc)
 			return rc;
-		}
 	}
 
 	idx = (hisi_hba->n_phy * HISI_SAS_PHY_INT_NR) + hisi_hba->queue_count;
@@ -1669,11 +1663,8 @@ static int interrupt_init_v1_hw(struct hisi_hba *hisi_hba)
 
 		rc = devm_request_irq(dev, irq, fatal_interrupts[i], 0,
 				      DRV_NAME " fatal", hisi_hba);
-		if (rc) {
-			dev_err(dev, "irq init: could not request fatal interrupt %d, rc=%d\n",
-				irq, rc);
+		if (rc)
 			return rc;
-		}
 	}
 
 	hisi_hba->cq_nvecs = hisi_hba->queue_count;

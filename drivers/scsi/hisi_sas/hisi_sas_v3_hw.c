@@ -2631,26 +2631,20 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 	rc = devm_request_irq(dev, pci_irq_vector(pdev, IRQ_PHY_UP_DOWN_INDEX),
 			      int_phy_up_down_bcast_v3_hw, 0,
 			      DRV_NAME " phy", hisi_hba);
-	if (rc) {
-		dev_err(dev, "could not request phy interrupt, rc=%d\n", rc);
+	if (rc)
 		return -ENOENT;
-	}
 
 	rc = devm_request_irq(dev, pci_irq_vector(pdev, IRQ_CHL_INDEX),
 			      int_chnl_int_v3_hw, 0,
 			      DRV_NAME " channel", hisi_hba);
-	if (rc) {
-		dev_err(dev, "could not request chnl interrupt, rc=%d\n", rc);
+	if (rc)
 		return -ENOENT;
-	}
 
 	rc = devm_request_irq(dev, pci_irq_vector(pdev, IRQ_AXI_INDEX),
 			      fatal_axi_int_v3_hw, 0,
 			      DRV_NAME " fatal", hisi_hba);
-	if (rc) {
-		dev_err(dev, "could not request fatal interrupt, rc=%d\n", rc);
+	if (rc)
 		return -ENOENT;
-	}
 
 	if (hisi_sas_intr_conv)
 		dev_info(dev, "Enable interrupt converge\n");
@@ -2668,11 +2662,8 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 				      cq_thread_v3_hw,
 				      irqflags,
 				      DRV_NAME " cq", cq);
-		if (rc) {
-			dev_err(dev, "could not request cq%d interrupt, rc=%d\n",
-				i, rc);
+		if (rc)
 			return -ENOENT;
-		}
 		cq->irq_mask = pci_irq_get_affinity(pdev, i + BASE_VECTORS_V3_HW);
 		if (!cq->irq_mask) {
 			dev_err(dev, "could not get cq%d irq affinity!\n", i);

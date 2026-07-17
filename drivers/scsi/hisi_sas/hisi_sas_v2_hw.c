@@ -3338,8 +3338,6 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 		rc = devm_request_irq(dev, irq, phy_interrupts[i], 0,
 				      DRV_NAME " phy", hisi_hba);
 		if (rc) {
-			dev_err(dev, "irq init: could not request phy interrupt %d, rc=%d\n",
-				irq, rc);
 			rc = -ENOENT;
 			goto err_out;
 		}
@@ -3352,8 +3350,6 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 		rc = devm_request_irq(dev, irq, sata_int_v2_hw, 0,
 				      DRV_NAME " sata", phy);
 		if (rc) {
-			dev_err(dev, "irq init: could not request sata interrupt %d, rc=%d\n",
-				irq, rc);
 			rc = -ENOENT;
 			goto err_out;
 		}
@@ -3364,8 +3360,6 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 		rc = devm_request_irq(dev, irq, fatal_interrupts[fatal_no], 0,
 				      DRV_NAME " fatal", hisi_hba);
 		if (rc) {
-			dev_err(dev, "irq init: could not request fatal interrupt %d, rc=%d\n",
-				irq, rc);
 			rc = -ENOENT;
 			goto err_out;
 		}
@@ -3380,8 +3374,6 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 					       cq_thread_v2_hw, IRQF_ONESHOT,
 					       DRV_NAME " cq", cq);
 		if (rc) {
-			dev_err(dev, "irq init: could not request cq interrupt %d, rc=%d\n",
-					cq->irq_no, rc);
 			rc = -ENOENT;
 			goto err_out;
 		}
