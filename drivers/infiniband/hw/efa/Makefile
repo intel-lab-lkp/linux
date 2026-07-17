@@ -4,6 +4,8 @@
 # Makefile for Amazon Elastic Fabric Adapter (EFA) device driver.
 #
 
+CONTEXT_ANALYSIS := y
+
 obj-$(CONFIG_INFINIBAND_EFA) += efa.o
 
 efa-y := efa_com_cmd.o efa_ah_cache.o efa_com.o efa_main.o efa_verbs.o
