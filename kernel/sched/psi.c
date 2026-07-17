@@ -743,10 +743,16 @@ static int psi_rtpoll_worker(void *data)
 
 	while (true) {
 		wait_event_interruptible(group->rtpoll_wait,
-				atomic_cmpxchg(&group->rtpoll_wakeup, 1, 0) ||
+				atomic_read(&group->rtpoll_wakeup) ||
 				kthread_should_stop());
 		if (kthread_should_stop())
 			break;
+		/*
+		 * Consume the wakeup only after checking for stop. Once consumed,
+		 * always run the work so a replacement worker cannot lose it.
+		 */
+		if (atomic_cmpxchg(&group->rtpoll_wakeup, 1, 0) != 1)
+			continue;
 
 		psi_rtpoll_work(group);
 	}
