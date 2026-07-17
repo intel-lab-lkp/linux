@@ -252,6 +252,10 @@ int __must_check vb2_queue_init_name(struct vb2_queue *q, const char *name);
  * This function stops streaming and performs necessary clean ups, including
  * freeing video buffer memory. The driver is responsible for freeing
  * the vb2_queue structure itself.
+ *
+ * There is normally no reason for drivers to call this function directly,
+ * instead call (_)vb2_fop_release(), vb2_video_unregister_device() or
+ * v4l2_m2m_ctx_release().
  */
 void vb2_queue_release(struct vb2_queue *q);
 
