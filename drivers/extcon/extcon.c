@@ -1234,7 +1234,7 @@ static int extcon_alloc_groups(struct extcon_dev *edev)
  * do not set the values of "internal data", which are initialized by
  * this function.
  *
- * Note that before calling this funciton, have to allocate the memory
+ * Note that before calling this function, have to allocate the memory
  * of an extcon device by using the extcon_dev_allocate(). And the extcon
  * dev should include the supported_cable information.
  *
