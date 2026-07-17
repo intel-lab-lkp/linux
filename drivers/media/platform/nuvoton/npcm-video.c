@@ -1635,13 +1635,11 @@ static int npcm_video_setup_video(struct npcm_video *video)
 	rc = video_register_device(vdev, VFL_TYPE_VIDEO, 0);
 	if (rc) {
 		dev_err(video->dev, "Failed to register video device\n");
-		goto rel_vb_queue;
+		goto rel_ctrl_handler;
 	}
 
 	return 0;
 
-rel_vb_queue:
-	vb2_queue_release(vbq);
 rel_ctrl_handler:
 	v4l2_ctrl_handler_free(&video->ctrl_handler);
 	v4l2_device_unregister(v4l2_dev);
@@ -1807,8 +1805,7 @@ static void npcm_video_remove(struct platform_device *pdev)
 	struct v4l2_device *v4l2_dev = dev_get_drvdata(dev);
 	struct npcm_video *video = to_npcm_video(v4l2_dev);
 
-	video_unregister_device(&video->vdev);
-	vb2_queue_release(&video->queue);
+	vb2_video_unregister_device(&video->vdev);
 	v4l2_ctrl_handler_free(&video->ctrl_handler);
 	v4l2_device_unregister(v4l2_dev);
 	if (video->ece.enable)
