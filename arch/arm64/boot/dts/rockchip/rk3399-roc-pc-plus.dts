@@ -93,6 +93,10 @@
 	};
 };
 
+&work_led {
+	linux,default-trigger = "default-on";
+};
+
 &fusb0 {
 	vbus-supply = <&vcc_vbus_typec1>;
 };
