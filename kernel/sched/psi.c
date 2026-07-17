@@ -1488,18 +1488,22 @@ void psi_trigger_destroy(struct psi_trigger *t)
 						group->rtpoll_task,
 						lockdep_is_held(&group->rtpoll_trigger_lock));
 				rcu_assign_pointer(group->rtpoll_task, NULL);
-				timer_delete(&group->rtpoll_timer);
+				/*
+				 * Wait for psi_schedule_rtpoll_work() to either
+				 * observe the NULL task or finish rearming the timer.
+				 * Keeping the mutex held also prevents a new trigger
+				 * from installing a task before the old timer is gone.
+				 */
+				synchronize_rcu();
+				timer_delete_sync(&group->rtpoll_timer);
 			}
 		}
 		mutex_unlock(&group->rtpoll_trigger_lock);
 	}
 
-	/*
-	 * Wait for psi_schedule_rtpoll_work RCU to complete its read-side
-	 * critical section before destroying the trigger and optionally the
-	 * rtpoll_task.
-	 */
-	synchronize_rcu();
+	/* The last-trigger path has already waited for RCU readers above. */
+	if (!task_to_destroy)
+		synchronize_rcu();
 	/*
 	 * Stop kthread 'psimon' after releasing rtpoll_trigger_lock to prevent
 	 * a deadlock while waiting for psi_rtpoll_work to acquire
