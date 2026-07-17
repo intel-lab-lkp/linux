@@ -511,7 +511,7 @@ int rzv2h_ivc_init_vdev(struct rzv2h_ivc *ivc, struct v4l2_device *v4l2_dev)
 	ivc->vdev.pad.flags = MEDIA_PAD_FL_SOURCE;
 	ret = media_entity_pads_init(&ivc->vdev.dev.entity, 1, &ivc->vdev.pad);
 	if (ret)
-		goto err_release_vb2q;
+		return ret;
 
 	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 	if (ret) {
@@ -531,11 +531,9 @@ int rzv2h_ivc_init_vdev(struct rzv2h_ivc *ivc, struct v4l2_device *v4l2_dev)
 	return 0;
 
 err_unregister_vdev:
-	video_unregister_device(vdev);
+	vb2_video_unregister_device(vdev);
 err_cleanup_vdev_entity:
 	media_entity_cleanup(&vdev->entity);
-err_release_vb2q:
-	vb2_queue_release(vb2q);
 
 	return ret;
 }
@@ -547,5 +545,4 @@ void rzv2h_deinit_video_dev_and_queue(struct rzv2h_ivc *ivc)
 
 	vb2_video_unregister_device(vdev);
 	media_entity_cleanup(&vdev->entity);
-	vb2_queue_release(vb2q);
 }
