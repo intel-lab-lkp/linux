@@ -38,6 +38,12 @@ properties:
   interrupts:
     maxItems: 1
 
+  resets:
+    maxItems: 1
+
+  reset-names:
+    const: core_rst
+
   power-domains:
     maxItems: 1
 
