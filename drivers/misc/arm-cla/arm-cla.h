@@ -30,6 +30,7 @@ struct cla_domain;
  * @pfn:		Page of registers assigned to user.
  * @accelerators:	Available accelerators.
  * @pg_offset:		Mmap offset of this device.
+ * @iassizes:		Combined regstate of all accels.
  * @domain:		The domain this CLA belongs to.
  *
  * Mutable, only accessed under @lock:
@@ -43,6 +44,7 @@ struct cla_dev {
 	unsigned long pfn;
 	u8 accelerators;
 	unsigned long pg_offset;
+	unsigned long iassizes;
 	struct cla_domain *domain;
 
 	struct mutex lock;
@@ -63,6 +65,23 @@ struct cla_domain {
 	unsigned long pg_offset;
 	unsigned int nr_devs;
 	struct cla_dev **devs;
+};
+
+/**
+ * struct cla_regs - Saved CLA register state
+ *
+ * @data:		DATA registers.
+ * @lresp:		LRESP register.
+ * @accel_valid:	Accelerator state has been saved once.
+ * @srstate:		Save/restore state for each accelerator.
+ * @regstate:		Internal accelerator state.
+ */
+struct cla_regs {
+	u64 data[CLA_NUM_DATA_REGS];
+	u64 lresp;
+	bool accel_valid;
+	u64 srstate[CLA_NUM_ACC][CLA_SRSTATE_LEN];
+	u64 regstate[];
 };
 
 extern struct xarray cla_domains;
@@ -115,5 +134,13 @@ int cla_op_regread(struct cla_dev *dev, unsigned int accid, unsigned int regidx,
 		   size_t nregs, u64 *regs);
 int cla_op_regwrite(struct cla_dev *dev, unsigned int accid,
 		    unsigned int regidx, size_t nregs, u64 *regs);
+int cla_op_entersr(struct cla_dev *dev, unsigned int accid, u64 *srstate);
+int cla_op_exitsr(struct cla_dev *dev, unsigned int accid, u64 *srstate);
+
+int cla_regs_switch_out(struct cla_dev *dev, struct cla_regs *regs,
+			bool save_regs);
+int cla_regs_switch_in(struct cla_dev *dev, struct cla_regs *regs);
+struct cla_regs **cla_regs_alloc_domain(struct cla_domain *domain);
+void cla_regs_free_domain(struct cla_domain *domain, struct cla_regs **regs);
 
 #endif /* _ARM_CLA_H_ */

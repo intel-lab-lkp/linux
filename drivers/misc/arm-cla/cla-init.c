@@ -81,6 +81,8 @@ static int cla_reset_pmu(struct cla_dev *dev, unsigned int accid)
 static int cla_dev_setup_accel(struct cla_dev *dev, unsigned int accid)
 {
 	u64 status;
+	u64 iassize;
+	u64 acap;
 	int ret;
 
 	/*
@@ -105,6 +107,26 @@ static int cla_dev_setup_accel(struct cla_dev *dev, unsigned int accid)
 			status, accid);
 		return -EIO;
 	}
+
+	/*
+	 * We don't support SROP (SAVE and RESTORE ops), only context switching
+	 * with REGREAD and REGWRITE. SROP would require finding a DMA buffer
+	 * where to save state, ideally in userspace process to avoid kernel
+	 * DMA. It's complicated and no implementation needs it at the moment.
+	 */
+	ret = cla_op_regread(dev, accid, CLA_REG_ACAP, 1, &acap);
+	if (ret)
+		return ret;
+	if (FIELD_GET(CLA_ACAP_SROP, acap)) {
+		cla_err(dev, "[%u] SROP not supported\n", accid);
+		return 1;
+	}
+
+	ret = cla_op_regread(dev, accid, CLA_REG_IASSIZE, 1, &iassize);
+	if (ret)
+		return ret;
+	if (FIELD_GET(CLA_ACAP_REGSTATE, acap) && iassize)
+		dev->iassizes += iassize;
 
 	/*
 	 * The following are nice to have, but the accelerator should work

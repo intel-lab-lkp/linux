@@ -245,3 +245,46 @@ int cla_op_regwrite(struct cla_dev *dev, unsigned int accid,
 	return cla_op_access_reg(dev, CLA_LAUNCH_OP_REGWRITE, CLA_DATA_IN,
 				 accid, regidx, nregs, regs);
 }
+
+/**
+ * cla_op_entersr - launch ENTERSR operation.
+ * @dev: CLA device.
+ * @accid: accelerator ID.
+ * @srstate: 64-byte save/restore state written by CLA. May be NULL if the
+ *           SRSTATE isn't needed.
+ *
+ * Return: 0 on success, or an error.
+ */
+int cla_op_entersr(struct cla_dev *dev, unsigned int accid, u64 *srstate)
+{
+	struct cla_launch launch = {
+		.op		= CLA_LAUNCH_OP_ENTERSR,
+		.ndata_m1	= 7,
+		.accid		= accid,
+		.data_mode	= srstate ? CLA_DATA_OUT : CLA_DATA_NONE,
+		.data		= srstate,
+	};
+
+	return cla_op_launch(dev, &launch);
+}
+
+/**
+ * cla_op_exitsr - launch EXITSR operation.
+ * @dev: CLA device.
+ * @accid: accelerator ID.
+ * @srstate: 64-byte save/restore state written to CLA.
+ *
+ * Return: 0 on success, or an error.
+ */
+int cla_op_exitsr(struct cla_dev *dev, unsigned int accid, u64 *srstate)
+{
+	struct cla_launch launch = {
+		.op		= CLA_LAUNCH_OP_EXITSR,
+		.ndata_m1	= 7,
+		.accid		= accid,
+		.data_mode	= CLA_DATA_IN,
+		.data		= srstate,
+	};
+
+	return cla_op_launch(dev, &launch);
+}
