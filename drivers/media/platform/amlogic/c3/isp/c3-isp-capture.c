@@ -720,7 +720,7 @@ static int c3_isp_register_capture(struct c3_isp_capture *cap)
 	cap->pad.flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_pads_init(&vdev->entity, 1, &cap->pad);
 	if (ret)
-		goto err_queue_release;
+		goto err_destroy;
 
 	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 	if (ret) {
@@ -733,8 +733,6 @@ static int c3_isp_register_capture(struct c3_isp_capture *cap)
 
 err_entity_cleanup:
 	media_entity_cleanup(&vdev->entity);
-err_queue_release:
-	vb2_queue_release(vb2_q);
 err_destroy:
 	mutex_destroy(&cap->lock);
 	return ret;
@@ -789,9 +787,8 @@ void c3_isp_captures_unregister(struct c3_isp_device *isp)
 
 		if (!cap->isp)
 			continue;
-		vb2_queue_release(&cap->vb2_q);
 		media_entity_cleanup(&cap->vdev.entity);
-		video_unregister_device(&cap->vdev);
+		vb2_video_unregister_device(&cap->vdev);
 		mutex_destroy(&cap->lock);
 	}
 }

@@ -279,7 +279,7 @@ int c3_isp_stats_register(struct c3_isp_device *isp)
 	stats->pad.flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_pads_init(&vdev->entity, 1, &stats->pad);
 	if (ret)
-		goto err_queue_release;
+		goto err_destroy;
 
 	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 	if (ret) {
@@ -292,8 +292,6 @@ int c3_isp_stats_register(struct c3_isp_device *isp)
 
 err_entity_cleanup:
 	media_entity_cleanup(&vdev->entity);
-err_queue_release:
-	vb2_queue_release(vb2_q);
 err_destroy:
 	mutex_destroy(&stats->lock);
 	return ret;
@@ -303,9 +301,8 @@ void c3_isp_stats_unregister(struct c3_isp_device *isp)
 {
 	struct c3_isp_stats *stats = &isp->stats;
 
-	vb2_queue_release(&stats->vb2_q);
 	media_entity_cleanup(&stats->vdev.entity);
-	video_unregister_device(&stats->vdev);
+	vb2_video_unregister_device(&stats->vdev);
 	mutex_destroy(&stats->lock);
 }
 

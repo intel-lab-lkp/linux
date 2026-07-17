@@ -876,12 +876,12 @@ int c3_isp_params_register(struct c3_isp_device *isp)
 
 	ret = vb2_queue_init(vb2_q);
 	if (ret)
-		goto err_detroy;
+		goto err_destroy;
 
 	params->pad.flags = MEDIA_PAD_FL_SOURCE;
 	ret = media_entity_pads_init(&vdev->entity, 1, &params->pad);
 	if (ret)
-		goto err_queue_release;
+		goto err_destroy;
 
 	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
 	if (ret < 0) {
@@ -894,9 +894,7 @@ int c3_isp_params_register(struct c3_isp_device *isp)
 
 err_entity_cleanup:
 	media_entity_cleanup(&vdev->entity);
-err_queue_release:
-	vb2_queue_release(vb2_q);
-err_detroy:
+err_destroy:
 	mutex_destroy(&params->lock);
 	return ret;
 }
@@ -905,9 +903,8 @@ void c3_isp_params_unregister(struct c3_isp_device *isp)
 {
 	struct c3_isp_params *params = &isp->params;
 
-	vb2_queue_release(&params->vb2_q);
 	media_entity_cleanup(&params->vdev.entity);
-	video_unregister_device(&params->vdev);
+	vb2_video_unregister_device(&params->vdev);
 	mutex_destroy(&params->lock);
 }
 
