@@ -27,6 +27,16 @@
 			linux,can-disable;
 		};
 	};
+
+	/* PM4125 charger out, supplied by VBAT */
+	vph_pwr: regulator-vph-pwr {
+		compatible = "regulator-fixed";
+		regulator-name = "vph_pwr";
+		regulator-min-microvolt = <3700000>;
+		regulator-max-microvolt = <3700000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
 };
 
 &pm4125_gpios {
@@ -52,10 +62,31 @@
 &rpm_requests {
 	regulators {
 		compatible = "qcom,rpm-pm2250-regulators";
+		vdd_s4-supply = <&vph_pwr>;
+		vdd_l1-supply =  <&pm4125_s4>;
+		vdd_l2_l3-supply =  <&pm4125_s4>;
+		vdd_l5_l6_l7_l11_l12-supply =  <&pm4125_s4>;
+		vdd_l8_l9-supply =  <&pm4125_s4>;
+		vdd_l10-supply =  <&pm4125_s4>;
+		vdd_l13_l14-supply =  <&pm4125_s1>;
+		vdd_l15_l16-supply =  <&pm4125_s1>;
+		vdd_l17_l22-supply = <&vph_pwr>;
+		vdd_l18_l19-supply = <&vph_pwr>;
+		vdd_l4_l20_l21-supply = <&vph_pwr>;
+
+		pm4125_s1: s1 {
+			regulator-min-microvolt = <1396000>;
+			regulator-max-microvolt = <1396000>;
+		};
 
 		pm4125_s2: s2 {
 			regulator-min-microvolt = <1000000>;
 			regulator-max-microvolt = <1200000>;
+		};
+
+		pm4125_s4: s4 {
+			regulator-min-microvolt = <640000>;
+			regulator-max-microvolt = <1408000>;
 		};
 
 		pm4125_l3: l3 {
