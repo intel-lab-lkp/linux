@@ -940,6 +940,17 @@ static void ghes_do_proc(struct ghes *ghes,
 		if (guid_equal(sec_type, &CPER_SEC_PLATFORM_MEM)) {
 			struct cper_sec_mem_err *mem_err = acpi_hest_get_payload(gdata);
 
+			/*
+			 * Several consumers below dereference the record, so
+			 * check the length once here. Bound against the shorter
+			 * UEFI 2.1/2.2 layout that older firmware still emits;
+			 * the extra fields are only used under validation bits
+			 * such records leave clear.
+			 */
+			if (gdata->error_data_length <
+			    sizeof(struct cper_sec_mem_err_old))
+				continue;
+
 			atomic_notifier_call_chain(&ghes_report_chain, sev, mem_err);
 
 			arch_apei_report_mem_error(sev, mem_err);
