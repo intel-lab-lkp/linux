@@ -435,6 +435,133 @@ static void px30_lvds_encoder_disable(struct drm_encoder *encoder)
 	drm_panel_unprepare(lvds->panel);
 }
 
+static int rk3568_lvds_poweron(struct rockchip_lvds *lvds)
+{
+	int ret;
+
+	ret = clk_enable(lvds->pclk);
+	if (ret < 0) {
+		DRM_DEV_ERROR(lvds->dev, "failed to enable lvds pclk %d\n", ret);
+		return ret;
+	}
+
+	ret = pm_runtime_get_sync(lvds->dev);
+	if (ret < 0) {
+		DRM_DEV_ERROR(lvds->dev, "failed to get pm runtime: %d\n", ret);
+		clk_disable(lvds->pclk);
+		return ret;
+	}
+
+	/*
+	 * Enable LVDS mode and the parallel-to-serial converter. These are
+	 * write-masked registers, so a plain write only touches the bits named
+	 * here; there is nothing to preserve and no need to read first.
+	 */
+	return regmap_write(lvds->grf, RK3568_GRF_VO_CON2,
+			    RK3568_LVDS0_MODE_EN(1) |
+			    RK3568_LVDS0_P2S_EN(1));
+}
+
+static void rk3568_lvds_poweroff(struct rockchip_lvds *lvds)
+{
+	regmap_write(lvds->grf, RK3568_GRF_VO_CON2,
+		     RK3568_LVDS0_MODE_EN(0) | RK3568_LVDS0_P2S_EN(0));
+
+	pm_runtime_put(lvds->dev);
+	clk_disable(lvds->pclk);
+}
+
+static int rk3568_lvds_grf_config(struct drm_encoder *encoder,
+				  struct drm_display_mode *mode)
+{
+	struct rockchip_lvds *lvds = encoder_to_lvds(encoder);
+	struct rockchip_crtc_state *s =
+		to_rockchip_crtc_state(encoder->crtc->state);
+	bool negedge = !!(s->bus_flags & DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE);
+
+	if (lvds->output != DISPLAY_OUTPUT_LVDS) {
+		DRM_DEV_ERROR(lvds->dev, "Unsupported display output %d\n",
+			      lvds->output);
+		return -EINVAL;
+	}
+
+	/*
+	 * The LVDS block has its own dclk inversion select, separate from the
+	 * VOP's pin polarity. Both have to agree with what the panel samples on.
+	 */
+	regmap_write(lvds->grf, RK3568_GRF_VO_CON2,
+		     RK3568_LVDS0_DCLK_INV_SEL(negedge));
+
+	/* Set format */
+	return regmap_write(lvds->grf, RK3568_GRF_VO_CON0,
+			    RK3568_LVDS0_SELECT(lvds->format) |
+			    RK3568_LVDS0_MSBSEL(1));
+}
+
+static void rk3568_lvds_encoder_enable(struct drm_encoder *encoder)
+{
+	struct rockchip_lvds *lvds = encoder_to_lvds(encoder);
+	struct drm_display_mode *mode = &encoder->crtc->state->adjusted_mode;
+	int ret;
+
+	drm_panel_prepare(lvds->panel);
+
+	ret = rk3568_lvds_poweron(lvds);
+	if (ret) {
+		DRM_DEV_ERROR(lvds->dev, "failed to power on LVDS: %d\n", ret);
+		drm_panel_unprepare(lvds->panel);
+		return;
+	}
+
+	ret = rk3568_lvds_grf_config(encoder, mode);
+	if (ret) {
+		DRM_DEV_ERROR(lvds->dev, "failed to configure LVDS: %d\n", ret);
+		drm_panel_unprepare(lvds->panel);
+		return;
+	}
+
+	/*
+	 * Only now bring the D-PHY up. phy_power_on() runs the whole
+	 * inno_dsidphy_lvds_mode_enable() sequence - PLL and bandgap power-on,
+	 * a settle, PLL mode select, then a reset pulse of the serializer and
+	 * the lane enables. All of that has to happen with the block already
+	 * switched to LVDS mode in the GRF (above) and with the VOP's dclk
+	 * running, because the serializer is clocked from dclk and latches its
+	 * state out of that reset.
+	 *
+	 * Doing it at probe instead - as this driver used to - resets and
+	 * enables the serializer against a block that is not in LVDS mode yet
+	 * and has no input clock. Every register then reads back correct while
+	 * the lanes sit at common mode forever. Rockchip's BSP orders it this
+	 * way (GRF writes, then phy_set_mode + phy_power_on).
+	 */
+	ret = phy_set_mode(lvds->dphy, PHY_MODE_LVDS);
+	if (ret) {
+		DRM_DEV_ERROR(lvds->dev, "failed to set phy mode: %d\n", ret);
+		drm_panel_unprepare(lvds->panel);
+		return;
+	}
+
+	ret = phy_power_on(lvds->dphy);
+	if (ret) {
+		DRM_DEV_ERROR(lvds->dev, "failed to power on phy: %d\n", ret);
+		drm_panel_unprepare(lvds->panel);
+		return;
+	}
+
+	drm_panel_enable(lvds->panel);
+}
+
+static void rk3568_lvds_encoder_disable(struct drm_encoder *encoder)
+{
+	struct rockchip_lvds *lvds = encoder_to_lvds(encoder);
+
+	drm_panel_disable(lvds->panel);
+	phy_power_off(lvds->dphy);
+	rk3568_lvds_poweroff(lvds);
+	drm_panel_unprepare(lvds->panel);
+}
+
 static const
 struct drm_encoder_helper_funcs rk3288_lvds_encoder_helper_funcs = {
 	.enable = rk3288_lvds_encoder_enable,
@@ -446,6 +573,13 @@ static const
 struct drm_encoder_helper_funcs px30_lvds_encoder_helper_funcs = {
 	.enable = px30_lvds_encoder_enable,
 	.disable = px30_lvds_encoder_disable,
+	.atomic_check = rockchip_lvds_encoder_atomic_check,
+};
+
+static const
+struct drm_encoder_helper_funcs rk3568_lvds_encoder_helper_funcs = {
+	.enable = rk3568_lvds_encoder_enable,
+	.disable = rk3568_lvds_encoder_disable,
 	.atomic_check = rockchip_lvds_encoder_atomic_check,
 };
 
@@ -512,6 +646,22 @@ static int px30_lvds_probe(struct platform_device *pdev,
 	return phy_power_on(lvds->dphy);
 }
 
+static int rk3568_lvds_probe(struct platform_device *pdev,
+			     struct rockchip_lvds *lvds)
+{
+	/*
+	 * Grab and init the phy, but do NOT power it on here - that is done in
+	 * rk3568_lvds_encoder_enable() once the GRF is in LVDS mode and dclk is
+	 * running. See the comment there. The GRF is not touched at probe
+	 * either: every bit of it is programmed from the enable path.
+	 */
+	lvds->dphy = devm_phy_get(&pdev->dev, "dphy");
+	if (IS_ERR(lvds->dphy))
+		return PTR_ERR(lvds->dphy);
+
+	return phy_init(lvds->dphy);
+}
+
 static const struct rockchip_lvds_soc_data rk3288_lvds_data = {
 	.probe = rk3288_lvds_probe,
 	.helper_funcs = &rk3288_lvds_encoder_helper_funcs,
@@ -522,6 +672,11 @@ static const struct rockchip_lvds_soc_data px30_lvds_data = {
 	.helper_funcs = &px30_lvds_encoder_helper_funcs,
 };
 
+static const struct rockchip_lvds_soc_data rk3568_lvds_data = {
+	.probe = rk3568_lvds_probe,
+	.helper_funcs = &rk3568_lvds_encoder_helper_funcs,
+};
+
 static const struct of_device_id rockchip_lvds_dt_ids[] = {
 	{
 		.compatible = "rockchip,rk3288-lvds",
@@ -530,6 +685,10 @@ static const struct of_device_id rockchip_lvds_dt_ids[] = {
 	{
 		.compatible = "rockchip,px30-lvds",
 		.data = &px30_lvds_data
+	},
+	{
+		.compatible = "rockchip,rk3568-lvds",
+		.data = &rk3568_lvds_data
 	},
 	{}
 };
@@ -601,6 +760,8 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 	encoder = &lvds->encoder.encoder;
 	encoder->possible_crtcs = drm_of_find_possible_crtcs(drm_dev,
 							     dev->of_node);
+	rockchip_drm_encoder_set_crtc_endpoint_id(&lvds->encoder,
+						  dev->of_node, 0, 0);
 
 	ret = drm_simple_encoder_init(drm_dev, encoder, DRM_MODE_ENCODER_LVDS);
 	if (ret < 0) {
