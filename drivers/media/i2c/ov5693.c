@@ -35,6 +35,12 @@
 #define OV5693_STOP_STREAMING			0x00
 #define OV5693_SW_RESET				0x01
 
+/* MIPI transmitter control */
+#define OV5693_MIPI_CTRL00_REG			CCI_REG8(0x4800)
+/* bit 5: gate the clock lane when idle; bit 2: keep the bus in LP11 when idle */
+#define OV5693_MIPI_CTRL00_CLOCK_LANE_GATE	BIT(5)
+#define OV5693_MIPI_CTRL00_BUS_IDLE		BIT(2)
+
 #define OV5693_REG_CHIP_ID			CCI_REG16(0x300a)
 /* Yes, this is right. The datasheet for the OV5693 gives its ID as 0x5690 */
 #define OV5693_CHIP_ID				0x5690
@@ -610,6 +616,20 @@ static int ov5693_mode_configure(struct ov5693_device *ov5693)
 static int ov5693_enable_streaming(struct ov5693_device *ov5693, bool enable)
 {
 	int ret = 0;
+
+	/*
+	 * Gate the MIPI clock lane when idle. The power-on default of
+	 * MIPI_CTRL00 is 0x00 (free-running clock), which the IPU3 CSI-2
+	 * receiver tolerates but the IPU6 one does not: it fails to lock onto
+	 * the link and capture times out. Gating the clock lane (bit 5) is
+	 * required for IPU6 and is the conventional setting for OmniVision
+	 * sensors (cf. ov5640, ov5647, ov5648); also keep the bus in LP11 when
+	 * idle (bit 2). Harmless on IPU3.
+	 */
+	if (enable)
+		cci_write(ov5693->regmap, OV5693_MIPI_CTRL00_REG,
+			  OV5693_MIPI_CTRL00_CLOCK_LANE_GATE |
+			  OV5693_MIPI_CTRL00_BUS_IDLE, &ret);
 
 	cci_write(ov5693->regmap, OV5693_SW_STREAM_REG,
 		  enable ? OV5693_START_STREAMING : OV5693_STOP_STREAMING,
