@@ -568,8 +568,6 @@ static int caam_jr_init(struct device *dev)
 	error = devm_request_irq(dev, jrp->irq, caam_jr_interrupt, IRQF_SHARED,
 				 dev_name(dev), dev);
 	if (error) {
-		dev_err(dev, "can't connect JobR %d interrupt (%d)\n",
-			jrp->ridx, jrp->irq);
 		tasklet_kill(&jrp->irqtask);
 	}
 
