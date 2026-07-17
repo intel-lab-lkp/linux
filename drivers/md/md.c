@@ -4696,7 +4696,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	}
 	err = mddev_lock(mddev);
 	if (err)
-		return err;
+		goto out_clear_closing;
 
 	switch (st) {
 	case inactive:
@@ -4769,6 +4769,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 	}
 	mddev_unlock(mddev);
 
+out_clear_closing:
 	if (st == readonly || st == read_auto || st == inactive ||
 	    (err && st == clear))
 		clear_bit(MD_CLOSING, &mddev->flags);
