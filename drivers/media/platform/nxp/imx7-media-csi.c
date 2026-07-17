@@ -1545,14 +1545,10 @@ static int imx7_csi_video_release(struct file *file)
 
 	mutex_lock(&csi->vdev_mutex);
 
-	if (file->private_data == vq->owner) {
-		vb2_queue_release(vq);
-		vq->owner = NULL;
-	}
+	_vb2_fop_release(file, NULL);
 
 	v4l2_pipeline_pm_put(&csi->vdev->entity);
 
-	v4l2_fh_release(file);
 	mutex_unlock(&csi->vdev_mutex);
 	return 0;
 }
@@ -1627,7 +1623,7 @@ static int imx7_csi_video_register(struct imx7_csi *csi)
 				    MEDIA_LNK_FL_ENABLED);
 	if (ret) {
 		dev_err(csi->dev, "failed to create link to device node\n");
-		video_unregister_device(vdev);
+		vb2_video_unregister_device(vdev);
 		return ret;
 	}
 
@@ -1637,7 +1633,7 @@ static int imx7_csi_video_register(struct imx7_csi *csi)
 static void imx7_csi_video_unregister(struct imx7_csi *csi)
 {
 	media_entity_cleanup(&csi->vdev->entity);
-	video_unregister_device(csi->vdev);
+	vb2_video_unregister_device(csi->vdev);
 }
 
 static int imx7_csi_video_init(struct imx7_csi *csi)
