@@ -2940,6 +2940,55 @@
 			#clock-cells = <1>;
 		};
 
+		pmu@24091000 {
+			compatible = "qcom,milos-cpu-bwmon", "qcom,sc7280-llcc-bwmon";
+			reg = <0x0 0x24091000 0x0 0x1000>;
+
+			interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH 0>;
+
+			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
+					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>;
+
+			operating-points-v2 = <&llcc_bwmon_opp_table>;
+
+			llcc_bwmon_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-0 {
+					opp-peak-kBps = <2086000>;
+				};
+
+				opp-1 {
+					opp-peak-kBps = <2929000>;
+				};
+
+				opp-2 {
+					/* TODO: ddr4 = 3879000 */
+					opp-peak-kBps = <5931000>;
+				};
+
+				opp-3 {
+					/* TODO: ddr4 = 5163000 */
+					opp-peak-kBps = <6515000>;
+				};
+
+				opp-4 {
+					/* TODO: ddr4 = 5931000 */
+					opp-peak-kBps = <7980000>;
+				};
+
+				opp-5 {
+					/* TODO: ddr4 = 6515000 */
+					opp-peak-kBps = <10437000>;
+				};
+
+				opp-6 {
+					/* TODO: ddr4 = 7980000 */
+					opp-peak-kBps = <12191000>;
+				};
+			};
+		};
+
 		gem_noc: interconnect@24100000 {
 			compatible = "qcom,milos-gem-noc";
 			reg = <0x0 0x24100000 0x0 0xff080>;
