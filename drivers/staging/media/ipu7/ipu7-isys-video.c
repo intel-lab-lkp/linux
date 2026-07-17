@@ -1035,7 +1035,7 @@ int ipu7_isys_video_init(struct ipu7_isys_video *av)
 	av->pad.flags = MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_MUST_CONNECT;
 	ret = media_entity_pads_init(&av->vdev.entity, 1, &av->pad);
 	if (ret)
-		goto out_vb2_queue_cleanup;
+		goto out_mutex_destroy;
 
 	av->vdev.entity.ops = &entity_ops;
 	av->vdev.release = video_device_release_empty;
@@ -1058,11 +1058,7 @@ int ipu7_isys_video_init(struct ipu7_isys_video *av)
 	return ret;
 
 out_media_entity_cleanup:
-	vb2_video_unregister_device(&av->vdev);
 	media_entity_cleanup(&av->vdev.entity);
-
-out_vb2_queue_cleanup:
-	vb2_queue_release(&av->aq.vbq);
 
 out_mutex_destroy:
 	mutex_destroy(&av->mutex);
