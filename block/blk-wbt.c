@@ -813,7 +813,14 @@ static void wbt_queue_depth_changed(struct rq_qos *rqos)
 	wbt_update_limits(RQWB(rqos));
 }
 
-static bool wbt_set_lat_changed(struct request_queue *q, u64 val)
+/*
+ * Return true if writing @val would change the WBT state:
+ * 1) @val differs from the stored min_lat_nsec, or
+ * 2) @val matches, but enable_state is not the corresponding manual state
+ *    (WBT_STATE_ON_MANUAL for non-zero @val, WBT_STATE_OFF_MANUAL for 0),
+ *    so the write still has to update enable_state.
+ */
+static bool wbt_lat_changed(struct request_queue *q, u64 val)
 {
 	struct rq_qos *rqos = wbt_rq_qos(q);
 	struct rq_wb *rwb;
@@ -825,7 +832,8 @@ static bool wbt_set_lat_changed(struct request_queue *q, u64 val)
 	if (rwb->min_lat_nsec != val)
 		return true;
 
-	return rwb_enabled(rwb) != !!val;
+	return rwb->enable_state !=
+	       (val ? WBT_STATE_ON_MANUAL : WBT_STATE_OFF_MANUAL);
 }
 
 static void wbt_exit(struct rq_qos *rqos)
@@ -1021,7 +1029,7 @@ int wbt_set_lat(struct gendisk *disk, s64 val)
 		val *= 1000ULL;
 
 	mutex_lock(&disk->rqos_state_mutex);
-	if (!wbt_set_lat_changed(q, val)) {
+	if (!wbt_lat_changed(q, val)) {
 		mutex_unlock(&disk->rqos_state_mutex);
 		goto out;
 	}
