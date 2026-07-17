@@ -177,8 +177,12 @@ int omfs_clear_range(struct super_block *sb, u64 block, int count)
 	struct omfs_sb_info *sbi = OMFS_SB(sb);
 	int bits_per_entry = 8 * sb->s_blocksize;
 	u64 tmp;
+	u64 bits_left;
 	unsigned int map, bit;
 	int ret;
+
+	if (count <= 0)
+		return 0;
 
 	tmp = block;
 	bit = do_div(tmp, bits_per_entry);
@@ -186,6 +190,9 @@ int omfs_clear_range(struct super_block *sb, u64 block, int count)
 
 	if (map >= sbi->s_imap_size)
 		return 0;
+	bits_left = (u64)(sbi->s_imap_size - map) * bits_per_entry - bit;
+	if (count > bits_left)
+		return -EIO;
 
 	mutex_lock(&sbi->s_bitmap_lock);
 	ret = set_run(sb, map, bits_per_entry, bit, count, 0);
