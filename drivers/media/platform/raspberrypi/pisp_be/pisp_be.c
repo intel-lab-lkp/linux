@@ -1443,7 +1443,7 @@ static int pispbe_init_node(struct pispbe_dev *pispbe, unsigned int id)
 		dev_err(pispbe->dev,
 			"Failed to register media pads for %s device node\n",
 			NODE_NAME(node));
-		goto err_unregister_queue;
+		goto err_mutex_destroy;
 	}
 
 	ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
@@ -1451,7 +1451,7 @@ static int pispbe_init_node(struct pispbe_dev *pispbe, unsigned int id)
 		dev_err(pispbe->dev,
 			"Failed to register video %s device node\n",
 			NODE_NAME(node));
-		goto err_unregister_queue;
+		goto err_mutex_destroy;
 	}
 	video_set_drvdata(vdev, node);
 
@@ -1472,9 +1472,7 @@ static int pispbe_init_node(struct pispbe_dev *pispbe, unsigned int id)
 	return 0;
 
 err_unregister_video_dev:
-	video_unregister_device(&node->vfd);
-err_unregister_queue:
-	vb2_queue_release(&node->queue);
+	vb2_video_unregister_device(&node->vfd);
 err_mutex_destroy:
 	mutex_destroy(&node->node_lock);
 	mutex_destroy(&node->queue_lock);
@@ -1576,8 +1574,7 @@ err_unregister_mdev:
 	media_device_unregister(mdev);
 err_unregister_nodes:
 	while (num_regist-- > 0) {
-		video_unregister_device(&pispbe->node[num_regist].vfd);
-		vb2_queue_release(&pispbe->node[num_regist].queue);
+		vb2_video_unregister_device(&pispbe->node[num_regist].vfd);
 	}
 	v4l2_device_unregister_subdev(&pispbe->sd);
 	media_entity_cleanup(&pispbe->sd.entity);
@@ -1605,8 +1602,7 @@ static void pispbe_destroy_devices(struct pispbe_dev *pispbe)
 	media_device_unregister(&pispbe->mdev);
 
 	for (int i = PISPBE_NUM_NODES - 1; i >= 0; i--) {
-		video_unregister_device(&pispbe->node[i].vfd);
-		vb2_queue_release(&pispbe->node[i].queue);
+		vb2_video_unregister_device(&pispbe->node[i].vfd);
 		mutex_destroy(&pispbe->node[i].node_lock);
 		mutex_destroy(&pispbe->node[i].queue_lock);
 	}
