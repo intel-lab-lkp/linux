@@ -1338,9 +1338,11 @@ void init_entity_runnable_average(struct sched_entity *se)
  * To solve this problem, we also cap the util_avg of successive tasks to
  * only 1/2 of the left utilization budget:
  *
- *   util_avg_cap = (cpu_scale - cfs_rq->avg.util_avg) / 2^n
+ *   util_avg_cap = (cpu_scale - cfs_rq->avg.util_avg) / 2
  *
- * where n denotes the nth task and cpu_scale the CPU capacity.
+ * where cpu_scale is the CPU capacity.  Since cfs_rq->avg.util_avg
+ * accumulates the previously created tasks, applying this cap to each new
+ * task gives the nth task a util_avg_cap of cpu_scale / 2^n.
  *
  * For example, for a CPU with 1024 of capacity, a simplest series from
  * the beginning would be like:
