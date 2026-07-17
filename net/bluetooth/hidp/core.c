@@ -555,6 +555,8 @@ static void hidp_recv_ctrl_frame(struct hidp_session *session,
 
 	BT_DBG("session %p skb %p len %u", session, skb, skb->len);
 
+	if (!pskb_may_pull(skb, 1))
+		return;
 	hdr = skb->data[0];
 	skb_pull(skb, 1);
 
@@ -591,6 +593,8 @@ static void hidp_recv_intr_frame(struct hidp_session *session,
 
 	BT_DBG("session %p skb %p len %u", session, skb, skb->len);
 
+	if (!pskb_may_pull(skb, 1))
+		return;
 	hdr = skb->data[0];
 	skb_pull(skb, 1);
 
