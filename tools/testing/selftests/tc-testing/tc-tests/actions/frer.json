@@ -1,0 +1,785 @@
+[
+  {
+    "id": "frer_0001",
+    "name": "Create frer push action with default parameters",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer push index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 1",
+    "matchPattern": "action order [0-9]+: frer push tag-type rtag index 1",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0002",
+    "name": "Create frer push action with explicit tag-type rtag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer push tag-type rtag index 2",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 2",
+    "matchPattern": "action order [0-9]+: frer push tag-type rtag index 2",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0003",
+    "name": "Create frer recover action with default parameters",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 10",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 10 alg vector history-length [0-9]+ reset-time [0-9]+",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0004",
+    "name": "Create frer recover action with vector algorithm explicit",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector index 11",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 11",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 11 alg vector",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0005",
+    "name": "Create frer recover action with match algorithm",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg match index 12",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 12",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 12 alg match",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0006",
+    "name": "Create frer recover action with history-length 16",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector history-length 16 index 13",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 13",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 13 alg vector history-length 16",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0007",
+    "name": "Create frer recover action with reset-time 2000",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector reset-time 2000 index 14",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 14",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 14 alg vector history-length [0-9]+ reset-time 2000",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0008",
+    "name": "Create frer recover action with tag-pop flag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover tag-pop index 15",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 15",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 15.*tag-pop",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0009",
+    "name": "Create frer recover action with individual flag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover individual index 16",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 16",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 16.*individual",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0010",
+    "name": "Create frer recover action with take-no-seq flag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover take-no-seq index 17",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 17",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 17.*take-no-seq",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0011",
+    "name": "Create frer recover action with all parameters combined",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector history-length 16 reset-time 1000 tag-pop individual index 20",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 20",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 20 individual alg vector history-length 16 reset-time 1000 tag-pop",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0012",
+    "name": "Create frer recover action with match alg and all flags",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg match take-no-seq tag-pop individual index 21",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 21",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 21 individual alg match history-length [0-9]+ reset-time [0-9]+ tag-pop take-no-seq",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0013",
+    "name": "Show frer push action SeqGen statistics (zero after create)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1"
+    ],
+    "cmdUnderTest": "$TC -s actions show action frer index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC -s actions show action frer index 1",
+    "matchPattern": "SeqGen packets: 0",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0014",
+    "name": "Show frer recover action Statistics line (zero after create)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer recover alg vector history-length 16 reset-time 1000 tag-pop index 10"
+    ],
+    "cmdUnderTest": "$TC -s actions show action frer index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC -s actions show action frer index 10",
+    "matchPattern": "Statistics: passed=0 discarded=0 tagless=0 out-of-order=0 rogue=0 lost=0 resets=0",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0015",
+    "name": "Show frer recover action Statistics fields present",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer recover index 10"
+    ],
+    "cmdUnderTest": "$TC -s actions show action frer index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC -s actions show action frer index 10",
+    "matchPattern": "Statistics: passed=[0-9]+ discarded=[0-9]+ tagless=[0-9]+ out-of-order=[0-9]+ rogue=[0-9]+ lost=[0-9]+ resets=[0-9]+",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0016",
+    "name": "Replace frer push action (same index)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1"
+    ],
+    "cmdUnderTest": "$TC actions replace action frer push index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 1",
+    "matchPattern": "action order [0-9]+: frer push tag-type rtag index 1",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0017",
+    "name": "Replace frer recover action changing algorithm from vector to match",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer recover alg vector index 10"
+    ],
+    "cmdUnderTest": "$TC actions replace action frer recover alg match index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 10",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 10 alg match",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0018",
+    "name": "Delete frer push action by index",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1"
+    ],
+    "cmdUnderTest": "$TC actions del action frer index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer",
+    "matchPattern": "frer push tag-type rtag index 1",
+    "matchCount": "0",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0019",
+    "name": "Flush all frer actions",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1",
+      "$TC actions add action frer recover index 10",
+      "$TC actions add action frer recover index 11"
+    ],
+    "cmdUnderTest": "$TC actions flush action frer",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer",
+    "matchPattern": "action order [0-9]+: frer",
+    "matchCount": "0",
+    "teardown": [
+      "$TC actions flush action frer 2>/dev/null || true"
+    ]
+  },
+  {
+    "id": "frer_0020",
+    "name": "Add duplicate frer action index fails without replace flag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1"
+    ],
+    "cmdUnderTest": "$TC actions add action frer push index 1",
+    "expExitCode": "255",
+    "verifyCmd": "$TC actions show action frer index 1",
+    "matchPattern": "action order [0-9]+: frer push tag-type rtag index 1",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0021",
+    "name": "Create frer push action with continue control action",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer push index 1 continue",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 1",
+    "matchPattern": "action order [0-9]+: frer push tag-type rtag index 1.*control continue",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0022",
+    "name": "Create frer recover action with pipe control action",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover index 10 pipe",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 10",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 10.*control pipe",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0023",
+    "name": "Create frer recover action history-length minimum boundary (1)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector history-length 1 index 30",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 30",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 30 alg vector history-length 1",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0024",
+    "name": "Create frer recover action history-length maximum boundary (32)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector history-length 32 index 31",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 31",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 31 alg vector history-length 32",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0025",
+    "name": "Create frer recover action with reset-time 0 (timer disabled)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ]
+    ],
+    "cmdUnderTest": "$TC actions add action frer recover alg vector reset-time 0 index 32",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 32",
+    "matchPattern": "action order [0-9]+: frer recover tag-type rtag index 32 alg vector history-length [0-9]+ reset-time 0",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0026",
+    "name": "List all frer actions shows correct count",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1",
+      "$TC actions add action frer recover alg vector index 10",
+      "$TC actions add action frer recover alg match tag-pop index 11"
+    ],
+    "cmdUnderTest": "$TC actions show action frer",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer",
+    "matchPattern": "action order [0-9]+: frer",
+    "matchCount": "3",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0027",
+    "name": "Bind frer push action to egress clsact filter",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "ip link del frer_dummy 2>/dev/null || true",
+      "ip link add frer_dummy type dummy",
+      "ip link set frer_dummy up",
+      "$TC qdisc add dev frer_dummy clsact"
+    ],
+    "cmdUnderTest": "$TC filter add dev frer_dummy egress protocol ip flower skip_hw action frer push index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC filter show dev frer_dummy egress",
+    "matchPattern": "frer push tag-type rtag index 1",
+    "matchCount": "1",
+    "teardown": [
+      "$TC qdisc del dev frer_dummy clsact",
+      "$TC actions flush action frer",
+      "ip link del frer_dummy"
+    ]
+  },
+  {
+    "id": "frer_0028",
+    "name": "Bind frer recover action to ingress clsact filter",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "ip link del frer_dummy 2>/dev/null || true",
+      "ip link add frer_dummy type dummy",
+      "ip link set frer_dummy up",
+      "$TC qdisc add dev frer_dummy clsact"
+    ],
+    "cmdUnderTest": "$TC filter add dev frer_dummy ingress protocol all flower skip_hw action frer recover alg vector history-length 16 reset-time 1000 tag-pop index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC filter show dev frer_dummy ingress",
+    "matchPattern": "frer recover tag-type rtag index 10 alg vector history-length 16 reset-time 1000",
+    "matchCount": "1",
+    "teardown": [
+      "$TC qdisc del dev frer_dummy clsact",
+      "$TC actions flush action frer",
+      "ip link del frer_dummy"
+    ]
+  },
+  {
+    "id": "frer_0029",
+    "name": "Share frer recover action across two ingress filters (refcount check)",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "ip link del frer_a 2>/dev/null || true",
+      "ip link del frer_b 2>/dev/null || true",
+      "ip link add frer_a type dummy",
+      "ip link add frer_b type dummy",
+      "ip link set frer_a up",
+      "ip link set frer_b up",
+      "$TC qdisc add dev frer_a clsact",
+      "$TC qdisc add dev frer_b clsact",
+      "$TC filter add dev frer_a ingress protocol all flower skip_hw action frer recover alg vector history-length 16 tag-pop index 10"
+    ],
+    "cmdUnderTest": "$TC filter add dev frer_b ingress protocol all flower skip_hw action frer recover index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC -s actions show action frer index 10",
+    "matchPattern": "ref [2-9][0-9]*",
+    "matchCount": "1",
+    "teardown": [
+      "$TC qdisc del dev frer_a clsact",
+      "$TC qdisc del dev frer_b clsact",
+      "$TC actions flush action frer",
+      "ip link del frer_a",
+      "ip link del frer_b"
+    ]
+  },
+  {
+    "id": "frer_0030",
+    "name": "frer push action refcount increments when bound to filter",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "ip link del frer_dummy 2>/dev/null || true",
+      "ip link add frer_dummy type dummy",
+      "ip link set frer_dummy up",
+      "$TC qdisc add dev frer_dummy clsact",
+      "$TC actions add action frer push index 1"
+    ],
+    "cmdUnderTest": "$TC filter add dev frer_dummy egress protocol ip flower skip_hw action frer push index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC -s actions show action frer index 1",
+    "matchPattern": "ref [2-9][0-9]*",
+    "matchCount": "1",
+    "teardown": [
+      "$TC qdisc del dev frer_dummy clsact",
+      "$TC actions flush action frer",
+      "ip link del frer_dummy"
+    ]
+  },
+  {
+    "id": "frer_0031",
+    "name": "frer push output shows not_in_hw flag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer push index 1"
+    ],
+    "cmdUnderTest": "$TC actions show action frer index 1",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 1",
+    "matchPattern": "not_in_hw",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  },
+  {
+    "id": "frer_0032",
+    "name": "frer recover output shows not_in_hw flag",
+    "category": [
+      "actions",
+      "frer"
+    ],
+    "setup": [
+      [
+        "modprobe act_frer",
+        0,
+        1
+      ],
+      "$TC actions add action frer recover index 10"
+    ],
+    "cmdUnderTest": "$TC actions show action frer index 10",
+    "expExitCode": "0",
+    "verifyCmd": "$TC actions show action frer index 10",
+    "matchPattern": "not_in_hw",
+    "matchCount": "1",
+    "teardown": [
+      "$TC actions flush action frer"
+    ]
+  }
+]
