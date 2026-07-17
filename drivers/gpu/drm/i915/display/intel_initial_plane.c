@@ -43,9 +43,9 @@ void intel_initial_plane_vblank_wait(struct intel_crtc *crtc)
 			 crtc->base.base.id, crtc->base.name);
 }
 
-static const struct intel_plane_state *
-intel_reuse_initial_plane_obj(struct intel_crtc *this,
-			      const struct intel_initial_plane_configs *all_plane_configs)
+static struct drm_framebuffer *
+intel_reuse_initial_plane_fb(struct intel_crtc *this,
+			     const struct intel_initial_plane_configs *all_plane_configs)
 {
 	struct intel_display *display = to_intel_display(this);
 	struct intel_crtc *crtc;
@@ -66,7 +66,7 @@ intel_reuse_initial_plane_obj(struct intel_crtc *this,
 
 		if (all_plane_configs->config[this->pipe].base ==
 		    all_plane_configs->config[crtc->pipe].base)
-			return plane_state;
+			return plane_state->hw.fb;
 	}
 
 	return NULL;
@@ -135,13 +135,9 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 	if (intel_alloc_initial_plane_obj(display, plane_config)) {
 		fb = plane_config->fb;
 	} else {
-		const struct intel_plane_state *other_plane_state;
-
-		other_plane_state = intel_reuse_initial_plane_obj(crtc, all_plane_configs);
-		if (!other_plane_state)
+		fb = intel_reuse_initial_plane_fb(crtc, all_plane_configs);
+		if (!fb)
 			goto nofb;
-
-		fb = other_plane_state->hw.fb;
 	}
 
 	plane_state->uapi.rotation = plane_config->rotation;
