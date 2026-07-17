@@ -198,6 +198,8 @@ static void plane_config_fini(struct intel_display *display,
 			drm_framebuffer_put(fb);
 		else
 			kfree(fb);
+
+		plane_config->fb = NULL;
 	}
 
 	display->parent->initial_plane->config_fini(plane_config);
