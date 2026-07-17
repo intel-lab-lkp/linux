@@ -6699,6 +6699,7 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	union vmx_exit_reason exit_reason = vmx_get_exit_reason(vcpu);
 	u32 vectoring_info = vmx->idt_vectoring_info;
 	u16 exit_handler_index;
+	bool failed_nested_vmentry = false;
 
 	/*
 	 * Flush logged GPAs PML buffer, this will make dirty_bitmap more
@@ -6715,13 +6716,29 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		return 0;
 
 	/*
-	 * KVM should never reach this point with a pending nested VM-Enter.
-	 * More specifically, short-circuiting VM-Entry to emulate L2 due to
-	 * invalid guest state should never happen as that means KVM knowingly
-	 * allowed a nested VM-Enter with an invalid vmcs12.  More below.
+	 * vmx_vcpu_run() may synthesize EXIT_REASON_INVALID_STATE with the
+	 * failed VM-Entry bit set before attempting hardware VM-Enter, and thus
+	 * return before the normal post-run path clears nested_run_pending. Treat
+	 * that case as completion of the pending nested VM-Enter and reflect the
+	 * failed VM-Entry to L1.
+	 *
+	 * For all other exits, KVM should never reach this point with a trusted
+	 * pending nested VM-Enter. If userspace gained control while VM-Enter was
+	 * pending, the pending state is marked untrusted because userspace may
+	 * have modified vCPU state and induced an architecturally impossible
+	 * VM-Exit.
 	 */
-	if (KVM_BUG_ON(vcpu->arch.nested_run_pending, vcpu->kvm))
-		return -EIO;
+	if (unlikely(vcpu->arch.nested_run_pending)) {
+		if (exit_reason.basic == EXIT_REASON_INVALID_STATE &&
+		    exit_reason.failed_vmentry) {
+			failed_nested_vmentry = true;
+		} else if (KVM_BUG_ON(vcpu->arch.nested_run_pending ==
+				      KVM_NESTED_RUN_PENDING, vcpu->kvm)) {
+			return -EIO;
+		}
+
+		vcpu->arch.nested_run_pending = 0;
+	}
 
 	if (is_guest_mode(vcpu)) {
 		/*
@@ -6755,7 +6772,7 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		 * the least awful solution for the userspace case without
 		 * risking false positives.
 		 */
-		if (vmx->vt.emulation_required) {
+		if (vmx->vt.emulation_required && !failed_nested_vmentry) {
 			nested_vmx_vmexit(vcpu, EXIT_REASON_TRIPLE_FAULT, 0, 0);
 			return 1;
 		}
