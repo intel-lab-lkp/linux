@@ -34,42 +34,37 @@ static bool cxl_error_is_native(struct pci_dev *dev)
 	return (pcie_ports_native || host->native_aer);
 }
 
+struct cxl_rch_error_ctx {
+	struct aer_err_info *info;
+	bool enqueued;
+};
+
 static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 {
-	struct aer_err_info *info = (struct aer_err_info *)data;
-	const struct pci_error_handlers *err_handler;
+	struct cxl_rch_error_ctx *ctx = data;
 
 	if (!is_cxl_mem_dev(dev) || !cxl_error_is_native(dev))
 		return 0;
 
-	guard(device)(&dev->dev);
-
-	err_handler = dev->driver ? dev->driver->err_handler : NULL;
-	if (!err_handler)
-		return 0;
-
-	if (info->severity == AER_CORRECTABLE) {
-		if (err_handler->cor_error_detected)
-			err_handler->cor_error_detected(dev);
-	} else if (err_handler->error_detected) {
-		if (info->severity == AER_NONFATAL)
-			err_handler->error_detected(dev, pci_channel_io_normal);
-		else if (info->severity == AER_FATAL)
-			err_handler->error_detected(dev, pci_channel_io_frozen);
-	}
+	if (cxl_forward_error(dev, ctx->info))
+		ctx->enqueued = true;
 	return 0;
 }
 
-void cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info)
+bool cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 {
+	struct cxl_rch_error_ctx ctx = { .info = info };
+
 	/*
-	 * Internal errors of an RCEC indicate an AER error in an
-	 * RCH's downstream port. Check and handle them in the CXL.mem
-	 * device driver.
+	 * An RCEC AER internal error indicates an error in an
+	 * associated RCH Downstream Port or RC_END device or both.
+	 * Forward to the cxl_core module for handling.
 	 */
 	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC &&
 	    is_aer_internal_error(info))
-		pcie_walk_rcec(dev, cxl_rch_handle_error_iter, info);
+		pcie_walk_rcec(dev, cxl_rch_handle_error_iter, &ctx);
+
+	return ctx.enqueued;
 }
 
 static int handles_cxl_error_iter(struct pci_dev *dev, void *data)

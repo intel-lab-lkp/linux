@@ -1185,9 +1185,7 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
-	bool cxl_pending = false;
-
-	cxl_rch_handle_error(dev, info);
+	bool cxl_pending = cxl_rch_handle_error(dev, info);
 
 	if (is_cxl_error(dev, info))
 		cxl_pending |= cxl_forward_error(dev, info);

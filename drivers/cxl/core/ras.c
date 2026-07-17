@@ -218,7 +218,8 @@ void devm_cxl_port_ras_setup(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
 
-static void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
+
+void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
 {
 	if (!port)
 		return NULL;
@@ -324,37 +325,7 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 	return true;
 }
 
-void cxl_cor_error_detected(struct pci_dev *pdev)
-{
-	guard(device)(&pdev->dev);
-	if (!pdev->dev.driver)
-		return;
 
-	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_uport(&pdev->dev);
-	if (!port)
-		return;
-
-	if (is_cxl_restricted(pdev)) {
-		struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-		struct cxl_memdev *cxlmd = cxlds->cxlmd;
-
-		scoped_guard(device, &cxlmd->dev) {
-			cxl_handle_rdport_errors(cxlds);
-		}
-	}
-
-	scoped_guard(device, &port->dev) {
-		if (!port->dev.driver) {
-			dev_warn(&pdev->dev,
-				 "%s: port disabled, abort error handling\n",
-				 dev_name(&port->dev));
-			return;
-		}
-
-		cxl_handle_cor_ras(port->uport_dev, to_ras_base(port, NULL));
-	}
-}
-EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, "CXL");
 
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 				    pci_channel_state_t state)
@@ -365,14 +336,6 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	if (!port)
 		return PCI_ERS_RESULT_DISCONNECT;
 
-	if (is_cxl_restricted(pdev)) {
-		struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-		struct cxl_memdev *cxlmd = cxlds->cxlmd;
-
-		scoped_guard(device, &cxlmd->dev) {
-			cxl_handle_rdport_errors(cxlds);
-		}
-	}
 
 	scoped_guard(device, &port->dev) {
 		if (!port->dev.driver) {
@@ -429,6 +392,15 @@ static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
 
 static void __cxl_proto_err_work_fn(struct cxl_proto_err_work_data *wd)
 {
+	/*
+	 * For RC_END (RCD) devices, handle RCH Downstream Port errors
+	 * first.  cxl_handle_rdport_errors() does its own port lookup
+	 * and locking, keeping the Downstream Port lock separate from the
+	 * Endpoint Port lock taken below.
+	 */
+	if (is_cxl_restricted(wd->pdev))
+		cxl_handle_rdport_errors(wd->pdev);
+
 	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_dev(&wd->pdev->dev, NULL);
 	if (!port) {
 		dev_err_ratelimited(&wd->pdev->dev,
