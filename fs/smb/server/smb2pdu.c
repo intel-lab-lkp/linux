@@ -2655,6 +2655,27 @@ static int ksmbd_map_ea_name_to_xattr(const char *ea_name,
 	return XATTR_USER_PREFIX_LEN + ea_name_len;
 }
 
+static bool ksmbd_is_visible_ea_name(const char *name, const char **ea_name,
+				     size_t *ea_name_len)
+{
+	size_t name_len = strlen(name);
+
+	if (strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN))
+		return false;
+
+	*ea_name = name + XATTR_USER_PREFIX_LEN;
+	*ea_name_len = name_len - XATTR_USER_PREFIX_LEN;
+
+	if (!strncmp(*ea_name, STREAM_PREFIX, STREAM_PREFIX_LEN))
+		return false;
+
+	if (!strncmp(*ea_name, DOS_ATTRIBUTE_PREFIX,
+		     DOS_ATTRIBUTE_PREFIX_LEN))
+		return false;
+
+	return true;
+}
+
 /**
  * smb2_set_ea() - handler for setting extended attributes using set
  *		info command
@@ -5203,35 +5224,24 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 	idx = 0;
 
 	while (idx < xattr_list_len) {
+		const char *ea_name;
+		size_t visible_name_len;
+
 		name = xattr_list + idx;
 		name_len = strlen(name);
 
 		ksmbd_debug(SMB, "%s, len %d\n", name, name_len);
 		idx += name_len + 1;
 
-		/*
-		 * CIFS does not support EA other than user.* namespace,
-		 * still keep the framework generic, to list other attrs
-		 * in future.
-		 */
-		if (strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN))
+		if (!ksmbd_is_visible_ea_name(name, &ea_name,
+					      &visible_name_len))
 			continue;
 
-		if (!strncmp(&name[XATTR_USER_PREFIX_LEN], STREAM_PREFIX,
-			     STREAM_PREFIX_LEN))
-			continue;
+		name_len = visible_name_len;
 
 		if (req->InputBufferLength &&
-		    strncmp(&name[XATTR_USER_PREFIX_LEN], ea_req->name,
-			    ea_req->EaNameLength))
+		    strncmp(ea_name, ea_req->name, ea_req->EaNameLength))
 			continue;
-
-		if (!strncmp(&name[XATTR_USER_PREFIX_LEN],
-			     DOS_ATTRIBUTE_PREFIX, DOS_ATTRIBUTE_PREFIX_LEN))
-			continue;
-
-		if (!strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN))
-			name_len -= XATTR_USER_PREFIX_LEN;
 
 		ptr = eainfo->name + name_len + 1;
 		buf_free_len -= (offsetof(struct smb2_ea_info, name) +
@@ -5257,12 +5267,7 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 		ptr += value_len;
 		eainfo->Flags = 0;
 		eainfo->EaNameLength = name_len;
-
-		if (!strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN))
-			memcpy(eainfo->name, &name[XATTR_USER_PREFIX_LEN],
-			       name_len);
-		else
-			memcpy(eainfo->name, name, name_len);
+		memcpy(eainfo->name, ea_name, name_len);
 
 		eainfo->name[name_len] = '\0';
 		eainfo->EaValueLength = cpu_to_le16(value_len);
