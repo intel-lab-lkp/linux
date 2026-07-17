@@ -297,8 +297,11 @@ static void setup_tlb_handler(int cpu)
 			return;
 
 		page = alloc_pages_node(cpu_to_node(cpu), GFP_ATOMIC, get_order(vec_sz));
-		if (!page)
+		if (!page) {
+			pr_warn("CPU%d: TLB vector allocation failed; "
+				"using shared vectors\n", cpu);
 			return;
+		}
 
 		addr = page_address(page);
 		pcpu_handlers[cpu] = (unsigned long)addr;
