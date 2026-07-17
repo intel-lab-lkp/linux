@@ -680,6 +680,27 @@
 	};
 
 	/omit-if-no-ref/
+	ssp0_2_cfg: ssp0-2-cfg {
+		ssp0-0-pins {
+			pinmux = <K3_PADCONF(104, 1)>,  /* ssp0 tx */
+				 <K3_PADCONF(105, 1)>,  /* ssp0 rx */
+				 <K3_PADCONF(106, 1)>;  /* ssp0 clk */
+
+			bias-disable;
+			drive-strength = <25>;
+			power-source = <1800>;
+		};
+
+		ssp0-1-pins {
+			pinmux = <K3_PADCONF(107, 1)>;  /* ssp0 frm */
+
+			bias-pull-up = <0>;
+			drive-strength = <25>;
+			power-source = <1800>;
+		};
+	};
+
+	/omit-if-no-ref/
 	uart0_0_cfg: uart0-0-cfg {
 		uart0-0-pins {
 			pinmux = <K3_PADCONF(149, 2)>,	/* uart0 tx */

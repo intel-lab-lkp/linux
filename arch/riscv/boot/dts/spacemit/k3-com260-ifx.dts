@@ -11,11 +11,22 @@
 	compatible = "spacemit,k3-com260-ifx", "spacemit,k3-com260", "spacemit,k3";
 
 	aliases {
-		serial0 = &uart0;
 		ethernet0 = &eth1;
+		serial0 = &uart0;
+		spi0 = &spi0;
 	};
 
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
+};
+
+&pdma {
+	status = "okay";
+};
+
+&spi0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&ssp0_2_cfg>;
+	status = "okay";
 };
