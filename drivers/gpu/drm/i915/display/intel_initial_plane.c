@@ -140,7 +140,11 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 	struct intel_initial_plane_config *plane_config = &all_plane_configs->config[crtc->pipe];
 	struct intel_plane *plane = to_intel_plane(crtc->base.primary);
 	struct intel_plane_state *plane_state = to_intel_plane_state(plane->base.state);
+	struct intel_fb_pin_params pin_params = {};
 	struct drm_framebuffer *fb;
+	struct i915_vma *ggtt_vma = NULL;
+	int fence_id = -1;
+	u32 offset = 0;
 	int ret;
 
 	/*
@@ -160,9 +164,23 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 	intel_fb_fill_view(to_intel_framebuffer(fb),
 			   plane_state->uapi.rotation, &plane_state->view);
 
-	ret = display->parent->initial_plane->setup(plane->base.state, plane_config, fb);
+	/* TODO just use intel_plane_pin_fb() */
+	pin_params.view = &plane_state->view.gtt;
+	pin_params.needs_fence = intel_plane_needs_fence(display);
+
+	ret = intel_parent_fb_pin_ggtt_pin(display,
+					   intel_fb_bo(fb), &pin_params,
+					   &ggtt_vma, &offset,
+					   intel_plane_needs_fence(display) ? &fence_id : NULL);
 	if (ret)
 		goto nofb;
+
+	if (display->parent->initial_plane->setup)
+		display->parent->initial_plane->setup(display->drm, fb->modifier);
+
+	plane_state->ggtt_vma = ggtt_vma;
+	plane_state->surf = offset;
+	plane_state->fence_id = fence_id;
 
 	plane_state->uapi.src_x = 0;
 	plane_state->uapi.src_y = 0;

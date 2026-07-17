@@ -219,32 +219,12 @@ i915_free_initial_plane_obj(struct drm_gem_object *obj)
 	drm_gem_object_put(obj);
 }
 
-static int
-i915_initial_plane_setup(struct drm_plane_state *_plane_state,
-			 struct intel_initial_plane_config *plane_config,
-			 struct drm_framebuffer *fb)
+static void i915_initial_plane_setup(struct drm_device *drm, u64 modifier)
 {
-	struct intel_plane_state *plane_state = to_intel_plane_state(_plane_state);
-	struct drm_i915_private *dev_priv = to_i915(_plane_state->plane->dev);
-	struct drm_gem_object *obj = intel_fb_bo(fb);
-	struct i915_vma *vma;
+	struct drm_i915_private *dev_priv = to_i915(drm);
 
-	vma = i915_vma_instance(to_intel_bo(obj), &to_gt(dev_priv)->ggtt->vm, NULL);
-	if (IS_ERR(vma))
-		return PTR_ERR(vma);
-
-	__i915_vma_pin(vma);
-	plane_state->ggtt_vma = i915_vma_get(vma);
-	if (intel_plane_uses_fence(plane_state) &&
-	    i915_vma_pin_fence(vma) == 0 && vma->fence)
-		plane_state->fence_id = vma->fence->id;
-
-	plane_state->surf = i915_ggtt_offset(plane_state->ggtt_vma);
-
-	if (fb->modifier != DRM_FORMAT_MOD_LINEAR)
+	if (modifier != DRM_FORMAT_MOD_LINEAR)
 		dev_priv->preserve_bios_swizzle = true;
-
-	return 0;
 }
 
 const struct intel_display_initial_plane_interface i915_display_initial_plane_interface = {

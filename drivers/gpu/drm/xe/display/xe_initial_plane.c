@@ -130,32 +130,7 @@ xe_free_initial_plane_obj(struct drm_gem_object *obj)
 	xe_bo_unpin_map_no_vm(gem_to_xe_bo(obj));
 }
 
-static int
-xe_initial_plane_setup(struct drm_plane_state *_plane_state,
-		       struct intel_initial_plane_config *plane_config,
-		       struct drm_framebuffer *fb)
-{
-	struct intel_plane_state *plane_state = to_intel_plane_state(_plane_state);
-	struct i915_vma *vma;
-	struct intel_fb_pin_params pin_params = {
-		.view = &plane_state->view.gtt,
-	};
-	u32 offset;
-	int ret;
-
-	ret = xe_fb_pin_ggtt_pin(intel_fb_bo(fb), &pin_params, &vma, &offset, NULL);
-	if (ret)
-		return ret;
-
-	plane_state->ggtt_vma = vma;
-
-	plane_state->surf = offset;
-
-	return 0;
-}
-
 const struct intel_display_initial_plane_interface xe_display_initial_plane_interface = {
 	.alloc_obj = xe_alloc_initial_plane_obj,
 	.free_obj = xe_free_initial_plane_obj,
-	.setup = xe_initial_plane_setup,
 };

@@ -10,10 +10,8 @@ enum vlv_iosf_sb_unit;
 struct dma_fence;
 struct drm_device;
 struct drm_file;
-struct drm_framebuffer;
 struct drm_gem_object;
 struct drm_mode_fb_cmd2;
-struct drm_plane_state;
 struct drm_scanout_buffer;
 struct fb_info;
 struct i915_gtt_view;
@@ -127,8 +125,7 @@ struct intel_display_hdcp_interface {
 struct intel_display_initial_plane_interface {
 	struct drm_gem_object *(*alloc_obj)(struct drm_device *drm, struct intel_initial_plane_config *plane_config);
 	void (*free_obj)(struct drm_gem_object *obj);
-	int (*setup)(struct drm_plane_state *plane_state, struct intel_initial_plane_config *plane_config,
-		     struct drm_framebuffer *fb);
+	void (*setup)(struct drm_device *drm, u64 modifier);
 };
 
 struct intel_display_irq_interface {
