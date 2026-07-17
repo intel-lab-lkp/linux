@@ -2643,9 +2643,35 @@ out:
 	return err;
 }
 
-static int ksmbd_map_ea_name_to_xattr(const char *ea_name,
-				      size_t ea_name_len, char *attr_name)
+static bool ksmbd_is_security_capability_ea_name(const char *name,
+						 size_t name_len)
 {
+	return name_len == sizeof(XATTR_NAME_CAPS) - 1 &&
+	       !strncmp(name, XATTR_NAME_CAPS, name_len);
+}
+
+static bool ksmbd_is_posix_ea_name(const char *name, size_t name_len)
+{
+	if (ksmbd_is_security_capability_ea_name(name, name_len))
+		return true;
+
+	return false;
+}
+
+static int ksmbd_map_ea_name_to_xattr(bool posix_extensions,
+				      const char *ea_name, size_t ea_name_len,
+				      char *attr_name)
+{
+	if (posix_extensions &&
+	    ksmbd_is_posix_ea_name(ea_name, ea_name_len)) {
+		if (ea_name_len > XATTR_NAME_MAX)
+			return -EINVAL;
+
+		memcpy(attr_name, ea_name, ea_name_len);
+		attr_name[ea_name_len] = '\0';
+		return ea_name_len;
+	}
+
 	if (ea_name_len > XATTR_NAME_MAX - XATTR_USER_PREFIX_LEN)
 		return -EINVAL;
 
@@ -2655,24 +2681,30 @@ static int ksmbd_map_ea_name_to_xattr(const char *ea_name,
 	return XATTR_USER_PREFIX_LEN + ea_name_len;
 }
 
-static bool ksmbd_is_visible_ea_name(const char *name, const char **ea_name,
-				     size_t *ea_name_len)
+static bool ksmbd_is_visible_ea_name(bool posix_extensions, const char *name,
+				     const char **ea_name, size_t *ea_name_len)
 {
 	size_t name_len = strlen(name);
 
-	if (strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN))
+	if (!strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN)) {
+		*ea_name = name + XATTR_USER_PREFIX_LEN;
+		*ea_name_len = name_len - XATTR_USER_PREFIX_LEN;
+
+		if (!strncmp(*ea_name, STREAM_PREFIX, STREAM_PREFIX_LEN))
+			return false;
+
+		if (!strncmp(*ea_name, DOS_ATTRIBUTE_PREFIX,
+			     DOS_ATTRIBUTE_PREFIX_LEN))
+			return false;
+
+		return true;
+	}
+
+	if (!posix_extensions || !ksmbd_is_posix_ea_name(name, name_len))
 		return false;
 
-	*ea_name = name + XATTR_USER_PREFIX_LEN;
-	*ea_name_len = name_len - XATTR_USER_PREFIX_LEN;
-
-	if (!strncmp(*ea_name, STREAM_PREFIX, STREAM_PREFIX_LEN))
-		return false;
-
-	if (!strncmp(*ea_name, DOS_ATTRIBUTE_PREFIX,
-		     DOS_ATTRIBUTE_PREFIX_LEN))
-		return false;
-
+	*ea_name = name;
+	*ea_name_len = name_len;
 	return true;
 }
 
@@ -2683,11 +2715,13 @@ static bool ksmbd_is_visible_ea_name(const char *name, const char **ea_name,
  * @buf_len:	set info command buffer length
  * @path:	dentry path for get ea
  * @get_write:	get write access to a mount
+ * @posix_extensions:	client negotiated SMB3 POSIX extensions
  *
  * Return:	0 on success, otherwise error
  */
 static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
-		       const struct path *path, bool get_write)
+		       const struct path *path, bool get_write,
+		       bool posix_extensions)
 {
 	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 	char *attr_name = NULL, *value;
@@ -2712,7 +2746,8 @@ static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 			    le16_to_cpu(eabuf->EaValueLength),
 			    le32_to_cpu(eabuf->NextEntryOffset));
 
-		attr_name_len = ksmbd_map_ea_name_to_xattr(eabuf->name,
+		attr_name_len = ksmbd_map_ea_name_to_xattr(posix_extensions,
+							   eabuf->name,
 							   eabuf->EaNameLength,
 							   attr_name);
 		if (attr_name_len < 0) {
@@ -3694,7 +3729,8 @@ int smb2_open(struct ksmbd_work *work)
 
 			rc = smb2_set_ea(&ea_buf->ea,
 					 le32_to_cpu(ea_buf->ccontext.DataLength),
-					 &path, false);
+					 &path, false,
+					 work->tcon->posix_extensions);
 			if (rc == -EOPNOTSUPP)
 				rc = 0;
 			else if (rc)
@@ -5180,7 +5216,7 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 	}
 
 	path = &fp->filp->f_path;
-	/* single EA entry is requested with given user.* name */
+	/* single EA entry is requested with a client-visible EA name */
 	if (req->InputBufferLength) {
 		if (le32_to_cpu(req->InputBufferLength) <=
 		    sizeof(struct smb2_ea_info_req))
@@ -5233,14 +5269,16 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 		ksmbd_debug(SMB, "%s, len %d\n", name, name_len);
 		idx += name_len + 1;
 
-		if (!ksmbd_is_visible_ea_name(name, &ea_name,
+		if (!ksmbd_is_visible_ea_name(work->tcon->posix_extensions, name,
+					      &ea_name,
 					      &visible_name_len))
 			continue;
 
 		name_len = visible_name_len;
 
 		if (req->InputBufferLength &&
-		    strncmp(ea_name, ea_req->name, ea_req->EaNameLength))
+		    (name_len != ea_req->EaNameLength ||
+		     strncmp(ea_name, ea_req->name, ea_req->EaNameLength)))
 			continue;
 
 		ptr = eainfo->name + name_len + 1;
@@ -7061,7 +7099,8 @@ static int smb2_set_info_file(struct ksmbd_work *work, struct ksmbd_file *fp,
 			return -EMSGSIZE;
 
 		return smb2_set_ea((struct smb2_ea_info *)buffer,
-				   buf_len, &fp->filp->f_path, true);
+				   buf_len, &fp->filp->f_path, true,
+				   work->tcon->posix_extensions);
 	}
 	case FILE_POSITION_INFORMATION:
 	{
