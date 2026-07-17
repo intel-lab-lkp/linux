@@ -2123,7 +2123,7 @@ static int sctp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		goto out;
 	}
 
-	skb = sctp_skb_recv_datagram(sk, flags, &err);
+	skb = sctp_skb_recv_datagram(sk, flags);
 	if (!skb)
 		goto out;
 
@@ -9082,7 +9082,7 @@ out:
  * Note: This is pretty much the same routine as in core/datagram.c
  * with a few changes to make lksctp work.
  */
-struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags, int *err)
+struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags)
 {
 	int error;
 	struct sk_buff *skb;
@@ -9120,17 +9120,13 @@ struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags, int *err)
 		if (sk->sk_shutdown & RCV_SHUTDOWN)
 			break;
 
-
 		/* User doesn't want to wait.  */
 		error = -EAGAIN;
 		if (!timeo)
 			goto no_packet;
-	} while (sctp_wait_for_packet(sk, err, &timeo) == 0);
-
-	return NULL;
+	} while (sctp_wait_for_packet(sk, &error, &timeo) == 0);
 
 no_packet:
-	*err = error;
 	return NULL;
 }
 
