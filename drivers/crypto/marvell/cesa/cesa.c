@@ -410,7 +410,8 @@ static void mv_cesa_release_sram(void *data)
 	if (engine->pool)
 		gen_pool_free(engine->pool, (unsigned long)engine->sram_pool,
 			      cesa->sram_size);
-	else
+	else if (engine->sram &&
+		 !dma_mapping_error(cesa->dev, engine->sram_dma))
 		dma_unmap_resource(cesa->dev, engine->sram_dma,
 				   cesa->sram_size, DMA_BIDIRECTIONAL, 0);
 }
