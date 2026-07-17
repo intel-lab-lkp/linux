@@ -532,6 +532,21 @@ void input_enable_softrepeat(struct input_dev *dev, int delay, int period);
 
 bool input_device_enabled(struct input_dev *dev);
 
+/**
+ * input_sanitize_phys - replace invalid characters in a phys string
+ * @phys: the phys path to sanitize (modified in place)
+ *
+ * Replaces any control characters and non-ASCII characters with '?'.
+ **/
+static inline void input_sanitize_phys(char *phys)
+{
+	char *p;
+
+	for (p = phys; *p; p++)
+		if (*p < 0x20 || *p > 0x7e)
+			*p = '?';
+}
+
 extern const struct class input_class;
 
 /**

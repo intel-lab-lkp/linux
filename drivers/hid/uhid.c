@@ -518,6 +518,7 @@ static int uhid_dev_create2(struct uhid_device *uhid,
 	strscpy(hid->name, ev->u.create2.name, sizeof(hid->name));
 	BUILD_BUG_ON(sizeof(hid->phys) != sizeof(ev->u.create2.phys));
 	strscpy(hid->phys, ev->u.create2.phys, sizeof(hid->phys));
+	input_sanitize_phys(hid->phys);
 	BUILD_BUG_ON(sizeof(hid->uniq) != sizeof(ev->u.create2.uniq));
 	strscpy(hid->uniq, ev->u.create2.uniq, sizeof(hid->uniq));
 

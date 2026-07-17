@@ -1003,6 +1003,7 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 		}
 
 		kfree(udev->dev->phys);
+		input_sanitize_phys(phys);
 		udev->dev->phys = phys;
 		goto out;
 
