@@ -2070,6 +2070,11 @@ xlog_recover_commit_trans(
 
 		switch (pass) {
 		case XLOG_RECOVER_PASS1:
+			if (item->ri_ops->verify) {
+				error = item->ri_ops->verify(log, item);
+				if (error)
+					break;
+			}
 			if (item->ri_ops->commit_pass1)
 				error = item->ri_ops->commit_pass1(log, item);
 			break;

@@ -33,6 +33,9 @@ struct xlog_recover_item_ops {
 	 */
 	enum xlog_recover_reorder (*reorder)(struct xlog_recover_item *item);
 
+	/* Validate the item's log structures in pass1, if provided. */
+	int (*verify)(struct xlog *log, struct xlog_recover_item *item);
+
 	/* Start readahead for pass2, if provided. */
 	void (*ra_pass2)(struct xlog *log, struct xlog_recover_item *item);
 
