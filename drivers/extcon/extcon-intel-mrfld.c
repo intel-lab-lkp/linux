@@ -224,7 +224,7 @@ static int mrfld_extcon_probe(struct platform_device *pdev)
 					IRQF_ONESHOT | IRQF_SHARED, pdev->name,
 					data);
 	if (ret)
-		return dev_err_probe(dev, ret, "can't register IRQ handler\n");
+		return ret;
 
 	ret = regmap_read(regmap, BCOVE_ID, &id);
 	if (ret)
