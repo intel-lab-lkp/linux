@@ -287,6 +287,8 @@ static bool bound_by_mac(struct netconsole_target *nt)
 
 static void netcons_release_dev(struct netconsole_target *nt)
 {
+	if (!nt->np.dev)
+		return;
 	do_netpoll_cleanup(&nt->np);
 	if (bound_by_mac(nt))
 		memset(&nt->np.dev_name, 0, IFNAMSIZ);
@@ -1490,10 +1492,12 @@ static void drop_netconsole_target(struct config_group *group,
 	 */
 	needs_cleanup = nt->state == STATE_ENABLED ||
 			nt->state == STATE_DEACTIVATED;
-	/* Disable deactivated target to prevent races between resume attempt
-	 * and target removal.
+	/* Disable targets that still own netpoll state before removal. This
+	 * prevents races between open configfs writers, resume attempts, and
+	 * target removal from observing STATE_ENABLED after netpoll_cleanup()
+	 * has cleared nt->np.dev.
 	 */
-	if (nt->state == STATE_DEACTIVATED)
+	if (needs_cleanup)
 		nt->state = STATE_DISABLED;
 	list_del(&nt->list);
 	spin_unlock_irqrestore(&target_list_lock, flags);
