@@ -18,6 +18,13 @@ static const struct class pci_epc_class = {
 	.name = "pci_epc",
 };
 
+struct pci_epc_dma_chan {
+	struct pci_epc *epc;
+	u8 func_no;
+	u8 vfunc_no;
+	void *data;
+};
+
 static void devm_pci_epc_release(struct device *dev, void *res)
 {
 	struct pci_epc *epc = *(struct pci_epc **)res;
@@ -235,6 +242,104 @@ int pci_epc_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pci_epc_get_aux_resources);
+
+/**
+ * pci_epc_delegate_dma_chan() - delegate an EPC-owned DMA channel to the host
+ * @epc: EPC device
+ * @func_no: function number
+ * @vfunc_no: virtual function number
+ * @dir: DMA channel direction relative to the endpoint
+ * @hw_ch: hardware channel number
+ * @chan: output delegated-channel handle
+ *
+ * Some EPC backends integrate DMA channels that can be exposed to the host.
+ * This helper asks the backend to reserve the specified channel locally and
+ * place it in a state where the host driver may program it through the exposed
+ * register window.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the backend does not support DMA channel
+ * delegation, or another -errno on failure.
+ */
+int pci_epc_delegate_dma_chan(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			      enum pci_epc_aux_dma_dir dir, u16 hw_ch,
+			      struct pci_epc_dma_chan **chan)
+{
+	struct pci_epc_dma_chan *epc_chan;
+	void *data = NULL;
+	int ret;
+
+	if (!pci_epc_function_is_valid(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!chan)
+		return -EINVAL;
+	*chan = NULL;
+
+	if (dir != PCI_EPC_AUX_DMA_EP_TO_RC &&
+	    dir != PCI_EPC_AUX_DMA_RC_TO_EP)
+		return -EINVAL;
+
+	if (!epc->ops->delegate_dma_chan || !epc->ops->reclaim_dma_chan)
+		return -EOPNOTSUPP;
+
+	epc_chan = kzalloc_obj(*epc_chan, GFP_KERNEL);
+	if (!epc_chan)
+		return -ENOMEM;
+
+	mutex_lock(&epc->lock);
+	ret = epc->ops->delegate_dma_chan(epc, func_no, vfunc_no, dir, hw_ch,
+					  &data);
+	mutex_unlock(&epc->lock);
+	if (ret) {
+		kfree(epc_chan);
+		return ret;
+	}
+
+	epc_chan->epc = epc;
+	epc_chan->func_no = func_no;
+	epc_chan->vfunc_no = vfunc_no;
+	epc_chan->data = data;
+	*chan = epc_chan;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_epc_delegate_dma_chan);
+
+/**
+ * pci_epc_reclaim_dma_chan() - reclaim a delegated EPC-owned DMA channel
+ * @chan: delegated-channel handle returned by pci_epc_delegate_dma_chan()
+ * @quiesce: quiesce affected hardware before reclaiming the channel
+ *
+ * Reclaim a channel previously delegated to the host. Set @quiesce for channels
+ * that may have been exposed to host programming. Bind failure paths that are
+ * unwinding local reservations before exposure may leave it clear.
+ *
+ * Some providers share enable and interrupt controls among channels. The
+ * caller must retain every delegated member of that sharing group and prevent
+ * further peer programming before requesting reclaim.
+ *
+ * Reclaim is best-effort because it runs from teardown paths that cannot be
+ * aborted. The backend always consumes the delegation and reports any quiesce
+ * failure itself.
+ */
+void pci_epc_reclaim_dma_chan(struct pci_epc_dma_chan *chan, bool quiesce)
+{
+	struct pci_epc *epc;
+
+	if (!chan)
+		return;
+
+	epc = chan->epc;
+	if (epc && epc->ops && epc->ops->reclaim_dma_chan) {
+		mutex_lock(&epc->lock);
+		epc->ops->reclaim_dma_chan(epc, chan->func_no, chan->vfunc_no,
+					    chan->data, quiesce);
+		mutex_unlock(&epc->lock);
+	}
+
+	kfree(chan);
+}
+EXPORT_SYMBOL_GPL(pci_epc_reclaim_dma_chan);
 
 /**
  * pci_epc_stop() - stop the PCI link
