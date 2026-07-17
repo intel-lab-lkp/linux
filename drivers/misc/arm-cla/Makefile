@@ -7,6 +7,7 @@ arm-cla-y := \
 	cla-ops.o \
 	cla-regs.o \
 	cla-sched.o \
-	cla-topology.o
+	cla-topology.o \
+	cla-user.o
 
 obj-$(CONFIG_ARM_CLA) += arm-cla.o

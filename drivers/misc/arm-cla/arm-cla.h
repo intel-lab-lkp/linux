@@ -45,6 +45,12 @@ struct cla_call_on_cpu {
 	struct kthread_work switch_ctx;
 };
 
+struct cla_accel_desc {
+	u64 iidr;
+	u64 devarch;
+	u64 revidr;
+};
+
 /**
  * struct cla_dev - CLA device
  *
@@ -57,6 +63,8 @@ struct cla_call_on_cpu {
  * @pg_offset:		Mmap offset of this device.
  * @iassizes:		Combined regstate of all accels.
  * @domain:		The domain this CLA belongs to.
+ * @aidr:		CLA Architecture ID.
+ * @accel_descs:	Accelerator ID registers.
  *
  * Mutable, only accessed under @lock:
  * @lock:		Protects the following members.
@@ -74,6 +82,8 @@ struct cla_dev {
 	unsigned long pg_offset;
 	unsigned long iassizes;
 	struct cla_domain *domain;
+	u64 aidr;
+	struct cla_accel_desc accel_descs[CLA_NUM_ACC];
 
 	struct mutex lock;
 	bool broken;
@@ -279,5 +289,8 @@ int cla_mtc_setup(struct cla_dev *dev);
 int cla_mtc_clear(struct cla_dev *dev);
 int cla_mtc_install(struct cla_dev *dev, pgd_t *pgd, unsigned long asid);
 int cla_mtc_uninstall(struct cla_dev *dev);
+
+int cla_user_init(void);
+void cla_user_exit(void);
 
 #endif /* _ARM_CLA_H_ */

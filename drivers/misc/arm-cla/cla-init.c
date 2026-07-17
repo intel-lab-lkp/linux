@@ -80,6 +80,7 @@ static int cla_reset_pmu(struct cla_dev *dev, unsigned int accid)
  */
 static int cla_dev_setup_accel(struct cla_dev *dev, unsigned int accid)
 {
+	struct cla_accel_desc *desc = &dev->accel_descs[accid];
 	u64 status;
 	u64 iassize;
 	u64 acap;
@@ -121,6 +122,20 @@ static int cla_dev_setup_accel(struct cla_dev *dev, unsigned int accid)
 		cla_err(dev, "[%u] SROP not supported\n", accid);
 		return 1;
 	}
+
+	/*
+	 * Cache some standard accelerator registers that user space may query
+	 * via ioctl from a remote CPU.
+	 */
+	ret = cla_op_regread(dev, accid, CLA_REG_IIDR, 1, &desc->iidr);
+	if (ret)
+		return ret;
+	ret = cla_op_regread(dev, accid, CLA_REG_DEVARCH, 1, &desc->devarch);
+	if (ret)
+		return ret;
+	ret = cla_op_regread(dev, accid, CLA_REG_REVIDR, 1, &desc->revidr);
+	if (ret)
+		return ret;
 
 	ret = cla_op_regread(dev, accid, CLA_REG_IASSIZE, 1, &iassize);
 	if (ret)
@@ -233,6 +248,10 @@ static int cla_dev_setup(unsigned int cpu)
 
 	if (WARN_ON(smp_processor_id() != cpu || dev->cpu != cpu))
 		return -EINVAL;
+
+	dev->aidr = cla_reg_read(dev, CLA_REG_CLAAIDR);
+	if (dev->aidr != CLA_AAIDR_1_0)
+		return -EPROTONOSUPPORT;
 
 	/* Clear DATA and LRESP_DATANZ */
 	for (i = 0; i < CLA_NUM_DATA_REGS; i++)
@@ -453,8 +472,14 @@ static int __init cla_module_init(void)
 	}
 	cla_cpuhp_state = ret;
 
+	ret = cla_user_init();
+	if (ret)
+		goto err_cpuhp_remove;
+
 	return 0;
 
+err_cpuhp_remove:
+	cpuhp_remove_state(cla_cpuhp_state);
 err_driver_unregister:
 	platform_driver_unregister(&cla_driver);
 err_domains_free:
@@ -464,6 +489,7 @@ err_domains_free:
 
 static void __exit cla_module_exit(void)
 {
+	cla_user_exit();
 	cpuhp_remove_state(cla_cpuhp_state);
 	platform_driver_unregister(&cla_driver);
 	cla_domains_free();

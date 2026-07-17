@@ -63,6 +63,8 @@
 					 CLA_STATUS_EXCEPT | \
 					 CLA_STATUS_SRMODE)
 
+#define CLA_AAIDR_1_0			(1ULL << 8)
+
 /* Standard accelerator registers */
 #define CLA_REG_IIDR			0x0000
 #define CLA_REG_DEVARCH			0x0001
