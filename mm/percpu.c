@@ -3077,13 +3077,32 @@ int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 
 	/* warn if maximum distance is further than 75% of vmalloc space */
 	if (max_distance > VMALLOC_TOTAL * 3 / 4) {
-		pr_warn("max_distance=0x%lx too large for vmalloc space 0x%lx\n",
+		pr_warn("percpu: embed: max_distance=0x%lx too large for vmalloc space 0x%lx\n",
 				max_distance, VMALLOC_TOTAL);
 #ifdef CONFIG_NEED_PER_CPU_PAGE_FIRST_CHUNK
-		/* and fail if we have fallback */
-		rc = -EINVAL;
-		goto out_free_areas;
-#endif
+		/*
+		 * The embed allocator uses the linear map directly for the
+		 * first chunk -- physical addresses are accessible as virtual
+		 * addresses without vmalloc mapping. The 75% check was designed
+		 * for pcpu_get_vm_areas() (dynamic chunks) where vmalloc
+		 * congruency is required. On large NUMA systems, physical span
+		 * between nodes may exceed vmalloc bounds even though total
+		 * percpu size is tiny. Check total size, not physical span.
+		 */
+		{
+			unsigned long total_size = 0;
+			for (group = 0; group < ai->nr_groups; group++)
+				total_size += (unsigned long)ai->unit_size *
+					ai->groups[group].nr_units;
+			if (total_size > VMALLOC_TOTAL * 3 / 4) {
+				rc = -EINVAL;
+				goto out_free_areas;
+			}
+			pr_info("percpu: embed: span 0x%lx > vmalloc 75%%"
+				" but total 0x%lx fits -- linear map used\n",
+				max_distance, total_size);
+		}
+#endif /* CONFIG_NEED_PER_CPU_PAGE_FIRST_CHUNK */
 	}
 
 	/*
