@@ -1234,7 +1234,7 @@ static void switchtec_dma_release(struct dma_device *dma_dev)
 static int switchtec_dma_create(struct pci_dev *pdev)
 {
 	struct switchtec_dma_dev *swdma_dev;
-	int chan_cnt, nr_vecs, irq, rc;
+	int chan_cnt, nr_vecs, irq, rc, i;
 	struct dma_device *dma;
 	struct dma_chan *chan;
 
@@ -1316,6 +1316,11 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 
 err_chans_release_exit:
 	switchtec_dma_chans_release(pdev, swdma_dev);
+
+	for (i = 0; i < swdma_dev->chan_cnt; i++)
+		kfree(swdma_dev->swdma_chans[i]);
+
+	kfree(swdma_dev->swdma_chans);
 
 err_exit:
 	if (swdma_dev->chan_status_irq)
