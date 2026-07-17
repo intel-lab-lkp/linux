@@ -88,7 +88,8 @@ int io_fallocate_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_sync *sync = io_kiocb_to_cmd(req, struct io_sync);
 
-	if (sqe->buf_index || sqe->rw_flags || sqe->splice_fd_in)
+	if (sqe->buf_index || sqe->rw_flags || sqe->splice_fd_in ||
+	    sqe->addr3 || sqe->__pad2[0])
 		return -EINVAL;
 
 	sync->off = READ_ONCE(sqe->off);
