@@ -192,7 +192,6 @@ union cpuid_0x10_x_edx {
  * @bw_type		: Event configuration that represents the memory
  *			  transactions being tracked by the @cntr_id.
  * @bw_src		: Bandwidth source (RMID or CLOSID).
- * @reserved1		: Reserved.
  * @is_clos		: @bw_src field is a CLOSID (not an RMID).
  * @cntr_id		: Counter identifier.
  * @reserved		: Reserved.
@@ -210,16 +209,15 @@ union cpuid_0x10_x_edx {
  */
 union l3_qos_abmc_cfg {
 	struct {
-		unsigned long bw_type  :32,
-			      bw_src   :12,
-			      reserved1: 3,
-			      is_clos  : 1,
-			      cntr_id  : 5,
-			      reserved : 9,
-			      cntr_en  : 1,
-			      cfg_en   : 1;
+		u64	bw_type  :32,
+			bw_src   :15,
+			is_clos  : 1,
+			cntr_id  :12,
+			reserved : 2,
+			cntr_en  : 1,
+			cfg_en   : 1;
 	} split;
-	unsigned long full;
+	u64	full;
 };
 
 void rdt_ctrl_update(void *arg);
