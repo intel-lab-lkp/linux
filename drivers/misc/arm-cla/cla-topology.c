@@ -37,6 +37,8 @@ static struct cla_domain *cla_domain_alloc(struct cla_dev *dev, unsigned int id)
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
+	mutex_init(&domain->lock);
+
 	domain->id = id;
 	ret = xa_insert(&cla_domains, id, domain, GFP_KERNEL);
 	if (ret < 0)
@@ -50,8 +52,14 @@ static struct cla_domain *cla_domain_alloc(struct cla_dev *dev, unsigned int id)
 	}
 	domain->devs[0] = dev;
 
+	ret = cla_domain_sched_init(domain);
+	if (ret)
+		goto err_free_devs;
+
 	return domain;
 
+err_free_devs:
+	kfree(domain->devs);
 err_free_id:
 	xa_erase(&cla_domains, domain->id);
 err_free_domain:
@@ -155,6 +163,7 @@ err_free:
 
 static void cla_domain_free(struct cla_domain *domain)
 {
+	cla_domain_sched_exit(domain);
 	kfree(domain->devs);
 	xa_erase(&cla_domains, domain->id);
 	kfree(domain);

@@ -160,6 +160,7 @@ static void cla_dev_reinit(struct cla_dev *dev)
 		mutex_lock(&dev->lock);
 		dev->broken = true;
 		mutex_unlock(&dev->lock);
+		cla_domain_set_broken(dev->domain);
 		return;
 	}
 
@@ -169,6 +170,46 @@ static void cla_dev_reinit(struct cla_dev *dev)
 	for (i = 0; i < CLA_NUM_DATA_REGS; i++)
 		cla_reg_write(dev, CLA_REG_DATA(i), 0);
 	cla_reg_write(dev, CLA_REG_LRESP, 0);
+}
+
+static int cla_dev_worker_init(struct cla_dev *dev, int cpu)
+{
+	struct kthread_worker *worker;
+
+	worker = kthread_run_worker_on_cpu(cpu, 0, "cla-dev-worker/%u");
+	if (IS_ERR(worker))
+		return PTR_ERR(worker);
+
+	mutex_lock(&dev->lock);
+	WARN_ON(dev->worker);
+	dev->worker = worker;
+	mutex_unlock(&dev->lock);
+
+	return 0;
+}
+
+static void cla_dev_worker_destroy(struct cla_dev *dev)
+{
+	struct kthread_worker *worker;
+
+	/*
+	 * Mark the worker as NULL, which prevents any new work from being
+	 * queued to it. Then destroy it, which will flush any pending work.
+	 * worker_sem guarantees lifetime of worker when flushing work in other
+	 * paths. We must reinit the work so that work->worker is not dangling
+	 * after releasing worker_sem.
+	 */
+	mutex_lock(&dev->lock);
+	worker = dev->worker;
+	dev->worker = NULL;
+	mutex_unlock(&dev->lock);
+
+	if (worker) {
+		down_write(&dev->worker_sem);
+		kthread_destroy_worker(worker);
+		kthread_init_work(&dev->call.switch_ctx, cla_dev_switch_ctx);
+		up_write(&dev->worker_sem);
+	}
 }
 
 static int cla_dev_setup(unsigned int cpu)
@@ -227,6 +268,10 @@ static int cla_dev_setup(unsigned int cpu)
 			 dev->accelerators);
 	}
 
+	ret = cla_dev_worker_init(dev, cpu);
+	if (ret)
+		goto err;
+
 	return 0;
 err:
 	cla_dev_reinit(dev);
@@ -245,6 +290,7 @@ static int cla_dev_teardown(unsigned int cpu)
 	if (!dev)
 		return 0;
 
+	cla_dev_worker_destroy(dev);
 	cla_dev_reinit(dev);
 
 	return 0;
@@ -289,6 +335,8 @@ static struct cla_dev *cla_dev_alloc(struct device *parent, int cpu,
 	dev->dev = parent;
 
 	mutex_init(&dev->lock);
+	init_rwsem(&dev->worker_sem);
+	kthread_init_work(&dev->call.switch_ctx, cla_dev_switch_ctx);
 
 	/* Attempt to find device domain, or allocate a new one */
 	dev->domain = cla_dev_domain_get(dev);

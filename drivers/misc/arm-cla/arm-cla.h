@@ -7,9 +7,21 @@
 #ifndef _ARM_CLA_H_
 #define _ARM_CLA_H_
 
+#include <linux/atomic.h>
+#include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/kref.h>
+#include <linux/kthread.h>
+#include <linux/list.h>
+#include <linux/mm.h>
+#include <linux/mm_types.h>
+#include <linux/mutex.h>
+#include <linux/rhashtable-types.h>
+#include <linux/rwsem.h>
 #include <linux/types.h>
+#include <linux/wait.h>
+#include <linux/workqueue.h>
 
 #include "arm-cla-regs.h"
 
@@ -18,7 +30,20 @@
 #define CLA_NUM_DATA_REGS	8
 #define CLA_SRSTATE_LEN		8
 
+/* Quantum of CLA assignment */
+#define CLA_SLICE_MS		100
+
 struct cla_domain;
+
+struct cla_call_on_cpu {
+	int ret;
+	struct {
+		struct cla_ctx *prev_ctx;
+		struct cla_ctx *next_ctx;
+		unsigned int ctx_id;
+	} sched;
+	struct kthread_work switch_ctx;
+};
 
 /**
  * struct cla_dev - CLA device
@@ -36,6 +61,9 @@ struct cla_domain;
  * Mutable, only accessed under @lock:
  * @lock:		Protects the following members.
  * @broken:		Hardware failure.
+ * @worker:		CPU-bound worker to communicate with CLA.
+ * @worker_sem:		Serialize running @call against @worker destruction.
+ * @call:		Scheduling work.
  */
 struct cla_dev {
 	unsigned int cpu;
@@ -49,22 +77,50 @@ struct cla_dev {
 
 	struct mutex lock;
 	bool broken;
+	struct kthread_worker *worker;
+	struct rw_semaphore worker_sem;
+	struct cla_call_on_cpu call;
 };
 
 /**
  * struct cla_domain - Collection of cla_dev
+ *
+ * The whole domain is assigned to a single cla_ctx at a time.
  *
  * Immutable state:
  * @id:			Domain identifier, from FW or generated.
  * @pg_offset:		Mmap offset of the first device.
  * @nr_devs:		Number of devices in the domain.
  * @devs:		Devices.
+ *
+ * Mutable, only accessed under @lock:
+ * @lock:		Protects the following members.
+ * @ctxs:		All live contexts, keyed on mm_struct and file ptr.
+ * @queued_ctxs:	Queue of contexts waiting for assignment.
+ * @dying_ctxs:		Contexts waiting for reclaim.
+ * @worker:		Kthread worker to coordinate reassignment.
+ * @reassign:		Delayed work that switches contexts with time slicing.
+ * @reclaim:		Work to release and free contexts (after reassignment).
+ *
+ * Mutable, some reads outside the lock:
+ * @broken:		Hardware failure in any device in the domain.
+ * @assigned_ctx:	Context to which domain is currently assigned.
  */
 struct cla_domain {
 	unsigned int id;
 	unsigned long pg_offset;
 	unsigned int nr_devs;
 	struct cla_dev **devs;
+
+	struct mutex lock;
+	bool broken;
+	struct rhashtable ctxs;
+	struct list_head queued_ctxs;
+	struct list_head dying_ctxs;
+	struct cla_ctx *assigned_ctx;
+	struct kthread_worker *worker;
+	struct kthread_delayed_work reassign;
+	struct kthread_delayed_work reclaim;
 };
 
 /**
@@ -82,6 +138,46 @@ struct cla_regs {
 	bool accel_valid;
 	u64 srstate[CLA_NUM_ACC][CLA_SRSTATE_LEN];
 	u64 regstate[];
+};
+
+struct cla_ctx_key {
+	struct mm_struct *mm;
+	struct file *file;
+};
+
+/**
+ * struct cla_ctx - Domain context
+ *
+ * Immutable state:
+ * @domain:		The domain of this context.
+ * @key:		Key in cla_domain::ctxs hashtable.
+ * @node:		Node in cla_domain::ctxs hashtable.
+ *
+ * Mutable, protected by domain::lock:
+ * @refcnt:		Current users of this context.
+ * @queue_node:		Node in cla_domain::queued_ctxs or
+ *			cla_domain::dying_ctxs.
+ * @waitq:		Faulting threads sleep until assignment.
+ *
+ * Mutable, protected by domain::lock, some reads outside the lock:
+ * @mapped:		Number of VMAs mapping the context.
+ *
+ * Mutable, written only by domain::reassign and dev::switch_ctx:
+ * @regs:		State for each device in domain.
+ * @asid:		Pinned ASID of live context.
+ */
+struct cla_ctx {
+	struct kref refcnt;
+	struct rhash_head node;
+
+	struct cla_domain *domain;
+	struct cla_ctx_key key;
+
+	refcount_t mapped;
+	struct list_head queue_node;
+	struct cla_regs **regs;
+	wait_queue_head_t waitq;
+	unsigned int asid;
 };
 
 extern struct xarray cla_domains;
@@ -126,6 +222,38 @@ static inline void cla_reg_write(struct cla_dev *dev, off_t reg, u64 val)
 struct cla_domain *cla_dev_domain_get(struct cla_dev *dev);
 int cla_domains_finalise(void);
 void cla_domains_free(void);
+int cla_domain_sched_init(struct cla_domain *domain);
+void cla_domain_sched_exit(struct cla_domain *domain);
+void cla_domain_set_broken(struct cla_domain *domain);
+struct cla_ctx *cla_domain_lookup_ctx(struct cla_domain *domain,
+				      struct mm_struct *mm, struct file *file);
+int cla_domain_insert_ctx(struct cla_domain *domain, struct cla_ctx *ctx);
+void cla_domain_remove_ctx(struct cla_domain *domain, struct cla_ctx *ctx);
+void cla_domain_schedule_reassignment(struct cla_domain *domain,
+				      unsigned long ms);
+void cla_domain_schedule_reclaim(struct cla_domain *domain);
+struct cla_ctx *cla_ctx_map(struct cla_domain *domain, struct mm_struct *mm,
+			    struct file *file);
+void cla_ctx_unmap(struct cla_domain *domain, struct mm_struct *mm,
+		   struct file *file);
+void cla_ctx_free(struct kref *ref);
+
+static inline void cla_ctx_get(struct cla_ctx *ctx)
+{
+	kref_get(&ctx->refcnt);
+}
+
+static inline void cla_ctx_put(struct cla_ctx *ctx)
+{
+	kref_put(&ctx->refcnt, cla_ctx_free);
+}
+
+static inline bool cla_ctx_is_dying(struct cla_ctx *ctx)
+{
+	return refcount_read(&ctx->mapped) == 0;
+}
+
+void cla_dev_switch_ctx(struct kthread_work *work);
 
 int cla_op_wait_lresp(struct cla_dev *dev, u64 *lresp);
 int cla_op_reset(struct cla_dev *dev, unsigned int accid);
