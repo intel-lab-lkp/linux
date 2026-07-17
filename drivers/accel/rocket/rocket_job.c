@@ -7,6 +7,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include <drm/rocket_accel.h>
+#include <linux/hrtimer.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/platform_device.h>
@@ -19,6 +20,16 @@
 #include "rocket_registers.h"
 
 #define JOB_TIMEOUT_MS 500
+
+/*
+ * RK3576: INTERRUPT_MASK bits 28-29 are read-only (hardware rejects the write),
+ * so the PC_DONE completion signal cannot be routed to the GIC via the normal
+ * interrupt-mask path.  We poll OPERATION_ENABLE every RK3576_POLL_INTERVAL_NS
+ * instead of waiting for a completion IRQ.
+ */
+#define PC_INTERRUPT_MASK_RK3576_PC_DONE_0  0x10000000u
+#define PC_INTERRUPT_MASK_RK3576_PC_DONE_1  0x20000000u
+#define RK3576_POLL_INTERVAL_NS  1000000LL  /* 1 ms */
 
 static struct rocket_job *
 to_rocket_job(struct drm_sched_job *sched_job)
@@ -137,8 +148,21 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 	rocket_pc_writel(core, REGISTER_AMOUNTS,
 			 PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT((task->regcmd_count + 1) / 2 - 1));
 
-	rocket_pc_writel(core, INTERRUPT_MASK, PC_INTERRUPT_MASK_DPU_0 | PC_INTERRUPT_MASK_DPU_1);
-	rocket_pc_writel(core, INTERRUPT_CLEAR, PC_INTERRUPT_CLEAR_DPU_0 | PC_INTERRUPT_CLEAR_DPU_1);
+	/* Enable DMA-error interrupts; PC_DONE (bits 28-29) is polled, see above. */
+	rocket_pc_writel(core, INTERRUPT_MASK,
+			 PC_INTERRUPT_MASK_DPU_0    | PC_INTERRUPT_MASK_DPU_1    |
+			 PC_INTERRUPT_MASK_CORE_0   | PC_INTERRUPT_MASK_CORE_1   |
+			 PC_INTERRUPT_MASK_PPU_0    | PC_INTERRUPT_MASK_PPU_1    |
+			 PC_INTERRUPT_MASK_CNA_CSC_0 | PC_INTERRUPT_MASK_CNA_CSC_1 |
+			 PC_INTERRUPT_MASK_DMA_READ_ERROR |
+			 PC_INTERRUPT_MASK_DMA_WRITE_ERROR);
+	rocket_pc_writel(core, INTERRUPT_CLEAR,
+			 PC_INTERRUPT_CLEAR_DPU_0    | PC_INTERRUPT_CLEAR_DPU_1    |
+			 PC_INTERRUPT_CLEAR_CORE_0   | PC_INTERRUPT_CLEAR_CORE_1   |
+			 PC_INTERRUPT_CLEAR_PPU_0    | PC_INTERRUPT_CLEAR_PPU_1    |
+			 PC_INTERRUPT_CLEAR_CNA_CSC_0 | PC_INTERRUPT_CLEAR_CNA_CSC_1 |
+			 PC_INTERRUPT_MASK_RK3576_PC_DONE_0 |
+			 PC_INTERRUPT_MASK_RK3576_PC_DONE_1);
 
 	rocket_pc_writel(core, TASK_CON, PC_TASK_CON_RESERVED_0(1) |
 					 PC_TASK_CON_TASK_COUNT_CLEAR(1) |
@@ -149,7 +173,9 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 
 	rocket_pc_writel(core, OPERATION_ENABLE, PC_OPERATION_ENABLE_OP_EN(1));
 
-	dev_dbg(core->dev, "Submitted regcmd at 0x%llx to core %d", task->regcmd, core->index);
+	atomic_set(&core->poll_active, 1);
+	hrtimer_start(&core->poll_timer, ns_to_ktime(RK3576_POLL_INTERVAL_NS),
+		      HRTIMER_MODE_REL);
 }
 
 static int rocket_acquire_object_fences(struct drm_gem_object **bos,
@@ -326,56 +352,99 @@ static struct dma_fence *rocket_job_run(struct drm_sched_job *sched_job)
 	return fence;
 }
 
+static void rocket_job_handle_irq(struct rocket_core *core);
+
+static enum hrtimer_restart rocket_poll_timer_fn(struct hrtimer *timer)
+{
+	struct rocket_core *core = container_of(timer, struct rocket_core, poll_timer);
+
+	if (!atomic_read(&core->poll_active))
+		return HRTIMER_NORESTART;
+
+	/*
+	 * On RK3576, OPERATION_ENABLE is not cleared by hardware on completion;
+	 * check INTERRUPT_RAW_STATUS bits 28-29 (PC_DONE_0/1) instead.
+	 */
+	if (rocket_pc_readl(core, OPERATION_ENABLE) == 0 ||
+	    (rocket_pc_readl(core, INTERRUPT_RAW_STATUS) &
+	     (PC_INTERRUPT_MASK_RK3576_PC_DONE_0 |
+	      PC_INTERRUPT_MASK_RK3576_PC_DONE_1))) {
+		atomic_set(&core->poll_active, 0);
+		schedule_work(&core->poll_work);
+		return HRTIMER_NORESTART;
+	}
+
+	hrtimer_forward_now(timer, ns_to_ktime(RK3576_POLL_INTERVAL_NS));
+	return HRTIMER_RESTART;
+}
+
+static void rocket_poll_work_fn(struct work_struct *work)
+{
+	struct rocket_core *core = container_of(work, struct rocket_core, poll_work);
+
+	rocket_job_handle_irq(core);
+}
+
 static void rocket_job_handle_irq(struct rocket_core *core)
 {
+	struct rocket_job *job;
+
+	/* Stop the completion poll — we're handling it now. */
+	atomic_set(&core->poll_active, 0);
+	hrtimer_cancel(&core->poll_timer);
+
 	pm_runtime_mark_last_busy(core->dev);
 
 	rocket_pc_writel(core, OPERATION_ENABLE, 0x0);
-	rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
+	rocket_pc_writel(core, INTERRUPT_CLEAR,
+			 0x1ffff |
+			 PC_INTERRUPT_MASK_RK3576_PC_DONE_0 |
+			 PC_INTERRUPT_MASK_RK3576_PC_DONE_1);
 
-	scoped_guard(mutex, &core->job_lock)
-		if (core->in_flight_job) {
-			if (core->in_flight_job->next_task_idx < core->in_flight_job->task_count) {
-				rocket_job_hw_submit(core, core->in_flight_job);
-				return;
-			}
+	scoped_guard(mutex, &core->job_lock) {
+		job = core->in_flight_job;
+		if (!job)
+			return;
 
-			iommu_detach_group(NULL, iommu_group_get(core->dev));
-			dma_fence_signal(core->in_flight_job->done_fence);
-			pm_runtime_put_autosuspend(core->dev);
-			core->in_flight_job = NULL;
+		if (job->next_task_idx < job->task_count) {
+			rocket_job_hw_submit(core, job);
+			return;
 		}
+
+		iommu_detach_group(job->domain->domain, core->iommu_group);
+		dma_fence_signal(job->done_fence);
+		pm_runtime_put_autosuspend(core->dev);
+		core->in_flight_job = NULL;
+	}
 }
 
 static void
 rocket_reset(struct rocket_core *core, struct drm_sched_job *bad)
 {
+	struct rocket_job *job;
+
 	if (!atomic_read(&core->reset.pending))
 		return;
 
+	atomic_set(&core->poll_active, 0);
+	hrtimer_cancel(&core->poll_timer);
+	cancel_work(&core->poll_work);
+
 	drm_sched_stop(&core->sched, bad);
 
-	/*
-	 * Remaining interrupts have been handled, but we might still have
-	 * stuck jobs. Let's make sure the PM counters stay balanced by
-	 * manually calling pm_runtime_put_noidle().
-	 */
 	scoped_guard(mutex, &core->job_lock) {
-		if (core->in_flight_job)
+		job = core->in_flight_job;
+		if (job) {
 			pm_runtime_put_noidle(core->dev);
-
-		iommu_detach_group(NULL, core->iommu_group);
-
-		core->in_flight_job = NULL;
+			iommu_detach_group(job->domain->domain, core->iommu_group);
+			core->in_flight_job = NULL;
+		}
 	}
 
-	/* Proceed with reset now. */
 	rocket_core_reset(core);
 
-	/* NPU has been reset, we can clear the reset pending bit. */
 	atomic_set(&core->reset.pending, 0);
 
-	/* Restart the scheduler */
 	drm_sched_start(&core->sched, 0);
 }
 
@@ -385,7 +454,14 @@ static enum drm_gpu_sched_stat rocket_job_timedout(struct drm_sched_job *sched_j
 	struct rocket_device *rdev = job->rdev;
 	struct rocket_core *core = sched_to_core(rdev, sched_job->sched);
 
-	dev_err(core->dev, "NPU job timed out");
+	if (pm_runtime_active(core->dev))
+		dev_err(core->dev,
+			"NPU job timed out: RAW_STATUS=0x%08x MASK=0x%08x OP_EN=0x%08x\n",
+			rocket_pc_readl(core, INTERRUPT_RAW_STATUS),
+			rocket_pc_readl(core, INTERRUPT_MASK),
+			rocket_pc_readl(core, OPERATION_ENABLE));
+	else
+		dev_err(core->dev, "NPU job timed out (device not active)\n");
 
 	atomic_set(&core->reset.pending, 1);
 	rocket_reset(core, sched_job);
@@ -420,14 +496,16 @@ static irqreturn_t rocket_job_irq_handler(int irq, void *data)
 {
 	struct rocket_core *core = data;
 	u32 raw_status = rocket_pc_readl(core, INTERRUPT_RAW_STATUS);
+	/* Only bits 0-13 (DMA errors) can raise this IRQ; PC_DONE is polled. */
+	u32 active = raw_status & 0x3fff;
+
+	if (!active)
+		return IRQ_NONE;
 
 	WARN_ON(raw_status & PC_INTERRUPT_RAW_STATUS_DMA_READ_ERROR);
 	WARN_ON(raw_status & PC_INTERRUPT_RAW_STATUS_DMA_WRITE_ERROR);
 
-	if (!(raw_status & PC_INTERRUPT_RAW_STATUS_DPU_0 ||
-	      raw_status & PC_INTERRUPT_RAW_STATUS_DPU_1))
-		return IRQ_NONE;
-
+	rocket_pc_writel(core, INTERRUPT_CLEAR, active);
 	rocket_pc_writel(core, INTERRUPT_MASK, 0x0);
 
 	return IRQ_WAKE_THREAD;
@@ -445,6 +523,10 @@ int rocket_job_init(struct rocket_core *core)
 	int ret;
 
 	INIT_WORK(&core->reset.work, rocket_reset_work);
+	INIT_WORK(&core->poll_work, rocket_poll_work_fn);
+	hrtimer_setup(&core->poll_timer, rocket_poll_timer_fn, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_REL);
+	atomic_set(&core->poll_active, 0);
 	spin_lock_init(&core->fence_lock);
 	mutex_init(&core->job_lock);
 
@@ -486,6 +568,10 @@ err_sched:
 
 void rocket_job_fini(struct rocket_core *core)
 {
+	atomic_set(&core->poll_active, 0);
+	hrtimer_cancel(&core->poll_timer);
+	cancel_work_sync(&core->poll_work);
+
 	drm_sched_fini(&core->sched);
 
 	cancel_work_sync(&core->reset.work);

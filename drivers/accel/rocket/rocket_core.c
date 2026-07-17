@@ -8,6 +8,7 @@
 #include <linux/err.h>
 #include <linux/iommu.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
 
@@ -22,12 +23,23 @@ int rocket_core_init(struct rocket_core *core)
 	int err = 0;
 
 	core->resets[0].id = "srst_a";
-	core->resets[1].id = "srst_h";
 	err = devm_reset_control_bulk_get_exclusive(&pdev->dev, ARRAY_SIZE(core->resets),
 						    core->resets);
 	if (err)
 		return dev_err_probe(dev, err, "failed to get resets for core %d\n", core->index);
 
+	core->clks[0].id = "aclk";
+	core->clks[1].id = "hclk";
+	core->clks[2].id = "npu";
+	core->clks[3].id = "pclk";
+	/*
+	 * RK3576: the CBUF (convolution buffer) has its own clock domain. The CNA
+	 * fills the CBUF and CORE reads from it; without these the compute path
+	 * stalls after loading one slice (RDMA, which bypasses the CBUF, still
+	 * runs). The vendor keeps all NPU clocks on whenever powered.
+	 */
+	core->clks[4].id = "aclk_cbuf";
+	core->clks[5].id = "hclk_cbuf";
 	err = devm_clk_bulk_get(dev, ARRAY_SIZE(core->clks), core->clks);
 	if (err)
 		return dev_err_probe(dev, err, "failed to get clocks for core %d\n", core->index);
@@ -50,6 +62,18 @@ int rocket_core_init(struct rocket_core *core)
 		return PTR_ERR(core->core_iomem);
 	}
 
+	core->dpu_iomem = devm_platform_ioremap_resource_byname(pdev, "dpu");
+	if (IS_ERR(core->dpu_iomem)) {
+		dev_warn(dev, "no DPU registers; DPU S_POINTER won't be pre-armed\n");
+		core->dpu_iomem = NULL;
+	}
+
+	core->dpu_rdma_iomem = devm_platform_ioremap_resource_byname(pdev, "dpu_rdma");
+	if (IS_ERR(core->dpu_rdma_iomem)) {
+		dev_warn(dev, "no DPU_RDMA registers; DPU_RDMA S_POINTER won't be pre-armed\n");
+		core->dpu_rdma_iomem = NULL;
+	}
+
 	dma_set_max_seg_size(dev, UINT_MAX);
 
 	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(40));
@@ -63,6 +87,23 @@ int rocket_core_init(struct rocket_core *core)
 		iommu_group_put(core->iommu_group);
 		core->iommu_group = NULL;
 		return err;
+	}
+
+	/*
+	 * RK3576: the NPU spans TWO power domains (PD_NPU0 + PD_NPU1). The vendor
+	 * powers BOTH from its single NPU node even when computing on one core --
+	 * the CBUF->CMAC read path only works fully with NPU1 powered. The board DT
+	 * lists both power-domains on rknn_core_0; a multi-PD device skips the
+	 * driver-core single-PD auto-attach, so attach the list explicitly. With
+	 * one PD in DT this is a no-op (returns 1) and behaves as before.
+	 */
+	{
+		struct dev_pm_domain_list *pd_list;
+
+		err = devm_pm_domain_attach_list(dev, NULL, &pd_list);
+		if (err < 0)
+			return dev_err_probe(dev, err,
+					     "failed to attach NPU power domains\n");
 	}
 
 	pm_runtime_use_autosuspend(dev);
