@@ -2643,6 +2643,18 @@ out:
 	return err;
 }
 
+static int ksmbd_map_ea_name_to_xattr(const char *ea_name,
+				      size_t ea_name_len, char *attr_name)
+{
+	if (ea_name_len > XATTR_NAME_MAX - XATTR_USER_PREFIX_LEN)
+		return -EINVAL;
+
+	memcpy(attr_name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN);
+	memcpy(&attr_name[XATTR_USER_PREFIX_LEN], ea_name, ea_name_len);
+	attr_name[XATTR_USER_PREFIX_LEN + ea_name_len] = '\0';
+	return XATTR_USER_PREFIX_LEN + ea_name_len;
+}
+
 /**
  * smb2_set_ea() - handler for setting extended attributes using set
  *		info command
@@ -2658,7 +2670,7 @@ static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 {
 	struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 	char *attr_name = NULL, *value;
-	int rc = 0;
+	int rc = 0, attr_name_len;
 	unsigned int next = 0;
 
 	if (buf_len < sizeof(struct smb2_ea_info) + eabuf->EaNameLength + 1 +
@@ -2679,24 +2691,21 @@ static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 			    le16_to_cpu(eabuf->EaValueLength),
 			    le32_to_cpu(eabuf->NextEntryOffset));
 
-		if (eabuf->EaNameLength >
-		    (XATTR_NAME_MAX - XATTR_USER_PREFIX_LEN)) {
+		attr_name_len = ksmbd_map_ea_name_to_xattr(eabuf->name,
+							   eabuf->EaNameLength,
+							   attr_name);
+		if (attr_name_len < 0) {
 			rc = -EINVAL;
 			break;
 		}
 
-		memcpy(attr_name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN);
-		memcpy(&attr_name[XATTR_USER_PREFIX_LEN], eabuf->name,
-		       eabuf->EaNameLength);
-		attr_name[XATTR_USER_PREFIX_LEN + eabuf->EaNameLength] = '\0';
 		value = (char *)&eabuf->name + eabuf->EaNameLength + 1;
 
 		if (!eabuf->EaValueLength) {
 			rc = ksmbd_vfs_casexattr_len(idmap,
 						     path->dentry,
 						     attr_name,
-						     XATTR_USER_PREFIX_LEN +
-						     eabuf->EaNameLength);
+						     attr_name_len);
 
 			/* delete the EA only when it exits */
 			if (rc > 0) {
