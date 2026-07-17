@@ -1797,6 +1797,8 @@ error:
 
 void mt7996_unregister_device(struct mt7996_dev *dev)
 {
+	int i;
+
 	cancel_work_sync(&dev->dump_work);
 	cancel_work_sync(&dev->wed_rro.work);
 	mt7996_unregister_phy(mt7996_phy3(dev));
@@ -1804,6 +1806,15 @@ void mt7996_unregister_device(struct mt7996_dev *dev)
 	mt7996_unregister_thermal(&dev->phy);
 	mt7996_coredump_unregister(dev);
 	mt76_unregister_device(&dev->mt76);
+	mt76_for_each_q_rx(&dev->mt76, i) {
+		struct mt76_queue *q = &dev->mt76.q_rx[i];
+
+		if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
+		    mt76_queue_is_wed_rro(q))
+			continue;
+
+		napi_disable(&dev->mt76.napi[i]);
+	}
 	mt7996_wed_rro_free(dev);
 	mt7996_mcu_exit(dev);
 	mt7996_tx_token_put(dev);
