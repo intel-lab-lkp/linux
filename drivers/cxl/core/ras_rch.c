@@ -118,8 +118,8 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 
 	pci_print_aer(pdev, severity, &aer_regs);
 	if (severity == AER_CORRECTABLE)
-		cxl_handle_cor_ras(dport->port, dport, to_ras_base(port, dport),
-				   pci_get_dsn(pdev));
+		cxl_handle_cor_ras(dport->port, dport,
+				   to_ras_base(port, dport), pdev->dsn);
 	else
 		cxl_do_recovery(pdev, dport->port, dport);
 }

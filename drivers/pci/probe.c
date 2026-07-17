@@ -2638,6 +2638,19 @@ void pcie_report_downtraining(struct pci_dev *dev)
 	__pcie_print_link_status(dev, false);
 }
 
+/*
+ * Cache the Device Serial Number for use in contexts where config-space
+ * reads are unsafe (interrupt, panic).  Process-context callers that
+ * need a fresh value (e.g. hotplug device replacement) use pci_get_dsn().
+ */
+static void pci_dsn_init(struct pci_dev *dev)
+{
+	u64 dsn = pci_get_dsn(dev);
+
+	if (dsn)
+		dev->dsn = dsn;
+}
+
 static void pci_imm_ready_init(struct pci_dev *dev)
 {
 	u16 status;
@@ -2674,6 +2687,7 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	pci_rebar_init(dev);		/* Resizable BAR */
 	pci_dev3_init(dev);		/* Device 3 capabilities */
 	pci_ide_init(dev);		/* Link Integrity and Data Encryption */
+	pci_dsn_init(dev);		/* Serial number */
 
 	pcie_report_downtraining(dev);
 	pci_init_reset_methods(dev);

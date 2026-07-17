@@ -100,10 +100,10 @@ void cxl_cper_handle_prot_err(struct cxl_cper_prot_err_work_data *data)
 	dport = cxl_find_dport_by_dev(port, &pdev->dev);
 
 	if (data->severity == AER_CORRECTABLE)
-		cxl_cper_trace_corr_prot_err(port, dport, pci_get_dsn(pdev),
+		cxl_cper_trace_corr_prot_err(port, dport, pdev->dsn,
 					     &data->ras_cap);
 	else
-		cxl_cper_trace_uncorr_prot_err(port, dport, pci_get_dsn(pdev),
+		cxl_cper_trace_uncorr_prot_err(port, dport, pdev->dsn,
 					       &data->ras_cap);
 }
 EXPORT_SYMBOL_GPL(cxl_cper_handle_prot_err);
@@ -195,7 +195,7 @@ void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port, struct cxl_dpo
 		return;
 	}
 
-	if (cxl_handle_ras(port, dport, ras_base, pci_get_dsn(pdev)))
+	if (cxl_handle_ras(port, dport, ras_base, pdev->dsn))
 		panic("CXL cachemem error");
 
 	dev_dbg(&pdev->dev,
@@ -307,7 +307,7 @@ pci_ers_result_t cxl_pci_error_detected(struct pci_dev *pdev,
 		 * CXL.mem traffic.
 		 */
 		ue = cxl_handle_ras(port, NULL, to_ras_base(port, NULL),
-				    pci_get_dsn(pdev));
+				    pdev->dsn);
 	}
 
 	/*
@@ -339,7 +339,8 @@ static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
 				   struct cxl_dport *dport, int severity)
 {
 	if (severity == AER_CORRECTABLE)
-		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport), pci_get_dsn(pdev));
+		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport),
+				   pdev->dsn);
 	else
 		cxl_do_recovery(pdev, port, dport);
 }
