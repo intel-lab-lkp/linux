@@ -221,10 +221,10 @@ i915_free_initial_plane_obj(struct drm_gem_object *obj)
 
 static void i915_initial_plane_setup(struct drm_device *drm, u64 modifier)
 {
-	struct drm_i915_private *dev_priv = to_i915(drm);
+	struct drm_i915_private *i915 = to_i915(drm);
 
 	if (modifier != DRM_FORMAT_MOD_LINEAR)
-		dev_priv->preserve_bios_swizzle = true;
+		i915->preserve_bios_swizzle = true;
 }
 
 const struct intel_display_initial_plane_interface i915_display_initial_plane_interface = {
