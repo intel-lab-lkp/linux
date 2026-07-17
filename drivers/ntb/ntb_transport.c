@@ -974,6 +974,8 @@ static void ntb_transport_link_cleanup(struct ntb_transport_ctx *nt)
 
 	if (!nt->link_is_up)
 		cancel_delayed_work_sync(&nt->link_work);
+	else
+		nt->link_is_up = false;
 
 	for (i = 0; i < nt->mw_count; i++)
 		ntb_free_mw(nt, i);
