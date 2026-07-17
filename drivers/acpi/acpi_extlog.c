@@ -165,12 +165,12 @@ static void extlog_print_pcie(struct cper_sec_pcie *pcie_err,
 
 static void
 extlog_cxl_cper_handle_prot_err(struct cxl_cper_sec_prot_err *prot_err,
-				int severity)
+				int severity, u32 len)
 {
 #ifdef ACPI_APEI_PCIEAER
 	struct cxl_cper_prot_err_work_data wd;
 
-	if (cxl_cper_sec_prot_err_valid(prot_err))
+	if (cxl_cper_sec_prot_err_valid(prot_err, len))
 		return;
 
 	if (cxl_cper_setup_prot_err_work_data(&wd, prot_err, severity))
@@ -236,7 +236,8 @@ static int extlog_print(struct notifier_block *nb, unsigned long val,
 				acpi_hest_get_payload(gdata);
 
 			extlog_cxl_cper_handle_prot_err(prot_err,
-							gdata->error_severity);
+							gdata->error_severity,
+							gdata->error_data_length);
 		} else if (guid_equal(sec_type, &CPER_SEC_PCIE)) {
 			struct cper_sec_pcie *pcie_err = acpi_hest_get_payload(gdata);
 
