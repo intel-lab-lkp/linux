@@ -572,16 +572,11 @@ static int s3c_camif_close(struct file *file)
 
 	mutex_lock(&camif->lock);
 
-	if (vp->owner == file_to_v4l2_fh(file)) {
-		camif_stop_capture(vp);
-		vb2_queue_release(&vp->vb_queue);
-		vp->owner = NULL;
-	}
+	ret = _vb2_fop_release(file, NULL);
 
 	sensor_set_power(camif, 0);
 
 	pm_runtime_put(camif->dev);
-	ret = v4l2_fh_release(file);
 
 	mutex_unlock(&camif->lock);
 	return ret;
