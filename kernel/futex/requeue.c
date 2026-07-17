@@ -155,8 +155,13 @@ static inline void futex_requeue_pi_complete(struct futex_q *q, int locked)
 	} while (!atomic_try_cmpxchg(&q->requeue_state, &old, new));
 
 #ifdef CONFIG_PREEMPT_RT
-	/* If the waiter interleaved with the requeue let it know */
-	if (unlikely(old == Q_REQUEUE_PI_WAIT))
+	/*
+	 * If the waiter interleaved with the requeue, let it know. For LOCKED,
+	 * q may already be invalid, so requeue_pi_wake_futex() wakes the saved
+	 * task instead.
+	 */
+	if (unlikely(old == Q_REQUEUE_PI_WAIT) &&
+	    new != Q_REQUEUE_PI_LOCKED)
 		rcuwait_wake_up(&q->requeue_wait);
 #endif
 }
