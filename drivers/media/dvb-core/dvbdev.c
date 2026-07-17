@@ -448,6 +448,14 @@ static int dvb_register_media_device(struct dvb_device *dvbdev,
 	return 0;
 }
 
+static void dvb_device_remove_minor(struct dvb_device *dvbdev)
+{
+	down_write(&minor_rwsem);
+	dvb_minors[dvbdev->minor] = NULL;
+	dvb_device_put(dvbdev);
+	up_write(&minor_rwsem);
+}
+
 int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 			const struct dvb_device *template, void *priv,
 			enum dvb_device_type type, int demux_sink_pads)
@@ -551,6 +559,7 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	if (ret) {
 		pr_err("%s: dvb_register_media_device failed to create the mediagraph\n",
 		       __func__);
+		dvb_device_remove_minor(dvbdev);
 		if (new_node) {
 			list_del(&new_node->list_head);
 			kfree(dvbdevfops);
@@ -558,8 +567,8 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 		}
 		dvb_media_device_free(dvbdev);
 		list_del(&dvbdev->list_head);
-		kfree(dvbdev);
 		*pdvbdev = NULL;
+		dvb_device_put(dvbdev);
 		mutex_unlock(&dvbdev_register_lock);
 		return ret;
 	}
@@ -570,6 +579,7 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	if (IS_ERR(clsdev)) {
 		pr_err("%s: failed to create device dvb%d.%s%d (%pe)\n",
 		       __func__, adap->num, dnames[type], id, clsdev);
+		dvb_device_remove_minor(dvbdev);
 		if (new_node) {
 			list_del(&new_node->list_head);
 			kfree(dvbdevfops);
@@ -577,8 +587,8 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 		}
 		dvb_media_device_free(dvbdev);
 		list_del(&dvbdev->list_head);
-		kfree(dvbdev);
 		*pdvbdev = NULL;
+		dvb_device_put(dvbdev);
 		mutex_unlock(&dvbdev_register_lock);
 		return PTR_ERR(clsdev);
 	}
@@ -596,10 +606,7 @@ void dvb_remove_device(struct dvb_device *dvbdev)
 	if (!dvbdev)
 		return;
 
-	down_write(&minor_rwsem);
-	dvb_minors[dvbdev->minor] = NULL;
-	dvb_device_put(dvbdev);
-	up_write(&minor_rwsem);
+	dvb_device_remove_minor(dvbdev);
 
 	dvb_media_device_free(dvbdev);
 
