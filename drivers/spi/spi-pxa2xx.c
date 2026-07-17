@@ -1351,6 +1351,9 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 		}
 	}
 
+	if (!platform_info->enable_dma)
+		pm_runtime_forbid(dev);
+
 	/* Enable SOC clock */
 	status = clk_prepare_enable(ssp->clk);
 	if (status)
@@ -1518,6 +1521,7 @@ static int pxa2xx_spi_runtime_suspend(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 
+	synchronize_irq(drv_data->ssp->irq);
 	clk_disable_unprepare(drv_data->ssp->clk);
 	return 0;
 }
