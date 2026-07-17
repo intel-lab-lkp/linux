@@ -77,6 +77,14 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 					 struct shrink_control *sc);
 static bool split_underused_thp = true;
 
+#define deferred_split_pages_add(folio) \
+	mod_node_page_state(NODE_DATA(folio_nid(folio)), \
+			    NR_DEFERRED_SPLIT_PAGES, folio_nr_pages(folio))
+
+#define deferred_split_pages_del(folio) \
+	mod_node_page_state(NODE_DATA(folio_nid(folio)), \
+			    NR_DEFERRED_SPLIT_PAGES, -folio_nr_pages(folio))
+
 static atomic_t huge_zero_refcount;
 struct folio *huge_zero_folio __read_mostly;
 unsigned long huge_zero_pfn __read_mostly = ~0UL;
@@ -3914,8 +3922,10 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 		struct lruvec *lruvec;
 
 		if (dequeue_deferred) {
-			__list_lru_del(&deferred_split_lru, lru,
-				       &folio->_deferred_list, folio_nid(folio));
+			if (__list_lru_del(&deferred_split_lru, lru,
+					  &folio->_deferred_list, folio_nid(folio)) &&
+			    folio_test_partially_mapped(folio))
+				deferred_split_pages_del(folio);
 			if (folio_test_partially_mapped(folio)) {
 				folio_clear_partially_mapped(folio);
 				mod_mthp_stat(old_order,
@@ -4416,6 +4426,7 @@ bool __folio_unqueue_deferred_split(struct folio *folio)
 	lru = list_lru_lock_irqsave(&deferred_split_lru, nid, &memcg, &flags);
 	if (__list_lru_del(&deferred_split_lru, lru, &folio->_deferred_list, nid)) {
 		if (folio_test_partially_mapped(folio)) {
+			deferred_split_pages_del(folio);
 			folio_clear_partially_mapped(folio);
 			mod_mthp_stat(folio_order(folio),
 				      MTHP_STAT_NR_ANON_PARTIALLY_MAPPED, -1);
@@ -4474,6 +4485,8 @@ void deferred_split_folio(struct folio *folio, bool partially_mapped)
 		VM_WARN_ON_FOLIO(folio_test_partially_mapped(folio), folio);
 	}
 	__list_lru_add(&deferred_split_lru, lru, &folio->_deferred_list, nid, memcg);
+	if (partially_mapped)
+		deferred_split_pages_add(folio);
 	list_lru_unlock_irqrestore(lru, &flags);
 	rcu_read_unlock();
 }
@@ -4520,8 +4533,11 @@ static enum lru_status deferred_split_isolate(struct list_head *item,
 {
 	struct folio *folio = container_of(item, struct folio, _deferred_list);
 	struct list_head *freeable = cb_arg;
+	bool partially_mapped = folio_test_partially_mapped(folio);
 
 	if (folio_try_get(folio)) {
+		if (partially_mapped)
+			deferred_split_pages_del(folio);
 		list_lru_isolate_move(lru, item, freeable);
 		return LRU_REMOVED;
 	}
@@ -4531,7 +4547,8 @@ static enum lru_status deferred_split_isolate(struct list_head *item,
 	 * isolate: folio_unqueue_deferred_split() checks list_empty()
 	 * locklessly, so once removed the folio can be freed any time.
 	 */
-	if (folio_test_partially_mapped(folio)) {
+	if (partially_mapped) {
+		deferred_split_pages_del(folio);
 		folio_clear_partially_mapped(folio);
 		mod_mthp_stat(folio_order(folio),
 			      MTHP_STAT_NR_ANON_PARTIALLY_MAPPED, -1);
@@ -4592,6 +4609,7 @@ requeue:
 					 &folio->_deferred_list,
 					 folio_nid(folio),
 					 folio_memcg(folio));
+			deferred_split_pages_add(folio);
 			rcu_read_unlock();
 		}
 		folio_put(folio);

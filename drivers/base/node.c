@@ -519,6 +519,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     "Node %d ShmemPmdMapped: %8lu kB\n"
 			     "Node %d FileHugePages:  %8lu kB\n"
 			     "Node %d FilePmdMapped:  %8lu kB\n"
+			     "Node %d DeferredSplitPages: %8lu kB\n"
 #endif
 #ifdef CONFIG_UNACCEPTED_MEMORY
 			     "Node %d Unaccepted:     %8lu kB\n"
@@ -553,7 +554,8 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     nid, K(node_page_state(pgdat, NR_SHMEM_THPS)),
 			     nid, K(node_page_state(pgdat, NR_SHMEM_PMDMAPPED)),
 			     nid, K(node_page_state(pgdat, NR_FILE_THPS)),
-			     nid, K(node_page_state(pgdat, NR_FILE_PMDMAPPED))
+			     nid, K(node_page_state(pgdat, NR_FILE_PMDMAPPED)),
+			     nid, K(node_page_state(pgdat, NR_DEFERRED_SPLIT_PAGES))
 #endif
 #ifdef CONFIG_UNACCEPTED_MEMORY
 			     ,

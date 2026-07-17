@@ -1248,6 +1248,7 @@ const char * const vmstat_text[] = {
 	[I(NR_FILE_THPS)]			= "nr_file_hugepages",
 	[I(NR_FILE_PMDMAPPED)]			= "nr_file_pmdmapped",
 	[I(NR_ANON_THPS)]			= "nr_anon_transparent_hugepages",
+	[I(NR_DEFERRED_SPLIT_PAGES)]		= "nr_deferred_split_pages",
 	[I(NR_VMSCAN_WRITE)]			= "nr_vmscan_write",
 	[I(NR_VMSCAN_IMMEDIATE)]		= "nr_vmscan_immediate_reclaim",
 	[I(NR_DIRTIED)]				= "nr_dirtied",
