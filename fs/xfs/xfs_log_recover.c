@@ -2050,6 +2050,17 @@ xlog_recover_commit_trans(
 
 	hlist_del_init(&trans->r_list);
 
+	/*
+	 * Reject an item missing a region its format declared; the NULL slot
+	 * would be dereferenced by the reorder and replay code.
+	 */
+	list_for_each_entry(item, &trans->r_itemq, ri_list) {
+		if (XFS_IS_CORRUPT(log->l_mp,
+				   item->ri_total == 0 ||
+				   item->ri_cnt != item->ri_total))
+			return -EFSCORRUPTED;
+	}
+
 	error = xlog_recover_reorder_trans(log, trans, pass);
 	if (error)
 		return error;
