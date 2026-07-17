@@ -148,6 +148,18 @@ enum sn65dsi83_lvds_term {
 	OHM_200
 };
 
+enum {
+	LANE_MAPPING_NORMAL,
+	LANE_MAPPING_REVERSE,
+};
+
+#define DATA_LANES_COUNT	4
+
+static const u32 supported_data_lane_mapping[][DATA_LANES_COUNT] = {
+	[LANE_MAPPING_NORMAL] = { 1, 2, 3, 4 },
+	[LANE_MAPPING_REVERSE] = { 4, 3, 2, 1},
+};
+
 enum sn65dsi83_model {
 	MODEL_SN65DSI83,
 	MODEL_SN65DSI84,
@@ -163,6 +175,7 @@ struct sn65dsi83 {
 	struct regulator		*vcc;
 	bool				lvds_dual_link;
 	bool				lvds_dual_link_even_odd_swap;
+	bool				lvds_reverse_lanes_conf[2];
 	int				lvds_vod_swing_conf[2];
 	int				lvds_term_conf[2];
 	int				irq;
@@ -644,6 +657,10 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 	regmap_write(ctx->regmap, REG_LVDS_LANE,
 		     (ctx->lvds_dual_link_even_odd_swap ?
 		      REG_LVDS_LANE_EVEN_ODD_SWAP : 0) |
+		     (ctx->lvds_reverse_lanes_conf[CHANNEL_A] ?
+		      REG_LVDS_LANE_CHA_REVERSE_LVDS : 0) |
+		     (ctx->lvds_reverse_lanes_conf[CHANNEL_B] ?
+		      REG_LVDS_LANE_CHB_REVERSE_LVDS : 0) |
 		     (ctx->lvds_term_conf[CHANNEL_A] ?
 			  REG_LVDS_LANE_CHA_LVDS_TERM : 0) |
 		     (ctx->lvds_term_conf[CHANNEL_B] ?
@@ -833,6 +850,7 @@ static int sn65dsi83_parse_lvds_endpoint(struct sn65dsi83 *ctx, int channel)
 	u32 lvds_vod_swing_clk[2] = { 0, 1000000 };
 	/* Set default near end terminataion to 200 Ohm */
 	u32 lvds_term = 200;
+	u32 data_lanes[DATA_LANES_COUNT];
 	int lvds_vod_swing_conf;
 	int ret_data;
 	int ret_clock;
@@ -844,6 +862,19 @@ static int sn65dsi83_parse_lvds_endpoint(struct sn65dsi83 *ctx, int channel)
 		ctx->lvds_term_conf[channel] = OHM_200;
 	else
 		return -EINVAL;
+
+	ret_data = of_property_read_u32_array(endpoint, "data-lanes", data_lanes,
+			ARRAY_SIZE(data_lanes));
+	if (!ret_data) {
+		if (memcmp(data_lanes,
+				supported_data_lane_mapping[LANE_MAPPING_REVERSE],
+				ARRAY_SIZE(data_lanes)) == 0)
+			ctx->lvds_reverse_lanes_conf[channel] = true;
+		else if (memcmp(data_lanes,
+			   supported_data_lane_mapping[LANE_MAPPING_NORMAL],
+			   ARRAY_SIZE(data_lanes)) != 0)
+			return dev_err_probe(dev, -EINVAL, "invalid data lanes mapping\n");
+	}
 
 	ret_data = of_property_read_u32_array(endpoint, "ti,lvds-vod-swing-data-microvolt",
 					lvds_vod_swing_data, ARRAY_SIZE(lvds_vod_swing_data));
