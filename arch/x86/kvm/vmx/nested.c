@@ -2818,8 +2818,6 @@ static int prepare_vmcs02(struct kvm_vcpu *vcpu, struct vmcs12 *vmcs12,
 	if (kvm_caps.has_tsc_control)
 		vmcs_write64(TSC_MULTIPLIER, vcpu->arch.tsc_scaling_ratio);
 
-	nested_vmx_transition_tlb_flush(vcpu, vmcs12, true);
-
 	if (nested_cpu_has_ept(vmcs12))
 		nested_ept_init_mmu_context(vcpu);
 
@@ -3738,6 +3736,8 @@ enum nvmx_vmentry_status nested_vmx_enter_non_root_mode(struct kvm_vcpu *vcpu,
 		u64 timer_value = vmx_calc_preemption_timer_value(vcpu);
 		vmx_start_preemption_timer(vcpu, timer_value);
 	}
+
+	nested_vmx_transition_tlb_flush(vcpu, vmcs12, true);
 
 	/*
 	 * Note no nested_vmx_succeed or nested_vmx_fail here. At this point
