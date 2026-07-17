@@ -264,7 +264,7 @@ static bool __init hip04_cpu_table_init(void)
 
 static int __init hip04_smp_init(void)
 {
-	struct device_node *np, *np_sctl, *np_fab;
+	struct device_node *np = NULL, *np_sctl = NULL, *np_fab = NULL;
 	struct resource fab_res;
 	void __iomem *relocation;
 	int ret = -ENODEV;
@@ -331,6 +331,9 @@ static int __init hip04_smp_init(void)
 	iounmap(relocation);
 
 	smp_set_ops(&hip04_smp_ops);
+	of_node_put(np_fab);
+	of_node_put(np_sctl);
+	of_node_put(np);
 	return ret;
 err_table:
 	iounmap(fabric);
@@ -341,6 +344,9 @@ err_sysctrl:
 err_reloc:
 	memblock_phys_free(hip04_boot_method[0], hip04_boot_method[1]);
 err:
+	of_node_put(np_fab);
+	of_node_put(np_sctl);
+	of_node_put(np);
 	return ret;
 }
 early_initcall(hip04_smp_init);
