@@ -71,6 +71,7 @@
 #include <linux/unwind_deferred.h>
 #include <linux/uaccess.h>
 #include <linux/pidfs.h>
+#include <net/af_unix.h>
 
 #include <uapi/linux/wait.h>
 
@@ -997,6 +998,7 @@ void __noreturn do_exit(long code)
 	exit_sem(tsk);
 	exit_shm(tsk);
 	exit_files(tsk);
+	unix_schedule_gc(NULL); /* Must be after exit_files() */
 	exit_fs(tsk);
 	if (group_dead)
 		disassociate_ctty(1);
