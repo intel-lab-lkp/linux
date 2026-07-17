@@ -232,6 +232,14 @@ properties:
     description:
       All eMMC HS400 modes are not supported.
 
+  no-mmc-sleep:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      The attached (e)MMC card cannot reliably resume from the SLEEP
+      (CMD5) state within its advertised S_A_TIMEOUT, so the
+      controller must not put it to sleep during suspend or power
+      off.
+
   dsr:
     description:
       Value the card Driver Stage Register (DSR) should be programmed
