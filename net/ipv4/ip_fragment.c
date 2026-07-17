@@ -291,6 +291,8 @@ static int ip_frag_queue(struct ipq *qp, struct sk_buff *skb, int *refs)
 	/* Determine the position of this fragment. */
 	end = offset + skb->len - skb_network_offset(skb) - ihl;
 	err = -EINVAL;
+	if (end > IP_MAX_MTU - sizeof(struct iphdr))
+		goto err;
 
 	/* Is this the final fragment? */
 	if ((flags & IP_MF) == 0) {
