@@ -16,6 +16,7 @@
 #include <linux/swap.h>
 #include <linux/pagewalk.h>
 #include <linux/backing-dev.h>
+#include <linux/kmemleak.h>
 #include <asm/facility.h>
 #include <asm/sections.h>
 #include <asm/uv.h>
@@ -70,6 +71,7 @@ void __init setup_uv(void)
 			uv_info.uv_base_stor_len);
 		goto fail;
 	}
+	kmemleak_ignore_phys(__pa(uv_stor_base));
 
 	if (uv_init(__pa(uv_stor_base), uv_info.uv_base_stor_len)) {
 		memblock_free(uv_stor_base, uv_info.uv_base_stor_len);
