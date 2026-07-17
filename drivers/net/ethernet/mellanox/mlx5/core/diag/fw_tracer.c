@@ -64,6 +64,13 @@ static int mlx5_query_mtrc_caps(struct mlx5_fw_tracer *tracer)
 	tracer->str_db.num_string_trace =
 			MLX5_GET(mtrc_cap, out, num_string_trace);
 	tracer->str_db.num_string_db = MLX5_GET(mtrc_cap, out, num_string_db);
+	if (tracer->str_db.num_string_db > STRINGS_DB_SECTIONS_NUM) {
+		mlx5_core_warn(dev,
+			       "FWTracer: Firmware reports num_string_db (%u) > (%u), clamping\n",
+			       tracer->str_db.num_string_db,
+			       STRINGS_DB_SECTIONS_NUM);
+		tracer->str_db.num_string_db = STRINGS_DB_SECTIONS_NUM;
+	}
 	tracer->owner = !!MLX5_GET(mtrc_cap, out, trace_owner);
 	tracer->str_db.loaded = false;
 
