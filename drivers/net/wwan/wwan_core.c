@@ -22,6 +22,7 @@
 #include <linux/termios.h>
 #include <linux/gnss.h>
 #include <linux/wwan.h>
+#include <linux/tty.h>
 #include <net/rtnetlink.h>
 #include <uapi/linux/wwan.h>
 
@@ -79,7 +80,7 @@ struct wwan_device {
  * @data_lock: Port specific data access serialization
  * @headroom_len: SKB reserved headroom size
  * @frag_len: Length to fragment packet
- * @at_data: AT port specific data
+ * @at_data: AT/QCDM port specific data
  * @gnss: Pointer to GNSS device associated with this port
  */
 struct wwan_port {
@@ -98,6 +99,7 @@ struct wwan_port {
 		struct {
 			struct ktermios termios;
 			int mdmbits;
+			unsigned long flags;
 		} at_data;
 		struct gnss_device *gnss;
 	};
@@ -748,6 +750,14 @@ static int wwan_port_op_start(struct wwan_port *port)
 		goto out_unlock;
 	}
 
+	/* Check exclusive open mode for AT and QCDM ports */
+	if ((port->type == WWAN_PORT_AT || port->type == WWAN_PORT_QCDM) &&
+	    test_bit(TTY_EXCLUSIVE, &port->at_data.flags) &&
+	    !capable(CAP_SYS_ADMIN)) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
 	/* If port is already started, don't start again */
 	if (!port->start_count)
 		ret = port->ops->start(port);
@@ -857,6 +867,15 @@ static int wwan_port_fops_release(struct inode *inode, struct file *filp)
 	struct wwan_port *port = filp->private_data;
 
 	wwan_port_op_stop(port);
+
+	/* Clear exclusive flag when last fd is closed */
+	if (port->type == WWAN_PORT_AT || port->type == WWAN_PORT_QCDM) {
+		mutex_lock(&port->ops_lock);
+		if (!port->start_count)
+			clear_bit(TTY_EXCLUSIVE, &port->at_data.flags);
+		mutex_unlock(&port->ops_lock);
+	}
+
 	put_device(&port->dev);
 
 	return 0;
@@ -1028,6 +1047,22 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 			port->at_data.mdmbits |= mdmbits;
 		else
 			port->at_data.mdmbits = mdmbits;
+		break;
+	}
+
+	case TIOCEXCL:
+		set_bit(TTY_EXCLUSIVE, &port->at_data.flags);
+		break;
+
+	case TIOCNXCL:
+		clear_bit(TTY_EXCLUSIVE, &port->at_data.flags);
+		break;
+
+	case TIOCGEXCL:
+	{
+		int excl = test_bit(TTY_EXCLUSIVE, &port->at_data.flags);
+
+		ret = put_user(excl, (int __user *)arg);
 		break;
 	}
 
