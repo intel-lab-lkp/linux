@@ -14,6 +14,10 @@ properties:
     oneOf:
       - description: Generic xHCI device
         const: generic-xhci
+      - description: Axiado AX3005 SoC xHCI controller
+        items:
+          - const: axiado,ax3005-xhci
+          - const: generic-xhci
       - description: Armada 375/38x SoCs
         items:
           - enum:
