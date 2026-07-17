@@ -339,7 +339,9 @@ static int ethosu_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, ethosudev);
 
-	dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(40));
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(40));
+	if (ret)
+		return ret;
 
 	ethosudev->regs = devm_platform_ioremap_resource(pdev, 0);
 
