@@ -230,3 +230,12 @@ void __init padata_init(void)
 	for (i = 0; i < possible_cpus; ++i)
 		list_add(&padata_works[i].pw_list, &padata_free_works);
 }
+
+static int __init padata_exit(void)
+{
+	kfree(padata_works);
+	padata_works = NULL;
+	INIT_LIST_HEAD(&padata_free_works);
+	return 0;
+}
+late_initcall_sync(padata_exit);
