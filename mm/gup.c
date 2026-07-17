@@ -1082,7 +1082,13 @@ unmap:
 /*
  * mmap_lock must be held on entry.  If @flags has FOLL_UNLOCKABLE but not
  * FOLL_NOWAIT, the mmap_lock may be released.  If it is, *@locked will be set
- * to 0 and -EBUSY returned.
+ * to 0 and -EAGAIN returned.
+ *
+ * The return value does not depend on the lock type: a fault that made
+ * progress but needs a retry (VM_FAULT_RETRY / VM_FAULT_COMPLETED) is reported
+ * as -EAGAIN for both the mmap lock and the per-VMA lock (FOLL_VMA_LOCK). Only
+ * the *@locked side effect is lock-type specific, as the per-VMA lock path has
+ * no unlockable mmap_lock to drop.
  */
 static int faultin_page(struct vm_area_struct *vma,
 		unsigned long address, unsigned int flags, bool unshare,
@@ -1097,6 +1103,8 @@ static int faultin_page(struct vm_area_struct *vma,
 		fault_flags |= FAULT_FLAG_WRITE;
 	if (flags & FOLL_REMOTE)
 		fault_flags |= FAULT_FLAG_REMOTE;
+	if (flags & FOLL_VMA_LOCK)
+		fault_flags |= FAULT_FLAG_VMA_LOCK;
 	if (flags & FOLL_UNLOCKABLE) {
 		fault_flags |= FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 		/*
@@ -1125,39 +1133,145 @@ static int faultin_page(struct vm_area_struct *vma,
 
 	ret = handle_mm_fault(vma, address, fault_flags, NULL);
 
+	/*
+	 * A fully completed fault (VM_FAULT_COMPLETED) or one that needs a retry
+	 * (VM_FAULT_RETRY) has released the lock it was holding. Report both as
+	 * -EAGAIN so the caller retries: the mmap lock caller retakes it here,
+	 * the per-VMA lock caller (FOLL_VMA_LOCK) falls back to the mmap lock.
+	 *
+	 * Dropping the mmap lock is recorded in *@locked. There is no such lock
+	 * to drop under the per-VMA lock, where @locked is not used, so leave it
+	 * alone in that case.
+	 */
 	if (ret & VM_FAULT_COMPLETED) {
-		/*
-		 * With FAULT_FLAG_RETRY_NOWAIT we'll never release the
-		 * mmap lock in the page fault handler. Sanity check this.
-		 */
-		WARN_ON_ONCE(fault_flags & FAULT_FLAG_RETRY_NOWAIT);
-		*locked = 0;
-
-		/*
-		 * We should do the same as VM_FAULT_RETRY, but let's not
-		 * return -EBUSY since that's not reflecting the reality of
-		 * what has happened - we've just fully completed a page
-		 * fault, with the mmap lock released.  Use -EAGAIN to show
-		 * that we want to take the mmap lock _again_.
-		 */
+		if (!(flags & FOLL_VMA_LOCK)) {
+			/*
+			 * With FAULT_FLAG_RETRY_NOWAIT we'll never release the
+			 * mmap lock in the page fault handler. Sanity check this.
+			 */
+			WARN_ON_ONCE(fault_flags & FAULT_FLAG_RETRY_NOWAIT);
+			*locked = 0;
+		}
 		return -EAGAIN;
 	}
 
 	if (ret & VM_FAULT_ERROR) {
 		int err = vm_fault_to_errno(ret, flags);
 
-		if (err)
-			return err;
-		BUG();
+		/*
+		 * VM_FAULT_ERROR always decodes to an errno; a zero here would
+		 * mean handle_mm_fault() returned an unexpected combination.
+		 * Report -EFAULT rather than crash: under the per-VMA lock the
+		 * mmap lock retry produces the definitive result.
+		 */
+		VM_WARN_ON_ONCE(!err);
+		return err ? err : -EFAULT;
 	}
 
 	if (ret & VM_FAULT_RETRY) {
-		if (!(fault_flags & FAULT_FLAG_RETRY_NOWAIT))
+		if (!(flags & FOLL_VMA_LOCK) &&
+		    !(fault_flags & FAULT_FLAG_RETRY_NOWAIT))
 			*locked = 0;
-		return -EBUSY;
+		return -EAGAIN;
 	}
 
 	return 0;
+}
+
+/*
+ * get_user_page_vma - get one page from @vma, whose lock the caller already
+ * holds: the mmap lock, or (with FOLL_VMA_LOCK) the per-VMA lock. Walks the
+ * page tables, faulting the page in if needed, and on success returns it with
+ * a reference and the lock still held.
+ *
+ * Runs check_vma_flags() like __get_user_pages(), so callers need not pre-check
+ * the VMA; most rejections are returned as their error. A VM_IO/VM_PFNMAP VMA
+ * is the exception: a COWed page with a struct page is returned, while a raw
+ * PFN has none and yields -EFAULT, to be reached via vma->vm_ops->access().
+ *
+ * Under FOLL_VMA_LOCK, anything that cannot be finished under the per-VMA lock
+ * (a dropped fault, userfaultfd, a hard error, or ->access() memory) releases
+ * the lock and returns -EAGAIN, so the caller retries under the mmap lock.
+ */
+struct page *get_user_page_vma(struct vm_area_struct *vma, unsigned long addr,
+			       unsigned int gup_flags)
+{
+	bool vma_locked = gup_flags & FOLL_VMA_LOCK;
+	unsigned long page_mask;
+	struct page *page;
+	int locked = 1;
+	bool pfnmap;
+	int ret;
+
+	/*
+	 * Validate the VMA up front, like __get_user_pages(). A VM_IO/VM_PFNMAP
+	 * VMA is not rejected outright: it can hold COWed pages that have a
+	 * struct page, so let follow_page_mask() look for one, and treat only
+	 * its struct-page-less PFNs as unreachable. Any other rejection
+	 * (secretmem, bad permissions, ...) is final.
+	 */
+	ret = check_vma_flags(vma, gup_flags);
+	if (ret && !(vma->vm_flags & (VM_IO | VM_PFNMAP)))
+		goto fail;
+	pfnmap = ret;
+
+	for (;;) {
+		if (fatal_signal_pending(current)) {
+			ret = -EINTR;
+			goto fail;
+		}
+		cond_resched();
+
+		page = follow_page_mask(vma, addr,
+					gup_flags | FOLL_TOUCH | FOLL_GET,
+					&page_mask);
+		if (!IS_ERR_OR_NULL(page))
+			return page;
+
+		/*
+		 * No struct page: a raw PFN of a VM_IO/VM_PFNMAP VMA, whether
+		 * seen by the up-front check (@pfnmap) or reported as -EEXIST
+		 * for a present PFN. Return -EFAULT so the caller reaches it
+		 * through vma->vm_ops->access().
+		 */
+		if (pfnmap || PTR_ERR(page) == -EEXIST) {
+			ret = -EFAULT;
+			goto fail;
+		}
+		/* A hard error from the walk itself. */
+		if (page && PTR_ERR(page) != -EMLINK) {
+			ret = PTR_ERR(page);
+			goto fail;
+		}
+
+		/*
+		 * The page is not present, or needs unsharing. A remote fault
+		 * under the per-VMA lock cannot deliver userfaultfd (which
+		 * assumes current is the faulting task), so fall back for those.
+		 */
+		if (vma_locked && userfaultfd_armed(vma)) {
+			ret = -EAGAIN;
+			goto fail;
+		}
+		ret = faultin_page(vma, addr, gup_flags | FOLL_REMOTE | FOLL_GET,
+				   PTR_ERR(page) == -EMLINK, &locked);
+		if (ret == -EAGAIN)
+			return ERR_PTR(-EAGAIN);	/* fault released the per-VMA lock */
+		if (ret)
+			goto fail;
+	}
+
+fail:
+	/*
+	 * Under the per-VMA lock the caller cannot reach ->access() or act on a
+	 * hard error (both need the mmap lock), so release the lock and have it
+	 * retry there; the mmap-lock pass produces the definitive error.
+	 */
+	if (vma_locked) {
+		vma_end_read(vma);
+		return ERR_PTR(-EAGAIN);
+	}
+	return ERR_PTR(ret);
 }
 
 /*

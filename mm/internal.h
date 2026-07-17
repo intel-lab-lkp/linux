@@ -1595,6 +1595,8 @@ struct vm_struct *__get_vm_area_node(unsigned long size,
  */
 int __must_check try_grab_folio(struct folio *folio, int refs,
 				unsigned int flags);
+struct page *get_user_page_vma(struct vm_area_struct *vma, unsigned long addr,
+			       unsigned int gup_flags);
 
 /*
  * mm/huge_memory.c
@@ -1641,11 +1643,13 @@ enum {
 	FOLL_UNLOCKABLE = 1 << 21,
 	/* VMA lookup+checks compatible with MADV_POPULATE_(READ|WRITE) */
 	FOLL_MADV_POPULATE = 1 << 22,
+	/* caller holds the per-VMA lock, not the mmap lock */
+	FOLL_VMA_LOCK = 1 << 23,
 };
 
 #define INTERNAL_GUP_FLAGS (FOLL_TOUCH | FOLL_TRIED | FOLL_REMOTE | FOLL_PIN | \
 			    FOLL_FAST_ONLY | FOLL_UNLOCKABLE | \
-			    FOLL_MADV_POPULATE)
+			    FOLL_MADV_POPULATE | FOLL_VMA_LOCK)
 
 /*
  * Indicates for which pages that are write-protected in the page table,
