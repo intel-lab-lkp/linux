@@ -78,10 +78,11 @@ initial_plane_phys(struct drm_i915_private *i915,
 	return true;
 }
 
-static struct i915_vma *
-initial_plane_vma(struct drm_i915_private *i915,
-		  struct intel_initial_plane_config *plane_config)
+static struct drm_gem_object *
+i915_alloc_initial_plane_obj(struct drm_device *drm,
+			     struct intel_initial_plane_config *plane_config)
 {
+	struct drm_i915_private *i915 = to_i915(drm);
 	struct intel_memory_region *mem;
 	struct drm_i915_gem_object *obj;
 	struct drm_mm_node orig_mm = {};
@@ -203,7 +204,7 @@ retry:
 		    "Initial plane fb bound to 0x%x in the ggtt (original 0x%x)\n",
 		    i915_ggtt_offset(vma), plane_config->base);
 
-	return vma;
+	return &obj->base;
 
 err_obj:
 	if (drm_mm_node_allocated(&orig_mm))
@@ -212,39 +213,10 @@ err_obj:
 	return NULL;
 }
 
-static struct drm_gem_object *
-i915_alloc_initial_plane_obj(struct drm_device *drm,
-			     struct intel_initial_plane_config *plane_config)
+static void
+i915_free_initial_plane_obj(struct drm_gem_object *obj)
 {
-	struct drm_i915_private *i915 = to_i915(drm);
-	struct drm_mode_fb_cmd2 mode_cmd = {};
-	struct drm_framebuffer *fb = plane_config->fb;
-	struct i915_vma *vma;
-
-	vma = initial_plane_vma(i915, plane_config);
-	if (!vma)
-		return NULL;
-
-	mode_cmd.pixel_format = fb->format->format;
-	mode_cmd.width = fb->width;
-	mode_cmd.height = fb->height;
-	mode_cmd.pitches[0] = fb->pitches[0];
-	mode_cmd.modifier[0] = fb->modifier;
-	mode_cmd.flags = DRM_MODE_FB_MODIFIERS;
-
-	if (intel_framebuffer_init(to_intel_framebuffer(fb),
-				   intel_bo_to_drm_bo(vma->obj),
-				   fb->format, &mode_cmd)) {
-		drm_dbg_kms(&i915->drm, "intel fb init failed\n");
-		goto err_vma;
-	}
-
-	plane_config->vma = vma;
-	return intel_bo_to_drm_bo(vma->obj);
-
-err_vma:
-	i915_vma_put(vma);
-	return NULL;
+	drm_gem_object_put(obj);
 }
 
 static int
@@ -275,14 +247,8 @@ i915_initial_plane_setup(struct drm_plane_state *_plane_state,
 	return 0;
 }
 
-static void i915_plane_config_fini(struct intel_initial_plane_config *plane_config)
-{
-	if (plane_config->vma)
-		i915_vma_put(plane_config->vma);
-}
-
 const struct intel_display_initial_plane_interface i915_display_initial_plane_interface = {
 	.alloc_obj = i915_alloc_initial_plane_obj,
+	.free_obj = i915_free_initial_plane_obj,
 	.setup = i915_initial_plane_setup,
-	.config_fini = i915_plane_config_fini,
 };

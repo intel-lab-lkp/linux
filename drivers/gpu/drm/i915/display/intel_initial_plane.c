@@ -4,6 +4,7 @@
 #include <linux/iopoll.h>
 
 #include <drm/drm_blend.h>
+#include <drm/drm_gem.h>
 #include <drm/drm_print.h>
 #include <drm/intel/display_parent_interface.h>
 
@@ -67,11 +68,20 @@ intel_reuse_initial_plane_fb(struct intel_crtc *this,
 	return NULL;
 }
 
-static struct drm_gem_object *
-intel_alloc_initial_plane_obj(struct intel_display *display,
-			      struct intel_initial_plane_config *plane_config)
+static struct drm_framebuffer *
+intel_alloc_initial_plane_fb(struct intel_display *display,
+			     struct intel_initial_plane_config *plane_config)
 {
 	struct drm_framebuffer *fb = plane_config->fb;
+	struct drm_mode_fb_cmd2 mode_cmd = {
+		.pixel_format = fb->format->format,
+		.width = fb->width,
+		.height = fb->height,
+		.pitches[0] = fb->pitches[0],
+		.modifier[0] = fb->modifier,
+		.flags = DRM_MODE_FB_MODIFIERS,
+	};
+	struct drm_gem_object *obj;
 
 	switch (fb->modifier) {
 	case DRM_FORMAT_MOD_LINEAR:
@@ -106,7 +116,20 @@ intel_alloc_initial_plane_obj(struct intel_display *display,
 		return NULL;
 	}
 
-	return display->parent->initial_plane->alloc_obj(display->drm, plane_config);
+	obj = display->parent->initial_plane->alloc_obj(display->drm, plane_config);
+	if (!obj)
+		return NULL;
+
+	if (intel_framebuffer_init(to_intel_framebuffer(fb), obj,
+				   fb->format, &mode_cmd)) {
+		display->parent->initial_plane->free_obj(obj);
+		drm_dbg_kms(display->drm, "initial FB init failed\n");
+		return NULL;
+	}
+
+	drm_gem_object_put(obj);
+
+	return fb;
 }
 
 static void
@@ -127,13 +150,11 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 	if (!plane_config->fb)
 		goto nofb;
 
-	if (intel_alloc_initial_plane_obj(display, plane_config)) {
-		fb = plane_config->fb;
-	} else {
+	fb = intel_alloc_initial_plane_fb(display, plane_config);
+	if (!fb)
 		fb = intel_reuse_initial_plane_fb(crtc, all_plane_configs);
-		if (!fb)
-			goto nofb;
-	}
+	if (!fb)
+		goto nofb;
 
 	plane_state->uapi.rotation = plane_config->rotation;
 	intel_fb_fill_view(to_intel_framebuffer(fb),
@@ -189,8 +210,6 @@ static void plane_config_fini(struct intel_display *display,
 
 		plane_config->fb = NULL;
 	}
-
-	display->parent->initial_plane->config_fini(plane_config);
 }
 
 void intel_initial_plane_config(struct intel_display *display)

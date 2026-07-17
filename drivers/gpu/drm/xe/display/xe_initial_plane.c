@@ -37,10 +37,11 @@ static bool need_pte_local(struct xe_device *xe)
 	return IS_DGFX(xe) || has_lmembar(xe);
 }
 
-static struct xe_bo *
-initial_plane_bo(struct xe_device *xe,
-		 struct intel_initial_plane_config *plane_config)
+static struct drm_gem_object *
+xe_alloc_initial_plane_obj(struct drm_device *drm,
+			   struct intel_initial_plane_config *plane_config)
 {
+	struct xe_device *xe = to_xe_device(drm);
 	struct xe_tile *tile0 = xe_device_get_root_tile(xe);
 	struct xe_bo *bo;
 	resource_size_t phys_base;
@@ -120,42 +121,13 @@ initial_plane_bo(struct xe_device *xe,
 		return NULL;
 	}
 
-	return bo;
+	return &bo->ttm.base;
 }
 
-static struct drm_gem_object *
-xe_alloc_initial_plane_obj(struct drm_device *drm,
-			   struct intel_initial_plane_config *plane_config)
+static void
+xe_free_initial_plane_obj(struct drm_gem_object *obj)
 {
-	struct xe_device *xe = to_xe_device(drm);
-	struct drm_mode_fb_cmd2 mode_cmd = { 0 };
-	struct drm_framebuffer *fb = plane_config->fb;
-	struct xe_bo *bo;
-
-	mode_cmd.pixel_format = fb->format->format;
-	mode_cmd.width = fb->width;
-	mode_cmd.height = fb->height;
-	mode_cmd.pitches[0] = fb->pitches[0];
-	mode_cmd.modifier[0] = fb->modifier;
-	mode_cmd.flags = DRM_MODE_FB_MODIFIERS;
-
-	bo = initial_plane_bo(xe, plane_config);
-	if (!bo)
-		return NULL;
-
-	if (intel_framebuffer_init(to_intel_framebuffer(fb),
-				   &bo->ttm.base, fb->format, &mode_cmd)) {
-		drm_dbg_kms(&xe->drm, "intel fb init failed\n");
-		goto err_bo;
-	}
-	/* Reference handed over to fb */
-	xe_bo_put(bo);
-
-	return &bo->ttm.base;
-
-err_bo:
-	xe_bo_unpin_map_no_vm(bo);
-	return NULL;
+	xe_bo_unpin_map_no_vm(gem_to_xe_bo(obj));
 }
 
 static int
@@ -179,17 +151,11 @@ xe_initial_plane_setup(struct drm_plane_state *_plane_state,
 
 	plane_state->surf = offset;
 
-	plane_config->vma = vma;
-
 	return 0;
-}
-
-static void xe_plane_config_fini(struct intel_initial_plane_config *plane_config)
-{
 }
 
 const struct intel_display_initial_plane_interface xe_display_initial_plane_interface = {
 	.alloc_obj = xe_alloc_initial_plane_obj,
+	.free_obj = xe_free_initial_plane_obj,
 	.setup = xe_initial_plane_setup,
-	.config_fini = xe_plane_config_fini,
 };
