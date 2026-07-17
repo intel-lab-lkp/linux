@@ -380,9 +380,23 @@ static bool rk_iommu_is_stall_active(struct rk_iommu *iommu)
 	bool active = true;
 	int i;
 
-	for (i = 0; i < iommu->num_mmu; i++)
-		active &= !!(rk_iommu_read(iommu->bases[i], RK_MMU_STATUS) &
-					   RK_MMU_STATUS_STALL_ACTIVE);
+	for (i = 0; i < iommu->num_mmu; i++) {
+		u32 status = rk_iommu_read(iommu->bases[i], RK_MMU_STATUS);
+
+		/*
+		 * A bank stuck with PAGE_FAULT_ACTIVE but without STALL_ACTIVE
+		 * and with IDLE set has an orphaned fault left by firmware before
+		 * paging was configured.  It cannot enter stall mode but has no
+		 * transaction in flight, so it is already quiescent.  Skip it
+		 * rather than treating it as "not stalled."
+		 */
+		if ((status & RK_MMU_STATUS_PAGE_FAULT_ACTIVE) &&
+		    !(status & RK_MMU_STATUS_STALL_ACTIVE) &&
+		    (status & RK_MMU_STATUS_IDLE))
+			continue;
+
+		active &= !!(status & RK_MMU_STATUS_STALL_ACTIVE);
+	}
 
 	return active;
 }
