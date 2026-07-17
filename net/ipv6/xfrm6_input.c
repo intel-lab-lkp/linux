@@ -173,6 +173,7 @@ int xfrm6_udp_encap_rcv(struct sock *sk, struct sk_buff *skb)
 
 	return ret;
 }
+EXPORT_SYMBOL(xfrm6_udp_encap_rcv);
 
 struct sk_buff *xfrm6_gro_udp_encap_rcv(struct sock *sk, struct list_head *head,
 					struct sk_buff *skb)

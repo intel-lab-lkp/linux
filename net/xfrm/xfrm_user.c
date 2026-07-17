@@ -29,6 +29,7 @@
 #include <net/xfrm.h>
 #include <net/netlink.h>
 #include <net/ah.h>
+#include <net/udp_tunnel.h>
 #include <linux/uaccess.h>
 #if IS_ENABLED(CONFIG_IPV6)
 #include <linux/in6.h>
@@ -484,6 +485,17 @@ static int verify_newsa_info(struct xfrm_usersa_info *p,
 			goto out;
 	}
 
+	if (attrs[XFRMA_SA_EXTRA_FLAGS]) {
+		u32 xflags = nla_get_u32(attrs[XFRMA_SA_EXTRA_FLAGS]);
+
+		if (xflags & XFRM_SA_XFLAG_UDP_ENCAP_SOCK &&
+		    (!sa_dir || sa_dir == XFRM_SA_DIR_OUT)) {
+			NL_SET_ERR_MSG(extack, "Flag UDP_ENCAP_SOCK can only be set on input SA");
+			err = -EINVAL;
+			goto out;
+		}
+	}
+
 	if (sa_dir == XFRM_SA_DIR_OUT) {
 		if (p->flags & XFRM_STATE_DECAP_DSCP) {
 			NL_SET_ERR_MSG(extack, "Flag DECAP_DSCP should not be set for output SA");
@@ -556,7 +568,6 @@ static int verify_newsa_info(struct xfrm_usersa_info *p,
 				err = -EINVAL;
 				goto out;
 			}
-
 		}
 
 		if (attrs[XFRMA_IPTFS_DONT_FRAG]) {
@@ -932,8 +943,16 @@ static struct xfrm_state *xfrm_state_construct(struct net *net,
 			goto error;
 	}
 
-	if (attrs[XFRMA_SA_EXTRA_FLAGS])
+	if (attrs[XFRMA_SA_EXTRA_FLAGS]) {
 		x->props.extra_flags = nla_get_u32(attrs[XFRMA_SA_EXTRA_FLAGS]);
+
+		if (x->props.extra_flags & XFRM_SA_XFLAG_UDP_ENCAP_SOCK &&
+		    x->encap && x->encap->encap_type != UDP_ENCAP_ESPINUDP) {
+			NL_SET_ERR_MSG(extack, "XFRM_SA_XFLAG_UDP_ENCAP_SOCK can only be set on UDP_ENCAP_ESPINUDP type");
+			err = -EOPNOTSUPP;
+			goto error;
+		}
+	}
 
 	if ((err = attach_aead(x, attrs[XFRMA_ALG_AEAD], extack)))
 		goto error;
@@ -1036,6 +1055,97 @@ error_no_put:
 	return NULL;
 }
 
+static struct xfrm_encap_sock *
+xfrm_socket_find_get(struct net *net, const struct udp_port_cfg *udp_conf)
+{
+	struct xfrm_encap_sock *listener;
+
+	hlist_for_each_entry(listener, &net->xfrm.encap_socket, list) {
+		if (!memcmp(&listener->cfg, udp_conf, sizeof(*udp_conf))) {
+			refcount_inc(&listener->refcnt);
+			return listener;
+		}
+	}
+
+	return NULL;
+}
+
+static int xfrm_socket_encap_create(struct net *net, struct xfrm_state *x,
+				    struct udp_port_cfg *udp_conf,
+				    struct udp_tunnel_sock_cfg *tuncfg)
+{
+	struct xfrm_encap_sock *listener;
+	struct socket *sock;
+	int err;
+
+	listener = kzalloc_obj(*listener);
+	if (!listener)
+		return -ENOMEM;
+
+	err = udp_sock_create(net, udp_conf, &sock);
+	if (err) {
+		kfree(listener);
+		return err;
+	}
+	setup_udp_tunnel_sock(net, sock->sk, tuncfg);
+
+	listener->sk = sock->sk;
+	listener->cfg = *udp_conf;
+	refcount_set(&listener->refcnt, 1);
+	hlist_add_head(&listener->list, &net->xfrm.encap_socket);
+
+	x->encap_sock = listener;
+
+	return 0;
+}
+
+static int xfrm_socket_setup(struct net *net, struct xfrm_state *x,
+			     struct netlink_ext_ack *extack)
+{
+	struct udp_tunnel_sock_cfg tuncfg = {};
+	struct xfrm_encap_sock *listener;
+	struct udp_port_cfg udp_conf;
+	int err;
+
+	if (!x->encap)
+		return -EOPNOTSUPP;
+
+	memset(&udp_conf, 0, sizeof(udp_conf));
+	udp_conf.family = x->props.family;
+
+	switch (x->props.family) {
+	case AF_INET:
+		udp_conf.local_ip.s_addr = x->id.daddr.a4;
+		tuncfg.encap_rcv = xfrm4_udp_encap_rcv;
+		break;
+#if IS_ENABLED(CONFIG_IPV6)
+	case AF_INET6:
+		udp_conf.local_ip6 = x->id.daddr.in6;
+		tuncfg.encap_rcv = xfrm6_udp_encap_rcv;
+		break;
+#endif
+	default:
+		return -EOPNOTSUPP;
+	}
+	udp_conf.local_udp_port = x->encap->encap_sport;
+
+	listener = xfrm_socket_find_get(net, &udp_conf);
+	if (listener) {
+		x->encap_sock = listener;
+		return 0;
+	}
+
+	tuncfg.encap_type = UDP_ENCAP_ESPINUDP;
+
+	err = xfrm_socket_encap_create(net, x, &udp_conf, &tuncfg);
+	if (err < 0) {
+		NL_SET_ERR_MSG(extack, "Cannot initialize kernel UDP socket");
+		return err;
+	}
+
+	return 0;
+}
+
 static int xfrm_add_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 		       struct nlattr **attrs, struct netlink_ext_ack *extack)
 {
@@ -1052,6 +1162,14 @@ static int xfrm_add_sa(struct sk_buff *skb, struct nlmsghdr *nlh,
 	x = xfrm_state_construct(net, p, attrs, &err, extack);
 	if (!x)
 		return err;
+
+	if (x->props.extra_flags & XFRM_SA_XFLAG_UDP_ENCAP_SOCK) {
+		err = xfrm_socket_setup(net, x, extack);
+		if (err < 0) {
+			x->km.state = XFRM_STATE_DEAD;
+			goto out;
+		}
+	}
 
 	xfrm_state_hold(x);
 	if (nlh->nlmsg_type == XFRM_MSG_NEWSA)

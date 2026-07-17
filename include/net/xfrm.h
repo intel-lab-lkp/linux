@@ -25,6 +25,7 @@
 #include <net/ipv6.h>
 #include <net/ip6_fib.h>
 #include <net/flow.h>
+#include <net/udp_tunnel.h>
 #include <net/gro_cells.h>
 
 #include <linux/interrupt.h>
@@ -169,6 +170,13 @@ struct xfrm_dev_offload {
 	u8			flags : 2;
 };
 
+struct xfrm_encap_sock {
+	struct hlist_node	list;
+	struct udp_port_cfg	cfg;
+	struct sock		*sk;
+	refcount_t		refcnt;
+};
+
 struct xfrm_mode {
 	u8 encap;
 	u8 family;
@@ -249,6 +257,7 @@ struct xfrm_state {
 
 	/* Data for encapsulator */
 	struct xfrm_encap_tmpl	*encap;
+	struct xfrm_encap_sock	*encap_sock;
 
 	/* NAT keepalive */
 	u32			nat_keepalive_interval; /* seconds */
@@ -2342,6 +2351,8 @@ static inline bool xfrm6_local_dontfrag(const struct sock *sk)
 	return false;
 }
 #endif
+
+int xfrm4_udp_encap_rcv(struct sock *sk, struct sk_buff *skb);
 
 #if (IS_BUILTIN(CONFIG_XFRM_INTERFACE) && IS_ENABLED(CONFIG_DEBUG_INFO_BTF)) || \
     (IS_MODULE(CONFIG_XFRM_INTERFACE) && IS_ENABLED(CONFIG_DEBUG_INFO_BTF_MODULES))

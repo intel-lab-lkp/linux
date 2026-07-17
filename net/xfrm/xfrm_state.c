@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <net/udp_tunnel.h>
 
 #include <crypto/aead.h>
 
@@ -586,6 +587,16 @@ retry:
 	return cbs;
 }
 
+static bool xfrm_socket_put(struct xfrm_encap_sock *encap_sock)
+{
+	if (refcount_dec_and_test(&encap_sock->refcnt)) {
+		udp_tunnel_sock_release(encap_sock->sk);
+		return true;
+	}
+
+	return false;
+}
+
 void xfrm_state_free(struct xfrm_state *x)
 {
 	kmem_cache_free(xfrm_state_cache, x);
@@ -597,6 +608,10 @@ static void xfrm_state_gc_destroy(struct xfrm_state *x)
 {
 	if (x->mode_cbs && x->mode_cbs->destroy_state)
 		x->mode_cbs->destroy_state(x);
+
+	if (x->encap_sock && xfrm_socket_put(x->encap_sock))
+		kfree(x->encap_sock);
+
 	hrtimer_cancel(&x->mtimer);
 	timer_delete_sync(&x->rtimer);
 	kfree_sensitive(x->aead);
@@ -3332,6 +3347,7 @@ int __net_init xfrm_state_init(struct net *net)
 					      SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 
 	INIT_LIST_HEAD(&net->xfrm.state_all);
+	INIT_HLIST_HEAD(&net->xfrm.encap_socket);
 
 	sz = sizeof(struct hlist_head) * 8;
 

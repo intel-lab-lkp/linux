@@ -7,6 +7,7 @@ config XFRM
 	depends on INET
 	select GRO_CELLS
 	select SKB_EXTENSIONS
+	select NET_UDP_TUNNEL
 
 config XFRM_OFFLOAD
 	bool
@@ -23,6 +24,7 @@ if INET
 config XFRM_USER
 	tristate "Transformation user configuration interface"
 	select XFRM_ALGO
+	select NET_UDP_TUNNEL
 	help
 	  Support for Transformation(XFRM) user configuration interface
 	  like IPsec used by native Linux tools.
