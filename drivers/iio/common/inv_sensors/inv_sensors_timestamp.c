@@ -16,6 +16,9 @@
 #define INV_SENSORS_TIMESTAMP_MAX(_val, _jitter)		\
 	(((_val) * (1000 + (_jitter))) / 1000)
 
+/* minimum timestamp delta between 2 interrupts for measuring period (20ms) */
+#define INV_SENSORS_MIN_IT_DELTA	(20 * NSEC_PER_MSEC)
+
 /* Add a new value inside an accumulator and update the estimate value */
 static void inv_update_acc(struct inv_sensors_timestamp_acc *acc, uint32_t val)
 {
@@ -121,10 +124,13 @@ static uint32_t inv_align_timestamp_it(struct inv_sensors_timestamp *ts,
 void inv_sensors_timestamp_interrupt(struct inv_sensors_timestamp *ts,
 				     size_t sample_nb, int64_t timestamp)
 {
+	const int64_t delta_threshold =
+			INV_SENSORS_TIMESTAMP_MIN(INV_SENSORS_MIN_IT_DELTA,
+						  ts->chip.jitter);
 	struct inv_sensors_timestamp_interval *it;
 	int64_t delta, interval;
 	uint32_t period;
-	bool valid = false;
+	bool valid;
 
 	if (sample_nb == 0)
 		return;
@@ -136,16 +142,29 @@ void inv_sensors_timestamp_interrupt(struct inv_sensors_timestamp *ts,
 		ts->timestamp = timestamp - interval;
 	}
 
+	/* update delta timestamps and estimated period */
+	it = &ts->delta;
+	ts->delta_counter += sample_nb;
+	delta = timestamp - it->up;
+	if (delta >= delta_threshold) {
+		it->lo = it->up;
+		it->up = timestamp;
+		if (it->lo != 0) {
+			/* compute period: delta time divided by number of samples */
+			delta = it->up - it->lo;
+			period = div_s64(delta, sample_nb);
+			inv_update_chip_period(ts, period);
+		}
+		ts->delta_counter = 0;
+	}
+
 	/* update interrupt timestamp and compute chip and sensor periods */
 	it = &ts->it;
 	it->lo = it->up;
 	it->up = timestamp;
 	delta = it->up - it->lo;
-	if (it->lo != 0) {
-		/* compute period: delta time divided by number of samples */
-		period = div_s64(delta, sample_nb);
-		valid = inv_update_chip_period(ts, period);
-	}
+	period = div_s64(delta, sample_nb);
+	valid = inv_validate_period(ts, period);
 
 	/* if interrupt interval is valid, sync with interrupt timestamp */
 	ts->period = valid ? inv_align_timestamp_it(ts, sample_nb) :
