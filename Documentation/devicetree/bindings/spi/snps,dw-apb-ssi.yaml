@@ -41,6 +41,10 @@ properties:
         enum:
           - snps,dw-apb-ssi
           - snps,dwc-ssi-1.01a
+      - description: Axiado AX3005 SPI Controller
+        items:
+          - const: axiado,ax3005-spi
+          - const: snps,dwc-ssi-1.01a
       - description: Microchip Sparx5 SoC SPI Controller
         const: microchip,sparx5-spi
       - description: Amazon Alpine SPI Controller
