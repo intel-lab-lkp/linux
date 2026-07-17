@@ -774,3 +774,33 @@ void efi_remap_image(unsigned long image_base, unsigned alloc_size,
 			efi_warn("Failed to remap data region non-executable\n");
 	}
 }
+
+/*
+ * Install an empty root for the poisoned-memory table now, while boot services
+ * are available; the running kernel can only append to it later, not install a
+ * new config table. Shared by all stubs (x86 and the generic stub).
+ */
+#ifdef CONFIG_EFI_POISONED_MEMORY
+void install_poisoned_memory_table(void)
+{
+	efi_guid_t poisoned_memory_table_guid = LINUX_EFI_POISONED_MEMORY_TABLE_GUID;
+	struct linux_efi_poisoned_memory *pm;
+	efi_status_t status;
+
+	status = efi_bs_call(allocate_pool, EFI_LOADER_DATA, sizeof(*pm),
+			     (void **)&pm);
+	if (status != EFI_SUCCESS) {
+		efi_err("Failed to allocate poisoned-memory entry!\n");
+		return;
+	}
+
+	pm->next = 0;
+	pm->size = 0;
+	atomic_set(&pm->count, 0);
+
+	status = efi_bs_call(install_configuration_table,
+			     &poisoned_memory_table_guid, pm);
+	if (status != EFI_SUCCESS)
+		efi_err("Failed to install poisoned-memory config table!\n");
+}
+#endif
