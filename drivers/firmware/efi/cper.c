@@ -765,6 +765,16 @@ int cper_estatus_check(const struct acpi_hest_generic_status *estatus)
 		if (acpi_hest_get_size(gdata) > data_len)
 			return -EINVAL;
 
+		/*
+		 * error_data_length reaches record_size below as a signed int
+		 * (see <acpi/ghes.h>), so a value with the sign bit set can
+		 * wrap record_size small and slip past the bound check. Reject
+		 * it before the arithmetic.
+		 */
+		if (acpi_hest_get_error_length(gdata) < 0 ||
+		    acpi_hest_get_error_length(gdata) > data_len)
+			return -EINVAL;
+
 		record_size = acpi_hest_get_record_size(gdata);
 		if (record_size > data_len)
 			return -EINVAL;
