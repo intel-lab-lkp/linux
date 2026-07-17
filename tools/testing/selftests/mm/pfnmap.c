@@ -31,6 +31,7 @@ static sigjmp_buf sigjmp_buf_env;
 static char *file = "/dev/mem";
 static off_t file_offset;
 static int fd;
+static int target_is_ram;
 
 static void signal_handler(int sig)
 {
@@ -113,6 +114,7 @@ static void pfnmap_init(void)
 		if (err)
 			ksft_exit_skip("Cannot find ram target in '/proc/iomem': %s\n",
 				       strerror(-err));
+		target_is_ram = 1;
 	} else {
 		file_offset = 0;
 	}
@@ -269,6 +271,70 @@ TEST_F(pfnmap, fork)
 	else
 		ret = -EINVAL;
 	ASSERT_EQ(ret, 0);
+}
+
+TEST_F(pfnmap, procmem_cow_read)
+{
+	char *priv, *buf;
+	ssize_t rc;
+	int mem_fd;
+
+	/*
+	 * A COWed page in a VM_PFNMAP mapping has a struct page, so reading it
+	 * through /proc/self/mem -- __access_remote_vm() -> get_user_page_vma()
+	 * -- returns it directly, instead of routing to vma->vm_ops->access(),
+	 * which ioremaps the PFN and cannot reach a COWed RAM page.
+	 *
+	 * Map the file MAP_PRIVATE and writable, write to COW a page into anon
+	 * memory, then read the page back through /proc/self/mem.
+	 */
+	self->size2 = self->pagesize;
+	self->addr2 = mmap(NULL, self->size2, PROT_READ | PROT_WRITE,
+			   MAP_PRIVATE, fd, file_offset);
+	if (self->addr2 == MAP_FAILED)
+		SKIP(return, "Cannot create a writable private pfnmap mapping");
+	priv = self->addr2;
+
+	/* COW the page and stamp known bytes into the anon copy. */
+	priv[0] = 0x42;
+	priv[self->pagesize - 1] = 0x24;
+
+	buf = malloc(self->pagesize);
+	ASSERT_NE(buf, NULL);
+
+	mem_fd = open("/proc/self/mem", O_RDONLY);
+	ASSERT_GE(mem_fd, 0);
+	rc = pread(mem_fd, buf, self->pagesize, (off_t)(uintptr_t)priv);
+	close(mem_fd);
+
+	ASSERT_EQ(rc, (ssize_t)self->pagesize);
+	EXPECT_EQ(buf[0], 0x42);
+	EXPECT_EQ(buf[self->pagesize - 1], 0x24);
+
+	free(buf);
+}
+
+TEST_F(pfnmap, procmem_pfn_read)
+{
+	char buf[64];
+	ssize_t rc;
+	int mem_fd;
+
+	/*
+	 * A raw PFN of a VM_IO/VM_PFNMAP mapping has no struct page, so
+	 * __access_remote_vm() reaches it through vma->vm_ops->access()
+	 * (generic_access_phys()). That ioremaps the PFN, which is rejected for
+	 * RAM, so this only applies to genuine device memory.
+	 */
+	if (target_is_ram)
+		SKIP(return, "Target is System RAM; ->access() cannot ioremap RAM");
+
+	mem_fd = open("/proc/self/mem", O_RDONLY);
+	ASSERT_GE(mem_fd, 0);
+	rc = pread(mem_fd, buf, sizeof(buf), (off_t)(uintptr_t)self->addr1);
+	close(mem_fd);
+
+	ASSERT_EQ(rc, (ssize_t)sizeof(buf));
 }
 
 int main(int argc, char **argv)
