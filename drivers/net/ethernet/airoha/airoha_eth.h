@@ -561,6 +561,9 @@ struct airoha_gdm_dev {
 	int nbq;
 
 	struct airoha_hw_stats stats;
+
+	struct phylink *phylink;
+	struct phylink_config phylink_config;
 };
 
 struct airoha_gdm_port {
@@ -568,8 +571,8 @@ struct airoha_gdm_port {
 	int id;
 	int users;
 
-	/* protect concurrent hw_stats accesses */
-	spinlock_t stats_lock;
+	/* protect concurrent hw_stats and frag register accesses */
+	spinlock_t lock;
 
 	struct metadata_dst *dsa_meta[AIROHA_MAX_DSA_PORTS];
 };
