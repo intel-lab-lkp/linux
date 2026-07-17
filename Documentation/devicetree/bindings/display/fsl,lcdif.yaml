@@ -58,6 +58,13 @@ properties:
     items:
       - const: rx
 
+  interface-pix-fmt:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - rgb24
+      - rgb565
+      - rgb666
+
   interrupts:
     items:
       - description: LCDIF DMA interrupt
