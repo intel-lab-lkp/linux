@@ -2650,9 +2650,19 @@ static bool ksmbd_is_security_capability_ea_name(const char *name,
 	       !strncmp(name, XATTR_NAME_CAPS, name_len);
 }
 
+static bool ksmbd_is_security_xfstests_ea_name(const char *name,
+					       size_t name_len)
+{
+	return name_len == sizeof(XATTR_SECURITY_PREFIX "xfstests") - 1 &&
+	       !strncmp(name, XATTR_SECURITY_PREFIX "xfstests", name_len);
+}
+
 static bool ksmbd_is_posix_ea_name(const char *name, size_t name_len)
 {
 	if (ksmbd_is_security_capability_ea_name(name, name_len))
+		return true;
+
+	if (ksmbd_is_security_xfstests_ea_name(name, name_len))
 		return true;
 
 	return false;
