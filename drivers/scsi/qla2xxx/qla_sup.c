@@ -208,7 +208,7 @@ qla29xx_get_fdt_info(scsi_qla_host_t *vha)
  *
  * Returns QLA_SUCCESS on success or QLA_FUNCTION_FAILED on failure.
  */
-static int
+int
 qla29xx_get_flash_region(struct scsi_qla_host *vha, uint32_t code,
 			 struct qla_flt_region_data *region)
 {

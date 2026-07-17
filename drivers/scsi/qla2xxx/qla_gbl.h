@@ -697,6 +697,8 @@ extern int qla29xx_write_optrom_data(struct scsi_qla_host *vha,
 				     uint16_t reg_code, uint16_t opts,
 				     void *buf, uint32_t offset,
 				     uint32_t length);
+int qla29xx_get_flash_region(struct scsi_qla_host *vha, uint32_t code,
+			     struct qla_flt_region_data *region);
 /*
  * Global Function Prototypes in qla_dbg.c source file.
  */
