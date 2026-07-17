@@ -450,12 +450,19 @@ static void reassign_resources_sorted(struct list_head *realloc_head,
 		add_size = add_res->add_size;
 		align = add_res->min_align;
 		if (!resource_assigned(res)) {
-			resource_set_range(res, align,
-					   resource_size(res) + add_size);
+			resource_size_t req_size = resource_size(res);
+
+			resource_set_range(res, align, req_size + add_size);
 			if (pci_assign_resource(dev, idx)) {
 				pci_dbg(dev,
 					"%s %pR: ignoring failure in optional allocation\n",
 					res_name, res);
+				/*
+				 * Restore the required size so a fully optional
+				 * resource is left zero-sized and not later
+				 * mistaken for a required failure.
+				 */
+				resource_set_range(res, align, req_size);
 			}
 		} else if (add_size > 0 || !IS_ALIGNED(res->start, align)) {
 			res->flags |= add_res->flags &
@@ -743,7 +750,13 @@ out:
 		if (resource_assigned(res))
 			continue;
 
-		if (fail_head) {
+		/*
+		 * Report only required failures.  Skip optional and
+		 * zero-sized resources; reporting them would trigger
+		 * another release/retry round.
+		 */
+		if (fail_head && resource_size(res) &&
+		    !pci_resource_is_optional(dev, pci_resource_num(dev, res))) {
 			pci_dev_res_add_to_list(fail_head, dev, res,
 						0 /* don't care */,
 						0 /* don't care */);
