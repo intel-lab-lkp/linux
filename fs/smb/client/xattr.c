@@ -36,7 +36,7 @@
 #define SMB3_XATTR_CIFS_NTSD_FULL "system.smb3_ntsd_full" /* owner/DACL/SACL */
 #define SMB3_XATTR_ATTRIB "smb3.dosattrib"  /* full name: user.smb3.dosattrib */
 #define SMB3_XATTR_CREATETIME "smb3.creationtime"  /* user.smb3.creationtime */
-enum { XATTR_USER, XATTR_SECURITY,
+enum { XATTR_USER, XATTR_TRUSTED, XATTR_SECURITY,
 	XATTR_CIFS_ACL, XATTR_ACL_ACCESS, XATTR_ACL_DEFAULT,
 	XATTR_CIFS_NTSD_SACL, XATTR_CIFS_NTSD_OWNER,
 	XATTR_CIFS_NTSD, XATTR_CIFS_NTSD_FULL };
@@ -64,6 +64,16 @@ static int cifs_build_ea_name(int xattr_flag, const char *name, char *ea_name,
 		memcpy(ea_name + XATTR_SECURITY_PREFIX_LEN, name,
 		       name_len + 1);
 		return XATTR_SECURITY_PREFIX_LEN + name_len;
+	case XATTR_TRUSTED:
+		name_len = strlen(name);
+		if (ea_name_size <= XATTR_TRUSTED_PREFIX_LEN ||
+		    name_len > ea_name_size - XATTR_TRUSTED_PREFIX_LEN - 1)
+			return -ERANGE;
+		memcpy(ea_name, XATTR_TRUSTED_PREFIX,
+		       XATTR_TRUSTED_PREFIX_LEN);
+		memcpy(ea_name + XATTR_TRUSTED_PREFIX_LEN, name,
+		       name_len + 1);
+		return XATTR_TRUSTED_PREFIX_LEN + name_len;
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -160,6 +170,16 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 	}
 
 	switch (handler->flags) {
+	case XATTR_TRUSTED:
+		rc = cifs_build_ea_name(handler->flags, name, ea_name,
+					sizeof(ea_name));
+		if (rc < 0)
+			goto out;
+		server_ea_name = ea_name;
+		cifs_dbg(FYI, "%s: setting trusted xattr %s\n",
+			 __func__, name);
+		goto set_ea;
+
 	case XATTR_SECURITY:
 		rc = cifs_build_ea_name(handler->flags, name, ea_name,
 					sizeof(ea_name));
@@ -339,6 +359,16 @@ static int cifs_xattr_get(const struct xattr_handler *handler,
 
 	/* return alt name if available as pseudo attr */
 	switch (handler->flags) {
+	case XATTR_TRUSTED:
+		rc = cifs_build_ea_name(handler->flags, name, ea_name,
+					sizeof(ea_name));
+		if (rc < 0)
+			goto out;
+		server_ea_name = ea_name;
+		cifs_dbg(FYI, "%s: querying trusted xattr %s\n",
+			 __func__, name);
+		goto query_ea;
+
 	case XATTR_SECURITY:
 		rc = cifs_build_ea_name(handler->flags, name, ea_name,
 					sizeof(ea_name));
@@ -491,6 +521,13 @@ static const struct xattr_handler cifs_user_xattr_handler = {
 	.set = cifs_xattr_set,
 };
 
+static const struct xattr_handler cifs_trusted_xattr_handler = {
+	.prefix = XATTR_TRUSTED_PREFIX,
+	.flags = XATTR_TRUSTED,
+	.get = cifs_xattr_get,
+	.set = cifs_xattr_set,
+};
+
 static const struct xattr_handler cifs_security_xattr_handler = {
 	.prefix = XATTR_SECURITY_PREFIX,
 	.flags = XATTR_SECURITY,
@@ -582,6 +619,7 @@ static const struct xattr_handler smb3_ntsd_full_xattr_handler = {
 
 const struct xattr_handler * const cifs_xattr_handlers[] = {
 	&cifs_user_xattr_handler,
+	&cifs_trusted_xattr_handler,
 	&cifs_security_xattr_handler,
 	&cifs_os2_xattr_handler,
 	&cifs_cifs_acl_xattr_handler,

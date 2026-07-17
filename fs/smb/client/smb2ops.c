@@ -1046,6 +1046,10 @@ static int smb2_query_file_info(const unsigned int xid, struct cifs_tcon *tcon,
 #ifdef CONFIG_CIFS_XATTR
 static bool cifs_passthrough(const char *name, size_t name_len)
 {
+	if (name_len > XATTR_TRUSTED_PREFIX_LEN &&
+	    !memcmp(name, XATTR_TRUSTED_PREFIX, XATTR_TRUSTED_PREFIX_LEN))
+		return true;
+
 	if (name_len == sizeof(XATTR_NAME_CAPS) - 1 &&
 	    !memcmp(name, XATTR_NAME_CAPS, name_len))
 		return true;
