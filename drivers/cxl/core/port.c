@@ -2501,7 +2501,7 @@ const struct bus_type cxl_bus_type = {
 };
 EXPORT_SYMBOL_NS_GPL(cxl_bus_type, "CXL");
 
-static struct dentry *cxl_debugfs;
+struct dentry *cxl_debugfs;
 
 struct dentry *cxl_debugfs_create_dir(const char *dir)
 {

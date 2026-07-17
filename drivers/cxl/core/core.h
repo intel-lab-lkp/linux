@@ -182,6 +182,9 @@ static inline struct device *dport_to_host(struct cxl_dport *dport)
 		return port->uport_dev;
 	return &port->dev;
 }
+
+extern struct dentry *cxl_debugfs;
+
 #ifdef CONFIG_CXL_RAS
 void cxl_ras_init(void);
 void cxl_ras_exit(void);
@@ -244,4 +247,22 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 
 resource_size_t cxl_rcd_component_reg_phys(struct device *dev,
 					   struct cxl_dport *dport);
+
+#ifdef CONFIG_CXL_PROTO_AER_EINJ
+
+#define AER_REGISTER_SIZE 5
+#define RAS_REGISTER_SIZE (CXL_RAS_CAPABILITY_LENGTH / sizeof(u32))
+
+struct cxl_aer_einj {
+	int correctable;
+	bool is_rch;
+	struct mutex *lock;
+	struct device *dev;
+	u32 aer_registers[AER_REGISTER_SIZE];
+	u32 ras_registers[RAS_REGISTER_SIZE];
+};
+
+extern struct cxl_aer_einj cxl_aer_einj;
+#endif
+
 #endif /* __CXL_CORE_H__ */

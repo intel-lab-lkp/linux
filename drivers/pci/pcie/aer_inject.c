@@ -14,6 +14,7 @@
 
 #define dev_fmt(fmt) "aer_inject: " fmt
 
+#include <linux/aer.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -30,19 +31,6 @@
 /* Override the existing corrected and uncorrected error masks */
 static bool aer_mask_override;
 module_param(aer_mask_override, bool, 0);
-
-struct aer_error_inj {
-	u8 bus;
-	u8 dev;
-	u8 fn;
-	u32 uncor_status;
-	u32 cor_status;
-	u32 header_log0;
-	u32 header_log1;
-	u32 header_log2;
-	u32 header_log3;
-	u32 domain;
-};
 
 struct aer_error {
 	struct list_head list;
@@ -316,7 +304,7 @@ out:
 	return 0;
 }
 
-static int aer_inject(struct aer_error_inj *einj)
+int aer_inject(struct aer_error_inj *einj)
 {
 	struct aer_error *err, *rperr;
 	struct aer_error *err_alloc = NULL, *rperr_alloc = NULL;
@@ -332,10 +320,14 @@ static int aer_inject(struct aer_error_inj *einj)
 	dev = pci_get_domain_bus_and_slot(einj->domain, einj->bus, devfn);
 	if (!dev)
 		return -ENODEV;
-	rpdev = pcie_find_root_port(dev);
-	/* If Root Port not found, try to find an RCEC */
-	if (!rpdev)
-		rpdev = dev->rcec;
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC)
+		rpdev = dev;
+	else {
+		rpdev = pcie_find_root_port(dev);
+		/* If Root Port not found, try to find an RCEC */
+		if (!rpdev)
+			rpdev = dev->rcec;
+	}
 	if (!rpdev) {
 		pci_err(dev, "Neither Root Port nor RCEC found\n");
 		ret = -ENODEV;
@@ -482,6 +474,7 @@ out_put:
 	pci_dev_put(dev);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(aer_inject);
 
 static ssize_t aer_inject_write(struct file *filp, const char __user *ubuf,
 				size_t usize, loff_t *off)

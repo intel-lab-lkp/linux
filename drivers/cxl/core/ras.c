@@ -3,6 +3,7 @@
 
 #include <linux/pci.h>
 #include <linux/aer.h>
+#include <linux/debugfs.h>
 #include <cxl/event.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
@@ -116,6 +117,195 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 		cxl_cper_handle_prot_err(&wd);
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
+
+#if IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)
+
+static DEFINE_MUTEX(cxl_aer_einj_mutex);
+
+struct cxl_aer_einj cxl_aer_einj = {
+	.lock = &cxl_aer_einj_mutex,
+};
+
+static const char cxl_aer_einj_usage[] =
+	"ssss:bb:dd.f [UCE|CE] AER_STATUS RAS_STATUS [RCH]\n";
+
+static int cxl_aer_inject_error(struct pci_dev *pdev, bool correctable,
+				u32 aer_status, u32 ras_status)
+{
+	/* RCD errors are signaled as internal errors on the associated RCEC */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END) {
+		if (!pdev->rcec)
+			return -ENODEV;
+		pdev = pdev->rcec;
+	}
+
+	struct aer_error_inj einj = {
+		.bus = pdev->bus->number,
+		.dev = PCI_SLOT(pdev->devfn),
+		.fn = PCI_FUNC(pdev->devfn),
+		.domain = pci_domain_nr(pdev->bus),
+	};
+	int ret;
+	int aer_offset;
+	int ras_offset;
+
+	if (correctable) {
+		einj.cor_status = aer_status | PCI_ERR_COR_INTERNAL;
+		aer_offset = PCI_ERR_COR_STATUS / sizeof(u32);
+		ras_offset = CXL_RAS_CORRECTABLE_STATUS_OFFSET / sizeof(u32);
+	} else {
+		einj.uncor_status = aer_status | PCI_ERR_UNC_INTN;
+		aer_offset = PCI_ERR_UNCOR_STATUS / sizeof(u32);
+		ras_offset = CXL_RAS_UNCORRECTABLE_STATUS_OFFSET / sizeof(u32);
+	}
+
+	cxl_aer_einj.correctable = correctable;
+	cxl_aer_einj.aer_registers[aer_offset] = aer_status;
+	cxl_aer_einj.ras_registers[ras_offset] = ras_status;
+
+	ret = aer_inject(&einj);
+	if (ret) {
+		pr_err("cxl-einj: aer_inject failed: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static ssize_t cxl_aer_einj_write(struct file *file,
+				    const char __user *ubuf,
+				    size_t count, loff_t *ppos)
+{
+	char sbdf[16], severity[4], topology[4] = "";
+	unsigned int domain, bus, dev, fn;
+	u32 aer_status, ras_status;
+	struct cxl_dport *dport;
+	char buf[128];
+	int nargs;
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf)) {
+		pr_err("cxl-einj: input too long (%zu bytes, max %zu)\n", count, sizeof(buf) - 1);
+		return -EINVAL;
+	}
+
+	if (copy_from_user(buf, ubuf, count)) {
+		pr_err("cxl-einj: copy_from_user failed\n");
+		return -EFAULT;
+	}
+	buf[count] = '\0';
+
+	nargs = sscanf(buf, "%15s %3s %x %x %3s", sbdf, severity,
+		       &aer_status, &ras_status, topology);
+	if (nargs < 4) {
+		pr_err("cxl-einj: expected format: <SBDF> <UCE|CE> <aer_status> <ras_status>\n");
+		return -EINVAL;
+	}
+
+	if (nargs == 5 && strcmp(topology, "RCH") != 0)
+		return -EINVAL;
+
+	if (strcmp(severity, "UCE") != 0 && strcmp(severity, "CE") != 0) {
+		pr_err("cxl-einj: expected 'UCE' or 'CE', got '%s'\n", severity);
+		return -EINVAL;
+	}
+
+	if (sscanf(sbdf, "%x:%x:%x.%x", &domain, &bus, &dev, &fn) != 4) {
+		pr_err("cxl-einj: invalid SBDF format '%s', expected DDDD:BB:DD.F\n", sbdf);
+		return -EINVAL;
+	}
+
+	struct pci_dev *pdev __free(pci_dev_put) =
+		pci_get_domain_bus_and_slot(domain, bus, PCI_DEVFN(dev, fn));
+	if (!pdev) {
+		pr_err("cxl-einj: device %s not found\n", sbdf);
+		return -ENODEV;
+	}
+
+	guard(mutex)(cxl_aer_einj.lock);
+	cxl_aer_einj.dev = NULL;
+
+	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_dev(&pdev->dev, &dport);
+	if (!port) {
+		dev_err(&pdev->dev, "cxl-einj: Failed to find CXL Port.\n");
+		return -ENODEV;
+	}
+
+	if (!to_ras_base(port, dport)) {
+		dev_err(&pdev->dev, "cxl-einj: RAS not initialized.\n");
+		return -ENODEV;
+	}
+
+	cxl_aer_einj.is_rch = (nargs == 5 && strcmp(topology, "RCH") == 0);
+	if (!cxl_aer_einj.is_rch)
+		pci_dev_get(pdev);
+	cxl_aer_einj.dev = cxl_aer_einj.is_rch ? pdev->dev.parent : &pdev->dev;
+	ret = cxl_aer_inject_error(pdev, strcmp(severity, "CE") == 0,
+				   aer_status, ras_status);
+	if (ret) {
+		if (!cxl_aer_einj.is_rch)
+			pci_dev_put(pdev);
+		cxl_aer_einj.dev = NULL;
+		pr_err("cxl-einj: injection failed for %s: %d\n", sbdf, ret);
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t cxl_aer_einj_read(struct file *file, char __user *ubuf,
+				 size_t count, loff_t *ppos)
+{
+	return simple_read_from_buffer(ubuf, count, ppos,
+				       cxl_aer_einj_usage,
+				       sizeof(cxl_aer_einj_usage) - 1);
+}
+
+static const struct file_operations cxl_ras_error_fops = {
+	.owner		= THIS_MODULE,
+	.read		= cxl_aer_einj_read,
+	.write		= cxl_aer_einj_write,
+	.llseek		= default_llseek,
+};
+
+static void cxl_ras_create_debugfs(struct dentry *dir)
+{
+	debugfs_create_file("aer_einj_inject", 0600, dir, NULL,
+			    &cxl_ras_error_fops);
+}
+
+static void __iomem *to_einj_ras_base(struct cxl_port *port, struct cxl_dport *dport)
+{
+	if (dport) {
+		if (cxl_aer_einj.is_rch) {
+			if (cxl_aer_einj.dev == dport->dport_dev) {
+				cxl_aer_einj.dev = NULL;
+				return (__force void __iomem *)cxl_aer_einj.ras_registers;
+			}
+		} else {
+			if (cxl_aer_einj.dev == dport->dport_dev) {
+				pci_dev_put(to_pci_dev(cxl_aer_einj.dev));
+				cxl_aer_einj.dev = NULL;
+				return (__force void __iomem *)cxl_aer_einj.ras_registers;
+			}
+		}
+	} else if (!cxl_aer_einj.is_rch) {
+		struct device *dev = is_cxl_endpoint(port) ?
+			port->uport_dev->parent : port->uport_dev;
+
+		if (dev_is_pci(dev) && cxl_aer_einj.dev == dev) {
+			pci_dev_put(to_pci_dev(cxl_aer_einj.dev));
+			cxl_aer_einj.dev = NULL;
+			return (__force void __iomem *)cxl_aer_einj.ras_registers;
+		}
+	}
+
+	return NULL;
+}
+#endif
 
 static void cxl_unmask_proto_interrupts(struct device *dev)
 {
@@ -237,6 +427,14 @@ void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
 {
 	if (!port)
 		return NULL;
+
+#if IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)
+	if (cxl_aer_einj.dev) {
+		void __iomem *einj = to_einj_ras_base(port, dport);
+		if (einj)
+			return einj;
+	}
+#endif
 
 	if (dport)
 		return dport->regs.ras;
@@ -458,10 +656,20 @@ void cxl_ras_init(void)
 	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
 	cxl_register_proto_err_work(&cxl_proto_err_work,
 				   cxl_proto_err_do_flush);
+#if IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)
+	cxl_ras_create_debugfs(cxl_debugfs);
+#endif
 }
 
 void cxl_ras_exit(void)
 {
 	cxl_unregister_proto_err_work();
 	cxl_cper_unregister_prot_err_work();
+#if IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)
+	if (cxl_aer_einj.dev) {
+		if (!cxl_aer_einj.is_rch)
+			pci_dev_put(to_pci_dev(cxl_aer_einj.dev));
+		cxl_aer_einj.dev = NULL;
+	}
+#endif
 }

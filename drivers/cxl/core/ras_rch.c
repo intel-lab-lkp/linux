@@ -110,6 +110,14 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	if (!dport)
 		return;
 
+#if IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)
+	if (cxl_aer_einj.is_rch && cxl_aer_einj.dev) {
+		severity = cxl_aer_einj.correctable ?
+			AER_CORRECTABLE : AER_FATAL;
+		goto handle_ras;
+	}
+#endif
+
 	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
 		return;
 
@@ -117,6 +125,10 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 		return;
 
 	pci_print_aer(pdev, severity, &aer_regs);
+
+#if IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)
+handle_ras:
+#endif
 	if (severity == AER_CORRECTABLE)
 		cxl_handle_cor_ras(dport->port, dport,
 				   to_ras_base(port, dport), pdev->dsn);

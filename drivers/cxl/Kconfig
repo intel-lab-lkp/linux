@@ -238,6 +238,19 @@ config CXL_RAS
 	def_bool y
 	depends on ACPI_APEI_GHES && PCIEAER && CXL_BUS
 
+config CXL_PROTO_AER_EINJ
+	bool "CXL: RAS Protocol Error Injection using AER EINJ"
+	depends on CXL_RAS
+	depends on PCIEAER_INJECT
+	help
+	  Enable debugfs-based CXL protocol error injection. Writes to
+	  /sys/kernel/debug/cxl/aer_einj_inject inject CXL RAS protocol
+	  errors using the AER internal error inject interface.
+
+	  This is a debug/test facility. Say N for production kernels.
+
+	  If unsure say N.
+
 config CXL_ATL
 	def_bool y
 	depends on CXL_REGION

@@ -27,6 +27,21 @@
 struct pci_dev;
 struct work_struct;
 
+struct aer_error_inj {
+	u8 bus;
+	u8 dev;
+	u8 fn;
+	u32 uncor_status;
+	u32 cor_status;
+	u32 header_log0;
+	u32 header_log1;
+	u32 header_log2;
+	u32 header_log3;
+	u32 domain;
+};
+
+int aer_inject(struct aer_error_inj *einj);
+
 struct pcie_tlp_log {
 	union {
 		u32 dw[PCIE_STD_MAX_TLP_HEADERLOG];
