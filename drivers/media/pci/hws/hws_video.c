@@ -384,11 +384,6 @@ static void hws_video_drain_queue_locked(struct hws_video *vid)
 
 static void hws_video_release_registration(struct hws_video *vid)
 {
-	if (vid->buffer_queue.ops) {
-		vb2_queue_release(&vid->buffer_queue);
-		vid->buffer_queue.ops = NULL;
-	}
-
 	if (!vid->video_device)
 		return;
 
