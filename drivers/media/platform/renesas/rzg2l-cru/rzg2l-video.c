@@ -1091,7 +1091,7 @@ static void rzg2l_cru_v4l2_init(struct rzg2l_cru_dev *cru)
 void rzg2l_cru_video_unregister(struct rzg2l_cru_dev *cru)
 {
 	media_device_unregister(&cru->mdev);
-	video_unregister_device(&cru->vdev);
+	vb2_video_unregister_device(&cru->vdev);
 }
 
 int rzg2l_cru_video_register(struct rzg2l_cru_dev *cru)
@@ -1118,7 +1118,7 @@ int rzg2l_cru_video_register(struct rzg2l_cru_dev *cru)
 
 	ret = media_device_register(&cru->mdev);
 	if (ret) {
-		video_unregister_device(&cru->vdev);
+		vb2_video_unregister_device(&cru->vdev);
 		return ret;
 	}
 
