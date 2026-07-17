@@ -8,7 +8,7 @@ Landlock: unprivileged access control
 =====================================
 
 :Author: Mickaël Salaün
-:Date: June 2026
+:Date: July 2026
 
 The goal of Landlock is to enable restriction of ambient rights (e.g. global
 filesystem or network access) for a set of processes.  Because Landlock
@@ -788,6 +788,18 @@ landlock_ruleset_attr.  The object is marked as quiet within a ruleset
 when at least one sys_landlock_add_rule() call is made for it with the
 ``LANDLOCK_ADD_RULE_QUIET`` flag, additional add-rule calls for the same
 object without this flag do not clear it.
+
+Atomic no_new_privs (ABI < 11)
+------------------------------
+
+Starting with the Landlock ABI version 11, sys_landlock_restrict_self()
+accepts the ``LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS`` flag, which sets the
+no_new_privs attribute of the calling thread atomically with the enforcement
+of the ruleset: no_new_privs is set if and only if the call succeeds.  This
+removes the need for a prior :manpage:`prctl(2)` ``PR_SET_NO_NEW_PRIVS``
+call, and with it the ``CAP_SYS_ADMIN`` requirement.  When combined with
+``LANDLOCK_RESTRICT_SELF_TSYNC``, no_new_privs is set on all threads of the
+process.
 
 .. _kernel_support:
 
