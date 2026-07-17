@@ -492,13 +492,16 @@ static void set_sec_offset(struct iwl_firmware_pieces *pieces,
  * Gets uCode section from tlv.
  */
 static int iwl_store_ucode_sec(struct fw_img_parsing *img,
-			       const void *data, int size)
+			       const void *data, size_t size)
 {
 	struct fw_sec *sec;
 	const struct fw_sec_parsing *sec_parse;
 	size_t alloc_size;
 
 	if (WARN_ON(!img || !data))
+		return -EINVAL;
+
+	if (size < sizeof(sec_parse->offset))
 		return -EINVAL;
 
 	sec_parse = (const struct fw_sec_parsing *)data;
