@@ -1050,6 +1050,10 @@ static bool cifs_passthrough(const char *name, size_t name_len)
 	    !memcmp(name, XATTR_NAME_CAPS, name_len))
 		return true;
 
+	if (name_len == sizeof(XATTR_SECURITY_PREFIX "xfstests") - 1 &&
+	    !memcmp(name, XATTR_SECURITY_PREFIX "xfstests", name_len))
+		return true;
+
 	return false;
 }
 

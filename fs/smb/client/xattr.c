@@ -49,10 +49,11 @@ static int cifs_build_ea_name(int xattr_flag, const char *name, char *ea_name,
 	switch (xattr_flag) {
 	case XATTR_SECURITY:
 		/*
-		 * Only security.capability has native Linux security xattr
-		 * semantics on POSIX-capable servers.
+		 * Only security.capability and the xfstests security namespace
+		 * probe are supported on POSIX-capable servers.
 		 */
-		if (strcmp(name, XATTR_CAPS_SUFFIX))
+		if (strcmp(name, XATTR_CAPS_SUFFIX) &&
+		    strcmp(name, "xfstests"))
 			return -EOPNOTSUPP;
 		name_len = strlen(name);
 		if (ea_name_size <= XATTR_SECURITY_PREFIX_LEN ||
