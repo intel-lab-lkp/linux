@@ -611,7 +611,7 @@ static int sx150x_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin,
 	if (sx150x_pin_is_oscio(pctl, pin)) {
 		switch (param) {
 		case PIN_CONFIG_DRIVE_PUSH_PULL:
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			ret = regmap_read(pctl->regmap,
 					  pctl->data->pri.x789.reg_clock,
 					  &data);
@@ -705,7 +705,7 @@ static int sx150x_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin,
 		}
 		break;
 
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		ret = sx150x_gpio_get_direction(&pctl->gpio, pin);
 		if (ret < 0)
 			return ret;
@@ -744,7 +744,7 @@ static int sx150x_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 		arg = pinconf_to_config_argument(configs[i]);
 
 		if (sx150x_pin_is_oscio(pctl, pin)) {
-			if (param == PIN_CONFIG_OUTPUT) {
+			if (param == PIN_CONFIG_LEVEL) {
 				ret = sx150x_gpio_direction_output(&pctl->gpio,
 								   pin, arg);
 				if (ret < 0)
@@ -816,7 +816,7 @@ static int sx150x_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 
 			break;
 
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			ret = sx150x_gpio_direction_output(&pctl->gpio,
 							   pin, arg);
 			if (ret < 0)
@@ -839,16 +839,16 @@ static const struct pinconf_ops sx150x_pinconf_ops = {
 };
 
 static const struct i2c_device_id sx150x_id[] = {
-	{"sx1501q", (kernel_ulong_t) &sx1501q_device_data },
-	{"sx1502q", (kernel_ulong_t) &sx1502q_device_data },
-	{"sx1503q", (kernel_ulong_t) &sx1503q_device_data },
-	{"sx1504q", (kernel_ulong_t) &sx1504q_device_data },
-	{"sx1505q", (kernel_ulong_t) &sx1505q_device_data },
-	{"sx1506q", (kernel_ulong_t) &sx1506q_device_data },
-	{"sx1507q", (kernel_ulong_t) &sx1507q_device_data },
-	{"sx1508q", (kernel_ulong_t) &sx1508q_device_data },
-	{"sx1509q", (kernel_ulong_t) &sx1509q_device_data },
-	{}
+	{ .name = "sx1501q", .driver_data = (kernel_ulong_t)&sx1501q_device_data },
+	{ .name = "sx1502q", .driver_data = (kernel_ulong_t)&sx1502q_device_data },
+	{ .name = "sx1503q", .driver_data = (kernel_ulong_t)&sx1503q_device_data },
+	{ .name = "sx1504q", .driver_data = (kernel_ulong_t)&sx1504q_device_data },
+	{ .name = "sx1505q", .driver_data = (kernel_ulong_t)&sx1505q_device_data },
+	{ .name = "sx1506q", .driver_data = (kernel_ulong_t)&sx1506q_device_data },
+	{ .name = "sx1507q", .driver_data = (kernel_ulong_t)&sx1507q_device_data },
+	{ .name = "sx1508q", .driver_data = (kernel_ulong_t)&sx1508q_device_data },
+	{ .name = "sx1509q", .driver_data = (kernel_ulong_t)&sx1509q_device_data },
+	{ }
 };
 
 static const struct of_device_id sx150x_of_match[] = {
@@ -863,6 +863,7 @@ static const struct of_device_id sx150x_of_match[] = {
 	{ .compatible = "semtech,sx1509q", .data = &sx1509q_device_data },
 	{},
 };
+MODULE_DEVICE_TABLE(of, sx150x_of_match);
 
 static int sx150x_reset(struct sx150x_pinctrl *pctl)
 {
@@ -1176,7 +1177,7 @@ static int sx150x_probe(struct i2c_client *client)
 	pctl->gpio.direction_input = sx150x_gpio_direction_input;
 	pctl->gpio.direction_output = sx150x_gpio_direction_output;
 	pctl->gpio.get = sx150x_gpio_get;
-	pctl->gpio.set_rv = sx150x_gpio_set;
+	pctl->gpio.set = sx150x_gpio_set;
 	pctl->gpio.set_config = gpiochip_generic_config;
 	pctl->gpio.parent = dev;
 	pctl->gpio.can_sleep = true;
@@ -1191,7 +1192,7 @@ static int sx150x_probe(struct i2c_client *client)
 	 * would require locking that is not in place at this time.
 	 */
 	if (pctl->data->model != SX150X_789)
-		pctl->gpio.set_multiple_rv = sx150x_gpio_set_multiple;
+		pctl->gpio.set_multiple = sx150x_gpio_set_multiple;
 
 	/* Add Interrupt support if an irq is specified */
 	if (client->irq > 0) {
@@ -1266,3 +1267,6 @@ static int __init sx150x_init(void)
 	return i2c_add_driver(&sx150x_driver);
 }
 subsys_initcall(sx150x_init);
+
+MODULE_DESCRIPTION("Semtech SX150x I2C GPIO expander pinctrl driver");
+MODULE_LICENSE("GPL");

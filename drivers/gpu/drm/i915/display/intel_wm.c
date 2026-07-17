@@ -5,7 +5,6 @@
 
 #include <linux/debugfs.h>
 
-#include <drm/drm_file.h>
 #include <drm/drm_print.h>
 
 #include "i9xx_wm.h"
@@ -49,8 +48,8 @@
  */
 void intel_update_watermarks(struct intel_display *display)
 {
-	if (display->funcs.wm->update_wm)
-		display->funcs.wm->update_wm(display);
+	if (display->wm.funcs->update_wm)
+		display->wm.funcs->update_wm(display);
 }
 
 int intel_wm_compute(struct intel_atomic_state *state,
@@ -58,10 +57,10 @@ int intel_wm_compute(struct intel_atomic_state *state,
 {
 	struct intel_display *display = to_intel_display(state);
 
-	if (!display->funcs.wm->compute_watermarks)
+	if (!display->wm.funcs->compute_watermarks)
 		return 0;
 
-	return display->funcs.wm->compute_watermarks(state, crtc);
+	return display->wm.funcs->compute_watermarks(state, crtc);
 }
 
 bool intel_initial_watermarks(struct intel_atomic_state *state,
@@ -69,8 +68,8 @@ bool intel_initial_watermarks(struct intel_atomic_state *state,
 {
 	struct intel_display *display = to_intel_display(state);
 
-	if (display->funcs.wm->initial_watermarks) {
-		display->funcs.wm->initial_watermarks(state, crtc);
+	if (display->wm.funcs->initial_watermarks) {
+		display->wm.funcs->initial_watermarks(state, crtc);
 		return true;
 	}
 
@@ -82,8 +81,8 @@ void intel_atomic_update_watermarks(struct intel_atomic_state *state,
 {
 	struct intel_display *display = to_intel_display(state);
 
-	if (display->funcs.wm->atomic_update_watermarks)
-		display->funcs.wm->atomic_update_watermarks(state, crtc);
+	if (display->wm.funcs->atomic_update_watermarks)
+		display->wm.funcs->atomic_update_watermarks(state, crtc);
 }
 
 void intel_optimize_watermarks(struct intel_atomic_state *state,
@@ -91,30 +90,30 @@ void intel_optimize_watermarks(struct intel_atomic_state *state,
 {
 	struct intel_display *display = to_intel_display(state);
 
-	if (display->funcs.wm->optimize_watermarks)
-		display->funcs.wm->optimize_watermarks(state, crtc);
+	if (display->wm.funcs->optimize_watermarks)
+		display->wm.funcs->optimize_watermarks(state, crtc);
 }
 
 int intel_compute_global_watermarks(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
 
-	if (display->funcs.wm->compute_global_watermarks)
-		return display->funcs.wm->compute_global_watermarks(state);
+	if (display->wm.funcs->compute_global_watermarks)
+		return display->wm.funcs->compute_global_watermarks(state);
 
 	return 0;
 }
 
 void intel_wm_get_hw_state(struct intel_display *display)
 {
-	if (display->funcs.wm->get_hw_state)
-		return display->funcs.wm->get_hw_state(display);
+	if (display->wm.funcs->get_hw_state)
+		return display->wm.funcs->get_hw_state(display);
 }
 
 void intel_wm_sanitize(struct intel_display *display)
 {
-	if (display->funcs.wm->sanitize)
-		return display->funcs.wm->sanitize(display);
+	if (display->wm.funcs->sanitize)
+		return display->wm.funcs->sanitize(display);
 }
 
 bool intel_wm_plane_visible(const struct intel_crtc_state *crtc_state,
@@ -390,15 +389,15 @@ static const struct file_operations i915_cur_wm_latency_fops = {
 
 void intel_wm_debugfs_register(struct intel_display *display)
 {
-	struct drm_minor *minor = display->drm->primary;
+	struct dentry *debugfs_root = display->drm->debugfs_root;
 
-	debugfs_create_file("i915_pri_wm_latency", 0644, minor->debugfs_root,
+	debugfs_create_file("i915_pri_wm_latency", 0644, debugfs_root,
 			    display, &i915_pri_wm_latency_fops);
 
-	debugfs_create_file("i915_spr_wm_latency", 0644, minor->debugfs_root,
+	debugfs_create_file("i915_spr_wm_latency", 0644, debugfs_root,
 			    display, &i915_spr_wm_latency_fops);
 
-	debugfs_create_file("i915_cur_wm_latency", 0644, minor->debugfs_root,
+	debugfs_create_file("i915_cur_wm_latency", 0644, debugfs_root,
 			    display, &i915_cur_wm_latency_fops);
 
 	skl_watermark_debugfs_register(display);

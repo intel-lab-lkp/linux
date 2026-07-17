@@ -155,7 +155,7 @@ int rvu_mbox_handler_lmtst_tbl_setup(struct rvu *rvu,
 	int err = 0;
 	u64 val;
 
-	/* Check if PF_FUNC wants to use it's own local memory as LMTLINE
+	/* Check if PF_FUNC wants to use its own local memory as LMTLINE
 	 * region, if so, convert that IOVA to physical address and
 	 * populate LMT table with that address
 	 */
@@ -178,6 +178,15 @@ int rvu_mbox_handler_lmtst_tbl_setup(struct rvu *rvu,
 	 * pcifunc (will be the one who is calling this mailbox).
 	 */
 	if (req->base_pcifunc) {
+		/* A VF is untrusted and must not redirect its LMTLINE to
+		 * another PF's region, so confine VF callers to their own PF.
+		 */
+		if (is_vf(req->hdr.pcifunc) &&
+		    (!is_pf_func_valid(rvu, req->base_pcifunc) ||
+		     rvu_get_pf(rvu->pdev, req->hdr.pcifunc) !=
+		     rvu_get_pf(rvu->pdev, req->base_pcifunc)))
+			return -EPERM;
+
 		/* Calculating the LMT table index equivalent to primary
 		 * pcifunc.
 		 */

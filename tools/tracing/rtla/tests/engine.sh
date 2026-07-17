@@ -4,6 +4,9 @@ test_begin() {
 	# Count tests to allow the test harness to double-check if all were
 	# included correctly.
 	ctr=0
+	# Set test directory to the directory of the script
+	scriptfile=$(realpath "$0")
+	testdir=$(dirname "$scriptfile")
 	[ -z "$RTLA" ] && RTLA="./rtla"
 	[ -n "$TEST_COUNT" ] && echo "1..$TEST_COUNT"
 }
@@ -11,7 +14,7 @@ test_begin() {
 reset_osnoise() {
 	# Reset osnoise options to default and remove any dangling instances created
 	# by improperly exited rtla runs.
-	pushd /sys/kernel/tracing || return 1
+	pushd /sys/kernel/tracing >/dev/null || return 1
 
 	# Remove dangling instances created by previous rtla run
 	echo 0 > tracing_thresh
@@ -35,11 +38,15 @@ reset_osnoise() {
 	echo 0 > stop_tracing_us
 	echo 1000 > timerlat_period_us
 
-	popd
+	popd >/dev/null
 }
 
 check() {
+	test_name=$0
+	tested_command=$1
 	expected_exitcode=${3:-0}
+	expected_output=$4
+	unexpected_output=$5
 	# Simple check: run rtla with given arguments and test exit code.
 	# If TEST_COUNT is set, run the test. Otherwise, just count.
 	ctr=$(($ctr + 1))
@@ -47,18 +54,46 @@ check() {
 	then
 		# Reset osnoise options before running test.
 		[ "$NO_RESET_OSNOISE" == 1 ] || reset_osnoise
+
+		# Create a temporary directory to contain rtla output
+		tmpdir=$(mktemp -d)
+		pushd $tmpdir >/dev/null
+
 		# Run rtla; in case of failure, include its output as comment
 		# in the test results.
-		result=$(stdbuf -oL $TIMEOUT "$RTLA" $2 2>&1); exitcode=$?
-		if [ $exitcode -eq $expected_exitcode ]
+		result=$(eval stdbuf -oL $TIMEOUT "$RTLA" $2 2>&1); exitcode=$?
+		failbuf=''
+		fail=0
+
+		# Test if the results matches if requested
+		if [ -n "$expected_output" ] && ! grep -qE "$expected_output" <<< "$result"
+		then
+			fail=1
+			failbuf+=$(printf "# Output match failed: \"%s\"" "$expected_output")
+			failbuf+=$'\n'
+		fi
+
+		if [ -n "$unexpected_output" ] && grep -qE "$unexpected_output" <<< "$result"
+		then
+			fail=1
+			failbuf+=$(printf "# Output non-match failed: \"%s\"" "$unexpected_output")
+			failbuf+=$'\n'
+		fi
+
+		if [ $exitcode -eq $expected_exitcode ] && [ $fail -eq 0 ]
 		then
 			echo "ok $ctr - $1"
 		else
-			echo "not ok $ctr - $1"
 			# Add rtla output and exit code as comments in case of failure
+			echo "not ok $ctr - $1"
+			echo -n "$failbuf"
 			echo "$result" | col -b | while read line; do echo "# $line"; done
 			printf "#\n# exit code %s\n" $exitcode
 		fi
+
+		# Remove temporary directory
+		popd >/dev/null
+		rm -r $tmpdir
 	fi
 }
 
@@ -82,12 +117,26 @@ check_with_osnoise_options() {
 			[ "$1" == "" ] && continue
 			option=$(echo $1 | cut -d '=' -f 1)
 			value=$(echo $1 | cut -d '=' -f 2)
-			echo "option: $option, value: $value"
 			echo "$value" > "/sys/kernel/tracing/osnoise/$option" || return 1
 		done
 	fi
 
 	NO_RESET_OSNOISE=1 check "$arg1" "$arg2" "$arg3"
+}
+
+check_top_hist() {
+	# Test one command with both "top" and "hist" tools, replacing "TOOL" in
+	# command with either "top" or "hist" respectively, and prefixing the test
+	# names with "top " and "hist ".
+	check "top $1" "$(echo "$2" | sed 's/TOOL/top/g')" "${@:3}"
+	check "hist $1" "$(echo "$2" | sed 's/TOOL/hist/g')" "${@:3}"
+}
+
+check_top_q_hist() {
+	# Same as above, but pass "-q" to top so that strings printed in main
+	# loop are on their own line for top too, not only for hist.
+	check "top $1" "$(echo "$2" | sed 's/TOOL/top -q/g')" "${@:3}"
+	check "hist $1" "$(echo "$2" | sed 's/TOOL/hist/g')" "${@:3}"
 }
 
 set_timeout() {

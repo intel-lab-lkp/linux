@@ -6,7 +6,7 @@
 #include <linux/arm-smccc.h>
 #include <linux/cc_platform.h>
 #include <linux/kernel.h>
-#include <linux/mod_devicetable.h>
+#include <linux/device-id/platform.h>
 #include <linux/module.h>
 #include <linux/smp.h>
 #include <linux/tsm.h>
@@ -157,7 +157,8 @@ static int arm_cca_report_new(struct tsm_report *report, void *data)
 		} while (info.result == RSI_INCOMPLETE &&
 			 info.offset < RSI_GRANULE_SIZE);
 
-		if (info.result != RSI_SUCCESS) {
+		/* Break out in case of failure */
+		if (info.result != RSI_SUCCESS && info.result != RSI_INCOMPLETE) {
 			ret = -ENXIO;
 			token_size = 0;
 			goto exit_free_granule_page;

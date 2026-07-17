@@ -21,6 +21,8 @@
 #include <linux/efi.h>
 #include <linux/crash_dump.h>
 #include <linux/panic_notifier.h>
+#include <linux/jump_label.h>
+#include <linux/gcd.h>
 
 #include <asm/acpi.h>
 #include <asm/alternative.h>
@@ -44,11 +46,7 @@
  * This is used before the kernel initializes the BSS so it can't be in the
  * BSS.
  */
-atomic_t hart_lottery __section(".sdata")
-#ifdef CONFIG_XIP_KERNEL
-= ATOMIC_INIT(0xC001BEEF)
-#endif
-;
+atomic_t hart_lottery __section(".sdata");
 unsigned long boot_cpu_hartid;
 EXPORT_SYMBOL_GPL(boot_cpu_hartid);
 
@@ -73,16 +71,13 @@ static struct resource *standard_resources;
 static int __init add_resource(struct resource *parent,
 				struct resource *res)
 {
-	int ret = 0;
+	int ret;
 
 	ret = insert_resource(parent, res);
-	if (ret < 0) {
-		pr_err("Failed to add a %s resource at %llx\n",
-			res->name, (unsigned long long) res->start);
-		return ret;
-	}
+	if (ret < 0)
+		pr_err("Failed to add resource %s %pR\n", res->name, res);
 
-	return 1;
+	return ret;
 }
 
 static int __init add_kernel_resources(void)
@@ -288,6 +283,7 @@ static void __init riscv_spinlock_init(void)
 
 	if (IS_ENABLED(CONFIG_RISCV_ISA_ZABHA) &&
 	    IS_ENABLED(CONFIG_RISCV_ISA_ZACAS) &&
+	    IS_ENABLED(CONFIG_TOOLCHAIN_HAS_ZACAS) &&
 	    riscv_isa_extension_available(NULL, ZABHA) &&
 	    riscv_isa_extension_available(NULL, ZACAS)) {
 		using_ext = "using Zabha";
@@ -328,11 +324,14 @@ void __init setup_arch(char **cmdline_p)
 	/* Parse the ACPI tables for possible boot-time configuration */
 	acpi_boot_table_init();
 
+	if (acpi_disabled) {
 #if IS_ENABLED(CONFIG_BUILTIN_DTB)
-	unflatten_and_copy_device_tree();
+		unflatten_and_copy_device_tree();
 #else
-	unflatten_device_tree();
+		unflatten_device_tree();
 #endif
+	}
+
 	misc_mem_init();
 
 	init_resources();
@@ -362,6 +361,9 @@ void __init setup_arch(char **cmdline_p)
 
 	riscv_user_isa_enable();
 	riscv_spinlock_init();
+
+	if (!IS_ENABLED(CONFIG_RISCV_ISA_ZBB) || !riscv_isa_extension_available(NULL, ZBB))
+		static_branch_disable(&efficient_ffs_key);
 }
 
 bool arch_cpu_is_hotpluggable(int cpu)

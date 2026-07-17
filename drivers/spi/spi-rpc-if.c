@@ -83,7 +83,7 @@ static ssize_t xspi_spi_mem_dirmap_write(struct spi_mem_dirmap_desc *desc,
 	if (offs + desc->info.offset + len > U32_MAX)
 		return -EINVAL;
 
-	rpcif_spi_mem_prepare(desc->mem->spi, &desc->info.op_tmpl, &offs, &len);
+	rpcif_spi_mem_prepare(desc->mem->spi, desc->info.op_tmpl, &offs, &len);
 
 	return xspi_dirmap_write(rpc->dev, offs, len, buf);
 }
@@ -97,7 +97,7 @@ static ssize_t rpcif_spi_mem_dirmap_read(struct spi_mem_dirmap_desc *desc,
 	if (offs + desc->info.offset + len > U32_MAX)
 		return -EINVAL;
 
-	rpcif_spi_mem_prepare(desc->mem->spi, &desc->info.op_tmpl, &offs, &len);
+	rpcif_spi_mem_prepare(desc->mem->spi, desc->info.op_tmpl, &offs, &len);
 
 	return rpcif_dirmap_read(rpc->dev, offs, len, buf);
 }
@@ -110,13 +110,13 @@ static int rpcif_spi_mem_dirmap_create(struct spi_mem_dirmap_desc *desc)
 	if (desc->info.offset + desc->info.length > U32_MAX)
 		return -EINVAL;
 
-	if (!rpcif_spi_mem_supports_op(desc->mem, &desc->info.op_tmpl))
+	if (!rpcif_spi_mem_supports_op(desc->mem, desc->info.op_tmpl))
 		return -EOPNOTSUPP;
 
 	if (!rpc->dirmap)
 		return -EOPNOTSUPP;
 
-	if (!rpc->xspi && desc->info.op_tmpl.data.dir != SPI_MEM_DATA_IN)
+	if (!rpc->xspi && desc->info.op_tmpl->data.dir != SPI_MEM_DATA_IN)
 		return -EOPNOTSUPP;
 
 	return 0;
@@ -196,21 +196,27 @@ static void rpcif_spi_remove(struct platform_device *pdev)
 	pm_runtime_disable(rpc->dev);
 }
 
-static int __maybe_unused rpcif_spi_suspend(struct device *dev)
+static int rpcif_spi_suspend(struct device *dev)
 {
 	struct spi_controller *ctlr = dev_get_drvdata(dev);
 
 	return spi_controller_suspend(ctlr);
 }
 
-static int __maybe_unused rpcif_spi_resume(struct device *dev)
+static int rpcif_spi_resume(struct device *dev)
 {
 	struct spi_controller *ctlr = dev_get_drvdata(dev);
+	struct rpcif *rpc = spi_controller_get_devdata(ctlr);
+	int ret;
+
+	ret = rpcif_hw_init(rpc->dev, false);
+	if (ret)
+		return ret;
 
 	return spi_controller_resume(ctlr);
 }
 
-static SIMPLE_DEV_PM_OPS(rpcif_spi_pm_ops, rpcif_spi_suspend, rpcif_spi_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(rpcif_spi_pm_ops, rpcif_spi_suspend, rpcif_spi_resume);
 
 static const struct platform_device_id rpc_if_spi_id_table[] = {
 	{ .name = "rpc-if-spi" },
@@ -224,9 +230,7 @@ static struct platform_driver rpcif_spi_driver = {
 	.id_table = rpc_if_spi_id_table,
 	.driver = {
 		.name	= "rpc-if-spi",
-#ifdef CONFIG_PM_SLEEP
-		.pm	= &rpcif_spi_pm_ops,
-#endif
+		.pm	= pm_sleep_ptr(&rpcif_spi_pm_ops),
 	},
 };
 module_platform_driver(rpcif_spi_driver);

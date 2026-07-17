@@ -648,7 +648,7 @@ r535_conn_new(struct nvkm_disp *disp, u32 id)
 	ctrl = nvkm_gsp_rm_ctrl_get(&disp->rm.objcom,
 				    NV0073_CTRL_CMD_SPECIFIC_GET_CONNECTOR_DATA, sizeof(*ctrl));
 	if (IS_ERR(ctrl))
-		return (void *)ctrl;
+		return ERR_CAST(ctrl);
 
 	ctrl->subDeviceInstance = 0;
 	ctrl->displayId = BIT(id);
@@ -1734,7 +1734,8 @@ r535_disp_new(const struct nvkm_disp_func *hw, struct nvkm_device *device,
 	struct nvkm_disp_func *rm;
 	int ret;
 
-	if (!(rm = kzalloc(sizeof(*rm) + 6 * sizeof(rm->user[0]), GFP_KERNEL)))
+	rm = kzalloc_flex(*rm, user, 6);
+	if (!rm)
 		return -ENOMEM;
 
 	rm->dtor = r535_disp_dtor;

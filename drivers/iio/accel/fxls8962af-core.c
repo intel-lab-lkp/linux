@@ -17,7 +17,6 @@
 #include <linux/i2c.h>
 #include <linux/irq.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
@@ -222,7 +221,6 @@ static int fxls8962af_power_off(struct fxls8962af_data *data)
 	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 
-	pm_runtime_mark_last_busy(dev);
 	ret = pm_runtime_put_autosuspend(dev);
 	if (ret)
 		dev_err(dev, "failed to power off\n");
@@ -876,6 +874,8 @@ static int fxls8962af_buffer_predisable(struct iio_dev *indio_dev)
 				FXLS8962AF_INT_EN_BUF_EN);
 	if (ret)
 		return ret;
+
+	synchronize_irq(data->irq);
 
 	ret = __fxls8962af_fifo_set_mode(data, false);
 

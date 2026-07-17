@@ -26,7 +26,6 @@ void *memmove(void *dest, const void *src, size_t n);
 #define __HAVE_ARCH_MEMSCAN	/* inline & arch function */
 #define __HAVE_ARCH_STRCAT	/* inline & arch function */
 #define __HAVE_ARCH_STRCMP	/* arch function */
-#define __HAVE_ARCH_STRLCAT	/* arch function */
 #define __HAVE_ARCH_STRLEN	/* inline & arch function */
 #define __HAVE_ARCH_STRNCAT	/* arch function */
 #define __HAVE_ARCH_STRNLEN	/* inline & arch function */
@@ -38,7 +37,6 @@ void *memmove(void *dest, const void *src, size_t n);
 /* Prototypes for non-inlined arch strings functions. */
 int memcmp(const void *s1, const void *s2, size_t n);
 int strcmp(const char *s1, const char *s2);
-size_t strlcat(char *dest, const char *src, size_t n);
 char *strncat(char *dest, const char *src, size_t n);
 char *strstr(const char *s1, const char *s2);
 #endif /* !defined(CONFIG_KASAN) && !defined(CONFIG_KMSAN) */
@@ -125,7 +123,7 @@ static inline void *memscan(void *s, int c, size_t n)
 	asm volatile(
 		"	lgr	0,%[c]\n"
 		"0:	srst	%[ret],%[s]\n"
-		"	jo	0b\n"
+		"	jo	0b"
 		: [ret] "+&a" (ret), [s] "+&a" (s)
 		: [c] "d" (c)
 		: "cc", "memory", "0");

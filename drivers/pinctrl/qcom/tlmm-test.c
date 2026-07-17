@@ -16,6 +16,7 @@
 #include <linux/of_irq.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 
 /*
  * This TLMM test module serves the purpose of validating that the TLMM driver
@@ -32,13 +33,16 @@
  * dynamically, rather then relying on e.g. Devicetree and phandles.
  */
 
-#define MSM_PULL_MASK		GENMASK(2, 0)
+#define MSM_PULL_MASK		GENMASK(1, 0)
 #define MSM_PULL_DOWN		1
 #define MSM_PULL_UP		3
 #define TLMM_REG_SIZE		0x1000
 
 static int tlmm_test_gpio = -1;
+static char *tlmm_reg_name = "default_region";
+
 module_param_named(gpio, tlmm_test_gpio, int, 0600);
+module_param_named(name, tlmm_reg_name, charp, 0600);
 
 static struct {
 	void __iomem *base;
@@ -570,6 +574,46 @@ static const struct of_device_id tlmm_of_match[] = {
 	{}
 };
 
+static int tlmm_reg_base(struct device_node *tlmm, struct resource *res)
+{
+	const char **reg_names;
+	int count;
+	int ret;
+	int i;
+
+	if (!strcmp(tlmm_reg_name, "default_region"))
+		return of_address_to_resource(tlmm, 0, res);
+
+	count = of_property_count_strings(tlmm, "reg-names");
+	if (count <= 0) {
+		pr_err("failed to find tlmm reg name\n");
+		return count;
+	}
+
+	reg_names = kcalloc(count, sizeof(char *), GFP_KERNEL);
+	if (!reg_names)
+		return -ENOMEM;
+
+	ret = of_property_read_string_array(tlmm, "reg-names", reg_names, count);
+	if (ret != count) {
+		kfree(reg_names);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (!strcmp(reg_names[i], tlmm_reg_name)) {
+			ret = of_address_to_resource(tlmm, i, res);
+			break;
+		}
+	}
+	if (i == count)
+		ret = -EINVAL;
+
+	kfree(reg_names);
+
+	return ret;
+}
+
 static int tlmm_test_init_suite(struct kunit_suite *suite)
 {
 	struct of_phandle_args args = {};
@@ -588,7 +632,7 @@ static int tlmm_test_init_suite(struct kunit_suite *suite)
 		return -EINVAL;
 	}
 
-	ret = of_address_to_resource(tlmm, 0, &res);
+	ret = tlmm_reg_base(tlmm, &res);
 	if (ret < 0)
 		return ret;
 

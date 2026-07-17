@@ -71,6 +71,7 @@
  */
 
 #include <linux/ctype.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/hashtable.h>
@@ -89,9 +90,9 @@
 struct scmi_quirk {
 	bool enabled;
 	const char *name;
-	char *vendor;
-	char *sub_vendor_id;
-	char *impl_ver_range;
+	const char *vendor;
+	const char *sub_vendor_id;
+	const char *impl_ver_range;
 	u32 start_range;
 	u32 end_range;
 	struct static_key_false *key;
@@ -217,10 +218,10 @@ static unsigned int scmi_quirk_signature(const char *vend, const char *sub_vend)
 
 static int scmi_quirk_range_parse(struct scmi_quirk *quirk)
 {
-	const char *last, *first = quirk->impl_ver_range;
+	const char *last, *first __free(kfree) = NULL;
+	int ret = 0;
 	size_t len;
 	char *sep;
-	int ret;
 
 	quirk->start_range = 0;
 	quirk->end_range = 0xFFFFFFFF;
@@ -228,21 +229,24 @@ static int scmi_quirk_range_parse(struct scmi_quirk *quirk)
 	if (!len)
 		return 0;
 
+	first = kmemdup(quirk->impl_ver_range, len + 1, GFP_KERNEL);
+	if (!first)
+		return -ENOMEM;
+
 	last = first + len - 1;
-	sep = strchr(quirk->impl_ver_range, '-');
+	sep = strchr(first, '-');
 	if (sep)
 		*sep = '\0';
 
-	if (sep == first) /* -X */
-		ret = kstrtouint(first + 1, 0, &quirk->end_range);
-	else /* X OR X- OR X-y */
+	if (sep != first) /* X OR X- OR X-y */ {
 		ret = kstrtouint(first, 0, &quirk->start_range);
-	if (ret)
-		return ret;
+		if (ret)
+			return ret;
+	}
 
 	if (!sep)
 		quirk->end_range = quirk->start_range;
-	else if (sep != last) /* x-Y */
+	else if (sep != last) /* -X OR x-Y */
 		ret = kstrtouint(sep + 1, 0, &quirk->end_range);
 
 	if (quirk->start_range > quirk->end_range)
@@ -254,10 +258,8 @@ static int scmi_quirk_range_parse(struct scmi_quirk *quirk)
 void scmi_quirks_initialize(void)
 {
 	struct scmi_quirk *quirk;
-	int i;
 
-	for (i = 0, quirk = scmi_quirks_table[0]; quirk;
-	     i++, quirk = scmi_quirks_table[i]) {
+	for (unsigned int i = 0; (quirk = scmi_quirks_table[i]); i++) {
 		int ret;
 
 		ret = scmi_quirk_range_parse(quirk);

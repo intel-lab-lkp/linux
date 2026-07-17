@@ -10,8 +10,6 @@
  * for kernel.
  */
 
-#define pr_fmt(fmt)	"kexec_image: " fmt
-
 #include <linux/elf.h>
 #include <linux/kexec.h>
 #include <linux/slab.h>
@@ -19,6 +17,7 @@
 #include <linux/libfdt.h>
 #include <linux/types.h>
 #include <linux/memblock.h>
+#include <linux/minmax.h>
 #include <asm/setup.h>
 
 static int riscv_kexec_elf_load(struct kimage *image, struct elfhdr *ehdr,
@@ -27,8 +26,7 @@ static int riscv_kexec_elf_load(struct kimage *image, struct elfhdr *ehdr,
 {
 	int i;
 	int ret = 0;
-	size_t size;
-	struct kexec_buf kbuf;
+	struct kexec_buf kbuf = {};
 	const struct elf_phdr *phdr;
 
 	kbuf.image = image;
@@ -38,12 +36,8 @@ static int riscv_kexec_elf_load(struct kimage *image, struct elfhdr *ehdr,
 		if (phdr->p_type != PT_LOAD)
 			continue;
 
-		size = phdr->p_filesz;
-		if (size > phdr->p_memsz)
-			size = phdr->p_memsz;
-
 		kbuf.buffer = (void *) elf_info->buffer + phdr->p_offset;
-		kbuf.bufsz = size;
+		kbuf.bufsz = min(phdr->p_filesz, phdr->p_memsz);
 		kbuf.buf_align = phdr->p_align;
 		kbuf.mem = phdr->p_paddr - old_pbase + new_pbase;
 		kbuf.memsz = phdr->p_memsz;
@@ -66,7 +60,7 @@ static int elf_find_pbase(struct kimage *image, unsigned long kernel_len,
 {
 	int i;
 	int ret;
-	struct kexec_buf kbuf;
+	struct kexec_buf kbuf = {};
 	const struct elf_phdr *phdr;
 	unsigned long lowest_paddr = ULONG_MAX;
 	unsigned long lowest_vaddr = ULONG_MAX;
@@ -95,6 +89,7 @@ static int elf_find_pbase(struct kimage *image, unsigned long kernel_len,
 	kbuf.buf_align = PMD_SIZE;
 	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
 	kbuf.memsz = ALIGN(kernel_len, PAGE_SIZE);
+	kbuf.cma = NULL;
 	kbuf.top_down = false;
 	ret = arch_kexec_locate_mem_hole(&kbuf);
 	if (!ret) {

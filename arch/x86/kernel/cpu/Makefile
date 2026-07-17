@@ -19,6 +19,7 @@ KCSAN_SANITIZE_common.o := n
 
 obj-y			:= cacheinfo.o scattered.o
 obj-y			+= topology_common.o topology_ext.o topology_amd.o
+obj-y			+= cpuid_parser.o
 obj-y			+= common.o
 obj-y			+= rdrand.o
 obj-y			+= match.o
@@ -58,6 +59,7 @@ obj-$(CONFIG_X86_SGX)			+= sgx/
 obj-$(CONFIG_X86_LOCAL_APIC)		+= perfctr-watchdog.o
 
 obj-$(CONFIG_HYPERVISOR_GUEST)		+= vmware.o hypervisor.o mshyperv.o
+obj-$(CONFIG_BHYVE_GUEST)		+= bhyve.o
 obj-$(CONFIG_ACRN_GUEST)		+= acrn.o
 
 obj-$(CONFIG_DEBUG_FS)			+= debugfs.o

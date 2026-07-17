@@ -32,6 +32,7 @@
 #include <linux/list.h>
 #include <linux/slab.h>
 
+#include <net/flow.h>
 #include <net/inet_dscp.h>
 #include <net/ip.h>
 #include <net/protocol.h>
@@ -87,7 +88,8 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	if (id == RT_TABLE_LOCAL && !net->ipv4.fib_has_custom_rules)
 		alias = fib_new_table(net, RT_TABLE_MAIN);
 
-	tb = fib_trie_table(id, alias);
+	if (check_net(net))
+		tb = fib_trie_table(id, alias);
 	if (!tb)
 		return NULL;
 
@@ -293,7 +295,7 @@ __be32 fib_compute_spec_dst(struct sk_buff *skb)
 			.flowi4_iif = LOOPBACK_IFINDEX,
 			.flowi4_l3mdev = l3mdev_master_ifindex_rcu(dev),
 			.daddr = ip_hdr(skb)->saddr,
-			.flowi4_tos = inet_dscp_to_dsfield(ip4h_dscp(ip_hdr(skb))),
+			.flowi4_dscp = ip4h_dscp(ip_hdr(skb)),
 			.flowi4_scope = scope,
 			.flowi4_mark = vmark ? skb->mark : 0,
 		};
@@ -358,7 +360,7 @@ static int __fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 	fl4.flowi4_iif = oif ? : LOOPBACK_IFINDEX;
 	fl4.daddr = src;
 	fl4.saddr = dst;
-	fl4.flowi4_tos = inet_dscp_to_dsfield(dscp);
+	fl4.flowi4_dscp = dscp;
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
 	fl4.flowi4_tun_key.tun_id = 0;
 	fl4.flowi4_flags = 0;
@@ -945,9 +947,6 @@ int ip_valid_fib_dump_req(struct net *net, const struct nlmsghdr *nlh,
 	struct rtmsg *rtm;
 	int err, i;
 
-	if (filter->rtnl_held)
-		ASSERT_RTNL();
-
 	rtm = nlmsg_payload(nlh, sizeof(*rtm));
 	if (!rtm) {
 		NL_SET_ERR_MSG(extack, "Invalid header for FIB dump request");
@@ -991,10 +990,8 @@ int ip_valid_fib_dump_req(struct net *net, const struct nlmsghdr *nlh,
 			break;
 		case RTA_OIF:
 			ifindex = nla_get_u32(tb[i]);
-			if (filter->rtnl_held)
-				filter->dev = __dev_get_by_index(net, ifindex);
-			else
-				filter->dev = dev_get_by_index_rcu(net, ifindex);
+
+			filter->dev = dev_get_by_index_rcu(net, ifindex);
 			if (!filter->dev)
 				return -ENODEV;
 			break;
@@ -1016,18 +1013,16 @@ EXPORT_SYMBOL_GPL(ip_valid_fib_dump_req);
 
 static int inet_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 {
+	const struct nlmsghdr *nlh = cb->nlh;
+	struct net *net = sock_net(skb->sk);
 	struct fib_dump_filter filter = {
 		.dump_routes = true,
 		.dump_exceptions = true,
-		.rtnl_held = false,
 	};
-	const struct nlmsghdr *nlh = cb->nlh;
-	struct net *net = sock_net(skb->sk);
-	unsigned int h, s_h;
-	unsigned int e = 0, s_e;
-	struct fib_table *tb;
+	unsigned int e = 0, s_e, h, s_h;
 	struct hlist_head *head;
 	int dumped = 0, err = 0;
+	struct fib_table *tb;
 
 	rcu_read_lock();
 	if (cb->strict_check) {
@@ -1372,7 +1367,7 @@ static void nl_fib_lookup(struct net *net, struct fib_result_nl *frn)
 	struct flowi4           fl4 = {
 		.flowi4_mark = frn->fl_mark,
 		.daddr = frn->fl_addr,
-		.flowi4_tos = frn->fl_tos & INET_DSCP_MASK,
+		.flowi4_dscp = inet_dsfield_to_dscp(frn->fl_tos),
 		.flowi4_scope = frn->fl_scope,
 	};
 	struct fib_table *tb;
@@ -1524,7 +1519,7 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 		fib_disable_ip(dev, event, false);
 		break;
 	case NETDEV_CHANGE:
-		flags = dev_get_flags(dev);
+		flags = netif_get_flags(dev);
 		if (flags & (IFF_RUNNING | IFF_LOWER_UP))
 			fib_sync_up(dev, RTNH_F_LINKDOWN);
 		else
@@ -1612,18 +1607,11 @@ static void ip_fib_net_exit(struct net *net)
 		struct fib_table *tb;
 
 		hlist_for_each_entry_safe(tb, tmp, head, tb_hlist) {
-			hlist_del(&tb->tb_hlist);
+			hlist_del_rcu(&tb->tb_hlist);
 			fib_table_flush(net, tb, true);
 			fib_free_table(tb);
 		}
 	}
-
-#ifdef CONFIG_IP_MULTIPLE_TABLES
-	fib4_rules_exit(net);
-#endif
-
-	kfree(net->ipv4.fib_table_hash);
-	fib4_notifier_exit(net);
 }
 
 static int __net_init fib_net_init(struct net *net)
@@ -1659,35 +1647,42 @@ out_semantics:
 	rtnl_net_lock(net);
 	ip_fib_net_exit(net);
 	rtnl_net_unlock(net);
+
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+	fib4_rules_exit(net);
+#endif
+	kfree(net->ipv4.fib_table_hash);
+	fib4_notifier_exit(net);
 	goto out;
 }
 
-static void __net_exit fib_net_exit(struct net *net)
+static void __net_exit fib_net_pre_exit(struct net *net)
 {
 	fib_proc_exit(net);
 	nl_fib_lookup_exit(net);
 }
 
-static void __net_exit fib_net_exit_batch(struct list_head *net_list)
+static void __net_exit fib_net_exit_rtnl(struct net *net,
+					 struct list_head *dev_kill_list)
 {
-	struct net *net;
+	ip_fib_net_exit(net);
+}
 
-	rtnl_lock();
-	list_for_each_entry(net, net_list, exit_list) {
-		__rtnl_net_lock(net);
-		ip_fib_net_exit(net);
-		__rtnl_net_unlock(net);
-	}
-	rtnl_unlock();
-
-	list_for_each_entry(net, net_list, exit_list)
-		fib4_semantics_exit(net);
+static void __net_exit fib_net_exit(struct net *net)
+{
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+	fib4_rules_exit(net);
+#endif
+	kfree(net->ipv4.fib_table_hash);
+	fib4_notifier_exit(net);
+	fib4_semantics_exit(net);
 }
 
 static struct pernet_operations fib_net_ops = {
 	.init = fib_net_init,
+	.pre_exit = fib_net_pre_exit,
+	.exit_rtnl = fib_net_exit_rtnl,
 	.exit = fib_net_exit,
-	.exit_batch = fib_net_exit_batch,
 };
 
 static const struct rtnl_msg_handler fib_rtnl_msg_handlers[] __initconst = {

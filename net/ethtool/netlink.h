@@ -115,6 +115,34 @@ static inline void ethnl_update_u8(u8 *dst, const struct nlattr *attr,
 }
 
 /**
+ * ethnl_update_u8_u32() - update u8 value from an NLA_U32 attribute
+ * @dst:  value to update
+ * @attr: netlink attribute with new value or null
+ * @mod:  pointer to bool for modification tracking
+ *
+ * Some attributes are NLA_U32 on the wire but are stored in a u8. Read the
+ * full 32-bit value from NLA_U32 netlink attribute @attr and narrow it into
+ * the u8 pointed to by @dst; do nothing if @attr is null.
+ * Bool pointed to by @mod is set to true if this function changed the value
+ * of *dst, otherwise it is left as is.
+ */
+static inline void ethnl_update_u8_u32(u8 *dst, const struct nlattr *attr,
+				       bool *mod)
+{
+	u32 val;
+
+	if (!attr)
+		return;
+	val = nla_get_u32(attr);
+	DEBUG_NET_WARN_ON_ONCE(val > U8_MAX);
+	if (*dst == val)
+		return;
+
+	*dst = val;
+	*mod = true;
+}
+
+/**
  * ethnl_update_bool32() - update u32 used as bool from NLA_U8 attribute
  * @dst:  value to update
  * @attr: netlink attribute with new value or null
@@ -275,14 +303,15 @@ static inline void ethnl_parse_header_dev_put(struct ethnl_req_info *req_info)
 
 /**
  * ethnl_req_get_phydev() - Gets the phy_device targeted by this request,
- *			    if any. Must be called under rntl_lock().
+ *			    if any.
  * @req_info:	The ethnl request to get the phy from.
  * @tb:		The netlink attributes array, for error reporting.
  * @header:	The netlink header index, used for error reporting.
  * @extack:	The netlink extended ACK, for error reporting.
  *
- * The caller must hold RTNL, until it's done interacting with the returned
- * phy_device.
+ * If a phy_device is returned the caller must hold rtnl_lock when calling
+ * this function, and until it's done interacting with the returned phy_device.
+ * IOW caller must hold rtnl_lock unless they know netdev has no phy_device.
  *
  * Return: A phy_device pointer corresponding either to the passed phy_index
  *	   if one is provided. If not, the phy_device attached to the
@@ -317,12 +346,12 @@ enum ethnl_sock_type {
 };
 
 struct ethnl_sock_priv {
-	struct net_device *dev;
+	struct net *net;
 	u32 portid;
 	enum ethnl_sock_type type;
 };
 
-int ethnl_sock_priv_set(struct sk_buff *skb, struct net_device *dev, u32 portid,
+int ethnl_sock_priv_set(struct sk_buff *skb, struct net *net, u32 portid,
 			enum ethnl_sock_type type);
 
 /**
@@ -332,7 +361,9 @@ int ethnl_sock_priv_set(struct sk_buff *skb, struct net_device *dev, u32 portid,
  * @hdr_attr:         attribute type for request header
  * @req_info_size:    size of request info
  * @reply_data_size:  size of reply data
- * @allow_nodev_do:   allow non-dump request with no device identification
+ * @allow_nodev_do:
+ *	Allow non-dump request with no device identification.
+ *	Note that locks (rtnl_lock etc.) are only taken if device is set.
  * @set_ntf_cmd:      notification to generate on changes (SET)
  * @parse_request:
  *	Parse request except common header (struct ethnl_req_info). Common
@@ -395,6 +426,7 @@ struct ethnl_request_ops {
 	u8			set_ntf_cmd;
 
 	int (*parse_request)(struct ethnl_req_info *req_info,
+			     const struct genl_info *info,
 			     struct nlattr **tb,
 			     struct netlink_ext_ack *extack);
 	int (*prepare_data)(const struct ethnl_req_info *req_info,
@@ -441,6 +473,7 @@ extern const struct ethnl_request_ops ethnl_plca_status_request_ops;
 extern const struct ethnl_request_ops ethnl_mm_request_ops;
 extern const struct ethnl_request_ops ethnl_phy_request_ops;
 extern const struct ethnl_request_ops ethnl_tsconfig_request_ops;
+extern const struct ethnl_request_ops ethnl_mse_request_ops;
 
 extern const struct nla_policy ethnl_header_policy[ETHTOOL_A_HEADER_FLAGS + 1];
 extern const struct nla_policy ethnl_header_policy_stats[ETHTOOL_A_HEADER_FLAGS + 1];
@@ -484,6 +517,9 @@ extern const struct nla_policy ethnl_module_set_policy[ETHTOOL_A_MODULE_POWER_MO
 extern const struct nla_policy ethnl_pse_get_policy[ETHTOOL_A_PSE_HEADER + 1];
 extern const struct nla_policy ethnl_pse_set_policy[ETHTOOL_A_PSE_MAX + 1];
 extern const struct nla_policy ethnl_rss_get_policy[ETHTOOL_A_RSS_START_CONTEXT + 1];
+extern const struct nla_policy ethnl_rss_set_policy[ETHTOOL_A_RSS_FLOW_HASH + 1];
+extern const struct nla_policy ethnl_rss_create_policy[ETHTOOL_A_RSS_INPUT_XFRM + 1];
+extern const struct nla_policy ethnl_rss_delete_policy[ETHTOOL_A_RSS_CONTEXT + 1];
 extern const struct nla_policy ethnl_plca_get_cfg_policy[ETHTOOL_A_PLCA_HEADER + 1];
 extern const struct nla_policy ethnl_plca_set_cfg_policy[ETHTOOL_A_PLCA_MAX + 1];
 extern const struct nla_policy ethnl_plca_get_status_policy[ETHTOOL_A_PLCA_HEADER + 1];
@@ -493,6 +529,7 @@ extern const struct nla_policy ethnl_module_fw_flash_act_policy[ETHTOOL_A_MODULE
 extern const struct nla_policy ethnl_phy_get_policy[ETHTOOL_A_PHY_HEADER + 1];
 extern const struct nla_policy ethnl_tsconfig_get_policy[ETHTOOL_A_TSCONFIG_HEADER + 1];
 extern const struct nla_policy ethnl_tsconfig_set_policy[ETHTOOL_A_TSCONFIG_MAX + 1];
+extern const struct nla_policy ethnl_mse_get_policy[ETHTOOL_A_MSE_HEADER + 1];
 
 int ethnl_set_features(struct sk_buff *skb, struct genl_info *info);
 int ethnl_act_cable_test(struct sk_buff *skb, struct genl_info *info);
@@ -506,6 +543,8 @@ int ethnl_rss_dumpit(struct sk_buff *skb, struct netlink_callback *cb);
 int ethnl_tsinfo_start(struct netlink_callback *cb);
 int ethnl_tsinfo_dumpit(struct sk_buff *skb, struct netlink_callback *cb);
 int ethnl_tsinfo_done(struct netlink_callback *cb);
+int ethnl_rss_create_doit(struct sk_buff *skb, struct genl_info *info);
+int ethnl_rss_delete_doit(struct sk_buff *skb, struct genl_info *info);
 
 extern const char stats_std_names[__ETHTOOL_STATS_CNT][ETH_GSTRING_LEN];
 extern const char stats_eth_phy_names[__ETHTOOL_A_STATS_ETH_PHY_CNT][ETH_GSTRING_LEN];
