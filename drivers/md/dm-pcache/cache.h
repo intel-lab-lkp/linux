@@ -517,15 +517,7 @@ static inline u32 get_kset_onmedia_size(struct pcache_cache_kset_onmedia *kset_o
  */
 static inline u32 cache_seg_remain(struct pcache_cache_pos *pos)
 {
-	struct pcache_cache_segment *cache_seg;
-	struct pcache_segment *segment;
-	u32 seg_remain;
-
-	cache_seg = pos->cache_seg;
-	segment = &cache_seg->segment;
-	seg_remain = segment->data_size - pos->seg_off;
-
-	return seg_remain;
+	return pos->cache_seg->segment.data_size - pos->seg_off;
 }
 
 /**
