@@ -7257,16 +7257,11 @@ void __noreturn do_task_dead(void)
 		cpu_relax();
 }
 
-static inline void sched_submit_work(struct task_struct *tsk)
-{
-	static DEFINE_WAIT_OVERRIDE_MAP(sched_map, LD_WAIT_CONFIG);
-	unsigned int task_flags;
+static DEFINE_WAIT_OVERRIDE_MAP(sched_map, LD_WAIT_CONFIG);
 
-	/*
-	 * Establish LD_WAIT_CONFIG context to ensure none of the code called
-	 * will use a blocking primitive -- which would lead to recursion.
-	 */
-	lock_map_acquire_try(&sched_map);
+static inline void sched_submit_work_notifiers(struct task_struct *tsk)
+{
+	unsigned int task_flags;
 
 	task_flags = tsk->flags;
 	/*
@@ -7277,7 +7272,10 @@ static inline void sched_submit_work(struct task_struct *tsk)
 		wq_worker_sleeping(tsk);
 	else if (task_flags & PF_IO_WORKER)
 		io_wq_worker_sleeping(tsk);
+}
 
+static inline void sched_submit_work_plug(struct task_struct *tsk)
+{
 	/*
 	 * spinlock and rwlock must not flush block requests.  This will
 	 * deadlock if the callback attempts to acquire a lock which is
@@ -7290,6 +7288,18 @@ static inline void sched_submit_work(struct task_struct *tsk)
 	 * make sure to submit it to avoid deadlocks.
 	 */
 	blk_flush_plug(tsk->plug, true);
+}
+
+static inline void sched_submit_work(struct task_struct *tsk)
+{
+	/*
+	 * Establish LD_WAIT_CONFIG context to ensure none of the code called
+	 * will use a blocking primitive -- which would lead to recursion.
+	 */
+	lock_map_acquire_try(&sched_map);
+
+	sched_submit_work_notifiers(tsk);
+	sched_submit_work_plug(tsk);
 
 	lock_map_release(&sched_map);
 }
@@ -7595,10 +7605,29 @@ const struct sched_class *__setscheduler_class(int policy, int prio)
  */
 #define fetch_and_set(x, v) ({ int _x = (x); (x) = (v); _x; })
 
+void rt_mutex_pre_schedule_flush_plug(void)
+{
+	lockdep_assert(!current->pi_blocked_on);
+	lock_map_acquire_try(&sched_map);
+	sched_submit_work_plug(current);
+	lock_map_release(&sched_map);
+}
+
 void rt_mutex_pre_schedule(void)
 {
 	lockdep_assert(!fetch_and_set(current->sched_rt_mutex, 1));
 	sched_submit_work(current);
+}
+
+void rt_mutex_pre_schedule_pi_blocked(void)
+{
+	lockdep_assert(current->pi_blocked_on);
+	lockdep_assert(!fetch_and_set(current->sched_rt_mutex, 1));
+
+	/* The plug was flushed before current->pi_blocked_on was installed. */
+	lock_map_acquire_try(&sched_map);
+	sched_submit_work_notifiers(current);
+	lock_map_release(&sched_map);
 }
 
 void rt_mutex_schedule(void)

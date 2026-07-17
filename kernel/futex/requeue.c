@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <linux/plist.h>
+#include <linux/sched/rt.h>
 #include <linux/sched/signal.h>
 
 #include "futex.h"
@@ -821,6 +822,13 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	q.requeue_pi_key = &key2;
 
 	/*
+	 * Once q is visible, requeue can enqueue rt_waiter and install
+	 * current->pi_blocked_on on our behalf. Flush plugged I/O before
+	 * that can happen.
+	 */
+	rt_mutex_pre_schedule_flush_plug();
+
+	/*
 	 * Prepare to wait on uaddr. On success, it holds hb->lock and q
 	 * is initialized.
 	 */
@@ -865,6 +873,11 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	case Q_REQUEUE_PI_DONE:
 		/* Requeue completed. Current is 'pi_blocked_on' the rtmutex */
 		pi_mutex = &q.pi_state->pi_mutex;
+		/*
+		 * The rt_waiter is already enqueued and the plug is flushed.
+		 * Enter schedule state and notify worker users.
+		 */
+		rt_mutex_pre_schedule_pi_blocked();
 		ret = rt_mutex_wait_proxy_lock(pi_mutex, to, &rt_waiter);
 
 		/*
@@ -875,6 +888,7 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 
 		futex_q_lockptr_lock(&q);
 		debug_rt_mutex_free_waiter(&rt_waiter);
+		rt_mutex_post_schedule();
 		/*
 		 * Fixup the pi_state owner and possibly acquire the lock if we
 		 * haven't already.
@@ -915,4 +929,3 @@ out:
 	}
 	return ret;
 }
-

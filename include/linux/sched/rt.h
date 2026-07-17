@@ -51,7 +51,9 @@ static inline bool rt_or_dl_task_policy(struct task_struct *tsk)
 }
 
 #ifdef CONFIG_RT_MUTEXES
+void rt_mutex_pre_schedule_flush_plug(void);
 extern void rt_mutex_pre_schedule(void);
+void rt_mutex_pre_schedule_pi_blocked(void);
 extern void rt_mutex_schedule(void);
 extern void rt_mutex_post_schedule(void);
 
