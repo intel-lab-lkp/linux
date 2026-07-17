@@ -1333,7 +1333,7 @@ static int __bmp280_trigger_probe(struct iio_dev *indio_dev,
 					irq_thread_handler, IRQF_ONESHOT,
 					indio_dev->name, indio_dev);
 	if (ret)
-		return dev_err_probe(dev, ret, "request IRQ failed.\n");
+		return ret;
 
 	ret = devm_iio_trigger_register(data->dev, data->trig);
 	if (ret)
@@ -3058,7 +3058,6 @@ static int bmp085_trigger_probe(struct iio_dev *indio_dev)
 			       indio_dev->name, data);
 	if (ret) {
 		/* Bail out without IRQ but keep the driver in place */
-		dev_err(dev, "unable to request DRDY IRQ\n");
 		return 0;
 	}
 
