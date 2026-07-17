@@ -1424,6 +1424,49 @@ void smb_lazy_parent_lease_break_close(struct ksmbd_file *fp)
 	ksmbd_inode_put(p_ci);
 }
 
+static bool ksmbd_skip_session_ea_break(struct ksmbd_work *work,
+					struct ksmbd_file *fp,
+					int req_op_level,
+					struct lease_ctx_info *lctx)
+{
+	struct oplock_info *opinfo;
+	bool same_session = false;
+	bool foreign_session = false;
+	__le32 ea_meta_mask = FILE_READ_EA_LE | FILE_WRITE_EA_LE |
+			      FILE_READ_ATTRIBUTES_LE |
+			      FILE_WRITE_ATTRIBUTES_LE |
+			      FILE_READ_CONTROL_LE | FILE_SYNCHRONIZE_LE;
+
+	if (!work || !fp || lctx || req_op_level != SMB2_OPLOCK_LEVEL_NONE)
+		return false;
+
+	/*
+	 * Avoid self-deadlock when the same session reopens the file only
+	 * to read/write EAs or metadata, e.g. CIFS killpriv querying or
+	 * removing security.capability during buffered write.
+	 */
+	if (!(fp->daccess & (FILE_READ_EA_LE | FILE_WRITE_EA_LE)) ||
+	    (fp->daccess & ~ea_meta_mask))
+		return false;
+
+	down_read(&fp->f_ci->m_lock);
+	list_for_each_entry(opinfo, &fp->f_ci->m_op_list, op_entry) {
+		if (!opinfo->conn || opinfo->level == SMB2_OPLOCK_LEVEL_NONE)
+			continue;
+
+		if (opinfo->sess == work->sess)
+			same_session = true;
+		else
+			foreign_session = true;
+
+		if (same_session && foreign_session)
+			break;
+	}
+	up_read(&fp->f_ci->m_lock);
+
+	return same_session && !foreign_session;
+}
+
 /**
  * smb_grant_oplock() - handle oplock/lease request on file open
  * @work:		smb work
@@ -1527,6 +1570,12 @@ int smb_grant_oplock(struct ksmbd_work *work, int req_op_level, u64 pid,
 		err = share_ret;
 		opinfo_put(prev_opinfo);
 		goto err_out;
+	}
+
+	if (share_ret >= 0 &&
+	    ksmbd_skip_session_ea_break(work, fp, req_op_level, lctx)) {
+		opinfo_put(prev_opinfo);
+		goto set_lev;
 	}
 
 	if (prev_opinfo->level != SMB2_OPLOCK_LEVEL_BATCH &&
