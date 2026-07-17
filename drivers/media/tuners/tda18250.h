@@ -8,7 +8,8 @@
 #ifndef TDA18250_H
 #define TDA18250_H
 
-#include <linux/kconfig.h>
+#include <linux/types.h>
+
 #include <media/media-device.h>
 #include <media/dvb_frontend.h>
 
