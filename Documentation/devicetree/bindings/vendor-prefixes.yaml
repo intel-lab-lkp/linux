@@ -1013,6 +1013,8 @@ patternProperties:
     description: MaxBotix Inc.
   "^maxim,.*":
     description: Maxim Integrated Products
+  "^maxio,.*":
+    description: Maxio Technology (Hangzhou) Co., Ltd.
   "^maxlinear,.*":
     description: MaxLinear Inc.
   "^maxtor,.*":
