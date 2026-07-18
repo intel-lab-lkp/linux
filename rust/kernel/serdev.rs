@@ -515,7 +515,7 @@ impl Device<device::Bound> {
     /// [`Device::write_all`].
     ///
     /// Note that any accepted data has only been buffered by the controller. Use
-    /// [ Device::wait_until_sent`] to make sure the controller write buffer has actually been
+    /// [`Device::wait_until_sent`] to make sure the controller write buffer has actually been
     /// emptied.
     ///
     /// Returns the number of bytes written (less than `data.len()` if not enough room in the
