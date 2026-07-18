@@ -916,6 +916,15 @@ NOKPROBE(call_on_irq_stack)
 	b	.
 .endm
 
+/* Set \dst using \op and the \normal or \critical sym, based on \prio */
+.macro sdei_choose op:req, dst:req, prio:req, normal:req, critical:req, tmp:req
+	cbnz	\prio, .Lcritical\@
+	\op dst=\dst, sym=\normal, tmp=\tmp
+	b	.Ldone\@
+.Lcritical\@:	\op dst=\dst, sym=\critical, tmp=\tmp
+.Ldone\@:
+.endm
+
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 /*
  * The regular SDEI entry point may have been unmapped along with the rest of
@@ -997,32 +1006,24 @@ SYM_CODE_START(__sdei_asm_handler)
 
 	/* Store the registered-event for crash_smp_send_stop() */
 	ldrb	w4, [x19, #SDEI_EVENT_PRIORITY]
-	cbnz	w4, 1f
-	adr_this_cpu dst=x5, sym=sdei_active_normal_event, tmp=x6
-	b	2f
-1:	adr_this_cpu dst=x5, sym=sdei_active_critical_event, tmp=x6
-2:	str	x19, [x5]
+	sdei_choose adr_this_cpu, x5, w4, sdei_active_normal_event, \
+		    sdei_active_critical_event, x6
+	str	x19, [x5]
 
 	/*
 	 * entry.S may have been using sp as a scratch register, find whether
 	 * this is a normal or critical event and switch to the appropriate
 	 * stack for this CPU.
 	 */
-	cbnz	w4, 1f
-	ldr_this_cpu dst=x5, sym=sdei_stack_normal_ptr, tmp=x6
-	b	2f
-1:	ldr_this_cpu dst=x5, sym=sdei_stack_critical_ptr, tmp=x6
-2:	mov	x6, #SDEI_STACK_SIZE
+	sdei_choose ldr_this_cpu, x5, w4, sdei_stack_normal_ptr, sdei_stack_critical_ptr, x6
+	mov	x6, #SDEI_STACK_SIZE
 	add	x5, x5, x6
 	mov	sp, x5
 
 #ifdef CONFIG_SHADOW_CALL_STACK
 	/* Use a separate shadow call stack for normal and critical events */
-	cbnz	w4, 3f
-	ldr_this_cpu dst=scs_sp, sym=sdei_shadow_call_stack_normal_ptr, tmp=x6
-	b	4f
-3:	ldr_this_cpu dst=scs_sp, sym=sdei_shadow_call_stack_critical_ptr, tmp=x6
-4:
+	sdei_choose ldr_this_cpu, scs_sp, w4, sdei_shadow_call_stack_normal_ptr, \
+		    sdei_shadow_call_stack_critical_ptr, x6
 #endif
 
 	/*
@@ -1068,11 +1069,9 @@ SYM_CODE_START(__sdei_asm_handler)
 
 	/* Clear the registered-event seen by crash_smp_send_stop() */
 	ldrb	w3, [x4, #SDEI_EVENT_PRIORITY]
-	cbnz	w3, 1f
-	adr_this_cpu dst=x5, sym=sdei_active_normal_event, tmp=x6
-	b	2f
-1:	adr_this_cpu dst=x5, sym=sdei_active_critical_event, tmp=x6
-2:	str	xzr, [x5]
+	sdei_choose adr_this_cpu, x5, w3, sdei_active_normal_event, \
+		    sdei_active_critical_event, x6
+	str	xzr, [x5]
 
 alternative_if_not ARM64_UNMAP_KERNEL_AT_EL0
 	sdei_handler_exit exit_mode=x2
