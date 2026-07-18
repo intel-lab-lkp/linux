@@ -3369,9 +3369,9 @@ static int early_mod_check(struct load_info *info, int flags)
 
 	/*
 	 * Now that we know we have the correct module name, check
-	 * if it's blacklisted.
+	 * if it's denylisted.
 	 */
-	if (module_is_blacklisted(info->name)) {
+	if (module_is_denylisted(info->name)) {
 		pr_err("Module %s is blacklisted\n", info->name);
 		return -EPERM;
 	}
