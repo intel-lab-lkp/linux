@@ -132,6 +132,23 @@ pub struct PrivateData<'bound, T: Driver> {
     #[pin]
     driver: UnsafeCell<MaybeUninit<T::Data<'bound>>>,
     open: UnsafeCell<bool>,
+    /// Whether `receive_buf_callback` is allowed to call `Driver::receive_buf`.
+    ///
+    /// If locked, the receive_buf_callback will be blocked on data receival.
+    /// This is the case while the driver is being probed or while [`PrivateData`] is being dropped.
+    /// This is necessary, because we need to open the serdev device before the driver has been
+    /// probed in order to allow it to be configured, which allows [`Adapter::receive_buf_callback`]
+    /// to be called. Thus we need to block data until probe completes and the driver data becomes
+    /// initialized.
+    ///
+    /// If unlocked and true, the receive_buf_callback will forward the data to
+    /// `Driver::receive_buf`. This is the normal state of operation.
+    ///
+    /// If unlocked and false, the receive_buf_callback will throw away the data.
+    /// This is only the case, if the serdev device is open and
+    /// - the driver returned an error in probe
+    /// or
+    /// - the driver data already has been dropped, because it was unbound.
     #[pin]
     active: Mutex<bool>,
 }
