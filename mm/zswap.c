@@ -34,6 +34,7 @@
 #include <linux/writeback.h>
 #include <linux/pagemap.h>
 #include <linux/workqueue.h>
+#include <linux/llist.h>
 #include <linux/list_lru.h>
 #include <linux/zsmalloc.h>
 
@@ -990,10 +991,37 @@ static void zswap_writeback_free_folio(struct folio *folio)
 		goto out;
 
 	/* Raced: the folio is now owned by the swapin; put it back on the LRU. */
+	folio_clear_dropbehind(folio);
 	folio_add_lru(folio);
 out:
 	folio_unlock(folio);
 	folio_put(folio);
+}
+
+static DEFINE_PER_CPU(struct llist_head, zswap_dropbehind_llist);
+
+static void zswap_dropbehind_workfn(struct work_struct *work)
+{
+	struct llist_node *pos, *next;
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		pos = llist_del_all(per_cpu_ptr(&zswap_dropbehind_llist, cpu));
+		llist_for_each_safe(pos, next, pos) {
+			struct folio *folio = container_of((struct list_head *)pos,
+							   struct folio, lru);
+			zswap_writeback_free_folio(folio);
+		}
+	}
+}
+
+static DECLARE_WORK(zswap_dropbehind_work, zswap_dropbehind_workfn);
+
+void zswap_writeback_dropbehind_folio(struct folio *folio)
+{
+	llist_add((struct llist_node *)&folio->lru,
+		  this_cpu_ptr(&zswap_dropbehind_llist));
+	schedule_work(&zswap_dropbehind_work);
 }
 
 /*
@@ -1027,7 +1055,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 
 	mpol = get_task_policy(current);
 	folio = swap_cache_alloc_folio(swpentry, GFP_KERNEL, BIT(0), NULL, mpol,
-				       NO_INTERLEAVE_INDEX, sync);
+				       NO_INTERLEAVE_INDEX, true);
 	put_swap_device(si);
 
 	/*
@@ -1071,9 +1099,9 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	/* folio is up to date */
 	folio_mark_uptodate(folio);
 
-	/* move it to the tail of the inactive list after end_writeback */
+	/* Free the folio once writeback completes; see folio_end_writeback(). */
 	if (!sync)
-		folio_set_reclaim(folio);
+		folio_set_dropbehind(folio);
 
 	/* start writeback */
 	__swap_writepage(folio, NULL);
