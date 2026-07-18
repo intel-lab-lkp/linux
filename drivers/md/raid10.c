@@ -489,7 +489,9 @@ static void raid10_end_write_request(struct bio *bio)
 
 			dec_rdev = 0;
 			if (test_bit(FailFast, &rdev->flags) &&
-			    (bio->bi_opf & MD_FAILFAST)) {
+			    (bio->bi_opf & MD_FAILFAST) &&
+			    /* A mapping failure says nothing about device health */
+			    !md_bio_p2pdma_mapping_error(bio)) {
 				md_error(rdev->mddev, rdev);
 			}
 
@@ -2786,7 +2788,7 @@ static void fix_read_error(struct r10conf *conf, struct mddev *mddev, struct r10
 	}
 }
 
-static void narrow_write_error(struct r10bio *r10_bio, int i)
+static void narrow_write_error(struct r10bio *r10_bio, int i, bool coarse)
 {
 	struct bio *bio = r10_bio->master_bio;
 	struct mddev *mddev = r10_bio->mddev;
@@ -2799,6 +2801,12 @@ static void narrow_write_error(struct r10bio *r10_bio, int i)
 	 * a bad block.
 	 * It is conceivable that the bio doesn't exactly align with
 	 * blocks.  We must handle this.
+	 *
+	 * With 'coarse', retry the whole range as one bio and record
+	 * one bad range if it fails: used when per-block narrowing
+	 * cannot find a good block (P2PDMA mapping failures fail the
+	 * whole range identically), while a single retry still tells
+	 * a since-cleared transient error apart.
 	 *
 	 * We currently own a reference to the rdev.
 	 */
@@ -2814,9 +2822,12 @@ static void narrow_write_error(struct r10bio *r10_bio, int i)
 		block_sectors = roundup(1 << rdev->badblocks.shift, lbs);
 
 	sector = r10_bio->sector;
-	sectors = ((r10_bio->sector + block_sectors)
-		   & ~(sector_t)(block_sectors - 1))
-		- sector;
+	if (coarse)
+		sectors = sect_to_write;
+	else
+		sectors = ((r10_bio->sector + block_sectors)
+			   & ~(sector_t)(block_sectors - 1))
+			- sector;
 
 	while (sect_to_write) {
 		struct bio *wbio;
@@ -2856,6 +2867,7 @@ static void handle_read_error(struct mddev *mddev, struct r10bio *r10_bio)
 {
 	int slot = r10_bio->read_slot;
 	struct bio *bio;
+	bool p2pdma_error;
 	struct r10conf *conf = mddev->private;
 	struct md_rdev *rdev = r10_bio->devs[slot].rdev;
 
@@ -2868,17 +2880,28 @@ static void handle_read_error(struct mddev *mddev, struct r10bio *r10_bio)
 	 * frozen.
 	 */
 	bio = r10_bio->devs[slot].bio;
+	p2pdma_error = md_bio_p2pdma_mapping_error(bio);
 	bio_put(bio);
 	r10_bio->devs[slot].bio = NULL;
 
 	if (mddev->ro)
 		r10_bio->devs[slot].bio = IO_BLOCKED;
-	else if (!test_bit(FailFast, &rdev->flags)) {
+	else if (p2pdma_error) {
+		/*
+		 * The peer pages cannot be DMA-mapped to this member;
+		 * there is nothing to fix on the medium and the member
+		 * is healthy for host I/O: don't charge the read-error
+		 * budget or fail a FailFast member, just keep this leg
+		 * out of the retry.
+		 */
+		r10_bio->devs[slot].bio = IO_BLOCKED;
+	} else if (test_bit(FailFast, &rdev->flags)) {
+		md_error(mddev, rdev);
+	} else {
 		freeze_array(conf, 1);
 		fix_read_error(conf, mddev, r10_bio);
 		unfreeze_array(conf);
-	} else
-		md_error(mddev, rdev);
+	}
 
 	rdev_dec_pending(rdev, mddev);
 	r10_bio->state = 0;
@@ -2948,7 +2971,23 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 				rdev_dec_pending(rdev, conf->mddev);
 			} else if (bio != NULL && bio->bi_status) {
 				fail = true;
-				narrow_write_error(r10_bio, m);
+				if (md_bio_p2pdma_mapping_error(bio))
+					/*
+					 * A P2PDMA mapping failure fails
+					 * the whole range identically, so
+					 * narrowing block by block cannot
+					 * find a good block -- but a
+					 * transient device error also
+					 * surfaces as BLK_STS_TARGET, so
+					 * don't assume.  Retry the range
+					 * once: if it fails, record it in
+					 * one go; if it succeeds, there
+					 * was nothing wrong with the
+					 * medium.
+					 */
+					narrow_write_error(r10_bio, m, true);
+				else
+					narrow_write_error(r10_bio, m, false);
 				rdev_dec_pending(rdev, conf->mddev);
 			}
 			bio = r10_bio->devs[m].repl_bio;

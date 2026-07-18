@@ -41,6 +41,19 @@ static inline bool md_bio_is_p2pdma(struct bio *bio)
 }
 
 /*
+ * True when a leg bio failed because its P2PDMA pages cannot be DMA-mapped
+ * to this member (BLK_STS_TARGET from blk_dma_map_iter_start()). Usable at
+ * completion time, unlike md_bio_is_p2pdma(): leg bios are clones sharing
+ * the master bio's bvec table, which outlives the leg's end_io, but their
+ * iterator is consumed by then, so bio_has_data() cannot gate the access.
+ */
+static inline bool md_bio_p2pdma_mapping_error(struct bio *bio)
+{
+	return bio->bi_status == BLK_STS_TARGET && bio->bi_io_vec &&
+	       is_pci_p2pdma_page(bio->bi_io_vec->bv_page);
+}
+
+/*
  * Number of guaranteed raid bios in case of extreme VM load:
  */
 #define	NR_RAID_BIOS 256
