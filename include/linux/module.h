@@ -86,7 +86,8 @@ extern void cleanup_module(void);
  * builtin) or at module insertion time (if a module).  There can only
  * be one per module.
  */
-#define module_init(x)	__initcall(x);
+#define module_init(initfn)					\
+	____define_initcall_modname(initfn, 6, .initcall6, __initcall_id(initfn))
 
 /**
  * module_exit() - driver exit entry point
@@ -882,6 +883,8 @@ static inline void module_for_each_mod(int(*func)(struct module *mod, void *data
 {
 }
 #endif /* CONFIG_MODULES */
+
+bool module_is_blacklisted(const char *module_name);
 
 #ifdef CONFIG_SYSFS
 extern struct kset *module_kset;
