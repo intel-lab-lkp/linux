@@ -56,6 +56,10 @@ static int cs8409_parse_auto_config(struct hda_codec *codec)
 }
 
 static void cs8409_disable_i2c_clock_worker(struct work_struct *work);
+static void cs8409_jack_detect_work(struct work_struct *work);
+static void cs42l42_run_jack_detect(struct sub_codec *cs42l42);
+static int cs8409_i2c_read(struct sub_codec *scodec, unsigned int addr);
+static int cs8409_i2c_write(struct sub_codec *scodec, unsigned int addr, unsigned int value);
 
 static struct cs8409_spec *cs8409_alloc_spec(struct hda_codec *codec)
 {
@@ -69,6 +73,7 @@ static struct cs8409_spec *cs8409_alloc_spec(struct hda_codec *codec)
 	codec->power_save_node = 1;
 	mutex_init(&spec->i2c_mux);
 	INIT_DELAYED_WORK(&spec->i2c_clk_work, cs8409_disable_i2c_clock_worker);
+	INIT_DELAYED_WORK(&spec->jack_detect_work, cs8409_jack_detect_work);
 	snd_hda_gen_spec_init(&spec->gen);
 
 	return spec;
@@ -113,6 +118,27 @@ static void cs8409_disable_i2c_clock_worker(struct work_struct *work)
 	struct cs8409_spec *spec = container_of(work, struct cs8409_spec, i2c_clk_work.work);
 
 	cs8409_disable_i2c_clock(spec->codec);
+}
+
+static void cs8409_jack_detect_work(struct work_struct *work)
+{
+	struct cs8409_spec *spec = container_of(work, struct cs8409_spec, jack_detect_work.work);
+	struct sub_codec *cs42l42 = spec->scodecs[CS8409_CODEC0];
+
+	if (spec->init_done && spec->build_ctrl_done && !cs42l42->hp_jack_in) {
+		int reg_ts_status = cs8409_i2c_read(cs42l42, CS42L42_TSRS_PLUG_STATUS);
+
+		if (reg_ts_status < 0)
+			return;
+
+		if (((reg_ts_status & (CS42L42_TS_PLUG_MASK | CS42L42_TS_UNPLUG_MASK))
+			>> CS42L42_TS_PLUG_SHIFT) == CS42L42_TS_PLUG) {
+			cs42l42_run_jack_detect(cs42l42);
+		} else {
+			/* Make sure Tip Sense interrupts are unmasked */
+			cs8409_i2c_write(cs42l42, CS42L42_TSRS_PLUG_INT_MASK, 0xF3);
+		}
+	}
 }
 
 /*
@@ -953,6 +979,7 @@ static void cs8409_remove(struct hda_codec *codec)
 
 	/* Cancel i2c clock disable timer, and disable clock if left enabled */
 	cancel_delayed_work_sync(&spec->i2c_clk_work);
+	cancel_delayed_work_sync(&spec->jack_detect_work);
 	cs8409_disable_i2c_clock(codec);
 
 	snd_hda_gen_remove(codec);
@@ -1025,6 +1052,7 @@ static int cs8409_cs42l42_suspend(struct hda_codec *codec)
 
 	/* Cancel i2c clock disable timer, and disable clock if left enabled */
 	cancel_delayed_work_sync(&spec->i2c_clk_work);
+	cancel_delayed_work_sync(&spec->jack_detect_work);
 	cs8409_disable_i2c_clock(codec);
 
 	snd_hda_shutup_pins(codec);
@@ -1198,7 +1226,7 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 		spec->init_done = 1;
 		if (spec->init_done && spec->build_ctrl_done
 			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in)
-			cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+			schedule_delayed_work(&spec->jack_detect_work, msecs_to_jiffies(100));
 		break;
 	case HDA_FIXUP_ACT_BUILD:
 		spec->build_ctrl_done = 1;
@@ -1209,7 +1237,7 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 		 */
 		if (spec->init_done && spec->build_ctrl_done
 			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in)
-			cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+			schedule_delayed_work(&spec->jack_detect_work, msecs_to_jiffies(2000));
 		break;
 	default:
 		break;
