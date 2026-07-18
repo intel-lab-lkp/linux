@@ -1418,8 +1418,9 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	 * Keep at least one housekeeping cpu onlined to avoid generating
 	 * an empty sched_domain span.
 	 */
-	if (cpumask_any_and(cpu_online_mask,
-			    housekeeping_cpumask(HK_TYPE_DOMAIN)) >= nr_cpu_ids) {
+	if (cpumask_any_and_but(cpu_online_mask,
+				housekeeping_cpumask(HK_TYPE_DOMAIN),
+				cpu) >= nr_cpu_ids) {
 		ret = -EBUSY;
 		goto out;
 	}
