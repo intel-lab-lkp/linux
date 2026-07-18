@@ -896,7 +896,7 @@ int __init imsic_setup_state(struct fwnode_handle *fwnode, void *opaque)
 		index = nr_mmios;
 		reloff = i * BIT(global->guest_index_bits) *
 			 IMSIC_MMIO_PAGE_SZ;
-		for (j = 0; nr_mmios; j++) {
+		for (j = 0; j < nr_mmios; j++) {
 			if (reloff < resource_size(&mmios[j])) {
 				index = j;
 				break;
