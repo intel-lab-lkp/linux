@@ -138,7 +138,8 @@ static void tipc_net_finalize(struct net *net, u32 addr)
 	tipc_named_reinit(net);
 	tipc_sk_reinit(net);
 	tipc_mon_reinit_self(net);
-	tipc_nametbl_publish(net, &ua, &sk, addr);
+	if (!tipc_nametbl_publish(net, &ua, &sk, addr))
+		pr_warn("Failed to publish own node state\n");
 	atomic_inc(&tn->finalized);
 	wake_up_var(&tn->finalized);
 }
