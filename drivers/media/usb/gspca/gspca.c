@@ -1178,6 +1178,7 @@ static void gspca_release(struct v4l2_device *v4l2_device)
 	v4l2_ctrl_handler_free(gspca_dev->vdev.ctrl_handler);
 	v4l2_device_unregister(&gspca_dev->v4l2_dev);
 	kfree(gspca_dev->usb_buf);
+	usb_put_dev(gspca_dev->dev);
 	kfree(gspca_dev);
 }
 
@@ -1462,7 +1463,7 @@ int gspca_dev_probe2(struct usb_interface *intf,
 		ret = -ENOMEM;
 		goto out;
 	}
-	gspca_dev->dev = dev;
+	gspca_dev->dev = usb_get_dev(dev);
 	gspca_dev->iface = intf->cur_altsetting->desc.bInterfaceNumber;
 	gspca_dev->xfer_ep = -1;
 
@@ -1574,6 +1575,7 @@ out:
 	if (sd_desc->probe_error)
 		sd_desc->probe_error(gspca_dev);
 	kfree(gspca_dev->usb_buf);
+	usb_put_dev(gspca_dev->dev);
 	kfree(gspca_dev);
 	return ret;
 }
