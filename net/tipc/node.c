@@ -111,6 +111,7 @@ struct tipc_bclink_entry {
  * @peer_net: peer's net namespace
  * @peer_hash_mix: hash for this peer (FIXME)
  * @crypto_rx: RX crypto handler
+ * @work: work item for bulk distribution of cluster scope publications
  */
 struct tipc_node {
 	u32 addr;
@@ -145,6 +146,7 @@ struct tipc_node {
 #ifdef CONFIG_TIPC_CRYPTO
 	struct tipc_crypto *crypto_rx;
 #endif
+	struct work_struct work;
 };
 
 /* Node FSM states and events:
@@ -303,6 +305,7 @@ static void tipc_node_free(struct rcu_head *rp)
 #ifdef CONFIG_TIPC_CRYPTO
 	tipc_crypto_stop(&n->crypto_rx);
 #endif
+	cancel_work_sync(&n->work);
 	kfree(n);
 }
 
@@ -393,6 +396,19 @@ static void tipc_node_write_unlock_fast(struct tipc_node *n)
 	write_unlock_bh(&n->lock);
 }
 
+static void tipc_node_dist_bulk(struct work_struct *work)
+{
+	struct tipc_node *node = container_of(work, struct tipc_node, work);
+
+	if (tipc_named_dist_cluster_scope(node->net, node->addr) < 0) {
+		u32 bearer_id = node->link_id & 0xffff;
+
+		tipc_node_link_down(node, bearer_id, false);
+	}
+
+	tipc_node_put(node);
+}
+
 static void tipc_node_write_unlock(struct tipc_node *n)
 	__releases(n->lock)
 {
@@ -424,8 +440,21 @@ static void tipc_node_write_unlock(struct tipc_node *n)
 	if (flags & TIPC_NOTIFY_NODE_DOWN)
 		tipc_publ_notify(net, publ_list, node, n->capabilities);
 
-	if (flags & TIPC_NOTIFY_NODE_UP)
-		tipc_named_node_up(net, node, n->capabilities);
+	if (flags & TIPC_NOTIFY_NODE_UP) {
+		int rc = 0;
+
+		rc = tipc_named_node_up(net, node, n->capabilities);
+		/* Defer bulk distribution to work queue */
+		if (rc > 0) {
+			tipc_node_get(n);
+			schedule_work(&n->work);
+		} else if (rc < 0) {
+			/* Bring the link down to start over bulk distribution
+			 * when the link is up again.
+			 */
+			tipc_node_link_down(n, bearer_id, false);
+		}
+	}
 
 	if (flags & TIPC_NOTIFY_LINK_UP) {
 		tipc_mon_peer_up(net, node, bearer_id);
@@ -564,6 +593,7 @@ update:
 	INIT_LIST_HEAD(&n->list);
 	INIT_LIST_HEAD(&n->publ_list);
 	INIT_LIST_HEAD(&n->conn_sks);
+	INIT_WORK(&n->work, tipc_node_dist_bulk);
 	skb_queue_head_init(&n->bc_entry.namedq);
 	skb_queue_head_init(&n->bc_entry.inputq1);
 	__skb_queue_head_init(&n->bc_entry.arrvq);

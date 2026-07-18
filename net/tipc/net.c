@@ -139,6 +139,8 @@ static void tipc_net_finalize(struct net *net, u32 addr)
 	tipc_sk_reinit(net);
 	tipc_mon_reinit_self(net);
 	tipc_nametbl_publish(net, &ua, &sk, addr);
+	atomic_inc(&tn->finalized);
+	wake_up_var(&tn->finalized);
 }
 
 void tipc_net_finalize_work(struct work_struct *work)
