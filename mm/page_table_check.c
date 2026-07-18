@@ -14,8 +14,8 @@
 #define pr_fmt(fmt)	"page_table_check: " fmt
 
 struct page_table_check {
-	atomic_t anon_map_count;
-	atomic_t file_map_count;
+	atomic64_t anon_map_count;
+	atomic64_t file_map_count;
 };
 
 static bool __page_table_check_enabled __initdata =
@@ -79,11 +79,11 @@ static void page_table_check_clear(unsigned long pfn, unsigned long pgcnt)
 		struct page_table_check *ptc = get_page_table_check(page_ext);
 
 		if (anon) {
-			BUG_ON(atomic_read(&ptc->file_map_count));
-			BUG_ON(atomic_dec_return(&ptc->anon_map_count) < 0);
+			BUG_ON(atomic64_read(&ptc->file_map_count));
+			BUG_ON(atomic64_dec_return(&ptc->anon_map_count) < 0);
 		} else {
-			BUG_ON(atomic_read(&ptc->anon_map_count));
-			BUG_ON(atomic_dec_return(&ptc->file_map_count) < 0);
+			BUG_ON(atomic64_read(&ptc->anon_map_count));
+			BUG_ON(atomic64_dec_return(&ptc->file_map_count) < 0);
 		}
 	}
 	rcu_read_unlock();
@@ -114,11 +114,11 @@ static void page_table_check_set(unsigned long pfn, unsigned long pgcnt,
 		struct page_table_check *ptc = get_page_table_check(page_ext);
 
 		if (anon) {
-			BUG_ON(atomic_read(&ptc->file_map_count));
-			BUG_ON(atomic_inc_return(&ptc->anon_map_count) > 1 && rw);
+			BUG_ON(atomic64_read(&ptc->file_map_count));
+			BUG_ON(atomic64_inc_return(&ptc->anon_map_count) > 1 && rw);
 		} else {
-			BUG_ON(atomic_read(&ptc->anon_map_count));
-			BUG_ON(atomic_inc_return(&ptc->file_map_count) < 0);
+			BUG_ON(atomic64_read(&ptc->anon_map_count));
+			BUG_ON(atomic64_inc_return(&ptc->file_map_count) < 0);
 		}
 	}
 	rcu_read_unlock();
@@ -139,8 +139,8 @@ void __page_table_check_zero(struct page *page, unsigned int order)
 	for_each_page_ext(page, 1 << order, page_ext, iter) {
 		struct page_table_check *ptc = get_page_table_check(page_ext);
 
-		BUG_ON(atomic_read(&ptc->anon_map_count));
-		BUG_ON(atomic_read(&ptc->file_map_count));
+		BUG_ON(atomic64_read(&ptc->anon_map_count));
+		BUG_ON(atomic64_read(&ptc->file_map_count));
 	}
 	rcu_read_unlock();
 }
