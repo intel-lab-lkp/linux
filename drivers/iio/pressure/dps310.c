@@ -53,6 +53,19 @@
 #define  DPS310_PRS_SHIFT_EN	BIT(4)
 #define  DPS310_FIFO_EN		BIT(5)
 #define  DPS310_SPI_EN		BIT(6)
+/* FIFO status register */
+#define DPS310_FIFO_STS		0x0B
+#define DPS310_FIFO_EMPTY	BIT(0)
+#define DPS310_FIFO_FULL	BIT(1)
+
+/* FIFO samples are read from DPS310_PRS_BASE (0x00). The lower 2 bits
+ * of the third byte encode the sample type; the remaining bits are
+ * the signed measurement value.
+ */
+#define DPS310_FIFO_TYPE_MASK	GENMASK(0, 0)
+#define DPS310_FIFO_TMP_SAMPLE	0x00
+#define DPS310_FIFO_PRS_SAMPLE	0x01
+
 #define DPS310_RESET		0x0c
 #define  DPS310_RESET_MAGIC	0x09
 #define DPS310_COEF_BASE	0x10
@@ -90,6 +103,7 @@ struct dps310_data {
 	s32 pressure_raw;
 	s32 temp_raw;
 	bool timeout_recovery_failed;
+	bool fifo_enabled;
 };
 
 static const struct iio_chan_spec dps310_channels[] = {
@@ -843,6 +857,61 @@ static const struct iio_info dps310_info = {
 	.write_raw = dps310_write_raw,
 };
 
+static int dps310_fifo_flush(struct dps310_data *data)
+{
+	int rc;
+
+	rc = regmap_write_bits(data->regmap, DPS310_CFG_REG,
+			DPS310_FIFO_EN, 0);
+	if (rc)
+		return rc;
+
+	data->fifo_enabled = false;
+	return 0;
+}
+
+static int __maybe_unused dps310_fifo_read_sample(struct dps310_data *data)
+{
+	int rc;
+	u8 val[3];
+	s32 raw;
+	u8 type;
+
+	rc = regmap_bulk_read(data->regmap, DPS310_PRS_BASE,
+			val, sizeof(val));
+	if (rc)
+		return rc;
+
+	type = val[2] & DPS310_FIFO_TYPE_MASK;
+	raw = (val[0] << 16) | (val[1] << 8) | (val[2] & ~DPS310_FIFO_TYPE_MASK);
+	raw = sign_extend32(raw, 23);
+
+	if (type == DPS310_FIFO_TMP_SAMPLE)
+		data->temp_raw = raw;
+	else
+		data->pressure_raw = raw;
+
+	return 0;
+}
+
+static int dps310_fifo_init(struct dps310_data *data)
+{
+	int rc;
+
+	rc = dps310_fifo_flush(data);
+	if (rc)
+		return rc;
+
+	rc = regmap_write_bits(data->regmap, DPS310_CFG_REG,
+			DPS310_FIFO_EN, DPS310_FIFO_EN);
+
+	if (rc)
+		return rc;
+
+	data->fifo_enabled = true;
+	return 0;
+}
+
 static int dps310_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -877,6 +946,10 @@ static int dps310_probe(struct i2c_client *client)
 	if (rc)
 		return rc;
 
+	rc = dps310_fifo_init(data);
+	if (rc)
+		dev_warn(&client->dev,
+			"FIFO init failed (%d), continuing without FIFO\n", rc);
 	rc = devm_iio_device_register(&client->dev, iio);
 	if (rc)
 		return rc;
