@@ -557,11 +557,9 @@ struct os05b10 {
 
 	/* V4L2 Controls */
 	struct v4l2_ctrl_handler handler;
-	struct v4l2_ctrl *link_freq;
 	struct v4l2_ctrl *pixel_rate;
 	struct v4l2_ctrl *hblank;
 	struct v4l2_ctrl *vblank;
-	struct v4l2_ctrl *gain;
 	struct v4l2_ctrl *exposure;
 	struct v4l2_ctrl *vflip;
 	struct v4l2_ctrl *hflip;
@@ -1276,8 +1274,13 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 	struct v4l2_fwnode_device_properties props;
 	struct v4l2_ctrl_handler *ctrl_hdlr;
 	u64 vblank_def, exp_max, pixel_rate;
+	struct v4l2_ctrl *link_freq;
 	s64 hblank_def;
 	int ret;
+
+	ret = v4l2_fwnode_device_parse(os05b10->dev, &props);
+	if (ret)
+		return ret;
 
 	ctrl_hdlr = &os05b10->handler;
 	v4l2_ctrl_handler_init(ctrl_hdlr, 12);
@@ -1287,22 +1290,18 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 						V4L2_CID_PIXEL_RATE, pixel_rate,
 						pixel_rate, 1, pixel_rate);
 
-	os05b10->link_freq = v4l2_ctrl_new_int_menu(ctrl_hdlr, &os05b10_ctrl_ops,
-						    V4L2_CID_LINK_FREQ,
-						    ARRAY_SIZE(link_frequencies_4lane) - 1,
-						    os05b10->link_freq_index,
-						    (os05b10->data_lanes == 2) ?
-						    link_frequencies_2lane :
-						    link_frequencies_4lane);
-	if (os05b10->link_freq)
-		os05b10->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	link_freq = v4l2_ctrl_new_int_menu(ctrl_hdlr, &os05b10_ctrl_ops,
+					   V4L2_CID_LINK_FREQ,
+					   ARRAY_SIZE(link_frequencies_4lane) - 1,
+					   os05b10->link_freq_index,
+					   (os05b10->data_lanes == 2) ?
+					   link_frequencies_2lane :
+					   link_frequencies_4lane);
 
 	hblank_def = (s64)mode->hts -(s64)mode->width;
 	os05b10->hblank = v4l2_ctrl_new_std(ctrl_hdlr, NULL, V4L2_CID_HBLANK,
 					    hblank_def, hblank_def,
 					    1, hblank_def);
-	if (os05b10->hblank)
-		os05b10->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	vblank_def = mode->vts - mode->height;
 	os05b10->vblank = v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops,
@@ -1317,12 +1316,10 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 					      exp_max, OS05B10_EXPOSURE_STEP,
 					      mode->exp);
 
-	os05b10->gain = v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops,
-					  V4L2_CID_ANALOGUE_GAIN,
-					  OS05B10_ANALOG_GAIN_MIN,
-					  OS05B10_ANALOG_GAIN_MAX,
-					  OS05B10_ANALOG_GAIN_STEP,
-					  OS05B10_ANALOG_GAIN_DEFAULT);
+	v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops,
+			  V4L2_CID_ANALOGUE_GAIN, OS05B10_ANALOG_GAIN_MIN,
+			  OS05B10_ANALOG_GAIN_MAX, OS05B10_ANALOG_GAIN_STEP,
+			  OS05B10_ANALOG_GAIN_DEFAULT);
 
 	v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops, V4L2_CID_DIGITAL_GAIN,
 			  OS05B10_DIGITAL_GAIN_MIN, OS05B10_DIGITAL_GAIN_MAX,
@@ -1330,18 +1327,19 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 
 	os05b10->hflip = v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops,
 					   V4L2_CID_HFLIP, 0, 1, 1, 0);
-	if (os05b10->hflip)
-		os05b10->hflip->flags |= V4L2_CTRL_FLAG_MODIFY_LAYOUT;
 
 	os05b10->vflip = v4l2_ctrl_new_std(ctrl_hdlr, &os05b10_ctrl_ops,
 					   V4L2_CID_VFLIP, 0, 1, 1, 0);
-	if (os05b10->vflip)
-		os05b10->vflip->flags |= V4L2_CTRL_FLAG_MODIFY_LAYOUT;
 
 	v4l2_ctrl_new_std_menu_items(ctrl_hdlr, &os05b10_ctrl_ops,
 				     V4L2_CID_TEST_PATTERN,
 				     ARRAY_SIZE(os05b10_test_pattern_menu) - 1,
 				     0, 0, os05b10_test_pattern_menu);
+
+	ret = v4l2_ctrl_new_fwnode_properties(ctrl_hdlr, &os05b10_ctrl_ops,
+					      &props);
+	if (ret)
+		goto error;
 
 	if (ctrl_hdlr->error) {
 		ret = ctrl_hdlr->error;
@@ -1349,14 +1347,11 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 		goto error;
 	}
 
-	ret = v4l2_fwnode_device_parse(os05b10->dev, &props);
-	if (ret)
-		goto error;
 
-	ret = v4l2_ctrl_new_fwnode_properties(ctrl_hdlr, &os05b10_ctrl_ops,
-					      &props);
-	if (ret)
-		goto error;
+	link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	os05b10->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	os05b10->hflip->flags |= V4L2_CTRL_FLAG_MODIFY_LAYOUT;
+	os05b10->vflip->flags |= V4L2_CTRL_FLAG_MODIFY_LAYOUT;
 
 	os05b10->sd.ctrl_handler = ctrl_hdlr;
 
