@@ -193,6 +193,10 @@ static int named_distribute(struct net *net, struct sk_buff_head *list,
 		skb_trim(skb, INT_H_SIZE + (msg_dsz - msg_rem));
 		__skb_queue_tail(list, skb);
 	}
+	if (skb_queue_empty(list)) {
+		pr_warn("Bulk publication list empty, nothing to distribute\n");
+		return 1;
+	}
 	hdr = buf_msg(skb_peek_tail(list));
 	msg_set_last_bulk(hdr);
 	msg_set_named_seqno(hdr, seqno);
@@ -253,6 +257,13 @@ int tipc_named_dist_cluster_scope(struct net *net, u32 dnode)
 	spin_unlock_bh(&tn->nametbl_lock);
 
 	read_lock_bh(&nt->cluster_scope_lock);
+	if (unlikely(list_empty(&nt->cluster_scope))) {
+		/* finalize is done but nothing was published (publish
+		 * failed): a permanent state, nothing to synchronize.
+		 */
+		read_unlock_bh(&nt->cluster_scope_lock);
+		return 0;
+	}
 	if (named_distribute(net, &head, dnode, &nt->cluster_scope, seqno)) {
 		read_unlock_bh(&nt->cluster_scope_lock);
 		return -ENOBUFS;
