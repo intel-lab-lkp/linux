@@ -2312,13 +2312,30 @@ static int sched_record_numa_dist(int offline_node, int (*n_dist)(int, int),
 	return 0;
 }
 
+static void sched_free_numa_masks(struct cpumask ***masks, int nr_levels)
+{
+	int i, j;
+
+	if (!masks)
+		return;
+
+	for (i = 0; i < nr_levels; i++) {
+		if (!masks[i])
+			continue;
+		for_each_node(j)
+			kfree(masks[i][j]);
+		kfree(masks[i]);
+	}
+	kfree(masks);
+}
+
 void sched_init_numa(int offline_node)
 {
 	struct sched_domain_topology_level *tl;
 	int nr_levels, nr_node_levels;
 	int i, j;
 	int *distances, *domain_distances;
-	struct cpumask ***masks;
+	struct cpumask ***masks = NULL;
 
 	/* Record the NUMA distances from SLIT table */
 	if (sched_record_numa_dist(offline_node, numa_node_dist, &distances,
@@ -2336,10 +2353,6 @@ void sched_init_numa(int offline_node)
 		domain_distances = distances;
 		nr_levels = nr_node_levels;
 	}
-	rcu_assign_pointer(sched_numa_node_distance, distances);
-	WRITE_ONCE(sched_max_numa_distance, distances[nr_node_levels - 1]);
-	WRITE_ONCE(sched_numa_node_levels, nr_node_levels);
-
 	/*
 	 * 'nr_levels' contains the number of unique distances
 	 *
@@ -2348,21 +2361,14 @@ void sched_init_numa(int offline_node)
 	 */
 
 	/*
-	 * Here, we should temporarily reset sched_domains_numa_levels to 0.
-	 * If it fails to allocate memory for array sched_domains_numa_masks[][],
-	 * the array will contain less then 'nr_levels' members. This could be
-	 * dangerous when we use it to iterate array sched_domains_numa_masks[][]
-	 * in other functions.
-	 *
-	 * We reset it to 'nr_levels' at the end of this function.
+	 * Keep the level count at zero until all allocations have succeeded and
+	 * the new NUMA topology has been published.
 	 */
-	rcu_assign_pointer(sched_domains_numa_distance, domain_distances);
-
 	sched_domains_numa_levels = 0;
 
 	masks = kzalloc(sizeof(void *) * nr_levels, GFP_KERNEL);
 	if (!masks)
-		return;
+		goto free;
 
 	/*
 	 * Now for each level, construct a mask per node which contains all
@@ -2371,14 +2377,14 @@ void sched_init_numa(int offline_node)
 	for (i = 0; i < nr_levels; i++) {
 		masks[i] = kzalloc(nr_node_ids * sizeof(void *), GFP_KERNEL);
 		if (!masks[i])
-			return;
+			goto free;
 
 		for_each_cpu_node_but(j, offline_node) {
 			struct cpumask *mask = kzalloc(cpumask_size(), GFP_KERNEL);
 			int k;
 
 			if (!mask)
-				return;
+				goto free;
 
 			masks[i][j] = mask;
 
@@ -2389,14 +2395,13 @@ void sched_init_numa(int offline_node)
 					sched_numa_warn("Node-distance not symmetric");
 
 				if (arch_sched_node_distance(j, k) >
-				    sched_domains_numa_distance[i])
+				    domain_distances[i])
 					continue;
 
 				cpumask_or(mask, mask, cpumask_of_node(k));
 			}
 		}
 	}
-	rcu_assign_pointer(sched_domains_numa_masks, masks);
 
 	/* Compute default topology size */
 	for (i = 0; sched_domain_topology[i].mask; i++);
@@ -2404,7 +2409,7 @@ void sched_init_numa(int offline_node)
 	tl = kzalloc((i + nr_levels + 1) *
 			sizeof(struct sched_domain_topology_level), GFP_KERNEL);
 	if (!tl)
-		return;
+		goto free;
 
 	/*
 	 * Copy the default topology bits..
@@ -2425,12 +2430,25 @@ void sched_init_numa(int offline_node)
 		tl[i].numa_level = j;
 	}
 
+	rcu_assign_pointer(sched_numa_node_distance, distances);
+	WRITE_ONCE(sched_max_numa_distance, distances[nr_node_levels - 1]);
+	WRITE_ONCE(sched_numa_node_levels, nr_node_levels);
+	rcu_assign_pointer(sched_domains_numa_distance, domain_distances);
+	rcu_assign_pointer(sched_domains_numa_masks, masks);
+
 	sched_domain_topology_saved = sched_domain_topology;
 	sched_domain_topology = tl;
 
 	sched_domains_numa_levels = nr_levels;
 
 	init_numa_topology_type(offline_node);
+	return;
+
+free:
+	sched_free_numa_masks(masks, nr_levels);
+	if (domain_distances != distances)
+		kfree(domain_distances);
+	kfree(distances);
 }
 
 
@@ -2452,19 +2470,10 @@ static void sched_reset_numa(void)
 	masks = sched_domains_numa_masks;
 	rcu_assign_pointer(sched_domains_numa_masks, NULL);
 	if (distances || masks) {
-		int i, j;
-
 		synchronize_rcu();
 		kfree(distances);
 		kfree(dom_distances);
-		for (i = 0; i < nr_levels && masks; i++) {
-			if (!masks[i])
-				continue;
-			for_each_node(j)
-				kfree(masks[i][j]);
-			kfree(masks[i]);
-		}
-		kfree(masks);
+		sched_free_numa_masks(masks, nr_levels);
 	}
 	if (sched_domain_topology_saved) {
 		kfree(sched_domain_topology);
