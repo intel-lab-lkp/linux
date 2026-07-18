@@ -831,7 +831,14 @@ static int fsl_re_probe(struct platform_device *ofdev)
 			rc = of_device_is_compatible(child,
 					     "fsl,raideng-v1.0-job-ring");
 			if (rc) {
-				fsl_re_chan_probe(ofdev, child, ridx++, off);
+				rc = fsl_re_chan_probe(ofdev, child, ridx, off);
+				if (rc) {
+					dev_err(dev,
+						"job ring %d probe failed: %d\n",
+						ridx, rc);
+					continue;
+				}
+				ridx++;
 				re_priv->total_chans++;
 			}
 		}
@@ -864,7 +871,8 @@ static void fsl_re_remove(struct platform_device *ofdev)
 
 	/* Cleanup chan related memory areas */
 	for (i = 0; i < re_priv->total_chans; i++)
-		fsl_re_remove_chan(re_priv->re_jrs[i]);
+		if (re_priv->re_jrs[i])
+			fsl_re_remove_chan(re_priv->re_jrs[i]);
 
 	/* Unregister the driver */
 	dma_async_device_unregister(&re_priv->dma_dev);
