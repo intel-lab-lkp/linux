@@ -2873,7 +2873,7 @@ int atomisp_css_get_ctc_table(struct atomisp_sub_device *asd,
 		return -EINVAL;
 	}
 
-	tab = vzalloc(sizeof(struct ia_css_ctc_table));
+	tab = vzalloc(sizeof(*tab));
 	if (!tab)
 		return -ENOMEM;
 
@@ -2901,7 +2901,7 @@ int atomisp_css_get_gamma_table(struct atomisp_sub_device *asd,
 		return -EINVAL;
 	}
 
-	tab = vzalloc(sizeof(struct ia_css_gamma_table));
+	tab = vzalloc(sizeof(*tab));
 	if (!tab)
 		return -ENOMEM;
 
