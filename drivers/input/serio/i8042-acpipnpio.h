@@ -1431,6 +1431,18 @@ static const struct dmi_system_id i8042_dmi_quirk_table[] __initconst = {
 		},
 		.driver_data = (void *)(SERIO_QUIRK_DIRECT)
 	},
+	/*
+	 * Some laptops have a broken keyboard controller that reports
+	 * incorrect data. SERIO_QUIRK_DUMBKBD bypasses the intelligent
+	 * probing and forces a basic PS/2 keyboard assumption.
+	 */
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "XIAOMI"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Xiaomi Book Pro 14"),
+		},
+		.driver_data = (void *)(SERIO_QUIRK_DUMBKBD)
+	},
 	{ }
 };
 
