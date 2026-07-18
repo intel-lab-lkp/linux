@@ -482,7 +482,7 @@ void remove_vma(struct vm_area_struct *vma)
 {
 	might_sleep();
 	vma_close(vma);
-	if (vma->vm_file)
+	if (vma->vm_file && !vma->vm_file_doesnt_need_put)
 		fput(vma->vm_file);
 	mpol_put(vma_policy(vma));
 	vm_area_free(vma);
@@ -2544,6 +2544,7 @@ static int __mmap_new_file_vma(struct mmap_state *map,
 	int error;
 
 	vma->vm_file = map->file;
+	vma->vm_file_doesnt_need_put = map->file_doesnt_need_get;
 	if (!map->file_doesnt_need_get)
 		get_file(map->file);
 
@@ -2554,7 +2555,14 @@ static int __mmap_new_file_vma(struct mmap_state *map,
 	if (error) {
 		UNMAP_STATE(unmap, vmi, vma, vma->vm_start, vma->vm_end,
 			    map->prev, map->next);
-		fput(vma->vm_file);
+
+		/*
+		 * We set vma->vm_file to map->file, so if we didn't increase
+		 * the refcount, don't decrease it in this path.
+		 */
+		if (!map->file_doesnt_need_get)
+			fput(vma->vm_file);
+
 		vma->vm_file = NULL;
 
 		vma_iter_set(vmi, vma->vm_end);
@@ -2819,7 +2827,7 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 	if (!error && have_mmap_prepare)
 		error = call_mmap_prepare(&map, &desc);
 	if (error)
-		goto abort_munmap;
+		goto abort_mmap_prepare;
 
 	if (map.check_ksm_early)
 		update_ksm_flags(&map);
@@ -2857,15 +2865,9 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 unacct_error:
 	if (map.charged)
 		vm_unacct_memory(map.charged);
-abort_munmap:
-	/*
-	 * This indicates that .mmap_prepare has set a new file, differing from
-	 * desc->vm_file. But since we're aborting the operation, only the
-	 * original file will be cleaned up. Ensure we clean up both.
-	 */
-	if (map.file_doesnt_need_get)
-		fput(map.file);
+
 	vms_abort_munmap_vmas(&map.vms, &map.mas_detach);
+abort_mmap_prepare:
 	return error;
 }
 
