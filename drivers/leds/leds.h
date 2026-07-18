@@ -27,6 +27,8 @@ ssize_t led_trigger_read(struct file *filp, struct kobject *kobj,
 ssize_t led_trigger_write(struct file *filp, struct kobject *kobj,
 			const struct bin_attribute *bin_attr, char *buf,
 			loff_t pos, size_t count);
+ssize_t trigger_may_offload_show(struct device *dev,
+				 struct device_attribute *attr, char *buf);
 
 extern struct rw_semaphore leds_list_lock;
 extern struct list_head leds_list;
