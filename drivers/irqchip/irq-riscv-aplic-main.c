@@ -235,15 +235,17 @@ int aplic_irq_set_type(struct irq_data *d, unsigned int type)
 }
 
 int aplic_irqdomain_translate(struct irq_fwspec *fwspec, u32 gsi_base,
-			      unsigned long *hwirq, unsigned int *type)
+			      u32 nr_irqs, unsigned long *hwirq,
+			      unsigned int *type)
 {
 	if (WARN_ON(fwspec->param_count < 2))
-		return -EINVAL;
-	if (WARN_ON(!fwspec->param[0]))
 		return -EINVAL;
 
 	/* For DT, gsi_base is always zero. */
 	*hwirq = fwspec->param[0] - gsi_base;
+	if (WARN_ON(!*hwirq || *hwirq > nr_irqs))
+		return -EINVAL;
+
 	*type = fwspec->param[1] & IRQ_TYPE_SENSE_MASK;
 
 	WARN_ON(*type == IRQ_TYPE_NONE);

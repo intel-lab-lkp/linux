@@ -140,7 +140,8 @@ static int aplic_msi_translate(struct irq_domain *d, struct irq_fwspec *fwspec,
 	struct msi_domain_info *info = d->host_data;
 	struct aplic_priv *priv = info->data;
 
-	return aplic_irqdomain_translate(fwspec, priv->gsi_base, hwirq, type);
+	return aplic_irqdomain_translate(fwspec, priv->gsi_base, priv->nr_irqs,
+					 hwirq, type);
 }
 
 static const struct msi_domain_template aplic_msi_template = {

@@ -97,7 +97,8 @@ static int aplic_direct_irqdomain_translate(struct irq_domain *d, struct irq_fws
 {
 	struct aplic_priv *priv = d->host_data;
 
-	return aplic_irqdomain_translate(fwspec, priv->gsi_base, hwirq, type);
+	return aplic_irqdomain_translate(fwspec, priv->gsi_base, priv->nr_irqs,
+					 hwirq, type);
 }
 
 static int aplic_direct_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
@@ -110,7 +111,8 @@ static int aplic_direct_irqdomain_alloc(struct irq_domain *domain, unsigned int 
 	unsigned int type;
 	int i, ret;
 
-	ret = aplic_irqdomain_translate(fwspec, priv->gsi_base, &hwirq, &type);
+	ret = aplic_irqdomain_translate(fwspec, priv->gsi_base, priv->nr_irqs,
+					&hwirq, &type);
 	if (ret)
 		return ret;
 

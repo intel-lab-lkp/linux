@@ -55,7 +55,8 @@ void aplic_irq_unmask(struct irq_data *d);
 void aplic_irq_mask(struct irq_data *d);
 int aplic_irq_set_type(struct irq_data *d, unsigned int type);
 int aplic_irqdomain_translate(struct irq_fwspec *fwspec, u32 gsi_base,
-			      unsigned long *hwirq, unsigned int *type);
+			      u32 nr_irqs, unsigned long *hwirq,
+			      unsigned int *type);
 void aplic_init_hw_global(struct aplic_priv *priv, bool msi_mode);
 int aplic_setup_priv(struct aplic_priv *priv, struct device *dev, void __iomem *regs);
 void aplic_direct_restore_states(struct aplic_priv *priv);
