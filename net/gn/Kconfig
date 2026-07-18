@@ -1,0 +1,4 @@
+config GN
+    tristate "Enable GeoNetworking support"
+    default y
+    select LLC

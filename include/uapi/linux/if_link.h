@@ -2074,4 +2074,14 @@ enum {
 
 #define IFLA_OVPN_MAX	(__IFLA_OVPN_MAX - 1)
 
+/* GN section */
+
+enum {
+	IFLA_GN_UNSPEC,
+	IFLA_GN_POSITION,
+	__IFLA_GN_MAX,
+};
+
+#define IFLA_GN_MAX (__IFLA_GN_MAX - 1)
+
 #endif /* _UAPI_LINUX_IF_LINK_H */

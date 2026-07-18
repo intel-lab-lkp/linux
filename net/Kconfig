@@ -26,6 +26,8 @@ menuconfig NET
 
 if NET
 
+source "net/gn/Kconfig"
+
 config WANT_COMPAT_NETLINK_MESSAGES
 	bool
 	help

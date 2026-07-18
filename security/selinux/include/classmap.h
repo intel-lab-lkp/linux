@@ -174,6 +174,7 @@ const struct security_class_mapping secclass_map[] = {
 	    "map_create_as", "prog_load_as", NULL } },
 	{ "xdp_socket", { COMMON_SOCK_PERMS, NULL } },
 	{ "mctp_socket", { COMMON_SOCK_PERMS, NULL } },
+	{ "gn_socket",	{ COMMON_SOCK_PERMS, NULL } },
 	{ "perf_event",
 	  { "open", "cpu", "kernel", "tracepoint", "read", "write", NULL } },
 	{ "anon_inode", { COMMON_FILE_PERMS, NULL } },
@@ -187,7 +188,7 @@ const struct security_class_mapping secclass_map[] = {
 #ifdef __KERNEL__ /* avoid this check when building host programs */
 #include <linux/socket.h>
 
-#if PF_MAX > 46
+#if PF_MAX > 47
 #error New address family defined, please update secclass_map.
 #endif
 #endif

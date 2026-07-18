@@ -1318,7 +1318,10 @@ static inline u16 socket_type_to_security_class(int family, int type, int protoc
 			return SECCLASS_XDP_SOCKET;
 		case PF_MCTP:
 			return SECCLASS_MCTP_SOCKET;
-#if PF_MAX > 46
+		case PF_GN:
+			return SECCLASS_GN_SOCKET;
+
+#if PF_MAX > 47
 #error New address family defined, please update this function.
 #endif
 		}
