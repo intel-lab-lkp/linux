@@ -387,9 +387,7 @@ unsigned int sm750_calc_pll_value(unsigned int request_orig,
 
 unsigned int sm750_format_pll_reg(struct pll_value *p_PLL)
 {
-#ifndef VALIDATION_CHIP
 	unsigned int POD = p_PLL->POD;
-#endif
 	unsigned int OD = p_PLL->OD;
 	unsigned int M = p_PLL->M;
 	unsigned int N = p_PLL->N;
@@ -401,9 +399,7 @@ unsigned int sm750_format_pll_reg(struct pll_value *p_PLL)
 	 * applied to any PLL in the calling function.
 	 */
 	return PLL_CTRL_POWER |
-#ifndef VALIDATION_CHIP
 		((POD << PLL_CTRL_POD_SHIFT) & PLL_CTRL_POD_MASK) |
-#endif
 		((OD << PLL_CTRL_OD_SHIFT) & PLL_CTRL_OD_MASK) |
 		((N << PLL_CTRL_N_SHIFT) & PLL_CTRL_N_MASK) |
 		((M << PLL_CTRL_M_SHIFT) & PLL_CTRL_M_MASK);
