@@ -264,9 +264,19 @@ static s32 igb_init_phy_params_82575(struct e1000_hw *hw)
 			data = FIELD_GET(E1000_M88E1112_MAC_CTRL_1_MODE_MASK,
 					 data);
 			if (data == E1000_M88E1112_AUTO_COPPER_SGMII ||
-			    data == E1000_M88E1112_AUTO_COPPER_BASEX)
+			    data == E1000_M88E1112_AUTO_COPPER_BASEX) {
 				hw->mac.ops.check_for_link =
 						igb_check_for_link_media_swap;
+			} else if (data == E1000_M88E1112_100BASE_FX) {
+				/* The driver only detects this strap/EEPROM
+				 * mode. 88E1112 register and EEPROM setup must
+				 * be done outside igb before probe/reset.
+				 */
+				hw->phy.media_type =
+					e1000_media_type_internal_serdes;
+				hw->mac.ops.setup_physical_interface =
+					igb_setup_serdes_link_82575;
+			}
 		}
 		if (phy->id == M88E1512_E_PHY_ID) {
 			ret_val = igb_initialize_M88E1512_phy(hw);
