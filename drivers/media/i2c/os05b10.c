@@ -1057,7 +1057,7 @@ static int os05b10_enable_streams(struct v4l2_subdev *sd,
 	return 0;
 
 err_rpm_put:
-	pm_runtime_put(os05b10->dev);
+	pm_runtime_put_autosuspend(os05b10->dev);
 
 	return ret;
 }
@@ -1077,7 +1077,7 @@ static int os05b10_disable_streams(struct v4l2_subdev *sd,
 	__v4l2_ctrl_grab(os05b10->vflip, false);
 	__v4l2_ctrl_grab(os05b10->hflip, false);
 
-	pm_runtime_put(os05b10->dev);
+	pm_runtime_put_autosuspend(os05b10->dev);
 
 	return 0;
 }
@@ -1455,6 +1455,8 @@ static int os05b10_probe(struct i2c_client *client)
 
 	pm_runtime_set_active(os05b10->dev);
 	pm_runtime_enable(os05b10->dev);
+	pm_runtime_set_autosuspend_delay(os05b10->dev, 1000);
+	pm_runtime_use_autosuspend(os05b10->dev);
 
 	ret = v4l2_async_register_subdev_sensor(&os05b10->sd);
 	if (ret < 0) {
