@@ -4,11 +4,6 @@
 //!
 //! C header: [`include/linux/drm/drm_gem_shmem_helper.h`](srctree/include/drm/drm_gem_shmem_helper.h)
 
-// TODO:
-// - There are a number of spots here that manually acquire/release the DMA reservation lock using
-//   dma_resv_(un)lock(). In the future we should add support for ww mutex, expose a method to
-//   acquire a reference to the WwMutex, and then use that directly instead of the C functions here.
-
 use crate::{
     container_of,
     drm::{
