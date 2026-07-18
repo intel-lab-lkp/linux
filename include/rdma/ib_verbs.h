@@ -3034,8 +3034,6 @@ struct ib_device {
 	struct completion unreg_completion;
 	struct work_struct unregistration_work;
 
-	const struct rdma_link_ops *link_ops;
-
 	/* Protects compat_devs xarray modifications */
 	struct mutex compat_devs_mutex;
 	/* Maintains compat devices for each net namespace */
