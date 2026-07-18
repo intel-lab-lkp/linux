@@ -20,11 +20,7 @@ use crate::{
         aref::AlwaysRefCounted,
         Mutex, //
     },
-    time::{
-        msecs_to_jiffies,
-        Jiffies,
-        Msecs, //
-    },
+    time::Jiffies,
     types::{
         Opaque,
         ScopeGuard, //
@@ -35,7 +31,6 @@ use core::{
     cell::UnsafeCell,
     marker::PhantomData,
     mem::{offset_of, MaybeUninit},
-    num::NonZero,
     ptr::NonNull, //
 };
 
@@ -48,30 +43,6 @@ pub enum Parity {
     Even = bindings::serdev_parity_SERDEV_PARITY_EVEN,
     /// Odd parity.
     Odd = bindings::serdev_parity_SERDEV_PARITY_ODD,
-}
-
-/// Timeout in Jiffies.
-pub enum Timeout {
-    /// Wait for a specific amount of [`Jiffies`].
-    Jiffies(NonZero<Jiffies>),
-    /// Wait for a specific amount of [`Msecs`].
-    Milliseconds(NonZero<Msecs>),
-    /// Wait as long as possible.
-    ///
-    /// This is equivalent to [`kernel::task::MAX_SCHEDULE_TIMEOUT`].
-    Max,
-}
-
-impl Timeout {
-    fn into_jiffies(self) -> isize {
-        match self {
-            Self::Jiffies(value) => value.get().try_into().unwrap_or_default(),
-            Self::Milliseconds(value) => {
-                msecs_to_jiffies(value.get()).try_into().unwrap_or_default()
-            }
-            Self::Max => 0,
-        }
-    }
 }
 
 /// An adapter for the registration of serial device bus device drivers.
@@ -505,11 +476,13 @@ impl Device<device::Bound> {
     /// [`Device::wait_until_sent`] to make sure the controller write buffer has actually been
     /// emptied.
     ///
+    /// Use a timeout of 0 to wait indefinitely.
+    ///
     /// Returns the number of bytes written (less than `data.len()` if interrupted).
     /// [`kernel::error::code::ETIMEDOUT`] or [`kernel::error::code::ERESTARTSYS`] if interrupted
-    /// before any bytes were written.
+    /// before any bytes were written. [`kernel::error::code::EINVAL`] if `data.len() > i32::MAX`.
     #[inline]
-    pub fn write_all(&self, data: &[u8], timeout: Timeout) -> Result<usize> {
+    pub fn write_all(&self, data: &[u8], timeout: impl Into<Jiffies>) -> Result<usize> {
         if data.len() > i32::MAX as usize {
             return Err(EINVAL);
         }
@@ -523,7 +496,7 @@ impl Device<device::Bound> {
                 self.as_raw(),
                 data.as_ptr(),
                 data.len(),
-                timeout.into_jiffies(),
+                isize::try_from(timeout.into()).unwrap_or_default(),
             )
         };
         // CAST: negative return values are guaranteed to be between `-MAX_ERRNO` and `-1`,
@@ -570,11 +543,19 @@ impl Device<device::Bound> {
 
     /// Wait for the data to be sent.
     ///
-    /// After this function, the write buffer of the controller should be empty.
+    /// After this function, the write buffer of the controller should be empty or the timeout
+    /// elapsed.
+    ///
+    /// Use a timeout of 0 to wait indefinitely.
     #[inline]
-    pub fn wait_until_sent(&self, timeout: Timeout) {
+    pub fn wait_until_sent(&self, timeout: impl Into<Jiffies>) {
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
-        unsafe { bindings::serdev_device_wait_until_sent(self.as_raw(), timeout.into_jiffies()) };
+        unsafe {
+            bindings::serdev_device_wait_until_sent(
+                self.as_raw(),
+                isize::try_from(timeout.into()).unwrap_or_default(),
+            )
+        };
     }
 }
 
