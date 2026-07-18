@@ -440,6 +440,7 @@ pub struct Device<Ctx: device::DeviceContext = device::Normal>(
 );
 
 impl<Ctx: device::DeviceContext> Device<Ctx> {
+    #[inline]
     fn as_raw(&self) -> *mut bindings::serdev_device {
         self.0.get()
     }
@@ -451,6 +452,7 @@ impl Device<device::Bound> {
     /// Common baudrates are 115200, 9600, 19200, 57600, 4800.
     ///
     /// Use [`Device::write_flush`] before calling this if you have written data prior to this call.
+    #[inline]
     pub fn set_baudrate(&self, speed: u32) -> Result<(), u32> {
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
         let ret = unsafe { bindings::serdev_device_set_baudrate(self.as_raw(), speed) };
@@ -464,6 +466,7 @@ impl Device<device::Bound> {
     /// Set if flow control should be enabled.
     ///
     /// Use [`Device::write_flush`] before calling this if you have written data prior to this call.
+    #[inline]
     pub fn set_flow_control(&self, enable: bool) {
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
         unsafe { bindings::serdev_device_set_flow_control(self.as_raw(), enable) };
@@ -472,6 +475,7 @@ impl Device<device::Bound> {
     /// Set parity to use.
     ///
     /// Use [`Device::write_flush`] before calling this if you have written data prior to this call.
+    #[inline]
     pub fn set_parity(&self, parity: Parity) -> Result {
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
         to_result(unsafe { bindings::serdev_device_set_parity(self.as_raw(), parity as u32) })
@@ -487,6 +491,7 @@ impl Device<device::Bound> {
     /// Returns the number of bytes written (less than `data.len()` if interrupted).
     /// [`kernel::error::code::ETIMEDOUT`] or [`kernel::error::code::ERESTARTSYS`] if interrupted
     /// before any bytes were written.
+    #[inline]
     pub fn write_all(&self, data: &[u8], timeout: Timeout) -> Result<usize> {
         if data.len() > i32::MAX as usize {
             return Err(EINVAL);
@@ -520,6 +525,7 @@ impl Device<device::Bound> {
     ///
     /// Returns the number of bytes written (less than `data.len()` if not enough room in the
     /// write buffer).
+    #[inline]
     pub fn write(&self, data: &[u8]) -> Result<u32> {
         if data.len() > i32::MAX as usize {
             return Err(EINVAL);
@@ -539,6 +545,7 @@ impl Device<device::Bound> {
     ///
     /// Note that this doesn't guarantee that the data has been transmitted.
     /// Use [`Device::wait_until_sent`] for this purpose.
+    #[inline]
     pub fn write_flush(&self) {
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
         unsafe { bindings::serdev_device_write_flush(self.as_raw()) };
@@ -547,6 +554,7 @@ impl Device<device::Bound> {
     /// Wait for the data to be sent.
     ///
     /// After this function, the write buffer of the controller should be empty.
+    #[inline]
     pub fn wait_until_sent(&self, timeout: Timeout) {
         // SAFETY: `self.as_raw()` is guaranteed to be a pointer to a valid `serdev_device`.
         unsafe { bindings::serdev_device_wait_until_sent(self.as_raw(), timeout.into_jiffies()) };
