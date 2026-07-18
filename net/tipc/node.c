@@ -447,7 +447,8 @@ static void tipc_node_write_unlock(struct tipc_node *n)
 		/* Defer bulk distribution to work queue */
 		if (rc > 0) {
 			tipc_node_get(n);
-			schedule_work(&n->work);
+			if (!schedule_work(&n->work))
+				tipc_node_put(n);
 		} else if (rc < 0) {
 			/* Bring the link down to start over bulk distribution
 			 * when the link is up again.
