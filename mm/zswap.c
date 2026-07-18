@@ -972,6 +972,30 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 /*********************************
 * writeback code
 **********************************/
+static void zswap_writeback_free_folio(struct folio *folio)
+{
+	folio_lock(folio);
+
+	/* The folio was allocated off the LRU and nothing re-adds it here. */
+	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
+
+	/*
+	 * Gate remove_mapping() on folio_test_swapcache(): a racing swapin may
+	 * have freed the swap slot (folio_free_swap()) and dropped the folio from
+	 * the cache, and remove_mapping() must not run on a non-swapcache folio
+	 * (it would trip __remove_mapping()'s mapping == folio_mapping() check).
+	 */
+	if (folio_test_swapcache(folio) &&
+	    remove_mapping(swap_address_space(folio->swap), folio))
+		goto out;
+
+	/* Raced: the folio is now owned by the swapin; put it back on the LRU. */
+	folio_add_lru(folio);
+out:
+	folio_unlock(folio);
+	folio_put(folio);
+}
+
 /*
  * Attempts to free an entry by adding a folio to the swap cache,
  * decompressing the entry data into the folio, and issuing a
@@ -992,16 +1016,18 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct folio *folio;
 	struct mempolicy *mpol;
 	struct swap_info_struct *si;
+	bool sync;
 	int ret = 0;
 
 	/* try to allocate swap cache folio */
 	si = get_swap_device(swpentry);
 	if (!si)
 		return -EEXIST;
+	sync = data_race(si->flags & SWP_SYNCHRONOUS_IO);
 
 	mpol = get_task_policy(current);
 	folio = swap_cache_alloc_folio(swpentry, GFP_KERNEL, BIT(0), NULL, mpol,
-				       NO_INTERLEAVE_INDEX);
+				       NO_INTERLEAVE_INDEX, sync);
 	put_swap_device(si);
 
 	/*
@@ -1046,10 +1072,16 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	folio_mark_uptodate(folio);
 
 	/* move it to the tail of the inactive list after end_writeback */
-	folio_set_reclaim(folio);
+	if (!sync)
+		folio_set_reclaim(folio);
 
 	/* start writeback */
 	__swap_writepage(folio, NULL);
+
+	if (sync) {
+		zswap_writeback_free_folio(folio);
+		return 0;
+	}
 
 out:
 	if (ret) {
