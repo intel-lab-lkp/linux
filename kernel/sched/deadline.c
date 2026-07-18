@@ -3854,29 +3854,47 @@ void __setparam_dl(struct task_struct *p, const struct sched_attr *attr)
 	dl_se->dl_density = to_ratio(dl_se->dl_deadline, dl_se->dl_runtime);
 }
 
-void __getparam_dl(struct task_struct *p, struct sched_attr *attr, unsigned int flags)
+int __getparam_dl(struct task_struct *p, struct sched_attr *attr, unsigned int flags)
 {
 	struct sched_dl_entity *dl_se = &p->dl;
-	struct rq *rq = task_rq(p);
-	u64 adj_deadline;
+	struct rq_flags rf;
+	struct rq *rq;
 
-	attr->sched_priority = p->rt_priority;
 	if (flags & SCHED_GETATTR_FLAG_DL_DYNAMIC) {
-		guard(raw_spinlock_irq)(&rq->__lock);
+		u64 adj_deadline;
+
+		rq = task_rq_lock(p, &rf);
+		if (!task_has_dl_policy(p)) {
+			task_rq_unlock(rq, p, &rf);
+			return -EINVAL;
+		}
+
 		update_rq_clock(rq);
-		if (task_current(rq, p))
+		if (task_current_donor(rq, p))
 			update_curr_dl(rq);
 
+		attr->sched_policy = p->policy;
+		attr->sched_priority = p->rt_priority;
 		attr->sched_runtime = dl_se->runtime;
 		adj_deadline = dl_se->deadline - rq_clock(rq) + ktime_get_ns();
 		attr->sched_deadline = adj_deadline;
-	} else {
-		attr->sched_runtime = dl_se->dl_runtime;
-		attr->sched_deadline = dl_se->dl_deadline;
+		attr->sched_period = dl_se->dl_period;
+		attr->sched_flags &= ~(SCHED_FLAG_RESET_ON_FORK | SCHED_DL_FLAGS);
+		if (p->sched_reset_on_fork)
+			attr->sched_flags |= SCHED_FLAG_RESET_ON_FORK;
+		attr->sched_flags |= dl_se->flags;
+		task_rq_unlock(rq, p, &rf);
+		return 0;
 	}
+
+	attr->sched_priority = p->rt_priority;
+	attr->sched_runtime = dl_se->dl_runtime;
+	attr->sched_deadline = dl_se->dl_deadline;
 	attr->sched_period = dl_se->dl_period;
 	attr->sched_flags &= ~SCHED_DL_FLAGS;
 	attr->sched_flags |= dl_se->flags;
+
+	return 0;
 }
 
 /*

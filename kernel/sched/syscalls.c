@@ -911,16 +911,21 @@ err_size:
 	return -E2BIG;
 }
 
-static void get_params(struct task_struct *p, struct sched_attr *attr, unsigned int flags)
+static int get_params(struct task_struct *p, struct sched_attr *attr, unsigned int flags)
 {
+	if (flags)
+		return __getparam_dl(p, attr, flags);
+
 	if (task_has_dl_policy(p)) {
-		__getparam_dl(p, attr, flags);
+		return __getparam_dl(p, attr, flags);
 	} else if (task_has_rt_policy(p)) {
 		attr->sched_priority = p->rt_priority;
 	} else {
 		attr->sched_nice = task_nice(p);
 		attr->sched_runtime = p->se.slice;
 	}
+
+	return 0;
 }
 
 /**
@@ -979,8 +984,11 @@ SYSCALL_DEFINE3(sched_setattr, pid_t, pid, struct sched_attr __user *, uattr,
 	if (!p)
 		return -ESRCH;
 
-	if (attr.sched_flags & SCHED_FLAG_KEEP_PARAMS)
-		get_params(p, &attr, 0);
+	if (attr.sched_flags & SCHED_FLAG_KEEP_PARAMS) {
+		retval = get_params(p, &attr, 0);
+		if (retval)
+			return retval;
+	}
 
 	return sched_setattr(p, &attr);
 }
@@ -1086,7 +1094,9 @@ SYSCALL_DEFINE4(sched_getattr, pid_t, pid, struct sched_attr __user *, uattr,
 		kattr.sched_policy = p->policy;
 		if (p->sched_reset_on_fork)
 			kattr.sched_flags |= SCHED_FLAG_RESET_ON_FORK;
-		get_params(p, &kattr, flags);
+		retval = get_params(p, &kattr, flags);
+		if (retval)
+			return retval;
 		kattr.sched_flags &= SCHED_FLAG_ALL;
 
 #ifdef CONFIG_UCLAMP_TASK
