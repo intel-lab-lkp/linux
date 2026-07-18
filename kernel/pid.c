@@ -557,6 +557,11 @@ pid_t pid_vnr(struct pid *pid)
 }
 EXPORT_SYMBOL_GPL(pid_vnr);
 
+int kill_cad_pid(int sig, int priv)
+{
+	return kill_pid(cad_pid, sig, priv);
+}
+
 pid_t __task_pid_nr_ns(struct task_struct *task, enum pid_type type,
 			struct pid_namespace *ns)
 {
