@@ -871,7 +871,8 @@ static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 				      const struct os05b10_mode *mode)
 {
 	u64 pixel_rate = os05b10_pixel_rate(os05b10, mode);
-	u32 hblank, vblank, vblank_max;
+	u32 vblank, vblank_max;
+	s32 hblank;
 	int ret;
 
 	ret = __v4l2_ctrl_modify_range(os05b10->pixel_rate, pixel_rate,
@@ -883,7 +884,7 @@ static int os05b10_set_framing_limits(struct os05b10 *os05b10,
 	if (ret)
 		return ret;
 
-	hblank = mode->hts - mode->width;
+	hblank = (s32)mode->hts - (s32)mode->width;
 	ret = __v4l2_ctrl_modify_range(os05b10->hblank, hblank, hblank, 1,
 				       hblank);
 	if (ret)
@@ -1272,9 +1273,10 @@ error_out:
 static int os05b10_init_controls(struct os05b10 *os05b10)
 {
 	const struct os05b10_mode *mode = &supported_modes_10bit[0];
-	u64 hblank_def, vblank_def, exp_max, pixel_rate;
 	struct v4l2_fwnode_device_properties props;
 	struct v4l2_ctrl_handler *ctrl_hdlr;
+	u64 vblank_def, exp_max, pixel_rate;
+	s64 hblank_def;
 	int ret;
 
 	ctrl_hdlr = &os05b10->handler;
@@ -1295,7 +1297,7 @@ static int os05b10_init_controls(struct os05b10 *os05b10)
 	if (os05b10->link_freq)
 		os05b10->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
-	hblank_def = mode->hts - mode->width;
+	hblank_def = (s64)mode->hts -(s64)mode->width;
 	os05b10->hblank = v4l2_ctrl_new_std(ctrl_hdlr, NULL, V4L2_CID_HBLANK,
 					    hblank_def, hblank_def,
 					    1, hblank_def);
