@@ -174,8 +174,13 @@ static int rpmi_sysmsi_translate(struct irq_domain *d, struct irq_fwspec *fwspec
 	if (WARN_ON(fwspec->param_count < 1))
 		return -EINVAL;
 
-	/* For DT, gsi_base is always zero. */
+	if (fwspec->param[0] < priv->gsi_base)
+		return -EINVAL;
+
 	*hwirq = fwspec->param[0] - priv->gsi_base;
+	if (*hwirq >= priv->nr_irqs)
+		return -EINVAL;
+
 	*type = IRQ_TYPE_NONE;
 	return 0;
 }
