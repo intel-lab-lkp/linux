@@ -705,6 +705,8 @@ struct damos_quota_goal *damos_new_quota_goal(
 	goal->metric = metric;
 	goal->target_value = target_value;
 	INIT_LIST_HEAD(&goal->list);
+	if (goal->metric == DAMOS_QUOTA_SOME_MEM_PSI_US)
+		goal->last_psi_total = 0;
 	return goal;
 }
 
