@@ -61,9 +61,9 @@
 #define MX6Q_SUSPEND_OCRAM_SIZE		0x1000
 #define MX6_MAX_MMDC_IO_NUM		33
 
-static void __iomem *ccm_base;
-static void __iomem *suspend_ocram_base;
-static void (*imx6_suspend_in_ocram_fn)(void __iomem *ocram_vbase);
+static void __iomem *ccm_base __ro_after_init;
+static void __iomem *suspend_ocram_base __ro_after_init;
+static void (*imx6_suspend_in_ocram_fn)(void __iomem *ocram_vbase) __ro_after_init;
 
 /*
  * suspend ocram space layout:
@@ -360,6 +360,11 @@ int imx6_set_lpm(enum mxc_cpu_pwr_mode mode)
 	return 0;
 }
 
+static void __nocfi imx6_suspend_in_ocram(void __iomem *ocram_vbase)
+{
+	imx6_suspend_in_ocram_fn(ocram_vbase);
+}
+
 static int imx6q_suspend_finish(unsigned long val)
 {
 	if (!imx6_suspend_in_ocram_fn) {
@@ -374,7 +379,7 @@ static int imx6q_suspend_finish(unsigned long val)
 		if (!((struct imx6_cpu_pm_info *)
 			suspend_ocram_base)->l2_base.vbase)
 			flush_cache_all();
-		imx6_suspend_in_ocram_fn(suspend_ocram_base);
+		imx6_suspend_in_ocram(suspend_ocram_base);
 	}
 
 	return 0;
