@@ -2018,10 +2018,15 @@ static netdev_tx_t rtw_cfg80211_monitor_if_xmit_entry(struct sk_buff *skb, struc
 	/* Skip the ratio tap header */
 	skb_pull(skb, rtap_len);
 
+	if (unlikely(skb->len < sizeof(struct ieee80211_hdr)))
+		goto fail;
+
 	dot11_hdr = (struct ieee80211_hdr *)skb->data;
 	frame_control = le16_to_cpu(dot11_hdr->frame_control);
 	/* Check if the QoS bit is set */
 	if ((frame_control & IEEE80211_FCTL_FTYPE) == IEEE80211_FTYPE_DATA) {
+		int pull_len;
+
 		/* Check if this ia a Wireless Distribution System (WDS) frame
 		 * which has 4 MAC addresses
 		 */
@@ -2030,13 +2035,19 @@ static netdev_tx_t rtw_cfg80211_monitor_if_xmit_entry(struct sk_buff *skb, struc
 		if ((frame_control & 0x0300) == 0x0300)
 			dot11_hdr_len += 6;
 
+		if (unlikely(skb->len < dot11_hdr_len + qos_len))
+			goto fail;
+
 		memcpy(dst_mac_addr, dot11_hdr->addr1, sizeof(dst_mac_addr));
 		memcpy(src_mac_addr, dot11_hdr->addr2, sizeof(src_mac_addr));
 
 		/* Skip the 802.11 header, QoS (if any) and SNAP, but leave spaces for
 		 * two MAC addresses
 		 */
-		skb_pull(skb, dot11_hdr_len + qos_len + snap_len - sizeof(src_mac_addr) * 2);
+		pull_len = dot11_hdr_len + qos_len + snap_len - sizeof(src_mac_addr) * 2;
+		if (unlikely(pull_len < 0 || skb->len < pull_len))
+			goto fail;
+		skb_pull(skb, pull_len);
 		pdata = (unsigned char *)skb->data;
 		memcpy(pdata, dst_mac_addr, sizeof(dst_mac_addr));
 		memcpy(pdata + sizeof(dst_mac_addr), src_mac_addr, sizeof(src_mac_addr));
