@@ -2811,9 +2811,9 @@ static int mana_create_page_pool(struct mana_rxq *rxq, struct gdma_context *gc)
 	return 0;
 }
 
-static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
-					u32 rxq_idx, struct mana_eq *eq,
-					struct net_device *ndev)
+static int mana_create_rxq(struct mana_port_context *apc, u32 rxq_idx,
+			   struct mana_eq *eq, struct net_device *ndev,
+			   struct mana_rxq **rxq_out)
 {
 	struct gdma_dev *gd = apc->ac->gdma_dev;
 	struct mana_obj_spec wq_spec;
@@ -2829,7 +2829,7 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 
 	rxq = kvzalloc_flex(*rxq, rx_oobs, apc->rx_queue_size);
 	if (!rxq)
-		return NULL;
+		return -ENOMEM;
 
 	rxq->ndev = ndev;
 	rxq->num_rx_buf = apc->rx_queue_size;
@@ -2923,14 +2923,16 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 
 	mana_gd_ring_cq(cq->gdma_cq, SET_ARM_BIT);
 out:
-	if (!err)
-		return rxq;
+	if (!err) {
+		*rxq_out = rxq;
+		return 0;
+	}
 
 	netdev_err(ndev, "Failed to create RXQ: err = %d\n", err);
 
 	mana_destroy_rxq(apc, rxq, false);
 
-	return NULL;
+	return err;
 }
 
 static void mana_create_rxq_debugfs(struct mana_port_context *apc, int idx)
@@ -2963,9 +2965,8 @@ static int mana_add_rx_queues(struct mana_port_context *apc,
 	int i;
 
 	for (i = 0; i < apc->num_queues; i++) {
-		rxq = mana_create_rxq(apc, i, &apc->eqs[i], ndev);
-		if (!rxq) {
-			err = -ENOMEM;
+		err = mana_create_rxq(apc, i, &apc->eqs[i], ndev, &rxq);
+		if (err) {
 			netdev_err(ndev, "Failed to create rxq %d : %d\n", i, err);
 			goto out;
 		}
