@@ -275,7 +275,7 @@
 		};
 
 		cpu-map {
-			cluster0 {
+			cpu_map_cluster0: cluster0 {
 				core0 {
 					cpu = <&cpu0>;
 				};
