@@ -7,6 +7,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -14,6 +15,8 @@
 #include <linux/iio/buffer.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/units.h>
 
 #include "ad3552r.h"
@@ -585,14 +588,15 @@ static ssize_t ad3552r_hs_show_data_source_avail(struct file *f,
 						 char __user *userbuf,
 						 size_t count, loff_t *ppos)
 {
-	ssize_t len = 0;
-	char buf[128];
+	char *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	int len = 0;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(dbgfs_attr_source); i++) {
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s ",
-				 dbgfs_attr_source[i]);
-	}
+	if (!buf)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(dbgfs_attr_source); i++)
+		len += sysfs_emit_at(buf, len, "%s ", dbgfs_attr_source[i]);
 	buf[len - 1] = '\n';
 
 	return simple_read_from_buffer(userbuf, count, ppos, buf, len);
