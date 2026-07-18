@@ -28,8 +28,8 @@ struct cpu_rmap *alloc_cpu_rmap(unsigned int size, gfp_t flags)
 	unsigned int cpu;
 	size_t obj_offset;
 
-	/* This is a silly number of objects, and we use u16 indices. */
-	if (size > 0xffff)
+	/* Empty maps are invalid, and we use u16 indices. */
+	if (!size || size > 0xffff)
 		return NULL;
 
 	/* Offset of object pointer array from base structure */
