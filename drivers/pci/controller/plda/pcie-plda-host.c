@@ -559,9 +559,17 @@ EXPORT_SYMBOL_GPL(plda_pcie_setup_iomems);
 
 static void plda_pcie_irq_domain_deinit(struct plda_pcie_rp *pcie)
 {
+	u32 i, event_irq;
+
 	irq_set_chained_handler_and_data(pcie->irq, NULL, NULL);
 	irq_set_chained_handler_and_data(pcie->msi_irq, NULL, NULL);
 	irq_set_chained_handler_and_data(pcie->intx_irq, NULL, NULL);
+
+	for_each_set_bit(i, &pcie->events_bitmap, pcie->num_events) {
+		event_irq = irq_find_mapping(pcie->event_domain, i);
+		if (event_irq)
+			devm_free_irq(pcie->dev, event_irq, pcie);
+	}
 
 	irq_domain_remove(pcie->msi.dev_domain);
 
