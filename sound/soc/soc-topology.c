@@ -672,6 +672,16 @@ static int soc_tplg_control_dmixer_create(struct soc_tplg *tplg, struct snd_kcon
 	sm->shift = tplg_chan_get_shift(tplg, mc->channel, SNDRV_CHMAP_FL);
 	sm->rshift = tplg_chan_get_shift(tplg, mc->channel, SNDRV_CHMAP_FR);
 
+	if (sm->shift >= 32 || sm->rshift >= 32) {
+		dev_warn(tplg->dev,
+			 "ASoC: out-of-range shift for control %s, clamping to 0\n",
+			 mc->hdr.name);
+		if (sm->shift >= 32)
+			sm->shift = 0;
+		if (sm->rshift >= 32)
+			sm->rshift = 0;
+	}
+
 	sm->max = le32_to_cpu(mc->max);
 	sm->min = le32_to_cpu(mc->min);
 	sm->invert = le32_to_cpu(mc->invert);
