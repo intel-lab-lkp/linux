@@ -2228,6 +2228,13 @@ static int __init amd_pstate_init(void)
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
 		return -ENODEV;
 
+	/*
+	 * Do not continue on the following checks and emit bogus warning
+	 * messages if the platform doesn't support frequency scaling at all.
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_HW_PSTATE))
+		return -ENODEV;
+
 	/* show debug message only if CPPC is not supported */
 	if (!amd_cppc_supported())
 		return -EOPNOTSUPP;
