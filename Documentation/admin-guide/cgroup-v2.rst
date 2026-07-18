@@ -1144,12 +1144,18 @@ will be referred to. All time durations are in microseconds.
 	A read-only flat-keyed file.
 	This file exists whether the controller is enabled or not.
 
-	It always reports the following three stats, which account for all the
+	It always reports the following four stats, which account for all the
 	processes in the cgroup (including those in descendant cgroups):
 
 	- usage_usec
 	- user_usec
 	- system_usec
+	- nice_usec
+
+	When core scheduling (CONFIG_SCHED_CORE) is enabled, an additional
+	stat is reported:
+
+	- core_sched.force_idle_usec
 
 	and the following five when the controller is enabled, which account for
 	only the processes under the fair-class scheduler:
