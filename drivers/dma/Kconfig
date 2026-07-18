@@ -242,7 +242,7 @@ config FSL_QDMA
 
 config FSL_RAID
 	tristate "Freescale RAID engine Support"
-	depends on FSL_SOC && !ASYNC_TX_ENABLE_CHANNEL_SWITCH
+	depends on (FSL_SOC && !ASYNC_TX_ENABLE_CHANNEL_SWITCH) || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_ENGINE_RAID
 	help
