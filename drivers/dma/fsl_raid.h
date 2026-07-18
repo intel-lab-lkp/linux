@@ -270,6 +270,7 @@ struct fsl_re_chan {
 	struct list_head active_q; /* already issued on hw, not completed */
 	struct list_head submit_q;
 	struct list_head free_q; /* alloc available queue */
+	struct platform_device *ofdev;
 	struct device *dev;
 	struct fsl_re_drv_private *re_dev;
 	struct dma_chan chan;

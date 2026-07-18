@@ -201,10 +201,11 @@ static void fsl_re_dequeue(struct tasklet_struct *t)
 /* Per Job Ring interrupt handler */
 static irqreturn_t fsl_re_isr(int irq, void *data)
 {
+	struct platform_device *pdata = data;
 	struct fsl_re_chan *re_chan;
 	u32 irqstate, status;
 
-	re_chan = dev_get_drvdata((struct device *)data);
+	re_chan = platform_get_drvdata(pdata);
 
 	irqstate = in_be32(&re_chan->jrregs->jr_interrupt_status);
 	if (!irqstate)
@@ -634,7 +635,7 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	struct platform_device *chan_ofdev;
 
 	dev = &ofdev->dev;
-	re_priv = dev_get_drvdata(dev);
+	re_priv = platform_get_drvdata(ofdev);
 	dma_dev = &re_priv->dma_dev;
 
 	chan = devm_kzalloc(dev, sizeof(*chan), GFP_KERNEL);
@@ -645,8 +646,7 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	chan_ofdev = of_platform_device_create(np, NULL, dev);
 	if (!chan_ofdev) {
 		dev_err(dev, "Not able to create ofdev for jr %d\n", q);
-		ret = -EINVAL;
-		goto err_free;
+		return -EINVAL;
 	}
 
 	/* read reg property from dts */
@@ -672,17 +672,18 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	chandev = &chan_ofdev->dev;
 	tasklet_setup(&chan->irqtask, fsl_re_dequeue);
 
-	ret = request_irq(chan->irq, fsl_re_isr, 0, chan->name, chandev);
+	ret = request_irq(chan->irq, fsl_re_isr, 0, chan->name, chan_ofdev);
 	if (ret) {
 		dev_err(dev, "Unable to register interrupt for JR %d\n", q);
 		ret = -EINVAL;
-		goto err_free;
+		goto err_free_tasklet;
 	}
 
 	re_priv->re_jrs[q] = chan;
 	chan->chan.device = dma_dev;
 	chan->chan.private = chan;
 	chan->dev = chandev;
+	chan->ofdev = chan_ofdev;
 	chan->re_dev = re_priv;
 
 	spin_lock_init(&chan->desc_lock);
@@ -696,7 +697,7 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	if (!chan->inb_ring_virt_addr) {
 		dev_err(dev, "No dma memory for inb_ring_virt_addr\n");
 		ret = -ENOMEM;
-		goto err_free;
+		goto err_free_irq;
 	}
 
 	chan->oub_ring_virt_addr = dma_pool_alloc(chan->re_dev->hw_desc_pool,
@@ -728,7 +729,7 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 	out_be32(&chan->jrregs->jr_config_1,
 		 FSL_RE_CFG1_CBSI | FSL_RE_CFG1_CBS0 | status);
 
-	dev_set_drvdata(chandev, chan);
+	platform_set_drvdata(chan_ofdev, chan);
 
 	/* Enable RE/CHAN */
 	out_be32(&chan->jrregs->jr_command, FSL_RE_ENABLE);
@@ -738,7 +739,12 @@ static int fsl_re_chan_probe(struct platform_device *ofdev,
 err_free_1:
 	dma_pool_free(chan->re_dev->hw_desc_pool, chan->inb_ring_virt_addr,
 		      chan->inb_phys_addr);
+err_free_irq:
+	free_irq(chan->irq, chan_ofdev);
+err_free_tasklet:
+	tasklet_kill(&chan->irqtask);
 err_free:
+	platform_device_put(chan_ofdev);
 	return ret;
 }
 
@@ -817,7 +823,7 @@ static int fsl_re_probe(struct platform_device *ofdev)
 		return -ENOMEM;
 	}
 
-	dev_set_drvdata(dev, re_priv);
+	platform_set_drvdata(ofdev, re_priv);
 
 	/* Parse Device tree to find out the total number of JQs present */
 	for_each_compatible_node_scoped(np, NULL, "fsl,raideng-v1.0-job-queue") {
@@ -846,21 +852,23 @@ static void fsl_re_remove_chan(struct fsl_re_chan *chan)
 {
 	tasklet_kill(&chan->irqtask);
 
+	free_irq(chan->irq, chan->ofdev);
+
 	dma_pool_free(chan->re_dev->hw_desc_pool, chan->inb_ring_virt_addr,
 		      chan->inb_phys_addr);
 
 	dma_pool_free(chan->re_dev->hw_desc_pool, chan->oub_ring_virt_addr,
 		      chan->oub_phys_addr);
+
+	platform_device_put(chan->ofdev);
 }
 
 static void fsl_re_remove(struct platform_device *ofdev)
 {
 	struct fsl_re_drv_private *re_priv;
-	struct device *dev;
 	int i;
 
-	dev = &ofdev->dev;
-	re_priv = dev_get_drvdata(dev);
+	re_priv = platform_get_drvdata(ofdev);
 
 	/* Cleanup chan related memory areas */
 	for (i = 0; i < re_priv->total_chans; i++)
