@@ -292,7 +292,6 @@ static void iommu_sva_handle_iopf(struct work_struct *work)
 	}
 
 	iopf_group_response(group, status);
-	iopf_free_group(group);
 }
 
 static int iommu_sva_iopf_handler(struct iopf_group *group)
