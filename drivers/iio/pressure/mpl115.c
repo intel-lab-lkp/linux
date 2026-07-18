@@ -204,8 +204,17 @@ int mpl115_probe(struct device *dev, const char *name,
 	if (data->shutdown) {
 		/* Enable runtime PM */
 		pm_runtime_get_noresume(dev);
-		pm_runtime_set_active(dev);
-		pm_runtime_enable(dev);
+		ret = pm_runtime_set_active(dev);
+		if (ret) {
+			pm_runtime_put_noidle(dev);
+			return ret;
+		}
+
+		ret = devm_pm_runtime_enable(dev);
+		if (ret) {
+			pm_runtime_put_noidle(dev);
+			return ret;
+		}
 
 		/*
 		 * As the device takes 3 ms to come up with a fresh
