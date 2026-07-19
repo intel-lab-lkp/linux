@@ -131,6 +131,7 @@ static enum sr_loc_attr locate_direct_register(const struct kvm_vcpu *vcpu,
 
 	case TPIDR_EL0:
 	case TPIDRRO_EL0:
+	case TPIDR2_EL0:
 	case TPIDR_EL1:
 	case PAR_EL1:
 	case DACR32_EL2:
@@ -246,6 +247,7 @@ static u64 read_sr_from_cpu(enum vcpu_sysreg reg)
 	case SCTLR2_EL1:	val = read_sysreg_s(SYS_SCTLR2_EL12);	break;
 	case TPIDR_EL0:		val = read_sysreg_s(SYS_TPIDR_EL0);	break;
 	case TPIDRRO_EL0:	val = read_sysreg_s(SYS_TPIDRRO_EL0);	break;
+	case TPIDR2_EL0:	val = read_sysreg_s(SYS_TPIDR2_EL0);	break;
 	case TPIDR_EL1:		val = read_sysreg_s(SYS_TPIDR_EL1);	break;
 	case PAR_EL1:		val = read_sysreg_par();		break;
 	case DACR32_EL2:	val = read_sysreg_s(SYS_DACR32_EL2);	break;
@@ -285,6 +287,7 @@ static void write_sr_to_cpu(enum vcpu_sysreg reg, u64 val)
 	case SCTLR2_EL1:	write_sysreg_s(val, SYS_SCTLR2_EL12);	break;
 	case TPIDR_EL0:		write_sysreg_s(val, SYS_TPIDR_EL0);	break;
 	case TPIDRRO_EL0:	write_sysreg_s(val, SYS_TPIDRRO_EL0);	break;
+	case TPIDR2_EL0:	write_sysreg_s(val, SYS_TPIDR2_EL0);	break;
 	case TPIDR_EL1:		write_sysreg_s(val, SYS_TPIDR_EL1);	break;
 	case PAR_EL1:		write_sysreg_s(val, SYS_PAR_EL1);	break;
 	case DACR32_EL2:	write_sysreg_s(val, SYS_DACR32_EL2);	break;
@@ -3598,7 +3601,8 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	  .visibility = s1poe_visibility },
 	{ SYS_DESC(SYS_TPIDR_EL0), NULL, reset_unknown, TPIDR_EL0 },
 	{ SYS_DESC(SYS_TPIDRRO_EL0), NULL, reset_unknown, TPIDRRO_EL0 },
-	{ SYS_DESC(SYS_TPIDR2_EL0), undef_access },
+	{ SYS_DESC(SYS_TPIDR2_EL0), NULL, reset_unknown, TPIDR2_EL0,
+	  .visibility = sme_visibility },
 
 	{ SYS_DESC(SYS_SCXTNUM_EL0), undef_access },
 
