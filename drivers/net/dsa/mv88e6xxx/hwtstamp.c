@@ -283,35 +283,24 @@ static bool parse_embedded_ts(unsigned int arr_ts_mode,
 	return true;
 }
 
-static void mv88e6xxx_get_rxts_embedded(struct mv88e6xxx_chip *chip,
-					struct mv88e6xxx_port_hwtstamp *ps,
-					struct sk_buff *skb)
+/* Apply the arrival time the switch embedded in the frame. No register access
+ * is needed, so this runs inline on the receive path rather than being handed
+ * to the PTP worker.
+ */
+static void mv88e6xxx_ptp_rx_timestamp(struct mv88e6xxx_chip *chip,
+				       struct sk_buff *skb)
 {
-	struct sk_buff_head *rxq = &ps->rx_queue;
 	struct skb_shared_hwtstamps *shwt;
-	struct sk_buff_head received;
-	unsigned long flags;
 	u64 ns;
 
-	__skb_queue_head_init(&received);
-	__skb_queue_head(&received, skb);
-	spin_lock_irqsave(&rxq->lock, flags);
-	skb_queue_splice_tail_init(rxq, &received);
-	spin_unlock_irqrestore(&rxq->lock, flags);
+	if (!parse_embedded_ts(chip->info->arr_ts_mode, skb, &ns))
+		return;
 
-	mv88e6xxx_reg_lock(chip);
-	skb_queue_walk(&received, skb) {
-		if (!parse_embedded_ts(chip->info->arr_ts_mode, skb, &ns))
-			continue;
-		ns = timecounter_cyc2time(&chip->tstamp_tc, ns);
-		shwt = skb_hwtstamps(skb);
-		memset(shwt, 0, sizeof(*shwt));
-		shwt->hwtstamp = ns_to_ktime(ns);
-	}
-	mv88e6xxx_reg_unlock(chip);
+	ns = mv88e6xxx_timecounter_cyc2time(chip, ns);
 
-	while ((skb = __skb_dequeue(&received)))
-		netif_rx(skb);
+	shwt = skb_hwtstamps(skb);
+	memset(shwt, 0, sizeof(*shwt));
+	shwt->hwtstamp = ns_to_ktime(ns);
 }
 
 static void mv88e6xxx_get_rxts(struct mv88e6xxx_chip *chip,
@@ -358,9 +347,7 @@ static void mv88e6xxx_get_rxts(struct mv88e6xxx_chip *chip,
 		if (mv88e6xxx_ts_valid(status) && seq_match(skb, seq_id)) {
 			ns = timehi << 16 | timelo;
 
-			mv88e6xxx_reg_lock(chip);
-			ns = timecounter_cyc2time(&chip->tstamp_tc, ns);
-			mv88e6xxx_reg_unlock(chip);
+			ns = mv88e6xxx_timecounter_cyc2time(chip, ns);
 			shwt = skb_hwtstamps(skb);
 			memset(shwt, 0, sizeof(*shwt));
 			shwt->hwtstamp = ns_to_ktime(ns);
@@ -375,20 +362,6 @@ static void mv88e6xxx_rxtstamp_work(struct mv88e6xxx_chip *chip,
 {
 	const struct mv88e6xxx_ptp_ops *ptp_ops = chip->info->ops->ptp_ops;
 	struct sk_buff *skb;
-
-	if (chip->info->arr_ts_mode) {
-		/* If arr_ts_mode is set, the timestamps are embedded in the
-		 * frames so a register read is not required. We still need a
-		 * work queue rather than processing inline because
-		 * timecounter_cyc2time() takes the global mutex and this
-		 * cannot be called from mv88e6xxx_port_rxtstamp().
-		 */
-		skb = skb_dequeue(&ps->rx_queue);
-		if (skb)
-			mv88e6xxx_get_rxts_embedded(chip, ps, skb);
-
-		return;
-	}
 
 	skb = skb_dequeue(&ps->rx_queue);
 	if (skb)
@@ -432,7 +405,13 @@ bool mv88e6xxx_port_rxtstamp(struct dsa_switch *ds, int port,
 
 	SKB_PTP_TYPE(skb) = type;
 
-	if (!chip->info->arr_ts_mode && is_pdelay_msg(hdr))
+	/* Embedded arrival times can be returned inline. */
+	if (chip->info->arr_ts_mode) {
+		mv88e6xxx_ptp_rx_timestamp(chip, skb);
+		return false;
+	}
+
+	if (is_pdelay_msg(hdr))
 		skb_queue_tail(&ps->rx_queue2, skb);
 	else
 		skb_queue_tail(&ps->rx_queue, skb);
@@ -498,9 +477,7 @@ static int mv88e6xxx_txtstamp_work(struct mv88e6xxx_chip *chip,
 
 	memset(&shhwtstamps, 0, sizeof(shhwtstamps));
 	time_raw = ((u32)departure_block[2] << 16) | departure_block[1];
-	mv88e6xxx_reg_lock(chip);
-	ns = timecounter_cyc2time(&chip->tstamp_tc, time_raw);
-	mv88e6xxx_reg_unlock(chip);
+	ns = mv88e6xxx_timecounter_cyc2time(chip, time_raw);
 	shhwtstamps.hwtstamp = ns_to_ktime(ns);
 
 	dev_dbg(chip->dev,
@@ -543,7 +520,9 @@ long mv88e6xxx_hwtstamp_work(struct ptp_clock_info *ptp)
 		if (test_bit(MV88E6XXX_HWTSTAMP_TX_IN_PROGRESS, &ps->state))
 			restart |= mv88e6xxx_txtstamp_work(chip, ps);
 
-		mv88e6xxx_rxtstamp_work(chip, ps);
+		/* Embedded arrival times are applied on the receive path. */
+		if (!chip->info->arr_ts_mode)
+			mv88e6xxx_rxtstamp_work(chip, ps);
 	}
 
 	return restart ? 1 : -1;

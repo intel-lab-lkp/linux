@@ -231,13 +231,35 @@ static void mv88e6352_tai_event_work(struct work_struct *ugly)
 
 	/* We only have one timestamping channel. */
 	ev.index = 0;
-	mv88e6xxx_reg_lock(chip);
-	ev.timestamp = timecounter_cyc2time(&chip->tstamp_tc, raw_ts);
-	mv88e6xxx_reg_unlock(chip);
+	ev.timestamp = mv88e6xxx_timecounter_cyc2time(chip, raw_ts);
 
 	ptp_clock_event(chip->ptp_clock, &ev);
 out:
 	schedule_delayed_work(&chip->tai_event_work, TAI_EVENT_WORK_INTERVAL);
+}
+
+/* Refresh the cached counter value that the read() callback returns. The
+ * read cannot acquire the register lock whilst holding ptp_clock_lock
+ * because MDIO reads can sleep. The caller must hold reg_lock, which
+ * serializes against the other timecounter writers.
+ */
+static void mv88e6xxx_ptp_read_cycles(struct mv88e6xxx_chip *chip)
+{
+	const struct mv88e6xxx_ptp_ops *ptp_ops = chip->info->ops->ptp_ops;
+
+	if (ptp_ops->clock_read)
+		chip->tstamp_cycles = ptp_ops->clock_read(&chip->tstamp_cc);
+}
+
+u64 mv88e6xxx_timecounter_cyc2time(struct mv88e6xxx_chip *chip, u64 cycles)
+{
+	u64 ns;
+
+	spin_lock_bh(&chip->ptp_clock_lock);
+	ns = timecounter_cyc2time(&chip->tstamp_tc, cycles);
+	spin_unlock_bh(&chip->ptp_clock_lock);
+
+	return ns;
 }
 
 static int mv88e6xxx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
@@ -258,9 +280,12 @@ static int mv88e6xxx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	diff = div_u64(adj, chip->cc_coeffs->cc_mult_dem);
 
 	mv88e6xxx_reg_lock(chip);
+	mv88e6xxx_ptp_read_cycles(chip);
 
+	spin_lock_bh(&chip->ptp_clock_lock);
 	timecounter_read(&chip->tstamp_tc);
 	chip->tstamp_cc.mult = neg_adj ? mult - diff : mult + diff;
+	spin_unlock_bh(&chip->ptp_clock_lock);
 
 	mv88e6xxx_reg_unlock(chip);
 
@@ -271,8 +296,16 @@ static int mv88e6xxx_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
 	struct mv88e6xxx_chip *chip = ptp_to_chip(ptp);
 
+	/* No register access is needed here, but reg_lock still serialises
+	 * this against the other timecounter writers, which drop it only
+	 * after their hardware read has completed.
+	 */
 	mv88e6xxx_reg_lock(chip);
+
+	spin_lock_bh(&chip->ptp_clock_lock);
 	timecounter_adjtime(&chip->tstamp_tc, delta);
+	spin_unlock_bh(&chip->ptp_clock_lock);
+
 	mv88e6xxx_reg_unlock(chip);
 
 	return 0;
@@ -285,7 +318,12 @@ static int mv88e6xxx_ptp_gettime(struct ptp_clock_info *ptp,
 	u64 ns;
 
 	mv88e6xxx_reg_lock(chip);
+	mv88e6xxx_ptp_read_cycles(chip);
+
+	spin_lock_bh(&chip->ptp_clock_lock);
 	ns = timecounter_read(&chip->tstamp_tc);
+	spin_unlock_bh(&chip->ptp_clock_lock);
+
 	mv88e6xxx_reg_unlock(chip);
 
 	*ts = ns_to_timespec64(ns);
@@ -302,7 +340,12 @@ static int mv88e6xxx_ptp_settime(struct ptp_clock_info *ptp,
 	ns = timespec64_to_ns(ts);
 
 	mv88e6xxx_reg_lock(chip);
+	mv88e6xxx_ptp_read_cycles(chip);
+
+	spin_lock_bh(&chip->ptp_clock_lock);
 	timecounter_init(&chip->tstamp_tc, &chip->tstamp_cc, ns);
+	spin_unlock_bh(&chip->ptp_clock_lock);
+
 	mv88e6xxx_reg_unlock(chip);
 
 	return 0;
@@ -444,14 +487,12 @@ const struct mv88e6xxx_ptp_ops mv88e6390_ptp_ops = {
 		(1 << HWTSTAMP_FILTER_PTP_V2_DELAY_REQ),
 };
 
+/* Return the value most recently fetched by mv88e6xxx_ptp_read_cycles()
+ * rather than reading the hardware over MDIO.
+ */
 static u64 mv88e6xxx_ptp_clock_read(struct cyclecounter *cc)
 {
-	struct mv88e6xxx_chip *chip = cc_to_chip(cc);
-
-	if (chip->info->ops->ptp_ops->clock_read)
-		return chip->info->ops->ptp_ops->clock_read(cc);
-
-	return 0;
+	return cc_to_chip(cc)->tstamp_cycles;
 }
 
 /* With a 250MHz input clock, the 32-bit timestamp counter overflows in ~17.2
@@ -485,6 +526,12 @@ int mv88e6xxx_ptp_setup(struct mv88e6xxx_chip *chip)
 	chip->tstamp_cc.mask	= CYCLECOUNTER_MASK(32);
 	chip->tstamp_cc.mult	= chip->cc_coeffs->cc_mult;
 	chip->tstamp_cc.shift	= chip->cc_coeffs->cc_shift;
+
+	/* Prime the cycle counter cache for the timecounter_init() below.
+	 * The caller holds reg_lock, and nothing can reach the PTP clock
+	 * until ptp_clock_register() below, so no locking is needed here.
+	 */
+	mv88e6xxx_ptp_read_cycles(chip);
 
 	timecounter_init(&chip->tstamp_tc, &chip->tstamp_cc,
 			 ktime_to_ns(ktime_get_real()));

@@ -427,9 +427,12 @@ struct mv88e6xxx_chip {
 	/* GPIO resources */
 	u8 gpio_data[2];
 
-	/* This cyclecounter abstracts the switch PTP time.
-	 * reg_lock must be held for any operation that read()s.
+	/* This cyclecounter abstracts the switch PTP time. ptp_clock_lock
+	 * protects tstamp_cc and tstamp_tc. tstamp_cycles caches the
+	 * result most recently returned by mv88e6xxx_ptp_read_cycles().
 	 */
+	spinlock_t		ptp_clock_lock;
+	u64			tstamp_cycles;
 	struct cyclecounter	tstamp_cc;
 	struct timecounter	tstamp_tc;
 	struct delayed_work	overflow_work;
