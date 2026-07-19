@@ -3251,6 +3251,10 @@ static void bond_ns_send(struct slave *slave, const struct in6_addr *daddr,
 
 	addrconf_addr_solict_mult(daddr, &mcaddr);
 	if (bond_handle_vlan(slave, tags, skb)) {
+		if (skb_cow_head(skb, sizeof(struct ipv6hdr))) {
+			kfree_skb(skb);
+			return;
+		}
 		slave_update_last_tx(slave);
 		ndisc_send_skb(skb, &mcaddr, saddr);
 	}
