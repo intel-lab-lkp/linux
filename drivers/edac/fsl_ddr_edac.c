@@ -491,6 +491,13 @@ static void fsl_ddr_init_csrows(struct mem_ctl_info *mci)
 	}
 }
 
+static void fsl_mc_edac_free(void *data)
+{
+	struct mem_ctl_info *mci = data;
+
+	edac_mc_free(mci);
+}
+
 int fsl_mc_err_probe(struct platform_device *op)
 {
 	struct mem_ctl_info *mci;
@@ -501,9 +508,6 @@ int fsl_mc_err_probe(struct platform_device *op)
 	u32 sdram_ctl;
 	int res;
 
-	if (!devres_open_group(&op->dev, fsl_mc_err_probe, GFP_KERNEL))
-		return -ENOMEM;
-
 	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
 	layers[0].size = 4;
 	layers[0].is_virt_csrow = true;
@@ -512,10 +516,17 @@ int fsl_mc_err_probe(struct platform_device *op)
 	layers[1].is_virt_csrow = false;
 	mci = edac_mc_alloc(edac_mc_idx, ARRAY_SIZE(layers), layers,
 			    sizeof(*pdata));
-	if (!mci) {
-		devres_release_group(&op->dev, fsl_mc_err_probe);
+	if (!mci)
 		return -ENOMEM;
-	}
+
+	/*
+	 * Manage mci lifetime via devres so it is freed only after the
+	 * devm-requested IRQ is released, avoiding a use-after-free of mci
+	 * (and its pdata) in the shared interrupt handler during removal.
+	 */
+	res = devm_add_action_or_reset(&op->dev, fsl_mc_edac_free, mci);
+	if (res)
+		return res;
 
 	pdata = mci->pvt_info;
 	pdata->name = "fsl_mc_err";
@@ -559,10 +570,8 @@ int fsl_mc_err_probe(struct platform_device *op)
 
 	if (pdata->flag == TYPE_IMX9) {
 		pdata->inject_vbase = devm_platform_ioremap_resource_byname(op, "inject");
-		if (IS_ERR(pdata->inject_vbase)) {
-			res = -ENOMEM;
-			goto err;
-		}
+		if (IS_ERR(pdata->inject_vbase))
+			return -ENOMEM;
 	}
 
 	if (pdata->flag == TYPE_IMX9) {
@@ -576,8 +585,7 @@ int fsl_mc_err_probe(struct platform_device *op)
 	if ((sdram_ctl & ecc_en_mask) != ecc_en_mask) {
 		/* no ECC */
 		pr_warn("%s: No ECC DIMMs discovered\n", __func__);
-		res = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
 
 	edac_dbg(3, "init mci\n");
@@ -640,7 +648,6 @@ int fsl_mc_err_probe(struct platform_device *op)
 		       pdata->irq);
 	}
 
-	devres_remove_group(&op->dev, fsl_mc_err_probe);
 	edac_dbg(3, "success\n");
 	pr_info(EDAC_MOD_STR " MC err registered\n");
 
@@ -653,8 +660,6 @@ err:
 	ddr_out32(pdata, FSL_MC_ERR_DISABLE,
 		  pdata->orig_ddr_err_disable);
 	ddr_out32(pdata, FSL_MC_ERR_SBE, pdata->orig_ddr_err_sbe);
-	devres_release_group(&op->dev, fsl_mc_err_probe);
-	edac_mc_free(mci);
 	return res;
 }
 
@@ -675,5 +680,4 @@ void fsl_mc_err_remove(struct platform_device *op)
 
 
 	edac_mc_del_mc(&op->dev);
-	edac_mc_free(mci);
 }
