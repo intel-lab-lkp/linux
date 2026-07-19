@@ -897,7 +897,8 @@ static int damon_sysfs_preps_add_dirs(struct damon_sysfs_preps *preps,
 		}
 
 		err = kobject_init_and_add(&prep->kobj,
-				&damon_sysfs_prep_ktype, &prep->kobj, "%d", i);
+				&damon_sysfs_prep_ktype, &preps->kobj, "%d",
+				i);
 		if (err) {
 			kobject_put(&prep->kobj);
 			damon_sysfs_preps_rm_dirs(preps);
