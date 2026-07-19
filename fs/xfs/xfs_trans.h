@@ -152,7 +152,7 @@ typedef struct xfs_trans {
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
 	struct list_head	t_dfops;	/* deferred operations */
-	unsigned long		t_pflags;	/* saved process flags state */
+	unsigned int		t_pflags;	/* saved process flags state */
 } xfs_trans_t;
 
 /*
