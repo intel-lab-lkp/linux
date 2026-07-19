@@ -343,6 +343,23 @@ static inline void memalloc_flags_restore(unsigned flags)
 }
 
 /**
+ * memalloc_flags_move - transfer a memalloc scope from one tracking
+ * variable to another.
+ * @old_flags: pointer to the source flags (will be zeroed)
+ *
+ * Returns the flags value to store in the destination.  The source is
+ * set to zero so that a subsequent memalloc_flags_restore() on it is
+ * a no-op.
+ */
+static inline unsigned int memalloc_flags_move(unsigned int *old_flags)
+{
+	unsigned int ret = *old_flags;
+
+	*old_flags = 0;
+	return ret;
+}
+
+/**
  * memalloc_noio_save - Marks implicit GFP_NOIO allocation scope.
  *
  * This functions marks the beginning of the GFP_NOIO allocation scope.
