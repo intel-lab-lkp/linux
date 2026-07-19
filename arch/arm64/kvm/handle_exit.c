@@ -233,6 +233,24 @@ static int handle_sve(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
+static int handle_sme(struct kvm_vcpu *vcpu)
+{
+	u64 esr = kvm_vcpu_get_esr(vcpu);
+
+	if (guest_hyp_sme_traps_enabled(vcpu))
+		return kvm_inject_nested_sync(vcpu, esr);
+
+	/* Reinject SME EZT0 traps that were enabled by the guest. */
+	if (vcpu_has_sme2(vcpu) &&
+	    ESR_ELx_EC(esr) == ESR_ELx_EC_SME &&
+	    ESR_ELx_SME_ISS_SMTC(esr) == ESR_ELx_SME_ISS_SMTC_ZT_DISABLED &&
+	    !(__vcpu_sys_reg(vcpu, SMCR_EL2) & SMCR_ELx_EZT0))
+		return kvm_inject_nested_sync(vcpu, esr);
+
+	kvm_inject_undefined(vcpu);
+	return 1;
+}
+
 /*
  * Two possibilities to handle a trapping ptrauth instruction:
  *
@@ -386,6 +404,7 @@ static exit_handle_fn arm_exit_handlers[] = {
 	[ESR_ELx_EC_SVC64]	= handle_svc,
 	[ESR_ELx_EC_SYS64]	= kvm_handle_sys_reg,
 	[ESR_ELx_EC_SVE]	= handle_sve,
+	[ESR_ELx_EC_SME]	= handle_sme,
 	[ESR_ELx_EC_ERET]	= kvm_handle_eret,
 	[ESR_ELx_EC_IABT_LOW]	= kvm_handle_guest_abort,
 	[ESR_ELx_EC_DABT_LOW]	= kvm_handle_guest_abort,
