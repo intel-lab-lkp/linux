@@ -112,6 +112,7 @@
 #include <linux/unwind_deferred.h>
 #include <linux/pgalloc.h>
 #include <linux/uaccess.h>
+#include <linux/sched/isolation.h>
 
 #include <asm/mmu_context.h>
 #include <asm/cacheflush.h>
@@ -3407,3 +3408,56 @@ static int __init init_fork_sysctl(void)
 }
 
 subsys_initcall(init_fork_sysctl);
+
+#ifdef CONFIG_ASYNC_MM_TEARDOWN
+static LLIST_HEAD(mm_reaper_list);
+static DECLARE_WAIT_QUEUE_HEAD(mm_reaper_wait);
+
+static void async_mm_teardown_queue(struct mm_struct *mm)
+{
+	if (llist_add(&mm->async_reap_node, &mm_reaper_list))
+		wake_up(&mm_reaper_wait);
+}
+
+static int mm_reaper(void *unused)
+{
+	set_freezable();
+	while (true) {
+		struct llist_node *batch;
+		struct mm_struct *mm, *n;
+
+		wait_event_freezable(mm_reaper_wait, !llist_empty(&mm_reaper_list));
+		batch = llist_del_all(&mm_reaper_list);
+		llist_for_each_entry_safe(mm, n, batch, async_reap_node) {
+			__mmput(mm); /* may free mm via mmdrop */
+			cond_resched();
+			try_to_freeze();
+		}
+	}
+	return 0;
+}
+
+void mmput_exit(struct mm_struct *mm)
+{
+	might_sleep();
+	if (!atomic_dec_and_test(&mm->mm_users))
+		return;
+	async_mm_teardown_queue(mm);
+}
+
+static int __init mm_reaper_init(void)
+{
+	struct task_struct *th;
+
+	th = kthread_create(mm_reaper, NULL, "mm_reaper");
+	if (IS_ERR(th)) {
+		pr_err("mm_reaper: failed to start kthread: %ld\n", PTR_ERR(th));
+		return PTR_ERR(th);
+	}
+	set_user_nice(th, 19); /* minimize competition with other fair class tasks */
+	kthread_affine_preferred(th, housekeeping_cpumask(HK_TYPE_KTHREAD));
+	wake_up_process(th);
+	return 0;
+}
+subsys_initcall(mm_reaper_init);
+#endif
