@@ -121,6 +121,7 @@ static enum sr_loc_attr locate_direct_register(const struct kvm_vcpu *vcpu,
 	case ELR_EL1:
 	case SPSR_EL1:
 	case ZCR_EL1:
+	case SMCR_EL1:
 	case SCTLR2_EL1:
 		/*
 		 * EL1 registers which have an ELx2 mapping are loaded if
@@ -241,6 +242,7 @@ static u64 read_sr_from_cpu(enum vcpu_sysreg reg)
 	case ELR_EL1:		val = read_sysreg_s(SYS_ELR_EL12);	break;
 	case SPSR_EL1:		val = read_sysreg_s(SYS_SPSR_EL12);	break;
 	case ZCR_EL1:		val = read_sysreg_s(SYS_ZCR_EL12);	break;
+	case SMCR_EL1:		val = read_sysreg_s(SYS_SMCR_EL12);	break;
 	case SCTLR2_EL1:	val = read_sysreg_s(SYS_SCTLR2_EL12);	break;
 	case TPIDR_EL0:		val = read_sysreg_s(SYS_TPIDR_EL0);	break;
 	case TPIDRRO_EL0:	val = read_sysreg_s(SYS_TPIDRRO_EL0);	break;
@@ -279,6 +281,7 @@ static void write_sr_to_cpu(enum vcpu_sysreg reg, u64 val)
 	case ELR_EL1:		write_sysreg_s(val, SYS_ELR_EL12);	break;
 	case SPSR_EL1:		write_sysreg_s(val, SYS_SPSR_EL12);	break;
 	case ZCR_EL1:		write_sysreg_s(val, SYS_ZCR_EL12);	break;
+	case SMCR_EL1:		write_sysreg_s(val, SYS_SMCR_EL12);	break;
 	case SCTLR2_EL1:	write_sysreg_s(val, SYS_SCTLR2_EL12);	break;
 	case TPIDR_EL0:		write_sysreg_s(val, SYS_TPIDR_EL0);	break;
 	case TPIDRRO_EL0:	write_sysreg_s(val, SYS_TPIDRRO_EL0);	break;
@@ -2830,6 +2833,12 @@ static unsigned int sve_el2_visibility(const struct kvm_vcpu *vcpu,
 	return __el2_visibility(vcpu, rd, sve_visibility);
 }
 
+static unsigned int sme_el2_visibility(const struct kvm_vcpu *vcpu,
+				       const struct sys_reg_desc *rd)
+{
+	return __el2_visibility(vcpu, rd, sme_visibility);
+}
+
 static unsigned int vncr_el2_visibility(const struct kvm_vcpu *vcpu,
 					const struct sys_reg_desc *rd)
 {
@@ -2868,6 +2877,23 @@ static bool access_zcr_el2(struct kvm_vcpu *vcpu,
 		p->regval = __vcpu_sys_reg(vcpu, ZCR_EL2);
 	else
 		__vcpu_assign_sys_reg(vcpu, ZCR_EL2, p->regval);
+
+	return true;
+}
+
+static bool access_smcr_el2(struct kvm_vcpu *vcpu,
+			    struct sys_reg_params *p,
+			    const struct sys_reg_desc *r)
+{
+	if (guest_hyp_sme_traps_enabled(vcpu)) {
+		kvm_inject_nested_sme_trap(vcpu, ESR_ELx_SME_ISS_SMTC_SME_DISABLED);
+		return false;
+	}
+
+	if (!p->is_write)
+		p->regval = __vcpu_sys_reg(vcpu, SMCR_EL2);
+	else
+		__vcpu_assign_sys_reg(vcpu, SMCR_EL2, p->regval);
 
 	return true;
 }
@@ -3386,7 +3412,7 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	{ SYS_DESC(SYS_ZCR_EL1), NULL, reset_val, ZCR_EL1, 0, .visibility = sve_visibility },
 	{ SYS_DESC(SYS_TRFCR_EL1), undef_access },
 	{ SYS_DESC(SYS_SMPRI_EL1), undef_access },
-	{ SYS_DESC(SYS_SMCR_EL1), undef_access },
+	{ SYS_DESC(SYS_SMCR_EL1), NULL, reset_val, SMCR_EL1, 0, .visibility = sme_visibility },
 	{ SYS_DESC(SYS_TTBR0_EL1), access_vm_reg, reset_unknown, TTBR0_EL1 },
 	{ SYS_DESC(SYS_TTBR1_EL1), access_vm_reg, reset_unknown, TTBR1_EL1 },
 	{ SYS_DESC(SYS_TCR_EL1), access_vm_reg, reset_val, TCR_EL1, 0 },
@@ -3753,6 +3779,9 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 			 sve_el2_visibility),
 
 	EL2_REG_VNCR(HCRX_EL2, reset_val, 0),
+
+	EL2_REG_FILTERED(SMCR_EL2, access_smcr_el2, reset_val, 0,
+			 sme_el2_visibility),
 
 	EL2_REG(TTBR0_EL2, access_rw, reset_val, 0),
 	EL2_REG(TTBR1_EL2, access_rw, reset_val, 0),
