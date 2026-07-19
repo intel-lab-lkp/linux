@@ -113,6 +113,7 @@
 #include <linux/pgalloc.h>
 #include <linux/uaccess.h>
 #include <linux/sched/isolation.h>
+#include <linux/sizes.h>
 
 #include <asm/mmu_context.h>
 #include <asm/cacheflush.h>
@@ -3412,6 +3413,48 @@ subsys_initcall(init_fork_sysctl);
 #ifdef CONFIG_ASYNC_MM_TEARDOWN
 static LLIST_HEAD(mm_reaper_list);
 static DECLARE_WAIT_QUEUE_HEAD(mm_reaper_wait);
+static atomic_long_t mm_reaper_pending_pages;
+static unsigned long sysctl_async_mm_teardown_thresh_pages;
+static unsigned long sysctl_async_mm_teardown_max_pending_pages;
+
+static bool async_mm_teardown_eligible(struct mm_struct *mm, unsigned long rss)
+{
+	if (rss < READ_ONCE(sysctl_async_mm_teardown_thresh_pages))
+		return false;
+	if (mm_flags_test(MMF_OOM_SKIP, mm))	/* reaped, or hidden from the reaper */
+		return false;
+	/*
+	 * MMF_OOM_TARGETED is set by the OOM killer while some task still
+	 * holds a live reference to this mm (see mark_oom_victim() and
+	 * __oom_kill_process()), and this eligibility check is reached only
+	 * from mmput_exit(), after mm_users has dropped to 0 -- so marking
+	 * and this check can never overlap in time. Whichever thread
+	 * performs the final decrement is therefore guaranteed to observe
+	 * the flag already set, regardless of whether that thread was
+	 * itself ever passed to mark_oom_victim() (a CLONE_VM-sharing
+	 * process in another thread group never is, but still observes
+	 * this flag on the shared mm).
+	 */
+	if (mm_flags_test(MMF_OOM_TARGETED, mm))
+		return false;
+	return true;
+}
+
+/*
+ * Charge rss against the pending-teardown budget.  Returns true if it fits
+ * under the cap, in which case the caller enqueues and the reaper releases
+ * the same rss after __mmput().  On overshoot nothing stays charged and the
+ * caller must tear down synchronously.
+ */
+static bool async_mm_teardown_reserve(unsigned long rss)
+{
+	if (atomic_long_add_return(rss, &mm_reaper_pending_pages) >
+	    READ_ONCE(sysctl_async_mm_teardown_max_pending_pages)) {
+		atomic_long_sub(rss, &mm_reaper_pending_pages);
+		return false;
+	}
+	return true;
+}
 
 static void async_mm_teardown_queue(struct mm_struct *mm)
 {
@@ -3429,7 +3472,10 @@ static int mm_reaper(void *unused)
 		wait_event_freezable(mm_reaper_wait, !llist_empty(&mm_reaper_list));
 		batch = llist_del_all(&mm_reaper_list);
 		llist_for_each_entry_safe(mm, n, batch, async_reap_node) {
+			unsigned long pages = mm->async_reap_rss;
+
 			__mmput(mm); /* may free mm via mmdrop */
+			atomic_long_sub(pages, &mm_reaper_pending_pages);
 			cond_resched();
 			try_to_freeze();
 		}
@@ -3439,10 +3485,38 @@ static int mm_reaper(void *unused)
 
 void mmput_exit(struct mm_struct *mm)
 {
+	unsigned long rss;
+
 	might_sleep();
+	/*
+	 * Fully ordered RMW: combined with exit_mm() (or exec_mmap(), the
+	 * other path that sheds ->mm) clearing ->mm under task_lock() before
+	 * this call, it guarantees MMF_OOM_TARGETED set at any mark site is
+	 * visible here -- see mark_oom_victim(). Any new caller of
+	 * mmput_exit() outside exit_mm() must re-verify that argument.
+	 */
 	if (!atomic_dec_and_test(&mm->mm_users))
 		return;
-	async_mm_teardown_queue(mm);
+
+	rss = get_mm_rss(mm);
+
+	if (async_mm_teardown_eligible(mm, rss)) {
+		/*
+		 * exit_aio() can block indefinitely. Run it here so a stuck
+		 * AIO only hangs this task (same as how it would happen in
+		 * case of synchronous mmput()) instead of stranding every
+		 * teardown queued behind this mm
+		 */
+		exit_aio(mm);
+
+		if (async_mm_teardown_reserve(rss)) {
+			mm->async_reap_rss = rss;
+			async_mm_teardown_queue(mm);
+			return;
+		}
+	}
+
+	__mmput(mm);
 }
 
 static int __init mm_reaper_init(void)
@@ -3456,7 +3530,10 @@ static int __init mm_reaper_init(void)
 	}
 	set_user_nice(th, 19); /* minimize competition with other fair class tasks */
 	kthread_affine_preferred(th, housekeeping_cpumask(HK_TYPE_KTHREAD));
+	sysctl_async_mm_teardown_thresh_pages      = SZ_64M >> PAGE_SHIFT;
+	sysctl_async_mm_teardown_max_pending_pages = totalram_pages() / 4;  /* TODO: placeholder */
 	wake_up_process(th);
+
 	return 0;
 }
 subsys_initcall(mm_reaper_init);

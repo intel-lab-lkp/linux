@@ -1370,6 +1370,7 @@ struct mm_struct {
 		struct work_struct async_put_work;
 #ifdef CONFIG_ASYNC_MM_TEARDOWN
 		struct llist_node async_reap_node;
+		unsigned long async_reap_rss;
 #endif /* CONFIG_ASYNC_MM_TEARDOWN */
 
 #ifdef CONFIG_IOMMU_MM_DATA
