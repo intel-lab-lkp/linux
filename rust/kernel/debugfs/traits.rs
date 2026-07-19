@@ -160,14 +160,7 @@ where
         writer: &mut UserSliceWriter,
         offset: &mut file::Offset,
     ) -> Result<usize> {
-        let slice = self.as_slice();
-
-        // SAFETY: `T: Immutable + IntoBytes` allows us to treat `&[T]` as `&[u8]`.
-        let buffer = unsafe {
-            core::slice::from_raw_parts(slice.as_ptr().cast(), core::mem::size_of_val(slice))
-        };
-
-        writer.write_slice_file(buffer, offset)
+        writer.write_slice_file(self.as_bytes(), offset)
     }
 }
 
