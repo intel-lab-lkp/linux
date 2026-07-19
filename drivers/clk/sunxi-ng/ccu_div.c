@@ -130,6 +130,41 @@ static int ccu_div_set_parent(struct clk_hw *hw, u8 index)
 	return ccu_mux_helper_set_parent(&cd->common, &cd->mux, index);
 }
 
+static int ccu_div_set_rate_and_parent(struct clk_hw *hw, unsigned long rate,
+				       unsigned long parent_rate, u8 index)
+{
+	struct ccu_div *cd = hw_to_ccu_div(hw);
+
+	/*
+	 * The predivider helpers look it up through the current parent,
+	 * which is ambiguous while both the parent and the divider are
+	 * changing, so keep the mux-then-divider order the core would
+	 * have used for those clocks.
+	 */
+	if (cd->common.features & (CCU_FEATURE_VARIABLE_PREDIV |
+				   CCU_FEATURE_FIXED_PREDIV |
+				   CCU_FEATURE_ALL_PREDIV)) {
+		ccu_div_set_parent(hw, index);
+		return ccu_div_set_rate(hw, rate, parent_rate);
+	}
+
+	/*
+	 * Same ordering rule as clk_composite_set_rate_and_parent(): if
+	 * switching the mux with the current divider would overshoot the
+	 * requested rate, program the divider first, so the intermediate
+	 * rate never exceeds both the old and the new rate.
+	 */
+	if (ccu_div_recalc_rate(hw, parent_rate) > rate) {
+		ccu_div_set_rate(hw, rate, parent_rate);
+		ccu_div_set_parent(hw, index);
+	} else {
+		ccu_div_set_parent(hw, index);
+		ccu_div_set_rate(hw, rate, parent_rate);
+	}
+
+	return 0;
+}
+
 const struct clk_ops ccu_div_ops = {
 	.disable	= ccu_div_disable,
 	.enable		= ccu_div_enable,
@@ -141,5 +176,6 @@ const struct clk_ops ccu_div_ops = {
 	.determine_rate	= ccu_div_determine_rate,
 	.recalc_rate	= ccu_div_recalc_rate,
 	.set_rate	= ccu_div_set_rate,
+	.set_rate_and_parent = ccu_div_set_rate_and_parent,
 };
 EXPORT_SYMBOL_NS_GPL(ccu_div_ops, "SUNXI_CCU");
