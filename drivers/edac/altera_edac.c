@@ -703,37 +703,37 @@ MODULE_DEVICE_TABLE(of, altr_edac_device_of_match);
  *	Module specific initialization is done by passing the
  *	function index in the device tree.
  */
+
+static void altr_edac_device_free(void *data)
+{
+	struct edac_device_ctl_info *dci = data;
+
+	edac_device_free_ctl_info(dci);
+}
+
 static int altr_edac_device_probe(struct platform_device *pdev)
 {
 	struct edac_device_ctl_info *dci;
 	struct altr_edac_device_dev *drvdata;
-	struct resource *r;
+	void __iomem *base;
+	int db_irq;
+	int sb_irq;
 	int res = 0;
 	struct device_node *np = pdev->dev.of_node;
 	char *ecc_name = (char *)np->name;
 	static int dev_instance;
 
-	if (!devres_open_group(&pdev->dev, NULL, GFP_KERNEL)) {
-		edac_printk(KERN_ERR, EDAC_DEVICE,
-			    "Unable to open devm\n");
-		return -ENOMEM;
-	}
+	base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r) {
-		edac_printk(KERN_ERR, EDAC_DEVICE,
-			    "Unable to get mem resource\n");
-		res = -ENODEV;
-		goto fail;
-	}
+	sb_irq = platform_get_irq(pdev, 0);
+	if (sb_irq < 0)
+		return sb_irq;
 
-	if (!devm_request_mem_region(&pdev->dev, r->start, resource_size(r),
-				     dev_name(&pdev->dev))) {
-		edac_printk(KERN_ERR, EDAC_DEVICE,
-			    "%s:Error requesting mem region\n", ecc_name);
-		res = -EBUSY;
-		goto fail;
-	}
+	db_irq = platform_get_irq(pdev, 1);
+	if (db_irq < 0)
+		return db_irq;
 
 	dci = edac_device_alloc_ctl_info(sizeof(*drvdata), ecc_name,
 					 1, ecc_name, 1, 0, dev_instance++);
@@ -741,20 +741,18 @@ static int altr_edac_device_probe(struct platform_device *pdev)
 	if (!dci) {
 		edac_printk(KERN_ERR, EDAC_DEVICE,
 			    "%s: Unable to allocate EDAC device\n", ecc_name);
-		res = -ENOMEM;
-		goto fail;
+		return -ENOMEM;
 	}
+
+	if (devm_add_action_or_reset(&pdev->dev, altr_edac_device_free, dci))
+		return -ENOMEM;
 
 	drvdata = dci->pvt_info;
 	dci->dev = &pdev->dev;
 	platform_set_drvdata(pdev, dci);
 	drvdata->edac_dev_name = ecc_name;
 
-	drvdata->base = devm_ioremap(&pdev->dev, r->start, resource_size(r));
-	if (!drvdata->base) {
-		res = -ENOMEM;
-		goto fail1;
-	}
+	drvdata->base = base;
 
 	/* Get driver specific data for this EDAC device */
 	drvdata->data = of_match_node(altr_edac_device_of_match, np)->data;
@@ -763,44 +761,33 @@ static int altr_edac_device_probe(struct platform_device *pdev)
 	if (drvdata->data->setup) {
 		res = drvdata->data->setup(drvdata);
 		if (res)
-			goto fail1;
+			return res;
 	}
 
-	drvdata->sb_irq = platform_get_irq(pdev, 0);
+	drvdata->sb_irq = sb_irq;
 	res = devm_request_irq(&pdev->dev, drvdata->sb_irq,
 			       altr_edac_device_handler,
 			       0, dev_name(&pdev->dev), dci);
 	if (res)
-		goto fail1;
+		return res;
 
-	drvdata->db_irq = platform_get_irq(pdev, 1);
+	drvdata->db_irq = db_irq;
 	res = devm_request_irq(&pdev->dev, drvdata->db_irq,
 			       altr_edac_device_handler,
 			       0, dev_name(&pdev->dev), dci);
 	if (res)
-		goto fail1;
+		return res;
 
 	dci->mod_name = "Altera ECC Manager";
 	dci->dev_name = drvdata->edac_dev_name;
 
 	res = edac_device_add_device(dci);
 	if (res)
-		goto fail1;
+		return res;
 
 	altr_create_edacdev_dbgfs(dci, drvdata->data);
 
-	devres_close_group(&pdev->dev, NULL);
-
 	return 0;
-
-fail1:
-	edac_device_free_ctl_info(dci);
-fail:
-	devres_release_group(&pdev->dev, NULL);
-	edac_printk(KERN_ERR, EDAC_DEVICE,
-		    "%s:Error setting up EDAC device: %d\n", ecc_name, res);
-
-	return res;
 }
 
 static void altr_edac_device_remove(struct platform_device *pdev)
@@ -810,7 +797,6 @@ static void altr_edac_device_remove(struct platform_device *pdev)
 
 	debugfs_remove_recursive(drvdata->debugfs_dir);
 	edac_device_del_device(&pdev->dev);
-	edac_device_free_ctl_info(dci);
 }
 
 static struct platform_driver altr_edac_device_driver = {
