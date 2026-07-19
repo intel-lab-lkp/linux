@@ -93,7 +93,7 @@ impl SGEntry {
     pub fn dma_len(&self) -> ResourceSize {
         #[allow(clippy::useless_conversion)]
         // SAFETY: `self.as_raw()` is a valid pointer to a `struct scatterlist`.
-        unsafe { bindings::sg_dma_len(self.as_raw()) }.into()
+        ResourceSize::from_raw(unsafe { bindings::sg_dma_len(self.as_raw()) }.into())
     }
 }
 

@@ -6,6 +6,7 @@
 //! crate.
 
 use kernel::{
+    io::ResourceSize,
     macros::paste,
     prelude::*, //
 };
@@ -134,6 +135,15 @@ impl FromSafeCast<u32> for usize {
 impl FromSafeCast<u64> for usize {
     fn from_safe_cast(value: u64) -> Self {
         u64_as_usize(value)
+    }
+}
+
+// A `resource_size_t` fits into a `usize` on 64-bit platforms, where a `usize` is a `u64` and a
+// `resource_size_t` is at most a `u64`. Delegates to the primitive impl for the underlying type.
+#[cfg(CONFIG_64BIT)]
+impl FromSafeCast<ResourceSize> for usize {
+    fn from_safe_cast(value: ResourceSize) -> Self {
+        Self::from_safe_cast(value.into_raw())
     }
 }
 
