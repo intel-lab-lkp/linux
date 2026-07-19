@@ -1844,8 +1844,12 @@ static int xgene_edac_probe(struct platform_device *pdev)
 {
 	struct xgene_edac *edac;
 	struct device_node *child;
-	struct resource *res;
+	void __iomem *pcp_csr;
 	int rc;
+
+	pcp_csr = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(pcp_csr))
+		return PTR_ERR(pcp_csr);
 
 	edac = devm_kzalloc(&pdev->dev, sizeof(*edac), GFP_KERNEL);
 	if (!edac)
@@ -1902,13 +1906,7 @@ static int xgene_edac_probe(struct platform_device *pdev)
 		edac->rb_map = NULL;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	edac->pcp_csr = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(edac->pcp_csr)) {
-		dev_err(&pdev->dev, "no PCP resource address\n");
-		rc = PTR_ERR(edac->pcp_csr);
-		goto out_err;
-	}
+	edac->pcp_csr = pcp_csr;
 
 	if (edac_op_state == EDAC_OPSTATE_INT) {
 		int irq;
