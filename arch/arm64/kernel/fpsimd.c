@@ -277,6 +277,27 @@ void task_set_vl_onexec(struct task_struct *task, enum vec_type type,
 	task->thread.vl_onexec[type] = vl;
 }
 
+static unsigned long task_zcr(const struct task_struct *task)
+{
+	unsigned long vq = sve_vq_from_vl(task_get_sve_vl(task));
+	unsigned long zcr = vq - 1;
+
+	return zcr;
+}
+
+static unsigned long task_smcr(const struct task_struct *task)
+{
+	unsigned long vq = sve_vq_from_vl(task_get_sme_vl(task));
+	unsigned long smcr = vq - 1;
+
+	if (system_supports_fa64())
+		smcr |= SMCR_ELx_FA64;
+	if (system_supports_sme2())
+		smcr |= SMCR_ELx_EZT0;
+
+	return smcr;
+}
+
 /*
  * TIF_SME controls whether a task can use SME without trapping while
  * in userspace, when TIF_SME is set then we must have storage
@@ -377,10 +398,8 @@ static void task_fpsimd_load(void)
 			if (!thread_sm_enabled(&current->thread))
 				WARN_ON_ONCE(!test_and_set_thread_flag(TIF_SVE));
 
-			if (test_thread_flag(TIF_SVE)) {
-				unsigned long vq = sve_vq_from_vl(task_get_sve_vl(current));
-				sysreg_clear_set_s(SYS_ZCR_EL1, ZCR_ELx_LEN, vq - 1);
-			}
+			if (system_supports_sve())
+				sysreg_cond_update_s(SYS_ZCR_EL1, task_zcr(current));
 
 			restore_sve_regs = true;
 			restore_ffr = true;
@@ -402,12 +421,17 @@ static void task_fpsimd_load(void)
 
 	/* Restore SME, override SVE register configuration if needed */
 	if (system_supports_sme()) {
-		unsigned long sme_vl = task_get_sme_vl(current);
-
-		/* Ensure VL is set up for restoring data */
 		if (test_thread_flag(TIF_SME)) {
-			unsigned long vq = sve_vq_from_vl(sme_vl);
-			sysreg_clear_set_s(SYS_SMCR_EL1, SMCR_ELx_LEN, vq - 1);
+			u64 old_smcr = read_sysreg_s(SYS_SMCR_EL1);
+			u64 new_smcr = task_smcr(current);
+
+			sysreg_cond_update_s(SYS_SMCR_EL1, new_smcr);
+
+			/* FA64 and EZT0 are not self synchronising */
+			old_smcr &= SMCR_ELx_FA64 | SMCR_ELx_EZT0;
+			new_smcr &= SMCR_ELx_FA64 | SMCR_ELx_EZT0;
+			if (old_smcr != new_smcr)
+				isb();
 		}
 
 		write_sysreg_s(current->thread.svcr, SYS_SVCR);
@@ -1217,26 +1241,6 @@ void cpu_enable_sme(const struct arm64_cpu_capabilities *__always_unused p)
 	isb();
 }
 
-void cpu_enable_sme2(const struct arm64_cpu_capabilities *__always_unused p)
-{
-	/* This must be enabled after SME */
-	BUILD_BUG_ON(ARM64_SME2 <= ARM64_SME);
-
-	/* Allow use of ZT0 */
-	write_sysreg_s(read_sysreg_s(SYS_SMCR_EL1) | SMCR_ELx_EZT0_MASK,
-		       SYS_SMCR_EL1);
-}
-
-void cpu_enable_fa64(const struct arm64_cpu_capabilities *__always_unused p)
-{
-	/* This must be enabled after SME */
-	BUILD_BUG_ON(ARM64_SME_FA64 <= ARM64_SME);
-
-	/* Allow use of FA64 */
-	write_sysreg_s(read_sysreg_s(SYS_SMCR_EL1) | SMCR_ELx_FA64_MASK,
-		       SYS_SMCR_EL1);
-}
-
 void __init sme_setup(void)
 {
 	struct vl_info *info = &vl_info[ARM64_VEC_SME];
@@ -1283,20 +1287,10 @@ void __init sme_setup(void)
 
 void fpsimd_suspend_exit(void)
 {
-	u64 smcr = 0;
+	if (!system_supports_sme())
+		return;
 
-	if (system_supports_sve())
-		write_sysreg_s(0, SYS_ZCR_EL1);
-
-	if (system_supports_sme()) {
-		if (system_supports_fa64())
-			smcr |= SMCR_ELx_FA64;
-		if (system_supports_sme2())
-			smcr |= SMCR_ELx_EZT0;
-
-		write_sysreg_s(smcr, SYS_SMCR_EL1);
-		write_sysreg_s(0, SYS_SMPRI_EL1);
-	}
+	write_sysreg_s(0, SYS_SMPRI_EL1);
 }
 
 /*
@@ -1338,8 +1332,7 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 	 * any effective streaming mode SVE state.
 	 */
 	if (!test_thread_flag(TIF_FOREIGN_FPSTATE)) {
-		unsigned long vq = sve_vq_from_vl(task_get_sve_vl(current));
-		sysreg_clear_set_s(SYS_ZCR_EL1, ZCR_ELx_LEN, vq - 1);
+		sysreg_cond_update_s(SYS_ZCR_EL1, task_zcr(current));
 		sve_flush_live();
 		fpsimd_bind_task_to_cpu();
 	} else {
@@ -1474,8 +1467,7 @@ void do_sme_acc(unsigned long esr, struct pt_regs *regs)
 		WARN_ON(1);
 
 	if (!test_thread_flag(TIF_FOREIGN_FPSTATE)) {
-		unsigned long vq = sve_vq_from_vl(task_get_sme_vl(current));
-		sysreg_clear_set_s(SYS_SMCR_EL1, SMCR_ELx_LEN, vq - 1);
+		sysreg_cond_update_s(SYS_SMCR_EL1, task_smcr(current));
 
 		fpsimd_bind_task_to_cpu();
 	} else {
