@@ -224,10 +224,6 @@ static int kvm_handle_unknown_ec(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
-/*
- * Guest access to SVE registers should be routed to this handler only
- * when the system doesn't support SVE.
- */
 static int handle_sve(struct kvm_vcpu *vcpu)
 {
 	if (guest_hyp_sve_traps_enabled(vcpu))
