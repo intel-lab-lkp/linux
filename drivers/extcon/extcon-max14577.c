@@ -674,11 +674,6 @@ static int max14577_muic_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, info);
 	mutex_init(&info->mutex);
 
-	ret = devm_work_autocancel(&pdev->dev, &info->irq_work,
-				   max14577_muic_irq_work);
-	if (ret)
-		return ret;
-
 	switch (max14577->dev_type) {
 	case MAXIM_DEVICE_TYPE_MAX77836:
 		info->muic_irqs = max77836_muic_irqs;
@@ -688,28 +683,6 @@ static int max14577_muic_probe(struct platform_device *pdev)
 	default:
 		info->muic_irqs = max14577_muic_irqs;
 		info->muic_irqs_num = ARRAY_SIZE(max14577_muic_irqs);
-	}
-
-	/* Support irq domain for max14577 MUIC device */
-	for (i = 0; i < info->muic_irqs_num; i++) {
-		struct max14577_muic_irq *muic_irq = &info->muic_irqs[i];
-		int virq = 0;
-
-		virq = regmap_irq_get_virq(max14577->irq_data, muic_irq->irq);
-		if (virq <= 0)
-			return -EINVAL;
-		muic_irq->virq = virq;
-
-		ret = devm_request_threaded_irq(&pdev->dev, virq, NULL,
-				max14577_muic_irq_handler,
-				IRQF_NO_SUSPEND,
-				muic_irq->name, info);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"failed: irq request (IRQ: %d, error :%d)\n",
-				muic_irq->irq, ret);
-			return ret;
-		}
 	}
 
 	/* Initialize extcon device */
@@ -725,6 +698,14 @@ static int max14577_muic_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to register extcon device\n");
 		return ret;
 	}
+	ret = devm_work_autocancel(&pdev->dev, &info->irq_work,
+				   max14577_muic_irq_work);
+	if (ret)
+		return ret;
+	ret = devm_delayed_work_autocancel(&pdev->dev, &info->wq_detcable,
+					   max14577_muic_detect_cable_wq);
+	if (ret)
+		return ret;
 
 	/* Default h/w line path */
 	info->path_usb = CTRL1_SW_USB;
@@ -755,6 +736,28 @@ static int max14577_muic_probe(struct platform_device *pdev)
 	/* Set ADC debounce time */
 	max14577_muic_set_debounce_time(info, ADC_DEBOUNCE_TIME_25MS);
 
+	/* Support irq domain for max14577 MUIC device */
+	for (i = 0; i < info->muic_irqs_num; i++) {
+		struct max14577_muic_irq *muic_irq = &info->muic_irqs[i];
+		int virq = 0;
+
+		virq = regmap_irq_get_virq(max14577->irq_data, muic_irq->irq);
+		if (virq <= 0)
+			return -EINVAL;
+		muic_irq->virq = virq;
+
+		ret = devm_request_threaded_irq(&pdev->dev, virq, NULL,
+						max14577_muic_irq_handler,
+						IRQF_NO_SUSPEND,
+						muic_irq->name, info);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"failed: irq request (IRQ: %d, error :%d)\n",
+				muic_irq->irq, ret);
+			return ret;
+		}
+	}
+
 	/*
 	 * Detect accessory after completing the initialization of platform
 	 *
@@ -763,7 +766,6 @@ static int max14577_muic_probe(struct platform_device *pdev)
 	 * After completing the booting of platform, the extcon provider
 	 * driver should notify cable state to upper layer.
 	 */
-	INIT_DELAYED_WORK(&info->wq_detcable, max14577_muic_detect_cable_wq);
 	queue_delayed_work(system_power_efficient_wq, &info->wq_detcable,
 			delay_jiffies);
 
