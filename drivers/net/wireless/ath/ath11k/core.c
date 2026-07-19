@@ -2330,6 +2330,9 @@ static int ath11k_core_reconfigure_on_crash(struct ath11k_base *ab)
 {
 	int ret;
 
+	if (!ab->is_reset)
+		ath11k_hif_irq_disable(ab);
+
 	mutex_lock(&ab->core_lock);
 	ath11k_thermal_unregister(ab);
 	ath11k_dp_pdev_free(ab);

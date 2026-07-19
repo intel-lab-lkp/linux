@@ -7,6 +7,8 @@
 #ifndef ATH11K_DP_H
 #define ATH11K_DP_H
 
+#include <linux/page_frag_cache.h>
+
 #include "hal_rx.h"
 
 #define MAX_RXDMA_PER_PDEV     2
@@ -72,6 +74,7 @@ struct dp_srng {
 
 struct dp_rxdma_ring {
 	struct dp_srng refill_buf_ring;
+	struct page_frag_cache frag_cache;
 	struct idr bufs_idr;
 	/* Protects bufs_idr */
 	spinlock_t idr_lock;
