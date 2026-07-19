@@ -9078,6 +9078,7 @@ static struct md_personality raid6_personality =
 	.change_consistency_policy = raid5_change_consistency_policy,
 	.prepare_suspend = raid5_prepare_suspend,
 	.bitmap_sector	= raid5_bitmap_sector,
+	.recovery_in_bitmap_space = true,
 };
 static struct md_personality raid5_personality =
 {
@@ -9108,6 +9109,7 @@ static struct md_personality raid5_personality =
 	.change_consistency_policy = raid5_change_consistency_policy,
 	.prepare_suspend = raid5_prepare_suspend,
 	.bitmap_sector	= raid5_bitmap_sector,
+	.recovery_in_bitmap_space = true,
 };
 
 static struct md_personality raid4_personality =
@@ -9139,6 +9141,7 @@ static struct md_personality raid4_personality =
 	.change_consistency_policy = raid5_change_consistency_policy,
 	.prepare_suspend = raid5_prepare_suspend,
 	.bitmap_sector	= raid5_bitmap_sector,
+	.recovery_in_bitmap_space = true,
 };
 
 static int __init raid5_init(void)

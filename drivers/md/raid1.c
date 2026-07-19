@@ -3518,6 +3518,7 @@ static struct md_personality raid1_personality =
 	.check_reshape	= raid1_reshape,
 	.quiesce	= raid1_quiesce,
 	.takeover	= raid1_takeover,
+	.recovery_in_bitmap_space = true,
 };
 
 static int __init raid1_init(void)

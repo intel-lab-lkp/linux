@@ -798,6 +798,17 @@ struct md_personality
 	/* convert io ranges from array to bitmap */
 	void (*bitmap_sector)(struct mddev *mddev, sector_t *offset,
 			      unsigned long *sectors);
+	/*
+	 * The position md_do_sync() walks during MD_RECOVERY_RECOVER
+	 * addresses the space the write-intent bitmap is indexed by, so
+	 * recovery may consult bitmap_ops->skip_sync_blocks() directly.
+	 * True for raid1 (device space is array space) and raid456 (the
+	 * bitmap is indexed by the per-device sync cursor).  raid10 must
+	 * leave this unset: its recovery walks per-device offsets while
+	 * its bitmap is indexed by array sectors, and translating needs
+	 * the disk number, which md_do_sync() does not have.
+	 */
+	bool recovery_in_bitmap_space;
 };
 
 struct md_sysfs_entry {
