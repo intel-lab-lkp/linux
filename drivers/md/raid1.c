@@ -483,12 +483,22 @@ static void raid1_end_write_request(struct bio *bio)
 	 * 'one mirror IO has finished' event handler:
 	 */
 	if (bio->bi_status && !ignore_error) {
+		/*
+		 * A P2PDMA mapping failure reflects the peer/member
+		 * pairing, not member health: don't pull in a spare
+		 * or trip FailFast for it.
+		 */
+		bool p2pdma_unmappable = bio->bi_status == BLK_STS_TARGET &&
+			test_bit(R1BIO_P2PDMA, &r1_bio->state);
+
 		set_bit(WriteErrorSeen,	&rdev->flags);
-		if (!test_and_set_bit(WantReplacement, &rdev->flags))
+		if (!p2pdma_unmappable &&
+		    !test_and_set_bit(WantReplacement, &rdev->flags))
 			set_bit(MD_RECOVERY_NEEDED, &
 				conf->mddev->recovery);
 
-		if (test_bit(FailFast, &rdev->flags) &&
+		if (!p2pdma_unmappable &&
+		    test_bit(FailFast, &rdev->flags) &&
 		    (bio->bi_opf & MD_FAILFAST) &&
 		    /* We never try FailFast to WriteMostly devices */
 		    !test_bit(WriteMostly, &rdev->flags)) {
@@ -1378,6 +1388,8 @@ static void raid1_read_request(struct mddev *mddev, struct bio *bio,
 	else
 		init_r1bio(r1_bio, mddev, bio);
 	r1_bio->sectors = max_read_sectors;
+	if (md_bio_is_p2pdma(bio))
+		set_bit(R1BIO_P2PDMA, &r1_bio->state);
 
 	/*
 	 * make_request() can abort the operation when read-ahead is being
@@ -1557,6 +1569,8 @@ static bool raid1_write_request(struct mddev *mddev, struct bio *bio,
 
 	r1_bio = alloc_r1bio(mddev, bio);
 	r1_bio->sectors = max_sectors;
+	if (md_bio_is_p2pdma(bio))
+		set_bit(R1BIO_P2PDMA, &r1_bio->state);
 
 	/* first select target devices under rcu_lock and
 	 * inc refcount on their rdev.  Record them by setting
@@ -2525,7 +2539,7 @@ static void fix_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 	}
 }
 
-static void narrow_write_error(struct r1bio *r1_bio, int i)
+static void narrow_write_error(struct r1bio *r1_bio, int i, bool coarse)
 {
 	struct mddev *mddev = r1_bio->mddev;
 	struct r1conf *conf = mddev->private;
@@ -2538,6 +2552,11 @@ static void narrow_write_error(struct r1bio *r1_bio, int i)
 	 * a bad block.
 	 * It is conceivable that the bio doesn't exactly align with
 	 * blocks.  We must handle this somehow.
+	 *
+	 * With 'coarse', retry the whole range as one bio and record
+	 * one bad range if it fails: for P2PDMA mapping failures,
+	 * which fail every block identically, while the single retry
+	 * still lets a cleared transient error recover.
 	 *
 	 * We currently own a reference on the rdev.
 	 */
@@ -2553,9 +2572,12 @@ static void narrow_write_error(struct r1bio *r1_bio, int i)
 		block_sectors = roundup(1 << rdev->badblocks.shift, lbs);
 
 	sector = r1_bio->sector;
-	sectors = ((sector + block_sectors)
-		   & ~(sector_t)(block_sectors - 1))
-		- sector;
+	if (coarse)
+		sectors = sect_to_write;
+	else
+		sectors = ((sector + block_sectors)
+			   & ~(sector_t)(block_sectors - 1))
+			- sector;
 
 	while (sect_to_write) {
 		struct bio *wbio;
@@ -2636,8 +2658,18 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 			 * narrow down and record precise write
 			 * errors.
 			 */
+			bool coarse = r1_bio->bios[m]->bi_status ==
+					BLK_STS_TARGET &&
+				test_bit(R1BIO_P2PDMA, &r1_bio->state);
+
 			fail = true;
-			narrow_write_error(r1_bio, m);
+			/*
+			 * A P2PDMA mapping failure fails the whole range
+			 * identically: probe it once (coarse) instead of
+			 * narrowing block by block. A transient TARGET
+			 * recovers via the probe with nothing recorded.
+			 */
+			narrow_write_error(r1_bio, m, coarse);
 			rdev_dec_pending(conf->mirrors[m].rdev,
 					 conf->mddev);
 		}
@@ -2664,6 +2696,9 @@ static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 {
 	struct md_rdev *rdev = conf->mirrors[r1_bio->read_disk].rdev;
 	struct bio *bio = r1_bio->bios[r1_bio->read_disk];
+	/* evaluate before the bio_put() below */
+	bool p2pdma_error = bio->bi_status == BLK_STS_TARGET &&
+		test_bit(R1BIO_P2PDMA, &r1_bio->state);
 	struct mddev *mddev = conf->mddev;
 	sector_t sector;
 
@@ -2682,6 +2717,13 @@ static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 	 * frozen.
 	 */
 	if (mddev->ro) {
+		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
+	} else if (p2pdma_error) {
+		/*
+		 * The peer cannot reach this member; nothing on the
+		 * medium to fix. Skip the read-error budget and
+		 * FailFast, just keep this leg out of the retry.
+		 */
 		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
 	} else if (test_bit(FailFast, &rdev->flags)) {
 		md_error(mddev, rdev);
