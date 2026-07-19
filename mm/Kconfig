@@ -1507,7 +1507,8 @@ config ASYNC_MM_TEARDOWN
 	help
 	  Defer the address space teardown (exit_mmap()) of large exiting processes
 	  to a kernel thread instead of running it on the exiting CPU. The feature
-	  is off by default.
+	  is off by default and is enabled at runtime via the vm.async_mm_teardown
+	  sysctl.
 
 	  If unsure, say N.
 

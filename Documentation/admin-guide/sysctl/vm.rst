@@ -22,6 +22,9 @@ the writeout of dirty data to disk.
 Currently, these files are in /proc/sys/vm:
 
 - admin_reserve_kbytes
+- async_mm_teardown
+- async_mm_teardown_max_pending_pages
+- async_mm_teardown_thresh_pages
 - compact_memory
 - compaction_proactiveness
 - compact_unevictable_allowed
@@ -106,6 +109,41 @@ and add the sum of their RSS.
 On x86_64 this is about 128MB.
 
 Changing this takes effect whenever an application requests memory.
+
+
+async_mm_teardown
+=================
+
+Available only when CONFIG_ASYNC_MM_TEARDOWN is set. Controls whether the
+address-space teardown (exit_mmap()) of large exiting processes is deferred
+to the mm_reaper kernel thread instead of running on the exiting CPU.
+
+Writing 1 enables deferral, 0 disables it. Disabling makes mmput_exit() tear
+down inline again; it does not drain mms already queued. Defaults to 0.
+
+Deferred teardown consumes CPU in the mm_reaper kernel thread, which runs in
+the root cgroup: the teardown work of a task in a CPU-limited cgroup is not
+charged to that cgroup, similar to kswapd and the oom_reaper. Consider this
+before enabling the feature on systems that rely on strict per-cgroup CPU
+accounting.
+
+
+async_mm_teardown_max_pending_pages
+===================================
+
+Available only when CONFIG_ASYNC_MM_TEARDOWN is set. Backpressure cap, in
+pages, on the total RSS of mms queued for the mm_reaper but not yet torn
+down. An exit that would push the total over this cap tears down
+synchronously instead of queuing. Defaults to totalram_pages() / 4.
+
+
+async_mm_teardown_thresh_pages
+==============================
+
+Available only when CONFIG_ASYNC_MM_TEARDOWN is set. Minimum RSS, in pages,
+for an exiting mm to be eligible for deferral to the mm_reaper. Exiting mms
+below this threshold are always torn down synchronously. Defaults to 64MB
+worth of pages.
 
 
 compact_memory

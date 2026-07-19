@@ -3414,8 +3414,13 @@ subsys_initcall(init_fork_sysctl);
 static LLIST_HEAD(mm_reaper_list);
 static DECLARE_WAIT_QUEUE_HEAD(mm_reaper_wait);
 static atomic_long_t mm_reaper_pending_pages;
+static DEFINE_STATIC_KEY_FALSE(async_mm_teardown_key);
 static unsigned long sysctl_async_mm_teardown_thresh_pages;
 static unsigned long sysctl_async_mm_teardown_max_pending_pages;
+#ifdef CONFIG_SYSCTL
+static u8 sysctl_async_mm_teardown_enabled;
+static DEFINE_MUTEX(async_mm_teardown_lock);
+#endif
 
 static bool async_mm_teardown_eligible(struct mm_struct *mm, unsigned long rss)
 {
@@ -3485,8 +3490,6 @@ static int mm_reaper(void *unused)
 
 void mmput_exit(struct mm_struct *mm)
 {
-	unsigned long rss;
-
 	might_sleep();
 	/*
 	 * Fully ordered RMW: combined with exit_mm() (or exec_mmap(), the
@@ -3498,26 +3501,79 @@ void mmput_exit(struct mm_struct *mm)
 	if (!atomic_dec_and_test(&mm->mm_users))
 		return;
 
-	rss = get_mm_rss(mm);
+	if (static_branch_unlikely(&async_mm_teardown_key)) {
+		unsigned long rss = get_mm_rss(mm);
 
-	if (async_mm_teardown_eligible(mm, rss)) {
-		/*
-		 * exit_aio() can block indefinitely. Run it here so a stuck
-		 * AIO only hangs this task (same as how it would happen in
-		 * case of synchronous mmput()) instead of stranding every
-		 * teardown queued behind this mm
-		 */
-		exit_aio(mm);
+		if (async_mm_teardown_eligible(mm, rss)) {
+			/*
+			 * exit_aio() can block indefinitely. Run it here so a stuck
+			 * AIO only hangs this task (same as how it would happen in
+			 * case of synchronous mmput()) instead of stranding every
+			 * teardown queued behind this mm
+			 */
+			exit_aio(mm);
 
-		if (async_mm_teardown_reserve(rss)) {
-			mm->async_reap_rss = rss;
-			async_mm_teardown_queue(mm);
-			return;
+			if (async_mm_teardown_reserve(rss)) {
+				mm->async_reap_rss = rss;
+				async_mm_teardown_queue(mm);
+				return;
+			}
 		}
 	}
 
 	__mmput(mm);
 }
+
+#ifdef CONFIG_SYSCTL
+static int async_mm_teardown_enabled_handler(const struct ctl_table *table,
+					     int write, void *buffer,
+					     size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	/*
+	 * Serialize concurrent writers so the static key state always matches
+	 * the last value written to the variable.
+	 */
+	guard(mutex)(&async_mm_teardown_lock);
+
+	ret = proc_dou8vec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write)
+		return ret;
+
+	if (sysctl_async_mm_teardown_enabled)
+		static_branch_enable(&async_mm_teardown_key);
+	else
+		static_branch_disable(&async_mm_teardown_key);
+	return 0;
+}
+
+static const struct ctl_table async_mm_teardown_table[] = {
+	{
+		.procname	= "async_mm_teardown",
+		.data		= &sysctl_async_mm_teardown_enabled,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= async_mm_teardown_enabled_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "async_mm_teardown_thresh_pages",
+		.data		= &sysctl_async_mm_teardown_thresh_pages,
+		.maxlen		= sizeof(unsigned long),
+		.mode		= 0644,
+		.proc_handler	= proc_doulongvec_minmax,
+	},
+	{
+		.procname	= "async_mm_teardown_max_pending_pages",
+		.data		= &sysctl_async_mm_teardown_max_pending_pages,
+		.maxlen		= sizeof(unsigned long),
+		.mode		= 0644,
+		.proc_handler	= proc_doulongvec_minmax,
+	},
+};
+#endif /* CONFIG_SYSCTL */
 
 static int __init mm_reaper_init(void)
 {
@@ -3533,7 +3589,9 @@ static int __init mm_reaper_init(void)
 	sysctl_async_mm_teardown_thresh_pages      = SZ_64M >> PAGE_SHIFT;
 	sysctl_async_mm_teardown_max_pending_pages = totalram_pages() / 4;  /* TODO: placeholder */
 	wake_up_process(th);
-
+#ifdef CONFIG_SYSCTL
+	register_sysctl_init("vm", async_mm_teardown_table);
+#endif
 	return 0;
 }
 subsys_initcall(mm_reaper_init);
