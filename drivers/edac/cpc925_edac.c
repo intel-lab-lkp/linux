@@ -903,6 +903,13 @@ static int cpc925_mc_get_channels(void __iomem *vbase)
 	return dual;
 }
 
+static void cpc925_edac_free(void *data)
+{
+	struct mem_ctl_info *mci = data;
+
+	edac_mc_free(mci);
+}
+
 static int cpc925_probe(struct platform_device *pdev)
 {
 	static int edac_mc_idx;
@@ -910,37 +917,14 @@ static int cpc925_probe(struct platform_device *pdev)
 	struct edac_mc_layer layers[2];
 	void __iomem *vbase;
 	struct cpc925_mc_pdata *pdata;
-	struct resource *r;
 	int res = 0, nr_channels;
 
 	edac_dbg(0, "%s platform device found!\n", pdev->name);
 
-	if (!devres_open_group(&pdev->dev, cpc925_probe, GFP_KERNEL)) {
-		res = -ENOMEM;
-		goto out;
-	}
-
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r) {
+	vbase = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(vbase)) {
 		cpc925_printk(KERN_ERR, "Unable to get resource\n");
-		res = -ENOENT;
-		goto err1;
-	}
-
-	if (!devm_request_mem_region(&pdev->dev,
-				     r->start,
-				     resource_size(r),
-				     pdev->name)) {
-		cpc925_printk(KERN_ERR, "Unable to request mem region\n");
-		res = -EBUSY;
-		goto err1;
-	}
-
-	vbase = devm_ioremap(&pdev->dev, r->start, resource_size(r));
-	if (!vbase) {
-		cpc925_printk(KERN_ERR, "Unable to ioremap device\n");
-		res = -ENOMEM;
-		goto err2;
+		return PTR_ERR(vbase);
 	}
 
 	nr_channels = cpc925_mc_get_channels(vbase) + 1;
@@ -955,9 +939,11 @@ static int cpc925_probe(struct platform_device *pdev)
 			    sizeof(struct cpc925_mc_pdata));
 	if (!mci) {
 		cpc925_printk(KERN_ERR, "No memory for mem_ctl_info\n");
-		res = -ENOMEM;
-		goto err2;
+		return -ENOMEM;
 	}
+
+	if (devm_add_action_or_reset(&pdev->dev, cpc925_edac_free, mci))
+		return -ENOMEM;
 
 	pdata = mci->pvt_info;
 	pdata->vbase = vbase;
@@ -988,7 +974,7 @@ static int cpc925_probe(struct platform_device *pdev)
 
 	if (edac_mc_add_mc(mci) > 0) {
 		cpc925_mc_printk(mci, KERN_ERR, "Failed edac_mc_add_mc()\n");
-		goto err3;
+		goto err;
 	}
 
 	cpc925_add_edac_devices(vbase);
@@ -996,17 +982,10 @@ static int cpc925_probe(struct platform_device *pdev)
 	/* get this far and it's successful */
 	edac_dbg(0, "success\n");
 
-	res = 0;
-	goto out;
+	return 0;
 
-err3:
+err:
 	cpc925_mc_exit(mci);
-	edac_mc_free(mci);
-err2:
-	devm_release_mem_region(&pdev->dev, r->start, resource_size(r));
-err1:
-	devres_release_group(&pdev->dev, cpc925_probe);
-out:
 	return res;
 }
 
@@ -1022,7 +1001,6 @@ static void cpc925_remove(struct platform_device *pdev)
 	cpc925_mc_exit(mci);
 
 	edac_mc_del_mc(&pdev->dev);
-	edac_mc_free(mci);
 }
 
 static struct platform_driver cpc925_edac_driver = {
