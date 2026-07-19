@@ -1142,6 +1142,34 @@ struct kvm_vcpu_arch {
 
 #define vcpu_sve_state_size(vcpu) sve_state_size_from_vl(vcpu_sve_max_vl(vcpu))
 
+#define vcpu_sme_state(vcpu) (kern_hyp_va((vcpu)->arch.sme_state))
+
+#define sme_state_size_from_vl(vl, sme2) ({				\
+	size_t __size_ret;                                              \
+	unsigned int __vq;                                              \
+									\
+	if (WARN_ON(!sve_vl_valid(vl))) {                               \
+		__size_ret = 0;                                         \
+	} else {                                                        \
+		__vq = sve_vq_from_vl(vl);                              \
+		__size_ret = ZA_SIG_REGS_SIZE(__vq);                    \
+		if (sme2)                                               \
+			__size_ret += ZT_SIG_REG_BYTES;			\
+	}                                                               \
+									\
+	__size_ret;                                                     \
+})
+
+/*
+ * Always provide space for ZT0 to avoid ordering requirements with ID
+ * register writes and vector finalization.
+ */
+#define vcpu_sme_state_size(vcpu) ({					\
+	unsigned long __vl;						\
+	__vl = (vcpu)->arch.max_vl[ARM64_VEC_SME];			\
+	sme_state_size_from_vl(__vl, system_supports_sme2());		\
+})
+
 #define KVM_GUESTDBG_VALID_MASK (KVM_GUESTDBG_ENABLE | \
 				 KVM_GUESTDBG_USE_SW_BP | \
 				 KVM_GUESTDBG_USE_HW | \
