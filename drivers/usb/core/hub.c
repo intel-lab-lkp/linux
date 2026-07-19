@@ -5671,8 +5671,8 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 			descr = usb_get_device_descriptor(udev);
 			if (IS_ERR(descr)) {
 				dev_dbg(&udev->dev,
-						"can't read device descriptor %ld\n",
-						PTR_ERR(descr));
+						"can't read device descriptor %pe\n",
+						descr);
 			} else {
 				if (descriptors_changed(udev, descr,
 						udev->bos)) {
