@@ -981,7 +981,15 @@ static int llbitmap_read_sb(struct llbitmap *llbitmap)
 		else
 			mddev->bitmap_info.space = mddev->bitmap_info.default_space;
 	}
-	llbitmap->flags = le32_to_cpu(sb->state);
+	/*
+	 * Mask the loaded state to the bits this loader consumes.
+	 * WRITE_ERROR and DAEMON_BUSY are kernel-runtime signals; a stray
+	 * WRITE_ERROR trusted from disk silently disables the bitmap for
+	 * the array's entire lifetime.
+	 */
+	llbitmap->flags = le32_to_cpu(sb->state) &
+			  (BIT(BITMAP_STALE) | BIT(BITMAP_FIRST_USE) |
+			   BIT(BITMAP_CLEAN));
 	if (test_and_clear_bit(BITMAP_FIRST_USE, &llbitmap->flags)) {
 		ret = llbitmap_init(llbitmap);
 		goto out_put_page;
