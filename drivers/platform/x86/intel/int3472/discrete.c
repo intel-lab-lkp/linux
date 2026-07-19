@@ -164,6 +164,19 @@ static const struct int3472_gpio_map int3472_gpio_map[] = {
 		.con_id = "dvdd",
 		.enable_time_us = 45 * USEC_PER_MSEC,
 	},
+	{	/*
+		 * Surface Pro 7+ ov8865 (rear camera): type 0x08 is an
+		 * undocumented sensor power rail; left undriven the sensor
+		 * stays in a failed power state. "dvdd" rather than "avdd"
+		 * because this INT3472 also has a type 0x0b (power enable)
+		 * pin already registered as "avdd".
+		 */
+		.hid = "INT347A",
+		.type_from = 0x08,
+		.type_to = INT3472_GPIO_TYPE_POWER_ENABLE,
+		.con_id = "dvdd",
+		.enable_time_us = GPIO_REGULATOR_ENABLE_TIME,
+	},
 };
 
 static void int3472_get_con_id_and_polarity(struct int3472_discrete_device *int3472, u8 *type,
