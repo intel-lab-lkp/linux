@@ -147,6 +147,12 @@ extern void mmput(struct mm_struct *);
 void mmput_async(struct mm_struct *);
 #endif
 
+#ifdef CONFIG_ASYNC_MM_TEARDOWN
+void mmput_exit(struct mm_struct *);
+#else
+static inline void mmput_exit(struct mm_struct *mm) { mmput(mm); }
+#endif
+
 /* Grab a reference to a task's mm, if it is not already going away */
 extern struct mm_struct *get_task_mm(struct task_struct *task);
 /*
