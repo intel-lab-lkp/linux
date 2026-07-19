@@ -754,6 +754,40 @@ static void mark_oom_victim(struct task_struct *tsk)
 	struct mm_struct *mm = tsk->mm;
 
 	WARN_ON(oom_killer_disabled);
+
+	/*
+	 * Mark the mm itself, not just this task/signal, as an OOM target,
+	 * so the deferred-teardown path can test it from the mm alone. Set
+	 * ahead of the TIF_MEMDIE test-and-set below so that every call
+	 * marks the mm, including a repeat mark on a task that is already
+	 * TIF_MEMDIE.
+	 *
+	 * This is reliably visible to whichever thread ends up dropping the
+	 * last reference in mmput_exit(): marking and queuing for async
+	 * teardown can never overlap in time. Every caller reaches this with
+	 * tsk->mm still set -- either tsk is current, marking itself in
+	 * program order, or tsk is task_lock()ed by the caller (the
+	 * task_will_free_mem() fast path in oom_kill_process()) -- while
+	 * mmput_exit(), the only path that queues for teardown, is reached
+	 * only after mm_users hits 0, which requires tsk's own exit_mm() (or
+	 * exec_mmap(), the other path that sheds ->mm) to have already
+	 * cleared ->mm under that same task_lock(). Program order or
+	 * task_lock() release/acquire therefore orders this store before
+	 * tsk's own eventual mmput_exit().
+	 *
+	 * If a different CLONE_VM sharer performs the actual final decrement
+	 * instead, the ordering does not come from this store:
+	 * mm_flags_set() is set_bit(), a non-value-returning RMW, so it is
+	 * unordered and contributes nothing on its own. It comes from the
+	 * marking task's own atomic_dec_and_test(), a value-returning RMW
+	 * and therefore fully ordered (an smp_mb() before and after).
+	 * Decrements are totally ordered in mm_users' modification order
+	 * with the zeroing one last, so the general barriers on both sides
+	 * make this store visible to whichever thread performs it.
+	 */
+	if (IS_ENABLED(CONFIG_ASYNC_MM_TEARDOWN))
+		mm_flags_set(MMF_OOM_TARGETED, mm);
+
 	/* OOM killer might race with memcg OOM */
 	if (test_and_set_tsk_thread_flag(tsk, TIF_MEMDIE))
 		return;
@@ -930,6 +964,33 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 	/* Get a reference to safely compare mm after task_unlock(victim) */
 	mm = victim->mm;
 	mmgrab(mm);
+
+	/*
+	 * Set this before any SIGKILL for this kill event goes out below,
+	 * while task_lock(victim) (held since find_lock_task_mm() above) is
+	 * still held. This is reliably visible to whichever thread ends up
+	 * running mmput_exit() and dropping the last reference to this mm --
+	 * victim itself, a sibling, or a CLONE_VM sharer in another thread
+	 * group (which mark_oom_victim() never marks, but which still
+	 * observes this store on the shared mm). Marking and queuing for
+	 * async teardown can never overlap: mmput_exit() is reached only
+	 * after mm_users hits 0, and that requires victim's own exit_mm()
+	 * (or exec_mmap(), the other path that sheds ->mm) to have cleared
+	 * ->mm under this same task_lock() first, which release/acquire
+	 * orders after the store above.
+	 *
+	 * If some other sharer performs the actual final decrement instead,
+	 * the ordering does not come from this store: mm_flags_set() is
+	 * set_bit(), a non-value-returning RMW, so it is unordered and
+	 * contributes nothing on its own. It comes from the marking task's
+	 * own atomic_dec_and_test(), a value-returning RMW and therefore
+	 * fully ordered (an smp_mb() before and after). Decrements are
+	 * totally ordered in mm_users' modification order with the zeroing
+	 * one last, so the general barriers on both sides make this store
+	 * visible to whichever thread performs it.
+	 */
+	if (IS_ENABLED(CONFIG_ASYNC_MM_TEARDOWN))
+		mm_flags_set(MMF_OOM_TARGETED, mm);
 
 	/* Raise event before sending signal: task reaper must see this */
 	count_vm_event(OOM_KILL);

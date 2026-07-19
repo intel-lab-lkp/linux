@@ -1989,6 +1989,16 @@ enum {
 #define MMF_TOPDOWN		31	/* mm searches top down by default */
 #define MMF_TOPDOWN_MASK	BIT(MMF_TOPDOWN)
 
+/*
+ * mm is the target of an in-flight OOM kill. Only written under
+ * CONFIG_ASYNC_MM_TEARDOWN today. Sticky: never cleared -- the mm is
+ * dying (__oom_kill_process() kills every process sharing it), and a
+ * hypothetical surviving sharer would merely keep tearing down
+ * synchronously. Above bit 31, so it is outside MMF_INIT_LEGACY_MASK's
+ * domain entirely and is never inherited on fork.
+ */
+#define MMF_OOM_TARGETED	32
+
 #define MMF_INIT_LEGACY_MASK	(MMF_DUMP_FILTER_MASK |\
 				 MMF_DISABLE_THP_MASK | MMF_HAS_MDWE_MASK |\
 				 MMF_VM_MERGE_ANY_MASK | MMF_TOPDOWN_MASK)
