@@ -647,6 +647,7 @@ static struct notifier_block panel_notifier = {
 
 int charlcd_register(struct charlcd *lcd)
 {
+	struct charlcd_priv *priv = charlcd_to_priv(lcd);
 	int ret;
 
 	ret = charlcd_init(lcd);
@@ -654,8 +655,13 @@ int charlcd_register(struct charlcd *lcd)
 		return ret;
 
 	ret = misc_register(&charlcd_dev);
-	if (ret)
+	if (ret) {
+		if (lcd->ops->backlight) {
+			cancel_delayed_work_sync(&priv->bl_work);
+			lcd->ops->backlight(lcd, CHARLCD_OFF);
+		}
 		return ret;
+	}
 
 	the_charlcd = lcd;
 	register_reboot_notifier(&panel_notifier);
