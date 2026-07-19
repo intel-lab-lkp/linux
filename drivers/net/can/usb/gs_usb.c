@@ -337,6 +337,7 @@ struct gs_usb {
 
 	unsigned int hf_size_rx;
 	u8 active_channels;
+	u8 active_timestamp_channels;
 	u8 channel_cnt;
 
 	unsigned int pipe_in;
@@ -980,10 +981,13 @@ static int gs_can_open(struct net_device *netdev)
 
 	can_rx_offload_enable(&dev->offload);
 
-	if (!parent->active_channels) {
-		if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP)
+	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP) {
+		if (!parent->active_timestamp_channels)
 			gs_usb_timestamp_init(parent);
+		parent->active_timestamp_channels++;
+	}
 
+	if (!parent->active_channels) {
 		for (i = 0; i < GS_MAX_RX_URBS; i++) {
 			u8 *buf;
 
@@ -1094,12 +1098,14 @@ out_usb_unanchor_urb:
 out_usb_free_urb:
 	usb_free_urb(urb);
 out_usb_kill_anchored_urbs:
-	if (!parent->active_channels) {
-		usb_kill_anchored_urbs(&parent->rx_submitted);
-
-		if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP)
+	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP) {
+		parent->active_timestamp_channels--;
+		if (!parent->active_timestamp_channels)
 			gs_usb_timestamp_stop(parent);
 	}
+
+	if (!parent->active_channels)
+		usb_kill_anchored_urbs(&parent->rx_submitted);
 
 	can_rx_offload_disable(&dev->offload);
 	close_candev(netdev);
@@ -1152,12 +1158,14 @@ static int gs_can_close(struct net_device *netdev)
 
 	/* Stop polling */
 	parent->active_channels--;
-	if (!parent->active_channels) {
-		usb_kill_anchored_urbs(&parent->rx_submitted);
-
-		if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP)
+	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP) {
+		parent->active_timestamp_channels--;
+		if (!parent->active_timestamp_channels)
 			gs_usb_timestamp_stop(parent);
 	}
+
+	if (!parent->active_channels)
+		usb_kill_anchored_urbs(&parent->rx_submitted);
 
 	/* Stop sending URBs */
 	usb_kill_anchored_urbs(&dev->tx_submitted);
