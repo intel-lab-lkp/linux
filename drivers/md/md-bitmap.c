@@ -931,8 +931,13 @@ re_read:
 		}
 	}
 
-	/* assign fields using values from superblock */
-	bitmap->flags |= le32_to_cpu(sb->state);
+	/*
+	 * Only BITMAP_STALE is meaningful to this loader from sb->state:
+	 * WRITE_ERROR and DAEMON_BUSY are kernel-runtime signals (kernels
+	 * before v4.15 persisted WRITE_ERROR), FIRST_USE/CLEAN are
+	 * llbitmap-only, and HOSTENDIAN is derived from sb->version below.
+	 */
+	bitmap->flags |= le32_to_cpu(sb->state) & BIT(BITMAP_STALE);
 	if (le32_to_cpu(sb->version) == BITMAP_MAJOR_HOSTENDIAN)
 		set_bit(BITMAP_HOSTENDIAN, &bitmap->flags);
 	bitmap->events_cleared = le64_to_cpu(sb->events_cleared);
