@@ -81,7 +81,7 @@ void notrace __cpu_suspend_exit(void)
 	 */
 	spectre_v4_enable_mitigation(NULL);
 
-	sme_suspend_exit();
+	fpsimd_suspend_exit();
 
 	/* Restore additional feature-specific configuration */
 	ptrauth_suspend_exit();

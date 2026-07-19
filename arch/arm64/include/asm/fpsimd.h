@@ -364,6 +364,8 @@ extern void cpu_enable_sme2(const struct arm64_cpu_capabilities *__unused);
 extern void cpu_enable_fa64(const struct arm64_cpu_capabilities *__unused);
 extern void cpu_enable_fpmr(const struct arm64_cpu_capabilities *__unused);
 
+extern void fpsimd_suspend_exit(void);
+
 /*
  * Helpers to translate bit indices in sve_vq_map to VQ values (and
  * vice versa).  This allows find_next_bit() to be used to find the
@@ -623,7 +625,6 @@ static inline unsigned int sme_get_vl(void)
 extern void sme_alloc(struct task_struct *task, bool flush);
 extern int sme_set_current_vl(unsigned long arg);
 extern int sme_get_current_vl(void);
-extern void sme_suspend_exit(void);
 
 static inline size_t __sme_state_size(unsigned int sme_vl)
 {
@@ -779,7 +780,6 @@ static inline int sme_max_vl(void) { return 0; }
 static inline int sme_max_virtualisable_vl(void) { return 0; }
 static inline int sme_set_current_vl(unsigned long arg) { return -EINVAL; }
 static inline int sme_get_current_vl(void) { return -EINVAL; }
-static inline void sme_suspend_exit(void) { }
 
 static inline size_t __sme_state_size(unsigned int sme_vl)
 {
