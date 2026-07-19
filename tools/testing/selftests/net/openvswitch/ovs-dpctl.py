@@ -1983,6 +1983,11 @@ class ovskey(nla):
                 ovskey.ovs_key_icmp,
             ),
             (
+                "OVS_KEY_ATTR_SCTP",
+                "sctp",
+                ovskey.ovs_key_sctp,
+            ),
+            (
                 "OVS_KEY_ATTR_TCP_FLAGS",
                 "tcp_flags",
                 lambda x: parse_flags(x, None),
