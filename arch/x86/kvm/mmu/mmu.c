@@ -1723,6 +1723,9 @@ static bool kvm_rmap_age_gfn_range(struct kvm *kvm,
 			rmap_head = gfn_to_rmap(gfn, level, range->slot);
 			rmap_val = kvm_rmap_lock_readonly(rmap_head);
 
+			if (!rmap_val)
+				continue;
+
 			for_each_rmap_spte_lockless(rmap_head, &iter, sptep, spte) {
 				if (!is_accessed_spte(spte))
 					continue;
