@@ -126,6 +126,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
+#ifdef CONFIG_ASYNC_MM_TEARDOWN
+#include <trace/events/mm_reaper.h>
+#endif
 
 #include <kunit/visibility.h>
 
@@ -3461,8 +3464,10 @@ static bool async_mm_teardown_reserve(unsigned long rss)
 	return true;
 }
 
-static void async_mm_teardown_queue(struct mm_struct *mm)
+static void async_mm_teardown_queue(struct mm_struct *mm, unsigned long rss)
 {
+	count_vm_event(ASYNC_MM_TEARDOWN_QUEUED);
+	trace_mm_async_teardown_queue(mm, rss);
 	if (llist_add(&mm->async_reap_node, &mm_reaper_list))
 		wake_up(&mm_reaper_wait);
 }
@@ -3478,6 +3483,9 @@ static int mm_reaper(void *unused)
 		batch = llist_del_all(&mm_reaper_list);
 		llist_for_each_entry_safe(mm, n, batch, async_reap_node) {
 			unsigned long pages = mm->async_reap_rss;
+			unsigned long live = get_mm_rss(mm);
+
+			trace_mm_async_teardown_reap(mm, pages, live);
 
 			__mmput(mm); /* may free mm via mmdrop */
 			atomic_long_sub(pages, &mm_reaper_pending_pages);
@@ -3515,12 +3523,14 @@ void mmput_exit(struct mm_struct *mm)
 
 			if (async_mm_teardown_reserve(rss)) {
 				mm->async_reap_rss = rss;
-				async_mm_teardown_queue(mm);
+				async_mm_teardown_queue(mm, rss);
 				return;
 			}
+			count_vm_event(ASYNC_MM_TEARDOWN_REJECTED);
 		}
 	}
 
+	count_vm_event(ASYNC_MM_TEARDOWN_SYNC);
 	__mmput(mm);
 }
 

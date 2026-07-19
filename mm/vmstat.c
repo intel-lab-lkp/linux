@@ -1494,6 +1494,11 @@ const char * const vmstat_text[] = {
 	[I(NRSWPIN)]				= "nrswpin",
 	[I(NRSWPOUT)]				= "nrswpout",
 #endif /* CONFIG_SWAP */
+#ifdef CONFIG_ASYNC_MM_TEARDOWN
+	[I(ASYNC_MM_TEARDOWN_QUEUED)]	= "async_mm_teardown_queued",
+	[I(ASYNC_MM_TEARDOWN_SYNC)]		= "async_mm_teardown_sync",
+	[I(ASYNC_MM_TEARDOWN_REJECTED)]	= "async_mm_teardown_rejected",
+#endif
 #undef I
 #endif /* CONFIG_VM_EVENT_COUNTERS */
 };
