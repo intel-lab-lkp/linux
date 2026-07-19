@@ -24,7 +24,7 @@
  */
 
 static int C_A_D = 1;
-struct pid *cad_pid;
+struct pid __rcu *cad_pid;
 EXPORT_SYMBOL(cad_pid);
 
 #if defined(CONFIG_ARM)
