@@ -36,6 +36,11 @@ use core::{
     str::FromStr,
 };
 
+use zerocopy::{
+    Immutable,
+    IntoBytes, //
+};
+
 /// A trait for types that can be written into a string.
 ///
 /// This works very similarly to `Debug`, and is automatically implemented if `Debug` is
@@ -76,8 +81,8 @@ pub trait BinaryWriter {
     ) -> Result<usize>;
 }
 
-// Base implementation for any `T: AsBytes`.
-impl<T: AsBytes> BinaryWriter for T {
+// Base implementation for any `T: Immutable + IntoBytes`.
+impl<T: Immutable + IntoBytes> BinaryWriter for T {
     fn write_to_slice(
         &self,
         writer: &mut UserSliceWriter,
@@ -147,7 +152,7 @@ where
 // Delegate for `Vec<T, A>`.
 impl<T, A> BinaryWriter for Vec<T, A>
 where
-    T: AsBytes,
+    T: Immutable + IntoBytes,
     A: Allocator,
 {
     fn write_to_slice(
@@ -157,7 +162,7 @@ where
     ) -> Result<usize> {
         let slice = self.as_slice();
 
-        // SAFETY: `T: AsBytes` allows us to treat `&[T]` as `&[u8]`.
+        // SAFETY: `T: Immutable + IntoBytes` allows us to treat `&[T]` as `&[u8]`.
         let buffer = unsafe {
             core::slice::from_raw_parts(slice.as_ptr().cast(), core::mem::size_of_val(slice))
         };
