@@ -58,6 +58,8 @@ properties:
           - hydis,hv070wx2-1e0
           # Jenson Display BL-JT60050-01A 7" WSVGA (1024x600) color TFT LCD LVDS panel
           - jenson,bl-jt60050-01a
+          # BOE DV215FHM-R01 21.5" FHD (1920x1080) dual-channel LVDS panel
+          - boe,dv215fhm-r01
           # Riverdi RVT101HVLNWC00 10.1" WXGA (1280x800) TFT LCD LVDS panel
           - riverdi,rvt101hvlnwc00
           # Riverdi RVT70HSLNWCA0 7.0" WSVGA (1024x600) TFT LCD LVDS panel
@@ -72,6 +74,12 @@ properties:
 
       - const: panel-lvds
 
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+    description:
+      For dual-channel LVDS panels, use 'ports' with port@0 for odd pixels
+      and port@1 for even pixels instead of the single 'port' property.
+
 unevaluatedProperties: false
 
 required:
@@ -80,6 +88,4 @@ required:
   - width-mm
   - height-mm
   - panel-timing
-  - port
-
 ...
