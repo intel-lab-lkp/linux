@@ -72,11 +72,13 @@ static int nsim_setup_tc_ets(struct net_device *dev,
 }
 
 static LIST_HEAD(nsim_block_cb_list);
+static DEFINE_MUTEX(nsim_block_cb_lock);
 
 int
 nsim_setup_tc(struct net_device *dev, enum tc_setup_type type, void *type_data)
 {
 	struct netdevsim *ns = netdev_priv(dev);
+	int err;
 
 	switch (type) {
 	case TC_SETUP_QDISC_TAPRIO:
@@ -84,10 +86,13 @@ nsim_setup_tc(struct net_device *dev, enum tc_setup_type type, void *type_data)
 	case TC_SETUP_QDISC_ETS:
 		return nsim_setup_tc_ets(dev, type_data);
 	case TC_SETUP_BLOCK:
-		return flow_block_cb_setup_simple(type_data,
-						  &nsim_block_cb_list,
-						  nsim_setup_tc_block_cb,
-						  ns, ns, true);
+		mutex_lock(&nsim_block_cb_lock);
+		err = flow_block_cb_setup_simple(type_data,
+						 &nsim_block_cb_list,
+						 nsim_setup_tc_block_cb,
+						 ns, ns, true);
+		mutex_unlock(&nsim_block_cb_lock);
+		return err;
 	case TC_SETUP_FT:
 		return 0;
 	default:
