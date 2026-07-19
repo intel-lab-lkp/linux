@@ -1997,6 +1997,9 @@ xlog_recover_items_pass2(
 	return error;
 }
 
+STATIC int xlog_recover_verify_item(struct xlog *log,
+		struct xlog_recover_item *item);
+
 /*
  * Perform the transaction.
  *
@@ -2020,6 +2023,18 @@ xlog_recover_commit_trans(
 	#define XLOG_RECOVER_COMMIT_QUEUE_MAX 100
 
 	hlist_del_init(&trans->r_list);
+
+	/*
+	 * The final item is completed by the commit record rather than by a
+	 * following item, so no decode step has verified it yet; do so now.
+	 */
+	if (!list_empty(&trans->r_itemq)) {
+		item = list_entry(trans->r_itemq.prev,
+				  struct xlog_recover_item, ri_list);
+		error = xlog_recover_verify_item(log, item);
+		if (error)
+			return error;
+	}
 
 	xlog_recover_reorder_trans(log, trans, pass);
 
@@ -2165,6 +2180,25 @@ xlog_recover_verify_item_header(
 }
 
 /*
+ * A fully decoded item has received all its declared regions.  Check it is
+ * complete and run the type's verifier, if any, before it is queued for
+ * replay.
+ */
+STATIC int
+xlog_recover_verify_item(
+	struct xlog			*log,
+	struct xlog_recover_item	*item)
+{
+	if (XFS_IS_CORRUPT(log->l_mp,
+			item->ri_total == 0 || item->ri_cnt != item->ri_total))
+		return -EFSCORRUPTED;
+
+	if (item->ri_ops->verify)
+		return item->ri_ops->verify(log, item);
+	return 0;
+}
+
+/*
  * The next region to add is the start of a new region.  It could be
  * a whole region or it could be the first part of a new region.  Because
  * of this, the assumption here is that the type and size fields of all
@@ -2226,7 +2260,12 @@ xlog_recover_add_to_trans(
 			  ri_list);
 	if (item->ri_total != 0 &&
 	     item->ri_total == item->ri_cnt) {
-		/* tail item is in use, get a new one */
+		/* the tail item is complete; verify it before starting a new one */
+		error = xlog_recover_verify_item(log, item);
+		if (error) {
+			kvfree(ptr);
+			return error;
+		}
 		xlog_recover_add_item(&trans->r_itemq);
 		item = list_entry(trans->r_itemq.prev,
 					struct xlog_recover_item, ri_list);

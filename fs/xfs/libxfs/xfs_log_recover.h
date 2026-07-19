@@ -41,6 +41,15 @@ struct xlog_recover_item_ops {
 	 */
 	enum xlog_recover_reorder (*reorder)(struct xlog_recover_item *item);
 
+	/*
+	 * Comprehensively validate a fully decoded item's formatted log
+	 * structures, if provided: the region count and sizes the item type
+	 * requires, and any header fields that can be checked without the
+	 * on-disk buffer.  Called once the item is complete, before it is
+	 * queued for replay.  Returning an error aborts recovery.
+	 */
+	int (*verify)(struct xlog *log, struct xlog_recover_item *item);
+
 	/* Start readahead for pass2, if provided. */
 	void (*ra_pass2)(struct xlog *log, struct xlog_recover_item *item);
 
