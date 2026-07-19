@@ -6,6 +6,7 @@
  * Author: Chanwoo Choi <cw00.choi@samsung.com>
  */
 
+#include <linux/devm-helpers.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -699,8 +700,6 @@ static int sm5022_muic_i2c_probe(struct i2c_client *i2c)
 
 	mutex_init(&info->mutex);
 
-	INIT_WORK(&info->irq_work, sm5502_muic_irq_work);
-
 	info->regmap = devm_regmap_init_i2c(i2c, &sm5502_muic_regmap_config);
 	if (IS_ERR(info->regmap)) {
 		ret = PTR_ERR(info->regmap);
@@ -719,6 +718,29 @@ static int sm5022_muic_i2c_probe(struct i2c_client *i2c)
 				    info->irq, ret);
 		return ret;
 	}
+
+	/* Allocate extcon device */
+	info->edev = devm_extcon_dev_allocate(info->dev, sm5502_extcon_cable);
+	if (IS_ERR(info->edev)) {
+		dev_err(info->dev, "failed to allocate memory for extcon\n");
+		return -ENOMEM;
+	}
+
+	/* Register extcon device */
+	ret = devm_extcon_dev_register(info->dev, info->edev);
+	if (ret) {
+		dev_err(info->dev, "failed to register extcon device\n");
+		return ret;
+	}
+
+	ret = devm_work_autocancel(info->dev, &info->irq_work,
+				   sm5502_muic_irq_work);
+	if (ret)
+		return ret;
+	ret = devm_delayed_work_autocancel(info->dev, &info->wq_detcable,
+					   sm5502_muic_detect_cable_wq);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < info->type->num_muic_irqs; i++) {
 		struct muic_irq *muic_irq = &info->type->muic_irqs[i];
@@ -741,19 +763,8 @@ static int sm5022_muic_i2c_probe(struct i2c_client *i2c)
 		}
 	}
 
-	/* Allocate extcon device */
-	info->edev = devm_extcon_dev_allocate(info->dev, sm5502_extcon_cable);
-	if (IS_ERR(info->edev)) {
-		dev_err(info->dev, "failed to allocate memory for extcon\n");
-		return -ENOMEM;
-	}
-
-	/* Register extcon device */
-	ret = devm_extcon_dev_register(info->dev, info->edev);
-	if (ret) {
-		dev_err(info->dev, "failed to register extcon device\n");
-		return ret;
-	}
+	/* Initialize SM5502 device and print vendor id and version id */
+	sm5502_init_dev_type(info);
 
 	/*
 	 * Detect accessory after completing the initialization of platform
@@ -763,12 +774,8 @@ static int sm5022_muic_i2c_probe(struct i2c_client *i2c)
 	 * After completing the booting of platform, the extcon provider
 	 * driver should notify cable state to upper layer.
 	 */
-	INIT_DELAYED_WORK(&info->wq_detcable, sm5502_muic_detect_cable_wq);
 	queue_delayed_work(system_power_efficient_wq, &info->wq_detcable,
 			msecs_to_jiffies(DELAY_MS_DEFAULT));
-
-	/* Initialize SM5502 device and print vendor id and version id */
-	sm5502_init_dev_type(info);
 
 	return 0;
 }
