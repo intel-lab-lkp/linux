@@ -25,6 +25,14 @@ struct xlog_recover_item_ops {
 	uint16_t	item_type;	/* XFS_LI_* type code. */
 
 	/*
+	 * Bounds on the item's declared region count, checked before the
+	 * region array is allocated.  max_regions 0 means no fixed maximum, so
+	 * the generic XLOG_MAX_REGIONS_IN_ITEM ceiling applies (buffers).
+	 */
+	unsigned int	min_regions;
+	unsigned int	max_regions;
+
+	/*
 	 * Help sort recovered log items into the order required to replay them
 	 * correctly.  Log item types that always use XLOG_REORDER_ITEM_LIST do
 	 * not have to supply a function here.  See the comment preceding

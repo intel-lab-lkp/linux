@@ -178,6 +178,8 @@ out_release:
 
 const struct xlog_recover_item_ops xlog_dquot_item_ops = {
 	.item_type		= XFS_LI_DQUOT,
+	.max_regions		= 2,
+	.min_regions		= 2,
 	.ra_pass2		= xlog_recover_dquot_ra_pass2,
 	.commit_pass2		= xlog_recover_dquot_commit_pass2,
 };
@@ -211,6 +213,8 @@ xlog_recover_quotaoff_commit_pass1(
 
 const struct xlog_recover_item_ops xlog_quotaoff_item_ops = {
 	.item_type		= XFS_LI_QUOTAOFF,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass1		= xlog_recover_quotaoff_commit_pass1,
 	/* nothing to commit in pass2 */
 };

@@ -741,6 +741,8 @@ xlog_recover_cui_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_cui_item_ops = {
 	.item_type		= XFS_LI_CUI,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_cui_commit_pass2,
 };
 
@@ -796,6 +798,8 @@ xlog_recover_rtcui_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_rtcui_item_ops = {
 	.item_type		= XFS_LI_CUI_RT,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_rtcui_commit_pass2,
 };
 
@@ -828,6 +832,8 @@ xlog_recover_cud_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_cud_item_ops = {
 	.item_type		= XFS_LI_CUD,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_cud_commit_pass2,
 };
 
@@ -858,5 +864,7 @@ xlog_recover_rtcud_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_rtcud_item_ops = {
 	.item_type		= XFS_LI_CUD_RT,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_rtcud_commit_pass2,
 };

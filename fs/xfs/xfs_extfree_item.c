@@ -889,6 +889,8 @@ xlog_recover_efi_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_efi_item_ops = {
 	.item_type		= XFS_LI_EFI,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_efi_commit_pass2,
 };
 
@@ -941,6 +943,8 @@ xlog_recover_rtefi_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_rtefi_item_ops = {
 	.item_type		= XFS_LI_EFI_RT,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_rtefi_commit_pass2,
 };
 
@@ -984,6 +988,8 @@ xlog_recover_efd_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_efd_item_ops = {
 	.item_type		= XFS_LI_EFD,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_efd_commit_pass2,
 };
 
@@ -1025,5 +1031,7 @@ xlog_recover_rtefd_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_rtefd_item_ops = {
 	.item_type		= XFS_LI_EFD_RT,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_rtefd_commit_pass2,
 };

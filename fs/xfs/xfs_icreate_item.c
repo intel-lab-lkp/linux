@@ -255,6 +255,8 @@ xlog_recover_icreate_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_icreate_item_ops = {
 	.item_type		= XFS_LI_ICREATE,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.reorder		= xlog_recover_icreate_reorder,
 	.commit_pass2		= xlog_recover_icreate_commit_pass2,
 };

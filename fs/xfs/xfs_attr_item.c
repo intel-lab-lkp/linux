@@ -1189,6 +1189,8 @@ static const struct xfs_item_ops xfs_attri_item_ops = {
 
 const struct xlog_recover_item_ops xlog_attri_item_ops = {
 	.item_type	= XFS_LI_ATTRI,
+	.max_regions	= 5,
+	.min_regions	= 2,
 	.commit_pass2	= xlog_recover_attri_commit_pass2,
 };
 
@@ -1203,5 +1205,7 @@ static const struct xfs_item_ops xfs_attrd_item_ops = {
 
 const struct xlog_recover_item_ops xlog_attrd_item_ops = {
 	.item_type	= XFS_LI_ATTRD,
+	.max_regions	= 1,
+	.min_regions	= 1,
 	.commit_pass2	= xlog_recover_attrd_commit_pass2,
 };

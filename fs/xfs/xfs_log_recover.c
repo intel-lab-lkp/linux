@@ -1828,12 +1828,12 @@ static const struct xlog_recover_item_ops *xlog_recover_item_ops[] = {
 
 static const struct xlog_recover_item_ops *
 xlog_find_item_ops(
-	struct xlog_recover_item		*item)
+	unsigned short				item_type)
 {
 	unsigned int				i;
 
 	for (i = 0; i < ARRAY_SIZE(xlog_recover_item_ops); i++)
-		if (ITEM_TYPE(item) == xlog_recover_item_ops[i]->item_type)
+		if (item_type == xlog_recover_item_ops[i]->item_type)
 			return xlog_recover_item_ops[i];
 
 	return NULL;
@@ -1888,14 +1888,13 @@ xlog_find_item_ops(
  * but for all other items there may be specific ordering that we need to
  * preserve.
  */
-STATIC int
+STATIC void
 xlog_recover_reorder_trans(
 	struct xlog		*log,
 	struct xlog_recover	*trans,
 	int			pass)
 {
 	struct xlog_recover_item *item, *n;
-	int			error = 0;
 	LIST_HEAD(sort_list);
 	LIST_HEAD(cancel_list);
 	LIST_HEAD(buffer_list);
@@ -1905,22 +1904,6 @@ xlog_recover_reorder_trans(
 	list_splice_init(&trans->r_itemq, &sort_list);
 	list_for_each_entry_safe(item, n, &sort_list, ri_list) {
 		enum xlog_recover_reorder	fate = XLOG_REORDER_ITEM_LIST;
-
-		item->ri_ops = xlog_find_item_ops(item);
-		if (!item->ri_ops) {
-			xfs_warn(log->l_mp,
-				"%s: unrecognized type of log operation (%d)",
-				__func__, ITEM_TYPE(item));
-			ASSERT(0);
-			/*
-			 * return the remaining items back to the transaction
-			 * item list so they can be freed in caller.
-			 */
-			if (!list_empty(&sort_list))
-				list_splice_init(&sort_list, &trans->r_itemq);
-			error = -EFSCORRUPTED;
-			break;
-		}
 
 		if (item->ri_ops->reorder)
 			fate = item->ri_ops->reorder(item);
@@ -1954,7 +1937,6 @@ xlog_recover_reorder_trans(
 		list_splice_tail(&inode_buffer_list, &trans->r_itemq);
 	if (!list_empty(&cancel_list))
 		list_splice_tail(&cancel_list, &trans->r_itemq);
-	return error;
 }
 
 void
@@ -2039,9 +2021,7 @@ xlog_recover_commit_trans(
 
 	hlist_del_init(&trans->r_list);
 
-	error = xlog_recover_reorder_trans(log, trans, pass);
-	if (error)
-		return error;
+	xlog_recover_reorder_trans(log, trans, pass);
 
 	list_for_each_entry_safe(item, next, &trans->r_itemq, ri_list) {
 		trace_xfs_log_recover_item_recover(log, trans, item, pass);
@@ -2130,6 +2110,10 @@ xlog_recover_add_to_cont_trans(
 	item = list_entry(trans->r_itemq.prev, struct xlog_recover_item,
 			  ri_list);
 
+	/* the continuation has to extend a region we have already started */
+	if (XFS_IS_CORRUPT(log->l_mp, item->ri_cnt == 0 || !item->ri_buf))
+		return -EFSCORRUPTED;
+
 	old_ptr = item->ri_buf[item->ri_cnt-1].iov_base;
 	old_len = item->ri_buf[item->ri_cnt-1].iov_len;
 
@@ -2140,6 +2124,43 @@ xlog_recover_add_to_cont_trans(
 	item->ri_buf[item->ri_cnt-1].iov_len += len;
 	item->ri_buf[item->ri_cnt-1].iov_base = ptr;
 	trace_xfs_log_recover_item_add_cont(log, trans, item, 0);
+	return 0;
+}
+
+/*
+ * Validate a newly decoded item header before recovery trusts it to size and
+ * assemble the item's regions: resolve the item type and bound the declared
+ * region count.
+ */
+STATIC int
+xlog_recover_verify_item_header(
+	struct xlog			*log,
+	struct xlog_recover_item	*item,
+	char				*ptr,
+	int				len)
+{
+	struct xfs_inode_log_format	*in_f = (struct xfs_inode_log_format *)ptr;
+	const struct xlog_recover_item_ops *ops;
+	unsigned int			max_regions;
+
+	/* The type and region count fields have to be present to be read. */
+	if (XFS_IS_CORRUPT(log->l_mp,
+			len < offsetofend(struct xfs_inode_log_format, ilf_size)))
+		return -EFSCORRUPTED;
+
+	ops = xlog_find_item_ops(in_f->ilf_type);
+	if (XFS_IS_CORRUPT(log->l_mp, !ops))
+		return -EFSCORRUPTED;
+	item->ri_ops = ops;
+
+	max_regions = ops->max_regions ? ops->max_regions :
+					 XLOG_MAX_REGIONS_IN_ITEM;
+	if (XFS_IS_CORRUPT(log->l_mp,
+			in_f->ilf_size == 0 ||
+			in_f->ilf_size < ops->min_regions ||
+			in_f->ilf_size > max_regions))
+		return -EFSCORRUPTED;
+
 	return 0;
 }
 
@@ -2166,6 +2187,7 @@ xlog_recover_add_to_trans(
 	struct xfs_inode_log_format	*in_f;			/* any will do */
 	struct xlog_recover_item *item;
 	char			*ptr;
+	int			error;
 
 	if (!len)
 		return 0;
@@ -2211,14 +2233,10 @@ xlog_recover_add_to_trans(
 	}
 
 	if (item->ri_total == 0) {		/* first region to be added */
-		if (in_f->ilf_size == 0 ||
-		    in_f->ilf_size > XLOG_MAX_REGIONS_IN_ITEM) {
-			xfs_warn(log->l_mp,
-		"bad number of regions (%d) in inode log format",
-				  in_f->ilf_size);
-			ASSERT(0);
+		error = xlog_recover_verify_item_header(log, item, ptr, len);
+		if (error) {
 			kvfree(ptr);
-			return -EFSCORRUPTED;
+			return error;
 		}
 
 		item->ri_total = in_f->ilf_size;

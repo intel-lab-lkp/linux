@@ -684,6 +684,8 @@ xlog_recover_bui_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_bui_item_ops = {
 	.item_type		= XFS_LI_BUI,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_bui_commit_pass2,
 };
 
@@ -716,5 +718,7 @@ xlog_recover_bud_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_bud_item_ops = {
 	.item_type		= XFS_LI_BUD,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_bud_commit_pass2,
 };

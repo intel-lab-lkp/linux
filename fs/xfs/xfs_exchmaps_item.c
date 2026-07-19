@@ -576,6 +576,8 @@ xlog_recover_xmi_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_xmi_item_ops = {
 	.item_type		= XFS_LI_XMI,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_xmi_commit_pass2,
 };
 
@@ -607,5 +609,7 @@ xlog_recover_xmd_commit_pass2(
 
 const struct xlog_recover_item_ops xlog_xmd_item_ops = {
 	.item_type		= XFS_LI_XMD,
+	.max_regions		= 1,
+	.min_regions		= 1,
 	.commit_pass2		= xlog_recover_xmd_commit_pass2,
 };
