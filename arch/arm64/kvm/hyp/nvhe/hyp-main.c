@@ -31,16 +31,28 @@ void __kvm_hyp_host_forward_smc(struct kvm_cpu_context *host_ctxt);
 
 static void __hyp_sve_save_guest(struct kvm_vcpu *vcpu)
 {
-	__vcpu_assign_sys_reg(vcpu, ZCR_EL1, read_sysreg_el1(SYS_ZCR));
-	/*
-	 * On saving/restoring guest sve state, always use the maximum VL for
-	 * the guest. The layout of the data when saving the sve state depends
-	 * on the VL, so use a consistent (i.e., the maximum) guest VL.
-	 */
-	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
-	sve_save_state(kern_hyp_va(vcpu->arch.sve_state), true);
+	bool save_ffr = !vcpu_in_streaming_mode(vcpu) || vcpu_has_fa64(vcpu);
+
+	if (vcpu_has_sve(vcpu)) {
+		__vcpu_assign_sys_reg(vcpu, ZCR_EL1, read_sysreg_el1(SYS_ZCR));
+
+		/*
+		 * On saving/restoring guest sve state, always use the
+		 * maximum VL for the guest. The layout of the data
+		 * when saving the sve state depends on the VL, so use
+		 * a consistent (i.e., the maximum) guest VL.
+		 */
+		sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
+	}
+
+	/* Ensure ZCR/SMCR updates for VL are seen */
+	isb();
+	sve_save_state(kern_hyp_va(vcpu->arch.sve_state), save_ffr);
 	fpsimd_save_common(&vcpu->arch.ctxt.fp_regs);
-	write_sysreg_s(sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SVE]) - 1, SYS_ZCR_EL2);
+
+	if (system_supports_sve())
+		write_sysreg_s(sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SVE]) - 1,
+			       SYS_ZCR_EL2);
 }
 
 static void __hyp_sve_restore_host(void)
@@ -63,9 +75,76 @@ static void __hyp_sve_restore_host(void)
 	write_sysreg_el1(ctxt_sys_reg(hctxt, ZCR_EL1), SYS_ZCR);
 }
 
-static void fpsimd_sve_flush(void)
+static void __hyp_sme_save_guest(struct kvm_vcpu *vcpu)
 {
-	*host_data_ptr(fp_owner) = FP_STATE_HOST_OWNED;
+	unsigned long smcr_el2;
+
+	__vcpu_assign_sys_reg(vcpu, SMCR_EL1, read_sysreg_el1(SYS_SMCR));
+	__vcpu_assign_sys_reg(vcpu, SVCR, read_sysreg_s(SYS_SVCR));
+
+	/*
+	 * On saving/restoring guest sve state, always use the maximum VL for
+	 * the guest. The layout of the data when saving the sve state depends
+	 * on the VL, so use a consistent (i.e., the maximum) guest VL.
+	 *
+	 * We restore the FA64 and SME2 enables for the host since we
+	 * will always restore the host configuration so if host and
+	 * guest VLs are the same we might suppress an update.
+	 */
+	smcr_el2 = vcpu_sme_max_vq(vcpu) - 1;
+	if (system_supports_fa64())
+		smcr_el2 |= SMCR_ELx_FA64;
+	if (system_supports_sme2())
+		smcr_el2 |= SMCR_ELx_EZT0;
+	sysreg_cond_update_s(SYS_SMCR_EL2, smcr_el2);
+
+	if (vcpu_za_enabled(vcpu)) {
+		isb();
+		sme_save_state(vcpu_sme_state(vcpu), vcpu_has_sme2(vcpu));
+	}
+}
+
+static void __hyp_sme_restore_host(void)
+{
+	struct kvm_cpu_context *hctxt = host_data_ptr(host_ctxt);
+	u64 smcr_el2;
+
+	/*
+	 * The hypervisor refuses to run if we are in streaming mode
+	 * or have ZA enabled so there is no SME specific state to
+	 * restore other than the system registers.
+	 *
+	 * Note that this constrains the PE to the maximum shared VL
+	 * that was discovered, if we wish to use larger VLs this will
+	 * need to be revisited.
+	 */
+	smcr_el2 = sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SME]) - 1;
+	if (system_supports_fa64())
+		smcr_el2 |= SMCR_ELx_FA64;
+	if (system_supports_sme2())
+		smcr_el2 |= SMCR_ELx_EZT0;
+	sysreg_cond_update_s(SYS_SMCR_EL2, smcr_el2);
+
+	write_sysreg_el1(ctxt_sys_reg(hctxt, SMCR_EL1), SYS_SMCR);
+	sme_smstop();
+}
+
+static void fpsimd_sve_flush(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * If the guest has SME then we need to restore the trap
+	 * controls in SMCR and mode in SVCR in order to ensure that
+	 * traps generated directly to EL1 have the correct types,
+	 * otherwise we can defer until we load the guest state.
+	 */
+	if (vcpu_has_sme(vcpu)) {
+		kvm_hyp_save_fpsimd_host(vcpu);
+		kvm_sme_configure_traps(vcpu);
+
+		*host_data_ptr(fp_owner) = FP_STATE_FREE;
+	} else {
+		*host_data_ptr(fp_owner) = FP_STATE_HOST_OWNED;
+	}
 }
 
 static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
@@ -73,8 +152,18 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *hctxt = host_data_ptr(host_ctxt);
 	bool has_fpmr;
 
-	if (!guest_owns_fp_regs())
+	if (!guest_owns_fp_regs()) {
+		/*
+		 * We always at least partially configure SME for the
+		 * guest due to traps.
+		 */
+		if (vcpu_has_sme(vcpu)) {
+			/* Ensure __deactivate_cptr_traps() is visible */
+			isb();
+			__hyp_sme_restore_host();
+		}
 		return;
+	}
 
 	/*
 	 * Traps have been disabled by __deactivate_cptr_traps(), but there
@@ -82,7 +171,10 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	 */
 	isb();
 
-	if (vcpu_has_sve(vcpu))
+	if (vcpu_has_sme(vcpu))
+		__hyp_sme_save_guest(vcpu);
+
+	if (vcpu_has_sve(vcpu) || vcpu_in_streaming_mode(vcpu))
 		__hyp_sve_save_guest(vcpu);
 	else
 		fpsimd_save_state(&vcpu->arch.ctxt.fp_regs);
@@ -90,6 +182,9 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	has_fpmr = kvm_has_fpmr(kern_hyp_va(vcpu->kvm));
 	if (has_fpmr)
 		__vcpu_assign_sys_reg(vcpu, FPMR, read_sysreg_s(SYS_FPMR));
+
+	if (system_supports_sme())
+		__hyp_sme_restore_host();
 
 	if (system_supports_sve())
 		__hyp_sve_restore_host();
@@ -128,10 +223,11 @@ static void flush_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
 	struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
 
-	fpsimd_sve_flush();
 	flush_debug_state(hyp_vcpu);
 
 	hyp_vcpu->vcpu.arch.ctxt	= host_vcpu->arch.ctxt;
+
+	fpsimd_sve_flush(&hyp_vcpu->vcpu);
 
 	/* __hyp_running_vcpu must be NULL in a guest context. */
 	hyp_vcpu->vcpu.arch.ctxt.__hyp_running_vcpu = NULL;
@@ -223,10 +319,9 @@ static void handle___kvm_vcpu_run(struct kvm_cpu_context *host_ctxt)
 		struct pkvm_hyp_vcpu *hyp_vcpu = pkvm_get_loaded_hyp_vcpu();
 
 		/*
-		 * KVM (and pKVM) doesn't support SME guests for now, and
-		 * ensures that SME features aren't enabled in pstate when
-		 * loading a vcpu. Therefore, if SME features enabled the host
-		 * is misbehaving.
+		 * KVM (and pKVM) refuses to run if PSTATE.{SM,ZA} are
+		 * enabled. Therefore, if SME features enabled the
+		 * host is misbehaving.
 		 */
 		if (unlikely(system_supports_sme() && read_sysreg_s(SYS_SVCR))) {
 			ret = -EINVAL;

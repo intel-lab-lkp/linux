@@ -462,6 +462,44 @@ static inline bool kvm_hyp_handle_mops(struct kvm_vcpu *vcpu, u64 *exit_code)
 	return true;
 }
 
+/* The SMCR_EL2 for non-nested guests */
+static inline u64 __hyp_smcr_el2(struct kvm_vcpu *vcpu)
+{
+	u64 smcr_el2;
+
+	/*
+	 * The vCPU's saved SVE state layout always matches the max VL of the
+	 * vCPU.
+	 */
+	smcr_el2 = vcpu_sme_max_vq(vcpu) - 1;
+	if (vcpu_has_fa64(vcpu))
+		smcr_el2 |= SMCR_ELx_FA64;
+	if (vcpu_has_sme2(vcpu))
+		smcr_el2 |= SMCR_ELx_EZT0;
+
+	return smcr_el2;
+}
+
+static inline void __hyp_sme_restore_guest(struct kvm_vcpu *vcpu,
+					   bool *restore_sve,
+					   bool *restore_ffr)
+{
+	/* EZT0 and FA64 are not self synchronizing */
+	sysreg_cond_update_s(SYS_SMCR_EL2, __hyp_smcr_el2(vcpu));
+	isb();
+
+	if (vcpu_in_streaming_mode(vcpu)) {
+		*restore_sve = true;
+		*restore_ffr = vcpu_has_fa64(vcpu);
+	}
+
+	if (vcpu_za_enabled(vcpu))
+		sme_load_state(kern_hyp_va(vcpu->arch.sme_state),
+			       vcpu_has_sme2(vcpu));
+
+	write_sysreg_el1(__vcpu_sys_reg(vcpu, vcpu_sme_smcr_elx(vcpu)), SYS_SMCR);
+}
+
 static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
 {
 	u64 zcr_el2 = vcpu_sve_max_vq(vcpu) - 1;
@@ -471,20 +509,45 @@ static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
 	 * vCPU. Start off with the max VL so we can load the SVE state.
 	 */
 	sve_cond_update_zcr_vq(zcr_el2, SYS_ZCR_EL2);
-	sve_load_state(kern_hyp_va(vcpu->arch.sve_state), true);
-	fpsimd_load_common(&vcpu->arch.ctxt.fp_regs);
+	write_sysreg_el1(__vcpu_sys_reg(vcpu, vcpu_sve_zcr_elx(vcpu)), SYS_ZCR);
+}
+
+static inline u64 __hyp_smcr_el2_nested(struct kvm_vcpu *vcpu)
+{
+	u64 max_len = vcpu_sme_max_vq(vcpu) - 1;
+	u64 smcr_el2 = SYS_FIELD_GET(SMCR_ELx, LEN,
+				     __vcpu_sys_reg(vcpu, SMCR_EL2));
+
+	smcr_el2 = min(max_len, smcr_el2);
+
+	if (vcpu_has_fa64(vcpu))
+		smcr_el2 |= __vcpu_sys_reg(vcpu, SMCR_EL2) & SMCR_ELx_FA64;
+	if (vcpu_has_sme2(vcpu))
+		smcr_el2 |= __vcpu_sys_reg(vcpu, SMCR_EL2) & SMCR_ELx_EZT0;
+
+	return smcr_el2;
+}
+
+static inline void __hyp_nv_restore_guest_vls(struct kvm_vcpu *vcpu)
+{
+	if (!is_nested_ctxt(vcpu))
+		return;
 
 	/*
 	 * The effective VL for a VM could differ from the max VL when running a
 	 * nested guest, as the guest hypervisor could select a smaller VL. Slap
 	 * that into hardware before wrapping up.
 	 */
-	if (is_nested_ctxt(vcpu)) {
+
+	if (vcpu_has_sve(vcpu)) {
+		u64 zcr_el2 = vcpu_sve_max_vq(vcpu) - 1;
+
 		zcr_el2 = min(zcr_el2, __vcpu_sys_reg(vcpu, ZCR_EL2));
 		sve_cond_update_zcr_vq(zcr_el2, SYS_ZCR_EL2);
 	}
 
-	write_sysreg_el1(__vcpu_sys_reg(vcpu, vcpu_sve_zcr_elx(vcpu)), SYS_ZCR);
+	if (vcpu_has_sme(vcpu))
+		sysreg_cond_update_s(SYS_SMCR_EL2, __hyp_smcr_el2_nested(vcpu));
 }
 
 static inline void __hyp_sve_save_host(void)
@@ -498,9 +561,37 @@ static inline void __hyp_sve_save_host(void)
 	fpsimd_save_common(&hctxt->fp_regs);
 }
 
+static inline void kvm_sme_configure_traps(struct kvm_vcpu *vcpu)
+{
+	u64 smcr_el1, smcr_el2, svcr;
+
+	if (!vcpu_has_sme(vcpu))
+		return;
+
+	if (is_nested_ctxt(vcpu))
+		smcr_el2 = __hyp_smcr_el2_nested(vcpu);
+	else
+		smcr_el2 = __hyp_smcr_el2(vcpu);
+	sysreg_cond_update_s(SYS_SMCR_EL2, smcr_el2);
+
+	smcr_el1 = __vcpu_sys_reg(vcpu, vcpu_sme_smcr_elx(vcpu));
+	write_sysreg_el1(smcr_el1, SYS_SMCR);
+
+	svcr = __vcpu_sys_reg(vcpu, SVCR);
+	write_sysreg_s(svcr, SYS_SVCR);
+}
+
 static inline void fpsimd_lazy_switch_to_guest(struct kvm_vcpu *vcpu)
 {
 	u64 zcr_el1, zcr_el2;
+
+	/*
+	 * We always load the SME control registers that affect traps
+	 * since if they are not configured as expected by the guest
+	 * then it may have exceptions that it does not expect
+	 * directly delivered.
+	 */
+	kvm_sme_configure_traps(vcpu);
 
 	if (!guest_owns_fp_regs())
 		return;
@@ -555,8 +646,59 @@ static inline void sve_lazy_switch_to_host(struct kvm_vcpu *vcpu)
 	}
 }
 
+static inline void sme_lazy_switch_to_host(struct kvm_vcpu *vcpu)
+{
+	u64 smcr_el1, smcr_el2;
+
+	if (!vcpu_has_sme(vcpu))
+		return;
+
+	/*
+	 * __deactivate_cptr_traps() disabled traps, but there hasn't
+	 * necessarily been a context synchronization event yet.
+	 */
+	isb();
+
+	smcr_el1 = read_sysreg_el1(SYS_SMCR);
+	__vcpu_assign_sys_reg(vcpu, vcpu_sme_smcr_elx(vcpu), smcr_el1);
+
+	smcr_el2 = 0;
+	if (system_supports_fa64())
+		smcr_el2 |= SMCR_ELx_FA64;
+	if (system_supports_sme2())
+		smcr_el2 |= SMCR_ELx_EZT0;
+
+	/*
+	 * The guest's state is always saved using the guest's max VL.
+	 * Ensure that the host has the guest's max VL active such
+	 * that the host can save the guest's state lazily, but don't
+	 * artificially restrict the host to the guest's max VL.
+	 */
+	if (has_vhe()) {
+		smcr_el2 |= vcpu_sme_max_vq(vcpu) - 1;
+		write_sysreg_el2(smcr_el2, SYS_SMCR);
+		/* Guest might not have had EZT0 or FA64 */
+		isb();
+	} else {
+		smcr_el1 = smcr_el2;
+		smcr_el2 |= sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SME]) - 1;
+		write_sysreg_el2(smcr_el2, SYS_SMCR);
+
+		smcr_el1 |= vcpu_sme_max_vq(vcpu) - 1;
+		write_sysreg_el1(smcr_el1, SYS_SMCR);
+	}
+
+	__vcpu_assign_sys_reg(vcpu, SVCR, read_sysreg_s(SYS_SVCR));
+}
+
 static inline void fpsimd_lazy_switch_to_host(struct kvm_vcpu *vcpu)
 {
+	/*
+	 * We always load the control registers for the guest so we
+	 * always restore state for the host.
+	 */
+	sme_lazy_switch_to_host(vcpu);
+
 	if (!guest_owns_fp_regs())
 		return;
 
@@ -566,6 +708,16 @@ static inline void fpsimd_lazy_switch_to_host(struct kvm_vcpu *vcpu)
 static void kvm_hyp_save_fpsimd_host(struct kvm_vcpu *vcpu)
 {
 	struct kvm_cpu_context *hctxt = host_data_ptr(host_ctxt);
+
+	/*
+	 * The hypervisor refuses to run if streaming mode or ZA is
+	 * enabled, we only need to save SMCR_EL1 for SME.  For pKVM
+	 * we will restore this, reset SMCR_EL2 to a fixed value and
+	 * disable streaming mode and ZA to avoid any state being
+	 * leaked.
+	 */
+	if (system_supports_sme())
+		ctxt_sys_reg(hctxt, SMCR_EL1) = read_sysreg_el1(SYS_SMCR);
 
 	/*
 	 * Non-protected kvm relies on the host restoring its sve state.
@@ -591,14 +743,17 @@ static void kvm_hyp_save_fpsimd_host(struct kvm_vcpu *vcpu)
  */
 static inline bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
-	bool sve_guest;
-	u8 esr_ec;
+	bool restore_sve, restore_ffr;
+	bool sve_guest, sme_guest;
+	u8 esr_ec, esr_iss_smtc;
 
 	if (!system_supports_fpsimd())
 		return false;
 
 	sve_guest = vcpu_has_sve(vcpu);
+	sme_guest = vcpu_has_sme(vcpu);
 	esr_ec = kvm_vcpu_trap_get_class(vcpu);
+	esr_iss_smtc = ESR_ELx_SME_ISS_SMTC((kvm_vcpu_get_esr(vcpu)));
 
 	/* Only handle traps the vCPU can support here: */
 	switch (esr_ec) {
@@ -612,6 +767,20 @@ static inline bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 			return false;
 		if (guest_hyp_sve_traps_enabled(vcpu))
 			return false;
+		break;
+	case ESR_ELx_EC_SME:
+		if (!sme_guest)
+			return false;
+		if (guest_hyp_sme_traps_enabled(vcpu))
+			return false;
+		if (esr_iss_smtc == ESR_ELx_SME_ISS_SMTC_ZT_DISABLED) {
+			if (!kvm_has_sme2(kern_hyp_va(vcpu->kvm)))
+				return false;
+
+			if (vcpu_has_nv(vcpu) &&
+			    !(__vcpu_sys_reg(vcpu, SMCR_EL2) & SMCR_ELx_EZT0))
+				return false;
+		}
 		break;
 	default:
 		return false;
@@ -628,10 +797,22 @@ static inline bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		kvm_hyp_save_fpsimd_host(vcpu);
 
 	/* Restore the guest state */
+
+	/* These may be overridden for a SME guest */
+	restore_sve = sve_guest;
+	restore_ffr = sve_guest;
+
 	if (sve_guest)
 		__hyp_sve_restore_guest(vcpu);
-	else
+	if (sme_guest)
+		__hyp_sme_restore_guest(vcpu, &restore_sve, &restore_ffr);
+
+	if (restore_sve) {
+		sve_load_state(kern_hyp_va(vcpu->arch.sve_state), restore_ffr);
+		fpsimd_load_common(&vcpu->arch.ctxt.fp_regs);
+	} else {
 		fpsimd_load_state(&vcpu->arch.ctxt.fp_regs);
+	}
 
 	if (kvm_has_fpmr(kern_hyp_va(vcpu->kvm)))
 		write_sysreg_s(__vcpu_sys_reg(vcpu, FPMR), SYS_FPMR);
@@ -639,6 +820,8 @@ static inline bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 	/* Skip restoring fpexc32 for AArch64 guests */
 	if (!(read_sysreg(hcr_el2) & HCR_RW))
 		write_sysreg(__vcpu_sys_reg(vcpu, FPEXC32_EL2), fpexc32_el2);
+
+	__hyp_nv_restore_guest_vls(vcpu);
 
 	*host_data_ptr(fp_owner) = FP_STATE_GUEST_OWNED;
 
