@@ -66,20 +66,20 @@ err_release_region:
 
 int hw_sm750_inithw(struct sm750_dev *sm750_dev, struct pci_dev *pdev)
 {
-	struct init_status *parm;
+	struct initchip_param *parm;
 
 	parm = &sm750_dev->init_parm;
-	if (parm->chip_clk == 0)
-		parm->chip_clk = (sm750_get_chip_type() == SM750LE) ?
+	if (parm->chip_clock == 0)
+		parm->chip_clock = (sm750_get_chip_type() == SM750LE) ?
 					       DEFAULT_SM750LE_CHIP_CLOCK :
 					       DEFAULT_SM750_CHIP_CLOCK;
 
-	if (parm->mem_clk == 0)
-		parm->mem_clk = parm->chip_clk;
-	if (parm->master_clk == 0)
-		parm->master_clk = parm->chip_clk / 3;
+	if (parm->mem_clock == 0)
+		parm->mem_clock = parm->chip_clock;
+	if (parm->master_clock == 0)
+		parm->master_clock = parm->chip_clock / 3;
 
-	ddk750_init_hw((struct initchip_param *)&sm750_dev->init_parm);
+	ddk750_init_hw(&sm750_dev->init_parm);
 	/* for sm718, open pci burst */
 	if (sm750_dev->devid == 0x718) {
 		poke32(SYSTEM_CTRL,
