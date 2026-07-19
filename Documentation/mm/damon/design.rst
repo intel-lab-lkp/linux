@@ -375,7 +375,8 @@ filter types.  Currently below fitler types are supported.
 
 - ``anon``: Same to that for DAMOS filters.
 - ``memcg``: Same to that for DAMOS filters.
-- ``pgidle``: Matches if the page for the memory is marked as access-idle.
+- ``pgidle_unset``: Matches if the page for the memory is marked as not
+  access-idle.
   Matches if the memory is not backed by pages that DAMON can idnetify
   idleness.
 
@@ -392,8 +393,8 @@ Users can optionally register probing preparation actions per probe.  If such
 actions are registered, DAMON applies the actions to each region's sampling
 memory before starting the next sampling interval.  Currently only one action,
 ``set_pgidle`` is supported.  The action marks the page for the probing target
-memory as access-idle.  This can be useful to be used together with ``pgidle``
-probe filter.
+memory as access-idle.  This can be useful to be used together with
+``pgidle_unset`` probe filter.
 
 This is a sampling based mechanism.  Hence, it is lightweight but the output
 may include some measurement errors.  The output should be used with good

@@ -996,8 +996,8 @@ damon_sysfs_filter_type_names[] = {
 		.name = "memcg",
 	},
 	{
-		.type = DAMON_FILTER_TYPE_PGIDLE,
-		.name = "pgidle",
+		.type = DAMON_FILTER_TYPE_PGIDLE_UNSET,
+		.name = "pgidle_unset",
 	},
 };
 
