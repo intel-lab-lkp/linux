@@ -1035,8 +1035,8 @@ static int llbitmap_read_sb(struct llbitmap *llbitmap)
 	ret = llbitmap_cache_pages(llbitmap);
 
 out_put_page:
-	__free_page(sb_page);
 	kunmap_local(sb);
+	__free_page(sb_page);
 	return ret;
 }
 
