@@ -367,13 +367,6 @@ xlog_recover_inode_commit_pass2(
 		goto out_release;
 	}
 	ldip = item->ri_buf[1].iov_base;
-	if (XFS_IS_CORRUPT(mp, ldip->di_magic != XFS_DINODE_MAGIC)) {
-		xfs_alert(mp,
-			"%s: Bad inode log record, rec ptr "PTR_FMT", ino %lld",
-			__func__, item, in_f->ilf_ino);
-		error = -EFSCORRUPTED;
-		goto out_release;
-	}
 
 	/*
 	 * If the inode has an LSN in it, recover the inode only if the on-disk
@@ -462,15 +455,6 @@ xlog_recover_inode_commit_pass2(
 	if (error)
 		goto out_release;
 
-	if (unlikely(ldip->di_forkoff > mp->m_sb.sb_inodesize)) {
-		XFS_CORRUPTION_ERROR("Bad log dinode fork offset",
-				XFS_ERRLEVEL_LOW, mp, ldip, sizeof(*ldip));
-		xfs_alert(mp,
-			"Bad inode 0x%llx, di_forkoff 0x%x",
-			in_f->ilf_ino, ldip->di_forkoff);
-		error = -EFSCORRUPTED;
-		goto out_release;
-	}
 	isize = xfs_log_dinode_size(mp);
 	if (unlikely(item->ri_buf[1].iov_len > isize)) {
 		XFS_CORRUPTION_ERROR("Bad log dinode size", XFS_ERRLEVEL_LOW,
@@ -597,10 +581,81 @@ error:
 	return error;
 }
 
+/*
+ * Validate the log dinode and fork regions of a decoded inode item.  Checks
+ * that need the on-disk inode buffer stay in xlog_recover_inode_commit_pass2().
+ */
+STATIC int
+xlog_recover_inode_verify(
+	struct xlog			*log,
+	struct xlog_recover_item	*item)
+{
+	struct xfs_mount		*mp = log->l_mp;
+	struct xfs_inode_log_format	*in_f;
+	struct xfs_inode_log_format	in_f_buf;
+	struct xfs_log_dinode		*ldip;
+	unsigned int			litino = XFS_LITINO(mp);
+	unsigned int			dsize, asize;
+	int				attr_index;
+	int				error;
+
+	if (item->ri_buf[0].iov_len == sizeof(struct xfs_inode_log_format)) {
+		in_f = item->ri_buf[0].iov_base;
+	} else {
+		in_f = &in_f_buf;
+		error = xfs_inode_item_format_convert(&item->ri_buf[0], in_f);
+		if (error)
+			return error;
+	}
+
+	/* The inode core is always logged as the log dinode in ri_buf[1]. */
+	if (XFS_IS_CORRUPT(mp, in_f->ilf_size < 2) ||
+	    XFS_IS_CORRUPT(mp,
+			   item->ri_buf[1].iov_len < xfs_log_dinode_size(mp)))
+		return -EFSCORRUPTED;
+
+	ldip = item->ri_buf[1].iov_base;
+	if (XFS_IS_CORRUPT(mp, ldip->di_magic != XFS_DINODE_MAGIC) ||
+	    XFS_IS_CORRUPT(mp, !xfs_dinode_good_version(mp, ldip->di_version)) ||
+	    XFS_IS_CORRUPT(mp, ldip->di_forkoff >= (litino >> 3)))
+		return -EFSCORRUPTED;
+
+	if (ldip->di_forkoff) {
+		dsize = ldip->di_forkoff << 3;
+		asize = litino - (ldip->di_forkoff << 3);
+	} else {
+		dsize = litino;
+		asize = 0;
+	}
+
+	/*
+	 * Btree-root forks are logged in a larger in-core form and converted on
+	 * replay, so their region is not bounded by the on-disk fork size here.
+	 */
+	if (in_f->ilf_fields & XFS_ILOG_DFORK) {
+		if (XFS_IS_CORRUPT(mp, in_f->ilf_size < 3))
+			return -EFSCORRUPTED;
+		if ((in_f->ilf_fields & XFS_ILOG_DFORK) != XFS_ILOG_DBROOT &&
+		    XFS_IS_CORRUPT(mp, item->ri_buf[2].iov_len > dsize))
+			return -EFSCORRUPTED;
+	}
+	if (in_f->ilf_fields & XFS_ILOG_AFORK) {
+		attr_index = (in_f->ilf_fields & XFS_ILOG_DFORK) ? 3 : 2;
+		if (XFS_IS_CORRUPT(mp, in_f->ilf_size < attr_index + 1))
+			return -EFSCORRUPTED;
+		if ((in_f->ilf_fields & XFS_ILOG_AFORK) != XFS_ILOG_ABROOT &&
+		    XFS_IS_CORRUPT(mp, item->ri_buf[attr_index].iov_len > asize))
+			return -EFSCORRUPTED;
+	}
+
+	return 0;
+}
+
 const struct xlog_recover_item_ops xlog_inode_item_ops = {
 	.item_type		= XFS_LI_INODE,
 	.max_regions		= 4,
 	.min_regions		= 2,
+	.verify			= xlog_recover_inode_verify,
 	.ra_pass2		= xlog_recover_inode_ra_pass2,
 	.commit_pass2		= xlog_recover_inode_commit_pass2,
 };
