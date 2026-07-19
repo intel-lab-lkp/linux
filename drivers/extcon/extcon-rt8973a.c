@@ -6,6 +6,7 @@
  * Author: Chanwoo Choi <cw00.choi@samsung.com>
  */
 
+#include <linux/devm-helpers.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
@@ -572,8 +573,6 @@ static int rt8973a_muic_i2c_probe(struct i2c_client *i2c)
 
 	mutex_init(&info->mutex);
 
-	INIT_WORK(&info->irq_work, rt8973a_muic_irq_work);
-
 	info->regmap = devm_regmap_init_i2c(i2c, &rt8973a_muic_regmap_config);
 	if (IS_ERR(info->regmap)) {
 		ret = PTR_ERR(info->regmap);
@@ -584,13 +583,40 @@ static int rt8973a_muic_i2c_probe(struct i2c_client *i2c)
 
 	/* Support irq domain for RT8973A MUIC device */
 	irq_flags = IRQF_TRIGGER_FALLING | IRQF_ONESHOT | IRQF_SHARED;
-	ret = regmap_add_irq_chip(info->regmap, info->irq, irq_flags, 0,
-				  &rt8973a_muic_irq_chip, &info->irq_data);
+	ret = devm_regmap_add_irq_chip(info->dev, info->regmap, info->irq,
+				       irq_flags, 0, &rt8973a_muic_irq_chip,
+				       &info->irq_data);
 	if (ret != 0) {
 		dev_err(info->dev, "failed to add irq_chip (irq:%d, err:%d)\n",
 				    info->irq, ret);
 		return ret;
 	}
+
+	/* Allocate extcon device */
+	info->edev = devm_extcon_dev_allocate(info->dev, rt8973a_extcon_cable);
+	if (IS_ERR(info->edev)) {
+		dev_err(info->dev, "failed to allocate memory for extcon\n");
+		return -ENOMEM;
+	}
+
+	/* Register extcon device */
+	ret = devm_extcon_dev_register(info->dev, info->edev);
+	if (ret) {
+		dev_err(info->dev, "failed to register extcon device\n");
+		return ret;
+	}
+
+	ret = devm_work_autocancel(info->dev, &info->irq_work,
+				   rt8973a_muic_irq_work);
+	if (ret)
+		return ret;
+	ret = devm_delayed_work_autocancel(info->dev, &info->wq_detcable,
+					   rt8973a_muic_detect_cable_wq);
+	if (ret)
+		return ret;
+
+	/* Initialize RT8973A device and print vendor id and version id */
+	rt8973a_init_dev_type(info);
 
 	for (i = 0; i < info->num_muic_irqs; i++) {
 		struct muic_irq *muic_irq = &info->muic_irqs[i];
@@ -613,20 +639,6 @@ static int rt8973a_muic_i2c_probe(struct i2c_client *i2c)
 		}
 	}
 
-	/* Allocate extcon device */
-	info->edev = devm_extcon_dev_allocate(info->dev, rt8973a_extcon_cable);
-	if (IS_ERR(info->edev)) {
-		dev_err(info->dev, "failed to allocate memory for extcon\n");
-		return -ENOMEM;
-	}
-
-	/* Register extcon device */
-	ret = devm_extcon_dev_register(info->dev, info->edev);
-	if (ret) {
-		dev_err(info->dev, "failed to register extcon device\n");
-		return ret;
-	}
-
 	/*
 	 * Detect accessory after completing the initialization of platform
 	 *
@@ -635,21 +647,10 @@ static int rt8973a_muic_i2c_probe(struct i2c_client *i2c)
 	 * After completing the booting of platform, the extcon provider
 	 * driver should notify cable state to upper layer.
 	 */
-	INIT_DELAYED_WORK(&info->wq_detcable, rt8973a_muic_detect_cable_wq);
 	queue_delayed_work(system_power_efficient_wq, &info->wq_detcable,
 			msecs_to_jiffies(DELAY_MS_DEFAULT));
 
-	/* Initialize RT8973A device and print vendor id and version id */
-	rt8973a_init_dev_type(info);
-
 	return 0;
-}
-
-static void rt8973a_muic_i2c_remove(struct i2c_client *i2c)
-{
-	struct rt8973a_muic_info *info = i2c_get_clientdata(i2c);
-
-	regmap_del_irq_chip(info->irq, info->irq_data);
 }
 
 static const struct of_device_id rt8973a_dt_match[] = {
@@ -696,7 +697,6 @@ static struct i2c_driver rt8973a_muic_i2c_driver = {
 		.of_match_table = rt8973a_dt_match,
 	},
 	.probe = rt8973a_muic_i2c_probe,
-	.remove	= rt8973a_muic_i2c_remove,
 	.id_table = rt8973a_i2c_id,
 };
 
