@@ -378,9 +378,9 @@ int ath11k_dp_rxbufs_replenish(struct ath11k_base *ab, int mac_id,
 
 		if (!IS_ALIGNED((unsigned long)skb->data,
 				DP_RX_BUFFER_ALIGN_SIZE)) {
-			skb_pull(skb,
-				 PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
-				 skb->data);
+			skb_reserve(skb,
+				    PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
+				    skb->data);
 		}
 
 		paddr = dma_map_single(ab->dev, skb->data,
@@ -2875,7 +2875,7 @@ static struct sk_buff *ath11k_dp_rx_alloc_mon_status_buf(struct ath11k_base *ab,
 
 	if (!IS_ALIGNED((unsigned long)skb->data,
 			DP_RX_BUFFER_ALIGN_SIZE)) {
-		skb_pull(skb, PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
+		skb_reserve(skb, PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
 			 skb->data);
 	}
 
