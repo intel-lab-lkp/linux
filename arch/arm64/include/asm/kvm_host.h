@@ -558,6 +558,7 @@ enum vcpu_sysreg {
 	VNCR(CPACR_EL1),/* Coprocessor Access Control */
 	VNCR(ZCR_EL1),	/* SVE Control */
 	VNCR(SMCR_EL1),	/* SME Control */
+	VNCR(SMPRIMAP_EL2),	/* Streaming Mode Priority Mapping Register */
 	VNCR(TTBR0_EL1),/* Translation Table Base Register 0 */
 	VNCR(TTBR1_EL1),/* Translation Table Base Register 1 */
 	VNCR(TCR_EL1),	/* Translation Control Register */
@@ -1690,6 +1691,10 @@ void kvm_set_vm_id_reg(struct kvm *kvm, u32 reg, u64 val);
 #define kvm_has_sme2(k)					\
 	(system_supports_sme2() &&			\
 	 kvm_has_feat((k), ID_AA64PFR1_EL1, SME, SME2))
+
+#define kvm_has_smps(k)					\
+	(kvm_has_sme(k) &&				\
+	 (kvm_read_vm_id_reg(k, SYS_SMIDR_EL1) & SMIDR_EL1_SMPS))
 
 #ifdef __KVM_NVHE_HYPERVISOR__
 #define vcpu_has_sme2(vcpu)	kvm_has_sme2(kern_hyp_va((vcpu)->kvm))

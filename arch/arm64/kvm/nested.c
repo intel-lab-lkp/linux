@@ -1925,6 +1925,13 @@ int kvm_init_nv_sysregs(struct kvm_vcpu *vcpu)
 	resx.res1 = SMCR_ELx_RES1;
 	set_sysreg_masks(kvm, SMCR_EL2, resx);
 
+	/* SMPRMAP_EL2 - RES0 with SME but without priority mapping */
+	if (!kvm_has_smps(kvm)) {
+		resx.res0 = GENMASK_ULL(63, 0);
+		resx.res1 = 0;
+		set_sysreg_masks(kvm, SMPRIMAP_EL2, resx);
+	}
+
 out:
 	for (enum vcpu_sysreg sr = __SANITISED_REG_START__; sr < NR_SYS_REGS; sr++)
 		__vcpu_rmw_sys_reg(vcpu, sr, |=, 0);
