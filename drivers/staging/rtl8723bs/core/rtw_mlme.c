@@ -675,52 +675,52 @@ exit:
 	spin_unlock_bh(&pmlmepriv->lock);
 }
 
-void rtw_surveydone_event_callback(struct adapter *adapter, u8 *pbuf)
+void rtw_surveydone_event_callback(struct adapter *adapter, u8 *buf)
 {
-	struct mlme_priv *pmlmepriv = &adapter->mlmepriv;
+	struct mlme_priv *mlme_priv = &adapter->mlmepriv;
 
-	spin_lock_bh(&pmlmepriv->lock);
-	if (pmlmepriv->wps_probe_req_ie) {
-		pmlmepriv->wps_probe_req_ie_len = 0;
-		kfree(pmlmepriv->wps_probe_req_ie);
-		pmlmepriv->wps_probe_req_ie = NULL;
+	spin_lock_bh(&mlme_priv->lock);
+	if (mlme_priv->wps_probe_req_ie) {
+		mlme_priv->wps_probe_req_ie_len = 0;
+		kfree(mlme_priv->wps_probe_req_ie);
+		mlme_priv->wps_probe_req_ie = NULL;
 	}
 
-	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY)) {
-		spin_unlock_bh(&pmlmepriv->lock);
-		timer_delete_sync(&pmlmepriv->scan_to_timer);
-		spin_lock_bh(&pmlmepriv->lock);
-		_clr_fwstate_(pmlmepriv, _FW_UNDER_SURVEY);
+	if (check_fwstate(mlme_priv, _FW_UNDER_SURVEY)) {
+		spin_unlock_bh(&mlme_priv->lock);
+		timer_delete_sync(&mlme_priv->scan_to_timer);
+		spin_lock_bh(&mlme_priv->lock);
+		_clr_fwstate_(mlme_priv, _FW_UNDER_SURVEY);
 	}
 
 	rtw_set_signal_stat_timer(&adapter->recvpriv);
 
-	if (pmlmepriv->to_join) {
-		if (check_fwstate(pmlmepriv, WIFI_ADHOC_STATE)) {
-			if (!check_fwstate(pmlmepriv, _FW_LINKED)) {
-				set_fwstate(pmlmepriv, _FW_UNDER_LINKING);
+	if (mlme_priv->to_join) {
+		if (check_fwstate(mlme_priv, WIFI_ADHOC_STATE)) {
+			if (!check_fwstate(mlme_priv, _FW_LINKED)) {
+				set_fwstate(mlme_priv, _FW_UNDER_LINKING);
 
-				if (rtw_select_and_join_from_scanned_queue(pmlmepriv) == _SUCCESS) {
-					_set_timer(&pmlmepriv->assoc_timer, MAX_JOIN_TIMEOUT);
+				if (rtw_select_and_join_from_scanned_queue(mlme_priv) == _SUCCESS) {
+					_set_timer(&mlme_priv->assoc_timer, MAX_JOIN_TIMEOUT);
 				} else {
 					u8 ret = _SUCCESS;
-					struct wlan_bssid_ex *pdev_network =
+					struct wlan_bssid_ex *dev_network =
 						&adapter->registrypriv.dev_network;
 
-					u8 *pibss = adapter->registrypriv.dev_network.mac_address;
+					u8 *ibss = adapter->registrypriv.dev_network.mac_address;
 
-					/* pmlmepriv->fw_state ^= _FW_UNDER_SURVEY;because don't set assoc_timer */
-					_clr_fwstate_(pmlmepriv, _FW_UNDER_SURVEY);
+					/* mlme_priv->fw_state ^= _FW_UNDER_SURVEY;because don't set assoc_timer */
+					_clr_fwstate_(mlme_priv, _FW_UNDER_SURVEY);
 
-					memcpy(&pdev_network->ssid, &pmlmepriv->assoc_ssid,
+					memcpy(&dev_network->ssid, &mlme_priv->assoc_ssid,
 					       sizeof(struct ndis_802_11_ssid));
 
 					rtw_update_registrypriv_dev_network(adapter);
-					rtw_generate_random_ibss(pibss);
+					rtw_generate_random_ibss(ibss);
 
-					pmlmepriv->fw_state = WIFI_ADHOC_MASTER_STATE;
+					mlme_priv->fw_state = WIFI_ADHOC_MASTER_STATE;
 
-					pmlmepriv->to_join = false;
+					mlme_priv->to_join = false;
 
 					ret = rtw_createbss_cmd(adapter);
 					if (ret != _SUCCESS)
@@ -730,37 +730,37 @@ void rtw_surveydone_event_callback(struct adapter *adapter, u8 *pbuf)
 		} else {
 			int s_ret;
 
-			set_fwstate(pmlmepriv, _FW_UNDER_LINKING);
-			pmlmepriv->to_join = false;
-			s_ret = rtw_select_and_join_from_scanned_queue(pmlmepriv);
+			set_fwstate(mlme_priv, _FW_UNDER_LINKING);
+			mlme_priv->to_join = false;
+			s_ret = rtw_select_and_join_from_scanned_queue(mlme_priv);
 			if (s_ret == _SUCCESS) {
-				_set_timer(&pmlmepriv->assoc_timer, MAX_JOIN_TIMEOUT);
+				_set_timer(&mlme_priv->assoc_timer, MAX_JOIN_TIMEOUT);
 			} else if (s_ret == 2) {/* there is no need to wait for join */
-				_clr_fwstate_(pmlmepriv, _FW_UNDER_LINKING);
+				_clr_fwstate_(mlme_priv, _FW_UNDER_LINKING);
 				rtw_indicate_connect(adapter);
 			} else {
 				if (rtw_to_roam(adapter) != 0) {
 					if (rtw_dec_to_roam(adapter) == 0 ||
-					    rtw_sitesurvey_cmd(adapter, &pmlmepriv->assoc_ssid,
+					    rtw_sitesurvey_cmd(adapter, &mlme_priv->assoc_ssid,
 							       1, NULL, 0) != _SUCCESS) {
 						rtw_set_to_roam(adapter, 0);
 						rtw_free_assoc_resources(adapter, 1);
 						rtw_indicate_disconnect(adapter);
 					} else {
-						pmlmepriv->to_join = true;
+						mlme_priv->to_join = true;
 					}
 				} else {
 					rtw_indicate_disconnect(adapter);
 				}
-				_clr_fwstate_(pmlmepriv, _FW_UNDER_LINKING);
+				_clr_fwstate_(mlme_priv, _FW_UNDER_LINKING);
 			}
 		}
 	} else {
 		if (rtw_chk_roam_flags(adapter, RTW_ROAM_ACTIVE)) {
-			if (check_fwstate(pmlmepriv, WIFI_STATION_STATE) &&
-			    check_fwstate(pmlmepriv, _FW_LINKED)) {
-				if (rtw_select_roaming_candidate(pmlmepriv) == _SUCCESS) {
-					receive_disconnect(adapter, pmlmepriv->cur_network.network.mac_address
+			if (check_fwstate(mlme_priv, WIFI_STATION_STATE) &&
+			    check_fwstate(mlme_priv, _FW_LINKED)) {
+				if (rtw_select_roaming_candidate(mlme_priv) == _SUCCESS) {
+					receive_disconnect(adapter, mlme_priv->cur_network.network.mac_address
 						, WLAN_REASON_ACTIVE_ROAM);
 				}
 			}
@@ -768,7 +768,7 @@ void rtw_surveydone_event_callback(struct adapter *adapter, u8 *pbuf)
 	}
 
 unlock:
-	spin_unlock_bh(&pmlmepriv->lock);
+	spin_unlock_bh(&mlme_priv->lock);
 
 	rtw_os_xmit_schedule(adapter);
 
@@ -2177,57 +2177,57 @@ void rtw_joinbss_reset(struct adapter *padapter)
 	}
 }
 
-void rtw_ht_use_default_setting(struct adapter *padapter)
+void rtw_ht_use_default_setting(struct adapter *adapter)
 {
-	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
-	struct ht_priv *phtpriv = &pmlmepriv->htpriv;
-	struct registry_priv *pregistrypriv = &padapter->registrypriv;
-	bool bHwLDPCSupport = false, bHwSTBCSupport = false;
-	bool bHwSupportBeamformer = false, bHwSupportBeamformee = false;
+	struct mlme_priv *mlme_priv = &adapter->mlmepriv;
+	struct ht_priv *ht_priv = &mlme_priv->htpriv;
+	struct registry_priv *registry_priv = &adapter->registrypriv;
+	bool hw_ldpc_support = false, hw_stbc_support = false;
+	bool hw_support_beamformer = false, hw_support_beamformee = false;
 
-	if (pregistrypriv->wifi_spec)
-		phtpriv->bss_coexist = 1;
+	if (registry_priv->wifi_spec)
+		ht_priv->bss_coexist = 1;
 	else
-		phtpriv->bss_coexist = 0;
+		ht_priv->bss_coexist = 0;
 
-	phtpriv->sgi_40m = TEST_FLAG(pregistrypriv->short_gi, BIT(1)) ? true : false;
-	phtpriv->sgi_20m = TEST_FLAG(pregistrypriv->short_gi, BIT(0)) ? true : false;
+	ht_priv->sgi_40m = TEST_FLAG(registry_priv->short_gi, BIT(1)) ? true : false;
+	ht_priv->sgi_20m = TEST_FLAG(registry_priv->short_gi, BIT(0)) ? true : false;
 
 	/*  LDPC support */
-	rtw_hal_get_def_var(padapter, HAL_DEF_RX_LDPC, (u8 *)&bHwLDPCSupport);
-	CLEAR_FLAGS(phtpriv->ldpc_cap);
-	if (bHwLDPCSupport) {
-		if (TEST_FLAG(pregistrypriv->ldpc_cap, BIT(4)))
-			SET_FLAG(phtpriv->ldpc_cap, LDPC_HT_ENABLE_RX);
+	rtw_hal_get_def_var(adapter, HAL_DEF_RX_LDPC, (u8 *)&hw_ldpc_support);
+	CLEAR_FLAGS(ht_priv->ldpc_cap);
+	if (hw_ldpc_support) {
+		if (TEST_FLAG(registry_priv->ldpc_cap, BIT(4)))
+			SET_FLAG(ht_priv->ldpc_cap, LDPC_HT_ENABLE_RX);
 	}
-	rtw_hal_get_def_var(padapter, HAL_DEF_TX_LDPC, (u8 *)&bHwLDPCSupport);
-	if (bHwLDPCSupport) {
-		if (TEST_FLAG(pregistrypriv->ldpc_cap, BIT(5)))
-			SET_FLAG(phtpriv->ldpc_cap, LDPC_HT_ENABLE_TX);
+	rtw_hal_get_def_var(adapter, HAL_DEF_TX_LDPC, (u8 *)&hw_ldpc_support);
+	if (hw_ldpc_support) {
+		if (TEST_FLAG(registry_priv->ldpc_cap, BIT(5)))
+			SET_FLAG(ht_priv->ldpc_cap, LDPC_HT_ENABLE_TX);
 	}
 
 	/*  STBC */
-	rtw_hal_get_def_var(padapter, HAL_DEF_TX_STBC, (u8 *)&bHwSTBCSupport);
-	CLEAR_FLAGS(phtpriv->stbc_cap);
-	if (bHwSTBCSupport) {
-		if (TEST_FLAG(pregistrypriv->stbc_cap, BIT(5)))
-			SET_FLAG(phtpriv->stbc_cap, STBC_HT_ENABLE_TX);
+	rtw_hal_get_def_var(adapter, HAL_DEF_TX_STBC, (u8 *)&hw_stbc_support);
+	CLEAR_FLAGS(ht_priv->stbc_cap);
+	if (hw_stbc_support) {
+		if (TEST_FLAG(registry_priv->stbc_cap, BIT(5)))
+			SET_FLAG(ht_priv->stbc_cap, STBC_HT_ENABLE_TX);
 	}
-	rtw_hal_get_def_var(padapter, HAL_DEF_RX_STBC, (u8 *)&bHwSTBCSupport);
-	if (bHwSTBCSupport) {
-		if (TEST_FLAG(pregistrypriv->stbc_cap, BIT(4)))
-			SET_FLAG(phtpriv->stbc_cap, STBC_HT_ENABLE_RX);
+	rtw_hal_get_def_var(adapter, HAL_DEF_RX_STBC, (u8 *)&hw_stbc_support);
+	if (hw_stbc_support) {
+		if (TEST_FLAG(registry_priv->stbc_cap, BIT(4)))
+			SET_FLAG(ht_priv->stbc_cap, STBC_HT_ENABLE_RX);
 	}
 
 	/*  Beamforming setting */
-	rtw_hal_get_def_var(padapter, HAL_DEF_EXPLICIT_BEAMFORMER, (u8 *)&bHwSupportBeamformer);
-	rtw_hal_get_def_var(padapter, HAL_DEF_EXPLICIT_BEAMFORMEE, (u8 *)&bHwSupportBeamformee);
-	CLEAR_FLAGS(phtpriv->beamform_cap);
-	if (TEST_FLAG(pregistrypriv->beamform_cap, BIT(4)) && bHwSupportBeamformer)
-		SET_FLAG(phtpriv->beamform_cap, BEAMFORMING_HT_BEAMFORMER_ENABLE);
+	rtw_hal_get_def_var(adapter, HAL_DEF_EXPLICIT_BEAMFORMER, (u8 *)&hw_support_beamformer);
+	rtw_hal_get_def_var(adapter, HAL_DEF_EXPLICIT_BEAMFORMEE, (u8 *)&hw_support_beamformee);
+	CLEAR_FLAGS(ht_priv->beamform_cap);
+	if (TEST_FLAG(registry_priv->beamform_cap, BIT(4)) && hw_support_beamformer)
+		SET_FLAG(ht_priv->beamform_cap, BEAMFORMING_HT_BEAMFORMER_ENABLE);
 
-	if (TEST_FLAG(pregistrypriv->beamform_cap, BIT(5)) && bHwSupportBeamformee)
-		SET_FLAG(phtpriv->beamform_cap, BEAMFORMING_HT_BEAMFORMEE_ENABLE);
+	if (TEST_FLAG(registry_priv->beamform_cap, BIT(5)) && hw_support_beamformee)
+		SET_FLAG(ht_priv->beamform_cap, BEAMFORMING_HT_BEAMFORMEE_ENABLE);
 }
 
 void rtw_build_wmm_ie_ht(struct adapter *padapter, u8 *out_ie, uint *pout_len)
