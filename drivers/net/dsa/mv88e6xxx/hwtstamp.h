@@ -68,6 +68,20 @@
 #define MV88E6XXX_PORT_PTP_CFG2_DEP_IRQ_EN		0x0002
 #define MV88E6XXX_PORT_PTP_CFG2_ARR_IRQ_EN		0x0001
 
+/* Arrival Time Stamp Mode (ArrTSMode), CFG2 bits [15:8]: configures how the
+ * switch embeds the arrival time stamp (PTPArr0Time) into enabled PTP event
+ * frames.
+ *   0x00        frame modification disabled (time stamp read from registers)
+ *   0x01        append the 4-byte time stamp at the end of the frame,
+ *               growing the frame by four bytes
+ *   0x04..0xEF  overwrite the 4-byte time stamp in place, that many bytes past
+ *               the start of the PTP common header, without growing the frame
+ *               (offsetof(struct ptp_header, reserved2) targets the reserved
+ *               bytes of the header)
+ *   others      reserved
+ */
+#define MV88E6XXX_PTP_ARR_TS_MODE_APPEND		0x01
+
 /* Offset 0x03: PTP LED Configuration */
 #define MV88E6XXX_PORT_PTP_LED_CFG	0x03
 
