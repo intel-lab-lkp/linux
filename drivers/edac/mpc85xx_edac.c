@@ -142,6 +142,13 @@ static irqreturn_t mpc85xx_pci_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void mpc85xx_pci_edac_free(void *data)
+{
+	struct edac_pci_ctl_info *pci = data;
+
+	edac_pci_free_ctl_info(pci);
+}
+
 static int mpc85xx_pci_err_probe(struct platform_device *op)
 {
 	struct edac_pci_ctl_info *pci;
@@ -151,12 +158,13 @@ static int mpc85xx_pci_err_probe(struct platform_device *op)
 	struct resource r;
 	int res = 0;
 
-	if (!devres_open_group(&op->dev, mpc85xx_pci_err_probe, GFP_KERNEL))
-		return -ENOMEM;
-
 	pci = edac_pci_alloc_ctl_info(sizeof(*pdata), "mpc85xx_pci_err");
 	if (!pci)
 		return -ENOMEM;
+
+	res = devm_add_action_or_reset(&op->dev, mpc85xx_pci_edac_free, pci);
+	if (res)
+		return res;
 
 	/* make sure error reporting method is sane */
 	switch (edac_op_state) {
@@ -286,7 +294,6 @@ static int mpc85xx_pci_err_probe(struct platform_device *op)
 			 | PEX_ERR_ICCAD_DISR_BIT);
 	}
 
-	devres_remove_group(&op->dev, mpc85xx_pci_err_probe);
 	edac_dbg(3, "success\n");
 	pr_info(EDAC_MOD_STR " PCI err registered\n");
 
@@ -295,8 +302,6 @@ static int mpc85xx_pci_err_probe(struct platform_device *op)
 err2:
 	edac_pci_del_device(&op->dev);
 err:
-	edac_pci_free_ctl_info(pci);
-	devres_release_group(&op->dev, mpc85xx_pci_err_probe);
 	return res;
 }
 
@@ -311,7 +316,6 @@ static void mpc85xx_pci_err_remove(struct platform_device *op)
 	out_be32(pdata->pci_vbase + MPC85XX_PCI_ERR_EN, orig_pci_err_en);
 
 	edac_pci_del_device(&op->dev);
-	edac_pci_free_ctl_info(pci);
 }
 
 static const struct platform_device_id mpc85xx_pci_err_match[] = {
@@ -485,6 +489,13 @@ static irqreturn_t mpc85xx_l2_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void mpc85xx_l2_edac_free(void *data)
+{
+	struct edac_device_ctl_info *edac_dev = data;
+
+	edac_device_free_ctl_info(edac_dev);
+}
+
 static int mpc85xx_l2_err_probe(struct platform_device *op)
 {
 	struct edac_device_ctl_info *edac_dev;
@@ -492,16 +503,16 @@ static int mpc85xx_l2_err_probe(struct platform_device *op)
 	struct resource r;
 	int res;
 
-	if (!devres_open_group(&op->dev, mpc85xx_l2_err_probe, GFP_KERNEL))
-		return -ENOMEM;
-
 	edac_dev = edac_device_alloc_ctl_info(sizeof(*pdata),
 					      "cpu", 1, "L", 1, 2,
 					      edac_dev_idx);
-	if (!edac_dev) {
-		devres_release_group(&op->dev, mpc85xx_l2_err_probe);
+	if (!edac_dev)
 		return -ENOMEM;
-	}
+
+	res = devm_add_action_or_reset(&op->dev, mpc85xx_l2_edac_free,
+				       edac_dev);
+	if (res)
+		return res;
 
 	pdata = edac_dev->pvt_info;
 	pdata->name = "mpc85xx_l2_err";
@@ -574,8 +585,6 @@ static int mpc85xx_l2_err_probe(struct platform_device *op)
 		out_be32(pdata->l2_vbase + MPC85XX_L2_ERRINTEN, L2_EIE_MASK);
 	}
 
-	devres_remove_group(&op->dev, mpc85xx_l2_err_probe);
-
 	edac_dbg(3, "success\n");
 	pr_info(EDAC_MOD_STR " L2 err registered\n");
 
@@ -584,8 +593,6 @@ static int mpc85xx_l2_err_probe(struct platform_device *op)
 err2:
 	edac_device_del_device(&op->dev);
 err:
-	devres_release_group(&op->dev, mpc85xx_l2_err_probe);
-	edac_device_free_ctl_info(edac_dev);
 	return res;
 }
 
@@ -603,7 +610,6 @@ static void mpc85xx_l2_err_remove(struct platform_device *op)
 
 	out_be32(pdata->l2_vbase + MPC85XX_L2_ERRDIS, orig_l2_err_disable);
 	edac_device_del_device(&op->dev);
-	edac_device_free_ctl_info(edac_dev);
 }
 
 static const struct of_device_id mpc85xx_l2_err_of_match[] = {
