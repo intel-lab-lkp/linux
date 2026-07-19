@@ -1150,6 +1150,32 @@ static int llbitmap_resize(struct mddev *mddev, sector_t blocks, int chunksize)
 		chunks = DIV_ROUND_UP_SECTOR_T(blocks, chunksize);
 	}
 
+	/*
+	 * A changed chunksize would require remapping every on-disk bit:
+	 * each chunk would cover a different sector range.  Refuse rather
+	 * than corrupt the existing intent record.
+	 */
+	if (chunksize != llbitmap->chunksize) {
+		pr_warn("md/llbitmap: %s: cannot resize to %llu sectors: bitmap space (%lu sectors) requires chunksize %u, current is %lu\n",
+			mdname(mddev), (unsigned long long)blocks,
+			mddev->bitmap_info.space, (unsigned int)chunksize,
+			llbitmap->chunksize);
+		return -EINVAL;
+	}
+
+	/*
+	 * pctl[]/nr_pages are sized at creation and not grown here; a
+	 * grow past the last allocated page would index past pctl[].
+	 */
+	if (DIV_ROUND_UP(chunks + BITMAP_DATA_OFFSET, PAGE_SIZE) >
+	    llbitmap->nr_pages) {
+		pr_warn("md/llbitmap: %s: cannot grow to %lu chunks: needs %lu bitmap pages, only %u allocated; growing the bitmap is not yet supported\n",
+			mdname(mddev), chunks,
+			DIV_ROUND_UP(chunks + BITMAP_DATA_OFFSET, PAGE_SIZE),
+			llbitmap->nr_pages);
+		return -ENOSPC;
+	}
+
 	llbitmap->chunkshift = ffz(~chunksize);
 	llbitmap->chunksize = chunksize;
 	llbitmap->chunks = chunks;
