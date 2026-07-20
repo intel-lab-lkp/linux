@@ -1157,14 +1157,35 @@ static void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu,
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 }
 
+/*
+ * Whether software accounting of KVM-emulated instructions for @perf_hw_id is
+ * disabled via KVM_CAP_X86_DISABLE_PMU_SW_ACCOUNTING. The capability only
+ * targets the emulated (perf-based) vPMU, where the accounting drives an
+ * expensive counter reprogram; a mediated vPMU increments pmc->counter
+ * directly (and may raise a PMI on overflow), so it is never skipped.
+ */
+static bool kvm_pmu_skip_sw_accounting(struct kvm_vcpu *vcpu, u64 perf_hw_id)
+{
+	if (kvm_vcpu_has_mediated_pmu(vcpu))
+		return false;
+
+	return vcpu->kvm->arch.pmu_disable_sw_accounting & BIT_ULL(perf_hw_id);
+}
+
 void kvm_pmu_instruction_retired(struct kvm_vcpu *vcpu)
 {
+	if (kvm_pmu_skip_sw_accounting(vcpu, PERF_COUNT_HW_INSTRUCTIONS))
+		return;
+
 	kvm_pmu_trigger_event(vcpu, vcpu_to_pmu(vcpu)->pmc_counting_instructions);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_pmu_instruction_retired);
 
 void kvm_pmu_branch_retired(struct kvm_vcpu *vcpu)
 {
+	if (kvm_pmu_skip_sw_accounting(vcpu, PERF_COUNT_HW_BRANCH_INSTRUCTIONS))
+		return;
+
 	kvm_pmu_trigger_event(vcpu, vcpu_to_pmu(vcpu)->pmc_counting_branches);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_pmu_branch_retired);

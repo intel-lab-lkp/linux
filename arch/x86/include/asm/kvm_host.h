@@ -1458,6 +1458,13 @@ struct kvm_arch {
 	bool enable_pmu;
 	bool created_mediated_pmu;
 
+	/*
+	 * Bitmask of PERF_COUNT_HW_* event IDs for which software accounting
+	 * of KVM-emulated instructions is disabled (KVM_CAP_X86_DISABLE_PMU_
+	 * SW_ACCOUNTING). See kvm_pmu_trigger_event().
+	 */
+	u64 pmu_disable_sw_accounting;
+
 	u32 notify_window;
 	u32 notify_vmexit_flags;
 	/*

@@ -2382,6 +2382,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_DISABLE_QUIRKS2:
 		r = kvm_caps.supported_quirks;
 		break;
+	case KVM_CAP_X86_DISABLE_PMU_SW_ACCOUNTING:
+		r = KVM_PMU_SW_ACCOUNTING_VALID_MASK;
+		break;
 	case KVM_CAP_X86_NOTIFY_VMEXIT:
 		r = kvm_caps.has_notify_vmexit;
 		break;
@@ -3933,6 +3936,18 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 		return -EINVAL;
 
 	switch (cap->cap) {
+	case KVM_CAP_X86_DISABLE_PMU_SW_ACCOUNTING:
+		r = -EINVAL;
+		if (cap->args[0] & ~KVM_PMU_SW_ACCOUNTING_VALID_MASK)
+			break;
+
+		mutex_lock(&kvm->lock);
+		if (!kvm->created_vcpus) {
+			kvm->arch.pmu_disable_sw_accounting = cap->args[0];
+			r = 0;
+		}
+		mutex_unlock(&kvm->lock);
+		break;
 	case KVM_CAP_DISABLE_QUIRKS2:
 		r = -EINVAL;
 		if (cap->args[0] & ~kvm_caps.supported_quirks)

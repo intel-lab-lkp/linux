@@ -23,6 +23,15 @@
 
 #define KVM_FIXED_PMC_BASE_IDX INTEL_PMC_IDX_FIXED
 
+/*
+ * Events for which KVM_CAP_X86_DISABLE_PMU_SW_ACCOUNTING can disable software
+ * accounting of emulated instructions. These are the only events KVM ever
+ * passes to kvm_pmu_trigger_event() (from the retired-instruction path).
+ */
+#define KVM_PMU_SW_ACCOUNTING_VALID_MASK			\
+	(BIT_ULL(PERF_COUNT_HW_INSTRUCTIONS) |			\
+	 BIT_ULL(PERF_COUNT_HW_BRANCH_INSTRUCTIONS))
+
 struct kvm_pmu_ops {
 	struct kvm_pmc *(*rdpmc_ecx_to_pmc)(struct kvm_vcpu *vcpu,
 		unsigned int idx, u64 *mask);
