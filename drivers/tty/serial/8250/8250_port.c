@@ -1804,6 +1804,21 @@ void serial8250_handle_irq_locked(struct uart_port *port, unsigned int iir)
 		serial8250_clear_and_reinit_fifos(up);
 
 	/*
+	 * A UART can raise an RX character-timeout interrupt while the RX
+	 * FIFO is already empty (IIR reports RX_TIMEOUT but LSR.DR is
+	 * clear). The timeout is only cleared by reading RHR, but the RX
+	 * path below is skipped when the FIFO is empty, so nothing clears
+	 * it. With a level-triggered IRQ it re-fires immediately and can
+	 * livelock a single-core. Observed on the NXP LPC32xx
+	 * UART (PORT_LPC3220). Do one throwaway RHR read to
+	 * clear it. A healthy 16550 UART never reports a timeout with DR clear,
+	 * so this is a no-op elsewhere.
+	 */
+	if ((iir & UART_IIR_RX_TIMEOUT) == UART_IIR_RX_TIMEOUT &&
+	    !(status & UART_LSR_DR))
+		serial_in(up, UART_RX);
+
+	/*
 	 * If port is stopped and there are no error conditions in the
 	 * FIFO, then don't drain the FIFO, as this may lead to TTY buffer
 	 * overflow. Not servicing, RX FIFO would trigger auto HW flow
