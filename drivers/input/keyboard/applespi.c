@@ -1029,6 +1029,7 @@ static void applespi_debug_update_dimensions(struct applespi_data *applespi,
 static int applespi_tp_dim_open(struct inode *inode, struct file *file)
 {
 	struct applespi_data *applespi = inode->i_private;
+	struct input_dev *touchpad = applespi->touchpad_input_dev;
 
 	if (!applespi->touchpad_input_dev)
 		return -ENODEV;
@@ -1037,7 +1038,7 @@ static int applespi_tp_dim_open(struct inode *inode, struct file *file)
 
 	snprintf(applespi->tp_dim_val, sizeof(applespi->tp_dim_val),
 		 "0x%.4x %dx%d+%u+%u\n",
-		 applespi->touchpad_input_dev->id.product,
+		 touchpad->id.product,
 		 applespi->tp_dim_min_x, applespi->tp_dim_min_y,
 		 applespi->tp_dim_max_x - applespi->tp_dim_min_x,
 		 applespi->tp_dim_max_y - applespi->tp_dim_min_y);
@@ -2044,6 +2045,7 @@ static struct spi_driver applespi_driver = {
 		.name			= "applespi",
 		.acpi_match_table	= applespi_acpi_match,
 		.pm			= pm_sleep_ptr(&applespi_pm_ops),
+		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe		= applespi_probe,
 	.remove		= applespi_remove,
