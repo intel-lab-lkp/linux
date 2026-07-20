@@ -2054,8 +2054,9 @@ splice_requeue:
  */
 #define TLS_RX_NODATA_LIMIT 16
 
-int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
-		     sk_read_actor_t read_actor)
+static int __tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
+			      sk_read_actor_t read_actor,
+			      sk_read_rectype_actor_t rectype_actor)
 {
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
 	struct tls_sw_context_rx *ctx = tls_sw_ctx_rx(tls_ctx);
@@ -2115,10 +2116,27 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			tls_rx_rec_done(ctx);
 		}
 
-		/* read_sock does not support reading control messages */
+		/* Control records (alerts, handshake) reach a consumer
+		 * only through rectype_actor; without one, read_sock
+		 * rejects them.
+		 */
 		if (tlm->control != TLS_RECORD_TYPE_DATA) {
-			err = -EINVAL;
-			goto read_sock_requeue;
+			if (!rectype_actor) {
+				err = -EINVAL;
+				goto read_sock_requeue;
+			}
+			err = rectype_actor(desc, skb, rxm->offset,
+					 rxm->full_len,
+					 tlm->control);
+			if (err < 0)
+				goto read_sock_requeue;
+			err = 0;
+			/* rectype_actor consumes the whole record; no partial path */
+			consume_skb(skb);
+			skb = NULL;
+			if (++nodata_count >= TLS_RX_NODATA_LIMIT)
+				break;
+			continue;
 		}
 
 		/* An empty data record (legal in TLS 1.3) gives a zero
@@ -2162,6 +2180,19 @@ read_sock_end:
 read_sock_requeue:
 	__skb_queue_head(&ctx->rx_list, skb);
 	goto read_sock_end;
+}
+
+int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
+		     sk_read_actor_t read_actor)
+{
+	return __tls_sw_read_sock(sk, desc, read_actor, NULL);
+}
+
+int tls_sw_read_sock_rectype(struct sock *sk, read_descriptor_t *desc,
+			     sk_read_actor_t read_actor,
+			     sk_read_rectype_actor_t rectype_actor)
+{
+	return __tls_sw_read_sock(sk, desc, read_actor, rectype_actor);
 }
 
 bool tls_sw_sock_is_readable(struct sock *sk)

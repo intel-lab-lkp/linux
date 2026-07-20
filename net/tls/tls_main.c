@@ -949,12 +949,17 @@ static void build_proto_ops(struct proto_ops ops[TLS_NUM_CONFIG][TLS_NUM_CONFIG]
 	ops[TLS_BASE][TLS_SW  ].splice_read	= tls_sw_splice_read;
 	ops[TLS_BASE][TLS_SW  ].poll		= tls_sk_poll;
 	ops[TLS_BASE][TLS_SW  ].read_sock	= tls_sw_read_sock;
+	ops[TLS_BASE][TLS_SW  ].read_sock_rectype	= tls_sw_read_sock_rectype;
 
 	ops[TLS_SW  ][TLS_SW  ] = ops[TLS_SW  ][TLS_BASE];
 	ops[TLS_SW  ][TLS_SW  ].splice_read	= tls_sw_splice_read;
 	ops[TLS_SW  ][TLS_SW  ].poll		= tls_sk_poll;
 	ops[TLS_SW  ][TLS_SW  ].read_sock	= tls_sw_read_sock;
+	ops[TLS_SW  ][TLS_SW  ].read_sock_rectype	= tls_sw_read_sock_rectype;
 
+	/* TLS_HW (device offload) RX entries inherit
+	 * read_sock{,_rectype} from SW via the struct copies below.
+	 */
 #ifdef CONFIG_TLS_DEVICE
 	ops[TLS_HW  ][TLS_BASE] = ops[TLS_BASE][TLS_BASE];
 
