@@ -2230,42 +2230,63 @@ struct collapse_file_state {
 	unsigned int is_shmem : 1;
 };
 
+static struct folio *collapse_read_folio(pgoff_t index, struct collapse_file_state *state)
+{
+	const bool may_bring_uptodate = state->is_shmem;
+	struct folio *folio = state->folio;
+
+	if (!folio || xa_is_value(folio) ||
+	   (may_bring_uptodate && !folio_test_uptodate(folio))) {
+		xas_unlock_irq(state->xas);
+		if (state->is_shmem) {
+			/* swap in or instantiate fallocated page */
+			if (shmem_get_folio(state->mapping->host, index, 0,
+					    &folio, SGP_NOALLOC))
+				return NULL;
+		} else {
+			page_cache_sync_readahead(state->mapping, &state->file->f_ra,
+						  state->file, index,
+						  state->end - index);
+			folio = filemap_lock_folio(state->mapping, index);
+			if (IS_ERR(folio))
+				return NULL;
+		}
+	}
+
+	return folio;
+}
+
 static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collapse_file_state *state)
 {
 	struct address_space *mapping = state->mapping;
 	enum scan_result result = SCAN_SUCCEED;
 	const int is_shmem = state->is_shmem;
-	struct folio *folio = state->folio;
+	struct folio *folio;
+
+	folio = collapse_read_folio(index, state);
+	if (!folio)
+		return SCAN_FAIL;
+	if (folio != state->folio) {
+		/*
+		 * collapse_read_folio() got a new folio. This folio is locked
+		 * and ref'd up. Nothing tricky (dirty, writeback, etc) can
+		 * happen, so bail now. But before that, drain the local LRU
+		 * add batch. Otherwise, it's very possible folio_isolate_lru()
+		 * will not succeed.
+		 */
+		lru_add_drain();
+		goto xa_unlocked;
+	}
 
 	if (is_shmem) {
-		if (xa_is_value(folio) || !folio_test_uptodate(folio)) {
-			xas_unlock_irq(state->xas);
-			/* swap in or instantiate fallocated page */
-			if (shmem_get_folio(mapping->host, index, 0,
-					&folio, SGP_NOALLOC))
-				result = SCAN_FAIL;
-			/* drain lru cache to help folio_isolate_lru() */
-			lru_add_drain();
-			goto xa_unlocked;
-		} else if (folio_trylock(folio)) {
+		if (folio_trylock(folio)) {
 			folio_get(folio);
 		} else {
 			result = SCAN_PAGE_LOCK;
 			goto xa_locked;
 		}
 	} else {	/* !is_shmem */
-		if (!folio || xa_is_value(folio)) {
-			xas_unlock_irq(state->xas);
-			page_cache_sync_readahead(mapping, &state->file->f_ra,
-						  state->file, index,
-						  state->end - index);
-			/* drain lru cache to help folio_isolate_lru() */
-			lru_add_drain();
-			folio = filemap_lock_folio(mapping, index);
-			if (IS_ERR(folio))
-				result = SCAN_FAIL;
-			goto xa_unlocked;
-		} else if (folio_test_dirty(folio)) {
+		if (folio_test_dirty(folio)) {
 			/*
 			 * This page is dirty because it hasn't
 			 * been flushed since first write.
