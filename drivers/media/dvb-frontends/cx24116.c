@@ -233,7 +233,9 @@ static int cx24116_writeregN(struct cx24116_state *state, int reg,
 	if (ret != 1) {
 		printk(KERN_ERR "%s: writereg error(err == %i, reg == 0x%02x\n",
 			 __func__, ret, reg);
-		ret = -EREMOTEIO;
+		ret = ret < 0 ? ret : -EREMOTEIO;
+	} else {
+		ret = 0;
 	}
 
 	kfree(buf);
@@ -611,8 +613,10 @@ static int cx24116_load_firmware(struct dvb_frontend *fe,
 		if (len > max - 1)
 			len = max - 1;
 
-		cx24116_writeregN(state, 0xF7, &fw->data[fw->size - remaining],
-			len);
+		ret = cx24116_writeregN(state, 0xF7,
+					&fw->data[fw->size - remaining], len);
+		if (ret)
+			return ret;
 	}
 
 	cx24116_writereg(state, 0xF4, 0x10);
