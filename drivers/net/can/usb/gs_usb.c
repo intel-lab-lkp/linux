@@ -529,29 +529,31 @@ static void gs_usb_timestamp_stop(struct gs_usb *parent)
 	cancel_delayed_work_sync(&parent->timestamp);
 }
 
-static void gs_update_state(struct gs_can *dev, struct can_frame *cf)
+static void gs_update_state(struct gs_can *dev, struct can_frame *cf,
+			    enum can_state tx_state, enum can_state rx_state)
 {
 	struct can_device_stats *can_stats = &dev->can.can_stats;
 
-	if (cf->can_id & CAN_ERR_RESTARTED) {
-		dev->can.state = CAN_STATE_ERROR_ACTIVE;
+	/* clear CAN state information, will be set consistently by can_change_state() below */
+	cf->can_id &= ~(CAN_ERR_CRTL | CAN_ERR_BUSOFF | CAN_ERR_RESTARTED);
+	cf->data[1] &= ~(CAN_ERR_CRTL_RX_WARNING | CAN_ERR_CRTL_TX_WARNING |
+			 CAN_ERR_CRTL_RX_PASSIVE | CAN_ERR_CRTL_TX_PASSIVE |
+			 CAN_ERR_CRTL_ACTIVE);
+
+	const enum can_state new_state = max(rx_state, tx_state);
+
+	if (new_state == dev->can.state)
+		return;
+
+	/* some firmware does automatically CAN bus off recovery, account for this */
+	if (cf->can_id & CAN_ERR_RESTARTED ||
+	    (dev->can.state == CAN_STATE_BUS_OFF && new_state < CAN_STATE_BUS_OFF)) {
 		can_stats->restarts++;
-	} else if (cf->can_id & CAN_ERR_BUSOFF) {
-		dev->can.state = CAN_STATE_BUS_OFF;
-		can_stats->bus_off++;
-	} else if (cf->can_id & CAN_ERR_CRTL) {
-		if ((cf->data[1] & CAN_ERR_CRTL_TX_WARNING) ||
-		    (cf->data[1] & CAN_ERR_CRTL_RX_WARNING)) {
-			dev->can.state = CAN_STATE_ERROR_WARNING;
-			can_stats->error_warning++;
-		} else if ((cf->data[1] & CAN_ERR_CRTL_TX_PASSIVE) ||
-			   (cf->data[1] & CAN_ERR_CRTL_RX_PASSIVE)) {
-			dev->can.state = CAN_STATE_ERROR_PASSIVE;
-			can_stats->error_passive++;
-		} else {
-			dev->can.state = CAN_STATE_ERROR_ACTIVE;
-		}
+		/* some firmware doesn't set CAN_ERR_RESTARTED, fixup */
+		cf->can_id |= CAN_ERR_RESTARTED;
 	}
+
+	can_change_state(dev->can.dev, cf, tx_state, rx_state);
 }
 
 static u32 gs_usb_set_timestamp(struct gs_can *dev, struct sk_buff *skb,
@@ -640,6 +642,75 @@ gs_usb_get_minimum_rx_length(const struct gs_can *dev, const struct gs_host_fram
 	return minimum_length;
 }
 
+static void
+gs_usb_state_get_by_hf(const struct gs_can *dev, const struct gs_host_frame *hf,
+		       enum can_state *tx_state_p, enum can_state *rx_state_p)
+{
+	enum can_state tx_state, rx_state;
+
+	/* extract CAN state from frame */
+	if (hf->can_id & cpu_to_le32(CAN_ERR_CRTL | CAN_ERR_BUSOFF)) {
+		const u8 err_crtl = hf->classic_can->data[1];
+
+		if (hf->can_id & cpu_to_le32(CAN_ERR_BUSOFF)) {
+			tx_state = CAN_STATE_BUS_OFF;
+			rx_state = CAN_STATE_BUS_OFF;
+		} else {
+			if (err_crtl & CAN_ERR_CRTL_RX_PASSIVE)
+				rx_state = CAN_STATE_ERROR_PASSIVE;
+			else if (err_crtl & CAN_ERR_CRTL_RX_WARNING)
+				rx_state = CAN_STATE_ERROR_WARNING;
+			else
+				rx_state = CAN_STATE_ERROR_ACTIVE;
+
+			if (err_crtl & CAN_ERR_CRTL_TX_PASSIVE)
+				tx_state = CAN_STATE_ERROR_PASSIVE;
+			else if (err_crtl & CAN_ERR_CRTL_TX_WARNING)
+				tx_state = CAN_STATE_ERROR_WARNING;
+			else
+				tx_state = CAN_STATE_ERROR_ACTIVE;
+		}
+	} else {
+		tx_state = dev->can.state;
+		rx_state = dev->can.state;
+	}
+
+	*tx_state_p = tx_state;
+	*rx_state_p = rx_state;
+}
+
+static bool
+gs_usb_should_handle_can_error(const struct gs_can *dev, const struct gs_host_frame *hf,
+			       enum can_state *tx_state_p, enum can_state *rx_state_p)
+{
+	gs_usb_state_get_by_hf(dev, hf, tx_state_p, rx_state_p);
+
+	/* If the CAN error counters are not 0, some firmware repeatedly send CAN state error
+	 * frames, even if the CAN state does not change. Handle changed CAN states.
+	 */
+	const enum can_state new_state = max(*tx_state_p, *rx_state_p);
+
+	if (new_state != dev->can.state)
+		return true;
+
+	/* handle RX and TX overflow */
+	const u8 err_crtl = hf->classic_can->data[1];
+
+	if ((hf->can_id & cpu_to_le32(CAN_ERR_CRTL)) &&
+	    err_crtl & (CAN_ERR_CRTL_RX_OVERFLOW | CAN_ERR_CRTL_TX_OVERFLOW))
+		return true;
+
+	/* handle TX timeout */
+	if (hf->can_id & cpu_to_le32(CAN_ERR_TX_TIMEOUT))
+		return true;
+
+	/* handle CAN bus errors */
+	if (hf->can_id & cpu_to_le32(CAN_ERR_LOSTARB | CAN_ERR_PROT | CAN_ERR_TRX | CAN_ERR_ACK))
+		return true;
+
+	return false;
+}
+
 static void gs_usb_receive_bulk_callback(struct urb *urb)
 {
 	struct gs_usb *parent = urb->context;
@@ -719,7 +790,12 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 			memcpy(cfd->data, hf->canfd->data, data_length);
 		} else {
+			enum can_state tx_state, rx_state;
 			struct can_frame *cf;
+
+			if (hf->can_id & cpu_to_le32(CAN_ERR_FLAG) &&
+			    !gs_usb_should_handle_can_error(dev, hf, &tx_state, &rx_state))
+				goto resubmit_urb;
 
 			skb = alloc_can_skb(netdev, &cf);
 			if (!skb)
@@ -732,7 +808,7 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 			/* ERROR frames tell us information about the controller */
 			if (le32_to_cpu(hf->can_id) & CAN_ERR_FLAG)
-				gs_update_state(dev, cf);
+				gs_update_state(dev, cf, tx_state, rx_state);
 		}
 
 		gs_usb_rx_offload(dev, skb, hf);
