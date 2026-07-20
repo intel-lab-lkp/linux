@@ -393,11 +393,14 @@ static int ccwchain_calc_length(u64 iova, struct channel_program *cp)
 		if (!ccw_is_chain(ccw) && !is_tic_within_range(ccw, iova, cnt))
 			break;
 
-		ccw++;
-	} while (cnt < CCWCHAIN_LEN_MAX + 1);
+		/* Exit the loop when we reach the maximum */
+		if (cnt >= CCWCHAIN_LEN_MAX) {
+			cnt = -EINVAL;
+			break;
+		}
 
-	if (cnt == CCWCHAIN_LEN_MAX + 1)
-		cnt = -EINVAL;
+		ccw++;
+	} while (1);
 
 	return cnt;
 }
