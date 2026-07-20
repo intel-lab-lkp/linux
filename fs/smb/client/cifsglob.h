@@ -836,6 +836,26 @@ struct TCP_Server_Info {
 	char dns_dom[CIFS_MAX_DOMAINNAME_LEN + 1];
 };
 
+static __always_inline void disable_compression(struct TCP_Server_Info *server)
+{
+	/*
+	 * should_compress() checks the primary server compression state, so disable it only
+	 * on primary server.
+	 */
+	if (SERVER_IS_CHAN(server))
+		server = server->primary_server;
+
+	if (server->compression.enabled) {
+		pr_warn("%s: disabling compression (failsafe)\n", server->hostname);
+
+		/*
+		 * We must keep ->requested as true, in case new channels are added, so server
+		 * capabilities are kept in sync (even though no further compression will be done).
+		 */
+		server->compression.enabled = false;
+	}
+}
+
 static inline bool is_smb1(const struct TCP_Server_Info *server)
 {
 	return server->vals->protocol_id == SMB10_PROT_ID;

@@ -401,6 +401,17 @@ static int __cifs_reconnect(struct TCP_Server_Info *server,
 		try_to_freeze();
 		cifs_server_lock(server);
 
+		/*
+		 * Servers might disconnect us when they can't decompress a compressed request we
+		 * sent.
+		 * When this happens, as a failsafe measure, disable compression entirely to avoid
+		 * an endless retry.
+		 *
+		 * TODO: implement a more flexible alternative, e.g. identify and retry sending
+		 * the failed request uncompressed, without having to disable compression entirely.
+		 */
+		disable_compression(server);
+
 		if (!cifs_swn_set_server_dstaddr(server) &&
 		    !SERVER_IS_CHAN(server)) {
 			/* resolve the hostname again to make sure that IP address is up-to-date */
