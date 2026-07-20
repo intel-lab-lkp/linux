@@ -1587,7 +1587,7 @@ static bool intel_sel_update_config_valid(struct intel_crtc_state *crtc_state,
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 	struct intel_display *display = to_intel_display(intel_dp);
 
-	if (crtc_state->cmrr.enable) {
+	if (crtc_state->vrr.cmrr.enable) {
 		drm_dbg_kms(display->drm,
 			    "Selective update cannot be enabled when CMRR is enabled\n");
 		goto unsupported;
