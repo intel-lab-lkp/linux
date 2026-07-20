@@ -195,7 +195,7 @@ is_cmrr_frac_required(struct intel_crtc_state *crtc_state)
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 
 	/* Avoid CMRR for now till we have VRR with fixed timings working */
-	if (!HAS_CMRR(display) || true)
+	if (!(HAS_CMRR(display) && intel_vrr_always_use_vrr_tg(display)) || true)
 		return false;
 
 	actual_refresh_k =
@@ -1066,7 +1066,7 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 	trans_vrr_ctl = intel_de_read(display,
 				      TRANS_VRR_CTL(display, cpu_transcoder));
 
-	if (HAS_CMRR(display))
+	if (HAS_CMRR(display) && intel_vrr_always_use_vrr_tg(display))
 		crtc_state->cmrr.enable = (trans_vrr_ctl & VRR_CTL_CMRR_ENABLE);
 
 	if (crtc_state->cmrr.enable) {
