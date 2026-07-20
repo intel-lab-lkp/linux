@@ -200,6 +200,7 @@ EXPORT_SYMBOL(pcie_tph_get_st_table_size);
 static u8 get_rp_completer_type(struct pci_dev *pdev)
 {
 	struct pci_dev *rp;
+	u8 tph_comp;
 	u32 reg;
 	int ret;
 
@@ -211,7 +212,15 @@ static u8 get_rp_completer_type(struct pci_dev *pdev)
 	if (ret)
 		return 0;
 
-	return FIELD_GET(PCI_EXP_DEVCAP2_TPH_COMP_MASK, reg);
+	/*
+	 * 0b10 is reserved; treat it as "not supported" so only the
+	 * architected encodings reach the Requester Enable field.
+	 */
+	tph_comp = FIELD_GET(PCI_EXP_DEVCAP2_TPH_COMP_MASK, reg);
+	if (tph_comp == PCI_EXP_DEVCAP2_TPH_COMP_TPH_ONLY ||
+	    tph_comp == PCI_EXP_DEVCAP2_TPH_COMP_EXT_TPH)
+		return tph_comp;
+	return PCI_EXP_DEVCAP2_TPH_COMP_NONE;
 }
 
 /* Write tag to ST table - Return 0 if OK, otherwise -errno */
