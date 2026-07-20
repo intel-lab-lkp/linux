@@ -600,4 +600,19 @@ static inline void riscv_insn_insert_utype_itype_imm(u32 *utype_insn, u32 *itype
 	*utype_insn |= (imm & RV_U_IMM_31_12_MASK) + ((imm & BIT(11)) << 1);
 	*itype_insn |= ((imm & RV_I_IMM_11_0_MASK) << RV_I_IMM_11_0_OPOFF);
 }
+
+static __always_inline bool riscv_insn_is_csr_read(u32 code)
+{
+	return (code & RV_INSN_OPCODE_MASK) == RVG_OPCODE_SYSTEM &&
+			(GET_FUNCT3(code) == GET_FUNCT3(INSN_MATCH_CSRRS)
+				 || GET_FUNCT3(code) == GET_FUNCT3(INSN_MATCH_CSRRC)
+				 || GET_FUNCT3(code) == GET_FUNCT3(INSN_MATCH_CSRRSI)
+				 || GET_FUNCT3(code) == GET_FUNCT3(INSN_MATCH_CSRRCI)) &&
+			 RV_EXTRACT_RS1_REG(code) == 0;
+}
+
+static __always_inline bool riscv_insn_is_system_except_csr_read(u32 code)
+{
+	return riscv_insn_is_system(code) && !riscv_insn_is_csr_read(code);
+}
 #endif /* _ASM_RISCV_INSN_H */

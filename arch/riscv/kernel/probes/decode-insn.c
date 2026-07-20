@@ -21,7 +21,7 @@ riscv_probe_decode_insn(probe_opcode_t *addr, struct arch_probe_insn *api)
 	/*
 	 * Reject instructions list:
 	 */
-	RISCV_INSN_REJECTED(system,		insn);
+	RISCV_INSN_REJECTED(system_except_csr_read,		insn);
 	RISCV_INSN_REJECTED(fence,		insn);
 
 	/*
