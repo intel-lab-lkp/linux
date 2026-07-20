@@ -1420,6 +1420,8 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 
 	feature = le32_to_cpu(bt_const.feature);
 	dev->feature = FIELD_GET(GS_CAN_FEATURE_MASK, feature);
+
+	/* keep sorted by GS_CAN_FEATURE */
 	if (feature & GS_CAN_FEATURE_LISTEN_ONLY)
 		dev->can.ctrlmode_supported |= CAN_CTRLMODE_LISTENONLY;
 
@@ -1432,6 +1434,11 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 	if (feature & GS_CAN_FEATURE_ONE_SHOT)
 		dev->can.ctrlmode_supported |= CAN_CTRLMODE_ONE_SHOT;
 
+	/* GS_CAN_FEATURE_IDENTIFY is only supported for sw_version > 1 */
+	if (!(le32_to_cpu(dconf->sw_version) > 1 &&
+	      feature & GS_CAN_FEATURE_IDENTIFY))
+		dev->feature &= ~GS_CAN_FEATURE_IDENTIFY;
+
 	if (feature & GS_CAN_FEATURE_FD) {
 		dev->can.ctrlmode_supported |= CAN_CTRLMODE_FD;
 		/* The data bit timing will be overwritten, if
@@ -1439,27 +1446,6 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 		 */
 		dev->can.fd.data_bittiming_const = &dev->bt_const;
 	}
-
-	if (feature & GS_CAN_FEATURE_TERMINATION) {
-		rc = gs_usb_get_termination(netdev, &dev->can.termination);
-		if (rc) {
-			dev->feature &= ~GS_CAN_FEATURE_TERMINATION;
-
-			dev_info(&intf->dev,
-				 "Disabling termination support for channel %d (%pe)\n",
-				 channel, ERR_PTR(rc));
-		} else {
-			dev->can.termination_const = gs_usb_termination_const;
-			dev->can.termination_const_cnt = ARRAY_SIZE(gs_usb_termination_const);
-			dev->can.do_set_termination = gs_usb_set_termination;
-		}
-	}
-
-	if (feature & GS_CAN_FEATURE_BERR_REPORTING)
-		dev->can.ctrlmode_supported |= CAN_CTRLMODE_BERR_REPORTING;
-
-	if (feature & GS_CAN_FEATURE_GET_STATE)
-		dev->can.do_get_berr_counter = gs_usb_can_get_berr_counter;
 
 	/* The CANtact Pro from LinkLayer Labs is based on the
 	 * LPC54616 µC, which is affected by the NXP LPC USB transfer
@@ -1483,11 +1469,6 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 	    (le32_to_cpu(dconf->sw_version) <= 2))
 		dev->feature |= GS_CAN_FEATURE_REQ_USB_QUIRK_LPC546XX |
 			GS_CAN_FEATURE_QUIRK_BREQ_CANTACT_PRO;
-
-	/* GS_CAN_FEATURE_IDENTIFY is only supported for sw_version > 1 */
-	if (!(le32_to_cpu(dconf->sw_version) > 1 &&
-	      feature & GS_CAN_FEATURE_IDENTIFY))
-		dev->feature &= ~GS_CAN_FEATURE_IDENTIFY;
 
 	/* fetch extended bit timing constants if device has feature
 	 * GS_CAN_FEATURE_FD and GS_CAN_FEATURE_BT_CONST_EXT
@@ -1521,6 +1502,27 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 
 		dev->can.fd.data_bittiming_const = &dev->data_bt_const;
 	}
+
+	if (feature & GS_CAN_FEATURE_TERMINATION) {
+		rc = gs_usb_get_termination(netdev, &dev->can.termination);
+		if (rc) {
+			dev->feature &= ~GS_CAN_FEATURE_TERMINATION;
+
+			dev_info(&intf->dev,
+				 "Disabling termination support for channel %d (%pe)\n",
+				 channel, ERR_PTR(rc));
+		} else {
+			dev->can.termination_const = gs_usb_termination_const;
+			dev->can.termination_const_cnt = ARRAY_SIZE(gs_usb_termination_const);
+			dev->can.do_set_termination = gs_usb_set_termination;
+		}
+	}
+
+	if (feature & GS_CAN_FEATURE_BERR_REPORTING)
+		dev->can.ctrlmode_supported |= CAN_CTRLMODE_BERR_REPORTING;
+
+	if (feature & GS_CAN_FEATURE_GET_STATE)
+		dev->can.do_get_berr_counter = gs_usb_can_get_berr_counter;
 
 	can_rx_offload_add_manual(netdev, &dev->offload, GS_NAPI_WEIGHT);
 	SET_NETDEV_DEV(netdev, &intf->dev);
