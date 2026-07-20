@@ -1648,7 +1648,8 @@ static unsigned long fraction_mm_sched(int cpu,
 	__update_mm_sched(rq, pcpu_sched);
 
 	/* Skip the rq that has not been hit for a long time */
-	if ((rq->cpu_epoch - pcpu_sched->epoch_last_visit) > llc_epoch_affinity_timeout) {
+	if (sched_feat(SC_VISIT) &&
+	    (rq->cpu_epoch - pcpu_sched->epoch_last_visit) > llc_epoch_affinity_timeout) {
 		cpumask_clear_cpu(cpu, mm->sc_stat.visited_cpus);
 		return 0;
 	}
@@ -1723,7 +1724,8 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 		rq->cpu_runtime += delta_exec;
 		epoch = rq->cpu_epoch;
 		pcpu_sched->epoch_last_visit = epoch;
-		if (!cpumask_test_cpu(cpu_of(rq), mm->sc_stat.visited_cpus))
+		if (sched_feat(SC_VISIT) &&
+		    !cpumask_test_cpu(cpu_of(rq), mm->sc_stat.visited_cpus))
 			cpumask_set_cpu(cpu_of(rq), mm->sc_stat.visited_cpus);
 	}
 
@@ -1846,7 +1848,8 @@ static void task_cache_work(struct callback_head *work)
 	unsigned long curr_m_a_occ = 0;
 	struct mm_struct *mm = p->mm;
 	unsigned long m_a_occ = 0;
-	cpumask_var_t cpus;
+	cpumask_var_t cpus, scan_cpus;
+	int scanned = 0;
 
 	WARN_ON_ONCE(work != &p->cache_work);
 
@@ -1877,6 +1880,11 @@ static void task_cache_work(struct callback_head *work)
 	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
 		return;
 
+	if (!zalloc_cpumask_var(&scan_cpus, GFP_KERNEL)) {
+		free_cpumask_var(cpus);
+		return;
+	}
+
 	scoped_guard (cpus_read_lock) {
 		guard(rcu)();
 
@@ -1892,7 +1900,8 @@ static void task_cache_work(struct callback_head *work)
 		 * implies this process hasn't run on that CPU for a long
 		 * time, and will be captured in the next cycle.
 		 */
-		cpumask_and(cpus, cpus, mm->sc_stat.visited_cpus);
+		if (sched_feat(SC_VISIT))
+			cpumask_and(cpus, cpus, mm->sc_stat.visited_cpus);
 
 		for_each_cpu(cpu, cpus) {
 			/* XXX sched_cluster_active */
@@ -1903,12 +1912,17 @@ static void task_cache_work(struct callback_head *work)
 			if (!sd)
 				continue;
 
-			for_each_cpu_and(i, sched_domain_span(sd), mm->sc_stat.visited_cpus) {
+			cpumask_copy(scan_cpus, sched_domain_span(sd));
+			if (sched_feat(SC_VISIT))
+				cpumask_and(scan_cpus, scan_cpus, mm->sc_stat.visited_cpus);
+
+			for_each_cpu(i, scan_cpus) {
 				cur = rcu_dereference_all(cpu_rq(i)->curr);
 				if (cur && !(cur->flags & (PF_EXITING | PF_KTHREAD)) &&
 				    cur->mm == mm)
 					nr_running++;
 
+				scanned++;
 				occ = fraction_mm_sched(i, mm);
 				if (occ == 0)
 					continue;
@@ -1963,6 +1977,8 @@ static void task_cache_work(struct callback_head *work)
 
 	update_avg_scale(&mm->sc_stat.nr_running_avg, nr_running);
 	free_cpumask_var(cpus);
+	free_cpumask_var(scan_cpus);
+	trace_sched_cache_scan(p, scanned);
 }
 
 void init_sched_mm(struct task_struct *p)
