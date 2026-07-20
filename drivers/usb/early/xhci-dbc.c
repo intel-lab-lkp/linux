@@ -35,10 +35,23 @@ static bool early_console_keep;
 static inline void xdbc_trace(const char *fmt, ...) { }
 #endif /* XDBC_TRACE */
 
+/* Size of xHCI debug capability structure */
+#define XDBC_MAPPING_SIZE	56
+
+enum xdbc_capability_flags {
+	XDBC_CAP_FLAG_NONE		= 0,
+	XDBC_CAP_FLAG_LEGACY		= 1 << 0,
+	XDBC_CAP_FLAG_PROTOCOL		= 1 << 1,
+	XDBC_CAP_FLAG_DEBUG		= 1 << 2,
+};
+
 static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 {
-	u64 val64, sz64, mask64;
+	u64 val64, sz64, mask64, fixmap_size, mapped_size;
+	enum xdbc_capability_flags cap_flags = XDBC_CAP_FLAG_NONE;
+	bool found_all_caps = false;
 	void __iomem *base;
+	int offset;
 	u32 val, sz;
 	u8 byte;
 
@@ -85,7 +98,72 @@ static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 
 	xdbc.xhci_start = val64;
 	xdbc.xhci_length = sz64;
-	base = early_ioremap(val64, sz64);
+
+	fixmap_size = NR_FIX_BTMAPS << PAGE_SHIFT;
+	if (sz64 < fixmap_size) {
+		xdbc.xhci_base_length = sz64;
+		return early_ioremap(val64, sz64);
+	}
+
+	/*
+	 * Base address size is greater than fixed size boot mappings,
+	 * hence iterate over the region one fixmap_size at a time,
+	 * starting with XHCI_EXP_CAPS_DEBUG capability.
+	 */
+	base = early_ioremap(val64, fixmap_size);
+	offset = xhci_find_next_ext_cap(base, 0, 0);
+	mapped_size = fixmap_size;
+
+	while (mapped_size <= sz64) {
+		val = readl(base + offset);
+		switch (XHCI_EXT_CAPS_ID(val)) {
+		case XHCI_EXT_CAPS_DEBUG:
+			if (offset + XDBC_MAPPING_SIZE > fixmap_size) {
+				early_iounmap(base, fixmap_size);
+				base = early_ioremap(val64 + offset, XDBC_MAPPING_SIZE);
+
+				mapped_size += offset;
+				cap_flags = XDBC_CAP_FLAG_NONE;
+			}
+			cap_flags |= XDBC_CAP_FLAG_DEBUG;
+			break;
+		case XHCI_EXT_CAPS_PROTOCOL:
+			cap_flags |= XDBC_CAP_FLAG_PROTOCOL;
+			break;
+		case XHCI_EXT_CAPS_LEGACY:
+			cap_flags |= XDBC_CAP_FLAG_LEGACY;
+			break;
+		}
+
+		if ((cap_flags & XDBC_CAP_FLAG_DEBUG) &&
+		    (cap_flags & XDBC_CAP_FLAG_PROTOCOL) &&
+		    (cap_flags & XDBC_CAP_FLAG_LEGACY)) {
+			found_all_caps = true;
+			break;
+		}
+
+		/*
+		 * Find offset to next xhci-ext capability, remap if the offset
+		 * is out of bounds of the already mapped region.
+		 */
+		offset = xhci_find_next_ext_cap(base, offset, 0);
+		if (!offset) {
+			early_iounmap(base, fixmap_size);
+			base = early_ioremap(val64 + mapped_size, fixmap_size);
+			mapped_size += fixmap_size;
+
+			offset = xhci_find_next_ext_cap(base, 0, 0);
+			cap_flags = XDBC_CAP_FLAG_NONE;
+
+		}
+	}
+
+	if (found_all_caps) {
+		xdbc.xhci_base_length = fixmap_size;
+	} else {
+		xdbc.xhci_base_length = 0;
+		base = NULL;
+	}
 
 	return base;
 }
@@ -643,9 +721,9 @@ int __init early_xdbc_parse_parameter(char *s, int keep_early)
 	offset = xhci_find_next_ext_cap(xdbc.xhci_base, 0, XHCI_EXT_CAPS_DEBUG);
 	if (!offset) {
 		pr_notice("xhci host doesn't support debug capability\n");
-		early_iounmap(xdbc.xhci_base, xdbc.xhci_length);
+		early_iounmap(xdbc.xhci_base, xdbc.xhci_base_length);
 		xdbc.xhci_base = NULL;
-		xdbc.xhci_length = 0;
+		xdbc.xhci_base_length = 0;
 
 		return -ENODEV;
 	}
@@ -682,9 +760,9 @@ int __init early_xdbc_setup_hardware(void)
 		xdbc.table_base = NULL;
 		xdbc.out_buf = NULL;
 
-		early_iounmap(xdbc.xhci_base, xdbc.xhci_length);
+		early_iounmap(xdbc.xhci_base, xdbc.xhci_base_length);
 		xdbc.xhci_base = NULL;
-		xdbc.xhci_length = 0;
+		xdbc.xhci_base_length = 0;
 	}
 
 	return ret;
@@ -987,7 +1065,7 @@ static int __init xdbc_init(void)
 	}
 
 	raw_spin_lock_irqsave(&xdbc.lock, flags);
-	early_iounmap(xdbc.xhci_base, xdbc.xhci_length);
+	early_iounmap(xdbc.xhci_base, xdbc.xhci_base_length);
 	xdbc.xhci_base = base;
 	offset = xhci_find_next_ext_cap(xdbc.xhci_base, 0, XHCI_EXT_CAPS_DEBUG);
 	xdbc.xdbc_reg = (struct xdbc_regs __iomem *)(xdbc.xhci_base + offset);
@@ -1004,7 +1082,7 @@ free_and_quit:
 	memblock_phys_free(xdbc.table_dma, PAGE_SIZE);
 	memblock_phys_free(xdbc.out_dma, PAGE_SIZE);
 	writel(0, &xdbc.xdbc_reg->control);
-	early_iounmap(xdbc.xhci_base, xdbc.xhci_length);
+	early_iounmap(xdbc.xhci_base, xdbc.xhci_base_length);
 
 	return ret;
 }
