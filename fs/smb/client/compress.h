@@ -17,24 +17,14 @@
 
 #include <linux/uio.h>
 #include <linux/kernel.h>
-#include "../common/smb2pdu.h"
-#include "../common/compress/compress.h"
 #include "cifsglob.h"
-
-/* sizeof(smb2_compression_hdr) - sizeof(OriginalPayloadSize) */
-#define SMB_COMPRESS_HDR_LEN		16
-/* sizeof(smb2_compression_payload_hdr) - sizeof(OriginalPayloadSize) */
-#define SMB_COMPRESS_PAYLOAD_HDR_LEN	8
-#define SMB_COMPRESS_MIN_LEN		PAGE_SIZE
 
 #ifdef CONFIG_CIFS_COMPRESSION
 typedef int (*compress_send_fn)(struct TCP_Server_Info *, int, struct smb_rqst *);
 
-
 int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq,
 		 compress_send_fn send_fn);
 bool should_compress(const struct cifs_tcon *tcon, const struct smb_rqst *rq);
-
 #else /* !CONFIG_CIFS_COMPRESSION */
 static inline int smb_compress(void *unused1, void *unused2, void *unused3)
 {
@@ -45,6 +35,5 @@ static inline bool should_compress(void *unused1, void *unused2)
 {
 	return false;
 }
-
 #endif /* !CONFIG_CIFS_COMPRESSION */
 #endif /* _SMB_COMPRESS_H */

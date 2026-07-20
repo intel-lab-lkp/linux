@@ -18,11 +18,10 @@
 #include <linux/sort.h>
 
 #include "cifsglob.h"
-#include "../common/smb2pdu.h"
 #include "cifsproto.h"
 #include "smb2proto.h"
 
-#include "../common/compress/lz77.h"
+#include "../common/compress/compress.h"
 #include "compress.h"
 
 /*

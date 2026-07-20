@@ -10,9 +10,6 @@
 
 #include "compress.h"
 #include "smb_common.h"
-#include "../common/compress/lz77.h"
-
-#define SMB_COMPRESS_MIN_LEN	PAGE_SIZE
 
 /**
  * ksmbd_decompress_request() - replace a compressed request with its SMB2 PDU
