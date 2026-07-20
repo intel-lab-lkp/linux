@@ -184,8 +184,13 @@ struct mxc_isi_dma_buffer {
 	dma_addr_t			dma;
 };
 
+/* V4L2 subdev max stream ID is 63, need 64 counters (0-63) */
+#define MXC_ISI_MAX_STREAMS		64
+
 struct mxc_isi_input {
-	unsigned int			enable_count;
+	u64				enabled_streams;
+	/* Per-stream reference counter */
+	unsigned int			enabled_count[MXC_ISI_MAX_STREAMS];
 };
 
 struct mxc_isi_crossbar {
