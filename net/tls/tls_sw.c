@@ -405,6 +405,24 @@ static void tls_free_open_rec(struct sock *sk)
 	}
 }
 
+static bool tls_is_non_restartable_err(int err)
+{
+	if (err >= 0)
+		return false;
+
+	switch (err) {
+	case -EAGAIN:
+	case -EINTR:
+	case -ERESTARTSYS:
+	case -ERESTARTNOINTR:
+	case -ERESTARTNOHAND:
+	case -ERESTART_RESTARTBLOCK:
+		return false;
+	default:
+		return true;
+	}
+}
+
 int tls_tx_records(struct sock *sk, int flags)
 {
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
@@ -458,7 +476,7 @@ int tls_tx_records(struct sock *sk, int flags)
 	}
 
 tx_err:
-	if (rc < 0 && rc != -EAGAIN)
+	if (tls_is_non_restartable_err(rc))
 		tls_err_abort(sk, rc);
 
 	return rc;
