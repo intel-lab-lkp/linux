@@ -1416,10 +1416,8 @@ static int atomisp_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	err = devm_request_threaded_irq(&pdev->dev, pdev->irq,
 					atomisp_isr, atomisp_isr_thread,
 					IRQF_SHARED, "isp_irq", isp);
-	if (err) {
-		dev_err(&pdev->dev, "Failed to request irq (%d)\n", err);
+	if (err)
 		goto error_unregister_entities;
-	}
 
 	/* Load firmware into ISP memory */
 	err = atomisp_css_load_firmware(isp);
