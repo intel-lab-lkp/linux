@@ -1112,6 +1112,12 @@ int begin_new_exec(struct linux_binprm * bprm)
 	struct task_struct *me = current;
 	int retval;
 
+	/* A declined execfd request has no executable for a later format. */
+	if (!bprm->executable) {
+		bprm->have_execfd = 0;
+		bprm->execfd_creds = 0;
+	}
+
 	/* Once we are committed compute the creds */
 	retval = bprm_creds_from_file(bprm);
 	if (retval)
