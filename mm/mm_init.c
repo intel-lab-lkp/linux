@@ -1040,25 +1040,6 @@ static void __ref zone_device_page_init_slow(struct page *page,
 		set_page_count(page, 0);
 }
 
-static inline bool zone_device_page_init_optimization_enabled(void)
-{
-	/*
-	 * Keep sanitized builds on the slow path so their stores stay
-	 * instrumented.
-	 */
-	if (IS_ENABLED(CONFIG_KASAN) || IS_ENABLED(CONFIG_KMSAN))
-		return false;
-
-	/*
-	 * The template fast path copies a preinitialized struct page image.
-	 * Skip it when the page_ref_set tracepoint is enabled.
-	 */
-	if (page_ref_tracepoint_active(page_ref_set))
-		return false;
-
-	return true;
-}
-
 static inline void zone_device_tail_page_init(struct page *page,
 		unsigned long pfn, unsigned long zone_idx, int nid,
 		struct dev_pagemap *pgmap, const struct page *head,
@@ -1126,8 +1107,7 @@ static void __ref memmap_init_compound(struct page *head,
 				       unsigned long head_pfn,
 				       unsigned long zone_idx, int nid,
 				       struct dev_pagemap *pgmap,
-				       unsigned long nr_pages,
-				       bool use_template)
+				       unsigned long nr_pages)
 {
 	unsigned long pfn, end_pfn = head_pfn + nr_pages;
 	unsigned int order = pgmap->vmemmap_shift;
@@ -1144,10 +1124,7 @@ static void __ref memmap_init_compound(struct page *head,
 	for (pfn = head_pfn + 1; pfn < end_pfn; pfn++) {
 		struct page *page = pfn_to_page(pfn);
 
-		if (!use_template) {
-			zone_device_tail_page_init(page, pfn, zone_idx, nid,
-						   pgmap, head, order);
-		} else if (pfn == head_pfn + 1) {
+		if (pfn == head_pfn + 1) {
 			/*
 			 * All tails of the same compound page share the
 			 * state established by prep_compound_tail(). Reuse
@@ -1172,7 +1149,6 @@ void __ref memmap_init_zone_device(struct zone *zone,
 				   unsigned long nr_pages,
 				   struct dev_pagemap *pgmap)
 {
-	bool use_template = zone_device_page_init_optimization_enabled();
 	unsigned long pfn, end_pfn = start_pfn + nr_pages;
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	struct vmem_altmap *altmap = pgmap_altmap(pgmap);
@@ -1198,10 +1174,7 @@ void __ref memmap_init_zone_device(struct zone *zone,
 	for (pfn = start_pfn; pfn < end_pfn; pfn += pfns_per_compound) {
 		struct page *page = pfn_to_page(pfn);
 
-		if (!use_template) {
-			zone_device_page_init_slow(page, pfn, zone_idx,
-						   nid, pgmap);
-		} else if (pfn == start_pfn) {
+		if (pfn == start_pfn) {
 			/*
 			 * Seed the reusable head-page template from the
 			 * first real struct page, because the existing
@@ -1224,8 +1197,7 @@ void __ref memmap_init_zone_device(struct zone *zone,
 			continue;
 
 		memmap_init_compound(page, pfn, zone_idx, nid, pgmap,
-				     compound_nr_pages(pfn, altmap, pgmap),
-				     use_template);
+				     compound_nr_pages(pfn, altmap, pgmap));
 	}
 
 	pageblock_migratetype_init_range(start_pfn, nr_pages, MIGRATE_MOVABLE);
