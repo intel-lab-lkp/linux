@@ -52,12 +52,7 @@ module_param(detect_node_addresses, bool, 0600);
 
 static struct damon_ctx *ctxs[2];
 
-struct region_range {
-	phys_addr_t start;
-	phys_addr_t end;
-};
-
-static int nid_to_phys(int target_node, struct region_range *range)
+static int nid_to_phys(int target_node, struct damon_addr_range *range)
 {
 	if (!node_online(target_node)) {
 		pr_err("NUMA node %d is not online\n", target_node);
@@ -78,8 +73,7 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	struct damos *scheme;
 	struct damos_quota_goal *quota_goal;
 	struct damos_filter *filter;
-	struct region_range addr;
-	struct damon_addr_range range;
+	struct damon_addr_range addr;
 	int ret;
 
 	ctx = damon_new_ctx();
@@ -123,10 +117,7 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	if (addr.start >= addr.end)
 		goto free_out;
 
-	range.start = addr.start;
-	range.end = addr.end;
-
-	ret = damon_set_regions(target, &range, 1, DAMON_MIN_REGION_SZ);
+	ret = damon_set_regions(target, &addr, 1, DAMON_MIN_REGION_SZ);
 	if (ret)
 		goto free_out;
 
