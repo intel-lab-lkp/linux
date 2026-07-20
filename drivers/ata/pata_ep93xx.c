@@ -211,6 +211,7 @@ static void ep93xx_pata_delay(unsigned long count)
 		"bge 0b\n"
 		: "=r" (count)
 		: "0" (count)
+		: "cc"
 	);
 #else
 	while (count--)
