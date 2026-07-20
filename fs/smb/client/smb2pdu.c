@@ -832,56 +832,103 @@ static void decode_preauth_context(struct smb2_preauth_neg_context *ctxt)
 static void decode_compress_ctx(struct TCP_Server_Info *server,
 			 struct smb2_compression_capabilities_context *ctxt)
 {
+	struct TCP_Server_Info *pserver;
 	unsigned int len = le16_to_cpu(ctxt->DataLength);
 	unsigned int count, i;
-
-	server->compression.enabled = false;
-	server->compression.chained = false;
-	server->compression.pattern = false;
-	server->compression.alg = SMB3_COMPRESS_NONE;
+	bool pattern, chained;
+	__le16 alg;
 
 	/*
+	 * This is a bug and should never happen -- we're either on first Negotiate (mount) or
+	 * reconnecting (disable_compression() was called), where ->enabled is false in both cases.
+	 */
+	if (WARN_ON_ONCE(server->compression.enabled)) {
+		cifs_dbg(VFS, "compression enabled unexpectedly\n");
+		goto out;
+	}
+
+	/*
+	 * Do not overwrite any settings until we've fully validated them.
+	 *
 	 * Caller checked that DataLength remains within SMB boundary. We still
 	 * need to confirm that one CompressionAlgorithms member is accounted
 	 * for.
 	 */
-	if (len < 10) {
-		pr_warn_once("server sent bad compression cntxt\n");
-		return;
+	if (unlikely(len < 10)) {
+		cifs_dbg(VFS, "server sent bad compression context (len %u)\n", len);
+		goto out;
 	}
 
 	count = le16_to_cpu(ctxt->CompressionAlgorithmCount);
-	if (!count || count > ARRAY_SIZE(ctxt->CompressionAlgorithms) ||
-	    len < 8 + count * sizeof(__le16)) {
-		pr_warn_once("invalid SMB3 compress algorithm count\n");
-		return;
+	if (unlikely(!count || count > ARRAY_SIZE(ctxt->CompressionAlgorithms) ||
+	    len < 8 + count * sizeof(__le16))) {
+		cifs_dbg(VFS, "invalid SMB3 compress algorithm count (%u)\n", count);
+		goto out;
 	}
 
-	if (ctxt->Flags != SMB2_COMPRESSION_CAPABILITIES_FLAG_NONE &&
-	    ctxt->Flags != SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED) {
-		pr_warn_once("invalid SMB3 compression flags\n");
-		return;
+	if (unlikely(ctxt->Flags != SMB2_COMPRESSION_CAPABILITIES_FLAG_NONE &&
+		     ctxt->Flags != SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED)) {
+		cifs_dbg(VFS, "invalid SMB3 compression flags 0x%x\n", ctxt->Flags);
+		goto out;
 	}
+
+	alg = SMB3_COMPRESS_NONE;
+	chained = false;
+	pattern = false;
 
 	for (i = 0; i < count; i++) {
 		/* Record the intersection supported by the shared SMB codec. */
 		if (ctxt->CompressionAlgorithms[i] == SMB3_COMPRESS_LZ77)
-			server->compression.alg = SMB3_COMPRESS_LZ77;
+			alg = SMB3_COMPRESS_LZ77;
 		else if (ctxt->CompressionAlgorithms[i] == SMB3_COMPRESS_PATTERN)
-			server->compression.pattern = true;
+			pattern = true;
 	}
-	if (server->compression.alg != SMB3_COMPRESS_LZ77)
-		return;
+
+	if (unlikely(alg != SMB3_COMPRESS_LZ77)) {
+		cifs_dbg(VFS, "invalid LZ algorithm negotiated 0x%x\n", alg);
+		goto out;
+	}
 
 	/*
 	 * Pattern_V1 cannot appear in an unchained transform even if a broken
 	 * peer lists it in the algorithm array.
 	 */
-	server->compression.chained =
-		ctxt->Flags == SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED;
-	if (!server->compression.chained)
-		server->compression.pattern = false;
-	server->compression.enabled = true;
+	chained = (ctxt->Flags == SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED);
+	if (!chained)
+		pattern = false;
+
+	/*
+	 * Regardless of that, if @server is a channel, we must check if the negotiated parameters
+	 * match the primary server ones.  If there's a mismatch and compression is enabled in
+	 * primary server, disable it (to avoid operations with mixed settings).
+	 */
+	pserver = server;
+	if (SERVER_IS_CHAN(server)) {
+		pserver = server->primary_server;
+		if (unlikely(chained != pserver->compression.chained ||
+			     pattern != pserver->compression.pattern ||
+			     alg != pserver->compression.alg)) {
+			cifs_dbg(VFS, "channel compression settings mismatch\n");
+			goto out;
+		}
+	}
+
+	/*
+	 * We may only enable compression for @server if we entered this function with @pserver
+	 * ->alg == NONE and ->enabled == false, otherwise it means disable_compression() was
+	 * called.
+	 */
+	if (!pserver->compression.enabled && pserver->compression.alg == SMB3_COMPRESS_NONE)
+		server->compression.enabled = true;
+
+	server->compression.chained = chained;
+	server->compression.pattern = pattern;
+	server->compression.alg = alg;
+
+	/* Compression was just enabled, or previously disabled on primary server, just leave */
+	return;
+out:
+	disable_compression(server);
 }
 
 static int decode_encrypt_ctx(struct TCP_Server_Info *server,
