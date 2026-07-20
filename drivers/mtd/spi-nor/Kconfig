@@ -19,9 +19,34 @@ config MTD_SPI_NOR_USE_4K_SECTORS
 	  Changing a small part of the flash's contents is usually faster with
 	  small sectors. On the other hand erasing should be faster when using
 	  64 KiB block instead of 16 × 4 KiB sectors.
+	  If MTD_SPI_NOR_MULTI_ERASE_SIZE is also enabled, the flash erasesize
+	  is reported as 4096 B, but large erase requests may still use larger
+	  erase sizes internally to improve performance.
 
 	  Please note that some tools/drivers/filesystems may not work with
 	  4096 B erase size (e.g. UBIFS requires 15 KiB as a minimum).
+
+config MTD_SPI_NOR_MULTI_ERASE_SIZE
+	bool "Use multiple erase sizes on uniform flashes"
+	default n
+	help
+	  Uniform SPI NOR flashes (whose erase map spans the whole device) may
+	  still advertise several erase sizes, e.g. 4 KiB, 32 KiB and 64 KiB.
+	  By default the driver collapses such a flash to a single erase size
+	  and uses that one size for every erase request.
+
+	  Say Y here to let those flashes use multiple erase sizes for a single
+	  erase request, exactly like non-uniform flashes already do: larger
+	  blocks are used for the aligned bulk of the range, while smaller
+	  blocks are used for the unaligned head and tail. This improves erase
+	  performance when a smaller erasesize is exposed to userspace.
+
+	  This option interacts with MTD_SPI_NOR_USE_4K_SECTORS: when both are
+	  enabled, the 4096 B erase size is exposed through mtd->erasesize, but
+	  the driver still uses multiple erase sizes internally to improve
+	  performance.
+
+	  If unsure, say N.
 
 choice
 	prompt "Software write protection at boot"
