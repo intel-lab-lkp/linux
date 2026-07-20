@@ -126,7 +126,7 @@ struct ext4_prealloc_space {
 		struct rcu_head	pa_rcu;
 	} u;
 	spinlock_t		pa_lock;
-	atomic_t		pa_count;
+	refcount_t		pa_count;
 	unsigned		pa_deleted;
 	ext4_fsblk_t		pa_pstart;	/* phys. block */
 	ext4_lblk_t		pa_lstart;	/* log. block */

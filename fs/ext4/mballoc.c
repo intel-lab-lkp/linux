@@ -4824,7 +4824,7 @@ ext4_mb_check_group_pa(ext4_fsblk_t goal_block,
 	ext4_fsblk_t cur_distance, new_distance;
 
 	if (cpa == NULL) {
-		atomic_inc(&pa->pa_count);
+		refcount_inc(&pa->pa_count);
 		return pa;
 	}
 	cur_distance = abs(goal_block - cpa->pa_pstart);
@@ -4834,8 +4834,8 @@ ext4_mb_check_group_pa(ext4_fsblk_t goal_block,
 		return cpa;
 
 	/* drop the previous reference */
-	atomic_dec(&cpa->pa_count);
-	atomic_inc(&pa->pa_count);
+	refcount_dec(&cpa->pa_count);
+	refcount_inc(&pa->pa_count);
 	return pa;
 }
 
@@ -4994,7 +4994,7 @@ ext4_mb_use_preallocated(struct ext4_allocation_context *ac)
 	}
 
 	if (tmp_pa->pa_free && likely(ext4_mb_pa_goal_check(ac, tmp_pa))) {
-		atomic_inc(&tmp_pa->pa_count);
+		refcount_inc(&tmp_pa->pa_count);
 		ext4_mb_use_inode_pa(ac, tmp_pa);
 		spin_unlock(&tmp_pa->pa_lock);
 		read_unlock(&ei->i_prealloc_lock);
@@ -5140,7 +5140,7 @@ static void ext4_mb_mark_pa_deleted(struct super_block *sb,
 static inline void ext4_mb_pa_free(struct ext4_prealloc_space *pa)
 {
 	BUG_ON(!pa);
-	BUG_ON(atomic_read(&pa->pa_count));
+	BUG_ON(refcount_read(&pa->pa_count));
 	BUG_ON(pa->pa_deleted == 0);
 	kmem_cache_free(ext4_pspace_cachep, pa);
 }
@@ -5166,7 +5166,7 @@ static void ext4_mb_put_pa(struct ext4_allocation_context *ac,
 
 	/* in this short window concurrent discard can set pa_deleted */
 	spin_lock(&pa->pa_lock);
-	if (!atomic_dec_and_test(&pa->pa_count) || pa->pa_free != 0) {
+	if (!refcount_dec_and_test(&pa->pa_count) || pa->pa_free != 0) {
 		spin_unlock(&pa->pa_lock);
 		return;
 	}
@@ -5536,7 +5536,7 @@ ext4_mb_discard_group_preallocations(struct super_block *sb,
 	list_for_each_entry_safe(pa, tmp,
 				&grp->bb_prealloc_list, pa_group_list) {
 		spin_lock(&pa->pa_lock);
-		if (atomic_read(&pa->pa_count)) {
+		if (refcount_read(&pa->pa_count)) {
 			spin_unlock(&pa->pa_lock);
 			*busy = 1;
 			continue;
@@ -5638,7 +5638,7 @@ repeat:
 		BUG_ON(pa->pa_node_lock.inode_lock != &ei->i_prealloc_lock);
 
 		spin_lock(&pa->pa_lock);
-		if (atomic_read(&pa->pa_count)) {
+		if (refcount_read(&pa->pa_count)) {
 			/* this shouldn't happen often - nobody should
 			 * use preallocation while we're discarding it */
 			spin_unlock(&pa->pa_lock);
@@ -5721,7 +5721,7 @@ static int ext4_mb_pa_alloc(struct ext4_allocation_context *ac)
 	pa = kmem_cache_zalloc(ext4_pspace_cachep, GFP_NOFS);
 	if (!pa)
 		return -ENOMEM;
-	atomic_set(&pa->pa_count, 1);
+	refcount_set(&pa->pa_count, 1);
 	ac->ac_pa = pa;
 	return 0;
 }
@@ -5732,7 +5732,7 @@ static void ext4_mb_pa_put_free(struct ext4_allocation_context *ac)
 
 	BUG_ON(!pa);
 	ac->ac_pa = NULL;
-	WARN_ON(!atomic_dec_and_test(&pa->pa_count));
+	WARN_ON(!refcount_dec_and_test(&pa->pa_count));
 	/*
 	 * current function is only called due to an error or due to
 	 * len of found blocks < len of requested blocks hence the PA has not
@@ -5949,7 +5949,7 @@ ext4_mb_discard_lg_preallocations(struct super_block *sb,
 				pa_node.lg_list,
 				lockdep_is_held(&lg->lg_prealloc_lock)) {
 		spin_lock(&pa->pa_lock);
-		if (atomic_read(&pa->pa_count)) {
+		if (refcount_read(&pa->pa_count)) {
 			/*
 			 * This is the pa that we just used
 			 * for block allocation. So don't
