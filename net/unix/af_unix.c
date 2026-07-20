@@ -3547,15 +3547,14 @@ static int unix_seq_show(struct seq_file *seq, void *v)
 {
 
 	if (v == SEQ_START_TOKEN)
-		seq_puts(seq, "Num       RefCount Protocol Flags    Type St "
+		seq_puts(seq, "Num RefCount Protocol Flags    Type St "
 			 "Inode Path\n");
 	else {
 		struct sock *s = v;
 		struct unix_sock *u = unix_sk(s);
 		unix_state_lock(s);
 
-		seq_printf(seq, "%pK: %08X %08X %08X %04X %02X %5llu",
-			s,
+		seq_printf(seq, "0:  %08X %08X %08X %04X %02X %5llu",
 			refcount_read(&s->sk_refcnt),
 			0,
 			s->sk_state == TCP_LISTEN ? __SO_ACCEPTCON : 0,
