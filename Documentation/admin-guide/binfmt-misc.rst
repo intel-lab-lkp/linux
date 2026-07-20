@@ -100,6 +100,13 @@ Here is what the fields mean:
             ``AT_FLAGS_TRANSPARENT_INTERP`` contract. Combining ``T``
             with ``P`` is rejected: transparency preserves the whole
             argument vector, argv[0] included.
+      ``L`` - loader substitution
+            Do not run the interpreter on the binary at all: load the
+            binary itself as a fully native exec and substitute the
+            interpreter for the loader named in the binary's
+            ``PT_INTERP``. See the "Loader substitution" section
+            below. ``L`` rejects ``T``, ``P``, ``O`` and ``C``;
+            ``F`` composes.
 
 
 There are some restrictions:
@@ -244,6 +251,49 @@ code/data statistics markers via one ``PR_SET_MM_MAP`` which completes
 what attaching debuggers observe. What remains visibly different from a direct
 execution is the address space layout. The interpreter occupies the main-image
 position and the program lives in the mmap region.
+
+
+Loader substitution
+-------------------
+
+The ``L`` flag turns the execution model around. Instead of running the
+registered interpreter with the binary as its payload the kernel loads
+the matched binary itself as the main image and substitutes the registered
+interpreter for the loader named in the binary's ``PT_INTERP``.
+
+Because the exec is native, there is no dispatch identity to
+reconstruct and no contract the substitute has to implement. A stock
+dynamic loader works unchanged. The argument vector is untouched,
+credentials and ``AT_SECURE`` derive from the binary, there is no
+``AT_EXECFD`` and no marker in the aux vector, the binary sits in the
+main-image slot with the native brk placement so ``/proc/pid/maps``,
+core dumps and perf mmap records have the native shape, and the
+identity is already complete when ``PTRACE_EVENT_EXEC`` stops the
+tracee. So launching under a debugger works, not just attaching. ``L``
+entries are for ELF binaries of a native architecture. Foreign-arch
+emulation and non-ELF payloads remain the domain of the classic and
+transparent modes.
+
+The override applies when the format that finally claims the file is
+ELF with a ``PT_INTERP``. A matched binary without one or an
+interpreter-less ``ET_DYN`` drops the override and runs natively. A
+file claimed by another format is handled by that format as if the entry
+had not matched. A format that cannot consume the override at
+all instead refuses the exec with ``ENOEXEC`` before the point of no
+return, so the substitution is never silently ignored where it would
+have applied.
+
+A wrong-architecture ELF fails the whole exec with ``ENOEXEC`` exactly
+as if no entry had matched. A substitute that is not ELF of the right
+architecture fails with ``ELIBBAD``. The usual ``PT_INTERP`` sanity
+checks on the binary still apply. But the segment's content is otherwise
+irrelevant.
+
+``L`` rejects the classic-dispatch flags ``T``, ``P``, ``O`` and ``C``
+at registration. ``F`` composes and is valuable. The substitute is
+opened at registration time, so later mount namespace or path changes
+cannot redirect it. As with ``C``, register only trusted interpreters.
+The substituted loader runs with credentials derived from the binary.
 
 
 Hints
