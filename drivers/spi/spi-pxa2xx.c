@@ -1495,16 +1495,24 @@ void pxa2xx_spi_remove(struct device *dev)
 
 	spi_unregister_controller(drv_data->controller);
 
-	/* Disable the SSP at the peripheral and SOC level */
-	pxa_ssp_disable(ssp);
+	/* Disable SSP interrupt generation on hardware level while clock is active */
+	pxa2xx_spi_off(drv_data);
+
+	/* Mark as suspended to prevent further IRQ handling */
+	drv_data->suspended = true;
+
+	/* Wait for any pending interrupt handlers to complete */
+	synchronize_irq(ssp->irq);
+
+	/* Release IRQ */
+	free_irq(ssp->irq, drv_data);
+
+	/* Safe to disable the SSP clock now */
 	pxa2xx_spi_clk_disable(drv_data);
 
 	/* Release DMA */
 	if (drv_data->controller_info->enable_dma)
 		pxa2xx_spi_dma_release(drv_data);
-
-	/* Release IRQ */
-	free_irq(ssp->irq, drv_data);
 }
 EXPORT_SYMBOL_NS_GPL(pxa2xx_spi_remove, "SPI_PXA2xx");
 
@@ -1519,10 +1527,10 @@ static int pxa2xx_spi_suspend(struct device *dev)
 		return status;
 
 	drv_data->suspended = true;
-	pxa_ssp_disable(ssp);
+	pxa2xx_spi_off(drv_data);
+	synchronize_irq(ssp->irq);
 
-	if (!pm_runtime_suspended(dev))
-		pxa2xx_spi_clk_disable(drv_data);
+	pxa2xx_spi_clk_disable(drv_data);
 
 	return 0;
 }
@@ -1530,6 +1538,7 @@ static int pxa2xx_spi_suspend(struct device *dev)
 static int pxa2xx_spi_resume(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
+	struct ssp_device *ssp = drv_data->ssp;
 	int status;
 
 	/* Enable the SSP clock */
@@ -1542,7 +1551,15 @@ static int pxa2xx_spi_resume(struct device *dev)
 	drv_data->suspended = false;
 
 	/* Start the queue running */
-	return spi_controller_resume(drv_data->controller);
+	status = spi_controller_resume(drv_data->controller);
+	if (status) {
+		drv_data->suspended = true;
+		synchronize_irq(ssp->irq);
+		pxa2xx_spi_clk_disable(drv_data);
+		return status;
+	}
+
+	return 0;
 }
 
 static int pxa2xx_spi_runtime_suspend(struct device *dev)
@@ -1550,6 +1567,8 @@ static int pxa2xx_spi_runtime_suspend(struct device *dev)
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 
 	drv_data->suspended = true;
+	pxa2xx_spi_off(drv_data);
+	synchronize_irq(drv_data->ssp->irq);
 	pxa2xx_spi_clk_disable(drv_data);
 	return 0;
 }
@@ -1557,11 +1576,11 @@ static int pxa2xx_spi_runtime_suspend(struct device *dev)
 static int pxa2xx_spi_runtime_resume(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
-	int ret;
+	int status;
 
-	ret = pxa2xx_spi_clk_enable(drv_data);
-	if (ret)
-		return ret;
+	status = pxa2xx_spi_clk_enable(drv_data);
+	if (status)
+		return status;
 
 	drv_data->suspended = false;
 	return 0;
