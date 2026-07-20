@@ -1372,14 +1372,72 @@ void ice_ptp_link_change(struct ice_pf *pf, bool linkup)
 	switch (hw->mac_type) {
 	case ICE_MAC_E810:
 	case ICE_MAC_E830:
-		/* Do not reconfigure E810 or E830 PHY */
+	case ICE_MAC_GENERIC_3K_E825:
+		/* Do not reconfigure E810 or E830 PHY, but on link-up clear
+		 * any stale timestamp ready bits left over from a previous
+		 * link cycle. The PHY may have latched timestamps for packets
+		 * in flight when the link went down; these must be cleared
+		 * before new timestamp requests arrive.
+		 *
+		 * E810 does not have a real ready bitmap
+		 * (ice_get_phy_tx_tstamp_ready_e810 returns all-ones), so
+		 * skip clearing on E810 to avoid unnecessary sideband queue
+		 * operations for every not-in-use slot on each link-up.
+		 */
+		if (linkup && ptp_port->tx.has_ready_bitmap) {
+			struct ice_ptp_tx *tx = &ptp_port->tx;
+			u64 tstamp_ready;
+			int i;
+
+			if (ice_get_phy_tx_tstamp_ready(hw, tx->block,
+							&tstamp_ready)) {
+				dev_warn_ratelimited(ice_pf_to_dev(pf),
+						     "PTP failed to read Tx timestamp ready bitmap on link-up; stale PHY timestamps may remain and stall Tx timestamping\n");
+			} else {
+				/* Only clear stale ready bits for slots that
+				 * have no in-flight software request. Iterating
+				 * the not-in-use slots skips any concurrent
+				 * ice_ptp_request_ts() allocation without
+				 * holding tx->lock across the PHY access. E830
+				 * and E825 reach this clear; E810 is filtered
+				 * out above by has_ready_bitmap.
+				 */
+				for_each_clear_bit(i, tx->in_use, tx->len) {
+					u8 phy_idx = i + tx->offset;
+
+					if (tstamp_ready & BIT_ULL(phy_idx))
+						ice_clear_phy_tstamp(hw,
+								     tx->block,
+								     phy_idx);
+				}
+			}
+		}
+
+		/* E810 and E830 need no further PHY reconfiguration */
+		if (hw->mac_type != ICE_MAC_GENERIC_3K_E825)
+			return;
+
+		/* E825 recovers its Tx path by soft resetting the PHY
+		 * timestamp block and restarting the port, but only on
+		 * link-up. The reset is a three-step register toggle; if it
+		 * fails partway through, the port can be left held in reset,
+		 * and programming a PHY that is stuck in reset via
+		 * ice_ptp_port_phy_restart() would leave Tx timestamping
+		 * permanently broken. So warn and skip the restart on
+		 * failure; the sequence is retried on the next link-up event.
+		 */
+		if (!linkup)
+			return;
+
+		if (ice_ptp_phy_soft_reset_eth56g(hw, ptp_port->port_num))
+			dev_warn(ice_pf_to_dev(pf),
+				 "PTP failed to soft reset PHY port %u on link-up; skipping restart, Tx timestamping may be stuck, try toggle a link to recover\n",
+				 ptp_port->port_num);
+		else
+			ice_ptp_port_phy_restart(ptp_port);
 		return;
 	case ICE_MAC_GENERIC:
 		ice_ptp_port_phy_restart(ptp_port);
-		return;
-	case ICE_MAC_GENERIC_3K_E825:
-		if (linkup)
-			ice_ptp_port_phy_restart(ptp_port);
 		return;
 	default:
 		dev_warn(ice_pf_to_dev(pf), "%s: Unknown PHY type\n", __func__);
@@ -3380,6 +3438,7 @@ void ice_ptp_init(struct ice_pf *pf)
 
 	ptp->state = ICE_PTP_INITIALIZING;
 
+	mutex_init(&hw->ptp.tx_tstamp_lock);
 	if (hw->lane_num < 0) {
 		err = hw->lane_num;
 		goto err_exit;
@@ -3443,6 +3502,7 @@ err_clean_pf:
 
 	ice_ptp_cleanup_adapter(pf);
 err_exit:
+	mutex_destroy(&hw->ptp.tx_tstamp_lock);
 	/* If we registered a PTP clock, release it */
 	if (pf->ptp.clock) {
 		ptp_clock_unregister(ptp->clock);
@@ -3469,6 +3529,7 @@ void ice_ptp_release(struct ice_pf *pf)
 
 	if (pf->ptp.state != ICE_PTP_READY) {
 		mutex_destroy(&pf->ptp.port.ps_lock);
+		mutex_destroy(&pf->hw.ptp.tx_tstamp_lock);
 		ice_ptp_cleanup_pf(pf);
 		ice_ptp_cleanup_adapter(pf);
 		if (pf->ptp.clock) {
@@ -3495,6 +3556,7 @@ void ice_ptp_release(struct ice_pf *pf)
 
 	ice_ptp_port_phy_stop(&pf->ptp.port);
 	mutex_destroy(&pf->ptp.port.ps_lock);
+	mutex_destroy(&pf->hw.ptp.tx_tstamp_lock);
 	if (pf->ptp.kworker) {
 		kthread_destroy_worker(pf->ptp.kworker);
 		pf->ptp.kworker = NULL;

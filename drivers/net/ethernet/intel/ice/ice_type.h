@@ -888,6 +888,13 @@ enum ice_global_link_topo {
 
 struct ice_ptp_hw {
 	union ice_phy_params phy;
+	/* Serializes eth56g Tx timestamp-memory reads (the per-index
+	 * timestamp entries, not the TX_MEMORY_STATUS registers). Reading an
+	 * entry auto-clears its ts_memory_status bit as a side effect, so the
+	 * per-index and full-port clear paths must not interleave on the same
+	 * port or a bit could re-latch the interrupt.
+	 */
+	struct mutex tx_tstamp_lock;
 	u8 num_lports;
 	u8 ports_per_phy;
 };

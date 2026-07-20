@@ -1160,10 +1160,14 @@ static int ice_read_ptp_tstamp_eth56g(struct ice_hw *hw, u8 port, u8 idx,
  *
  * To directly clear the contents of the timestamp block entirely, discarding
  * all timestamp data at once, software should instead use
- * ice_ptp_reset_ts_memory_quad_eth56g().
+ * ice_ptp_reset_ts_memory_eth56g().
  *
  * This function should only be called on an idx whose bit is set according to
  * ice_get_phy_tx_tstamp_ready().
+ *
+ * Serialized against ice_ptp_clear_tx_memory_status_eth56g() via
+ * tx_tstamp_lock so the two paths do not interleave their reads of the same
+ * port's Tx timestamp memory.
  *
  * Return:
  * * %0     - success
@@ -1175,25 +1179,62 @@ static int ice_clear_ptp_tstamp_eth56g(struct ice_hw *hw, u8 port, u8 idx)
 	u16 lo_addr;
 	int err;
 
-	/* Read the timestamp register to ensure the timestamp status bit is
-	 * cleared.
-	 */
-	err = ice_read_ptp_tstamp_eth56g(hw, port, idx, &unused_tstamp);
-	if (err) {
-		ice_debug(hw, ICE_DBG_PTP, "Failed to read the PHY timestamp register for port %u, idx %u, err %d\n",
-			  port, idx, err);
-	}
-
 	lo_addr = (u16)PHY_TSTAMP_L(idx);
 
+	mutex_lock(&hw->ptp.tx_tstamp_lock);
+
+	/* Per the PHY spec, reading the timestamp memory location is what
+	 * clears the entry's valid bit and its corresponding (read-only)
+	 * ts_memory_status bit. This clears only this index, leaving any
+	 * other in-flight timestamps on the port untouched.
+	 */
+	err = ice_read_ptp_tstamp_eth56g(hw, port, idx, &unused_tstamp);
+	if (err)
+		ice_debug(hw, ICE_DBG_PTP, "Failed to read the PHY timestamp register for port %u, idx %u, err %d\n",
+			  port, idx, err);
+
 	err = ice_write_port_mem_eth56g(hw, port, lo_addr, 0);
-	if (err) {
+	if (err)
 		ice_debug(hw, ICE_DBG_PTP, "Failed to clear low PTP timestamp register for port %u, idx %u, err %d\n",
 			  port, idx, err);
-		return err;
-	}
 
-	return 0;
+	mutex_unlock(&hw->ptp.tx_tstamp_lock);
+
+	return err;
+}
+
+/**
+ * ice_ptp_clear_tx_memory_status_eth56g - Reset one port's Tx timestamp memory
+ * @hw: pointer to the HW struct
+ * @port: port number to clear
+ *
+ * Fully reset a single PHY port's Tx timestamp memory. Per the PHY spec, the
+ * only way to clear a timestamp valid bit (and its read-only ts_memory_status
+ * bit) is to read the timestamp memory location, so read every entry for the
+ * port (two 32-bit reads each). This discards all timestamp data on the port,
+ * so it must only be used for a full reset; callers that must preserve
+ * in-flight timestamps clear individual indices via ice_clear_phy_tstamp().
+ *
+ * Holds tx_tstamp_lock so this full-port sweep does not interleave with the
+ * per-index reads in ice_clear_ptp_tstamp_eth56g() on the same port.
+ *
+ * Return: 0 on success, negative error code on failure to read the PHY.
+ */
+int ice_ptp_clear_tx_memory_status_eth56g(struct ice_hw *hw, u8 port)
+{
+	u64 unused_tstamp;
+	int err = 0;
+	u8 idx;
+
+	mutex_lock(&hw->ptp.tx_tstamp_lock);
+	for (idx = 0; idx < INDEX_PER_PORT; idx++) {
+		err = ice_read_ptp_tstamp_eth56g(hw, port, idx, &unused_tstamp);
+		if (err)
+			break;
+	}
+	mutex_unlock(&hw->ptp.tx_tstamp_lock);
+
+	return err;
 }
 
 /**
@@ -1204,12 +1245,8 @@ static void ice_ptp_reset_ts_memory_eth56g(struct ice_hw *hw)
 {
 	unsigned int port;
 
-	for (port = 0; port < hw->ptp.num_lports; port++) {
-		ice_write_ptp_reg_eth56g(hw, port, PHY_REG_TX_MEMORY_STATUS_L,
-					 0);
-		ice_write_ptp_reg_eth56g(hw, port, PHY_REG_TX_MEMORY_STATUS_U,
-					 0);
-	}
+	for (port = 0; port < hw->ptp.num_lports; port++)
+		ice_ptp_clear_tx_memory_status_eth56g(hw, port);
 }
 
 /**
@@ -5278,6 +5315,23 @@ static void ice_read_phy_tstamp_e830(const struct ice_hw *hw, u8 idx,
 }
 
 /**
+ * ice_clear_phy_tstamp_e830 - Clear a timestamp from the E830 PHY
+ * @hw: pointer to the HW struct
+ * @idx: the timestamp index to clear
+ *
+ * Clear the valid bit for the given timestamp index in the Tx memory (TS_MEM).
+ * On E830 devices the PRTMAC_TS_TX_MEM_VALID_L/H registers are read-only
+ * mirrors of the per-entry TX_VALID bits and cannot be written. The actual
+ * TS_MEM entry's TX_VALID bit is cleared by reading the corresponding
+ * PRTTSYN_TXTIME_L/H registers (read-to-clear).
+ */
+static void ice_clear_phy_tstamp_e830(const struct ice_hw *hw, u8 idx)
+{
+	rd32(hw, E830_PRTTSYN_TXTIME_H(idx));
+	rd32(hw, E830_PRTTSYN_TXTIME_L(idx));
+}
+
+/**
  * ice_get_phy_tx_tstamp_ready_e830 - Read Tx memory status register
  * @hw: pointer to the HW struct
  * @port: the PHY port to read
@@ -5772,6 +5826,9 @@ int ice_clear_phy_tstamp(struct ice_hw *hw, u8 block, u8 idx)
 	switch (hw->mac_type) {
 	case ICE_MAC_E810:
 		return ice_clear_phy_tstamp_e810(hw, block, idx);
+	case ICE_MAC_E830:
+		ice_clear_phy_tstamp_e830(hw, idx);
+		return 0;
 	case ICE_MAC_GENERIC:
 		return ice_clear_phy_tstamp_e82x(hw, block, idx);
 	case ICE_MAC_GENERIC_3K_E825:
