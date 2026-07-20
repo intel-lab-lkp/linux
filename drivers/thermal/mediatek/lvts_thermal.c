@@ -160,6 +160,7 @@ struct lvts_data {
 	int gt_calib_bit_offset;
 	unsigned int def_calibration;
 	u16 msr_offset;
+	bool optional_reset;
 };
 
 struct lvts_sensor {
@@ -1470,9 +1471,29 @@ static int lvts_probe(struct platform_device *pdev)
 	if (IS_ERR(lvts_td->base))
 		return dev_err_probe(dev, PTR_ERR(lvts_td->base), "Failed to map io resource\n");
 
-	lvts_td->reset = devm_reset_control_get_by_index(dev, 0);
-	if (IS_ERR(lvts_td->reset))
-		return dev_err_probe(dev, PTR_ERR(lvts_td->reset), "Failed to get reset control\n");
+	/*
+	 * Depending on the SoC+Firmware combination, the LVTS hardware may be
+	 * may be actively used by one or even multiple concurrent MCUs!
+	 * In this case, resetting it may produce either a severe slowdown of
+	 * the entire system, or even a thermal protection AP reset, as some
+	 * MCU(s) may be reading a very high or very low temperature while the
+	 * LVTS is being reset.
+	 *
+	 * On those, don't fail if no reset is found as that may be omitted on
+	 * purpose, but still check if there's one, because some board(s) may
+	 * be running on a different bootchain with reduced firmwares or using
+	 * firmwares with reduced functionality.
+	 */
+	lvts_td->reset = devm_reset_control_get_exclusive_by_index(dev, 0);
+	if (IS_ERR(lvts_td->reset)) {
+		if (lvts_data->optional_reset) {
+			dev_dbg(dev, "No reset found. LVTS may be used by firmware.\n");
+			lvts_td->reset = NULL;
+		} else {
+			return dev_err_probe(dev, PTR_ERR(lvts_td->reset),
+					     "Failed to get reset control\n");
+		}
+	}
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
@@ -2157,6 +2178,7 @@ static const struct lvts_data mt8196_lvts_mcu_data = {
 	.num_cal_offsets = LVTS_NUM_CAL_OFFSETS_MT8196,
 	.msr_offset = LVTS_MSR_OFFSET_MT8196,
 	.ops = &lvts_platform_ops_mt8196,
+	.optional_reset = true,
 };
 
 static const struct lvts_data mt8196_lvts_ap_data = {
@@ -2169,6 +2191,7 @@ static const struct lvts_data mt8196_lvts_ap_data = {
 	.num_cal_offsets = LVTS_NUM_CAL_OFFSETS_MT8196,
 	.msr_offset = LVTS_MSR_OFFSET_MT8196,
 	.ops = &lvts_platform_ops_mt8196,
+	.optional_reset = true,
 };
 
 static const struct of_device_id lvts_of_match[] = {
