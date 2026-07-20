@@ -138,6 +138,7 @@ static const struct fsl_soc_die_attr fsl_soc_die[] = {
 
 static struct fsl_soc_guts {
 	struct ccsr_guts __iomem *dcfg_ccsr;
+	const struct fsl_soc_data *data;
 	bool little_endian;
 	u32 svr;
 } soc;
@@ -231,10 +232,9 @@ static const struct of_device_id fsl_guts_of_match[] = {
 
 static int __init fsl_guts_init(void)
 {
-	struct soc_device_attribute *soc_dev_attr;
+	struct soc_device_attribute *soc_dev_attr = NULL;
 	static struct soc_device *soc_dev;
 	const struct fsl_soc_die_attr *soc_die;
-	const struct fsl_soc_data *soc_data;
 	const struct of_device_id *match;
 	struct device_node *np;
 	u64 soc_uid = 0;
@@ -243,12 +243,12 @@ static int __init fsl_guts_init(void)
 	np = of_find_matching_node_and_match(NULL, fsl_guts_of_match, &match);
 	if (!np)
 		return 0;
-	soc_data = match->data;
+	soc.data = match->data;
 
 	soc.dcfg_ccsr = of_iomap(np, DCFG_CCSR);
 	if (!soc.dcfg_ccsr) {
 		of_node_put(np);
-		return -ENOMEM;
+		goto err_nomem;
 	}
 
 	soc.little_endian = of_property_read_bool(np, "little-endian");
@@ -283,9 +283,9 @@ static int __init fsl_guts_init(void)
 	if (!soc_dev_attr->revision)
 		goto err_nomem;
 
-	if (soc_data)
-		soc_uid = fsl_guts_get_soc_uid(soc_data->sfp_compat,
-					       soc_data->uid_offset);
+	if (soc.data)
+		soc_uid = fsl_guts_get_soc_uid(soc.data->sfp_compat,
+					       soc.data->uid_offset);
 	if (soc_uid)
 		soc_dev_attr->serial_number = kasprintf(GFP_KERNEL, "%016llX",
 							soc_uid);
@@ -311,8 +311,11 @@ err:
 	kfree(soc_dev_attr->revision);
 	kfree(soc_dev_attr->serial_number);
 	kfree(soc_dev_attr);
-	iounmap(soc.dcfg_ccsr);
-	soc.dcfg_ccsr = NULL;
+	if (soc.dcfg_ccsr) {
+		iounmap(soc.dcfg_ccsr);
+		soc.dcfg_ccsr = NULL;
+	}
+	soc.data = NULL;
 
 	return ret;
 }
