@@ -290,6 +290,9 @@ static void ljca_gpio_event_cb(void *context, u8 cmd, const void *evt_data,
 
 	if (cmd != LJCA_GPIO_INT_EVENT)
 		return;
+	if (len < sizeof(*packet) ||
+	    struct_size(packet, item, packet->num) > len)
+		return;
 
 	for (i = 0; i < packet->num; i++) {
 		generic_handle_domain_irq(ljca_gpio->gc.irq.domain,
