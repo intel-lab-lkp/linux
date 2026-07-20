@@ -1689,8 +1689,8 @@ static int spi_nor_erase_uniform(struct spi_nor *nor, u64 addr, u32 len)
 {
 	const struct spi_nor_erase_map *map = &nor->params->erase_map;
 	const struct spi_nor_erase_region *region = &map->uniform_region;
-	const struct spi_nor_erase_type *erase;
-	int ret;
+	const struct spi_nor_erase_type *erase, *largest = NULL;
+	int i, ret;
 	/*
 	 * When CONFIG_MTD_SPI_NOR_MULTI_ERASE_SIZE is disabled, erase_size is
 	 * mtd->erasesize and nor->erase_opcode was set once at init by
@@ -1698,10 +1698,39 @@ static int spi_nor_erase_uniform(struct spi_nor *nor, u64 addr, u32 len)
 	 */
 	u32 erase_size = nor->mtd.erasesize;
 
+	if (IS_ENABLED(CONFIG_MTD_SPI_NOR_MULTI_ERASE_SIZE)) {
+		u8 erase_mask = map->uniform_region.erase_mask;
+
+		for (i = SNOR_ERASE_TYPE_MAX - 1; i >= 0; i--) {
+			if (!(erase_mask & BIT(i)))
+				continue;
+			if (!map->erase_type[i].size)
+				continue;
+
+			largest = &map->erase_type[i];
+			break;
+		}
+
+		if (unlikely(!largest))
+			return -EINVAL;
+	}
+
 	while (len) {
 		if (IS_ENABLED(CONFIG_MTD_SPI_NOR_MULTI_ERASE_SIZE)) {
-			erase = spi_nor_find_best_erase_type(map, region, addr,
-							     len);
+			/*
+			 * For large aligned ranges, every step in the middle
+			 * picks the same largest erase type. Skip
+			 * spi_nor_find_best_erase_type() there and use
+			 * @largest directly when @addr is aligned to it and
+			 * @len is still large enough. Fall back to the full
+			 * search only at the head or tail, where a smaller
+			 * erase type may be required.
+			 */
+			if (len >= largest->size && !(addr & largest->size_mask))
+				erase = largest;
+			else
+				erase = spi_nor_find_best_erase_type(map, region,
+								     addr, len);
 			if (unlikely(!erase))
 				return -EINVAL;
 
