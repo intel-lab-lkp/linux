@@ -74,6 +74,14 @@ static inline bool pfn_vmemmap_optimizable(unsigned long pfn)
 	return (pfn & (nr_pages - 1)) >= VMEMMAP_OPTIMIZATION_NR_STRUCT_PAGES;
 }
 
+static inline bool section_vmemmap_optimizable(const struct mem_section *section)
+{
+	if (!is_power_of_2(sizeof(struct page)))
+		return false;
+
+	return section_order(section) >= VMEMMAP_OPTIMIZATION_MIN_ORDER;
+}
+
 /*
  * mm/sparse-vmemmap.c
  */
