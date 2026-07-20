@@ -1148,9 +1148,94 @@ skip_peer_find:
 	}
 }
 
+static void ath12k_wifi7_mac_op_wake_tx_queue(struct ieee80211_hw *hw,
+					      struct ieee80211_txq *txq)
+{
+	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(txq->vif);
+	struct ath12k_txq *atxq = (void *)txq->drv_priv;
+	struct ath12k_hw *ah = ath12k_hw_to_ah(hw);
+	struct ieee80211_tx_control control = {
+		.sta = txq->sta,
+	};
+	struct ieee80211_vif *vif = txq->vif;
+	const struct ath12k_hw_ops *ops;
+	const struct sk_buff *peek_skb;
+	struct ath12k_link_vif *arvif;
+	struct dp_tx_ring *tx_ring;
+	struct hal_srng *tcl_ring;
+	struct ath12k_sta *ahsta;
+	struct ath12k_dp *dp;
+	struct sk_buff *skb;
+	struct ath12k *ar;
+	u32 ring_selector;
+	int num_free;
+	u8 ring_id;
+	u8 link_id;
+
+	while (1) {
+		if (unlikely(test_bit(ATH12K_FLAG_CRASH_FLUSH,
+				      &ah->radio[0].ab->dev_flags)))
+			break;
+
+		spin_lock_bh(&atxq->lock);
+
+		peek_skb = ieee80211_tx_peek(hw, txq);
+		if (!peek_skb) {
+			spin_unlock_bh(&atxq->lock);
+			break;
+		}
+
+		if (ieee80211_vif_is_mld(vif) && txq->sta) {
+			ahsta = ath12k_sta_to_ahsta(txq->sta);
+			link_id = ahsta->assoc_link_id;
+		} else {
+			link_id = ahvif->deflink.link_id;
+		}
+
+		rcu_read_lock();
+
+		arvif = rcu_dereference(ahvif->link[link_id]);
+		if (!arvif || !arvif->ar) {
+			rcu_read_unlock();
+			spin_unlock_bh(&atxq->lock);
+			break;
+		}
+
+		ar = arvif->ar;
+		dp = ar->ab->dp;
+
+		ops = dp->hw_params->hw_ops;
+		ring_selector = ops->get_ring_selector((struct sk_buff *)peek_skb);
+		ring_id = ring_selector % dp->hw_params->max_tx_ring;
+
+		tx_ring = &dp->tx_ring[ring_id];
+		tcl_ring = &dp->hal->srng_list[tx_ring->tcl_data_ring.ring_id];
+
+		spin_lock(&tcl_ring->lock);
+		num_free = ath12k_hal_srng_src_num_free(ar->ab, tcl_ring, true);
+		spin_unlock(&tcl_ring->lock);
+
+		if (num_free == 0) {
+			rcu_read_unlock();
+			spin_unlock_bh(&atxq->lock);
+			break;
+		}
+
+		skb = ieee80211_tx_dequeue(hw, txq);
+
+		rcu_read_unlock();
+		spin_unlock_bh(&atxq->lock);
+
+		if (!skb)
+			break;
+
+		ath12k_wifi7_mac_op_tx(hw, &control, skb);
+	}
+}
+
 static const struct ieee80211_ops ath12k_ops_wifi7 = {
 	.tx				= ath12k_wifi7_mac_op_tx,
-	.wake_tx_queue			= ieee80211_handle_wake_tx_queue,
+	.wake_tx_queue			= ath12k_wifi7_mac_op_wake_tx_queue,
 	.start                          = ath12k_mac_op_start,
 	.stop                           = ath12k_mac_op_stop,
 	.reconfig_complete              = ath12k_mac_op_reconfig_complete,

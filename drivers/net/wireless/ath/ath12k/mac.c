@@ -7716,10 +7716,12 @@ int ath12k_mac_op_sta_state(struct ieee80211_hw *hw,
 	struct ath12k_link_vif *arvif;
 	struct ath12k_link_sta *arsta;
 	unsigned long valid_links;
+	struct ath12k_txq *atxq;
 	u16 selected_links = 0;
 	u8 link_id = 0, i;
 	struct ath12k *ar;
 	int ret = -EINVAL;
+	int tid;
 	struct ath12k_dp_peer_create_params dp_params = {};
 
 	lockdep_assert_wiphy(hw->wiphy);
@@ -7738,6 +7740,14 @@ int ath12k_mac_op_sta_state(struct ieee80211_hw *hw,
 	    new_state == IEEE80211_STA_NONE) {
 		memset(ahsta, 0, sizeof(*ahsta));
 		ahsta->free_logical_link_idx_map = U16_MAX;
+
+		for (tid = 0; tid < ARRAY_SIZE(sta->txq); tid++) {
+			if (!sta->txq[tid])
+				continue;
+
+			atxq = (void *)sta->txq[tid]->drv_priv;
+			spin_lock_init(&atxq->lock);
+		}
 
 		arsta = &ahsta->deflink;
 
@@ -10804,6 +10814,7 @@ int ath12k_mac_op_add_interface(struct ieee80211_hw *hw,
 	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
 	struct ath12k_reg_info *reg_info;
 	struct ath12k_link_vif *arvif;
+	struct ath12k_txq *atxq;
 	struct ath12k_base *ab;
 	struct ath12k *ar;
 	int i;
@@ -10815,6 +10826,11 @@ int ath12k_mac_op_add_interface(struct ieee80211_hw *hw,
 	ahvif->ah = ah;
 	ahvif->vif = vif;
 	arvif = &ahvif->deflink;
+
+	if (vif->txq) {
+		atxq = (void *)vif->txq->drv_priv;
+		spin_lock_init(&atxq->lock);
+	}
 
 	ath12k_mac_init_arvif(ahvif, arvif, -1);
 
@@ -14912,6 +14928,7 @@ static int ath12k_mac_hw_register(struct ath12k_hw *ah)
 
 	hw->vif_data_size = sizeof(struct ath12k_vif);
 	hw->sta_data_size = sizeof(struct ath12k_sta);
+	hw->txq_data_size = sizeof(struct ath12k_txq);
 	hw->extra_tx_headroom = ab->hw_params->iova_mask;
 
 	wiphy_ext_feature_set(wiphy, NL80211_EXT_FEATURE_CQM_RSSI_LIST);

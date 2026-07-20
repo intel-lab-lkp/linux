@@ -17,6 +17,11 @@ struct ath12k_hw;
 struct ath12k_hw_group;
 struct ath12k_pdev_map;
 
+struct ath12k_txq {
+	/* protects ieee80211_tx_peek/dequeue serialization per txq */
+	spinlock_t lock;
+};
+
 struct ath12k_generic_iter {
 	struct ath12k *ar;
 	int ret;
