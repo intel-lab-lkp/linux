@@ -202,7 +202,7 @@ bool encl_load(const char *path, struct encl *encl, unsigned long heap_size)
 	}
 
 	ptr = mmap(NULL, PAGE_SIZE, PROT_READ, MAP_SHARED, fd, 0);
-	if (ptr == (void *)-1) {
+	if (ptr == MAP_FAILED) {
 		perror("mmap for read");
 		goto err;
 	}
@@ -215,7 +215,7 @@ bool encl_load(const char *path, struct encl *encl, unsigned long heap_size)
 " If so, remount it executable: mount -o remount,exec /dev\n\n"
 
 	ptr = mmap(NULL, PAGE_SIZE, PROT_EXEC, MAP_SHARED, fd, 0);
-	if (ptr == (void *)-1) {
+	if (ptr == MAP_FAILED) {
 		fprintf(stderr, ERR_MSG);
 		goto err;
 	}
