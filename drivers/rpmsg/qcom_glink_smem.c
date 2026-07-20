@@ -85,6 +85,22 @@ static size_t glink_smem_rx_avail(struct qcom_glink_pipe *np)
 	head = le32_to_cpu(*pipe->head);
 	tail = le32_to_cpu(*pipe->tail);
 
+	/*
+	 * head is written by the remote peer via SMEM; tail is written
+	 * locally. Check the raw values, not a derived length: two
+	 * out-of-range indices can still produce an in-range difference,
+	 * and reducing a bad index modulo the FIFO length would hide the
+	 * invariant violation.
+	 */
+	if (unlikely(head >= pipe->native.length)) {
+		dev_warn_ratelimited(&smem->dev,
+				     "rx head out of range: head=%u length=%zu\n",
+				     head, pipe->native.length);
+		return 0;
+	}
+	if (WARN_ON_ONCE(tail >= pipe->native.length))
+		return 0;
+
 	if (head < tail)
 		return pipe->native.length - tail + head;
 	else
@@ -99,6 +115,11 @@ static void glink_smem_rx_peek(struct qcom_glink_pipe *np,
 	u32 tail;
 
 	tail = le32_to_cpu(*pipe->tail);
+	if (WARN_ON_ONCE(tail >= pipe->native.length))
+		return;
+	if (WARN_ON_ONCE(offset + count > pipe->native.length))
+		return;
+
 	tail += offset;
 	if (tail >= pipe->native.length)
 		tail -= pipe->native.length;
@@ -129,12 +150,26 @@ static void glink_smem_rx_advance(struct qcom_glink_pipe *np,
 static size_t glink_smem_tx_avail(struct qcom_glink_pipe *np)
 {
 	struct glink_smem_pipe *pipe = to_smem_pipe(np);
+	struct qcom_glink_smem *smem = pipe->smem;
 	u32 head;
 	u32 tail;
 	u32 avail;
 
 	head = le32_to_cpu(*pipe->head);
 	tail = le32_to_cpu(*pipe->tail);
+
+	/*
+	 * head is written locally; tail is written by the remote peer via
+	 * SMEM. Check the raw values, not a derived length.
+	 */
+	if (WARN_ON_ONCE(head >= pipe->native.length))
+		return 0;
+	if (unlikely(tail >= pipe->native.length)) {
+		dev_warn_ratelimited(&smem->dev,
+				     "tx tail out of range: tail=%u length=%zu\n",
+				     tail, pipe->native.length);
+		return 0;
+	}
 
 	if (tail <= head)
 		avail = pipe->native.length - head + tail;
@@ -177,6 +212,10 @@ static void glink_smem_tx_write(struct qcom_glink_pipe *glink_pipe,
 	unsigned int head;
 
 	head = le32_to_cpu(*pipe->head);
+	if (WARN_ON_ONCE(head >= pipe->native.length))
+		return;
+	if (WARN_ON_ONCE(hlen + dlen > pipe->native.length))
+		return;
 
 	head = glink_smem_tx_write_one(pipe, head, hdr, hlen);
 	head = glink_smem_tx_write_one(pipe, head, data, dlen);
