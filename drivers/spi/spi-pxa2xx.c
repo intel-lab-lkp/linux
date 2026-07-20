@@ -1313,7 +1313,7 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 	struct spi_controller *controller;
 	struct driver_data *drv_data;
 	const struct lpss_config *config;
-	int status;
+	int ret;
 	u32 tmp;
 
 	if (platform_info->is_target)
@@ -1372,8 +1372,8 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 
 	/* Setup DMA if requested */
 	if (platform_info->enable_dma) {
-		status = pxa2xx_spi_dma_setup(drv_data);
-		if (status) {
+		ret = pxa2xx_spi_dma_setup(drv_data);
+		if (ret) {
 			dev_warn(dev, "no DMA channels available, using PIO\n");
 			platform_info->enable_dma = false;
 		} else {
@@ -1387,16 +1387,16 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 	}
 
 	/* Enable SOC clock */
-	status = pxa2xx_spi_clk_enable(drv_data);
-	if (status)
+	ret = pxa2xx_spi_clk_enable(drv_data);
+	if (ret)
 		goto out_error_dma_alloc;
 
 	drv_data->suspended = false;
 
-	status = request_irq(ssp->irq, ssp_int, IRQF_SHARED, dev_name(dev),
+	ret = request_irq(ssp->irq, ssp_int, IRQF_SHARED, dev_name(dev),
 			drv_data);
-	if (status < 0) {
-		status = dev_err_probe(dev, status, "cannot get IRQ %d\n", ssp->irq);
+	if (ret < 0) {
+		ret = dev_err_probe(dev, ret, "cannot get IRQ %d\n", ssp->irq);
 		goto out_error_clock_enabled;
 	}
 
@@ -1477,23 +1477,23 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 		drv_data->gpiod_ready = devm_gpiod_get_optional(dev,
 						"ready", GPIOD_OUT_LOW);
 		if (IS_ERR(drv_data->gpiod_ready)) {
-			status = PTR_ERR(drv_data->gpiod_ready);
+			ret = PTR_ERR(drv_data->gpiod_ready);
 			goto out_error_irq_alloc;
 		}
 	}
 
 	/* Register with the SPI framework */
 	dev_set_drvdata(dev, drv_data);
-	status = spi_register_controller(controller);
-	if (status) {
-		dev_err_probe(dev, status, "problem registering SPI controller\n");
+	ret = spi_register_controller(controller);
+	if (ret) {
+		dev_err_probe(dev, ret, "problem registering SPI controller\n");
 		goto out_error_irq_alloc;
 	}
 
 	if (is_lpss_ssp(drv_data) && !platform_info->enable_dma)
 		pm_runtime_get_noresume(dev);
 
-	return status;
+	return ret;
 
 out_error_irq_alloc:
 	free_irq(ssp->irq, drv_data);
@@ -1504,7 +1504,7 @@ out_error_clock_enabled:
 out_error_dma_alloc:
 	pxa2xx_spi_dma_release(drv_data);
 
-	return status;
+	return ret;
 }
 EXPORT_SYMBOL_NS_GPL(pxa2xx_spi_probe, "SPI_PXA2xx");
 
@@ -1547,15 +1547,14 @@ static int pxa2xx_spi_suspend(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 	struct ssp_device *ssp = drv_data->ssp;
-	int status;
+	int ret;
 
-	status = pm_runtime_resume_and_get(dev);
-	if (status < 0)
-		return status;
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret < 0)
+		return ret;
 
-
-	status = spi_controller_suspend(drv_data->controller);
-	if (status)
+	ret = spi_controller_suspend(drv_data->controller);
+	if (ret)
 		goto out_put;
 
 	/* Disable SSP interrupt generation on hardware level while clock is active */
@@ -1586,19 +1585,19 @@ static int pxa2xx_spi_suspend(struct device *dev)
 
 out_put:
 	pm_runtime_put_noidle(dev);
-	return status;
+	return ret;
 }
 
 static int pxa2xx_spi_resume(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 	struct ssp_device *ssp = drv_data->ssp;
-	int status;
+	int ret;
 
 	/* Enable the SSP clock */
 	if (!pm_runtime_suspended(dev)) {
-		status = pxa2xx_spi_clk_enable(drv_data);
-		if (status)
+		ret = pxa2xx_spi_clk_enable(drv_data);
+		if (ret)
 			goto out_put;
 	}
 
@@ -1643,8 +1642,8 @@ static int pxa2xx_spi_resume(struct device *dev)
 	drv_data->suspended = false;
 
 	/* Start the queue running */
-	status = spi_controller_resume(drv_data->controller);
-	if (status) {
+	ret = spi_controller_resume(drv_data->controller);
+	if (ret) {
 		drv_data->suspended = true;
 		synchronize_irq(ssp->irq);
 		pxa2xx_spi_clk_disable(drv_data);
@@ -1653,7 +1652,7 @@ static int pxa2xx_spi_resume(struct device *dev)
 
 out_put:
 	if (!pm_runtime_suspended(dev)) {
-		if (status)
+		if (ret)
 			/*
 			 * Clock is already disabled on the error path; align
 			 * the PM runtime state with hardware reality before
@@ -1665,8 +1664,7 @@ out_put:
 		pm_runtime_put_noidle(dev);
 	}
 
-	return status;
-
+	return ret;
 }
 
 static int pxa2xx_spi_runtime_suspend(struct device *dev)
@@ -1683,11 +1681,11 @@ static int pxa2xx_spi_runtime_suspend(struct device *dev)
 static int pxa2xx_spi_runtime_resume(struct device *dev)
 {
 	struct driver_data *drv_data = dev_get_drvdata(dev);
-	int status;
+	int ret;
 
-	status = pxa2xx_spi_clk_enable(drv_data);
-	if (status)
-		return status;
+	ret = pxa2xx_spi_clk_enable(drv_data);
+	if (ret)
+		return ret;
 
 	drv_data->suspended = false;
 	return 0;
