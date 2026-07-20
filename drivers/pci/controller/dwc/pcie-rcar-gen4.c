@@ -98,6 +98,7 @@ struct rcar_gen4_pcie {
 	void __iomem *base;
 	void __iomem *phy_base;
 	struct platform_device *pdev;
+	struct reset_control *perst;
 	const struct rcar_gen4_pcie_drvdata *drvdata;
 };
 #define to_rcar_gen4_pcie(_dw)	container_of(_dw, struct rcar_gen4_pcie, dw)
@@ -316,12 +317,23 @@ static void rcar_gen4_pcie_unprepare(struct rcar_gen4_pcie *rcar)
 
 static int rcar_gen4_pcie_get_resources(struct rcar_gen4_pcie *rcar)
 {
+	struct device *dev = rcar->dw.dev;
+	struct device_node *root_port;
+
 	rcar->phy_base = devm_platform_ioremap_resource_byname(rcar->pdev, "phy");
 	if (IS_ERR(rcar->phy_base))
 		return PTR_ERR(rcar->phy_base);
 
+	root_port = of_get_next_available_child(dev->of_node, NULL);
+	rcar->perst = of_reset_control_get_optional_exclusive(root_port, "perst");
+	of_node_put(root_port);
+	if (IS_ERR(rcar->perst))
+		return dev_err_probe(dev, PTR_ERR(rcar->perst), "Failed to get PERST#\n");
+
 	/* Renesas-specific registers */
 	rcar->base = devm_platform_ioremap_resource_byname(rcar->pdev, "app");
+	if (IS_ERR(rcar->base))
+		reset_control_put(rcar->perst);
 
 	return PTR_ERR_OR_ZERO(rcar->base);
 }
@@ -442,6 +454,22 @@ err:
 	return ret;
 }
 
+static void rcar_gen4_pcie_host_perst_assert(struct dw_pcie_rp *pp, bool assert)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+
+	gpiod_set_value_cansleep(dw->pe_rst, assert);
+
+	if (!rcar->perst)
+		return;
+
+	if (assert)
+		reset_control_assert(rcar->perst);
+	else
+		reset_control_deassert(rcar->perst);
+}
+
 /* Host mode */
 static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
 {
@@ -449,7 +477,7 @@ static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 	int ret;
 
-	gpiod_set_value_cansleep(dw->pe_rst, 1);
+	rcar_gen4_pcie_host_perst_assert(pp, true);
 
 	ret = rcar->drvdata->init(rcar);
 	if (ret)
@@ -470,7 +498,7 @@ static int rcar_gen4_pcie_host_init(struct dw_pcie_rp *pp)
 
 	msleep(PCIE_T_PVPERL_MS);	/* pe_rst requires 100msec delay */
 
-	gpiod_set_value_cansleep(dw->pe_rst, 0);
+	rcar_gen4_pcie_host_perst_assert(pp, false);
 
 	return 0;
 
@@ -484,7 +512,7 @@ static void rcar_gen4_pcie_host_deinit(struct dw_pcie_rp *pp)
 	struct dw_pcie *dw = to_dw_pcie_from_pp(pp);
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 
-	gpiod_set_value_cansleep(dw->pe_rst, 1);
+	rcar_gen4_pcie_host_perst_assert(pp, true);
 	rcar_gen4_pcie_common_deinit(rcar);
 }
 
@@ -654,7 +682,7 @@ static int rcar_gen4_pcie_probe(struct platform_device *pdev)
 
 	err = rcar_gen4_pcie_prepare(rcar);
 	if (err)
-		return err;
+		goto err_prepare;
 
 	err = rcar_gen4_add_dw_pcie(rcar);
 	if (err)
@@ -662,6 +690,8 @@ static int rcar_gen4_pcie_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_prepare:
+	reset_control_put(rcar->perst);
 err_unprepare:
 	rcar_gen4_pcie_unprepare(rcar);
 
@@ -688,6 +718,7 @@ static void rcar_gen4_pcie_remove(struct platform_device *pdev)
 
 	rcar_gen4_remove_dw_pcie(rcar);
 	rcar_gen4_pcie_unprepare(rcar);
+	reset_control_put(rcar->perst);
 }
 
 static int r8a779f0_pcie_ltssm_control(struct rcar_gen4_pcie *rcar, bool enable)
