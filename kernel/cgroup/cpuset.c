@@ -3042,7 +3042,7 @@ static int cpuset_can_attach(struct cgroup_taskset *tset)
 			goto out_unlock;
 
 		if (setsched_check) {
-			ret = security_task_setscheduler(task);
+			ret = security_task_setscheduler(task, NULL, cs->effective_cpus);
 			if (ret)
 				goto out_unlock;
 		}
@@ -3600,7 +3600,7 @@ static int cpuset_can_fork(struct task_struct *task, struct css_set *cset)
 	if (ret)
 		goto out_unlock;
 
-	ret = security_task_setscheduler(task);
+	ret = security_task_setscheduler(task, NULL, cs->effective_cpus);
 	if (ret)
 		goto out_unlock;
 
