@@ -1939,14 +1939,29 @@ static void applespi_drain_reads(struct applespi_data *applespi)
 static void applespi_remove(struct spi_device *spi)
 {
 	struct applespi_data *applespi = spi_get_drvdata(spi);
+	unsigned long flags;
+	long ret;
 
-	applespi_drain_writes(applespi);
-
+	/* Disable GPE and remove handler first to prevent interrupt storm */
 	acpi_disable_gpe(NULL, applespi->gpe);
 	acpi_remove_gpe_handler(NULL, applespi->gpe, applespi_notify);
 	device_wakeup_disable(&spi->dev);
 
-	applespi_drain_reads(applespi);
+	/* Prevent any new SPI transfers and wait for outstanding ones */
+	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+	applespi->cancel_spi = true;
+	ret = wait_event_lock_irq_timeout(applespi->wait_queue,
+					  !applespi_async_outstanding(applespi),
+					  applespi->cmd_msg_lock,
+					  msecs_to_jiffies(3000));
+	if (!ret && applespi_async_outstanding(applespi)) {
+		dev_warn(&applespi->spi->dev,
+			 "Timed out waiting for SPI transfers to drain, waiting unconditionally\n");
+		wait_event_lock_irq(applespi->wait_queue,
+				    !applespi_async_outstanding(applespi),
+				    applespi->cmd_msg_lock);
+	}
+	spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
 
 	debugfs_remove_recursive(applespi->debugfs_root);
 }
