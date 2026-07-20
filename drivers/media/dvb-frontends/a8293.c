@@ -234,8 +234,11 @@ static int a8293_probe(struct i2c_client *client)
 
 	/* check if the SEC is there */
 	ret = i2c_master_recv(client, buf, 2);
-	if (ret < 0)
+	if (ret != 2) {
+		if (ret >= 0)
+			ret = -EREMOTEIO;
 		goto err_kfree;
+	}
 
 	/* override frontend ops */
 	fe->ops.set_voltage = a8293_set_voltage;
