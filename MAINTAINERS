@@ -12056,6 +12056,13 @@ L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	arch/x86/kernel/cpu/hygon.c
 
+HYNETEK HUSB320 TYPE-C DRIVER
+M:	Hongyang Zhao <hongyang.zhao@163.com>
+L:	linux-usb@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/usb/hynetek,husb320.yaml
+F:	drivers/usb/typec/husb320.c
+
 HYNIX HI556 SENSOR DRIVER
 M:	Sakari Ailus <sakari.ailus@linux.intel.com>
 L:	linux-media@vger.kernel.org
