@@ -2256,6 +2256,21 @@ static struct folio *collapse_read_folio(pgoff_t index, struct collapse_file_sta
 	return folio;
 }
 
+
+/**
+ * prepare_collapse_file_folio() - Prepare the collapsing of a single file folio
+ * @index: folio index in the page cache
+ * @state: helper struct of state being passed back and forth.
+ *
+ * prepare_collapse_file_folio() helps prepare the THP collapsing of file folios
+ * (both shmem and !shmem), including the reading of folios, initial tests for
+ * dirty/writeback, locking, etc.
+ *
+ * Context: Expects @state->mapping->i_pages->xa_lock to be held. Releases the same xa_lock.
+ *          On success, returns a refcounted and locked folio in @state->folio (that may
+ *          not be the same that was passed in).
+ * Return: Appropriate scan_result value (on success, SCAN_SUCCEED).
+ */
 static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collapse_file_state *state)
 {
 	struct address_space *mapping = state->mapping;
