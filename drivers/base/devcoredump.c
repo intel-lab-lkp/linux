@@ -210,7 +210,12 @@ static ssize_t disabled_show(const struct class *class, const struct class_attri
 static ssize_t disabled_store(const struct class *class, const struct class_attribute *attr,
 			      const char *buf, size_t count)
 {
-	long tmp = simple_strtol(buf, NULL, 10);
+	long tmp;
+	int ret;
+
+	ret = kstrtol(buf, 10, &tmp);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * This essentially makes the attribute write-once, since you can't
