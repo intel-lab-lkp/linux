@@ -1473,6 +1473,9 @@ int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp,
 		goto out_error_irq_alloc;
 	}
 
+	if (is_lpss_ssp(drv_data) && !platform_info->enable_dma)
+		pm_runtime_get_noresume(dev);
+
 	return status;
 
 out_error_irq_alloc:
@@ -1494,6 +1497,13 @@ void pxa2xx_spi_remove(struct device *dev)
 	struct ssp_device *ssp = drv_data->ssp;
 
 	spi_unregister_controller(drv_data->controller);
+
+	/* Release the PM reference held in probe for LPSS PIO mode before
+	 * hardware teardown so the PM core does not invoke runtime_suspend
+	 * on already-unclocked hardware.
+	 */
+	if (is_lpss_ssp(drv_data) && !drv_data->controller_info->enable_dma)
+		pm_runtime_put_noidle(dev);
 
 	/* Disable SSP interrupt generation on hardware level while clock is active */
 	pxa2xx_spi_off(drv_data);
