@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/extcon/ti,extcon-palmas.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments PALMAS USB COMPARATOR
+
+maintainers:
+  - Roger Quadros <rogerq@ti.com>
+  - Bhargav Joshi <j.bhargav.u@gmail.com>
+
+properties:
+  compatible:
+    oneOf:
+      - enum:
+          - ti,palmas-usb-vid
+          - ti,twl6035-usb-vid
+      - enum:
+          - ti,palmas-usb
+          - ti,twl6035-usb
+        deprecated: true
+
+  ti,wakeup:
+    type: boolean
+    description:
+      To enable the wakeup comparator in probe.
+
+  ti,enable-id-detection:
+    type: boolean
+    description:
+      Perform ID detection. If id-gpios is specified it performs ID detection
+      using GPIO, otherwise using the OTG core.
+
+  ti,enable-vbus-detection:
+    type: boolean
+    description:
+      Perform VBUS detection.
+
+  id-gpios:
+    maxItems: 1
+
+  id-gpio:
+    maxItems: 1
+    deprecated: true
+
+  vbus-gpios:
+    maxItems: 1
+
+  vbus-gpio:
+    maxItems: 1
+    deprecated: true
+
+  debounce-delay-ms:
+    description:
+      Debounce delay for GPIO ID pin in milliseconds.
+    default: 20
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    palmas_usb {
+        compatible = "ti,palmas-usb-vid";
+        ti,wakeup;
+        ti,enable-id-detection;
+        ti,enable-vbus-detection;
+        id-gpios = <&palmas_gpio 0 GPIO_ACTIVE_HIGH>;
+    };
