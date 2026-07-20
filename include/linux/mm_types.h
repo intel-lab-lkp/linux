@@ -1620,6 +1620,11 @@ static inline int mm_alloc_sched_noprof(struct mm_struct *mm)
 	if (!pcpu_sched)
 		return -ENOMEM;
 
+	if (!zalloc_cpumask_var(&mm->sc_stat.visited_cpus, GFP_KERNEL)) {
+		free_percpu(pcpu_sched);
+		return -ENOMEM;
+	}
+
 	mm_init_sched(mm, pcpu_sched);
 	return 0;
 }
@@ -1630,6 +1635,7 @@ static inline void mm_destroy_sched(struct mm_struct *mm)
 {
 	free_percpu(mm->sc_stat.pcpu_sched);
 	mm->sc_stat.pcpu_sched = NULL;
+	free_cpumask_var(mm->sc_stat.visited_cpus);
 }
 #else /* !CONFIG_SCHED_CACHE */
 
