@@ -390,6 +390,8 @@ static int mtk_jpegenc_hw_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 	pm_runtime_enable(&pdev->dev);
 
+	atomic_inc(&master_dev->hw_rdy);
+
 	return 0;
 }
 
