@@ -4000,15 +4000,9 @@ int tipc_sk_dump(struct sock *sk, u16 dqueues, char *buf)
 		i += tipc_list_dump(&sk->sk_receive_queue, false, buf + i);
 	}
 
-	if (dqueues & TIPC_DUMP_SK_BKLGQ) {
-		i += scnprintf(buf + i, sz - i, "sk_backlog:\n  head ");
-		i += tipc_skb_dump(sk->sk_backlog.head, false, buf + i);
-		if (sk->sk_backlog.tail != sk->sk_backlog.head) {
-			i += scnprintf(buf + i, sz - i, "  tail ");
-			i += tipc_skb_dump(sk->sk_backlog.tail, false,
-					   buf + i);
-		}
-	}
+	if (dqueues & TIPC_DUMP_SK_BKLGQ)
+		i += scnprintf(buf + i, sz - i, "sk_backlog: len = %d\n",
+				       READ_ONCE(sk->sk_backlog.len));
 
 	return i;
 }
