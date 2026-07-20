@@ -3,14 +3,17 @@
 #ifndef __SELFTESTS_EXEC_BINFMT_MISC_COMMON_H
 #define __SELFTESTS_EXEC_BINFMT_MISC_COMMON_H
 
+#include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <link.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define BINFMT_DIR	"/proc/sys/fs/binfmt_misc"
@@ -93,6 +96,51 @@ static inline int artifact_path(char *out, size_t sz, const char *name)
 	if ((size_t)snprintf(out, sz, "%s/%s", dirname(exe), name) >= sz)
 		return -1;
 	return 0;
+}
+
+static inline int patch_file(const char *path, off_t off, const void *data, size_t len)
+{
+	ssize_t n;
+	int fd;
+
+	fd = open(path, O_WRONLY);
+	if (fd < 0)
+		return -1;
+	n = pwrite(fd, data, len, off);
+	close(fd);
+	return n == (ssize_t)len ? 0 : -1;
+}
+
+/* Find the system loader through our own PT_INTERP. */
+static inline int find_loader(char *out, size_t sz)
+{
+	ElfW(Ehdr) eh;
+	ElfW(Phdr) ph;
+	int fd, i, ret = -1;
+
+	fd = open("/proc/self/exe", O_RDONLY);
+	if (fd < 0)
+		return -1;
+	if (pread(fd, &eh, sizeof(eh), 0) != sizeof(eh))
+		goto out;
+	for (i = 0; i < eh.e_phnum; i++) {
+		if (pread(fd, &ph, sizeof(ph),
+			  eh.e_phoff + i * eh.e_phentsize) != sizeof(ph))
+			goto out;
+		if (ph.p_type != PT_INTERP)
+			continue;
+		if (!ph.p_filesz || ph.p_filesz > sz)
+			goto out;
+		if (pread(fd, out, ph.p_filesz, ph.p_offset) !=
+		    (ssize_t)ph.p_filesz)
+			goto out;
+		out[ph.p_filesz - 1] = '\0';
+		ret = 0;
+		break;
+	}
+out:
+	close(fd);
+	return ret;
 }
 
 #endif /* __SELFTESTS_EXEC_BINFMT_MISC_COMMON_H */
