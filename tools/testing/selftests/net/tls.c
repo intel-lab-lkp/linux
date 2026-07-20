@@ -427,7 +427,8 @@ FIXTURE_SETUP(tls)
 
 FIXTURE_TEARDOWN(tls)
 {
-	close(self->fd);
+	if (self->fd >= 0)
+		close(self->fd);
 	close(self->cfd);
 }
 
@@ -895,6 +896,114 @@ TEST_F(tls, splice_dec_cmsg_to_pipe)
 				buf, sizeof(buf), MSG_WAITALL),
 		  send_len);
 	EXPECT_EQ(memcmp(test_str, buf, send_len), 0);
+}
+
+/* Verify splice handles data-control-data: splice reads the data
+ * records successfully while the intervening control record must
+ * be drained via recvmsg before splice can continue.
+ */
+TEST_F(tls, splice_data_cmsg_data)
+{
+	char mem_send[TLS_PAYLOAD_MAX_LEN];
+	char mem_recv[TLS_PAYLOAD_MAX_LEN];
+	int send_len = 4096;
+	char *ctrl_str = "control";
+	int ctrl_len = strlen(ctrl_str) + 1;
+	char ctrl_buf[8];
+	int p[2];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	memrnd(mem_send, sizeof(mem_send));
+
+	ASSERT_GE(pipe(p), 0);
+
+	/* Send: data, control, data */
+	EXPECT_EQ(send(self->fd, mem_send, send_len, 0), send_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl_str, ctrl_len, 0),
+		  ctrl_len);
+	EXPECT_EQ(send(self->fd, &mem_send[send_len], send_len, 0), send_len);
+
+	/* Splice first data record */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), send_len);
+	EXPECT_EQ(read(p[0], mem_recv, send_len), send_len);
+	EXPECT_EQ(memcmp(mem_send, mem_recv, send_len), 0);
+
+	/* Splice hits control record, fails */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), -1);
+	EXPECT_EQ(errno, EINVAL);
+
+	/* Drain the control record via recvmsg */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				ctrl_buf, sizeof(ctrl_buf), MSG_WAITALL),
+		  ctrl_len);
+	EXPECT_EQ(memcmp(ctrl_str, ctrl_buf, ctrl_len), 0);
+
+	/* Splice second data record */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), send_len);
+	EXPECT_EQ(read(p[0], mem_recv, send_len), send_len);
+	EXPECT_EQ(memcmp(&mem_send[send_len], mem_recv, send_len), 0);
+}
+
+/* Verify that multiple consecutive control records between data
+ * records can each be drained individually, and splice resumes
+ * afterward.  The two control records use different content types
+ * to verify type preservation across the splice boundary.
+ */
+TEST_F(tls, splice_multi_cmsg_data)
+{
+	char mem_send[TLS_PAYLOAD_MAX_LEN];
+	char mem_recv[TLS_PAYLOAD_MAX_LEN];
+	int send_len = 4096;
+	char *ctrl1 = "alert1";
+	char *ctrl2 = "alert2";
+	int ctrl_len = strlen(ctrl1) + 1;
+	char ctrl_buf[7];
+	int p[2];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	memrnd(mem_send, sizeof(mem_send));
+
+	ASSERT_GE(pipe(p), 0);
+
+	/* Send: data, control(100), control(200), data */
+	EXPECT_EQ(send(self->fd, mem_send, send_len, 0), send_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl1, ctrl_len, 0), ctrl_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 200, ctrl2, ctrl_len, 0), ctrl_len);
+	EXPECT_EQ(send(self->fd, &mem_send[send_len], send_len, 0), send_len);
+
+	/* Splice first data */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), send_len);
+	EXPECT_EQ(read(p[0], mem_recv, send_len), send_len);
+	EXPECT_EQ(memcmp(mem_send, mem_recv, send_len), 0);
+
+	/* Splice fails on first control record */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), -1);
+	EXPECT_EQ(errno, EINVAL);
+
+	/* Drain first control (type 100) */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				ctrl_buf, sizeof(ctrl_buf), MSG_WAITALL),
+		  ctrl_len);
+	EXPECT_EQ(memcmp(ctrl1, ctrl_buf, ctrl_len), 0);
+
+	/* Splice fails on second control record */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), -1);
+	EXPECT_EQ(errno, EINVAL);
+
+	/* Drain second control (type 200) */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 200,
+				ctrl_buf, sizeof(ctrl_buf), MSG_WAITALL),
+		  ctrl_len);
+	EXPECT_EQ(memcmp(ctrl2, ctrl_buf, ctrl_len), 0);
+
+	/* Splice second data */
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, send_len, 0), send_len);
+	EXPECT_EQ(read(p[0], mem_recv, send_len), send_len);
+	EXPECT_EQ(memcmp(&mem_send[send_len], mem_recv, send_len), 0);
 }
 
 TEST_F(tls, recv_and_splice)
@@ -1680,6 +1789,193 @@ TEST_F(tls, data_control_data)
 
 	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_PEEK), send_len);
 	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_PEEK), send_len);
+}
+
+/* Fully consume a data-control-data sequence.  The existing
+ * data_control_data test only peeks; this exercises complete
+ * record delivery through recv and recvmsg.
+ */
+TEST_F(tls, recv_data_cmsg_data)
+{
+	char *data1 = "first_data";
+	char *ctrl = "ctrl_msg";
+	char *data2 = "second_data";
+	int d1_len = strlen(data1) + 1;
+	int c_len = strlen(ctrl) + 1;
+	int d2_len = strlen(data2) + 1;
+	char buf[20];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	EXPECT_EQ(send(self->fd, data1, d1_len, 0), d1_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl, c_len, 0), c_len);
+	EXPECT_EQ(send(self->fd, data2, d2_len, 0), d2_len);
+
+	/* First data record */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), d1_len);
+	EXPECT_EQ(memcmp(buf, data1, d1_len), 0);
+
+	/* recv without cmsg buffer fails on control record */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), 0), -1);
+	EXPECT_EQ(errno, EIO);
+
+	/* Drain control via recvmsg */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				buf, sizeof(buf), MSG_WAITALL), c_len);
+	EXPECT_EQ(memcmp(buf, ctrl, c_len), 0);
+
+	/* Second data record */
+	EXPECT_EQ(recv(self->cfd, buf, d2_len, MSG_WAITALL), d2_len);
+	EXPECT_EQ(memcmp(buf, data2, d2_len), 0);
+}
+
+/* Peek at an interleaved control record after the preceding data
+ * record has been consumed, then consume it.  MSG_PEEK exposes the
+ * control record's type without consuming it.
+ */
+TEST_F(tls, peek_cmsg_after_data)
+{
+	char *data = "leading";
+	char *ctrl = "middle";
+	char *tail = "trailing";
+	int d_len = strlen(data) + 1;
+	int c_len = strlen(ctrl) + 1;
+	int t_len = strlen(tail) + 1;
+	char buf[20];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	EXPECT_EQ(send(self->fd, data, d_len, 0), d_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl, c_len, 0), c_len);
+	EXPECT_EQ(send(self->fd, tail, t_len, 0), t_len);
+
+	/* Consume leading data */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), d_len);
+	EXPECT_EQ(memcmp(buf, data, d_len), 0);
+
+	/* Peek at the control record */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				buf, sizeof(buf), MSG_PEEK), c_len);
+	EXPECT_EQ(memcmp(buf, ctrl, c_len), 0);
+
+	/* Consume the control record */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				buf, sizeof(buf), 0), c_len);
+	EXPECT_EQ(memcmp(buf, ctrl, c_len), 0);
+
+	/* Trailing data */
+	EXPECT_EQ(recv(self->cfd, buf, t_len, MSG_WAITALL), t_len);
+	EXPECT_EQ(memcmp(buf, tail, t_len), 0);
+}
+
+/* Control record as the first record in the stream, followed by
+ * data.  The control record must be drained before the data record
+ * becomes available.
+ */
+TEST_F(tls, cmsg_before_data)
+{
+	char *ctrl = "alert";
+	char *data = "payload";
+	int c_len = strlen(ctrl) + 1;
+	int d_len = strlen(data) + 1;
+	char buf[20];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl, c_len, 0), c_len);
+	EXPECT_EQ(send(self->fd, data, d_len, 0), d_len);
+
+	/* recv without cmsg fails */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), 0), -1);
+	EXPECT_EQ(errno, EIO);
+
+	/* Drain control via recvmsg */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				buf, sizeof(buf), MSG_WAITALL), c_len);
+	EXPECT_EQ(memcmp(buf, ctrl, c_len), 0);
+
+	/* Data follows */
+	EXPECT_EQ(recv(self->cfd, buf, d_len, MSG_WAITALL), d_len);
+	EXPECT_EQ(memcmp(buf, data, d_len), 0);
+}
+
+/* Two different control record types interleaved with data.
+ * Each control record is delivered with its own type preserved;
+ * verify both types arrive intact.
+ */
+TEST_F(tls, mixed_control_types)
+{
+	char *data1 = "data1";
+	char *ctrl1 = "handshake";
+	char *ctrl2 = "alert_msg";
+	char *data2 = "data2";
+	int d1_len = strlen(data1) + 1;
+	int c1_len = strlen(ctrl1) + 1;
+	int c2_len = strlen(ctrl2) + 1;
+	int d2_len = strlen(data2) + 1;
+	char buf[20];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	EXPECT_EQ(send(self->fd, data1, d1_len, 0), d1_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl1, c1_len, 0), c1_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 200, ctrl2, c2_len, 0), c2_len);
+	EXPECT_EQ(send(self->fd, data2, d2_len, 0), d2_len);
+
+	/* First data */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), d1_len);
+	EXPECT_EQ(memcmp(buf, data1, d1_len), 0);
+
+	/* First control (type 100) */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				buf, sizeof(buf), MSG_WAITALL), c1_len);
+	EXPECT_EQ(memcmp(buf, ctrl1, c1_len), 0);
+
+	/* Second control (type 200) */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 200,
+				buf, sizeof(buf), MSG_WAITALL), c2_len);
+	EXPECT_EQ(memcmp(buf, ctrl2, c2_len), 0);
+
+	/* Second data */
+	EXPECT_EQ(recv(self->cfd, buf, d2_len, MSG_WAITALL), d2_len);
+	EXPECT_EQ(memcmp(buf, data2, d2_len), 0);
+}
+
+/* Trailing control record with no data following it.  The sender
+ * closes the connection after the control record; the receiver
+ * drains the control and then observes EOF.
+ */
+TEST_F(tls, data_cmsg_eof)
+{
+	char *data = "payload";
+	char *ctrl = "final";
+	int d_len = strlen(data) + 1;
+	int c_len = strlen(ctrl) + 1;
+	char buf[20];
+
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	EXPECT_EQ(send(self->fd, data, d_len, 0), d_len);
+	EXPECT_EQ(tls_send_cmsg(self->fd, 100, ctrl, c_len, 0), c_len);
+	EXPECT_EQ(close(self->fd), 0);
+	self->fd = -1;
+
+	/* Consume data */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), d_len);
+	EXPECT_EQ(memcmp(buf, data, d_len), 0);
+
+	/* Drain trailing control */
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, 100,
+				buf, sizeof(buf), 0), c_len);
+	EXPECT_EQ(memcmp(buf, ctrl, c_len), 0);
+
+	/* Next recv returns EOF */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), 0), 0);
 }
 
 TEST_F(tls, shutdown)
