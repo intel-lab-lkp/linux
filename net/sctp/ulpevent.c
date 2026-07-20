@@ -1061,10 +1061,9 @@ void sctp_ulpevent_read_nxtinfo(const struct sctp_ulpevent *event,
 				struct sock *sk)
 {
 	struct sk_buff *skb;
-	int err;
 
-	skb = sctp_skb_recv_datagram(sk, MSG_PEEK | MSG_DONTWAIT, &err);
-	if (skb != NULL) {
+	skb = sctp_skb_recv_datagram(sk, MSG_PEEK | MSG_DONTWAIT);
+	if (!IS_ERR_OR_NULL(skb)) {
 		__sctp_ulpevent_read_nxtinfo(sctp_skb2event(skb),
 					     msghdr, skb);
 		/* Just release refcount here. */

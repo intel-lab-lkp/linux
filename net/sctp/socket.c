@@ -2123,9 +2123,11 @@ static int sctp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		goto out;
 	}
 
-	skb = sctp_skb_recv_datagram(sk, flags, &err);
-	if (!skb)
+	skb = sctp_skb_recv_datagram(sk, flags);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
 		goto out;
+	}
 
 	/* Get the total length of the skb including any skb's in the
 	 * frag_list.
@@ -9082,7 +9084,7 @@ out:
  * Note: This is pretty much the same routine as in core/datagram.c
  * with a few changes to make lksctp work.
  */
-struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags, int *err)
+struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags)
 {
 	int error;
 	struct sk_buff *skb;
@@ -9117,21 +9119,19 @@ struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags, int *err)
 		if (error)
 			goto no_packet;
 
-		if (sk->sk_shutdown & RCV_SHUTDOWN)
+		if (sk->sk_shutdown & RCV_SHUTDOWN) {
+			error = 0;
 			break;
-
+		}
 
 		/* User doesn't want to wait.  */
 		error = -EAGAIN;
 		if (!timeo)
 			goto no_packet;
-	} while (sctp_wait_for_packet(sk, err, &timeo) == 0);
-
-	return NULL;
+	} while (sctp_wait_for_packet(sk, &error, &timeo) == 0);
 
 no_packet:
-	*err = error;
-	return NULL;
+	return ERR_PTR(error);
 }
 
 /* If sndbuf has changed, wake up per association sndbuf waiters.  */

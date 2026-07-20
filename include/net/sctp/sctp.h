@@ -97,7 +97,7 @@ void sctp_sock_rfree(struct sk_buff *skb);
 
 extern struct percpu_counter sctp_sockets_allocated;
 int sctp_asconf_mgmt(struct sctp_sock *, struct sctp_sockaddr_entry *);
-struct sk_buff *sctp_skb_recv_datagram(struct sock *, int, int *);
+struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags);
 
 typedef int (*sctp_callback_t)(struct sctp_endpoint *, struct sctp_transport *, void *);
 void sctp_transport_walk_start(struct rhashtable_iter *iter);
