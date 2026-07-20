@@ -246,6 +246,12 @@ struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 					  DRM_COLOR_YCBCR_BT601,
 					  DRM_COLOR_YCBCR_FULL_RANGE);
 
+	/* Since our composer only supports pre-multiplied alpha,
+	 * advertise only the PREMULTI blend mode.
+	 */
+	drm_plane_create_blend_mode_property(&plane->base,
+					BIT(DRM_MODE_BLEND_PREMULTI));
+
 	if (vkms_config_plane_get_default_pipeline(plane_cfg))
 		vkms_initialize_colorops(&plane->base);
 
