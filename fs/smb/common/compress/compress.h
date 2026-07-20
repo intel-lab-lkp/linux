@@ -152,6 +152,92 @@ static __always_inline bool smb_compress_alg_valid(__le16 alg, bool valid_none)
 	return false;
 }
 
+static __always_inline bool is_compress_hdr(const void *buf)
+{
+	const struct smb2_compression_hdr *hdr = buf;
+
+	return likely(hdr) && hdr->ProtocolId == SMB2_COMPRESSION_TRANSFORM_ID;
+}
+
+/**
+ * smb_decompress_alloc_size() - Validate received SMB2 compression header + return allocation size
+ *				 for the decompressed buffer.
+ * @buf: received buffer
+ * @pdu_size: size of @buf
+ * @dmin: minimum decompressed size allowed (inclusive)
+ * @dmax: maximum decompressed size allowed (inclusive)
+ * @chained: if chaining was negotiated
+ *
+ * Return: decompressed size, or 0 if invalid.
+ */
+static __always_inline u32 smb_decompress_alloc_size(const void *buf, const u32 pdu_size,
+						     const u32 dmin, const u32 dmax, bool chained)
+{
+	const struct smb2_compression_hdr *hdr = buf;
+	__le16 alg, flags;
+	u32 len;
+
+	if (unlikely(!is_compress_hdr(buf) || pdu_size < sizeof(*hdr))) {
+		pr_warn("invalid SMB2 compressed buffer/header\n");
+		return 0;
+	}
+
+	len = le32_to_cpu(hdr->OriginalCompressedSegmentSize);
+	alg = le16_to_cpu(hdr->CompressionAlgorithm);
+	flags = le16_to_cpu(hdr->Flags);
+
+	if (flags == SMB2_COMPRESSION_FLAG_CHAINED) {
+		if (unlikely(!chained)) {
+			pr_warn("chained payload but chaining wasn't negotiated\n");
+			return 0;
+		}
+
+		if (unlikely(!smb_compress_alg_valid(alg, true))) {
+			pr_warn("invalid chained compression algorithm (%u)\n", alg);
+			return 0;
+		}
+
+		/* This is the first payload_hdr->Length field, so it can never be 0 */
+		if (unlikely(le32_to_cpu(hdr->Offset) == 0)) {
+			pr_warn("invalid chained compression payload length 0\n");
+			return 0;
+		}
+	} else if (flags == SMB2_COMPRESSION_FLAG_NONE) {
+		/*
+		 * When unchained, we must account for the offset (uncompressed) part as well
+		 * (usually SMB2 header, but can be anything).
+		 */
+		u32 res, offset = le32_to_cpu(hdr->Offset);
+
+		if (unlikely(chained)) {
+			pr_warn("unchained payload but chaining negotiated\n");
+			return 0;
+		}
+
+		if (unlikely(offset > pdu_size - sizeof(*hdr) ||
+			     check_add_overflow(len, offset, &res))) {
+			pr_warn("invalid unchained compression offset (%u, len=%u)\n", offset, len);
+			return 0;
+		}
+
+		len = res;
+		if (unlikely(!smb_compress_alg_valid(alg, false) || alg == SMB3_COMPRESS_PATTERN)) {
+			pr_warn("invalid unchained compression algorithm (%u)\n", alg);
+			return 0;
+		}
+	} else {
+		pr_warn("invalid SMB2 compression flags (0x%x)\n", flags);
+		return 0;
+	}
+
+	if (unlikely(len < dmin || len > dmax)) {
+		pr_warn("decompressed size %u out of range (min=%u, max=%u)\n", len, dmin, dmax);
+		return 0;
+	}
+
+	return len;
+}
+
 /**
  * smb_compress_alloc_size() - Compute total allocation size required for compressed (dst) buffer.
  * @size:		uncompressed size

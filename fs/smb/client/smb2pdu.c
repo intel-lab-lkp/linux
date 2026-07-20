@@ -4935,6 +4935,12 @@ smb2_async_readv(struct cifs_io_subrequest *rdata)
 		flags |= CIFS_HAS_CREDITS;
 	}
 
+	if (should_compress(io_parms.tcon, &rqst)) {
+		struct smb2_read_req *req = (struct smb2_read_req *)buf;
+
+		req->Flags |= SMB2_READFLAG_REQUEST_COMPRESSED;
+	}
+
 	rc = cifs_call_async(server, &rqst,
 			     cifs_readv_receive, smb2_readv_callback,
 			     smb3_handle_read_data, rdata, flags,

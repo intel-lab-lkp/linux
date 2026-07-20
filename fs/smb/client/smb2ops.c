@@ -30,6 +30,8 @@
 #include "fs_context.h"
 #include "cached_dir.h"
 #include "reparse.h"
+#include "../common/compress/compress.h"
+#include "compress.h"
 
 /* Change credits for different ops and return the total number of credits */
 static int
@@ -4779,7 +4781,7 @@ smb3_is_transform_hdr(void *buf)
 {
 	struct smb2_transform_hdr *trhdr = buf;
 
-	return trhdr->ProtocolId == SMB2_TRANSFORM_PROTO_NUM;
+	return (trhdr->ProtocolId == SMB2_TRANSFORM_PROTO_NUM) || is_compress_hdr(buf);
 }
 
 static int
@@ -5311,6 +5313,153 @@ one_more:
 	return ret;
 }
 
+static __always_inline bool check_decompressed_smb2(const void *buf, const u32 len)
+{
+	const struct smb2_read_rsp *rsp = buf;
+
+	if (unlikely(rsp->hdr.ProtocolId != SMB2_PROTO_NUMBER)) {
+		cifs_dbg(VFS, "decompressed message is not an SMB2 message (got ProtocolId 0x%x)\n",
+			 rsp->hdr.ProtocolId);
+		return false;
+	}
+
+	if (unlikely(rsp->hdr.Command != SMB2_READ)) {
+		cifs_dbg(VFS, "decompressed message is not an SMB2 READ (got %u)\n",
+			 le16_to_cpu(rsp->hdr.Command));
+		return false;
+	}
+
+	if (unlikely(le32_to_cpu(rsp->DataLength) != len)) {
+		cifs_dbg(VFS, "invalid decompressed length for SMB2 READ (got %u, expected %u)\n",
+			 le32_to_cpu(rsp->DataLength), len);
+		return false;
+	}
+
+	return true;
+}
+
+static int receive_compressed(struct TCP_Server_Info *server)
+{
+	struct mid_q_entry *mid;
+	void *src = NULL, *dst = NULL;
+	u32 slen, dlen;
+	int read, ret;
+
+	/* smb2_compression_pattern_v1 is the smallest compressed data we can have. */
+	slen = server->pdu_size;
+	if (unlikely(slen < sizeof(struct smb2_compression_hdr) +
+			    sizeof(struct smb2_compression_pattern_v1))) {
+		ret = -EINVAL;
+		goto err_free;
+	}
+
+	src = kvzalloc(slen, GFP_KERNEL);
+	if (unlikely(!src)) {
+		ret = -ENOMEM;
+		goto err_free;
+	}
+
+	read = server->total_read;
+	if (unlikely(read > slen)) {
+		ret = -EINVAL;
+		goto err_free;
+	}
+
+	memcpy(src, server->smallbuf, read);
+	ret = cifs_read_from_socket(server, src + read, slen - read);
+	if (ret < 0)
+		goto err_free;
+
+	server->total_read += ret;
+	if (unlikely(slen - ret != read)) {
+		ret = -EINVAL;
+		goto err_free;
+	}
+
+	ret = -EINVAL;
+	read = server->vals->read_rsp_size;
+	dlen = smb_decompress_alloc_size(src, slen, read, read + 256 +
+					 SMB2_COMPRESSION_PAYLOAD_BASE_LEN + server->max_read,
+					 server->compression.chained);
+	if (unlikely(dlen == 0))
+		goto err_free;
+
+	dst = kvzalloc(dlen, GFP_KERNEL);
+	if (unlikely(!dst)) {
+		ret = -ENOMEM;
+		goto err_free;
+	}
+
+	ret = smb_compression_decompress(server->compression.alg, server->compression.chained,
+					 src, slen, dst, dlen);
+	if (unlikely(ret))
+		goto err_free;
+
+	if (unlikely(!check_decompressed_smb2(dst, dlen - server->vals->read_rsp_size))) {
+		ret = -EINVAL;
+		goto err_free;
+	}
+
+	mid = smb2_find_dequeue_mid(server, dst);
+	if (!mid) {
+		ret = -EIO;
+		goto err_free;
+	}
+
+	ret = handle_read_data(server, mid, dst, dlen, NULL, 0, true);
+	if (!ret) {
+		struct cifs_io_subrequest *rdata = mid->callback_data;
+#ifdef CONFIG_CIFS_STATS2
+		mid->when_received = jiffies;
+#endif
+		if (server->ops->is_network_name_deleted)
+			server->ops->is_network_name_deleted(dst, server);
+
+		rdata->iov[0].iov_base = dst;
+		rdata->iov[0].iov_len = server->vals->read_rsp_size;
+		mid_execute_callback(server, mid);
+	} else {
+		spin_lock(&server->srv_lock);
+		if (server->tcpStatus == CifsNeedReconnect) {
+			spin_lock(&server->mid_queue_lock);
+			mid->mid_state = MID_RETRY_NEEDED;
+			spin_unlock(&server->mid_queue_lock);
+			spin_unlock(&server->srv_lock);
+
+			mid_execute_callback(server, mid);
+		} else {
+			spin_lock(&server->mid_queue_lock);
+			mid->mid_state = MID_REQUEST_SUBMITTED;
+			mid->deleted_from_q = false;
+			list_add_tail(&mid->qhead, &server->pending_mid_q);
+			spin_unlock(&server->mid_queue_lock);
+			spin_unlock(&server->srv_lock);
+		}
+	}
+
+	release_mid(server, mid);
+err_free:
+	kvfree(src);
+	kvfree(dst);
+
+	/*
+	 * We _must_ disconnect on any failed decompression.
+	 * Actually, there's not much we can do to handle different decompression errors here, so
+	 * forcing a reconnect (which will disable compression) is our best option as the request
+	 * should be retried.
+	 */
+	if (unlikely(ret)) {
+		/* Alias only if not -ENOMEM */
+		if (ret != -ENOMEM)
+			ret = -ECONNRESET;
+		spin_lock(&server->srv_lock);
+		server->tcpStatus = CifsNeedReconnect;
+		spin_unlock(&server->srv_lock);
+	}
+
+	return ret;
+}
+
 static int
 smb3_receive_transform(struct TCP_Server_Info *server,
 		       struct mid_q_entry **mids, char **bufs, int *num_mids)
@@ -5320,6 +5469,13 @@ smb3_receive_transform(struct TCP_Server_Info *server,
 	struct smb2_transform_hdr *tr_hdr = (struct smb2_transform_hdr *)buf;
 	unsigned int orig_len = le32_to_cpu(tr_hdr->OriginalMessageSize);
 
+	if (is_compress_hdr(buf))
+		return receive_compressed(server);
+
+	/*
+	 * @buf is either a compress or transform (encrypt) header, previously checked by cifsd
+	 * (or we wouldn't reach here), so no need to check again.
+	 */
 	if (pdu_length < sizeof(struct smb2_transform_hdr) +
 						sizeof(struct smb2_hdr)) {
 		cifs_server_dbg(VFS, "Transform message is too small (%u)\n",
@@ -5361,6 +5517,8 @@ static int smb2_next_header(struct TCP_Server_Info *server, char *buf,
 		*noff = le32_to_cpu(t_hdr->OriginalMessageSize);
 		if (unlikely(check_add_overflow(*noff, sizeof(*t_hdr), noff)))
 			return -EINVAL;
+	} else if (hdr->ProtocolId == SMB2_COMPRESSION_TRANSFORM_ID) {
+		*noff = 0;
 	} else {
 		*noff = le32_to_cpu(hdr->NextCommand);
 	}
