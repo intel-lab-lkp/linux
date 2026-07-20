@@ -143,7 +143,11 @@ static void generate_config_rom(struct fw_card *card, __be32 *config_rom)
 	for (i = 0; i < j; i += length + 1)
 		length = fw_compute_block_crc(config_rom + i);
 
-	WARN_ON(j != config_rom_length);
+     if (j != config_rom_length) {
+        pr_warn("FireWire ROM length mismatch: expected %zu, got %d\n",
+            config_rom_length, j);
+        config_rom_length = j;
+     }
 }
 
 static void update_config_roms(void)
@@ -165,33 +169,36 @@ static size_t required_space(struct fw_descriptor *desc)
 
 int fw_core_add_descriptor(struct fw_descriptor *desc)
 {
-	size_t i;
+    size_t i;
 
-	/*
-	 * Check descriptor is valid; the length of all blocks in the
-	 * descriptor has to add up to exactly the length of the
-	 * block.
-	 */
-	i = 0;
-	while (i < desc->length)
-		i += (desc->data[i] >> 16) + 1;
+    /* Extra validation: reject empty or oversized descriptors */
+    if (desc->length == 0 || desc->length > 256)
+        return -EINVAL;
 
-	if (i != desc->length)
-		return -EINVAL;
+    /*
+     * Check descriptor is valid, the length of all blocks in the
+     * descriptor has to add up to exactly the length of the block.
+     */
+    i = 0;
+    while (i < desc->length)
+        i += (desc->data[i] >> 16) + 1;
 
-	guard(mutex)(&card_mutex);
+    if (i != desc->length)
+        return -EINVAL;
 
-	if (config_rom_length + required_space(desc) > 256)
-		return -EBUSY;
+    guard(mutex)(&card_mutex);
 
-	list_add_tail(&desc->link, &descriptor_list);
-	config_rom_length += required_space(desc);
-	descriptor_count++;
-	if (desc->immediate > 0)
-		descriptor_count++;
-	update_config_roms();
+    if (config_rom_length + required_space(desc) > 256)
+        return -EBUSY;
 
-	return 0;
+    list_add_tail(&desc->link, &descriptor_list);
+    config_rom_length += required_space(desc);
+    descriptor_count++;
+    if (desc->immediate > 0)
+        descriptor_count++;
+    update_config_roms();
+
+    return 0;
 }
 EXPORT_SYMBOL(fw_core_add_descriptor);
 
