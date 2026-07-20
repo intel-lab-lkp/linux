@@ -19,6 +19,7 @@
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/binfmts.h>
+#include <linux/cleanup.h>
 #include <linux/string.h>
 #include <linux/file.h>
 #include <linux/slab.h>
@@ -907,7 +908,11 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		if (elf_interpreter[elf_ppnt->p_filesz - 1] != '\0')
 			goto out_free_interp;
 
-		interpreter = open_exec(elf_interpreter);
+		/* A binfmt_misc loader entry substitutes for PT_INTERP. */
+		if (bprm->loader)
+			interpreter = no_free_ptr(bprm->loader);
+		else
+			interpreter = open_exec(elf_interpreter);
 		kfree(elf_interpreter);
 		retval = PTR_ERR(interpreter);
 		if (IS_ERR(interpreter))
@@ -936,6 +941,14 @@ static int load_elf_binary(struct linux_binprm *bprm)
 out_free_interp:
 		kfree(elf_interpreter);
 		goto out_free_ph;
+	}
+
+	/* No PT_INTERP to substitute for: the override does not apply. */
+	if (bprm->loader) {
+		struct file *loader = no_free_ptr(bprm->loader);
+
+		exe_file_allow_write_access(loader);
+		fput(loader);
 	}
 
 	elf_ppnt = elf_phdata;
