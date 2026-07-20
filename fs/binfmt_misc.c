@@ -51,6 +51,7 @@ enum binfmt_misc_entry_flags {
 	MISC_FMT_CREDENTIALS	= (1U << 29),
 	MISC_FMT_OPEN_FILE	= (1U << 28),
 	MISC_FMT_TRANSPARENT	= (1U << 27),
+	MISC_FMT_LOADER		= (1U << 26),
 };
 
 /**
@@ -73,6 +74,7 @@ static const struct binfmt_misc_flag misc_flags[] = {
 	{ 'C', MISC_FMT_CREDENTIALS,	MISC_FMT_OPEN_BINARY,	"credentials from the binary"	},
 	{ 'F', MISC_FMT_OPEN_FILE,	0,			"open interpreter file now"	},
 	{ 'T', MISC_FMT_TRANSPARENT,	MISC_FMT_OPEN_BINARY,	"transparent"			},
+	{ 'L', MISC_FMT_LOADER,		0,			"loader substitution"		},
 };
 
 /* Look up a flag character, NULL if @c is not one. */
@@ -475,6 +477,24 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	if (flags & MISC_FMT_OPEN_BINARY)
 		bprm->have_execfd = 1;
 
+	/*
+	 * Stash the interpreter for binfmt_elf to consume in place of the
+	 * binary's PT_INTERP and decline the match, so the search continues
+	 * to the real format in the same round.
+	 */
+	if (flags & MISC_FMT_LOADER) {
+		/* A native exec has no argv slot for a staged argument. */
+		if (bprm->bpf_interp_arg)
+			return -EINVAL;
+
+		interp_file = entry_open_interpreter(fmt, interpreter);
+		if (IS_ERR(interp_file))
+			return PTR_ERR(interp_file);
+
+		bprm->loader = interp_file;
+		return -ENOEXEC;
+	}
+
 	if (flags & MISC_FMT_TRANSPARENT) {
 		/* No argv is built for a staged argument to land in. */
 		kfree(bprm->bpf_interp_arg);
@@ -769,6 +789,12 @@ static struct binfmt_misc_entry *create_entry(const char __user *buffer,
 	/* Transparency preserves the whole argv, argv[0] included. */
 	if ((e->flags & MISC_FMT_TRANSPARENT) &&
 	    (e->flags & MISC_FMT_PRESERVE_ARGV0))
+		return ERR_PTR(-EINVAL);
+
+	/* A native exec splices no argv, passes no execfd and needs no creds. */
+	if ((e->flags & MISC_FMT_LOADER) &&
+	    (e->flags & (MISC_FMT_TRANSPARENT | MISC_FMT_PRESERVE_ARGV0 |
+			 MISC_FMT_CREDENTIALS | MISC_FMT_OPEN_BINARY)))
 		return ERR_PTR(-EINVAL);
 
 	if (*p == '\n')
