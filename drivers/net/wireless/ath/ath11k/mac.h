@@ -14,6 +14,11 @@
 struct ath11k;
 struct ath11k_base;
 
+struct ath11k_txq {
+	/* protects ieee80211_tx_peek/dequeue serialization per txq */
+	spinlock_t lock;
+};
+
 struct ath11k_generic_iter {
 	struct ath11k *ar;
 	int ret;
