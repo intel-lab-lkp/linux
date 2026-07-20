@@ -2437,6 +2437,45 @@ static unsigned long record__waking(struct record *rec)
 	return waking;
 }
 
+/*
+ * Weak symbol - architecture can override to indicate if more
+ * data needs to be collected before finishing output.
+ *
+ * Returns: 1 if more data exists, 0 if collection is complete
+ */
+__weak int arch_perf_record__need_read(struct evlist *evlist __maybe_unused)
+{
+	return 0;  /* Default: no arch-specific data to collect */
+}
+
+static void record__final_data(struct record *rec)
+{
+	u64 last_bytes_written = 0;
+	/*
+	 * Collect any remaining architecture-specific data.
+	 * The arch code checks if more data exists, and we do the actual
+	 * reading here since we have access to record__mmap_read_all().
+	 * This code performs the additional read pass while events are
+	 * still live.
+	 */
+	while (arch_perf_record__need_read(rec->evlist)) {
+		/* If user presses Ctrl+C again during draining, abort cleanly */
+		if (done > 1)
+			break;
+
+		last_bytes_written = rec->bytes_written;
+
+		if (record__mmap_read_all(rec, true) < 0)
+			break;
+
+		if (rec->bytes_written == last_bytes_written) {
+			pr_warning("Final data drain made no forward progress.\n");
+			break;
+		}
+		usleep(100);
+	}
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -2451,6 +2490,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	float ratio = 0;
 	enum evlist_ctl_cmd cmd = EVLIST_CTL_CMD_UNSUPPORTED;
 	struct perf_env *env;
+	bool final_data_drained = false;
 
 	atexit(record__sig_exit);
 	signal(SIGCHLD, sig_handler);
@@ -2855,6 +2895,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (err) {
 			err = 0;
 			done = 1;
+		}
+
+		if (done && !disabled && !final_data_drained) {
+			record__final_data(rec);
+			final_data_drained = true;
 		}
 
 		/*
