@@ -81,6 +81,7 @@ static const struct i2c_device_id inv_icm42600_id[] = {
 	{ .name = "icm42622", .driver_data = INV_CHIP_ICM42622 },
 	{ .name = "icm42688", .driver_data = INV_CHIP_ICM42688 },
 	{ .name = "icm42631", .driver_data = INV_CHIP_ICM42631 },
+	{ .name = "icm42630", .driver_data = INV_CHIP_ICM42630 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, inv_icm42600_id);
@@ -107,6 +108,9 @@ static const struct of_device_id inv_icm42600_of_matches[] = {
 	}, {
 		.compatible = "invensense,icm42631",
 		.data = (void *)INV_CHIP_ICM42631,
+	}, {
+		.compatible = "invensense,icm42630",
+		.data = (void *)INV_CHIP_ICM42630,
 	},
 	{ }
 };
