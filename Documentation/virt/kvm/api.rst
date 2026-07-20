@@ -8949,6 +8949,38 @@ enabled, cmma can't be enabled anymore and pfmfi and the storage key
 interpretation are disabled. If cmma has already been enabled or the
 hpage_2g module parameter is not set to 1, -EINVAL is returned.
 
+7.48 KVM_CAP_X86_DISABLE_PMU_SW_ACCOUNTING
+------------------------------------------
+
+:Architectures: x86
+:Type: vm
+:Parameters: args[0] - bitmask of PERF_COUNT_HW_* event IDs
+:Returns: 0 on success; -EINVAL if args[0] contains an unsupported event or
+          if the VM already has vCPUs.
+
+By default, KVM software-accounts instructions it emulates against a guest
+PMU counter programmed for retired instructions (PERF_COUNT_HW_INSTRUCTIONS)
+or retired branches (PERF_COUNT_HW_BRANCH_INSTRUCTIONS), by walking the vPMU
+counters and requesting a counter reprogram on the next VM-entry. On hosts
+with an emulated vPMU this reprogram is expensive and, under some workloads,
+inflates timer-interrupt handling enough to trigger guest CSD lockups.
+
+This capability lets userspace disable that software accounting for the given
+events. Setting a bit for an event ID makes KVM skip the accounting for that
+event: instructions KVM emulates in host context go uncounted. Hardware-
+executed guest instructions are still counted by the backing perf_event, and
+its overflow/PMI path is unaffected.
+
+The capability only affects the emulated (perf-based) vPMU. A mediated vPMU
+does not incur the reprogram cost and increments the guest counter directly,
+so accounting is never skipped for it regardless of this setting.
+
+This can only be invoked on a VM prior to the creation of vCPUs; attempting to
+set it once any vCPU exists returns -EINVAL.
+
+KVM_CHECK_EXTENSION returns the bitmask of event IDs that can be disabled.
+args[0] must be a subset of that mask.
+
 8. Other capabilities.
 ======================
 
