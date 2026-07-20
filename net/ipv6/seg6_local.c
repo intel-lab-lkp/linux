@@ -909,6 +909,11 @@ static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 	struct in6_addr *nhaddr = NULL;
 	struct seg6_local_lwt *slwt;
 
+	if (!orig_dst) {
+		kfree_skb(skb);
+		return -EINVAL;
+	}
+
 	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
 
 	/* The inner packet is not associated to any local interface,
@@ -961,6 +966,11 @@ static int input_action_end_dx4_finish(struct net *net, struct sock *sk,
 	struct seg6_local_lwt *slwt;
 	struct iphdr *iph;
 	__be32 nhaddr;
+
+	if (!orig_dst) {
+		kfree_skb(skb);
+		return -EINVAL;
+	}
 
 	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
 
