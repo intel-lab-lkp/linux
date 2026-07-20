@@ -790,7 +790,7 @@ int cp_init(struct channel_program *cp, union orb *orb)
  * @cp, which must have been returned by a previous call to cp_init().
  * Otherwise, undefined behavior occurs.
  */
-void cp_free(struct channel_program *cp)
+void cp_free_locked(struct channel_program *cp)
 {
 	struct vfio_device *vdev =
 		&container_of(cp, struct vfio_ccw_private, cp)->vdev;
@@ -808,6 +808,17 @@ void cp_free(struct channel_program *cp)
 		}
 		ccwchain_free(chain);
 	}
+}
+
+void cp_free(struct channel_program *cp)
+{
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
+	unsigned long flags;
+
+	spin_lock_irqsave(&private->cp_lock, flags);
+	cp_free_locked(cp);
+	spin_unlock_irqrestore(&private->cp_lock, flags);
 }
 
 /**

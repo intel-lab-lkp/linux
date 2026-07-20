@@ -48,6 +48,7 @@ struct channel_program {
 };
 
 int cp_init(struct channel_program *cp, union orb *orb);
+void cp_free_locked(struct channel_program *cp);
 void cp_free(struct channel_program *cp);
 int cp_prefetch(struct channel_program *cp);
 union orb *cp_get_orb(struct channel_program *cp, struct subchannel *sch);

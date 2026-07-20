@@ -83,6 +83,7 @@ void vfio_ccw_sch_io_todo(struct work_struct *work)
 {
 	struct vfio_ccw_private *private;
 	struct irb *irb;
+	unsigned long flags;
 	bool is_final;
 	bool cp_is_finished = false;
 
@@ -91,13 +92,16 @@ void vfio_ccw_sch_io_todo(struct work_struct *work)
 
 	is_final = !(scsw_actl(&irb->scsw) &
 		     (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT));
+	spin_lock_irqsave(&private->cp_lock, flags);
 	if (scsw_is_solicited(&irb->scsw)) {
 		cp_update_scsw(&private->cp, &irb->scsw);
 		if (is_final && private->state == VFIO_CCW_STATE_CP_PENDING) {
-			cp_free(&private->cp);
+			cp_free_locked(&private->cp);
 			cp_is_finished = true;
 		}
 	}
+	spin_unlock_irqrestore(&private->cp_lock, flags);
+
 	mutex_lock(&private->io_mutex);
 	memcpy(private->io_region->irb_area, irb, sizeof(*irb));
 	mutex_unlock(&private->io_mutex);

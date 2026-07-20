@@ -36,10 +36,15 @@ static void vfio_ccw_dma_unmap(struct vfio_device *vdev, u64 iova, u64 length)
 {
 	struct vfio_ccw_private *private =
 		container_of(vdev, struct vfio_ccw_private, vdev);
+	unsigned long flags;
 
 	/* Drivers MUST unpin pages in response to an invalidation. */
-	if (!cp_iova_pinned(&private->cp, iova, length))
+	spin_lock_irqsave(&private->cp_lock, flags);
+	if (!cp_iova_pinned(&private->cp, iova, length)) {
+		spin_unlock_irqrestore(&private->cp_lock, flags);
 		return;
+	}
+	spin_unlock_irqrestore(&private->cp_lock, flags);
 
 	vfio_ccw_mdev_reset(private);
 }
@@ -54,6 +59,7 @@ static int vfio_ccw_mdev_init_dev(struct vfio_device *vdev)
 	INIT_LIST_HEAD(&private->crw);
 	INIT_WORK(&private->io_work, vfio_ccw_sch_io_todo);
 	INIT_WORK(&private->crw_work, vfio_ccw_crw_todo);
+	spin_lock_init(&private->cp_lock);
 
 	private->cp.guest_cp = kzalloc_objs(struct ccw1, CCWCHAIN_LEN_MAX);
 	if (!private->cp.guest_cp)
