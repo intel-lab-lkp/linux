@@ -119,7 +119,7 @@ static int init_tearing_effect_line(struct fbtft_par *par)
 	rc = devm_request_irq(dev, irq_te, panel_te_handler,
 			      IRQF_TRIGGER_RISING, "TE_GPIO", par);
 	if (rc)
-		return dev_err_probe(dev, rc, "TE IRQ request failed.\n");
+		return rc;
 
 	disable_irq_nosync(irq_te);
 
