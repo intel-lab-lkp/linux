@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
@@ -268,14 +269,21 @@ static int sgm3804_probe(struct i2c_client *i2c)
 
 	for (i = 0; i < ARRAY_SIZE(sgm3804_regulator_desc); i++) {
 		struct regulator_config config = { };
+		const struct regulator_desc *reg = &sgm3804_regulator_desc[i];
 		struct regulator_dev *rdev;
+		struct device_node *child;
+
+		child = of_get_child_by_name(dev_of_node(dev), reg->of_match);
+		if (!child)
+			return dev_err_probe(dev, -EINVAL, "missing child '%s'\n",
+					     reg->of_match);
 
 		config.dev = dev;
 		config.regmap = ctx->regmap;
-		config.of_node = dev_of_node(dev);
+		config.of_node = child;
 		config.driver_data = ctx;
-		rdev = devm_regulator_register(dev, &sgm3804_regulator_desc[i],
-					       &config);
+		rdev = devm_regulator_register(dev, reg, &config);
+		of_node_put(child);
 		if (IS_ERR(rdev))
 			return dev_err_probe(dev, PTR_ERR(rdev),
 					     "failed to register regulator %d\n", i);
