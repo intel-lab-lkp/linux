@@ -892,86 +892,6 @@ static void dm_test_add_modifier_noop_when_mods_null(struct kunit *test)
 }
 
 /**
- * dm_test_fill_gfx8_tiling_info_2d_tiled() - Verify GFX8 2D tiled flag parsing.
- * @test: KUnit test context.
- *
- * Verify if 2D tiled GFX8 flags populate expected tiling fields.
- */
-static void dm_test_fill_gfx8_tiling_info_2d_tiled(struct kunit *test)
-{
-	struct dc_tiling_info tiling_info = {0};
-	uint64_t tiling_flags = 0;
-
-	tiling_flags |= AMDGPU_TILING_SET(ARRAY_MODE, DC_ARRAY_2D_TILED_THIN1);
-	tiling_flags |= AMDGPU_TILING_SET(BANK_WIDTH, 2);
-	tiling_flags |= AMDGPU_TILING_SET(BANK_HEIGHT, 1);
-	tiling_flags |= AMDGPU_TILING_SET(MACRO_TILE_ASPECT, 3);
-	tiling_flags |= AMDGPU_TILING_SET(TILE_SPLIT, 4);
-	tiling_flags |= AMDGPU_TILING_SET(NUM_BANKS, 2);
-	tiling_flags |= AMDGPU_TILING_SET(PIPE_CONFIG, 7);
-
-	amdgpu_dm_plane_fill_gfx8_tiling_info_from_flags(&tiling_info, tiling_flags);
-
-	KUNIT_EXPECT_EQ(test, (int)tiling_info.gfxversion, (int)DcGfxVersion8);
-	KUNIT_EXPECT_EQ(test, (int)tiling_info.gfx8.array_mode, (int)DC_ARRAY_2D_TILED_THIN1);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.bank_width, 2U);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.bank_height, 1U);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.tile_aspect, 3U);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.tile_split, 4U);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.num_banks, 2U);
-	KUNIT_EXPECT_EQ(test, (int)tiling_info.gfx8.tile_mode,
-			(int)DC_ADDR_SURF_MICRO_TILING_DISPLAY);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.pipe_config, 7U);
-}
-
-/**
- * dm_test_fill_gfx8_tiling_info_1d_tiled() - Verify GFX8 1D tiled flag parsing.
- * @test: KUnit test context.
- *
- * Verify if 1D tiled GFX8 flags populate array mode and pipe config.
- */
-static void dm_test_fill_gfx8_tiling_info_1d_tiled(struct kunit *test)
-{
-	struct dc_tiling_info tiling_info = {0};
-	uint64_t tiling_flags = 0;
-
-	tiling_flags |= AMDGPU_TILING_SET(ARRAY_MODE, DC_ARRAY_1D_TILED_THIN1);
-	tiling_flags |= AMDGPU_TILING_SET(PIPE_CONFIG, 5);
-
-	amdgpu_dm_plane_fill_gfx8_tiling_info_from_flags(&tiling_info, tiling_flags);
-
-	KUNIT_EXPECT_EQ(test, (int)tiling_info.gfx8.array_mode, (int)DC_ARRAY_1D_TILED_THIN1);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.pipe_config, 5U);
-}
-
-/**
- * dm_test_fill_gfx8_tiling_info_other_mode() - Verify non-1D/non-2D mode handling.
- * @test: KUnit test context.
- *
- * Verify if unsupported array mode keeps preset fields and updates pipe config.
- */
-static void dm_test_fill_gfx8_tiling_info_other_mode(struct kunit *test)
-{
-	struct dc_tiling_info tiling_info = {0};
-	uint64_t tiling_flags = 0;
-
-	tiling_info.gfxversion = 0x7f;
-	tiling_info.gfx8.array_mode = 0x7f;
-	tiling_info.gfx8.tile_mode = 0x7f;
-	tiling_info.gfx8.num_banks = 0x7f;
-
-	tiling_flags |= AMDGPU_TILING_SET(PIPE_CONFIG, 6);
-
-	amdgpu_dm_plane_fill_gfx8_tiling_info_from_flags(&tiling_info, tiling_flags);
-
-	KUNIT_EXPECT_EQ(test, tiling_info.gfxversion, 0x7f);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.array_mode, 0x7f);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.tile_mode, 0x7f);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.num_banks, 0x7f);
-	KUNIT_EXPECT_EQ(test, tiling_info.gfx8.pipe_config, 6U);
-}
-
-/**
  * dm_test_fill_gfx9_tiling_info_from_device_pre_10_3() - Verify GFX9 field copy before 10.3.
  * @test: KUnit test context.
  *
@@ -1197,10 +1117,6 @@ static struct kunit_case amdgpu_dm_plane_test_cases[] = {
 	KUNIT_CASE(dm_test_add_modifier_appends_value),
 	KUNIT_CASE(dm_test_add_modifier_grows_capacity),
 	KUNIT_CASE(dm_test_add_modifier_noop_when_mods_null),
-	/* amdgpu_dm_plane_fill_gfx8_tiling_info_from_flags() */
-	KUNIT_CASE(dm_test_fill_gfx8_tiling_info_2d_tiled),
-	KUNIT_CASE(dm_test_fill_gfx8_tiling_info_1d_tiled),
-	KUNIT_CASE(dm_test_fill_gfx8_tiling_info_other_mode),
 	/* amdgpu_dm_plane_fill_gfx9_tiling_info_from_device() */
 	KUNIT_CASE(dm_test_fill_gfx9_tiling_info_from_device_pre_10_3),
 	KUNIT_CASE(dm_test_fill_gfx9_tiling_info_from_device_10_3_plus),
