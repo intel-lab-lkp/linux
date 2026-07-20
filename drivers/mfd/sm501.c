@@ -1103,8 +1103,10 @@ static int sm501_register_gpio_i2c_instance(struct sm501_devdata *sm,
 	/* Create a gpiod lookup using gpiochip-local offsets */
 	lookup = devm_kzalloc(&pdev->dev, struct_size(lookup, table, 3),
 			      GFP_KERNEL);
-	if (!lookup)
+	if (!lookup) {
+		platform_device_put(pdev);
 		return -ENOMEM;
+	}
 
 	lookup->dev_id = "i2c-gpio";
 	lookup->table[0] = (struct gpiod_lookup)
