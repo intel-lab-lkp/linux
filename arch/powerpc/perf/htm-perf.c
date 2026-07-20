@@ -104,6 +104,10 @@ struct htm_pmu_buf {
 	u64     size;
 	int     collect_htm_trace;
 	u64	trace_records;
+	void    *htm_mem_buf;	/* Staging bounce area allocated node-locally */
+	void	*emit_buf;	/* Stable buffer for perf raw sample emission */
+	u64     mem_start;	/* Hypervisor offset state iterator tracker */
+	int     collect_htm_mem;	/* State flag tracking whether memory logging is ongoing */
 };
 
 struct htm_pmu_ctx {
@@ -172,6 +176,99 @@ static ssize_t htm_return_check(int rc)
  */
 #define HTM_TRACING_ACTIVE	1
 #define HTM_TRACING_INACTIVE	0
+
+#define HTM_MEM_MAX_ENTRIES	2013U
+#define HTM_MEM_BUF_SIZE	(32 + HTM_MEM_MAX_ENTRIES * 32)
+
+static int htm_collect_memory_config(struct perf_event *event,
+				      struct htm_pmu_buf *aux_buf)
+{
+	struct perf_sample_data data;
+	struct perf_raw_record raw;
+	struct pt_regs regs;
+	u8 *htm_mem_buf = aux_buf->htm_mem_buf;
+	__be64 *num_entries;
+	u64 next_start;
+	u64 to_copy;
+	void *emit_buf = aux_buf->emit_buf;
+	long rc;
+	int ret = 0;
+	int retries;
+	int emitted = 0;
+
+	/*
+	 * htm_mem_buf is the hcall memory buffer target reused each iteration.
+	 * emit_buf is a preallocated stable buffer used for perf raw
+	 * sample emission, so raw.frag.data remains valid during
+	 * perf_event_overflow().
+	 * Size: 32-byte header + HTM_MEM_MAX_ENTRIES * 32-byte entries.
+	 */
+	while (true) {
+		retries = 0;
+		do {
+			rc = htm_hcall_wrapper(htmflags, 0, 0, 0,
+					       0, H_HTM_OP_DUMP_SYSMEM_CONF,
+					       virt_to_phys(aux_buf->htm_mem_buf),
+					       HTM_MEM_BUF_SIZE, aux_buf->mem_start);
+			ret = htm_return_check(rc);
+		} while (ret == -EBUSY && ++retries < MAX_RETRIES);
+
+		/* H_NOT_AVAILABLE or error: no more data */
+		if (ret <= 0) {
+			aux_buf->collect_htm_mem = 0;
+			break;
+		}
+
+		/*
+		 * Read next iterator value from the hcall response BEFORE
+		 * emitting, but only commit it to mem_start after a
+		 * successful writing of raw data/
+		 */
+		next_start = be64_to_cpu(*((__be64 *)(htm_mem_buf + 0x8)));
+
+		/*
+		 * The hcall was given HTM_MEM_BUF_SIZE bytes of buffer space,
+		 * so num_entries is already bounded to HTM_MEM_MAX_ENTRIES.
+		 * The response is a complete hcall data:
+		 *   [32-byte header][num_entries * 32-byte entries]
+		 * Userspace can validate and parse it directly.
+		 */
+		num_entries = (__be64 *)(htm_mem_buf + 0x10);
+		to_copy = 32 + (be64_to_cpu(*num_entries) * 32);
+		if (WARN_ON_ONCE(to_copy > HTM_MEM_BUF_SIZE)) {
+			ret = -EIO;
+			aux_buf->collect_htm_mem = 0;
+			break;
+		}
+
+		memcpy(emit_buf, aux_buf->htm_mem_buf, to_copy);
+
+		perf_sample_data_init(&data, 0, event->hw.last_period);
+		memset(&raw, 0, sizeof(raw));
+		raw.frag.data = emit_buf;
+		raw.frag.size = to_copy;
+		perf_sample_save_raw_data(&data, event, &raw);
+
+		if (perf_event_overflow(event, &data, &regs)) {
+			ret = 0;
+			break;
+		}
+
+		/* Record written: advance next read iterator */
+		aux_buf->mem_start = next_start;
+		emitted = 1;
+
+		if (!next_start) {
+			aux_buf->collect_htm_mem = 0;
+			break;
+		}
+	}
+
+	if (emitted)
+		return 1;
+
+	return ret;
+}
 
 static void reset_htm_active(struct perf_event *event)
 {
@@ -407,7 +504,7 @@ static int htm_dump_sample_data(struct perf_event *event)
 	if (!aux_buf)
 		return 0;
 
-	if (!aux_buf->collect_htm_trace) {
+	if (!aux_buf->collect_htm_trace && !aux_buf->collect_htm_mem) {
 		perf_aux_output_end(&htm_ctx->handle, 0);
 		return 0;
 	}
@@ -418,6 +515,11 @@ static int htm_dump_sample_data(struct perf_event *event)
 			perf_aux_output_end(&htm_ctx->handle, 0);
 			return -EAGAIN;
 		}
+	}
+
+	if (!aux_buf->collect_htm_trace) {
+		ret = htm_collect_memory_config(event, aux_buf);
+		goto out;
 	}
 
 	/* Derive the exact target destination point directly out of active ring pointers */
@@ -506,6 +608,8 @@ static int htm_dump_sample_data(struct perf_event *event)
 	}
 
 	aux_buf->collect_htm_trace = 0;
+	ret = htm_collect_memory_config(event, aux_buf);
+out:
 	perf_aux_output_end(&htm_ctx->handle, 0);
 	return ret;
 }
@@ -568,7 +672,23 @@ static void *htm_setup_aux(struct perf_event *event, void **pages,
 		return NULL;
 	}
 
+	buf->htm_mem_buf = kmalloc_node(PAGE_SIZE, GFP_KERNEL, cpu_to_node(cpu));
+	if (!buf->htm_mem_buf) {
+		kfree(buf);
+		return NULL;
+	}
+
+	buf->emit_buf = kmalloc_node(HTM_MEM_BUF_SIZE, GFP_KERNEL,
+			cpu_to_node(cpu));
+	if (!buf->emit_buf) {
+		kfree(buf->htm_mem_buf);
+		kfree(buf);
+		return NULL;
+	}
+
 	buf->collect_htm_trace = 1;
+	buf->collect_htm_mem = 1;
+	buf->mem_start = 0;
 	buf->trace_records = 0;
 	buf->head = 0;
 	return buf;
@@ -584,6 +704,8 @@ static void htm_free_aux(void *aux)
 	if (!buf)
 		return;
 
+	kfree(buf->emit_buf);
+	kfree(buf->htm_mem_buf);
 	kfree(buf);
 }
 
