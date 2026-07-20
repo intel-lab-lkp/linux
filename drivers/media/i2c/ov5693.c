@@ -375,8 +375,28 @@ static int ov5693_flip_horz_configure(struct ov5693_device *ov5693,
 		  OV5693_FORMAT2_FLIP_HORZ_SENSOR_EN;
 	int ret;
 
+	/*
+	 * The sensor's native readout is horizontally mirrored; the
+	 * FLIP_HORZ bits un-mirror it. Map the control so that HFLIP=0
+	 * yields an unmirrored image (verified on Surface Pro 7+ front
+	 * camera by a live flip-control/image matrix test, matching the
+	 * same behaviour found on the ov8865).
+	 */
 	ret = cci_update_bits(ov5693->regmap, OV5693_FORMAT2_REG, bits,
-			      enable ? bits : 0, NULL);
+			      enable ? 0 : bits, NULL);
+	if (ret)
+		return ret;
+
+	/*
+	 * Clearing the FLIP_HORZ bits shifts the Bayer sampling by one
+	 * column relative to the orientation the init table (0x3821 = 0x1e)
+	 * and the reported SBGGR10 mbus code assume, which corrupts colors.
+	 * Offset the ISP output window by one column in that state to keep
+	 * the BGGR phase; the crop window always has one spare column
+	 * (crop end = start + width, inclusive).
+	 */
+	ret = cci_write(ov5693->regmap, OV5693_OFFSET_START_X_REG,
+			enable ? 1 : 0, NULL);
 	if (ret)
 		return ret;
 
