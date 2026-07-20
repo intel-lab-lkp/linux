@@ -350,6 +350,19 @@ static int add_changeset_property(struct overlay_changeset *ovcs,
 		if (prop)
 			return -EINVAL;
 		new_prop = dup_and_fixup_symbol_prop(ovcs, overlay_prop);
+	} else if (target->np->parent &&
+		   of_node_is_root(target->np->parent) &&
+		   of_node_name_eq(target->np, "aliases")) {
+		/*
+		 * /aliases property values are string paths in the same
+		 * "/fragment@N/__overlay__/..." form as /__symbols__.
+		 * Rewrite them to live-tree paths so of_alias_get_id() can
+		 * resolve them; fall back to a raw dup for non-fragment
+		 * values (e.g. legacy string aliases like "ttyS0").
+		 */
+		new_prop = dup_and_fixup_symbol_prop(ovcs, overlay_prop);
+		if (!new_prop)
+			new_prop = __of_prop_dup(overlay_prop, GFP_KERNEL);
 	} else {
 		new_prop = __of_prop_dup(overlay_prop, GFP_KERNEL);
 	}
