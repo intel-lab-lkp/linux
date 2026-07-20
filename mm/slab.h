@@ -351,6 +351,33 @@ static inline int objs_per_slab(const struct kmem_cache *cache,
 	return slab->objects;
 }
 
+/* kvfree_rcu_head offset can be only less than page size */
+static inline void *kvmalloc_obj_start_addr(void *head)
+{
+	void *obj = head;
+
+	if (unlikely(is_vmalloc_addr(obj))) {
+		obj = (void *) PAGE_ALIGN_DOWN((unsigned long)obj);
+	} else {
+		struct page *page = virt_to_page(obj);
+		struct slab *slab = page_slab(page);
+
+		if (!slab) {
+			obj = (void *) PAGE_ALIGN_DOWN((unsigned long)obj);
+		} else if (is_kfence_address(obj)) {
+			obj = kfence_object_start(obj);
+		} else {
+			struct kmem_cache *s = slab->slab_cache;
+			unsigned int idx = __obj_to_index(s, slab_address(slab), obj);
+
+			obj = slab_address(slab) + s->size * idx;
+			obj = fixup_red_left(s, obj);
+		}
+	}
+
+	return obj;
+}
+
 /*
  * State of the slab allocator.
  *
@@ -761,6 +788,7 @@ void __check_heap_object(const void *ptr, unsigned long n,
 			 const struct slab *slab, bool to_user);
 
 void deferred_work_barrier(void);
+void defer_kfree_rcu(struct kvfree_rcu_head *head);
 
 static inline bool slub_debug_orig_size(struct kmem_cache *s)
 {
