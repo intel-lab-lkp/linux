@@ -127,21 +127,6 @@ struct gs_device_config {
 	__le32 hw_version;
 } __packed;
 
-#define GS_CAN_MODE_LISTEN_ONLY BIT(0)
-#define GS_CAN_MODE_LOOP_BACK BIT(1)
-#define GS_CAN_MODE_TRIPLE_SAMPLE BIT(2)
-#define GS_CAN_MODE_ONE_SHOT BIT(3)
-#define GS_CAN_MODE_HW_TIMESTAMP BIT(4)
-/* GS_CAN_FEATURE_IDENTIFY BIT(5) */
-/* GS_CAN_FEATURE_USER_ID BIT(6) */
-#define GS_CAN_MODE_PAD_PKTS_TO_MAX_PKT_SIZE BIT(7)
-#define GS_CAN_MODE_FD BIT(8)
-/* GS_CAN_FEATURE_REQ_USB_QUIRK_LPC546XX BIT(9) */
-/* GS_CAN_FEATURE_BT_CONST_EXT BIT(10) */
-/* GS_CAN_FEATURE_TERMINATION BIT(11) */
-#define GS_CAN_MODE_BERR_REPORTING BIT(12)
-/* GS_CAN_FEATURE_GET_STATE BIT(13) */
-
 struct gs_device_mode {
 	__le32 mode;
 	__le32 flags;
@@ -1033,26 +1018,26 @@ static int gs_can_open(struct net_device *netdev)
 
 	/* flags */
 	if (ctrlmode & CAN_CTRLMODE_LOOPBACK)
-		flags |= GS_CAN_MODE_LOOP_BACK;
+		flags |= GS_CAN_FEATURE_LOOP_BACK;
 
 	if (ctrlmode & CAN_CTRLMODE_LISTENONLY)
-		flags |= GS_CAN_MODE_LISTEN_ONLY;
+		flags |= GS_CAN_FEATURE_LISTEN_ONLY;
 
 	if (ctrlmode & CAN_CTRLMODE_3_SAMPLES)
-		flags |= GS_CAN_MODE_TRIPLE_SAMPLE;
+		flags |= GS_CAN_FEATURE_TRIPLE_SAMPLE;
 
 	if (ctrlmode & CAN_CTRLMODE_ONE_SHOT)
-		flags |= GS_CAN_MODE_ONE_SHOT;
+		flags |= GS_CAN_FEATURE_ONE_SHOT;
 
 	if (ctrlmode & CAN_CTRLMODE_BERR_REPORTING)
-		flags |= GS_CAN_MODE_BERR_REPORTING;
+		flags |= GS_CAN_FEATURE_BERR_REPORTING;
 
 	if (ctrlmode & CAN_CTRLMODE_FD)
-		flags |= GS_CAN_MODE_FD;
+		flags |= GS_CAN_FEATURE_FD;
 
 	/* if hardware supports timestamps, enable it */
 	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP)
-		flags |= GS_CAN_MODE_HW_TIMESTAMP;
+		flags |= GS_CAN_FEATURE_HW_TIMESTAMP;
 
 	rc = gs_usb_set_bittiming(dev);
 	if (rc) {
