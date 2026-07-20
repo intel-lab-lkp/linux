@@ -3167,6 +3167,16 @@ serial8250_verify_port(struct uart_port *port, struct serial_struct *ser)
 	    ser->type >= ARRAY_SIZE(uart_config) || ser->type == PORT_CIRRUS ||
 	    ser->type == PORT_STARTECH)
 		return -EINVAL;
+
+	if (port->iotype == UPIO_MEM || port->iotype == UPIO_MEM32 ||
+	    port->iotype == UPIO_MEM32BE || port->iotype == UPIO_MEM16 ||
+	    ser->io_type == UPIO_MEM || ser->io_type == UPIO_MEM32 ||
+	    ser->io_type == UPIO_MEM32BE || ser->io_type == UPIO_MEM16) {
+		if (ser->io_type != port->iotype ||
+		    (unsigned long)ser->iomem_base != port->mapbase)
+			return -EINVAL;
+	}
+
 	return 0;
 }
 
