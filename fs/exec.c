@@ -1102,6 +1102,17 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 }
 
 /*
+ * The file the process presents as: its exe link and comm. A transparent
+ * dispatch presents as the binary, which is bprm->executable.
+ */
+static struct file *bprm_identity_file(const struct linux_binprm *bprm)
+{
+	if (bprm->interp_flags & BINPRM_FLAGS_TRANSPARENT_INTERP)
+		return bprm->executable;
+	return bprm->file;
+}
+
+/*
  * Calling this is the point of no return. None of the failures will be
  * seen by userspace since either the process is already taking a fatal
  * signal (via de_thread() or coredump), or will have SEGV raised
@@ -1157,7 +1168,7 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 * not visible until then. Doing it here also ensures
 	 * we don't race against replace_mm_exe_file().
 	 */
-	retval = set_mm_exe_file(bprm->mm, bprm->file);
+	retval = set_mm_exe_file(bprm->mm, bprm_identity_file(bprm));
 	if (retval)
 		goto out;
 
@@ -1247,6 +1258,8 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 * Let's fix it up to be something reasonable.
 	 */
 	if (bprm->comm_from_dentry) {
+		struct file *comm_file = bprm_identity_file(bprm);
+
 		/*
 		 * Hold RCU lock to keep the name from being freed behind our back.
 		 * Use acquire semantics to make sure the terminating NUL from
@@ -1256,7 +1269,7 @@ int begin_new_exec(struct linux_binprm * bprm)
 		 * detecting a concurrent rename and just want a terminated name.
 		 */
 		rcu_read_lock();
-		__set_task_comm(me, smp_load_acquire(&bprm->file->f_path.dentry->d_name.name),
+		__set_task_comm(me, smp_load_acquire(&comm_file->f_path.dentry->d_name.name),
 				true);
 		rcu_read_unlock();
 	} else {
@@ -1300,6 +1313,9 @@ int begin_new_exec(struct linux_binprm * bprm)
 		retval = FD_ADD(0, bprm->executable);
 		if (retval < 0)
 			goto out_unlock;
+		/* mm->exe_file carries its own write denial now. */
+		if (bprm->executable_denied)
+			exe_file_allow_write_access(bprm->executable);
 		bprm->executable = NULL;
 		bprm->execfd = retval;
 	}
@@ -1419,8 +1435,12 @@ static void free_bprm(struct linux_binprm *bprm)
 	if (bprm->old_mm)
 		exec_mm_put_old(bprm->old_mm);
 	do_close_execat(bprm->file);
-	if (bprm->executable)
+	if (bprm->executable) {
+		/* A transparent dispatch still holds the write denial. */
+		if (bprm->executable_denied)
+			exe_file_allow_write_access(bprm->executable);
 		fput(bprm->executable);
+	}
 	/* If a binfmt changed the interp, free it. */
 	if (bprm->interp != bprm->filename)
 		kfree(bprm->interp);
@@ -1746,8 +1766,11 @@ static int exec_binprm(struct linux_binprm *bprm)
 				do_close_execat(exec);
 				return -ENOEXEC;
 			}
-			/* Only the reference is kept, for AT_EXECFD. */
-			exe_file_allow_write_access(exec);
+			/* A transparent dispatch keeps the denial for mm->exe_file. */
+			if (bprm->interp_flags & BINPRM_FLAGS_TRANSPARENT_INTERP)
+				bprm->executable_denied = 1;
+			else
+				exe_file_allow_write_access(exec);
 			bprm->executable = exec;
 		} else {
 			do_close_execat(exec);
