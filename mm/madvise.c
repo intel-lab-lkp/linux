@@ -565,10 +565,19 @@ restart:
 	return 0;
 }
 
-static const struct mm_walk_ops cold_walk_ops = {
-	.pmd_entry = madvise_cold_or_pageout_pte_range,
-	.walk_lock = PGWALK_RDLOCK,
-};
+static inline enum page_walk_lock get_walk_lock(enum madvise_lock_mode mode)
+{
+	switch (mode) {
+	case MADVISE_VMA_READ_LOCK:
+		return PGWALK_VMA_RDLOCK_VERIFY;
+	case MADVISE_MMAP_READ_LOCK:
+		return PGWALK_RDLOCK;
+	default:
+		/* Other modes don't require fixing up the walk_lock */
+		WARN_ON_ONCE(1);
+		return PGWALK_RDLOCK;
+	}
+}
 
 static void madvise_cold_page_range(struct mmu_gather *tlb,
 		struct madvise_behavior *madv_behavior)
@@ -576,13 +585,17 @@ static void madvise_cold_page_range(struct mmu_gather *tlb,
 {
 	struct vm_area_struct *vma = madv_behavior->vma;
 	struct madvise_behavior_range *range = &madv_behavior->range;
+	struct mm_walk_ops walk_ops = {
+		.pmd_entry = madvise_cold_or_pageout_pte_range,
+	};
 	struct madvise_walk_private walk_private = {
 		.pageout = false,
 		.tlb = tlb,
 	};
 
+	walk_ops.walk_lock = get_walk_lock(madv_behavior->lock_mode);
 	tlb_start_vma(tlb, vma);
-	walk_page_range_vma(vma, range->start, range->end, &cold_walk_ops,
+	walk_page_range_vma(vma, range->start, range->end, &walk_ops,
 			&walk_private);
 	tlb_end_vma(tlb, vma);
 }
@@ -610,15 +623,20 @@ static long madvise_cold(struct madvise_behavior *madv_behavior)
 
 static void madvise_pageout_page_range(struct mmu_gather *tlb,
 		struct vm_area_struct *vma,
-		struct madvise_behavior_range *range)
+		struct madvise_behavior *madv_behavior)
 {
+	struct madvise_behavior_range *range = &madv_behavior->range;
+	struct mm_walk_ops walk_ops = {
+		.pmd_entry = madvise_cold_or_pageout_pte_range,
+	};
 	struct madvise_walk_private walk_private = {
 		.pageout = true,
 		.tlb = tlb,
 	};
 
+	walk_ops.walk_lock = get_walk_lock(madv_behavior->lock_mode);
 	tlb_start_vma(tlb, vma);
-	walk_page_range_vma(vma, range->start, range->end, &cold_walk_ops,
+	walk_page_range_vma(vma, range->start, range->end, &walk_ops,
 			    &walk_private);
 	tlb_end_vma(tlb, vma);
 }
@@ -643,7 +661,7 @@ static long madvise_pageout(struct madvise_behavior *madv_behavior)
 
 	lru_add_drain();
 	tlb_gather_mmu(&tlb, madv_behavior->mm);
-	madvise_pageout_page_range(&tlb, vma, &madv_behavior->range);
+	madvise_pageout_page_range(&tlb, vma, madv_behavior);
 	tlb_finish_mmu(&tlb);
 
 	return 0;
@@ -780,20 +798,6 @@ static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
 	cond_resched();
 
 	return 0;
-}
-
-static inline enum page_walk_lock get_walk_lock(enum madvise_lock_mode mode)
-{
-	switch (mode) {
-	case MADVISE_VMA_READ_LOCK:
-		return PGWALK_VMA_RDLOCK_VERIFY;
-	case MADVISE_MMAP_READ_LOCK:
-		return PGWALK_RDLOCK;
-	default:
-		/* Other modes don't require fixing up the walk_lock */
-		WARN_ON_ONCE(1);
-		return PGWALK_RDLOCK;
-	}
 }
 
 static int madvise_free_single_vma(struct madvise_behavior *madv_behavior)
@@ -1747,8 +1751,6 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	switch (madv_behavior->behavior) {
 	case MADV_REMOVE:
 	case MADV_WILLNEED:
-	case MADV_COLD:
-	case MADV_PAGEOUT:
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
 	case MADV_COLLAPSE:
@@ -1758,6 +1760,8 @@ static enum madvise_lock_mode get_lock_mode(struct madvise_behavior *madv_behavi
 	case MADV_DONTNEED:
 	case MADV_DONTNEED_LOCKED:
 	case MADV_FREE:
+	case MADV_COLD:
+	case MADV_PAGEOUT:
 		return MADVISE_VMA_READ_LOCK;
 	default:
 		return MADVISE_MMAP_WRITE_LOCK;
