@@ -1507,7 +1507,7 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 	int edac_idx, rc;
 	struct device_node *np;
 	const struct edac_device_prv_data *prv = &a10_sdmmceccb_data;
-	bool is_s10 = device->edac->is_s10;
+	unsigned long flag = {unsigned long)device->edac->flag;
 
 	rc = altr_check_ecc_deps(device);
 	if (rc)
@@ -1552,7 +1552,7 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 	 */
 
 	/* Using compatibles to determine the IRQ Index */
-	if (is_s10)
+	if (flag == SOCFPGA_S10)
 		altdev->sb_irq = irq_of_parse_and_map(np, 1);
 	else
 		altdev->sb_irq = irq_of_parse_and_map(np, 2);
@@ -1570,7 +1570,7 @@ static int altr_portb_setup(struct altr_edac_device_dev *device)
 		goto err_release_group_1;
 	}
 
-	if (is_s10) {
+	if (flag == SOCFPGA_S10) {
 		/* Use IRQ to determine SError origin instead of assigning IRQ */
 		rc = of_property_read_u32_index(np, "interrupts", 1, &altdev->db_irq);
 		if (rc) {
@@ -1973,7 +1973,7 @@ static int altr_edac_a10_device_add(struct altr_arria10_edac *edac,
 		goto err_release_group1;
 	}
 
-	if (edac->is_s10) {
+	if (edac->flag == SOCFPGA_S10) {
 		/* Use IRQ to determine SError origin instead of assigning IRQ */
 		rc = of_property_read_u32_index(np, "interrupts", 0, &altdev->db_irq);
 		if (rc) {
@@ -2119,7 +2119,7 @@ static int altr_edac_a10_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, edac);
 	INIT_LIST_HEAD(&edac->a10_ecc_devices);
 
-	edac->is_s10 = !!device_get_match_data(&pdev->dev);
+	edac->flag = (unsigned long)device_get_match_data(&pdev->dev);
 
 	edac->ecc_mgr_map =
 		altr_sysmgr_regmap_lookup_by_phandle(pdev->dev.of_node,
@@ -2152,8 +2152,8 @@ static int altr_edac_a10_probe(struct platform_device *pdev)
 	irq_set_chained_handler_and_data(edac->sb_irq,
 					 altr_edac_a10_irq_handler,
 					 edac);
-	if (edac->is_s10)
-	{
+
+	if (edac->flag == SOCFPGA_S10) {
 		int dberror, err_addr;
 
 		edac->panic_notifier.notifier_call = s10_edac_dberr_handler;
@@ -2204,7 +2204,8 @@ static int altr_edac_a10_probe(struct platform_device *pdev)
 
 static const struct of_device_id altr_edac_a10_of_match[] = {
 	{ .compatible = "altr,socfpga-a10-ecc-manager" },
-	{ .compatible = "altr,socfpga-s10-ecc-manager", .data = (void *)1 },
+	{ .compatible = "altr,socfpga-s10-ecc-manager",
+	  .data = (void *)SOCFPGA_S10 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, altr_edac_a10_of_match);
