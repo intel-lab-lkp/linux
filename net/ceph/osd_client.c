@@ -4145,8 +4145,11 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	bool pauserd, pausewr;
 	int err;
 
-	dout("%s have %u\n", __func__, osdc->osdmap->epoch);
 	down_write(&osdc->lock);
+	if (!osdc->osdmap)
+		goto out_unlock;
+
+	dout("%s have %u\n", __func__, osdc->osdmap->epoch);
 
 	/* verify fsid */
 	ceph_decode_need(&p, end, sizeof(fsid), bad);
@@ -4238,6 +4241,7 @@ done:
 bad:
 	pr_err("osdc handle_map corrupt msg\n");
 	ceph_msg_dump(msg);
+out_unlock:
 	up_write(&osdc->lock);
 }
 
@@ -5268,6 +5272,8 @@ out:
 
 void ceph_osdc_stop(struct ceph_osd_client *osdc)
 {
+	struct ceph_osdmap *osdmap;
+
 	destroy_workqueue(osdc->completion_wq);
 	destroy_workqueue(osdc->notify_wq);
 	cancel_delayed_work_sync(&osdc->timeout_work);
@@ -5279,6 +5285,8 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 						struct ceph_osd, o_node);
 		close_osd(osd);
 	}
+	osdmap = osdc->osdmap;
+	osdc->osdmap = NULL;
 	up_write(&osdc->lock);
 	WARN_ON(refcount_read(&osdc->homeless_osd.o_ref) != 1);
 	osd_cleanup(&osdc->homeless_osd);
@@ -5290,7 +5298,7 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 	WARN_ON(atomic_read(&osdc->num_requests));
 	WARN_ON(atomic_read(&osdc->num_homeless));
 
-	ceph_osdmap_destroy(osdc->osdmap);
+	ceph_osdmap_destroy(osdmap);
 	mempool_destroy(osdc->req_mempool);
 	ceph_msgpool_destroy(&osdc->msgpool_op);
 	ceph_msgpool_destroy(&osdc->msgpool_op_reply);
