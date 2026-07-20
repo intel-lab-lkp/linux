@@ -3877,6 +3877,45 @@ static bool ieee80211_xmit_fast(struct ieee80211_sub_if_data *sdata,
 	return true;
 }
 
+const struct sk_buff *ieee80211_tx_peek(struct ieee80211_hw *hw,
+					struct ieee80211_txq *txq)
+{
+	struct txq_info *txqi = container_of(txq, struct txq_info, txq);
+	struct ieee80211_local *local = hw_to_local(hw);
+	struct fq_tin *tin = &txqi->tin;
+	struct fq *fq = &local->fq;
+	struct sk_buff *skb = NULL;
+	struct fq_flow *flow;
+
+	WARN_ON_ONCE(softirq_count() == 0);
+
+	spin_lock_bh(&fq->lock);
+
+	skb = skb_peek(&txqi->frags);
+	if (skb)
+		goto out;
+
+	list_for_each_entry(flow, &tin->new_flows, flowchain) {
+		skb = skb_peek(&flow->queue);
+		if (skb)
+			goto out;
+	}
+
+	list_for_each_entry(flow, &tin->old_flows, flowchain) {
+		skb = skb_peek(&flow->queue);
+		if (skb)
+			goto out;
+	}
+
+out:
+	if (skb)
+		skb_get_hash(skb);
+
+	spin_unlock_bh(&fq->lock);
+	return skb;
+}
+EXPORT_SYMBOL_GPL(ieee80211_tx_peek);
+
 struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
 				     struct ieee80211_txq *txq)
 {
