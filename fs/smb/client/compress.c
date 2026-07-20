@@ -352,8 +352,9 @@ bool should_compress(const struct cifs_tcon *tcon, const struct smb_rqst *rq)
 int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_send_fn send_fn)
 {
 	struct iov_iter iter;
-	u32 slen, dlen;
+	bool chained, use_pattern;
 	void *src, *dst = NULL;
+	u32 slen, dlen;
 	int ret;
 
 	if (!server || !rq || !rq->rq_iov || !rq->rq_iov->iov_base)
@@ -394,30 +395,60 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 		goto err_free;
 	}
 
-	dlen = smb_lz77_compressed_alloc_size(slen);
+	chained = server->compression.chained;
+	use_pattern = server->compression.pattern;
+	dlen = smb_compress_alloc_size(slen, chained, use_pattern);
 	dst = kvzalloc(dlen, GFP_KERNEL);
 	if (!dst) {
 		ret = -ENOMEM;
 		goto err_free;
 	}
 
-	ret = smb_lz77_compress(src, slen, dst, &dlen);
+	ret = smb_compression_compress(SMB3_COMPRESS_LZ77, chained, use_pattern,
+				       src, slen, dst, &dlen);
 	if (!ret) {
-		struct smb2_compression_hdr hdr = { 0 };
+		struct smb2_compression_hdr *hdrp = dst, hdr = {};
 		struct smb_rqst comp_rq = { .rq_nvec = 3, };
 		struct kvec iov[3];
+		u32 payload_offset = sizeof(hdr);
+		u32 shdr_len = rq->rq_iov[0].iov_len;
 
-		hdr.ProtocolId = SMB2_COMPRESSION_TRANSFORM_ID;
-		hdr.OriginalCompressedSegmentSize = cpu_to_le32(slen);
-		hdr.CompressionAlgorithm = SMB3_COMPRESS_LZ77;
-		hdr.Flags = SMB2_COMPRESSION_FLAG_NONE;
-		hdr.Offset = cpu_to_le32(rq->rq_iov[0].iov_len);
+		/*
+		 * smb_compression_compress() already setup a compression header in @dst, but we're
+		 * sending the SMB2 header uncompressed, so we need to adjust our iovs layout to
+		 * accommodate that when @chained (iov[2] always points to the start of compressed
+		 * data, regardless of @chained).
+		 *
+		 * Sneak in a "NONE" payload header (that corresponds to our uncompressed SMB2
+		 * header) as the first one, and point iov[2] to the original first payload header
+		 * created (which now becomes the second payload header).
+		 *
+		 * If unchained, we can just use the created header.
+		 */
+		hdr = *hdrp;
+		if (chained) {
+			struct smb2_compression_payload_hdr *phdr;
 
-		iov[0].iov_base = &hdr;
-		iov[0].iov_len = sizeof(hdr);
-		iov[1] = rq->rq_iov[0];
-		iov[2].iov_base = dst;
-		iov[2].iov_len = dlen;
+			payload_offset = SMB2_COMPRESSION_CHAINED_HDR_LEN;
+			le32_add_cpu(&hdr.OriginalCompressedSegmentSize, shdr_len);
+			hdr.CompressionAlgorithm = SMB3_COMPRESS_NONE;
+			hdrp = &hdr;
+
+			/*
+			 * Only the first payload header must have the CHAINED flag set, so strip
+			 * the original one.
+			 */
+			phdr = dst + payload_offset;
+			phdr->Flags = cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE);
+		}
+
+		hdrp->Offset = cpu_to_le32(shdr_len);
+
+		iov[0].iov_base = hdrp;
+		iov[0].iov_len = sizeof(*hdrp);
+		iov[1] = rq->rq_iov[0]; /* this is the SMB2 header */
+		iov[2].iov_base = dst + payload_offset;
+		iov[2].iov_len = dlen - payload_offset;
 
 		comp_rq.rq_iov = iov;
 

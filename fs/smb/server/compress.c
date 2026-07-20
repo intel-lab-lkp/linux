@@ -98,6 +98,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 	struct smb2_hdr *req_hdr;
 	u32 src_len, dst_len, compressed_pdu_len, max_dst_len;
 	u8 *src = NULL, *out = NULL, *p;
+	bool chained, pattern;
 	int i, rc;
 
 	if (!work->compress_response || work->encrypted ||
@@ -132,10 +133,14 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	max_dst_len = smb_lz77_compressed_alloc_size(src_len) +
-		sizeof(struct smb2_compression_hdr) +
-		3 * sizeof(struct smb2_compression_payload_hdr) +
-		2 * sizeof(struct smb2_compression_pattern_v1);
+	chained = work->conn->compress_chained;
+	pattern = work->conn->compress_pattern;
+	if (unlikely(!chained && pattern)) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	max_dst_len = smb_compress_alloc_size(src_len, chained, pattern);
 	out = kvzalloc(sizeof(__be32) + max_dst_len,
 		       KSMBD_DEFAULT_GFP);
 	if (!out) {
@@ -143,11 +148,9 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	if (work->conn->compress_chained) {
+	if (chained) {
 		dst_len = max_dst_len;
-		rc = smb_compression_compress(SMB3_COMPRESS_LZ77,
-					      work->conn->compress_chained,
-					      work->conn->compress_pattern,
+		rc = smb_compression_compress(SMB3_COMPRESS_LZ77, chained, pattern,
 					      src, src_len,
 					      out + sizeof(__be32),
 					      &dst_len);

@@ -892,6 +892,12 @@ static void decode_compress_ctx(struct TCP_Server_Info *server,
 	/*
 	 * Pattern_V1 cannot appear in an unchained transform even if a broken
 	 * peer lists it in the algorithm array.
+	 *
+	 * OTOH, the chained flag might have been negotiated without either/both peers having not
+	 * advertised Pattern_V1 algorithm support.
+	 *
+	 * (which doesn't make much sense, but we'll still have to send compressed payloads with
+	 * the chained flag set in "chained && !pattern_v1" cases)
 	 */
 	chained = (ctxt->Flags == SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED);
 	if (!chained)
@@ -1382,12 +1388,23 @@ SMB2_negotiate(const unsigned int xid,
 			rc = smb_EIO1(smb_eio_trace_neg_decode_token, rc);
 	}
 
+	/*
+	 * Disable compression until we decode negcontext -- keep other settings as they are, in
+	 * case there are channels doing compression concurrently.
+	 */
+	server->compression.enabled = false;
+
 	if (server->dialect == SMB311_PROT_ID) {
 		if (rsp->NegotiateContextCount)
 			rc = smb311_decode_neg_context(rsp, server,
 						       rsp_iov.iov_len);
 		else
 			cifs_server_dbg(VFS, "Missing expected negotiate contexts\n");
+	}
+
+	if (server->compression.requested && !server->compression.enabled) {
+		cifs_server_dbg(VFS, "Server doesn't support SMB2 compression\n");
+		disable_compression(server);
 	}
 
 	if (server->cipher_type && !rc)

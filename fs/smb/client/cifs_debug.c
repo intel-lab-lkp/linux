@@ -552,14 +552,20 @@ static int cifs_debug_data_proc_show(struct seq_file *m, void *v)
 		}
 
 		seq_puts(m, "\nCompression: ");
-		if (!IS_ENABLED(CONFIG_CIFS_COMPRESSION))
+		if (!IS_ENABLED(CONFIG_CIFS_COMPRESSION)) {
 			seq_puts(m, "no built-in support");
-		else if (!server->compression.requested)
+		} else if (!server->compression.requested) {
 			seq_puts(m, "disabled on mount");
-		else if (server->compression.enabled)
-			seq_printf(m, "enabled (%s)", compression_alg_str(server->compression.alg));
-		else
-			seq_puts(m, "disabled (not supported by this server)");
+		} else if (!server->compression.enabled) {
+			seq_puts(m, "disabled"); /* XXX: reason? */
+		} else {
+			seq_printf(m, "enabled, chained: %s, algs: ",
+				   str_yes_no(server->compression.chained));
+
+			seq_printf(m, "%s ", compression_alg_str(server->compression.alg));
+			if (server->compression.pattern)
+				seq_printf(m, "%s ", compression_alg_str(SMB3_COMPRESS_PATTERN));
+		}
 
 		/* Show negotiated encryption cipher, even if not required */
 		seq_puts(m, "\nEncryption: ");
