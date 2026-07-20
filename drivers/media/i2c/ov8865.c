@@ -2204,8 +2204,14 @@ static int ov8865_flip_horz_configure(struct ov8865_sensor *sensor, bool enable)
 	u8 bits = OV8865_FORMAT2_FLIP_HORZ_ISP_EN |
 		  OV8865_FORMAT2_FLIP_HORZ_SENSOR_EN;
 
+	/*
+	 * The sensor's native readout is horizontally mirrored; the
+	 * FLIP_HORZ bits un-mirror it. Map the control so that HFLIP=0
+	 * yields an unmirrored image (verified on Surface Pro 7+ rear
+	 * camera by a live flip-control/image matrix test).
+	 */
 	return ov8865_update_bits(sensor, OV8865_FORMAT2_REG, bits,
-				  enable ? bits : 0);
+				  enable ? 0 : bits);
 }
 
 /* Test Pattern */
