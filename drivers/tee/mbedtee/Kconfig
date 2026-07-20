@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# MbedTEE Trusted Execution Environment Configuration
+config MBEDTEE
+	tristate "MbedTEE"
+	depends on MMU && OF
+	depends on ((ARM || ARM64) && HAVE_ARM_SMCCC) || (RISCV && GENERIC_MSI_IRQ)
+	help
+	  This enables the MbedTEE Trusted Execution Environment (TEE)
+	  driver.
+
+	  The driver supports ARM TrustZone (SMC calls, GIC SPI notifications)
+	  and RISC-V IMSIC (shared-memory polling, MSI notifications), with
+	  GlobalPlatform client API via /dev/tee*.
+
+	  The DT node should be under a firmware node and have compatible =
+	  "mbedtee,tee" with the RPC ring buffer addresses and,
+	  for ARM/ARM64, an interrupt property for TEE-to-REE notifications.
+	  See Documentation/tee/mbedtee.rst for protocol details.
+
+	  If unsure, say N.
