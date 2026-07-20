@@ -597,6 +597,11 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 	}
 
 	section_size = hdr.va.end - hdr.va.start;
+	if (!section_size) {
+		drm_err(&ptdev->base, "Firmware corrupted, zero-sized section\n");
+		return -EINVAL;
+	}
+
 	data_size = hdr.data.end - hdr.data.start;
 	if (data_size > section_size) {
 		drm_err(&ptdev->base, "Firmware corrupted, section data exceeds section size\n");
