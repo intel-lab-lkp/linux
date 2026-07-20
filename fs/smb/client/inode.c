@@ -2772,7 +2772,7 @@ cifs_dentry_needs_reval(struct dentry *dentry)
  * @key:	currently unused
  * @mode:	the task state to sleep in
  */
-static int
+int
 cifs_wait_bit_killable(struct wait_bit_key *key, int mode)
 {
 	schedule();

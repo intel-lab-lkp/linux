@@ -1064,6 +1064,17 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 	void *page = alloc_dentry_path();
 	struct cached_fid *cfid = NULL;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(file);
+	struct inode *inode = file_inode(file);
+	struct cifsInodeInfo *cinode = CIFS_I(inode);
+	int lock_rc;
+
+	lock_rc = wait_on_bit_lock_action(&cinode->flags, CIFS_INO_LOCK,
+					  cifs_wait_bit_killable,
+					  TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
+	if (lock_rc) {
+		free_dentry_path(page);
+		return lock_rc;
+	}
 
 	xid = get_xid();
 
@@ -1226,5 +1237,6 @@ rddir2_exit:
 		close_cached_dir(cfid);
 	free_dentry_path(page);
 	free_xid(xid);
+	clear_and_wake_up_bit(CIFS_INO_LOCK, &cinode->flags);
 	return rc;
 }

@@ -183,6 +183,7 @@ void cifs_dir_info_to_fattr(struct cifs_fattr *fattr,
 int cifs_fattr_to_inode(struct inode *inode, struct cifs_fattr *fattr,
 			bool from_readdir);
 struct inode *cifs_iget(struct super_block *sb, struct cifs_fattr *fattr);
+int cifs_wait_bit_killable(struct wait_bit_key *key, int mode);
 
 int cifs_get_inode_info(struct inode **inode, const char *full_path,
 			struct cifs_open_info_data *data,
