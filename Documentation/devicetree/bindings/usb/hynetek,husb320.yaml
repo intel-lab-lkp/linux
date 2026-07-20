@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/hynetek,husb320.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Hynetek HUSB320 USB Type-C controller
+
+maintainers:
+  - Hongyang Zhao <hongyang.zhao@163.com>
+
+description:
+  The HUSB320 is an autonomous USB Type-C Configuration Channel controller.
+  It supports source, sink and dual-role port configurations, including
+  optional Try.SRC and Try.SNK role preferences. The controller reports cable
+  attachment, orientation, advertised current and accessory detection over
+  I2C and an active-low interrupt.
+
+properties:
+  compatible:
+    const: hynetek,husb320
+
+  reg:
+    description:
+      7-bit I2C address selected by the ADDR/ORIENT pin strap. Ground selects
+      0x21 and VDD selects 0x31. These correspond to the 8-bit write addresses
+      0x42 and 0x62 shown in the datasheet.
+    enum: [0x21, 0x31]
+
+  interrupts:
+    maxItems: 1
+
+  wakeup-source: true
+
+  vdd-supply:
+    description: Power supply for the controller
+
+  enable-gpios:
+    description: Active-low controller enable
+    maxItems: 1
+
+  connector:
+    type: object
+    $ref: /schemas/connector/usb-connector.yaml#
+    unevaluatedProperties: false
+    description:
+      USB Type-C connector managed by the controller. A dual-role data port
+      requires a High-Speed graph connection to a USB role-switch provider.
+
+    properties:
+      compatible:
+        const: usb-c-connector
+
+      try-power-role:
+        enum: [source, sink]
+
+    required:
+      - compatible
+      - pd-disable
+      - power-role
+      - typec-power-opmode
+
+    allOf:
+      - if:
+          properties:
+            power-role:
+              enum: [source, dual]
+        then:
+          required:
+            - vbus-supply
+
+      - if:
+          properties:
+            power-role:
+              const: source
+        then:
+          properties:
+            data-role:
+              const: host
+            try-power-role: false
+
+      - if:
+          properties:
+            power-role:
+              const: sink
+        then:
+          properties:
+            data-role:
+              const: device
+            try-power-role: false
+
+      - if:
+          properties:
+            power-role:
+              const: dual
+        then:
+          properties:
+            data-role:
+              const: dual
+
+      - if:
+          required:
+            - data-role
+          properties:
+            data-role:
+              const: dual
+        then:
+          anyOf:
+            - required:
+                - port
+            - required:
+                - ports
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - connector
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        typec@31 {
+            compatible = "hynetek,husb320";
+            reg = <0x31>;
+            vdd-supply = <&vreg_3v3>;
+            enable-gpios = <&gpio 54 GPIO_ACTIVE_LOW>;
+            interrupts-extended = <&gpio 55 IRQ_TYPE_LEVEL_LOW>;
+            wakeup-source;
+
+            connector {
+                compatible = "usb-c-connector";
+                label = "USB-C";
+                vbus-supply = <&usb_vbus>;
+                data-role = "dual";
+                power-role = "dual";
+                try-power-role = "sink";
+                typec-power-opmode = "default";
+                pd-disable;
+
+                ports {
+                    #address-cells = <1>;
+                    #size-cells = <0>;
+
+                    port@0 {
+                        reg = <0>;
+
+                        endpoint {
+                            remote-endpoint = <&usb_role>;
+                        };
+                    };
+
+                    port@1 {
+                        reg = <1>;
+
+                        endpoint {
+                            remote-endpoint = <&usb_ss>;
+                        };
+                    };
+                };
+            };
+        };
+    };
