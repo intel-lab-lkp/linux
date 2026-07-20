@@ -352,6 +352,36 @@ static unsigned long entry_invocation_flags(const struct binfmt_misc_entry *e,
 	return flags;
 }
 
+/**
+ * entry_open_interpreter - open the entry's interpreter for execution
+ * @e: matched binary type handler
+ * @interpreter: the interpreter selected for this exec
+ *
+ * An 'F' entry hands out a clone of the file it pre-opened at registration,
+ * any other entry opens the selected path.
+ *
+ * Return: the opened interpreter on success, an ERR_PTR on failure
+ */
+static struct file *entry_open_interpreter(const struct binfmt_misc_entry *e,
+					   const char *interpreter)
+{
+	struct file *interp_file __free(fput) = NULL;
+	int retval;
+
+	if (!(e->flags & MISC_FMT_OPEN_FILE))
+		return open_exec(interpreter);
+
+	interp_file = file_clone_open(e->interp_file);
+	if (IS_ERR(interp_file))
+		return interp_file;
+
+	retval = exe_file_deny_write_access(interp_file);
+	if (retval)
+		return ERR_PTR(retval);
+
+	return no_free_ptr(interp_file);
+}
+
 /*
  * the loader itself
  */
@@ -426,19 +456,7 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	if (retval < 0)
 		return retval;
 
-	if (fmt->flags & MISC_FMT_OPEN_FILE) {
-		interp_file = file_clone_open(fmt->interp_file);
-		if (!IS_ERR(interp_file)) {
-			int err = exe_file_deny_write_access(interp_file);
-
-			if (err) {
-				fput(interp_file);
-				interp_file = ERR_PTR(err);
-			}
-		}
-	} else {
-		interp_file = open_exec(interpreter);
-	}
+	interp_file = entry_open_interpreter(fmt, interpreter);
 	if (IS_ERR(interp_file))
 		return PTR_ERR(interp_file);
 
