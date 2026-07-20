@@ -639,6 +639,42 @@ int hinic3_get_link_status(struct hinic3_hwdev *hwdev, bool *link_status_up)
 	return 0;
 }
 
+int hinic3_get_phy_port_stats(struct hinic3_hwdev *hwdev,
+			      struct mag_cmd_port_stats *stats)
+{
+	struct mag_cmd_port_stats_info stats_info = {};
+	struct mag_cmd_get_port_stat *ps;
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	ps = kzalloc_obj(*ps);
+	if (!ps)
+		return -ENOMEM;
+
+	stats_info.port_id = hinic3_physical_port_id(hwdev);
+
+	mgmt_msg_params_init_in_out(&msg_params, &stats_info, ps,
+				    sizeof(stats_info), sizeof(*ps));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_HILINK,
+				       MAG_CMD_GET_PORT_STAT, &msg_params);
+
+	if (err || ps->head.status) {
+		dev_err(hwdev->dev,
+			"Failed to get port statistics, err: %d, status: 0x%x\n",
+			err, ps->head.status);
+		err = -EFAULT;
+		goto out;
+	}
+
+	memcpy(stats, &ps->counter, sizeof(*stats));
+
+out:
+	kfree(ps);
+
+	return err;
+}
+
 int hinic3_get_port_info(struct hinic3_hwdev *hwdev,
 			 struct hinic3_nic_port_info *port_info)
 {
@@ -737,4 +773,32 @@ int hinic3_get_pause_info(struct hinic3_nic_dev *nic_dev,
 {
 	return hinic3_cfg_hw_pause(nic_dev->hwdev, MGMT_MSG_CMD_OP_GET,
 				   nic_pause);
+}
+
+int hinic3_get_vport_stats(struct hinic3_hwdev *hwdev, u16 func_id,
+			   struct l2nic_vport_stats *stats)
+{
+	struct l2nic_cmd_vport_stats vport_stats = {};
+	struct l2nic_port_stats_info stats_info = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	stats_info.func_id = func_id;
+
+	mgmt_msg_params_init_in_out(&msg_params, &stats_info, &vport_stats,
+				    sizeof(stats_info), sizeof(vport_stats));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_GET_VPORT_STAT, &msg_params);
+
+	if (err || vport_stats.msg_head.status) {
+		dev_err(hwdev->dev,
+			"Failed to get function statistics, err: %d, status: 0x%x\n",
+			err, vport_stats.msg_head.status);
+		return -EFAULT;
+	}
+
+	memcpy(stats, &vport_stats.stats, sizeof(*stats));
+
+	return 0;
 }
