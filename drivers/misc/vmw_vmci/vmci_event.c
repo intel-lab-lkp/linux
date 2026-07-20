@@ -181,14 +181,15 @@ int vmci_event_subscribe(u32 event,
 
 	if (have_new_id) {
 		list_add_rcu(&sub->node, &subscriber_array[event]);
+		*new_subscription_id = sub->id;
 		retval = VMCI_SUCCESS;
 	} else {
+		*new_subscription_id = sub->id;
+		kfree(sub);
 		retval = VMCI_ERROR_NO_RESOURCES;
 	}
 
 	mutex_unlock(&subscriber_mutex);
-
-	*new_subscription_id = sub->id;
 	return retval;
 }
 EXPORT_SYMBOL_GPL(vmci_event_subscribe);
