@@ -67,6 +67,8 @@ properties:
       Voltage threshold to report battery as over voltage (in mV).
       Default is not to report over-voltage events.
 
+  monitored-battery: true
+
   power-supplies: true
 
 required:
