@@ -151,10 +151,9 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 				      src, src_len,
 				      out + sizeof(__be32),
 				      &dst_len);
-	if (rc == -EMSGSIZE || dst_len >= src_len) {
-		rc = 0;
+	/* if dst_len >= src_len, rc is 0 */
+	if (rc || dst_len >= src_len)
 		goto out;
-	}
 
 	*(__be32 *)out = cpu_to_be32(dst_len);
 

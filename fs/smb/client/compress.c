@@ -406,7 +406,7 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 
 	ret = smb_compression_compress(SMB3_COMPRESS_LZ77, chained, use_pattern,
 				       src, slen, dst, &dlen);
-	if (!ret) {
+	if (!ret && dlen < slen) {
 		struct smb2_compression_hdr *hdrp = dst, hdr = {};
 		struct smb_rqst comp_rq = { .rq_nvec = 3, };
 		struct kvec iov[3];
@@ -453,7 +453,7 @@ int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_s
 		comp_rq.rq_iov = iov;
 
 		ret = send_fn(server, 1, &comp_rq);
-	} else if (ret == -EMSGSIZE || dlen >= slen) {
+	} else if (!ret) {
 		ret = send_fn(server, 1, rq);
 	}
 err_free:

@@ -248,19 +248,16 @@ noinline int smb_lz77_compress(const void *src, const u32 slen, void *dst, u32 *
 	} while (srcp < end);
 out:
 	dstp = lz77_encode_literals(anchor, end, dstp, &flag, &flag_count, &flag_pos);
-
 	flag_count = LZ77_FLAG_MAX - flag_count;
 	flag <<= flag_count;
 	flag |= (1UL << flag_count) - 1;
 	mem_write32(flag_pos, flag);
 
+	/* Compression is successful from our POV -- let caller decide if @dlen suits them. */
 	*dlen = dstp - dst;
 	kvfree(htable);
 
-	if (*dlen < slen)
-		return 0;
-
-	return -EMSGSIZE;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(smb_lz77_compress);
 
