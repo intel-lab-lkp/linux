@@ -853,7 +853,7 @@ static int tegra_nvec_probe(struct platform_device *pdev)
 	err = devm_request_irq(dev, nvec->irq, nvec_interrupt, IRQF_NO_AUTOEN,
 			       "nvec", nvec);
 	if (err)
-		return dev_err_probe(dev, err, "couldn't request irq\n");
+		return err;
 
 	tegra_init_i2c_slave(nvec);
 
