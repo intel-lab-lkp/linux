@@ -213,10 +213,15 @@ static int a8293_set_voltage(struct dvb_frontend *fe,
 static int a8293_probe(struct i2c_client *client)
 {
 	struct a8293_dev *dev;
-	struct a8293_platform_data *pdata = client->dev.platform_data;
-	struct dvb_frontend *fe = pdata->dvb_frontend;
+	struct a8293_platform_data *pdata = dev_get_platdata(&client->dev);
+	struct dvb_frontend *fe;
 	int ret;
 	u8 buf[2];
+
+	if (!pdata || !pdata->dvb_frontend)
+		return -EINVAL;
+
+	fe = pdata->dvb_frontend;
 
 	dev = kzalloc_obj(*dev);
 	if (!dev) {
