@@ -99,7 +99,7 @@ htm_info_fill(struct auxtrace_record *itr,
 	if (priv_size != HTM_AUXTRACE_PRIV_SIZE(expected_n))
 		return -EINVAL;
 
-	// To set: auxtrace_info->type
+	auxtrace_info->type = PERF_AUXTRACE_POWERPC_HTM;
 	auxtrace_info->priv[POWERPC_HTM_PMU_TYPE] = htm_r->evsel->core.attr.type;
 	auxtrace_info->priv[POWERPC_HTM_NUM_EVENTS] = expected_n;
 
