@@ -1433,6 +1433,9 @@ static void hinic_remove(struct pci_dev *pdev)
 
 	hinic_free_intr_coalesce(nic_dev);
 
+	kfree(nic_dev->rss_indir_user);
+	kfree(nic_dev->rss_hkey_user);
+
 	hinic_port_del_mac(nic_dev, netdev->dev_addr, 0);
 
 	hinic_hwdev_cb_unregister(nic_dev->hwdev,
