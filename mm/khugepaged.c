@@ -2218,6 +2218,92 @@ drop_pml:
 	i_mmap_unlock_read(mapping);
 }
 
+struct collapse_file_state {
+	/* in-out parameter */
+	struct folio *folio;
+	/* in parameters */
+	struct address_space *mapping;
+	struct file *file;
+	struct xa_state *xas;
+	/* collapse end index */
+	pgoff_t end;
+	unsigned int is_shmem : 1;
+};
+
+static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collapse_file_state *state)
+{
+	struct address_space *mapping = state->mapping;
+	enum scan_result result = SCAN_SUCCEED;
+	const int is_shmem = state->is_shmem;
+	struct folio *folio = state->folio;
+
+	if (is_shmem) {
+		if (xa_is_value(folio) || !folio_test_uptodate(folio)) {
+			xas_unlock_irq(state->xas);
+			/* swap in or instantiate fallocated page */
+			if (shmem_get_folio(mapping->host, index, 0,
+					&folio, SGP_NOALLOC))
+				result = SCAN_FAIL;
+			/* drain lru cache to help folio_isolate_lru() */
+			lru_add_drain();
+			goto xa_unlocked;
+		} else if (folio_trylock(folio)) {
+			folio_get(folio);
+		} else {
+			result = SCAN_PAGE_LOCK;
+			goto xa_locked;
+		}
+	} else {	/* !is_shmem */
+		if (!folio || xa_is_value(folio)) {
+			xas_unlock_irq(state->xas);
+			page_cache_sync_readahead(mapping, &state->file->f_ra,
+						  state->file, index,
+						  state->end - index);
+			/* drain lru cache to help folio_isolate_lru() */
+			lru_add_drain();
+			folio = filemap_lock_folio(mapping, index);
+			if (IS_ERR(folio))
+				result = SCAN_FAIL;
+			goto xa_unlocked;
+		} else if (folio_test_dirty(folio)) {
+			/*
+			 * This page is dirty because it hasn't
+			 * been flushed since first write.
+			 *
+			 * Trigger async flush for read-only files and
+			 * hope the writeback is done when khugepaged
+			 * revisits this page. Writable files can have
+			 * their folios dirty at any time; blindly
+			 * flushing them would cause undesirable
+			 * system-wide writeback.
+			 *
+			 * This is a one-off situation. We are not
+			 * forcing writeback in loop.
+			 */
+			xas_unlock_irq(state->xas);
+			if (!inode_is_open_for_write(mapping->host))
+				filemap_flush(mapping);
+			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+			goto xa_unlocked;
+		} else if (folio_test_writeback(folio)) {
+			xas_unlock_irq(state->xas);
+			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+			goto xa_unlocked;
+		} else if (folio_trylock(folio)) {
+			folio_get(folio);
+		} else {
+			result = SCAN_PAGE_LOCK;
+			goto xa_locked;
+		}
+	}
+
+xa_locked:
+	xas_unlock_irq(state->xas);
+xa_unlocked:
+	state->folio = folio;
+	return result;
+}
+
 /**
  * collapse_file - collapse filemap/tmpfs/shmem pages into huge one.
  *
@@ -2255,6 +2341,13 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 	enum scan_result result = SCAN_SUCCEED;
 	int nr_none = 0;
 	bool is_shmem = shmem_file(file);
+	struct collapse_file_state state = {
+		.is_shmem = is_shmem,
+		.xas = &xas,
+		.mapping = mapping,
+		.file = file,
+		.end = end,
+	};
 
 	/*
 	 * MADV_COLLAPSE ignores shmem huge config, so do not check shmem
@@ -2298,87 +2391,29 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		folio = xas_load(&xas);
 
 		VM_BUG_ON(index != xas.xa_index);
-		if (is_shmem) {
-			if (!folio) {
-				/*
-				 * Stop if extent has been truncated or
-				 * hole-punched, and is now completely
-				 * empty.
-				 */
-				if (index == start) {
-					if (!xas_next_entry(&xas, end - 1)) {
-						result = SCAN_TRUNCATED;
-						goto xa_locked;
-					}
+		if (is_shmem && !folio) {
+			/*
+			 * Stop if extent has been truncated or
+			 * hole-punched, and is now completely
+			 * empty.
+			 */
+			if (index == start) {
+				if (!xas_next_entry(&xas, end - 1)) {
+					result = SCAN_TRUNCATED;
+					goto xa_locked;
 				}
-				nr_none++;
-				index++;
-				continue;
 			}
-
-			if (xa_is_value(folio) || !folio_test_uptodate(folio)) {
-				xas_unlock_irq(&xas);
-				/* swap in or instantiate fallocated page */
-				if (shmem_get_folio(mapping->host, index, 0,
-						&folio, SGP_NOALLOC)) {
-					result = SCAN_FAIL;
-					goto xa_unlocked;
-				}
-				/* drain lru cache to help folio_isolate_lru() */
-				lru_add_drain();
-			} else if (folio_trylock(folio)) {
-				folio_get(folio);
-				xas_unlock_irq(&xas);
-			} else {
-				result = SCAN_PAGE_LOCK;
-				goto xa_locked;
-			}
-		} else {	/* !is_shmem */
-			if (!folio || xa_is_value(folio)) {
-				xas_unlock_irq(&xas);
-				page_cache_sync_readahead(mapping, &file->f_ra,
-							  file, index,
-							  end - index);
-				/* drain lru cache to help folio_isolate_lru() */
-				lru_add_drain();
-				folio = filemap_lock_folio(mapping, index);
-				if (IS_ERR(folio)) {
-					result = SCAN_FAIL;
-					goto xa_unlocked;
-				}
-			} else if (folio_test_dirty(folio)) {
-				/*
-				 * This page is dirty because it hasn't
-				 * been flushed since first write.
-				 *
-				 * Trigger async flush for read-only files and
-				 * hope the writeback is done when khugepaged
-				 * revisits this page. Writable files can have
-				 * their folios dirty at any time; blindly
-				 * flushing them would cause undesirable
-				 * system-wide writeback.
-				 *
-				 * This is a one-off situation. We are not
-				 * forcing writeback in loop.
-				 */
-				xas_unlock_irq(&xas);
-				if (!inode_is_open_for_write(mapping->host))
-					filemap_flush(mapping);
-				result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-				goto xa_unlocked;
-			} else if (folio_test_writeback(folio)) {
-				xas_unlock_irq(&xas);
-				result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-				goto xa_unlocked;
-			} else if (folio_trylock(folio)) {
-				folio_get(folio);
-				xas_unlock_irq(&xas);
-			} else {
-				result = SCAN_PAGE_LOCK;
-				goto xa_locked;
-			}
+			nr_none++;
+			index++;
+			continue;
 		}
 
+		/* At this point folio can be NULL, or a value. */
+		state.folio = folio;
+		result = prepare_collapse_file_folio(index, &state);
+		folio = state.folio;
+		if (result != SCAN_SUCCEED)
+			goto xa_unlocked;
 		/*
 		 * The folio must be locked, so we can drop the i_pages lock
 		 * without racing with truncate.
