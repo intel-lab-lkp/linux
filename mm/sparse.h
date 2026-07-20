@@ -14,6 +14,7 @@
  * mm/sparse.c
  */
 #ifdef CONFIG_SPARSEMEM
+void sparse_sections_init(void);
 void sparse_init(void);
 int sparse_index_init(unsigned long section_nr, int nid);
 
@@ -48,6 +49,7 @@ static inline void __section_mark_present(struct mem_section *ms,
 	ms->section_mem_map |= SECTION_MARKED_PRESENT;
 }
 #else
+static inline void sparse_sections_init(void) {}
 static inline void sparse_init(void) {}
 #endif /* CONFIG_SPARSEMEM */
 
