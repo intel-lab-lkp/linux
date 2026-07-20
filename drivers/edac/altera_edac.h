@@ -326,6 +326,27 @@ struct altr_sdram_mc_data {
 #define S10_DDR0_IRQ_MASK                 BIT(16)
 #define S10_DBE_IRQ_MASK                  0x3FFFE
 
+/************* Agilex5 Defines **************/
+/*
+ * The Agilex5 ECC manager exposes up to 7 named interrupts on the manager
+ * node. global_sbe and global_dbe are aggregate single/double-bit error
+ * interrupts that fan-out through the manager's IRQ domain to the child
+ * peripheral ECCs. The remaining named interrupts are routed directly from
+ * dedicated controllers (IO96B memory controllers and Secure Device Manager)
+ * to the GIC.
+ */
+#define ALTR_AGILEX5_NUM_IRQS             7
+
+enum altr_agilex5_irq_idx {
+	ALTR_AGILEX5_IRQ_GLOBAL_SBE,
+	ALTR_AGILEX5_IRQ_GLOBAL_DBE,
+	ALTR_AGILEX5_IRQ_IO96B0,
+	ALTR_AGILEX5_IRQ_IO96B1,
+	ALTR_AGILEX5_IRQ_SDM_QSPI_SBE,
+	ALTR_AGILEX5_IRQ_SDM_QSPI_DBE,
+	ALTR_AGILEX5_IRQ_SDM_SEU,
+};
+
 /* Define ECC Block Offsets for peripherals */
 #define ECC_BLK_ADDRESS_OFST              0x40
 #define ECC_BLK_RDATA0_OFST               0x44
@@ -398,6 +419,14 @@ struct altr_arria10_edac {
 	struct list_head	a10_ecc_devices;
 	struct notifier_block	panic_notifier;
 	unsigned long		flag;
+
+	/*
+	 * Agilex5 ECC manager supports up to ALTR_AGILEX5_NUM_IRQS named
+	 * interrupts. Entries are indexed by enum altr_agilex5_irq_idx and
+	 * hold the Linux virtual IRQ number, or a negative errno when the
+	 * corresponding interrupt was not provided in the device tree.
+	 */
+	int			agilex5_irqs[ALTR_AGILEX5_NUM_IRQS];
 };
 
 #endif	/* #ifndef _ALTERA_EDAC_H */
