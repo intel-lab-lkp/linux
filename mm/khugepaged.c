@@ -2332,6 +2332,69 @@ static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collap
 	return ret;
 }
 
+static enum scan_result collapse_isolate_folio(struct collapse_file_state *state)
+{
+	struct folio *folio = state->folio;
+	enum scan_result result;
+
+	/*
+	 * The folio must be locked, so we can drop the i_pages lock
+	 * without racing with truncate.
+	 */
+	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
+
+	/* make sure the folio is up to date */
+	if (unlikely(!folio_test_uptodate(folio))) {
+		result = SCAN_FAIL;
+		goto out_unlock;
+	}
+
+	/*
+	 * If file was truncated then extended, or hole-punched, before
+	 * we locked the first folio, then a THP might be there already.
+	 * This will be discovered on the first iteration.
+	 */
+	if (is_pmd_order(folio_order(folio))) {
+		result = SCAN_PTE_MAPPED_HUGEPAGE;
+		goto out_unlock;
+	}
+
+	if (folio_mapping(folio) != state->mapping) {
+		result = SCAN_TRUNCATED;
+		goto out_unlock;
+	}
+
+	if (!state->is_shmem && (folio_test_dirty(folio) ||
+			         folio_test_writeback(folio))) {
+		/*
+		 * khugepaged only works on clean file-backed folios,
+		 * so this folio is dirty because it hasn't been flushed
+		 * since first write.
+		 */
+		result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+		goto out_unlock;
+	}
+
+	if (!folio_isolate_lru(folio)) {
+		result = SCAN_DEL_PAGE_LRU;
+		goto out_unlock;
+	}
+
+	if (!filemap_release_folio(folio, GFP_KERNEL)) {
+		result = SCAN_PAGE_HAS_PRIVATE;
+		folio_putback_lru(folio);
+		goto out_unlock;
+	}
+
+	if (folio_mapped(folio))
+		try_to_unmap(folio, TTU_IGNORE_MLOCK | TTU_BATCH_FLUSH);
+	return SCAN_SUCCEED;
+out_unlock:
+	folio_unlock(folio);
+	folio_put(folio);
+	return result;
+}
+
 /**
  * collapse_file - collapse filemap/tmpfs/shmem pages into huge one.
  *
@@ -2442,61 +2505,12 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		folio = state.folio;
 		if (result != SCAN_SUCCEED)
 			goto xa_unlocked;
-		/*
-		 * The folio must be locked, so we can drop the i_pages lock
-		 * without racing with truncate.
-		 */
-		VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 
-		/* make sure the folio is up to date */
-		if (unlikely(!folio_test_uptodate(folio))) {
-			result = SCAN_FAIL;
-			goto out_unlock;
-		}
-
-		/*
-		 * If file was truncated then extended, or hole-punched, before
-		 * we locked the first folio, then a THP might be there already.
-		 * This will be discovered on the first iteration.
-		 */
-		if (is_pmd_order(folio_order(folio))) {
-			result = SCAN_PTE_MAPPED_HUGEPAGE;
-			goto out_unlock;
-		}
-
-		if (folio_mapping(folio) != mapping) {
-			result = SCAN_TRUNCATED;
-			goto out_unlock;
-		}
-
-		if (!is_shmem && (folio_test_dirty(folio) ||
-				  folio_test_writeback(folio))) {
-			/*
-			 * khugepaged only works on clean file-backed folios,
-			 * so this folio is dirty because it hasn't been flushed
-			 * since first write.
-			 */
-			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-			goto out_unlock;
-		}
-
-		if (!folio_isolate_lru(folio)) {
-			result = SCAN_DEL_PAGE_LRU;
-			goto out_unlock;
-		}
-
-		if (!filemap_release_folio(folio, GFP_KERNEL)) {
-			result = SCAN_PAGE_HAS_PRIVATE;
-			folio_putback_lru(folio);
-			goto out_unlock;
-		}
-
-		if (folio_mapped(folio))
-			try_to_unmap(folio,
-					TTU_IGNORE_MLOCK | TTU_BATCH_FLUSH);
+		result = collapse_isolate_folio(&state);
+		if (result != SCAN_SUCCEED)
+			goto xa_unlocked;
 
 		xas_lock_irq(&xas);
-
 		VM_BUG_ON_FOLIO(folio != xa_load(xas.xa, index), folio);
 
 		/*
