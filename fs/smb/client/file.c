@@ -1452,6 +1452,9 @@ int cifs_close(struct inode *inode, struct file *file)
 	struct cifs_deferred_close *dclose;
 	struct cifs_tcon *tcon;
 
+	if (file->f_mode & FMODE_WRITE)
+		cinode->time_last_write = jiffies;
+
 	cifs_fscache_unuse_inode_cookie(inode, file->f_mode & FMODE_WRITE);
 
 	if (file->private_data != NULL) {
@@ -3225,13 +3228,21 @@ static int is_inode_writable(struct cifsInodeInfo *cifs_inode)
 bool is_size_safe_to_change(struct cifsInodeInfo *cifsInode, __u64 end_of_file,
 			    bool from_readdir)
 {
+	struct cifs_sb_info *cifs_sb;
+
 	if (!cifsInode)
 		return true;
+
+	cifs_sb = CIFS_SB(cifsInode);
+
+	if (from_readdir) {
+		if (time_before(jiffies, cifsInode->time_last_write + cifs_sb->ctx->acregmax))
+			return false;
+	}
 
 	if (is_inode_writable(cifsInode) ||
 		((cifsInode->oplock & CIFS_CACHE_RW_FLG) != 0 && from_readdir)) {
 		/* This inode is open for write at least once */
-		struct cifs_sb_info *cifs_sb = CIFS_SB(cifsInode);
 
 		if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_DIRECT_IO) {
 			/* since no page cache to corrupt on directio
@@ -3239,12 +3250,18 @@ bool is_size_safe_to_change(struct cifsInodeInfo *cifsInode, __u64 end_of_file,
 			return true;
 		}
 
+		/* Readdir data is unreliable when we have writable handles or
+		 * an exclusive lease -- never allow it to change i_size. */
+		if (from_readdir)
+			return false;
+
 		if (i_size_read(&cifsInode->netfs.inode) < end_of_file)
 			return true;
 
 		return false;
-	} else
-		return true;
+	}
+
+	return true;
 }
 
 void cifs_oplock_break(struct work_struct *work)
