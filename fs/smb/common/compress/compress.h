@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 
 #include "../smb2pdu.h"
+#include "huffman.h"
 #include "lz77.h"
 
 #define SMB2_COMPRESSION_CHAINED_HDR_LEN \
@@ -139,10 +140,16 @@ static __always_inline u32 smb_compress_hash_ptr(const void *ptr)
  */
 static __always_inline bool smb_compress_alg_valid(__le16 alg, bool valid_none)
 {
-	if (alg == SMB3_COMPRESS_NONE)
+	switch (alg) {
+	case SMB3_COMPRESS_NONE:
 		return valid_none;
+	case SMB3_COMPRESS_LZ77:
+	case SMB3_COMPRESS_LZ77_HUFF:
+	case SMB3_COMPRESS_PATTERN:
+		return true;
+	}
 
-	return alg == SMB3_COMPRESS_LZ77 || alg == SMB3_COMPRESS_PATTERN;
+	return false;
 }
 
 /**
@@ -150,6 +157,7 @@ static __always_inline bool smb_compress_alg_valid(__le16 alg, bool valid_none)
  * @size:		uncompressed size
  * @chained:		if chained compression is enabled
  * @use_pattern:	if Pattern_V1 is enabled
+ * @lzalg:		LZ* algorithm that will be used
  *
  * For any case:
  * - SMB2 compression hdr
@@ -168,11 +176,15 @@ static __always_inline bool smb_compress_alg_valid(__le16 alg, bool valid_none)
  * checked by the caller.
  */
 static __always_inline u32 smb_compress_alloc_size(const u32 size, const bool chained,
-						   const bool use_pattern)
+						   const bool use_pattern, const __le16 lzalg)
 {
-	u32 alloc_size;
+	u32 alloc_size = sizeof(struct smb2_compression_hdr);
 
-	alloc_size = sizeof(struct smb2_compression_hdr) + smb_lz77_compressed_alloc_size(size);
+	if (lzalg == SMB3_COMPRESS_LZ77)
+		alloc_size += smb_lz77_compressed_alloc_size(size);
+	else if (lzalg == SMB3_COMPRESS_LZ77_HUFF)
+		alloc_size += smb_huff_compressed_alloc_size(size);
+
 	if (chained) {
 		alloc_size += SMB2_COMPRESSION_PAYLOAD_BASE_LEN;
 		if (use_pattern)

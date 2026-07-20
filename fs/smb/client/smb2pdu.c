@@ -44,6 +44,7 @@
 #include "cached_dir.h"
 #include "compress.h"
 #include "fs_context.h"
+#include "../common/compress/compress.h"
 
 /*
  *  The following table defines the expected "StructureSize" of SMB2 requests
@@ -877,14 +878,23 @@ static void decode_compress_ctx(struct TCP_Server_Info *server,
 	pattern = false;
 
 	for (i = 0; i < count; i++) {
-		/* Record the intersection supported by the shared SMB codec. */
-		if (ctxt->CompressionAlgorithms[i] == SMB3_COMPRESS_LZ77)
-			alg = SMB3_COMPRESS_LZ77;
-		else if (ctxt->CompressionAlgorithms[i] == SMB3_COMPRESS_PATTERN)
+		__le16 rsp_alg = ctxt->CompressionAlgorithms[i];
+
+		/*
+		 * Servers only return 1 LZ* algorithm, or + Pattern_V1 if chained.
+		 * server->compression.alg only tracks LZ* algs.
+		 */
+		if (rsp_alg == SMB3_COMPRESS_PATTERN)
 			pattern = true;
+		else if (smb_compress_alg_valid(rsp_alg, false))
+			alg = rsp_alg;
+		else
+			pr_warn_once("invalid compression algorithm '0x%04x'\n",
+				     le16_to_cpu(rsp_alg));
 	}
 
-	if (unlikely(alg != SMB3_COMPRESS_LZ77)) {
+	/* We explicitly checked for SMB3_COMPRESS_PATTERN above, so this works fine */
+	if (unlikely(!smb_compress_alg_valid(alg, false))) {
 		cifs_dbg(VFS, "invalid LZ algorithm negotiated 0x%x\n", alg);
 		goto out;
 	}

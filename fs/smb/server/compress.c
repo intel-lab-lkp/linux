@@ -35,7 +35,7 @@ int ksmbd_decompress_request(struct ksmbd_conn *conn)
 		return -EINVAL;
 
 	if (conn->dialect != SMB311_PROT_ID ||
-	    conn->compress_algorithm == SMB3_COMPRESS_NONE)
+	    !smb_compress_alg_valid(conn->compress_algorithm, false))
 		return -EINVAL;
 
 	hdr = smb_get_msg(conn->request_buf);
@@ -98,10 +98,11 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 	u8 *src = NULL, *out = NULL, *p;
 	bool chained, pattern;
 	u32 src_len, dst_len;
+	__le16 alg = work->conn->compress_algorithm;
 	int i, rc;
 
 	if (!work->compress_response || work->encrypted ||
-	    work->conn->compress_algorithm != SMB3_COMPRESS_LZ77)
+	    !smb_compress_alg_valid(alg, false))
 		return 0;
 
 	req_hdr = smb_get_msg(work->request_buf);
@@ -139,7 +140,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	dst_len = smb_compress_alloc_size(src_len, chained, pattern);
+	dst_len = smb_compress_alloc_size(src_len, chained, pattern, alg);
 	out = kvzalloc(sizeof(__be32) + dst_len,
 		       KSMBD_DEFAULT_GFP);
 	if (!out) {
@@ -147,7 +148,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	rc = smb_compression_compress(SMB3_COMPRESS_LZ77, chained, pattern,
+	rc = smb_compression_compress(alg, chained, pattern,
 				      src, src_len,
 				      out + sizeof(__be32),
 				      &dst_len);
