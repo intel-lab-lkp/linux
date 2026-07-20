@@ -490,6 +490,20 @@ static int swap_cluster_alloc_table(struct swap_cluster_info *ci, gfp_t gfp)
 	return 0;
 }
 
+static void swap_cluster_copy_table(struct swap_cluster_info *d_ci,
+				    struct swap_cluster_info *s_ci)
+{
+	rcu_assign_pointer(d_ci->table, rcu_access_pointer(s_ci->table));
+
+#ifdef CONFIG_MEMCG
+	d_ci->memcg_table = s_ci->memcg_table;
+#endif
+
+#if !SWAP_TABLE_HAS_ZEROFLAG
+	d_ci->zero_bitmap = s_ci->zero_bitmap;
+#endif
+}
+
 /*
  * Sanity check to ensure nothing leaked, and the specified range is empty.
  * One special case is that bad slots can't be freed, so check the number of
@@ -527,6 +541,7 @@ static struct swap_cluster_info *
 swap_cluster_populate(struct swap_info_struct *si,
 			 struct swap_cluster_info *ci)
 {
+	struct swap_cluster_info tmp_ci;
 	int ret;
 
 	/*
@@ -552,7 +567,8 @@ swap_cluster_populate(struct swap_info_struct *si,
 		spin_unlock(&si->global_cluster_lock);
 	local_unlock(&percpu_swap_cluster.lock);
 
-	ret = swap_cluster_alloc_table(ci, __GFP_HIGH | __GFP_NOMEMALLOC |
+	tmp_ci = *ci;
+	ret = swap_cluster_alloc_table(&tmp_ci, __GFP_HIGH | __GFP_NOMEMALLOC |
 					   GFP_KERNEL);
 
 	/*
@@ -573,6 +589,9 @@ swap_cluster_populate(struct swap_info_struct *si,
 		spin_unlock(&ci->lock);
 		return NULL;
 	}
+
+	/* Update tables in atomic context */
+	swap_cluster_copy_table(ci, &tmp_ci);
 	return ci;
 }
 
