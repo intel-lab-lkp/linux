@@ -649,10 +649,6 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 	struct net_device_stats *stats;
 	struct gs_host_frame *hf = urb->transfer_buffer;
 	unsigned int minimum_length, data_length;
-	struct gs_tx_context *txc;
-	struct can_frame *cf;
-	struct canfd_frame *cfd;
-	struct sk_buff *skb;
 
 	BUG_ON(!parent);
 
@@ -705,7 +701,11 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 	}
 
 	if (hf->echo_id == GS_HOST_FRAME_ECHO_ID_RX) { /* normal rx */
+		struct sk_buff *skb;
+
 		if (hf->flags & GS_CAN_FLAG_FD) {
+			struct canfd_frame *cfd;
+
 			skb = alloc_canfd_skb(netdev, &cfd);
 			if (!skb)
 				return;
@@ -719,6 +719,8 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 			memcpy(cfd->data, hf->canfd->data, data_length);
 		} else {
+			struct can_frame *cf;
+
 			skb = alloc_can_skb(netdev, &cf);
 			if (!skb)
 				return;
@@ -735,6 +737,9 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 		gs_usb_rx_offload(dev, skb, hf);
 	} else { /* echo_id == hf->echo_id */
+		struct gs_tx_context *txc;
+		struct sk_buff *skb;
+
 		if (hf->echo_id >= GS_MAX_TX_URBS) {
 			netdev_err(netdev,
 				   "Unexpected out of range echo id %u\n",
@@ -763,6 +768,9 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 	}
 
 	if (hf->flags & GS_CAN_FLAG_OVERFLOW) {
+		struct can_frame *cf;
+		struct sk_buff *skb;
+
 		stats->rx_over_errors++;
 		stats->rx_errors++;
 
