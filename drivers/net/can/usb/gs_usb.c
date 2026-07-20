@@ -74,9 +74,9 @@ enum gs_usb_breq {
 	GS_USB_BREQ_GET_STATE,
 	GS_USB_BREQ_SET_FILTER,
 	GS_USB_BREQ_GET_FILTER,
-	__GS_USB_BREQ_PLACEHOLDER_17,
-	__GS_USB_BREQ_PLACEHOLDER_18,
-	__GS_USB_BREQ_PLACEHOLDER_19,
+	GS_USB_BREQ_GET_TDC_CONST,
+	GS_USB_BREQ_SET_TDC,
+	GS_USB_BREQ_GET_TDC,
 	GS_USB_BREQ_ELM_GET_BOARDINFO = 20,
 	GS_USB_BREQ_ELM_SET_FILTER,
 	GS_USB_BREQ_ELM_GET_LASTERROR,
@@ -196,6 +196,27 @@ struct gs_device_filter {
 	};
 } __packed __aligned(4);
 
+#define GS_CAN_TDC_MODE_OFF BIT(0)
+#define GS_CAN_TDC_MODE_AUTO BIT(1)
+#define GS_CAN_TDC_MODE_MANUAL BIT(2)
+
+struct gs_device_tdc_const {
+	__le32 tdcv_min;
+	__le32 tdcv_max;
+	__le32 tdco_min;
+	__le32 tdco_max;
+	__le32 tdcf_min;
+	__le32 tdcf_max;
+	__le32 mode;
+} __packed __aligned(4);
+
+struct gs_device_tdc {
+	__le32 tdcv;
+	__le32 tdco;
+	__le32 tdcf;
+	__le32 mode;
+} __packed __aligned(4);
+
 #define GS_CAN_FEATURE_LISTEN_ONLY BIT(0)
 #define GS_CAN_FEATURE_LOOP_BACK BIT(1)
 #define GS_CAN_FEATURE_TRIPLE_SAMPLE BIT(2)
@@ -218,7 +239,8 @@ struct gs_device_filter {
 /* supported by Elmue firmware 0x260528 only */
 #define GS_CAN_FEATURE_ELM_DEV_FLAG_SEND_USB_BLOBS_260528 BIT(16)
 #define GS_CAN_FEATURE_FILTER BIT(16)
-#define GS_CAN_FEATURE_MASK GENMASK(16, 0)
+#define GS_CAN_FEATURE_TDC BIT(17)
+#define GS_CAN_FEATURE_MASK GENMASK(17, 0)
 
 /* internal quirks - keep in GS_CAN_FEATURE space for now */
 
@@ -345,6 +367,7 @@ struct gs_can {
 	struct usb_device *udev;
 
 	struct can_bittiming_const bt_const, data_bt_const;
+	struct can_tdc_const tdc_const;
 	unsigned int channel;	/* channel number */
 
 	u32 feature;
@@ -1086,6 +1109,30 @@ nomem_urb:
 	return NETDEV_TX_OK;
 }
 
+static int gs_usb_set_tdc(const struct gs_can *dev)
+{
+	const struct can_tdc *tdc = &dev->can.fd.tdc;
+	struct gs_device_tdc device_tdc = {
+		.tdcv = cpu_to_le32(tdc->tdcv),
+		.tdco = cpu_to_le32(tdc->tdco),
+		.tdcf = cpu_to_le32(tdc->tdcf),
+	};
+
+	const u32 ctrlmode = dev->can.ctrlmode;
+
+	if (ctrlmode & CAN_CTRLMODE_TDC_AUTO)
+		device_tdc.mode = cpu_to_le32(GS_CAN_TDC_MODE_AUTO);
+	else if (ctrlmode & CAN_CTRLMODE_TDC_MANUAL)
+		device_tdc.mode = cpu_to_le32(GS_CAN_TDC_MODE_MANUAL);
+	else
+		device_tdc.mode = cpu_to_le32(GS_CAN_TDC_MODE_OFF);
+
+	return usb_control_msg_send(dev->udev, 0, GS_USB_BREQ_SET_TDC,
+				    USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
+				    dev->channel, 0, &device_tdc, sizeof(device_tdc),
+				    USB_CTRL_SET_TIMEOUT, GFP_KERNEL);
+}
+
 static int gs_can_open(struct net_device *netdev)
 {
 	struct gs_can *dev = netdev_priv(netdev);
@@ -1193,6 +1240,9 @@ static int gs_can_open(struct net_device *netdev)
 	if (dev->feature & GS_CAN_FEATURE_HW_TIMESTAMP)
 		flags |= GS_CAN_FEATURE_HW_TIMESTAMP;
 
+	if (dev->feature & GS_CAN_FEATURE_TDC)
+		flags |= GS_CAN_FEATURE_TDC;
+
 	rc = gs_usb_set_bittiming(dev);
 	if (rc) {
 		netdev_err(netdev, "failed to set bittiming: %pe\n", ERR_PTR(rc));
@@ -1203,6 +1253,14 @@ static int gs_can_open(struct net_device *netdev)
 		rc = gs_usb_set_data_bittiming(dev);
 		if (rc) {
 			netdev_err(netdev, "failed to set data bittiming: %pe\n", ERR_PTR(rc));
+			goto out_usb_kill_anchored_urbs;
+		}
+	}
+
+	if (dev->feature & GS_CAN_FEATURE_TDC) {
+		rc = gs_usb_set_tdc(dev);
+		if (rc) {
+			netdev_err(netdev, "failed to set TDC: %pe\n", ERR_PTR(rc));
 			goto out_usb_kill_anchored_urbs;
 		}
 	}
@@ -1452,6 +1510,25 @@ static const u16 gs_usb_termination_const[] = {
 	GS_USB_TERMINATION_ENABLED
 };
 
+static int gs_usb_get_auto_tdcv(const struct net_device *netdev, u32 *tdcv)
+{
+	struct gs_can *dev = netdev_priv(netdev);
+	struct gs_device_tdc tdc;
+	int rc;
+
+	rc = usb_control_msg_recv(dev->udev, 0, GS_USB_BREQ_GET_TDC,
+				  USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
+				  dev->channel, 0,
+				  &tdc, sizeof(tdc), USB_CTRL_GET_TIMEOUT,
+				  GFP_KERNEL);
+	if (rc)
+		return rc;
+
+	*tdcv = le32_to_cpu(tdc.tdcv);
+
+	return 0;
+}
+
 static struct gs_can *gs_make_candev(unsigned int channel,
 				     struct usb_interface *intf,
 				     struct gs_device_config *dconf)
@@ -1625,6 +1702,38 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 
 	if (feature & GS_CAN_FEATURE_GET_STATE)
 		dev->can.do_get_berr_counter = gs_usb_can_get_berr_counter;
+
+	if (feature & GS_CAN_FEATURE_TDC) {
+		struct gs_device_tdc_const tdc_const;
+
+		rc = usb_control_msg_recv(interface_to_usbdev(intf), 0,
+					  GS_USB_BREQ_GET_TDC_CONST,
+					  USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
+					  channel, 0, &tdc_const,
+					  sizeof(tdc_const),
+					  1000, GFP_KERNEL);
+		if (rc) {
+			dev_err(&intf->dev,
+				"Couldn't get TDC const for channel %d (%pe)\n",
+				channel, ERR_PTR(rc));
+			goto out_free_candev;
+		}
+
+		dev->tdc_const.tdcv_min = le32_to_cpu(tdc_const.tdcv_min);
+		dev->tdc_const.tdcv_max = le32_to_cpu(tdc_const.tdcv_max);
+		dev->tdc_const.tdco_min = le32_to_cpu(tdc_const.tdco_min);
+		dev->tdc_const.tdco_max = le32_to_cpu(tdc_const.tdco_max);
+		dev->tdc_const.tdcf_min = le32_to_cpu(tdc_const.tdcf_min);
+		dev->tdc_const.tdcf_max = le32_to_cpu(tdc_const.tdcf_max);
+
+		if (tdc_const.mode & cpu_to_le32(GS_CAN_TDC_MODE_MANUAL))
+			dev->can.ctrlmode_supported |= CAN_CTRLMODE_TDC_MANUAL;
+		if (tdc_const.mode & cpu_to_le32(GS_CAN_TDC_MODE_AUTO))
+			dev->can.ctrlmode_supported |= CAN_CTRLMODE_TDC_AUTO;
+
+		dev->can.fd.tdc_const = &dev->tdc_const;
+		dev->can.fd.do_get_auto_tdcv = gs_usb_get_auto_tdcv;
+	}
 
 	can_rx_offload_add_manual(netdev, &dev->offload, GS_NAPI_WEIGHT);
 	SET_NETDEV_DEV(netdev, &intf->dev);
