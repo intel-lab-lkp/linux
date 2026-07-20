@@ -87,8 +87,7 @@ static int smb_decompress_lz77_payload(const u8 **src, u32 *slen, u8 **dst,
 	return 0;
 }
 
-static int smb_decompress_chained(__le16 alg, bool allow_chained,
-				  const struct smb2_compression_hdr *hdr,
+static int smb_decompress_chained(__le16 alg, const struct smb2_compression_hdr *hdr,
 				  u32 slen, void *dst, u32 dlen)
 {
 	const struct smb2_compression_payload_hdr *payload;
@@ -97,10 +96,17 @@ static int smb_decompress_chained(__le16 alg, bool allow_chained,
 	u32 remaining = slen - SMB2_COMPRESSION_CHAINED_HDR_LEN;
 	u8 *out = dst;
 	u32 out_remaining = dlen;
-	bool first = true;
 	int rc;
 
-	if (!allow_chained || orig_size != dlen)
+	if (orig_size != dlen)
+		return -EINVAL;
+
+	payload = (const struct smb2_compression_payload_hdr *)src;
+	/*
+	 * CHAINED marks only the first payload. Requiring NONE on every
+	 * later payload rejects ambiguous or independently chained data.
+	 */
+	if (unlikely(payload->Flags != cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED)))
 		return -EINVAL;
 
 	/*
@@ -110,43 +116,40 @@ static int smb_decompress_chained(__le16 alg, bool allow_chained,
 	 */
 	while (remaining) {
 		__le16 payload_alg;
-		__le16 flags;
 		u32 len;
 
 		if (remaining < SMB2_COMPRESSION_PAYLOAD_BASE_LEN)
 			return -EINVAL;
 
-		payload = (const struct smb2_compression_payload_hdr *)src;
 		payload_alg = payload->CompressionAlgorithm;
-		flags = payload->Flags;
-		len = le32_to_cpu(payload->Length);
-
-		/*
-		 * CHAINED marks only the first payload. Requiring NONE on every
-		 * later payload rejects ambiguous or independently chained data.
-		 */
-		if ((first && flags != cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED)) ||
-		    (!first && flags != cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE)))
+		if (unlikely(!smb_compress_alg_valid(payload_alg, true)))
 			return -EINVAL;
 
+		len = le32_to_cpu(payload->Length);
 		src += SMB2_COMPRESSION_PAYLOAD_BASE_LEN;
 		remaining -= SMB2_COMPRESSION_PAYLOAD_BASE_LEN;
 
-		if (payload_alg == SMB3_COMPRESS_NONE) {
-			rc = smb_decompress_none(&src, &remaining, &out,
-						 &out_remaining, len);
-		} else if (payload_alg == SMB3_COMPRESS_PATTERN) {
-			rc = smb_decompress_pattern(&src, &remaining, &out,
-						    &out_remaining, len);
-		} else if (payload_alg == alg && alg == SMB3_COMPRESS_LZ77) {
+		rc = -EINVAL;
+		switch (payload_alg) {
+		case SMB3_COMPRESS_NONE:
+			rc = smb_decompress_none(&src, &remaining, &out, &out_remaining, len);
+			break;
+		case SMB3_COMPRESS_LZ77:
 			rc = smb_decompress_lz77_payload(&src, &remaining, &out,
 							 &out_remaining, len);
-		} else {
-			return -EINVAL;
+			break;
+		case SMB3_COMPRESS_PATTERN:
+			rc = smb_decompress_pattern(&src, &remaining, &out, &out_remaining, len);
+			break;
 		}
+
 		if (rc)
 			return rc;
-		first = false;
+
+		payload = (const struct smb2_compression_payload_hdr *)src;
+		if (remaining >= SMB2_COMPRESSION_PAYLOAD_BASE_LEN &&
+		    unlikely(payload->Flags != cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE)))
+			return -EINVAL;
 	}
 
 	return out_remaining ? -EINVAL : 0;
@@ -195,15 +198,22 @@ int smb_compression_decompress(__le16 alg, bool allow_chained,
 	const struct smb2_compression_hdr *hdr = src;
 
 	if (!src || !dst || slen < sizeof(*hdr) ||
-	    hdr->ProtocolId != SMB2_COMPRESSION_TRANSFORM_ID ||
-	    alg == SMB3_COMPRESS_NONE)
+	    hdr->ProtocolId != SMB2_COMPRESSION_TRANSFORM_ID)
 		return -EINVAL;
 
-	if (hdr->Flags == cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED))
-		return smb_decompress_chained(alg, allow_chained, hdr, slen,
-					      dst, dlen);
+	/* If @allow_chained == true, the first payload hdr may have "NONE" algorithm */
+	if (unlikely(!allow_chained && (hdr->CompressionAlgorithm == SMB3_COMPRESS_NONE ||
+					hdr->CompressionAlgorithm == SMB3_COMPRESS_PATTERN)))
+		return -EINVAL;
 
-	if (hdr->Flags != cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE))
+	if (hdr->Flags == cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED)) {
+		if (likely(allow_chained))
+			return smb_decompress_chained(alg, hdr, slen, dst, dlen);
+
+		return -EINVAL;
+	}
+
+	if (unlikely(hdr->Flags != cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE) || allow_chained))
 		return -EINVAL;
 
 	return smb_decompress_unchained(alg, hdr, slen, dst, dlen);
