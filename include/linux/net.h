@@ -198,6 +198,13 @@ struct sk_buff;
 struct proto_accept_arg;
 typedef int (*sk_read_actor_t)(read_descriptor_t *, struct sk_buff *,
 			       unsigned int, size_t);
+/* rectype carries the transport record type, for example a
+ * TLS_RECORD_TYPE_* value.
+ */
+typedef int (*sk_read_rectype_actor_t)(read_descriptor_t *,
+				       struct sk_buff *,
+				       unsigned int, size_t,
+				       u8 rectype);
 typedef int (*skb_read_actor_t)(struct sock *, struct sk_buff *);
 
 
@@ -264,6 +271,27 @@ struct proto_ops {
 	 */
 	int		(*read_sock)(struct sock *sk, read_descriptor_t *desc,
 				     sk_read_actor_t recv_actor);
+	/*
+	 * read_sock_rectype splits delivery across two callbacks:
+	 * recv_actor for data records, per the sk_read_actor_t
+	 * convention, and rectype_actor for all other records,
+	 * with rectype identifying each. A NULL rectype_actor
+	 * leaves non-data records pending. rectype_actor returns 0
+	 * to consume a record or negative to leave it pending for
+	 * redelivery and stop delivery; the negative return is a
+	 * backpressure signal, not a fatal error. Both callbacks
+	 * report errors and early stop the way recv_actor does:
+	 * by setting desc->count to 0 and recording the reason in
+	 * desc->error, per the read_descriptor_t convention and
+	 * independent of the return value. The return value reports
+	 * only data bytes consumed by recv_actor; the caller
+	 * detects an error or early stop via desc->count and
+	 * desc->error.
+	 */
+	int		(*read_sock_rectype)(struct sock *sk,
+					     read_descriptor_t *desc,
+					     sk_read_actor_t recv_actor,
+					     sk_read_rectype_actor_t rectype_actor);
 	/* This is different from read_sock(), it reads an entire skb at a time. */
 	int		(*read_skb)(struct sock *sk, skb_read_actor_t recv_actor);
 	int		(*sendmsg_locked)(struct sock *sk, struct msghdr *msg,
