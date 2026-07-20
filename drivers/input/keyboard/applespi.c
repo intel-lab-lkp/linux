@@ -421,6 +421,12 @@ struct applespi_data {
 	bool				read_active;
 	bool				write_active;
 
+	struct applespi_complete_info {
+		void				(*complete)(void *context);
+		struct applespi_data		*applespi;
+	}				spi_complete[2];
+	bool				cancel_spi;
+
 	struct work_struct		work;
 	struct touchpad_info_protocol	rcvd_tp_info;
 
@@ -607,13 +613,73 @@ static void applespi_setup_write_txfrs(struct applespi_data *applespi)
 	spi_message_add_tail(st_t, msg);
 }
 
+static bool applespi_async_outstanding(struct applespi_data *applespi)
+{
+	return applespi->spi_complete[0].complete ||
+	       applespi->spi_complete[1].complete;
+}
+
+static void applespi_async_complete(void *context)
+{
+	struct applespi_complete_info *info = context;
+	struct applespi_data *applespi = info->applespi;
+	void (*complete)(void *context);
+	unsigned long flags;
+
+	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+	complete = info->complete;
+	spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
+
+	if (complete)
+		complete(applespi);
+
+	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+	info->complete = NULL;
+
+	if (applespi->cancel_spi && !applespi_async_outstanding(applespi))
+		wake_up_all(&applespi->wait_queue);
+
+	spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
+}
+
 static int applespi_async(struct applespi_data *applespi,
 			  struct spi_message *message, void (*complete)(void *))
 {
-	message->complete = complete;
-	message->context = applespi;
+	struct applespi_complete_info *info;
+	int sts;
 
-	return spi_async(applespi->spi, message);
+	assert_spin_locked(&applespi->cmd_msg_lock);
+
+	if (applespi->cancel_spi) {
+		if (!applespi_async_outstanding(applespi))
+			wake_up_all(&applespi->wait_queue);
+		return -ESHUTDOWN;
+	}
+
+	/*
+	 * There can only be at most 2 spi requests in flight, one for "reads"
+	 * and one for "writes".
+	 */
+	if (!applespi->spi_complete[0].complete)
+		info = &applespi->spi_complete[0];
+	else if (!applespi->spi_complete[1].complete)
+		info = &applespi->spi_complete[1];
+	else {
+		dev_warn(&applespi->spi->dev, "Both SPI async slots in use\n");
+		return -EBUSY;
+	}
+
+	info->complete = complete;
+	info->applespi = applespi;
+
+	message->complete = applespi_async_complete;
+	message->context = info;
+
+	sts = spi_async(applespi->spi, message);
+	if (sts)
+		info->complete = NULL;
+
+	return sts;
 }
 
 static inline bool applespi_check_write_status(struct applespi_data *applespi,
@@ -1799,6 +1865,7 @@ static void applespi_drain_writes(struct applespi_data *applespi)
 	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
 
 	applespi->drain = true;
+	applespi->cancel_spi = true;
 	ret = wait_event_lock_irq_timeout(applespi->wait_queue,
 					  !applespi->write_active,
 					  applespi->cmd_msg_lock,
@@ -1820,6 +1887,8 @@ static void applespi_drain_reads(struct applespi_data *applespi)
 	long ret;
 
 	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+
+	applespi->cancel_spi = true;
 
 	ret = wait_event_lock_irq_timeout(applespi->wait_queue,
 					  !applespi->read_active,
