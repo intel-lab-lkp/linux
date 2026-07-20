@@ -465,9 +465,16 @@
 		compatible = "qcom,rpm-pm2250-regulators";
 		vdd_s3-supply = <&vph_pwr>;
 		vdd_s4-supply = <&vph_pwr>;
-		vdd_l1_l2_l3_l5_l6_l7_l8_l9_l10_l11_l12-supply = <&pm4125_s3>;
-		vdd_l4_l17_l18_l19_l20_l21_l22-supply = <&vph_pwr>;
-		vdd_l13_l14_l15_l16-supply = <&pm4125_s4>;
+		vdd_l1-supply =  <&pm4125_s3>;
+		vdd_l2_l3-supply =  <&pm4125_s3>;
+		vdd_l5_l6_l7_l11_l12-supply =  <&pm4125_s3>;
+		vdd_l8_l9-supply =  <&pm4125_s3>;
+		vdd_l10-supply =  <&pm4125_s3>;
+		vdd_l13_l14-supply =  <&pm4125_s4>;
+		vdd_l15_l16-supply =  <&pm4125_s4>;
+		vdd_l17_l22-supply = <&vph_pwr>;
+		vdd_l18_l19-supply = <&vph_pwr>;
+		vdd_l4_l20_l21-supply = <&vph_pwr>;
 
 		/*
 		 * S1 - VDD_APC
