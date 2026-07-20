@@ -427,7 +427,7 @@ struct applespi_data {
 	}				spi_complete[2];
 	bool				cancel_spi;
 
-	struct work_struct		work;
+	bool				have_tp_info;
 	struct touchpad_info_protocol	rcvd_tp_info;
 
 	struct dentry			*debugfs_root;
@@ -1030,6 +1030,9 @@ static int applespi_tp_dim_open(struct inode *inode, struct file *file)
 {
 	struct applespi_data *applespi = inode->i_private;
 
+	if (!applespi->touchpad_input_dev)
+		return -ENODEV;
+
 	file->private_data = applespi;
 
 	snprintf(applespi->tp_dim_val, sizeof(applespi->tp_dim_val),
@@ -1390,26 +1393,20 @@ applespi_register_touchpad_device(struct applespi_data *applespi,
 	return 0;
 }
 
-static void applespi_worker(struct work_struct *work)
-{
-	struct applespi_data *applespi =
-		container_of(work, struct applespi_data, work);
-
-	applespi_register_touchpad_device(applespi, &applespi->rcvd_tp_info);
-}
-
 static void applespi_handle_cmd_response(struct applespi_data *applespi,
 					 struct spi_packet *packet,
 					 struct message *message)
 {
+	unsigned long flags;
+
 	if (packet->device == PACKET_DEV_INFO &&
 	    le16_to_cpu(message->type) == 0x1020) {
-		/*
-		 * We're not allowed to sleep here, but registering an input
-		 * device can sleep.
-		 */
+		spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
 		applespi->rcvd_tp_info = message->tp_info;
-		schedule_work(&applespi->work);
+		applespi->have_tp_info = true;
+		spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
+
+		wake_up_all(&applespi->wait_queue);
 		return;
 	}
 
@@ -1677,6 +1674,7 @@ static int applespi_probe(struct spi_device *spi)
 	acpi_handle spi_handle = ACPI_HANDLE(&spi->dev);
 	acpi_status acpi_sts;
 	int sts, i;
+	unsigned long flags;
 	unsigned long long gpe, usb_status;
 
 	/* check if the USB interface is present and enabled already */
@@ -1693,8 +1691,6 @@ static int applespi_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	applespi->spi = spi;
-
-	INIT_WORK(&applespi->work, applespi_worker);
 
 	/* store the driver data */
 	spi_set_drvdata(spi, applespi);
@@ -1823,6 +1819,25 @@ static int applespi_probe(struct spi_device *spi)
 	/* trigger touchpad setup */
 	applespi_init(applespi, false);
 
+	/* set up the touchpad as a separate input device if info is received */
+	sts = wait_event_timeout(applespi->wait_queue,
+				 READ_ONCE(applespi->have_tp_info),
+				 msecs_to_jiffies(3000));
+	if (!sts) {
+		dev_warn(&applespi->spi->dev,
+			 "Timed out waiting for touchpad info, continuing keyboard-only\n");
+	} else {
+		struct touchpad_info_protocol tp_info;
+
+		spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+		tp_info = applespi->rcvd_tp_info;
+		spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
+
+		sts = applespi_register_touchpad_device(applespi, &tp_info);
+		if (sts)
+			goto cancel_spi;
+	}
+
 	/*
 	 * By default this device is not enabled for wakeup; but USB keyboards
 	 * generally are, so the expectation is that by default the keyboard
@@ -1855,6 +1870,19 @@ static int applespi_probe(struct spi_device *spi)
 			    &applespi_tp_dim_fops);
 
 	return 0;
+
+cancel_spi:
+	acpi_disable_gpe(NULL, applespi->gpe);
+	acpi_remove_gpe_handler(NULL, applespi->gpe, applespi_notify);
+
+	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+	applespi->cancel_spi = true;
+	wait_event_lock_irq(applespi->wait_queue,
+			    !applespi_async_outstanding(applespi),
+			    applespi->cmd_msg_lock);
+	spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
+
+	return sts;
 }
 
 static void applespi_drain_writes(struct applespi_data *applespi)
