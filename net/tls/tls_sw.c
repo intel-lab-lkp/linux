@@ -2049,6 +2049,11 @@ splice_requeue:
 	goto splice_read_end;
 }
 
+/* Consecutive empty data records deliver no bytes; cap them per
+ * call so a peer streaming them cannot hold the socket lock here.
+ */
+#define TLS_RX_NODATA_LIMIT 16
+
 int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		     sk_read_actor_t read_actor)
 {
@@ -2057,6 +2062,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	struct tls_prot_info *prot = &tls_ctx->prot_info;
 	struct strp_msg *rxm = NULL;
 	struct sk_buff *skb = NULL;
+	unsigned int nodata_count = 0;
 	struct sk_psock *psock;
 	size_t flushed_at = 0;
 	bool released = true;
@@ -2122,7 +2128,13 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		 * here instead.
 		 */
 		if (rxm->full_len == 0) {
+			err = 0;
 			consume_skb(skb);
+			/* tls_rx_reader_release() announces any parsed record
+			 * on exit, so returning 0 here cannot strand it.
+			 */
+			if (++nodata_count >= TLS_RX_NODATA_LIMIT)
+				break;
 			continue;
 		}
 
@@ -2133,6 +2145,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			goto read_sock_requeue;
 		}
 		copied += used;
+		nodata_count = 0;
 		if (used < rxm->full_len) {
 			rxm->offset += used;
 			rxm->full_len -= used;
