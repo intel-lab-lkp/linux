@@ -97,9 +97,8 @@ static void kmod_dup_request_delete(struct work_struct *work)
 	 * kmod. The inneficies there are a call to modprobe and modprobe
 	 * just returning 0.
 	 */
-	mutex_lock(&kmod_dup_mutex);
-	list_del(&kmod_req->list);
-	mutex_unlock(&kmod_dup_mutex);
+	scoped_guard(mutex, &kmod_dup_mutex)
+		list_del(&kmod_req->list);
 
 	put_kmod_req(kmod_req);
 }
@@ -122,10 +121,13 @@ bool kmod_dup_request_exists_wait(char *module_name, bool wait, int *dup_ret)
 	INIT_DELAYED_WORK(&new_kmod_req->delete_work, kmod_dup_request_delete);
 	init_completion(&new_kmod_req->first_req_done);
 
-	mutex_lock(&kmod_dup_mutex);
+	scoped_guard(mutex, &kmod_dup_mutex) {
+		kmod_req = kmod_dup_request_lookup(module_name);
+		if (kmod_req) {
+			get_kmod_req(kmod_req);
+			goto dup_req;
+		}
 
-	kmod_req = kmod_dup_request_lookup(module_name);
-	if (!kmod_req) {
 		/*
 		 * If the first request that came through for a module
 		 * was with request_module_nowait() we cannot wait for it
@@ -140,7 +142,6 @@ bool kmod_dup_request_exists_wait(char *module_name, bool wait, int *dup_ret)
 		if (!wait) {
 			kfree(new_kmod_req);
 			pr_debug("New request_module_nowait() for %s -- cannot track duplicates for this request\n", module_name);
-			mutex_unlock(&kmod_dup_mutex);
 			return false;
 		}
 
@@ -150,13 +151,10 @@ bool kmod_dup_request_exists_wait(char *module_name, bool wait, int *dup_ret)
 		 */
 		pr_debug("New request_module() for %s\n", module_name);
 		list_add(&new_kmod_req->list, &dup_kmod_reqs);
-		mutex_unlock(&kmod_dup_mutex);
 		return false;
 	}
 
-	get_kmod_req(kmod_req);
-	mutex_unlock(&kmod_dup_mutex);
-
+dup_req:
 	/* We are dealing with a duplicate request now */
 	kfree(new_kmod_req);
 
@@ -214,14 +212,12 @@ void kmod_dup_request_announce(char *module_name, int ret)
 {
 	struct kmod_dup_req *kmod_req;
 
-	mutex_lock(&kmod_dup_mutex);
-
 	/*
 	 * Find the entry previously added in kmod_dup_request_exists_wait()
 	 * that is owned by the current task.
 	 */
-	kmod_req = kmod_dup_request_lookup(module_name);
-	mutex_unlock(&kmod_dup_mutex);
+	scoped_guard(mutex, &kmod_dup_mutex)
+		kmod_req = kmod_dup_request_lookup(module_name);
 
 	if (!kmod_req)
 		return;
