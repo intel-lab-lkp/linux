@@ -192,16 +192,18 @@ static u64 dma_length(struct ethosu_validated_cmdstream_info *info,
 	return len;
 }
 
-static u64 feat_matrix_length(struct ethosu_validated_cmdstream_info *info,
-			      struct feat_matrix *fm,
-			      u32 x, u32 y, u32 c)
+/*
+ * Compute the byte offset the NPU addresses for one feature-matrix coordinate
+ * (x, y, c). Storage modes 0 and 1 route disjoint (x, y) sub-rectangles to up
+ * to four independent tile bases; the caller must only pass coordinates whose
+ * tiles it means to bound. Returns U64_MAX if the coordinate lands on a tile
+ * whose base was never set by the command stream.
+ */
+static u64 feat_matrix_addr(struct feat_matrix *fm, u32 x, u32 y, u32 c)
 {
 	u32 element_size, storage = fm->precision >> 14;
 	int tile = 0;
 	u64 addr;
-
-	if (fm->region < 0)
-		return U64_MAX;
 
 	switch (storage) {
 	case 0:
@@ -240,9 +242,64 @@ static u64 feat_matrix_length(struct ethosu_validated_cmdstream_info *info,
 		break;
 	}
 
-	info->region_size[fm->region] = max(info->region_size[fm->region], addr + 1);
-
 	return addr;
+}
+
+/*
+ * Bound the region a feature matrix touches over the coordinate box
+ * [0, x] x [0, y] x [0, c].
+ *
+ * The address is separable and, as the strides are unsigned 40-bit quantities,
+ * non-decreasing in x and y, so their maxima sit at the box edge and, for the
+ * tiled storage modes, just below each split (width0, height[]) where an
+ * independent tile base takes over. Only nhcwb16 packing is non-monotonic in c:
+ * crossing a 16-lane group adds stride_c but resets the in-group term, so the
+ * peak may sit at the top of the last full group instead of at c. Evaluating
+ * every such extremal corner bounds all up-to-four tiles, whereas a single
+ * presumed-max corner undercounts the other tiles and the channel peak.
+ */
+static u64 feat_matrix_length(struct ethosu_validated_cmdstream_info *info,
+			      struct feat_matrix *fm,
+			      u32 x, u32 y, u32 c)
+{
+	u32 storage = fm->precision >> 14;
+	u32 xs[2], ys[3], cs[2];
+	int nx = 0, ny = 0, nc = 0, i, j, k;
+	u64 max_addr = 0;
+
+	if (fm->region < 0)
+		return U64_MAX;
+
+	xs[nx++] = x;
+	if (storage == 0)
+		xs[nx++] = min_t(u32, x, fm->width0);
+
+	ys[ny++] = y;
+	if (storage == 0 || storage == 1) {
+		ys[ny++] = min_t(u32, y, fm->height[0]);
+		ys[ny++] = min_t(u32, y, fm->height[1]);
+	}
+
+	cs[nc++] = c;
+	if (((fm->precision >> 6) & 0x3) == 1 && c >= 16)
+		cs[nc++] = (c & ~0xfu) - 1;
+
+	for (i = 0; i < nx; i++) {
+		for (j = 0; j < ny; j++) {
+			for (k = 0; k < nc; k++) {
+				u64 addr = feat_matrix_addr(fm, xs[i], ys[j], cs[k]);
+
+				if (addr == U64_MAX)
+					return U64_MAX;
+				max_addr = max(max_addr, addr);
+			}
+		}
+	}
+
+	info->region_size[fm->region] =
+		max(info->region_size[fm->region], max_addr + 1);
+
+	return max_addr;
 }
 
 static int calc_sizes(struct drm_device *ddev,
