@@ -1123,6 +1123,10 @@ int begin_new_exec(struct linux_binprm * bprm)
 	struct task_struct *me = current;
 	int retval;
 
+	/* A pending PT_INTERP substitution this format cannot consume. */
+	if (bprm->loader)
+		return -ENOEXEC;
+
 	/* A declined execfd request has no executable for a later format. */
 	if (!bprm->executable) {
 		bprm->have_execfd = 0;
@@ -1435,6 +1439,8 @@ static void free_bprm(struct linux_binprm *bprm)
 	if (bprm->old_mm)
 		exec_mm_put_old(bprm->old_mm);
 	do_close_execat(bprm->file);
+	/* An unconsumed PT_INTERP substitute from a binfmt_misc loader entry. */
+	do_close_execat(bprm->loader);
 	if (bprm->executable) {
 		/* A transparent dispatch still holds the write denial. */
 		if (bprm->executable_denied)
@@ -1756,6 +1762,9 @@ static int exec_binprm(struct linux_binprm *bprm)
 			return ret;
 		if (!bprm->interpreter)
 			break;
+
+		/* A stashed PT_INTERP substitute belonged to the replaced file. */
+		do_close_execat(no_free_ptr(bprm->loader));
 
 		exec = bprm->file;
 		bprm->file = bprm->interpreter;
