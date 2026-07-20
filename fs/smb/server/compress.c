@@ -24,11 +24,9 @@
  */
 int ksmbd_decompress_request(struct ksmbd_conn *conn)
 {
-	struct smb2_compression_hdr *hdr;
 	unsigned int pdu_size = get_rfc1002_len(conn->request_buf);
-	u32 orig_size, offset, out_size;
-	u32 max_allowed_pdu_size;
 	char *buf, *out;
+	u32 out_size;
 	int rc;
 
 	if (pdu_size < sizeof(struct smb2_compression_hdr))
@@ -38,30 +36,17 @@ int ksmbd_decompress_request(struct ksmbd_conn *conn)
 	    !smb_compress_alg_valid(conn->compress_algorithm, false))
 		return -EINVAL;
 
-	hdr = smb_get_msg(conn->request_buf);
-	if (hdr->ProtocolId != SMB2_COMPRESSION_TRANSFORM_ID)
-		return -EINVAL;
-
-	orig_size = le32_to_cpu(hdr->OriginalCompressedSegmentSize);
-	if (hdr->Flags == cpu_to_le16(SMB2_COMPRESSION_FLAG_CHAINED)) {
-		out_size = orig_size;
-	} else {
-		offset = le32_to_cpu(hdr->Offset);
-		if (offset > pdu_size - sizeof(*hdr) ||
-		    check_add_overflow(orig_size, offset, &out_size))
-			return -EINVAL;
-	}
-
-	max_allowed_pdu_size = SMB3_MAX_MSGSIZE + conn->vals->max_write_size;
-	if (out_size > max_allowed_pdu_size ||
-	    out_size > MAX_STREAM_PROT_LEN)
+	buf = smb_get_msg(conn->request_buf);
+	out_size = smb_decompress_alloc_size(buf, pdu_size, 0,
+					     SMB3_MAX_MSGSIZE + conn->vals->max_write_size,
+					     conn->compress_chained);
+	if (out_size == 0 || out_size > MAX_STREAM_PROT_LEN)
 		return -EINVAL;
 
 	out = kvmalloc(out_size + 4 + 1, KSMBD_DEFAULT_GFP);
 	if (!out)
 		return -ENOMEM;
 
-	buf = (char *)hdr;
 	*(__be32 *)out = cpu_to_be32(out_size);
 	rc = smb_compression_decompress(conn->compress_algorithm,
 					conn->compress_chained,
