@@ -1355,7 +1355,6 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 	struct gs_can *dev;
 	struct net_device *netdev;
 	int rc;
-	struct gs_device_bt_const_extended bt_const_extended;
 	struct gs_device_bt_const bt_const;
 	u32 feature;
 
@@ -1495,6 +1494,8 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 	 */
 	if (feature & GS_CAN_FEATURE_FD &&
 	    feature & GS_CAN_FEATURE_BT_CONST_EXT) {
+		struct gs_device_bt_const_extended bt_const_extended;
+
 		rc = usb_control_msg_recv(interface_to_usbdev(intf), 0,
 					  GS_USB_BREQ_BT_CONST_EXT,
 					  USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
