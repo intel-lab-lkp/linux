@@ -212,6 +212,7 @@ static const struct of_device_id dummy_match[] = {
 	{.compatible = "arm,coresight-dummy-sink"},
 	{},
 };
+MODULE_DEVICE_TABLE(of, dummy_match);
 
 static struct platform_driver dummy_driver = {
 	.probe	= dummy_probe,
