@@ -258,7 +258,7 @@ static int cx24116_readreg(struct cx24116_state *state, u8 reg)
 	if (ret != 2) {
 		printk(KERN_ERR "%s: reg=0x%x (error=%d)\n",
 			__func__, reg, ret);
-		return ret;
+		return ret < 0 ? ret : -EREMOTEIO;
 	}
 
 	if (debug > 1)
@@ -468,7 +468,11 @@ static int cx24116_firmware_ondemand(struct dvb_frontend *fe)
 
 	dprintk("%s()\n", __func__);
 
-	if (cx24116_readreg(state, 0x20) > 0) {
+	ret = cx24116_readreg(state, 0x20);
+	if (ret < 0)
+		return ret;
+
+	if (ret > 0) {
 
 		if (state->skip_fw_load)
 			return 0;
