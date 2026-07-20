@@ -1134,6 +1134,247 @@ static void svc_tcp_fragment_received(struct svc_sock *svsk)
 	svsk->sk_marker = xdr_zero;
 }
 
+/*
+ * read_sock_rectype data actor: receives decrypted application data
+ * from the TLS layer, parsing the RPC record stream (fragment
+ * headers and message bodies) and assembling complete RPC messages
+ * into rqstp->rq_pages.
+ */
+static int svc_tcp_recv_actor(read_descriptor_t *desc,
+			      struct sk_buff *skb,
+			      unsigned int offset, size_t len)
+{
+	struct svc_rqst *rqstp = desc->arg.data;
+	struct svc_sock *svsk =
+		container_of(rqstp->rq_xprt, struct svc_sock, sk_xprt);
+	size_t reclen, received, want, take, done, n;
+	size_t consumed = 0;
+
+	if (!desc->count)
+		return 0;
+
+	if (svsk->sk_tcplen < sizeof(rpc_fraghdr)) {
+		want = sizeof(rpc_fraghdr) - svsk->sk_tcplen;
+		n = min(want, len);
+
+		if (skb_copy_bits(skb, offset,
+				  (char *)&svsk->sk_marker +
+					svsk->sk_tcplen, n))
+			goto fault;
+		svsk->sk_tcplen += n;
+		offset += n;
+		len -= n;
+		consumed += n;
+
+		if (svsk->sk_tcplen < sizeof(rpc_fraghdr))
+			return consumed;
+
+		trace_svcsock_marker(&svsk->sk_xprt, svsk->sk_marker);
+		if (svc_sock_reclen(svsk) + svsk->sk_datalen >
+		    svsk->sk_xprt.xpt_server->sv_max_mesg) {
+			net_notice_ratelimited("svc: %s oversized RPC fragment (%u octets) from %pISpc\n",
+					       svsk->sk_xprt.xpt_server->sv_name,
+					       svc_sock_reclen(svsk),
+					       (struct sockaddr *)&svsk->sk_xprt.xpt_remote);
+			desc->error = -EMSGSIZE;
+			desc->count = 0;
+			return consumed;
+		}
+	}
+
+	reclen = svc_sock_reclen(svsk);
+	received = svsk->sk_tcplen - sizeof(rpc_fraghdr);
+	want = reclen - received;
+	take = min(want, len);
+	done = 0;
+
+	while (done < take) {
+		unsigned int pg = svsk->sk_datalen >> PAGE_SHIFT;
+		unsigned int pg_off = svsk->sk_datalen & (PAGE_SIZE - 1);
+		size_t chunk = min(take - done,
+				   PAGE_SIZE - (size_t)pg_off);
+
+		if (skb_copy_bits(skb, offset,
+				  page_address(rqstp->rq_pages[pg]) + pg_off,
+				  chunk))
+			goto fault;
+		flush_dcache_page(rqstp->rq_pages[pg]);
+		offset += chunk;
+		done += chunk;
+		svsk->sk_datalen += chunk;
+	}
+	svsk->sk_tcplen += take;
+	consumed += take;
+
+	if (svsk->sk_tcplen - sizeof(rpc_fraghdr) >= reclen) {
+		if (svc_sock_final_rec(svsk))
+			desc->count = 0;
+		else
+			svc_tcp_fragment_received(svsk);
+	}
+
+	return consumed;
+
+fault:
+	desc->error = -EFAULT;
+	desc->count = 0;
+	return consumed;
+}
+
+/*
+ * read_sock_rectype non-data record actor: receives non-data TLS
+ * records (alerts, handshake messages) and translates them into
+ * transport-level actions.
+ *
+ * Returns 0 to consume the record and allow the TLS layer to
+ * continue delivering subsequent records. A negative return
+ * causes the TLS layer to requeue the skb on its rx_list,
+ * blocking all further record delivery on this connection.
+ */
+static int svc_tcp_rectype_actor(read_descriptor_t *desc,
+				 struct sk_buff *skb,
+				 unsigned int offset, size_t len,
+				 u8 rectype)
+{
+	struct svc_rqst *rqstp = desc->arg.data;
+	struct svc_sock *svsk =
+		container_of(rqstp->rq_xprt, struct svc_sock, sk_xprt);
+
+	switch (rectype) {
+	case TLS_RECORD_TYPE_ALERT: {
+		u8 alert[2] = {}, level, description;
+		struct kvec kvec = {
+			.iov_base = alert,
+			.iov_len = sizeof(alert),
+		};
+		struct msghdr msg = {};
+
+		if (skb_copy_bits(skb, offset, alert, min(len, sizeof(alert))))
+			break;
+		iov_iter_kvec(&msg.msg_iter, ITER_DEST, &kvec, 1, sizeof(alert));
+		tls_alert_recv(svsk->sk_sk, &msg, &level, &description);
+		if (level == TLS_ALERT_LEVEL_FATAL) {
+			svc_xprt_deferred_close(&svsk->sk_xprt);
+			desc->error = -ENOTCONN;
+			desc->count = 0;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+	return 0;
+}
+
+static int svc_tcp_recvfrom_readsock(struct svc_rqst *rqstp)
+{
+	struct svc_sock	*svsk =
+		container_of(rqstp->rq_xprt, struct svc_sock, sk_xprt);
+	struct svc_serv	*serv = svsk->sk_xprt.xpt_server;
+	struct sock	*sk = svsk->sk_sk;
+	read_descriptor_t desc = {
+		.arg.data = rqstp,
+	};
+	ssize_t len;
+	__be32 *p;
+	__be32 calldir;
+
+	clear_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
+
+	svc_tcp_restore_pages(svsk, rqstp);
+	rqstp->rq_arg.head[0].iov_base = page_address(rqstp->rq_pages[0]);
+
+	desc.count = serv->sv_max_mesg;
+	lock_sock(sk);
+	len = svsk->sk_sock->ops->read_sock_rectype(sk, &desc,
+						    svc_tcp_recv_actor,
+						    svc_tcp_rectype_actor);
+	release_sock(sk);
+
+	if (desc.error < 0) {
+		len = desc.error;
+		goto err_discard;
+	}
+	if (desc.count != 0) {
+		if (len > 0)
+			set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
+		goto err_incomplete;
+	}
+
+	if (svsk->sk_datalen < 8)
+		goto err_nuts;
+
+	rqstp->rq_arg.len = svsk->sk_datalen;
+	rqstp->rq_arg.page_base = 0;
+	if (rqstp->rq_arg.len <= rqstp->rq_arg.head[0].iov_len) {
+		rqstp->rq_arg.head[0].iov_len = rqstp->rq_arg.len;
+		rqstp->rq_arg.page_len = 0;
+	} else {
+		rqstp->rq_arg.page_len = rqstp->rq_arg.len -
+			rqstp->rq_arg.head[0].iov_len;
+	}
+
+	rqstp->rq_xprt_ctxt   = NULL;
+	rqstp->rq_prot	      = IPPROTO_TCP;
+	if (test_bit(XPT_LOCAL, &svsk->sk_xprt.xpt_flags))
+		set_bit(RQ_LOCAL, &rqstp->rq_flags);
+	else
+		clear_bit(RQ_LOCAL, &rqstp->rq_flags);
+
+	p = (__be32 *)rqstp->rq_arg.head[0].iov_base;
+	calldir = p[1];
+	if (calldir)
+		len = receive_cb_reply(svsk, rqstp);
+
+	/* Reset TCP read info */
+	svsk->sk_datalen = 0;
+	svc_tcp_fragment_received(svsk);
+
+	if (len < 0)
+		goto error;
+
+	trace_svcsock_tcp_recv(&svsk->sk_xprt, rqstp->rq_arg.len);
+	svc_xprt_copy_addrs(rqstp, &svsk->sk_xprt);
+	if (serv->sv_stats)
+		serv->sv_stats->nettcpcnt++;
+
+	svc_sock_secure_port(rqstp);
+	set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
+	svc_xprt_received(rqstp->rq_xprt);
+	return rqstp->rq_arg.len;
+
+err_incomplete:
+	svc_tcp_save_pages(svsk, rqstp);
+	if (len < 0 && len != -EAGAIN)
+		goto err_delete;
+	if (svsk->sk_tcplen >= sizeof(rpc_fraghdr))
+		trace_svcsock_tcp_recv_short(&svsk->sk_xprt,
+				svc_sock_reclen(svsk),
+				svsk->sk_tcplen - sizeof(rpc_fraghdr));
+	goto err_noclose;
+error:
+	if (len != -EAGAIN)
+		goto err_delete;
+	trace_svcsock_tcp_recv_eagain(&svsk->sk_xprt, 0);
+	goto err_noclose;
+err_nuts:
+	svsk->sk_datalen = 0;
+	goto err_delete;
+err_discard:
+	/*
+	 * Clear sk_datalen so the teardown-time
+	 * svc_tcp_clear_pages() does not walk the emptied
+	 * svsk->sk_pages[].
+	 */
+	svsk->sk_datalen = 0;
+err_delete:
+	trace_svcsock_tcp_recv_err(&svsk->sk_xprt, len);
+	svc_xprt_deferred_close(&svsk->sk_xprt);
+err_noclose:
+	svc_xprt_received(rqstp->rq_xprt);
+	return 0;
+}
+
 /**
  * svc_tcp_recvfrom - Receive data from a TCP socket
  * @rqstp: request structure into which to receive an RPC Call
@@ -1161,6 +1402,9 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	ssize_t len;
 	__be32 *p;
 	__be32 calldir;
+
+	if (svsk->sk_sock->ops->read_sock_rectype)
+		return svc_tcp_recvfrom_readsock(rqstp);
 
 	clear_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 	len = svc_tcp_read_marker(svsk, rqstp);
