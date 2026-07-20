@@ -225,11 +225,11 @@ static void intel_fbdev_fill_mode_cmd(struct intel_display *display,
 
 static struct intel_framebuffer *
 __intel_fbdev_fb_alloc(struct intel_display *display,
-		       struct drm_fb_helper_surface_size *sizes)
+		       struct drm_fb_helper_surface_size *sizes,
+		       struct drm_gem_object *obj)
 {
 	struct drm_mode_fb_cmd2 mode_cmd = {};
 	struct drm_framebuffer *fb;
-	struct drm_gem_object *obj;
 	int size;
 
 	intel_fbdev_fill_mode_cmd(display, sizes, &mode_cmd);
@@ -262,31 +262,67 @@ err:
 
 }
 
-static bool bios_fb_ok(const struct intel_framebuffer *fb,
-		       const struct drm_fb_helper_surface_size *sizes)
+static struct intel_framebuffer *
+__intel_fbdev_fb_realloc(struct intel_display *display,
+			 const struct drm_framebuffer *orig_fb,
+			 struct drm_gem_object *obj)
+{
+	struct drm_framebuffer *new_fb;
+	struct drm_mode_fb_cmd2 mode_cmd = {
+		.flags = DRM_MODE_FB_MODIFIERS,
+		.width = orig_fb->width,
+		.height = orig_fb->height,
+		.pitches[0] = orig_fb->pitches[0],
+		.offsets[0] = orig_fb->offsets[0],
+		.pixel_format = orig_fb->format->format,
+		.modifier[0] = orig_fb->modifier,
+	};
+
+	new_fb = intel_framebuffer_create(obj, orig_fb->format, &mode_cmd);
+
+	if (IS_ERR(new_fb)) {
+		intel_bo_fbdev_destroy(obj);
+		return ERR_CAST(new_fb);
+	}
+
+	drm_gem_object_put(obj);
+	return to_intel_framebuffer(new_fb);
+}
+
+static struct intel_framebuffer *bios_fb_pick(struct intel_framebuffer *fb,
+					      const struct drm_fb_helper_surface_size *sizes)
 {
 	struct intel_display *display = to_intel_display(fb->base.dev);
 	int width = fb->base.width;
 	int height = fb->base.height;
 	int depth = fb->base.format->depth;
 	int bpp = fb->base.format->cpp[0] * 8;
+	struct drm_gem_object *new;
 
 	if (sizes->fb_width > width || sizes->fb_height > height) {
 		drm_dbg_kms(display->drm,
 			    "BIOS fb too small (%dx%d), we require (%dx%d), releasing it\n",
 			    width, height, sizes->fb_width, sizes->fb_height);
-		return false;
+		return NULL;
 	}
 
 	if (sizes->surface_depth != depth || sizes->surface_bpp != bpp) {
 		drm_dbg_kms(display->drm,
 			    "BIOS fb using wrong depth/bpp (%d/%d), we require (%d/%d), releasing it\n",
 			    depth, bpp, sizes->surface_depth, sizes->surface_bpp);
-		return false;
+		return NULL;
 	}
 
-	return true;
+	new = intel_bo_fbdev_bios_fb_takeover(fb->base.obj[0]);
+	if (IS_ERR(new))
+		return ERR_CAST(new);
+	if (fb->base.obj[0] == new)
+		return fb;
+
+	/* Different object, re-create an intel_framebuffer around it */
+	return __intel_fbdev_fb_realloc(display, &fb->base, new);
 }
+
 
 int intel_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 				   struct drm_fb_helper_surface_size *sizes)
@@ -305,9 +341,19 @@ int intel_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 
 	ifbdev->fb = NULL;
 
-	if (fb && !bios_fb_ok(fb, sizes)) {
-		drm_framebuffer_put(&fb->base);
-		fb = NULL;
+	if (fb) {
+		struct intel_framebuffer *bios_fb =
+			bios_fb_pick(fb, sizes);
+
+		if (IS_ERR(bios_fb)) {
+			drm_dbg_kms(display->drm, "Re-using BIOS fb failed (%pe).", bios_fb);
+			bios_fb = NULL;
+		}
+
+		if (fb != bios_fb) {
+			drm_framebuffer_put(&fb->base);
+			fb = bios_fb;
+		}
 	}
 
 	wakeref = intel_display_rpm_get(display);
@@ -316,7 +362,7 @@ int intel_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 		drm_dbg_kms(display->drm,
 			    "no BIOS fb, allocating a new one\n");
 
-		fb = __intel_fbdev_fb_alloc(display, sizes);
+		fb = __intel_fbdev_fb_alloc(display, sizes, NULL);
 		if (IS_ERR(fb)) {
 			ret = PTR_ERR(fb);
 			goto out_unlock;

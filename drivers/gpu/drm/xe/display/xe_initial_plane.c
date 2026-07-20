@@ -14,7 +14,6 @@
 #include "intel_display_types.h"
 
 #include "xe_bo.h"
-#include "xe_display_bo.h"
 #include "xe_display_vma.h"
 #include "xe_fb_pin.h"
 #include "xe_ggtt.h"
@@ -90,13 +89,6 @@ initial_plane_bo(struct xe_device *xe,
 
 		flags |= XE_BO_FLAG_STOLEN;
 		phys_base -= xe_ttm_stolen_gpu_offset(xe);
-
-		if (IS_ENABLED(CONFIG_FRAMEBUFFER_CONSOLE) &&
-		    IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION) &&
-		    !xe_display_bo_fbdev_prefer_stolen(xe, plane_config->size)) {
-			drm_info(&xe->drm, "Initial FB size exceeds half of stolen, discarding\n");
-			return NULL;
-		}
 	}
 
 	original_ggtt_node = xe_ggtt_reserve_area(tile0->mem.ggtt, base, size);
