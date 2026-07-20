@@ -1083,6 +1083,39 @@ unlock:
 }
 
 /*
+ * Avoid taking i_es_lock for writing if the entire extent is already cached.
+ * ext4_es_cache_extent() rechecks under the write lock if the cache changes
+ * after this read-side check.
+ */
+void ext4_es_cache_extent_if_missing(struct inode *inode, ext4_lblk_t lblk,
+				     ext4_lblk_t len, ext4_fsblk_t pblk,
+				     unsigned int status)
+{
+	struct extent_status *es;
+	ext4_lblk_t end;
+	bool cached;
+
+	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+		return;
+
+	if (!len)
+		return;
+
+	end = lblk + len - 1;
+	if (WARN_ON_ONCE(end < lblk))
+		return;
+
+	read_lock(&EXT4_I(inode)->i_es_lock);
+	es = __es_tree_search(&EXT4_I(inode)->i_es_tree.root, lblk);
+	cached = es && es->es_lblk <= lblk && ext4_es_end(es) >= end &&
+		 !__es_check_extent_status(es, status, NULL);
+	read_unlock(&EXT4_I(inode)->i_es_lock);
+
+	if (!cached)
+		ext4_es_cache_extent(inode, lblk, len, pblk, status);
+}
+
+/*
  * ext4_es_lookup_extent() looks up an extent in extent status tree.
  *
  * ext4_es_lookup_extent is called by ext4_map_blocks/ext4_da_map_blocks.

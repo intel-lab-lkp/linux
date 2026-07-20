@@ -4310,6 +4310,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		ext4_lblk_t ee_block = le32_to_cpu(ex->ee_block);
 		ext4_fsblk_t ee_start = ext4_ext_pblock(ex);
 		unsigned short ee_len;
+		unsigned int status;
 
 
 		/*
@@ -4317,6 +4318,8 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		 * we split out initialized portions during a write.
 		 */
 		ee_len = ext4_ext_get_actual_len(ex);
+		status = ext4_ext_is_unwritten(ex) ?
+			 EXTENT_STATUS_UNWRITTEN : EXTENT_STATUS_WRITTEN;
 
 		trace_ext4_ext_show_extent(inode, ee_block, ee_start, ee_len);
 
@@ -4327,6 +4330,12 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 			allocated = ee_len - (map->m_lblk - ee_block);
 			ext_debug(inode, "%u fit into %u:%d -> %llu\n",
 				  map->m_lblk, ee_block, ee_len, newblock);
+
+			if (!(flags & (EXT4_GET_BLOCKS_CREATE |
+				       EXT4_EX_NOCACHE)))
+				ext4_es_cache_extent_if_missing(inode, ee_block,
+								ee_len, ee_start,
+								status);
 
 			/*
 			 * If the extent is initialized check whether the
