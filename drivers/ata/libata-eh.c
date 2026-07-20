@@ -653,23 +653,36 @@ int ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap,
 			if (qc->scsicmd != scmd)
 				continue;
 			if ((qc->flags & ATA_QCFLAG_ACTIVE) ||
-			    qc == qc->dev->link->deferred_qc)
+			    (qc->flags & ATA_QCFLAG_DEFERRED))
 				break;
 		}
 
-		if (i < ATA_MAX_QUEUE && qc == qc->dev->link->deferred_qc) {
+		if (i < ATA_MAX_QUEUE && (qc->flags & ATA_QCFLAG_DEFERRED)) {
 			/*
-			 * This is a deferred command that timed out while
-			 * waiting for the command queue to drain. Since the qc
-			 * is not active yet (deferred_qc is still set, so the
-			 * deferred qc work has not issued the command yet),
-			 * simply signal the timeout by finishing the SCSI
-			 * command and clear the deferred qc to prevent the
-			 * deferred qc work from issuing this qc.
+			 * This is a deferred qc, which we need to either retry
+			 * if flagged with ATA_QCFLAG_RETRY, or otherwise
+			 * terminate as it timed out while waiting for the
+			 * command queue to drain. Since the qc is not active
+			 * yet, mark it as belonging to EH and finish the SCSI
+			 * command so that ata_eh_finish() signals the timeout.
 			 */
 			WARN_ON_ONCE(qc->flags & ATA_QCFLAG_ACTIVE);
 			qc->dev->link->deferred_qc = NULL;
 			cancel_work(&qc->dev->link->deferred_qc_work);
+
+			if (qc->flags & ATA_QCFLAG_RETRY) {
+				/*
+				 * Retry the qc: do not change its allowed retry
+				 * count as ata_eh_finish() -> ata_eh_qc_retry()
+				 * will take care of that.
+				 */
+				set_host_byte(scmd, DID_REQUEUE);
+				scsi_eh_finish_cmd(scmd, &ap->eh_done_q);
+				continue;
+			}
+
+			qc->err_mask |= AC_ERR_TIMEOUT;
+			qc->flags |= ATA_QCFLAG_EH;
 			set_host_byte(scmd, DID_TIME_OUT);
 			scsi_eh_finish_cmd(scmd, &ap->eh_done_q);
 		} else if (i < ATA_MAX_QUEUE) {
@@ -948,10 +961,10 @@ static void ata_eh_set_pending(struct ata_port *ap, bool fastdrain)
 	ap->pflags |= ATA_PFLAG_EH_PENDING;
 
 	/*
-	 * If we have a deferred qc, requeue it so that it is retried once EH
-	 * completes.
+	 * If we have deferred QCs, requeue them so that the SCSI EH task can
+	 * run.
 	 */
-	ata_scsi_requeue_deferred_qc(ap);
+	ata_scsi_requeue_deferred_qc(ap, NULL);
 
 	if (!fastdrain)
 		return;
@@ -1214,8 +1227,19 @@ static void __ata_eh_qc_complete(struct ata_queued_cmd *qc)
 	struct scsi_cmnd *scmd = qc->scsicmd;
 	unsigned long flags;
 
+	/*
+	 * If we are retrying a deferred QC after a timeout, it is not active
+	 * and we already called scsi_eh_finish_cmd() in
+	 * ata_scsi_cmd_error_handler(). So all we need to do is to complete it
+	 * directly.
+	 */
 	spin_lock_irqsave(ap->lock, flags);
 	qc->scsidone = ata_eh_scsidone;
+	if (qc->flags & ATA_QCFLAG_DEFERRED) {
+		qc->complete_fn(qc);
+		spin_unlock_irqrestore(ap->lock, flags);
+		return;
+	}
 	__ata_qc_complete(qc);
 	WARN_ON(ata_tag_valid(qc->tag));
 	spin_unlock_irqrestore(ap->lock, flags);

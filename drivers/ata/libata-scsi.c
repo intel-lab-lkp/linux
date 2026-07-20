@@ -1681,31 +1681,63 @@ void ata_scsi_deferred_qc_work(struct work_struct *work)
 	if (qc && !ata_port_eh_scheduled(ap)) {
 		WARN_ON_ONCE(ap->ops->qc_defer(qc));
 		link->deferred_qc = NULL;
+		qc->flags &= ~ATA_QCFLAG_DEFERRED;
 		ata_qc_issue(ap, qc);
 	}
 
 	spin_unlock_irqrestore(ap->lock, flags);
 }
 
-void ata_scsi_requeue_deferred_qc(struct ata_port *ap)
+void ata_scsi_requeue_deferred_qc(struct ata_port *ap,
+				  struct scsi_cmnd *timedout_scmd)
 {
+	struct ata_queued_cmd *qc;
 	struct ata_link *link;
 
 	lockdep_assert_held(ap->lock);
 
 	/*
-	 * If we have a deferred qc when a reset occurs or NCQ commands fail,
-	 * do not try to be smart about what to do with this deferred command
-	 * and simply requeue it by completing it with DID_REQUEUE.
+	 * Trigger EH for any deferred qc, to either retry them or handle one
+	 * that timed out.
 	 */
 	ata_for_each_link(link, ap, PMP_FIRST) {
-		struct ata_queued_cmd *qc = link->deferred_qc;
+		qc = link->deferred_qc;
+		if (!qc)
+			continue;
 
-		if (qc) {
-			link->deferred_qc = NULL;
-			cancel_work(&link->deferred_qc_work);
+		link->deferred_qc = NULL;
+		cancel_work(&link->deferred_qc_work);
+
+		if (!timedout_scmd) {
+			/*
+			 * We are retrying due to some error. Complete the
+			 * request and ask for a requeue. In this case, since EH
+			 * was scheduled already, the block layer attempting to
+			 * re-issue the command immediately will not lead to the
+			 * device being kept busy, thus allowing SCSI EH task to
+			 * run.
+			 */
 			ata_scsi_qc_done(qc, true, DID_REQUEUE << 16);
+			continue;
 		}
+
+		/*
+		 * We are being called from scsi_timeout(). scsi_eh_scmd_add()
+		 * will add the command to eh_work_q and it will be handled by
+		 * ata_scsi_cmd_error_handler(). So here, we only need to
+		 * indicate if we want a retry if the command did not timeout.
+		 */
+		if (qc->scsicmd != timedout_scmd)
+			qc->flags |= ATA_QCFLAG_RETRY;
+
+		/*
+		 * Schedule EH, but set EH pending on the port so that we do not
+		 * reenter this function from ata_eh_set_pending() with
+		 * timedout_scmd being NULL and erroneously retry deferred QCs
+		 * that have timed out on other links.
+		 */
+		ap->pflags |= ATA_PFLAG_EH_PENDING;
+		ata_qc_schedule_eh(qc);
 	}
 }
 
@@ -1725,12 +1757,44 @@ static void ata_scsi_schedule_deferred_qc(struct ata_link *link)
 		return;
 
 	if (ata_port_eh_scheduled(ap)) {
-		ata_scsi_requeue_deferred_qc(ap);
+		ata_scsi_requeue_deferred_qc(ap, NULL);
 		return;
 	}
 	if (!ap->ops->qc_defer(qc))
 		queue_work(system_highpri_wq, &link->deferred_qc_work);
 }
+
+static void ata_scsi_retry_deferred_qc(struct ata_port *ap,
+				       struct scsi_cmnd *scmd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(ap->lock, flags);
+	ata_scsi_requeue_deferred_qc(ap, scmd);
+	spin_unlock_irqrestore(ap->lock, flags);
+}
+
+enum scsi_timeout_action ata_scsi_eh_timed_out(struct scsi_cmnd *scmd)
+{
+	struct ata_port *ap = ata_shost_to_port(scmd->device->host);
+
+	/*
+	 * ata_scsi_cmd_error_handler() takes care of timed-out deferred queued
+	 * commands. However, if we had any other command time out and we have
+	 * deferred QCs, we must let scsi_timeout() handle them with
+	 * scsi_eh_scmd_add() so that we do not unnecessarilly delay starting
+	 * the SCSI EH task. So requeue all deferred queued commands for retry
+	 * through libata EH.
+	 */
+	ata_scsi_retry_deferred_qc(ap, scmd);
+
+	/*
+	 * Let scsi_timeout() know that it must continue with handling the
+	 * timeout as we in fact did not do much here.
+	 */
+	return SCSI_EH_NOT_HANDLED;
+}
+EXPORT_SYMBOL_GPL(ata_scsi_eh_timed_out);
 
 static void ata_scsi_qc_complete(struct ata_queued_cmd *qc)
 {
@@ -1825,6 +1889,7 @@ defer_qc:
 	 * commands complete.
 	 */
 	if (!ata_is_ncq(qc->tf.protocol)) {
+		qc->flags |= ATA_QCFLAG_DEFERRED;
 		link->deferred_qc = qc;
 		return 0;
 	}
@@ -2913,6 +2978,7 @@ static void atapi_qc_complete(struct ata_queued_cmd *qc)
 
 	/* handle completion from EH */
 	if (unlikely(err_mask || qc->flags & ATA_QCFLAG_SENSE_VALID)) {
+		u32 result = SAM_STAT_CHECK_CONDITION;
 
 		if (!(qc->flags & ATA_QCFLAG_SENSE_VALID))
 			ata_gen_passthru_sense(qc);
@@ -2933,7 +2999,15 @@ static void atapi_qc_complete(struct ata_queued_cmd *qc)
 		if (qc->cdb[0] == ALLOW_MEDIUM_REMOVAL && qc->dev->sdev)
 			qc->dev->sdev->locked = 0;
 
-		ata_scsi_qc_done(qc, true, SAM_STAT_CHECK_CONDITION);
+		if (qc->err_mask & AC_ERR_TIMEOUT)
+			result = DID_TIME_OUT << 16;
+
+		ata_scsi_qc_done(qc, true, result);
+		return;
+	}
+
+	if (qc->flags & ATA_QCFLAG_RETRY) {
+		ata_scsi_qc_done(qc, true, DID_REQUEUE << 16);
 		return;
 	}
 
