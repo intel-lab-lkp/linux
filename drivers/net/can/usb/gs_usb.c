@@ -72,8 +72,8 @@ enum gs_usb_breq {
 	GS_USB_BREQ_SET_TERMINATION,
 	GS_USB_BREQ_GET_TERMINATION,
 	GS_USB_BREQ_GET_STATE,
-	__GS_USB_BREQ_PLACEHOLDER_15,
-	__GS_USB_BREQ_PLACEHOLDER_16,
+	GS_USB_BREQ_SET_FILTER,
+	GS_USB_BREQ_GET_FILTER,
 	__GS_USB_BREQ_PLACEHOLDER_17,
 	__GS_USB_BREQ_PLACEHOLDER_18,
 	__GS_USB_BREQ_PLACEHOLDER_19,
@@ -119,6 +119,10 @@ enum gs_can_termination_state {
 
 #define GS_USB_TERMINATION_DISABLED CAN_TERMINATION_DISABLED
 #define GS_USB_TERMINATION_ENABLED 120
+
+enum gs_device_filter_dev {
+	GS_DEVICE_FILTER_DEV_BXCAN = 1,         /* bxcan, 14 filters */
+};
 
 /* data types passed between host and device */
 
@@ -171,6 +175,27 @@ struct gs_device_termination_state {
 	__le32 state;
 } __packed;
 
+struct gs_device_filter_info {
+	u8 dev;		/* enum gs_device_filter_dev */
+	u8 reserved[3];
+}  __packed __aligned(4);
+
+struct gs_device_filter_bxcan {
+	__le32 fs1r;
+	__le32 fm1r;
+	__le32 ffa1r;
+	__le32 fa1r;
+	__le32 fr1[14];
+	__le32 fr2[14];
+} __packed __aligned(4);
+
+struct gs_device_filter {
+	struct gs_device_filter_info info;
+	union {
+		struct gs_device_filter_bxcan bxcan;
+	};
+} __packed __aligned(4);
+
 #define GS_CAN_FEATURE_LISTEN_ONLY BIT(0)
 #define GS_CAN_FEATURE_LOOP_BACK BIT(1)
 #define GS_CAN_FEATURE_TRIPLE_SAMPLE BIT(2)
@@ -192,6 +217,7 @@ struct gs_device_termination_state {
 #define GS_CAN_FEATURE_ELM_DEV_FLAG_SEND_USB_BLOBS BIT(15)
 /* supported by Elmue firmware 0x260528 only */
 #define GS_CAN_FEATURE_ELM_DEV_FLAG_SEND_USB_BLOBS_260528 BIT(16)
+#define GS_CAN_FEATURE_FILTER BIT(16)
 #define GS_CAN_FEATURE_MASK GENMASK(16, 0)
 
 /* internal quirks - keep in GS_CAN_FEATURE space for now */
