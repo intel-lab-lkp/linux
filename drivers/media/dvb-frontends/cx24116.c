@@ -533,22 +533,28 @@ static int cx24116_cmd_execute(struct dvb_frontend *fe, struct cx24116_cmd *cmd)
 	/* Write the command */
 	for (i = 0; i < cmd->len ; i++) {
 		dprintk("%s: 0x%02x == 0x%02x\n", __func__, i, cmd->args[i]);
-		cx24116_writereg(state, i, cmd->args[i]);
+		ret = cx24116_writereg(state, i, cmd->args[i]);
+		if (ret)
+			return ret;
 	}
 
 	/* Start execution and wait for cmd to terminate */
-	cx24116_writereg(state, CX24116_REG_EXECUTE, 0x01);
-	while (cx24116_readreg(state, CX24116_REG_EXECUTE)) {
+	ret = cx24116_writereg(state, CX24116_REG_EXECUTE, 0x01);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < 65; i++) {
+		ret = cx24116_readreg(state, CX24116_REG_EXECUTE);
+		if (ret < 0)
+			return ret;
+		if (!ret)
+			return 0;
+
 		msleep(10);
-		if (i++ > 64) {
-			/* Avoid looping forever if the firmware does
-				not respond */
-			printk(KERN_WARNING "%s() Firmware not responding\n",
-				__func__);
-			return -EREMOTEIO;
-		}
 	}
-	return 0;
+
+	dev_warn(&state->i2c->dev, "Firmware not responding\n");
+	return -EREMOTEIO;
 }
 
 static int cx24116_load_firmware(struct dvb_frontend *fe,
