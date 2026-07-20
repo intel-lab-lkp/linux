@@ -114,11 +114,17 @@ static int lp5860_iterate_subleds(struct lp5860_led *led, struct led_init_data *
 		}
 
 		ret = fwnode_property_read_u32(led_node, "reg", &channel);
-		if (ret < 0 || channel > LP5860_MAX_LED) {
+		if (ret < 0) {
 			dev_err_probe(led->chip->dev, ret,
 				      "%pfwP: 'reg' property is missing. Skipping.\n", led_node);
 			fwnode_handle_put(led_node);
 			return ret;
+		}
+		if (channel > LP5860_MAX_LED) {
+			dev_err(led->chip->dev, "%pfwP: 'reg' property is out of range.\n",
+				led_node);
+			fwnode_handle_put(led_node);
+			return -EINVAL;
 		}
 
 		led->mc_cdev.subled_info[subled].color_index = color_index;
