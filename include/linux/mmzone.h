@@ -2011,6 +2011,14 @@ struct mem_section {
 	unsigned long section_mem_map;
 
 	struct mem_section_usage *usage;
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+	/*
+	 * Normally, sections hold regular (order-0) pages. However, for
+	 * sections with HVO enabled, this tracks the compound page order
+	 * to enable deduplication of redundant vmemmap pages.
+	 */
+	unsigned int order;
+#endif
 #ifdef CONFIG_PAGE_EXTENSION
 	/*
 	 * If SPARSEMEM, pgdat doesn't have page_ext pointer. We use
@@ -2365,8 +2373,14 @@ static inline unsigned long next_present_section_nr(unsigned long section_nr)
 #endif
 
 #else
+struct mem_section;
+
 #define sparse_vmemmap_init_nid_early(_nid) do {} while (0)
 #define pfn_in_present_section pfn_valid
+static inline struct mem_section *__pfn_to_section(unsigned long pfn)
+{
+	return NULL;
+}
 #endif /* CONFIG_SPARSEMEM */
 
 /*
