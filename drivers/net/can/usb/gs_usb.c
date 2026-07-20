@@ -89,6 +89,7 @@ enum gs_usb_breq {
 	__GS_USB_BREQ_ELM_PLACEHOLDER_29,
 	__GS_USB_BREQ_ELM_PLACEHOLDER_30,
 	__GS_USB_BREQ_ELM_PLACEHOLDER_31,
+	GS_USB_BREQ_BUS_OFF_RECOVERY = 32,
 };
 
 enum gs_can_mode {
@@ -217,6 +218,10 @@ struct gs_device_tdc {
 	__le32 mode;
 } __packed __aligned(4);
 
+struct gs_device_bus_off_recovery {
+	u32 unused;
+} __packed __aligned(4);
+
 #define GS_CAN_FEATURE_LISTEN_ONLY BIT(0)
 #define GS_CAN_FEATURE_LOOP_BACK BIT(1)
 #define GS_CAN_FEATURE_TRIPLE_SAMPLE BIT(2)
@@ -240,7 +245,8 @@ struct gs_device_tdc {
 #define GS_CAN_FEATURE_ELM_DEV_FLAG_SEND_USB_BLOBS_260528 BIT(16)
 #define GS_CAN_FEATURE_FILTER BIT(16)
 #define GS_CAN_FEATURE_TDC BIT(17)
-#define GS_CAN_FEATURE_MASK GENMASK(17, 0)
+#define GS_CAN_FEATURE_BUS_OFF_RECOVERY BIT(18)
+#define GS_CAN_FEATURE_MASK GENMASK(18, 0)
 
 /* internal quirks - keep in GS_CAN_FEATURE space for now */
 
@@ -573,14 +579,22 @@ static void gs_update_state(struct gs_can *dev, struct can_frame *cf,
 		return;
 
 	/* some firmware does automatically CAN bus off recovery, account for this */
-	if (cf->can_id & CAN_ERR_RESTARTED ||
-	    (dev->can.state == CAN_STATE_BUS_OFF && new_state < CAN_STATE_BUS_OFF)) {
+	if (!(dev->feature & GS_CAN_FEATURE_BUS_OFF_RECOVERY) &&
+	    (cf->can_id & CAN_ERR_RESTARTED ||
+	     (dev->can.state == CAN_STATE_BUS_OFF && new_state < CAN_STATE_BUS_OFF))) {
 		can_stats->restarts++;
 		/* some firmware doesn't set CAN_ERR_RESTARTED, fixup */
 		cf->can_id |= CAN_ERR_RESTARTED;
 	}
 
 	can_change_state(dev->can.dev, cf, tx_state, rx_state);
+
+	/* If device supports explicit CAN bus off recovery by the host, use default CAN bus off
+	 * handler. Otherwise the device will recover itself.
+	 */
+	if (new_state == CAN_STATE_BUS_OFF &&
+	    dev->feature & GS_CAN_FEATURE_BUS_OFF_RECOVERY)
+		can_bus_off(dev->netdev);
 }
 
 static u32 gs_usb_set_timestamp(struct gs_can *dev, struct sk_buff *skb,
@@ -1243,6 +1257,9 @@ static int gs_can_open(struct net_device *netdev)
 	if (dev->feature & GS_CAN_FEATURE_TDC)
 		flags |= GS_CAN_FEATURE_TDC;
 
+	if (dev->feature & GS_CAN_FEATURE_BUS_OFF_RECOVERY)
+		flags |= GS_CAN_FEATURE_BUS_OFF_RECOVERY;
+
 	rc = gs_usb_set_bittiming(dev);
 	if (rc) {
 		netdev_err(netdev, "failed to set bittiming: %pe\n", ERR_PTR(rc));
@@ -1326,6 +1343,27 @@ static int gs_usb_get_state(const struct net_device *netdev,
 	*state = le32_to_cpu(ds.state);
 	bec->txerr = le32_to_cpu(ds.txerr);
 	bec->rxerr = le32_to_cpu(ds.rxerr);
+
+	return 0;
+}
+
+static int gs_usb_set_mode(struct net_device *netdev, enum can_mode mode)
+{
+	struct gs_can *dev = netdev_priv(netdev);
+
+	switch (mode) {
+	case CAN_MODE_START: {
+		struct gs_device_bus_off_recovery bus_off_recovery = { 0 };
+
+		return usb_control_msg_send(dev->udev, 0, GS_USB_BREQ_BUS_OFF_RECOVERY,
+					    USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
+					    dev->channel, 0,
+					    &bus_off_recovery, sizeof(bus_off_recovery),
+					    USB_CTRL_SET_TIMEOUT, GFP_KERNEL);
+	}
+	default:
+		return -EOPNOTSUPP;
+	}
 
 	return 0;
 }
@@ -1734,6 +1772,9 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 		dev->can.fd.tdc_const = &dev->tdc_const;
 		dev->can.fd.do_get_auto_tdcv = gs_usb_get_auto_tdcv;
 	}
+
+	if (feature & GS_CAN_FEATURE_BUS_OFF_RECOVERY)
+		dev->can.do_set_mode = gs_usb_set_mode;
 
 	can_rx_offload_add_manual(netdev, &dev->offload, GS_NAPI_WEIGHT);
 	SET_NETDEV_DEV(netdev, &intf->dev);
