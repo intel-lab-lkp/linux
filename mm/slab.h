@@ -615,7 +615,7 @@ static inline size_t cache_obj_ext_size(struct kmem_cache *s)
 {
 	size_t sz = 0;
 
-	if (IS_ENABLED(CONFIG_MEMCG))
+	if (cache_needs_objcg(s))
 		sz += 1;
 
 	if (slab_obj_ext_has_codetag())
@@ -626,7 +626,15 @@ static inline size_t cache_obj_ext_size(struct kmem_cache *s)
 
 static inline size_t slab_obj_ext_size(struct slab *slab)
 {
-	return cache_obj_ext_size(slab->slab_cache);
+	size_t sz = 0;
+
+	if (slab_needs_objcg(slab))
+		sz += 1;
+
+	if (slab_obj_ext_has_codetag())
+		sz += 1;
+
+	return sizeof(struct slabobj_ext) * sz;
 }
 
 #ifdef CONFIG_SLAB_OBJ_EXT
@@ -753,7 +761,7 @@ static inline void slab_obj_ext_set_objcg(struct slabobj_ext *obj_ext,
 static inline union codetag_ref *
 slab_obj_ext_codetag_ref(struct slab *slab, struct slabobj_ext *obj_ext)
 {
-	if (IS_ENABLED(CONFIG_MEMCG))
+	if (slab_needs_objcg(slab))
 		obj_ext += 1;
 
 	return &obj_ext->_ctref;
