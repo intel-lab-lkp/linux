@@ -94,11 +94,10 @@ int ksmbd_decompress_request(struct ksmbd_conn *conn)
  */
 int ksmbd_compress_response(struct ksmbd_work *work)
 {
-	struct smb2_compression_hdr *chdr;
 	struct smb2_hdr *req_hdr;
-	u32 src_len, dst_len, compressed_pdu_len, max_dst_len;
 	u8 *src = NULL, *out = NULL, *p;
 	bool chained, pattern;
+	u32 src_len, dst_len;
 	int i, rc;
 
 	if (!work->compress_response || work->encrypted ||
@@ -140,54 +139,24 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 		goto out;
 	}
 
-	max_dst_len = smb_compress_alloc_size(src_len, chained, pattern);
-	out = kvzalloc(sizeof(__be32) + max_dst_len,
+	dst_len = smb_compress_alloc_size(src_len, chained, pattern);
+	out = kvzalloc(sizeof(__be32) + dst_len,
 		       KSMBD_DEFAULT_GFP);
 	if (!out) {
 		rc = -ENOMEM;
 		goto out;
 	}
 
-	if (chained) {
-		dst_len = max_dst_len;
-		rc = smb_compression_compress(SMB3_COMPRESS_LZ77, chained, pattern,
-					      src, src_len,
-					      out + sizeof(__be32),
-					      &dst_len);
-		if (rc == -EMSGSIZE || dst_len >= src_len) {
-			rc = 0;
-			goto out;
-		}
-		if (rc)
-			goto out;
-		compressed_pdu_len = dst_len;
-	} else {
-		/*
-		 * Peers which did not negotiate chained compression still use
-		 * the original 16-byte unchained transform format.
-		 */
-		dst_len = smb_lz77_compressed_alloc_size(src_len);
-		rc = smb_lz77_compress(src, src_len,
-				       out + sizeof(__be32) + sizeof(*chdr),
-				       &dst_len);
-		if (rc == -EMSGSIZE ||
-		    dst_len + sizeof(*chdr) >= src_len) {
-			rc = 0;
-			goto out;
-		}
-		if (rc)
-			goto out;
-
-		compressed_pdu_len = sizeof(*chdr) + dst_len;
-		chdr = (struct smb2_compression_hdr *)(out + sizeof(__be32));
-		chdr->ProtocolId = SMB2_COMPRESSION_TRANSFORM_ID;
-		chdr->OriginalCompressedSegmentSize = cpu_to_le32(src_len);
-		chdr->CompressionAlgorithm = SMB3_COMPRESS_LZ77;
-		chdr->Flags = cpu_to_le16(SMB2_COMPRESSION_FLAG_NONE);
-		chdr->Offset = 0;
+	rc = smb_compression_compress(SMB3_COMPRESS_LZ77, chained, pattern,
+				      src, src_len,
+				      out + sizeof(__be32),
+				      &dst_len);
+	if (rc == -EMSGSIZE || dst_len >= src_len) {
+		rc = 0;
+		goto out;
 	}
 
-	*(__be32 *)out = cpu_to_be32(compressed_pdu_len);
+	*(__be32 *)out = cpu_to_be32(dst_len);
 
 	/*
 	 * Keep the transform in work->compress_buf until send completion.
@@ -198,7 +167,7 @@ int ksmbd_compress_response(struct ksmbd_work *work)
 	work->iov[0].iov_base = out;
 	work->iov[0].iov_len = sizeof(__be32);
 	work->iov[1].iov_base = out + sizeof(__be32);
-	work->iov[1].iov_len = compressed_pdu_len;
+	work->iov[1].iov_len = dst_len;
 	work->iov_cnt = 2;
 	work->iov_idx = 1;
 	out = NULL;
