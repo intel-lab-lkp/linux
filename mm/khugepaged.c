@@ -2262,6 +2262,7 @@ static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collap
 	enum scan_result result = SCAN_SUCCEED;
 	const int is_shmem = state->is_shmem;
 	struct folio *folio;
+	bool dirty;
 
 	folio = collapse_read_folio(index, state);
 	if (!folio)
@@ -2278,6 +2279,31 @@ static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collap
 		goto xa_unlocked;
 	}
 
+	if (!is_shmem) {
+		dirty = folio_test_dirty(folio);
+		if (dirty || folio_test_writeback(folio)) {
+			/*
+			 * This folio is either dirty or under writeback.
+			 * khugepaged cannot operate on such folios.
+			 *
+			 * For dirty folios, trigger async flush for
+			 * read-only files and hope the writeback is done
+			 * when khugepaged revisits this page. Writable
+			 * files can have their folios dirty at any time;
+			 * blindly flushing them would cause undesirable
+			 * system-wide writeback.
+			 *
+			 * This is a one-off situation. We are not
+			 * forcing writeback in loop.
+			 */
+			xas_unlock_irq(state->xas);
+			if (dirty && !inode_is_open_for_write(mapping->host))
+				filemap_flush(mapping);
+			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+			goto xa_unlocked;
+		}
+	}
+
 	if (is_shmem) {
 		if (folio_trylock(folio)) {
 			folio_get(folio);
@@ -2286,31 +2312,7 @@ static enum scan_result prepare_collapse_file_folio(pgoff_t index, struct collap
 			goto xa_locked;
 		}
 	} else {	/* !is_shmem */
-		if (folio_test_dirty(folio)) {
-			/*
-			 * This page is dirty because it hasn't
-			 * been flushed since first write.
-			 *
-			 * Trigger async flush for read-only files and
-			 * hope the writeback is done when khugepaged
-			 * revisits this page. Writable files can have
-			 * their folios dirty at any time; blindly
-			 * flushing them would cause undesirable
-			 * system-wide writeback.
-			 *
-			 * This is a one-off situation. We are not
-			 * forcing writeback in loop.
-			 */
-			xas_unlock_irq(state->xas);
-			if (!inode_is_open_for_write(mapping->host))
-				filemap_flush(mapping);
-			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-			goto xa_unlocked;
-		} else if (folio_test_writeback(folio)) {
-			xas_unlock_irq(state->xas);
-			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-			goto xa_unlocked;
-		} else if (folio_trylock(folio)) {
+		if (folio_trylock(folio)) {
 			folio_get(folio);
 		} else {
 			result = SCAN_PAGE_LOCK;
