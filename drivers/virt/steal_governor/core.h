@@ -12,6 +12,11 @@
 #include <linux/workqueue.h>
 #include <linux/ktime.h>
 #include <linux/kconfig.h>
+#include <linux/kernel_stat.h>
+#include <linux/topology.h>
+#include <linux/sched/isolation.h>
+#include <linux/cleanup.h>
+#include <linux/math64.h>
 
 struct steal_governor {
 	struct delayed_work	work;
