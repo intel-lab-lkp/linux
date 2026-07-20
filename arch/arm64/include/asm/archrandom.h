@@ -61,8 +61,22 @@ static inline bool __arm64_rndrrs(unsigned long *v)
 
 static __always_inline bool __cpu_has_rng(void)
 {
-	if (unlikely(!system_capabilities_finalized() && !preemptible()))
-		return this_cpu_has_cap(ARM64_HAS_RNG);
+	if (unlikely(!system_capabilities_finalized() && !preemptible())) {
+		/*
+		 * Until the ARM64_HAS_RNG alternative is patched we can't use
+		 * the static-branch form, so consult the feature register
+		 * directly. Don't use this_cpu_has_cap() here: it reads
+		 * ID_AA64ISAR0_EL1 from hardware on every call, under
+		 * virtualization each ID register read traps to the hypervisor
+		 * (HCR_EL2.TID3) -- producing a storm of vmexits during boot.
+		 * The sanitised value is cached in memory.
+		 */
+		u64 isar0 = read_sanitised_ftr_reg(SYS_ID_AA64ISAR0_EL1);
+
+		return cpuid_feature_extract_unsigned_field(isar0,
+				ID_AA64ISAR0_EL1_RNDR_SHIFT) >=
+			ID_AA64ISAR0_EL1_RNDR_IMP;
+	}
 	return alternative_has_cap_unlikely(ARM64_HAS_RNG);
 }
 
