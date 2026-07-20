@@ -141,6 +141,8 @@ bool xe_display_bo_fbdev_prefer_stolen(struct xe_device *xe, unsigned int size)
 	if (XE_DEVICE_WA(xe, 22019338487_display))
 		return false;
 
+	return false;
+
 	/*
 	 * If the FB is too big, just don't use it since fbdev is not very
 	 * important and we should probably use that space with FBC or other
