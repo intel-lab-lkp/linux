@@ -2382,13 +2382,48 @@ static enum scan_result collapse_isolate_folio(struct collapse_file_state *state
 
 	if (!filemap_release_folio(folio, GFP_KERNEL)) {
 		result = SCAN_PAGE_HAS_PRIVATE;
-		folio_putback_lru(folio);
-		goto out_unlock;
+		goto out_putback;
 	}
 
 	if (folio_mapped(folio))
 		try_to_unmap(folio, TTU_IGNORE_MLOCK | TTU_BATCH_FLUSH);
+	/*
+	 * We control 2 + nr_pages references to the folio:
+	 *  - we hold a pin on it;
+	 *  - nr_pages reference from page cache;
+	 *  - one from lru_isolate_folio;
+	 * If those are the only references, then any new usage
+	 * of the folio will have to fetch it from the page
+	 * cache. That requires locking the folio to handle
+	 * truncate, so any new usage will be blocked until we
+	 * unlock folio after collapse/during rollback.
+	 */
+	if (folio_ref_count(folio) != 2 + folio_nr_pages(folio)) {
+		result = SCAN_PAGE_COUNT;
+		goto out_putback;
+	}
+
+	/*
+	 * At this point, the folio is locked and unmapped. If the PTE
+	 * was dirty, try_to_unmap() has transferred the dirty bit to
+	 * the folio and we must not collapse it into a clean
+	 * file-backed folio.
+	 *
+	 * If the folio is clean here, no one can write it until we
+	 * drop the folio lock. A write through a stale TLB entry came
+	 * from a clean PTE and must fault because the PTE has been
+	 * cleared; the fault path has to take the folio lock before
+	 * installing a writable mapping. Buffered write paths also
+	 * have to take the folio lock before modifying file contents
+	 * without a mapping, typically via write_begin_get_folio().
+	 */
+	if (!state->is_shmem && folio_test_dirty(folio)) {
+		result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
+		goto out_putback;
+	}
 	return SCAN_SUCCEED;
+out_putback:
+	folio_putback_lru(folio);
 out_unlock:
 	folio_unlock(folio);
 	folio_put(folio);
@@ -2514,54 +2549,10 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		VM_BUG_ON_FOLIO(folio != xa_load(xas.xa, index), folio);
 
 		/*
-		 * We control 2 + nr_pages references to the folio:
-		 *  - we hold a pin on it;
-		 *  - nr_pages reference from page cache;
-		 *  - one from lru_isolate_folio;
-		 * If those are the only references, then any new usage
-		 * of the folio will have to fetch it from the page
-		 * cache. That requires locking the folio to handle
-		 * truncate, so any new usage will be blocked until we
-		 * unlock folio after collapse/during rollback.
-		 */
-		if (folio_ref_count(folio) != 2 + folio_nr_pages(folio)) {
-			result = SCAN_PAGE_COUNT;
-			xas_unlock_irq(&xas);
-			folio_putback_lru(folio);
-			goto out_unlock;
-		}
-
-		/*
-		 * At this point, the folio is locked and unmapped. If the PTE
-		 * was dirty, try_to_unmap() has transferred the dirty bit to
-		 * the folio and we must not collapse it into a clean
-		 * file-backed folio.
-		 *
-		 * If the folio is clean here, no one can write it until we
-		 * drop the folio lock. A write through a stale TLB entry came
-		 * from a clean PTE and must fault because the PTE has been
-		 * cleared; the fault path has to take the folio lock before
-		 * installing a writable mapping. Buffered write paths also
-		 * have to take the folio lock before modifying file contents
-		 * without a mapping, typically via write_begin_get_folio().
-		 */
-		if (!is_shmem && folio_test_dirty(folio)) {
-			result = SCAN_PAGE_DIRTY_OR_WRITEBACK;
-			xas_unlock_irq(&xas);
-			folio_putback_lru(folio);
-			goto out_unlock;
-		}
-
-		/*
 		 * Accumulate the folios that are being collapsed.
 		 */
 		list_add_tail(&folio->lru, &pagelist);
 		index += folio_nr_pages(folio);
-		continue;
-out_unlock:
-		folio_unlock(folio);
-		folio_put(folio);
-		goto xa_unlocked;
 	}
 
 xa_locked:
