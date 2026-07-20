@@ -238,6 +238,7 @@ static int dev_rot_parse_report(struct platform_device *pdev,
 				u32 usage_id,
 				struct dev_rot_state *st)
 {
+	struct device *dev = &pdev->dev;
 	int ret;
 
 	ret = sensor_hub_input_get_attribute_info(hsdev,
@@ -248,11 +249,8 @@ static int dev_rot_parse_report(struct platform_device *pdev,
 	if (ret)
 		return ret;
 
-	dev_dbg(&pdev->dev, "dev_rot %x:%x\n", st->quaternion.index,
-		st->quaternion.report_id);
-
-	dev_dbg(&pdev->dev, "dev_rot: attrib size %d\n",
-				st->quaternion.size);
+	dev_dbg(dev, "dev_rot %x:%x\n", st->quaternion.index, st->quaternion.report_id);
+	dev_dbg(dev, "dev_rot: attrib size %d\n", st->quaternion.size);
 
 	st->scale_precision = hid_sensor_format_scale(
 				hsdev->usage,
@@ -265,14 +263,14 @@ static int dev_rot_parse_report(struct platform_device *pdev,
 /* Function to initialize the processing for usage id */
 static int hid_dev_rot_probe(struct platform_device *pdev)
 {
-	struct hid_sensor_hub_device *hsdev = dev_get_platdata(&pdev->dev);
+	struct device *dev = &pdev->dev;
+	struct hid_sensor_hub_device *hsdev = dev_get_platdata(dev);
 	int ret;
 	char *name;
 	struct iio_dev *indio_dev;
 	struct dev_rot_state *rot_state;
 
-	indio_dev = devm_iio_device_alloc(&pdev->dev,
-					  sizeof(struct dev_rot_state));
+	indio_dev = devm_iio_device_alloc(dev, sizeof(struct dev_rot_state));
 	if (!indio_dev)
 		return -ENOMEM;
 
@@ -302,13 +300,13 @@ static int hid_dev_rot_probe(struct platform_device *pdev)
 						 rotation_sensitivity_addresses,
 						 ARRAY_SIZE(rotation_sensitivity_addresses));
 	if (ret) {
-		dev_err(&pdev->dev, "failed to setup common attributes\n");
+		dev_err(dev, "failed to setup common attributes\n");
 		return ret;
 	}
 
 	ret = dev_rot_parse_report(pdev, hsdev, hsdev->usage, rot_state);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to setup attributes\n");
+		dev_err(dev, "failed to setup attributes\n");
 		return ret;
 	}
 
@@ -323,7 +321,7 @@ static int hid_dev_rot_probe(struct platform_device *pdev)
 	ret = hid_sensor_setup_trigger(indio_dev, name,
 				       &rot_state->common_attributes);
 	if (ret) {
-		dev_err(&pdev->dev, "trigger setup failed\n");
+		dev_err(dev, "trigger setup failed\n");
 		return ret;
 	}
 
@@ -333,13 +331,13 @@ static int hid_dev_rot_probe(struct platform_device *pdev)
 	ret = sensor_hub_register_callback(hsdev, hsdev->usage,
 					   &rot_state->callbacks);
 	if (ret) {
-		dev_err(&pdev->dev, "callback reg failed\n");
+		dev_err(dev, "callback reg failed\n");
 		goto error_remove_trigger;
 	}
 
 	ret = iio_device_register(indio_dev);
 	if (ret) {
-		dev_err(&pdev->dev, "device register failed\n");
+		dev_err(dev, "device register failed\n");
 		goto error_remove_callback;
 	}
 
