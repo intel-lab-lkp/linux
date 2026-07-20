@@ -670,6 +670,21 @@ gs_usb_state_get_by_hf(const struct gs_can *dev, const struct gs_host_frame *hf,
 			else
 				tx_state = CAN_STATE_ERROR_ACTIVE;
 		}
+
+		const u8 tx_err = hf->classic_can->data[6];
+		const u8 rx_err = hf->classic_can->data[7];
+
+		netdev_dbg(dev->netdev, "host_frame: TX-state='%s/%u' RX-state='%s/%u' %s%s%s%s%s%s%s",
+			   can_get_state_str(tx_state), tx_err,
+			   can_get_state_str(rx_state), rx_err,
+			   hf->can_id & cpu_to_le32(CAN_ERR_BUSOFF) ? "bus-off " : "",
+			   hf->can_id & cpu_to_le32(CAN_ERR_RESTARTED) ?
+			   "restarted-after-bus-off " : "",
+			   err_crtl & CAN_ERR_CRTL_RX_PASSIVE ? "rx-error-passive " : "",
+			   err_crtl & CAN_ERR_CRTL_RX_WARNING ? "rx-error-warning " : "",
+			   err_crtl & CAN_ERR_CRTL_TX_PASSIVE ? "tx-error-passive " : "",
+			   err_crtl & CAN_ERR_CRTL_TX_WARNING ? "tx-error-warning " : "",
+			   err_crtl & CAN_ERR_CRTL_ACTIVE ? "back-to-error-active " : "");
 	} else {
 		tx_state = dev->can.state;
 		rx_state = dev->can.state;
