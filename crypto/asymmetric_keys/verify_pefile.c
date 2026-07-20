@@ -14,6 +14,7 @@
 #include <linux/asn1.h>
 #include <linux/verification.h>
 #include <crypto/hash.h>
+#include <crypto/utils.h>
 #include "verify_pefile.h"
 
 /*
@@ -374,7 +375,7 @@ static int pefile_digest_pe(const void *pebuf, unsigned int pelen,
 	/* Check that the PE file digest matches that in the MSCODE part of the
 	 * PKCS#7 certificate.
 	 */
-	if (memcmp(digest, ctx->digest, ctx->digest_len) != 0) {
+	if (crypto_memneq(digest, ctx->digest, ctx->digest_len)) {
 		pr_warn("Digest mismatch\n");
 		ret = -EKEYREJECTED;
 	} else {
