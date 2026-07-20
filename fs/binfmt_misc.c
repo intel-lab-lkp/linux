@@ -50,6 +50,7 @@ enum binfmt_misc_entry_flags {
 	MISC_FMT_OPEN_BINARY	= (1U << 30),
 	MISC_FMT_CREDENTIALS	= (1U << 29),
 	MISC_FMT_OPEN_FILE	= (1U << 28),
+	MISC_FMT_TRANSPARENT	= (1U << 27),
 };
 
 /**
@@ -399,6 +400,10 @@ static int build_interp_argv(struct linux_binprm *bprm, const char *interpreter,
 {
 	int retval;
 
+	/* The interpreter has to be able to load the binary by path. */
+	if (bprm->interp_flags & BINPRM_FLAGS_PATH_INACCESSIBLE)
+		return -ENOENT;
+
 	/* The entry's own choice - not one accumulated from an earlier level. */
 	if (flags & MISC_FMT_PRESERVE_ARGV0) {
 		bprm->interp_flags |= BINPRM_FLAGS_PRESERVE_ARGV0;
@@ -457,10 +462,6 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	if (!fmt)
 		return -ENOEXEC;
 
-	/* Need to be able to load the file after exec */
-	if (bprm->interp_flags & BINPRM_FLAGS_PATH_INACCESSIBLE)
-		return -ENOENT;
-
 	interpreter = entry_select_interpreter(fmt, bprm);
 	if (IS_ERR(interpreter))
 		return PTR_ERR(interpreter);
@@ -471,11 +472,17 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	if (flags & MISC_FMT_OPEN_BINARY)
 		bprm->have_execfd = 1;
 
-	retval = build_interp_argv(bprm, interpreter, flags);
-	if (retval)
-		return retval;
+	if (flags & MISC_FMT_TRANSPARENT) {
+		/* No argv is built for a staged argument to land in. */
+		kfree(bprm->bpf_interp_arg);
+		bprm->bpf_interp_arg = NULL;
+	} else {
+		retval = build_interp_argv(bprm, interpreter, flags);
+		if (retval)
+			return retval;
+	}
 
-	/* Update interp in case binfmt_script needs it. */
+	/* Update interp for the next round; kernel-internal, not user-visible. */
 	retval = bprm_change_interp(interpreter, bprm);
 	if (retval < 0)
 		return retval;
@@ -483,6 +490,10 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	interp_file = entry_open_interpreter(fmt, interpreter);
 	if (IS_ERR(interp_file))
 		return PTR_ERR(interp_file);
+
+	/* Raise only past the last failure, or an -ENOEXEC decline leaks it. */
+	if (flags & MISC_FMT_TRANSPARENT)
+		bprm->interp_flags |= BINPRM_FLAGS_TRANSPARENT_INTERP;
 
 	bprm->interpreter = interp_file;
 	return 0;
