@@ -1231,7 +1231,9 @@ static int lynx_10g_set_mode(struct phy *phy, enum phy_mode mode, int submode)
 
 	lynx_10g_lane_change_proto_conf(lane, lane_mode);
 	lynx_10g_lane_remap_pll(lane, lane_mode);
-	WARN_ON(lynx_10g_lane_enable_pcvt(lane, lane_mode));
+	err = lynx_10g_lane_enable_pcvt(lane, lane_mode);
+	if (err)
+		goto out;
 
 	lane->mode = lane_mode;
 
