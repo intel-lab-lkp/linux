@@ -1671,7 +1671,6 @@ int iopf_queue_flush_dev(struct device *dev);
 struct iopf_queue *iopf_queue_alloc(const char *name);
 void iopf_queue_free(struct iopf_queue *queue);
 int iopf_queue_discard_partial(struct iopf_queue *queue);
-void iopf_free_group(struct iopf_group *group);
 int iommu_report_device_fault(struct device *dev, struct iopf_fault *evt);
 void iopf_group_response(struct iopf_group *group,
 			 enum iommu_page_response_code status);
@@ -1705,10 +1704,6 @@ static inline void iopf_queue_free(struct iopf_queue *queue)
 static inline int iopf_queue_discard_partial(struct iopf_queue *queue)
 {
 	return -ENODEV;
-}
-
-static inline void iopf_free_group(struct iopf_group *group)
-{
 }
 
 static inline int

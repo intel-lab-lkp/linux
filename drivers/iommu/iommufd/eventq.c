@@ -40,7 +40,6 @@ void iommufd_auto_response_faults(struct iommufd_hw_pagetable *hwpt,
 	list_for_each_entry_safe(group, next, &free_list, node) {
 		list_del(&group->node);
 		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
-		iopf_free_group(group);
 	}
 
 	xa_for_each(&fault->response, index, group) {
@@ -48,7 +47,6 @@ void iommufd_auto_response_faults(struct iommufd_hw_pagetable *hwpt,
 			continue;
 		xa_erase(&fault->response, index);
 		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
-		iopf_free_group(group);
 	}
 	mutex_unlock(&fault->mutex);
 }
@@ -70,12 +68,10 @@ void iommufd_fault_destroy(struct iommufd_object *obj)
 	list_for_each_entry_safe(group, next, &fault->common.deliver, node) {
 		list_del(&group->node);
 		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
-		iopf_free_group(group);
 	}
 	xa_for_each(&fault->response, index, group) {
 		xa_erase(&fault->response, index);
 		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
-		iopf_free_group(group);
 	}
 	xa_destroy(&fault->response);
 	mutex_destroy(&fault->mutex);
@@ -209,7 +205,6 @@ static ssize_t iommufd_fault_fops_write(struct file *filep, const char __user *b
 		}
 
 		iopf_group_response(group, response.code);
-		iopf_free_group(group);
 		done += response_size;
 	}
 	mutex_unlock(&fault->mutex);

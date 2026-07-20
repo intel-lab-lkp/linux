@@ -52,12 +52,11 @@ static void __iopf_free_group(struct iopf_group *group)
 	iopf_put_dev_fault_param(group->fault_param);
 }
 
-void iopf_free_group(struct iopf_group *group)
+static void iopf_free_group(struct iopf_group *group)
 {
 	__iopf_free_group(group);
 	kfree(group);
 }
-EXPORT_SYMBOL_GPL(iopf_free_group);
 
 /* Non-last request of a group. Postpone until the last one. */
 static int report_partial_fault(struct iommu_fault_param *fault_param,
@@ -168,6 +167,35 @@ static void iopf_error_response(struct device *dev, struct iopf_fault *evt)
 	ops->page_response(dev, evt, &resp);
 }
 
+static void __iopf_group_response_locked(struct iopf_group *group,
+					 enum iommu_page_response_code status)
+{
+	struct iommu_fault_param *fault_param = group->fault_param;
+	struct iopf_fault *iopf = &group->last_fault;
+	struct device *dev = fault_param->dev;
+	const struct iommu_ops *ops = dev_iommu_ops(dev);
+	struct iommu_page_response resp = {
+		.pasid = iopf->fault.prm.pasid,
+		.grpid = iopf->fault.prm.grpid,
+		.code = status,
+	};
+
+	lockdep_assert_held(&fault_param->lock);
+
+	ops->page_response(dev, &group->last_fault, &resp);
+	list_del_init(&group->pending_node);
+}
+
+static void __iopf_group_response(struct iopf_group *group,
+				  enum iommu_page_response_code status)
+{
+	struct iommu_fault_param *fault_param = group->fault_param;
+
+	mutex_lock(&fault_param->lock);
+	__iopf_group_response_locked(group, status);
+	mutex_unlock(&fault_param->lock);
+}
+
 /**
  * iommu_report_device_fault() - Report fault event to device driver
  * @dev: the device
@@ -255,10 +283,7 @@ int iommu_report_device_fault(struct device *dev, struct iopf_fault *evt)
 
 	group->attach_handle = attach_handle;
 
-	/*
-	 * On success iopf_handler must call iopf_group_response() and
-	 * iopf_free_group()
-	 */
+	/* On success iopf_handler must call iopf_group_response(). */
 	if (group->attach_handle->domain->iopf_handler(group))
 		goto err_abort;
 
@@ -267,7 +292,7 @@ int iommu_report_device_fault(struct device *dev, struct iopf_fault *evt)
 err_abort:
 	dev_warn_ratelimited(dev, "iopf with pasid %d aborted\n",
 			     fault->prm.pasid);
-	iopf_group_response(group, IOMMU_PAGE_RESP_FAILURE);
+	__iopf_group_response(group, IOMMU_PAGE_RESP_FAILURE);
 	if (group == &abort_group)
 		__iopf_free_group(group);
 	else
@@ -318,24 +343,15 @@ EXPORT_SYMBOL_GPL(iopf_queue_flush_dev);
  * iopf_group_response - Respond a group of page faults
  * @group: the group of faults with the same group id
  * @status: the response code
+ *
+ * The group will be freed as well and must not be accessed after
+ * this function returns.
  */
 void iopf_group_response(struct iopf_group *group,
 			 enum iommu_page_response_code status)
 {
-	struct iommu_fault_param *fault_param = group->fault_param;
-	struct iopf_fault *iopf = &group->last_fault;
-	struct device *dev = group->fault_param->dev;
-	const struct iommu_ops *ops = dev_iommu_ops(dev);
-	struct iommu_page_response resp = {
-		.pasid = iopf->fault.prm.pasid,
-		.grpid = iopf->fault.prm.grpid,
-		.code = status,
-	};
-
-	mutex_lock(&fault_param->lock);
-	ops->page_response(dev, &group->last_fault, &resp);
-	list_del_init(&group->pending_node);
-	mutex_unlock(&fault_param->lock);
+	__iopf_group_response(group, status);
+	iopf_free_group(group);
 }
 EXPORT_SYMBOL_GPL(iopf_group_response);
 
@@ -468,7 +484,6 @@ void iopf_queue_remove_device(struct iopf_queue *queue, struct device *dev)
 	struct iopf_group *group, *temp;
 	struct dev_iommu *param = dev->iommu;
 	struct iommu_fault_param *fault_param;
-	const struct iommu_ops *ops = dev_iommu_ops(dev);
 
 	mutex_lock(&queue->lock);
 	mutex_lock(&param->lock);
@@ -483,15 +498,7 @@ void iopf_queue_remove_device(struct iopf_queue *queue, struct device *dev)
 		kfree(partial_iopf);
 
 	list_for_each_entry_safe(group, temp, &fault_param->faults, pending_node) {
-		struct iopf_fault *iopf = &group->last_fault;
-		struct iommu_page_response resp = {
-			.pasid = iopf->fault.prm.pasid,
-			.grpid = iopf->fault.prm.grpid,
-			.code = IOMMU_PAGE_RESP_INVALID
-		};
-
-		ops->page_response(dev, iopf, &resp);
-		list_del_init(&group->pending_node);
+		__iopf_group_response_locked(group, IOMMU_PAGE_RESP_INVALID);
 		iopf_free_group(group);
 	}
 	mutex_unlock(&fault_param->lock);
