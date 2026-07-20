@@ -3343,9 +3343,13 @@ err_unlock:
 }
 
 /**
- * ice_ptp_init_work - Initialize PTP work threads
+ * ice_ptp_init_work - Initialize the PTP kworker
  * @pf: Board private structure
  * @ptp: PF PTP structure
+ *
+ * Allocate the kworker and initialize the periodic work function. The
+ * periodic work is not queued here; the caller starts it once the PTP
+ * state is ICE_PTP_READY.
  */
 static int ice_ptp_init_work(struct ice_pf *pf, struct ice_ptp *ptp)
 {
@@ -3363,9 +3367,6 @@ static int ice_ptp_init_work(struct ice_pf *pf, struct ice_ptp *ptp)
 		return PTR_ERR(kworker);
 
 	ptp->kworker = kworker;
-
-	/* Start periodic work going */
-	kthread_queue_delayed_work(ptp->kworker, &ptp->work, 0);
 
 	return 0;
 }
@@ -3489,6 +3490,29 @@ void ice_ptp_init(struct ice_pf *pf)
 	if (err)
 		goto err_clean_pf;
 
+	/* Seed the cached PTP link state from the current PHY link status
+	 * before starting the PHY timestamping block. On a fresh load the
+	 * port structure is zeroed (link_up == false); if the link is
+	 * already up at probe (for example after a PXE boot) no link-change
+	 * edge will follow, and ice_ptp_link_change() is edge-driven, so the
+	 * flag would stay stale. Seeding it here also lets
+	 * ice_ptp_reset_phy_timestamping() make the correct start/stop
+	 * decision instead of stopping the PHY timer on an already-up link.
+	 */
+	if (pf->hw.port_info)
+		ptp->port.link_up =
+			!!(pf->hw.port_info->phy.link_info.link_info &
+			ICE_AQ_LINK_UP);
+
+	/* Create the PTP kworker before (re)starting the PHY, because the
+	 * E82x restart path queues offset verification work on it, and
+	 * before ICE_PTP_READY is set, so a concurrent link event cannot
+	 * reach ice_ptp_port_phy_restart() while the kworker is still NULL.
+	 */
+	err = ice_ptp_init_work(pf, ptp);
+	if (err)
+		goto err_exit;
+
 	/* Start the PHY timestamping block */
 	ice_ptp_reset_phy_timestamping(pf);
 
@@ -3497,9 +3521,10 @@ void ice_ptp_init(struct ice_pf *pf)
 
 	ptp->state = ICE_PTP_READY;
 
-	err = ice_ptp_init_work(pf, ptp);
-	if (err)
-		goto err_exit;
+	/* Start periodic work only after the state is READY; the worker
+	 * returns without rescheduling while the state is not READY.
+	 */
+	kthread_queue_delayed_work(ptp->kworker, &ptp->work, 0);
 
 	dev_info(ice_pf_to_dev(pf), "PTP init successful\n");
 	return;
