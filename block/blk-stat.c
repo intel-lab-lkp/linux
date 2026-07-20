@@ -36,6 +36,7 @@ void blk_rq_stat_sum(struct blk_rq_stat *dst, struct blk_rq_stat *src)
 	dst->mean = div_u64(src->batch + dst->mean * dst->nr_samples,
 				dst->nr_samples + src->nr_samples);
 
+	dst->batch += src->batch;
 	dst->nr_samples += src->nr_samples;
 }
 
