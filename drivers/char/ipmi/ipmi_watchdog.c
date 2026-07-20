@@ -1146,18 +1146,22 @@ static struct ipmi_smi_watcher smi_watcher = {
 	.smi_gone = ipmi_smi_gone
 };
 
+static const char * const action_names[] = {
+	"reset", "none", "power_cycle", "power_off"
+};
+
+static const unsigned char action_vals[] = {
+	WDOG_TIMEOUT_RESET, WDOG_TIMEOUT_NONE,
+	WDOG_TIMEOUT_POWER_CYCLE, WDOG_TIMEOUT_POWER_DOWN
+};
+
 static int action_op_set_val(const char *inval)
 {
-	if (strcmp(inval, "reset") == 0)
-		action_val = WDOG_TIMEOUT_RESET;
-	else if (strcmp(inval, "none") == 0)
-		action_val = WDOG_TIMEOUT_NONE;
-	else if (strcmp(inval, "power_cycle") == 0)
-		action_val = WDOG_TIMEOUT_POWER_CYCLE;
-	else if (strcmp(inval, "power_off") == 0)
-		action_val = WDOG_TIMEOUT_POWER_DOWN;
-	else
+	int idx = match_string(action_names, ARRAY_SIZE(action_names), inval);
+
+	if (idx < 0)
 		return -EINVAL;
+	action_val = action_vals[idx];
 	return 0;
 }
 
@@ -1176,20 +1180,30 @@ static int action_op(const char *inval, char *outval)
 	return rv;
 }
 
+static const char * const preaction_names[] = {
+	"pre_none", "pre_smi",
+#ifdef HAVE_DIE_NMI
+	"pre_nmi",
+#endif
+	"pre_int"
+};
+
+static const unsigned char preaction_vals[] = {
+	WDOG_PRETIMEOUT_NONE, WDOG_PRETIMEOUT_SMI,
+#ifdef HAVE_DIE_NMI
+	WDOG_PRETIMEOUT_NMI,
+#endif
+	WDOG_PRETIMEOUT_MSG_INT
+};
+
 static int preaction_op_set_val(const char *inval)
 {
-	if (strcmp(inval, "pre_none") == 0)
-		preaction_val = WDOG_PRETIMEOUT_NONE;
-	else if (strcmp(inval, "pre_smi") == 0)
-		preaction_val = WDOG_PRETIMEOUT_SMI;
-#ifdef HAVE_DIE_NMI
-	else if (strcmp(inval, "pre_nmi") == 0)
-		preaction_val = WDOG_PRETIMEOUT_NMI;
-#endif
-	else if (strcmp(inval, "pre_int") == 0)
-		preaction_val = WDOG_PRETIMEOUT_MSG_INT;
-	else
+	int idx = match_string(preaction_names, ARRAY_SIZE(preaction_names),
+			       inval);
+
+	if (idx < 0)
 		return -EINVAL;
+	preaction_val = preaction_vals[idx];
 	return 0;
 }
 
@@ -1208,16 +1222,21 @@ static int preaction_op(const char *inval, char *outval)
 	return 0;
 }
 
+static const char * const preop_names[] = {
+	"preop_none", "preop_panic", "preop_give_data"
+};
+
+static const unsigned char preop_vals[] = {
+	WDOG_PREOP_NONE, WDOG_PREOP_PANIC, WDOG_PREOP_GIVE_DATA
+};
+
 static int preop_op_set_val(const char *inval)
 {
-	if (strcmp(inval, "preop_none") == 0)
-		preop_val = WDOG_PREOP_NONE;
-	else if (strcmp(inval, "preop_panic") == 0)
-		preop_val = WDOG_PREOP_PANIC;
-	else if (strcmp(inval, "preop_give_data") == 0)
-		preop_val = WDOG_PREOP_GIVE_DATA;
-	else
+	int idx = match_string(preop_names, ARRAY_SIZE(preop_names), inval);
+
+	if (idx < 0)
 		return -EINVAL;
+	preop_val = preop_vals[idx];
 	return 0;
 }
 
