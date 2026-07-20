@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+/* overlay_alias - declare an alias inside an overlay */
+
+&{/aliases} {
+	testcase-alias99 = "/testcase-data/overlay-node/test-bus/test-unittest100";
+};

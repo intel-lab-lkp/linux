@@ -22,6 +22,7 @@ obj-$(CONFIG_OF_OVERLAY) += overlay.dtbo.o \
 			    overlay_18.dtbo.o \
 			    overlay_19.dtbo.o \
 			    overlay_20.dtbo.o \
+			    overlay_alias.dtbo.o \
 			    overlay_bad_add_dup_node.dtbo.o \
 			    overlay_bad_add_dup_prop.dtbo.o \
 			    overlay_bad_phandle.dtbo.o \
@@ -87,6 +88,7 @@ apply_static_overlay_1 := overlay_0.dtbo \
 			  overlay_18.dtbo \
 			  overlay_19.dtbo \
 			  overlay_20.dtbo \
+			  overlay_alias.dtbo \
 			  overlay_gpio_01.dtbo \
 			  overlay_gpio_02a.dtbo \
 			  overlay_gpio_02b.dtbo \

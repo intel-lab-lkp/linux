@@ -3475,6 +3475,53 @@ static struct notifier_block of_nb = {
 	.notifier_call = of_notify,
 };
 
+static void __init of_unittest_overlay_alias(void)
+{
+	const char *path = "/testcase-data/overlay-node/test-bus/test-unittest100";
+	struct device_node *np;
+	int ovcs_id = 0;
+	int id, ret;
+
+	np = of_find_node_by_path(path);
+	if (!np) {
+		unittest(0, "could not find %s for alias test\n", path);
+		return;
+	}
+
+	id = of_alias_get_id(np, "testcase-alias");
+	if (id != -ENODEV) {
+		unittest(0,
+			 "of_alias_get_id() = %d before overlay, expected -ENODEV\n",
+			 id);
+		goto out;
+	}
+
+	ret = overlay_data_apply("overlay_alias", &ovcs_id);
+	if (!ret) {
+		unittest(0, "overlay_alias apply failed\n");
+		goto out;
+	}
+
+	id = of_alias_get_id(np, "testcase-alias");
+	unittest(id == 99,
+		 "of_alias_get_id() = %d after overlay apply, expected 99\n", id);
+
+	ret = of_overlay_remove(&ovcs_id);
+	if (ret) {
+		unittest(0, "overlay_alias remove failed, ret = %d\n", ret);
+		goto out;
+	}
+
+	id = of_alias_get_id(np, "testcase-alias");
+	unittest(id == -ENODEV,
+		 "of_alias_get_id() = %d after overlay remove, expected -ENODEV\n",
+		 id);
+
+	unittest(1, "overlay alias test passed\n");
+out:
+	of_node_put(np);
+}
+
 static void __init of_unittest_overlay_notify(void)
 {
 	int ovcs_id;
@@ -3648,6 +3695,8 @@ static void __init of_unittest_overlay(void)
 #endif
 
 	of_unittest_overlay_gpio();
+
+	of_unittest_overlay_alias();
 
 	of_unittest_remove_tracked_overlays();
 
@@ -3848,6 +3897,7 @@ OVERLAY_INFO_EXTERN(overlay_17);
 OVERLAY_INFO_EXTERN(overlay_18);
 OVERLAY_INFO_EXTERN(overlay_19);
 OVERLAY_INFO_EXTERN(overlay_20);
+OVERLAY_INFO_EXTERN(overlay_alias);
 OVERLAY_INFO_EXTERN(overlay_gpio_01);
 OVERLAY_INFO_EXTERN(overlay_gpio_02a);
 OVERLAY_INFO_EXTERN(overlay_gpio_02b);
@@ -3885,6 +3935,7 @@ static struct overlay_info overlays[] = {
 	OVERLAY_INFO(overlay_18, 0, 0),
 	OVERLAY_INFO(overlay_19, 0, 0),
 	OVERLAY_INFO(overlay_20, 0, 0),
+	OVERLAY_INFO(overlay_alias, 0, 0),
 	OVERLAY_INFO(overlay_gpio_01, 0, 0),
 	OVERLAY_INFO(overlay_gpio_02a, 0, 0),
 	OVERLAY_INFO(overlay_gpio_02b, 0, 0),
