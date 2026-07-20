@@ -9987,16 +9987,23 @@ static int __init slab_debugfs_init(void)
 {
 	struct kmem_cache *s;
 
+	mutex_lock(&slab_mutex);
+
 	slab_debugfs_root = debugfs_create_dir("slab", NULL);
 
 	list_for_each_entry(s, &slab_caches, list)
 		if (s->flags & SLAB_STORE_USER)
 			debugfs_slab_add(s);
 
+	mutex_unlock(&slab_mutex);
 	return 0;
 
 }
-__initcall(slab_debugfs_init);
+/*
+ * This must be after slab_sysfs_init(), otherwise caches created between
+ * the debugfs scan and slab_state reaching FULL miss their debugfs entries.
+ */
+late_initcall(slab_debugfs_init);
 #endif
 /*
  * The /proc/slabinfo ABI
