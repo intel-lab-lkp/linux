@@ -1220,6 +1220,71 @@ static bool folio_try_pageout(struct folio *folio,
 	return false;
 }
 
+static void pageout_batch(struct folio_batch *fbatch,
+			  struct list_head *ret_folios,
+			  struct folio_batch *free_folios,
+			  struct scan_control *sc, struct reclaim_stat *stat,
+			  struct swap_iocb **plug, struct list_head *folio_list,
+			  unsigned int *nr_reclaimed)
+{
+	int i, nr = folio_batch_count(fbatch);
+	int count = 0;
+	struct folio *folios[FOLIO_BATCH_SIZE];
+
+	/*
+	 * Collect survivors into a local array: this avoids walking and
+	 * mutating @fbatch in the same loop, so its invariant (only
+	 * folios[0..nr) are valid) is preserved throughout.
+	 */
+	for (i = 0; i < nr; i++) {
+		struct folio *folio = fbatch->folios[i];
+
+		if (!folio_trylock(folio)) {
+			list_add(&folio->lru, ret_folios);
+			continue;
+		}
+
+		VM_WARN_ON_FOLIO(folio_test_lru(folio), folio);
+
+		/*
+		 * Recheck what shrink_folio_list() verified before dropping
+		 * the folio lock. Between that folio_unlock() and our
+		 * folio_trylock() here, a parallel swapin (do_swap_page) can
+		 * fully complete -- taking the lock, installing a new PTE,
+		 * and releasing the lock -- after which a parallel GUP
+		 * (O_DIRECT, vmsplice, RDMA, ...) can pin the folio through
+		 * that PTE without taking the folio lock. Each flag catches
+		 * one case:
+		 *   folio_test_writeback   -- defensive guard.
+		 *   folio_mapped           -- swapin installed a PTE.
+		 *   folio_maybe_dma_pinned -- GUP pinned through such a PTE.
+		 */
+		if (folio_test_writeback(folio) || folio_mapped(folio) ||
+		    folio_maybe_dma_pinned(folio)) {
+			folio_unlock(folio);
+			list_add(&folio->lru, ret_folios);
+			continue;
+		}
+
+		folios[count++] = folio;	/* keep lock held */
+	}
+	folio_batch_reinit(fbatch);
+
+	if (!count)
+		return;
+
+	/* One TLB flush for the whole batch */
+	try_to_unmap_flush_dirty();
+
+	for (i = 0; i < count; i++) {
+		struct folio *folio = folios[i];
+
+		if (!folio_try_pageout(folio, free_folios, sc, stat, plug,
+				       folio_list, nr_reclaimed))
+			list_add(&folio->lru, ret_folios);
+	}
+}
+
 static bool folio_try_unmap(struct folio *folio, struct reclaim_stat *stat,
 		unsigned int nr_pages)
 {
@@ -1261,6 +1326,7 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 		struct mem_cgroup *memcg)
 {
 	struct folio_batch free_folios;
+	struct folio_batch flush_folios;
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(demote_folios);
 	unsigned int nr_reclaimed = 0, nr_demoted = 0;
@@ -1269,6 +1335,7 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	struct swap_iocb *plug = NULL;
 
 	folio_batch_init(&free_folios);
+	folio_batch_init(&flush_folios);
 	memset(stat, 0, sizeof(*stat));
 	cond_resched();
 	do_demote_pass = can_demote(pgdat->node_id, sc, memcg);
@@ -1564,15 +1631,18 @@ retry:
 			if (!sc->may_writepage)
 				goto keep_locked;
 			/*
-			 * Folio is dirty. Flush the TLB if a writable entry
-			 * potentially exists to avoid CPU writes after I/O
-			 * starts and then write it out here.
+			 * Drop the lock so swap faults finding this folio
+			 * via swap cache lookup can make progress; the
+			 * recheck that this necessitates is documented in
+			 * pageout_batch().
 			 */
-			try_to_unmap_flush_dirty();
-			if (!folio_try_pageout(folio, &free_folios, sc, stat,
-					      &plug, folio_list, &nr_reclaimed))
-				goto keep;
-			continue;
+			folio_unlock(folio);
+			if (!folio_batch_add(&flush_folios, folio))
+				pageout_batch(&flush_folios,
+					      &ret_folios, &free_folios,
+					      sc, stat, &plug,
+					      folio_list, &nr_reclaimed);
+			goto next;
 		}
 
 		if (!folio_try_reclaim_free(folio, &free_folios, sc, stat,
@@ -1597,6 +1667,12 @@ keep:
 		list_add(&folio->lru, &ret_folios);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio) ||
 				folio_test_unevictable(folio), folio);
+next:
+		continue;
+	}
+	if (folio_batch_count(&flush_folios)) {
+		pageout_batch(&flush_folios, &ret_folios, &free_folios, sc,
+			      stat, &plug, folio_list, &nr_reclaimed);
 	}
 	/* 'folio_list' is always empty here */
 
