@@ -4594,9 +4594,11 @@ static int its_vpe_init(struct its_vpe *vpe)
 
 static void its_vpe_teardown(struct its_vpe *vpe)
 {
-	its_vpe_db_proxy_unmap(vpe);
-	its_vpe_id_free(vpe->vpe_id);
-	its_free_pending_table(vpe->vpt_page);
+	if (vpe->vpt_page != NULL) {
+		its_vpe_db_proxy_unmap(vpe);
+		its_vpe_id_free(vpe->vpe_id);
+		its_free_pending_table(vpe->vpt_page);
+	}
 }
 
 static void its_vpe_irq_domain_free(struct irq_domain *domain,
@@ -4674,8 +4676,10 @@ static int its_vpe_irq_domain_alloc(struct irq_domain *domain, unsigned int virq
 		irqd_set_resend_when_in_progress(irq_get_irq_data(virq + i));
 	}
 
-	if (err)
+	if (err) {
+		its_vpe_teardown(vm->vpes[i]);
 		its_vpe_irq_domain_free(domain, virq, i);
+	}
 
 	return err;
 }
