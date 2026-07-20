@@ -417,7 +417,7 @@ struct applespi_data {
 
 	bool				suspended;
 	bool				drain;
-	wait_queue_head_t		drain_complete;
+	wait_queue_head_t		wait_queue;
 	bool				read_active;
 	bool				write_active;
 
@@ -677,7 +677,7 @@ static int applespi_setup_spi(struct applespi_data *applespi)
 		return sts;
 
 	spin_lock_init(&applespi->cmd_msg_lock);
-	init_waitqueue_head(&applespi->drain_complete);
+	init_waitqueue_head(&applespi->wait_queue);
 
 	return 0;
 }
@@ -725,7 +725,7 @@ static void applespi_msg_complete(struct applespi_data *applespi,
 		applespi->write_active = false;
 
 	if (applespi->drain && !applespi->write_active)
-		wake_up_all(&applespi->drain_complete);
+		wake_up_all(&applespi->wait_queue);
 
 	if (is_write_msg) {
 		applespi->cmd_msg_queued = 0;
@@ -1415,7 +1415,7 @@ static void applespi_got_data(struct applespi_data *applespi)
 			applespi->read_active = false;
 			applespi->write_active = false;
 
-			wake_up_all(&applespi->drain_complete);
+			wake_up_all(&applespi->wait_queue);
 		}
 
 		return;
@@ -1793,21 +1793,49 @@ static int applespi_probe(struct spi_device *spi)
 
 static void applespi_drain_writes(struct applespi_data *applespi)
 {
-	guard(spinlock_irqsave)(&applespi->cmd_msg_lock);
+	unsigned long flags;
+	long ret;
+
+	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
 
 	applespi->drain = true;
-	wait_event_lock_irq(applespi->drain_complete, !applespi->write_active,
-			    applespi->cmd_msg_lock);
+	ret = wait_event_lock_irq_timeout(applespi->wait_queue,
+					  !applespi->write_active,
+					  applespi->cmd_msg_lock,
+					  msecs_to_jiffies(3000));
+	if (!ret && applespi->write_active) {
+		dev_warn(&applespi->spi->dev,
+			 "Timed out waiting for write drain, waiting unconditionally\n");
+		wait_event_lock_irq(applespi->wait_queue,
+				    !applespi->write_active,
+				    applespi->cmd_msg_lock);
+	}
+
+	spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
 }
 
 static void applespi_drain_reads(struct applespi_data *applespi)
 {
-	guard(spinlock_irqsave)(&applespi->cmd_msg_lock);
+	unsigned long flags;
+	long ret;
 
-	wait_event_lock_irq(applespi->drain_complete, !applespi->read_active,
-			    applespi->cmd_msg_lock);
+	spin_lock_irqsave(&applespi->cmd_msg_lock, flags);
+
+	ret = wait_event_lock_irq_timeout(applespi->wait_queue,
+					  !applespi->read_active,
+					  applespi->cmd_msg_lock,
+					  msecs_to_jiffies(3000));
+	if (!ret && applespi->read_active) {
+		dev_warn(&applespi->spi->dev,
+			 "Timed out waiting for read drain, waiting unconditionally\n");
+		wait_event_lock_irq(applespi->wait_queue,
+				    !applespi->read_active,
+				    applespi->cmd_msg_lock);
+	}
 
 	applespi->suspended = true;
+
+	spin_unlock_irqrestore(&applespi->cmd_msg_lock, flags);
 }
 
 static void applespi_remove(struct spi_device *spi)
