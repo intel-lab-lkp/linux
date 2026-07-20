@@ -818,10 +818,8 @@ static int dim2_probe(struct platform_device *pdev)
 
 	ret = devm_request_threaded_irq(&pdev->dev, irq, dim2_ahb_isr,
 					dim2_task_irq, 0, "dim2_ahb0_int", dev);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
+	if (ret)
 		goto err_shutdown_dim;
-	}
 
 	irq = platform_get_irq(pdev, MLB_INT_IDX);
 	if (irq < 0) {
@@ -831,10 +829,8 @@ static int dim2_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(&pdev->dev, irq, dim2_mlb_isr, 0,
 			       "dim2_mlb_int", dev);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
+	if (ret)
 		goto err_shutdown_dim;
-	}
 
 	init_waitqueue_head(&dev->netinfo_waitq);
 	dev->deliver_netinfo = 0;
