@@ -925,6 +925,12 @@ static void rds6_sock_info(struct socket *sock, unsigned int len,
 static void rds_exit(void)
 {
 	sock_unregister(rds_family_ops.family);
+	rds_info_deregister_func(RDS_INFO_SOCKETS, rds_sock_info);
+	rds_info_deregister_func(RDS_INFO_RECV_MESSAGES, rds_sock_inc_info);
+#if IS_ENABLED(CONFIG_IPV6)
+	rds_info_deregister_func(RDS6_INFO_SOCKETS, rds6_sock_info);
+	rds_info_deregister_func(RDS6_INFO_RECV_MESSAGES, rds6_sock_inc_info);
+#endif
 	proto_unregister(&rds_proto);
 	rds_conn_exit();
 	rds_cong_exit();
@@ -933,12 +939,6 @@ static void rds_exit(void)
 	rds_stats_exit();
 	rds_page_exit();
 	rds_bind_lock_destroy();
-	rds_info_deregister_func(RDS_INFO_SOCKETS, rds_sock_info);
-	rds_info_deregister_func(RDS_INFO_RECV_MESSAGES, rds_sock_inc_info);
-#if IS_ENABLED(CONFIG_IPV6)
-	rds_info_deregister_func(RDS6_INFO_SOCKETS, rds6_sock_info);
-	rds_info_deregister_func(RDS6_INFO_RECV_MESSAGES, rds6_sock_inc_info);
-#endif
 }
 module_exit(rds_exit);
 
