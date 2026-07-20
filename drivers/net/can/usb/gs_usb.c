@@ -540,6 +540,10 @@ static void gs_update_state(struct gs_can *dev, struct can_frame *cf,
 			 CAN_ERR_CRTL_RX_PASSIVE | CAN_ERR_CRTL_TX_PASSIVE |
 			 CAN_ERR_CRTL_ACTIVE);
 
+	/* some firmware sends CAN error counters but doesn't set CAN_ERR_CNT, fixup */
+	if (cf->data[6] || cf->data[7])
+		cf->can_id |= CAN_ERR_CNT;
+
 	const enum can_state new_state = max(rx_state, tx_state);
 
 	if (new_state == dev->can.state)
