@@ -75,6 +75,7 @@
 #include <crypto/authenc.h>
 #include <crypto/skcipher.h>
 #include <crypto/hash.h>
+#include <crypto/utils.h>
 #include "internal.h"
 
 /* Maximum blocksize for the supported crypto algorithms */
@@ -763,7 +764,7 @@ int rfc3961_verify_mic(const struct krb5_enctype *krb5,
 	if (done != krb5->cksum_len)
 		goto error;
 
-	if (memcmp(cksum, cksum2, krb5->cksum_len) != 0) {
+	if (crypto_memneq(cksum, cksum2, krb5->cksum_len)) {
 		ret = -EBADMSG;
 		goto error;
 	}
