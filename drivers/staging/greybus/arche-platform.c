@@ -503,10 +503,8 @@ static int arche_platform_probe(struct platform_device *pdev)
 					IRQF_TRIGGER_FALLING |
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					dev_name(dev), arche_pdata);
-	if (ret) {
-		dev_err(dev, "failed to request wake detect IRQ %d\n", ret);
+	if (ret)
 		return ret;
-	}
 	disable_irq(arche_pdata->wake_detect_irq);
 
 	ret = device_create_file(dev, &dev_attr_state);
