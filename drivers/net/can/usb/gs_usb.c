@@ -724,7 +724,8 @@ gs_usb_should_handle_can_error(const struct gs_can *dev, const struct gs_host_fr
 		return true;
 
 	/* handle CAN bus errors */
-	if (hf->can_id & cpu_to_le32(CAN_ERR_LOSTARB | CAN_ERR_PROT | CAN_ERR_TRX | CAN_ERR_ACK))
+	if (dev->can.ctrlmode & CAN_CTRLMODE_BERR_REPORTING &&
+	    hf->can_id & cpu_to_le32(CAN_ERR_LOSTARB | CAN_ERR_PROT | CAN_ERR_TRX | CAN_ERR_ACK))
 		return true;
 
 	return false;
@@ -1182,7 +1183,7 @@ static int gs_can_open(struct net_device *netdev)
 	if (ctrlmode & CAN_CTRLMODE_ONE_SHOT)
 		flags |= GS_CAN_FEATURE_ONE_SHOT;
 
-	if (ctrlmode & CAN_CTRLMODE_BERR_REPORTING)
+	if (ctrlmode & CAN_CTRLMODE_BERR_REPORTING && dev->feature & GS_CAN_FEATURE_BERR_REPORTING)
 		flags |= GS_CAN_FEATURE_BERR_REPORTING;
 
 	if (ctrlmode & CAN_CTRLMODE_FD)
@@ -1519,7 +1520,8 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 	dev->can.clock.freq = le32_to_cpu(bt_const.fclk_can);
 	dev->can.bittiming_const = &dev->bt_const;
 
-	dev->can.ctrlmode_supported = CAN_CTRLMODE_CC_LEN8_DLC;
+	dev->can.ctrlmode_supported = CAN_CTRLMODE_BERR_REPORTING |
+		CAN_CTRLMODE_CC_LEN8_DLC;
 
 	feature = le32_to_cpu(bt_const.feature);
 	dev->feature = FIELD_GET(GS_CAN_FEATURE_MASK, feature);
@@ -1620,9 +1622,6 @@ static struct gs_can *gs_make_candev(unsigned int channel,
 			dev->can.do_set_termination = gs_usb_set_termination;
 		}
 	}
-
-	if (feature & GS_CAN_FEATURE_BERR_REPORTING)
-		dev->can.ctrlmode_supported |= CAN_CTRLMODE_BERR_REPORTING;
 
 	if (feature & GS_CAN_FEATURE_GET_STATE)
 		dev->can.do_get_berr_counter = gs_usb_can_get_berr_counter;
