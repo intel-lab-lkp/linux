@@ -182,6 +182,15 @@ enum aarch32_map {
 static struct page *aarch32_vectors_page __ro_after_init;
 static struct page *aarch32_sig_page __ro_after_init;
 
+static inline void aarch32_vdso_futex_update_ips(struct mm_struct *mm)
+{
+	unsigned long vdso = (unsigned long) mm->context.vdso;
+
+	__vdso_futex_update_ips(mm, true,
+				VDSO_SYMBOL(vdso, futex_list32_try_unlock_cs_start),
+				VDSO_SYMBOL(vdso, futex_list32_try_unlock_cs_end));
+}
+
 static int aarch32_sigpage_mremap(const struct vm_special_mapping *sm,
 				  struct vm_area_struct *new_vma)
 {
@@ -194,6 +203,8 @@ static int aarch32_mremap(const struct vm_special_mapping *sm,
 		struct vm_area_struct *new_vma)
 {
 	current->mm->context.vdso = (void *)new_vma->vm_start;
+
+	aarch32_vdso_futex_update_ips(current->mm);
 
 	return 0;
 }
@@ -327,6 +338,7 @@ out:
 	return PTR_ERR_OR_ZERO(ret);
 }
 
+
 int aarch32_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
 	struct mm_struct *mm = current->mm;
@@ -347,6 +359,8 @@ int aarch32_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 	}
 
 	ret = aarch32_sigreturn_setup(mm);
+
+	aarch32_vdso_futex_update_ips(mm);
 out:
 	mmap_write_unlock(mm);
 	return ret;
