@@ -4834,7 +4834,9 @@ ext4_mb_check_group_pa(ext4_fsblk_t goal_block,
 		return cpa;
 
 	/* drop the previous reference */
+	spin_lock(&cpa->pa_lock);
 	atomic_dec(&cpa->pa_count);
+	spin_unlock(&cpa->pa_lock);
 	atomic_inc(&pa->pa_count);
 	return pa;
 }
