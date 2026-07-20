@@ -173,10 +173,9 @@ static int keyscan_probe(struct platform_device *pdev)
 		return PTR_ERR(keypad_data->base);
 
 	keypad_data->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(keypad_data->clk)) {
-		dev_err(&pdev->dev, "cannot get clock\n");
-		return PTR_ERR(keypad_data->clk);
-	}
+	if (IS_ERR(keypad_data->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(keypad_data->clk),
+				     "cannot get clock\n");
 
 	error = clk_enable(keypad_data->clk);
 	if (error) {
@@ -192,10 +191,8 @@ static int keyscan_probe(struct platform_device *pdev)
 
 	error = devm_request_irq(&pdev->dev, keypad_data->irq, keyscan_isr, 0,
 				 pdev->name, keypad_data);
-	if (error) {
-		dev_err(&pdev->dev, "failed to request IRQ\n");
+	if (error)
 		return error;
-	}
 
 	error = input_register_device(input_dev);
 	if (error) {
