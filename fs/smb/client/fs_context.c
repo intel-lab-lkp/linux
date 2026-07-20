@@ -1248,6 +1248,22 @@ free_old_ctx:
 	return rc;
 }
 
+/*
+ * Current SMB2 compression code works best, or at all, only in 64-bit little endian architectures.
+ *
+ * (this is more of a "TODO" than a final statement for other archs)
+ */
+static inline bool smb_compress_arch_supported(void)
+{
+#if BITS_PER_LONG == 64 && (defined(__LITTLE_ENDIAN) || \
+	(defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+	 __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__))
+	return true;
+#else
+	return false;
+#endif
+}
+
 static int smb3_fs_context_parse_param(struct fs_context *fc,
 				      struct fs_parameter *param)
 {
@@ -1289,8 +1305,13 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 			cifs_errorf(fc, "CONFIG_CIFS_COMPRESSION kernel config option is unset\n");
 			goto cifs_parse_mount_err;
 		}
-		ctx->compress = true;
-		cifs_dbg(VFS, "SMB3 compression support is experimental\n");
+
+		if (smb_compress_arch_supported()) {
+			ctx->compress = true;
+			cifs_dbg(VFS, "SMB3 compression support is experimental\n");
+		} else {
+			cifs_dbg(VFS, "SMB3 compression is currently only supported on 64-bit little endian architectures, not enabling\n");
+		}
 		break;
 	case Opt_nodfs:
 		ctx->nodfs = 1;
