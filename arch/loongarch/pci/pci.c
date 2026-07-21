@@ -115,6 +115,11 @@ static void loongson_gpu_fixup_dma_hang(struct pci_dev *pdev, bool on)
 	static u32 crtc_status[CRTC_NUM_MAX] = { 0 };
 
 	base = pdev->bus->ops->map_bus(pdev->bus, pdev->devfn + 1, 0);
+	if (!base) {
+		pci_dbg(pdev, "cannot map config space for devfn %02x.%d\n",
+			PCI_SLOT(pdev->devfn + 1), PCI_FUNC(pdev->devfn + 1));
+		return;
+	}
 	device = readw(base + PCI_DEVICE_ID);
 
 	regbase = ioremap(readq(base + PCI_BASE_ADDRESS_0) & ~0xffull, SZ_64K);
