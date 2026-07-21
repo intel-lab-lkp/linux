@@ -3,11 +3,61 @@
 #define _ASM_X86_SET_MEMORY_H
 
 #include <asm/page.h>
+#include <asm/sections.h>
 #include <asm-generic/set_memory.h>
 #include <asm/pgtable.h>
 
 #define set_memory_rox set_memory_rox
 int set_memory_rox(unsigned long addr, int numpages);
+
+#ifdef CONFIG_X86_64
+/*
+ * The kernel image is mapped into two places in the virtual address space
+ * (addresses without KASLR, of course):
+ *
+ * 1. The kernel direct map (0xffff880000000000)
+ * 2. The "high kernel map" (0xffffffff81000000)
+ *
+ * We actually execute out of #2. If we get the address of a kernel symbol, it
+ * points to #2, but almost all physical-to-virtual translations point to #1.
+ *
+ * This is so that we can have both a directmap of all physical memory *and*
+ * take full advantage of the limited (s32) immediate addressing range (2G)
+ * of x86_64.
+ *
+ * See Documentation/arch/x86/x86_64/mm.rst for more detail.
+ */
+static inline bool pfn_is_kernel(unsigned long pfn)
+{
+	unsigned long spfn = __pa_symbol(_text) >> PAGE_SHIFT;
+	/* Do not reference a physical address outside the kernel. */
+	unsigned long epfn = __pa_symbol(roundup(_brk_end, PMD_SIZE) - 1) >> PAGE_SHIFT;
+
+	return pfn >= spfn && pfn <= epfn;
+}
+#else
+static inline bool pfn_is_kernel(unsigned long pfn)
+{
+	/* There is no highmap on 32-bit */
+	return false;
+}
+#endif
+
+static inline bool cpa_should_update_alias(unsigned long vaddr,
+					   unsigned long pfn)
+{
+	/* Primary is not in the direct map, its direct map alias needs update */
+	if (vaddr < PAGE_OFFSET ||
+	    vaddr >= PAGE_OFFSET + (max_pfn_mapped << PAGE_SHIFT))
+		return true;
+
+	/* direct map page that is also part of the kernel highmap */
+	if ((vaddr < (unsigned long)_text || vaddr >= _brk_end) &&
+	    pfn_is_kernel(pfn))
+		return true;
+
+	return false;
+}
 
 /*
  * The set_memory_* API can be used to change various attributes of a virtual
