@@ -718,6 +718,18 @@ EXPORT_SYMBOL_GPL(kernel_power_off);
 DEFINE_MUTEX(system_transition_mutex);
 
 /*
+ * Log the task that asked for the transition once the requested
+ * command is committed and can no longer fail, e.g:
+ *
+ *   reboot: initiated by systemd-shutdow[1]
+ *   reboot: Restarting system
+ */
+void reboot_log_initiator(void)
+{
+	pr_info("initiated by %s[%d]\n", current->comm, task_pid_nr(current));
+}
+
+/*
  * Reboot system call: for obvious reasons only root may call it,
  * and even root needs to set up some magic numbers in the registers
  * so that some mistake won't make this reboot the whole machine.
@@ -764,6 +776,7 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	mutex_lock(&system_transition_mutex);
 	switch (cmd) {
 	case LINUX_REBOOT_CMD_RESTART:
+		reboot_log_initiator();
 		kernel_restart(NULL);
 		break;
 
@@ -776,10 +789,12 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		break;
 
 	case LINUX_REBOOT_CMD_HALT:
+		reboot_log_initiator();
 		kernel_halt();
 		do_exit(0);
 
 	case LINUX_REBOOT_CMD_POWER_OFF:
+		reboot_log_initiator();
 		kernel_power_off();
 		do_exit(0);
 		break;
@@ -792,6 +807,7 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		}
 		buffer[sizeof(buffer) - 1] = '\0';
 
+		reboot_log_initiator();
 		kernel_restart(buffer);
 		break;
 
