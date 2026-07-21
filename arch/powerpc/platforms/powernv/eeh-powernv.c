@@ -1169,11 +1169,39 @@ static int pnv_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 	struct pnv_phb *phb = hose->private_data;
 	s64 rc;
 
-	if (type != OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR &&
-	    type != OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64) {
-		pr_warn("%s: Invalid error type %d\n",
+	/*
+	 * Map generic EEH error-type ABI values to OPAL-specific type codes.
+	 * EEH_ERR_TYPE_32 and EEH_ERR_TYPE_64 are the only types supported by
+	 * OPAL.  Additional generic types defined in the UAPI header are valid
+	 * for pSeries RTAS but unsupported here; return -EOPNOTSUPP for those.
+	 * Unknown or invalid values return -EINVAL.
+	 *
+	 * Note: currently OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR  == 0 ==
+	 * EEH_ERR_TYPE_32 and OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64 == 1 ==
+	 * EEH_ERR_TYPE_64, but the explicit switch makes the coupling
+	 * visible and allows the values to diverge independently.
+	 */
+	switch (type) {
+	case EEH_ERR_TYPE_32:
+		type = OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR;
+		break;
+	case EEH_ERR_TYPE_64:
+		type = OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64;
+		break;
+	case EEH_ERR_TYPE_RECOVERED_SPECIAL_EVENT:
+	case EEH_ERR_TYPE_CORRUPTED_PAGE:
+	case EEH_ERR_TYPE_CORRUPTED_DCACHE_START:
+	case EEH_ERR_TYPE_CORRUPTED_DCACHE_END:
+	case EEH_ERR_TYPE_CORRUPTED_ICACHE_START:
+	case EEH_ERR_TYPE_CORRUPTED_ICACHE_END:
+	case EEH_ERR_TYPE_CORRUPTED_TLB_START:
+	case EEH_ERR_TYPE_CORRUPTED_TLB_END:
+		pr_warn("%s: EEH error type %d not supported by OPAL\n",
 			__func__, type);
-		return -ERANGE;
+		return -EOPNOTSUPP;
+	default:
+		pr_warn("%s: unsupported EEH error type %d\n", __func__, type);
+		return -EINVAL;
 	}
 
 	if (func < OPAL_ERR_INJECT_FUNC_IOA_LD_MEM_ADDR ||
