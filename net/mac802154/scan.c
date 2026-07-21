@@ -180,6 +180,7 @@ void mac802154_scan_worker(struct work_struct *work)
 	struct ieee802154_sub_if_data *sdata;
 	unsigned int scan_duration = 0;
 	struct wpan_phy *wpan_phy;
+	netdevice_tracker dev_tracker;
 	u8 scan_req_duration;
 	u8 page, channel;
 	int ret;
@@ -208,6 +209,14 @@ void mac802154_scan_worker(struct work_struct *work)
 				   msecs_to_jiffies(1000));
 		return;
 	}
+
+	/*
+	 * sdata->dev is dereferenced below after rcu_read_unlock() and outside
+	 * the rtnl, and a concurrent DEL_INTERFACE / PHY teardown can free it
+	 * asynchronously from netdev_run_todo(). Pin it with a reference taken
+	 * while the RCU read lock is still held, and drop it at every exit.
+	 */
+	netdev_hold(sdata->dev, &dev_tracker, GFP_ATOMIC);
 
 	wpan_phy = scan_req->wpan_phy;
 	scan_req_type = scan_req->type;
@@ -262,12 +271,14 @@ void mac802154_scan_worker(struct work_struct *work)
 		"Scan page %u channel %u for %ums\n",
 		page, channel, jiffies_to_msecs(scan_duration));
 	queue_delayed_work(local->mac_wq, &local->scan_work, scan_duration);
+	netdev_put(sdata->dev, &dev_tracker);
 	return;
 
 end_scan:
 	rtnl_lock();
 	mac802154_scan_cleanup_locked(local, sdata, false);
 	rtnl_unlock();
+	netdev_put(sdata->dev, &dev_tracker);
 }
 
 int mac802154_trigger_scan_locked(struct ieee802154_sub_if_data *sdata,
