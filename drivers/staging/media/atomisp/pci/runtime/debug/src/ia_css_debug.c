@@ -135,13 +135,13 @@ void ia_css_debug_dtrace(unsigned int level, const char *fmt, ...)
 
 void ia_css_debug_set_dtrace_level(const unsigned int trace_level)
 {
-	dbg_level = trace_level;
+	/* Trace level is now controlled dynamically via Linux kernel dynamic debug facility */
 	return;
 }
 
 unsigned int ia_css_debug_get_dtrace_level(void)
 {
-	return dbg_level;
+	return 0;
 }
 
 static const char *debug_stream_format2str(const enum atomisp_input_format

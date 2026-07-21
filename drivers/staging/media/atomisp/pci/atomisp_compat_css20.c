@@ -784,7 +784,7 @@ int atomisp_css_load_firmware(struct atomisp_device *isp)
 	isp->css_env.isp_css_env.hw_access_env.load = atomisp_css2_hw_load;
 	isp->css_env.isp_css_env.hw_access_env.store = atomisp_css2_hw_store;
 
-	__set_css_print_env(isp, dbg_func);
+	__set_css_print_env(isp, 1);
 
 	isp->css_env.isp_css_env.print_env.error_print = atomisp_vprintk;
 
@@ -3372,18 +3372,12 @@ void atomisp_css_set_isp_config_applied_frame(struct atomisp_sub_device *asd,
 
 int atomisp_get_css_dbgfunc(void)
 {
-	return dbg_func;
+	return 1;
 }
 
 int atomisp_set_css_dbgfunc(struct atomisp_device *isp, int opt)
 {
-	int ret;
-
-	ret = __set_css_print_env(isp, opt);
-	if (ret == 0)
-		dbg_func = opt;
-
-	return ret;
+	return __set_css_print_env(isp, opt);
 }
 
 void atomisp_en_dz_capt_pipe(struct atomisp_sub_device *asd, bool enable)

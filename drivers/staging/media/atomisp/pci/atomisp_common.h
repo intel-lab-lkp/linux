@@ -20,8 +20,6 @@
 
 #include "ia_css.h"
 
-extern int dbg_level;
-extern int dbg_func;
 extern const int pad_w;
 extern const int pad_h;
 

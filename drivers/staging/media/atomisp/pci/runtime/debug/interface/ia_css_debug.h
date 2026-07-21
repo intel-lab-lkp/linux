@@ -8,7 +8,7 @@
 #define _IA_CSS_DEBUG_H_
 
 /*! \file */
-
+#include <linux/printk.h>
 #include <type_support.h>
 #include <linux/stdarg.h>
 #include <linux/bits.h>
@@ -39,7 +39,6 @@
 #define IA_CSS_DEBUG_INFO    9
 
 /* Global variable which controls the verbosity levels of the debug tracing */
-extern int dbg_level;
 
 /*! @brief Enum defining the different isp parameters to dump.
  *  Values can be combined to dump a combination of sets.
@@ -125,8 +124,8 @@ static inline void __printf(2, 0) ia_css_debug_vdtrace(unsigned int level,
 						       const char *fmt,
 						       va_list args)
 {
-	if (dbg_level >= level)
-		sh_css_vprint(fmt, args);
+	if (level <= IA_CSS_DEBUG_WARNING)
+		vprintk(fmt, args);
 }
 
 __printf(2, 3) void ia_css_debug_dtrace(unsigned int level,
