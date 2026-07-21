@@ -2393,8 +2393,8 @@ static int iterate_leaf_refs(struct btrfs_fs_info *fs_info,
 		ret = iterate(eie->inum, eie->offset, eie->num_bytes, root, ctx);
 		if (ret) {
 			btrfs_debug(fs_info,
-				    "stopping iteration for %llu due to ret=%d",
-				    extent_item_objectid, ret);
+				    "stopping iteration for %llu due to ret=%pe",
+				    extent_item_objectid, ERR_PTR(ret));
 			break;
 		}
 	}
