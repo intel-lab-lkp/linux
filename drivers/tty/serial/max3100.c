@@ -107,6 +107,7 @@ struct max3100_port {
 	int  force_end_work;
 	/* need to know we are suspending to avoid deadlock on workqueue */
 	int suspending;
+	bool irq_requested;
 
 	struct timer_list	timer;
 };
@@ -304,6 +305,29 @@ static void max3100_dowork(struct max3100_port *s)
 {
 	if (!s->force_end_work && !freezing(current) && !s->suspending)
 		queue_work(s->workqueue, &s->work);
+}
+
+/*
+ * Stop async producers before tearing down the workqueue.  A normal
+ * shutdown must leave the timer re-armable for the next open, while final
+ * removal uses timer_shutdown_sync() to prevent max3100_timeout() from
+ * re-arming a timer embedded in an object about to be freed.
+ */
+static void max3100_drain_async(struct max3100_port *s, bool final)
+{
+	s->force_end_work = 1;
+	if (final)
+		timer_shutdown_sync(&s->timer);
+	else
+		timer_delete_sync(&s->timer);
+	if (s->irq_requested) {
+		free_irq(s->port.irq, s);
+		s->irq_requested = false;
+	}
+	if (s->workqueue) {
+		destroy_workqueue(s->workqueue);
+		s->workqueue = NULL;
+	}
 }
 
 static void max3100_timeout(struct timer_list *t)
@@ -530,16 +554,7 @@ static void max3100_shutdown(struct uart_port *port)
 	if (s->suspending)
 		return;
 
-	s->force_end_work = 1;
-
-	timer_delete_sync(&s->timer);
-
-	if (s->workqueue) {
-		destroy_workqueue(s->workqueue);
-		s->workqueue = NULL;
-	}
-	if (port->irq)
-		free_irq(port->irq, s);
+	max3100_drain_async(s, false);
 
 	/* set shutdown mode to save power */
 	max3100_sr(s, MAX3100_WC | MAX3100_SHDN, &rx);
@@ -581,6 +596,7 @@ static int max3100_startup(struct uart_port *port)
 		return -EBUSY;
 	}
 
+	s->irq_requested = true;
 	s->conf_commit = 1;
 	max3100_dowork(s);
 	/* wait for clock to settle */
@@ -753,6 +769,7 @@ static void max3100_remove(struct spi_device *spi)
 		if (max3100s[i] == s) {
 			dev_dbg(&spi->dev, "%s: removing port %d\n", __func__, i);
 			uart_remove_one_port(&max3100_uart_driver, &max3100s[i]->port);
+			max3100_drain_async(max3100s[i], true);
 			kfree(max3100s[i]);
 			max3100s[i] = NULL;
 			break;
