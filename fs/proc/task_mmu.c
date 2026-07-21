@@ -1369,9 +1369,12 @@ static void smap_gather_stats(struct proc_maps_private *priv,
 			      struct mem_size_stats *mss, unsigned long start)
 {
 	const struct mm_walk_ops *ops = get_smaps_walk_ops(priv);
+	unsigned long end = vma->vm_end;
+
+	start = start ?: vma->vm_start;
 
 	/* Invalid start */
-	if (start >= vma->vm_end)
+	if (start >= end)
 		return;
 
 	if (vma == get_gate_vma(priv->lock_ctx.mm))
@@ -1401,10 +1404,7 @@ static void smap_gather_stats(struct proc_maps_private *priv,
 		}
 	}
 
-	if (!start)
-		walk_page_vma(vma, ops, mss);
-	else
-		walk_page_range(vma->vm_mm, start, vma->vm_end, ops, mss);
+	walk_page_range_vma(vma, start, end, ops, mss);
 
 	reacquire_rcu(priv);
 }
