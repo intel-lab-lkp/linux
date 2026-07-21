@@ -120,18 +120,4 @@ static inline int syscall_get_arch(struct task_struct *task)
 
 	return AUDIT_ARCH_AARCH64;
 }
-
-bool arm64_syscall_trace_enter(struct pt_regs *regs, unsigned long flags);
-void arm64_syscall_exit_work(struct pt_regs *regs, unsigned long flags);
-
-static __always_inline void arm64_syscall_exit_to_user_mode_work(struct pt_regs *regs)
-{
-	unsigned long flags = read_thread_flags();
-
-	rseq_syscall(regs);
-
-	if (unlikely(flags & _TIF_SYSCALL_EXIT_WORK) || flags & _TIF_SINGLESTEP)
-		arm64_syscall_exit_work(regs, flags);
-}
-
 #endif	/* __ASM_SYSCALL_H */
