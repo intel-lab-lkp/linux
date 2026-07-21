@@ -14,6 +14,8 @@
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/log2.h>
+#include <linux/set_memory.h>
 #include <linux/slab.h>
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
@@ -27,6 +29,8 @@
 
 #include "hyperv_net.h"
 #include "netvsc_trace.h"
+
+static struct workqueue_struct *netvsc_wq;
 
 /*
  * Switch the data path from the synthetic interface to the VF
@@ -125,6 +129,194 @@ static void netvsc_subchan_work(struct work_struct *w)
 	rtnl_unlock();
 }
 
+/*
+ * netvsc_free_buf_pages - release a netvsc send/receive buffer.
+ *
+ * @addr: buffer address, or NULL if none was allocated (e.g. cleanup from a
+ *        failed allocation)
+ * @chunks: chunks array from netvsc_alloc_buf_pages(), or NULL
+ * @chunk_cnt: number of entries in @chunks
+ *
+ * When @chunks is NULL the buffer is a plain vzalloc() allocation.
+ *
+ * Otherwise tear down the vmap, and for each chunk re-encrypt and free
+ * the underlying pages. Any chunk that cannot be re-encrypted is leaked.
+ */
+static void netvsc_free_buf_pages(void *addr,
+				  struct netvsc_buf_chunk *chunks,
+				  u32 chunk_cnt)
+{
+	u32 i;
+
+	if (!chunks) {
+		vfree(addr);
+		return;
+	}
+
+	vunmap(addr);
+
+	for (i = 0; i < chunk_cnt; i++) {
+		unsigned long vaddr =
+			(unsigned long)page_address(chunks[i].page);
+		unsigned int order = chunks[i].order;
+
+		if (set_memory_encrypted(vaddr, 1U << order))
+			continue;
+		__free_pages(chunks[i].page, order);
+	}
+
+	kvfree(chunks);
+}
+
+/*
+ * netvsc_alloc_buf_pages - allocate a virtually-contiguous, host-visible
+ * buffer for the netvsc send/receive area.
+ *
+ * @node: NUMA node hint (NUMA_NO_NODE for any node)
+ * @size: requested buffer size in bytes (rounded up to PAGE_SIZE)
+ * @chunks_out: on success, set to the array of underlying chunks
+ * @chunk_cnt_out: on success, set to the number of chunks
+ *
+ * Allocates the buffer as a series of physically-contiguous chunks,
+ * starting at MAX_PAGE_ORDER and falling back to smaller orders on
+ * allocation failure. Each chunk is transitioned to host-visible via
+ * set_memory_decrypted() on its direct-map address, then all chunks are
+ * combined into a virtually-contiguous range via vmap().
+ *
+ * Return: the vmap()ed virtual address, or NULL on failure.
+ */
+static void *netvsc_alloc_buf_pages(int node, u32 size,
+				    struct netvsc_buf_chunk **chunks_out,
+				    u32 *chunk_cnt_out)
+{
+	u32 nr_pages = PFN_UP(size);
+	struct netvsc_buf_chunk *chunks = NULL;
+	struct page **pages = NULL;
+	unsigned int order;
+	u32 chunk_cnt = 0;
+	u32 page_idx = 0;
+	u32 remaining = nr_pages;
+	void *addr;
+	u32 i;
+	int ret;
+
+	*chunks_out = NULL;
+	*chunk_cnt_out = 0;
+
+	if (!nr_pages)
+		return NULL;
+
+	/* Worst case: every chunk is a single page. */
+	chunks = kvmalloc_array(nr_pages, sizeof(*chunks),
+				GFP_KERNEL | __GFP_ZERO);
+	if (!chunks)
+		goto err;
+
+	pages = kvmalloc_array(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		goto err;
+
+	/*
+	 * @order monotonically decreases across iterations
+	 *
+	 * Use __GFP_NORETRY | __GFP_NOWARN to avoid OOM-killing, but try
+	 * harder at order 0 since that is the final fallback.
+	 */
+	order = min_t(unsigned int, MAX_PAGE_ORDER, ilog2(nr_pages));
+	while (remaining) {
+		struct page *page;
+		gfp_t gfp;
+
+		order = min_t(unsigned int, order, ilog2(remaining));
+
+		for (;;) {
+			gfp = GFP_KERNEL | __GFP_ZERO;
+			if (order)
+				gfp |= __GFP_NORETRY | __GFP_NOWARN;
+			page = alloc_pages_node(node, gfp, order);
+			if (page)
+				break;
+			if (!order)
+				goto err;
+			order--;
+		}
+
+		ret = set_memory_decrypted((unsigned long)page_address(page),
+					   1U << order);
+		if (ret) {
+			/*
+			 * set_memory_decrypted() failed; the page state is
+			 * unknown so it must be leaked rather than freed.
+			 */
+			goto err;
+		}
+
+		chunks[chunk_cnt].page = page;
+		chunks[chunk_cnt].order = order;
+		chunk_cnt++;
+
+		for (i = 0; i < (1U << order); i++)
+			pages[page_idx++] = page + i;
+
+		remaining -= 1U << order;
+	}
+
+	addr = vmap(pages, nr_pages, VM_MAP, pgprot_decrypted(PAGE_KERNEL));
+	if (!addr)
+		goto err;
+
+	kvfree(pages);
+	*chunks_out = chunks;
+	*chunk_cnt_out = chunk_cnt;
+	return addr;
+
+err:
+	kvfree(pages);
+	netvsc_free_buf_pages(NULL, chunks, chunk_cnt);
+	return NULL;
+}
+
+static void __free_netvsc_device(struct netvsc_device *nvdev)
+{
+	int i;
+
+	kfree(nvdev->extension);
+
+	netvsc_free_buf_pages(nvdev->recv_buf, nvdev->recv_buf_chunks,
+			      nvdev->recv_buf_chunk_cnt);
+	netvsc_free_buf_pages(nvdev->send_buf, nvdev->send_buf_chunks,
+			      nvdev->send_buf_chunk_cnt);
+	bitmap_free(nvdev->send_section_map);
+
+	for (i = 0; i < VRSS_CHANNEL_MAX; i++) {
+		xdp_rxq_info_unreg(&nvdev->chan_table[i].xdp_rxq);
+		kfree(nvdev->chan_table[i].recv_buf);
+		vfree(nvdev->chan_table[i].mrc.slots);
+	}
+
+	kfree(nvdev);
+}
+
+static void free_netvsc_device(struct work_struct *w)
+{
+	struct rcu_work *rwork = to_rcu_work(w);
+
+	__free_netvsc_device(container_of(rwork, struct netvsc_device, rwork));
+}
+
+int netvsc_workqueue_init(void)
+{
+	netvsc_wq = alloc_workqueue("hv_netvsc", WQ_UNBOUND, 0);
+
+	return netvsc_wq ? 0 : -ENOMEM;
+}
+
+void netvsc_workqueue_destroy(void)
+{
+	rcu_barrier();
+	destroy_workqueue(netvsc_wq);
+}
+
 static struct netvsc_device *alloc_net_device(void)
 {
 	struct netvsc_device *net_device;
@@ -143,36 +335,18 @@ static struct netvsc_device *alloc_net_device(void)
 	init_completion(&net_device->channel_init_wait);
 	init_waitqueue_head(&net_device->subchan_open);
 	INIT_WORK(&net_device->subchan_work, netvsc_subchan_work);
+	INIT_RCU_WORK(&net_device->rwork, free_netvsc_device);
 
 	return net_device;
 }
 
-static void free_netvsc_device(struct rcu_head *head)
-{
-	struct netvsc_device *nvdev
-		= container_of(head, struct netvsc_device, rcu);
-	int i;
-
-	kfree(nvdev->extension);
-
-	if (!nvdev->recv_buf_gpadl_handle.decrypted)
-		vfree(nvdev->recv_buf);
-	if (!nvdev->send_buf_gpadl_handle.decrypted)
-		vfree(nvdev->send_buf);
-	bitmap_free(nvdev->send_section_map);
-
-	for (i = 0; i < VRSS_CHANNEL_MAX; i++) {
-		xdp_rxq_info_unreg(&nvdev->chan_table[i].xdp_rxq);
-		kfree(nvdev->chan_table[i].recv_buf);
-		vfree(nvdev->chan_table[i].mrc.slots);
-	}
-
-	kfree(nvdev);
-}
-
 static void free_netvsc_device_rcu(struct netvsc_device *nvdev)
 {
-	call_rcu(&nvdev->rcu, free_netvsc_device);
+	/*
+	 * Defer the actual free to process context: vunmap() and
+	 * set_memory_encrypted() cannot run from RCU softirq context.
+	 */
+	queue_rcu_work(netvsc_wq, &nvdev->rwork);
 }
 
 static void netvsc_revoke_recv_buf(struct hv_device *device,
@@ -351,7 +525,20 @@ static int netvsc_init_buf(struct hv_device *device,
 		buf_size = min_t(unsigned int, buf_size,
 				 NETVSC_RECEIVE_BUFFER_SIZE_LEGACY);
 
-	net_device->recv_buf = vzalloc(buf_size);
+	if (device->channel->co_external_memory) {
+		/* Confidential VM Bus leaves buffer encrypted */
+		net_device->recv_buf_chunks = NULL;
+		net_device->recv_buf_chunk_cnt = 0;
+		net_device->recv_buf = vzalloc(buf_size);
+	} else {
+		/* Otherwise, allocate decrypted buffer */
+		net_device->recv_buf =
+			netvsc_alloc_buf_pages(cpu_to_node(device->channel->target_cpu),
+					       buf_size,
+					       &net_device->recv_buf_chunks,
+					       &net_device->recv_buf_chunk_cnt);
+	}
+
 	if (!net_device->recv_buf) {
 		netdev_err(ndev,
 			   "unable to allocate receive buffer of size %u\n",
@@ -367,9 +554,10 @@ static int netvsc_init_buf(struct hv_device *device,
 	 * channel.  Note: This call uses the vmbus connection rather
 	 * than the channel to establish the gpadl handle.
 	 */
-	ret = vmbus_establish_gpadl(device->channel, net_device->recv_buf,
-				    buf_size,
-				    &net_device->recv_buf_gpadl_handle);
+	ret = vmbus_establish_gpadl_caller_decrypted(device->channel,
+						     net_device->recv_buf,
+						     buf_size,
+						     &net_device->recv_buf_gpadl_handle);
 	if (ret != 0) {
 		netdev_err(ndev,
 			"unable to establish receive buffer's gpadl\n");
@@ -457,7 +645,19 @@ static int netvsc_init_buf(struct hv_device *device,
 	buf_size = device_info->send_sections * device_info->send_section_size;
 	buf_size = round_up(buf_size, PAGE_SIZE);
 
-	net_device->send_buf = vzalloc(buf_size);
+	if (device->channel->co_external_memory) {
+		/* Confidential VM Bus leaves buffer encrypted */
+		net_device->send_buf_chunks = NULL;
+		net_device->send_buf_chunk_cnt = 0;
+		net_device->send_buf = vzalloc(buf_size);
+	} else {
+		/* Otherwise, allocate decrypted buffer */
+		net_device->send_buf =
+			netvsc_alloc_buf_pages(cpu_to_node(device->channel->target_cpu),
+					       buf_size,
+					       &net_device->send_buf_chunks,
+					       &net_device->send_buf_chunk_cnt);
+	}
 	if (!net_device->send_buf) {
 		netdev_err(ndev, "unable to allocate send buffer of size %u\n",
 			   buf_size);
@@ -470,9 +670,10 @@ static int netvsc_init_buf(struct hv_device *device,
 	 * channel.  Note: This call uses the vmbus connection rather
 	 * than the channel to establish the gpadl handle.
 	 */
-	ret = vmbus_establish_gpadl(device->channel, net_device->send_buf,
-				    buf_size,
-				    &net_device->send_buf_gpadl_handle);
+	ret = vmbus_establish_gpadl_caller_decrypted(device->channel,
+						     net_device->send_buf,
+						     buf_size,
+						     &net_device->send_buf_gpadl_handle);
 	if (ret != 0) {
 		netdev_err(ndev,
 			   "unable to establish send buffer's gpadl\n");
@@ -1863,7 +2064,11 @@ cleanup:
 	netif_napi_del(&net_device->chan_table[0].napi);
 
 cleanup2:
-	free_netvsc_device(&net_device->rcu);
+	/*
+	 * net_device was never published, so we don't need to wait for an
+	 * RCU grace period -- call the free routine synchronously.
+	 */
+	__free_netvsc_device(net_device);
 
 	return ERR_PTR(ret);
 }
