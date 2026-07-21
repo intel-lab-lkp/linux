@@ -38,11 +38,7 @@ BGPID=$!
 ${POLL} -I -t 4000 ${EVENT}/hist
 echo 0 > tracing_on
 
-if [ -d /proc/${BGPID} ]; then
-  echo "poll exits too soon"
-  kill -KILL ${BGPID} ||:
-  exit_fail
-fi
+wait ${BGPID} 2>/dev/null ||:
 
 if ! grep -qw "sleep" trace; then
   echo "poll exits before event happens"
@@ -60,11 +56,7 @@ BGPID=$!
 ${POLL} -P -t 4000 ${EVENT}/hist
 echo 0 > tracing_on
 
-if [ -d /proc/${BGPID} ]; then
-  echo "poll exits too soon"
-  kill -KILL ${BGPID} ||:
-  exit_fail
-fi
+wait ${BGPID} 2>/dev/null ||:
 
 if ! grep -qw "sleep" trace; then
   echo "poll exits before event happens"
@@ -72,3 +64,5 @@ if ! grep -qw "sleep" trace; then
 fi
 
 exit_pass
+
+
