@@ -1355,6 +1355,8 @@ xrep_iunlink_resolve_bucket(
 	int			error = 0;
 
 	while (next_agino != NULLAGINO) {
+		unsigned int len = 1;
+
 		if (xchk_should_terminate(ragi->sc, &error))
 			return error;
 
@@ -1415,6 +1417,14 @@ xrep_iunlink_resolve_bucket(
 					bucket, prev_agino, next_agino);
 			next_agino = ip->i_next_unlinked;
 			continue;
+		}
+
+		/* Inode already seen?  We're stuck in a loop */
+		if (!xagino_bitmap_test(&ragi->iunlink_bmp, next_agino, &len)) {
+			trace_xrep_iunlink_resolve_infinite_loop(sc->sa.pag,
+					bucket, prev_agino, next_agino);
+			next_agino = NULLAGINO;
+			break;
 		}
 
 		trace_xrep_iunlink_resolve_ok(sc->sa.pag, bucket, prev_agino,
