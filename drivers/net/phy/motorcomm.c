@@ -1,16 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Motorcomm 8511/8521/8522/8531/8531S/8821 PHY driver.
+ * Motorcomm 8511/8521/8522/8531/8531S/8821/8824 PHY driver.
  *
  * Author: Peter Geis <pgwipeout@gmail.com>
  * Author: Frank <Frank.Sae@motor-comm.com>
+ * Author: Kyle <kyle.switch@motor-comm.com>
  */
 
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/property.h>
+
+#include "phylib.h"
+
+/* define PHY8824 top extend addr offset internal and external*/
+#define INTERNAL_PHY8824_TOP_EXTEND_OFFSET    (5)
+#define EXTERNAL_PHY8824_TOP_EXTEND_OFFSET    (4)
 
 #define PHY_ID_YT8511		0x0000010a
 #define PHY_ID_YT8521		0x0000011a
@@ -18,6 +26,7 @@
 #define PHY_ID_YT8531		0x4f51e91b
 #define PHY_ID_YT8531S		0x4f51e91a
 #define PHY_ID_YT8821		0x4f51ea19
+#define PHY_ID_YT8824		0x4f51e8b8
 /* YT8521/YT8531S/YT8821 Register Overview
  *	UTP Register space	|	FIBER Register space
  *  ------------------------------------------------------------
@@ -26,6 +35,18 @@
  * |	UTP Extended		|	FIBER Extended		|
  *  ------------------------------------------------------------
  * |			Common Extended				|
+ *  ------------------------------------------------------------
+ */
+
+/* YT8824 Register Overview
+ *	UTP Register space	|	FIBER Register space
+ *  ------------------------------------------------------------
+ * |	UTP MII			|	FIBER MII	        |
+ * |	UTP MMD			|				|
+ * |	UTP Extended		|	FIBER Extended		|
+ * |	UTP Top Extended	|	FIBER Top Extended	|
+ *  ------------------------------------------------------------
+ * |			Common Top Extended			|
  *  ------------------------------------------------------------
  */
 
@@ -375,6 +396,16 @@
 #define YT8821_CHIP_MODE_AUTO_BX2500_SGMII	0
 #define YT8821_CHIP_MODE_FORCE_BX2500		1
 
+#define YT8824_RSSR_SPACE_MASK			BIT(0)
+#define YT8824_RSSR_FIBER_SPACE			(0x1)
+#define YT8824_RSSR_UTP_SPACE			(0x0)
+#define YT8824_UTP_TEMPLATE_MODE_CTRL		(0x84)
+#define YT8824_UTP_TEMPLATE_MODE_MASK		GENMASK(15, 13)
+#define YT8824_UTP_TEMPLATE_TEST_MODE1		BIT(13)
+#define YT8824_SDS_CFG_MIN_PRE_MASK		GENMASK(3, 0)
+#define YT8824_SDS_EN_FILL_PRE			BIT(13)
+#define YT8824_SDS_TX_PRE_PADDING		(0x7)
+
 struct yt8521_priv {
 	/* combo_advertising is used for case of YT8521 in combo mode,
 	 * this means that yt8521 may work in utp or fiber mode which depends
@@ -391,6 +422,11 @@ struct yt8521_priv {
 	 * YT8521_RSSR_TO_BE_ARBITRATED
 	 */
 	u8 reg_page;
+};
+
+struct yt8824_shared_priv {
+	unsigned int interface_mode;
+	unsigned int offset;
 };
 
 /**
@@ -429,6 +465,46 @@ static int ytphy_read_ext_with_lock(struct phy_device *phydev, u16 regnum)
 	phy_unlock_mdio_bus(phydev);
 
 	return ret;
+}
+
+/**
+ * ytphy_read_top_ext() - read a PHY's top extended register for YT8824
+ * @phydev: a pointer to a &struct phy_device
+ * @regnum: register number to read
+ *
+ * Returns: the value of regnum reg or negative error code
+ */
+static int ytphy_read_top_ext(struct phy_device *phydev, u16 regnum)
+{
+	int ret;
+
+	lockdep_assert_held(&phydev->mdio.bus->mdio_lock);
+	ret = __phy_package_write(phydev, 0, YTPHY_PAGE_SELECT, regnum);
+	if (ret < 0)
+		return ret;
+
+	return __phy_package_read(phydev, 0, YTPHY_PAGE_DATA);
+}
+
+/**
+ * ytphy_write_top_ext() - write a PHY's top extended register for YT8824
+ * @phydev: a pointer to a &struct phy_device
+ * @regnum: register number to write
+ * @val: register val to write
+ *
+ * Returns: the value of regnum reg or negative error code
+ */
+static int ytphy_write_top_ext(struct phy_device *phydev, u16 regnum,
+			       u16 val)
+{
+	int ret;
+
+	lockdep_assert_held(&phydev->mdio.bus->mdio_lock);
+	ret = __phy_package_write(phydev, 0, YTPHY_PAGE_SELECT, regnum);
+	if (ret < 0)
+		return ret;
+
+	return __phy_package_write(phydev, 0, YTPHY_PAGE_DATA, val);
 }
 
 /**
@@ -625,6 +701,1212 @@ static int ytphy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 
 err_restore_page:
 	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_read_page() - read reg page
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: current reg space of yt8824 (YT8824_RSSR_FIBER_SPACE/
+ * YT8824_RSSR_UTP_SPACE) or negative errno code
+ */
+static int yt8824_read_page(struct phy_device *phydev)
+{
+	int old_page;
+
+	old_page = ytphy_read_top_ext(phydev, YT8521_REG_SPACE_SELECT_REG);
+	if (old_page < 0)
+		return old_page;
+
+	return old_page & YT8824_RSSR_SPACE_MASK;
+};
+
+/**
+ * yt8824_write_page() - write reg page
+ * @phydev: a pointer to a &struct phy_device
+ * @page: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE) to write.
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_write_page(struct phy_device *phydev, int page)
+{
+	int old_page;
+	u16 data;
+
+	old_page = ytphy_read_top_ext(phydev, YT8521_REG_SPACE_SELECT_REG);
+	data = old_page & (~YT8824_RSSR_SPACE_MASK);
+	data |= page;
+
+	return ytphy_write_top_ext(phydev, YT8521_REG_SPACE_SELECT_REG, data);
+};
+
+/**
+ * yt8824_utp_invalid_test_mode_paged() - config YT8824 to invalid test mode.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_utp_invalid_test_mode_paged(struct phy_device *phydev,
+					      int reg_space)
+{
+	int old_page;
+	int ret = 0;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	if (reg_space == YT8824_RSSR_UTP_SPACE) {
+		ret = __phy_read_mmd(phydev, 0x1,
+				     YT8824_UTP_TEMPLATE_MODE_CTRL);
+		if (ret < 0)
+			goto err_restore_page;
+		ret &= ~YT8824_UTP_TEMPLATE_MODE_MASK;
+		ret |= YT8824_UTP_TEMPLATE_TEST_MODE1;
+		ret = __phy_write_mmd(phydev, 0x1,
+				      YT8824_UTP_TEMPLATE_MODE_CTRL, ret);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_sds_isolate_paged() - enable YT8824 serdes isolate.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_sds_isolate_paged(struct phy_device *phydev,
+				    int reg_space)
+{
+	int old_page;
+	int ret = 0;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	if (reg_space == YT8824_RSSR_FIBER_SPACE) {
+		ret = __phy_read(phydev, MII_BMCR);
+		if (ret < 0)
+			goto err_restore_page;
+		/* isolation */
+		ret |= BMCR_ISOLATE;
+		ret = __phy_write(phydev, MII_BMCR, ret);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_utp_softreset_paged() - config YT8824 UTP softreset.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_utp_softreset_paged(struct phy_device *phydev,
+				      int reg_space)
+{
+	int old_page;
+	int ret = 0;
+	int val;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+	if (reg_space == YT8824_RSSR_UTP_SPACE) {
+		ret = __phy_read(phydev, MII_BMCR);
+		if (ret < 0)
+			goto err_restore_page;
+		ret |= BMCR_RESET;
+		ret = __phy_write(phydev, MII_BMCR, ret);
+		if (ret < 0)
+			goto err_restore_page;
+		else
+			phy_unlock_mdio_bus(phydev);
+
+		/* wait until softreset done. */
+		return phy_read_poll_timeout(phydev, MII_BMCR, val,
+					     !(val & BMCR_RESET),
+					     50000, 600000, true);
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_utp_normal_test_mode_paged() - config YT8824 to normal test mode.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_utp_normal_test_mode_paged(struct phy_device *phydev,
+					     int reg_space)
+{
+	int old_page;
+	int ret = 0;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	if (reg_space == YT8824_RSSR_UTP_SPACE) {
+		/* normal mode */
+		ret = __phy_read_mmd(phydev, 0x1,
+				     YT8824_UTP_TEMPLATE_MODE_CTRL);
+		if (ret < 0)
+			goto err_restore_page;
+		ret &= ~YT8824_UTP_TEMPLATE_MODE_MASK;
+		ret = __phy_write_mmd(phydev, 0x1,
+				      YT8824_UTP_TEMPLATE_MODE_CTRL, ret);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_sds_isolate_and_softreset_paged() - disable YT8824 serdes isolate
+ * and sds softreset.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_sds_isolate_and_softreset_paged(struct phy_device *phydev,
+						  int reg_space)
+{
+	int old_page;
+	int ret = 0;
+	int val;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+	if (reg_space == YT8824_RSSR_FIBER_SPACE) {
+		ret = __phy_read(phydev, MII_BMCR);
+		if (ret < 0)
+			goto err_restore_page;
+		/* disable isolation */
+		ret &= ~BMCR_ISOLATE;
+		/* soft reset */
+		ret |= BMCR_RESET;
+		ret = __phy_write(phydev, MII_BMCR, ret);
+		if (ret < 0)
+			goto err_restore_page;
+		else
+			phy_unlock_mdio_bus(phydev);
+		/* wait until softreset done. */
+		return phy_read_poll_timeout(phydev, MII_BMCR, val,
+					     !(val & BMCR_RESET),
+					     50000, 600000, true);
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_soft_reset() - called to do PHY software reset
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_soft_reset(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->interface == PHY_INTERFACE_MODE_INTERNAL) {
+		/* invalid test mode */
+		ret = yt8824_utp_invalid_test_mode_paged
+			(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+		ret = yt8824_utp_softreset_paged(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+		/* normal mode */
+		ret = yt8824_utp_normal_test_mode_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+	} else {
+		/* invalid test mode */
+		ret = yt8824_utp_invalid_test_mode_paged
+			(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* sds isolation */
+		ret = yt8824_sds_isolate_paged(phydev, YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* utp soft reset */
+		ret = yt8824_utp_softreset_paged(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* normal mode */
+		ret = yt8824_utp_normal_test_mode_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* sds soft reset and disable isolation */
+		ret = yt8824_sds_isolate_and_softreset_paged
+			(phydev, YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
+/**
+ * yt8824_config_init_paged() - config external phy8824 init
+ * @phydev: target phy_device struct
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_config_init_paged(struct phy_device *phydev, int reg_space)
+{
+	struct yt8824_shared_priv *shared_priv;
+	int ret = 0, old_page;
+	u16 val_1, val_2, val_3, tmp;
+	u16 data = 0;
+	int port;
+
+	shared_priv = phy_package_get_priv(phydev);
+	port = phydev->mdio.addr - shared_priv->offset;
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	if (reg_space == YT8824_RSSR_FIBER_SPACE) {
+		/* read efuse */
+		val_1 = ytphy_read_top_ext(phydev, 0xa13e);
+		if (val_1 < 0)
+			goto err_restore_page;
+
+		val_2 = ytphy_read_top_ext(phydev, 0xa13f);
+		if (val_2 < 0)
+			goto err_restore_page;
+
+		val_3 = ytphy_read_top_ext(phydev, 0xa140);
+		if (val_3 < 0)
+			goto err_restore_page;
+
+		if (port == 0) {
+			/* Serdes optimization */
+			ret = ytphy_write_ext(phydev, 0x04be, 0x000d);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x049f, 0x7ded);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x04a9, 0x009f);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* analog CDR */
+			ret = ytphy_write_ext(phydev, 0x0406, 0x0800);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* optimized VCO */
+			ret = ytphy_write_ext(phydev, 0x0438, 0x9024);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x0439, 0x00c0);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* optimized PLL lock */
+			ret = ytphy_read_ext(phydev, 0x0429);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret &= ~(BIT(13) | BIT(12));
+			tmp = (val_1 & (BIT(7) | BIT(6)) >> 6);
+			ret |= (tmp << 12);
+			ret = ytphy_write_ext(phydev, 0x0429, ret);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_read_ext(phydev, 0x0441);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret &= ~(BIT(1) | BIT(0));
+			tmp = (val_1 & (BIT(5) | BIT(4)) >> 4);
+			ret |= tmp;
+			ret = ytphy_write_ext(phydev, 0x0441, ret);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_read_ext(phydev, 0x042b);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret &= ~(BIT(13) | BIT(12));
+			tmp = (val_3 & (BIT(1) | BIT(0)));
+			ret |= (tmp << 12);
+			ret = ytphy_write_ext(phydev, 0x042b, ret);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x043a, 0x1006);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x042a, 0xf070);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* cable length threshold */
+			ret = ytphy_write_ext(phydev, 0x0491, 0x007f);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x0492, 0x7f7f);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* Serdes training threshold */
+			ret = ytphy_write_ext(phydev, 0x0454, 0x0f14);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x0497, 0x0a44);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* digital eye diagram of SerDes */
+			ret = ytphy_write_ext(phydev, 0x04cd, 0x0000);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* Serdes LDO */
+			ret = ytphy_read_ext(phydev, 0x04b5);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret &= ~(BIT(6) | BIT(5) | BIT(4));
+			tmp = (val_2 & (BIT(4) | BIT(3) | BIT(2)) >> 2);
+			ret |= (tmp << 4);
+			ret = ytphy_write_ext(phydev, 0x04b5, ret);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_read_ext(phydev, 0x04b4);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret &= ~(BIT(10) | BIT(9) | BIT(8));
+			tmp = (val_2 & (BIT(7) | BIT(6) | BIT(5)) >> 5);
+			ret |= (tmp << 8);
+			ret = ytphy_write_ext(phydev, 0x04b4, ret);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* optimized Serdes RX */
+			ret = ytphy_write_ext(phydev, 0x04af, 0x45e3);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x048a, 0x0fff);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x0408, 0x7c00);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x04d6, 0x007f);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x044f, 0xff08);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* optimized Serdes TX */
+			ret = ytphy_write_ext(phydev, 0x048e, 0x7d00);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x000d, 0x0606);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* Serdes manual config */
+			ret = ytphy_write_ext(phydev, 0x04b0, 0x0804);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x04b1, 0x7074);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x04af, 0x45e7);
+			if (ret < 0)
+				goto err_restore_page;
+
+			/* restart calibration */
+			ret = ytphy_write_ext(phydev, 0x0003, 0x5603);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x0492, 0x7fff);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x0492, 0x7f7f);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x2000, 0x0040);
+			if (ret < 0)
+				goto err_restore_page;
+
+			ret = ytphy_write_ext(phydev, 0x2000, 0x0000);
+			if (ret < 0)
+				goto err_restore_page;
+		}
+
+		/* TX preamble padded to 8; RX IPG always > 8 */
+		data &= ~YT8824_SDS_CFG_MIN_PRE_MASK;
+		data |= YT8824_SDS_TX_PRE_PADDING;
+		data |= YT8824_SDS_EN_FILL_PRE;
+		ret = __phy_write(phydev, MII_RESV1, data);
+		if (ret < 0)
+			goto err_restore_page;
+
+		data = __phy_read(phydev, MII_BMCR);
+		if (data < 0)
+			goto err_restore_page;
+		data |= BMCR_RESET;
+		data |= BMCR_ANENABLE;
+		ret = __phy_write(phydev, MII_BMCR, data);
+		if (ret < 0)
+			goto err_restore_page;
+	} else if (reg_space == YT8824_RSSR_UTP_SPACE) {
+		/* power down */
+		data = __phy_read(phydev, MII_BMCR);
+		if (data < 0)
+			goto err_restore_page;
+		data |= BMCR_PDOWN;
+		ret = __phy_write(phydev, MII_BMCR, data);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* pll calibration */
+		ret = ytphy_write_ext(phydev, 0x0001, 0x0003);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa20e, 0x0cba);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa20a, 0xc3f1);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa20c, 0x1620);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa2b6, 0x0a00);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa2b6, 0x0e00);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimization utp */
+		ret = ytphy_write_ext(phydev, 0x0001, 0x0003);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* enable nibble */
+		ret = ytphy_write_ext(phydev, 0xa003, 0x0003);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* idle err detect enable */
+		ret = ytphy_write_ext(phydev, 0x03d0, 0x5210);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized 2.5G long cable performance */
+		ret = ytphy_write_ext(phydev, 0x0372, 0x5038);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x037c, 0x6068);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0388, 0x00a0);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized fast retrain */
+		ret = ytphy_write_ext(phydev, 0x0359, 0x2140);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x000c, 0xc1a0);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* 2.5G template tone */
+		ret = ytphy_write_ext(phydev, 0xa2fa, 0x0083);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x04e2, 0x0149);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized 2.5G template */
+		ret = ytphy_write_ext(phydev, 0x047e, 0x3939);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x047f, 0x3939);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0480, 0x3939);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0481, 0x3939);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized 1000M cable length threshold */
+		ret = ytphy_write_ext(phydev, 0x0336, 0xab0a);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0340, 0x301d);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* 100M template amplitude */
+		ret = ytphy_write_ext(phydev, 0x046e, 0x4545);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x046f, 0x4545);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0470, 0x4545);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0471, 0x4545);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized 100M cable length threshold */
+		ret = ytphy_write_ext(phydev, 0x030b, 0xaa1d);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x071f, 0x0036);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* 10M template amplitude */
+		ret = ytphy_write_ext(phydev, 0x046b, 0x1818);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x046c, 0x1818);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized 10M cable length threshold */
+		ret = ytphy_write_ext(phydev, 0x0466, 0x6c6c);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0467, 0x6c6c);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0468, 0x6c6c);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0469, 0x6c6c);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimize utp 1000M performance */
+		ret = ytphy_write_ext(phydev, 0x034a, 0xff03);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x00f8, 0xb3ff);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0059, 0x4040);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x032c, 0x5094);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x032d, 0xd094);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x032e, 0x5308);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x0322, 0x6440);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x04d3, 0x5220);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x04d2, 0x5220);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized EMC CS */
+		ret = ytphy_write_ext(phydev, 0x00c8, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x00be, 0x6406);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0x037a, 0x40ff);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* optimized EMC RE */
+		ret = ytphy_write_ext(phydev, 0x0482, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa2d5, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa2d6, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa2d7, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa2d8, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa218, 0x006e);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa01d, 0xfff0);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa01e, 0xfff0);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa01d, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_ext(phydev, 0xa01e, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_internal_config_init_paged() - config internal phy8824 init
+ * @phydev: target phy_device struct
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE).
+ *
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_internal_config_init_paged(struct phy_device *phydev,
+					     int reg_space)
+{
+	struct yt8824_shared_priv *shared_priv;
+	int old_page;
+	int port = 0;
+	int ret = 0;
+	u16 data;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	shared_priv = phy_package_get_priv(phydev);
+	port = phydev->mdio.addr - shared_priv->offset;
+	ret = ytphy_write_ext(phydev, 0x1, 0x3);
+	if (ret < 0)
+		goto err_restore_page;
+	data = __phy_read(phydev, MII_BMCR);
+	if (data < 0)
+		goto err_restore_page;
+	data |= BMCR_PDOWN;
+	ret = __phy_write(phydev, MII_BMCR, data);
+	if (ret < 0)
+		goto err_restore_page;
+	if (port == 0) {
+		ret = ytphy_write_ext(phydev, 0xa20e, 0xcba);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa20a, 0xc3f1);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa20c, 0x1620);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa2b6, 0xa00);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa2b6, 0xe00);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa003, 0x3);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+	ret = ytphy_write_ext(phydev, 0x3d0, 0x5210);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x372, 0x5038);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x37c, 0x6068);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x388, 0xa0);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x359, 0x2140);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_top_ext(phydev, 0xa2fa, 0x83);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x4e2, 0x149);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 2.5G tempate */
+	ret = ytphy_write_ext(phydev, 0x47e, 0x3939);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x47f, 0x3939);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x480, 0x3939);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x481, 0x3939);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 1000 cable length threshold */
+	ret = ytphy_write_ext(phydev, 0x336, 0xab0a);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x340, 0x301d);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 1000 performance */
+	ret = ytphy_write_ext(phydev, 0x34a, 0xff03);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0xf8, 0xb3ff);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x32c, 0x5094);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x32d, 0xd094);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x32e, 0x5308);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x322, 0x6440);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x4d3, 0x5220);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x4d2, 0x5220);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 100 tempate */
+	ret = ytphy_write_ext(phydev, 0x46e, 0x4545);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x46f, 0x4545);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x470, 0x4545);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x471, 0x4545);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 100 cable length threshold */
+	ret = ytphy_write_ext(phydev, 0x30b, 0xaa1d);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x71f, 0x36);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 10 tempate */
+	ret = ytphy_write_ext(phydev, 0x46b, 0x1818);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x46c, 0x1818);
+	if (ret < 0)
+		goto err_restore_page;
+	/* 10 tempate MAU*/
+	ret = ytphy_write_ext(phydev, 0x466, 0x6c6c);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x467, 0x6c6c);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x468, 0x6c6c);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x469, 0x6c6c);
+	if (ret < 0)
+		goto err_restore_page;
+	/* EMC CS */
+	ret = ytphy_write_ext(phydev, 0xc8, 0xfff);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0xbe, 0x6406);
+	if (ret < 0)
+		goto err_restore_page;
+	ret = ytphy_write_ext(phydev, 0x37a, 0x40ff);
+	if (ret < 0)
+		goto err_restore_page;
+	/* EMC RE*/
+	ret = ytphy_write_ext(phydev, 0x482, 0xffff);
+	if (ret < 0)
+		goto err_restore_page;
+	if (port == 0) {
+		ret = ytphy_write_ext(phydev, 0x482, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa2d5, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa2d6, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa2d7, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa2d8, 0x1f1f);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa218, 0x6e);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa01d, 0xfff0);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa01e, 0xfff0);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa01d, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+		ret = ytphy_write_ext(phydev, 0xa01e, 0xffff);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+	ret = ytphy_write_ext(phydev, 0xc, 0x41a1);
+	if (ret < 0)
+		goto err_restore_page;
+	data = __phy_read_mmd(phydev, 0x1, YT8824_UTP_TEMPLATE_MODE_CTRL);
+	if (data < 0)
+		goto err_restore_page;
+	data &= ~YT8824_UTP_TEMPLATE_MODE_MASK;
+	data |= YT8824_UTP_TEMPLATE_TEST_MODE1;
+	ret = __phy_write_mmd(phydev, 0x1, YT8824_UTP_TEMPLATE_MODE_CTRL, data);
+	data = __phy_read(phydev, MII_BMCR);
+	if (data < 0)
+		goto err_restore_page;
+	data |= BMCR_RESET;
+	data |= BMCR_ANENABLE;
+	ret = __phy_write(phydev, MII_BMCR, data);
+	if (ret < 0)
+		goto err_restore_page;
+	data = __phy_read_mmd(phydev, 0x1, YT8824_UTP_TEMPLATE_MODE_CTRL);
+	if (data < 0)
+		goto err_restore_page;
+	data &= ~YT8824_UTP_TEMPLATE_MODE_MASK;
+	ret = __phy_write_mmd(phydev, 0x1, YT8824_UTP_TEMPLATE_MODE_CTRL, data);
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_config_init() - phy initializatioin
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_config_init(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->interface == PHY_INTERFACE_MODE_INTERNAL) {
+		ret = yt8824_internal_config_init_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+	} else {
+		ret = yt8824_config_init_paged(phydev, YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+		ret = yt8824_config_init_paged(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+	}
+	ret = yt8824_soft_reset(phydev);
+	if (ret < 0)
+		return ret;
+
+	phydev_dbg(phydev, "%s done, phy addr: %d\n",
+		   __func__, phydev->mdio.addr);
+
+	return 0;
+}
+
+/**
+ * yt8824_config_intr() - phy8824 interrupt configuration
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_config_intr(struct phy_device *phydev)
+{
+	struct yt8824_shared_priv *shared_priv;
+	int ret = 0, old_page;
+	int port;
+
+	shared_priv = phy_package_get_priv(phydev);
+	if ((phydev->mdio.addr - shared_priv->offset) < 2)
+		port = 0;
+	else
+		port = 2;
+	old_page = phy_select_page(phydev, YT8824_RSSR_UTP_SPACE);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		/* top ext reg 0xa000
+		 * bit6 int_polarity 1'b0 low active, 1'b1 high active
+		 */
+		ret = ytphy_read_top_ext(phydev, YT8521_REG_SPACE_SELECT_REG);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_top_ext(phydev,
+					  YT8521_REG_SPACE_SELECT_REG,
+					  ret & (~BIT(6)));
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* top ext reg 0xa019
+		 * bit5 intr_phy_pulse_en 1'b0 level, 1'b1 pulse
+		 */
+		ret = ytphy_read_top_ext(phydev, 0xa019);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_write_top_ext(phydev, 0xa019, ret | BIT(5));
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* top ext reg 0xa018 phy_pulse_lth bit14:8
+		 * top ext reg 0xa019 timer_tick_sel bit8:7
+		 * bit14:8 phy_pulse_lth bit8:7 timer_tick_sel   pulse width
+		 * 0x007a		0x0002		10ms pulse width
+		 * 0x0064		0x0001		1ms pulse width
+		 * 0x004e		0x0000		100ms pulse width
+		 * 0x0009		0x0000		10ms pulse width
+		 */
+		ret = ytphy_read_top_ext(phydev, 0xa018);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret &= ~0x7f00;
+		ret |= (0x0009 << 8);
+		ret = ytphy_write_top_ext(phydev, 0xa018, ret);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret = ytphy_read_top_ext(phydev, 0xa019);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret &= ~0x180;
+		ret |= (0x0000 << 7);
+		ret = ytphy_write_top_ext(phydev, 0xa019, ret);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* top ext reg 0xa01c interrupt state(Read Clear)
+		 * bit11 PHY3 1: phy3 link up/down occurs, 0: not occur
+		 * bit10 PHY2 1: phy2 link up/down occurs, 0: not occur
+		 * bit9  PHY1 1: phy1 link up/down occurs, 0: not occur
+		 * bit8  PHY0 1: phy0 link up/down occurs, 0: not occur
+		 *
+		 * bit7  PHY3 1: phy3 link down occurs, 0: not occur
+		 * bit6  PHY2 1: phy2 link down occurs, 0: not occur
+		 * bit5  PHY1 1: phy1 link down occurs, 0: not occur
+		 * bit4  PHY0 1: phy0 link down occurs, 0: not occur
+		 *
+		 * bit3  PHY3 1: phy3 link up occurs, 0: not occur
+		 * bit2  PHY2 1: phy2 link up occurs, 0: not occur
+		 * bit1  PHY1 1: phy1 link up occurs, 0: not occur
+		 * bit0  PHY0 1: phy0 link up occurs, 0: not occur
+		 */
+		ret = ytphy_read_top_ext(phydev, 0xa01c);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* top ext reg 0xa01a
+		 * bit5 intn_wol_mode 1'b1 enable intn_wol pin output
+		 * bit4 intn_mode 1'b1 enable intn pin output
+		 */
+		ret = ytphy_read_top_ext(phydev, 0xa01a);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret &= ~BIT(5);
+		ret |= BIT(4);
+		ret = ytphy_write_top_ext(phydev, 0xa01a, ret);
+		if (ret < 0)
+			goto err_restore_page;
+
+		/* top ext reg 0xa01b interrupt mask
+		 * bit11 1'b1 enable interrupt signal(link up/down) to intr pin
+		 * bit7 1'b1 enable interrupt signal(link down) to intr pin
+		 * bit3 1'b1 enable interrupt signal(link up) to intr pin
+		 *
+		 * bit10 1'b1 enable interrupt signal(link up/down) to intr pin
+		 * bit6 1'b1 enable interrupt signal(link down) to intr pin
+		 * bit2 1'b1 enable interrupt signal(link up) to intr pin
+		 *
+		 * bit9 1'b1 enable interrupt signal(link up/down) to intr pin
+		 * bit5 1'b1 enable interrupt signal(link down) to intr pin
+		 * bit1 1'b1 enable interrupt signal(link up) to intr pin
+		 *
+		 * bit8 1'b1 enable interrupt signal(link up/down) to intr pin
+		 * bit4 1'b1 enable interrupt signal(link down) to intr pin
+		 * bit0 1'b1 enable interrupt signal(link up) to intr pin
+		 */
+		ret = ytphy_read_top_ext(phydev, 0xa01b);
+		if (ret < 0)
+			goto err_restore_page;
+
+		ret |= (BIT(port + 8) | BIT(port + 4) | BIT(port));
+		ret = ytphy_write_top_ext(phydev, 0xa01b, ret);
+		if (ret < 0)
+			goto err_restore_page;
+	}
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_handle_interrupt() - phy8824 interrupt handle
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static irqreturn_t yt8824_handle_interrupt(struct phy_device *phydev)
+{
+	int ret = 0, old_page;
+
+	old_page = phy_select_page(phydev, YT8824_RSSR_UTP_SPACE);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	/* top ext reg 0xa01c interrupt state(Read Clear)
+	 * bit11 PHY3 interrupt 1: phy3 link up/down happened, 0: not happened
+	 * bit10 PHY2 interrupt 1: phy2 link up/down happened, 0: not happened
+	 * bit9  PHY1 interrupt 1: phy1 link up/down happened, 0: not happened
+	 * bit8  PHY0 interrupt 1: phy0 link up/down happened, 0: not happened
+	 * bit7  PHY3 link down 1: phy3 link down happened, 0: not happened
+	 * bit6  PHY2 link down 1: phy2 link down happened, 0: not happened
+	 * bit5  PHY1 link down 1: phy1 link down happened, 0: not happened
+	 * bit4  PHY0 link down 1: phy0 link down happened, 0: not happened
+	 * bit3  PHY3 link up 1: phy3 link up happened, 0: not happened
+	 * bit2  PHY2 link up 1: phy2 link up happened, 0: not happened
+	 * bit1  PHY1 link up 1: phy1 link up happened, 0: not happened
+	 * bit0  PHY0 link up 1: phy0 link up happened, 0: not happened
+	 */
+	ret = ytphy_read_top_ext(phydev, 0xa01c);
+	if (ret < 0)
+		goto err_restore_page;
+
+err_restore_page:
+	ret = phy_restore_page(phydev, old_page, ret);
+	if (ret > 0) {
+		phy_trigger_machine(phydev);
+		return IRQ_HANDLED;
+	} else {
+		return IRQ_NONE;
+	}
 }
 
 static int yt8531_set_wol(struct phy_device *phydev,
@@ -3059,6 +4341,408 @@ static int yt8821_resume(struct phy_device *phydev)
 	return yt8821_modify_utp_fiber_bmcr(phydev, BMCR_PDOWN, 0);
 }
 
+/**
+ * yt8824_aneg_done()  - check negotiation state.
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_aneg_done(struct phy_device *phydev)
+{
+	int link = 0;
+	int old_page;
+	int ret = 0;
+
+	old_page = phy_select_page(phydev, YT8824_RSSR_UTP_SPACE);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	link = !!(__phy_read(phydev, YTPHY_SPECIFIC_STATUS_REG) &
+			     YTPHY_SSR_LINK);
+
+	phydev_dbg(phydev, "%s, phy addr: %d, link_utp: %d\n",
+		   __func__, phydev->mdio.addr, link);
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_read_status_paged() -  determines the speed and duplex of one page
+ * @phydev: a pointer to a &struct phy_device
+ * @page: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE) to
+ * operate.
+ * @status: The link status, include speed, duplex and link state.
+ * @lpa: link partner advertising.
+ *
+ * Returns: 1 (utp or fiber link),0 (no link) or negative errno code
+ */
+static int yt8824_read_status_paged(struct phy_device *phydev, int page,
+				    int *status, int *lpa)
+{
+	int old_page;
+	int ret = 0;
+
+	page &= YT8824_RSSR_SPACE_MASK;
+	old_page = phy_select_page(phydev, page);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	ret = __phy_read(phydev, MII_LPA);
+	*lpa = ret;
+	if (ret < 0)
+		goto err_restore_page;
+
+	ret = __phy_read(phydev, YTPHY_SPECIFIC_STATUS_REG);
+	*status = ret;
+	if (ret < 0)
+		goto err_restore_page;
+
+	ret = !!(*status & YTPHY_SSR_LINK);
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_read_status() -  determines the negotiated speed and duplex
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_read_status(struct phy_device *phydev)
+{
+	int link;
+	int lpa;
+	int val;
+
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
+	phydev->link = 0;
+	phydev->speed = SPEED_UNKNOWN;
+	phydev->duplex = DUPLEX_UNKNOWN;
+
+	link = yt8824_read_status_paged(phydev,
+					YT8824_RSSR_UTP_SPACE, &val, &lpa);
+	if (link < 0)
+		return link;
+
+	if (link) {
+		phydev->link = 1;
+		phydev->pause = !!(lpa & BIT(10));
+		phydev->asym_pause = !!(lpa & BIT(11));
+
+		/* update speed & duplex */
+		yt8821_adjust_status(phydev, val);
+	} else {
+		phydev->link = 0;
+		phydev->pause = 0;
+		phydev->asym_pause = 0;
+		phydev->speed = SPEED_UNKNOWN;
+		phydev->duplex = DUPLEX_UNKNOWN;
+	}
+
+	return 0;
+}
+
+/**
+ * yt8824_utp_power_on(): utp power on.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE)
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_utp_power_on(struct phy_device *phydev,
+			       int reg_space)
+{
+	int old_page;
+	int ret = 0;
+
+	old_page = phy_select_page(phydev, reg_space);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	ret = __phy_read(phydev, MII_BMCR);
+	if (ret < 0)
+		goto err_restore_page;
+
+	ret &= ~BMCR_PDOWN;
+	ret &= ~BMCR_ISOLATE;
+
+	ret = __phy_write(phydev, MII_BMCR, ret);
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_utp_power_down(): utp power down.
+ * @phydev: a pointer to a &struct phy_device
+ * @reg_space: The reg page(YT8824_RSSR_FIBER_SPACE/YT8824_RSSR_UTP_SPACE)
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_utp_power_down(struct phy_device *phydev,
+				 int reg_space)
+{
+	int ret = 0, old_page;
+
+	old_page = phy_select_page(phydev, YT8824_RSSR_UTP_SPACE);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	ret = __phy_read(phydev, MII_BMCR);
+	if (ret < 0)
+		goto err_restore_page;
+
+	ret = __phy_write(phydev, MII_BMCR, ret | BMCR_PDOWN);
+	if (ret < 0)
+		goto err_restore_page;
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_power_on()  - set utp power on.
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * NOTE: need WA like softreset
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_power_on(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->interface == PHY_INTERFACE_MODE_INTERNAL) {
+		/* invalid test mode */
+		ret = yt8824_utp_invalid_test_mode_paged(phydev,
+							 YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+		/* utp power on */
+		ret = yt8824_utp_power_on(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+		/* normal mode */
+		ret = yt8824_utp_normal_test_mode_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+	} else {
+		/* invalid test mode */
+		ret = yt8824_utp_invalid_test_mode_paged(phydev,
+							 YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* sds isolation */
+		ret = yt8824_sds_isolate_paged(phydev, YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* utp power on */
+		ret = yt8824_utp_power_on(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* normal mode */
+		ret = yt8824_utp_normal_test_mode_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* sds soft reset and disable isolation */
+		ret = yt8824_sds_isolate_and_softreset_paged
+			(phydev,
+			 YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
+/**
+ * yt8824_resume() - resume the hardware
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_resume(struct phy_device *phydev)
+{
+	return yt8824_power_on(phydev);
+}
+
+/**
+ * yt8824_power_down()  - set utp power down.
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * NOTE: need WA like softreset
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_power_down(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->interface == PHY_INTERFACE_MODE_INTERNAL) {
+		/* invalid test mode */
+		ret = yt8824_utp_invalid_test_mode_paged(phydev,
+							 YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+		/* utp power down */
+		ret = yt8824_utp_power_down(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+		/* normal mode */
+		ret = yt8824_utp_normal_test_mode_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+	} else {
+		/* invalid test mode */
+		ret = yt8824_utp_invalid_test_mode_paged(phydev,
+							 YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* sds isolation */
+		ret = yt8824_sds_isolate_paged(phydev, YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* utp power down */
+		ret = yt8824_utp_power_down(phydev, YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* normal mode */
+		ret = yt8824_utp_normal_test_mode_paged(phydev,
+							YT8824_RSSR_UTP_SPACE);
+		if (ret < 0)
+			return ret;
+
+		/* sds soft reset and disable isolation */
+		ret = yt8824_sds_isolate_and_softreset_paged
+			(phydev, YT8824_RSSR_FIBER_SPACE);
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
+/**
+ * yt8824_suspend() - suspend the hardware
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_suspend(struct phy_device *phydev)
+{
+	return yt8824_power_down(phydev);
+}
+
+/**
+ * yt8824_config_aneg() - config negotiation
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_config_aneg(struct phy_device *phydev)
+{
+	int phy_ctrl = 0;
+	int old_page;
+	int ret = 0;
+
+	old_page = phy_select_page(phydev, YT8824_RSSR_UTP_SPACE);
+	if (old_page < 0)
+		goto err_restore_page;
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+			      phydev->advertising))
+		phy_ctrl = MDIO_AN_10GBT_CTRL_ADV2_5G;
+
+	ret = __phy_modify_mmd_changed(phydev, MDIO_MMD_AN,
+				       MDIO_AN_10GBT_CTRL,
+				       MDIO_AN_10GBT_CTRL_ADV2_5G,
+				       phy_ctrl);
+	if (ret)
+		goto err_restore_page;
+	else
+		phy_unlock_mdio_bus(phydev);
+
+	return genphy_config_aneg(phydev);
+
+err_restore_page:
+	return phy_restore_page(phydev, old_page, ret);
+}
+
+/**
+ * yt8824_phy_package_probe_once()  - init phy packet for phy8824.
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_phy_package_probe_once(struct phy_device *phydev)
+{
+	struct yt8824_shared_priv *priv = phy_package_get_priv(phydev);
+	struct device_node *np = phy_package_get_node(phydev);
+	const char *interface_mode_name;
+
+	priv->interface_mode = PHY_INTERFACE_MODE_NA;
+	priv->offset = INTERNAL_PHY8824_TOP_EXTEND_OFFSET;
+	if (!of_property_read_string(np, "motorcomm,interface-mode",
+				     &interface_mode_name)) {
+		if (!strcasecmp(interface_mode_name,
+				phy_modes(PHY_INTERFACE_MODE_USXGMII))) {
+			priv->interface_mode = PHY_INTERFACE_MODE_USXGMII;
+			priv->offset = EXTERNAL_PHY8824_TOP_EXTEND_OFFSET;
+		} else if (!strcasecmp
+				(interface_mode_name,
+				 phy_modes(PHY_INTERFACE_MODE_INTERNAL))) {
+			priv->interface_mode = PHY_INTERFACE_MODE_INTERNAL;
+			priv->offset = INTERNAL_PHY8824_TOP_EXTEND_OFFSET;
+		} else {
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+/**
+ * yt8824_probe() - phy8824 probe.
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * Returns: 0 or negative errno code
+ */
+static int yt8824_probe(struct phy_device *phydev)
+{
+	struct device *dev = &phydev->mdio.dev;
+	struct yt8824_shared_priv *shared_priv;
+	struct yt8521_priv *priv;
+	int ret;
+
+	ret = devm_of_phy_package_join(dev, phydev, sizeof(*shared_priv));
+	if (ret)
+		return ret;
+
+	if (phy_package_probe_once(phydev)) {
+		ret = yt8824_phy_package_probe_once(phydev);
+		if (ret)
+			return ret;
+	}
+
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	phydev->priv = priv;
+
+	return 0;
+}
+
 static struct phy_driver motorcomm_phy_drvs[] = {
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8511),
@@ -3145,13 +4829,31 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.suspend		= yt8821_suspend,
 		.resume			= yt8821_resume,
 	},
+	{
+		PHY_ID_MATCH_EXACT(PHY_ID_YT8824),
+		.name			= "YT8824 Quad Ports 2.5Gbps Ethernet",
+		.get_features		= yt8821_get_features,
+		.read_page		= yt8824_read_page,
+		.write_page		= yt8824_write_page,
+		.config_intr            = yt8824_config_intr,
+		.handle_interrupt	= yt8824_handle_interrupt,
+		.probe		        = yt8824_probe,
+		.config_aneg		= yt8824_config_aneg,
+		.aneg_done		= yt8824_aneg_done,
+		.config_init		= yt8824_config_init,
+		.read_status		= yt8824_read_status,
+		.soft_reset		= yt8824_soft_reset,
+		.suspend		= yt8824_suspend,
+		.resume			= yt8824_resume,
+	},
 };
 
 module_phy_driver(motorcomm_phy_drvs);
 
-MODULE_DESCRIPTION("Motorcomm 8511/8521/8531/8531S/8821 PHY driver");
+MODULE_DESCRIPTION("Motorcomm 8511/8521/8531/8531S/8821/8824 PHY driver");
 MODULE_AUTHOR("Peter Geis");
 MODULE_AUTHOR("Frank");
+MODULE_AUTHOR("Kyle");
 MODULE_LICENSE("GPL");
 
 static const struct mdio_device_id __maybe_unused motorcomm_tbl[] = {
@@ -3161,6 +4863,7 @@ static const struct mdio_device_id __maybe_unused motorcomm_tbl[] = {
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8531) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8531S) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8821) },
+	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8824) },
 	{ /* sentinel */ }
 };
 
