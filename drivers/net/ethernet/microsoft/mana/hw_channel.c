@@ -384,14 +384,20 @@ static void mana_hwc_comp_event(void *ctx, struct gdma_queue *q_self)
 
 static void mana_hwc_destroy_cq(struct gdma_context *gc, struct hwc_cq *hwc_cq)
 {
-	kfree(hwc_cq->comp_buf);
-
 	if (hwc_cq->gdma_cq)
 		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
 
+	/* comp_buf is reached only by mana_hwc_comp_event(), which the
+	 * EQ handler invokes via cq_table[id].  The CQ destroy above
+	 * already cleared that slot and ran synchronize_rcu(), so no
+	 * handler can reach comp_buf once it returns.  Destroying the EQ
+	 * here additionally tears down the IRQ (defense in depth) before
+	 * comp_buf and hwc_cq are freed below.
+	 */
 	if (hwc_cq->gdma_eq)
 		mana_gd_destroy_queue(gc, hwc_cq->gdma_eq);
 
+	kfree(hwc_cq->comp_buf);
 	kfree(hwc_cq);
 }
 
