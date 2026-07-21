@@ -1249,6 +1249,9 @@ int arm_smmu_kexec_parse_strtab_linear(struct arm_smmu_device *smmu,
 int arm_smmu_kexec_check_strtab_l1_desc(struct arm_smmu_device *smmu,
 					u64 l1_desc, u32 idx,
 					phys_addr_t *l2_base);
+int arm_smmu_kexec_check_ste_cdtab(struct arm_smmu_device *smmu, u64 ste0,
+				   phys_addr_t *cdtab, u32 *s1fmt,
+				   u32 *max_contexts);
 #endif /* CONFIG_ARM_SMMU_V3_KEXEC */
 
 #ifdef CONFIG_CRASH_DUMP
