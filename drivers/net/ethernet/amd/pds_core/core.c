@@ -635,6 +635,9 @@ void pdsc_health_thread(struct work_struct *work)
 	unsigned long mask;
 	bool healthy;
 
+	if (READ_ONCE(pdsc->health_stopped))
+		return;
+
 	mutex_lock(&pdsc->config_lock);
 
 	/* Don't do a check when in a transition state */

@@ -463,6 +463,7 @@ static void pdsc_stop_health_thread(struct pdsc *pdsc)
 	if (pdsc->pdev->is_virtfn)
 		return;
 
+	WRITE_ONCE(pdsc->health_stopped, true);
 	timer_shutdown_sync(&pdsc->wdtimer);
 	if (pdsc->health_work.func)
 		cancel_work_sync(&pdsc->health_work);
@@ -473,6 +474,7 @@ static void pdsc_restart_health_thread(struct pdsc *pdsc)
 	if (pdsc->pdev->is_virtfn)
 		return;
 
+	WRITE_ONCE(pdsc->health_stopped, false);
 	timer_setup(&pdsc->wdtimer, pdsc_wdtimer_cb, 0);
 	mod_timer(&pdsc->wdtimer, jiffies + 1);
 }
