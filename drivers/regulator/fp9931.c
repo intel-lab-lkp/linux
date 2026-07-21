@@ -42,7 +42,6 @@ static const unsigned int VPOSNEG_table[] = {
 	7040000,
 	7040000,
 	7040000,
-	7040000,
 	7260000,
 	7490000,
 	7710000,
