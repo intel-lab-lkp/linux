@@ -311,6 +311,7 @@ err_out_unmap_bars:
 		destroy_workqueue(pdsc->wq);
 	mutex_destroy(&pdsc->config_lock);
 	mutex_destroy(&pdsc->devcmd_lock);
+	pdsc_deferred_dma_free(pdsc);
 	pci_free_irq_vectors(pdsc->pdev);
 	pdsc_unmap_bars(pdsc);
 err_out_release_regions:
@@ -348,6 +349,8 @@ static int pdsc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pdsc->pdev = pdev;
 	pdsc->dev = &pdev->dev;
 	set_bit(PDSC_S_INITING_DRIVER, &pdsc->state);
+	INIT_LIST_HEAD(&pdsc->deferred_dma_list);
+	spin_lock_init(&pdsc->deferred_dma_lock);
 	pci_set_drvdata(pdev, pdsc);
 	pdsc_debugfs_add_dev(pdsc);
 
@@ -452,6 +455,7 @@ static void pdsc_remove(struct pci_dev *pdev)
 	}
 
 	pci_disable_device(pdev);
+	pdsc_deferred_dma_free(pdsc);
 
 	ida_free(&pdsc_ida, pdsc->uid);
 	pdsc_debugfs_del_dev(pdsc);
@@ -499,6 +503,7 @@ static void pdsc_reset_prepare(struct pci_dev *pdev)
 	pci_release_regions(pdev);
 	if (pci_is_enabled(pdev))
 		pci_disable_device(pdev);
+	pdsc_deferred_dma_free(pdsc);
 }
 
 static void pdsc_reset_done(struct pci_dev *pdev)
