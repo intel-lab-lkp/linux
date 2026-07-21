@@ -794,8 +794,8 @@ static int rtl8366rb_setup_all_leds_off(struct realtek_priv *priv)
 static int rtl8366rb_port_set_isolation(struct realtek_priv *priv, int port,
 					u32 mask)
 {
-	/* Bit 0 enables isolation so set this if we enable isolation
-	 * any of the ports an clear it if we disable on all of them.
+	/* Bit 0 enables isolation so set this if we enable isolation on
+	 * any of the ports and clear it if we disable on all of them.
 	 */
 	if (mask)
 		mask = RTL8366RB_PORT_ISO_PORTS(mask) | RTL8366RB_PORT_ISO_EN;
@@ -951,7 +951,8 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 		rtl8366rb_port_stp_state_set(ds, dp->index, BR_STATE_DISABLED);
 
 		/* Start with all ports completely isolated */
-		ret = rtl8366rb_port_set_isolation(priv, dp->index, 0);
+		ret = rtl8366rb_port_set_isolation(priv, dp->index,
+						   RTL8366RB_PORT_ISO_PORTS_MASK);
 		if (ret)
 			return ret;
 
@@ -974,7 +975,7 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 		if (!dsa_port_is_user(dp))
 			continue;
 
-		/* Forward only to the CPU */
+		/* Forward only to the CPU, isolate from all other ports */
 		ret = rtl8366rb_port_set_isolation(priv, dp->index, upports_mask);
 		if (ret)
 			return ret;
