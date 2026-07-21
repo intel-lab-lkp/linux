@@ -774,10 +774,23 @@ static void nvec_disable_i2c_slave(struct nvec_chip *nvec)
 
 static void nvec_power_off(void)
 {
+	struct nvec_chip *nvec = nvec_power_handle;
 	char ap_pwr_down[] = { NVEC_SLEEP, AP_PWR_DOWN };
 
-	nvec_toggle_global_events(nvec_power_handle, false);
-	nvec_write_async(nvec_power_handle, ap_pwr_down, 2);
+	if (!nvec)
+		return;
+
+	nvec_toggle_global_events(nvec, false);
+	nvec_write_async(nvec, ap_pwr_down, 2);
+
+	/*
+	 * Process the TX queue directly instead of relying on the
+	 * workqueue.  Workqueues may be frozen during the power-off
+	 * sequence, so schedule_work() from nvec_write_async() may
+	 * not execute, leaving the AP_PWR_DOWN message unsent and
+	 * the system unable to power off.
+	 */
+	nvec_request_master(&nvec->tx_work);
 }
 
 static int tegra_nvec_probe(struct platform_device *pdev)
