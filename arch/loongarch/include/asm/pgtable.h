@@ -638,6 +638,48 @@ static inline long pmd_protnone(pmd_t pmd)
 #define pmd_leaf(pmd)		((pmd_val(pmd) & _PAGE_HUGE) != 0)
 #define pud_leaf(pud)		((pud_val(pud) & _PAGE_HUGE) != 0)
 
+#define pgd_write pgd_write
+static inline int pgd_write(pgd_t pgd)
+{
+	return !!(pgd_val(pgd) & _PAGE_WRITE);
+}
+
+#define p4d_write p4d_write
+static inline int p4d_write(p4d_t p4d)
+{
+	return !!(p4d_val(p4d) & _PAGE_WRITE);
+}
+
+#define pud_write pud_write
+static inline int pud_write(pud_t pud)
+{
+	return !!(pud_val(pud) & _PAGE_WRITE);
+}
+
+#define pgd_exec pgd_exec
+static inline int pgd_exec(pgd_t pgd)
+{
+	return !(pgd_val(pgd) & _PAGE_NO_EXEC);
+}
+
+#define p4d_exec p4d_exec
+static inline int p4d_exec(p4d_t p4d)
+{
+	return !(p4d_val(p4d) & _PAGE_NO_EXEC);
+}
+
+#define pud_exec pud_exec
+static inline int pud_exec(pud_t pud)
+{
+	return !(pud_val(pud) & _PAGE_NO_EXEC);
+}
+
+#define pmd_exec pmd_exec
+static inline int pmd_exec(pmd_t pmd)
+{
+	return !(pmd_val(pmd) & _PAGE_NO_EXEC);
+}
+
 /*
  * We provide our own get_unmapped area to cope with the virtual aliasing
  * constraints placed on us by the cache architecture.
