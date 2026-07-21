@@ -4516,6 +4516,7 @@ static int arm_smmu_init_strtab(struct arm_smmu_device *smmu)
 {
 	int ret;
 
+	/* Init first, as a kdump adoption reserves in-use VMIDs in the ida */
 	ida_init(&smmu->vmid_map);
 	ret = devm_add_action_or_reset(smmu->dev, arm_smmu_deinit_strtab, smmu);
 	if (ret)
