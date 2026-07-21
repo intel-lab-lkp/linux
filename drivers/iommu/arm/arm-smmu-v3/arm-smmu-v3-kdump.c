@@ -205,16 +205,29 @@ int arm_smmu_kdump_adopt_strtab(struct arm_smmu_device *smmu)
 		goto err;
 	}
 
+	mutex_lock(&arm_smmu_kexec_resv_lock);
+	ret = arm_smmu_kexec_scan_and_resv_ids(smmu);
+	if (ret) {
+		dev_warn(smmu->dev, "failed to reserve in-use ASIDs/VMIDs\n");
+		arm_smmu_kdump_adopt_cleanup(smmu);
+		goto err_unresv;
+	}
+
 	ret = devm_add_action_or_reset(smmu->dev, arm_smmu_kdump_adopt_cleanup,
 				       smmu);
 	/* devm_add_action_or_reset ran the cleanup upon failure */
 	if (ret) {
 		dev_warn(smmu->dev, "failed to set up cleanup action\n");
-		goto err;
+		goto err_unresv;
 	}
+	mutex_unlock(&arm_smmu_kexec_resv_lock);
 
 	return 0;
 
+err_unresv:
+	/* The full reset will flush the entire TLB, so release everything */
+	arm_smmu_kexec_unresv_ids(smmu);
+	mutex_unlock(&arm_smmu_kexec_resv_lock);
 err:
 	dev_warn(smmu->dev, "falling back to full reset\n");
 	/*
