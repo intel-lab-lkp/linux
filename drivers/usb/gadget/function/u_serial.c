@@ -459,10 +459,22 @@ static void gs_read_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct gs_port	*port = ep->driver_data;
 
-	/* Queue all received data until the tty layer is ready for it. */
 	spin_lock(&port->port_lock);
-	list_add_tail(&req->list, &port->read_queue);
-	schedule_delayed_work(&port->push, 0);
+	if (req->status == -ESHUTDOWN) {
+		/*
+		 * Discard shutdown completions here while ep is still valid.
+		 * Returning them to read_pool after gserial_disconnect() has
+		 * reset the counters causes stale reqs (with req->dep pointing
+		 * to the old ep) to be queued onto a new ep at reconnect time,
+		 * triggering a req->dep != dep WARN and kernel panic.
+		 */
+		gs_free_req(ep, req);
+		port->read_started--;
+	} else {
+		/* Queue all received data until the tty layer is ready for it. */
+		list_add_tail(&req->list, &port->read_queue);
+		schedule_delayed_work(&port->push, 0);
+	}
 	spin_unlock(&port->port_lock);
 }
 
