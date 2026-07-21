@@ -1509,6 +1509,9 @@ config LAZY_MMU_MODE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config GENERIC_SET_MEMORY
+	bool
+
 source "mm/damon/Kconfig"
 
 endmenu
