@@ -12,10 +12,14 @@ use kernel::{
         Device,
         DmaMask, //
     },
-    page, pci,
+    page,
+    pci,
     prelude::*,
-    scatterlist::{Owned, SGTable},
-    sync::aref::ARef,
+    scatterlist::{
+        Owned,
+        SGTable, //
+    },
+    sync::aref::ARef, //
 };
 
 #[pin_data(PinnedDrop)]
