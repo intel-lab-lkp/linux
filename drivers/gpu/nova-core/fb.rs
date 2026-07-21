@@ -275,8 +275,8 @@ impl FbLayout {
 /// Returns `None` if the WPR2 region is not set.
 pub(crate) fn wpr2_range(bar: Bar0<'_>) -> Option<Range<u64>> {
     let (wpr2_lo, wpr2_hi) = (
-        bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_LO),
-        bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI),
+        bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_LO),
+        bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI),
     );
 
     if !wpr2_hi.is_wpr2_set() {
