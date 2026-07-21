@@ -305,12 +305,24 @@ void __smbdirect_socket_schedule_cleanup(struct smbdirect_socket *sc,
 	 * disconnect all pending and ready sockets
 	 *
 	 * First we move ready sockets to pending again.
+	 *
+	 * Only a real listener (accept.listener == NULL) owns a populated
+	 * listen.ready/pending list. Guarding on that also breaks the recursive
+	 * locking: without it, this listener holds sc->listen.lock while the
+	 * loop recurses into each child psc, which would take psc->listen.lock
+	 * (same lock class) -> lockdep "possible recursive locking". A child
+	 * (accept.listener != NULL) has empty listen lists and nothing to do
+	 * here, so skipping it loses nothing, and the child stays on this
+	 * listener's pending list for the free path (smbdirect_socket_destroy)
+	 * to reap.
 	 */
-	spin_lock_irqsave(&sc->listen.lock, flags);
-	list_splice_init(&sc->listen.ready, &sc->listen.pending);
-	list_for_each_entry_safe(psc, tsc, &sc->listen.pending, accept.list)
-		smbdirect_socket_schedule_cleanup(psc, sc->first_error);
-	spin_unlock_irqrestore(&sc->listen.lock, flags);
+	if (!sc->accept.listener) {
+		spin_lock_irqsave(&sc->listen.lock, flags);
+		list_splice_init(&sc->listen.ready, &sc->listen.pending);
+		list_for_each_entry_safe(psc, tsc, &sc->listen.pending, accept.list)
+			smbdirect_socket_schedule_cleanup(psc, sc->first_error);
+		spin_unlock_irqrestore(&sc->listen.lock, flags);
+	}
 
 	switch (sc->status) {
 	case SMBDIRECT_SOCKET_RESOLVE_ADDR_FAILED:
@@ -405,12 +417,19 @@ static void smbdirect_socket_cleanup_work(struct work_struct *work)
 	 * disconnect all pending and ready sockets
 	 *
 	 * First we move ready sockets to pending again.
+	 *
+	 * Guarded on !accept.listener for the same reason as in
+	 * __smbdirect_socket_schedule_cleanup(): only a real listener owns a
+	 * populated listen list, and skipping the block for a child avoids
+	 * nesting psc->listen.lock under a listener's listen.lock.
 	 */
-	spin_lock_irqsave(&sc->listen.lock, flags);
-	list_splice_init(&sc->listen.ready, &sc->listen.pending);
-	list_for_each_entry_safe(psc, tsc, &sc->listen.pending, accept.list)
-		smbdirect_socket_schedule_cleanup(psc, sc->first_error);
-	spin_unlock_irqrestore(&sc->listen.lock, flags);
+	if (!sc->accept.listener) {
+		spin_lock_irqsave(&sc->listen.lock, flags);
+		list_splice_init(&sc->listen.ready, &sc->listen.pending);
+		list_for_each_entry_safe(psc, tsc, &sc->listen.pending, accept.list)
+			smbdirect_socket_schedule_cleanup(psc, sc->first_error);
+		spin_unlock_irqrestore(&sc->listen.lock, flags);
+	}
 
 	switch (sc->status) {
 	case SMBDIRECT_SOCKET_NEGOTIATE_NEEDED:
