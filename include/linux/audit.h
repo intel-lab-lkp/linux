@@ -343,7 +343,7 @@ static inline void audit_set_context(struct task_struct *task, struct audit_cont
 	task->audit_context = ctx;
 }
 
-static inline struct audit_context *audit_context(void)
+static __always_inline struct audit_context *audit_context(void)
 {
 	return current->audit_context;
 }
@@ -623,7 +623,7 @@ static inline bool audit_dummy_context(void)
 }
 static inline void audit_set_context(struct task_struct *task, struct audit_context *ctx)
 { }
-static inline struct audit_context *audit_context(void)
+static __always_inline struct audit_context *audit_context(void)
 {
 	return NULL;
 }
