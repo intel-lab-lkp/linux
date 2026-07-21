@@ -13,7 +13,7 @@ use kernel::{
 };
 
 use crate::{
-    driver::Bar0,
+    driver::{Bar0, NovaRegisters},
     falcon::{
         DmaTrfCmdSize,
         FalconCoreRev,
@@ -37,6 +37,8 @@ use crate::{
 // PMC
 
 register! {
+    base: NovaRegisters;
+
     /// Basic revision information about the GPU.
     pub(crate) NV_PMC_BOOT_0(u32) @ 0x00000000 {
         /// Lower bits of the architecture.
@@ -108,6 +110,8 @@ impl kernel::fmt::Display for NV_PMC_BOOT_42 {
 // PBUS
 
 register! {
+    base: NovaRegisters;
+
     pub(crate) NV_PBUS_SW_SCRATCH(u32)[64] @ 0x00001400 {}
 
     /// Scratch register 0xe used as FRTS firmware error code.
@@ -119,6 +123,8 @@ register! {
 // PFB
 
 register! {
+    base: NovaRegisters;
+
     /// Low bits of the physical system memory address used by the GPU to perform sysmembar
     /// operations (see [`crate::fb::SysmemFlush`]).
     pub(crate) NV_PFB_NISO_FLUSH_SYSMEM_ADDR(u32) @ 0x00100c10 {
@@ -154,6 +160,8 @@ register! {
 pub(crate) struct Hshub0Base(());
 
 register! {
+    base: NovaRegisters;
+
     // GB10x sysmem flush registers, relative to the HSHUB0 base. GB10x routes sysmembar
     // through a primary and an EG (egress) pair that must both be programmed to the same
     // address. Hardware ignores bits 7:0 of each LO register. The boot path uses a fixed
@@ -176,6 +184,8 @@ register! {
 }
 
 register! {
+    base: NovaRegisters;
+
     // GB20x FBHUB0 sysmem flush registers. Unlike the older
     // NV_PFB_NISO_FLUSH_SYSMEM_ADDR registers, which encode the address with an
     // 8-bit right-shift, these take the raw address split into lower and upper
@@ -190,6 +200,8 @@ register! {
 }
 
 register! {
+    base: NovaRegisters;
+
     /// Low bits of the physical system memory address used by the GPU to perform
     /// sysmembar operations on Hopper.
     ///
@@ -253,6 +265,8 @@ impl NV_PFB_PRI_MMU_WPR2_ADDR_HI {
 // number.
 
 register! {
+    base: NovaRegisters;
+
     /// Boot Sequence Interface (BSI) register used to determine
     /// if GSP reload/resume has completed during the boot process.
     pub(crate) NV_PGC6_BSI_SECURE_SCRATCH_14(u32) @ 0x001180f8 {
@@ -307,6 +321,8 @@ impl NV_USABLE_FB_SIZE_IN_MB {
 pub(crate) const NV_FUSE_OPT_FPF_SIZE: usize = 16;
 
 register! {
+    base: NovaRegisters;
+
     pub(crate) NV_FUSE_OPT_FPF_NVDEC_UCODE1_VERSION(u32)[NV_FUSE_OPT_FPF_SIZE] @ 0x00824100 {
         15:0    data => u16;
     }
@@ -323,6 +339,8 @@ register! {
 // PFALCON
 
 register! {
+    base: NovaRegisters;
+
     pub(crate) NV_PFALCON_FALCON_IRQSCLR(u32) @ PFalconBase + 0x00000004 {
         6:6     swgen0 => bool;
         4:4     halt => bool;
@@ -524,6 +542,8 @@ impl NV_PFALCON_FALCON_HWCFG2 {
 /* PFALCON2 */
 
 register! {
+    base: NovaRegisters;
+
     pub(crate) NV_PFALCON2_FALCON_MOD_SEL(u32) @ PFalcon2Base + 0x00000180 {
         7:0     algo ?=> FalconModSelAlgo;
     }
@@ -546,6 +566,8 @@ register! {
 // PRISCV
 
 register! {
+    base: NovaRegisters;
+
     /// RISC-V status register for debug (Turing and GA100 only).
     /// Reflects current RISC-V core status.
     pub(crate) NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS(u32) @ PFalcon2Base + 0x00000240 {
@@ -571,6 +593,8 @@ register! {
 // These registers manage falcon EMEM communication queues.
 
 register! {
+    base: NovaRegisters;
+
     pub(crate) NV_PFSP_QUEUE_HEAD(u32)[8] @ 0x008f2c00 {
         31:0    address => u32;
     }
@@ -594,9 +618,13 @@ register! {
 pub(crate) mod gm107 {
     use kernel::io::register;
 
+    use crate::driver::NovaRegisters;
+
     // FUSE
 
     register! {
+        base: NovaRegisters;
+
         pub(crate) NV_FUSE_STATUS_OPT_DISPLAY(u32) @ 0x00021c04 {
             0:0     display_disabled => bool;
         }
@@ -606,9 +634,13 @@ pub(crate) mod gm107 {
 pub(crate) mod ga100 {
     use kernel::io::register;
 
+    use crate::driver::NovaRegisters;
+
     // FUSE
 
     register! {
+        base: NovaRegisters;
+
         pub(crate) NV_FUSE_STATUS_OPT_DISPLAY(u32) @ 0x00820c04 {
             0:0     display_disabled => bool;
         }
@@ -620,9 +652,13 @@ pub(crate) const NV_THERM_I2CS_SCRATCH_FSP_BOOT_COMPLETE_STATUS_SUCCESS: u32 = 0
 pub(crate) mod gh100 {
     use kernel::io::register;
 
+    use crate::driver::NovaRegisters;
+
     // PTHERM
 
     register! {
+        base: NovaRegisters;
+
         pub(crate) NV_THERM_I2CS_SCRATCH(u32) @ 0x000200bc {
             31:0    data;
         }
@@ -637,9 +673,13 @@ pub(crate) mod gh100 {
 pub(crate) mod gb202 {
     use kernel::io::register;
 
+    use crate::driver::NovaRegisters;
+
     // PTHERM
 
     register! {
+        base: NovaRegisters;
+
         pub(crate) NV_THERM_I2CS_SCRATCH(u32) @ 0x00ad00bc {
             31:0    data;
         }

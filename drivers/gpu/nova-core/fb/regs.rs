@@ -2,9 +2,13 @@
 
 use kernel::io::register;
 
+use crate::driver::NovaRegisters;
+
 // PDISP
 
 register! {
+    base: NovaRegisters;
+
     pub(super) NV_PDISP_VGA_WORKSPACE_BASE(u32) @ 0x00625f04 {
         /// VGA workspace base address divided by 0x10000.
         31:8    addr;
