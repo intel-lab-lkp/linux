@@ -191,6 +191,10 @@ int hibmc_dp_hw_init(struct hibmc_dp *dp)
 	writel(HIBMC_DP_HDCP, dp_dev->base + HIBMC_DP_HDCP_CFG);
 	/* clock enable */
 	writel(HIBMC_DP_CLK_EN, dp_dev->base + HIBMC_DP_DPTX_CLK_CTRL);
+	/* To latch the HPD interrupt, ensuring that DP can support more modes
+	 * within the fbcon framework when connected alone.
+	 */
+	msleep(100);
 
 	return 0;
 }
@@ -322,20 +326,26 @@ void hibmc_dp_set_cbar(struct hibmc_dp *dp, const struct hibmc_dp_cbar_cfg *cfg)
 	writel(HIBMC_DP_SYNC_EN_MASK, dp_dev->base + HIBMC_DP_TIMING_SYNC_CTRL);
 }
 
-bool hibmc_dp_check_hpd_status(struct hibmc_dp *dp, int exp_status)
+int hibmc_dp_get_hpd_status(struct hibmc_dp *dp)
 {
+	int ret = HIBMC_HPD_UNKNOWN;
 	u32 status;
-	int ret;
 
-	ret = readl_poll_timeout(dp->dp_dev->base + HIBMC_DP_HPD_STATUS, status,
-				 FIELD_GET(HIBMC_DP_HPD_CUR_STATE, status) == exp_status,
-				 1000, 100000); /* DP spec says 100ms */
-	if (ret) {
-		drm_dbg_dp(dp->drm_dev, "wait hpd status timeout");
-		return false;
+	status = FIELD_GET(HIBMC_DP_HPD_CUR_STATE,
+			   readl(dp->dp_dev->base + HIBMC_DP_HPD_STATUS));
+	switch (status) {
+	case 0: /* idle */
+	case 3: /* unplug */
+	case 4: /* unplug intermediate */
+		ret = HIBMC_HPD_OUT;
+		break;
+	case 1: /* plug */
+	case 2: /* plug intermediate */
+		ret = HIBMC_HPD_IN;
+		break;
+	default:
+		break;
 	}
 
-	dp->dp_dev->hpd_status = exp_status;
-
-	return true;
+	return ret;
 }

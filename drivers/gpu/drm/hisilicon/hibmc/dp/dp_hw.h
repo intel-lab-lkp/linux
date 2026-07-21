@@ -15,6 +15,7 @@
 struct hibmc_dp_dev;
 
 enum hibmc_hpd_status {
+	HIBMC_HPD_UNKNOWN,
 	HIBMC_HPD_OUT,
 	HIBMC_HPD_IN,
 };
@@ -55,6 +56,7 @@ struct hibmc_dp {
 	struct drm_dp_aux aux;
 	struct hibmc_dp_cbar_cfg cfg;
 	u32 irq_status;
+	int hpd_status;
 	int phys_status;
 };
 
@@ -66,7 +68,7 @@ void hibmc_dp_reset_link(struct hibmc_dp *dp);
 void hibmc_dp_hpd_cfg(struct hibmc_dp *dp);
 void hibmc_dp_enable_int(struct hibmc_dp *dp);
 void hibmc_dp_disable_int(struct hibmc_dp *dp);
-bool hibmc_dp_check_hpd_status(struct hibmc_dp *dp, int exp_status);
+int hibmc_dp_get_hpd_status(struct hibmc_dp *dp);
 u8 hibmc_dp_get_link_rate(struct hibmc_dp *dp);
 u8 hibmc_dp_get_lanes(struct hibmc_dp *dp);
 

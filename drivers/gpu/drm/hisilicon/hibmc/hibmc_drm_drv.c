@@ -63,6 +63,7 @@ static irqreturn_t hibmc_dp_interrupt(int irq, void *arg)
 	status = readl(priv->mmio + HIBMC_DP_INTSTAT);
 	if (status) {
 		priv->dp.irq_status = status;
+		priv->dp.hpd_status = hibmc_dp_get_hpd_status(&priv->dp);
 		writel(status, priv->mmio + HIBMC_DP_INTCLR);
 		return IRQ_WAKE_THREAD;
 	}
