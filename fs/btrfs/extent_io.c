@@ -1492,6 +1492,33 @@ static noinline_for_stack int writepage_delalloc(struct btrfs_inode *inode,
 	/* Save the dirty bitmap as our submission bitmap will be a subset of it. */
 	btrfs_copy_subpage_dirty_bitmap(fs_info, folio, bio_ctrl->submit_bitmap);
 
+	/*
+	 * The dirty bitmap can be empty even though the folio is dirty: data
+	 * mappings use filemap_dirty_folio(), so a generic folio_mark_dirty()
+	 * call (e.g. set_page_dirty_lock() after GUP) only sets the folio
+	 * flag, without any subpage dirty bit nor a delalloc reservation.
+	 *
+	 * There is nothing to submit for such a folio.  Bail out now,
+	 * otherwise the bitmap_empty() check at the end would mistake it for
+	 * "all ranges submitted asynchronously" and return with the folio
+	 * lock never released, deadlocking every subsequent locker.
+	 *
+	 * Also clear the stale dirty flag: with no subpage dirty bits nothing
+	 * will ever be written back for it, and leaving the flag would make
+	 * writeback rescan the folio forever.  All dirty flag setters hold
+	 * the folio lock, which we own, so this cannot race with a new
+	 * dirtier.  As folio_clear_dirty_for_io() keeps PAGECACHE_TAG_DIRTY,
+	 * use the same set/clear writeback dance as extent_writepage_io() to
+	 * also drop the stale tag, otherwise the inode would never go clean.
+	 */
+	if (unlikely(bitmap_empty(bio_ctrl->submit_bitmap, blocks_per_folio))) {
+		folio_clear_dirty_for_io(folio);
+		btrfs_folio_set_writeback(fs_info, folio, page_start, folio_size(folio));
+		btrfs_folio_clear_writeback(fs_info, folio, page_start, folio_size(folio));
+		folio_unlock(folio);
+		return 1;
+	}
+
 	for_each_set_bitrange(start_bit, end_bit, bio_ctrl->submit_bitmap,
 			      blocks_per_folio) {
 		u64 start = page_start + (start_bit << fs_info->sectorsize_bits);
