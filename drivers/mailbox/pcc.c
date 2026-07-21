@@ -537,6 +537,7 @@ static void pcc_shutdown(struct mbox_chan *chan)
 
 	if (pchan->plat_irq > 0)
 		devm_free_irq(chan->mbox->dev, pchan->plat_irq, chan);
+	synchronize_irq(pchan->plat_irq);
 
 	pcc_mbox_chan = &pchan->chan;
 	if (pcc_mbox_chan->shmem) {
