@@ -669,7 +669,29 @@ void smbdirect_socket_destroy_sync(struct smbdirect_socket *sc)
 	if (sc->status < SMBDIRECT_SOCKET_DISCONNECTED) {
 		smbdirect_log_rdma_event(sc, SMBDIRECT_LOG_INFO,
 			"wait for transport being disconnected\n");
-		wait_event(sc->status_wait, sc->status == SMBDIRECT_SOCKET_DISCONNECTED);
+		/*
+		 * The DISCONNECTED transition for a CONNECTED socket depends on an
+		 * async RDMA CM disconnect event (see smbdirect_socket_cleanup_work():
+		 * it sets DISCONNECTING + rdma_disconnect() and the CM event handler
+		 * finishes the transition). If the peer died abruptly (e.g. a killed
+		 * client, or Soft-RoCE/RXE where no graceful disconnect completes) that
+		 * event never arrives, so an unbounded wait_event() here hangs the
+		 * ksmbd-conn-release workqueue forever — every later conn release then
+		 * queues behind it and the whole server wedges (hung_task). Bound the
+		 * wait; on timeout drive the state machine to completion locally under
+		 * the CM handler lock (rdma_disconnect() was already issued and the QP
+		 * is drained by smbdirect_socket_destroy() below), so teardown always
+		 * makes progress instead of deadlocking on a gone peer.
+		 */
+		if (!wait_event_timeout(sc->status_wait,
+				sc->status == SMBDIRECT_SOCKET_DISCONNECTED,
+				msecs_to_jiffies(8000))) {
+			smbdirect_log_rdma_event(sc, SMBDIRECT_LOG_ERR,
+				"timed out waiting for disconnect; forcing DISCONNECTED\n");
+			rdma_lock_handler(sc->rdma.cm_id);
+			sc->status = SMBDIRECT_SOCKET_DISCONNECTED;
+			rdma_unlock_handler(sc->rdma.cm_id);
+		}
 		smbdirect_log_rdma_event(sc, SMBDIRECT_LOG_INFO,
 			"waited for transport being disconnected\n");
 	}
