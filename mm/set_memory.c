@@ -51,58 +51,62 @@ unsigned long cpa_addr(struct cpa_data *cpa, unsigned long idx)
  * the level of the entry, and the effective NX and RW bits of all
  * page table levels.
  */
-pte_t *lookup_address_in_pgd_attr(pgd_t *pgd, unsigned long address,
+pte_t *lookup_address_in_pgd_attr(pgd_t *pgdp, unsigned long address,
 				  unsigned int *level, bool *nx, bool *rw)
 {
-	p4d_t *p4d;
-	pud_t *pud;
-	pmd_t *pmd;
+	pgd_t pgd = pgdp_get(pgdp);
+	p4d_t *p4dp, p4d;
+	pud_t *pudp, pud;
+	pmd_t *pmdp, pmd;
 
 	*level = PGTABLE_LEVEL_PGD;
 	*nx = false;
 	*rw = true;
 
-	if (pgd_none(*pgd))
+	if (pgd_none(pgd))
 		return NULL;
 
 	*level = PGTABLE_LEVEL_P4D;
-	*nx |= !pgd_exec(*pgd);
-	*rw &= !!(pgd_write(*pgd));
+	*nx |= !pgd_exec(pgd);
+	*rw &= !!(pgd_write(pgd));
 
-	p4d = p4d_offset(pgd, address);
-	if (p4d_none(*p4d))
+	p4dp = p4d_offset(pgdp, address);
+	p4d = p4dp_get(p4dp);
+	if (p4d_none(p4d))
 		return NULL;
 
-	if (p4d_leaf(*p4d) || !p4d_present(*p4d))
-		return (pte_t *)p4d;
+	if (p4d_leaf(p4d) || !p4d_present(p4d))
+		return (pte_t *)p4dp;
 
 	*level = PGTABLE_LEVEL_PUD;
-	*nx |= !p4d_exec(*p4d);
-	*rw &= !!(p4d_write(*p4d));
+	*nx |= !p4d_exec(p4d);
+	*rw &= !!(p4d_write(p4d));
 
-	pud = pud_offset(p4d, address);
-	if (pud_none(*pud))
+	pudp = pud_offset(p4dp, address);
+	pud = pudp_get(pudp);
+	if (pud_none(pud))
 		return NULL;
 
-	if (pud_leaf(*pud) || !pud_present(*pud))
-		return (pte_t *)pud;
+	if (pud_leaf(pud) || !pud_present(pud))
+		return (pte_t *)pudp;
 
 	*level = PGTABLE_LEVEL_PMD;
-	*nx |= !pud_exec(*pud);
-	*rw &= !!(pud_write(*pud));
+	*nx |= !pud_exec(pud);
+	*rw &= !!(pud_write(pud));
 
-	pmd = pmd_offset(pud, address);
-	if (pmd_none(*pmd))
+	pmdp = pmd_offset(pudp, address);
+	pmd = pmdp_get(pmdp);
+	if (pmd_none(pmd))
 		return NULL;
 
-	if (pmd_leaf(*pmd) || !pmd_present(*pmd))
-		return (pte_t *)pmd;
+	if (pmd_leaf(pmd) || !pmd_present(pmd))
+		return (pte_t *)pmdp;
 
 	*level = PGTABLE_LEVEL_PTE;
-	*nx |= !pmd_exec(*pmd);
-	*rw &= !!(pmd_write(*pmd));
+	*nx |= !pmd_exec(pmd);
+	*rw &= !!(pmd_write(pmd));
 
-	return pte_offset_kernel(pmd, address);
+	return pte_offset_kernel(pmdp, address);
 }
 
 /*
