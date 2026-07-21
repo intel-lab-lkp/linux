@@ -578,6 +578,9 @@ int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 		if (drm_WARN_ONCE(dev, !recovery, "invalid recovery method %u\n", opt))
 			break;
 
+		if (drm_WARN_ON(dev, len >= WEDGE_STR_LEN - 1))
+			break;
+
 		len += scnprintf(event_string + len, sizeof(event_string) - len, "%s,", recovery);
 	}
 
