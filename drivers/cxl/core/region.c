@@ -2894,6 +2894,9 @@ static ssize_t delete_region_store(struct device *dev,
 	if (!cxlr || !sysfs_streq(buf, dev_name(&cxlr->dev)))
 		return -ENODEV;
 
+	if (test_bit(CXL_REGION_F_LOCK, &cxlr->flags))
+		return -EPERM;
+
 	unregister_region(cxlr);
 
 	return len;
