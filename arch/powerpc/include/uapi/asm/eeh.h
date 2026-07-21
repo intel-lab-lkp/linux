@@ -15,9 +15,27 @@
 #define EEH_PE_STATE_STOPPED_DMA	4	/* Stopped DMA only	*/
 #define EEH_PE_STATE_UNAVAIL		5	/* Unavailable		*/
 
-/* EEH error types and functions */
-#define EEH_ERR_TYPE_32			0       /* 32-bits error	*/
-#define EEH_ERR_TYPE_64			1       /* 64-bits error	*/
+/*
+ * EEH error types.
+ *
+ * EEH_ERR_TYPE_32 and EEH_ERR_TYPE_64 are the original ABI values and must
+ * not be renumbered.  The additional types below are generic identifiers for
+ * error-injection types supported by pSeries RTAS.  Platform backends may
+ * return -EOPNOTSUPP for valid generic types that are not supported by their
+ * firmware.
+ */
+#define EEH_ERR_TYPE_32				0       /* 32-bits error	*/
+#define EEH_ERR_TYPE_64				1       /* 64-bits error	*/
+#define EEH_ERR_TYPE_RECOVERED_SPECIAL_EVENT	0x03
+#define EEH_ERR_TYPE_CORRUPTED_PAGE		0x04
+#define EEH_ERR_TYPE_CORRUPTED_DCACHE_START	0x09
+#define EEH_ERR_TYPE_CORRUPTED_DCACHE_END	0x0a
+#define EEH_ERR_TYPE_CORRUPTED_ICACHE_START	0x0b
+#define EEH_ERR_TYPE_CORRUPTED_ICACHE_END	0x0c
+#define EEH_ERR_TYPE_CORRUPTED_TLB_START	0x0d
+#define EEH_ERR_TYPE_CORRUPTED_TLB_END		0x0e
+
+/* EEH error functions */
 #define EEH_ERR_FUNC_MIN		0
 #define EEH_ERR_FUNC_LD_MEM_ADDR	0	/* Memory load	*/
 #define EEH_ERR_FUNC_LD_MEM_DATA	1
