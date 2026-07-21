@@ -282,8 +282,11 @@ static int pci_doe_abort(struct pci_doe_mb *doe_mb)
 
 		/* Abort success! */
 		if (!FIELD_GET(PCI_DOE_STATUS_ERROR, val) &&
-		    !FIELD_GET(PCI_DOE_STATUS_BUSY, val))
+		    !FIELD_GET(PCI_DOE_STATUS_BUSY, val)) {
+			pci_dbg(pdev, "[%x] Abort completed, status: %#010x\n",
+				offset, val);
 			return 0;
+		}
 
 	} while (!time_after(jiffies, timeout_jiffies));
 
@@ -323,13 +326,19 @@ static int pci_doe_send_req(struct pci_doe_mb *doe_mb,
 	if (FIELD_GET(PCI_DOE_STATUS_BUSY, val))
 		return -EBUSY;
 
-	if (FIELD_GET(PCI_DOE_STATUS_ERROR, val))
+	if (FIELD_GET(PCI_DOE_STATUS_ERROR, val)) {
+		pci_dbg(pdev, "[%x] status error before request: %#010x\n",
+			offset, val);
 		return -EIO;
+	}
 
 	/* Length is 2 DW of header + length of payload in DW */
 	length = 2 + DIV_ROUND_UP(task->request_pl_sz, sizeof(__le32));
-	if (length > PCI_DOE_MAX_LENGTH)
+	if (length > PCI_DOE_MAX_LENGTH) {
+		pci_dbg(pdev, "[%x] request length %zu DW exceeds maximum\n",
+			offset, length);
 		return -EIO;
+	}
 	if (length == PCI_DOE_MAX_LENGTH)
 		length = 0;
 
@@ -369,6 +378,10 @@ static bool pci_doe_data_obj_ready(struct pci_doe_mb *doe_mb)
 	pci_read_config_dword(pdev, offset + PCI_DOE_STATUS, &val);
 	if (FIELD_GET(PCI_DOE_STATUS_DATA_OBJECT_READY, val))
 		return true;
+
+	pci_dbg(pdev,
+		"[%x] Data Object Ready cleared prematurely, status: %#010x\n",
+		offset, val);
 	return false;
 }
 
@@ -400,8 +413,11 @@ static int pci_doe_recv_resp(struct pci_doe_mb *doe_mb, struct pci_doe_task *tas
 	/* A value of 0x0 indicates max data object length */
 	if (!length)
 		length = PCI_DOE_MAX_LENGTH;
-	if (length < 2)
+	if (length < 2) {
+		pci_dbg(pdev, "[%x] invalid response length: %zu\n",
+			offset, length);
 		return -EIO;
+	}
 
 	/* First 2 dwords have already been read */
 	length -= 2;
@@ -447,8 +463,11 @@ static int pci_doe_recv_resp(struct pci_doe_mb *doe_mb, struct pci_doe_task *tas
 
 	/* Final error check to pick up on any since Data Object Ready */
 	pci_read_config_dword(pdev, offset + PCI_DOE_STATUS, &val);
-	if (FIELD_GET(PCI_DOE_STATUS_ERROR, val))
+	if (FIELD_GET(PCI_DOE_STATUS_ERROR, val)) {
+		pci_dbg(pdev, "[%x] status error after response: %#010x\n",
+			offset, val);
 		return -EIO;
+	}
 
 	return received;
 }
@@ -515,12 +534,17 @@ static void doe_statemachine_work(struct work_struct *work)
 retry_resp:
 	pci_read_config_dword(pdev, offset + PCI_DOE_STATUS, &val);
 	if (FIELD_GET(PCI_DOE_STATUS_ERROR, val)) {
+		pci_dbg(pdev,
+			"[%x] status error while waiting for response: %#010x\n",
+			offset, val);
 		signal_task_abort(task, -EIO);
 		return;
 	}
 
 	if (!FIELD_GET(PCI_DOE_STATUS_DATA_OBJECT_READY, val)) {
 		if (time_after(jiffies, timeout_jiffies)) {
+			pci_dbg(pdev, "[%x] response timeout, status: %#010x\n",
+				offset, val);
 			signal_task_abort(task, -EIO);
 			return;
 		}
@@ -564,8 +588,12 @@ static int pci_doe_discovery(struct pci_doe_mb *doe_mb, u8 capver, u8 *index, u1
 	if (rc < 0)
 		return rc;
 
-	if (rc != sizeof(response_pl_le))
+	if (rc != sizeof(response_pl_le)) {
+		pci_dbg(doe_mb->pdev,
+			"[%x] invalid Discovery response size: %d\n",
+			doe_mb->cap_offset, rc);
 		return -EIO;
+	}
 
 	response_pl = le32_to_cpu(response_pl_le);
 	*vid = FIELD_GET(PCI_DOE_DATA_OBJECT_DISC_RSP_3_VID, response_pl);
