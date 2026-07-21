@@ -14,13 +14,12 @@ use kernel::{
     },
     io::{
         poll::read_poll_timeout,
-        register::{
-            RegisterBase,
-            WithBase, //
-        },
+        register::Array,
         Io,
+        Mmio, //
     },
     prelude::*,
+    sizes::SZ_4K,
     time::Delta,
 };
 
@@ -165,18 +164,22 @@ bounded_enum! {
     }
 }
 
-/// Type used to represent the `PFALCON` registers address base for a given falcon engine.
-pub(crate) struct PFalconBase(());
+/// Type used to represent the `PFALCON` registers.
+#[repr(align(4))]
+#[derive(FromBytes, IntoBytes)]
+pub(crate) struct PFalconRegisters([u8; SZ_4K]);
 
-/// Type used to represent the `PFALCON2` registers address base for a given falcon engine.
-pub(crate) struct PFalcon2Base(());
+/// Type used to represent the `PFALCON2` registers.
+#[repr(align(4))]
+#[derive(FromBytes, IntoBytes)]
+pub(crate) struct PFalcon2Registers([u8; SZ_4K]);
 
 /// Trait defining the parameters of a given Falcon engine.
 ///
 /// Each engine provides one base for `PFALCON` and `PFALCON2` registers.
-pub(crate) trait FalconEngine:
-    Send + Sync + RegisterBase<PFalconBase> + RegisterBase<PFalcon2Base> + Sized
-{
+pub(crate) trait FalconEngine: Send + Sync + Sized {
+    fn pfalcon(io: Bar0<'_>) -> Mmio<'_, PFalconRegisters>;
+    fn pfalcon2(io: Bar0<'_>) -> Mmio<'_, PFalcon2Registers>;
 }
 
 /// Represents a portion of the firmware to be loaded into a particular memory (e.g. IMEM or DMEM)
@@ -376,14 +379,11 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
     /// Resets DMA-related registers.
     pub(crate) fn dma_reset(&self) {
-        self.bar.update(regs::NV_PFALCON_FBIF_CTL::of::<E>(), |v| {
+        E::pfalcon(self.bar).update(regs::NV_PFALCON_FBIF_CTL, |v| {
             v.with_allow_phys_no_ctx(true)
         });
 
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_DMACTL::zeroed(),
-        );
+        E::pfalcon(self.bar).write_reg(regs::NV_PFALCON_FALCON_DMACTL::zeroed());
     }
 
     /// Reset the controller, select the falcon core, and wait for memory scrubbing to complete.
@@ -392,10 +392,9 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         self.hal.select_core(self)?;
         self.hal.reset_wait_mem_scrubbing(self)?;
 
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_RM::from(self.bar.read(regs::NV_PMC_BOOT_0).into_raw()),
-        );
+        E::pfalcon(self.bar).write_reg(regs::NV_PFALCON_FALCON_RM::from(
+            self.bar.read(regs::NV_PMC_BOOT_0).into_raw(),
+        ));
 
         Ok(())
     }
@@ -413,8 +412,8 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
             return Err(EINVAL);
         }
 
-        self.bar.write(
-            WithBase::of::<E>().at(Self::PIO_PORT),
+        E::pfalcon(self.bar).write(
+            Array::at(Self::PIO_PORT),
             regs::NV_PFALCON_FALCON_IMEMC::zeroed()
                 .with_secure(load_offsets.secure)
                 .with_aincw(true)
@@ -424,14 +423,14 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         for (n, block) in load_offsets.data.chunks(MEM_BLOCK_ALIGNMENT).enumerate() {
             let n = u16::try_from(n)?;
             let tag: u16 = load_offsets.start_tag.checked_add(n).ok_or(ERANGE)?;
-            self.bar.write(
-                WithBase::of::<E>().at(Self::PIO_PORT),
+            E::pfalcon(self.bar).write(
+                Array::at(Self::PIO_PORT),
                 regs::NV_PFALCON_FALCON_IMEMT::zeroed().with_tag(tag),
             );
             for word in block.chunks_exact(4) {
                 let w = [word[0], word[1], word[2], word[3]];
-                self.bar.write(
-                    WithBase::of::<E>().at(Self::PIO_PORT),
+                E::pfalcon(self.bar).write(
+                    Array::at(Self::PIO_PORT),
                     regs::NV_PFALCON_FALCON_IMEMD::zeroed().with_data(u32::from_le_bytes(w)),
                 );
             }
@@ -450,8 +449,8 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
             return Err(EINVAL);
         }
 
-        self.bar.write(
-            WithBase::of::<E>().at(Self::PIO_PORT),
+        E::pfalcon(self.bar).write(
+            Array::at(Self::PIO_PORT),
             regs::NV_PFALCON_FALCON_DMEMC::zeroed()
                 .with_aincw(true)
                 .with_offs(load_offsets.dst_start),
@@ -459,8 +458,8 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
         for word in load_offsets.data.chunks_exact(4) {
             let w = [word[0], word[1], word[2], word[3]];
-            self.bar.write(
-                WithBase::of::<E>().at(Self::PIO_PORT),
+            E::pfalcon(self.bar).write(
+                Array::at(Self::PIO_PORT),
                 regs::NV_PFALCON_FALCON_DMEMD::zeroed().with_data(u32::from_le_bytes(w)),
             );
         }
@@ -473,14 +472,11 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         &self,
         fw: &F,
     ) -> Result {
-        self.bar.update(regs::NV_PFALCON_FBIF_CTL::of::<E>(), |v| {
+        E::pfalcon(self.bar).update(regs::NV_PFALCON_FBIF_CTL, |v| {
             v.with_allow_phys_no_ctx(true)
         });
 
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_DMACTL::zeroed(),
-        );
+        E::pfalcon(self.bar).write_reg(regs::NV_PFALCON_FALCON_DMACTL::zeroed());
 
         if let Some(imem_ns) = fw.imem_ns_load_params() {
             self.pio_wr_imem_slice(imem_ns)?;
@@ -492,10 +488,8 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
         self.hal.program_brom(self, &fw.brom_params());
 
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_BOOTVEC::zeroed().with_value(fw.boot_addr()),
-        );
+        E::pfalcon(self.bar)
+            .write_reg(regs::NV_PFALCON_FALCON_BOOTVEC::zeroed().with_value(fw.boot_addr()));
 
         Ok(())
     }
@@ -563,16 +557,12 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
         // Set up the base source DMA address.
 
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_DMATRFBASE::zeroed().with_base(
-                // CAST: `as u32` is used on purpose since we do want to strip the upper bits,
-                // which will be written to `NV_PFALCON_FALCON_DMATRFBASE1`.
-                (dma_start >> 8) as u32,
-            ),
-        );
-        self.bar.write(
-            WithBase::of::<E>(),
+        E::pfalcon(self.bar).write_reg(regs::NV_PFALCON_FALCON_DMATRFBASE::zeroed().with_base(
+            // CAST: `as u32` is used on purpose since we do want to strip the upper bits,
+            // which will be written to `NV_PFALCON_FALCON_DMATRFBASE1`.
+            (dma_start >> 8) as u32,
+        ));
+        E::pfalcon(self.bar).write_reg(
             regs::NV_PFALCON_FALCON_DMATRFBASE1::zeroed().try_with_base(dma_start >> 40)?,
         );
 
@@ -582,23 +572,21 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
         for pos in (0..num_transfers).map(|i| i * DMA_LEN) {
             // Perform a transfer of size `DMA_LEN`.
-            self.bar.write(
-                WithBase::of::<E>(),
+            E::pfalcon(self.bar).write_reg(
                 regs::NV_PFALCON_FALCON_DMATRFMOFFS::zeroed()
                     .try_with_offs(load_offsets.dst_start + pos)?,
             );
-            self.bar.write(
-                WithBase::of::<E>(),
+            E::pfalcon(self.bar).write_reg(
                 regs::NV_PFALCON_FALCON_DMATRFFBOFFS::zeroed().with_offs(src_start + pos),
             );
 
-            self.bar.write(WithBase::of::<E>(), cmd);
+            E::pfalcon(self.bar).write_reg(cmd);
 
             // Wait for the transfer to complete.
             // TIMEOUT: arbitrarily large value, no DMA transfer to the falcon's small memories
             // should ever take that long.
             read_poll_timeout(
-                || Ok(self.bar.read(regs::NV_PFALCON_FALCON_DMATRFCMD::of::<E>())),
+                || Ok(E::pfalcon(self.bar).read(regs::NV_PFALCON_FALCON_DMATRFCMD)),
                 |r| r.idle(),
                 Delta::ZERO,
                 Delta::from_secs(2),
@@ -630,11 +618,10 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         };
 
         self.dma_reset();
-        self.bar
-            .update(regs::NV_PFALCON_FBIF_TRANSCFG::of::<E>().at(0), |v| {
-                v.with_target(FalconFbifTarget::CoherentSysmem)
-                    .with_mem_type(FalconFbifMemType::Physical)
-            });
+        E::pfalcon(self.bar).update(regs::NV_PFALCON_FBIF_TRANSCFG::at(0), |v| {
+            v.with_target(FalconFbifTarget::CoherentSysmem)
+                .with_mem_type(FalconFbifMemType::Physical)
+        });
 
         self.dma_wr(&dma_obj, FalconMem::ImemSecure, fw.imem_sec_load_params())?;
         self.dma_wr(&dma_obj, FalconMem::Dmem, fw.dmem_load_params())?;
@@ -642,10 +629,8 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         self.hal.program_brom(self, &fw.brom_params());
 
         // Set `BootVec` to start of non-secure code.
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_BOOTVEC::zeroed().with_value(fw.boot_addr()),
-        );
+        E::pfalcon(self.bar)
+            .write_reg(regs::NV_PFALCON_FALCON_BOOTVEC::zeroed().with_value(fw.boot_addr()));
 
         Ok(())
     }
@@ -654,7 +639,7 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
     pub(crate) fn wait_till_halted(&self) -> Result<()> {
         // TIMEOUT: arbitrarily large value, firmwares should complete in less than 2 seconds.
         read_poll_timeout(
-            || Ok(self.bar.read(regs::NV_PFALCON_FALCON_CPUCTL::of::<E>())),
+            || Ok(E::pfalcon(self.bar).read(regs::NV_PFALCON_FALCON_CPUCTL)),
             |r| r.halted(),
             Delta::ZERO,
             Delta::from_secs(2),
@@ -665,19 +650,14 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
     /// Start the falcon CPU.
     pub(crate) fn start(&self) -> Result<()> {
-        match self
-            .bar
-            .read(regs::NV_PFALCON_FALCON_CPUCTL::of::<E>())
+        match E::pfalcon(self.bar)
+            .read(regs::NV_PFALCON_FALCON_CPUCTL)
             .alias_en()
         {
-            true => self.bar.write(
-                WithBase::of::<E>(),
-                regs::NV_PFALCON_FALCON_CPUCTL_ALIAS::zeroed().with_startcpu(true),
-            ),
-            false => self.bar.write(
-                WithBase::of::<E>(),
-                regs::NV_PFALCON_FALCON_CPUCTL::zeroed().with_startcpu(true),
-            ),
+            true => E::pfalcon(self.bar)
+                .write_reg(regs::NV_PFALCON_FALCON_CPUCTL_ALIAS::zeroed().with_startcpu(true)),
+            false => E::pfalcon(self.bar)
+                .write_reg(regs::NV_PFALCON_FALCON_CPUCTL::zeroed().with_startcpu(true)),
         }
 
         Ok(())
@@ -686,31 +666,27 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
     /// Writes values to the mailbox registers if provided.
     pub(crate) fn write_mailboxes(&self, mbox0: Option<u32>, mbox1: Option<u32>) {
         if let Some(mbox0) = mbox0 {
-            self.bar.write(
-                WithBase::of::<E>(),
-                regs::NV_PFALCON_FALCON_MAILBOX0::zeroed().with_value(mbox0),
-            );
+            E::pfalcon(self.bar)
+                .write_reg(regs::NV_PFALCON_FALCON_MAILBOX0::zeroed().with_value(mbox0));
         }
 
         if let Some(mbox1) = mbox1 {
-            self.bar.write(
-                WithBase::of::<E>(),
-                regs::NV_PFALCON_FALCON_MAILBOX1::zeroed().with_value(mbox1),
-            );
+            E::pfalcon(self.bar)
+                .write_reg(regs::NV_PFALCON_FALCON_MAILBOX1::zeroed().with_value(mbox1));
         }
     }
 
     /// Reads the value from `mbox0` register.
     pub(crate) fn read_mailbox0(&self) -> u32 {
-        self.bar
-            .read(regs::NV_PFALCON_FALCON_MAILBOX0::of::<E>())
+        E::pfalcon(self.bar)
+            .read(regs::NV_PFALCON_FALCON_MAILBOX0)
             .value()
     }
 
     /// Reads the value from `mbox1` register.
     pub(crate) fn read_mailbox1(&self) -> u32 {
-        self.bar
-            .read(regs::NV_PFALCON_FALCON_MAILBOX1::of::<E>())
+        E::pfalcon(self.bar)
+            .read(regs::NV_PFALCON_FALCON_MAILBOX1)
             .value()
     }
 
@@ -765,9 +741,7 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
 
     /// Write the application version to the OS register.
     pub(crate) fn write_os_version(&self, app_version: u32) {
-        self.bar.write(
-            WithBase::of::<E>(),
-            regs::NV_PFALCON_FALCON_OS::zeroed().with_value(app_version),
-        );
+        E::pfalcon(self.bar)
+            .write_reg(regs::NV_PFALCON_FALCON_OS::zeroed().with_value(app_version));
     }
 }

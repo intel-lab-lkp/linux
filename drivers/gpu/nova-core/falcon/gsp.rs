@@ -3,22 +3,20 @@
 use kernel::{
     io::{
         poll::read_poll_timeout,
-        register::{
-            RegisterBase,
-            WithBase, //
-        },
         Io,
+        Mmio,
+        Region, //
     },
     prelude::*,
+    sizes::SZ_4K,
     time::Delta, //
 };
 
 use crate::{
+    driver::Bar0,
     falcon::{
         Falcon,
-        FalconEngine,
-        PFalcon2Base,
-        PFalconBase, //
+        FalconEngine, //
     },
     regs,
 };
@@ -26,24 +24,24 @@ use crate::{
 /// Type specifying the `Gsp` falcon engine. Cannot be instantiated.
 pub(crate) struct Gsp(());
 
-impl RegisterBase<PFalconBase> for Gsp {
-    const BASE: usize = 0x00110000;
-}
+impl FalconEngine for Gsp {
+    #[inline]
+    fn pfalcon<'a>(io: Bar0<'a>) -> Mmio<'a, super::PFalconRegisters> {
+        Region::subregion::<0x00110000, SZ_4K, _>(io).cast()
+    }
 
-impl RegisterBase<PFalcon2Base> for Gsp {
-    const BASE: usize = 0x00111000;
+    #[inline]
+    fn pfalcon2<'a>(io: Bar0<'a>) -> Mmio<'a, super::PFalcon2Registers> {
+        Region::subregion::<0x00111000, SZ_4K, _>(io).cast()
+    }
 }
-
-impl FalconEngine for Gsp {}
 
 impl<'a> Falcon<'a, Gsp> {
     /// Clears the SWGEN0 bit in the Falcon's IRQ status clear register to
     /// allow GSP to signal CPU for processing new messages in message queue.
     pub(crate) fn clear_swgen0_intr(&self) {
-        self.bar.write(
-            WithBase::of::<Gsp>(),
-            regs::NV_PFALCON_FALCON_IRQSCLR::zeroed().with_swgen0(true),
-        );
+        Gsp::pfalcon(self.bar)
+            .write_reg(regs::NV_PFALCON_FALCON_IRQSCLR::zeroed().with_swgen0(true));
     }
 
     /// Checks if GSP reload/resume has completed during the boot process.
@@ -59,8 +57,8 @@ impl<'a> Falcon<'a, Gsp> {
 
     /// Returns whether the RISC-V branch privilege lockdown bit is set.
     pub(crate) fn riscv_branch_privilege_lockdown(&self) -> bool {
-        self.bar
-            .read(regs::NV_PFALCON_FALCON_HWCFG2::of::<Gsp>())
+        Gsp::pfalcon(self.bar)
+            .read(regs::NV_PFALCON_FALCON_HWCFG2)
             .riscv_br_priv_lockdown()
     }
 
@@ -71,9 +69,8 @@ impl<'a> Falcon<'a, Gsp> {
         const LOCKED_PATTERN: u32 = 0xbadf_4100;
         const LOCKED_MASK: u32 = 0xffff_ff00;
 
-        let hwcfg2 = self
-            .bar
-            .read(regs::NV_PFALCON_FALCON_HWCFG2::of::<Gsp>())
+        let hwcfg2 = Gsp::pfalcon(self.bar)
+            .read(regs::NV_PFALCON_FALCON_HWCFG2)
             .into_raw();
 
         hwcfg2 != 0 && (hwcfg2 & LOCKED_MASK) != LOCKED_PATTERN

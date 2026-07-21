@@ -5,7 +5,6 @@ use core::marker::PhantomData;
 use kernel::{
     io::{
         poll::read_poll_timeout,
-        register::WithBase,
         Io, //
     },
     prelude::*,
@@ -49,16 +48,15 @@ impl<E: FalconEngine> FalconHal<E> for Tu102<E> {
     fn program_brom(&self, _falcon: &Falcon<'_, E>, _params: &FalconBromParams) {}
 
     fn is_riscv_active(&self, falcon: &Falcon<'_, E>) -> bool {
-        falcon
-            .bar
-            .read(regs::NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS::of::<E>())
+        E::pfalcon2(falcon.bar)
+            .read(regs::NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS)
             .active_stat()
     }
 
     fn reset_wait_mem_scrubbing(&self, falcon: &Falcon<'_, E>) -> Result {
         // TIMEOUT: memory scrubbing should complete in less than 10ms.
         read_poll_timeout(
-            || Ok(falcon.bar.read(regs::NV_PFALCON_FALCON_DMACTL::of::<E>())),
+            || Ok(E::pfalcon(falcon.bar).read(regs::NV_PFALCON_FALCON_DMACTL)),
             |r| r.mem_scrubbing_done(),
             Delta::ZERO,
             Delta::from_millis(10),
