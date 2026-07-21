@@ -1780,6 +1780,7 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 	}
 
 	good_linear = SKB_MAX_HEAD(align);
+	good_linear = max(good_linear, 0);
 
 	if (msg_control) {
 		struct iov_iter i = *from;
