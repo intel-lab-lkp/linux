@@ -15,6 +15,7 @@
 #include "cn10k.h"
 #include "otx2_reg.h"
 #include "rep.h"
+#include "switch/sw_nb.h"
 
 #define DRV_NAME	"rvu_rep"
 #define DRV_STRING	"Marvell RVU Representor Driver"
@@ -399,22 +400,55 @@ static void rvu_rep_get_stats64(struct net_device *dev,
 
 static int rvu_eswitch_config(struct otx2_nic *priv, u8 ena)
 {
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+	struct net_device *netdev = priv->netdev;
+#endif
 	struct devlink_port_attrs attrs = {};
 	struct esw_cfg_req *req;
+	int mbox_err;
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+	int err;
+#endif
 
 	rvu_rep_devlink_set_switch_id(priv, &attrs.switch_id);
+
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+	if (ena) {
+		err = sw_nb_register(netdev);
+		if (err)
+			return err;
+	}
+#endif
 
 	mutex_lock(&priv->mbox.lock);
 	req = otx2_mbox_alloc_msg_esw_cfg(&priv->mbox);
 	if (!req) {
 		mutex_unlock(&priv->mbox.lock);
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+		if (ena)
+			sw_nb_unregister(netdev);
+#endif
 		return -ENOMEM;
 	}
 	req->ena = ena;
 	memcpy(req->switch_id, attrs.switch_id.id, attrs.switch_id.id_len);
-	otx2_sync_mbox_msg(&priv->mbox);
+	mbox_err = otx2_sync_mbox_msg(&priv->mbox);
 	mutex_unlock(&priv->mbox.lock);
-	return 0;
+
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+	if (ena && mbox_err) {
+		sw_nb_unregister(netdev);
+		return mbox_err;
+	}
+
+	if (!ena) {
+		err = sw_nb_unregister(netdev);
+		if (err && !mbox_err)
+			return err;
+	}
+#endif
+
+	return mbox_err;
 }
 
 static netdev_tx_t rvu_rep_xmit(struct sk_buff *skb, struct net_device *dev)
