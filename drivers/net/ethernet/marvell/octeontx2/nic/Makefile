@@ -10,7 +10,7 @@ obj-$(CONFIG_RVU_ESWITCH) += rvu_rep.o
 rvu_nicpf-y := otx2_pf.o otx2_common.o otx2_txrx.o otx2_ethtool.o \
                otx2_flows.o otx2_tc.o cn10k.o cn20k.o otx2_dmac_flt.o \
                otx2_devlink.o qos_sq.o qos.o otx2_xsk.o \
-	       switch/sw_fdb.o switch/sw_fl.o
+	       switch/sw_fdb.o switch/sw_fl.o switch/sw_trace.o
 rvu_nicpf-$(CONFIG_OCTEONTX_SWITCH) += switch/sw_nb.o switch/sw_fib.o \
 				       switch/sw_nb_v4.o
 ifneq ($(CONFIG_IPV6),)
@@ -25,3 +25,4 @@ rvu_nicpf-$(CONFIG_MACSEC) += cn10k_macsec.o
 rvu_nicpf-$(CONFIG_XFRM_OFFLOAD) += cn10k_ipsec.o
 
 ccflags-y += -I$(srctree)/drivers/net/ethernet/marvell/octeontx2/af
+ccflags-y += -I$(src)/switch/
