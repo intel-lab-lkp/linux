@@ -430,7 +430,26 @@ struct gdma_context {
 
 	/* This maps a CQ index to the queue structure. */
 	unsigned int		max_num_cqs;
-	struct gdma_queue	**cq_table;
+	/* Both the base pointer and each entry are RCU-managed.  The fast
+	 * path (mana_gd_process_eqe) reads the base via rcu_dereference()
+	 * under rcu_read_lock(), so the table is freed with
+	 * rcu_assign_pointer(NULL) + synchronize_rcu() and an in-flight
+	 * reader can never observe freed memory.
+	 *
+	 * The slow paths -- mana_gd_destroy_cq() and the CQ install/remove
+	 * callers (mana_create_txq/_rxq, mana_ib_install/remove_cq_cb) --
+	 * instead read the base with rcu_dereference_protected(cq_table,
+	 * true).  The bare "true" is justified by teardown ordering, not by
+	 * a lock: the base table is replaced+freed only by
+	 * mana_hwc_destroy_channel() (and the create-time reinit), and every
+	 * teardown path first runs mana_remove() + mana_rdma_remove(), which
+	 * synchronously drain the netdev and the IB device
+	 * (unregister_netdevice / ib_unregister_device) that bound all
+	 * install/remove callers; the reinit case runs before either
+	 * consumer is probed.  So no slow-path caller can run while the base
+	 * table is being freed.
+	 */
+	struct gdma_queue	__rcu * __rcu *cq_table;
 
 	/* Protect eq_test_event and test_event_eq_id  */
 	struct mutex		eq_test_event_mutex;
