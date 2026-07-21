@@ -687,6 +687,8 @@ static void power_down(void)
 	}
 #endif
 
+	reboot_log_initiator();
+
 	switch (hibernation_mode) {
 	case HIBERNATION_REBOOT:
 		kernel_restart(NULL);
