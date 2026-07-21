@@ -1,0 +1,2 @@
+# Multiple QoS paths x several latency ceilings x idle windows.
+timeout=180
