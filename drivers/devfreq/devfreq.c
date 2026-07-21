@@ -993,9 +993,12 @@ int devfreq_remove_device(struct devfreq *devfreq)
 
 	devfreq_cooling_unregister(devfreq->cdev);
 
-	if (devfreq->governor)
+	if (devfreq->governor) {
+		devfreq_monitor_stop(devfreq);
 		devfreq->governor->event_handler(devfreq,
 						 DEVFREQ_GOV_STOP, NULL);
+	}
+
 	device_unregister(&devfreq->dev);
 
 	return 0;
@@ -1377,6 +1380,7 @@ int devfreq_remove_governor(struct devfreq_governor *governor)
 
 		if (!strncmp(devfreq->governor->name, governor->name,
 			     DEVFREQ_NAME_LEN)) {
+			devfreq_monitor_stop(devfreq);
 			ret = devfreq->governor->event_handler(devfreq,
 						DEVFREQ_GOV_STOP, NULL);
 			if (ret) {
@@ -1449,6 +1453,7 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 	 * Stop the current governor and remove the specific sysfs files
 	 * which depend on current governor.
 	 */
+	devfreq_monitor_stop(df);
 	ret = df->governor->event_handler(df, DEVFREQ_GOV_STOP, NULL);
 	if (ret) {
 		dev_warn(dev, "%s: Governor %s not stopped(%d)\n",
@@ -1895,6 +1900,7 @@ static ssize_t timer_store(struct device *dev, struct device_attribute *attr,
 	df->profile->timer = timer;
 	mutex_unlock(&df->lock);
 
+	devfreq_monitor_stop(df);
 	ret = df->governor->event_handler(df, DEVFREQ_GOV_STOP, NULL);
 	if (ret) {
 		dev_warn(dev, "%s: Governor %s not stopped(%d)\n",
