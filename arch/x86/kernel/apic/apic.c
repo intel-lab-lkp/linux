@@ -341,7 +341,7 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
  * necessarily a BIOS bug.
  */
 
-static atomic_t eilvt_offsets[APIC_EILVT_NR_MAX];
+static atomic_t *eilvt_offsets;
 unsigned int apic_eilvt_count __ro_after_init;
 
 static inline int eilvt_entry_is_changeable(unsigned int old, unsigned int new)
@@ -355,7 +355,7 @@ static unsigned int reserve_eilvt_offset(int offset, unsigned int new)
 {
 	unsigned int rsvd, vector;
 
-	if (offset >= APIC_EILVT_NR_MAX)
+	if (!eilvt_offsets || offset >= apic_eilvt_count)
 		return ~0;
 
 	rsvd = atomic_read(&eilvt_offsets[offset]);
@@ -418,6 +418,9 @@ static __init void init_eilvt(void)
 
 	if (!apic_eilvt_count && boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
 		apic_eilvt_count = APIC_EILVT_NR_AMD_10H;
+
+	if (apic_eilvt_count)
+		eilvt_offsets = kzalloc_objs(atomic_t, apic_eilvt_count);
 }
 
 /*
