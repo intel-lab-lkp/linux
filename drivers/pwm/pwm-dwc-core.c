@@ -12,8 +12,10 @@
 #define DEFAULT_SYMBOL_NAMESPACE "dwc_pwm"
 
 #include <linux/bitops.h>
+#include <linux/clk.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
@@ -39,26 +41,82 @@ static int __dwc_pwm_configure_timer(struct dwc_pwm *dwc,
 				     struct pwm_device *pwm,
 				     const struct pwm_state *state)
 {
-	u64 tmp;
+	u64 tmp, period_cyc;
 	u32 ctrl;
 	u32 high;
 	u32 low;
 
-	/*
-	 * Calculate width of low and high period in terms of input clock
-	 * periods and check are the result within HW limits between 1 and
-	 * 2^32 periods.
-	 */
-	tmp = DIV_ROUND_CLOSEST_ULL(state->duty_cycle, dwc->clk_ns);
-	if (tmp < 1 || tmp > (1ULL << 32))
-		return -ERANGE;
-	low = tmp - 1;
+	if (dwc->clk)
+		dwc->clk_rate = clk_get_rate(dwc->clk);
 
-	tmp = DIV_ROUND_CLOSEST_ULL(state->period - state->duty_cycle,
-				    dwc->clk_ns);
-	if (tmp < 1 || tmp > (1ULL << 32))
-		return -ERANGE;
-	high = tmp - 1;
+	if (dwc->features & DWC_TIM_CTRL_0N100PWM_EN) {
+		/*
+		 * Calculate the total period in clock cycles first, then the
+		 * duty cycle. Derive the complementary half as the remainder to
+		 * avoid compounding two independent floor-truncation errors:
+		 * floor(duty) + floor(period - duty) can be one cycle short of
+		 * floor(period). The PWM core requires the maximal achievable
+		 * period not exceeding the requested value.
+		 */
+		period_cyc = mul_u64_u64_div_u64(state->period, dwc->clk_rate,
+						 NSEC_PER_SEC);
+		if (!period_cyc)
+			return -ERANGE;
+
+		tmp = mul_u64_u64_div_u64(state->duty_cycle, dwc->clk_rate,
+					  NSEC_PER_SEC);
+		/*
+		 * Calculate width of low and high period in terms of input
+		 * clock periods and check are the result within HW limits
+		 * between 0 and 2^32 periods.
+		 */
+		if (tmp >= (1ULL << 32) || period_cyc - tmp >= (1ULL << 32))
+			return -ERANGE;
+
+		/*
+		 * The hardware has no polarity register. Polarity inversion is
+		 * achieved by swapping the low and high load-count registers:
+		 * NORMAL (active-high): duty_cycle ->
+		 *				HIGH period (DWC_TIM_LD_CNT2)
+		 * INVERSED (active-low): duty_cycle ->
+		 *				LOW period (DWC_TIM_LD_CNT)
+		 */
+		if (state->polarity == PWM_POLARITY_NORMAL) {
+			high = tmp;
+			low = period_cyc - tmp;
+		} else {
+			low = tmp;
+			high = period_cyc - tmp;
+		}
+	} else {
+		/*
+		 * Calculate width of low and high period in terms of input
+		 * clock periods and check are the result within HW limits
+		 * between 1 and 2^32 periods.
+		 * Polarity inversion uses the same register-swap technique as
+		 * the 0N100 path above.
+		 * Derive the complementary half from the total period to avoid
+		 * compounding two independent floor-truncation errors.
+		 */
+		tmp = mul_u64_u64_div_u64(state->duty_cycle, dwc->clk_rate,
+					  NSEC_PER_SEC);
+		if (tmp < 1 || tmp > (1ULL << 32))
+			return -ERANGE;
+
+		period_cyc = mul_u64_u64_div_u64(state->period, dwc->clk_rate,
+						 NSEC_PER_SEC);
+		/* period_cyc - tmp: complementary half; tmp <= period_cyc */
+		if (period_cyc - tmp < 1 || period_cyc - tmp > (1ULL << 32))
+			return -ERANGE;
+
+		if (state->polarity == PWM_POLARITY_NORMAL) {
+			high = tmp - 1;
+			low = period_cyc - tmp - 1;
+		} else {
+			low = tmp - 1;
+			high = period_cyc - tmp - 1;
+		}
+	}
 
 	/*
 	 * Specification says timer usage flow is to disable timer, then
@@ -74,6 +132,7 @@ static int __dwc_pwm_configure_timer(struct dwc_pwm *dwc,
 	 * width of low period and latter the width of high period in terms
 	 * multiple of input clock periods:
 	 * Width = ((Count + 1) * input clock period).
+	 * Width = (Count * input clock period) : supported 0% and 100%.
 	 */
 	dwc_pwm_writel(dwc, low, DWC_TIM_LD_CNT(pwm->hwpwm));
 	dwc_pwm_writel(dwc, high, DWC_TIM_LD_CNT2(pwm->hwpwm));
@@ -85,6 +144,14 @@ static int __dwc_pwm_configure_timer(struct dwc_pwm *dwc,
 	 * periods are set by Load Count registers.
 	 */
 	ctrl = DWC_TIM_CTRL_MODE_USER | DWC_TIM_CTRL_PWM;
+	/*
+	 * Mask interrupts to prevent unmasked timer interrupts on shared IRQ
+	 * systems where no IRQ handler is installed.
+	 */
+	ctrl |= DWC_TIM_CTRL_INT_MASK;
+	if (dwc->features & DWC_TIM_CTRL_0N100PWM_EN)
+		ctrl |= DWC_TIM_CTRL_0N100PWM_EN;
+
 	dwc_pwm_writel(dwc, ctrl, DWC_TIM_CTRL(pwm->hwpwm));
 
 	/*
@@ -99,14 +166,18 @@ static int dwc_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 			 const struct pwm_state *state)
 {
 	struct dwc_pwm *dwc = to_dwc_pwm(chip);
-
-	if (state->polarity != PWM_POLARITY_INVERSED)
-		return -EINVAL;
+	int ret;
 
 	if (state->enabled) {
-		if (!pwm->state.enabled)
-			pm_runtime_get_sync(pwmchip_parent(chip));
-		return __dwc_pwm_configure_timer(dwc, pwm, state);
+		if (!pwm->state.enabled) {
+			ret = pm_runtime_resume_and_get(pwmchip_parent(chip));
+			if (ret < 0)
+				return ret;
+		}
+		ret = __dwc_pwm_configure_timer(dwc, pwm, state);
+		if (ret && !pwm->state.enabled)
+			pm_runtime_put_sync(pwmchip_parent(chip));
+		return ret;
 	} else {
 		if (pwm->state.enabled) {
 			__dwc_pwm_set_enable(dwc, pwm->hwpwm, false);
@@ -121,10 +192,23 @@ static int dwc_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 			     struct pwm_state *state)
 {
 	struct dwc_pwm *dwc = to_dwc_pwm(chip);
-	u64 duty, period;
+	unsigned long clk_rate;
 	u32 ctrl, ld, ld2;
+	u64 duty, period;
+	int ret;
 
-	pm_runtime_get_sync(pwmchip_parent(chip));
+	ret = pm_runtime_resume_and_get(pwmchip_parent(chip));
+	if (ret < 0)
+		return ret;
+
+	if (dwc->clk)
+		dwc->clk_rate = clk_get_rate(dwc->clk);
+
+	clk_rate = dwc->clk_rate;
+	if (!clk_rate) {
+		pm_runtime_put_sync(pwmchip_parent(chip));
+		return -EINVAL;
+	}
 
 	ctrl = dwc_pwm_readl(dwc, DWC_TIM_CTRL(pwm->hwpwm));
 	ld = dwc_pwm_readl(dwc, DWC_TIM_LD_CNT(pwm->hwpwm));
@@ -133,21 +217,45 @@ static int dwc_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 	state->enabled = !!(ctrl & DWC_TIM_CTRL_EN);
 
 	/*
+	 * The hardware has no polarity status register; polarity is encoded
+	 * implicitly by which of DWC_TIM_LD_CNT / DWC_TIM_LD_CNT2 holds the
+	 * duty-cycle period (see __dwc_pwm_configure_timer). Report the
+	 * polarity that was last programmed by apply(). On the initial read
+	 * (before any apply call), pwm->state.polarity defaults to
+	 * PWM_POLARITY_NORMAL, which is the natural zero-initialised value.
+	 */
+	state->polarity = pwm->state.polarity;
+
+	/*
 	 * If we're not in PWM, technically the output is a 50-50
 	 * based on the timer load-count only.
 	 */
 	if (ctrl & DWC_TIM_CTRL_PWM) {
-		duty = (ld + 1) * dwc->clk_ns;
-		period = (ld2 + 1)  * dwc->clk_ns;
-		period += duty;
+		if (ctrl & DWC_TIM_CTRL_0N100PWM_EN) {
+			/*
+			 * NORMAL: duty_cycle was written to DWC_TIM_LD_CNT2.
+			 * INVERSED: duty_cycle was written to DWC_TIM_LD_CNT.
+			 */
+			if (state->polarity == PWM_POLARITY_NORMAL)
+				duty = ld2;
+			else
+				duty = ld;
+			period = (u64)ld + ld2;
+		} else {
+			if (state->polarity == PWM_POLARITY_NORMAL)
+				duty = ld2 + 1;
+			else
+				duty = ld + 1;
+			period = (u64)ld + ld2 + 2;
+		}
 	} else {
-		duty = (ld + 1) * dwc->clk_ns;
+		duty = ld + 1;
 		period = duty * 2;
+		state->polarity = PWM_POLARITY_INVERSED;
 	}
 
-	state->polarity = PWM_POLARITY_INVERSED;
-	state->period = period;
-	state->duty_cycle = duty;
+	state->period = mul_u64_u64_div_u64(period, NSEC_PER_SEC, clk_rate);
+	state->duty_cycle = mul_u64_u64_div_u64(duty, NSEC_PER_SEC, clk_rate);
 
 	pm_runtime_put_sync(pwmchip_parent(chip));
 
@@ -169,7 +277,7 @@ struct pwm_chip *dwc_pwm_alloc(struct device *dev)
 		return chip;
 	dwc = to_dwc_pwm(chip);
 
-	dwc->clk_ns = 10;
+	dwc->clk_rate = NSEC_PER_SEC / 10;
 	chip->ops = &dwc_pwm_ops;
 
 	return chip;
