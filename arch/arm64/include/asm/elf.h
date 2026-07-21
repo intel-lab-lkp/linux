@@ -293,6 +293,7 @@ static inline int arch_check_elf(void *ehdr, bool has_interp,
 	return 0;
 }
 
+extern bool arch_syscall_is_vdso_sigreturn(struct pt_regs *regs);
 #endif /* !__ASSEMBLER__ */
 
 #endif

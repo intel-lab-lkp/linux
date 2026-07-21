@@ -112,3 +112,4 @@ VERSION
  * Make the sigreturn code visible to the kernel.
  */
 VDSO_sigtramp		= __kernel_rt_sigreturn;
+VDSO_sigreturn_landing_pad	= __sigreturn_landing_pad;
