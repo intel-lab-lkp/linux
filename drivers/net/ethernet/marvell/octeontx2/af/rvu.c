@@ -1990,18 +1990,29 @@ int rvu_mbox_handler_msix_offset(struct rvu *rvu, struct msg_req *req,
 	return 0;
 }
 
-static void rvu_iface_get_qcnts(struct rvu *rvu, struct rvu_pfvf *pfvf,
-				struct iface_info *info)
+static void rvu_iface_get_qcnts(struct rvu *rvu, u16 pcifunc,
+				struct rvu_pfvf *pfvf, struct iface_info *info)
 {
+	int sq_bmap_bits;
+
 	mutex_lock(&rvu->rsrc_lock);
 
 	info->sq_cnt = 0;
 	info->cq_cnt = 0;
 	info->rq_cnt = 0;
 
-	/* Use each LF queue context size; bitmaps are sized to qsize longs. */
-	if (pfvf->sq_ctx && pfvf->sq_bmap)
-		info->sq_cnt = bitmap_weight(pfvf->sq_bmap, pfvf->sq_ctx->qsize);
+	if (pfvf->sq_bmap) {
+		/* Match switchdev sq_bmap allocation size in nix_lf_alloc(). */
+		if (rvu_is_switch_pcifunc(rvu, pcifunc))
+			sq_bmap_bits = NIX_SQ_BMAP_BITS;
+		else if (pfvf->sq_ctx)
+			sq_bmap_bits = pfvf->sq_ctx->qsize;
+		else
+			sq_bmap_bits = 0;
+
+		if (sq_bmap_bits)
+			info->sq_cnt = bitmap_weight(pfvf->sq_bmap, sq_bmap_bits);
+	}
 	if (pfvf->cq_ctx && pfvf->cq_bmap)
 		info->cq_cnt = bitmap_weight(pfvf->cq_bmap, pfvf->cq_ctx->qsize);
 	if (pfvf->rq_ctx && pfvf->rq_bmap)
@@ -2064,7 +2075,7 @@ int rvu_mbox_handler_iface_get_info(struct rvu *rvu, struct msg_req *req,
 		if (is_sdp_pfvf(rvu, pcifunc))
 			info->is_sdp = 1;
 
-		rvu_iface_get_qcnts(rvu, pfvf, info);
+		rvu_iface_get_qcnts(rvu, pcifunc, pfvf, info);
 
 		if (pfvf->nix_blkaddr == BLKADDR_NIX0)
 			info->nix = 0;
@@ -2097,7 +2108,7 @@ chk_vfs:
 			if (is_sdp_pfvf(rvu, pcifunc))
 				info->is_sdp = 1;
 
-			rvu_iface_get_qcnts(rvu, pfvf, info);
+			rvu_iface_get_qcnts(rvu, pcifunc, pfvf, info);
 
 			if (pfvf->nix_blkaddr == BLKADDR_NIX0)
 				info->nix = 0;
