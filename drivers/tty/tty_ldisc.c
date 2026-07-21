@@ -242,8 +242,20 @@ struct tty_ldisc *tty_ldisc_ref_wait(struct tty_struct *tty)
 
 	ldsem_down_read(&tty->ldisc_sem, MAX_SCHEDULE_TIMEOUT);
 	ld = tty->ldisc;
-	if (!ld)
+	if (!ld) {
 		ldsem_up_read(&tty->ldisc_sem);
+
+		/* ldisc may be NULL during a discipline switch; wait and retry */
+		if (!test_bit(TTY_HUPPED, &tty->flags)) {
+			wait_event(tty->read_wait,
+				   READ_ONCE(tty->ldisc) != NULL ||
+				   test_bit(TTY_HUPPED, &tty->flags));
+			ldsem_down_read(&tty->ldisc_sem, MAX_SCHEDULE_TIMEOUT);
+			ld = tty->ldisc;
+			if (!ld)
+				ldsem_up_read(&tty->ldisc_sem);
+		}
+	}
 	return ld;
 }
 EXPORT_SYMBOL_GPL(tty_ldisc_ref_wait);
@@ -556,15 +568,28 @@ int tty_set_ldisc(struct tty_struct *tty, int disc)
 	/* Shutdown the old discipline. */
 	tty_ldisc_close(tty, old_ldisc);
 
-	/* Now set up the new line discipline. */
-	tty->ldisc = new_ldisc;
+	/* Clear tty->ldisc so concurrent readers back off during transition */
+	tty->ldisc = NULL;
 	tty_set_termios_ldisc(tty, disc);
+	tty_ldisc_unlock(tty);
 
+	/*
+	 * Open the new discipline outside ldisc_sem. The ldisc .open()
+	 * may acquire locks (e.g., rtnl_mutex) that would create circular
+	 * dependencies if taken under ldisc_sem. tty_lock is still held,
+	 * preventing concurrent ldisc changes and hangup.
+	 */
 	retval = tty_ldisc_open(tty, new_ldisc);
+
+	tty_ldisc_lock(tty, MAX_SCHEDULE_TIMEOUT);
+
 	if (retval < 0) {
 		/* Back to the old one or N_TTY if we can't */
 		tty_ldisc_put(new_ldisc);
 		tty_ldisc_restore(tty, old_ldisc);
+	} else {
+		/* Success - install new ldisc */
+		tty->ldisc = new_ldisc;
 	}
 
 	if (tty->ldisc->ops->num != old_ldisc->ops->num && tty->ops->set_ldisc) {
@@ -583,6 +608,9 @@ int tty_set_ldisc(struct tty_struct *tty, int disc)
 	new_ldisc = old_ldisc;
 out:
 	tty_ldisc_unlock(tty);
+
+	/* Wake up readers waiting for the ldisc transition to complete */
+	wake_up(&tty->read_wait);
 
 	/*
 	 * Restart the work queue in case no characters kick it off. Safe if

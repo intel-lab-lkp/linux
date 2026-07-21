@@ -649,6 +649,13 @@ static void __tty_hangup(struct tty_struct *tty, int exit_session)
 	 */
 	set_bit(TTY_HUPPED, &tty->flags);
 	clear_bit(TTY_HUPPING, &tty->flags);
+
+	/*
+	 * Wake up readers blocked in tty_ldisc_ref_wait() that may have
+	 * seen ldisc == NULL but not yet TTY_HUPPED.
+	 */
+	wake_up(&tty->read_wait);
+
 	tty_unlock(tty);
 
 	if (f)
