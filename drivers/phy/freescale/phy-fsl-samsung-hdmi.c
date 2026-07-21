@@ -665,20 +665,26 @@ static int fsl_samsung_hdmi_phy_probe(struct platform_device *pdev)
 				     "failed to get ref clk\n");
 
 	pm_runtime_get_noresume(phy->dev);
-	pm_runtime_set_active(phy->dev);
-	pm_runtime_enable(phy->dev);
+	ret = pm_runtime_set_active(phy->dev);
+	if (ret)
+		goto pm_put_noidle;
+
+	ret = devm_pm_runtime_enable(phy->dev);
+	if (ret)
+		goto pm_put_noidle;
 
 	ret = phy_clk_register(phy);
 	if (ret) {
 		dev_err(&pdev->dev, "register clk failed\n");
-		goto register_clk_failed;
+		goto pm_put_noidle;
 	}
 
 	pm_runtime_put(phy->dev);
 
 	return 0;
 
-register_clk_failed:
+pm_put_noidle:
+	pm_runtime_put_noidle(phy->dev);
 	return ret;
 }
 
