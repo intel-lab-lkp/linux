@@ -649,8 +649,8 @@ function GOLDEN_RECORDS {
 #K= 9c405e06fcea50284df82d1ae9692403 FT_grammar_errs.2        dmesg
 #K= 0b0d9b0e6f4c45c7d75d699fd3b6aa93 FT_grammar_errs.3        dmesg
 #K= e008644e159c2a9d99a8d0806c06e71e FT_grammar_errs.4        dmesg
-#K= 11833e6cf8fe8b03869aa4f669b63398 FT_grammar_errs.5        dmesg
-#K= e85a4b665f5ef141e3f4d4505dec1da1 FT_grammar_errs.6        dmesg
+#K= 5750ed178633f9a68623f928c093d16e FT_grammar_errs.5        dmesg
+#K= 2cd51e5e3c3e2501544524bed0fab620 FT_grammar_errs.6        dmesg
 #K= 3e1eba65bd936e1276c7e1d76b399595 FT_grammar_errs.7        dmesg
 #K= e3ac86676e309d4e72ff3da287736c29 FT_grammar_errs.8        dmesg
 #K= 466d325c23519119f754fa7860bae7c6 FT_grammar_errs.9        dmesg
@@ -663,8 +663,8 @@ function GOLDEN_RECORDS {
 #K= bd8d9cf661c9aca54dac93c74cfc1501 FT_grammar_errs.16       dmesg
 #K= e991391048f2fdffaaed99ba36b787ed FT_grammar_errs.17       dmesg
 #K= 82d99278f471ebfbf47eeb19898525cf FT_grammar_errs.18       dmesg
-#K= 3c8d268c94b0bf97e64999654cd840c4 FT_grammar_errs.19       dmesg
-#K= 1a448ff3f1df9155cc3acf1e124f24f5 FT_grammar_errs.20       dmesg
+#K= f3f088fa7d276981bf2898c048087f76 FT_grammar_errs.19       dmesg
+#K= 984ecc198e0fa9fc91bc31caf7da2a5d FT_grammar_errs.20       dmesg
 #K= 76c8a33c585d414fcc3f1c8b5ea5b4b3 FT_grammar_errs.21       dmesg
 #K= 90cfc66e9d61f5c448353b97baa99145 FT_grammar_errs.22       dmesg
 #K= 37a51dfd6e84cb64b69d3a0e23e68ceb FT_grammar_errs.23       dmesg
@@ -677,8 +677,8 @@ function GOLDEN_RECORDS {
 #K= 2e37642dc8aee3d04b8a54a76b3b891c FT_grammar_errs.30       dmesg
 #K= 593c8b4c41932e3bde564a0008627ced FT_grammar_errs.31       dmesg
 #K= 85a2a0bee8d0cd10f883aa5477d62efb FT_grammar_errs.32       dmesg
-#K= 3c8d268c94b0bf97e64999654cd840c4 FT_grammar_errs.33       dmesg
-#K= 1a448ff3f1df9155cc3acf1e124f24f5 FT_grammar_errs.34       dmesg
+#K= f3f088fa7d276981bf2898c048087f76 FT_grammar_errs.33       dmesg
+#K= 629f6a7e379e02f38c543cdb48e3b84f FT_grammar_errs.34       dmesg
 #K= d9f0cffb0898c54690735a71b0d4f3bf FT_grammar_errs.35       dmesg
 #K= 4cf728b6a32043ea5336a14d0c435312 FT_grammar_errs.36       dmesg
 #K= a11ae3f86f4e5f539fd6168d318f74b4 FT_grammar_errs.37       dmesg
@@ -693,8 +693,6 @@ function GOLDEN_RECORDS {
 #K= 551f9801b6008553661453021ae6dfd3 FT_basic_queries.4       "kernel/params.c"
 #K= 33f7162ac85020894fab9752ef07b89c FT_basic_queries.5       "kernel/params.c"
 #K= 544d955c3bb9d3c78704f780d91396e0 FT_basic_queries.6       "kernel/params.c"
-
-
 EOF
         # Read the K-recs and skip those for tests that can't run
         while read -r line; do
