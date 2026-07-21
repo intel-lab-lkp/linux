@@ -32,11 +32,17 @@ struct cpuidle_governor *cpuidle_prev_governor;
  */
 static DEFINE_PER_CPU(atomic_t, latency_req_gen);
 
+struct cpuidle_latency_req_cache {
+	unsigned int gen;
+	s64 latency_ns;
+};
+
 struct cpuidle_cpu_qos_nb {
 	struct notifier_block nb;
 	unsigned int cpu;
 };
 
+static DEFINE_PER_CPU(struct cpuidle_latency_req_cache, latency_req_cache);
 static DEFINE_PER_CPU(struct cpuidle_cpu_qos_nb, cpuidle_cpu_qos_nb);
 
 static void cpuidle_latency_req_invalidate_cpu(unsigned int cpu)
@@ -212,10 +218,22 @@ int cpuidle_register_governor(struct cpuidle_governor *gov)
  */
 s64 cpuidle_governor_latency_req(unsigned int cpu)
 {
-	struct device *device = get_cpu_device(cpu);
-	int device_req = dev_pm_qos_raw_resume_latency(device);
-	int global_req = cpu_latency_qos_limit();
-	int global_wake_req = cpu_wakeup_latency_qos_limit();
+	struct cpuidle_latency_req_cache *cache;
+	unsigned int gen;
+	struct device *device;
+	int device_req, global_req, global_wake_req;
+	s64 latency_ns;
+
+	cache = per_cpu_ptr(&latency_req_cache, cpu);
+	gen = atomic_read(per_cpu_ptr(&latency_req_gen, cpu));
+
+	if (likely(READ_ONCE(cache->gen) == gen))
+		return READ_ONCE(cache->latency_ns);
+
+	device = get_cpu_device(cpu);
+	device_req = dev_pm_qos_raw_resume_latency(device);
+	global_req = cpu_latency_qos_limit();
+	global_wake_req = cpu_wakeup_latency_qos_limit();
 
 	if (global_req > global_wake_req)
 		global_req = global_wake_req;
@@ -223,5 +241,14 @@ s64 cpuidle_governor_latency_req(unsigned int cpu)
 	if (device_req > global_req)
 		device_req = global_req;
 
-	return (s64)device_req * NSEC_PER_USEC;
+	latency_ns = (s64)device_req * NSEC_PER_USEC;
+
+	WRITE_ONCE(cache->latency_ns, latency_ns);
+	/*
+	 * Store gen last so a concurrent invalidate cannot leave a stale
+	 * latency_ns marked as current.
+	 */
+	WRITE_ONCE(cache->gen, gen);
+
+	return latency_ns;
 }
