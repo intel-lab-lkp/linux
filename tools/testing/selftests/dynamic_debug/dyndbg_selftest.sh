@@ -461,7 +461,8 @@ function FT_hyphen_underscore {
     ddcmd =_
 }
 
-# test parsing on spaces, commas. testing agains builtin [kernel/params]
+# test parsing on spaces, commas. testing against builtin [kernel/params]
+# disabled pending feature patch
 function FT_comma_terminators {
     v_echo "${GREEN}# COMMA_TERMINATOR_TESTS ${NC}"
     if [ $LACK_DD_BUILTIN -eq 1 ]; then
@@ -470,15 +471,9 @@ function FT_comma_terminators {
     fi
     ddcmd "module params =_"
 
-    # 1. Verify transition after commas-as-spaces query and splitting on @
-    # Use non-printing decorator flags (+mf) to avoid print-enabling (+p) and
-    # prevent syslog pollution
-    #ddcmd "module,params,=_ @ module,params,+mf" 'kernel/params.c'
-
-    # 2. Verify transition after ignored-commas query
+    ddcmd "module,params,=_ @ module,params,+mf" 'kernel/params.c'
+    # ignore empty tokens
     ddcmd ",module ,, ,  params, -p" 'kernel/params.c'
-
-    # 3. Verify transition after quoted-commas query
     ddcmd " , module ,,, ,  params, -m" 'kernel/params.c'
 
     ddcmd =_
@@ -688,13 +683,12 @@ function GOLDEN_RECORDS {
 #K= 781995971d28f732a792522f3c56cdd3 FT_grammar_errs.40       dmesg
 #K= 6614a677d9f9ac09d9825b4e989d2c42 FT_grammar_errs.41       dmesg
 #K= 70de9afed457a6be9f9c3c81cbd6d4d5 FT_grammar_errs.42       dmesg
-#K= 9a7aaed40738f1c5203af2e421a20bc2 FT_basic_queries.1       "kernel/params.c"
-#K= 2a57a9e283a3912de3fa5e006fb330cc FT_basic_queries.2       "kernel/params.c"
-#K= fed3186684428b2f05bcf5df960c639c FT_basic_queries.3       "kernel/params.c"
-#K= 551f9801b6008553661453021ae6dfd3 FT_basic_queries.4       "kernel/params.c"
-#K= 33f7162ac85020894fab9752ef07b89c FT_basic_queries.5       "kernel/params.c"
-#K= 544d955c3bb9d3c78704f780d91396e0 FT_basic_queries.6       "kernel/params.c"
-# ------------------------------
+#K= 24d85e3b86f3d5f7640995922d91e08c FT_basic_queries.1       "kernel/params.c"
+#K= 958898bcd9736a94e1f8b293b230a96a FT_basic_queries.2       "kernel/params.c"
+#K= 130118da5a296e4039865d167e06cacd FT_basic_queries.3       "kernel/params.c"
+#K= da6bd1c6a299290150668186f8263b82 FT_basic_queries.4       "kernel/params.c"
+#K= 82572e8d20c4b567afac783006d1a935 FT_basic_queries.5       "kernel/params.c"
+#K= baea1247680e8151c121539f4b90a6d8 FT_basic_queries.6       "kernel/params.c"
 EOF
         # Read the K-recs and skip those for tests that can't run
         while read -r line; do
