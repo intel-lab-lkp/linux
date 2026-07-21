@@ -261,6 +261,13 @@ static void __apply_guest_page(void *va, size_t size,
 
 static void clean_dcache_guest_page(void *va, size_t size)
 {
+	/*
+	 * Guest stage-2 uses FWB if available, making it safe to elide CMOs.
+	 * In contrast, the host stage-2 never has FWB enabled.
+	 */
+	if (cpus_have_final_cap(ARM64_HAS_STAGE2_FWB))
+		return;
+
 	__apply_guest_page(va, size, __clean_dcache_guest_page);
 }
 
