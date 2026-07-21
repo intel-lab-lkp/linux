@@ -722,8 +722,11 @@ static int __maybe_unused fsl_samsung_hdmi_phy_resume(struct device *dev)
 		return ret;
 	}
 
-	if (phy->cur_cfg)
+	if (phy->cur_cfg) {
 		ret = fsl_samsung_hdmi_phy_configure(phy, phy->cur_cfg);
+		if (ret)
+			clk_disable(phy->apbclk);
+	}
 
 	return ret;
 
