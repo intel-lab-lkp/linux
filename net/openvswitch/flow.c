@@ -1035,6 +1035,13 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 		return res;
 	key->mac_proto = res;
 
+	if (res == MAC_PROTO_ETHERNET) {
+		int err = check_header(skb, ETH_HLEN);
+
+		if (unlikely(err))
+			return err;
+	}
+
 #if IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
 	if (tc_skb_ext_tc_enabled()) {
 		tc_ext = skb_ext_find(skb, TC_SKB_EXT);
