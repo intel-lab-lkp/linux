@@ -426,7 +426,13 @@ static void vmbus_free_channel_msginfo(struct vmbus_channel_msginfo *msginfo)
 }
 
 /*
- * __vmbus_establish_gpadl - Establish a GPADL for a buffer or ringbuffer
+ * __vmbus_establish_gpadl - Establish a GPADL for a buffer or ringbuffer.
+ *
+ * This function only handles the GPADL handshake with the host.  The caller
+ * is responsible for ensuring that @kbuffer is in the encryption state the
+ * host expects (host-visible / "decrypted" for confidential VMs); this
+ * function never calls set_memory_decrypted() or set_memory_encrypted().
+ * It also leaves gpadl->decrypted untouched, so the caller must set it.
  *
  * @channel: a channel
  * @type: the type of the corresponding GPADL, only meaningful for the guest.
@@ -434,7 +440,7 @@ static void vmbus_free_channel_msginfo(struct vmbus_channel_msginfo *msginfo)
  * @size: page-size multiple
  * @send_offset: the offset (in bytes) where the send ring buffer starts,
  *              should be 0 for BUFFER type gpadl
- * @gpadl_handle: some funky thing
+ * @gpadl: out parameter receiving the established GPADL handle/buffer/size
  */
 static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 				   enum hv_gpadl_type type, void *kbuffer,
@@ -454,30 +460,8 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 		(atomic_inc_return(&vmbus_connection.next_gpadl_handle) - 1);
 
 	ret = create_gpadl_header(type, kbuffer, size, send_offset, &msginfo);
-	if (ret) {
-		gpadl->decrypted = false;
+	if (ret)
 		return ret;
-	}
-
-	gpadl->decrypted = !((channel->co_external_memory && type == HV_GPADL_BUFFER) ||
-		(channel->co_ring_buffer && type == HV_GPADL_RING));
-	if (gpadl->decrypted) {
-		/*
-		 * The "decrypted" flag being true assumes that set_memory_decrypted() succeeds.
-		 * But if it fails, the encryption state of the memory is unknown. In that case,
-		 * leave "decrypted" as true to ensure the memory is leaked instead of going back
-		 * on the free list.
-		 */
-		ret = set_memory_decrypted((unsigned long)kbuffer,
-					PFN_UP(size));
-		if (ret) {
-			dev_warn(&channel->device_obj->device,
-				"Failed to set host visibility for new GPADL %d.\n",
-				ret);
-			vmbus_free_channel_msginfo(msginfo);
-			return ret;
-		}
-	}
 
 	init_completion(&msginfo->waitevent);
 	msginfo->waiting_channel = channel;
@@ -553,19 +537,47 @@ cleanup:
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 
 	vmbus_free_channel_msginfo(msginfo);
+	return ret;
+}
 
-	if (ret) {
-		/*
-		 * If set_memory_encrypted() fails, the decrypted flag is
-		 * left as true so the memory is leaked instead of being
-		 * put back on the free list.
-		 */
-		if (gpadl->decrypted) {
-			if (!set_memory_encrypted((unsigned long)kbuffer, PFN_UP(size)))
-				gpadl->decrypted = false;
+/*
+ * vmbus_establish_gpadl_and_decrypt - Manage the encryption lifecycle of
+ * @kbuffer around a __vmbus_establish_gpadl() call.
+ *
+ * Decrypts @kbuffer (making it host-visible) unless the channel was created
+ * with confidential memory for @type, then establishes the GPADL.  On
+ * establish failure the buffer is re-encrypted so the caller can free it.
+ *
+ * Sets gpadl->decrypted; see the comment on struct vmbus_gpadl::decrypted.
+ */
+static int vmbus_establish_gpadl_and_decrypt(struct vmbus_channel *channel,
+					     enum hv_gpadl_type type,
+					     void *kbuffer, u32 size,
+					     u32 send_offset,
+					     struct vmbus_gpadl *gpadl)
+{
+	bool decrypt = !((channel->co_external_memory && type == HV_GPADL_BUFFER) ||
+			 (channel->co_ring_buffer && type == HV_GPADL_RING));
+	int ret;
+
+	if (decrypt) {
+		ret = set_memory_decrypted((unsigned long)kbuffer, PFN_UP(size));
+		if (ret) {
+			dev_warn(&channel->device_obj->device,
+				 "Failed to set host visibility for new GPADL %d.\n",
+				 ret);
+			/* Encryption state unknown; signal caller to leak. */
+			gpadl->decrypted = true;
+			return ret;
 		}
 	}
 
+	gpadl->decrypted = decrypt;
+	ret = __vmbus_establish_gpadl(channel, type, kbuffer, size, send_offset,
+				      gpadl);
+	if (ret && decrypt &&
+	    !set_memory_encrypted((unsigned long)kbuffer, PFN_UP(size)))
+		gpadl->decrypted = false;
 	return ret;
 }
 
@@ -580,10 +592,39 @@ cleanup:
 int vmbus_establish_gpadl(struct vmbus_channel *channel, void *kbuffer,
 			  u32 size, struct vmbus_gpadl *gpadl)
 {
-	return __vmbus_establish_gpadl(channel, HV_GPADL_BUFFER, kbuffer, size,
-				       0U, gpadl);
+	return vmbus_establish_gpadl_and_decrypt(channel, HV_GPADL_BUFFER,
+						 kbuffer, size, 0U, gpadl);
 }
 EXPORT_SYMBOL_GPL(vmbus_establish_gpadl);
+
+/*
+ * vmbus_establish_gpadl_caller_decrypted - Establish a GPADL for a buffer
+ * whose encryption state is managed by the caller.
+ *
+ * @channel: a channel
+ * @kbuffer: a buffer that the caller has already transitioned to host-visible
+ *           (decrypted) via set_memory_decrypted() or an equivalent mechanism.
+ * @size: page-size multiple
+ * @gpadl: out parameter receiving the established GPADL
+ *
+ * Unlike vmbus_establish_gpadl(), this function does not call
+ * set_memory_decrypted() on @kbuffer, and the matching vmbus_teardown_gpadl()
+ * call will not call set_memory_encrypted() on it.  The caller is responsible
+ * for the full encryption lifecycle of @kbuffer; on return gpadl->decrypted
+ * is set to false to record that vmbus does not own the encryption state.
+ */
+int vmbus_establish_gpadl_caller_decrypted(struct vmbus_channel *channel,
+					   void *kbuffer, u32 size,
+					   struct vmbus_gpadl *gpadl)
+{
+	int ret = __vmbus_establish_gpadl(channel, HV_GPADL_BUFFER, kbuffer,
+					  size, 0U, gpadl);
+
+	/* Caller owns @kbuffer's encryption; teardown must not touch it. */
+	gpadl->decrypted = false;
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vmbus_establish_gpadl_caller_decrypted);
 
 /**
  * request_arr_init - Allocates memory for the requestor array. Each slot
@@ -685,11 +726,11 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
 	/* Establish the gpadl for the ring buffer */
 	newchannel->ringbuffer_gpadlhandle.gpadl_handle = 0;
 
-	err = __vmbus_establish_gpadl(newchannel, HV_GPADL_RING,
-				      page_address(newchannel->ringbuffer_page),
-				      (send_pages + recv_pages) << PAGE_SHIFT,
-				      newchannel->ringbuffer_send_offset << PAGE_SHIFT,
-				      &newchannel->ringbuffer_gpadlhandle);
+	err = vmbus_establish_gpadl_and_decrypt(newchannel, HV_GPADL_RING,
+						page_address(newchannel->ringbuffer_page),
+						(send_pages + recv_pages) << PAGE_SHIFT,
+						newchannel->ringbuffer_send_offset << PAGE_SHIFT,
+						&newchannel->ringbuffer_gpadlhandle);
 	if (err)
 		goto error_clean_ring;
 

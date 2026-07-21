@@ -781,6 +781,12 @@ struct vmbus_gpadl {
 	u32 gpadl_handle;
 	u32 size;
 	void *buffer;
+	/*
+	 * Only used if the vmbus layer owns the encryption lifecycle of
+	 * @buffer.
+	 * Indicates @buffer must be re-encrypted at teardown or that it
+	 * must be leaked because re-encryption failed.
+	 */
 	bool decrypted;
 };
 
@@ -1204,6 +1210,11 @@ extern int vmbus_establish_gpadl(struct vmbus_channel *channel,
 				      void *kbuffer,
 				      u32 size,
 				      struct vmbus_gpadl *gpadl);
+
+extern int vmbus_establish_gpadl_caller_decrypted(struct vmbus_channel *channel,
+						  void *kbuffer,
+						  u32 size,
+						  struct vmbus_gpadl *gpadl);
 
 extern int vmbus_teardown_gpadl(struct vmbus_channel *channel,
 				     struct vmbus_gpadl *gpadl);
