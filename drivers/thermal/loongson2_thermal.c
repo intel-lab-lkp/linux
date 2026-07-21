@@ -2,9 +2,11 @@
 /*
  * Author: zhanghongchen <zhanghongchen@loongson.cn>
  *         Yinbo Zhu <zhuyinbo@loongson.cn>
- * Copyright (C) 2022-2023 Loongson Technology Corporation Limited
+ *         Binbin Zhou <zhoubinbin@loongson.cn>
+ * Copyright (C) 2022-2026 Loongson Technology Corporation Limited
  */
 
+#include <linux/bitfield.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/minmax.h>
@@ -14,6 +16,9 @@
 #include <linux/property.h>
 #include <linux/thermal.h>
 #include <linux/units.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
+#include <linux/syscore_ops.h>
 
 #include "thermal_hwmon.h"
 
@@ -23,28 +28,48 @@
 #define LOONGSON2_THSENS_CTRL_LOW_REG	0x8
 #define LOONGSON2_THSENS_STATUS_REG	0x10
 #define LOONGSON2_THSENS_OUT_REG	0x14
+#define LOONGSON2_THSENS_CFG_REG	0x18
 
 #define LOONGSON2_THSENS_INT_LO		BIT(0)
 #define LOONGSON2_THSENS_INT_HIGH	BIT(1)
 #define LOONGSON2_THSENS_INT_EN		(LOONGSON2_THSENS_INT_LO | \
 					 LOONGSON2_THSENS_INT_HIGH)
-#define LOONGSON2_THSENS_OUT_MASK	0xFF
+#define LOONGSON2_THSENS_OUT_8B_MASK	0xFF
+#define LOONGSON2_THSENS_OUT_10B_MASK	GENMASK(10, 0)
+
+#define LS2K0300_CHIP_ID0		0x10
+#define LS2K0300_CHIP_ID1		0x14
+#define LS2K0300_EXTERN_ID		BIT(4)
+#define LS2K0300_ID0_VAL_MASK		GENMASK(31, 20)
+#define LS2K0300_ID1_VAL_MASK		GENMASK(15, 0)
+
+#define LS2K0300_COMP_VAL_MASK		GENMASK(14, 0)
+#define LS2K0300_COMP_SIGN_BIT		BIT(15)
+
+#define LS2K0300_LOWEST_VALID_TEMP	(-55000)
+#define LS2K0300_HIGHEST_VALID_TEMP	(125000)
 
 /*
  * This flag is used to indicate the temperature reading
  * method of the Loongson-2K2000
  */
 #define LS2K2000_THSENS_OUT_FLAG	BIT(0)
+#define LS2K0300_CHIP_ID_FLAG		BIT(1)
+#define LS2K0300_OLD_FUSE_FLAG		BIT(2)
 
 struct loongson2_thermal_chip_data {
 	unsigned int thermal_sensor_sel;
 	unsigned int flags;
+	const struct thermal_zone_device_ops *thermal_ops;
 };
 
 struct loongson2_thermal_data {
+	int calib_offset;
+	struct device *dev;
 	void __iomem *ctrl_reg;
 	void __iomem *temp_reg;
-	const struct loongson2_thermal_chip_data *chip_data;
+	struct regmap *regmap_cfg;
+	struct loongson2_thermal_chip_data *chip_data;
 };
 
 static void loongson2_set_ctrl_regs(struct loongson2_thermal_data *data,
@@ -71,13 +96,55 @@ static int loongson2_thermal_set(struct loongson2_thermal_data *data,
 	return 0;
 }
 
+static int loongson2_2k0300_get_temp(struct thermal_zone_device *tz, int *temp)
+{
+	struct loongson2_thermal_data *tdata = thermal_zone_device_priv(tz);
+	int calib_data, calib_offset, temp_mc, raw_adc;
+	u32 chip_id0, chip_id1;
+
+	writel(0xff03, tdata->ctrl_reg + LOONGSON2_THSENS_CFG_REG);
+	raw_adc = FIELD_GET(LOONGSON2_THSENS_OUT_10B_MASK,
+			    readl(tdata->ctrl_reg + LOONGSON2_THSENS_OUT_REG));
+
+	if (tdata->chip_data->flags & LS2K0300_OLD_FUSE_FLAG) {
+		*temp = raw_adc * 569 - 394700;
+		return 0;
+	}
+
+	regmap_read(tdata->regmap_cfg, LS2K0300_CHIP_ID0, &chip_id0);
+	regmap_read(tdata->regmap_cfg, LS2K0300_CHIP_ID1, &chip_id1);
+
+	if (chip_id0 & LS2K0300_EXTERN_ID) {
+		calib_data = FIELD_GET(LS2K0300_ID1_VAL_MASK, chip_id1);
+		calib_offset = FIELD_GET(LS2K0300_COMP_VAL_MASK, calib_data);
+		if (calib_data & LS2K0300_COMP_SIGN_BIT)
+			calib_offset = -calib_offset;
+	} else {
+		calib_data = FIELD_GET(LS2K0300_ID0_VAL_MASK, chip_id0);
+		calib_offset = FIELD_GET(LS2K0300_COMP_VAL_MASK, calib_data);
+	}
+
+	tdata->calib_offset = calib_offset;
+	temp_mc = (raw_adc + calib_offset) * 570 - 394700;
+
+	/* For old fuse which can not read right thermal data */
+	if (temp_mc < LS2K0300_LOWEST_VALID_TEMP || temp_mc > LS2K0300_HIGHEST_VALID_TEMP) {
+		dev_warn_once(tdata->dev, "It's an old fuse, thermal %d is not right\n", temp_mc);
+		tdata->chip_data->flags |= LS2K0300_OLD_FUSE_FLAG;
+		temp_mc = raw_adc * 569 - 394700;
+	}
+	*temp = temp_mc;
+
+	return 0;
+}
+
 static int loongson2_2k1000_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	int val;
 	struct loongson2_thermal_data *data = thermal_zone_device_priv(tz);
 
 	val = readl(data->ctrl_reg + LOONGSON2_THSENS_OUT_REG);
-	*temp = ((val & LOONGSON2_THSENS_OUT_MASK) - HECTO) * KILO;
+	*temp = ((val & LOONGSON2_THSENS_OUT_8B_MASK) - HECTO) * KILO;
 
 	return 0;
 }
@@ -112,6 +179,11 @@ static int loongson2_thermal_set_trips(struct thermal_zone_device *tz, int low, 
 	return loongson2_thermal_set(data, low/MILLI, high/MILLI, true);
 }
 
+static const struct thermal_zone_device_ops loongson2_2k0300_of_thermal_ops = {
+	.get_temp = loongson2_2k0300_get_temp,
+	.set_trips = loongson2_thermal_set_trips,
+};
+
 static const struct thermal_zone_device_ops loongson2_2k1000_of_thermal_ops = {
 	.get_temp = loongson2_2k1000_get_temp,
 	.set_trips = loongson2_thermal_set_trips,
@@ -124,7 +196,6 @@ static const struct thermal_zone_device_ops loongson2_2k2000_of_thermal_ops = {
 
 static int loongson2_thermal_probe(struct platform_device *pdev)
 {
-	const struct thermal_zone_device_ops *thermal_ops;
 	struct device *dev = &pdev->dev;
 	struct loongson2_thermal_data *data;
 	struct thermal_zone_device *tzd;
@@ -134,7 +205,8 @@ static int loongson2_thermal_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENOMEM;
 
-	data->chip_data = device_get_match_data(dev);
+	data->dev = dev;
+	data->chip_data = (struct loongson2_thermal_chip_data *)device_get_match_data(dev);
 
 	data->ctrl_reg = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(data->ctrl_reg))
@@ -145,10 +217,14 @@ static int loongson2_thermal_probe(struct platform_device *pdev)
 		data->temp_reg = devm_platform_ioremap_resource(pdev, 1);
 		if (IS_ERR(data->temp_reg))
 			return PTR_ERR(data->temp_reg);
+	}
 
-		thermal_ops = &loongson2_2k2000_of_thermal_ops;
-	} else {
-		thermal_ops = &loongson2_2k1000_of_thermal_ops;
+	/* The chip id register is needed for Loongson-2K0300 */
+	if (data->chip_data->flags & LS2K0300_CHIP_ID_FLAG) {
+		data->regmap_cfg =
+			syscon_regmap_lookup_by_phandle(dev->of_node, "loongson,chipid");
+		if (IS_ERR(data->regmap_cfg))
+			return PTR_ERR(data->regmap_cfg);
 	}
 
 	irq = platform_get_irq(pdev, 0);
@@ -160,7 +236,7 @@ static int loongson2_thermal_probe(struct platform_device *pdev)
 	loongson2_thermal_set(data, 0, 0, false);
 
 	for (i = 0; i <= LOONGSON2_MAX_SENSOR_SEL_NUM; i++) {
-		tzd = devm_thermal_of_zone_register(dev, i, data, thermal_ops);
+		tzd = devm_thermal_of_zone_register(dev, i, data, data->chip_data->thermal_ops);
 		if (!IS_ERR(tzd))
 			break;
 
@@ -183,17 +259,29 @@ static int loongson2_thermal_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct loongson2_thermal_chip_data loongson2_thermal_ls2k1000_data = {
+static struct loongson2_thermal_chip_data loongson2_thermal_ls2k0300_data = {
 	.thermal_sensor_sel = 0,
-	.flags = 0,
+	.flags = LS2K0300_CHIP_ID_FLAG,
+	.thermal_ops = &loongson2_2k0300_of_thermal_ops,
 };
 
-static const struct loongson2_thermal_chip_data loongson2_thermal_ls2k2000_data = {
+static struct loongson2_thermal_chip_data loongson2_thermal_ls2k1000_data = {
+	.thermal_sensor_sel = 0,
+	.flags = 0,
+	.thermal_ops = &loongson2_2k1000_of_thermal_ops,
+};
+
+static struct loongson2_thermal_chip_data loongson2_thermal_ls2k2000_data = {
 	.thermal_sensor_sel = 0,
 	.flags = LS2K2000_THSENS_OUT_FLAG,
+	.thermal_ops = &loongson2_2k2000_of_thermal_ops,
 };
 
 static const struct of_device_id of_loongson2_thermal_match[] = {
+	{
+		.compatible = "loongson,ls2k0300-thermal",
+		.data = &loongson2_thermal_ls2k0300_data,
+	},
 	{
 		.compatible = "loongson,ls2k1000-thermal",
 		.data = &loongson2_thermal_ls2k1000_data,
