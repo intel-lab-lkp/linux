@@ -129,6 +129,12 @@ struct cpa_split_data {
 
 unsigned long cpa_addr(struct cpa_data *cpa, unsigned long idx);
 
+pte_t *lookup_address(unsigned long address, unsigned int *level);
+pte_t *lookup_address_in_pgd(pgd_t *pgd, unsigned long address,
+			     unsigned int *level);
+pte_t *lookup_address_in_pgd_attr(pgd_t *pgd, unsigned long address,
+				  unsigned int *level, bool *nx, bool *rw);
+
 int arch_cpa_process_fault(struct cpa_data *cpa, unsigned long vaddr,
 			   int primary);
 int arch_cpa_process_alias(struct cpa_data *cpa);

@@ -819,6 +819,42 @@ static inline int pud_write(pud_t pud)
 	return pte_write(pud_pte(pud));
 }
 
+#define pgd_write pgd_write
+static inline int pgd_write(pgd_t pgd)
+{
+	return pgd_val(pgd) & _PAGE_WRITE;
+}
+
+#define p4d_write p4d_write
+static inline int p4d_write(p4d_t p4d)
+{
+	return p4d_val(p4d) & _PAGE_WRITE;
+}
+
+#define pgd_exec pgd_exec
+static inline int pgd_exec(pgd_t pgd)
+{
+	return !!(pgd_val(pgd) & _PAGE_EXEC);
+}
+
+#define p4d_exec p4d_exec
+static inline int p4d_exec(p4d_t p4d)
+{
+	return !!(p4d_val(p4d) & _PAGE_EXEC);
+}
+
+#define pud_exec pud_exec
+static inline int pud_exec(pud_t pud)
+{
+	return !!(pud_val(pud) & _PAGE_EXEC);
+}
+
+#define pmd_exec pmd_exec
+static inline int pmd_exec(pmd_t pmd)
+{
+	return !!(pmd_val(pmd) & _PAGE_EXEC);
+}
+
 #define pmd_dirty pmd_dirty
 static inline int pmd_dirty(pmd_t pmd)
 {

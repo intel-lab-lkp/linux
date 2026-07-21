@@ -7,6 +7,8 @@
 #define _ASM_RISCV_SET_MEMORY_H
 
 #ifndef __ASSEMBLER__
+#include <asm/page.h>
+#include <asm/pgtable.h>
 /*
  * Functions to change memory attributes.
  */
@@ -25,6 +27,11 @@ static __always_inline int set_kernel_memory(char *startp, char *endp,
 	int num_pages = PAGE_ALIGN(end - start) >> PAGE_SHIFT;
 
 	return set_memory(start, num_pages);
+}
+
+static inline bool cpa_should_update_alias(unsigned long vaddr, unsigned long pfn)
+{
+	return !is_linear_mapping(vaddr);
 }
 #else
 static inline int set_memory_ro(unsigned long addr, int numpages) { return 0; }
