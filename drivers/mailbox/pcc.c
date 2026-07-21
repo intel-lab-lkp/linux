@@ -325,7 +325,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 		return IRQ_NONE;
 
 	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_MASTER_SUBSPACE &&
-	    !pchan->chan_in_use)
+	    !READ_ONCE(pchan->chan_in_use))
 		return IRQ_NONE;
 
 	if (!pcc_mbox_cmd_complete_check(pchan))
@@ -339,7 +339,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	 * where the flag is set again to start new transfer. This is
 	 * required to avoid any possible race in updatation of this flag.
 	 */
-	pchan->chan_in_use = false;
+	WRITE_ONCE(pchan->chan_in_use, false);
 	if (!rc)
 		mbox_chan_received_data(chan, NULL);
 	mbox_chan_txdone(chan, rc);
@@ -471,7 +471,7 @@ static int pcc_send_data(struct mbox_chan *chan, void *data)
 
 	ret = pcc_chan_reg_read_modify_write(&pchan->db);
 	if (!ret && pchan->plat_irq > 0)
-		pchan->chan_in_use = true;
+		WRITE_ONCE(pchan->chan_in_use, true);
 
 	return ret;
 }
