@@ -317,6 +317,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 {
 	struct pcc_chan_info *pchan;
 	struct mbox_chan *chan = p;
+	int rc;
 
 	pchan = chan->con_priv;
 
@@ -330,8 +331,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	if (!pcc_mbox_cmd_complete_check(pchan))
 		return IRQ_NONE;
 
-	if (pcc_mbox_error_check_and_clear(pchan))
-		return IRQ_NONE;
+	rc = pcc_mbox_error_check_and_clear(pchan);
 
 	/*
 	 * Clear this flag after updating interrupt ack register and just
@@ -340,8 +340,9 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	 * required to avoid any possible race in updatation of this flag.
 	 */
 	pchan->chan_in_use = false;
-	mbox_chan_received_data(chan, NULL);
-	mbox_chan_txdone(chan, 0);
+	if (!rc)
+		mbox_chan_received_data(chan, NULL);
+	mbox_chan_txdone(chan, rc);
 
 	pcc_chan_acknowledge(pchan);
 
