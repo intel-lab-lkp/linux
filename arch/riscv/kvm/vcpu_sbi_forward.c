@@ -26,6 +26,13 @@ const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_dbcn = {
 	.handler = kvm_riscv_vcpu_sbi_forward_handler,
 };
 
+const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_dbtr = {
+	.extid_start = SBI_EXT_DBTR,
+	.extid_end = SBI_EXT_DBTR,
+	.default_disabled = true,
+	.handler = kvm_riscv_vcpu_sbi_forward_handler,
+};
+
 const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_mpxy = {
 	.extid_start = SBI_EXT_MPXY,
 	.extid_end = SBI_EXT_MPXY,
