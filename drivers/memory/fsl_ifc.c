@@ -92,10 +92,6 @@ static void fsl_ifc_ctrl_remove(struct platform_device *dev)
 	if (ctrl->nand_irq > 0)
 		free_irq(ctrl->nand_irq, ctrl);
 	free_irq(ctrl->irq, ctrl);
-
-	iounmap(ctrl->gregs);
-
-	dev_set_drvdata(&dev->dev, NULL);
 }
 
 /*
@@ -201,6 +197,7 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 {
 	int ret = 0;
 	int version, banks;
+	void __iomem *gregs;
 	void __iomem *addr;
 	int nand_irq;
 	int irq;
@@ -217,6 +214,11 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	if (nand_irq == -EPROBE_DEFER)
 		return nand_irq;
 
+	/* IOMAP the entire IFC region */
+	gregs = devm_platform_ioremap_resource(dev, 0);
+	if (IS_ERR(gregs))
+		return PTR_ERR(gregs);
+
 	fsl_ifc_ctrl_dev = devm_kzalloc(&dev->dev, sizeof(*fsl_ifc_ctrl_dev),
 					GFP_KERNEL);
 	if (!fsl_ifc_ctrl_dev)
@@ -224,12 +226,7 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 
 	dev_set_drvdata(&dev->dev, fsl_ifc_ctrl_dev);
 
-	/* IOMAP the entire IFC region */
-	fsl_ifc_ctrl_dev->gregs = of_iomap(dev->dev.of_node, 0);
-	if (!fsl_ifc_ctrl_dev->gregs) {
-		dev_err(&dev->dev, "failed to get memory region\n");
-		return -ENODEV;
-	}
+	fsl_ifc_ctrl_dev->gregs = gregs;
 
 	if (of_property_read_bool(dev->dev.of_node, "little-endian")) {
 		fsl_ifc_ctrl_dev->little_endian = true;
@@ -262,7 +259,7 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 
 	ret = fsl_ifc_ctrl_init(fsl_ifc_ctrl_dev);
 	if (ret < 0)
-		goto err;
+		return ret;
 
 	init_waitqueue_head(&fsl_ifc_ctrl_dev->nand_wait);
 
@@ -271,7 +268,7 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	if (ret != 0) {
 		dev_err(&dev->dev, "failed to install irq (%d)\n",
 			fsl_ifc_ctrl_dev->irq);
-		goto err;
+		goto err_free_irq;
 	}
 
 	fsl_ifc_ctrl_dev->nand_irq = nand_irq;
@@ -297,8 +294,6 @@ err_free_nandirq:
 		free_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_ctrl_dev);
 err_free_irq:
 	free_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_dev);
-err:
-	iounmap(fsl_ifc_ctrl_dev->gregs);
 	return ret;
 }
 
