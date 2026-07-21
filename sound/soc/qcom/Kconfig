@@ -47,15 +47,6 @@ config SND_SOC_LPASS_SC7280
 	select SND_SOC_LPASS_HDMI
 	select SND_SOC_LPASS_CDC_DMA
 
-config SND_SOC_STORM
-	tristate "ASoC I2S support for Storm boards"
-	depends on GPIOLIB
-	select SND_SOC_LPASS_IPQ806X
-	select SND_SOC_MAX98357A
-	help
-	  Say Y or M if you want add support for SoC audio on the
-	  Qualcomm Technologies IPQ806X-based Storm board.
-
 config SND_SOC_APQ8016_SBC
 	tristate "SoC Audio support for APQ8016 SBC platforms"
 	select SND_SOC_LPASS_APQ8016
