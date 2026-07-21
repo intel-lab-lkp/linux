@@ -1200,6 +1200,7 @@ int kernel_kexec(void)
 		 * CPU hotplug again; so re-enable it here.
 		 */
 		cpu_hotplug_enable();
+		reboot_log_initiator();
 		pr_notice("Starting new kernel\n");
 		machine_shutdown();
 	}
