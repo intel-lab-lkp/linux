@@ -6715,12 +6715,14 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		return 0;
 
 	/*
-	 * KVM should never reach this point with a pending nested VM-Enter.
-	 * More specifically, short-circuiting VM-Entry to emulate L2 due to
-	 * invalid guest state should never happen as that means KVM knowingly
-	 * allowed a nested VM-Enter with an invalid vmcs12.  More below.
+	 * KVM should never reach this point with a trusted pending nested
+	 * VM-Enter.  Short-circuiting VM-Entry to emulate L2 due to invalid
+	 * guest state after a normal nested VM-Enter would mean KVM knowingly
+	 * allowed an invalid vmcs12.  Pending VM-Enters restored from untrusted
+	 * state are handled below.
 	 */
-	if (KVM_BUG_ON(vcpu->arch.nested_run_pending, vcpu->kvm))
+	if (KVM_BUG_ON(vcpu->arch.nested_run_pending == KVM_NESTED_RUN_PENDING,
+		       vcpu->kvm))
 		return -EIO;
 
 	if (is_guest_mode(vcpu)) {
@@ -8436,7 +8438,7 @@ int vmx_leave_smm(struct kvm_vcpu *vcpu, const union kvm_smram *smram)
 		if (ret != NVMX_VMENTRY_SUCCESS)
 			return 1;
 
-		vcpu->arch.nested_run_pending = KVM_NESTED_RUN_PENDING;
+		vcpu->arch.nested_run_pending = KVM_NESTED_RUN_PENDING_UNTRUSTED;
 		vmx->nested.smm.guest_mode = false;
 	}
 	return 0;

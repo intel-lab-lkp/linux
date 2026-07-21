@@ -5143,6 +5143,14 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 	}
 
 	/*
+	 * Untrusted pending VM-Enters may be canceled by untrusted state.  Keep
+	 * the flag set through sync_vmcs02_to_vmcs12() so that fields which are
+	 * updated only after L2 runs, e.g. the preemption timer, aren't saved.
+	 */
+	if (vcpu->arch.nested_run_pending == KVM_NESTED_RUN_PENDING_UNTRUSTED)
+		vcpu->arch.nested_run_pending = 0;
+
+	/*
 	 * Drop events/exceptions that were queued for re-injection to L2
 	 * (picked up via vmx_complete_interrupts()), as well as exceptions
 	 * that were pending for L2.  Note, this must NOT be hoisted above
