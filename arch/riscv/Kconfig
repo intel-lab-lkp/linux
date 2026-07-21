@@ -1097,6 +1097,7 @@ config ARCH_SUPPORTS_KEXEC_FILE
 config ARCH_SELECTS_KEXEC_FILE
 	def_bool y
 	depends on KEXEC_FILE
+	select HOTPLUG_CPU if SMP
 	select HAVE_IMA_KEXEC if IMA
 	select KEXEC_ELF
 
