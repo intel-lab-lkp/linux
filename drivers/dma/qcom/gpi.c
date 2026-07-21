@@ -207,8 +207,8 @@ enum CNTXT_OFFS {
 
 /* Scratch registers */
 #define GPII_n_CH_k_SCRATCH_0_OFFS(n, k)	(0x20060 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPII_n_CH_k_SCRATCH_0_SEID		GENMASK(2, 0)
-#define GPII_n_CH_k_SCRATCH_0_PROTO		GENMASK(7, 4)
+#define GPII_n_CH_k_SCRATCH_0_SEID		GENMASK(3, 0)
+#define GPII_n_CH_k_SCRATCH_0_PROTO		GENMASK(8, 4)
 #define GPII_n_CH_k_SCRATCH_0_PAIR		GENMASK(20, 16)
 #define GPII_n_CH_k_SCRATCH_0(pair, proto, seid)		\
 			     (FIELD_PREP(GPII_n_CH_k_SCRATCH_0_PAIR, pair)	| \
