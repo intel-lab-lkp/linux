@@ -216,6 +216,32 @@ static inline void latency_stat_sum(struct iolatency_grp *iolat,
 		blk_rq_stat_sum(&sum->rqs, &stat->rqs);
 }
 
+/*
+ * Like latency_stat_sum(), but @stat is itself already aggregated (i.e.
+ * carries a valid mean), not a raw per-cpu stat. blk_rq_stat_sum() is
+ * contracted on a raw src -- it reads src->batch -- so for the non-SSD
+ * case merge by the reconstructed totals (mean * nr_samples) instead.
+ */
+static inline void latency_stat_merge(struct iolatency_grp *iolat,
+				      struct latency_stat *sum,
+				      struct latency_stat *stat)
+{
+	if (iolat->ssd) {
+		sum->ps.total += stat->ps.total;
+		sum->ps.missed += stat->ps.missed;
+	} else {
+		if (sum->rqs.nr_samples + stat->rqs.nr_samples <=
+		    sum->rqs.nr_samples)
+			return;
+		sum->rqs.mean = div_u64(sum->rqs.mean * sum->rqs.nr_samples +
+					stat->rqs.mean * stat->rqs.nr_samples,
+					sum->rqs.nr_samples + stat->rqs.nr_samples);
+		sum->rqs.min = min(sum->rqs.min, stat->rqs.min);
+		sum->rqs.max = max(sum->rqs.max, stat->rqs.max);
+		sum->rqs.nr_samples += stat->rqs.nr_samples;
+	}
+}
+
 static inline void latency_stat_record_time(struct iolatency_grp *iolat,
 					    u64 req_time)
 {
@@ -547,7 +573,7 @@ static void iolatency_check_latencies(struct iolatency_grp *iolat, u64 now)
 	/* Somebody beat us to the punch, just bail. */
 	spin_lock_irqsave(&lat_info->lock, flags);
 
-	latency_stat_sum(iolat, &iolat->cur_stat, &stat);
+	latency_stat_merge(iolat, &iolat->cur_stat, &stat);
 	lat_info->nr_samples -= iolat->nr_samples;
 	lat_info->nr_samples += latency_stat_samples(iolat, &iolat->cur_stat);
 	iolat->nr_samples = latency_stat_samples(iolat, &iolat->cur_stat);
