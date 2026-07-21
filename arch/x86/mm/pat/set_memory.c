@@ -60,6 +60,9 @@ struct cpa_split_data {
 	unsigned long	address;
 	pte_t		*kpte;
 	struct ptdesc	*ptdesc;
+	enum pgtable_level level;
+	bool		nx;
+	bool		rw;
 };
 
 enum cpa_warn {
@@ -883,19 +886,12 @@ static int __should_split_large_page(struct cpa_data *cpa,
 {
 	unsigned long numpages, pmask, psize, lpaddr, pfn, old_pfn;
 	pgprot_t old_prot, new_prot, req_prot, chk_prot;
+	enum pgtable_level level = sd->level;
 	unsigned long address = sd->address;
-	enum pgtable_level level;
 	pte_t *kpte = sd->kpte;
-	pte_t new_pte, *tmp;
-	bool nx, rw;
-
-	/*
-	 * Check for races, another CPU might have split this page
-	 * up already:
-	 */
-	tmp = _lookup_address_cpa(cpa, address, &level, &nx, &rw);
-	if (tmp != kpte)
-		return 1;
+	bool nx = sd->nx;
+	bool rw = sd->rw;
+	pte_t new_pte;
 
 	switch (level) {
 	case PGTABLE_LEVEL_PMD:
@@ -1030,16 +1026,10 @@ static int __should_split_large_page(struct cpa_data *cpa,
 static int should_split_large_page(struct cpa_data *cpa,
 				   struct cpa_split_data *sd)
 {
-	int do_split;
-
 	if (cpa->force_split)
 		return 1;
 
-	spin_lock(&pgd_lock);
-	do_split = __should_split_large_page(cpa, sd);
-	spin_unlock(&pgd_lock);
-
-	return do_split;
+	return __should_split_large_page(cpa, sd);
 }
 
 static void split_set_pte(struct cpa_data *cpa, pte_t *pte, unsigned long pfn,
@@ -1084,23 +1074,11 @@ static int __split_large_page(struct cpa_data *cpa, struct cpa_split_data *sd)
 	struct ptdesc *ptdesc = sd->ptdesc;
 	struct page *base = ptdesc_page(ptdesc);
 	pte_t *pbase = (pte_t *)page_address(base);
+	enum pgtable_level level = sd->level;
 	unsigned long address = sd->address;
 	pte_t *kpte = sd->kpte;
-	unsigned int i, level;
+	unsigned int i;
 	pgprot_t ref_prot;
-	bool nx, rw;
-	pte_t *tmp;
-
-	spin_lock(&pgd_lock);
-	/*
-	 * Check for races, another CPU might have split this page
-	 * up for us already:
-	 */
-	tmp = _lookup_address_cpa(cpa, address, &level, &nx, &rw);
-	if (tmp != kpte) {
-		spin_unlock(&pgd_lock);
-		return 1;
-	}
 
 	paravirt_alloc_pte(&init_mm, page_to_pfn(base));
 
@@ -1133,7 +1111,6 @@ static int __split_large_page(struct cpa_data *cpa, struct cpa_split_data *sd)
 		break;
 
 	default:
-		spin_unlock(&pgd_lock);
 		return 1;
 	}
 
@@ -1181,23 +1158,13 @@ static int __split_large_page(struct cpa_data *cpa, struct cpa_split_data *sd)
 	 * just split large page entry.
 	 */
 	flush_tlb_all();
-	spin_unlock(&pgd_lock);
 
 	return 0;
 }
 
 static int split_large_page(struct cpa_data *cpa, struct cpa_split_data *sd)
 {
-	spin_unlock(&cpa_lock);
-	sd->ptdesc = pagetable_alloc(GFP_KERNEL, 0);
-	spin_lock(&cpa_lock);
-	if (!sd->ptdesc)
-		return -ENOMEM;
-
-	if (__split_large_page(cpa, sd))
-		pagetable_free(sd->ptdesc);
-
-	return 0;
+	return __split_large_page(cpa, sd);
 }
 
 static int cpa_handle_large_page(struct cpa_data *cpa, pte_t *kpte,
@@ -1207,13 +1174,31 @@ static int cpa_handle_large_page(struct cpa_data *cpa, pte_t *kpte,
 		.address = address,
 		.kpte = kpte,
 	};
-	int do_split, err;
+	int do_split, ret = 1;
+	pte_t *tmp;
+
+	spin_unlock(&cpa_lock);
+	sd.ptdesc = pagetable_alloc(GFP_KERNEL, 0);
+	spin_lock(&cpa_lock);
+	if (!sd.ptdesc)
+		return -ENOMEM;
+
+	spin_lock(&pgd_lock);
+
+	/*
+	 * Check for races, another CPU might have split this page
+	 * up already:
+	 */
+	tmp = _lookup_address_cpa(cpa, address, &sd.level, &sd.nx, &sd.rw);
+	if (tmp != kpte)
+		goto out_free_ptdesc;
 
 	/*
 	 * Check, whether we can keep the large page intact
 	 * and just change the pte:
 	 */
 	do_split = should_split_large_page(cpa, &sd);
+	ret = do_split;
 	/*
 	 * When the range fits into the existing large page, no split is
 	 * required.
@@ -1221,16 +1206,22 @@ static int cpa_handle_large_page(struct cpa_data *cpa, pte_t *kpte,
 	 * cpa->numpages and cpa->pfn.
 	 */
 	if (do_split <= 0)
-		return do_split;
+		goto out_free_ptdesc;
 
 	/*
 	 * We have to split the large page:
 	 */
-	err = split_large_page(cpa, &sd);
-	if (err)
-		return err;
+	ret = split_large_page(cpa, &sd);
+	if (ret)
+		goto out_free_ptdesc;
 
+	spin_unlock(&pgd_lock);
 	return do_split;
+
+out_free_ptdesc:
+	spin_unlock(&pgd_lock);
+	pagetable_free(sd.ptdesc);
+	return ret;
 }
 
 static int collapse_pmd_page(pmd_t *pmd, unsigned long addr,
