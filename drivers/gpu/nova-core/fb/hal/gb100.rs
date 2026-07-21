@@ -5,11 +5,9 @@
 
 use kernel::{
     io::{
-        register::{
-            RegisterBase,
-            WithBase, //
-        },
-        Io, //
+        Io,
+        Mmio,
+        Region, //
     },
     num::Bounded,
     prelude::*,
@@ -29,17 +27,24 @@ use crate::{
 
 struct Gb100;
 
-impl RegisterBase<regs::Hshub0Base> for Gb100 {
-    const BASE: usize = 0x0087_0000;
+impl Gb100 {
+    #[inline]
+    fn hshub0(self, bar: Bar0<'_>) -> Mmio<'_, regs::Hshub0Registers> {
+        Region::subregion::<0x0087_0000, SZ_4K, _>(bar).cast()
+    }
 }
 
 fn read_sysmem_flush_page_gb100(bar: Bar0<'_>) -> u64 {
     let lo = u64::from(
-        bar.read(regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO::of::<Gb100>())
+        Gb100
+            .hshub0(bar)
+            .read(regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO)
             .adr(),
     );
     let hi = u64::from(
-        bar.read(regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI::of::<Gb100>())
+        Gb100
+            .hshub0(bar)
+            .read(regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI)
             .adr(),
     );
 
@@ -58,24 +63,20 @@ fn write_sysmem_flush_page_gb100(bar: Bar0<'_>, addr: Bounded<u64, 52>) {
     // Write HI first. The hardware will trigger the flush on the LO write.
 
     // Primary HSHUB pair.
-    bar.write(
-        regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI::of::<Gb100>(),
-        regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI::zeroed().with_adr(addr_hi),
-    );
-    bar.write(
-        regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO::of::<Gb100>(),
-        regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO::zeroed().with_adr(addr_lo),
-    );
+    Gb100
+        .hshub0(bar)
+        .write_reg(regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI::zeroed().with_adr(addr_hi));
+    Gb100
+        .hshub0(bar)
+        .write_reg(regs::NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO::zeroed().with_adr(addr_lo));
 
     // EG (egress) pair -- must match the primary pair.
-    bar.write(
-        regs::NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI::of::<Gb100>(),
-        regs::NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI::zeroed().with_adr(addr_hi),
-    );
-    bar.write(
-        regs::NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO::of::<Gb100>(),
-        regs::NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO::zeroed().with_adr(addr_lo),
-    );
+    Gb100
+        .hshub0(bar)
+        .write_reg(regs::NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI::zeroed().with_adr(addr_hi));
+    Gb100
+        .hshub0(bar)
+        .write_reg(regs::NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO::zeroed().with_adr(addr_lo));
 }
 
 pub(super) const fn pmu_reserved_size_gb100() -> u32 {

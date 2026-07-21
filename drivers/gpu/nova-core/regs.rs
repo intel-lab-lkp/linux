@@ -7,7 +7,10 @@ use kernel::{
         Io, //
     },
     prelude::*,
-    sizes::SizeConstants,
+    sizes::{
+        SizeConstants,
+        SZ_4K, //
+    },
     time, //
 };
 
@@ -156,28 +159,30 @@ register! {
 /// Base of the GB10x HSHUB0 register window (`NV_HSHUB0_PRIV_BASE` in Open RM).
 ///
 /// The base is provided by the GB10x framebuffer HAL.
-pub(crate) struct Hshub0Base(());
+#[repr(align(4))]
+#[derive(FromBytes, IntoBytes)]
+pub(crate) struct Hshub0Registers([u8; SZ_4K]);
 
 register! {
-    base: NovaRegisters;
+    base: Hshub0Registers;
 
     // GB10x sysmem flush registers, relative to the HSHUB0 base. GB10x routes sysmembar
     // through a primary and an EG (egress) pair that must both be programmed to the same
     // address. Hardware ignores bits 7:0 of each LO register. The boot path uses a fixed
     // HSHUB0 base, so the multiple runtime-discovered HSHUB bases are not needed here.
-    pub(crate) NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ Hshub0Base + 0x00000e50 {
+    pub(crate) NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ 0x00000e50 {
         31:0    adr => u32;
     }
 
-    pub(crate) NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ Hshub0Base + 0x00000e54 {
+    pub(crate) NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ 0x00000e54 {
         19:0    adr;
     }
 
-    pub(crate) NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ Hshub0Base + 0x000006c0 {
+    pub(crate) NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ 0x000006c0 {
         31:0    adr => u32;
     }
 
-    pub(crate) NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ Hshub0Base + 0x000006c4 {
+    pub(crate) NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ 0x000006c4 {
         19:0    adr;
     }
 }
