@@ -2785,6 +2785,10 @@ static int amt_rcv(struct sock *sk, struct sk_buff *skb)
 	}
 
 	skb->dev = amt->dev;
+	if (skb_linearize(skb)) {
+		err = true;
+		goto drop;
+	}
 	iph = ip_hdr(skb);
 	type = amt_parse_type(skb);
 	if (type == -1) {
