@@ -9117,9 +9117,10 @@ struct sk_buff *sctp_skb_recv_datagram(struct sock *sk, int flags, int *err)
 		if (error)
 			goto no_packet;
 
-		if (sk->sk_shutdown & RCV_SHUTDOWN)
+		if (sk->sk_shutdown & RCV_SHUTDOWN) {
+			*err = 0;
 			break;
-
+		}
 
 		/* User doesn't want to wait.  */
 		error = -EAGAIN;
