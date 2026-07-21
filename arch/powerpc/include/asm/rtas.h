@@ -4,6 +4,7 @@
 #ifdef __KERNEL__
 
 #include <linux/mutex.h>
+#include <linux/sizes.h>
 #include <linux/spinlock.h>
 #include <asm/page.h>
 #include <asm/rtas-types.h>
@@ -518,6 +519,31 @@ int rtas_get_error_log_max(void);
 #define RTAS_DATA_BUF_SIZE 4096
 extern spinlock_t rtas_data_buf_lock;
 extern char rtas_data_buf[RTAS_DATA_BUF_SIZE];
+
+/*
+ * RTAS error-injection work buffer.
+ *
+ * ibm,errinjct requires a caller-provided work buffer whose physical
+ * address is passed to firmware.  A static C array only guarantees
+ * alignment, not physical placement; if it lands above the RTAS-safe
+ * range or above 4 GB, RTAS receives a truncated or bogus address.
+ *
+ * rtas_errinjct_buf stores the physical address allocated during
+ * rtas_initialize() using memblock_phys_alloc_range() with the same
+ * rtas_region upper bound used for rtas_rmo_buf, matching the existing
+ * placement model for RTAS-accessible buffers.
+ *
+ * Use __va(rtas_errinjct_buf) to obtain the kernel virtual address for
+ * filling the buffer, and lower_32_bits(rtas_errinjct_buf) to pass the
+ * physical address to RTAS (after checking upper_32_bits() == 0).
+ *
+ * rtas_errinjct_mutex must be held across the complete
+ * ibm,open-errinjct / ibm,errinjct / ibm,close-errinjct sequence.
+ */
+#define RTAS_ERRINJCT_BUF_SIZE	SZ_1K
+
+extern unsigned long rtas_errinjct_buf;
+extern struct mutex rtas_errinjct_mutex;
 
 /* RMO buffer reserved for user-space RTAS use */
 extern unsigned long rtas_rmo_buf;

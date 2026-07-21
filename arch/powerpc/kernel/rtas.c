@@ -770,6 +770,17 @@ EXPORT_SYMBOL_GPL(rtas_data_buf);
 unsigned long rtas_rmo_buf;
 
 /*
+ * Physical address of the ibm,errinjct work buffer.  Allocated during
+ * rtas_initialize() using memblock_phys_alloc_range() below rtas_region
+ * so the address fits in 32 bits and is safe to pass to RTAS firmware.
+ */
+unsigned long rtas_errinjct_buf;
+EXPORT_SYMBOL_GPL(rtas_errinjct_buf);
+
+DEFINE_MUTEX(rtas_errinjct_mutex);
+EXPORT_SYMBOL_GPL(rtas_errinjct_mutex);
+
+/*
  * If non-NULL, this gets called when the kernel terminates.
  * This is done like this so rtas_flash can be a module.
  */
@@ -2108,6 +2119,12 @@ void __init rtas_initialize(void)
 	if (!rtas_rmo_buf)
 		panic("ERROR: RTAS: Failed to allocate %lx bytes below %pa\n",
 		      PAGE_SIZE, &rtas_region);
+
+	rtas_errinjct_buf = memblock_phys_alloc_range(RTAS_ERRINJCT_BUF_SIZE,
+						      SZ_1K, 0, rtas_region);
+	if (!rtas_errinjct_buf)
+		panic("ERROR: RTAS: Failed to allocate %lu bytes below %pa\n",
+		      (unsigned long)RTAS_ERRINJCT_BUF_SIZE, &rtas_region);
 
 	rtas_work_area_reserve_arena(rtas_region);
 }
