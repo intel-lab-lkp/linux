@@ -101,20 +101,58 @@ enum drm_edid_internal_quirk {
 #define MICROSOFT_IEEE_OUI	0xca125c
 #define AMD_IEEE_OUI        0x00001A
 
+#define AMD_VSDB_V1_PAYLOAD_LEN 8
+#define AMD_VSDB_V2_PAYLOAD_LEN 13
 #define AMD_VSDB_V3_PAYLOAD_MIN_LEN 15
-#define AMD_VSDB_V3_PAYLOAD_MAX_LEN 20
+#define AMD_VSDB_V3_PAYLOAD_MAX_LEN 21
 
-struct amd_vsdb_v3_payload {
+#define AMD_VSDB_V3_MAX_VFREQ_EXT2_LEN 21
+
+struct amd_vsdb_common_payload {
+	u8 oui[3];
+	u8 version;
+} __packed;
+
+struct amd_vsdb_v1_payload {
 	u8 oui[3];
 	u8 version;
 	u8 feature_caps;
-	u8 rsvd0[3];
+	u8 min_vfreq;
+	u8 max_vfreq;
+	u8 freesync_vcp_code;
+} __packed;
+
+struct amd_vsdb_v2_payload {
+	u8 oui[3];
+	u8 version;
+	u8 feature_caps;
+	u8 min_vfreq;
+	u8 max_vfreq;
+	u8 freesync_vcp_code;
 	u8 cs_eotf_support;
 	u8 lum1_max;
 	u8 lum1_min;
 	u8 lum2_max;
 	u8 lum2_min;
-	u8 rsvd1[2];
+} __packed;
+
+struct amd_vsdb_v3_payload {
+	u8 oui[3];
+	u8 version;
+	u8 feature_caps;
+	u8 min_vfreq;
+	u8 max_vfreq;
+	u8 freesync_vcp_code;
+	u8 cs_eotf_support;
+	u8 lum1_max;
+	u8 lum1_min;
+	u8 lum2_max;
+	u8 lum2_min;
+	u8 max_vfreq_ext_low;
+	/*
+	 * byte 14: bits 0-1 extend MSB of max refresh rate
+	 */
+	u8 max_vfreq_ext_high;
 	/*
 	 * Bytes beyond AMD_VSDB_V3_PAYLOAD_MIN_LEN are optional; a
 	 * monitor may provide a payload as short as 15 bytes.  Always
@@ -5231,7 +5269,7 @@ static bool cea_db_is_microsoft_vsdb(const struct cea_db *db)
 static bool cea_db_is_amd_vsdb(const struct cea_db *db)
 {
 	return cea_db_is_vendor(db, AMD_IEEE_OUI) &&
-		cea_db_payload_len(db) >= AMD_VSDB_V3_PAYLOAD_MIN_LEN &&
+		cea_db_payload_len(db) >= AMD_VSDB_V1_PAYLOAD_LEN &&
 		cea_db_payload_len(db) <= AMD_VSDB_V3_PAYLOAD_MAX_LEN;
 }
 
@@ -6431,43 +6469,81 @@ static void drm_parse_microsoft_vsdb(struct drm_connector *connector,
 		    connector->base.id, connector->name, version, db[5]);
 }
 
+static void drm_parse_amd_vsdb_v1(struct drm_display_info *info,
+				  const u8 *data)
+{
+	const struct amd_vsdb_v1_payload *p =
+		(const struct amd_vsdb_v1_payload *)data;
+
+	info->amd_vsdb.freesync_supported = p->feature_caps & 0x1;
+	info->amd_vsdb.min_frame_rate = p->min_vfreq;
+	info->amd_vsdb.max_frame_rate = p->max_vfreq;
+	info->amd_vsdb.freesync_vcp_code = p->freesync_vcp_code;
+}
+
+static void drm_parse_amd_vsdb_v2(struct drm_display_info *info,
+				  const u8 *data)
+{
+	const struct amd_vsdb_v2_payload *p =
+		(const struct amd_vsdb_v2_payload *)data;
+
+	info->amd_vsdb.luminance_range1.max_luminance = p->lum1_max;
+	info->amd_vsdb.luminance_range1.min_luminance = p->lum1_min;
+	info->amd_vsdb.luminance_range2.max_luminance = p->lum2_max;
+	info->amd_vsdb.luminance_range2.min_luminance = p->lum2_min;
+}
+
+static void drm_parse_amd_vsdb_v3(struct drm_display_info *info,
+				  const u8 *data, int payload_len)
+{
+	const struct amd_vsdb_v3_payload *p =
+		(const struct amd_vsdb_v3_payload *)data;
+	u16 max_frame_rate;
+
+	info->amd_vsdb.replay_mode = p->feature_caps & 0x40;
+	info->amd_vsdb.panel_type = (p->cs_eotf_support & 0xC0) >> 6;
+
+	/* vfreq is provded in a different set of fields for v3. */
+	max_frame_rate = p->max_vfreq_ext_low |
+			 (p->max_vfreq_ext_high & 0x3) << 8;
+
+	/*
+	 * The AMD VSDB v3 payload length is variable (15..21 bytes).
+	 * All fields through max_vfreq_ext_high (byte 14) are always
+	 * present, but p->extra[] (bytes 15+) may not be, so any access
+	 * to extra[] must be guarded with a runtime length check to
+	 * avoid out-of-bounds reads on shorter (but spec-valid) payloads.
+	 */
+	if (payload_len >= AMD_VSDB_V3_MAX_VFREQ_EXT2_LEN)
+		max_frame_rate |= (p->extra[5] & 0x3) << 10;
+
+	info->amd_vsdb.max_frame_rate = max_frame_rate;
+}
+
 static void drm_parse_amd_vsdb(struct drm_connector *connector,
 			       const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	const u8 *data = cea_db_data(db);
-	const struct amd_vsdb_v3_payload *p;
+	const struct amd_vsdb_common_payload *common =
+		(const struct amd_vsdb_common_payload *)data;
 
-	p = (const struct amd_vsdb_v3_payload *)data;
-
-	if (p->version != 0x03) {
+	if (common->version < 1 || common->version > 3) {
 		drm_dbg_kms(connector->dev,
 			    "[CONNECTOR:%d:%s] Unsupported AMD VSDB version %u\n",
-			    connector->base.id, connector->name, p->version);
+			    connector->base.id, connector->name, common->version);
 		return;
 	}
 
-	info->amd_vsdb.version = p->version;
-	info->amd_vsdb.replay_mode = p->feature_caps & 0x40;
-	info->amd_vsdb.panel_type = (p->cs_eotf_support & 0xC0) >> 6;
-	info->amd_vsdb.luminance_range1.max_luminance = p->lum1_max;
-	info->amd_vsdb.luminance_range1.min_luminance = p->lum1_min;
-	info->amd_vsdb.luminance_range2.max_luminance = p->lum2_max;
-	info->amd_vsdb.luminance_range2.min_luminance = p->lum2_min;
+	info->amd_vsdb.version = common->version;
 
-	/*
-	 * The AMD VSDB v3 payload length is variable (15..20 bytes).
-	 * All fields through p->rsvd1 (byte 14) are always present,
-	 * but p->extra[] (bytes 15+) may not be.  Any future access to
-	 * extra[] must be guarded with a runtime length check to avoid
-	 * out-of-bounds reads on shorter (but spec-valid) payloads.
-	 * For example:
-	 *
-	 *   int len = cea_db_payload_len(db);
-	 *
-	 *   if (len > AMD_VSDB_V3_PAYLOAD_MIN_LEN)
-	 *       info->amd_vsdb.foo = p->extra[0];
-	 */
+	drm_parse_amd_vsdb_v1(info, data);
+
+	if (common->version >= 2)
+		drm_parse_amd_vsdb_v2(info, data);
+
+	if (common->version >= 3)
+		drm_parse_amd_vsdb_v3(info, data, cea_db_payload_len(db));
 }
 
 static void drm_parse_cea_ext(struct drm_connector *connector,
