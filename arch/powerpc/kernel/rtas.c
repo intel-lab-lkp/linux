@@ -1118,6 +1118,29 @@ static bool token_is_restricted_errinjct(s32 token)
 }
 
 /**
+ * rtas_token_is_open_errinjct() - Test whether @token identifies ibm,open-errinjct.
+ */
+static bool rtas_token_is_open_errinjct(int token)
+{
+	return token == rtas_function_token(RTAS_FN_IBM_OPEN_ERRINJCT);
+}
+
+/**
+ * rtas_status_from_args() - Extract the RTAS status code from a completed
+ *                           call's return-cell array.
+ *
+ * For ibm,open-errinjct the status lives in rets[1]; for every other
+ * RTAS function it lives in rets[0].
+ */
+static int rtas_status_from_args(int token, struct rtas_args *args, int nret)
+{
+	if (rtas_token_is_open_errinjct(token) && nret > 1)
+		return be32_to_cpu(args->rets[1]);
+
+	return nret > 0 ? be32_to_cpu(args->rets[0]) : 0;
+}
+
+/**
  * rtas_call() - Invoke an RTAS firmware function.
  * @token: Identifies the function being invoked.
  * @nargs: Number of input parameters. Does not include token.
@@ -1213,15 +1236,29 @@ int rtas_call(int token, int nargs, int nret, int *outputs, ...)
 	va_rtas_call_unlocked(args, token, nargs, nret, list);
 	va_end(list);
 
-	/* A -1 return code indicates that the last command couldn't
-	   be completed due to a hardware error. */
-	if (be32_to_cpu(args->rets[0]) == -1)
+	ret = rtas_status_from_args(token, args, nret);
+
+	/*
+	 * A -1 return code indicates that the last command couldn't
+	 * be completed due to a hardware error.
+	 */
+	if (ret == -1)
 		buff_copy = __fetch_rtas_last_error(NULL);
 
-	if (nret > 1 && outputs != NULL)
-		for (i = 0; i < nret-1; ++i)
-			outputs[i] = be32_to_cpu(args->rets[i + 1]);
-	ret = (nret > 0) ? be32_to_cpu(args->rets[0]) : 0;
+	if (nret > 1 && outputs != NULL) {
+		if (rtas_token_is_open_errinjct(token)) {
+			/*
+			 * ibm,open-errinjct: rets[0]=session token, rets[1]=status.
+			 * Expose session token in outputs[0]; skip rets[1] (status).
+			 */
+			outputs[0] = be32_to_cpu(args->rets[0]);
+			for (i = 1; i < nret - 1; ++i)
+				outputs[i] = be32_to_cpu(args->rets[i + 1]);
+		} else {
+			for (i = 0; i < nret - 1; ++i)
+				outputs[i] = be32_to_cpu(args->rets[i + 1]);
+		}
+	}
 
 	lockdep_unpin_lock(&rtas_lock, cookie);
 	raw_spin_unlock_irqrestore(&rtas_lock, flags);
