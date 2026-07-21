@@ -350,6 +350,50 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 }
 
 /**
+ * pcc_mbox_query_channel - returns information about the channel
+ *              without activating the channel.
+ *
+ * @q_chan: a pointer to an already allocated struct pcc_mbox_chan
+ *              that will be populated with the channel data.
+ * @subspace_id: The PCC Subspace index as parsed in the PCC client
+ *      ACPI package. This is used to lookup the array of PCC
+ *      subspaces as parsed by the PCC Mailbox controller.
+ *
+ * Return: 0 upon success or non-zero upon error.
+ */
+int
+pcc_mbox_query_channel(struct pcc_mbox_chan *q_chan, int subspace_id)
+{
+	struct pcc_mbox_chan *pcc_mchan;
+	struct pcc_chan_info *pchan;
+	struct mbox_chan *chan;
+
+	if (!q_chan)
+		return -EINVAL;
+
+	if (subspace_id < 0 || subspace_id >= pcc_chan_count)
+		return -ENOENT;
+	pchan = chan_info + subspace_id;
+	chan = pchan->chan.mchan;
+	if (IS_ERR(chan)) {
+		pr_err("Channel not found for idx: %d\n", subspace_id);
+		return -EBUSY;
+	}
+	pcc_mchan = &pchan->chan;
+
+	q_chan->shmem_base_addr = pcc_mchan->shmem_base_addr;
+	q_chan->shmem = NULL;
+	q_chan->shmem_size = pcc_mchan->shmem_size;
+	q_chan->latency = pcc_mchan->latency;
+	q_chan->max_access_rate = pcc_mchan->max_access_rate;
+	q_chan->min_turnaround_time = pcc_mchan->min_turnaround_time;
+	q_chan->type = pcc_mchan->type;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pcc_mbox_query_channel);
+
+/**
  * pcc_mbox_request_channel - PCC clients call this function to
  *		request a pointer to their PCC subspace, from which they
  *		can get the details of communicating with the remote.
@@ -833,6 +877,7 @@ static int pcc_mbox_probe(struct platform_device *pdev)
 		pcc_parse_subspace_shmem(pchan, pcct_entry);
 
 		pchan->type = pcct_entry->type;
+		pchan->chan.type = pcct_entry->type;
 		pcct_entry = (struct acpi_subtable_header *)
 			((unsigned long) pcct_entry + pcct_entry->length);
 	}

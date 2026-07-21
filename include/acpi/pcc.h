@@ -8,6 +8,7 @@
 
 #include <linux/mailbox_controller.h>
 #include <linux/mailbox_client.h>
+#include <linux/acpi.h>
 
 struct pcc_mbox_chan {
 	struct mbox_chan *mchan;
@@ -17,6 +18,7 @@ struct pcc_mbox_chan {
 	u32 latency;
 	u32 max_access_rate;
 	u16 min_turnaround_time;
+	enum acpi_pcct_type type;
 };
 
 /* Generic Communications Channel Shared Memory Region */
@@ -37,6 +39,8 @@ struct pcc_mbox_chan {
 extern struct pcc_mbox_chan *
 pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id);
 extern void pcc_mbox_free_channel(struct pcc_mbox_chan *chan);
+extern int
+pcc_mbox_query_channel(struct pcc_mbox_chan *q_chan, int subspace_id);
 #else
 static inline struct pcc_mbox_chan *
 pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
@@ -44,6 +48,11 @@ pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
 	return ERR_PTR(-ENODEV);
 }
 static inline void pcc_mbox_free_channel(struct pcc_mbox_chan *chan) { }
+static inline int
+pcc_mbox_query_channel(struct pcc_mbox_chan *q_chan, int subspace_id)
+{
+	return -ENODEV;
+}
 #endif
 
 #endif /* _PCC_H */
