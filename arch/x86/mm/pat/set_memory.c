@@ -58,6 +58,8 @@ struct cpa_data {
  */
 struct cpa_split_data {
 	unsigned long	address;
+	unsigned long	psize;
+	unsigned long	pmask;
 	pte_t		*kpte;
 	struct ptdesc	*ptdesc;
 	enum pgtable_level level;
@@ -884,10 +886,12 @@ static pgprot_t pgprot_clear_protnone_bits(pgprot_t prot)
 static int __should_split_large_page(struct cpa_data *cpa,
 				     struct cpa_split_data *sd)
 {
-	unsigned long numpages, pmask, psize, lpaddr, pfn, old_pfn;
 	pgprot_t old_prot, new_prot, req_prot, chk_prot;
+	unsigned long numpages, lpaddr, pfn, old_pfn;
 	enum pgtable_level level = sd->level;
 	unsigned long address = sd->address;
+	unsigned long psize = sd->psize;
+	unsigned long pmask = sd->pmask;
 	pte_t *kpte = sd->kpte;
 	bool nx = sd->nx;
 	bool rw = sd->rw;
@@ -907,18 +911,6 @@ static int __should_split_large_page(struct cpa_data *cpa,
 	default:
 		return -EINVAL;
 	}
-
-	psize = pgtable_level_size(level);
-	pmask = pgtable_level_mask(level);
-
-	/*
-	 * Calculate the number of pages, which fit into this large
-	 * page starting at address:
-	 */
-	lpaddr = (address + psize) & pmask;
-	numpages = (lpaddr - address) >> PAGE_SHIFT;
-	if (numpages < cpa->numpages)
-		cpa->numpages = numpages;
 
 	/*
 	 * We are safe now. Check whether the new pgprot is the same:
@@ -1026,8 +1018,24 @@ static int __should_split_large_page(struct cpa_data *cpa,
 static int should_split_large_page(struct cpa_data *cpa,
 				   struct cpa_split_data *sd)
 {
+	enum pgtable_level level = sd->level;
+	unsigned long address = sd->address;
+	unsigned long numpages, lpaddr;
+
 	if (cpa->force_split)
 		return 1;
+
+	sd->psize = pgtable_level_size(level);
+	sd->pmask = pgtable_level_mask(level);
+
+	/*
+	 * Calculate the number of pages, which fit into this large
+	 * page starting at address:
+	 */
+	lpaddr = (address + sd->psize) & sd->pmask;
+	numpages = (lpaddr - address) >> PAGE_SHIFT;
+	if (numpages < cpa->numpages)
+		cpa->numpages = numpages;
 
 	return __should_split_large_page(cpa, sd);
 }
