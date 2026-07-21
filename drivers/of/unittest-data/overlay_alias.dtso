@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+/*
+ * overlay_alias - exercise the full "aliases inside an overlay" path.
+ *
+ * fragment@0 grafts a labeled node under target_base (empty target-path
+ * means "the target base itself"). fragment@1 adds a numbered alias at
+ * the DT-root /aliases and points it at that label. target-path="/aliases"
+ * is an absolute path — reaching it while target_base is non-NULL
+ * exercises the absolute-target-paths handling in find_target(). The
+ * alias value is emitted by dtc as the fragment-internal path
+ * "/fragment@0/__overlay__/alias-target"; the overlay code's
+ * /aliases path rewrite is what makes it resolve in the live tree.
+ * The reconfig notifier is what mirrors the change into aliases_lookup.
+ */
+
+/ {
+	fragment@0 {
+		target-path = "";
+		__overlay__ {
+			testcase-target: alias-target {
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/aliases";
+		__overlay__ {
+			testcase-alias99 = &testcase-target;
+		};
+	};
+};

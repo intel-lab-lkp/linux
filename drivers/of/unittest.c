@@ -3475,6 +3475,76 @@ static struct notifier_block of_nb = {
 	.notifier_call = of_notify,
 };
 
+static void __init of_unittest_overlay_alias(void)
+{
+	const char *base_path =
+		"/testcase-data/overlay-node/test-bus/test-unittest100";
+	const char *target_path =
+		"/testcase-data/overlay-node/test-bus/test-unittest100/alias-target";
+	struct device_node *base, *target;
+	struct overlay_info *info;
+	int ovcs_id = 0;
+	int id, ret;
+	u32 size;
+
+	/*
+	 * Apply the overlay with a non-NULL target_base so that
+	 * fragment@1's target-path="/aliases" is looked up absolutely
+	 * (exercising find_target()'s absolute-path handling) rather
+	 * than under the base. The alias value inside the overlay is a
+	 * fragment-internal path that only resolves after the overlay
+	 * code rewrites /aliases values, so this run covers the whole
+	 * chain end-to-end.
+	 */
+	base = of_find_node_by_path(base_path);
+	if (!base) {
+		unittest(0, "could not find alias target base %s\n", base_path);
+		return;
+	}
+
+	for (info = overlays; info && info->name; info++)
+		if (!strcmp("overlay_alias", info->name))
+			break;
+	if (!info || !info->name) {
+		unittest(0, "no overlay data for overlay_alias\n");
+		goto out_put_base;
+	}
+
+	size = info->dtbo_end - info->dtbo_begin;
+	ret = of_overlay_fdt_apply(info->dtbo_begin, size, &ovcs_id, base);
+	if (ret < 0) {
+		unittest(0, "overlay_alias apply failed, ret = %d\n", ret);
+		goto out_put_base;
+	}
+
+	target = of_find_node_by_path(target_path);
+	if (!target) {
+		unittest(0, "could not find grafted target %s\n", target_path);
+		goto out_remove;
+	}
+
+	id = of_alias_get_id(target, "testcase-alias");
+	unittest(id == 99,
+		 "of_alias_get_id() = %d after overlay apply, expected 99\n",
+		 id);
+	of_node_put(target);
+
+out_remove:
+	ret = of_overlay_remove(&ovcs_id);
+	if (ret) {
+		unittest(0, "overlay_alias remove failed, ret = %d\n", ret);
+		goto out_put_base;
+	}
+
+	id = of_alias_get_id(base, "testcase-alias");
+	unittest(id == -ENODEV,
+		 "of_alias_get_id() = %d after overlay remove, expected -ENODEV\n",
+		 id);
+
+out_put_base:
+	of_node_put(base);
+}
+
 static void __init of_unittest_overlay_notify(void)
 {
 	int ovcs_id;
@@ -3648,6 +3718,8 @@ static void __init of_unittest_overlay(void)
 #endif
 
 	of_unittest_overlay_gpio();
+
+	of_unittest_overlay_alias();
 
 	of_unittest_remove_tracked_overlays();
 
@@ -3848,6 +3920,7 @@ OVERLAY_INFO_EXTERN(overlay_17);
 OVERLAY_INFO_EXTERN(overlay_18);
 OVERLAY_INFO_EXTERN(overlay_19);
 OVERLAY_INFO_EXTERN(overlay_20);
+OVERLAY_INFO_EXTERN(overlay_alias);
 OVERLAY_INFO_EXTERN(overlay_gpio_01);
 OVERLAY_INFO_EXTERN(overlay_gpio_02a);
 OVERLAY_INFO_EXTERN(overlay_gpio_02b);
@@ -3885,6 +3958,7 @@ static struct overlay_info overlays[] = {
 	OVERLAY_INFO(overlay_18, 0, 0),
 	OVERLAY_INFO(overlay_19, 0, 0),
 	OVERLAY_INFO(overlay_20, 0, 0),
+	OVERLAY_INFO(overlay_alias, 0, 0),
 	OVERLAY_INFO(overlay_gpio_01, 0, 0),
 	OVERLAY_INFO(overlay_gpio_02a, 0, 0),
 	OVERLAY_INFO(overlay_gpio_02b, 0, 0),
