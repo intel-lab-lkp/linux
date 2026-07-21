@@ -20,6 +20,12 @@ bool __min_heap_full(min_heap_char *heap)
 }
 EXPORT_SYMBOL(__min_heap_full);
 
+bool __min_heap_empty(min_heap_char *heap)
+{
+	return __min_heap_empty_inline(heap);
+}
+EXPORT_SYMBOL(__min_heap_empty);
+
 void __min_heap_sift_down(min_heap_char *heap, size_t pos, size_t elem_size,
 			  const struct min_heap_callbacks *func, void *args)
 {
