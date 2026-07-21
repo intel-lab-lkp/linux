@@ -89,11 +89,9 @@ static void fsl_ifc_ctrl_remove(struct platform_device *dev)
 	struct fsl_ifc_ctrl *ctrl = dev_get_drvdata(&dev->dev);
 
 	of_platform_depopulate(&dev->dev);
-	free_irq(ctrl->nand_irq, ctrl);
+	if (ctrl->nand_irq > 0)
+		free_irq(ctrl->nand_irq, ctrl);
 	free_irq(ctrl->irq, ctrl);
-
-	irq_dispose_mapping(ctrl->nand_irq);
-	irq_dispose_mapping(ctrl->irq);
 
 	iounmap(ctrl->gregs);
 
@@ -204,8 +202,20 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	int ret = 0;
 	int version, banks;
 	void __iomem *addr;
+	int nand_irq;
+	int irq;
 
 	dev_info(&dev->dev, "Freescale Integrated Flash Controller\n");
+
+	/* get the Controller level irq */
+	irq = platform_get_irq(dev, 0);
+	if (irq < 0)
+		return irq;
+
+	/* get the nand machine irq */
+	nand_irq = platform_get_irq_optional(dev, 1);
+	if (nand_irq == -EPROBE_DEFER)
+		return nand_irq;
 
 	fsl_ifc_ctrl_dev = devm_kzalloc(&dev->dev, sizeof(*fsl_ifc_ctrl_dev),
 					GFP_KERNEL);
@@ -246,23 +256,13 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 		addr += PGOFFSET_4K;
 	fsl_ifc_ctrl_dev->rregs = addr;
 
-	/* get the Controller level irq */
-	fsl_ifc_ctrl_dev->irq = irq_of_parse_and_map(dev->dev.of_node, 0);
-	if (fsl_ifc_ctrl_dev->irq == 0) {
-		dev_err(&dev->dev, "failed to get irq resource for IFC\n");
-		ret = -ENODEV;
-		goto err;
-	}
-
-	/* get the nand machine irq */
-	fsl_ifc_ctrl_dev->nand_irq =
-			irq_of_parse_and_map(dev->dev.of_node, 1);
+	fsl_ifc_ctrl_dev->irq = irq;
 
 	fsl_ifc_ctrl_dev->dev = &dev->dev;
 
 	ret = fsl_ifc_ctrl_init(fsl_ifc_ctrl_dev);
 	if (ret < 0)
-		goto err_unmap_nandirq;
+		goto err;
 
 	init_waitqueue_head(&fsl_ifc_ctrl_dev->nand_wait);
 
@@ -271,10 +271,11 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	if (ret != 0) {
 		dev_err(&dev->dev, "failed to install irq (%d)\n",
 			fsl_ifc_ctrl_dev->irq);
-		goto err_unmap_nandirq;
+		goto err;
 	}
 
-	if (fsl_ifc_ctrl_dev->nand_irq) {
+	fsl_ifc_ctrl_dev->nand_irq = nand_irq;
+	if (fsl_ifc_ctrl_dev->nand_irq > 0) {
 		ret = request_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_nand_irq,
 				0, "fsl-ifc-nand", fsl_ifc_ctrl_dev);
 		if (ret != 0) {
@@ -292,12 +293,10 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	return 0;
 
 err_free_nandirq:
-	free_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_ctrl_dev);
+	if (fsl_ifc_ctrl_dev->nand_irq > 0)
+		free_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_ctrl_dev);
 err_free_irq:
 	free_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_dev);
-err_unmap_nandirq:
-	irq_dispose_mapping(fsl_ifc_ctrl_dev->nand_irq);
-	irq_dispose_mapping(fsl_ifc_ctrl_dev->irq);
 err:
 	iounmap(fsl_ifc_ctrl_dev->gregs);
 	return ret;
