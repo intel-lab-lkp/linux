@@ -124,7 +124,10 @@ struct kvm_sync_regs {
 };
 
 /* dummy definition */
+#define KVM_LOONGARCH_NR_SREGS	0x184
+
 struct kvm_sregs {
+	__u64 csr[KVM_LOONGARCH_NR_SREGS];
 };
 
 struct kvm_iocsr_entry {

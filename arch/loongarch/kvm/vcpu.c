@@ -1001,12 +1001,51 @@ static int kvm_set_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 
 int kvm_arch_vcpu_ioctl_get_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 {
-	return -ENOIOCTLCMD;
+	int i;
+	unsigned long estat, gintc;
+	struct loongarch_csrs *csr = vcpu->arch.csr;
+
+	/*
+	 * Pull pending interrupts into ESTAT with a single vcpu_load/put so
+	 * the ESTAT value read below matches the current interrupt state.
+	 * This also avoids the per-register load/put side-effect that makes
+	 * the ONE_REG path's ESTAT snapshot order-sensitive.  The SW CSR
+	 * reads run under vcpu->mutex, which serialises this ioctl.
+	 */
+	preempt_disable();
+	vcpu_load(vcpu);
+	kvm_deliver_intr(vcpu);
+	vcpu->arch.aux_inuse &= ~KVM_LARCH_SWCSR_LATEST;
+	vcpu_put(vcpu);
+	preempt_enable();
+
+	for (i = 0; i < KVM_LOONGARCH_NR_SREGS; i++) {
+		if (i == LOONGARCH_CSR_ESTAT) {
+			gintc = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_GINTC) & KVM_GINTC_IRQ_MASK;
+			estat = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_ESTAT) & ~KVM_ESTAT_EXTI_MASK;
+			sregs->csr[i] = estat | (gintc << VIP_DELTA);
+		} else {
+			sregs->csr[i] = kvm_read_sw_gcsr(csr, i);
+		}
+	}
+
+	return 0;
 }
 
 int kvm_arch_vcpu_ioctl_set_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 {
-	return -ENOIOCTLCMD;
+	int i, ret;
+
+	/* Clear first so a failing _kvm_setcsr still forces a HW reload. */
+	vcpu->arch.aux_inuse &= ~KVM_LARCH_HWCSR_USABLE;
+
+	for (i = 0; i < KVM_LOONGARCH_NR_SREGS; i++) {
+		ret = _kvm_setcsr(vcpu, i, sregs->csr[i]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 int kvm_arch_vcpu_ioctl_get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
