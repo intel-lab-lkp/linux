@@ -328,6 +328,7 @@ struct dw_dp {
 	struct dw_dp_link link;
 	struct dw_dp_plat_data plat_data;
 	u8 pixel_mode;
+	bool usbc_mode;
 
 	struct drm_bridge *next_bridge;
 
@@ -1467,6 +1468,8 @@ static ssize_t dw_dp_aux_transfer(struct drm_dp_aux *aux,
 	if (WARN_ON(msg->size > 16))
 		return -E2BIG;
 
+	ACQUIRE(pm_runtime_active_auto, pm)(dp->dev);
+
 	switch (msg->request & ~DP_AUX_I2C_MOT) {
 	case DP_AUX_NATIVE_WRITE:
 	case DP_AUX_I2C_WRITE:
@@ -1657,6 +1660,8 @@ static void dw_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	int ret;
 
+	pm_runtime_get_sync(dp->dev);
+
 	connector = drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
 	if (!connector) {
 		dev_err(dp->dev, "failed to get connector\n");
@@ -1711,6 +1716,7 @@ static void dw_dp_bridge_atomic_disable(struct drm_bridge *bridge,
 	dw_dp_link_disable(dp);
 	bitmap_zero(dp->sdp_reg_bank, SDP_REG_BANK_SIZE);
 	dw_dp_reset(dp);
+	pm_runtime_put_autosuspend(dp->dev);
 }
 
 static bool dw_dp_hpd_detect_link(struct dw_dp *dp, struct drm_connector *connector)
@@ -1730,6 +1736,14 @@ static enum drm_connector_status dw_dp_bridge_detect(struct drm_bridge *bridge,
 						     struct drm_connector *connector)
 {
 	struct dw_dp *dp = bridge_to_dp(bridge);
+
+	ACQUIRE(pm_runtime_active_auto, pm)(dp->dev);
+
+	/*
+	 * HPD_HOT_PLUG bit is asserted only after the sink holds HPD high for
+	 * at least 100ms. Thus we need to wait 100ms after runtime PM resume.
+	 */
+	msleep(110);
 
 	if (!dw_dp_hpd_detect(dp))
 		return connector_status_disconnected;
@@ -2032,10 +2046,15 @@ int dw_dp_bind(struct dw_dp *dp, struct drm_encoder *encoder)
 	}
 
 	if (dw_dp_is_routed_to_usb_c(encoder)) {
+		dp->usbc_mode = true;
 		dev_dbg(dev, "USB-C mode\n");
 
 		if (dp->plat_data.hpd_sw_sel)
 			dp->plat_data.hpd_sw_sel(dp->plat_data.data, 1);
+	} else {
+		dp->usbc_mode = false;
+		/* Keep runtime PM enabled to have working native HPD IRQ */
+		pm_runtime_get_sync(dp->dev);
 	}
 
 	dw_dp_init_hw(dp);
@@ -2065,6 +2084,8 @@ EXPORT_SYMBOL_GPL(dw_dp_bind);
 
 void dw_dp_unbind(struct dw_dp *dp)
 {
+	if (dp->usbc_mode)
+		pm_runtime_put_autosuspend(dp->dev);
 	disable_irq(dp->irq);
 	phy_exit(dp->phy);
 	drm_bridge_put(dp->next_bridge);
@@ -2162,6 +2183,35 @@ struct dw_dp *dw_dp_probe(struct platform_device *pdev, const struct dw_dp_plat_
 	return dp;
 }
 EXPORT_SYMBOL_GPL(dw_dp_probe);
+
+int dw_dp_runtime_suspend(struct dw_dp *dp)
+{
+	clk_disable_unprepare(dp->aux_clk);
+	clk_disable_unprepare(dp->apb_clk);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dw_dp_runtime_suspend);
+
+int dw_dp_runtime_resume(struct dw_dp *dp)
+{
+	int ret;
+
+	ret = clk_prepare_enable(dp->apb_clk);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(dp->aux_clk);
+	if (ret) {
+		clk_disable_unprepare(dp->apb_clk);
+		return ret;
+	}
+
+	dw_dp_init_hw(dp);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dw_dp_runtime_resume);
 
 MODULE_AUTHOR("Andy Yan <andyshrk@163.com>");
 MODULE_DESCRIPTION("DW DP Core Library");
