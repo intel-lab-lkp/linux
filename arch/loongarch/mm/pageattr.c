@@ -134,40 +134,53 @@ bool kernel_page_present(struct page *page)
 int set_direct_map_default_noflush(struct page *page)
 {
 	unsigned long addr = (unsigned long)page_address(page);
+	struct cpa_data cpa = { .vaddr = &addr,
+				.pgd = NULL,
+				.numpages = 1,
+				.mask_set = PAGE_KERNEL,
+				.mask_clr = __pgprot(0),
+				.flags = CPA_NO_CHECK_ALIAS };
 
 	if (addr < vm_map_base)
 		return 0;
 
-	return change_page_attr_set_clr(&addr, 1, PAGE_KERNEL,
-					__pgprot(0), 0, 0, NULL);
+	return __change_page_attr_set_clr(&cpa, 1);
 }
 
 int set_direct_map_invalid_noflush(struct page *page)
 {
 	unsigned long addr = (unsigned long)page_address(page);
+	struct cpa_data cpa = { .vaddr = &addr,
+				.pgd = NULL,
+				.numpages = 1,
+				.mask_set = __pgprot(0),
+				.mask_clr = __pgprot(_PAGE_PRESENT | _PAGE_VALID),
+				.flags = CPA_NO_CHECK_ALIAS };
 
 	if (addr < vm_map_base)
 		return 0;
 
-	return change_page_attr_clear(&addr, 1,
-				      __pgprot(_PAGE_PRESENT | _PAGE_VALID), 0);
+	return __change_page_attr_set_clr(&cpa, 1);
 }
 
 int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 {
 	unsigned long addr = (unsigned long)page_address(page);
-	pgprot_t set, clear;
+	struct cpa_data cpa = { .vaddr = &addr,
+				.pgd = NULL,
+				.numpages = nr,
+				.flags = CPA_NO_CHECK_ALIAS };
 
 	if (addr < vm_map_base)
 		return 0;
 
 	if (valid) {
-		set = PAGE_KERNEL;
-		clear = __pgprot(0);
+		cpa.mask_set = PAGE_KERNEL;
+		cpa.mask_clr = __pgprot(0);
 	} else {
-		set = __pgprot(0);
-		clear = __pgprot(_PAGE_PRESENT | _PAGE_VALID);
+		cpa.mask_set = __pgprot(0);
+		cpa.mask_clr = __pgprot(_PAGE_PRESENT | _PAGE_VALID);
 	}
 
-	return change_page_attr_set_clr(&addr, nr, set, clear, 0, 0, NULL);
+	return __change_page_attr_set_clr(&cpa, 1);
 }
