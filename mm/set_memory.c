@@ -14,6 +14,20 @@
  */
 static DEFINE_SPINLOCK(cpa_lock);
 
+static inline void arch_lock(void)
+{
+#ifdef CONFIG_X86
+	spin_lock(&pgd_lock);
+#endif
+}
+
+static inline void arch_unlock(void)
+{
+#ifdef CONFIG_X86
+	spin_unlock(&pgd_lock);
+#endif
+}
+
 unsigned long cpa_addr(struct cpa_data *cpa, unsigned long idx)
 {
 	if (cpa->flags & CPA_PAGES_ARRAY) {
@@ -170,7 +184,7 @@ static int cpa_handle_large_page(struct cpa_data *cpa, pte_t *kpte,
 	if (!sd.ptdesc)
 		return -ENOMEM;
 
-	spin_lock(&pgd_lock);
+	arch_lock();
 
 	/*
 	 * Check for races, another CPU might have split this page
@@ -202,11 +216,11 @@ static int cpa_handle_large_page(struct cpa_data *cpa, pte_t *kpte,
 	if (ret)
 		goto out_free_ptdesc;
 
-	spin_unlock(&pgd_lock);
+	arch_unlock();
 	return do_split;
 
 out_free_ptdesc:
-	spin_unlock(&pgd_lock);
+	arch_unlock();
 	pagetable_free(sd.ptdesc);
 	return ret;
 }
