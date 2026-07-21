@@ -360,7 +360,6 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 struct pcc_mbox_chan *
 pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
 {
-	struct pcc_mbox_chan *pcc_mchan;
 	struct pcc_chan_info *pchan;
 	struct mbox_chan *chan;
 	int rc;
@@ -375,20 +374,10 @@ pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
 		return ERR_PTR(-EBUSY);
 	}
 
-	pcc_mchan = &pchan->chan;
-	pcc_mchan->shmem = acpi_os_ioremap(pcc_mchan->shmem_base_addr,
-					   pcc_mchan->shmem_size);
-	if (!pcc_mchan->shmem)
-		return ERR_PTR(-ENXIO);
-
 	rc = mbox_bind_client(chan, cl);
-	if (rc) {
-		iounmap(pcc_mchan->shmem);
-		pcc_mchan->shmem = NULL;
-		return ERR_PTR(rc);
-	}
-
-	return pcc_mchan;
+	if (rc)
+		return ERR_PTR(-ENXIO);
+	return  &pchan->chan;
 }
 EXPORT_SYMBOL_GPL(pcc_mbox_request_channel);
 
@@ -400,19 +389,13 @@ EXPORT_SYMBOL_GPL(pcc_mbox_request_channel);
  */
 void pcc_mbox_free_channel(struct pcc_mbox_chan *pchan)
 {
-	struct mbox_chan *chan = pchan->mchan;
-	struct pcc_chan_info *pchan_info;
-	struct pcc_mbox_chan *pcc_mbox_chan;
+	struct mbox_chan *chan;
 
+	if (!pchan)
+		return;
+	chan = pchan->mchan;
 	if (!chan || !chan->cl)
 		return;
-	pchan_info = chan->con_priv;
-	pcc_mbox_chan = &pchan_info->chan;
-	if (pcc_mbox_chan->shmem) {
-		iounmap(pcc_mbox_chan->shmem);
-		pcc_mbox_chan->shmem = NULL;
-	}
-
 	mbox_free_channel(chan);
 }
 EXPORT_SYMBOL_GPL(pcc_mbox_free_channel);
@@ -462,9 +445,15 @@ static bool pcc_last_tx_done(struct mbox_chan *chan)
 static int pcc_startup(struct mbox_chan *chan)
 {
 	struct pcc_chan_info *pchan = chan->con_priv;
+	struct pcc_mbox_chan *pcc_mchan;
 	unsigned long irqflags;
 	int rc;
 
+	pcc_mchan = &pchan->chan;
+	pcc_mchan->shmem = acpi_os_ioremap(pcc_mchan->shmem_base_addr,
+					   pcc_mchan->shmem_size);
+	if (pcc_mchan->shmem  == NULL)
+		return -ENOMEM;
 	/*
 	 * Clear and acknowledge any pending interrupts on responder channel
 	 * before enabling the interrupt
@@ -479,6 +468,8 @@ static int pcc_startup(struct mbox_chan *chan)
 		if (unlikely(rc)) {
 			dev_err(chan->mbox->dev, "failed to register PCC interrupt %d\n",
 				pchan->plat_irq);
+			iounmap(pcc_mchan->shmem);
+			pcc_mchan->shmem = NULL;
 			return rc;
 		}
 	}
@@ -488,15 +479,22 @@ static int pcc_startup(struct mbox_chan *chan)
 
 /**
  * pcc_shutdown - Called from Mailbox Controller code. Used here
- *		to free the interrupt.
+ *		to free the interrupt and unmap the shared memory.
  * @chan: Pointer to Mailbox channel to shutdown.
  */
 static void pcc_shutdown(struct mbox_chan *chan)
 {
 	struct pcc_chan_info *pchan = chan->con_priv;
+	struct pcc_mbox_chan *pcc_mbox_chan;
 
 	if (pchan->plat_irq > 0)
 		devm_free_irq(chan->mbox->dev, pchan->plat_irq, chan);
+
+	pcc_mbox_chan = &pchan->chan;
+	if (pcc_mbox_chan->shmem) {
+		iounmap(pcc_mbox_chan->shmem);
+		pcc_mbox_chan->shmem = NULL;
+	}
 }
 
 static const struct mbox_chan_ops pcc_chan_ops = {
