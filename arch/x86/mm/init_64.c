@@ -573,6 +573,7 @@ phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 				continue;
 			}
 			new_prot = pte_pgprot(pte_clrhuge(*(pte_t *)pmd));
+			pmd_clear(pmd);
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_2M)) {
@@ -659,6 +660,7 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 				continue;
 			}
 			prot = pte_pgprot(pte_clrhuge(*(pte_t *)pud));
+			pud_clear(pud);
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {
