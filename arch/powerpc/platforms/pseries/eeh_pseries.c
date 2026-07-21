@@ -1037,40 +1037,109 @@ static int prepare_errinjct_buffer(void *buf, struct eeh_pe *pe,
 }
 
 /**
- * pseries_eeh_err_inject - Inject specified error to the indicated PE
- * @pe: the indicated PE
- * @type: error type
- * @func: specific error type
- * @addr: address
- * @mask: address mask
- * The routine is called to inject specified error, which is
- * determined by @type and @func, to the indicated PE
+ * pseries_eeh_err_inject - Inject specified error into the indicated PE
+ * @pe:   the indicated PE
+ * @type: generic EEH error type (EEH_ERR_TYPE_*)
+ * @func: error function selector (EEH_ERR_FUNC_*)
+ * @addr: target address, if applicable
+ * @mask: address mask, if applicable
+ *
+ * Implements the EEH error-injection callback for pseries using the RTAS
+ * ibm,open-errinjct / ibm,errinjct / ibm,close-errinjct firmware services.
+ *
+ * Generic EEH error types are translated to RTAS firmware type codes via
+ * pseries_eeh_type_to_rtas() before the injection session is opened.
+ * Unsupported generic types are rejected with -EINVAL before any RTAS call
+ * is made.  Existing userspace is unaffected.
+ *
+ * Return: 0 on success, negative errno or RTAS error code on failure.
  */
 static int pseries_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 				  unsigned long addr, unsigned long mask)
 {
-	struct	eeh_dev	*pdev;
+	int open_token, errinjct_token, close_token;
+	int session_token = 0;
+	bool session_open = false;
+	void *buf;
+	u32 buf_phys;
+	int rc;
+	int rtas_type;
 
-	/* Check on PCI error type */
-	if (type != EEH_ERR_TYPE_32 && type != EEH_ERR_TYPE_64)
-		return -EINVAL;
-
-	switch (func) {
-	case EEH_ERR_FUNC_LD_MEM_ADDR:
-	case EEH_ERR_FUNC_LD_MEM_DATA:
-	case EEH_ERR_FUNC_ST_MEM_ADDR:
-	case EEH_ERR_FUNC_ST_MEM_DATA:
-		/* injects a MMIO error for all pdev's belonging to PE */
-		pci_lock_rescan_remove();
-		list_for_each_entry(pdev, &pe->edevs, entry)
-			eeh_pe_inject_mmio_error(pdev->pdev);
-		pci_unlock_rescan_remove();
-		break;
-	default:
+	/* Guard: buffer must fit in 32 bits for RTAS */
+	if (WARN_ON_ONCE(upper_32_bits(rtas_errinjct_buf)))
 		return -ERANGE;
+
+	/* Map generic EEH ABI to RTAS-internal error type */
+	rtas_type = pseries_eeh_type_to_rtas(type);
+	if (rtas_type < 0) {
+		pr_err("unsupported EEH error type %#x\n", type);
+		return rtas_type;
 	}
 
-	return 0;
+	/* Verify all three RTAS tokens are available before touching firmware */
+	open_token    = rtas_function_token(RTAS_FN_IBM_OPEN_ERRINJCT);
+	errinjct_token = rtas_function_token(RTAS_FN_IBM_ERRINJCT);
+	close_token   = rtas_function_token(RTAS_FN_IBM_CLOSE_ERRINJCT);
+
+	if (open_token    == RTAS_UNKNOWN_SERVICE ||
+	    errinjct_token == RTAS_UNKNOWN_SERVICE ||
+	    close_token   == RTAS_UNKNOWN_SERVICE) {
+		pr_err("ibm,open/errinjct/close-errinjct not available\n");
+		return -ENODEV;
+	}
+
+	buf      = __va(rtas_errinjct_buf);
+	buf_phys = lower_32_bits(rtas_errinjct_buf);
+
+	mutex_lock(&rtas_errinjct_mutex);
+
+	/* Step 1: open injection session */
+	do {
+		rc = rtas_call(open_token, 0, 2, &session_token);
+	} while (rtas_busy_delay(rc));
+
+	if (rc) {
+		pr_err("ibm,open-errinjct failed: status=%d\n", rc);
+		goto out_unlock;
+	}
+	session_open = true;
+
+	/* Step 2: prepare the work buffer */
+	rc = prepare_errinjct_buffer(buf, pe, rtas_type, func, addr, mask);
+	if (rc) {
+		pr_err("failed to prepare errinjct buffer: rc=%d\n", rc);
+		goto out_close;
+	}
+
+	/* Step 3: inject the error */
+	do {
+		rc = rtas_call(errinjct_token, 3, 1, NULL,
+			       rtas_type, session_token, buf_phys);
+	} while (rtas_busy_delay(rc));
+
+	if (rc)
+		pr_err("ibm,errinjct failed: status=%d\n", rc);
+
+out_close:
+	/* Step 4: always close the session */
+	{
+		int close_rc;
+
+		if (session_open) {
+			do {
+				close_rc = rtas_call(close_token, 1, 1, NULL,
+						     session_token);
+			} while (rtas_busy_delay(close_rc));
+
+			if (close_rc)
+				pr_warn("ibm,close-errinjct failed: status=%d\n",
+					close_rc);
+		}
+	}
+
+out_unlock:
+	mutex_unlock(&rtas_errinjct_mutex);
+	return rc;
 }
 
 static struct eeh_ops pseries_eeh_ops = {
