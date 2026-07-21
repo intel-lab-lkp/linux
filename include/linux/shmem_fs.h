@@ -127,6 +127,9 @@ int shmem_writeout(struct folio *folio, struct swap_iocb **plug,
 		struct list_head *folio_list);
 void shmem_truncate_range(struct inode *inode, loff_t start, uoff_t end);
 int shmem_unuse(unsigned int type);
+int shmem_backup_folio(struct folio *folio, struct file *backup, pgoff_t index,
+		       gfp_t gfp, unsigned int order, pgoff_t *nr_pages_backed,
+		       bool writeback);
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && defined(CONFIG_SHMEM)
 unsigned long shmem_allowable_huge_orders(struct inode *inode,

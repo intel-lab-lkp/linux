@@ -5961,3 +5961,128 @@ struct page *shmem_read_mapping_page_gfp(struct address_space *mapping,
 	return page;
 }
 EXPORT_SYMBOL_GPL(shmem_read_mapping_page_gfp);
+
+/**
+ * shmem_backup_folio() - Copy a folio's contents into a shmem-backed file.
+ * @folio: Source folio whose contents are to be backed up. Must remain
+ *	pinned by the caller for the duration of the call. The source folio
+ *	is not modified; on success its contents live in @backup and the
+ *	caller may release the source memory.
+ * @backup: A file previously created with shmem_file_setup() (or a wrapper
+ *	such as ttm_backup_shmem_create()). Must be shmem-backed;
+ *	non-shmem files are rejected with -EINVAL.
+ * @index: shmem page index at which to begin storing the backup. The
+ *	subpages of @folio are written to consecutive indices starting at
+ *	@index. The caller is responsible for ensuring the range
+ *	[@index, @index + nr_pages) does not collide with other in-flight
+ *	backups against the same @backup.
+ * @gfp: Allocation flags used when reading/allocating the destination
+ *	shmem folios.
+ * @order: Number of source subpages to copy, expressed as a power of two
+ *	(nr_pages = 1 << @order). Passed explicitly rather than derived
+ *	from folio_order(@folio) so that callers may back up higher-order
+ *	page ranges that were allocated without __GFP_COMP (and for which
+ *	folio_order() would therefore return 0).
+ * @nr_pages_backed: Out parameter. Reset to 0 on entry. On any return
+ *	value, holds the number of source subpages whose contents are
+ *	guaranteed to be present in @backup and reachable via consecutive
+ *	shmem indices starting at @index. A value less than (1 << @order)
+ *	with return value -ENOMEM indicates a partial backup that the
+ *	caller may keep (see below).
+ * @writeback: If true, attempt immediate writeout of each destination
+ *	shmem folio after it is populated. This trades throughput for
+ *	promptly evicting the backup from page cache. Only meaningful for
+ *	unmapped destination folios.
+ *
+ * Copy the contents of @folio into @backup starting at shmem index
+ * @index, one destination shmem folio at a time. Destination folios may
+ * themselves be higher-order; the copy loop advances by the natural
+ * order of each destination folio so a large destination folio is
+ * populated in a single iteration.
+ *
+ * The function distinguishes two failure modes:
+ *
+ *  - Mid-folio -ENOMEM after at least one destination folio has been
+ *    populated: the partial backup is *retained*. @nr_pages_backed is
+ *    left at the number of subpages successfully copied so far, and
+ *    -ENOMEM is returned. Callers that support partial backup (e.g. a
+ *    subsequent split-and-retry of the source) can commit the returned
+ *    prefix by treating handles [@index, @index + *@nr_pages_backed) as
+ *    valid.
+ *
+ *  - Any other error, or -ENOMEM with no progress: the pages already
+ *    written (if any) are truncated from @backup via
+ *    shmem_truncate_range(), @nr_pages_backed is reset to 0, and the
+ *    original error is returned. On return the caller owns no valid
+ *    handles in @backup.
+ *
+ * Context: May sleep. The caller is responsible for any locking of
+ * @backup's page range against concurrent access.
+ *
+ * Return: 0 on full success (all 1 << @order subpages backed up),
+ * -ENOMEM on partial success (see above), or another negative errno on
+ * failure (backup fully rolled back).
+ */
+int shmem_backup_folio(struct folio *folio, struct file *backup, pgoff_t index,
+		       gfp_t gfp, unsigned int order, pgoff_t *nr_pages_backed,
+		       bool writeback)
+{
+	struct address_space *mapping = backup->f_mapping;
+	int nr_pages = 1 << order;
+	int ret, i;
+
+	*nr_pages_backed = 0;
+	if (!shmem_file(backup))
+		return -EINVAL;
+
+	for (i = 0; i < nr_pages; ) {
+		struct folio *to_folio;
+		int to_nr, j;
+
+		to_folio = shmem_read_folio_gfp(mapping, index + i, gfp);
+		if (IS_ERR(to_folio)) {
+			ret = PTR_ERR(to_folio);
+
+			/* All errors aside from -ENOMEM drop partial backup */
+			if (*nr_pages_backed && ret != -ENOMEM) {
+				shmem_truncate_range(file_inode(backup),
+						     (loff_t)index << PAGE_SHIFT,
+						     ((loff_t)(index + i) << PAGE_SHIFT) - 1);
+				*nr_pages_backed = 0;
+			}
+
+			return ret;
+		}
+
+		to_nr = min_t(int, nr_pages - i,
+			      folio_next_index(to_folio) - (index + i));
+
+		folio_mark_accessed(to_folio);
+		folio_lock(to_folio);
+
+		for (j = 0; j < to_nr; j++)
+			copy_highpage(folio_file_page(to_folio, index + i + j),
+				      folio_page(folio, i + j));
+
+		folio_mark_dirty(to_folio);
+
+		if (writeback && !folio_mapped(to_folio) &&
+		    folio_clear_dirty_for_io(to_folio)) {
+			folio_set_reclaim(to_folio);
+			ret = shmem_writeout(to_folio, NULL, NULL);
+			if (!folio_test_writeback(to_folio))
+				folio_clear_reclaim(to_folio);
+			if (ret == AOP_WRITEPAGE_ACTIVATE)
+				folio_unlock(to_folio);
+		} else {
+			folio_unlock(to_folio);
+		}
+
+		folio_put(to_folio);
+		i += to_nr;
+		*nr_pages_backed = i;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(shmem_backup_folio);
