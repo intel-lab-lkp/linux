@@ -86,6 +86,7 @@ struct mlxsw_pci_queue {
 			enum mlxsw_pci_cqe_v v;
 			struct mlxsw_pci_queue *dq;
 			struct napi_struct napi;
+			bool napi_enabled;
 			struct page_pool *page_pool;
 		} cq;
 		struct {
@@ -989,6 +990,15 @@ static void mlxsw_pci_cq_napi_teardown(struct mlxsw_pci_queue *q)
 	netif_napi_del(&q->u.cq.napi);
 }
 
+static void mlxsw_pci_cq_napi_disable(struct mlxsw_pci_queue *q)
+{
+	if (!q->u.cq.napi_enabled)
+		return;
+
+	napi_disable(&q->u.cq.napi);
+	q->u.cq.napi_enabled = false;
+}
+
 static int mlxsw_pci_cq_page_pool_init(struct mlxsw_pci_queue *q,
 				       enum mlxsw_pci_cq_type cq_type)
 {
@@ -1064,6 +1074,7 @@ static int mlxsw_pci_cq_init(struct mlxsw_pci *mlxsw_pci, char *mbox,
 		goto err_page_pool_init;
 
 	napi_enable(&q->u.cq.napi);
+	q->u.cq.napi_enabled = true;
 	mlxsw_pci_queue_doorbell_consumer_ring(mlxsw_pci, q);
 	mlxsw_pci_queue_doorbell_arm_consumer_ring(mlxsw_pci, q);
 	return 0;
@@ -1078,7 +1089,7 @@ static void mlxsw_pci_cq_fini(struct mlxsw_pci *mlxsw_pci,
 {
 	enum mlxsw_pci_cq_type cq_type = mlxsw_pci_cq_type(mlxsw_pci, q);
 
-	napi_disable(&q->u.cq.napi);
+	mlxsw_pci_cq_napi_disable(q);
 	mlxsw_pci_cq_page_pool_fini(q, cq_type);
 	mlxsw_pci_cq_napi_teardown(q);
 	mlxsw_cmd_hw2sw_cq(mlxsw_pci->core, q->num);
@@ -1439,6 +1450,14 @@ err_cqs_init:
 
 static void mlxsw_pci_aqs_fini(struct mlxsw_pci *mlxsw_pci)
 {
+	struct mlxsw_pci_queue_type_group *queue_group;
+	int i;
+
+	queue_group = mlxsw_pci_queue_type_group_get(mlxsw_pci,
+						     MLXSW_PCI_QUEUE_TYPE_CQ);
+	for (i = 0; i < queue_group->count; i++)
+		mlxsw_pci_cq_napi_disable(&queue_group->q[i]);
+
 	mlxsw_pci_queue_group_fini(mlxsw_pci, &mlxsw_pci_rdq_ops);
 	mlxsw_pci_queue_group_fini(mlxsw_pci, &mlxsw_pci_sdq_ops);
 	mlxsw_pci_queue_group_fini(mlxsw_pci, &mlxsw_pci_cq_ops);
@@ -2089,6 +2108,7 @@ static void mlxsw_pci_fini(void *bus_priv)
 	struct mlxsw_pci *mlxsw_pci = bus_priv;
 
 	free_irq(pci_irq_vector(mlxsw_pci->pdev, 0), mlxsw_pci);
+	tasklet_kill(&mlxsw_pci_eq_get(mlxsw_pci)->u.eq.tasklet);
 	mlxsw_pci_aqs_fini(mlxsw_pci);
 	mlxsw_pci_napi_devs_fini(mlxsw_pci);
 	mlxsw_pci_fw_area_fini(mlxsw_pci);
