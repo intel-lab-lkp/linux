@@ -89,6 +89,9 @@ enum gpio_regmap_operation {
  *			mask before writing. This allows driver-specific logic
  *			to append additional bits (like write-enable masks)
  *			dynamically based on the current operation.
+ * @set_config:		(Optional) Callback for setting GPIO configuration such
+ *			as debounce, drive strength, or other hardware specific
+ *			settings.
  * @drvdata:		(Optional) Pointer to driver specific data which is
  *			not used by gpio-remap but is provided "as is" to the
  *			driver callback(s).
@@ -149,6 +152,8 @@ struct gpio_regmap_config {
 	int (*value_xlate)(struct gpio_regmap *gpio, enum gpio_regmap_operation,
 			   unsigned int base, unsigned int offset, unsigned int reg,
 			   unsigned int *mask, unsigned int *val);
+
+	int (*set_config)(struct gpio_chip *gc, unsigned int offset, unsigned long config);
 
 	void *drvdata;
 };

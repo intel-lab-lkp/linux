@@ -454,6 +454,7 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 		gpio->reg_mask_xlate = gpio_regmap_simple_xlate;
 
 	gpio->value_xlate = config->value_xlate;
+	chip->set_config = config->set_config;
 
 	ret = gpiochip_add_data(chip, gpio);
 	if (ret < 0)
