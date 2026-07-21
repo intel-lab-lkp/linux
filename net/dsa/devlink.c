@@ -20,6 +20,15 @@ static int dsa_devlink_info_get(struct devlink *dl,
 	return -EOPNOTSUPP;
 }
 
+static int dsa_devlink_flash_update(struct devlink *dl,
+				    struct devlink_flash_update_params *params,
+				    struct netlink_ext_ack *extack)
+{
+	struct dsa_switch *ds = dsa_devlink_to_ds(dl);
+
+	return ds->ops->devlink_flash_update(ds, params, extack);
+}
+
 static int dsa_devlink_sb_pool_get(struct devlink *dl,
 				   unsigned int sb_index, u16 pool_index,
 				   struct devlink_sb_pool_info *pool_info)
@@ -167,18 +176,31 @@ dsa_devlink_sb_occ_tc_port_bind_get(struct devlink_port *dlp,
 							p_max);
 }
 
-static const struct devlink_ops dsa_devlink_ops = {
-	.info_get			= dsa_devlink_info_get,
-	.sb_pool_get			= dsa_devlink_sb_pool_get,
-	.sb_pool_set			= dsa_devlink_sb_pool_set,
-	.sb_port_pool_get		= dsa_devlink_sb_port_pool_get,
-	.sb_port_pool_set		= dsa_devlink_sb_port_pool_set,
-	.sb_tc_pool_bind_get		= dsa_devlink_sb_tc_pool_bind_get,
-	.sb_tc_pool_bind_set		= dsa_devlink_sb_tc_pool_bind_set,
-	.sb_occ_snapshot		= dsa_devlink_sb_occ_snapshot,
-	.sb_occ_max_clear		= dsa_devlink_sb_occ_max_clear,
-	.sb_occ_port_pool_get		= dsa_devlink_sb_occ_port_pool_get,
+/* The devlink core rejects flash requests up front when the flash_update
+ * op is absent, before fetching the firmware file from userspace. Only
+ * install the op for switches whose driver implements it, so that
+ * unsupported requests keep failing early.
+ */
+#define DSA_DEVLINK_OPS							\
+	.info_get			= dsa_devlink_info_get,		\
+	.sb_pool_get			= dsa_devlink_sb_pool_get,	\
+	.sb_pool_set			= dsa_devlink_sb_pool_set,	\
+	.sb_port_pool_get		= dsa_devlink_sb_port_pool_get,	\
+	.sb_port_pool_set		= dsa_devlink_sb_port_pool_set,	\
+	.sb_tc_pool_bind_get		= dsa_devlink_sb_tc_pool_bind_get, \
+	.sb_tc_pool_bind_set		= dsa_devlink_sb_tc_pool_bind_set, \
+	.sb_occ_snapshot		= dsa_devlink_sb_occ_snapshot,	\
+	.sb_occ_max_clear		= dsa_devlink_sb_occ_max_clear,	\
+	.sb_occ_port_pool_get		= dsa_devlink_sb_occ_port_pool_get, \
 	.sb_occ_tc_port_bind_get	= dsa_devlink_sb_occ_tc_port_bind_get,
+
+static const struct devlink_ops dsa_devlink_ops = {
+	DSA_DEVLINK_OPS
+};
+
+static const struct devlink_ops dsa_devlink_flash_ops = {
+	DSA_DEVLINK_OPS
+	.flash_update			= dsa_devlink_flash_update,
 };
 
 int dsa_devlink_param_get(struct devlink *dl, u32 id,
@@ -378,12 +400,16 @@ void dsa_switch_devlink_unregister(struct dsa_switch *ds)
 int dsa_switch_devlink_alloc(struct dsa_switch *ds)
 {
 	struct dsa_devlink_priv *dl_priv;
+	const struct devlink_ops *ops;
 	struct devlink *dl;
+
+	ops = ds->ops->devlink_flash_update ? &dsa_devlink_flash_ops
+					    : &dsa_devlink_ops;
 
 	/* Add the switch to devlink before calling setup, so that setup can
 	 * add dpipe tables
 	 */
-	dl = devlink_alloc(&dsa_devlink_ops, sizeof(*dl_priv), ds->dev);
+	dl = devlink_alloc(ops, sizeof(*dl_priv), ds->dev);
 	if (!dl)
 		return -ENOMEM;
 
