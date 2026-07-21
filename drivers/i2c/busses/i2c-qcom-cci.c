@@ -519,6 +519,7 @@ static int cci_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *child;
 	struct resource *r;
+	struct clk *cci_clk;
 	struct cci *cci;
 	int ret, i;
 	u32 val;
@@ -586,6 +587,15 @@ static int cci_probe(struct platform_device *pdev)
 	else if (!ret)
 		return dev_err_probe(dev, -EINVAL, "not enough clocks in DT\n");
 	cci->nclocks = ret;
+
+	cci_clk = devm_clk_get(dev, "cci");
+	if (IS_ERR(cci_clk))
+		return dev_err_probe(dev, PTR_ERR(cci_clk), "failed to get CCI clock\n");
+
+	clk_set_rate(cci_clk, cci->data->cci_clk_rate);
+	if (clk_get_rate(cci_clk) != cci->data->cci_clk_rate)
+		dev_warn(dev, "CCI clock is not at expected %lu Hz\n",
+			 cci->data->cci_clk_rate);
 
 	ret = cci_enable_clocks(cci);
 	if (ret < 0)
