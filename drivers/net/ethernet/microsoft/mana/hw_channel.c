@@ -83,6 +83,17 @@ static void mana_hwc_handle_resp(struct hw_channel_context *hwc, u32 resp_len,
 	struct hwc_caller_ctx *ctx;
 	int err;
 
+	/* Validate msg_id is in range before using it to index bitmap
+	 * and caller_ctx array.  Malicious firmware could send
+	 * out-of-range msg_id causing out-of-bounds access.
+	 */
+	if (msg_id >= hwc->num_inflight_msg) {
+		dev_err(hwc->dev, "hwc_rx: msg_id %u >= max %u\n",
+			msg_id, hwc->num_inflight_msg);
+		mana_hwc_post_rx_wqe(hwc->rxq, rx_req);
+		return;
+	}
+
 	if (!test_bit(msg_id, hwc->inflight_msg_res.map)) {
 		dev_err(hwc->dev, "hwc_rx: invalid msg_id = %u\n", msg_id);
 		mana_hwc_post_rx_wqe(hwc->rxq, rx_req);
@@ -90,6 +101,18 @@ static void mana_hwc_handle_resp(struct hw_channel_context *hwc, u32 resp_len,
 	}
 
 	ctx = hwc->caller_ctx + msg_id;
+
+	/* Reject responses larger than the RX DMA buffer — the SGE
+	 * limits what hardware can DMA, so an oversized resp_len
+	 * indicates a firmware bug.  Fail rather than silently
+	 * truncating.
+	 */
+	if (resp_len > rx_req->buf_len) {
+		dev_err(hwc->dev, "HWC RX: resp_len %u > buf_len %u\n",
+			resp_len, rx_req->buf_len);
+		resp_len = 0;
+	}
+
 	err = mana_hwc_verify_resp_msg(ctx, resp_msg, resp_len);
 	if (err)
 		goto out;
@@ -261,18 +284,68 @@ static void mana_hwc_rx_event_handler(void *ctx, u32 gdma_rxq_id,
 
 	sge = (struct gdma_sge *)(wqe + 8 + dma_oob->inline_oob_size_div4 * 4);
 
-	/* Select the RX work request for virtual address and for reposting. */
+	/* inline_oob_size_div4 is read from the WQE in device-accessible RQ
+	 * memory, so a malicious host in a CVM (or buggy firmware) could set
+	 * it to push the SGE past the RQ buffer.  Bounds-check the SGE it
+	 * locates before dereferencing sge->address below.  A validly posted
+	 * WQE keeps the SGE inside the ring (worst case ends exactly at the
+	 * buffer boundary); reject anything that would read past it.  The
+	 * slot cannot be trusted here, so leak this RX WQE rather than repost
+	 * the wrong one -- as in the SGE-address mismatch path below.
+	 */
+	if ((u8 *)(sge + 1) > (u8 *)rq->queue_mem_ptr + rq->queue_size) {
+		dev_err(hwc->dev, "HWC RX: SGE past RQ buffer, oob_div4=%u\n",
+			dma_oob->inline_oob_size_div4);
+		return;
+	}
+
+	/* Recover the originating RX slot from the SGE address.  Of the three
+	 * terms here only sge->address lives in device-accessible RQ memory;
+	 * rq_base_addr and max_resp_msg_size are driver-private constants.  An
+	 * in-range but wrong/unaligned SGE (corrupted WQE, or a malicious host
+	 * in a CVM) would otherwise truncate onto a neighbouring slot, letting
+	 * us read a stale response that could complete the wrong, reused
+	 * in-flight request.  Require the index to be in range AND the address
+	 * to exactly match the value the driver posted for that slot.
+	 */
 	rq_base_addr = hwc_rxq->msg_buf->mem_info.dma_handle;
 	rx_req_idx = (sge->address - rq_base_addr) / hwc->max_resp_msg_size;
 
-	if (rx_req_idx >= hwc_rxq->msg_buf->num_reqs) {
-		dev_err(hwc->dev, "HWC RX: wrong rx_req_idx=%llu, num_reqs=%u\n",
-			rx_req_idx, hwc_rxq->msg_buf->num_reqs);
+	if (rx_req_idx >= hwc_rxq->queue_depth) {
+		/* Cannot trust which WQE this is, so we cannot safely repost
+		 * it; leak one RX WQE and bail.  An out-of-range index means
+		 * a corrupted SGE from hardware (or host tampering), an
+		 * unrecoverable device error.
+		 */
+		dev_err(hwc->dev, "HWC RX: SGE idx %llu out of range\n",
+			rx_req_idx);
 		return;
 	}
 
 	rx_req = &hwc_rxq->msg_buf->reqs[rx_req_idx];
+	if (sge->address != (u64)rx_req->buf_sge_addr) {
+		/* In-range index but the address does not match what the
+		 * driver posted for that slot; the same unrecoverable case,
+		 * so leak this WQE rather than repost the wrong one.
+		 */
+		dev_err(hwc->dev, "HWC RX: invalid SGE address %llx (idx=%llu)\n",
+			sge->address, rx_req_idx);
+		return;
+	}
+
 	resp = (struct gdma_resp_hdr *)rx_req->buf_va;
+
+	/* Validate resp_len covers the response header before reading
+	 * hwc_msg_id.  A short response leaves stale data from the
+	 * previous buffer occupant, which could match a live slot and
+	 * complete the wrong request.
+	 */
+	if (rx_oob->tx_oob_data_size < sizeof(*resp)) {
+		dev_err(hwc->dev, "HWC RX: short resp_len=%u\n",
+			rx_oob->tx_oob_data_size);
+		mana_hwc_post_rx_wqe(hwc_rxq, rx_req);
+		return;
+	}
 
 	/* Read msg_id once from DMA buffer to prevent TOCTOU:
 	 * DMA memory is shared/unencrypted in CVMs - host can
@@ -281,6 +354,7 @@ static void mana_hwc_rx_event_handler(void *ctx, u32 gdma_rxq_id,
 	msg_id = READ_ONCE(resp->response.hwc_msg_id);
 	if (msg_id >= hwc->num_inflight_msg) {
 		dev_err(hwc->dev, "HWC RX: wrong msg_id=%u\n", msg_id);
+		mana_hwc_post_rx_wqe(hwc_rxq, rx_req);
 		return;
 	}
 
