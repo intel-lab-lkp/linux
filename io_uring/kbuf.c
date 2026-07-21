@@ -314,8 +314,10 @@ static int io_ring_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg,
 		iov->iov_base = u64_to_user_ptr(READ_ONCE(buf->addr));
 		iov->iov_len = len;
 		if (unlikely(!access_ok(iov->iov_base, len))) {
-			if (arg->iovs != org_iovs)
+			if (arg->iovs != org_iovs) {
 				kfree(arg->iovs);
+				arg->iovs = org_iovs;
+			}
 			return -EFAULT;
 		}
 		iov++;
