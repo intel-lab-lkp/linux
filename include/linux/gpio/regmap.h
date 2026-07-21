@@ -14,6 +14,36 @@ struct regmap;
 #define GPIO_REGMAP_ADDR(addr) ((addr) ? : GPIO_REGMAP_ADDR_ZERO)
 
 /**
+ * enum gpio_regmap_operation - Operation type for reg_mask_xlate callback
+ *
+ * This enum is used to distinguish between different types of GPIO operations
+ * so that the reg_mask_xlate callback can return the appropriate mask for each
+ * operation type.
+ *
+ * Value operations:
+ * @GPIO_REGMAP_GET_OP: Mask for reading direction to detect if GPIO is input or output.
+ *                      Used in gpio_regmap_get() to determine the GPIO direction.
+ * @GPIO_REGMAP_IN: Mask for reading input value. Used when GPIO is configured as input.
+ * @GPIO_REGMAP_OUT: Mask for reading output value. Used when GPIO is configured as output.
+ *
+ * Output operations:
+ * @GPIO_REGMAP_SET_OP: Mask for setting GPIO output value.
+ *
+ * Direction operations:
+ * @GPIO_REGMAP_GET_DIR_OP: Mask for reading GPIO direction (input/output).
+ * @GPIO_REGMAP_SET_DIR_OP: Mask for setting GPIO direction (input/output).
+ *
+ */
+enum gpio_regmap_operation {
+	GPIO_REGMAP_GET_OP,
+	GPIO_REGMAP_SET_OP,
+	GPIO_REGMAP_GET_DIR_OP,
+	GPIO_REGMAP_SET_DIR_OP,
+	GPIO_REGMAP_IN,
+	GPIO_REGMAP_OUT,
+};
+
+/**
  * struct gpio_regmap_config - Description of a generic regmap gpio_chip.
  * @parent:		The parent device
  * @regmap:		The regmap used to access the registers
@@ -55,6 +85,10 @@ struct regmap;
  *			is used.
  * @init_valid_mask:	(Optional) Routine to initialize @valid_mask, to be used
  *			if not all GPIOs are valid.
+ * @value_xlate:	(Optional) Routine to translate the register value and
+ *			mask before writing. This allows driver-specific logic
+ *			to append additional bits (like write-enable masks)
+ *			dynamically based on the current operation.
  * @drvdata:		(Optional) Pointer to driver specific data which is
  *			not used by gpio-remap but is provided "as is" to the
  *			driver callback(s).
@@ -104,13 +138,17 @@ struct gpio_regmap_config {
 	unsigned long regmap_irq_flags;
 #endif
 
-	int (*reg_mask_xlate)(struct gpio_regmap *gpio, unsigned int base,
-			      unsigned int offset, unsigned int *reg,
-			      unsigned int *mask);
+	int (*reg_mask_xlate)(struct gpio_regmap *gpio, enum gpio_regmap_operation,
+			      unsigned int base, unsigned int offset,
+			      unsigned int *reg, unsigned int *mask);
 
 	int (*init_valid_mask)(struct gpio_chip *gc,
 			       unsigned long *valid_mask,
 			       unsigned int ngpios);
+
+	int (*value_xlate)(struct gpio_regmap *gpio, enum gpio_regmap_operation,
+			   unsigned int base, unsigned int offset, unsigned int reg,
+			   unsigned int *mask, unsigned int *val);
 
 	void *drvdata;
 };
