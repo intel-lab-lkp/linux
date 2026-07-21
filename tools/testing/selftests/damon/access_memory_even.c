@@ -26,8 +26,17 @@ int main(int argc, char *argv[])
 	sz_region = atoi(argv[2]);
 
 	regions = malloc(sizeof(*regions) * nr_regions);
-	for (i = 0; i < nr_regions; i++)
+	if (!regions) {
+		fprintf(stderr, "Failed to allocate regions array\n");
+		return -1;
+	}
+	for (i = 0; i < nr_regions; i++) {
 		regions[i] = malloc(sz_region);
+		if (!regions[i]) {
+			fprintf(stderr, "Failed to allocate region %d\n", i);
+			return -1;
+		}
+	}
 
 	while (1) {
 		for (i = 0; i < nr_regions; i++) {
