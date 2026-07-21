@@ -801,6 +801,26 @@ where
 /// ```
 #[macro_export]
 macro_rules! register {
+    // Deprecated `+` syntax for relative registers and their aliases.
+    (
+        $(
+            $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
+                $([ $size:expr $(, stride = $stride:expr)? ])?
+                $(@ $($base:ident +)? $offset:literal)?
+                $(=> $alias:ident $(+ $alias_offset:ty)? $([$alias_idx:expr])? )?
+            { $($fields:tt)* }
+        )*
+    ) => {
+        $(
+        $crate::register!(
+            @reg $(#[$attr])* $vis $name ($storage) $([$size $(, stride = $stride)?])?
+                $(@ $($base :)? $offset)?
+                $(=> $alias $(: $alias_offset)? $([$alias_idx])? )?
+            { $($fields)* }
+        );
+        )*
+    };
+
     // Entry point for the macro, allowing multiple registers to be defined in one call.
     // It matches all possible register declaration patterns to dispatch them to corresponding
     // `@reg` rule that defines a single register.
@@ -808,8 +828,8 @@ macro_rules! register {
         $(
             $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
                 $([ $size:expr $(, stride = $stride:expr)? ])?
-                $(@ $($base:ident +)? $offset:literal)?
-                $(=> $alias:ident $(+ $alias_offset:path)? $([$alias_idx:expr])? )?
+                $(@ $($base:path :)? $offset:literal)?
+                $(=> $alias:path $(: $alias_offset:path)? $([$alias_idx:expr])? )?
             { $($fields:tt)* }
         )*
     ) => {
