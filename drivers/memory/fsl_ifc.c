@@ -15,7 +15,6 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/fsl_ifc.h>
 #include <linux/irqdomain.h>
@@ -82,11 +81,6 @@ static int fsl_ifc_ctrl_init(struct fsl_ifc_ctrl *ctrl)
 	ifc_out32(0x0, &ifc->cm_erattr1);
 
 	return 0;
-}
-
-static void fsl_ifc_ctrl_remove(struct platform_device *dev)
-{
-	of_platform_depopulate(&dev->dev);
 }
 
 /*
@@ -270,8 +264,7 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 			return ret;
 	}
 
-	/* legacy dts may still use "simple-bus" compatible */
-	return of_platform_default_populate(dev->dev.of_node, NULL, &dev->dev);
+	return 0;
 }
 
 static const struct of_device_id fsl_ifc_match[] = {
@@ -287,7 +280,6 @@ static struct platform_driver fsl_ifc_ctrl_driver = {
 		.of_match_table = fsl_ifc_match,
 	},
 	.probe       = fsl_ifc_ctrl_probe,
-	.remove  = fsl_ifc_ctrl_remove,
 };
 
 static int __init fsl_ifc_init(void)
