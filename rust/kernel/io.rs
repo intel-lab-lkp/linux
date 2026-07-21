@@ -80,6 +80,30 @@ impl<const SIZE: usize> Region<SIZE> {
 
         Ok(Self::ptr_from_raw_parts_mut(base, size))
     }
+
+    /// Create a subregion with provided offset and size.
+    #[inline]
+    pub fn subregion<'a, const OFFSET: usize, const NEW_SIZE: usize, IO>(
+        io: IO,
+    ) -> <IO::Backend as IoBackend>::View<'a, Region<NEW_SIZE>>
+    where
+        IO: IoBase<'a, Target = Self>,
+    {
+        const_assert!(
+            OFFSET + NEW_SIZE <= SIZE && OFFSET.is_multiple_of(4) && NEW_SIZE.is_multiple_of(4)
+        );
+
+        let view = io.as_view();
+        let ptr = IO::Backend::as_ptr(view) as *mut [u8];
+        let new_ptr = Region::ptr_from_raw_parts_mut(
+            ptr.cast::<u8>().wrapping_add(OFFSET),
+            ptr.len() - OFFSET,
+        );
+
+        // SAFETY: We have checked that the new region is a subregion and it is aligned, hence it is
+        // a valid projection.
+        unsafe { IO::Backend::project_view(view, new_ptr) }
+    }
 }
 
 impl<const SIZE: usize> KnownSize for Region<SIZE> {
