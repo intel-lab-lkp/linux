@@ -1283,6 +1283,11 @@ static int ov9282_probe(struct i2c_client *client)
 	struct ov9282 *ov9282;
 	int ret;
 
+	const struct cci_regmap_config config = {
+		.reg_addr_bits = 16,
+		.use_single_read = true,
+	};
+
 	ov9282 = devm_kzalloc(&client->dev, sizeof(*ov9282), GFP_KERNEL);
 	if (!ov9282)
 		return -ENOMEM;
@@ -1301,7 +1306,7 @@ static int ov9282_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	ov9282->regmap = devm_cci_regmap_init_i2c(client, 16);
+	ov9282->regmap = devm_cci_regmap_init_i2c_cfg(client, &config);
 	if (IS_ERR(ov9282->regmap))
 		return dev_err_probe(ov9282->dev, PTR_ERR(ov9282->regmap),
 				     "Failed to init CCI\n");
