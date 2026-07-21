@@ -2105,6 +2105,46 @@ static inline int pud_write(pud_t pud)
 }
 #endif /* pud_write */
 
+#ifndef p4d_write
+static inline int p4d_write(p4d_t p4d)
+{
+	BUG();
+	return 0;
+}
+#endif /* p4d_write */
+
+#ifndef pmd_exec
+static inline int pmd_exec(pmd_t pmd)
+{
+	BUG();
+	return 0;
+}
+#endif /* pmd_exec */
+
+#ifndef pud_exec
+static inline int pud_exec(pud_t pud)
+{
+	BUG();
+	return 0;
+}
+#endif /* pud_exec */
+
+#ifndef p4d_exec
+static inline int p4d_exec(p4d_t p4d)
+{
+	BUG();
+	return 0;
+}
+#endif /* p4d_exec */
+
+#ifndef pgd_exec
+static inline int pgd_exec(pgd_t pgd)
+{
+	BUG();
+	return 0;
+}
+#endif /* pgd_exec */
+
 #if !defined(CONFIG_TRANSPARENT_HUGEPAGE) || \
 	!defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)
 static inline int pud_trans_huge(pud_t pud)
