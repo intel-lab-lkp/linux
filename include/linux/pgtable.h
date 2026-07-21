@@ -2295,16 +2295,20 @@ static inline bool arch_has_pfn_modify_check(void)
 typedef unsigned int pgtbl_mod_mask;
 
 enum pgtable_level {
-	PGTABLE_LEVEL_PTE = 0,
+	PGTABLE_LEVEL_NONE = 0,
+	PGTABLE_LEVEL_PTE,
 	PGTABLE_LEVEL_PMD,
 	PGTABLE_LEVEL_PUD,
 	PGTABLE_LEVEL_P4D,
 	PGTABLE_LEVEL_PGD,
+	PGTABLE_LEVEL_NUM,
 };
 
 static inline const char *pgtable_level_to_str(enum pgtable_level level)
 {
 	switch (level) {
+	case PGTABLE_LEVEL_NONE:
+		return "none";
 	case PGTABLE_LEVEL_PTE:
 		return "pte";
 	case PGTABLE_LEVEL_PMD:
