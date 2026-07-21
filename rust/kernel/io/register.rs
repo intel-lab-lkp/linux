@@ -809,7 +809,7 @@ macro_rules! register {
             $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
                 $([ $size:expr $(, stride = $stride:expr)? ])?
                 $(@ $($base:ident +)? $offset:literal)?
-                $(=> $alias:ident $(+ $alias_offset:ident)? $([$alias_idx:expr])? )?
+                $(=> $alias:ident $(+ $alias_offset:path)? $([$alias_idx:expr])? )?
             { $($fields:tt)* }
         )*
     ) => {
@@ -837,7 +837,7 @@ macro_rules! register {
 
     // Creates an alias register of fixed offset register `alias` with its own fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:ident
+        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:path
             { $($fields:tt)* }
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
@@ -860,7 +860,7 @@ macro_rules! register {
 
     // Creates an alias register of relative offset register `alias` with its own fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $base:ident + $alias:ident
+        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $base:ident + $alias:path
             { $($fields:tt)* }
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
@@ -896,7 +896,7 @@ macro_rules! register {
 
     // Creates an alias of register `idx` of array of registers `alias` with its own fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:ident [ $idx:expr ]
+        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:path [ $idx:expr ]
             { $($fields:tt)* }
     ) => {
         $crate::build_assert::static_assert!(
@@ -940,7 +940,7 @@ macro_rules! register {
     // fields.
     (
         @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
-            => $base:ident + $alias:ident [ $idx:expr ] { $($fields:tt)* }
+            => $base:ident + $alias:path [ $idx:expr ] { $($fields:tt)* }
     ) => {
         $crate::build_assert::static_assert!(
             $idx < <$alias as $crate::io::register::RegisterArray>::SIZE
