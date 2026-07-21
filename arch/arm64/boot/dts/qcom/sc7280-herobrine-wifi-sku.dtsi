@@ -7,6 +7,34 @@
 
 /* WIFI SKUs save 256M by not having modem/mba/rmtfs memory regions defined. */
 
+&mdmss0_thermal {
+	cooling-maps {
+		/delete-node/ map0;
+		/delete-node/ map1;
+	};
+};
+
+&mdmss1_thermal {
+	cooling-maps {
+		/delete-node/ map0;
+		/delete-node/ map1;
+	};
+};
+
+&mdmss2_thermal {
+	cooling-maps {
+		/delete-node/ map0;
+		/delete-node/ map1;
+	};
+};
+
+&mdmss3_thermal {
+	cooling-maps {
+		/delete-node/ map0;
+		/delete-node/ map1;
+	};
+};
+
 /delete-node/ &mpss_mem;
 /delete-node/ &remoteproc_mpss;
 /delete-node/ &rmtfs_mem;
