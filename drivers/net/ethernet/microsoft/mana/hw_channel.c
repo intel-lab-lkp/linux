@@ -4,6 +4,7 @@
 #include <net/mana/gdma.h>
 #include <net/mana/mana.h>
 #include <net/mana/hw_channel.h>
+#include <linux/pci.h>
 #include <linux/vmalloc.h>
 
 static int mana_hwc_get_msg_index(struct hw_channel_context *hwc, u16 *msg_id)
@@ -768,20 +769,33 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	if (err)
 		return err;
 
-	if (!wait_for_completion_timeout(&hwc->hwc_init_eqe_comp, 60 * HZ))
-		return -ETIMEDOUT;
+	/* setup_hwc activated MST entries — hardware can now DMA into
+	 * our queue buffers.  If anything below fails, we must tear
+	 * down before returning so the caller doesn't need to track
+	 * whether setup_hwc succeeded.
+	 */
+	hwc->setup_active = true;
+
+	if (!wait_for_completion_timeout(&hwc->hwc_init_eqe_comp, 60 * HZ)) {
+		err = -ETIMEDOUT;
+		goto teardown;
+	}
 
 	*q_depth = hwc->hwc_init_q_depth_max;
 	*max_req_msg_size = hwc->hwc_init_max_req_msg_size;
 	*max_resp_msg_size = hwc->hwc_init_max_resp_msg_size;
 
 	/* Both were set in mana_hwc_init_event_handler(). */
-	if (WARN_ON(cq->id >= gc->max_num_cqs))
-		return -EPROTO;
+	if (WARN_ON(cq->id >= gc->max_num_cqs)) {
+		err = -EPROTO;
+		goto teardown;
+	}
 
 	cq_table = vcalloc(gc->max_num_cqs, sizeof(*cq_table));
-	if (!cq_table)
-		return -ENOMEM;
+	if (!cq_table) {
+		err = -ENOMEM;
+		goto teardown;
+	}
 
 	rcu_assign_pointer(cq_table[cq->id], cq);
 	/* Publish the fully-initialised table last; pairs with the
@@ -790,6 +804,16 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	rcu_assign_pointer(gc->cq_table, cq_table);
 
 	return 0;
+
+teardown:
+	{
+		int td_err = mana_smc_teardown_hwc(&gc->shm_channel, false);
+
+		if (!td_err)
+			hwc->setup_active = false;
+
+		return td_err ? td_err : err;
+	}
 }
 
 static int mana_hwc_init_queues(struct hw_channel_context *hwc, u16 q_depth,
@@ -902,28 +926,64 @@ void mana_hwc_destroy_channel(struct gdma_context *gc)
 	if (!hwc)
 		return;
 
-	/* gc->max_num_cqs is set in mana_hwc_init_event_handler(). If it's
-	 * non-zero, the HWC worked and we should tear down the HWC here.
+	/* Tear down the HWC if setup_hwc previously activated MST entries.
+	 * This is the definitive flag — unlike max_num_cqs which depends
+	 * on the init EQE arriving.
 	 */
-	if (gc->max_num_cqs > 0)
-		mana_smc_teardown_hwc(&gc->shm_channel, false);
+	if (hwc->setup_active) {
+		int td_err = mana_smc_teardown_hwc(&gc->shm_channel, false);
+
+		if (td_err) {
+			dev_err(gc->dev, "HWC teardown failed: %d, issuing FLR\n",
+				td_err);
+
+			/* On systems without IOMMU, freeing DMA memory with
+			 * active hardware MST mappings risks memory corruption.
+			 * Issue FLR to force-reset the device and invalidate
+			 * all hardware state including MST entries.
+			 */
+			td_err = pcie_flr(to_pci_dev(gc->dev));
+			if (td_err) {
+				/* Device wedged: teardown and FLR
+				 * both failed, so hardware may still
+				 * DMA into our queue buffers.  Leak
+				 * all HWC DMA buffers instead of
+				 * freeing memory the device can still
+				 * reach; without an IOMMU the freed
+				 * pages could be reused under live
+				 * DMA.
+				 */
+
+				dev_warn(gc->dev,
+					 "Leaked HWC DMA buffers (CQ/RQ/TXQ) to prevent memory corruption. Device is no longer usable.\n");
+
+				/* Do not call destroy_cq/wq below;
+				 * they would dma_free_coherent().
+				 * Leave hwc/cq/rxq/txq allocated.
+				 */
+				return;
+			}
+
+			dev_info(gc->dev, "FLR succeeded, hardware state cleared\n");
+		}
+
+		hwc->setup_active = false;
+	}
+
+	/* Tear down the HWC CQ object first — mana_hwc_destroy_cq()
+	 * both unpublishes the CQ from cq_table (+synchronize_rcu) and
+	 * deregisters the HWC EQ from the interrupt handler list (via
+	 * mana_gd_deregister_irq + synchronize_rcu), guaranteeing no
+	 * interrupt handler can access RQ/TXQ buffers after this point.
+	 */
+	if (hwc->cq)
+		mana_hwc_destroy_cq(hwc->gdma_dev->gdma_context, hwc->cq);
 
 	if (hwc->txq)
 		mana_hwc_destroy_wq(hwc, hwc->txq);
 
 	if (hwc->rxq)
 		mana_hwc_destroy_wq(hwc, hwc->rxq);
-
-	if (hwc->cq)
-		mana_hwc_destroy_cq(hwc->gdma_dev->gdma_context, hwc->cq);
-
-	/* Reset only after mana_hwc_destroy_cq() above has run with a valid
-	 * max_num_cqs so mana_gd_destroy_cq() clears the CQ table slot and
-	 * waits out in-flight EQ handlers (synchronize_rcu) before the CQ is
-	 * freed.  Clearing it earlier would make that path early-return and
-	 * skip the slot clear, leaving a dangling cq_table entry.
-	 */
-	gc->max_num_cqs = 0;
 
 	kfree(hwc->caller_ctx);
 	hwc->caller_ctx = NULL;

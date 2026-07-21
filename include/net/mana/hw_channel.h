@@ -200,6 +200,14 @@ struct hw_channel_context {
 	u32 pf_dest_vrcq_id;
 	u32 hwc_timeout;
 
+	/* Set after mana_smc_setup_hwc() succeeds (hardware has active
+	 * MST entries).  On recoverable paths (establish_channel)
+	 * cleared only after successful teardown so a retry remains
+	 * possible.  On the terminal destroy_channel path, cleared
+	 * unconditionally since hwc is about to be freed.
+	 */
+	bool setup_active;
+
 	struct hwc_caller_ctx *caller_ctx;
 };
 
