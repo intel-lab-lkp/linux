@@ -1911,9 +1911,9 @@ static int match_switch_decoder_by_range(struct device *dev,
 static int find_pos_and_ways(struct cxl_port *port, struct range *range,
 			     int *pos, int *ways)
 {
+	struct device *dev __free(put_device) = NULL;
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_port *parent;
-	struct device *dev;
 	int rc = -ENXIO;
 
 	parent = parent_port_of(port);
@@ -1944,8 +1944,6 @@ static int find_pos_and_ways(struct cxl_port *port, struct range *range,
 			dev_name(&port->dev),
 			dev_name(port->parent_dport->dport_dev),
 			dev_name(&cxlsd->cxld.dev));
-
-	put_device(dev);
 
 	return rc;
 }
