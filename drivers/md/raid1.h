@@ -184,6 +184,8 @@ enum r1bio_state {
 	R1BIO_MadeGood,
 	R1BIO_WriteError,
 	R1BIO_FailFast,
+/* the master bio carries PCI P2PDMA (peer device memory) pages */
+	R1BIO_P2PDMA,
 };
 
 static inline int sector_to_idx(sector_t sector)
