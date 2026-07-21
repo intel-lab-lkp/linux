@@ -350,6 +350,21 @@ static int add_changeset_property(struct overlay_changeset *ovcs,
 		if (prop)
 			return -EINVAL;
 		new_prop = dup_and_fixup_symbol_prop(ovcs, overlay_prop);
+	} else if (target->np->parent &&
+		   of_node_is_root(target->np->parent) &&
+		   of_node_name_eq(target->np, "aliases")) {
+		/* /aliases values are deref'd as C strings; reject malformed input */
+		if (!overlay_prop->value || overlay_prop->length < 2 ||
+		    strnlen(overlay_prop->value, overlay_prop->length) >=
+			overlay_prop->length)
+			return -EINVAL;
+
+		/* rewrite overlay-internal paths to live-tree paths */
+		if (!strncmp(overlay_prop->value, "/fragment@",
+			     strlen("/fragment@")))
+			new_prop = dup_and_fixup_symbol_prop(ovcs, overlay_prop);
+		else
+			new_prop = __of_prop_dup(overlay_prop, GFP_KERNEL);
 	} else {
 		new_prop = __of_prop_dup(overlay_prop, GFP_KERNEL);
 	}
