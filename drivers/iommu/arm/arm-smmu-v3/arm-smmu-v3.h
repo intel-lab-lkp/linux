@@ -1241,6 +1241,8 @@ tegra241_cmdqv_probe(struct arm_smmu_device *smmu)
 #endif /* CONFIG_TEGRA241_CMDQV */
 
 #ifdef CONFIG_ARM_SMMU_V3_KEXEC
+extern struct mutex arm_smmu_kexec_resv_lock;
+
 int arm_smmu_kexec_parse_strtab_2lvl(struct arm_smmu_device *smmu, u32 cfg_reg,
 				     phys_addr_t base, u32 *num_l1_ents);
 int arm_smmu_kexec_parse_strtab_linear(struct arm_smmu_device *smmu,
@@ -1252,6 +1254,8 @@ int arm_smmu_kexec_check_strtab_l1_desc(struct arm_smmu_device *smmu,
 int arm_smmu_kexec_check_ste_cdtab(struct arm_smmu_device *smmu, u64 ste0,
 				   phys_addr_t *cdtab, u32 *s1fmt,
 				   u32 *max_contexts);
+int arm_smmu_kexec_scan_and_resv_ids(struct arm_smmu_device *smmu);
+void arm_smmu_kexec_unresv_ids(struct arm_smmu_device *smmu);
 #endif /* CONFIG_ARM_SMMU_V3_KEXEC */
 
 #ifdef CONFIG_CRASH_DUMP
