@@ -319,6 +319,35 @@ static void cpu_sbi_fwft_set(void *arg)
 }
 
 /**
+ * sbi_fwft_get() - Get a feature value on the local hart
+ * @feature: The feature ID to get
+ * @value: Where to store the feature value
+ *
+ * Return: 0 on success, appropriate Linux error code otherwise.
+ */
+int sbi_fwft_get(u32 feature, unsigned long *value)
+{
+	struct sbiret ret;
+	int error;
+
+	if (!sbi_fwft_supported)
+		return -EOPNOTSUPP;
+
+	if (!value)
+		return -EINVAL;
+
+	ret = sbi_ecall(SBI_EXT_FWFT, SBI_EXT_FWFT_GET,
+			feature, 0, 0, 0, 0, 0);
+	error = sbi_err_map_linux_errno(ret.error);
+	if (error)
+		return error;
+
+	*value = ret.value;
+
+	return 0;
+}
+
+/**
  * sbi_fwft_set() - Set a feature on the local hart
  * @feature: The feature ID to be set
  * @value: The feature value to be set

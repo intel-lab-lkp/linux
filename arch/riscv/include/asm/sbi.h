@@ -607,6 +607,7 @@ int sbi_remote_hfence_vvma_asid(const struct cpumask *cpu_mask,
 				unsigned long asid);
 long sbi_probe_extension(int ext);
 
+int sbi_fwft_get(u32 feature, unsigned long *value);
 int sbi_fwft_set(u32 feature, unsigned long value, unsigned long flags);
 int sbi_fwft_set_cpumask(const cpumask_t *mask, u32 feature,
 			 unsigned long value, unsigned long flags);
