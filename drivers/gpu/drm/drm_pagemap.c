@@ -578,10 +578,13 @@ static int drm_pagemap_cpages(unsigned long *migrate_pfn, unsigned long npages)
 			folio = page_folio(page);
 			order = folio_order(folio);
 			cpages += NR_PAGES(order);
-		} else if (migrate_pfn[i] & MIGRATE_PFN_COMPOUND) {
+		}
+#ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
+		else if (migrate_pfn[i] & MIGRATE_PFN_COMPOUND) {
 			order = HPAGE_PMD_ORDER;
 			cpages += NR_PAGES(order);
 		}
+#endif
 
 		i += NR_PAGES(order);
 	}
@@ -733,7 +736,6 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 	own_pages = 0;
 
 	for (i = 0; i < npages;) {
-		unsigned long j;
 		struct page *page = pfn_to_page(migrate.dst[i]);
 		struct page *src_page = migrate_pfn_to_page(migrate.src[i]);
 		unsigned int order = 0;
@@ -763,7 +765,10 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 		}
 		migrate.dst[i] = migrate_pfn(migrate.dst[i]);
 
+#ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
 		if (migrate.src[i] & MIGRATE_PFN_COMPOUND) {
+			unsigned long j;
+
 			drm_WARN_ONCE(dpagemap->drm, src_page &&
 				      folio_order(page_folio(src_page)) != HPAGE_PMD_ORDER,
 				      "Unexpected folio order\n");
@@ -774,6 +779,7 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 			for (j = 1; j < NR_PAGES(order) && i + j < npages; j++)
 				migrate.dst[i + j] = 0;
 		}
+#endif
 
 		drm_pagemap_get_devmem_page(page, order, zdd);
 
