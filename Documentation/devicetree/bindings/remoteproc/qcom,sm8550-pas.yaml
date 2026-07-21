@@ -236,6 +236,8 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,glymur-adsp-pas
+              - qcom,kaanapali-adsp-pas
               - qcom,sm8550-adsp-pas
               - qcom,sm8650-adsp-pas
               - qcom,x1e80100-adsp-pas
@@ -273,6 +275,8 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,glymur-cdsp-pas
+              - qcom,kaanapali-cdsp-pas
               - qcom,sm8550-cdsp-pas
               - qcom,sm8650-cdsp-pas
               - qcom,x1e80100-cdsp-pas
