@@ -2043,8 +2043,10 @@ static int geneve_configure(struct net *net, struct net_device *dev,
 	}
 
 	err = register_netdevice(dev);
-	if (err)
+	if (err) {
+		geneve_free_dev(dev);
 		return err;
+	}
 
 	list_add(&geneve->next, &gn->geneve_list);
 	return 0;
