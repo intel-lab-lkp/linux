@@ -1190,10 +1190,10 @@ static bool is_init_done(struct fman_cfg *cfg)
 
 static void free_init_resources(struct fman *fman)
 {
-	if (fman->cam_offset)
+	if (fman->cam_offset && !IS_ERR_VALUE(fman->cam_offset))
 		fman_muram_free_mem(fman->muram, fman->cam_offset,
 				    fman->cam_size);
-	if (fman->fifo_offset)
+	if (fman->fifo_offset && !IS_ERR_VALUE(fman->fifo_offset))
 		fman_muram_free_mem(fman->muram, fman->fifo_offset,
 				    fman->fifo_size);
 }
@@ -1963,6 +1963,8 @@ static int fman_init(struct fman *fman)
 	err = dma_init(fman);
 	if (err != 0) {
 		free_init_resources(fman);
+		fman->fifo_offset = 0;
+		fman->cam_offset = 0;
 		return err;
 	}
 
@@ -1975,6 +1977,8 @@ static int fman_init(struct fman *fman)
 					     fman->state->total_fifo_size);
 	if (IS_ERR_VALUE(fman->fifo_offset)) {
 		free_init_resources(fman);
+		fman->fifo_offset = 0;
+		fman->cam_offset = 0;
 		dev_err(fman->dev, "%s: MURAM alloc for BMI FIFO failed\n",
 			__func__);
 		return -ENOMEM;
@@ -1998,6 +2002,8 @@ static int fman_init(struct fman *fman)
 	fman->keygen = keygen_init(fman->kg_regs);
 	if (!fman->keygen) {
 		free_init_resources(fman);
+		fman->fifo_offset = 0;
+		fman->cam_offset = 0;
 		return -EINVAL;
 	}
 
@@ -2800,6 +2806,24 @@ fman_free:
 	return ERR_PTR(err);
 }
 
+static void fman_free_resources(struct fman *fman, struct device *dev,
+				bool irq_registered)
+{
+	/* Free IRQs first while fman is still valid */
+	if (irq_registered) {
+		if (fman->dts_params.err_irq != 0)
+			devm_free_irq(dev, fman->dts_params.err_irq, fman);
+		devm_free_irq(dev, fman->dts_params.irq, fman);
+	}
+
+	kfree(fman->keygen);
+	free_init_resources(fman);
+	kfree(fman->cfg);
+	fman_muram_finish(fman->muram);
+	kfree(fman->state);
+	kfree(fman);
+}
+
 static int fman_probe(struct platform_device *of_dev)
 {
 	struct fman *fman;
@@ -2820,7 +2844,7 @@ static int fman_probe(struct platform_device *of_dev)
 
 	if (fman_init(fman) != 0) {
 		dev_err(dev, "%s: FMan init failed\n", __func__);
-		return -EINVAL;
+		goto err_no_irq;
 	}
 
 	/* Register IRQ handlers only after initialization is complete.
@@ -2838,7 +2862,7 @@ static int fman_probe(struct platform_device *of_dev)
 	if (err < 0) {
 		dev_err(dev, "%s: irq %d allocation failed (error = %d)\n",
 			__func__, fman->dts_params.irq, err);
-		return err;
+		goto err_no_irq;
 	}
 
 	if (fman->dts_params.err_irq != 0) {
@@ -2848,7 +2872,7 @@ static int fman_probe(struct platform_device *of_dev)
 		if (err < 0) {
 			dev_err(dev, "%s: irq %d allocation failed (error = %d)\n",
 				__func__, fman->dts_params.err_irq, err);
-			return err;
+			goto err_irq;
 		}
 	}
 
@@ -2863,7 +2887,7 @@ static int fman_probe(struct platform_device *of_dev)
 	err = enable(fman);
 	if (err != 0) {
 		dev_err(dev, "%s: FMan enable failed\n", __func__);
-		return err;
+		goto err_irq;
 	}
 
 	if (fman->dts_params.err_irq == 0) {
@@ -2891,6 +2915,12 @@ static int fman_probe(struct platform_device *of_dev)
 	dev_dbg(dev, "FMan%d probed\n", fman->dts_params.id);
 
 	return 0;
+
+err_irq:
+	devm_free_irq(dev, fman->dts_params.irq, fman);
+err_no_irq:
+	fman_free_resources(fman, dev, false);
+	return err ?: -EINVAL;
 }
 
 static const struct of_device_id fman_match[] = {
