@@ -128,7 +128,7 @@ static void ufs_rpmb_device_release(struct device *dev)
 {
 	struct ufs_rpmb_dev *ufs_rpmb = dev_get_drvdata(dev);
 
-	rpmb_dev_unregister(ufs_rpmb->rdev);
+	kfree(ufs_rpmb);
 }
 
 /* UFS RPMB device registration */
@@ -152,8 +152,6 @@ int ufs_rpmb_probe(struct ufs_hba *hba)
 		return -EINVAL;
 	}
 
-	INIT_LIST_HEAD(&hba->rpmbs);
-
 	struct rpmb_descr descr = {
 		.type = RPMB_TYPE_UFS,
 		.route_frames = ufs_rpmb_route_frames,
@@ -165,7 +163,7 @@ int ufs_rpmb_probe(struct ufs_hba *hba)
 		if (!cap)
 			continue;
 
-		ufs_rpmb = devm_kzalloc(hba->dev, sizeof(*ufs_rpmb), GFP_KERNEL);
+		ufs_rpmb = kzalloc_obj(*ufs_rpmb);
 		if (!ufs_rpmb) {
 			ret = -ENOMEM;
 			goto err_out;
@@ -224,6 +222,7 @@ err_out:
 	kfree(cid);
 	list_for_each_entry_safe(it, tmp, &hba->rpmbs, node) {
 		list_del(&it->node);
+		rpmb_dev_unregister(it->rdev);
 		device_unregister(&it->dev);
 	}
 
@@ -244,6 +243,7 @@ void ufs_rpmb_remove(struct ufs_hba *hba)
 		/* Remove from list first */
 		list_del(&ufs_rpmb->node);
 		/* Unregister device */
+		rpmb_dev_unregister(ufs_rpmb->rdev);
 		device_unregister(&ufs_rpmb->dev);
 	}
 
