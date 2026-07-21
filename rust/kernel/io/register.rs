@@ -527,11 +527,11 @@ where
 /// space segment. Since both instances of `CPU_CTL` share the same layout, we don't want to define
 /// them twice and would prefer a way to select which one to use from a single definition.
 ///
-/// This can be done using the `Base + Offset` syntax when specifying the register's address:
+/// This can be done using the `Base: Offset` syntax when specifying the register's address:
 ///
 /// ```ignore
 /// register! {
-///     pub RELATIVE_REG(u32) @ Base + 0x80 {
+///     pub RELATIVE_REG(u32) @ Base: 0x80 {
 ///         ...
 ///     }
 /// }
@@ -579,7 +579,7 @@ where
 /// // This makes `CPU_CTL` accessible from all implementors of `RegisterBase<CpuCtlBase>`.
 /// register! {
 ///     /// CPU core control.
-///     pub CPU_CTL(u32) @ CpuCtlBase + 0x10 {
+///     pub CPU_CTL(u32) @ CpuCtlBase: 0x10 {
 ///         0:0 start;
 ///     }
 /// }
@@ -595,7 +595,7 @@ where
 /// // Aliases can also be defined for relative register.
 /// register! {
 ///     /// Alias to CPU core control.
-///     pub CPU_CTL_ALIAS(u32) => CpuCtlBase + CPU_CTL {
+///     pub CPU_CTL_ALIAS(u32) => CpuCtlBase: CPU_CTL {
 ///         /// Start the aliased CPU core.
 ///         1:1 alias_start;
 ///     }
@@ -703,7 +703,7 @@ where
 ///
 /// ```ignore
 /// register! {
-///     pub RELATIVE_REGISTER_ARRAY(u8)[10, stride = 4] @ Base + 0x100 {
+///     pub RELATIVE_REGISTER_ARRAY(u8)[10, stride = 4] @ Base: 0x100 {
 ///         ...
 ///     }
 /// }
@@ -747,7 +747,7 @@ where
 /// // 64 per-cpu scratch registers, arranged as a contiguous array.
 /// register! {
 ///     /// Per-CPU scratch registers.
-///     pub CPU_SCRATCH(u32)[64] @ CpuCtlBase + 0x00000080 {
+///     pub CPU_SCRATCH(u32)[64] @ CpuCtlBase: 0x00000080 {
 ///         31:0 value;
 ///     }
 /// }
@@ -774,7 +774,7 @@ where
 /// // Alias to `SCRATCH[8]` used to convey the firmware exit code.
 /// register! {
 ///     /// Per-CPU firmware exit status code.
-///     pub CPU_FIRMWARE_STATUS(u32) => CpuCtlBase + CPU_SCRATCH[8] {
+///     pub CPU_FIRMWARE_STATUS(u32) => CpuCtlBase: CPU_SCRATCH[8] {
 ///         7:0 status;
 ///     }
 /// }
@@ -784,12 +784,12 @@ where
 /// // registers of the two declarations below are interleaved.
 /// register! {
 ///     /// Scratch registers bank 0.
-///     pub CPU_SCRATCH_INTERLEAVED_0(u32)[16, stride = 8] @ CpuCtlBase + 0x00000d00 {
+///     pub CPU_SCRATCH_INTERLEAVED_0(u32)[16, stride = 8] @ CpuCtlBase: 0x00000d00 {
 ///         31:0 value;
 ///     }
 ///
 ///     /// Scratch registers bank 1.
-///     pub CPU_SCRATCH_INTERLEAVED_1(u32)[16, stride = 8] @ CpuCtlBase + 0x00000d04 {
+///     pub CPU_SCRATCH_INTERLEAVED_1(u32)[16, stride = 8] @ CpuCtlBase: 0x00000d04 {
 ///         31:0 value;
 ///     }
 /// }
