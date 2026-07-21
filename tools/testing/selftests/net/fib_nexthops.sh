@@ -432,6 +432,15 @@ check_nexthop_fdb_support()
 	fi
 }
 
+check_nexthop_fdb_port_support()
+{
+	$IP nexthop help 2>&1 | grep -q "fdb \[ port"
+	if [ $? -ne 0 ]; then
+		echo "SKIP: iproute2 too old, missing fdb nexthop port support"
+		return $ksft_skip
+	fi
+}
+
 check_nexthop_res_support()
 {
 	$IP nexthop help 2>&1 | grep -q resilient
@@ -513,6 +522,31 @@ ipv6_fdb_grp_fcnal()
 	run_cmd "$IP nexthop add id 73 group 72"
 	run_cmd "$IP nexthop replace id 72 via 2001:db8:91::2 fdb"
 	log_test $? 2 "Replace non-FDB nexthop to FDB nexthop while in a group"
+
+	# NHA_FDB_PORT: optional per-nexthop VXLAN destination UDP port,
+	# letting an fdb nexthop group balance a flow across legs that share
+	# an underlay IP but listen on different UDP ports.
+	if check_nexthop_fdb_port_support; then
+		run_cmd "$IP nexthop add id 80 via 2001:db8:91::2 fdb port 4790"
+		check_nexthop "id 80" "id 80 via 2001:db8:91::2 scope link fdb port 4790"
+		log_test $? 0 "Fdb nexthop with port"
+
+		run_cmd "$IP nexthop add id 81 fdb port 4790"
+		log_test $? 2 "Fdb nexthop with port but no gateway"
+
+		run_cmd "$IP nexthop add id 81 via 2001:db8:91::2 fdb port 0"
+		log_test $? 2 "Fdb nexthop with port 0"
+
+		run_cmd "$IP nexthop add id 82 via 2001:db8:91::2 fdb port 4789"
+		run_cmd "$IP nexthop add id 83 via 2001:db8:91::3 fdb port 5789"
+		run_cmd "$IP nexthop add id 106 group 82/83 fdb"
+		check_nexthop "id 106" "id 106 group 82/83 fdb"
+		log_test $? 0 "Fdb nexthop group with legs differing in port"
+
+		run_cmd "$IP nexthop add id 84 via 2001:db8:91::2 fdb"
+		check_nexthop "id 84" "id 84 via 2001:db8:91::2 scope link fdb"
+		log_test $? 0 "Fdb nexthop without port omits port"
+	fi
 
 	run_cmd "$IP link add name vx10 type vxlan id 1010 local 2001:db8:91::9 remote 2001:db8:91::10 dstport 4789 nolearning noudpcsum tos inherit ttl 100"
 	run_cmd "$BRIDGE fdb add 02:02:00:00:00:13 dev vx10 nhid 102 self"
@@ -613,6 +647,31 @@ ipv4_fdb_grp_fcnal()
 	run_cmd "$IP nexthop add id 21 group 20"
 	run_cmd "$IP nexthop replace id 20 via 172.16.1.2 fdb"
 	log_test $? 2 "Replace non-FDB nexthop to FDB nexthop while in a group"
+
+	# NHA_FDB_PORT: optional per-nexthop VXLAN destination UDP port,
+	# letting an fdb nexthop group balance a flow across legs that share
+	# an underlay IP but listen on different UDP ports.
+	if check_nexthop_fdb_port_support; then
+		run_cmd "$IP nexthop add id 30 via 172.16.1.2 fdb port 4790"
+		check_nexthop "id 30" "id 30 via 172.16.1.2 scope link fdb port 4790"
+		log_test $? 0 "Fdb nexthop with port"
+
+		run_cmd "$IP nexthop add id 31 fdb port 4790"
+		log_test $? 2 "Fdb nexthop with port but no gateway"
+
+		run_cmd "$IP nexthop add id 31 via 172.16.1.2 fdb port 0"
+		log_test $? 2 "Fdb nexthop with port 0"
+
+		run_cmd "$IP nexthop add id 32 via 172.16.1.2 fdb port 4789"
+		run_cmd "$IP nexthop add id 33 via 172.16.1.3 fdb port 5789"
+		run_cmd "$IP nexthop add id 105 group 32/33 fdb"
+		check_nexthop "id 105" "id 105 group 32/33 fdb"
+		log_test $? 0 "Fdb nexthop group with legs differing in port"
+
+		run_cmd "$IP nexthop add id 34 via 172.16.1.2 fdb"
+		check_nexthop "id 34" "id 34 via 172.16.1.2 scope link fdb"
+		log_test $? 0 "Fdb nexthop without port omits port"
+	fi
 
 	run_cmd "$IP link add name vx10 type vxlan id 1010 local 10.0.0.1 remote 10.0.0.2 dstport 4789 nolearning noudpcsum tos inherit ttl 100"
 	run_cmd "$BRIDGE fdb add 02:02:00:00:00:13 dev vx10 nhid 102 self"
