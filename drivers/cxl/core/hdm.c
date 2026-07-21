@@ -1064,21 +1064,24 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(which));
 		}
 	}
-	rc = eiw_to_ways(FIELD_GET(CXL_HDM_DECODER0_CTRL_IW_MASK, ctrl),
-			  &cxld->interleave_ways);
-	if (rc) {
-		dev_warn(&port->dev,
-			 "decoder%d.%d: Invalid interleave ways (ctrl: %#x)\n",
-			 port->id, cxld->id, ctrl);
-		return rc;
-	}
-	rc = eig_to_granularity(FIELD_GET(CXL_HDM_DECODER0_CTRL_IG_MASK, ctrl),
-				 &cxld->interleave_granularity);
-	if (rc) {
-		dev_warn(&port->dev,
-			 "decoder%d.%d: Invalid interleave granularity (ctrl: %#x)\n",
-			 port->id, cxld->id, ctrl);
-		return rc;
+	/* Interleave settings are only valid on a committed decoder */
+	if (committed) {
+		rc = eiw_to_ways(FIELD_GET(CXL_HDM_DECODER0_CTRL_IW_MASK, ctrl),
+				 &cxld->interleave_ways);
+		if (rc) {
+			dev_warn(&port->dev,
+				 "decoder%d.%d: Invalid interleave ways (ctrl: %#x)\n",
+				 port->id, cxld->id, ctrl);
+			return rc;
+		}
+		rc = eig_to_granularity(FIELD_GET(CXL_HDM_DECODER0_CTRL_IG_MASK, ctrl),
+					&cxld->interleave_granularity);
+		if (rc) {
+			dev_warn(&port->dev,
+				 "decoder%d.%d: Invalid interleave granularity (ctrl: %#x)\n",
+				 port->id, cxld->id, ctrl);
+			return rc;
+		}
 	}
 
 	dev_dbg(&port->dev, "decoder%d.%d: range: %#llx-%#llx iw: %d ig: %d\n",
