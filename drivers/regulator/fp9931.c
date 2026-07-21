@@ -243,8 +243,7 @@ static int fp9931_v3p3_enable(struct regulator_dev *rdev)
 		return ret;
 
 	ret = regulator_enable_regmap(rdev);
-	if (ret < 0)
-		pm_runtime_put_autosuspend(data->dev);
+	pm_runtime_put_autosuspend(data->dev);
 
 	return ret;
 }
@@ -253,6 +252,10 @@ static int fp9931_v3p3_disable(struct regulator_dev *rdev)
 {
 	struct fp9931_data *data = rdev_get_drvdata(rdev);
 	int ret;
+
+	ret = pm_runtime_resume_and_get(data->dev);
+	if (ret < 0)
+		return ret;
 
 	ret = regulator_disable_regmap(rdev);
 	pm_runtime_put_autosuspend(data->dev);
