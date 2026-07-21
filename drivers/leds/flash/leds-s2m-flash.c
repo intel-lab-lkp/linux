@@ -339,6 +339,7 @@ MODULE_DEVICE_TABLE(of, s2m_fled_of_match_table);
 static struct platform_driver s2m_fled_driver = {
 	.driver = {
 		.name = "s2m-flash",
+		.of_match_table = s2m_fled_of_match_table,
 	},
 	.probe = s2m_fled_probe,
 	.id_table = s2m_fled_id_table,
