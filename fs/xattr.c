@@ -953,17 +953,15 @@ listxattr(struct dentry *d, char __user *list, size_t size)
 	return error;
 }
 
-static
 ssize_t file_listxattr(struct file *f, char __user *list, size_t size)
 {
 	audit_file(f);
 	return listxattr(f->f_path.dentry, list, size);
 }
 
-static
-ssize_t filename_listxattr(int dfd, struct filename *filename,
-			   unsigned int lookup_flags,
-			   char __user *list, size_t size)
+static ssize_t filename_listxattr(int dfd, struct filename *filename,
+				  unsigned int lookup_flags,
+				  char __user *list, size_t size)
 {
 	struct path path;
 	ssize_t error;
@@ -1036,7 +1034,7 @@ removexattr(struct mnt_idmap *idmap, struct dentry *d, const char *name)
 	return vfs_removexattr(idmap, d, name);
 }
 
-static int file_removexattr(struct file *f, struct xattr_name *kname)
+int file_removexattr(struct file *f, struct xattr_name *kname)
 {
 	int error = mnt_want_write_file(f);
 
