@@ -335,7 +335,8 @@ static int acpi_osc_handshake(acpi_handle handle, const char *uuid_str,
 		.length = bufsize * sizeof(u32),
 	};
 	struct acpi_buffer output;
-	u32 *retbuf, test;
+	u32 *retbuf, test, errors;
+	bool capabilities_masked = false;
 	guid_t guid;
 	int ret, i;
 
@@ -395,16 +396,24 @@ static int acpi_osc_handshake(acpi_handle handle, const char *uuid_str,
 	 * Clear the feature bits in capbuf[] that have not been acknowledged.
 	 * After that, capbuf[] contains the resultant feature mask.
 	 */
-	for (i = OSC_QUERY_DWORD + 1; i < bufsize; i++)
-		capbuf[i] &= retbuf[i];
+	for (i = OSC_QUERY_DWORD + 1; i < bufsize; i++) {
+		if (capbuf[i] & ~retbuf[i])
+			capabilities_masked = true;
 
-	if (retbuf[OSC_QUERY_DWORD] & OSC_ERROR_MASK) {
+		capbuf[i] &= retbuf[i];
+	}
+
+	errors = retbuf[OSC_QUERY_DWORD] & OSC_ERROR_MASK;
+	if (errors) {
 		/*
-		 * Complain about the unexpected errors and print diagnostic
-		 * information related to them.
+		 * Some firmware sets OSC_CAPABILITIES_MASK_ERROR without clearing
+		 * any requested capability.  Only complain if another error is
+		 * present or a capability was actually masked.
 		 */
-		acpi_handle_err(handle, "_OSC: errors while processing control request\n");
-		acpi_handle_err(handle, "_OSC: some features may be missing\n");
+		if (errors != OSC_CAPABILITIES_MASK_ERROR || capabilities_masked) {
+			acpi_handle_err(handle, "_OSC: errors while processing control request\n");
+			acpi_handle_err(handle, "_OSC: some features may be missing\n");
+		}
 		acpi_osc_error_check(handle, &guid, rev, &cap, retbuf);
 	}
 
