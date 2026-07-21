@@ -888,7 +888,8 @@ macro_rules! register {
             { $($fields:tt)* }
     ) => {
         $crate::register!(
-            $(#[$attr])* $vis $name($storage) [ $size, stride = ::core::mem::size_of::<$storage>() ]
+            @reg $(#[$attr])* $vis $name($storage)
+                [ $size, stride = ::core::mem::size_of::<$storage>() ]
                 @ $offset { $($fields)* }
         );
     };
