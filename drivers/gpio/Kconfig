@@ -1954,6 +1954,23 @@ config GPIO_SODAVILLE
 
 endmenu
 
+menu "RPMSG GPIO drivers"
+	depends on RPMSG
+
+config GPIO_RPMSG
+	tristate "Generic RPMSG GPIO support"
+	depends on OF && REMOTEPROC
+	select GPIOLIB_IRQCHIP
+	default REMOTEPROC
+	help
+	  Say Y here to enable GPIO controllers exposed over an RPMSG
+	  communication channel to a remote processor. GPIO operations
+	  and interrupt configuration requests are forwarded to the
+	  remote side through RPMSG, allowing Linux to control GPIOs
+	  implemented by a remote firmware.
+
+endmenu
+
 menu "SPI GPIO expanders"
 	depends on SPI_MASTER
 
