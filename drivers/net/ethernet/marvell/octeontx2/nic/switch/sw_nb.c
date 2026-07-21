@@ -169,13 +169,17 @@ static int sw_nb_fdb_event(struct notifier_block *unused,
 
 	switch (event) {
 	case SWITCHDEV_FDB_ADD_TO_DEVICE:
-		if (fdb_info->is_local)
-			break;
-		break;
-
 	case SWITCHDEV_FDB_DEL_TO_DEVICE:
 		if (fdb_info->is_local)
 			break;
+		/* dev is the bridge port that learned the FDB
+		 * (SWITCHDEV_FDB_*_TO_DEVICE), not the bridge master.
+		 * sw_nb_is_valid_dev() limits this to Cavium-offloaded
+		 * setups; only Cavium PF/representor netdevs are supported
+		 * as bridge ports today (VLAN/virt under bridge is TODO).
+		 */
+		sw_fdb_add_to_list(dev, (u8 *)fdb_info->addr,
+				   event == SWITCHDEV_FDB_ADD_TO_DEVICE);
 		break;
 
 	default:

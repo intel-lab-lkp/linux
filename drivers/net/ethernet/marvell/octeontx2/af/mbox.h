@@ -1996,6 +1996,7 @@ struct af2pf_fdb_refresh_req {
 	struct mbox_msghdr hdr;
 	u16 pcifunc;
 	u8 mac[6];
+	u64 flags;
 };
 
 struct iface_info {
@@ -2035,6 +2036,7 @@ struct fl_info {
 struct swdev2af_notify_req {
 	struct  mbox_msghdr hdr;
 	u64 msg_type;
+/* Mutually exclusive message selectors (not a combinable bitmask). */
 #define SWDEV2AF_MSG_TYPE_FW_STATUS BIT_ULL(0)
 #define	SWDEV2AF_MSG_TYPE_REFRESH_FDB BIT_ULL(1)
 #define	SWDEV2AF_MSG_TYPE_REFRESH_FL BIT_ULL(2)
