@@ -1915,6 +1915,231 @@ static void of_alias_add(struct alias_prop *ap, struct device_node *np,
 		 ap->alias, ap->stem, ap->id, np);
 }
 
+/*
+ * Serializes aliases_lookup and of_aliases across boot-time scan,
+ * runtime notifier updates, and readers. of_alias_get_id() and
+ * of_alias_get_highest_id() acquire this before walking the list; the
+ * OF reconfig notifier below acquires it around each mutation.
+ * of_alias_scan() runs single-threaded from of_core_init() and skips
+ * the lock, but any code path that reads or writes aliases_lookup
+ * outside init must hold it.
+ */
+static DEFINE_MUTEX(aliases_mutex);
+
+/*
+ * Build an alias_prop for @pp using @dt_alloc as the storage allocator
+ * and add it to aliases_lookup. @owned is stored on the entry so the
+ * matching destroy path knows whether the alias_prop is a kmalloc'd
+ * struct that must be kfree()d (with a paired of_node_put on the
+ * target and kfree on the kstrdup'd alias name) or a memblock/
+ * dt_alloc'd struct that must be left alone.
+ *
+ * Callers other than of_alias_scan() must hold @aliases_mutex.
+ *
+ * Skips pseudo-properties (name, phandle, ...), malformed property
+ * values (empty or not null-terminated within pp->length), and alias
+ * names not ending in a numeric id.
+ */
+static void of_alias_create(const struct property *pp,
+			    void *(*dt_alloc)(u64 size, u64 align),
+			    bool owned)
+{
+	const char *start = pp->name;
+	const char *end;
+	struct device_node *np;
+	struct alias_prop *ap;
+	const char *dup;
+	int id, len;
+
+	if (is_pseudo_property(pp->name))
+		return;
+
+	/*
+	 * pp->value must be a non-empty, null-terminated string within
+	 * pp->length. of_find_node_by_path() derefs it as a C string, so
+	 * a missing terminator would cause an OOB read.
+	 */
+	if (!pp->value || pp->length < 2 ||
+	    strnlen(pp->value, pp->length) >= pp->length)
+		return;
+
+	np = of_find_node_by_path(pp->value);
+	if (!np)
+		return;
+
+	end = start + strlen(start);
+	while (end > start && isdigit(*(end - 1)))
+		end--;
+	len = end - start;
+	if (len == 0)
+		goto out_put;
+
+	if (kstrtoint(end, 10, &id) < 0)
+		goto out_put;
+
+	ap = dt_alloc(sizeof(*ap) + len + 1, __alignof__(*ap));
+	if (!ap)
+		goto out_put;
+	memset(ap, 0, sizeof(*ap) + len + 1);
+
+	/*
+	 * For runtime entries, kstrdup the alias name so the alias_prop
+	 * doesn't depend on pp->name remaining valid — an overlay revert
+	 * frees the source property. Boot-time entries point into the
+	 * FDT, which is never freed.
+	 */
+	if (owned) {
+		dup = kstrdup(pp->name, GFP_KERNEL);
+		if (!dup) {
+			kfree(ap);
+			goto out_put;
+		}
+	} else {
+		dup = start;
+	}
+	ap->alias = dup;
+	ap->owned = owned;
+	of_alias_add(ap, np, id, start, len);
+	return;
+
+out_put:
+	if (owned)
+		of_node_put(np);
+}
+
+/*
+ * Reverse of of_alias_create() for owned entries: unlink and free the
+ * matching alias_prop and drop the reference it holds on the target
+ * node. For boot-time entries (owned=false) it unlinks only — the
+ * struct and the alias name live in memblock and are never freed —
+ * which prevents an overlay-driven UPDATE_PROPERTY against a boot-time
+ * alias from leaving stale duplicates in aliases_lookup.
+ *
+ * Callers must hold @aliases_mutex.
+ */
+static void of_alias_destroy(const char *name)
+{
+	struct alias_prop *ap, *tmp;
+
+	list_for_each_entry_safe(ap, tmp, &aliases_lookup, link) {
+		if (strcmp(ap->alias, name) != 0)
+			continue;
+		list_del(&ap->link);
+		if (ap->owned) {
+			of_node_put(ap->np);
+			kfree(ap->alias);
+			kfree(ap);
+		}
+		return;
+	}
+}
+
+static void *alias_alloc(u64 size, u64 align)
+{
+	return kzalloc(size, GFP_KERNEL);
+}
+
+/* Scan every property of @aliases and mirror it into aliases_lookup. */
+static void of_alias_node_scan(struct device_node *aliases)
+{
+	struct property *pp;
+
+	for_each_property_of_node(aliases, pp)
+		of_alias_create(pp, alias_alloc, true);
+}
+
+/* Reverse: destroy every alias_prop backed by a property of @aliases. */
+static void of_alias_node_forget(struct device_node *aliases)
+{
+	struct property *pp;
+
+	for_each_property_of_node(aliases, pp)
+		of_alias_destroy(pp->name);
+}
+
+/*
+ * OF reconfig notifier that mirrors /aliases property changes into
+ * aliases_lookup. Fires on both direct changesets and overlay
+ * apply/revert, so of_alias_get_id() returns the right id for aliases
+ * declared inside an overlay.
+ */
+static int of_aliases_reconfig_notifier(struct notifier_block *nb,
+					unsigned long action, void *arg)
+{
+	struct of_reconfig_data *rd = arg;
+
+	/*
+	 * Match /aliases structurally (name + root-parent) rather than by
+	 * pointer against the of_aliases global — a system with no
+	 * boot-time /aliases (of_aliases == NULL) can still acquire one
+	 * from an overlay, and we must track its properties from the
+	 * first ATTACH_NODE onward.
+	 */
+	if (!rd->dn || !rd->dn->parent ||
+	    !of_node_is_root(rd->dn->parent) ||
+	    !of_node_name_eq(rd->dn, "aliases"))
+		return NOTIFY_DONE;
+
+	mutex_lock(&aliases_mutex);
+	switch (action) {
+	case OF_RECONFIG_ATTACH_NODE:
+		/*
+		 * Overlays build the node up empty and add properties via
+		 * separate ADD_PROPERTY events, but the reconfig API also
+		 * permits attaching a fully-populated node in one shot —
+		 * scan defensively so pre-populated aliases aren't lost.
+		 */
+		of_alias_node_scan(rd->dn);
+		if (!of_aliases)
+			of_aliases = of_node_get(rd->dn);
+		break;
+	case OF_RECONFIG_DETACH_NODE:
+		/*
+		 * Symmetric with ATTACH_NODE: some callers detach without
+		 * emitting per-property REMOVE events first, so drop every
+		 * alias_prop backed by this node's properties before it
+		 * disappears.
+		 */
+		of_alias_node_forget(rd->dn);
+		if (of_aliases == rd->dn) {
+			of_node_put(of_aliases);
+			of_aliases = NULL;
+		}
+		break;
+	case OF_RECONFIG_ADD_PROPERTY:
+		of_alias_create(rd->prop, alias_alloc, true);
+		break;
+	case OF_RECONFIG_REMOVE_PROPERTY:
+		of_alias_destroy(rd->prop->name);
+		break;
+	case OF_RECONFIG_UPDATE_PROPERTY:
+		if (rd->old_prop)
+			of_alias_destroy(rd->old_prop->name);
+		of_alias_create(rd->prop, alias_alloc, true);
+		break;
+	default:
+		break;
+	}
+	mutex_unlock(&aliases_mutex);
+	return NOTIFY_OK;
+}
+
+static struct notifier_block of_aliases_nb = {
+	.notifier_call = of_aliases_reconfig_notifier,
+};
+
+static int __init of_aliases_reconfig_init(void)
+{
+	return of_reconfig_notifier_register(&of_aliases_nb);
+}
+
+/*
+ * of_alias_scan() runs from of_core_init() (core_initcall), so hook the
+ * reconfig notifier one initcall level later to guarantee the initial
+ * static scan is complete before any dynamic tracking begins.
+ */
+core_initcall_sync(of_aliases_reconfig_init);
+
 /**
  * of_alias_scan - Scan all properties of the 'aliases' node
  * @dt_alloc:	An allocator that provides a virtual address to memory
@@ -1950,42 +2175,8 @@ void of_alias_scan(void * (*dt_alloc)(u64 size, u64 align))
 	if (!of_aliases)
 		return;
 
-	for_each_property_of_node(of_aliases, pp) {
-		const char *start = pp->name;
-		const char *end = start + strlen(start);
-		struct device_node *np;
-		struct alias_prop *ap;
-		int id, len;
-
-		/* Skip those we do not want to proceed */
-		if (is_pseudo_property(pp->name))
-			continue;
-
-		np = of_find_node_by_path(pp->value);
-		if (!np)
-			continue;
-
-		/* walk the alias backwards to extract the id and work out
-		 * the 'stem' string */
-		while (isdigit(*(end-1)) && end > start)
-			end--;
-		len = end - start;
-
-		if (kstrtoint(end, 10, &id) < 0) {
-			of_node_put(np);
-			continue;
-		}
-
-		/* Allocate an alias_prop with enough space for the stem */
-		ap = dt_alloc(sizeof(*ap) + len + 1, __alignof__(*ap));
-		if (!ap) {
-			of_node_put(np);
-			continue;
-		}
-		memset(ap, 0, sizeof(*ap) + len + 1);
-		ap->alias = start;
-		of_alias_add(ap, np, id, start, len);
-	}
+	for_each_property_of_node(of_aliases, pp)
+		of_alias_create(pp, dt_alloc, false);
 }
 
 /**
@@ -2003,7 +2194,7 @@ int of_alias_get_id(const struct device_node *np, const char *stem)
 	struct alias_prop *app;
 	int id = -ENODEV;
 
-	mutex_lock(&of_mutex);
+	mutex_lock(&aliases_mutex);
 	list_for_each_entry(app, &aliases_lookup, link) {
 		if (strcmp(app->stem, stem) != 0)
 			continue;
@@ -2013,7 +2204,7 @@ int of_alias_get_id(const struct device_node *np, const char *stem)
 			break;
 		}
 	}
-	mutex_unlock(&of_mutex);
+	mutex_unlock(&aliases_mutex);
 
 	return id;
 }
@@ -2031,7 +2222,7 @@ int of_alias_get_highest_id(const char *stem)
 	struct alias_prop *app;
 	int id = -ENODEV;
 
-	mutex_lock(&of_mutex);
+	mutex_lock(&aliases_mutex);
 	list_for_each_entry(app, &aliases_lookup, link) {
 		if (strcmp(app->stem, stem) != 0)
 			continue;
@@ -2039,7 +2230,7 @@ int of_alias_get_highest_id(const char *stem)
 		if (app->id > id)
 			id = app->id;
 	}
-	mutex_unlock(&of_mutex);
+	mutex_unlock(&aliases_mutex);
 
 	return id;
 }

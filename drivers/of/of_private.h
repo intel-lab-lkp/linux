@@ -17,6 +17,12 @@
  * @alias:	Alias property name
  * @np:		Pointer to device_node that the alias stands for
  * @id:		Index value from end of alias name
+ * @owned:	True if @alias was kstrdup'd and @np was of_node_get'd on
+ *		insertion (overlay-time entries). False for entries built
+ *		by of_alias_scan() at boot, where @alias points into the
+ *		FDT and @np is an unreferenced pointer. The removal path
+ *		uses this flag to decide whether it must kfree(@alias),
+ *		of_node_put(@np), and kfree(the struct itself).
  * @stem:	Alias string without the index
  *
  * The structure represents one alias property of 'aliases' node as
@@ -27,6 +33,7 @@ struct alias_prop {
 	const char *alias;
 	struct device_node *np;
 	int id;
+	bool owned;
 	char stem[];
 };
 
