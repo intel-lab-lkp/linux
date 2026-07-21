@@ -7152,50 +7152,61 @@ EXPORT_SYMBOL_GPL(follow_pfnmap_end);
 int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 			void *buf, int len, int write)
 {
-	resource_size_t phys_addr;
-	pgprot_t prot = __pgprot(0);
-	void __iomem *maddr;
-	int offset = offset_in_page(addr);
-	int ret = -EINVAL;
-	bool writable;
-	struct follow_pfnmap_args args = { .vma = vma, .address = addr };
+	unsigned long offset = offset_in_page(addr);
+	int total_copied = 0;
+
+	while (len > 0) {
+		unsigned long chunk_len = min(len, (int)(PAGE_SIZE - offset));
+		resource_size_t phys_addr;
+		pgprot_t prot;
+		bool writable;
+		void __iomem *maddr;
+		struct follow_pfnmap_args args = { .vma = vma, .address = addr };
 
 retry:
-	if (follow_pfnmap_start(&args))
-		return -EINVAL;
-	prot = args.pgprot;
-	phys_addr = (resource_size_t)args.pfn << PAGE_SHIFT;
-	writable = args.writable;
-	follow_pfnmap_end(&args);
+		if (follow_pfnmap_start(&args))
+			return total_copied ? total_copied : -EFAULT;
 
-	if ((write & FOLL_WRITE) && !writable)
-		return -EINVAL;
+		phys_addr = (resource_size_t)args.pfn << PAGE_SHIFT;
+		prot = args.pgprot;
+		writable = args.writable;
+		follow_pfnmap_end(&args);
 
-	maddr = ioremap_prot(phys_addr, PAGE_ALIGN(len + offset), prot);
-	if (!maddr)
-		return -ENOMEM;
+		if ((write & FOLL_WRITE) && !writable)
+			return total_copied ? total_copied : -EACCES;
 
-	if (follow_pfnmap_start(&args))
-		goto out_unmap;
+		maddr = ioremap_prot(phys_addr, PAGE_SIZE, prot);
+		if (!maddr)
+			return total_copied ? total_copied : -ENOMEM;
 
-	if ((pgprot_val(prot) != pgprot_val(args.pgprot)) ||
-	    (phys_addr != (args.pfn << PAGE_SHIFT)) ||
-	    (writable != args.writable)) {
+		if (follow_pfnmap_start(&args)) {
+			iounmap(maddr);
+			return total_copied ? total_copied : -EFAULT;
+		}
+
+		if ((pgprot_val(prot) != pgprot_val(args.pgprot)) ||
+		    (phys_addr != (args.pfn << PAGE_SHIFT)) ||
+		    (writable != args.writable)) {
+			follow_pfnmap_end(&args);
+			iounmap(maddr);
+			goto retry;
+		}
+
+		if (write)
+			memcpy_toio(maddr + offset, buf + total_copied, chunk_len);
+		else
+			memcpy_fromio(buf + total_copied, maddr + offset, chunk_len);
+
 		follow_pfnmap_end(&args);
 		iounmap(maddr);
-		goto retry;
+
+		addr += chunk_len;
+		total_copied += chunk_len;
+		len -= chunk_len;
+		offset = 0;
 	}
 
-	if (write)
-		memcpy_toio(maddr + offset, buf, len);
-	else
-		memcpy_fromio(buf, maddr + offset, len);
-	ret = len;
-	follow_pfnmap_end(&args);
-out_unmap:
-	iounmap(maddr);
-
-	return ret;
+	return total_copied;
 }
 EXPORT_SYMBOL_GPL(generic_access_phys);
 #endif
