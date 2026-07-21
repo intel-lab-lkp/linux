@@ -8,10 +8,13 @@
  * This code is licenced under the GPL.
  */
 
+#include <linux/atomic.h>
 #include <linux/cpu.h>
 #include <linux/cpuidle.h>
+#include <linux/init.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/pm_qos.h>
 
 #include "cpuidle.h"
@@ -21,6 +24,61 @@ char param_governor[CPUIDLE_NAME_LEN];
 LIST_HEAD(cpuidle_governors);
 struct cpuidle_governor *cpuidle_curr_governor;
 struct cpuidle_governor *cpuidle_prev_governor;
+
+/*
+ * Per-CPU generation bumped to invalidate that CPU's cached latency
+ * constraint.  Consumers of the generation are added in later changes.
+ */
+static DEFINE_PER_CPU(atomic_t, latency_req_gen);
+
+static void cpuidle_latency_req_invalidate_cpu(unsigned int cpu)
+{
+	atomic_inc(per_cpu_ptr(&latency_req_gen, cpu));
+}
+
+static void cpuidle_latency_req_invalidate_all(void)
+{
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu)
+		cpuidle_latency_req_invalidate_cpu(cpu);
+}
+
+static int cpuidle_global_qos_notify(struct notifier_block *nb,
+				     unsigned long action, void *data)
+{
+	cpuidle_latency_req_invalidate_all();
+	return NOTIFY_OK;
+}
+
+static struct notifier_block cpuidle_latency_qos_nb = {
+	.notifier_call = cpuidle_global_qos_notify,
+};
+
+#ifdef CONFIG_PM_QOS_CPU_SYSTEM_WAKEUP
+static struct notifier_block cpuidle_wakeup_qos_nb = {
+	.notifier_call = cpuidle_global_qos_notify,
+};
+#endif
+
+static int __init cpuidle_latency_req_init(void)
+{
+	int ret;
+
+	ret = cpu_latency_qos_add_notifier(&cpuidle_latency_qos_nb);
+	if (ret)
+		return ret;
+
+#ifdef CONFIG_PM_QOS_CPU_SYSTEM_WAKEUP
+	ret = cpu_wakeup_latency_qos_add_notifier(&cpuidle_wakeup_qos_nb);
+	if (ret) {
+		cpu_latency_qos_remove_notifier(&cpuidle_latency_qos_nb);
+		return ret;
+	}
+#endif
+	return 0;
+}
+core_initcall(cpuidle_latency_req_init);
 
 /**
  * cpuidle_find_governor - finds a governor of the specified name
