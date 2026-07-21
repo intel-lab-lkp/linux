@@ -924,7 +924,7 @@ static void hwp_init(struct fman_hwp_regs __iomem *hwp_rg)
 	iowrite32be(HWP_RPIMAC_PEN, &hwp_rg->fmprrpimac);
 }
 
-static int enable(struct fman *fman, struct fman_cfg *cfg)
+static int enable(struct fman *fman)
 {
 	u32 cfg_reg = 0;
 
@@ -936,7 +936,8 @@ static int enable(struct fman *fman, struct fman_cfg *cfg)
 	cfg_reg = QMI_CFG_EN_COUNTERS;
 
 	/* Set enqueue and dequeue thresholds */
-	cfg_reg |= (cfg->qmi_def_tnums_thresh << 8) | cfg->qmi_def_tnums_thresh;
+	cfg_reg |= (fman->state->qmi_def_tnums_thresh << 8) |
+		   fman->state->qmi_def_tnums_thresh;
 
 	iowrite32be(BMI_INIT_START, &fman->bmi_regs->fmbm_init);
 	iowrite32be(cfg_reg | QMI_CFG_ENQ_EN | QMI_CFG_DEQ_EN,
@@ -2000,14 +2001,7 @@ static int fman_init(struct fman *fman)
 		return -EINVAL;
 	}
 
-	err = enable(fman, cfg);
-	if (err != 0)
-		return err;
-
 	enable_time_stamp(fman);
-
-	kfree(fman->cfg);
-	fman->cfg = NULL;
 
 	return 0;
 }
@@ -2695,7 +2689,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	void __iomem *base_addr;
 	struct resource *res;
 	u32 val, range[2];
-	int err, irq;
+	int err;
 	struct clk *clk;
 	u32 clk_rate;
 
@@ -2717,7 +2711,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	err = platform_get_irq(of_dev, 0);
 	if (err < 0)
 		goto fman_node_put;
-	irq = err;
+	fman->dts_params.irq = err;
 
 	/* Get the FM error interrupt */
 	err = platform_get_irq(of_dev, 1);
@@ -2773,25 +2767,6 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 
 	of_node_put(muram_node);
 
-	err = devm_request_irq(&of_dev->dev, irq, fman_irq, IRQF_SHARED,
-			       "fman", fman);
-	if (err < 0) {
-		dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
-			__func__, irq, err);
-		goto fman_free;
-	}
-
-	if (fman->dts_params.err_irq != 0) {
-		err = devm_request_irq(&of_dev->dev, fman->dts_params.err_irq,
-				       fman_err_irq, IRQF_SHARED,
-				       "fman-err", fman);
-		if (err < 0) {
-			dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
-				__func__, fman->dts_params.err_irq, err);
-			goto fman_free;
-		}
-	}
-
 	base_addr = devm_platform_get_and_ioremap_resource(of_dev, 0, &res);
 	if (IS_ERR(base_addr)) {
 		err = PTR_ERR(base_addr);
@@ -2846,6 +2821,49 @@ static int fman_probe(struct platform_device *of_dev)
 	if (fman_init(fman) != 0) {
 		dev_err(dev, "%s: FMan init failed\n", __func__);
 		return -EINVAL;
+	}
+
+	/* Register IRQ handlers only after initialization is complete.
+	 * This prevents two issues:
+	 * 1) Pre-init NULL dereference: is_init_done(NULL) returns true,
+	 *    so a shared-IRQ spurious firing before fpm_regs is set would
+	 *    dereference NULL.
+	 * 2) Use-after-free on probe failure: fman was kzalloc'd (not devm),
+	 *    so on error paths kfree(fman) ran before devm_free_irq, leaving
+	 *    a window where the handler could fire with a freed dev_id.
+	 * By registering here, both problems are eliminated.
+	 */
+	err = devm_request_irq(dev, fman->dts_params.irq, fman_irq,
+			       IRQF_SHARED, "fman", fman);
+	if (err < 0) {
+		dev_err(dev, "%s: irq %d allocation failed (error = %d)\n",
+			__func__, fman->dts_params.irq, err);
+		return err;
+	}
+
+	if (fman->dts_params.err_irq != 0) {
+		err = devm_request_irq(dev, fman->dts_params.err_irq,
+				       fman_err_irq, IRQF_SHARED,
+				       "fman-err", fman);
+		if (err < 0) {
+			dev_err(dev, "%s: irq %d allocation failed (error = %d)\n",
+				__func__, fman->dts_params.err_irq, err);
+			return err;
+		}
+	}
+
+	/* Free the config structure before enabling the hardware.
+	 * is_init_done() uses cfg == NULL to indicate init is complete,
+	 * so the IRQ handlers will properly process interrupts once
+	 * the hardware is enabled below.
+	 */
+	kfree(fman->cfg);
+	fman->cfg = NULL;
+
+	err = enable(fman);
+	if (err != 0) {
+		dev_err(dev, "%s: FMan enable failed\n", __func__);
+		return err;
 	}
 
 	if (fman->dts_params.err_irq == 0) {
