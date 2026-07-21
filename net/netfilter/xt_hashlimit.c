@@ -244,6 +244,7 @@ dsthash_alloc_init(struct xt_hashlimit_htable *ht,
 	} else
 		ent = kmem_cache_alloc(hashlimit_cachep, GFP_ATOMIC);
 	if (ent) {
+		memset(&ent->rateinfo, 0, sizeof(ent->rateinfo));
 		memcpy(&ent->dst, dst, sizeof(ent->dst));
 		spin_lock_init(&ent->lock);
 
