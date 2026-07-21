@@ -350,6 +350,33 @@ static int add_changeset_property(struct overlay_changeset *ovcs,
 		if (prop)
 			return -EINVAL;
 		new_prop = dup_and_fixup_symbol_prop(ovcs, overlay_prop);
+	} else if (target->np->parent &&
+		   of_node_is_root(target->np->parent) &&
+		   of_node_name_eq(target->np, "aliases") &&
+		   overlay_prop->length >= sizeof("/fragment@") &&
+		   overlay_prop->value &&
+		   strnlen(overlay_prop->value, overlay_prop->length) <
+			overlay_prop->length &&
+		   !strncmp(overlay_prop->value, "/fragment@",
+			    strlen("/fragment@"))) {
+		/*
+		 * /aliases property values that reference a labeled node
+		 * inside this overlay are rendered by dtc as string paths
+		 * "/fragment@N/__overlay__/..." — the overlay's internal
+		 * layout rather than where the node lives after apply.
+		 * Reuse dup_and_fixup_symbol_prop() (which already handles
+		 * this rewrite for /__symbols__) so of_alias_get_id() can
+		 * resolve the value in the live tree.
+		 *
+		 * The property-value shape (non-empty, null-terminated
+		 * within pp->length, prefix "/fragment@") is validated
+		 * above so a NULL return from dup_and_fixup_symbol_prop()
+		 * here means -ENOMEM, not "not our shape"; let the shared
+		 * -ENOMEM check below handle it rather than falling back
+		 * to a raw dup that would inject an unresolvable path
+		 * into the live tree.
+		 */
+		new_prop = dup_and_fixup_symbol_prop(ovcs, overlay_prop);
 	} else {
 		new_prop = __of_prop_dup(overlay_prop, GFP_KERNEL);
 	}
