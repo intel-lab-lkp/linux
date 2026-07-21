@@ -706,7 +706,7 @@ static int __maybe_unused fsl_samsung_hdmi_phy_suspend(struct device *dev)
 {
 	struct fsl_samsung_hdmi_phy *phy = dev_get_drvdata(dev);
 
-	clk_disable_unprepare(phy->apbclk);
+	clk_disable(phy->apbclk);
 
 	return 0;
 }
@@ -716,7 +716,7 @@ static int __maybe_unused fsl_samsung_hdmi_phy_resume(struct device *dev)
 	struct fsl_samsung_hdmi_phy *phy = dev_get_drvdata(dev);
 	int ret = 0;
 
-	ret = clk_prepare_enable(phy->apbclk);
+	ret = clk_enable(phy->apbclk);
 	if (ret) {
 		dev_err(phy->dev, "failed to enable apbclk\n");
 		return ret;
