@@ -2207,13 +2207,13 @@ static int trf7970a_probe(struct spi_device *spi)
 err_shutdown:
 	trf7970a_shutdown(trf);
 err_free_ddev:
+	cancel_delayed_work_sync(&trf->timeout_work);
 	nfc_digital_free_device(trf->ddev);
 err_disable_vddio_regulator:
 	regulator_disable(trf->vddio_regulator);
 err_disable_vin_regulator:
 	regulator_disable(trf->vin_regulator);
 err_destroy_lock:
-	mutex_destroy(&trf->lock);
 	return ret;
 }
 
@@ -2227,13 +2227,13 @@ static void trf7970a_remove(struct spi_device *spi)
 
 	mutex_unlock(&trf->lock);
 
+	cancel_delayed_work_sync(&trf->timeout_work);
+
 	nfc_digital_unregister_device(trf->ddev);
 	nfc_digital_free_device(trf->ddev);
 
 	regulator_disable(trf->vddio_regulator);
 	regulator_disable(trf->vin_regulator);
-
-	mutex_destroy(&trf->lock);
 }
 
 #ifdef CONFIG_PM_SLEEP
