@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <kunit/visibility.h>
 
 #include "of_private.h"
 
@@ -27,6 +28,7 @@ static void of_node_release(struct kobject *kobj)
 const struct kobj_type of_node_ktype = {
 	.release = of_node_release,
 };
+EXPORT_SYMBOL_IF_KUNIT(of_node_ktype);
 
 static ssize_t of_node_property_read(struct file *filp, struct kobject *kobj,
 				const struct bin_attribute *bin_attr, char *buf,
