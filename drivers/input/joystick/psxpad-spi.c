@@ -301,6 +301,7 @@ static int psxpad_spi_probe(struct spi_device *spi)
 	/* input poll device settings */
 	pad->idev = idev;
 	pad->spi = spi;
+	spi_set_drvdata(spi, pad);
 
 	/* input device settings */
 	input_set_drvdata(idev, pad);
