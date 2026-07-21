@@ -105,76 +105,27 @@ ttm_backup_backup_folio(struct file *backup, struct folio *folio,
 			gfp_t folio_gfp, gfp_t alloc_gfp,
 			pgoff_t *nr_pages_backed)
 {
-	struct address_space *mapping = backup->f_mapping;
-	int nr_pages = 1 << order;
-	struct folio *to_folio;
-	int ret, i;
+	unsigned int backup_order = order;
+	int err;
 
-	*nr_pages_backed = 0;
+	/*
+	 * Fault injection: back up only the first half of the folio to
+	 * simulate a mid-compound OOM. The caller sees *nr_pages_backed
+	 * < (1 << order) on success and drives its reactive-split path
+	 * exactly as it would on a real short return. order == 0 cannot
+	 * be shrunk further, so injection is skipped in that case.
+	 */
+	if (IS_ENABLED(CONFIG_FAULT_INJECTION) && order &&
+	    ttm_backup_fault_inject_folio())
+		backup_order = order - 1;
 
-	for (i = 0; i < nr_pages; ) {
-		int to_nr, j;
+	err = shmem_backup_folio(folio, backup, idx, alloc_gfp, backup_order,
+				 nr_pages_backed, writeback);
 
-		/*
-		 * Only inject past the first subpage so *nr_pages_backed is
-		 * always > 0 here, matching a genuine mid-compound -ENOMEM
-		 * and driving the caller's reactive split fallback instead
-		 * of an early, no-progress failure.
-		 */
-		if (IS_ENABLED(CONFIG_FAULT_INJECTION) && i &&
-		    ttm_backup_fault_inject_folio())
-			to_folio = ERR_PTR(-ENOMEM);
-		else
-			to_folio = shmem_read_folio_gfp(mapping, idx + i, alloc_gfp);
-		if (IS_ERR(to_folio)) {
-			int err = PTR_ERR(to_folio);
+	if (!err || (err == -ENOMEM && *nr_pages_backed))
+		return ttm_backup_shmem_idx_to_handle(idx);
 
-			if (err == -ENOMEM && *nr_pages_backed)
-				return ttm_backup_shmem_idx_to_handle(idx);
-
-			if (*nr_pages_backed) {
-				shmem_truncate_range(file_inode(backup),
-						     (loff_t)idx << PAGE_SHIFT,
-						     ((loff_t)(idx + i) << PAGE_SHIFT) - 1);
-				/*
-				 * The pages just truncated are no longer
-				 * backed up; don't let the caller mistake
-				 * them for valid handles.
-				 */
-				*nr_pages_backed = 0;
-			}
-			return err;
-		}
-
-		to_nr = min_t(int, nr_pages - i,
-			      folio_next_index(to_folio) - (idx + i));
-
-		folio_mark_accessed(to_folio);
-		folio_lock(to_folio);
-		folio_mark_dirty(to_folio);
-
-		for (j = 0; j < to_nr; j++)
-			copy_highpage(folio_file_page(to_folio, idx + i + j),
-				      folio_page(folio, i + j));
-
-		if (writeback && !folio_mapped(to_folio) &&
-		    folio_clear_dirty_for_io(to_folio)) {
-			folio_set_reclaim(to_folio);
-			ret = shmem_writeout(to_folio, NULL, NULL);
-			if (!folio_test_writeback(to_folio))
-				folio_clear_reclaim(to_folio);
-			if (ret == AOP_WRITEPAGE_ACTIVATE)
-				folio_unlock(to_folio);
-		} else {
-			folio_unlock(to_folio);
-		}
-
-		folio_put(to_folio);
-		i += to_nr;
-		*nr_pages_backed = i;
-	}
-
-	return ttm_backup_shmem_idx_to_handle(idx);
+	return err;
 }
 
 /**
