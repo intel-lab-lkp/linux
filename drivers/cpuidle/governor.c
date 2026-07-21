@@ -27,9 +27,17 @@ struct cpuidle_governor *cpuidle_prev_governor;
 
 /*
  * Per-CPU generation bumped to invalidate that CPU's cached latency
- * constraint.  Consumers of the generation are added in later changes.
+ * constraint.  Global QoS changes invalidate every CPU; per-CPU resume
+ * latency changes invalidate only the affected CPU.
  */
 static DEFINE_PER_CPU(atomic_t, latency_req_gen);
+
+struct cpuidle_cpu_qos_nb {
+	struct notifier_block nb;
+	unsigned int cpu;
+};
+
+static DEFINE_PER_CPU(struct cpuidle_cpu_qos_nb, cpuidle_cpu_qos_nb);
 
 static void cpuidle_latency_req_invalidate_cpu(unsigned int cpu)
 {
@@ -60,6 +68,44 @@ static struct notifier_block cpuidle_wakeup_qos_nb = {
 	.notifier_call = cpuidle_global_qos_notify,
 };
 #endif
+
+static int cpuidle_cpu_qos_notify(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	struct cpuidle_cpu_qos_nb *qos_nb =
+		container_of(nb, struct cpuidle_cpu_qos_nb, nb);
+
+	cpuidle_latency_req_invalidate_cpu(qos_nb->cpu);
+	return NOTIFY_OK;
+}
+
+int cpuidle_latency_req_notifier_register(unsigned int cpu)
+{
+	struct device *device = get_cpu_device(cpu);
+	struct cpuidle_cpu_qos_nb *qos_nb =
+		per_cpu_ptr(&cpuidle_cpu_qos_nb, cpu);
+
+	if (!device)
+		return -ENODEV;
+
+	qos_nb->cpu = cpu;
+	qos_nb->nb.notifier_call = cpuidle_cpu_qos_notify;
+	return dev_pm_qos_add_notifier(device, &qos_nb->nb,
+				       DEV_PM_QOS_RESUME_LATENCY);
+}
+
+void cpuidle_latency_req_notifier_unregister(unsigned int cpu)
+{
+	struct device *device = get_cpu_device(cpu);
+	struct cpuidle_cpu_qos_nb *qos_nb =
+		per_cpu_ptr(&cpuidle_cpu_qos_nb, cpu);
+
+	if (!device)
+		return;
+
+	dev_pm_qos_remove_notifier(device, &qos_nb->nb,
+				   DEV_PM_QOS_RESUME_LATENCY);
+}
 
 static int __init cpuidle_latency_req_init(void)
 {
