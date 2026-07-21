@@ -514,8 +514,12 @@ typedef struct { unsigned long v; } kmalloc_token_t;
 extern unsigned long random_kmalloc_seed;
 #define __kmalloc_token(...) ((kmalloc_token_t){ .v = _CODE_LOCATION_ })
 #elif defined(CONFIG_KMALLOC_PARTITION_TYPED)
+#ifdef __CHECKER__
+#define __kmalloc_token(...) ((kmalloc_token_t){ .v = 0 })
+#else /* !__CHECKER__ */
 #define __kmalloc_token(...) ((kmalloc_token_t){ .v = __builtin_infer_alloc_token(__VA_ARGS__) })
-#endif
+#endif /* __CHECKER__ */
+#endif /* CONFIG_KMALLOC_PARTITION_TYPED */
 #define DECL_TOKEN_PARAM(_token)	, kmalloc_token_t (_token)
 #define _PASS_TOKEN_PARAM(_token)	, (_token)
 #define PASS_TOKEN_PARAM(_token)	(_token)
