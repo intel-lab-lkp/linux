@@ -386,3 +386,11 @@ int change_page_attr_set_clr(unsigned long *addr, int numpages,
 out:
 	return err;
 }
+
+/*
+ * The testcases use internal knowledge of the implementation that shouldn't
+ * be exposed to the rest of the kernel. Include these directly here.
+ */
+#ifdef CONFIG_CPA_DEBUG
+#include "cpa-test.c"
+#endif
