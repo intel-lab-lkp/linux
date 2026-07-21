@@ -415,6 +415,7 @@ MODULE_DEVICE_TABLE(of, s2m_rgb_of_match_table);
 static struct platform_driver s2m_rgb_driver = {
 	.driver = {
 		.name = "s2m-rgb",
+		.of_match_table = s2m_rgb_of_match_table,
 	},
 	.probe = s2m_rgb_probe,
 	.id_table = s2m_rgb_id_table,
