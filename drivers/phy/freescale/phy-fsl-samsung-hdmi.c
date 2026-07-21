@@ -690,7 +690,16 @@ pm_put_noidle:
 
 static void fsl_samsung_hdmi_phy_remove(struct platform_device *pdev)
 {
+	int ret;
+
+	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret < 0)
+		dev_warn(&pdev->dev, "failed to resume on remove: %d\n", ret);
+
 	of_clk_del_provider(pdev->dev.of_node);
+
+	if (!ret)
+		pm_runtime_put_noidle(&pdev->dev);
 }
 
 static int __maybe_unused fsl_samsung_hdmi_phy_suspend(struct device *dev)
