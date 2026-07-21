@@ -27,6 +27,27 @@ struct cci_reg_sequence {
 	u64 val;
 };
 
+/**
+ * struct cci_regmap_config - Optional configuration for CCI I2C regmap creation
+ *
+ * @reg_addr_bits: Number of bits in the register address.
+ * @use_single_read: Force single-register read transactions.
+ * @use_single_write: Force single-register write transactions.
+ *
+ * This structure describes optional transport-specific regmap configuration for
+ * I2C devices using the cci_*() register access helpers.
+ *
+ * The CCI helper initializes the underlying regmap with the CCI defaults:
+ * 16-bit or 8-bit register addresses as selected by @reg_addr_bits, 8-bit
+ * register values, big-endian register address formatting, and disabled
+ * regmap locking.
+ */
+struct cci_regmap_config {
+	int reg_addr_bits;
+	bool use_single_read;
+	bool use_single_write;
+};
+
 /*
  * Macros to define register address with the register width encoded
  * into the higher bits.
@@ -124,6 +145,20 @@ int cci_multi_reg_write(struct regmap *map, const struct cci_reg_sequence *regs,
 
 #if IS_ENABLED(CONFIG_V4L2_CCI_I2C)
 /**
+ * devm_cci_regmap_init_i2c_cfg() - Create regmap with a custom config to use
+ *                                  with cci_*() register access functions
+ *
+ * @client: i2c_client to create the regmap for
+ * @config: Configuration for CCI register map.
+ *
+ * Note the memory for the created regmap is devm() managed, tied to the client.
+ *
+ * Return: a pointer to the regmap on success, or an ERR_PTR() encoded error on failure.
+ */
+struct regmap *devm_cci_regmap_init_i2c_cfg(struct i2c_client *client,
+					    const struct cci_regmap_config *config);
+
+/**
  * devm_cci_regmap_init_i2c() - Create regmap to use with cci_*() register
  *                              access functions
  *
@@ -132,7 +167,7 @@ int cci_multi_reg_write(struct regmap *map, const struct cci_reg_sequence *regs,
  *
  * Note the memory for the created regmap is devm() managed, tied to the client.
  *
- * Return: %0 on success or a negative error code on failure.
+ * Return: a pointer to the regmap on success, or an ERR_PTR() encoded error on failure.
  */
 struct regmap *devm_cci_regmap_init_i2c(struct i2c_client *client,
 					int reg_addr_bits);

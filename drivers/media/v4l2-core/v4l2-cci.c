@@ -183,17 +183,32 @@ int cci_multi_reg_write(struct regmap *map, const struct cci_reg_sequence *regs,
 EXPORT_SYMBOL_GPL(cci_multi_reg_write);
 
 #if IS_ENABLED(CONFIG_V4L2_CCI_I2C)
-struct regmap *devm_cci_regmap_init_i2c(struct i2c_client *client,
-					int reg_addr_bits)
+struct regmap *devm_cci_regmap_init_i2c_cfg(struct i2c_client *client,
+					    const struct cci_regmap_config *cci_cfg)
 {
-	struct regmap_config config = {
-		.reg_bits = reg_addr_bits,
+	const struct regmap_config config = {
+		.reg_bits = cci_cfg->reg_addr_bits,
 		.val_bits = 8,
 		.reg_format_endian = REGMAP_ENDIAN_BIG,
 		.disable_locking = true,
+		.use_single_read = cci_cfg->use_single_read,
+		.use_single_write = cci_cfg->use_single_write,
 	};
 
 	return devm_regmap_init_i2c(client, &config);
+}
+EXPORT_SYMBOL_GPL(devm_cci_regmap_init_i2c_cfg);
+
+struct regmap *devm_cci_regmap_init_i2c(struct i2c_client *client,
+					int reg_addr_bits)
+{
+	const struct cci_regmap_config cci_cfg = {
+		.reg_addr_bits = reg_addr_bits,
+		.use_single_read = false,
+		.use_single_write = false,
+	};
+
+	return devm_cci_regmap_init_i2c_cfg(client, &cci_cfg);
 }
 EXPORT_SYMBOL_GPL(devm_cci_regmap_init_i2c);
 #endif
