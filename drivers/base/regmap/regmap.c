@@ -3296,11 +3296,9 @@ static int _regmap_update_bits(struct regmap *map, unsigned int reg,
  * Perform a read/modify/write cycle on a register map with change, async, force
  * options.
  *
- * If async is true:
- *
- * With most buses the read must be done synchronously so this is most useful
- * for devices with a cache which do not need to interact with the hardware to
- * determine the current register value.
+ * If async is true, queue an asynchronous write. However, reads are
+ * synchronous on most buses, so they will still block unless the device
+ * uses a register cache.
  *
  * Returns zero for success, a negative number on error.
  */
