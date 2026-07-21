@@ -1239,6 +1239,17 @@ tegra241_cmdqv_probe(struct arm_smmu_device *smmu)
 }
 #endif /* CONFIG_TEGRA241_CMDQV */
 
+#ifdef CONFIG_ARM_SMMU_V3_KEXEC
+int arm_smmu_kexec_parse_strtab_2lvl(struct arm_smmu_device *smmu, u32 cfg_reg,
+				     phys_addr_t base, u32 *num_l1_ents);
+int arm_smmu_kexec_parse_strtab_linear(struct arm_smmu_device *smmu,
+				       u32 cfg_reg, phys_addr_t base,
+				       u32 *num_ents);
+int arm_smmu_kexec_check_strtab_l1_desc(struct arm_smmu_device *smmu,
+					u64 l1_desc, u32 idx,
+					phys_addr_t *l2_base);
+#endif /* CONFIG_ARM_SMMU_V3_KEXEC */
+
 struct arm_vsmmu {
 	struct iommufd_viommu core;
 	struct arm_smmu_device *smmu;
