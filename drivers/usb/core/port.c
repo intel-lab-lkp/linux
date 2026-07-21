@@ -738,6 +738,14 @@ static void connector_unbind(struct device *dev, struct device *connector, void 
 {
 	struct usb_port *port_dev = to_usb_port(dev);
 
+	/*
+	 * If a USB device is still connected to the port, let the
+	 * Type-C connector know it's going away before we drop our
+	 * reference to it.
+	 */
+	if (port_dev->child)
+		typec_deattach(data, &port_dev->child->dev);
+
 	sysfs_remove_link(&connector->kobj, dev_name(dev));
 	sysfs_remove_link(&dev->kobj, "connector");
 	port_dev->connector = NULL;
