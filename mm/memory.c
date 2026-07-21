@@ -4903,6 +4903,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 			vmf->page = softleaf_to_page(entry);
 			ret = remove_device_exclusive_entry(vmf);
 		} else if (softleaf_is_device_private(entry)) {
+			struct folio *fault_folio;
+
 			if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
 				/*
 				 * migrate_to_ram is not yet ready to operate
@@ -4914,6 +4916,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 			}
 
 			vmf->page = softleaf_to_page(entry);
+			fault_folio = page_folio(vmf->page);
 			vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
 					vmf->address, &vmf->ptl);
 			if (unlikely(!vmf->pte ||
@@ -4925,15 +4928,15 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 			 * Get a page reference while we know the page can't be
 			 * freed.
 			 */
-			if (trylock_page(vmf->page)) {
+			if (folio_trylock(fault_folio)) {
 				struct dev_pagemap *pgmap;
 
-				get_page(vmf->page);
+				folio_get(fault_folio);
 				pte_unmap_unlock(vmf->pte, vmf->ptl);
 				pgmap = page_pgmap(vmf->page);
 				ret = pgmap->ops->migrate_to_ram(vmf);
-				unlock_page(vmf->page);
-				put_page(vmf->page);
+				folio_unlock(fault_folio);
+				folio_put(fault_folio);
 			} else {
 				pte_unmap(vmf->pte);
 				softleaf_entry_wait_on_locked(entry, vmf->ptl);
