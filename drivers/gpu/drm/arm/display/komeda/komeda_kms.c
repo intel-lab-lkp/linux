@@ -276,7 +276,10 @@ struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)
 {
 	struct komeda_kms_dev *kms;
 	struct drm_device *drm;
+	struct drm_encoder *encoder;
 	int err;
+	/* Bitmap of all encoders, assigned to each encoder's possible_clones. */
+	u32 clone_mask = 0;
 
 	kms = devm_drm_dev_alloc(mdev->dev, &komeda_kms_driver,
 				 struct komeda_kms_dev, base);
@@ -310,6 +313,23 @@ struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)
 		goto cleanup_mode_config;
 
 	drm_mode_config_reset(drm);
+
+	/*
+	 * Build the full possible_clones mask once. drm_encoder_index()
+	 * returns the bit position assigned to each encoder and BIT() converts
+	 * that index into the corresponding mask value.
+	 *
+	 * Komeda does not have per-encoder clone restrictions, so every encoder
+	 * gets the same mask and is advertised as clone-compatible with all
+	 * other registered encoders.
+	 */
+	drm_for_each_encoder(encoder, drm) {
+		clone_mask |= BIT(drm_encoder_index(encoder));
+	}
+
+	drm_for_each_encoder(encoder, drm) {
+		encoder->possible_clones = clone_mask;
+	}
 
 	err = devm_request_irq(drm->dev, mdev->irq,
 			       komeda_kms_irq_handler, IRQF_SHARED,
