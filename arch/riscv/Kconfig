@@ -572,6 +572,28 @@ config RISCV_ISA_SUPM
 	  If this option is disabled, userspace will be unable to use
 	  the prctl(PR_{SET,GET}_TAGGED_ADDR_CTRL) API.
 
+config RISCV_SSPM
+	bool
+	depends on 64BIT && RISCV_SBI
+	default y
+	help
+	  Provide internal supervisor pointer-masking lifecycle support for
+	  hibernation and for resetting firmware state retained across kexec.
+
+config RISCV_ISA_SSPM
+	bool "Sspm extension for supervisor pointer masking"
+	depends on RISCV_SSPM
+	default y
+	help
+	  Allow an in-kernel consumer to enable
+	  supervisor-mode pointer masking with PMLEN=7 through SBI FWFT.
+
+	  Pointer masking remains disabled until a kernel consumer explicitly
+	  requests it. Internal reset and hibernation support remains available
+	  when this consumer option is disabled.
+
+	  If unsure, say Y.
+
 config RISCV_ISA_SVNAPOT
 	bool "Svnapot extension support for supervisor mode NAPOT pages"
 	depends on 64BIT && MMU

@@ -12,6 +12,7 @@
 #include <asm/page.h>		/* For PAGE_MASK */
 #include <linux/libfdt.h>	/* For fdt_check_header() */
 #include <asm/set_memory.h>	/* For set_memory_x() */
+#include <asm/sspm.h>
 #include <linux/compiler.h>	/* For unreachable() */
 #include <linux/cpu.h>		/* For cpu_down() */
 #include <linux/reboot.h>
@@ -161,8 +162,12 @@ machine_kexec(struct kimage *image)
 	riscv_kexec_method kexec_method = NULL;
 
 #ifdef CONFIG_SMP
-	WARN(smp_crash_stop_failed(),
-		"Some CPUs may be stale, kdump will be unreliable.\n");
+	bool stop_failed = smp_crash_stop_failed();
+
+	WARN(stop_failed,
+	     "Some CPUs may be stale, kdump will be unreliable.\n");
+	if (stop_failed && riscv_sspm_may_be_active())
+		panic("Sspm: cannot hand off with stale PMLEN state");
 #endif
 
 	if (image->type != KEXEC_TYPE_CRASH)
@@ -179,6 +184,7 @@ machine_kexec(struct kimage *image)
 
 	/* Jump to the relocation code */
 	pr_notice("Bye...\n");
+	riscv_sspm_reset_local_or_panic("kexec boot hart");
 	kexec_method(first_ind_entry, jump_addr, fdt_addr,
 		     this_hart_id, kernel_map.va_pa_offset);
 	unreachable();

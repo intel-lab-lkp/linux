@@ -34,6 +34,7 @@
 #include <asm/tlbflush.h>
 #include <asm/sections.h>
 #include <asm/smp.h>
+#include <asm/sspm.h>
 #include <uapi/asm/hwcap.h>
 #include <asm/vector.h>
 
@@ -210,6 +211,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 
 void __init smp_cpus_done(unsigned int max_cpus)
 {
+	riscv_sspm_smp_cpus_done();
 }
 
 /*
@@ -229,13 +231,16 @@ asmlinkage __visible void smp_callin(void)
 			return;
 	}
 
-	/* All kernel threads share the same mm context.  */
-	mmgrab(mm);
-	current->active_mm = mm;
+	if (riscv_sspm_prepare_cpu())
+		return;
 
 #ifdef CONFIG_HOTPLUG_PARALLEL
 	cpuhp_ap_sync_alive();
 #endif
+
+	/* All kernel threads share the same mm context.  */
+	mmgrab(mm);
+	current->active_mm = mm;
 
 	store_cpu_topology(curr_cpuid);
 	notify_cpu_starting(curr_cpuid);

@@ -34,6 +34,7 @@
 #include <asm/set_memory.h>
 #include <asm/sections.h>
 #include <asm/sbi.h>
+#include <asm/sspm.h>
 #include <asm/tlbflush.h>
 #include <asm/thread_info.h>
 #include <asm/kasan.h>
@@ -315,6 +316,7 @@ void __init setup_arch(char **cmdline_p)
 
 	early_ioremap_setup();
 	sbi_init();
+	riscv_sspm_boot_reset();
 	jump_label_init();
 	parse_early_param();
 

@@ -15,6 +15,7 @@
 #include <asm/cpu_ops.h>
 #include <asm/numa.h>
 #include <asm/smp.h>
+#include <asm/sspm.h>
 
 bool cpu_has_hotplug(unsigned int cpu)
 {
@@ -67,8 +68,8 @@ void arch_cpuhp_cleanup_dead_cpu(unsigned int cpu)
 void __noreturn arch_cpu_idle_dead(void)
 {
 	idle_task_exit();
-
 	cpuhp_ap_report_dead();
+	riscv_sspm_reset_local_or_panic("offline hart");
 
 	cpu_ops->cpu_stop();
 	/* It should never reach here */

@@ -27,6 +27,7 @@
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
 #include <asm/cpu_ops.h>
+#include <asm/sspm.h>
 
 enum ipi_message_type {
 	IPI_RESCHEDULE,
@@ -92,6 +93,7 @@ static atomic_t waiting_for_crash_ipi = ATOMIC_INIT(0);
 static inline void ipi_cpu_crash_stop(unsigned int cpu, struct pt_regs *regs)
 {
 	crash_save_cpu(regs, cpu);
+	riscv_sspm_reset_local_or_panic("crash secondary hart");
 
 	atomic_dec(&waiting_for_crash_ipi);
 
