@@ -694,6 +694,13 @@ void ieee802154_if_remove(struct ieee802154_sub_if_data *sdata)
 	mutex_unlock(&sdata->local->iflist_mtx);
 
 	synchronize_rcu();
+
+	/* After the grace period no new rx_mac_cmd_list entry can point at
+	 * @sdata; drop the ones already queued before it is freed below, as
+	 * the mac_wq worker derefs mac_pkt->sdata with no liveness check.
+	 */
+	mac802154_flush_queued_mac_cmds(sdata->local, sdata);
+
 	unregister_netdevice(sdata->dev);
 }
 

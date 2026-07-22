@@ -91,6 +91,7 @@ ieee802154_alloc_hw(size_t priv_data_len, const struct ieee802154_ops *ops)
 	INIT_LIST_HEAD(&local->interfaces);
 	INIT_LIST_HEAD(&local->rx_beacon_list);
 	INIT_LIST_HEAD(&local->rx_mac_cmd_list);
+	spin_lock_init(&local->rx_mac_cmd_lock);
 	mutex_init(&local->iflist_mtx);
 
 	tasklet_setup(&local->tasklet, ieee802154_tasklet_handler);
@@ -276,6 +277,12 @@ void ieee802154_unregister_hw(struct ieee802154_hw *hw)
 
 	tasklet_kill(&local->tasklet);
 	flush_workqueue(local->workqueue);
+
+	/* Drain rx_mac_cmd_list before ieee802154_remove_interfaces()
+	 * frees every sdata: the mac_wq worker derefs mac_pkt->sdata and
+	 * is not covered by the flush above (that is the data workqueue).
+	 */
+	mac802154_flush_queued_mac_cmds(local, NULL);
 
 	rtnl_lock();
 

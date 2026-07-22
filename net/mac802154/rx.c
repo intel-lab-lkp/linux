@@ -76,8 +76,12 @@ void mac802154_rx_mac_cmd_worker(struct work_struct *work)
 	u8 mac_cmd;
 	int rc;
 
+	spin_lock_bh(&local->rx_mac_cmd_lock);
 	mac_pkt = list_first_entry_or_null(&local->rx_mac_cmd_list,
 					   struct cfg802154_mac_pkt, node);
+	if (mac_pkt)
+		list_del(&mac_pkt->node);
+	spin_unlock_bh(&local->rx_mac_cmd_lock);
 	if (!mac_pkt)
 		return;
 
@@ -123,9 +127,46 @@ void mac802154_rx_mac_cmd_worker(struct work_struct *work)
 	}
 
 out:
-	list_del(&mac_pkt->node);
 	kfree_skb(mac_pkt->skb);
 	kfree(mac_pkt);
+}
+
+/**
+ * mac802154_flush_queued_mac_cmds - drop pending rx_mac_cmd_list work
+ * @local: the mac802154 device the queue belongs to
+ * @sdata: interface being torn down, or %NULL to flush unconditionally
+ *
+ * Each queued &struct cfg802154_mac_pkt stashes a raw pointer to the
+ * interface it was received on, which mac802154_rx_mac_cmd_worker() later
+ * dereferences without checking whether that interface is still alive.
+ * Callers must invoke this before freeing @sdata (or before freeing every
+ * interface, when @sdata is %NULL) so the worker never runs against freed
+ * memory. The list is drained under rx_mac_cmd_lock, then cancel_work_sync()
+ * waits out a run that already dequeued a matching packet before the drain.
+ */
+void mac802154_flush_queued_mac_cmds(struct ieee802154_local *local,
+				     struct ieee802154_sub_if_data *sdata)
+{
+	struct cfg802154_mac_pkt *mac_pkt, *tmp;
+
+	spin_lock_bh(&local->rx_mac_cmd_lock);
+	list_for_each_entry_safe(mac_pkt, tmp, &local->rx_mac_cmd_list, node) {
+		if (sdata && mac_pkt->sdata != sdata)
+			continue;
+
+		list_del(&mac_pkt->node);
+		kfree_skb(mac_pkt->skb);
+		kfree(mac_pkt);
+	}
+	spin_unlock_bh(&local->rx_mac_cmd_lock);
+
+	cancel_work_sync(&local->rx_mac_cmd_work);
+
+	/* Other interfaces on @local may still have entries pending. */
+	spin_lock_bh(&local->rx_mac_cmd_lock);
+	if (!list_empty(&local->rx_mac_cmd_list))
+		queue_work(local->mac_wq, &local->rx_mac_cmd_work);
+	spin_unlock_bh(&local->rx_mac_cmd_lock);
 }
 
 static int
@@ -233,7 +274,11 @@ ieee802154_subif_frame(struct ieee802154_sub_if_data *sdata,
 
 		mac_pkt->skb = skb_get(skb);
 		mac_pkt->sdata = sdata;
+
+		spin_lock(&sdata->local->rx_mac_cmd_lock);
 		list_add_tail(&mac_pkt->node, &sdata->local->rx_mac_cmd_list);
+		spin_unlock(&sdata->local->rx_mac_cmd_lock);
+
 		queue_work(sdata->local->mac_wq, &sdata->local->rx_mac_cmd_work);
 		return NET_RX_SUCCESS;
 
