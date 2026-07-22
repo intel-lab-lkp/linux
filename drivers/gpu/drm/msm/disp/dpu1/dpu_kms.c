@@ -603,7 +603,7 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 		if (!priv->kms->dsi[i])
 			continue;
 
-		display = msm_dsi_get_display(priv->kms->dsi[i]);
+		display = priv->kms->dsi[i];
 
 		if (!display->funcs->needs_encoder(display))
 			continue;

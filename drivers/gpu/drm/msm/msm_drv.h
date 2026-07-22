@@ -324,14 +324,9 @@ struct msm_display {
 
 struct hdmi;
 #ifdef CONFIG_DRM_MSM_HDMI
-struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi);
 void __init msm_hdmi_register(void);
 void __exit msm_hdmi_unregister(void);
 #else
-static inline struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)
-{
-	return NULL;
-}
 static inline void __init msm_hdmi_register(void) {}
 static inline void __exit msm_hdmi_unregister(void) {}
 #endif
@@ -342,7 +337,6 @@ int dsi_dev_attach(struct platform_device *pdev);
 void dsi_dev_detach(struct platform_device *pdev);
 void __init msm_dsi_register(void);
 void __exit msm_dsi_unregister(void);
-struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
 #else
 static inline void __init msm_dsi_register(void)
 {
@@ -350,17 +344,12 @@ static inline void __init msm_dsi_register(void)
 static inline void __exit msm_dsi_unregister(void)
 {
 }
-static inline struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
-{
-	return NULL;
-}
 #endif
 
 struct msm_dp;
 #ifdef CONFIG_DRM_MSM_DP
 int __init msm_dp_register(void);
 void __exit msm_dp_unregister(void);
-struct msm_display *msm_dp_get_display(struct msm_dp *dp_display);
 
 #else
 static inline int __init msm_dp_register(void)
@@ -369,10 +358,6 @@ static inline int __init msm_dp_register(void)
 }
 static inline void __exit msm_dp_unregister(void)
 {
-}
-static inline struct msm_display *msm_dp_get_display(struct msm_dp *dp_display)
-{
-	return NULL;
 }
 
 #endif

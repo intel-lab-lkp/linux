@@ -261,11 +261,11 @@ static struct msm_display *dpu_encoder_get_display(struct drm_device *dev,
 
 	switch (disp_info->intf_type) {
 	case INTF_DP:
-		return msm_dp_get_display(priv->kms->dp[index]);
+		return priv->kms->dp[index];
 	case INTF_DSI:
-		return msm_dsi_get_display(priv->kms->dsi[index]);
+		return priv->kms->dsi[index];
 	case INTF_HDMI:
-		return msm_hdmi_get_display(priv->kms->hdmi);
+		return priv->kms->hdmi;
 	default:
 		return NULL;
 	}

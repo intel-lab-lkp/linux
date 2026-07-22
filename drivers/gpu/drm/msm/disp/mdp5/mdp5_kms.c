@@ -361,7 +361,7 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
 			break;
 		}
 
-		display = msm_dsi_get_display(priv->kms->dsi[dsi_id]);
+		display = priv->kms->dsi[dsi_id];
 		priv->kms->dsi_encoder[dsi_id] = encoder;
 		mdp5_encoder_set_intf_mode(encoder,
 					   display->funcs->is_cmd_mode(display));

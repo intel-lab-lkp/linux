@@ -286,21 +286,20 @@ static int msm_kms_init_connectors(struct drm_device *ddev)
 	int i, ret;
 
 	for (i = 0; i < ARRAY_SIZE(kms->dsi); i++) {
-		ret = msm_display_modeset_init(msm_dsi_get_display(kms->dsi[i]),
-					       ddev, kms->dsi_encoder[i]);
+		ret = msm_display_modeset_init(kms->dsi[i], ddev,
+					       kms->dsi_encoder[i]);
 		if (ret)
 			goto fail;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(kms->dp); i++) {
-		ret = msm_display_modeset_init(msm_dp_get_display(kms->dp[i]),
-					       ddev, kms->dp_encoder[i]);
+		ret = msm_display_modeset_init(kms->dp[i], ddev,
+					       kms->dp_encoder[i]);
 		if (ret)
 			goto fail;
 	}
 
-	ret = msm_display_modeset_init(msm_hdmi_get_display(kms->hdmi),
-				       ddev, kms->hdmi_encoder);
+	ret = msm_display_modeset_init(kms->hdmi, ddev, kms->hdmi_encoder);
 	if (ret)
 		goto fail;
 

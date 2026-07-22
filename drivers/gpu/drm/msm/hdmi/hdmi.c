@@ -276,11 +276,6 @@ static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.needs_encoder = msm_hdmi_needs_encoder,
 };
 
-struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)
-{
-	return hdmi ? &hdmi->display : NULL;
-}
-
 /*
  * The hdmi device:
  */
@@ -315,7 +310,7 @@ static int msm_hdmi_bind(struct device *dev, struct device *master, void *data)
 	if (err)
 		return err;
 	hdmi->display.funcs = &msm_hdmi_display_funcs;
-	priv->kms->hdmi = hdmi;
+	priv->kms->hdmi = &hdmi->display;
 
 	return 0;
 }

@@ -170,7 +170,7 @@ static int dsi_bind(struct device *dev, struct device *master, void *data)
 	}
 
 	msm_dsi->display.funcs = &msm_dsi_display_funcs;
-	priv->kms->dsi[msm_dsi->id] = msm_dsi;
+	priv->kms->dsi[msm_dsi->id] = &msm_dsi->display;
 
 	return 0;
 }
@@ -318,9 +318,4 @@ static const struct msm_display_funcs msm_dsi_display_funcs = {
 	.is_bonded = msm_dsi_is_bonded,
 	.needs_encoder = msm_dsi_needs_encoder,
 };
-
-struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
-{
-	return msm_dsi ? &msm_dsi->display : NULL;
-}
 

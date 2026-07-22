@@ -215,7 +215,7 @@ static int msm_dp_display_bind(struct device *dev, struct device *master,
 
 	dp->msm_dp_display.drm_dev = drm;
 	dp->msm_dp_display.display.funcs = &msm_dp_display_funcs;
-	priv->kms->dp[dp->id] = &dp->msm_dp_display;
+	priv->kms->dp[dp->id] = &dp->msm_dp_display.display;
 
 	dp->drm_dev = drm;
 	dp->aux->drm_dev = drm;
@@ -1405,11 +1405,6 @@ static const struct msm_display_funcs msm_dp_display_funcs = {
 	.is_bonded = msm_dp_display_is_bonded,
 	.needs_encoder = msm_dp_display_needs_encoder,
 };
-
-struct msm_display *msm_dp_get_display(struct msm_dp *msm_dp_display)
-{
-	return msm_dp_display ? &msm_dp_display->display : NULL;
-}
 
 void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 				 struct drm_atomic_commit *state)
