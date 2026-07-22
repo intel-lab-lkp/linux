@@ -8795,6 +8795,29 @@ static inline bool asym_fits_cpu(unsigned long util,
 }
 
 /*
+ * For reciprocal WF_SYNC handoffs, prefer the waker CPU when it has no
+ * other runnable fair task.
+ */
+static bool prefer_sync_pair_cpu(struct task_struct *p, int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if ((rq->nr_running - cfs_h_nr_delayed(rq)) != 1)
+		return false;
+
+	if (!cpumask_test_cpu(cpu, p->cpus_ptr))
+		return false;
+
+	if (sched_asym_cpucap_active()) {
+		sync_entity_load_avg(&p->se);
+		if (!task_fits_cpu(p, cpu))
+			return false;
+	}
+
+	return true;
+}
+
+/*
  * Try and locate an idle core/thread in the LLC cache domain.
  */
 static int select_idle_sibling(struct task_struct *p, int prev, int target)
@@ -9579,6 +9602,11 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		 */
 		if (want_affine && (tmp->flags & SD_WAKE_AFFINE) &&
 		    cpumask_test_cpu(prev_cpu, sched_domain_span(tmp))) {
+			if (sync &&
+			    READ_ONCE(p->last_wakee) == current &&
+			    prefer_sync_pair_cpu(p, cpu))
+				return cpu;
+
 			if (cpu != prev_cpu)
 				new_cpu = wake_affine(tmp, p, cpu, prev_cpu, sync);
 
