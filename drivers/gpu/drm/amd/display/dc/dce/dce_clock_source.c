@@ -1514,6 +1514,10 @@ static const struct clock_source_funcs dce110_clk_src_funcs = {
 	.get_dp_dto_frequency_100hz = get_dp_dto_frequency_100hz
 };
 
+/* calc_pll_cs->ctx is set only after get_ss_info_from_atombios(), unlike clk_src->base */
+#pragma push_macro("DC_LOGGER")
+#undef DC_LOGGER
+#define DC_LOGGER CTX->logger
 
 static void get_ss_info_from_atombios(
 		struct dce110_clk_src *clk_src,
@@ -1527,7 +1531,7 @@ static void get_ss_info_from_atombios(
 	struct spread_spectrum_info *ss_info_cur;
 	struct spread_spectrum_data *ss_data_cur;
 	uint32_t i;
-	DC_LOGGER_INIT();
+
 	if (ss_entries_num == NULL) {
 		DC_LOG_SYNC(
 			"Invalid entry !!!\n");
@@ -1631,6 +1635,8 @@ out_free_data:
 out_free_info:
 	kfree(ss_info);
 }
+
+#pragma pop_macro("DC_LOGGER")
 
 static void ss_info_from_atombios_create(
 	struct dce110_clk_src *clk_src)
