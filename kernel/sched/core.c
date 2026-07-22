@@ -2806,8 +2806,10 @@ do_set_cpus_allowed(struct task_struct *p, struct affinity_context *ctx)
 static DEFINE_RAW_SPINLOCK(cpu_fallback_lock);
 static bool cpu_fallback_active;
 
-static bool mark_cpu_fallback(struct task_struct *p)
+static bool mark_cpu_fallback(struct task_struct *p,
+			      const struct cpumask **fallback_mask)
 {
+	const struct cpumask *possible_mask;
 	unsigned long flags;
 	bool temporary = false;
 
@@ -2817,6 +2819,11 @@ static bool mark_cpu_fallback(struct task_struct *p)
 	raw_spin_lock_irqsave(&cpu_fallback_lock, flags);
 	if (cpu_fallback_active) {
 		p->migration_flags |= MDF_CPUHP_FALLBACK;
+		if (!cpumask_intersects(*fallback_mask, cpu_active_mask)) {
+			possible_mask = task_cpu_possible_mask(p);
+			if (cpumask_intersects(possible_mask, cpu_active_mask))
+				*fallback_mask = possible_mask;
+		}
 		temporary = true;
 	}
 	raw_spin_unlock_irqrestore(&cpu_fallback_lock, flags);
@@ -2842,7 +2849,7 @@ void set_cpus_allowed_force(struct task_struct *p, const struct cpumask *new_mas
 	};
 
 	scoped_guard (__task_rq_lock, p) {
-		if (mark_cpu_fallback(p))
+		if (mark_cpu_fallback(p, &ac.new_mask))
 			ac.flags = 0;
 		do_set_cpus_allowed(p, &ac);
 	}
