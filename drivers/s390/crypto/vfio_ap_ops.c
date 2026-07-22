@@ -1824,6 +1824,12 @@ static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
 	struct ap_matrix_mdev *m;
 
 	if (kvm->arch.crypto.crycbd) {
+		/*
+		 * Taking the kvm->arch.crypto.pqap_hook_rwsem lock while
+		 * holding the update locks (below) could result in a
+		 * deadlock condition, so let's hold the rwsem here while we
+		 * update the pqap_hook.
+		 */
 		down_write(&kvm->arch.crypto.pqap_hook_rwsem);
 		kvm->arch.crypto.pqap_hook = &matrix_mdev->pqap_hook;
 		up_write(&kvm->arch.crypto.pqap_hook_rwsem);
@@ -1833,6 +1839,10 @@ static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
 		list_for_each_entry(m, &matrix_dev->mdev_list, node) {
 			if (m != matrix_mdev && m->kvm == kvm) {
 				release_update_locks_for_kvm(kvm);
+				/* Undo the hook installation since we're failing */
+				down_write(&kvm->arch.crypto.pqap_hook_rwsem);
+				kvm->arch.crypto.pqap_hook = &m->pqap_hook;
+				up_write(&kvm->arch.crypto.pqap_hook_rwsem);
 				return -EPERM;
 			}
 		}
