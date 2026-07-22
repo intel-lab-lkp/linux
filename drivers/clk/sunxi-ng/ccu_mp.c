@@ -237,12 +237,17 @@ static int ccu_mp_set_rate(struct clk_hw *hw, unsigned long rate,
 
 	reg = readl(cmp->common.base + cmp->common.reg);
 	reg &= ~GENMASK(cmp->m.width + cmp->m.shift - 1, cmp->m.shift);
-	reg &= ~GENMASK(cmp->p.width + cmp->p.shift - 1, cmp->p.shift);
+	if (cmp->p.width)
+		reg &= ~GENMASK(cmp->p.width + cmp->p.shift - 1, cmp->p.shift);
+	if (cmp->common.features & CCU_FEATURE_UPDATE_BIT)
+		reg |= CCU_SUNXI_UPDATE_BIT;
 	reg |= (m - cmp->m.offset) << cmp->m.shift;
-	if (shift)
-		reg |= ilog2(p) << cmp->p.shift;
-	else
-		reg |= (p - cmp->p.offset) << cmp->p.shift;
+	if (cmp->p.width) {
+		if (shift)
+			reg |= ilog2(p) << cmp->p.shift;
+		else
+			reg |= (p - cmp->p.offset) << cmp->p.shift;
+	}
 
 	writel(reg, cmp->common.base + cmp->common.reg);
 
