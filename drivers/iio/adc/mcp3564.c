@@ -1122,7 +1122,9 @@ static int mcp3564_config(struct iio_dev *indio_dev, bool *use_internal_vref_att
 	 * addresses are available when multiple devices are present on the same
 	 * SPI bus with only one Chip Select line for all devices.
 	 */
-	device_property_read_u32(dev, "microchip,hw-device-address", &tmp);
+	ret = device_property_read_u32(dev, "spi-device-addr", &tmp);
+	if (ret)
+		device_property_read_u32(dev, "microchip,hw-device-address", &tmp);
 
 	if (tmp > 3) {
 		dev_err_probe(dev, tmp,
