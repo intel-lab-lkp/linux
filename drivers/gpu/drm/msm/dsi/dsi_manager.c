@@ -3,7 +3,6 @@
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  */
 
-#include "drm/drm_bridge_connector.h"
 
 #include "msm_kms.h"
 #include "dsi.h"
@@ -458,13 +457,11 @@ static const struct drm_bridge_funcs dsi_mgr_bridge_funcs = {
 };
 
 /* initialize bridge */
-int msm_dsi_manager_connector_init(struct msm_dsi *msm_dsi,
-				   struct drm_encoder *encoder)
+int msm_dsi_manager_bridge_init(struct msm_dsi *msm_dsi,
+				struct drm_encoder *encoder)
 {
-	struct drm_device *dev = msm_dsi->dev;
 	struct drm_bridge *bridge;
 	struct dsi_bridge *dsi_bridge;
-	struct drm_connector *connector;
 	int ret;
 
 	dsi_bridge = devm_drm_bridge_alloc(msm_dsi->dev->dev, struct dsi_bridge, base,
@@ -483,12 +480,6 @@ int msm_dsi_manager_connector_init(struct msm_dsi *msm_dsi,
 	ret = drm_bridge_attach(encoder, bridge, NULL, DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret)
 		return ret;
-
-	connector = drm_bridge_connector_init(dev, encoder);
-	if (IS_ERR(connector)) {
-		DRM_ERROR("Unable to create bridge connector\n");
-		return PTR_ERR(connector);
-	}
 
 	return 0;
 }

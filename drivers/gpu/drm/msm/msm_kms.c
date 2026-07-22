@@ -10,7 +10,10 @@
 #include <linux/sched/mm.h>
 #include <uapi/linux/sched/types.h>
 
+#include <drm/drm_bridge_connector.h>
+#include <drm/drm_connector.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_encoder.h>
 #include <drm/drm_mode_config.h>
 #include <drm/drm_vblank.h>
 #include <drm/clients/drm_client_setup.h>
@@ -271,15 +274,15 @@ static int msm_display_modeset_init(struct msm_display *display,
 }
 
 /*
- * Set up the bridges and connectors for the display sub-blocks, dispatching
- * through the common display interface using the encoders the backend created
- * in ->kms_init().
+ * Set up the bridge chains for the display sub-blocks, dispatching through the
+ * common display interface using the encoders the backend created in
+ * ->kms_init().
  *
- * The slave link of a bonded DSI pair shares its master's encoder and creates
- * no connector of its own; its ->modeset_init() handles that internally, so it
+ * The slave link of a bonded DSI pair shares its master's encoder and sets up
+ * no bridge of its own; its ->modeset_init() handles that internally, so it
  * needs no special-casing here.
  */
-static int msm_kms_init_connectors(struct drm_device *ddev)
+static int msm_kms_modeset_init(struct drm_device *ddev)
 {
 	struct msm_drm_private *priv = ddev->dev_private;
 	struct msm_kms *kms = priv->kms;
@@ -308,6 +311,35 @@ static int msm_kms_init_connectors(struct drm_device *ddev)
 fail:
 	DRM_DEV_ERROR(ddev->dev, "modeset_init failed: %d\n", ret);
 	return ret;
+}
+
+/* Build a bridge connector for each encoder. */
+static int msm_kms_init_connectors(struct drm_device *ddev)
+{
+	struct drm_encoder *encoder;
+
+	drm_for_each_encoder(encoder, ddev) {
+		struct drm_connector *connector;
+		int ret;
+
+		/* the virtual writeback encoder brings its own connector */
+		if (encoder->encoder_type == DRM_MODE_ENCODER_VIRTUAL)
+			continue;
+
+		connector = drm_bridge_connector_init(ddev, encoder);
+		if (IS_ERR(connector)) {
+			DRM_DEV_ERROR(ddev->dev,
+				      "failed to init connector for %s: %ld\n",
+				      encoder->name, PTR_ERR(connector));
+			return PTR_ERR(connector);
+		}
+
+		/* The DP subconnector property applies to DisplayPort only. */
+		if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
+			drm_connector_attach_dp_subconnector_property(connector);
+	}
+
+	return 0;
 }
 
 int msm_drm_kms_init(struct device *dev, const struct drm_driver *drv)
@@ -353,6 +385,10 @@ int msm_drm_kms_init(struct device *dev, const struct drm_driver *drv)
 	 * ->hw_init(); now set up the bridges and connectors for them from
 	 * common code.
 	 */
+	ret = msm_kms_modeset_init(ddev);
+	if (ret)
+		goto err_msm_uninit;
+
 	ret = msm_kms_init_connectors(ddev);
 	if (ret)
 		goto err_msm_uninit;

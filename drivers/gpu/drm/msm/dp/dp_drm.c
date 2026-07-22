@@ -7,7 +7,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_bridge.h>
-#include <drm/drm_bridge_connector.h>
 #include <drm/drm_crtc.h>
 
 #include "msm_drv.h"
@@ -311,20 +310,4 @@ int msm_dp_bridge_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
 	msm_dp_display->bridge = bridge;
 
 	return 0;
-}
-
-/* connector initialization */
-struct drm_connector *msm_dp_drm_connector_init(struct msm_dp *msm_dp_display,
-					    struct drm_encoder *encoder)
-{
-	struct drm_connector *connector = NULL;
-
-	connector = drm_bridge_connector_init(msm_dp_display->drm_dev, encoder);
-	if (IS_ERR(connector))
-		return connector;
-
-	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
-		drm_connector_attach_dp_subconnector_property(connector);
-
-	return connector;
 }

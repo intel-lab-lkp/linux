@@ -1380,7 +1380,6 @@ static int msm_dp_modeset_init(struct msm_display *display,
 			       struct drm_device *dev, struct drm_encoder *encoder)
 {
 	struct msm_dp *msm_dp_display = container_of(display, struct msm_dp, display);
-	struct drm_connector *connector;
 	int ret;
 
 	msm_dp_display->drm_dev = dev;
@@ -1389,14 +1388,6 @@ static int msm_dp_modeset_init(struct msm_display *display,
 	if (ret) {
 		DRM_DEV_ERROR(dev->dev,
 			"failed to create dp bridge: %d\n", ret);
-		return ret;
-	}
-
-	connector = msm_dp_drm_connector_init(msm_dp_display, encoder);
-	if (IS_ERR(connector)) {
-		ret = PTR_ERR(connector);
-		DRM_DEV_ERROR(dev->dev,
-			"failed to create dp connector: %d\n", ret);
 		return ret;
 	}
 

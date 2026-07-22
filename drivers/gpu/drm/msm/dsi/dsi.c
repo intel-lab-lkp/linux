@@ -283,15 +283,15 @@ static int msm_dsi_modeset_init(struct msm_display *display,
 	    !msm_dsi_is_master_dsi(msm_dsi)) {
 		/*
 		 * Do not return an eror here,
-		 * Just skip creating encoder/connector for the slave-DSI.
+		 * Just skip creating the bridge for the slave-DSI.
 		 */
 		return 0;
 	}
 
-	ret = msm_dsi_manager_connector_init(msm_dsi, encoder);
+	ret = msm_dsi_manager_bridge_init(msm_dsi, encoder);
 	if (ret) {
 		DRM_DEV_ERROR(dev->dev,
-			"failed to create dsi connector: %d\n", ret);
+			"failed to create dsi bridge: %d\n", ret);
 		return ret;
 	}
 

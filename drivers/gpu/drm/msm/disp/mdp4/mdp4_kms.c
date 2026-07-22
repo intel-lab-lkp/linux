@@ -7,7 +7,6 @@
 #include <linux/delay.h>
 
 #include <drm/drm_bridge.h>
-#include <drm/drm_bridge_connector.h>
 #include <drm/drm_vblank.h>
 
 #include "msm_drv.h"
@@ -191,7 +190,6 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 	struct drm_device *dev = mdp4_kms->dev;
 	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_encoder *encoder;
-	struct drm_connector *connector;
 	struct drm_bridge *next_bridge;
 	int dsi_id;
 	int ret;
@@ -224,12 +222,6 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 			DRM_DEV_ERROR(dev->dev, "failed to attach LVDS panel/bridge: %d\n", ret);
 
 			return ret;
-		}
-
-		connector = drm_bridge_connector_init(dev, encoder);
-		if (IS_ERR(connector)) {
-			DRM_DEV_ERROR(dev->dev, "failed to initialize LVDS connector\n");
-			return PTR_ERR(connector);
 		}
 
 		break;

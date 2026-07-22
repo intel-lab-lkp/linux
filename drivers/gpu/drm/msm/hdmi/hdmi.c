@@ -11,7 +11,6 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 
-#include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
 #include <drm/display/drm_hdmi_state_helper.h>
 
@@ -164,7 +163,6 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 		struct drm_device *dev, struct drm_encoder *encoder)
 {
 	struct hdmi *hdmi = container_of(display, struct hdmi, display);
-	struct drm_connector *connector = NULL;
 	int ret;
 
 	hdmi->dev = dev;
@@ -173,7 +171,7 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 	ret = msm_hdmi_bridge_init(hdmi);
 	if (ret) {
 		DRM_DEV_ERROR(dev->dev, "failed to create HDMI bridge: %d\n", ret);
-		goto fail;
+		return ret;
 	}
 
 	if (hdmi->next_bridge) {
@@ -181,16 +179,8 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 					DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 		if (ret) {
 			DRM_DEV_ERROR(dev->dev, "failed to attach next HDMI bridge: %d\n", ret);
-			goto fail;
+			return ret;
 		}
-	}
-
-	connector = drm_bridge_connector_init(hdmi->dev, encoder);
-	if (IS_ERR(connector)) {
-		ret = PTR_ERR(connector);
-		DRM_DEV_ERROR(dev->dev, "failed to create HDMI connector: %d\n", ret);
-		connector = NULL;
-		goto fail;
 	}
 
 	ret = devm_request_irq(dev->dev, hdmi->irq,
@@ -199,16 +189,10 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 	if (ret < 0) {
 		DRM_DEV_ERROR(dev->dev, "failed to request IRQ%u: %d\n",
 				hdmi->irq, ret);
-		goto fail;
+		return ret;
 	}
 
 	return 0;
-
-fail:
-	if (connector)
-		connector->funcs->destroy(connector);
-
-	return ret;
 }
 
 static void msm_hdmi_snapshot(struct msm_display *display,
