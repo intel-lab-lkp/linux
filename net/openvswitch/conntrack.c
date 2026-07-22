@@ -933,9 +933,13 @@ static int ovs_ct_check_limit(struct net *net,
 			      const struct ovs_conntrack_info *info)
 {
 	struct ovs_net *ovs_net = net_generic(net, ovs_net_id);
-	const struct ovs_ct_limit_info *ct_limit_info = ovs_net->ct_limit_info;
+	const struct ovs_ct_limit_info *ct_limit_info;
 	u32 per_zone_limit, connections;
 	u32 conncount_key;
+
+	ct_limit_info = rcu_dereference(ovs_net->ct_limit_info);
+	if (!ct_limit_info)
+		return 0;
 
 	conncount_key = info->zone.id;
 
@@ -1585,39 +1589,46 @@ static void __ovs_ct_free_action(struct ovs_conntrack_info *ct_info)
 #if	IS_ENABLED(CONFIG_NETFILTER_CONNCOUNT)
 static int ovs_ct_limit_init(struct net *net, struct ovs_net *ovs_net)
 {
+	struct ovs_ct_limit_info *info;
 	int i, err;
 
-	ovs_net->ct_limit_info = kmalloc_obj(*ovs_net->ct_limit_info);
-	if (!ovs_net->ct_limit_info)
+	info = kmalloc_obj(*info);
+	if (!info)
 		return -ENOMEM;
 
-	ovs_net->ct_limit_info->default_limit = OVS_CT_LIMIT_DEFAULT;
-	ovs_net->ct_limit_info->limits =
+	info->default_limit = OVS_CT_LIMIT_DEFAULT;
+	info->limits =
 		kmalloc_objs(struct hlist_head, CT_LIMIT_HASH_BUCKETS);
-	if (!ovs_net->ct_limit_info->limits) {
-		kfree(ovs_net->ct_limit_info);
+	if (!info->limits) {
+		kfree(info);
 		return -ENOMEM;
 	}
 
 	for (i = 0; i < CT_LIMIT_HASH_BUCKETS; i++)
-		INIT_HLIST_HEAD(&ovs_net->ct_limit_info->limits[i]);
+		INIT_HLIST_HEAD(&info->limits[i]);
 
-	ovs_net->ct_limit_info->data = nf_conncount_init(net, sizeof(u32));
+	info->data = nf_conncount_init(net, sizeof(u32));
 
-	if (IS_ERR(ovs_net->ct_limit_info->data)) {
-		err = PTR_ERR(ovs_net->ct_limit_info->data);
-		kfree(ovs_net->ct_limit_info->limits);
-		kfree(ovs_net->ct_limit_info);
+	if (IS_ERR(info->data)) {
+		err = PTR_ERR(info->data);
+		kfree(info->limits);
+		kfree(info);
 		pr_err("openvswitch: failed to init nf_conncount %d\n", err);
 		return err;
 	}
+	rcu_assign_pointer(ovs_net->ct_limit_info, info);
 	return 0;
 }
 
 static void ovs_ct_limit_exit(struct net *net, struct ovs_net *ovs_net)
 {
-	const struct ovs_ct_limit_info *info = ovs_net->ct_limit_info;
+	const struct ovs_ct_limit_info *info;
 	int i;
+
+	info = rcu_replace_pointer(ovs_net->ct_limit_info, NULL,
+				   lockdep_ovsl_is_held());
+	/* ovs_ct_check_limit() accesses the info under the datapath RCU lock. */
+	synchronize_rcu();
 
 	nf_conncount_destroy(net, info->data);
 	for (i = 0; i < CT_LIMIT_HASH_BUCKETS; ++i) {
@@ -1678,9 +1689,7 @@ static int ovs_ct_limit_set_zone_limit(struct nlattr *nla_zone_limit,
 	while (rem >= sizeof(*zone_limit)) {
 		if (unlikely(zone_limit->zone_id ==
 				OVS_ZONE_LIMIT_DEFAULT_ZONE)) {
-			ovs_lock();
 			info->default_limit = zone_limit->limit;
-			ovs_unlock();
 		} else if (unlikely(!check_zone_id(
 				zone_limit->zone_id, &zone))) {
 			OVS_NLERR(true, "zone id is out of range");
@@ -1694,9 +1703,7 @@ static int ovs_ct_limit_set_zone_limit(struct nlattr *nla_zone_limit,
 			ct_limit->zone = zone;
 			ct_limit->limit = zone_limit->limit;
 
-			ovs_lock();
 			ct_limit_set(info, ct_limit);
-			ovs_unlock();
 		}
 		rem -= NLA_ALIGN(sizeof(*zone_limit));
 		zone_limit = (struct ovs_zone_limit *)((u8 *)zone_limit +
@@ -1722,16 +1729,12 @@ static int ovs_ct_limit_del_zone_limit(struct nlattr *nla_zone_limit,
 	while (rem >= sizeof(*zone_limit)) {
 		if (unlikely(zone_limit->zone_id ==
 				OVS_ZONE_LIMIT_DEFAULT_ZONE)) {
-			ovs_lock();
 			info->default_limit = OVS_CT_LIMIT_DEFAULT;
-			ovs_unlock();
 		} else if (unlikely(!check_zone_id(
 				zone_limit->zone_id, &zone))) {
 			OVS_NLERR(true, "zone id is out of range");
 		} else {
-			ovs_lock();
 			ct_limit_del(info, zone);
-			ovs_unlock();
 		}
 		rem -= NLA_ALIGN(sizeof(*zone_limit));
 		zone_limit = (struct ovs_zone_limit *)((u8 *)zone_limit +
@@ -1850,7 +1853,7 @@ static int ovs_ct_limit_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	struct sk_buff *reply;
 	struct ovs_header *ovs_reply_header;
 	struct ovs_net *ovs_net = net_generic(sock_net(skb->sk), ovs_net_id);
-	struct ovs_ct_limit_info *ct_limit_info = ovs_net->ct_limit_info;
+	struct ovs_ct_limit_info *ct_limit_info;
 	int err;
 
 	reply = ovs_ct_limit_cmd_reply_start(info, OVS_CT_LIMIT_CMD_SET,
@@ -1863,16 +1866,22 @@ static int ovs_ct_limit_cmd_set(struct sk_buff *skb, struct genl_info *info)
 		goto exit_err;
 	}
 
+	ovs_lock();
+	ct_limit_info = rcu_dereference_protected(ovs_net->ct_limit_info,
+						  lockdep_ovsl_is_held());
 	err = ovs_ct_limit_set_zone_limit(a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT],
 					  ct_limit_info);
 	if (err)
-		goto exit_err;
+		goto exit_unlock;
 
 	static_branch_enable(&ovs_ct_limit_enabled);
 
 	genlmsg_end(reply, ovs_reply_header);
+	ovs_unlock();
 	return genlmsg_reply(reply, info);
 
+exit_unlock:
+	ovs_unlock();
 exit_err:
 	nlmsg_free(reply);
 	return err;
@@ -1884,7 +1893,7 @@ static int ovs_ct_limit_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	struct sk_buff *reply;
 	struct ovs_header *ovs_reply_header;
 	struct ovs_net *ovs_net = net_generic(sock_net(skb->sk), ovs_net_id);
-	struct ovs_ct_limit_info *ct_limit_info = ovs_net->ct_limit_info;
+	struct ovs_ct_limit_info *ct_limit_info;
 	int err;
 
 	reply = ovs_ct_limit_cmd_reply_start(info, OVS_CT_LIMIT_CMD_DEL,
@@ -1897,14 +1906,20 @@ static int ovs_ct_limit_cmd_del(struct sk_buff *skb, struct genl_info *info)
 		goto exit_err;
 	}
 
+	ovs_lock();
+	ct_limit_info = rcu_dereference_protected(ovs_net->ct_limit_info,
+						  lockdep_ovsl_is_held());
 	err = ovs_ct_limit_del_zone_limit(a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT],
 					  ct_limit_info);
 	if (err)
-		goto exit_err;
+		goto exit_unlock;
 
 	genlmsg_end(reply, ovs_reply_header);
+	ovs_unlock();
 	return genlmsg_reply(reply, info);
 
+exit_unlock:
+	ovs_unlock();
 exit_err:
 	nlmsg_free(reply);
 	return err;
@@ -1918,7 +1933,7 @@ static int ovs_ct_limit_cmd_get(struct sk_buff *skb, struct genl_info *info)
 	struct ovs_header *ovs_reply_header;
 	struct net *net = sock_net(skb->sk);
 	struct ovs_net *ovs_net = net_generic(net, ovs_net_id);
-	struct ovs_ct_limit_info *ct_limit_info = ovs_net->ct_limit_info;
+	struct ovs_ct_limit_info *ct_limit_info;
 	int err;
 
 	reply = ovs_ct_limit_cmd_reply_start(info, OVS_CT_LIMIT_CMD_GET,
@@ -1932,23 +1947,29 @@ static int ovs_ct_limit_cmd_get(struct sk_buff *skb, struct genl_info *info)
 		goto exit_err;
 	}
 
+	ovs_lock();
+	ct_limit_info = rcu_dereference_protected(ovs_net->ct_limit_info,
+						  lockdep_ovsl_is_held());
 	if (a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT]) {
 		err = ovs_ct_limit_get_zone_limit(
 			net, a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT], ct_limit_info,
 			reply);
 		if (err)
-			goto exit_err;
+			goto exit_unlock;
 	} else {
 		err = ovs_ct_limit_get_all_zone_limit(net, ct_limit_info,
 						      reply);
 		if (err)
-			goto exit_err;
+			goto exit_unlock;
 	}
 
 	nla_nest_end(reply, nla_reply);
 	genlmsg_end(reply, ovs_reply_header);
+	ovs_unlock();
 	return genlmsg_reply(reply, info);
 
+exit_unlock:
+	ovs_unlock();
 exit_err:
 	nlmsg_free(reply);
 	return err;
