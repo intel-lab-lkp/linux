@@ -5,8 +5,9 @@
 
 #include "dsi.h"
 
-bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi)
+static bool msm_dsi_is_cmd_mode(struct msm_display *display)
 {
+	struct msm_dsi *msm_dsi = container_of(display, struct msm_dsi, display);
 	unsigned long host_flags = msm_dsi_host_get_mode_flags(msm_dsi->host);
 
 	return !(host_flags & MIPI_DSI_MODE_VIDEO);
@@ -289,6 +290,7 @@ static const struct msm_display_funcs msm_dsi_display_funcs = {
 	.snapshot = msm_dsi_snapshot,
 	.wide_bus_enabled = msm_dsi_wide_bus_enabled,
 	.needs_periph_flush = msm_dsi_needs_periph_flush,
+	.is_cmd_mode = msm_dsi_is_cmd_mode,
 };
 
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)

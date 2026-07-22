@@ -337,6 +337,7 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
 		const struct mdp5_cfg_hw *hw_cfg =
 					mdp5_cfg_get_hw_config(mdp5_kms->cfg);
 		int dsi_id = get_dsi_id_from_intf(hw_cfg, intf->num);
+		struct msm_display *display;
 
 		if ((dsi_id >= ARRAY_SIZE(priv->kms->dsi)) || (dsi_id < 0)) {
 			DRM_DEV_ERROR(dev->dev, "failed to find dsi from intf %d\n",
@@ -360,9 +361,10 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
 			break;
 		}
 
+		display = msm_dsi_get_display(priv->kms->dsi[dsi_id]);
 		priv->kms->dsi_encoder[dsi_id] = encoder;
 		mdp5_encoder_set_intf_mode(encoder,
-					   msm_dsi_is_cmd_mode(priv->kms->dsi[dsi_id]));
+					   display->funcs->is_cmd_mode(display));
 
 		break;
 	}

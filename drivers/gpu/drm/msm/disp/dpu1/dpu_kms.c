@@ -583,6 +583,7 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 {
 	struct drm_encoder *encoder = NULL;
 	struct msm_display_info info;
+	struct msm_display *display;
 	int i, rc = 0;
 
 	if (!(priv->kms->dsi[0] || priv->kms->dsi[1]))
@@ -613,7 +614,8 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 		if (msm_dsi_is_bonded_dsi(priv->kms->dsi[i]))
 			info.h_tile_instance[info.num_of_h_tiles++] = other;
 
-		info.is_cmd_mode = msm_dsi_is_cmd_mode(priv->kms->dsi[i]);
+		display = msm_dsi_get_display(priv->kms->dsi[i]);
+		info.is_cmd_mode = display->funcs->is_cmd_mode(display);
 
 		rc = dpu_kms_dsi_set_te_source(&info, priv->kms->dsi[i]);
 		if (rc) {

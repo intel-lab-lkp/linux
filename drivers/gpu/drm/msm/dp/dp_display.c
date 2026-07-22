@@ -1369,11 +1369,17 @@ static bool msm_dp_display_needs_periph_flush(struct msm_display *display,
 	return msm_dp_needs_periph_flush(dp, mode);
 }
 
+static bool msm_dp_display_is_cmd_mode(struct msm_display *display)
+{
+	return false;
+}
+
 static const struct msm_display_funcs msm_dp_display_funcs = {
 	.modeset_init = msm_dp_modeset_init,
 	.snapshot = msm_dp_snapshot,
 	.wide_bus_enabled = msm_dp_display_wide_bus_enabled,
 	.needs_periph_flush = msm_dp_display_needs_periph_flush,
+	.is_cmd_mode = msm_dp_display_is_cmd_mode,
 };
 
 struct msm_display *msm_dp_get_display(struct msm_dp *msm_dp_display)

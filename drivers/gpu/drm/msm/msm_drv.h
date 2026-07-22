@@ -286,6 +286,7 @@ struct msm_disp_state;
  * @wide_bus_enabled: whether the sub-block drives a wide (2 pixel/clock) bus;
  *                    mandatory.
  * @needs_periph_flush: whether @mode requires a peripheral flush; mandatory.
+ * @is_cmd_mode:  whether the sub-block runs in command mode; mandatory.
  */
 struct msm_display_funcs {
 	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
@@ -295,6 +296,7 @@ struct msm_display_funcs {
 	bool (*wide_bus_enabled)(struct msm_display *display);
 	bool (*needs_periph_flush)(struct msm_display *display,
 				   const struct drm_display_mode *mode);
+	bool (*is_cmd_mode)(struct msm_display *display);
 };
 
 /**
@@ -330,7 +332,6 @@ void dsi_dev_detach(struct platform_device *pdev);
 void __init msm_dsi_register(void);
 void __exit msm_dsi_unregister(void);
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
-bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
 struct drm_dsc_config *msm_dsi_get_dsc_config(struct msm_dsi *msm_dsi);
@@ -345,10 +346,6 @@ static inline void __exit msm_dsi_unregister(void)
 static inline struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
 {
 	return NULL;
-}
-static inline bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi)
-{
-	return false;
 }
 static inline bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi)
 {
