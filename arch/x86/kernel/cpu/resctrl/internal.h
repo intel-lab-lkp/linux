@@ -49,7 +49,7 @@ struct arch_mbm_state {
 #define ABMC_EXTENDED_EVT_ID		BIT(31)
 #define ABMC_EVT_ID			BIT(0)
 
-/* Setting bit 1 in MSR_IA32_L3_QOS_EXT_CFG enables the SDCIAE feature. */
+/* Setting bit 1 in MSR_AMD_L3_QOS_EXT_CFG enables the SDCIAE feature. */
 #define SDCIAE_ENABLE_BIT		1
 
 /**
@@ -187,7 +187,7 @@ union cpuid_0x10_x_edx {
 };
 
 /*
- * ABMC counters are configured by writing to MSR_IA32_L3_QOS_ABMC_CFG.
+ * ABMC counters are configured by writing to MSR_AMD_L3_QOS_ABMC_CFG.
  *
  * @bw_type		: Event configuration that represents the memory
  *			  transactions being tracked by the @cntr_id.
