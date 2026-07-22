@@ -25,7 +25,7 @@ use kernel::{
 use crate::{
     allocation::{Allocation, AllocationView, BinderObject, BinderObjectRef, NewAllocation},
     defs::*,
-    error::BinderResult,
+    error::{BinderError, BinderResult},
     process::{GetWorkOrRegister, Process},
     ptr_align,
     stats::GLOBAL_STATS,
@@ -1022,17 +1022,7 @@ impl Thread {
             size_of::<u64>(),
         );
         let secctx_off = aligned_data_size + offsets_size + buffers_size;
-        let mut alloc = match to_process.buffer_alloc(debug_id, len, info) {
-            Ok(alloc) => alloc,
-            Err(err) => {
-                pr_warn!(
-                    "Failed to allocate buffer. len:{}, is_oneway:{}",
-                    len,
-                    info.is_oneway(),
-                );
-                return Err(err);
-            }
-        };
+        let mut alloc = to_process.buffer_alloc(debug_id, len, info)?;
 
         let mut buffer_reader = UserSlice::new(info.data_ptr, data_size).reader();
         let mut end_of_previous_object = 0;
@@ -1283,6 +1273,9 @@ impl Thread {
             self.transaction_inner(&mut info)
         };
 
+        // This runs when return work is passed to the caller. This is not
+        // always the same as the transaction failing, as reply errors are
+        // delivered to the remote process.
         if let Err(err) = ret {
             self.push_return_work(err.reply);
             if err.reply != BR_TRANSACTION_COMPLETE {
@@ -1290,13 +1283,21 @@ impl Thread {
                 if let Some(source) = &err.source {
                     info.errno = source.to_errno();
 
-                    {
-                        let mut inner = self.inner.lock();
-                        inner.extended_error =
-                            ExtendedError::new(info.debug_id as u32, err.reply, source.to_errno());
-                    }
+                    self.inner.lock().extended_error =
+                        ExtendedError::new(info.debug_id as u32, err.reply, source.to_errno());
                 }
+            }
+        }
 
+        if info.oneway_spam_suspect {
+            // If this is both a oneway spam suspect and a failure, we report it twice. This is
+            // useful in case the transaction failed with BR_TRANSACTION_PENDING_FROZEN.
+            info.report_netlink(BR_ONEWAY_SPAM_SUSPECT, &self.process.ctx);
+        }
+        // This runs when the transaction failed.
+        if info.reply != 0 {
+            info.report_netlink(info.reply, &self.process.ctx);
+            if info.errno != 0 {
                 binder_debug!(
                     FailedTransaction,
                     "transaction {} to {}:{} failed {:?}, code {} size {}-{}",
@@ -1309,21 +1310,15 @@ impl Thread {
                     },
                     info.to_pid,
                     info.to_tid,
-                    err,
+                    BinderError {
+                        reply: info.reply,
+                        source: Error::try_from_errno(info.errno),
+                    },
                     info.code,
                     info.data_size,
                     info.offsets_size
                 );
             }
-        }
-
-        if info.oneway_spam_suspect {
-            // If this is both a oneway spam suspect and a failure, we report it twice. This is
-            // useful in case the transaction failed with BR_TRANSACTION_PENDING_FROZEN.
-            info.report_netlink(BR_ONEWAY_SPAM_SUSPECT, &self.process.ctx);
-        }
-        if info.reply != 0 {
-            info.report_netlink(info.reply, &self.process.ctx);
         }
 
         Ok(())
@@ -1407,12 +1402,6 @@ impl Thread {
             // At this point we only return `BR_TRANSACTION_COMPLETE` to the caller, and we must let
             // the sender know that the transaction has completed (with an error in this case).
 
-            pr_warn!(
-                "{}:{} reply to {} failed: {err:?}",
-                info.from_pid,
-                info.from_tid,
-                info.to_pid
-            );
             let param = err.source.as_ref().map_or(0, |e| e.to_errno());
             let ee = ExtendedError::new(info.debug_id as u32, err.reply, param);
             orig.from
