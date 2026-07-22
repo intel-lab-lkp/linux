@@ -8,7 +8,6 @@ compat_vdso-syms  = rt_sigreturn
 compat_vdso-syms += getcpu
 compat_vdso-syms += flush_icache
 
-COMPAT_CC := $(CC)
 COMPAT_LD := $(LD)
 
 # binutils 2.35 does not support the zifencei extension, but in the ISA
@@ -43,8 +42,7 @@ $(obj)/compat_vdso.so.dbg: $(obj)/compat_vdso.lds $(obj-compat_vdso) FORCE
 LDFLAGS_compat_vdso.so.dbg = -shared -S -soname=linux-compat_vdso.so.1 \
 	--build-id=sha1 --hash-style=both --eh-frame-hdr
 
-$(obj-compat_vdso): %.o: %.S FORCE
-	$(call if_changed_dep,compat_vdsoas)
+$(obj-compat_vdso): KBUILD_AFLAGS += $(COMPAT_CC_FLAGS)
 
 # strip rule for the .so file
 $(obj)/%.so: OBJCOPYFLAGS := -S
@@ -66,7 +64,3 @@ quiet_cmd_compat_vdsold = VDSOLD  $@
       cmd_compat_vdsold = $(COMPAT_LD) $(ld_flags) $(COMPAT_LD_FLAGS) -T $(filter-out FORCE,$^) -o $@.tmp && \
                    $(OBJCOPY) $(patsubst %, -G __compat_vdso_%, $(compat_vdso-syms)) $@.tmp $@ && \
                    rm $@.tmp
-
-# actual build commands
-quiet_cmd_compat_vdsoas = VDSOAS  $@
-      cmd_compat_vdsoas = $(COMPAT_CC) $(a_flags) $(COMPAT_CC_FLAGS) -c -o $@ $<
