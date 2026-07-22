@@ -51,8 +51,11 @@ static void trigger_data_free_queued_locked(void)
 
 	tracepoint_synchronize_unregister();
 
-	llist_for_each_entry_safe(data, tmp, llnodes, llist)
+	llist_for_each_entry_safe(data, tmp, llnodes, llist) {
+		if (data->private_free)
+			data->private_free(data->private_data);
 		kfree(data);
+	}
 }
 
 /* Bulk garbage collection of event_trigger_data elements */
@@ -74,8 +77,11 @@ static int trigger_kthread_fn(void *ignore)
 		/* make sure current triggers exit before free */
 		tracepoint_synchronize_unregister();
 
-		llist_for_each_entry_safe(data, tmp, llnodes, llist)
+		llist_for_each_entry_safe(data, tmp, llnodes, llist) {
+			if (data->private_free)
+				data->private_free(data->private_data);
 			kfree(data);
+		}
 	}
 
 	return 0;
@@ -582,7 +588,7 @@ int event_trigger_init(struct event_trigger_data *data)
  * Usually used directly as the @free method in event trigger
  * implementations.
  */
-static void
+void
 event_trigger_free(struct event_trigger_data *data)
 {
 	if (WARN_ON_ONCE(data->ref <= 0))
