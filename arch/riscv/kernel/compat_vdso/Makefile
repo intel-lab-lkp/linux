@@ -43,6 +43,7 @@ LDFLAGS_compat_vdso.so.dbg = -shared -S -soname=linux-compat_vdso.so.1 \
 	--build-id=sha1 --hash-style=both --eh-frame-hdr
 
 $(obj-compat_vdso): KBUILD_AFLAGS += $(COMPAT_CC_FLAGS)
+$(obj-compat_vdso): KBUILD_CFLAGS += $(COMPAT_CC_FLAGS)
 
 # strip rule for the .so file
 $(obj)/%.so: OBJCOPYFLAGS := -S
