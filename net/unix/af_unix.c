@@ -733,7 +733,7 @@ static void unix_release_sock(struct sock *sk, int embrion)
 
 	/* ---- Socket is dead now and most probably destroyed ---- */
 
-	unix_schedule_gc(NULL);
+	unix_schedule_gc();
 }
 
 struct unix_peercred {

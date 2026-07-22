@@ -635,23 +635,11 @@ skip_gc:
 
 static DECLARE_WORK(unix_gc_work, unix_gc);
 
-#define UNIX_INFLIGHT_SANE_USER		(SCM_MAX_FD * 8)
-
-void unix_schedule_gc(struct user_struct *user)
+void unix_schedule_gc(void)
 {
 	if (READ_ONCE(unix_graph_state) == UNIX_GRAPH_NOT_CYCLIC)
 		return;
 
-	/* Penalise users who want to send AF_UNIX sockets
-	 * but whose sockets have not been received yet.
-	 */
-	if (user &&
-	    READ_ONCE(user->unix_inflight) < UNIX_INFLIGHT_SANE_USER)
-		return;
-
 	if (!READ_ONCE(gc_in_progress))
 		queue_work(system_dfl_wq, &unix_gc_work);
-
-	if (user && READ_ONCE(unix_graph_cyclic_sccs))
-		flush_work(&unix_gc_work);
 }

@@ -1014,7 +1014,7 @@ void __noreturn do_exit(long code)
 	 * Must be after exit_files() and exit_task_work(tsk) to ensure that
 	 * the task's AF_UNIX sockets have all been closed.
 	 */
-	unix_schedule_gc(NULL);
+	unix_schedule_gc();
 
 	sched_autogroup_exit_task(tsk);
 	cgroup_task_exit(tsk);
