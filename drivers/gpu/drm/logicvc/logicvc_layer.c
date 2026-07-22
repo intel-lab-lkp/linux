@@ -13,6 +13,7 @@
 #include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
+#include <drm/drm_managed.h>
 #include <drm/drm_plane.h>
 #include <drm/drm_print.h>
 
@@ -250,7 +251,6 @@ static struct drm_plane_helper_funcs logicvc_plane_helper_funcs = {
 static const struct drm_plane_funcs logicvc_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
-	.destroy		= drm_plane_cleanup,
 	.reset			= drm_atomic_helper_plane_reset,
 	.atomic_duplicate_state	= drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_plane_destroy_state,
@@ -350,16 +350,17 @@ int logicvc_layer_buffer_find_setup(struct logicvc_drm *logicvc,
 	return 0;
 }
 
-static struct logicvc_layer_formats *logicvc_layer_formats_lookup(struct logicvc_layer *layer)
+static struct logicvc_layer_formats *
+logicvc_layer_formats_lookup(struct logicvc_layer_config *config)
 {
 	bool alpha;
 	unsigned int i = 0;
 
-	alpha = (layer->config.alpha_mode == LOGICVC_LAYER_ALPHA_PIXEL);
+	alpha = (config->alpha_mode == LOGICVC_LAYER_ALPHA_PIXEL);
 
 	while (logicvc_layer_formats[i].formats) {
-		if (logicvc_layer_formats[i].colorspace == layer->config.colorspace &&
-		    logicvc_layer_formats[i].depth == layer->config.depth &&
+		if (logicvc_layer_formats[i].colorspace == config->colorspace &&
+		    logicvc_layer_formats[i].depth == config->depth &&
 		    logicvc_layer_formats[i].alpha == alpha)
 			return &logicvc_layer_formats[i];
 
@@ -380,10 +381,9 @@ static unsigned int logicvc_layer_formats_count(struct logicvc_layer_formats *fo
 }
 
 static int logicvc_layer_config_parse(struct logicvc_drm *logicvc,
-				      struct logicvc_layer *layer)
+				      struct device_node *of_node,
+				      struct logicvc_layer_config *config)
 {
-	struct device_node *of_node = layer->of_node;
-	struct logicvc_layer_config *config = &layer->config;
 	int ret;
 
 	logicvc_of_property_parse_bool(of_node,
@@ -458,11 +458,30 @@ struct logicvc_layer *logicvc_layer_get_primary(struct logicvc_drm *logicvc)
 	return logicvc_layer_get_from_type(logicvc, DRM_PLANE_TYPE_PRIMARY);
 }
 
+static void logicvc_layer_set_config(struct logicvc_layer *layer,
+				     struct logicvc_layer_config *config)
+{
+	layer->config.colorspace = config->colorspace;
+	layer->config.depth = config->depth;
+	layer->config.alpha_mode = config->alpha_mode;
+	layer->config.base_offset = config->base_offset;
+	layer->config.buffer_offset = config->buffer_offset;
+	layer->config.primary = config->primary;
+}
+
+static void logicvc_layer_fini(struct drm_device *drm_dev,
+			       void *data)
+{
+	struct logicvc_layer *layer = data;
+
+	list_del(&layer->list);
+}
+
 static int logicvc_layer_init(struct logicvc_drm *logicvc,
 			      struct device_node *of_node, u32 index)
 {
 	struct drm_device *drm_dev = &logicvc->drm_dev;
-	struct device *dev = drm_dev->dev;
+	struct logicvc_layer_config config = { 0 };
 	struct logicvc_layer *layer = NULL;
 	struct logicvc_layer_formats *formats;
 	unsigned int formats_count;
@@ -470,28 +489,18 @@ static int logicvc_layer_init(struct logicvc_drm *logicvc,
 	unsigned int zpos;
 	int ret;
 
-	layer = devm_kzalloc(dev, sizeof(*layer), GFP_KERNEL);
-	if (!layer) {
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	layer->of_node = of_node;
-	layer->index = index;
-
-	ret = logicvc_layer_config_parse(logicvc, layer);
+	ret = logicvc_layer_config_parse(logicvc, of_node, &config);
 	if (ret) {
 		drm_err(drm_dev, "Failed to parse config for layer #%d\n",
 			index);
-		goto error;
+		return ret;
 	}
 
-	formats = logicvc_layer_formats_lookup(layer);
+	formats = logicvc_layer_formats_lookup(&config);
 	if (!formats) {
 		drm_err(drm_dev, "Failed to lookup formats for layer #%d\n",
 			index);
-		ret = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 
 	formats_count = logicvc_layer_formats_count(formats);
@@ -511,23 +520,26 @@ static int logicvc_layer_init(struct logicvc_drm *logicvc,
 		regmap_write(logicvc->regmap, LOGICVC_BACKGROUND_COLOR_REG,
 			     background);
 
-		devm_kfree(dev, layer);
-
 		return 0;
 	}
 
-	if (layer->config.primary)
+	if (config.primary)
 		type = DRM_PLANE_TYPE_PRIMARY;
 	else
 		type = DRM_PLANE_TYPE_OVERLAY;
 
-	ret = drm_universal_plane_init(drm_dev, &layer->drm_plane, 0,
-				       &logicvc_plane_funcs, formats->formats,
-				       formats_count, NULL, type, NULL);
-	if (ret) {
+	layer = drmm_universal_plane_alloc(drm_dev, struct logicvc_layer,
+					   drm_plane, 0, &logicvc_plane_funcs,
+					   formats->formats, formats_count,
+					   NULL, type, NULL);
+	if (IS_ERR(layer)) {
 		drm_err(drm_dev, "Failed to initialize layer plane\n");
-		return ret;
+		return PTR_ERR(layer);
 	}
+
+	layer->of_node = of_node;
+	layer->index = index;
+	logicvc_layer_set_config(layer, &config);
 
 	drm_plane_helper_add(&layer->drm_plane, &logicvc_plane_helper_funcs);
 
@@ -545,22 +557,13 @@ static int logicvc_layer_init(struct logicvc_drm *logicvc,
 
 	list_add_tail(&layer->list, &logicvc->layers_list);
 
+	ret = drmm_add_action_or_reset(drm_dev, logicvc_layer_fini,
+				       layer);
+	if (ret)
+		return ret;
+
+
 	return 0;
-
-error:
-	if (layer)
-		devm_kfree(dev, layer);
-
-	return ret;
-}
-
-static void logicvc_layer_fini(struct logicvc_drm *logicvc,
-			       struct logicvc_layer *layer)
-{
-	struct device *dev = logicvc->drm_dev.dev;
-
-	list_del(&layer->list);
-	devm_kfree(dev, layer);
 }
 
 void logicvc_layers_attach_crtc(struct logicvc_drm *logicvc)
@@ -584,14 +587,12 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 	struct device_node *layer_node = NULL;
 	struct device_node *layers_node;
 	struct logicvc_layer *layer;
-	struct logicvc_layer *next;
 	int ret = 0;
 
 	layers_node = of_get_child_by_name(of_node, "layers");
 	if (!layers_node) {
 		drm_err(drm_dev, "No layers node found in the description\n");
-		ret = -ENODEV;
-		goto error;
+		return -ENODEV;
 	}
 
 	for_each_child_of_node(layers_node, layer_node) {
@@ -614,17 +615,11 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 		ret = logicvc_layer_init(logicvc, layer_node, index);
 		if (ret) {
 			of_node_put(layers_node);
-			goto error;
+			return ret;
 		}
 	}
 
 	of_node_put(layers_node);
 
 	return 0;
-
-error:
-	list_for_each_entry_safe(layer, next, &logicvc->layers_list, list)
-		logicvc_layer_fini(logicvc, layer);
-
-	return ret;
 }

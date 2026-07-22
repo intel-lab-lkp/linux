@@ -13,6 +13,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_gem_dma_helper.h>
+#include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 
@@ -214,7 +215,6 @@ static void logicvc_crtc_disable_vblank(struct drm_crtc *drm_crtc)
 
 static const struct drm_crtc_funcs logicvc_crtc_funcs = {
 	.reset			= drm_atomic_helper_crtc_reset,
-	.destroy		= drm_crtc_cleanup,
 	.set_config		= drm_atomic_helper_set_config,
 	.page_flip		= drm_atomic_helper_page_flip,
 	.atomic_duplicate_state	= drm_atomic_helper_crtc_duplicate_state,
@@ -250,11 +250,6 @@ int logicvc_crtc_init(struct logicvc_drm *logicvc)
 	struct device_node *of_node = dev->of_node;
 	struct logicvc_crtc *crtc;
 	struct logicvc_layer *layer_primary;
-	int ret;
-
-	crtc = devm_kzalloc(dev, sizeof(*crtc), GFP_KERNEL);
-	if (!crtc)
-		return -ENOMEM;
 
 	layer_primary = logicvc_layer_get_primary(logicvc);
 	if (!layer_primary) {
@@ -262,12 +257,12 @@ int logicvc_crtc_init(struct logicvc_drm *logicvc)
 		return -EINVAL;
 	}
 
-	ret = drm_crtc_init_with_planes(drm_dev, &crtc->drm_crtc,
-					&layer_primary->drm_plane, NULL,
-					&logicvc_crtc_funcs, NULL);
-	if (ret) {
+	crtc = drmm_crtc_alloc_with_planes(drm_dev, struct logicvc_crtc,
+					   drm_crtc, &layer_primary->drm_plane,
+					   NULL, &logicvc_crtc_funcs, NULL);
+	if (IS_ERR(crtc)) {
 		drm_err(drm_dev, "Failed to initialize CRTC\n");
-		return ret;
+		return PTR_ERR(crtc);
 	}
 
 	drm_crtc_helper_add(&crtc->drm_crtc, &logicvc_crtc_helper_funcs);
