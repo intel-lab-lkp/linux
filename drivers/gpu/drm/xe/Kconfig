@@ -11,6 +11,12 @@ config DRM_XE
 	# the shmem_readpage() which depends upon tmpfs
 	select SHMEM
 	select TMPFS
+	# Xe is the only TTM driver that exercises the TTM shrinker's
+	# incremental swap path, which splits the pool's compound folios one
+	# page at a time via folio_split_driver_managed(). That helper lives
+	# in the THP split machinery, so pull it in here rather than for all
+	# TTM users.
+	select TRANSPARENT_HUGEPAGE
 	select DRM_BUDDY
 	select DRM_CLIENT_SELECTION
 	select DRM_KMS_HELPER
