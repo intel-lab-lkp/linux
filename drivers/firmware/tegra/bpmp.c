@@ -675,6 +675,104 @@ bool tegra_bpmp_mrq_is_supported(struct tegra_bpmp *bpmp, unsigned int mrq)
 }
 EXPORT_SYMBOL_GPL(tegra_bpmp_mrq_is_supported);
 
+bool tegra_bpmp_mbwt_cmd_is_supported(struct tegra_bpmp *bpmp,
+				      unsigned int cmd_code)
+{
+	struct mrq_sochub_mbwt_request request = {
+		.cmd = CMD_SOCHUB_MBWT_QUERY_ABI,
+		.query_abi.cmd_code = cmd_code,
+	};
+	struct tegra_bpmp_message msg = {
+		.mrq = MRQ_SOCHUB_MBWT,
+		.tx = {
+			.data = &request,
+			.size = sizeof(request),
+		},
+	};
+	int err;
+
+	err = tegra_bpmp_transfer(bpmp, &msg);
+	if (err || msg.rx.ret)
+		return false;
+
+	return true;
+}
+
+int tegra_bpmp_mbwt_get(struct tegra_bpmp *bpmp, unsigned int instance,
+			unsigned int vc_type, unsigned int *bandwidth)
+{
+	struct mrq_sochub_mbwt_request request = {
+		.cmd = CMD_SOCHUB_MBWT_GET_BW,
+		.get_bw = {
+			.instance = instance,
+			.vc_type = vc_type,
+		},
+	};
+	struct mrq_sochub_mbwt_response response = {};
+	struct tegra_bpmp_message msg = {
+		.mrq = MRQ_SOCHUB_MBWT,
+		.tx = {
+			.data = &request,
+			.size = sizeof(request),
+		},
+		.rx = {
+			.data = &response,
+			.size = sizeof(response),
+		},
+	};
+	int err;
+
+	if (!bandwidth)
+		return -EINVAL;
+
+	err = tegra_bpmp_transfer(bpmp, &msg);
+	if (err) {
+		dev_err(bpmp->dev, "MBWT get bandwidth transfer failed: %d\n",
+			err);
+		return err;
+	}
+
+	if (msg.rx.ret)
+		return msg.rx.ret;
+
+	*bandwidth = response.get_bw.bw;
+
+	return 0;
+}
+
+int tegra_bpmp_mbwt_set(struct tegra_bpmp *bpmp, unsigned int instance,
+			unsigned int vc_type, unsigned int bandwidth)
+{
+	struct mrq_sochub_mbwt_request request = {
+		.cmd = CMD_SOCHUB_MBWT_SET_BW,
+		.set_bw = {
+			.instance = instance,
+			.vc_type = vc_type,
+			.bw = bandwidth,
+		},
+	};
+	struct tegra_bpmp_message msg = {
+		.mrq = MRQ_SOCHUB_MBWT,
+		.tx = {
+			.data = &request,
+			.size = sizeof(request),
+		},
+	};
+	int err;
+
+	err = tegra_bpmp_transfer(bpmp, &msg);
+	if (err) {
+		dev_err(bpmp->dev, "MBWT set bandwidth transfer failed: %d\n",
+			err);
+		return err;
+	}
+
+	if (msg.rx.ret)
+		return msg.rx.ret;
+
+	return 0;
+}
+
 static void tegra_bpmp_mrq_handle_ping(unsigned int mrq,
 				       struct tegra_bpmp_channel *channel,
 				       void *data)
