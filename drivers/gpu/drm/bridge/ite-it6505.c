@@ -2713,6 +2713,11 @@ static irqreturn_t it6505_int_threaded_handler(int unused, void *data)
 	int_status[1] = it6505_read(it6505, INT_STATUS_02);
 	int_status[2] = it6505_read(it6505, INT_STATUS_03);
 
+	if (int_status[0] < 0 || int_status[1] < 0 || int_status[2] < 0) {
+		pm_runtime_put_sync(dev);
+		return IRQ_NONE;
+	}
+
 	it6505_write(it6505, INT_STATUS_01, int_status[0]);
 	it6505_write(it6505, INT_STATUS_02, int_status[1]);
 	it6505_write(it6505, INT_STATUS_03, int_status[2]);
