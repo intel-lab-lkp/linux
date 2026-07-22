@@ -32,6 +32,7 @@
 #include <linux/leafops.h>
 #include <linux/shmem_fs.h>
 #include <linux/mmu_notifier.h>
+#include <linux/zswap.h>
 
 #include <asm/tlb.h>
 
@@ -193,6 +194,91 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 	spinlock_t *ptl;
 	unsigned long addr;
 
+	ptl = pmd_trans_huge_lock(pmd, vma);
+	if (ptl) {
+		pmd_t pmdval = *pmd;
+
+		if (pmd_is_swap_entry(pmdval)) {
+			softleaf_t entry = softleaf_from_pmd(pmdval);
+			struct vm_fault vmf = {
+				.vma = vma,
+				.address = start,
+				.real_address = start,
+				.pmd = pmd,
+			};
+			struct swap_info_struct *si;
+			struct folio *folio;
+			enum swap_pmd_cache cache_state;
+			bool split = false;
+
+			cache_state = swap_pmd_cache_lookup(entry, &folio);
+			if (cache_state == SWAP_PMD_CACHE_HUGE) {
+				folio_put(folio);
+				spin_unlock(ptl);
+				goto ret;
+			}
+			if (cache_state == SWAP_PMD_CACHE_SPLIT ||
+			    zswap_is_present(entry, HPAGE_PMD_NR)) {
+				spin_unlock(ptl);
+				__split_huge_pmd(vma, pmd, start, false);
+				walk->action = ACTION_AGAIN;
+				goto ret;
+			}
+
+			/*
+			 * Pin the swap device under the PMD lock so the
+			 * PMD-swap-entry observation keeps the entry valid for
+			 * swapin_sync().
+			 */
+			si = get_swap_device(entry);
+			spin_unlock(ptl);
+			if (!si)
+				goto ret;
+
+			folio = swapin_sync(entry, GFP_HIGHUSER_MOVABLE,
+					    BIT(HPAGE_PMD_ORDER), &vmf,
+					    NULL, 0);
+			/*
+			 * The empty-cache observation was made under the PMD
+			 * lock, but swap cache can change after dropping it. If
+			 * PMD-order swapin lost a race to per-slot cache state,
+			 * retry through the PTE path.
+			 */
+			if (IS_ERR(folio)) {
+				if (PTR_ERR(folio) == -EBUSY)
+					split = true;
+			} else if (folio) {
+				if (folio_nr_pages(folio) != HPAGE_PMD_NR) {
+					split = true;
+				} else if (!folio_test_locked(folio) &&
+					 !folio_test_uptodate(folio) &&
+					 zswap_is_present(entry, HPAGE_PMD_NR)) {
+					folio_lock(folio);
+					/*
+					 * A failed PMD-order zswap load leaves the
+					 * folio clean and not uptodate, but another
+					 * thread can remove it from swap cache before
+					 * we acquire the lock. Revalidate the
+					 * association before deleting it so the PTE
+					 * retry can load the per-page state.
+					 */
+					if (folio_matches_swap_entry(folio, entry))
+						swap_cache_del_folio(folio);
+					folio_unlock(folio);
+					split = true;
+				}
+				folio_put(folio);
+			}
+			put_swap_device(si);
+			if (split) {
+				__split_huge_pmd(vma, pmd, start, false);
+				walk->action = ACTION_AGAIN;
+			}
+			goto ret;
+		}
+		spin_unlock(ptl);
+	}
+
 	for (addr = start; addr < end; addr += PAGE_SIZE) {
 		pte_t pte;
 		softleaf_t entry;
@@ -221,6 +307,7 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 	if (ptep)
 		pte_unmap_unlock(ptep, ptl);
 	swap_read_submit(&ctx);
+ret:
 	cond_resched();
 
 	return 0;
