@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/binfmts.h>
 #include <linux/err.h>
+#include <linux/futex.h>
 #include <asm/page.h>
 #include <asm/vdso.h>
 #include <linux/vdso_datastore.h>
@@ -33,10 +34,68 @@ static struct __vdso_info vdso_info;
 static struct __vdso_info compat_vdso_info;
 #endif
 
+#define _CONCAT3(a, b, c)	a ## b ## c
+#define CONCAT3(a, b, c)	_CONCAT3(a, b, c)
+
+#if defined(CONFIG_RISCV_ISA_ZACAS) && defined(CONFIG_TOOLCHAIN_HAS_ZACAS)
+#define FUTEX_CAS_SET_VDSO_CS_RANGE(vdso, fd, idx, xlen, symbol)				\
+({												\
+	void *start = symbol(vdso, CONCAT3(futex_list, xlen, _try_unlock_cs_cas_start));	\
+	void *end   = symbol(vdso, CONCAT3(futex_list, xlen, _try_unlock_cs_cas_end));		\
+												\
+	futex_set_vdso_cs_range(fd, idx, (uintptr_t)start, (uintptr_t)end, xlen == 32);		\
+})
+#else
+#define FUTEX_CAS_SET_VDSO_CS_RANGE(...) BUILD_BUG()
+#endif
+
+#define FUTEX_LRSC_SET_VDSO_CS_RANGE(vdso, fd, idx, xlen, symbol)				\
+({												\
+	void *start = symbol(vdso, CONCAT3(futex_list, xlen, _try_unlock_cs_lrsc_start));	\
+	void *end   = symbol(vdso, CONCAT3(futex_list, xlen, _try_unlock_cs_lrsc_end));		\
+												\
+	futex_set_vdso_cs_range(fd, idx, (uintptr_t)start, (uintptr_t)end, xlen == 32);		\
+})
+
+#define FUTEX_SET_VDSO_CS_RANGE(vdso, fd, idx, xlen, symbol)					\
+({												\
+	if (cpu_supports_zacas())								\
+		FUTEX_CAS_SET_VDSO_CS_RANGE(vdso, fd, idx, xlen, symbol);			\
+	else											\
+		FUTEX_LRSC_SET_VDSO_CS_RANGE(vdso, fd, idx, xlen, symbol);			\
+})
+
+#ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+
+/* Allow parameters to expand first */
+#define __VDSO_SYMBOL(vdso, name)		VDSO_SYMBOL(vdso, name)
+#define __COMPAT_VDSO_SYMBOL(vdso, name)	COMPAT_VDSO_SYMBOL(vdso, name)
+
+static void vdso_futex_robust_unlock_update_ips(void)
+{
+	unsigned long vdso = (unsigned long) current->mm->context.vdso;
+	struct futex_mm_data *fd = &current->mm->futex;
+
+	futex_reset_cs_ranges(fd);
+
+	if (!is_compat_task())
+		FUTEX_SET_VDSO_CS_RANGE(vdso, fd, 0, __riscv_xlen, __VDSO_SYMBOL);
+
+#ifdef CONFIG_COMPAT
+	if (is_compat_task())
+		FUTEX_SET_VDSO_CS_RANGE(vdso, fd, 0, 32, __COMPAT_VDSO_SYMBOL);
+#endif
+}
+#else
+static inline void vdso_futex_robust_unlock_update_ips(void) {}
+#endif
+
 static int vdso_mremap(const struct vm_special_mapping *sm,
 		       struct vm_area_struct *new_vma)
 {
 	current->mm->context.vdso = (void *)new_vma->vm_start;
+
+	vdso_futex_robust_unlock_update_ips();
 
 	return 0;
 }
@@ -146,6 +205,8 @@ static int __setup_additional_pages(struct mm_struct *mm,
 
 	if (IS_ERR(ret))
 		goto up_fail;
+
+	vdso_futex_robust_unlock_update_ips();
 
 	return 0;
 

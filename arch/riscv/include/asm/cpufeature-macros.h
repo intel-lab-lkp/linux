@@ -6,6 +6,8 @@
 #ifndef _ASM_CPUFEATURE_MACROS_H
 #define _ASM_CPUFEATURE_MACROS_H
 
+#include <linux/types.h>
+
 #include <asm/hwcap.h>
 #include <asm/alternative-macros.h>
 

@@ -24,7 +24,12 @@ COMPAT_CC_FLAGS += $(call cc-option,-mno-riscv-attribute)
 COMPAT_CC_FLAGS += $(call as-option,-Wa$(comma)-mno-arch-attr)
 
 # Files to link into the compat_vdso
-obj-compat_vdso = $(patsubst %, %.o, $(compat_vdso-syms)) note.o
+obj-compat_vdso := $(patsubst %, %.o, $(compat_vdso-syms)) note.o
+
+ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+compat_vdso-syms += __vdso_futex_robust_list32_try_unlock
+obj-compat_vdso += futex.o
+endif
 
 # Build rules
 targets := $(obj-compat_vdso) compat_vdso.so compat_vdso.so.dbg compat_vdso.lds

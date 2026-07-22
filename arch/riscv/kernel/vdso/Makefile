@@ -27,10 +27,15 @@ asflags-y += -DVDSO_CFI=1
 endif
 
 # Files to link into the vdso
-obj-vdso = $(patsubst %, %.o, $(vdso-syms)) note.o
+obj-vdso := $(patsubst %, %.o, $(vdso-syms)) note.o
 
 ifdef CONFIG_VDSO_GETRANDOM
 obj-vdso += vgetrandom-chacha.o
+endif
+
+ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+obj-vdso += futex.o
+vdso-syms += __vdso_futex_robust_list$(BITS)_try_unlock
 endif
 
 ccflags-y := -fno-stack-protector

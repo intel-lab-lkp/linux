@@ -83,6 +83,14 @@ VERSION
 #if defined(CONFIG_VDSO_GETRANDOM) && !defined(COMPAT_VDSO)
 		__vdso_getrandom;
 #endif
+
+#ifdef CONFIG_FUTEX_ROBUST_UNLOCK
+#if defined(CONFIG_32BIT) || defined(COMPAT_VDSO)
+		__vdso_futex_robust_list32_try_unlock;
+#else
+		__vdso_futex_robust_list64_try_unlock;
+#endif
+#endif
 	local: *;
 	};
 }
