@@ -228,8 +228,9 @@ static unsigned int get_bitmap(struct bitstr *bs, unsigned int b)
 		     bytes--, shift -= 8)
 			v |= (unsigned int)(*bs->cur++) << shift;
 
-		if (l < 32) {
-			v |= (unsigned int)(*bs->cur) << shift;
+		if (l <= 32) {
+			if (l & 7)
+				v |= (unsigned int)(*bs->cur) << shift;
 			v <<= bs->bit;
 		} else if (l > 32) {
 			v <<= bs->bit;
