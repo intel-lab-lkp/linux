@@ -1402,7 +1402,9 @@ static inline int cpu_of(struct rq *rq)
 	return rq->cpu;
 }
 
-#define MDF_PUSH		0x01
+#define MDF_PUSH			0x01
+#define MDF_CPUHP_FALLBACK		0x02
+#define MDF_CPUHP_AFFINITY_CHANGED	0x04
 
 static inline bool is_migration_disabled(struct task_struct *p)
 {

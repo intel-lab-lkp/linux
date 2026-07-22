@@ -1902,6 +1902,7 @@ int freeze_secondary_cpus(int primary)
 	 * with the userspace trying to use the CPU hotplug at the same time
 	 */
 	cpumask_clear(frozen_cpus);
+	sched_cpu_fallback_begin();
 
 	pr_info("Disabling non-boot CPUs ...\n");
 	for (cpu = nr_cpu_ids - 1; cpu >= 0; cpu--) {
@@ -1978,6 +1979,7 @@ void thaw_secondary_cpus(void)
 
 	cpumask_clear(frozen_cpus);
 out:
+	sched_cpu_fallback_end();
 	cpu_maps_update_done();
 }
 

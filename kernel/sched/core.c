@@ -2771,6 +2771,13 @@ static inline void mm_update_cpus_allowed(struct mm_struct *mm, const cpumask_t 
  * sched_class::set_cpus_allowed must do the below, but is not required to
  * actually call this function.
  */
+static void swap_user_cpus_ptr(struct task_struct *p, struct affinity_context *ctx)
+{
+	if (p->migration_flags & MDF_CPUHP_FALLBACK)
+		p->migration_flags |= MDF_CPUHP_AFFINITY_CHANGED;
+	swap(p->user_cpus_ptr, ctx->user_mask);
+}
+
 void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx)
 {
 	if (ctx->flags & (SCA_MIGRATE_ENABLE | SCA_MIGRATE_DISABLE)) {
@@ -2786,7 +2793,7 @@ void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx
 	 * Swap in a new user_cpus_ptr if SCA_USER flag set
 	 */
 	if (ctx->flags & SCA_USER)
-		swap(p->user_cpus_ptr, ctx->user_mask);
+		swap_user_cpus_ptr(p, ctx);
 }
 
 static void
@@ -2796,24 +2803,49 @@ do_set_cpus_allowed(struct task_struct *p, struct affinity_context *ctx)
 		p->sched_class->set_cpus_allowed(p, ctx);
 }
 
+static DEFINE_RAW_SPINLOCK(cpu_fallback_lock);
+static bool cpu_fallback_active;
+
+static bool mark_cpu_fallback(struct task_struct *p)
+{
+	unsigned long flags;
+	bool temporary = false;
+
+	if (p->flags & PF_KTHREAD)
+		return false;
+
+	raw_spin_lock_irqsave(&cpu_fallback_lock, flags);
+	if (cpu_fallback_active) {
+		p->migration_flags |= MDF_CPUHP_FALLBACK;
+		temporary = true;
+	}
+	raw_spin_unlock_irqrestore(&cpu_fallback_lock, flags);
+
+	return temporary;
+}
+
 /*
- * Used for kthread_bind() and select_fallback_rq(), in both cases the user
- * affinity (if any) should be destroyed too.
+ * Used for kthread_bind() and select_fallback_rq().  A user task which is
+ * forcefully moved while CPUs are frozen must retain its requested affinity
+ * so it can be restored when the CPUs come back online.
  */
 void set_cpus_allowed_force(struct task_struct *p, const struct cpumask *new_mask)
 {
 	struct affinity_context ac = {
 		.new_mask  = new_mask,
 		.user_mask = NULL,
-		.flags     = SCA_USER,	/* clear the user requested mask */
+		.flags     = SCA_USER,
 	};
 	union cpumask_rcuhead {
 		cpumask_t cpumask;
 		struct rcu_head rcu;
 	};
 
-	scoped_guard (__task_rq_lock, p)
+	scoped_guard (__task_rq_lock, p) {
+		if (mark_cpu_fallback(p))
+			ac.flags = 0;
 		do_set_cpus_allowed(p, &ac);
+	}
 
 	/*
 	 * Because this is called with p->pi_lock held, it is not possible
@@ -3152,7 +3184,7 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	if (!(ctx->flags & SCA_MIGRATE_ENABLE)) {
 		if (cpumask_equal(&p->cpus_mask, ctx->new_mask)) {
 			if (ctx->flags & SCA_USER)
-				swap(p->user_cpus_ptr, ctx->user_mask);
+				swap_user_cpus_ptr(p, ctx);
 			goto out;
 		}
 
@@ -3605,6 +3637,145 @@ out:
 	}
 
 	return dest_cpu;
+}
+
+static bool task_has_cpu_fallback(struct task_struct *p)
+{
+	return READ_ONCE(p->migration_flags) & MDF_CPUHP_FALLBACK;
+}
+
+static void restore_cpu_fallback(struct task_struct *p)
+{
+	struct affinity_context ac = { .flags = 0 };
+	cpumask_var_t mask;
+	struct rq_flags rf;
+	struct rq *rq;
+	bool retry;
+	int ret;
+
+	if (!alloc_cpumask_var(&mask, GFP_KERNEL)) {
+		pr_warn_ratelimited("Failed to allocate affinity mask for task %d\n",
+				    task_pid_nr(p));
+		goto clear;
+	}
+
+	for (;;) {
+		rq = task_rq_lock(p, &rf);
+		if (!(p->migration_flags & MDF_CPUHP_FALLBACK) ||
+		    (p->flags & PF_EXITING)) {
+			p->migration_flags &= ~(MDF_CPUHP_FALLBACK |
+						MDF_CPUHP_AFFINITY_CHANGED);
+			task_rq_unlock(rq, p, &rf);
+			break;
+		}
+
+		p->migration_flags &= ~MDF_CPUHP_AFFINITY_CHANGED;
+		cpumask_copy(mask, task_user_cpus(p));
+		task_rq_unlock(rq, p, &rf);
+
+		ac.new_mask = mask;
+		ret = __sched_setaffinity(p, &ac);
+
+		rq = task_rq_lock(p, &rf);
+		retry = p->migration_flags & MDF_CPUHP_AFFINITY_CHANGED;
+		if (!retry)
+			p->migration_flags &= ~MDF_CPUHP_FALLBACK;
+		task_rq_unlock(rq, p, &rf);
+
+		if (!retry) {
+			if (ret)
+				pr_warn_ratelimited("Failed to restore affinity for task %d: %d\n",
+						    task_pid_nr(p), ret);
+			break;
+		}
+	}
+
+	free_cpumask_var(mask);
+	return;
+
+clear:
+	rq = task_rq_lock(p, &rf);
+	p->migration_flags &= ~(MDF_CPUHP_FALLBACK |
+				MDF_CPUHP_AFFINITY_CHANGED);
+	task_rq_unlock(rq, p, &rf);
+}
+
+static struct task_struct *find_cpu_fallback_task(void)
+{
+	struct task_struct *g, *p, *task = NULL;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(g, p) {
+		if (!task_has_cpu_fallback(p))
+			continue;
+		task = get_task_struct(p);
+		break;
+	}
+	read_unlock(&tasklist_lock);
+
+	return task;
+}
+
+static void restore_cpu_fallback_tasks(void)
+{
+	struct task_struct **tasks, *g, *p, *task;
+	unsigned int count = 0, nr = 0, i;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(g, p)
+		count += task_has_cpu_fallback(p);
+	read_unlock(&tasklist_lock);
+
+	if (!count)
+		return;
+
+	tasks = kvcalloc(count, sizeof(*tasks), GFP_KERNEL);
+	if (!tasks)
+		goto scan;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(g, p) {
+		if (!task_has_cpu_fallback(p))
+			continue;
+		tasks[nr++] = get_task_struct(p);
+		if (nr == count)
+			break;
+	}
+	read_unlock(&tasklist_lock);
+
+	for (i = 0; i < nr; i++) {
+		restore_cpu_fallback(tasks[i]);
+		put_task_struct(tasks[i]);
+	}
+	kvfree(tasks);
+
+	/* Catch a child which inherited a fallback while tasks were collected. */
+scan:
+	while ((task = find_cpu_fallback_task())) {
+		restore_cpu_fallback(task);
+		put_task_struct(task);
+	}
+}
+
+void sched_cpu_fallback_begin(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&cpu_fallback_lock, flags);
+	WARN_ON_ONCE(cpu_fallback_active);
+	WRITE_ONCE(cpu_fallback_active, true);
+	raw_spin_unlock_irqrestore(&cpu_fallback_lock, flags);
+}
+
+void sched_cpu_fallback_end(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&cpu_fallback_lock, flags);
+	WRITE_ONCE(cpu_fallback_active, false);
+	raw_spin_unlock_irqrestore(&cpu_fallback_lock, flags);
+
+	restore_cpu_fallback_tasks();
 }
 
 /*
@@ -4612,6 +4783,7 @@ static void __sched_fork(u64 clone_flags, struct task_struct *p)
 	init_numa_balancing(clone_flags, p);
 	p->wake_entry.u_flags = CSD_TYPE_TTWU;
 	p->migration_pending = NULL;
+	p->migration_flags &= ~MDF_CPUHP_AFFINITY_CHANGED;
 	init_sched_mm(p);
 }
 
