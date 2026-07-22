@@ -329,9 +329,43 @@ static int class_function_probe(struct auxiliary_device *auxdev,
 	drv->core = core;
 	drv->function = &sdev->function;
 
-	ret = sdca_parse_function(dev, core->sdw, drv->function);
-	if (ret)
-		return ret;
+	if (drv->function->desc->node) {
+		ret = sdca_parse_function(dev, core->sdw, drv->function);
+		if (ret)
+			return ret;
+	} else if (core->hw_ops && core->hw_ops->get_function_data) {
+		/*
+		 * No DisCo/ACPI firmware node available (e.g. DT/ARM platform).
+		 * Use pre-populated static function data supplied by the
+		 * device-specific hw_ops instead of sdca_parse_function().
+		 * The callback returns an array of function_data entries;
+		 * pick the one matching this auxdev's function type.
+		 */
+		struct sdca_function_data *fdata;
+		unsigned int num = 0;
+		unsigned int i;
+
+		fdata = core->hw_ops->get_function_data(&num);
+		if (!fdata || num == 0)
+			return -EINVAL;
+
+		for (i = 0; i < num; i++) {
+			if (fdata[i].desc &&
+			    fdata[i].desc->type == sdev->function.desc->type) {
+				*drv->function = fdata[i];
+				drv->function->desc = sdev->function.desc;
+				break;
+			}
+		}
+		if (i == num) {
+			dev_err(dev, "no matching function data for type 0x%x\n",
+				sdev->function.desc->type);
+			return -EINVAL;
+		}
+	} else {
+		dev_err(dev, "no firmware node and no get_function_data hook\n");
+		return -EINVAL;
+	}
 
 	ndefaults = sdca_regmap_count_constants(dev, drv->function);
 	if (ndefaults < 0)

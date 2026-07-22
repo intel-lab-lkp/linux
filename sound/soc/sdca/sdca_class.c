@@ -24,7 +24,15 @@
 
 #define CLASS_SDW_ATTACH_TIMEOUT_MS	5000
 
-static int class_read_prop(struct sdw_slave *sdw)
+/**
+ * sdca_class_read_prop - fill SDCA-common SoundWire slave properties
+ * @sdw: SoundWire slave
+ *
+ * Exported so codec-specific SoundWire drivers can invoke the SDCA
+ * common property setup from their own sdw_slave_ops.read_prop, and
+ * then apply codec-specific overrides inline.
+ */
+int sdca_class_read_prop(struct sdw_slave *sdw)
 {
 	struct sdw_slave_prop *prop = &sdw->prop;
 
@@ -36,9 +44,10 @@ static int class_read_prop(struct sdw_slave *sdw)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(sdca_class_read_prop, "SND_SOC_SDCA_CLASS");
 
 static const struct sdw_slave_ops class_sdw_ops = {
-	.read_prop	= class_read_prop,
+	.read_prop	= sdca_class_read_prop,
 };
 
 static void class_regmap_lock(void *data)
@@ -136,9 +145,23 @@ err:
 	pm_runtime_put_sync(drv->dev);
 }
 
-static int class_sdw_probe(struct sdw_slave *sdw, const struct sdw_device_id *id)
+/**
+ * sdca_class_probe - SDCA class SoundWire slave probe helper
+ * @sdw: SoundWire slave
+ * @hw_ops: optional device-specific hw_ops (may be NULL for pure-generic
+ *          SDCA parts that need no quirks)
+ *
+ * Exported so codec-specific SoundWire drivers can call this from their
+ * own sdw_driver.probe.  For codecs with quirks, pass the codec's
+ * sdca_class_hw_ops so hw_init, DT function injection, and PDE hooks
+ * are wired up.  For pure-generic SDCA parts (used by the built-in
+ * class_sdw_driver in this file), pass NULL.
+ */
+int sdca_class_probe(struct sdw_slave *sdw,
+		     const struct sdca_class_hw_ops *hw_ops)
 {
 	struct device *dev = &sdw->dev;
+	struct sdca_device_data *data = &sdw->sdca_data;
 	struct regmap_config *dev_config;
 	struct sdca_class_drv *drv;
 	int ret;
@@ -156,10 +179,46 @@ static int class_sdw_probe(struct sdw_slave *sdw, const struct sdw_device_id *id
 
 	drv->dev = dev;
 	drv->sdw = sdw;
+	drv->hw_ops = hw_ops;
 	mutex_init(&drv->regmap_lock);
 	mutex_init(&drv->init_lock);
 
 	dev_set_drvdata(drv->dev, drv);
+
+	/*
+	 * On ARM platforms without ACPI/DisCo tables, sdca_lookup_functions()
+	 * is a no-op and num_functions stays 0. Inject the function descriptors
+	 * from the device-specific static data so sdca_dev_register_functions()
+	 * can create the auxiliary devices.
+	 */
+	if (data->num_functions == 0 && hw_ops && hw_ops->get_function_data) {
+		struct sdca_function_data *fdata;
+		unsigned int num = 0;
+		unsigned int i;
+
+		fdata = hw_ops->get_function_data(&num);
+		if (!fdata || num == 0 || num > SDCA_MAX_FUNCTION_COUNT)
+			return -EINVAL;
+
+		for (i = 0; i < num; i++) {
+			if (!fdata[i].desc)
+				return -EINVAL;
+			data->function[i].type = fdata[i].desc->type;
+			data->function[i].adr  = fdata[i].desc->adr;
+			data->function[i].name = fdata[i].desc->name;
+			data->function[i].node = NULL;
+		}
+		data->num_functions = num;
+
+		dev_info(dev, "no DisCo/ACPI functions found, injected %u descriptor(s)\n",
+			 num);
+	}
+
+	if (hw_ops && hw_ops->hw_init) {
+		ret = hw_ops->hw_init(sdw);
+		if (ret)
+			return dev_err_probe(dev, ret, "hw_init failed\n");
+	}
 
 	INIT_WORK(&drv->boot_work, class_boot_work);
 
@@ -184,6 +243,13 @@ static int class_sdw_probe(struct sdw_slave *sdw, const struct sdw_device_id *id
 	queue_work(system_long_wq, &drv->boot_work);
 
 	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(sdca_class_probe, "SND_SOC_SDCA_CLASS");
+
+static int class_sdw_probe(struct sdw_slave *sdw, const struct sdw_device_id *id)
+{
+	/* Pure-generic SDCA parts: no per-device hw_ops. */
+	return sdca_class_probe(sdw, NULL);
 }
 
 static void class_sdw_remove(struct sdw_slave *sdw)
@@ -266,11 +332,18 @@ err:
 	return ret;
 }
 
-static const struct dev_pm_ops class_pm_ops = {
+const struct dev_pm_ops sdca_class_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(class_suspend, class_resume)
 	RUNTIME_PM_OPS(class_runtime_suspend, class_runtime_resume, NULL)
 };
+EXPORT_SYMBOL_NS_GPL(sdca_class_pm_ops, "SND_SOC_SDCA_CLASS");
 
+/*
+ * Built-in class driver for SDCA parts that need no per-device quirks.
+ * Codecs that need hw_ops (hw_init, DT function injection, PDE / jack
+ * hooks, etc.) register their own sdw_driver and call
+ * sdca_class_probe(slave, &their_hw_ops) from their .probe.
+ */
 static const struct sdw_device_id class_sdw_id[] = {
 	SDW_SLAVE_ENTRY(0x01FA, 0x4245, 0),
 	SDW_SLAVE_ENTRY(0x01FA, 0x4249, 0),
@@ -282,7 +355,7 @@ MODULE_DEVICE_TABLE(sdw, class_sdw_id);
 static struct sdw_driver class_sdw_driver = {
 	.driver = {
 		.name		= "sdca_class",
-		.pm		= pm_ptr(&class_pm_ops),
+		.pm		= pm_ptr(&sdca_class_pm_ops),
 	},
 
 	.probe		= class_sdw_probe,
