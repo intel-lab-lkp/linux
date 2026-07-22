@@ -22,7 +22,14 @@ properties:
 
   reg:
     minItems: 1
-    maxItems: 2
+    maxItems: 3
+
+  reg-names:
+    minItems: 1
+    items:
+      - const: hc
+      - enum: [bctl, cqhci]
+      - const: cqhci
 
   interrupts:
     maxItems: 1
@@ -131,13 +138,27 @@ allOf:
     then:
       properties:
         reg:
+          minItems: 2
           items:
             - description: Host controller registers
             - description: Elba byte-lane enable register for writes
+            - description: CQE (Command Queuing Engine) registers (optional)
+        reg-names:
+          minItems: 2
+          items:
+            - const: hc
+            - const: bctl
+            - const: cqhci
     else:
       properties:
         reg:
-          maxItems: 1
+          items:
+            - description: Host Controller registers
+            - description: CQE (Command Queuing Engine) registers (optional)
+        reg-names:
+          items:
+            - const: hc
+            - const: cqhci
 
 unevaluatedProperties: false
 
@@ -145,7 +166,8 @@ examples:
   - |
     emmc: mmc@5a000000 {
         compatible = "socionext,uniphier-sd4hc", "cdns,sd4hc";
-        reg = <0x5a000000 0x400>;
+        reg = <0x5a000000 0x400>, <0x5a000400 0x060>;
+        reg-names = "hc", "cqhci";
         interrupts = <0 78 4>;
         clocks = <&clk 4>;
         bus-width = <8>;
