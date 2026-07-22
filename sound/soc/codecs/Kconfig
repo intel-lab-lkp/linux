@@ -2770,6 +2770,18 @@ config SND_SOC_WSA884X
 	  This enables support for Qualcomm WSA8840/WSA8845/WSA8845H Class-D
 	  Smart Speaker Amplifier.
 
+config SND_SOC_WCD9378_SDCA
+	tristate "Qualcomm Tambora (WCD9378) SDCA codec"
+	depends on SOUNDWIRE
+	depends on SND_SOC_SDCA_CLASS
+	default m if ARCH_QCOM
+	help
+	  This enables support for the Qualcomm Tambora (WCD9378) headset
+	  codec when driven via the SDCA class driver on ARM platforms
+	  without ACPI/DisCo tables. It provides the static SDCA topology
+	  and SoundWire data port properties transcribed from the factory
+	  ACPI tables.
+
 config SND_SOC_ZL38060
 	tristate "Microsemi ZL38060 Connected Home Audio Processor"
 	depends on SPI_MASTER
