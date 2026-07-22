@@ -78,6 +78,8 @@
 
 #define V9FS_MAGIC		0x01021997
 
+#define MQUEUE_MAGIC		0x19800202
+
 #define BDEVFS_MAGIC            0x62646576
 #define DAXFS_MAGIC             0x64646178
 #define BINFMTFS_MAGIC          0x42494e4d

@@ -22,6 +22,7 @@
 #include <linux/sysctl.h>
 #include <linux/poll.h>
 #include <linux/mqueue.h>
+#include <linux/magic.h>
 #include <linux/msg.h>
 #include <linux/skbuff.h>
 #include <linux/vmalloc.h>
@@ -47,7 +48,6 @@ struct mqueue_fs_context {
 	bool			 newns;	/* Set if newly created ipc namespace */
 };
 
-#define MQUEUE_MAGIC	0x19800202
 #define DIRENT_SIZE	20
 #define FILENT_SIZE	80
 
