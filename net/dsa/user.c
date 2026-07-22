@@ -2885,6 +2885,7 @@ void dsa_user_destroy(struct net_device *user_dev)
 
 	netif_carrier_off(user_dev);
 	rtnl_lock();
+	dsa_user_unsync_ha(user_dev);
 	netdev_upper_dev_unlink(conduit, user_dev);
 	unregister_netdevice(user_dev);
 	phylink_disconnect_phy(dp->pl);
