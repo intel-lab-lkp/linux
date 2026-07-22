@@ -6192,6 +6192,19 @@ static int ocfs2_get_truncate_log_info(struct ocfs2_super *osb,
 	}
 
 	di = (struct ocfs2_dinode *)bh->b_data;
+	/*
+	 * A JBD-managed buffer may skip the read validation callback. Check
+	 * the signature before exposing the truncate log to callers.
+	 */
+	if (!OCFS2_IS_VALID_DINODE(di)) {
+		status = ocfs2_error(osb->sb,
+				     "Invalid truncate log dinode #%llu\n",
+				     (unsigned long long)bh->b_blocknr);
+		iput(inode);
+		brelse(bh);
+		goto bail;
+	}
+
 	tl = &di->id2.i_dealloc;
 	tl_count = le16_to_cpu(tl->tl_count);
 	tl_used = le16_to_cpu(tl->tl_used);
