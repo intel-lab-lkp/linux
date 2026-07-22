@@ -323,7 +323,7 @@ struct drm_connector *msm_dp_drm_connector_init(struct msm_dp *msm_dp_display,
 	if (IS_ERR(connector))
 		return connector;
 
-	if (!msm_dp_display->is_edp)
+	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
 		drm_connector_attach_dp_subconnector_property(connector);
 
 	return connector;

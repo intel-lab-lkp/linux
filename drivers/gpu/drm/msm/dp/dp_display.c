@@ -295,7 +295,7 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
 
 	msm_dp_link_process_request(dp->link);
 
-	if (!dp->msm_dp_display.is_edp)
+	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
 		drm_dp_set_subconnector_property(connector,
 						 connector_status_connected,
 						 dp->panel->dpcd,
@@ -477,7 +477,7 @@ static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp)
 	 * We don't need separate work for disconnect as
 	 * connect/attention interrupts are disabled
 	 */
-	if (!dp->msm_dp_display.is_edp)
+	if (dp->msm_dp_display.connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
 		drm_dp_set_subconnector_property(dp->msm_dp_display.connector,
 						 connector_status_disconnected,
 						 dp->panel->dpcd,
