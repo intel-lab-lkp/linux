@@ -71,6 +71,7 @@
 #include <linux/unwind_deferred.h>
 #include <linux/uaccess.h>
 #include <linux/pidfs.h>
+#include <net/af_unix.h>
 
 #include <uapi/linux/wait.h>
 
@@ -1008,6 +1009,12 @@ void __noreturn do_exit(long code)
 	exit_nsproxy_namespaces(tsk);
 	exit_task_work(tsk);
 	exit_thread(tsk);
+
+	/*
+	 * Must be after exit_files() and exit_task_work(tsk) to ensure that
+	 * the task's AF_UNIX sockets have all been closed.
+	 */
+	unix_schedule_gc(NULL);
 
 	sched_autogroup_exit_task(tsk);
 	cgroup_task_exit(tsk);

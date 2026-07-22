@@ -14,10 +14,15 @@
 
 #if IS_ENABLED(CONFIG_UNIX)
 struct unix_sock *unix_get_socket(struct file *filp);
+void unix_schedule_gc(struct user_struct *user);
 #else
 static inline struct unix_sock *unix_get_socket(struct file *filp)
 {
 	return NULL;
+}
+
+static inline void unix_schedule_gc(struct user_struct *user)
+{
 }
 #endif
 
