@@ -176,9 +176,27 @@ static inline void check_heap_object(const void *ptr, unsigned long n,
 
 	if (is_vmalloc_addr(ptr) && !pagefault_disabled()) {
 		struct vmap_area *area = find_vmap_area(addr);
+		struct vm_struct *vm;
 
 		if (!area)
 			usercopy_abort("vmalloc", "no area", to_user, 0, n);
+
+		vm = area->vm;
+		/*
+		 * Mappings with a vm_struct track the originally requested
+		 * size. Check against that rather than the page-rounded
+		 * vmap_area->va_end so copies cannot reach vmalloc tail
+		 * padding. vmap mappings are always page aligned.
+		 */
+		if (vm && (vm->flags & VM_ALLOC) && vm->requested_size) {
+			unsigned long size = vm->requested_size;
+
+			offset = addr - area->va_start;
+			if (offset > size || n > size - offset)
+				usercopy_abort("vmalloc", NULL, to_user,
+					       offset, n);
+			return;
+		}
 
 		if (n > area->va_end - addr) {
 			offset = addr - area->va_start;
