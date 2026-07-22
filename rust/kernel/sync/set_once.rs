@@ -2,11 +2,18 @@
 
 //! A container that can be initialized at most once.
 
-use super::atomic::{
-    ordering::{Acquire, Relaxed, Release},
-    Atomic,
-};
 use core::{cell::UnsafeCell, mem::MaybeUninit};
+use kernel::sync::{
+    atomic::{
+        ordering::{
+            Acquire,
+            Relaxed,
+            Release, //
+        },
+        Atomic, //
+    },
+    lock, //
+};
 
 /// A container that can be populated at most once. Thread safe.
 ///
@@ -101,6 +108,34 @@ impl<T> SetOnce<T> {
             Ok(unsafe { &*self.value.get().cast() })
         } else {
             Err(value)
+        }
+    }
+
+    /// Get the value, or populate it if it's missing.
+    ///
+    /// This method is useful to avoid spinning on the internal atomic state. If all writers call
+    /// this method with the same lock, then they are synchronized with each other and it's
+    /// guaranteed that no caller will attempt to invoke [`SetOnce::populate`] more than once.
+    pub fn try_get_or_populate<F, E, U, B>(&self, lock: &lock::Lock<U, B>, f: F) -> Result<&T, E>
+    where
+        B: lock::Backend,
+        F: FnOnce() -> Result<T, E>,
+    {
+        if let Some(value) = self.as_ref() {
+            return Ok(value);
+        }
+
+        let mut to_insert = f()?;
+        loop {
+            if let Some(value) = self.as_ref() {
+                return Ok(value);
+            }
+
+            let _guard = lock.lock();
+            match self.populate(to_insert) {
+                Ok(value) => return Ok(value),
+                Err(ret) => to_insert = ret,
+            }
         }
     }
 
