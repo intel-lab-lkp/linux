@@ -1154,6 +1154,7 @@ struct rq {
 #ifdef CONFIG_SCHED_PROXY_EXEC
 	struct task_struct __rcu	*donor;  /* Scheduling context */
 	struct task_struct __rcu	*curr;   /* Execution context */
+	u64				proxy_pick_seq;
 #else
 	union {
 		struct task_struct __rcu *donor; /* Scheduler context */
@@ -3091,6 +3092,16 @@ static inline void __block_task(struct rq *rq, struct task_struct *p)
 
 extern void activate_task(struct rq *rq, struct task_struct *p, int flags);
 extern void deactivate_task(struct rq *rq, struct task_struct *p, int flags);
+
+static inline void sched_proxy_enqueue_task(struct task_struct *p)
+{
+#ifdef CONFIG_SCHED_PROXY_EXEC
+	if (!sched_proxy_exec())
+		return;
+
+	p->proxy_pick_seq = 0;
+#endif
+}
 
 extern void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags);
 

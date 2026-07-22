@@ -2221,6 +2221,7 @@ void activate_task(struct rq *rq, struct task_struct *p, int flags)
 	if (task_on_rq_migrating(p))
 		flags |= ENQUEUE_MIGRATED;
 
+	sched_proxy_enqueue_task(p);
 	enqueue_task(rq, p, flags);
 
 	WRITE_ONCE(p->on_rq, TASK_ON_RQ_QUEUED);
@@ -6724,6 +6725,7 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 }
 
 #ifdef CONFIG_SCHED_PROXY_EXEC
+
 static inline void proxy_set_task_cpu(struct task_struct *p, int cpu)
 {
 	unsigned int wake_cpu;
@@ -6839,14 +6841,14 @@ static void proxy_migrate_task(struct rq *rq, struct rq_flags *rf,
 }
 
 /*
- * Find runnable lock owner to proxy for mutex blocked donor
+ * Find runnable lock owner to proxy for a blocked donor
  *
  * Follow the blocked-on relation:
  *
  *                ,-> task
  *                |     | blocked-on
  *                |     v
- *  blocked_donor |   mutex
+ *  blocked_donor | blocking primitive
  *                |     | owner
  *                |     v
  *                `-- task
@@ -6873,6 +6875,8 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 	int this_cpu = cpu_of(rq);
 	struct task_struct *p;
 	int owner_cpu;
+
+	rq->proxy_pick_seq++;
 
 	/* Follow blocked_on chain. */
 	for (p = donor; p->is_blocked; p = owner) {
@@ -6990,6 +6994,14 @@ find_proxy_task(struct rq *rq, struct task_struct *donor, struct rq_flags *rf)
 			 */
 			return proxy_resched_idle(rq);
 		}
+
+		if (owner->proxy_pick_seq == rq->proxy_pick_seq) {
+			pr_warn_once("sched/pe: deadlock cycle detected, pid %d\n",
+				     p->pid);
+			__clear_task_blocked_on(p, NULL);
+			goto deactivate;
+		}
+		owner->proxy_pick_seq = rq->proxy_pick_seq;
 		/*
 		 * OK, now we're absolutely sure @owner is on this
 		 * rq, therefore holding @rq->lock is sufficient to
@@ -9056,6 +9068,9 @@ void __init sched_init(void)
 #ifdef CONFIG_SCHED_CACHE
 		raw_spin_lock_init(&rq->cpu_epoch_lock);
 		rq->cpu_epoch_next = jiffies;
+#endif
+#ifdef CONFIG_SCHED_PROXY_EXEC
+		rq->proxy_pick_seq = 1;
 #endif
 
 		zalloc_cpumask_var_node(&rq->scratch_mask, GFP_KERNEL, cpu_to_node(i));
