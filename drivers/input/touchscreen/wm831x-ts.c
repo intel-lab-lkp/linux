@@ -366,6 +366,10 @@ static int wm831x_ts_probe(struct platform_device *pdev)
 	return 0;
 
 err_pd_irq:
+	disable_irq(wm831x_ts->pd_irq);
+	disable_irq(wm831x_ts->data_irq);
+	cancel_work_sync(&wm831x_ts->pd_data_work);
+
 	free_irq(wm831x_ts->pd_irq, wm831x_ts);
 err_data_irq:
 	free_irq(wm831x_ts->data_irq, wm831x_ts);
@@ -377,6 +381,12 @@ err_alloc:
 static void wm831x_ts_remove(struct platform_device *pdev)
 {
 	struct wm831x_ts *wm831x_ts = platform_get_drvdata(pdev);
+
+	input_unregister_device(wm831x_ts->input_dev);
+
+	disable_irq(wm831x_ts->pd_irq);
+	disable_irq(wm831x_ts->data_irq);
+	cancel_work_sync(&wm831x_ts->pd_data_work);
 
 	free_irq(wm831x_ts->pd_irq, wm831x_ts);
 	free_irq(wm831x_ts->data_irq, wm831x_ts);
