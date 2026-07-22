@@ -300,8 +300,6 @@ int unix_prepare_fpl(struct scm_fp_list *fpl)
 	if (!fpl->edges)
 		goto err;
 
-	unix_schedule_gc(fpl->user);
-
 	return 0;
 
 err:
