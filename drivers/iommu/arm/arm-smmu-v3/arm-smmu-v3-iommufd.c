@@ -33,6 +33,9 @@ void *arm_smmu_hw_info(struct device *dev, u32 *length,
 	info->iidr = readl_relaxed(master->smmu->base + ARM_SMMU_IIDR);
 	info->aidr = readl_relaxed(master->smmu->base + ARM_SMMU_AIDR);
 
+	if (arm_smmu_erratum_repeat_tlbi_cfgi())
+		info->flags |= IOMMU_HW_INFO_ARM_SMMUV3_ERRATA_REPEAT_TLBI_CFGI;
+
 	*length = sizeof(*info);
 	*type = IOMMU_HW_INFO_TYPE_ARM_SMMUV3;
 

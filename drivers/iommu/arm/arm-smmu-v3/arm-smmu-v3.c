@@ -829,11 +829,16 @@ int __arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 	return ret;
 }
 
+bool arm_smmu_erratum_repeat_tlbi_cfgi(void)
+{
+	return static_branch_unlikely(&arm_smmu_erratum_repeat_tlbi_cfgi_key);
+}
+
 bool arm_smmu_erratum_cmd_needs_repeating(struct arm_smmu_cmd *cmd)
 {
 	u8 opcode;
 
-	if (!static_branch_unlikely(&arm_smmu_erratum_repeat_tlbi_cfgi_key))
+	if (!arm_smmu_erratum_repeat_tlbi_cfgi())
 		return false;
 
 	opcode = FIELD_GET(CMDQ_0_OP, cmd->data[0]);
@@ -5357,8 +5362,10 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 	if (of_dma_is_coherent(dev->of_node))
 		smmu->features |= ARM_SMMU_FEAT_COHERENCY;
 
-	if (of_device_is_compatible(dev->of_node, "nvidia,tegra264-smmu"))
+	if (of_device_is_compatible(dev->of_node, "nvidia,tegra264-smmu")) {
 		tegra_cmdqv_dt_probe(dev->of_node, smmu);
+		static_branch_enable(&arm_smmu_erratum_repeat_tlbi_cfgi_key);
+	}
 
 	return ret;
 }
