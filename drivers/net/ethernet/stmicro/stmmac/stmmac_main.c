@@ -1346,6 +1346,10 @@ static int stmmac_init_phy(struct net_device *dev)
 		int addr = priv->plat->phy_addr;
 		struct phy_device *phydev;
 
+		/* If a custom PCS is in use, no PHY is needed */
+		if (priv->hw->phylink_pcs)
+			return 0;
+
 		if (addr < 0) {
 			netdev_err(priv->dev, "no phy found\n");
 			return -ENODEV;
