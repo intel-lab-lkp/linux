@@ -1354,9 +1354,17 @@ static int msm_dp_modeset_init(struct msm_display *display,
 	return 0;
 }
 
+static bool msm_dp_display_wide_bus_enabled(struct msm_display *display)
+{
+	struct msm_dp *dp = container_of(display, struct msm_dp, display);
+
+	return msm_dp_wide_bus_available(dp);
+}
+
 static const struct msm_display_funcs msm_dp_display_funcs = {
 	.modeset_init = msm_dp_modeset_init,
 	.snapshot = msm_dp_snapshot,
+	.wide_bus_enabled = msm_dp_display_wide_bus_enabled,
 };
 
 struct msm_display *msm_dp_get_display(struct msm_dp *msm_dp_display)

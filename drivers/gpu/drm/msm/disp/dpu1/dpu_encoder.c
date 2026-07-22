@@ -269,24 +269,44 @@ bool dpu_encoder_needs_periph_flush(struct dpu_encoder_phys *phys_enc)
 }
 
 /**
+ * dpu_encoder_get_display - find the display sub-block driving an interface
+ * @dev:        the DRM device
+ * @disp_info:  the interface description
+ *
+ * Return: the &struct msm_display (DSI/DP/HDMI) driving the interface, or NULL
+ * for interfaces (e.g. writeback) that have no such sub-block.
+ */
+static struct msm_display *dpu_encoder_get_display(struct drm_device *dev,
+		const struct msm_display_info *disp_info)
+{
+	struct msm_drm_private *priv = dev->dev_private;
+	int index = disp_info->h_tile_instance[0];
+
+	switch (disp_info->intf_type) {
+	case INTF_DP:
+		return msm_dp_get_display(priv->kms->dp[index]);
+	case INTF_DSI:
+		return msm_dsi_get_display(priv->kms->dsi[index]);
+	case INTF_HDMI:
+		return msm_hdmi_get_display(priv->kms->hdmi);
+	default:
+		return NULL;
+	}
+}
+
+/**
  * dpu_encoder_is_widebus_enabled - return bool value if widebus is enabled
  * @drm_enc:    Pointer to previously created drm encoder structure
  */
 bool dpu_encoder_is_widebus_enabled(const struct drm_encoder *drm_enc)
 {
-	const struct dpu_encoder_virt *dpu_enc;
-	struct msm_drm_private *priv = drm_enc->dev->dev_private;
-	const struct msm_display_info *disp_info;
-	int index;
+	const struct dpu_encoder_virt *dpu_enc = to_dpu_encoder_virt(drm_enc);
+	struct msm_display *display;
 
-	dpu_enc = to_dpu_encoder_virt(drm_enc);
-	disp_info = &dpu_enc->disp_info;
-	index = disp_info->h_tile_instance[0];
+	display = dpu_encoder_get_display(drm_enc->dev, &dpu_enc->disp_info);
 
-	if (disp_info->intf_type == INTF_DP)
-		return msm_dp_wide_bus_available(priv->kms->dp[index]);
-	else if (disp_info->intf_type == INTF_DSI)
-		return msm_dsi_wide_bus_enabled(priv->kms->dsi[index]);
+	if (display)
+		return display->funcs->wide_bus_enabled(display);
 
 	return false;
 }

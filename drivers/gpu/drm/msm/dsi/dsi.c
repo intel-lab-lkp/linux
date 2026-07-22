@@ -17,8 +17,10 @@ struct drm_dsc_config *msm_dsi_get_dsc_config(struct msm_dsi *msm_dsi)
 	return msm_dsi_host_get_dsc_config(msm_dsi->host);
 }
 
-bool msm_dsi_wide_bus_enabled(struct msm_dsi *msm_dsi)
+static bool msm_dsi_wide_bus_enabled(struct msm_display *display)
 {
+	struct msm_dsi *msm_dsi = container_of(display, struct msm_dsi, display);
+
 	return msm_dsi_host_is_wide_bus_enabled(msm_dsi->host);
 }
 
@@ -279,6 +281,7 @@ static void msm_dsi_snapshot(struct msm_display *display,
 static const struct msm_display_funcs msm_dsi_display_funcs = {
 	.modeset_init = msm_dsi_modeset_init,
 	.snapshot = msm_dsi_snapshot,
+	.wide_bus_enabled = msm_dsi_wide_bus_enabled,
 };
 
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)

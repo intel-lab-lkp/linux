@@ -228,9 +228,15 @@ static void msm_hdmi_snapshot(struct msm_display *display,
 				    hdmi->mmio, "hdmi");
 }
 
+static bool msm_hdmi_wide_bus_enabled(struct msm_display *display)
+{
+	return false;
+}
+
 static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.modeset_init = msm_hdmi_modeset_init,
 	.snapshot = msm_hdmi_snapshot,
+	.wide_bus_enabled = msm_hdmi_wide_bus_enabled,
 };
 
 struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)

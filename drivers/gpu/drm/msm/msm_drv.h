@@ -283,12 +283,15 @@ struct msm_disp_state;
  *                to @encoder.
  * @snapshot:     capture the sub-block's state for a display snapshot;
  *                mandatory.
+ * @wide_bus_enabled: whether the sub-block drives a wide (2 pixel/clock) bus;
+ *                    mandatory.
  */
 struct msm_display_funcs {
 	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
 			    struct drm_encoder *encoder);
 	void (*snapshot)(struct msm_display *display,
 			 struct msm_disp_state *disp_state);
+	bool (*wide_bus_enabled)(struct msm_display *display);
 };
 
 /**
@@ -327,7 +330,6 @@ struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
-bool msm_dsi_wide_bus_enabled(struct msm_dsi *msm_dsi);
 struct drm_dsc_config *msm_dsi_get_dsc_config(struct msm_dsi *msm_dsi);
 const char *msm_dsi_get_te_source(struct msm_dsi *msm_dsi);
 #else
@@ -353,10 +355,6 @@ static inline bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi)
 {
 	return false;
 }
-static inline bool msm_dsi_wide_bus_enabled(struct msm_dsi *msm_dsi)
-{
-	return false;
-}
 
 static inline struct drm_dsc_config *msm_dsi_get_dsc_config(struct msm_dsi *msm_dsi)
 {
@@ -376,7 +374,6 @@ void __exit msm_dp_unregister(void);
 struct msm_display *msm_dp_get_display(struct msm_dp *dp_display);
 bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
 			       const struct drm_display_mode *mode);
-bool msm_dp_wide_bus_available(const struct msm_dp *dp_display);
 
 #else
 static inline int __init msm_dp_register(void)
@@ -393,11 +390,6 @@ static inline struct msm_display *msm_dp_get_display(struct msm_dp *dp_display)
 
 static inline bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
 					     const struct drm_display_mode *mode)
-{
-	return false;
-}
-
-static inline bool msm_dp_wide_bus_available(const struct msm_dp *dp_display)
 {
 	return false;
 }
