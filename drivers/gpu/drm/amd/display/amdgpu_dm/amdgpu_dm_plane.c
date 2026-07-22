@@ -1923,7 +1923,12 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	if (res)
 		return res;
 
-	if (plane->type == DRM_PLANE_TYPE_OVERLAY &&
+	/* TODO: per_pixel_alpha is not set to DCE planes. Check what blend
+	 * modes are supported in DCE-generation planes, i.e.
+	 * DC_PLANE_TYPE_DCE_RGB and expose blend mode property accordingly.
+	 */
+	if ((plane->type == DRM_PLANE_TYPE_OVERLAY ||
+	     plane->type == DRM_PLANE_TYPE_PRIMARY) &&
 	    plane_cap && plane_cap->per_pixel_alpha) {
 		unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) |
 					  BIT(DRM_MODE_BLEND_PREMULTI) |
@@ -1931,6 +1936,13 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 
 		drm_plane_create_alpha_property(plane);
 		drm_plane_create_blend_mode_property(plane, blend_caps);
+	} else if (plane->type == DRM_PLANE_TYPE_CURSOR) {
+		/* Cursor color format is set to
+		 * CURSOR_MODE_COLOR_PRE_MULTIPLIED_ALPHA by default, so only
+		 * advertise DRM_MODE_BLEND_PREMULTI blend mode for this type
+		 * of plane.
+		 */
+		drm_plane_create_blend_mode_property(plane, BIT(DRM_MODE_BLEND_PREMULTI));
 	}
 
 	if (plane->type == DRM_PLANE_TYPE_PRIMARY) {
