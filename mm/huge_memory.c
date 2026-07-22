@@ -4185,6 +4185,69 @@ int folio_split_unmapped(struct folio *folio, unsigned int new_order)
 	return ret;
 }
 
+/**
+ * folio_split_driver_managed() - split an exclusively-owned, off-LRU folio
+ * @folio: folio to split. Must be a large (compound) folio that is owned
+ *         exclusively by the caller and is invisible to the core mm.
+ * @new_order: the order of the folios after the split.
+ *
+ * This is a lightweight structural split for folios that a driver allocated
+ * and manages itself (for example TTM's GPU page pool, which allocates
+ * higher-order compound pages with __GFP_COMP and maps them into userspace
+ * via VM_PFNMAP rather than through the rmap). Such folios are:
+ *
+ *   - singly referenced (the caller holds the only reference),
+ *   - not mapped through the rmap (folio_mapcount() == 0),
+ *   - not in the page cache or swap cache (folio->mapping == NULL),
+ *   - not on any LRU or the deferred-split list.
+ *
+ * Because nothing else in the kernel can reach the folio, this helper does
+ * not perform the refcount freeze / remap / anon_vma & i_mmap locking dance
+ * that split_folio() and folio_split_unmapped() require. It performs only
+ * the compound and split-accounting teardown and then hands each resulting
+ * folio its own reference, mirroring split_page() for compound folios.
+ *
+ * The caller is responsible for freeing the resulting folios individually.
+ *
+ * Context: caller holds the only reference and excludes concurrent access.
+ * Does not sleep.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int folio_split_driver_managed(struct folio *folio, unsigned int new_order)
+{
+	unsigned int old_order = folio_order(folio);
+	unsigned int split_nr = 1U << new_order;
+	unsigned int nr = 1U << old_order;
+	unsigned int i;
+
+	if (new_order >= old_order)
+		return -EINVAL;
+
+	VM_WARN_ON_ONCE_FOLIO(folio_ref_count(folio) != 1, folio);
+	VM_WARN_ON_ONCE_FOLIO(folio_mapped(folio), folio);
+	VM_WARN_ON_ONCE_FOLIO(folio->mapping, folio);
+	VM_WARN_ON_ONCE_FOLIO(folio_test_swapcache(folio), folio);
+	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
+
+	/*
+	 * Structural + split-accounting teardown only. No mapping/xarray, no
+	 * refcount freeze: the folio is frozen-by-ownership already.
+	 */
+	__split_unmapped_folio(folio, new_order, &folio->page, NULL, NULL,
+			       SPLIT_TYPE_UNIFORM);
+
+	/*
+	 * Give every resulting head folio its own reference. The original
+	 * reference stays on the first one, exactly like split_page().
+	 */
+	for (i = split_nr; i < nr; i += split_nr)
+		set_page_refcounted(folio_page(folio, i));
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(folio_split_driver_managed);
+
 /*
  * This function splits a large folio into smaller folios of order @new_order.
  * @page can point to any page of the large folio to split. The split operation
