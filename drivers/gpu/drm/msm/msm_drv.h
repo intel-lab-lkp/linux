@@ -274,17 +274,39 @@ int msm_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 	.fbdev_probe = NULL
 #endif
 
+struct msm_display;
+
+/**
+ * struct msm_display_funcs - ops provided by a display sub-block (DSI/DP/HDMI)
+ * @modeset_init: create the bridge and connector for the sub-block, attaching
+ *                to @encoder.
+ */
+struct msm_display_funcs {
+	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
+			    struct drm_encoder *encoder);
+};
+
+/**
+ * struct msm_display - common interface to a display sub-block
+ * @funcs: sub-block provided ops
+ *
+ * Embedded in each sub-block (&struct hdmi, &struct msm_dsi, &struct msm_dp)
+ * so that common KMS code can set up their connectors without knowing the
+ * concrete type.
+ */
+struct msm_display {
+	const struct msm_display_funcs *funcs;
+};
+
 struct hdmi;
 #ifdef CONFIG_DRM_MSM_HDMI
-int msm_hdmi_modeset_init(struct hdmi *hdmi, struct drm_device *dev,
-		struct drm_encoder *encoder);
+struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi);
 void __init msm_hdmi_register(void);
 void __exit msm_hdmi_unregister(void);
 #else
-static inline int msm_hdmi_modeset_init(struct hdmi *hdmi, struct drm_device *dev,
-		struct drm_encoder *encoder)
+static inline struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)
 {
-	return -EINVAL;
+	return NULL;
 }
 static inline void __init msm_hdmi_register(void) {}
 static inline void __exit msm_hdmi_unregister(void) {}
@@ -296,8 +318,7 @@ int dsi_dev_attach(struct platform_device *pdev);
 void dsi_dev_detach(struct platform_device *pdev);
 void __init msm_dsi_register(void);
 void __exit msm_dsi_unregister(void);
-int msm_dsi_modeset_init(struct msm_dsi *msm_dsi, struct drm_device *dev,
-			 struct drm_encoder *encoder);
+struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
 void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi);
 bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
@@ -312,11 +333,9 @@ static inline void __init msm_dsi_register(void)
 static inline void __exit msm_dsi_unregister(void)
 {
 }
-static inline int msm_dsi_modeset_init(struct msm_dsi *msm_dsi,
-				       struct drm_device *dev,
-				       struct drm_encoder *encoder)
+static inline struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
 {
-	return -EINVAL;
+	return NULL;
 }
 static inline void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi)
 {
@@ -353,8 +372,7 @@ struct msm_dp;
 #ifdef CONFIG_DRM_MSM_DP
 int __init msm_dp_register(void);
 void __exit msm_dp_unregister(void);
-int msm_dp_modeset_init(struct msm_dp *dp_display, struct drm_device *dev,
-			 struct drm_encoder *encoder);
+struct msm_display *msm_dp_get_display(struct msm_dp *dp_display);
 void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp_display);
 bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
 			       const struct drm_display_mode *mode);
@@ -368,11 +386,9 @@ static inline int __init msm_dp_register(void)
 static inline void __exit msm_dp_unregister(void)
 {
 }
-static inline int msm_dp_modeset_init(struct msm_dp *dp_display,
-				       struct drm_device *dev,
-				       struct drm_encoder *encoder)
+static inline struct msm_display *msm_dp_get_display(struct msm_dp *dp_display)
 {
-	return -EINVAL;
+	return NULL;
 }
 
 static inline void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp_display)

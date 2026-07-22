@@ -159,9 +159,10 @@ fail:
  * should be handled in msm_hdmi_init() so that failure happens from
  * hdmi sub-device's probe.
  */
-int msm_hdmi_modeset_init(struct hdmi *hdmi,
+static int msm_hdmi_modeset_init(struct msm_display *display,
 		struct drm_device *dev, struct drm_encoder *encoder)
 {
+	struct hdmi *hdmi = container_of(display, struct hdmi, display);
 	int ret;
 
 	hdmi->dev = dev;
@@ -210,6 +211,15 @@ fail:
 	return ret;
 }
 
+static const struct msm_display_funcs msm_hdmi_display_funcs = {
+	.modeset_init = msm_hdmi_modeset_init,
+};
+
+struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)
+{
+	return hdmi ? &hdmi->display : NULL;
+}
+
 /*
  * The hdmi device:
  */
@@ -243,6 +253,7 @@ static int msm_hdmi_bind(struct device *dev, struct device *master, void *data)
 	err = msm_hdmi_init(hdmi);
 	if (err)
 		return err;
+	hdmi->display.funcs = &msm_hdmi_display_funcs;
 	priv->kms->hdmi = hdmi;
 
 	return 0;

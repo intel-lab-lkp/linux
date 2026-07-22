@@ -31,6 +31,8 @@ struct hdmi_audio {
 struct hdmi_hdcp_ctrl;
 
 struct hdmi {
+	struct msm_display display;
+
 	struct drm_device *dev;
 	struct platform_device *pdev;
 

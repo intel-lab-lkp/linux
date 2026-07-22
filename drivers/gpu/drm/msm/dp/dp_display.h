@@ -12,6 +12,8 @@
 #define DP_MAX_PIXEL_CLK_KHZ	675000
 
 struct msm_dp {
+	struct msm_display display;
+
 	struct drm_device *drm_dev;
 	struct platform_device *pdev;
 	struct drm_connector *connector;

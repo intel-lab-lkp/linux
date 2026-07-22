@@ -260,9 +260,24 @@ void msm_drm_kms_uninit(struct device *dev)
 		kms->funcs->destroy(kms);
 }
 
+static int msm_display_modeset_init(struct msm_display *display,
+				    struct drm_device *ddev,
+				    struct drm_encoder *encoder)
+{
+	if (!display)
+		return 0;
+
+	return display->funcs->modeset_init(display, ddev, encoder);
+}
+
 /*
- * Set up the bridges and connectors for the display sub-blocks, using the
- * encoders the backend created in ->kms_init().
+ * Set up the bridges and connectors for the display sub-blocks, dispatching
+ * through the common display interface using the encoders the backend created
+ * in ->kms_init().
+ *
+ * The slave link of a bonded DSI pair shares its master's encoder and creates
+ * no connector of its own; its ->modeset_init() handles that internally, so it
+ * needs no special-casing here.
  */
 static int msm_kms_init_connectors(struct drm_device *ddev)
 {
@@ -270,45 +285,30 @@ static int msm_kms_init_connectors(struct drm_device *ddev)
 	struct msm_kms *kms = priv->kms;
 	int i, ret;
 
-	/*
-	 * The slave link of a bonded DSI pair shares its master's encoder and
-	 * creates no connector of its own; msm_dsi_modeset_init() handles that
-	 * internally, so it needs no special-casing here.
-	 */
 	for (i = 0; i < ARRAY_SIZE(kms->dsi); i++) {
-		if (!kms->dsi[i])
-			continue;
-
-		ret = msm_dsi_modeset_init(kms->dsi[i], ddev, kms->dsi_encoder[i]);
-		if (ret) {
-			DRM_DEV_ERROR(ddev->dev,
-				      "modeset_init failed for dsi[%d]: %d\n", i, ret);
-			return ret;
-		}
+		ret = msm_display_modeset_init(msm_dsi_get_display(kms->dsi[i]),
+					       ddev, kms->dsi_encoder[i]);
+		if (ret)
+			goto fail;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(kms->dp); i++) {
-		if (!kms->dp[i])
-			continue;
-
-		ret = msm_dp_modeset_init(kms->dp[i], ddev, kms->dp_encoder[i]);
-		if (ret) {
-			DRM_DEV_ERROR(ddev->dev,
-				      "modeset_init failed for dp[%d]: %d\n", i, ret);
-			return ret;
-		}
+		ret = msm_display_modeset_init(msm_dp_get_display(kms->dp[i]),
+					       ddev, kms->dp_encoder[i]);
+		if (ret)
+			goto fail;
 	}
 
-	if (kms->hdmi) {
-		ret = msm_hdmi_modeset_init(kms->hdmi, ddev, kms->hdmi_encoder);
-		if (ret) {
-			DRM_DEV_ERROR(ddev->dev,
-				      "modeset_init failed for HDMI: %d\n", ret);
-			return ret;
-		}
-	}
+	ret = msm_display_modeset_init(msm_hdmi_get_display(kms->hdmi),
+				       ddev, kms->hdmi_encoder);
+	if (ret)
+		goto fail;
 
 	return 0;
+
+fail:
+	DRM_DEV_ERROR(ddev->dev, "modeset_init failed: %d\n", ret);
+	return ret;
 }
 
 int msm_drm_kms_init(struct device *dev, const struct drm_driver *drv)

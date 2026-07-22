@@ -115,6 +115,8 @@ destroy_dsi:
 	return ERR_PTR(ret);
 }
 
+static const struct msm_display_funcs msm_dsi_display_funcs;
+
 static int dsi_bind(struct device *dev, struct device *master, void *data)
 {
 	struct msm_drm_private *priv = dev_get_drvdata(master);
@@ -136,6 +138,7 @@ static int dsi_bind(struct device *dev, struct device *master, void *data)
 		msm_dsi->next_bridge = ext_bridge;
 	}
 
+	msm_dsi->display.funcs = &msm_dsi_display_funcs;
 	priv->kms->dsi[msm_dsi->id] = msm_dsi;
 
 	return 0;
@@ -230,9 +233,11 @@ void __exit msm_dsi_unregister(void)
 	platform_driver_unregister(&dsi_driver);
 }
 
-int msm_dsi_modeset_init(struct msm_dsi *msm_dsi, struct drm_device *dev,
-			 struct drm_encoder *encoder)
+static int msm_dsi_modeset_init(struct msm_display *display,
+				struct drm_device *dev,
+				struct drm_encoder *encoder)
 {
+	struct msm_dsi *msm_dsi = container_of(display, struct msm_dsi, display);
 	int ret;
 
 	msm_dsi->dev = dev;
@@ -260,6 +265,15 @@ int msm_dsi_modeset_init(struct msm_dsi *msm_dsi, struct drm_device *dev,
 	}
 
 	return 0;
+}
+
+static const struct msm_display_funcs msm_dsi_display_funcs = {
+	.modeset_init = msm_dsi_modeset_init,
+};
+
+struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
+{
+	return msm_dsi ? &msm_dsi->display : NULL;
 }
 
 void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi)

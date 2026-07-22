@@ -203,6 +203,8 @@ void msm_dp_display_signal_audio_complete(struct msm_dp *msm_dp_display)
 	complete_all(&dp->audio_comp);
 }
 
+static const struct msm_display_funcs msm_dp_display_funcs;
+
 static int msm_dp_display_bind(struct device *dev, struct device *master,
 			   void *data)
 {
@@ -212,6 +214,7 @@ static int msm_dp_display_bind(struct device *dev, struct device *master,
 	struct drm_device *drm = priv->dev;
 
 	dp->msm_dp_display.drm_dev = drm;
+	dp->msm_dp_display.display.funcs = &msm_dp_display_funcs;
 	priv->kms->dp[dp->id] = &dp->msm_dp_display;
 
 	dp->drm_dev = drm;
@@ -1317,9 +1320,10 @@ void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *r
 		DRM_ERROR("failed to initialize debug, rc = %d\n", rc);
 }
 
-int msm_dp_modeset_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
-			struct drm_encoder *encoder)
+static int msm_dp_modeset_init(struct msm_display *display,
+			       struct drm_device *dev, struct drm_encoder *encoder)
 {
+	struct msm_dp *msm_dp_display = container_of(display, struct msm_dp, display);
 	struct msm_dp_display_private *msm_dp_priv;
 	int ret;
 
@@ -1346,6 +1350,15 @@ int msm_dp_modeset_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
 	msm_dp_priv->panel->connector = msm_dp_display->connector;
 
 	return 0;
+}
+
+static const struct msm_display_funcs msm_dp_display_funcs = {
+	.modeset_init = msm_dp_modeset_init,
+};
+
+struct msm_display *msm_dp_get_display(struct msm_dp *msm_dp_display)
+{
+	return msm_dp_display ? &msm_dp_display->display : NULL;
 }
 
 void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,

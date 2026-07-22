@@ -32,6 +32,8 @@ enum msm_dsi_phy_usecase {
 #define DSI_BUS_CLK_MAX		4
 
 struct msm_dsi {
+	struct msm_display display;
+
 	struct drm_device *dev;
 	struct platform_device *pdev;
 
