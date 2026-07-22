@@ -3202,11 +3202,11 @@ static void wait_for_writer(struct btrfs_root *root)
 	DEFINE_WAIT(wait);
 
 	for (;;) {
-		prepare_to_wait(&root->log_writer_wait, &wait,
-				TASK_UNINTERRUPTIBLE);
-		if (!atomic_read(&root->log_writers))
+		if (atomic_read(&root->log_writers) == 0)
 			break;
 
+		prepare_to_wait(&root->log_writer_wait, &wait,
+				TASK_UNINTERRUPTIBLE);
 		mutex_unlock(&root->log_mutex);
 		schedule();
 		mutex_lock(&root->log_mutex);
