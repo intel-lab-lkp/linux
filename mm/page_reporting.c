@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/sysctl.h>
 #include <linux/scatterlist.h>
 
 #include "page_reporting.h"
@@ -47,13 +48,28 @@ MODULE_PARM_DESC(page_reporting_order, "Set page reporting order");
  */
 EXPORT_SYMBOL_GPL(page_reporting_order);
 
-#define PAGE_REPORTING_DELAY	(2 * HZ)
+#define PAGE_REPORTING_DELAY_MS_MAX	(10 * MSEC_PER_SEC)
+
+static unsigned int page_reporting_delay_ms = 2 * MSEC_PER_SEC;
+static unsigned int page_reporting_delay_ms_max = PAGE_REPORTING_DELAY_MS_MAX;
 static struct page_reporting_dev_info __rcu *pr_dev_info __read_mostly;
 
 enum {
 	PAGE_REPORTING_IDLE = 0,
 	PAGE_REPORTING_REQUESTED,
 	PAGE_REPORTING_ACTIVE
+};
+
+static struct ctl_table page_reporting_sysctls[] = {
+	{
+		.procname	= "page_reporting_delay_ms",
+		.data		= &page_reporting_delay_ms,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &page_reporting_delay_ms_max,
+	},
 };
 
 /* request page reporting */
@@ -80,7 +96,7 @@ __page_reporting_request(struct page_reporting_dev_info *prdev)
 	 * now we are limiting this to running no more than once every
 	 * couple of seconds.
 	 */
-	schedule_delayed_work(&prdev->work, PAGE_REPORTING_DELAY);
+	schedule_delayed_work(&prdev->work, msecs_to_jiffies(page_reporting_delay_ms));
 }
 
 /* notify prdev of free page reporting request */
@@ -343,7 +359,7 @@ err_out:
 	 */
 	state = atomic_cmpxchg(&prdev->state, state, PAGE_REPORTING_IDLE);
 	if (state == PAGE_REPORTING_REQUESTED)
-		schedule_delayed_work(&prdev->work, PAGE_REPORTING_DELAY);
+		schedule_delayed_work(&prdev->work, msecs_to_jiffies(page_reporting_delay_ms));
 }
 
 static DEFINE_MUTEX(page_reporting_mutex);
@@ -416,3 +432,10 @@ void page_reporting_unregister(struct page_reporting_dev_info *prdev)
 	mutex_unlock(&page_reporting_mutex);
 }
 EXPORT_SYMBOL_GPL(page_reporting_unregister);
+
+static int __init page_reporting_sysctl_init(void)
+{
+	register_sysctl_init("vm", page_reporting_sysctls);
+	return 0;
+}
+late_initcall(page_reporting_sysctl_init);
