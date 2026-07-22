@@ -1197,10 +1197,12 @@ add_field:
  * Format: type name [size]
  */
 static int user_event_parse_field(char *field, struct user_event *user,
-				  u32 *offset)
+				  int *offset)
 {
 	char *part, *type, *name;
-	u32 depth = 0, saved_offset = *offset;
+	u32 depth = 0;
+	unsigned int field_size;
+	int saved_offset = *offset;
 	int len, size = -EINVAL;
 	bool is_struct = false;
 
@@ -1261,8 +1263,11 @@ parse:
 			if (!is_struct)
 				return -EINVAL;
 
-			if (kstrtou32(part, 10, &size))
+			if (kstrtouint(part, 10, &field_size))
 				return -EINVAL;
+			if (field_size > INT_MAX)
+				return -E2BIG;
+			size = field_size;
 			break;
 		default:
 			return -EINVAL;
@@ -1281,6 +1286,9 @@ parse:
 	if (size < 0)
 		return size;
 
+	if (size > INT_MAX - saved_offset)
+		return -E2BIG;
+
 	*offset = saved_offset + size;
 
 	return user_event_add_field(user, type, name, saved_offset, size,
@@ -1290,7 +1298,7 @@ parse:
 static int user_event_parse_fields(struct user_event *user, char *args)
 {
 	char *field;
-	u32 offset = sizeof(struct trace_entry);
+	int offset = sizeof(struct trace_entry);
 	int ret = -EINVAL;
 
 	if (args == NULL)
