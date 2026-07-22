@@ -1012,7 +1012,7 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	struct page *page;
 
 	if (likely(softleaf_is_swap(entry))) {
-		if (swap_dup_entry_direct(entry) < 0)
+		if (swap_dup_entries_direct(entry, 1) < 0)
 			return -EIO;
 
 		mm_prepare_for_swap_entries(dst_mm);
@@ -1427,7 +1427,7 @@ again:
 
 	if (ret == -EIO) {
 		VM_WARN_ON_ONCE(!entry.val);
-		if (swap_retry_table_alloc(entry, GFP_KERNEL) < 0) {
+		if (swap_retry_table_alloc(entry, 1, GFP_KERNEL) < 0) {
 			ret = -ENOMEM;
 			goto out;
 		}

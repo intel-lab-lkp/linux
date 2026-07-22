@@ -229,7 +229,7 @@ static inline void swap_cluster_unlock_irq(struct swap_cluster_info *ci)
 	spin_unlock_irq(&ci->lock);
 }
 
-extern int swap_retry_table_alloc(swp_entry_t entry, gfp_t gfp);
+int swap_retry_table_alloc(swp_entry_t entry, unsigned int nr, gfp_t gfp);
 
 /*
  * Below are the core routines for doing swap for a folio.
@@ -435,7 +435,8 @@ static inline int swap_writeout(struct swap_io_ctx *ctx, struct folio *folio)
 	return 0;
 }
 
-static inline int swap_retry_table_alloc(swp_entry_t entry, gfp_t gfp)
+static inline int swap_retry_table_alloc(swp_entry_t entry, unsigned int nr,
+					 gfp_t gfp)
 {
 	return -EINVAL;
 }
