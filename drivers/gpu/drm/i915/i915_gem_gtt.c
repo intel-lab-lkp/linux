@@ -16,6 +16,7 @@
 #include <asm/smp.h>
 
 #include "gt/intel_gt.h"
+#include "gt/intel_gt_print.h"
 #include "gt/intel_gt_requests.h"
 
 #include "i915_drv.h"
@@ -58,10 +59,14 @@ void i915_gem_gtt_finish_pages(struct drm_i915_gem_object *obj,
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 	struct i915_ggtt *ggtt = to_gt(i915)->ggtt;
 
-	/* XXX This does not prevent more requests being submitted! */
-	if (unlikely(ggtt->do_idle_maps))
-		/* Wait a bit, in the hope it avoids the hang */
-		usleep_range(100, 250);
+	if (unlikely(ggtt->do_idle_maps)) {
+		struct intel_gt *gt;
+		int i;
+
+		for_each_gt(gt, i915, i)
+			if (intel_gt_wait_for_idle(gt, MAX_SCHEDULE_TIMEOUT))
+				gt_err(gt, "Failed to idle before DMA unmap\n");
+	}
 
 	dma_unmap_sg(i915->drm.dev, pages->sgl, pages->nents,
 		     DMA_BIDIRECTIONAL);
