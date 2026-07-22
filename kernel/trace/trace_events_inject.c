@@ -243,6 +243,9 @@ static int parse_entry(char *str, struct trace_event_call *call, void **pentry)
 				int str_loc = entry_size & 0xffff;
 				u32 *str_item;
 
+				if (str_len > INT_MAX - entry_size)
+					return -E2BIG;
+
 				entry_size += str_len;
 				*pentry = krealloc(entry, entry_size, GFP_KERNEL);
 				if (!*pentry) {
