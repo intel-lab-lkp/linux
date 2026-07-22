@@ -17,6 +17,7 @@
 
 #include "msm_kms.h"
 #include "hdmi.h"
+#include "disp/msm_disp_snapshot.h"
 
 void msm_hdmi_set_mode(struct hdmi *hdmi, bool power_on)
 {
@@ -214,6 +215,17 @@ fail:
 static void msm_hdmi_snapshot(struct msm_display *display,
 			      struct msm_disp_state *disp_state)
 {
+	struct hdmi *hdmi = container_of(display, struct hdmi, display);
+
+	/*
+	 * Accessing the HDMI registers requires the clocks to be running,
+	 * which is only guaranteed while the block is powered on.
+	 */
+	if (!hdmi->power_on)
+		return;
+
+	msm_disp_snapshot_add_block(disp_state, hdmi->mmio_size,
+				    hdmi->mmio, "hdmi");
 }
 
 static const struct msm_display_funcs msm_hdmi_display_funcs = {
@@ -310,7 +322,7 @@ static int msm_hdmi_dev_probe(struct platform_device *pdev)
 		hdmi->next_bridge = NULL;
 	}
 
-	hdmi->mmio = msm_ioremap(pdev, "core_physical");
+	hdmi->mmio = msm_ioremap_size(pdev, "core_physical", &hdmi->mmio_size);
 	if (IS_ERR(hdmi->mmio)) {
 		ret = PTR_ERR(hdmi->mmio);
 		goto err_put_bridge;

@@ -48,6 +48,7 @@ struct hdmi {
 	unsigned long pixclock;
 
 	void __iomem *mmio;
+	phys_addr_t mmio_size;
 	void __iomem *qfprom_mmio;
 	phys_addr_t mmio_phy_addr;
 
