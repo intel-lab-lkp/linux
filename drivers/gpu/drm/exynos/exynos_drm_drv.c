@@ -7,6 +7,7 @@
  *	Seung-Woo Kim <sw0312.kim@samsung.com>
  */
 
+#include <linux/aperture.h>
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
@@ -272,6 +273,11 @@ static int exynos_drm_bind(struct device *dev)
 	ret = component_bind_all(drm->dev, drm);
 	if (ret)
 		goto err_mode_config_cleanup;
+
+	/* Remove existing devices which own the framebuffer memory. */
+	ret = aperture_remove_all_conflicting_devices(exynos_drm_driver.name);
+	if (ret)
+		goto err_unbind_all;
 
 	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
 	if (ret)
