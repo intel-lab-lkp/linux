@@ -8,6 +8,7 @@
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include "inv_icm42607.h"
@@ -56,6 +57,13 @@ static int inv_icm42607_probe(struct i2c_client *client)
 	return inv_icm42607_core_probe(regmap, hw, inv_icm42607_i2c_bus_setup);
 }
 
+static void inv_icm42607_i2c_remove(struct i2c_client *client)
+{
+	struct inv_icm42607_state *st = dev_get_drvdata(&client->dev);
+
+	inv_icm42607_sensors_off(st);
+}
+
 static const struct i2c_device_id inv_icm42607_id[] = {
 	{
 		.name = "icm42607",
@@ -84,9 +92,11 @@ static struct i2c_driver inv_icm42607_driver = {
 	.driver = {
 		.name = "inv-icm42607-i2c",
 		.of_match_table = inv_icm42607_of_matches,
+		.pm = pm_ptr(&inv_icm42607_pm_ops),
 	},
 	.id_table = inv_icm42607_id,
 	.probe = inv_icm42607_probe,
+	.remove = inv_icm42607_i2c_remove,
 };
 module_i2c_driver(inv_icm42607_driver);
 

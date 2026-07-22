@@ -7,6 +7,7 @@
 #include <linux/dev_printk.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
 
@@ -65,6 +66,13 @@ static int inv_icm42607_probe(struct spi_device *spi)
 	return inv_icm42607_core_probe(regmap, hw, inv_icm42607_spi_bus_setup);
 }
 
+static void inv_icm42607_spi_remove(struct spi_device *spi)
+{
+	struct inv_icm42607_state *st = dev_get_drvdata(&spi->dev);
+
+	inv_icm42607_sensors_off(st);
+}
+
 static const struct spi_device_id inv_icm42607_spi_id_table[] = {
 	{
 		.name = "icm42607",
@@ -94,9 +102,11 @@ static struct spi_driver inv_icm42607_driver = {
 	.driver = {
 		.name = "inv-icm42607-spi",
 		.of_match_table = inv_icm42607_of_matches,
+		.pm = pm_ptr(&inv_icm42607_pm_ops),
 	},
 	.id_table = inv_icm42607_spi_id_table,
 	.probe = inv_icm42607_probe,
+	.remove = inv_icm42607_spi_remove,
 };
 module_spi_driver(inv_icm42607_driver);
 
