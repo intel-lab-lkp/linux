@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regmap/common.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Common register access constraints
+
+maintainers:
+  - TBD
+
+description:
+  Common properties describing register access constraints.
+
+properties:
+  no-sequential-read:
+    type: boolean
+    description:
+      Indicates that this device instance does not support sequential
+      register reads.
+
+      Reads may start at a given register address, but reading multiple
+      consecutive registers in a single operation is not reliable.
+      Software must instead read registers individually.
+
+additionalProperties: true
