@@ -335,7 +335,7 @@ static long tlb_inval_timeout_delay(struct xe_tlb_inval *tlb_inval)
 	struct xe_guc *guc = tlb_inval->private;
 
 	/* this reflects what HW/GuC needs to process TLB inv request */
-	const long hw_tlb_timeout = HZ / 4;
+	const long hw_tlb_timeout = HZ / 2;
 
 	/* this estimates actual delay caused by the CTB transport */
 	long delay = xe_guc_ct_queue_proc_time_jiffies(&guc->ct);
