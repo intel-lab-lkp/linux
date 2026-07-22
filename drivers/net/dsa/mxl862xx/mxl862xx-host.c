@@ -346,6 +346,11 @@ int mxl862xx_api_wrap(struct mxl862xx_priv *priv, u16 cmd, void *_data,
 		goto out;
 	}
 
+	if (priv->rescue_mode) {
+		ret = -ENODEV;
+		goto out;
+	}
+
 	if (priv->block_host && cmd != SYS_MISC_FW_UPDATE &&
 	    cmd != SYS_MISC_FW_VERSION) {
 		ret = -EBUSY;

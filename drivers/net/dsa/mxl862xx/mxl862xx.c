@@ -629,9 +629,22 @@ static int mxl862xx_setup(struct dsa_switch *ds)
 	if (ret)
 		return ret;
 
-	ret = mxl862xx_wait_ready(ds);
-	if (ret)
-		return ret;
+	priv->rescue_mode = mxl862xx_rescue_mode_detect(priv);
+	if (!priv->rescue_mode) {
+		ret = mxl862xx_wait_ready(ds);
+		if (ret) {
+			/* the reset may only now have triggered rescue mode */
+			priv->rescue_mode = mxl862xx_rescue_mode_detect(priv);
+			if (!priv->rescue_mode)
+				return ret;
+		}
+	}
+
+	if (priv->rescue_mode) {
+		dev_warn(ds->dev,
+			 "switch stuck in MCUboot rescue mode, use devlink to flash new firmware\n");
+		return 0;
+	}
 
 	mutex_init(&priv->serdes_lock);
 	for (i = 0; i < ARRAY_SIZE(priv->serdes_ports); i++)
@@ -716,11 +729,21 @@ static int mxl862xx_port_state(struct dsa_switch *ds, int port, bool enable)
 static int mxl862xx_port_enable(struct dsa_switch *ds, int port,
 				struct phy_device *phydev)
 {
+	struct mxl862xx_priv *priv = ds->priv;
+
+	if (priv->rescue_mode)
+		return 0;
+
 	return mxl862xx_port_state(ds, port, true);
 }
 
 static void mxl862xx_port_disable(struct dsa_switch *ds, int port)
 {
+	struct mxl862xx_priv *priv = ds->priv;
+
+	if (priv->rescue_mode)
+		return;
+
 	if (mxl862xx_port_state(ds, port, false))
 		dev_err(ds->dev, "failed to disable port %d\n", port);
 }
@@ -1338,6 +1361,12 @@ static int mxl862xx_port_setup(struct dsa_switch *ds, int port)
 	bool is_cpu_port = dsa_port_is_cpu(dp);
 	int ret;
 
+	/* DSA reinits failed user ports as unused; shared ports must
+	 * succeed for the tree to register.
+	 */
+	if (priv->rescue_mode)
+		return dsa_port_is_user(dp) ? -ENODEV : 0;
+
 	ret = mxl862xx_port_state(ds, port, false);
 	if (ret)
 		return ret;
@@ -1633,6 +1662,9 @@ static void mxl862xx_port_stp_state_set(struct dsa_switch *ds, int port,
 	};
 	struct mxl862xx_priv *priv = ds->priv;
 	int ret;
+
+	if (priv->rescue_mode)
+		return;
 
 	switch (state) {
 	case BR_STATE_DISABLED:
