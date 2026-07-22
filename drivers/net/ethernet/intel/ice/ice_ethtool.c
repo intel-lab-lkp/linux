@@ -2800,7 +2800,7 @@ ice_set_link_ksettings(struct net_device *netdev,
 		/* Tell the OS link is going down, the link will go
 		 * back up when fw says it is ready asynchronously
 		 */
-		ice_print_link_msg(np->vsi, false);
+		ice_print_link_msg(np->vsi, false, 0);
 		netif_carrier_off(netdev);
 		netif_tx_stop_all_queues(netdev);
 	}
