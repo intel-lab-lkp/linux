@@ -2,15 +2,15 @@
 /*
  * Copyright 2015, Michael Neuling, IBM Corp.
  *
- * Test the kernel's signal delievery code to ensure that we don't
- * trelaim twice in the kernel signal delivery code.  This can happen
+ * Test the kernel's signal delivery code to ensure that we don't
+ * treclaim twice in the kernel signal delivery code.  This can happen
  * if we trigger a signal when in a transaction and the stack pointer
  * is bogus.
  *
  * This test case registers a SEGV handler, sets the stack pointer
  * (r1) to NULL, starts a transaction and then generates a SEGV.  The
  * SEGV should be handled but we exit here as the stack pointer is
- * invalid and hance we can't sigreturn.  We only need to check that
+ * invalid and hence we can't sigreturn.  We only need to check that
  * this flow doesn't crash the kernel.
  */
 
