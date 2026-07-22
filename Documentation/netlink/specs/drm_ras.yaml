@@ -69,6 +69,10 @@ attribute-sets:
         name: error-value
         type: u32
         doc: Current value of the requested error counter.
+      -
+        name: error-threshold
+        type: u32
+        doc: Error threshold of the counter.
 
 operations:
   list:
@@ -124,3 +128,31 @@ operations:
       do:
         request:
           attributes: *id-attrs
+    -
+      name: get-error-threshold
+      doc: >-
+           Retrieve error threshold of a given counter.
+           The response includes the id, the name, and current threshold
+           of the counter.
+      attribute-set: error-counter-attrs
+      flags: [admin-perm]
+      do:
+        request:
+          attributes: *id-attrs
+        reply:
+          attributes:
+            - error-id
+            - error-name
+            - error-threshold
+    -
+      name: set-error-threshold
+      doc: >-
+           Set error threshold of a given counter.
+      attribute-set: error-counter-attrs
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - node-id
+            - error-id
+            - error-threshold
