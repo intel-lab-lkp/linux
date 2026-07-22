@@ -1670,4 +1670,8 @@ struct kvm_pre_fault_memory {
 	__u64 padding[5];
 };
 
+/* LoongArch: bulk CSR get/set for migration */
+#define KVM_LOONGARCH_GET_CSR	_IOWR(KVMIO, 0xd6, struct kvm_loongarch_csrs)
+#define KVM_LOONGARCH_SET_CSR	_IOW(KVMIO,  0xd7, struct kvm_loongarch_csrs)
+
 #endif /* __LINUX_KVM_H */

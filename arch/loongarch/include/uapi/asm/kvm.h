@@ -127,6 +127,19 @@ struct kvm_sync_regs {
 struct kvm_sregs {
 };
 
+/* bulk CSR entries for VM migration */
+struct kvm_loongarch_csr_entry {
+	__u32 index;
+	__u32 reserved;
+	__u64 data;
+};
+
+struct kvm_loongarch_csrs {
+	__u32 ncsrs;	/* number of csr entries */
+	__u32 pad;
+	__DECLARE_FLEX_ARRAY(struct kvm_loongarch_csr_entry, entries);
+};
+
 struct kvm_iocsr_entry {
 	__u32 addr;
 	__u32 pad;
