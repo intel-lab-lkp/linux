@@ -242,4 +242,7 @@
 /* PHY registers */
 #define I82579_DFT_CTRL	PHY_REG(769, 20)
 
+/* Smallest BAR0 that covers every register the driver accesses */
+#define E1000_MMIO_LEN_MIN	(E1000_SYSSTMPH + sizeof(u32))
+
 #endif
