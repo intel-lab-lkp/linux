@@ -18,6 +18,7 @@ Block
 
    blk-mq
    data-integrity
+   error-injection
 
 TODOList:
 * bfq-iosched
