@@ -705,6 +705,10 @@ int nfit_spa_type(struct acpi_nfit_system_address *spa)
 
 static size_t sizeof_spa(struct acpi_nfit_system_address *spa)
 {
+	if (spa->header.length <
+	    offsetof(struct acpi_nfit_system_address, reserved))
+		return 0;
+
 	if (spa->flags & ACPI_NFIT_LOCATION_COOKIE_VALID)
 		return sizeof(*spa);
 	return sizeof(*spa) - 8;
@@ -868,9 +872,16 @@ static bool add_bdw(struct acpi_nfit_desc *acpi_desc,
 
 static size_t sizeof_idt(struct acpi_nfit_interleave *idt)
 {
+	size_t size;
+
 	if (idt->header.length < sizeof(*idt))
 		return 0;
-	return sizeof(*idt) + sizeof(u32) * idt->line_count;
+
+	size = struct_size(idt, line_offset, idt->line_count);
+	if (size > idt->header.length)
+		return 0;
+
+	return size;
 }
 
 static bool add_idt(struct acpi_nfit_desc *acpi_desc,
@@ -907,9 +918,16 @@ static bool add_idt(struct acpi_nfit_desc *acpi_desc,
 
 static size_t sizeof_flush(struct acpi_nfit_flush_address *flush)
 {
+	size_t size;
+
 	if (flush->header.length < sizeof(*flush))
 		return 0;
-	return struct_size(flush, hint_address, flush->hint_count);
+
+	size = struct_size(flush, hint_address, flush->hint_count);
+	if (size > flush->header.length)
+		return 0;
+
+	return size;
 }
 
 static bool add_flush(struct acpi_nfit_desc *acpi_desc,
@@ -951,7 +969,16 @@ static bool add_platform_cap(struct acpi_nfit_desc *acpi_desc,
 	struct device *dev = acpi_desc->dev;
 	u32 mask;
 
-	mask = (1 << (pcap->highest_capability + 1)) - 1;
+	if (pcap->header.length < sizeof(*pcap))
+		return false;
+	if (pcap->highest_capability > 31)
+		return false;
+
+	if (pcap->highest_capability == 31)
+		mask = U32_MAX;
+	else
+		mask = (1U << (pcap->highest_capability + 1)) - 1;
+
 	acpi_desc->platform_cap = pcap->capabilities & mask;
 	dev_dbg(dev, "cap: %#x\n", acpi_desc->platform_cap);
 	return true;
@@ -963,14 +990,18 @@ static void *add_table(struct acpi_nfit_desc *acpi_desc,
 	struct device *dev = acpi_desc->dev;
 	struct acpi_nfit_header *hdr;
 	void *err = ERR_PTR(-ENOMEM);
+	size_t table_len;
 
 	if (table >= end)
 		return NULL;
+	table_len = end - table;
+	if (table_len < sizeof(*hdr))
+		return NULL;
 
 	hdr = table;
-	if (!hdr->length) {
-		dev_warn(dev, "found a zero length table '%d' parsing nfit\n",
-			hdr->type);
+	if (hdr->length < sizeof(*hdr) || hdr->length > table_len) {
+		dev_warn(dev, "invalid table length %u for type %u parsing nfit\n",
+			 hdr->length, hdr->type);
 		return NULL;
 	}
 
