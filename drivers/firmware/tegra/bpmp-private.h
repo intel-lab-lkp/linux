@@ -33,4 +33,13 @@ int tegra_bpmp_mbwt_get(struct tegra_bpmp *bpmp, unsigned int instance,
 int tegra_bpmp_mbwt_set(struct tegra_bpmp *bpmp, unsigned int instance,
 			unsigned int vc_type, unsigned int bandwidth);
 
+#ifdef CONFIG_SYSFS
+int tegra_bpmp_init_sysfs(struct tegra_bpmp *bpmp);
+#else
+static inline int tegra_bpmp_init_sysfs(struct tegra_bpmp *bpmp)
+{
+	return 0;
+}
+#endif
+
 #endif
