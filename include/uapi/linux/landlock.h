@@ -478,7 +478,9 @@ struct landlock_net_port_attr {
  * Setting a flag for a ruleset will isolate the Landlock domain to forbid
  * connections to resources outside the domain.
  *
- * This is supported since Landlock ABI version 6.
+ * This is supported since Landlock ABI version 6.  The
+ * %LANDLOCK_SCOPE_POSIX_MSG_QUEUE scope is supported since Landlock ABI version
+ * 11.
  *
  * Scopes:
  *
@@ -487,6 +489,8 @@ struct landlock_net_port_attr {
  *   related Landlock domain (e.g., a parent domain or a non-sandboxed process).
  * - %LANDLOCK_SCOPE_SIGNAL: Restrict a sandboxed process from sending a signal
  *   to another process outside the domain.
+ * - %LANDLOCK_SCOPE_POSIX_MSG_QUEUE: Restrict a sandboxed process from opening
+ *   a POSIX message queue created outside the domain.
  */
 /* clang-format off */
 #define LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET		(1ULL << 0)
