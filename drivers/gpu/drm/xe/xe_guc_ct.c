@@ -1377,7 +1377,7 @@ retry_same_fence:
 wait_again:
 	ret = wait_event_timeout(ct->g2h_fence_wq, READ_ONCE(g2h_fence.done), HZ);
 	if (!ret) {
-		LNL_FLUSH_WORK(&ct->g2h_worker);
+		xe_guc_ct_flush_g2h(ct);
 		if (READ_ONCE(g2h_fence.done)) {
 			xe_gt_warn(gt, "G2H fence %u, action %04x, done\n",
 				   g2h_fence.seqno, action[0]);
@@ -2044,6 +2044,27 @@ static void g2h_worker_func(struct work_struct *w)
 	struct xe_guc_ct *ct = container_of(w, struct xe_guc_ct, g2h_worker);
 
 	receive_g2h(ct);
+}
+
+/**
+ * xe_guc_ct_flush_g2h() - Force processing of pending G2H messages
+ * @ct: GuC CT object
+ *
+ * The GUC2HOST interrupt for a G2H message may be lost or coalesced. When
+ * that happens the G2H worker is never queued and flushing it is a no-op
+ * that does not read the G2H CTB, leaving messages the GuC has already
+ * posted unprocessed until the next interrupt arrives. Queue the worker
+ * before flushing it so the flush always drains the G2H CTB. A spurious
+ * worker run is safe: it returns without side effects if the CTB is empty
+ * or CT communication is disabled.
+ */
+void xe_guc_ct_flush_g2h(struct xe_guc_ct *ct)
+{
+	if (!xe_guc_ct_enabled(ct))
+		return;
+
+	queue_work(ct->g2h_wq, &ct->g2h_worker);
+	flush_work(&ct->g2h_worker);
 }
 
 static struct xe_guc_ct_snapshot *guc_ct_snapshot_alloc(struct xe_guc_ct *ct, bool atomic,

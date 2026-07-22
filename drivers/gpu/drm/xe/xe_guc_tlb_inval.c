@@ -327,7 +327,7 @@ static void tlb_inval_flush(struct xe_tlb_inval *tlb_inval)
 {
 	struct xe_guc *guc = tlb_inval->private;
 
-	LNL_FLUSH_WORK(&guc->ct.g2h_worker);
+	xe_guc_ct_flush_g2h(&guc->ct);
 }
 
 static long tlb_inval_timeout_delay(struct xe_tlb_inval *tlb_inval)
