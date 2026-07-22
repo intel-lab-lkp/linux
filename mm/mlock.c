@@ -658,9 +658,11 @@ static __must_check int do_mlock(unsigned long start, size_t len,
 	if (error)
 		return error;
 
-	error = __mm_populate(start, len, 0);
-	if (error)
-		return __mlock_posix_error_return(error);
+	if (!vma_flags_test(flags, VMA_LOCKONFAULT_BIT)) {
+		error = __mm_populate(start, len, 0);
+		if (error)
+			return __mlock_posix_error_return(error);
+	}
 	return 0;
 }
 
@@ -778,7 +780,7 @@ SYSCALL_DEFINE1(mlockall, int, flags)
 	    capable(CAP_IPC_LOCK))
 		ret = apply_mlockall_flags(flags);
 	mmap_write_unlock(current->mm);
-	if (!ret && (flags & MCL_CURRENT))
+	if (!ret && (flags & MCL_CURRENT) && !(flags & MCL_ONFAULT))
 		mm_populate(0, TASK_SIZE);
 
 	return ret;
