@@ -702,6 +702,7 @@ static int dmatest_func(void *data)
 		struct dmaengine_unmap_data *um;
 		dma_addr_t *dsts;
 		unsigned int len;
+		bool stopping;
 
 		total_tests++;
 
@@ -839,6 +840,7 @@ static int dmatest_func(void *data)
 			status = dma_sync_wait(chan, cookie);
 			if (status == DMA_COMPLETE)
 				done->done = true;
+			stopping = kthread_should_stop();
 		} else {
 			dma_async_issue_pending(chan);
 
@@ -846,14 +848,19 @@ static int dmatest_func(void *data)
 					done->done,
 					msecs_to_jiffies(params->timeout));
 
-			status = dma_async_is_tx_complete(chan, cookie, NULL,
-							  NULL);
+			stopping = kthread_should_stop();
+			status = stopping ?
+				dma_sync_wait(chan, cookie) :
+				dma_async_is_tx_complete(chan, cookie, NULL, NULL);
 		}
 
 		if (!done->done) {
-			result("test timed out", total_tests, src->off, dst->off,
-			       len, 0);
-			goto error_unmap_continue;
+			/* stopping: dma_sync_wait() let the transfer finish, not a timeout */
+			if (!stopping) {
+				result("test timed out", total_tests, src->off,
+				       dst->off, len, 0);
+				goto error_unmap_continue;
+			}
 		} else if (status != DMA_COMPLETE &&
 			   !(dma_has_cap(DMA_COMPLETION_NO_ORDER,
 					 dev->cap_mask) &&
