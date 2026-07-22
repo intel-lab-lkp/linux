@@ -555,9 +555,9 @@ static const char *dpu_vsync_sources[] = {
 };
 
 static int dpu_kms_dsi_set_te_source(struct msm_display_info *info,
-				     struct msm_dsi *dsi)
+				     struct msm_display *display)
 {
-	const char *te_source = msm_dsi_get_te_source(dsi);
+	const char *te_source = display->funcs->get_te_source(display);
 	int i;
 
 	if (!te_source) {
@@ -617,7 +617,7 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 		display = msm_dsi_get_display(priv->kms->dsi[i]);
 		info.is_cmd_mode = display->funcs->is_cmd_mode(display);
 
-		rc = dpu_kms_dsi_set_te_source(&info, priv->kms->dsi[i]);
+		rc = dpu_kms_dsi_set_te_source(&info, display);
 		if (rc) {
 			DPU_ERROR("failed to identify TE source for dsi display\n");
 			return rc;

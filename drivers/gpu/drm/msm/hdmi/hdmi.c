@@ -249,6 +249,11 @@ static struct drm_dsc_config *msm_hdmi_get_dsc_config(struct msm_display *displa
 	return NULL;
 }
 
+static const char *msm_hdmi_get_te_source(struct msm_display *display)
+{
+	return NULL;
+}
+
 static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.modeset_init = msm_hdmi_modeset_init,
 	.snapshot = msm_hdmi_snapshot,
@@ -256,6 +261,7 @@ static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.needs_periph_flush = msm_hdmi_needs_periph_flush,
 	.is_cmd_mode = msm_hdmi_is_cmd_mode,
 	.get_dsc_config = msm_hdmi_get_dsc_config,
+	.get_te_source = msm_hdmi_get_te_source,
 };
 
 struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)

@@ -288,6 +288,7 @@ struct msm_disp_state;
  * @needs_periph_flush: whether @mode requires a peripheral flush; mandatory.
  * @is_cmd_mode:  whether the sub-block runs in command mode; mandatory.
  * @get_dsc_config: return the DSC config for the sub-block, or NULL; mandatory.
+ * @get_te_source: return the tear-check source name, or NULL; mandatory.
  */
 struct msm_display_funcs {
 	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
@@ -299,6 +300,7 @@ struct msm_display_funcs {
 				   const struct drm_display_mode *mode);
 	bool (*is_cmd_mode)(struct msm_display *display);
 	struct drm_dsc_config *(*get_dsc_config)(struct msm_display *display);
+	const char *(*get_te_source)(struct msm_display *display);
 };
 
 /**
@@ -336,7 +338,6 @@ void __exit msm_dsi_unregister(void);
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
-const char *msm_dsi_get_te_source(struct msm_dsi *msm_dsi);
 #else
 static inline void __init msm_dsi_register(void)
 {
@@ -355,11 +356,6 @@ static inline bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi)
 static inline bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi)
 {
 	return false;
-}
-
-static inline const char *msm_dsi_get_te_source(struct msm_dsi *msm_dsi)
-{
-	return NULL;
 }
 #endif
 
