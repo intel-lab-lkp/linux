@@ -168,9 +168,11 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 	struct page *p;
 	void *vaddr;
 
-	/* Don't set the __GFP_COMP flag for higher order allocations.
-	 * Mapping pages directly into an userspace process and calling
-	 * put_page() on a TTM allocated page is illegal.
+	/*
+	 * For higher-order allocations be a good citizen: don't dip into
+	 * memory reserves, don't retry hard, don't warn on failure and stay
+	 * on the local node. The non-DMA path additionally sets __GFP_COMP
+	 * below; the DMA path allocates via dma_alloc_attrs().
 	 */
 	if (order)
 		gfp_flags |= __GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN |
@@ -189,11 +191,9 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 	}
 
 	if (!ttm_pool_uses_dma_alloc(pool)) {
-		p = alloc_pages_node(pool->nid, gfp_flags, order);
-		if (p) {
-			p->private = order;
+		p = alloc_pages_node(pool->nid, gfp_flags | __GFP_COMP, order);
+		if (p)
 			mod_lruvec_page_state(p, NR_GPU_ACTIVE, 1 << order);
-		}
 		return p;
 	}
 
@@ -482,7 +482,7 @@ static unsigned int ttm_pool_page_order(struct ttm_pool *pool, struct page *p)
 		return dma->vaddr & ~PAGE_MASK;
 	}
 
-	return p->private;
+	return folio_order(page_folio(p));
 }
 
 /*
@@ -493,15 +493,31 @@ static unsigned int ttm_pool_page_order(struct ttm_pool *pool, struct page *p)
 static void ttm_pool_split_for_swap(struct ttm_pool *pool, struct page *p)
 {
 	unsigned int order = ttm_pool_page_order(pool, p);
-	pgoff_t nr;
 
 	if (!order)
 		return;
 
-	split_page(p, order);
-	nr = 1UL << order;
-	while (nr--)
-		(p++)->private = 0;
+	if (ttm_pool_uses_dma_alloc(pool)) {
+		pgoff_t nr;
+
+		/*
+		 * DMA-alloc pages are not compound; split the plain
+		 * higher-order allocation and clear the per-page private
+		 * (which held the order for the non-compound case).
+		 */
+		split_page(p, order);
+		nr = 1UL << order;
+		while (nr--)
+			(p++)->private = 0;
+		return;
+	}
+
+	/*
+	 * The non-DMA path allocates compound folios (__GFP_COMP). Split the
+	 * driver-owned, off-LRU, unmapped folio into order-0 folios so each
+	 * page can be freed as soon as it has been backed up.
+	 */
+	folio_split_driver_managed(page_folio(p), 0);
 }
 
 /**
@@ -548,7 +564,7 @@ static pgoff_t ttm_pool_unmap_and_free(struct ttm_pool *pool, struct page *page,
 
 		pt = ttm_pool_select_type(pool, caching, order);
 	} else {
-		order = page->private;
+		order = folio_order(page_folio(page));
 		nr = (1UL << order);
 	}
 
@@ -1124,7 +1140,6 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 					       num_pages);
 			if (flags->purge) {
 				shrunken += num_pages;
-				page->private = 0;
 				__free_pages_gpu_account(page, order, false);
 				memset(tt->pages + i, 0,
 				       num_pages * sizeof(*tt->pages));
@@ -1214,7 +1229,6 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 		}
 
 		/* Fully backed up: free at native order. */
-		page->private = 0;
 		__free_pages_gpu_account(page, order, false);
 	}
 

@@ -72,9 +72,11 @@ int ttm_backup_copy_page(struct file *backup, struct page *dst,
  * ttm_backup_backup_folio() - Backup a folio
  * @backup: The struct backup pointer to use.
  * @folio: The folio to back up.
- * @order: The allocation order of @folio.  Since TTM allocates higher-order
- *         pages without __GFP_COMP, folio_nr_pages(@folio) would always
- *         return 1; the caller must pass the true order explicitly.
+ * @order: The allocation order of @folio, passed explicitly. For the DMA
+ *         path TTM allocates higher-order pages without __GFP_COMP, so
+ *         folio_order(@folio) would return 0 rather than the true order;
+ *         the caller therefore passes the order explicitly. (The non-DMA
+ *         path allocates compound pages, for which the two agree.)
  * @writeback: Whether to perform immediate writeback of the folio's pages.
  * This may have performance implications.
  * @idx: A unique integer for the first page of the folio and each struct backup.

@@ -169,7 +169,14 @@ static void ttm_pool_alloc_basic(struct kunit *test)
 			KUNIT_ASSERT_NOT_NULL(test, (void *)fst_page->private);
 			KUNIT_ASSERT_NOT_NULL(test, (void *)last_page->private);
 		} else {
-			KUNIT_ASSERT_EQ(test, fst_page->private, params->order);
+			/*
+			 * The non-DMA path allocates compound pages, so the
+			 * order is recovered from the folio rather than from
+			 * page->private.
+			 */
+			KUNIT_ASSERT_EQ(test,
+					folio_order(page_folio(fst_page)),
+					params->order);
 		}
 	} else {
 		if (ttm_pool_uses_dma_alloc(pool)) {
@@ -177,13 +184,19 @@ static void ttm_pool_alloc_basic(struct kunit *test)
 			KUNIT_ASSERT_NULL(test, (void *)last_page->private);
 		} else {
 			/*
-			 * We expect to alloc one big block, followed by
-			 * order 0 blocks
+			 * We expect to alloc one or more max-order compound
+			 * blocks. page_folio() on any subpage resolves to the
+			 * compound head, so both the first and last pages
+			 * report the max block order.
 			 */
-			KUNIT_ASSERT_EQ(test, fst_page->private,
+			KUNIT_ASSERT_EQ(test,
+					folio_order(page_folio(fst_page)),
 					min_t(unsigned int, MAX_PAGE_ORDER,
 					      params->order));
-			KUNIT_ASSERT_EQ(test, last_page->private, 0);
+			KUNIT_ASSERT_EQ(test,
+					folio_order(page_folio(last_page)),
+					min_t(unsigned int, MAX_PAGE_ORDER,
+					      params->order));
 		}
 	}
 
