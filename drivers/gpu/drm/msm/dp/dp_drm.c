@@ -32,7 +32,7 @@ static int msm_dp_bridge_get_modes(struct drm_bridge *bridge, struct drm_connect
 	dp = to_dp_bridge(bridge)->msm_dp_display;
 
 	/* pluggable case assumes EDID is read when HPD */
-	rc = msm_dp_display_get_modes(dp);
+	rc = msm_dp_display_get_modes(dp, connector);
 	if (rc <= 0) {
 		DRM_ERROR("failed to get DP sink modes, rc=%d\n", rc);
 		return rc;

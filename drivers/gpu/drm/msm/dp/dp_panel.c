@@ -305,7 +305,8 @@ static u8 msm_dp_panel_get_edid_checksum(const struct edid *edid)
 }
 
 void msm_dp_panel_handle_sink_request(struct msm_dp_panel *msm_dp_panel,
-				      const struct drm_edid *drm_edid)
+				      const struct drm_edid *drm_edid,
+				      struct drm_connector *connector)
 {
 	struct msm_dp_panel_private *panel;
 
@@ -324,7 +325,7 @@ void msm_dp_panel_handle_sink_request(struct msm_dp_panel *msm_dp_panel,
 		if (edid)
 			checksum = msm_dp_panel_get_edid_checksum(edid);
 		else
-			checksum = msm_dp_panel->connector->real_edid_checksum;
+			checksum = connector->real_edid_checksum;
 
 		msm_dp_link_send_edid_checksum(panel->link, checksum);
 		msm_dp_link_send_test_response(panel->link);

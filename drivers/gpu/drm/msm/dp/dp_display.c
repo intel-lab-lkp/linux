@@ -304,7 +304,7 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
 	dp->msm_dp_display.psr_supported = dp->panel->psr_cap.version && psr_enabled;
 
 	dp->audio_supported = info->has_audio;
-	msm_dp_panel_handle_sink_request(dp->panel, drm_edid);
+	msm_dp_panel_handle_sink_request(dp->panel, drm_edid, connector);
 
 	/*
 	 * set sink to normal operation mode -- D0
@@ -600,7 +600,8 @@ error:
 
 static int msm_dp_display_set_mode(struct msm_dp *msm_dp_display,
 				   const struct drm_display_mode *adjusted_mode,
-				   struct msm_dp_panel *msm_dp_panel)
+				   struct msm_dp_panel *msm_dp_panel,
+				   struct drm_connector *connector)
 {
 	struct msm_dp_display_private *dp;
 	u32 bpp;
@@ -611,7 +612,7 @@ static int msm_dp_display_set_mode(struct msm_dp *msm_dp_display,
 	if (msm_dp_display_check_video_test(msm_dp_display))
 		bpp = msm_dp_display_get_test_bpp(msm_dp_display);
 	else
-		bpp = msm_dp_panel->connector->display_info.bpc * 3;
+		bpp = connector->display_info.bpc * 3;
 
 	msm_dp_panel->msm_dp_mode.bpp = bpp ? bpp : 24; /* Default bpp */
 	msm_dp_panel->msm_dp_mode.v_active_low =
@@ -619,7 +620,7 @@ static int msm_dp_display_set_mode(struct msm_dp *msm_dp_display,
 	msm_dp_panel->msm_dp_mode.h_active_low =
 		!!(adjusted_mode->flags & DRM_MODE_FLAG_NHSYNC);
 	msm_dp_panel->msm_dp_mode.out_fmt_is_yuv_420 =
-		drm_mode_is_420_only(&msm_dp_panel->connector->display_info, adjusted_mode) &&
+		drm_mode_is_420_only(&connector->display_info, adjusted_mode) &&
 		msm_dp_panel->vsc_sdp_supported;
 	msm_dp_panel_init_panel_info(msm_dp_panel);
 
@@ -769,18 +770,14 @@ enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
-int msm_dp_display_get_modes(struct msm_dp *dp)
+int msm_dp_display_get_modes(struct msm_dp *dp, struct drm_connector *connector)
 {
-	struct msm_dp_display_private *msm_dp_display;
-
 	if (!dp) {
 		DRM_ERROR("invalid params\n");
 		return 0;
 	}
 
-	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
-
-	return drm_edid_connector_add_modes(msm_dp_display->panel->connector);
+	return drm_edid_connector_add_modes(connector);
 }
 
 bool msm_dp_display_check_video_test(struct msm_dp *dp)
@@ -1350,12 +1347,9 @@ static int msm_dp_modeset_init(struct msm_display *display,
 			       struct drm_device *dev, struct drm_encoder *encoder)
 {
 	struct msm_dp *msm_dp_display = container_of(display, struct msm_dp, display);
-	struct msm_dp_display_private *msm_dp_priv;
 	int ret;
 
 	msm_dp_display->drm_dev = dev;
-
-	msm_dp_priv = container_of(msm_dp_display, struct msm_dp_display_private, msm_dp_display);
 
 	ret = msm_dp_bridge_init(msm_dp_display, dev, encoder);
 	if (ret) {
@@ -1372,8 +1366,6 @@ static int msm_dp_modeset_init(struct msm_display *display,
 		msm_dp_display->connector = NULL;
 		return ret;
 	}
-
-	msm_dp_priv->panel->connector = msm_dp_display->connector;
 
 	return 0;
 }
@@ -1438,8 +1430,11 @@ void msm_dp_bridge_atomic_pre_enable(struct drm_bridge *drm_bridge,
 	struct msm_dp_display_private *msm_dp_display;
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *crtc_state;
+	struct drm_connector *connector;
 
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
+
+	connector = drm_atomic_get_new_connector_for_encoder(state, drm_bridge->encoder);
 
 	crtc = drm_atomic_get_new_crtc_for_encoder(state, drm_bridge->encoder);
 	if (!crtc)
@@ -1451,7 +1446,7 @@ void msm_dp_bridge_atomic_pre_enable(struct drm_bridge *drm_bridge,
 	 * state and runs before the bridge's .atomic_enable(), so the mode must
 	 * be programmed here, in .atomic_pre_enable().
 	 */
-	msm_dp_display_set_mode(dp, &crtc_state->adjusted_mode, msm_dp_display->panel);
+	msm_dp_display_set_mode(dp, &crtc_state->adjusted_mode, msm_dp_display->panel, connector);
 }
 
 void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
