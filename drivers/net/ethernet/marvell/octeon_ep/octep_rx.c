@@ -388,9 +388,15 @@ static void octep_oq_drop_rx(struct octep_oq *oq,
 			     u32 *read_idx, u32 *desc_used)
 {
 	int data_len = buff_info->len - oq->max_single_buffer_size;
+	int i;
 
-	while (data_len > 0) {
+	for (i = 0; i < MAX_SKB_FRAGS && data_len > 0; i++) {
+		struct page *page;
+
+		buff_info = (struct octep_rx_buffer *)&oq->buff_info[*read_idx];
+		page = buff_info->page;
 		octep_oq_next_pkt(oq, buff_info, read_idx, desc_used);
+		put_page(page);
 		data_len -= oq->buffer_size;
 	}
 }
@@ -457,6 +463,7 @@ static int __octep_oq_process_rx(struct octep_device *oct,
 		if (!skb) {
 			octep_oq_drop_rx(oq, buff_info,
 					 &read_idx, &desc_used);
+			put_page(virt_to_page(resp_hw));
 			oq->stats->alloc_failures++;
 			continue;
 		}
