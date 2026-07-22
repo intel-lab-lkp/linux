@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0
+config VIDEO_ROCKCHIP_VEPU510
+	tristate "Rockchip VEPU510 Video Encoder driver"
+	depends on ARCH_ROCKCHIP || COMPILE_TEST
+	depends on VIDEO_DEV
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_MEM2MEM_DEV
+	help
+	  Support for the Rockchip VEPU510 hardware video encoder IP
+	  present on the RK3576 SoC, which accelerates H.264 video
+	  encoding.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called rockchip-vepu510.
