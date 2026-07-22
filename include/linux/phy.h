@@ -376,6 +376,23 @@ struct mii_bus {
 			 int regnum, u16 val);
 	/** @reset: Perform a reset of the bus */
 	int (*reset)(struct mii_bus *bus);
+	/**
+	 * @notify_phy_attach: Perform post-attach handling for MDIO bus
+	 *   drivers. Called in phy_attach_direct() right after phy_init_hw()
+	 *   and before phy_resume(). At this point, the PHY is still
+	 *   suspended, and @phydev->attached_dev may be NULL (e.g. for
+	 *   standalone PHYs). Runs in process context and may sleep. Return
+	 *   0 on success or a negative errno on failure (which aborts the
+	 *   attach sequence).
+	 */
+	int (*notify_phy_attach)(struct phy_device *phydev);
+	/**
+	 * @notify_phy_detach: Perform pre-detach handling for MDIO bus
+	 *   drivers. Called in phy_detach() before device links and resources
+	 *   are cleaned up. Runs in process context and may sleep. Only
+	 *   invoked if @notify_phy_attach was previously called and succeeded.
+	 */
+	void (*notify_phy_detach)(struct phy_device *phydev);
 
 	/** @stats: Statistic counters per device on the bus */
 	struct mdio_bus_stats stats[PHY_MAX_ADDR];
@@ -574,6 +591,7 @@ struct phy_oatc14_sqi_capability {
  * @has_fixups: Set to true if this PHY has fixups/quirks.
  * @suspended: Set to true if this PHY has been suspended successfully.
  * @suspended_by_mdio_bus: Set to true if this PHY was suspended by MDIO bus.
+ * @mdio_bus_notified: Set to true if post-attach bus notificaton succeeded.
  * @sysfs_links: Internal boolean tracking sysfs symbolic links setup/removal.
  * @loopback_enabled: Set true if this PHY has been loopbacked successfully.
  * @downshifted_rate: Set true if link speed has been downshifted.
@@ -685,6 +703,7 @@ struct phy_device {
 	unsigned has_fixups:1;
 	unsigned suspended:1;
 	unsigned suspended_by_mdio_bus:1;
+	unsigned mdio_bus_notified:1;
 	unsigned sysfs_links:1;
 	unsigned loopback_enabled:1;
 	unsigned downshifted_rate:1;
