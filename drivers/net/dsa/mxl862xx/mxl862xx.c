@@ -21,6 +21,7 @@
 #include "mxl862xx.h"
 #include "mxl862xx-api.h"
 #include "mxl862xx-cmd.h"
+#include "mxl862xx-fw.h"
 #include "mxl862xx-host.h"
 #include "mxl862xx-phylink.h"
 
@@ -1572,6 +1573,11 @@ static int mxl862xx_port_mdb_del(struct dsa_switch *ds, int port,
 	ether_addr_copy(qparam.mac, mdb->addr);
 
 	ret = MXL862XX_API_READ(priv, MXL862XX_MAC_TABLEENTRYQUERY, qparam);
+	/* -ENODEV: the firmware and its MAC table are gone, nothing left
+	 * to delete
+	 */
+	if (ret == -ENODEV)
+		return 0;
 	if (ret)
 		return ret;
 
@@ -2086,6 +2092,8 @@ static const struct dsa_switch_ops mxl862xx_switch_ops = {
 	.get_pause_stats = mxl862xx_get_pause_stats,
 	.get_rmon_stats = mxl862xx_get_rmon_stats,
 	.get_stats64 = mxl862xx_get_stats64,
+	.devlink_info_get = mxl862xx_devlink_info_get,
+	.devlink_flash_update = mxl862xx_devlink_flash_update,
 };
 
 static int mxl862xx_probe(struct mdio_device *mdiodev)
@@ -2191,8 +2199,8 @@ static void mxl862xx_shutdown(struct mdio_device *mdiodev)
 }
 
 static const struct of_device_id mxl862xx_of_match[] = {
-	{ .compatible = "maxlinear,mxl86282" },
-	{ .compatible = "maxlinear,mxl86252" },
+	{ .compatible = "maxlinear,mxl86282", .data = "MaxLinear MxL86282" },
+	{ .compatible = "maxlinear,mxl86252", .data = "MaxLinear MxL86252" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mxl862xx_of_match);
