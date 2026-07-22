@@ -69,6 +69,13 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	for (n = 0; n < read_cnt; n++)
 		aer_regs_buf[n] = readl(aer_base + n * sizeof(u32));
 
+	/*
+	 * header_len and flit are software-only metadata in struct
+	 * pcie_tlp_log; Clear to remove garbage register contents.
+	 */
+	aer_regs->header_log.header_len = 0;
+	aer_regs->header_log.flit = false;
+
 	writel(aer_regs->uncor_status, aer_base + PCI_ERR_UNCOR_STATUS);
 	writel(aer_regs->cor_status, aer_base + PCI_ERR_COR_STATUS);
 
