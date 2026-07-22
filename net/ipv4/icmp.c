@@ -1395,46 +1395,6 @@ send_mal_query:
 	return true;
 }
 
-/*
- *	Handle ICMP Timestamp requests.
- *	RFC 1122: 3.2.2.8 MAY implement ICMP timestamp requests.
- *		  SHOULD be in the kernel for minimum random latency.
- *		  MUST be accurate to a few minutes.
- *		  MUST be updated at least at 15Hz.
- */
-static enum skb_drop_reason icmp_timestamp(struct sk_buff *skb)
-{
-	DEFINE_RAW_FLEX(struct icmp_bxm, icmp_param, replyopts.opt.__data,
-			IP_OPTIONS_DATA_FIXED_SIZE);
-	/*
-	 *	Too short.
-	 */
-	if (skb->len < 4)
-		goto out_err;
-
-	/*
-	 *	Fill in the current time as ms since midnight UT:
-	 */
-	icmp_param->data.times[1] = inet_current_timestamp();
-	icmp_param->data.times[2] = icmp_param->data.times[1];
-
-	BUG_ON(skb_copy_bits(skb, 0, &icmp_param->data.times[0], 4));
-
-	icmp_param->data.icmph	   = *icmp_hdr(skb);
-	icmp_param->data.icmph.type = ICMP_TIMESTAMPREPLY;
-	icmp_param->data.icmph.code = 0;
-	icmp_param->skb		   = skb;
-	icmp_param->offset	   = 0;
-	icmp_param->data_len	   = 0;
-	icmp_param->head_len	   = sizeof(struct icmphdr) + 12;
-	icmp_reply(icmp_param, skb);
-	return SKB_NOT_DROPPED_YET;
-
-out_err:
-	__ICMP_INC_STATS(skb_dst_dev_net_rcu(skb), ICMP_MIB_INERRORS);
-	return SKB_DROP_REASON_PKT_TOO_SMALL;
-}
-
 static enum skb_drop_reason icmp_discard(struct sk_buff *skb)
 {
 	/* pretend it was a success */
@@ -1697,7 +1657,7 @@ static const struct icmp_control icmp_pointers[NR_ICMP_TYPES + 1] = {
 		.error = 1,
 	},
 	[ICMP_TIMESTAMP] = {
-		.handler = icmp_timestamp,
+		.handler = icmp_discard,
 	},
 	[ICMP_TIMESTAMPREPLY] = {
 		.handler = icmp_discard,
