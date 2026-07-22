@@ -291,6 +291,7 @@ static ssize_t rtas_flash_read_num(struct file *file, char __user *buf,
 {
 	struct rtas_update_flash_t *const uf = &rtas_update_flash_data;
 	char msg[RTAS_MSG_MAXLEN];
+	size_t len;
 	int status;
 
 	mutex_lock(&rtas_update_flash_mutex);
@@ -298,8 +299,8 @@ static ssize_t rtas_flash_read_num(struct file *file, char __user *buf,
 	mutex_unlock(&rtas_update_flash_mutex);
 
 	/* Read as number */
-	sprintf(msg, "%d\n", status);
-	return simple_read_from_buffer(buf, count, ppos, msg, strlen(msg));
+	len = scnprintf(msg, sizeof(msg), "%d\n", status);
+	return simple_read_from_buffer(buf, count, ppos, msg, len);
 }
 
 /* We could be much more efficient here.  But to keep this function
