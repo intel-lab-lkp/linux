@@ -3635,13 +3635,13 @@ static struct config_group *target_core_call_addhbatotarget(
 	unsigned long plugin_dep_id = 0;
 	int ret;
 
-	if (strlen(name) >= TARGET_CORE_NAME_MAX_LEN) {
-		pr_err("Passed *name strlen(): %d exceeds"
-			" TARGET_CORE_NAME_MAX_LEN: %d\n", (int)strlen(name),
-			TARGET_CORE_NAME_MAX_LEN);
+	ret = snprintf(buf, TARGET_CORE_NAME_MAX_LEN, "%s", name);
+	if (ret >= TARGET_CORE_NAME_MAX_LEN) {
+		pr_err("Passed *name length: %d exceeds"
+		        " TARGET_CORE_NAME_MAX_LEN: %d\n",
+		        ret, TARGET_CORE_NAME_MAX_LEN);
 		return ERR_PTR(-ENAMETOOLONG);
 	}
-	snprintf(buf, TARGET_CORE_NAME_MAX_LEN, "%s", name);
 
 	str = strstr(buf, "_");
 	if (!str) {
