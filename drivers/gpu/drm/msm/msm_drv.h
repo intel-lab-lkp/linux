@@ -289,6 +289,11 @@ struct msm_disp_state;
  * @is_cmd_mode:  whether the sub-block runs in command mode; mandatory.
  * @get_dsc_config: return the DSC config for the sub-block, or NULL; mandatory.
  * @get_te_source: return the tear-check source name, or NULL; mandatory.
+ * @is_bonded:    whether the sub-block is part of a bonded (tiled) pair;
+ *                mandatory.
+ * @needs_encoder: whether the sub-block needs its own encoder created (false
+ *                 for e.g. the slave of a bonded pair, which shares the
+ *                 master's encoder); mandatory.
  */
 struct msm_display_funcs {
 	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
@@ -301,6 +306,8 @@ struct msm_display_funcs {
 	bool (*is_cmd_mode)(struct msm_display *display);
 	struct drm_dsc_config *(*get_dsc_config)(struct msm_display *display);
 	const char *(*get_te_source)(struct msm_display *display);
+	bool (*is_bonded)(struct msm_display *display);
+	bool (*needs_encoder)(struct msm_display *display);
 };
 
 /**
@@ -336,8 +343,6 @@ void dsi_dev_detach(struct platform_device *pdev);
 void __init msm_dsi_register(void);
 void __exit msm_dsi_unregister(void);
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
-bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
-bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
 #else
 static inline void __init msm_dsi_register(void)
 {
@@ -348,14 +353,6 @@ static inline void __exit msm_dsi_unregister(void)
 static inline struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
 {
 	return NULL;
-}
-static inline bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi)
-{
-	return false;
-}
-static inline bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi)
-{
-	return false;
 }
 #endif
 

@@ -1384,6 +1384,16 @@ static const char *msm_dp_display_get_te_source(struct msm_display *display)
 	return NULL;
 }
 
+static bool msm_dp_display_is_bonded(struct msm_display *display)
+{
+	return false;
+}
+
+static bool msm_dp_display_needs_encoder(struct msm_display *display)
+{
+	return true;
+}
+
 static const struct msm_display_funcs msm_dp_display_funcs = {
 	.modeset_init = msm_dp_modeset_init,
 	.snapshot = msm_dp_snapshot,
@@ -1392,6 +1402,8 @@ static const struct msm_display_funcs msm_dp_display_funcs = {
 	.is_cmd_mode = msm_dp_display_is_cmd_mode,
 	.get_dsc_config = msm_dp_display_get_dsc_config,
 	.get_te_source = msm_dp_display_get_te_source,
+	.is_bonded = msm_dp_display_is_bonded,
+	.needs_encoder = msm_dp_display_needs_encoder,
 };
 
 struct msm_display *msm_dp_get_display(struct msm_dp *msm_dp_display)

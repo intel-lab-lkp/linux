@@ -27,6 +27,19 @@ static const char *msm_dsi_get_te_source(struct msm_display *display)
 	return msm_dsi->te_source;
 }
 
+static bool msm_dsi_is_bonded(struct msm_display *display)
+{
+	return msm_dsi_is_bonded_dsi(container_of(display, struct msm_dsi, display));
+}
+
+static bool msm_dsi_needs_encoder(struct msm_display *display)
+{
+	struct msm_dsi *msm_dsi = container_of(display, struct msm_dsi, display);
+
+	/* the slave of a bonded pair shares the master's encoder */
+	return !(msm_dsi_is_bonded_dsi(msm_dsi) && !msm_dsi_is_master_dsi(msm_dsi));
+}
+
 static bool msm_dsi_wide_bus_enabled(struct msm_display *display)
 {
 	struct msm_dsi *msm_dsi = container_of(display, struct msm_dsi, display);
@@ -302,6 +315,8 @@ static const struct msm_display_funcs msm_dsi_display_funcs = {
 	.is_cmd_mode = msm_dsi_is_cmd_mode,
 	.get_dsc_config = msm_dsi_get_dsc_config,
 	.get_te_source = msm_dsi_get_te_source,
+	.is_bonded = msm_dsi_is_bonded,
+	.needs_encoder = msm_dsi_needs_encoder,
 };
 
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)

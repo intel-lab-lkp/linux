@@ -603,18 +603,18 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 		if (!priv->kms->dsi[i])
 			continue;
 
-		if (msm_dsi_is_bonded_dsi(priv->kms->dsi[i]) &&
-		    !msm_dsi_is_master_dsi(priv->kms->dsi[i]))
+		display = msm_dsi_get_display(priv->kms->dsi[i]);
+
+		if (!display->funcs->needs_encoder(display))
 			continue;
 
 		memset(&info, 0, sizeof(info));
 		info.intf_type = INTF_DSI;
 
 		info.h_tile_instance[info.num_of_h_tiles++] = i;
-		if (msm_dsi_is_bonded_dsi(priv->kms->dsi[i]))
+		if (display->funcs->is_bonded(display))
 			info.h_tile_instance[info.num_of_h_tiles++] = other;
 
-		display = msm_dsi_get_display(priv->kms->dsi[i]);
 		info.is_cmd_mode = display->funcs->is_cmd_mode(display);
 
 		rc = dpu_kms_dsi_set_te_source(&info, display);

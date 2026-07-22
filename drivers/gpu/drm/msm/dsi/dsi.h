@@ -50,6 +50,8 @@ struct msm_dsi {
 };
 
 /* dsi manager */
+bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
+bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
 int msm_dsi_manager_connector_init(struct msm_dsi *msm_dsi,
 				   struct drm_encoder *encoder);
 int msm_dsi_manager_cmd_xfer(int id, const struct mipi_dsi_msg *msg);

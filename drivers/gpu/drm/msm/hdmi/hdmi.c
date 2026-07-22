@@ -254,6 +254,16 @@ static const char *msm_hdmi_get_te_source(struct msm_display *display)
 	return NULL;
 }
 
+static bool msm_hdmi_is_bonded(struct msm_display *display)
+{
+	return false;
+}
+
+static bool msm_hdmi_needs_encoder(struct msm_display *display)
+{
+	return true;
+}
+
 static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.modeset_init = msm_hdmi_modeset_init,
 	.snapshot = msm_hdmi_snapshot,
@@ -262,6 +272,8 @@ static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.is_cmd_mode = msm_hdmi_is_cmd_mode,
 	.get_dsc_config = msm_hdmi_get_dsc_config,
 	.get_te_source = msm_hdmi_get_te_source,
+	.is_bonded = msm_hdmi_is_bonded,
+	.needs_encoder = msm_hdmi_needs_encoder,
 };
 
 struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)
