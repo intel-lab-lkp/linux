@@ -40,7 +40,7 @@ class DumpPageOwner(gdb.Command):
 
     def invoke(self, args, from_tty):
         if not constants.LX_CONFIG_PAGE_OWNER:
-            raise gdb.GdbError('CONFIG_PAGE_OWNER does not enable')
+            raise gdb.GdbError('CONFIG_PAGE_OWNER is not enabled')
 
         page_owner_inited = gdb.parse_and_eval('page_owner_inited')
         if page_owner_inited['key']['enabled']['counter'] != 0x1:
