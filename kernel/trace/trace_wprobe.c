@@ -27,6 +27,7 @@
 #include <asm/ptrace.h>
 
 #include "trace.h"
+#include "trace_btf.h"
 #include "trace_dynevent.h"
 #include "trace_probe.h"
 #include "trace_probe_kernel.h"
@@ -925,6 +926,143 @@ static void wprobe_trigger_free(struct event_trigger_data *data)
 	}
 }
 
+#ifdef CONFIG_PROBE_EVENTS_BTF_ARGS
+
+static int get_offset_of_field(struct btf *btf, const struct btf_type *type, char *field_name)
+{
+	const struct btf_member *field;
+	int bitoffs = 0;
+	u32 anon_offs;
+	char *next;
+
+	do {
+		next = strchr(field_name, '.');
+		if (next)
+			*next++ = '\0';
+
+		field = btf_find_struct_member(btf, type, field_name, &anon_offs);
+		if (IS_ERR_OR_NULL(field))
+			return -ENOENT;
+		type = btf_type_by_id(btf, field->type);
+
+		/* Reject bitfield member access */
+		if (btf_type_kflag(type))
+			return -EINVAL;
+
+		/* add offset for anonymous struct type */
+		bitoffs += anon_offs + field->offset;
+		field_name = next;
+		if (next) {
+			type = btf_type_skip_modifiers(btf, field->type, NULL);
+			if (!type)
+				return -ENOENT;
+		}
+	} while (next);
+	return bitoffs / BITS_PER_BYTE;
+}
+
+/* btf_put(NULL) is acceptable. */
+DEFINE_FREE(btf_put, struct btf *, btf_put(_T))
+
+/* parse typecast: (TYPE[,ASGN])EVENT_FIELD->FIELD[.SUBFIELD...] and set adjust. */
+static int wprobe_trigger_typecast_parse(char **field_str_ptr,
+					 struct wprobe_trigger_data *wprobe_data)
+{
+	struct btf *btf __free(btf_put) = NULL;
+	const struct btf_type *type;
+	char *assign_field;
+	char *event_field;
+	char *type_field;
+	char *type_name;
+	int id;
+	int adjust;
+
+	type_name = *field_str_ptr + 1;
+	event_field = strchr(type_name, ')');
+	if (!event_field)
+		return -EINVAL;
+	*event_field++ = '\0';
+
+	/* Check the optional assign field. */
+	assign_field = strchr(type_name, ',');
+	if (assign_field)
+		*assign_field++ = '\0';
+
+	/* Get the type field name. */
+	type_field = strstr(event_field, "->");
+	if (!type_field)
+		return -EINVAL;
+	*type_field = '\0';
+	type_field += 2;
+
+	/* find type from BTF */
+	id = bpf_find_btf_id(type_name, BTF_KIND_STRUCT, &btf);
+	if (id < 0)
+		return id;
+
+	type = btf_type_by_id(btf, id);
+	if (!type)
+		return -EINVAL;
+
+	adjust = get_offset_of_field(btf, type, type_field);
+	if (adjust < 0)
+		return adjust;
+	wprobe_data->adjust = adjust;
+
+	if (assign_field) {
+		/* assign_field should be a struct field */
+		adjust = get_offset_of_field(btf, type, assign_field);
+		if (adjust < 0)
+			return adjust;
+		wprobe_data->adjust -= adjust;
+	}
+
+	*field_str_ptr = event_field;
+	return 0;
+}
+#else
+static int wprobe_trigger_typecast_parse(char **field_str_ptr, struct wprobe_trigger_data *wprobe_data)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_PROBE_EVENTS_BTF_ARGS */
+
+static int wprobe_trigger_field_parse(char *field_str, struct trace_event_file *file,
+					struct wprobe_trigger_data *wprobe_data)
+{
+	struct ftrace_event_field *field;
+	char *offs;
+
+	if (field_str[0] == '(') {
+		int ret = wprobe_trigger_typecast_parse(&field_str, wprobe_data);
+
+		if (ret < 0)
+			return ret;
+	} else {
+		offs = strpbrk(field_str, "+-");
+		if (offs) {
+			long val;
+
+			if (kstrtol(offs, 0, &val) < 0)
+				return -EINVAL;
+			wprobe_data->adjust = val;
+			*offs = '\0';
+		}
+	}
+
+	field = trace_find_event_field(file->event_call, field_str);
+	if (!field)
+		return -ENOENT;
+	if (field->size != sizeof(void *))
+		return -ENOEXEC;
+	wprobe_data->offset = field->offset;
+	wprobe_data->field = kstrdup(field_str, GFP_KERNEL);
+	if (!wprobe_data->field)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int wprobe_trigger_cmd_parse(struct event_command *cmd_ops,
 				    struct trace_event_file *file,
 				    char *glob, char *cmd,
@@ -936,10 +1074,8 @@ static int wprobe_trigger_cmd_parse(struct event_command *cmd_ops,
 	 */
 	struct wprobe_trigger_data *wprobe_data __free(free_wprobe_trigger_data) = NULL;
 	struct event_trigger_data *trigger_data __free(kfree) = NULL;
-	struct ftrace_event_field *field = NULL;
 	struct trace_event_file *wprobe_file;
 	struct trace_array *tr = file->tr;
-	struct trace_event_call *event;
 	char *event_str, *field_str;
 	bool remove, clear = false;
 	struct trace_wprobe *tw;
@@ -986,29 +1122,9 @@ static int wprobe_trigger_cmd_parse(struct event_command *cmd_ops,
 		return -EINVAL;
 
 	if (field_str) {
-		char *offs;
-
-		offs = strpbrk(field_str, "+-");
-		if (offs) {
-			long val;
-
-			if (kstrtol(offs, 0, &val) < 0)
-				return -EINVAL;
-			wprobe_data->adjust = val;
-			*offs = '\0';
-		}
-
-		event = file->event_call;
-		field = trace_find_event_field(event, field_str);
-		if (!field)
-			return -ENOENT;
-
-		if (field->size != sizeof(void *))
-			return -ENOEXEC;
-		wprobe_data->offset = field->offset;
-		wprobe_data->field = kstrdup(field_str, GFP_KERNEL);
-		if (!wprobe_data->field)
-			return -ENOMEM;
+		ret = wprobe_trigger_field_parse(field_str, file, wprobe_data);
+		if (ret < 0)
+			return ret;
 	}
 
 	trigger_data = trigger_data_alloc(cmd_ops, cmd, param, wprobe_data);
