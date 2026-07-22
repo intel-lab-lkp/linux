@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/rockchip,rk3576-vepu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Rockchip VEPU510 Video Encoder (RK3576)
+
+maintainers:
+  - Jiaxing Hu <gahing@gahingwoo.com>
+
+description: |-
+  RK3576 has two identical VEPU510 hardware H.264/H.265 video encoder
+  cores. Each core is a standalone V4L2 mem2mem device in this binding;
+  there is no shared hardware descriptor/link-list engine tying the two
+  cores together (unlike the RK3576 video decoder's CCU), so each core
+  node is independent and self-contained.
+
+properties:
+  compatible:
+    const: rockchip,rk3576-vepu
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    items:
+      - description: The Video Encoder AXI interface clock
+      - description: The Video Encoder AHB interface clock
+      - description: The Video Encoder core clock
+
+  clock-names:
+    items:
+      - const: aclk_vcodec
+      - const: hclk_vcodec
+      - const: clk_core
+
+  assigned-clocks: true
+
+  assigned-clock-rates: true
+
+  resets:
+    items:
+      - description: The Video Encoder AXI interface reset
+      - description: The Video Encoder AHB interface reset
+      - description: The Video Encoder core reset
+
+  reset-names:
+    items:
+      - const: video_a
+      - const: video_h
+      - const: video_core
+
+  power-domains:
+    maxItems: 1
+
+  iommus:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - power-domains
+  - iommus
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/rockchip,rk3576-cru.h>
+    #include <dt-bindings/power/rockchip,rk3576-power.h>
+
+    vepu0: video-codec@27a00000 {
+        compatible = "rockchip,rk3576-vepu";
+        reg = <0x27a00000 0x6000>;
+        interrupts = <GIC_SPI 310 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&cru ACLK_VEPU0>, <&cru HCLK_VEPU0>, <&cru CLK_VEPU0_CORE>;
+        clock-names = "aclk_vcodec", "hclk_vcodec", "clk_core";
+        assigned-clocks = <&cru ACLK_VEPU0>, <&cru CLK_VEPU0_CORE>;
+        assigned-clock-rates = <400000000>, <702000000>;
+        resets = <&cru SRST_A_VEPU0>, <&cru SRST_H_VEPU0>, <&cru SRST_VEPU0_CORE>;
+        reset-names = "video_a", "video_h", "video_core";
+        power-domains = <&power RK3576_PD_VEPU0>;
+        iommus = <&vepu0_mmu>;
+    };
+
+...
