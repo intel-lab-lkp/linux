@@ -251,6 +251,12 @@ static int ti_sci_pm_domain_probe(struct platform_device *pdev)
 			if (args.args_count >= 1 && args.np == dev->of_node) {
 				bool is_on;
 
+				if (args.args[0] == U32_MAX) {
+					dev_err(dev, "power-domain ID is too large\n");
+					of_node_put(args.np);
+					return -EINVAL;
+				}
+
 				of_node_put(args.np);
 				if (args.args[0] > max_id) {
 					max_id = args.args[0];
