@@ -324,11 +324,10 @@ static void msm_hdmi_unbind(struct device *dev, struct device *master,
 		void *data)
 {
 	struct msm_drm_private *priv = dev_get_drvdata(master);
+	struct hdmi *hdmi = dev_get_drvdata(dev);
 
-	if (priv->kms->hdmi) {
-		msm_hdmi_destroy(priv->kms->hdmi);
-		priv->kms->hdmi = NULL;
-	}
+	msm_hdmi_destroy(hdmi);
+	priv->kms->hdmi = NULL;
 }
 
 static const struct component_ops msm_hdmi_ops = {
