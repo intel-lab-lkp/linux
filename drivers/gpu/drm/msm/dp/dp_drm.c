@@ -203,7 +203,7 @@ static enum drm_mode_status msm_edp_bridge_mode_valid(struct drm_bridge *bridge,
 
 	dp = to_dp_bridge(bridge)->msm_dp_display;
 
-	if (!dp || !mode_pclk_khz || !dp->connector) {
+	if (!dp || !mode_pclk_khz) {
 		DRM_ERROR("invalid params\n");
 		return -EINVAL;
 	}

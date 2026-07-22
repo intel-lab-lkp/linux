@@ -731,7 +731,7 @@ enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
 
 	dp = to_dp_bridge(bridge)->msm_dp_display;
 
-	if (!dp || !mode_pclk_khz || !dp->connector) {
+	if (!dp || !mode_pclk_khz) {
 		DRM_ERROR("invalid params\n");
 		return -EINVAL;
 	}
@@ -739,7 +739,7 @@ enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
 	link_info = &msm_dp_display->panel->link_info;
 
-	is_yuv_420 = drm_mode_is_420_only(&dp->connector->display_info, mode);
+	is_yuv_420 = drm_mode_is_420_only(info, mode);
 
 	/*
 	 * YUV 420 is carried over DP by signalling the colorimetry through a
@@ -754,7 +754,7 @@ enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
 	if (mode_pclk_khz > DP_MAX_PIXEL_CLK_KHZ)
 		return MODE_CLOCK_HIGH;
 
-	mode_bpp = dp->connector->display_info.bpc * num_components;
+	mode_bpp = info->bpc * num_components;
 	if (!mode_bpp)
 		mode_bpp = default_bpp;
 
