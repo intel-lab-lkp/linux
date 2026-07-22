@@ -272,6 +272,11 @@ static int get_fs_type(int fd)
 	return ret ? 0 : (int)fs.f_type;
 }
 
+static bool file_backed_test_supported(int fs_type)
+{
+	return fs_type && fs_type != TMPFS_MAGIC && fs_type != NFS_SUPER_MAGIC;
+}
+
 TEST_F(memory_failure, clean_pagecache)
 {
 	int fd;
@@ -283,8 +288,10 @@ TEST_F(memory_failure, clean_pagecache)
 	if (fd < 0)
 		SKIP(return, "failed to open test file.\n");
 	fs_type = get_fs_type(fd);
-	if (!fs_type || fs_type == TMPFS_MAGIC)
+	if (!file_backed_test_supported(fs_type)) {
+		close(fd);
 		SKIP(return, "unsupported filesystem :%x\n", fs_type);
+	}
 
 	addr = mmap(0, self->page_size, PROT_READ | PROT_WRITE,
 		    MAP_SHARED, fd, 0);
@@ -325,8 +332,10 @@ TEST_F(memory_failure, dirty_pagecache)
 	if (fd < 0)
 		SKIP(return, "failed to open test file.\n");
 	fs_type = get_fs_type(fd);
-	if (!fs_type || fs_type == TMPFS_MAGIC)
+	if (!file_backed_test_supported(fs_type)) {
+		close(fd);
 		SKIP(return, "unsupported filesystem :%x\n", fs_type);
+	}
 
 	addr = mmap(0, self->page_size, PROT_READ | PROT_WRITE,
 		    MAP_SHARED, fd, 0);
