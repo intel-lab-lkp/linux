@@ -959,17 +959,22 @@ static void dmatest_cleanup_channel(struct dmatest_chan *dtc)
 	struct dmatest_thread	*_thread;
 	int			ret;
 
-	list_for_each_entry_safe(thread, _thread, &dtc->threads, node) {
+	/* stop all threads first */
+	list_for_each_entry(thread, &dtc->threads, node) {
 		ret = kthread_stop(thread->task);
 		pr_debug("thread %s exited with status %d\n",
 			 thread->task->comm, ret);
+	}
+
+	/* flush the channel (e.g. vchan_synchronize() -> tasklet_kill()) */
+	dmaengine_terminate_sync(dtc->chan);
+
+	/* now it is safe to free the thread memory */
+	list_for_each_entry_safe(thread, _thread, &dtc->threads, node) {
 		list_del(&thread->node);
 		put_task_struct(thread->task);
 		kfree(thread);
 	}
-
-	/* terminate all transfers on specified channels */
-	dmaengine_terminate_sync(dtc->chan);
 
 	kfree(dtc);
 }
