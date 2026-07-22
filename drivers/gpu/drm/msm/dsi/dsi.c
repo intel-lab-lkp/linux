@@ -267,18 +267,22 @@ static int msm_dsi_modeset_init(struct msm_display *display,
 	return 0;
 }
 
+static void msm_dsi_snapshot(struct msm_display *display,
+			     struct msm_disp_state *disp_state)
+{
+	struct msm_dsi *msm_dsi = container_of(display, struct msm_dsi, display);
+
+	msm_dsi_host_snapshot(disp_state, msm_dsi->host);
+	msm_dsi_phy_snapshot(disp_state, msm_dsi->phy);
+}
+
 static const struct msm_display_funcs msm_dsi_display_funcs = {
 	.modeset_init = msm_dsi_modeset_init,
+	.snapshot = msm_dsi_snapshot,
 };
 
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
 {
 	return msm_dsi ? &msm_dsi->display : NULL;
-}
-
-void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi)
-{
-	msm_dsi_host_snapshot(disp_state, msm_dsi->host);
-	msm_dsi_phy_snapshot(disp_state, msm_dsi->phy);
 }
 

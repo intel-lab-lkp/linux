@@ -211,8 +211,14 @@ fail:
 	return ret;
 }
 
+static void msm_hdmi_snapshot(struct msm_display *display,
+			      struct msm_disp_state *disp_state)
+{
+}
+
 static const struct msm_display_funcs msm_hdmi_display_funcs = {
 	.modeset_init = msm_hdmi_modeset_init,
+	.snapshot = msm_hdmi_snapshot,
 };
 
 struct msm_display *msm_hdmi_get_display(struct hdmi *hdmi)

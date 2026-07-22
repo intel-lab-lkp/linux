@@ -275,15 +275,20 @@ int msm_fbdev_driver_fbdev_probe(struct drm_fb_helper *helper,
 #endif
 
 struct msm_display;
+struct msm_disp_state;
 
 /**
  * struct msm_display_funcs - ops provided by a display sub-block (DSI/DP/HDMI)
  * @modeset_init: create the bridge and connector for the sub-block, attaching
  *                to @encoder.
+ * @snapshot:     capture the sub-block's state for a display snapshot;
+ *                mandatory.
  */
 struct msm_display_funcs {
 	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
 			    struct drm_encoder *encoder);
+	void (*snapshot)(struct msm_display *display,
+			 struct msm_disp_state *disp_state);
 };
 
 /**
@@ -319,7 +324,6 @@ void dsi_dev_detach(struct platform_device *pdev);
 void __init msm_dsi_register(void);
 void __exit msm_dsi_unregister(void);
 struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi);
-void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi);
 bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_bonded_dsi(struct msm_dsi *msm_dsi);
 bool msm_dsi_is_master_dsi(struct msm_dsi *msm_dsi);
@@ -336,9 +340,6 @@ static inline void __exit msm_dsi_unregister(void)
 static inline struct msm_display *msm_dsi_get_display(struct msm_dsi *msm_dsi)
 {
 	return NULL;
-}
-static inline void msm_dsi_snapshot(struct msm_disp_state *disp_state, struct msm_dsi *msm_dsi)
-{
 }
 static inline bool msm_dsi_is_cmd_mode(struct msm_dsi *msm_dsi)
 {
@@ -373,7 +374,6 @@ struct msm_dp;
 int __init msm_dp_register(void);
 void __exit msm_dp_unregister(void);
 struct msm_display *msm_dp_get_display(struct msm_dp *dp_display);
-void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp_display);
 bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
 			       const struct drm_display_mode *mode);
 bool msm_dp_wide_bus_available(const struct msm_dp *dp_display);
@@ -389,10 +389,6 @@ static inline void __exit msm_dp_unregister(void)
 static inline struct msm_display *msm_dp_get_display(struct msm_dp *dp_display)
 {
 	return NULL;
-}
-
-static inline void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp_display)
-{
 }
 
 static inline bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,

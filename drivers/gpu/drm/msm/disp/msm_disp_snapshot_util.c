@@ -131,6 +131,7 @@ void msm_disp_snapshot_capture_state(struct msm_disp_state *disp_state)
 {
 	struct msm_drm_private *priv;
 	struct drm_device *drm_dev;
+	struct msm_display *display;
 	struct msm_kms *kms;
 	int i;
 
@@ -139,18 +140,20 @@ void msm_disp_snapshot_capture_state(struct msm_disp_state *disp_state)
 	kms = priv->kms;
 
 	for (i = 0; i < ARRAY_SIZE(kms->dp); i++) {
-		if (!kms->dp[i])
-			continue;
-
-		msm_dp_snapshot(disp_state, kms->dp[i]);
+		display = msm_dp_get_display(kms->dp[i]);
+		if (display)
+			display->funcs->snapshot(display, disp_state);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(kms->dsi); i++) {
-		if (!kms->dsi[i])
-			continue;
-
-		msm_dsi_snapshot(disp_state, kms->dsi[i]);
+		display = msm_dsi_get_display(kms->dsi[i]);
+		if (display)
+			display->funcs->snapshot(display, disp_state);
 	}
+
+	display = msm_hdmi_get_display(kms->hdmi);
+	if (display)
+		display->funcs->snapshot(display, disp_state);
 
 	if (kms->funcs->snapshot)
 		kms->funcs->snapshot(disp_state, kms);

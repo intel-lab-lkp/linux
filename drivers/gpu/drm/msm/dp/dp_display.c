@@ -783,8 +783,10 @@ int msm_dp_display_get_test_bpp(struct msm_dp *dp)
 		msm_dp_display->link->test_video.test_bit_depth);
 }
 
-void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp)
+static void msm_dp_snapshot(struct msm_display *display,
+			    struct msm_disp_state *disp_state)
 {
+	struct msm_dp *dp = container_of(display, struct msm_dp, display);
 	struct msm_dp_display_private *msm_dp_display;
 
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
@@ -1354,6 +1356,7 @@ static int msm_dp_modeset_init(struct msm_display *display,
 
 static const struct msm_display_funcs msm_dp_display_funcs = {
 	.modeset_init = msm_dp_modeset_init,
+	.snapshot = msm_dp_snapshot,
 };
 
 struct msm_display *msm_dp_get_display(struct msm_dp *msm_dp_display)
