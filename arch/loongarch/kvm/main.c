@@ -18,7 +18,7 @@ struct kvm_world_switch *kvm_loongarch_ops;
 static int gcsr_flag[CSR_MAX_NUMS];
 static struct kvm_context __percpu *vmcs;
 
-int get_gcsr_flag(int csr)
+int get_gcsr_flag(unsigned int csr)
 {
 	if (csr < CSR_MAX_NUMS)
 		return gcsr_flag[csr];
@@ -26,13 +26,13 @@ int get_gcsr_flag(int csr)
 	return INVALID_GCSR;
 }
 
-static inline void set_gcsr_sw_flag(int csr)
+static inline void set_gcsr_sw_flag(unsigned int csr)
 {
 	if (csr < CSR_MAX_NUMS)
 		gcsr_flag[csr] |= SW_GCSR;
 }
 
-static inline void set_gcsr_hw_flag(int csr)
+static inline void set_gcsr_hw_flag(unsigned int csr)
 {
 	if (csr < CSR_MAX_NUMS)
 		gcsr_flag[csr] |= HW_GCSR;

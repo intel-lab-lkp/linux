@@ -362,7 +362,7 @@ extern struct kvm_world_switch *kvm_loongarch_ops;
 #define HW_GCSR		(1 << 1)
 #define INVALID_GCSR	(1 << 2)
 
-int get_gcsr_flag(int csr);
+int get_gcsr_flag(unsigned int csr);
 void set_hw_gcsr(int csr_id, unsigned long val);
 
 #endif /* __ASM_LOONGARCH_KVM_HOST_H__ */

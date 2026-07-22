@@ -1009,6 +1009,77 @@ int kvm_arch_vcpu_ioctl_set_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs
 	return -ENOIOCTLCMD;
 }
 
+/* max CSR entries handled per ioctl */
+#define KVM_LOONGARCH_MAX_CSR_REGS	0x400
+
+/* Bulk get/set of CSR state for VM migration. */
+static int kvm_loongarch_csr_io(struct kvm_vcpu *vcpu,
+				struct kvm_loongarch_csrs __user *ucsrs,
+				bool write)
+{
+	int i, ret = 0;
+	unsigned long size;
+	struct kvm_loongarch_csrs csrs;
+	struct kvm_loongarch_csr_entry *entries;
+	struct loongarch_csrs *csr = vcpu->arch.csr;
+
+	if (copy_from_user(&csrs, ucsrs, sizeof(csrs)))
+		return -EFAULT;
+
+	if (csrs.pad)
+		return -EINVAL;
+
+	if (csrs.ncsrs > KVM_LOONGARCH_MAX_CSR_REGS)
+		return -E2BIG;
+
+	size = array_size(csrs.ncsrs, sizeof(*entries));
+	entries = memdup_user(ucsrs->entries, size);
+	if (IS_ERR(entries))
+		return PTR_ERR(entries);
+
+	if (write) {
+		vcpu->arch.aux_inuse &= ~KVM_LARCH_HWCSR_USABLE;
+	} else {
+		preempt_disable();
+		vcpu_load(vcpu);
+		kvm_deliver_intr(vcpu);
+		vcpu->arch.aux_inuse &= ~KVM_LARCH_SWCSR_LATEST;
+		vcpu_put(vcpu);
+		preempt_enable();
+	}
+
+	for (i = 0; i < csrs.ncsrs; i++) {
+		unsigned int id = entries[i].index;
+
+		if (entries[i].reserved || id >= CSR_MAX_NUMS ||
+		    (get_gcsr_flag(id) & INVALID_GCSR)) {
+			ret = -EINVAL;
+			break;
+		}
+
+		if (write) {
+			ret = _kvm_setcsr(vcpu, id, entries[i].data);
+			if (ret)
+				break;
+		} else if (id == LOONGARCH_CSR_ESTAT) {
+			unsigned long estat, gintc;
+
+			/* ESTAT IP0~IP7 come from GINTC */
+			gintc = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_GINTC) & KVM_GINTC_IRQ_MASK;
+			estat = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_ESTAT) & ~KVM_ESTAT_EXTI_MASK;
+			entries[i].data = estat | (gintc << VIP_DELTA);
+		} else {
+			entries[i].data = kvm_read_sw_gcsr(csr, id);
+		}
+	}
+
+	if (!write && copy_to_user(ucsrs->entries, entries, size))
+		ret = -EFAULT;
+
+	kfree(entries);
+	return ret;
+}
+
 int kvm_arch_vcpu_ioctl_get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 {
 	int i;
@@ -1266,6 +1337,12 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 			r = kvm_get_reg(vcpu, &reg);
 		break;
 	}
+	case KVM_LOONGARCH_GET_CSR:
+		r = kvm_loongarch_csr_io(vcpu, argp, false);
+		break;
+	case KVM_LOONGARCH_SET_CSR:
+		r = kvm_loongarch_csr_io(vcpu, argp, true);
+		break;
 	case KVM_ENABLE_CAP: {
 		struct kvm_enable_cap cap;
 
