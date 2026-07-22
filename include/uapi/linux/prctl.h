@@ -416,4 +416,42 @@ struct prctl_mm_map {
 # define PR_CFI_DISABLE		_BITUL(1)
 # define PR_CFI_LOCK		_BITUL(2)
 
+/*
+ * Get or set the per-process (per address space) cache aware
+ * scheduling attributes.
+ *
+ * PR_SCHED_CACHE_GET stores the attribute selected by arg3 into the
+ * int pointed to by arg4. PR_SCHED_CACHE_SET sets the attribute
+ * selected by arg3 to the value in arg4.
+ */
+#define PR_SCHED_CACHE				82
+# define PR_SCHED_CACHE_GET			1
+# define PR_SCHED_CACHE_SET			2
+/* Attributes for PR_SCHED_CACHE_GET/PR_SCHED_CACHE_SET */
+# define PR_SCHED_CACHE_ENABLE			1
+# define PR_SCHED_CACHE_AGGR_TOLERANCE_NR	2
+# define PR_SCHED_CACHE_AGGR_TOLERANCE_SIZE	3
+# define PR_SCHED_CACHE_OVERAGGR_PCT		4
+# define PR_SCHED_CACHE_INHERIT			5
+/*
+ * Attribute value that resets an attribute to the system default;
+ * an unset value attribute also reads back as this via
+ * PR_SCHED_CACHE_GET.
+ */
+# define PR_SCHED_CACHE_DEFAULT			(-1)
+/*
+ * Flags for PR_SCHED_CACHE_INHERIT: which attributes the new address
+ * space keeps across execve(). New address spaces created by fork()
+ * always inherit all attributes.
+ */
+# define PR_SCHED_CACHE_INHERIT_ENABLE			(1UL << 0)
+# define PR_SCHED_CACHE_INHERIT_AGGR_TOLERANCE_NR	(1UL << 1)
+# define PR_SCHED_CACHE_INHERIT_AGGR_TOLERANCE_SIZE	(1UL << 2)
+# define PR_SCHED_CACHE_INHERIT_OVERAGGR_PCT		(1UL << 3)
+# define PR_SCHED_CACHE_INHERIT_MASK			\
+	(PR_SCHED_CACHE_INHERIT_ENABLE |		\
+	 PR_SCHED_CACHE_INHERIT_AGGR_TOLERANCE_NR |	\
+	 PR_SCHED_CACHE_INHERIT_AGGR_TOLERANCE_SIZE |	\
+	 PR_SCHED_CACHE_INHERIT_OVERAGGR_PCT)
+
 #endif /* _LINUX_PRCTL_H */

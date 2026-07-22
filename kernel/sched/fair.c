@@ -44,6 +44,7 @@
 #include <linux/memory-tiers.h>
 #include <linux/mempolicy.h>
 #include <linux/mutex_api.h>
+#include <linux/prctl.h>
 #include <linux/profile.h>
 #include <linux/psi.h>
 #include <linux/ratelimit.h>
@@ -1430,6 +1431,61 @@ static inline int get_sched_cache_scale(unsigned int tol, int mul)
 	return (1 + (tol - 1) * mul);
 }
 
+/*
+ * Effective cache aware scheduling state of @mm. The per-process
+ * prctl(PR_SCHED_CACHE_ENABLE) attribute overrides the global
+ * default. Only meaningful when sched_cache_enabled().
+ */
+static bool sched_cache_mm_enabled(struct mm_struct *mm)
+{
+	int enabled;
+
+	/*
+	 * Statically allocated mms (init_mm, efi_mm) never go through
+	 * mm_init_sched(): their sc_stat is zero-initialized rather
+	 * than set up, recognizable by the NULL pcpu_sched. Treat them
+	 * as disabled instead of interpreting the zeroes (e.g.
+	 * sc_stat.cpu == 0 would read as a valid preferred CPU).
+	 */
+	if (!mm || !mm->sc_stat.pcpu_sched)
+		return false;
+
+	/*
+	 * -1 means no per-process override: follow the global enable,
+	 * which is on in every path that reaches this - they are all
+	 * behind sched_cache_enabled().
+	 */
+	enabled = READ_ONCE(mm->sc_stat.user_enabled);
+
+	return enabled != 0;
+}
+
+/*
+ * The following helpers return the effective value of a cache aware
+ * scheduling knob for @mm: the per-process attribute if one was set
+ * via prctl(PR_SCHED_CACHE), the global tunable otherwise.
+ */
+static inline unsigned int mm_aggr_tolerance_nr(struct mm_struct *mm)
+{
+	int tol = mm ? READ_ONCE(mm->sc_stat.aggr_tolerance_nr) : -1;
+
+	return tol >= 0 ? tol : READ_ONCE(llc_aggr_tolerance_nr);
+}
+
+static inline unsigned int mm_aggr_tolerance_size(struct mm_struct *mm)
+{
+	int tol = mm ? READ_ONCE(mm->sc_stat.aggr_tolerance_size) : -1;
+
+	return tol >= 0 ? tol : READ_ONCE(llc_aggr_tolerance_size);
+}
+
+static inline unsigned int mm_overaggr_pct(struct mm_struct *mm)
+{
+	int pct = mm ? READ_ONCE(mm->sc_stat.overaggr_pct) : -1;
+
+	return pct >= 0 ? pct : READ_ONCE(llc_overaggr_pct);
+}
+
 static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
 {
 #ifdef CONFIG_NUMA_BALANCING
@@ -1468,7 +1524,7 @@ static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
 		 * ignore the footprint and do the aggregation
 		 * anyway.
 		 */
-		scale = get_sched_cache_scale(READ_ONCE(llc_aggr_tolerance_size), 256);
+		scale = get_sched_cache_scale(mm_aggr_tolerance_size(mm), 256);
 		if (scale == INT_MAX)
 			return false;
 
@@ -1490,7 +1546,7 @@ static bool invalid_llc_nr(struct mm_struct *mm, struct task_struct *p,
 	 * Scale the number of 'cores' in a LLC by llc_aggr_tolerance_nr
 	 * and compare it to the task's active threads.
 	 */
-	scale = get_sched_cache_scale(READ_ONCE(llc_aggr_tolerance_nr), 1);
+	scale = get_sched_cache_scale(mm_aggr_tolerance_nr(mm), 1);
 	if (scale == INT_MAX)
 		return false;
 
@@ -1571,7 +1627,7 @@ static void account_llc_dequeue(struct rq *rq, struct task_struct *p)
 	}
 }
 
-void mm_init_sched(struct mm_struct *mm,
+void mm_init_sched(struct mm_struct *mm, struct task_struct *p,
 		   struct sched_cache_time __percpu *_pcpu_sched)
 {
 	unsigned long epoch = 0;
@@ -1593,6 +1649,34 @@ void mm_init_sched(struct mm_struct *mm,
 	mm->sc_stat.next_scan = jiffies;
 	mm->sc_stat.nr_running_avg = 0;
 	mm->sc_stat.footprint = 0;
+	mm->sc_stat.user_enabled = -1;
+	mm->sc_stat.aggr_tolerance_nr = -1;
+	mm->sc_stat.aggr_tolerance_size = -1;
+	mm->sc_stat.overaggr_pct = -1;
+
+	/*
+	 * A new mm created by fork() (@p is the new child) inherits all
+	 * of the parent's prctl(PR_SCHED_CACHE) attributes. Across
+	 * execve() (@p is current) only the attributes marked in the
+	 * calling thread's PR_SCHED_CACHE_INHERIT mask survive.
+	 */
+	if (current->mm) {
+		struct sched_cache_stat *src = &current->mm->sc_stat;
+		unsigned int inherit = ~0U;
+
+		if (p == current)
+			inherit = READ_ONCE(current->sched_cache_inherit);
+
+		if (inherit & PR_SCHED_CACHE_INHERIT_ENABLE)
+			mm->sc_stat.user_enabled = READ_ONCE(src->user_enabled);
+		if (inherit & PR_SCHED_CACHE_INHERIT_AGGR_TOLERANCE_NR)
+			mm->sc_stat.aggr_tolerance_nr = READ_ONCE(src->aggr_tolerance_nr);
+		if (inherit & PR_SCHED_CACHE_INHERIT_AGGR_TOLERANCE_SIZE)
+			mm->sc_stat.aggr_tolerance_size = READ_ONCE(src->aggr_tolerance_size);
+		if (inherit & PR_SCHED_CACHE_INHERIT_OVERAGGR_PCT)
+			mm->sc_stat.overaggr_pct = READ_ONCE(src->overaggr_pct);
+	}
+
 	/*
 	 * The update to mm->sc_stat should not be reordered
 	 * before initialization to mm's other fields, in case
@@ -1713,10 +1797,12 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	}
 
 	/*
-	 * If this process hasn't hit task_cache_work() for a while invalidate
-	 * its preferred state.
+	 * If this process hasn't hit task_cache_work() for a while, or
+	 * has cache aware scheduling disabled via prctl(PR_SCHED_CACHE),
+	 * invalidate its preferred state.
 	 */
 	if ((long)(epoch - READ_ONCE(mm->sc_stat.epoch)) > llc_epoch_affinity_timeout ||
+	    !sched_cache_mm_enabled(mm) ||
 	    invalid_llc_nr(mm, p, cpu_of(rq)) ||
 	    exceed_llc_capacity(mm, cpu_of(rq))) {
 		if (READ_ONCE(mm->sc_stat.cpu) != -1)
@@ -1745,6 +1831,9 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 
 	if (!mm || p->flags & PF_KTHREAD ||
 	    !mm->sc_stat.pcpu_sched)
+		return;
+
+	if (!sched_cache_mm_enabled(mm))
 		return;
 
 	epoch = rq->cpu_epoch;
@@ -1851,7 +1940,8 @@ static void task_cache_work(struct callback_head *work)
 		return;
 
 	curr_cpu = task_cpu(p);
-	if (invalid_llc_nr(mm, p, curr_cpu) ||
+	if (!sched_cache_mm_enabled(mm) ||
+	    invalid_llc_nr(mm, p, curr_cpu) ||
 	    exceed_llc_capacity(mm, curr_cpu)) {
 		if (READ_ONCE(mm->sc_stat.cpu) != -1)
 			WRITE_ONCE(mm->sc_stat.cpu, -1);
@@ -1918,7 +2008,14 @@ static void task_cache_work(struct callback_head *work)
 		}
 	}
 
-	if (m_a_occ > (2 * curr_m_a_occ)) {
+	/*
+	 * Re-check the per-mm enable after the scan: a concurrent
+	 * prctl() may have disabled cache aware scheduling for this
+	 * mm and reset sc_stat.cpu while we were scanning - do not
+	 * undo that reset. The check is best effort; a lost race is
+	 * corrected at the next tick.
+	 */
+	if (sched_cache_mm_enabled(mm) && m_a_occ > (2 * curr_m_a_occ)) {
 		/*
 		 * Avoid switching sc_stat.cpu too fast.
 		 * The reason to choose 2X is because:
@@ -10417,17 +10514,19 @@ static inline int task_is_ineligible_on_dst_cpu(struct task_struct *p, int dest_
  * done.
  * Derived from fits_capacity().
  *
+ * The per-mm percentage is bounded by the prctl, but the global
  * llc_overaggr_pct is an unbounded debugfs u32 and CONFIG_SCHED_CACHE
  * only depends on SMP, so max * aggr_pct can wrap on 32-bit. A
  * threshold large enough to overflow is effectively unlimited: the
  * LLC always has room, so treat that as "fits" rather than letting
  * the multiplication wrap.
  *
- * (default: ~50%, tunable via debugfs)
+ * (default: ~50%, tunable via debugfs and prctl(PR_SCHED_CACHE))
  */
-static bool fits_llc_capacity(unsigned long util, unsigned long max)
+static bool fits_llc_capacity(unsigned long util, unsigned long max,
+			      struct mm_struct *mm)
 {
-	u32 aggr_pct = READ_ONCE(llc_overaggr_pct);
+	u32 aggr_pct = mm_overaggr_pct(mm);
 	unsigned long thresh;
 	u32 bumped;
 
@@ -10549,7 +10648,8 @@ enum llc_mig {
  */
 static enum llc_mig can_migrate_llc(int src_cpu, int dst_cpu,
 				    unsigned long tsk_util,
-				    bool to_pref)
+				    bool to_pref,
+				    struct mm_struct *mm)
 {
 	unsigned long src_util, dst_util, src_cap, dst_cap;
 
@@ -10560,8 +10660,8 @@ static enum llc_mig can_migrate_llc(int src_cpu, int dst_cpu,
 	src_util = src_util < tsk_util ? 0 : src_util - tsk_util;
 	dst_util = dst_util + tsk_util;
 
-	if (!fits_llc_capacity(dst_util, dst_cap) &&
-	    !fits_llc_capacity(src_util, src_cap))
+	if (!fits_llc_capacity(dst_util, dst_cap, mm) &&
+	    !fits_llc_capacity(src_util, src_cap, mm))
 		return mig_unrestricted;
 
 	if (to_pref) {
@@ -10571,7 +10671,7 @@ static enum llc_mig can_migrate_llc(int src_cpu, int dst_cpu,
 		 * than the src, in which case migration will
 		 * increase the imbalance too much.
 		 */
-		if (!fits_llc_capacity(dst_util, dst_cap) &&
+		if (!fits_llc_capacity(dst_util, dst_cap, mm) &&
 		    util_greater(dst_util, src_util))
 			return mig_forbid;
 	} else {
@@ -10582,7 +10682,7 @@ static enum llc_mig can_migrate_llc(int src_cpu, int dst_cpu,
 		 * of preferred LLC, leading to migration again
 		 * back to preferred LLC.
 		 */
-		if (fits_llc_capacity(src_util, src_cap) ||
+		if (fits_llc_capacity(src_util, src_cap, mm) ||
 		    !util_greater(src_util, dst_util))
 			return mig_forbid;
 	}
@@ -10608,8 +10708,9 @@ static enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu,
 	if (cpu < 0 || cpus_share_cache(src_cpu, dst_cpu))
 		return mig_unrestricted;
 
-	/* skip cache aware load balance for too many threads */
-	if (invalid_llc_nr(mm, p, dst_cpu) ||
+	/* skip cache aware load balance for disabled mm or too many threads */
+	if (!sched_cache_mm_enabled(mm) ||
+	    invalid_llc_nr(mm, p, dst_cpu) ||
 	    exceed_llc_capacity(mm, dst_cpu)) {
 		if (READ_ONCE(mm->sc_stat.cpu) != -1)
 			WRITE_ONCE(mm->sc_stat.cpu, -1);
@@ -10624,7 +10725,7 @@ static enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu,
 		return mig_unrestricted;
 
 	return can_migrate_llc(src_cpu, dst_cpu,
-			       task_util(p), to_pref);
+			       task_util(p), to_pref, mm);
 }
 
 /*
@@ -10663,8 +10764,12 @@ alb_break_llc(struct lb_env *env)
 		if (cur && cur->sched_class == &fair_sched_class)
 			util = task_util(cur);
 
+		/*
+		 * No stable mm context here: rq->curr's mm may be
+		 * dropped at any time, use the global threshold.
+		 */
 		if (can_migrate_llc(env->src_cpu, env->dst_cpu,
-				    util, false) == mig_forbid)
+				    util, false, NULL) == mig_forbid)
 			return true;
 	}
 
@@ -11775,9 +11880,13 @@ static inline bool llc_balance(struct lb_env *env, struct sg_lb_stats *sgs,
 	if (env->sd->nr_balance_failed >= env->sd->cache_nice_tries + 1)
 		return false;
 
+	/*
+	 * Group level statistics aggregate tasks of many processes,
+	 * there is no single owning mm: use the global threshold.
+	 */
 	if (sgs->nr_pref_dst_llc &&
 	    can_migrate_llc(cpumask_first(sched_group_span(group)),
-			    env->dst_cpu, 0, true) == mig_llc)
+			    env->dst_cpu, 0, true, NULL) == mig_llc)
 		return true;
 
 	return false;

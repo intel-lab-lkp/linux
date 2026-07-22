@@ -1135,7 +1135,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	if (mm_alloc_cid(mm, p))
 		goto fail_cid;
 
-	if (mm_alloc_sched(mm))
+	if (mm_alloc_sched(mm, p))
 		goto fail_sched;
 
 	if (percpu_counter_init_many(mm->rss_stat, 0, GFP_KERNEL_ACCOUNT,

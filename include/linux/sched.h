@@ -1424,6 +1424,8 @@ struct task_struct {
 	int				preferred_llc;
 	/* 1: task was enqueued to its preferred LLC, 0 otherwise */
 	int				pref_llc_queued;
+	/* PR_SCHED_CACHE_INHERIT flags kept across execve() */
+	unsigned int			sched_cache_inherit;
 #endif
 
 	struct rseq_data		rseq;
@@ -2338,6 +2340,11 @@ static inline void sched_core_fork(struct task_struct *p) { }
 static inline int sched_core_idle_cpu(int cpu) { return idle_cpu(cpu); }
 #endif
 
+#ifdef CONFIG_SCHED_CACHE
+extern int sched_cache_prctl(unsigned long opt, unsigned long attr,
+			     unsigned long val, unsigned long arg5);
+#endif
+
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING
@@ -2398,6 +2405,15 @@ struct sched_cache_stat {
 	unsigned long next_scan;
 	unsigned long footprint;
 	int cpu;
+	/*
+	 * Per-process overrides of the cache aware scheduling
+	 * knobs, set via prctl(PR_SCHED_CACHE). -1 makes an
+	 * attribute follow the system-wide default.
+	 */
+	int user_enabled;
+	int aggr_tolerance_nr;
+	int aggr_tolerance_size;
+	int overaggr_pct;
 } ____cacheline_aligned_in_smp;
 
 #else

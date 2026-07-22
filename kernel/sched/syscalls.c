@@ -7,6 +7,7 @@
  *  Copyright (C) 1991-2002  Linus Torvalds
  *  Copyright (C) 1998-2024  Ingo Molnar, Red Hat
  */
+#include <linux/prctl.h>
 #include <linux/sched.h>
 #include <linux/cpuset.h>
 #include <linux/sched/debug.h>
@@ -1576,3 +1577,122 @@ SYSCALL_DEFINE2(sched_rr_get_interval_time32, pid_t, pid,
 	return retval;
 }
 #endif
+
+#ifdef CONFIG_SCHED_CACHE
+/*
+ * PR_SCHED_CACHE_DEFAULT is the int -1. Depending on how userspace
+ * passed it (int through prctl()'s varargs, long, or from a 32-bit
+ * task) it arrives either sign-extended (the first comparison, -1
+ * converts to ULONG_MAX) or zero-extended to 0xffffffff (the second);
+ * accept both.
+ */
+static bool sched_cache_val_default(unsigned long val)
+{
+	return val == (unsigned long)PR_SCHED_CACHE_DEFAULT ||
+	       val == (unsigned int)PR_SCHED_CACHE_DEFAULT;
+}
+
+static int sched_cache_set_attr(unsigned long attr, unsigned long val)
+{
+	struct mm_struct *mm = current->mm;
+	bool def = sched_cache_val_default(val);
+	int ival = def ? -1 : (int)val;
+
+	switch (attr) {
+	case PR_SCHED_CACHE_ENABLE:
+		if (!def && val > 1)
+			return -EINVAL;
+		WRITE_ONCE(mm->sc_stat.user_enabled, ival);
+		/*
+		 * Drop the preferred LLC hint on any change: a process
+		 * that became disabled must stop being honored right
+		 * away, and one that became enabled re-establishes the
+		 * hint within an epoch anyway. This is best effort: an
+		 * in-flight task_cache_work() scan re-checks the enable
+		 * before publishing a new preference, and a lost race
+		 * is corrected at the next tick.
+		 */
+		WRITE_ONCE(mm->sc_stat.cpu, -1);
+		break;
+	case PR_SCHED_CACHE_AGGR_TOLERANCE_NR:
+		if (!def && val > 100)
+			return -EINVAL;
+		WRITE_ONCE(mm->sc_stat.aggr_tolerance_nr, ival);
+		break;
+	case PR_SCHED_CACHE_AGGR_TOLERANCE_SIZE:
+		if (!def && val > 100)
+			return -EINVAL;
+		WRITE_ONCE(mm->sc_stat.aggr_tolerance_size, ival);
+		break;
+	case PR_SCHED_CACHE_OVERAGGR_PCT:
+		/*
+		 * Bound the percentage so that scaling an LLC capacity
+		 * by it cannot overflow, even on 32-bit. Anything in the
+		 * hundreds already means "never treat the LLC as busy".
+		 */
+		if (!def && val > 1000)
+			return -EINVAL;
+		WRITE_ONCE(mm->sc_stat.overaggr_pct, ival);
+		break;
+	case PR_SCHED_CACHE_INHERIT:
+		/* the default inherit mask is empty */
+		if (def)
+			val = 0;
+		if (val & ~PR_SCHED_CACHE_INHERIT_MASK)
+			return -EINVAL;
+		WRITE_ONCE(current->sched_cache_inherit, val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int sched_cache_get_attr(unsigned long attr, unsigned long uptr)
+{
+	struct mm_struct *mm = current->mm;
+	int val;
+
+	switch (attr) {
+	case PR_SCHED_CACHE_ENABLE:
+		val = READ_ONCE(mm->sc_stat.user_enabled);
+		break;
+	case PR_SCHED_CACHE_AGGR_TOLERANCE_NR:
+		val = READ_ONCE(mm->sc_stat.aggr_tolerance_nr);
+		break;
+	case PR_SCHED_CACHE_AGGR_TOLERANCE_SIZE:
+		val = READ_ONCE(mm->sc_stat.aggr_tolerance_size);
+		break;
+	case PR_SCHED_CACHE_OVERAGGR_PCT:
+		val = READ_ONCE(mm->sc_stat.overaggr_pct);
+		break;
+	case PR_SCHED_CACHE_INHERIT:
+		val = READ_ONCE(current->sched_cache_inherit);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return put_user(val, (int __user *)uptr);
+}
+
+int sched_cache_prctl(unsigned long opt, unsigned long attr,
+		      unsigned long val, unsigned long arg5)
+{
+	if (arg5)
+		return -EINVAL;
+
+	if (!current->mm)
+		return -EINVAL;
+
+	switch (opt) {
+	case PR_SCHED_CACHE_GET:
+		return sched_cache_get_attr(attr, val);
+	case PR_SCHED_CACHE_SET:
+		return sched_cache_set_attr(attr, val);
+	default:
+		return -EINVAL;
+	}
+}
+#endif /* CONFIG_SCHED_CACHE */
