@@ -100,6 +100,10 @@ static int manage_bp_slot(struct perf_event *bp, enum bp_slot_action action)
 		old_bp = NULL;
 		new_bp = bp;
 		break;
+	case BP_SLOT_ACTION_REINSTALL:
+		old_bp = bp;
+		new_bp = bp;
+		break;
 	case BP_SLOT_ACTION_UNINSTALL:
 		old_bp = bp;
 		new_bp = NULL;
@@ -129,23 +133,36 @@ static int manage_bp_slot(struct perf_event *bp, enum bp_slot_action action)
 static void setup_hwbp(struct arch_hw_breakpoint *info, int slot, bool enable)
 {
 	unsigned long dr7;
+	bool enabled;
+
+	dr7 = this_cpu_read(cpu_dr7);
+	enabled = dr7 & ((DR_LOCAL_ENABLE | DR_GLOBAL_ENABLE) << (slot * DR_ENABLE_SIZE));
+	dr7 &= ~(__encode_dr7(slot, 0xc, 0x3) |
+		 (DR_LOCAL_ENABLE << (slot * DR_ENABLE_SIZE)));
+
+	/*
+	 * If the slot is currently enabled, disable it first before updating
+	 * the address register to prevent spurious debug exceptions.
+	 */
+	if (enable && enabled) {
+		barrier();
+		set_debugreg(dr7, 7);
+		barrier();
+		this_cpu_write(cpu_dr7, dr7);
+	}
 
 	set_debugreg(info->address, slot);
 	__this_cpu_write(cpu_debugreg[slot], info->address);
-
-	dr7 = this_cpu_read(cpu_dr7);
-	dr7 &= ~(__encode_dr7(slot, 0xc, 0x3) |
-		 (DR_LOCAL_ENABLE << (slot * DR_ENABLE_SIZE)));
-	if (enable)
-		dr7 |= encode_dr7(slot, info->len, info->type);
 
 	/*
 	 * Enabling:
 	 *   Ensure we first write cpu_dr7 before we set the DR7 register.
 	 *   This ensures an NMI never see cpu_dr7 0 when DR7 is not.
 	 */
-	if (enable)
+	if (enable) {
+		dr7 |= encode_dr7(slot, info->len, info->type);
 		this_cpu_write(cpu_dr7, dr7);
+	}
 
 	barrier();
 
@@ -187,6 +204,11 @@ static int arch_manage_bp(struct perf_event *bp, enum bp_slot_action action)
 int arch_install_hw_breakpoint(struct perf_event *bp)
 {
 	return arch_manage_bp(bp, BP_SLOT_ACTION_INSTALL);
+}
+
+int arch_reinstall_hw_breakpoint(struct perf_event *bp)
+{
+	return arch_manage_bp(bp, BP_SLOT_ACTION_REINSTALL);
 }
 
 void arch_uninstall_hw_breakpoint(struct perf_event *bp)
