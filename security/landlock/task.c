@@ -445,6 +445,49 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 	return -EPERM;
 }
 
+static const struct access_masks posix_mqueue_scope = {
+	.scope = LANDLOCK_SCOPE_POSIX_MSG_QUEUE,
+};
+
+/**
+ * landlock_check_posix_mqueue_open - Deny opening a POSIX message queue
+ * created by a task from a different (non-ancestor) domain
+ *
+ * @file: The mqueuefs file being opened.
+ *
+ * Return: -EPERM if the open must be denied, 0 otherwise.
+ */
+int landlock_check_posix_mqueue_open(struct file *const file)
+{
+	const struct inode *const inode = file_inode(file);
+	const struct landlock_cred_security *subject;
+	size_t handle_layer;
+
+	if (!landlock_is_posix_mqueue_inode(inode))
+		return 0;
+
+	subject = landlock_get_applicable_subject(file->f_cred,
+						  posix_mqueue_scope,
+						  &handle_layer);
+	if (!subject)
+		return 0;
+
+	if (!domain_is_scoped(subject->domain,
+			      landlock_inode(inode)->mq_domain,
+			      LANDLOCK_SCOPE_POSIX_MSG_QUEUE))
+		return 0;
+
+	landlock_log_denial(subject, &(struct landlock_request) {
+		.type = LANDLOCK_REQUEST_SCOPE_POSIX_MSG_QUEUE,
+		.audit = {
+			.type = LSM_AUDIT_DATA_FILE,
+			.u.file = file,
+		},
+		.layer_plus_one = handle_layer + 1,
+	});
+	return -EPERM;
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(ptrace_access_check, hook_ptrace_access_check),
 	LSM_HOOK_INIT(ptrace_traceme, hook_ptrace_traceme),

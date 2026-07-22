@@ -14,6 +14,7 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/rcupdate.h>
+#include <uapi/linux/magic.h>
 
 #include "access.h"
 #include "cred.h"
@@ -38,6 +39,14 @@ struct landlock_inode_security {
 	 * performed by get_inode_object().
 	 */
 	struct landlock_object __rcu *object;
+	/**
+	 * @mq_domain: Domain of the task that created POSIX message queue.
+	 * Only set for mqueuefs inodes (i.e. s_magic == MQUEUE_MAGIC) at
+	 * creation time by hook_d_instantiate(), never modified afterwards.
+	 * Used to check LANDLOCK_SCOPE_POSIX_MSG_QUEUE against the
+	 * accessing task's domain.
+	 */
+	struct landlock_ruleset *mq_domain;
 };
 
 /**
@@ -139,6 +148,12 @@ static inline struct landlock_inode_security *
 landlock_inode(const struct inode *const inode)
 {
 	return inode->i_security + landlock_blob_sizes.lbs_inode;
+}
+
+static inline bool
+landlock_is_posix_mqueue_inode(const struct inode *const inode)
+{
+	return S_ISREG(inode->i_mode) && inode->i_sb->s_magic == MQUEUE_MAGIC;
 }
 
 static inline struct landlock_superblock_security *

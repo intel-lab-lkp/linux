@@ -9,6 +9,10 @@
 #ifndef _SECURITY_LANDLOCK_TASK_H
 #define _SECURITY_LANDLOCK_TASK_H
 
+#include <linux/fs.h>
+
 __init void landlock_add_task_hooks(void);
+
+int landlock_check_posix_mqueue_open(struct file *const file);
 
 #endif /* _SECURITY_LANDLOCK_TASK_H */

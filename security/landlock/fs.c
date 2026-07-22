@@ -51,6 +51,7 @@
 #include "object.h"
 #include "ruleset.h"
 #include "setup.h"
+#include "task.h"
 
 /* Underlying object management */
 
@@ -1268,6 +1269,33 @@ static void hook_inode_free_security_rcu(void *inode_security)
 	 */
 	inode_sec = inode_security + landlock_blob_sizes.lbs_inode;
 	WARN_ON_ONCE(inode_sec->object);
+
+	landlock_put_ruleset_deferred(inode_sec->mq_domain);
+}
+
+/*
+ * Tag a newly created POSIX message queue with its creator's domain.
+ *
+ * This is the earliest reachable point with both the creator's context and a
+ * fully initialized inode.
+ */
+static void hook_d_instantiate(struct dentry *const dentry,
+			       struct inode *const inode)
+{
+	struct landlock_ruleset *dom;
+
+	if (!landlock_is_posix_mqueue_inode(inode))
+		return;
+
+	dom = landlock_get_current_domain();
+	if (!dom)
+		return;
+
+	if (WARN_ON_ONCE(landlock_inode(inode)->mq_domain))
+		return;
+
+	landlock_get_ruleset(dom);
+	landlock_inode(inode)->mq_domain = dom;
 }
 
 /* Super-block hooks */
@@ -1756,6 +1784,12 @@ static int hook_file_open(struct file *const file)
 	const struct landlock_cred_security *const subject =
 		landlock_get_applicable_subject(file->f_cred, any_fs, NULL);
 	struct landlock_request request = {};
+	int err;
+
+	/* POSIX message queue scoping is independent of FS access rights. */
+	err = landlock_check_posix_mqueue_open(file);
+	if (err)
+		return err;
 
 	if (!subject)
 		return 0;
@@ -1979,6 +2013,7 @@ static void hook_file_free_security(struct file *file)
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_free_security_rcu, hook_inode_free_security_rcu),
+	LSM_HOOK_INIT(d_instantiate, hook_d_instantiate),
 
 	LSM_HOOK_INIT(sb_delete, hook_sb_delete),
 	LSM_HOOK_INIT(sb_mount, hook_sb_mount),

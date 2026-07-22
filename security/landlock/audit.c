@@ -82,6 +82,10 @@ get_blocker(const enum landlock_request_type type,
 	case LANDLOCK_REQUEST_SCOPE_SIGNAL:
 		WARN_ON_ONCE(access_bit != -1);
 		return "scope.signal";
+
+	case LANDLOCK_REQUEST_SCOPE_POSIX_MSG_QUEUE:
+		WARN_ON_ONCE(access_bit != -1);
+		return "scope.posix_msg_queue";
 	}
 
 	WARN_ON_ONCE(1);
@@ -645,6 +649,11 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
 			quiet_applicable_to_access =
 				!!(quiet_mask &
 				   LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET);
+			break;
+		case LANDLOCK_REQUEST_SCOPE_POSIX_MSG_QUEUE:
+			quiet_applicable_to_access =
+				!!(quiet_mask &
+				   LANDLOCK_SCOPE_POSIX_MSG_QUEUE);
 			break;
 		/*
 		 * Leave LANDLOCK_REQUEST_PTRACE and
