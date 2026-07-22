@@ -166,6 +166,7 @@ void st_nci_remove(struct nci_dev *ndev)
 
 	ndlc_close(info->ndlc);
 
+	st_nci_se_deinit(ndev);
 	nci_unregister_device(ndev);
 	nci_free_device(ndev);
 }

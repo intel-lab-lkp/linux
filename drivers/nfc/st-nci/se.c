@@ -751,10 +751,8 @@ void st_nci_se_deinit(struct nci_dev *ndev)
 {
 	struct st_nci_info *info = nci_get_drvdata(ndev);
 
-	if (info->se_info.bwi_active)
-		timer_delete_sync(&info->se_info.bwi_timer);
-	if (info->se_info.se_active)
-		timer_delete_sync(&info->se_info.se_active_timer);
+	timer_shutdown_sync(&info->se_info.bwi_timer);
+	timer_shutdown_sync(&info->se_info.se_active_timer);
 
 	info->se_info.se_active = false;
 	info->se_info.bwi_active = false;
