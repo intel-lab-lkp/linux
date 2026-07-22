@@ -317,6 +317,15 @@ void rtw_fw_c2h_cmd_handle(struct rtw_dev *rtwdev, struct sk_buff *skb)
 	case C2H_CCX_TX_RPT:
 		rtw_tx_report_handle(rtwdev, skb, C2H_CCX_TX_RPT);
 		break;
+	case C2H_VENDOR_TX_RPT:
+	case C2H_WLAN_RFON:
+		/*
+		 * The RTL8723BS firmware reports management TX through these
+		 * two events instead, using the same payload layout.
+		 */
+		if (rtw_is_8723bs(rtwdev))
+			rtw_tx_report_handle(rtwdev, skb, C2H_CCX_TX_RPT);
+		break;
 	case C2H_BT_INFO:
 		rtw_coex_bt_info_notify(rtwdev, c2h->payload, len);
 		break;
@@ -365,6 +374,15 @@ void rtw_fw_c2h_cmd_rx_irqsafe(struct rtw_dev *rtwdev, u32 pkt_offset,
 		rtw_coex_info_response(rtwdev, skb);
 		break;
 	case C2H_WLAN_RFON:
+		/* On 8723BS SDIO with v41 firmware, C2H 0x32 carries a scan TX
+		 * report, not a WLAN_RFON event: defer it to rtw_fw_c2h_cmd_handle().
+		 */
+		if (rtw_is_8723bs(rtwdev)) {
+			*((u32 *)skb->cb) = pkt_offset;
+			skb_queue_tail(&rtwdev->c2h_queue, skb);
+			ieee80211_queue_work(rtwdev->hw, &rtwdev->c2h_work);
+			break;
+		}
 		complete(&rtwdev->lps_leave_check);
 		dev_kfree_skb_any(skb);
 		break;
@@ -726,9 +744,19 @@ void rtw_fw_send_rssi_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si)
 
 	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_RSSI_MONITOR);
 
-	SET_RSSI_INFO_MACID(h2c_pkt, si->mac_id);
-	SET_RSSI_INFO_RSSI(h2c_pkt, rssi);
-	SET_RSSI_INFO_STBC(h2c_pkt, stbc_en);
+	if (rtw_is_8723bs(rtwdev)) {
+		/* Vendor v5.2.17 RA_INFO byte layout (H2C 0x42):
+		 * [1] mac_id, [2] 0x00, [3] rssi, [4] stbc?0x04:0x00.
+		 */
+		h2c_pkt[1] = si->mac_id & 0x7f;
+		h2c_pkt[2] = 0x00;
+		h2c_pkt[3] = rssi;
+		h2c_pkt[4] = stbc_en ? 0x04 : 0x00;
+	} else {
+		SET_RSSI_INFO_MACID(h2c_pkt, si->mac_id);
+		SET_RSSI_INFO_RSSI(h2c_pkt, rssi);
+		SET_RSSI_INFO_STBC(h2c_pkt, stbc_en);
+	}
 
 	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
 }
@@ -741,6 +769,37 @@ void rtw_fw_send_ra_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si,
 	u32 mask_hi;
 
 	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_RA_INFO);
+
+	if (rtw_is_8723bs(rtwdev)) {
+		/* The v41 firmware parses the vendor v5.2.17 MACID_CFG (0x40)
+		 * byte layout, not the bit-packed rtw88 RA_INFO below:
+		 * [1] mac_id, [2] rate_id | sgi_en(bit7),
+		 * [3] bw(bits 1-0) | no_update(bit3), [4..7] 4-byte mask.
+		 *
+		 * no_update(bit3)=1 tells the firmware to keep its existing
+		 * rate mask, so a mask that changes under no_update is dropped.
+		 * Force no_update=0 whenever the mask actually changes so the
+		 * update is applied, and keep no_update=1 for identical
+		 * refreshes so the firmware retains the rate it has learned.
+		 */
+		bool apply = reset_ra_mask || si->ra_mask != si->ra_mask_last;
+
+		h2c_pkt[1] = si->mac_id & 0x7f;
+		h2c_pkt[2] = (si->rate_id & 0x1f) |
+			     (si->sgi_enable ? BIT(7) : 0);
+		h2c_pkt[3] = ((si->bw_mode ? 3 : 1) & 0x3) |
+			     (apply ? 0 : BIT(3));
+		h2c_pkt[4] = si->ra_mask & 0xff;
+		h2c_pkt[5] = (si->ra_mask >> 8) & 0xff;
+		h2c_pkt[6] = (si->ra_mask >> 16) & 0xff;
+		h2c_pkt[7] = (si->ra_mask >> 24) & 0xff;
+
+		si->ra_mask_last = si->ra_mask;
+		si->init_ra_lv = 0;
+
+		rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
+		return;
+	}
 
 	SET_RA_INFO_MACID(h2c_pkt, si->mac_id);
 	SET_RA_INFO_RATE_ID(h2c_pkt, si->rate_id);
@@ -780,8 +839,78 @@ void rtw_fw_media_status_report(struct rtw_dev *rtwdev, u8 mac_id, bool connect)
 	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
 
 	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_MEDIA_STATUS_RPT);
-	MEDIA_STATUS_RPT_SET_OP_MODE(h2c_pkt, connect);
-	MEDIA_STATUS_RPT_SET_MACID(h2c_pkt, mac_id);
+
+	if (rtw_is_8723bs(rtwdev)) {
+		/* Vendor v5.2.17 MEDIA_STATUS_RPT: connect = 21 00 00,
+		 * disconnect = 00 00 00. Byte1[0]=OPMODE, [5]=ROLE(STA=0),
+		 * [1]=MACID_IND; byte2=MACID; byte3=MACID_END.
+		 */
+		h2c_pkt[1] = connect ? 0x21 : 0x00;
+		h2c_pkt[2] = mac_id & 0x7f;
+		h2c_pkt[3] = 0x00;
+	} else {
+		MEDIA_STATUS_RPT_SET_OP_MODE(h2c_pkt, connect);
+		MEDIA_STATUS_RPT_SET_MACID(h2c_pkt, mac_id);
+	}
+
+	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
+}
+
+/* 8723BS SDIO: post-assoc rate-adaptation config in the vendor v5.2.17
+ * MACID_CFG byte layout. disra (bit7 of [2]) must stay 0 so the firmware keeps
+ * running rate adaptation for this mac_id.
+ */
+void rtw_fw_macid_cfg(struct rtw_dev *rtwdev, u8 mac_id, u8 raid, u8 bw,
+		      u8 sgi, u32 rate_mask)
+{
+	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
+
+	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_RA_INFO);
+
+	h2c_pkt[1] = mac_id & 0x7f;
+	h2c_pkt[2] = (raid & 0x1f) | (sgi ? BIT(7) : 0) | 0x60;
+	h2c_pkt[3] = (bw ? 3 : 1) & 0x3;
+	h2c_pkt[4] = rate_mask & 0xff;
+	h2c_pkt[5] = (rate_mask >> 8) & 0xff;
+	h2c_pkt[6] = (rate_mask >> 16) & 0xff;
+	h2c_pkt[7] = (rate_mask >> 24) & 0xff;
+
+	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
+}
+
+/* 8723BS SDIO: report the connected channel/bandwidth to the vendor firmware. */
+void rtw_fw_send_wl_ch_info(struct rtw_dev *rtwdev, u8 ch, u8 bw)
+{
+	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
+	u8 bw_byte = bw == RTW_CHANNEL_WIDTH_40 ? 0x30 : 0x20;
+
+	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_WL_CH_INFO);
+	h2c_pkt[1] = 0x00;
+	h2c_pkt[2] = ch;
+	h2c_pkt[3] = bw_byte;
+
+	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
+}
+
+/* 8723BS SDIO: set the firmware GNT_BT state (0 = WiFi owns the antenna). */
+void rtw_fw_set_gnt_bt(struct rtw_dev *rtwdev, u8 state)
+{
+	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
+
+	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_GNT_BT);
+	SET_GNT_BT_STATE(h2c_pkt, state);
+
+	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
+}
+
+/* 8723BS SDIO: vendor coex antenna-select reserve H2C (part of the init toggle). */
+void rtw_fw_coex_ant_sel_rsv(struct rtw_dev *rtwdev, u8 inverse, u8 type)
+{
+	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
+
+	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_COEX_ANT_SEL_RSV);
+	SET_COEX_ANT_SEL_RSV_INVERSE(h2c_pkt, inverse);
+	SET_COEX_ANT_SEL_RSV_TYPE(h2c_pkt, type);
 
 	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
 }
@@ -1466,10 +1595,14 @@ void rtw_add_rsvd_page_sta(struct rtw_dev *rtwdev,
 	rtw_add_rsvd_page(rtwdev, rtwvif, RSVD_LPS_PG_INFO, true);
 }
 
+/* REG_DWBCN1_CTRL bit 20 (SW_BCN_SEL for port 0), relative to byte +2 */
+#define BIT_OFFSET_DWBCN1_SW_BCN_SEL_PORT0	(20 - 16)
+
 int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 				u8 *buf, u32 size)
 {
-	u8 bckp[3];
+	const bool is_8723bs_sdio = rtw_is_8723bs(rtwdev);
+	u8 bckp[4];
 	u8 val;
 	u16 rsvd_pg_head;
 	u32 bcn_valid_addr;
@@ -1499,11 +1632,26 @@ int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 	rtw_write8(rtwdev, REG_BCN_CTRL,
 		   (bckp[2] & ~BIT_EN_BCN_FUNCTION) | BIT_DIS_TSF_UDT);
 
-	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE) {
+	/* Clear BIT_EN_BCNQ_DL so the chip does not treat the reserved-page
+	 * upload as a real beacon; otherwise BIT_BCN_VALID never asserts. The
+	 * vendor rtl8723bs driver does this unconditionally; rtw88 only did it
+	 * for PCIe, which left 8723BS SDIO's BCN_VALID handshake failing.
+	 */
+	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE || is_8723bs_sdio) {
 		val = rtw_read8(rtwdev, REG_FWHW_TXQ_CTRL + 2);
 		bckp[1] = val;
 		val &= ~(BIT_EN_BCNQ_DL >> 16);
 		rtw_write8(rtwdev, REG_FWHW_TXQ_CTRL + 2, val);
+	}
+
+	/* 8723BS SDIO: point the SW beacon download path at port 0, else
+	 * BIT_BCN_VALID is never asserted after the SDIO upload completes.
+	 */
+	if (is_8723bs_sdio) {
+		val = rtw_read8(rtwdev, REG_DWBCN1_CTRL + 2);
+		bckp[3] = val;
+		val &= ~BIT(BIT_OFFSET_DWBCN1_SW_BCN_SEL_PORT0);
+		rtw_write8(rtwdev, REG_DWBCN1_CTRL + 2, val);
 	}
 
 	ret = rtw_hci_write_data_rsvd_page(rtwdev, buf, size);
@@ -1526,11 +1674,13 @@ int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 	}
 
 restore:
+	if (is_8723bs_sdio)
+		rtw_write8(rtwdev, REG_DWBCN1_CTRL + 2, bckp[3]);
 	rsvd_pg_head = rtwdev->fifo.rsvd_boundary;
 	rtw_write16(rtwdev, REG_FIFOPAGE_CTRL_2,
 		    rsvd_pg_head | BIT_BCN_VALID_V1);
 	rtw_write8(rtwdev, REG_BCN_CTRL, bckp[2]);
-	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE)
+	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE || is_8723bs_sdio)
 		rtw_write8(rtwdev, REG_FWHW_TXQ_CTRL + 2, bckp[1]);
 	rtw_write8(rtwdev, REG_CR + 1, bckp[0]);
 

@@ -43,6 +43,108 @@ MODULE_PARM_DESC(disable_lps_deep, "Set Y to disable Deep PS");
 MODULE_PARM_DESC(support_bf, "Set Y to enable beamformee support");
 MODULE_PARM_DESC(debug_mask, "Debugging mask");
 
+#define RTW8723BS_REG_BB_SEL_BTG	0x0948
+#define RTW8723BS_SCAN_IGI		0x1e
+
+struct rtw8723bs_txagc_entry {
+	u8 rate;
+	u8 pwr_idx;
+};
+
+/* Vendor/staging per-rate TXAGC PG bytes for 8723BS 2.4 GHz. */
+static const struct rtw8723bs_txagc_entry rtw8723bs_pg_txagc[] = {
+	{ DESC_RATE1M, 0x38 }, { DESC_RATE2M, 0x36 },
+	{ DESC_RATE5_5M, 0x34 }, { DESC_RATE11M, 0x32 },
+	{ DESC_RATE6M, 0x44 }, { DESC_RATE9M, 0x44 },
+	{ DESC_RATE12M, 0x42 }, { DESC_RATE18M, 0x40 },
+	{ DESC_RATE24M, 0x38 }, { DESC_RATE36M, 0x36 },
+	{ DESC_RATE48M, 0x32 }, { DESC_RATE54M, 0x28 },
+	{ DESC_RATEMCS0, 0x44 }, { DESC_RATEMCS1, 0x42 },
+	{ DESC_RATEMCS2, 0x40 }, { DESC_RATEMCS3, 0x38 },
+	{ DESC_RATEMCS4, 0x36 }, { DESC_RATEMCS5, 0x34 },
+	{ DESC_RATEMCS6, 0x30 }, { DESC_RATEMCS7, 0x26 },
+};
+
+/* Lower the scan-time initial gain so the 8723BS SDIO site-survey hears the AP. */
+static void rtw_scan_set_8723bs_igi(struct rtw_dev *rtwdev)
+{
+	if (!rtw_is_8723bs(rtwdev))
+		return;
+
+	rtw_write32_mask(rtwdev, REG_RXIGI_A, MASKBYTE0, RTW8723BS_SCAN_IGI);
+}
+
+/* rtw_load_table() only populates the by-rate cache; restore the staging
+ * 8723BS PG bytes after the generic channel power update and push them to the
+ * chip TXAGC registers.
+ */
+static void rtw8723bs_reapply_pg_txagc(struct rtw_dev *rtwdev)
+{
+	struct rtw_hal *hal = &rtwdev->hal;
+	u8 path;
+	int i;
+
+	if (!rtw_is_8723bs(rtwdev) || hal->current_band_type != RTW_BAND_2G)
+		return;
+
+	mutex_lock(&hal->tx_power_mutex);
+	for (path = 0; path < hal->rf_path_num && path < RTW_RF_PATH_MAX; path++)
+		for (i = 0; i < ARRAY_SIZE(rtw8723bs_pg_txagc); i++)
+			hal->tx_pwr_tbl[path][rtw8723bs_pg_txagc[i].rate] =
+				rtw8723bs_pg_txagc[i].pwr_idx;
+	rtwdev->chip->ops->set_tx_power_index(rtwdev);
+	mutex_unlock(&hal->tx_power_mutex);
+}
+
+/* Staging runs PHY_IQCalibrate_8723B() only during initial hal_init, never on
+ * IPS leave. Match that: run IQK once on the first power-on, then on later
+ * (IPS-leave) power-ons just restore the PTA antenna path and reset RF_WLINT.
+ */
+static void rtw_power_on_8723bs_sdio_rfk(struct rtw_dev *rtwdev)
+{
+	const struct rtw_chip_info *chip = rtwdev->chip;
+	struct rtw_efuse *efuse = &rtwdev->efuse;
+	u32 pta_path;
+	u32 saved_path;
+
+	if (!rtw_is_8723bs(rtwdev) || !chip->ops->phy_calibration)
+		return;
+
+	pta_path = (efuse->bt_setting & BIT(6)) ? 0x80 : 0x200;
+
+	if (rtwdev->initial_rfk_done) {
+		rtw_write32(rtwdev, RTW8723BS_REG_BB_SEL_BTG, pta_path);
+		rtw_write_rf(rtwdev, RF_PATH_A, RF_WLINT, RFREG_MASK, 0x0780);
+		return;
+	}
+
+	saved_path = rtw_read32(rtwdev, RTW8723BS_REG_BB_SEL_BTG);
+	rtw_write32(rtwdev, RTW8723BS_REG_BB_SEL_BTG, pta_path);
+	chip->ops->phy_calibration(rtwdev);
+	rtwdev->need_rfk = false;
+	rtw_write32(rtwdev, RTW8723BS_REG_BB_SEL_BTG, saved_path);
+	rtwdev->initial_rfk_done = true;
+}
+
+static bool rtw8723bs_station_media_status(struct rtw_dev *rtwdev,
+					   struct ieee80211_sta *sta,
+					   struct ieee80211_vif *vif)
+{
+	return rtw_is_8723bs(rtwdev) &&
+	       vif->type == NL80211_IFTYPE_STATION && !sta->tdls;
+}
+
+/* 8723BS SDIO: defer the connect MEDIA_STATUS_RPT until the STA is actually
+ * associated (the vendor firmware sends it at assoc completion, not sta-add).
+ */
+static bool rtw8723bs_defer_sta_media_status(struct rtw_dev *rtwdev,
+					     struct ieee80211_sta *sta,
+					     struct ieee80211_vif *vif)
+{
+	return rtw8723bs_station_media_status(rtwdev, sta, vif) &&
+	       !vif->cfg.assoc;
+}
+
 static struct ieee80211_channel rtw_channeltable_2g[] = {
 	{.center_freq = 2412, .hw_value = 1,},
 	{.center_freq = 2417, .hw_value = 2,},
@@ -299,6 +401,18 @@ static void rtw_watch_dog_work(struct work_struct *work)
 	 * get that vif and check if device is having traffic more than the
 	 * threshold.
 	 */
+
+	/* On 8723BS SDIO the firmware's per-packet wake latency out of LPS
+	 * throttles bursty traffic hard. The stock check enters LPS after a
+	 * single quiet 2s window, which a normal bursty session hits
+	 * constantly. Gate LPS on the smoothed throughput instead so the chip
+	 * only sleeps after sustained idle and stays awake through an active
+	 * session. Other chips keep the normal behaviour.
+	 */
+	if (rtw_is_8723bs(rtwdev) &&
+	    (stats->tx_throughput || stats->rx_throughput))
+		ps_active = true;
+
 	if (rtwdev->ps_enabled && data.rtwvif && !ps_active &&
 	    !rtwdev->beacon_loss && !rtwdev->ap_active)
 		rtw_enter_lps(rtwdev, data.rtwvif->port);
@@ -367,7 +481,13 @@ int rtw_sta_add(struct rtw_dev *rtwdev, struct ieee80211_sta *sta,
 	INIT_WORK(&si->rc_work, rtw_sta_rc_work);
 
 	rtw_update_sta_info(rtwdev, si, true);
-	rtw_fw_media_status_report(rtwdev, si->mac_id, true);
+	if (rtw8723bs_defer_sta_media_status(rtwdev, sta, vif)) {
+		rtwvif->fw_media_connected = false;
+	} else {
+		rtw_fw_media_status_report(rtwdev, si->mac_id, true);
+		if (rtw8723bs_station_media_status(rtwdev, sta, vif))
+			rtwvif->fw_media_connected = true;
+	}
 
 	rtwdev->sta_cnt++;
 	rtwdev->beacon_loss = false;
@@ -382,14 +502,21 @@ void rtw_sta_remove(struct rtw_dev *rtwdev, struct ieee80211_sta *sta,
 {
 	struct rtw_sta_info *si = (struct rtw_sta_info *)sta->drv_priv;
 	struct ieee80211_vif *vif = si->vif;
+	struct rtw_vif *rtwvif = (struct rtw_vif *)vif->drv_priv;
 	int i;
 
 	cancel_work_sync(&si->rc_work);
 
 	if (vif->type != NL80211_IFTYPE_STATION || sta->tdls)
 		rtw_release_macid(rtwdev, si->mac_id);
-	if (fw_exist)
+	if (fw_exist && rtw8723bs_station_media_status(rtwdev, sta, vif) &&
+	    !rtwvif->fw_media_connected) {
+		/* connect status was deferred and never sent; nothing to undo */
+	} else if (fw_exist) {
 		rtw_fw_media_status_report(rtwdev, si->mac_id, false);
+		if (rtw8723bs_station_media_status(rtwdev, sta, vif))
+			rtwvif->fw_media_connected = false;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(sta->txq); i++)
 		rtw_txq_cleanup(rtwdev, sta->txq[i]);
@@ -903,6 +1030,8 @@ void rtw_set_channel(struct rtw_dev *rtwdev)
 	}
 
 	rtw_phy_set_tx_power_level(rtwdev, center_chan);
+
+	rtw8723bs_reapply_pg_txagc(rtwdev);
 
 	/* if the channel isn't set for scanning, we will do RF calibration
 	 * in ieee80211_ops::mgd_prepare_tx(). Performing the calibration
@@ -1429,6 +1558,34 @@ int rtw_power_on(struct rtw_dev *rtwdev)
 	rtw_fw_send_phydm_info(rtwdev);
 
 	wifi_only = !rtwdev->efuse.btcoex;
+
+	/* 8723BS SDIO: on an IPS-leave power-on (IQK already done once) skip the
+	 * BT-path coex init entirely - scan_workaround re-establishes the PTA /
+	 * coex state. Run the once-only IQK via the RFK helper; on the first
+	 * power-on, finalise coex with the vendor init H2C toggle that enables
+	 * the 8051 management TX scheduler.
+	 */
+	if (rtw_is_8723bs(rtwdev)) {
+		bool ips_wake = rtwdev->initial_rfk_done;
+
+		if (!ips_wake)
+			rtw_coex_power_on_setting(rtwdev);
+
+		rtw_power_on_8723bs_sdio_rfk(rtwdev);
+
+		if (!ips_wake) {
+			rtw_coex_init_hw_config(rtwdev, wifi_only);
+			rtw_fw_coex_tdma_type(rtwdev, 0x08, 0x00, 0x00, 0x00, 0x00);
+			rtw_fw_set_gnt_bt(rtwdev, 1);
+			rtw_fw_coex_ant_sel_rsv(rtwdev, 0, 0);
+			rtw_fw_query_bt_info(rtwdev);
+			rtw_fw_coex_tdma_type(rtwdev, 0x08, 0x00, 0x00, 0x00, 0x00);
+			rtw_fw_set_gnt_bt(rtwdev, 0);
+		}
+
+		return 0;
+	}
+
 	rtw_coex_power_on_setting(rtwdev);
 	rtw_coex_init_hw_config(rtwdev, wifi_only);
 
@@ -1485,6 +1642,7 @@ void rtw_core_scan_start(struct rtw_dev *rtwdev, struct rtw_vif *rtwvif,
 	set_bit(RTW_FLAG_SCANNING, rtwdev->flags);
 
 	rtw_phy_dig_set_max_coverage(rtwdev);
+	rtw_scan_set_8723bs_igi(rtwdev);
 }
 
 void rtw_core_scan_complete(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
@@ -1965,8 +2123,21 @@ static int rtw_dump_hw_feature(struct rtw_dev *rtwdev)
 	u8 bw;
 	int i;
 
-	if (!rtwdev->chip->hw_feature_report)
+	if (!rtwdev->chip->hw_feature_report) {
+		/* 8723BS has neither a firmware feature report nor an efuse hw_cap
+		 * parser, so hw_cap is otherwise left at zero. A zero stream count
+		 * produces an HT capability with no usable RX MCS rates, which makes
+		 * APs drop the station immediately after a successful association.
+		 * Other report-less chips fill hw_cap in when parsing the efuse.
+		 */
+		if (rtw_is_8723bs(rtwdev)) {
+			efuse->hw_cap.nss = rtwdev->hal.rf_path_num ? : 1;
+			efuse->hw_cap.ant_num = rtwdev->hal.rf_path_num ? : 1;
+			efuse->hw_cap.bw = BIT(RTW_CHANNEL_WIDTH_20) |
+					   BIT(RTW_CHANNEL_WIDTH_40);
+		}
 		return 0;
+	}
 
 	id = rtw_read8(rtwdev, REG_C2HEVT);
 	if (id != C2H_HW_FEATURE_REPORT) {
@@ -2174,11 +2345,13 @@ int rtw_core_init(struct rtw_dev *rtwdev)
 
 	spin_lock_init(&rtwdev->txq_lock);
 	spin_lock_init(&rtwdev->tx_report.q_lock);
+	spin_lock_init(&rtwdev->auth_sync.lock);
 
 	mutex_init(&rtwdev->mutex);
 	mutex_init(&rtwdev->hal.tx_power_mutex);
 
 	init_waitqueue_head(&rtwdev->coex.wait);
+	init_waitqueue_head(&rtwdev->auth_sync.wait);
 	init_completion(&rtwdev->lps_leave_check);
 	init_completion(&rtwdev->fw_scan_density);
 
@@ -2270,7 +2443,12 @@ int rtw_register_hw(struct rtw_dev *rtwdev, struct ieee80211_hw *hw)
 	hw->vif_data_size = sizeof(struct rtw_vif);
 
 	ieee80211_hw_set(hw, SIGNAL_DBM);
-	ieee80211_hw_set(hw, RX_INCLUDES_FCS);
+	/* RTL8723BS keeps BIT_APP_FCS clear, so received frames do not contain
+	 * the FCS. Advertising RX_INCLUDES_FCS would make mac80211 trim four
+	 * bytes of frame data and corrupt the tail IE in beacons/probe responses.
+	 */
+	if (!rtw_is_8723bs(rtwdev))
+		ieee80211_hw_set(hw, RX_INCLUDES_FCS);
 	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
 	ieee80211_hw_set(hw, REPORTS_TX_ACK_STATUS);

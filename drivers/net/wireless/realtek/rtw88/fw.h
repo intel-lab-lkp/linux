@@ -54,6 +54,10 @@ enum rtw_c2h_cmd_id {
 	C2H_BT_MP_INFO = 0x0b,
 	C2H_BT_HID_INFO = 0x45,
 	C2H_RA_RPT = 0x0c,
+	/* 8723BS SDIO vendor v41 firmware management TX report (0x32 is
+	 * reported as C2H_WLAN_RFON, handled per-chip in the C2H dispatch).
+	 */
+	C2H_VENDOR_TX_RPT = 0x12,
 	C2H_HW_FEATURE_REPORT = 0x19,
 	C2H_WLAN_INFO = 0x27,
 	C2H_WLAN_RFON = 0x32,
@@ -568,10 +572,12 @@ static inline void rtw_h2c_pkt_set_header(u8 *h2c_pkt, u8 sub_id)
 #define H2C_CMD_QUERY_BT_INFO		0x61
 #define H2C_CMD_FORCE_BT_TX_POWER	0x62
 #define H2C_CMD_IGNORE_WLAN_ACTION	0x63
+#define H2C_CMD_COEX_ANT_SEL_RSV	0x65
 #define H2C_CMD_WL_CH_INFO		0x66
 #define H2C_CMD_QUERY_BT_MP_INFO	0x67
 #define H2C_CMD_BT_WIFI_CONTROL		0x69
 #define H2C_CMD_WIFI_CALIBRATION	0x6d
+#define H2C_CMD_GNT_BT			0x6e
 #define H2C_CMD_QUERY_BT_HID_INFO	0x73
 
 #define H2C_CMD_KEEP_ALIVE		0x03
@@ -684,6 +690,12 @@ static inline void rtw_h2c_pkt_set_header(u8 *h2c_pkt, u8 sub_id)
 	le32p_replace_bits((__le32 *)(h2c_pkt) + 0x01, value, GENMASK(31, 24))
 #define SET_QUERY_BT_INFO(h2c_pkt, value)                                      \
 	le32p_replace_bits((__le32 *)(h2c_pkt) + 0x00, value, BIT(8))
+#define SET_GNT_BT_STATE(h2c_pkt, value)                                       \
+	le32p_replace_bits((__le32 *)(h2c_pkt) + 0x00, value, BIT(8))
+#define SET_COEX_ANT_SEL_RSV_INVERSE(h2c_pkt, value)                           \
+	le32p_replace_bits((__le32 *)(h2c_pkt) + 0x00, value, GENMASK(15, 8))
+#define SET_COEX_ANT_SEL_RSV_TYPE(h2c_pkt, value)                              \
+	le32p_replace_bits((__le32 *)(h2c_pkt) + 0x00, value, GENMASK(23, 16))
 #define SET_WL_CH_INFO_LINK(h2c_pkt, value)                                    \
 	le32p_replace_bits((__le32 *)(h2c_pkt) + 0x00, value, GENMASK(15, 8))
 #define SET_WL_CH_INFO_CHNL(h2c_pkt, value)                                    \
@@ -849,6 +861,11 @@ void rtw_fw_send_rssi_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si);
 void rtw_fw_send_ra_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si,
 			 bool reset_ra_mask);
 void rtw_fw_media_status_report(struct rtw_dev *rtwdev, u8 mac_id, bool conn);
+void rtw_fw_macid_cfg(struct rtw_dev *rtwdev, u8 mac_id, u8 raid, u8 bw,
+		      u8 sgi, u32 rate_mask);
+void rtw_fw_send_wl_ch_info(struct rtw_dev *rtwdev, u8 ch, u8 bw);
+void rtw_fw_set_gnt_bt(struct rtw_dev *rtwdev, u8 state);
+void rtw_fw_coex_ant_sel_rsv(struct rtw_dev *rtwdev, u8 inverse, u8 type);
 void rtw_fw_update_wl_phy_info(struct rtw_dev *rtwdev);
 void rtw_fw_beacon_filter_config(struct rtw_dev *rtwdev, bool connect,
 				 struct ieee80211_vif *vif);
