@@ -265,9 +265,9 @@ static int msm_dp_display_lttpr_init(struct msm_dp_display_private *dp, u8 *dpcd
 	return lttpr_count;
 }
 
-static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
+static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp,
+					   struct drm_connector *connector)
 {
-	struct drm_connector *connector = dp->msm_dp_display.connector;
 	const struct drm_display_info *info = &connector->display_info;
 	int rc = 0;
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
@@ -403,7 +403,8 @@ static int msm_dp_display_handle_irq_hpd(struct msm_dp_display_private *dp)
 	return 0;
 }
 
-static int msm_dp_hpd_plug_handle(struct msm_dp_display_private *dp)
+static int msm_dp_hpd_plug_handle(struct msm_dp_display_private *dp,
+				  struct drm_connector *connector)
 {
 	int ret;
 	struct platform_device *pdev = dp->msm_dp_display.pdev;
@@ -424,7 +425,7 @@ static int msm_dp_hpd_plug_handle(struct msm_dp_display_private *dp)
 
 	msm_dp_display_host_phy_init(dp);
 
-	ret = msm_dp_display_process_hpd_high(dp);
+	ret = msm_dp_display_process_hpd_high(dp, connector);
 
 	drm_dbg_dp(dp->drm_dev, "After, type=%d sink_count=%d\n",
 			dp->msm_dp_display.connector_type,
@@ -436,7 +437,7 @@ static int msm_dp_hpd_plug_handle(struct msm_dp_display_private *dp)
 };
 
 static void msm_dp_display_handle_plugged_change(struct msm_dp *msm_dp_display,
-		bool plugged)
+		struct drm_connector *connector, bool plugged)
 {
 	struct msm_dp_display_private *dp;
 
@@ -445,11 +446,11 @@ static void msm_dp_display_handle_plugged_change(struct msm_dp *msm_dp_display,
 
 	/* notify audio subsystem only if sink supports audio */
 	if (dp->audio_supported)
-		drm_connector_hdmi_audio_plugged_notify(msm_dp_display->connector,
-							plugged);
+		drm_connector_hdmi_audio_plugged_notify(connector, plugged);
 }
 
-static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp)
+static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp,
+				    struct drm_connector *connector)
 {
 	struct platform_device *pdev = dp->msm_dp_display.pdev;
 
@@ -467,7 +468,7 @@ static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp)
 
 	/* Don't forget modes for eDP */
 	if (!dp->msm_dp_display.is_edp)
-		drm_edid_connector_update(dp->msm_dp_display.connector, NULL);
+		drm_edid_connector_update(connector, NULL);
 
 	/* triggered by irq_hdp with sink_count = 0 */
 	if (dp->link->sink_count == 0)
@@ -477,14 +478,14 @@ static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp)
 	 * We don't need separate work for disconnect as
 	 * connect/attention interrupts are disabled
 	 */
-	if (dp->msm_dp_display.connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
-		drm_dp_set_subconnector_property(dp->msm_dp_display.connector,
+	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
+		drm_dp_set_subconnector_property(connector,
 						 connector_status_disconnected,
 						 dp->panel->dpcd,
 						 dp->panel->downstream_ports);
 
 	/* signal the disconnect event early to ensure proper teardown */
-	msm_dp_display_handle_plugged_change(&dp->msm_dp_display, false);
+	msm_dp_display_handle_plugged_change(&dp->msm_dp_display, connector, false);
 
 	drm_dbg_dp(dp->drm_dev, "After, type=%d, sink_count=%d\n",
 			dp->msm_dp_display.connector_type,
@@ -498,7 +499,8 @@ static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp)
 	return 0;
 }
 
-static int msm_dp_irq_hpd_handle(struct msm_dp_display_private *dp)
+static int msm_dp_irq_hpd_handle(struct msm_dp_display_private *dp,
+				 struct drm_connector *connector)
 {
 	u32 sink_request;
 	int rc = 0;
@@ -514,7 +516,7 @@ static int msm_dp_irq_hpd_handle(struct msm_dp_display_private *dp)
 		sink_request = dp->link->sink_request;
 		drm_dbg_dp(dp->drm_dev, "sink_request=%d\n", sink_request);
 		if (sink_request & DS_PORT_STATUS_CHANGED)
-			rc = msm_dp_display_process_hpd_high(dp);
+			rc = msm_dp_display_process_hpd_high(dp, connector);
 		else
 			rc = msm_dp_display_handle_irq_hpd(dp);
 	}
@@ -648,7 +650,8 @@ static int msm_dp_display_enable(struct msm_dp_display_private *dp, bool force_l
 	return rc;
 }
 
-static int msm_dp_display_post_enable(struct msm_dp *msm_dp_display)
+static int msm_dp_display_post_enable(struct msm_dp *msm_dp_display,
+				      struct drm_connector *connector)
 {
 	struct msm_dp_display_private *dp;
 	u32 rate;
@@ -663,7 +666,7 @@ static int msm_dp_display_post_enable(struct msm_dp *msm_dp_display)
 	}
 
 	/* signal the connect event late to synchronize video and display */
-	msm_dp_display_handle_plugged_change(msm_dp_display, true);
+	msm_dp_display_handle_plugged_change(msm_dp_display, connector, true);
 
 	if (msm_dp_display->psr_supported)
 		msm_dp_ctrl_config_psr(dp->ctrl);
@@ -671,7 +674,8 @@ static int msm_dp_display_post_enable(struct msm_dp *msm_dp_display)
 	return 0;
 }
 
-static int msm_dp_display_disable(struct msm_dp_display_private *dp)
+static int msm_dp_display_disable(struct msm_dp_display_private *dp,
+				  struct drm_connector *connector)
 {
 	struct msm_dp *msm_dp_display = &dp->msm_dp_display;
 
@@ -681,7 +685,7 @@ static int msm_dp_display_disable(struct msm_dp_display_private *dp)
 	/* wait only if audio was enabled */
 	if (msm_dp_display->audio_enabled) {
 		/* signal the disconnect event */
-		msm_dp_display_handle_plugged_change(msm_dp_display, false);
+		msm_dp_display_handle_plugged_change(msm_dp_display, connector, false);
 		if (!wait_for_completion_timeout(&dp->audio_comp,
 				HZ * 5))
 			DRM_ERROR("audio comp timeout\n");
@@ -1314,7 +1318,15 @@ void __exit msm_dp_unregister(void)
 static bool msm_dp_needs_periph_flush(const struct msm_dp *msm_dp_display,
 				      const struct drm_display_mode *mode)
 {
-	return drm_mode_is_420_only(&msm_dp_display->connector->display_info, mode);
+	struct msm_dp_display_private *dp = container_of(msm_dp_display,
+			struct msm_dp_display_private, msm_dp_display);
+
+	/*
+	 * The YUV-420 output format is determined during ->mode_set(), which
+	 * has already run by the time this is queried at flush time; use the
+	 * cached value so no connector lookup is needed here.
+	 */
+	return dp->panel->msm_dp_mode.out_fmt_is_yuv_420;
 }
 
 bool msm_dp_wide_bus_available(const struct msm_dp *msm_dp_display)
@@ -1329,6 +1341,25 @@ bool msm_dp_wide_bus_available(const struct msm_dp *msm_dp_display)
 	return dp->wide_bus_supported;
 }
 
+static struct drm_connector *
+msm_dp_display_get_connector(struct msm_dp *msm_dp_display)
+{
+	struct drm_encoder *encoder = msm_dp_display->bridge->encoder;
+	struct drm_connector_list_iter conn_iter;
+	struct drm_connector *connector, *found = NULL;
+
+	drm_connector_list_iter_begin(msm_dp_display->drm_dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
+		if (drm_connector_has_possible_encoder(connector, encoder)) {
+			found = connector;
+			break;
+		}
+	}
+	drm_connector_list_iter_end(&conn_iter);
+
+	return found;
+}
+
 void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *root, bool is_edp)
 {
 	struct msm_dp_display_private *dp;
@@ -1338,7 +1369,9 @@ void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *r
 	dp = container_of(msm_dp_display, struct msm_dp_display_private, msm_dp_display);
 	dev = &dp->msm_dp_display.pdev->dev;
 
-	rc = msm_dp_debug_init(dev, dp->panel, dp->link, dp->msm_dp_display.connector, root, is_edp);
+	rc = msm_dp_debug_init(dev, dp->panel, dp->link,
+			       msm_dp_display_get_connector(msm_dp_display),
+			       root, is_edp);
 	if (rc)
 		DRM_ERROR("failed to initialize debug, rc = %d\n", rc);
 }
@@ -1347,6 +1380,7 @@ static int msm_dp_modeset_init(struct msm_display *display,
 			       struct drm_device *dev, struct drm_encoder *encoder)
 {
 	struct msm_dp *msm_dp_display = container_of(display, struct msm_dp, display);
+	struct drm_connector *connector;
 	int ret;
 
 	msm_dp_display->drm_dev = dev;
@@ -1358,12 +1392,11 @@ static int msm_dp_modeset_init(struct msm_display *display,
 		return ret;
 	}
 
-	msm_dp_display->connector = msm_dp_drm_connector_init(msm_dp_display, encoder);
-	if (IS_ERR(msm_dp_display->connector)) {
-		ret = PTR_ERR(msm_dp_display->connector);
+	connector = msm_dp_drm_connector_init(msm_dp_display, encoder);
+	if (IS_ERR(connector)) {
+		ret = PTR_ERR(connector);
 		DRM_DEV_ERROR(dev->dev,
 			"failed to create dp connector: %d\n", ret);
-		msm_dp_display->connector = NULL;
 		return ret;
 	}
 
@@ -1454,14 +1487,17 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 {
 	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
 	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+	struct drm_connector *connector;
 	int rc = 0;
 	struct msm_dp_display_private *msm_dp_display;
 	bool force_link_train = false;
 
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
 
+	connector = drm_atomic_get_new_connector_for_encoder(state, drm_bridge->encoder);
+
 	if (dp->is_edp)
-		msm_dp_hpd_plug_handle(msm_dp_display);
+		msm_dp_hpd_plug_handle(msm_dp_display, connector);
 
 	if (pm_runtime_resume_and_get(&dp->pdev->dev)) {
 		DRM_ERROR("failed to pm_runtime_resume\n");
@@ -1485,10 +1521,10 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 
 	msm_dp_display_enable(msm_dp_display, force_link_train);
 
-	rc = msm_dp_display_post_enable(dp);
+	rc = msm_dp_display_post_enable(dp, connector);
 	if (rc) {
 		DRM_ERROR("DP display post enable failed, rc=%d\n", rc);
-		msm_dp_display_disable(msm_dp_display);
+		msm_dp_display_disable(msm_dp_display, connector);
 	}
 
 	drm_dbg_dp(dp->drm_dev, "type=%d Done\n", dp->connector_type);
@@ -1512,13 +1548,17 @@ void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
 	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
 	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
 	struct msm_dp_display_private *msm_dp_display;
+	struct drm_connector *connector;
 
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
 
-	if (dp->is_edp)
-		msm_dp_hpd_unplug_handle(msm_dp_display);
+	connector = drm_atomic_get_old_connector_for_encoder(state,
+							     drm_bridge->encoder);
 
-	msm_dp_display_disable(msm_dp_display);
+	if (dp->is_edp)
+		msm_dp_hpd_unplug_handle(msm_dp_display, connector);
+
+	msm_dp_display_disable(msm_dp_display, connector);
 
 	drm_dbg_dp(dp->drm_dev, "type=%d Done\n", dp->connector_type);
 
@@ -1581,15 +1621,15 @@ void msm_dp_bridge_hpd_notify(struct drm_bridge *bridge,
 
 	if (status == connector_status_connected) {
 		if (hpd_link_status == ISR_HPD_REPLUG_COUNT) {
-			msm_dp_hpd_unplug_handle(dp);
-			msm_dp_hpd_plug_handle(dp);
+			msm_dp_hpd_unplug_handle(dp, connector);
+			msm_dp_hpd_plug_handle(dp, connector);
 		} else if (hpd_link_status == ISR_IRQ_HPD_PULSE_COUNT) {
-			msm_dp_irq_hpd_handle(dp);
+			msm_dp_irq_hpd_handle(dp, connector);
 		} else {
-			msm_dp_hpd_plug_handle(dp);
+			msm_dp_hpd_plug_handle(dp, connector);
 		}
 	} else {
-		msm_dp_hpd_unplug_handle(dp);
+		msm_dp_hpd_unplug_handle(dp, connector);
 	}
 
 	pm_runtime_put_sync(&msm_dp_display->pdev->dev);

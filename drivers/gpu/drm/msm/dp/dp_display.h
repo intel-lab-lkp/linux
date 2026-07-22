@@ -16,7 +16,6 @@ struct msm_dp {
 
 	struct drm_device *drm_dev;
 	struct platform_device *pdev;
-	struct drm_connector *connector;
 	struct drm_bridge *next_bridge;
 	struct drm_bridge *bridge;
 	bool audio_enabled;
