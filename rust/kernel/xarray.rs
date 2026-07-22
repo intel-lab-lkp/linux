@@ -8,7 +8,10 @@ use crate::{
     alloc,
     bindings,
     build_assert::build_assert,
-    error::{Error, Result},
+    error::{
+        Error,
+        Result, //
+    },
     ffi::c_void,
     types::{
         ForeignOwnable,
@@ -146,6 +149,46 @@ impl<T: ForeignOwnable> XArray<T> {
             xa: self,
             _not_send: NotThreadSafe,
         }
+    }
+
+    /// Reserve memory in the XArray at the appropriate index. If this call
+    /// succeeds, later storing at the index will not require an allocation.
+    ///
+    /// Loading from reserved entries will return `None`.
+    pub fn reserve(&self, index: usize, gfp: alloc::Flags) -> Result<Reservation<'_, T>> {
+        // SAFETY:
+        // - `self.xa.xa` is always valid by the type invariant.
+        // - The caller holds the lock.
+        //
+        // INVARIANT: `new` came from `T::into_foreign`.
+        let ret = unsafe { bindings::xa_reserve(self.xa.get(), index, gfp.as_raw()) };
+        match ret {
+            0 => Ok(Reservation { xa: self, index }),
+            _ => Err(Error::from_errno(ret)),
+        }
+    }
+}
+
+/// An index reservation object.
+///
+/// As long as you keep this object alive, your reservation will stay valid. If
+/// someone has stored to this index in the meantime, dropping your reservation
+/// does nothing, which is why you can always drop this reservation object once
+/// you performed your store operation.
+///
+/// Refer to the main C xarray documentation for more details.
+pub struct Reservation<'a, T: ForeignOwnable> {
+    xa: &'a XArray<T>,
+    index: usize,
+}
+
+impl<T: ForeignOwnable> Drop for Reservation<'_, T> {
+    fn drop(&mut self) {
+        // SAFETY:
+        // - `self.xa` is always valid by the type invariant.
+        // - If `self.id` is not used or has been stored to by a racing party,
+        //   `xa_release()` will do nothing.
+        unsafe { bindings::xa_release(self.xa.xa.get(), self.index) };
     }
 }
 

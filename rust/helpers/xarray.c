@@ -26,3 +26,13 @@ __rust_helper void rust_helper_xa_unlock(struct xarray *xa)
 {
 	return xa_unlock(xa);
 }
+
+__rust_helper int rust_helper_xa_reserve(struct xarray *xa, unsigned long index, gfp_t flags)
+{
+	return xa_reserve(xa, index, flags);
+}
+
+__rust_helper void rust_helper_xa_release(struct xarray *xa, unsigned long index)
+{
+	xa_release(xa, index);
+}
