@@ -740,10 +740,13 @@ static int mcp3911_probe(struct spi_device *spi)
 	}
 
 	/*
-	 * Fallback to "device-addr" due to historical mismatch between
-	 * dt-bindings and implementation.
+	 * Fall back to the vendor-specific property, then to "device-addr"
+	 * due to a historical mismatch between the binding and implementation.
 	 */
-	ret = device_property_read_u32(dev, "microchip,device-addr", &adc->dev_addr);
+	ret = device_property_read_u32(dev, "spi-device-addr", &adc->dev_addr);
+	if (ret)
+		ret = device_property_read_u32(dev, "microchip,device-addr",
+					       &adc->dev_addr);
 	if (ret)
 		device_property_read_u32(dev, "device-addr", &adc->dev_addr);
 	if (adc->dev_addr > 3) {
