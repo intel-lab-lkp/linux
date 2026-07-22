@@ -317,6 +317,8 @@ enum perf_pmu_scope {
 	PERF_PMU_SCOPE_CLUSTER,
 	PERF_PMU_SCOPE_PKG,
 	PERF_PMU_SCOPE_SYS_WIDE,
+	/* Dynamically determined by PMU driver via pmu->cpumask */
+	PERF_PMU_SCOPE_CPUMASK,
 	PERF_PMU_MAX_SCOPE,
 };
 
@@ -350,6 +352,7 @@ struct pmu {
 	 * PMU scope
 	 */
 	unsigned int			scope;
+	const struct cpumask		*cpumask;
 
 	struct perf_cpu_pmu_context * __percpu *cpu_pmu_context;
 	atomic_t			exclusive_cnt; /* < 0: cpu; > 0: tsk */
@@ -589,6 +592,22 @@ struct pmu {
 	 * Check period value for PERF_EVENT_IOC_PERIOD ioctl.
 	 */
 	int (*check_period)		(struct perf_event *event, u64 value); /* optional */
+
+	/*
+	 * For PMUs to manage any private CPU-affine state, e.g. IRQs.
+	 *
+	 * Called from CPU hotplug. PMUs with PERF_PMU_SCOPE_CPUMASK may
+	 * return true if pmu->cpumask was updated and PMU context should be
+	 * be migrated to a new CPU; otherwise should return false.
+	 *
+	 * ->exit_cpu() runs from CPUHP_AP_PERF_OFFLINE context, unless @cpu
+	 * is already absent from pmu->cpumask
+	 * ->init_cpu() runs from CPUHP_AP_PERF_ONLINE context, unless @cpu is
+	 * already present in pmu->cpumask, plus once for each online CPU upon
+	 * initial registration
+	 */
+	bool (*exit_cpu)		(struct pmu *pmu, int cpu); /* optional */
+	bool (*init_cpu)		(struct pmu *pmu, int cpu); /* optional */
 };
 
 enum perf_addr_filter_action_t {

@@ -12653,6 +12653,13 @@ perf_event_mux_interval_ms_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(perf_event_mux_interval_ms);
 
+static void perf_scope_init_cpu(void *info)
+{
+	struct pmu *pmu = info;
+
+	pmu->init_cpu(pmu, smp_processor_id());
+}
+
 static inline const struct cpumask *perf_scope_cpu_topology_cpumask(unsigned int scope, int cpu)
 {
 	switch (scope) {
@@ -12666,9 +12673,11 @@ static inline const struct cpumask *perf_scope_cpu_topology_cpumask(unsigned int
 		return topology_core_cpumask(cpu);
 	case PERF_PMU_SCOPE_SYS_WIDE:
 		return cpu_online_mask;
+	case PERF_PMU_SCOPE_CPUMASK:
+		return cpumask_of(cpu);
+	default:
+		return NULL;
 	}
-
-	return NULL;
 }
 
 static inline struct cpumask *perf_scope_cpumask(unsigned int scope)
@@ -12684,16 +12693,26 @@ static inline struct cpumask *perf_scope_cpumask(unsigned int scope)
 		return perf_online_pkg_mask;
 	case PERF_PMU_SCOPE_SYS_WIDE:
 		return perf_online_sys_mask;
+	default:
+		return NULL;
 	}
+}
 
-	return NULL;
+static inline const struct cpumask *perf_pmu_cpumask(const struct pmu *pmu)
+{
+	switch (pmu->scope) {
+	case PERF_PMU_SCOPE_CPUMASK:
+		return pmu->cpumask;
+	default:
+		return perf_scope_cpumask(pmu->scope);
+	}
 }
 
 static ssize_t cpumask_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
 	struct pmu *pmu = dev_get_drvdata(dev);
-	struct cpumask *mask = perf_scope_cpumask(pmu->scope);
+	const struct cpumask *mask = perf_pmu_cpumask(pmu);
 
 	if (mask)
 		return cpumap_print_to_pagebuf(true, buf, mask);
@@ -12851,6 +12870,12 @@ int perf_pmu_register(struct pmu *_pmu, const char *name, int type)
 		      "Can not register a pmu with an invalid scope.\n"))
 		return -EINVAL;
 
+	if (pmu->scope == PERF_PMU_SCOPE_CPUMASK && !pmu->cpumask) {
+		if (WARN_ONCE(!pmu->init_cpu, "PMU must provide cpumask or init callback\n"))
+			return -EINVAL;
+		pmu->cpumask = cpu_none_mask;
+	}
+
 	pmu->name = name;
 
 	if (type >= 0)
@@ -12919,6 +12944,16 @@ int perf_pmu_register(struct pmu *_pmu, const char *name, int type)
 
 	INIT_LIST_HEAD(&pmu->events);
 	spin_lock_init(&pmu->events_lock);
+
+	/*
+	 * Finally, if appropriate give the PMU a chance to initialise any
+	 * of its own CPU-affine state. Note that we're serialised against
+	 * perf_event_{init,exit}_cpu() themselves by virtue of pmus_lock.
+	 */
+	if (pmu->init_cpu) {
+		for_each_online_cpu(cpu)
+			smp_call_function_single(cpu, perf_scope_init_cpu, pmu, 1);
+	}
 
 	/*
 	 * Now that the PMU is complete, make it visible to perf_try_init_event().
@@ -13126,11 +13161,11 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 
 	if (pmu->scope != PERF_PMU_SCOPE_NONE && event->cpu >= 0) {
 		const struct cpumask *cpumask;
-		struct cpumask *pmu_cpumask;
+		const struct cpumask *pmu_cpumask;
 		int cpu;
 
 		cpumask = perf_scope_cpu_topology_cpumask(pmu->scope, event->cpu);
-		pmu_cpumask = perf_scope_cpumask(pmu->scope);
+		pmu_cpumask = perf_pmu_cpumask(pmu);
 
 		ret = -ENODEV;
 		if (!pmu_cpumask || !cpumask)
@@ -13140,7 +13175,8 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 		if (cpu >= nr_cpu_ids)
 			goto err_destroy;
 
-		event->event_caps |= PERF_EV_CAP_READ_SCOPE;
+		if (pmu->scope <= PERF_PMU_SCOPE_SYS_WIDE)
+			event->event_caps |= PERF_EV_CAP_READ_SCOPE;
 	}
 
 	return 0;
@@ -15172,7 +15208,7 @@ static void perf_event_clear_cpumask(unsigned int cpu)
 
 	cpumask_clear_cpu(cpu, perf_online_mask);
 
-	for (scope = PERF_PMU_SCOPE_NONE + 1; scope < PERF_PMU_MAX_SCOPE; scope++) {
+	for (scope = PERF_PMU_SCOPE_NONE + 1; scope <= PERF_PMU_SCOPE_SYS_WIDE; scope++) {
 		const struct cpumask *cpumask = perf_scope_cpu_topology_cpumask(scope, cpu);
 		struct cpumask *pmu_cpumask = perf_scope_cpumask(scope);
 
@@ -15189,9 +15225,18 @@ static void perf_event_clear_cpumask(unsigned int cpu)
 
 	/* migrate */
 	list_for_each_entry(pmu, &pmus, entry) {
+		bool cpumask_migrate = false;
+
+		if (pmu->init_cpu && (!pmu->cpumask || cpumask_test_cpu(cpu, pmu->cpumask)))
+			cpumask_migrate = pmu->exit_cpu(pmu, cpu);
+
 		if (pmu->scope == PERF_PMU_SCOPE_NONE ||
 		    WARN_ON_ONCE(pmu->scope >= PERF_PMU_MAX_SCOPE))
 			continue;
+
+		target[PERF_PMU_SCOPE_CPUMASK] = -1;
+		if (cpumask_migrate && !WARN_ON_ONCE(!pmu->cpumask))
+			target[PERF_PMU_SCOPE_CPUMASK] = cpumask_any_but(pmu->cpumask, cpu);
 
 		if (target[pmu->scope] >= 0 && target[pmu->scope] < nr_cpu_ids)
 			perf_pmu_migrate_context(pmu, cpu, target[pmu->scope]);
@@ -15230,6 +15275,7 @@ static void perf_event_setup_cpumask(unsigned int cpu)
 {
 	struct cpumask *pmu_cpumask;
 	unsigned int scope;
+	struct pmu *pmu;
 
 	/*
 	 * Early boot stage, the cpumask hasn't been set yet.
@@ -15237,7 +15283,7 @@ static void perf_event_setup_cpumask(unsigned int cpu)
 	 * Always unconditionally set the boot CPU for the perf_online_<domain>_masks.
 	 */
 	if (cpumask_empty(perf_online_mask)) {
-		for (scope = PERF_PMU_SCOPE_NONE + 1; scope < PERF_PMU_MAX_SCOPE; scope++) {
+		for (scope = PERF_PMU_SCOPE_NONE + 1; scope <= PERF_PMU_SCOPE_SYS_WIDE; scope++) {
 			pmu_cpumask = perf_scope_cpumask(scope);
 			if (WARN_ON_ONCE(!pmu_cpumask))
 				continue;
@@ -15246,7 +15292,7 @@ static void perf_event_setup_cpumask(unsigned int cpu)
 		goto end;
 	}
 
-	for (scope = PERF_PMU_SCOPE_NONE + 1; scope < PERF_PMU_MAX_SCOPE; scope++) {
+	for (scope = PERF_PMU_SCOPE_NONE + 1; scope <= PERF_PMU_SCOPE_CPUMASK; scope++) {
 		const struct cpumask *cpumask = perf_scope_cpu_topology_cpumask(scope, cpu);
 
 		pmu_cpumask = perf_scope_cpumask(scope);
@@ -15257,6 +15303,16 @@ static void perf_event_setup_cpumask(unsigned int cpu)
 		if (!cpumask_empty(cpumask) &&
 		    cpumask_any_and(pmu_cpumask, cpumask) >= nr_cpu_ids)
 			cpumask_set_cpu(cpu, pmu_cpumask);
+	}
+
+	/* Allow migrating if the new CPU is preferable (e.g. NUMA locality) */
+	list_for_each_entry(pmu, &pmus, entry) {
+		bool cpumask_migrate = false;
+
+		if (pmu->init_cpu && (!pmu->cpumask || !cpumask_test_cpu(cpu, pmu->cpumask)))
+			cpumask_migrate = pmu->init_cpu(pmu, cpu);
+		if (cpumask_migrate && !WARN_ON_ONCE(!pmu->cpumask))
+			perf_pmu_migrate_context(pmu, cpu, cpumask_any(pmu->cpumask));
 	}
 end:
 	cpumask_set_cpu(cpu, perf_online_mask);
