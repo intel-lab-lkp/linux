@@ -1793,21 +1793,12 @@ impl Process {
         table: PollTable<'_>,
     ) -> Result<u32> {
         let thread = this.get_current_thread()?;
-        {
-            let poll = loop {
-                if let Some(poll) = this.poll.as_ref() {
-                    break poll;
-                }
 
-                let poll = PollCondVarBox::new(c"Process::poll", kernel::static_lock_class!())?;
-                // Reuse our existing lock to synchronize callers initializing.
-                let guard = this.node_refs.lock();
-                let _ret = this.poll.populate(poll);
-                drop(guard);
-            };
+        let poll = this.poll.try_get_or_populate(&this.node_refs, || {
+            PollCondVarBox::new(c"Process::poll", kernel::static_lock_class!())
+        })?;
+        table.register_wait(file, poll);
 
-            table.register_wait(file, poll);
-        }
         let (from_proc, mut mask) = thread.poll()?;
         if mask == 0 && from_proc && !this.inner.lock().work.is_empty() {
             mask |= bindings::POLLIN;
