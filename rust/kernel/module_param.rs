@@ -77,10 +77,10 @@ where
         // SAFETY: By function safety requirements, this access is safe.
         let container = unsafe { &*((*param).__bindgen_anon_1.arg.cast::<SetOnce<T>>()) };
 
-        container
-            .populate(new_value)
-            .then_some(0)
-            .ok_or(kernel::error::code::EEXIST)
+        match container.populate(new_value) {
+            Ok(_) => Ok(0),
+            Err(_) => Err(EEXIST),
+        }
     })
 }
 

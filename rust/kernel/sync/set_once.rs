@@ -31,12 +31,12 @@ use core::{cell::UnsafeCell, mem::MaybeUninit};
 /// assert_eq!(None, value.as_ref());
 ///
 /// let status = value.populate(42u8);
-/// assert_eq!(true, status);
+/// assert_eq!(Ok(&42u8), status);
 /// assert_eq!(Some(&42u8), value.as_ref());
 /// assert_eq!(Some(42u8), value.copy());
 ///
 /// let status = value.populate(101u8);
-/// assert_eq!(false, status);
+/// assert_eq!(Err(101u8), status);
 /// assert_eq!(Some(&42u8), value.as_ref());
 /// assert_eq!(Some(42u8), value.copy());
 /// ```
@@ -78,8 +78,9 @@ impl<T> SetOnce<T> {
 
     /// Populate the [`SetOnce`].
     ///
-    /// Returns `true` if the [`SetOnce`] was successfully populated.
-    pub fn populate(&self, value: T) -> bool {
+    /// Returns `Ok(value)` if the [`SetOnce`] was successfully populated with the provided value.
+    /// Otherwise returns an error containing the value that this call attempted to insert.
+    pub fn populate(&self, value: T) -> Result<&T, T> {
         // INVARIANT: If the swap succeeds:
         //  - We increase `init`.
         //  - We write the valid value `1` to `init`.
@@ -95,9 +96,11 @@ impl<T> SetOnce<T> {
             //  - We release our exclusive access to `self.value` and it is now valid for shared
             //    access.
             self.init.store(2, Release);
-            true
+            // SAFETY: By the type invariants of `Self`, the value is initialized and will stay
+            // that way.
+            Ok(unsafe { &*self.value.get().cast() })
         } else {
-            false
+            Err(value)
         }
     }
 

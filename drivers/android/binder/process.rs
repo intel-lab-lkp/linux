@@ -1801,8 +1801,9 @@ impl Process {
 
                 let poll = PollCondVarBox::new(c"Process::poll", kernel::static_lock_class!())?;
                 // Reuse our existing lock to synchronize callers initializing.
-                let _guard = this.node_refs.lock();
-                this.poll.populate(poll);
+                let guard = this.node_refs.lock();
+                let _ret = this.poll.populate(poll);
+                drop(guard);
             };
 
             table.register_wait(file, poll);
