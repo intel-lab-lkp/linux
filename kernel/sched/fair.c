@@ -8794,6 +8794,28 @@ static inline bool asym_fits_cpu(unsigned long util,
 	return true;
 }
 
+/* For reciprocal WF_SYNC handoffs, prefer the waker CPU when it has no
+ * other runnable fair task.
+ */
+static bool prefer_sync_pair_cpu(struct task_struct *p, int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if ((rq->nr_running - cfs_h_nr_delayed(rq)) != 1)
+		return false;
+
+	if (!cpumask_test_cpu(cpu, p->cpus_ptr))
+		return false;
+
+	if (sched_asym_cpucap_active()) {
+		sync_entity_load_avg(&p->se);
+		if (!task_fits_cpu(p, cpu))
+			return false;
+	}
+
+	return true;
+}
+
 /*
  * Try and locate an idle core/thread in the LLC cache domain.
  */
@@ -9548,6 +9570,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	int cpu = smp_processor_id();
 	int new_cpu = prev_cpu;
 	int want_affine = 0;
+	int wide = 0;
 	/* SD_flags and WF_flags share the first nibble */
 	int sd_flag = wake_flags & 0xF;
 
@@ -9557,6 +9580,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	lockdep_assert_held(&p->pi_lock);
 	if (wake_flags & WF_TTWU) {
 		record_wakee(p);
+		wide = wake_wide(p);
 
 		if ((wake_flags & WF_CURRENT_CPU) &&
 		    cpumask_test_cpu(cpu, p->cpus_ptr))
@@ -9569,7 +9593,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 			new_cpu = prev_cpu;
 		}
 
-		want_affine = !wake_wide(p) && cpumask_test_cpu(cpu, p->cpus_ptr);
+		if (sync && !wide &&
+		    READ_ONCE(p->last_wakee) == current &&
+		    prefer_sync_pair_cpu(p, cpu))
+			return cpu;
+
+		want_affine = !wide && cpumask_test_cpu(cpu, p->cpus_ptr);
 	}
 
 	for_each_domain(cpu, tmp) {
