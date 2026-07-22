@@ -87,6 +87,8 @@ struct befs_btree_node {
 /* local constants */
 static const befs_off_t BEFS_BT_INVAL = 0xffffffffffffffffULL;
 
+#define BEFS_BTREE_MAX_DEPTH 64
+
 /* local functions */
 static int befs_btree_seekleaf(struct super_block *sb, const befs_data_stream *ds,
 			       befs_btree_super * bt_super,
@@ -248,6 +250,7 @@ befs_btree_find(struct super_block *sb, const befs_data_stream *ds,
 	struct befs_btree_node *this_node;
 	befs_btree_super bt_super;
 	befs_off_t node_off;
+	u32 depth = 0;
 	int res;
 
 	befs_debug(sb, "---> %s Key: %s", __func__, key);
@@ -276,6 +279,12 @@ befs_btree_find(struct super_block *sb, const befs_data_stream *ds,
 	}
 
 	while (!befs_leafnode(this_node)) {
+		if (++depth > bt_super.max_depth ||
+		    depth > BEFS_BTREE_MAX_DEPTH) {
+			befs_error(sb, "B-tree depth exceeds limit");
+			goto error_alloc;
+		}
+
 		res = befs_find_key(sb, this_node, key, &node_off);
 		/* if no key set, try the overflow node */
 		if (res == BEFS_BT_OVERFLOW)
@@ -543,6 +552,7 @@ befs_btree_seekleaf(struct super_block *sb, const befs_data_stream *ds,
 		    struct befs_btree_node *this_node,
 		    befs_off_t * node_off)
 {
+	u32 depth = 0;
 
 	befs_debug(sb, "---> %s", __func__);
 
@@ -559,6 +569,11 @@ befs_btree_seekleaf(struct super_block *sb, const befs_data_stream *ds,
 	}
 
 	while (!befs_leafnode(this_node)) {
+		if (++depth > bt_super->max_depth ||
+		    depth > BEFS_BTREE_MAX_DEPTH) {
+			befs_error(sb, "B-tree depth exceeds limit");
+			goto error;
+		}
 
 		if (this_node->head.all_key_count == 0) {
 			befs_debug(sb, "%s encountered "
