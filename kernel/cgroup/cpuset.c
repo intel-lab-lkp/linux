@@ -1076,7 +1076,11 @@ void rebuild_sched_domains(void)
 void cpuset_reset_sched_domains(void)
 {
 	mutex_lock(&cpuset_mutex);
-	partition_sched_domains(1, NULL, NULL);
+	if (cpumask_intersects(cpu_active_mask,
+			       housekeeping_cpumask(HK_TYPE_DOMAIN)))
+		partition_sched_domains(1, NULL, NULL);
+	else
+		partition_sched_domains(0, NULL, NULL);
 	mutex_unlock(&cpuset_mutex);
 }
 

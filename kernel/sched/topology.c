@@ -3365,9 +3365,8 @@ static int dattrs_equal(struct sched_domain_attr *cur, int idx_cur,
  * and partition_sched_domains() will fallback to the single partition
  * 'fallback_doms', it also forces the domains to be rebuilt.
  *
- * If doms_new == NULL it will be replaced with cpu_online_mask.
- * ndoms_new == 0 is a special case for destroying existing domains,
- * and it will not create the default domain.
+ * ndoms_new == 0 and doms_new == NULL is a special case for destroying
+ * existing domains, and it will not create the default domain.
  *
  * Call with hotplug lock and sched_domains_mutex held
  */
@@ -3387,7 +3386,7 @@ static void partition_sched_domains_locked(int ndoms_new, cpumask_var_t doms_new
 	if (new_topology)
 		asym_cpu_capacity_scan();
 
-	if (!doms_new) {
+	if (ndoms_new && !doms_new) {
 		WARN_ON_ONCE(dattr_new);
 		n = 0;
 		doms_new = alloc_sched_domains(1);
@@ -3414,7 +3413,7 @@ match1:
 	}
 
 	n = ndoms_cur;
-	if (!doms_new) {
+	if (ndoms_new && !doms_new) {
 		n = 0;
 		doms_new = &fallback_doms;
 		cpumask_and(doms_new[0], cpu_active_mask,

@@ -10,6 +10,7 @@
  */
 
 #include <linux/sched.h>
+#include <linux/sched/isolation.h>
 #include <linux/sched/topology.h>
 #include <linux/sched/task.h>
 #include <linux/cpumask.h>
@@ -284,7 +285,11 @@ static inline void rebuild_sched_domains(void)
 
 static inline void cpuset_reset_sched_domains(void)
 {
-	partition_sched_domains(1, NULL, NULL);
+	if (cpumask_intersects(cpu_active_mask,
+			       housekeeping_cpumask(HK_TYPE_DOMAIN)))
+		partition_sched_domains(1, NULL, NULL);
+	else
+		partition_sched_domains(0, NULL, NULL);
 }
 
 static inline void cpuset_print_current_mems_allowed(void)
