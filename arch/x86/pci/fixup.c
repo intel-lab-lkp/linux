@@ -995,6 +995,39 @@ static void asus_disable_nvme_d3cold(struct pci_dev *pdev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x9a09, asus_disable_nvme_d3cold);
 
+/*
+ * Disable D3cold on the Intel BE200 Wi-Fi on Lenovo IdeaPad Pro 5 14IAH10
+ *
+ * On this platform the BE200 (8086:272b) fails to power back on from D3cold
+ * after an s2idle cycle: all config and CSR reads return 0xffffffff, the
+ * driver's firmware reset times out ("timeout waiting for FW reset ACK
+ * (inta_hw=0xffffffff)") and re-probe fails with -EIO.  A module reload and a
+ * PCI remove/rescan cannot revive the device; only a full platform power cycle
+ * does.  This looks like an untested transition by the vendor: the reference
+ * OS does not appear to exercise the D3cold->D0 path.
+ *
+ * Forbidding D3cold keeps the card in D3hot across suspend, which resumes
+ * reliably at the cost of a small amount of power while suspended.  Match on
+ * the product only (not the BIOS version) so the workaround survives BIOS
+ * updates that do not address the issue.
+ */
+static const struct dmi_system_id lenovo_be200_broken_d3cold_table[] = {
+	{
+		.matches = {
+				DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+				DMI_MATCH(DMI_PRODUCT_VERSION, "IdeaPad Pro 5 14IAH10"),
+		},
+	},
+	{}
+};
+
+static void lenovo_disable_be200_d3cold(struct pci_dev *pdev)
+{
+	if (dmi_check_system(lenovo_be200_broken_d3cold_table) > 0)
+		pci_d3cold_disable(pdev);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x272b, lenovo_disable_be200_d3cold);
+
 #ifdef CONFIG_SUSPEND
 /*
  * Root Ports on some AMD SoCs advertise PME_Support for D3hot and D3cold, but
