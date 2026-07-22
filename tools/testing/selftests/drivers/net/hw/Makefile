@@ -7,14 +7,11 @@ HAS_IOURING_ZCRX := $(shell \
 	     'int main() {return 0;}' | \
 	$(CC) -luring -x c - -o /dev/null 2>&1 && echo y)
 
-ifeq ($(HAS_IOURING_ZCRX),y)
-COND_GEN_FILES += iou-zcrx
-else
+ifneq ($(HAS_IOURING_ZCRX),y)
 $(warning excluding iouring tests, liburing not installed or too old)
 endif
 
 TEST_GEN_FILES := \
-	$(COND_GEN_FILES) \
 # end of TEST_GEN_FILES
 
 TEST_PROGS = \
@@ -72,6 +69,9 @@ YNL_GEN_FILES := \
 	ncdevmem \
 	toeplitz \
 # end of YNL_GEN_FILES
+ifeq ($(HAS_IOURING_ZCRX),y)
+YNL_GEN_FILES += iou-zcrx
+endif
 TEST_GEN_FILES += $(YNL_GEN_FILES)
 TEST_GEN_FILES += $(patsubst %.c,%.o,$(wildcard *.bpf.c))
 
