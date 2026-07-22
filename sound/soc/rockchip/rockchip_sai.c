@@ -1474,11 +1474,14 @@ static int rockchip_sai_probe(struct platform_device *pdev)
 	 *
 	 * NB: we don't rely on _resume_and_get in case of !CONFIG_PM
 	 */
-	devm_pm_runtime_enable(&pdev->dev);
 	pm_runtime_get_noresume(&pdev->dev);
 	ret = rockchip_sai_runtime_resume(&pdev->dev);
-	if (ret)
+	if (ret) {
+		pm_runtime_put_noidle(&pdev->dev);
 		return dev_err_probe(&pdev->dev, ret, "Failed to resume device\n");
+	}
+	pm_runtime_set_active(&pdev->dev);
+	devm_pm_runtime_enable(&pdev->dev);
 
 	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
 	if (ret) {
