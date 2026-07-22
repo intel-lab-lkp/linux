@@ -3908,7 +3908,7 @@ void sched_ttwu_pending(void *arg)
 		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
 			set_task_cpu(p, cpu_of(rq));
 
-		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &rf);
+		ttwu_do_activate(rq, p, p->sched_remote_wakeup_flags, &rf);
 	}
 
 	/*
@@ -3947,11 +3947,12 @@ bool call_function_single_prep_ipi(int cpu)
  * via sched_ttwu_wakeup() for activation so the wakee incurs the cost
  * of the wakeup instead of the waker.
  */
+#define WF_TTWU_QUEUE_MASK (WF_TTWU | WF_SYNC | WF_MIGRATED | WF_RQ_SELECTED)
 static void __ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
 {
 	struct rq *rq = cpu_rq(cpu);
 
-	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+	p->sched_remote_wakeup_flags = wake_flags & WF_TTWU_QUEUE_MASK;
 
 	WRITE_ONCE(rq->ttwu_pending, 1);
 #ifdef CONFIG_SMP
