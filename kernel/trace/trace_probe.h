@@ -91,6 +91,7 @@ typedef int (*print_type_func_t)(struct trace_seq *, void *, void *);
 	FETCH_OP(STACK, param),		/* Stack: .param = index */	\
 	FETCH_OP(STACKP, none),		/* Stack pointer */		\
 	FETCH_OP(RETVAL, none),		/* Return value */		\
+	FETCH_OP(BADDR, none),		/* Break address */		\
 	FETCH_OP(IMM, imm),		/* Immediate: .immediate */	\
 	FETCH_OP(COMM, none),		/* Current comm */		\
 	FETCH_OP(CURRENT, none),	/* Current task_struct address */\
@@ -420,6 +421,7 @@ static inline int traceprobe_get_entry_data_size(struct trace_probe *tp)
 #define TPARG_FL_USER   BIT(4)
 #define TPARG_FL_FPROBE BIT(5)
 #define TPARG_FL_TPOINT BIT(6)
+#define TPARG_FL_WPROBE BIT(7)
 #define TPARG_FL_LOC_MASK	GENMASK(4, 0)
 
 static inline bool tparg_is_function_entry(unsigned int flags)
@@ -546,6 +548,10 @@ extern int traceprobe_define_arg_fields(struct trace_event_call *event_call,
 	C(ARG_TOO_LONG,		"Argument expression is too long"),		\
 	C(ARRAY_NO_CLOSE,	"Array is not closed"),		\
 	C(ARRAY_TOO_BIG,	"Array number is too big"),		\
+	C(BAD_ACCESS_ADDR,	"Invalid access memory address"),		\
+	C(BAD_ACCESS_FMT,	"Access memory address requires @"),		\
+	C(BAD_ACCESS_LEN,	"This memory access length is not supported"),	\
+	C(BAD_ACCESS_TYPE,	"Bad memory access type"),			\
 	C(BAD_ADDR_SUFFIX,	"Invalid probed address suffix"),		\
 	C(BAD_ARG_NAME,		"Argument name must follow the same rules as C identifiers"),	\
 	C(BAD_ARG_NUM,		"Invalid argument number"),		\
@@ -628,7 +634,8 @@ extern int traceprobe_define_arg_fields(struct trace_event_call *event_call,
 	C(TYPECAST_NOT_EVENT,	"Typecasts are only for eprobe fields"),	\
 	C(TYPECAST_REQ_FIELD,	"Typecast requires a field access"),	\
 	C(TYPECAST_SYM_OFFSET,	"@SYM+/-OFFSET with typecast needs parentheses"),	\
-	C(USED_ARG_NAME,	"This argument name is already used"),
+	C(USED_ARG_NAME,	"This argument name is already used"),		\
+	C(WPROBE_NO_SIBLING,	"Watchpoint probe does not support sibling probes"),
 
 #undef C
 #define C(a, b)		TP_ERR_##a
