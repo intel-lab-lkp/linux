@@ -1068,6 +1068,13 @@ int xe_gt_resume(struct xe_gt *gt)
 		return -ETIMEDOUT;
 	}
 
+	/*
+	 * The MCR steering semaphore may be left held across a suspend
+	 * cycle; release it before the first MCR access below so that
+	 * mcr_lock() does not stall until the semaphore wait times out.
+	 */
+	xe_gt_mcr_lock_sanitize(gt);
+
 	err = do_gt_restart(gt);
 	if (err)
 		return err;

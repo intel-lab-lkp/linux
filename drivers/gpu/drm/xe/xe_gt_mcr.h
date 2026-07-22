@@ -16,6 +16,7 @@ void xe_gt_mcr_init_early(struct xe_gt *gt);
 void xe_gt_mcr_init(struct xe_gt *gt);
 
 void xe_gt_mcr_set_implicit_defaults(struct xe_gt *gt);
+void xe_gt_mcr_lock_sanitize(struct xe_gt *gt);
 
 u32 xe_gt_mcr_unicast_read(struct xe_gt *gt, struct xe_reg_mcr mcr_reg,
 			   int group, int instance);

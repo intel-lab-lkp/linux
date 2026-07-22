@@ -755,6 +755,28 @@ static void mcr_unlock(struct xe_gt *gt, unsigned int fw_ref) __releases(&gt->mc
 	}
 }
 
+/**
+ * xe_gt_mcr_lock_sanitize - Release the hardware MCR steering semaphore
+ * @gt: GT structure
+ *
+ * The MCR steering semaphore can be left in a held state after a suspend
+ * cycle, in which case the first MCR access after resume stalls until the
+ * semaphore wait times out.  Forcibly release the semaphore during driver
+ * load/resume; this is safe because no other agents acquire the semaphore
+ * during the load/resume process, mirroring i915's
+ * intel_gt_mcr_lock_sanitize().
+ */
+void xe_gt_mcr_lock_sanitize(struct xe_gt *gt)
+{
+	if (IS_SRIOV_VF(gt_to_xe(gt)))
+		return;
+
+	lockdep_assert_not_held(&gt->mcr_lock);
+
+	if (GRAPHICS_VERx100(gt_to_xe(gt)) >= 1270)
+		xe_mmio_write32(&gt->mmio, STEER_SEMAPHORE, 0x1);
+}
+
 /*
  * Access a register with specific MCR steering
  *
