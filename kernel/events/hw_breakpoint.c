@@ -889,6 +889,67 @@ void unregister_wide_hw_breakpoint(struct perf_event * __percpu *cpu_events)
 EXPORT_SYMBOL_GPL(unregister_wide_hw_breakpoint);
 
 /**
+ * modify_wide_hw_breakpoint_local - update breakpoint config for local CPU
+ * @bp: the hwbp perf event for this CPU
+ * @attr: the new attribute for @bp
+ *
+ * This does not release and reserve the slot of a HWBP; it just reuses the
+ * current slot on local CPU. So the users must update the other CPUs by
+ * themselves.
+ * Also, since this does not release/reserve the slot, this can not change the
+ * type to incompatible type of the HWBP.
+ * Return err if attr is invalid or the CPU fails to update debug register
+ * for new @attr.
+ */
+#ifdef CONFIG_HAVE_REINSTALL_HW_BREAKPOINT
+int modify_wide_hw_breakpoint_local(struct perf_event *bp,
+				    struct perf_event_attr *attr)
+{
+	struct arch_hw_breakpoint info, old_info;
+	unsigned long old_addr;
+	unsigned int old_type, old_len;
+	int ret;
+
+	lockdep_assert_irqs_disabled();
+
+	if (find_slot_idx(bp->attr.bp_type) != find_slot_idx(attr->bp_type))
+		return -EINVAL;
+
+	ret = hw_breakpoint_arch_parse(bp, attr, &info);
+	if (ret)
+		return ret;
+
+	old_info = *counter_arch_bp(bp);
+	old_addr = bp->attr.bp_addr;
+	old_type = bp->attr.bp_type;
+	old_len = bp->attr.bp_len;
+
+	*counter_arch_bp(bp) = info;
+	bp->attr.bp_addr = attr->bp_addr;
+	bp->attr.bp_type = attr->bp_type;
+	bp->attr.bp_len = attr->bp_len;
+
+	ret = arch_reinstall_hw_breakpoint(bp);
+	if (ret) {
+		/* Rollback to the original state */
+		*counter_arch_bp(bp) = old_info;
+		bp->attr.bp_addr = old_addr;
+		bp->attr.bp_type = old_type;
+		bp->attr.bp_len = old_len;
+	}
+
+	return ret;
+}
+#else
+int modify_wide_hw_breakpoint_local(struct perf_event *bp,
+				    struct perf_event_attr *attr)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+EXPORT_SYMBOL_GPL(modify_wide_hw_breakpoint_local);
+
+/**
  * hw_breakpoint_is_used - check if breakpoints are currently used
  *
  * Returns: true if breakpoints are used, false otherwise.
