@@ -57,6 +57,13 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     enum: [0, 1, 2, 3]
     default: 0
+    deprecated: true
+
+  spi-device-addr:
+    maxItems: 1
+    items:
+      enum: [0, 1, 2, 3]
+    default: [0]
 
   vref-supply:
     description: |
@@ -86,7 +93,7 @@ examples:
         interrupts = <15 2>;
         reset-gpios = <&gpio1 10 GPIO_ACTIVE_LOW>;
         spi-max-frequency = <20000000>;
-        microchip,device-addr = <0>;
+        spi-device-addr = <0>;
         vref-supply = <&vref_reg>;
         clocks = <&xtal>;
       };
