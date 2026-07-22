@@ -3306,15 +3306,21 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	struct btrfs_root *log = root->log_root;
 	struct btrfs_root *log_root_tree = fs_info->log_root_tree;
 	struct btrfs_root_item new_root_item;
-	int log_transid = 0;
+	int log_transid = ctx->log_transid;
 	struct btrfs_log_ctx root_log_ctx;
 	struct blk_plug plug;
 	u64 log_root_start;
 	u64 log_root_level;
 
+	/* Avoid fist taking root->log_mutex, reduce lock contention. */
+	if (data_race(root->log_transid_committed) >= log_transid) {
+		trace_btrfs_sync_log_enter(trans, root, ctx);
+		trace_btrfs_sync_log_exit(trans, root, ctx, ctx->log_ret);
+		return ctx->log_ret;
+	}
+
 	mutex_lock(&root->log_mutex);
 	trace_btrfs_sync_log_enter(trans, root, ctx);
-	log_transid = ctx->log_transid;
 	if (root->log_transid_committed >= log_transid) {
 		trace_btrfs_sync_log_exit(trans, root, ctx, ctx->log_ret);
 		mutex_unlock(&root->log_mutex);
