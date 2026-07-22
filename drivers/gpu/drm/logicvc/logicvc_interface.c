@@ -34,6 +34,10 @@ static void logicvc_encoder_enable(struct drm_encoder *drm_encoder)
 	struct logicvc_drm *logicvc = logicvc_drm(drm_encoder->dev);
 	struct logicvc_interface *interface =
 		logicvc_interface_from_drm_encoder(drm_encoder);
+	int idx;
+
+	if (!drm_dev_enter(drm_encoder->dev, &idx))
+		return;
 
 	regmap_update_bits(logicvc->regmap, LOGICVC_POWER_CTRL_REG,
 			   LOGICVC_POWER_CTRL_VIDEO_ENABLE,
@@ -43,17 +47,25 @@ static void logicvc_encoder_enable(struct drm_encoder *drm_encoder)
 		drm_panel_prepare(interface->drm_panel);
 		drm_panel_enable(interface->drm_panel);
 	}
+
+	drm_dev_exit(idx);
 }
 
 static void logicvc_encoder_disable(struct drm_encoder *drm_encoder)
 {
 	struct logicvc_interface *interface =
 		logicvc_interface_from_drm_encoder(drm_encoder);
+	int idx;
+
+	if (!drm_dev_enter(drm_encoder->dev, &idx))
+		return;
 
 	if (interface->drm_panel) {
 		drm_panel_disable(interface->drm_panel);
 		drm_panel_unprepare(interface->drm_panel);
 	}
+
+	drm_dev_exit(idx);
 }
 
 static const struct drm_encoder_helper_funcs logicvc_encoder_helper_funcs = {

@@ -10,6 +10,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
@@ -92,7 +93,7 @@ static int logicvc_plane_atomic_check(struct drm_plane *drm_plane,
 	struct drm_crtc_state *crtc_state;
 	int min_scale, max_scale;
 	bool can_position;
-	int ret;
+	int idx, ret = 0;
 
 	if (!new_state->crtc)
 		return 0;
@@ -108,12 +109,15 @@ static int logicvc_plane_atomic_check(struct drm_plane *drm_plane,
 		return -EINVAL;
 	}
 
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -ENODEV;
+
 	if (!logicvc->caps->layer_address) {
 		ret = logicvc_layer_buffer_find_setup(logicvc, layer, new_state,
 						      NULL);
 		if (ret) {
 			drm_err(drm_dev, "No viable setup for buffer found.\n");
-			return ret;
+			goto out_exit;
 		}
 	}
 
@@ -127,12 +131,12 @@ static int logicvc_plane_atomic_check(struct drm_plane *drm_plane,
 	ret = drm_atomic_helper_check_plane_state(new_state, crtc_state,
 						  min_scale, max_scale,
 						  can_position, true);
-	if (ret) {
+	if (ret)
 		drm_err(drm_dev, "Invalid plane state\n\n");
-		return ret;
-	}
 
-	return 0;
+out_exit:
+	drm_dev_exit(idx);
+	return ret;
 }
 
 static void logicvc_plane_atomic_update(struct drm_plane *drm_plane,
@@ -148,7 +152,11 @@ static void logicvc_plane_atomic_update(struct drm_plane *drm_plane,
 	struct drm_framebuffer *fb = new_state->fb;
 	struct logicvc_layer_buffer_setup setup = {};
 	u32 index = layer->index;
+	int idx;
 	u32 reg;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return;
 
 	/* Layer dimensions */
 
@@ -230,6 +238,8 @@ static void logicvc_plane_atomic_update(struct drm_plane *drm_plane,
 	reg |= LOGICVC_LAYER_CTRL_COLOR_KEY_DISABLE;
 
 	regmap_write(logicvc->regmap, LOGICVC_LAYER_CTRL_REG(index), reg);
+
+	drm_dev_exit(idx);
 }
 
 static void logicvc_plane_atomic_disable(struct drm_plane *drm_plane,
@@ -238,8 +248,14 @@ static void logicvc_plane_atomic_disable(struct drm_plane *drm_plane,
 	struct logicvc_layer *layer = logicvc_layer(drm_plane);
 	struct logicvc_drm *logicvc = logicvc_drm(drm_plane->dev);
 	u32 index = layer->index;
+	int idx;
+
+	if (!drm_dev_enter(&logicvc->drm_dev, &idx))
+		return;
 
 	regmap_write(logicvc->regmap, LOGICVC_LAYER_CTRL_REG(index), 0);
+
+	drm_dev_exit(idx);
 }
 
 static struct drm_plane_helper_funcs logicvc_plane_helper_funcs = {

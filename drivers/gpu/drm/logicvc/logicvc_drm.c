@@ -72,6 +72,10 @@ static irqreturn_t logicvc_drm_irq_handler(int irq, void *data)
 	irqreturn_t ret = IRQ_NONE;
 	u32 stat = 0;
 
+	/* The interrupt handler will be unregistered when the device is
+	 * removed. Therefore, there's no need for drm_dev_enter() here.
+	 */
+
 	/* Get pending interrupt sources. */
 	regmap_read(logicvc->regmap, LOGICVC_INT_STAT_REG, &stat);
 
@@ -463,7 +467,7 @@ static void logicvc_drm_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct drm_device *drm_dev = &logicvc->drm_dev;
 
-	drm_dev_unregister(drm_dev);
+	drm_dev_unplug(drm_dev);
 	drm_atomic_helper_shutdown(drm_dev);
 
 	logicvc_mode_fini(logicvc);
