@@ -66,6 +66,7 @@ Currently, these files are in /proc/sys/vm:
 - overcommit_ratio
 - page-cluster
 - page_lock_unfairness
+- page_reporting_delay
 - panic_on_oom
 - percpu_pagelist_high_fraction
 - stat_interval
@@ -895,6 +896,18 @@ This value determines the number of times that the page lock can be
 stolen from under a waiter. After the lock is stolen the number of times
 specified in this file (default is 5), the "fair lock handoff" semantics
 will apply, and the waiter will only be awakened if the lock can be taken.
+
+page_reporting_delay
+=======================
+
+This value determines the delay in milliseconds between free page
+reporting intervals. A lower delay allows aggressive memory
+reclamation by returning unused pages to the host quickly, while a
+higher delay helps to batch free pages over a longer window, absorbing
+allocation/free churn without hypercall and re-fault overhead.
+
+The default value is 2000 (2 seconds). The minimum allowed value is
+0 (immediate reporting) and the maximum allowed value is 10000 (10 seconds).
 
 panic_on_oom
 ============
