@@ -197,6 +197,17 @@ void ptdump_walk_pgd(struct ptdump_state *st, struct mm_struct *mm, pgd_t *pgd)
 	st->note_page_flush(st);
 }
 
+int ptdump_pt_level_first(struct mm_struct *mm)
+{
+	if (mm_pmd_folded(mm))
+		return 3;
+	if (mm_pud_folded(mm))
+		return 2;
+	if (mm_p4d_folded(mm))
+		return 1;
+	return 0;
+}
+
 static int check_wx_show(struct seq_file *m, void *v)
 {
 	if (ptdump_check_wx())

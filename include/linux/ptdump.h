@@ -29,6 +29,7 @@ bool ptdump_walk_pgd_level_core(struct seq_file *m,
 				struct mm_struct *mm, pgd_t *pgd,
 				bool checkwx, bool dmesg);
 void ptdump_walk_pgd(struct ptdump_state *st, struct mm_struct *mm, pgd_t *pgd);
+int ptdump_pt_level_first(struct mm_struct *mm);
 bool ptdump_check_wx(void);
 
 static inline void debug_checkwx(void)

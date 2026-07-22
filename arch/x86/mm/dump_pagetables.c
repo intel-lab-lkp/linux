@@ -27,6 +27,7 @@
  */
 struct pg_state {
 	struct ptdump_state ptdump;
+	int first_level;
 	int level;
 	pgprotval_t current_prot;
 	pgprotval_t effective_prot;
@@ -254,7 +255,7 @@ static void effective_prot(struct ptdump_state *pt_st, int level, u64 val)
 	pgprotval_t prot = val & PTE_FLAGS_MASK;
 	pgprotval_t effective;
 
-	if (level > 0) {
+	if (level > st->first_level) {
 		pgprotval_t higher_prot = st->prot_levels[level - 1];
 
 		effective = (higher_prot & prot & (_PAGE_USER | _PAGE_RW)) |
@@ -454,6 +455,8 @@ bool ptdump_walk_pgd_level_core(struct seq_file *m,
 		.check_wx	= checkwx,
 		.seq		= m
 	};
+
+	st.first_level = ptdump_pt_level_first(mm);
 
 	ptdump_walk_pgd(&st.ptdump, mm, pgd);
 
