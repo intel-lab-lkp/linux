@@ -274,8 +274,8 @@
 			#cooling-cells = <2>;
 		};
 
-		cpu-map {
-			cluster0 {
+		cpu_map: cpu-map {
+			cpu_map_cluster0: cluster0 {
 				core0 {
 					cpu = <&cpu0>;
 				};
@@ -301,7 +301,7 @@
 				};
 			};
 
-			cluster1 {
+			cpu_map_cluster1: cluster1 {
 				core0 {
 					cpu = <&cpu6>;
 				};
