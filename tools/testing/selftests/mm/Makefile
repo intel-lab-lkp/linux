@@ -104,6 +104,7 @@ TEST_GEN_FILES += guard-regions
 TEST_GEN_FILES += merge
 TEST_GEN_FILES += rmap
 TEST_GEN_FILES += folio_split_race_test
+TEST_GEN_FILES += pmd_swap
 
 ifneq ($(ARCH),arm64)
 TEST_GEN_FILES += soft-dirty
@@ -165,6 +166,7 @@ TEST_PROGS += ksft_mremap.sh
 TEST_PROGS += ksft_pagemap.sh
 TEST_PROGS += ksft_pfnmap.sh
 TEST_PROGS += ksft_pkey.sh
+TEST_PROGS += ksft_pmd_swap.sh
 TEST_PROGS += ksft_process_madv.sh
 TEST_PROGS += ksft_process_mrelease.sh
 TEST_PROGS += ksft_rmap.sh

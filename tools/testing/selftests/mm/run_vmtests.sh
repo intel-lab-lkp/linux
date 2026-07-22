@@ -69,6 +69,8 @@ separated by spaces:
 	test pagemap_scan IOCTL
 - pfnmap
 	tests for VM_PFNMAP handling
+- pmd_swap
+	tests for PMD-level swap entries
 - process_madv
 	test for process_madv
 - cow
@@ -398,6 +400,8 @@ fi
 CATEGORY="pagemap" run_test ./pagemap_ioctl
 
 CATEGORY="pfnmap" run_test ./pfnmap
+
+CATEGORY="pmd_swap" run_test ./pmd_swap
 
 # COW tests
 CATEGORY="cow" run_test ./cow
