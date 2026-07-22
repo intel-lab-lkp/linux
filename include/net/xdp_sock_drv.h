@@ -260,9 +260,22 @@ xsk_buff_raw_get_ctx(const struct xsk_buff_pool *pool, u64 addr)
 	0)
 
 static inline bool
-xsk_buff_valid_tx_metadata(const struct xsk_tx_metadata *meta)
+xsk_buff_valid_tx_metadata(const struct xsk_buff_pool *pool,
+			   const struct xsk_tx_metadata *meta)
 {
-	return !(meta->flags & ~XDP_TXMD_FLAGS_VALID);
+	/* covers flags, XDP_TXMD_FLAGS_CHECKSUM & XDP_TXMD_FLAGS_TIMESTAMP */
+	if (unlikely(pool->tx_metadata_len < 16))
+		return false;
+
+	if (unlikely(meta->flags & ~XDP_TXMD_FLAGS_VALID))
+		return false;
+
+	if (meta->flags & XDP_TXMD_FLAGS_LAUNCH_TIME)
+		if (unlikely(pool->tx_metadata_len <
+			     offsetofend(struct xsk_tx_metadata, request.launch_time)))
+			return false;
+
+	return true;
 }
 
 static inline struct xsk_tx_metadata *
@@ -274,7 +287,7 @@ __xsk_buff_get_metadata(const struct xsk_buff_pool *pool, void *data)
 		return NULL;
 
 	meta = data - pool->tx_metadata_len;
-	if (unlikely(!xsk_buff_valid_tx_metadata(meta)))
+	if (unlikely(!xsk_buff_valid_tx_metadata(pool, meta)))
 		return NULL; /* no way to signal the error to the user */
 
 	return meta;
@@ -469,7 +482,8 @@ xsk_buff_raw_get_ctx(const struct xsk_buff_pool *pool, u64 addr)
 	return (struct xdp_desc_ctx){ };
 }
 
-static inline bool xsk_buff_valid_tx_metadata(struct xsk_tx_metadata *meta)
+static inline bool xsk_buff_valid_tx_metadata(const struct xsk_buff_pool *pool,
+					      struct xsk_tx_metadata *meta)
 {
 	return false;
 }
