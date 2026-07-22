@@ -4101,6 +4101,7 @@ static void tcp_ca_dst_init(struct sock *sk, const struct dst_entry *dst)
 static void tcp_connect_init(struct sock *sk)
 {
 	const struct dst_entry *dst = __sk_dst_get(sk);
+	int full_space = tcp_full_space(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	__u8 rcv_wscale;
 	u16 user_mss;
@@ -4133,14 +4134,16 @@ static void tcp_connect_init(struct sock *sk)
 
 	/* limit the window selection if the user enforce a smaller rx buffer */
 	if (sk->sk_userlocks & SOCK_RCVBUF_LOCK &&
-	    (tp->window_clamp > tcp_full_space(sk) || tp->window_clamp == 0))
-		WRITE_ONCE(tp->window_clamp, tcp_full_space(sk));
+	    (tp->window_clamp > full_space || tp->window_clamp == 0))
+		WRITE_ONCE(tp->window_clamp, full_space);
 
 	rcv_wnd = tcp_rwnd_init_bpf(sk);
 	if (rcv_wnd == 0)
 		rcv_wnd = dst_metric(dst, RTAX_INITRWND);
+	else if (full_space < rcv_wnd * tp->advmss)
+		full_space = rcv_wnd * tp->advmss;
 
-	tcp_select_initial_window(sk, tcp_full_space(sk),
+	tcp_select_initial_window(sk, full_space,
 				  tp->advmss - (tp->rx_opt.ts_recent_stamp ? tp->tcp_header_len - sizeof(struct tcphdr) : 0),
 				  &tp->rcv_wnd,
 				  &tp->window_clamp,
