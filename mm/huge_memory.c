@@ -3210,6 +3210,14 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			folio_add_anon_rmap_ptes(folio, page, HPAGE_PMD_NR,
 						 vma, haddr, rmap_flags);
 		}
+	} else if (pmd_is_swap_entry(*pmd)) {
+		VM_WARN_ON_ONCE(freeze);
+		/* Swap entries have no page for the migration freeze path. */
+		freeze = false;
+		old_pmd = *pmd;
+		soft_dirty = pmd_swp_soft_dirty(old_pmd);
+		uffd_wp = pmd_swp_uffd(old_pmd);
+		anon_exclusive = pmd_swp_exclusive(old_pmd);
 	} else {
 		/*
 		 * Up to this point the pmd is present and huge and userland has
@@ -3346,6 +3354,25 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
 			set_pte_at(mm, addr, pte + i, entry);
 		}
+	} else if (pmd_is_swap_entry(old_pmd)) {
+		softleaf_t sl_entry = softleaf_from_pmd(old_pmd);
+		pte_t swp_pte;
+		swp_entry_t sub_entry;
+
+		for (i = 0, addr = haddr; i < HPAGE_PMD_NR;
+		     i++, addr += PAGE_SIZE) {
+			sub_entry = swp_entry(swp_type(sl_entry),
+					      swp_offset(sl_entry) + i);
+			swp_pte = swp_entry_to_pte(sub_entry);
+			if (soft_dirty)
+				swp_pte = pte_swp_mksoft_dirty(swp_pte);
+			if (uffd_wp)
+				swp_pte = pte_swp_mkuffd(swp_pte);
+			if (anon_exclusive)
+				swp_pte = pte_swp_mkexclusive(swp_pte);
+			VM_WARN_ON(!pte_none(ptep_get(pte + i)));
+			set_pte_at(mm, addr, pte + i, swp_pte);
+		}
 	} else {
 		pte_t entry;
 
@@ -3373,7 +3400,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	}
 	pte_unmap(pte);
 
-	if (!pmd_is_migration_entry(*pmd))
+	if (!pmd_is_migration_entry(old_pmd) && !pmd_is_swap_entry(old_pmd))
 		folio_remove_rmap_pmd(folio, page, vma);
 	if (freeze)
 		put_page(page);
