@@ -80,6 +80,7 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     minimum: 0
     maximum: 3
+    deprecated: true
     description:
       The address is set on a per-device basis by fuses in the factory,
       configured on request. If not requested, the fuses are set for 0x1.
@@ -90,6 +91,12 @@ properties:
       Each device communication starts by a CS falling edge, followed by the
       clocking of the device address (BITS[7:6] - top two bits of COMMAND BYTE
       which is first one on the wire).
+
+  spi-device-addr:
+    maxItems: 1
+    items:
+      enum: [0, 1, 2, 3]
+    default: [1]
 
   "#io-channel-cells":
     const: 1
@@ -123,7 +130,6 @@ dependencies:
 required:
   - compatible
   - reg
-  - microchip,hw-device-address
   - spi-max-frequency
 
 allOf:
@@ -159,7 +165,7 @@ examples:
             spi-cpha;
             spi-cpol;
             spi-max-frequency = <10000000>;
-            microchip,hw-device-address = <1>;
+            spi-device-addr = <1>;
 
             #address-cells = <1>;
             #size-cells = <0>;
