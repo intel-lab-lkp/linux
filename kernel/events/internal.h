@@ -38,6 +38,7 @@ struct perf_buffer {
 	refcount_t			mmap_count;
 	unsigned long			mmap_locked;
 	struct user_struct		*mmap_user;
+	struct mm_struct		*mmap_mm;
 
 	/* AUX area */
 	struct mutex			aux_mutex;
@@ -49,6 +50,8 @@ struct perf_buffer {
 	int				aux_overwrite;
 	refcount_t			aux_mmap_count;
 	unsigned long			aux_mmap_locked;
+	struct user_struct		*aux_mmap_user;
+	struct mm_struct		*aux_mmap_mm;
 	void				(*free_aux)(void *);
 	refcount_t			aux_refcount;
 	int				aux_in_sampling;

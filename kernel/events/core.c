@@ -7006,7 +7006,7 @@ static void perf_mmap_open(struct vm_area_struct *vma)
 }
 
 static void perf_pmu_output_stop(struct perf_event *event);
-static void perf_mmap_unaccount(struct vm_area_struct *vma, struct perf_buffer *rb);
+static void perf_mmap_unaccount(struct perf_buffer *rb);
 
 /*
  * A buffer can be mmap()ed multiple times; either directly through the same
@@ -7021,7 +7021,6 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 	struct perf_event *event = vma->vm_file->private_data;
 	mapped_f unmapped = get_mapped(event, event_unmapped);
 	struct perf_buffer *rb = ring_buffer_get(event);
-	struct user_struct *mmap_user = rb->mmap_user;
 	bool detach_rest = false;
 
 	/* FIXIES vs perf_pmu_unregister() */
@@ -7043,8 +7042,13 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 		perf_pmu_output_stop(event);
 
 		/* now it's safe to free the pages */
-		atomic_long_sub(rb->aux_nr_pages - rb->aux_mmap_locked, &mmap_user->locked_vm);
-		atomic64_sub(rb->aux_mmap_locked, &vma->vm_mm->pinned_vm);
+		atomic_long_sub(rb->aux_nr_pages - rb->aux_mmap_locked,
+				&rb->aux_mmap_user->locked_vm);
+		atomic64_sub(rb->aux_mmap_locked, &rb->aux_mmap_mm->pinned_vm);
+		free_uid(rb->aux_mmap_user);
+		mmdrop(rb->aux_mmap_mm);
+		rb->aux_mmap_user = NULL;
+		rb->aux_mmap_mm = NULL;
 
 		/* this has to be the last one */
 		rb_free_aux(rb);
@@ -7116,7 +7120,7 @@ again:
 	 * Aside from that, this buffer is 'fully' detached and unmapped,
 	 * undo the VM accounting.
 	 */
-	perf_mmap_unaccount(vma, rb);
+	perf_mmap_unaccount(rb);
 
 out_put:
 	ring_buffer_put(rb); /* could be last */
@@ -7258,13 +7262,15 @@ static void perf_mmap_account(struct vm_area_struct *vma, long user_extra, long 
 	atomic64_add(extra, &vma->vm_mm->pinned_vm);
 }
 
-static void perf_mmap_unaccount(struct vm_area_struct *vma, struct perf_buffer *rb)
+static void perf_mmap_unaccount(struct perf_buffer *rb)
 {
 	struct user_struct *user = rb->mmap_user;
 
 	atomic_long_sub((perf_data_size(rb) >> PAGE_SHIFT) + 1 - rb->mmap_locked,
 			&user->locked_vm);
-	atomic64_sub(rb->mmap_locked, &vma->vm_mm->pinned_vm);
+	atomic64_sub(rb->mmap_locked, &rb->mmap_mm->pinned_vm);
+	mmdrop(rb->mmap_mm);
+	rb->mmap_mm = NULL;
 }
 
 static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
@@ -7330,6 +7336,8 @@ static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
 		return -ENOMEM;
 
 	rb->mmap_locked = extra;
+	rb->mmap_mm = vma->vm_mm;
+	mmgrab(rb->mmap_mm);
 
 	ring_buffer_attach(event, rb);
 
@@ -7411,6 +7419,9 @@ static int perf_mmap_aux(struct vm_area_struct *vma, struct perf_event *event,
 
 		refcount_set(&rb->aux_mmap_count, 1);
 		rb->aux_mmap_locked = extra;
+		rb->aux_mmap_user = get_current_user();
+		rb->aux_mmap_mm = vma->vm_mm;
+		mmgrab(rb->aux_mmap_mm);
 	}
 
 	perf_mmap_account(vma, user_extra, extra);
@@ -7512,7 +7523,7 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 			mapped = get_mapped(event, event_unmapped);
 			if (mapped)
 				mapped(event, vma->vm_mm);
-			perf_mmap_unaccount(vma, event->rb);
+			perf_mmap_unaccount(event->rb);
 			ring_buffer_attach(event, NULL);	/* drops last rb->refcount */
 			refcount_set(&event->mmap_count, 0);
 			return ret;
