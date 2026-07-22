@@ -518,6 +518,29 @@ impl Delta {
         }
     }
 
+    /// Return the smallest number of milliseconds greater than or equal
+    /// to the value in the [`Delta`].
+    #[inline]
+    pub fn as_millis_ceil(self) -> i64 {
+        let n = self.as_nanos();
+        let n = if n > 0 {
+            n.saturating_add(NSEC_PER_MSEC - 1)
+        } else {
+            n
+        };
+
+        #[cfg(CONFIG_64BIT)]
+        {
+            n / NSEC_PER_MSEC
+        }
+
+        #[cfg(not(CONFIG_64BIT))]
+        // SAFETY: It is always safe to call `ktime_to_ms()` with any value.
+        unsafe {
+            bindings::ktime_to_ms(n)
+        }
+    }
+
     /// Return `self % dividend` where `dividend` is in nanoseconds.
     ///
     /// The kernel doesn't have any emulation for `s64 % s64` on 32 bit platforms, so this is
