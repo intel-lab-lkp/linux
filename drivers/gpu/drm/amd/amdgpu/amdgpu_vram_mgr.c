@@ -954,6 +954,9 @@ void amdgpu_vram_mgr_fini(struct amdgpu_device *adev)
 	struct ttm_resource_manager *man = &mgr->manager;
 	int ret;
 	struct amdgpu_vram_reservation *rsv, *temp;
+	bool was_used;
+
+	was_used = ttm_resource_manager_used(man);
 
 	ttm_resource_manager_set_used(man, false);
 
@@ -969,7 +972,7 @@ void amdgpu_vram_mgr_fini(struct amdgpu_device *adev)
 		gpu_buddy_free_list(&mgr->mm, &rsv->allocated, 0);
 		kfree(rsv);
 	}
-	if (!adev->gmc.is_app_apu)
+	if (!adev->gmc.is_app_apu && was_used)
 		gpu_buddy_fini(&mgr->mm);
 	mutex_unlock(&mgr->lock);
 
