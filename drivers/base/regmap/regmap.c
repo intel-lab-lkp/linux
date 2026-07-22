@@ -674,6 +674,18 @@ enum regmap_endian regmap_get_val_endian(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(regmap_get_val_endian);
 
+static bool regmap_get_use_single_read(struct device *dev,
+				       const struct regmap_bus *bus,
+				       const struct regmap_config *config)
+{
+	struct fwnode_handle *fwnode = dev ? dev_fwnode(dev) : NULL;
+
+	if (fwnode_property_read_bool(fwnode, "no-sequential-read"))
+		return true;
+
+	return config->use_single_read || !(config->read || (bus && bus->read));
+}
+
 struct regmap *__regmap_init(struct device *dev,
 			     const struct regmap_bus *bus,
 			     void *bus_context,
@@ -786,7 +798,7 @@ struct regmap *__regmap_init(struct device *dev,
 		map->reg_stride_order = ilog2(map->reg_stride);
 	else
 		map->reg_stride_order = -1;
-	map->use_single_read = config->use_single_read || !(config->read || (bus && bus->read));
+	map->use_single_read = regmap_get_use_single_read(dev, bus, config);
 	map->use_single_write = config->use_single_write || !(config->write || (bus && bus->write));
 	map->can_multi_write = config->can_multi_write && (config->write || (bus && bus->write));
 	if (bus) {
