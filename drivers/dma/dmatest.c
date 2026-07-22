@@ -7,6 +7,7 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/atomic.h>
 #include <linux/err.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
@@ -92,6 +93,11 @@ static bool polled;
 module_param(polled, bool, 0644);
 MODULE_PARM_DESC(polled, "Use polling for completion instead of interrupts");
 
+static unsigned int fatal_errors;
+module_param(fatal_errors, uint, 0644);
+MODULE_PARM_DESC(fatal_errors,
+		"Panic after this many test errors in a run; 0 = never (default: 0)");
+
 /**
  * struct dmatest_params - test parameters.
  * @nobounce:		prevent using swiotlb buffer
@@ -109,6 +115,7 @@ MODULE_PARM_DESC(polled, "Use polling for completion instead of interrupts");
  * @alignment:		custom data address alignment taken as 2^alignment
  * @transfer_size:	custom transfer size in bytes
  * @polled:		use polling for completion instead of interrupts
+ * @fatal_errors:	panic after this many test errors in a run (0 = never)
  */
 struct dmatest_params {
 	bool		nobounce;
@@ -126,6 +133,7 @@ struct dmatest_params {
 	int		alignment;
 	unsigned int	transfer_size;
 	bool		polled;
+	unsigned int	fatal_errors;
 };
 
 /**
@@ -133,6 +141,7 @@ struct dmatest_params {
  * @params:		test parameters
  * @channels:		channels under test
  * @nr_channels:	number of channels under test
+ * @error_count:	test errors in the current run (for fatal_errors)
  * @lock:		access protection to the fields of this structure
  * @did_init:		module has been initialized completely
  * @last_error:		test has faced configuration issues
@@ -144,6 +153,7 @@ struct dmatest_info {
 	/* Internal state */
 	struct list_head	channels;
 	unsigned int		nr_channels;
+	atomic_t		error_count;
 	int			last_error;
 	struct mutex		lock;
 	bool			did_init;
@@ -487,6 +497,24 @@ static void dbg_result(const char *err, unsigned int n, unsigned int src_off,
 		dbg_result(err, n, src_off, dst_off, len, data);\
 })
 
+/*
+ * Record a test error whose details were just logged via result(). When
+ * fatal_errors is set, panic once that many errors have accumulated in the
+ * current run.
+ */
+static void dmatest_note_error(struct dmatest_info *info)
+{
+	unsigned int errors;
+
+	if (!info->params.fatal_errors)
+		return;
+
+	errors = atomic_inc_return(&info->error_count);
+	if (errors >= info->params.fatal_errors)
+		panic("dmatest: fatal_errors=%u and %u error(s) encountered\n",
+		      info->params.fatal_errors, errors);
+}
+
 static unsigned long long dmatest_persec(s64 runtime, unsigned int val)
 {
 	unsigned long long per_sec = 1000000;
@@ -583,7 +611,7 @@ static int dmatest_func(void *data)
 	struct dma_device	*dev;
 	struct device		*dma_dev;
 	unsigned int		error_count;
-	unsigned int		failed_tests = 0;
+	unsigned int		failed_tests = 0;	/* for this thread */
 	unsigned int		total_tests = 0;
 	dma_cookie_t		cookie;
 	enum dma_status		status;
@@ -755,6 +783,7 @@ static int dmatest_func(void *data)
 			failed_tests++;
 			result("unmap data NULL", total_tests,
 			       src->off, dst->off, len, ret);
+			dmatest_note_error(info);
 			continue;
 		}
 
@@ -910,6 +939,7 @@ static int dmatest_func(void *data)
 			result("data error", total_tests, src->off, dst->off,
 			       len, error_count);
 			failed_tests++;
+			dmatest_note_error(info);
 		} else {
 			verbose_result("test passed", total_tests, src->off,
 				       dst->off, len, 0);
@@ -920,6 +950,7 @@ static int dmatest_func(void *data)
 error_unmap_continue:
 		dmaengine_unmap_put(um);
 		failed_tests++;
+		dmatest_note_error(info);
 	}
 	ktime = ktime_sub(ktime_get(), ktime);
 	ktime = ktime_sub(ktime, comparetime);
@@ -1135,6 +1166,7 @@ static void add_threaded_test(struct dmatest_info *info)
 	params->alignment = alignment;
 	params->transfer_size = transfer_size;
 	params->polled = polled;
+	params->fatal_errors = fatal_errors;
 
 	request_channels(info, DMA_MEMCPY);
 	request_channels(info, DMA_MEMSET);
@@ -1146,6 +1178,8 @@ static void run_pending_tests(struct dmatest_info *info)
 {
 	struct dmatest_chan *dtc;
 	unsigned int thread_count = 0;
+
+	atomic_set(&info->error_count, 0);
 
 	list_for_each_entry(dtc, &info->channels, node) {
 		struct dmatest_thread *thread;
