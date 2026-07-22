@@ -2363,7 +2363,6 @@ static int btintel_pcie_setup_internal(struct hci_dev *hdev)
 			   INTEL_HW_VARIANT(ver_tlv.cnvi_bt));
 		err = -EINVAL;
 		goto exit_error;
-		break;
 	}
 
 	data->dmp_hdr.cnvi_top = ver_tlv.cnvi_top;
