@@ -616,11 +616,15 @@ check_if_vesa_backlight_possible(struct intel_dp *intel_dp)
 	u8 bit_min, bit_max;
 
 	/*
-	 * Since we only support Fully AUX Based VESA Backlight interface make sure
-	 * backlight enable is possible via AUX along with backlight adjustment
+	 * Brightness adjustment must be possible via AUX. Backlight *enable*
+	 * may come either via AUX (DP_EDP_BACKLIGHT_AUX_ENABLE_CAP) or via the
+	 * BL_ENABLE pin, which the VESA backlight code already supports by
+	 * falling back to the PWM funcs for enable when aux_enable is not set.
+	 * Some panels (e.g. Tianma Y156ZAN02.0 in the Google Pixel Slate)
+	 * support only that hybrid configuration and ignore the PWM pin for
+	 * brightness adjustment.
 	 */
-	if (!(intel_dp->edp_dpcd[1] & DP_EDP_BACKLIGHT_AUX_ENABLE_CAP &&
-	      intel_dp->edp_dpcd[2] & DP_EDP_BACKLIGHT_BRIGHTNESS_AUX_SET_CAP))
+	if (!(intel_dp->edp_dpcd[2] & DP_EDP_BACKLIGHT_BRIGHTNESS_AUX_SET_CAP))
 		return false;
 
 	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_EDP_PWMGEN_BIT_COUNT_CAP_MIN, &bit_min);
