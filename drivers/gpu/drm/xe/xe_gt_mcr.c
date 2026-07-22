@@ -10,6 +10,8 @@
 
 #include "regs/xe_gt_regs.h"
 #include "xe_assert.h"
+#include "xe_device.h"
+#include "xe_force_wake.h"
 #include "xe_gt_printk.h"
 #include "xe_gt_topology.h"
 #include "xe_gt_types.h"
@@ -57,6 +59,8 @@ enum {
 	MCR_OP_READ,
 	MCR_OP_WRITE
 };
+
+#define MCR_STEER_SEMAPHORE_TIMEOUT_US	100000
 
 static const struct xe_mmio_range xelp_l3bank_steering_table[] = {
 	{ 0x00B100, 0x00B3FF },
@@ -697,33 +701,58 @@ bool xe_gt_mcr_get_nonterminated_steering(struct xe_gt *gt,
  * to synchronize with external clients (e.g., firmware), so a semaphore
  * register will also need to be taken.
  */
-static void mcr_lock(struct xe_gt *gt) __acquires(&gt->mcr_lock)
+static unsigned int mcr_lock(struct xe_gt *gt) __acquires(&gt->mcr_lock)
 {
 	struct xe_device *xe = gt_to_xe(gt);
+	unsigned int fw_ref = 0;
 	int ret = 0;
 
-	spin_lock(&gt->mcr_lock);
+	might_sleep();
 
 	/*
 	 * Starting with MTL we also need to grab a semaphore register
 	 * to synchronize with external agents (e.g., firmware) that now
 	 * shares the same steering control register. The semaphore is obtained
 	 * when a read to the relevant register returns 1.
+	 *
+	 * The steering control and semaphore registers are inside an
+	 * "always on" power domain with respect to RC6.  However there
+	 * are some issues if higher-level platform sleep states are
+	 * entering/exiting at the same time these registers are accessed.
+	 * Grabbing GT forcewake and holding it over the entire
+	 * lock/steer/unlock cycle ensures that those sleep states have
+	 * fully exited before we access these registers, matching what
+	 * i915 does in intel_gt_mcr_lock().
+	 *
+	 * Wa_22018931422
 	 */
-	if (GRAPHICS_VERx100(xe) >= 1270)
-		ret = xe_mmio_wait32(&gt->mmio, STEER_SEMAPHORE, 0x1, 0x1, 10, NULL,
-				     true);
+	if (GRAPHICS_VERx100(xe) >= 1270) {
+		fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+		if (!xe_force_wake_ref_has_domain(fw_ref, XE_FW_GT))
+			xe_gt_err_ratelimited(gt, "failed to get MCR forcewake\n");
 
-	xe_gt_WARN_ON_ONCE(gt, ret == -ETIMEDOUT);
+		ret = xe_mmio_wait32(&gt->mmio, STEER_SEMAPHORE, 0x1, 0x1,
+				     MCR_STEER_SEMAPHORE_TIMEOUT_US, NULL,
+				     false);
+	}
+
+	spin_lock(&gt->mcr_lock);
+
+	if (ret == -ETIMEDOUT)
+		xe_gt_err_ratelimited(gt, "hardware MCR steering semaphore timed out\n");
+
+	return fw_ref;
 }
 
-static void mcr_unlock(struct xe_gt *gt) __releases(&gt->mcr_lock)
+static void mcr_unlock(struct xe_gt *gt, unsigned int fw_ref) __releases(&gt->mcr_lock)
 {
-	/* Release hardware semaphore - this is done by writing 1 to the register */
-	if (GRAPHICS_VERx100(gt_to_xe(gt)) >= 1270)
-		xe_mmio_write32(&gt->mmio, STEER_SEMAPHORE, 0x1);
-
 	spin_unlock(&gt->mcr_lock);
+
+	/* Release hardware semaphore - this is done by writing 1 to the register */
+	if (GRAPHICS_VERx100(gt_to_xe(gt)) >= 1270) {
+		xe_mmio_write32(&gt->mmio, STEER_SEMAPHORE, 0x1);
+		xe_force_wake_put(gt_to_fw(gt), fw_ref);
+	}
 }
 
 /*
@@ -812,10 +841,11 @@ u32 xe_gt_mcr_unicast_read_any(struct xe_gt *gt, struct xe_reg_mcr reg_mcr)
 						     &group, &instance);
 
 	if (steer) {
-		mcr_lock(gt);
+		unsigned int fw_ref = mcr_lock(gt);
+
 		val = rw_with_mcr_steering(gt, reg_mcr, MCR_OP_READ,
 					   group, instance, 0);
-		mcr_unlock(gt);
+		mcr_unlock(gt, fw_ref);
 	} else {
 		val = xe_mmio_read32(&gt->mmio, reg);
 	}
@@ -837,13 +867,14 @@ u32 xe_gt_mcr_unicast_read(struct xe_gt *gt,
 			   struct xe_reg_mcr reg_mcr,
 			   int group, int instance)
 {
+	unsigned int fw_ref;
 	u32 val;
 
 	xe_gt_assert(gt, !IS_SRIOV_VF(gt_to_xe(gt)));
 
-	mcr_lock(gt);
+	fw_ref = mcr_lock(gt);
 	val = rw_with_mcr_steering(gt, reg_mcr, MCR_OP_READ, group, instance, 0);
-	mcr_unlock(gt);
+	mcr_unlock(gt, fw_ref);
 
 	return val;
 }
@@ -862,11 +893,13 @@ u32 xe_gt_mcr_unicast_read(struct xe_gt *gt,
 void xe_gt_mcr_unicast_write(struct xe_gt *gt, struct xe_reg_mcr reg_mcr,
 			     u32 value, int group, int instance)
 {
+	unsigned int fw_ref;
+
 	xe_gt_assert(gt, !IS_SRIOV_VF(gt_to_xe(gt)));
 
-	mcr_lock(gt);
+	fw_ref = mcr_lock(gt);
 	rw_with_mcr_steering(gt, reg_mcr, MCR_OP_WRITE, group, instance, value);
-	mcr_unlock(gt);
+	mcr_unlock(gt, fw_ref);
 }
 
 /**
@@ -881,6 +914,7 @@ void xe_gt_mcr_multicast_write(struct xe_gt *gt, struct xe_reg_mcr reg_mcr,
 			       u32 value)
 {
 	struct xe_reg reg = to_xe_reg(reg_mcr);
+	unsigned int fw_ref;
 
 	xe_gt_assert(gt, !IS_SRIOV_VF(gt_to_xe(gt)));
 
@@ -889,9 +923,9 @@ void xe_gt_mcr_multicast_write(struct xe_gt *gt, struct xe_reg_mcr reg_mcr,
 	 * access, the MULTICAST bit should already be set, so there's no need
 	 * to touch the steering register.
 	 */
-	mcr_lock(gt);
+	fw_ref = mcr_lock(gt);
 	xe_mmio_write32(&gt->mmio, reg, value);
-	mcr_unlock(gt);
+	mcr_unlock(gt, fw_ref);
 }
 
 void xe_gt_mcr_steering_dump(struct xe_gt *gt, struct drm_printer *p)
