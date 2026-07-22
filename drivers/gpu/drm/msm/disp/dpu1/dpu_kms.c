@@ -627,21 +627,11 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 			return PTR_ERR(encoder);
 		}
 
-		rc = msm_dsi_modeset_init(priv->kms->dsi[i], dev, encoder);
-		if (rc) {
-			DPU_ERROR("modeset_init failed for dsi[%d], rc = %d\n",
-				i, rc);
-			break;
-		}
-
-		if (msm_dsi_is_bonded_dsi(priv->kms->dsi[i]) && priv->kms->dsi[other]) {
-			rc = msm_dsi_modeset_init(priv->kms->dsi[other], dev, encoder);
-			if (rc) {
-				DPU_ERROR("modeset_init failed for dsi[%d], rc = %d\n",
-					other, rc);
-				break;
-			}
-		}
+		/*
+		 * A bonded pair is driven by a single encoder; the connector
+		 * setup for both hosts is handled from common code later.
+		 */
+		priv->kms->dsi_encoder[i] = encoder;
 	}
 
 	return rc;
@@ -653,7 +643,6 @@ static int _dpu_kms_initialize_displayport(struct drm_device *dev,
 {
 	struct drm_encoder *encoder = NULL;
 	struct msm_display_info info;
-	int rc;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(priv->kms->dp); i++) {
@@ -671,11 +660,7 @@ static int _dpu_kms_initialize_displayport(struct drm_device *dev,
 			return PTR_ERR(encoder);
 		}
 
-		rc = msm_dp_modeset_init(priv->kms->dp[i], dev, encoder);
-		if (rc) {
-			DPU_ERROR("modeset_init failed for DP, rc = %d\n", rc);
-			return rc;
-		}
+		priv->kms->dp_encoder[i] = encoder;
 	}
 
 	return 0;
@@ -687,7 +672,6 @@ static int _dpu_kms_initialize_hdmi(struct drm_device *dev,
 {
 	struct drm_encoder *encoder = NULL;
 	struct msm_display_info info;
-	int rc;
 
 	if (!priv->kms->hdmi)
 		return 0;
@@ -703,11 +687,7 @@ static int _dpu_kms_initialize_hdmi(struct drm_device *dev,
 		return PTR_ERR(encoder);
 	}
 
-	rc = msm_hdmi_modeset_init(priv->kms->hdmi, dev, encoder);
-	if (rc) {
-		DPU_ERROR("modeset_init failed for DP, rc = %d\n", rc);
-		return rc;
-	}
+	priv->kms->hdmi_encoder = encoder;
 
 	return 0;
 }

@@ -140,10 +140,13 @@ struct msm_kms {
 	struct drm_device *dev;
 
 	struct hdmi *hdmi;
+	struct drm_encoder *hdmi_encoder;
 
 	struct msm_dsi *dsi[MSM_DSI_CONTROLLER_COUNT];
+	struct drm_encoder *dsi_encoder[MSM_DSI_CONTROLLER_COUNT];
 
 	struct msm_dp *dp[MSM_DP_CONTROLLER_COUNT];
+	struct drm_encoder *dp_encoder[MSM_DP_CONTROLLER_COUNT];
 
 	/* irq number to be passed on to msm_irq_install */
 	int irq;

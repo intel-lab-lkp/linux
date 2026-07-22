@@ -260,6 +260,57 @@ void msm_drm_kms_uninit(struct device *dev)
 		kms->funcs->destroy(kms);
 }
 
+/*
+ * Set up the bridges and connectors for the display sub-blocks, using the
+ * encoders the backend created in ->kms_init().
+ */
+static int msm_kms_init_connectors(struct drm_device *ddev)
+{
+	struct msm_drm_private *priv = ddev->dev_private;
+	struct msm_kms *kms = priv->kms;
+	int i, ret;
+
+	/*
+	 * The slave link of a bonded DSI pair shares its master's encoder and
+	 * creates no connector of its own; msm_dsi_modeset_init() handles that
+	 * internally, so it needs no special-casing here.
+	 */
+	for (i = 0; i < ARRAY_SIZE(kms->dsi); i++) {
+		if (!kms->dsi[i])
+			continue;
+
+		ret = msm_dsi_modeset_init(kms->dsi[i], ddev, kms->dsi_encoder[i]);
+		if (ret) {
+			DRM_DEV_ERROR(ddev->dev,
+				      "modeset_init failed for dsi[%d]: %d\n", i, ret);
+			return ret;
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(kms->dp); i++) {
+		if (!kms->dp[i])
+			continue;
+
+		ret = msm_dp_modeset_init(kms->dp[i], ddev, kms->dp_encoder[i]);
+		if (ret) {
+			DRM_DEV_ERROR(ddev->dev,
+				      "modeset_init failed for dp[%d]: %d\n", i, ret);
+			return ret;
+		}
+	}
+
+	if (kms->hdmi) {
+		ret = msm_hdmi_modeset_init(kms->hdmi, ddev, kms->hdmi_encoder);
+		if (ret) {
+			DRM_DEV_ERROR(ddev->dev,
+				      "modeset_init failed for HDMI: %d\n", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 int msm_drm_kms_init(struct device *dev, const struct drm_driver *drv)
 {
 	struct msm_drm_private *priv = dev_get_drvdata(dev);
@@ -297,6 +348,15 @@ int msm_drm_kms_init(struct device *dev, const struct drm_driver *drv)
 		DRM_DEV_ERROR(dev, "kms hw init failed: %d\n", ret);
 		goto err_msm_uninit;
 	}
+
+	/*
+	 * The backend created the encoders for each display sub-block in
+	 * ->hw_init(); now set up the bridges and connectors for them from
+	 * common code.
+	 */
+	ret = msm_kms_init_connectors(ddev);
+	if (ret)
+		goto err_msm_uninit;
 
 	drm_helper_move_panel_connectors_to_head(ddev);
 

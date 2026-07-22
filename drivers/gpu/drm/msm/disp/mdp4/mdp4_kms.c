@@ -243,14 +243,9 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 		/* DTV can be hooked to DMA_E: */
 		encoder->possible_crtcs = 1 << 1;
 
-		if (priv->kms->hdmi) {
-			/* Construct bridge/connector for HDMI: */
-			ret = msm_hdmi_modeset_init(priv->kms->hdmi, dev, encoder);
-			if (ret) {
-				DRM_DEV_ERROR(dev->dev, "failed to initialize HDMI: %d\n", ret);
-				return ret;
-			}
-		}
+		/* the bridge/connector for HDMI is set up from common code */
+		if (priv->kms->hdmi)
+			priv->kms->hdmi_encoder = encoder;
 
 		break;
 	case DRM_MODE_ENCODER_DSI:
@@ -271,12 +266,7 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 		/* TODO: Add DMA_S later? */
 		encoder->possible_crtcs = 1 << DMA_P;
 
-		ret = msm_dsi_modeset_init(priv->kms->dsi[dsi_id], dev, encoder);
-		if (ret) {
-			DRM_DEV_ERROR(dev->dev, "failed to initialize DSI: %d\n",
-				ret);
-			return ret;
-		}
+		priv->kms->dsi_encoder[dsi_id] = encoder;
 
 		break;
 	default:

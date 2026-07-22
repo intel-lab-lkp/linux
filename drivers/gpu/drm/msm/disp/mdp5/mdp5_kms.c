@@ -330,7 +330,7 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
 			break;
 		}
 
-		ret = msm_hdmi_modeset_init(priv->kms->hdmi, dev, encoder);
+		priv->kms->hdmi_encoder = encoder;
 		break;
 	case INTF_DSI:
 	{
@@ -360,10 +360,9 @@ static int modeset_init_intf(struct mdp5_kms *mdp5_kms,
 			break;
 		}
 
-		ret = msm_dsi_modeset_init(priv->kms->dsi[dsi_id], dev, encoder);
-		if (!ret)
-			mdp5_encoder_set_intf_mode(encoder,
-						   msm_dsi_is_cmd_mode(priv->kms->dsi[dsi_id]));
+		priv->kms->dsi_encoder[dsi_id] = encoder;
+		mdp5_encoder_set_intf_mode(encoder,
+					   msm_dsi_is_cmd_mode(priv->kms->dsi[dsi_id]));
 
 		break;
 	}
