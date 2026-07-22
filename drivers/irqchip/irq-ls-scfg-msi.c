@@ -139,30 +139,32 @@ static int ls_scfg_msi_domain_irq_alloc(struct irq_domain *domain,
 					unsigned int nr_irqs,
 					void *args)
 {
-	msi_alloc_info_t *info = args;
 	struct ls_scfg_msi *msi_data = domain->host_data;
-	int pos, err = 0;
+	int order = get_count_order(nr_irqs);
+	msi_alloc_info_t *info = args;
+	unsigned int i;
+	int pos, err;
 
 	WARN_ON(nr_irqs != 1);
 
-	spin_lock(&msi_data->lock);
-	pos = find_first_zero_bit(msi_data->used, msi_data->irqs_num);
-	if (pos < msi_data->irqs_num)
-		__set_bit(pos, msi_data->used);
-	else
-		err = -ENOSPC;
-	spin_unlock(&msi_data->lock);
+	scoped_guard(spinlock, &msi_data->lock)
+		pos = bitmap_find_free_region(msi_data->used, msi_data->irqs_num, order);
 
-	if (err)
-		return err;
+	if (pos < 0)
+		return pos;
 
 	err = iommu_dma_prepare_msi(info->desc, msi_data->msiir_addr);
-	if (err)
+	if (err) {
+		scoped_guard(spinlock, &msi_data->lock)
+			bitmap_release_region(msi_data->used, pos, order);
 		return err;
+	}
 
-	irq_domain_set_info(domain, virq, pos,
-			    &ls_scfg_msi_parent_chip, msi_data,
-			    handle_simple_irq, NULL, NULL);
+	for (i = 0; i < nr_irqs; i++) {
+		irq_domain_set_info(domain, virq + i, pos + i,
+				    &ls_scfg_msi_parent_chip, msi_data,
+				    handle_simple_irq, NULL, NULL);
+	}
 
 	return 0;
 }
@@ -172,17 +174,17 @@ static void ls_scfg_msi_domain_irq_free(struct irq_domain *domain,
 {
 	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
 	struct ls_scfg_msi *msi_data = irq_data_get_irq_chip_data(d);
+	int order = get_count_order(nr_irqs);
 	int pos;
 
 	pos = d->hwirq;
-	if (pos < 0 || pos >= msi_data->irqs_num) {
-		pr_err("failed to teardown msi. Invalid hwirq %d\n", pos);
+	if (pos < 0 || pos + nr_irqs > msi_data->irqs_num) {
+		pr_err("failed to teardown msi. Invalid hwirq %d nr %u\n", pos, nr_irqs);
 		return;
 	}
 
-	spin_lock(&msi_data->lock);
-	__clear_bit(pos, msi_data->used);
-	spin_unlock(&msi_data->lock);
+	scoped_guard(spinlock, &msi_data->lock)
+		bitmap_release_region(msi_data->used, pos, order);
 }
 
 static const struct irq_domain_ops ls_scfg_msi_domain_ops = {
