@@ -320,7 +320,6 @@ static int msm_kms_init_connectors(struct drm_device *ddev)
 
 	drm_for_each_encoder(encoder, ddev) {
 		struct drm_connector *connector;
-		int ret;
 
 		/* the virtual writeback encoder brings its own connector */
 		if (encoder->encoder_type == DRM_MODE_ENCODER_VIRTUAL)
@@ -333,10 +332,6 @@ static int msm_kms_init_connectors(struct drm_device *ddev)
 				      encoder->name, PTR_ERR(connector));
 			return PTR_ERR(connector);
 		}
-
-		/* The DP subconnector property applies to DisplayPort only. */
-		if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort)
-			drm_connector_attach_dp_subconnector_property(connector);
 	}
 
 	return 0;

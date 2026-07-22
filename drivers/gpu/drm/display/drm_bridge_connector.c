@@ -1089,6 +1089,10 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 	    IS_ENABLED(CONFIG_DRM_DISPLAY_HDCP_HELPER))
 		drm_connector_attach_content_protection_property(connector, true);
 
+	/* The DP subconnector property applies to DisplayPort only. */
+	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort)
+		drm_connector_attach_dp_subconnector_property(connector);
+
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret)
 		return ERR_PTR(ret);
