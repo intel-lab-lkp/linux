@@ -10,6 +10,7 @@ Scheduler
     membarrier
     sched-arch
     sched-bwc
+    sched-cache
     sched-deadline
     sched-design-CFS
     sched-eevdf
