@@ -938,6 +938,13 @@ def test_rss_context_persist_ifupdown(cfg, pre_down=False):
     ethtool(f"-X {cfg.ifname} equal 2")
     defer(ethtool, f"-X {cfg.ifname} default")
 
+    # IPv6 addresses are deleted on admin down and not restored on up
+    knob = f"net/ipv6/conf/{cfg.ifname}/keep_addr_on_down"
+    probe = cmd(f"sysctl -n {knob}", fail=False)
+    if probe.ret == 0:
+        cmd(f"sysctl -qw {knob}=1")
+        defer(cmd, f"sysctl -qw {knob}={probe.stdout.strip()}")
+
     ifup = defer(ip, f"link set dev {cfg.ifname} up")
     if pre_down:
         ip(f"link set dev {cfg.ifname} down")
