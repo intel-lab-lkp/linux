@@ -1404,7 +1404,8 @@ static void set_next_buddy(struct sched_entity *se);
  */
 #define EPOCH_PERIOD	(HZ / 100)	/* 10 ms */
 #define EPOCH_LLC_AFFINITY_TIMEOUT	5	/* 50 ms */
-__read_mostly unsigned int llc_aggr_tolerance	= 1;
+__read_mostly unsigned int llc_aggr_tolerance_nr	= 1;
+__read_mostly unsigned int llc_aggr_tolerance_size	= 1;
 __read_mostly unsigned int llc_epoch_period	= EPOCH_PERIOD;
 __read_mostly unsigned int llc_epoch_affinity_timeout = EPOCH_LLC_AFFINITY_TIMEOUT;
 __read_mostly unsigned int llc_imb_pct		= 20;
@@ -1418,10 +1419,8 @@ static int llc_id(int cpu)
 	return per_cpu(sd_llc_id, cpu);
 }
 
-static inline int get_sched_cache_scale(int mul)
+static inline int get_sched_cache_scale(unsigned int tol, int mul)
 {
-	unsigned int tol = READ_ONCE(llc_aggr_tolerance);
-
 	if (!tol)
 		return 0;
 
@@ -1453,23 +1452,23 @@ static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
 		footprint = READ_ONCE(mm->sc_stat.footprint);
 
 		/*
-		 * Scale the LLC size by 256*llc_aggr_tolerance
+		 * Scale the LLC size by 256*llc_aggr_tolerance_size
 		 * and compare it to the task's footprint.
 		 *
 		 * Suppose the L3 size is 32MB. If the
-		 * llc_aggr_tolerance is 1:
+		 * llc_aggr_tolerance_size is 1:
 		 * When the footprint is larger than 32MB, the
 		 * process is regarded as exceeding the LLC
-		 * capacity. If the llc_aggr_tolerance is 99:
+		 * capacity. If the llc_aggr_tolerance_size is 99:
 		 * When the footprint is larger than 784GB, the
 		 * process is regarded as exceeding the LLC
 		 * capacity:
 		 * 784GB = (1 + (99 - 1) * 256) * 32MB
-		 * If the llc_aggr_tolerance is 100:
+		 * If the llc_aggr_tolerance_size is 100:
 		 * ignore the footprint and do the aggregation
 		 * anyway.
 		 */
-		scale = get_sched_cache_scale(256);
+		scale = get_sched_cache_scale(READ_ONCE(llc_aggr_tolerance_size), 256);
 		if (scale == INT_MAX)
 			return false;
 
@@ -1488,10 +1487,10 @@ static bool invalid_llc_nr(struct mm_struct *mm, struct task_struct *p,
 		return true;
 
 	/*
-	 * Scale the number of 'cores' in a LLC by llc_aggr_tolerance
+	 * Scale the number of 'cores' in a LLC by llc_aggr_tolerance_nr
 	 * and compare it to the task's active threads.
 	 */
-	scale = get_sched_cache_scale(1);
+	scale = get_sched_cache_scale(READ_ONCE(llc_aggr_tolerance_nr), 1);
 	if (scale == INT_MAX)
 		return false;
 
@@ -10418,20 +10417,34 @@ static inline int task_is_ineligible_on_dst_cpu(struct task_struct *p, int dest_
  * done.
  * Derived from fits_capacity().
  *
+ * llc_overaggr_pct is an unbounded debugfs u32 and CONFIG_SCHED_CACHE
+ * only depends on SMP, so max * aggr_pct can wrap on 32-bit. A
+ * threshold large enough to overflow is effectively unlimited: the
+ * LLC always has room, so treat that as "fits" rather than letting
+ * the multiplication wrap.
+ *
  * (default: ~50%, tunable via debugfs)
  */
 static bool fits_llc_capacity(unsigned long util, unsigned long max)
 {
-	u32 aggr_pct = llc_overaggr_pct;
+	u32 aggr_pct = READ_ONCE(llc_overaggr_pct);
+	unsigned long thresh;
+	u32 bumped;
 
 	/*
 	 * For single core systems, raise the aggregation
 	 * threshold to accommodate more tasks.
 	 */
-	if (cpu_smt_num_threads == 1)
-		aggr_pct = (aggr_pct * 3 / 2);
+	if (cpu_smt_num_threads == 1) {
+		if (check_mul_overflow(aggr_pct, 3U, &bumped))
+			return true;
+		aggr_pct = bumped / 2;
+	}
 
-	return util * 100 < max * aggr_pct;
+	if (check_mul_overflow(max, (unsigned long)aggr_pct, &thresh))
+		return true;
+
+	return util * 100 < thresh;
 }
 
 /*
@@ -10439,10 +10452,23 @@ static bool fits_llc_capacity(unsigned long util, unsigned long max)
  * is 'util1' noticeably greater than 'util2'
  * Derived from capacity_greater().
  * Bias is in perentage.
+ *
+ * Allows dst util to be bigger than src util by up to bias percent.
+ * llc_imb_pct is an unbounded debugfs u32; a bias large enough to
+ * overflow util2 * (100 + llc_imb_pct) is effectively infinite, so
+ * util1 is never noticeably greater - treat that as "not greater"
+ * rather than letting the multiplication wrap.
  */
-/* Allows dst util to be bigger than src util by up to bias percent */
-#define util_greater(util1, util2) \
-	((util1) * 100 > (util2) * (100 + llc_imb_pct))
+static bool util_greater(unsigned long util1, unsigned long util2)
+{
+	unsigned long bias, rhs;
+
+	if (check_add_overflow(100UL, (unsigned long)READ_ONCE(llc_imb_pct), &bias) ||
+	    check_mul_overflow(util2, bias, &rhs))
+		return false;
+
+	return util1 * 100 > rhs;
+}
 
 static __maybe_unused bool get_llc_stats(int cpu, unsigned long *util,
 					 unsigned long *cap)
