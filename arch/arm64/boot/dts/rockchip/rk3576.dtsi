@@ -1314,6 +1314,56 @@
 			#iommu-cells = <0>;
 		};
 
+		vepu0: video-codec@27a00000 {
+			compatible = "rockchip,rk3576-vepu";
+			reg = <0x0 0x27a00000 0x0 0x6000>;
+			interrupts = <GIC_SPI 310 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cru ACLK_VEPU0>, <&cru HCLK_VEPU0>, <&cru CLK_VEPU0_CORE>;
+			clock-names = "aclk_vcodec", "hclk_vcodec", "clk_core";
+			assigned-clocks = <&cru ACLK_VEPU0>, <&cru CLK_VEPU0_CORE>;
+			assigned-clock-rates = <400000000>, <702000000>;
+			resets = <&cru SRST_A_VEPU0>, <&cru SRST_H_VEPU0>, <&cru SRST_VEPU0_CORE>;
+			reset-names = "video_a", "video_h", "video_core";
+			power-domains = <&power RK3576_PD_VEPU0>;
+			iommus = <&vepu0_mmu>;
+		};
+
+		vepu0_mmu: iommu@27a0f000 {
+			compatible = "rockchip,rk3576-iommu", "rockchip,rk3568-iommu";
+			reg = <0x0 0x27a0f000 0x0 0x40>;
+			interrupts = <GIC_SPI 311 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cru ACLK_VEPU0>, <&cru HCLK_VEPU0>;
+			clock-names = "aclk", "iface";
+			power-domains = <&power RK3576_PD_VEPU0>;
+			rockchip,disable-mmu-reset;
+			#iommu-cells = <0>;
+		};
+
+		vepu1: video-codec@27a10000 {
+			compatible = "rockchip,rk3576-vepu";
+			reg = <0x0 0x27a10000 0x0 0x6000>;
+			interrupts = <GIC_SPI 387 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cru ACLK_VEPU1>, <&cru HCLK_VEPU1>, <&cru CLK_VEPU1_CORE>;
+			clock-names = "aclk_vcodec", "hclk_vcodec", "clk_core";
+			assigned-clocks = <&cru ACLK_VEPU1>, <&cru CLK_VEPU1_CORE>;
+			assigned-clock-rates = <400000000>, <702000000>;
+			resets = <&cru SRST_A_VEPU1>, <&cru SRST_H_VEPU1>, <&cru SRST_VEPU1_CORE>;
+			reset-names = "video_a", "video_h", "video_core";
+			power-domains = <&power RK3576_PD_VEPU1>;
+			iommus = <&vepu1_mmu>;
+		};
+
+		vepu1_mmu: iommu@27a1f000 {
+			compatible = "rockchip,rk3576-iommu", "rockchip,rk3568-iommu";
+			reg = <0x0 0x27a1f000 0x0 0x40>;
+			interrupts = <GIC_SPI 388 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cru ACLK_VEPU1>, <&cru HCLK_VEPU1>;
+			clock-names = "aclk", "iface";
+			power-domains = <&power RK3576_PD_VEPU1>;
+			rockchip,disable-mmu-reset;
+			#iommu-cells = <0>;
+		};
+
 		vop: vop@27d00000 {
 			compatible = "rockchip,rk3576-vop";
 			reg = <0x0 0x27d00000 0x0 0x3000>, <0x0 0x27d05000 0x0 0x1000>;
