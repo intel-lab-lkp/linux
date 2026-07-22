@@ -2908,10 +2908,8 @@ static int svs_probe(struct platform_device *pdev)
 
 	ret = devm_request_threaded_irq(svsp->dev, svsp_irq, NULL, svs_isr,
 					IRQF_ONESHOT, svsp_data->name, svsp);
-	if (ret) {
-		dev_err_probe(svsp->dev, ret, "register irq(%d) failed\n", svsp_irq);
+	if (ret)
 		goto svs_probe_iounmap;
-	}
 
 	ret = svs_start(svsp);
 	if (ret) {
