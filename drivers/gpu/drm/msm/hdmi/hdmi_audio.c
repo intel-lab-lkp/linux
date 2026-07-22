@@ -19,7 +19,7 @@ int msm_hdmi_audio_update(struct hdmi *hdmi)
 	bool enabled = audio->enabled;
 	u32 acr_pkt_ctrl, vbi_pkt_ctrl, aud_pkt_ctrl, audio_config;
 
-	if (!hdmi->connector->display_info.is_hdmi)
+	if (!hdmi->is_hdmi)
 		return -EINVAL;
 
 	DBG("audio: enabled=%d, channels=%d, rate=%d",

@@ -47,6 +47,9 @@ struct hdmi {
 	struct mutex state_mutex; /* protects two booleans */
 	unsigned long pixclock;
 
+	/* cached from the connector's EDID, updated on hotplug */
+	bool is_hdmi;
+
 	void __iomem *mmio;
 	phys_addr_t mmio_size;
 	void __iomem *qfprom_mmio;
@@ -62,7 +65,6 @@ struct hdmi {
 	struct device *phy_dev;
 
 	struct i2c_adapter *i2c;
-	struct drm_connector *connector;
 	struct drm_bridge *bridge;
 
 	struct drm_bridge *next_bridge;

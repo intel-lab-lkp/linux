@@ -27,7 +27,7 @@ void msm_hdmi_set_mode(struct hdmi *hdmi, bool power_on)
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
 	if (power_on) {
 		ctrl |= HDMI_CTRL_ENABLE;
-		if (!hdmi->connector->display_info.is_hdmi) {
+		if (!hdmi->is_hdmi) {
 			ctrl |= HDMI_CTRL_HDMI;
 			hdmi_write(hdmi, REG_HDMI_CTRL, ctrl);
 			ctrl &= ~HDMI_CTRL_HDMI;
@@ -164,6 +164,7 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 		struct drm_device *dev, struct drm_encoder *encoder)
 {
 	struct hdmi *hdmi = container_of(display, struct hdmi, display);
+	struct drm_connector *connector = NULL;
 	int ret;
 
 	hdmi->dev = dev;
@@ -184,11 +185,11 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 		}
 	}
 
-	hdmi->connector = drm_bridge_connector_init(hdmi->dev, encoder);
-	if (IS_ERR(hdmi->connector)) {
-		ret = PTR_ERR(hdmi->connector);
+	connector = drm_bridge_connector_init(hdmi->dev, encoder);
+	if (IS_ERR(connector)) {
+		ret = PTR_ERR(connector);
 		DRM_DEV_ERROR(dev->dev, "failed to create HDMI connector: %d\n", ret);
-		hdmi->connector = NULL;
+		connector = NULL;
 		goto fail;
 	}
 
@@ -204,10 +205,8 @@ static int msm_hdmi_modeset_init(struct msm_display *display,
 	return 0;
 
 fail:
-	if (hdmi->connector) {
-		hdmi->connector->funcs->destroy(hdmi->connector);
-		hdmi->connector = NULL;
-	}
+	if (connector)
+		connector->funcs->destroy(connector);
 
 	return ret;
 }
