@@ -135,27 +135,43 @@ parse_field(char *str, struct trace_event_call *call,
 	return -EINVAL;
 }
 
-static int trace_get_entry_size(struct trace_event_call *call)
+static int trace_get_entry_size(struct trace_event_call *call, int *entry_size)
 {
 	struct ftrace_event_field *field;
 	struct list_head *head;
-	int size = 0;
+	int field_size;
+	int size = sizeof(struct trace_entry);
 
 	head = trace_get_fields(call);
 	list_for_each_entry(field, head, link) {
-		if (field->size + field->offset > size)
-			size = field->size + field->offset;
+		if (field->offset < 0 || field->size < 0 ||
+		    field->size > INT_MAX - field->offset)
+			return -E2BIG;
+
+		field_size = field->size + field->offset;
+		if (field_size > size)
+			size = field_size;
 	}
 
-	return size;
+	/* trace_alloc_entry() reserves an extra NUL byte. */
+	if (size == INT_MAX)
+		return -E2BIG;
+
+	*entry_size = size;
+	return 0;
 }
 
 static void *trace_alloc_entry(struct trace_event_call *call, int *size)
 {
-	int entry_size = trace_get_entry_size(call);
+	int entry_size;
 	struct ftrace_event_field *field;
 	struct list_head *head;
 	void *entry = NULL;
+	int ret;
+
+	ret = trace_get_entry_size(call, &entry_size);
+	if (ret)
+		return ERR_PTR(ret);
 
 	/* We need an extra '\0' at the end. */
 	entry = kzalloc(entry_size + 1, GFP_KERNEL);
@@ -202,6 +218,9 @@ static int parse_entry(char *str, struct trace_event_call *call, void **pentry)
 	int len;
 
 	entry = trace_alloc_entry(call, &entry_size);
+	if (IS_ERR(entry))
+		return PTR_ERR(entry);
+
 	*pentry = entry;
 	if (!entry)
 		return -ENOMEM;
