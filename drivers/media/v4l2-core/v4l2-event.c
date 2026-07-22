@@ -18,6 +18,9 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 
+/* Per-filehandle limit on the number of event subscriptions. */
+#define V4L2_MAX_EVENT_SUBSCRIPTIONS	256
+
 static unsigned int sev_pos(const struct v4l2_subscribed_event *sev, unsigned int idx)
 {
 	idx += sev->first;
@@ -218,6 +221,7 @@ static void __v4l2_event_unsubscribe(struct v4l2_subscribed_event *sev)
 		fh->navailable--;
 	}
 	list_del(&sev->list);
+	fh->nsubscribed--;
 }
 
 int v4l2_event_subscribe(struct v4l2_fh *fh,
@@ -251,8 +255,16 @@ int v4l2_event_subscribe(struct v4l2_fh *fh,
 
 	spin_lock_irqsave(&fh->vdev->fh_lock, flags);
 	found_ev = v4l2_event_subscribed(fh, sub->type, sub->id);
-	if (!found_ev)
+	if (!found_ev) {
+		if (fh->nsubscribed >= V4L2_MAX_EVENT_SUBSCRIPTIONS) {
+			spin_unlock_irqrestore(&fh->vdev->fh_lock, flags);
+			kvfree(sev);
+			mutex_unlock(&fh->subscribe_lock);
+			return -ENOSPC;
+		}
 		list_add(&sev->list, &fh->subscribed);
+		fh->nsubscribed++;
+	}
 	spin_unlock_irqrestore(&fh->vdev->fh_lock, flags);
 
 	if (found_ev) {

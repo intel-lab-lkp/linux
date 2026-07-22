@@ -33,6 +33,7 @@ struct v4l2_ctrl_handler;
  * @subscribe_lock: serialise changes to the subscribed list; guarantee that
  *		    the add and del event callbacks are orderly called
  * @subscribed: list of subscribed events
+ * @nsubscribed: number of subscribed events at @subscribed list
  * @available: list of events waiting to be dequeued
  * @navailable: number of available events at @available list
  * @sequence: event sequence number
@@ -49,6 +50,7 @@ struct v4l2_fh {
 	wait_queue_head_t	wait;
 	struct mutex		subscribe_lock;
 	struct list_head	subscribed;
+	unsigned int		nsubscribed;
 	struct list_head	available;
 	unsigned int		navailable;
 	u32			sequence;
