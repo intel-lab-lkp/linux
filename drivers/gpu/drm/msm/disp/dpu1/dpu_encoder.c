@@ -666,12 +666,12 @@ bool dpu_encoder_use_dsc_merge(struct drm_encoder *drm_enc)
  */
 struct drm_dsc_config *dpu_encoder_get_dsc_config(struct drm_encoder *drm_enc)
 {
-	struct msm_drm_private *priv = drm_enc->dev->dev_private;
 	struct dpu_encoder_virt *dpu_enc = to_dpu_encoder_virt(drm_enc);
-	int index = dpu_enc->disp_info.h_tile_instance[0];
+	struct msm_display *display = dpu_encoder_get_display(drm_enc->dev,
+							     &dpu_enc->disp_info);
 
-	if (dpu_enc->disp_info.intf_type == INTF_DSI)
-		return msm_dsi_get_dsc_config(priv->kms->dsi[index]);
+	if (display)
+		return display->funcs->get_dsc_config(display);
 
 	return NULL;
 }
