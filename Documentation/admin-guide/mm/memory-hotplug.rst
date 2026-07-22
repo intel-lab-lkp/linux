@@ -224,7 +224,10 @@ increases memory offlining reliability; still, memory offlining can fail in
 some corner cases.
 
 Further, memory offlining might retry for a long time (or even forever), until
-aborted by the user.
+aborted by the user.  The ``memory_hotplug.offline_migrate_max_passes``
+parameter can be used to bound the number of retry passes, making an offline
+request that cannot make progress fail with ``-EBUSY`` instead of retrying
+indefinitely (see `Module Parameters`_).
 
 Offlining of a memory block can be triggered via::
 
@@ -547,6 +550,27 @@ The following module parameters are currently defined:
 				 possible.
 
 				 Parameter availability depends on CONFIG_NUMA.
+``offline_migrate_max_passes``	 read-write: Maximum number of migration
+				 passes for a single memory offline
+				 request.  Memory offlining retries to
+				 migrate and isolate pages until it succeeds;
+				 a page that can never be migrated or freed
+				 makes it retry forever.  When this parameter
+				 is non-zero, an offline request gives up
+				 with ``-EBUSY`` after the configured number
+				 of migration passes and the memory block
+				 stays online.
+
+				 The parameter is re-read on every pass, so
+				 an offline request that is already stuck
+				 retrying can be rescued at runtime by
+				 writing a non-zero value, without a reboot.
+
+				 The default is "0", meaning no limit (the
+				 historical behaviour).
+
+				 Parameter availability depends on
+				 CONFIG_MEMORY_HOTREMOVE.
 ================================ ===============================================
 
 ZONE_MOVABLE

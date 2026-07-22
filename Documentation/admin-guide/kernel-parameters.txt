@@ -3980,6 +3980,20 @@ Kernel parameters
 			Note that even when enabled, there are a few cases where
 			the feature is not effective.
 
+	memory_hotplug.offline_migrate_max_passes=
+			[KNL] Maximum number of migration passes
+			for memory offlining.
+			Format: <integer>
+			default: 0 (no limit, historical behaviour)
+			When non-zero, memory offlining gives up with
+			-EBUSY after this many migration passes over
+			the range, instead of retrying forever on a
+			stuck page.  Each pass scans the range and
+			migrates what it can.
+			The parameter is re-read on every pass, so an
+			offline request that is already stuck can be
+			rescued at runtime by writing the parameter.
+
 	memtest=	[KNL,X86,ARM,M68K,PPC,RISCV,EARLY] Enable memtest
 			Format: <integer>
 			default : 0 <disable>

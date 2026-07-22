@@ -1785,6 +1785,12 @@ bool mhp_range_allowed(u64 start, u64 size, bool need_mapping)
 }
 
 #ifdef CONFIG_MEMORY_HOTREMOVE
+/* Max offline_pages() migration passes before -EBUSY; 0 = retry forever. */
+static unsigned int offline_migrate_max_passes __read_mostly;
+module_param(offline_migrate_max_passes, uint, 0644);
+MODULE_PARM_DESC(offline_migrate_max_passes,
+	"Max migration passes before memory offline gives up (0 = no limit)");
+
 /*
  * Scan pfn range [start,end) to find movable/migratable pages (LRU and
  * hugetlb folio, movable_ops pages). Will skip over most unmovable
@@ -1966,6 +1972,8 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	struct node_notify node_arg = {
 		.nid = NUMA_NO_NODE,
 	};
+	unsigned int max_passes;
+	unsigned int pass = 0;
 	unsigned long flags;
 	char *reason;
 	int ret;
@@ -2059,6 +2067,36 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 			if (signal_pending(current)) {
 				ret = -EINTR;
 				reason = "signal backoff";
+				goto failed_removal_isolated;
+			}
+
+			/*
+			 * A page that can never be migrated (e.g. a
+			 * long-term pin) makes this loop retry forever.
+			 * Give up after the configured number of passes.
+			 * The limit is re-read on every pass so that an
+			 * offline request that is already stuck here can
+			 * be aborted at runtime by writing the parameter,
+			 * which matters for in-kernel callers (e.g. ACPI
+			 * DIMM hot-unplug) that run on kworkers and can
+			 * never be aborted by a signal.
+			 */
+			max_passes = READ_ONCE(offline_migrate_max_passes);
+			if (max_passes && pass++ >= max_passes) {
+				pr_warn("memory offlining [mem %#010llx-%#010llx]: giving up after %u passes\n",
+					(unsigned long long)start_pfn << PAGE_SHIFT,
+					((unsigned long long)end_pfn << PAGE_SHIFT) - 1,
+					pass - 1);
+				/*
+				 * Dump the page we last stopped at as a
+				 * diagnostic hint: usually the stuck page,
+				 * but just the range start after a restart.
+				 */
+				if (pfn >= start_pfn && pfn < end_pfn)
+					dump_page(pfn_to_page(pfn),
+						  "memory offline retry limit");
+				ret = -EBUSY;
+				reason = "retry limit exceeded";
 				goto failed_removal_isolated;
 			}
 
