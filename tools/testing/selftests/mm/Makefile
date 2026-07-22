@@ -177,6 +177,9 @@ TEST_PROGS += ksft_vmalloc.sh
 # Destructive: every successful run panics the kernel.  Installed and
 # kept executable, but not run from a default kselftest invocation.
 TEST_PROGS_EXTENDED += hwpoison-panic.sh
+# Spawns its own VM (virtme-ng); not run from a default kselftest
+# invocation.
+TEST_PROGS_EXTENDED += vmtest_memory_hotplug.sh
 
 TEST_FILES := test_vmalloc.sh
 TEST_FILES += test_hmm.sh
