@@ -285,6 +285,7 @@ struct msm_disp_state;
  *                mandatory.
  * @wide_bus_enabled: whether the sub-block drives a wide (2 pixel/clock) bus;
  *                    mandatory.
+ * @needs_periph_flush: whether @mode requires a peripheral flush; mandatory.
  */
 struct msm_display_funcs {
 	int (*modeset_init)(struct msm_display *display, struct drm_device *dev,
@@ -292,6 +293,8 @@ struct msm_display_funcs {
 	void (*snapshot)(struct msm_display *display,
 			 struct msm_disp_state *disp_state);
 	bool (*wide_bus_enabled)(struct msm_display *display);
+	bool (*needs_periph_flush)(struct msm_display *display,
+				   const struct drm_display_mode *mode);
 };
 
 /**
@@ -372,8 +375,6 @@ struct msm_dp;
 int __init msm_dp_register(void);
 void __exit msm_dp_unregister(void);
 struct msm_display *msm_dp_get_display(struct msm_dp *dp_display);
-bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
-			       const struct drm_display_mode *mode);
 
 #else
 static inline int __init msm_dp_register(void)
@@ -386,12 +387,6 @@ static inline void __exit msm_dp_unregister(void)
 static inline struct msm_display *msm_dp_get_display(struct msm_dp *dp_display)
 {
 	return NULL;
-}
-
-static inline bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
-					     const struct drm_display_mode *mode)
-{
-	return false;
 }
 
 #endif

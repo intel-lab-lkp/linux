@@ -246,29 +246,6 @@ u32 dpu_encoder_get_drm_fmt(struct dpu_encoder_phys *phys_enc)
 }
 
 /**
- * dpu_encoder_needs_periph_flush - return true if physical encoder requires
- *	peripheral flush
- * @phys_enc: Pointer to physical encoder structure
- */
-bool dpu_encoder_needs_periph_flush(struct dpu_encoder_phys *phys_enc)
-{
-	struct drm_encoder *drm_enc;
-	struct dpu_encoder_virt *dpu_enc;
-	struct msm_display_info *disp_info;
-	struct msm_drm_private *priv;
-	struct drm_display_mode *mode;
-
-	drm_enc = phys_enc->parent;
-	dpu_enc = to_dpu_encoder_virt(drm_enc);
-	disp_info = &dpu_enc->disp_info;
-	priv = drm_enc->dev->dev_private;
-	mode = &phys_enc->cached_mode;
-
-	return phys_enc->hw_intf->cap->type == INTF_DP &&
-	       msm_dp_needs_periph_flush(priv->kms->dp[disp_info->h_tile_instance[0]], mode);
-}
-
-/**
  * dpu_encoder_get_display - find the display sub-block driving an interface
  * @dev:        the DRM device
  * @disp_info:  the interface description
@@ -292,6 +269,32 @@ static struct msm_display *dpu_encoder_get_display(struct drm_device *dev,
 	default:
 		return NULL;
 	}
+}
+
+/**
+ * dpu_encoder_needs_periph_flush - return true if physical encoder requires
+ *	peripheral flush
+ * @phys_enc: Pointer to physical encoder structure
+ */
+bool dpu_encoder_needs_periph_flush(struct dpu_encoder_phys *phys_enc)
+{
+	struct drm_encoder *drm_enc;
+	struct dpu_encoder_virt *dpu_enc;
+	struct msm_display_info *disp_info;
+	struct drm_display_mode *mode;
+	struct msm_display *display;
+
+	drm_enc = phys_enc->parent;
+	dpu_enc = to_dpu_encoder_virt(drm_enc);
+	disp_info = &dpu_enc->disp_info;
+	mode = &phys_enc->cached_mode;
+
+	display = dpu_encoder_get_display(drm_enc->dev, disp_info);
+
+	if (display)
+		return display->funcs->needs_periph_flush(display, mode);
+
+	return false;
 }
 
 /**
