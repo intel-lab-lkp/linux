@@ -832,6 +832,14 @@ int fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
 		error = get_dprc_icid(mc_io2, obj_desc->id, &mc_dev->icid);
 		if (error < 0)
 			goto error_cleanup_dev;
+
+		/*
+		 * Seed dma_mask so platforms without an SMMU don't complain
+		 * with "DMA mask not set" in of_dma_configure_id().
+		 */
+		mc_dev->dma_mask = FSL_MC_DEFAULT_DMA_MASK;
+		mc_dev->dev.dma_mask = &mc_dev->dma_mask;
+		mc_dev->dev.coherent_dma_mask = mc_dev->dma_mask;
 	} else {
 		/*
 		 * A non-DPRC object has to be a child of a DPRC, use the
