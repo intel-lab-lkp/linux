@@ -77,11 +77,14 @@ static int __init init_gfs2_fs(void)
 
 	gfs2_str2qstr(&gfs2_qdot, ".");
 	gfs2_str2qstr(&gfs2_qdotdot, "..");
-	gfs2_quota_hash_init();
+
+	error = gfs2_quota_hash_init();
+	if (error)
+		return error;
 
 	error = gfs2_sys_init();
 	if (error)
-		return error;
+		goto fail_sys;
 
 	error = list_lru_init(&gfs2_qd_lru);
 	if (error)
@@ -217,6 +220,8 @@ fail_glock:
 	list_lru_destroy(&gfs2_qd_lru);
 fail_lru:
 	gfs2_sys_uninit();
+fail_sys:
+	gfs2_quota_hash_exit();
 	return error;
 }
 
@@ -250,6 +255,7 @@ static void __exit exit_gfs2_fs(void)
 	kmem_cache_destroy(gfs2_glock_cachep);
 
 	gfs2_sys_uninit();
+	gfs2_quota_hash_exit();
 }
 
 MODULE_DESCRIPTION("Global File System");

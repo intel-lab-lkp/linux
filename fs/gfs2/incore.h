@@ -440,14 +440,18 @@ enum {
 	QDF_QMSG_QUIET          = 4,
 };
 
-struct gfs2_quota_data {
-	struct hlist_bl_node qd_hlist;
-	struct list_head qd_list;
-	struct kqid qd_id;
+/* rhashtable key, hashed by value; keep it free of padding. */
+struct gfs2_qd_hash_key {
 	struct gfs2_sbd *qd_sbd;
+	struct kqid qd_id;
+};
+
+struct gfs2_quota_data {
+	struct rhash_head qd_node;
+	struct gfs2_qd_hash_key qd_key;
+	struct list_head qd_list;
 	struct lockref qd_lockref;
 	struct list_head qd_lru;
-	unsigned qd_hash;
 
 	unsigned long qd_flags;		/* QDF_... */
 

@@ -63,6 +63,7 @@ int __init gfs2_qd_shrinker_init(void);
 void gfs2_qd_shrinker_exit(void);
 extern struct list_lru gfs2_qd_lru;
 
-void __init gfs2_quota_hash_init(void);
+int __init gfs2_quota_hash_init(void);
+void gfs2_quota_hash_exit(void);
 
 #endif /* __QUOTA_DOT_H__ */
