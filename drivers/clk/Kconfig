@@ -448,6 +448,12 @@ config COMMON_CLK_STM32H7
 	help
 	  Support for stm32h7 SoC family clocks
 
+config COMMON_CLK_STM32H7RS
+	def_bool COMMON_CLK && MACH_STM32H7R7
+	select RESET_SIMPLE
+	help
+	  Support for STM32H7RS SoC family clocks
+
 config COMMON_CLK_MMP2
 	def_bool COMMON_CLK && (MACH_MMP2_DT || MACH_MMP3_DT)
 	help
