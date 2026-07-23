@@ -396,6 +396,47 @@ static bool dw_edma_ll_consume_progress(struct dw_edma_chan *chan)
 	return true;
 }
 
+static bool dw_edma_ll_has_hdma_stop_event(struct dw_edma_chan *chan)
+{
+	return chan->dw->chip->mf == EDMA_MF_HDMA_NATIVE;
+}
+
+/*
+ * Must be called with vc.lock held. A DONE-time DMA_LLP sample may miss
+ * the final burst element. For the legacy interrupt interface, accept a
+ * fresh LLP sample only when status is STOPPED and transfer size is zero.
+ * Native HDMA reports STOP directly.
+ */
+static bool dw_edma_ll_reconcile_and_refill(struct dw_edma_chan *chan)
+{
+	u32 old_done;
+	int idx;
+
+	if (dw_edma_core_ch_status(chan) != DMA_COMPLETE)
+		return false;
+
+	/* Native HDMA reports STOP directly, without a transfer-size check. */
+	if (!dw_edma_ll_has_hdma_stop_event(chan) &&
+	    dw_edma_core_ch_transfer_size(chan) != 0)
+		return false;
+
+	idx = dw_edma_ll_recycle_idx(chan, dw_edma_core_ll_cur_idx(chan),
+				     true);
+	if (idx < 0)
+		return false;
+
+	if (!dw_edma_ll_advance(chan, idx, &old_done))
+		return false;
+
+	dw_edma_ll_irq_idx_discard(chan);
+	dw_edma_ll_clean_pending(chan, old_done);
+	dw_edma_start_transfer(chan);
+	chan->status = dw_edma_ll_pending(chan) ?
+		       EDMA_ST_BUSY : EDMA_ST_IDLE;
+
+	return true;
+}
+
 /* Must be called with vc.lock held. */
 static void dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 {
@@ -408,6 +449,10 @@ static void dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 	 * elements without another doorbell.
 	 */
 	if (dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS)
+		return;
+
+	dw_edma_ll_reconcile_and_refill(chan);
+	if (!dw_edma_ll_pending(chan))
 		return;
 
 	dw_edma_core_ch_doorbell(chan);
