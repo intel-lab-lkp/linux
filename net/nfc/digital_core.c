@@ -843,8 +843,8 @@ void nfc_digital_unregister_device(struct nfc_digital_dev *ddev)
 	mutex_unlock(&ddev->poll_lock);
 
 	cancel_delayed_work_sync(&ddev->poll_work);
-	cancel_work_sync(&ddev->cmd_work);
-	cancel_work_sync(&ddev->cmd_complete_work);
+	disable_work_sync(&ddev->cmd_work);
+	disable_work_sync(&ddev->cmd_complete_work);
 
 	list_for_each_entry_safe(cmd, n, &ddev->cmd_queue, queue) {
 		list_del(&cmd->queue);
