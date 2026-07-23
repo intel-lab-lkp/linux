@@ -9,6 +9,7 @@
  */
 
 #include <linux/fsnotify_backend.h>
+#include <linux/ktime.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 
@@ -26,12 +27,22 @@ struct ksmbd_notify_mark {
 	struct ksmbd_notify *notify;
 };
 
+struct ksmbd_notify_event {
+	struct list_head list;
+	u32 action;
+	u64 when;
+	size_t name_len;
+	char name[];
+};
+
 struct ksmbd_notify {
 	struct fsnotify_group *group;
 	struct fsnotify_mark *mark;
 	struct ksmbd_file *fp;
 	/* Protects filter, rename state and the queued events. */
 	spinlock_t lock;
+	struct list_head events;
+	unsigned int num_events;
 	u32 filter;
 	u32 mask;
 	u32 max_buffer_size;
@@ -43,6 +54,8 @@ struct ksmbd_notify_req {
 
 #define KSMBD_NOTIFY_NAME_EVENT_MASK	(FS_CREATE | FS_DELETE | \
 					 FS_MOVED_FROM | FS_MOVED_TO)
+#define KSMBD_NOTIFY_EVENT_MASK		(FS_ATTRIB | FS_MODIFY | \
+					 KSMBD_NOTIFY_NAME_EVENT_MASK)
 
 static const struct {
 	u32 notify_mask;
@@ -77,12 +90,78 @@ static u32 ksmbd_notify_map(u32 filter)
 	return mask;
 }
 
+static void ksmbd_notify_free_events(struct list_head *events)
+{
+	struct ksmbd_notify_event *event, *tmp;
+
+	list_for_each_entry_safe(event, tmp, events, list) {
+		list_del(&event->list);
+		kfree(event);
+	}
+}
+
+static bool ksmbd_notify_filter_match(struct ksmbd_notify *notify, u32 mask)
+{
+	u32 filter, notify_mask;
+
+	spin_lock(&notify->lock);
+	filter = notify->filter;
+	notify_mask = notify->mask;
+	spin_unlock(&notify->lock);
+
+	if (mask & KSMBD_NOTIFY_NAME_EVENT_MASK) {
+		if (mask & FS_ISDIR)
+			return filter & FILE_NOTIFY_CHANGE_DIR_NAME;
+		return filter & FILE_NOTIFY_CHANGE_FILE_NAME;
+	}
+
+	return mask & notify_mask;
+}
+
 static void smb2_notify_cancel(void **argv)
 {
 	struct ksmbd_notify_req *notify_req = argv[0];
 
 	ksmbd_debug(NOTIFY, "Wake pending notify request\n");
 	wake_up(&notify_req->wait);
+}
+
+static struct ksmbd_notify_event *
+ksmbd_notify_alloc_event(u32 action, const struct qstr *file_name, gfp_t gfp)
+{
+	struct ksmbd_notify_event *event;
+	size_t name_len = file_name ? file_name->len : 0;
+
+	event = kmalloc(sizeof(*event) + name_len + 1, gfp);
+	if (!event) {
+		pr_err("Failed to allocate notify event, action %u, name %.*s\n",
+		       action, file_name ? file_name->len : 0,
+		       file_name ? (const char *)file_name->name : "");
+		return NULL;
+	}
+
+	INIT_LIST_HEAD(&event->list);
+	event->action = action;
+	event->when = ktime_get_ns();
+	event->name_len = name_len;
+	if (name_len)
+		memcpy(event->name, file_name->name, name_len);
+	event->name[name_len] = '\0';
+
+	return event;
+}
+
+static void
+ksmbd_notify_queue_event(struct ksmbd_notify *notify,
+			 struct ksmbd_notify_event *event)
+{
+	ksmbd_debug(NOTIFY, "Queueing notify event, action %u, name %s\n",
+		    event->action, event->name);
+
+	spin_lock(&notify->lock);
+	list_add_tail(&event->list, &notify->events);
+	notify->num_events++;
+	spin_unlock(&notify->lock);
 }
 
 static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
@@ -92,9 +171,11 @@ static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
 					   u32 cookie)
 {
 	struct ksmbd_notify_mark *notify_mark;
+	struct ksmbd_notify_event *event;
 	struct ksmbd_notify *notify;
 	struct inode *event_inode = dir ?: inode;
 	struct ksmbd_file *fp;
+	u32 action;
 
 	notify_mark = container_of(mark, struct ksmbd_notify_mark, mark);
 	notify = notify_mark->notify;
@@ -106,6 +187,29 @@ static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
 		    event_inode ? (unsigned long long)event_inode->i_ino : 0,
 		    file_name ? file_name->len : 0,
 		    file_name ? (const char *)file_name->name : "", cookie);
+
+	if (!(mask & KSMBD_NOTIFY_EVENT_MASK)) {
+		ksmbd_debug(NOTIFY, "Ignored notify event mask 0x%x\n", mask);
+		return 0;
+	}
+
+	if (mask & FS_CREATE) {
+		action = FILE_ACTION_ADDED;
+	} else if (mask & FS_DELETE) {
+		action = FILE_ACTION_REMOVED;
+	} else {
+		action = FILE_ACTION_MODIFIED;
+	}
+
+	if (!ksmbd_notify_filter_match(notify, mask))
+		return 0;
+
+	event = ksmbd_notify_alloc_event(action, file_name,
+					 KSMBD_DEFAULT_GFP);
+	if (!event)
+		return 0;
+
+	ksmbd_notify_queue_event(notify, event);
 
 	return 0;
 }
@@ -206,6 +310,7 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 
 	notify->fp = fp;
 	spin_lock_init(&notify->lock);
+	INIT_LIST_HEAD(&notify->events);
 	notify->filter = filter;
 	notify->mask = mask;
 	notify->max_buffer_size = max_buffer_size;
@@ -254,6 +359,7 @@ void ksmbd_notify_remove(struct ksmbd_file *fp)
 		    (unsigned long long)file_inode(fp->filp)->i_ino,
 		    notify->mark->mask);
 	ksmbd_notify_destroy_mark(notify->group, notify->mark);
+	ksmbd_notify_free_events(&notify->events);
 	kfree(notify);
 }
 
