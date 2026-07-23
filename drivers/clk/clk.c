@@ -1780,7 +1780,7 @@ long clk_round_rate(struct clk *clk, unsigned long rate)
 	struct clk_rate_request req;
 	int ret;
 
-	if (!clk)
+	if (IS_ERR_OR_NULL(clk))
 		return 0;
 
 	clk_prepare_lock();
