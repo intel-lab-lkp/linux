@@ -1109,6 +1109,12 @@ properties:
 
       - items:
           - enum:
+              - ayaneo,pocket-ds
+          - const: qcom,qcs8550
+          - const: qcom,sm8550
+
+      - items:
+          - enum:
               - ayaneo,pocket-s2
               - qcom,sm8650-hdk
               - qcom,sm8650-mtp
