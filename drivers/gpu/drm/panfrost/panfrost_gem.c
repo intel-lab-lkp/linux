@@ -15,13 +15,13 @@
 #include "panfrost_gem.h"
 #include "panfrost_mmu.h"
 
-void panfrost_gem_init(struct panfrost_device *pfdev)
+int panfrost_gem_init(struct panfrost_device *pfdev)
 {
 	int err;
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    !panfrost_transparent_hugepage)
-		return;
+		return 0;
 
 	err = drm_gem_huge_mnt_create(&pfdev->base, "within_size");
 	if (drm_gem_get_huge_mnt(&pfdev->base))
@@ -29,6 +29,8 @@ void panfrost_gem_init(struct panfrost_device *pfdev)
 	else if (err)
 		drm_warn(&pfdev->base, "Can't use Transparent Hugepage (%d)\n",
 			 err);
+
+	return panfrost_gem_shrinker_init(pfdev);
 }
 
 #ifdef CONFIG_DEBUG_FS
