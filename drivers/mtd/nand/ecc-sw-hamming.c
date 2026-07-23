@@ -113,7 +113,7 @@ static const char addressbits[256] = {
 };
 
 int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
-			     unsigned char *code, bool sm_order)
+			     unsigned char *code, enum ecc_hamming_order ecc_order)
 {
 	const u32 *bp = (uint32_t *)buf;
 	const u32 eccsize_mult = (step_size == 256) ? 1 : 2;
@@ -309,7 +309,8 @@ int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
 	 * possible, but benchmarks showed that on the system this is developed
 	 * the code below is the fastest
 	 */
-	if (sm_order) {
+	switch (ecc_order) {
+	case ECC_HAMMING_SM_ORDER:
 		code[0] = (invparity[rp7] << 7) | (invparity[rp6] << 6) |
 			  (invparity[rp5] << 5) | (invparity[rp4] << 4) |
 			  (invparity[rp3] << 3) | (invparity[rp2] << 2) |
@@ -318,7 +319,8 @@ int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
 			  (invparity[rp13] << 5) | (invparity[rp12] << 4) |
 			  (invparity[rp11] << 3) | (invparity[rp10] << 2) |
 			  (invparity[rp9] << 1) | (invparity[rp8]);
-	} else {
+		break;
+	case ECC_HAMMING_REGULAR_ORDER:
 		code[1] = (invparity[rp7] << 7) | (invparity[rp6] << 6) |
 			  (invparity[rp5] << 5) | (invparity[rp4] << 4) |
 			  (invparity[rp3] << 3) | (invparity[rp2] << 2) |
@@ -327,6 +329,7 @@ int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
 			  (invparity[rp13] << 5) | (invparity[rp12] << 4) |
 			  (invparity[rp11] << 3) | (invparity[rp10] << 2) |
 			  (invparity[rp9] << 1) | (invparity[rp8]);
+		break;
 	}
 
 	if (eccsize_mult == 1)
@@ -364,15 +367,16 @@ int nand_ecc_sw_hamming_calculate(struct nand_device *nand,
 {
 	struct nand_ecc_sw_hamming_conf *engine_conf = nand->ecc.ctx.priv;
 	unsigned int step_size = nand->ecc.ctx.conf.step_size;
-	bool sm_order = engine_conf ? engine_conf->sm_order : false;
+	enum ecc_hamming_order order = engine_conf ? engine_conf->ecc_order :
+				       ECC_HAMMING_REGULAR_ORDER;
 
-	return ecc_sw_hamming_calculate(buf, step_size, code, sm_order);
+	return ecc_sw_hamming_calculate(buf, step_size, code, order);
 }
 EXPORT_SYMBOL(nand_ecc_sw_hamming_calculate);
 
 int ecc_sw_hamming_correct(unsigned char *buf, unsigned char *read_ecc,
 			   unsigned char *calc_ecc, unsigned int step_size,
-			   bool sm_order)
+			   enum ecc_hamming_order ecc_order)
 {
 	const u32 eccsize_mult = step_size >> 8;
 	unsigned char b0, b1, b2, bit_addr;
@@ -383,14 +387,16 @@ int ecc_sw_hamming_correct(unsigned char *buf, unsigned char *read_ecc,
 	 * we might need the xor result  more than once,
 	 * so keep them in a local var
 	*/
-	if (sm_order) {
+	switch (ecc_order) {
+	case ECC_HAMMING_SM_ORDER:
 		b0 = read_ecc[0] ^ calc_ecc[0];
 		b1 = read_ecc[1] ^ calc_ecc[1];
-	} else {
+		break;
+	case ECC_HAMMING_REGULAR_ORDER:
 		b0 = read_ecc[1] ^ calc_ecc[1];
 		b1 = read_ecc[0] ^ calc_ecc[0];
+		break;
 	}
-
 	b2 = read_ecc[2] ^ calc_ecc[2];
 
 	/* check if there are any bitfaults */
@@ -457,10 +463,11 @@ int nand_ecc_sw_hamming_correct(struct nand_device *nand, unsigned char *buf,
 {
 	struct nand_ecc_sw_hamming_conf *engine_conf = nand->ecc.ctx.priv;
 	unsigned int step_size = nand->ecc.ctx.conf.step_size;
-	bool sm_order = engine_conf ? engine_conf->sm_order : false;
+	enum ecc_hamming_order ecc_order = engine_conf ? engine_conf->ecc_order :
+					   ECC_HAMMING_REGULAR_ORDER;
 
 	return ecc_sw_hamming_correct(buf, read_ecc, calc_ecc, step_size,
-				      sm_order);
+				      ecc_order);
 }
 EXPORT_SYMBOL(nand_ecc_sw_hamming_correct);
 

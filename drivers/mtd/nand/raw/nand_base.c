@@ -5657,7 +5657,9 @@ int rawnand_sw_hamming_init(struct nand_chip *chip)
 	engine_conf = base->ecc.ctx.priv;
 
 	if (chip->ecc.options & NAND_ECC_SOFT_HAMMING_SM_ORDER)
-		engine_conf->sm_order = true;
+		engine_conf->ecc_order = ECC_HAMMING_SM_ORDER;
+	else
+		engine_conf->ecc_order = ECC_HAMMING_REGULAR_ORDER;
 
 	chip->ecc.size = base->ecc.ctx.conf.step_size;
 	chip->ecc.strength = base->ecc.ctx.conf.strength;

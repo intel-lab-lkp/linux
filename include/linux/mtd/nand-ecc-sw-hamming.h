@@ -12,6 +12,11 @@
 
 #include <linux/mtd/nand.h>
 
+enum ecc_hamming_order {
+	ECC_HAMMING_REGULAR_ORDER = 0,
+	ECC_HAMMING_SM_ORDER,
+};
+
 /**
  * struct nand_ecc_sw_hamming_conf - private software Hamming ECC engine structure
  * @req_ctx: Save request context and tweak the original request to fit the
@@ -19,14 +24,14 @@
  * @code_size: Number of bytes needed to store a code (one code per step)
  * @calc_buf: Buffer to use when calculating ECC bytes
  * @code_buf: Buffer to use when reading (raw) ECC bytes from the chip
- * @sm_order: Smart Media special ordering
+ * @ecc_order: ECC ordering
  */
 struct nand_ecc_sw_hamming_conf {
 	struct nand_ecc_req_tweak_ctx req_ctx;
 	unsigned int code_size;
 	u8 *calc_buf;
 	u8 *code_buf;
-	unsigned int sm_order;
+	enum ecc_hamming_order ecc_order;
 };
 
 #if IS_ENABLED(CONFIG_MTD_NAND_ECC_SW_HAMMING)
@@ -34,13 +39,13 @@ struct nand_ecc_sw_hamming_conf {
 int nand_ecc_sw_hamming_init_ctx(struct nand_device *nand);
 void nand_ecc_sw_hamming_cleanup_ctx(struct nand_device *nand);
 int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
-			     unsigned char *code, bool sm_order);
+			     unsigned char *code, enum ecc_hamming_order ecc_order);
 int nand_ecc_sw_hamming_calculate(struct nand_device *nand,
 				  const unsigned char *buf,
 				  unsigned char *code);
 int ecc_sw_hamming_correct(unsigned char *buf, unsigned char *read_ecc,
 			   unsigned char *calc_ecc, unsigned int step_size,
-			   bool sm_order);
+			   enum ecc_hamming_order ecc_order);
 int nand_ecc_sw_hamming_correct(struct nand_device *nand, unsigned char *buf,
 				unsigned char *read_ecc,
 				unsigned char *calc_ecc);
@@ -56,7 +61,8 @@ static inline void nand_ecc_sw_hamming_cleanup_ctx(struct nand_device *nand) {}
 
 static inline int ecc_sw_hamming_calculate(const unsigned char *buf,
 					   unsigned int step_size,
-					   unsigned char *code, bool sm_order)
+					   unsigned char *code,
+					   enum ecc_hamming_order ecc_order)
 {
 	return -ENOTSUPP;
 }
@@ -71,7 +77,8 @@ static inline int nand_ecc_sw_hamming_calculate(struct nand_device *nand,
 static inline int ecc_sw_hamming_correct(unsigned char *buf,
 					 unsigned char *read_ecc,
 					 unsigned char *calc_ecc,
-					 unsigned int step_size, bool sm_order)
+					 unsigned int step_size,
+					 enum ecc_hamming_order ecc_order)
 {
 	return -ENOTSUPP;
 }
