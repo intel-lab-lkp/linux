@@ -163,7 +163,8 @@ struct gpio_reg {
 	u32	gpio1;
 	u32	__pad0;
 	u32	gpio2;
-	u32	__pad1;
+	/* adva_x1: I2C bus ownership register; reserved on other variants */
+	u32	i2c_bus_ctrl;
 };
 
 struct irig_master_reg {
@@ -416,6 +417,11 @@ struct ptp_ocp {
 	dpll_tracker tracker;
 	int signals_nr;
 	int freq_in_nr;
+	/* cpld_i2c_xfer sysfs (adva_x1) */
+	struct mutex		tap_i2c_lock;
+	int			tap_i2c_adap_nr; /* adapter nr; -1 if absent */
+	u8			tap_i2c_rsp[21]; /* [status, read_data...] */
+	size_t			tap_i2c_rsp_len;
 };
 
 #define OCP_REQ_TIMESTAMP	BIT(0)
@@ -4226,6 +4232,205 @@ static const struct ocp_attr_group art_timecard_groups[] = {
 	{ },
 };
 
+/*
+ * i2c_bus_ctrl exposes the MicroBlaze I2C bus arbitration register.
+ *
+ * The shared bus requires a three-step handshake before use:
+ *   read 0x00000000 (free) -> write 0x0000ffff (request) ->
+ *   poll until 0xffffffff (MicroBlaze confirms release).
+ *
+ * The poll is a PCIe non-posted read, which also flushes the preceding
+ * posted write to the FPGA, so no separate kernel read-back is needed.
+ */
+static ssize_t
+i2c_bus_ctrl_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ptp_ocp *bp = dev_get_drvdata(dev);
+
+	if (!bp->pps_select)
+		return -ENODEV;
+	return sysfs_emit(buf, "0x%08x\n",
+			  ioread32(&bp->pps_select->i2c_bus_ctrl));
+}
+
+static ssize_t
+i2c_bus_ctrl_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ptp_ocp *bp = dev_get_drvdata(dev);
+	u32 val;
+
+	if (!bp->pps_select)
+		return -ENODEV;
+	if (kstrtou32(buf, 0, &val))
+		return -EINVAL;
+	iowrite32(val, &bp->pps_select->i2c_bus_ctrl);
+	return count;
+}
+
+static DEVICE_ATTR_RW(i2c_bus_ctrl);
+
+/*
+ * cpld_i2c_xfer - sysfs binary I2C passthrough for adva_x1 TAP CPLD.
+ *
+ * write: [addr][write_len][read_len][flags][write_data...]
+ *   flags bit 0: I2C_M_NOSTART on the read segment
+ * read:  [status][read_data...]
+ *   status 0 = success, else positive errno
+ *
+ * Only addresses 0x40 (CPLD) and 0x74 (mux) are permitted.
+ */
+#define TAP_I2C_ALLOWED_ADDRS_NUM  2
+static const u8 tap_i2c_allowed_addrs[TAP_I2C_ALLOWED_ADDRS_NUM] = {
+	0x40, /* CPLD */
+	0x74, /* mux  */
+};
+
+/*
+ * tap_i2c_errno_to_byte - encode a kernel errno as a one-byte status.
+ *
+ * Errnos > 255 (e.g. ENOTSUPP=524) or multiples of 256 would truncate
+ * to a wrong or zero value with a plain (u8) cast.  Map those to EIO.
+ */
+static u8 tap_i2c_errno_to_byte(int err)
+{
+	int val = (err < 0) ? -err : EIO;
+
+	return (val > 0 && val <= 0xFF) ? (u8)val : EIO;
+}
+
+#define TAP_I2C_REQ_HDR_LEN   4
+#define TAP_I2C_MAX_WRITE_LEN 67
+#define TAP_I2C_MAX_READ_LEN  20
+#define TAP_I2C_FLAG_NOSTART  BIT(0)
+
+static ssize_t
+ptp_ocp_cpld_i2c_write(struct file *file, struct kobject *kobj,
+		       const struct bin_attribute *attr,
+		       char *buf, loff_t off, size_t count)
+{
+	struct ptp_ocp *bp = dev_get_drvdata(kobj_to_dev(kobj));
+	const u8 *req = (const u8 *)buf;
+	u8 addr, write_len, read_len, flags;
+	struct i2c_adapter *adap;
+	struct i2c_msg msgs[2];
+	u8 *rdbuf = NULL;
+	int nmsgs, ret, i;
+
+	/* Each write is one atomic request; non-zero offset means a
+	 * mid-buffer pwrite() which would misparse the header.
+	 */
+	if (off != 0)
+		return -EINVAL;
+	if (count < TAP_I2C_REQ_HDR_LEN || count > TAP_I2C_REQ_HDR_LEN + TAP_I2C_MAX_WRITE_LEN)
+		return -EINVAL;
+
+	addr      = req[0];
+	write_len = req[1];
+	read_len  = req[2];
+	flags     = req[3];
+
+	/* Validate */
+	for (i = 0; i < TAP_I2C_ALLOWED_ADDRS_NUM; i++)
+		if (addr == tap_i2c_allowed_addrs[i])
+			break;
+	if (i == TAP_I2C_ALLOWED_ADDRS_NUM)
+		return -EPERM;
+
+	if (write_len > TAP_I2C_MAX_WRITE_LEN)
+		return -EINVAL;
+	if (read_len > TAP_I2C_MAX_READ_LEN)
+		return -EINVAL;
+	if (write_len + TAP_I2C_REQ_HDR_LEN > count)
+		return -EINVAL;
+	if (write_len == 0 && read_len == 0)
+		return -EINVAL;
+	/* I2C_M_NOSTART suppresses the repeated START between write and read
+	 * segments; it has no meaning on a first-and-only message.
+	 */
+	if ((flags & TAP_I2C_FLAG_NOSTART) && write_len == 0)
+		return -EINVAL;
+
+	/* i2c_get_adapter() takes a reference under core_lock; safe against
+	 * concurrent adapter unbind.
+	 */
+	adap = i2c_get_adapter(READ_ONCE(bp->tap_i2c_adap_nr));
+	if (!adap)
+		return -ENODEV;
+
+	nmsgs = 0;
+	if (write_len > 0) {
+		msgs[nmsgs].addr  = addr;
+		msgs[nmsgs].flags = 0;
+		msgs[nmsgs].len   = write_len;
+		msgs[nmsgs].buf   = (u8 *)req + TAP_I2C_REQ_HDR_LEN;
+		nmsgs++;
+	}
+	if (read_len > 0) {
+		u16 rd_flags = I2C_M_RD;
+
+		if (flags & TAP_I2C_FLAG_NOSTART)
+			rd_flags |= I2C_M_NOSTART;
+		msgs[nmsgs].addr  = addr;
+		msgs[nmsgs].flags = rd_flags | I2C_M_DMA_SAFE;
+		msgs[nmsgs].len   = read_len;
+		rdbuf = kzalloc(read_len, GFP_KERNEL);
+		if (!rdbuf) {
+			i2c_put_adapter(adap);
+			return -ENOMEM;
+		}
+		msgs[nmsgs].buf = rdbuf;
+		nmsgs++;
+	}
+
+	/* Serialise transfer+publish so concurrent writers cannot overwrite
+	 * each other's response in tap_i2c_rsp.
+	 */
+	mutex_lock(&bp->tap_i2c_lock);
+	ret = i2c_transfer(adap, msgs, nmsgs);
+	if (ret == nmsgs) {
+		bp->tap_i2c_rsp[0] = 0;
+		if (read_len > 0)
+			memcpy(&bp->tap_i2c_rsp[1], rdbuf, read_len);
+		bp->tap_i2c_rsp_len = 1 + read_len;
+		ret = count;
+	} else {
+		bp->tap_i2c_rsp[0]  = tap_i2c_errno_to_byte(ret);
+		bp->tap_i2c_rsp_len = 1;
+		ret = (ret < 0) ? ret : -EIO;
+	}
+	mutex_unlock(&bp->tap_i2c_lock);
+	kfree(rdbuf);
+	i2c_put_adapter(adap);
+
+	return ret;
+}
+
+static ssize_t
+ptp_ocp_cpld_i2c_read(struct file *file, struct kobject *kobj,
+		      const struct bin_attribute *attr,
+		      char *buf, loff_t off, size_t count)
+{
+	struct ptp_ocp *bp = dev_get_drvdata(kobj_to_dev(kobj));
+	ssize_t ret;
+
+	mutex_lock(&bp->tap_i2c_lock);
+	if (off >= bp->tap_i2c_rsp_len) {
+		ret = 0;
+	} else {
+		ret = min(count, bp->tap_i2c_rsp_len - (size_t)off);
+		memcpy(buf, bp->tap_i2c_rsp + off, ret);
+	}
+	mutex_unlock(&bp->tap_i2c_lock);
+	return ret;
+}
+
+static const struct bin_attribute tap_i2c_bin_attr = {
+	.attr  = { .name = "cpld_i2c_xfer", .mode = 0600 },
+	.write = ptp_ocp_cpld_i2c_write,
+	.read  = ptp_ocp_cpld_i2c_read,
+};
+
 static struct attribute *adva_timecard_attrs[] = {
 	&dev_attr_serialnum.attr,
 	&dev_attr_gnss_sync.attr,
@@ -4274,11 +4479,18 @@ static struct attribute *adva_timecard_x1_attrs[] = {
 	&dev_attr_ts_window_adjust.attr,
 	&dev_attr_utc_tai_offset.attr,
 	&dev_attr_tod_correction.attr,
+	&dev_attr_i2c_bus_ctrl.attr,
+	NULL,
+};
+
+static const struct bin_attribute *const bin_adva_x1_timecard_attrs[] = {
+	&tap_i2c_bin_attr,
 	NULL,
 };
 
 static const struct attribute_group adva_timecard_x1_group = {
-	.attrs = adva_timecard_x1_attrs,
+	.attrs     = adva_timecard_x1_attrs,
+	.bin_attrs = bin_adva_x1_timecard_attrs,
 };
 
 static const struct ocp_attr_group adva_timecard_x1_groups[] = {
@@ -4904,6 +5116,7 @@ ptp_ocp_detach(struct ptp_ocp *bp)
 		clk_hw_unregister_fixed_rate(bp->i2c_clk);
 	if (bp->n_irqs)
 		pci_free_irq_vectors(bp->pdev);
+	mutex_destroy(&bp->tap_i2c_lock);
 	device_unregister(&bp->dev);
 }
 
@@ -5080,6 +5293,17 @@ ptp_ocp_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (err)
 		goto out_disable;
 
+	/* Must be before the first error path that calls ptp_ocp_detach(),
+	 * so mutex_destroy() always runs on an initialised mutex.
+	 * Must also be before ptp_ocp_register_resources(): the I2C bus
+	 * notifier (ptp_ocp_i2c_notifier_call) fires when the adapter
+	 * registers and stores the adapter number in tap_i2c_adap_nr; the
+	 * -1 sentinel below must already be written so that a notifier
+	 * firing during registration is never overwritten by this init.
+	 */
+	mutex_init(&bp->tap_i2c_lock);
+	bp->tap_i2c_adap_nr = -1;
+
 	INIT_DELAYED_WORK(&bp->sync_work, ptp_ocp_sync_work);
 
 	/* compat mode.
@@ -5219,11 +5443,16 @@ ptp_ocp_i2c_notifier_call(struct notifier_block *nb,
 
 found:
 	bp = dev_get_drvdata(dev);
-	if (add)
+	if (add) {
 		ptp_ocp_symlink(bp, child, "i2c");
-	else
+		/* Cache adapter number; cpld_i2c_xfer uses i2c_get_adapter()
+		 * for a reference-counted, unbind-safe lookup.
+		 */
+		WRITE_ONCE(bp->tap_i2c_adap_nr, i2c_verify_adapter(child)->nr);
+	} else {
+		WRITE_ONCE(bp->tap_i2c_adap_nr, -1);	/* invalidate before free */
 		sysfs_remove_link(&bp->dev.kobj, "i2c");
-
+	}
 	return 0;
 }
 

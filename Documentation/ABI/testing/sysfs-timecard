@@ -11,6 +11,62 @@ Contact:	Jonathan Lemon <jonathan.lemon@gmail.com>
 Description:	This directory contains the attributes of the Nth timecard
 		registered.
 
+What:		/sys/class/timecard/ocpN/cpld_i2c_xfer
+Date:		July 2026
+Contact:	Sagi Maimon <sagi.maimon@adva.com>
+Description:	(RW) Binary sysfs attribute providing a raw I2C passthrough to
+		the CPLD and I2C mux on ADVA x1 TAP boards.  Only present on
+		that board variant.
+
+		Each write initiates one I2C transaction.  The write payload
+		must be exactly four header bytes followed by the write data:
+
+		  Byte 0: slave address (only 0x40 and 0x74 are permitted)
+		  Byte 1: number of bytes to write (0..67)
+		  Byte 2: number of bytes to read back (0..20)
+		  Byte 3: flags
+		            bit 0 - suppress the repeated START before the
+		                    read segment (I2C_M_NOSTART); only valid
+		                    when both write and read lengths are
+		                    non-zero
+		  Bytes 4..: write data (write_len bytes)
+
+		A subsequent read() returns:
+
+		  Byte 0: status (0 = success, positive errno on error)
+		  Bytes 1..: read data (read_len bytes), present only when
+		             status is 0 and read_len > 0
+
+		The write and read portions of the sysfs file share a single
+		per-device response buffer protected by a mutex; a single
+		open() / write() / read() sequence must be used to avoid
+		data races between concurrent users.
+
+		Only slave addresses 0x40 (Lattice CPLD) and 0x74 (PCA9548
+		I2C mux) are accepted; all others return EPERM.
+
+What:		/sys/class/timecard/ocpN/i2c_bus_ctrl
+Date:		July 2026
+Contact:	Sagi Maimon <sagi.maimon@adva.com>
+Description:	(RW) Exposes the MicroBlaze I2C bus arbitration register for
+		the shared I2C bus on ADVA x1 and x2 TAP boards.  Only
+		present when the board has a pps_select register block.
+
+		Userspace must complete a three-step handshake before
+		driving the bus:
+
+		  1. Read  - value must be 0x00000000 (bus is free).
+		  2. Write - 0x0000ffff (request ownership).
+		  3. Poll  - read until the value is 0xffffffff (MicroBlaze
+		             has acknowledged the handover).
+
+		After all I2C traffic is complete the bus must be released
+		by writing 0x00000000.
+
+		The poll read is a PCIe non-posted read and therefore also
+		flushes the preceding posted write to the FPGA; no
+		additional read-back is required for ordering.
+
 What:		/sys/class/timecard/ocpN/available_clock_sources
 Date:		September 2021
 Contact:	Jonathan Lemon <jonathan.lemon@gmail.com>
