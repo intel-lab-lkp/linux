@@ -161,6 +161,7 @@ i915_gem_userptr_put_pages(struct drm_i915_gem_object *obj,
 {
 	struct sgt_iter sgt_iter;
 	struct page *page;
+	struct folio *folio;
 
 	if (!pages)
 		return;
@@ -177,7 +178,9 @@ i915_gem_userptr_put_pages(struct drm_i915_gem_object *obj,
 		obj->mm.dirty = false;
 
 	for_each_sgt_page(page, sgt_iter, pages) {
-		if (obj->mm.dirty && trylock_page(page)) {
+		folio = page_folio(page);
+
+		if (obj->mm.dirty && folio_trylock(folio)) {
 			/*
 			 * As this may not be anonymous memory (e.g. shmem)
 			 * but exist on a real mapping, we have to lock
@@ -193,14 +196,14 @@ i915_gem_userptr_put_pages(struct drm_i915_gem_object *obj,
 			 * on the folio. Such a try_to_unmap() will result
 			 * in us calling put_pages() and so recursively try
 			 * to lock the page. We avoid that deadlock with
-			 * a trylock_page() and in exchange we risk missing
+			 * a folio_trylock() and in exchange we risk missing
 			 * some page dirtying.
 			 */
-			set_page_dirty(page);
-			unlock_page(page);
+			folio_mark_dirty(folio);
+			folio_unlock(folio);
 		}
 
-		mark_page_accessed(page);
+		folio_mark_accessed(folio);
 	}
 	obj->mm.dirty = false;
 
