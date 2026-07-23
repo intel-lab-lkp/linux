@@ -1099,9 +1099,8 @@ int smc_llc_cli_add_link(struct smc_link *link, struct smc_llc_qentry *qentry)
 	if (rc)
 		goto out_clear_lnk;
 	if (lgr->smc_version == SMC_V2) {
-		u8 *llc_msg = smc_link_shared_v2_rxbuf(link) ?
-			(u8 *)lgr->wr_rx_buf_v2 : (u8 *)llc;
-		smc_llc_save_add_link_rkeys(link, lnk_new, llc_msg);
+		smc_llc_save_add_link_rkeys(link, lnk_new,
+					    (u8 *)lgr->wr_rx_buf_v2);
 	} else {
 		rc = smc_llc_cli_rkey_exchange(link, lnk_new);
 		if (rc) {
@@ -1501,9 +1500,8 @@ int smc_llc_srv_add_link(struct smc_link *link,
 	if (rc)
 		goto out_err;
 	if (lgr->smc_version == SMC_V2) {
-		u8 *llc_msg = smc_link_shared_v2_rxbuf(link) ?
-			(u8 *)lgr->wr_rx_buf_v2 : (u8 *)add_llc;
-		smc_llc_save_add_link_rkeys(link, link_new, llc_msg);
+		smc_llc_save_add_link_rkeys(link, link_new,
+					    (u8 *)lgr->wr_rx_buf_v2);
 	} else {
 		rc = smc_llc_srv_rkey_exchange(link, link_new);
 		if (rc)
@@ -1812,12 +1810,15 @@ static void smc_llc_rmt_delete_rkey(struct smc_link_group *lgr)
 	if (lgr->smc_version == SMC_V2) {
 		struct smc_llc_msg_delete_rkey_v2 *llcv2;
 
-		if (smc_link_shared_v2_rxbuf(link)) {
+		if (smc_link_shared_v2_rxbuf(link))
 			memcpy(lgr->wr_rx_buf_v2, llc, sizeof(*llc));
-			llcv2 = (struct smc_llc_msg_delete_rkey_v2 *)lgr->wr_rx_buf_v2;
-		} else {
-			llcv2 = (struct smc_llc_msg_delete_rkey_v2 *)llc;
-		}
+		/* The full message, including the rkey array, has been placed in
+		 * wr_rx_buf_v2 for both rxbuf layouts (shared: header copy above
+		 * + spillover DMA; non-shared: full copy in smc_llc_rx_handler()).
+		 * Reading it from the fixed-size qentry copy would run past its
+		 * end.
+		 */
+		llcv2 = (struct smc_llc_msg_delete_rkey_v2 *)lgr->wr_rx_buf_v2;
 		llcv2->num_inval_rkeys = 0;
 
 		max = min_t(u8, llcv2->num_rkeys, SMC_LLC_RKEYS_PER_MSG_V2);
@@ -2104,6 +2105,16 @@ static void smc_llc_rx_handler(struct ib_wc *wc, void *buf)
 	} else {
 		if (llc->raw.hdr.length_v2 < sizeof(*llc))
 			return; /* invalid message */
+		/* For the non-shared v2 rxbuf layout the received message lives
+		 * only in the per-WR receive buffer, which is reposted as soon as
+		 * this handler returns.  The LLC event handlers run later from a
+		 * work item and read the message from wr_rx_buf_v2, so the whole
+		 * message must be preserved there now, mirroring the shared-rxbuf
+		 * layout where the body arrives in wr_rx_buf_v2 via spillover DMA.
+		 */
+		if (!smc_link_shared_v2_rxbuf(link))
+			memcpy(link->lgr->wr_rx_buf_v2, llc,
+			       min_t(u32, wc->byte_len, SMC_WR_BUF_V2_SIZE));
 	}
 
 	smc_llc_enqueue(link, llc);
