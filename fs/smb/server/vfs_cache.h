@@ -33,6 +33,7 @@
 #define SMB2_NO_FID		(0xFFFFFFFFFFFFFFFFULL)
 
 struct ksmbd_conn;
+struct ksmbd_notify;
 struct ksmbd_session;
 
 struct ksmbd_lock {
@@ -89,6 +90,9 @@ struct ksmbd_file {
 	u64				durable_volatile_id;
 
 	spinlock_t			f_lock;
+	/* Protects notify watch creation and removal. */
+	struct mutex			notify_lock;
+	struct ksmbd_notify		*notify;
 
 	struct ksmbd_inode		*f_ci;
 	struct ksmbd_inode		*f_parent_ci;

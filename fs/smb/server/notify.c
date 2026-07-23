@@ -182,6 +182,21 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 	struct fsnotify_mark *mark;
 	int err = 0;
 
+	mutex_lock(&fp->notify_lock);
+	if (fp->notify) {
+		spin_lock(&fp->notify->lock);
+		fp->notify->filter |= filter;
+		fp->notify->mask |= mask;
+		spin_unlock(&fp->notify->lock);
+		fsnotify_modify_mark_mask(fp->notify->mark, mask, 0);
+		ksmbd_debug(NOTIFY,
+			    "Updated fsnotify mark, inode %llu, mask 0x%x\n",
+			    (unsigned long long)file_inode(fp->filp)->i_ino,
+			    fp->notify->mark->mask);
+		*notify_out = fp->notify;
+		goto out;
+	}
+
 	notify = kzalloc_obj(*notify, KSMBD_DEFAULT_GFP);
 	if (!notify) {
 		pr_err("Failed to allocate notify watch\n");
@@ -203,6 +218,7 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 	}
 
 	notify->mark = mark;
+	fp->notify = notify;
 	*notify_out = notify;
 	ksmbd_debug(NOTIFY,
 		    "Added fsnotify mark, inode %llu, mask 0x%x, filter 0x%x, "
@@ -211,7 +227,34 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 		    filter, max_buffer_size);
 
 out:
+	mutex_unlock(&fp->notify_lock);
 	return err;
+}
+
+/**
+ * ksmbd_notify_remove() - remove the notify watch for a closing handle
+ * @fp: file handle whose watch is being removed
+ *
+ * A cancelled CHANGE_NOTIFY request leaves this watch installed. The watch is
+ * owned by @fp and removed only when the file handle is finally closed.
+ */
+void ksmbd_notify_remove(struct ksmbd_file *fp)
+{
+	struct ksmbd_notify *notify;
+
+	mutex_lock(&fp->notify_lock);
+	notify = fp->notify;
+	fp->notify = NULL;
+	mutex_unlock(&fp->notify_lock);
+	if (!notify)
+		return;
+
+	ksmbd_debug(NOTIFY,
+		    "Removing fsnotify mark, inode %llu, mask 0x%x\n",
+		    (unsigned long long)file_inode(fp->filp)->i_ino,
+		    notify->mark->mask);
+	ksmbd_notify_destroy_mark(notify->group, notify->mark);
+	kfree(notify);
 }
 
 static struct ksmbd_file *
@@ -417,10 +460,6 @@ out:
 		kfree(argv);
 	if (notify_req)
 		kfree(notify_req);
-	if (notify) {
-		ksmbd_notify_destroy_mark(notify->group, notify->mark);
-		kfree(notify);
-	}
 	if (fp)
 		ksmbd_fd_put(work, fp);
 	return err;
