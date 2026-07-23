@@ -78,6 +78,7 @@
 	EM(rxgk_abort_2_short_encdata,		"rxgk2-short-encdata")	\
 	EM(rxgk_abort_2_short_header,		"rxgk2-short-hdr")	\
 	EM(rxgk_abort_bad_key_number,		"rxgk-bad-key-num")	\
+	EM(rxgk_abort_chall_bad_app_key,	"rxgk-chall-bad-app-key")\
 	EM(rxgk_abort_chall_key_expired,	"rxgk-chall-key-exp")	\
 	EM(rxgk_abort_chall_no_key,		"rxgk-chall-nokey")	\
 	EM(rxgk_abort_chall_short,		"rxgk-chall-short")	\
