@@ -13,6 +13,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 
+#include <dt-bindings/phy/phy.h>
+
 #define EXYNOS_USB_PHY_HS_PHY_CTRL_RST	(0x0)
 #define USB_PHY_RST_MASK		GENMASK(1, 0)
 #define UTMI_PORT_RST_MASK		GENMASK(5, 4)
@@ -596,6 +598,8 @@ static int snps_eusb2_hsphy_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to create phy: %d\n", ret);
 		return PTR_ERR(generic_phy);
 	}
+
+	phy_set_type(generic_phy, PHY_TYPE_EUSB2);
 
 	dev_set_drvdata(dev, phy);
 	phy_set_drvdata(generic_phy, phy);
