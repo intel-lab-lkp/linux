@@ -92,6 +92,8 @@ void vfio_ccw_sch_io_todo(struct work_struct *work)
 
 	is_final = !(scsw_actl(&irb->scsw) &
 		     (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT));
+
+	mutex_lock(&private->cp_mutex);
 	if (scsw_is_solicited(&irb->scsw)) {
 		cp_update_scsw(&private->cp, &irb->scsw);
 		if (is_final && private->state == VFIO_CCW_STATE_CP_PENDING) {
@@ -99,6 +101,8 @@ void vfio_ccw_sch_io_todo(struct work_struct *work)
 			cp_is_finished = true;
 		}
 	}
+	mutex_unlock(&private->cp_mutex);
+
 	mutex_lock(&private->io_mutex);
 	memcpy(private->io_region->irb_area, irb, sizeof(*irb));
 	mutex_unlock(&private->io_mutex);
@@ -260,12 +264,16 @@ static int vfio_ccw_sch_event(struct subchannel *sch, int process)
 	rc = 0;
 
 	if (cio_update_schib(sch)) {
-		if (private)
+		if (private) {
+			spin_unlock_irqrestore(&sch->lock, flags);
 			vfio_ccw_fsm_event(private, VFIO_CCW_EVENT_NOT_OPER);
+			goto out;
+		}
 	}
 
 out_unlock:
 	spin_unlock_irqrestore(&sch->lock, flags);
+out:
 
 	return rc;
 }
