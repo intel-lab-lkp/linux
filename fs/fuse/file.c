@@ -3045,6 +3045,10 @@ fallback:
 		err = -EIO;
 		goto out;
 	}
+	if (!bytes_copied) {
+		err = 0;
+		goto out;
+	}
 
 	truncate_inode_pages_range(inode_out->i_mapping,
 				   ALIGN_DOWN(pos_out, PAGE_SIZE),
