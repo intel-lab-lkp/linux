@@ -128,6 +128,28 @@ struct kmem_cache *req_alloc_cache;
 struct kmem_cache *page_alloc_cache;
 
 /**
+ * create_page_orders_subdirs() - Creates a directory for each page order inside
+ * the zone directory. Once that the page order directory is created, it creates
+ * a directory for each migrate type.
+ */
+static inline int create_page_orders_subdirs(struct dentry *zonedir,
+					     int node_idx, int zone_idx,
+					     struct zone *zone)
+{
+	struct dentry *orderdir;
+	char dirname[12];
+
+	for (int order = 0; order < NR_PAGE_ORDERS; order++) {
+		snprintf(dirname, sizeof(dirname), "order-%d", order);
+		orderdir = debugfs_create_dir(dirname, zonedir);
+		if (IS_ERR(orderdir))
+			return PTR_ERR(orderdir);
+	}
+
+	return 0;
+}
+
+/**
  * create_zones_subdirs() - Creates a directory for each populated zone in the
  * node. Once that the zone directory is created, it creates a directory for
  * each order supported.
@@ -143,6 +165,7 @@ static inline int create_zones_subdirs(struct dentry *nodedir, int node_idx,
 	struct zone *node_zones = pgdata->node_zones;
 	int zone_idx;
 	char dirname[24];
+	int ret;
 
 	for (zone = node_zones, zone_idx = 0; zone - node_zones < MAX_NR_ZONES;
 	     ++zone, ++zone_idx) {
@@ -157,6 +180,11 @@ static inline int create_zones_subdirs(struct dentry *nodedir, int node_idx,
 		zonedir = debugfs_create_dir(dirname, nodedir);
 		if (IS_ERR(zonedir))
 			return PTR_ERR(zonedir);
+
+		ret = create_page_orders_subdirs(zonedir, node_idx, zone_idx,
+						 zone);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
