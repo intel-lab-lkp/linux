@@ -1333,12 +1333,8 @@ int vdo_validate_config(const struct vdo_config *config,
 	if (result != VDO_SUCCESS)
 		return result;
 
-	result = VDO_ASSERT(is_power_of_2(config->recovery_journal_size),
-			    "recovery journal size must be a power of two");
-	if (result != VDO_SUCCESS)
-		return result;
-
-	return result;
+	return VDO_ASSERT(is_power_of_2(config->recovery_journal_size),
+			  "recovery journal size must be a power of two");
 }
 
 /**
