@@ -5113,8 +5113,6 @@ void ext4_set_inode_flags(struct inode *inode, bool init)
 	unsigned int flags = EXT4_I(inode)->i_flags;
 	unsigned int new_fl = 0;
 
-	WARN_ON_ONCE(IS_DAX(inode) && init);
-
 	if (flags & EXT4_SYNC_FL)
 		new_fl |= S_SYNC;
 	if (flags & EXT4_APPEND_FL)
@@ -5129,8 +5127,12 @@ void ext4_set_inode_flags(struct inode *inode, bool init)
 	/* Because of the way inode_set_flags() works we must preserve S_DAX
 	 * here if already set. */
 	new_fl |= (inode->i_flags & S_DAX);
-	if (init && ext4_should_enable_dax(inode))
-		new_fl |= S_DAX;
+	if (init) {
+		if (ext4_should_enable_dax(inode))
+			new_fl |= S_DAX;
+		else
+			new_fl &= ~S_DAX;
+	}
 
 	if (flags & EXT4_ENCRYPT_FL)
 		new_fl |= S_ENCRYPTED;

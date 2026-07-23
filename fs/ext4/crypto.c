@@ -134,6 +134,7 @@ static int ext4_set_context(struct inode *inode, const void *ctx, size_t len,
 {
 	handle_t *handle = fs_data;
 	int res, res2, credits, retries = 0;
+	bool init = S_ISREG(inode->i_mode);
 
 	/*
 	 * Encrypting the root directory is not allowed because e2fsck expects
@@ -179,10 +180,16 @@ static int ext4_set_context(struct inode *inode, const void *ctx, size_t len,
 			ext4_clear_inode_state(inode,
 					EXT4_STATE_MAY_INLINE_DATA);
 			/*
-			 * Update inode->i_flags - S_ENCRYPTED will be enabled,
-			 * S_DAX may be disabled
+			 * Update inode->i_flags, S_ENCRYPTED will be enabled.
+			 * If this is a regular inode, then we must be coming
+			 * via __ext4_new_inode() as only new inodes can be
+			 * encrypted, so we must set the init flag so
+			 * S_DAX can be disabled. This is a bit fragile but
+			 * seems like the easiest way to make sure we don't let
+			 * the DAX flag linger when encryption is enabled as
+			 * that result in writes silently bypassing encryption.
 			 */
-			ext4_set_inode_flags(inode, false);
+			ext4_set_inode_flags(inode, init);
 		}
 		return res;
 	}
@@ -209,7 +216,7 @@ retry:
 		 * Update inode->i_flags - S_ENCRYPTED will be enabled,
 		 * S_DAX may be disabled
 		 */
-		ext4_set_inode_flags(inode, false);
+		ext4_set_inode_flags(inode, init);
 		res = ext4_mark_inode_dirty(handle, inode);
 		if (res)
 			EXT4_ERROR_INODE(inode, "Failed to mark inode dirty");
