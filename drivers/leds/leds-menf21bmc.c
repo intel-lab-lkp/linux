@@ -84,10 +84,8 @@ static int menf21bmc_led_probe(struct platform_device *pdev)
 		leds[i].cdev.brightness_set = menf21bmc_led_set;
 		leds[i].i2c_client = i2c_client;
 		ret = devm_led_classdev_register(&pdev->dev, &leds[i].cdev);
-		if (ret < 0) {
-			dev_err(&pdev->dev, "failed to register LED device\n");
-			return ret;
-		}
+		if (ret < 0)
+			return dev_err_probe(&pdev->dev, ret, "failed to register LED device\n");
 	}
 	dev_info(&pdev->dev, "MEN 140F21P00 BMC LED device enabled\n");
 
