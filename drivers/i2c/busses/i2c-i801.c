@@ -345,10 +345,19 @@ MODULE_PARM_DESC(disable_features, "Disable selected driver features:\n"
 	"\t\t  0x10  don't use interrupts\n"
 	"\t\t  0x20  disable SMBus Host Notify ");
 
+/*
+ * Bound the maximum wait time to prevent system lockup if the
+ * userspace passes an arbitrarily large timeout via ioctl.
+ */
+static inline unsigned long i801_get_timeout(struct i801_priv *priv)
+{
+	return min_t(unsigned long, priv->adapter.timeout, HZ);
+}
+
 /* Wait for BUSY being cleared and either INTR or an error flag being set */
 static int i801_wait_intr(struct i801_priv *priv)
 {
-	unsigned long timeout = jiffies + priv->adapter.timeout;
+	unsigned long timeout = jiffies + i801_get_timeout(priv);
 	int status, busy;
 
 	do {
@@ -366,7 +375,7 @@ static int i801_wait_intr(struct i801_priv *priv)
 /* Wait for either BYTE_DONE or an error flag being set */
 static int i801_wait_byte_done(struct i801_priv *priv)
 {
-	unsigned long timeout = jiffies + priv->adapter.timeout;
+	unsigned long timeout = jiffies + i801_get_timeout(priv);
 	int status;
 
 	do {
@@ -497,13 +506,12 @@ static int i801_check_post(struct i801_priv *priv, int status)
 static int i801_transaction(struct i801_priv *priv, int xact)
 {
 	unsigned long result;
-	const struct i2c_adapter *adap = &priv->adapter;
 
 	if (priv->features & FEATURE_IRQ) {
 		reinit_completion(&priv->done);
 		iowrite8(xact | SMBHSTCNT_INTREN | SMBHSTCNT_START,
 		       SMBHSTCNT(priv));
-		result = wait_for_completion_timeout(&priv->done, adap->timeout);
+		result = wait_for_completion_timeout(&priv->done, i801_get_timeout(priv));
 		return result ? priv->status : -ETIMEDOUT;
 	}
 
@@ -677,7 +685,6 @@ static int i801_block_transaction_byte_by_byte(struct i801_priv *priv,
 	int smbcmd;
 	int status;
 	unsigned long result;
-	const struct i2c_adapter *adap = &priv->adapter;
 
 	if (command == I2C_SMBUS_BLOCK_PROC_CALL)
 		return -EOPNOTSUPP;
@@ -706,7 +713,7 @@ static int i801_block_transaction_byte_by_byte(struct i801_priv *priv,
 
 		reinit_completion(&priv->done);
 		iowrite8(priv->cmd | SMBHSTCNT_START, SMBHSTCNT(priv));
-		result = wait_for_completion_timeout(&priv->done, adap->timeout);
+		result = wait_for_completion_timeout(&priv->done, i801_get_timeout(priv));
 		return result ? priv->status : -ETIMEDOUT;
 	}
 
