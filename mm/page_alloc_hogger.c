@@ -91,6 +91,34 @@
 
 struct dentry *mmdir;
 
+/**
+ * struct req_alloc - Represents the requested allocation
+ * @node_idx: The Node index to allocate from.
+ * @zone_idx: The Zone index to allocate from.
+ * @order: The Order of pages to allocate.
+ * @migrate_type: The Migrate type to allocate from.
+ * @parentdir: The parent dir where the file representing the alloc was created.
+ */
+struct req_alloc {
+	int node_idx;
+	int zone_idx;
+	int order;
+	int migrate_type;
+	struct dentry *parentdir;
+};
+
+/*
+ * struct page_alloc - Represents the page allocation.
+ * @page: The pointer to the page(s) allocated.
+ * @req_alloc: The details of the allocation.
+ * @alloc_dentry: The pointer to the file that represents the allocation.
+ */
+struct page_alloc {
+	struct page *page;
+	struct req_alloc *req_alloc;
+	struct dentry *alloc_dentry;
+};
+
 static int __init page_alloc_hogger_debugfs_init(void)
 {
 	mmdir = debugfs_create_dir("mm", NULL);
