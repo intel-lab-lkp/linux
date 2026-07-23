@@ -188,6 +188,10 @@ retry:
 
 		/* Too small packets are not really GSO ones. */
 		if (skb->len - nh_off > gso_size) {
+			/* Block packets that would cause a gso_segs overflow. */
+			if (unlikely(skb->len - nh_off > gso_size * GSO_MAX_SEGS))
+				return -EINVAL;
+
 			shinfo->gso_size = gso_size;
 			shinfo->gso_type = gso_type;
 
