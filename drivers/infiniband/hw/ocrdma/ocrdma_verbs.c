@@ -1750,11 +1750,8 @@ static int ocrdma_copy_srq_uresp(struct ocrdma_dev *dev, struct ocrdma_srq *srq,
 	status = ib_respond_udata(udata, uresp);
 	if (status)
 		return status;
-	status = ocrdma_add_mmap(srq->pd->uctx, uresp.rq_page_addr[0],
-				 uresp.rq_page_size);
-	if (status)
-		return status;
-	return status;
+	return ocrdma_add_mmap(srq->pd->uctx, uresp.rq_page_addr[0],
+			       uresp.rq_page_size);
 }
 
 int ocrdma_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init_attr,
