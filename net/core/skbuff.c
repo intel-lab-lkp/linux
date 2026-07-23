@@ -228,6 +228,12 @@ static void skb_under_panic(struct sk_buff *skb, unsigned int sz, void *addr)
 #define NAPI_SKB_CACHE_BULK	32
 #define NAPI_SKB_CACHE_FREE	32
 
+/*
+ * For offsetof(struct sk_buff, tail) == 184, the 64-byte loop in
+ * memset_orig() runs twice (2 * 64 = 128). Splitting here for inlining.
+ */
+#define SKB_CLEAR_INLINE_CHUNK_SIZE	128
+
 struct napi_alloc_cache {
 	local_lock_t bh_lock;
 	struct page_frag_cache page;
@@ -319,10 +325,12 @@ static inline void skbuff_clear(struct sk_buff *skb)
 	 * with two smaller memset(), with a barrier() between them.
 	 * This forces the compiler to inline both calls.
 	 */
-	BUILD_BUG_ON(offsetof(struct sk_buff, tail) <= 128);
-	memset(skb, 0, 128);
+	BUILD_BUG_ON(offsetof(struct sk_buff, tail) <=
+		     SKB_CLEAR_INLINE_CHUNK_SIZE);
+	memset(skb, 0, SKB_CLEAR_INLINE_CHUNK_SIZE);
 	barrier();
-	memset((void *)skb + 128, 0, offsetof(struct sk_buff, tail) - 128);
+	memset((void *)skb + SKB_CLEAR_INLINE_CHUNK_SIZE, 0,
+	       offsetof(struct sk_buff, tail) - SKB_CLEAR_INLINE_CHUNK_SIZE);
 }
 
 /**
