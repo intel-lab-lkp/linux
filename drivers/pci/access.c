@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/pci.h>
+#include <linux/pci_crash.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/ioport.h>
@@ -27,9 +28,11 @@ DEFINE_RAW_SPINLOCK(pci_lock);
 #ifdef CONFIG_PCI_LOCKLESS_CONFIG
 # define pci_lock_config(f)	do { (void)(f); } while (0)
 # define pci_unlock_config(f)	do { (void)(f); } while (0)
+# define pci_trylock_config(f)	({ (void)(f); true; })
 #else
 # define pci_lock_config(f)	raw_spin_lock_irqsave(&pci_lock, f)
 # define pci_unlock_config(f)	raw_spin_unlock_irqrestore(&pci_lock, f)
+# define pci_trylock_config(f)	raw_spin_trylock_irqsave(&pci_lock, f)
 #endif
 
 #define PCI_OP_READ(size, type, len) \
@@ -84,6 +87,63 @@ EXPORT_SYMBOL(pci_bus_read_config_dword);
 EXPORT_SYMBOL(pci_bus_write_config_byte);
 EXPORT_SYMBOL(pci_bus_write_config_word);
 EXPORT_SYMBOL(pci_bus_write_config_dword);
+
+#ifdef CONFIG_PCI_CRASH
+/**
+ * pci_bus_read_config_dword_trylock - non-blocking config read for the crash path
+ * @bus: target PCI bus
+ * @devfn: target device/function
+ * @pos: dword-aligned config space offset
+ * @value: result; set to ~0 (PCI "no response") if the read is skipped
+ *
+ * Like pci_bus_read_config_dword() but acquires pci_lock with a trylock instead
+ * of blocking.  The PCI crash capture (CONFIG_PCI_CRASH) reads config space from
+ * crash_save_vmcoreinfo() inside __crash_kexec(), which can run while a halted
+ * peer CPU still holds pci_lock, or after this CPU was interrupted mid config
+ * access while holding it.  pci_lock is a raw (non-reentrant) spinlock, so a
+ * blocking acquire in either case would spin forever and hang the dump.  On
+ * contention this skips the device (value ~0, PCIBIOS_SET_FAILED) instead.
+ *
+ * This only avoids the pci_lock deadlock.  On x86 with legacy conf1 or
+ * mmconfig_32 port-I/O, a second blocking lock (pci_config_lock in
+ * arch/x86/pci/common.c) is taken below bus->ops->read() and is NOT covered
+ * by this trylock -- those paths can still hang the dump.  arm64 ECAM and
+ * x86-64 MMCONFIG are fully covered (no second lock).  The trylock also does
+ * not make the underlying MMIO access fault-tolerant: a read to a device whose
+ * link is down can still raise an external abort, so callers must confirm the
+ * device is reachable first.
+ *
+ * Context: crash/panic path only.  Returns 0 on success or a PCIBIOS_* error
+ * (PCIBIOS_SET_FAILED on lock contention).
+ */
+int pci_bus_read_config_dword_trylock(struct pci_bus *bus, unsigned int devfn,
+				      int pos, u32 *value)
+{
+	unsigned long flags;
+	u32 data = 0;
+	int res;
+
+	if (pos & 3) {
+		PCI_SET_ERROR_RESPONSE(value);
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	}
+	if (!bus || !bus->ops || !bus->ops->read) {
+		PCI_SET_ERROR_RESPONSE(value);
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
+	if (!pci_trylock_config(flags)) {
+		PCI_SET_ERROR_RESPONSE(value);
+		return PCIBIOS_SET_FAILED;
+	}
+	res = bus->ops->read(bus, devfn, pos, 4, &data);
+	if (res)
+		PCI_SET_ERROR_RESPONSE(value);
+	else
+		*value = data;
+	pci_unlock_config(flags);
+	return res;
+}
+#endif /* CONFIG_PCI_CRASH */
 
 int pci_generic_config_read(struct pci_bus *bus, unsigned int devfn,
 			    int where, int size, u32 *val)

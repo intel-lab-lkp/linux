@@ -2713,6 +2713,14 @@ static inline bool pci_dev_is_disconnected(const struct pci_dev *dev)
 	return READ_ONCE(dev->error_state) == pci_channel_io_perm_failure;
 }
 
+/* Bit index in pci_dev->priv_flags for device removal state. */
+#define PCI_DEV_REMOVED		3
+
+static inline bool pci_dev_is_removed(const struct pci_dev *dev)
+{
+	return test_bit(PCI_DEV_REMOVED, &dev->priv_flags);
+}
+
 void pci_request_acs(void);
 bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags);
 bool pci_acs_path_enabled(struct pci_dev *start,

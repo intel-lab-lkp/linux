@@ -20559,6 +20559,14 @@ S:	Maintained
 F:	drivers/leds/leds-pca9532.c
 F:	include/linux/leds-pca9532.h
 
+PCI CRASH BUFFER
+M:	Johannes Hange <hangej@amazon.com>
+L:	linux-pci@vger.kernel.org
+S:	Maintained
+F:	Documentation/PCI/pci-crash-capture.rst
+F:	include/linux/pci_crash.h
+F:	kernel/pci_crash.c
+
 PCI DRIVER FOR AARDVARK (Marvell Armada 3700)
 M:	Thomas Petazzoni <thomas.petazzoni@bootlin.com>
 M:	Pali Rohár <pali@kernel.org>

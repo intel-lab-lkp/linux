@@ -5298,6 +5298,22 @@ Kernel parameters
 		nomsi	Do not use MSI for native PCIe PME signaling (this makes
 			all PCIe root ports use INTx for all services).
 
+	pci_crash.capture=
+			[PCI] When to capture PCI config space at panic time.
+			always (default): capture on every panic.
+			aer: capture only if root port AER reports
+				uncorrectable errors.
+			Requires CONFIG_PCI_CRASH=y.
+
+	pci_crash.devices=
+			[PCI] Which devices to include in crash capture.
+			all (default): every PCI device.
+			bridges: PCI bridges only.
+			root_ports: PCIe root ports only.
+			XXYY: hex class code (up to 8).
+			Bridges always implicitly included.
+			Requires CONFIG_PCI_CRASH=y.
+
 	pcmv=		[HW,PCMCIA] BadgePAD 4
 
 	pd_ignore_unused
