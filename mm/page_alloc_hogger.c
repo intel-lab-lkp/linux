@@ -136,6 +136,19 @@ struct kmem_cache *page_alloc_cache;
 static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 				     size_t cnt, loff_t *ppos)
 {
+	unsigned long nr_pages_allocs;
+	unsigned long *allocs_ids;
+	int ret;
+
+	ret = kstrtoul_from_user(ubuf, cnt, 10, &nr_pages_allocs);
+	if (ret)
+		return ret;
+
+	allocs_ids = kmalloc_array(nr_pages_allocs, sizeof(unsigned long),
+					GFP_KERNEL);
+	if (!allocs_ids)
+		return -ENOMEM;
+
 	return cnt;
 }
 
