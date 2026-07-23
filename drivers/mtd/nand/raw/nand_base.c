@@ -2941,8 +2941,8 @@ static int nand_read_page_raw_syndrome(struct nand_chip *chip, uint8_t *buf,
  * @oob_required: caller requires OOB data read to chip->oob_poi
  * @page: page number to read
  */
-static int nand_read_page_swecc(struct nand_chip *chip, uint8_t *buf,
-				int oob_required, int page)
+int nand_read_page_swecc(struct nand_chip *chip, uint8_t *buf,
+			 int oob_required, int page)
 {
 	struct mtd_info *mtd = nand_to_mtd(chip);
 	int i, eccsize = chip->ecc.size, ret;
@@ -2979,6 +2979,7 @@ static int nand_read_page_swecc(struct nand_chip *chip, uint8_t *buf,
 	}
 	return max_bitflips;
 }
+EXPORT_SYMBOL_GPL(nand_read_page_swecc);
 
 /**
  * nand_read_subpage - [REPLACEABLE] ECC based sub-page read function
