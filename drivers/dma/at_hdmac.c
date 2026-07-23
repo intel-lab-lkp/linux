@@ -1381,6 +1381,7 @@ atc_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 		}
 		break;
 	default:
+		kfree(desc);
 		return NULL;
 	}
 
