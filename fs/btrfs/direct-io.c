@@ -1093,6 +1093,11 @@ ssize_t btrfs_direct_read(struct kiocb *iocb, struct iov_iter *to)
 	if (check_direct_read(inode_to_fs_info(inode), to, iocb->ki_pos))
 		return 0;
 
+#ifndef CONFIG_BTRFS_EXPERIMENTAL
+	/* To avoid dirty folios without fs knowing through */
+	return 0;
+#endif
+
 	btrfs_inode_lock(BTRFS_I(inode), BTRFS_ILOCK_SHARED);
 again:
 	/*
