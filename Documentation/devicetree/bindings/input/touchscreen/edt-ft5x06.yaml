@@ -111,6 +111,14 @@ properties:
 
   interrupt-controller: true
 
+  no-regmap-bulk-read:
+    type: boolean
+    description:
+      Set this when the i2c controller the touch controller is attached to
+      cannot reliably sustain the multi-byte block read of a full touch
+      frame and aborts long transfers. The driver then reads the touch
+      frame one register at a time instead of in a single bulk transfer.
+
 unevaluatedProperties: false
 
 required:
