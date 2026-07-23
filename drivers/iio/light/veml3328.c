@@ -318,7 +318,6 @@ static int veml3328_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	data = iio_priv(indio_dev);
-	i2c_set_clientdata(client, indio_dev);
 
 	data->regmap = devm_regmap_init_i2c(client, &veml3328_regmap_config);
 	if (IS_ERR(data->regmap))
