@@ -40,6 +40,17 @@ config PINCTRL_STM32H743
 	default MACH_STM32H743
 	select PINCTRL_STM32
 
+config PINCTRL_STM32H7RS
+	bool "STMicroelectronics STM32H7RS pin control" if COMPILE_TEST && !MACH_STM32H7R7
+	depends on OF && HAS_IOMEM
+	default MACH_STM32H7R7
+	select PINCTRL_STM32
+	help
+	  Say yes here to enable the pin controller and GPIO support for
+	  STM32H7RS microcontrollers. The driver handles pin multiplexing,
+	  pin configuration and the GPIO banks exposed by these devices.
+	  It is required on STM32H7R7-based boards.
+
 config PINCTRL_STM32MP135
 	bool "STMicroelectronics STM32MP135 pin control" if COMPILE_TEST && !MACH_STM32MP13
 	depends on OF && HAS_IOMEM
