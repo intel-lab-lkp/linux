@@ -142,6 +142,7 @@ struct panfrost_device {
 	/* pm_domains for devices with more than one. */
 	struct device *pm_domain_devs[MAX_PM_DOMAINS];
 	struct device_link *pm_domain_links[MAX_PM_DOMAINS];
+	atomic_t gpu_powered;
 	bool coherent;
 
 	struct panfrost_features features;
@@ -252,6 +253,8 @@ int panfrost_unstable_ioctl_check(void);
 int panfrost_device_init(struct panfrost_device *pfdev);
 void panfrost_device_fini(struct panfrost_device *pfdev);
 void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int);
+
+void panfrost_try_suspend_device(struct panfrost_device *pfdev);
 
 extern const struct dev_pm_ops panfrost_pm_ops;
 
