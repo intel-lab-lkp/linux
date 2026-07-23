@@ -72,24 +72,35 @@ struct dw_edma_chan {
 	u8				func_no;
 
 	/*
-	 * New LL entries are appended at ll_head. Entries between ll_end
-	 * and ll_head, modulo the LL ring, are owned by DMA; the rest are
-	 * owned by software.
+	 * New LL entries are appended at ll_head. Entries between ll_done and
+	 * ll_head, modulo the LL ring, are owned by DMA; the rest are available
+	 * to software.
 	 *
 	 *   software-owned      DMA-owned       software-owned
 	 * +---------------+-------------------+---------------+
 	 * ^               ^                   ^
-	 * 0             ll_end              ll_head
+	 * 0            ll_done             ll_head
 	 *
-	 * The link entry points back to the region start. ll_head == ll_end
-	 * means all entries are software-owned and previous DMA work is
-	 * done.
+	 * The link entry points back to the region start. No DMA-owned entries
+	 * remain once ll_done catches up with ll_head.
 	 *
 	 * Software always keeps at least one free entry, so the ring is
-	 * never completely DMA-owned.
+	 * never completely DMA-owned. That keeps a hardware-reported physical
+	 * LL index unique within the current ll_done..ll_head producer window.
 	 */
 	u32				ll_head;
-	u32				ll_end;
+	u32				ll_done;
+
+	/*
+	 * LL progress boundary sampled by the hard IRQ handler after clearing
+	 * the DONE/watermark status it accompanies. It is normalized to the
+	 * exclusive convention used by ll_done. The sample and all later
+	 * accesses are serialized by vc.lock; -1 means consumed or invalid.
+	 * ll_irq_stopped records whether the same event found the channel
+	 * stopped.
+	 */
+	int				ll_irq_idx;
+	bool				ll_irq_stopped;
 
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */
@@ -146,7 +157,7 @@ struct dw_edma {
 	const struct dw_edma_core_ops	*core;
 };
 
-typedef void (*dw_edma_handler_t)(struct dw_edma_chan *);
+typedef void (*dw_edma_handler_t)(struct dw_edma_chan *, bool);
 
 struct dw_edma_core_ops {
 	void (*off)(struct dw_edma *dw);
@@ -154,6 +165,7 @@ struct dw_edma_core_ops {
 	int (*ch_quiesce)(struct dw_edma_chan *chan);
 	u16 (*ch_count)(struct dw_edma *dw, enum dw_edma_dir dir);
 	enum dma_status (*ch_status)(struct dw_edma_chan *chan);
+	u32 (*ch_transfer_size)(struct dw_edma_chan *chan);
 	irqreturn_t (*handle_int)(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 				  dw_edma_handler_t done, dw_edma_handler_t abort);
 	void (*non_ll_start)(struct dw_edma_chan *chan, struct dw_edma_burst *child);

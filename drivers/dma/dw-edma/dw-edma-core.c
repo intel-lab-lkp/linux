@@ -51,13 +51,6 @@ dw_edma_alloc_desc(struct dw_edma_chan *chan, size_t nburst)
 {
 	struct dw_edma_desc *desc;
 
-	/*
-	 * For now, a descriptor that does not fit would stall the channel
-	 * forever: reject it up front.
-	 */
-	if (!chan->non_ll && nburst > chan->ll_max - 1)
-		return NULL;
-
 	desc = kzalloc_flex(*desc, burst, nburst, GFP_NOWAIT);
 	if (unlikely(!desc))
 		return NULL;
@@ -71,6 +64,12 @@ dw_edma_alloc_desc(struct dw_edma_chan *chan, size_t nburst)
 static void vchan_free_desc(struct virt_dma_desc *vdesc)
 {
 	kfree(vd2dw_edma_desc(vdesc));
+}
+
+static void dw_edma_ll_irq_idx_discard(struct dw_edma_chan *chan)
+{
+	chan->ll_irq_idx = -1;
+	chan->ll_irq_stopped = false;
 }
 
 static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
@@ -103,7 +102,8 @@ static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 	u32 i;
 
 	chan->ll_head = 0;
-	chan->ll_end = 0;
+	chan->ll_done = 0;
+	dw_edma_ll_irq_idx_discard(chan);
 	/* Drop stale CB bits before reusing the circular LL ring. */
 	for (i = 0; i < chan->ll_max; i++)
 		dw_edma_core_ll_clear(chan, i);
@@ -116,11 +116,26 @@ static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 	chan->ll_valid = true;
 }
 
+static u32 dw_edma_core_get_ll_dist(struct dw_edma_chan *chan, u32 from, u32 to)
+{
+	return (to + chan->ll_max - from) % chan->ll_max;
+}
+
+static u32 dw_edma_core_get_used_num(struct dw_edma_chan *chan)
+{
+	return dw_edma_core_get_ll_dist(chan, chan->ll_done, chan->ll_head);
+}
+
 static u32 dw_edma_core_get_free_num(struct dw_edma_chan *chan)
 {
-	/* Keep one data entry free so equal indices mean an empty ring. */
-	return (chan->ll_end + chan->ll_max - 1 - chan->ll_head) %
-		chan->ll_max;
+	/*
+	 * Measure occupancy from ll_done: entries consumed by the
+	 * hardware can be reused even if the descriptor that owns them has not
+	 * completed yet; this lets descriptors larger than the ring move forward.
+	 *
+	 * Keep one data entry free so equal indices mean an empty ring.
+	 */
+	return chan->ll_max - 1 - dw_edma_core_get_used_num(chan);
 }
 
 static bool dw_edma_core_enable_ll_irq(struct dw_edma_desc *desc, u32 i,
@@ -129,9 +144,51 @@ static bool dw_edma_core_enable_ll_irq(struct dw_edma_desc *desc, u32 i,
 	return desc->chan->dw->core->ll_irq(desc, i, free);
 }
 
+static bool dw_edma_ll_advance(struct dw_edma_chan *chan, int idx, u32 *old_done)
+{
+	u32 done;
+
+	if (idx < 0 || (u32)idx >= chan->ll_max)
+		return false;
+
+	done = dw_edma_core_get_ll_dist(chan, chan->ll_done, idx);
+	if (!done || done > dw_edma_core_get_used_num(chan))
+		return false;
+
+	*old_done = chan->ll_done;
+	chan->ll_done = idx;
+
+	return true;
+}
+
 static bool dw_edma_ll_pending(struct dw_edma_chan *chan)
 {
-	return chan->ll_head != chan->ll_end;
+	return dw_edma_core_get_used_num(chan);
+}
+
+static u32 dw_edma_core_ch_transfer_size(struct dw_edma_chan *chan)
+{
+	if (!chan->dw->core->ch_transfer_size)
+		return U32_MAX;
+
+	return chan->dw->core->ch_transfer_size(chan);
+}
+
+static bool dw_edma_ll_irq_is_stopped(struct dw_edma_chan *chan, bool stopped)
+{
+	if (stopped)
+		return true;
+
+	/*
+	 * Native HDMA reports STOP separately. The legacy interrupt interface
+	 * uses DONE for both progress and stop, so confirm a stopped boundary
+	 * with channel status and transfer size.
+	 */
+	if (!chan->dw->core->ch_transfer_size)
+		return false;
+
+	return dw_edma_core_ch_status(chan) == DMA_COMPLETE &&
+	       dw_edma_core_ch_transfer_size(chan) == 0;
 }
 
 static void dw_edma_core_ll_start(struct dw_edma_desc *desc)
@@ -166,7 +223,6 @@ static void dw_edma_core_ll_start(struct dw_edma_desc *desc)
 		}
 	}
 
-	desc->done_burst = desc->start_burst;
 	desc->start_burst = i;
 }
 
@@ -233,6 +289,110 @@ static void dw_edma_terminate_all_descs(struct dw_edma_chan *chan)
 	 */
 	dw_edma_terminate_vdesc_list(&chan->vc.desc_issued);
 	dw_edma_terminate_vdesc_list(&chan->vc.desc_submitted);
+}
+
+/* Must be called with vc.lock held. */
+static void dw_edma_ll_clean_pending(struct dw_edma_chan *chan, u32 old_done)
+{
+	struct virt_dma_desc *vd, *_vd;
+	u32 done = dw_edma_core_get_ll_dist(chan, old_done, chan->ll_done);
+
+	list_for_each_entry_safe(vd, _vd, &chan->vc.desc_issued, node) {
+		struct dw_edma_desc *desc = vd2dw_edma_desc(vd);
+		u32 consumed, started;
+
+		if (!done)
+			break;
+
+		/*
+		 * start_burst is the append boundary. done_burst is the
+		 * hardware-consumed boundary reported through LL progress.
+		 */
+		started = desc->start_burst - desc->done_burst;
+		if (!started)
+			break;
+
+		consumed = min(done, started);
+		desc->done_burst += consumed;
+		done -= consumed;
+
+		/*
+		 * Descriptors are appended in list order, so later descriptors
+		 * cannot be complete if this one has not been fully consumed.
+		 */
+		if (desc->done_burst != desc->nburst)
+			break;
+
+		/* Hardware has consumed this descriptor's LL entries. */
+		dw_hdma_set_callback_result(vd, DMA_TRANS_NOERROR);
+		list_del(&vd->node);
+		vchan_cookie_complete(vd);
+	}
+}
+
+/* Must be called with vc.lock held. */
+static int dw_edma_ll_recycle_idx(struct dw_edma_chan *chan, int idx,
+				  bool stopped)
+{
+	if (idx < 0 || (u32)idx > chan->ll_max)
+		return -EINVAL;
+
+	/*
+	 * Convert the raw LLP index to the exclusive boundary used by ll_done.
+	 * For both eDMA and HDMA, once the engine has stopped, LLP points to
+	 * the next element. ll_max is the link element, hence the following
+	 * data boundary is 0.
+	 */
+	if (stopped)
+		return idx == chan->ll_max ? 0 : idx;
+
+	/*
+	 * Moving a running index one entry back cannot represent index 0
+	 * without wrapping it to ll_max - 1. That could falsely consume a full
+	 * producer window, so wait for another sample or STOP.
+	 */
+	if (!idx)
+		return -EINVAL;
+
+	/*
+	 * A running eDMA LLP can move ahead of payload completion, so keep the
+	 * boundary one entry behind it.
+	 *
+	 * DWC PCIe Controller Databook 6.10a-lca06, Section 7.2.1, Table 7-3
+	 * describes an HDMA watermark LLP as an inclusive LLE recycling
+	 * boundary, which would normally translate to idx + 1. During testing
+	 * on a DWC HDMA 6.30a integration, using that boundary for DMAengine
+	 * completion let clients release DMA mappings while hardware still
+	 * accessed them, causing IOMMU faults. Keep the boundary one entry
+	 * behind the raw LLP for HDMA as well. Stopped samples continue to use
+	 * the next-entry boundary above.
+	 */
+	return idx == chan->ll_max ? chan->ll_max - 1 : idx - 1;
+}
+
+/*
+ * Must be called with vc.lock held. Consume a recorded LL progress
+ * boundary, if any. Advance ll_done and complete descriptors covered by
+ * the newly consumed range. Return true if ll_done advanced.
+ */
+static bool dw_edma_ll_consume_progress(struct dw_edma_chan *chan)
+{
+	int idx = chan->ll_irq_idx;
+	u32 old_done;
+
+	/* No progress sample is pending. */
+	if (idx < 0)
+		return false;
+
+	dw_edma_ll_irq_idx_discard(chan);
+
+	/* Ignore duplicate or stale progress. */
+	if (!dw_edma_ll_advance(chan, idx, &old_done))
+		return false;
+
+	dw_edma_ll_clean_pending(chan, old_done);
+
+	return true;
 }
 
 /* Must be called with vc.lock held. */
@@ -424,6 +584,8 @@ static void dw_edma_device_issue_pending(struct dma_chan *dchan)
 	if (chan->configured && vchan_issue_pending(&chan->vc) &&
 	    chan->request == EDMA_REQ_NONE &&
 	    chan->status == EDMA_ST_IDLE) {
+		if (!chan->non_ll && !dw_edma_ll_pending(chan))
+			dw_edma_ll_irq_idx_discard(chan);
 		chan->status = EDMA_ST_BUSY;
 		dw_edma_start_transfer(chan);
 		dw_edma_core_ch_maybe_doorbell(chan);
@@ -697,6 +859,7 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 	struct dw_edma_desc *desc;
 	struct virt_dma_desc *vd;
 	unsigned long flags;
+	bool active;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
 	if (chan->status == EDMA_ST_PAUSE) {
@@ -704,20 +867,21 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 		return;
 	}
 
+	if (!chan->non_ll)
+		dw_edma_ll_consume_progress(chan);
+
 	switch (chan->request) {
 	case EDMA_REQ_NONE:
 	case EDMA_REQ_PAUSE:
 		vd = vchan_next_desc(&chan->vc);
-		if (!vd)
-			break;
-
-		desc = vd2dw_edma_desc(vd);
-		if (desc->start_burst >= desc->nburst) {
-			dw_hdma_set_callback_result(vd, DMA_TRANS_NOERROR);
-			list_del(&vd->node);
-			vchan_cookie_complete(vd);
-			if (!chan->non_ll)
-				chan->ll_end = chan->ll_head;
+		if (vd && chan->non_ll) {
+			desc = vd2dw_edma_desc(vd);
+			if (desc->start_burst >= desc->nburst) {
+				dw_hdma_set_callback_result(vd,
+							    DMA_TRANS_NOERROR);
+				list_del(&vd->node);
+				vchan_cookie_complete(vd);
+			}
 		}
 
 		if (chan->request == EDMA_REQ_PAUSE) {
@@ -726,14 +890,15 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 			break;
 		}
 
-		chan->status = dw_edma_start_transfer(chan) ? EDMA_ST_BUSY : EDMA_ST_IDLE;
+		active = false;
+		if (vd)
+			active = dw_edma_start_transfer(chan);
+		if (!chan->non_ll)
+			active = dw_edma_ll_pending(chan);
+		chan->status = active ? EDMA_ST_BUSY : EDMA_ST_IDLE;
 		break;
 
 	case EDMA_REQ_STOP:
-		vd = vchan_next_desc(&chan->vc);
-		if (!vd)
-			break;
-
 		dw_edma_terminate_all_descs(chan);
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
@@ -789,12 +954,34 @@ static void dw_edma_queue_irq_work(struct dw_edma_chan *chan,
 	queue_work(chan->dw->wq, &chan->irq_work);
 }
 
-static void dw_edma_done_interrupt_deferred(struct dw_edma_chan *chan)
+static void dw_edma_record_irq_idx(struct dw_edma_chan *chan, bool stopped)
 {
+	int idx;
+
+	guard(spinlock_irqsave)(&chan->vc.lock);
+
+	if (!chan->non_ll) {
+		idx = dw_edma_core_ll_cur_idx(chan);
+		if (idx >= 0) {
+			stopped = dw_edma_ll_irq_is_stopped(chan, stopped);
+			idx = dw_edma_ll_recycle_idx(chan, idx, stopped);
+			if (idx >= 0) {
+				chan->ll_irq_idx = idx;
+				chan->ll_irq_stopped = stopped;
+			}
+		}
+	}
+}
+
+static void dw_edma_done_interrupt_deferred(struct dw_edma_chan *chan,
+					    bool stopped)
+{
+	dw_edma_record_irq_idx(chan, stopped);
 	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_DONE);
 }
 
-static void dw_edma_abort_interrupt_deferred(struct dw_edma_chan *chan)
+static void dw_edma_abort_interrupt_deferred(struct dw_edma_chan *chan,
+					     bool stopped)
 {
 	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_ABORT);
 }
@@ -1033,6 +1220,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
 		chan->irq_mode = dw_edma_get_default_irq_mode(chan);
+		dw_edma_ll_irq_idx_discard(chan);
 		INIT_WORK(&chan->irq_work, dw_edma_irq_work);
 		atomic_set(&chan->irq_pending, 0);
 
