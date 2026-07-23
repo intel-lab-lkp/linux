@@ -267,11 +267,17 @@ static inline bool acpi_ec_dispatch_gpe(void)
                                   Suspend/Resume
   -------------------------------------------------------------------------- */
 #ifdef CONFIG_ACPI_SYSTEM_POWER_STATES_SUPPORT
-extern bool acpi_s2idle_wakeup(void);
 extern int acpi_sleep_init(void);
 #else
-static inline bool acpi_s2idle_wakeup(void) { return false; }
 static inline int acpi_sleep_init(void) { return -ENXIO; }
+#endif
+
+#ifdef CONFIG_ACPI_S2IDLE
+extern bool acpi_s2idle_wakeup(void);
+extern void acpi_s2idle_init(void);
+#else
+static inline bool acpi_s2idle_wakeup(void) { return false; }
+static inline void acpi_s2idle_init(void) {}
 #endif
 
 #ifdef CONFIG_ACPI_SLEEP
