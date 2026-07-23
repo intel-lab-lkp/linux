@@ -11929,9 +11929,6 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		nr_running = rq->nr_running;
 		sgs->sum_nr_running += nr_running;
 
-		if (cpu_overutilized(i))
-			sgs->group_overutilized = 1;
-
 #ifdef CONFIG_SCHED_CACHE
 		if (sched_cache_enabled()) {
 			struct sched_domain *sd_tmp;
@@ -11958,6 +11955,9 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		/* Overload indicator is only updated at root domain */
 		if (balancing_at_rd && nr_running > 1)
 			*sg_overloaded = 1;
+
+		if (cpu_overutilized(i))
+			sgs->group_overutilized = 1;
 
 #ifdef CONFIG_NUMA_BALANCING
 		/* Only fbq_classify_group() uses this to classify NUMA groups */
