@@ -2,8 +2,10 @@
 #define __LINUX_MROUTE_BASE_H
 
 #include <linux/netdevice.h>
+#include <linux/refcount.h>
 #include <linux/rhashtable-types.h>
 #include <linux/spinlock.h>
+#include <linux/workqueue.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <net/fib_notifier.h>
@@ -242,6 +244,8 @@ struct mr_table_ops {
  * @mroute_do_assert: Whether to inform userspace on wrong ingress
  * @mroute_do_pim: Whether to receive IGMP PIMv1
  * @mroute_reg_vif_num: PIM-device vif index
+ * @refcnt: lifetime pins for this table
+ * @destroy_work: process-context cleanup before final RCU free
  */
 struct mr_table {
 	struct rcu_work		work;
@@ -261,6 +265,8 @@ struct mr_table {
 	bool			mroute_do_pim;
 	bool			mroute_do_wrvifwhole;
 	int			mroute_reg_vif_num;
+	refcount_t		refcnt;
+	struct work_struct	destroy_work;
 };
 
 static inline bool mr_can_free_table(struct net *net)

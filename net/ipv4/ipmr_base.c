@@ -32,8 +32,10 @@ static void __mr_free_table(struct work_struct *work)
 {
 	struct mr_table *mrt = container_of(to_rcu_work(work),
 					    struct mr_table, work);
+	struct net *net = read_pnet(&mrt->net);
 
 	rhltable_destroy(&mrt->mfc_hash);
+	put_net(net);
 	kfree(mrt);
 }
 
@@ -56,11 +58,12 @@ mr_table_alloc(struct net *net, u32 id,
 	if (!mrt)
 		return ERR_PTR(-ENOMEM);
 	mrt->id = id;
-	write_pnet(&mrt->net, net);
+	write_pnet(&mrt->net, get_net(net));
 
 	mrt->ops = *ops;
 	err = rhltable_init(&mrt->mfc_hash, mrt->ops.rht_params);
 	if (err) {
+		put_net(read_pnet(&mrt->net));
 		kfree(mrt);
 		return ERR_PTR(err);
 	}
@@ -72,6 +75,7 @@ mr_table_alloc(struct net *net, u32 id,
 	timer_setup(&mrt->ipmr_expire_timer, expire_func, 0);
 
 	mrt->mroute_reg_vif_num = -1;
+	refcount_set(&mrt->refcnt, 1);
 	table_set(mrt, net);
 	return mrt;
 }
