@@ -686,9 +686,12 @@ static int dw_hdmi_qp_rockchip_bind(struct device *dev, struct device *master,
 	platform_set_drvdata(pdev, hdmi);
 
 	hdmi->hdmi = dw_hdmi_qp_bind(pdev, encoder, &plat_data);
-	if (IS_ERR(hdmi->hdmi))
-		return dev_err_probe(hdmi->dev, PTR_ERR(hdmi->hdmi),
+	if (IS_ERR(hdmi->hdmi)) {
+		ret = PTR_ERR(hdmi->hdmi);
+		hdmi->hdmi = NULL;
+		return dev_err_probe(hdmi->dev, ret,
 				     "Failed to bind dw-hdmi-qp");
+	}
 
 	connector = drm_bridge_connector_init(drm, encoder);
 	if (IS_ERR(connector))
@@ -726,7 +729,8 @@ static int __maybe_unused dw_hdmi_qp_rockchip_suspend(struct device *dev)
 {
 	struct rockchip_hdmi_qp *hdmi = dev_get_drvdata(dev);
 
-	dw_hdmi_qp_suspend(dev, hdmi->hdmi);
+	if (hdmi && hdmi->hdmi)
+		dw_hdmi_qp_suspend(dev, hdmi->hdmi);
 
 	return 0;
 }
@@ -735,12 +739,15 @@ static int __maybe_unused dw_hdmi_qp_rockchip_resume(struct device *dev)
 {
 	struct rockchip_hdmi_qp *hdmi = dev_get_drvdata(dev);
 
-	hdmi->ctrl_ops->io_init(hdmi);
+	if (hdmi) {
+		hdmi->ctrl_ops->io_init(hdmi);
 
-	dw_hdmi_qp_resume(dev, hdmi->hdmi);
+		if (hdmi->hdmi)
+			dw_hdmi_qp_resume(dev, hdmi->hdmi);
 
-	if (hdmi->encoder.encoder.dev)
-		drm_helper_hpd_irq_event(hdmi->encoder.encoder.dev);
+		if (hdmi->encoder.encoder.dev)
+			drm_helper_hpd_irq_event(hdmi->encoder.encoder.dev);
+	}
 
 	return 0;
 }
