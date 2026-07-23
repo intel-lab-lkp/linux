@@ -725,15 +725,11 @@ static int ppgtt_write_protection_handler(
 {
 	struct intel_vgpu_ppgtt_spt *spt = page_track->priv_data;
 
-	int ret;
-
 	if (bytes != 4 && bytes != 8)
 		return -EINVAL;
 
-	ret = ppgtt_handle_guest_write_page_table_bytes(spt, gpa, data, bytes);
-	if (ret)
-		return ret;
-	return ret;
+	return ppgtt_handle_guest_write_page_table_bytes(spt, gpa, data,
+							 bytes);
 }
 
 /* Find a spt by guest gfn. */

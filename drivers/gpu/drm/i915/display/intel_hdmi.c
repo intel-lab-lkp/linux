@@ -2658,13 +2658,8 @@ static int
 intel_hdmi_connector_register(struct drm_connector *_connector)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
-	int ret;
 
-	ret = intel_connector_register(&connector->base);
-	if (ret)
-		return ret;
-
-	return ret;
+	return intel_connector_register(&connector->base);
 }
 
 static void intel_hdmi_connector_unregister(struct drm_connector *_connector)
