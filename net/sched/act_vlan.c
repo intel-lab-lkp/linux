@@ -4,6 +4,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/if_arp.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
@@ -76,6 +77,9 @@ TC_INDIRECT_SCOPE int tcf_vlan_act(struct sk_buff *skb,
 		__vlan_hwaccel_put_tag(skb, p->tcfv_push_proto, tci);
 		break;
 	case TCA_VLAN_ACT_POP_ETH:
+		if (!skb->dev || skb->dev->type != ARPHRD_ETHER)
+			goto out;
+
 		err = skb_eth_pop(skb);
 		if (err)
 			goto drop;
