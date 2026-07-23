@@ -134,6 +134,7 @@
 #define		APIC_TDR_DIV_64		0x9
 #define		APIC_TDR_DIV_128	0xA
 #define	APIC_EFEAT	0x400
+#define		APIC_EFEAT_XLC(x)	(((x) >> 16) & 0xff)
 #define	APIC_ECTRL	0x410
 #define APIC_SEOI	0x420
 #define APIC_IER	0x480
