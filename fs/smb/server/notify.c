@@ -11,6 +11,7 @@
 #include <linux/fsnotify_backend.h>
 #include <linux/jiffies.h>
 #include <linux/ktime.h>
+#include <linux/list_sort.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
@@ -502,6 +503,104 @@ void ksmbd_notify_remove(struct ksmbd_file *fp)
 	kfree(notify->moved_from_event);
 	ksmbd_notify_free_events(&notify->events);
 	kfree(notify);
+}
+
+static int ksmbd_notify_event_cmp(void *priv, const struct list_head *a,
+				  const struct list_head *b)
+{
+	struct ksmbd_notify_event *event_a;
+	struct ksmbd_notify_event *event_b;
+
+	event_a = list_entry(a, struct ksmbd_notify_event, list);
+	event_b = list_entry(b, struct ksmbd_notify_event, list);
+
+	if (event_a->when < event_b->when)
+		return -1;
+	if (event_a->when > event_b->when)
+		return 1;
+	return 0;
+}
+
+static void *ksmbd_notify_encode_events(struct ksmbd_work *work,
+					struct list_head *events,
+					u32 max_len, size_t *data_len)
+{
+	struct ksmbd_notify_event *event;
+	u8 *data = NULL;
+	size_t len = 0;
+
+	list_sort(NULL, events, ksmbd_notify_event_cmp);
+
+	list_for_each_entry(event, events, list) {
+		struct file_notify_information *info;
+		struct ksmbd_notify_event *next;
+		size_t alloc_len, name_buf_len, record_len;
+		bool last = list_is_last(&event->list, events);
+		__le16 *name;
+		u8 *new_data;
+		int name_len;
+
+		/* Coalesce adjacent, case-sensitive duplicate records. */
+		if (!last) {
+			next = list_next_entry(event, list);
+			if (event->action == next->action &&
+			    event->name_len == next->name_len &&
+			    !memcmp(event->name, next->name, event->name_len))
+				continue;
+		}
+
+		name_buf_len = (event->name_len + 1) * sizeof(__le16);
+		name = kmalloc(name_buf_len, KSMBD_DEFAULT_GFP);
+		if (!name) {
+			pr_err("Failed to allocate notify event name buffer\n");
+			goto fail;
+		}
+
+		name_len = smbConvertToUTF16(name, event->name,
+					     event->name_len,
+					     work->conn->local_nls, 0);
+		name_len *= sizeof(__le16);
+		record_len = sizeof(*info) + name_len;
+		alloc_len = ALIGN(record_len, 4);
+		if (len > SIZE_MAX - alloc_len) {
+			pr_err("Notify event data length overflow\n");
+			kfree(name);
+			goto fail;
+		}
+
+		new_data = kvrealloc(data, len + alloc_len, KSMBD_DEFAULT_GFP);
+		if (!new_data) {
+			pr_err("Failed to allocate notify event data, length %zu\n",
+			       len + alloc_len);
+			kfree(name);
+			goto fail;
+		}
+		data = new_data;
+		memset(data + len, 0, alloc_len);
+
+		info = (struct file_notify_information *)(data + len);
+		info->NextEntryOffset = last ? 0 : cpu_to_le32(alloc_len);
+		info->Action = cpu_to_le32(event->action);
+		info->FileNameLength = cpu_to_le32(name_len);
+		memcpy(info->FileName, name, name_len);
+		kfree(name);
+
+		len += alloc_len;
+		if (len > max_len) {
+			ksmbd_debug(NOTIFY,
+				    "Notify event data length %zu exceeds output buffer %u\n",
+				    len, max_len);
+			goto fail;
+		}
+	}
+
+	*data_len = len;
+	return data;
+
+fail:
+	kvfree(data);
+	*data_len = 0;
+	return NULL;
 }
 
 static struct ksmbd_file *
