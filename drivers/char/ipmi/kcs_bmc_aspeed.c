@@ -125,6 +125,8 @@ struct aspeed_kcs_bmc {
 		bool remove;
 		struct timer_list timer;
 	} obe;
+
+	u32 channel;
 };
 
 static inline struct aspeed_kcs_bmc *to_aspeed_kcs_bmc(struct kcs_bmc_device *kcs_bmc)
@@ -167,7 +169,7 @@ static void aspeed_kcs_outb(struct kcs_bmc_device *kcs_bmc, u32 reg, u8 data)
 	if (priv->upstream_irq.mode != aspeed_kcs_irq_serirq)
 		return;
 
-	switch (kcs_bmc->channel) {
+	switch (priv->channel) {
 	case 1:
 		switch (priv->upstream_irq.id) {
 		case 12:
@@ -232,7 +234,7 @@ static int aspeed_kcs_set_address(struct kcs_bmc_device *kcs_bmc, u32 addrs[2], 
 	if (WARN_ON(nr_addrs < 1 || nr_addrs > 2))
 		return -EINVAL;
 
-	switch (priv->kcs_bmc.channel) {
+	switch (priv->channel) {
 	case 1:
 		regmap_update_bits(priv->map, LPC_HICR4, LPC_HICR4_LADR12AS, 0);
 		regmap_write(priv->map, LPC_LADR12H, addrs[0] >> 8);
@@ -315,7 +317,7 @@ static int aspeed_kcs_config_upstream_irq(struct aspeed_kcs_bmc *priv, u32 id, u
 	priv->upstream_irq.mode = aspeed_kcs_irq_serirq;
 	priv->upstream_irq.id = id;
 
-	switch (priv->kcs_bmc.channel) {
+	switch (priv->channel) {
 	case 1:
 		/* Needs IRQxE1 rather than (ID1IRQX, SEL1IRQX, IRQXE1) before AST2600 A3 */
 		break;
@@ -347,7 +349,7 @@ static int aspeed_kcs_config_upstream_irq(struct aspeed_kcs_bmc *priv, u32 id, u
 	default:
 		dev_warn(priv->kcs_bmc.dev,
 			 "SerIRQ configuration not supported on KCS channel %d\n",
-			 priv->kcs_bmc.channel);
+			 priv->channel);
 		return -EINVAL;
 	}
 
@@ -358,7 +360,7 @@ static void aspeed_kcs_enable_channel(struct kcs_bmc_device *kcs_bmc, bool enabl
 {
 	struct aspeed_kcs_bmc *priv = to_aspeed_kcs_bmc(kcs_bmc);
 
-	switch (kcs_bmc->channel) {
+	switch (priv->channel) {
 	case 1:
 		regmap_update_bits(priv->map, LPC_HICR0, LPC_HICR0_LPC1E, enable * LPC_HICR0_LPC1E);
 		return;
@@ -374,7 +376,7 @@ static void aspeed_kcs_enable_channel(struct kcs_bmc_device *kcs_bmc, bool enabl
 		regmap_update_bits(priv->map, LPC_HICRB, LPC_HICRB_LPC4E, enable * LPC_HICRB_LPC4E);
 		return;
 	default:
-		pr_warn("%s: Unsupported channel: %d", __func__, kcs_bmc->channel);
+		pr_warn("%s: Unsupported channel: %d", __func__, priv->channel);
 		return;
 	}
 }
@@ -435,7 +437,7 @@ static void aspeed_kcs_irq_mask_update(struct kcs_bmc_device *kcs_bmc, u8 mask, 
 	if (mask & KCS_BMC_EVENT_TYPE_IBF) {
 		const bool enable = !!(state & KCS_BMC_EVENT_TYPE_IBF);
 
-		switch (kcs_bmc->channel) {
+		switch (priv->channel) {
 		case 1:
 			regmap_update_bits(priv->map, LPC_HICR2, LPC_HICR2_IBFIE1,
 					   enable * LPC_HICR2_IBFIE1);
@@ -453,7 +455,7 @@ static void aspeed_kcs_irq_mask_update(struct kcs_bmc_device *kcs_bmc, u8 mask, 
 					   enable * LPC_HICRB_IBFIE4);
 			return;
 		default:
-			pr_warn("%s: Unsupported channel: %d", __func__, kcs_bmc->channel);
+			pr_warn("%s: Unsupported channel: %d", __func__, priv->channel);
 			return;
 		}
 	}
@@ -526,6 +528,17 @@ static int aspeed_kcs_of_get_channel(struct platform_device *pdev)
 	return -EINVAL;
 }
 
+static int aspeed_kcs_of_get_bank(struct device_node *lpc_np)
+{
+	int id;
+
+	id = of_alias_get_id(lpc_np, "lpc");
+	if (id < 0)
+		return 0;
+
+	return id;
+}
+
 static int
 aspeed_kcs_of_get_io_address(struct platform_device *pdev, u32 addrs[2])
 {
@@ -559,7 +572,7 @@ static int aspeed_kcs_probe(struct platform_device *pdev)
 	struct device_node *np;
 	bool have_upstream_irq;
 	u32 upstream_irq[2];
-	int rc, channel;
+	int rc, channel, bank;
 	int nr_addrs;
 	u32 addrs[2];
 
@@ -574,6 +587,8 @@ static int aspeed_kcs_probe(struct platform_device *pdev)
 	channel = aspeed_kcs_of_get_channel(pdev);
 	if (channel < 0)
 		return channel;
+
+	bank = aspeed_kcs_of_get_bank(np);
 
 	nr_addrs = aspeed_kcs_of_get_io_address(pdev, addrs);
 	if (nr_addrs < 0)
@@ -590,9 +605,11 @@ static int aspeed_kcs_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
+	priv->channel = channel;
+
 	kcs_bmc = &priv->kcs_bmc;
 	kcs_bmc->dev = &pdev->dev;
-	kcs_bmc->channel = channel;
+	kcs_bmc->channel = bank * KCS_CHANNEL_MAX + channel;
 	kcs_bmc->ioreg = ast_kcs_bmc_ioregs[channel - 1];
 	kcs_bmc->ops = &aspeed_kcs_ops;
 
