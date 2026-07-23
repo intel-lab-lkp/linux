@@ -622,12 +622,29 @@ int drmm_connector_hdmi_init(struct drm_device *dev,
 	 * default with the actual controller capability. A value of zero keeps
 	 * the limit inferred from supported_hdmi_ver.
 	 */
-	if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_2_0)
+	if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_2_0) {
+		if (!hdmi_funcs->scrambler_enable || !hdmi_funcs->scrambler_disable) {
+			drm_err(dev, "Scrambler callbacks missing for HDMI 2.x\n");
+			return -EINVAL;
+		}
+
 		connector->hdmi.max_tmds_char_rate = HDMI_2_0_TMDS_CHAR_RATE_MAX_HZ;
-	else if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_1_3)
-		connector->hdmi.max_tmds_char_rate = HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ;
-	else if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_1_0)
-		connector->hdmi.max_tmds_char_rate = HDMI_1_0_TMDS_CHAR_RATE_MAX_HZ;
+	} else {
+		/*
+		 * Scrambler callbacks are only valid for connectors advertising
+		 * HDMI 2.0 capability. drm_connector_hdmi_scrambler_supported()
+		 * relies on their presence to report scrambling support.
+		 */
+		if (hdmi_funcs->scrambler_enable || hdmi_funcs->scrambler_disable) {
+			drm_err(dev, "Scrambler callbacks unexpected for HDMI 1.x\n");
+			return -EINVAL;
+		}
+
+		if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_1_3)
+			connector->hdmi.max_tmds_char_rate = HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ;
+		else if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_1_0)
+			connector->hdmi.max_tmds_char_rate = HDMI_1_0_TMDS_CHAR_RATE_MAX_HZ;
+	}
 
 	if (hdmi_funcs->supported_tmds_char_rate) {
 		if (hdmi_funcs->supported_tmds_char_rate > connector->hdmi.max_tmds_char_rate) {
@@ -635,6 +652,7 @@ int drmm_connector_hdmi_init(struct drm_device *dev,
 				connector->hdmi.max_tmds_char_rate);
 			return -EINVAL;
 		}
+
 		connector->hdmi.max_tmds_char_rate = hdmi_funcs->supported_tmds_char_rate;
 	}
 
@@ -913,6 +931,9 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	if (WARN_ON(connector->registration_state ==
 		    DRM_CONNECTOR_REGISTERED))
 		drm_connector_unregister(connector);
+
+	if (connector->hdmi.scdc_work_initialized)
+		cancel_delayed_work_sync(&connector->hdmi.scdc_work);
 
 	platform_device_unregister(connector->hdmi_audio.codec_pdev);
 
