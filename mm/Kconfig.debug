@@ -320,3 +320,15 @@ config PER_VMA_LOCK_STATS
 	  overhead in the page fault path.
 
 	  If in doubt, say N.
+
+config PAGEALLOC_HOGGER
+	bool "Alloc pages from different nodes, zones, migrate types and orders"
+	depends on DEBUG_FS
+	help
+	  Say Y to alloc pages from different nodes, zones, migrate type and
+	  orders using the debug fs filesystem. This helps to generate memory
+	  pressure easily. This is useful to debug memory reclaims issues,
+	  OOM triggers, page migration issues, etc.
+
+	  If in doubt, say N.
+
