@@ -902,6 +902,7 @@ struct net_device_path {
 			};
 
 			u8	l3_proto;
+			struct dst_entry *dst;
 		} tun;
 		struct {
 			enum {
