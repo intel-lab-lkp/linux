@@ -1203,7 +1203,9 @@ int phy_ethtool_ksettings_set(struct phy_device *phydev,
 	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
 			 phydev->advertising, autoneg == AUTONEG_ENABLE);
 
-	phydev->master_slave_set = cmd->base.master_slave_cfg;
+	if (cmd->base.master_slave_cfg != MASTER_SLAVE_CFG_UNSUPPORTED)
+		phydev->master_slave_set = cmd->base.master_slave_cfg;
+
 	phydev->mdix_ctrl = cmd->base.eth_tp_mdix_ctrl;
 
 	/* Restart the PHY */
