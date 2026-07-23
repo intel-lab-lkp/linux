@@ -51,6 +51,9 @@ properties:
               - st,stm32h750i-art-pi
           - const: st,stm32h750
       - items:
+          - const: ruiside,art-pi2
+          - const: st,stm32h7r7
+      - items:
           - enum:
               - st,stm32mp135f-dk
           - const: st,stm32mp135
