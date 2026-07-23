@@ -427,17 +427,24 @@ static unsigned long find_smallest_section_pfn(int nid, struct zone *zone,
 				     unsigned long start_pfn,
 				     unsigned long end_pfn)
 {
-	for (; start_pfn < end_pfn; start_pfn += PAGES_PER_SUBSECTION) {
+	unsigned long next_pfn;
+
+	for (; start_pfn < end_pfn; start_pfn = next_pfn) {
+		unsigned long tail_pfn;
+
+		next_pfn = start_pfn + PAGES_PER_SUBSECTION;
+		tail_pfn = next_pfn - 1;
+
 		if (unlikely(!pfn_to_online_page(start_pfn)))
 			continue;
 
-		if (unlikely(pfn_to_nid(start_pfn) != nid))
-			continue;
+		if (likely(pfn_to_nid(start_pfn) == nid) &&
+		    zone == page_zone(pfn_to_page(start_pfn)))
+			return start_pfn;
 
-		if (zone != page_zone(pfn_to_page(start_pfn)))
-			continue;
-
-		return start_pfn;
+		if (likely(pfn_to_nid(tail_pfn) == nid) &&
+		    zone == page_zone(pfn_to_page(tail_pfn)))
+			return start_pfn;
 	}
 
 	return 0;
@@ -448,21 +455,26 @@ static unsigned long find_biggest_section_pfn(int nid, struct zone *zone,
 				    unsigned long start_pfn,
 				    unsigned long end_pfn)
 {
-	unsigned long pfn;
+	unsigned long pfn, prev_pfn;
 
 	/* pfn is the end pfn of a memory section. */
 	pfn = end_pfn - 1;
-	for (; pfn >= start_pfn; pfn -= PAGES_PER_SUBSECTION) {
+	for (; pfn >= start_pfn; pfn = prev_pfn) {
+		unsigned long head_pfn;
+
+		prev_pfn = pfn - PAGES_PER_SUBSECTION;
+		head_pfn = prev_pfn + 1;
+
 		if (unlikely(!pfn_to_online_page(pfn)))
 			continue;
 
-		if (unlikely(pfn_to_nid(pfn) != nid))
-			continue;
+		if (likely(pfn_to_nid(pfn) == nid) &&
+		    zone == page_zone(pfn_to_page(pfn)))
+			return pfn;
 
-		if (zone != page_zone(pfn_to_page(pfn)))
-			continue;
-
-		return pfn;
+		if (likely(pfn_to_nid(head_pfn) == nid) &&
+		    zone == page_zone(pfn_to_page(head_pfn)))
+			return pfn;
 	}
 
 	return 0;
