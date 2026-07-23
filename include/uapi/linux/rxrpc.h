@@ -63,6 +63,7 @@ enum rxrpc_cmsg_type {
 	RXRPC_RESPOND		= 17,	/* Cs-: Respond to a challenge */
 	RXRPC_RESPONDED		= 18,	/* S-r: Data received in RESPONSE */
 	RXRPC_RESP_RXGK_APPDATA	= 19,	/* Cs-: RESPONSE: RxGK app data to include */
+	RXRPC_RESPONSE_APPDATA	= 20,	/* Cs-: User key holding app data for RESPONSE */
 	RXRPC__SUPPORTED
 };
 

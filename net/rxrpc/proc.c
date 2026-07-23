@@ -238,7 +238,7 @@ static int rxrpc_bundle_seq_show(struct seq_file *seq, void *v)
 		seq_puts(seq,
 			 "Proto Local                                          "
 			 " Remote                                         "
-			 " SvID Ref Act Flg Key      |"
+			 " SvID Ref Act Flg Key      AppData  |"
 			 " Bundle   Conn_0   Conn_1   Conn_2   Conn_3\n"
 			 );
 		return 0;
@@ -250,7 +250,7 @@ static int rxrpc_bundle_seq_show(struct seq_file *seq, void *v)
 	scnprintf(rbuff, sizeof(rbuff), "%pISpc", &bundle->peer->srx.transport);
 	seq_printf(seq,
 		   "UDP   %-47.47s %-47.47s %4x %3u %3d"
-		   " %c%c%c %08x | %08x %08x %08x %08x %08x\n",
+		   " %c%c%c %08x %08x | %08x %08x %08x %08x %08x\n",
 		   lbuff,
 		   rbuff,
 		   bundle->service_id,
@@ -260,6 +260,7 @@ static int rxrpc_bundle_seq_show(struct seq_file *seq, void *v)
 		   bundle->exclusive ? 'e' : '-',
 		   bundle->upgrade ? 'u' : '-',
 		   key_serial(bundle->key),
+		   key_serial(bundle->app_data),
 		   bundle->debug_id,
 		   bundle->conn_ids[0],
 		   bundle->conn_ids[1],
