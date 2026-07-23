@@ -26,6 +26,7 @@ static int zl3073x_i2c_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id zl3073x_i2c_id[] = {
+	{ .name = "zl30643" },
 	{ .name = "zl30731" },
 	{ .name = "zl30732" },
 	{ .name = "zl30733" },
@@ -36,6 +37,7 @@ static const struct i2c_device_id zl3073x_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, zl3073x_i2c_id);
 
 static const struct of_device_id zl3073x_i2c_of_match[] = {
+	{ .compatible = "microchip,zl30643" },
 	{ .compatible = "microchip,zl30731" },
 	{ .compatible = "microchip,zl30732" },
 	{ .compatible = "microchip,zl30733" },

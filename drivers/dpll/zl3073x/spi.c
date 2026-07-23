@@ -26,6 +26,7 @@ static int zl3073x_spi_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id zl3073x_spi_id[] = {
+	{ "zl30643" },
 	{ "zl30731" },
 	{ "zl30732" },
 	{ "zl30733" },
@@ -36,6 +37,7 @@ static const struct spi_device_id zl3073x_spi_id[] = {
 MODULE_DEVICE_TABLE(spi, zl3073x_spi_id);
 
 static const struct of_device_id zl3073x_spi_of_match[] = {
+	{ .compatible = "microchip,zl30643" },
 	{ .compatible = "microchip,zl30731" },
 	{ .compatible = "microchip,zl30732" },
 	{ .compatible = "microchip,zl30733" },
