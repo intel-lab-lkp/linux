@@ -851,9 +851,13 @@ static int sata_dwc_port_start(struct ata_port *ap)
 	if (err)
 		goto CLEANUP_ALLOC;
 
-	err = phy_power_on(hsdev->phy);
+	err = phy_init(hsdev->phy);
 	if (err)
 		goto CLEANUP_ALLOC;
+
+	err = phy_power_on(hsdev->phy);
+	if (err)
+		goto CLEANUP_PHY;
 
 	for (i = 0; i < SATA_DWC_QCMD_MAX; i++)
 		hsdevp->cmd_issued[i] = SATA_DWC_CMD_ISSUED_NOT;
@@ -880,6 +884,8 @@ static int sata_dwc_port_start(struct ata_port *ap)
 	dev_dbg(ap->dev, "%s: done\n", __func__);
 	return 0;
 
+CLEANUP_PHY:
+	phy_exit(hsdev->phy);
 CLEANUP_ALLOC:
 	kfree(hsdevp);
 CLEANUP:
@@ -897,6 +903,7 @@ static void sata_dwc_port_stop(struct ata_port *ap)
 	dmaengine_terminate_sync(hsdevp->chan);
 	dma_release_channel(hsdevp->chan);
 	phy_power_off(hsdev->phy);
+	phy_exit(hsdev->phy);
 
 	kfree(hsdevp);
 	ap->private_data = NULL;
@@ -1163,6 +1170,10 @@ static int sata_dwc_probe(struct platform_device *ofdev)
 	if (irq < 0)
 		return irq;
 
+	hsdev->phy = devm_phy_optional_get(dev, "sata-phy");
+	if (IS_ERR(hsdev->phy))
+		return PTR_ERR(hsdev->phy);
+
 #ifdef CONFIG_SATA_DWC_OLD_DMA
 	if (!of_property_present(dev->of_node, "dmas")) {
 		err = sata_dwc_dma_init_old(ofdev, hsdev);
@@ -1171,29 +1182,26 @@ static int sata_dwc_probe(struct platform_device *ofdev)
 	}
 #endif
 
-	hsdev->phy = devm_phy_optional_get(dev, "sata-phy");
-	if (IS_ERR(hsdev->phy))
-		return PTR_ERR(hsdev->phy);
-
-	err = phy_init(hsdev->phy);
-	if (err)
-		goto error_out;
-
 	/*
 	 * Now, register with libATA core, this will also initiate the
 	 * device discovery process, invoking our port_start() handler &
 	 * error_handler() to execute a dummy Softreset EH session
 	 */
 	err = ata_host_activate(host, irq, sata_dwc_isr, 0, &sata_dwc_sht);
-	if (err)
+	if (err) {
 		dev_err(dev, "failed to activate host");
+		goto error_out;
+	}
 
 	/* Enable SATA Interrupts */
 	sata_dwc_enable_interrupts(hsdev);
 	return 0;
 
 error_out:
-	phy_exit(hsdev->phy);
+#ifdef CONFIG_SATA_DWC_OLD_DMA
+	if (!device_property_present(dev, "dmas"))
+		sata_dwc_dma_exit_old(hsdev);
+#endif
 	return err;
 }
 
@@ -1204,8 +1212,6 @@ static void sata_dwc_remove(struct platform_device *ofdev)
 	struct sata_dwc_device *hsdev = host->private_data;
 
 	ata_host_detach(host);
-
-	phy_exit(hsdev->phy);
 
 #ifdef CONFIG_SATA_DWC_OLD_DMA
 	/* Free SATA DMA resources */
