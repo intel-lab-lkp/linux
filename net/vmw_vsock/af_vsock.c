@@ -1975,6 +1975,10 @@ static int vsock_listen(struct socket *sock, int backlog)
 		goto out;
 	}
 
+	/* sk_err might have been set as a result of an earlier
+	 * (failed) connect attempt.
+	 */
+	sk->sk_err = 0;
 	sk->sk_max_ack_backlog = backlog;
 	sk->sk_state = TCP_LISTEN;
 
