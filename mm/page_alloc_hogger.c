@@ -89,6 +89,7 @@
 #include <linux/gfp_types.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/nodemask.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
 
@@ -125,6 +126,27 @@ struct page_alloc {
 struct kmem_cache *req_alloc_cache;
 struct kmem_cache *page_alloc_cache;
 
+/**
+ * create_nodes_subdirs() - Creates a directory for each online node in the
+ * system. Once that the node directory is created, it creates a directory for
+ * each zone in the node.
+ */
+static inline int create_nodes_subdirs(struct dentry *mmdir)
+{
+	struct dentry *nodedir;
+	int node_idx;
+	char dirname[12];
+
+	for_each_online_node(node_idx) {
+		snprintf(dirname, sizeof(dirname), "node-%d", node_idx);
+		nodedir = debugfs_create_dir(dirname, mmdir);
+		if (IS_ERR(nodedir))
+			return PTR_ERR(nodedir);
+	}
+
+	return 0;
+}
+
 static int __init page_alloc_hogger_debugfs_init(void)
 {
 	int ret;
@@ -154,8 +176,14 @@ static int __init page_alloc_hogger_debugfs_init(void)
 		goto clean_page_alloc_cache;
 	}
 
+	ret = create_nodes_subdirs(mmdir);
+	if (ret)
+		goto clean_dir;
+
 	return 0;
 
+clean_dir:
+	debugfs_remove_recursive(mmdir);
 
 clean_page_alloc_cache:
 	kmem_cache_destroy(page_alloc_cache);
@@ -166,6 +194,7 @@ clean_req_alloc_cache:
 error_exit:
 	return ret;
 }
+
 static void __exit page_alloc_hogger_debugfs_exit(void)
 {
 	debugfs_remove_recursive(mmdir);
