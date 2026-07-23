@@ -128,6 +128,37 @@ struct kmem_cache *req_alloc_cache;
 struct kmem_cache *page_alloc_cache;
 
 /**
+ * create_migrate_type_subdirs() - Creates a directory for each migrate type
+ * inside the order directory. Once the migrate type directory is created, it
+ * creates the "nr_allocs" file and the "free" file.
+ */
+static inline int create_migrate_type_subdirs(struct dentry *orderdir,
+					      int node_idx, int zone_idx,
+					      int order)
+{
+	struct dentry *migratedir;
+	char dirname[24];
+
+	for (int mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
+#ifdef CONFIG_CMA
+		if (mtype == MIGRATE_CMA) /* CMA allocs are not supported yet*/
+			continue;
+#endif
+#ifdef CONFIG_MEMORY_ISOLATION
+		if (mtype == MIGRATE_ISOLATE) /* can't allocate from here */
+			continue;
+#endif
+		snprintf(dirname, sizeof(dirname), "migrate-%s",
+			 migratetype_names[mtype]);
+		migratedir = debugfs_create_dir(dirname, orderdir);
+		if (IS_ERR(migratedir))
+			return PTR_ERR(migratedir);
+	}
+
+	return 0;
+}
+
+/**
  * create_page_orders_subdirs() - Creates a directory for each page order inside
  * the zone directory. Once that the page order directory is created, it creates
  * a directory for each migrate type.
@@ -138,12 +169,18 @@ static inline int create_page_orders_subdirs(struct dentry *zonedir,
 {
 	struct dentry *orderdir;
 	char dirname[12];
+	int ret;
 
 	for (int order = 0; order < NR_PAGE_ORDERS; order++) {
 		snprintf(dirname, sizeof(dirname), "order-%d", order);
 		orderdir = debugfs_create_dir(dirname, zonedir);
 		if (IS_ERR(orderdir))
 			return PTR_ERR(orderdir);
+
+		ret = create_migrate_type_subdirs(orderdir, node_idx, zone_idx,
+						  order);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
