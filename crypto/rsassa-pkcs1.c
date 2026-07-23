@@ -224,10 +224,10 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 	unsigned int child_reqsize = crypto_akcipher_reqsize(ctx->child);
 	struct akcipher_request *child_req __free(kfree_sensitive) = NULL;
 	struct crypto_wait cwait;
-	struct scatterlist sg;
+	struct scatterlist sg_src, sg_dst;
 	unsigned int dst_len;
 	unsigned int pos;
-	u8 *out_buf;
+	u8 *in_buf, *out_buf;
 	int err;
 
 	/* RFC 8017 sec 8.2.2 step 1 - length checking */
@@ -236,19 +236,30 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 	    rsassa_pkcs1_invalid_hash_len(dlen, hash_prefix))
 		return -EINVAL;
 
-	/* RFC 8017 sec 8.2.2 step 2 - RSA verification */
-	child_req = kmalloc(sizeof(*child_req) + child_reqsize + ctx->key_size,
-			    GFP_KERNEL);
+	/*
+	 * RFC 8017 sec 8.2.2 step 2 - RSA verification
+	 *
+	 * Allocate separate input and output buffers within the child_req
+	 * allocation.  Using the same buffer for both src and dst (in-place)
+	 * would cause it to be DMA-mapped twice with incompatible directions
+	 * (DMA_TO_DEVICE and DMA_FROM_DEVICE), which is undefined behaviour on
+	 * non-coherent architectures such as ARM64 with hardware accelerators
+	 * like CAAM, leading to intermittent cache-coherency failures.
+	 */
+	child_req = kmalloc(sizeof(*child_req) + child_reqsize +
+			    2 * ctx->key_size, GFP_KERNEL);
 	if (!child_req)
 		return -ENOMEM;
 
-	out_buf = (u8 *)(child_req + 1) + child_reqsize;
-	memcpy(out_buf, src, slen);
+	in_buf  = (u8 *)(child_req + 1) + child_reqsize;
+	out_buf = in_buf + ctx->key_size;
+	memcpy(in_buf, src, slen);
 
 	crypto_init_wait(&cwait);
-	sg_init_one(&sg, out_buf, slen);
+	sg_init_one(&sg_src, in_buf,  slen);
+	sg_init_one(&sg_dst, out_buf, slen);
 	akcipher_request_set_tfm(child_req, ctx->child);
-	akcipher_request_set_crypt(child_req, &sg, &sg, slen, slen);
+	akcipher_request_set_crypt(child_req, &sg_src, &sg_dst, slen, slen);
 	akcipher_request_set_callback(child_req, CRYPTO_TFM_REQ_MAY_SLEEP,
 				      crypto_req_done, &cwait);
 
