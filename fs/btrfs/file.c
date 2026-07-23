@@ -1420,6 +1420,11 @@ ssize_t btrfs_do_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	if (encoded && (iocb->ki_flags & IOCB_NOWAIT))
 		return -EOPNOTSUPP;
 
+#ifndef CONFIG_BTRFS_EXPERIMENTAL
+	if (iocb->ki_flags & IOCB_DIRECT)
+		return -EOPNOTSUPP;
+#endif
+
 	if (encoded) {
 		num_written = btrfs_encoded_write(iocb, from, encoded);
 		num_sync = encoded->len;
@@ -3793,6 +3798,11 @@ static ssize_t btrfs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 	if (btrfs_is_shutdown(inode_to_fs_info(file_inode(iocb->ki_filp))))
 		return -EIO;
+
+#ifndef CONFIG_BTRFS_EXPERIMENTAL
+	if (iocb->ki_flags & IOCB_DIRECT)
+		return -EOPNOTSUPP;
+#endif
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
 		ret = btrfs_direct_read(iocb, to);
