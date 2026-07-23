@@ -1147,11 +1147,45 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_calc_nested_tsc_offset);
 
 u64 kvm_calc_nested_tsc_multiplier(u64 l1_multiplier, u64 l2_multiplier)
 {
-	if (l2_multiplier != kvm_caps.default_tsc_scaling_ratio)
-		return mul_u64_u64_shr(l1_multiplier, l2_multiplier,
-				       kvm_caps.tsc_scaling_ratio_frac_bits);
+	unsigned int frac = kvm_caps.tsc_scaling_ratio_frac_bits;
+	u64 nested_multiplier;
 
-	return l1_multiplier;
+	if (l2_multiplier == kvm_caps.default_tsc_scaling_ratio)
+		return l1_multiplier;
+
+	/*
+	 * Both inputs are individually within [1, max_tsc_scaling_ratio], but
+	 * their fixed-point product (M1 * M2) >> frac can exceed the width of
+	 * the hardware TSC multiplier field: on Intel the high bits would be
+	 * silently truncated (yielding a wrong -- or even zero -- L2 scaling
+	 * ratio), and on AMD the surplus bits are reserved bits that #GP the
+	 * physical MSR_AMD64_TSC_RATIO write.  (M1 * M2) >> frac overflows u64
+	 * iff the high 64 bits of the 128-bit product are >= (1 << frac);
+	 * detect that (and any result above the advertised maximum) and
+	 * saturate rather than program an unrepresentable ratio.
+	 */
+	if (mul_u64_u64_shr(l1_multiplier, l2_multiplier, 64) >= (1ULL << frac))
+		return kvm_caps.max_tsc_scaling_ratio;
+
+	nested_multiplier = mul_u64_u64_shr(l1_multiplier, l2_multiplier, frac);
+	if (nested_multiplier > kvm_caps.max_tsc_scaling_ratio)
+		return kvm_caps.max_tsc_scaling_ratio;
+
+	/*
+	 * The same product can floor to 0 at the other end, when the true ratio
+	 * is below one ulp (e.g. M1 < 2^frac -- L1 slower than the host --
+	 * composed with a small but legal M2).  A zero multiplier is no more
+	 * representable than an oversized one: Intel rejects it at VM-entry (the
+	 * SDM requires a nonzero TSC-multiplier under "use TSC scaling", which
+	 * KVM already mirrors on the input via CC(!vmcs12->tsc_multiplier)), and
+	 * on AMD it programs a frozen ratio into MSR_AMD64_TSC_RATIO.  Clamp up
+	 * to the smallest representable nonzero ratio, mirroring the saturation
+	 * above.
+	 */
+	if (!nested_multiplier)
+		return 1;
+
+	return nested_multiplier;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_calc_nested_tsc_multiplier);
 
