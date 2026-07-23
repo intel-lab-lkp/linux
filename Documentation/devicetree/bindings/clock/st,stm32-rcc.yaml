@@ -23,6 +23,7 @@ properties:
               - st,stm32f746-rcc
               - st,stm32h743-rcc
           - const: st,stm32-rcc
+      - const: st,stm32h7rs-rcc
       - items:
           - enum:
               - st,stm32f469-rcc
@@ -46,6 +47,10 @@ properties:
   clocks:
     minItems: 2
     maxItems: 3
+
+  clock-names:
+    minItems: 2
+    maxItems: 2
 
   st,syscfg:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -79,14 +84,13 @@ required:
   - '#reset-cells'
   - '#clock-cells'
   - clocks
-  - st,syscfg
 
 allOf:
   - if:
       properties:
         compatible:
           contains:
-            const: st,stm32h743-rcc
+            const: st,stm32h7rs-rcc
     then:
       properties:
         '#clock-cells':
@@ -97,23 +101,55 @@ allOf:
           items:
             - description: high speed external (HSE) clock input
             - description: low speed external (LSE) clock input
-            - description: Inter-IC sound (I2S) clock input
+        clock-names:
+          items:
+            - const: hse
+            - const: lse
+        st,syscfg: false
         st,ssc-modfreq-hz: false
         st,ssc-moddepth-permyriad: false
         st,ssc-modmethod: false
+      required:
+        - clock-names
 
     else:
-      properties:
-        '#clock-cells':
-          const: 2
-          description: |
-            - The first cell is the clock type, possible values are 0 for
-              gated clocks and 1 otherwise.
-            - The second cell is the clock index for the specified type.
-        clocks:
-          items:
-            - description: high speed external (HSE) clock input
-            - description: Inter-IC sound (I2S) clock input
+      required:
+        - st,syscfg
+      allOf:
+        - if:
+            properties:
+              compatible:
+                contains:
+                  const: st,stm32h743-rcc
+          then:
+            properties:
+              '#clock-cells':
+                const: 1
+                description: |
+                  The clock index for the specified type.
+              clocks:
+                items:
+                  - description: high speed external (HSE) clock input
+                  - description: low speed external (LSE) clock input
+                  - description: Inter-IC sound (I2S) clock input
+              clock-names: false
+              st,ssc-modfreq-hz: false
+              st,ssc-moddepth-permyriad: false
+              st,ssc-modmethod: false
+
+          else:
+            properties:
+              '#clock-cells':
+                const: 2
+                description: |
+                  - The first cell is the clock type, possible values are 0 for
+                    gated clocks and 1 otherwise.
+                  - The second cell is the clock index for the specified type.
+              clocks:
+                items:
+                  - description: high speed external (HSE) clock input
+                  - description: Inter-IC sound (I2S) clock input
+              clock-names: false
 
 additionalProperties: false
 
@@ -139,6 +175,15 @@ examples:
         #reset-cells = <1>;
         clocks = <&clk_hse>, <&clk_lse>, <&clk_i2s>;
         st,syscfg = <&pwrcfg>;
+    };
+  - |
+    reset-clock-controller@58024400 {
+        compatible = "st,stm32h7rs-rcc";
+        reg = <0x58024400 0x400>;
+        #clock-cells = <1>;
+        #reset-cells = <1>;
+        clocks = <&clk_hse>, <&clk_lse>;
+        clock-names = "hse", "lse";
     };
 
 ...
