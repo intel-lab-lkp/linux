@@ -230,6 +230,67 @@ static void ksmbd_notify_save_moved_from(struct ksmbd_notify *notify,
 			 msecs_to_jiffies(KSMBD_NOTIFY_MOVED_FROM_MSECS));
 }
 
+static bool
+ksmbd_notify_handle_rename(struct ksmbd_notify *notify, u32 mask,
+				 u32 cookie, const struct qstr *file_name)
+{
+	struct ksmbd_notify_event *from, *to;
+	u32 from_mask;
+
+	to = ksmbd_notify_alloc_event(FILE_ACTION_RENAMED_NEW_NAME, file_name,
+				      KSMBD_DEFAULT_GFP);
+	if (!to)
+		return false;
+
+	spin_lock(&notify->lock);
+	if (!notify->moved_from_event ||
+	    notify->moved_from_cookie != cookie) {
+		spin_unlock(&notify->lock);
+		kfree(to);
+		ksmbd_debug(NOTIFY,
+			    "No rename source for destination %.*s, cookie %u\n",
+			    file_name ? file_name->len : 0,
+			    file_name ? (const char *)file_name->name : "",
+			    cookie);
+		return false;
+	}
+	from = notify->moved_from_event;
+	from_mask = notify->moved_from_mask;
+	notify->moved_from_event = NULL;
+	notify->moved_from_mask = 0;
+	notify->moved_from_cookie = 0;
+	cancel_delayed_work(&notify->moved_from_work);
+	spin_unlock(&notify->lock);
+
+	from->action = FILE_ACTION_RENAMED_OLD_NAME;
+	ksmbd_debug(NOTIFY, "Matched rename %.*s to %.*s, cookie %u\n",
+		    (int)from->name_len, from->name,
+		    file_name ? file_name->len : 0,
+		    file_name ? (const char *)file_name->name : "", cookie);
+
+	if (!ksmbd_notify_filter_match(notify, from_mask)) {
+		ksmbd_debug(NOTIFY, "Filtered rename source %.*s\n",
+			    (int)from->name_len, from->name);
+		kfree(from);
+		from = NULL;
+	}
+
+	if (!ksmbd_notify_filter_match(notify, mask)) {
+		ksmbd_debug(NOTIFY, "Filtered rename destination %.*s\n",
+			    file_name ? file_name->len : 0,
+			    file_name ? (const char *)file_name->name : "");
+		kfree(to);
+		to = NULL;
+	}
+
+	if (from)
+		ksmbd_notify_queue_event(notify, from);
+	if (to)
+		ksmbd_notify_queue_event(notify, to);
+
+	return true;
+}
+
 static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
 					   u32 mask, struct inode *inode,
 					   struct inode *dir,
@@ -264,10 +325,12 @@ static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
 		return 0;
 	}
 
-	if (mask & FS_MOVED_TO)
-		return 0;
-
-	if (mask & FS_CREATE) {
+	if (mask & FS_MOVED_TO) {
+		if (ksmbd_notify_handle_rename(notify, mask, cookie,
+					       file_name))
+			return 0;
+		action = FILE_ACTION_ADDED;
+	} else if (mask & FS_CREATE) {
 		action = FILE_ACTION_ADDED;
 	} else if (mask & FS_DELETE) {
 		action = FILE_ACTION_REMOVED;
