@@ -8,6 +8,7 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/wait.h>
 
 #include "panfrost_device.h"
 #include "panfrost_devfreq.h"
