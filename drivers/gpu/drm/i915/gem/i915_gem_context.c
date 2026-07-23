@@ -66,6 +66,7 @@
 #include <linux/highmem.h>
 #include <linux/log2.h>
 #include <linux/nospec.h>
+#include <linux/cleanup.h>
 
 #include <drm/drm_cache.h>
 #include <drm/drm_print.h>
@@ -106,7 +107,7 @@ static void lut_close(struct i915_gem_context *ctx)
 	struct radix_tree_iter iter;
 	void __rcu **slot;
 
-	mutex_lock(&ctx->lut_mutex);
+	guard(mutex)(&ctx->lut_mutex);
 	rcu_read_lock();
 	radix_tree_for_each_slot(slot, &ctx->handles_vma, &iter, 0) {
 		struct i915_vma *vma = rcu_dereference_raw(*slot);
@@ -139,7 +140,6 @@ static void lut_close(struct i915_gem_context *ctx)
 		i915_gem_object_put(obj);
 	}
 	rcu_read_unlock();
-	mutex_unlock(&ctx->lut_mutex);
 }
 
 static struct intel_context *
@@ -340,13 +340,8 @@ static int proto_context_register(struct drm_i915_file_private *fpriv,
 				  struct i915_gem_proto_context *pc,
 				  u32 *id)
 {
-	int ret;
-
-	mutex_lock(&fpriv->proto_context_lock);
-	ret = proto_context_register_locked(fpriv, pc, id);
-	mutex_unlock(&fpriv->proto_context_lock);
-
-	return ret;
+	guard(mutex)(&fpriv->proto_context_lock);
+	return proto_context_register_locked(fpriv, pc, id);
 }
 
 static struct i915_address_space *
@@ -404,7 +399,6 @@ set_proto_ctx_engines_balance(struct i915_user_extension __user *base,
 		container_of_user(base, typeof(*ext), base);
 	const struct set_proto_ctx_engines *set = data;
 	struct drm_i915_private *i915 = set->i915;
-	struct intel_engine_cs **siblings;
 	u16 num_siblings, idx;
 	unsigned int n;
 	int err;
@@ -442,17 +436,17 @@ set_proto_ctx_engines_balance(struct i915_user_extension __user *base,
 	if (num_siblings == 0)
 		return 0;
 
-	siblings = kmalloc_objs(*siblings, num_siblings);
+	struct intel_engine_cs **siblings __free(kfree) =
+		kmalloc_objs(*siblings, num_siblings);
+
 	if (!siblings)
 		return -ENOMEM;
 
 	for (n = 0; n < num_siblings; n++) {
 		struct i915_engine_class_instance ci;
 
-		if (copy_from_user(&ci, &ext->engines[n], sizeof(ci))) {
-			err = -EFAULT;
-			goto err_siblings;
-		}
+		if (copy_from_user(&ci, &ext->engines[n], sizeof(ci)))
+			return -EFAULT;
 
 		siblings[n] = intel_engine_lookup_user(i915,
 						       ci.engine_class,
@@ -461,27 +455,20 @@ set_proto_ctx_engines_balance(struct i915_user_extension __user *base,
 			drm_dbg(&i915->drm,
 				"Invalid sibling[%d]: { class:%d, inst:%d }\n",
 				n, ci.engine_class, ci.engine_instance);
-			err = -EINVAL;
-			goto err_siblings;
+			return -EINVAL;
 		}
 	}
 
 	if (num_siblings == 1) {
 		set->engines[idx].type = I915_GEM_ENGINE_TYPE_PHYSICAL;
 		set->engines[idx].engine = siblings[0];
-		kfree(siblings);
 	} else {
 		set->engines[idx].type = I915_GEM_ENGINE_TYPE_BALANCED;
 		set->engines[idx].num_siblings = num_siblings;
-		set->engines[idx].siblings = siblings;
+		set->engines[idx].siblings = no_free_ptr(siblings);
 	}
 
 	return 0;
-
-err_siblings:
-	kfree(siblings);
-
-	return err;
 }
 
 static int
@@ -588,7 +575,6 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 	u64 flags;
 	int err = 0, n, i, j;
 	u16 slot, width, num_siblings;
-	struct intel_engine_cs **siblings = NULL;
 	intel_engine_mask_t prev_mask;
 
 	if (get_user(slot, &ext->engine_index))
@@ -645,7 +631,8 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 		return -EINVAL;
 	}
 
-	siblings = kmalloc_objs(*siblings, num_siblings * width);
+	struct intel_engine_cs **siblings __free(kfree) =
+		kmalloc_objs(*siblings, num_siblings * width);
 	if (!siblings)
 		return -ENOMEM;
 
@@ -657,10 +644,8 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 			struct i915_engine_class_instance ci;
 
 			n = i * num_siblings + j;
-			if (copy_from_user(&ci, &ext->engines[n], sizeof(ci))) {
-				err = -EFAULT;
-				goto out_err;
-			}
+			if (copy_from_user(&ci, &ext->engines[n], sizeof(ci)))
+				return -EINVAL;
 
 			siblings[n] =
 				intel_engine_lookup_user(i915, ci.engine_class,
@@ -669,8 +654,7 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 				drm_dbg(&i915->drm,
 					"Invalid sibling[%d]: { class:%d, inst:%d }\n",
 					n, ci.engine_class, ci.engine_instance);
-				err = -EINVAL;
-				goto out_err;
+				return -EINVAL;
 			}
 
 			/*
@@ -678,10 +662,8 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 			 * classes
 			 */
 			if (siblings[n]->class == RENDER_CLASS ||
-			    siblings[n]->class == COMPUTE_CLASS) {
-				err = -EINVAL;
-				goto out_err;
-			}
+			    siblings[n]->class == COMPUTE_CLASS)
+				return -EINVAL;
 
 			if (n) {
 				if (prev_engine.engine_class !=
@@ -690,8 +672,7 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 						"Mismatched class %d, %d\n",
 						prev_engine.engine_class,
 						ci.engine_class);
-					err = -EINVAL;
-					goto out_err;
+					return -EINVAL;
 				}
 			}
 
@@ -704,8 +685,7 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 				drm_dbg(&i915->drm,
 					"Non contiguous logical mask 0x%x, 0x%x\n",
 					prev_mask, current_mask);
-				err = -EINVAL;
-				goto out_err;
+				return -EINVAL;
 			}
 		}
 		prev_mask = current_mask;
@@ -714,14 +694,9 @@ set_proto_ctx_engines_parallel_submit(struct i915_user_extension __user *base,
 	set->engines[slot].type = I915_GEM_ENGINE_TYPE_PARALLEL;
 	set->engines[slot].num_siblings = num_siblings;
 	set->engines[slot].width = width;
-	set->engines[slot].siblings = siblings;
+	set->engines[slot].siblings = no_free_ptr(siblings);
 
 	return 0;
-
-out_err:
-	kfree(siblings);
-
-	return err;
 }
 
 static const i915_user_extension_fn set_proto_ctx_engines_extensions[] = {
@@ -1041,6 +1016,7 @@ static void free_engines(struct i915_gem_engines *e)
 {
 	__free_engines(e, e->num_engines);
 }
+DEFINE_FREE(free_engines, struct i915_gem_engines *, if (_T) free_engines(_T))
 
 static void free_engines_rcu(struct rcu_head *rcu)
 {
@@ -1117,9 +1093,8 @@ static struct i915_gem_engines *default_engines(struct i915_gem_context *ctx,
 {
 	const unsigned int max = I915_NUM_ENGINES;
 	struct intel_engine_cs *engine;
-	struct i915_gem_engines *e, *err;
 
-	e = alloc_engines(max);
+	struct i915_gem_engines *e __free(free_engines) = alloc_engines(max);
 	if (!e)
 		return ERR_PTR(-ENOMEM);
 
@@ -1135,10 +1110,8 @@ static struct i915_gem_engines *default_engines(struct i915_gem_context *ctx,
 		GEM_BUG_ON(e->engines[engine->legacy_idx]);
 
 		ce = intel_context_create(engine);
-		if (IS_ERR(ce)) {
-			err = ERR_CAST(ce);
-			goto free_engines;
-		}
+		if (IS_ERR(ce))
+			return ERR_CAST(ce);
 
 		e->engines[engine->legacy_idx] = ce;
 		e->num_engines = max(e->num_engines, engine->legacy_idx + 1);
@@ -1147,18 +1120,11 @@ static struct i915_gem_engines *default_engines(struct i915_gem_context *ctx,
 			sseu = rcs_sseu;
 
 		ret = intel_context_set_gem(ce, ctx, sseu);
-		if (ret) {
-			err = ERR_PTR(ret);
-			goto free_engines;
-		}
-
+		if (ret)
+			return ERR_PTR(ret);
 	}
 
-	return e;
-
-free_engines:
-	free_engines(e);
-	return err;
+	return_ptr(e);
 }
 
 static int perma_pin_contexts(struct intel_context *ce)
@@ -2347,7 +2313,7 @@ i915_gem_context_lookup(struct drm_i915_file_private *file_priv, u32 id)
 	if (ctx)
 		return ctx;
 
-	mutex_lock(&file_priv->proto_context_lock);
+	guard(mutex)(&file_priv->proto_context_lock);
 	/* Try one more time under the lock */
 	ctx = __context_lookup(file_priv, id);
 	if (!ctx) {
@@ -2357,7 +2323,6 @@ i915_gem_context_lookup(struct drm_i915_file_private *file_priv, u32 id)
 		else
 			ctx = finalize_create_context_locked(file_priv, pc, id);
 	}
-	mutex_unlock(&file_priv->proto_context_lock);
 
 	return ctx;
 }
@@ -2452,10 +2417,10 @@ int i915_gem_context_destroy_ioctl(struct drm_device *dev, void *data,
 	/* We need to hold the proto-context lock here to prevent races
 	 * with finalize_create_context_locked().
 	 */
-	mutex_lock(&file_priv->proto_context_lock);
-	ctx = xa_erase(&file_priv->context_xa, args->ctx_id);
-	pc = xa_erase(&file_priv->proto_context_xa, args->ctx_id);
-	mutex_unlock(&file_priv->proto_context_lock);
+	scoped_guard (mutex, &file_priv->proto_context_lock) {
+		ctx = xa_erase(&file_priv->context_xa, args->ctx_id);
+		pc = xa_erase(&file_priv->proto_context_xa, args->ctx_id);
+	}
 
 	if (!ctx && !pc)
 		return -ENOENT;
@@ -2607,22 +2572,22 @@ int i915_gem_context_setparam_ioctl(struct drm_device *dev, void *data,
 	struct i915_gem_context *ctx;
 	int ret = 0;
 
-	mutex_lock(&file_priv->proto_context_lock);
-	ctx = __context_lookup(file_priv, args->ctx_id);
-	if (!ctx) {
-		pc = xa_load(&file_priv->proto_context_xa, args->ctx_id);
-		if (pc) {
-			/* Contexts should be finalized inside
-			 * GEM_CONTEXT_CREATE starting with graphics
-			 * version 13.
-			 */
-			WARN_ON(GRAPHICS_VER(file_priv->i915) > 12);
-			ret = set_proto_ctx_param(file_priv, pc, args);
-		} else {
-			ret = -ENOENT;
+	scoped_guard (mutex, &file_priv->proto_context_lock) {
+		ctx = __context_lookup(file_priv, args->ctx_id);
+		if (!ctx) {
+			pc = xa_load(&file_priv->proto_context_xa, args->ctx_id);
+			if (pc) {
+				/* Contexts should be finalized inside
+				 * GEM_CONTEXT_CREATE starting with graphics
+				 * version 13.
+				 */
+				WARN_ON(GRAPHICS_VER(file_priv->i915) > 12);
+				ret = set_proto_ctx_param(file_priv, pc, args);
+			} else {
+				ret = -ENOENT;
+			}
 		}
 	}
-	mutex_unlock(&file_priv->proto_context_lock);
 
 	if (ctx) {
 		ret = ctx_setparam(file_priv, ctx, args);
