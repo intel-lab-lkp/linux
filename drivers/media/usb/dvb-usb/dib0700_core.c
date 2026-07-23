@@ -352,6 +352,20 @@ static int dib0700_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg *msg,
 {
 	struct dvb_usb_device *d = i2c_get_adapdata(adap);
 	struct dib0700_state *st = d->priv;
+	int i;
+
+	/*
+	 * Both transfer paths translate an I2C read into a control-IN
+	 * usb_control_msg() whose wLength is the message length. A
+	 * zero-length read produces a control URB whose pipe direction
+	 * (IN) disagrees with a zero-length setup packet (which
+	 * usb_submit_urb() treats as OUT), tripping its "BOGUS control
+	 * dir" WARN(). Reject such reads up front so neither path can
+	 * submit one.
+	 */
+	for (i = 0; i < num; i++)
+		if ((msg[i].flags & I2C_M_RD) && msg[i].len == 0)
+			return -EOPNOTSUPP;
 
 	if (st->fw_use_new_i2c_api == 1) {
 		/* User running at least fw 1.20 */
