@@ -1924,11 +1924,21 @@ static void packet_parse_headers(struct sk_buff *skb, struct socket *sock)
 {
 	int depth;
 
+	/*
+	 * packet_parse_headers() runs only on the transmit path
+	 * (packet_sendmsg_spkt(), tpacket_fill_skb(), packet_snd()), where
+	 * skb->data is the start of the L2 header for every packet-socket
+	 * type: SOCK_RAW and SOCK_PACKET carry a user-supplied header and
+	 * SOCK_DGRAM has one built by dev_hard_header(). Anchor the MAC
+	 * header for all of them so a frame does not reach ndo_start_xmit()
+	 * with the MAC header unset, where a driver reading eth_hdr(skb) on
+	 * TX would dereference an out-of-bounds offset (skb->head + (u16)~0).
+	 */
+	skb_reset_mac_header(skb);
+
 	if ((!skb->protocol || skb->protocol == htons(ETH_P_ALL)) &&
-	    sock->type == SOCK_RAW) {
-		skb_reset_mac_header(skb);
+	    sock->type == SOCK_RAW)
 		skb->protocol = dev_parse_header_protocol(skb);
-	}
 
 	/* Move network header to the right position for VLAN tagged packets */
 	if (likely(skb->dev->type == ARPHRD_ETHER) &&
