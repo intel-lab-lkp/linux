@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -30,10 +31,20 @@ static const unsigned int supported_mclk_lrck_ratios[] = {
 	256, 384, 400, 500, 512, 768, 1024
 };
 
+static const char * const es8316_supply_names[] = {
+	"avdd",
+	"cpvdd",
+	"dvdd",
+	"pvdd",
+};
+
+#define ES8316_NUM_SUPPLIES ARRAY_SIZE(es8316_supply_names)
+
 struct es8316_priv {
 	struct mutex lock;
 	struct clk *mclk;
 	struct regmap *regmap;
+	struct regulator_bulk_data supplies[ES8316_NUM_SUPPLIES];
 	struct snd_soc_component *component;
 	struct snd_soc_jack *jack;
 	int irq;
@@ -767,10 +778,16 @@ static int es8316_probe(struct snd_soc_component *component)
 	if (!es8316->mclk)
 		dev_warn(component->dev, "assuming static mclk\n");
 
+	ret = regulator_bulk_enable(ES8316_NUM_SUPPLIES, es8316->supplies);
+	if (ret) {
+		dev_err(component->dev, "unable to enable supplies\n");
+		return ret;
+	}
+
 	ret = clk_prepare_enable(es8316->mclk);
 	if (ret) {
 		dev_err(component->dev, "unable to enable mclk\n");
-		return ret;
+		goto err_disable_supplies;
 	}
 
 	/* Reset codec and enable current state machine */
@@ -793,6 +810,11 @@ static int es8316_probe(struct snd_soc_component *component)
 	snd_soc_component_write(component, ES8316_CLKMGR_ADCOSR, 0x32);
 
 	return 0;
+
+err_disable_supplies:
+	regulator_bulk_disable(ES8316_NUM_SUPPLIES, es8316->supplies);
+
+	return ret;
 }
 
 static void es8316_remove(struct snd_soc_component *component)
@@ -800,6 +822,7 @@ static void es8316_remove(struct snd_soc_component *component)
 	struct es8316_priv *es8316 = snd_soc_component_get_drvdata(component);
 
 	clk_disable_unprepare(es8316->mclk);
+	regulator_bulk_disable(ES8316_NUM_SUPPLIES, es8316->supplies);
 }
 
 static int es8316_resume(struct snd_soc_component *component)
@@ -862,7 +885,7 @@ static int es8316_i2c_probe(struct i2c_client *i2c_client)
 {
 	struct device *dev = &i2c_client->dev;
 	struct es8316_priv *es8316;
-	int ret;
+	int i, ret;
 
 	es8316 = devm_kzalloc(&i2c_client->dev, sizeof(struct es8316_priv),
 			      GFP_KERNEL);
@@ -870,6 +893,14 @@ static int es8316_i2c_probe(struct i2c_client *i2c_client)
 		return -ENOMEM;
 
 	i2c_set_clientdata(i2c_client, es8316);
+
+	for (i = 0; i < ES8316_NUM_SUPPLIES; i++)
+		es8316->supplies[i].supply = es8316_supply_names[i];
+
+	ret = devm_regulator_bulk_get(dev, ES8316_NUM_SUPPLIES,
+				      es8316->supplies);
+	if (ret)
+		return dev_err_probe(dev, ret, "unable to get supplies\n");
 
 	es8316->regmap = devm_regmap_init_i2c(i2c_client, &es8316_regmap);
 	if (IS_ERR(es8316->regmap))
