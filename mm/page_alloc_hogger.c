@@ -127,6 +127,58 @@ struct page_alloc {
 struct kmem_cache *req_alloc_cache;
 struct kmem_cache *page_alloc_cache;
 
+
+/**
+ * req_page_alloc_write() - Allocates the pages on the requested node, zone,
+ * order and migrate type. Once the allocation is performed, a file is created
+ * to free the allocation later.
+ */
+static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
+				     size_t cnt, loff_t *ppos)
+{
+	return cnt;
+}
+
+static const struct file_operations req_page_alloc_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = req_page_alloc_write,
+};
+
+/**
+ * create_nr_pages_allocs_file() - Creates the file "nr_pages_allocs".
+ *
+ * The "nr_pages_allocs" file will be used to write the number of allocations
+ * that will be performed. When the allocations are performed, a new file for
+ * each allocation will be created in @migratedir.
+ */
+static inline int create_nr_pages_allocs_file(struct dentry *migratedir,
+					      int node_idx, int zone_idx,
+					      int order, int mtype)
+{
+	struct req_alloc *req;
+	struct dentry *nr_pages;
+
+	req = kmem_cache_alloc(req_alloc_cache, GFP_KERNEL);
+	if (!req) {
+		pr_err("Failed to create nr_pages_allocs_info");
+		return -ENOMEM;
+	}
+
+	req->node_idx = node_idx;
+	req->zone_idx = zone_idx;
+	req->order = order;
+	req->migrate_type = mtype;
+	req->parentdir = migratedir;
+
+	nr_pages = debugfs_create_file("nr_pages_allocs", 0644, migratedir, req,
+				       &req_page_alloc_fops);
+	if (IS_ERR(nr_pages))
+		return PTR_ERR(nr_pages);
+
+	return 0;
+}
+
 /**
  * create_migrate_type_subdirs() - Creates a directory for each migrate type
  * inside the order directory. Once the migrate type directory is created, it
@@ -138,6 +190,7 @@ static inline int create_migrate_type_subdirs(struct dentry *orderdir,
 {
 	struct dentry *migratedir;
 	char dirname[24];
+	int ret;
 
 	for (int mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
 #ifdef CONFIG_CMA
@@ -153,6 +206,11 @@ static inline int create_migrate_type_subdirs(struct dentry *orderdir,
 		migratedir = debugfs_create_dir(dirname, orderdir);
 		if (IS_ERR(migratedir))
 			return PTR_ERR(migratedir);
+
+		ret = create_nr_pages_allocs_file(migratedir, node_idx,
+						  zone_idx, order, mtype);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
