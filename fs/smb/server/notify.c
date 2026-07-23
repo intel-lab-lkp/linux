@@ -8,6 +8,7 @@
  *
  */
 
+#include <linux/fsnotify_backend.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 
@@ -20,9 +21,61 @@
 #include "smb2pdu.h"
 #include "vfs_cache.h"
 
+struct ksmbd_notify_mark {
+	struct fsnotify_mark mark;
+	struct ksmbd_notify *notify;
+};
+
+struct ksmbd_notify {
+	struct fsnotify_group *group;
+	struct fsnotify_mark *mark;
+	struct ksmbd_file *fp;
+	/* Protects filter, rename state and the queued events. */
+	spinlock_t lock;
+	u32 filter;
+	u32 mask;
+	u32 max_buffer_size;
+};
+
 struct ksmbd_notify_req {
 	wait_queue_head_t wait;
 };
+
+#define KSMBD_NOTIFY_NAME_EVENT_MASK	(FS_CREATE | FS_DELETE | \
+					 FS_MOVED_FROM | FS_MOVED_TO)
+
+static const struct {
+	u32 notify_mask;
+	u32 fsnotify_mask;
+} ksmbd_notify_mapping[] = {
+	{ FILE_NOTIFY_CHANGE_FILE_NAME,
+	  KSMBD_NOTIFY_NAME_EVENT_MASK },
+	{ FILE_NOTIFY_CHANGE_DIR_NAME,
+	  KSMBD_NOTIFY_NAME_EVENT_MASK },
+	{ FILE_NOTIFY_CHANGE_ATTRIBUTES,
+	  FS_ATTRIB | FS_MOVED_FROM | FS_MOVED_TO | FS_MODIFY },
+	{ FILE_NOTIFY_CHANGE_LAST_WRITE, FS_ATTRIB },
+	{ FILE_NOTIFY_CHANGE_LAST_ACCESS, FS_ATTRIB },
+	{ FILE_NOTIFY_CHANGE_EA, FS_ATTRIB },
+	{ FILE_NOTIFY_CHANGE_SECURITY, FS_ATTRIB },
+};
+
+static u32 ksmbd_notify_map(u32 filter)
+{
+	size_t i;
+	u32 mask = 0;
+
+	for (i = 0; i < ARRAY_SIZE(ksmbd_notify_mapping); i++) {
+		if (ksmbd_notify_mapping[i].notify_mask & filter)
+			mask |= ksmbd_notify_mapping[i].fsnotify_mask;
+	}
+
+	ksmbd_debug(NOTIFY,
+		    "Mapped completion filter 0x%x to fsnotify mask 0x%x\n",
+		    filter, mask);
+
+	return mask;
+}
 
 static void smb2_notify_cancel(void **argv)
 {
@@ -30,6 +83,135 @@ static void smb2_notify_cancel(void **argv)
 
 	ksmbd_debug(NOTIFY, "Wake pending notify request\n");
 	wake_up(&notify_req->wait);
+}
+
+static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
+					   u32 mask, struct inode *inode,
+					   struct inode *dir,
+					   const struct qstr *file_name,
+					   u32 cookie)
+{
+	struct ksmbd_notify_mark *notify_mark;
+	struct ksmbd_notify *notify;
+	struct inode *event_inode = dir ?: inode;
+	struct ksmbd_file *fp;
+
+	notify_mark = container_of(mark, struct ksmbd_notify_mark, mark);
+	notify = notify_mark->notify;
+	fp = notify->fp;
+
+	ksmbd_debug(NOTIFY,
+		    "fid %llu:%llu, notify event: mask=0x%08x inode=%llu name=%.*s cookie=%u\n",
+		    fp->persistent_id, fp->volatile_id, mask,
+		    event_inode ? (unsigned long long)event_inode->i_ino : 0,
+		    file_name ? file_name->len : 0,
+		    file_name ? (const char *)file_name->name : "", cookie);
+
+	return 0;
+}
+
+static void ksmbd_notify_free_mark(struct fsnotify_mark *mark)
+{
+	struct ksmbd_notify_mark *notify_mark;
+
+	notify_mark = container_of(mark, struct ksmbd_notify_mark, mark);
+	kfree(notify_mark);
+}
+
+static const struct fsnotify_ops ksmbd_notify_fsnotify_ops = {
+	.handle_inode_event = ksmbd_notify_handle_inode_event,
+	.free_mark = ksmbd_notify_free_mark,
+};
+
+static struct fsnotify_mark *
+ksmbd_notify_add_mark(struct ksmbd_notify *notify, u32 mask,
+		      struct fsnotify_group **group)
+{
+	struct ksmbd_notify_mark *notify_mark;
+	int err;
+
+	*group = fsnotify_alloc_group(&ksmbd_notify_fsnotify_ops, 0);
+	if (IS_ERR(*group)) {
+		pr_err("Failed to allocate fsnotify group: %ld\n",
+		       PTR_ERR(*group));
+		return ERR_CAST(*group);
+	}
+
+	notify_mark = kzalloc_obj(*notify_mark, KSMBD_DEFAULT_GFP);
+	if (!notify_mark) {
+		pr_err("Failed to allocate fsnotify mark\n");
+		err = -ENOMEM;
+		goto err_put_group;
+	}
+
+	notify_mark->notify = notify;
+	fsnotify_init_mark(&notify_mark->mark, *group);
+	notify_mark->mark.mask = mask | FS_EVENT_ON_CHILD;
+	err = fsnotify_add_inode_mark(&notify_mark->mark,
+				      file_inode(notify->fp->filp), 0);
+	if (err) {
+		pr_err("Failed to add fsnotify mark, inode %llu: %d\n",
+		       (unsigned long long)file_inode(notify->fp->filp)->i_ino,
+		       err);
+		goto err_put_mark;
+	}
+
+	return &notify_mark->mark;
+
+err_put_mark:
+	fsnotify_put_mark(&notify_mark->mark);
+err_put_group:
+	fsnotify_put_group(*group);
+	return ERR_PTR(err);
+}
+
+static void ksmbd_notify_destroy_mark(struct fsnotify_group *group,
+				      struct fsnotify_mark *mark)
+{
+	fsnotify_destroy_mark(mark, group);
+	fsnotify_put_mark(mark);
+	fsnotify_wait_marks_destroyed();
+	fsnotify_put_group(group);
+}
+
+static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
+			    u32 max_buffer_size,
+			    struct ksmbd_notify **notify_out)
+{
+	struct ksmbd_notify *notify;
+	struct fsnotify_mark *mark;
+	int err = 0;
+
+	notify = kzalloc_obj(*notify, KSMBD_DEFAULT_GFP);
+	if (!notify) {
+		pr_err("Failed to allocate notify watch\n");
+		err = -ENOMEM;
+		goto out;
+	}
+
+	notify->fp = fp;
+	spin_lock_init(&notify->lock);
+	notify->filter = filter;
+	notify->mask = mask;
+	notify->max_buffer_size = max_buffer_size;
+
+	mark = ksmbd_notify_add_mark(notify, mask, &notify->group);
+	if (IS_ERR(mark)) {
+		err = PTR_ERR(mark);
+		kfree(notify);
+		goto out;
+	}
+
+	notify->mark = mark;
+	*notify_out = notify;
+	ksmbd_debug(NOTIFY,
+		    "Added fsnotify mark, inode %llu, mask 0x%x, filter 0x%x, "
+		    "output buffer length %u\n",
+		    (unsigned long long)file_inode(fp->filp)->i_ino, mark->mask,
+		    filter, max_buffer_size);
+
+out:
+	return err;
 }
 
 static struct ksmbd_file *
@@ -88,10 +270,40 @@ err_put_fp:
 	return ERR_PTR(err);
 }
 
+static struct ksmbd_notify *
+ksmbd_notify_setup_watch(struct ksmbd_file *fp,
+			 struct smb2_change_notify_req *req,
+			 struct smb2_change_notify_rsp *rsp)
+{
+	struct ksmbd_notify *notify;
+	u32 filter, mask;
+	int err;
+
+	filter = le32_to_cpu(req->CompletionFilter);
+	mask = ksmbd_notify_map(filter);
+	if (!mask) {
+		pr_err("Unsupported completion filter 0x%x\n", filter);
+		rsp->hdr.Status = STATUS_INVALID_PARAMETER;
+		return ERR_PTR(-EINVAL);
+	}
+
+	err = ksmbd_notify_add(fp, mask, filter,
+			       le32_to_cpu(req->OutputBufferLength), &notify);
+	if (err) {
+		pr_err("Failed to add notify watch, fid %llu:%llu: %d\n",
+		       fp->persistent_id, fp->volatile_id, err);
+		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
+		return ERR_PTR(err);
+	}
+
+	return notify;
+}
+
 static int ksmbd_notify_wait(struct ksmbd_work *work,
-			     struct ksmbd_file *fp,
+			     struct ksmbd_notify *notify,
 			     struct ksmbd_notify_req *notify_req)
 {
+	struct ksmbd_file *fp = notify->fp;
 	int err;
 
 	spin_lock(&fp->f_lock);
@@ -131,6 +343,7 @@ int ksmbd_handle_notify(struct ksmbd_work *work,
 			struct smb2_change_notify_rsp *rsp)
 {
 	struct ksmbd_notify_req *notify_req = NULL;
+	struct ksmbd_notify *notify = NULL;
 	struct ksmbd_file *fp = NULL;
 	void **argv = NULL;
 	bool async_work = false;
@@ -140,6 +353,13 @@ int ksmbd_handle_notify(struct ksmbd_work *work,
 	if (IS_ERR(fp)) {
 		err = PTR_ERR(fp);
 		fp = NULL;
+		goto out;
+	}
+
+	notify = ksmbd_notify_setup_watch(fp, req, rsp);
+	if (IS_ERR(notify)) {
+		err = PTR_ERR(notify);
+		notify = NULL;
 		goto out;
 	}
 
@@ -169,7 +389,7 @@ int ksmbd_handle_notify(struct ksmbd_work *work,
 	}
 	async_work = true;
 
-	err = ksmbd_notify_wait(work, fp, notify_req);
+	err = ksmbd_notify_wait(work, notify, notify_req);
 
 	if (work->state == KSMBD_WORK_CANCELLED) {
 		ksmbd_debug(NOTIFY, "Notify request cancelled, async id %d\n",
@@ -197,6 +417,10 @@ out:
 		kfree(argv);
 	if (notify_req)
 		kfree(notify_req);
+	if (notify) {
+		ksmbd_notify_destroy_mark(notify->group, notify->mark);
+		kfree(notify);
+	}
 	if (fp)
 		ksmbd_fd_put(work, fp);
 	return err;
