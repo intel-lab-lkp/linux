@@ -2386,6 +2386,7 @@ static __always_inline int task_mm_cid(struct task_struct *t)
 struct sched_cache_time {
 	u64 runtime;
 	unsigned long epoch;
+	unsigned long epoch_last_visit;
 };
 
 struct sched_cache_stat {
@@ -2396,6 +2397,7 @@ struct sched_cache_stat {
 	unsigned long next_scan;
 	unsigned long footprint;
 	int cpu;
+	cpumask_var_t visited_cpus;
 } ____cacheline_aligned_in_smp;
 
 #else
