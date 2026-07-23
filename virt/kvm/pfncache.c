@@ -152,6 +152,37 @@ static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_s
 	return kvm->mmu_invalidate_seq != mmu_seq;
 }
 
+static void kvm_gpc_invalidate_pfn(struct kvm *kvm, kvm_pfn_t pfn)
+{
+	struct gfn_to_pfn_cache *gpc;
+
+	if (is_error_noslot_pfn(pfn))
+		return;
+
+	spin_lock(&kvm->gpc_lock);
+	list_for_each_entry(gpc, &kvm->gpc_list, list) {
+		read_lock_irq(&gpc->lock);
+
+		if (gpc->valid && gpc->pfn == pfn) {
+			read_unlock_irq(&gpc->lock);
+
+			/*
+			 * Re-check if invalidation is still necessary
+			 * after acquiring the write lock.
+			 * See gfn_to_pfn_cache_invalidate_start()
+			 */
+			write_lock_irq(&gpc->lock);
+			if (gpc->valid && gpc->pfn == pfn)
+				gpc->valid = false;
+			write_unlock_irq(&gpc->lock);
+			continue;
+		}
+
+		read_unlock_irq(&gpc->lock);
+	}
+	spin_unlock(&kvm->gpc_lock);
+}
+
 static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 {
 	/* Note, the new page offset may be different than the old! */
@@ -201,6 +232,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			if (new_khva != old_khva)
 				gpc_unmap(new_pfn, new_khva);
 
+			kvm_gpc_invalidate_pfn(gpc->kvm, new_pfn);
 			kvm_release_page_unused(page);
 
 			cond_resched();
@@ -221,6 +253,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			new_khva = gpc_map(new_pfn);
 
 		if (!new_khva) {
+			kvm_gpc_invalidate_pfn(gpc->kvm, new_pfn);
 			kvm_release_page_unused(page);
 			goto out_error;
 		}
