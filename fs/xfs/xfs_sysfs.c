@@ -392,6 +392,63 @@ const struct kobj_type xfs_stats_ktype = {
 	.default_groups = xfs_stats_groups,
 };
 
+static inline struct xfs_mount *csum_to_mp(struct kobject *kobj)
+{
+	return container_of(to_kobj(kobj), struct xfs_mount, m_csum_kobj);
+}
+
+static ssize_t
+read_bounce_show(
+	struct kobject		*kobj,
+	char			*buf)
+{
+	struct xfs_mount	*mp = csum_to_mp(kobj);
+
+	switch (READ_ONCE(mp->m_read_bounce)) {
+	case XFS_READ_BOUNCE_NEVER:
+		return sysfs_emit(buf, "never\n");
+	case XFS_READ_BOUNCE_ALWAYS:
+		return sysfs_emit(buf, "always\n");
+	case XFS_READ_BOUNCE_LAZY:
+		return sysfs_emit(buf, "lazy\n");
+	default:
+		return sysfs_emit(buf, "invalid\n");
+	}
+}
+
+static ssize_t
+read_bounce_store(
+	struct kobject	*kobj,
+	const char	*buf,
+	size_t		count)
+{
+	struct xfs_mount	*mp = csum_to_mp(kobj);
+
+	if (!strcmp(buf, "never"))
+		WRITE_ONCE(mp->m_read_bounce, XFS_READ_BOUNCE_NEVER);
+	else if (!strcmp(buf, "always"))
+		WRITE_ONCE(mp->m_read_bounce, XFS_READ_BOUNCE_ALWAYS);
+	else if (!strcmp(buf, "lazy"))
+		WRITE_ONCE(mp->m_read_bounce, XFS_READ_BOUNCE_LAZY);
+	else
+		return -EINVAL;
+
+	return count;
+}
+XFS_SYSFS_ATTR_RW(read_bounce);
+
+static struct attribute *xfs_csum_attrs[] = {
+	ATTR_LIST(read_bounce),
+	NULL,
+};
+ATTRIBUTE_GROUPS(xfs_csum);
+
+static const struct kobj_type xfs_csum_ktype = {
+	.release = xfs_sysfs_release,
+	.sysfs_ops = &xfs_sysfs_ops,
+	.default_groups = xfs_csum_groups,
+};
+
 /* xlog */
 
 static inline struct xlog *
@@ -837,6 +894,12 @@ xfs_mount_sysfs_init(
 	if (error)
 		goto out_remove_error_dir;
 
+	/* .../xfs/<dev>/csum/ */
+	error = xfs_sysfs_init(&mp->m_csum_kobj, &xfs_csum_ktype,
+			       &mp->m_kobj, "csum");
+	if (error)
+		goto out_remove_error_dir;
+
 	return 0;
 
 out_remove_error_dir:
@@ -854,6 +917,8 @@ xfs_mount_sysfs_del(
 {
 	struct xfs_error_cfg	*cfg;
 	int			i, j;
+
+	xfs_sysfs_del(&mp->m_csum_kobj);
 
 	for (i = 0; i < XFS_ERR_CLASS_MAX; i++) {
 		for (j = 0; j < XFS_ERR_ERRNO_MAX; j++) {

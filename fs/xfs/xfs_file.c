@@ -264,10 +264,8 @@ xfs_file_dio_read(
 	ret = xfs_ilock_iocb(iocb, XFS_IOLOCK_SHARED);
 	if (ret)
 		return ret;
-	if (mapping_stable_writes(iocb->ki_filp->f_mapping)) {
+	if (mapping_stable_writes(iocb->ki_filp->f_mapping))
 		dio_ops = &xfs_dio_read_bounce_ops;
-		dio_flags |= IOMAP_DIO_BOUNCE;
-	}
 	ret = iomap_dio_rw(iocb, to, &xfs_read_iomap_ops, dio_ops, dio_flags,
 			NULL, 0);
 	xfs_iunlock(ip, XFS_IOLOCK_SHARED);
