@@ -47,12 +47,6 @@ static bool none_validate_challenge(struct rxrpc_connection *conn,
 	return true;
 }
 
-static int none_sendmsg_respond_to_challenge(struct sk_buff *challenge,
-					     struct msghdr *msg)
-{
-	return -EINVAL;
-}
-
 static int none_verify_response(struct rxrpc_connection *conn,
 				struct sk_buff *response_skb,
 				void *response, unsigned int len)
@@ -88,7 +82,6 @@ const struct rxrpc_security rxrpc_no_security = {
 	.secure_packet			= none_secure_packet,
 	.verify_packet			= none_verify_packet,
 	.validate_challenge		= none_validate_challenge,
-	.sendmsg_respond_to_challenge	= none_sendmsg_respond_to_challenge,
 	.verify_response		= none_verify_response,
 	.clear				= none_clear,
 };
