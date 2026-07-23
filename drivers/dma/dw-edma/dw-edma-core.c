@@ -100,7 +100,26 @@ static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
 
 static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 {
+	struct virt_dma_desc *vd, *tmp;
 	u32 i;
+
+	/*
+	 * Software cannot tell which published entries completed before the
+	 * reset. Replaying one could duplicate a transfer after its target
+	 * changed ownership, while keeping descriptors with uncertain entries
+	 * would block later in-order completions. Abort descriptors with published
+	 * entries; untouched descriptors remain available for republishing.
+	 */
+	list_for_each_entry_safe(vd, tmp, &chan->vc.desc_issued, node) {
+		struct dw_edma_desc *desc = vd2dw_edma_desc(vd);
+
+		if (desc->start_burst == desc->done_burst)
+			continue;
+
+		dw_hdma_set_callback_result(vd, DMA_TRANS_ABORTED);
+		list_del(&vd->node);
+		vchan_cookie_complete(vd);
+	}
 
 	chan->ll_head = 0;
 	chan->ll_done = 0;
