@@ -215,10 +215,8 @@ static int da8xx_mstpri_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	mstpri = devm_ioremap_resource(dev, res);
-	if (IS_ERR(mstpri)) {
-		dev_err(dev, "unable to map MSTPRI registers\n");
+	if (IS_ERR(mstpri))
 		return PTR_ERR(mstpri);
-	}
 
 	prio_list = da8xx_mstpri_get_board_prio();
 	if (!prio_list) {
