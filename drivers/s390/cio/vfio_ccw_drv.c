@@ -126,8 +126,10 @@ void vfio_ccw_crw_todo(struct work_struct *work)
 
 	private = container_of(work, struct vfio_ccw_private, crw_work);
 
+	spin_lock(&private->crw_lock);
 	if (!list_empty(&private->crw) && private->crw_trigger)
 		eventfd_signal(private->crw_trigger);
+	spin_unlock(&private->crw_lock);
 }
 
 /*
@@ -301,7 +303,9 @@ static void vfio_ccw_queue_crw(struct vfio_ccw_private *private,
 	crw->crw.erc = erc;
 	crw->crw.rsid = rsid;
 
+	spin_lock(&private->crw_lock);
 	list_add_tail(&crw->next, &private->crw);
+	spin_unlock(&private->crw_lock);
 	queue_work(vfio_ccw_work_q, &private->crw_work);
 }
 
