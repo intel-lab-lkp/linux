@@ -1041,7 +1041,7 @@ static int sn65dsi83_probe(struct i2c_client *client)
 		ret = devm_request_threaded_irq(ctx->dev, ctx->irq, NULL, sn65dsi83_irq,
 						IRQF_ONESHOT, dev_name(ctx->dev), ctx);
 		if (ret)
-			return dev_err_probe(dev, ret, "failed to request irq\n");
+			return ret;
 	}
 
 	dev_set_drvdata(dev, ctx);
