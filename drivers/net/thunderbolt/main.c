@@ -930,7 +930,15 @@ static int tbnet_open(struct net_device *dev)
 	if (tbnet_e2e && net->svc->prtcstns & TBNET_E2E)
 		flags |= RING_FLAG_E2E;
 
-	ring = tb_ring_alloc_tx(xd->tb->nhi, -1, TBNET_RING_SIZE, flags);
+	/*
+	 * Leave E2E off the Tx ring. Per the USB4 spec a Transmit Descriptor
+	 * Ring with E2E enabled must obtain end-to-end credits before it may
+	 * transmit, and not every host router delivers them. On ASMedia
+	 * ASM4242 the credits never arrive, which parks the Tx consumer index
+	 * forever and makes the link unusable.
+	 */
+	ring = tb_ring_alloc_tx(xd->tb->nhi, -1, TBNET_RING_SIZE,
+				RING_FLAG_FRAME);
 	if (!ring) {
 		netdev_err(dev, "failed to allocate Tx ring\n");
 		return -ENOMEM;
