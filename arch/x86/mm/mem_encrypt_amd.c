@@ -566,4 +566,10 @@ void __init mem_encrypt_free_decrypted_mem(void)
 	}
 
 	free_init_pages("unused decrypted", vaddr, vaddr_end);
+
+	vaddr = (unsigned long)__start_bss_decrypted_gap;
+	vaddr_end = (unsigned long)__start_bss_decrypted;
+
+	free_kernel_image_pages("unused kernel image (bss_decrypted gap)",
+				(void *)vaddr, (void *)vaddr_end);
 }
