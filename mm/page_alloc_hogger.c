@@ -85,9 +85,12 @@
 
 #include <linux/errno.h>
 #include <linux/debugfs.h>
+#include <linux/gfp.h>
+#include <linux/gfp_types.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/slab.h>
 
 struct dentry *mmdir;
 
@@ -119,20 +122,55 @@ struct page_alloc {
 	struct dentry *alloc_dentry;
 };
 
+struct kmem_cache *req_alloc_cache;
+struct kmem_cache *page_alloc_cache;
+
 static int __init page_alloc_hogger_debugfs_init(void)
 {
+	int ret;
+
+	req_alloc_cache = kmem_cache_create(
+		"req_alloc_cache", sizeof(struct req_alloc), 0,
+		SLAB_HWCACHE_ALIGN, NULL);
+	if (!req_alloc_cache) {
+		pr_err("The req_alloc_cache couldn't be created");
+		ret = -ENOMEM;
+		goto error_exit;
+	}
+
+	page_alloc_cache = kmem_cache_create(
+		"page_alloc_cache", sizeof(struct page_alloc), 0,
+		SLAB_HWCACHE_ALIGN, NULL);
+	if (!page_alloc_cache) {
+		pr_err("The page_alloc_cache couldn't be created");
+		ret = -ENOMEM;
+		goto clean_req_alloc_cache;
+	}
+
 	mmdir = debugfs_create_dir("mm", NULL);
 	if (IS_ERR(mmdir)) {
 		pr_err("Unable to create mm directory");
-		return PTR_ERR(mmdir);
+		ret = PTR_ERR(mmdir);
+		goto clean_page_alloc_cache;
 	}
 
 	return 0;
-}
 
+
+clean_page_alloc_cache:
+	kmem_cache_destroy(page_alloc_cache);
+
+clean_req_alloc_cache:
+	kmem_cache_destroy(req_alloc_cache);
+
+error_exit:
+	return ret;
+}
 static void __exit page_alloc_hogger_debugfs_exit(void)
 {
 	debugfs_remove_recursive(mmdir);
+	kmem_cache_destroy(req_alloc_cache);
+	kmem_cache_destroy(page_alloc_cache);
 }
 
 module_init(page_alloc_hogger_debugfs_init);
