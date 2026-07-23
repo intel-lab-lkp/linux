@@ -19,6 +19,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#include <linux/workqueue.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
 #include <linux/input/touchscreen.h>
@@ -147,7 +148,18 @@ struct edt_ft5x06_ts_data {
 	unsigned int crc_errors;
 	unsigned int header_errors;
 	bool no_regmap_bulk_read;
+	unsigned long last_reset;
+	unsigned long last_success;
+	struct delayed_work poll_work;
+	/* io_lock serialises the frame read between the IRQ and the poll work */
+	struct mutex io_lock;
+	u16 down_mask;
+	u8 miss[16];
 };
+
+/* poll cadence and release debounce for the poll-while-touched recovery */
+#define EDT_POLL_INTERVAL_MS	15
+#define EDT_RELEASE_MISSES	3
 
 struct edt_i2c_chip_data {
 	int  max_support_points;
@@ -321,26 +333,83 @@ static int edt_ft5x06_bulk_read(struct regmap *map, unsigned int start,
 	return 0;
 }
 
-static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
+static void edt_ft5x06_release_all(struct edt_ft5x06_ts_data *tsdata)
 {
-	struct edt_ft5x06_ts_data *tsdata = dev_id;
+	int id;
+
+	if (!tsdata->down_mask)
+		return;
+
+	for (id = 0; id < tsdata->max_support_points; id++) {
+		if (!(tsdata->down_mask & BIT(id)))
+			continue;
+		input_mt_slot(tsdata->input, id);
+		input_mt_report_slot_state(tsdata->input, MT_TOOL_FINGER, false);
+	}
+	tsdata->down_mask = 0;
+	memset(tsdata->miss, 0, sizeof(tsdata->miss));
+	input_mt_report_pointer_emulation(tsdata->input, true);
+	input_sync(tsdata->input);
+}
+
+static void edt_ft5x06_fetch_and_report(struct edt_ft5x06_ts_data *tsdata)
+{
 	struct device *dev = &tsdata->client->dev;
+	u16 new_mask = 0, released = 0;
 	u8 rdbuf[63];
 	int i, type, x, y, id;
-	int error;
+	int error, tries;
 
 	memset(rdbuf, 0, sizeof(rdbuf));
-	if (tsdata->no_regmap_bulk_read)
-		error = edt_ft5x06_bulk_read(tsdata->regmap, tsdata->tdata_cmd,
-					     rdbuf, tsdata->tdata_len);
-	else
-		error = regmap_bulk_read(tsdata->regmap, tsdata->tdata_cmd,
-					 rdbuf, tsdata->tdata_len);
+	for (tries = 0; tries < 4; tries++) {
+		if (tsdata->no_regmap_bulk_read)
+			error = edt_ft5x06_bulk_read(tsdata->regmap,
+						     tsdata->tdata_cmd, rdbuf,
+						     tsdata->tdata_len);
+		else
+			error = regmap_bulk_read(tsdata->regmap,
+						 tsdata->tdata_cmd, rdbuf,
+						 tsdata->tdata_len);
+		if (!error)
+			break;
+		if (error != -EAGAIN && error != -ETIMEDOUT &&
+		    error != -EIO && error != -ENXIO)
+			break;
+		usleep_range(min(1000U << tries, 4000U),
+			     min(2000U << tries, 8000U));
+	}
 	if (error) {
 		dev_err_ratelimited(dev, "Unable to fetch data, error: %d\n",
 				    error);
-		goto out;
+		/*
+		 * A run of failed reads with no success for over a second means
+		 * the controller is wedged rather than just glitching; pulse the
+		 * reset line to recover it and drop any held contacts, since the
+		 * post-reset finger state is unknown.
+		 */
+		if (tsdata->reset_gpio &&
+		    time_after(jiffies, tsdata->last_success + HZ) &&
+		    time_after(jiffies, tsdata->last_reset + 2 * HZ)) {
+			tsdata->last_reset = jiffies;
+			gpiod_set_value_cansleep(tsdata->reset_gpio, 1);
+			usleep_range(5000, 6000);
+			gpiod_set_value_cansleep(tsdata->reset_gpio, 0);
+			msleep(300);
+			tsdata->last_success = jiffies;
+			dev_warn_ratelimited(dev, "reset to recover controller\n");
+			edt_ft5x06_release_all(tsdata);
+		}
+		return;
 	}
+	tsdata->last_success = jiffies;
+
+	/*
+	 * TD_STATUS holds the active-contact count; a value above the panel
+	 * maximum means the frame is corrupt, so keep the previous state.
+	 */
+	if (tsdata->version != EDT_M06 &&
+	    (rdbuf[2] & 0x0f) > tsdata->max_support_points)
+		return;
 
 	for (i = 0; i < tsdata->max_support_points; i++) {
 		u8 *buf = &rdbuf[i * tsdata->point_len + tsdata->tdata_offset];
@@ -349,9 +418,11 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 		/* ignore Reserved events */
 		if (type == TOUCH_EVENT_RESERVED)
 			continue;
-
 		/* M06 sometimes sends bogus coordinates in TOUCH_DOWN */
 		if (tsdata->version == EDT_M06 && type == TOUCH_EVENT_DOWN)
+			continue;
+		/* releases are derived from the down-mask diff below */
+		if (type == TOUCH_EVENT_UP)
 			continue;
 
 		x = get_unaligned_be16(buf) & 0x0fff;
@@ -363,19 +434,73 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 		id = (buf[2] >> 4) & 0x0f;
 		if (id >= tsdata->max_support_points)
 			continue;
+		if (tsdata->prop.max_x &&
+		    (x > tsdata->prop.max_x || y > tsdata->prop.max_y))
+			continue;
 
 		input_mt_slot(tsdata->input, id);
-		if (input_mt_report_slot_state(tsdata->input, MT_TOOL_FINGER,
-					       type != TOUCH_EVENT_UP))
-			touchscreen_report_pos(tsdata->input, &tsdata->prop,
-					       x, y, true);
+		input_mt_report_slot_state(tsdata->input, MT_TOOL_FINGER, true);
+		touchscreen_report_pos(tsdata->input, &tsdata->prop, x, y, true);
+		new_mask |= BIT(id);
 	}
+
+	/*
+	 * Reconcile held contacts with this frame. A contact absent from the
+	 * frame is released only after EDT_RELEASE_MISSES consecutive misses so
+	 * a single glitchy read cannot cut a still-present tap or drag.
+	 */
+	for (id = 0; id < tsdata->max_support_points; id++) {
+		if (new_mask & BIT(id)) {
+			tsdata->miss[id] = 0;
+			continue;
+		}
+		if (!(tsdata->down_mask & BIT(id)))
+			continue;
+		if (++tsdata->miss[id] >= EDT_RELEASE_MISSES) {
+			input_mt_slot(tsdata->input, id);
+			input_mt_report_slot_state(tsdata->input,
+						   MT_TOOL_FINGER, false);
+			tsdata->miss[id] = 0;
+			released |= BIT(id);
+		}
+	}
+	tsdata->down_mask = (tsdata->down_mask | new_mask) & ~released;
 
 	input_mt_report_pointer_emulation(tsdata->input, true);
 	input_sync(tsdata->input);
+}
 
-out:
+static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
+{
+	struct edt_ft5x06_ts_data *tsdata = dev_id;
+
+	guard(mutex)(&tsdata->io_lock);
+	edt_ft5x06_fetch_and_report(tsdata);
+	if (tsdata->down_mask)
+		mod_delayed_work(system_wq, &tsdata->poll_work,
+				 msecs_to_jiffies(EDT_POLL_INTERVAL_MS));
+
 	return IRQ_HANDLED;
+}
+
+static void edt_ft5x06_poll_work(struct work_struct *work)
+{
+	struct edt_ft5x06_ts_data *tsdata =
+		container_of(to_delayed_work(work),
+			     struct edt_ft5x06_ts_data, poll_work);
+
+	guard(mutex)(&tsdata->io_lock);
+	edt_ft5x06_fetch_and_report(tsdata);
+	if (tsdata->down_mask)
+		mod_delayed_work(system_wq, &tsdata->poll_work,
+				 msecs_to_jiffies(EDT_POLL_INTERVAL_MS));
+}
+
+static void edt_ft5x06_cancel_poll(void *data)
+{
+	struct edt_ft5x06_ts_data *tsdata = data;
+
+	cancel_delayed_work_sync(&tsdata->poll_work);
 }
 
 struct edt_ft5x06_attribute {
@@ -1244,6 +1369,10 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 
 	tsdata->no_regmap_bulk_read =
 		device_property_read_bool(&client->dev, "no-regmap-bulk-read");
+	tsdata->last_success = jiffies;
+	tsdata->last_reset = jiffies;
+	mutex_init(&tsdata->io_lock);
+	INIT_DELAYED_WORK(&tsdata->poll_work, edt_ft5x06_poll_work);
 
 	/*
 	 * Check which sleep modes we can support. Power-off requires the
@@ -1341,6 +1470,15 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		return error;
 	}
 
+	/*
+	 * Registered before the IRQ so it unwinds after the IRQ is freed on
+	 * removal: no edge can re-arm the poll worker once it is cancelled.
+	 */
+	error = devm_add_action_or_reset(&client->dev, edt_ft5x06_cancel_poll,
+					 tsdata);
+	if (error)
+		return error;
+
 	irq_flags = irq_get_trigger_type(client->irq);
 	if (irq_flags == IRQF_TRIGGER_NONE)
 		irq_flags = IRQF_TRIGGER_FALLING;
@@ -1382,6 +1520,9 @@ static int edt_ft5x06_ts_suspend(struct device *dev)
 	struct edt_ft5x06_ts_data *tsdata = i2c_get_clientdata(client);
 	struct gpio_desc *reset_gpio = tsdata->reset_gpio;
 	int ret;
+
+	/* stop the poll worker so it cannot touch i2c after power-down */
+	cancel_delayed_work_sync(&tsdata->poll_work);
 
 	if (device_may_wakeup(dev))
 		return 0;
