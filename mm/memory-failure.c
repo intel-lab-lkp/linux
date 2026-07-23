@@ -2677,7 +2677,12 @@ int unpoison_memory(unsigned long pfn)
 	p = pfn_to_online_page(pfn);
 	if (!p)
 		return -EIO;
-	folio = page_folio(p);
+
+	if (!is_page_hwpoison(p)) {
+		unpoison_pr_info("%#lx: page is not poisoned\n",
+				 pfn, &unpoison_rs);
+		return -EBUSY;
+	}
 
 	mutex_lock(&mf_mutex);
 
@@ -2688,16 +2693,12 @@ int unpoison_memory(unsigned long pfn)
 		goto unlock_mutex;
 	}
 
+	folio = page_folio(p);
+
 	if (is_huge_zero_folio(folio)) {
 		unpoison_pr_info("%#lx: huge zero page is not supported\n",
 				 pfn, &unpoison_rs);
 		ret = -EOPNOTSUPP;
-		goto unlock_mutex;
-	}
-
-	if (!is_page_hwpoison(p)) {
-		unpoison_pr_info("%#lx: page is not poisoned\n",
-				 pfn, &unpoison_rs);
 		goto unlock_mutex;
 	}
 
