@@ -1115,8 +1115,6 @@ __setup("s390_iommu_aperture=", s390_iommu_aperture_setup);
 
 static int __init s390_iommu_init(void)
 {
-	int rc;
-
 	iommu_dma_forcedac = true;
 	s390_iommu_aperture = (u64)virt_to_phys(high_memory);
 	if (!s390_iommu_aperture_factor)
@@ -1124,11 +1122,7 @@ static int __init s390_iommu_init(void)
 	else
 		s390_iommu_aperture *= s390_iommu_aperture_factor;
 
-	rc = dma_alloc_cpu_table_caches();
-	if (rc)
-		return rc;
-
-	return rc;
+	return dma_alloc_cpu_table_caches();
 }
 subsys_initcall(s390_iommu_init);
 
