@@ -253,11 +253,7 @@ static int toshiba_haps_resume(struct device *device)
 					    haps->protection_level);
 
 	/* Reset the protection on resume */
-	ret = toshiba_haps_reset_protection(haps->acpi_dev->handle);
-	if (ret != 0)
-		return ret;
-
-	return ret;
+	return toshiba_haps_reset_protection(haps->acpi_dev->handle);
 }
 #endif
 
