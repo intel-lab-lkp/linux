@@ -98,6 +98,18 @@
 struct dentry *mmdir;
 
 /**
+ * atomic_long_t allocs_file_seq - Represents the naming sequence used for
+ * allocation files.
+ */
+atomic_long_t allocs_file_seq = ATOMIC_INIT(0);
+
+/**
+ * allocs_xa - Represent the xarray that contains the actual allocations perform
+ * by this driver.
+ */
+static DEFINE_XARRAY(allocs_xa);
+
+/**
  * struct req_alloc - Represents the requested allocation
  * @node_idx: The Node index to allocate from.
  * @zone_idx: The Zone index to allocate from.
@@ -174,6 +186,47 @@ inline void set_migrate_type_to_alloc_from(int migrate_type, gfp_t *flags_ptr)
 	}
 }
 
+static int make_alloc(struct req_alloc *req,
+			    gfp_t flags, unsigned long *alloc_id)
+{
+	struct page_alloc *pa;
+	struct page *page;
+	char new_alloc_name[12];
+	int ret;
+
+	page = alloc_pages_node_noprof(req->node_idx, flags, req->order);
+	if (page) {
+		pa = kmem_cache_alloc(page_alloc_cache, GFP_KERNEL);
+		if (!pa) {
+			ret = -ENOMEM;
+			goto free_pages;
+		}
+
+		*alloc_id = atomic_long_inc_return(&allocs_file_seq);
+		ret = xa_insert(&allocs_xa, *alloc_id, pa, GFP_KERNEL);
+		if (ret)
+			goto free_page_alloc;
+
+		snprintf(new_alloc_name, sizeof(new_alloc_name), "%lu",
+			 *alloc_id);
+
+		pa->req_alloc = req;
+		pa->page = page;
+	} else {
+		return -ENOMEM;
+	}
+
+	return 0;
+
+free_page_alloc:
+	kmem_cache_free(page_alloc_cache, pa);
+
+free_pages:
+	__free_pages(page, pa->req_alloc->order);
+
+	return ret;
+}
+
 /**
  * req_page_alloc_write() - Allocates the pages on the requested node, zone,
  * order and migrate type. Once the allocation is performed, a file is created
@@ -183,10 +236,12 @@ static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 				     size_t cnt, loff_t *ppos)
 {
 	struct req_alloc *req = file->private_data;
+	unsigned long alloc_id;
 	unsigned long nr_pages_allocs;
 	unsigned long *allocs_ids;
 	gfp_t flags = 0;
 	int ret;
+	int i;
 
 	ret = kstrtoul_from_user(ubuf, cnt, 10, &nr_pages_allocs);
 	if (ret)
@@ -200,7 +255,23 @@ static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 	set_zone_to_alloc_from(req->zone_idx, &flags);
 	set_migrate_type_to_alloc_from(req->migrate_type, &flags);
 
+	for (i = 0; i < nr_pages_allocs; i++) {
+		ret = make_alloc(req, flags, &alloc_id);
+		if (ret)
+			goto free_allocs;
+
+		allocs_ids[i] = alloc_id;
+	}
+
+	kfree(allocs_ids);
+
 	return cnt;
+
+free_allocs:
+
+	kfree(allocs_ids);
+
+	return ret;
 }
 
 static const struct file_operations req_page_alloc_fops = {
