@@ -25,6 +25,7 @@ ALTERNATIVE(__stringify(RISCV_PTR do_page_fault),			\
 	    __stringify(RISCV_PTR sifive_cip_453_page_fault_trp),	\
 	    SIFIVE_VENDOR_ID, ERRATA_SIFIVE_CIP_453,			\
 	    CONFIG_ERRATA_SIFIVE_CIP_453)
+
 #else /* !__ASSEMBLER__ */
 
 #define ALT_SFENCE_VMA_ASID(asid)					\
@@ -52,6 +53,220 @@ asm(ALTERNATIVE(	\
 	: /* no outputs */	\
 	: /* no inputs */	\
 	: "memory")
+
+#ifdef CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC
+#define ALT_ATOMIC_OP(asm_op, I, asm_type, v, ret, temp)		\
+asm(ALTERNATIVE(							\
+		"	amo" #asm_op "." #asm_type " zero, %3, %0\n"	\
+		__nops(3),						\
+		"1:	lr." #asm_type " %1, %0\n"			\
+		"	" #asm_op " %2, %1, %3\n"			\
+		"	sc." #asm_type " %2, %2, %0\n"			\
+		"	bnez %2, 1b\n",					\
+		MIPS_VENDOR_ID,						\
+		ERRATA_MIPS_P8700_ZALRSC,				\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)			\
+	: "+A" (v->counter), "=&r" (ret), "=&r" (temp)			\
+	: "r" (I)							\
+	: "memory")
+
+#define ALT_ATOMIC_FETCH_OP_RELAXED(asm_op, I, asm_type, v, ret, temp)	\
+asm(ALTERNATIVE(							\
+		"	amo" #asm_op "." #asm_type " %1, %3, %0\n"	\
+		__nops(3),						\
+		"1:	lr." #asm_type " %1, %0\n"			\
+		"	" #asm_op " %2, %1, %3\n"			\
+		"	sc." #asm_type " %2, %2, %0\n"			\
+		"	bnez %2, 1b\n",					\
+		MIPS_VENDOR_ID,						\
+		ERRATA_MIPS_P8700_ZALRSC,				\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)			\
+	: "+A" (v->counter), "=&r" (ret), "=&r" (temp)			\
+	: "r" (I)							\
+	: "memory")
+
+#define ALT_ATOMIC_FETCH_OP(asm_op, I, asm_type, v, ret, temp)		\
+asm(ALTERNATIVE(							\
+		"	amo" #asm_op "." #asm_type ".aqrl  %1, %3, %0\n"\
+		__nops(3),						\
+		"1:	lr." #asm_type ".aqrl %1, %0\n"			\
+		"	" #asm_op " %2, %1, %3\n"			\
+		"	sc." #asm_type ".aqrl %2, %2, %0\n"		\
+		"	bnez %2, 1b\n",					\
+		MIPS_VENDOR_ID,						\
+		ERRATA_MIPS_P8700_ZALRSC,				\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)			\
+	: "+A" (v->counter), "=&r" (ret), "=&r" (temp)			\
+	: "r" (I)							\
+	: "memory")
+/* BITOPS.h */
+#define ALT_TEST_AND_OP_BIT_ORD(op, mod, nr, addr, ord, __res, __mask, __temp)	\
+asm(ALTERNATIVE(								\
+		__AMO(op) #ord " %0, %3, %1\n"					\
+		__nops(3),							\
+		"1: " __LR #ord " %0, %1\n"					\
+		#op " %2, %0, %3\n"						\
+		__SC #ord " %2, %2, %1\n"					\
+		"bnez %2, 1b\n",						\
+		MIPS_VENDOR_ID,							\
+		ERRATA_MIPS_P8700_ZALRSC,					\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)				\
+	: "=&r" (__res), "+A" (addr[BIT_WORD(nr)]), "=&r" (__temp)		\
+	: "r" (mod(__mask))							\
+	: "memory")
+
+#define ALT_OP_BIT_ORD(op, mod, nr, addr, ord, __res, __temp)		\
+asm(ALTERNATIVE(							\
+		__AMO(op) #ord " zero, %3, %1\n"			\
+		__nops(3),						\
+		"1: " __LR #ord " %0, %1\n"				\
+		#op " %2, %0, %3\n"					\
+		__SC #ord " %2, %2, %1\n"				\
+		"bnez %2, 1b\n",					\
+		MIPS_VENDOR_ID,						\
+		ERRATA_MIPS_P8700_ZALRSC,				\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)			\
+	: "=&r" (__res), "+A" (addr[BIT_WORD(nr)]), "=&r" (__temp)	\
+	: "r" (mod(BIT_MASK(nr)))					\
+	: "memory")
+
+#define ALT_ARCH_XOR_UNLOCK(mask, addr, __res, __temp)	\
+asm(ALTERNATIVE(					\
+		__AMO(xor) ".rl %0, %3, %1\n"		\
+		__nops(3),				\
+		"1: " __LR ".rl %0, %1\n"		\
+		"xor %2, %0, %3\n"			\
+		__SC ".rl %2, %2, %1\n"			\
+		"bnez %2, 1b\n",			\
+		MIPS_VENDOR_ID,				\
+		ERRATA_MIPS_P8700_ZALRSC,		\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)	\
+	: "=&r" (__res), "+A" (*addr), "=&r" (__temp)	\
+	: "r" (__NOP(mask))				\
+	: "memory")
+
+#define ALT_ARCH_XCHG(sfx, prepend, append, r, p, n, temp)	\
+asm(ALTERNATIVE(						\
+		prepend						\
+		"	amoswap" sfx " %0, %3, %1\n"		\
+	    __nops(2)						\
+		append,						\
+		prepend						\
+		"1:	lr" sfx " %0, %1\n"			\
+		"	sc" sfx " %2, %3, %1\n"			\
+		"	bnez %2, 1b\n"				\
+		append,						\
+		MIPS_VENDOR_ID,					\
+		ERRATA_MIPS_P8700_ZALRSC,			\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)		\
+	: "=&r" (r), "+A" (*(p)), "=&r" (temp)			\
+	: "r" (n)						\
+	: "memory")
+
+/* FUTEX.H */
+#define ALT_FUTEX_ATOMIC_OP(insn, ret, oldval, uaddr, oparg, temp)	\
+asm(ALTERNATIVE(							\
+		"1: amo" #insn ".w.aqrl %[ov],%z[op],%[u]\n"		\
+		__nops(3)						\
+		"2:\n"							\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),			\
+		"1:	lr.w.aqrl %[ov], %[u]\n"			\
+		"	" #insn" %[t], %[ov], %z[op]\n"			\
+		"	sc.w.aqrl %[t], %[t], %[u]\n"			\
+		"	bnez %[t], 1b\n"				\
+		"2:\n"							\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),			\
+		MIPS_VENDOR_ID,						\
+		ERRATA_MIPS_P8700_ZALRSC,				\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)			\
+	: [r] "+r" (ret), [ov] "=&r" (oldval),				\
+	  [t] "=&r" (temp), [u] "+m" (*uaddr)				\
+	: [op] "Jr" (oparg)						\
+	: "memory")
+
+#define ALT_FUTEX_ATOMIC_SWAP(ret, oldval, uaddr, oparg, temp)	\
+asm(ALTERNATIVE(						\
+		"1: amoswap.w.aqrl %[ov],%z[op],%[u]\n"		\
+		__nops(3)					\
+		"2:\n"						\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),		\
+		"1:	lr.w.aqrl %[ov], %[u]\n"		\
+		"	mv %[t], %z[op]\n"			\
+		"	sc.w.aqrl %[t], %[t], %[u]\n"		\
+		"	bnez %[t], 1b\n"			\
+		"2:\n"						\
+		_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r]),		\
+		MIPS_VENDOR_ID,					\
+		ERRATA_MIPS_P8700_ZALRSC,			\
+		CONFIG_ERRATA_MIPS_P8700_AMO_ZALRSC)		\
+	: [r] "+r" (ret), [ov] "=&r" (oldval),			\
+	  [t] "=&r" (temp), [u] "+m" (*uaddr)			\
+	: [op] "Jr" (oparg)					\
+	: "memory")
+
+#else
+#define ALT_ATOMIC_OP(asm_op, I, asm_type, v, ret, temp)	\
+asm("amo" #asm_op "." #asm_type " zero, %1, %0"			\
+	: "+A" (v->counter)					\
+	: "r" (I)						\
+	: "memory")
+
+#define ALT_ATOMIC_FETCH_OP_RELAXED(asm_op, I, asm_type, v, ret, temp)	\
+asm("amo" #asm_op "." #asm_type " %1, %2, %0"				\
+	: "+A" (v->counter), "=r" (ret)					\
+	: "r" (I)							\
+	: "memory")
+
+#define ALT_ATOMIC_FETCH_OP(asm_op, I, asm_type, v, ret, temp)	\
+asm("amo" #asm_op "." #asm_type ".aqrl %1, %2, %0"		\
+	: "+A" (v->counter), "=r" (ret)				\
+	: "r" (I)						\
+	: "memory")
+
+#define ALT_TEST_AND_OP_BIT_ORD(op, mod, nr, addr, ord, __res, __mask, __temp)	\
+asm(__AMO(op) #ord " %0, %2, %1"						\
+	: "=r" (__res), "+A" (addr[BIT_WORD(nr)])				\
+	: "r" (mod(__mask))							\
+	: "memory")
+
+#define ALT_OP_BIT_ORD(op, mod, nr, addr, ord, __res, __temp)	\
+asm(__AMO(op) #ord " zero, %1, %0"				\
+	: "+A" (addr[BIT_WORD(nr)])				\
+	: "r" (mod(BIT_MASK(nr)))				\
+	: "memory")
+
+#define ALT_ARCH_XOR_UNLOCK(mask, addr, __res, __temp)	\
+asm(__AMO(xor) ".rl %0, %2, %1"				\
+	: "=r" (res), "+A" (*addr)			\
+	: "r" (__NOP(mask))				\
+	: "memory")
+
+#define ALT_ARCH_XCHG(sfx, prepend, append, r, p, n, temp)	\
+asm(prepend							\
+	"	amoswap" sfx " %0, %2, %1\n"			\
+	append							\
+	: "=r" (r), "+A" (*(p))					\
+	: "r" (n)						\
+	: "memory")
+
+#define ALT_FUTEX_ATOMIC_OP(insn, ret, oldval, uaddr, oparg, temp)	\
+asm("1: amo" #insn ".w.aqrl %[ov],%z[op],%[u]\n"			\
+	"2:\n"								\
+	_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r])				\
+	: [r] "+r" (ret), [ov] "=&r" (oldval),				\
+	  [u] "+m" (*uaddr)						\
+	: [op] "Jr" (oparg)						\
+	: "memory")
+
+#define ALT_FUTEX_ATOMIC_SWAP(ret, oldval, uaddr, oparg, temp)  \
+asm("1: amoswap.w.aqrl %[ov],%z[op],%[u]\n"			\
+	"2:\n"							\
+	_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r])			\
+	: [r] "+r" (ret), [ov] "=&r" (oldval),			\
+	  [u] "+m" (*uaddr)					\
+	: [op] "Jr" (oparg)					\
+	: "memory")
+#endif
 
 /*
  * _val is marked as "will be overwritten", so need to set it to 0

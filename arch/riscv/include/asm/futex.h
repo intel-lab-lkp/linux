@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <asm/asm.h>
 #include <asm/asm-extable.h>
+#include <asm/errata_list.h>
 
 /* We don't even really need the extable code, but for now keep it simple */
 #ifndef CONFIG_MMU
@@ -19,48 +20,47 @@
 #define __disable_user_access()		do { } while (0)
 #endif
 
-#define __futex_atomic_op(insn, ret, oldval, uaddr, oparg)	\
+#define __futex_atomic_op(insn, ret, oldval, uaddr, oparg, temp)	\
 {								\
 	__enable_user_access();					\
-	__asm__ __volatile__ (					\
-	"1:	" insn "				\n"	\
-	"2:						\n"	\
-	_ASM_EXTABLE_UACCESS_ERR(1b, 2b, %[r])			\
-	: [r] "+r" (ret), [ov] "=&r" (oldval),			\
-	  [u] "+m" (*uaddr)					\
-	: [op] "Jr" (oparg)					\
-	: "memory");						\
+	ALT_FUTEX_ATOMIC_OP(insn, ret, oldval, uaddr, oparg, temp);	\
+	__disable_user_access();				\
+}
+
+#define __futex_atomic_swap(ret, oldval, uaddr, oparg, temp)	\
+{								\
+	__enable_user_access();					\
+	ALT_FUTEX_ATOMIC_SWAP(ret, oldval, uaddr, oparg, temp);	\
 	__disable_user_access();				\
 }
 
 static inline int
 arch_futex_atomic_op_inuser(int op, int oparg, int *oval, u32 __user *uaddr)
 {
-	int oldval = 0, ret = 0;
+	int __maybe_unused oldval = 0, ret = 0, temp = 0;
 
 	if (!access_ok(uaddr, sizeof(u32)))
 		return -EFAULT;
 
 	switch (op) {
 	case FUTEX_OP_SET:
-		__futex_atomic_op("amoswap.w.aqrl %[ov],%z[op],%[u]",
-				  ret, oldval, uaddr, oparg);
+		__futex_atomic_swap(ret, oldval, uaddr, oparg, temp);
 		break;
 	case FUTEX_OP_ADD:
-		__futex_atomic_op("amoadd.w.aqrl %[ov],%z[op],%[u]",
-				  ret, oldval, uaddr, oparg);
+		__futex_atomic_op(add,
+				  ret, oldval, uaddr, oparg, temp);
 		break;
 	case FUTEX_OP_OR:
-		__futex_atomic_op("amoor.w.aqrl %[ov],%z[op],%[u]",
-				  ret, oldval, uaddr, oparg);
+		__futex_atomic_op(or,
+				  ret, oldval, uaddr, oparg, temp);
 		break;
 	case FUTEX_OP_ANDN:
-		__futex_atomic_op("amoand.w.aqrl %[ov],%z[op],%[u]",
-				  ret, oldval, uaddr, ~oparg);
+		__futex_atomic_op(and,
+				  ret, oldval, uaddr, ~oparg, temp);
 		break;
 	case FUTEX_OP_XOR:
-		__futex_atomic_op("amoxor.w.aqrl %[ov],%z[op],%[u]",
-				  ret, oldval, uaddr, oparg);
+		__futex_atomic_op(xor,
+				  ret, oldval, uaddr, oparg, temp);
 		break;
 	default:
 		ret = -ENOSYS;
