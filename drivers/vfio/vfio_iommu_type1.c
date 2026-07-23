@@ -814,22 +814,42 @@ static inline void put_valid_unreserved_pfns(unsigned long start_pfn,
 					 prot & IOMMU_WRITE);
 }
 
+/* Pages to unpin per cond_resched() when tearing down a large mapping. */
+#define VFIO_UNPIN_RESCHED_PAGES	(16UL * 1024)	/* 64MB @ 4K pages */
+
 static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 				    unsigned long pfn, unsigned long npage,
 				    bool do_accounting)
 {
 	long unlocked = 0, locked = vpfn_pages(dma, iova, npage);
+	unsigned long remaining = npage;
 
-	if (dma->has_rsvd) {
-		unsigned long i;
+	/*
+	 * A single unmap of a very large device-passthrough mapping can unpin
+	 * hundreds of millions of pages here.  Bound the work per iteration and
+	 * cond_resched() so one VFIO_IOMMU_UNMAP_DMA cannot hold a CPU past the
+	 * soft-lockup watchdog.  Mirrors the pin-side reschedule in commit
+	 * edeca59cb88d2 ("vfio/type1: conditional rescheduling while pinning").
+	 */
+	while (remaining) {
+		unsigned long batch = min(remaining, VFIO_UNPIN_RESCHED_PAGES);
 
-		for (i = 0; i < npage; i++)
-			if (put_pfn(pfn++, dma->prot))
-				unlocked++;
-	} else {
-		put_valid_unreserved_pfns(pfn, npage, dma->prot);
-		unlocked = npage;
+		if (dma->has_rsvd) {
+			unsigned long i;
+
+			for (i = 0; i < batch; i++)
+				if (put_pfn(pfn++, dma->prot))
+					unlocked++;
+		} else {
+			put_valid_unreserved_pfns(pfn, batch, dma->prot);
+			unlocked += batch;
+			pfn += batch;
+		}
+
+		remaining -= batch;
+		cond_resched();
 	}
+
 	if (do_accounting)
 		vfio_lock_acct(dma, locked - unlocked, true);
 
