@@ -1811,7 +1811,7 @@ void __bio_complete_in_task(struct bio *bio)
 
 	if (was_empty)
 		mod_delayed_work_on(batch->cpu, bio_complete_wq,
-				    &batch->work, 1);
+				    &batch->work, 0);
 }
 EXPORT_SYMBOL_GPL(__bio_complete_in_task);
 
