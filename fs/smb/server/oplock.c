@@ -1382,6 +1382,46 @@ void smb_send_parent_lease_break_noti(struct ksmbd_file *fp,
 	ksmbd_inode_put(p_ci);
 }
 
+/**
+ * smb_break_dir_lease() - break leases when a directory changes
+ * @fp: open directory that changed
+ *
+ * Some directory changes do not go through the SMB request path. fsnotify
+ * reports these changes. Break the directory leases before sending the
+ * changes to the SMB client.
+ *
+ * This function can sleep while it waits for a reply from the client. Do not
+ * call it from the fsnotify callback.
+ */
+void smb_break_dir_lease(struct ksmbd_file *fp)
+{
+	struct ksmbd_inode *ci = fp->f_ci;
+	struct oplock_info *opinfo;
+	LIST_HEAD(brk_list);
+
+	down_read(&ci->m_lock);
+	list_for_each_entry(opinfo, &ci->m_op_list, op_entry) {
+		if (!opinfo->conn || !opinfo->is_lease ||
+		    !opinfo->o_lease->is_dir ||
+		    opinfo->o_lease->state == SMB2_LEASE_NONE_LE)
+			continue;
+
+		if (!atomic_inc_not_zero(&opinfo->refcount))
+			continue;
+
+		if (ksmbd_conn_releasing(opinfo->conn)) {
+			opinfo_put(opinfo);
+			continue;
+		}
+
+		if (oplock_break_add(&brk_list, opinfo))
+			opinfo_put(opinfo);
+	}
+	up_read(&ci->m_lock);
+
+	oplock_break_drain_none(&brk_list);
+}
+
 void smb_lazy_parent_lease_break_close(struct ksmbd_file *fp)
 {
 	struct oplock_info *opinfo;
