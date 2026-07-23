@@ -29,6 +29,7 @@
 #include "vfs.h"
 #include "vfs_cache.h"
 #include "misc.h"
+#include "notify.h"
 
 #include "server.h"
 #include "smb_common.h"
@@ -9696,22 +9697,23 @@ int smb2_notify(struct ksmbd_work *work)
 	struct smb2_change_notify_req *req;
 	struct smb2_change_notify_rsp *rsp;
 
-	ksmbd_debug(SMB, "Received smb2 notify\n");
+	ksmbd_debug(NOTIFY, "Received smb2 notify\n");
 
 	WORK_BUFFERS(work, req, rsp);
 
-	if (smb2_compound_has_failed(work, &rsp->hdr))
+	if (smb2_compound_has_failed(work, &rsp->hdr)) {
+		pr_err("Failed compound notify request\n");
 		return -EACCES;
+	}
 
 	if (work->next_smb2_rcv_hdr_off && req->hdr.NextCommand) {
+		pr_err("Notify request is not the last compound command\n");
 		rsp->hdr.Status = STATUS_INTERNAL_ERROR;
 		smb2_set_err_rsp(work);
 		return -EIO;
 	}
 
-	smb2_set_err_rsp(work);
-	rsp->hdr.Status = STATUS_NOT_IMPLEMENTED;
-	return -EOPNOTSUPP;
+	return ksmbd_handle_notify(work, req, rsp);
 }
 
 /**
