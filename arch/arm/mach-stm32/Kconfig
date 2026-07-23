@@ -40,6 +40,15 @@ config MACH_STM32H743
 	bool "STMicroelectronics STM32H743"
 	default y
 
+config MACH_STM32H7R7
+	bool "STMicroelectronics STM32H7R7"
+	default y
+	help
+	  Support for STMicroelectronics STM32H7R7 Cortex-M7
+	  microcontrollers. This enables support for boards based on the
+	  STM32H7R7 SoC, such as the RT-Thread ART-Pi2. These devices run
+	  Linux without an MMU and may execute from external memory.
+
 endif # ARMv7-M
 
 if ARCH_MULTI_V7
