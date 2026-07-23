@@ -293,6 +293,12 @@ static void dw_edma_core_ll_start(struct dw_edma_desc *desc)
 				     chan->ll_head, chan->cb,
 				     dw_edma_core_enable_ll_irq(desc, i, free));
 
+		trace_edma_fill_ll(chan, chan->ll_head,
+				   desc->vd.tx.cookie,
+				   desc->burst[i].sar,
+				   desc->burst[i].dar, desc->burst[i].sz,
+				   chan->cb);
+
 		chan->ll_head++;
 
 		if (chan->ll_head == chan->ll_max) {
@@ -350,6 +356,7 @@ static int dw_edma_start_transfer(struct dw_edma_chan *chan)
 		if (desc->start_burst == desc->nburst)
 			continue;
 
+		trace_edma_append_desc(desc);
 		dw_edma_core_start(desc);
 		ret = 1;
 	}
@@ -421,6 +428,7 @@ static void dw_edma_ll_clean_pending(struct dw_edma_chan *chan, u32 old_done)
 		/* Hardware has consumed this descriptor's LL entries. */
 		dw_hdma_set_callback_result(vd, DMA_TRANS_NOERROR);
 		list_del(&vd->node);
+		trace_edma_complete_desc(desc);
 		vchan_cookie_complete(vd);
 	}
 }
@@ -647,6 +655,45 @@ dw_edma_engine_recovery_sync_irqs(struct dw_edma_engine_recovery *rec)
 	}
 }
 
+static void
+dw_edma_trace_engine_recovery(struct dw_edma_engine_recovery *rec)
+{
+	struct dw_edma *dw = rec->dw;
+	u16 off = rec->dir == EDMA_DIR_WRITE ? 0 : dw->wr_ch_cnt;
+	u16 cnt = rec->dir == EDMA_DIR_WRITE ? dw->wr_ch_cnt : dw->rd_ch_cnt;
+	struct dw_edma_chan *chan;
+	u16 i;
+
+	if (!trace_edma_engine_recovery_enabled())
+		return;
+
+	for (i = 0; i < cnt; i++) {
+		enum dw_edma_request request;
+		enum dw_edma_status status;
+		bool configured_ll;
+		unsigned int pending;
+		u32 ll_head, ll_done;
+
+		chan = &dw->chan[off + i];
+		scoped_guard(spinlock_irqsave, &chan->vc.lock) {
+			configured_ll = chan->configured && !chan->non_ll;
+			if (configured_ll) {
+				request = chan->request;
+				status = chan->status;
+				ll_head = chan->ll_head;
+				ll_done = chan->ll_done;
+				pending = dw_edma_ll_pending(chan);
+			}
+		}
+		if (!configured_ll)
+			continue;
+
+		trace_edma_engine_recovery(chan, dw_edma_core_ch_status(chan),
+					   request, status, ll_head, ll_done,
+					   pending);
+	}
+}
+
 static void dw_edma_engine_recovery_work(struct work_struct *work)
 {
 	struct dw_edma_engine_recovery *rec =
@@ -746,6 +793,8 @@ static void dw_edma_engine_recovery_work(struct work_struct *work)
 
 	if (!dw_edma_engine_recovery_needed(rec))
 		goto out_release;
+
+	dw_edma_trace_engine_recovery(rec);
 
 	if (!dw->core->engine_reset(dw, rec->dir)) {
 		/*
@@ -1322,6 +1371,9 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 	bool active;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
+	if (!chan->non_ll)
+		trace_edma_irq(chan, chan->ll_irq_idx, false,
+			       chan->ll_irq_stopped);
 	if (chan->status == EDMA_ST_PAUSE)
 		goto out;
 
@@ -1394,6 +1446,8 @@ static void dw_edma_progress_interrupt(struct dw_edma_chan *chan)
 
 	guard(spinlock_irqsave)(&chan->vc.lock);
 
+	trace_edma_irq(chan, chan->ll_irq_idx, true,
+		       chan->ll_irq_stopped);
 	if (chan->request == EDMA_REQ_NONE && chan->status != EDMA_ST_PAUSE) {
 		if (dw_edma_ll_consume_progress(chan))
 			dw_edma_start_transfer(chan);
