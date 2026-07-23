@@ -273,18 +273,6 @@ bool vmw_seqno_waiter_remove(struct vmw_private *dev_priv)
 					&dev_priv->fence_queue_waiters);
 }
 
-bool vmw_goal_waiter_add(struct vmw_private *dev_priv)
-{
-	return vmw_generic_waiter_add(dev_priv, vmw_irqflag_fence_goal(dev_priv),
-					&dev_priv->goal_queue_waiters);
-}
-
-bool vmw_goal_waiter_remove(struct vmw_private *dev_priv)
-{
-	return vmw_generic_waiter_remove(dev_priv, vmw_irqflag_fence_goal(dev_priv),
-					&dev_priv->goal_queue_waiters);
-}
-
 static void vmw_irq_preinstall(struct drm_device *dev)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);

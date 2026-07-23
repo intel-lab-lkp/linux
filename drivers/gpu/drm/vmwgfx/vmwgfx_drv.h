@@ -1026,8 +1026,6 @@ extern int vmw_fallback_wait(struct vmw_private *dev_priv,
 			     unsigned long timeout);
 bool vmw_seqno_waiter_add(struct vmw_private *dev_priv);
 bool vmw_seqno_waiter_remove(struct vmw_private *dev_priv);
-bool vmw_goal_waiter_add(struct vmw_private *dev_priv);
-bool vmw_goal_waiter_remove(struct vmw_private *dev_priv);
 bool vmw_generic_waiter_add(struct vmw_private *dev_priv, u32 flag,
 			    int *waiter_count);
 bool vmw_generic_waiter_remove(struct vmw_private *dev_priv,
