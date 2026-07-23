@@ -5134,8 +5134,16 @@
 
 			status = "disabled";
 
-			port {
-				usb_2_dwc3_hs: endpoint {
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				/* High-speed USB 2.0 data bus */
+				port@0 {
+					reg = <0>;
+
+					usb_2_dwc3_hs: endpoint {
+					};
 				};
 			};
 		};
