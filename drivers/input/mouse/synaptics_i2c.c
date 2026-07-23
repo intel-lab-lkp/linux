@@ -257,11 +257,7 @@ static s32 synaptics_i2c_reg_set(struct i2c_client *client, u16 reg, u8 val)
 	if (error)
 		return error;
 
-	error = i2c_smbus_write_byte_data(client, reg & 0xff, val);
-	if (error)
-		return error;
-
-	return error;
+	return i2c_smbus_write_byte_data(client, reg & 0xff, val);
 }
 
 static s32 synaptics_i2c_word_get(struct i2c_client *client, u16 reg)
