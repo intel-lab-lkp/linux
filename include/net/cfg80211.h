@@ -5225,7 +5225,11 @@ struct mgmt_frame_regs {
  *
  * @get_ftm_responder_stats: Retrieve FTM responder statistics, if available.
  *	Statistics should be cumulative, currently no way to reset is provided.
- * @start_pmsr: start peer measurement (e.g. FTM)
+ * @start_pmsr: start peer measurement (e.g. FTM). The callback may
+ *	complete the request before returning success. After completing it,
+ *	the driver must not access the request. If the callback returns an
+ *	error, the driver must not retain the request or later report results
+ *	or completion for it.
  * @abort_pmsr: abort peer measurement
  *
  * @update_owe_info: Provide updated OWE info to driver. Driver implementing SME

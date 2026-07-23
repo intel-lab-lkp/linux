@@ -4673,7 +4673,11 @@ struct ieee80211_prep_tx_info {
  * @get_ftm_responder_stats: Retrieve FTM responder statistics, if available.
  *	Statistics should be cumulative, currently no way to reset is provided.
  *
- * @start_pmsr: start peer measurement (e.g. FTM) (this call can sleep)
+ * @start_pmsr: start peer measurement (e.g. FTM) (this call can sleep).
+ *	The callback may complete the request before returning success.
+ *	After completing it, the driver must not access the request. If the
+ *	callback returns an error, the driver must not retain the request or
+ *	later report results or completion for it.
  * @abort_pmsr: abort peer measurement (this call can sleep)
  * @set_tid_config: Apply TID specific configurations. This callback may sleep.
  * @reset_tid_config: Reset TID specific configuration for the peer.
