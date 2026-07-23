@@ -617,6 +617,10 @@ void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int)
 {
 	int ret;
 
+	/* Pre-reset */
+	if (panfrost_device_is_initialized(pfdev))
+		down_write(&pfdev->reset.lock);
+
 	/* Do the actual device reset */
 	ret = panfrost_gpu_soft_reset(pfdev);
 	panfrost_gpu_power_on(pfdev);
@@ -630,6 +634,7 @@ void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int)
 		panfrost_jm_reset_interrupts(pfdev);
 		if (enable_job_int)
 			panfrost_jm_enable_interrupts(pfdev);
+		up_write(&pfdev->reset.lock);
 	}
 }
 
