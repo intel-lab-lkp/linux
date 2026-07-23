@@ -33,6 +33,7 @@
 #include <scsi/scsi_dbg.h>
 #include <scsi/scsi_transport_fc.h>
 #include <scsi/scsi_transport.h>
+#include "scsi_priv.h"
 
 /*
  * All wire protocol details (storage protocol between the guest and the host)
@@ -519,6 +520,17 @@ static void storvsc_host_scan(struct work_struct *work)
 	 */
 	scsi_scan_host(host);
 }
+
+#if IS_ENABLED(CONFIG_SCSI_FC_ATTRS)
+static int storvsc_user_scan(struct Scsi_Host *host,
+			     unsigned int channel,
+			     unsigned int id,
+			     u64 lun)
+{
+	return scsi_scan_host_selected(host, channel, id, lun,
+				       SCSI_SCAN_MANUAL);
+}
+#endif
 
 static void storvsc_remove_lun(struct work_struct *work)
 {
@@ -2232,6 +2244,8 @@ static int __init storvsc_drv_init(void)
 	fc_transport_template = fc_attach_transport(&fc_transport_functions);
 	if (!fc_transport_template)
 		return -ENODEV;
+
+	fc_transport_template->user_scan = storvsc_user_scan;
 #endif
 
 	ret = vmbus_driver_register(&storvsc_drv);
