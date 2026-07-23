@@ -1210,9 +1210,9 @@ void vme_bus_error_handler(struct vme_bridge *bridge,
 	u32 aspace = vme_get_aspace(am);
 
 	list_for_each_entry(handler, &bridge->vme_error_handlers, list) {
-		if ((aspace == handler->aspace) &&
-		    (address >= handler->start) &&
-		    (address < handler->end)) {
+		if  (aspace == handler->aspace &&
+		     address >= handler->start &&
+		     address < handler->end) {
 			if (!handler->num_errors)
 				handler->first_error = address;
 			if (handler->num_errors != UINT_MAX)
@@ -1299,7 +1299,7 @@ int vme_irq_request(struct vme_dev *vdev, int level, int statid,
 		return -EINVAL;
 	}
 
-	if ((level < 1) || (level > 7)) {
+	if (level < 1 || level > 7) {
 		dev_err(bridge->parent, "Invalid interrupt level\n");
 		return -EINVAL;
 	}
@@ -1349,7 +1349,7 @@ void vme_irq_free(struct vme_dev *vdev, int level, int statid)
 		return;
 	}
 
-	if ((level < 1) || (level > 7)) {
+	if (level < 1 || level > 7) {
 		dev_err(bridge->parent, "Invalid interrupt level\n");
 		return;
 	}
@@ -1397,7 +1397,7 @@ int vme_irq_generate(struct vme_dev *vdev, int level, int statid)
 		return -EINVAL;
 	}
 
-	if ((level < 1) || (level > 7)) {
+	if (level < 1 || level > 7) {
 		dev_warn(bridge->parent, "Invalid interrupt level\n");
 		return -EINVAL;
 	}
