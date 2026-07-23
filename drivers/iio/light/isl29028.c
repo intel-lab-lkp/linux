@@ -405,11 +405,7 @@ static int isl29028_write_raw(struct iio_dev *indio_dev,
 	if (ret < 0)
 		return ret;
 
-	ret = isl29028_set_pm_runtime_busy(chip, false);
-	if (ret < 0)
-		return ret;
-
-	return ret;
+	return isl29028_set_pm_runtime_busy(chip, false);
 }
 
 static int isl29028_read_raw(struct iio_dev *indio_dev,
