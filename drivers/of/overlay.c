@@ -1038,6 +1038,8 @@ int of_overlay_fdt_apply(const void *overlay_fdt, u32 overlay_fdt_size,
 	ovcs->id = idr_alloc(&ovcs_idr, ovcs, 1, 0, GFP_KERNEL);
 	if (ovcs->id <= 0) {
 		ret = ovcs->id;
+		/* free_overlay_changeset() treats a set id as registered */
+		ovcs->id = 0;
 		goto err_free_ovcs;
 	}
 
