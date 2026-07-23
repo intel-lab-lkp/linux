@@ -1418,7 +1418,8 @@ u16 tipc_get_gap_ack_blks(struct tipc_gap_ack_blks **ga, struct tipc_link *l,
 	u16 sz = 0;
 
 	/* Does peer support the Gap ACK blocks feature? */
-	if (l->peer_caps & TIPC_GAP_ACK_BLOCK) {
+	if ((l->peer_caps & TIPC_GAP_ACK_BLOCK) &&
+	    msg_data_sz(hdr) >= sizeof(*p)) {
 		p = (struct tipc_gap_ack_blks *)msg_data(hdr);
 		sz = ntohs(p->len);
 		/* Sanity check */
