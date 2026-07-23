@@ -916,6 +916,40 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 	}
 }
 
+static void __init update_zone_online_memmap_pages(struct zone *zone,
+						   unsigned long start_pfn,
+						   unsigned long end_pfn,
+						   unsigned long *hole_pfn)
+{
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+	unsigned long zone_start_pfn = zone->zone_start_pfn;
+	unsigned long zone_end_pfn = zone_start_pfn + zone->spanned_pages;
+	unsigned long sub_start, sub_end;
+
+	sub_start = max(ALIGN_DOWN(start_pfn, PAGES_PER_SUBSECTION),
+			zone_start_pfn);
+	sub_end = min(ALIGN(end_pfn, PAGES_PER_SUBSECTION), zone_end_pfn);
+
+	/*
+	 * For an in-zone hole smaller than a subsection, the adjacent
+	 * memblock ranges share a subsection. Avoid counting the same
+	 * subsection's pages twice.
+	 */
+	if (*hole_pfn > zone_start_pfn) {
+		unsigned long prev_sub_end;
+
+		prev_sub_end = min(ALIGN(*hole_pfn, PAGES_PER_SUBSECTION),
+				   zone_end_pfn);
+		sub_start = max(sub_start, prev_sub_end);
+	}
+
+	if (sub_start < sub_end)
+		zone->pages_with_online_memmap += sub_end - sub_start;
+#else
+	zone->pages_with_online_memmap += end_pfn - start_pfn;
+#endif
+}
+
 static void __init memmap_init_zone_range(struct zone *zone,
 					  unsigned long start_pfn,
 					  unsigned long end_pfn,
@@ -931,6 +965,8 @@ static void __init memmap_init_zone_range(struct zone *zone,
 
 	if (start_pfn >= end_pfn)
 		return;
+
+	update_zone_online_memmap_pages(zone, start_pfn, end_pfn, hole_pfn);
 
 	memmap_init_range(end_pfn - start_pfn, nid, zone_id, start_pfn,
 			  zone_end_pfn, MEMINIT_EARLY, NULL, mt, false);
@@ -2194,28 +2230,6 @@ void __init init_cma_pageblock(struct page *page)
 	page_zone(page)->cma_pages += pageblock_nr_pages;
 }
 #endif
-
-void set_zone_contiguous(struct zone *zone)
-{
-	unsigned long block_start_pfn = zone->zone_start_pfn;
-	unsigned long block_end_pfn;
-
-	block_end_pfn = pageblock_end_pfn(block_start_pfn);
-	for (; block_start_pfn < zone_end_pfn(zone);
-			block_start_pfn = block_end_pfn,
-			 block_end_pfn += pageblock_nr_pages) {
-
-		block_end_pfn = min(block_end_pfn, zone_end_pfn(zone));
-
-		if (!__pageblock_pfn_to_page(block_start_pfn,
-					     block_end_pfn, zone))
-			return;
-		cond_resched();
-	}
-
-	/* We confirm that there is no hole */
-	zone->contiguous = true;
-}
 
 /*
  * Check if a PFN range intersects multiple zones on one or more
