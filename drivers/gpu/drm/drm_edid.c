@@ -278,6 +278,9 @@ static const struct edid_quirk {
 	/* LQ116M1JW10 displays noise when 8 bpc, but display fine as 6 bpc */
 	EDID_QUIRK('S', 'H', 'P', 0x154c, BIT(EDID_QUIRK_FORCE_6BPC)),
 
+	/* MSI MAG273R reports mode as stereo even though it's usable as 2D */
+	EDID_QUIRK('M', 'S', 'I', 15542, BIT(EDID_QUIRK_IGNORE_STEREO_FLAG)),
+
 	/*
 	 * @drm_edid_internal_quirk entries end here, following with the
 	 * @drm_edid_quirk entries.
