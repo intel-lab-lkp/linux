@@ -340,6 +340,23 @@ static inline unsigned int pipe_update_tail(struct pipe_inode_info *pipe,
 	return tail;
 }
 
+static void pipe_set_epoll_usage(struct file *filp, struct pipe_inode_info *pipe)
+{
+#ifdef CONFIG_EPOLL
+	if ((filp->f_mode & FMODE_READ) && filp->f_ep &&
+	    unlikely(!READ_ONCE(pipe->epoll_usage)))
+		WRITE_ONCE(pipe->epoll_usage, true);
+#endif
+}
+
+static bool pipe_get_epoll_usage(struct pipe_inode_info *pipe)
+{
+#ifdef CONFIG_EPOLL
+	return pipe->epoll_usage;
+#endif
+	return false;
+}
+
 static ssize_t
 anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 {
@@ -668,7 +685,7 @@ out:
 	 * Epoll nonsensically wants a wakeup whether the pipe
 	 * was already empty or not.
 	 */
-	if (was_empty || pipe->poll_usage)
+	if (was_empty || pipe_get_epoll_usage(pipe))
 		wake_up_interruptible_sync_poll(&pipe->rd_wait, EPOLLIN | EPOLLRDNORM);
 	kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
 	if (wake_next_writer)
@@ -740,9 +757,7 @@ pipe_poll(struct file *filp, poll_table *wait)
 	union pipe_index idx;
 
 	/* Epoll has some historical nasty semantics, this enables them */
-	if (unlikely(!READ_ONCE(pipe->poll_usage)))
-		WRITE_ONCE(pipe->poll_usage, true);
-
+	pipe_set_epoll_usage(filp, pipe);
 	/*
 	 * Reading pipe state only -- no need for acquiring the semaphore.
 	 *
