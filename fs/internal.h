@@ -364,3 +364,4 @@ void pidfs_get_root(struct path *path);
 void nsfs_get_root(struct path *path);
 void failfs_get_root(struct path *path);
 void __init failfs_init(void);
+int failfs_current_chdir(void);
