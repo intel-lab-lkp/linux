@@ -314,11 +314,7 @@ static int fusb302_i2c_mask_write(struct fusb302_chip *chip, u8 address,
 		return ret;
 	data &= ~mask;
 	data |= value;
-	ret = fusb302_i2c_write(chip, address, data);
-	if (ret < 0)
-		return ret;
-
-	return ret;
+	return fusb302_i2c_write(chip, address, data);
 }
 
 static int fusb302_i2c_set_bits(struct fusb302_chip *chip, u8 address,
@@ -375,12 +371,8 @@ static int fusb302_init_interrupt(struct fusb302_chip *chip)
 	ret = fusb302_i2c_write(chip, FUSB_REG_MASKB, 0xFF);
 	if (ret < 0)
 		return ret;
-	ret = fusb302_i2c_clear_bits(chip, FUSB_REG_CONTROL0,
-				     FUSB_REG_CONTROL0_INT_MASK);
-	if (ret < 0)
-		return ret;
-
-	return ret;
+	return fusb302_i2c_clear_bits(chip, FUSB_REG_CONTROL0,
+				      FUSB_REG_CONTROL0_INT_MASK);
 }
 
 static int fusb302_set_power_mode(struct fusb302_chip *chip, u8 power_mode)
