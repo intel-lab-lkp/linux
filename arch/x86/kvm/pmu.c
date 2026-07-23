@@ -39,6 +39,14 @@ bool __read_mostly enable_pmu = true;
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(enable_pmu);
 module_param(enable_pmu, bool, 0444);
 
+/*
+ * Number of KVM-emulated instructions that may accumulate on an emulated
+ * (perf-based) vPMU counter before KVM forces a counter reprogram to fold the
+ * emulated count into the backing perf_event
+ */
+static uint __read_mostly emulated_counter_reprogram_tolerance;
+module_param(emulated_counter_reprogram_tolerance, uint, 0644);
+
 /* Enable/disabled mediated PMU virtualization. */
 bool __read_mostly enable_mediated_pmu;
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(enable_mediated_pmu);
@@ -1072,7 +1080,15 @@ static void kvm_pmu_incr_counter(struct kvm_pmc *pmc)
 	 */
 	if (!kvm_vcpu_has_mediated_pmu(vcpu)) {
 		pmc->emulated_counter++;
-		kvm_pmu_request_counter_reprogram(pmc);
+
+		/*
+		 * Batch reprograms: only force one once the accumulated
+		 * emulated count exceeds the tolerance. The count is still
+		 * reflected in guest counter reads via pmc->emulated_counter;
+		 * this only bounds how late an overflow-driven PMI arrives.
+		 */
+		if (pmc->emulated_counter > emulated_counter_reprogram_tolerance)
+			kvm_pmu_request_counter_reprogram(pmc);
 		return;
 	}
 
