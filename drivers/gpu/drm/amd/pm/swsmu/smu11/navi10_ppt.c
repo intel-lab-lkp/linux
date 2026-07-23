@@ -484,11 +484,7 @@ static int navi10_setup_pptable(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = navi10_check_powerplay_table(smu);
-	if (ret)
-		return ret;
-
-	return ret;
+	return navi10_check_powerplay_table(smu);
 }
 
 static int navi10_tables_init(struct smu_context *smu)

@@ -1525,11 +1525,7 @@ static int sdma_v4_4_2_sw_init(struct amdgpu_ip_block *ip_block)
 	else
 		DRM_ERROR("Failed to allocated memory for SDMA IP Dump\n");
 
-	r = amdgpu_sdma_sysfs_reset_mask_init(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_sdma_sysfs_reset_mask_init(adev);
 }
 
 static int sdma_v4_4_2_sw_fini(struct amdgpu_ip_block *ip_block)

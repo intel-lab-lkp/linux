@@ -893,11 +893,8 @@ static int renoir_set_peak_clock_by_device(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = smu_v12_0_set_soft_freq_limited_range(smu, SMU_UCLK, uclk_freq, uclk_freq, false);
-	if (ret)
-		return ret;
-
-	return ret;
+	return smu_v12_0_set_soft_freq_limited_range(smu, SMU_UCLK, uclk_freq,
+						     uclk_freq, false);
 }
 
 static int renior_set_dpm_profile_freq(struct smu_context *smu,

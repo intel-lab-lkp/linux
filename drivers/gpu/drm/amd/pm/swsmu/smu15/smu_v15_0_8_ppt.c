@@ -318,11 +318,7 @@ static int smu_v15_0_8_fini_smc_tables(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = smu_v15_0_fini_smc_tables(smu);
-	if (ret)
-		return ret;
-
-	return ret;
+	return smu_v15_0_fini_smc_tables(smu);
 }
 
 static int smu_v15_0_8_init_allowed_features(struct smu_context *smu)
@@ -1253,7 +1249,6 @@ static int smu_v15_0_8_register_irq_handler(struct smu_context *smu)
 {
 	struct amdgpu_device *adev = smu->adev;
 	struct amdgpu_irq_src *irq_src = &smu->irq_source;
-	int ret = 0;
 
 	if (amdgpu_sriov_vf(adev))
 		return 0;
@@ -1261,13 +1256,8 @@ static int smu_v15_0_8_register_irq_handler(struct smu_context *smu)
 	irq_src->num_types = 1;
 	irq_src->funcs = &smu_v15_0_8_irq_funcs;
 
-	ret = amdgpu_irq_add_id(adev, SOC_V1_0_IH_CLIENTID_MP1,
-				IH_INTERRUPT_ID_TO_DRIVER,
-				irq_src);
-	if (ret)
-		return ret;
-
-	return ret;
+	return amdgpu_irq_add_id(adev, SOC_V1_0_IH_CLIENTID_MP1,
+				 IH_INTERRUPT_ID_TO_DRIVER, irq_src);
 }
 
 static int smu_v15_0_8_notify_unload(struct smu_context *smu)

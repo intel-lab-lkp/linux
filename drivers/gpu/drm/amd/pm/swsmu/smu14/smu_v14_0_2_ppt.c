@@ -366,11 +366,7 @@ static int smu_v14_0_2_setup_pptable(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = smu_v14_0_2_check_powerplay_table(smu);
-	if (ret)
-		return ret;
-
-	return ret;
+	return smu_v14_0_2_check_powerplay_table(smu);
 }
 
 static int smu_v14_0_2_tables_init(struct smu_context *smu)

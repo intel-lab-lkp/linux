@@ -1614,11 +1614,7 @@ static int gfx_v9_0_init_microcode(struct amdgpu_device *adev)
 	if (r)
 		return r;
 
-	r = gfx_v9_0_init_cp_compute_microcode(adev, ucode_prefix);
-	if (r)
-		return r;
-
-	return r;
+	return gfx_v9_0_init_cp_compute_microcode(adev, ucode_prefix);
 }
 
 static u32 gfx_v9_0_get_csb_size(struct amdgpu_device *adev)

@@ -482,11 +482,7 @@ static int uvd_v7_0_sw_init(struct amdgpu_ip_block *ip_block)
 	if (r)
 		return r;
 
-	r = amdgpu_virt_alloc_mm_table(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_virt_alloc_mm_table(adev);
 }
 
 static int uvd_v7_0_sw_fini(struct amdgpu_ip_block *ip_block)

@@ -600,11 +600,7 @@ static int gfx_v9_4_3_init_microcode(struct amdgpu_device *adev)
 	if (r)
 		return r;
 
-	r = gfx_v9_4_3_init_cp_compute_microcode(adev, ucode_prefix);
-	if (r)
-		return r;
-
-	return r;
+	return gfx_v9_4_3_init_cp_compute_microcode(adev, ucode_prefix);
 }
 
 static void gfx_v9_4_3_mec_fini(struct amdgpu_device *adev)

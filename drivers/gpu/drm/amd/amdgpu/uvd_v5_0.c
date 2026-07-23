@@ -121,11 +121,7 @@ static int uvd_v5_0_sw_init(struct amdgpu_ip_block *ip_block)
 	if (r)
 		return r;
 
-	r = amdgpu_uvd_resume(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_uvd_resume(adev);
 }
 
 static int uvd_v5_0_sw_fini(struct amdgpu_ip_block *ip_block)

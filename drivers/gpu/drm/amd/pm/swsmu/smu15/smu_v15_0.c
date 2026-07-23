@@ -862,13 +862,8 @@ int smu_v15_0_register_irq_handler(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_MP1,
-				SMU_IH_INTERRUPT_ID_TO_DRIVER,
-				irq_src);
-	if (ret)
-		return ret;
-
-	return ret;
+	return amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_MP1,
+				 SMU_IH_INTERRUPT_ID_TO_DRIVER, irq_src);
 }
 
 static int smu_v15_0_wait_for_reset_complete(struct smu_context *smu,

@@ -664,12 +664,10 @@ int smu_v13_0_notify_memory_pool_location(struct smu_context *smu)
 					      address_low, NULL);
 	if (ret)
 		return ret;
-	ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_DramLogSetDramSize,
-					      (uint32_t)memory_pool->size, NULL);
-	if (ret)
-		return ret;
-
-	return ret;
+	return smu_cmn_send_smc_msg_with_param(smu,
+					       SMU_MSG_DramLogSetDramSize,
+					       (uint32_t)memory_pool->size,
+					       NULL);
 }
 
 int smu_v13_0_set_driver_table_location(struct smu_context *smu)
@@ -1362,13 +1360,8 @@ int smu_v13_0_register_irq_handler(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_MP1,
-				SMU_IH_INTERRUPT_ID_TO_DRIVER,
-				irq_src);
-	if (ret)
-		return ret;
-
-	return ret;
+	return amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_MP1,
+				 SMU_IH_INTERRUPT_ID_TO_DRIVER, irq_src);
 }
 
 int smu_v13_0_get_max_sustainable_clocks_by_dc(struct smu_context *smu,

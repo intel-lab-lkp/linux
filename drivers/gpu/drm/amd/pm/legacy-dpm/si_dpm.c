@@ -6986,11 +6986,7 @@ static int si_set_temperature_range(struct amdgpu_device *adev)
 	ret = si_thermal_set_temperature_range(adev, R600_TEMP_RANGE_MIN, R600_TEMP_RANGE_MAX);
 	if (ret)
 		return ret;
-	ret = si_thermal_enable_alert(adev, true);
-	if (ret)
-		return ret;
-
-	return ret;
+	return si_thermal_enable_alert(adev, true);
 }
 
 static void si_dpm_disable(struct amdgpu_device *adev)

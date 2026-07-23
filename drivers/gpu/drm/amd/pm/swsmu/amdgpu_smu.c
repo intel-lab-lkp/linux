@@ -1910,11 +1910,7 @@ static int smu_start_smc_engine(struct smu_context *smu)
 	 * Send msg GetDriverIfVersion to check if the return value is equal
 	 * with DRIVER_IF_VERSION of smc header.
 	 */
-	ret = smu_check_fw_version(smu);
-	if (ret)
-		return ret;
-
-	return ret;
+	return smu_check_fw_version(smu);
 }
 
 static int smu_hw_init(struct amdgpu_ip_block *ip_block)

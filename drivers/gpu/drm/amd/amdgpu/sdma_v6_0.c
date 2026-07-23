@@ -1423,11 +1423,7 @@ static int sdma_v6_0_sw_init(struct amdgpu_ip_block *ip_block)
 		break;
 	}
 
-	r = amdgpu_sdma_sysfs_reset_mask_init(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_sdma_sysfs_reset_mask_init(adev);
 }
 
 static int sdma_v6_0_sw_fini(struct amdgpu_ip_block *ip_block)

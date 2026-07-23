@@ -4482,11 +4482,7 @@ static int gfx_v7_0_hw_init(struct amdgpu_ip_block *ip_block)
 	if (r)
 		return r;
 
-	r = gfx_v7_0_cp_resume(adev);
-	if (r)
-		return r;
-
-	return r;
+	return gfx_v7_0_cp_resume(adev);
 }
 
 static int gfx_v7_0_hw_fini(struct amdgpu_ip_block *ip_block)

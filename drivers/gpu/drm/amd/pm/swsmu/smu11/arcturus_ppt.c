@@ -540,11 +540,7 @@ static int arcturus_setup_pptable(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = arcturus_check_powerplay_table(smu);
-	if (ret)
-		return ret;
-
-	return ret;
+	return arcturus_check_powerplay_table(smu);
 }
 
 static int arcturus_run_btc(struct smu_context *smu)
