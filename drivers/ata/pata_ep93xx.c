@@ -499,19 +499,12 @@ static unsigned int ep93xx_pata_data_xfer(struct ata_queued_cmd *qc,
 
 	/* Transfer trailing 1 byte, if any. */
 	if (unlikely(buflen & 0x01)) {
-		unsigned char pad[2] = { };
-
 		buf += buflen - 1;
 
 		if (rw == READ) {
-			*pad = cpu_to_le16(
-				ep93xx_pata_read_data(
-					drv_data, IDECTRL_ADDR_DATA));
-			*buf = pad[0];
+			*buf = ep93xx_pata_read_data(drv_data, IDECTRL_ADDR_DATA);
 		} else {
-			pad[0] = *buf;
-			ep93xx_pata_write_data(drv_data, le16_to_cpu(*pad),
-					  IDECTRL_ADDR_DATA);
+			ep93xx_pata_write_data(drv_data, *buf, IDECTRL_ADDR_DATA);
 		}
 		words++;
 	}
