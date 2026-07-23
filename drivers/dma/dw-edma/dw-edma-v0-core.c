@@ -649,6 +649,15 @@ static int dw_edma_v0_core_ll_cur_idx(struct dw_edma_chan *chan)
 	return (val - base) / EDMA_LL_SZ;
 }
 
+static bool dw_edma_v0_core_ll_irq(struct dw_edma_desc *desc, u32 i, u32 free)
+{
+	/*
+	 * eDMA reports LL interrupts through DONE. Keep them at
+	 * descriptor ends, plus the last free slot to refill the ring.
+	 */
+	return i == desc->nburst - 1 || free == 1;
+}
+
 /* eDMA debugfs callbacks */
 static void dw_edma_v0_core_debugfs_on(struct dw_edma *dw)
 {
@@ -685,6 +694,7 @@ static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.ll_link = dw_edma_v0_core_ll_link,
 	.ll_clear = dw_edma_v0_core_ll_clear,
 	.ll_cur_idx = dw_edma_v0_core_ll_cur_idx,
+	.ll_irq = dw_edma_v0_core_ll_irq,
 	.ch_doorbell = dw_edma_v0_core_ch_doorbell,
 	.ch_enable = dw_edma_v0_core_ch_enable,
 	.ch_config = dw_edma_v0_core_ch_config,

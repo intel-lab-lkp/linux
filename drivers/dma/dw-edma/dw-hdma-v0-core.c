@@ -13,6 +13,9 @@
 #include "dw-hdma-v0-regs.h"
 #include "dw-hdma-v0-debugfs.h"
 
+/* Empirically chosen watermark interval. */
+#define HDMA_V0_WATERMARK_INTERVAL			4
+
 enum dw_hdma_control {
 	DW_HDMA_V0_CB					= BIT(0),
 	DW_HDMA_V0_TCB					= BIT(1),
@@ -417,6 +420,30 @@ static int dw_hdma_v0_core_ll_cur_idx(struct dw_edma_chan *chan)
 	return (val - base) / EDMA_LL_SZ;
 }
 
+static bool dw_hdma_v0_core_ll_irq(struct dw_edma_desc *desc, u32 i, u32 free)
+{
+	struct dw_edma_chan *chan = desc->chan;
+	bool needs_progress;
+
+	/*
+	 * Always place a watermark at a descriptor end and before the link
+	 * element. The first reports descriptor progress; the second provides
+	 * one progress point per ring lap.
+	 */
+	if (i == desc->nburst - 1 || chan->ll_head == chan->ll_max - 1)
+		return true;
+
+	/*
+	 * Use periodic watermarks when a descriptor exceeds the usable ring or
+	 * when more issued work follows it.
+	 */
+	needs_progress = desc->nburst > chan->ll_max - 1 ||
+			 !list_is_last(&desc->vd.node, &chan->vc.desc_issued);
+
+	return needs_progress &&
+	       (chan->ll_head + 1) % HDMA_V0_WATERMARK_INTERVAL == 0;
+}
+
 /* HDMA debugfs callbacks */
 static void dw_hdma_v0_core_debugfs_on(struct dw_edma *dw)
 {
@@ -441,6 +468,7 @@ static const struct dw_edma_core_ops dw_hdma_v0_core = {
 	.ll_link = dw_hdma_v0_core_ll_link,
 	.ll_clear = dw_hdma_v0_core_ll_clear,
 	.ll_cur_idx = dw_hdma_v0_core_ll_cur_idx,
+	.ll_irq = dw_hdma_v0_core_ll_irq,
 	.ch_doorbell = dw_hdma_v0_core_ch_doorbell,
 	.ch_enable = dw_hdma_v0_core_ch_enable,
 	.ch_config = dw_hdma_v0_core_ch_config,
