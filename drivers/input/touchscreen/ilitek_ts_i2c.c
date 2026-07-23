@@ -131,11 +131,15 @@ static int ilitek_i2c_write_and_read(struct ilitek_ts_data *ts,
 		error = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 		if (error < 0)
 			return error;
+		if (error != ARRAY_SIZE(msgs))
+			return -EIO;
 	} else {
 		if (write_len > 0) {
 			error = i2c_transfer(client->adapter, msgs, 1);
 			if (error < 0)
 				return error;
+			if (error != 1)
+				return -EIO;
 		}
 		if (delay > 0)
 			fsleep(delay * 1000);
@@ -144,6 +148,8 @@ static int ilitek_i2c_write_and_read(struct ilitek_ts_data *ts,
 			error = i2c_transfer(client->adapter, msgs + 1, 1);
 			if (error < 0)
 				return error;
+			if (error != 1)
+				return -EIO;
 		}
 	}
 
