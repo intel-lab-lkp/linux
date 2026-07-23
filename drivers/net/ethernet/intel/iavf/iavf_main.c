@@ -2986,18 +2986,12 @@ static int iavf_watchdog_step(struct iavf_adapter *adapter)
 				iavf_send_api_ver(adapter);
 			}
 		} else {
-			int ret = iavf_process_aq_command(adapter);
-
-			/* An error will be returned if no commands were
-			 * processed; use this opportunity to update stats
-			 * if the error isn't -ENOTSUPP
-			 */
-			if (ret && ret != -EOPNOTSUPP &&
-			    adapter->state == __IAVF_RUNNING)
-				iavf_request_stats(adapter);
+			iavf_process_aq_command(adapter);
 		}
-		if (adapter->state == __IAVF_RUNNING)
+		if (adapter->state == __IAVF_RUNNING) {
+			iavf_request_stats(adapter);
 			iavf_detect_recover_hung(&adapter->vsi);
+		}
 		break;
 	case __IAVF_REMOVE:
 	default:
