@@ -70,7 +70,7 @@ struct ccs811_reading {
 	u8 status;
 	u8 error;
 	__be16 raw_data;
-} __attribute__((__packed__));
+} __packed;
 
 struct ccs811_data {
 	struct i2c_client *client;
