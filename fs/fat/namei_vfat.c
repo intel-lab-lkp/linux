@@ -931,6 +931,38 @@ static void vfat_update_dir_metadata(struct inode *dir, struct timespec64 *ts)
 		mark_inode_dirty(dir);
 }
 
+/*
+ * Overwrite the reserved lcase bits (those not used by the
+ * kernel) of the entry at i_pos with those from the source
+ * lcase byte.
+ */
+static int vfat_overwrite_lcase_reserved_bits(struct inode *dir, loff_t i_pos,
+					      unsigned char src_lcase)
+{
+	/* lcase bits the kernel actually assigns meaning to */
+	const unsigned char lcase_unreserved_bits = CASE_LOWER_BASE | CASE_LOWER_EXT;
+	struct super_block *sb = dir->i_sb;
+	struct buffer_head *bh;
+	struct msdos_dir_entry *de;
+	sector_t blocknr;
+	int offset, err = 0;
+
+	fat_get_blknr_offset(MSDOS_SB(sb), i_pos, &blocknr, &offset);
+	bh = sb_bread(sb, blocknr);
+	if (!bh)
+		return -EIO;
+
+	de = &((struct msdos_dir_entry *)bh->b_data)[offset];
+	de->lcase = (de->lcase & lcase_unreserved_bits) |
+		    (src_lcase & ~lcase_unreserved_bits);
+
+	mmb_mark_buffer_dirty(bh, &MSDOS_I(dir)->i_metadata_bhs);
+	if (IS_DIRSYNC(dir))
+		err = sync_dirty_buffer(bh);
+	brelse(bh);
+	return err;
+}
+
 static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 		       struct inode *new_dir, struct dentry *new_dentry)
 {
@@ -974,6 +1006,17 @@ static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
 			goto out;
 		new_i_pos = sinfo.i_pos;
 	}
+
+	/*
+	 * The kernel only interprets some of the lcase bits; make
+	 * sure the rest carry over from old_dentry's lcase instead
+	 * of being silently clobbered.
+	 */
+	err = vfat_overwrite_lcase_reserved_bits(new_dir, new_i_pos,
+						 old_sinfo.de->lcase);
+	if (err)
+		goto error_inode;
+
 	inode_inc_iversion(new_dir);
 
 	fat_detach(old_inode);
