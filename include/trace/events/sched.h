@@ -10,6 +10,27 @@
 #include <linux/tracepoint.h>
 #include <linux/binfmts.h>
 
+TRACE_EVENT(sched_cache_scan,
+
+	TP_PROTO(struct task_struct *t, int scan),
+
+	TP_ARGS(t, scan),
+
+	TP_STRUCT__entry(
+		__string(	comm,	t->comm		)
+		__field(	pid_t,	pid		)
+		__field(	int,	scan		)
+	),
+
+	TP_fast_assign(
+		__assign_str(comm);
+		__entry->pid	= t->pid;
+		__entry->scan	= scan;
+	),
+
+	TP_printk("comm=%s pid=%d scan=%d", __get_str(comm), __entry->pid,
+					__entry->scan)
+);
 /*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
  */
