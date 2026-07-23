@@ -88,6 +88,7 @@
 #include <linux/gfp.h>
 #include <linux/gfp_types.h>
 #include <linux/kernel.h>
+#include <linux/mmzone.h>
 #include <linux/module.h>
 #include <linux/nodemask.h>
 #include <linux/printk.h>
@@ -127,6 +128,41 @@ struct kmem_cache *req_alloc_cache;
 struct kmem_cache *page_alloc_cache;
 
 /**
+ * create_zones_subdirs() - Creates a directory for each populated zone in the
+ * node. Once that the zone directory is created, it creates a directory for
+ * each order supported.
+ *
+ * Note: ZONE_DEVICE pages won't be allocated using this driver. The main reason
+ * is because they are not managed by the Buddy Allocator or CMA allocator.
+ */
+static inline int create_zones_subdirs(struct dentry *nodedir, int node_idx,
+				       struct pglist_data *pgdata)
+{
+	struct dentry *zonedir;
+	struct zone *zone;
+	struct zone *node_zones = pgdata->node_zones;
+	int zone_idx;
+	char dirname[24];
+
+	for (zone = node_zones, zone_idx = 0; zone - node_zones < MAX_NR_ZONES;
+	     ++zone, ++zone_idx) {
+		if (!populated_zone(zone))
+			continue;
+
+		/* ZONE_DEVICE pages won't be allocated using this driver. */
+		if (zone_is_zone_device(zone))
+			continue;
+
+		snprintf(dirname, sizeof(dirname), "zone-%s", zone->name);
+		zonedir = debugfs_create_dir(dirname, nodedir);
+		if (IS_ERR(zonedir))
+			return PTR_ERR(zonedir);
+	}
+
+	return 0;
+}
+
+/**
  * create_nodes_subdirs() - Creates a directory for each online node in the
  * system. Once that the node directory is created, it creates a directory for
  * each zone in the node.
@@ -136,12 +172,19 @@ static inline int create_nodes_subdirs(struct dentry *mmdir)
 	struct dentry *nodedir;
 	int node_idx;
 	char dirname[12];
+	int ret;
 
 	for_each_online_node(node_idx) {
+		struct pglist_data *pgdata = NODE_DATA(node_idx);
+
 		snprintf(dirname, sizeof(dirname), "node-%d", node_idx);
 		nodedir = debugfs_create_dir(dirname, mmdir);
 		if (IS_ERR(nodedir))
 			return PTR_ERR(nodedir);
+
+		ret = create_zones_subdirs(nodedir, node_idx, pgdata);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
