@@ -1,0 +1,11 @@
+/* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
+#ifndef _DT_BINDINGS_MFD_STM32H7RS_RCC_H
+#define _DT_BINDINGS_MFD_STM32H7RS_RCC_H
+
+/* AHB5 */
+#define STM32H7RS_RCC_AHB5_SDMMC1	8
+
+#define STM32H7RS_AHB5_RESET(bit) \
+	(STM32H7RS_RCC_AHB5_##bit + (0x7c * 8))
+
+#endif /* _DT_BINDINGS_MFD_STM32H7RS_RCC_H */
