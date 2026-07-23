@@ -147,10 +147,17 @@ void hantro_start_prepare_run(struct hantro_ctx *ctx)
 	}
 }
 
-void hantro_end_prepare_run(struct hantro_ctx *ctx)
+void hantro_complete_ctrl_request(struct hantro_ctx *ctx)
 {
 	struct vb2_v4l2_buffer *src_buf;
 
+	src_buf = hantro_get_src_buf(ctx);
+	v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req,
+				   &ctx->ctrl_handler);
+}
+
+void hantro_end_prepare_run(struct hantro_ctx *ctx)
+{
 	if (!ctx->is_encoder && ctx->dev->variant->late_postproc) {
 		if (hantro_needs_postproc(ctx, ctx->vpu_dst_fmt))
 			hantro_postproc_enable(ctx);
@@ -158,9 +165,7 @@ void hantro_end_prepare_run(struct hantro_ctx *ctx)
 			hantro_postproc_disable(ctx);
 	}
 
-	src_buf = hantro_get_src_buf(ctx);
-	v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req,
-				   &ctx->ctrl_handler);
+	hantro_complete_ctrl_request(ctx);
 
 	/* Kick the watchdog. */
 	schedule_delayed_work(&ctx->dev->watchdog_work,

@@ -36,12 +36,14 @@ static int start_prepare_run(struct hantro_ctx *ctx, const struct v4l2_ctrl_vp9_
 
 	ctrl = v4l2_ctrl_find(&ctx->ctrl_handler, V4L2_CID_STATELESS_VP9_FRAME);
 	if (WARN_ON(!ctrl))
-		return -EINVAL;
+		goto err_complete_request;
+
 	*dec_params = ctrl->p_cur.p;
 
 	ctrl = v4l2_ctrl_find(&ctx->ctrl_handler, V4L2_CID_STATELESS_VP9_COMPRESSED_HDR);
 	if (WARN_ON(!ctrl))
-		return -EINVAL;
+		goto err_complete_request;
+
 	prob_updates = ctrl->p_cur.p;
 	vp9_ctx->cur.tx_mode = prob_updates->tx_mode;
 
@@ -86,6 +88,10 @@ static int start_prepare_run(struct hantro_ctx *ctx, const struct v4l2_ctrl_vp9_
 	v4l2_vp9_fw_update_probs(&vp9_ctx->probability_tables, prob_updates, *dec_params);
 
 	return 0;
+
+err_complete_request:
+	hantro_complete_ctrl_request(ctx);
+	return -EINVAL;
 }
 
 static struct hantro_decoded_buffer *
@@ -894,10 +900,8 @@ int hantro_g2_vp9_dec_run(struct hantro_ctx *ctx)
 	int ret;
 
 	ret = start_prepare_run(ctx, &decode_params);
-	if (ret) {
-		hantro_end_prepare_run(ctx);
+	if (ret)
 		return ret;
-	}
 
 	src = hantro_get_src_buf(ctx);
 	dst = hantro_get_dst_buf(ctx);
