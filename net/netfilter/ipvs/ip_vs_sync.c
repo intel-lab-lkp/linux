@@ -1603,15 +1603,10 @@ ip_vs_receive(struct socket *sock, char *buffer, const size_t buflen)
 {
 	struct msghdr		msg = {NULL,};
 	struct kvec		iov = {buffer, buflen};
-	int			len;
 
 	/* Receive a packet */
 	iov_iter_kvec(&msg.msg_iter, ITER_DEST, &iov, 1, buflen);
-	len = sock_recvmsg(sock, &msg, MSG_DONTWAIT);
-	if (len < 0)
-		return len;
-
-	return len;
+	return sock_recvmsg(sock, &msg, MSG_DONTWAIT);
 }
 
 /* Wakeup the master thread for sending */
