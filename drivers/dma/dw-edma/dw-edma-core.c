@@ -24,6 +24,7 @@
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 
+#define DW_EDMA_LL_STALL_TIMEOUT_MS		30
 #define DW_EDMA_ENGINE_QUIESCE_TIMEOUT_MS	250
 #define DW_EDMA_ENGINE_RESET_MAX_FAILS		5
 #define DW_EDMA_MAX_DIR_CH			MAX(HDMA_MAX_WR_CH, HDMA_MAX_RD_CH)
@@ -129,6 +130,7 @@ static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 	chan->ll_head = 0;
 	chan->ll_done = 0;
 	dw_edma_ll_irq_idx_discard(chan);
+	chan->ll_stall_valid = false;
 	chan->ll_recovery_pending = false;
 	/* Drop stale CB bits before reusing the circular LL ring. */
 	for (i = 0; i < chan->ll_max; i++)
@@ -183,9 +185,50 @@ static bool dw_edma_ll_advance(struct dw_edma_chan *chan, int idx, u32 *old_done
 
 	*old_done = chan->ll_done;
 	chan->ll_done = idx;
+	chan->ll_stall_valid = false;
 	chan->ll_recovery_pending = false;
 
 	return true;
+}
+
+/*
+ * Called with vc.lock held for a stopped channel with LL work pending. Queue
+ * direction recovery if repeated doorbells show no progress for the stall
+ * timeout.
+ */
+static void dw_edma_ll_stall_check(struct dw_edma_chan *chan)
+{
+	struct dw_edma_engine_recovery *rec;
+
+	/*
+	 * DWC PCIe Controller Databook 6.10a-lca06, "Legacy DMA and HDMA
+	 * Software Compatibility":
+	 *
+	 * "HDMA does not implement engine enable, that is
+	 * DMA_[WRITE|READ]_ENGINE_EN_OFF.DMA_[WRITE|READ]_ENGINE field."
+	 */
+	if (chan->dw->chip->mf == EDMA_MF_HDMA_COMPAT)
+		return;
+
+	if (!chan->dw->core->engine_reset ||
+	    !chan->dw->core->engine_enable ||
+	    !chan->dw->core->ch_transfer_size)
+		return;
+
+	if (!chan->ll_stall_valid) {
+		chan->ll_stall_valid = true;
+		chan->ll_stall_since = jiffies;
+		return;
+	}
+
+	if (!time_after(jiffies, chan->ll_stall_since +
+			msecs_to_jiffies(DW_EDMA_LL_STALL_TIMEOUT_MS)))
+		return;
+
+	rec = &chan->dw->eng_recovery[chan->dir];
+	chan->ll_recovery_pending = true;
+	if (!READ_ONCE(rec->active))
+		queue_work(chan->dw->wq, &rec->work);
 }
 
 static bool dw_edma_ll_pending(struct dw_edma_chan *chan)
@@ -492,9 +535,12 @@ static void dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 	if (dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS)
 		return;
 
+	/* Reconcile a lost tail completion before declaring a stall. */
 	dw_edma_ll_reconcile_and_refill(chan);
 	if (!dw_edma_ll_pending(chan))
 		return;
+
+	dw_edma_ll_stall_check(chan);
 
 	dw_edma_core_ch_doorbell(chan);
 }

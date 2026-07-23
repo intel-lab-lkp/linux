@@ -104,7 +104,9 @@ struct dw_edma_chan {
 	bool				ll_irq_stopped;
 	bool				ll_irq_requested;
 
-	/* Per-channel recovery state. */
+	/* Per-channel stall and recovery state. */
+	unsigned long			ll_stall_since;
+	bool				ll_stall_valid;
 	bool				ll_recovery_pending;
 	bool				ll_recovering;
 
