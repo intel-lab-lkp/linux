@@ -238,8 +238,10 @@ static int ilitek_process_and_report_v6(struct ilitek_ts_data *ts)
 		return ilitek_process_pen_report(ts, buf);
 
 	if (buf[0] != ILITEK_TP_I2C_REPORT_ID) {
-		dev_err(dev, "get touch info failed. Wrong id: 0x%02X\n", buf[0]);
-		return -EINVAL;
+		dev_err_ratelimited(dev,
+				    "get touch info failed. Wrong id: 0x%02X raw[0:16]=%*ph\n",
+				    buf[0], 16, buf);
+		return 0;
 	}
 
 	report_max_point = buf[REPORT_COUNT_ADDRESS];
