@@ -37,6 +37,18 @@
 #define ILITEK_TP_CMD_GET_IC_MODE			0xC0
 
 #define ILITEK_TP_I2C_REPORT_ID				0x48
+/* Reverse engineered stylus report on a tested CHUWI Hi10 Max device. */
+#define ILITEK_PEN_I2C_REPORT_ID			0x0C
+#define ILITEK_PEN_PRESSURE_MAX			1023
+#define ILITEK_PEN_DISTANCE_MAX			2
+/* Userspace expects tablet axis resolution; with INPUT_PROP_DIRECT this is */
+/* mostly descriptive and does not materially affect event coordinates. */
+#define ILITEK_PEN_RESOLUTION			68
+
+#define ILITEK_PEN_FLAG_TOUCH			0x01
+#define ILITEK_PEN_FLAG_STYLUS2			0x02
+#define ILITEK_PEN_FLAG_STYLUS			0x08
+#define ILITEK_PEN_FLAG_PROX			0x10
 
 #define REPORT_COUNT_ADDRESS				61
 #define ILITEK_SUPPORT_MAX_POINT			40
@@ -50,6 +62,7 @@ struct ilitek_ts_data {
 	struct i2c_client		*client;
 	struct gpio_desc		*reset_gpio;
 	struct input_dev		*input_dev;
+	struct input_dev		*pen_input_dev;
 	struct touchscreen_properties	prop;
 
 	const struct ilitek_protocol_map *ptl_cb_func;
@@ -88,6 +101,9 @@ enum ilitek_cmds {
 	/* ALWAYS keep at the end */
 	MAX_CMD_CNT
 };
+
+static int ilitek_pen_input_dev_init(struct device *dev,
+				      struct ilitek_ts_data *ts);
 
 /* ILITEK I2C R/W APIs */
 static int ilitek_i2c_write_and_read(struct ilitek_ts_data *ts,
@@ -146,6 +162,54 @@ static void ilitek_touch_down(struct ilitek_ts_data *ts, unsigned int id,
 	touchscreen_report_pos(input, &ts->prop, x, y, true);
 }
 
+/*
+ * buf[1] carries prox/touch/side-button state and buf[6..7] carries
+ * pressure. A right shift by one matches the observed 1024 pressure levels.
+ */
+static int ilitek_process_pen_report(struct ilitek_ts_data *ts, u8 *buf)
+{
+	struct device *dev = &ts->client->dev;
+	struct input_dev *input = ts->pen_input_dev;
+	unsigned int x, y, z, distance;
+	bool prox, touch, stylus, stylus2;
+	int error;
+
+	if (!input) {
+		error = ilitek_pen_input_dev_init(dev, ts);
+		if (error) {
+			dev_err_ratelimited(dev,
+					    "failed to register pen input device: %d\n",
+					    error);
+			return 0;
+		}
+		input = ts->pen_input_dev;
+	}
+
+	x = get_unaligned_le16(buf + 2);
+	y = get_unaligned_le16(buf + 4);
+	z = get_unaligned_le16(buf + 6) >> 1;
+	prox = !!(buf[1] & ILITEK_PEN_FLAG_PROX);
+	touch = !!(buf[1] & ILITEK_PEN_FLAG_TOUCH);
+	stylus = !!(buf[1] & ILITEK_PEN_FLAG_STYLUS);
+	stylus2 = !!(buf[1] & ILITEK_PEN_FLAG_STYLUS2);
+	distance = prox ? (touch ? 0 : 1) : ILITEK_PEN_DISTANCE_MAX;
+	if (!touch)
+		z = 0;
+	else if (z > ILITEK_PEN_PRESSURE_MAX)
+		z = ILITEK_PEN_PRESSURE_MAX;
+
+	input_report_key(input, BTN_TOOL_PEN, prox || touch);
+	input_report_key(input, BTN_TOUCH, touch);
+	input_report_key(input, BTN_STYLUS, stylus);
+	input_report_key(input, BTN_STYLUS2, stylus2);
+	touchscreen_report_pos(input, &ts->prop, x, y, false);
+	input_report_abs(input, ABS_PRESSURE, z);
+	input_report_abs(input, ABS_DISTANCE, distance);
+	input_sync(input);
+
+	return 0;
+}
+
 static int ilitek_process_and_report_v6(struct ilitek_ts_data *ts)
 {
 	int error = 0;
@@ -163,6 +227,9 @@ static int ilitek_process_and_report_v6(struct ilitek_ts_data *ts)
 		dev_err(dev, "get touch info failed, err:%d\n", error);
 		return error;
 	}
+
+	if (buf[0] == ILITEK_PEN_I2C_REPORT_ID)
+		return ilitek_process_pen_report(ts, buf);
 
 	if (buf[0] != ILITEK_TP_I2C_REPORT_ID) {
 		dev_err(dev, "get touch info failed. Wrong id: 0x%02X\n", buf[0]);
@@ -459,6 +526,58 @@ static int ilitek_read_tp_info(struct ilitek_ts_data *ts, bool boot)
 	return 0;
 }
 
+static int ilitek_pen_input_dev_init(struct device *dev, struct ilitek_ts_data *ts)
+{
+	struct input_dev *pen_input;
+	int error;
+
+	if (ts->pen_input_dev)
+		return 0;
+
+	/* No explicit pen capability probe is known; create on first pen report. */
+
+	pen_input = input_allocate_device();
+	if (!pen_input)
+		return -ENOMEM;
+
+	ts->pen_input_dev = pen_input;
+	pen_input->dev.parent = dev;
+	pen_input->name = "ilitek_ts_pen";
+	pen_input->id.bustype = BUS_I2C;
+
+	__set_bit(INPUT_PROP_DIRECT, pen_input->propbit);
+	input_set_capability(pen_input, EV_KEY, BTN_TOUCH);
+	input_set_capability(pen_input, EV_KEY, BTN_TOOL_PEN);
+	input_set_capability(pen_input, EV_KEY, BTN_STYLUS);
+	input_set_capability(pen_input, EV_KEY, BTN_STYLUS2);
+
+	input_set_abs_params(pen_input, ABS_X,
+			     input_abs_get_min(ts->input_dev, ABS_MT_POSITION_X),
+			     input_abs_get_max(ts->input_dev, ABS_MT_POSITION_X),
+			     0, 0);
+	input_set_abs_params(pen_input, ABS_Y,
+			     input_abs_get_min(ts->input_dev, ABS_MT_POSITION_Y),
+			     input_abs_get_max(ts->input_dev, ABS_MT_POSITION_Y),
+			     0, 0);
+	input_set_abs_params(pen_input, ABS_PRESSURE, 0,
+			     ILITEK_PEN_PRESSURE_MAX, 0, 0);
+	input_set_abs_params(pen_input, ABS_DISTANCE, 0,
+			     ILITEK_PEN_DISTANCE_MAX, 0, 0);
+	input_abs_set_res(pen_input, ABS_X, ILITEK_PEN_RESOLUTION);
+	input_abs_set_res(pen_input, ABS_Y, ILITEK_PEN_RESOLUTION);
+
+	error = input_register_device(pen_input);
+	if (error)
+		goto err_free_pen_input;
+
+	return 0;
+
+err_free_pen_input:
+	ts->pen_input_dev = NULL;
+	input_free_device(pen_input);
+	return error;
+}
+
 static int ilitek_input_dev_init(struct device *dev, struct ilitek_ts_data *ts)
 {
 	int error;
@@ -589,15 +708,26 @@ static int ilitek_ts_i2c_probe(struct i2c_client *client)
 		return error;
 	}
 
-	error = devm_request_threaded_irq(dev, ts->client->irq,
-					  NULL, ilitek_i2c_isr, IRQF_ONESHOT,
-					  "ilitek_touch_irq", ts);
+	error = request_threaded_irq(ts->client->irq, NULL, ilitek_i2c_isr,
+				     IRQF_ONESHOT, "ilitek_touch_irq", ts);
 	if (error) {
 		dev_err(dev, "request threaded irq failed: %d\n", error);
 		return error;
 	}
 
 	return 0;
+}
+
+static void ilitek_ts_i2c_remove(struct i2c_client *client)
+{
+	struct ilitek_ts_data *ts = i2c_get_clientdata(client);
+
+	free_irq(client->irq, ts);
+
+	if (ts->pen_input_dev) {
+		input_unregister_device(ts->pen_input_dev);
+		ts->pen_input_dev = NULL;
+	}
 }
 
 static int ilitek_suspend(struct device *dev)
@@ -677,6 +807,7 @@ static struct i2c_driver ilitek_ts_i2c_driver = {
 		.acpi_match_table = ACPI_PTR(ilitekts_acpi_id),
 	},
 	.probe = ilitek_ts_i2c_probe,
+	.remove = ilitek_ts_i2c_remove,
 	.id_table = ilitek_ts_i2c_id,
 };
 module_i2c_driver(ilitek_ts_i2c_driver);
