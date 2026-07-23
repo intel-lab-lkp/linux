@@ -1215,6 +1215,12 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 					src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
 					goto next;
 				}
+
+				/*
+				 * folio_free_swap() removed the folio from the swap
+				 * cache. Migrate it as a mappingless anonymous folio.
+				 */
+				mapping = NULL;
 			}
 		} else if (folio_is_zone_device(newfolio)) {
 			/*
