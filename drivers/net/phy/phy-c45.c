@@ -1284,6 +1284,26 @@ int genphy_c45_fast_retrain(struct phy_device *phydev, bool enable)
 EXPORT_SYMBOL_GPL(genphy_c45_fast_retrain);
 
 /**
+ * genphy_c45_template_testmode - configure template testmode registers
+ * @phydev: target phy_device struct
+ * @test_mode: testmode includes Test mode 1 to Test mode 7
+ *
+ * Description: Set template testmode include Test mode 1 to Test mode 7
+ */
+int genphy_c45_template_testmode(struct phy_device *phydev, int test_mode)
+{
+	int ctrl;
+
+	ctrl = phy_read_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_10GBT_TEMPLATE);
+	if (ctrl < 0)
+		return ctrl;
+	ctrl &= ~(0x7 << 13);
+	ctrl |= test_mode << 13;
+	return phy_write_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_10GBT_TEMPLATE, ctrl);
+}
+EXPORT_SYMBOL_GPL(genphy_c45_template_testmode);
+
+/**
  * genphy_c45_plca_get_cfg - get PLCA configuration from standard registers
  * @phydev: target phy_device struct
  * @plca_cfg: output structure to store the PLCA configuration
