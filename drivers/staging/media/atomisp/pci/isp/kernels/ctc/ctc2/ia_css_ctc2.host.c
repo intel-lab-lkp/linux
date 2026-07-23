@@ -77,9 +77,9 @@ void ia_css_ctc2_vmem_encode(struct ia_css_isp_ctc2_vmem_params *to,
 
 	(void)size;
 	/*
-	*  Calculation of slopes of lines interconnecting
-	*  0.0 -> y_x1 -> y_x2 -> y _x3 -> y_x4 -> 1.0
-	*/
+	 *  Calculation of slopes of lines interconnecting
+	 *  0.0 -> y_x1 -> y_x2 -> y _x3 -> y_x4 -> 1.0
+	 */
 	dydx0 = ctc2_slope(from->y_y1, from->y_y0,
 			   from->y_x1, 0);
 	dydx1 = ctc2_slope(from->y_y2, from->y_y1,
