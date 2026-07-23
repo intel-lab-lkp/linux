@@ -1817,37 +1817,30 @@ struct raw_hwp_page {
 	struct page *page;
 };
 
-bool is_raw_hwpoison_page_in_hugepage(struct page *page)
+/*
+ * Check if a given @page in a hugetlb folio is HWPOISON.
+ */
+bool hugetlb_page_hwpoison(const struct folio *folio, const struct page *page)
 {
-	struct raw_hwp_page *p;
-	struct folio *folio = page_folio(page);
-	bool ret = false;
+	const struct llist_head *list = &folio->hugetlb_hwpoison;
+	const struct raw_hwp_page *p;
 
 	if (!folio_test_has_hwpoisoned(folio))
 		return false;
 
-	if (!folio_test_hugetlb(folio))
-		return PageHWPoison(page);
-
 	/*
-	 * When RawHwpUnreliable is set, kernel lost track of which subpages
-	 * are HWPOISON. So return as if ALL subpages are HWPOISONed.
+	 * When RawHwpUnreliable is set, kernel lost track of which pages
+	 * are HWPOISON. So return as if ALL pages are HWPOISONed.
 	 */
 	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
 		return true;
 
-	mutex_lock(&mf_mutex);
-
-	llist_for_each_entry(p, folio->hugetlb_hwpoison.first, node) {
-		if (page == p->page) {
-			ret = true;
-			break;
-		}
+	llist_for_each_entry(p, READ_ONCE(list->first), node) {
+		if (page == p->page)
+			return true;
 	}
 
-	mutex_unlock(&mf_mutex);
-
-	return ret;
+	return false;
 }
 
 static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
