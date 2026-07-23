@@ -83,6 +83,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/atomic.h>
 #include <linux/errno.h>
 #include <linux/debugfs.h>
 #include <linux/gfp.h>
@@ -94,6 +95,7 @@
 #include <linux/nodemask.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
+#include <linux/xarray.h>
 
 struct dentry *mmdir;
 
@@ -332,6 +334,37 @@ static const struct file_operations req_page_alloc_fops = {
 };
 
 /**
+ * free_page_alloc_write() - free the previously allocated pages.
+ * @file: File where the user is writing.
+ * @ubuf: Contains the name of the file the user wants to delete and have the
+ *       memory associated with that file freed.
+ * @cnt: Size of @ubuf.
+ * @ppos: Current position in the file.
+ */
+static ssize_t free_page_alloc_write(struct file *file,
+				      const char __user *ubuf, size_t cnt,
+				      loff_t *ppos)
+{
+	int ret;
+	unsigned long alloc_id;
+
+	ret = kstrtoul_from_user(ubuf, cnt, 10, &alloc_id);
+	if (ret)
+		return ret;
+
+	ret = free_alloc_helper(alloc_id);
+	if (ret)
+		return ret;
+
+	return cnt;
+}
+
+static const struct file_operations free_page_alloc_fops = {
+	.owner = THIS_MODULE,
+	.write = free_page_alloc_write,
+};
+
+/**
  * create_nr_pages_allocs_file() - Creates the file "nr_pages_allocs".
  *
  * The "nr_pages_allocs" file will be used to write the number of allocations
@@ -501,6 +534,7 @@ static inline int create_nodes_subdirs(struct dentry *mmdir)
 
 static int __init page_alloc_hogger_debugfs_init(void)
 {
+	struct dentry *free_file;
 	int ret;
 
 	req_alloc_cache = kmem_cache_create(
@@ -531,6 +565,13 @@ static int __init page_alloc_hogger_debugfs_init(void)
 	ret = create_nodes_subdirs(mmdir);
 	if (ret)
 		goto clean_dir;
+
+	free_file = debugfs_create_file("free", 0644, mmdir, NULL,
+					&free_page_alloc_fops);
+	if (IS_ERR(free_file)) {
+		ret = PTR_ERR(free_file);
+		goto clean_dir;
+	}
 
 	return 0;
 
