@@ -126,6 +126,9 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 	lp = NAPI_GRO_CB(p)->last;
 	pinfo = skb_shinfo(lp);
 
+	if (unlikely(segs > GSO_MAX_SEGS - NAPI_GRO_CB(p)->count))
+		return -E2BIG;
+
 	if (headlen <= offset) {
 		skb_frag_t *frag;
 		skb_frag_t *frag2;
