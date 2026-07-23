@@ -1425,6 +1425,8 @@ patternProperties:
     description: Shenzhen Roofull Technology Co, Ltd
   "^roseapplepi,.*":
     description: RoseapplePi.org
+  "^ruiside,.*":
+    description: Shanghai Ruiside Electronic Technology Co., Ltd.
   "^rve,.*":
     description: Recharge Véhicule Électrique (RVE) inc.
   "^saef,.*":
