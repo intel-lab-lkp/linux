@@ -279,12 +279,8 @@ static int ch341_set_baudrate_lcr(struct usb_device *dev,
 	if (priv->version < 0x30)
 		return 0;
 
-	r = ch341_control_out(dev, CH341_REQ_WRITE_REG,
-			      CH341_REG_LCR2 << 8 | CH341_REG_LCR, lcr);
-	if (r)
-		return r;
-
-	return r;
+	return ch341_control_out(dev, CH341_REQ_WRITE_REG,
+				 CH341_REG_LCR2 << 8 | CH341_REG_LCR, lcr);
 }
 
 static int ch341_set_handshake(struct usb_device *dev, u8 control)
