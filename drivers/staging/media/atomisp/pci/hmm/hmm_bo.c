@@ -30,7 +30,6 @@
 #include <asm/set_memory.h>
 
 #include "atomisp_internal.h"
-#include "hmm/hmm_common.h"
 #include "hmm/hmm_bo.h"
 
 static int __bo_init(struct hmm_bo_device *bdev, struct hmm_buffer_object *bo,
@@ -389,6 +388,7 @@ struct hmm_buffer_object *hmm_bo_alloc(struct hmm_bo_device *bdev,
 {
 	struct hmm_buffer_object *bo, *new_bo;
 	struct rb_root *root;
+	int ret;
 
 	if (!bdev) {
 		dev_err(atomisp_dev, "NULL hmm_bo_device.\n");
@@ -396,8 +396,11 @@ struct hmm_buffer_object *hmm_bo_alloc(struct hmm_bo_device *bdev,
 	}
 
 	root = &bdev->free_rbtree;
-	var_equal_return(hmm_bo_device_inited(bdev), 0, NULL,
-			 "hmm_bo_device not inited yet.\n");
+	ret = hmm_bo_device_inited(bdev);
+	if (!ret) {
+		dev_err(atomisp_dev, "hmm_bo_device not inited yet.\n");
+		return NULL;
+	}
 
 	if (pgnr == 0) {
 		dev_err(atomisp_dev, "0 size buffer is not allowed.\n");
