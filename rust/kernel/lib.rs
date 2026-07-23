@@ -135,6 +135,8 @@ pub mod types;
 pub mod uaccess;
 #[cfg(CONFIG_USB = "y")]
 pub mod usb;
+#[cfg(CONFIG_WATCHDOG)]
+pub mod watchdog;
 pub mod workqueue;
 pub mod xarray;
 

@@ -29028,6 +29028,8 @@ F:	drivers/watchdog/
 F:	include/linux/watchdog.h
 F:	include/trace/events/watchdog.h
 F:	include/uapi/linux/watchdog.h
+F:	rust/helpers/watchdog.c
+F:	rust/kernel/watchdog.rs
 
 WAVE5 VPU CODEC DRIVER
 M:	Nas Chung <nas.chung@chipsnmedia.com>
