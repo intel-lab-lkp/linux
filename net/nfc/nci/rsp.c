@@ -186,6 +186,7 @@ static void nci_rf_disc_rsp_packet(struct nci_dev *ndev,
 				   const struct sk_buff *skb)
 {
 	struct nci_conn_info *conn_info;
+	struct nci_conn_info *new_conn_info;
 	__u8 status = skb->data[0];
 
 	pr_debug("status 0x%x\n", status);
@@ -193,19 +194,33 @@ static void nci_rf_disc_rsp_packet(struct nci_dev *ndev,
 	if (status == NCI_STATUS_OK) {
 		atomic_set(&ndev->state, NCI_DISCOVERY);
 
+		spin_lock_bh(&ndev->conn_info_lock);
 		conn_info = ndev->rf_conn_info;
+		spin_unlock_bh(&ndev->conn_info_lock);
+
 		if (!conn_info) {
-			conn_info = devm_kzalloc(&ndev->nfc_dev->dev,
-						 sizeof(struct nci_conn_info),
-						 GFP_KERNEL);
-			if (!conn_info) {
+			new_conn_info = devm_kzalloc(&ndev->nfc_dev->dev,
+						     sizeof(*new_conn_info),
+						     GFP_KERNEL);
+			if (!new_conn_info) {
 				status = NCI_STATUS_REJECTED;
 				goto exit;
 			}
-			conn_info->conn_id = NCI_STATIC_RF_CONN_ID;
-			INIT_LIST_HEAD(&conn_info->list);
-			list_add(&conn_info->list, &ndev->conn_info_list);
-			ndev->rf_conn_info = conn_info;
+
+			new_conn_info->conn_id = NCI_STATIC_RF_CONN_ID;
+			INIT_LIST_HEAD(&new_conn_info->list);
+
+			spin_lock_bh(&ndev->conn_info_lock);
+			if (!ndev->rf_conn_info) {
+				list_add(&new_conn_info->list,
+					 &ndev->conn_info_list);
+				ndev->rf_conn_info = new_conn_info;
+				new_conn_info = NULL;
+			}
+			spin_unlock_bh(&ndev->conn_info_lock);
+
+			if (new_conn_info)
+				devm_kfree(&ndev->nfc_dev->dev, new_conn_info);
 		}
 	}
 
@@ -298,20 +313,20 @@ static void nci_core_conn_create_rsp_packet(struct nci_dev *ndev,
 		conn_info->dest_params->id = ndev->cur_params.id;
 		conn_info->dest_params->protocol = ndev->cur_params.protocol;
 		conn_info->conn_id = rsp->conn_id;
+		conn_info->max_pkt_payload_len = rsp->max_ctrl_pkt_payload_len;
+		atomic_set(&conn_info->credits_cnt, rsp->credits_cnt);
 
 		/* Note: data_exchange_cb and data_exchange_cb_context need to
 		 * be specify out of nci_core_conn_create_rsp_packet
 		 */
 
 		INIT_LIST_HEAD(&conn_info->list);
+		spin_lock_bh(&ndev->conn_info_lock);
 		list_add(&conn_info->list, &ndev->conn_info_list);
 
 		if (ndev->cur_params.id == ndev->hci_dev->nfcee_id)
 			ndev->hci_dev->conn_info = conn_info;
-
-		conn_info->conn_id = rsp->conn_id;
-		conn_info->max_pkt_payload_len = rsp->max_ctrl_pkt_payload_len;
-		atomic_set(&conn_info->credits_cnt, rsp->credits_cnt);
+		spin_unlock_bh(&ndev->conn_info_lock);
 	}
 
 free_conn_info:
@@ -330,14 +345,21 @@ static void nci_core_conn_close_rsp_packet(struct nci_dev *ndev,
 
 	pr_debug("status 0x%x\n", status);
 	if (status == NCI_STATUS_OK) {
-		conn_info = nci_get_conn_info_by_conn_id(ndev,
-							 ndev->cur_conn_id);
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_info =
+			nci_get_conn_info_by_conn_id_locked(ndev,
+							    ndev->cur_conn_id);
 		if (conn_info) {
 			list_del(&conn_info->list);
 			if (conn_info == ndev->rf_conn_info)
 				ndev->rf_conn_info = NULL;
-			devm_kfree(&ndev->nfc_dev->dev, conn_info);
+			if (ndev->hci_dev &&
+			    conn_info == ndev->hci_dev->conn_info)
+				ndev->hci_dev->conn_info = NULL;
 		}
+		spin_unlock_bh(&ndev->conn_info_lock);
+		if (conn_info)
+			devm_kfree(&ndev->nfc_dev->dev, conn_info);
 	}
 	nci_req_complete(ndev, status);
 }

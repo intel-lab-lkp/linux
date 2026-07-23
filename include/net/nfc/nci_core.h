@@ -19,6 +19,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 #include <linux/tty.h>
 
 #include <net/nfc/nfc.h>
@@ -227,6 +228,8 @@ struct nci_dev {
 	struct sk_buff_head	tx_q;
 
 	struct mutex		req_lock;
+	/* Serializes conn_info_list and conn_info pointer alias updates. */
+	spinlock_t		conn_info_lock;
 	struct completion	req_completion;
 	__u32			req_status;
 	__u32			req_result;
@@ -382,8 +385,10 @@ void nci_clear_target_list(struct nci_dev *ndev);
 #define NCI_REQ_CANCELED	2
 
 void nci_req_complete(struct nci_dev *ndev, int result);
-struct nci_conn_info *nci_get_conn_info_by_conn_id(struct nci_dev *ndev,
-						   int conn_id);
+struct nci_conn_info *nci_get_conn_info_by_conn_id_locked(struct nci_dev *ndev,
+							  int conn_id);
+int nci_get_conn_info_by_dest_locked(struct nci_dev *ndev, u8 dest_type,
+				     const struct dest_spec_params *params);
 int nci_get_conn_info_by_dest_type_params(struct nci_dev *ndev, u8 dest_type,
 					  const struct dest_spec_params *params);
 

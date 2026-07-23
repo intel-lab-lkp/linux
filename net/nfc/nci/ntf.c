@@ -56,6 +56,7 @@ static int nci_core_conn_credits_ntf_packet(struct nci_dev *ndev,
 {
 	struct nci_core_conn_credit_ntf *ntf;
 	struct nci_conn_info *conn_info;
+	int conn_id;
 	int i;
 
 	if (skb->len < offsetofend(struct nci_core_conn_credit_ntf, num_entries))
@@ -81,13 +82,17 @@ static int nci_core_conn_credits_ntf_packet(struct nci_dev *ndev,
 			 i, ntf->conn_entries[i].conn_id,
 			 ntf->conn_entries[i].credits);
 
-		conn_info = nci_get_conn_info_by_conn_id(ndev,
-							 ntf->conn_entries[i].conn_id);
-		if (!conn_info)
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_id = ntf->conn_entries[i].conn_id;
+		conn_info = nci_get_conn_info_by_conn_id_locked(ndev, conn_id);
+		if (!conn_info) {
+			spin_unlock_bh(&ndev->conn_info_lock);
 			return 0;
+		}
 
 		atomic_add(ntf->conn_entries[i].credits,
 			   &conn_info->credits_cnt);
+		spin_unlock_bh(&ndev->conn_info_lock);
 	}
 
 	/* trigger the next tx */
@@ -828,9 +833,12 @@ static int nci_rf_intf_activated_ntf_packet(struct nci_dev *ndev,
 
 exit:
 	if (err == NCI_STATUS_OK) {
+		spin_lock_bh(&ndev->conn_info_lock);
 		conn_info = ndev->rf_conn_info;
-		if (!conn_info)
+		if (!conn_info) {
+			spin_unlock_bh(&ndev->conn_info_lock);
 			return 0;
+		}
 
 		conn_info->max_pkt_payload_len = ntf.max_data_pkt_payload_size;
 		conn_info->initial_num_credits = ntf.initial_num_credits;
@@ -838,6 +846,7 @@ exit:
 		/* set the available credits to initial value */
 		atomic_set(&conn_info->credits_cnt,
 			   conn_info->initial_num_credits);
+		spin_unlock_bh(&ndev->conn_info_lock);
 
 		/* store general bytes to be reported later in dep_link_up */
 		if (ntf.rf_interface == NCI_RF_INTERFACE_NFC_DEP) {
@@ -901,9 +910,13 @@ static int nci_rf_deactivate_ntf_packet(struct nci_dev *ndev,
 
 	pr_debug("entry, type 0x%x, reason 0x%x\n", ntf->type, ntf->reason);
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->rf_conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return 0;
+	}
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	/* drop tx data queue */
 	skb_queue_purge(&ndev->tx_q);

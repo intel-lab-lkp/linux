@@ -147,14 +147,22 @@ static int nci_hci_send_data(struct nci_dev *ndev, u8 pipe,
 	struct sk_buff *skb;
 	int len, i, r;
 	u8 cb = pipe;
+	u8 conn_id;
+	u8 max_pkt_payload_len;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
+	conn_id = conn_info->conn_id;
+	max_pkt_payload_len = conn_info->max_pkt_payload_len;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	i = 0;
-	skb = nci_skb_alloc(ndev, conn_info->max_pkt_payload_len +
-			    NCI_DATA_HDR_SIZE, GFP_ATOMIC);
+	skb = nci_skb_alloc(ndev, max_pkt_payload_len + NCI_DATA_HDR_SIZE,
+			    GFP_ATOMIC);
 	if (!skb)
 		return -ENOMEM;
 
@@ -163,12 +171,11 @@ static int nci_hci_send_data(struct nci_dev *ndev, u8 pipe,
 
 	do {
 		/* If last packet add NCI_HFP_NO_CHAINING */
-		if (i + conn_info->max_pkt_payload_len -
-		    (skb->len + 1) >= data_len) {
+		if (i + max_pkt_payload_len - (skb->len + 1) >= data_len) {
 			cb |= NCI_HFP_NO_CHAINING;
 			len = data_len - i;
 		} else {
-			len = conn_info->max_pkt_payload_len - skb->len - 1;
+			len = max_pkt_payload_len - skb->len - 1;
 		}
 
 		*(u8 *)skb_push(skb, 1) = cb;
@@ -176,15 +183,14 @@ static int nci_hci_send_data(struct nci_dev *ndev, u8 pipe,
 		if (len > 0)
 			skb_put_data(skb, data + i, len);
 
-		r = nci_send_data(ndev, conn_info->conn_id, skb);
+		r = nci_send_data(ndev, conn_id, skb);
 		if (r < 0)
 			return r;
 
 		i += len;
 
 		if (i < data_len) {
-			skb = nci_skb_alloc(ndev,
-					    conn_info->max_pkt_payload_len +
+			skb = nci_skb_alloc(ndev, max_pkt_payload_len +
 					    NCI_DATA_HDR_SIZE, GFP_ATOMIC);
 			if (!skb)
 				return -ENOMEM;
@@ -225,17 +231,22 @@ int nci_hci_send_cmd(struct nci_dev *ndev, u8 gate, u8 cmd,
 	const struct nci_hcp_message *message;
 	const struct nci_conn_info *conn_info;
 	struct nci_data data;
+	struct sk_buff *rx_skb;
 	int r;
 	u8 pipe = ndev->hci_dev->gate2pipe[gate];
 
 	if (pipe == NCI_HCI_INVALID_PIPE)
 		return -EADDRNOTAVAIL;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
 
 	data.conn_id = conn_info->conn_id;
+	spin_unlock_bh(&ndev->conn_info_lock);
 	data.pipe = pipe;
 	data.cmd = NCI_HCP_HEADER(NCI_HCI_HCP_COMMAND, cmd);
 	data.data = param;
@@ -244,13 +255,22 @@ int nci_hci_send_cmd(struct nci_dev *ndev, u8 gate, u8 cmd,
 	r = nci_request(ndev, nci_hci_send_data_req, &data,
 			msecs_to_jiffies(NCI_DATA_TIMEOUT));
 	if (r == NCI_STATUS_OK) {
-		message = (struct nci_hcp_message *)conn_info->rx_skb->data;
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_info = ndev->hci_dev->conn_info;
+		rx_skb = conn_info ? conn_info->rx_skb : NULL;
+		if (!rx_skb) {
+			spin_unlock_bh(&ndev->conn_info_lock);
+			return -EPROTO;
+		}
+
+		message = (struct nci_hcp_message *)rx_skb->data;
 		r = nci_hci_result_to_errno(
 			NCI_HCP_MSG_GET_CMD(message->header));
-		skb_pull(conn_info->rx_skb, NCI_HCI_HCP_MESSAGE_HEADER_LEN);
+		skb_pull(rx_skb, NCI_HCI_HCP_MESSAGE_HEADER_LEN);
+		spin_unlock_bh(&ndev->conn_info_lock);
 
 		if (!r && skb)
-			*skb = conn_info->rx_skb;
+			*skb = rx_skb;
 	}
 
 	return r;
@@ -366,11 +386,15 @@ static void nci_hci_resp_received(struct nci_dev *ndev, u8 pipe,
 {
 	struct nci_conn_info *conn_info;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		goto exit;
+	}
 
 	conn_info->rx_skb = skb;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 exit:
 	nci_req_complete(ndev, NCI_STATUS_OK);
@@ -510,11 +534,15 @@ int nci_hci_open_pipe(struct nci_dev *ndev, u8 pipe)
 	struct nci_data data;
 	const struct nci_conn_info *conn_info;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
 
 	data.conn_id = conn_info->conn_id;
+	spin_unlock_bh(&ndev->conn_info_lock);
 	data.pipe = pipe;
 	data.cmd = NCI_HCP_HEADER(NCI_HCI_HCP_COMMAND,
 				       NCI_HCI_ANY_OPEN_PIPE);
@@ -569,6 +597,7 @@ int nci_hci_set_param(struct nci_dev *ndev, u8 gate, u8 idx,
 	const struct nci_hcp_message *message;
 	const struct nci_conn_info *conn_info;
 	struct nci_data data;
+	struct sk_buff *rx_skb;
 	int r;
 	u8 *tmp;
 	u8 pipe = ndev->hci_dev->gate2pipe[gate];
@@ -578,9 +607,14 @@ int nci_hci_set_param(struct nci_dev *ndev, u8 gate, u8 idx,
 	if (pipe == NCI_HCI_INVALID_PIPE)
 		return -EADDRNOTAVAIL;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
+	data.conn_id = conn_info->conn_id;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	tmp = kmalloc(1 + param_len, GFP_KERNEL);
 	if (!tmp)
@@ -589,7 +623,6 @@ int nci_hci_set_param(struct nci_dev *ndev, u8 gate, u8 idx,
 	*tmp = idx;
 	memcpy(tmp + 1, param, param_len);
 
-	data.conn_id = conn_info->conn_id;
 	data.pipe = pipe;
 	data.cmd = NCI_HCP_HEADER(NCI_HCI_HCP_COMMAND,
 				       NCI_HCI_ANY_SET_PARAMETER);
@@ -599,10 +632,20 @@ int nci_hci_set_param(struct nci_dev *ndev, u8 gate, u8 idx,
 	r = nci_request(ndev, nci_hci_send_data_req, &data,
 			msecs_to_jiffies(NCI_DATA_TIMEOUT));
 	if (r == NCI_STATUS_OK) {
-		message = (struct nci_hcp_message *)conn_info->rx_skb->data;
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_info = ndev->hci_dev->conn_info;
+		rx_skb = conn_info ? conn_info->rx_skb : NULL;
+		if (!rx_skb) {
+			spin_unlock_bh(&ndev->conn_info_lock);
+			kfree(tmp);
+			return -EPROTO;
+		}
+
+		message = (struct nci_hcp_message *)rx_skb->data;
 		r = nci_hci_result_to_errno(
 			NCI_HCP_MSG_GET_CMD(message->header));
-		skb_pull(conn_info->rx_skb, NCI_HCI_HCP_MESSAGE_HEADER_LEN);
+		skb_pull(rx_skb, NCI_HCI_HCP_MESSAGE_HEADER_LEN);
+		spin_unlock_bh(&ndev->conn_info_lock);
 	}
 
 	kfree(tmp);
@@ -616,6 +659,7 @@ int nci_hci_get_param(struct nci_dev *ndev, u8 gate, u8 idx,
 	const struct nci_hcp_message *message;
 	const struct nci_conn_info *conn_info;
 	struct nci_data data;
+	struct sk_buff *rx_skb;
 	int r;
 	u8 pipe = ndev->hci_dev->gate2pipe[gate];
 
@@ -624,11 +668,15 @@ int nci_hci_get_param(struct nci_dev *ndev, u8 gate, u8 idx,
 	if (pipe == NCI_HCI_INVALID_PIPE)
 		return -EADDRNOTAVAIL;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
 
 	data.conn_id = conn_info->conn_id;
+	spin_unlock_bh(&ndev->conn_info_lock);
 	data.pipe = pipe;
 	data.cmd = NCI_HCP_HEADER(NCI_HCI_HCP_COMMAND,
 				  NCI_HCI_ANY_GET_PARAMETER);
@@ -639,13 +687,22 @@ int nci_hci_get_param(struct nci_dev *ndev, u8 gate, u8 idx,
 			msecs_to_jiffies(NCI_DATA_TIMEOUT));
 
 	if (r == NCI_STATUS_OK) {
-		message = (struct nci_hcp_message *)conn_info->rx_skb->data;
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_info = ndev->hci_dev->conn_info;
+		rx_skb = conn_info ? conn_info->rx_skb : NULL;
+		if (!rx_skb) {
+			spin_unlock_bh(&ndev->conn_info_lock);
+			return -EPROTO;
+		}
+
+		message = (struct nci_hcp_message *)rx_skb->data;
 		r = nci_hci_result_to_errno(
 			NCI_HCP_MSG_GET_CMD(message->header));
-		skb_pull(conn_info->rx_skb, NCI_HCI_HCP_MESSAGE_HEADER_LEN);
+		skb_pull(rx_skb, NCI_HCI_HCP_MESSAGE_HEADER_LEN);
+		spin_unlock_bh(&ndev->conn_info_lock);
 
 		if (!r && skb)
-			*skb = conn_info->rx_skb;
+			*skb = rx_skb;
 	}
 
 	return r;
@@ -729,12 +786,16 @@ int nci_hci_dev_session_init(struct nci_dev *ndev)
 	ndev->hci_dev->count_pipes = 0;
 	ndev->hci_dev->expected_pipes = 0;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
 
 	conn_info->data_exchange_cb = nci_hci_data_received_cb;
 	conn_info->data_exchange_cb_context = ndev;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	nci_hci_reset_pipes(ndev->hci_dev);
 

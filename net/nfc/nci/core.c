@@ -40,8 +40,8 @@ static void nci_cmd_work(struct work_struct *work);
 static void nci_rx_work(struct work_struct *work);
 static void nci_tx_work(struct work_struct *work);
 
-struct nci_conn_info *nci_get_conn_info_by_conn_id(struct nci_dev *ndev,
-						   int conn_id)
+struct nci_conn_info *nci_get_conn_info_by_conn_id_locked(struct nci_dev *ndev,
+							  int conn_id)
 {
 	struct nci_conn_info *conn_info;
 
@@ -53,8 +53,8 @@ struct nci_conn_info *nci_get_conn_info_by_conn_id(struct nci_dev *ndev,
 	return NULL;
 }
 
-int nci_get_conn_info_by_dest_type_params(struct nci_dev *ndev, u8 dest_type,
-					  const struct dest_spec_params *params)
+int nci_get_conn_info_by_dest_locked(struct nci_dev *ndev, u8 dest_type,
+				     const struct dest_spec_params *params)
 {
 	const struct nci_conn_info *conn_info;
 
@@ -70,6 +70,18 @@ int nci_get_conn_info_by_dest_type_params(struct nci_dev *ndev, u8 dest_type,
 	}
 
 	return -EINVAL;
+}
+
+int nci_get_conn_info_by_dest_type_params(struct nci_dev *ndev, u8 dest_type,
+					  const struct dest_spec_params *params)
+{
+	int conn_id;
+
+	spin_lock_bh(&ndev->conn_info_lock);
+	conn_id = nci_get_conn_info_by_dest_locked(ndev, dest_type, params);
+	spin_unlock_bh(&ndev->conn_info_lock);
+
+	return conn_id;
 }
 EXPORT_SYMBOL(nci_get_conn_info_by_dest_type_params);
 
@@ -411,13 +423,17 @@ static void nci_nfcc_loopback_cb(void *context, struct sk_buff *skb, int err)
 	struct nci_dev *ndev = (struct nci_dev *)context;
 	struct nci_conn_info *conn_info;
 
-	conn_info = nci_get_conn_info_by_conn_id(ndev, ndev->cur_conn_id);
+	spin_lock_bh(&ndev->conn_info_lock);
+	conn_info = nci_get_conn_info_by_conn_id_locked(ndev,
+							ndev->cur_conn_id);
 	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		nci_req_complete(ndev, NCI_STATUS_REJECTED);
 		return;
 	}
 
 	conn_info->rx_skb = skb;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	nci_req_complete(ndev, NCI_STATUS_OK);
 }
@@ -443,13 +459,17 @@ int nci_nfcc_loopback(struct nci_dev *ndev, const void *data, size_t data_len,
 					NULL);
 	}
 
-	conn_info = nci_get_conn_info_by_conn_id(ndev, conn_id);
-	if (!conn_info)
+	spin_lock_bh(&ndev->conn_info_lock);
+	conn_info = nci_get_conn_info_by_conn_id_locked(ndev, conn_id);
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		return -EPROTO;
+	}
 
 	/* store cb and context to be used on receiving data */
 	conn_info->data_exchange_cb = nci_nfcc_loopback_cb;
 	conn_info->data_exchange_cb_context = ndev;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	skb = nci_skb_alloc(ndev, NCI_DATA_HDR_SIZE + data_len, GFP_KERNEL);
 	if (!skb)
@@ -464,8 +484,15 @@ int nci_nfcc_loopback(struct nci_dev *ndev, const void *data, size_t data_len,
 	ndev->cur_conn_id = conn_id;
 	r = nci_request(ndev, nci_send_data_req, &loopback_data,
 			msecs_to_jiffies(NCI_DATA_TIMEOUT));
-	if (r == NCI_STATUS_OK && resp)
-		*resp = conn_info->rx_skb;
+	if (r == NCI_STATUS_OK && resp) {
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_info = nci_get_conn_info_by_conn_id_locked(ndev, conn_id);
+		if (conn_info)
+			*resp = conn_info->rx_skb;
+		else
+			r = -EPROTO;
+		spin_unlock_bh(&ndev->conn_info_lock);
+	}
 
 	return r;
 }
@@ -1045,12 +1072,6 @@ static int nci_transceive(struct nfc_dev *nfc_dev, struct nfc_target *target,
 	int rc;
 	struct nci_conn_info *conn_info;
 
-	conn_info = ndev->rf_conn_info;
-	if (!conn_info) {
-		kfree_skb(skb);
-		return -EPROTO;
-	}
-
 	pr_debug("target_idx %d, len %d\n", target->idx, skb->len);
 
 	if (!ndev->target_active_prot) {
@@ -1064,9 +1085,19 @@ static int nci_transceive(struct nfc_dev *nfc_dev, struct nfc_target *target,
 		return -EBUSY;
 	}
 
+	spin_lock_bh(&ndev->conn_info_lock);
+	conn_info = ndev->rf_conn_info;
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
+		kfree_skb(skb);
+		clear_bit(NCI_DATA_EXCHANGE, &ndev->flags);
+		return -EPROTO;
+	}
+
 	/* store cb and context to be used on receiving data */
 	conn_info->data_exchange_cb = cb;
 	conn_info->data_exchange_cb_context = cb_context;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	rc = nci_send_data(ndev, NCI_STATIC_RF_CONN_ID, skb);
 	if (rc)
@@ -1288,6 +1319,7 @@ int nci_register_device(struct nci_dev *ndev)
 	timer_setup(&ndev->data_timer, nci_data_timer, 0);
 
 	mutex_init(&ndev->req_lock);
+	spin_lock_init(&ndev->conn_info_lock);
 	INIT_LIST_HEAD(&ndev->conn_info_list);
 
 	rc = nfc_register_device(ndev->nfc_dev);
@@ -1333,11 +1365,17 @@ void nci_unregister_device(struct nci_dev *ndev)
 	destroy_workqueue(ndev->rx_wq);
 	destroy_workqueue(ndev->tx_wq);
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	list_for_each_entry_safe(conn_info, n, &ndev->conn_info_list, list) {
 		list_del(&conn_info->list);
+		if (conn_info == ndev->rf_conn_info)
+			ndev->rf_conn_info = NULL;
+		if (ndev->hci_dev &&
+		    conn_info == ndev->hci_dev->conn_info)
+			ndev->hci_dev->conn_info = NULL;
 		/* conn_info is allocated with devm_kzalloc */
 	}
-
+	spin_unlock_bh(&ndev->conn_info_lock);
 	nfc_remove_device(ndev->nfc_dev);
 }
 EXPORT_SYMBOL(nci_unregister_device);
@@ -1523,23 +1561,32 @@ static void nci_tx_work(struct work_struct *work)
 	struct nci_conn_info *conn_info;
 	struct sk_buff *skb;
 
-	conn_info = nci_get_conn_info_by_conn_id(ndev, ndev->cur_conn_id);
-	if (!conn_info)
-		return;
-
-	pr_debug("credits_cnt %d\n", atomic_read(&conn_info->credits_cnt));
-
 	/* Send queued tx data */
-	while (atomic_read(&conn_info->credits_cnt)) {
+	for (;;) {
+		spin_lock_bh(&ndev->conn_info_lock);
+		conn_info =
+			nci_get_conn_info_by_conn_id_locked(ndev,
+							    ndev->cur_conn_id);
+		if (!conn_info)
+			goto unlock;
+
+		pr_debug("credits_cnt %d\n",
+			 atomic_read(&conn_info->credits_cnt));
+
+		if (!atomic_read(&conn_info->credits_cnt))
+			goto unlock;
+
 		skb = skb_dequeue(&ndev->tx_q);
 		if (!skb)
-			return;
-		kcov_remote_start_common(skb_get_kcov_handle(skb));
+			goto unlock;
 
 		/* Check if data flow control is used */
 		if (atomic_read(&conn_info->credits_cnt) !=
 		    NCI_DATA_FLOW_CONTROL_NOT_USED)
 			atomic_dec(&conn_info->credits_cnt);
+		spin_unlock_bh(&ndev->conn_info_lock);
+
+		kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 		pr_debug("NCI TX: MT=data, PBF=%d, conn_id=%d, plen=%d\n",
 			 nci_pbf(skb->data),
@@ -1552,6 +1599,9 @@ static void nci_tx_work(struct work_struct *work)
 			  jiffies + msecs_to_jiffies(NCI_DATA_TIMEOUT));
 		kcov_remote_stop();
 	}
+
+unlock:
+	spin_unlock_bh(&ndev->conn_info_lock);
 }
 
 /* ----- NCI RX worker thread (data & control) ----- */

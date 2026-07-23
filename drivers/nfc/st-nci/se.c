@@ -548,6 +548,7 @@ static int st_nci_hci_network_init(struct nci_dev *ndev)
 	struct core_conn_create_dest_spec_params *dest_params;
 	struct dest_spec_params spec_params;
 	struct nci_conn_info    *conn_info;
+	u8 nfcee_id;
 	int r, dev_num;
 
 	dest_params =
@@ -569,9 +570,14 @@ static int st_nci_hci_network_init(struct nci_dev *ndev)
 	if (r != NCI_STATUS_OK)
 		goto free_dest_params;
 
+	spin_lock_bh(&ndev->conn_info_lock);
 	conn_info = ndev->hci_dev->conn_info;
-	if (!conn_info)
+	if (!conn_info) {
+		spin_unlock_bh(&ndev->conn_info_lock);
 		goto free_dest_params;
+	}
+	nfcee_id = conn_info->dest_params->id;
+	spin_unlock_bh(&ndev->conn_info_lock);
 
 	ndev->hci_dev->init_data.gate_count = ARRAY_SIZE(st_nci_gates);
 	memcpy(ndev->hci_dev->init_data.gates, st_nci_gates,
@@ -601,13 +607,9 @@ static int st_nci_hci_network_init(struct nci_dev *ndev)
 	 * HCI will be used here only for proprietary commands.
 	 */
 	if (test_bit(ST_NCI_FACTORY_MODE, &info->flags))
-		r = nci_nfcee_mode_set(ndev,
-				       ndev->hci_dev->conn_info->dest_params->id,
-				       NCI_NFCEE_DISABLE);
+		r = nci_nfcee_mode_set(ndev, nfcee_id, NCI_NFCEE_DISABLE);
 	else
-		r = nci_nfcee_mode_set(ndev,
-				       ndev->hci_dev->conn_info->dest_params->id,
-				       NCI_NFCEE_ENABLE);
+		r = nci_nfcee_mode_set(ndev, nfcee_id, NCI_NFCEE_ENABLE);
 
 free_dest_params:
 	kfree(dest_params);
