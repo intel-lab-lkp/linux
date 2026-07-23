@@ -61,6 +61,7 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 
+#include "core.h"
 #include "cdnsp-trace.h"
 #include "cdnsp-gadget.h"
 
@@ -1575,8 +1576,12 @@ irqreturn_t cdnsp_thread_irq_handler(int irq, void *data)
 irqreturn_t cdnsp_irq_handler(int irq, void *priv)
 {
 	struct cdnsp_device *pdev = (struct cdnsp_device *)priv;
+	struct cdns *cdns = dev_get_drvdata(pdev->dev);
 	u32 irq_pending;
 	u32 status;
+
+	if (cdns->in_lpm)
+		return IRQ_NONE;
 
 	status = readl(&pdev->op_regs->status);
 

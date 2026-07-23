@@ -1354,6 +1354,34 @@ struct cdnsp_port {
 #define CDNSP_EXT_PORT_COUNT(x)		(((x) >> 8) & 0xff)
 
 /**
+ * struct cdnsp_s3_save - register context saved before S3 suspend.
+ * @command: Saved USB command register value.
+ * @dnctrl: Saved device notification control register value.
+ * @dcbaa_ptr: Saved Device Context Base Address Array pointer.
+ * @config_reg: Saved configuration register value.
+ * @s3_irq_pending: Saved interrupter pending register value.
+ * @s3_irq_control: Saved interrupter control register value.
+ * @s3_erst_size: Saved Event Ring Segment Table size.
+ * @s3_erst_base: Saved Event Ring Segment Table base address.
+ * @s3_erst_dequeue: Saved Event Ring Dequeue Pointer.
+ *
+ * Stores the controller register state that may be lost across S3
+ * suspend/resume. The saved values are used to restore the CDNSP
+ * operational and interrupter register programming after resume.
+ */
+struct cdnsp_s3_save {
+	u32	command;
+	u32	dnctrl;
+	u64	dcbaa_ptr;
+	u32	config_reg;
+	u32	s3_irq_pending;
+	u32	s3_irq_control;
+	u32	s3_erst_size;
+	u64	s3_erst_base;
+	u64	s3_erst_dequeue;
+};
+
+/**
  * struct cdnsp_device - represent USB device.
  * @dev: Pointer to device structure associated whit this controller.
  * @gadget: Device side representation of the peripheral controller.
@@ -1388,6 +1416,7 @@ struct cdnsp_port {
  * @cmd: Represent all what is needed to issue command on Command Ring.
  * @event_ring: Event ring.
  * @erst: Event Ring Segment table
+ * @s3:  Register values saved before entering S3.
  * @slot_id: Current Slot ID. Should be 0 or 1.
  * @out_ctx: Output context.
  * @in_ctx: Input context.
@@ -1447,6 +1476,7 @@ struct cdnsp_device {
 	struct cdnsp_command cmd;
 	struct cdnsp_ring *event_ring;
 	struct cdnsp_erst erst;
+	struct cdnsp_s3_save s3;
 	int slot_id;
 
 	/*
@@ -1510,6 +1540,7 @@ int cdnsp_endpoint_init(struct cdnsp_device *pdev,
 int cdnsp_ring_expansion(struct cdnsp_device *pdev,
 			 struct cdnsp_ring *ring,
 			 unsigned int num_trbs, gfp_t flags);
+void cdnsp_ring_init(struct cdnsp_device *pdev, struct cdnsp_ring *ring);
 struct cdnsp_ring *cdnsp_dma_to_transfer_ring(struct cdnsp_ep *ep, u64 address);
 int cdnsp_alloc_stream_info(struct cdnsp_device *pdev,
 			    struct cdnsp_ep *pep,
