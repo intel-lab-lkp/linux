@@ -496,11 +496,7 @@ static int load_firmware(struct echoaudio *chip)
 	if (err < 0)
 		return err;
 
-	box_type = load_asic(chip);
-	if (box_type < 0)
-		return box_type;	/* error */
-
-	return box_type;
+	return load_asic(chip);
 }
 
 

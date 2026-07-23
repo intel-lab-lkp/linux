@@ -1383,15 +1383,13 @@ int snd_scarlett_controls_create(struct usb_mixer_interface *mixer)
 		return err;
 
 	/* initialize sampling rate to 48000 */
-	err = snd_usb_ctl_msg(mixer->chip->dev,
-		usb_sndctrlpipe(mixer->chip->dev, 0), UAC2_CS_CUR,
-		USB_RECIP_INTERFACE | USB_TYPE_CLASS |
-		USB_DIR_OUT, 0x0100, snd_usb_ctrl_intf(mixer->hostif) |
-		(0x29 << 8), sample_rate_buffer, 4);
-	if (err < 0)
-		return err;
-
-	return err;
+	return snd_usb_ctl_msg(mixer->chip->dev,
+			       usb_sndctrlpipe(mixer->chip->dev, 0),
+			       UAC2_CS_CUR,
+			       USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
+			       0x0100,
+			       snd_usb_ctrl_intf(mixer->hostif) | (0x29 << 8),
+			       sample_rate_buffer, 4);
 }
 
 /*
@@ -1446,11 +1444,7 @@ int snd_forte_controls_create(struct usb_mixer_interface *mixer)
 	}
 
 	/* val_len == 1 and UAC2_CS_MEM */
-	err = add_new_ctl(mixer, &usb_scarlett_ctl_sync, NULL, 0x3c, 0x00, 2,
-			  USB_MIXER_U8, 1, "Sample Clock Sync Status",
-			  &opt_sync, &elem);
-	if (err < 0)
-		return err;
-
-	return err;
+	return add_new_ctl(mixer, &usb_scarlett_ctl_sync, NULL, 0x3c, 0x00, 2,
+			   USB_MIXER_U8, 1, "Sample Clock Sync Status",
+			   &opt_sync, &elem);
 }

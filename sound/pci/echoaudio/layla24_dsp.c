@@ -54,11 +54,7 @@ static int init_hw(struct echoaudio *chip, u16 device_id, u16 subdevice_id)
 		return err;
 	chip->bad_board = false;
 
-	err = init_line_levels(chip);
-	if (err < 0)
-		return err;
-
-	return err;
+	return init_line_levels(chip);
 }
 
 

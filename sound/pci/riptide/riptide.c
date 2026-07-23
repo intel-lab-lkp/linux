@@ -1957,10 +1957,7 @@ static int snd_riptide_mixer(struct snd_riptide *chip)
 
 	chip->ac97_bus = pbus;
 	ac97.pci = chip->pci;
-	err = snd_ac97_mixer(pbus, &ac97, &chip->ac97);
-	if (err < 0)
-		return err;
-	return err;
+	return snd_ac97_mixer(pbus, &ac97, &chip->ac97);
 }
 
 #ifdef SUPPORT_JOYSTICK
