@@ -1712,12 +1712,19 @@ static int mwifiex_decode_rx_packet(struct mwifiex_adapter *adapter,
 	case MWIFIEX_TYPE_EVENT:
 		mwifiex_dbg(adapter, EVENT,
 			    "info: --- Rx: Event ---\n");
+		if (skb->len < MWIFIEX_EVENT_HEADER_LEN ||
+		    skb->len > MAX_EVENT_SIZE) {
+			mwifiex_dbg(adapter, ERROR,
+				    "EVENT: invalid skb->len %u\n", skb->len);
+			dev_kfree_skb_any(skb);
+			break;
+		}
+
 		adapter->event_cause = get_unaligned_le32(skb->data);
 
-		if ((skb->len > 0) && (skb->len  < MAX_EVENT_SIZE))
-			memcpy(adapter->event_body,
-			       skb->data + MWIFIEX_EVENT_HEADER_LEN,
-			       skb->len);
+		memcpy(adapter->event_body,
+		       skb->data + MWIFIEX_EVENT_HEADER_LEN,
+		       skb->len - MWIFIEX_EVENT_HEADER_LEN);
 
 		/* event cause has been saved to adapter->event_cause */
 		adapter->event_received = true;
