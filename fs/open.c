@@ -618,12 +618,36 @@ dput_and_out:
 	return error;
 }
 
+static int fchroot_failfs(void)
+{
+	struct path path;
+	int error;
+
+	if (!ns_capable(current_user_ns(), CAP_SYS_CHROOT)) {
+		if (!task_no_new_privs(current))
+			return -EPERM;
+		/* Moving the root to failfs lifts the old root's ".." barrier. */
+		if (current_chrooted())
+			return -EPERM;
+	}
+
+	failfs_get_root(&path);
+	error = security_path_chroot(&path);
+	if (!error)
+		set_fs_root(current->fs, &path);
+	path_put(&path);
+	return error;
+}
+
 SYSCALL_DEFINE2(fchroot, int, fd, unsigned int, flags)
 {
 	int error;
 
 	if (flags)
 		return -EINVAL;
+
+	if (fd == FD_FAILFS_ROOT)
+		return fchroot_failfs();
 
 	CLASS(fd_raw, f)(fd);
 	if (fd_empty(f))
