@@ -32,7 +32,8 @@ struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
 
 enum dw_edma_irq_event {
 	DW_EDMA_IRQ_DONE	= BIT(0),
-	DW_EDMA_IRQ_ABORT	= BIT(1),
+	DW_EDMA_IRQ_PROGRESS	= BIT(1),
+	DW_EDMA_IRQ_ABORT	= BIT(2),
 };
 
 static inline
@@ -912,6 +913,24 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
 
+static void dw_edma_progress_interrupt(struct dw_edma_chan *chan)
+{
+	if (chan->non_ll)
+		return;
+
+	guard(spinlock_irqsave)(&chan->vc.lock);
+
+	if (chan->request == EDMA_REQ_NONE && chan->status != EDMA_ST_PAUSE) {
+		if (dw_edma_ll_consume_progress(chan))
+			dw_edma_start_transfer(chan);
+		chan->status = dw_edma_ll_pending(chan) ?
+			       EDMA_ST_BUSY : EDMA_ST_IDLE;
+	}
+
+	/* The channel may have stopped after the progress point was sampled. */
+	dw_edma_core_ch_maybe_doorbell(chan);
+}
+
 static void dw_edma_abort_interrupt(struct dw_edma_chan *chan)
 {
 	struct virt_dma_desc *vd;
@@ -942,6 +961,8 @@ static void dw_edma_irq_work(struct work_struct *work)
 
 		if (events & DW_EDMA_IRQ_DONE)
 			dw_edma_done_interrupt(chan);
+		if (events & DW_EDMA_IRQ_PROGRESS)
+			dw_edma_progress_interrupt(chan);
 		if (events & DW_EDMA_IRQ_ABORT)
 			dw_edma_abort_interrupt(chan);
 	} while (atomic_read(&chan->irq_pending));
@@ -978,6 +999,13 @@ static void dw_edma_done_interrupt_deferred(struct dw_edma_chan *chan,
 {
 	dw_edma_record_irq_idx(chan, stopped);
 	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_DONE);
+}
+
+static void dw_edma_progress_interrupt_deferred(struct dw_edma_chan *chan,
+						bool stopped)
+{
+	dw_edma_record_irq_idx(chan, stopped);
+	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_PROGRESS);
 }
 
 static void dw_edma_abort_interrupt_deferred(struct dw_edma_chan *chan,
@@ -1084,6 +1112,7 @@ static inline irqreturn_t dw_edma_interrupt_write_inner(int irq, void *data)
 
 	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_WRITE,
 				       dw_edma_done_interrupt_deferred,
+				       dw_edma_progress_interrupt_deferred,
 				       dw_edma_abort_interrupt_deferred);
 }
 
@@ -1093,6 +1122,7 @@ static inline irqreturn_t dw_edma_interrupt_read_inner(int irq, void *data)
 
 	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_READ,
 				       dw_edma_done_interrupt_deferred,
+				       dw_edma_progress_interrupt_deferred,
 				       dw_edma_abort_interrupt_deferred);
 }
 

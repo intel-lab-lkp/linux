@@ -341,7 +341,9 @@ static void dw_edma_v0_core_clear_abort_int(struct dw_edma_chan *chan)
 
 static irqreturn_t
 dw_edma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
-			   dw_edma_handler_t done, dw_edma_handler_t abort)
+			   dw_edma_handler_t done,
+			   dw_edma_handler_t progress,
+			   dw_edma_handler_t abort)
 {
 	struct dw_edma *dw = dw_irq->dw;
 	unsigned long total, pos, val;
