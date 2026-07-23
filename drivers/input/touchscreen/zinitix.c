@@ -145,7 +145,37 @@ struct point_coord {
 	u8	angle;
 };
 
+struct point_coord_mode0 {
+	__le16	x;
+	__le16	y;
+	u8	width;
+	u8	sub_status;
+};
+
 struct touch_event {
+	__le16	status;
+	__le16	event_flag;
+	u8	finger_mask;
+	u8	time_stamp;
+	struct point_coord point_coord[MAX_SUPPORTED_FINGER_NUM];
+};
+
+struct touch_event_mode0 {
+	__le16	status;
+	u8	finger_mask;
+	u8	time_stamp;
+	struct point_coord_mode0 point_coord[MAX_SUPPORTED_FINGER_NUM];
+};
+
+struct touch_event_mode1 {
+	__le16	status;
+	__le16	event_flag;
+	u8	finger_mask;
+	u8	time_stamp;
+	struct point_coord_mode0 point_coord[MAX_SUPPORTED_FINGER_NUM];
+};
+
+struct touch_event_mode2 {
 	__le16	status;
 	u8	finger_mask;
 	u8	time_stamp;
@@ -440,6 +470,103 @@ static void zinitix_report_keys(struct bt541_ts_data *bt541, u16 icon_events)
 				 bt541->keycodes[i], icon_events & BIT(i));
 }
 
+static int zinitix_read_point_status_mode0(struct bt541_ts_data *bt541,
+					   struct touch_event *event)
+{
+	struct touch_event_mode0 event_mode0;
+	int ret;
+	int i;
+
+	ret = zinitix_read_data(bt541->client, ZINITIX_POINT_STATUS_REG,
+				&event_mode0, sizeof(struct touch_event_mode0));
+	if (ret)
+		return ret;
+
+	event->status = event_mode0.status;
+	event->finger_mask = event_mode0.finger_mask;
+	event->time_stamp = event_mode0.time_stamp;
+
+	for (i = 0; i < ARRAY_SIZE(event_mode0.point_coord); i++) {
+		event->point_coord[i].x = event_mode0.point_coord[i].x;
+		event->point_coord[i].y = event_mode0.point_coord[i].y;
+		event->point_coord[i].width = event_mode0.point_coord[i].width;
+		event->point_coord[i].sub_status = event_mode0.point_coord[i].sub_status;
+	}
+
+	return 0;
+}
+
+static int zinitix_read_point_status_mode1(struct bt541_ts_data *bt541,
+					   struct touch_event *event)
+{
+	struct touch_event_mode1 event_mode1;
+	int ret;
+	int i;
+
+	ret = zinitix_read_data(bt541->client, ZINITIX_POINT_STATUS_REG,
+				&event_mode1, sizeof(struct touch_event_mode1));
+	if (ret)
+		return ret;
+
+	event->status = event_mode1.status;
+	event->event_flag = event_mode1.event_flag;
+	event->finger_mask = event_mode1.finger_mask;
+	event->time_stamp = event_mode1.time_stamp;
+
+	for (i = 0; i < ARRAY_SIZE(event_mode1.point_coord); i++) {
+		event->point_coord[i].x = event_mode1.point_coord[i].x;
+		event->point_coord[i].y = event_mode1.point_coord[i].y;
+		event->point_coord[i].width = event_mode1.point_coord[i].width;
+		event->point_coord[i].sub_status = event_mode1.point_coord[i].sub_status;
+	}
+
+	return 0;
+}
+
+static int zinitix_read_point_status_mode2(struct bt541_ts_data *bt541,
+					   struct touch_event *event)
+{
+	struct touch_event_mode2 event_mode2;
+	int ret;
+	int i;
+
+	ret = zinitix_read_data(bt541->client, ZINITIX_POINT_STATUS_REG,
+				&event_mode2, sizeof(struct touch_event_mode2));
+	if (ret)
+		return ret;
+
+	event->status = event_mode2.status;
+	event->finger_mask = event_mode2.finger_mask;
+	event->time_stamp = event_mode2.time_stamp;
+
+	for (i = 0; i < ARRAY_SIZE(event_mode2.point_coord); i++) {
+		event->point_coord[i].x = event_mode2.point_coord[i].x;
+		event->point_coord[i].y = event_mode2.point_coord[i].y;
+		event->point_coord[i].width = event_mode2.point_coord[i].width;
+		event->point_coord[i].sub_status = event_mode2.point_coord[i].sub_status;
+		event->point_coord[i].minor_width = event_mode2.point_coord[i].minor_width;
+		event->point_coord[i].angle = event_mode2.point_coord[i].angle;
+	}
+
+	return 0;
+}
+static int zinitix_read_point_status(struct bt541_ts_data *bt541,
+				     struct touch_event *event)
+{
+	switch (bt541->zinitix_mode) {
+	case 0:
+		return zinitix_read_point_status_mode0(bt541, event);
+	case 1:
+		return zinitix_read_point_status_mode1(bt541, event);
+	case 2:
+		return zinitix_read_point_status_mode2(bt541, event);
+	default:
+		dev_err(&bt541->client->dev, "Mode %d is unsupported\n",
+			bt541->zinitix_mode);
+		return -EINVAL;
+	}
+}
+
 static irqreturn_t zinitix_ts_irq_handler(int irq, void *bt541_handler)
 {
 	struct bt541_ts_data *bt541 = bt541_handler;
@@ -451,8 +578,7 @@ static irqreturn_t zinitix_ts_irq_handler(int irq, void *bt541_handler)
 
 	memset(&touch_event, 0, sizeof(struct touch_event));
 
-	error = zinitix_read_data(bt541->client, ZINITIX_POINT_STATUS_REG,
-				  &touch_event, sizeof(struct touch_event));
+	error = zinitix_read_point_status(bt541, &touch_event);
 	if (error) {
 		dev_err(&client->dev, "Failed to read in touchpoint struct\n");
 		goto out;
@@ -682,13 +808,9 @@ static int zinitix_ts_probe(struct i2c_client *client)
 		bt541->zinitix_mode = DEFAULT_TOUCH_POINT_MODE;
 	}
 
-	if (bt541->zinitix_mode != 2) {
-		/*
-		 * If there are devices that don't support mode 2, support
-		 * for other modes (0, 1) will be needed.
-		 */
+	if (bt541->zinitix_mode > 2) {
 		dev_err(&client->dev,
-			"Malformed zinitix,mode property, must be 2 (supplied: %d)\n",
+			"Malformed zinitix,mode property, must be 0, 1, or 2 (supplied: %d)\n",
 			bt541->zinitix_mode);
 		return -EINVAL;
 	}
