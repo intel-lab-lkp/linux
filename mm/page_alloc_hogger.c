@@ -253,6 +253,23 @@ free_pages:
 	return ret;
 }
 
+static int free_alloc_helper(unsigned long alloc_id)
+{
+	struct page_alloc *pa;
+
+	pa = xa_erase(&allocs_xa, alloc_id);
+	if (!pa) {
+		pr_err("The alloc_id %lu was not found!", alloc_id);
+		return -EINVAL;
+	}
+
+	__free_pages(pa->page, pa->req_alloc->order);
+	debugfs_remove(pa->alloc_dentry);
+	kmem_cache_free(page_alloc_cache, pa);
+
+	return 0;
+}
+
 /**
  * req_page_alloc_write() - Allocates the pages on the requested node, zone,
  * order and migrate type. Once the allocation is performed, a file is created
@@ -294,6 +311,14 @@ static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 	return cnt;
 
 free_allocs:
+	/* Free all the pages previously allocated. */
+	for (int j = 0; j < i; j++) {
+		int ret2 = free_alloc_helper(allocs_ids[j]);
+
+		if (ret2)
+			pr_err("Unable to free pages associated with file %lu",
+			       allocs_ids[j]);
+	}
 
 	kfree(allocs_ids);
 
