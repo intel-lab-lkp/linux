@@ -97,10 +97,12 @@ struct dw_edma_chan {
 	 * exclusive convention used by ll_done. The sample and all later
 	 * accesses are serialized by vc.lock; -1 means consumed or invalid.
 	 * ll_irq_stopped records whether the same event found the channel
-	 * stopped.
+	 * stopped. ll_irq_requested records whether EDMA_REQ_STOP or
+	 * EDMA_REQ_PAUSE was already pending at sample time.
 	 */
 	int				ll_irq_idx;
 	bool				ll_irq_stopped;
+	bool				ll_irq_requested;
 
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */

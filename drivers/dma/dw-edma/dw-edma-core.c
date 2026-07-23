@@ -71,6 +71,7 @@ static void dw_edma_ll_irq_idx_discard(struct dw_edma_chan *chan)
 {
 	chan->ll_irq_idx = -1;
 	chan->ll_irq_stopped = false;
+	chan->ll_irq_requested = false;
 }
 
 static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
@@ -616,36 +617,64 @@ static int dw_edma_device_resume(struct dma_chan *dchan)
 	return err;
 }
 
+/* Must be called with vc.lock held. */
+static bool dw_edma_may_be_active(struct dw_edma_chan *chan)
+{
+	if (chan->non_ll)
+		return dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS;
+
+	if (!dw_edma_ll_pending(chan))
+		return false;
+
+	/*
+	 * Legacy eDMA can report STOPPED while a doorbell-triggered start is
+	 * still pending. Native HDMA has a dedicated STOP event.
+	 */
+	return !dw_edma_ll_has_hdma_stop_event(chan) ||
+	       dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS;
+}
+
+/* Must be called with vc.lock held after the channel has stopped. */
+static void dw_edma_finish_termination(struct dw_edma_chan *chan)
+{
+	dw_edma_terminate_all_descs(chan);
+
+	/* Preserve a clean ring; resync only if entries remain published. */
+	if (!chan->non_ll && dw_edma_ll_pending(chan))
+		dw_edma_core_reset_ll(chan);
+
+	chan->request = EDMA_REQ_NONE;
+	chan->status = EDMA_ST_IDLE;
+}
+
 static int dw_edma_device_terminate_all(struct dma_chan *dchan)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
-	int err = 0;
 
 	guard(spinlock_irqsave)(&chan->vc.lock);
 
 	if (!chan->configured) {
 		dw_edma_terminate_all_descs(chan);
-	} else if (chan->status == EDMA_ST_PAUSE) {
-		dw_edma_terminate_all_descs(chan);
-		chan->status = EDMA_ST_IDLE;
-	} else if (chan->status == EDMA_ST_IDLE) {
-		dw_edma_terminate_all_descs(chan);
-	} else if (dw_edma_core_ch_status(chan) == DMA_COMPLETE) {
-		/*
-		 * The channel is in a false BUSY state, probably didn't
-		 * receive or lost an interrupt
-		 */
-		dw_edma_terminate_all_descs(chan);
-		chan->status = EDMA_ST_IDLE;
-	} else if (chan->request > EDMA_REQ_PAUSE) {
-		err = -EPERM;
-	} else {
-		chan->request = EDMA_REQ_STOP;
-	}
-	if (chan->status == EDMA_ST_IDLE)
 		chan->request = EDMA_REQ_NONE;
+	} else if (chan->status == EDMA_ST_PAUSE) {
+		/* A paused channel has already stopped. */
+		dw_edma_finish_termination(chan);
+	} else if (dw_edma_may_be_active(chan)) {
+		/*
+		 * Keep published entries intact until an IRQ sample confirms
+		 * that the channel stopped. An outstanding EDMA_REQ_PAUSE is
+		 * replaced by EDMA_REQ_STOP.
+		 */
+		chan->request = EDMA_REQ_STOP;
+	} else {
+		/*
+		 * No LL entry is hardware-owned, or non-LL status confirms that
+		 * the one programmed burst is not running.
+		 */
+		dw_edma_finish_termination(chan);
+	}
 
-	return err;
+	return 0;
 }
 
 static void dw_edma_device_issue_pending(struct dma_chan *dchan)
@@ -965,17 +994,30 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 	bool active;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
-	if (chan->status == EDMA_ST_PAUSE) {
-		spin_unlock_irqrestore(&chan->vc.lock, flags);
-		return;
-	}
+	if (chan->status == EDMA_ST_PAUSE)
+		goto out;
 
-	if (!chan->non_ll)
+	/*
+	 * A stopped event sampled after the request can complete it directly.
+	 * If it was sampled just before the request, complete the request only
+	 * when its boundary drains all published entries. A running event only
+	 * advances LL progress.
+	 */
+	if (chan->request != EDMA_REQ_NONE && !chan->non_ll &&
+	    (!chan->ll_irq_stopped || !chan->ll_irq_requested)) {
+		bool stopped = chan->ll_irq_stopped;
+
 		dw_edma_ll_consume_progress(chan);
+		if (!stopped || dw_edma_ll_pending(chan))
+			goto out;
+	}
 
 	switch (chan->request) {
 	case EDMA_REQ_NONE:
 	case EDMA_REQ_PAUSE:
+		if (!chan->non_ll)
+			dw_edma_ll_consume_progress(chan);
+
 		vd = vchan_next_desc(&chan->vc);
 		if (vd && chan->non_ll) {
 			desc = vd2dw_edma_desc(vd);
@@ -988,6 +1030,8 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 		}
 
 		if (chan->request == EDMA_REQ_PAUSE) {
+			if (!chan->non_ll)
+				dw_edma_ll_irq_idx_discard(chan);
 			chan->request = EDMA_REQ_NONE;
 			chan->status = EDMA_ST_PAUSE;
 			break;
@@ -1002,14 +1046,14 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 		break;
 
 	case EDMA_REQ_STOP:
-		dw_edma_terminate_all_descs(chan);
-		chan->request = EDMA_REQ_NONE;
-		chan->status = EDMA_ST_IDLE;
+		dw_edma_finish_termination(chan);
 		break;
 
 	default:
 		break;
 	}
+
+out:
 	dw_edma_core_ch_maybe_doorbell(chan);
 
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
@@ -1047,6 +1091,8 @@ static void dw_edma_abort_interrupt(struct dw_edma_chan *chan)
 		list_del(&vd->node);
 		vchan_cookie_complete(vd);
 	}
+	if (!chan->non_ll)
+		dw_edma_core_reset_ll(chan);
 	chan->request = EDMA_REQ_NONE;
 	chan->status = EDMA_ST_IDLE;
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
@@ -1091,6 +1137,8 @@ static void dw_edma_record_irq_idx(struct dw_edma_chan *chan, bool stopped)
 			if (idx >= 0) {
 				chan->ll_irq_idx = idx;
 				chan->ll_irq_stopped = stopped;
+				chan->ll_irq_requested =
+					chan->request != EDMA_REQ_NONE;
 			}
 		}
 	}
