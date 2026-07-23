@@ -104,6 +104,10 @@ struct dw_edma_chan {
 	bool				ll_irq_stopped;
 	bool				ll_irq_requested;
 
+	/* Per-channel recovery state. */
+	bool				ll_recovery_pending;
+	bool				ll_recovering;
+
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */
 	bool				ll_valid;	/* LL context programmed */
@@ -133,6 +137,18 @@ struct dw_edma_irq {
 	DECLARE_BITMAP(rd_mask, HDMA_MAX_RD_CH);
 };
 
+/*
+ * Direction-wide recovery state. active prevents duplicate recovery work;
+ * each channel's ll_recovering flag gates publication and doorbells.
+ */
+struct dw_edma_engine_recovery {
+	bool				active;
+	unsigned int			fails;
+	struct work_struct		work;
+	struct dw_edma			*dw;
+	enum dw_edma_dir		dir;
+};
+
 struct dw_edma {
 	char				name[32];
 
@@ -147,10 +163,12 @@ struct dw_edma {
 	struct dw_edma_chan		*chan;
 
 	/*
-	 * WQ_HIGHPRI keeps completion processing responsive under heavy load;
-	 * WQ_UNBOUND lets different channels run on different CPUs.
+	 * WQ_HIGHPRI keeps completion and recovery work responsive under heavy
+	 * load; WQ_UNBOUND lets independent work run on different CPUs.
 	 */
 	struct workqueue_struct		*wq;
+
+	struct dw_edma_engine_recovery	eng_recovery[2];
 
 	raw_spinlock_t			lock;		/* Protect v0 shared registers */
 
@@ -167,6 +185,10 @@ struct dw_edma_core_ops {
 	int (*ch_quiesce)(struct dw_edma_chan *chan);
 	u16 (*ch_count)(struct dw_edma *dw, enum dw_edma_dir dir);
 	enum dma_status (*ch_status)(struct dw_edma_chan *chan);
+	/*
+	 * Recovery is available only when ch_transfer_size, engine_reset, and
+	 * engine_enable are all provided.
+	 */
 	u32 (*ch_transfer_size)(struct dw_edma_chan *chan);
 	irqreturn_t (*handle_int)(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 				  dw_edma_handler_t done,
@@ -180,7 +202,7 @@ struct dw_edma_core_ops {
 	int (*ll_cur_idx)(struct dw_edma_chan *chan);
 	/* Called with chan->vc.lock held. */
 	bool (*ll_irq)(struct dw_edma_desc *desc, u32 i, u32 free);
-	/* Reset one direction, discard its IRQ status, and leave it disabled. */
+	/* Reset one direction, clear its IRQ status, and leave it disabled. */
 	bool (*engine_reset)(struct dw_edma *dw, enum dw_edma_dir dir);
 	void (*engine_enable)(struct dw_edma *dw, enum dw_edma_dir dir);
 	void (*ch_doorbell)(struct dw_edma_chan *chan);
@@ -313,7 +335,7 @@ static inline void dw_edma_core_ch_doorbell(struct dw_edma_chan *chan)
 static inline void dw_edma_core_ch_enable(struct dw_edma_chan *chan)
 {
 	chan->dw->core->ch_enable(chan);
-	if (chan->dw->core->engine_enable)
+	if (!chan->ll_recovering && chan->dw->core->engine_enable)
 		chan->dw->core->engine_enable(chan->dw, chan->dir);
 }
 
