@@ -843,16 +843,11 @@ static int kv_populate_samu_table(struct radeon_device *rdev)
 	if (ret)
 		return ret;
 
-	ret = kv_copy_bytes_to_smc(rdev,
-				   pi->dpm_table_start +
-				   offsetof(SMU7_Fusion_DpmTable, SamuLevel),
-				   (u8 *)&pi->samu_level,
-				   sizeof(SMU7_Fusion_ExtClkLevel) * SMU7_MAX_LEVELS_SAMU,
-				   pi->sram_end);
-	if (ret)
-		return ret;
-
-	return ret;
+	return kv_copy_bytes_to_smc(rdev,
+				    pi->dpm_table_start + offsetof(SMU7_Fusion_DpmTable, SamuLevel),
+				    (u8 *)&pi->samu_level,
+				    sizeof(SMU7_Fusion_ExtClkLevel) * SMU7_MAX_LEVELS_SAMU,
+				    pi->sram_end);
 }
 
 
@@ -902,16 +897,11 @@ static int kv_populate_acp_table(struct radeon_device *rdev)
 	if (ret)
 		return ret;
 
-	ret = kv_copy_bytes_to_smc(rdev,
-				   pi->dpm_table_start +
-				   offsetof(SMU7_Fusion_DpmTable, AcpLevel),
-				   (u8 *)&pi->acp_level,
-				   sizeof(SMU7_Fusion_ExtClkLevel) * SMU7_MAX_LEVELS_ACP,
-				   pi->sram_end);
-	if (ret)
-		return ret;
-
-	return ret;
+	return kv_copy_bytes_to_smc(rdev,
+				    pi->dpm_table_start + offsetof(SMU7_Fusion_DpmTable, AcpLevel),
+				    (u8 *)&pi->acp_level,
+				    sizeof(SMU7_Fusion_ExtClkLevel) * SMU7_MAX_LEVELS_ACP,
+				    pi->sram_end);
 }
 
 static void kv_calculate_dfs_bypass_settings(struct radeon_device *rdev)

@@ -6418,22 +6418,12 @@ static int si_set_temperature_range(struct radeon_device *rdev)
 	ret = si_thermal_set_temperature_range(rdev, R600_TEMP_RANGE_MIN, R600_TEMP_RANGE_MAX);
 	if (ret)
 		return ret;
-	ret = si_thermal_enable_alert(rdev, true);
-	if (ret)
-		return ret;
-
-	return ret;
+	return si_thermal_enable_alert(rdev, true);
 }
 
 int si_dpm_late_enable(struct radeon_device *rdev)
 {
-	int ret;
-
-	ret = si_set_temperature_range(rdev);
-	if (ret)
-		return ret;
-
-	return ret;
+	return si_set_temperature_range(rdev);
 }
 
 void si_dpm_disable(struct radeon_device *rdev)
