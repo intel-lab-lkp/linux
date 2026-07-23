@@ -9,9 +9,11 @@
  */
 
 #include <linux/fsnotify_backend.h>
+#include <linux/jiffies.h>
 #include <linux/ktime.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 
 #include "glob.h"
 #include "../common/smb2status.h"
@@ -46,12 +48,17 @@ struct ksmbd_notify {
 	u32 filter;
 	u32 mask;
 	u32 max_buffer_size;
+	struct ksmbd_notify_event *moved_from_event;
+	u32 moved_from_mask;
+	u32 moved_from_cookie;
+	struct delayed_work moved_from_work;
 };
 
 struct ksmbd_notify_req {
 	wait_queue_head_t wait;
 };
 
+#define KSMBD_NOTIFY_MOVED_FROM_MSECS	100
 #define KSMBD_NOTIFY_NAME_EVENT_MASK	(FS_CREATE | FS_DELETE | \
 					 FS_MOVED_FROM | FS_MOVED_TO)
 #define KSMBD_NOTIFY_EVENT_MASK		(FS_ATTRIB | FS_MODIFY | \
@@ -164,6 +171,65 @@ ksmbd_notify_queue_event(struct ksmbd_notify *notify,
 	spin_unlock(&notify->lock);
 }
 
+static void
+ksmbd_notify_trigger_removed(struct ksmbd_notify *notify,
+			     struct ksmbd_notify_event *event)
+{
+	ksmbd_debug(NOTIFY,
+		    "Queue moved from as removed, name %s\n",
+		    event->name);
+	event->action = FILE_ACTION_REMOVED;
+	event->when = ktime_get_ns();
+	ksmbd_notify_queue_event(notify, event);
+}
+
+static void ksmbd_notify_moved_from_timeout(struct work_struct *work)
+{
+	struct ksmbd_notify_event *event;
+	struct ksmbd_notify *notify;
+
+	notify = container_of(to_delayed_work(work), struct ksmbd_notify,
+			      moved_from_work);
+
+	spin_lock(&notify->lock);
+	event = notify->moved_from_event;
+	notify->moved_from_event = NULL;
+	spin_unlock(&notify->lock);
+
+	if (!event)
+		return;
+	ksmbd_notify_trigger_removed(notify, event);
+}
+
+static void ksmbd_notify_save_moved_from(struct ksmbd_notify *notify,
+					 u32 mask, u32 cookie,
+					 const struct qstr *file_name)
+{
+	struct ksmbd_notify_event *event, *old_event;
+
+	event = ksmbd_notify_alloc_event(FILE_ACTION_RENAMED_OLD_NAME,
+					 file_name, KSMBD_DEFAULT_GFP);
+	if (!event)
+		return;
+
+	spin_lock(&notify->lock);
+	old_event = notify->moved_from_event;
+	notify->moved_from_event = event;
+	notify->moved_from_mask = mask;
+	notify->moved_from_cookie = cookie;
+	spin_unlock(&notify->lock);
+
+	ksmbd_debug(NOTIFY,
+		    "Saved moved from, mask 0x%x, name %.*s, cookie %u\n",
+		    mask, file_name ? file_name->len : 0,
+		    file_name ? (const char *)file_name->name : "", cookie);
+	if (old_event)
+		ksmbd_notify_trigger_removed(notify, old_event);
+
+	mod_delayed_work(system_dfl_wq, &notify->moved_from_work,
+			 msecs_to_jiffies(KSMBD_NOTIFY_MOVED_FROM_MSECS));
+}
+
 static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
 					   u32 mask, struct inode *inode,
 					   struct inode *dir,
@@ -192,6 +258,14 @@ static int ksmbd_notify_handle_inode_event(struct fsnotify_mark *mark,
 		ksmbd_debug(NOTIFY, "Ignored notify event mask 0x%x\n", mask);
 		return 0;
 	}
+
+	if (mask & FS_MOVED_FROM) {
+		ksmbd_notify_save_moved_from(notify, mask, cookie, file_name);
+		return 0;
+	}
+
+	if (mask & FS_MOVED_TO)
+		return 0;
 
 	if (mask & FS_CREATE) {
 		action = FILE_ACTION_ADDED;
@@ -314,6 +388,8 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 	notify->filter = filter;
 	notify->mask = mask;
 	notify->max_buffer_size = max_buffer_size;
+	INIT_DELAYED_WORK(&notify->moved_from_work,
+			  ksmbd_notify_moved_from_timeout);
 
 	mark = ksmbd_notify_add_mark(notify, mask, &notify->group);
 	if (IS_ERR(mark)) {
@@ -359,6 +435,8 @@ void ksmbd_notify_remove(struct ksmbd_file *fp)
 		    (unsigned long long)file_inode(fp->filp)->i_ino,
 		    notify->mark->mask);
 	ksmbd_notify_destroy_mark(notify->group, notify->mark);
+	cancel_delayed_work_sync(&notify->moved_from_work);
+	kfree(notify->moved_from_event);
 	ksmbd_notify_free_events(&notify->events);
 	kfree(notify);
 }
