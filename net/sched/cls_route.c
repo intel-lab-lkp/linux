@@ -297,16 +297,29 @@ static void route4_destroy(struct tcf_proto *tp, bool rtnl_held,
 					next = rtnl_dereference(f->next);
 					RCU_INIT_POINTER(b->ht[h2], next);
 					tcf_unbind_filter(tp, &f->res);
-					if (tcf_exts_get_net(&f->exts))
-						route4_queue_work(f);
-					else
-						__route4_delete_filter(f);
+					/* Always defer the free.  The direct
+					 * __route4_delete_filter() path has no
+					 * grace period and races with readers
+					 * that cached f in the fastmap.
+					 */
+					tcf_exts_get_net(&f->exts);
+					route4_queue_work(f);
 				}
 			}
 			RCU_INIT_POINTER(head->table[h1], NULL);
 			kfree_rcu(b, rcu);
 		}
 	}
+
+	/* All filters are unlinked; no new reader can find them on the
+	 * chain.  Wait for in-flight readers that may still hold a filter
+	 * pointer and have published it into the fastmap after we unlinked.
+	 * Then flush the stale entries while head is still valid under
+	 * RTNL, matching the route4_delete() pattern.
+	 */
+	synchronize_rcu();
+	route4_reset_fastmap(head);
+
 	kfree_rcu(head, rcu);
 }
 
@@ -334,10 +347,16 @@ static int route4_delete(struct tcf_proto *tp, void *arg, bool *last,
 			/* unlink it */
 			RCU_INIT_POINTER(*fp, rtnl_dereference(f->next));
 
-			/* Remove any fastmap lookups that might ref filter
-			 * notice we unlink'd the filter so we can't get it
-			 * back in the fastmap.
+			/* This code path assumes we have the RTNL lock.
+			 * We wait for in-flight readers that may still hold
+			 * the filter pointer and publish it into the fastmap
+			 * after we unlinked it.
+			 * Once done, no new reader can find the filter on the
+			 * chain, so the only stale fastmap entries are the
+			 * ones those readers just wrote. Flush them now
+			 * while head is still valid.
 			 */
+			synchronize_rcu();
 			route4_reset_fastmap(head);
 
 			/* Delete it */
@@ -558,6 +577,15 @@ static int route4_change(struct net *net, struct sk_buff *in_skb,
 		}
 	}
 
+	/* Assuming RTNL lock. Wait for in-flight readers that may still
+	 * hold a filter pointer and publish it into the fastmap after we
+	 * inserted the new filter (or unlinked fold when replacing).
+	 * Once they are done, flush the stale entries while head is still
+	 * valid.  Needed on both the creation and replace paths: on
+	 * creation, readers may have cached a ROUTE4_FAILURE entry for the
+	 * (id, iif) tuple that the new filter now matches.
+	 */
+	synchronize_rcu();
 	route4_reset_fastmap(head);
 	*arg = f;
 	if (fold) {
