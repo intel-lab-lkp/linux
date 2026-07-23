@@ -386,7 +386,7 @@ int ath11k_peer_create(struct ath11k *ar, struct ath11k_vif *arvif,
 	spin_lock_bh(&ar->ab->base_lock);
 	peer = ath11k_peer_find_by_addr(ar->ab, param->peer_addr);
 	if (peer) {
-		if (peer->vdev_id == param->vdev_id) {
+		if (peer->pdev_idx == ar->pdev_idx) {
 			spin_unlock_bh(&ar->ab->base_lock);
 			mutex_unlock(&ar->ab->tbl_mtx_lock);
 			return -EINVAL;
