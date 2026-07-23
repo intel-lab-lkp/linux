@@ -6187,9 +6187,11 @@ static void nv_remove(struct pci_dev *pci_dev)
 	struct net_device *dev = pci_get_drvdata(pci_dev);
 	struct fe_priv *np = netdev_priv(dev);
 
-	free_percpu(np->txrx_stats);
-
+	/* txrx_stats is used by ndo_get_stats64 and the data path until
+	 * unregister_netdevice() has completed.
+	 */
 	unregister_netdev(dev);
+	free_percpu(np->txrx_stats);
 
 	nv_restore_mac_addr(pci_dev);
 
