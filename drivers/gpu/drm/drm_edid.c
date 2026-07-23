@@ -96,6 +96,8 @@ enum drm_edid_internal_quirk {
 	EDID_QUIRK_NON_DESKTOP,
 	/* Cap the DSC target bitrate to 15bpp */
 	EDID_QUIRK_CAP_DSC_15BPP,
+	/* Ignore stereo flag of modes */
+	EDID_QUIRK_IGNORE_STEREO_FLAG,
 };
 
 #define MICROSOFT_IEEE_OUI	0xca125c
@@ -3538,7 +3540,8 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_connector *connecto
 	if (hactive < 64 || vactive < 64)
 		return NULL;
 
-	if (pt->misc & DRM_EDID_PT_STEREO) {
+	if (pt->misc & DRM_EDID_PT_STEREO &&
+		!drm_edid_has_internal_quirk(connector, EDID_QUIRK_IGNORE_STEREO_FLAG)) {
 		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] Stereo mode not supported\n",
 			    connector->base.id, connector->name);
 		return NULL;
