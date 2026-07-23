@@ -938,8 +938,7 @@ sub get_maintainers {
 				my $file_pd = ($file  =~ tr@/@@);
 				$value_pd++ if (substr($value,-1,1) ne "/");
 				$value_pd = -1 if ($value =~ /^(\.\*|\(\?:\.\*\))/);
-				if ($value_pd >= $file_pd &&
-				    range_is_maintained($start, $end) &&
+				if (range_is_maintained($start, $end) &&
 				    range_has_maintainer($start, $end)) {
 				    $exact_pattern_match_hash{$file} = 1;
 				}
