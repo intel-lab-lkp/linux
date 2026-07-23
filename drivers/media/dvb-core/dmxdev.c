@@ -270,13 +270,23 @@ static ssize_t dvb_dvr_read(struct file *file, char __user *buf, size_t count,
 {
 	struct dvb_device *dvbdev = file->private_data;
 	struct dmxdev *dmxdev = dvbdev->priv;
+	ssize_t ret;
 
-	if (dmxdev->exit)
+	if (mutex_lock_interruptible(&dmxdev->mutex))
+		return -ERESTARTSYS;
+
+	if (dmxdev->exit) {
+		mutex_unlock(&dmxdev->mutex);
 		return -ENODEV;
+	}
 
-	return dvb_dmxdev_buffer_read(&dmxdev->dvr_buffer,
-				      file->f_flags & O_NONBLOCK,
-				      buf, count, ppos);
+	ret = dvb_dmxdev_buffer_read(&dmxdev->dvr_buffer,
+				     file->f_flags & O_NONBLOCK,
+				     buf, count, ppos);
+
+	mutex_unlock(&dmxdev->mutex);
+
+	return ret;
 }
 
 static int dvb_dvr_set_buffer_size(struct dmxdev *dmxdev,
