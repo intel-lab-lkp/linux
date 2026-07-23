@@ -3176,6 +3176,9 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 	int i;
 	int max_sync;
 	sector_t sync_blocks;
+	sector_t min_sync_blocks = MaxSector;
+	sector_t sync_end;
+	bool missing_source = false;
 	sector_t chunk_mask = conf->geo.chunk_mask;
 	int page_idx = 0;
 
@@ -3258,6 +3261,14 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 	if (max_sector > mddev->resync_max)
 		max_sector = mddev->resync_max; /* Don't do IO beyond here */
 
+	/*
+	 * The chunk clamp below caps a single sync I/O to at most one chunk.
+	 * The bitmap-clean recovery skip issues no I/O, so remember the real
+	 * end here to bound the skip against it rather than the chunk
+	 * boundary.
+	 */
+	sync_end = max_sector;
+
 	/* make sure whole request will fit in a chunk - if chunks
 	 * are meaningful
 	 */
@@ -3334,9 +3345,13 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 			if (!must_sync &&
 			    mreplace == NULL &&
 			    !conf->fullsync) {
-				/* yep, skip the sync_blocks here, but don't assume
-				 * that there will never be anything to do here
+				/* Skip the clean sync_blocks here; don't
+				 * assume there will never be anything to
+				 * do.  Only a genuinely skipped clean span
+				 * may widen the bulk skip below.
 				 */
+				if (sync_blocks < min_sync_blocks)
+					min_sync_blocks = sync_blocks;
 				continue;
 			}
 			if (mrdev)
@@ -3459,6 +3474,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 			if (j == conf->copies) {
 				/* Cannot recover, so abort the recovery or
 				 * record a bad block */
+				missing_source = true;
 				if (any_working) {
 					/* problem is that there are bad blocks
 					 * on other device(s)
@@ -3514,6 +3530,8 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 			}
 		}
 		if (biolist == NULL) {
+			sector_t skip_sectors = max_sync;
+
 			while (r10_bio) {
 				struct r10bio *rb2 = r10_bio;
 				r10_bio = (struct r10bio*) rb2->master_bio;
@@ -3521,7 +3539,29 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 				put_buf(rb2);
 			}
 			*skipped = 1;
-			return max_sync;
+
+			/*
+			 * min_sync_blocks is in array sectors, but the return
+			 * value advances the per-device cursor; for a near
+			 * layout the two spaces differ by the factor
+			 * raid_disks / near_copies.
+			 */
+			if (!missing_source &&
+			    conf->geo.far_copies == 1 && !conf->geo.far_offset &&
+			    conf->geo.raid_disks % conf->geo.near_copies == 0 &&
+			    min_sync_blocks != MaxSector) {
+				sector_t clean_sectors = min_sync_blocks;
+
+				clean_sectors *= conf->geo.near_copies;
+				sector_div(clean_sectors, conf->geo.raid_disks);
+				clean_sectors &= ~chunk_mask;
+				if (clean_sectors > sync_end - sector_nr)
+					clean_sectors = sync_end - sector_nr;
+				if (clean_sectors > skip_sectors)
+					skip_sectors = clean_sectors;
+			}
+
+			return skip_sectors;
 		}
 	} else {
 		/* resync. Schedule a read for every block at this virt offset */
