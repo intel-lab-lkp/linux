@@ -113,6 +113,7 @@ dtb-$(CONFIG_ARCH_STM32) += \
 	stm32h743i-disco.dtb \
 	stm32h747i-disco.dtb \
 	stm32h750i-art-pi.dtb \
+	stm32h7r7l8-art-pi2.dtb \
 	stm32mp133c-prihmb.dtb \
 	stm32mp135f-dhcor-dhsbc.dtb \
 	stm32mp13xx-dhcor-dhsbc-overlay-rb-tft32-v2.dtb \
