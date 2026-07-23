@@ -320,6 +320,24 @@ int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
 			  (invparity[rp11] << 3) | (invparity[rp10] << 2) |
 			  (invparity[rp9] << 1) | (invparity[rp8]);
 		break;
+	case ECC_HAMMING_PL35X_ORDER:
+		code[1] = (invparity[rp0] << 7) |
+			  (invparity[par & 0x0f] << 6) |
+			  (invparity[par & 0x33] << 5) |
+			  (invparity[par & 0x55] << 4) |
+			  (invparity[rp17] << 3) |
+			  (invparity[rp15] << 2) |
+			  (invparity[rp13] << 1) |
+			  (invparity[rp11] << 0);
+		code[0] = (invparity[rp9] << 7) |
+			  (invparity[rp7] << 6) |
+			  (invparity[rp5] << 5) |
+			  (invparity[rp3] << 4) |
+			  (invparity[rp1] << 3) |
+			  (invparity[par & 0xf0] << 2) |
+			  (invparity[par & 0xcc] << 1) |
+			  (invparity[par & 0xaa] << 0);
+		break;
 	case ECC_HAMMING_REGULAR_ORDER:
 		code[1] = (invparity[rp7] << 7) | (invparity[rp6] << 6) |
 			  (invparity[rp5] << 5) | (invparity[rp4] << 4) |
@@ -332,25 +350,38 @@ int ecc_sw_hamming_calculate(const unsigned char *buf, unsigned int step_size,
 		break;
 	}
 
-	if (eccsize_mult == 1)
-		code[2] =
-		    (invparity[par & 0xf0] << 7) |
-		    (invparity[par & 0x0f] << 6) |
-		    (invparity[par & 0xcc] << 5) |
-		    (invparity[par & 0x33] << 4) |
-		    (invparity[par & 0xaa] << 3) |
-		    (invparity[par & 0x55] << 2) |
-		    3;
-	else
-		code[2] =
-		    (invparity[par & 0xf0] << 7) |
-		    (invparity[par & 0x0f] << 6) |
-		    (invparity[par & 0xcc] << 5) |
-		    (invparity[par & 0x33] << 4) |
-		    (invparity[par & 0xaa] << 3) |
-		    (invparity[par & 0x55] << 2) |
-		    (invparity[rp17] << 1) |
-		    (invparity[rp16] << 0);
+	switch (ecc_order) {
+	case ECC_HAMMING_PL35X_ORDER:
+		code[2] = (invparity[rp16] << 7) |
+			  (invparity[rp14] << 6) |
+			  (invparity[rp12] << 5) |
+			  (invparity[rp10] << 4) |
+			  (invparity[rp8] << 3) |
+			  (invparity[rp6] << 2) |
+			  (invparity[rp4] << 1) |
+			  (invparity[rp2] << 0);
+		break;
+	case ECC_HAMMING_REGULAR_ORDER:
+	case ECC_HAMMING_SM_ORDER:
+		if (eccsize_mult == 1)
+			code[2] = (invparity[par & 0xf0] << 7) |
+				  (invparity[par & 0x0f] << 6) |
+				  (invparity[par & 0xcc] << 5) |
+				  (invparity[par & 0x33] << 4) |
+				  (invparity[par & 0xaa] << 3) |
+				  (invparity[par & 0x55] << 2) |
+				  3;
+		else
+			code[2] = (invparity[par & 0xf0] << 7) |
+				  (invparity[par & 0x0f] << 6) |
+				  (invparity[par & 0xcc] << 5) |
+				  (invparity[par & 0x33] << 4) |
+				  (invparity[par & 0xaa] << 3) |
+				  (invparity[par & 0x55] << 2) |
+				  (invparity[rp17] << 1) |
+				  (invparity[rp16] << 0);
+		break;
+	}
 
 	return 0;
 }
@@ -380,6 +411,7 @@ int ecc_sw_hamming_correct(unsigned char *buf, unsigned char *read_ecc,
 {
 	const u32 eccsize_mult = step_size >> 8;
 	unsigned char b0, b1, b2, bit_addr;
+	bool single_bit_err = false;
 	unsigned int byte_addr;
 
 	/*
@@ -388,6 +420,7 @@ int ecc_sw_hamming_correct(unsigned char *buf, unsigned char *read_ecc,
 	 * so keep them in a local var
 	*/
 	switch (ecc_order) {
+	case ECC_HAMMING_PL35X_ORDER:
 	case ECC_HAMMING_SM_ORDER:
 		b0 = read_ecc[0] ^ calc_ecc[0];
 		b1 = read_ecc[1] ^ calc_ecc[1];
@@ -407,33 +440,60 @@ int ecc_sw_hamming_correct(unsigned char *buf, unsigned char *read_ecc,
 	if ((b0 | b1 | b2) == 0)
 		return 0;	/* no error */
 
-	if ((((b0 ^ (b0 >> 1)) & 0x55) == 0x55) &&
-	    (((b1 ^ (b1 >> 1)) & 0x55) == 0x55) &&
-	    ((eccsize_mult == 1 && ((b2 ^ (b2 >> 1)) & 0x54) == 0x54) ||
-	     (eccsize_mult == 2 && ((b2 ^ (b2 >> 1)) & 0x55) == 0x55))) {
 	/* single bit error */
-		/*
-		 * rp17/rp15/13/11/9/7/5/3/1 indicate which byte is the faulty
-		 * byte, cp 5/3/1 indicate the faulty bit.
-		 * A lookup table (called addressbits) is used to filter
-		 * the bits from the byte they are in.
-		 * A marginal optimisation is possible by having three
-		 * different lookup tables.
-		 * One as we have now (for b0), one for b2
-		 * (that would avoid the >> 1), and one for b1 (with all values
-		 * << 4). However it was felt that introducing two more tables
-		 * hardly justify the gain.
-		 *
-		 * The b2 shift is there to get rid of the lowest two bits.
-		 * We could also do addressbits[b2] >> 1 but for the
-		 * performance it does not make any difference
-		 */
-		if (eccsize_mult == 1)
-			byte_addr = (addressbits[b1] << 4) + addressbits[b0];
-		else
-			byte_addr = (addressbits[b2 & 0x3] << 8) +
-				    (addressbits[b1] << 4) + addressbits[b0];
-		bit_addr = addressbits[b2 >> 2];
+	/*
+	 * rp17/rp15/13/11/9/7/5/3/1 indicate which byte is the faulty
+	 * byte, cp 5/3/1 indicate the faulty bit.
+	 */
+	switch (ecc_order) {
+	case ECC_HAMMING_SM_ORDER:
+	case ECC_HAMMING_REGULAR_ORDER:
+		if ((((b0 ^ (b0 >> 1)) & 0x55) == 0x55) &&
+		    (((b1 ^ (b1 >> 1)) & 0x55) == 0x55) &&
+		    ((eccsize_mult == 1 && ((b2 ^ (b2 >> 1)) & 0x54) == 0x54) ||
+		     (eccsize_mult == 2 && ((b2 ^ (b2 >> 1)) & 0x55) == 0x55))) {
+			single_bit_err = true;
+			/*
+			 * A lookup table (called addressbits) is used to filter
+			 * the bits from the byte they are in.
+			 * A marginal optimisation is possible by having three
+			 * different lookup tables.
+			 * One as we have now (for b0), one for b2
+			 * (that would avoid the >> 1), and one for b1 (with all values
+			 * << 4). However it was felt that introducing two more tables
+			 * hardly justify the gain.
+			 *
+			 * The b2 shift is there to get rid of the lowest two bits.
+			 * We could also do addressbits[b2] >> 1 but for the
+			 * performance it does not make any difference
+			 */
+			if (eccsize_mult == 1)
+				byte_addr = (addressbits[b1] << 4) + addressbits[b0];
+			else
+				byte_addr = (addressbits[b2 & 0x3] << 8) +
+					    (addressbits[b1] << 4) + addressbits[b0];
+			bit_addr = addressbits[b2 >> 2];
+		}
+		break;
+	case ECC_HAMMING_PL35X_ORDER:
+		if (((((b0 >> 4) ^ b2) & 0xF) == 0xF) &&
+		    ((((b1 >> 4) ^ b0) & 0xF) == 0xF) &&
+		    ((((b2 >> 4) ^ b1) & 0xF) == 0xF)) {
+			single_bit_err = true;
+			/*
+			 * We can't use the addressbits table here because the
+			 * bit ordering in the ECC bytes has nothing to do with
+			 * the other ordering
+			 */
+			byte_addr = (b0 >> 3) & 0xF;
+			byte_addr |= (b0 >> 7) & 0x10;
+			byte_addr |= (b1 << 5) & 0x1e0;
+			bit_addr = b0 & 0x7;
+		}
+		break;
+	}
+
+	if (single_bit_err) {
 		/* flip the bit */
 		buf[byte_addr] ^= (1 << bit_addr);
 		return 1;

@@ -15,6 +15,7 @@
 enum ecc_hamming_order {
 	ECC_HAMMING_REGULAR_ORDER = 0,
 	ECC_HAMMING_SM_ORDER,
+	ECC_HAMMING_PL35X_ORDER,
 };
 
 /**

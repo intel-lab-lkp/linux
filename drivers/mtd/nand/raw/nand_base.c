@@ -5658,6 +5658,8 @@ int rawnand_sw_hamming_init(struct nand_chip *chip)
 
 	if (chip->ecc.options & NAND_ECC_SOFT_HAMMING_SM_ORDER)
 		engine_conf->ecc_order = ECC_HAMMING_SM_ORDER;
+	else if (chip->ecc.options & NAND_ECC_SOFT_HAMMING_PL35X_ORDER)
+		engine_conf->ecc_order = ECC_HAMMING_PL35X_ORDER;
 	else
 		engine_conf->ecc_order = ECC_HAMMING_REGULAR_ORDER;
 

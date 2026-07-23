@@ -113,10 +113,11 @@ struct gpio_desc;
  * When using software implementation of Hamming, we can specify which byte
  * ordering should be used.
  */
-#define NAND_ECC_SOFT_HAMMING_SM_ORDER	BIT(2)
+#define NAND_ECC_SOFT_HAMMING_SM_ORDER		BIT(2)
+#define NAND_ECC_SOFT_HAMMING_PL35X_ORDER	BIT(3)
 
 /* Chip has cache program function */
-#define NAND_CACHEPRG		BIT(3)
+#define NAND_CACHEPRG		BIT(4)
 /* Options valid for Samsung large page devices */
 #define NAND_SAMSUNG_LP_OPTIONS NAND_CACHEPRG
 
