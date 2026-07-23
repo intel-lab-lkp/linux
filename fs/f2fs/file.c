@@ -1976,11 +1976,12 @@ next_alloc:
 
 		map.m_seg_type = CURSEG_COLD_DATA_PINNED;
 		err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_PRE_DIO);
-		file_dont_truncate(inode);
+		if (!err)
+			file_dont_truncate(inode);
 
 		f2fs_up_write(&sbi->pin_sem);
 
-		expanded += map.m_len;
+		expanded += err ? rounddown(map.m_len, sec_blks) : map.m_len;
 		sec_len -= map.m_len;
 		map.m_lblk += map.m_len;
 		if (!err && sec_len)
@@ -1996,7 +1997,7 @@ out_err:
 		pgoff_t last_off;
 
 		if (!expanded)
-			return err;
+			goto out;
 
 		last_off = pg_start + expanded - 1;
 
@@ -2012,6 +2013,16 @@ out_err:
 			file_set_keep_isize(inode);
 		else
 			f2fs_i_size_write(inode, new_size);
+	}
+
+out:
+	if (err && f2fs_is_pinned_file(inode) && file_should_truncate(inode)) {
+		f2fs_down_write(&F2FS_I(inode)->i_gc_rwsem[WRITE]);
+		filemap_invalidate_lock(inode->i_mapping);
+		if (!f2fs_truncate(inode))
+			file_dont_truncate(inode);
+		filemap_invalidate_unlock(inode->i_mapping);
+		f2fs_up_write(&F2FS_I(inode)->i_gc_rwsem[WRITE]);
 	}
 
 	return err;
