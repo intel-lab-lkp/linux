@@ -794,7 +794,8 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 	 * the originator of the new connection, and this state has to be
 	 * in the newly created struct sock private area. -acme
 	 */
-	if (unlikely(sk->sk_state == TCP_LISTEN)) {
+	if (unlikely(sk->sk_state == TCP_LISTEN) &&
+	    !llc_conn_ev_rx_sabme_cmd_pbit_set_x(sk, skb)) {
 		struct sock *newsk = llc_create_incoming_sock(sk, skb->dev,
 							      &saddr, &daddr);
 		if (!newsk)
