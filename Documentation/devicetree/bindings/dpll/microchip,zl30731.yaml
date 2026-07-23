@@ -18,6 +18,7 @@ description:
 properties:
   compatible:
     enum:
+      - microchip,zl30643
       - microchip,zl30731
       - microchip,zl30732
       - microchip,zl30733
