@@ -638,14 +638,10 @@ static int ath10k_wmi_tlv_event_peer_delete_resp(struct ath10k *ar,
 
 static void ath10k_wmi_tlv_op_rx(struct ath10k *ar, struct sk_buff *skb)
 {
-	struct wmi_cmd_hdr *cmd_hdr;
-	enum wmi_tlv_event_id id;
 	bool consumed;
+	u32 id;
 
-	cmd_hdr = (struct wmi_cmd_hdr *)skb->data;
-	id = MS(__le32_to_cpu(cmd_hdr->cmd_id), WMI_CMD_HDR_CMD_ID);
-
-	if (skb_pull(skb, sizeof(struct wmi_cmd_hdr)) == NULL)
+	if (!ath10k_wmi_pull_cmd_hdr(skb, &id))
 		goto out;
 
 	trace_ath10k_wmi_event(ar, id, skb->data, skb->len);

@@ -5873,15 +5873,24 @@ static inline void ath10k_wmi_queue_set_coverage_class_work(struct ath10k *ar)
 	}
 }
 
+bool ath10k_wmi_pull_cmd_hdr(struct sk_buff *skb, u32 *id)
+{
+	const struct wmi_cmd_hdr *cmd_hdr;
+
+	cmd_hdr = skb_pull_data(skb, sizeof(*cmd_hdr));
+	if (!cmd_hdr)
+		return false;
+
+	*id = MS(__le32_to_cpu(cmd_hdr->cmd_id), WMI_CMD_HDR_CMD_ID);
+
+	return true;
+}
+
 static void ath10k_wmi_op_rx(struct ath10k *ar, struct sk_buff *skb)
 {
-	struct wmi_cmd_hdr *cmd_hdr;
-	enum wmi_event_id id;
+	u32 id;
 
-	cmd_hdr = (struct wmi_cmd_hdr *)skb->data;
-	id = MS(__le32_to_cpu(cmd_hdr->cmd_id), WMI_CMD_HDR_CMD_ID);
-
-	if (skb_pull(skb, sizeof(struct wmi_cmd_hdr)) == NULL)
+	if (!ath10k_wmi_pull_cmd_hdr(skb, &id))
 		goto out;
 
 	trace_ath10k_wmi_event(ar, id, skb->data, skb->len);
@@ -6002,14 +6011,10 @@ out:
 
 static void ath10k_wmi_10_1_op_rx(struct ath10k *ar, struct sk_buff *skb)
 {
-	struct wmi_cmd_hdr *cmd_hdr;
-	enum wmi_10x_event_id id;
 	bool consumed;
+	u32 id;
 
-	cmd_hdr = (struct wmi_cmd_hdr *)skb->data;
-	id = MS(__le32_to_cpu(cmd_hdr->cmd_id), WMI_CMD_HDR_CMD_ID);
-
-	if (skb_pull(skb, sizeof(struct wmi_cmd_hdr)) == NULL)
+	if (!ath10k_wmi_pull_cmd_hdr(skb, &id))
 		goto out;
 
 	trace_ath10k_wmi_event(ar, id, skb->data, skb->len);
@@ -6133,14 +6138,10 @@ out:
 
 static void ath10k_wmi_10_2_op_rx(struct ath10k *ar, struct sk_buff *skb)
 {
-	struct wmi_cmd_hdr *cmd_hdr;
-	enum wmi_10_2_event_id id;
 	bool consumed;
+	u32 id;
 
-	cmd_hdr = (struct wmi_cmd_hdr *)skb->data;
-	id = MS(__le32_to_cpu(cmd_hdr->cmd_id), WMI_CMD_HDR_CMD_ID);
-
-	if (skb_pull(skb, sizeof(struct wmi_cmd_hdr)) == NULL)
+	if (!ath10k_wmi_pull_cmd_hdr(skb, &id))
 		goto out;
 
 	trace_ath10k_wmi_event(ar, id, skb->data, skb->len);
@@ -6282,14 +6283,10 @@ out:
 
 static void ath10k_wmi_10_4_op_rx(struct ath10k *ar, struct sk_buff *skb)
 {
-	struct wmi_cmd_hdr *cmd_hdr;
-	enum wmi_10_4_event_id id;
 	bool consumed;
+	u32 id;
 
-	cmd_hdr = (struct wmi_cmd_hdr *)skb->data;
-	id = MS(__le32_to_cpu(cmd_hdr->cmd_id), WMI_CMD_HDR_CMD_ID);
-
-	if (!skb_pull(skb, sizeof(struct wmi_cmd_hdr)))
+	if (!ath10k_wmi_pull_cmd_hdr(skb, &id))
 		goto out;
 
 	trace_ath10k_wmi_event(ar, id, skb->data, skb->len);
