@@ -152,16 +152,12 @@ static int pm860x_led_probe(struct platform_device *pdev)
 	if (data == NULL)
 		return -ENOMEM;
 	res = platform_get_resource_byname(pdev, IORESOURCE_REG, "control");
-	if (!res) {
-		dev_err(&pdev->dev, "No REG resource for control\n");
-		return -ENXIO;
-	}
+	if (!res)
+		return dev_err_probe(&pdev->dev, -ENXIO, "No REG resource for control\n");
 	data->reg_control = res->start;
 	res = platform_get_resource_byname(pdev, IORESOURCE_REG, "blink");
-	if (!res) {
-		dev_err(&pdev->dev, "No REG resource for blink\n");
-		return -ENXIO;
-	}
+	if (!res)
+		return dev_err_probe(&pdev->dev, -ENXIO, "No REG resource for blink\n");
 	data->reg_blink = res->start;
 	memset(data->name, 0, MFD_NAME_SIZE);
 	switch (pdev->id) {
@@ -203,10 +199,8 @@ static int pm860x_led_probe(struct platform_device *pdev)
 	mutex_init(&data->lock);
 
 	ret = led_classdev_register(chip->dev, &data->cdev);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register LED: %d\n", ret);
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "Failed to register LED\n");
 	pm860x_led_set(&data->cdev, 0);
 
 	platform_set_drvdata(pdev, data);
