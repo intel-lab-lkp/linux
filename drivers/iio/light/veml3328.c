@@ -70,7 +70,6 @@ static const struct regmap_config veml3328_regmap_config = {
 static const struct iio_chan_spec veml3328_channels[] = {
 	{
 		.type = IIO_LIGHT,
-
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),
 		.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SCALE),
