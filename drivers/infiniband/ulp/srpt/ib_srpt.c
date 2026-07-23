@@ -1558,8 +1558,8 @@ static void srpt_handle_cmd(struct srpt_rdma_ch *ch,
 	struct srp_cmd *srp_cmd;
 	struct scatterlist *sg = NULL;
 	unsigned sg_cnt = 0;
-	u64 data_len;
-	enum dma_data_direction dir;
+	u64 data_len = 0;
+	enum dma_data_direction dir = DMA_NONE;
 	int rc;
 
 	BUG_ON(!send_ioctx);
@@ -1584,6 +1584,25 @@ static void srpt_handle_cmd(struct srpt_rdma_ch *ch,
 		break;
 	}
 
+	/*
+	 * Call target_init_cmd() before srpt_get_desc_tbl() so that
+	 * cmd->se_tfo is set if descriptor parsing fails and
+	 * target_send_busy() is used. data_length is filled in after a
+	 * successful srpt_get_desc_tbl().
+	 *
+	 * target_send_busy() is only valid after a successful
+	 * target_init_cmd(). On init failure free the tag locally.
+	 */
+	rc = target_init_cmd(cmd, ch->sess, &send_ioctx->sense_data[0],
+			     scsilun_to_int(&srp_cmd->lun), 0 /* data_len */,
+			     TCM_SIMPLE_TAG, DMA_NONE, TARGET_SCF_ACK_KREF);
+	if (rc != 0) {
+		pr_debug("target_init_cmd() returned %d for tag %#llx\n", rc,
+			 srp_cmd->tag);
+		target_free_tag(ch->sess, cmd);
+		return;
+	}
+
 	rc = srpt_get_desc_tbl(recv_ioctx, send_ioctx, srp_cmd, &dir,
 			       &sg, &sg_cnt, &data_len, ch->imm_data_offset);
 	if (rc) {
@@ -1594,14 +1613,11 @@ static void srpt_handle_cmd(struct srpt_rdma_ch *ch,
 		goto busy;
 	}
 
-	rc = target_init_cmd(cmd, ch->sess, &send_ioctx->sense_data[0],
-			     scsilun_to_int(&srp_cmd->lun), data_len,
-			     TCM_SIMPLE_TAG, dir, TARGET_SCF_ACK_KREF);
-	if (rc != 0) {
-		pr_debug("target_submit_cmd() returned %d for tag %#llx\n", rc,
-			 srp_cmd->tag);
-		goto busy;
-	}
+	/*
+	 * Replace the placeholder length from target_init_cmd(). Direction
+	 * was already set inside srpt_get_desc_tbl() for srpt_alloc_rw_ctxs().
+	 */
+	cmd->data_length = data_len;
 
 	if (target_submit_prep(cmd, srp_cmd->cdb, sg, sg_cnt, NULL, 0, NULL, 0,
 			       GFP_KERNEL))
