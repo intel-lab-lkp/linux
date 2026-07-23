@@ -58,8 +58,10 @@ mux_pinmux_dt_node_to_map(struct pinctrl_dev *pctldev,
 				     num_maps, &num_reserved_maps, group_names,
 				     0, &np_config->name, NULL, 0);
 
-	if (ret)
+	if (ret) {
+		pinctrl_utils_free_map(pctldev, *maps, *num_maps);
 		return ret;
+	}
 
 	ret = pinmux_generic_add_function(pctldev, np_config->name, group_names,
 					  1, function);
