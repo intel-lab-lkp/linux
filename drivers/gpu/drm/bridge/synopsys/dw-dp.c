@@ -1522,6 +1522,54 @@ static ssize_t dw_dp_aux_transfer(struct drm_dp_aux *aux,
  * 2. the minimum hsync should be 9 pixel;
  * 3. the minimum hbp should be 16 pixel;
  */
+static u32 *dw_dp_bridge_atomic_get_output_bus_fmts(struct drm_bridge *bridge,
+						    struct drm_bridge_state *bridge_state,
+						    struct drm_crtc_state *crtc_state,
+						    struct drm_connector_state *conn_state,
+						    unsigned int *num_output_fmts)
+{
+	struct dw_dp *dp = bridge_to_dp(bridge);
+	struct dw_dp_link *link = &dp->link;
+	struct drm_display_info *di = &conn_state->connector->display_info;
+	struct drm_display_mode mode = crtc_state->mode;
+	const struct dw_dp_output_format *fmt;
+	u32 i, j = 0;
+	u32 *output_fmts;
+
+	*num_output_fmts = 0;
+
+	output_fmts = kcalloc(ARRAY_SIZE(dw_dp_output_formats), sizeof(*output_fmts), GFP_KERNEL);
+	if (!output_fmts)
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(dw_dp_output_formats); i++) {
+		fmt = &dw_dp_output_formats[i];
+
+		if (fmt->bpc > conn_state->max_bpc)
+			continue;
+
+		if (!(BIT(fmt->color_format) & di->color_formats))
+			continue;
+
+		if (fmt->color_format == DRM_OUTPUT_COLOR_FORMAT_YCBCR420 &&
+		    !link->vsc_sdp_supported)
+			continue;
+
+		if (fmt->color_format != DRM_OUTPUT_COLOR_FORMAT_YCBCR420 &&
+		    drm_mode_is_420_only(di, &mode))
+			continue;
+
+		if (!dw_dp_bandwidth_ok(dp, &mode, fmt->bpp, link->lanes, link->rate))
+			continue;
+
+		output_fmts[j++] = fmt->bus_format;
+	}
+
+	*num_output_fmts = j;
+
+	return output_fmts;
+}
+
 static int dw_dp_bridge_atomic_check(struct drm_bridge *bridge,
 				     struct drm_bridge_state *bridge_state,
 				     struct drm_crtc_state *crtc_state,
@@ -1750,54 +1798,6 @@ static const struct drm_edid *dw_dp_bridge_edid_read(struct drm_bridge *bridge,
 	phy_power_off(dp->phy);
 
 	return edid;
-}
-
-static u32 *dw_dp_bridge_atomic_get_output_bus_fmts(struct drm_bridge *bridge,
-						    struct drm_bridge_state *bridge_state,
-						    struct drm_crtc_state *crtc_state,
-						    struct drm_connector_state *conn_state,
-						    unsigned int *num_output_fmts)
-{
-	struct dw_dp *dp = bridge_to_dp(bridge);
-	struct dw_dp_link *link = &dp->link;
-	struct drm_display_info *di = &conn_state->connector->display_info;
-	struct drm_display_mode mode = crtc_state->mode;
-	const struct dw_dp_output_format *fmt;
-	u32 i, j = 0;
-	u32 *output_fmts;
-
-	*num_output_fmts = 0;
-
-	output_fmts = kcalloc(ARRAY_SIZE(dw_dp_output_formats), sizeof(*output_fmts), GFP_KERNEL);
-	if (!output_fmts)
-		return NULL;
-
-	for (i = 0; i < ARRAY_SIZE(dw_dp_output_formats); i++) {
-		fmt = &dw_dp_output_formats[i];
-
-		if (fmt->bpc > conn_state->max_bpc)
-			continue;
-
-		if (!(BIT(fmt->color_format) & di->color_formats))
-			continue;
-
-		if (fmt->color_format == DRM_OUTPUT_COLOR_FORMAT_YCBCR420 &&
-		    !link->vsc_sdp_supported)
-			continue;
-
-		if (fmt->color_format != DRM_OUTPUT_COLOR_FORMAT_YCBCR420 &&
-		    drm_mode_is_420_only(di, &mode))
-			continue;
-
-		if (!dw_dp_bandwidth_ok(dp, &mode, fmt->bpp, link->lanes, link->rate))
-			continue;
-
-		output_fmts[j++] = fmt->bus_format;
-	}
-
-	*num_output_fmts = j;
-
-	return output_fmts;
 }
 
 static struct drm_bridge_state *dw_dp_bridge_atomic_duplicate_state(struct drm_bridge *bridge)
