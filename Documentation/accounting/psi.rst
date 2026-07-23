@@ -35,7 +35,8 @@ Pressure interface
 ==================
 
 Pressure information for each resource is exported through the
-respective file in /proc/pressure/ -- cpu, memory, and io.
+respective file in /proc/pressure/ -- cpu, memory, io and, when the
+kernel is built with CONFIG_IRQ_TIME_ACCOUNTING, irq.
 
 The format is as such::
 
@@ -56,6 +57,12 @@ stall state is tracked separately and exported in the "full" averages.
 
 CPU full is undefined at the system level, but has been reported
 since 5.13, so it is set to zero for backward compatibility.
+
+Unlike the other resources, IRQ pressure is tracked only for the
+"full" state, which accounts for CPU time consumed by interrupt
+handling and therefore unavailable to tasks. The "some" state is not
+reported, and writing a "some" trigger to /proc/pressure/irq fails
+with EINVAL.
 
 The ratios (in %) are tracked as recent trends over ten, sixty, and
 three hundred second windows, which gives insight into short term events
@@ -181,8 +188,9 @@ Cgroup2 interface
 In a system with a CONFIG_CGROUPS=y kernel and the cgroup2 filesystem
 mounted, pressure stall information is also tracked for tasks grouped
 into cgroups. Each subdirectory in the cgroupfs mountpoint contains
-cpu.pressure, memory.pressure, and io.pressure files; the format is
-the same as the /proc/pressure/ files.
+cpu.pressure, memory.pressure, io.pressure and, with
+CONFIG_IRQ_TIME_ACCOUNTING, irq.pressure files; the format is the same
+as the /proc/pressure/ files.
 
 Per-cgroup psi monitors can be specified and used the same way as
 system-wide ones.
