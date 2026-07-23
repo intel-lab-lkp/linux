@@ -3667,10 +3667,16 @@ L:	linux-stm32@st-md-mailman.stormreply.com (moderated for non-subscribers)
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32.git stm32-next
+F:	Documentation/arch/arm/stm32/stm32h7r7-overview.rst
+F:	Documentation/devicetree/bindings/arm/stm32/
+F:	Documentation/devicetree/bindings/clock/st,stm32-rcc.yaml
 F:	arch/arm/boot/dts/st/stm32*
 F:	arch/arm/mach-stm32/
 F:	arch/arm64/boot/dts/st/
+F:	drivers/clk/clk-stm32h7rs.c
 F:	drivers/clocksource/armv7m_systick.c
+F:	include/dt-bindings/clock/stm32h7rs-clks.h
+F:	include/dt-bindings/mfd/stm32h7rs-rcc.h
 N:	stm32
 N:	stm
 
