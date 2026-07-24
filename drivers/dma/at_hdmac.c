@@ -1616,6 +1616,13 @@ static int atc_resume(struct dma_chan *chan)
 	return 0;
 }
 
+static void atc_synchronize(struct dma_chan *chan)
+{
+	struct at_dma_chan *atchan = to_at_dma_chan(chan);
+
+	vchan_synchronize(&atchan->vc);
+}
+
 static int atc_terminate_all(struct dma_chan *chan)
 {
 	struct at_dma_chan	*atchan = to_at_dma_chan(chan);
@@ -2042,6 +2049,7 @@ static int __init at_dma_probe(struct platform_device *pdev)
 	atdma->dma_device.device_free_chan_resources = atc_free_chan_resources;
 	atdma->dma_device.device_tx_status = atc_tx_status;
 	atdma->dma_device.device_issue_pending = atc_issue_pending;
+	atdma->dma_device.device_synchronize = atc_synchronize;
 	atdma->dma_device.dev = &pdev->dev;
 
 	/* set prep routines based on capability */
