@@ -25,6 +25,7 @@
 #include <linux/unaligned.h>
 
 #include "nvme.h"
+#include "cdq.h"
 #include "fabrics.h"
 #include <linux/nvme-auth.h>
 
@@ -2665,9 +2666,19 @@ int nvme_disable_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
 	}
 	if (ctrl->quirks & NVME_QUIRK_DELAY_BEFORE_CHK_RDY)
 		msleep(NVME_QUIRK_DELAY_AMOUNT);
-	return nvme_wait_ready(ctrl, NVME_CSTS_RDY, 0,
+	ret =  nvme_wait_ready(ctrl, NVME_CSTS_RDY, 0,
 			       (NVME_CAP_TIMEOUT(ctrl->cap) + 1) / 2, "reset");
+	if (ret)
+		return ret;
+
+	/*
+	 * Delete host side CDQ only. Purposefully NOT sending delete cmd.
+	 * Ctrl should delete on disable.
+	 */
+	nvme_delete_cdqs_host(ctrl);
+	return ret;
 }
+
 EXPORT_SYMBOL_GPL(nvme_disable_ctrl);
 
 int nvme_enable_ctrl(struct nvme_ctrl *ctrl)
@@ -5074,6 +5085,7 @@ static void nvme_free_ctrl(struct device *dev)
 	if (!subsys || ctrl->instance != subsys->instance)
 		ida_free(&nvme_instance_ida, ctrl->instance);
 	nvme_free_cels(ctrl);
+	nvme_free_cdqs(ctrl);
 	nvme_mpath_uninit(ctrl);
 	cleanup_srcu_struct(&ctrl->srcu);
 	nvme_auth_stop(ctrl);
@@ -5120,6 +5132,7 @@ int nvme_init_ctrl(struct nvme_ctrl *ctrl, struct device *dev,
 	mutex_init(&ctrl->scan_lock);
 	INIT_LIST_HEAD(&ctrl->namespaces);
 	xa_init(&ctrl->cels);
+	xa_init(&ctrl->cdqs);
 	ctrl->dev = dev;
 	ctrl->ops = ops;
 	ctrl->quirks = quirks;
