@@ -750,6 +750,41 @@ static bool svm_lbrv2_supported(struct kvm_vcpu *vcpu)
 	       kvm_vcpu_has_mediated_pmu(vcpu);
 }
 
+static bool svm_lbrv2_active(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	return svm_lbrv2_supported(vcpu) &&
+	       (svm->vmcb->save.dbg_extn_cfg & DBG_EXTN_CFG_LBRV2EN);
+}
+
+static void svm_recalc_lbrv2_msr_intercepts(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+	bool intercept = !svm_lbrv2_active(vcpu);
+	int i;
+
+	if (intercept == svm->lbrv2_msrs_intercepted)
+		return;
+
+	for (i = 0; i < 32; i++)
+		svm_set_intercept_for_msr(vcpu, MSR_AMD_SAMP_BR_FROM + i, MSR_TYPE_RW, intercept);
+
+	svm_set_intercept_for_msr(vcpu, MSR_AMD64_LBR_SELECT, MSR_TYPE_RW, intercept);
+
+	/*
+	 * DBG_EXTN_CFG stays permanently intercepted for non-SEV-ES guests so
+	 * KVM can observe LBRV2EN and lazily toggle V_LBR.  SEV-ES+ guests must
+	 * delegate LBR virtualization to the processor (per the APM), where
+	 * intercepting LBR MSRs can be fatal, so toggle it with the rest.  See
+	 * commit b7e4be0a224f ("KVM: SEV-ES: Delegate LBR virtualization to the
+	 * processor").
+	 */
+	if (is_sev_es_guest(vcpu))
+		svm_set_intercept_for_msr(vcpu, MSR_AMD_DBG_EXTN_CFG, MSR_TYPE_RW, intercept);
+
+	svm->lbrv2_msrs_intercepted = intercept;
+}
+
 void svm_vcpu_free_msrpm(void *msrpm)
 {
 	__free_pages(virt_to_page(msrpm), get_order(MSRPM_SIZE));
@@ -805,8 +840,10 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
 	svm_disable_intercept_for_msr(vcpu, MSR_SYSCALL_MASK, MSR_TYPE_RW);
 #endif
 
-	if (lbrv)
+	if (lbrv) {
 		svm_recalc_lbr_msr_intercepts(vcpu);
+		svm_recalc_lbrv2_msr_intercepts(vcpu);
+	}
 
 	if (cpu_feature_enabled(X86_FEATURE_IBPB))
 		svm_set_intercept_for_msr(vcpu, MSR_IA32_PRED_CMD, MSR_TYPE_W,
@@ -874,6 +911,7 @@ void svm_enable_lbrv(struct kvm_vcpu *vcpu)
 {
 	__svm_enable_lbrv(vcpu);
 	svm_recalc_lbr_msr_intercepts(vcpu);
+	svm_recalc_lbrv2_msr_intercepts(vcpu);
 }
 
 static void __svm_disable_lbrv(struct kvm_vcpu *vcpu)
@@ -886,9 +924,11 @@ void svm_update_lbrv(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	bool current_enable_lbrv = svm->vmcb->control.misc_ctl2 & SVM_MISC2_ENABLE_V_LBR;
+
 	bool enable_lbrv = (svm->vmcb->save.dbgctl & DEBUGCTLMSR_LBR) ||
 			    (is_guest_mode(vcpu) && guest_cpu_cap_has(vcpu, X86_FEATURE_LBRV) &&
-			    (svm->nested.ctl.misc_ctl2 & SVM_MISC2_ENABLE_V_LBR));
+			    (svm->nested.ctl.misc_ctl2 & SVM_MISC2_ENABLE_V_LBR)) ||
+			    svm_lbrv2_active(vcpu);
 
 	if (enable_lbrv && !current_enable_lbrv)
 		__svm_enable_lbrv(vcpu);
@@ -902,6 +942,7 @@ void svm_update_lbrv(struct kvm_vcpu *vcpu)
 	 * do, so always recalculate the intercepts here.
 	 */
 	svm_recalc_lbr_msr_intercepts(vcpu);
+	svm_recalc_lbrv2_msr_intercepts(vcpu);
 }
 
 void disable_nmi_singlestep(struct vcpu_svm *svm)
@@ -1347,6 +1388,7 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 
 	svm->x2avic_msrs_intercepted = true;
 	svm->lbr_msrs_intercepted = true;
+	svm->lbrv2_msrs_intercepted = true;
 
 	svm->vmcb01.ptr = page_address(vmcb01_page);
 	svm->vmcb01.pa = __sme_set(page_to_pfn(vmcb01_page) << PAGE_SHIFT);
