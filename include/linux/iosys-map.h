@@ -201,6 +201,42 @@ static inline void iosys_map_set_vaddr_iomem(struct iosys_map *map,
 }
 
 /**
+ * iosys_map_get_vaddr - Gets the virtual address of a system-memory mapping
+ * @map:	The iosys_map structure
+ *
+ * Returns the system-memory address. The caller must ensure the mapping
+ * refers to system memory (not I/O memory).
+ *
+ * Returns:
+ * The system-memory address, or NULL if the mapping is not set or refers
+ * to I/O memory.
+ */
+static inline void *iosys_map_get_vaddr(const struct iosys_map *map)
+{
+	if (WARN_ON(map->is_iomem))
+		return NULL;
+	return map->vaddr;
+}
+
+/**
+ * iosys_map_get_vaddr_iomem - Gets the virtual address of an I/O-memory mapping
+ * @map:	The iosys_map structure
+ *
+ * Returns the I/O-memory address. The caller must ensure the mapping
+ * refers to I/O memory (not system memory).
+ *
+ * Returns:
+ * The I/O-memory address, or NULL if the mapping is not set or refers
+ * to system memory.
+ */
+static inline void __iomem *iosys_map_get_vaddr_iomem(const struct iosys_map *map)
+{
+	if (WARN_ON(!map->is_iomem))
+		return NULL;
+	return map->vaddr_iomem;
+}
+
+/**
  * iosys_map_is_equal - Compares two iosys mapping structures for equality
  * @lhs:	The iosys_map structure
  * @rhs:	A iosys_map structure to compare with
