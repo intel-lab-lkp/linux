@@ -72,6 +72,12 @@ fi
 infile="$1"
 outfile="$2"
 
+is_x32=
+
+if [[ "$abis" == *"x32"* ]]; then
+	is_x32=1
+fi
+
 guard=_UAPI_ASM_$(basename "$outfile" |
 	sed -e 'y/abcdefghijklmnopqrstuvwxyz/ABCDEFGHIJKLMNOPQRSTUVWXYZ/' \
 	-e 's/[^A-Z0-9_]/_/g' -e 's/__/_/g')
@@ -116,10 +122,32 @@ gen_hdr() {
 
 emit_start_guard > $outfile
 
-gen_hdr $infile >> $outfile
+# x32 has a special ordering. We need to get first the common numbers from x86
+# table, then the common numbers from scripts/syscall_common.tbl and finally the
+# x32 numbers
+if [ -n "$is_x32" ]; then
 
-if [ -n "$common_tbl" ]; then
-	gen_hdr $COMMON_TBL_PATH  >> "$outfile"
+	abis="${abis//x32|/}"
+	abis="${abis//|x32/}"
+	abis="${abis//x32/}"
+
+	if [[ $abis != "()" ]]; then
+		gen_hdr $infile >> $outfile
+
+		if [ -n "$common_tbl" ]; then
+			gen_hdr $COMMON_TBL_PATH  >> "$outfile"
+		fi
+	fi
+
+	abis="(x32)"
+
+	gen_hdr $infile >> "$outfile"
+else
+	gen_hdr $infile >> $outfile
+
+	if [ -n "$common_tbl" ]; then
+		gen_hdr $COMMON_TBL_PATH  >> "$outfile"
+	fi
 fi
 
 emit_nr $(($max + 1)) $prefix >> $outfile
