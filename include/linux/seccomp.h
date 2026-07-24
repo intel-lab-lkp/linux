@@ -16,6 +16,11 @@
 #define SECCOMP_NOTIFY_ADDFD_SIZE_VER0 24
 #define SECCOMP_NOTIFY_ADDFD_SIZE_LATEST SECCOMP_NOTIFY_ADDFD_SIZE_VER0
 
+/* sizeof() the first published struct seccomp_notif_pin_install */
+#define SECCOMP_NOTIFY_PIN_INSTALL_SIZE_VER0 32		/* up to @size */
+#define SECCOMP_NOTIFY_PIN_INSTALL_SIZE_VER1 40		/* adds @offset */
+#define SECCOMP_NOTIFY_PIN_INSTALL_SIZE_LATEST SECCOMP_NOTIFY_PIN_INSTALL_SIZE_VER1
+
 #ifdef CONFIG_SECCOMP
 
 #include <linux/thread_info.h>
