@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/overflow.h>
 #include <linux/percpu.h>
 #include <net/dst.h>
 #include <net/ip.h>
@@ -582,6 +583,9 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 	daddr = (xfrm_address_t *)(skb_network_header(skb) +
 				   XFRM_SPI_SKB_CB(skb)->daddroff);
 	do {
+		bool saturated;
+		u64 bytes, len;
+
 		sp = skb_sec_path(skb);
 
 		if (sp->len == XFRM_MAX_DEPTH) {
@@ -689,9 +693,23 @@ resume:
 
 		xfrm_replay_advance(x, seq);
 
-		x->curlft.bytes += skb->len;
+		len = skb->len;
+		saturated = check_add_overflow(x->curlft.bytes, len, &bytes);
+		if (saturated || bytes == XFRM_INF) {
+			bytes = XFRM_INF - 1;
+			saturated = true;
+		}
+		x->curlft.bytes = bytes;
 		x->curlft.packets++;
 		x->lastused = ktime_get_real_seconds();
+
+		/* IPComp may expand skb->len during the input transform. */
+		if (x->lft.hard_byte_limit != XFRM_INF &&
+		    (saturated || bytes > x->lft.hard_byte_limit)) {
+			xfrm_state_check_expire(x);
+			XFRM_INC_STATS(net, LINUX_MIB_XFRMINSTATEEXPIRED);
+			goto drop_unlock;
+		}
 
 		spin_unlock(&x->lock);
 
