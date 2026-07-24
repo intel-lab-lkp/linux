@@ -810,9 +810,6 @@ static int riscv_iommu_iodir_set_mode(struct riscv_iommu_device *iommu,
 	return 0;
 }
 
-#define iommu_domain_to_riscv(iommu_domain) \
-	container_of(iommu_domain, struct riscv_iommu_domain, domain)
-
 /*
  * Linkage between an iommu_domain and attached devices.
  *
@@ -1336,6 +1333,8 @@ static struct iommu_domain *riscv_iommu_alloc_paging_domain(struct device *dev)
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
+	mutex_init(&domain->mutex);
+
 	INIT_LIST_HEAD_RCU(&domain->bonds);
 	spin_lock_init(&domain->lock);
 	/*
@@ -1448,6 +1447,13 @@ static struct iommu_device *riscv_iommu_probe_device(struct device *dev)
 	info = kzalloc_obj(*info);
 	if (!info)
 		return ERR_PTR(-ENOMEM);
+
+	/*
+	 * Set info->dev before creating the irqdomain: riscv_iommu_ir_irq_domain_create()
+	 * publishes the irqdomain via dev_set_msi_domain(), making the .alloc callback
+	 * (which dereferences info->dev) reachable.
+	 */
+	info->dev = dev;
 
 	if (imsic_enabled()) {
 		irqdomain = riscv_iommu_ir_irq_domain_create(dev, info);
