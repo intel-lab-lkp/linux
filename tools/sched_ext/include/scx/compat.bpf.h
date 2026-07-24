@@ -421,6 +421,24 @@ static inline void scx_bpf_dsq_reenq(u64 dsq_id, u64 reenq_flags)
 }
 
 /*
+ * v7.3: scx_bpf_cidperf_set() now returns 0 or -errno - -EACCES when a
+ * sub-sched lacks SCX_CAP_PERF on the cid and the write was denied. Pre-gate
+ * kernels always apply the write. Drop the wrapper and move the decl to
+ * common.bpf.h after v7.6.
+ */
+s32 scx_bpf_cidperf_set___v2___compat(s32 cid, u32 perf) __ksym __weak;
+void scx_bpf_cidperf_set___compat(s32 cid, u32 perf) __ksym __weak;
+
+static inline s32 scx_bpf_cidperf_set(s32 cid, u32 perf)
+{
+	if (bpf_ksym_exists(scx_bpf_cidperf_set___v2___compat))
+		return scx_bpf_cidperf_set___v2___compat(cid, perf);
+
+	scx_bpf_cidperf_set___compat(cid, perf);
+	return 0;
+}
+
+/*
  * Define sched_ext_ops. See compat.h::SCX_OPS_OPEN() for how backward
  * compatibility is handled (this macro can be expanded to emit multiple
  * variants for incompatible op changes; SCX_OPS_OPEN() handles purely
