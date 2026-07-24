@@ -29,9 +29,11 @@ static int __init timer_get_base_and_rate(struct device_node *np,
 
 	/*
 	 * Reset the timer if the reset control is available, wiping
-	 * out the state the firmware may have left it
+	 * out the state the firmware may have left it.
+	 * Use array variant to handle multiple resets (e.g., timer
+	 * and APB interface resets) if specified in the device tree.
 	 */
-	rstc = of_reset_control_get(np, NULL);
+	rstc = of_reset_control_array_get_optional_exclusive(np);
 	if (!IS_ERR(rstc)) {
 		reset_control_assert(rstc);
 		reset_control_deassert(rstc);
