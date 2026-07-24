@@ -1777,10 +1777,10 @@ void blk_throtl_cancel_bios(struct gendisk *disk)
 	if (!blk_throtl_activated(q))
 		return;
 
-	spin_lock_irq(&q->queue_lock);
-	spin_lock(&td->lock);
+	mutex_lock(&q->blkcg_mutex);
+	spin_lock_irq(&td->lock);
 	/*
-	 * queue_lock is held, rcu lock is not needed here technically.
+	 * blkcg_mutex is held, rcu lock is not needed here technically.
 	 * However, rcu lock is still held to emphasize that following
 	 * path need RCU protection and to prevent warning from lockdep.
 	 */
@@ -1797,8 +1797,8 @@ void blk_throtl_cancel_bios(struct gendisk *disk)
 		tg_cancel_writeback_bios(blkg_to_tg(blkg), cancel_bios);
 	}
 	rcu_read_unlock();
-	spin_unlock(&td->lock);
-	spin_unlock_irq(&q->queue_lock);
+	spin_unlock_irq(&td->lock);
+	mutex_unlock(&q->blkcg_mutex);
 
 	for (rw = READ; rw <= WRITE; rw++) {
 		struct bio *bio;

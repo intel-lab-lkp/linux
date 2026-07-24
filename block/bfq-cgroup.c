@@ -426,7 +426,7 @@ static void bfqg_stats_xfer_dead(struct bfq_group *bfqg)
 
 	parent = bfqg_parent(bfqg);
 
-	lockdep_assert_held(&bfqg_to_blkg(bfqg)->q->queue_lock);
+	lockdep_assert_held(&bfqg_to_blkg(bfqg)->q->blkcg_mutex);
 
 	if (unlikely(!parent))
 		return;
@@ -874,7 +874,7 @@ static void bfq_reparent_active_queues(struct bfq_data *bfqd,
  *		    and reparent its children entities.
  * @pd: descriptor of the policy going offline.
  *
- * blkio already grabs the queue_lock for us, so no need to use
+ * blkio already grabs the blkcg_mutex for us, so no need to use
  * RCU-based magic
  */
 static void bfq_pd_offline(struct blkg_policy_data *pd)
@@ -947,8 +947,7 @@ void bfq_end_wr_async(struct bfq_data *bfqd)
 	struct blkcg_gq *blkg;
 
 	mutex_lock(&q->blkcg_mutex);
-	spin_lock_irq(&q->queue_lock);
-	spin_lock(&bfqd->lock);
+	spin_lock_irq(&bfqd->lock);
 
 	list_for_each_entry(blkg, &q->blkg_list, q_node) {
 		struct bfq_group *bfqg = blkg_to_bfqg(blkg);
@@ -957,8 +956,7 @@ void bfq_end_wr_async(struct bfq_data *bfqd)
 	}
 	bfq_end_wr_async_queues(bfqd, bfqd->root_group);
 
-	spin_unlock(&bfqd->lock);
-	spin_unlock_irq(&q->queue_lock);
+	spin_unlock_irq(&bfqd->lock);
 	mutex_unlock(&q->blkcg_mutex);
 }
 
