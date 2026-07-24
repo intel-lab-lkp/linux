@@ -50,7 +50,21 @@ struct cdq_nvme_queue {
 
 	/* How far the CDQ was consumed by the host */
 	u32 host_head;
+
+	/*
+	 * Value sent by the in-flight set-feature cmd
+	 * Differs from cntl_head until set-feature cmd completes
+	 */
+	u32 sent_head;
+
+	/* Last acked CDQ head update. Trails host_head.*/
+	u32 cntl_head;
+
 	u8 phase_bit;
+
+	/* sf_* controlls if the feature set cmd is done or is still inflight */
+	spinlock_t sf_lock;
+	bool sf_inflight;
 
 	/* Manage refs for read FD and controller xarray */
 	struct kref ref;

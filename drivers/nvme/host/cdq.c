@@ -202,6 +202,90 @@ static size_t nvme_advance_cdq(struct cdq_nvme_queue *cdq, size_t max_nrbyte)
 	return target_nbyte;
 }
 
+static void nvme_submit_sfcmd_cdq(struct cdq_nvme_queue *cdq);
+
+/* updates cntl_head, exits sf_inflight and re-arms if needed */
+static enum rq_end_io_ret nvme_endio_sfcmd_cdq(struct request *rq,
+					       blk_status_t status,
+					       const struct io_comp_batch *iob)
+{
+	struct cdq_nvme_queue *cdq = rq->end_io_data;
+	unsigned long flags;
+	bool rearm = false;
+
+	WRITE_ONCE(cdq->cntl_head, cdq->sent_head);
+	blk_mq_free_request(rq);
+
+	spin_lock_irqsave(&cdq->sf_lock, flags);
+	cdq->sf_inflight = false;
+	/* cntl_head was just written above, plain read under the lock. */
+	if (READ_ONCE(cdq->host_head) != cdq->cntl_head) {
+		cdq->sf_inflight = true;
+		rearm = true;
+	}
+	spin_unlock_irqrestore(&cdq->sf_lock, flags);
+
+	/* Re-arm (takes its own ref) before dropping ours, so cdq stays alive. */
+	if (rearm)
+		nvme_submit_sfcmd_cdq(cdq);
+
+	nvme_cdq_put(cdq);
+	return RQ_END_IO_NONE;
+}
+
+/* Inform ctrl that head as advance by sending a CDQ set-feature command*/
+static void nvme_submit_sfcmd_cdq(struct cdq_nvme_queue *cdq)
+{
+	struct nvme_command c = { };
+	struct request *rq;
+	unsigned long flags;
+	u32 head = READ_ONCE(cdq->host_head);
+
+	c.features.opcode = nvme_admin_set_features;
+	c.features.fid = cpu_to_le32(NVME_FEAT_CDQ);
+	c.features.dword11 = cpu_to_le32(cdq->id & NVME_FEAT_CDQ_ID_MASK);
+	c.features.dword12 = cpu_to_le32(head);
+
+	rq = blk_mq_alloc_request(cdq->ctrl->admin_q, nvme_req_op(&c),
+				  BLK_MQ_REQ_NOWAIT);
+	if (IS_ERR(rq)) {
+		/*
+		 * No admin tag right now and we cannot sleep. Drop the slot; the
+		 * next read() will re-arm.
+		 */
+		spin_lock_irqsave(&cdq->sf_lock, flags);
+		cdq->sf_inflight = false;
+		spin_unlock_irqrestore(&cdq->sf_lock, flags);
+		return;
+	}
+
+	cdq->sent_head = head;
+	nvme_init_request(rq, &c);
+	rq->end_io = nvme_endio_sfcmd_cdq;
+	rq->end_io_data = cdq;
+
+	/* Pin cdq for the lifetime of the command */
+	nvme_cdq_get(cdq);
+	blk_execute_rq_nowait(rq, false);
+}
+
+/* submit set feature if none are in-flight */
+static void nvme_kick_cdq(struct cdq_nvme_queue *cdq)
+{
+	unsigned long flags;
+	bool submit = false;
+
+	spin_lock_irqsave(&cdq->sf_lock, flags);
+	if (!cdq->sf_inflight) {
+		cdq->sf_inflight = true;
+		submit = true;
+	}
+	spin_unlock_irqrestore(&cdq->sf_lock, flags);
+
+	if (submit)
+		nvme_submit_sfcmd_cdq(cdq);
+}
+
 static ssize_t nvme_traversecopy_cdq(struct cdq_nvme_queue *cdq, size_t max_nrbyte,
 				   void *priv_data)
 {
@@ -231,6 +315,13 @@ static ssize_t nvme_traversecopy_cdq(struct cdq_nvme_queue *cdq, size_t max_nrby
 	}
 
 out:
+	/*
+	 * host_head advanced past consumed entries; tell the controller its head
+	 * can move up. Decoupled from this read: the set-feature admin
+	 * round-trip must not delay the data path.
+	 */
+	if (copied_nbyte)
+		nvme_kick_cdq(cdq);
 	return copied_nbyte;
 
 err_out:
@@ -416,6 +507,7 @@ int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id)
 	cdq->mc_id = mc_id;
 	cdq->ctrl = ctrl;
 	cdq->size_nbyte = (u32)size_nbyte;
+	spin_lock_init(&cdq->sf_lock);
 
 	ret = nvme_create_cdq_backing(cdq);
 	if (ret) {
