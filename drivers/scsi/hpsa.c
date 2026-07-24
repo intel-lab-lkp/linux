@@ -9055,7 +9055,6 @@ static void hpsa_remove_one(struct pci_dev *pdev)
 	cancel_delayed_work_sync(&h->rescan_ctlr_work);
 	cancel_delayed_work_sync(&h->event_monitor_work);
 	destroy_workqueue(h->rescan_ctlr_wq);
-	destroy_workqueue(h->resubmit_wq);
 	destroy_workqueue(h->monitor_ctlr_wq);
 
 	hpsa_delete_sas_host(h);
@@ -9071,6 +9070,7 @@ static void hpsa_remove_one(struct pci_dev *pdev)
 	/* includes hpsa_free_irqs - init_one 4 */
 	/* includes hpsa_disable_interrupt_mode - pci_init 2 */
 	__hpsa_shutdown(pdev);
+	destroy_workqueue(h->resubmit_wq);
 
 	hpsa_free_device_info(h);		/* scan */
 
