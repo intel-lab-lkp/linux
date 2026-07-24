@@ -443,7 +443,7 @@ static ssize_t zfcp_sysfs_unit_add_store(struct device *dev,
 {
 	struct zfcp_port *port = container_of(dev, struct zfcp_port, dev);
 	struct zfcp_adapter *adapter = port->adapter;
-	u64 fcp_lun;
+	u64 fcp_lun = 0x0ULL;
 	int retval = -EINVAL;
 
 	if (kstrtoull(buf, 0, (unsigned long long *)&fcp_lun)) {
