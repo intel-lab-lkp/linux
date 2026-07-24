@@ -28,7 +28,7 @@
 #include "vmwgfx_bo.h"
 #include "vmwgfx_drv.h"
 
-#include "drm/drm_prime.h"
+#include "drm/drm_gem.h"
 #include "drm/drm_gem_ttm_helper.h"
 
 #include <linux/debugfs.h>
@@ -76,7 +76,7 @@ static struct sg_table *vmw_gem_object_get_sg_table(struct drm_gem_object *obj)
 	if (vmw_tt->vsgt.sgt)
 		return vmw_tt->vsgt.sgt;
 
-	return drm_prime_pages_to_sg(obj->dev, vmw_tt->dma_ttm.pages, vmw_tt->dma_ttm.num_pages);
+	return drm_pages_to_sg(obj->dev, vmw_tt->dma_ttm.pages, vmw_tt->dma_ttm.num_pages);
 }
 
 static int vmw_gem_vmap(struct drm_gem_object *obj, struct iosys_map *map)

@@ -23,7 +23,7 @@ struct sg_table *msm_gem_prime_get_sg_table(struct drm_gem_object *obj)
 	if (WARN_ON(!msm_obj->pages))  /* should have already pinned! */
 		return ERR_PTR(-ENOMEM);
 
-	return drm_prime_pages_to_sg(obj->dev, msm_obj->pages, npages);
+	return drm_pages_to_sg(obj->dev, msm_obj->pages, npages);
 }
 
 int msm_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)

@@ -3,6 +3,7 @@
  * Copyright (C) 2014-2018 Etnaviv Project
  */
 
+#include <drm/drm_gem.h>
 #include <drm/drm_prime.h>
 #include <linux/dma-buf.h>
 #include <linux/module.h>
@@ -22,7 +23,7 @@ struct sg_table *etnaviv_gem_prime_get_sg_table(struct drm_gem_object *obj)
 	if (WARN_ON(!etnaviv_obj->pages))  /* should have already pinned! */
 		return ERR_PTR(-EINVAL);
 
-	return drm_prime_pages_to_sg(obj->dev, etnaviv_obj->pages, npages);
+	return drm_pages_to_sg(obj->dev, etnaviv_obj->pages, npages);
 }
 
 int etnaviv_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)

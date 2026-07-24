@@ -836,44 +836,6 @@ static const struct dma_buf_ops drm_gem_prime_dmabuf_ops =  {
 };
 
 /**
- * drm_prime_pages_to_sg - converts a page array into an sg list
- * @dev: DRM device
- * @pages: pointer to the array of page pointers to convert
- * @nr_pages: length of the page vector
- *
- * This helper creates an sg table object from a set of pages
- * the driver is responsible for mapping the pages into the
- * importers address space for use with dma_buf itself.
- *
- * This is useful for implementing &drm_gem_object_funcs.get_sg_table.
- */
-struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
-				       struct page **pages, unsigned int nr_pages)
-{
-	struct sg_table *sg;
-	size_t max_segment = 0;
-	int err;
-
-	sg = kmalloc_obj(struct sg_table);
-	if (!sg)
-		return ERR_PTR(-ENOMEM);
-
-	if (dev)
-		max_segment = dma_max_mapping_size(drm_dev_dma_dev(dev));
-	if (max_segment == 0)
-		max_segment = UINT_MAX;
-	err = sg_alloc_table_from_pages_segment(sg, pages, nr_pages, 0,
-						(unsigned long)nr_pages << PAGE_SHIFT,
-						max_segment, GFP_KERNEL);
-	if (err) {
-		kfree(sg);
-		sg = ERR_PTR(err);
-	}
-	return sg;
-}
-EXPORT_SYMBOL(drm_prime_pages_to_sg);
-
-/**
  * drm_prime_get_contiguous_size - returns the contiguous size of the buffer
  * @sgt: sg_table describing the buffer to check
  *

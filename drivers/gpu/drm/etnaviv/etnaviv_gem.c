@@ -3,7 +3,6 @@
  * Copyright (C) 2015-2018 Etnaviv Project
  */
 
-#include <drm/drm_prime.h>
 #include <drm/drm_print.h>
 #include <linux/dma-mapping.h>
 #include <linux/shmem_fs.h>
@@ -104,7 +103,7 @@ struct page **etnaviv_gem_get_pages(struct etnaviv_gem_object *etnaviv_obj)
 		unsigned int npages = etnaviv_obj->base.size >> PAGE_SHIFT;
 		struct sg_table *sgt;
 
-		sgt = drm_prime_pages_to_sg(dev, etnaviv_obj->pages, npages);
+		sgt = drm_pages_to_sg(dev, etnaviv_obj->pages, npages);
 		if (IS_ERR(sgt)) {
 			dev_err(dev->dev, "failed to allocate sgt: %ld\n",
 				PTR_ERR(sgt));

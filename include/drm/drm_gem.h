@@ -155,7 +155,7 @@ struct drm_gem_object_funcs {
 	 * here cannot be used for sg tables pointing at driver private memory
 	 * ranges.
 	 *
-	 * See also drm_prime_pages_to_sg().
+	 * See also drm_pages_to_sg().
 	 */
 	struct sg_table *(*get_sg_table)(struct drm_gem_object *obj);
 
@@ -588,6 +588,9 @@ int drm_gem_create_mmap_offset_size(struct drm_gem_object *obj, size_t size);
 struct page **drm_gem_get_pages(struct drm_gem_object *obj);
 void drm_gem_put_pages(struct drm_gem_object *obj, struct page **pages,
 		bool dirty, bool accessed);
+
+struct sg_table *drm_pages_to_sg(struct drm_device *dev,
+				 struct page **pages, unsigned int nr_pages);
 
 void drm_gem_lock(struct drm_gem_object *obj);
 void drm_gem_unlock(struct drm_gem_object *obj);

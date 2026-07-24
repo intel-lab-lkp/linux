@@ -32,8 +32,8 @@ struct sg_table *nouveau_gem_prime_get_sg_table(struct drm_gem_object *obj)
 {
 	struct nouveau_bo *nvbo = nouveau_gem_object(obj);
 
-	return drm_prime_pages_to_sg(obj->dev, nvbo->bo.ttm->pages,
-				     nvbo->bo.ttm->num_pages);
+	return drm_pages_to_sg(obj->dev, nvbo->bo.ttm->pages,
+			       nvbo->bo.ttm->num_pages);
 }
 
 struct drm_gem_object *nouveau_gem_prime_import_sg_table(struct drm_device *dev,

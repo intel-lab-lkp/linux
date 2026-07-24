@@ -9,7 +9,6 @@
 #include <drm/drm_dumb_buffers.h>
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
-#include <drm/drm_prime.h>
 #include <drm/drm_print.h>
 
 #include "lsdc_drv.h"
@@ -51,7 +50,7 @@ static struct sg_table *lsdc_gem_prime_get_sg_table(struct drm_gem_object *obj)
 		return ERR_PTR(-ENOMEM);
 	}
 
-	return drm_prime_pages_to_sg(obj->dev, tt->pages, tt->num_pages);
+	return drm_pages_to_sg(obj->dev, tt->pages, tt->num_pages);
 }
 
 static void lsdc_gem_object_free(struct drm_gem_object *obj)

@@ -118,9 +118,9 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 
 	switch (bo->ttm.resource->mem_type) {
 	case XE_PL_TT:
-		sgt = drm_prime_pages_to_sg(obj->dev,
-					    bo->ttm.ttm->pages,
-					    obj->size >> PAGE_SHIFT);
+		sgt = drm_pages_to_sg(obj->dev,
+				      bo->ttm.ttm->pages,
+				      obj->size >> PAGE_SHIFT);
 		if (IS_ERR(sgt))
 			return sgt;
 

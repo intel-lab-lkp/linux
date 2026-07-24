@@ -26,6 +26,7 @@
 
 #include <linux/dma-buf.h>
 
+#include <drm/drm_gem.h>
 #include <drm/drm_prime.h>
 #include <drm/radeon_drm.h>
 
@@ -38,8 +39,8 @@ struct sg_table *radeon_gem_prime_get_sg_table(struct drm_gem_object *obj)
 {
 	struct radeon_bo *bo = gem_to_radeon_bo(obj);
 
-	return drm_prime_pages_to_sg(obj->dev, bo->tbo.ttm->pages,
-				     bo->tbo.ttm->num_pages);
+	return drm_pages_to_sg(obj->dev, bo->tbo.ttm->pages,
+			       bo->tbo.ttm->num_pages);
 }
 
 struct drm_gem_object *radeon_gem_prime_import_sg_table(struct drm_device *dev,

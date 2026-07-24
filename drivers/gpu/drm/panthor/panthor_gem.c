@@ -321,8 +321,8 @@ panthor_gem_dev_map_get_sgt_locked(struct panthor_gem_object *bo)
 	if (ret)
 		return ERR_PTR(ret);
 
-	sgt = drm_prime_pages_to_sg(bo->base.dev, bo->backing.pages,
-				    bo->base.size >> PAGE_SHIFT);
+	sgt = drm_pages_to_sg(bo->base.dev, bo->backing.pages,
+			      bo->base.size >> PAGE_SHIFT);
 	if (IS_ERR(sgt))
 		return sgt;
 
@@ -702,7 +702,7 @@ static struct sg_table *panthor_gem_get_sg_table(struct drm_gem_object *obj)
 	drm_WARN_ON_ONCE(obj->dev, !bo->backing.pages);
 	drm_WARN_ON_ONCE(obj->dev, !refcount_read(&bo->backing.pin_count));
 
-	return drm_prime_pages_to_sg(obj->dev, bo->backing.pages, obj->size >> PAGE_SHIFT);
+	return drm_pages_to_sg(obj->dev, bo->backing.pages, obj->size >> PAGE_SHIFT);
 }
 
 static int panthor_gem_vmap_locked(struct drm_gem_object *obj,
