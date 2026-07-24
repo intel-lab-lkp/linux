@@ -503,17 +503,16 @@ static inline void bio_release_pages(struct bio *bio, bool mark_dirty)
 	disk_devt((bio)->bi_bdev->bd_disk)
 
 #ifdef CONFIG_BLK_CGROUP
-void bio_associate_blkg(struct bio *bio);
-void bio_associate_blkg_from_css(struct bio *bio,
+bool bio_associate_blkg(struct bio *bio);
+bool bio_associate_blkg_from_css(struct bio *bio,
 				 struct cgroup_subsys_state *css);
 void bio_clone_blkg_association(struct bio *dst, struct bio *src);
 void bio_disassociate_blkg(struct bio *bio);
 void blkcg_punt_bio_submit(struct bio *bio);
 #else	/* CONFIG_BLK_CGROUP */
-static inline void bio_associate_blkg(struct bio *bio) { }
-static inline void bio_associate_blkg_from_css(struct bio *bio,
-					       struct cgroup_subsys_state *css)
-{ }
+static inline bool bio_associate_blkg(struct bio *bio) { return true; }
+static inline bool bio_associate_blkg_from_css(struct bio *bio,
+					       struct cgroup_subsys_state *css) { return true; }
 static inline void bio_clone_blkg_association(struct bio *dst,
 					      struct bio *src) { }
 static inline void bio_disassociate_blkg(struct bio *bio) { }

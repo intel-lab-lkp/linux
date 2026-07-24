@@ -832,8 +832,16 @@ void submit_bio_noacct(struct bio *bio)
 	 * rely on bio->bi_blkg matching the queue of bio->bi_bdev.
 	 */
 #ifdef CONFIG_BLK_CGROUP
-	if (!bio->bi_blkg || bio->bi_blkg->q != q)
-		bio_associate_blkg(bio);
+	if (!bio->bi_blkg || bio->bi_blkg->q != q) {
+		/*
+		 * For REQ_NOWAIT, do not sleep to create a new blkg: fail the
+		 * bio so the submitter retries once the blkg exists.
+		 */
+		if (!bio_associate_blkg(bio)) {
+			bio_endio_status(bio, BLK_STS_AGAIN);
+			return;
+		}
+	}
 #endif
 
 	/*
@@ -979,8 +987,13 @@ void submit_bio(struct bio *bio)
 	 * bio->bi_blkg, so associate the blkg (for new I/O, the first time) before
 	 * it runs.  This is the sleepable entry point for new I/O; remapped bios
 	 * that reach submit_bio_noacct() directly are reassociated there.
+	 * For REQ_NOWAIT I/O, fail the bio instead of sleeping if a new blkg
+	 * cannot be allocated.
 	 */
-	bio_associate_blkg(bio);
+	if (!bio_associate_blkg(bio)) {
+		bio_endio_status(bio, BLK_STS_AGAIN);
+		return;
+	}
 	bio_set_ioprio(bio);
 	submit_bio_noacct(bio);
 }

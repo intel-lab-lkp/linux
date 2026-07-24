@@ -30,6 +30,7 @@
 #include <linux/resume_user_mode.h>
 #include <linux/psi.h>
 #include <linux/part_stat.h>
+#include <linux/preempt.h>
 #include "blk.h"
 #include "blk-cgroup.h"
 #include "blk-ioprio.h"
@@ -1984,6 +1985,30 @@ static inline struct blkcg_gq *blkg_tryget_closest(struct bio *bio,
 	if (blkg)
 		return blkg;
 
+	if (bio->bi_opf & REQ_NOWAIT) {
+		int ret;
+
+		/*
+		 * Nowait callers must not sleep on the mutex nor allocate with
+		 * sleeping GFPs.  Trylock the mutex and create the missing blkg
+		 * atomically; if the mutex is contended, the caller is atomic,
+		 * or blkg allocation fails, return NULL so the caller can fail
+		 * the bio and let the submitter retry once the blkg exists.
+		 */
+		if (!preemptible() || !mutex_trylock(&q->blkcg_mutex))
+			return NULL;
+
+		ret = blkg_lookup_create(blkcg, bio->bi_bdev->bd_disk,
+					 GFP_ATOMIC, &blkg);
+		if (ret)
+			blkg = NULL;
+		else if (blkg)
+			blkg = blkg_lookup_tryget(blkg);
+		mutex_unlock(&q->blkcg_mutex);
+
+		return blkg;
+	}
+
 	/*
 	 * Fast path failed, we're probably issuing IO in this cgroup the first
 	 * time, hold lock to create new blkg.
@@ -2010,19 +2035,33 @@ static inline struct blkcg_gq *blkg_tryget_closest(struct bio *bio,
  *
  * A reference will be taken on the blkg and will be released when @bio is
  * freed.
+ *
+ * If @bio is REQ_NOWAIT and associating requires creating a new blkg, this
+ * function does not sleep; when the blkg cannot be created atomically it
+ * returns %false with @bio left unassociated so the caller can fail the I/O.
+ *
+ * Return: %true if @bio is associated with a blkg, %false on nowait failure.
  */
-void bio_associate_blkg_from_css(struct bio *bio,
+bool bio_associate_blkg_from_css(struct bio *bio,
 				 struct cgroup_subsys_state *css)
 {
-	if (bio->bi_blkg)
+	struct blkcg_gq *blkg;
+
+	if (bio->bi_blkg) {
 		blkg_put(bio->bi_blkg);
+		bio->bi_blkg = NULL;
+	}
 
 	if (css && css->parent) {
-		bio->bi_blkg = blkg_tryget_closest(bio, css);
+		blkg = blkg_tryget_closest(bio, css);
+		if (!blkg)
+			return false;
+		bio->bi_blkg = blkg;
 	} else {
 		blkg_get(bdev_get_queue(bio->bi_bdev)->root_blkg);
 		bio->bi_blkg = bdev_get_queue(bio->bi_bdev)->root_blkg;
 	}
+	return true;
 }
 EXPORT_SYMBOL_GPL(bio_associate_blkg_from_css);
 
@@ -2030,32 +2069,38 @@ EXPORT_SYMBOL_GPL(bio_associate_blkg_from_css);
  * bio_associate_blkg - associate a bio with a blkg
  * @bio: target bio
  *
- * Associate @bio with the blkg found from the bio's css and request_queue.
- * If one is not found, bio_lookup_blkg() creates the blkg.  If a blkg is
- * already associated, the css is reused and association redone as the
- * request_queue may have changed.
+ * Associate @bio with the blkg found from the bio's css and request_queue,
+ * creating it if necessary.  If a blkg is already associated, the css is
+ * reused and association redone as the request_queue may have changed.
+ *
+ * If @bio is REQ_NOWAIT, association does not sleep; if the blkg cannot be
+ * created without sleeping, %false is returned with @bio left unassociated.
+ *
+ * Return: %true on success, %false on nowait failure.
  */
-void bio_associate_blkg(struct bio *bio)
+bool bio_associate_blkg(struct bio *bio)
 {
 	struct cgroup_subsys_state *css;
+	bool ret;
 
 	if (blk_op_is_passthrough(bio->bi_opf))
-		return;
+		return true;
 
 	if (bio->bi_blkg) {
 		css = bio_blkcg_css(bio);
-		bio_associate_blkg_from_css(bio, css);
-	} else {
-		rcu_read_lock();
-		css = blkcg_css();
-		if (!css_tryget_online(css))
-			css = NULL;
-		rcu_read_unlock();
-
-		bio_associate_blkg_from_css(bio, css);
-		if (css)
-			css_put(css);
+		return bio_associate_blkg_from_css(bio, css);
 	}
+
+	rcu_read_lock();
+	css = blkcg_css();
+	if (!css_tryget_online(css))
+		css = NULL;
+	rcu_read_unlock();
+
+	ret = bio_associate_blkg_from_css(bio, css);
+	if (css)
+		css_put(css);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bio_associate_blkg);
 
