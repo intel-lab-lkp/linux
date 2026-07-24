@@ -6,6 +6,7 @@
 
 #ifdef CONFIG_X86_32
 #define __NR_seccomp_sigreturn		__NR_sigreturn
+#define __NR_seccomp_rt_sigreturn	__NR_rt_sigreturn
 #endif
 
 #ifdef CONFIG_COMPAT
@@ -14,12 +15,18 @@
 #define __NR_seccomp_write_32		__NR_ia32_write
 #define __NR_seccomp_exit_32		__NR_ia32_exit
 #define __NR_seccomp_sigreturn_32	__NR_ia32_sigreturn
+#define __NR_seccomp_rt_sigreturn_32	__NR_ia32_rt_sigreturn
+#define __NR_seccomp_clone_32		__NR_ia32_clone
+#define __NR_seccomp_clone3_32		__NR_ia32_clone3
+#define __NR_seccomp_fork_32		__NR_ia32_fork
+#define __NR_seccomp_vfork_32		__NR_ia32_vfork
 #endif
 
 #ifdef CONFIG_X86_64
 # define SECCOMP_ARCH_NATIVE		AUDIT_ARCH_X86_64
 # define SECCOMP_ARCH_NATIVE_NR		NR_syscalls
 # define SECCOMP_ARCH_NATIVE_NAME	"x86_64"
+# define SECCOMP_ARCH_REDIRECT		1
 # ifdef CONFIG_COMPAT
 #  define SECCOMP_ARCH_COMPAT		AUDIT_ARCH_I386
 #  define SECCOMP_ARCH_COMPAT_NR	IA32_NR_syscalls
@@ -28,8 +35,14 @@
 /*
  * x32 will have __X32_SYSCALL_BIT set in syscall number. We don't support
  * caching them and they are treated as out of range syscalls, which will
- * always pass through the BPF filter.
+ * always pass through the BPF filter. It shares AUDIT_ARCH_X86_64 with the
+ * native ABI, so refuse to redirect it: the generic denylist keys off plain
+ * syscall numbers and cannot name x32's sigreturn/clone.
  */
+static inline bool arch_seccomp_redirect_deny(const struct seccomp_data *sd)
+{
+	return sd->nr & __X32_SYSCALL_BIT;
+}
 #else /* !CONFIG_X86_64 */
 # define SECCOMP_ARCH_NATIVE		AUDIT_ARCH_I386
 # define SECCOMP_ARCH_NATIVE_NR	        NR_syscalls

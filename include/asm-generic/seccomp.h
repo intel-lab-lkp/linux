@@ -26,6 +26,36 @@
 #define __NR_seccomp_sigreturn		__NR_rt_sigreturn
 #endif
 
+#ifdef SECCOMP_ARCH_REDIRECT
+#ifndef __NR_seccomp_rt_sigreturn
+#define __NR_seccomp_rt_sigreturn	__NR_seccomp_sigreturn
+#endif
+#ifndef __NR_seccomp_clone
+#define __NR_seccomp_clone		__NR_clone
+#endif
+#ifndef __NR_seccomp_clone3
+#ifdef __NR_clone3
+#define __NR_seccomp_clone3		__NR_clone3
+#else
+#define __NR_seccomp_clone3		(-1)
+#endif
+#endif
+#ifndef __NR_seccomp_fork
+#ifdef __NR_fork
+#define __NR_seccomp_fork		__NR_fork
+#else
+#define __NR_seccomp_fork		(-1)
+#endif
+#endif
+#ifndef __NR_seccomp_vfork
+#ifdef __NR_vfork
+#define __NR_seccomp_vfork		__NR_vfork
+#else
+#define __NR_seccomp_vfork		(-1)
+#endif
+#endif
+#endif /* SECCOMP_ARCH_REDIRECT */
+
 #ifdef CONFIG_COMPAT
 #ifndef get_compat_mode1_syscalls
 static inline const int *get_compat_mode1_syscalls(void)
