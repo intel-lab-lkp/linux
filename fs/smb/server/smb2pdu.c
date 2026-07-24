@@ -10857,91 +10857,60 @@ int smb2_oplock_break(struct ksmbd_work *work)
 	return 0;
 }
 
-/*
- * Cancel handler for a deferred CHANGE_NOTIFY. Races against
- * __ksmbd_close_fd()'s notify_pendings drain (vfs_cache.c), which can run
- * concurrently on a different connection closing the same handle -- only
- * one of the two may claim and free in_work, so both sides check
- * list_empty() under fp->f_lock before touching it (list_del_init()
- * leaves a node empty, so whichever side removes it first is the owner;
- * the loser must not touch in_work again, since the winner may already be
- * freeing it).
- *
- * smb2_cancel() holds conn->request_lock (a spinlock) for the entire
- * time it walks conn->async_requests and calls this function -- so this
- * runs with preemption disabled and must not sleep or re-acquire that
- * same lock. release_async_work() does both (it takes conn->request_lock
- * itself, and frees things that can involve sleeping paths), so calling
- * it from here would self-deadlock the very thread processing the
- * client's CANCEL command. ksmbd_conn_write() can also sleep (it takes
- * conn's write mutex). So: do only the non-sleeping, no-relock cleanup
- * inline here (the async_requests removal itself is safe without
- * re-locking, since the caller already holds that lock), and defer the
- * actual response send + work-struct free to a workqueue, matching the
- * minimal, non-blocking style of the existing smb2_remove_blocked_lock()
- * cancel_fn (which only wakes a waiter, never sends network data itself).
- */
-struct notify_cancel_ctx {
-	struct work_struct	work;
-	struct ksmbd_work	*in_work;
+struct ksmbd_notify_wait {
+	wait_queue_head_t wait;
 };
 
-static void smb2_notify_cancel_deferred(struct work_struct *w)
+/*
+ * Cancel handler for a pending CHANGE_NOTIFY. Called either by
+ * smb2_cancel() (conn->request_lock held, work->state already set to
+ * KSMBD_WORK_CANCELLED by the caller) or by
+ * set_close_state_blocked_works() (vfs_cache.c, fp->f_lock held,
+ * work->state already set to KSMBD_WORK_CLOSED by the caller) -- both
+ * callers hold a spinlock across this call, so it must not sleep.
+ * wake_up() only wakes the waiter in smb2_notify(); it does not touch
+ * fp->blocked_works itself, matching smb2_remove_blocked_lock()'s same
+ * non-mutating style for the equivalent byte-range-lock wait.
+ */
+static void smb2_notify_cancel(void **argv)
 {
-	struct notify_cancel_ctx *ctx =
-		container_of(w, struct notify_cancel_ctx, work);
-	struct ksmbd_work *in_work = ctx->in_work;
-	struct smb2_hdr *in_hdr;
+	struct ksmbd_notify_wait *notify_wait = (struct ksmbd_notify_wait *)argv[0];
 
-	in_hdr = smb_get_msg(in_work->response_buf);
-	in_hdr->Status = STATUS_CANCELLED;
-	ksmbd_conn_write(in_work);
-	ksmbd_free_work_struct(in_work);
-	kfree(ctx);
-}
-
-static void smb2_notify_cancel_fn(void **argv)
-{
-	struct ksmbd_work *in_work = (struct ksmbd_work *)argv[0];
-	struct ksmbd_file *fp = (struct ksmbd_file *)argv[1];
-	struct ksmbd_conn *conn = in_work->conn;
-	struct notify_cancel_ctx *ctx;
-	bool claimed;
-
-	spin_lock(&fp->f_lock);
-	claimed = !list_empty(&in_work->notify_entry);
-	if (claimed)
-		list_del_init(&in_work->notify_entry);
-	spin_unlock(&fp->f_lock);
-
-	if (!claimed)
-		return;
-
-	/* conn->request_lock is already held by the caller (smb2_cancel()). */
-	list_del_init(&in_work->async_request_entry);
-	in_work->asynchronous = false;
-	in_work->cancel_fn = NULL;
-	kfree(in_work->cancel_argv);
-	in_work->cancel_argv = NULL;
-	if (in_work->async_id) {
-		ksmbd_release_id(&conn->async_ida, in_work->async_id);
-		in_work->async_id = 0;
-	}
-
-	ctx = kmalloc(sizeof(*ctx), GFP_ATOMIC);
-	if (!ctx) {
-		/* Can't defer the response -- free without sending one. */
-		ksmbd_free_work_struct(in_work);
-		return;
-	}
-	ctx->in_work = in_work;
-	INIT_WORK(&ctx->work, smb2_notify_cancel_deferred);
-	schedule_work(&ctx->work);
+	wake_up(&notify_wait->wait);
 }
 
 /**
  * smb2_notify() - handler for smb2 notify request
  * @work:   smb work containing notify command buffer
+ *
+ * KSMBD does not implement a real change-notification backend yet.
+ * Genuine SMB2 servers (and macOS smbfs) never complete a CHANGE_NOTIFY
+ * spontaneously: it is satisfied only by a real directory change, or
+ * with STATUS_NOTIFY_CLEANUP when the watched handle is closed.
+ * Completing it early (e.g. on a timer) makes Finder treat the cleanup
+ * as "directory changed" and re-enumerate the directory forever,
+ * leaving items unopenable. Returning STATUS_NOT_IMPLEMENTED here (like
+ * stock ksmbd) makes macOS smbfs hard-freeze on unmount, so this must
+ * stay deferred.
+ *
+ * The calling worker registers on fp->blocked_works and blocks on a
+ * local wait queue, the same pattern smb2_lock() uses for a pending
+ * byte-range lock (setup_async_work() on work directly, no separate
+ * synthetic work struct), until woken by smb2_notify_cancel() -- either
+ * from an explicit client CANCEL or from the handle closing
+ * (set_close_state_blocked_works() already covers both generically over
+ * fp->blocked_works, no changes needed there). This is deliberately a
+ * blocking design, unlike the deferred/workqueue design this replaces:
+ * the worker stays unavailable to ksmbd_wq for as long as the watch
+ * stays open. Accepted for now to keep the skeleton compatible with a
+ * planned real event-delivery patch built on the same blocking wait;
+ * revisit if this proves to exhaust the worker pool in practice.
+ *
+ * Also uses wait_event_interruptible() rather than smb2_lock()'s plain
+ * wait_event(): a byte-range lock wait is only ever woken by an
+ * explicit, targeted signal (lock availability or cancel), but a
+ * CHANGE_NOTIFY watch can stay pending indefinitely, so allowing the
+ * wait to be interrupted matters more here.
  *
  * Return:      0 on success, otherwise error
  */
@@ -10949,9 +10918,10 @@ int smb2_notify(struct ksmbd_work *work)
 {
 	struct smb2_change_notify_req *req;
 	struct smb2_change_notify_rsp *rsp;
-	struct ksmbd_work *in_work;
-	struct smb2_hdr *in_hdr;
+	struct ksmbd_notify_wait notify_wait;
 	struct ksmbd_file *fp;
+	void **argv;
+	int err;
 
 	ksmbd_debug(SMB, "Received smb2 notify\n");
 
@@ -10969,54 +10939,26 @@ int smb2_notify(struct ksmbd_work *work)
 	/*
 	 * macOS backupd sends CHANGE_NOTIFY with FileId=FFFF...FFFF (share-root
 	 * sentinel) to watch for changes on the share root without holding an
-	 * open handle. Respond STATUS_PENDING + STATUS_NOTIFY_CLEANUP immediately;
-	 * without this, backupd aborts Time Machine setup on STATUS_FILE_CLOSED.
+	 * open handle. There is no fp to block on for this case, so report the
+	 * watch as already cleaned up immediately instead of joining the wait
+	 * below; without this, backupd aborts Time Machine setup on
+	 * STATUS_FILE_CLOSED.
 	 */
 	if (req->VolatileFileId == SMB2_NO_FID &&
 	    req->PersistentFileId == SMB2_NO_FID) {
-		in_work = ksmbd_alloc_work_struct();
-		if (!in_work || allocate_interim_rsp_buf(in_work)) {
-			if (in_work)
-				ksmbd_free_work_struct(in_work);
-			rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
-			smb2_set_err_rsp(work);
-			return 0;
-		}
 		if (setup_async_work(work, NULL, NULL)) {
-			ksmbd_free_work_struct(in_work);
 			rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
 			smb2_set_err_rsp(work);
 			return 0;
 		}
 		smb2_send_interim_resp(work, STATUS_PENDING);
-		in_work->conn = work->conn;
-		in_hdr = smb_get_msg(in_work->response_buf);
-		memcpy(in_hdr, ksmbd_resp_buf_next(work),
-		       __SMB2_HEADER_STRUCTURE_SIZE);
-		in_hdr->Flags |= SMB2_FLAGS_ASYNC_COMMAND;
-		in_hdr->Id.AsyncId = cpu_to_le64(work->async_id);
-		smb2_set_err_rsp(in_work);
-		in_hdr->Status = STATUS_NOTIFY_CLEANUP;
-		in_work->async_id = work->async_id;
-		work->async_id = 0;
+		rsp->hdr.Status = STATUS_NOTIFY_CLEANUP;
+		smb2_send_interim_resp(work, STATUS_NOTIFY_CLEANUP);
 		release_async_work(work);
-		ksmbd_conn_write(in_work);
-		ksmbd_free_work_struct(in_work);
 		work->send_no_response = 1;
 		return 0;
 	}
 
-	/*
-	 * KSMBD does not implement a real change-notification backend.
-	 * Genuine SMB2 servers (and macOS smbfs) never complete a
-	 * CHANGE_NOTIFY spontaneously: it is satisfied only by a real
-	 * directory change, or with STATUS_NOTIFY_CLEANUP when the watched
-	 * handle is closed. Completing it early (e.g. on a timer) makes
-	 * Finder treat the cleanup as "directory changed" and re-enumerate
-	 * the directory forever, leaving items unopenable. Returning
-	 * STATUS_NOT_IMPLEMENTED here (like stock ksmbd) makes macOS smbfs
-	 * hard-freeze on unmount, so this must stay deferred.
-	 */
 	fp = ksmbd_lookup_fd_slow(work, req->VolatileFileId, req->PersistentFileId);
 	if (!fp) {
 		rsp->hdr.Status = STATUS_FILE_CLOSED;
@@ -11024,96 +10966,52 @@ int smb2_notify(struct ksmbd_work *work)
 		return 0;
 	}
 
-	in_work = ksmbd_alloc_work_struct();
-	if (!in_work || allocate_interim_rsp_buf(in_work)) {
-		if (in_work)
-			ksmbd_free_work_struct(in_work);
+	argv = kmalloc(sizeof(void *), KSMBD_DEFAULT_GFP);
+	if (!argv) {
 		ksmbd_fd_put(work, fp);
 		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
 		smb2_set_err_rsp(work);
 		return 0;
 	}
-	/*
-	 * in_work is synthetic (not from the normal request-receiving
-	 * pipeline), so it has no request_buf of its own. It gets registered
-	 * into conn->async_requests below, and smb2_cancel() unconditionally
-	 * computes smb_get_msg(iter->request_buf) for every entry in that
-	 * list while searching for a match -- give it its own small buffer
-	 * (not an alias of response_buf: ksmbd_free_work_struct() kvfree()s
-	 * both separately, so aliasing them would double-free) so that stays
-	 * a harmless read instead of a near-NULL dereference.
-	 */
-	in_work->request_buf = kzalloc(MAX_CIFS_SMALL_BUFFER_SIZE, KSMBD_DEFAULT_GFP);
-	if (!in_work->request_buf) {
-		ksmbd_free_work_struct(in_work);
+	init_waitqueue_head(&notify_wait.wait);
+	argv[0] = &notify_wait;
+
+	if (setup_async_work(work, smb2_notify_cancel, argv)) {
+		kfree(argv);
 		ksmbd_fd_put(work, fp);
 		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
 		smb2_set_err_rsp(work);
-		return 0;
-	}
-
-	if (setup_async_work(work, NULL, NULL)) {
-		ksmbd_free_work_struct(in_work);
-		ksmbd_fd_put(work, fp);
-		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
-		smb2_set_err_rsp(work);
-		return 0;
-	}
-
-	smb2_send_interim_resp(work, STATUS_PENDING);
-
-	/* Keep the async IDA alive until the deferred work is released. */
-	in_work->conn = ksmbd_conn_get(work->conn);
-	in_work->owns_conn_ref = true;
-	in_hdr = smb_get_msg(in_work->response_buf);
-	memcpy(in_hdr, ksmbd_resp_buf_next(work), __SMB2_HEADER_STRUCTURE_SIZE);
-	in_hdr->Flags |= SMB2_FLAGS_ASYNC_COMMAND;
-	in_hdr->Id.AsyncId = cpu_to_le64(work->async_id);
-	smb2_set_err_rsp(in_work);
-	in_hdr->Status = STATUS_NOTIFY_CLEANUP;
-
-	/*
-	 * Transfer ownership of the async id to in_work; it stays reserved
-	 * until in_work is freed after the deferred response is sent on
-	 * close, so it can't be reused for an unrelated async response.
-	 */
-	in_work->async_id = work->async_id;
-	work->async_id = 0;
-	release_async_work(work);
-
-	/*
-	 * work itself is about to be recycled by the normal request-processing
-	 * pipeline, so it can't stay the target of a future CANCEL -- register
-	 * in_work instead, reusing the same async_id, so a client-sent CANCEL
-	 * for this notify actually finds something to cancel instead of
-	 * silently doing nothing until the handle eventually closes.
-	 */
-	in_work->asynchronous = true;
-	in_work->cancel_argv = kmalloc_array(2, sizeof(void *), KSMBD_DEFAULT_GFP);
-	if (in_work->cancel_argv) {
-		in_work->cancel_argv[0] = in_work;
-		in_work->cancel_argv[1] = fp;
-		in_work->cancel_fn = smb2_notify_cancel_fn;
-	}
-
-	if (!ksmbd_conn_link_async_request(work->conn, in_work)) {
-		kfree(in_work->cancel_argv);
-		in_work->cancel_argv = NULL;
-		in_work->cancel_fn = NULL;
-		in_work->asynchronous = false;
-		ksmbd_fd_put(work, fp);
-		ksmbd_conn_write(in_work);
-		ksmbd_free_work_struct(in_work);
-		work->send_no_response = 1;
 		return 0;
 	}
 
 	spin_lock(&fp->f_lock);
-	list_add_tail(&in_work->notify_entry, &fp->notify_pendings);
+	list_add_tail(&work->fp_entry, &fp->blocked_works);
 	spin_unlock(&fp->f_lock);
 
-	ksmbd_fd_put(work, fp);
+	smb2_send_interim_resp(work, STATUS_PENDING);
+
+	err = wait_event_interruptible(notify_wait.wait,
+				       READ_ONCE(work->state) != KSMBD_WORK_ACTIVE);
+	if (err && READ_ONCE(work->state) == KSMBD_WORK_ACTIVE) {
+		/*
+		 * Woken by a signal, not a real cancel/close. There is no
+		 * notification backend yet to report anything else against,
+		 * so treat this the same as a client-side cancel.
+		 */
+		WRITE_ONCE(work->state, KSMBD_WORK_CANCELLED);
+	}
+
+	spin_lock(&fp->f_lock);
+	list_del_init(&work->fp_entry);
+	spin_unlock(&fp->f_lock);
+
+	rsp->hdr.Status = work->state == KSMBD_WORK_CLOSED ?
+			  STATUS_NOTIFY_CLEANUP : STATUS_CANCELLED;
+	smb2_send_interim_resp(work, rsp->hdr.Status);
+	release_async_work(work);
 	work->send_no_response = 1;
+
+	ksmbd_fd_put(work, fp);
 	return 0;
 }
 
