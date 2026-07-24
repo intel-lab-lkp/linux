@@ -300,6 +300,7 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 	u32 from_len, meta_len, rem, num_desc;
 	struct xdp_buff_xsk *xskb;
 	struct xdp_buff *xsk_xdp;
+	u32 nb_submitted = 0;
 	skb_frag_t *frag;
 
 	from_len = xdp->data_end - copy_from;
@@ -348,6 +349,11 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		u32 copied;
 
 		xsk_xdp = xsk_buff_alloc(xs->pool);
+		if (!xsk_xdp) {
+			xskq_prod_cancel_n(xs->rx, nb_submitted);
+			xs->rx_dropped++;
+			return -ENOMEM;
+		}
 		copy_to = xsk_xdp->data - meta_len;
 
 		copied = xsk_copy_xdp(copy_to, &copy_from, to_len, &from_len, &frag, rem);
@@ -356,6 +362,7 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		xskb = container_of(xsk_xdp, struct xdp_buff_xsk, xdp);
 		__xsk_rcv_zc_safe(xs, xskb, copied - meta_len,
 				  rem ? XDP_PKT_CONTD : 0);
+		nb_submitted++;
 		meta_len = 0;
 	} while (rem);
 
