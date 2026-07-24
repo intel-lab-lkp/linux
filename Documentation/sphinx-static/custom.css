@@ -35,6 +35,183 @@ div.body div.table-overflow {
     overflow-y: hidden;
 }
 
+/*
+ * Let long identifiers, URLs, and other unbreakable cell content contribute a
+ * smaller intrinsic minimum width so the viewport-capped column minimums can
+ * take effect. Normal text still wraps at ordinary break opportunities; a
+ * break inside a token is used only when needed to avoid overflow.
+ */
+div.body table.docutils th,
+div.body table.docutils td {
+    overflow-wrap: anywhere;
+}
+
+/*
+ * table_layout.py derives a minimum width from the longest non-spanning
+ * cell in each column and assigns the corresponding table-column-width-N
+ * class. These minimums prevent premature wrapping, while overflow-wrap:
+ * anywhere above prevents long tokens from forcing unbounded expansion.
+ *
+ * Cap the generated floor at 60vw so an individual column's minimum remains
+ * fully visible on narrow viewports and does not itself require horizontal
+ * scrolling to read. Keep this range in sync with MAX_COLUMN_WIDTH.
+ */
+div.body table.docutils .table-column-width-2 {
+    min-width: min(2ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-3 {
+    min-width: min(3ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-4 {
+    min-width: min(4ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-5 {
+    min-width: min(5ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-6 {
+    min-width: min(6ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-7 {
+    min-width: min(7ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-8 {
+    min-width: min(8ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-9 {
+    min-width: min(9ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-10 {
+    min-width: min(10ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-11 {
+    min-width: min(11ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-12 {
+    min-width: min(12ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-13 {
+    min-width: min(13ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-14 {
+    min-width: min(14ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-15 {
+    min-width: min(15ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-16 {
+    min-width: min(16ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-17 {
+    min-width: min(17ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-18 {
+    min-width: min(18ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-19 {
+    min-width: min(19ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-20 {
+    min-width: min(20ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-21 {
+    min-width: min(21ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-22 {
+    min-width: min(22ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-23 {
+    min-width: min(23ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-24 {
+    min-width: min(24ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-25 {
+    min-width: min(25ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-26 {
+    min-width: min(26ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-27 {
+    min-width: min(27ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-28 {
+    min-width: min(28ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-29 {
+    min-width: min(29ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-30 {
+    min-width: min(30ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-31 {
+    min-width: min(31ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-32 {
+    min-width: min(32ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-33 {
+    min-width: min(33ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-34 {
+    min-width: min(34ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-35 {
+    min-width: min(35ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-36 {
+    min-width: min(36ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-37 {
+    min-width: min(37ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-38 {
+    min-width: min(38ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-39 {
+    min-width: min(39ch, 60vw);
+}
+
+div.body table.docutils .table-column-width-40 {
+    min-width: min(40ch, 60vw);
+}
+
 /* Size the logo appropriately */
 img.logo {
     width: 104px;
@@ -168,8 +345,16 @@ div.language-selection ul li:hover {
 }
 
 /*
- * Let long inline literals in paragraph text wrap as needed to prevent
+ * Treat inline literals like normal text for wrapping in ordinary layouts,
+ * while allowing breaks inside long unbroken tokens when needed to prevent
  * overflow.
+ *
+ * In tables, this aggressive wrapping can otherwise collapse narrow columns
+ * into nearly vertical text. The content-derived minimum widths assigned by
+ * table_layout.py establish a readable floor for each column. The column
+ * width adapts without falling below that floor, while long inline literals
+ * wrap within the available width rather than forcing the table to expand or
+ * collapsing into vertical text.
  */
 code.docutils.literal span.pre {
     white-space: normal;
