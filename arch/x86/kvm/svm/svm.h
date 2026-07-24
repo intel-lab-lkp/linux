@@ -784,6 +784,8 @@ BUILD_SVM_MSR_BITMAP_HELPERS(void, clear, __clear)
 BUILD_SVM_MSR_BITMAP_HELPERS(void, set, __set)
 
 #define DEBUGCTL_RESERVED_BITS (~DEBUGCTLMSR_LBR)
+#define DBG_EXTN_CFG_RESERVED_BITS (~DBG_EXTN_CFG_LBRV2EN)
+#define LBR_SELECT_RESERVED_BITS (~GENMASK_ULL(8, 0))
 
 /* svm.c */
 extern bool dump_invalid_vmcb;

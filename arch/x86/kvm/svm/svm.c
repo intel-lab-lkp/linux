@@ -744,6 +744,12 @@ static void svm_recalc_lbr_msr_intercepts(struct kvm_vcpu *vcpu)
 	svm->lbr_msrs_intercepted = intercept;
 }
 
+static bool svm_lbrv2_supported(struct kvm_vcpu *vcpu)
+{
+	return guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_LBR_V2) &&
+	       kvm_vcpu_has_mediated_pmu(vcpu);
+}
+
 void svm_vcpu_free_msrpm(void *msrpm)
 {
 	__free_pages(virt_to_page(msrpm), get_order(MSRPM_SIZE));
@@ -2787,6 +2793,19 @@ static u64 *svm_vmcb_lbr(struct vcpu_svm *svm, u32 msr)
 	return &svm->vmcb->save.br_from;
 }
 
+static u64 *svm_vmcb_lbrv2(struct vcpu_svm *svm, u32 msr)
+{
+	u32 offset = msr - MSR_AMD_SAMP_BR_FROM;
+	u32 idx = offset >> 1;
+
+	if (WARN_ON_ONCE(idx >= SVM_LBR_V2_STACK_SIZE))
+		return &svm->vmcb->save.lbr[0].lbr_stack_from;
+
+	if (offset & 1)
+		return &svm->vmcb->save.lbr[idx].lbr_stack_to;
+	return &svm->vmcb->save.lbr[idx].lbr_stack_from;
+}
+
 static bool sev_es_prevent_msr_access(struct kvm_vcpu *vcpu,
 				      struct msr_data *msr_info)
 {
@@ -2881,6 +2900,21 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_IA32_LASTINTFROMIP:
 	case MSR_IA32_LASTINTTOIP:
 		msr_info->data = lbrv ? *svm_vmcb_lbr(svm, msr_info->index) : 0;
+		break;
+	case MSR_AMD_DBG_EXTN_CFG:
+		if (!svm_lbrv2_supported(vcpu))
+			return KVM_MSR_RET_UNSUPPORTED;
+		msr_info->data = svm->vmcb->save.dbg_extn_cfg;
+		break;
+	case MSR_AMD64_LBR_SELECT:
+		if (!svm_lbrv2_supported(vcpu))
+			return KVM_MSR_RET_UNSUPPORTED;
+		msr_info->data = svm->vmcb->save.lbr_select;
+		break;
+	case MSR_AMD_SAMP_BR_FROM ... MSR_AMD_SAMP_BR_FROM + 31:
+		if (!svm_lbrv2_supported(vcpu))
+			return KVM_MSR_RET_UNSUPPORTED;
+		msr_info->data = *svm_vmcb_lbrv2(svm, msr_info->index);
 		break;
 	case MSR_VM_HSAVE_PA:
 		msr_info->data = svm->nested.hsave_msr;
@@ -3179,6 +3213,40 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		if (!msr->host_initiated)
 			return 1;
 		*svm_vmcb_lbr(svm, ecx) = data;
+		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
+		break;
+	case MSR_AMD_DBG_EXTN_CFG:
+		if (!svm_lbrv2_supported(vcpu))
+			return KVM_MSR_RET_UNSUPPORTED;
+
+		if (data & DBG_EXTN_CFG_RESERVED_BITS)
+			return 1;
+
+		if (svm->vmcb->save.dbg_extn_cfg == data)
+			break;
+
+		svm->vmcb->save.dbg_extn_cfg = data;
+		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
+		svm_update_lbrv(vcpu);
+		break;
+	case MSR_AMD64_LBR_SELECT:
+		if (!svm_lbrv2_supported(vcpu))
+			return KVM_MSR_RET_UNSUPPORTED;
+
+		if (data & LBR_SELECT_RESERVED_BITS)
+			return 1;
+
+		if (svm->vmcb->save.lbr_select == data)
+			break;
+
+		svm->vmcb->save.lbr_select = data;
+		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
+		break;
+	case MSR_AMD_SAMP_BR_FROM ... MSR_AMD_SAMP_BR_FROM + 31:
+		if (!svm_lbrv2_supported(vcpu))
+			return KVM_MSR_RET_UNSUPPORTED;
+
+		*svm_vmcb_lbrv2(svm, ecx) = data;
 		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
 		break;
 	case MSR_VM_HSAVE_PA:
