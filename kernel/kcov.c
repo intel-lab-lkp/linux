@@ -202,6 +202,16 @@ static notrace unsigned long canonicalize_ip(unsigned long ip)
 	return ip;
 }
 
+#ifdef CONFIG_KCOV_SELFTEST
+static unsigned long decanonicalize_ip(unsigned long ip)
+{
+#ifdef CONFIG_RANDOMIZE_BASE
+	ip += kaslr_offset();
+#endif
+	return ip;
+}
+#endif
+
 /*
  * Entry point from instrumented code.
  * This is called once per basic-block/edge.
@@ -1102,9 +1112,11 @@ struct kcov_common_handle_id kcov_common_handle(void)
 EXPORT_SYMBOL(kcov_common_handle);
 
 #ifdef CONFIG_KCOV_SELFTEST
+static unsigned long selftest_area[2] __initdata;
+
 static void __init selftest(void)
 {
-	unsigned long start;
+	unsigned long start, ip;
 
 	pr_err("running self test\n");
 	/*
@@ -1114,15 +1126,27 @@ static void __init selftest(void)
 	 * leaks out of that section and leads to spurious coverage.
 	 * It's hard to call the actual interrupt handler directly,
 	 * so we just loop here for a bit waiting for a timer interrupt.
-	 * We set kcov_mode to enable tracing, but don't setup the area,
-	 * so any attempt to trace will crash. Note: we must not call any
-	 * potentially traced functions in this region.
+	 * We set up a two-word coverage area rather than leaving it NULL:
+	 * a leak then records its PC instead of crashing on a NULL
+	 * dereference, and we can report the offending PC. Note: we
+	 * must not call any potentially traced functions in this region.
 	 */
+	kcov_start(current, NULL, ARRAY_SIZE(selftest_area),
+		   selftest_area, KCOV_MODE_TRACE_PC, 0);
 	start = jiffies;
-	WRITE_ONCE(current->kcov_mode, KCOV_MODE_TRACE_PC);
-	while ((jiffies - start) * MSEC_PER_SEC / HZ < 300)
-		;
-	WRITE_ONCE(current->kcov_mode, 0);
+	while ((jiffies - start) * MSEC_PER_SEC / HZ < 300) {
+		if (READ_ONCE(selftest_area[0]))
+			break;
+		cpu_relax();
+	}
+	kcov_stop(current);
+
+	if (selftest_area[0]) {
+		ip = decanonicalize_ip(selftest_area[1]);
+		pr_err("spurious coverage detected during interrupt selftest: %pS\n",
+		       (void *)ip);
+		panic("kcov: interrupt selftest detected spurious coverage");
+	}
 	pr_err("done running self test\n");
 }
 #endif
