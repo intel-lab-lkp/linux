@@ -3099,6 +3099,7 @@ struct rtw89_h2c_scanofld_be {
 	__le32 w11; /* Added after SCAN_OFFLOAD_BE_V2 */
 	/* struct rtw89_h2c_scanofld_be_macc_role (flexible number) */
 	/* struct rtw89_h2c_scanofld_be_opch (flexible number) */
+	/* probe SSID list (flexible number); Added after SCAN_OFFLOAD_BE_V3 */
 } __packed;
 
 #define RTW89_H2C_SCANOFLD_BE_W0_OP GENMASK(1, 0)
