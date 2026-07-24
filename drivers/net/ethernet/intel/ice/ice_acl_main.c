@@ -284,6 +284,85 @@ void ice_acl_replay_fltrs(struct ice_pf *pf)
 }
 
 /**
+ * ice_acl_comp_rules - compare two ACL filters
+ * @a: first ACL filter
+ * @b: second ACL filter
+ *
+ * Return: true if a and b values and masks are identical, false otherwise
+ */
+static bool
+ice_acl_comp_rules(struct ice_ntuple_fltr *a, struct ice_ntuple_fltr *b)
+{
+	bool ipv4_equal;
+
+	if (a->flow_type != b->flow_type)
+		return false;
+
+	ipv4_equal = a->ip.v4.dst_ip == b->ip.v4.dst_ip &&
+		     a->ip.v4.src_ip == b->ip.v4.src_ip &&
+		     a->mask.v4.dst_ip == b->mask.v4.dst_ip &&
+		     a->mask.v4.src_ip == b->mask.v4.src_ip;
+
+	switch (a->flow_type) {
+	case ICE_FLTR_PTYPE_NONF_IPV4_TCP:
+	case ICE_FLTR_PTYPE_NONF_IPV4_UDP:
+	case ICE_FLTR_PTYPE_NONF_IPV4_SCTP:
+		return ipv4_equal &&
+		       a->ip.v4.dst_port == b->ip.v4.dst_port &&
+		       a->ip.v4.src_port == b->ip.v4.src_port &&
+		       a->mask.v4.dst_port == b->mask.v4.dst_port &&
+		       a->mask.v4.src_port == b->mask.v4.src_port;
+	case ICE_FLTR_PTYPE_NONF_IPV4_OTHER:
+		return ipv4_equal &&
+		       a->ip.v4.l4_header == b->ip.v4.l4_header &&
+		       a->ip.v4.proto == b->ip.v4.proto &&
+		       a->ip.v4.ip_ver == b->ip.v4.ip_ver &&
+		       a->ip.v4.tos == b->ip.v4.tos &&
+		       a->mask.v4.l4_header == b->mask.v4.l4_header &&
+		       a->mask.v4.proto == b->mask.v4.proto &&
+		       a->mask.v4.ip_ver == b->mask.v4.ip_ver &&
+		       a->mask.v4.tos == b->mask.v4.tos;
+	default:
+		return false;
+	}
+}
+
+/**
+ * ice_acl_is_dup_fltr - test if an ACL filter is already in the list
+ * @hw: hardware data structure
+ * @input: ACL filter to check
+ *
+ * Return: true if an identical filter (same flow type, values, and masks)
+ * already exists at a different location
+ */
+static bool
+ice_acl_is_dup_fltr(struct ice_hw *hw, struct ice_ntuple_fltr *input)
+{
+	struct ice_ntuple_fltr *rule;
+
+	list_for_each_entry(rule, &hw->fdir_list_head, fltr_node) {
+		if (!rule->acl_fltr)
+			continue;
+
+		if (!ice_acl_comp_rules(rule, input))
+			continue;
+
+		/* At this point rule and input have same match criteria.
+		 * Different location is a duplicate.
+		 * Same location with a different queue is an update (not a
+		 * duplicate).
+		 */
+		if (rule->fltr_id == input->fltr_id &&
+		    rule->q_index != input->q_index)
+			continue;
+
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * ice_acl_add_rule_ethtool - add an ACL rule
  * @vsi: pointer to target VSI
  * @cmd: command to add or delete ACL rule
@@ -321,6 +400,14 @@ int ice_acl_add_rule_ethtool(struct ice_vsi *vsi, struct ethtool_rxnfc *cmd)
 	err = ice_ntuple_set_input_set(vsi, ICE_BLK_ACL, fsp, input);
 	if (err)
 		goto free_input;
+
+	mutex_lock(&hw->fdir_fltr_lock);
+	if (ice_acl_is_dup_fltr(hw, input)) {
+		mutex_unlock(&hw->fdir_fltr_lock);
+		err = -EINVAL;
+		goto free_input;
+	}
+	mutex_unlock(&hw->fdir_fltr_lock);
 
 	memset(&acts, 0, sizeof(acts));
 	if (fsp->ring_cookie == RX_CLS_FLOW_DISC)
