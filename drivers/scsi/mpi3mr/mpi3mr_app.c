@@ -141,25 +141,27 @@ void mpi3mr_alloc_diag_bufs(struct mpi3mr_ioc *mrioc)
 		trace_min_size = fw_min_size = MPI3MR_DEFAULT_HDB_MIN_SZ;
 
 	} else {
-		trace_size = driver_pg1.host_diag_trace_max_size * 1024;
-		trace_dec_size = driver_pg1.host_diag_trace_decrement_size
+		trace_size = le16_to_cpu(driver_pg1.host_diag_trace_max_size) * 1024;
+		trace_dec_size = le16_to_cpu(driver_pg1.host_diag_trace_decrement_size)
 			 * 1024;
 		trace_min_size = driver_pg1.host_diag_trace_min_size * 1024;
-		fw_size = driver_pg1.host_diag_fw_max_size * 1024;
-		fw_dec_size = driver_pg1.host_diag_fw_decrement_size * 1024;
-		fw_min_size = driver_pg1.host_diag_fw_min_size * 1024;
+		fw_size = le16_to_cpu(driver_pg1.host_diag_fw_max_size) * 1024;
+		fw_dec_size = le16_to_cpu(driver_pg1.host_diag_fw_decrement_size) * 1024;
+		fw_min_size = le16_to_cpu(driver_pg1.host_diag_fw_min_size) * 1024;
 		dprint_init(mrioc,
 		    "%s:trace diag buffer sizes read from driver\n"
 		    "page1: maximum size = %dKB, decrement size = %dKB\n"
-		    ", minimum size = %dKB\n", __func__, driver_pg1.host_diag_trace_max_size,
-		    driver_pg1.host_diag_trace_decrement_size,
-		    driver_pg1.host_diag_trace_min_size);
+		    ", minimum size = %dKB\n", __func__,
+		    le16_to_cpu(driver_pg1.host_diag_trace_max_size),
+		    le16_to_cpu(driver_pg1.host_diag_trace_decrement_size),
+		    le16_to_cpu(driver_pg1.host_diag_trace_min_size));
 		dprint_init(mrioc,
 		    "%s:firmware diag buffer sizes read from driver\n"
 		    "page1: maximum size = %dKB, decrement size = %dKB\n"
-		    ", minimum size = %dKB\n", __func__, driver_pg1.host_diag_fw_max_size,
-		    driver_pg1.host_diag_fw_decrement_size,
-		    driver_pg1.host_diag_fw_min_size);
+		    ", minimum size = %dKB\n", __func__,
+		    le16_to_cpu(driver_pg1.host_diag_fw_max_size),
+		    le16_to_cpu(driver_pg1.host_diag_fw_decrement_size),
+		    le16_to_cpu(driver_pg1.host_diag_fw_min_size));
 		if ((trace_size == 0) && (fw_size == 0))
 			return;
 	}
