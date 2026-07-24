@@ -357,13 +357,15 @@ long set_tagged_addr_ctrl(struct task_struct *task, unsigned long arg)
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;
 
-	if (test_bit(MM_CONTEXT_LOCK_PMLEN, &mm->context.flags) && mm->context.pmlen != pmlen) {
-		mmap_write_unlock(mm);
-		return -EBUSY;
+	if (test_bit(MM_CONTEXT_LOCK_PMLEN, &mm->context.flags)) {
+		if (READ_ONCE(mm->context.pmlen) != pmlen) {
+			mmap_write_unlock(mm);
+			return -EBUSY;
+		}
 	}
 
 	envcfg_update_bits(task, ENVCFG_PMM, pmm);
-	mm->context.pmlen = pmlen;
+	WRITE_ONCE(mm->context.pmlen, pmlen);
 
 	mmap_write_unlock(mm);
 
@@ -394,7 +396,7 @@ long get_tagged_addr_ctrl(struct task_struct *task)
 		break;
 	}
 
-	if (task->mm->context.pmlen)
+	if (READ_ONCE(task->mm->context.pmlen))
 		ret |= PR_TAGGED_ADDR_ENABLE;
 
 	return ret;

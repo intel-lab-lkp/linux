@@ -21,7 +21,7 @@ static inline void activate_mm(struct mm_struct *prev,
 			       struct mm_struct *next)
 {
 #ifdef CONFIG_RISCV_ISA_SUPM
-	next->context.pmlen = 0;
+	WRITE_ONCE(next->context.pmlen, 0);
 #endif
 	switch_mm(prev, next, NULL);
 }
@@ -44,7 +44,7 @@ DECLARE_STATIC_KEY_FALSE(use_asid_allocator);
 #define mm_untag_mask mm_untag_mask
 static inline unsigned long mm_untag_mask(struct mm_struct *mm)
 {
-	return -1UL >> mm->context.pmlen;
+	return -1UL >> READ_ONCE(mm->context.pmlen);
 }
 #endif
 
