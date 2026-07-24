@@ -207,11 +207,15 @@ static int udl_handle_damage(struct drm_framebuffer *fb,
 {
 	struct drm_device *dev = fb->dev;
 	struct udl_device *udl = to_udl(dev);
-	void *vaddr = map->vaddr; /* TODO: Use mapping abstraction properly */
+	void *vaddr;
 	int i, ret;
 	char *cmd;
 	struct urb *urb;
 	int log_bpp;
+
+	vaddr = iosys_map_get_vaddr(map);
+	if (!vaddr)
+		return -EFAULT;
 
 	ret = udl_log_cpp(fb->format->cpp[0]);
 	if (ret < 0)
