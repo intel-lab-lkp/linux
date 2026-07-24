@@ -27,6 +27,9 @@ struct fei_attr {
 	struct list_head list;
 	struct kprobe kp;
 	unsigned long retval;
+	char	parent[KSYM_NAME_LEN];
+	unsigned long	parent_start;
+	unsigned long	parent_end;
 };
 static DEFINE_MUTEX(fei_lock);
 static LIST_HEAD(fei_attr_list);
@@ -154,13 +157,94 @@ static int fei_retval_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fei_retval_ops, fei_retval_get, fei_retval_set,
 			 "%llx\n");
 
+static ssize_t fei_parent_read(struct file *file, char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	struct fei_attr *attr = file->private_data;
+	char tmp[KSYM_NAME_LEN + 1];
+	int len;
+	int err = 0;
+
+	mutex_lock(&fei_lock);
+	if (!fei_attr_is_valid(attr)) {
+		err = -ENOENT;
+		goto out;
+	}
+	len = scnprintf(tmp, sizeof(tmp), "%s\n", attr->parent);
+	mutex_unlock(&fei_lock);
+
+	return simple_read_from_buffer(buf, count, ppos, tmp, len);
+out:
+	mutex_unlock(&fei_lock);
+	return err;
+}
+
+static ssize_t fei_parent_write(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	struct fei_attr *attr = file->private_data;
+	char tmp[KSYM_NAME_LEN];
+	unsigned long start, size;
+	ssize_t err = 0;
+
+	if (count == 0 || count >= sizeof(tmp))
+		return -EINVAL;
+
+	if (copy_from_user(tmp, buf, count))
+		return -EFAULT;
+
+	tmp[count] = '\0';
+	strim(tmp);
+
+	mutex_lock(&fei_lock);
+	if (!fei_attr_is_valid(attr)) {
+		err = -ENOENT;
+		goto out;
+	}
+
+	if (tmp[0] == '\0') {
+		attr->parent[0]  = '\0';
+		attr->parent_start = 0;
+		attr->parent_end   = 0;
+		err = count;
+		goto out;
+	}
+
+	start = kallsyms_lookup_name(tmp);
+	if (!start) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (!kallsyms_lookup_size_offset(start, &size, NULL)) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	strscpy(attr->parent, tmp, sizeof(attr->parent));
+	attr->parent_start = start;
+	attr->parent_end   = start + size;
+	err = count;
+
+out:
+	mutex_unlock(&fei_lock);
+	return err;
+}
+
+static const struct file_operations fei_parent_ops = {
+	.owner = THIS_MODULE,
+	.open  = simple_open,
+	.read  = fei_parent_read,
+	.write = fei_parent_write,
+};
+
 static void fei_debugfs_add_attr(struct fei_attr *attr)
 {
 	struct dentry *dir;
 
 	dir = debugfs_create_dir(attr->kp.symbol_name, fei_debugfs_dir);
-
 	debugfs_create_file("retval", 0600, dir, attr, &fei_retval_ops);
+	debugfs_create_file("parent", 0600, dir, attr, &fei_parent_ops);
 }
 
 static void fei_debugfs_remove_attr(struct fei_attr *attr)
@@ -171,6 +255,16 @@ static void fei_debugfs_remove_attr(struct fei_attr *attr)
 static int fei_kprobe_handler(struct kprobe *kp, struct pt_regs *regs)
 {
 	struct fei_attr *attr = container_of(kp, struct fei_attr, kp);
+	unsigned long ret_addr = 0;
+	bool in_parent = false;
+
+	ret_addr = fei_return_address(regs);
+	if (attr->parent_start) {
+		in_parent = (ret_addr >= attr->parent_start &&
+					ret_addr <  attr->parent_end);
+		if (!in_parent)
+			return 0;
+	}
 
 	if (should_fail(&fei_fault_attr, 1)) {
 		regs_set_return_value(regs, attr->retval);

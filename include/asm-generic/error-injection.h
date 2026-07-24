@@ -34,10 +34,15 @@ static struct error_injection_entry __used				\
 	}
 
 void override_function_with_return(struct pt_regs *regs);
+unsigned long fei_return_address(struct pt_regs *regs);
 #else
 #define ALLOW_ERROR_INJECTION(fname, _etype)
 
 static inline void override_function_with_return(struct pt_regs *regs) { }
+static inline unsigned long fei_return_address(struct pt_regs *regs)
+{
+	return 0UL;
+}
 #endif
 #endif
 

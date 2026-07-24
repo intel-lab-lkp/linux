@@ -16,3 +16,9 @@ void override_function_with_return(struct pt_regs *regs)
 	instruction_pointer_set(regs, procedure_link_pointer(regs));
 }
 NOKPROBE_SYMBOL(override_function_with_return);
+
+unsigned long fei_return_address(struct pt_regs *regs)
+{
+	return procedure_link_pointer(regs);
+}
+NOKPROBE_SYMBOL(fei_return_address);

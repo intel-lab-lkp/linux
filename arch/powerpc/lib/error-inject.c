@@ -14,3 +14,9 @@ void override_function_with_return(struct pt_regs *regs)
 	regs_set_return_ip(regs, regs->link);
 }
 NOKPROBE_SYMBOL(override_function_with_return);
+
+unsigned long fei_return_address(struct pt_regs *regs)
+{
+	return regs->link;
+}
+NOKPROBE_SYMBOL(fei_return_address);
