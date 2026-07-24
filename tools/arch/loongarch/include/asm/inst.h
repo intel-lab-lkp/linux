@@ -25,6 +25,10 @@ enum reg1i21_op {
 	bcnez_op	= 0x12, /* bits[9:8] = 0x01 */
 };
 
+enum reg1i20_op {
+	pcalau12i_op	= 0x0d,
+};
+
 enum reg2_op {
 	ertn_op		= 0x1920e,
 };
@@ -64,6 +68,12 @@ struct reg0i26_format {
 	unsigned int immediate_h : 10;
 	unsigned int immediate_l : 16;
 	unsigned int opcode : 6;
+};
+
+struct reg1i20_format {
+	unsigned int rd : 5;
+	unsigned int immediate : 20;
+	unsigned int opcode : 7;
 };
 
 struct reg1i21_format {
@@ -111,6 +121,7 @@ union loongarch_instruction {
 	unsigned int word;
 	struct reg0i15_format	reg0i15_format;
 	struct reg0i26_format	reg0i26_format;
+	struct reg1i20_format	reg1i20_format;
 	struct reg1i21_format	reg1i21_format;
 	struct reg2_format	reg2_format;
 	struct reg2i12_format	reg2i12_format;

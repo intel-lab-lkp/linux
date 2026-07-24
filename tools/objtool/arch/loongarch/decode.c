@@ -101,6 +101,110 @@ int arch_normalize_paired_reloc(struct elf *elf, struct reloc *reloc)
 	return 0;
 }
 
+static bool klp_read_insn(struct section *sec, unsigned long offset,
+			  union loongarch_instruction *insn)
+{
+	if (offset + sizeof(*insn) > sec_size(sec))
+		return false;
+
+	memcpy(insn, sec->data->d_buf + offset, sizeof(*insn));
+	return true;
+}
+
+/*
+ * A livepatch module is mapped far more than the +-2GB reachable by
+ * pcalau12i/addi.d, so a klp reloc which resolves to a symbol in vmlinux cannot
+ * be reached PC-relatively: the relocation overflows and the patched function
+ * computes a wild pointer.  Far calls are already handled by the module loader,
+ * which redirects them through a PLT stub, but there is no such indirection for
+ * data: the address is materialized inline.
+ *
+ * Compilers emit the direct PC-relative form for any symbol they consider local
+ * (in particular file-local 'static' data, which is never interposable, so
+ * -fPIC does not route it through the GOT).  This is correct for vmlinux and
+ * for ordinary modules; it only breaks once klp-diff extracts the function into
+ * a far away livepatch module while its data stays behind.
+ *
+ * Convert the reference to its GOT-indirect equivalent, which loads the full
+ * 64-bit address from a GOT slot the module loader fills in and so works at any
+ * distance:
+ *
+ *	pcalau12i rd, %pc_hi20(sym)	->  pcalau12i rd, %got_pc_hi20(sym)
+ *	addi.d    rd, rj, %pc_lo12(sym)	->  ld.d      rd, rj, %got_pc_lo12(sym)
+ *
+ * Only an adjacent pcalau12i/addi.d pair which materializes an address can be
+ * converted, and only that exact shape is accepted:
+ *
+ *  - A PCALA_LO12 on anything but addi.d is a load or store reading the symbol
+ *    directly.  Going through the GOT would need an extra instruction to
+ *    dereference the slot, and the function cannot grow without shifting every
+ *    offset, relocation and ORC entry.
+ *
+ *  - The pair must be adjacent and register-consistent.  If one pcalau12i is
+ *    shared by several addi.d with different addends, each needs its own GOT
+ *    slot, but the single GOT_PC_HI20 only spans one page: the result would be
+ *    correct only if those slots happened to share a page.  Requiring
+ *    adjacency rejects that (the second addi.d is not preceded by a pcalau12i),
+ *    as well as a pair the compiler scheduled apart.
+ *
+ * Bail out on anything else instead of emitting a livepatch which is quietly
+ * broken.
+ */
+int arch_klp_convert_reloc_to_got(struct elf *elf, struct section *sec,
+				  unsigned long offset, unsigned int *type)
+{
+	union loongarch_instruction hi, lo;
+	unsigned long hi_offset, lo_offset;
+
+	switch (*type) {
+	case R_LARCH_PCALA_HI20:
+		hi_offset = offset;
+		lo_offset = offset + LOONGARCH_INSN_SIZE;
+		break;
+
+	case R_LARCH_PCALA_LO12:
+		if (offset < LOONGARCH_INSN_SIZE) {
+			ERROR("%s+0x%lx: PCALA_LO12 with no preceding instruction",
+			      sec->name, offset);
+			return -1;
+		}
+		hi_offset = offset - LOONGARCH_INSN_SIZE;
+		lo_offset = offset;
+		break;
+
+	default:
+		return 0;
+	}
+
+	if (!klp_read_insn(sec, hi_offset, &hi) ||
+	    !klp_read_insn(sec, lo_offset, &lo)) {
+		ERROR("%s+0x%lx: PCALA pair runs past end of section",
+		      sec->name, offset);
+		return -1;
+	}
+
+	if (hi.reg1i20_format.opcode != pcalau12i_op ||
+	    lo.reg2i12_format.opcode != addid_op ||
+	    lo.reg2i12_format.rj != hi.reg1i20_format.rd) {
+		ERROR("%s+0x%lx: cannot make klp reference GOT-indirect: expected an adjacent pcalau12i/addi.d pair, found 0x%08x/0x%08x",
+		      sec->name, offset, hi.word, lo.word);
+		return -1;
+	}
+
+	if (*type == R_LARCH_PCALA_HI20) {
+		*type = R_LARCH_GOT_PC_HI20;
+		return 0;
+	}
+
+	/* addi.d rd, rj, %pc_lo12(sym) -> ld.d rd, rj, %got_pc_lo12(sym) */
+	lo.reg2i12_format.opcode = ldd_op;
+	if (elf_write_insn(elf, sec, lo_offset, sizeof(lo), (const char *)&lo))
+		return -1;
+
+	*type = R_LARCH_GOT_PC_LO12;
+	return 0;
+}
+
 bool arch_pc_relative_reloc(struct reloc *reloc)
 {
 	return false;

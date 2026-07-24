@@ -1525,6 +1525,14 @@ static inline int arch_normalize_paired_reloc(struct elf *elf, struct reloc *rel
 }
 #endif
 
+#ifndef ARCH_HAS_KLP_GOT_RELOCS
+static inline int arch_klp_convert_reloc_to_got(struct elf *elf, struct section *sec,
+						unsigned long offset, unsigned int *type)
+{
+	return 0;
+}
+#endif
+
 /*
  * Convert a relocation symbol reference to the needed format: either a section
  * symbol or the underlying symbol itself.  Return -1 error, 0 success, 1 skip.
@@ -1565,11 +1573,22 @@ static int clone_reloc_klp(struct elfs *e, struct reloc *patched_reloc,
 	char sym_name[SYM_NAME_LEN];
 	struct klp_reloc klp_reloc;
 	unsigned long sympos;
+	unsigned int type;
 
 	if (!patched_sym->twin) {
 		ERROR("unexpected klp reloc for new symbol %s", patched_sym->name);
 		return -1;
 	}
+
+	/*
+	 * This reference resolves to a symbol which stays in the patched
+	 * object, arbitrarily far from the livepatch module.  Give the arch a
+	 * chance to convert a PC-relative reference into an indirect one which
+	 * can reach it (LoongArch: PCALA -> GOT).
+	 */
+	type = reloc_type(patched_reloc);
+	if (arch_klp_convert_reloc_to_got(e->out, sec, offset, &type))
+		return -1;
 
 	/*
 	 * Keep the original reloc intact for now to avoid breaking objtool run
@@ -1591,7 +1610,7 @@ static int clone_reloc_klp(struct elfs *e, struct reloc *patched_reloc,
 		sym->clone = patched_sym;
 	}
 
-	if (!elf_create_reloc(e->out, sec, offset, sym, addend, reloc_type(patched_reloc)))
+	if (!elf_create_reloc(e->out, sec, offset, sym, addend, type))
 		return -1;
 
 	/*
@@ -1648,7 +1667,7 @@ static int clone_reloc_klp(struct elfs *e, struct reloc *patched_reloc,
 	klp_reloc_off = sec_size(klp_relocs);
 	memset(&klp_reloc, 0, sizeof(klp_reloc));
 
-	klp_reloc.type = reloc_type(patched_reloc);
+	klp_reloc.type = type;
 	if (!elf_add_data(e->out, klp_relocs, &klp_reloc, sizeof(klp_reloc), true))
 		return -1;
 

@@ -27,6 +27,18 @@
 #ifndef R_LARCH_SUB64
 #define R_LARCH_SUB64		56
 #endif
+#ifndef R_LARCH_PCALA_HI20
+#define R_LARCH_PCALA_HI20	71
+#endif
+#ifndef R_LARCH_PCALA_LO12
+#define R_LARCH_PCALA_LO12	72
+#endif
+#ifndef R_LARCH_GOT_PC_HI20
+#define R_LARCH_GOT_PC_HI20	75
+#endif
+#ifndef R_LARCH_GOT_PC_LO12
+#define R_LARCH_GOT_PC_LO12	76
+#endif
 #ifndef R_LARCH_32_PCREL
 #define R_LARCH_32_PCREL	99
 #endif
@@ -48,9 +60,13 @@
 
 #define ARCH_HAS_INLINE_ALTS	1
 #define ARCH_HAS_PAIRED_RELOCS	1
+#define ARCH_HAS_KLP_GOT_RELOCS	1
 
 struct elf;
 struct reloc;
+struct section;
 int arch_normalize_paired_reloc(struct elf *elf, struct reloc *reloc);
+int arch_klp_convert_reloc_to_got(struct elf *elf, struct section *sec,
+				  unsigned long offset, unsigned int *type);
 
 #endif /* _OBJTOOL_ARCH_ELF_H */
