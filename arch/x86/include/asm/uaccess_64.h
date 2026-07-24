@@ -39,16 +39,25 @@ static inline unsigned long __untagged_addr(unsigned long addr)
 	(__force __typeof__(addr))__untagged_addr(__addr);		\
 })
 
+/*
+ * mm->context.untag_mask changes only when the target enables LAM or execs,
+ * always single-threaded. An unlocked remote reader can race that; READ_ONCE
+ * keeps the value whole and the untag is best-effort.
+ */
 static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 						   unsigned long addr)
 {
-	mmap_assert_locked(mm);
-	return addr & (mm)->context.untag_mask;
+	return addr & READ_ONCE(mm->context.untag_mask);
 }
 
-#define untagged_addr_remote(mm, addr)	({				\
+#define untagged_addr_remote_unlocked(mm, addr)	({			\
 	unsigned long __addr = (__force unsigned long)(addr);		\
 	(__force __typeof__(addr))__untagged_addr_remote(mm, __addr);	\
+})
+
+#define untagged_addr_remote(mm, addr)	({				\
+	mmap_assert_locked(mm);						\
+	untagged_addr_remote_unlocked(mm, addr);			\
 })
 
 #endif
