@@ -3128,6 +3128,7 @@ set_size_out:
 	if (rc == 0) {
 		netfs_resize_file(&cifsInode->netfs, size, true);
 		cifs_setsize(inode, size);
+		fscache_resize_cookie(cifs_inode_cookie(inode), size);
 	}
 
 	return rc;
