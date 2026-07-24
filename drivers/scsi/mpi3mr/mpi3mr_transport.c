@@ -1428,9 +1428,15 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 	}
 
 	port = sas_port_alloc_num(mr_sas_node->parent_dev);
+	if (!port) {
+		ioc_err(mrioc, "failure at %s:%d/%s() (sas_port_alloc)!\n",
+		    __FILE__, __LINE__, __func__);
+		goto out_fail;
+	}
 	if ((sas_port_add(port))) {
 		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
 		    __FILE__, __LINE__, __func__);
+		sas_port_free(port);
 		goto out_fail;
 	}
 
@@ -1450,10 +1456,22 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 	mr_sas_port->port = port;
 	if (mr_sas_port->remote_identify.device_type == SAS_END_DEVICE) {
 		rphy = sas_end_device_alloc(port);
+		if (!rphy) {
+			ioc_err(mrioc, "failure at %s:%d/%s() (sas_end_device_alloc)!\n",
+			    __FILE__, __LINE__, __func__);
+			sas_port_delete(port);
+			goto out_fail;
+		}
 		tgtdev->dev_spec.sas_sata_inf.rphy = rphy;
 	} else {
 		rphy = sas_expander_alloc(port,
 		    mr_sas_port->remote_identify.device_type);
+		if (!rphy) {
+			ioc_err(mrioc, "failure at %s:%d/%s() (sas_expander_alloc)!\n",
+			    __FILE__, __LINE__, __func__);
+			sas_port_delete(port);
+			goto out_fail;
+		}
 	}
 	rphy->identify = mr_sas_port->remote_identify;
 
@@ -1463,6 +1481,8 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 	if ((sas_rphy_add(rphy))) {
 		ioc_err(mrioc, "failure at %s:%d/%s()!\n",
 		    __FILE__, __LINE__, __func__);
+		sas_port_delete(port);
+		goto out_fail;
 	}
 	if (mr_sas_port->remote_identify.device_type == SAS_END_DEVICE) {
 		tgtdev->dev_spec.sas_sata_inf.pend_sas_rphy_add = 0;
@@ -1498,6 +1518,9 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 	return mr_sas_port;
 
  out_fail:
+	if (tgtdev)
+		mpi3mr_tgtdev_put(tgtdev);
+
 	list_for_each_entry_safe(mr_sas_phy, next, &mr_sas_port->phy_list,
 	    port_siblings)
 		list_del(&mr_sas_phy->port_siblings);
