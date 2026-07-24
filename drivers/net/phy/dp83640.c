@@ -10,6 +10,7 @@
 #include <linux/crc32.h>
 #include <linux/ethtool.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/mii.h>
 #include <linux/module.h>
@@ -130,6 +131,8 @@ struct dp83640_private {
 struct dp83640_clock {
 	/* keeps the instance in the 'phyter_clocks' list */
 	struct list_head list;
+	/* tracks attached or probing PHYs */
+	struct kref kref;
 	/* we create one clock instance per MII bus */
 	struct mii_bus *bus;
 	/* protects extended registers from concurrent access */
@@ -956,6 +959,7 @@ static void decode_status_frame(struct dp83640_private *dp83640,
 static void dp83640_clock_init(struct dp83640_clock *clock, struct mii_bus *bus)
 {
 	INIT_LIST_HEAD(&clock->list);
+	kref_init(&clock->kref);
 	clock->bus = bus;
 	mutex_init(&clock->extreg_lock);
 	mutex_init(&clock->clock_lock);
@@ -999,11 +1003,9 @@ static int choose_this_phy(struct dp83640_clock *clock,
 	return 0;
 }
 
-static struct dp83640_clock *dp83640_clock_get(struct dp83640_clock *clock)
+static void dp83640_clock_lock(struct dp83640_clock *clock)
 {
-	if (clock)
-		mutex_lock(&clock->clock_lock);
-	return clock;
+	mutex_lock(&clock->clock_lock);
 }
 
 /*
@@ -1021,6 +1023,7 @@ static struct dp83640_clock *dp83640_clock_get_bus(struct mii_bus *bus)
 		tmp = list_entry(this, struct dp83640_clock, list);
 		if (tmp->bus == bus) {
 			clock = tmp;
+			kref_get(&clock->kref);
 			break;
 		}
 	}
@@ -1043,12 +1046,36 @@ static struct dp83640_clock *dp83640_clock_get_bus(struct mii_bus *bus)
 out:
 	mutex_unlock(&phyter_clocks_lock);
 
-	return dp83640_clock_get(clock);
+	if (clock)
+		dp83640_clock_lock(clock);
+
+	return clock;
+}
+
+static void dp83640_clock_unlock(struct dp83640_clock *clock)
+{
+	mutex_unlock(&clock->clock_lock);
+}
+
+static void dp83640_clock_release(struct kref *kref)
+{
+	struct dp83640_clock *clock =
+		container_of(kref, struct dp83640_clock, kref);
+
+	list_del(&clock->list);
+	mutex_unlock(&phyter_clocks_lock);
+
+	mutex_destroy(&clock->extreg_lock);
+	mutex_destroy(&clock->clock_lock);
+	put_device(&clock->bus->dev);
+	kfree(clock->caps.pin_config);
+	kfree(clock);
 }
 
 static void dp83640_clock_put(struct dp83640_clock *clock)
 {
-	mutex_unlock(&clock->clock_lock);
+	kref_put_mutex(&clock->kref, dp83640_clock_release,
+		       &phyter_clocks_lock);
 }
 
 static int dp83640_soft_reset(struct phy_device *phydev)
@@ -1450,13 +1477,14 @@ static int dp83640_probe(struct phy_device *phydev)
 	} else
 		list_add_tail(&dp83640->list, &clock->phylist);
 
-	dp83640_clock_put(clock);
+	dp83640_clock_unlock(clock);
 	return 0;
 
 no_register:
 	clock->chosen = NULL;
 	kfree(dp83640);
 no_memory:
+	dp83640_clock_unlock(clock);
 	dp83640_clock_put(clock);
 no_clock:
 	return err;
@@ -1467,7 +1495,6 @@ static void dp83640_remove(struct phy_device *phydev)
 	struct dp83640_clock *clock;
 	struct list_head *this, *next;
 	struct dp83640_private *tmp, *dp83640 = phydev->priv;
-	bool remove_clock = false;
 
 	if (phydev->mdio.addr == BROADCAST_ADDR)
 		return;
@@ -1480,7 +1507,8 @@ static void dp83640_remove(struct phy_device *phydev)
 	skb_queue_purge(&dp83640->rx_queue);
 	skb_queue_purge(&dp83640->tx_queue);
 
-	clock = dp83640_clock_get(dp83640->clock);
+	clock = dp83640->clock;
+	dp83640_clock_lock(clock);
 
 	if (dp83640 == clock->chosen) {
 		ptp_clock_unregister(clock->ptp_clock);
@@ -1495,23 +1523,9 @@ static void dp83640_remove(struct phy_device *phydev)
 		}
 	}
 
-	if (!clock->chosen && list_empty(&clock->phylist))
-		remove_clock = true;
-
+	dp83640_clock_unlock(clock);
 	dp83640_clock_put(clock);
 	kfree(dp83640);
-
-	if (remove_clock) {
-		mutex_lock(&phyter_clocks_lock);
-		list_del(&clock->list);
-		mutex_unlock(&phyter_clocks_lock);
-
-		mutex_destroy(&clock->extreg_lock);
-		mutex_destroy(&clock->clock_lock);
-		put_device(&clock->bus->dev);
-		kfree(clock->caps.pin_config);
-		kfree(clock);
-	}
 }
 
 static struct phy_driver dp83640_driver[] = {
