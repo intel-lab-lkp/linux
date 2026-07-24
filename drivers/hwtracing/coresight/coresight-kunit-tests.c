@@ -6,14 +6,18 @@
 
 #include "coresight-priv.h"
 
-static struct coresight_device *coresight_test_device(struct device *dev)
+static struct coresight_device *coresight_test_device(struct kunit *test,
+						      struct device *dev)
 {
 	struct coresight_device *csdev = devm_kcalloc(dev, 1,
 						     sizeof(struct coresight_device),
 						     GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, csdev);
+
 	csdev->pdata = devm_kcalloc(dev, 1,
 				   sizeof(struct coresight_platform_data),
 				   GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, csdev->pdata);
 	return csdev;
 }
 
@@ -25,11 +29,15 @@ static void test_default_sink(struct kunit *test)
 	 *                   | default
 	 */
 	struct device *dev = kunit_device_register(test, "coresight_kunit");
-	struct coresight_device *src = coresight_test_device(dev),
-				*etf = coresight_test_device(dev),
-				*etr = coresight_test_device(dev),
-				*catu = coresight_test_device(dev);
+	struct coresight_device *src, *etf, *etr, *catu;
 	struct coresight_connection conn = {};
+
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
+
+	src = coresight_test_device(test, dev);
+	etf = coresight_test_device(test, dev);
+	etr = coresight_test_device(test, dev);
+	catu = coresight_test_device(test, dev);
 
 	src->type = CORESIGHT_DEV_TYPE_SOURCE;
 	/*
