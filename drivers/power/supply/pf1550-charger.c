@@ -514,7 +514,10 @@ static int pf1550_reg_init(struct pf1550_charger *chg)
 	 * a battery. The other supported mode is mode 2, the charger is turned
 	 * on to charge a battery when present.
 	 */
-	if (power_supply_get_battery_info(chg->charger, &info)) {
+	ret = power_supply_get_battery_info(chg->charger, &info);
+	if (!ret) {
+		power_supply_put_battery_info(chg->charger, info);
+
 		ret = regmap_write(chg->pf1550->regmap,
 				   PF1550_CHARG_REG_CHG_OPER,
 				   PF1550_CHG_BAT_ON);
@@ -540,10 +543,12 @@ static void pf1550_dt_parse_dev_info(struct pf1550_charger *chg)
 				     &chg->thermal_regulation_temp))
 		chg->thermal_regulation_temp = PF1550_DEFAULT_THERMAL_TEMP;
 
-	if (power_supply_get_battery_info(chg->charger, &info))
+	if (power_supply_get_battery_info(chg->charger, &info)) {
 		chg->constant_volt = PF1550_DEFAULT_CONSTANT_VOLT;
-	else
+	} else {
 		chg->constant_volt = info->constant_charge_voltage_max_uv;
+		power_supply_put_battery_info(chg->charger, info);
+	}
 }
 
 static int pf1550_charger_probe(struct platform_device *pdev)
