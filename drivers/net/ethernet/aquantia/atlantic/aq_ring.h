@@ -17,12 +17,12 @@
 #define AQ_XDP_TAILROOM		SKB_DATA_ALIGN(sizeof(struct skb_shared_info))
 
 struct page;
+struct page_pool;
 struct aq_nic_cfg_s;
 
 struct aq_rxpage {
 	struct page *page;
 	dma_addr_t daddr;
-	unsigned int order;
 	unsigned int pg_off;
 };
 
@@ -105,9 +105,6 @@ struct aq_ring_stats_rx_s {
 	u64 alloc_fails;
 	u64 skb_alloc_fails;
 	u64 polls;
-	u64 pg_losts;
-	u64 pg_flips;
-	u64 pg_reuses;
 	u64 xdp_aborted;
 	u64 xdp_drop;
 	u64 xdp_pass;
@@ -151,6 +148,7 @@ struct aq_ring_s {
 	u16 tail_size;
 	union aq_ring_stats_s stats;
 	dma_addr_t dx_ring_pa;
+	struct page_pool *pg_pool;
 	struct bpf_prog *xdp_prog;
 	enum atl_ring_type ring_type;
 	struct xdp_rxq_info xdp_rxq;
