@@ -51,7 +51,7 @@ extern struct vmpressure *memcg_to_vmpressure(struct mem_cgroup *memcg);
 extern struct mem_cgroup *vmpressure_to_memcg(struct vmpressure *vmpr);
 
 /* Shared with the v1 vmpressure block in mm/memcontrol-v1.c. */
-extern const unsigned long vmpressure_win;
+extern unsigned long vmpressure_win;
 extern enum vmpressure_levels vmpressure_calc_level(unsigned long scanned,
 						    unsigned long reclaimed);
 
