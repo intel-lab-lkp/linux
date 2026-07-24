@@ -39,6 +39,12 @@
 	(1 << (VIRTIO_BALLOON_HINT_BLOCK_ORDER + PAGE_SHIFT))
 #define VIRTIO_BALLOON_HINT_BLOCK_PAGES (1 << VIRTIO_BALLOON_HINT_BLOCK_ORDER)
 
+static inline bool virtio_balloon_has_reporting(struct virtio_device *vdev)
+{
+	return virtio_has_feature(vdev, VIRTIO_BALLOON_F_REPORTING) ||
+	       virtio_has_feature(vdev, VIRTIO_BALLOON_F_REPORTING_PM_SAFE);
+}
+
 enum virtio_balloon_vq {
 	VIRTIO_BALLOON_VQ_INFLATE,
 	VIRTIO_BALLOON_VQ_DEFLATE,
@@ -598,7 +604,7 @@ static int init_vqs(struct virtio_balloon *vb)
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
 		vqs_info[VIRTIO_BALLOON_VQ_FREE_PAGE].name = "free_page_vq";
 
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_REPORTING)) {
+	if (virtio_balloon_has_reporting(vb->vdev)) {
 		vqs_info[VIRTIO_BALLOON_VQ_REPORTING].name = "reporting_vq";
 		vqs_info[VIRTIO_BALLOON_VQ_REPORTING].callback = balloon_ack;
 	}
@@ -635,7 +641,7 @@ static int init_vqs(struct virtio_balloon *vb)
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT))
 		vb->free_page_vq = vqs[VIRTIO_BALLOON_VQ_FREE_PAGE];
 
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_REPORTING))
+	if (virtio_balloon_has_reporting(vb->vdev))
 		vb->reporting_vq = vqs[VIRTIO_BALLOON_VQ_REPORTING];
 
 	return 0;
@@ -1013,7 +1019,7 @@ static int virtballoon_probe(struct virtio_device *vdev)
 	}
 
 	vb->pr_dev_info.report = virtballoon_free_page_report;
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_REPORTING)) {
+	if (virtio_balloon_has_reporting(vb->vdev)) {
 		unsigned int capacity;
 
 		capacity = virtqueue_get_vring_size(vb->reporting_vq);
@@ -1099,7 +1105,7 @@ static void virtballoon_remove(struct virtio_device *vdev)
 {
 	struct virtio_balloon *vb = vdev->priv;
 
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_REPORTING))
+	if (virtio_balloon_has_reporting(vb->vdev))
 		page_reporting_unregister(&vb->pr_dev_info);
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_DEFLATE_ON_OOM))
 		unregister_oom_notifier(&vb->oom_nb);
@@ -1162,8 +1168,10 @@ static int virtballoon_validate(struct virtio_device *vdev)
 	 */
 	if (!want_init_on_free() && !page_poisoning_enabled_static())
 		__virtio_clear_bit(vdev, VIRTIO_BALLOON_F_PAGE_POISON);
-	else if (!virtio_has_feature(vdev, VIRTIO_BALLOON_F_PAGE_POISON))
+	else if (!virtio_has_feature(vdev, VIRTIO_BALLOON_F_PAGE_POISON)) {
 		__virtio_clear_bit(vdev, VIRTIO_BALLOON_F_REPORTING);
+		__virtio_clear_bit(vdev, VIRTIO_BALLOON_F_REPORTING_PM_SAFE);
+	}
 
 	__virtio_clear_bit(vdev, VIRTIO_F_ACCESS_PLATFORM);
 	return 0;
@@ -1176,6 +1184,7 @@ static unsigned int features[] = {
 	VIRTIO_BALLOON_F_FREE_PAGE_HINT,
 	VIRTIO_BALLOON_F_PAGE_POISON,
 	VIRTIO_BALLOON_F_REPORTING,
+	VIRTIO_BALLOON_F_REPORTING_PM_SAFE,
 };
 
 static struct virtio_driver virtio_balloon_driver = {
