@@ -562,6 +562,11 @@ Commit message
       - The email subaddresses do not match.
       - The email comments do not match.
 
+  **COMMITTER_SIGN_OFF_MISMATCH**
+    When checking a Git commit, the final Signed-off-by: line does not match
+    the commit's committer.  The person committing a patch should add their
+    own Signed-off-by: line last.
+
   **MISSING_SIGN_OFF**
     The patch is missing a Signed-off-by line.  A signed-off-by
     line should be added according to Developer's certificate of
