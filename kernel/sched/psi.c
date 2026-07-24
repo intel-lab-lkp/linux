@@ -451,10 +451,11 @@ static u64 window_update(struct psi_window *win, u64 now, u64 value)
 	if (elapsed > win->size)
 		window_reset(win, now, value, growth);
 	else {
-		u32 remaining;
+		u64 remaining;
 
 		remaining = win->size - elapsed;
-		growth += div64_u64(win->prev_growth * remaining, win->size);
+		growth += mul_u64_u64_div_u64(win->prev_growth, remaining,
+					      win->size);
 	}
 
 	return growth;
