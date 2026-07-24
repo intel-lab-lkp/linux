@@ -1354,12 +1354,16 @@ static void mpi3mr_update_tgtdev(struct mpi3mr_ioc *mrioc,
 		tgtdev->dev_spec.pcie_inf.capb =
 		    le32_to_cpu(pcieinf->capabilities);
 		tgtdev->dev_spec.pcie_inf.mdts = MPI3MR_DEFAULT_MDTS;
-		/* 2^12 = 4096 */
-		tgtdev->dev_spec.pcie_inf.pgsz = 12;
+		tgtdev->dev_spec.pcie_inf.reset_to = MPI3MR_INTADMCMD_TIMEOUT;
+		tgtdev->dev_spec.pcie_inf.abort_to = MPI3MR_INTADMCMD_TIMEOUT;
+		/* Validate firmware page size to prevent undefined shift behavior */
+		if (pcieinf->page_size > 0 && pcieinf->page_size < 31)
+			tgtdev->dev_spec.pcie_inf.pgsz = pcieinf->page_size;
+		else
+			tgtdev->dev_spec.pcie_inf.pgsz = 12; /* Default to 4096 (2^12) */
 		if (dev_pg0->access_status == MPI3_DEVICE0_ASTATUS_NO_ERRORS) {
 			tgtdev->dev_spec.pcie_inf.mdts =
 			    le32_to_cpu(pcieinf->maximum_data_transfer_size);
-			tgtdev->dev_spec.pcie_inf.pgsz = pcieinf->page_size;
 			tgtdev->dev_spec.pcie_inf.reset_to =
 			    max_t(u8, pcieinf->controller_reset_to,
 			     MPI3MR_INTADMCMD_TIMEOUT);
