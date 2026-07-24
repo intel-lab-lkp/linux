@@ -1028,6 +1028,26 @@ int kvm_vgic_v5_irs_init(struct kvm *kvm, unsigned int nr_spis)
 	return 0;
 }
 
+int vgic_v5_irs_lpi_ist_id_bits(struct kvm *kvm, unsigned int *id_bits)
+{
+	struct vgic_v5_irs *irs = kvm->arch.vgic.vgic_v5_irs_data;
+
+	if (!irs)
+		return -ENXIO;
+
+	if (!irs->ist_baser.valid)
+		return 0;
+
+	if (!vgic_v5_ist_cfgr_valid(irs)) {
+		kvm_err("Guest programmed invalid IRS_IST_CFGR\n");
+		return -EINVAL;
+	}
+
+	*id_bits = irs->ist_cfgr.lpi_id_bits;
+
+	return 1;
+}
+
 int vgic_v5_has_attr_regs(struct kvm_device *dev, struct kvm_device_attr *attr)
 {
 	const struct vgic_register_region *region;
