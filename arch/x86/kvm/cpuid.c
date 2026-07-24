@@ -1267,6 +1267,7 @@ void kvm_initialize_cpu_caps(void)
 
 	kvm_cpu_cap_init(CPUID_8000_0022_EAX,
 		F(PERFMON_V2),
+		SCATTERED_F(AMD_LBR_V2),
 	);
 
 	if (!static_cpu_has_bug(X86_BUG_NULL_SEG))
@@ -1883,6 +1884,11 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		cpuid_entry_override(entry, CPUID_8000_0022_EAX);
 
 		ebx.split.num_core_pmc = kvm_pmu_cap.num_counters_gp;
+
+		if (kvm_cpu_cap_has(X86_FEATURE_AMD_LBR_V2))
+			ebx.split.lbr_v2_stack_sz =
+				min(kvm_pmu_cap.num_branches_lbr, SVM_LBR_V2_STACK_SIZE);
+
 		entry->ebx = ebx.full;
 		break;
 	}

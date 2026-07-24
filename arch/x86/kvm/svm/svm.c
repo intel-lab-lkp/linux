@@ -4820,6 +4820,20 @@ static bool svm_has_emulated_msr(struct kvm *kvm, u32 index)
 	return true;
 }
 
+static int cpuid_query_lbrv2_stack_size(struct kvm_vcpu *vcpu)
+{
+	struct kvm_cpuid_entry2 *entry;
+
+	entry = kvm_find_cpuid_entry(vcpu, 0x80000000);
+	if (!entry || entry->eax < 0x80000022)
+		goto not_found;
+	entry = kvm_find_cpuid_entry(vcpu, 0x80000022);
+	if (entry)
+		return (entry->ebx >> 4) & 0x3f;
+not_found:
+	return 0;
+}
+
 static void svm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -4845,6 +4859,10 @@ static void svm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	 */
 	if (guest_cpuid_is_intel_compatible(vcpu))
 		guest_cpu_cap_clear(vcpu, X86_FEATURE_V_VMSAVE_VMLOAD);
+
+	if (guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_LBR_V2) &&
+	    cpuid_query_lbrv2_stack_size(vcpu) != SVM_LBR_V2_STACK_SIZE)
+		guest_cpu_cap_clear(vcpu, X86_FEATURE_AMD_LBR_V2);
 
 	if (is_sev_guest(vcpu))
 		sev_vcpu_after_set_cpuid(svm);
@@ -5692,6 +5710,10 @@ static __init void svm_set_cpu_caps(void)
 		if (kvm_pmu_cap.version != 2 ||
 		    !kvm_cpu_cap_has(X86_FEATURE_PERFCTR_CORE))
 			kvm_cpu_cap_clear(X86_FEATURE_PERFMON_V2);
+
+		if (!lbrv || !enable_mediated_pmu ||
+		    !kvm_cpu_cap_has(X86_FEATURE_PERFMON_V2))
+			kvm_cpu_cap_clear(X86_FEATURE_AMD_LBR_V2);
 	}
 
 	/* CPUID 0x8000001F (SME/SEV features) */
