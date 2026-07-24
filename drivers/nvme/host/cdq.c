@@ -5,6 +5,7 @@
 
 #include <linux/anon_inodes.h>
 #include <linux/file.h>
+#include <linux/uaccess.h>
 
 #include "nvme.h"
 #include "cdq.h"
@@ -169,6 +170,75 @@ static inline void nvme_release_cdq_backing(struct cdq_nvme_queue *cdq)
 	nvme_free_cdqmem_chunks(cdq);
 }
 
+
+static inline void *nvme_get_cdq_entryvaddr(struct cdq_nvme_queue *cdq,
+					    unsigned int entry_idx)
+{
+	return cdq->chunks[entry_idx / NVME_CDQ_MQ_ENTRY_PER_CHUNK].vaddr +
+		(entry_idx % NVME_CDQ_MQ_ENTRY_PER_CHUNK) * NVME_CDQ_MQ_ENTRY_NRBYTES;
+}
+
+/* Advance cdq->host_head at most nrbytes and return actual advanced bytes */
+static size_t nvme_advance_cdq(struct cdq_nvme_queue *cdq, size_t max_nrbyte)
+{
+	size_t target_nbyte = 0;
+	void *entry;
+	u8 phase_bit;
+	u32 cdq_nrentry = cdq->size_nbyte / NVME_CDQ_MQ_ENTRY_NRBYTES;
+
+	while (target_nbyte < max_nrbyte) {
+		entry = nvme_get_cdq_entryvaddr(cdq, cdq->host_head);
+		phase_bit = (*(u8 *)(entry + NVME_CDQ_MQ_PHASE_OFFSET) & NVME_CDQ_MQ_PHASE_MASK);
+
+		if (phase_bit == cdq->phase_bit)
+			break;
+
+		cdq->host_head = (cdq->host_head + 1) % cdq_nrentry;
+		target_nbyte += NVME_CDQ_MQ_ENTRY_NRBYTES;
+		if (unlikely(cdq->host_head == 0))
+			cdq->phase_bit = ~cdq->phase_bit & NVME_CDQ_MQ_PHASE_MASK;
+	}
+
+	return target_nbyte;
+}
+
+static ssize_t nvme_traversecopy_cdq(struct cdq_nvme_queue *cdq, size_t max_nrbyte,
+				   void *priv_data)
+{
+	char __user *to_buf = priv_data;
+	void *from_buf;
+	u32 init_host_head = cdq->host_head;
+	u8 init_phase_bit = cdq->phase_bit;
+
+	size_t target_nbyte = nvme_advance_cdq(cdq, max_nrbyte);
+	size_t copied_nbyte = 0, chunks_idx, entry_idx, tx_nbytes;
+
+	if (target_nbyte == 0)
+		goto out;
+
+	for (chunks_idx = init_host_head / NVME_CDQ_MQ_ENTRY_PER_CHUNK,
+	     entry_idx = init_host_head % NVME_CDQ_MQ_ENTRY_PER_CHUNK;
+	     copied_nbyte < target_nbyte;
+	     chunks_idx = (chunks_idx + 1) % cdq->nr_chunks, entry_idx = 0) {
+		from_buf = cdq->chunks[chunks_idx].vaddr +
+			(entry_idx * NVME_CDQ_MQ_ENTRY_NRBYTES);
+		tx_nbytes = min(target_nbyte - copied_nbyte,
+				NVME_CDQ_CHUNK_SIZE - (entry_idx * NVME_CDQ_MQ_ENTRY_NRBYTES));
+		if (copy_to_user(to_buf, from_buf, tx_nbytes))
+			goto err_out;
+		copied_nbyte += tx_nbytes;
+		to_buf += tx_nbytes;
+	}
+
+out:
+	return copied_nbyte;
+
+err_out:
+	cdq->host_head = init_host_head;
+	cdq->phase_bit = init_phase_bit;
+	return -EFAULT;
+}
+
 static ssize_t nvme_cdq_fops_read(struct file *filep, char __user *buf,
 				  size_t size_nbyte, loff_t *ppos)
 {
@@ -187,8 +257,7 @@ static ssize_t nvme_cdq_fops_read(struct file *filep, char __user *buf,
 	if (!READ_ONCE(cdq->valid_mem))
 		return -EINVAL;
 
-	/* CDQ traversal not implemented yet. */
-	return -EOPNOTSUPP;
+	return nvme_traversecopy_cdq(cdq, nbytes, buf);
 }
 
 /* File reference already dropped by the close path, so don't fput() */

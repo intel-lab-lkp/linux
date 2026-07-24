@@ -9,6 +9,8 @@
 #include "nvme.h"
 
 #define NVME_CDQ_MQ_ENTRY_NRBYTES	32
+#define NVME_CDQ_MQ_PHASE_MASK		0x1
+#define NVME_CDQ_MQ_PHASE_OFFSET	(NVME_CDQ_MQ_ENTRY_NRBYTES - 1)
 
 /*
  * The CDQ backing is a set of coherent DMA chunks expressed in
@@ -17,6 +19,7 @@
 #define NVME_CDQ_CHUNK_ORDER		2
 #define NVME_CDQ_CHUNK_SIZE		(PAGE_SIZE << NVME_CDQ_CHUNK_ORDER)
 #define NVME_CDQ_PAGES_PER_CHUNK	(NVME_CDQ_CHUNK_SIZE / NVME_CTRL_PAGE_SIZE)
+#define NVME_CDQ_MQ_ENTRY_PER_CHUNK	(NVME_CDQ_CHUNK_SIZE / NVME_CDQ_MQ_ENTRY_NRBYTES)
 
 /* Max PRP List pages we are willing to chain to describe a discontiguous CDQ. */
 #define MAX_NR_CDQ_PRPS		20
@@ -44,6 +47,10 @@ struct cdq_nvme_queue {
 
 	/* True if mem for chunks and prps is valid */
 	bool valid_mem;
+
+	/* How far the CDQ was consumed by the host */
+	u32 host_head;
+	u8 phase_bit;
 
 	/* Manage refs for read FD and controller xarray */
 	struct kref ref;
