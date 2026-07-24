@@ -1197,12 +1197,20 @@ static bool writable_file_mapping_allowed(struct vm_area_struct *vma,
 	return !vma_needs_dirty_tracking(vma);
 }
 
-static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
+static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags,
+			   vm_flags_t ignore_flags)
 {
 	vm_flags_t vm_flags = vma->vm_flags;
 	int write = (gup_flags & FOLL_WRITE);
 	int foreign = (gup_flags & FOLL_REMOTE);
 	bool vma_anon = vma_is_anonymous(vma);
+
+	/*
+	 * Opt out of the flag checks that read this local copy (the
+	 * VM_IO/VM_PFNMAP gate and the write/read/cow bits); checks that
+	 * re-read vma->vm_flags through helpers are unaffected.
+	 */
+	vm_flags &= ~ignore_flags;
 
 	if (vm_flags & (VM_IO | VM_PFNMAP))
 		return -EFAULT;
@@ -1387,7 +1395,7 @@ static long __get_user_pages(struct mm_struct *mm,
 					ret = -ENOMEM;
 					goto out;
 				}
-				if (check_vma_flags(vma, gup_flags)) {
+				if (check_vma_flags(vma, gup_flags, 0)) {
 					ret = -EINVAL;
 					goto out;
 				}
@@ -1408,7 +1416,7 @@ static long __get_user_pages(struct mm_struct *mm,
 				ret = -EFAULT;
 				goto out;
 			}
-			ret = check_vma_flags(vma, gup_flags);
+			ret = check_vma_flags(vma, gup_flags, 0);
 			if (ret)
 				goto out;
 		}
