@@ -182,6 +182,32 @@ struct vgic_global {
 	struct {
 		DECLARE_BITMAP(impl_ppi_mask, VGIC_V5_NR_PRIVATE_IRQS);
 	} vgic_v5_ppi_caps;
+
+	/* GICv5 IRS capabilities */
+	struct {
+		/* Base address of the host IRS's CONFIG_FRAME */
+		void __iomem	*irs_base;
+
+		/* IST Caps */
+		u8		ist_id_bits;
+		bool		ist_levels;
+		u8		ist_l2sz;
+		bool		istmd;
+		u8		istmd_sz;
+
+		/* LPI only */
+		u8		min_lpi_id_bits;
+
+		/* VM Table, VPE Table */
+		bool		two_level_vmt_support;
+		u32		max_vms;
+		u32		max_vpes;
+		u16		vmd_size;
+		u16		vped_size;
+
+		/* Is the IRS coherent with us, or not? */
+		bool		non_coherent;
+	} vgic_v5_irs_caps;
 };
 
 extern struct vgic_global kvm_vgic_global_state;

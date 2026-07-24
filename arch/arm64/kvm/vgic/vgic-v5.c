@@ -11,6 +11,7 @@
 #include "vgic.h"
 
 #define ppi_caps	kvm_vgic_global_state.vgic_v5_ppi_caps
+#define irs_caps	kvm_vgic_global_state.vgic_v5_irs_caps
 
 /*
  * Not all PPIs are guaranteed to be implemented for GICv5. Deterermine which
@@ -32,6 +33,45 @@ static void vgic_v5_get_implemented_ppis(void)
 
 	/* The PMUIRQ is available if we have the PMU */
 	__assign_bit(GICV5_ARCH_PPI_PMUIRQ, ppi_caps.impl_ppi_mask, system_supports_pmuv3());
+}
+
+static u32 irs_readl_relaxed(const u32 reg_offset)
+{
+	return readl_relaxed(irs_caps.irs_base + reg_offset);
+}
+
+static void vgic_v5_irs_extract_vm_caps(const struct gic_kvm_info *info)
+{
+	u64 idr;
+
+	irs_caps.irs_base = info->gicv5_irs.base;
+	irs_caps.non_coherent = info->gicv5_irs.non_coherent;
+
+	idr = irs_readl_relaxed(GICV5_IRS_IDR2);
+
+	/* We skip the LPI field as it only applies to physical LPIs */
+	irs_caps.ist_id_bits = FIELD_GET(GICV5_IRS_IDR2_ID_BITS, idr);
+	irs_caps.min_lpi_id_bits = FIELD_GET(GICV5_IRS_IDR2_MIN_LPI_ID_BITS, idr);
+	irs_caps.ist_levels = (idr & GICV5_IRS_IDR2_IST_LEVELS);
+	irs_caps.ist_l2sz = FIELD_GET(GICV5_IRS_IDR2_IST_L2SZ, idr);
+	irs_caps.istmd = (idr & GICV5_IRS_IDR2_ISTMD);
+	irs_caps.istmd_sz = FIELD_GET(GICV5_IRS_IDR2_ISTMD_SZ, idr);
+
+	idr = irs_readl_relaxed(GICV5_IRS_IDR3);
+
+	irs_caps.max_vms = BIT(FIELD_GET(GICV5_IRS_IDR3_VM_ID_BITS, idr));
+	irs_caps.two_level_vmt_support = (idr & GICV5_IRS_IDR3_VMT_LEVELS);
+
+	if (idr & GICV5_IRS_IDR3_VMD)
+		irs_caps.vmd_size = BIT(FIELD_GET(GICV5_IRS_IDR3_VMD_SZ, idr));
+	else
+		irs_caps.vmd_size = 0;
+
+	idr = irs_readl_relaxed(GICV5_IRS_IDR4);
+
+	irs_caps.vped_size = BIT(FIELD_GET(GICV5_IRS_IDR4_VPED_SZ, idr));
+	/* Field stores VPE_ID_BITS - 1 */
+	irs_caps.max_vpes = BIT(FIELD_GET(GICV5_IRS_IDR4_VPE_ID_BITS, idr) + 1);
 }
 
 /*
@@ -61,9 +101,11 @@ int vgic_v5_probe(const struct gic_kvm_info *info)
 		goto skip_v5;
 	}
 
-	kvm_vgic_global_state.max_gic_vcpus = VGIC_V5_MAX_CPUS;
-
+	vgic_v5_irs_extract_vm_caps(info);
 	vgic_v5_get_implemented_ppis();
+
+	kvm_vgic_global_state.max_gic_vcpus = min(irs_caps.max_vpes,
+						  VGIC_V5_MAX_CPUS);
 
 	ret = kvm_register_vgic_device(KVM_DEV_TYPE_ARM_VGIC_V5);
 	if (ret) {
