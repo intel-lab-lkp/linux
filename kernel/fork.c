@@ -3047,7 +3047,9 @@ SYSCALL_DEFINE2(clone3, struct clone_args __user *, uargs, size_t, size)
 	if (!clone3_args_valid(&kargs))
 		return -EINVAL;
 
-	return kernel_clone(&kargs);
+	err = kernel_clone(&kargs);
+	audit_log_clone3(&kargs, err);
+	return err;
 }
 
 void walk_process_tree(struct task_struct *top, proc_visitor visitor, void *data)

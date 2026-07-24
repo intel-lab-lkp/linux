@@ -2883,6 +2883,26 @@ void __audit_log_nfcfg(const char *name, u8 af, unsigned int nentries,
 }
 EXPORT_SYMBOL_GPL(__audit_log_nfcfg);
 
+void __audit_log_clone3(struct kernel_clone_args *kargs, int ret)
+{
+	struct audit_buffer *ab;
+	int pidfd;
+
+	ab = audit_log_start(audit_context(), GFP_KERNEL,
+			     AUDIT_CLONE3);
+	if (!ab)
+		return;
+
+	audit_log_format(ab, "cl3_flags=0x%llx exit_signal=%d cgroup=%d",
+			 kargs->flags, kargs->exit_signal, kargs->cgroup);
+	if ((kargs->flags & CLONE_PIDFD) && ret >= 0 &&
+	    !get_user(pidfd, kargs->pidfd))
+		audit_log_format(ab, " pidfd=%d", pidfd);
+	else
+		audit_log_format(ab, " pidfd=(null)");
+	audit_log_end(ab);
+}
+
 static void audit_log_task(struct audit_buffer *ab)
 {
 	kuid_t auid, uid;
