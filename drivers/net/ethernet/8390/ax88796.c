@@ -722,12 +722,12 @@ static int ax_init_dev(struct net_device *dev)
 #ifdef CONFIG_AX88796_93CX6
 	if (ax->plat->flags & AXFLG_HAS_93CX6) {
 		unsigned char mac_addr[ETH_ALEN];
-		struct eeprom_93cx6 eeprom;
-
-		eeprom.data = ei_local;
-		eeprom.register_read = ax_eeprom_register_read;
-		eeprom.register_write = ax_eeprom_register_write;
-		eeprom.width = PCI_EEPROM_WIDTH_93C56;
+		struct eeprom_93cx6 eeprom = {
+			.data = ei_local,
+			.register_read = ax_eeprom_register_read,
+			.register_write = ax_eeprom_register_write,
+			.width = PCI_EEPROM_WIDTH_93C56,
+		};
 
 		eeprom_93cx6_multiread(&eeprom, 0,
 				       (__le16 __force *)mac_addr,
