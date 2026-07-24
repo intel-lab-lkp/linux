@@ -934,6 +934,22 @@ static int cppc_cpufreq_cpu_online(struct cpufreq_policy *policy)
 	return 0;
 }
 
+/*
+ * suspend() only saves the OSPM-set values. It does not revert them to the
+ * firmware values.
+ *
+ * This is because system suspend may later offline the secondary CPUs.
+ * That runs offline(), which saves the values and then reverts to firmware.
+ * If suspend() had already reverted, offline() would save the firmware value
+ * instead of the user's request, and the request would be lost.
+ */
+static int cppc_cpufreq_cpu_suspend(struct cpufreq_policy *policy)
+{
+	cppc_cpufreq_save_requested_regs(policy);
+
+	return 0;
+}
+
 static void cppc_cpufreq_cpu_exit(struct cpufreq_policy *policy)
 {
 	struct cppc_cpudata *cpu_data = policy->driver_data;
@@ -1248,6 +1264,8 @@ static struct cpufreq_driver cppc_cpufreq_driver = {
 	.exit = cppc_cpufreq_cpu_exit,
 	.online = cppc_cpufreq_cpu_online,
 	.offline = cppc_cpufreq_cpu_offline,
+	.suspend = cppc_cpufreq_cpu_suspend,
+	.resume = cppc_cpufreq_cpu_online,
 	.set_boost = cppc_cpufreq_set_boost,
 	.attr = cppc_cpufreq_attr,
 	.name = "cppc_cpufreq",
