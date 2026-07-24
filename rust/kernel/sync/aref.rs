@@ -129,7 +129,11 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// struct Empty {}
     ///
-    /// # // SAFETY: TODO.
+    /// # // SAFETY: `dec_ref` is a no-op and never deallocates `data`, so the object's
+    /// # // lifetime is governed entirely by ordinary Rust scoping, not by this impl; the
+    /// # // trait's "keep alive until matching decrement" guarantee holds vacuously because
+    /// # // no decrement here ever frees anything, and neither `ptr` nor `raw_ptr` is ever
+    /// # // dereferenced in this example.
     /// unsafe impl AlwaysRefCounted for Empty {
     ///     fn inc_ref(&self) {}
     ///     unsafe fn dec_ref(_obj: NonNull<Self>) {}
@@ -137,7 +141,9 @@ impl<T: AlwaysRefCounted> ARef<T> {
     ///
     /// let mut data = Empty {};
     /// let ptr = NonNull::<Empty>::new(&mut data).unwrap();
-    /// # // SAFETY: TODO.
+    /// # // SAFETY: `from_raw`'s contract concerns a reference count that `Empty` doesn't
+    /// # // actually have; since `inc_ref`/`dec_ref` never touch any state, there is no
+    /// # // invariant here for `from_raw` to violate.
     /// let data_ref: ARef<Empty> = unsafe { ARef::from_raw(ptr) };
     /// let raw_ptr: NonNull<Empty> = ARef::into_raw(data_ref);
     ///
