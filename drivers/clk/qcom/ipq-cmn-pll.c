@@ -210,6 +210,28 @@ static int ipq_cmn_pll_find_freq_index(unsigned long parent_rate)
 	return index;
 }
 
+static int clk_cmn_pll_ana_soft_reset(struct regmap *regmap)
+{
+	int ret;
+	u32 val;
+
+	ret = regmap_clear_bits(regmap, CMN_PLL_POWER_ON_AND_RESET,
+				CMN_ANA_EN_SW_RSTN);
+	if (ret)
+		return ret;
+
+	usleep_range(1000, 1200);
+	ret = regmap_set_bits(regmap, CMN_PLL_POWER_ON_AND_RESET,
+			      CMN_ANA_EN_SW_RSTN);
+	if (ret)
+		return ret;
+
+	/* Stability check of CMN PLL output clocks. */
+	return regmap_read_poll_timeout(regmap, CMN_PLL_LOCKED, val,
+					(val & CMN_PLL_CLKS_LOCKED),
+					100, 100 * USEC_PER_MSEC);
+}
+
 static unsigned long clk_cmn_pll_recalc_rate(struct clk_hw *hw,
 					     unsigned long parent_rate)
 {
@@ -253,7 +275,6 @@ static int clk_cmn_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 {
 	struct clk_cmn_pll *cmn_pll = to_clk_cmn_pll(hw);
 	int ret, index;
-	u32 val;
 
 	/*
 	 * Configure the reference input clock selection as per the given
@@ -297,21 +318,7 @@ static int clk_cmn_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	 * Reset the CMN PLL block to ensure the updated configurations
 	 * take effect.
 	 */
-	ret = regmap_clear_bits(cmn_pll->regmap, CMN_PLL_POWER_ON_AND_RESET,
-				CMN_ANA_EN_SW_RSTN);
-	if (ret)
-		return ret;
-
-	usleep_range(1000, 1200);
-	ret = regmap_set_bits(cmn_pll->regmap, CMN_PLL_POWER_ON_AND_RESET,
-			      CMN_ANA_EN_SW_RSTN);
-	if (ret)
-		return ret;
-
-	/* Stability check of CMN PLL output clocks. */
-	return regmap_read_poll_timeout(cmn_pll->regmap, CMN_PLL_LOCKED, val,
-					(val & CMN_PLL_CLKS_LOCKED),
-					100, 100 * USEC_PER_MSEC);
+	return clk_cmn_pll_ana_soft_reset(cmn_pll->regmap);
 }
 
 static const struct clk_ops clk_cmn_pll_ops = {
