@@ -881,7 +881,15 @@ where
 {
 }
 
-// SAFETY: TODO.
+// SAFETY: The `__enqueue` implementation in `RawWorkItem` uses a `work_struct` initialized
+// with the `run` method of this trait as the function pointer because:
+//   - `__enqueue` gets the `work_struct` from the `Work` field, using `T::raw_get_work`.
+//   - The only safe way to create a `Work` object is through `Work::new`.
+//   - `Work::new` makes sure that `T::Pointer::run` is passed to `init_work_with_key`.
+//   - Finally `Work` and `RawWorkItem` guarantee that the correct `Work` field will be used
+//     because of the ID const generic bound. This makes sure that `T::raw_get_work` uses the
+//     correct offset for the `Work` field, and `Work::new` picks the correct implementation
+//     of `WorkItemPointer` for `Pin<KBox<T>>`.
 unsafe impl<T, const ID: u64> WorkItemPointer<ID> for Pin<KBox<T>>
 where
     T: WorkItem<ID, Pointer = Self>,
@@ -901,7 +909,14 @@ where
     }
 }
 
-// SAFETY: TODO.
+// SAFETY: `__enqueue` leaks the box via `KBox::into_raw` before calling `queue_work_on`, so
+// the pointer is valid for the duration of that call. If the closure returns true, the
+// pointer remains valid until reclaimed in `WorkItemPointer::run`, which reconstructs the box
+// with a matching `KBox::from_raw`. If the closure returns false, `__enqueue`'s own safety
+// requirement only permits that when the `work_struct` is already in a workqueue -- but
+// `self` is an exclusively-owned `Pin<KBox<T>>`, and ownership is only ever given up by
+// enqueuing it, so it cannot already be enqueued elsewhere while we still hold it here. That
+// branch is therefore unreachable, matching the `unreachable_unchecked` call.
 unsafe impl<T, const ID: u64> RawWorkItem<ID> for Pin<KBox<T>>
 where
     T: WorkItem<ID, Pointer = Self>,
