@@ -377,16 +377,12 @@ int stop_two_cpus(unsigned int cpu1, unsigned int cpu2, cpu_stop_fn_t fn, void *
  *
  * CONTEXT:
  * Don't care.
- *
- * RETURNS:
- * true if cpu_stop_work was queued successfully and @fn will be called,
- * false otherwise.
  */
-bool stop_one_cpu_nowait(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
-			struct cpu_stop_work *work_buf)
+void stop_one_cpu_nowait(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
+			 struct cpu_stop_work *work_buf)
 {
 	*work_buf = (struct cpu_stop_work){ .fn = fn, .arg = arg, .caller = _RET_IP_, };
-	return cpu_stop_queue_work(cpu, work_buf);
+	WARN_ON_ONCE(!cpu_stop_queue_work(cpu, work_buf));
 }
 
 static bool queue_stop_cpus_work(const struct cpumask *cpumask,
