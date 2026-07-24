@@ -578,6 +578,20 @@ int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 		if (drm_WARN_ONCE(dev, !recovery, "invalid recovery method %u\n", opt))
 			break;
 
+		/*
+		 * scnprintf(buf, size, "%s,", recovery) writes strlen(recovery)+1
+		 * content bytes (token + comma) and reserves 1 byte for NUL within
+		 * 'size'.  It fits without truncation when:
+		 *   len + strlen(recovery) + 1 <= WEDGE_STR_LEN - 1  (safe)
+		 * so warn and bail when:
+		 *   len + strlen(recovery) + 1 >= WEDGE_STR_LEN       (would truncate)
+		 * Note: ">= WEDGE_STR_LEN - 1" would be off-by-one — it would
+		 * incorrectly reject the exact-fit case where NUL lands on the last
+		 * valid byte (index WEDGE_STR_LEN - 1).
+		 */
+		if (drm_WARN_ON(dev, len + strlen(recovery) + 1 >= WEDGE_STR_LEN))
+			break;
+
 		len += scnprintf(event_string + len, sizeof(event_string) - len, "%s,", recovery);
 	}
 
