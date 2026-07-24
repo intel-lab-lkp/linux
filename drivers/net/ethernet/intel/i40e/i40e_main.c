@@ -12823,6 +12823,7 @@ static int i40e_sw_init(struct i40e_pf *pf)
 			 "total-port-shutdown was enabled, link-down-on-close is forced on\n");
 	}
 	mutex_init(&pf->switch_mutex);
+	i40e_ptp_init_work(pf);
 
 sw_init_done:
 	return err;
@@ -16188,14 +16189,6 @@ static void i40e_remove(struct pci_dev *pdev)
 
 	i40e_devlink_unregister(pf);
 
-	i40e_dbg_pf_exit(pf);
-
-	i40e_ptp_stop(pf);
-
-	/* Disable RSS in hw */
-	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), 0);
-	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(1), 0);
-
 	/* Grab __I40E_RESET_RECOVERY_PENDING and set __I40E_IN_REMOVE
 	 * flags, once they are set, i40e_rebuild should not be called as
 	 * i40e_prep_for_reset always returns early.
@@ -16203,6 +16196,14 @@ static void i40e_remove(struct pci_dev *pdev)
 	while (test_and_set_bit(__I40E_RESET_RECOVERY_PENDING, pf->state))
 		usleep_range(1000, 2000);
 	set_bit(__I40E_IN_REMOVE, pf->state);
+
+	i40e_dbg_pf_exit(pf);
+
+	i40e_ptp_stop(pf);
+
+	/* Disable RSS in hw */
+	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), 0);
+	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(1), 0);
 
 	if (test_bit(I40E_FLAG_SRIOV_ENA, pf->flags)) {
 		set_bit(__I40E_VF_RESETS_DISABLED, pf->state);

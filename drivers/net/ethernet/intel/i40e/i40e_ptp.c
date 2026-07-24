@@ -170,6 +170,17 @@ static void i40e_ptp_extts0_work(struct work_struct *work)
 }
 
 /**
+ * i40e_ptp_init_work - Initialize PTP work for a PF
+ * @pf: Board private structure
+ *
+ * Initialize work which must remain valid for the lifetime of the PF.
+ */
+void i40e_ptp_init_work(struct i40e_pf *pf)
+{
+	INIT_WORK(&pf->ptp_extts0_work, i40e_ptp_extts0_work);
+}
+
+/**
  * i40e_is_ptp_pin_dev - check if device supports PTP pins
  * @hw: pointer to the hardware structure
  *
@@ -1186,8 +1197,6 @@ static int i40e_ptp_set_timestamp_mode(struct i40e_pf *pf,
 	regval |= 1 << I40E_PRTTSYN_CTL0_EVENT_INT_ENA_SHIFT;
 	wr32(hw, I40E_PRTTSYN_CTL0, regval);
 
-	INIT_WORK(&pf->ptp_extts0_work, i40e_ptp_extts0_work);
-
 	switch (config->tx_type) {
 	case HWTSTAMP_TX_OFF:
 		pf->ptp_tx = false;
@@ -1541,6 +1550,13 @@ void i40e_ptp_stop(struct i40e_pf *pf)
 	struct i40e_hw *hw = &pf->hw;
 	u32 regval;
 
+	/* Stop external timestamp events before unregistering the clock. */
+	regval = rd32(hw, I40E_PRTTSYN_CTL0);
+	regval &= ~I40E_PRTTSYN_CTL0_EVENT_INT_ENA_MASK;
+	wr32(hw, I40E_PRTTSYN_CTL0, regval);
+
+	disable_work_sync(&pf->ptp_extts0_work);
+
 	clear_bit(I40E_FLAG_PTP_ENA, pf->flags);
 	pf->ptp_tx = false;
 	pf->ptp_rx = false;
@@ -1570,11 +1586,6 @@ void i40e_ptp_stop(struct i40e_pf *pf)
 	regval = rd32(hw, I40E_PRTTSYN_AUX_0(0));
 	regval &= ~I40E_PRTTSYN_AUX_0_PTPFLAG_MASK;
 	wr32(hw, I40E_PRTTSYN_AUX_0(0), regval);
-
-	/* Disable interrupts */
-	regval = rd32(hw, I40E_PRTTSYN_CTL0);
-	regval &= ~I40E_PRTTSYN_CTL0_EVENT_INT_ENA_MASK;
-	wr32(hw, I40E_PRTTSYN_CTL0, regval);
 
 	i40e_ptp_free_pins(pf);
 }
