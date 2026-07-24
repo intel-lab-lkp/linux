@@ -42,6 +42,7 @@
 
 DECLARE_FAULT_ATTR(gt_reset_failure);
 DECLARE_FAULT_ATTR(inject_csc_hw_error);
+DECLARE_FAULT_ATTR(inject_punit_error);
 
 static bool csc_hw_error_available(struct xe_device *xe)
 {
@@ -62,6 +63,8 @@ static struct {
 	{ .name = "inject_csc_hw_error",
 	  .attr = &inject_csc_hw_error,
 	  .is_visible = csc_hw_error_available },
+	{ .name = "inject_punit_error",
+	  .attr = &inject_punit_error },
 };
 
 /*
@@ -76,6 +79,7 @@ bool xe_fault_##name(void)				\
 
 FAULT_ACTION(gt_reset, gt_reset_failure)
 FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
+FAULT_ACTION(punit_error, inject_punit_error)
 
 static void xe_fault_inject_debugfs_register(struct xe_device *xe,
 					     struct dentry *root)

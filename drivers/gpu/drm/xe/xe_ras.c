@@ -3,6 +3,7 @@
  * Copyright © 2026 Intel Corporation
  */
 
+#include "xe_debugfs.h"
 #include "xe_device.h"
 #include "xe_drm_ras.h"
 #include "xe_pm.h"
@@ -390,6 +391,22 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 	struct xe_ras_get_soc_error response;
 	size_t rlen;
 	int ret;
+
+	/*
+	 * Only allow the injected PUNIT error once the DRM device is registered.
+	 * xe_ras_process_errors() also runs during probe (via xe_ras_init()), before
+	 * drm_dev_register() calls device_add() on the DRM minor's kdev. At that
+	 * point kdev->kobj.parent is not yet linked into the sysfs hierarchy, so
+	 * kobject_get_path() returns "/card0" instead of the real sysfs path.
+	 * drm_dev_wedged_event() would then emit a KOBJ_CHANGE uevent with a wrong
+	 * DEVPATH that udev cannot resolve, silently dropping the event and leaving
+	 * the cold-reset recovery broken.
+	 */
+	if (xe->drm.registered && xe_fault_punit_error()) {
+		xe_err(xe, "[RAS]: PUNIT error injected\n");
+		punit_error_handler(xe);
+		return XE_RAS_RECOVERY_ACTION_DISCONNECT;
+	}
 
 	if (!xe->info.has_sysctrl)
 		return XE_RAS_RECOVERY_ACTION_RESET;
