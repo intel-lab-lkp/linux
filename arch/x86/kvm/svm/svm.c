@@ -3236,6 +3236,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 			data &= ~DEBUGCTLMSR_BTF;
 		}
 
+		if ((data & DEBUGCTL_LBR_PMC_FREEZE_BITS) &&
+		    !guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_LBR_PMC_FREEZE))
+			return 1;
+
 		if (data & DEBUGCTL_RESERVED_BITS)
 			return 1;
 
