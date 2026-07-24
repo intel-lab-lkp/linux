@@ -5,12 +5,14 @@
 #include <linux/crash_dump.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/rtnetlink.h>
 
 #include "bnge.h"
 #include "bnge_devlink.h"
 #include "bnge_hwrm.h"
 #include "bnge_hwrm_lib.h"
 #include "bnge_link.h"
+#include "bnge_resc.h"
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION(DRV_SUMMARY);
@@ -406,12 +408,34 @@ static void bnge_remove_one(struct pci_dev *pdev)
 
 static void bnge_shutdown(struct pci_dev *pdev)
 {
+	struct bnge_dev *bd = pci_get_drvdata(pdev);
+	struct net_device *dev;
+
+	dev = bd ? bd->netdev : NULL;
+	if (!dev)
+		return;
+
+	rtnl_lock();
+	netdev_lock(dev);
+
+	if (netif_running(dev))
+		netif_close(dev);
+
+	if (bnge_hwrm_func_drv_unrgtr(bd)) {
+		pcie_flr(pdev);
+		goto shutdown_exit;
+	}
+	bnge_free_irqs(bd);
 	pci_disable_device(pdev);
 
 	if (system_state == SYSTEM_POWER_OFF) {
 		pci_wake_from_d3(pdev, 0);
 		pci_set_power_state(pdev, PCI_D3hot);
 	}
+
+shutdown_exit:
+	netdev_unlock(dev);
+	rtnl_unlock();
 }
 
 static struct pci_driver bnge_driver = {
