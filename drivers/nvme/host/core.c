@@ -4765,7 +4765,8 @@ static bool nvme_handle_aen_oneshot(struct nvme_ctrl *ctrl, u32 result, u32 even
 
 	switch (aer_subtype) {
 	case NVME_AER_ONE_SHOT_CDQ_TAIL_PTR:
-		WARN_ONCE(1, "CDQ Tail Pointer one shot event ignored");
+		if (nvme_handle_cdq_aen_tpevent(ctrl, event_param))
+			WARN_ONCE(1, "Error handling CDQ AEN oneshot");
 		break;
 	case NVME_AER_ONE_SHOT_CDQ_FULL:
 		WARN_ONCE(1, "CDQ Full Error one shot event ignored");

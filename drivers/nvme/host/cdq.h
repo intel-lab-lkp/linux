@@ -60,6 +60,9 @@ struct cdq_nvme_queue {
 	/* Last acked CDQ head update. Trails host_head.*/
 	u32 cntl_head;
 
+	/* ETPT offset to arm on next set-feature send, 0 = none */
+	u32 pending_tpt;
+
 	u8 phase_bit;
 
 	/* sf_* controlls if the feature set cmd is done or is still inflight */
@@ -68,6 +71,9 @@ struct cdq_nvme_queue {
 
 	/* Manage refs for read FD and controller xarray */
 	struct kref ref;
+
+	/* Has a value if user setup an event fd for AEN tpt events */
+	struct eventfd_ctx *tpt_efd_ctx;
 };
 
 /*
@@ -83,7 +89,7 @@ void nvme_free_cdq(struct kref *ref);
  *    - Calls nvme_free_cdq if there are no more refs
  */
 void nvme_delete_cdq(struct cdq_nvme_queue *cdq);
-int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id);
+int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id, int tpt_fd);
 
 static inline void nvme_cdq_get(struct cdq_nvme_queue *cdq)
 {
@@ -97,5 +103,6 @@ static inline void nvme_cdq_put(struct cdq_nvme_queue *cdq)
 
 void nvme_delete_cdqs_host(struct nvme_ctrl *ctrl);
 void nvme_free_cdqs(struct nvme_ctrl *ctrl);
+int nvme_handle_cdq_aen_tpevent(struct nvme_ctrl *ctrl, u32 event_param);
 
 #endif /* _NVME_CDQ_H */
