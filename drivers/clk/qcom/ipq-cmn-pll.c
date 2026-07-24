@@ -92,33 +92,61 @@
 #define CMN_PLL_DIVIDER_CTRL			0x794
 #define CMN_PLL_DIVIDER_CTRL_FACTOR		GENMASK(9, 0)
 
+/* Clock gate enable bits. */
+#define CMN_PLL_OUTPUT_RELATED_1		0x79c
+#define CLK25M_EN_BIT				15
+#define CLK50M_EN_BIT3_BIT			14
+#define CLK250M_EN_BIT				13
+#define CLK31P25M_EN_BIT			12
+#define CLK50M_EN_BIT				11
+#define CLK50M_EN_BIT2_BIT			10
+
 /**
  * struct cmn_pll_fixed_output_clk - CMN PLL output clocks information
  * @id:	Clock specifier to be supplied
  * @name: Clock name to be registered
  * @rate: Clock rate
+ * @enable_bit: Enable bit in CMN_PLL_OUTPUT_RELATED_1 for gate clock,
+ *              -1 for non-gated clocks.
  */
 struct cmn_pll_fixed_output_clk {
 	unsigned int id;
 	const char *name;
 	unsigned long rate;
+	int enable_bit;
 };
 
 /**
  * struct clk_cmn_pll - CMN PLL hardware specific data
  * @regmap: hardware regmap.
+ * @base: register base address for gate clock registration
+ * @gate_lock: protects read-modify-write access to CMN_PLL_OUTPUT_RELATED_1,
+ *             which is shared by multiple gate clocks
  * @hw: handle between common and hardware-specific interfaces
+ *
+ * This structure is used for all CMN PLL-derived clocks including
+ * the main PLL, NSS clock, PPE clock, PON reference clock, and
+ * EPHY-RAW clock.
  */
 struct clk_cmn_pll {
 	struct regmap *regmap;
+	void __iomem *base;
+	spinlock_t gate_lock;
 	struct clk_hw hw;
 };
 
-#define CLK_PLL_OUTPUT(_id, _name, _rate) {		\
+#define CLK_PLL_OUTPUT_RAW(_id, _name, _rate, _bit) {	\
 	.id =		_id,				\
 	.name =		_name,				\
 	.rate =		_rate,				\
+	.enable_bit =	_bit,				\
 }
+
+#define CLK_PLL_OUTPUT(_id, _name, _rate)	\
+	CLK_PLL_OUTPUT_RAW(_id, _name, _rate, -1)
+
+#define CLK_PLL_GATE(_id, _name, _rate, _bit)	\
+	CLK_PLL_OUTPUT_RAW(_id, _name, _rate, _bit)
 
 #define to_clk_cmn_pll(_hw) container_of(_hw, struct clk_cmn_pll, hw)
 
@@ -368,6 +396,8 @@ static struct clk_hw *ipq_cmn_pll_clk_hw_register(struct platform_device *pdev)
 
 	cmn_pll->hw.init = &init;
 	cmn_pll->regmap = regmap;
+	cmn_pll->base = base;
+	spin_lock_init(&cmn_pll->gate_lock);
 
 	ret = devm_clk_hw_register(dev, &cmn_pll->hw);
 	if (ret)
@@ -776,6 +806,50 @@ static struct clk_hw *ipq_cmn_pll_ephy_raw_register(struct platform_device *pdev
 	return &ephy_raw_clk->hw;
 }
 
+/*
+ * Register a composite clock that combines a fixed-rate clock with a gate.
+ * The gate control bit lives in CMN_PLL_OUTPUT_RELATED_1, which is shared
+ * across multiple gate clocks, so all of them must use the same lock.
+ */
+static struct clk_hw *ipq_cmn_pll_register_fixed_gate(struct device *dev,
+						      const char *name,
+						      struct clk_hw *parent_hw,
+						      unsigned long rate,
+						      void __iomem *base,
+						      spinlock_t *lock,
+						      u8 enable_bit)
+{
+	struct clk_parent_data pdata = { .hw = parent_hw };
+	struct clk_fixed_rate *fixed;
+	struct clk_gate *gate;
+
+	gate = devm_kzalloc(dev, sizeof(*gate), GFP_KERNEL);
+	if (!gate)
+		return ERR_PTR(-ENOMEM);
+
+	fixed = devm_kzalloc(dev, sizeof(*fixed), GFP_KERNEL);
+	if (!fixed)
+		return ERR_PTR(-ENOMEM);
+
+	gate->reg = base + CMN_PLL_OUTPUT_RELATED_1;
+	gate->bit_idx = enable_bit;
+	gate->lock = lock;
+
+	fixed->fixed_rate = rate;
+
+	/*
+	 * These gated clocks may be relied on by external hardware or
+	 * bootloader-enabled paths without an in-kernel client driver.
+	 * Add CLK_IGNORE_UNUSED so the clock framework does not disable
+	 * them when no consumer has claimed them.
+	 */
+	return devm_clk_hw_register_composite_pdata(dev, name, &pdata, 1,
+						    NULL, NULL,
+						    &fixed->hw, &clk_fixed_rate_ops,
+						    &gate->hw, &clk_gate_ops,
+						    CLK_IGNORE_UNUSED);
+}
+
 static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 {
 	const struct cmn_pll_fixed_output_clk *p, *fixed_clk;
@@ -812,7 +886,15 @@ static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 
 	/* Register the fixed rate output clocks. */
 	for (i = 0; i < num_clks; i++) {
-		if (fixed_clk[i].rate) {
+		if (fixed_clk[i].enable_bit != -1) {
+			hw = ipq_cmn_pll_register_fixed_gate(dev,
+							     fixed_clk[i].name,
+							     cmn_pll_hw,
+							     fixed_clk[i].rate,
+							     cmn_pll->base,
+							     &cmn_pll->gate_lock,
+							     fixed_clk[i].enable_bit);
+		} else if (fixed_clk[i].rate) {
 			struct clk_parent_data pdata = { .hw = cmn_pll_hw };
 
 			hw = devm_clk_hw_register_fixed_rate_parent_data(dev,
