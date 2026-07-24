@@ -216,6 +216,35 @@ void riscv_iommu_ir_irq_domain_remove(struct device *dev, struct riscv_iommu_inf
 int riscv_iommu_ir_attach_paging_domain(struct iommu_domain *iommu_domain, struct device *dev,
 					struct iommu_domain *old)
 {
+	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
+	struct riscv_iommu_domain *old_domain = old ? iommu_domain_to_riscv(old) : NULL;
+	dma_addr_t *msi_iova;
+
+	if (!old_domain)
+		return 0;
+
+	if (old_domain->domain.cookie_type != IOMMU_COOKIE_IOMMUFD ||
+	    iommu_domain->cookie_type != IOMMU_COOKIE_IOMMUFD)
+		return 0;
+
+	scoped_guard(mutex, &old_domain->mutex) {
+		if (!old_domain->msi_iova)
+			return 0;
+
+		msi_iova = kmemdup(old_domain->msi_iova,
+				   riscv_iommu_ir_msi_iova_count() * sizeof(*msi_iova),
+				   GFP_KERNEL);
+		if (!msi_iova)
+			return -ENOMEM;
+	}
+
+	guard(mutex)(&domain->mutex);
+
+	if (domain->msi_iova)
+		kfree(msi_iova);
+	else
+		domain->msi_iova = msi_iova;
+
 	return 0;
 }
 

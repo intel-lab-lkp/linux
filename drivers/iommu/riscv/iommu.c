@@ -1264,11 +1264,14 @@ static bool riscv_iommu_pt_supported(struct riscv_iommu_device *iommu, int pgd_m
 	return false;
 }
 
+static const struct iommu_domain_ops riscv_iommu_paging_domain_ops;
+
 static int riscv_iommu_attach_paging_domain(struct iommu_domain *iommu_domain,
 					    struct device *dev,
 					    struct iommu_domain *old)
 {
 	struct riscv_iommu_domain *domain = iommu_domain_to_riscv(iommu_domain);
+	bool old_is_paging = old && old->ops == &riscv_iommu_paging_domain_ops;
 	struct riscv_iommu_device *iommu = dev_to_iommu(dev);
 	struct riscv_iommu_info *info = dev_iommu_priv_get(dev);
 	struct pt_iommu_riscv_64_hw_info pt_info;
@@ -1288,7 +1291,7 @@ static int riscv_iommu_attach_paging_domain(struct iommu_domain *iommu_domain,
 	if (riscv_iommu_bond_link(domain, dev))
 		return -ENOMEM;
 
-	ret = riscv_iommu_ir_attach_paging_domain(iommu_domain, dev, old);
+	ret = riscv_iommu_ir_attach_paging_domain(iommu_domain, dev, old_is_paging ? old : NULL);
 	if (ret) {
 		riscv_iommu_bond_unlink(domain, dev);
 		return ret;
