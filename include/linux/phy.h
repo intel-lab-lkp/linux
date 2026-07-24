@@ -376,6 +376,24 @@ struct mii_bus {
 			 int regnum, u16 val);
 	/** @reset: Perform a reset of the bus */
 	int (*reset)(struct mii_bus *bus);
+	/**
+	 * @notify_phy_attach: Perform post-attach handling for MDIO bus
+	 *   drivers. Called in phy_attach_direct() right after phy_init_hw()
+	 *   and before phy_resume(). At this point, the PHY is still
+	 *   suspended, and @phydev->attached_dev may be NULL (e.g. for
+	 *   standalone PHYs). Runs in process context and may sleep. Return
+	 *   0 on success or a negative errno on failure (which aborts the
+	 *   attach sequence).
+	 */
+	int (*notify_phy_attach)(struct phy_device *phydev);
+	/**
+	 * @notify_phy_detach: Perform pre-detach handling for MDIO bus
+	 *   drivers. Called in phy_detach() after phy_suspend() and link
+	 *   cleanup, but before driver unbind and device reference release.
+	 *   Runs in process context and may sleep. Only invoked if
+	 *   @notify_phy_attach was previously called and succeeded.
+	 */
+	void (*notify_phy_detach)(struct phy_device *phydev);
 
 	/** @stats: Statistic counters per device on the bus */
 	struct mdio_bus_stats stats[PHY_MAX_ADDR];
