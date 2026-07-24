@@ -1268,7 +1268,8 @@ static int ice_dpll_sma_direction_set(struct ice_dpll_pin *p,
 			type = ICE_DPLL_PIN_TYPE_INPUT;
 		}
 		ret = ice_dpll_pin_enable(&p->pf->hw, target,
-					  d->eec.dpll_idx, type, extack);
+					  d->pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX && target->state[d->pps.dpll_idx] == DPLL_PIN_STATE_CONNECTED ?
+					  d->pps.dpll_idx : d->eec.dpll_idx, type, extack);
 		if (!ret)
 			ret = ice_dpll_pin_state_update(p->pf, target,
 							type, extack);
@@ -1304,6 +1305,7 @@ ice_dpll_ufl_pin_state_set(const struct dpll_pin *pin, void *pin_priv,
 	enum ice_dpll_pin_type type;
 	struct ice_pf *pf = p->pf;
 	struct ice_hw *hw;
+	u8 old_data = 0;
 	bool enable;
 	u8 data;
 	int ret;
@@ -1316,6 +1318,7 @@ ice_dpll_ufl_pin_state_set(const struct dpll_pin *pin, void *pin_priv,
 	ret = ice_read_sma_ctrl(hw, &data);
 	if (ret)
 		goto unlock;
+	old_data = data;
 
 	ret = -EINVAL;
 	switch (p->idx) {
@@ -1379,14 +1382,85 @@ ice_dpll_ufl_pin_state_set(const struct dpll_pin *pin, void *pin_priv,
 	ret = ice_dpll_pin_state_update(pf, p, ICE_DPLL_PIN_TYPE_SOFTWARE,
 					extack);
 	if (ret)
-		goto unlock;
+		goto restore_sma_ctrl;
 
-	if (enable)
+	if (enable) {
 		ret = ice_dpll_pin_enable(hw, target, d->dpll_idx, type, extack);
-	else
+		if (!ret)
+			ret = ice_dpll_pin_state_update(pf, target, type, extack);
+		if (!ret && p->muxed && p->muxed->active) {
+			struct ice_dpll_pin *peer = p->muxed;
+			struct ice_dpll_pin *peer_target;
+			enum ice_dpll_pin_type peer_type;
+			int peer_ret;
+
+			switch (peer->direction) {
+			case DPLL_PIN_DIRECTION_OUTPUT:
+				peer_target = peer->output;
+				peer_type = ICE_DPLL_PIN_TYPE_OUTPUT;
+				break;
+			case DPLL_PIN_DIRECTION_INPUT:
+				peer_target = peer->input;
+				peer_type = ICE_DPLL_PIN_TYPE_INPUT;
+				break;
+			default:
+				ret = -EINVAL;
+				goto disable_pin;
+			}
+			if (!peer_target) {
+				ret = -EINVAL;
+				goto disable_pin;
+			}
+			peer_ret = ice_dpll_pin_enable(&pf->hw, peer_target,
+					       pf->dplls.pps.dpll_idx < ICE_DPLL_RCLK_NUM_MAX &&
+					       peer_target->state[pf->dplls.pps.dpll_idx] == DPLL_PIN_STATE_CONNECTED ?
+					       pf->dplls.pps.dpll_idx : pf->dplls.eec.dpll_idx,
+						       peer_type, NULL);
+			if (!peer_ret)
+				peer_ret = ice_dpll_pin_state_update(pf, peer_target,
+							     peer_type, NULL);
+			if (peer_ret) {
+				ret = peer_ret;
+				goto disable_pin;
+			}
+		}
+	} else {
 		ret = ice_dpll_pin_disable(hw, target, type, extack);
-	if (!ret)
-		ret = ice_dpll_pin_state_update(pf, target, type, extack);
+		if (!ret)
+			ret = ice_dpll_pin_state_update(pf, target, type, extack);
+	}
+
+	goto unlock;
+
+disable_pin:
+	ice_dpll_pin_disable(hw, target, type, extack);
+	if (p->muxed && p->muxed->active) {
+		struct ice_dpll_pin *peer = p->muxed;
+		struct ice_dpll_pin *peer_target = NULL;
+		enum ice_dpll_pin_type peer_type;
+
+		if (peer->direction == DPLL_PIN_DIRECTION_OUTPUT) {
+			peer_target = peer->output;
+			peer_type = ICE_DPLL_PIN_TYPE_OUTPUT;
+		} else if (peer->direction == DPLL_PIN_DIRECTION_INPUT) {
+			peer_target = peer->input;
+			peer_type = ICE_DPLL_PIN_TYPE_INPUT;
+		}
+		if (peer_target)
+			ice_dpll_pin_disable(&pf->hw, peer_target, peer_type, extack);
+	}
+restore_sma_ctrl:
+	{
+		int restore_ret;
+
+		restore_ret = ice_write_sma_ctrl(hw, old_data);
+		if (!restore_ret)
+			restore_ret = ice_dpll_sw_pins_update(pf);
+		if (restore_ret)
+			dev_warn(ice_pf_to_dev(pf),
+				 "Failed to restore SMA control after pin state error %d, restore err %d\n",
+				 ret, restore_ret);
+	}
 
 unlock:
 	mutex_unlock(&pf->dplls.lock);
