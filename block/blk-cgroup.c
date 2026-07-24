@@ -2170,6 +2170,24 @@ void bio_clone_blkg_association(struct bio *dst, struct bio *src)
 }
 EXPORT_SYMBOL_GPL(bio_clone_blkg_association);
 
+/**
+ * bio_disassociate_blkg - disassociate a bio from its blkg
+ * @bio: target bio
+ *
+ * Drop the blkg reference held by @bio and clear the association.  This is
+ * used when a bio's target device changes (e.g. via bio_set_dev()): the old
+ * blkg is tied to the previous request_queue, so it is dropped here and the
+ * bio is reassociated to the new queue from the submit path.
+ */
+void bio_disassociate_blkg(struct bio *bio)
+{
+	if (bio->bi_blkg) {
+		blkg_put(bio->bi_blkg);
+		bio->bi_blkg = NULL;
+	}
+}
+EXPORT_SYMBOL_GPL(bio_disassociate_blkg);
+
 static int blk_cgroup_io_type(struct bio *bio)
 {
 	if (op_is_discard(bio->bi_opf))

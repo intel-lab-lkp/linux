@@ -823,6 +823,20 @@ void submit_bio_noacct(struct bio *bio)
 	might_sleep();
 
 	/*
+	 * Associate the bio with a blkg for its target queue here, where it is
+	 * safe to sleep, instead of in bio_set_dev()/bio_init() which may run
+	 * under a spinlock.  bio_set_dev() no longer associates, so a freshly
+	 * allocated or remapped bio has no blkg until it reaches the submit path.
+	 * Reassociate only when the bio was remapped to a different queue since
+	 * it was last associated; blk_throtl_bio() and the rq_qos throttlers
+	 * rely on bio->bi_blkg matching the queue of bio->bi_bdev.
+	 */
+#ifdef CONFIG_BLK_CGROUP
+	if (!bio->bi_blkg || bio->bi_blkg->q != q)
+		bio_associate_blkg(bio);
+#endif
+
+	/*
 	 * For a REQ_NOWAIT based request, return -EOPNOTSUPP
 	 * if queue does not support NOWAIT.
 	 */
@@ -958,6 +972,13 @@ void submit_bio(struct bio *bio)
 		count_vm_events(PGPGOUT, bio_sectors(bio));
 	}
 
+	/*
+	 * bio_set_ioprio() -> blkcg_set_ioprio() reads the policy from
+	 * bio->bi_blkg, so associate the blkg (for new I/O, the first time) before
+	 * it runs.  This is the sleepable entry point for new I/O; remapped bios
+	 * that reach submit_bio_noacct() directly are reassociated there.
+	 */
+	bio_associate_blkg(bio);
 	bio_set_ioprio(bio);
 	submit_bio_noacct(bio);
 }

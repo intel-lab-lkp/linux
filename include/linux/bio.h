@@ -507,6 +507,7 @@ void bio_associate_blkg(struct bio *bio);
 void bio_associate_blkg_from_css(struct bio *bio,
 				 struct cgroup_subsys_state *css);
 void bio_clone_blkg_association(struct bio *dst, struct bio *src);
+void bio_disassociate_blkg(struct bio *bio);
 void blkcg_punt_bio_submit(struct bio *bio);
 #else	/* CONFIG_BLK_CGROUP */
 static inline void bio_associate_blkg(struct bio *bio) { }
@@ -515,6 +516,7 @@ static inline void bio_associate_blkg_from_css(struct bio *bio,
 { }
 static inline void bio_clone_blkg_association(struct bio *dst,
 					      struct bio *src) { }
+static inline void bio_disassociate_blkg(struct bio *bio) { }
 static inline void blkcg_punt_bio_submit(struct bio *bio)
 {
 	submit_bio(bio);
@@ -524,10 +526,11 @@ static inline void blkcg_punt_bio_submit(struct bio *bio)
 static inline void bio_set_dev(struct bio *bio, struct block_device *bdev)
 {
 	bio_clear_flag(bio, BIO_REMAPPED);
-	if (bio->bi_bdev != bdev)
+	if (bio->bi_bdev != bdev) {
 		bio_clear_flag(bio, BIO_BPS_THROTTLED);
+		bio_disassociate_blkg(bio);
+	}
 	bio->bi_bdev = bdev;
-	bio_associate_blkg(bio);
 }
 
 /*

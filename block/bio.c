@@ -179,12 +179,7 @@ static inline gfp_t try_alloc_gfp(gfp_t gfp)
 
 void bio_uninit(struct bio *bio)
 {
-#ifdef CONFIG_BLK_CGROUP
-	if (bio->bi_blkg) {
-		blkg_put(bio->bi_blkg);
-		bio->bi_blkg = NULL;
-	}
-#endif
+	bio_disassociate_blkg(bio);
 	if (bio_integrity(bio))
 		bio_integrity_free(bio);
 
@@ -235,8 +230,6 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 #ifdef CONFIG_BLK_CGROUP
 	bio->bi_blkg = NULL;
 	bio->issue_time_ns = 0;
-	if (bdev)
-		bio_associate_blkg(bio);
 #ifdef CONFIG_BLK_CGROUP_IOCOST
 	bio->bi_iocost_cost = 0;
 #endif
@@ -280,8 +273,6 @@ void bio_reset(struct bio *bio, struct block_device *bdev, blk_opf_t opf)
 	atomic_set(&bio->__bi_remaining, 1);
 	bio->bi_io_vec = bv;
 	bio->bi_bdev = bdev;
-	if (bio->bi_bdev)
-		bio_associate_blkg(bio);
 	bio->bi_opf = opf;
 }
 EXPORT_SYMBOL(bio_reset);
@@ -1803,17 +1794,12 @@ again:
 		goto again;
 	}
 
-#ifdef CONFIG_BLK_CGROUP
 	/*
 	 * Release cgroup info.  We shouldn't have to do this here, but quite
 	 * a few callers of bio_init fail to call bio_uninit, so we cover up
 	 * for that here at least for now.
 	 */
-	if (bio->bi_blkg) {
-		blkg_put(bio->bi_blkg);
-		bio->bi_blkg = NULL;
-	}
-#endif
+	bio_disassociate_blkg(bio);
 
 	if (bio->bi_end_io)
 		bio->bi_end_io(bio);
