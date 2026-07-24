@@ -604,6 +604,16 @@ static void bfq_link_bfqg(struct bfq_data *bfqd, struct bfq_group *bfqg)
 	}
 }
 
+static void bfq_bio_update_blkg(struct bio *bio, struct blkcg_gq *blkg)
+{
+	if (bio->bi_blkg == blkg)
+		return;
+
+	blkg_get(blkg);
+	blkg_put(bio->bi_blkg);
+	bio->bi_blkg = blkg;
+}
+
 struct bfq_group *bfq_bio_bfqg(struct bfq_data *bfqd, struct bio *bio)
 {
 	struct blkcg_gq *blkg = bio->bi_blkg;
@@ -616,13 +626,13 @@ struct bfq_group *bfq_bio_bfqg(struct bfq_data *bfqd, struct bio *bio)
 		}
 		bfqg = blkg_to_bfqg(blkg);
 		if (bfqg->pd.online) {
-			bio_associate_blkg_from_css(bio, &blkg->blkcg->css);
+			bfq_bio_update_blkg(bio, blkg);
 			return bfqg;
 		}
 		blkg = blkg->parent;
 	}
-	bio_associate_blkg_from_css(bio,
-				&bfqg_to_blkg(bfqd->root_group)->blkcg->css);
+	blkg = bfqg_to_blkg(bfqd->root_group);
+	bfq_bio_update_blkg(bio, blkg);
 	return bfqd->root_group;
 }
 
