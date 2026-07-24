@@ -1828,9 +1828,23 @@ process_flow:
 		target = req->hdr.pcifunc;
 	}
 
-	/* ignore chan_mask in case pf func is not AF, revisit later */
-	if (!is_pffunc_af(req->hdr.pcifunc))
-		req->chan_mask = rvu_get_cpt_chan_mask(rvu);
+	/* Non-AF callers get the CPT default chan_mask unless the authorized
+	 * switchdev PF sets set_chanmask to preserve a caller-supplied mask.
+	 * VFs and other PFs must not use set_chanmask; that would bypass
+	 * channel isolation.
+	 */
+	if (!is_pffunc_af(req->hdr.pcifunc)) {
+		if (req->set_chanmask &&
+		    !rvu_is_switch_pcifunc(rvu, req->hdr.pcifunc)) {
+			rvu_npc_free_entry_for_flow_install(rvu,
+							    req->hdr.pcifunc,
+							    allocated,
+							    req->entry);
+			return NPC_FLOW_VF_PERM_DENIED;
+		}
+		if (!req->set_chanmask)
+			req->chan_mask = rvu_get_cpt_chan_mask(rvu);
+	}
 
 	err = npc_check_unsupported_flows(rvu, req->features, req->intf);
 	if (err) {
