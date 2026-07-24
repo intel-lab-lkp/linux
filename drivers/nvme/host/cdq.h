@@ -11,7 +11,7 @@
 #define NVME_CDQ_MQ_ENTRY_NRBYTES	32
 
 /*
- * The CDQ backing is a set of coherent DMA chunks. Chunk size expressed in
+ * The CDQ backing is a set of coherent DMA chunks expressed in
  * host pages to match dma_alloc_coherency granularity.
  */
 #define NVME_CDQ_CHUNK_ORDER		2
@@ -31,6 +31,7 @@ struct cdq_nvme_queue {
 	u16 id;
 	struct nvme_ctrl *ctrl;
 	u32 size_nbyte;
+	u16 mc_id; // migratable controller id
 
 	/* Coherent backing store. */
 	struct nvme_cdq_chunk *chunks;
@@ -62,6 +63,7 @@ static inline void nvme_cdq_put(struct cdq_nvme_queue *cdq)
 }
 
 void nvme_delete_cdq(struct cdq_nvme_queue *cdq);
+int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id);
 void nvme_delete_cdqs_host(struct nvme_ctrl *ctrl);
 void nvme_free_cdqs(struct nvme_ctrl *ctrl);
 

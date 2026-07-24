@@ -154,9 +154,6 @@ static inline int nvme_create_cdq_backing(struct cdq_nvme_queue *cdq)
 			goto err_chunks;
 	}
 
-	/* FIXME: put this on the create_cdq function*/
-	kref_init(&cdq->ref);
-
 	return 0;
 
 err_chunks:
@@ -272,6 +269,93 @@ void nvme_delete_cdq(struct cdq_nvme_queue *cdq)
 	nvme_delete_cdq_host(cdq);
 }
 EXPORT_SYMBOL_GPL(nvme_delete_cdq);
+
+static int nvme_submit_create_cdq_cmd(struct cdq_nvme_queue *cdq)
+{
+	int ret;
+	union nvme_result result = {};
+	struct nvme_command c = {
+		.cdq.opcode = nvme_admin_cdq,
+		.cdq.sel = NVME_CDQ_CMD_MGMT_CREATE,
+		.cdq.mos = cpu_to_le16(NVME_CDQ_CMD_MGMT_CREATE_MOS_QT_UDMQ),
+		.cdq.dw11.cqs = cpu_to_le16(cdq->mc_id),
+		.cdq.cdqsize = cpu_to_le32(cdq->size_nbyte >> 2) // size is in dwords
+	};
+
+	if (cdq->nr_chunks < 2) {
+		c.cdq.dw11.flags = cpu_to_le16(NVME_CDQ_CMD_MGMT_CREATE_PC_CONT);
+		c.cdq.prp1 = cpu_to_le64(cdq->chunks[0].dma_addr);
+	} else {
+		c.cdq.dw11.flags = cpu_to_le16(NVME_CDQ_CMD_MGMT_CREATE_PC_DISCONT);
+		c.cdq.prp1 = cpu_to_le64(cdq->prp_lists_dma[0]);
+	}
+
+	ret = __nvme_submit_sync_cmd(cdq->ctrl->admin_q, &c, &result, NULL, 0, NVME_QID_ANY, 0);
+	if (ret)
+		return ret;
+
+	cdq->id = le16_to_cpu(result.u16);
+
+	return ret;
+}
+
+int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id)
+{
+	u64 size_nbyte = (u64)entry_nr * NVME_CDQ_MQ_ENTRY_NRBYTES;
+	struct cdq_nvme_queue *cdq = NULL;
+	int ret, cdq_fd;
+
+	/* The backing size and the CDQSIZE field are both u32 (bytes). */
+	if (size_nbyte > U32_MAX)
+		return -EINVAL;
+
+	cdq = kzalloc_obj(*cdq);
+	if (!cdq)
+		return -ENOMEM;
+
+	cdq->mc_id = mc_id;
+	cdq->ctrl = ctrl;
+	cdq->size_nbyte = (u32)size_nbyte;
+
+	ret = nvme_create_cdq_backing(cdq);
+	if (ret) {
+		kfree(cdq);
+		return ret;
+	}
+
+	kref_init(&cdq->ref);
+
+	ret = nvme_submit_create_cdq_cmd(cdq);
+	if (ret)
+		goto del_cdqmem;
+
+	ret = xa_insert(&cdq->ctrl->cdqs, cdq->id, cdq, GFP_KERNEL);
+	if (ret)
+		goto del_cmd;
+
+	ret = nvme_create_cdqfd(cdq, &cdq_fd);
+	if (ret)
+		goto del_xarray;
+
+	return 0;
+
+del_xarray:
+	nvme_delete_cdq(cdq);
+	/*nvme_delete_cdq, has everything */
+	return ret;
+
+del_cmd:
+	if (nvme_submit_delete_cdq_cmd(cdq))
+		WARN_ONCE(1, "Failed delete CDQ (id: %d)", cdq->id);
+
+del_cdqmem:
+	/* puts the ref acquired by kref_init */
+	nvme_release_cdq_backing(cdq);
+	nvme_cdq_put(cdq);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nvme_create_cdq);
 
 /* Will NOT send a CDQ delete NVMe cmd. */
 void nvme_delete_cdqs_host(struct nvme_ctrl *ctrl)
