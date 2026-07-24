@@ -4748,6 +4748,30 @@ static u32 nvme_aer_subtype(u32 result)
 	return (result & 0xff00) >> 8;
 }
 
+static bool nvme_handle_aen_oneshot(struct nvme_ctrl *ctrl, u32 result, u32 event_param)
+{
+	u32 aer_subtype = nvme_aer_subtype(result);
+
+	switch (aer_subtype) {
+	case NVME_AER_ONE_SHOT_CDQ_TAIL_PTR:
+		WARN_ONCE(1, "CDQ Tail Pointer one shot event ignored");
+		break;
+	case NVME_AER_ONE_SHOT_CDQ_FULL:
+		WARN_ONCE(1, "CDQ Full Error one shot event ignored");
+		break;
+	case NVME_AER_ONE_SHOT_PWR_TH:
+		WARN_ONCE(1, "Power Threshold Exceeded one shot event ignored");
+		break;
+	default:
+		WARN_ONCE(1, "Unrecognized One Shot Async Event %d (ignored)",
+			  aer_subtype);
+		break;
+	}
+
+	/* Return true in all cases to reque after handling */
+	return true;
+}
+
 static bool nvme_handle_aen_notice(struct nvme_ctrl *ctrl, u32 result)
 {
 	u32 aer_notice_type = nvme_aer_subtype(result);
@@ -4796,6 +4820,7 @@ void nvme_complete_async_event(struct nvme_ctrl *ctrl, __le16 status,
 		volatile union nvme_result *res)
 {
 	u32 result = le32_to_cpu(res->u32);
+	u32 event_param = 0;
 	u32 aer_type = nvme_aer_type(result);
 	u32 aer_subtype = nvme_aer_subtype(result);
 	bool requeue = true;
@@ -4807,6 +4832,10 @@ void nvme_complete_async_event(struct nvme_ctrl *ctrl, __le16 status,
 	switch (aer_type) {
 	case NVME_AER_NOTICE:
 		requeue = nvme_handle_aen_notice(ctrl, result);
+		break;
+	case NVME_AER_ONE_SHOT:
+		event_param = le64_to_cpu(res->u64) >> 32;
+		requeue = nvme_handle_aen_oneshot(ctrl, result, event_param);
 		break;
 	case NVME_AER_ERROR:
 		/*
