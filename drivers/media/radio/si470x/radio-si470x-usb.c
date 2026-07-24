@@ -655,7 +655,7 @@ static int si470x_usb_driver_probe(struct usb_interface *intf,
 	if (radio->hdl.error) {
 		retval = radio->hdl.error;
 		dev_err(&intf->dev, "couldn't register control\n");
-		goto err_dev;
+		goto err_ctrl;
 	}
 	radio->videodev = si470x_viddev_template;
 	radio->videodev.ctrl_handler = &radio->hdl;
@@ -745,7 +745,6 @@ err_buf:
 	kfree(radio->buffer);
 err_ctrl:
 	v4l2_ctrl_handler_free(&radio->hdl);
-err_dev:
 	v4l2_device_unregister(&radio->v4l2_dev);
 err_urb:
 	usb_free_urb(radio->int_in_urb);
