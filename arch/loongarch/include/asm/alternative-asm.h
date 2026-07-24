@@ -5,6 +5,8 @@
 #ifdef __ASSEMBLER__
 
 #include <asm/asm.h>
+#include <generated/asm-offsets.h>
+#include <linux/annotate.h>
 
 /*
  * Issue one struct alt_instr descriptor entry (need to put it into
@@ -33,14 +35,16 @@
 	.fill - (((144f-143f)-(141b-140b)) > 0) * ((144f-143f)-(141b-140b)) / 4, 4, 0x03400000
 142 :
 
-	.pushsection .altinstructions, "a"
+	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE
 	altinstruction_entry 140b, 143f, \feature, 142b-140b, 144f-143f
 	.popsection
 
 	.subsection 1
+	ANNOTATE_DATA_SPECIAL
 143 :
 	\newinstr
 144 :
+	ANNOTATE_DATA_SPECIAL_END
 	.previous
 .endm
 
@@ -63,17 +67,19 @@
 		(alt_max_short(new_len1, new_len2) - (old_len)) / 4, 4, 0x03400000
 142 :
 
-	.pushsection .altinstructions, "a"
+	.pushsection .altinstructions, "aM", @progbits, ALT_INSTR_SIZE
 	altinstruction_entry 140b, 143f, \feature1, 142b-140b, 144f-143f, 142b-141b
 	altinstruction_entry 140b, 144f, \feature2, 142b-140b, 145f-144f, 142b-141b
 	.popsection
 
 	.subsection 1
+	ANNOTATE_DATA_SPECIAL
 143 :
 	\newinstr1
 144 :
 	\newinstr2
 145 :
+	ANNOTATE_DATA_SPECIAL_END
 	.previous
 .endm
 

@@ -25,6 +25,7 @@
 #define __BUG_ENTRY(cond_str, flags)				\
 		.pushsection __bug_table, "aw";			\
 		.align 2;					\
+		__ANNOTATE_DATA_SPECIAL;				\
 	10000:	.long 10001f - .;				\
 		_BUGVERBOSE_LOCATION(WARN_CONDITION_STR(cond_str) __FILE__, __LINE__) \
 		.short flags;					\

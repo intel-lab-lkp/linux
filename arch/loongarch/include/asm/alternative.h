@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/stddef.h>
 #include <linux/stringify.h>
+#include <linux/objtool.h>
 #include <asm/asm.h>
 
 struct alt_instr {
@@ -70,22 +71,28 @@ extern void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
 /* alternative assembly primitive: */
 #define ALTERNATIVE(oldinstr, newinstr, feature)			\
 	OLDINSTR(oldinstr, 1)						\
-	".pushsection .altinstructions,\"a\"\n"				\
+	".pushsection .altinstructions, \"aM\", @progbits, "            \
+		 __stringify(ALT_INSTR_SIZE) "\n"                       \
 	ALTINSTR_ENTRY(feature, 1)					\
 	".popsection\n"							\
 	".subsection 1\n" \
+	ANNOTATE_DATA_SPECIAL "\n" \
 	ALTINSTR_REPLACEMENT(newinstr, feature, 1)			\
+	ANNOTATE_DATA_SPECIAL_END "\n" \
 	".previous\n"
 
 #define ALTERNATIVE_2(oldinstr, newinstr1, feature1, newinstr2, feature2)\
 	OLDINSTR_2(oldinstr, 1, 2)					\
-	".pushsection .altinstructions,\"a\"\n"				\
+	".pushsection .altinstructions, \"aM\", @progbits, "            \
+			__stringify(ALT_INSTR_SIZE) "\n"                \
 	ALTINSTR_ENTRY(feature1, 1)					\
 	ALTINSTR_ENTRY(feature2, 2)					\
 	".popsection\n"							\
 	".subsection 1\n" \
+	ANNOTATE_DATA_SPECIAL "\n" \
 	ALTINSTR_REPLACEMENT(newinstr1, feature1, 1)			\
 	ALTINSTR_REPLACEMENT(newinstr2, feature2, 2)			\
+	ANNOTATE_DATA_SPECIAL_END "\n" \
 	".previous\n"
 
 /*
