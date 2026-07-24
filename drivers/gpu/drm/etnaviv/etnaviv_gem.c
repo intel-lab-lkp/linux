@@ -735,9 +735,20 @@ int etnaviv_gem_new_userptr(struct drm_device *dev, struct drm_file *file,
 	uintptr_t ptr, u32 size, u32 flags, u32 *handle)
 {
 	struct etnaviv_gem_object *etnaviv_obj;
+	u32 bo_flags = ETNA_BO_CACHED;
 	int ret;
 
-	ret = etnaviv_gem_new_private(dev, size, ETNA_BO_CACHED,
+	/*
+	 * Keep read-only userptr BOs out of the MMUv1 linear window, which
+	 * would expose far more than the pinned pages to the GPU.  MMUv1
+	 * PTEs have no writeable bit, so this confines the GPU rather than
+	 * making the BO read-only; MMUv2 enforces read-only per PTE in
+	 * etnaviv_iommu_map_gem().
+	 */
+	if (!(flags & ETNA_USERPTR_WRITE))
+		bo_flags |= ETNA_BO_FORCE_MMU;
+
+	ret = etnaviv_gem_new_private(dev, size, bo_flags,
 				      &etnaviv_gem_userptr_ops, &etnaviv_obj);
 	if (ret)
 		return ret;
