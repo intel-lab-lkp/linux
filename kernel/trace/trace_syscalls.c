@@ -1440,18 +1440,19 @@ static void perf_syscall_enter(void *ignore, struct pt_regs *regs, long id)
 	 */
 	guard(preempt_notrace)();
 
-	head = this_cpu_ptr(sys_data->enter_event->perf_events);
-	if (hlist_empty(head))
-		return;
-
 	/* Check if this syscall event faults in user space memory */
 	mayfault = sys_data->user_mask != 0;
 
 	if (mayfault) {
+		/* Enables preemption and may migrate */
 		if (syscall_get_data(sys_data, args, &user_ptr,
 				     &size, user_sizes, &uargs, buf_size) < 0)
 			return;
 	}
+
+	head = this_cpu_ptr(sys_data->enter_event->perf_events);
+	if (hlist_empty(head))
+		return;
 
 	/* get the size after alignment with the u32 buffer size field */
 	size += sizeof(unsigned long) * sys_data->nb_args + sizeof(*rec);
