@@ -1956,6 +1956,7 @@ entsize:
 static bool should_keep_special_sym(struct elf *elf, struct symbol *sym)
 {
 	bool annotate_insn = !strcmp(sym->sec->name, ".discard.annotate_insn");
+	bool tablejump_annotate = !strcmp(sym->sec->name, ".discard.tablejump_annotate");
 	struct reloc *reloc;
 
 	if (is_sec_sym(sym) || !sym->sec->rsec)
@@ -1967,6 +1968,16 @@ static bool should_keep_special_sym(struct elf *elf, struct symbol *sym)
 
 		if (!reloc->sym->clone || is_undef_sym(reloc->sym->clone))
 			continue;
+
+		/*
+		 * .discard.tablejump_annotate (LoongArch -mannotate-tablejump)
+		 * holds pairs of words: a jump instruction and its jump table.
+		 * The table word references the table via its .rodata section
+		 * symbol, which the is_func_sym() rule below would drop,
+		 * breaking the pairing.  Keep both words of each entry.
+		 */
+		if (tablejump_annotate)
+			return true;
 
 		/*
 		 * Keep special section references to cloned functions.
