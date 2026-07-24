@@ -19,8 +19,13 @@ static int vgic_irqfd_set_irq(struct kvm_kernel_irq_routing_entry *e,
 			struct kvm *kvm, int irq_source_id,
 			int level, bool line_status)
 {
-	unsigned int spi_id = e->irqchip.pin + VGIC_NR_PRIVATE_IRQS;
+	unsigned int spi_id;
 	int ret;
+
+	if (kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V5)
+		spi_id = vgic_v5_make_spi(e->irqchip.pin);
+	else
+		spi_id = e->irqchip.pin + VGIC_NR_PRIVATE_IRQS;
 
 	if (!vgic_valid_spi(kvm, spi_id))
 		return -EINVAL;
@@ -52,8 +57,8 @@ int kvm_set_routing_entry(struct kvm *kvm,
 		e->set = vgic_irqfd_set_irq;
 		e->irqchip.irqchip = ue->u.irqchip.irqchip;
 		e->irqchip.pin = ue->u.irqchip.pin;
-		if ((e->irqchip.pin >= KVM_IRQCHIP_NUM_PINS) ||
-		    (e->irqchip.irqchip >= KVM_NR_IRQCHIPS))
+		if (e->irqchip.pin >= KVM_IRQCHIP_NUM_PINS ||
+		    e->irqchip.irqchip >= KVM_NR_IRQCHIPS)
 			goto out;
 		break;
 	case KVM_IRQ_ROUTING_MSI:
