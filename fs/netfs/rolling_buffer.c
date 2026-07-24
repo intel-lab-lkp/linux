@@ -60,11 +60,11 @@ EXPORT_SYMBOL(netfs_folioq_free);
  * consumer.
  */
 int rolling_buffer_init(struct rolling_buffer *roll, unsigned int rreq_id,
-			unsigned int direction)
+			unsigned int direction, gfp_t gfp)
 {
 	struct folio_queue *fq;
 
-	fq = netfs_folioq_alloc(rreq_id, GFP_NOFS, netfs_trace_folioq_rollbuf_init);
+	fq = netfs_folioq_alloc(rreq_id, gfp, netfs_trace_folioq_rollbuf_init);
 	if (!fq)
 		return -ENOMEM;
 

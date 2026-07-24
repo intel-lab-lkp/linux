@@ -43,7 +43,7 @@ struct rolling_buffer_snapshot {
 #define ROLLBUF_MARK_2	BIT(1)
 
 int rolling_buffer_init(struct rolling_buffer *roll, unsigned int rreq_id,
-			unsigned int direction);
+			unsigned int direction, gfp_t gfp);
 int rolling_buffer_make_space(struct rolling_buffer *roll);
 ssize_t rolling_buffer_load_from_ra(struct rolling_buffer *roll,
 				    struct readahead_control *ractl,

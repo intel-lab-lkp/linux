@@ -359,7 +359,7 @@ void netfs_readahead(struct readahead_control *ractl)
 	netfs_rreq_expand(rreq, ractl);
 
 	rreq->submitted = rreq->start;
-	if (rolling_buffer_init(&rreq->buffer, rreq->debug_id, ITER_DEST) < 0)
+	if (rolling_buffer_init(&rreq->buffer, rreq->debug_id, ITER_DEST, GFP_NOFS) < 0)
 		goto cleanup_free;
 	netfs_read_to_pagecache(rreq, ractl);
 
@@ -378,7 +378,7 @@ static int netfs_create_singular_buffer(struct netfs_io_request *rreq, struct fo
 {
 	ssize_t added;
 
-	if (rolling_buffer_init(&rreq->buffer, rreq->debug_id, ITER_DEST) < 0)
+	if (rolling_buffer_init(&rreq->buffer, rreq->debug_id, ITER_DEST, GFP_NOFS) < 0)
 		return -ENOMEM;
 
 	added = rolling_buffer_append(&rreq->buffer, folio, rollbuf_flags);

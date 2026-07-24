@@ -98,6 +98,7 @@ struct netfs_io_request *netfs_create_write_req(struct address_space *mapping,
 			     origin == NETFS_WRITEBACK_SINGLE ||
 			     origin == NETFS_WRITETHROUGH ||
 			     origin == NETFS_PGPRIV2_COPY_TO_CACHE);
+	gfp_t gfp = GFP_NOFS;
 
 	wreq = netfs_alloc_request(mapping, file, start, 0, origin);
 	if (IS_ERR(wreq))
@@ -108,7 +109,11 @@ struct netfs_io_request *netfs_create_write_req(struct address_space *mapping,
 	ictx = netfs_inode(wreq->inode);
 	if (is_cacheable)
 		fscache_begin_write_operation(&wreq->cache_resources, netfs_i_cookie(ictx));
-	if (rolling_buffer_init(&wreq->buffer, wreq->debug_id, ITER_SOURCE) < 0)
+
+	/* Writeback is part of memory reclaim and must not fail due to ENOMEM. */
+	if (origin == NETFS_WRITEBACK || origin == NETFS_WRITEBACK_SINGLE)
+		gfp |= __GFP_NOFAIL;
+	if (rolling_buffer_init(&wreq->buffer, wreq->debug_id, ITER_SOURCE, gfp) < 0)
 		goto nomem;
 
 	wreq->cleaned_to = wreq->start;
