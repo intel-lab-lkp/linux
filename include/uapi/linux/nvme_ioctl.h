@@ -92,6 +92,27 @@ struct nvme_uring_cmd {
 	__u32   rsvd2;
 };
 
+struct nvme_cdq_cmd {
+	/* Migratable controller id (filled by user space). */
+	__u16	mc_id;
+
+	/*
+	 * CDQ size in bytes: (number of entries) * 32. Must be a multiple of
+	 * 32. A size of 0 requests deletion of the CDQ created for mc_id.
+	 */
+	__u32	size_nbyte;
+
+	/*
+	 * Tail Pointer Trigger eventfd file descriptor, passed when creating
+	 * the CDQ. A value <= 0 means there is no eventfd and AERs are not
+	 * forwarded.
+	 */
+	__s32	tpt_fd;
+
+	/* Returned by the kernel: the CDQ file descriptor. */
+	__s32	cdq_fd;
+};
+
 #define nvme_admin_cmd nvme_passthru_cmd
 
 #define NVME_IOCTL_ID		_IO('N', 0x40)
@@ -104,6 +125,7 @@ struct nvme_uring_cmd {
 #define NVME_IOCTL_ADMIN64_CMD	_IOWR('N', 0x47, struct nvme_passthru_cmd64)
 #define NVME_IOCTL_IO64_CMD	_IOWR('N', 0x48, struct nvme_passthru_cmd64)
 #define NVME_IOCTL_IO64_CMD_VEC	_IOWR('N', 0x49, struct nvme_passthru_cmd64)
+#define NVME_IOCTL_CDQ		_IOWR('N', 0x50, struct nvme_cdq_cmd)
 
 /* io_uring async commands: */
 #define NVME_URING_CMD_IO	_IOWR('N', 0x80, struct nvme_uring_cmd)

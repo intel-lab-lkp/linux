@@ -89,7 +89,9 @@ void nvme_free_cdq(struct kref *ref);
  *    - Calls nvme_free_cdq if there are no more refs
  */
 void nvme_delete_cdq(struct cdq_nvme_queue *cdq);
-int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id, int tpt_fd);
+int nvme_delete_cdq_mcid(struct nvme_ctrl *ctrl, u16 mc_id);
+int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id,
+		    int tpt_fd, int *cdq_fd);
 
 static inline void nvme_cdq_get(struct cdq_nvme_queue *cdq)
 {

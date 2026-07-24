@@ -8,6 +8,7 @@
 #include <linux/nvme_ioctl.h>
 #include <linux/io_uring/cmd.h>
 #include "nvme.h"
+#include "cdq.h"
 
 enum {
 	NVME_IOCTL_VEC		= (1 << 0),
@@ -538,9 +539,46 @@ out_free_req:
 	return ret;
 }
 
+static int nvme_user_cdq(struct nvme_ctrl *ctrl, void __user *argp)
+{
+	struct nvme_cdq_cmd cmd;
+	u32 entry_nr;
+	int ret, cdq_fd;
+
+	if (copy_from_user(&cmd, argp, sizeof(cmd)))
+		return -EFAULT;
+
+	/* A zero size requests deletion of the CDQ created for this mc_id. */
+	if (cmd.size_nbyte == 0)
+		return nvme_delete_cdq_mcid(ctrl, cmd.mc_id);
+
+	if (cmd.size_nbyte % NVME_CDQ_MQ_ENTRY_NRBYTES)
+		return -EINVAL;
+
+	entry_nr = cmd.size_nbyte / NVME_CDQ_MQ_ENTRY_NRBYTES;
+
+	ret = nvme_create_cdq(ctrl, entry_nr, cmd.mc_id, cmd.tpt_fd, &cdq_fd);
+	if (ret)
+		goto err_out;
+
+	cmd.cdq_fd = cdq_fd;
+	if (copy_to_user(argp, &cmd, sizeof(cmd))) {
+		ret = -EFAULT;
+		goto err_out;
+	}
+
+	return 0;
+
+err_out:
+	nvme_delete_cdq_mcid(ctrl, cmd.mc_id);
+	return ret;
+
+}
+
 static bool is_ctrl_ioctl(unsigned int cmd)
 {
-	if (cmd == NVME_IOCTL_ADMIN_CMD || cmd == NVME_IOCTL_ADMIN64_CMD)
+	if (cmd == NVME_IOCTL_ADMIN_CMD || cmd == NVME_IOCTL_ADMIN64_CMD ||
+	    cmd == NVME_IOCTL_CDQ)
 		return true;
 	if (is_sed_ioctl(cmd))
 		return true;
@@ -555,6 +593,8 @@ static int nvme_ctrl_ioctl(struct nvme_ctrl *ctrl, unsigned int cmd,
 		return nvme_user_cmd(ctrl, NULL, argp, 0, open_for_write);
 	case NVME_IOCTL_ADMIN64_CMD:
 		return nvme_user_cmd64(ctrl, NULL, argp, 0, open_for_write);
+	case NVME_IOCTL_CDQ:
+		return nvme_user_cdq(ctrl, argp);
 	default:
 		return sed_ioctl(ctrl->opal_dev, cmd, argp);
 	}
@@ -873,6 +913,8 @@ long nvme_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EACCES;
 		nvme_queue_scan(ctrl);
 		return 0;
+	case NVME_IOCTL_CDQ:
+		return nvme_user_cdq(ctrl, argp);
 	default:
 		return -ENOTTY;
 	}
