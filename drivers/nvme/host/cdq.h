@@ -8,6 +8,8 @@
 
 #include "nvme.h"
 
+#define NVME_CDQ_MQ_ENTRY_NRBYTES	32
+
 /*
  * The CDQ backing is a set of coherent DMA chunks. Chunk size expressed in
  * host pages to match dma_alloc_coherency granularity.
@@ -38,7 +40,26 @@ struct cdq_nvme_queue {
 	__le64 *prp_lists[MAX_NR_CDQ_PRPS];
 	dma_addr_t prp_lists_dma[MAX_NR_CDQ_PRPS];
 	unsigned int nr_prp_lists;
+
+	/* Manage refs for read FD and controller xarray */
+	struct kref ref;
 };
+
+/* Must not touch cdq->ctrl: Ctrl may have been freed */
+static inline void nvme_free_cdq(struct kref *ref)
+{
+	kfree(container_of(ref, struct cdq_nvme_queue, ref));
+}
+
+static inline void nvme_cdq_get(struct cdq_nvme_queue *cdq)
+{
+	kref_get(&cdq->ref);
+}
+
+static inline void nvme_cdq_put(struct cdq_nvme_queue *cdq)
+{
+	kref_put(&cdq->ref, nvme_free_cdq);
+}
 
 void nvme_delete_cdq(struct cdq_nvme_queue *cdq);
 void nvme_delete_cdqs_host(struct nvme_ctrl *ctrl);
