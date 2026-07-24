@@ -77,6 +77,24 @@ static const unsigned int pca9450_dvs_buck_ramp_table[] = {
 	25000, 12500, 6250, 3125
 };
 
+/*
+ * ENMODE = 10b keeps the regulator enabled in RUN mode and disables it
+ * while PMIC_STBY_REQ is asserted.
+ */
+static int pca9450_buck_set_suspend_disable(struct regulator_dev *rdev)
+{
+	return regmap_update_bits(rdev->regmap, rdev->desc->enable_reg,
+				  rdev->desc->enable_mask,
+				  BUCK_ENMODE_ONREQ_STBYREQ);
+}
+
+static int pca9450_ldo_set_suspend_disable(struct regulator_dev *rdev)
+{
+	return regmap_update_bits(rdev->regmap, rdev->desc->enable_reg,
+				  rdev->desc->enable_mask,
+				  LDO_ENMODE_ONREQ_STBYREQ);
+}
+
 static const struct regulator_ops pca9450_dvs_buck_regulator_ops = {
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
@@ -88,6 +106,7 @@ static const struct regulator_ops pca9450_dvs_buck_regulator_ops = {
 	.set_ramp_delay	= regulator_set_ramp_delay_regmap,
 	.set_mode = pca9450_buck_set_mode,
 	.get_mode = pca9450_buck_get_mode,
+	.set_suspend_disable = pca9450_buck_set_suspend_disable,
 };
 
 static const struct regulator_ops pca9450_buck_regulator_ops = {
@@ -100,6 +119,7 @@ static const struct regulator_ops pca9450_buck_regulator_ops = {
 	.set_voltage_time_sel = regulator_set_voltage_time_sel,
 	.set_mode = pca9450_buck_set_mode,
 	.get_mode = pca9450_buck_get_mode,
+	.set_suspend_disable = pca9450_buck_set_suspend_disable,
 };
 
 static const struct regulator_ops pca9450_ldo_regulator_ops = {
@@ -109,6 +129,16 @@ static const struct regulator_ops pca9450_ldo_regulator_ops = {
 	.list_voltage = regulator_list_voltage_linear_range,
 	.set_voltage_sel = regulator_set_voltage_sel_regmap,
 	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+};
+
+static const struct regulator_ops pca9450_ldo_suspend_regulator_ops = {
+	.enable = regulator_enable_regmap,
+	.disable = regulator_disable_regmap,
+	.is_enabled = regulator_is_enabled_regmap,
+	.list_voltage = regulator_list_voltage_linear_range,
+	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+	.set_suspend_disable = pca9450_ldo_set_suspend_disable,
 };
 
 static unsigned int pca9450_ldo5_get_reg_voltage_sel(struct regulator_dev *rdev)
@@ -164,6 +194,7 @@ static const struct regulator_ops pca9450_ldo5_regulator_ops = {
 	.list_voltage = regulator_list_voltage_linear_range,
 	.set_voltage_sel = pca9450_ldo5_set_voltage_sel_regmap,
 	.get_voltage_sel = pca9450_ldo5_get_voltage_sel_regmap,
+	.set_suspend_disable = pca9450_ldo_set_suspend_disable,
 };
 
 /*
@@ -575,7 +606,7 @@ static struct pca9450_regulator_desc pca9450a_regulators[] = {
 			.of_match = of_match_ptr("LDO3"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = PCA9450_LDO3,
-			.ops = &pca9450_ldo_regulator_ops,
+			.ops = &pca9450_ldo_suspend_regulator_ops,
 			.type = REGULATOR_VOLTAGE,
 			.n_voltages = PCA9450_LDO3_VOLTAGE_NUM,
 			.linear_ranges = pca9450_ldo34_volts,
@@ -594,7 +625,7 @@ static struct pca9450_regulator_desc pca9450a_regulators[] = {
 			.of_match = of_match_ptr("LDO4"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = PCA9450_LDO4,
-			.ops = &pca9450_ldo_regulator_ops,
+			.ops = &pca9450_ldo_suspend_regulator_ops,
 			.type = REGULATOR_VOLTAGE,
 			.n_voltages = PCA9450_LDO4_VOLTAGE_NUM,
 			.linear_ranges = pca9450_ldo34_volts,
@@ -820,7 +851,7 @@ static struct pca9450_regulator_desc pca9450bc_regulators[] = {
 			.of_match = of_match_ptr("LDO3"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = PCA9450_LDO3,
-			.ops = &pca9450_ldo_regulator_ops,
+			.ops = &pca9450_ldo_suspend_regulator_ops,
 			.type = REGULATOR_VOLTAGE,
 			.n_voltages = PCA9450_LDO3_VOLTAGE_NUM,
 			.linear_ranges = pca9450_ldo34_volts,
@@ -839,7 +870,7 @@ static struct pca9450_regulator_desc pca9450bc_regulators[] = {
 			.of_match = of_match_ptr("LDO4"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = PCA9450_LDO4,
-			.ops = &pca9450_ldo_regulator_ops,
+			.ops = &pca9450_ldo_suspend_regulator_ops,
 			.type = REGULATOR_VOLTAGE,
 			.n_voltages = PCA9450_LDO4_VOLTAGE_NUM,
 			.linear_ranges = pca9450_ldo34_volts,
@@ -1040,7 +1071,7 @@ static struct pca9450_regulator_desc pca9451a_regulators[] = {
 			.of_match = of_match_ptr("LDO3"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = PCA9450_LDO3,
-			.ops = &pca9450_ldo_regulator_ops,
+			.ops = &pca9450_ldo_suspend_regulator_ops,
 			.type = REGULATOR_VOLTAGE,
 			.n_voltages = PCA9450_LDO3_VOLTAGE_NUM,
 			.linear_ranges = pca9450_ldo34_volts,
@@ -1059,7 +1090,7 @@ static struct pca9450_regulator_desc pca9451a_regulators[] = {
 			.of_match = of_match_ptr("LDO4"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = PCA9450_LDO4,
-			.ops = &pca9450_ldo_regulator_ops,
+			.ops = &pca9450_ldo_suspend_regulator_ops,
 			.type = REGULATOR_VOLTAGE,
 			.n_voltages = PCA9450_LDO4_VOLTAGE_NUM,
 			.linear_ranges = pca9450_ldo34_volts,
