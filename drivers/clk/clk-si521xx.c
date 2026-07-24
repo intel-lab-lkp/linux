@@ -358,8 +358,10 @@ static int __maybe_unused si521xx_resume(struct device *dev)
 
 	regcache_cache_only(si->regmap, false);
 	ret = regcache_sync(si->regmap);
-	if (ret)
+	if (ret) {
+		regcache_cache_only(si->regmap, true);
 		dev_err(dev, "Failed to restore register map: %d\n", ret);
+	}
 	return ret;
 }
 
