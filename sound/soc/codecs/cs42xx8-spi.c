@@ -52,8 +52,8 @@ static int cs42xx8_spi_probe(struct spi_device *spi)
 	 * write_flag_mask/read_flag_mask are OR'd into that address field:
 	 */
 	config.reg_bits           = 16;
-	config.write_flag_mask    = 0x9E;
-	config.read_flag_mask     = 0x9F;
+	config.write_flag_mask    = 0x9E00;
+	config.read_flag_mask     = 0x9F00;
 
 	ret = cs42xx8_probe(&spi->dev,
 			    devm_regmap_init_spi(spi, &config), drvdata);
