@@ -1289,6 +1289,41 @@ fail:
 }
 
 /*
+ * get_user_page_lookup_vma - fault in one page of a remote mm and hand back the
+ * page along with the VMA that covers it. The caller must hold the mmap_lock.
+ * Returns with the mmap_lock still held.
+ *
+ * Looks up the VMA, and gets a reference to the page through
+ * get_user_page_vma(), faulting in the page if needed.
+ *
+ * FOLL_NOWAIT and FOLL_UNLOCKABLE are rejected: both let the fault handler
+ * drop the mmap lock, which could invalidate the looked-up VMA.
+ */
+struct page *get_user_page_lookup_vma(struct mm_struct *mm, unsigned long addr,
+				      int gup_flags,
+				      struct vm_area_struct **vmap)
+{
+	struct vm_area_struct *vma;
+	struct page *page;
+
+	if (WARN_ON_ONCE(unlikely(gup_flags & (FOLL_NOWAIT | FOLL_UNLOCKABLE))))
+		return ERR_PTR(-EINVAL);
+
+	mmap_assert_locked(mm);
+
+	vma = vma_lookup(mm, addr);
+	if (!vma)
+		return ERR_PTR(-EFAULT);
+
+	page = get_user_page_vma(vma, addr, gup_flags | FOLL_REMOTE | FOLL_TOUCH);
+	if (IS_ERR(page))
+		return page;
+
+	*vmap = vma;
+	return page;
+}
+
+/*
  * Writing to file-backed mappings which require folio dirty tracking using GUP
  * is a fundamentally broken operation, as kernel write access to GUP mappings
  * do not adhere to the semantics expected by a file system.
