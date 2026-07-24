@@ -1277,6 +1277,8 @@ struct rq {
 
 	struct list_head cfs_tasks;
 
+	bool			push_task_work_done;
+
 	struct sched_avg	avg_rt;
 	struct sched_avg	avg_dl;
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
@@ -4241,5 +4243,11 @@ static inline bool task_can_sched_on_preferred(int cpu, struct task_struct *p)
 
 	return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
 }
+
+#ifdef CONFIG_PREFERRED_CPU
+void sched_push_current_non_preferred_cpu(struct rq *rq);
+#else	/* !CONFIG_PREFERRED_CPU */
+static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
+#endif
 
 #endif /* _KERNEL_SCHED_SCHED_H */
