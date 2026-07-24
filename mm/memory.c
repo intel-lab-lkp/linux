@@ -7296,84 +7296,67 @@ EXPORT_SYMBOL_GPL(access_process_vm);
 
 #ifdef CONFIG_BPF_SYSCALL
 /*
+ * Copy a NUL-terminated string from @addr into *@buf, up to @len bytes,
+ * stopping at the NUL. strscpy() always NUL terminates, so recopy the last
+ * byte of a page when more pages follow. A string is never read from
+ * struct-page-less VM_IO / VM_PFNMAP memory.
+ */
+static int copy_vm_str(struct vm_area_struct *vma, struct page *page,
+		       unsigned long addr, void **buf, int len, int write)
+{
+	struct folio *folio;
+	int bytes, offset, retval;
+	void *maddr;
+
+	if (!page)
+		return -EFAULT;
+
+	bytes = len;
+	offset = addr & (PAGE_SIZE - 1);
+	if (bytes > PAGE_SIZE - offset)
+		bytes = PAGE_SIZE - offset;
+
+	folio = page_folio(page);
+	maddr = kmap_local_folio(folio, folio_page_idx(folio, page) * PAGE_SIZE);
+	retval = strscpy(*buf, maddr + offset, bytes);
+	if (retval >= 0) {
+		/* Found the end of the string. */
+		*buf += retval;
+		folio_release_kmap(folio, maddr);
+		return 0;
+	}
+
+	*buf += bytes - 1;
+	if (bytes != len) {
+		copy_from_user_page(vma, page, addr + bytes - 1, *buf,
+				    maddr + (PAGE_SIZE - 1), 1);
+		*buf += 1;
+	}
+	folio_release_kmap(folio, maddr);
+
+	return bytes;
+}
+
+/*
  * Copy a string from another process's address space as given in mm.
  * If there is any error return -EFAULT.
  */
 static int __copy_remote_vm_str(struct mm_struct *mm, unsigned long addr,
 				void *buf, int len, unsigned int gup_flags)
 {
-	void *old_buf = buf;
-	int err = 0;
+	int bytes, err;
 
 	*(char *)buf = '\0';
 
-	if (mmap_read_lock_killable(mm))
-		return -EFAULT;
-
-	addr = untagged_addr_remote(mm, addr);
-
-	/* Avoid triggering the temporary warning in __get_user_pages */
-	if (!vma_lookup(mm, addr)) {
-		err = -EFAULT;
-		goto out;
-	}
-
-	while (len) {
-		int bytes, offset, retval;
-		void *maddr;
-		struct folio *folio;
-		struct page *page;
-		struct vm_area_struct *vma = NULL;
-
-		page = get_user_page_lookup_vma(mm, addr, gup_flags, &vma);
-		if (IS_ERR(page)) {
-			/*
-			 * Treat as a total failure for now until we decide how
-			 * to handle the CONFIG_HAVE_IOREMAP_PROT case and
-			 * stack expansion.
-			 */
-			*(char *)buf = '\0';
-			err = -EFAULT;
-			goto out;
-		}
-
-		folio = page_folio(page);
-		bytes = len;
-		offset = addr & (PAGE_SIZE - 1);
-		if (bytes > PAGE_SIZE - offset)
-			bytes = PAGE_SIZE - offset;
-
-		maddr = kmap_local_folio(folio, folio_page_idx(folio, page) * PAGE_SIZE);
-		retval = strscpy(buf, maddr + offset, bytes);
-		if (retval >= 0) {
-			/* Found the end of the string */
-			buf += retval;
-			folio_release_kmap(folio, maddr);
-			break;
-		}
-
-		buf += bytes - 1;
-		/*
-		 * Because strscpy always NUL terminates we need to
-		 * copy the last byte in the page if we are going to
-		 * load more pages
-		 */
-		if (bytes != len) {
-			addr += bytes - 1;
-			copy_from_user_page(vma, page, addr, buf, maddr + (PAGE_SIZE - 1), 1);
-			buf += 1;
-			addr += 1;
-		}
-		len -= bytes;
-
-		folio_release_kmap(folio, maddr);
-	}
-
-out:
-	mmap_read_unlock(mm);
-	if (err)
+	bytes = remote_vm_walk(mm, addr, buf, len, gup_flags, false,
+			       copy_vm_str, &err);
+	if (err) {
+		/* The contract guarantees a terminated buffer even on error. */
+		((char *)buf)[bytes] = '\0';
 		return err;
-	return buf - old_buf;
+	}
+
+	return bytes;
 }
 
 /**
