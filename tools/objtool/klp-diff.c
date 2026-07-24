@@ -1877,7 +1877,12 @@ static int create_fake_symbols(struct elf *elf)
 		if (annotype(elf, sec, reloc) != ANNOTYPE_DATA_SPECIAL)
 			continue;
 
-		offset = reloc_addend(reloc);
+		/*
+		 * The annotated location may be referenced via the section
+		 * symbol plus addend, or via a local label (GCC/GAS on
+		 * LoongArch): sym->offset + addend covers both forms.
+		 */
+		offset = reloc->sym->offset + reloc_addend(reloc);
 
 		size = 0;
 		next_reloc = reloc;
@@ -1889,7 +1894,7 @@ static int create_fake_symbols(struct elf *elf)
 			    next_reloc->sym->sec != reloc->sym->sec)
 				continue;
 
-			size = reloc_addend(next_reloc) - offset;
+			size = (next_reloc->sym->offset + reloc_addend(next_reloc)) - offset;
 			break;
 		}
 
