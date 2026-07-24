@@ -1639,6 +1639,7 @@ enum nvme_admin_opcode {
 	nvme_admin_nvme_mi_recv		= 0x1e,
 	nvme_admin_lm_send		= 0x41,
 	nvme_admin_lm_recv		= 0x42,
+	nvme_admin_cdq			= 0x45,
 	nvme_admin_dbbuf		= 0x7C,
 	nvme_admin_format_nvm		= 0x80,
 	nvme_admin_security_send	= 0x81,
@@ -1679,7 +1680,8 @@ enum nvme_admin_opcode {
 		nvme_admin_opcode_name(nvme_admin_security_send),	\
 		nvme_admin_opcode_name(nvme_admin_security_recv),	\
 		nvme_admin_opcode_name(nvme_admin_sanitize_nvm),	\
-		nvme_admin_opcode_name(nvme_admin_get_lba_status))
+		nvme_admin_opcode_name(nvme_admin_get_lba_status),	\
+		nvme_admin_opcode_name(nvme_admin_cdq))
 
 enum {
 	NVME_QUEUE_PHYS_CONTIG	= (1 << 0),
@@ -1710,6 +1712,7 @@ enum {
 	NVME_FEAT_PLM_WINDOW	= 0x14,
 	NVME_FEAT_HOST_BEHAVIOR	= 0x16,
 	NVME_FEAT_SANITIZE	= 0x17,
+	NVME_FEAT_CDQ		= 0x21,
 	NVME_FEAT_FDP		= 0x1d,
 	NVME_FEAT_SW_PROGRESS	= 0x80,
 	NVME_FEAT_HOST_ID	= 0x81,
@@ -1737,6 +1740,10 @@ enum {
 	NVME_FWACT_REPL		= (0 << 3),
 	NVME_FWACT_REPL_ACTV	= (1 << 3),
 	NVME_FWACT_ACTV		= (2 << 3),
+};
+
+enum {
+	NVME_FEAT_CDQ_ID_MASK = GENMASK(15, 0),
 };
 
 struct nvme_supported_log {
@@ -1915,6 +1922,41 @@ struct nvme_directive_cmd {
 	__u16			rsvd15;
 
 	__u32			rsvd16[3];
+};
+
+//Select values for dword 10
+enum nvme_cdq_cmd_mgmt_op {
+	NVME_CDQ_CMD_MGMT_CREATE = 0x0,
+	NVME_CDQ_CMD_MGMT_DELETE = 0x1
+};
+#define NVME_CDQ_CMD_MGMT_CREATE_MOS_QT_UDMQ	0x0
+#define NVME_CDQ_CMD_MGMT_CREATE_PC_CONT	0x1
+#define NVME_CDQ_CMD_MGMT_CREATE_PC_DISCONT	0x0
+
+union nvme_cdq_cmd_dw11 {
+	struct {
+		__le16	flags;
+		__le16	cqs;
+	};
+	struct {
+		__le16	cdqid;
+		__le16	rsvd;
+	};
+};
+
+struct nvme_cdq_command {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__u32			rsvd1[5];
+	__le64			prp1;
+	__le32			rsvd8[2];
+	__u8			sel;
+	__u8			rsvd10;
+	__le16			mos;
+	union nvme_cdq_cmd_dw11	dw11;
+	__le32			cdqsize;
+	__u32			rsvd13[3];
 };
 
 /*
@@ -2335,6 +2377,7 @@ struct nvme_command {
 		struct nvme_directive_cmd directive;
 		struct nvme_lm_command lm;
 		struct nvme_io_mgmt_recv_cmd imr;
+		struct nvme_cdq_command cdq;
 	};
 };
 

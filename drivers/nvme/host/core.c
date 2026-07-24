@@ -5387,6 +5387,7 @@ static inline void _nvme_check_size(void)
 	BUILD_BUG_ON(sizeof(struct nvme_directive_cmd) != 64);
 	BUILD_BUG_ON(sizeof(struct nvme_lm_send_cmd) != 64);
 	BUILD_BUG_ON(sizeof(struct nvme_lm_recv_cmd) != 64);
+	BUILD_BUG_ON(sizeof(struct nvme_cdq_command) != 64);
 	BUILD_BUG_ON(sizeof(struct nvme_feat_host_behavior) != 512);
 }
 
