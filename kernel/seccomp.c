@@ -94,6 +94,13 @@ struct seccomp_knotif {
 	u32 flags;
 
 	/*
+	 * Set by SEND_REDIRECT: the reply rewrote the syscall's registers,
+	 * so on resume the syscall must be re-evaluated against the filters
+	 * outer to the one that notified (see __seccomp_filter()).
+	 */
+	bool redirect;
+
+	/*
 	 * Signals when this has changed states, such as the listener
 	 * dying, a new seccomp addfd message, or changing to REPLIED
 	 */
@@ -1183,10 +1190,12 @@ static bool should_sleep_killable(struct seccomp_filter *match,
 
 static int seccomp_do_user_notification(int this_syscall,
 					struct seccomp_filter *match,
-					const struct seccomp_data *sd)
+					const struct seccomp_data *sd,
+					bool *redirected)
 {
 	int err;
 	u32 flags = 0;
+	bool redirect = false;
 	long ret = 0;
 	struct seccomp_knotif n = {};
 	struct seccomp_kaddfd *addfd, *tmp;
@@ -1243,6 +1252,7 @@ static int seccomp_do_user_notification(int this_syscall,
 	ret = n.val;
 	err = n.error;
 	flags = n.flags;
+	redirect = n.redirect;
 
 interrupted:
 	/* If there were any pending addfd calls, clear them out */
@@ -1269,11 +1279,111 @@ out:
 	mutex_unlock(&match->notify_lock);
 
 	/* Userspace requests to continue the syscall. */
-	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE)
+	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) {
+		*redirected = redirect;
 		return 0;
+	}
 
 	syscall_set_return_value(current, current_pt_regs(),
 				 err, ret);
+	return -1;
+}
+
+static void seccomp_kill_task(int this_syscall, u32 action, int data)
+{
+	current->seccomp.mode = SECCOMP_MODE_DEAD;
+	seccomp_log(this_syscall, SIGSYS, action, true);
+	/* Dump core only if this is the last remaining thread. */
+	if (action != SECCOMP_RET_KILL_THREAD ||
+	    (atomic_read(&current->signal->live) == 1)) {
+		/* Show the original registers in the dump. */
+		syscall_rollback(current, current_pt_regs());
+		/* Trigger a coredump with SIGSYS */
+		force_sig_seccomp(this_syscall, data, true);
+	} else {
+		do_exit(SIGSYS);
+	}
+}
+
+static int seccomp_redirect_revalidate(struct seccomp_filter *notifier)
+{
+	struct seccomp_filter *f;
+	struct seccomp_data sd;
+	bool redirected = false;
+	int this_syscall;
+	u32 action;
+	int data;
+
+	populate_seccomp_data(&sd);
+	this_syscall = sd.nr;
+
+	for (f = notifier->prev; f; f = f->prev) {
+		u32 cur_ret = bpf_prog_run_pin_on_cpu(f->prog, &sd);
+
+		data = cur_ret & SECCOMP_RET_DATA;
+		action = cur_ret & SECCOMP_RET_ACTION_FULL;
+
+		switch (action) {
+		case SECCOMP_RET_ALLOW:
+			continue;
+
+		case SECCOMP_RET_LOG:
+			seccomp_log(this_syscall, 0, action, true);
+			continue;
+
+		case SECCOMP_RET_ERRNO:
+			/* Set low-order bits as an errno, capped at MAX_ERRNO. */
+			if (data > MAX_ERRNO)
+				data = MAX_ERRNO;
+			syscall_set_return_value(current, current_pt_regs(),
+						 -data, 0);
+			goto skip;
+
+		case SECCOMP_RET_TRAP:
+			/* Show the handler the original registers. */
+			syscall_rollback(current, current_pt_regs());
+			/* Let the filter pass back 16 bits of data. */
+			force_sig_seccomp(this_syscall, data, false);
+			goto skip;
+
+		case SECCOMP_RET_USER_NOTIF:
+			/*
+			 * The outer supervisor judges the substituted call:
+			 * an error reply skips it, a plain FLAG_CONTINUE
+			 * keeps the walk going, or this reply would slip the
+			 * call past a stricter filter further out. It cannot
+			 * redirect again: at most one redirect-capable
+			 * listener exists in a chain, and the walk starts
+			 * outside it.
+			 */
+			if (seccomp_do_user_notification(this_syscall, f, &sd,
+							 &redirected))
+				goto skip;
+			continue;
+
+		case SECCOMP_RET_TRACE:
+			/*
+			 * A tracer may rewrite the syscall, and there is no
+			 * defensible way to restart composition mid-walk.
+			 * Fail closed exactly like TRACE with no tracer
+			 * attached: skip with -ENOSYS.
+			 */
+			syscall_set_return_value(current, current_pt_regs(),
+						 -ENOSYS, 0);
+			goto skip;
+
+		case SECCOMP_RET_KILL_THREAD:
+		case SECCOMP_RET_KILL_PROCESS:
+		default:
+			seccomp_kill_task(this_syscall, action, data);
+			return -1;
+		}
+	}
+
+	return 0;
+
+skip:
+	seccomp_log(this_syscall, 0, action, f->log);
 	return -1;
 }
 
@@ -1282,6 +1392,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 	u32 filter_ret, action;
 	struct seccomp_data sd;
 	struct seccomp_filter *match = NULL;
+	bool redirected = false;
 	int data;
 
 	/*
@@ -1356,8 +1467,18 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		return 0;
 
 	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(this_syscall, match, &sd))
+		if (seccomp_do_user_notification(this_syscall, match, &sd,
+						 &redirected))
 			goto skip;
+
+		/*
+		 * A redirect rewrote the argument registers; every filter
+		 * outer to the notifier must judge the substituted syscall
+		 * before it runs. A redirect from the outermost filter has
+		 * no outer filter left to judge it.
+		 */
+		if (redirected && match->prev)
+			return seccomp_redirect_revalidate(match);
 
 		return 0;
 
@@ -1376,18 +1497,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 	case SECCOMP_RET_KILL_THREAD:
 	case SECCOMP_RET_KILL_PROCESS:
 	default:
-		current->seccomp.mode = SECCOMP_MODE_DEAD;
-		seccomp_log(this_syscall, SIGSYS, action, true);
-		/* Dump core only if this is the last remaining thread. */
-		if (action != SECCOMP_RET_KILL_THREAD ||
-		    (atomic_read(&current->signal->live) == 1)) {
-			/* Show the original registers in the dump. */
-			syscall_rollback(current, current_pt_regs());
-			/* Trigger a coredump with SIGSYS */
-			force_sig_seccomp(this_syscall, data, true);
-		} else {
-			do_exit(SIGSYS);
-		}
+		seccomp_kill_task(this_syscall, action, data);
 		return -1; /* skip the syscall go directly to signal handling */
 	}
 
@@ -2223,6 +2333,7 @@ static long seccomp_notify_send_redirect(struct seccomp_filter *filter,
 		goto out_unlock_free;
 	}
 
+	knotif->redirect = true;
 	knotif->state = SECCOMP_NOTIFY_REPLIED;
 	knotif->error = 0;
 	knotif->val = 0;
