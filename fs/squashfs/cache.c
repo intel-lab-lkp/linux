@@ -46,6 +46,40 @@
 #include "page_actor.h"
 
 /*
+ * A NULL wake key selects one waiter for newly available capacity.  A block
+ * key selects every waiter which can share the newly published cache entry.
+ */
+struct squashfs_cache_wait {
+	wait_queue_entry_t wait;
+	u64 block;
+	bool capacity_wake;
+};
+
+static int squashfs_cache_wake_function(wait_queue_entry_t *wait,
+					unsigned int mode, int sync, void *key)
+{
+	struct squashfs_cache_wait *cache_wait =
+		container_of(wait, struct squashfs_cache_wait, wait);
+	u64 *block = key;
+	int ret;
+
+	if (block && cache_wait->block != *block)
+		return 0;
+
+	/* A failed wake remains queued, so finish_wait() sees the reset. */
+	WRITE_ONCE(cache_wait->capacity_wake, !block);
+	ret = autoremove_wake_function(wait, mode, sync, NULL);
+	if (!ret)
+		WRITE_ONCE(cache_wait->capacity_wake, false);
+	return ret;
+}
+
+static void squashfs_cache_wake_block(struct squashfs_cache *cache, u64 block)
+{
+	__wake_up(&cache->wait_queue, TASK_NORMAL, 0, &block);
+}
+
+/*
  * Look-up block in cache, and increment usage count.  If not in cache, read
  * and decompress it from disk.
  */
@@ -54,6 +88,8 @@ struct squashfs_cache_entry *squashfs_cache_get(struct super_block *sb,
 {
 	int i, n;
 	struct squashfs_cache_entry *entry;
+	struct squashfs_cache_wait wait = { .block = block };
+	bool consumed, pending, wake_block, wake_next;
 
 	spin_lock(&cache->lock);
 
@@ -72,9 +108,16 @@ struct squashfs_cache_entry *squashfs_cache_get(struct super_block *sb,
 			 * go to sleep waiting for one to become available.
 			 */
 			if (cache->unused == 0) {
+				init_wait(&wait.wait);
+				wait.wait.func = squashfs_cache_wake_function;
 				cache->num_waiters++;
+				WRITE_ONCE(wait.capacity_wake, false);
+				/* Enqueue before dropping the lock to avoid missing publish. */
+				prepare_to_wait_exclusive(&cache->wait_queue,
+							  &wait.wait, TASK_UNINTERRUPTIBLE);
 				spin_unlock(&cache->lock);
-				wait_event(cache->wait_queue, cache->unused);
+				schedule();
+				finish_wait(&cache->wait_queue, &wait.wait);
 				spin_lock(&cache->lock);
 				cache->num_waiters--;
 				continue;
@@ -105,7 +148,11 @@ struct squashfs_cache_entry *squashfs_cache_get(struct super_block *sb,
 			entry->pending = 1;
 			entry->num_waiters = 0;
 			entry->error = 0;
+			wake_block = cache->num_waiters;
 			spin_unlock(&cache->lock);
+
+			if (wake_block)
+				squashfs_cache_wake_block(cache, block);
 
 			entry->length = squashfs_read_data(sb, block, length,
 				&entry->next_index, entry->actor);
@@ -138,7 +185,8 @@ struct squashfs_cache_entry *squashfs_cache_get(struct super_block *sb,
 		 * for reuse.
 		 */
 		entry = &cache->entry[i];
-		if (entry->refcount == 0)
+		consumed = entry->refcount == 0;
+		if (consumed)
 			cache->unused--;
 		entry->refcount++;
 
@@ -146,12 +194,18 @@ struct squashfs_cache_entry *squashfs_cache_get(struct super_block *sb,
 		 * If the entry is currently being filled in by another process
 		 * go to sleep waiting for it to become available.
 		 */
-		if (entry->pending) {
+		pending = entry->pending;
+		if (pending)
 			entry->num_waiters++;
-			spin_unlock(&cache->lock);
+		/* Pass on capacity if this waiter shared rather than consumed it. */
+		wake_next = READ_ONCE(wait.capacity_wake) && !consumed &&
+			cache->unused && cache->num_waiters;
+		spin_unlock(&cache->lock);
+
+		if (wake_next)
+			wake_up(&cache->wait_queue);
+		if (pending)
 			wait_event(entry->wait_queue, !entry->pending);
-		} else
-			spin_unlock(&cache->lock);
 
 		goto out;
 	}
