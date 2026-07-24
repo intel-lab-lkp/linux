@@ -3945,10 +3945,6 @@ static int f2fs_release_compress_blocks(struct file *filp, unsigned long arg)
 		goto out;
 	}
 
-	set_inode_flag(inode, FI_COMPRESS_RELEASED);
-	inode_set_ctime_current(inode);
-	f2fs_mark_inode_dirty_sync(inode, true);
-
 	f2fs_down_write(&fi->i_gc_rwsem[WRITE]);
 	filemap_invalidate_lock(inode->i_mapping);
 
@@ -3992,6 +3988,12 @@ static int f2fs_release_compress_blocks(struct file *filp, unsigned long arg)
 
 	filemap_invalidate_unlock(inode->i_mapping);
 	f2fs_up_write(&fi->i_gc_rwsem[WRITE]);
+
+	if (ret >= 0 || released_blocks) {
+		set_inode_flag(inode, FI_COMPRESS_RELEASED);
+		inode_set_ctime_current(inode);
+		f2fs_mark_inode_dirty_sync(inode, true);
+	}
 out:
 	if (released_blocks)
 		f2fs_update_time(sbi, REQ_TIME);
