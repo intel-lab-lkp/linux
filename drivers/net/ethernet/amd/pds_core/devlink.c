@@ -96,7 +96,7 @@ int pdsc_dl_flash_update(struct devlink *dl,
 		return -EOPNOTSUPP;
 	}
 
-	return pdsc_firmware_update(pdsc, params->fw, extack);
+	return pdsc_firmware_update(pdsc, params, extack);
 }
 
 static char *fw_slotnames[] = {
