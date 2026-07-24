@@ -177,6 +177,11 @@ static const struct inv_icm42600_hw inv_icm42600_hw[INV_CHIP_NB] = {
 		.name = "icm42631",
 		.conf = &inv_icm42600_default_conf,
 	},
+	[INV_CHIP_ICM42630] = {
+		.whoami = INV_ICM42600_WHOAMI_ICM42630,
+		.name = "icm42630",
+		.conf = &inv_icm42600_default_conf,
+	},
 };
 
 const struct iio_mount_matrix *

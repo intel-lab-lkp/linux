@@ -75,6 +75,7 @@ static const struct spi_device_id inv_icm42600_id[] = {
 	{ .name = "icm42602", .driver_data = INV_CHIP_ICM42602 },
 	{ .name = "icm42605", .driver_data = INV_CHIP_ICM42605 },
 	{ .name = "icm42622", .driver_data = INV_CHIP_ICM42622 },
+	{ .name = "icm42630", .driver_data = INV_CHIP_ICM42630 },
 	{ .name = "icm42631", .driver_data = INV_CHIP_ICM42631 },
 	{ .name = "icm42686", .driver_data = INV_CHIP_ICM42686 },
 	{ .name = "icm42688", .driver_data = INV_CHIP_ICM42688 },
@@ -95,6 +96,9 @@ static const struct of_device_id inv_icm42600_of_matches[] = {
 	}, {
 		.compatible = "invensense,icm42622",
 		.data = (void *)INV_CHIP_ICM42622,
+	}, {
+		.compatible = "invensense,icm42630",
+		.data = (void *)INV_CHIP_ICM42630,
 	}, {
 		.compatible = "invensense,icm42631",
 		.data = (void *)INV_CHIP_ICM42631,
