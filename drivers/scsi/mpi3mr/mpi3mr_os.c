@@ -283,32 +283,6 @@ void mpi3mr_hdb_trigger_data_event(struct mpi3mr_ioc *mrioc,
 }
 
 /**
- * mpi3mr_fwevt_del_from_list - Delete firmware event from list
- * @mrioc: Adapter instance reference
- * @fwevt: Firmware event reference
- *
- * Delete the given firmware event from the firmware event list.
- *
- * Return: Nothing.
- */
-static void mpi3mr_fwevt_del_from_list(struct mpi3mr_ioc *mrioc,
-	struct mpi3mr_fwevt *fwevt)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&mrioc->fwevt_lock, flags);
-	if (!list_empty(&fwevt->list)) {
-		list_del_init(&fwevt->list);
-		/*
-		 * Put fwevt reference count after
-		 * removing it from fwevt_list
-		 */
-		mpi3mr_fwevt_put(fwevt);
-	}
-	spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
-}
-
-/**
  * mpi3mr_dequeue_fwevt - Dequeue firmware event from the list
  * @mrioc: Adapter instance reference
  *
@@ -327,11 +301,7 @@ static struct mpi3mr_fwevt *mpi3mr_dequeue_fwevt(
 		fwevt = list_first_entry(&mrioc->fwevt_list,
 		    struct mpi3mr_fwevt, list);
 		list_del_init(&fwevt->list);
-		/*
-		 * Put fwevt reference count after
-		 * removing it from fwevt_list
-		 */
-		mpi3mr_fwevt_put(fwevt);
+
 	}
 	spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
 
@@ -365,6 +335,11 @@ static void mpi3mr_cancel_work(struct mpi3mr_fwevt *fwevt)
 		 */
 		mpi3mr_fwevt_put(fwevt);
 	}
+
+	/*
+	 * Drop the reference count that was acquired by the caller.
+	 */
+	mpi3mr_fwevt_put(fwevt);
 }
 
 /**
@@ -379,16 +354,39 @@ static void mpi3mr_cancel_work(struct mpi3mr_fwevt *fwevt)
 void mpi3mr_cleanup_fwevt_list(struct mpi3mr_ioc *mrioc)
 {
 	struct mpi3mr_fwevt *fwevt = NULL;
+	unsigned long flags;
 
+	/*
+	 * Safely read current_event under lock to prevent TOCTOU race
+	 * with the firmware event worker thread.
+	 */
+	spin_lock_irqsave(&mrioc->fwevt_lock, flags);
 	if ((list_empty(&mrioc->fwevt_list) && !mrioc->current_event) ||
-	    !mrioc->fwevt_worker_thread)
+	    !mrioc->fwevt_worker_thread) {
+		spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
 		return;
+	}
+	spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
 
 	while ((fwevt = mpi3mr_dequeue_fwevt(mrioc)))
 		mpi3mr_cancel_work(fwevt);
 
-	if (mrioc->current_event) {
-		fwevt = mrioc->current_event;
+	/*
+	 * Safely read current_event under lock to prevent TOCTOU race
+	 * with the firmware event worker thread.
+	 */
+	spin_lock_irqsave(&mrioc->fwevt_lock, flags);
+	fwevt = mrioc->current_event;
+	if (fwevt) {
+		/*
+		 * Take a reference to ensure the event is not freed by the
+		 * worker thread while we are evaluating or cancelling it.
+		 */
+		mpi3mr_fwevt_get(fwevt);
+	}
+	spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
+
+	if (fwevt) {
 		/*
 		 * Don't call cancel_work_sync() API for the
 		 * fwevt work if the controller reset is
@@ -399,6 +397,7 @@ void mpi3mr_cleanup_fwevt_list(struct mpi3mr_ioc *mrioc)
 		 */
 		if (current_work() == &fwevt->work || fwevt->pending_at_sml) {
 			fwevt->discard = 1;
+			mpi3mr_fwevt_put(fwevt);
 			return;
 		}
 
@@ -2129,9 +2128,19 @@ static void mpi3mr_fwevt_bh(struct mpi3mr_ioc *mrioc,
 	u16 perst_id, handle, dev_info;
 	struct mpi3_device0_sas_sata_format *sasinf = NULL;
 	unsigned int timeout;
+	unsigned long flags;
 
-	mpi3mr_fwevt_del_from_list(mrioc, fwevt);
+	spin_lock_irqsave(&mrioc->fwevt_lock, flags);
+	if (!list_empty(&fwevt->list)) {
+		list_del_init(&fwevt->list);
+		/*
+		 * Put fwevt reference count after
+		 * removing it from fwevt_list
+		 */
+		mpi3mr_fwevt_put(fwevt);
+	}
 	mrioc->current_event = fwevt;
+	spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
 
 	if (mrioc->stop_drv_processing) {
 		dprint_event_bh(mrioc, "ignoring event(0x%02x) in the bottom half handler\n"
@@ -2264,9 +2273,12 @@ evt_ack:
 		mpi3mr_process_event_ack(mrioc, fwevt->event_id,
 		    fwevt->evt_ctx);
 out:
+	spin_lock_irqsave(&mrioc->fwevt_lock, flags);
+	mrioc->current_event = NULL;
+	spin_unlock_irqrestore(&mrioc->fwevt_lock, flags);
+
 	/* Put fwevt reference count to neutralize kref_init increment */
 	mpi3mr_fwevt_put(fwevt);
-	mrioc->current_event = NULL;
 }
 
 /**
