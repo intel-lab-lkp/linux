@@ -599,7 +599,12 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
     ///
     /// `item` must not be in a different linked list (with the same id).
     pub unsafe fn remove(&mut self, item: &T) -> Option<ListArc<T, ID>> {
-        // SAFETY: TODO.
+        // SAFETY: `item` is a `&T`, and Rust's reference guarantees mean it is always a valid,
+        // non-dangling pointer to a live value of type `T`, satisfying `view_links`'s safety
+        // requirement. The pointer `view_links` returns is guaranteed dereferenceable by its own
+        // documented guarantees: it's either the pointer from a preceding `prepare_to_insert`
+        // call, which itself must point at a valid value, or it points at a read-only
+        // `ListLinks` with null fields. Either way, `fields`'s safety requirement is satisfied.
         let mut item = unsafe { ListLinks::fields(T::view_links(item)) };
         // SAFETY: The user provided a reference, and reference are never dangling.
         //
