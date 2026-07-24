@@ -85,6 +85,30 @@ static struct acp_card_drvdata sof_nau8821_max98388_data = {
 	.amp_codec_id = MAX98388,
 	.soc_mclk = true,
 };
+/*
+ * struct acp_dai_link_info - ACP7x DAI link table entry
+ *
+ * Initializer layout:
+ * { name, id, cpu_id, codec_id, capture_only, tdm_mode }
+ *
+ * @name:		DAI link name
+ * @id:			Backend endpoint ID (enum acp7x_be_id)
+ * @cpu_id:		ACP CPU DAI endpoint (enum acp7x_cpu_endpoints)
+ * @codec_id:	Codec endpoint (enum codec_endpoints, or PDM0/PDM1)
+ * @capture_only:	Non-zero for capture-only links (e.g. DMIC)
+ * @tdm_mode:	Enable TDM mode for this link
+ */
+
+struct acp_dai_link_info nau8821_max98388_acp7x_dailink_data[] = {
+	{"acp-i2s0-codec", I2S0_BE_ID, I2S0, NAU8821, 0, 0},
+	{"acp-i2s1-codec", I2S1_BE_ID, I2S1, NONE, 0, 0},
+	{"acp-i2s2-codec", I2S2_BE_ID, I2S2, MAX98388, 0, 0},
+};
+
+static struct acp_card_drvdata sof_nau8821_max98388_acp7x_data = {
+	.soc_mclk = true,
+	.acp_dai_link_info = nau8821_max98388_acp7x_dailink_data,
+};
 
 static int acp_sof_probe(struct platform_device *pdev)
 {
@@ -157,6 +181,10 @@ static const struct platform_device_id board_ids[] = {
 	{
 		.name = "nau8821-max",
 		.driver_data = (kernel_ulong_t)&sof_nau8821_max98388_data
+	},
+	{
+		.name = "acp7x-nau8821-max",
+		.driver_data = (kernel_ulong_t)&sof_nau8821_max98388_acp7x_data
 	},
 	{ }
 };
