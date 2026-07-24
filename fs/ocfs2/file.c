@@ -9,6 +9,7 @@
 
 #include <linux/capability.h>
 #include <linux/fs.h>
+#include <linux/iomap.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/highmem.h>
@@ -2374,6 +2375,29 @@ out:
 	return ret;
 }
 
+static bool ocfs2_should_use_dio(struct kiocb *iocb, struct iov_iter *iter,
+				struct inode *inode)
+{
+	unsigned int dio_align = bdev_logical_block_size(inode->i_sb->s_bdev);
+
+	/*
+	 * Fallback to buffered I/O if we see an inode without
+	 * extents.
+	 */
+	if (OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL)
+		return false;
+
+	/*
+	 * Allow Direct I/O for any write requests aligned to the underlying
+	 * logical sector size (e.g., 512 bytes).
+	 */
+	if (IS_ALIGNED(iocb->ki_pos | iov_iter_alignment(iter), dio_align)) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
 static ssize_t ocfs2_file_write_iter(struct kiocb *iocb,
 				    struct iov_iter *from)
 {
@@ -2548,7 +2572,6 @@ static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 			filp->f_path.dentry->d_name.name,
 			to->nr_segs);	/* GRRRRR */
 
-
 	if (!inode) {
 		ret = -EINVAL;
 		mlog_errno(ret);
@@ -2558,26 +2581,37 @@ static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 	if (!direct_io && nowait)
 		return -EOPNOTSUPP;
 
+	if (!iov_iter_count(to))
+		return 0; /* skip atime */
+
+	/*
+	 * the following two lines do the same thing. Once iomap completely
+	 * replaces buffer_head, we can remove ocfs2_iocb_init_rw_locked(),
+	 * ocfs2_iocb_clear_rw_locked() and ocfs2_iocb_rw_locked_level().
+	 */
 	ocfs2_iocb_init_rw_locked(iocb);
+	ocfs2_iomap_iocb_init_rw_locked(iocb);
 
 	/*
 	 * buffered reads protect themselves in ->read_folio().  O_DIRECT reads
 	 * need locks to protect pending reads from racing with truncate.
 	 */
 	if (direct_io) {
+		rw_level = 0;
 		if (nowait)
-			ret = ocfs2_try_rw_lock(inode, 0);
+			ret = ocfs2_try_rw_lock(inode, rw_level);
 		else
-			ret = ocfs2_rw_lock(inode, 0);
+			ret = ocfs2_rw_lock(inode, rw_level);
 
 		if (ret < 0) {
 			if (ret != -EAGAIN)
 				mlog_errno(ret);
 			goto bail;
 		}
-		rw_level = 0;
 		/* communicate with ocfs2_dio_end_io */
 		ocfs2_iocb_set_rw_locked(iocb, rw_level);
+		/* communicate with ocfs2_dio_read_end_io */
+		ocfs2_iomap_iocb_set_rw_locked(iocb, rw_level);
 	}
 
 	/*
@@ -2598,7 +2632,12 @@ static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 	}
 	ocfs2_inode_unlock(inode, lock_level);
 
-	ret = generic_file_read_iter(iocb, to);
+	if (direct_io && ocfs2_should_use_dio(iocb, to, inode)) {
+		ret = iomap_dio_rw(iocb, to, &ocfs2_iomap_ops, &ocfs2_dio_r_ops, 0, NULL, 0);
+	} else {
+		iocb->ki_flags &= ~IOCB_DIRECT;
+		ret = generic_file_read_iter(iocb, to);
+	}
 	trace_generic_file_read_iter_ret(ret);
 
 	/* buffered aio wouldn't have proper lock coverage today */
@@ -2610,8 +2649,10 @@ static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 	}
 
 bail:
-	if (rw_level != -1)
+	if (rw_level != -1) {
 		ocfs2_rw_unlock(inode, rw_level);
+		ocfs2_iomap_iocb_clear_rw_locked(iocb);
+	}
 
 	return ret;
 }

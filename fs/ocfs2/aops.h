@@ -74,4 +74,28 @@ enum ocfs2_iocb_lock_bits {
 #define ocfs2_iocb_rw_locked_level(iocb) \
 	test_bit(OCFS2_IOCB_RW_LOCK_LEVEL, (unsigned long *)&iocb->private)
 
+/*
+ * Since iomap clear iocb->private in some cases, we use iocb->ki_flags
+ * top 2-bit to store the rw lock state. Hope ki_flags never touch these 2-bit.
+ */
+#define IOCB_OCFS2_RW_LOCK		(1 << 30)
+#define IOCB_OCFS2_RW_LOCK_LEVEL	(1 << 31)
+static inline void ocfs2_iomap_iocb_set_rw_locked(struct kiocb *iocb, int level)
+{
+	iocb->ki_flags |= IOCB_OCFS2_RW_LOCK;
+	if (level)
+		iocb->ki_flags |= IOCB_OCFS2_RW_LOCK_LEVEL;
+	else
+		iocb->ki_flags &= ~IOCB_OCFS2_RW_LOCK_LEVEL;
+}
+
+#define ocfs2_iomap_iocb_is_rw_locked(iocb) \
+	(iocb->ki_flags & IOCB_OCFS2_RW_LOCK)
+#define ocfs2_iomap_iocb_init_rw_locked(iocb) \
+	(iocb->ki_flags &= ~(IOCB_OCFS2_RW_LOCK | IOCB_OCFS2_RW_LOCK_LEVEL))
+#define ocfs2_iomap_iocb_clear_rw_locked(iocb) \
+	(iocb->ki_flags &= ~IOCB_OCFS2_RW_LOCK)
+#define ocfs2_iomap_iocb_rw_locked_level(iocb) \
+	((iocb->ki_flags & IOCB_OCFS2_RW_LOCK_LEVEL) ? 1 : 0)
+
 #endif /* OCFS2_FILE_H */
