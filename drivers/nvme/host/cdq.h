@@ -42,6 +42,9 @@ struct cdq_nvme_queue {
 	dma_addr_t prp_lists_dma[MAX_NR_CDQ_PRPS];
 	unsigned int nr_prp_lists;
 
+	/* True if mem for chunks and prps is valid */
+	bool valid_mem;
+
 	/* Manage refs for read FD and controller xarray */
 	struct kref ref;
 };
