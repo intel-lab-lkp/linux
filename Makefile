@@ -1053,10 +1053,12 @@ ifdef CONFIG_HAVE_FENTRY
     CC_FLAGS_FTRACE	+= -mfentry
     CC_FLAGS_USING	+= -DCC_USING_FENTRY
   endif
+  RUSTFLAGS_FTRACE := $(if $(call rustc-min-version,109800),-Zinstrument-mcount=fentry,)
 endif
 export CC_FLAGS_FTRACE
 KBUILD_CFLAGS	+= $(CC_FLAGS_FTRACE) $(CC_FLAGS_USING)
 KBUILD_AFLAGS	+= $(CC_FLAGS_USING)
+KBUILD_RUSTFLAGS += $(RUSTFLAGS_FTRACE)
 endif
 
 # We trigger additional mismatches with less inlining
