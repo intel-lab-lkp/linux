@@ -40,9 +40,6 @@ static void seg_led_update(struct work_struct *work)
 
 static int seg_led_linedisp_get_map_type(struct linedisp *linedisp)
 {
-	struct seg_led_priv *priv = container_of(linedisp, struct seg_led_priv, linedisp);
-
-	INIT_DELAYED_WORK(&priv->work, seg_led_update);
 	return LINEDISP_MAP_SEG7;
 }
 
@@ -58,10 +55,25 @@ static const struct linedisp_ops seg_led_linedisp_ops = {
 	.update = seg_led_linedisp_update,
 };
 
+static void seg_led_cancel_work(void *data)
+{
+	struct seg_led_priv *priv = data;
+
+	cancel_delayed_work_sync(&priv->work);
+}
+
+static void seg_led_unregister_linedisp(void *data)
+{
+	struct seg_led_priv *priv = data;
+
+	linedisp_unregister(&priv->linedisp);
+}
+
 static int seg_led_probe(struct platform_device *pdev)
 {
 	struct seg_led_priv *priv;
 	struct device *dev = &pdev->dev;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -76,15 +88,17 @@ static int seg_led_probe(struct platform_device *pdev)
 	if (priv->segment_gpios->ndescs < 7 || priv->segment_gpios->ndescs > 8)
 		return -EINVAL;
 
-	return linedisp_register(&priv->linedisp, dev, 1, &seg_led_linedisp_ops);
-}
+	INIT_DELAYED_WORK(&priv->work, seg_led_update);
 
-static void seg_led_remove(struct platform_device *pdev)
-{
-	struct seg_led_priv *priv = platform_get_drvdata(pdev);
+	ret = devm_add_action_or_reset(dev, seg_led_cancel_work, priv);
+	if (ret)
+		return ret;
 
-	cancel_delayed_work_sync(&priv->work);
-	linedisp_unregister(&priv->linedisp);
+	ret = linedisp_register(&priv->linedisp, dev, 1, &seg_led_linedisp_ops);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, seg_led_unregister_linedisp, priv);
 }
 
 static const struct of_device_id seg_led_of_match[] = {
@@ -95,7 +109,6 @@ MODULE_DEVICE_TABLE(of, seg_led_of_match);
 
 static struct platform_driver seg_led_driver = {
 	.probe = seg_led_probe,
-	.remove = seg_led_remove,
 	.driver = {
 		.name = "seg-led-gpio",
 		.of_match_table = seg_led_of_match,
