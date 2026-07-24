@@ -29,7 +29,7 @@ struct nvme_cdq_chunk {
 
 struct cdq_nvme_queue {
 	u16 id;
-	struct nvme_ctrl *ctrl;
+	struct nvme_ctrl *ctrl; // this is kref'ed for the life of the CDQ
 	u32 size_nbyte;
 	u16 mc_id; // migratable controller id
 
@@ -49,11 +49,20 @@ struct cdq_nvme_queue {
 	struct kref ref;
 };
 
-/* Must not touch cdq->ctrl: Ctrl may have been freed */
-static inline void nvme_free_cdq(struct kref *ref)
-{
-	kfree(container_of(ref, struct cdq_nvme_queue, ref));
-}
+/*
+ * nvme_free_cdq:
+ *    - Is called with the cdq struct has no more krefs.
+ *    - Will free (cdq) and decrease ctrl kref.
+ */
+void nvme_free_cdq(struct kref *ref);
+/* nvme_cdq_delete:
+ *    - Sends a nvme delete cmd to the controller
+ *    - removes (cdq) from controller xarray
+ *    - frees the backing CDQ mem
+ *    - Calls nvme_free_cdq if there are no more refs
+ */
+void nvme_delete_cdq(struct cdq_nvme_queue *cdq);
+int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id);
 
 static inline void nvme_cdq_get(struct cdq_nvme_queue *cdq)
 {
@@ -65,8 +74,6 @@ static inline void nvme_cdq_put(struct cdq_nvme_queue *cdq)
 	kref_put(&cdq->ref, nvme_free_cdq);
 }
 
-void nvme_delete_cdq(struct cdq_nvme_queue *cdq);
-int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id);
 void nvme_delete_cdqs_host(struct nvme_ctrl *ctrl);
 void nvme_free_cdqs(struct nvme_ctrl *ctrl);
 
