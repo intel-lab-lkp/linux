@@ -908,6 +908,86 @@ mt7925_get_rates_table(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	return mvif->basic_rates_idx;
 }
 
+static void
+mt7925_calc_vif_num(void *priv, u8 *mac, struct ieee80211_vif *vif)
+{
+	u32 *num = priv;
+
+	if (!priv)
+		return;
+
+	switch (vif->type) {
+	case NL80211_IFTYPE_STATION:
+	case NL80211_IFTYPE_P2P_CLIENT:
+	case NL80211_IFTYPE_AP:
+	case NL80211_IFTYPE_P2P_GO:
+		*num += 1;
+		break;
+	default:
+		break;
+	}
+}
+
+static void
+mt7925_regd_set_6ghz_power_type(struct ieee80211_vif *vif,
+				struct ieee80211_bss_conf *link_conf,
+				bool is_add)
+{
+	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+	struct mt792x_phy *phy = mvif->phy;
+	struct mt792x_dev *dev = phy->dev;
+	struct ieee80211_channel *chan = NULL;
+	u32 valid_vif_num = 0;
+	enum mt792x_reg_power_type old_power_type;
+	bool power_type_changed = false;
+
+	old_power_type = phy->power_type;
+
+	/* Try to get channel from link_conf first, then vif->bss_conf, then phy */
+	if (link_conf && link_conf->chanreq.oper.chan)
+		chan = link_conf->chanreq.oper.chan;
+	else if (vif->bss_conf.chanreq.oper.chan)
+		chan = vif->bss_conf.chanreq.oper.chan;
+	else if (phy->mt76->chandef.chan)
+		chan = phy->mt76->chandef.chan;
+
+	ieee80211_iterate_active_interfaces(mt76_hw(dev),
+					    IEEE80211_IFACE_ITER_RESUME_ALL,
+					    mt7925_calc_vif_num, &valid_vif_num);
+
+	if (valid_vif_num > 1) {
+		phy->power_type = MT_AP_DEFAULT;
+		goto out;
+	}
+
+	if (!is_add)
+		vif->bss_conf.power_type = IEEE80211_REG_UNSET_AP;
+
+	switch (vif->bss_conf.power_type) {
+	case IEEE80211_REG_SP_AP:
+		phy->power_type = MT_AP_SP;
+		break;
+	case IEEE80211_REG_VLP_AP:
+		phy->power_type = MT_AP_VLP;
+		break;
+	case IEEE80211_REG_LPI_AP:
+		phy->power_type = MT_AP_LPI;
+		break;
+	case IEEE80211_REG_UNSET_AP:
+		phy->power_type = MT_AP_UNSET;
+		break;
+	default:
+		phy->power_type = MT_AP_DEFAULT;
+		break;
+	}
+
+out:
+	power_type_changed = (old_power_type != phy->power_type);
+
+	if (power_type_changed && chan && chan->band == NL80211_BAND_6GHZ)
+		mt7925_mcu_apply_regd(dev, dev->mt76.alpha2, dev->country_ie_env, true);
+}
+
 static int mt7925_mac_link_sta_add(struct mt76_dev *mdev,
 				   struct ieee80211_vif *vif,
 				   struct ieee80211_link_sta *link_sta,
@@ -1029,6 +1109,8 @@ static int mt7925_mac_link_sta_add(struct mt76_dev *mdev,
 		if (ret)
 			goto out_pm;
 	}
+
+	mt7925_regd_set_6ghz_power_type(vif, link_conf, true);
 
 	mt76_connac_power_save_sched(&dev->mphy, &dev->pm);
 
@@ -1319,6 +1401,8 @@ static void mt7925_mac_link_sta_remove(struct mt76_dev *mdev,
 	rcu_assign_pointer(dev->mt76.wcid[idx], NULL);
 	mt76_wcid_cleanup(mdev, wcid);
 	mt76_wcid_mask_clear(mdev->wcid_mask, idx);
+
+	mt7925_regd_set_6ghz_power_type(vif, link_conf, false);
 
 	mt76_connac_power_save_sched(&dev->mphy, &dev->pm);
 }
