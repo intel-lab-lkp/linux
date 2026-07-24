@@ -726,8 +726,6 @@ static void pvr_queue_submit_job_to_cccb(struct pvr_job *job)
 		cmd->partial_render_geom_frag_fence.value = job->done_fence->seqno - 1;
 	}
 
-	trace_pvr_job_submit_fw(job);
-
 	/* Submit job to FW */
 	pvr_cccb_write_command_with_header(cccb, job->fw_ccb_cmd_type, job->cmd_len, job->cmd,
 					   job->id, job->id);
@@ -758,6 +756,7 @@ static struct dma_fence *pvr_queue_run_job(struct drm_sched_job *sched_job)
 	 */
 	if (job->paired_job && job->type == DRM_PVR_JOB_TYPE_FRAGMENT &&
 	    job->done_fence->ops) {
+		trace_pvr_job_submit_fw(job);
 		return dma_fence_get(job->done_fence);
 	}
 
@@ -810,6 +809,7 @@ static struct dma_fence *pvr_queue_run_job(struct drm_sched_job *sched_job)
 					pvr_context_get_fw_addr(job->ctx) + queue->ctx_offset,
 					job->hwrt);
 	}
+	trace_pvr_job_submit_fw(job);
 
 	return dma_fence_get(job->done_fence);
 }
