@@ -29,7 +29,11 @@ unsafe extern "C" fn rust_fmt_argument(
     use fmt::Write;
     // SAFETY: The C contract guarantees that `buf` is valid if it's less than `end`.
     let mut w = unsafe { RawFormatter::from_ptrs(buf.cast(), end.cast()) };
-    // SAFETY: TODO.
+    // SAFETY: This function is only reachable via the `%pA` format specifier handled in
+    // `lib/vsprintf.c`, which calls it synchronously with the `ptr` that `call_printk`
+    // derived from a live `&fmt::Arguments`, before that reference's scope can end. `ptr`
+    // is therefore valid and properly aligned for a `fmt::Arguments<'_>` for the duration
+    // of this call.
     let _ = w.write_fmt(unsafe { *ptr.cast::<fmt::Arguments<'_>>() });
     w.pos().cast()
 }
@@ -109,7 +113,11 @@ pub unsafe fn call_printk(
 ) {
     // `_printk` does not seem to fail in any path.
     #[cfg(CONFIG_PRINTK)]
-    // SAFETY: TODO.
+    // SAFETY: By this function's safety requirements, `format_string` is one of the fixed
+    // `format_strings` statics, so its `%s`/`%pA` specifiers match the two arguments
+    // supplied below, and `module_name` is null-terminated as `%s` requires. The third
+    // argument points at `args`, which remains valid for the duration of this call and is
+    // only read back synchronously, through `%pA`, by `rust_fmt_argument`.
     unsafe {
         bindings::_printk(
             format_string.as_ptr(),
