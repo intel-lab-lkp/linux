@@ -11,5 +11,6 @@ einj-y				:= einj-core.o
 einj-$(CONFIG_ACPI_APEI_EINJ_CXL) += einj-cxl.o
 obj-$(CONFIG_ACPI_APEI_ERST_DEBUG) += erst-dbg.o
 obj-$(CONFIG_ACPI_APEI_GHES_NVIDIA) += ghes-nvidia.o
+obj-$(CONFIG_ACPI_APEI_GHES_NVIDIA_KUNIT_TEST) += ghes-nvidia-test.o
 
 apei-y := apei-base.o hest.o erst.o bert.o

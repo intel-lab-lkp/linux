@@ -80,11 +80,24 @@ config ACPI_APEI_GHES_NVIDIA
 	help
 	  Support for decoding NVIDIA-specific CPER sections delivered via
 	  the APEI GHES vendor record notifier chain. Registers a handler
-	  for the NVIDIA section GUID and logs error signatures, severity,
-	  socket, and diagnostic register address-value pairs.
+	  for the NVIDIA Grace and Vera section GUIDs and logs the decoded
+	  NVIDIA error records.
 
 	  Enable on NVIDIA server platforms (e.g. DGX, HGX) that expose
 	  ACPI device NVDA2012 in their firmware tables.
+
+	  If unsure, say N.
+
+config ACPI_APEI_GHES_NVIDIA_KUNIT_TEST
+	tristate "NVIDIA GHES vendor record handler KUnit tests" if !KUNIT_ALL_TESTS
+	depends on KUNIT && ACPI_APEI_GHES_NVIDIA
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for NVIDIA GHES vendor CPER parser helpers.
+	  They cover Grace helper decoding, Vera payload parsing, and
+	  section routing.
+	  They are enabled only for KUnit test builds.
+	  They are not intended for production firmware paths.
 
 	  If unsure, say N.
 
