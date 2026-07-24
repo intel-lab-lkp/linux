@@ -672,6 +672,15 @@ static void ipheth_disconnect(struct usb_interface *intf)
 	if (dev != NULL) {
 		unregister_netdev(dev->net);
 		ipheth_kill_urbs(dev);
+		/*
+		 * ipheth_sndbulk_callback() re-arms carrier_work on the
+		 * -ENOENT completion delivered by the usb_kill_urb() in
+		 * ipheth_kill_urbs(), after ipheth_close() (via
+		 * unregister_netdev()) already drained it.  Drain it again
+		 * once the URB source is stopped, before free_netdev() frees
+		 * the netdev whose private area embeds carrier_work.
+		 */
+		cancel_delayed_work_sync(&dev->carrier_work);
 		ipheth_free_urbs(dev);
 		kfree(dev->ctrl_buf);
 		free_netdev(dev->net);
