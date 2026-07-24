@@ -14,6 +14,7 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/atmdev.h>
 #include <linux/sonet.h>
@@ -46,6 +47,7 @@
 static struct timer_list poll_timer;
 static struct suni_priv *sunis = NULL;
 static DEFINE_SPINLOCK(sunis_lock);
+static DEFINE_MUTEX(sunis_mutex);
 
 
 #define ADD_LIMITED(s,v) \
@@ -59,6 +61,7 @@ static void suni_hz(struct timer_list *timer)
 	struct atm_dev *dev;
 	struct k_sonet_stats *stats;
 
+	spin_lock_bh(&sunis_lock);
 	for (walk = sunis; walk; walk = walk->next) {
 		dev = walk->dev;
 		stats = &walk->sonet_stats;
@@ -85,6 +88,7 @@ static void suni_hz(struct timer_list *timer)
 		    ((GET(TACP_TCC) & 0xff) << 8) |
 		    ((GET(TACP_TCCM) & 7) << 16));
 	}
+	spin_unlock_bh(&sunis_lock);
 	if (timer) mod_timer(&poll_timer,jiffies+HZ);
 }
 
@@ -306,14 +310,9 @@ static void suni_int(struct atm_dev *dev)
 
 static int suni_start(struct atm_dev *dev)
 {
-	unsigned long flags;
 	int first;
 
-	spin_lock_irqsave(&sunis_lock,flags);
-	first = !sunis;
-	PRIV(dev)->next = sunis;
-	sunis = PRIV(dev);
-	spin_unlock_irqrestore(&sunis_lock,flags);
+	mutex_lock(&sunis_mutex);
 	memset(&PRIV(dev)->sonet_stats,0,sizeof(struct k_sonet_stats));
 	PUT(GET(RSOP_CIE) | SUNI_RSOP_CIE_LOSE,RSOP_CIE);
 		/* interrupt on loss of signal */
@@ -322,6 +321,11 @@ static int suni_start(struct atm_dev *dev)
 		printk(KERN_WARNING "%s(itf %d): no signal\n",dev->type,
 		    dev->number);
 	PRIV(dev)->loop_mode = ATM_LM_NONE;
+	spin_lock_bh(&sunis_lock);
+	first = !sunis;
+	PRIV(dev)->next = sunis;
+	sunis = PRIV(dev);
+	spin_unlock_bh(&sunis_lock);
 	suni_hz(NULL); /* clear SUNI counters */
 	(void) fetch_stats(dev,NULL,1); /* clear kernel counters */
 	if (first) {
@@ -333,6 +337,7 @@ printk(KERN_DEBUG "[u] p=0x%lx,n=0x%lx\n",(unsigned long) poll_timer.list.prev,
 #endif
 		add_timer(&poll_timer);
 	}
+	mutex_unlock(&sunis_mutex);
 	return 0;
 }
 
@@ -340,16 +345,20 @@ printk(KERN_DEBUG "[u] p=0x%lx,n=0x%lx\n",(unsigned long) poll_timer.list.prev,
 static int suni_stop(struct atm_dev *dev)
 {
 	struct suni_priv **walk;
-	unsigned long flags;
+	bool last;
 
 	/* let SAR driver worry about stopping interrupts */
-	spin_lock_irqsave(&sunis_lock,flags);
+	mutex_lock(&sunis_mutex);
+	spin_lock_bh(&sunis_lock);
 	for (walk = &sunis; *walk != PRIV(dev);
 	    walk = &PRIV((*walk)->dev)->next);
 	*walk = PRIV((*walk)->dev)->next;
-	if (!sunis) del_timer_sync(&poll_timer);
-	spin_unlock_irqrestore(&sunis_lock,flags);
+	last = !sunis;
+	spin_unlock_bh(&sunis_lock);
+	if (last)
+		timer_shutdown_sync(&poll_timer);
 	kfree(PRIV(dev));
+	mutex_unlock(&sunis_mutex);
 
 	return 0;
 }
