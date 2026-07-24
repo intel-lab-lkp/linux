@@ -1266,7 +1266,7 @@ void kvm_initialize_cpu_caps(void)
 	);
 
 	kvm_cpu_cap_init(CPUID_8000_0022_EAX,
-		F(PERFMON_V2),
+		SCATTERED_F(PERFMON_V2),
 		SCATTERED_F(AMD_LBR_V2),
 		SCATTERED_F(AMD_LBR_PMC_FREEZE),
 	);
