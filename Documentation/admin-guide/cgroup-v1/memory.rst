@@ -262,6 +262,17 @@ In this case, setting memsw.limit_in_bytes=3G will prevent bad use of swap.
 By using the memsw limit, you can avoid system OOM which can be caused by swap
 shortage.
 
+.. note::
+   - Since memsw is the sum of memory and swap, the kernel enforces the
+     invariant ``memory.limit_in_bytes <= memory.memsw.limit_in_bytes`` on
+     every write, so ``memory.limit_in_bytes`` must be configured with a
+     smaller value before setting ``memory.memsw.limit_in_bytes``.
+     Violating this relation will result in ``-EINVAL``.
+   - When adjusting both limits together, the order matters:
+        - To increase limits, set ``memory.memsw.limit_in_bytes`` first.
+        - To decrease limits, set ``memory.limit_in_bytes`` first.
+     This ensures the intermediate state does not violate the invariant.
+
 2.4.1 why 'memory+swap' rather than swap
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
