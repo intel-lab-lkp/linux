@@ -181,19 +181,22 @@ extern void arch_pick_mmap_layout(struct mm_struct *mm,
 				  const struct rlimit *rlim_stack);
 
 unsigned long
-arch_get_unmapped_area(struct file *filp, unsigned long addr,
-		       unsigned long len, unsigned long pgoff,
-		       unsigned long flags, vm_flags_t vm_flags);
+arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+		       unsigned long addr, unsigned long len,
+		       unsigned long pgoff, unsigned long flags,
+		       vm_flags_t vm_flags);
 unsigned long
-arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
-			       unsigned long len, unsigned long pgoff,
-			       unsigned long flags, vm_flags_t);
+arch_get_unmapped_area_topdown(struct mm_struct *mm, struct file *filp,
+			       unsigned long addr, unsigned long len,
+			       unsigned long pgoff, unsigned long flags,
+			       vm_flags_t);
 
-unsigned long mm_get_unmapped_area(struct file *filp, unsigned long addr,
-				   unsigned long len, unsigned long pgoff,
-				   unsigned long flags);
+unsigned long mm_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+				   unsigned long addr, unsigned long len,
+				   unsigned long pgoff, unsigned long flags);
 
-unsigned long mm_get_unmapped_area_vmflags(struct file *filp,
+unsigned long mm_get_unmapped_area_vmflags(struct mm_struct *mm,
+					   struct file *filp,
 					   unsigned long addr,
 					   unsigned long len,
 					   unsigned long pgoff,
@@ -201,13 +204,15 @@ unsigned long mm_get_unmapped_area_vmflags(struct file *filp,
 					   vm_flags_t vm_flags);
 
 unsigned long
-generic_get_unmapped_area(struct file *filp, unsigned long addr,
-			  unsigned long len, unsigned long pgoff,
-			  unsigned long flags, vm_flags_t vm_flags);
+generic_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+			  unsigned long addr, unsigned long len,
+			  unsigned long pgoff, unsigned long flags,
+			  vm_flags_t vm_flags);
 unsigned long
-generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
-				  unsigned long len, unsigned long pgoff,
-				  unsigned long flags, vm_flags_t vm_flags);
+generic_get_unmapped_area_topdown(struct mm_struct *mm, struct file *filp,
+				  unsigned long addr, unsigned long len,
+				  unsigned long pgoff, unsigned long flags,
+				  vm_flags_t vm_flags);
 #else
 static inline void arch_pick_mmap_layout(struct mm_struct *mm,
 					 const struct rlimit *rlim_stack) {}

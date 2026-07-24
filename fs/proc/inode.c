@@ -435,22 +435,25 @@ static int proc_reg_mmap(struct file *file, struct vm_area_struct *vma)
 }
 
 static unsigned long
-pde_get_unmapped_area(struct proc_dir_entry *pde, struct file *file, unsigned long orig_addr,
+pde_get_unmapped_area(struct proc_dir_entry *pde, struct mm_struct *mm,
+			   struct file *file, unsigned long orig_addr,
 			   unsigned long len, unsigned long pgoff,
 			   unsigned long flags)
 {
 	if (pde->proc_ops->proc_get_unmapped_area)
-		return pde->proc_ops->proc_get_unmapped_area(file, orig_addr, len, pgoff, flags);
+		return pde->proc_ops->proc_get_unmapped_area(mm, file,
+					orig_addr, len, pgoff, flags);
 
 #ifdef CONFIG_MMU
-	return mm_get_unmapped_area(file, orig_addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, file, orig_addr, len, pgoff, flags);
 #endif
 
 	return orig_addr;
 }
 
 static unsigned long
-proc_reg_get_unmapped_area(struct file *file, unsigned long orig_addr,
+proc_reg_get_unmapped_area(struct mm_struct *mm, struct file *file,
+			   unsigned long orig_addr,
 			   unsigned long len, unsigned long pgoff,
 			   unsigned long flags)
 {
@@ -458,9 +461,9 @@ proc_reg_get_unmapped_area(struct file *file, unsigned long orig_addr,
 	unsigned long rv = -EIO;
 
 	if (pde_is_permanent(pde)) {
-		return pde_get_unmapped_area(pde, file, orig_addr, len, pgoff, flags);
+		return pde_get_unmapped_area(pde, mm, file, orig_addr, len, pgoff, flags);
 	} else if (use_pde(pde)) {
-		rv = pde_get_unmapped_area(pde, file, orig_addr, len, pgoff, flags);
+		rv = pde_get_unmapped_area(pde, mm, file, orig_addr, len, pgoff, flags);
 		unuse_pde(pde);
 	}
 	return rv;

@@ -15,7 +15,8 @@
  *   mappings)
  * - attempts to map through to the underlying MTD device
  */
-static unsigned long romfs_get_unmapped_area(struct file *file,
+static unsigned long romfs_get_unmapped_area(struct mm_struct *mm,
+					     struct file *file,
 					     unsigned long addr,
 					     unsigned long len,
 					     unsigned long pgoff,

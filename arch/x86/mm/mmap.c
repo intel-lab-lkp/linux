@@ -143,10 +143,8 @@ void arch_pick_mmap_layout(struct mm_struct *mm, const struct rlimit *rlim_stack
 #endif
 }
 
-unsigned long get_mmap_base(int is_legacy)
+unsigned long get_mmap_base(struct mm_struct *mm, int is_legacy)
 {
-	struct mm_struct *mm = current->mm;
-
 #ifdef CONFIG_HAVE_ARCH_COMPAT_MMAP_BASES
 	if (in_32bit_syscall()) {
 		return is_legacy ? mm->mmap_compat_legacy_base

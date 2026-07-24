@@ -318,7 +318,8 @@ __cold int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
 	return io_region_mmap(ctx, region, vma, page_limit);
 }
 
-unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
+unsigned long io_uring_get_unmapped_area(struct mm_struct *mm,
+					 struct file *filp, unsigned long addr,
 					 unsigned long len, unsigned long pgoff,
 					 unsigned long flags)
 {
@@ -361,7 +362,7 @@ unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
 #else
 	addr = 0UL;
 #endif
-	return mm_get_unmapped_area(filp, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, filp, addr, len, pgoff, flags);
 }
 
 #else /* !CONFIG_MMU */
@@ -420,7 +421,8 @@ unsigned int io_uring_nommu_mmap_capabilities(struct file *file)
 	return NOMMU_MAP_DIRECT | NOMMU_MAP_READ | NOMMU_MAP_WRITE;
 }
 
-unsigned long io_uring_get_unmapped_area(struct file *file, unsigned long addr,
+unsigned long io_uring_get_unmapped_area(struct mm_struct *mm,
+					 struct file *file, unsigned long addr,
 					 unsigned long len, unsigned long pgoff,
 					 unsigned long flags)
 {

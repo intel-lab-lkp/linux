@@ -12,7 +12,8 @@ struct page **io_pin_pages(unsigned long uaddr, unsigned long len, int *npages);
 #ifndef CONFIG_MMU
 unsigned int io_uring_nommu_mmap_capabilities(struct file *file);
 #endif
-unsigned long io_uring_get_unmapped_area(struct file *file, unsigned long addr,
+unsigned long io_uring_get_unmapped_area(struct mm_struct *mm,
+					 struct file *file, unsigned long addr,
 					 unsigned long len, unsigned long pgoff,
 					 unsigned long flags);
 int io_uring_mmap(struct file *file, struct vm_area_struct *vma);

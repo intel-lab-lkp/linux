@@ -373,7 +373,8 @@ static long v4l2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #ifdef CONFIG_MMU
 #define v4l2_get_unmapped_area NULL
 #else
-static unsigned long v4l2_get_unmapped_area(struct file *filp,
+static unsigned long v4l2_get_unmapped_area(struct mm_struct *mm,
+		struct file *filp,
 		unsigned long addr, unsigned long len, unsigned long pgoff,
 		unsigned long flags)
 {

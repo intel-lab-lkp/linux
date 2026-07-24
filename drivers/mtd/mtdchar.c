@@ -1340,7 +1340,8 @@ static long mtdchar_compat_ioctl(struct file *file, unsigned int cmd,
  *   mappings)
  */
 #ifndef CONFIG_MMU
-static unsigned long mtdchar_get_unmapped_area(struct file *file,
+static unsigned long mtdchar_get_unmapped_area(struct mm_struct *mm,
+					   struct file *file,
 					   unsigned long addr,
 					   unsigned long len,
 					   unsigned long pgoff,

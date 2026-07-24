@@ -23,7 +23,8 @@
 #include "internal.h"
 
 static int ramfs_nommu_setattr(struct mnt_idmap *, struct dentry *, struct iattr *);
-static unsigned long ramfs_nommu_get_unmapped_area(struct file *file,
+static unsigned long ramfs_nommu_get_unmapped_area(struct mm_struct *mm,
+						   struct file *file,
 						   unsigned long addr,
 						   unsigned long len,
 						   unsigned long pgoff,
@@ -199,7 +200,8 @@ static int ramfs_nommu_setattr(struct mnt_idmap *idmap,
  *   - the pages to be mapped must exist
  *   - the pages be physically contiguous in sequence
  */
-static unsigned long ramfs_nommu_get_unmapped_area(struct file *file,
+static unsigned long ramfs_nommu_get_unmapped_area(struct mm_struct *mm,
+					    struct file *file,
 					    unsigned long addr, unsigned long len,
 					    unsigned long pgoff, unsigned long flags)
 {

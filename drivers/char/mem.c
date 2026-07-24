@@ -280,7 +280,8 @@ static pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 #endif
 
 #ifndef CONFIG_MMU
-static unsigned long get_unmapped_area_mem(struct file *file,
+static unsigned long get_unmapped_area_mem(struct mm_struct *mm,
+					   struct file *file,
 					   unsigned long addr,
 					   unsigned long len,
 					   unsigned long pgoff,
@@ -515,14 +516,16 @@ static int mmap_zero_prepare(struct vm_area_desc *desc)
 }
 
 #ifndef CONFIG_MMU
-static unsigned long get_unmapped_area_zero(struct file *file,
+static unsigned long get_unmapped_area_zero(struct mm_struct *mm,
+				struct file *file,
 				unsigned long addr, unsigned long len,
 				unsigned long pgoff, unsigned long flags)
 {
 	return -ENOSYS;
 }
 #else
-static unsigned long get_unmapped_area_zero(struct file *file,
+static unsigned long get_unmapped_area_zero(struct mm_struct *mm,
+				struct file *file,
 				unsigned long addr, unsigned long len,
 				unsigned long pgoff, unsigned long flags)
 {
@@ -534,7 +537,7 @@ static unsigned long get_unmapped_area_zero(struct file *file,
 		 * get_unmapped_area(), so as not to confuse shmem with our
 		 * handle on "/dev/zero".
 		 */
-		return shmem_get_unmapped_area(NULL, addr, len, pgoff, flags);
+		return shmem_get_unmapped_area(mm, NULL, addr, len, pgoff, flags);
 	}
 
 	/*
@@ -543,9 +546,9 @@ static unsigned long get_unmapped_area_zero(struct file *file,
 	 * fall back to system page size mappings.
 	 */
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	return thp_get_unmapped_area(file, addr, len, pgoff, flags);
+	return thp_get_unmapped_area(mm, file, addr, len, pgoff, flags);
 #else
-	return mm_get_unmapped_area(file, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, file, addr, len, pgoff, flags);
 #endif
 }
 #endif /* CONFIG_MMU */

@@ -2957,20 +2957,22 @@ unacct_fail:
 
 /**
  * unmapped_area() - Find an area between the low_limit and the high_limit with
- * the correct alignment and offset, all from @info. Note: current->mm is used
+ * the correct alignment and offset, all from @info. Note: @mm is used
  * for the search.
  *
+ * @mm: The mm_struct to search.
  * @info: The unmapped area information including the range [low_limit -
  * high_limit), the alignment offset and mask.
  *
  * Return: A memory address or -ENOMEM.
  */
-unsigned long unmapped_area(struct vm_unmapped_area_info *info)
+unsigned long unmapped_area(struct mm_struct *mm,
+			    struct vm_unmapped_area_info *info)
 {
 	unsigned long length, gap;
 	unsigned long low_limit, high_limit;
 	struct vm_area_struct *tmp;
-	VMA_ITERATOR(vmi, current->mm, 0);
+	VMA_ITERATOR(vmi, mm, 0);
 
 	/* Adjust search length to account for worst case alignment overhead */
 	length = info->length + info->align_mask + info->start_gap;
@@ -3016,19 +3018,21 @@ retry:
 /**
  * unmapped_area_topdown() - Find an area between the low_limit and the
  * high_limit with the correct alignment and offset at the highest available
- * address, all from @info. Note: current->mm is used for the search.
+ * address, all from @info. Note: @mm is used for the search.
  *
+ * @mm: The mm_struct to search.
  * @info: The unmapped area information including the range [low_limit -
  * high_limit), the alignment offset and mask.
  *
  * Return: A memory address or -ENOMEM.
  */
-unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info)
+unsigned long unmapped_area_topdown(struct mm_struct *mm,
+				    struct vm_unmapped_area_info *info)
 {
 	unsigned long length, gap, gap_end;
 	unsigned long low_limit, high_limit;
 	struct vm_area_struct *tmp;
-	VMA_ITERATOR(vmi, current->mm, 0);
+	VMA_ITERATOR(vmi, mm, 0);
 
 	/* Adjust search length to account for worst case alignment overhead */
 	length = info->length + info->align_mask + info->start_gap;

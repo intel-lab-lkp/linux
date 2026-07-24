@@ -170,9 +170,9 @@ out:
  */
 
 unsigned long
-hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
-			    unsigned long len, unsigned long pgoff,
-			    unsigned long flags)
+hugetlb_get_unmapped_area(struct mm_struct *mm, struct file *file,
+			    unsigned long addr, unsigned long len,
+			    unsigned long pgoff, unsigned long flags)
 {
 	unsigned long addr0 = 0;
 	struct hstate *h = hstate_file(file);
@@ -184,7 +184,8 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 	if (addr)
 		addr0 = ALIGN(addr, huge_page_size(h));
 
-	return mm_get_unmapped_area_vmflags(file, addr0, len, pgoff, flags, 0);
+	return mm_get_unmapped_area_vmflags(mm, file, addr0, len, pgoff,
+					    flags, 0);
 }
 
 /*

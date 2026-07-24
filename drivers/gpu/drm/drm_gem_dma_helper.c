@@ -330,6 +330,7 @@ EXPORT_SYMBOL_GPL(drm_gem_dma_vm_ops);
 #ifndef CONFIG_MMU
 /**
  * drm_gem_dma_get_unmapped_area - propose address for mapping in noMMU cases
+ * @mm: mm_struct the mapping is placed in
  * @filp: file object
  * @addr: memory address
  * @len: buffer size
@@ -344,7 +345,8 @@ EXPORT_SYMBOL_GPL(drm_gem_dma_vm_ops);
  * Returns:
  * mapping address on success or a negative error code on failure.
  */
-unsigned long drm_gem_dma_get_unmapped_area(struct file *filp,
+unsigned long drm_gem_dma_get_unmapped_area(struct mm_struct *mm,
+					    struct file *filp,
 					    unsigned long addr,
 					    unsigned long len,
 					    unsigned long pgoff,

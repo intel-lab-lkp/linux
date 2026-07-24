@@ -109,8 +109,9 @@ extern struct file *shmem_file_setup_with_mnt(struct vfsmount *mnt,
 		const char *name, loff_t size, vma_flags_t flags);
 int shmem_zero_setup(struct vm_area_struct *vma);
 int shmem_zero_setup_desc(struct vm_area_desc *desc);
-extern unsigned long shmem_get_unmapped_area(struct file *, unsigned long addr,
-		unsigned long len, unsigned long pgoff, unsigned long flags);
+extern unsigned long shmem_get_unmapped_area(struct mm_struct *mm,
+		struct file *file, unsigned long addr, unsigned long len,
+		unsigned long pgoff, unsigned long flags);
 extern int shmem_lock(struct file *file, int lock, struct ucounts *ucounts);
 #ifdef CONFIG_SHMEM
 bool shmem_mapping(const struct address_space *mapping);

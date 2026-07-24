@@ -661,13 +661,13 @@ static unsigned long find_nearest_trampoline(unsigned long vaddr)
 	/* Search up from the caller address. */
 	info.low_limit = call_end;
 	info.high_limit = min(high_limit, TASK_SIZE);
-	high_tramp = vm_unmapped_area(&info);
+	high_tramp = vm_unmapped_area(current->mm, &info);
 
 	/* Search down from the caller address. */
 	info.low_limit = max(low_limit, PAGE_SIZE);
 	info.high_limit = call_end;
 	info.flags = VM_UNMAPPED_AREA_TOPDOWN;
-	low_tramp = vm_unmapped_area(&info);
+	low_tramp = vm_unmapped_area(current->mm, &info);
 
 	if (IS_ERR_VALUE(high_tramp) && IS_ERR_VALUE(low_tramp))
 		return -ENOMEM;

@@ -1141,9 +1141,9 @@ static inline bool pte_access_permitted(pte_t pte, bool write)
 /* We provide a special get_unmapped_area for framebuffer mmaps to try and use
  * the largest alignment possible such that larget PTEs can be used.
  */
-unsigned long get_fb_unmapped_area(struct file *filp, unsigned long,
-				   unsigned long, unsigned long,
-				   unsigned long);
+unsigned long get_fb_unmapped_area(struct mm_struct *mm, struct file *filp,
+				   unsigned long addr, unsigned long len,
+				   unsigned long pgoff, unsigned long flags);
 #define HAVE_ARCH_FB_UNMAPPED_AREA
 
 void sun4v_register_fault_status(void);

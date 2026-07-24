@@ -1201,21 +1201,22 @@ SYSCALL_DEFINE1(old_adjtimex, struct timex32 __user *, txc_p)
 /* Get an address range which is currently unmapped. */
 
 static unsigned long
-arch_get_unmapped_area_1(unsigned long addr, unsigned long len,
-		         unsigned long limit)
+arch_get_unmapped_area_1(struct mm_struct *mm, unsigned long addr,
+			 unsigned long len, unsigned long limit)
 {
 	struct vm_unmapped_area_info info = {};
 
 	info.length = len;
 	info.low_limit = addr;
 	info.high_limit = limit;
-	return vm_unmapped_area(&info);
+	return vm_unmapped_area(mm, &info);
 }
 
 unsigned long
-arch_get_unmapped_area(struct file *filp, unsigned long addr,
-		       unsigned long len, unsigned long pgoff,
-		       unsigned long flags, vm_flags_t vm_flags)
+arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+		       unsigned long addr, unsigned long len,
+		       unsigned long pgoff, unsigned long flags,
+		       vm_flags_t vm_flags)
 {
 	unsigned long limit = TASK_SIZE;
 
@@ -1236,19 +1237,19 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	   this feature should be incorporated into all ports?  */
 
 	if (addr) {
-		addr = arch_get_unmapped_area_1 (PAGE_ALIGN(addr), len, limit);
+		addr = arch_get_unmapped_area_1(mm, PAGE_ALIGN(addr), len, limit);
 		if (addr != (unsigned long) -ENOMEM)
 			return addr;
 	}
 
 	/* Next, try allocating at TASK_UNMAPPED_BASE.  */
-	addr = arch_get_unmapped_area_1 (PAGE_ALIGN(TASK_UNMAPPED_BASE),
-					 len, limit);
+	addr = arch_get_unmapped_area_1(mm, PAGE_ALIGN(TASK_UNMAPPED_BASE),
+					len, limit);
 	if (addr != (unsigned long) -ENOMEM)
 		return addr;
 
 	/* Finally, try allocating in low memory.  */
-	addr = arch_get_unmapped_area_1 (PAGE_SIZE, len, limit);
+	addr = arch_get_unmapped_area_1(mm, PAGE_SIZE, len, limit);
 
 	return addr;
 }

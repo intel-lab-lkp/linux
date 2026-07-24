@@ -2711,7 +2711,8 @@ static vm_fault_t shmem_fault(struct vm_fault *vmf)
 	return ret;
 }
 
-unsigned long shmem_get_unmapped_area(struct file *file,
+unsigned long shmem_get_unmapped_area(struct mm_struct *mm,
+				      struct file *file,
 				      unsigned long uaddr, unsigned long len,
 				      unsigned long pgoff, unsigned long flags)
 {
@@ -2725,7 +2726,7 @@ unsigned long shmem_get_unmapped_area(struct file *file,
 	if (len > TASK_SIZE)
 		return -ENOMEM;
 
-	addr = mm_get_unmapped_area(file, uaddr, len, pgoff, flags);
+	addr = mm_get_unmapped_area(mm, file, uaddr, len, pgoff, flags);
 
 	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
 		return addr;
@@ -2803,7 +2804,8 @@ unsigned long shmem_get_unmapped_area(struct file *file,
 	if (inflated_len < len)
 		return addr;
 
-	inflated_addr = mm_get_unmapped_area(NULL, uaddr, inflated_len, 0, flags);
+	inflated_addr = mm_get_unmapped_area(mm, NULL, uaddr, inflated_len, 0,
+					     flags);
 	if (IS_ERR_VALUE(inflated_addr))
 		return addr;
 	if (inflated_addr & ~PAGE_MASK)
@@ -5730,11 +5732,12 @@ void shmem_unlock_mapping(struct address_space *mapping)
 }
 
 #ifdef CONFIG_MMU
-unsigned long shmem_get_unmapped_area(struct file *file,
+unsigned long shmem_get_unmapped_area(struct mm_struct *mm,
+				      struct file *file,
 				      unsigned long addr, unsigned long len,
 				      unsigned long pgoff, unsigned long flags)
 {
-	return mm_get_unmapped_area(file, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, file, addr, len, pgoff, flags);
 }
 #endif
 

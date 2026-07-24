@@ -449,7 +449,8 @@ static int cramfs_physmem_mmap(struct file *file, struct vm_area_struct *vma)
 	return is_nommu_shared_mapping(vma->vm_flags) ? 0 : -ENOSYS;
 }
 
-static unsigned long cramfs_physmem_get_unmapped_area(struct file *file,
+static unsigned long cramfs_physmem_get_unmapped_area(struct mm_struct *mm,
+			struct file *file,
 			unsigned long addr, unsigned long len,
 			unsigned long pgoff, unsigned long flags)
 {

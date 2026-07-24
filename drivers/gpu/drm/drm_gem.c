@@ -1316,6 +1316,7 @@ drm_gem_object_lookup_at_offset(struct file *filp, unsigned long start,
 #ifdef CONFIG_MMU
 /**
  * drm_gem_get_unmapped_area - get memory mapping region routine for GEM objects
+ * @mm: mm_struct the mapping is placed in
  * @filp: DRM file pointer
  * @uaddr: User address hint
  * @len: Mapping length
@@ -1336,7 +1337,8 @@ drm_gem_object_lookup_at_offset(struct file *filp, unsigned long start,
  * If a GEM object is not available at the given offset or if the caller is not
  * granted access to it, fall back to mm_get_unmapped_area().
  */
-unsigned long drm_gem_get_unmapped_area(struct file *filp, unsigned long uaddr,
+unsigned long drm_gem_get_unmapped_area(struct mm_struct *mm,
+					struct file *filp, unsigned long uaddr,
 					unsigned long len, unsigned long pgoff,
 					unsigned long flags)
 {
@@ -1348,9 +1350,10 @@ unsigned long drm_gem_get_unmapped_area(struct file *filp, unsigned long uaddr,
 		obj = NULL;
 
 	if (!obj || !obj->filp || !obj->filp->f_op->get_unmapped_area)
-		ret = mm_get_unmapped_area(filp, uaddr, len, 0, flags);
+		ret = mm_get_unmapped_area(mm, filp, uaddr, len, 0, flags);
 	else
-		ret = obj->filp->f_op->get_unmapped_area(obj->filp, uaddr, len, 0, flags);
+		ret = obj->filp->f_op->get_unmapped_area(mm, obj->filp, uaddr,
+							 len, 0, flags);
 
 	drm_gem_object_put(obj);
 

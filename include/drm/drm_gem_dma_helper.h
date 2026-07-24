@@ -232,7 +232,8 @@ drm_gem_dma_prime_import_sg_table_vmap(struct drm_device *drm,
  */
 
 #ifndef CONFIG_MMU
-unsigned long drm_gem_dma_get_unmapped_area(struct file *filp,
+unsigned long drm_gem_dma_get_unmapped_area(struct mm_struct *mm,
+					    struct file *filp,
 					    unsigned long addr,
 					    unsigned long len,
 					    unsigned long pgoff,

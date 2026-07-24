@@ -100,11 +100,11 @@ unsigned long mmap_upper_limit(const struct rlimit *rlim_stack)
 
 enum mmap_allocation_direction {UP, DOWN};
 
-static unsigned long arch_get_unmapped_area_common(struct file *filp,
-	unsigned long addr, unsigned long len, unsigned long pgoff,
-	unsigned long flags, enum mmap_allocation_direction dir)
+static unsigned long arch_get_unmapped_area_common(struct mm_struct *mm,
+	struct file *filp, unsigned long addr, unsigned long len,
+	unsigned long pgoff, unsigned long flags,
+	enum mmap_allocation_direction dir)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma, *prev;
 	unsigned long filp_pgoff;
 	int do_color_align;
@@ -152,7 +152,7 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 		info.flags = VM_UNMAPPED_AREA_TOPDOWN;
 		info.low_limit = PAGE_SIZE;
 		info.high_limit = mm->mmap_base;
-		addr = vm_unmapped_area(&info);
+		addr = vm_unmapped_area(mm, &info);
 		if (!(addr & ~PAGE_MASK))
 			return addr;
 		VM_BUG_ON(addr != -ENOMEM);
@@ -167,22 +167,22 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 
 	info.low_limit = mm->mmap_base;
 	info.high_limit = mmap_upper_limit(NULL);
-	return vm_unmapped_area(&info);
+	return vm_unmapped_area(mm, &info);
 }
 
-unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr,
-	unsigned long len, unsigned long pgoff, unsigned long flags,
-	vm_flags_t vm_flags)
-{
-	return arch_get_unmapped_area_common(filp,
-			addr, len, pgoff, flags, UP);
-}
-
-unsigned long arch_get_unmapped_area_topdown(struct file *filp,
+unsigned long arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
 	unsigned long addr, unsigned long len, unsigned long pgoff,
 	unsigned long flags, vm_flags_t vm_flags)
 {
-	return arch_get_unmapped_area_common(filp,
+	return arch_get_unmapped_area_common(mm, filp,
+			addr, len, pgoff, flags, UP);
+}
+
+unsigned long arch_get_unmapped_area_topdown(struct mm_struct *mm,
+	struct file *filp, unsigned long addr, unsigned long len,
+	unsigned long pgoff, unsigned long flags, vm_flags_t vm_flags)
+{
+	return arch_get_unmapped_area_common(mm, filp,
 			addr, len, pgoff, flags, DOWN);
 }
 

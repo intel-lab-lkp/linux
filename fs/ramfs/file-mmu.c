@@ -31,11 +31,12 @@
 
 #include "internal.h"
 
-static unsigned long ramfs_mmu_get_unmapped_area(struct file *file,
+static unsigned long ramfs_mmu_get_unmapped_area(struct mm_struct *mm,
+		struct file *file,
 		unsigned long addr, unsigned long len, unsigned long pgoff,
 		unsigned long flags)
 {
-	return mm_get_unmapped_area(file, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, file, addr, len, pgoff, flags);
 }
 
 const struct file_operations ramfs_file_operations = {

@@ -75,11 +75,11 @@ static unsigned long get_align_mask(struct file *filp, unsigned long flags)
 	return 0;
 }
 
-unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr,
-				     unsigned long len, unsigned long pgoff,
-				     unsigned long flags, vm_flags_t vm_flags)
+unsigned long arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+				     unsigned long addr, unsigned long len,
+				     unsigned long pgoff, unsigned long flags,
+				     vm_flags_t vm_flags)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	struct vm_unmapped_area_info info = {};
 
@@ -103,7 +103,7 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	info.align_mask = get_align_mask(filp, flags);
 	if (!(filp && is_file_hugepages(filp)))
 		info.align_offset = pgoff << PAGE_SHIFT;
-	addr = vm_unmapped_area(&info);
+	addr = vm_unmapped_area(mm, &info);
 	if (offset_in_page(addr))
 		return addr;
 
@@ -111,12 +111,15 @@ check_asce_limit:
 	return check_asce_limit(mm, addr, len);
 }
 
-unsigned long arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
-					     unsigned long len, unsigned long pgoff,
-					     unsigned long flags, vm_flags_t vm_flags)
+unsigned long arch_get_unmapped_area_topdown(struct mm_struct *mm,
+					     struct file *filp,
+					     unsigned long addr,
+					     unsigned long len,
+					     unsigned long pgoff,
+					     unsigned long flags,
+					     vm_flags_t vm_flags)
 {
 	struct vm_area_struct *vma;
-	struct mm_struct *mm = current->mm;
 	struct vm_unmapped_area_info info = {};
 
 	/* requested length too big for entire address space */
@@ -142,7 +145,7 @@ unsigned long arch_get_unmapped_area_topdown(struct file *filp, unsigned long ad
 	info.align_mask = get_align_mask(filp, flags);
 	if (!(filp && is_file_hugepages(filp)))
 		info.align_offset = pgoff << PAGE_SHIFT;
-	addr = vm_unmapped_area(&info);
+	addr = vm_unmapped_area(mm, &info);
 
 	/*
 	 * A failed mmap() very likely causes application failure,
@@ -155,7 +158,7 @@ unsigned long arch_get_unmapped_area_topdown(struct file *filp, unsigned long ad
 		info.flags = 0;
 		info.low_limit = TASK_UNMAPPED_BASE;
 		info.high_limit = TASK_SIZE;
-		addr = vm_unmapped_area(&info);
+		addr = vm_unmapped_area(mm, &info);
 		if (offset_in_page(addr))
 			return addr;
 	}

@@ -405,7 +405,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	/* Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
 	 */
-	addr = __get_unmapped_area(file, addr, len, pgoff, flags, vm_flags);
+	addr = __get_unmapped_area(mm, file, addr, len, pgoff, flags, vm_flags);
 	if (IS_ERR_VALUE(addr))
 		return addr;
 
@@ -662,14 +662,15 @@ static inline unsigned long stack_guard_placement(vm_flags_t vm_flags)
  * - is at least the desired size.
  * - satisfies (begin_addr & align_mask) == (align_offset & align_mask)
  */
-unsigned long vm_unmapped_area(struct vm_unmapped_area_info *info)
+unsigned long vm_unmapped_area(struct mm_struct *mm,
+			       struct vm_unmapped_area_info *info)
 {
 	unsigned long addr;
 
 	if (info->flags & VM_UNMAPPED_AREA_TOPDOWN)
-		addr = unmapped_area_topdown(info);
+		addr = unmapped_area_topdown(mm, info);
 	else
-		addr = unmapped_area(info);
+		addr = unmapped_area(mm, info);
 
 	trace_vm_unmapped_area(addr, info);
 	return addr;
@@ -687,11 +688,11 @@ unsigned long vm_unmapped_area(struct vm_unmapped_area_info *info)
  * This function "knows" that -ENOMEM has the bits set.
  */
 unsigned long
-generic_get_unmapped_area(struct file *filp, unsigned long addr,
-			  unsigned long len, unsigned long pgoff,
-			  unsigned long flags, vm_flags_t vm_flags)
+generic_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+			  unsigned long addr, unsigned long len,
+			  unsigned long pgoff, unsigned long flags,
+			  vm_flags_t vm_flags)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma, *prev;
 	struct vm_unmapped_area_info info = {};
 	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
@@ -717,16 +718,17 @@ generic_get_unmapped_area(struct file *filp, unsigned long addr,
 	info.start_gap = stack_guard_placement(vm_flags);
 	if (filp && is_file_hugepages(filp))
 		info.align_mask = huge_page_mask_align(filp);
-	return vm_unmapped_area(&info);
+	return vm_unmapped_area(mm, &info);
 }
 
 #ifndef HAVE_ARCH_UNMAPPED_AREA
 unsigned long
-arch_get_unmapped_area(struct file *filp, unsigned long addr,
-		       unsigned long len, unsigned long pgoff,
-		       unsigned long flags, vm_flags_t vm_flags)
+arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+		       unsigned long addr, unsigned long len,
+		       unsigned long pgoff, unsigned long flags,
+		       vm_flags_t vm_flags)
 {
-	return generic_get_unmapped_area(filp, addr, len, pgoff, flags,
+	return generic_get_unmapped_area(mm, filp, addr, len, pgoff, flags,
 					 vm_flags);
 }
 #endif
@@ -736,12 +738,12 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
  * stack's low limit (the base):
  */
 unsigned long
-generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
-				  unsigned long len, unsigned long pgoff,
-				  unsigned long flags, vm_flags_t vm_flags)
+generic_get_unmapped_area_topdown(struct mm_struct *mm, struct file *filp,
+				  unsigned long addr, unsigned long len,
+				  unsigned long pgoff, unsigned long flags,
+				  vm_flags_t vm_flags)
 {
 	struct vm_area_struct *vma, *prev;
-	struct mm_struct *mm = current->mm;
 	struct vm_unmapped_area_info info = {};
 	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
 
@@ -769,7 +771,7 @@ generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 	info.start_gap = stack_guard_placement(vm_flags);
 	if (filp && is_file_hugepages(filp))
 		info.align_mask = huge_page_mask_align(filp);
-	addr = vm_unmapped_area(&info);
+	addr = vm_unmapped_area(mm, &info);
 
 	/*
 	 * A failed mmap() very likely causes application failure,
@@ -782,7 +784,7 @@ generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 		info.flags = 0;
 		info.low_limit = TASK_UNMAPPED_BASE;
 		info.high_limit = mmap_end;
-		addr = vm_unmapped_area(&info);
+		addr = vm_unmapped_area(mm, &info);
 	}
 
 	return addr;
@@ -790,31 +792,36 @@ generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 
 #ifndef HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
 unsigned long
-arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
-			       unsigned long len, unsigned long pgoff,
-			       unsigned long flags, vm_flags_t vm_flags)
+arch_get_unmapped_area_topdown(struct mm_struct *mm, struct file *filp,
+			       unsigned long addr, unsigned long len,
+			       unsigned long pgoff, unsigned long flags,
+			       vm_flags_t vm_flags)
 {
-	return generic_get_unmapped_area_topdown(filp, addr, len, pgoff, flags,
-						 vm_flags);
+	return generic_get_unmapped_area_topdown(mm, filp, addr, len, pgoff,
+						 flags, vm_flags);
 }
 #endif
 
-unsigned long mm_get_unmapped_area_vmflags(struct file *filp, unsigned long addr,
+unsigned long mm_get_unmapped_area_vmflags(struct mm_struct *mm,
+					   struct file *filp, unsigned long addr,
 					   unsigned long len, unsigned long pgoff,
 					   unsigned long flags, vm_flags_t vm_flags)
 {
-	if (mm_flags_test(MMF_TOPDOWN, current->mm))
-		return arch_get_unmapped_area_topdown(filp, addr, len, pgoff,
-						      flags, vm_flags);
-	return arch_get_unmapped_area(filp, addr, len, pgoff, flags, vm_flags);
+	if (mm_flags_test(MMF_TOPDOWN, mm))
+		return arch_get_unmapped_area_topdown(mm, filp, addr, len,
+						      pgoff, flags, vm_flags);
+	return arch_get_unmapped_area(mm, filp, addr, len, pgoff, flags,
+				      vm_flags);
 }
 
 unsigned long
-__get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
+__get_unmapped_area(struct mm_struct *mm, struct file *file,
+		unsigned long addr, unsigned long len,
 		unsigned long pgoff, unsigned long flags, vm_flags_t vm_flags)
 {
-	unsigned long (*get_area)(struct file *, unsigned long,
-				  unsigned long, unsigned long, unsigned long)
+	unsigned long (*get_area)(struct mm_struct *, struct file *,
+				  unsigned long, unsigned long,
+				  unsigned long, unsigned long)
 				  = NULL;
 
 	unsigned long error = arch_mmap_check(addr, len, flags);
@@ -841,15 +848,15 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		pgoff = 0;
 
 	if (get_area) {
-		addr = get_area(file, addr, len, pgoff, flags);
+		addr = get_area(mm, file, addr, len, pgoff, flags);
 	} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) && !file
 		   && !addr /* no hint */
 		   && IS_ALIGNED(len, PMD_SIZE)) {
 		/* Ensures that larger anonymous mappings are THP aligned. */
-		addr = thp_get_unmapped_area_vmflags(file, addr, len,
+		addr = thp_get_unmapped_area_vmflags(mm, file, addr, len,
 						     pgoff, flags, vm_flags);
 	} else {
-		addr = mm_get_unmapped_area_vmflags(file, addr, len,
+		addr = mm_get_unmapped_area_vmflags(mm, file, addr, len,
 						    pgoff, flags, vm_flags);
 	}
 	if (IS_ERR_VALUE(addr))
@@ -865,10 +872,12 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 }
 
 unsigned long
-mm_get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
+mm_get_unmapped_area(struct mm_struct *mm, struct file *file,
+		     unsigned long addr, unsigned long len,
 		     unsigned long pgoff, unsigned long flags)
 {
-	return mm_get_unmapped_area_vmflags(file, addr, len, pgoff, flags, 0);
+	return mm_get_unmapped_area_vmflags(mm, file, addr, len, pgoff,
+					    flags, 0);
 }
 EXPORT_SYMBOL(mm_get_unmapped_area);
 

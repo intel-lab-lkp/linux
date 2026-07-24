@@ -121,11 +121,12 @@ static int sgx_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static unsigned long sgx_get_unmapped_area(struct file *file,
-					   unsigned long addr,
-					   unsigned long len,
-					   unsigned long pgoff,
-					   unsigned long flags)
+static unsigned long sgx_get_unmapped_area(struct mm_struct *mm,
+					    struct file *file,
+					    unsigned long addr,
+					    unsigned long len,
+					    unsigned long pgoff,
+					    unsigned long flags)
 {
 	if ((flags & MAP_TYPE) == MAP_PRIVATE)
 		return -EINVAL;
@@ -133,7 +134,7 @@ static unsigned long sgx_get_unmapped_area(struct file *file,
 	if (flags & MAP_FIXED)
 		return addr;
 
-	return mm_get_unmapped_area(file, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, file, addr, len, pgoff, flags);
 }
 
 #ifdef CONFIG_COMPAT

@@ -47,7 +47,10 @@ struct proc_ops {
 	long	(*proc_compat_ioctl)(struct file *, unsigned int, unsigned long);
 #endif
 	int	(*proc_mmap)(struct file *, struct vm_area_struct *);
-	unsigned long (*proc_get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
+	unsigned long (*proc_get_unmapped_area)(struct mm_struct *mm,
+			struct file *file, unsigned long addr,
+			unsigned long len, unsigned long pgoff,
+			unsigned long flags);
 } __randomize_layout;
 
 /* definitions for hide_pid field */

@@ -89,8 +89,9 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	return ksys_mmap_pgoff(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
 }
 
-static void find_start_end(unsigned long addr, unsigned long flags,
-		unsigned long *begin, unsigned long *end)
+static void find_start_end(struct mm_struct *mm, unsigned long addr,
+			   unsigned long flags, unsigned long *begin,
+			   unsigned long *end)
 {
 	if (!in_32bit_syscall() && (flags & MAP_32BIT)) {
 		/* This is usually used needed to map code in small
@@ -108,7 +109,7 @@ static void find_start_end(unsigned long addr, unsigned long flags,
 		return;
 	}
 
-	*begin	= get_mmap_base(1);
+	*begin	= get_mmap_base(mm, 1);
 	if (in_32bit_syscall())
 		*end = task_size_32bit();
 	else
@@ -124,10 +125,11 @@ static inline unsigned long stack_guard_placement(vm_flags_t vm_flags)
 }
 
 unsigned long
-arch_get_unmapped_area(struct file *filp, unsigned long addr, unsigned long len,
-		       unsigned long pgoff, unsigned long flags, vm_flags_t vm_flags)
+arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+		       unsigned long addr, unsigned long len,
+		       unsigned long pgoff, unsigned long flags,
+		       vm_flags_t vm_flags)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	struct vm_unmapped_area_info info = {};
 	unsigned long begin, end;
@@ -135,7 +137,7 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr, unsigned long len,
 	if (flags & MAP_FIXED)
 		return addr;
 
-	find_start_end(addr, flags, &begin, &end);
+	find_start_end(mm, addr, flags, &begin, &end);
 
 	if (len > end)
 		return -ENOMEM;
@@ -160,16 +162,16 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr, unsigned long len,
 		info.align_offset += get_align_bits();
 	}
 
-	return vm_unmapped_area(&info);
+	return vm_unmapped_area(mm, &info);
 }
 
 unsigned long
-arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr0,
-			  unsigned long len, unsigned long pgoff,
-			  unsigned long flags, vm_flags_t vm_flags)
+arch_get_unmapped_area_topdown(struct mm_struct *mm, struct file *filp,
+			  unsigned long addr0, unsigned long len,
+			  unsigned long pgoff, unsigned long flags,
+			  vm_flags_t vm_flags)
 {
 	struct vm_area_struct *vma;
-	struct mm_struct *mm = current->mm;
 	unsigned long addr = addr0;
 	struct vm_unmapped_area_info info = {};
 
@@ -204,7 +206,7 @@ get_unmapped_area:
 	else
 		info.low_limit = PAGE_SIZE;
 
-	info.high_limit = get_mmap_base(0);
+	info.high_limit = get_mmap_base(mm, 0);
 	if (!(filp && is_file_hugepages(filp))) {
 		info.start_gap = stack_guard_placement(vm_flags);
 		info.align_offset = pgoff << PAGE_SHIFT;
@@ -224,7 +226,7 @@ get_unmapped_area:
 		info.align_mask = get_align_mask(filp);
 		info.align_offset += get_align_bits();
 	}
-	addr = vm_unmapped_area(&info);
+	addr = vm_unmapped_area(mm, &info);
 	if (!(addr & ~PAGE_MASK))
 		return addr;
 	VM_BUG_ON(addr != -ENOMEM);
@@ -236,5 +238,5 @@ bottomup:
 	 * can happen with large stack limits and large mmap()
 	 * allocations.
 	 */
-	return arch_get_unmapped_area(filp, addr0, len, pgoff, flags, 0);
+	return arch_get_unmapped_area(mm, filp, addr0, len, pgoff, flags, 0);
 }

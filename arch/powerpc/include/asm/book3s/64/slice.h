@@ -25,7 +25,8 @@
 
 struct mm_struct;
 
-unsigned long slice_get_unmapped_area(unsigned long addr, unsigned long len,
+unsigned long slice_get_unmapped_area(struct mm_struct *mm,
+				      unsigned long addr, unsigned long len,
 				      unsigned long flags, unsigned int psize,
 				      int topdown);
 

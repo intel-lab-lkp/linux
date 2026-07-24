@@ -536,7 +536,8 @@ int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,
 int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
 
 #ifdef CONFIG_MMU
-unsigned long drm_gem_get_unmapped_area(struct file *filp, unsigned long uaddr,
+unsigned long drm_gem_get_unmapped_area(struct mm_struct *mm,
+					struct file *filp, unsigned long uaddr,
 					unsigned long len, unsigned long pgoff,
 					unsigned long flags);
 #else

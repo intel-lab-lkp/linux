@@ -1150,16 +1150,18 @@ static __poll_t bpf_map_poll(struct file *filp, struct poll_table_struct *pts)
 	return EPOLLERR;
 }
 
-static unsigned long bpf_get_unmapped_area(struct file *filp, unsigned long addr,
+static unsigned long bpf_get_unmapped_area(struct mm_struct *mm,
+					   struct file *filp, unsigned long addr,
 					   unsigned long len, unsigned long pgoff,
 					   unsigned long flags)
 {
 	struct bpf_map *map = filp->private_data;
 
 	if (map->ops->map_get_unmapped_area)
-		return map->ops->map_get_unmapped_area(filp, addr, len, pgoff, flags);
+		return map->ops->map_get_unmapped_area(mm, filp, addr, len,
+						       pgoff, flags);
 #ifdef CONFIG_MMU
-	return mm_get_unmapped_area(filp, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(mm, filp, addr, len, pgoff, flags);
 #else
 	return addr;
 #endif

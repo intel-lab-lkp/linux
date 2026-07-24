@@ -1145,8 +1145,9 @@ unsigned long do_mmap(struct file *file,
 		 *   tell us the location of a shared mapping
 		 */
 		if (capabilities & NOMMU_MAP_DIRECT) {
-			addr = file->f_op->get_unmapped_area(file, addr, len,
-							     pgoff, flags);
+			addr = file->f_op->get_unmapped_area(current->mm, file,
+							     addr, len, pgoff,
+							     flags);
 			if (IS_ERR_VALUE(addr)) {
 				ret = addr;
 				if (ret != -ENOSYS)

@@ -467,8 +467,10 @@ int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *brkvma,
 		 unsigned long addr, unsigned long request,
 		 vma_flags_t vma_flags);
 
-unsigned long unmapped_area(struct vm_unmapped_area_info *info);
-unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info);
+unsigned long unmapped_area(struct mm_struct *mm,
+			    struct vm_unmapped_area_info *info);
+unsigned long unmapped_area_topdown(struct mm_struct *mm,
+				    struct vm_unmapped_area_info *info);
 
 static inline bool vma_wants_manual_pte_write_upgrade(struct vm_area_struct *vma)
 {

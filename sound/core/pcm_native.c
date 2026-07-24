@@ -4202,7 +4202,8 @@ static int snd_pcm_hw_params_old_user(struct snd_pcm_substream *substream,
 #endif /* CONFIG_SND_SUPPORT_OLD_API */
 
 #ifndef CONFIG_MMU
-static unsigned long snd_pcm_get_unmapped_area(struct file *file,
+static unsigned long snd_pcm_get_unmapped_area(struct mm_struct *mm,
+					       struct file *file,
 					       unsigned long addr,
 					       unsigned long len,
 					       unsigned long pgoff,

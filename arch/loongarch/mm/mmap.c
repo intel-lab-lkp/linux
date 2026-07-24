@@ -18,11 +18,11 @@
 
 enum mmap_allocation_direction {UP, DOWN};
 
-static unsigned long arch_get_unmapped_area_common(struct file *filp,
-	unsigned long addr0, unsigned long len, unsigned long pgoff,
-	unsigned long flags, enum mmap_allocation_direction dir)
+static unsigned long arch_get_unmapped_area_common(struct mm_struct *mm,
+	struct file *filp, unsigned long addr0, unsigned long len,
+	unsigned long pgoff, unsigned long flags,
+	enum mmap_allocation_direction dir)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	unsigned long addr = addr0;
 	int do_color_align;
@@ -74,7 +74,7 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 		info.flags = VM_UNMAPPED_AREA_TOPDOWN;
 		info.low_limit = PAGE_SIZE;
 		info.high_limit = mm->mmap_base;
-		addr = vm_unmapped_area(&info);
+		addr = vm_unmapped_area(mm, &info);
 
 		if (!(addr & ~PAGE_MASK))
 			return addr;
@@ -89,14 +89,14 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 
 	info.low_limit = mm->mmap_base;
 	info.high_limit = TASK_SIZE;
-	return vm_unmapped_area(&info);
+	return vm_unmapped_area(mm, &info);
 }
 
-unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr0,
-	unsigned long len, unsigned long pgoff, unsigned long flags,
-	vm_flags_t vm_flags)
+unsigned long arch_get_unmapped_area(struct mm_struct *mm, struct file *filp,
+	unsigned long addr0, unsigned long len, unsigned long pgoff,
+	unsigned long flags, vm_flags_t vm_flags)
 {
-	return arch_get_unmapped_area_common(filp,
+	return arch_get_unmapped_area_common(mm, filp,
 			addr0, len, pgoff, flags, UP);
 }
 
@@ -104,11 +104,11 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr0,
  * There is no need to export this but sched.h declares the function as
  * extern so making it static here results in an error.
  */
-unsigned long arch_get_unmapped_area_topdown(struct file *filp,
-	unsigned long addr0, unsigned long len, unsigned long pgoff,
-	unsigned long flags, vm_flags_t vm_flags)
+unsigned long arch_get_unmapped_area_topdown(struct mm_struct *mm,
+	struct file *filp, unsigned long addr0, unsigned long len,
+	unsigned long pgoff, unsigned long flags, vm_flags_t vm_flags)
 {
-	return arch_get_unmapped_area_common(filp,
+	return arch_get_unmapped_area_common(mm, filp,
 			addr0, len, pgoff, flags, DOWN);
 }
 

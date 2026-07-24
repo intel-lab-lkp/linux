@@ -543,7 +543,8 @@ static const struct vm_operations_struct arena_vm_ops = {
 	.fault          = arena_vm_fault,
 };
 
-static unsigned long arena_get_unmapped_area(struct file *filp, unsigned long addr,
+static unsigned long arena_get_unmapped_area(struct mm_struct *mm,
+					     struct file *filp, unsigned long addr,
 					     unsigned long len, unsigned long pgoff,
 					     unsigned long flags)
 {
@@ -566,7 +567,7 @@ static unsigned long arena_get_unmapped_area(struct file *filp, unsigned long ad
 			return -EINVAL;
 	}
 
-	ret = mm_get_unmapped_area(filp, addr, len * 2, 0, flags);
+	ret = mm_get_unmapped_area(mm, filp, addr, len * 2, 0, flags);
 	if (IS_ERR_VALUE(ret))
 		return ret;
 	if ((ret >> 32) == ((ret + len - 1) >> 32))
