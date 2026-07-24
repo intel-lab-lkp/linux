@@ -211,6 +211,9 @@ static inline void seccomp_cache_prepare(struct seccomp_filter *sfilter)
  * @log: true if all actions except for SECCOMP_RET_ALLOW should be logged
  * @wait_killable_recv: Put notifying process in killable state once the
  *			notification is received by the userspace listener.
+ * @redirect_capable: true if installed with SECCOMP_FILTER_FLAG_REDIRECT, so
+ *		      this filter's notifier may issue SEND_REDIRECT. At most
+ *		      one filter in a stack may be redirect-capable.
  * @prev: points to a previously installed, or inherited, filter
  * @prog: the BPF program to evaluate
  * @notif: the struct that holds all notification related information
@@ -232,6 +235,7 @@ struct seccomp_filter {
 	refcount_t users;
 	bool log;
 	bool wait_killable_recv;
+	bool redirect_capable;
 	struct action_cache cache;
 	struct seccomp_filter *prev;
 	struct bpf_prog *prog;
@@ -952,6 +956,13 @@ static long seccomp_attach_filter(unsigned int flags,
 		}
 	}
 
+	if (flags & SECCOMP_FILTER_FLAG_REDIRECT) {
+		for (walker = current->seccomp.filter; walker;
+		     walker = walker->prev)
+			if (walker->redirect_capable)
+				return -EBUSY;
+	}
+
 	/* Set log flag, if present. */
 	if (flags & SECCOMP_FILTER_FLAG_LOG)
 		filter->log = true;
@@ -959,6 +970,10 @@ static long seccomp_attach_filter(unsigned int flags,
 	/* Set wait killable flag, if present. */
 	if (flags & SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV)
 		filter->wait_killable_recv = true;
+
+	/* Set redirect-capable flag, if present. */
+	if (flags & SECCOMP_FILTER_FLAG_REDIRECT)
+		filter->redirect_capable = true;
 
 	/*
 	 * If there is an existing filter, make it the prev and don't drop its
@@ -1946,6 +1961,299 @@ out_fput:
 	return ret;
 }
 
+#ifdef SECCOMP_ARCH_REDIRECT
+static bool seccomp_pin_access_ok(struct mm_struct *mm, struct file *memfd_file,
+				  u64 ptr, u64 len)
+{
+	struct vm_area_struct *vma;
+	u64 end = ptr + len;
+
+	if (!len || end < ptr)
+		return false;
+
+	vma = vma_lookup(mm, ptr);
+	if (!vma || end > vma->vm_end)
+		return false;
+	/*
+	 * The access must lie in a single sealed, read-only, MAP_SHARED,
+	 * memfd-backed VMA. VM_SHARED is required so the bytes the kernel reads
+	 * are the memfd's own pages: a MAP_PRIVATE mapping would resolve to
+	 * anonymous COW copies the target could have written before sealing it
+	 * read-only, defeating the guarantee.
+	 */
+	if (!(vma->vm_flags & VM_SEALED) || !(vma->vm_flags & VM_SHARED) ||
+	    (vma->vm_flags & VM_WRITE))
+		return false;
+	if (!vma->vm_file)
+		return false;
+	return file_inode(vma->vm_file) == file_inode(memfd_file);
+}
+
+static bool seccomp_pin_check(struct task_struct *target,
+			      struct file *memfd_file, u32 ptr_mask,
+			      const u64 *args, const u64 *ptr_len)
+{
+	struct mm_struct *mm;
+	bool ok = true;
+	int i;
+
+	mm = get_task_mm(target);
+	if (!mm)
+		return false;
+
+	mmap_read_lock(mm);
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++) {
+		if (!(ptr_mask & (1U << i)))
+			continue;
+		if (!seccomp_pin_access_ok(mm, memfd_file, args[i],
+					   ptr_len[i])) {
+			ok = false;
+			break;
+		}
+	}
+	mmap_read_unlock(mm);
+	mmput(mm);
+	return ok;
+}
+
+struct seccomp_redirect_restore {
+	struct callback_head twork;
+	unsigned long orig_args[SECCOMP_REDIRECT_ARGS];
+	u32 args_mask;		/* bit i: arg i was substituted, restore it */
+	u64 self_exec_id;	/* snapshot to detect an intervening execve */
+};
+
+static void seccomp_redirect_restore_cb(struct callback_head *cb)
+{
+	struct seccomp_redirect_restore *r =
+		container_of(cb, struct seccomp_redirect_restore, twork);
+	unsigned long args[SECCOMP_REDIRECT_ARGS];
+	long ret, err;
+	int i;
+
+	if (READ_ONCE(current->self_exec_id) != r->self_exec_id) {
+		kfree(r);
+		return;
+	}
+
+	err = syscall_get_error(current, current_pt_regs());
+	ret = syscall_get_return_value(current, current_pt_regs());
+
+	syscall_get_arguments(current, current_pt_regs(), args);
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+		if (r->args_mask & (1U << i))
+			args[i] = r->orig_args[i];
+	syscall_set_arguments(current, current_pt_regs(), args);
+
+	syscall_set_return_value(current, current_pt_regs(), err, ret);
+
+	kfree(r);
+}
+
+/*
+ * sigreturn/rt_sigreturn restore the entire register frame from the user
+ * signal stack; the SEND_REDIRECT register-restore (run from task_work at
+ * user-mode return) would corrupt that frame, and the syscall takes no
+ * arguments to substitute anyway. Refuse to redirect any of them, including
+ * the compat variants (legacy sigreturn and rt_sigreturn are distinct
+ * numbers). x32 rt_sigreturn carries __X32_SYSCALL_BIT and is not matched
+ * here; the deprecated x32 ABI is out of scope for redirect.
+ */
+static bool seccomp_redirect_is_sigreturn(const struct seccomp_data *sd)
+{
+#ifdef SECCOMP_ARCH_COMPAT
+	if (sd->arch == SECCOMP_ARCH_COMPAT)
+		return sd->nr == __NR_seccomp_sigreturn_32 ||
+		       sd->nr == __NR_seccomp_rt_sigreturn_32;
+#endif
+	return sd->nr == __NR_seccomp_sigreturn ||
+	       sd->nr == __NR_seccomp_rt_sigreturn;
+}
+
+/*
+ * clone/fork-family syscalls copy the trapped task's register frame into the
+ * new child, which gets no restore task_work of its own. A redirected task
+ * creation would leave the child in user space with the substituted (pinned)
+ * values still in its caller-saved arg registers, breaking the ABI the restore
+ * preserves for the parent. There is no use case for redirecting task creation,
+ * so refuse it. Syscalls absent on an arch resolve to -1 and never match.
+ */
+static bool seccomp_redirect_is_task_create(const struct seccomp_data *sd)
+{
+#ifdef SECCOMP_ARCH_COMPAT
+	if (sd->arch == SECCOMP_ARCH_COMPAT)
+		return sd->nr == __NR_seccomp_clone_32 ||
+		       sd->nr == __NR_seccomp_clone3_32 ||
+		       sd->nr == __NR_seccomp_fork_32 ||
+		       sd->nr == __NR_seccomp_vfork_32;
+#endif
+	return sd->nr == __NR_seccomp_clone ||
+	       sd->nr == __NR_seccomp_clone3 ||
+	       sd->nr == __NR_seccomp_fork ||
+	       sd->nr == __NR_seccomp_vfork;
+}
+
+static bool seccomp_redirect_deny(const struct seccomp_data *sd)
+{
+	return arch_seccomp_redirect_deny(sd) ||
+	       seccomp_redirect_is_sigreturn(sd) ||
+	       seccomp_redirect_is_task_create(sd);
+}
+
+static long seccomp_notify_send_redirect(struct seccomp_filter *filter,
+					 struct seccomp_notif_resp_redirect __user *uresp,
+					 unsigned int size)
+{
+	unsigned long args[SECCOMP_REDIRECT_ARGS];
+	struct seccomp_redirect_restore *restore;
+	struct seccomp_notif_resp_redirect resp;
+	struct file *memfd_file = NULL;
+	struct seccomp_knotif *knotif;
+	struct pt_regs *target_regs;
+	long ret;
+	int i;
+
+	BUILD_BUG_ON(sizeof(resp) < SECCOMP_NOTIFY_RESP_REDIRECT_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(resp) != SECCOMP_NOTIFY_RESP_REDIRECT_SIZE_LATEST);
+
+	if (!filter->redirect_capable)
+		return -EPERM;
+
+	if (size < SECCOMP_NOTIFY_RESP_REDIRECT_SIZE_VER0 || size >= PAGE_SIZE)
+		return -EINVAL;
+
+	ret = copy_struct_from_user(&resp, sizeof(resp), uresp, size);
+	if (ret)
+		return ret;
+
+	if (!(resp.flags & SECCOMP_REDIRECT_FLAG_CONTINUE))
+		return -EINVAL;
+	if (resp.flags & ~SECCOMP_REDIRECT_FLAG_CONTINUE)
+		return -EINVAL;
+	if (resp.args_mask & ~((1U << SECCOMP_REDIRECT_ARGS) - 1))
+		return -EINVAL;
+	if (resp.ptr_mask & ~resp.args_mask)
+		return -EINVAL;
+	if (!resp.args_mask)
+		return -EINVAL;
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++) {
+		if (resp.ptr_mask & (1U << i)) {
+			if (!resp.ptr_len[i])
+				return -EINVAL;
+		} else if (resp.ptr_len[i]) {
+			return -EINVAL;
+		}
+	}
+	if (resp.ptr_mask) {
+		memfd_file = fget(resp.memfd);
+		if (!memfd_file)
+			return -EBADF;
+	}
+
+	restore = kzalloc_obj(*restore, GFP_KERNEL_ACCOUNT);
+	if (!restore) {
+		ret = -ENOMEM;
+		goto out_free;
+	}
+	init_task_work(&restore->twork, seccomp_redirect_restore_cb);
+
+	ret = mutex_lock_interruptible(&filter->notify_lock);
+	if (ret < 0)
+		goto out_free;
+
+	knotif = find_notification(filter, resp.id);
+	if (!knotif) {
+		ret = -ENOENT;
+		goto out_unlock_free;
+	}
+	if (knotif->state != SECCOMP_NOTIFY_SENT) {
+		ret = -EINPROGRESS;
+		goto out_unlock_free;
+	}
+
+	if (seccomp_redirect_deny(knotif->data)) {
+		ret = -EOPNOTSUPP;
+		goto out_unlock_free;
+	}
+
+#ifdef SECCOMP_ARCH_COMPAT
+	if (knotif->data->arch == SECCOMP_ARCH_COMPAT) {
+		for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+			if (resp.ptr_mask & (1U << i))
+				resp.args[i] = (u32)resp.args[i];
+	}
+#endif
+
+	if (resp.ptr_mask &&
+	    !seccomp_pin_check(knotif->task, memfd_file, resp.ptr_mask,
+			       resp.args, resp.ptr_len)) {
+		ret = -EFAULT;
+		goto out_unlock_free;
+	}
+
+	target_regs = task_pt_regs(knotif->task);
+	syscall_get_arguments(knotif->task, target_regs, args);
+
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+		restore->orig_args[i] = args[i];
+	restore->args_mask = resp.args_mask;
+	restore->self_exec_id = READ_ONCE(knotif->task->self_exec_id);
+
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+		if (resp.args_mask & (1U << i))
+			args[i] = resp.args[i];
+	syscall_set_arguments(knotif->task, target_regs, args);
+
+	/*
+	 * Use TWA_RESUME, not TWA_SIGNAL. TWA_SIGNAL sets TIF_NOTIFY_SIGNAL,
+	 * which makes signal_pending() true for the entire redirected syscall
+	 * An interruptible syscall would then bail out with -ERESTARTSYS before
+	 * doing any work, restart, re-trap and get redirected again, it is a
+	 * livelock. TWA_RESUME does not feed signal_pending(), and the restore
+	 * still runs before signal delivery: get_signal() runs task_work_run()
+	 * before it dequeues a signal, so the original args are back in pt_regs
+	 * before handle_signal() builds the sigframe or the -ERESTART* path
+	 * rewinds for restart.
+	 */
+	ret = task_work_add(knotif->task, &restore->twork, TWA_RESUME);
+	if (ret) {
+		for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+			args[i] = restore->orig_args[i];
+		syscall_set_arguments(knotif->task, target_regs, args);
+		goto out_unlock_free;
+	}
+
+	knotif->state = SECCOMP_NOTIFY_REPLIED;
+	knotif->error = 0;
+	knotif->val = 0;
+	knotif->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+	if (filter->notif->flags & SECCOMP_USER_NOTIF_FD_SYNC_WAKE_UP)
+		complete_on_current_cpu(&knotif->ready);
+	else
+		complete(&knotif->ready);
+
+	mutex_unlock(&filter->notify_lock);
+	if (memfd_file)
+		fput(memfd_file);
+	return 0;
+
+out_unlock_free:
+	mutex_unlock(&filter->notify_lock);
+out_free:
+	if (memfd_file)
+		fput(memfd_file);
+	kfree(restore);
+	return ret;
+}
+#else /* !SECCOMP_ARCH_REDIRECT */
+static long seccomp_notify_send_redirect(struct seccomp_filter *filter,
+					 struct seccomp_notif_resp_redirect __user *uresp,
+					 unsigned int size)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* SECCOMP_ARCH_REDIRECT */
+
 static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 				 unsigned long arg)
 {
@@ -1973,6 +2281,9 @@ static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 	case EA_IOCTL(SECCOMP_IOCTL_NOTIF_PIN_INSTALL):
 		return seccomp_notify_pin_install(filter, buf,
 						  _IOC_SIZE(cmd));
+	case EA_IOCTL(SECCOMP_IOCTL_NOTIF_SEND_REDIRECT):
+		return seccomp_notify_send_redirect(filter, buf,
+						    _IOC_SIZE(cmd));
 	default:
 		return -EINVAL;
 	}
@@ -2109,6 +2420,15 @@ static long seccomp_set_mode_filter(unsigned int flags,
 	 * without the SECCOMP_FILTER_FLAG_NEW_LISTENER flag.
 	 */
 	if ((flags & SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV) &&
+	    ((flags & SECCOMP_FILTER_FLAG_NEW_LISTENER) == 0))
+		return -EINVAL;
+
+#ifndef SECCOMP_ARCH_REDIRECT
+	/* Redirect denylist inputs are not verified on this arch. */
+	if (flags & SECCOMP_FILTER_FLAG_REDIRECT)
+		return -EINVAL;
+#endif
+	if ((flags & SECCOMP_FILTER_FLAG_REDIRECT) &&
 	    ((flags & SECCOMP_FILTER_FLAG_NEW_LISTENER) == 0))
 		return -EINVAL;
 

@@ -25,6 +25,12 @@
 #define SECCOMP_FILTER_FLAG_TSYNC_ESRCH		(1UL << 4)
 /* Received notifications wait in killable state (only respond to fatal signals) */
 #define SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV	(1UL << 5)
+/*
+ * Declares that this listener's notifier may issue
+ * SECCOMP_IOCTL_NOTIF_PIN_INSTALL / SECCOMP_IOCTL_NOTIF_SEND_REDIRECT. At most
+ * one such filter may exist in a task's filter chain. Requires NEW_LISTENER.
+ */
+#define SECCOMP_FILTER_FLAG_REDIRECT		(1UL << 6)
 
 /*
  * All BPF programs must return a 32-bit value.
@@ -139,7 +145,9 @@ struct seccomp_notif_addfd {
 
 /**
  * struct seccomp_notif_pin_install - have the kernel install a sealed
- * MAP_SHARED mapping of @memfd into the trapped task's mm at @target_addr.
+ * MAP_SHARED mapping of @memfd into the trapped task's mm at @target_addr,
+ * which SECCOMP_IOCTL_NOTIF_SEND_REDIRECT can then use as a target for
+ * substituted pointer arguments.
  *
  * The supervisor owns @memfd and the kernel installs the mapping without
  * target-side cooperation. It is read-only and VM_SEALED, so the target and
@@ -168,6 +176,45 @@ struct seccomp_notif_pin_install {
 	__u64 offset;
 };
 
+#define SECCOMP_REDIRECT_ARGS 6
+
+/**
+ * struct seccomp_notif_resp_redirect - resume the trapped syscall with
+ * substituted arg-register values, optionally pointing into an installed
+ * pinned-memfd region.
+ *
+ * Like SECCOMP_USER_NOTIF_FLAG_CONTINUE the syscall runs, but the kernel
+ * first rewrites the arg registers in @args_mask. Pointer substitutions
+ * (@ptr_mask) are validated against the trapped task's live mapping of
+ * @memfd, so a target that has exited or execve()d simply fails validation.
+ * Original registers are restored at syscall exit, skipped after a successful
+ * execve whose fresh register file must not be clobbered.
+ *
+ * @id: The ID of the seccomp notification this response consumes.
+ * @flags: SECCOMP_REDIRECT_FLAG_*. CONTINUE must be set.
+ * @args_mask: Bit i set means args[i] replaces arg register i before the
+ *             syscall runs.
+ * @ptr_mask: Subset of @args_mask. Bit i set means args[i] is a pointer whose
+ *            access [args[i], args[i] + ptr_len[i]) must lie inside a single
+ *            VM_SEALED, read-only mapping of @memfd. Scalars (in @args_mask
+ *            but not @ptr_mask) are written verbatim.
+ * @memfd: Supervisor-side fd for the backing memfd. Consulted only when
+ *         @ptr_mask is non-zero.
+ * @args: Replacement values for the arg registers.
+ * @ptr_len: For each bit set in @ptr_mask, the byte length of the access at
+ *           args[i]; must be non-zero and args[i] + ptr_len[i] must not
+ *           overflow. Must be 0 where @ptr_mask bit i is clear.
+ */
+struct seccomp_notif_resp_redirect {
+	__u64 id;
+	__u32 flags;
+	__u32 args_mask;
+	__u32 ptr_mask;
+	__u32 memfd;
+	__u64 args[SECCOMP_REDIRECT_ARGS];
+	__u64 ptr_len[SECCOMP_REDIRECT_ARGS];
+};
+
 #define SECCOMP_IOC_MAGIC		'!'
 #define SECCOMP_IO(nr)			_IO(SECCOMP_IOC_MAGIC, nr)
 #define SECCOMP_IOR(nr, type)		_IOR(SECCOMP_IOC_MAGIC, nr, type)
@@ -187,5 +234,11 @@ struct seccomp_notif_pin_install {
 
 #define SECCOMP_IOCTL_NOTIF_PIN_INSTALL	SECCOMP_IOWR(5, \
 						struct seccomp_notif_pin_install)
+
+#define SECCOMP_IOCTL_NOTIF_SEND_REDIRECT	SECCOMP_IOW(6, \
+						struct seccomp_notif_resp_redirect)
+
+/* Valid flags for struct seccomp_notif_resp_redirect. */
+#define SECCOMP_REDIRECT_FLAG_CONTINUE (1UL << 0)
 
 #endif /* _UAPI_LINUX_SECCOMP_H */
