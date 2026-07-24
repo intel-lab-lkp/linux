@@ -4155,6 +4155,25 @@ extern unsigned long do_mmap(struct file *file, unsigned long addr,
 	unsigned long len, unsigned long prot, unsigned long flags,
 	vm_flags_t vm_flags, unsigned long pgoff, unsigned long *populate,
 	struct list_head *uf);
+#ifdef CONFIG_MMU
+unsigned long vm_mmap_remote(struct mm_struct *mm, struct file *file,
+	unsigned long addr, unsigned long len, unsigned long prot,
+	unsigned long flags, unsigned long pgoff, vm_flags_t vm_flags);
+int vm_munmap_remote(struct mm_struct *mm, unsigned long start, size_t len);
+#else
+static inline unsigned long vm_mmap_remote(struct mm_struct *mm,
+	struct file *file, unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long pgoff,
+	vm_flags_t vm_flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline int vm_munmap_remote(struct mm_struct *mm, unsigned long start,
+	size_t len)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 extern int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 			 unsigned long start, size_t len, struct list_head *uf,
 			 bool unlock);

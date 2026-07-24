@@ -32,6 +32,7 @@ struct unlink_vma_file_batch {
  * vma munmap operation
  */
 struct vma_munmap_struct {
+	struct mm_struct *mm;           /* The mm being operated on */
 	struct vma_iterator *vmi;
 	struct vm_area_struct *vma;     /* The first vma to munmap */
 	struct vm_area_struct *prev;    /* vma before the munmap area */
@@ -459,9 +460,9 @@ bool vma_wants_writenotify(struct vm_area_struct *vma, pgprot_t vm_page_prot);
 int mm_take_all_locks(struct mm_struct *mm);
 void mm_drop_all_locks(struct mm_struct *mm);
 
-unsigned long mmap_region(struct file *file, unsigned long addr,
-		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
-		struct list_head *uf);
+unsigned long mmap_region(struct mm_struct *mm, struct file *file,
+		unsigned long addr, unsigned long len, vm_flags_t vm_flags,
+		unsigned long pgoff, struct list_head *uf);
 
 int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *brkvma,
 		 unsigned long addr, unsigned long request,
@@ -732,11 +733,12 @@ int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift);
  *
  * Return: false if proposed change is OK, true if not ok and should be denied.
  */
-static inline bool map_deny_write_exec(const vma_flags_t *old,
+static inline bool map_deny_write_exec(struct mm_struct *mm,
+				       const vma_flags_t *old,
 				       const vma_flags_t *new)
 {
 	/* If MDWE is disabled, we have nothing to deny. */
-	if (!mm_flags_test(MMF_HAS_MDWE, current->mm))
+	if (!mm_flags_test(MMF_HAS_MDWE, mm))
 		return false;
 
 	/* If the new VMA is not executable, we have nothing to deny. */

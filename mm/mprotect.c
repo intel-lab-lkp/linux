@@ -939,7 +939,7 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 			break;
 		}
 
-		if (map_deny_write_exec(&vma->flags, &new_vma_flags)) {
+		if (map_deny_write_exec(vma->vm_mm, &vma->flags, &new_vma_flags)) {
 			error = -EACCES;
 			break;
 		}

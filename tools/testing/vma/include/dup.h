@@ -32,6 +32,7 @@ struct mm_struct {
 	unsigned long data_vm;	   /* VM_WRITE & ~VM_SHARED & ~VM_STACK */
 	unsigned long exec_vm;	   /* VM_EXEC & ~VM_WRITE & ~VM_STACK */
 	unsigned long stack_vm;	   /* VM_STACK */
+	unsigned long task_size;   /* size of task vm space */
 
 	union {
 		vm_flags_t def_flags;
