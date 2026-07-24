@@ -20,6 +20,7 @@
 #include <net/page_pool/helpers.h>
 
 #include "bnge.h"
+#include "bnge_hwrm.h"
 #include "bnge_hwrm_lib.h"
 #include "bnge_ethtool.h"
 #include "bnge_rmem.h"
@@ -2861,6 +2862,24 @@ static void bnge_tx_enable(struct bnge_net *bn)
 		netif_carrier_on(bn->netdev);
 }
 
+static int bnge_hwrm_if_change(struct bnge_dev *bd, bool up)
+{
+	struct hwrm_func_drv_if_change_input *req;
+	int rc;
+
+	if (!(bd->fw_cap & BNGE_FW_CAP_IF_CHANGE))
+		return 0;
+
+	rc = bnge_hwrm_req_init(bd, req, HWRM_FUNC_DRV_IF_CHANGE);
+	if (rc)
+		return rc;
+
+	if (up)
+		req->flags = cpu_to_le32(FUNC_DRV_IF_CHANGE_REQ_FLAGS_UP);
+
+	return bnge_hwrm_req_send(bd, req);
+}
+
 static int bnge_open_core(struct bnge_net *bn)
 {
 	struct bnge_dev *bd = bn->bd;
@@ -2868,16 +2887,22 @@ static int bnge_open_core(struct bnge_net *bn)
 
 	netif_carrier_off(bn->netdev);
 
+	rc = bnge_hwrm_if_change(bd, true);
+	if (rc) {
+		netdev_err(bn->netdev, "bnge_hwrm_if_change err: %d\n", rc);
+		return rc;
+	}
+
 	rc = bnge_reserve_rings(bd);
 	if (rc) {
 		netdev_err(bn->netdev, "bnge_reserve_rings err: %d\n", rc);
-		return rc;
+		goto err_if_change;
 	}
 
 	rc = bnge_alloc_core(bn);
 	if (rc) {
 		netdev_err(bn->netdev, "bnge_alloc_core err: %d\n", rc);
-		return rc;
+		goto err_if_change;
 	}
 
 	bnge_init_napi(bn);
@@ -2924,6 +2949,8 @@ err_free_irq:
 err_del_napi:
 	bnge_del_napi(bn);
 	bnge_free_core(bn);
+err_if_change:
+	bnge_hwrm_if_change(bd, false);
 	return rc;
 }
 
@@ -3154,6 +3181,7 @@ static int bnge_close(struct net_device *dev)
 
 	bnge_close_core(bn);
 	bnge_hwrm_shutdown_link(bn->bd);
+	bnge_hwrm_if_change(bn->bd, false);
 	bn->sp_event = 0;
 
 	return 0;

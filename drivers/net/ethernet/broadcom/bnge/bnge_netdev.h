@@ -275,6 +275,8 @@ enum bnge_net_flag {
 	BNGE_FLAG_PORT_STATS_EXT	= BIT(1),
 };
 
+#define BNGE_FW_IF_RETRY	10
+
 enum bnge_sp_event {
 	BNGE_LINK_CHNG_SP_EVENT,
 	BNGE_LINK_SPEED_CHNG_SP_EVENT,
