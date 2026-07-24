@@ -1423,8 +1423,55 @@ static int convert_reloc_secsym_to_sym(struct elf *elf, struct reloc *reloc)
 	if (!strcmp(reloc->sec->name, ".rela__patchable_function_entries"))
 		return convert_pfe_reloc(elf, reloc);
 
-	if (!is_sec_sym(sym))
+	if (!is_sec_sym(sym)) {
+		/*
+		 * Most toolchains reference special-section entries via the
+		 * section symbol plus an offset.  GCC/GAS on LoongArch instead
+		 * references a local text label (.L*): LoongArch linker
+		 * relaxation is the reason GAS keeps the label rather than
+		 * reducing it to a section symbol reference.  Such a label is
+		 * never cloned into the livepatch object, so the entry would be
+		 * silently dropped.  Redirect the relocation to the containing
+		 * function, mirroring the section-symbol case below.
+		 */
+		if (is_local_label(sym)) {
+			unsigned long offset = sym->offset + reloc_addend(reloc);
+
+			if (is_text_sec(sec)) {
+				sym = find_symbol_containing_inclusive(sec, offset);
+				if (!sym) {
+					/*
+					 * A local label with no containing function
+					 * symbol (e.g. hand-written asm in a plain .text
+					 * section).  It can't be correlated to a function,
+					 * so skip it rather than failing the build; such
+					 * entries belong to unchanged code and are dropped
+					 * anyway.
+					 */
+					return 1;
+				}
+
+				reloc->sym = sym;
+				set_reloc_sym(elf, reloc, sym->idx);
+				set_reloc_addend(elf, reloc, offset - sym->offset);
+			} else {
+				/*
+				 * A local label in a non-text section, e.g. Clang's
+				 * .LJTI* switch jump table in .rodata.  It isn't
+				 * cloned into the livepatch either, so redirect the
+				 * reloc to the section symbol plus the full offset,
+				 * mirroring the section-symbol case below.
+				 */
+				if (!sec->sym && !elf_create_section_symbol(elf, sec))
+					return -1;
+				reloc->sym = sec->sym;
+				set_reloc_sym(elf, reloc, sec->sym->idx);
+				set_reloc_addend(elf, reloc, offset);
+			}
+		}
+
 		return 0;
+	}
 
 	sym = find_symbol_containing_inclusive(sec, arch_adjusted_addend(reloc));
 	if (!sym) {
