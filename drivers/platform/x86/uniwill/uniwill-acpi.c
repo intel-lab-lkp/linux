@@ -1626,7 +1626,7 @@ static int uniwill_led_init(struct uniwill_data *data)
 							 &init_data);
 }
 
-static int uniwill_notify_kbd_led(struct uniwill_data *data, int brightness)
+static int uniwill_notify_kbd_led(struct uniwill_data *data)
 {
 	struct led_classdev *led_cdev;
 	int ret;
@@ -1643,7 +1643,7 @@ static int uniwill_notify_kbd_led(struct uniwill_data *data, int brightness)
 	if (ret < 0)
 		return ret;
 
-	led_classdev_notify_brightness_hw_changed(led_cdev, brightness);
+	led_classdev_notify_brightness_hw_changed(led_cdev, led_cdev->brightness);
 
 	return 0;
 }
@@ -2215,30 +2215,14 @@ static int uniwill_notifier_call(struct notifier_block *nb, unsigned long action
 
 		return NOTIFY_OK;
 	case UNIWILL_OSD_KB_LED_LEVEL0:
-		if (!uniwill_device_supports(data, UNIWILL_FEATURE_KEYBOARD_BACKLIGHT))
-			return NOTIFY_DONE;
-
-		return notifier_from_errno(uniwill_notify_kbd_led(data, 0));
 	case UNIWILL_OSD_KB_LED_LEVEL1:
-		if (!uniwill_device_supports(data, UNIWILL_FEATURE_KEYBOARD_BACKLIGHT))
-			return NOTIFY_DONE;
-
-		return notifier_from_errno(uniwill_notify_kbd_led(data, 1));
 	case UNIWILL_OSD_KB_LED_LEVEL2:
-		if (!uniwill_device_supports(data, UNIWILL_FEATURE_KEYBOARD_BACKLIGHT))
-			return NOTIFY_DONE;
-
-		return notifier_from_errno(uniwill_notify_kbd_led(data, 2));
 	case UNIWILL_OSD_KB_LED_LEVEL3:
-		if (!uniwill_device_supports(data, UNIWILL_FEATURE_KEYBOARD_BACKLIGHT))
-			return NOTIFY_DONE;
-
-		return notifier_from_errno(uniwill_notify_kbd_led(data, 3));
 	case UNIWILL_OSD_KB_LED_LEVEL4:
 		if (!uniwill_device_supports(data, UNIWILL_FEATURE_KEYBOARD_BACKLIGHT))
 			return NOTIFY_DONE;
 
-		return notifier_from_errno(uniwill_notify_kbd_led(data, 4));
+		return notifier_from_errno(uniwill_notify_kbd_led(data));
 	default:
 		mutex_lock(&data->input_lock);
 		sparse_keymap_report_event(data->input_device, action, 1, true);
