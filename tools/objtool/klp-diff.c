@@ -1518,6 +1518,13 @@ static bool is_uncorrelated_section(struct section *sec)
 	       strstarts(sec->name, ".data..Lanon.");		/* Clang */
 }
 
+#ifndef ARCH_HAS_PAIRED_RELOCS
+static inline int arch_normalize_paired_reloc(struct elf *elf, struct reloc *reloc)
+{
+	return 0;
+}
+#endif
+
 /*
  * Convert a relocation symbol reference to the needed format: either a section
  * symbol or the underlying symbol itself.  Return -1 error, 0 success, 1 skip.
@@ -1525,9 +1532,15 @@ static bool is_uncorrelated_section(struct section *sec)
 static int convert_reloc_sym(struct elf *elf, struct reloc *reloc)
 {
 	struct section *sec = reloc->sym->sec;
+	int ret;
 
 	if (reloc_type(reloc) == R_NONE)
 		return 1;
+
+	/* Fold paired ADD/SUB relocs (LoongArch) into a single PCREL */
+	ret = arch_normalize_paired_reloc(elf, reloc);
+	if (ret)
+		return ret;
 
 	if (is_uncorrelated_section(sec))
 		return convert_reloc_sym_to_secsym(elf, reloc);
