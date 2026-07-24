@@ -24,6 +24,17 @@ div.document {
     width: auto;
 }
 
+/*
+ * Put overflow on an outer container rather than changing the table's display
+ * type, preserving native table, caption, and collapsed-border rendering.
+ */
+div.body div.table-overflow {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
 /* Size the logo appropriately */
 img.logo {
     width: 104px;

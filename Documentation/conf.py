@@ -153,6 +153,7 @@ extensions = [
     "kernel_feat",
     "kernel_include",
     "kfigure",
+    "table_layout",
     "maintainers_include",
     "parser_yaml",
     "rstFlatTable",
