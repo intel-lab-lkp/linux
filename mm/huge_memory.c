@@ -298,9 +298,11 @@ static unsigned long shrink_huge_zero_folio_scan(struct shrinker *shrink,
 						 struct shrink_control *sc)
 {
 	if (atomic_cmpxchg(&huge_zero_refcount, 1, 0) == 1) {
-		struct folio *zero_folio = xchg(&huge_zero_folio, NULL);
-		BUG_ON(zero_folio == NULL);
+		struct folio *zero_folio;
+
 		WRITE_ONCE(huge_zero_pfn, ~0UL);
+		zero_folio = xchg(&huge_zero_folio, NULL);
+		BUG_ON(zero_folio == NULL);
 		folio_put(zero_folio);
 		return HPAGE_PMD_NR;
 	}
