@@ -627,18 +627,6 @@ static int ep93xx_pata_bus_softreset(struct ata_port *ap, unsigned int devmask,
 	return ep93xx_pata_wait_after_reset(&ap->link, devmask, deadline);
 }
 
-static void ep93xx_pata_release_dma(struct ep93xx_pata_data *drv_data)
-{
-	if (drv_data->dma_rx_channel) {
-		dma_release_channel(drv_data->dma_rx_channel);
-		drv_data->dma_rx_channel = NULL;
-	}
-	if (drv_data->dma_tx_channel) {
-		dma_release_channel(drv_data->dma_tx_channel);
-		drv_data->dma_tx_channel = NULL;
-	}
-}
-
 static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 {
 	struct platform_device *pdev = drv_data->pdev;
@@ -655,7 +643,7 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 	 * to request only one channel, and reprogram it's direction at
 	 * start of new transfer.
 	 */
-	drv_data->dma_rx_channel = dma_request_chan(dev, "rx");
+	drv_data->dma_rx_channel = devm_dma_request_chan(dev, "rx");
 	if (IS_ERR(drv_data->dma_rx_channel)) {
 		ret = PTR_ERR(drv_data->dma_rx_channel);
 		drv_data->dma_rx_channel = NULL;
@@ -665,14 +653,14 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 		return 0;
 	}
 
-	drv_data->dma_tx_channel = dma_request_chan(&pdev->dev, "tx");
+	drv_data->dma_tx_channel = devm_dma_request_chan(&pdev->dev, "tx");
 	if (IS_ERR(drv_data->dma_tx_channel)) {
 		ret = PTR_ERR(drv_data->dma_tx_channel);
 		drv_data->dma_tx_channel = NULL;
 		if (ret == -EPROBE_DEFER)
-			goto fail_release_rx;
+			return ret;
 		dev_warn(dev, "tx DMA unavailable, using PIO\n");
-		goto fail_release_rx;
+		return 0;
 	}
 
 	/* Configure receive channel direction and source address */
@@ -683,7 +671,9 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 	ret = dmaengine_slave_config(drv_data->dma_rx_channel, &conf);
 	if (ret) {
 		dev_warn(dev, "failed to configure rx dma channel, using PIO\n");
-		goto fail_release_dma;
+		drv_data->dma_rx_channel = NULL;
+		drv_data->dma_tx_channel = NULL;
+		return 0;
 	}
 
 	/* Configure transmit channel direction and destination address */
@@ -694,20 +684,11 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 	ret = dmaengine_slave_config(drv_data->dma_tx_channel, &conf);
 	if (ret) {
 		dev_warn(dev, "failed to configure tx dma channel, using PIO\n");
-		goto fail_release_dma;
+		drv_data->dma_rx_channel = NULL;
+		drv_data->dma_tx_channel = NULL;
+		return 0;
 	}
 
-	return 0;
-
-fail_release_rx:
-	dma_release_channel(drv_data->dma_rx_channel);
-	drv_data->dma_rx_channel = NULL;
-	if (ret == -EPROBE_DEFER)
-		return ret;
-	return 0;
-
-fail_release_dma:
-	ep93xx_pata_release_dma(drv_data);
 	return 0;
 }
 
@@ -959,10 +940,8 @@ static int ep93xx_pata_probe(struct platform_device *pdev)
 
 	/* allocate host */
 	host = ata_host_alloc(&pdev->dev, 1);
-	if (!host) {
-		err = -ENOMEM;
-		goto err_rel_dma;
-	}
+	if (!host)
+		return -ENOMEM;
 
 	ep93xx_pata_clear_regs(ide_base);
 
@@ -999,14 +978,8 @@ static int ep93xx_pata_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "version " DRV_VERSION "\n");
 
 	/* activate host */
-	err = ata_host_activate(host, irq, ata_bmdma_interrupt, 0,
+	return ata_host_activate(host, irq, ata_bmdma_interrupt, 0,
 		&ep93xx_pata_sht);
-	if (err == 0)
-		return 0;
-
-err_rel_dma:
-	ep93xx_pata_release_dma(drv_data);
-	return err;
 }
 
 static void ep93xx_pata_remove(struct platform_device *pdev)
@@ -1015,7 +988,6 @@ static void ep93xx_pata_remove(struct platform_device *pdev)
 	struct ep93xx_pata_data *drv_data = host->private_data;
 
 	ata_host_detach(host);
-	ep93xx_pata_release_dma(drv_data);
 	ep93xx_pata_clear_regs(drv_data->ide_base);
 }
 
