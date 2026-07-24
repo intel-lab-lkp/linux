@@ -388,7 +388,7 @@ mt792x_acpi_get_mtcl_map_v3(int row, int column, struct mt792x_asar_cl_v3 *cl)
 	u32 config = 0;
 	u8 mode_be = 0;
 
-	mode_be = (cl->mode_be > 0x02) ? 0 : cl->mode_be;
+	mode_be = (cl->mode_be > MT792X_ACPI_MTCL_MODE_DEFAULT) ? 0 : cl->mode_be;
 
 	if (cl->version > 2 && cl->clbe[row] & BIT(column))
 		config |= (mode_be & 0x3) << 4;
@@ -402,10 +402,10 @@ mt792x_acpi_get_mtcl_map(int row, int column, struct mt792x_asar_cl *cl)
 	u32 config = 0;
 	u8 mode_6g, mode_5g9;
 
-	mode_6g = (cl->mode_6g > 0x02) ? 0 : cl->mode_6g;
-	mode_5g9 = (cl->mode_5g9 > 0x01) ? 0 : cl->mode_5g9;
+	mode_6g = (cl->mode_6g > MT792X_ACPI_MTCL_MODE_DEFAULT) ? 0 : cl->mode_6g;
+	mode_5g9 = (cl->mode_5g9 > MT792X_ACPI_MTCL_MODE_ENABLE) ? 0 : cl->mode_5g9;
 
-	if ((cl->cl6g[row] & BIT(column)) || cl->mode_6g == 0x02)
+	if ((cl->cl6g[row] & BIT(column)) || cl->mode_6g == MT792X_ACPI_MTCL_MODE_DEFAULT)
 		config |= (mode_6g & 0x3) << 2;
 	if (cl->version > 1 && cl->cl5g9[row] & BIT(column))
 		config |= (mode_5g9 & 0x3);
@@ -425,6 +425,9 @@ mt792x_acpi_parse_mtcl_tbl_v3(struct mt792x_phy *phy, char *alpha2)
 
 	if (!cl)
 		return MT792X_ACPI_MTCL_INVALID;
+
+	if (cl->mode_be == MT792X_ACPI_MTCL_MODE_DEFAULT)
+		goto out;
 
 	for (i = 0; i < ARRAY_SIZE(cc_list_be); i++) {
 		col = 7 - i % 8;

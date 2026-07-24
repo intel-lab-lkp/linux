@@ -17,6 +17,13 @@
 
 #define MT792X_ACPI_MTCL_INVALID	0xffffffff
 
+/* MTCL per-band control mode (mode_6g/mode_5g9/mode_be) */
+enum {
+	MT792X_ACPI_MTCL_MODE_DISABLE	= 0x00,	/* force disable */
+	MT792X_ACPI_MTCL_MODE_ENABLE	= 0x01,	/* enable if driver & BIOS support */
+	MT792X_ACPI_MTCL_MODE_DEFAULT	= 0x02,	/* supporting depends on driver setting */
+};
+
 struct mt792x_asar_dyn_limit {
 	u8 idx;
 	u8 frp[5];
