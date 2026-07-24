@@ -509,11 +509,9 @@ static int inv_icm42600_setup(struct inv_icm42600_state *st,
 	ret = regmap_read(st->map, INV_ICM42600_REG_WHOAMI, &val);
 	if (ret)
 		return ret;
-	if (val != hw->whoami) {
-		dev_err(dev, "invalid whoami %#02x expected %#02x (%s)\n",
-			val, hw->whoami, hw->name);
-		return -ENODEV;
-	}
+	if (val != hw->whoami)
+		dev_warn(dev, "unexpected whoami %#02x, expected %#02x (%s)\n",
+			 val, hw->whoami, hw->name);
 	st->name = hw->name;
 
 	/* reset to make sure previous state are not there */
