@@ -1890,6 +1890,7 @@ int acp7x_sofdsp_dai_links_create(struct snd_soc_card *card)
 		return -ENOMEM;
 
 	for (link_idx = 0, i = 0; link_idx < ACP7X_MAX_DAI_LINKS; link_idx++) {
+		int codec_id;
 		if (!acp_dai_link_info[link_idx].cpu_id)
 			continue;
 
@@ -1902,13 +1903,35 @@ int acp7x_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].no_pcm = 1;
 		links[i].capture_only = acp_dai_link_info[link_idx].capture_only;
 
-		if (!acp_dai_link_info[link_idx].codec_id) {
+		codec_id = acp_dai_link_info[link_idx].codec_id;
+		switch (codec_id) {
+		case DUMMY:
 			links[i].codecs = &snd_soc_dummy_dlc;
 			links[i].num_codecs = 1;
-		} else if (acp_dai_link_info[link_idx].codec_id == PDM0 ||
-			   acp_dai_link_info[link_idx].codec_id == PDM1) {
+			break;
+		case PDM0:
+		case PDM1:
 			links[i].codecs = dmic_codec;
 			links[i].num_codecs = ARRAY_SIZE(dmic_codec);
+			break;
+		case NAU8821:
+			links[i].codecs = nau8821;
+			links[i].num_codecs = ARRAY_SIZE(nau8821);
+			links[i].init = acp_8821_init;
+			links[i].ops = &acp_8821_ops;
+			break;
+		case MAX98388:
+			links[i].codecs = max98388;
+			links[i].num_codecs = ARRAY_SIZE(max98388);
+			links[i].ops = &acp_max98388_ops;
+			links[i].init = acp_card_max98388_init;
+			card->codec_conf = max98388_conf;
+			card->num_configs = ARRAY_SIZE(max98388_conf);
+			break;
+		default:
+			dev_warn(dev, "Unknown codec_id %d for link %s\n",
+				 codec_id, links[i].name);
+			break;
 		}
 		i++;
 	}
