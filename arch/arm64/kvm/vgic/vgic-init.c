@@ -129,13 +129,17 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	}
 	ret = 0;
 
-	if (type == KVM_DEV_TYPE_ARM_VGIC_V2)
+	switch (type) {
+	case KVM_DEV_TYPE_ARM_VGIC_V2:
 		kvm->max_vcpus = VGIC_V2_MAX_CPUS;
-	else if (type == KVM_DEV_TYPE_ARM_VGIC_V3)
+		break;
+	case KVM_DEV_TYPE_ARM_VGIC_V3:
 		kvm->max_vcpus = VGIC_V3_MAX_CPUS;
-	else if (type == KVM_DEV_TYPE_ARM_VGIC_V5)
-		kvm->max_vcpus = min(VGIC_V5_MAX_CPUS,
-				     kvm_vgic_global_state.max_gic_vcpus);
+		break;
+	case KVM_DEV_TYPE_ARM_VGIC_V5:
+		kvm->max_vcpus = kvm_vgic_global_state.max_gicv5_vcpus;
+		break;
+	}
 
 	if (atomic_read(&kvm->online_vcpus) > kvm->max_vcpus) {
 		ret = -E2BIG;
