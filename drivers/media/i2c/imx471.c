@@ -306,7 +306,7 @@ static int imx471_set_ctrl(struct v4l2_ctrl *ctrl)
 			v4l2_subdev_get_locked_active_state(&sensor->sd);
 	const struct v4l2_mbus_framefmt *format =
 			v4l2_subdev_state_get_format(state, 0);
-	int ret;
+	int ret = 0;
 
 	if (ctrl->id == V4L2_CID_VBLANK) {
 		s64 exposure_max = format->height + ctrl->val -
