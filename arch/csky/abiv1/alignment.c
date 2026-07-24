@@ -261,18 +261,26 @@ good_area:
 	switch (opcode) {
 	case OP_LDH:
 		addr = get_ptreg(regs, rx) + (imm << 1);
+		if (user_mode(regs) && !access_ok((void __user *)addr, 2))
+			goto bad_area;
 		ret = ldh_c(regs, rz, addr);
 		break;
 	case OP_LDW:
 		addr = get_ptreg(regs, rx) + (imm << 2);
+		if (user_mode(regs) && !access_ok((void __user *)addr, 4))
+			goto bad_area;
 		ret = ldw_c(regs, rz, addr);
 		break;
 	case OP_STH:
 		addr = get_ptreg(regs, rx) + (imm << 1);
+		if (user_mode(regs) && !access_ok((void __user *)addr, 2))
+			goto bad_area;
 		ret = sth_c(regs, rz, addr);
 		break;
 	case OP_STW:
 		addr = get_ptreg(regs, rx) + (imm << 2);
+		if (user_mode(regs) && !access_ok((void __user *)addr, 4))
+			goto bad_area;
 		ret = stw_c(regs, rz, addr);
 		break;
 	}
