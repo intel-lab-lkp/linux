@@ -332,6 +332,8 @@ read_failure:
 						wait_on_buffer(bh);
 					put_bh(bh);
 					bhs[i] = NULL;
+				} else if (bh && buffer_uptodate(bh)) {
+					clear_buffer_uptodate(bh);
 				}
 				continue;
 			}
@@ -360,11 +362,8 @@ read_failure:
 				BUG_ON(buffer_jbd(bh));
 				clear_buffer_needs_validate(bh);
 				status = validate(sb, bh);
-				if (status) {
-					if (buffer_uptodate(bh))
-						clear_buffer_uptodate(bh);
+				if (status)
 					goto read_failure;
-				}
 			}
 		}
 
