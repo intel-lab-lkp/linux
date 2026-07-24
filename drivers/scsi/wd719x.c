@@ -739,14 +739,14 @@ static void wd719x_eeprom_reg_write(struct eeprom_93cx6 *eeprom)
 /* read config from EEPROM so it can be downloaded by the RISC on (re-)init */
 static void wd719x_read_eeprom(struct wd719x *wd)
 {
-	struct eeprom_93cx6 eeprom;
+	struct eeprom_93cx6 eeprom = {
+		.data = wd,
+		.register_read = wd719x_eeprom_reg_read,
+		.register_write = wd719x_eeprom_reg_write,
+		.width = PCI_EEPROM_WIDTH_93C46,
+	};
 	u8 gpio;
 	struct wd719x_eeprom_header header;
-
-	eeprom.data = wd;
-	eeprom.register_read = wd719x_eeprom_reg_read;
-	eeprom.register_write = wd719x_eeprom_reg_write;
-	eeprom.width = PCI_EEPROM_WIDTH_93C46;
 
 	/* set all outputs to low */
 	wd719x_writeb(wd, WD719X_PCI_GPIO_DATA, 0);
