@@ -1099,9 +1099,8 @@ int smc_llc_cli_add_link(struct smc_link *link, struct smc_llc_qentry *qentry)
 	if (rc)
 		goto out_clear_lnk;
 	if (lgr->smc_version == SMC_V2) {
-		u8 *llc_msg = smc_link_shared_v2_rxbuf(link) ?
-			(u8 *)lgr->wr_rx_buf_v2 : (u8 *)llc;
-		smc_llc_save_add_link_rkeys(link, lnk_new, llc_msg);
+		smc_llc_save_add_link_rkeys(link, lnk_new,
+					    (u8 *)lgr->wr_rx_buf_v2);
 	} else {
 		rc = smc_llc_cli_rkey_exchange(link, lnk_new);
 		if (rc) {
@@ -1501,9 +1500,8 @@ int smc_llc_srv_add_link(struct smc_link *link,
 	if (rc)
 		goto out_err;
 	if (lgr->smc_version == SMC_V2) {
-		u8 *llc_msg = smc_link_shared_v2_rxbuf(link) ?
-			(u8 *)lgr->wr_rx_buf_v2 : (u8 *)add_llc;
-		smc_llc_save_add_link_rkeys(link, link_new, llc_msg);
+		smc_llc_save_add_link_rkeys(link, link_new,
+					    (u8 *)lgr->wr_rx_buf_v2);
 	} else {
 		rc = smc_llc_srv_rkey_exchange(link, link_new);
 		if (rc)
@@ -1812,12 +1810,15 @@ static void smc_llc_rmt_delete_rkey(struct smc_link_group *lgr)
 	if (lgr->smc_version == SMC_V2) {
 		struct smc_llc_msg_delete_rkey_v2 *llcv2;
 
-		if (smc_link_shared_v2_rxbuf(link)) {
-			memcpy(lgr->wr_rx_buf_v2, llc, sizeof(*llc));
-			llcv2 = (struct smc_llc_msg_delete_rkey_v2 *)lgr->wr_rx_buf_v2;
-		} else {
-			llcv2 = (struct smc_llc_msg_delete_rkey_v2 *)llc;
-		}
+		/* Restore the header - and, for a message that fits in
+		 * SMC_WR_TX_SIZE, the whole rkey array - from the per-qentry copy
+		 * for both rxbuf layouts, so a v2 message that reached
+		 * wr_rx_buf_v2 in the meantime cannot clobber it.  The body of a
+		 * larger message is already in wr_rx_buf_v2 (shared: spillover
+		 * DMA; non-shared: smc_llc_rx_handler()).
+		 */
+		memcpy(lgr->wr_rx_buf_v2, llc, sizeof(*llc));
+		llcv2 = (struct smc_llc_msg_delete_rkey_v2 *)lgr->wr_rx_buf_v2;
 		llcv2->num_inval_rkeys = 0;
 
 		max = min_t(u8, llcv2->num_rkeys, SMC_LLC_RKEYS_PER_MSG_V2);
@@ -2104,6 +2105,26 @@ static void smc_llc_rx_handler(struct ib_wc *wc, void *buf)
 	} else {
 		if (llc->raw.hdr.length_v2 < sizeof(*llc))
 			return; /* invalid message */
+		/* For the non-shared v2 rxbuf layout the message body beyond
+		 * SMC_WR_TX_SIZE lives only in the per-WR receive buffer, which
+		 * is reposted as soon as this handler returns.  The LLC event
+		 * handlers run later from a work item and read the body from
+		 * wr_rx_buf_v2, so copy it there now - only the body, mirroring
+		 * the shared-rxbuf layout where the spillover SGE DMAs the body
+		 * into wr_rx_buf_v2 + SMC_WR_TX_SIZE.  The header is left to the
+		 * handlers, which restore it from the per-qentry copy, so a later
+		 * message reaching wr_rx_buf_v2 cannot clobber it.  wr_rx_buf_v2
+		 * only exists for SMC_V2 link groups, so the link-group version
+		 * is checked (not just the wire llc_version) to avoid a NULL
+		 * dereference on a v1 link group.
+		 */
+		if (link->lgr->smc_version == SMC_V2 &&
+		    !smc_link_shared_v2_rxbuf(link) &&
+		    wc->byte_len > SMC_WR_TX_SIZE)
+			memcpy((u8 *)link->lgr->wr_rx_buf_v2 + SMC_WR_TX_SIZE,
+			       (u8 *)llc + SMC_WR_TX_SIZE,
+			       min_t(u32, wc->byte_len, SMC_WR_BUF_V2_SIZE) -
+			       SMC_WR_TX_SIZE);
 	}
 
 	smc_llc_enqueue(link, llc);
