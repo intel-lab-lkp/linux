@@ -2620,9 +2620,9 @@ void *pskb_put(struct sk_buff *skb, struct sk_buff *tail, int len)
 EXPORT_SYMBOL_GPL(pskb_put);
 
 /**
- *	skb_put - add data to a buffer
+ *	skb_put - extend the data area at the tail of a buffer
  *	@skb: buffer to use
- *	@len: amount of data to add
+ *	@len: number of bytes to extend
  *
  *	This function extends the used data area of the buffer. If this would
  *	exceed the total buffer size the kernel will panic. A pointer to the
@@ -2641,9 +2641,9 @@ void *skb_put(struct sk_buff *skb, unsigned int len)
 EXPORT_SYMBOL(skb_put);
 
 /**
- *	skb_push - add data to the start of a buffer
+ *	skb_push - extend the data area at the start of a buffer
  *	@skb: buffer to use
- *	@len: amount of data to add
+ *	@len: number of bytes to extend
  *
  *	This function extends the used data area of the buffer at the buffer
  *	start. If this would exceed the total buffer headroom the kernel will
