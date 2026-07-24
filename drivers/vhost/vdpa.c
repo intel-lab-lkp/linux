@@ -898,7 +898,7 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 	case VHOST_SET_OWNER:
 		r = vhost_vdpa_bind_mm(v);
 		if (r)
-			vhost_dev_reset_owner(d, NULL);
+			vhost_dev_reset_owner(d, NULL, false);
 		break;
 	}
 out:
@@ -1396,7 +1396,7 @@ static void vhost_vdpa_cleanup(struct vhost_vdpa *v)
 	}
 
 	vhost_vdpa_free_domain(v);
-	vhost_dev_cleanup(&v->vdev);
+	vhost_dev_cleanup(&v->vdev, false);
 	kfree(v->vdev.vqs);
 	v->vdev.vqs = NULL;
 }
