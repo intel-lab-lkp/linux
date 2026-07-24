@@ -660,7 +660,7 @@ static __initdata unsigned long lapic_cal_j1, lapic_cal_j2;
 /*
  * Temporary interrupt handler and polled calibration function.
  */
-static void __init lapic_cal_handler(struct clock_event_device *dev)
+static __noipa void __init lapic_cal_handler(struct clock_event_device *dev)
 {
 	unsigned long long tsc = 0;
 	long tapic = apic_read(APIC_TMCCT);
