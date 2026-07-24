@@ -46,6 +46,7 @@
 #define R_TEXT32		R_LARCH_32_PCREL
 #define R_TEXT64		R_LARCH_32_PCREL
 
+#define ARCH_HAS_INLINE_ALTS	1
 #define ARCH_HAS_PAIRED_RELOCS	1
 
 struct elf;
