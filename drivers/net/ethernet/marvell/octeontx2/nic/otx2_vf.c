@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/net_tstamp.h>
+#include <net/switchdev.h>
 
 #include "otx2_common.h"
 #include "otx2_reg.h"
@@ -114,6 +115,33 @@ static void otx2vf_vfaf_mbox_handler(struct work_struct *work)
 	}
 }
 
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+static int otx2vf_mbox_af2pf_fdb_refresh(struct otx2_nic *vf,
+					 struct af2pf_fdb_refresh_req *req,
+					 struct msg_rsp *rsp)
+{
+	struct switchdev_notifier_fdb_info item = {0};
+
+	item.addr = req->mac;
+	item.info.dev = vf->netdev;
+	if (req->flags & FDB_DEL)
+		call_switchdev_notifiers(SWITCHDEV_FDB_DEL_TO_BRIDGE,
+					 item.info.dev, &item.info, NULL);
+	else
+		call_switchdev_notifiers(SWITCHDEV_FDB_ADD_TO_BRIDGE,
+					 item.info.dev, &item.info, NULL);
+
+	return 0;
+}
+#else
+static int otx2vf_mbox_af2pf_fdb_refresh(struct otx2_nic *vf,
+					 struct af2pf_fdb_refresh_req *req,
+					 struct msg_rsp *rsp)
+{
+	return 0;
+}
+#endif
+
 static int otx2vf_process_mbox_msg_up(struct otx2_nic *vf,
 				      struct mbox_msghdr *req)
 {
@@ -141,6 +169,22 @@ static int otx2vf_process_mbox_msg_up(struct otx2_nic *vf,
 		err = otx2_mbox_up_handler_cgx_link_event(
 				vf, (struct cgx_link_info_msg *)req, rsp);
 		return err;
+
+	case MBOX_MSG_AF2PF_FDB_REFRESH:
+		rsp = (struct msg_rsp *)otx2_mbox_alloc_msg(&vf->mbox.mbox_up, 0,
+							    sizeof(struct msg_rsp));
+		if (!rsp)
+			return -ENOMEM;
+
+		rsp->hdr.id = MBOX_MSG_AF2PF_FDB_REFRESH;
+		rsp->hdr.sig = OTX2_MBOX_RSP_SIG;
+		rsp->hdr.pcifunc = req->pcifunc;
+		rsp->hdr.rc = 0;
+		err = otx2vf_mbox_af2pf_fdb_refresh(vf,
+						    (struct af2pf_fdb_refresh_req *)req,
+						    rsp);
+		return err;
+
 	default:
 		otx2_reply_invalid_msg(&vf->mbox.mbox_up, 0, 0, req->id);
 		return -ENODEV;
