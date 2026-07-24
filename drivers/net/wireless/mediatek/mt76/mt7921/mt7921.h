@@ -136,6 +136,7 @@ struct mt7921_dma_layout {
 enum {
 	MT7921_CLC_POWER,
 	MT7921_CLC_CHAN,
+	MT7921_CLC_REGD = 3,
 	MT7921_CLC_MAX_NUM,
 };
 
