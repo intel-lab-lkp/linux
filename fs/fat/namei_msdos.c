@@ -252,12 +252,11 @@ static int msdos_add_entry(struct inode *dir, const unsigned char *name,
 		return err;
 
 	fat_truncate_time(dir, ts, FAT_UPDATE_CMTIME);
+	mark_inode_dirty(dir);
 	if (IS_DIRSYNC(dir))
-		(void)fat_sync_inode(dir);
-	else
-		mark_inode_dirty(dir);
+		err = sync_inode_metadata(dir, 1);
 
-	return 0;
+	return err;
 }
 
 /***** Create a file */
@@ -473,21 +472,20 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 				MSDOS_I(old_inode)->i_attrs |= ATTR_HIDDEN;
 			else
 				MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
+			mark_inode_dirty(old_inode);
 			if (IS_DIRSYNC(old_dir)) {
-				err = fat_sync_inode(old_inode);
+				err = sync_inode_metadata(old_inode, 1);
 				if (err) {
 					MSDOS_I(old_inode)->i_attrs = old_attrs;
 					goto out;
 				}
-			} else
-				mark_inode_dirty(old_inode);
+			}
 
 			inode_inc_iversion(old_dir);
 			fat_truncate_time(old_dir, NULL, FAT_UPDATE_CMTIME);
+			mark_inode_dirty(old_dir);
 			if (IS_DIRSYNC(old_dir))
-				(void)fat_sync_inode(old_dir);
-			else
-				mark_inode_dirty(old_dir);
+				err = sync_inode_metadata(old_dir, 1);
 			goto out;
 		}
 	}
@@ -518,26 +516,21 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 		MSDOS_I(old_inode)->i_attrs |= ATTR_HIDDEN;
 	else
 		MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
-	if (IS_DIRSYNC(new_dir)) {
-		err = fat_sync_inode(old_inode);
-		if (err)
-			goto error_inode;
-	} else
-		mark_inode_dirty(old_inode);
-
 	if (update_dotdot) {
 		fat_set_start(dotdot_de, MSDOS_I(new_dir)->i_logstart);
 		mmb_mark_buffer_dirty(dotdot_bh,
 				      &MSDOS_I(old_inode)->i_metadata_bhs);
-		if (IS_DIRSYNC(new_dir)) {
-			err = sync_dirty_buffer(dotdot_bh);
-			if (err)
-				goto error_dotdot;
-		}
 		drop_nlink(old_dir);
 		if (!new_inode)
 			inc_nlink(new_dir);
 	}
+	mark_inode_dirty(old_inode);
+	if (IS_DIRSYNC(new_dir)) {
+		err = sync_inode_metadata(old_inode, 1);
+		if (err)
+			goto error_dotdot;
+	}
+
 
 	err = fat_remove_entries(old_dir, &old_sinfo);	/* and releases bh */
 	old_sinfo.bh = NULL;
@@ -545,10 +538,9 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 		goto error_dotdot;
 	inode_inc_iversion(old_dir);
 	fat_truncate_time(old_dir, &ts, FAT_UPDATE_CMTIME);
+	mark_inode_dirty(old_dir);
 	if (IS_DIRSYNC(old_dir))
-		(void)fat_sync_inode(old_dir);
-	else
-		mark_inode_dirty(old_dir);
+		err = sync_inode_metadata(old_dir, 1);
 
 	if (new_inode) {
 		drop_nlink(new_inode);
@@ -571,14 +563,15 @@ error_dotdot:
 				      &MSDOS_I(old_inode)->i_metadata_bhs);
 		corrupt |= sync_dirty_buffer(dotdot_bh);
 	}
-error_inode:
 	fat_detach(old_inode);
 	fat_attach(old_inode, old_sinfo.i_pos);
 	MSDOS_I(old_inode)->i_attrs = old_attrs;
 	if (new_inode) {
 		fat_attach(new_inode, new_i_pos);
-		if (corrupt)
-			corrupt |= fat_sync_inode(new_inode);
+		if (corrupt) {
+			mark_inode_dirty(new_inode);
+			corrupt |= sync_inode_metadata(new_inode, 1);
+		}
 	} else {
 		/*
 		 * If new entry was not sharing the data cluster, it

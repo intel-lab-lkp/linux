@@ -1053,11 +1053,7 @@ static int __fat_remove_entries(struct inode *dir, loff_t pos, int nr_slots)
 			nr_slots--;
 		}
 		mmb_mark_buffer_dirty(bh, &MSDOS_I(dir)->i_metadata_bhs);
-		if (IS_DIRSYNC(dir))
-			err = sync_dirty_buffer(bh);
 		brelse(bh);
-		if (err)
-			break;
 
 		/* pos is *next* de's position, so this does `- sizeof(de)' */
 		pos += ((orig_slots - nr_slots) * sizeof(*de)) - sizeof(*de);
@@ -1088,11 +1084,7 @@ int fat_remove_entries(struct inode *dir, struct fat_slot_info *sinfo)
 		nr_slots--;
 	}
 	mmb_mark_buffer_dirty(bh, &MSDOS_I(dir)->i_metadata_bhs);
-	if (IS_DIRSYNC(dir))
-		err = sync_dirty_buffer(bh);
 	brelse(bh);
-	if (err)
-		return err;
 	inode_inc_iversion(dir);
 
 	if (nr_slots) {
@@ -1109,12 +1101,12 @@ int fat_remove_entries(struct inode *dir, struct fat_slot_info *sinfo)
 	}
 
 	fat_truncate_time(dir, NULL, FAT_UPDATE_ATIME | FAT_UPDATE_CMTIME);
+	err = 0;
+	mark_inode_dirty(dir);
 	if (IS_DIRSYNC(dir))
-		(void)fat_sync_inode(dir);
-	else
-		mark_inode_dirty(dir);
+		err = sync_inode_metadata(dir, 1);
 
-	return 0;
+	return err;
 }
 EXPORT_SYMBOL_GPL(fat_remove_entries);
 
@@ -1144,20 +1136,10 @@ static int fat_zeroed_cluster(struct inode *dir, sector_t blknr, int nr_used,
 		n++;
 		blknr++;
 		if (n == nr_bhs) {
-			if (IS_DIRSYNC(dir)) {
-				err = fat_sync_bhs(bhs, n);
-				if (err)
-					goto error;
-			}
 			for (i = 0; i < n; i++)
 				brelse(bhs[i]);
 			n = 0;
 		}
-	}
-	if (IS_DIRSYNC(dir)) {
-		err = fat_sync_bhs(bhs, n);
-		if (err)
-			goto error;
 	}
 	for (i = 0; i < n; i++)
 		brelse(bhs[i]);
