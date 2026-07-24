@@ -83,6 +83,15 @@ properties:
       register access with page 0 offsets. Set for Cavium ThunderX2 silicon that
       doesn't support SMMU page1 register space.
 
+  arm,instdata-override:
+    type: boolean
+    description:
+      Override the instruction/data attribute of incoming traffic to Data
+      by setting the INSTCFG override in all Stream Table Entries. Used
+      when the smmu can't guarantee that these attributes are provided
+      correctly from the client device. Google Laguna SoC is one such
+      example for some smmu instances.
+
 allOf:
   - if:
       not:
