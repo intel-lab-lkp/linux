@@ -3373,7 +3373,7 @@ int scsi_vpd_lun_id(struct scsi_device *sdev, char *id, size_t id_len)
 {
 	u8 cur_id_prio = 0;
 	u8 cur_id_size = 0;
-	const unsigned char *d, *cur_id_str;
+	const unsigned char *d, *cur_id_str, *end;
 	const struct scsi_vpd *vpd_pg83;
 	int id_size = -EINVAL;
 
@@ -3390,11 +3390,21 @@ int scsi_vpd_lun_id(struct scsi_device *sdev, char *id, size_t id_len)
 		return -EINVAL;
 	}
 
+	if (vpd_pg83->len < 4) {
+		rcu_read_unlock();
+		return -EINVAL;
+	}
+
 	memset(id, 0, id_len);
-	for (d = vpd_pg83->data + 4;
-	     d < vpd_pg83->data + vpd_pg83->len;
+	end = vpd_pg83->data + vpd_pg83->len;
+	for (d = vpd_pg83->data + 4; end - d >= 4;
 	     d += d[3] + 4) {
-		u8 prio = designator_prio(d);
+		u8 prio;
+
+		if (d[3] > end - d - 4)
+			break;
+
+		prio = designator_prio(d);
 
 		if (prio == 0 || cur_id_prio > prio)
 			continue;
