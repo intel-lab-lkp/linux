@@ -34,10 +34,10 @@ struct dim_ch_state {
 
 struct int_ch_state {
 	/* changed only in interrupt context */
-	volatile int request_counter;
+	int request_counter;
 
 	/* changed only in task context */
-	volatile int service_counter;
+	int service_counter;
 
 	u8 idx1;
 	u8 idx2;
