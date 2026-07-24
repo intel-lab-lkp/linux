@@ -1347,8 +1347,8 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 
 	t->group = group;
 	t->state = state;
-	t->threshold = threshold_us * NSEC_PER_USEC;
-	t->win.size = window_us * NSEC_PER_USEC;
+	t->threshold = (u64)threshold_us * NSEC_PER_USEC;
+	t->win.size = (u64)window_us * NSEC_PER_USEC;
 	window_reset(&t->win, sched_clock(),
 			group->total[PSI_POLL][t->state], 0);
 
