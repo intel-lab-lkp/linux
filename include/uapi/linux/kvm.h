@@ -1191,6 +1191,13 @@ struct kvm_device_attr {
 	__u64	addr;		/* userspace address of attr data */
 };
 
+struct kvm_vgic_v5_ist {
+	__u64	spi_ist_addr;
+	__u64	spi_ist_size;
+	__u64	lpi_ist_addr;
+	__u64	lpi_ist_size;
+};
+
 #define  KVM_DEV_VFIO_FILE			1
 
 #define   KVM_DEV_VFIO_FILE_ADD			1
