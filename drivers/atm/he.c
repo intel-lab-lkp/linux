@@ -1536,9 +1536,13 @@ he_stop(struct he_dev *he_dev)
 		pci_read_config_dword(pci_dev, GEN_CNTL_0, &gen_cntl_0);
 		gen_cntl_0 &= ~(INT_PROC_ENBL | INIT_ENB);
 		pci_write_config_dword(pci_dev, GEN_CNTL_0, gen_cntl_0);
+	}
 
-		tasklet_disable(&he_dev->tasklet);
+	if (he_dev->irq)
+		free_irq(he_dev->irq, he_dev);
+	tasklet_kill(&he_dev->tasklet);
 
+	if (he_dev->membase) {
 		/* disable recv and transmit */
 
 		reg = he_readl_mbox(he_dev, CS_ERCTL0);
@@ -1554,9 +1558,6 @@ he_stop(struct he_dev *he_dev)
 	if (he_dev->atm_dev->phy && he_dev->atm_dev->phy->stop)
 		he_dev->atm_dev->phy->stop(he_dev->atm_dev);
 #endif /* CONFIG_ATM_HE_USE_SUNI */
-
-	if (he_dev->irq)
-		free_irq(he_dev->irq, he_dev);
 
 	if (he_dev->irq_base)
 		dma_free_coherent(&he_dev->pci_dev->dev, (CONFIG_IRQ_SIZE + 1)
