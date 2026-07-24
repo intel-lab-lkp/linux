@@ -15,6 +15,7 @@ properties:
     enum:
       - rockchip,px30-lvds
       - rockchip,rk3288-lvds
+      - rockchip,rk3568-lvds
 
   reg:
     maxItems: 1
@@ -120,6 +121,27 @@ allOf:
         - avdd1v0-supply
         - avdd1v8-supply
         - avdd3v3-supply
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: rockchip,rk3568-lvds
+
+    then:
+      properties:
+        reg: false
+        clocks: false
+        clock-names: false
+        avdd1v0-supply: false
+        avdd1v8-supply: false
+        avdd3v3-supply: false
+        pinctrl-names: false
+        pinctrl-0: false
+
+      required:
+        - phys
+        - phy-names
 
 additionalProperties: false
 
