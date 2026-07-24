@@ -68,6 +68,7 @@
 
 #define CMN_PLL_NSS_PPE_FREQ_CTRL		0x98
 #define CMN_PLL_NSS_CLK_SEL			GENMASK(13, 8)
+#define CMN_PLL_PPE_CLK_SEL			GENMASK(5, 0)
 #define CMN_PLL_NSS_PPE_DIV_MIN			8
 #define CMN_PLL_NSS_PPE_DIV_MAX			63
 
@@ -462,6 +463,83 @@ static struct clk_hw *ipq_cmn_pll_nss_register(struct platform_device *pdev,
 	return &nss_clk->hw;
 }
 
+/*
+ * PPE (Packet Process Engine) clock operations.
+ * The PPE clock is derived from CMN PLL rate / 2, then divided by
+ * a configurable 6-bit divider (8-63).
+ */
+static unsigned long clk_ppe_recalc_rate(struct clk_hw *hw,
+					 unsigned long parent_rate)
+{
+	struct clk_cmn_pll *ppe_clk = to_clk_cmn_pll(hw);
+	u32 val, div;
+
+	regmap_read(ppe_clk->regmap, CMN_PLL_NSS_PPE_FREQ_CTRL, &val);
+	div = FIELD_GET(CMN_PLL_PPE_CLK_SEL, val);
+	if (WARN_ON_ONCE(!div))
+		return 0;
+
+	return DIV_ROUND_CLOSEST_ULL((u64)parent_rate, 2ULL * div);
+}
+
+static int clk_ppe_set_rate(struct clk_hw *hw, unsigned long rate,
+			    unsigned long parent_rate)
+{
+	struct clk_cmn_pll *ppe_clk = to_clk_cmn_pll(hw);
+	unsigned long div;
+	int ret;
+
+	if (rate == 0)
+		return -EINVAL;
+
+	div = DIV_ROUND_CLOSEST_ULL((u64)parent_rate, 2ULL * rate);
+	if (div < CMN_PLL_NSS_PPE_DIV_MIN || div > CMN_PLL_NSS_PPE_DIV_MAX)
+		return -EINVAL;
+
+	ret = regmap_update_bits(ppe_clk->regmap, CMN_PLL_NSS_PPE_FREQ_CTRL,
+				 CMN_PLL_PPE_CLK_SEL,
+				 FIELD_PREP(CMN_PLL_PPE_CLK_SEL, div));
+	if (ret)
+		return ret;
+
+	return clk_cmn_pll_ana_soft_reset(ppe_clk->regmap);
+}
+
+static const struct clk_ops clk_ppe_ops = {
+	.recalc_rate = clk_ppe_recalc_rate,
+	.determine_rate = clk_nss_ppe_determine_rate,
+	.set_rate = clk_ppe_set_rate,
+};
+
+static struct clk_hw *ipq_cmn_pll_ppe_register(struct platform_device *pdev,
+					       struct regmap *regmap,
+					       struct clk_hw *cmn_pll_hw)
+{
+	struct clk_parent_data pdata = { .hw = cmn_pll_hw };
+	struct device *dev = &pdev->dev;
+	struct clk_init_data init = {};
+	struct clk_cmn_pll *ppe_clk;
+	int ret;
+
+	ppe_clk = devm_kzalloc(dev, sizeof(*ppe_clk), GFP_KERNEL);
+	if (!ppe_clk)
+		return ERR_PTR(-ENOMEM);
+
+	init.name = "ppe-clk";
+	init.parent_data = &pdata;
+	init.num_parents = 1;
+	init.ops = &clk_ppe_ops;
+
+	ppe_clk->hw.init = &init;
+	ppe_clk->regmap = regmap;
+
+	ret = devm_clk_hw_register(dev, &ppe_clk->hw);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return &ppe_clk->hw;
+}
+
 static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 {
 	const struct cmn_pll_fixed_output_clk *p, *fixed_clk;
@@ -507,6 +585,9 @@ static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 									 fixed_clk[i].rate);
 		} else if (!strcmp(fixed_clk[i].name, "nss")) {
 			hw = ipq_cmn_pll_nss_register(pdev, cmn_pll->regmap,
+						      cmn_pll_hw);
+		} else if (!strcmp(fixed_clk[i].name, "ppe")) {
+			hw = ipq_cmn_pll_ppe_register(pdev, cmn_pll->regmap,
 						      cmn_pll_hw);
 		} else {
 			continue;
