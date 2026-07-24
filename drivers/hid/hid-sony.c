@@ -2438,7 +2438,19 @@ static void sony_remove(struct hid_device *hdev)
 	struct sony_sc *sc = hid_get_drvdata(hdev);
 
 	if (sc->quirks & (GHL_GUITAR_PS3WIIU | GHL_GUITAR_PS4)) {
-		timer_delete_sync(&sc->ghl_poke_timer);
+		/*
+		 * ghl_magic_poke() resubmits sc->ghl_urb from the poke timer
+		 * and its completion ghl_magic_poke_cb() re-arms the timer, so
+		 * an in-flight URB can re-arm the timer after a plain
+		 * timer_delete_sync() (a no-op while the URB is in flight and
+		 * the timer is not pending).  sc is devm-allocated and freed
+		 * once sony_remove() returns, so the re-armed timer would fire
+		 * on freed memory.  Kill the URB first so no completion can
+		 * re-arm the timer, then timer_shutdown_sync() to drain it and
+		 * permanently block further re-arming.
+		 */
+		usb_kill_urb(sc->ghl_urb);
+		timer_shutdown_sync(&sc->ghl_poke_timer);
 		usb_free_urb(sc->ghl_urb);
 	}
 
