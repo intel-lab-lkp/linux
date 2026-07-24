@@ -298,14 +298,6 @@ extern pmd_t radix__pmdp_huge_get_and_clear(struct mm_struct *mm,
 pud_t radix__pudp_huge_get_and_clear(struct mm_struct *mm,
 				     unsigned long addr, pud_t *pudp);
 
-static inline int radix__has_transparent_hugepage(void)
-{
-	/* For radix 2M at PMD level means thp */
-	if (mmu_psize_defs[MMU_PAGE_2M].shift == PMD_SHIFT)
-		return 1;
-	return 0;
-}
-
 static inline int radix__has_transparent_pud_hugepage(void)
 {
 	/* For radix 1G at PUD level means pud hugepage support */
@@ -314,6 +306,14 @@ static inline int radix__has_transparent_pud_hugepage(void)
 	return 0;
 }
 #endif
+
+static inline int radix__has_transparent_hugepage(void)
+{
+	/* For radix 2M at PMD level means thp */
+	if (mmu_psize_defs[MMU_PAGE_2M].shift == PMD_SHIFT)
+		return 1;
+	return 0;
+}
 
 struct vmem_altmap;
 struct dev_pagemap;
