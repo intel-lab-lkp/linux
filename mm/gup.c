@@ -805,6 +805,43 @@ static inline bool can_follow_write_pte(pte_t pte, struct page *page,
 	return !userfaultfd_pte_wp(vma, pte);
 }
 
+/*
+ * Count the pages, starting at @address and bounded by @end, that a PTE-mapped
+ * large @folio maps contiguously and that can be returned together with the
+ * page at @address: consecutive present PTEs mapping consecutive pages of
+ * @folio with a uniform write bit, within this VMA and a single page table.
+ * Returns at least 1.
+ *
+ * gup_must_unshare() and the write-fault check are per PTE. A writable run is
+ * always safe: a writable anon page is exclusive, and FOLL_WRITE is satisfied.
+ * A read-only run is only safe for a plain read; FOLL_WRITE would need a COW
+ * fault per page and FOLL_PIN would need a per-page gup_must_unshare() check,
+ * so those fall back to a single page.
+ */
+static unsigned long follow_pte_batch(struct vm_area_struct *vma,
+		unsigned long address, unsigned long end, struct folio *folio,
+		struct page *page, pte_t *ptep, pte_t pte, unsigned int flags)
+{
+	pte_t batch_pte = pte;
+	unsigned long max;
+
+	if (!pte_write(pte) && (flags & (FOLL_WRITE | FOLL_PIN)))
+		return 1;
+
+	/*
+	 * folio_pte_batch_flags() scans forward from @ptep, so the run must
+	 * stay within this page table: bound it by the PMD as well as @end and
+	 * the VMA, since a large folio can be PTE-mapped across a PMD boundary.
+	 */
+	max = min((pmd_addr_end(address, end) - address) >> PAGE_SHIFT,
+		  (vma->vm_end - address) >> PAGE_SHIFT);
+	if (max <= 1)
+		return 1;
+
+	return folio_pte_batch_flags(folio, vma, ptep, &batch_pte, max,
+				     FPB_RESPECT_WRITE);
+}
+
 static struct page *follow_page_pte(struct vm_area_struct *vma,
 		unsigned long address, unsigned long end, pmd_t *pmd,
 		unsigned int flags, unsigned long *nr_pages)
@@ -893,6 +930,14 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 		folio_mark_accessed(folio);
 	}
 
+	/*
+	 * A PTE-mapped large folio can be handed back as a contiguous batch,
+	 * so the caller advances over the whole run in one step instead of
+	 * walking the page tables for every page.
+	 */
+	if (folio_test_large(folio))
+		*nr_pages = follow_pte_batch(vma, address, end, folio, page,
+					     ptep, pte, flags);
 out:
 	pte_unmap_unlock(ptep, ptl);
 	return page;
