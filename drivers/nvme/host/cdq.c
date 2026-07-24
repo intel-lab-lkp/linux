@@ -243,9 +243,27 @@ static int nvme_submit_delete_cdq_cmd(const struct cdq_nvme_queue *cdq)
 	return __nvme_submit_sync_cmd(cdq->ctrl->admin_q, &c, NULL, NULL, 0, NVME_QID_ANY, 0);
 }
 
+static int nvme_submit_startstop_cdq_cmd(struct cdq_nvme_queue *cdq, uint startstop)
+{
+	struct nvme_command c = {
+		.track_send.opcode = nvme_admin_track_send,
+		.track_send.sel = NVME_TRSND_CMD_MGMT_LOG_USR_DATA,
+		.track_send.mos = cpu_to_le16(startstop),
+		.track_send.dw11 = cpu_to_le32((u32)cdq->id)
+	};
+
+	return  __nvme_submit_sync_cmd(cdq->ctrl->admin_q, &c, NULL, NULL, 0, NVME_QID_ANY, 0);
+}
+#define nvme_start_cdq(cdq) \
+	nvme_submit_startstop_cdq_cmd(cdq, NVME_TRSND_CMD_MGMT_LOG_USR_DATA_START)
+#define nvme_stop_cdq(cdq) \
+	nvme_submit_startstop_cdq_cmd(cdq, NVME_TRSND_CMD_MGMT_LOG_USR_DATA_STOP)
+
 /* Sends a CDQ delete NVMe cmd */
 static void nvme_delete_cdq_ctrl(struct cdq_nvme_queue *cdq)
 {
+	if (nvme_stop_cdq(cdq))
+		WARN_ONCE(1, "Failed to stop CDQ (id: %d)", cdq->id);
 	if (nvme_submit_delete_cdq_cmd(cdq))
 		WARN_ONCE(1, "Failed delete CDQ (id: %d)", cdq->id);
 }
@@ -337,6 +355,9 @@ int nvme_create_cdq(struct nvme_ctrl *ctrl, const u32 entry_nr, const u16 mc_id)
 	if (ret)
 		goto del_xarray;
 
+	ret = nvme_start_cdq(cdq);
+	if (ret)
+		goto del_xarray;
 	return 0;
 
 del_xarray:
