@@ -267,8 +267,17 @@ static int sky1_reset_set(struct reset_controller_dev *rcdev,
 			  unsigned long id, bool assert)
 {
 	struct sky1_src *sky1src = to_sky1_src(rcdev);
-	const struct sky1_src_signal *signal = &sky1src->signals[id];
-	unsigned int value = assert ? 0 : signal->bit;
+	const struct sky1_src_signal *signal;
+	unsigned int value;
+
+	if (id >= sky1src->rcdev.nr_resets)
+		return -EINVAL;
+
+	signal = &sky1src->signals[id];
+	if (!signal->offset && !signal->bit)
+		return -EINVAL;
+
+	value = assert ? 0 : signal->bit;
 
 	return regmap_update_bits(sky1src->regmap,
 				  signal->offset, signal->bit, value);
@@ -277,7 +286,12 @@ static int sky1_reset_set(struct reset_controller_dev *rcdev,
 static int sky1_reset_assert(struct reset_controller_dev *rcdev,
 			     unsigned long id)
 {
-	sky1_reset_set(rcdev, id, true);
+	int ret;
+
+	ret = sky1_reset_set(rcdev, id, true);
+	if (ret)
+		return ret;
+
 	usleep_range(SKY1_RESET_SLEEP_MIN_US,
 		     SKY1_RESET_SLEEP_MAX_US);
 	return 0;
@@ -286,7 +300,12 @@ static int sky1_reset_assert(struct reset_controller_dev *rcdev,
 static int sky1_reset_deassert(struct reset_controller_dev *rcdev,
 			       unsigned long id)
 {
-	sky1_reset_set(rcdev, id, false);
+	int ret;
+
+	ret = sky1_reset_set(rcdev, id, false);
+	if (ret)
+		return ret;
+
 	usleep_range(SKY1_RESET_SLEEP_MIN_US,
 		     SKY1_RESET_SLEEP_MAX_US);
 	return 0;
@@ -295,19 +314,34 @@ static int sky1_reset_deassert(struct reset_controller_dev *rcdev,
 static int sky1_reset(struct reset_controller_dev *rcdev,
 		      unsigned long id)
 {
-	sky1_reset_assert(rcdev, id);
-	sky1_reset_deassert(rcdev, id);
-	return 0;
+	int ret;
+
+	ret = sky1_reset_assert(rcdev, id);
+	if (ret)
+		return ret;
+
+	return sky1_reset_deassert(rcdev, id);
 }
 
 static int sky1_reset_status(struct reset_controller_dev *rcdev,
 			     unsigned long id)
 {
-	unsigned int value = 0;
 	struct sky1_src *sky1src = to_sky1_src(rcdev);
-	const struct sky1_src_signal *signal = &sky1src->signals[id];
+	const struct sky1_src_signal *signal;
+	unsigned int value = 0;
+	int ret;
 
-	regmap_read(sky1src->regmap, signal->offset, &value);
+	if (id >= sky1src->rcdev.nr_resets)
+		return -EINVAL;
+
+	signal = &sky1src->signals[id];
+	if (!signal->offset && !signal->bit)
+		return -EINVAL;
+
+	ret = regmap_read(sky1src->regmap, signal->offset, &value);
+	if (ret)
+		return ret;
+
 	return !(value & signal->bit);
 }
 
