@@ -1637,6 +1637,7 @@ enum nvme_admin_opcode {
 	nvme_admin_virtual_mgmt		= 0x1c,
 	nvme_admin_nvme_mi_send		= 0x1d,
 	nvme_admin_nvme_mi_recv		= 0x1e,
+	nvme_admin_track_send		= 0x3d,
 	nvme_admin_lm_send		= 0x41,
 	nvme_admin_lm_recv		= 0x42,
 	nvme_admin_cdq			= 0x45,
@@ -1681,7 +1682,8 @@ enum nvme_admin_opcode {
 		nvme_admin_opcode_name(nvme_admin_security_recv),	\
 		nvme_admin_opcode_name(nvme_admin_sanitize_nvm),	\
 		nvme_admin_opcode_name(nvme_admin_get_lba_status),	\
-		nvme_admin_opcode_name(nvme_admin_cdq))
+		nvme_admin_opcode_name(nvme_admin_cdq),			\
+		nvme_admin_opcode_name(nvme_admin_track_send))
 
 enum {
 	NVME_QUEUE_PHYS_CONTIG	= (1 << 0),
@@ -1957,6 +1959,28 @@ struct nvme_cdq_command {
 	union nvme_cdq_cmd_dw11	dw11;
 	__le32			cdqsize;
 	__u32			rsvd13[3];
+};
+
+// These are the values for select in dword10
+enum nvme_track_send_cmd_mgmt_op {
+	NVME_TRSND_CMD_MGMT_LOG_USR_DATA = 0x0,
+	NVME_TRSND_CMD_MGMT_TRACK_MEM = 0x1
+};
+
+// These are the values for Logging action LACT
+#define NVME_TRSND_CMD_MGMT_LOG_USR_DATA_START	0x1
+#define NVME_TRSND_CMD_MGMT_LOG_USR_DATA_STOP	0x0
+
+struct track_send_cmd {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__u32			rsvd1[9];
+	__u8			sel;
+	__u8			rsvd10;
+	__le16			mos;
+	__le32			dw11;
+	__u32			rsvd12[4];
 };
 
 /*
@@ -2378,6 +2402,7 @@ struct nvme_command {
 		struct nvme_lm_command lm;
 		struct nvme_io_mgmt_recv_cmd imr;
 		struct nvme_cdq_command cdq;
+		struct track_send_cmd track_send;
 	};
 };
 
