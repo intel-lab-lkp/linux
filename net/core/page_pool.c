@@ -505,6 +505,7 @@ static int page_pool_release_dma_index(struct page_pool *pool,
 {
 	struct page *old, *page = netmem_to_page(netmem);
 	unsigned long id;
+	int ret = 0;
 
 	if (unlikely(!PP_DMA_INDEX_BITS))
 		return 0;
@@ -517,12 +518,18 @@ static int page_pool_release_dma_index(struct page_pool *pool,
 		old = xa_cmpxchg(&pool->dma_mapped, id, page, NULL, 0);
 	else
 		old = xa_cmpxchg_bh(&pool->dma_mapped, id, page, NULL, 0);
-	if (old != page)
-		return -1;
+	if (old != page) {
+		/* xarray entry already removed by concurrent release path
+		 * (e.g. page_pool_scrub). Still clear DMA index bits to
+		 * keep pp_magic consistent. The winner of the xa_cmpxchg
+		 * race is responsible for dma_unmap.
+		 */
+		ret = -1;
+	}
 
 	netmem_set_dma_index(netmem, 0);
 
-	return 0;
+	return ret;
 }
 
 static bool page_pool_dma_map(struct page_pool *pool, netmem_ref netmem, gfp_t gfp)
