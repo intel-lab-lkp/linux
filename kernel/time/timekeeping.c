@@ -859,6 +859,7 @@ static void timekeeping_update_from_shadow(struct tk_data *tkd, unsigned int act
 	 * the cacheline optimized data layout of the timekeeper and requires
 	 * another indirection.
 	 */
+	WRITE_ONCE(tkd->timekeeper.xtime_sec, tk->xtime_sec);
 	memcpy(&tkd->timekeeper, tk, sizeof(*tk));
 	write_seqcount_end(&tkd->seq);
 }
@@ -1186,11 +1187,11 @@ time64_t ktime_get_real_seconds(void)
 	unsigned int seq;
 
 	if (IS_ENABLED(CONFIG_64BIT))
-		return tk->xtime_sec;
+		return READ_ONCE(tk->xtime_sec);
 
 	do {
 		seq = read_seqcount_begin(&tk_core.seq);
-		seconds = tk->xtime_sec;
+		seconds = READ_ONCE(tk->xtime_sec);
 
 	} while (read_seqcount_retry(&tk_core.seq, seq));
 
@@ -1212,7 +1213,7 @@ noinstr time64_t __ktime_get_real_seconds(void)
 {
 	struct timekeeper *tk = &tk_core.timekeeper;
 
-	return tk->xtime_sec;
+	return READ_ONCE(tk->xtime_sec);
 }
 
 static inline u64 tk_clock_read_snapshot(const struct tk_read_base *tkr,
