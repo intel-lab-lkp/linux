@@ -66,6 +66,11 @@
 #define CMN_PLL_LOCKED				0x64
 #define CMN_PLL_CLKS_LOCKED			BIT(8)
 
+#define CMN_PLL_NSS_PPE_FREQ_CTRL		0x98
+#define CMN_PLL_NSS_CLK_SEL			GENMASK(13, 8)
+#define CMN_PLL_NSS_PPE_DIV_MIN			8
+#define CMN_PLL_NSS_PPE_DIV_MAX			63
+
 #define CMN_PLL_POWER_ON_AND_RESET		0x780
 #define CMN_ANA_EN_SW_RSTN			BIT(6)
 
@@ -364,11 +369,105 @@ static struct clk_hw *ipq_cmn_pll_clk_hw_register(struct platform_device *pdev)
 	return &cmn_pll->hw;
 }
 
+/*
+ * NSS (Network Subsystem) clock operations.
+ * The NSS clock is derived from CMN PLL rate / 2, then divided by
+ * a configurable 6-bit divider (8-63).
+ */
+static unsigned long clk_nss_recalc_rate(struct clk_hw *hw,
+					 unsigned long parent_rate)
+{
+	struct clk_cmn_pll *nss_clk = to_clk_cmn_pll(hw);
+	u32 val, div;
+
+	regmap_read(nss_clk->regmap, CMN_PLL_NSS_PPE_FREQ_CTRL, &val);
+	div = FIELD_GET(CMN_PLL_NSS_CLK_SEL, val);
+	if (WARN_ON_ONCE(!div))
+		return 0;
+
+	return DIV_ROUND_CLOSEST_ULL((u64)parent_rate, 2ULL * div);
+}
+
+static int clk_nss_ppe_determine_rate(struct clk_hw *hw,
+				      struct clk_rate_request *req)
+{
+	unsigned long div;
+
+	if (WARN_ON_ONCE(!req->rate))
+		return 0;
+
+	div = DIV_ROUND_CLOSEST_ULL((u64)req->best_parent_rate, 2ULL * req->rate);
+	div = clamp_t(unsigned long, div, CMN_PLL_NSS_PPE_DIV_MIN,
+		      CMN_PLL_NSS_PPE_DIV_MAX);
+
+	req->rate = DIV_ROUND_CLOSEST_ULL((u64)req->best_parent_rate, 2ULL * div);
+	return 0;
+}
+
+static int clk_nss_set_rate(struct clk_hw *hw, unsigned long rate,
+			    unsigned long parent_rate)
+{
+	struct clk_cmn_pll *nss_clk = to_clk_cmn_pll(hw);
+	unsigned long div;
+	int ret;
+
+	if (rate == 0)
+		return -EINVAL;
+
+	div = DIV_ROUND_CLOSEST_ULL((u64)parent_rate, 2ULL * rate);
+	if (div < CMN_PLL_NSS_PPE_DIV_MIN || div > CMN_PLL_NSS_PPE_DIV_MAX)
+		return -EINVAL;
+
+	ret = regmap_update_bits(nss_clk->regmap, CMN_PLL_NSS_PPE_FREQ_CTRL,
+				 CMN_PLL_NSS_CLK_SEL,
+				 FIELD_PREP(CMN_PLL_NSS_CLK_SEL, div));
+	if (ret)
+		return ret;
+
+	return clk_cmn_pll_ana_soft_reset(nss_clk->regmap);
+}
+
+static const struct clk_ops clk_nss_ops = {
+	.recalc_rate = clk_nss_recalc_rate,
+	.determine_rate = clk_nss_ppe_determine_rate,
+	.set_rate = clk_nss_set_rate,
+};
+
+static struct clk_hw *ipq_cmn_pll_nss_register(struct platform_device *pdev,
+					       struct regmap *regmap,
+					       struct clk_hw *cmn_pll_hw)
+{
+	struct clk_parent_data pdata = { .hw = cmn_pll_hw };
+	struct device *dev = &pdev->dev;
+	struct clk_init_data init = {};
+	struct clk_cmn_pll *nss_clk;
+	int ret;
+
+	nss_clk = devm_kzalloc(dev, sizeof(*nss_clk), GFP_KERNEL);
+	if (!nss_clk)
+		return ERR_PTR(-ENOMEM);
+
+	init.name = "nss-clk";
+	init.parent_data = &pdata;
+	init.num_parents = 1;
+	init.ops = &clk_nss_ops;
+
+	nss_clk->hw.init = &init;
+	nss_clk->regmap = regmap;
+
+	ret = devm_clk_hw_register(dev, &nss_clk->hw);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return &nss_clk->hw;
+}
+
 static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 {
 	const struct cmn_pll_fixed_output_clk *p, *fixed_clk;
 	struct clk_hw_onecell_data *hw_data;
 	struct device *dev = &pdev->dev;
+	struct clk_cmn_pll *cmn_pll;
 	struct clk_hw *cmn_pll_hw;
 	unsigned int num_clks;
 	struct clk_hw *hw;
@@ -395,14 +494,24 @@ static int ipq_cmn_pll_register_clks(struct platform_device *pdev)
 	if (IS_ERR(cmn_pll_hw))
 		return PTR_ERR(cmn_pll_hw);
 
+	cmn_pll = to_clk_cmn_pll(cmn_pll_hw);
+
 	/* Register the fixed rate output clocks. */
 	for (i = 0; i < num_clks; i++) {
-		struct clk_parent_data pdata = { .hw = cmn_pll_hw };
+		if (fixed_clk[i].rate) {
+			struct clk_parent_data pdata = { .hw = cmn_pll_hw };
 
-		hw = devm_clk_hw_register_fixed_rate_parent_data(dev,
-								 fixed_clk[i].name,
-								 &pdata, 0,
-								 fixed_clk[i].rate);
+			hw = devm_clk_hw_register_fixed_rate_parent_data(dev,
+									 fixed_clk[i].name,
+									 &pdata, 0,
+									 fixed_clk[i].rate);
+		} else if (!strcmp(fixed_clk[i].name, "nss")) {
+			hw = ipq_cmn_pll_nss_register(pdev, cmn_pll->regmap,
+						      cmn_pll_hw);
+		} else {
+			continue;
+		}
+
 		if (IS_ERR(hw))
 			return PTR_ERR(hw);
 
