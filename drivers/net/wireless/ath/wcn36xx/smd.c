@@ -3254,6 +3254,11 @@ int wcn36xx_smd_rsp_process(struct rpmsg_device *rpdev,
 	struct wcn36xx_hal_ind_msg *msg_ind;
 	wcn36xx_dbg_dump(WCN36XX_DBG_SMD_DUMP, "SMD <<< ", buf, len);
 
+	if (len < sizeof(*msg_header)) {
+		wcn36xx_warn("Corrupted HAL message: length %d\n", len);
+		return 0;
+	}
+
 	switch (msg_header->msg_type) {
 	case WCN36XX_HAL_START_RSP:
 	case WCN36XX_HAL_CONFIG_STA_RSP:
