@@ -2052,9 +2052,13 @@ int pci_setup_device(struct pci_dev *dev)
 	 */
 	dev->msi_addr_mask = DMA_BIT_MASK(64);
 
-	dev_set_name(&dev->dev, "%04x:%02x:%02x.%d", pci_domain_nr(dev->bus),
-		     dev->bus->number, PCI_SLOT(dev->devfn),
-		     PCI_FUNC(dev->devfn));
+	err = dev_set_name(&dev->dev, "%04x:%02x:%02x.%d",
+			   pci_domain_nr(dev->bus), dev->bus->number,
+			   PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+	if (err) {
+		pci_release_of_node(dev);
+		return err;
+	}
 
 	class = pci_class(dev);
 
