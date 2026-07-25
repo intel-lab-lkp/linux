@@ -2279,7 +2279,7 @@ skip_init_ctx:
 			goto out_free_hdr;
 		}
 		if (WARN_ON(bpf_jit_binary_pack_finalize(ro_header, header))) {
-			/* ro_header and header has been freed */
+			bpf_jit_binary_pack_free(ro_header, NULL);
 			ro_header = NULL;
 			header = NULL;
 			goto out_free_hdr;
@@ -2328,11 +2328,8 @@ out_free_hdr:
 		prog->jited = 0;
 		prog->jited_len = 0;
 	}
-	if (header) {
-		bpf_arch_text_copy(&ro_header->size, &header->size,
-				   sizeof(header->size));
+	if (header)
 		bpf_jit_binary_pack_free(ro_header, header);
-	}
 	goto out_off;
 }
 
