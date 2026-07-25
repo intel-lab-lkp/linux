@@ -72,9 +72,12 @@ nouveau_sgdma_create_ttm(struct ttm_buffer_object *bo, uint32_t page_flags)
 	struct nouveau_sgdma_be *nvbe;
 	enum ttm_caching caching;
 
-	if (nvbo->force_coherent)
-		caching = ttm_uncached;
-	else if (drm->agp.bridge)
+	if (nvbo->force_coherent) {
+		if (drm->client.device.info.platform == NV_DEVICE_INFO_V0_SOC)
+			caching = ttm_write_combined;
+		else
+			caching = ttm_uncached;
+	} else if (drm->agp.bridge)
 		caching = ttm_write_combined;
 	else
 		caching = ttm_cached;
