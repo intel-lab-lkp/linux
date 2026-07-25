@@ -13,6 +13,7 @@ if SPMI
 
 config SPMI_APPLE
 	tristate "Apple SoC SPMI Controller platform driver"
+	select IRQ_DOMAIN_HIERARCHY
 	depends on ARCH_APPLE || COMPILE_TEST
 	help
 	  If you say yes to this option, support will be included for the
