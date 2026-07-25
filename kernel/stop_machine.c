@@ -15,12 +15,14 @@
 #include <linux/export.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
+#include <linux/sched/clock.h>
 #include <linux/stop_machine.h>
 #include <linux/interrupt.h>
 #include <linux/kallsyms.h>
 #include <linux/smpboot.h>
 #include <linux/atomic.h>
 #include <linux/nmi.h>
+#include <linux/time64.h>
 #include <linux/sched/wake_q.h>
 
 /*
@@ -174,6 +176,7 @@ struct multi_stop_data {
 
 	enum multi_stop_state	state;
 	atomic_t		thread_ack;
+	u64			tstamp;
 };
 
 static void set_state(struct multi_stop_data *msdata,
@@ -181,6 +184,7 @@ static void set_state(struct multi_stop_data *msdata,
 {
 	/* Reset ack counter. */
 	atomic_set(&msdata->thread_ack, msdata->num_threads);
+	WRITE_ONCE(msdata->tstamp, local_clock());
 	smp_wmb();
 	WRITE_ONCE(msdata->state, newstate);
 }
@@ -197,6 +201,9 @@ notrace void __weak stop_machine_yield(const struct cpumask *cpumask)
 	cpu_relax();
 }
 
+/* how long a state may sit unacked before waiting CPUs complain */
+#define MULTI_STOP_STUCK_NS	(10ULL * NSEC_PER_SEC)
+
 /* This is the cpu_stop function which stops the CPU. */
 static int multi_cpu_stop(void *data)
 {
@@ -205,7 +212,7 @@ static int multi_cpu_stop(void *data)
 	int cpu = smp_processor_id(), err = 0;
 	const struct cpumask *cpumask;
 	unsigned long flags;
-	bool is_active;
+	bool is_active, stuck = false;
 
 	/*
 	 * When called from stop_machine_from_inactive_cpu(), irq might
@@ -250,6 +257,18 @@ static int multi_cpu_stop(void *data)
 			touch_nmi_watchdog();
 			/* Also suppress RCU CPU stall warnings. */
 			rcu_momentary_eqs();
+			/*
+			 * the watchdogs above eat the evidence, a CPU that
+			 * never acks hangs us silently. every waiter yells
+			 * once, the culprit is the one missing from the log.
+			 */
+			if (!stuck &&
+			    local_clock() - READ_ONCE(msdata->tstamp) > MULTI_STOP_STUCK_NS) {
+				stuck = true;
+				pr_warn("%s: CPU %d stuck in state %d (%ps), %d acks missing\n",
+					__func__, cpu, curstate, msdata->fn,
+					atomic_read(&msdata->thread_ack));
+			}
 		}
 	} while (curstate != MULTI_STOP_EXIT);
 
