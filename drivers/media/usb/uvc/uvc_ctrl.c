@@ -30,7 +30,8 @@
 #define UVC_CTRL_DATA_MAX	3
 #define UVC_CTRL_DATA_RES	4
 #define UVC_CTRL_DATA_DEF	5
-#define UVC_CTRL_DATA_LAST	6
+#define UVC_CTRL_DATA_LIVE	6
+#define UVC_CTRL_DATA_LAST	7
 
 /* ------------------------------------------------------------------------
  * Controls
@@ -302,7 +303,8 @@ static const struct uvc_control_info uvc_ctrls[] = {
 		.flags		= UVC_CTRL_FLAG_SET_CUR
 				| UVC_CTRL_FLAG_GET_RANGE
 				| UVC_CTRL_FLAG_RESTORE
-				| UVC_CTRL_FLAG_AUTO_UPDATE,
+				| UVC_CTRL_FLAG_AUTO_UPDATE
+				| UVC_CTRL_FLAG_VOLATILE,
 	},
 	{
 		.entity		= UVC_GUID_UVC_CAMERA,
@@ -1499,22 +1501,58 @@ static int __uvc_ctrl_load_cur(struct uvc_video_chain *chain,
 	return ret;
 }
 
+/*
+ * Query the device for the current value of a volatile control, storing it in
+ * a buffer of its own. UVC_CTRL_DATA_CURRENT is deliberately left alone: it
+ * holds the value last commanded by the host, which is what the
+ * read-modify-write path in uvc_ctrl_set() must use to preserve the fields of
+ * a multi-field control that the caller is not writing.
+ */
+static int __uvc_ctrl_load_live(struct uvc_video_chain *chain,
+				struct uvc_control *ctrl)
+{
+	u8 *data = uvc_ctrl_data(ctrl, UVC_CTRL_DATA_LIVE);
+
+	if (ctrl->entity->get_cur)
+		return ctrl->entity->get_cur(chain->dev, ctrl->entity,
+					     ctrl->info.selector, data,
+					     ctrl->info.size);
+
+	return uvc_query_ctrl(chain->dev, UVC_GET_CUR, ctrl->entity->id,
+			      chain->dev->intfnum, ctrl->info.selector, data,
+			      ctrl->info.size);
+}
+
 static int __uvc_ctrl_get(struct uvc_video_chain *chain,
 			  struct uvc_control *ctrl,
 			  struct uvc_control_mapping *mapping,
 			  s32 *value)
 {
+	int id = UVC_CTRL_DATA_CURRENT;
 	int ret;
 
 	if ((ctrl->info.flags & UVC_CTRL_FLAG_GET_CUR) == 0)
 		return -EACCES;
 
-	ret = __uvc_ctrl_load_cur(chain, ctrl);
+	/*
+	 * A volatile control tracks a quantity that varies without host
+	 * intervention, so the cache cannot be trusted and the device is
+	 * queried on every read. Values staged by uvc_ctrl_set() but not yet
+	 * committed take precedence, so that reading back a control inside an
+	 * uncommitted transaction returns what the caller just wrote.
+	 */
+	if ((ctrl->info.flags & UVC_CTRL_FLAG_VOLATILE) && !ctrl->dirty) {
+		ret = __uvc_ctrl_load_live(chain, ctrl);
+		id = UVC_CTRL_DATA_LIVE;
+	} else {
+		ret = __uvc_ctrl_load_cur(chain, ctrl);
+	}
+
 	if (ret < 0)
 		return ret;
 
 	*value = uvc_mapping_get_s32(mapping, UVC_GET_CUR,
-				     uvc_ctrl_data(ctrl, UVC_CTRL_DATA_CURRENT));
+				     uvc_ctrl_data(ctrl, id));
 
 	return 0;
 }
@@ -1840,6 +1878,17 @@ static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 	if ((ctrl->info.flags & UVC_CTRL_FLAG_GET_MAX) &&
 	    (ctrl->info.flags & UVC_CTRL_FLAG_GET_MIN))
 		v4l2_ctrl->flags |= V4L2_CTRL_FLAG_HAS_WHICH_MIN_MAX;
+	if (ctrl->info.flags & UVC_CTRL_FLAG_VOLATILE) {
+		v4l2_ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
+		/*
+		 * Writes to a volatile control are documented to be ignored
+		 * unless EXECUTE_ON_WRITE is also reported. The driver
+		 * propagates every write of a writable control to the device,
+		 * so report the flag accordingly.
+		 */
+		if (ctrl->info.flags & UVC_CTRL_FLAG_SET_CUR)
+			v4l2_ctrl->flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
+	}
 
 	if (mapping->master_id)
 		__uvc_find_control(ctrl->entity, mapping->master_id,
