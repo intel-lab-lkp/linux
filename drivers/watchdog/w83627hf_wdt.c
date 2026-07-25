@@ -41,9 +41,6 @@
 #define WATCHDOG_NAME "w83627hf/thf/hg/dhg WDT"
 #define WATCHDOG_TIMEOUT 60		/* 60 sec default timeout */
 
-static int wdt_cfg_enter = 0x87;/* key to unlock configuration space */
-static int wdt_cfg_leave = 0xAA;/* key to lock configuration space */
-
 enum chips { w83627hf, w83627s, w83697hf, w83697ug, w83637hf, w83627thf,
 	     w83687thf, w83627ehf, w83627dhg, w83627uhg, w83667hg, w83627dhg_p,
 	     w83667hg_b, nct6775, nct6776, nct6779, nct6791, nct6792, nct6793,
@@ -121,7 +118,10 @@ MODULE_PARM_DESC(early_disable, "Disable watchdog at boot time (default=0)");
 #define WDT_CTRL_RISING_EDGE_KBD_RESET	BIT(2)
 #define WDT_CTRL_MINUTE_MODE		BIT(3)
 
-struct wdt_pdata {};
+struct wdt_pdata {
+	int siocfg_enter;
+	int siocfg_leave;
+};
 
 struct w83627hf_data {
 	struct watchdog_device wdd;
@@ -132,6 +132,8 @@ struct w83627hf_data {
 		int csr;
 	} reg;
 	int sioaddr;
+	int siocfg_enter;
+	int siocfg_leave;
 };
 
 static void superio_outb(int base, int reg, int val)
@@ -146,13 +148,13 @@ static inline int superio_inb(int base, int reg)
 	return inb(base + 1);
 }
 
-static int superio_enter(int base)
+static int superio_enter(int base, int enter)
 {
 	if (!request_muxed_region(base, 2, WATCHDOG_NAME))
 		return -EBUSY;
 
-	outb_p(wdt_cfg_enter, base); /* Enter extended function mode */
-	outb_p(wdt_cfg_enter, base); /* Again according to manual */
+	outb_p(enter, base); /* Enter extended function mode */
+	outb_p(enter, base); /* Again according to manual */
 
 	return 0;
 }
@@ -162,9 +164,9 @@ static void superio_select(int base, int ld)
 	superio_outb(base, SIO_REG_LDSEL, ld);
 }
 
-static void superio_exit(int base)
+static void superio_exit(int base, int leave)
 {
-	outb_p(wdt_cfg_leave, base); /* Leave extended function mode */
+	outb_p(leave, base); /* Leave extended function mode */
 	release_region(base, 2);
 }
 
@@ -174,7 +176,7 @@ static int w83627hf_init(struct watchdog_device *wdog, enum chips chip)
 	int ret;
 	unsigned char t;
 
-	ret = superio_enter(data->sioaddr);
+	ret = superio_enter(data->sioaddr, data->siocfg_enter);
 	if (ret)
 		return ret;
 
@@ -277,7 +279,7 @@ static int w83627hf_init(struct watchdog_device *wdog, enum chips chip)
 	t &= ~(WDT_CSR_STATUS | WDT_CSR_KBD_INT_RESET | WDT_CSR_MOUSE_INT_RESET);
 	superio_outb(data->sioaddr, data->reg.csr, t);
 
-	superio_exit(data->sioaddr);
+	superio_exit(data->sioaddr, data->siocfg_leave);
 
 	return 0;
 }
@@ -287,13 +289,13 @@ static int wdt_set_time(struct watchdog_device *wdog, unsigned int timeout)
 	struct w83627hf_data *data = watchdog_get_drvdata(wdog);
 	int ret;
 
-	ret = superio_enter(data->sioaddr);
+	ret = superio_enter(data->sioaddr, data->siocfg_enter);
 	if (ret)
 		return ret;
 
 	superio_select(data->sioaddr, W83627HF_LD_WDT);
 	superio_outb(data->sioaddr, data->reg.timeout, timeout);
-	superio_exit(data->sioaddr);
+	superio_exit(data->sioaddr, data->siocfg_leave);
 
 	return 0;
 }
@@ -321,13 +323,13 @@ static unsigned int wdt_get_time(struct watchdog_device *wdog)
 	unsigned int timeleft;
 	int ret;
 
-	ret = superio_enter(data->sioaddr);
+	ret = superio_enter(data->sioaddr, data->siocfg_enter);
 	if (ret)
 		return 0;
 
 	superio_select(data->sioaddr, W83627HF_LD_WDT);
 	timeleft = superio_inb(data->sioaddr, data->reg.timeout);
-	superio_exit(data->sioaddr);
+	superio_exit(data->sioaddr, data->siocfg_leave);
 
 	return timeleft;
 }
@@ -349,12 +351,12 @@ static const struct watchdog_ops wdt_ops = {
  *	turn the timebomb registers off.
  */
 
-static int wdt_find(int addr)
+static int wdt_find(int addr, int enter, int leave)
 {
 	u8 val;
 	int ret;
 
-	ret = superio_enter(addr);
+	ret = superio_enter(addr, enter);
 	if (ret)
 		return ret;
 	superio_select(addr, W83627HF_LD_WDT);
@@ -441,13 +443,14 @@ static int wdt_find(int addr)
 		pr_err("Unsupported chip ID: 0x%02x\n", val);
 		break;
 	}
-	superio_exit(addr);
+	superio_exit(addr, leave);
 	return ret;
 }
 
 static int wdt_probe(struct platform_device *pdev)
 {
 	const struct platform_device_id *id = platform_get_device_id(pdev);
+	const struct wdt_pdata *pdata = pdev->dev.platform_data;
 	enum chips chip = id->driver_data;
 	struct watchdog_device *wdd;
 	struct w83627hf_data *data;
@@ -477,6 +480,8 @@ static int wdt_probe(struct platform_device *pdev)
 	wdd->max_timeout = 255;
 
 	data->sioaddr = res->start;
+	data->siocfg_enter = pdata->siocfg_enter;
+	data->siocfg_leave = pdata->siocfg_leave;
 	data->reg.timeout = W83627HF_WDT_TIMEOUT;
 	data->reg.control = W83627HF_WDT_CONTROL;
 	data->reg.csr = W836X7HF_WDT_CSR;
@@ -520,11 +525,15 @@ static int wdt_probe(struct platform_device *pdev)
  */
 static int __init wdt_use_alt_key(const struct dmi_system_id *d)
 {
-	wdt_cfg_enter = 0x88;
-	wdt_cfg_leave = 0xBB;
+	struct wdt_pdata *pdata = d->driver_data;
+
+	pdata->siocfg_enter = 0x88;
+	pdata->siocfg_leave = 0xBB;
 
 	return 0;
 }
+
+static struct wdt_pdata pdata;
 
 static const struct dmi_system_id wdt_dmi_table[] __initconst = {
 	{
@@ -535,6 +544,7 @@ static const struct dmi_system_id wdt_dmi_table[] __initconst = {
 			DMI_EXACT_MATCH(DMI_BOARD_NAME, "SHARKBAY"),
 		},
 		.callback = wdt_use_alt_key,
+		.driver_data = &pdata,
 	},
 	{}
 };
@@ -579,20 +589,22 @@ static struct platform_device *wdt_pdev;
 
 static int __init wdt_init(void)
 {
-	struct wdt_pdata pdata;
 	struct resource res;
 	int sioaddr;
 	int ret;
 	int chip;
 
+	pdata.siocfg_enter = 0x87;
+	pdata.siocfg_leave = 0xAA;
+
 	/* Apply system-specific quirks */
 	dmi_check_system(wdt_dmi_table);
 
 	sioaddr = SIO_REG_CONF_ADDR0;
-	chip = wdt_find(sioaddr);
+	chip = wdt_find(sioaddr, pdata.siocfg_enter, pdata.siocfg_leave);
 	if (chip < 0) {
 		sioaddr = SIO_REG_CONF_ADDR1;
-		chip = wdt_find(sioaddr);
+		chip = wdt_find(sioaddr, pdata.siocfg_enter, pdata.siocfg_leave);
 		if (chip < 0)
 			return chip;
 	}
