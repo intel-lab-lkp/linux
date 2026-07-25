@@ -3324,8 +3324,8 @@ void __ext4_warning(struct super_block *, const char *, unsigned int,
 extern __printf(4, 5)
 void __ext4_warning_inode(const struct inode *inode, const char *function,
 			  unsigned int line, const char *fmt, ...);
-extern __printf(3, 4)
-void __ext4_msg(struct super_block *, const char *, const char *, ...);
+extern __printf(2, 3)
+void __ext4_msg(struct super_block *, const char *fmt, ...);
 extern void __dump_mmp_msg(struct super_block *, struct mmp_struct *mmp,
 			   const char *, unsigned int, const char *);
 extern __printf(7, 8)
@@ -3369,8 +3369,8 @@ void __ext4_grp_locked_error(const char *, unsigned int,
 	__ext4_warning(sb, __func__, __LINE__, fmt, ##__VA_ARGS__)
 #define ext4_warning_inode(inode, fmt, ...)				\
 	__ext4_warning_inode(inode, __func__, __LINE__, fmt, ##__VA_ARGS__)
-#define ext4_msg(sb, level, fmt, ...)				\
-	__ext4_msg(sb, level, fmt, ##__VA_ARGS__)
+#define ext4_msg(sb, level, fmt, ...)					\
+	__ext4_msg(sb, level fmt, ##__VA_ARGS__)
 #define dump_mmp_msg(sb, mmp, msg)					\
 	__dump_mmp_msg(sb, mmp, __func__, __LINE__, msg)
 #define ext4_grp_locked_error(sb, grp, ino, block, fmt, ...)		\
@@ -3416,8 +3416,8 @@ do {									\
 } while (0)
 #define ext4_msg(sb, level, fmt, ...)					\
 do {									\
-	no_printk(fmt, ##__VA_ARGS__);					\
-	__ext4_msg(sb, "", " ");					\
+	no_printk(level fmt, ##__VA_ARGS__);				\
+	__ext4_msg(sb, "" " ");						\
 } while (0)
 #define dump_mmp_msg(sb, mmp, msg)					\
 	__dump_mmp_msg(sb, mmp, "", 0, "")

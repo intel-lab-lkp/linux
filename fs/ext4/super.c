@@ -981,11 +981,11 @@ void __ext4_std_error(struct super_block *sb, const char *function,
 	ext4_handle_error(sb, false, -errno, 0, 0, function, line);
 }
 
-void __ext4_msg(struct super_block *sb,
-		const char *prefix, const char *fmt, ...)
+void __ext4_msg(struct super_block *sb, const char *fmt, ...)
 {
 	struct va_format vaf;
 	va_list args;
+	int level;
 
 	if (sb) {
 		atomic_inc(&EXT4_SB(sb)->s_msg_count);
@@ -995,12 +995,16 @@ void __ext4_msg(struct super_block *sb,
 	}
 
 	va_start(args, fmt);
-	vaf.fmt = fmt;
+
+	level = printk_get_level(fmt);
+	vaf.fmt = printk_skip_level(fmt);
 	vaf.va = &args;
 	if (sb)
-		printk("%sEXT4-fs (%s): %pV\n", prefix, sb->s_id, &vaf);
+		printk("%c%cEXT4-fs (%s): %pV\n",
+		       KERN_SOH_ASCII, level, sb->s_id, &vaf);
 	else
-		printk("%sEXT4-fs: %pV\n", prefix, &vaf);
+		printk("%c%cEXT4-fs: %pV\n",
+		       KERN_SOH_ASCII, level, &vaf);
 	va_end(args);
 }
 
