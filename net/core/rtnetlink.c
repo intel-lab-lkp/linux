@@ -1687,9 +1687,21 @@ static noinline_for_stack int rtnl_fill_vf(struct sk_buff *skb,
 		return -EMSGSIZE;
 
 	for (i = 0; i < num_vfs; i++) {
+		unsigned char *mark = skb_tail_pointer(skb);
+
 		if (rtnl_fill_vfinfo(skb, dev, i, ext_filter_mask)) {
 			nla_nest_cancel(skb, vfinfo);
 			return -EMSGSIZE;
+		}
+
+		/* An attribute length is a u16, so the nest cannot describe
+		 * more than U16_MAX bytes. Drop the VF that would overflow it
+		 * and stop: a truncated list keeps the rest of the message
+		 * parsable, whereas a wrapped nest length does not.
+		 */
+		if (skb_tail_pointer(skb) - (unsigned char *)vfinfo > U16_MAX) {
+			nlmsg_trim(skb, mark);
+			break;
 		}
 	}
 
