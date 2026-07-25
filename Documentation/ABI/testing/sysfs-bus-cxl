@@ -407,7 +407,10 @@ Description:
 		space this decoder claims at address N before the decode rotates
 		to the next target in the interleave at address N +
 		interleave_granularity (assuming N is aligned to
-		interleave_granularity).
+		interleave_granularity). When 'interleave_ways' is 1, the
+		decoder does not interleave and the reported granularity is
+		a don't-care value that may exceed the maximum encodable in
+		hardware.
 
 
 What:		/sys/bus/cxl/devices/decoderX.Y/create_{pmem,ram}_region
