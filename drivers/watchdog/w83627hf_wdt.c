@@ -479,12 +479,16 @@ static int wdt_probe(struct platform_device *pdev)
 	pr_info("WDT driver for %s Super I/O chip initialising\n", id->name);
 
 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
-	if (!res)
-		return -ENXIO;
+	if (!res) {
+		ret = -ENXIO;
+		goto fail;
+	}
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
+	if (!data) {
+		ret = -ENOMEM;
+		goto fail;
+	}
 
 	data->info.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE;
 	snprintf(data->info.identity, sizeof(data->info.identity),
@@ -524,10 +528,8 @@ static int wdt_probe(struct platform_device *pdev)
 	wdt_set_timeout(wdd, wdd->timeout);
 
 	ret = w83627hf_init(wdd, chip);
-	if (ret) {
-		pr_err("failed to initialize watchdog (err=%d)\n", ret);
-		return ret;
-	}
+	if (ret)
+		goto fail;
 
 	if (data->early_timer_val) {
 		if (early_disable) {
@@ -541,16 +543,19 @@ static int wdt_probe(struct platform_device *pdev)
 		}
 
 		if (ret)
-			return ret;
+			goto fail;
 	}
 
 	ret = devm_watchdog_register_device(&pdev->dev, wdd);
 	if (ret)
-		return ret;
+		goto fail;
 
 	pr_info("initialized. timeout=%d sec (nowayout=%d)\n", wdd->timeout,
 		nowayout);
 
+	return 0;
+fail:
+	pr_err("failed to initialize watchdog (err=%d)\n", ret);
 	return ret;
 }
 
