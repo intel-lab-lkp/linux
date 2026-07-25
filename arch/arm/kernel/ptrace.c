@@ -163,6 +163,25 @@ static inline long get_user_reg(struct task_struct *task, int offset)
 	return task_pt_regs(task)->uregs[offset];
 }
 
+static void update_syscall_orig_r0_after_ptrace(struct task_struct *target)
+{
+	struct pt_regs *regs = task_pt_regs(target);
+	struct kernel_siginfo *info = target->last_siginfo;
+	struct thread_info *ti = task_thread_info(target);
+
+	if (!info)
+		return;
+
+	if (ti->abi_syscall == -1)
+		return;
+
+	if ((info->si_code & ~0x80) == SIGTRAP &&
+	    target->ptrace_message == PTRACE_EVENTMSG_SYSCALL_EXIT)
+		return;
+
+	regs->ARM_ORIG_r0 = regs->ARM_r0;
+}
+
 /*
  * this routine will put a word on the processes privileged stack.
  * the offset is how far from the base addr as stored in the THREAD.
@@ -180,6 +199,8 @@ put_user_reg(struct task_struct *task, int offset, long data)
 
 	if (valid_user_regs(&newregs)) {
 		regs->uregs[offset] = data;
+		if (offset == 0)
+			update_syscall_orig_r0_after_ptrace(task);
 		ret = 0;
 	}
 
@@ -566,6 +587,7 @@ static int gpr_set(struct task_struct *target,
 		return -EINVAL;
 
 	*task_pt_regs(target) = newregs;
+	update_syscall_orig_r0_after_ptrace(target);
 	return 0;
 }
 
@@ -784,6 +806,12 @@ long arch_ptrace(struct task_struct *child, long request,
 			if (data != -1)
 				data &= __NR_SYSCALL_MASK;
 			task_thread_info(child)->abi_syscall = data;
+
+			/*
+			 * Re-sync orig_r0 in case the syscall number has
+			 * been changed from -1.
+			 */
+			update_syscall_orig_r0_after_ptrace(child);
 			ret = 0;
 			break;
 
@@ -868,7 +896,7 @@ asmlinkage int syscall_trace_enter(struct pt_regs *regs)
 	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
 		trace_sys_enter(regs, scno);
 
-	audit_syscall_entry(scno, regs->ARM_r0, regs->ARM_r1, regs->ARM_r2,
+	audit_syscall_entry(scno, regs->ARM_ORIG_r0, regs->ARM_r1, regs->ARM_r2,
 			    regs->ARM_r3);
 
 	return scno;
