@@ -471,12 +471,13 @@ static int wdt_probe(struct platform_device *pdev)
 	const struct platform_device_id *id = platform_get_device_id(pdev);
 	const struct wdt_pdata *pdata = pdev->dev.platform_data;
 	enum chips chip = id->driver_data;
+	struct device *dev = &pdev->dev;
 	struct watchdog_device *wdd;
 	struct w83627hf_data *data;
 	struct resource *res;
 	int ret;
 
-	pr_info("WDT driver for %s Super I/O chip initialising\n", id->name);
+	dev_info(dev, "WDT driver initialising\n");
 
 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
 	if (!res) {
@@ -533,11 +534,11 @@ static int wdt_probe(struct platform_device *pdev)
 
 	if (data->early_timer_val) {
 		if (early_disable) {
-			pr_warn("Stopping previously enabled watchdog until userland kicks in\n");
+			dev_warn(dev, "Stopping previously enabled watchdog until userland kicks in\n");
 			ret = wdt_stop(wdd);
 		} else {
-			pr_info("Watchdog already running. Resetting timeout to %d sec\n",
-				wdd->timeout);
+			dev_info(dev, "Watchdog already running. Resetting timeout to %d sec\n",
+				 wdd->timeout);
 			ret = wdt_start(wdd);
 			set_bit(WDOG_HW_RUNNING, &wdd->status);
 		}
@@ -550,13 +551,12 @@ static int wdt_probe(struct platform_device *pdev)
 	if (ret)
 		goto fail;
 
-	pr_info("initialized. timeout=%d sec (nowayout=%d)\n", wdd->timeout,
-		nowayout);
+	dev_info(dev, "initialized. timeout=%d sec (nowayout=%d)\n",
+		 wdd->timeout, nowayout);
 
 	return 0;
 fail:
-	pr_err("failed to initialize watchdog (err=%d)\n", ret);
-	return ret;
+	return dev_err_probe(dev, ret, "failed to initialize watchdog\n");
 }
 
 /*
