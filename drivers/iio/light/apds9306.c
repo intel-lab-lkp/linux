@@ -475,19 +475,21 @@ static int apds9306_read_data(struct apds9306_data *data, int *val, int reg)
 
 	ret = regmap_field_read(rf->intg_time, &intg_time_idx);
 	if (ret)
-		return ret;
+		goto out_pm_put;
 
 	ret = regmap_field_read(rf->repeat_rate, &repeat_rate_idx);
 	if (ret)
-		return ret;
+		goto out_pm_put;
 
 	ret = regmap_field_read(rf->int_src, &int_src);
 	if (ret)
-		return ret;
+		goto out_pm_put;
 
 	intg_time = iio_gts_find_int_time_by_sel(&data->gts, intg_time_idx);
-	if (intg_time < 0)
-		return intg_time;
+	if (intg_time < 0) {
+		ret = intg_time;
+		goto out_pm_put;
+	}
 
 	/* Whichever is greater - integration time period or sampling period. */
 	delay = max(intg_time, apds9306_repeat_rate_period[repeat_rate_idx]);
@@ -510,7 +512,7 @@ static int apds9306_read_data(struct apds9306_data *data, int *val, int reg)
 						  APDS9306_ALS_INT_STAT_MASK)),
 				       APDS9306_ALS_READ_DATA_DELAY_US, delay * 2);
 	if (ret)
-		return ret;
+		goto out_pm_put;
 
 	/* If we reach here before the interrupt handler we push an event */
 	if ((status & APDS9306_ALS_INT_STAT_MASK)) {
@@ -530,14 +532,15 @@ static int apds9306_read_data(struct apds9306_data *data, int *val, int reg)
 	ret = regmap_bulk_read(data->regmap, reg, buff, sizeof(buff));
 	if (ret) {
 		dev_err_ratelimited(dev, "read data failed\n");
-		return ret;
+		goto out_pm_put;
 	}
 
 	*val = get_unaligned_le24(&buff);
 
+out_pm_put:
 	pm_runtime_put_autosuspend(data->dev);
 
-	return 0;
+	return ret;
 }
 
 static int apds9306_intg_time_get(struct apds9306_data *data, int *val2)
