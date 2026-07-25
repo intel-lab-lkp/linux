@@ -39,6 +39,9 @@
 
 #define TIMER_SYNC_TICKS	3
 
+/* The reload bit clears a couple of source clock cycles after it is set. */
+#define TIMER_RELOAD_MAX_POLL	100
+
 /*
  * When we disable a timer, we need to wait at least for 2 cycles of
  * the timer source clock. We will use for that the clocksource timer
@@ -53,9 +56,30 @@ static void sun4i_clkevt_sync(void __iomem *base)
 		cpu_relax();
 }
 
+/*
+ * The control register must not be written while a reload is still in
+ * flight, or the write can be dropped.
+ */
+static int sun4i_clkevt_wait_reload(void __iomem *base, u8 timer)
+{
+	int i;
+
+	for (i = 0; i < TIMER_RELOAD_MAX_POLL; i++) {
+		if (!(readl(base + TIMER_CTL_REG(timer)) & TIMER_CTL_RELOAD))
+			return 0;
+		cpu_relax();
+	}
+
+	return -ETIME;
+}
+
 static void sun4i_clkevt_time_stop(void __iomem *base, u8 timer)
 {
-	u32 val = readl(base + TIMER_CTL_REG(timer));
+	u32 val;
+
+	sun4i_clkevt_wait_reload(base, timer);
+
+	val = readl(base + TIMER_CTL_REG(timer));
 	writel(val & ~TIMER_CTL_ENABLE, base + TIMER_CTL_REG(timer));
 	sun4i_clkevt_sync(base);
 }
