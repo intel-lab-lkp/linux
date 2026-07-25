@@ -811,7 +811,7 @@ static int etm_probe(struct amba_device *adev, const struct amba_id *id)
 
 	desc.access = drvdata->csa = CSDEV_ACCESS_IOMEM(base);
 
-	spin_lock_init(&drvdata->spinlock);
+	raw_spin_lock_init(&drvdata->spinlock);
 
 	drvdata->atclk = devm_clk_get_optional_enabled(dev, "atclk");
 	if (IS_ERR(drvdata->atclk))
