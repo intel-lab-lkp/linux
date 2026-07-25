@@ -25,6 +25,10 @@
 #include "tps6598x.h"
 #include "trace.h"
 
+#ifdef CONFIG_TYPEC_SN201202X
+#include <linux/spmi.h>
+#endif
+
 /* Register offsets */
 #define TPS_REG_VID			0x00
 #define TPS_REG_MODE			0x03
@@ -234,8 +238,14 @@ static const char *tps6598x_psy_name_prefix = "tps6598x-source-psy-";
 static struct tps6598x *tps6598x_from_device(struct device *dev)
 {
 	struct i2c_client *client = i2c_verify_client(dev);
-	struct tps6598x *tps = i2c_get_clientdata(client);
-	return tps;
+#ifdef CONFIG_TYPEC_SN201202X
+	if (!client) {
+		struct spmi_device *device = to_spmi_device(dev);
+
+		return spmi_device_get_drvdata(device);
+	}
+#endif
+	return i2c_get_clientdata(client);
 }
 
 static int
