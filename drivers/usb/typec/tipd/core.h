@@ -9,7 +9,6 @@
 #include <linux/i2c.h>
 #include <linux/acpi.h>
 #include <linux/gpio/consumer.h>
-#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
@@ -167,6 +166,7 @@ struct tps6598x {
 	struct device *dev;
 	struct regmap *regmap;
 	struct mutex lock; /* device lock */
+	int irq;
 	u8 i2c_protocol:1;
 
 	struct gpio_desc *reset;
@@ -230,6 +230,13 @@ static const char *tps6598x_psy_name_prefix = "tps6598x-source-psy-";
  * https://www.ti.com/lit/ug/slvuan1a/slvuan1a.pdf
  */
 #define TPS_MAX_LEN	64
+
+static struct tps6598x *tps6598x_from_device(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+	struct tps6598x *tps = i2c_get_clientdata(client);
+	return tps;
+}
 
 static int
 tps6598x_block_read(struct tps6598x *tps, u8 reg, void *val, size_t len)
@@ -1738,26 +1745,12 @@ static void cd321x_remove(struct tps6598x *tps)
 	cancel_delayed_work_sync(&cd321x->update_work);
 }
 
-static int tps6598x_probe(struct i2c_client *client)
+static int tps6598x_probe(struct tps6598x *tps)
 {
-	const struct tipd_data *data;
-	struct tps6598x *tps;
 	struct fwnode_handle *fwnode;
 	u32 status;
 	u32 vid;
 	int ret;
-
-	data = i2c_get_match_data(client);
-	if (!data)
-		return -EINVAL;
-
-	tps = devm_kzalloc(&client->dev, data->tps_struct_size, GFP_KERNEL);
-	if (!tps)
-		return -ENOMEM;
-
-	mutex_init(&tps->lock);
-	tps->dev = &client->dev;
-	tps->data = data;
 
 	tps->reset = devm_gpiod_get_optional(tps->dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(tps->reset))
@@ -1766,22 +1759,11 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (tps->reset)
 		msleep(TPS_SETUP_MS);
 
-	tps->regmap = devm_regmap_init_i2c(client, &tps6598x_regmap_config);
-	if (IS_ERR(tps->regmap))
-		return PTR_ERR(tps->regmap);
-
 	if (!device_is_compatible(tps->dev, "ti,tps25750")) {
 		ret = tps6598x_read32(tps, TPS_REG_VID, &vid);
 		if (ret < 0 || !vid)
 			return -ENODEV;
 	}
-
-	/*
-	 * Checking can the adapter handle SMBus protocol. If it can not, the
-	 * driver needs to take care of block reads separately.
-	 */
-	if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
-		tps->i2c_protocol = true;
 
 	if (tps->data->switch_power_state) {
 		ret = tps->data->switch_power_state(tps, TPS_SYSTEM_POWER_STATE_S0);
@@ -1816,7 +1798,7 @@ static int tps6598x_probe(struct i2c_client *client)
 	 * with existing DT files, we work around this by deleting any
 	 * fwnode_links to/from this fwnode.
 	 */
-	fwnode = device_get_named_child_node(&client->dev, "connector");
+	fwnode = device_get_named_child_node(tps->dev, "connector");
 	if (fwnode)
 		fw_devlink_purge_absent_suppliers(fwnode);
 
@@ -1842,14 +1824,14 @@ static int tps6598x_probe(struct i2c_client *client)
 			goto err_unregister_port;
 		ret = tps->data->connect(tps, status);
 		if (ret)
-			dev_err(&client->dev, "failed to register partner\n");
+			dev_err(tps->dev, "failed to register partner\n");
 	}
 
-	if (client->irq) {
-		ret = devm_request_threaded_irq(&client->dev, client->irq, NULL,
+	if (tps->irq) {
+		ret = devm_request_threaded_irq(tps->dev, tps->irq, NULL,
 						tps->data->irq_handler,
 						IRQF_SHARED | IRQF_ONESHOT,
-						dev_name(&client->dev), tps);
+						dev_name(tps->dev), tps);
 	} else {
 		dev_warn(tps->dev, "Unable to find the interrupt, switching to polling\n");
 		INIT_DELAYED_WORK(&tps->wq_poll, tps6598x_poll_work);
@@ -1860,13 +1842,12 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (ret)
 		goto err_disconnect;
 
-	i2c_set_clientdata(client, tps);
 	fwnode_handle_put(fwnode);
 
 	tps->wakeup = device_property_read_bool(tps->dev, "wakeup-source");
-	if (tps->wakeup && client->irq) {
-		devm_device_init_wakeup(&client->dev);
-		enable_irq_wake(client->irq);
+	if (tps->wakeup && tps->irq) {
+		devm_device_init_wakeup(tps->dev);
+		enable_irq_wake(tps->irq);
 	}
 
 	return 0;
@@ -1888,14 +1869,12 @@ err_reset_controller:
 	return ret;
 }
 
-static void tps6598x_remove(struct i2c_client *client)
+static void tps6598x_remove(struct tps6598x *tps)
 {
-	struct tps6598x *tps = i2c_get_clientdata(client);
-
-	if (!client->irq)
+	if (!tps->irq)
 		cancel_delayed_work_sync(&tps->wq_poll);
 	else
-		devm_free_irq(tps->dev, client->irq, tps);
+		devm_free_irq(tps->dev, tps->irq, tps);
 
 	if (tps->data->remove)
 		tps->data->remove(tps);
@@ -1913,17 +1892,16 @@ static void tps6598x_remove(struct i2c_client *client)
 
 static int __maybe_unused tps6598x_suspend(struct device *dev)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct tps6598x *tps = i2c_get_clientdata(client);
+	struct tps6598x *tps = tps6598x_from_device(dev);
 
 	if (tps->wakeup) {
-		disable_irq(client->irq);
-		enable_irq_wake(client->irq);
+		disable_irq(tps->irq);
+		enable_irq_wake(tps->irq);
 	} else if (tps->reset) {
 		gpiod_set_value_cansleep(tps->reset, 1);
 	}
 
-	if (!client->irq)
+	if (!tps->irq)
 		cancel_delayed_work_sync(&tps->wq_poll);
 
 	return 0;
@@ -1931,8 +1909,7 @@ static int __maybe_unused tps6598x_suspend(struct device *dev)
 
 static int __maybe_unused tps6598x_resume(struct device *dev)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct tps6598x *tps = i2c_get_clientdata(client);
+	struct tps6598x *tps = tps6598x_from_device(dev);
 	int ret;
 
 	ret = tps6598x_check_mode(tps);
@@ -1946,14 +1923,14 @@ static int __maybe_unused tps6598x_resume(struct device *dev)
 	}
 
 	if (tps->wakeup) {
-		disable_irq_wake(client->irq);
-		enable_irq(client->irq);
+		disable_irq_wake(tps->irq);
+		enable_irq(tps->irq);
 	} else if (tps->reset) {
 		gpiod_set_value_cansleep(tps->reset, 0);
 		msleep(TPS_SETUP_MS);
 	}
 
-	if (!client->irq)
+	if (!tps->irq)
 		queue_delayed_work(system_power_efficient_wq, &tps->wq_poll,
 				   msecs_to_jiffies(POLL_INTERVAL));
 
@@ -2018,33 +1995,3 @@ static const struct tipd_data tps25750_data = {
 	.reset = tps25750_reset,
 	.connect = tps6598x_connect,
 };
-
-static const struct of_device_id tps6598x_of_match[] = {
-	{ .compatible = "ti,tps6598x", &tps6598x_data},
-	{ .compatible = "apple,cd321x", &cd321x_data},
-	{ .compatible = "ti,tps25750", &tps25750_data},
-	{}
-};
-MODULE_DEVICE_TABLE(of, tps6598x_of_match);
-
-static const struct i2c_device_id tps6598x_id[] = {
-	{ .name = "tps6598x", .driver_data = (kernel_ulong_t)&tps6598x_data },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, tps6598x_id);
-
-static struct i2c_driver tps6598x_i2c_driver = {
-	.driver = {
-		.name = "tps6598x",
-		.pm = &tps6598x_pm_ops,
-		.of_match_table = tps6598x_of_match,
-	},
-	.probe = tps6598x_probe,
-	.remove = tps6598x_remove,
-	.id_table = tps6598x_id,
-};
-module_i2c_driver(tps6598x_i2c_driver);
-
-MODULE_AUTHOR("Heikki Krogerus <heikki.krogerus@linux.intel.com>");
-MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("TI TPS6598x USB Power Delivery Controller Driver");
