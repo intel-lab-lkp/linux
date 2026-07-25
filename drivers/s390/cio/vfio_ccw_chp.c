@@ -98,12 +98,6 @@ static ssize_t vfio_ccw_crw_region_read(struct vfio_ccw_private *private,
 	if (pos + count > sizeof(*region))
 		return -EINVAL;
 
-	crw = list_first_entry_or_null(&private->crw,
-				       struct vfio_ccw_crw, next);
-
-	if (crw)
-		list_del(&crw->next);
-
 	mutex_lock(&private->io_mutex);
 	if (i >= private->num_regions) {
 		ret = -EINVAL;
@@ -112,6 +106,16 @@ static ssize_t vfio_ccw_crw_region_read(struct vfio_ccw_private *private,
 
 	i = array_index_nospec(i, private->num_regions);
 	region = private->region[i].data;
+
+	spin_lock(&private->crw_lock);
+	crw = list_first_entry_or_null(&private->crw,
+				       struct vfio_ccw_crw, next);
+
+	if (crw)
+		list_del(&crw->next);
+
+	/* Drop CRW lock while copying to userspace */
+	spin_unlock(&private->crw_lock);
 
 	if (crw)
 		memcpy(&region->crw, &crw->crw, sizeof(region->crw));
@@ -122,15 +126,16 @@ static ssize_t vfio_ccw_crw_region_read(struct vfio_ccw_private *private,
 		ret = count;
 
 	region->crw = 0;
-
-out:
-	mutex_unlock(&private->io_mutex);
-
 	kfree(crw);
 
 	/* Notify the guest if more CRWs are on our queue */
+	spin_lock(&private->crw_lock);
 	if (!list_empty(&private->crw) && private->crw_trigger)
 		eventfd_signal(private->crw_trigger);
+	spin_unlock(&private->crw_lock);
+
+out:
+	mutex_unlock(&private->io_mutex);
 
 	return ret;
 }
