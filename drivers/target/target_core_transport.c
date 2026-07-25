@@ -904,7 +904,8 @@ static bool target_cmd_interrupted(struct se_cmd *cmd)
 
 static void target_complete(struct se_cmd *cmd, int success)
 {
-	struct se_wwn *wwn = cmd->se_sess->se_tpg->se_tpg_wwn;
+	struct se_portal_group *se_tpg = READ_ONCE(cmd->se_sess->se_tpg);
+	struct se_wwn *wwn = se_tpg ? se_tpg->se_tpg_wwn : NULL;
 	struct se_dev_attrib *da;
 	u8 compl_type;
 	int cpu;
