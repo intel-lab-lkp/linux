@@ -143,16 +143,12 @@ static int lp8788_led_probe(struct platform_device *pdev)
 	mutex_init(&led->lock);
 
 	ret = lp8788_led_init_device(led, led_pdata);
-	if (ret) {
-		dev_err(dev, "led init device err: %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "led init device err\n");
 
 	ret = devm_led_classdev_register(dev, &led->led_dev);
-	if (ret) {
-		dev_err(dev, "led register err: %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "led register err\n");
 
 	return 0;
 }
