@@ -814,6 +814,25 @@ static int abx80x_probe(struct i2c_client *client)
 		return -EIO;
 	}
 
+	/* part autodetection */
+	if (part == ABX80X) {
+		for (i = 0; abx80x_caps[i].pn; i++)
+			if (partnumber == abx80x_caps[i].pn)
+				break;
+		if (abx80x_caps[i].pn == 0) {
+			dev_err(&client->dev, "Unknown part: %04x\n",
+				partnumber);
+			return -EINVAL;
+		}
+		part = i;
+	}
+
+	if (partnumber != abx80x_caps[part].pn) {
+		dev_err(&client->dev, "partnumber mismatch %04x != %04x\n",
+			partnumber, abx80x_caps[part].pn);
+		return -EINVAL;
+	}
+
 	/* Configure RV1805 specifics */
 	if (part == RV1805) {
 		/*
@@ -863,25 +882,6 @@ static int abx80x_probe(struct i2c_client *client)
 				"Unable to write output control register\n");
 			return -EIO;
 		}
-	}
-
-	/* part autodetection */
-	if (part == ABX80X) {
-		for (i = 0; abx80x_caps[i].pn; i++)
-			if (partnumber == abx80x_caps[i].pn)
-				break;
-		if (abx80x_caps[i].pn == 0) {
-			dev_err(&client->dev, "Unknown part: %04x\n",
-				partnumber);
-			return -EINVAL;
-		}
-		part = i;
-	}
-
-	if (partnumber != abx80x_caps[part].pn) {
-		dev_err(&client->dev, "partnumber mismatch %04x != %04x\n",
-			partnumber, abx80x_caps[part].pn);
-		return -EINVAL;
 	}
 
 	if (np && abx80x_caps[part].has_tc)
