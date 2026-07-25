@@ -94,6 +94,7 @@ struct mmc_fixup {
 #define CID_MANFID_KINGSTON     0x70
 #define CID_MANFID_HYNIX	0x90
 #define CID_MANFID_KINGSTON_SD	0x9F
+#define CID_MANFID_ESMT_MMC	0xEC
 #define CID_MANFID_NUMONYX	0xFE
 
 #define END_FIXUP { NULL }

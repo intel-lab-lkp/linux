@@ -91,6 +91,12 @@ static const struct mmc_fixup __maybe_unused mmc_blk_fixups[] = {
 	MMC_FIXUP("MMC32G", CID_MANFID_TOSHIBA, CID_OEMID_ANY, add_quirk_mmc,
 		  MMC_QUIRK_BLK_NO_CMD23),
 
+	/* SM0000 supports normal TRIM discard but fails when TRIM is
+	 * used to offload WRITE_ZEROES, so we disable it.
+	 */
+	MMC_FIXUP("SM0000", CID_MANFID_ESMT_MMC, 0x0100, add_quirk_mmc,
+		  MMC_QUIRK_BROKEN_WRITE_ZEROES),
+
 	/*
 	 * Some SD cards lockup while using CMD23 multiblock transfers.
 	 */
