@@ -56,17 +56,10 @@ void sm750_set_power_mode(unsigned int mode)
 	}
 
 	/* Set up other fields in Power Control Register */
-	if (mode == POWER_MODE_CTRL_MODE_SLEEP) {
+	if (mode == POWER_MODE_CTRL_MODE_SLEEP)
 		ctrl &= ~POWER_MODE_CTRL_OSC_INPUT;
-#ifdef VALIDATION_CHIP
-		ctrl &= ~POWER_MODE_CTRL_336CLK;
-#endif
-	} else {
+	else
 		ctrl |= POWER_MODE_CTRL_OSC_INPUT;
-#ifdef VALIDATION_CHIP
-		ctrl |= POWER_MODE_CTRL_336CLK;
-#endif
-	}
 
 	/* Program new power mode. */
 	poke32(POWER_MODE_CTRL, ctrl);
