@@ -91,6 +91,8 @@ void vfio_ccw_sch_io_todo(struct work_struct *work)
 
 	is_final = !(scsw_actl(&irb->scsw) &
 		     (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT));
+
+	mutex_lock(&private->cp_mutex);
 	if (scsw_is_solicited(&irb->scsw)) {
 		cp_update_scsw(&private->cp, &irb->scsw);
 		if (is_final && private->state == VFIO_CCW_STATE_CP_PENDING) {
@@ -98,6 +100,8 @@ void vfio_ccw_sch_io_todo(struct work_struct *work)
 			cp_is_finished = true;
 		}
 	}
+	mutex_unlock(&private->cp_mutex);
+
 	mutex_lock(&private->io_mutex);
 	memcpy(private->io_region->irb_area, irb, sizeof(*irb));
 	mutex_unlock(&private->io_mutex);
@@ -131,7 +135,9 @@ void vfio_ccw_notoper_todo(struct work_struct *work)
 
 	private = container_of(work, struct vfio_ccw_private, notoper_work);
 
+	mutex_lock(&private->cp_mutex);
 	cp_free(&private->cp);
+	mutex_unlock(&private->cp_mutex);
 }
 
 /*

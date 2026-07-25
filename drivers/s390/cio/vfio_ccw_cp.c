@@ -738,11 +738,14 @@ static int ccwchain_fetch_one(struct ccw1 *ccw,
  */
 int cp_init(struct channel_program *cp, union orb *orb)
 {
-	struct vfio_device *vdev =
-		&container_of(cp, struct vfio_ccw_private, cp)->vdev;
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
+	struct vfio_device *vdev = &private->vdev;
 	/* custom ratelimit used to avoid flood during guest IPL */
 	static DEFINE_RATELIMIT_STATE(ratelimit_state, 5 * HZ, 1);
 	int ret;
+
+	lockdep_assert_held(&private->cp_mutex);
 
 	/* this is an error in the caller */
 	if (cp->initialized)
@@ -784,10 +787,13 @@ int cp_init(struct channel_program *cp, union orb *orb)
  */
 void cp_free(struct channel_program *cp)
 {
-	struct vfio_device *vdev =
-		&container_of(cp, struct vfio_ccw_private, cp)->vdev;
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
+	struct vfio_device *vdev = &private->vdev;
 	struct ccwchain *chain, *temp;
 	int i;
+
+	lockdep_assert_held(&private->cp_mutex);
 
 	if (!cp->initialized)
 		return;
@@ -841,10 +847,14 @@ void cp_free(struct channel_program *cp)
  */
 int cp_prefetch(struct channel_program *cp)
 {
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
 	struct ccwchain *chain;
 	struct ccw1 *ccw;
 	struct page_array *pa;
 	int len, idx, ret;
+
+	lockdep_assert_held(&private->cp_mutex);
 
 	/* this is an error in the caller */
 	if (!cp->initialized)
@@ -883,9 +893,13 @@ out_err:
  */
 union orb *cp_get_orb(struct channel_program *cp, struct subchannel *sch)
 {
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
 	union orb *orb;
 	struct ccwchain *chain;
 	struct ccw1 *cpa;
+
+	lockdep_assert_held(&private->cp_mutex);
 
 	/* this is an error in the caller */
 	if (!cp->initialized)
@@ -931,9 +945,13 @@ union orb *cp_get_orb(struct channel_program *cp, struct subchannel *sch)
  */
 void cp_update_scsw(struct channel_program *cp, union scsw *scsw)
 {
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
 	struct ccwchain *chain;
 	dma32_t cpa = scsw->cmd.cpa;
 	u32 ccw_head;
+
+	lockdep_assert_held(&private->cp_mutex);
 
 	if (!cp->initialized)
 		return;
@@ -977,8 +995,12 @@ void cp_update_scsw(struct channel_program *cp, union scsw *scsw)
  */
 bool cp_iova_pinned(struct channel_program *cp, u64 iova, u64 length)
 {
+	struct vfio_ccw_private *private =
+		container_of(cp, struct vfio_ccw_private, cp);
 	struct ccwchain *chain;
 	int i;
+
+	lockdep_assert_held(&private->cp_mutex);
 
 	if (!cp->initialized)
 		return false;

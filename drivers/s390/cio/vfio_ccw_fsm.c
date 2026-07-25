@@ -25,16 +25,14 @@ static int fsm_io_helper(struct vfio_ccw_private *private)
 	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&sch->lock, flags);
-
 	orb = cp_get_orb(&private->cp, sch);
-	if (!orb) {
-		ret = -EIO;
-		goto out;
-	}
+	if (!orb)
+		return -EIO;
 
 	VFIO_CCW_TRACE_EVENT(5, "stIO");
 	VFIO_CCW_TRACE_EVENT(5, dev_name(&sch->dev));
+
+	spin_lock_irqsave(&sch->lock, flags);
 
 	/* Issue "Start Subchannel" */
 	ccode = ssch(sch->schid, orb);
@@ -71,7 +69,6 @@ static int fsm_io_helper(struct vfio_ccw_private *private)
 	default:
 		ret = ccode;
 	}
-out:
 	spin_unlock_irqrestore(&sch->lock, flags);
 	return ret;
 }
@@ -251,6 +248,8 @@ static void fsm_io_request(struct vfio_ccw_private *private,
 	private->state = VFIO_CCW_STATE_CP_PROCESSING;
 	memcpy(scsw, io_region->scsw_area, sizeof(*scsw));
 
+	mutex_lock(&private->cp_mutex);
+
 	if (scsw->cmd.fctl & SCSW_FCTL_START_FUNC) {
 		orb = (union orb *)io_region->orb_area;
 
@@ -299,6 +298,8 @@ static void fsm_io_request(struct vfio_ccw_private *private,
 			cp_free(&private->cp);
 			goto err_out;
 		}
+
+		mutex_unlock(&private->cp_mutex);
 		return;
 	} else if (scsw->cmd.fctl & SCSW_FCTL_HALT_FUNC) {
 		VFIO_CCW_MSG_EVENT(2,
@@ -319,6 +320,7 @@ static void fsm_io_request(struct vfio_ccw_private *private,
 	}
 
 err_out:
+	mutex_unlock(&private->cp_mutex);
 	private->state = VFIO_CCW_STATE_IDLE;
 	trace_vfio_ccw_fsm_io_request(scsw->cmd.fctl, schid,
 				      io_region->ret_code, errstr);
@@ -409,7 +411,11 @@ static void fsm_close(struct vfio_ccw_private *private,
 
 	private->state = VFIO_CCW_STATE_STANDBY;
 	spin_unlock_irq(&sch->lock);
+
+	mutex_lock(&private->cp_mutex);
 	cp_free(&private->cp);
+	mutex_unlock(&private->cp_mutex);
+
 	return;
 
 err_unlock:
