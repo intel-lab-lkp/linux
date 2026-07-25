@@ -2689,12 +2689,25 @@ static void option_instat_callback(struct urb *urb)
 			dev_dbg(dev, "%s: NULL req_pkt\n", __func__);
 			return;
 		}
+
+		if (urb->actual_length < sizeof(*req_pkt)) {
+			dev_dbg(dev, "%s: short packet: %u bytes\n",
+				__func__, urb->actual_length);
+			return;
+		}
+
 		if ((req_pkt->bRequestType == 0xA1) &&
 				(req_pkt->bRequest == 0x20)) {
 			int old_dcd_state;
+			if (urb->actual_length < sizeof(*req_pkt) + 1) {
+				dev_dbg(dev, "%s: short interrupt transfer: %u bytes\n",
+					__func__, urb->actual_length);
+				return;
+			}
+
 			unsigned char signals = *((unsigned char *)
 					urb->transfer_buffer +
-					sizeof(struct usb_ctrlrequest));
+					sizeof(*req_pkt));
 
 			dev_dbg(dev, "%s: signal x%x\n", __func__, signals);
 
