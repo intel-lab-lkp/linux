@@ -101,5 +101,5 @@ static struct platform_driver cobalt_raq_led_driver = {
 		.name	= "cobalt-raq-leds",
 	},
 };
-
+MODULE_DESCRIPTION("LEDs driver for the Cobalt Raq series");
 builtin_platform_driver(cobalt_raq_led_driver);
