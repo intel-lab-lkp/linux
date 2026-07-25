@@ -32,39 +32,69 @@ static unsigned long ccu_nkmp_calc_rate(unsigned long parent,
 static unsigned long ccu_nkmp_find_best(unsigned long parent, unsigned long rate,
 					struct _ccu_nkmp *nkmp)
 {
+	unsigned long _k, _m, _p;
+	unsigned long max_p = rate >= 240000000 ? 1 : nkmp->max_p;
+	unsigned approx;
 	unsigned long best_rate = 0;
-	unsigned long best_n = 0, best_k = 0, best_m = 0, best_p = 0;
-	unsigned long _n, _k, _m, _p;
 
-	for (_k = nkmp->min_k; _k <= nkmp->max_k; _k++) {
-		for (_n = nkmp->min_n; _n <= nkmp->max_n; _n++) {
+	for (approx = 0; approx <= 1; approx++) {
+		for (_p = nkmp->min_p; _p <= max_p; _p <<= 1) {
 			for (_m = nkmp->min_m; _m <= nkmp->max_m; _m++) {
-				for (_p = nkmp->min_p; _p <= nkmp->max_p; _p <<= 1) {
-					unsigned long tmp_rate;
+				u64 nk = (u64)rate * _m * _p;
+				unsigned long nk_rem = do_div(nk, parent);
 
-					tmp_rate = ccu_nkmp_calc_rate(parent,
-								      _n, _k,
-								      _m, _p);
+				if (nk_rem != 0 && !approx)
+					continue;
 
-					if (tmp_rate > rate)
-						continue;
+				if (nk < 10 || nk > 88)
+					continue;
 
-					if ((rate - tmp_rate) < (rate - best_rate)) {
-						best_rate = tmp_rate;
-						best_n = _n;
-						best_k = _k;
-						best_m = _m;
-						best_p = _p;
+				for (_k = nkmp->min_k; _k <= nkmp->max_k; _k++) {
+					if (approx) {
+						u64 _n = (u64)rate * _m * _p;
+						unsigned long tmp_rate;
+
+						do_div(_n, parent * _k);
+
+						if (_n < nkmp->min_n || _n > nkmp->max_n)
+							continue;
+
+						tmp_rate = ccu_nkmp_calc_rate(parent,
+									      _n, _k,
+									      _m, _p);
+						if (tmp_rate > rate)
+							continue;
+
+						if ((rate - tmp_rate) < (rate - best_rate)) {
+							best_rate = tmp_rate;
+							nkmp->n = _n;
+							nkmp->k = _k;
+							nkmp->m = _m;
+							nkmp->p = _p;
+						}
+					} else {
+						u64 _n = nk;
+						unsigned long _n_rem = do_div(_n, _k);
+
+						if (_n < nkmp->min_n || _n > nkmp->max_n)
+							continue;
+
+						if (_n_rem == 0) {
+							nkmp->n = _n;
+							nkmp->k = _k;
+							nkmp->m = _m;
+							nkmp->p = _p;
+							return ccu_nkmp_calc_rate(parent,
+										  nkmp->n,
+										  nkmp->k,
+										  nkmp->m,
+										  nkmp->p);
+						}
 					}
 				}
 			}
 		}
 	}
-
-	nkmp->n = best_n;
-	nkmp->k = best_k;
-	nkmp->m = best_m;
-	nkmp->p = best_p;
 
 	return best_rate;
 }
