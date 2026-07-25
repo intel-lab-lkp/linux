@@ -730,6 +730,7 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 			   struct msghdr *msg, size_t len)
 {
 	struct sk_buff *pdu;
+	struct sock *sk = &sock->sk;
 	struct nfc_llcp_local *local;
 	size_t frag_len = 0, remaining_len;
 	u8 *msg_ptr, *msg_data;
@@ -738,10 +739,6 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 
 	pr_debug("Send UI frame len %zd\n", len);
 
-	local = sock->local;
-	if (local == NULL)
-		return -ENODEV;
-
 	msg_data = kmalloc(len, GFP_USER | __GFP_NOWARN);
 	if (msg_data == NULL)
 		return -ENOMEM;
@@ -749,6 +746,15 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 	if (memcpy_from_msg(msg_data, msg, len)) {
 		kfree(msg_data);
 		return -EFAULT;
+	}
+
+	lock_sock(sk);
+
+	local = sock->local;
+	if (local == NULL) {
+		release_sock(sk);
+		kfree(msg_data);
+		return -ENODEV;
 	}
 
 	remaining_len = len;
@@ -763,7 +769,7 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 		pr_debug("Fragment %zd bytes remaining %zd",
 			 frag_len, remaining_len);
 
-		pdu = nfc_alloc_send_skb(sock->dev, &sock->sk, 0,
+		pdu = nfc_alloc_send_skb(sock->dev, sk, 0,
 					 frag_len + LLCP_HEADER_SIZE, &err);
 		if (pdu == NULL) {
 			pr_err("Could not allocate PDU (error=%d)\n", err);
@@ -800,6 +806,7 @@ int nfc_llcp_send_ui_frame(struct nfc_llcp_sock *sock, u8 ssap, u8 dsap,
 		msg_ptr += frag_len;
 	} while (remaining_len > 0);
 
+	release_sock(sk);
 	kfree(msg_data);
 
 	return len;
