@@ -163,8 +163,12 @@ void vgic_v2_deactivate(struct kvm_vcpu *vcpu, u32 val)
 	cpuid = FIELD_GET(GENMASK_ULL(12, 10), val);
 	val &= ~GENMASK_ULL(12, 10);
 
-	/* We only deal with DIR when EOIMode==1 */
-	if (!(cpuif->vgic_vmcr & GICH_VMCR_EOI_MODE_MASK))
+	/*
+	 * We only deal with DIR when EOIMode==1, and only for SGI,
+	 * PPI or SPI.
+	 */
+	if (!(cpuif->vgic_vmcr & GICH_VMCR_EOI_MODE_MASK) ||
+	    val >= vcpu->kvm->arch.vgic.nr_spis + VGIC_NR_PRIVATE_IRQS)
 		return;
 
 	/* Make sure we're in the same context as LR handling */
