@@ -983,6 +983,9 @@ struct aead_edesc {
  * @sec4_sg_bytes: length of dma mapped sec4_sg space
  * @bklog: stored to determine if the request needs backlog
  * @sec4_sg_dma: bus physical mapped address of h/w link table
+ * @desc_dma: bus physical mapped address of the cipher job descriptor the
+ *	      blob decapsulation descriptor jumps to (protected key only)
+ * @desc_dma_bytes: length of the mapping at @desc_dma
  * @sec4_sg: pointer to h/w link table
  * @hw_desc: the h/w job descriptor followed by any referenced link tables
  *	     and IV
@@ -996,6 +999,8 @@ struct skcipher_edesc {
 	int sec4_sg_bytes;
 	bool bklog;
 	dma_addr_t sec4_sg_dma;
+	dma_addr_t desc_dma;
+	unsigned int desc_dma_bytes;
 	struct sec4_sg_entry *sec4_sg;
 	u32 hw_desc[];
 };
@@ -1036,6 +1041,10 @@ static void skcipher_unmap(struct device *dev, struct skcipher_edesc *edesc,
 {
 	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
 	int ivsize = crypto_skcipher_ivsize(skcipher);
+
+	if (edesc->desc_dma)
+		dma_unmap_single(dev, edesc->desc_dma, edesc->desc_dma_bytes,
+				 DMA_TO_DEVICE);
 
 	caam_unmap(dev, req->src, req->dst,
 		   edesc->src_nents, edesc->dst_nents,
@@ -1313,9 +1322,9 @@ static void init_authenc_job(struct aead_request *req,
 /*
  * Fill in skcipher job descriptor
  */
-static void init_skcipher_job(struct skcipher_request *req,
-			      struct skcipher_edesc *edesc,
-			      const bool encrypt)
+static int init_skcipher_job(struct skcipher_request *req,
+			     struct skcipher_edesc *edesc,
+			     const bool encrypt)
 {
 	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
 	struct caam_ctx *ctx = crypto_skcipher_ctx_dma(skcipher);
@@ -1365,6 +1374,13 @@ static void init_skcipher_job(struct skcipher_request *req,
 					    ivsize, encrypt);
 
 		desc_dma = dma_map_single(jrdev, desc, desc_bytes(desc), DMA_TO_DEVICE);
+		if (dma_mapping_error(jrdev, desc_dma)) {
+			dev_err(jrdev, "unable to map cipher job descriptor\n");
+			return -ENOMEM;
+		}
+
+		edesc->desc_dma = desc_dma;
+		edesc->desc_dma_bytes = desc_bytes(desc);
 
 		cnstr_desc_protected_blob_decap(edesc->hw_desc, &ctx->cdata, desc_dma);
 	} else {
@@ -1377,6 +1393,8 @@ static void init_skcipher_job(struct skcipher_request *req,
 
 		append_seq_out_ptr(desc, dst_dma, req->cryptlen + ivsize, out_options);
 	}
+
+	return 0;
 }
 
 /*
@@ -1933,7 +1951,12 @@ static inline int skcipher_crypt(struct skcipher_request *req, bool encrypt)
 		return PTR_ERR(edesc);
 
 	/* Create and submit job descriptor*/
-	init_skcipher_job(req, edesc, encrypt);
+	ret = init_skcipher_job(req, edesc, encrypt);
+	if (ret) {
+		skcipher_unmap(jrdev, edesc, req);
+		kfree(edesc);
+		return ret;
+	}
 
 	print_hex_dump_debug("skcipher jobdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, edesc->hw_desc,
