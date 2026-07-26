@@ -1213,6 +1213,8 @@ patternProperties:
     description: Orient Chip Technology Co., Ltd.
   "^oct,.*":
     description: Octavo Systems LLC
+  "^orbbec,.*":
+    description: Orbbec Inc.
   "^okaya,.*":
     description: Okaya Electric America, Inc.
   "^oki,.*":
