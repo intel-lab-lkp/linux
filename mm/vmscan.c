@@ -4855,9 +4855,12 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		 * If scanned > 0 and isolated == 0, avoid falling back to the
 		 * other type, as this type remains sufficient. Falling back
 		 * too readily can disrupt the positive_ctrl_err() bias.
+		 * Only fall back when reclaim is running at high priority.
 		 */
-		if (!scanned)
-			type = !type;
+		if (!scanned) {
+			if (!sc->priority)
+				type = !type;
+		}
 	}
 
 	return total_scanned;
