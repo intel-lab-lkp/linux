@@ -102,7 +102,6 @@ impl WaitQueue {
     }
 
     /// Returns a raw pointer to the underlying `wait_queue_head`.
-    #[expect(unused)]
     #[inline]
     pub(super) fn as_raw(&self) -> *mut bindings::wait_queue_head {
         self.wait_queue_head.get()
@@ -213,7 +212,6 @@ impl WaitQueue {
 
     /// Performs a single exclusive prepare-to-wait / finish-wait cycle, calling `schedule_fn`
     /// in between.
-    #[expect(unused)]
     pub(super) fn wait_once_exclusive<F, R>(&self, wait_state: c_int, schedule_fn: F) -> R
     where
         F: FnOnce() -> R,
@@ -269,7 +267,6 @@ impl WaitQueue {
     /// Used when a wait queue is about to be freed, to ensure epoll items are properly removed.
     /// Matches C's `wake_up_pollfree()`.
     #[inline]
-    #[expect(unused)]
     pub(super) fn wake_up_pollfree(&self) {
         // SAFETY: `wait_queue_head` points to valid memory.
         unsafe { bindings::__wake_up_pollfree(self.wait_queue_head.get()) };
