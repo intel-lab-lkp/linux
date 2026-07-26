@@ -4862,11 +4862,14 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 			break;
 		}
 		/*
-		 * If scanned > 0 and isolated == 0, avoid falling back to the
-		 * other type, as this type remains sufficient. Falling back
-		 * too readily can disrupt the positive_ctrl_err() bias.
+		 * If scanned >= nr_to_scan or isolated >= MIN_LRU_BATCH,
+		 * avoid falling back to the other type. The preferred
+		 * type is still reclaimable; otherwise, it would have
+		 * already run out of reclaimable generations. Falling
+		 * back too readily can disrupt the positive_ctrl_err()
+		 * bias.
 		 */
-		if (!scanned)
+		if (scanned < nr_to_scan && *isolated < MIN_LRU_BATCH)
 			type = !type;
 	}
 
