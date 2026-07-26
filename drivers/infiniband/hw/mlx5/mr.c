@@ -1822,6 +1822,9 @@ int mlx5_ib_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 	MLX5_SET(mkc, mkc, en_rinval, !!((ibmw->type == IB_MW_TYPE_2)));
 	MLX5_SET(mkc, mkc, qpn, 0xffffff);
 
+	if (MLX5_CAP_GEN(dev->mdev, mkc_order_write_after_write_ro_only))
+		mlx5_core_mkey_set_relaxed_ordering(dev->mdev, mkc);
+
 	err = mlx5_ib_create_mkey(dev, &mw->mmkey, in, inlen);
 	if (err)
 		goto free;
