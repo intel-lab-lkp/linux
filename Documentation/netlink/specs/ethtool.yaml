@@ -448,6 +448,12 @@ attribute-sets:
       -
         name: hds-thresh-max
         type: u32
+      -
+        name: pacing-offload-horizon
+        type: u32
+      -
+        name: pacing-offload-horizon-max
+        type: u32
 
   -
     name: mm-stat
@@ -2168,6 +2174,8 @@ operations:
             - tx-push-buf-len-max
             - hds-thresh
             - hds-thresh-max
+            - pacing-offload-horizon
+            - pacing-offload-horizon-max
       dump: *ring-get-op
     -
       name: rings-set
