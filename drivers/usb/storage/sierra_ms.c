@@ -47,17 +47,16 @@ static bool containsFullLinuxPackage(struct swoc_info *swocInfo)
 
 static int sierra_set_ms_mode(struct usb_device *udev, __u16 eSWocMode)
 {
-	int result;
 	dev_dbg(&udev->dev, "SWIMS: %s", "DEVICE MODE SWITCH\n");
-	result = usb_control_msg(udev, usb_sndctrlpipe(udev, 0),
+	return usb_control_msg_send(udev, 0,
 			SWIMS_USB_REQUEST_SetSwocMode,	/* __u8 request      */
 			USB_TYPE_VENDOR | USB_DIR_OUT,	/* __u8 request type */
 			eSWocMode,			/* __u16 value       */
 			0x0000,				/* __u16 index       */
 			NULL,				/* void *data        */
 			0,				/* __u16 size 	     */
-			USB_CTRL_SET_TIMEOUT);		/* int timeout       */
-	return result;
+			USB_CTRL_SET_TIMEOUT,		/* int timeout       */
+			GFP_KERNEL);
 }
 
 
@@ -68,17 +67,20 @@ static int sierra_get_swoc_info(struct usb_device *udev,
 
 	dev_dbg(&udev->dev, "SWIMS: Attempting to get TRU-Install info\n");
 
-	result = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
+	result = usb_control_msg_recv(udev, 0,
 			SWIMS_USB_REQUEST_GetSwocInfo,	/* __u8 request      */
 			USB_TYPE_VENDOR | USB_DIR_IN,	/* __u8 request type */
 			0,				/* __u16 value       */
 			0,				/* __u16 index       */
-			(void *) swocInfo,		/* void *data        */
+			swocInfo,			/* void *data        */
 			sizeof(struct swoc_info),	/* __u16 size 	     */
-			USB_CTRL_SET_TIMEOUT);		/* int timeout 	     */
+			USB_CTRL_SET_TIMEOUT,		/* int timeout       */
+			GFP_KERNEL);
 
-	swocInfo->LinuxSKU = le16_to_cpu(swocInfo->LinuxSKU);
-	swocInfo->LinuxVer = le16_to_cpu(swocInfo->LinuxVer);
+	if (!result) {
+		swocInfo->LinuxSKU = le16_to_cpu(swocInfo->LinuxSKU);
+		swocInfo->LinuxVer = le16_to_cpu(swocInfo->LinuxVer);
+	}
 	return result;
 }
 
