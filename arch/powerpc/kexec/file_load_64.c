@@ -69,8 +69,6 @@ int arch_check_excluded_range(struct kimage *image, unsigned long start,
  * @um_info:                  Usable memory buffer and ranges info.
  * @cnt:                      No. of entries to accommodate.
  *
- * Frees up the old buffer if memory reallocation fails.
- *
  * Returns buffer on success, NULL on error.
  */
 static __be64 *check_realloc_usable_mem(struct umem_info *um_info, int cnt)
