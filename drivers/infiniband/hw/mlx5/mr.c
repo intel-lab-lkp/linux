@@ -71,8 +71,13 @@ static void set_mkc_access_pd_addr_fields(void *mkc, int acc, u64 start_addr,
 	MLX5_SET(mkc, mkc, lw, !!(acc & IB_ACCESS_LOCAL_WRITE));
 	MLX5_SET(mkc, mkc, lr, 1);
 
-	if (acc & IB_ACCESS_RELAXED_ORDERING)
+	if (acc & (IB_ACCESS_RELAXED_ORDERING | IB_ACCESS_UNORDERED))
 		mlx5_core_mkey_set_relaxed_ordering(dev->mdev, mkc);
+
+	if ((acc & IB_ACCESS_UNORDERED) &&
+	    MLX5_CAP_GEN(dev->mdev, mkc_order_read_after_write))
+		MLX5_SET(mkc, mkc, order_read_after_write,
+			 MLX5_MKC_ORDER_READ_AFTER_WRITE_RO);
 
 	MLX5_SET(mkc, mkc, pd, to_mpd(pd)->pdn);
 	MLX5_SET(mkc, mkc, qpn, 0xffffff);

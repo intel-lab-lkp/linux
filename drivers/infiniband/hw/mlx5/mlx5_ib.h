@@ -1679,7 +1679,7 @@ static inline bool mlx5_umem_needs_ats(struct mlx5_ib_dev *dev,
 {
 	if (!MLX5_CAP_GEN(dev->mdev, ats) || !umem->is_dmabuf)
 		return false;
-	return access_flags & IB_ACCESS_RELAXED_ORDERING;
+	return access_flags & (IB_ACCESS_RELAXED_ORDERING | IB_ACCESS_UNORDERED);
 }
 
 int set_roce_addr(struct mlx5_ib_dev *dev, u32 port_num,

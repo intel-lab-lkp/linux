@@ -450,7 +450,7 @@ static void mlx5r_umr_set_access_flags(struct mlx5_ib_dev *dev,
 	MLX5_SET(mkc, seg, lw, !!(access_flags & IB_ACCESS_LOCAL_WRITE));
 	MLX5_SET(mkc, seg, lr, 1);
 
-	if (access_flags & IB_ACCESS_RELAXED_ORDERING)
+	if (access_flags & (IB_ACCESS_RELAXED_ORDERING | IB_ACCESS_UNORDERED))
 		mlx5_core_mkey_set_relaxed_ordering(dev->mdev, seg);
 }
 
