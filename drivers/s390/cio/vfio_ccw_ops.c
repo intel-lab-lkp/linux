@@ -210,6 +210,15 @@ static void vfio_ccw_mdev_close_device(struct vfio_device *vdev)
 	cancel_work_sync(&private->io_work);
 	cancel_work_sync(&private->crw_work);
 
+	/*
+	 * Ensure that a not-operational device has indeed
+	 * freed any resources. Normally the interrupt handler
+	 * or FSM close should do this, but there exists the
+	 * possibility that a device removed from the config
+	 * would have left some of this about.
+	 */
+	cp_free(&private->cp);
+
 	vfio_ccw_unregister_dev_regions(private);
 }
 
