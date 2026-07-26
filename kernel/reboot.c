@@ -366,7 +366,7 @@ static struct sys_off_handler *alloc_sys_off_handler(int priority)
 	 */
 	if (priority == SYS_OFF_PRIO_PLATFORM) {
 		handler = &platform_sys_off_handler;
-		if (handler->cb_data)
+		if (handler->sys_off_cb)
 			return ERR_PTR(-EBUSY);
 	} else {
 		if (system_state > SYSTEM_RUNNING)
