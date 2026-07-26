@@ -87,6 +87,8 @@ vxfs_find_entry(struct inode *ip, struct dentry *dp, struct page **ppp)
 
 				pos += overhead;
 				pg_ofs += overhead;
+				if (pg_ofs >= PAGE_SIZE)
+					break;
 			}
 			de = (struct vxfs_direct *)(kaddr + pg_ofs);
 
@@ -237,6 +239,8 @@ vxfs_readdir(struct file *fp, struct dir_context *ctx)
 
 				pos += overhead;
 				pg_ofs += overhead;
+				if (pg_ofs >= PAGE_SIZE)
+					break;
 			}
 			de = (struct vxfs_direct *)(kaddr + pg_ofs);
 
