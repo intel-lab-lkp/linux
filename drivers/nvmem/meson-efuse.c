@@ -20,7 +20,7 @@ static int meson_efuse_read(void *context, unsigned int offset,
 	struct meson_sm_firmware *fw = context;
 	int ret;
 
-	ret = meson_sm_call_read(fw, (u8 *)val, bytes, SM_EFUSE_READ, offset,
+	ret = meson_sm_call_read(fw, val, bytes, SM_EFUSE_READ, offset,
 				 bytes, 0, 0, 0);
 
 	return ret < 0 ? ret : 0;
@@ -32,7 +32,7 @@ static int meson_efuse_write(void *context, unsigned int offset,
 	struct meson_sm_firmware *fw = context;
 	int ret;
 
-	ret = meson_sm_call_write(fw, (u8 *)val, bytes, SM_EFUSE_WRITE, offset,
+	ret = meson_sm_call_write(fw, val, bytes, SM_EFUSE_WRITE, offset,
 				  bytes, 0, 0, 0);
 
 	return ret < 0 ? ret : 0;
