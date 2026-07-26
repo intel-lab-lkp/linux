@@ -9,7 +9,7 @@ The device node has following properties.
 Required properties:
  - compatible	: "st,stih407-dwmac"
  - st,syscon : Should be phandle/offset pair. The phandle to the syscon node which
-   encompases the glue register, and the offset of the control register.
+   encompasses the glue register, and the offset of the control register.
  - st,gmac_en: this is to enable the gmac into a dedicated sysctl control
    register available on STiH407 SoC.
  - pinctrl-0: pin-control for all the MII mode supported.
