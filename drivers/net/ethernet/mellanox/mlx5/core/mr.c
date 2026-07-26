@@ -35,6 +35,27 @@
 #include <linux/mlx5/qp.h>
 #include "mlx5_core.h"
 
+/**
+ * mlx5_core_mkey_set_relaxed_ordering - Set RO flags in mkey context
+ * @dev: MLX5 core device
+ * @mkc: Memory key context buffer
+ *
+ * Sets order_write_after_write and pci_relaxed_ordered_read in @mkc
+ * based on device caps. Call when creating or modifying a memory key to have
+ * relaxed ordering.
+ */
+void mlx5_core_mkey_set_relaxed_ordering(struct mlx5_core_dev *dev, void *mkc)
+{
+	bool ro_write = MLX5_CAP_GEN(dev, mkc_order_write_after_write_ro);
+	bool ro_read = MLX5_CAP_GEN(dev, pci_relaxed_ordered_read) ||
+		       (MLX5_CAP_GEN(dev, relaxed_ordering_read_pci_enabled) &&
+			pcie_relaxed_ordering_enabled(dev->pdev));
+
+	MLX5_SET(mkc, mkc, pci_relaxed_ordered_read, ro_read);
+	MLX5_SET(mkc, mkc, order_write_after_write, ro_write);
+}
+EXPORT_SYMBOL(mlx5_core_mkey_set_relaxed_ordering);
+
 int mlx5_core_create_mkey(struct mlx5_core_dev *dev, u32 *mkey, u32 *in,
 			  int inlen)
 {
