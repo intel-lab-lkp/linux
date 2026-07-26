@@ -710,20 +710,17 @@ inval:
 static int cachefiles_daemon_debug(struct cachefiles_cache *cache, char *args)
 {
 	unsigned long mask;
+	int ret;
 
 	_enter(",%s", args);
 
-	mask = simple_strtoul(args, &args, 0);
-	if (args[0] != '\0')
-		goto inval;
+	ret = kstrtoul(args, 0, &mask);
+	if (ret < 0)
+		return ret;
 
 	cachefiles_debug = mask;
 	_leave(" = 0");
 	return 0;
-
-inval:
-	pr_err("debug command requires mask\n");
-	return -EINVAL;
 }
 
 /*
