@@ -4867,10 +4867,14 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		 * type is still reclaimable; otherwise, it would have
 		 * already run out of reclaimable generations. Falling
 		 * back too readily can disrupt the positive_ctrl_err()
-		 * bias.
+		 * bias. Also, only fall back when reclaim is running at
+		 * a high priority.
 		 */
-		if (scanned < nr_to_scan && *isolated < MIN_LRU_BATCH)
+		if (scanned < nr_to_scan && *isolated < MIN_LRU_BATCH) {
+			if (sc->priority > 2)
+				break;
 			type = !type;
+		}
 	}
 
 	return total_scanned;
