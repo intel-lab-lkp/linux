@@ -10,12 +10,8 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
-#include <linux/of_address.h>
-#include <linux/of_pci.h>
-#include <linux/of_platform.h>
 #include <linux/phy/phy.h>
 
-#include "../pci.h"
 #include "pcie-iproc.h"
 
 static const struct of_device_id iproc_pcie_of_match_table[] = {
@@ -40,10 +36,13 @@ static int iproc_pltfm_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct iproc_pcie *pcie;
-	struct device_node *np = dev->of_node;
-	struct resource reg;
+	struct resource *reg;
 	struct pci_host_bridge *bridge;
 	int ret;
+
+	reg = platform_get_resource(pdev, 0, IORESOURCE_MEM);
+	if (!reg)
+		return -ENODEV;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
 	if (!bridge)
@@ -52,26 +51,20 @@ static int iproc_pltfm_pcie_probe(struct platform_device *pdev)
 	pcie = pci_host_bridge_priv(bridge);
 
 	pcie->dev = dev;
-	pcie->type = (uintptr_t)of_device_get_match_data(dev);
+	pcie->type = (uintptr_t)device_get_match_data(dev);
 
-	ret = of_address_to_resource(np, 0, &reg);
-	if (ret < 0) {
-		dev_err(dev, "unable to obtain controller resources\n");
-		return ret;
-	}
-
-	pcie->base = devm_pci_remap_cfgspace(dev, reg.start,
-					     resource_size(&reg));
+	pcie->base = devm_pci_remap_cfgspace(dev, reg->start,
+					     resource_size(reg));
 	if (!pcie->base) {
 		dev_err(dev, "unable to map controller registers\n");
 		return -ENOMEM;
 	}
-	pcie->base_addr = reg.start;
+	pcie->base_addr = reg->start;
 
-	if (of_property_read_bool(np, "brcm,pcie-ob")) {
+	if (device_property_present(dev, "brcm,pcie-ob")) {
 		u32 val;
 
-		ret = of_property_read_u32(np, "brcm,pcie-ob-axi-offset",
+		ret = device_property_read_u32(dev, "brcm,pcie-ob-axi-offset",
 					   &val);
 		if (ret) {
 			dev_err(dev,
@@ -87,7 +80,7 @@ static int iproc_pltfm_pcie_probe(struct platform_device *pdev)
 	 * core driver. For platforms that require explicit inbound mapping
 	 * configuration, "dma-ranges" would have been present in DT
 	 */
-	pcie->need_ib_cfg = of_property_read_bool(np, "dma-ranges");
+	pcie->need_ib_cfg = device_property_present(dev, "dma-ranges");
 
 	/* PHY use is optional */
 	pcie->phy = devm_phy_optional_get(dev, "pcie-phy");
