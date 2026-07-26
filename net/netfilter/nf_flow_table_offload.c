@@ -1186,7 +1186,6 @@ static int nf_flow_table_block_setup(struct nf_flowtable *flowtable,
 	struct flow_block_cb *block_cb, *next;
 	int err = 0;
 
-	down_write(&flowtable->flow_block_lock);
 	switch (cmd) {
 	case FLOW_BLOCK_BIND:
 		list_splice(&bo->cb_list, &flowtable->flow_block.cb_list);
@@ -1201,8 +1200,6 @@ static int nf_flow_table_block_setup(struct nf_flowtable *flowtable,
 		WARN_ON_ONCE(1);
 		err = -EOPNOTSUPP;
 	}
-	up_write(&flowtable->flow_block_lock);
-
 	return err;
 }
 
@@ -1230,7 +1227,6 @@ static void nf_flow_table_indr_cleanup(struct flow_block_cb *block_cb)
 	nf_flow_table_gc_cleanup(flowtable, dev);
 	down_write(&flowtable->flow_block_lock);
 	list_del(&block_cb->list);
-	list_del(&block_cb->driver_list);
 	flow_block_cb_free(block_cb);
 	up_write(&flowtable->flow_block_lock);
 }
@@ -1239,13 +1235,15 @@ static int nf_flow_table_indr_offload_cmd(struct flow_block_offload *bo,
 					  struct nf_flowtable *flowtable,
 					  struct net_device *dev,
 					  enum flow_block_command cmd,
-					  struct netlink_ext_ack *extack)
+					  struct netlink_ext_ack *extack,
+					  bool *indr_dev_added)
 {
 	nf_flow_table_block_offload_init(bo, dev_net(dev), cmd, flowtable,
 					 extack);
 
 	return flow_indr_dev_setup_offload(dev, NULL, TC_SETUP_FT, flowtable, bo,
-					   nf_flow_table_indr_cleanup);
+					   nf_flow_table_indr_cleanup,
+					   indr_dev_added);
 }
 
 static int nf_flow_table_offload_cmd(struct flow_block_offload *bo,
@@ -1258,9 +1256,7 @@ static int nf_flow_table_offload_cmd(struct flow_block_offload *bo,
 
 	nf_flow_table_block_offload_init(bo, dev_net(dev), cmd, flowtable,
 					 extack);
-	down_write(&flowtable->flow_block_lock);
 	err = dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_FT, bo);
-	up_write(&flowtable->flow_block_lock);
 	if (err < 0)
 		return err;
 
@@ -1273,21 +1269,29 @@ int nf_flow_table_offload_setup(struct nf_flowtable *flowtable,
 {
 	struct netlink_ext_ack extack = {};
 	struct flow_block_offload bo;
+	bool indr_dev_added = false;
 	int err;
 
 	if (!nf_flowtable_hw_offload(flowtable))
 		return nf_flow_offload_xdp_setup(flowtable, dev, cmd);
 
+	flow_block_cb_lock();
+	down_write(&flowtable->flow_block_lock);
 	if (dev->netdev_ops->ndo_setup_tc)
 		err = nf_flow_table_offload_cmd(&bo, flowtable, dev, cmd,
 						&extack);
 	else
 		err = nf_flow_table_indr_offload_cmd(&bo, flowtable, dev, cmd,
-						     &extack);
-	if (err < 0)
-		return err;
+						     &extack,
+						     &indr_dev_added);
+	if (err >= 0)
+		err = nf_flow_table_block_setup(flowtable, &bo, cmd);
+	if (err < 0 && indr_dev_added)
+		flow_indr_dev_setup_abort(flowtable);
+	up_write(&flowtable->flow_block_lock);
+	flow_block_cb_unlock();
 
-	return nf_flow_table_block_setup(flowtable, &bo, cmd);
+	return err;
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_offload_setup);
 

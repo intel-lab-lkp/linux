@@ -647,6 +647,8 @@ struct flow_block_cb *flow_block_cb_lookup(struct flow_block *block,
 void *flow_block_cb_priv(struct flow_block_cb *block_cb);
 void flow_block_cb_incref(struct flow_block_cb *block_cb);
 unsigned int flow_block_cb_decref(struct flow_block_cb *block_cb);
+void flow_block_cb_lock(void);
+void flow_block_cb_unlock(void);
 
 static inline void flow_block_cb_add(struct flow_block_cb *block_cb,
 				     struct flow_block_offload *offload)
@@ -741,7 +743,9 @@ void flow_indr_dev_unregister(flow_indr_block_bind_cb_t *cb, void *cb_priv,
 int flow_indr_dev_setup_offload(struct net_device *dev, struct Qdisc *sch,
 				enum tc_setup_type type, void *data,
 				struct flow_block_offload *bo,
-				void (*cleanup)(struct flow_block_cb *block_cb));
+				void (*cleanup)(struct flow_block_cb *block_cb),
+				bool *indr_dev_added);
+void flow_indr_dev_setup_abort(void *data);
 bool flow_indr_dev_exists(void);
 
 #endif /* _NET_FLOW_OFFLOAD_H */

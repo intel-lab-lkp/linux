@@ -270,6 +270,8 @@ struct flow_block_cb *flow_block_cb_alloc(flow_setup_cb_t *cb,
 	block_cb->cb_ident = cb_ident;
 	block_cb->cb_priv = cb_priv;
 	block_cb->release = release;
+	INIT_LIST_HEAD(&block_cb->driver_list);
+	INIT_LIST_HEAD(&block_cb->indr.list);
 
 	return block_cb;
 }
@@ -317,10 +319,26 @@ unsigned int flow_block_cb_decref(struct flow_block_cb *block_cb)
 }
 EXPORT_SYMBOL(flow_block_cb_decref);
 
+static DEFINE_MUTEX(flow_block_cb_mutex);
+
+void flow_block_cb_lock(void)
+{
+	mutex_lock(&flow_block_cb_mutex);
+}
+EXPORT_SYMBOL(flow_block_cb_lock);
+
+void flow_block_cb_unlock(void)
+{
+	mutex_unlock(&flow_block_cb_mutex);
+}
+EXPORT_SYMBOL(flow_block_cb_unlock);
+
 bool flow_block_cb_is_busy(flow_setup_cb_t *cb, void *cb_ident,
 			   struct list_head *driver_block_list)
 {
 	struct flow_block_cb *block_cb;
+
+	lockdep_assert_held(&flow_block_cb_mutex);
 
 	list_for_each_entry(block_cb, driver_block_list, driver_list) {
 		if (block_cb->cb == cb &&
@@ -339,6 +357,8 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 			       bool ingress_only)
 {
 	struct flow_block_cb *block_cb;
+
+	lockdep_assert_held(&flow_block_cb_mutex);
 
 	if (ingress_only &&
 	    f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
@@ -431,12 +451,14 @@ int flow_indr_dev_register(flow_indr_block_bind_cb_t *cb, void *cb_priv)
 {
 	struct flow_indr_dev *indr_dev;
 
+	flow_block_cb_lock();
 	mutex_lock(&flow_indr_block_lock);
 	list_for_each_entry(indr_dev, &flow_block_indr_dev_list, list) {
 		if (indr_dev->cb == cb &&
 		    indr_dev->cb_priv == cb_priv) {
 			refcount_inc(&indr_dev->refcnt);
 			mutex_unlock(&flow_indr_block_lock);
+			flow_block_cb_unlock();
 			return 0;
 		}
 	}
@@ -444,12 +466,14 @@ int flow_indr_dev_register(flow_indr_block_bind_cb_t *cb, void *cb_priv)
 	indr_dev = flow_indr_dev_alloc(cb, cb_priv);
 	if (!indr_dev) {
 		mutex_unlock(&flow_indr_block_lock);
+		flow_block_cb_unlock();
 		return -ENOMEM;
 	}
 
 	list_add(&indr_dev->list, &flow_block_indr_dev_list);
 	existing_qdiscs_register(cb, cb_priv);
 	mutex_unlock(&flow_indr_block_lock);
+	flow_block_cb_unlock();
 
 	tcf_action_reoffload_cb(cb, cb_priv, true);
 
@@ -465,8 +489,10 @@ static void __flow_block_indr_cleanup(void (*release)(void *cb_priv),
 
 	list_for_each_entry_safe(this, next, &flow_block_indr_list, indr.list) {
 		if (this->release == release &&
-		    this->indr.cb_priv == cb_priv)
+		    this->indr.cb_priv == cb_priv) {
+			list_del_init(&this->driver_list);
 			list_move(&this->indr.list, cleanup_list);
+		}
 	}
 }
 
@@ -486,6 +512,7 @@ void flow_indr_dev_unregister(flow_indr_block_bind_cb_t *cb, void *cb_priv,
 	struct flow_indr_dev *this, *next, *indr_dev = NULL;
 	LIST_HEAD(cleanup_list);
 
+	flow_block_cb_lock();
 	mutex_lock(&flow_indr_block_lock);
 	list_for_each_entry_safe(this, next, &flow_block_indr_dev_list, list) {
 		if (this->cb == cb &&
@@ -499,11 +526,13 @@ void flow_indr_dev_unregister(flow_indr_block_bind_cb_t *cb, void *cb_priv,
 
 	if (!indr_dev) {
 		mutex_unlock(&flow_indr_block_lock);
+		flow_block_cb_unlock();
 		return;
 	}
 
 	__flow_block_indr_cleanup(release, cb_priv, &cleanup_list);
 	mutex_unlock(&flow_indr_block_lock);
+	flow_block_cb_unlock();
 
 	tcf_action_reoffload_cb(cb, cb_priv, false);
 	flow_block_indr_notify(&cleanup_list);
@@ -603,18 +632,31 @@ static int indir_dev_remove(void *data)
 int flow_indr_dev_setup_offload(struct net_device *dev,	struct Qdisc *sch,
 				enum tc_setup_type type, void *data,
 				struct flow_block_offload *bo,
-				void (*cleanup)(struct flow_block_cb *block_cb))
+				void (*cleanup)(struct flow_block_cb *block_cb),
+				bool *indr_dev_added)
 {
 	struct flow_indr_dev *this;
 	u32 count = 0;
 	int err;
 
+	lockdep_assert_held(&flow_block_cb_mutex);
+
+	if (indr_dev_added)
+		*indr_dev_added = false;
+
 	mutex_lock(&flow_indr_block_lock);
 	if (bo) {
-		if (bo->command == FLOW_BLOCK_BIND)
-			indir_dev_add(data, dev, sch, type, cleanup, bo);
-		else if (bo->command == FLOW_BLOCK_UNBIND)
+		if (bo->command == FLOW_BLOCK_BIND) {
+			err = indir_dev_add(data, dev, sch, type, cleanup, bo);
+			if (!err) {
+				if (indr_dev_added)
+					*indr_dev_added = true;
+			} else if (err != -EEXIST) {
+				goto out_unlock;
+			}
+		} else if (bo->command == FLOW_BLOCK_UNBIND) {
 			indir_dev_remove(data);
+		}
 	}
 
 	list_for_each_entry(this, &flow_block_indr_dev_list, list) {
@@ -623,14 +665,35 @@ int flow_indr_dev_setup_offload(struct net_device *dev,	struct Qdisc *sch,
 			count++;
 	}
 
+	err = (bo && list_empty(&bo->cb_list)) ? -EOPNOTSUPP : count;
+
+out_unlock:
 	mutex_unlock(&flow_indr_block_lock);
 
-	return (bo && list_empty(&bo->cb_list)) ? -EOPNOTSUPP : count;
+	return err;
 }
 EXPORT_SYMBOL(flow_indr_dev_setup_offload);
 
+void flow_indr_dev_setup_abort(void *data)
+{
+	lockdep_assert_held(&flow_block_cb_mutex);
+
+	mutex_lock(&flow_indr_block_lock);
+	WARN_ON_ONCE(indir_dev_remove(data));
+	mutex_unlock(&flow_indr_block_lock);
+}
+EXPORT_SYMBOL(flow_indr_dev_setup_abort);
+
 bool flow_indr_dev_exists(void)
 {
-	return !list_empty(&flow_block_indr_dev_list);
+	bool exists;
+
+	flow_block_cb_lock();
+	mutex_lock(&flow_indr_block_lock);
+	exists = !list_empty(&flow_block_indr_dev_list);
+	mutex_unlock(&flow_indr_block_lock);
+	flow_block_cb_unlock();
+
+	return exists;
 }
 EXPORT_SYMBOL(flow_indr_dev_exists);

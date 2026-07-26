@@ -414,7 +414,6 @@ static void nft_indr_block_cleanup(struct flow_block_cb *block_cb)
 				    basechain, &extack);
 	nft_net = nft_pernet(net);
 	mutex_lock(&nft_net->commit_mutex);
-	list_del(&block_cb->driver_list);
 	list_move(&block_cb->list, &bo.cb_list);
 	nft_flow_offload_unbind(&bo, basechain);
 	mutex_unlock(&nft_net->commit_mutex);
@@ -426,19 +425,28 @@ static int nft_indr_block_offload_cmd(struct nft_base_chain *basechain,
 {
 	struct netlink_ext_ack extack = {};
 	struct flow_block_offload bo;
+	bool indr_dev_added = false;
 	int err;
 
 	nft_flow_block_offload_init(&bo, dev_net(dev), cmd, basechain, &extack);
 
 	err = flow_indr_dev_setup_offload(dev, NULL, TC_SETUP_BLOCK, basechain, &bo,
-					  nft_indr_block_cleanup);
-	if (err < 0)
+					  nft_indr_block_cleanup,
+					  &indr_dev_added);
+	if (err < 0) {
+		if (indr_dev_added)
+			flow_indr_dev_setup_abort(basechain);
 		return err;
+	}
 
 	if (list_empty(&bo.cb_list))
 		return -EOPNOTSUPP;
 
-	return nft_block_setup(basechain, &bo, cmd);
+	err = nft_block_setup(basechain, &bo, cmd);
+	if (err < 0 && indr_dev_added)
+		flow_indr_dev_setup_abort(basechain);
+
+	return err;
 }
 
 static int nft_chain_offload_cmd(struct nft_base_chain *basechain,
@@ -447,10 +455,12 @@ static int nft_chain_offload_cmd(struct nft_base_chain *basechain,
 {
 	int err;
 
+	flow_block_cb_lock();
 	if (dev->netdev_ops->ndo_setup_tc)
 		err = nft_block_offload_cmd(basechain, dev, cmd);
 	else
 		err = nft_indr_block_offload_cmd(basechain, dev, cmd);
+	flow_block_cb_unlock();
 
 	return err;
 }

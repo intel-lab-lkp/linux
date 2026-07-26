@@ -808,7 +808,6 @@ static void tc_block_indr_cleanup(struct flow_block_cb *block_cb)
 			       &extack);
 	rtnl_lock();
 	down_write(&block->cb_lock);
-	list_del(&block_cb->driver_list);
 	list_move(&block_cb->list, &bo.cb_list);
 	tcf_block_unbind(block, &bo);
 	up_write(&block->cb_lock);
@@ -824,17 +823,20 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 				 struct net_device *dev, struct Qdisc *sch,
 				 struct tcf_block_ext_info *ei,
 				 enum flow_block_command command,
-				 struct netlink_ext_ack *extack)
+				 struct netlink_ext_ack *extack,
+				 bool *indr_dev_added,
+				 unsigned int *indr_cb_count,
+				 bool *indr_unlocked_driver_cb)
 {
 	struct flow_block_offload bo = {};
+	unsigned int cb_count;
+	int err;
 
 	tcf_block_offload_init(&bo, dev, sch, command, ei->binder_type,
 			       &block->flow_block, tcf_block_shared(block),
 			       extack);
 
 	if (dev->netdev_ops->ndo_setup_tc) {
-		int err;
-
 		err = dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_BLOCK, &bo);
 		if (err < 0) {
 			if (err != -EOPNOTSUPP)
@@ -845,11 +847,52 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 		return tcf_block_setup(block, &bo);
 	}
 
-	flow_indr_dev_setup_offload(dev, sch, TC_SETUP_BLOCK, block, &bo,
-				    tc_block_indr_cleanup);
-	tcf_block_setup(block, &bo);
+	err = flow_indr_dev_setup_offload(dev, sch, TC_SETUP_BLOCK, block, &bo,
+					  tc_block_indr_cleanup,
+					  indr_dev_added);
+	if (err < 0)
+		return err;
+	cb_count = list_count_nodes(&bo.cb_list);
+	err = tcf_block_setup(block, &bo);
+	if (err)
+		return err;
+	if (indr_cb_count)
+		*indr_cb_count = cb_count;
+	if (indr_unlocked_driver_cb)
+		*indr_unlocked_driver_cb = bo.unlocked_driver_cb;
 
 	return -EOPNOTSUPP;
+}
+
+static void
+tcf_block_indr_bind_rollback(struct tcf_block *block, struct net_device *dev,
+			     struct Qdisc *sch, struct tcf_block_ext_info *ei,
+			     unsigned int cb_count, bool unlocked_driver_cb,
+			     bool remove_indr_dev)
+{
+	struct flow_block_offload bo = {};
+	struct flow_block_cb *block_cb;
+
+	tcf_block_offload_init(&bo, dev, sch, FLOW_BLOCK_UNBIND,
+			       ei->binder_type, &block->flow_block,
+			       tcf_block_shared(block), NULL);
+	bo.unlocked_driver_cb = unlocked_driver_cb;
+
+	if (remove_indr_dev)
+		flow_indr_dev_setup_abort(block);
+
+	/* tcf_block_bind() splices this bind's callbacks at the list head. */
+	while (cb_count--) {
+		if (WARN_ON_ONCE(list_empty(&block->flow_block.cb_list)))
+			break;
+
+		block_cb = list_first_entry(&block->flow_block.cb_list,
+					    struct flow_block_cb, list);
+		list_del_init(&block_cb->driver_list);
+		list_del_init(&block_cb->indr.list);
+		list_move(&block_cb->list, &bo.cb_list);
+	}
+	tcf_block_unbind(block, &bo);
 }
 
 static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
@@ -857,9 +900,13 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 				  struct netlink_ext_ack *extack)
 {
 	struct net_device *dev = q->dev_queue->dev;
+	bool indr_unlocked_driver_cb = false;
+	bool indr_dev_added = false;
+	unsigned int indr_cb_count = 0;
 	int err;
 
 	down_write(&block->cb_lock);
+	flow_block_cb_lock();
 
 	/* If tc offload feature is disabled and the block we try to bind
 	 * to already has some offloaded filters, forbid to bind.
@@ -872,14 +919,15 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 		goto err_unlock;
 	}
 
-	err = tcf_block_offload_cmd(block, dev, q, ei, FLOW_BLOCK_BIND, extack);
+	err = tcf_block_offload_cmd(block, dev, q, ei, FLOW_BLOCK_BIND, extack,
+				    &indr_dev_added, &indr_cb_count,
+				    &indr_unlocked_driver_cb);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_inc;
 	if (err)
 		goto err_unlock;
 
-	up_write(&block->cb_lock);
-	return 0;
+	goto out_unlock;
 
 no_offload_dev_inc:
 	if (tcf_block_offload_in_use(block))
@@ -888,6 +936,15 @@ no_offload_dev_inc:
 	err = 0;
 	block->nooffloaddevcnt++;
 err_unlock:
+	if (err && indr_cb_count)
+		tcf_block_indr_bind_rollback(block, dev, q, ei,
+					     indr_cb_count,
+					     indr_unlocked_driver_cb,
+					     indr_dev_added);
+	else if (err && indr_dev_added)
+		flow_indr_dev_setup_abort(block);
+out_unlock:
+	flow_block_cb_unlock();
 	up_write(&block->cb_lock);
 	return err;
 }
@@ -899,14 +956,18 @@ static void tcf_block_offload_unbind(struct tcf_block *block, struct Qdisc *q,
 	int err;
 
 	down_write(&block->cb_lock);
-	err = tcf_block_offload_cmd(block, dev, q, ei, FLOW_BLOCK_UNBIND, NULL);
+	flow_block_cb_lock();
+	err = tcf_block_offload_cmd(block, dev, q, ei, FLOW_BLOCK_UNBIND, NULL,
+				    NULL, NULL, NULL);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_dec;
+	flow_block_cb_unlock();
 	up_write(&block->cb_lock);
 	return;
 
 no_offload_dev_dec:
 	WARN_ON(block->nooffloaddevcnt-- == 0);
+	flow_block_cb_unlock();
 	up_write(&block->cb_lock);
 }
 
@@ -1649,7 +1710,8 @@ static int tcf_block_bind(struct tcf_block *block,
 
 err_unroll:
 	list_for_each_entry_safe(block_cb, next, &bo->cb_list, list) {
-		list_del(&block_cb->driver_list);
+		list_del_init(&block_cb->driver_list);
+		list_del_init(&block_cb->indr.list);
 		if (i-- > 0) {
 			list_del(&block_cb->list);
 			tcf_block_playback_offloads(block, block_cb->cb,

@@ -1601,30 +1601,41 @@ int enetc_set_psfp(struct net_device *ndev, bool en)
 
 int enetc_psfp_init(struct enetc_ndev_priv *priv)
 {
+	int err = 0;
+
+	flow_block_cb_lock();
 	if (epsfp.psfp_sfi_bitmap)
-		return 0;
+		goto out;
 
 	epsfp.psfp_sfi_bitmap = bitmap_zalloc(priv->psfp_cap.max_psfp_filter,
 					      GFP_KERNEL);
-	if (!epsfp.psfp_sfi_bitmap)
-		return -ENOMEM;
+	if (!epsfp.psfp_sfi_bitmap) {
+		err = -ENOMEM;
+		goto out;
+	}
 
 	spin_lock_init(&epsfp.psfp_lock);
 
 	if (list_empty(&enetc_block_cb_list))
 		epsfp.dev_bitmap = 0;
 
-	return 0;
+out:
+	flow_block_cb_unlock();
+	return err;
 }
 
 int enetc_psfp_clean(struct enetc_ndev_priv *priv)
 {
-	if (!list_empty(&enetc_block_cb_list))
-		return -EBUSY;
+	int err = -EBUSY;
 
-	clean_psfp_all();
+	flow_block_cb_lock();
+	if (list_empty(&enetc_block_cb_list)) {
+		clean_psfp_all();
+		err = 0;
+	}
+	flow_block_cb_unlock();
 
-	return 0;
+	return err;
 }
 
 int enetc_setup_tc_psfp(struct net_device *ndev, void *type_data)

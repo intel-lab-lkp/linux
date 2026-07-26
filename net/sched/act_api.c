@@ -205,8 +205,10 @@ static int tcf_action_offload_cmd_ex(struct flow_offload_action *fl_act,
 {
 	int err;
 
+	flow_block_cb_lock();
 	err = flow_indr_dev_setup_offload(NULL, NULL, TC_SETUP_ACT,
-					  fl_act, NULL, NULL);
+					  fl_act, NULL, NULL, NULL);
+	flow_block_cb_unlock();
 	if (err < 0)
 		return err;
 
