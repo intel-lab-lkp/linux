@@ -797,6 +797,45 @@ static int paes_skcipher_setkey(struct crypto_skcipher *skcipher,
 
 	keylen = keylen - CAAM_PKEY_HEADER;
 
+	if (pkey_info->is_pkey != 1) {
+		dev_dbg(jrdev, "not a protected key\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * An EKT (CCM) black key occupies plain_key_sz + CAAM_CCM_OVERHEAD
+	 * bytes, which neither the key size range of this algorithm, nor the
+	 * blob length computed by cnstr_desc_protected_blob_decap(), nor the
+	 * KEY command length in cnstr_desc_skcipher_enc_dec() account for.
+	 * Encapsulation has the same problem: caam_process_blob() stores only
+	 * input_len bytes of an input_len + CAAM_CCM_OVERHEAD byte black key.
+	 * Reject such keys instead of submitting a job that is bound to fail
+	 * or, worse, to derive a key from a truncated blob.
+	 */
+	if (pkey_info->key_enc_algo != CAAM_ENC_ALGO_ECB) {
+		dev_dbg(jrdev, "unsupported protected key encoding %u\n",
+			pkey_info->key_enc_algo);
+		return -EOPNOTSUPP;
+	}
+
+	/* Validate key length for AES algorithms */
+	err = aes_check_keylen(pkey_info->plain_key_sz);
+	if (err) {
+		dev_dbg(jrdev, "bad key length\n");
+		return err;
+	}
+
+	/*
+	 * plain_key_sz comes straight from userspace and determines how much
+	 * data the hardware reads out of ctx->key, so it has to agree with the
+	 * amount of key material actually supplied.
+	 */
+	if (keylen != pkey_info->plain_key_sz + CAAM_BLOB_OVERHEAD) {
+		dev_dbg(jrdev, "blob length %u does not match key size %u\n",
+			keylen, pkey_info->plain_key_sz);
+		return -EINVAL;
+	}
+
 	/* Retrieve the length of key */
 	ctx->cdata.plain_keylen = pkey_info->plain_key_sz;
 
@@ -806,19 +845,8 @@ static int paes_skcipher_setkey(struct crypto_skcipher *skcipher,
 	/* Retrieve the address of the blob */
 	ctx->cdata.key_virt = pkey_info->key_buf;
 
-	/* Validate key length for AES algorithms */
-	err = aes_check_keylen(ctx->cdata.plain_keylen);
-	if (err) {
-		dev_err(jrdev, "bad key length\n");
-		return err;
-	}
-
 	/* set command option */
-	ctx->cdata.key_cmd_opt |= KEY_ENC;
-
-	/* check if the Protected-Key is CCM key */
-	if (pkey_info->key_enc_algo == CAAM_ENC_ALGO_CCM)
-		ctx->cdata.key_cmd_opt |= KEY_EKT;
+	ctx->cdata.key_cmd_opt = KEY_ENC;
 
 	memcpy(ctx->key, ctx->cdata.key_virt, keylen);
 	dma_sync_single_for_device(jrdev, ctx->key_dma, keylen, DMA_TO_DEVICE);
