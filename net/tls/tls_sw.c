@@ -738,7 +738,7 @@ static int tls_sw_sendmsg_splice(struct sock *sk, struct msghdr *msg,
 {
 	struct page *page = NULL, **pages = &page;
 
-	do {
+	while (try_to_copy && !sk_msg_full(msg_pl)) {
 		ssize_t part;
 		size_t off;
 
@@ -758,7 +758,7 @@ static int tls_sw_sendmsg_splice(struct sock *sk, struct msghdr *msg,
 		sk_mem_charge(sk, part);
 		*copied += part;
 		try_to_copy -= part;
-	} while (try_to_copy && !sk_msg_full(msg_pl));
+	}
 
 	return 0;
 }
