@@ -405,22 +405,27 @@ static int cachefiles_daemon_range_error(struct cachefiles_cache *cache,
  */
 static int cachefiles_daemon_frun(struct cachefiles_cache *cache, char *args)
 {
-	unsigned long frun;
+        unsigned long frun;
+        int ret;
 
-	_enter(",%s", args);
+        _enter(",%s", args);
 
-	if (!*args)
-		return -EINVAL;
+        if (!*args)
+                return -EINVAL;
 
-	frun = simple_strtoul(args, &args, 10);
-	if (args[0] != '%' || args[1] != '\0')
-		return -EINVAL;
+        ret = kstrtoul(args, 10, &frun);
+        if (ret < 0)
+                return ret;
 
-	if (frun <= cache->fcull_percent || frun >= 100)
-		return cachefiles_daemon_range_error(cache, args);
+        args = strchr(args, '%');
+        if (!args || args[1] != '\0')
+                return -EINVAL;
 
-	cache->frun_percent = frun;
-	return 0;
+        if (frun <= cache->fcull_percent || frun >= 100)
+                return cachefiles_daemon_range_error(cache, args);
+
+        cache->frun_percent = frun;
+        return 0;
 }
 
 /*
@@ -430,14 +435,19 @@ static int cachefiles_daemon_frun(struct cachefiles_cache *cache, char *args)
 static int cachefiles_daemon_fcull(struct cachefiles_cache *cache, char *args)
 {
 	unsigned long fcull;
+	int ret;
 
 	_enter(",%s", args);
 
 	if (!*args)
 		return -EINVAL;
 
-	fcull = simple_strtoul(args, &args, 10);
-	if (args[0] != '%' || args[1] != '\0')
+	ret = kstrtoul(args, 10, &fcull);
+	if (ret < 0)
+		return ret;
+
+	args = strchr(args, '%');
+	if (!args || args[1] != '\0')
 		return -EINVAL;
 
 	if (fcull <= cache->fstop_percent || fcull >= cache->frun_percent)
