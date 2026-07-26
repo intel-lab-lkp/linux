@@ -905,8 +905,6 @@ static void __gb_lights_led_unregister(struct gb_channel *channel)
 		return;
 
 	led_classdev_unregister(cdev);
-	kfree(cdev->name);
-	cdev->name = NULL;
 	channel->led = NULL;
 }
 
@@ -1063,6 +1061,9 @@ static int gb_lights_light_register(struct gb_light *light)
 
 static void gb_lights_channel_free(struct gb_channel *channel)
 {
+	struct led_classdev *cdev = get_channel_cdev(channel);
+
+	kfree(cdev->name);
 	kfree(channel->attrs);
 	kfree(channel->attr_group);
 	kfree(channel->attr_groups);
