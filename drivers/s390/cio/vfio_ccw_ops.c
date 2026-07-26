@@ -136,6 +136,9 @@ static void vfio_ccw_mdev_release_dev(struct vfio_device *vdev)
 		kfree(crw);
 	}
 
+	cancel_work_sync(&private->io_work);
+	cancel_work_sync(&private->crw_work);
+
 	kmem_cache_free(vfio_ccw_crw_region, private->crw_region);
 	kmem_cache_free(vfio_ccw_schib_region, private->schib_region);
 	kmem_cache_free(vfio_ccw_cmd_region, private->cmd_region);
