@@ -278,11 +278,7 @@ int iwl_mvm_disable_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	if (ret)
 		return ret;
 
-	ret = iwl_mvm_remove_link(mvm, vif, link_conf);
-	if (ret)
-		return ret;
-
-	return ret;
+	return iwl_mvm_remove_link(mvm, vif, link_conf);
 }
 
 void iwl_mvm_init_link(struct iwl_mvm_vif_link_info *link)
