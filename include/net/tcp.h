@@ -1283,9 +1283,11 @@ enum tcp_ca_ack_event_flags {
 #define TCP_CONG_ECT_1_NEGOTIATION	BIT(3)
 /* Cannot fallback to RFC3168 during AccECN negotiation */
 #define TCP_CONG_NO_FALLBACK_RFC3168	BIT(4)
+/* Congestion cotnrol provides the exact TSO segment numbers  */
+#define TCP_CONG_EXACT_TSO_SEGS		BIT(5)
 #define TCP_CONG_MASK  (TCP_CONG_NON_RESTRICTED | TCP_CONG_NEEDS_ECN | \
 			TCP_CONG_NEEDS_ACCECN | TCP_CONG_ECT_1_NEGOTIATION | \
-			TCP_CONG_NO_FALLBACK_RFC3168)
+			TCP_CONG_NO_FALLBACK_RFC3168 | TCP_CONG_EXACT_TSO_SEGS)
 
 union tcp_cc_info;
 
@@ -1361,8 +1363,16 @@ struct tcp_congestion_ops {
 	/* hook for packet ack accounting (optional) */
 	void (*pkts_acked)(struct sock *sk, const struct ack_sample *sample);
 
-	/* override sysctl_tcp_min_tso_segs (optional) */
-	u32 (*min_tso_segs)(struct sock *sk);
+	union {
+		/* Used when TCP_CONG_EXACT_TSO_SEGS is not set,
+		 * override sysctl_tcp_min_tso_segs (optional)
+		 */
+		u32 (*min_tso_segs)(struct sock *sk);
+		/* Used when TCP_CONG_EXACT_TSO_SEGS is set,
+		 * override tcp_tso_autosize (optional)
+		 */
+		u32 (*tso_segs)(struct sock *sk, u32 mss_now);
+	};
 
 	/* new value of cwnd after loss (required) */
 	u32  (*undo_cwnd)(struct sock *sk);
