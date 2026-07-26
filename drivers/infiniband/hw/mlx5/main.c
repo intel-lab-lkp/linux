@@ -3514,13 +3514,13 @@ mlx5_ib_create_data_direct_resources(struct mlx5_ib_dev *dev)
 	dev->ddr.pdn = pdn;
 
 	/* create another mkey with RO support */
-	if (MLX5_CAP_GEN(dev->mdev, relaxed_ordering_write)) {
-		MLX5_SET(mkc, mkc, relaxed_ordering_write, 1);
+	if (MLX5_CAP_GEN(dev->mdev, mkc_order_write_after_write_ro)) {
+		MLX5_SET(mkc, mkc, order_write_after_write, 1);
 		ro_supp = true;
 	}
 
-	if (MLX5_CAP_GEN(dev->mdev, relaxed_ordering_read)) {
-		MLX5_SET(mkc, mkc, relaxed_ordering_read, 1);
+	if (MLX5_CAP_GEN(dev->mdev, pci_relaxed_ordered_read)) {
+		MLX5_SET(mkc, mkc, pci_relaxed_ordered_read, 1);
 		ro_supp = true;
 	}
 
