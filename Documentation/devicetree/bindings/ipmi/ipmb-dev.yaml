@@ -12,7 +12,7 @@ description: |
   requests to intelligent controllers like Satellite Management Controller(MC)
   devices via IPMB and the device sends responses back to the BMC.
   This device uses an I2C slave device to send and receive IPMB messages,
-  either on a BMC or other MC. A miscellaneous device provices a user space
+  either on a BMC or other MC. A miscellaneous device provides a user space
   program to communicate with the kernel and the backend device. Some IPMB
   devices only support the I2C protocol and not the SMB protocol.
 
