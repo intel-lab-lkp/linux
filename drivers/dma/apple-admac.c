@@ -946,6 +946,7 @@ static struct platform_driver apple_admac_driver = {
 	.driver = {
 		.name = "apple-admac",
 		.of_match_table = admac_of_match,
+		.suppress_bind_attrs = true,
 	},
 	.probe = admac_probe,
 	.remove = admac_remove,
