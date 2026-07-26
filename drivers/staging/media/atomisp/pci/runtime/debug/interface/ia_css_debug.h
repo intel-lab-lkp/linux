@@ -132,27 +132,6 @@ static inline void __printf(2, 0) ia_css_debug_vdtrace(unsigned int level,
 __printf(2, 3) void ia_css_debug_dtrace(unsigned int level,
 					const char *fmt, ...);
 
-
-/*! @brief Function to set the global dtrace verbosity level.
- * @param[in]	trace_level	Maximum level of the messages to be traced.
- * @return	None
- */
-void ia_css_debug_set_dtrace_level(
-    const unsigned int	trace_level);
-
-/*! @brief Function to get the global dtrace verbosity level.
- * @return	global dtrace verbosity level
- */
-unsigned int ia_css_debug_get_dtrace_level(void);
-
-/* ISP2401 */
-/*! @brief Dump GAC hardware state.
- * Dumps the GAC ACB hardware registers. may be useful for
- * detecting a GAC which got hang.
- * @return	None
- */
-void ia_css_debug_dump_gac_state(void);
-
 /*! @brief Dump internal sp software state.
  * Dumps the sp software state to tracing output.
  * @return	None
@@ -163,72 +142,6 @@ void ia_css_debug_dump_sp_sw_debug_info(void);
 void ia_css_debug_print_sp_debug_state(
     const struct sh_css_sp_debug_state *state);
 #endif
-
-/*! @brief Dump all related binary info data
- * @param[in]  bi	Binary info struct.
- * @return	None
- */
-void ia_css_debug_binary_print(
-    const struct ia_css_binary *bi);
-
-void ia_css_debug_sp_dump_mipi_fifo_high_water(void);
-
-/*! \brief Dump pif A isp fifo state
- * Dumps the primary input formatter state to tracing output.
- * @return	None
- */
-void ia_css_debug_dump_pif_a_isp_fifo_state(void);
-
-/*! \brief Dump pif B isp fifo state
- * Dumps the primary input formatter state to tracing output.
- * \return	None
- */
-void ia_css_debug_dump_pif_b_isp_fifo_state(void);
-
-/*! @brief Dump stream-to-memory sp fifo state
- * Dumps the stream-to-memory block state to tracing output.
- * @return	None
- */
-void ia_css_debug_dump_str2mem_sp_fifo_state(void);
-
-/*! @brief Dump all fifo state info to the output
- * Dumps all fifo state to tracing output.
- * @return	None
- */
-void ia_css_debug_dump_all_fifo_state(void);
-
-/*! @brief Dump the frame info to the trace output
- * Dumps the frame info to tracing output.
- * @param[in]	frame		pointer to struct ia_css_frame
- * @param[in]	descr		description output along with the frame info
- * @return	None
- */
-void ia_css_debug_frame_print(
-    const struct ia_css_frame	*frame,
-    const char	*descr);
-
-/*! @brief Function to enable sp sleep mode.
- * Function that enables sp sleep mode
- * @param[in]	mode		indicates when to put sp to sleep
- * @return	None
- */
-void ia_css_debug_enable_sp_sleep_mode(enum ia_css_sp_sleep_mode mode);
-
-/*! @brief Function to wake up sp when in sleep mode.
- * After sp has been put to sleep, use this function to let it continue
- * to run again.
- * @return	None
- */
-void ia_css_debug_wake_up_sp(void);
-
-/*! @brief Function to dump isp parameters.
- * Dump isp parameters to tracing output
- * @param[in]	stream		pointer to ia_css_stream struct
- * @param[in]	enable		flag indicating which parameters to dump.
- * @return	None
- */
-void ia_css_debug_dump_isp_params(struct ia_css_stream *stream,
-				  unsigned int enable);
 
 void ia_css_debug_dump_isp_binary(void);
 
@@ -311,96 +224,5 @@ void ia_css_debug_dump_metadata_config(
 void ia_css_debug_dump_stream_config(
     const struct ia_css_stream_config *config,
     int num_pipes);
-
-/**
- * @brief Initialize the debug mode.
- *
- * WARNING:
- * This API should be called ONLY once in the debug mode.
- *
- * @return
- *	- true, if it is successful.
- *	- false, otherwise.
- */
-bool ia_css_debug_mode_init(void);
-
-/**
- * @brief Disable the DMA channel.
- *
- * @param[in]	dma_ID		The ID of the target DMA.
- * @param[in]	channel_id	The ID of the target DMA channel.
- * @param[in]	request_type	The type of the DMA request.
- *				For example:
- *				- "0" indicates the writing request.
- *				- "1" indicates the reading request.
- *
- * This is part of the DMA API -> dma.h
- *
- * @return
- *	- true, if it is successful.
- *	- false, otherwise.
- */
-bool ia_css_debug_mode_disable_dma_channel(
-    int dma_ID,
-    int channel_id,
-    int request_type);
-/**
- * @brief Enable the DMA channel.
- *
- * @param[in]	dma_ID		The ID of the target DMA.
- * @param[in]	channel_id	The ID of the target DMA channel.
- * @param[in]	request_type	The type of the DMA request.
- *				For example:
- *				- "0" indicates the writing request.
- *				- "1" indicates the reading request.
- *
- * @return
- *	- true, if it is successful.
- *	- false, otherwise.
- */
-bool ia_css_debug_mode_enable_dma_channel(
-    int dma_ID,
-    int channel_id,
-    int request_type);
-
-/**
- * @brief Dump tracer data.
- * [Currently support is only for SKC]
- *
- * @return
- *	- none.
- */
-void ia_css_debug_dump_trace(void);
-
-/* ISP2401 */
-/**
- * @brief Program counter dumping (in loop)
- *
- * @param[in]	id		The ID of the SP
- * @param[in]	num_of_dumps	The number of dumps
- *
- * @return
- *	- none
- */
-void ia_css_debug_pc_dump(sp_ID_t id, unsigned int num_of_dumps);
-
-/* ISP2500 */
-/*! @brief Dump all states for ISP hang case.
- * Dumps the ISP previous and current configurations
- * GACs status, SP0/1 statuses.
- *
- * @param[in]	pipe	The current pipe
- *
- * @return	None
- */
-void ia_css_debug_dump_hang_status(
-    struct ia_css_pipe *pipe);
-
-/*! @brief External command handler
- * External command handler
- *
- * @return	None
- */
-void ia_css_debug_ext_command_handler(void);
 
 #endif /* _IA_CSS_DEBUG_H_ */
