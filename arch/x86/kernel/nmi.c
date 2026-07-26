@@ -532,10 +532,13 @@ enum nmi_states {
 static DEFINE_PER_CPU(enum nmi_states, nmi_state);
 static DEFINE_PER_CPU(unsigned long, nmi_cr2);
 static DEFINE_PER_CPU(unsigned long, nmi_dr7);
+static DEFINE_PER_CPU(unsigned int, nmi_dr7_seq);
 
 DEFINE_IDTENTRY_RAW(exc_nmi)
 {
 	irqentry_state_t irq_state;
+	unsigned long dr7;
+	unsigned int dr7_seq;
 	struct nmi_stats *nsp = this_cpu_ptr(&nmi_stats);
 
 	/*
@@ -572,7 +575,9 @@ nmi_restart:
 	 */
 	sev_es_ist_enter(regs);
 
-	this_cpu_write(nmi_dr7, local_db_save());
+	local_db_save(&dr7, &dr7_seq);
+	this_cpu_write(nmi_dr7, dr7);
+	this_cpu_write(nmi_dr7_seq, dr7_seq);
 
 	irq_state = irqentry_nmi_enter(regs);
 
@@ -594,7 +599,8 @@ nmi_restart:
 
 	irqentry_nmi_exit(regs, irq_state);
 
-	local_db_restore(this_cpu_read(nmi_dr7));
+	local_db_restore(this_cpu_read(nmi_dr7),
+			 this_cpu_read(nmi_dr7_seq));
 
 	sev_es_ist_exit();
 
