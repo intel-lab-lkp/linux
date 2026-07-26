@@ -10,7 +10,7 @@ maintainers:
   - Jassi Brar <jaswinder.singh@linaro.org>
 
 description: |
-  The controller provices USB2.0 compliant FullSpeed peripheral
+  The controller provides USB2.0 compliant FullSpeed peripheral
   implementation over the SPI interface.
 
   Specifications about the part can be found at:
