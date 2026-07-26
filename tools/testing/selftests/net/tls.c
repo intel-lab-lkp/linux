@@ -835,6 +835,58 @@ TEST_F(tls, send_and_splice)
 	EXPECT_EQ(memcmp(mem_send, mem_recv, send_len), 0);
 }
 
+/* Splicing into an open record whose plaintext scatterlist ring is already
+ * full used to wrap the ring's end index onto its start, after which
+ * sk_msg_full() reported the full ring as empty: further pages overwrote
+ * live entries and sg.size desynced from the walkable scatterlist, which
+ * oopsed in the AEAD walk once the record was pushed.  The ring is left
+ * full and unpushed by the copy path, which does not push the record when
+ * the fragment it adds is the one that fills the ring.
+ */
+TEST_F(tls, splice_onto_full_record)
+{
+	int frag_len = 100, extra = 4;
+	char mem_send[5000];
+	char mem_recv[5000];
+	int nfrags, i, total;
+	int p[2];
+
+	memrnd(mem_send, sizeof(mem_send));
+
+	/* MAX_SKB_FRAGS is configurable (17 by default), so sweep the
+	 * plausible range to land the one-byte send exactly on a full ring
+	 * whatever this kernel was built with.
+	 */
+	for (nfrags = 12; nfrags <= 45; nfrags++) {
+		total = (nfrags + extra) * frag_len + 2;
+
+		for (i = 0; i < nfrags; i++) {
+			ASSERT_GE(pipe(p), 0);
+			EXPECT_EQ(write(p[1], mem_send, frag_len), frag_len);
+			EXPECT_EQ(splice(p[0], NULL, self->fd, NULL, frag_len,
+					 SPLICE_F_MORE), frag_len);
+			close(p[0]);
+			close(p[1]);
+		}
+
+		EXPECT_EQ(send(self->fd, mem_send, 1, MSG_MORE), 1);
+
+		for (i = 0; i < extra; i++) {
+			ASSERT_GE(pipe(p), 0);
+			EXPECT_EQ(write(p[1], mem_send, frag_len), frag_len);
+			EXPECT_EQ(splice(p[0], NULL, self->fd, NULL, frag_len,
+					 SPLICE_F_MORE), frag_len);
+			close(p[0]);
+			close(p[1]);
+		}
+
+		EXPECT_EQ(send(self->fd, mem_send, 1, 0), 1);
+
+		EXPECT_EQ(recv(self->cfd, mem_recv, total, MSG_WAITALL), total);
+		EXPECT_EQ(memcmp(mem_send, mem_recv, frag_len), 0);
+	}
+}
+
 TEST_F(tls, splice_to_pipe)
 {
 	int send_len = TLS_PAYLOAD_MAX_LEN;
