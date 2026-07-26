@@ -1352,7 +1352,7 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 	/* enable clock */
 	ret = pm_runtime_get_sync(f->dev);
 	if (ret < 0)
-		return dev_err_probe(dev, ret, "Failed to enable clock");
+		goto err_pm_runtime;
 
 	/* Clear potential interrupts */
 	reg = fspi_readl(f, f->iobase + FSPI_INTR);
@@ -1389,6 +1389,13 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 		return ret;
 
 	return devm_spi_register_controller(&pdev->dev, ctlr);
+
+err_pm_runtime:
+	pm_runtime_put_noidle(dev);
+	pm_runtime_dont_use_autosuspend(dev);
+	pm_runtime_disable(dev);
+
+	return dev_err_probe(dev, ret, "Failed to enable clock");
 }
 
 static int nxp_fspi_runtime_suspend(struct device *dev)
