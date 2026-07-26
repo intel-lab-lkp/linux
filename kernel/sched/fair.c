@@ -56,7 +56,6 @@
 
 #include "sched.h"
 #include "stats.h"
-#include "autogroup.h"
 
 /*
  * The initial- and re-scaling of tunables is configurable
