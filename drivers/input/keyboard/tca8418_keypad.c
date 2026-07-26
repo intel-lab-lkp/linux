@@ -114,6 +114,8 @@ struct tca8418_keypad {
 	struct input_dev *input;
 
 	unsigned int row_shift;
+	unsigned int rows;
+	unsigned int cols;
 };
 
 /*
@@ -171,18 +173,27 @@ static void tca8418_read_keypad(struct tca8418_keypad *keypad_data)
 			break;
 		}
 
-		/* Assume that key code 0 signifies empty FIFO */
-		if (reg <= 0)
-			break;
 
 		state = reg & KEY_EVENT_VALUE;
 		code  = reg & KEY_EVENT_CODE;
+
+		/* Key code 0 signifies empty FIFO */
+		if (!code)
+			break;
 
 		row = code / TCA8418_MAX_COLS;
 		col = code % TCA8418_MAX_COLS;
 
 		row = (col) ? row : row - 1;
 		col = (col) ? col - 1 : TCA8418_MAX_COLS - 1;
+
+		/* Validate against configured matrix size */
+		if (row >= keypad_data->rows || col >= keypad_data->cols) {
+			dev_err(&keypad_data->client->dev,
+				"invalid key code %d (row %d, col %d)\n",
+				code, row, col);
+			continue;
+		}
 
 		code = MATRIX_SCAN_CODE(row, col, keypad_data->row_shift);
 		input_event(input, EV_MSC, MSC_SCAN, code);
@@ -299,6 +310,8 @@ static int tca8418_keypad_probe(struct i2c_client *client)
 
 	keypad_data->client = client;
 	keypad_data->row_shift = row_shift;
+	keypad_data->rows = rows;
+	keypad_data->cols = cols;
 
 	/* Read key lock register, if this fails assume device not present */
 	error = tca8418_read_byte(keypad_data, REG_KEY_LCK_EC, &reg);
