@@ -3982,16 +3982,6 @@ next:
 	if (!seq_inc_flag)
 		return;
 
-	/* see the comment on lru_gen_folio */
-	if (swappiness && swappiness <= MAX_SWAPPINESS) {
-		unsigned long seq = lrugen->max_seq - MIN_NR_GENS;
-
-		if (min_seq[LRU_GEN_ANON] > seq && min_seq[LRU_GEN_FILE] < seq)
-			min_seq[LRU_GEN_ANON] = seq;
-		else if (min_seq[LRU_GEN_FILE] > seq && min_seq[LRU_GEN_ANON] < seq)
-			min_seq[LRU_GEN_FILE] = seq;
-	}
-
 	for_each_evictable_type(type, swappiness) {
 		if (min_seq[type] <= lrugen->min_seq[type])
 			continue;
