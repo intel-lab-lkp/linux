@@ -569,6 +569,10 @@ void sctp_assoc_rm_peer(struct sctp_association *asoc,
 				sctp_transport_hold(active);
 	}
 
+	list_for_each_entry(ch, &asoc->outqueue.retransmit, transmitted_list)
+		if (ch->transport == peer)
+			ch->transport = NULL;
+
 	list_for_each_entry(ch, &asoc->outqueue.out_chunk_list, list)
 		if (ch->transport == peer)
 			ch->transport = NULL;
