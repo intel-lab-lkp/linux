@@ -38,8 +38,13 @@ static void vfio_ccw_dma_unmap(struct vfio_device *vdev, u64 iova, u64 length)
 		container_of(vdev, struct vfio_ccw_private, vdev);
 
 	/* Drivers MUST unpin pages in response to an invalidation. */
-	if (!cp_iova_pinned(&private->cp, iova, length))
+	mutex_lock(&private->cp_mutex);
+	if (!cp_iova_pinned(&private->cp, iova, length)) {
+		mutex_unlock(&private->cp_mutex);
 		return;
+	}
+
+	mutex_unlock(&private->cp_mutex);
 
 	vfio_ccw_mdev_reset(private);
 }
@@ -50,6 +55,7 @@ static int vfio_ccw_mdev_init_dev(struct vfio_device *vdev)
 		container_of(vdev, struct vfio_ccw_private, vdev);
 
 	mutex_init(&private->io_mutex);
+	mutex_init(&private->cp_mutex);
 	private->state = VFIO_CCW_STATE_STANDBY;
 	INIT_LIST_HEAD(&private->crw);
 	INIT_WORK(&private->io_work, vfio_ccw_sch_io_todo);
@@ -91,6 +97,7 @@ out_free_io:
 out_free_cp:
 	kfree(private->cp.guest_cp);
 out_free_private:
+	mutex_destroy(&private->cp_mutex);
 	mutex_destroy(&private->io_mutex);
 	return -ENOMEM;
 }
@@ -146,6 +153,7 @@ static void vfio_ccw_mdev_release_dev(struct vfio_device *vdev)
 	kmem_cache_free(vfio_ccw_cmd_region, private->cmd_region);
 	kmem_cache_free(vfio_ccw_io_region, private->io_region);
 	kfree(private->cp.guest_cp);
+	mutex_destroy(&private->cp_mutex);
 	mutex_destroy(&private->io_mutex);
 }
 
