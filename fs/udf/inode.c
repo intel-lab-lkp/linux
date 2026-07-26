@@ -1467,6 +1467,8 @@ reread:
 		iinfo->i_lenAlloc = le32_to_cpu(
 				((struct unallocSpaceEntry *)bh->b_data)->
 				 lengthAllocDescs);
+		if (udf_file_entry_alloc_offset(inode) + iinfo->i_lenAlloc > bs)
+			goto out;
 		ret = udf_alloc_i_data(inode, bs -
 					sizeof(struct unallocSpaceEntry));
 		if (ret)
