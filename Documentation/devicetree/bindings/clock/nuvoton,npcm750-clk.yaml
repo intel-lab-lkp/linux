@@ -18,7 +18,7 @@ description: >
   There are six fixed clocks that are generated outside the BMC. All clocks are of
   a known fixed value that cannot be changed. clk_refclk, clk_mcbypck and
   clk_sysbypck are inputs to the clock controller.
-  clk_rg1refck, clk_rg2refck and clk_xin are external clocks suppling the
+  clk_rg1refck, clk_rg2refck and clk_xin are external clocks supplying the
   network. They are set on the device tree, but not used by the clock module. The
   network devices use them directly.
 
