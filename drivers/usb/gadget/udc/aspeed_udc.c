@@ -1474,6 +1474,7 @@ static int ast_udc_probe(struct platform_device *pdev)
 	enum usb_device_speed max_speed;
 	struct device *dev = &pdev->dev;
 	struct ast_udc_dev *udc;
+	size_t ep0_buf_size;
 	int rc;
 
 	udc = devm_kzalloc(&pdev->dev, sizeof(struct ast_udc_dev), GFP_KERNEL);
@@ -1516,10 +1517,14 @@ static int ast_udc_probe(struct platform_device *pdev)
 	/*
 	 * Allocate DMA buffers for all EPs in one chunk
 	 */
+	ep0_buf_size = AST_UDC_EP_DMA_SIZE * AST_UDC_NUM_ENDPOINTS;
 	udc->ep0_buf = dma_alloc_coherent(&pdev->dev,
-					  AST_UDC_EP_DMA_SIZE *
-					  AST_UDC_NUM_ENDPOINTS,
+					  ep0_buf_size,
 					  &udc->ep0_buf_dma, GFP_KERNEL);
+	if (!udc->ep0_buf) {
+		rc = -ENOMEM;
+		goto err_disable_clk;
+	}
 
 	udc->gadget.speed = USB_SPEED_UNKNOWN;
 	udc->gadget.max_speed = USB_SPEED_HIGH;
@@ -1550,20 +1555,20 @@ static int ast_udc_probe(struct platform_device *pdev)
 	udc->irq = platform_get_irq(pdev, 0);
 	if (udc->irq < 0) {
 		rc = udc->irq;
-		goto err;
+		goto err_free_ep0_buf;
 	}
 
 	rc = devm_request_irq(&pdev->dev, udc->irq, ast_udc_isr, 0,
 			      KBUILD_MODNAME, udc);
 	if (rc) {
 		dev_err(&pdev->dev, "Failed to request interrupt\n");
-		goto err;
+		goto err_free_ep0_buf;
 	}
 
 	rc = usb_add_gadget_udc(&pdev->dev, &udc->gadget);
 	if (rc) {
 		dev_err(&pdev->dev, "Failed to add gadget udc\n");
-		goto err;
+		goto err_free_ep0_buf;
 	}
 
 	dev_info(&pdev->dev, "Initialized udc in USB%s mode\n",
@@ -1571,9 +1576,15 @@ static int ast_udc_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_free_ep0_buf:
+	dma_free_coherent(&pdev->dev,
+			  ep0_buf_size, udc->ep0_buf,
+			  udc->ep0_buf_dma);
+	udc->ep0_buf = NULL;
+err_disable_clk:
+	clk_disable_unprepare(udc->clk);
 err:
 	dev_err(&pdev->dev, "Failed to udc probe, rc:0x%x\n", rc);
-	ast_udc_remove(pdev);
 
 	return rc;
 }
