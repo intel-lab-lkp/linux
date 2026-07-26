@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bus/brcm,bus-axi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom AXI Bus with bcma driver
+
+maintainers:
+  - Hauke Mehrtens <hauke@hauke-mehrtens.de>
+  - Rafał Miłecki <rafal@milecki.pl>
+
+description: |
+  Driver for ARM AXI Bus with Broadcom Plugins (bcma).
+
+  The cores on the AXI bus are automatically detected by bcma with the
+  memory ranges they are using and they get registered afterwards.
+  Automatic detection of the IRQ number is not working on
+  BCM47xx/BCM53xx ARM SoCs. To assign IRQ numbers to the cores, provide
+  them manually through device tree. Use an interrupt-map to specify the
+  IRQ used by the devices on the bus. The first address is just an index,
+  because we do not have any special register.
+
+properties:
+  compatible:
+    const: brcm,bus-axi
+
+  reg:
+    description: IOMEM address range of chipcommon core.
+    maxItems: 1
+
+  ranges: true
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 1
+
+  "#interrupt-cells":
+    const: 1
+
+  interrupt-map-mask: true
+  interrupt-map: true
+
+patternProperties:
+  "@[0-9a-f]+$":
+    type: object
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    axi@18000000 {
+        compatible = "brcm,bus-axi";
+        reg = <0x18000000 0x1000>;
+        ranges = <0x00000000 0x18000000 0x00100000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        #interrupt-cells = <1>;
+        interrupt-map-mask = <0x000fffff 0xffff>;
+        interrupt-map =
+            /* Ethernet Controller 0 */
+            <0x00024000 0 &gic GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>,
+            /* Ethernet Controller 1 */
+            <0x00025000 0 &gic GIC_SPI 148 IRQ_TYPE_LEVEL_HIGH>;
+
+        chipcommon {
+            reg = <0x00000000 0x1000>;
+            gpio-controller;
+            #gpio-cells = <2>;
+        };
+    };
