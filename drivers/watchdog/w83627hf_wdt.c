@@ -485,7 +485,8 @@ static int wdt_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
 	if (!res)
-		return -ENXIO;
+		return dev_err_probe(dev, -ENXIO,
+				     "failed to get I/O resource\n");
 
 	data->info.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE;
 	snprintf(data->info.identity, sizeof(data->info.identity),
@@ -540,12 +541,12 @@ static int wdt_probe(struct platform_device *pdev)
 		}
 
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret, "failed to set watchdog timeout\n");
 	}
 
 	ret = devm_watchdog_register_device(&pdev->dev, wdd);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "failed to register watchdog\n");
 
 	dev_info(dev, "initialized. timeout=%d sec (nowayout=%d)\n",
 		 wdd->timeout, nowayout);
