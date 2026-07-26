@@ -4858,6 +4858,7 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		 * Only fall back when reclaim is running at high priority.
 		 */
 		if (!scanned) {
+			try_to_inc_min_seq(lruvec, swappiness);
 			if (!sc->priority)
 				type = !type;
 		}
