@@ -942,12 +942,15 @@ isert_put_login_tx(struct iscsit_conn *conn, struct iscsi_login *login,
 	}
 	if (!login->login_failed) {
 		if (login->login_complete) {
+			/*
+			 * Allocate here, but do not post yet: the receive
+			 * buffers are posted from isert_get_rx_pdu() once the
+			 * session has been registered.  Allocating early keeps
+			 * the original property that a memory allocation
+			 * failure cannot happen after the final Login Response
+			 * has been sent.
+			 */
 			ret = isert_alloc_rx_descriptors(isert_conn);
-			if (ret)
-				return ret;
-
-			ret = isert_post_recvm(isert_conn,
-					       ISERT_QP_MAX_RECV_DTOS);
 			if (ret)
 				return ret;
 
@@ -2622,7 +2625,30 @@ static void isert_free_conn(struct iscsit_conn *conn)
 
 static void isert_get_rx_pdu(struct iscsit_conn *conn)
 {
+	struct isert_conn *isert_conn = conn->context;
 	struct completion comp;
+
+	/*
+	 * Post the full-feature receive buffers here rather than from
+	 * isert_put_login_tx().  iscsi_target_rx_thread() only calls us after
+	 * waiting on conn->rx_login_comp, which iscsi_post_login_handler()
+	 * completes after __transport_register_session().  Posting them in
+	 * isert_put_login_tx() - before the final Login Response goes on the
+	 * wire - lets the initiator's first command be received and executed
+	 * against an se_session whose se_tpg is still NULL.
+	 *
+	 * On failure just return: iscsi_target_rx_thread() sets
+	 * transport_failed and tears the connection down.
+	 *
+	 * rx_descs can be NULL here: the login error path completes
+	 * rx_login_comp without ever reaching the login_complete branch that
+	 * allocates them.
+	 */
+	if (!isert_conn->rx_descs)
+		return;
+
+	if (isert_post_recvm(isert_conn, ISERT_QP_MAX_RECV_DTOS))
+		return;
 
 	init_completion(&comp);
 
