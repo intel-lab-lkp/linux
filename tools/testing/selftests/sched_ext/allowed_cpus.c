@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Andrea Righi <arighi@nvidia.com>
  */
 #include <bpf/bpf.h>
+#include <sched.h>
 #include <scx/common.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -47,13 +48,50 @@ static int test_select_cpu_from_user(const struct allowed_cpus *skel)
 	return 0;
 }
 
+/*
+ * Run this task once on every CPU while ops.running() repairs the bootstrap
+ * idle state. Once a CPU has been refreshed, subsequent idle transitions keep
+ * its state up to date.
+ */
+static int refresh_idle_masks(void)
+{
+	cpu_set_t original, one;
+	int cpu, ret = 0;
+
+	if (sched_getaffinity(0, sizeof(original), &original))
+		return -errno;
+
+	for (cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+		if (!CPU_ISSET(cpu, &original))
+			continue;
+
+		CPU_ZERO(&one);
+		CPU_SET(cpu, &one);
+		if (sched_setaffinity(0, sizeof(one), &one)) {
+			ret = -errno;
+			break;
+		}
+
+		sched_yield();
+	}
+
+	if (sched_setaffinity(0, sizeof(original), &original) && !ret)
+		ret = -errno;
+
+	return ret;
+}
+
 static enum scx_test_status run(void *ctx)
 {
 	struct allowed_cpus *skel = ctx;
 	struct bpf_link *link;
 
+	skel->bss->refresh_idle_masks = true;
 	link = bpf_map__attach_struct_ops(skel->maps.allowed_cpus_ops);
 	SCX_FAIL_IF(!link, "Failed to attach scheduler");
+
+	SCX_FAIL_IF(refresh_idle_masks(), "Failed to refresh idle CPU state");
+	__atomic_store_n(&skel->bss->refresh_idle_masks, false, __ATOMIC_RELEASE);
 
 	/* Pick an idle CPU from user-space */
 	SCX_FAIL_IF(test_select_cpu_from_user(skel), "Failed to pick idle CPU");
