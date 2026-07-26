@@ -21,6 +21,7 @@ pub mod poll;
 pub mod rcu;
 mod refcount;
 mod set_once;
+mod wait;
 
 pub use arc::{Arc, ArcBorrow, UniqueArc};
 pub use completion::Completion;
@@ -38,6 +39,11 @@ pub use lock::spinlock::{
 pub use locked_by::LockedBy;
 pub use refcount::Refcount;
 pub use set_once::SetOnce;
+pub use wait::{
+    new_waitqueue,
+    WaitError,
+    WaitQueue, //
+};
 
 /// Represents a lockdep class.
 ///
