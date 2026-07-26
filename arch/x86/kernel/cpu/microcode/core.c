@@ -9,7 +9,7 @@
  * X86 CPU microcode early update for Linux:
  *
  *	Copyright (C) 2012 Fenghua Yu <fenghua.yu@intel.com>
- *			   H Peter Anvin" <hpa@zytor.com>
+ *			   H Peter Anvin <hpa@zytor.com>
  *		  (C) 2015 Borislav Petkov <bp@alien8.de>
  *
  * This driver allows to upgrade microcode on x86 processors.

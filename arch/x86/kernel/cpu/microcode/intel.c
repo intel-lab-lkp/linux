@@ -8,7 +8,7 @@
  * Intel CPU microcode early update for Linux
  *
  * Copyright (C) 2012 Fenghua Yu <fenghua.yu@intel.com>
- *		      H Peter Anvin" <hpa@zytor.com>
+ *		      H Peter Anvin <hpa@zytor.com>
  */
 #define pr_fmt(fmt) "microcode: " fmt
 #include <linux/earlycpio.h>
