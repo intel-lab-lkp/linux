@@ -320,6 +320,7 @@ static inline void audit_cfg_lsm(const struct lsm_id *lsmid, int flags)
 /* These are defined in auditsc.c */
 				/* Public API */
 extern int  audit_alloc(struct task_struct *task);
+extern void __audit_proctitle_free(struct audit_context *context);
 extern void __audit_free(struct task_struct *task);
 extern void __audit_uring_entry(u8 op);
 extern void __audit_uring_exit(int success, long code);
@@ -352,6 +353,11 @@ static inline bool audit_dummy_context(void)
 {
 	void *p = audit_context();
 	return !p || *(int *)p;
+}
+static inline void audit_proctitle_free(struct audit_context *context)
+{
+	if (unlikely(!audit_dummy_context()))
+		__audit_proctitle_free(context);
 }
 static inline void audit_free(struct task_struct *task)
 {
@@ -470,6 +476,7 @@ static inline void audit_bprm(struct linux_binprm *bprm)
 	if (unlikely(!audit_dummy_context()))
 		__audit_bprm(bprm);
 }
+
 static inline int audit_socketcall(int nargs, unsigned long *args)
 {
 	if (unlikely(!audit_dummy_context()))
@@ -605,6 +612,8 @@ static inline int audit_alloc(struct task_struct *task)
 {
 	return 0;
 }
+static inline void audit_proctitle_free(struct audit_context *context)
+{ }
 static inline void audit_free(struct task_struct *task)
 { }
 static inline void audit_uring_entry(u8 op)

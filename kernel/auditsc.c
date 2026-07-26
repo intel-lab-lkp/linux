@@ -913,7 +913,7 @@ void audit_filter_inodes(struct task_struct *tsk, struct audit_context *ctx)
 	rcu_read_unlock();
 }
 
-static inline void audit_proctitle_free(struct audit_context *context)
+void __audit_proctitle_free(struct audit_context *context)
 {
 	kfree(context->proctitle.value);
 	context->proctitle.value = NULL;
@@ -1086,7 +1086,7 @@ static inline void audit_free_context(struct audit_context *context)
 {
 	/* resetting is extra work, but it is likely just noise */
 	audit_reset_context(context);
-	audit_proctitle_free(context);
+	__audit_proctitle_free(context);
 	free_tree_refs(context);
 	kfree(context->filterkey);
 	kfree(context);
