@@ -10,6 +10,7 @@ use crate::{
     pid_namespace::PidNamespace,
     prelude::*,
     sync::aref::ARef,
+    time::Jiffies,
     types::{NotThreadSafe, Opaque},
 };
 use core::{
@@ -19,6 +20,18 @@ use core::{
 
 /// A sentinel value used for infinite timeouts.
 pub const MAX_SCHEDULE_TIMEOUT: c_long = c_long::MAX;
+
+/// Sleeps for the given timeout in [`Jiffies`], or until woken.
+///
+/// Returns the remaining time in [`Jiffies`], or zero if the timeout expired.  The task state
+/// should be set before calling this.
+#[inline]
+pub fn schedule_timeout(timeout: Jiffies) -> Jiffies {
+    let timeout = timeout.try_into().unwrap_or(MAX_SCHEDULE_TIMEOUT);
+
+    // SAFETY: `schedule_timeout()` is always safe to call.
+    unsafe { bindings::schedule_timeout(timeout) as Jiffies }
+}
 
 /// Bitmask for tasks that are sleeping in an interruptible state.
 pub const TASK_INTERRUPTIBLE: c_int = bindings::TASK_INTERRUPTIBLE as c_int;
