@@ -201,6 +201,7 @@
 	pf(SVID_RND)		/* Random SVLAN ID */			\
 	pf(NODE)		/* Node memory alloc*/			\
 	pf(SHARED)		/* Shared SKB */			\
+	pf(TXTIME)		/* SO_TXTIME support */			\
 
 #define pf(flag)		flag##_SHIFT,
 enum pkt_flags {
@@ -290,6 +291,10 @@ struct pktgen_dev {
 
 	struct page *page;
 	u64 delay;		/* nano-seconds */
+
+	/* TXTIME support */
+	u64 txtime_delay;	/* transmit time delay in ns */
+	clockid_t txtime_clockid; /* clockid for SO_TXTIME */
 
 	__u64 count;		/* Default No packets to send */
 	__u64 sofar;		/* How many pkts we've sent so far */
@@ -665,6 +670,17 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 
 	if (pkt_dev->node >= 0)
 		seq_printf(seq, "     node: %d\n", pkt_dev->node);
+
+	if (pkt_dev->flags & F_TXTIME) {
+		clockid_t clockid = READ_ONCE(pkt_dev->txtime_clockid);
+
+		seq_printf(seq, "     txtime_delay: %llu\n",
+			   (unsigned long long)pkt_dev->txtime_delay);
+		seq_printf(seq, "     txtime_clockid: %s\n",
+			   clockid == CLOCK_MONOTONIC ? "monotonic" :
+			   clockid == CLOCK_REALTIME ? "realtime" :
+			   clockid == CLOCK_TAI ? "tai" : "unknown");
+	}
 
 	if (pkt_dev->xmit_mode == M_NETIF_RECEIVE)
 		seq_puts(seq, "     xmit_mode: netif_receive\n");
@@ -1141,6 +1157,50 @@ static ssize_t pktgen_if_write(struct file *file,
 			(unsigned long long) pkt_dev->delay);
 		return count;
 	}
+	if (!strcmp(name, "txtime_delay")) {
+		max = min(10, count - i);
+		len = num_arg(&user_buffer[i], max, &value);
+		if (len < 0)
+			return len;
+
+		/* in queue_xmit mode fq may clear tstamp, do not reuse skb */
+		if (value > 0 && pkt_dev->clone_skb > 0)
+			return -EINVAL;
+
+		WRITE_ONCE(pkt_dev->txtime_delay, (u64)value);
+		sprintf(pg_result, "OK: txtime_delay=%llu",
+			(unsigned long long)value);
+		return count;
+	}
+	if (!strcmp(name, "txtime_clockid")) {
+		char clockstr[32];
+		clockid_t clk;
+
+		memset(clockstr, 0, sizeof(clockstr));
+		max = min(sizeof(clockstr) - 1, count - i);
+		len = strn_len(&user_buffer[i], max);
+		if (len < 0)
+			return len;
+
+		if (copy_from_user(clockstr, &user_buffer[i], len))
+			return -EFAULT;
+
+		if (!strcmp(clockstr, "monotonic")) {
+			clk = CLOCK_MONOTONIC;
+		} else if (!strcmp(clockstr, "realtime")) {
+			clk = CLOCK_REALTIME;
+		} else if (!strcmp(clockstr, "tai")) {
+			clk = CLOCK_TAI;
+		} else {
+			sprintf(pg_result, "ERROR: unknown clockid '%s'",
+				clockstr);
+			return -EINVAL;
+		}
+
+		sprintf(pg_result, "OK: txtime_clockid=%s", clockstr);
+		WRITE_ONCE(pkt_dev->txtime_clockid, clk);
+		return count;
+	}
 	if (!strcmp(name, "rate")) {
 		max = min(10, count - i);
 		len = num_arg(&user_buffer[i], max, &value);
@@ -1237,6 +1297,8 @@ static ssize_t pktgen_if_write(struct file *file,
 			return -EOPNOTSUPP;
 		if (value > 0 && (pkt_dev->n_imix_entries > 0 ||
 				  !(pkt_dev->flags & F_SHARED)))
+			return -EINVAL;
+		if (value > 0 && READ_ONCE(pkt_dev->txtime_delay))
 			return -EINVAL;
 
 		pkt_dev->clone_skb = value;
@@ -2320,6 +2382,21 @@ static void pktgen_setup_inject(struct pktgen_dev *pkt_dev)
 	pkt_dev->nflows = 0;
 }
 
+
+static ktime_t ktime_get_clock(clockid_t clockid)
+{
+	switch (clockid) {
+	case CLOCK_REALTIME:
+		return ktime_get_real();
+	case CLOCK_MONOTONIC:
+		return ktime_get();
+	case CLOCK_TAI:
+		return ktime_get_clocktai();
+	default:
+		WARN_ON_ONCE(1);
+		return ktime_get();
+	}
+}
 
 static void spin(struct pktgen_dev *pkt_dev, ktime_t spin_until)
 {
@@ -3510,7 +3587,8 @@ static void pktgen_wait_for_skb(struct pktgen_dev *pkt_dev)
 
 static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 {
-	bool skb_shared = !!(READ_ONCE(pkt_dev->flags) & F_SHARED);
+	u32 flags = READ_ONCE(pkt_dev->flags);
+	bool skb_shared = !!(flags & F_SHARED);
 	struct net_device *odev = pkt_dev->odev;
 	struct netdev_queue *txq;
 	unsigned int burst = 1;
@@ -3545,6 +3623,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 	/* If no skb or clone count exhausted then get new one */
 	if (!pkt_dev->skb || (pkt_dev->last_ok &&
 			      ++pkt_dev->clone_count >= clone_skb)) {
+		u64 txtime_delay;
+
 		/* build a new pkt */
 		kfree_skb(pkt_dev->skb);
 
@@ -3557,6 +3637,16 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		}
 		pkt_dev->last_pkt_size = pkt_dev->skb->len;
 		pkt_dev->clone_count = 0;	/* reset counter */
+
+		txtime_delay = READ_ONCE(pkt_dev->txtime_delay);
+		if (flags & F_TXTIME && txtime_delay) {
+			clockid_t clk = READ_ONCE(pkt_dev->txtime_clockid);
+			ktime_t txtime = ktime_add_ns(ktime_get_clock(clk),
+						      txtime_delay);
+
+			skb_set_delivery_type_by_clockid(pkt_dev->skb, txtime,
+							 clk);
+		}
 	}
 
 	if (pkt_dev->delay && pkt_dev->last_ok)
@@ -3869,6 +3959,7 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 	pkt_dev->burst = 1;
 	pkt_dev->node = NUMA_NO_NODE;
 	pkt_dev->flags = F_SHARED;	/* SKB shared by default */
+	pkt_dev->txtime_clockid = CLOCK_MONOTONIC;
 
 	err = pktgen_setup_dev(t->net, pkt_dev, ifname);
 	if (err)
