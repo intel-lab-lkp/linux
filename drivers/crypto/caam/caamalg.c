@@ -98,6 +98,7 @@ struct caam_alg_entry {
 	bool rfc3686;
 	bool geniv;
 	bool nodkp;
+	bool is_paes;
 };
 
 struct caam_aead_alg {
@@ -822,19 +823,6 @@ static int paes_skcipher_setkey(struct crypto_skcipher *skcipher,
 	memcpy(ctx->key, ctx->cdata.key_virt, keylen);
 	dma_sync_single_for_device(jrdev, ctx->key_dma, keylen, DMA_TO_DEVICE);
 	ctx->cdata.key_dma = ctx->key_dma;
-
-	if (pkey_info->key_enc_algo == CAAM_ENC_ALGO_CCM)
-		ctx->protected_key_dma = dma_map_single(jrdev, ctx->protected_key,
-							ctx->cdata.plain_keylen +
-							CAAM_CCM_OVERHEAD,
-							DMA_FROM_DEVICE);
-	else
-		ctx->protected_key_dma = dma_map_single(jrdev, ctx->protected_key,
-							ctx->cdata.plain_keylen,
-							DMA_FROM_DEVICE);
-
-	ctx->cdata.protected_key_dma = ctx->protected_key_dma;
-	ctx->is_blob = true;
 
 	return 0;
 }
@@ -2013,6 +2001,7 @@ static struct caam_skcipher_alg driver_algs[] = {
 			.do_one_request = skcipher_do_one_req,
 		},
 		.caam.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_CBC,
+		.caam.is_paes = true,
 	},
 	{
 		.skcipher.base = {
@@ -3746,6 +3735,8 @@ static int caam_init_common(struct caam_ctx *ctx, struct caam_alg_entry *caam,
 	return 0;
 }
 
+static void caam_exit_common(struct caam_ctx *ctx);
+
 static int caam_cra_init(struct crypto_skcipher *tfm)
 {
 	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
@@ -3775,10 +3766,43 @@ static int caam_cra_init(struct crypto_skcipher *tfm)
 	}
 
 	ret = caam_init_common(ctx, &caam_alg->caam, false);
-	if (ret && ctx->fallback)
-		crypto_free_skcipher(ctx->fallback);
+	if (ret) {
+		if (ctx->fallback)
+			crypto_free_skcipher(ctx->fallback);
+		return ret;
+	}
 
-	return ret;
+	if (caam_alg->caam.is_paes) {
+		/*
+		 * The hardware writes the decapsulated black key here and reads
+		 * it back through the KEY command, so map it bidirectionally,
+		 * once, for the lifetime of the tfm. Mapping it per setkey()
+		 * leaks the mapping.
+		 *
+		 * All requests of a tfm share this buffer, which is safe only
+		 * because the key cannot change while requests can be issued:
+		 * AF_ALG refuses ALG_SET_KEY once an op socket exists, so
+		 * concurrent jobs all decapsulate the same blob into the same
+		 * black key.
+		 */
+		ctx->protected_key_dma = dma_map_single(ctx->jrdev,
+							ctx->protected_key,
+							AES_MAX_KEY_SIZE,
+							DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(ctx->jrdev, ctx->protected_key_dma)) {
+			dev_err(ctx->jrdev, "unable to map protected key\n");
+			ctx->protected_key_dma = 0;
+			if (ctx->fallback)
+				crypto_free_skcipher(ctx->fallback);
+			caam_exit_common(ctx);
+			return -ENOMEM;
+		}
+
+		ctx->cdata.protected_key_dma = ctx->protected_key_dma;
+		ctx->is_blob = true;
+	}
+
+	return 0;
 }
 
 static int caam_aead_init(struct crypto_aead *tfm)
@@ -3795,6 +3819,10 @@ static int caam_aead_init(struct crypto_aead *tfm)
 
 static void caam_exit_common(struct caam_ctx *ctx)
 {
+	if (ctx->protected_key_dma)
+		dma_unmap_single(ctx->jrdev, ctx->protected_key_dma,
+				 AES_MAX_KEY_SIZE, DMA_BIDIRECTIONAL);
+
 	dma_unmap_single_attrs(ctx->jrdev, ctx->sh_desc_enc_dma,
 			       offsetof(struct caam_ctx, sh_desc_enc_dma) -
 			       offsetof(struct caam_ctx, sh_desc_enc),
