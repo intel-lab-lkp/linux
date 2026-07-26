@@ -59,7 +59,7 @@ static int max77759_nvmem_reg_read(void *priv, unsigned int offset,
 }
 
 static int max77759_nvmem_reg_write(void *priv, unsigned int offset,
-				    void *val, size_t bytes)
+				    const void *val, size_t bytes)
 {
 	struct max77759_nvmem *nvmem = priv;
 	DEFINE_FLEX(struct max77759_maxq_command, cmd, cmd, length,
@@ -99,7 +99,7 @@ static int max77759_nvmem_probe(struct platform_device *pdev)
 		.word_size = sizeof(u8),
 		.stride = sizeof(u8),
 		.reg_read = max77759_nvmem_reg_read,
-		.reg_write = max77759_nvmem_reg_write,
+		.reg_write_const = max77759_nvmem_reg_write,
 	};
 	struct max77759_nvmem *nvmem;
 

@@ -81,8 +81,8 @@ static int sdam_read(void *priv, unsigned int offset, void *val,
 	return rc;
 }
 
-static int sdam_write(void *priv, unsigned int offset, void *val,
-				size_t bytes)
+static int sdam_write(void *priv, unsigned int offset, const void *val,
+		      size_t bytes)
 {
 	struct sdam_chip *sdam = priv;
 	struct device *dev = sdam->sdam_config.dev;
@@ -147,7 +147,7 @@ static int sdam_probe(struct platform_device *pdev)
 	sdam->sdam_config.size = sdam->size;
 	sdam->sdam_config.word_size = 1;
 	sdam->sdam_config.reg_read = sdam_read;
-	sdam->sdam_config.reg_write = sdam_write;
+	sdam->sdam_config.reg_write_const = sdam_write;
 	sdam->sdam_config.priv = sdam;
 
 	nvmem = devm_nvmem_register(&pdev->dev, &sdam->sdam_config);

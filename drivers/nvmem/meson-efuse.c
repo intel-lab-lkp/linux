@@ -27,7 +27,7 @@ static int meson_efuse_read(void *context, unsigned int offset,
 }
 
 static int meson_efuse_write(void *context, unsigned int offset,
-			     void *val, size_t bytes)
+			     const void *val, size_t bytes)
 {
 	struct meson_sm_firmware *fw = context;
 	int ret;
@@ -83,7 +83,7 @@ static int meson_efuse_probe(struct platform_device *pdev)
 	econfig->stride = 1;
 	econfig->word_size = 1;
 	econfig->reg_read = meson_efuse_read;
-	econfig->reg_write = meson_efuse_write;
+	econfig->reg_write_const = meson_efuse_write;
 	econfig->size = size;
 	econfig->priv = fw;
 

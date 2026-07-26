@@ -50,7 +50,7 @@ int stm32_bsec_optee_ta_read(struct tee_context *ctx, unsigned int offset,
  *	On success, 0. On failure, -errno.
  */
 int stm32_bsec_optee_ta_write(struct tee_context *ctx, unsigned int lower,
-			      unsigned int offset, void *buf, size_t bytes);
+			      unsigned int offset, const void *buf, size_t bytes);
 
 #else
 
@@ -72,7 +72,7 @@ static inline int stm32_bsec_optee_ta_read(struct tee_context *ctx,
 
 static inline int stm32_bsec_optee_ta_write(struct tee_context *ctx,
 					    unsigned int lower,
-					    unsigned int offset, void *buf,
+					    unsigned int offset, const void *buf,
 					    size_t bytes)
 {
 	return -EOPNOTSUPP;

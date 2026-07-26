@@ -87,7 +87,7 @@ static int lpc18xx_eeprom_busywait_until_prog(struct lpc18xx_eeprom_dev *eeprom)
 }
 
 static int lpc18xx_eeprom_gather_write(void *context, unsigned int reg,
-				       void *val, size_t bytes)
+				       const void *val, size_t bytes)
 {
 	struct lpc18xx_eeprom_dev *eeprom = context;
 	unsigned int offset = reg;
@@ -109,7 +109,7 @@ static int lpc18xx_eeprom_gather_write(void *context, unsigned int reg,
 	usleep_range(100, 200);
 
 	while (bytes) {
-		writel(*(u32 *)val, eeprom->mem_base + offset);
+		writel(*(const u32 *)val, eeprom->mem_base + offset);
 		ret = lpc18xx_eeprom_busywait_until_prog(eeprom);
 		if (ret < 0)
 			return ret;
@@ -155,7 +155,7 @@ static struct nvmem_config lpc18xx_nvmem_config = {
 	.stride = 4,
 	.word_size = 4,
 	.reg_read = lpc18xx_eeprom_read,
-	.reg_write = lpc18xx_eeprom_gather_write,
+	.reg_write_const = lpc18xx_eeprom_gather_write,
 };
 
 static int lpc18xx_eeprom_probe(struct platform_device *pdev)

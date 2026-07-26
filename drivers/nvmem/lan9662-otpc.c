@@ -139,10 +139,10 @@ static int lan9662_otp_read(void *context, unsigned int offset,
 }
 
 static int lan9662_otp_write(void *context, unsigned int offset,
-			     void *_val, size_t bytes)
+			     const void *_val, size_t bytes)
 {
 	struct lan9662_otp *otp = context;
-	u8 *val = _val;
+	const u8 *val = _val;
 	u8 data, newdata;
 	int i, rc = 0;
 
@@ -174,7 +174,7 @@ static struct nvmem_config otp_config = {
 	.stride = 1,
 	.word_size = 1,
 	.reg_read = lan9662_otp_read,
-	.reg_write = lan9662_otp_write,
+	.reg_write_const = lan9662_otp_write,
 };
 
 static int lan9662_otp_probe(struct platform_device *pdev)
