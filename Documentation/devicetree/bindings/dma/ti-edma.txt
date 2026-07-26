@@ -3,7 +3,7 @@ Texas Instruments eDMA
 The eDMA3 consists of two components: Channel controller (CC) and Transfer
 Controller(s) (TC). The CC is the main entry for DMA users since it is
 responsible for the DMA channel handling, while the TCs are responsible to
-execute the actual DMA tansfer.
+execute the actual DMA transfer.
 
 ------------------------------------------------------------------------------
 eDMA3 Channel Controller
