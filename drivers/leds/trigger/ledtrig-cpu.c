@@ -163,7 +163,15 @@ static int __init ledtrig_cpu_init(void)
 
 	register_syscore(&ledtrig_cpu_syscore);
 
-	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "leds/trigger:starting",
+	/*
+	 * Use cpuhp_setup_state_nocalls() to avoid invoking ledtrig_online_cpu()
+	 * on every already-online CPU at registration time. On systems with large
+	 * CPU counts (e.g. 64-hart RISC-V) cpuhp_setup_state() would serialize
+	 * callbacks across all online CPUs, causing multi-hundred-second delays
+	 * during boot. The trigger operates correctly for future hotplug events
+	 * regardless.
+ 	 */
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN, "leds/trigger:starting",
 				ledtrig_online_cpu, ledtrig_prepare_down_cpu);
 	if (ret < 0)
 		pr_err("CPU hotplug notifier for ledtrig-cpu could not be registered: %d\n",
