@@ -240,10 +240,14 @@ impl<T: DriverGpuVm> Deref for GpuVmBoAlloc<T> {
 }
 
 impl<T: DriverGpuVm> Drop for GpuVmBoAlloc<T> {
+    /// Must not be dropped while holding the `drm_gem_object` gpuva lock.
     #[inline]
     fn drop(&mut self) {
-        // TODO: Call drm_gpuvm_bo_destroy_not_in_lists() directly.
-        // SAFETY: It's safe to perform a deferred put in any context.
-        unsafe { bindings::drm_gpuvm_bo_put_deferred(self.as_raw()) };
+        // SAFETY: By the type invariant, `drm_gpuvm_bo` has a refcount
+        // of one and is absent from the gem, extobj, and evict lists.
+        // Per the precondition documented in impl, the caller does not
+        // hold the object's gpuva lock. Therefore, the preconditions of
+        // `drm_gpuvm_bo_destroy_not_in_lists()` are satisfied.
+        unsafe { bindings::drm_gpuvm_bo_destroy_not_in_lists(self.as_raw()) };
     }
 }
