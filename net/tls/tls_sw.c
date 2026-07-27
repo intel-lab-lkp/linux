@@ -2011,10 +2011,14 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	struct sk_buff *skb;
 	bool released = true;
 	ssize_t copied = 0;
+	bool nonblock;
 	int chunk;
 	int err;
 
-	err = tls_rx_reader_lock(sk, ctx, flags & SPLICE_F_NONBLOCK);
+	nonblock = (flags & SPLICE_F_NONBLOCK) ||
+		   (sock->file->f_flags & O_NONBLOCK);
+
+	err = tls_rx_reader_lock(sk, ctx, nonblock);
 	if (err < 0)
 		return err;
 
@@ -2029,8 +2033,7 @@ retry:
 	} else {
 		struct tls_decrypt_arg darg;
 
-		err = tls_rx_rec_wait(sk, flags & SPLICE_F_NONBLOCK,
-				      released, false);
+		err = tls_rx_rec_wait(sk, nonblock, released, false);
 		if (err <= 0)
 			goto splice_read_end;
 
@@ -2063,7 +2066,7 @@ retry:
 	 * while a record is parsed, so test for a signal here.
 	 */
 	if (tls_rx_empty_data_rec(rxm->full_len, tlm->control)) {
-		long timeo = sock_rcvtimeo(sk, flags & SPLICE_F_NONBLOCK);
+		long timeo = sock_rcvtimeo(sk, nonblock);
 
 		consume_skb(skb);
 		if (signal_pending(current)) {
