@@ -176,7 +176,7 @@ int pci_generic_config_write32(struct pci_bus *bus, unsigned int devfn,
 
 	mask = ~(((1 << (size * 8)) - 1) << ((where & 0x3) * 8));
 	tmp = readl(addr) & mask;
-	tmp |= val << ((where & 0x3) * 8);
+	tmp |= (val & ((1 << (size * 8)) - 1)) << ((where & 0x3) * 8);
 	writel(tmp, addr);
 
 	return PCIBIOS_SUCCESSFUL;
