@@ -297,6 +297,12 @@ int ath12k_peer_mlo_link_peers_delete(struct ath12k_vif *ahvif, struct ath12k_st
 	if (!sta->mlo)
 		return -EINVAL;
 
+	/* During firmware crash, peers are already gone. Skip WMI peer delete
+	 * to avoid timeouts that delay recovery and can trigger cascading resets.
+	 */
+	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ah->radio[0].ab->dev_flags))
+		return 0;
+
 	/* FW expects delete of all link peers at once before waiting for reception
 	 * of peer unmap or delete responses
 	 */

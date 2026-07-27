@@ -376,6 +376,9 @@ int ath12k_hal_srng_src_num_free(struct ath12k_base *ab, struct hal_srng *srng,
 
 	lockdep_assert_held(&srng->lock);
 
+	if (unlikely(test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags)))
+		return 0;
+
 	hp = srng->u.src_ring.hp;
 
 	if (sync_hw_ptr) {
@@ -417,6 +420,9 @@ void *ath12k_hal_srng_src_get_next_entry(struct ath12k_base *ab,
 	u32 next_hp;
 
 	lockdep_assert_held(&srng->lock);
+
+	if (unlikely(test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags)))
+		return NULL;
 
 	/* TODO: Using % is expensive, but we have to do this since size of some
 	 * SRNG rings is not power of 2 (due to descriptor sizes). Need to see
@@ -522,6 +528,10 @@ EXPORT_SYMBOL(ath12k_hal_srng_access_begin);
 void ath12k_hal_srng_access_end(struct ath12k_base *ab, struct hal_srng *srng)
 {
 	lockdep_assert_held(&srng->lock);
+
+	if (srng->ring_dir == HAL_SRNG_DIR_SRC &&
+	    unlikely(test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags)))
+		return;
 
 	if (srng->flags & HAL_SRNG_FLAGS_LMAC_RING) {
 		/* For LMAC rings, ring pointer updates are done through FW and

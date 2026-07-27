@@ -751,6 +751,9 @@ int ath12k_dp_rx_ampdu_stop(struct ath12k *ar,
 
 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
 
+	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags))
+		return 0;
+
 	arsta = wiphy_dereference(ath12k_ar_to_hw(ar)->wiphy,
 				  ahsta->link[link_id]);
 	if (!arsta)
