@@ -76,6 +76,7 @@ static struct in6_addr mld2_all_mcr = MLD2_ALL_MCR_INIT;
 static void igmp6_join_group(struct ifmcaddr6 *ma);
 static void igmp6_leave_group(struct ifmcaddr6 *ma);
 static void mld_mca_work(struct work_struct *work);
+static void ma_put(struct ifmcaddr6 *mc);
 
 static void mld_ifc_event(struct inet6_dev *idev);
 static bool mld_in_v1_mode(const struct inet6_dev *idev);
@@ -724,7 +725,7 @@ static void igmp6_group_dropped(struct ifmcaddr6 *mc)
 		igmp6_leave_group(mc);
 
 	if (cancel_delayed_work(&mc->mca_work))
-		refcount_dec(&mc->mca_refcnt);
+		ma_put(mc);
 }
 
 /* deleted ifmcaddr6 manipulation */
@@ -1155,6 +1156,7 @@ static void mld_report_stop_work(struct inet6_dev *idev)
 static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 {
 	unsigned long delay = resptime;
+	bool put = false;
 
 	mc_assert_locked(ma->idev);
 
@@ -1164,7 +1166,7 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 		return;
 
 	if (cancel_delayed_work(&ma->mca_work)) {
-		refcount_dec(&ma->mca_refcnt);
+		put = true;
 		delay = ma->mca_work.timer.expires - jiffies;
 	}
 
@@ -1174,6 +1176,9 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 	if (!mod_delayed_work(mld_wq, &ma->mca_work, delay))
 		refcount_inc(&ma->mca_refcnt);
 	WRITE_ONCE(ma->mca_flags, ma->mca_flags | MAF_TIMER_RUNNING);
+
+	if (put)
+		ma_put(ma);
 }
 
 /* mark EXCLUDE-mode sources */
@@ -1640,7 +1645,7 @@ static void __mld_report_work(struct sk_buff *skb)
 	for_each_mc_mclock(idev, ma) {
 		if (ipv6_addr_equal(&ma->mca_addr, &mld->mld_mca)) {
 			if (cancel_delayed_work(&ma->mca_work))
-				refcount_dec(&ma->mca_refcnt);
+				ma_put(ma);
 			WRITE_ONCE(ma->mca_flags,
 				   ma->mca_flags & ~(MAF_LAST_REPORTER |
 						     MAF_TIMER_RUNNING));
@@ -2621,6 +2626,7 @@ static void ip6_mc_clear_src(struct ifmcaddr6 *pmc)
 static void igmp6_join_group(struct ifmcaddr6 *ma)
 {
 	unsigned long delay;
+	bool put = false;
 
 	mc_assert_locked(ma->idev);
 
@@ -2632,7 +2638,7 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 	delay = get_random_u32_below(unsolicited_report_interval(ma->idev));
 
 	if (cancel_delayed_work(&ma->mca_work)) {
-		refcount_dec(&ma->mca_refcnt);
+		put = true;
 		delay = ma->mca_work.timer.expires - jiffies;
 	}
 
@@ -2640,6 +2646,9 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 		refcount_inc(&ma->mca_refcnt);
 	WRITE_ONCE(ma->mca_flags, ma->mca_flags |
 		   MAF_TIMER_RUNNING | MAF_LAST_REPORTER);
+
+	if (put)
+		ma_put(ma);
 }
 
 static int ip6_mc_leave_src(struct sock *sk, struct ipv6_mc_socklist *iml,
