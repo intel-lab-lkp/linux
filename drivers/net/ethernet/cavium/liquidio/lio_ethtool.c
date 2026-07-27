@@ -1242,15 +1242,20 @@ static int lio_reset_queues(struct net_device *netdev, uint32_t num_qs)
 
 		if (setup_rx_oom_poll_fn(netdev)) {
 			dev_err(&oct->pci_dev->dev, "lio_setup_rx_oom_poll_fn failed\n");
+			lio_delete_glists(lio);
 			return 1;
 		}
 
 		/* Send firmware the information about new number of queues
 		 * if the interface is a VF or a PF that is SRIOV enabled.
 		 */
-		if (oct->sriov_info.sriov_enabled || OCTEON_CN23XX_VF(oct))
-			if (lio_send_queue_count_update(netdev, num_qs))
+		if (oct->sriov_info.sriov_enabled || OCTEON_CN23XX_VF(oct)) {
+			if (lio_send_queue_count_update(netdev, num_qs)) {
+				cleanup_rx_oom_poll_fn(netdev);
+				lio_delete_glists(lio);
 				return -1;
+			}
+		}
 	}
 
 	return 0;
