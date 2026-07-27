@@ -19,6 +19,7 @@
 #include <net/udp.h>
 #include <net/tc_act/tc_gact.h>
 #include "stmmac.h"
+#include "stmmac_pcs.h"
 
 struct stmmachdr {
 	__be32 version;
@@ -374,23 +375,51 @@ static int stmmac_test_mac_loopback(struct stmmac_priv *priv)
 	return __stmmac_test_loopback(priv, &attr);
 }
 
+static struct phylink_pcs *stmmac_selftest_get_pcs(struct stmmac_priv *priv)
+{
+	/* Try glue driver's PCS first, then the integrated PCS. */
+	if (priv->hw->phylink_pcs)
+		return priv->hw->phylink_pcs;
+
+	if (priv->integrated_pcs)
+		return &priv->integrated_pcs->pcs;
+
+	return NULL;
+}
+
 static int stmmac_test_phy_loopback(struct stmmac_priv *priv)
 {
 	struct stmmac_packet_attrs attr = { };
+	struct phylink_pcs *pcs;
 	int ret;
 
-	if (!priv->dev->phydev)
-		return -EOPNOTSUPP;
+	if (priv->dev->phydev) {
+		ret = phy_loopback(priv->dev->phydev, true, 0);
+		if (ret)
+			return ret;
 
-	ret = phy_loopback(priv->dev->phydev, true, 0);
-	if (ret)
+		attr.dst = priv->dev->dev_addr;
+		ret = __stmmac_test_loopback(priv, &attr);
+
+		phy_loopback(priv->dev->phydev, false, 0);
 		return ret;
+	}
 
-	attr.dst = priv->dev->dev_addr;
-	ret = __stmmac_test_loopback(priv, &attr);
+	/* Use PCS loopback for interfaces without an external PHY. */
+	pcs = stmmac_selftest_get_pcs(priv);
+	if (pcs) {
+		ret = phylink_pcs_loopback(pcs, true);
+		if (ret)
+			return ret;
 
-	phy_loopback(priv->dev->phydev, false, 0);
-	return ret;
+		attr.dst = priv->dev->dev_addr;
+		ret = __stmmac_test_loopback(priv, &attr);
+
+		phylink_pcs_loopback(pcs, false);
+		return ret;
+	}
+
+	return -EOPNOTSUPP;
 }
 
 static int stmmac_test_mmc(struct stmmac_priv *priv)
@@ -1986,6 +2015,9 @@ void stmmac_selftest_run(struct net_device *dev,
 			ret = -EOPNOTSUPP;
 			if (dev->phydev)
 				ret = phy_loopback(dev->phydev, true, 0);
+			else
+				ret = phylink_pcs_loopback(stmmac_selftest_get_pcs(priv),
+							   true);
 			if (!ret)
 				break;
 			fallthrough;
@@ -2019,6 +2051,9 @@ void stmmac_selftest_run(struct net_device *dev,
 			ret = -EOPNOTSUPP;
 			if (dev->phydev)
 				ret = phy_loopback(dev->phydev, false, 0);
+			else
+				ret = phylink_pcs_loopback(stmmac_selftest_get_pcs(priv),
+							   false);
 			if (!ret)
 				break;
 			fallthrough;
