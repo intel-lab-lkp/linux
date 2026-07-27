@@ -62,7 +62,7 @@ TEST(wait_private_mapped_file)
 	int res;
 
 	res = pthread_create(&thr, NULL, thr_futex_wait, NULL);
-	if (res < 0)
+	if (res)
 		ksft_exit_fail_msg("pthread_create error\n");
 
 	ksft_print_dbg_msg("wait a while\n");
