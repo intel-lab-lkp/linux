@@ -124,6 +124,9 @@ static void *rmp_bookkeeping __ro_after_init;
 
 static u64 probed_rmp_base, probed_rmp_size;
 
+static cpumask_var_t rmpopt_cpumask;
+static phys_addr_t rmpopt_pa_start;
+
 static LIST_HEAD(snp_leaked_pages_list);
 static DEFINE_SPINLOCK(snp_leaked_pages_list_lock);
 
@@ -558,6 +561,17 @@ int snp_prepare(void)
 }
 EXPORT_SYMBOL_FOR_MODULES(snp_prepare, "ccp");
 
+static void snp_cleanup_rmpopt(void)
+{
+	int cpu;
+
+	for_each_cpu(cpu, rmpopt_cpumask)
+		wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE, 0);
+
+	free_cpumask_var(rmpopt_cpumask);
+	rmpopt_pa_start = 0;
+}
+
 void snp_shutdown(void)
 {
 	u64 syscfg;
@@ -567,16 +581,57 @@ void snp_shutdown(void)
 		return;
 
 	/*
-	 * The firmware has disabled SNP (SnpEn is clear), so re-enable CPU
-	 * hotplug.  A legacy SNP shutdown returns above with SnpEn still set and
-	 * leaves hotplug disabled.
+	 * Clear the RMPOPT_BASE MSRs while CPU hotplug is still disabled, then
+	 * re-enable hotplug now that the firmware has disabled SNP.  A legacy SNP
+	 * shutdown returns above with SnpEn still set and leaves hotplug disabled.
 	 */
+	snp_cleanup_rmpopt();
 	cpu_hotplug_enable();
 
 	clear_rmp();
 	on_each_cpu(mfd_reconfigure, NULL, 1);
 }
 EXPORT_SYMBOL_FOR_MODULES(snp_shutdown, "ccp");
+
+static bool rmpopt_capable(void)
+{
+	return cpu_feature_enabled(X86_FEATURE_RMPOPT) &&
+	       cc_platform_has(CC_ATTR_HOST_SEV_SNP);
+}
+
+void snp_setup_rmpopt(void)
+{
+	u64 rmpopt_base;
+	int cpu;
+
+	if (!rmpopt_capable())
+		return;
+
+	if (!zalloc_cpumask_var(&rmpopt_cpumask, GFP_KERNEL)) {
+		pr_err("Failed to allocate RMPOPT cpumask\n");
+		return;
+	}
+
+	/*
+	 * The RMPOPT_BASE MSR is per-core, so only one thread per core needs
+	 * to set up the RMPOPT_BASE MSR.  All primary threads are online,
+	 * otherwise SNP would not have been enabled.
+	 */
+	for_each_online_cpu(cpu)
+		if (topology_is_primary_thread(cpu))
+			cpumask_set_cpu(cpu, rmpopt_cpumask);
+
+	rmpopt_pa_start = ALIGN_DOWN(PFN_PHYS(min_low_pfn), SZ_1G);
+	rmpopt_base = rmpopt_pa_start | MSR_AMD64_RMPOPT_ENABLE;
+
+	/*
+	 * Per-CPU RMPOPT tables cover at most 2 TB.  Program each core's
+	 * RMPOPT_BASE with the start of RAM to optimize up to 2 TB.
+	 */
+	for_each_cpu(cpu, rmpopt_cpumask)
+		wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE, rmpopt_base);
+}
+EXPORT_SYMBOL_FOR_MODULES(snp_setup_rmpopt, "ccp");
 
 /*
  * Do the necessary preparations which are verified by the firmware as
@@ -705,10 +760,12 @@ bool snp_probe_rmptable_info(void)
 	if (cpu_feature_enabled(X86_FEATURE_SEGMENTED_RMP))
 		rdmsrq(MSR_AMD64_RMP_CFG, rmp_cfg);
 
-	if (rmp_cfg & MSR_AMD64_SEG_RMP_ENABLED)
+	if (rmp_cfg & MSR_AMD64_SEG_RMP_ENABLED) {
 		return probe_segmented_rmptable_info();
-	else
+	} else {
+		setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 		return probe_contiguous_rmptable_info();
+	}
 }
 
 /*
