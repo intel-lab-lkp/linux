@@ -27,6 +27,11 @@
 #define AMD_PMC_REGISTER_ARG_1AH_80H	0xA18
 #define AMD_PMC_REGISTER_RSP_1AH_80H	0xA14
 
+/* SMU communication registers for 1Ah 80h SoC */
+#define AMD_PMC_REGISTER_MSG_1AH_80H	0xA10
+#define AMD_PMC_REGISTER_ARG_1AH_80H	0xA18
+#define AMD_PMC_REGISTER_RSP_1AH_80H	0xA14
+
 /* PMC Scratch Registers */
 #define AMD_PMC_SCRATCH_REG_CZN		0x94
 #define AMD_PMC_SCRATCH_REG_YC		0xD14
@@ -191,6 +196,7 @@ void amd_mp2_stb_deinit(struct amd_pmc_dev *dev);
 
 #define PCI_DEVICE_ID_AMD_1AH_M20H_ROOT		0x1507
 #define PCI_DEVICE_ID_AMD_1AH_M60H_ROOT		0x1122
+#define PCI_DEVICE_ID_AMD_1AH_M80H_ROOT		0x115b
 #define PCI_DEVICE_ID_AMD_MP2_STB		0x172c
 
 int amd_stb_s2d_init(struct amd_pmc_dev *dev);
