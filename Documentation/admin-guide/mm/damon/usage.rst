@@ -102,7 +102,7 @@ comma (",").
     │ │ │ │ │ │ │ :ref:`dests <damon_sysfs_dests>`/nr_dests
     │ │ │ │ │ │ │ │ 0/id,weight
     │ │ │ │ │ │ │ :ref:`stats <sysfs_schemes_stats>`/nr_tried,sz_tried,nr_applied,sz_applied,sz_ops_filter_passed,qt_exceeds,nr_snapshots,max_nr_snapshots
-    │ │ │ │ │ │ │ :ref:`tried_regions <sysfs_schemes_tried_regions>`/total_bytes
+    │ │ │ │ │ │ │ :ref:`tried_regions <sysfs_schemes_tried_regions>`/nr_regions,total_bytes
     │ │ │ │ │ │ │ │ 0/start,end,nr_accesses,age,sz_filter_passed
     │ │ │ │ │ │ │ │ │ probes
     │ │ │ │ │ │ │ │ │ │ 0/hits
@@ -622,21 +622,24 @@ relevant ``kdamonds/<N>/state`` file.  Refer to :ref:`kdamond directory
 schemes/<N>/tried_regions/
 --------------------------
 
-This directory initially has one file, ``total_bytes``.
+This directory initially has two files, ``nr_regions`` and ``total_bytes``.
 
 When a special keyword, ``update_schemes_tried_regions``, is written to the
-relevant ``kdamonds/<N>/state`` file, DAMON updates the ``total_bytes`` file so
-that reading it returns the total size of the scheme tried regions, and creates
-directories named integer starting from ``0`` under this directory.  Each
-directory contains files exposing detailed information about each of the memory
-region that the corresponding scheme's ``action`` has tried to be applied under
-this directory, during next :ref:`apply interval <damon_design_damos>` of the
-corresponding scheme.  The information includes address range, ``nr_accesses``,
-and ``age`` of the region.
+relevant ``kdamonds/<N>/state`` file, DAMON updates the ``nr_regions`` and
+``total_bytes`` files so that reading them returns the number and the total size
+of the scheme tried regions, respectively, and creates directories named
+integer starting from ``0`` under this directory.  Each directory contains files
+exposing detailed information about each of the memory region that the
+corresponding scheme's ``action`` has tried to be applied under this directory,
+during next :ref:`apply interval <damon_design_damos>` of the corresponding
+scheme.  The information includes address range, ``nr_accesses``, and ``age`` of
+the region.
 
 Writing ``update_schemes_tried_bytes`` to the relevant ``kdamonds/<N>/state``
-file will only update the ``total_bytes`` file, and will not create the
-subdirectories.
+file will only update the ``nr_regions`` and ``total_bytes`` files, and will not
+create the subdirectories.  Hence ``nr_regions`` can be used as a lightweight way
+to read the number of the scheme tried regions without materializing the
+per-region subdirectories.
 
 The directories will be removed when another special keyword,
 ``clear_schemes_tried_regions``, is written to the relevant

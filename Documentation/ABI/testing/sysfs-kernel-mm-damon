@@ -609,6 +609,16 @@ Description:	Writing a number to this file sets the upper limit of
 		nr_snapshots that deactivates the scheme when the limit is
 		reached or exceeded.
 
+What:		/sys/kernel/mm/damon/admin/kdamonds/<K>/contexts/<C>/schemes/<S>/tried_regions/nr_regions
+Date:		Aug 2026
+Contact:	SJ Park <sj@kernel.org>
+Description:	Reading this file returns the number of regions that
+		corresponding DAMON-based Operation Scheme's action has tried
+		to be applied.  The number is updated together with
+		'.../tried_regions/total_bytes' by writing 'update_schemes_tried_bytes'
+		or 'update_schemes_tried_regions' to the relevant 'state' file, and
+		hence can be read without materializing the per-region directories.
+
 What:		/sys/kernel/mm/damon/admin/kdamonds/<K>/contexts/<C>/schemes/<S>/tried_regions/total_bytes
 Date:		Jul 2023
 Contact:	SJ Park <sj@kernel.org>

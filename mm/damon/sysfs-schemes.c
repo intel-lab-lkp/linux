@@ -297,6 +297,7 @@ static const struct kobj_type damon_sysfs_scheme_region_ktype = {
 struct damon_sysfs_scheme_regions {
 	struct kobject kobj;
 	struct list_head regions_list;
+	int nr_region_dirs;
 	int nr_regions;
 	unsigned long total_bytes;
 };
@@ -311,9 +312,19 @@ damon_sysfs_scheme_regions_alloc(void)
 
 	regions->kobj = (struct kobject){};
 	INIT_LIST_HEAD(&regions->regions_list);
+	regions->nr_region_dirs = 0;
 	regions->nr_regions = 0;
 	regions->total_bytes = 0;
 	return regions;
+}
+
+static ssize_t nr_regions_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	struct damon_sysfs_scheme_regions *regions = container_of(kobj,
+			struct damon_sysfs_scheme_regions, kobj);
+
+	return sysfs_emit(buf, "%d\n", regions->nr_regions);
 }
 
 static ssize_t total_bytes_show(struct kobject *kobj,
@@ -335,7 +346,7 @@ static void damon_sysfs_scheme_regions_rm_dirs(
 		list_del(&r->list);
 		kobject_del(&r->kobj);
 		kobject_put(&r->kobj);
-		regions->nr_regions--;
+		regions->nr_region_dirs--;
 	}
 }
 
@@ -344,10 +355,14 @@ static void damon_sysfs_scheme_regions_release(struct kobject *kobj)
 	kfree(container_of(kobj, struct damon_sysfs_scheme_regions, kobj));
 }
 
+static struct kobj_attribute damon_sysfs_scheme_regions_nr_regions_attr =
+		__ATTR_RO_MODE(nr_regions, 0400);
+
 static struct kobj_attribute damon_sysfs_scheme_regions_total_bytes_attr =
 		__ATTR_RO_MODE(total_bytes, 0400);
 
 static struct attribute *damon_sysfs_scheme_regions_attrs[] = {
+	&damon_sysfs_scheme_regions_nr_regions_attr.attr,
 	&damon_sysfs_scheme_regions_total_bytes_attr.attr,
 	NULL,
 };
@@ -3119,6 +3134,7 @@ void damos_sysfs_populate_region_dir(struct damon_sysfs_schemes *sysfs_schemes,
 		return;
 
 	sysfs_regions = sysfs_schemes->schemes_arr[schemes_idx]->tried_regions;
+	sysfs_regions->nr_regions++;
 	sysfs_regions->total_bytes += r->ar.end - r->ar.start;
 	if (total_bytes_only)
 		return;
@@ -3130,13 +3146,13 @@ void damos_sysfs_populate_region_dir(struct damon_sysfs_schemes *sysfs_schemes,
 	if (kobject_init_and_add(&region->kobj,
 				&damon_sysfs_scheme_region_ktype,
 				&sysfs_regions->kobj, "%d",
-				sysfs_regions->nr_regions))
+				sysfs_regions->nr_region_dirs))
 		goto out;
 	if (damos_sysfs_region_add_dirs(region, ctx, r))
 		goto del_out;
 
 	list_add_tail(&region->list, &sysfs_regions->regions_list);
-	sysfs_regions->nr_regions++;
+	sysfs_regions->nr_region_dirs++;
 	return;
 
 del_out:
@@ -3156,6 +3172,7 @@ int damon_sysfs_schemes_clear_regions(
 		sysfs_scheme = sysfs_schemes->schemes_arr[i];
 		damon_sysfs_scheme_regions_rm_dirs(
 				sysfs_scheme->tried_regions);
+		sysfs_scheme->tried_regions->nr_regions = 0;
 		sysfs_scheme->tried_regions->total_bytes = 0;
 	}
 	return 0;
