@@ -116,6 +116,7 @@
 #include <linux/bitmap.h>
 #include <linux/bits.h>
 #include <linux/find.h>
+#include <linux/kref.h>
 #include <linux/mdio.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mutex.h>
@@ -198,6 +199,7 @@ struct otto_emdio_cmd_regs {
 
 struct otto_emdio_priv {
 	const struct otto_emdio_info *info;
+	struct kref kref;
 	struct regmap *regmap;
 	struct mutex lock; /* protect HW access */
 	DECLARE_BITMAP(valid_ports, MAX_PORTS);
@@ -582,6 +584,21 @@ static int otto_emdio_9310_setup_controller(struct otto_emdio_priv *priv)
 	return 0;
 }
 
+static void otto_emdio_cleanup_controller(struct kref *kref)
+{
+	struct otto_emdio_priv *priv = container_of(kref, struct otto_emdio_priv, kref);
+
+	mutex_destroy(&priv->lock);
+	kfree(priv);
+}
+
+static void otto_emdio_cleanup_bus(void *data)
+{
+	struct otto_emdio_priv *priv = data;
+
+	kref_put(&priv->kref, otto_emdio_cleanup_controller);
+}
+
 static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv,
 				 struct fwnode_handle *node)
 {
@@ -616,6 +633,11 @@ static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv
 	chan->priv = priv;
 
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-%d", dev_name(dev), mdio_bus);
+
+	kref_get(&priv->kref);
+	err = devm_add_action_or_reset(dev, otto_emdio_cleanup_bus, priv);
+	if (err)
+		return dev_err_probe(dev, err, "cannot register cleanup action\n");
 
 	err = devm_of_mdiobus_register(dev, bus, to_of_node(node));
 	if (err)
@@ -731,44 +753,54 @@ static int otto_emdio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct otto_emdio_priv *priv;
+	int buses_registered = 0;
 	int err;
 
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
-	err = devm_mutex_init(dev, &priv->lock);
-	if (err)
-		return err;
+	kref_init(&priv->kref);
+	mutex_init(&priv->lock);
 
 	priv->info = device_get_match_data(dev);
 	priv->regmap = syscon_node_to_regmap(dev->parent->of_node);
-	if (IS_ERR(priv->regmap))
-		return PTR_ERR(priv->regmap);
+	if (IS_ERR(priv->regmap)) {
+		err = PTR_ERR(priv->regmap);
+		goto err_out;
+	}
 
 	platform_set_drvdata(pdev, priv);
 
 	err = otto_emdio_map_ports(dev);
 	if (err)
-		return err;
+		goto err_out;
 
 	err = otto_emdio_setup_topology(priv);
 	if (err)
-		return err;
+		goto err_out;
 
 	if (priv->info->setup_controller) {
 		err = priv->info->setup_controller(priv);
-		if (err)
-			return dev_err_probe(dev, err, "failed to setup MDIO bus controller\n");
+		if (err) {
+			dev_err_probe(dev, err, "failed to setup MDIO controller\n");
+			goto err_out;
+		}
 	}
 
 	device_for_each_child_node_scoped(dev, child) {
 		err = otto_emdio_probe_one(dev, priv, child);
 		if (err)
-			return err;
+			goto err_out;
+		buses_registered++;
 	}
 
-	return 0;
+	if (!buses_registered)
+		err = dev_err_probe(dev, -ENODEV, "no MDIO buses registered\n");
+err_out:
+	kref_put(&priv->kref, otto_emdio_cleanup_controller);
+
+	return err;
 }
 
 static const struct otto_emdio_info otto_emdio_9300_info = {
