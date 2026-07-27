@@ -1291,8 +1291,6 @@ static int ext4_write_begin(const struct kiocb *iocb,
 	if (unlikely(ret))
 		return ret;
 
-	*fsdata = (void *)((unsigned long)*fsdata & ~EXT4_WRITE_DATA_INLINE);
-
 	trace_ext4_write_begin(inode, pos, len);
 	/*
 	 * Reserve one block more for addition to orphan list in case
@@ -1306,10 +1304,6 @@ static int ext4_write_begin(const struct kiocb *iocb,
 		ret = ext4_convert_inline_data(inode);
 		if (ret < 0)
 			return ret;
-		if (ret == 1) {
-			*fsdata = (void *)((unsigned long)*fsdata | EXT4_WRITE_DATA_INLINE);
-			return 0;
-		}
 	}
 
 	/*
@@ -1442,10 +1436,6 @@ static int ext4_write_end(const struct kiocb *iocb,
 
 	trace_ext4_write_end(inode, pos, len, copied);
 
-	if ((unsigned long)fsdata & EXT4_WRITE_DATA_INLINE)
-		return ext4_write_inline_data_end(inode, pos, len, copied,
-						  folio);
-
 	copied = block_write_end(pos, len, copied, folio);
 	/*
 	 * it's important to update i_size while still holding folio lock:
@@ -1550,10 +1540,6 @@ static int ext4_journalled_write_end(const struct kiocb *iocb,
 	to = from + len;
 
 	BUG_ON(!ext4_handle_valid(handle));
-
-	if ((unsigned long)fsdata & EXT4_WRITE_DATA_INLINE)
-		return ext4_write_inline_data_end(inode, pos, len, copied,
-						  folio);
 
 	if (unlikely(copied < len) && !folio_test_uptodate(folio)) {
 		copied = 0;
@@ -3149,10 +3135,6 @@ static int ext4_da_write_begin(const struct kiocb *iocb,
 						     foliop, true);
 		if (ret < 0)
 			return ret;
-		if (ret == 1) {
-			*fsdata = (void *)((unsigned long)*fsdata | EXT4_WRITE_DATA_INLINE);
-			return 0;
-		}
 	}
 
 retry:
@@ -3288,10 +3270,6 @@ static int ext4_da_write_end(const struct kiocb *iocb,
 				      len, copied, folio, fsdata);
 
 	trace_ext4_da_write_end(inode, pos, len, copied);
-
-	if (write_mode & EXT4_WRITE_DATA_INLINE)
-		return ext4_write_inline_data_end(inode, pos, len, copied,
-						  folio);
 
 	if (unlikely(copied < len) && !folio_test_uptodate(folio))
 		copied = 0;
