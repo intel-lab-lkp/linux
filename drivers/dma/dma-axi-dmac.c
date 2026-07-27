@@ -1195,9 +1195,11 @@ static int axi_dmac_detect_caps(struct axi_dmac *dmac, unsigned int version)
 	return 0;
 }
 
-static void axi_dmac_tasklet_kill(void *task)
+static void axi_dmac_kill_bh(void *data)
 {
-	tasklet_kill(task);
+	struct dma_chan *chan = data;
+
+	dma_chan_kill_bh(chan);
 }
 
 static void axi_dmac_free_dma_controller(void *of_node)
@@ -1302,8 +1304,8 @@ static int axi_dmac_probe(struct platform_device *pdev)
 	 * Put the action in here so it get's done before unregistering the DMA
 	 * device.
 	 */
-	ret = devm_add_action_or_reset(&pdev->dev, axi_dmac_tasklet_kill,
-				       &dmac->chan.vchan.task);
+	ret = devm_add_action_or_reset(&pdev->dev, axi_dmac_kill_bh,
+				       &dmac->chan.vchan.chan);
 	if (ret)
 		return ret;
 
