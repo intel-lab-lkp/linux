@@ -453,6 +453,138 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 	return -EPERM;
 }
 
+static const struct access_masks sysv_msg_queue_scope = {
+	.scope = LANDLOCK_SCOPE_SYSV_MSG_QUEUE,
+};
+
+/**
+ * hook_msg_queue_alloc_security - Record the creator's domain on a msg queue
+ *
+ * @perm: IPC permission structure of the newly created message queue.
+ *
+ * Save a reference to the creating task's Landlock domain in the IPC security
+ * blob and tag the blob as belonging to a message queue so that the generic
+ * ipc_permission hook can distinguish msg queues from sem and shm objects.
+ *
+ * Return: 0 (allocation of the blob itself is handled by the LSM core).
+ */
+static int hook_msg_queue_alloc_security(struct kern_ipc_perm *const perm)
+{
+	struct landlock_kern_ipc_perm_security *const ipc_sec =
+		landlock_kern_ipc_perm(perm);
+	const struct landlock_cred_security *const subject =
+		landlock_get_applicable_subject(current_cred(),
+						sysv_msg_queue_scope, NULL);
+
+	ipc_sec->kind = LANDLOCK_SYSV_IPC_MSG_QUEUE;
+
+	/*
+	 * The blob is zero-allocated by the LSM core, so owner_subject.domain
+	 * is already NULL for an unsandboxed creator.
+	 */
+	if (!subject)
+		return 0;
+
+	landlock_get_ruleset(subject->domain);
+	ipc_sec->owner_subject = *subject;
+	return 0;
+}
+
+/**
+ * hook_msg_queue_free_security - Release the creator's domain reference
+ *
+ * @perm: IPC permission structure of the message queue being destroyed.
+ *
+ * The IPC security blob itself is freed by the LSM core.
+ */
+static void hook_msg_queue_free_security(struct kern_ipc_perm *const perm)
+{
+	struct landlock_kern_ipc_perm_security *const ipc_sec =
+		landlock_kern_ipc_perm(perm);
+
+	/* May be called from an RCU callback (msg_rcu_free()). */
+	landlock_put_ruleset_deferred(ipc_sec->owner_subject.domain);
+}
+
+/**
+ * hook_ipc_permission - Enforce SysV msg queue scoping on the current task
+ *
+ * @ipcp: IPC permission structure of the object being accessed.
+ * @flag: Requested mode bits (unused; same value for every msg queue access).
+ *
+ * The ipc_permission hook is the choke point for msgget on an existing queue
+ * and for msgsnd / msgrcv / msgctl(IPC_STAT, MSG_STAT, MSG_STAT_ANY) before
+ * they touch any per-message state. Using the per-message msg_queue_msgrcv hook
+ * instead would not work: find_msg() silently skips messages for which the
+ * hook returns an error and turns the result into -EAGAIN / -ENOMSG.
+ *
+ * The hook fires for sem and shm objects as well; @kind is used to filter
+ * them out.
+ *
+ * Return: 0 if access is allowed, -EACCES if scoped out.
+ */
+static int hook_ipc_permission(struct kern_ipc_perm *const ipcp,
+			       const short flag)
+{
+	const struct landlock_kern_ipc_perm_security *const ipc_sec =
+		landlock_kern_ipc_perm(ipcp);
+	size_t handle_layer;
+	const struct landlock_cred_security *subject;
+
+	/* Don't worry about other IPC objects for now */
+	if (ipc_sec->kind != LANDLOCK_SYSV_IPC_MSG_QUEUE)
+		return 0;
+
+	subject = landlock_get_applicable_subject(current_cred(),
+						  sysv_msg_queue_scope,
+						  &handle_layer);
+	if (!subject)
+		return 0;
+
+	if (!domain_is_scoped(subject->domain, ipc_sec->owner_subject.domain,
+			      sysv_msg_queue_scope.scope))
+		return 0;
+
+	landlock_log_denial(subject, &(struct landlock_request) {
+		.type = LANDLOCK_REQUEST_SCOPE_SYSV_MSG_QUEUE,
+		.audit = {
+			.type = LSM_AUDIT_DATA_IPC,
+			.u.ipc_id = ipcp->key,
+		},
+		.layer_plus_one = handle_layer + 1,
+	});
+	/*
+	 * The precise error value does not reach user space through
+	 * ipcperms(): its callers map any non-zero return to -EACCES.
+	 * Return -EACCES anyway so that the msgctl_down() path (which
+	 * propagates the hook's return value as is) reports the same error.
+	 */
+	return -EACCES;
+}
+
+/**
+ * hook_msg_queue_msgctl - Enforce scoping on msgctl(IPC_RMID, IPC_SET)
+ *
+ * @msq: IPC permission structure of the message queue, or NULL for
+ *	 namespace-wide commands (IPC_INFO, MSG_INFO).
+ * @cmd: msgctl command code (unused).
+ *
+ * msgctl_down() does not go through ipc_permission(), so this hook is
+ * needed to cover IPC_RMID and IPC_SET.  IPC_INFO and MSG_INFO are
+ * namespace-wide queries with no specific queue, so they are not in scope
+ * for SysV msg queue scoping.
+ *
+ * Return: 0 if access is allowed, -EACCES if scoped out.
+ */
+static int hook_msg_queue_msgctl(struct kern_ipc_perm *const msq, const int cmd)
+{
+	/* IPC_INFO and MSG_INFO are queue-less; nothing to scope. */
+	if (!msq)
+		return 0;
+
+	return hook_ipc_permission(msq, 0);
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(ptrace_access_check, hook_ptrace_access_check),
 	LSM_HOOK_INIT(ptrace_traceme, hook_ptrace_traceme),
@@ -462,6 +594,11 @@ static struct security_hook_list landlock_hooks[] __ro_after_init = {
 
 	LSM_HOOK_INIT(task_kill, hook_task_kill),
 	LSM_HOOK_INIT(file_send_sigiotask, hook_file_send_sigiotask),
+
+	LSM_HOOK_INIT(msg_queue_alloc_security, hook_msg_queue_alloc_security),
+	LSM_HOOK_INIT(msg_queue_free_security, hook_msg_queue_free_security),
+	LSM_HOOK_INIT(msg_queue_msgctl, hook_msg_queue_msgctl),
+	LSM_HOOK_INIT(ipc_permission, hook_ipc_permission),
 };
 
 __init void landlock_add_task_hooks(void)
