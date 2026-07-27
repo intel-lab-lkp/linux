@@ -724,7 +724,7 @@ retry_journal:
 		if (!da) {
 			brelse(iloc.bh);
 			/* Retry inside */
-			return ext4_convert_inline_data_to_extent(mapping, inode);
+			return ext4_convert_inline_data(inode);
 		}
 
 		ret = ext4_da_convert_inline_data_to_extent(mapping, inode);
@@ -785,7 +785,7 @@ int ext4_try_to_write_inline_data(struct address_space *mapping,
 				  struct folio **foliop)
 {
 	if (pos + len > ext4_get_max_inline_size(inode))
-		return ext4_convert_inline_data_to_extent(mapping, inode);
+		return ext4_convert_inline_data(inode);
 	return ext4_generic_write_inline_data(mapping, inode, pos, len,
 					      foliop, false);
 }
