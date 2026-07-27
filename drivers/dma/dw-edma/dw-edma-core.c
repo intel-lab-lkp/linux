@@ -1170,7 +1170,7 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	dma_async_device_unregister(&dw->dma);
 	list_for_each_entry_safe(chan, _chan, &dw->dma.channels,
 				 vc.chan.device_node) {
-		tasklet_kill(&chan->vc.task);
+		dma_chan_kill_bh(&chan->vc.chan);
 		list_del(&chan->vc.chan.device_node);
 	}
 
