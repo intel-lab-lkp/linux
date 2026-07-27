@@ -216,6 +216,10 @@ static struct ptp_header *mv88e6xxx_should_tstamp(struct mv88e6xxx_chip *chip,
 	if (!chip->info->ptp_support)
 		return NULL;
 
+	/* Marvell switches do not support IEEE 1588-2002 (PTPv1). */
+	if ((type & PTP_CLASS_VMASK) != PTP_CLASS_V2)
+		return NULL;
+
 	hdr = ptp_parse_header(skb, type);
 	if (!hdr)
 		return NULL;
