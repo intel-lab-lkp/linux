@@ -76,6 +76,7 @@ struct dw_edma_desc {
 
 	u32				alloc_sz;
 
+	u32				ll_start;	/* First outstanding LL entry */
 	size_t				done_burst;
 	size_t				start_burst;
 	size_t				nburst;
@@ -83,6 +84,7 @@ struct dw_edma_desc {
 };
 
 struct dw_edma_ll_snapshot {
+	int				idx;
 	enum dw_edma_ll_event		event;
 };
 
@@ -118,6 +120,7 @@ struct dw_edma_chan {
 	 * LL event recorded by the hard IRQ handler. The event scope lock
 	 * serializes its capture with a new hardware run; vc.lock serializes
 	 * its consumption with LL state.
+	 * Valid indices use the exclusive boundary convention of ll_done.
 	 */
 	struct dw_edma_ll_snapshot	ll_irq;
 	/* ABORT is terminal and remains pending across LL state changes. */
@@ -191,6 +194,7 @@ struct dw_edma_core_ops {
 	enum dma_status (*ch_status)(struct dw_edma_chan *chan);
 	/* Called with the event scope locked. */
 	bool (*ch_abort_int_pending)(struct dw_edma_chan *chan);
+	u32 (*ch_transfer_size)(struct dw_edma_chan *chan);
 	enum dw_edma_event_scope event_scope;
 	irqreturn_t (*handle_int)(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 				  dw_edma_handler_t handler);
