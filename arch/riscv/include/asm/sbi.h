@@ -651,6 +651,26 @@ static inline unsigned long sbi_mk_version(unsigned long major,
 		| (minor & SBI_SPEC_VERSION_MINOR_MASK);
 }
 
+/*
+ * SBI error code to Linux errno mapping.
+ *
+ * SBI error codes (from the SBI specification):
+ *   0  SUCCESS
+ *  -1  FAILURE           : -ENOTSUPP
+ *  -2  NOT_SUPPORTED     : -ENOTSUPP
+ *  -3  INVALID_PARAM     : -EINVAL
+ *  -4  DENIED            : -EPERM
+ *  -5  INVALID_ADDRESS   : -EFAULT
+ *  -6  ALREADY_AVAILABLE : -EALREADY
+ *  -7  ALREADY_STARTED   : -EALREADY
+ *  -8  ALREADY_STOPPED   : -EALREADY
+ *  -9  NO_SHMEM          : -ENOMEM
+ * -10  INVALID_STATE     : -EINVAL
+ * -11  BAD_RANGE         : -ERANGE
+ * -12  TIMEOUT           : -ETIMEDOUT
+ * -13  IO                : -EIO
+ * -14  DENIED_LOCKED     : -EPERM
+ */
 static inline int sbi_err_map_linux_errno(int err)
 {
 	switch (err) {
@@ -672,6 +692,10 @@ static inline int sbi_err_map_linux_errno(int err)
 		return -ETIMEDOUT;
 	case SBI_ERR_IO:
 		return -EIO;
+	case SBI_ERR_ALREADY_AVAILABLE:
+	case SBI_ERR_ALREADY_STARTED:
+	case SBI_ERR_ALREADY_STOPPED:
+		return -EALREADY;
 	case SBI_ERR_NOT_SUPPORTED:
 	case SBI_ERR_FAILURE:
 	default:
