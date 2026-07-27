@@ -21,6 +21,7 @@
 #include "acp_common.h"
 
 #define TDM_CHANNELS	8
+#define ACP7X_MAX_DAI_LINKS	5
 
 #define ACP_OPS(priv, cb)	((priv)->ops.cb)
 
@@ -45,6 +46,23 @@ enum cpu_endpoints {
 	DMIC,
 };
 
+enum acp7x_be_id {
+	I2S0_BE_ID = 0,
+	I2S1_BE_ID,
+	I2S2_BE_ID,
+	PDM0_BE_ID,
+	PDM1_BE_ID,
+};
+
+enum acp7x_cpu_endpoints {
+	CPU_ID_NONE = 0,
+	I2S0,
+	I2S1,
+	I2S2,
+	PDM0,
+	PDM1,
+};
+
 enum codec_endpoints {
 	DUMMY = 0,
 	RT5682,
@@ -55,6 +73,33 @@ enum codec_endpoints {
 	NAU8821,
 	MAX98388,
 	ES83XX,
+};
+
+/*
+ * struct acp_dai_link_info - ACP7x DAI link table entry
+ *
+ * Initializer layout:
+ * { name, id, cpu_id, codec_id, capture_only, tdm_mode }
+ *
+ * @name:		DAI link name
+ * @id:			Backend endpoint ID (enum acp7x_be_id)
+ * @cpu_id:		ACP CPU DAI endpoint (enum acp7x_cpu_endpoints)
+ * @codec_id:	Codec endpoint (enum codec_endpoints, or PDM0/PDM1)
+ * @capture_only:	Non-zero for capture-only links (e.g. DMIC)
+ * @tdm_mode:	Enable TDM mode for this link
+ */
+struct acp_dai_link_info {
+	const char *name;
+	int id;
+	int cpu_id;
+	int codec_id;
+	int capture_only;
+	bool tdm_mode;
+};
+
+struct acp_dailink {
+	const char *name;
+	const char *cpu_name;
 };
 
 struct acp_mach_ops {
@@ -76,6 +121,7 @@ struct acp_card_drvdata {
 	unsigned int dmic_codec_id;
 	unsigned int dai_fmt;
 	unsigned int acp_rev;
+	struct acp_dai_link_info *acp_dai_link_info;
 	struct clk *wclk;
 	struct clk *bclk;
 	struct acp_mach_ops ops;
@@ -87,6 +133,7 @@ struct acp_card_drvdata {
 
 int acp_sofdsp_dai_links_create(struct snd_soc_card *card);
 int acp_legacy_dai_links_create(struct snd_soc_card *card);
+int acp7x_sofdsp_dai_links_create(struct snd_soc_card *card);
 extern const struct dmi_system_id acp_quirk_table[];
 
 static inline int acp_ops_probe(struct snd_soc_card *card)

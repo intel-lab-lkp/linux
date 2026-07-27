@@ -1836,5 +1836,90 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 }
 EXPORT_SYMBOL_NS_GPL(acp_legacy_dai_links_create, "SND_SOC_AMD_MACH");
 
+static void acp7x_dai_link_set_cpus(struct snd_soc_dai_link *link, int cpu_id)
+{
+	switch (cpu_id) {
+	case I2S0:
+		link->cpus = sof_i2s0;
+		link->num_cpus = ARRAY_SIZE(sof_i2s0);
+		break;
+	case I2S1:
+		link->cpus = sof_i2s1;
+		link->num_cpus = ARRAY_SIZE(sof_i2s1);
+		break;
+	case I2S2:
+		link->cpus = sof_i2s2;
+		link->num_cpus = ARRAY_SIZE(sof_i2s2);
+		break;
+	case PDM0:
+		link->cpus = sof_pdm0;
+		link->num_cpus = ARRAY_SIZE(sof_pdm0);
+		break;
+	case PDM1:
+		link->cpus = sof_pdm1;
+		link->num_cpus = ARRAY_SIZE(sof_pdm1);
+		break;
+	default:
+		break;
+	}
+}
+
+int acp7x_sofdsp_dai_links_create(struct snd_soc_card *card)
+{
+	struct snd_soc_dai_link *links;
+	struct device *dev = card->dev;
+	struct acp_card_drvdata *drv_data = card->drvdata;
+	struct acp_dai_link_info *acp_dai_link_info;
+	int num_links = 0;
+	int link_idx;
+	int i;
+
+	if (!drv_data->acp_dai_link_info) {
+		dev_err(dev, "ACP DAILINK info not found\n");
+		return -EINVAL;
+	}
+
+	acp_dai_link_info = drv_data->acp_dai_link_info;
+	for (link_idx = 0; link_idx < ACP7X_MAX_DAI_LINKS; link_idx++) {
+		if (acp_dai_link_info[link_idx].cpu_id)
+			num_links++;
+	}
+
+	links = devm_kcalloc(dev, num_links, sizeof(struct snd_soc_dai_link), GFP_KERNEL);
+	if (!links)
+		return -ENOMEM;
+
+	for (link_idx = 0, i = 0; link_idx < ACP7X_MAX_DAI_LINKS; link_idx++) {
+		if (!acp_dai_link_info[link_idx].cpu_id)
+			continue;
+
+		links[i].name = acp_dai_link_info[link_idx].name;
+		links[i].id = acp_dai_link_info[link_idx].id;
+		acp7x_dai_link_set_cpus(&links[i], acp_dai_link_info[link_idx].cpu_id);
+		links[i].platforms = sof_component;
+		links[i].num_platforms = ARRAY_SIZE(sof_component);
+		links[i].nonatomic = true;
+		links[i].no_pcm = 1;
+		links[i].capture_only = acp_dai_link_info[link_idx].capture_only;
+
+		if (!acp_dai_link_info[link_idx].codec_id) {
+			links[i].codecs = &snd_soc_dummy_dlc;
+			links[i].num_codecs = 1;
+		} else if (acp_dai_link_info[link_idx].codec_id == PDM0 ||
+			   acp_dai_link_info[link_idx].codec_id == PDM1) {
+			links[i].codecs = dmic_codec;
+			links[i].num_codecs = ARRAY_SIZE(dmic_codec);
+		}
+		i++;
+	}
+
+	card->dai_link = links;
+	card->num_links = num_links;
+	card->set_bias_level = acp_rtk_set_bias_level;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(acp7x_sofdsp_dai_links_create, "SND_SOC_AMD_MACH");
+
 MODULE_DESCRIPTION("AMD ACP Common Machine driver");
 MODULE_LICENSE("GPL v2");
