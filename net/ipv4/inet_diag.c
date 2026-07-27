@@ -11,6 +11,7 @@
 #include <linux/fcntl.h>
 #include <linux/random.h>
 #include <linux/slab.h>
+#include <linux/bitmap.h>
 #include <linux/cache.h>
 #include <linux/init.h>
 #include <linux/time.h>
@@ -632,23 +633,6 @@ int inet_diag_bc_sk(const struct inet_diag_dump_data *cb_data, struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(inet_diag_bc_sk);
 
-static int valid_cc(const void *bc, int len, int cc)
-{
-	while (len >= 0) {
-		const struct inet_diag_bc_op *op = bc;
-
-		if (cc > len)
-			return 0;
-		if (cc == len)
-			return 1;
-		if (op->yes < 4 || op->yes & 3)
-			return 0;
-		len -= op->yes;
-		bc  += op->yes;
-	}
-	return 0;
-}
-
 /* data is u32 ifindex */
 static bool valid_devcond(const struct inet_diag_bc_op *op, int len,
 			  int *min_len)
@@ -729,8 +713,9 @@ static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 			      const struct sk_buff *skb)
 {
 	const struct nlattr *attr = cb_data->inet_diag_nla_bc;
-	const void *bytecode, *bc;
-	int bytecode_len, len;
+	int bytecode_len, len, nbits, err = -EINVAL;
+	unsigned long *target;
+	const void *bc;
 	bool net_admin;
 
 	if (!attr)
@@ -739,23 +724,38 @@ static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 	if (nla_len(attr) < sizeof(struct inet_diag_bc_op))
 		return -EINVAL;
 
+	/* One bit per 4-byte slot tracks 'no'-branch targets that must be
+	 * reached along the yes-chain.
+	 */
+	nbits = DIV_ROUND_UP(nla_len(attr), 4);
+	target = bitmap_zalloc(nbits, GFP_KERNEL);
+	if (!target)
+		return -ENOMEM;
+
 	net_admin = netlink_net_capable(skb, CAP_NET_ADMIN);
-	bytecode = bc = nla_data(attr);
+	bc = nla_data(attr);
 	len = bytecode_len = nla_len(attr);
 
 	while (len > 0) {
 		int min_len = sizeof(struct inet_diag_bc_op);
 		const struct inet_diag_bc_op *op = bc;
+		int off = bytecode_len - len;
+
+		/* Reaching 'off' along the yes-chain proves it is a valid
+		 * opcode boundary, satisfying any earlier 'no' branch that
+		 * targeted it.
+		 */
+		__clear_bit(off / 4, target);
 
 		switch (op->code) {
 		case INET_DIAG_BC_S_COND:
 		case INET_DIAG_BC_D_COND:
 			if (!valid_hostcond(bc, len, &min_len))
-				return -EINVAL;
+				goto out;
 			break;
 		case INET_DIAG_BC_DEV_COND:
 			if (!valid_devcond(bc, len, &min_len))
-				return -EINVAL;
+				goto out;
 			break;
 		case INET_DIAG_BC_S_EQ:
 		case INET_DIAG_BC_S_GE:
@@ -764,19 +764,21 @@ static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 		case INET_DIAG_BC_D_GE:
 		case INET_DIAG_BC_D_LE:
 			if (!valid_port_comparison(bc, len, &min_len))
-				return -EINVAL;
+				goto out;
 			break;
 		case INET_DIAG_BC_MARK_COND:
-			if (!net_admin)
-				return -EPERM;
+			if (!net_admin) {
+				err = -EPERM;
+				goto out;
+			}
 			if (!valid_markcond(bc, len, &min_len))
-				return -EINVAL;
+				goto out;
 			cb_data->mark_needed = true;
 			break;
 #ifdef CONFIG_SOCK_CGROUP_DATA
 		case INET_DIAG_BC_CGROUP_COND:
 			if (!valid_cgroupcond(bc, len, &min_len))
-				return -EINVAL;
+				goto out;
 			cb_data->cgroup_needed = true;
 			break;
 #endif
@@ -787,23 +789,31 @@ static int inet_diag_bc_audit(struct inet_diag_dump_data *cb_data,
 		case INET_DIAG_BC_NOP:
 			break;
 		default:
-			return -EINVAL;
+			goto out;
 		}
 
 		if (op->code != INET_DIAG_BC_NOP) {
 			if (op->no < min_len || op->no > len + 4 || op->no & 3)
-				return -EINVAL;
-			if (op->no < len &&
-			    !valid_cc(bytecode, bytecode_len, len - op->no))
-				return -EINVAL;
+				goto out;
+			/* Record the 'no'-branch target; it must be cleared
+			 * later when the yes-chain lands on it, otherwise the
+			 * target is not a reachable opcode boundary.
+			 */
+			if (op->no < len)
+				__set_bit((off + op->no) / 4, target);
 		}
 
 		if (op->yes < min_len || op->yes > len + 4 || op->yes & 3)
-			return -EINVAL;
+			goto out;
 		bc  += op->yes;
 		len -= op->yes;
 	}
-	return len == 0 ? 0 : -EINVAL;
+
+	if (len == 0 && bitmap_empty(target, nbits))
+		err = 0;
+out:
+	bitmap_free(target);
+	return err;
 }
 
 static int __inet_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
