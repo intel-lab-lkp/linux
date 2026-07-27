@@ -822,6 +822,12 @@ bool kvm_need_perf_global_ctrl_intercept(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_need_perf_global_ctrl_intercept);
 
+static bool kvm_need_perf_metrics_intercept(struct kvm_vcpu *vcpu)
+{
+	return (kvm_host.perf_capabilities & PERF_CAP_PERF_METRICS) &&
+		!kvm_vcpu_has_perf_metrics(vcpu);
+}
+
 static bool kvm_rdpmc_encoding_supported(void)
 {
 	/* KVM understands all RDPMC encodings prior to PMU v6. */
@@ -851,6 +857,7 @@ bool kvm_need_rdpmc_intercept(struct kvm_vcpu *vcpu)
 		return true;
 
 	return kvm_need_any_pmc_intercept(vcpu) ||
+	       kvm_need_perf_metrics_intercept(vcpu) ||
 	       pmu->counter_bitmask[KVM_PMC_GP] != (BIT_ULL(kvm_host_pmu.bit_width_gp) - 1) ||
 	       pmu->counter_bitmask[KVM_PMC_FIXED] != (BIT_ULL(kvm_host_pmu.bit_width_fixed) - 1);
 }
