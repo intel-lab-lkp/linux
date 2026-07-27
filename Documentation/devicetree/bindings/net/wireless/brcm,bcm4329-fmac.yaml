@@ -17,6 +17,7 @@ description:
 
 allOf:
   - $ref: /schemas/net/wireless/wireless-controller.yaml#
+  - $ref: /schemas/nvmem/nvmem-consumer.yaml#
 
 properties:
   compatible:
