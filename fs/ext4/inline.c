@@ -699,95 +699,17 @@ int ext4_generic_write_inline_data(struct address_space *mapping,
 					  bool da)
 {
 	int ret;
-	handle_t *handle;
-	struct folio *folio;
-	struct ext4_iloc iloc;
 	int retries = 0;
 
-	ret = ext4_get_inode_loc(inode, &iloc);
-	if (ret)
-		return ret;
-
-retry_journal:
-	handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
-	if (IS_ERR(handle)) {
-		ret = PTR_ERR(handle);
-		goto out_release_bh;
-	}
-
-	ret = ext4_prepare_inline_data(handle, inode, pos + len);
-	if (ret && ret != -ENOSPC)
-		goto out_stop_journal;
-
-	if (ret == -ENOSPC) {
-		ext4_journal_stop(handle);
-		if (!da) {
-			brelse(iloc.bh);
-			/* Retry inside */
-			return ext4_convert_inline_data(inode);
-		}
-
-		ret = ext4_da_convert_inline_data_to_extent(mapping, inode);
-		if (ret == -ENOSPC &&
-		    ext4_should_retry_alloc(inode->i_sb, &retries))
-			goto retry_journal;
-		goto out_release_bh;
-	}
-
-	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN | FGP_NOFS,
-					mapping_gfp_mask(mapping));
-	if (IS_ERR(folio)) {
-		ret = PTR_ERR(folio);
-		goto out_stop_journal;
-	}
-
-	down_read(&EXT4_I(inode)->xattr_sem);
-	/* Someone else had converted it to extent */
-	if (!ext4_has_inline_data(inode)) {
-		ret = 0;
-		goto out_release_folio;
-	}
-
-	if (!folio_test_uptodate(folio)) {
-		ret = ext4_read_inline_folio(inode, folio);
-		if (ret < 0)
-			goto out_release_folio;
-	}
-
-	ret = ext4_journal_get_write_access(handle, inode->i_sb, iloc.bh, EXT4_JTR_NONE);
-	if (ret)
-		goto out_release_folio;
-	*foliop = folio;
-	up_read(&EXT4_I(inode)->xattr_sem);
-	brelse(iloc.bh);
-	return 1;
-
-out_release_folio:
-	up_read(&EXT4_I(inode)->xattr_sem);
-	folio_unlock(folio);
-	folio_put(folio);
-out_stop_journal:
-	ext4_journal_stop(handle);
-out_release_bh:
-	brelse(iloc.bh);
-	return ret;
-}
-
-/*
- * Try to write data in the inode.
- * If the inode has inline data, check whether the new write can be
- * in the inode also. If not, create the page the handle, move the data
- * to the page make it update and let the later codes create extent for it.
- */
-int ext4_try_to_write_inline_data(struct address_space *mapping,
-				  struct inode *inode,
-				  loff_t pos, unsigned len,
-				  struct folio **foliop)
-{
-	if (pos + len > ext4_get_max_inline_size(inode))
+	/* Inline data is deprecated: always convert to block format */
+	if (!da)
 		return ext4_convert_inline_data(inode);
-	return ext4_generic_write_inline_data(mapping, inode, pos, len,
-					      foliop, false);
+
+retry:
+	ret = ext4_da_convert_inline_data_to_extent(mapping, inode);
+	if (ret == -ENOSPC && ext4_should_retry_alloc(inode->i_sb, &retries))
+		goto retry;
+	return ret;
 }
 
 int ext4_write_inline_data_end(struct inode *inode, loff_t pos, unsigned len,
@@ -828,7 +750,7 @@ int ext4_write_inline_data_end(struct inode *inode, loff_t pos, unsigned len,
 		/*
 		 * ei->i_inline_off may have changed since
 		 * ext4_write_begin() called
-		 * ext4_try_to_write_inline_data()
+		 * ext4_convert_inline_data()
 		 */
 		(void) ext4_find_inline_data_nolock(inode);
 

@@ -3771,10 +3771,6 @@ extern int ext4_destroy_inline_data(handle_t *handle, struct inode *inode);
 extern void ext4_update_final_de(void *de_buf, int old_size, int new_size);
 
 int ext4_readpage_inline(struct inode *inode, struct folio *folio);
-extern int ext4_try_to_write_inline_data(struct address_space *mapping,
-					 struct inode *inode,
-					 loff_t pos, unsigned len,
-					 struct folio **foliop);
 int ext4_write_inline_data_end(struct inode *inode, loff_t pos, unsigned len,
 			       unsigned copied, struct folio *folio);
 extern int ext4_generic_write_inline_data(struct address_space *mapping,

@@ -1303,8 +1303,7 @@ static int ext4_write_begin(const struct kiocb *iocb,
 	index = pos >> PAGE_SHIFT;
 
 	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
-		ret = ext4_try_to_write_inline_data(mapping, inode, pos, len,
-						    foliop);
+		ret = ext4_convert_inline_data(inode);
 		if (ret < 0)
 			return ret;
 		if (ret == 1) {
