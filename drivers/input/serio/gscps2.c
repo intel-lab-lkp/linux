@@ -22,19 +22,18 @@
  *                 was usable/enabled ?)
  */
 
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/serio.h>
+#include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
-#include <linux/spinlock.h>
-#include <linux/delay.h>
+#include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/property.h>
+#include <linux/serio.h>
 
 #include <asm/irq.h>
-#include <asm/io.h>
 #include <asm/parisc-device.h>
+
+#include "hpps2atkbd.h"
 
 MODULE_AUTHOR("Laurent Canet <canetl@esiee.fr>, Thibaut Varene <varenet@parisc-linux.org>, Helge Deller <deller@gmx.de>");
 MODULE_DESCRIPTION("HP GSC PS2 port driver");
@@ -398,6 +397,17 @@ static int __init gscps2_probe(struct parisc_device *dev)
 		goto fail;
 #endif
 
+	if (ps2port->id == GSC_ID_KEYBOARD) {
+		ret = device_create_managed_software_node(&serio->dev,
+							  gscps2_props, NULL);
+		if (ret) {
+			dev_err(&dev->dev,
+				"failed to add software node for keyboard: %d\n",
+				ret);
+			goto fail;
+		}
+	}
+
 	pr_info("serio: %s port at 0x%08lx irq %d @ %s\n",
 		ps2port->port->name,
 		hpa,
@@ -415,7 +425,9 @@ fail:
 
 fail_miserably:
 	iounmap(ps2port->addr);
+#if 0
 	release_mem_region(dev->hpa.start, GSC_STATUS + 4);
+#endif
 
 fail_nomem:
 	kfree(ps2port);
@@ -477,4 +489,3 @@ static void __exit gscps2_exit(void)
 
 module_init(gscps2_init);
 module_exit(gscps2_exit);
-
