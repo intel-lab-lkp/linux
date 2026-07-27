@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "kselftest_harness.h"
 
 /* uapi/glibc weirdness may leave this undefined */
 #ifndef IPV6_FLOWLABEL_MGR
@@ -38,23 +39,6 @@
 		.sin6_addr	= IN6ADDR_LOOPBACK_INIT,		\
 		.sin6_port	= htons(8888),				\
 	}
-
-#define explain(x)							\
-	do { if (cfg_verbose) fprintf(stderr, "       " x "\n"); } while (0)
-
-#define __expect(x)							\
-	do {								\
-		if (!(x))						\
-			fprintf(stderr, "[OK]   " #x "\n");		\
-		else							\
-			error(1, 0, "[ERR]  " #x " (line %d)", __LINE__); \
-	} while (0)
-
-#define expect_pass(x)	__expect(x)
-#define expect_fail(x)	__expect(!(x))
-
-static bool cfg_long_running;
-static bool cfg_verbose;
 
 static int flowlabel_get(int fd, uint32_t label, uint8_t share, uint16_t flags)
 {
@@ -141,6 +125,10 @@ static void tcp_connect(int listener, uint32_t flowlabel, int *client, int *acce
 
 static void set_flowlabel_consistency(bool enable)
 {
+	/* flowlabel_consistency must be disable to use the IPV6_FL_F_REFLECT
+	 * flag. This helper function is required for setting up and tearing
+	 * down test cases for this flag.
+	 */
 	int fd;
 
 	fd = open("/proc/sys/net/ipv6/flowlabel_consistency", O_WRONLY);
@@ -152,187 +140,270 @@ static void set_flowlabel_consistency(bool enable)
 		error(1, errno, "close flowlabel_consistency");
 }
 
-static void run_tests(int fd)
+TEST(cannot_get_non_existent_label)
 {
-	int wstatus;
+	int fd, err;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_get(fd, 1, IPV6_FL_S_ANY, 0);
+	ASSERT_TRUE(err) TH_LOG("expected get of a non-existent label to fail");
+
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(cannot_put_non_existent_label)
+{
+	int fd, err;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_put(fd, 1);
+	ASSERT_TRUE(err) TH_LOG("expected put of a non-existent label to fail");
+
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(cannot_create_label_greater_than_20_bits)
+{
+	int fd, err;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_get(fd, 0x1FFFFF, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(err) TH_LOG("expected label > 20 bits to be rejected");
+
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(can_create_and_get_and_put_labels)
+{
+	int fd, err;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_get(fd, 1, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("failed to create label (FL_F_CREATE)");
+
+	err = flowlabel_get(fd, 1, IPV6_FL_S_ANY, 0);
+	ASSERT_TRUE(!err) TH_LOG("failed to get the label without FL_F_CREATE");
+
+	err = flowlabel_get(fd, 1, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("failed to get it again with create flag set, too");
+
+	err = flowlabel_get(fd, 1, IPV6_FL_S_ANY, IPV6_FL_F_CREATE | IPV6_FL_F_EXCL);
+	ASSERT_TRUE(err) TH_LOG("expected FL_F_EXCL to reject an already-existing label");
+
+	err = flowlabel_put(fd, 1);
+	ASSERT_TRUE(!err) TH_LOG("failed to put first reference");
+	err = flowlabel_put(fd, 1);
+	ASSERT_TRUE(!err) TH_LOG("failed to put second reference");
+	err = flowlabel_put(fd, 1);
+	ASSERT_TRUE(!err) TH_LOG("failed to put third reference");
+	err = flowlabel_put(fd, 1);
+	ASSERT_TRUE(err) TH_LOG("expected fourth put to fail, no references left");
+
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(exclusive_label_share)
+{
+	int fd, err;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_get(fd, 2, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("failed to create a new exclusive label (FL_S_EXCL)");
+
+	err = flowlabel_get(fd, 2, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(err) TH_LOG("expected reuse in non-exclusive mode to fail");
+
+	err = flowlabel_get(fd, 2, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(err) TH_LOG("expected reuse in exclusive mode to fail too");
+
+	err = flowlabel_put(fd, 2);
+	ASSERT_TRUE(!err) TH_LOG("failed to put the exclusive label");
+
+	err = flowlabel_get(fd, 2, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(err) TH_LOG("expected reuse to fail, due to linger");
+
+	sleep(FL_MIN_LINGER * 2 + 1);
+
+	err = flowlabel_get(fd, 2, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("expected reuse to succeed after linger");
+
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(user_private_label_share)
+{
+	int fd, err, wstatus;
 	pid_t pid;
 
-	explain("cannot get non-existent label");
-	expect_fail(flowlabel_get(fd, 1, IPV6_FL_S_ANY, 0));
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
 
-	explain("cannot put non-existent label");
-	expect_fail(flowlabel_put(fd, 1));
+	err = flowlabel_get(fd, 3, IPV6_FL_S_USER, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("failed to create a new user-private label (FL_S_USER)");
 
-	explain("cannot create label greater than 20 bits");
-	expect_fail(flowlabel_get(fd, 0x1FFFFF, IPV6_FL_S_ANY,
-				  IPV6_FL_F_CREATE));
+	err = flowlabel_get(fd, 3, IPV6_FL_S_ANY, 0);
+	ASSERT_TRUE(err) TH_LOG("expected get in non-exclusive mode to fail");
 
-	explain("create a new label (FL_F_CREATE)");
-	expect_pass(flowlabel_get(fd, 1, IPV6_FL_S_ANY, IPV6_FL_F_CREATE));
-	explain("can get the label (without FL_F_CREATE)");
-	expect_pass(flowlabel_get(fd, 1, IPV6_FL_S_ANY, 0));
-	explain("can get it again with create flag set, too");
-	expect_pass(flowlabel_get(fd, 1, IPV6_FL_S_ANY, IPV6_FL_F_CREATE));
-	explain("cannot get it again with the exclusive (FL_FL_EXCL) flag");
-	expect_fail(flowlabel_get(fd, 1, IPV6_FL_S_ANY,
-					 IPV6_FL_F_CREATE | IPV6_FL_F_EXCL));
-	explain("can now put exactly three references");
-	expect_pass(flowlabel_put(fd, 1));
-	expect_pass(flowlabel_put(fd, 1));
-	expect_pass(flowlabel_put(fd, 1));
-	expect_fail(flowlabel_put(fd, 1));
+	err = flowlabel_get(fd, 3, IPV6_FL_S_EXCL, 0);
+	ASSERT_TRUE(err) TH_LOG("expected get in exclusive mode to fail");
 
-	explain("create a new exclusive label (FL_S_EXCL)");
-	expect_pass(flowlabel_get(fd, 2, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE));
-	explain("cannot get it again in non-exclusive mode");
-	expect_fail(flowlabel_get(fd, 2, IPV6_FL_S_ANY,  IPV6_FL_F_CREATE));
-	explain("cannot get it again in exclusive mode either");
-	expect_fail(flowlabel_get(fd, 2, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE));
-	expect_pass(flowlabel_put(fd, 2));
+	err = flowlabel_get(fd, 3, IPV6_FL_S_USER, 0);
+	ASSERT_TRUE(!err) TH_LOG("failed to get it again in user mode");
 
-	if (cfg_long_running) {
-		explain("cannot reuse the label, due to linger");
-		expect_fail(flowlabel_get(fd, 2, IPV6_FL_S_ANY,
-					  IPV6_FL_F_CREATE));
-		explain("after sleep, can reuse");
-		sleep(FL_MIN_LINGER * 2 + 1);
-		expect_pass(flowlabel_get(fd, 2, IPV6_FL_S_ANY,
-					  IPV6_FL_F_CREATE));
-	}
-
-	explain("create a new user-private label (FL_S_USER)");
-	expect_pass(flowlabel_get(fd, 3, IPV6_FL_S_USER, IPV6_FL_F_CREATE));
-	explain("cannot get it again in non-exclusive mode");
-	expect_fail(flowlabel_get(fd, 3, IPV6_FL_S_ANY, 0));
-	explain("cannot get it again in exclusive mode");
-	expect_fail(flowlabel_get(fd, 3, IPV6_FL_S_EXCL, 0));
-	explain("can get it again in user mode");
-	expect_pass(flowlabel_get(fd, 3, IPV6_FL_S_USER, 0));
-	explain("child process can get it too, but not after setuid(nobody)");
 	pid = fork();
-	if (pid == -1)
-		error(1, errno, "fork");
+	ASSERT_NE(-1, pid) TH_LOG("fork failed");
 	if (!pid) {
-		expect_pass(flowlabel_get(fd, 3, IPV6_FL_S_USER, 0));
-		if (setuid(USHRT_MAX))
+		if (flowlabel_get(fd, 3, IPV6_FL_S_USER, 0))
+			exit(1);
+		if (setuid(USHRT_MAX)) {
 			fprintf(stderr, "[INFO] skip setuid child test\n");
-		else
-			expect_fail(flowlabel_get(fd, 3, IPV6_FL_S_USER, 0));
+			exit(0);
+		}
+		if (!flowlabel_get(fd, 3, IPV6_FL_S_USER, 0))
+			exit(1);
 		exit(0);
 	}
-	if (wait(&wstatus) == -1)
-		error(1, errno, "wait");
-	if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus) != 0)
-		error(1, errno, "wait: unexpected child result");
+	ASSERT_EQ(pid, wait(&wstatus)) TH_LOG("wait failed");
+	ASSERT_TRUE(WIFEXITED(wstatus)) TH_LOG("child did not exit normally");
+	ASSERT_EQ(0, WEXITSTATUS(wstatus)) TH_LOG("child reported unexpected result");
 
-	explain("create a new process-private label (FL_S_PROCESS)");
-	expect_pass(flowlabel_get(fd, 4, IPV6_FL_S_PROCESS, IPV6_FL_F_CREATE));
-	explain("can get it again");
-	expect_pass(flowlabel_get(fd, 4, IPV6_FL_S_PROCESS, 0));
-	explain("child process cannot can get it");
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(process_private_label_share)
+{
+	int fd, err, wstatus;
+	pid_t pid;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_get(fd, 4, IPV6_FL_S_PROCESS, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("failed to create a new process-private label (FL_S_PROCESS)");
+
+	err = flowlabel_get(fd, 4, IPV6_FL_S_PROCESS, 0);
+	ASSERT_TRUE(!err) TH_LOG("failed to get it again");
+
 	pid = fork();
-	if (pid == -1)
-		error(1, errno, "fork");
+	ASSERT_NE(-1, pid) TH_LOG("fork failed");
 	if (!pid) {
-		expect_fail(flowlabel_get(fd, 4, IPV6_FL_S_PROCESS, 0));
+		if (!flowlabel_get(fd, 4, IPV6_FL_S_PROCESS, 0))
+			exit(1);
 		exit(0);
 	}
-	if (wait(&wstatus) == -1)
-		error(1, errno, "wait");
-	if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus) != 0)
-		error(1, errno, "wait: unexpected child result");
+	ASSERT_EQ(pid, wait(&wstatus)) TH_LOG("wait failed");
+	ASSERT_TRUE(WIFEXITED(wstatus)) TH_LOG("child did not exit normally");
+	ASSERT_EQ(0, WEXITSTATUS(wstatus)) TH_LOG("child reported unexpected result");
 
-	if (cfg_long_running) {
-		explain("create a new label with FL_MIN_LINGER linger time");
-		expect_pass(flowlabel_get(fd, 5, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE));
-		explain("renew the label to increase its linger time and put it");
-		expect_pass(flowlabel_renew(fd, 5, 2 * (FL_MIN_LINGER * 2 + 1)));
-		expect_pass(flowlabel_put(fd, 5));
-		sleep(FL_MIN_LINGER * 2 + 1);
-		explain("The label cannot be created because the new linger time is not over yet");
-		expect_fail(flowlabel_get(fd, 5, IPV6_FL_S_ANY, IPV6_FL_F_CREATE));
-	}
+	ASSERT_EQ(0, close(fd));
+}
 
-	explain("Prepare TCP SYN for REMOTE flag validation");
-	int remote_listener = tcp_listen();
-	int remote_cfd, remote_afd;
-	tcp_connect(remote_listener, 6, &remote_cfd, &remote_afd);
+TEST(renew_label_linger)
+{
+	/* After a label with EXCL share is put and lingered, it must be
+	 * possible to create a new one. Check if RENEW action extends
+	 * the linger period of put label, blocking creation after previous
+	 * linger time.
+	 */
+	int fd, err;
+
+	fd = socket(PF_INET6, SOCK_DGRAM, 0);
+	ASSERT_GE(fd, 0) TH_LOG("socket failed");
+
+	err = flowlabel_get(fd, 5, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(!err) TH_LOG("failed to create a new label with FL_MIN_LINGER linger time");
+
+	err = flowlabel_renew(fd, 5, 2 * (FL_MIN_LINGER * 2 + 1));
+	ASSERT_TRUE(!err) TH_LOG("failed to renew the label to increase its linger time");
+
+	err = flowlabel_put(fd, 5);
+	ASSERT_TRUE(!err) TH_LOG("failed to put the label");
+
+	sleep(FL_MIN_LINGER * 2 + 1);
+
+	err = flowlabel_get(fd, 5, IPV6_FL_S_ANY, IPV6_FL_F_CREATE);
+	ASSERT_TRUE(err) TH_LOG("expected reuse to fail, new linger time not over yet");
+
+	ASSERT_EQ(0, close(fd));
+}
+
+TEST(remote_flag)
+{
+	/* The REMOTE flag, used for getsockopt, is expected to retrieve the
+	 * label from the latest received header.
+	 */
 	struct in6_flowlabel_req freq = {
 		.flr_action = IPV6_FL_A_GET,
 		.flr_flags = IPV6_FL_F_REMOTE,
 	};
 	socklen_t freq_len = sizeof(freq);
-	explain("Query for label sent by client with IPV6_FL_F_REMOTE");
-	expect_pass(getsockopt(remote_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &freq, &freq_len));
-	expect_pass(ntohl(freq.flr_label) != 6);
-	close(remote_afd);
-	close(remote_cfd);
-	close(remote_listener);
+	int listener, cfd, afd, err;
 
-	explain("Prepare TCP SYN for REFLECT flag validation");
-	set_flowlabel_consistency(false);
-	int reflect_listener = tcp_listen();
+	listener = tcp_listen();
+	tcp_connect(listener, 6, &cfd, &afd);
+
+	err = getsockopt(afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &freq, &freq_len);
+	ASSERT_TRUE(!err) TH_LOG("getsockopt with IPV6_FL_F_REMOTE failed");
+	ASSERT_EQ(6, ntohl(freq.flr_label)) TH_LOG("unexpected remote flow label");
+
+	ASSERT_EQ(0, close(afd));
+	ASSERT_EQ(0, close(cfd));
+	ASSERT_EQ(0, close(listener));
+}
+
+TEST(reflect_flag)
+{
+	/* The REFLECT flag acts as a trigger to the REPFLOW bit. When REPFLOW
+	 * is triggered for a socket, it adopts the label received from the
+	 * connected socket.
+	 */
 	struct in6_flowlabel_req reflect_on = {
 		.flr_action = IPV6_FL_A_GET,
 		.flr_flags = IPV6_FL_F_REFLECT,
 	};
-	explain("Enable REFLECT on the listener before the client connects");
-	expect_pass(setsockopt(reflect_listener, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_on, sizeof(reflect_on)));
-	int reflect_cfd, reflect_afd;
-	tcp_connect(reflect_listener, 7, &reflect_cfd, &reflect_afd);
 	struct in6_flowlabel_req reflect_query = {
 		.flr_action = IPV6_FL_A_GET,
 	};
-	socklen_t reflect_query_len = sizeof(reflect_query);
-	explain("Query the accepted socket's outgoing label, should be reflected");
-	expect_pass(getsockopt(reflect_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_query, &reflect_query_len));
-	expect_pass(ntohl(reflect_query.flr_label) != 7);
 	struct in6_flowlabel_req reflect_off = {
 		.flr_action = IPV6_FL_A_PUT,
 		.flr_flags = IPV6_FL_F_REFLECT,
 	};
-	explain("PUT+REFLECT disables reflection on the accepted socket");
-	expect_pass(setsockopt(reflect_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_off, sizeof(reflect_off)));
-	explain("cannot disable reflection twice");
-	expect_fail(setsockopt(reflect_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_off, sizeof(reflect_off)));
+	socklen_t reflect_query_len = sizeof(reflect_query);
+	int listener, cfd, afd, err;
+
+	set_flowlabel_consistency(false);
+
+	listener = tcp_listen();
+	err = setsockopt(listener, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_on, sizeof(reflect_on));
+	ASSERT_TRUE(!err) TH_LOG("failed to enable REFLECT on the listener");
+
+	tcp_connect(listener, 7, &cfd, &afd);
+
+	err = getsockopt(afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_query, &reflect_query_len);
+	ASSERT_TRUE(!err) TH_LOG("failed to query the accepted socket's outgoing label");
+	ASSERT_EQ(7, ntohl(reflect_query.flr_label)) TH_LOG("accepted socket did not reflect client's label");
+
+	err = setsockopt(afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_off, sizeof(reflect_off));
+	ASSERT_TRUE(!err) TH_LOG("failed to disable REFLECT on the accepted socket");
+
+	err = setsockopt(afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_off, sizeof(reflect_off));
+	ASSERT_TRUE(err) TH_LOG("expected disabling REFLECT twice to fail");
+
 	set_flowlabel_consistency(true);
-	close(reflect_afd);
-	close(reflect_cfd);
-	close(reflect_listener);
+
+	ASSERT_EQ(0, close(afd));
+	ASSERT_EQ(0, close(cfd));
+	ASSERT_EQ(0, close(listener));
 }
 
-static void parse_opts(int argc, char **argv)
-{
-	int c;
-
-	while ((c = getopt(argc, argv, "lv")) != -1) {
-		switch (c) {
-		case 'l':
-			cfg_long_running = true;
-			break;
-		case 'v':
-			cfg_verbose = true;
-			break;
-		default:
-			error(1, 0, "%s: parse error", argv[0]);
-		}
-	}
-}
-
-int main(int argc, char **argv)
-{
-	int fd;
-
-	parse_opts(argc, argv);
-
-	fd = socket(PF_INET6, SOCK_DGRAM, 0);
-	if (fd == -1)
-		error(1, errno, "socket");
-
-	run_tests(fd);
-
-	if (close(fd))
-		error(1, errno, "close");
-
-	return 0;
-}
+TEST_HARNESS_MAIN
