@@ -146,6 +146,7 @@
 #define   RTL9300_PHY_CTRL_INDATA		GENMASK(31, 16)
 #define   RTL9300_PHY_CTRL_DATA			GENMASK(15, 0)
 #define RTL9300_SMI_ACCESS_PHY_CTRL_3		0xcb7c
+#define RTL9300_SMI_POLL_CTRL			0xca90
 #define RTL9300_SMI_PORT0_5_ADDR_CTRL		0xcb80
 
 #define RTL9310_NUM_BUSES			4
@@ -171,6 +172,7 @@
 #define   RTL9310_PHY_CTRL_INDATA		GENMASK(15, 0)
 #define RTL9310_SMI_INDRT_ACCESS_MMD_CTRL	0x0c18
 #define RTL9310_SMI_PORT_ADDR_CTRL		0x0c74
+#define RTL9310_SMI_PORT_POLLING_CTRL		0x0ccc
 #define RTL9310_SMI_PORT_POLLING_SEL		0x0c9c
 
 #define PHY_CTRL_CMD				BIT(0)
@@ -219,6 +221,7 @@ struct otto_emdio_info {
 	u8 num_buses;
 	u8 num_ports;
 	u16 num_pages;
+	u32 poll_ctrl;
 	int (*setup_controller)(struct otto_emdio_priv *priv);
 	int (*read_c22)(struct mii_bus *bus, int port, int regnum, u32 *value);
 	int (*read_c45)(struct mii_bus *bus, int port, int dev_addr, int regnum, u32 *value);
@@ -252,6 +255,12 @@ static struct otto_emdio_priv *otto_emdio_bus_to_priv(struct mii_bus *bus)
 	struct otto_emdio_chan *chan = bus->priv;
 
 	return chan->priv;
+}
+
+static int otto_emdio_set_port_polling(struct otto_emdio_priv *priv, int port, bool active)
+{
+	return regmap_assign_bits(priv->regmap, priv->info->poll_ctrl + (port / 32) * 4,
+				  BIT(port % 32), active);
 }
 
 static int otto_emdio_run_cmd(struct mii_bus *bus, u32 cmd,
@@ -584,6 +593,32 @@ static int otto_emdio_9310_setup_controller(struct otto_emdio_priv *priv)
 	return 0;
 }
 
+static int otto_emdio_notify_phy_attach(struct phy_device *phydev)
+{
+	struct otto_emdio_priv *priv = otto_emdio_bus_to_priv(phydev->mdio.bus);
+	int port = otto_emdio_phy_to_port(phydev->mdio.bus, phydev->mdio.addr);
+
+	if (port < 0)
+		return port;
+
+	return otto_emdio_set_port_polling(priv, port, true);
+}
+
+static void otto_emdio_notify_phy_detach(struct phy_device *phydev)
+{
+	struct otto_emdio_priv *priv = otto_emdio_bus_to_priv(phydev->mdio.bus);
+	int port = otto_emdio_phy_to_port(phydev->mdio.bus, phydev->mdio.addr);
+	struct mii_bus *bus = phydev->mdio.bus;
+	int ret;
+
+	if (port < 0)
+		return;
+
+	ret = otto_emdio_set_port_polling(priv, port, false);
+	if (ret)
+		dev_err(bus->parent, "failed to disable polling for port %d\n", port);
+}
+
 static void otto_emdio_cleanup_controller(struct kref *kref)
 {
 	struct otto_emdio_priv *priv = container_of(kref, struct otto_emdio_priv, kref);
@@ -628,6 +663,9 @@ static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv
 		bus->write = otto_emdio_write_c22;
 	}
 	bus->parent = dev;
+	bus->notify_phy_attach = otto_emdio_notify_phy_attach;
+	bus->notify_phy_detach = otto_emdio_notify_phy_detach;
+
 	chan = bus->priv;
 	chan->mdio_bus = mdio_bus;
 	chan->priv = priv;
@@ -749,6 +787,19 @@ put_nodes:
 	return err;
 }
 
+static int otto_emdio_init_polling(struct otto_emdio_priv *priv)
+{
+	int err;
+
+	for (int port = 0; port < priv->info->num_ports; port++) {
+		err = otto_emdio_set_port_polling(priv, port, false);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int otto_emdio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -769,6 +820,10 @@ static int otto_emdio_probe(struct platform_device *pdev)
 		err = PTR_ERR(priv->regmap);
 		goto err_out;
 	}
+
+	err = otto_emdio_init_polling(priv);
+	if (err)
+		return err;
 
 	platform_set_drvdata(pdev, priv);
 
@@ -818,6 +873,7 @@ static const struct otto_emdio_info otto_emdio_9300_info = {
 	.num_buses = RTL9300_NUM_BUSES,
 	.num_ports = RTL9300_NUM_PORTS,
 	.num_pages = RTL9300_NUM_PAGES,
+	.poll_ctrl = RTL9300_SMI_POLL_CTRL,
 	.setup_controller = otto_emdio_9300_setup_controller,
 	.read_c22 = otto_emdio_9300_read_c22,
 	.read_c45 = otto_emdio_9300_read_c45,
@@ -843,6 +899,7 @@ static const struct otto_emdio_info otto_emdio_9310_info = {
 	.num_buses = RTL9310_NUM_BUSES,
 	.num_pages = RTL9310_NUM_PAGES,
 	.num_ports = RTL9310_NUM_PORTS,
+	.poll_ctrl = RTL9310_SMI_PORT_POLLING_CTRL,
 	.setup_controller = otto_emdio_9310_setup_controller,
 	.read_c22 = otto_emdio_9310_read_c22,
 	.read_c45 = otto_emdio_9310_read_c45,
