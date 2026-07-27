@@ -68,7 +68,7 @@ config SCHED_CLUSTER
 	  making when dealing with machines that have clusters of CPUs.
 	  Cluster usually means a couple of CPUs which are placed closely
 	  by sharing mid-level caches, last-level cache tags or internal
-	  busses.
+	  buses.
 
 config SCHED_MC
 	bool "Multi-Core Cache (MC) scheduler support"
