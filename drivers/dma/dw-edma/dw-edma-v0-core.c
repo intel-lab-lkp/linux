@@ -339,8 +339,8 @@ dw_edma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 			   dw_edma_handler_t handler)
 {
 	struct dw_edma *dw = dw_irq->dw;
-	unsigned long total, pos, val;
-	irqreturn_t ret = IRQ_NONE;
+	u8 events[EDMA_V0_MAX_NR_CH] = {};
+	unsigned long total, pos, val, active = 0;
 	struct dw_edma_chan *chan;
 	unsigned long off;
 	unsigned long *mask;
@@ -356,45 +356,45 @@ dw_edma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 		mask = dw_irq->rd_mask;
 	}
 
-	/*
-	 * DONE and ABORT status share one register, and on remote setups
-	 * every read is a non-posted round trip across the PCIe link. Take
-	 * one snapshot and derive both views from it. An abort raised
-	 * after the snapshot is deferred, not lost: only bits observed in
-	 * the snapshot are ever cleared below, so its status remains set and
-	 * triggers another handler pass.
-	 */
-	sts = GET_RW_32(dw, dir, int_status);
+	scoped_guard(raw_spinlock_irqsave, &dw->event_lock[dir]) {
+		/*
+		 * DONE and ABORT status share one register, and on remote setups
+		 * every read is a non-posted round trip across the PCIe link. Take
+		 * one snapshot and derive both views from it.
+		 */
+		sts = GET_RW_32(dw, dir, int_status);
 
-	val = FIELD_GET(EDMA_V0_DONE_INT_MASK, sts);
-	val &= *mask;
-	for_each_set_bit(pos, &val, total) {
-		chan = &dw->chan[pos + off];
+		val = FIELD_GET(EDMA_V0_DONE_INT_MASK, sts);
+		val &= *mask;
+		for_each_set_bit(pos, &val, total) {
+			chan = &dw->chan[pos + off];
 
-		if (unlikely(dw_edma_core_ch_ignore_irq(chan)))
-			continue;
+			if (unlikely(dw_edma_core_ch_ignore_irq(chan)))
+				continue;
 
-		dw_edma_v0_core_clear_done_int(chan);
-		handler(chan, DW_EDMA_IRQ_DONE);
+			events[pos] |= DW_EDMA_IRQ_DONE;
+			active |= BIT(pos);
+			dw_edma_v0_core_clear_done_int(chan);
+		}
 
-		ret = IRQ_HANDLED;
+		val = FIELD_GET(EDMA_V0_ABORT_INT_MASK, sts);
+		val &= *mask;
+		for_each_set_bit(pos, &val, total) {
+			chan = &dw->chan[pos + off];
+
+			if (unlikely(dw_edma_core_ch_ignore_irq(chan)))
+				continue;
+
+			events[pos] |= DW_EDMA_IRQ_ABORT;
+			active |= BIT(pos);
+			dw_edma_v0_core_clear_abort_int(chan);
+		}
+
+		for_each_set_bit(pos, &active, total)
+			handler(&dw->chan[pos + off], events[pos]);
 	}
 
-	val = FIELD_GET(EDMA_V0_ABORT_INT_MASK, sts);
-	val &= *mask;
-	for_each_set_bit(pos, &val, total) {
-		chan = &dw->chan[pos + off];
-
-		if (unlikely(dw_edma_core_ch_ignore_irq(chan)))
-			continue;
-
-		dw_edma_v0_core_clear_abort_int(chan);
-		handler(chan, DW_EDMA_IRQ_ABORT);
-
-		ret = IRQ_HANDLED;
-	}
-
-	return ret;
+	return active ? IRQ_HANDLED : IRQ_NONE;
 }
 
 static void dw_edma_v0_write_ll_data(struct dw_edma_chan *chan, int i,

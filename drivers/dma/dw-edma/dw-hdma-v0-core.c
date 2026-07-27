@@ -177,10 +177,12 @@ dw_hdma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 			   dw_edma_handler_t handler)
 {
 	struct dw_edma *dw = dw_irq->dw;
-	unsigned long total, pos, val;
+	unsigned int events;
+	unsigned long total, pos;
 	irqreturn_t ret = IRQ_NONE;
 	struct dw_edma_chan *chan;
 	unsigned long off, *mask;
+	u32 val;
 
 	if (dir == EDMA_DIR_WRITE) {
 		total = dw->wr_ch_cnt;
@@ -197,20 +199,28 @@ dw_hdma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 		if (unlikely(dw_edma_core_ch_ignore_irq(chan)))
 			continue;
 
-		val = dw_hdma_v0_core_status_int(chan);
-		if (FIELD_GET(HDMA_V0_STOP_INT_MASK, val)) {
-			dw_hdma_v0_core_clear_done_int(chan);
-			handler(chan, DW_EDMA_IRQ_STOP);
+		events = 0;
+		scoped_guard(raw_spinlock_irqsave, dw_edma_event_lock(chan)) {
+			val = dw_hdma_v0_core_status_int(chan);
 
-			ret = IRQ_HANDLED;
+			if (FIELD_GET(HDMA_V0_STOP_INT_MASK, val)) {
+				events |= DW_EDMA_IRQ_STOP;
+				dw_hdma_v0_core_clear_done_int(chan);
+			}
+
+			if (FIELD_GET(HDMA_V0_ABORT_INT_MASK, val)) {
+				events |= DW_EDMA_IRQ_ABORT;
+				dw_hdma_v0_core_clear_abort_int(chan);
+			}
+
+			if (events)
+				handler(chan, events);
 		}
 
-		if (FIELD_GET(HDMA_V0_ABORT_INT_MASK, val)) {
-			dw_hdma_v0_core_clear_abort_int(chan);
-			handler(chan, DW_EDMA_IRQ_ABORT);
+		if (!events)
+			continue;
 
-			ret = IRQ_HANDLED;
-		}
+		ret = IRQ_HANDLED;
 	}
 
 	return ret;

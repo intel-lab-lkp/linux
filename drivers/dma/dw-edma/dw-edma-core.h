@@ -48,6 +48,12 @@ enum dw_edma_irq_event {
 	DW_EDMA_IRQ_ABORT	= BIT(3),
 };
 
+enum dw_edma_ll_event {
+	DW_EDMA_LL_EVENT_NONE,
+	DW_EDMA_LL_EVENT_PROGRESS,
+	DW_EDMA_LL_EVENT_STOP,
+};
+
 enum dw_edma_event_scope {
 	DW_EDMA_EVENT_PER_CHAN,
 	DW_EDMA_EVENT_PER_DIR,
@@ -74,6 +80,10 @@ struct dw_edma_desc {
 	size_t				start_burst;
 	size_t				nburst;
 	struct dw_edma_burst            burst[] __counted_by(nburst);
+};
+
+struct dw_edma_ll_snapshot {
+	enum dw_edma_ll_event		event;
 };
 
 struct dw_edma_chan {
@@ -103,6 +113,14 @@ struct dw_edma_chan {
 	 */
 	u32				ll_head;
 	u32				ll_done;
+
+	/*
+	 * LL event recorded by the hard IRQ handler. The event scope lock
+	 * serializes its capture with a new hardware run; vc.lock serializes
+	 * its consumption with LL state.
+	 */
+	struct dw_edma_ll_snapshot	ll_irq;
+	raw_spinlock_t			event_lock;
 
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */
@@ -153,6 +171,7 @@ struct dw_edma {
 	struct workqueue_struct		*wq;
 
 	raw_spinlock_t			lock;		/* Protect v0 shared registers */
+	raw_spinlock_t			event_lock[2];	/* Per-direction event scopes */
 
 	struct dw_edma_chip             *chip;
 
@@ -177,7 +196,9 @@ struct dw_edma_core_ops {
 	void (*ll_link)(struct dw_edma_chan *chan, u32 idx, bool cb, u64 addr);
 	void (*ll_clear)(struct dw_edma_chan *chan, u32 idx);
 	int (*ll_cur_idx)(struct dw_edma_chan *chan);
+	/* Called with the event scope locked. */
 	void (*ll_irq_clear)(struct dw_edma_chan *chan);
+	/* Called with the event scope locked for an LL channel. */
 	void (*ch_doorbell)(struct dw_edma_chan *chan);
 	void (*ch_enable)(struct dw_edma_chan *chan);
 	void (*ch_config)(struct dw_edma_chan *chan);
@@ -219,6 +240,22 @@ static inline
 struct dw_edma_chan *dchan2dw_edma_chan(struct dma_chan *dchan)
 {
 	return vc2dw_edma_chan(to_virt_chan(dchan));
+}
+
+/*
+ * Lock ordering:
+ *
+ *   chan->vc.lock -> dw_edma_event_lock(chan)
+ *
+ * Interrupt providers invoke the dw_edma_handler_t callback with the event
+ * lock held. The callback must not take vc.lock.
+ */
+static inline raw_spinlock_t *dw_edma_event_lock(struct dw_edma_chan *chan)
+{
+	if (chan->dw->core->event_scope == DW_EDMA_EVENT_PER_DIR)
+		return &chan->dw->event_lock[chan->dir];
+
+	return &chan->event_lock;
 }
 
 /*
