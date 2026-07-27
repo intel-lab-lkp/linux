@@ -91,7 +91,6 @@ struct pch_dma_chan {
 	struct dma_chan		chan;
 	void __iomem *membase;
 	enum dma_transfer_direction dir;
-	struct tasklet_struct	tasklet;
 	unsigned long		err_status;
 
 	spinlock_t		lock;
@@ -665,9 +664,10 @@ static int pd_device_terminate_all(struct dma_chan *chan)
 	return 0;
 }
 
-static void pdc_tasklet(struct tasklet_struct *t)
+static void pdc_tasklet(struct dma_chan *c)
 {
-	struct pch_dma_chan *pd_chan = from_tasklet(pd_chan, t, tasklet);
+	struct pch_dma_chan *pd_chan = container_of(c, struct pch_dma_chan,
+						    chan);
 	unsigned long flags;
 
 	if (!pdc_is_idle(pd_chan)) {
@@ -707,7 +707,7 @@ static irqreturn_t pd_irq(int irq, void *devid)
 				if (sts0 & DMA_STATUS0_ERR(i))
 					set_bit(0, &pd_chan->err_status);
 
-				tasklet_schedule(&pd_chan->tasklet);
+				dma_chan_schedule_bh(&pd_chan->chan);
 				ret0 = IRQ_HANDLED;
 			}
 		} else {
@@ -715,7 +715,7 @@ static irqreturn_t pd_irq(int irq, void *devid)
 				if (sts2 & DMA_STATUS2_ERR(i))
 					set_bit(0, &pd_chan->err_status);
 
-				tasklet_schedule(&pd_chan->tasklet);
+				dma_chan_schedule_bh(&pd_chan->chan);
 				ret2 = IRQ_HANDLED;
 			}
 		}
@@ -877,7 +877,7 @@ static int pch_dma_probe(struct pci_dev *pdev,
 		INIT_LIST_HEAD(&pd_chan->queue);
 		INIT_LIST_HEAD(&pd_chan->free_list);
 
-		tasklet_setup(&pd_chan->tasklet, pdc_tasklet);
+		dma_chan_init_bh(&pd_chan->chan, pdc_tasklet);
 		list_add_tail(&pd_chan->chan.device_node, &pd->dma.channels);
 	}
 
@@ -930,7 +930,7 @@ static void pch_dma_remove(struct pci_dev *pdev)
 					 device_node) {
 			pd_chan = to_pd_chan(chan);
 
-			tasklet_kill(&pd_chan->tasklet);
+			dma_chan_kill_bh(&pd_chan->chan);
 		}
 
 		dma_pool_destroy(pd->pool);
