@@ -2637,10 +2637,16 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct wireless_dev *wdev,
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 	struct sta_info *sta;
-	struct ieee80211_sub_if_data *sdata;
+	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 	int err;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
+
+	if (sdata->vif.type == NL80211_IFTYPE_AP ||
+	    sdata->vif.type == NL80211_IFTYPE_P2P_GO) {
+		if (!sdata->u.ap.active)
+			return -ENETDOWN;
+	}
 
 	if (params->vlan) {
 		sdata = IEEE80211_DEV_TO_SUB_IF(params->vlan);
@@ -2648,8 +2654,7 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct wireless_dev *wdev,
 		if (sdata->vif.type != NL80211_IFTYPE_AP_VLAN &&
 		    sdata->vif.type != NL80211_IFTYPE_AP)
 			return -EINVAL;
-	} else
-		sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
+	}
 
 	if (ether_addr_equal(mac, sdata->vif.addr))
 		return -EINVAL;
@@ -2663,17 +2668,37 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct wireless_dev *wdev,
 		return -EINVAL;
 
 	/*
-	 * If we have a link ID, it can be a non-MLO station on an AP MLD,
-	 * but we need to have a link_mac in that case as well, so use the
-	 * STA's MAC address in that case.
+	 * If we have a link ID:
+	 * (1) check if it is valid, up and beaconing
+	 * (2) it can be a non-MLO station on an AP MLD, but we need to have a
+	 * link_mac in that case as well, so use the STA's MAC address in that
+	 * case.
 	 */
-	if (params->link_sta_params.link_id >= 0)
+	if (params->link_sta_params.link_id >= 0) {
+		int link_id = params->link_sta_params.link_id;
+		struct ieee80211_link_data *link;
+		struct ieee80211_sub_if_data *wdev_sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
+
+		if (link_id >= IEEE80211_MLD_MAX_NUM_LINKS)
+			return -EINVAL;
+
+		link = sdata_dereference(wdev_sdata->link[link_id], wdev_sdata);
+		if (!link)
+			return -ENOLINK;
+
+		if (wdev_sdata->vif.type == NL80211_IFTYPE_AP ||
+		    wdev_sdata->vif.type == NL80211_IFTYPE_P2P_GO) {
+			if (!rcu_access_pointer(link->u.ap.beacon))
+				return -ENETDOWN;
+		}
+
 		sta = sta_info_alloc_with_link(sdata, mac,
-					       params->link_sta_params.link_id,
+					       link_id,
 					       params->link_sta_params.link_mac ?: mac,
 					       GFP_KERNEL);
-	else
+	} else {
 		sta = sta_info_alloc(sdata, mac, GFP_KERNEL);
+	}
 
 	if (!sta)
 		return -ENOMEM;
