@@ -38,6 +38,15 @@
 #define FASTRPC_INIT_HANDLE	1
 #define FASTRPC_DSP_UTILITIES_HANDLE	2
 #define FASTRPC_CTXID_MASK (0xFF0)
+
+/*
+ * DSP firmware on some targets (e.g. the Nord remoteproc) sends an unsolicited
+ * message during process teardown that carries this sentinel in the context
+ * field instead of the context of an outstanding invocation. It is not a
+ * response, so it must be dropped rather than matched against the context idr.
+ */
+#define FASTRPC_RSP_CTX_SENTINEL	0xABCDABCD
+
 #define INIT_FILELEN_MAX (2 * 1024 * 1024)
 #define INIT_FILE_NAMELEN_MAX (128)
 #define FASTRPC_DEVICE_NAME	"fastrpc"
@@ -2550,6 +2559,14 @@ static int fastrpc_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
 
 	if (!cctx)
 		return -ENODEV;
+
+	/*
+	 * A sentinel context marks an unsolicited message from the DSP rather
+	 * than a response to an outstanding invocation. Drop it: a real context
+	 * is (idr_index << 4) | pd and can never collide with this value.
+	 */
+	if (rsp->ctx == FASTRPC_RSP_CTX_SENTINEL)
+		return 0;
 
 	ctxid = ((rsp->ctx & FASTRPC_CTXID_MASK) >> 4);
 
