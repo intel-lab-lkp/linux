@@ -9,6 +9,7 @@
  */
 
 #include <linux/kernel_stat.h>
+#include <linux/utsname.h>
 #include <linux/cpufeature.h>
 #include <linux/init.h>
 #include <linux/errno.h>
@@ -21,7 +22,7 @@
 #include <linux/module.h>
 #include <linux/sched/signal.h>
 #include <linux/kvm_host.h>
-#include <linux/export.h>
+#include <asm/entry-percpu.h>
 #include <asm/lowcore.h>
 #include <asm/ctlreg.h>
 #include <asm/fpu.h>
@@ -116,18 +117,82 @@ static __always_inline char *u64_to_hex(char *dest, u64 val)
 	return dest;
 }
 
-static notrace void s390_handle_damage(void)
+static notrace void nmi_print_info(void)
+{
+	struct lowcore *lc = get_lowcore();
+	char message[100];
+	char *ptr;
+	int i;
+
+	ptr = nmi_puts(message, "Unrecoverable machine check, code: ");
+	ptr = u64_to_hex(ptr, lc->mcck_interruption_code);
+	ptr = nmi_puts(ptr, "\n");
+	sclp_emergency_printk(message);
+
+	ptr = nmi_puts(message, init_utsname()->release);
+	ptr = nmi_puts(ptr, "\n");
+	sclp_emergency_printk(message);
+
+	ptr = nmi_puts(message, arch_hw_string);
+	ptr = nmi_puts(ptr, "\n");
+	sclp_emergency_printk(message);
+
+	ptr = nmi_puts(message, "PSW: ");
+	ptr = u64_to_hex(ptr, lc->mcck_old_psw.mask);
+	ptr = nmi_puts(ptr, " ");
+	ptr = u64_to_hex(ptr, lc->mcck_old_psw.addr);
+	ptr = nmi_puts(ptr, " PFX: ");
+	ptr = u64_to_hex(ptr, (u64)get_lowcore());
+	ptr = nmi_puts(ptr, "\n");
+	sclp_emergency_printk(message);
+
+	ptr = nmi_puts(message, "LBA: ");
+	ptr = u64_to_hex(ptr, lc->last_break_save_area);
+	ptr = nmi_puts(ptr, " EDC: ");
+	ptr = u64_to_hex(ptr, lc->external_damage_code);
+	ptr = nmi_puts(ptr, " FSA: ");
+	ptr = u64_to_hex(ptr, lc->failing_storage_address);
+	ptr = nmi_puts(ptr, "\n");
+	sclp_emergency_printk(message);
+
+	ptr = nmi_puts(message, "CRS:\n");
+	sclp_emergency_printk(message);
+	ptr = message;
+	for (i = 0; i < 16; i++) {
+		ptr = u64_to_hex(ptr, lc->cregs_save_area[i].val);
+		ptr = nmi_puts(ptr, " ");
+		if ((i + 1) % 4 == 0) {
+			ptr = nmi_puts(ptr, "\n");
+			sclp_emergency_printk(message);
+			ptr = message;
+		}
+	}
+
+	ptr = nmi_puts(message, "GPRS:\n");
+	sclp_emergency_printk(message);
+	ptr = message;
+	for (i = 0; i < 16; i++) {
+		ptr = u64_to_hex(ptr, lc->gpregs_save_area[i]);
+		ptr = nmi_puts(ptr, " ");
+		if ((i + 1) % 4 == 0) {
+			ptr = nmi_puts(ptr, "\n");
+			sclp_emergency_printk(message);
+			ptr = message;
+		}
+	}
+
+	ptr = nmi_puts(message, "System stopped\n");
+	sclp_emergency_printk(message);
+}
+
+static notrace void __noreturn s390_handle_damage(void)
 {
 	struct lowcore *lc = get_lowcore();
 	union ctlreg0 cr0, cr0_new;
-	char message[100];
 	psw_t psw_save;
-	char *ptr;
 
 	smp_emergency_stop();
 	diag_amode31_ops.diag308_reset();
-	ptr = nmi_puts(message, "System stopped due to unrecoverable machine check, code: 0x");
-	u64_to_hex(ptr, lc->mcck_interruption_code);
 
 	/*
 	 * Disable low address protection and make machine check new PSW a
@@ -141,7 +206,7 @@ static notrace void s390_handle_damage(void)
 	psw_bits(lc->mcck_new_psw).io = 0;
 	psw_bits(lc->mcck_new_psw).ext = 0;
 	psw_bits(lc->mcck_new_psw).wait = 1;
-	sclp_emergency_printk(message);
+	nmi_print_info();
 
 	/*
 	 * Restore machine check new PSW and control register 0 to original
@@ -150,7 +215,6 @@ static notrace void s390_handle_damage(void)
 	lc->mcck_new_psw = psw_save;
 	local_ctl_load(0, &cr0.reg);
 	disabled_wait();
-	while (1);
 }
 NOKPROBE_SYMBOL(s390_handle_damage);
 
@@ -300,6 +364,7 @@ NOKPROBE_SYMBOL(s390_backup_mcck_info);
  */
 void notrace s390_do_machine_check(struct pt_regs *regs)
 {
+	bool percpu_needs_fixup;
 	static int ipd_count;
 	static DEFINE_SPINLOCK(ipd_lock);
 	static unsigned long long last_ipd;
@@ -311,6 +376,7 @@ void notrace s390_do_machine_check(struct pt_regs *regs)
 	unsigned long mcck_dam_code;
 	int mcck_pending = 0;
 
+	percpu_entry(regs);
 	irq_state = irqentry_nmi_enter(regs);
 
 	if (user_mode(regs))
@@ -424,15 +490,17 @@ void notrace s390_do_machine_check(struct pt_regs *regs)
 	mcck_dam_code = (mci.val & MCIC_SUBCLASS_MASK);
 	if (test_cpu_flag(CIF_MCCK_GUEST) &&
 	(mcck_dam_code & MCCK_CODE_NO_GUEST) != mcck_dam_code) {
-		/* Set exit reason code for host's later handling */
-		*((long *)(regs->gprs[15] + __SF_SIE_REASON)) = -EINTR;
+		/* Set sie return code for host's later handling */
+		((struct stack_frame *)regs->gprs[15])->sie_return = SIE64_RETURN_MCCK;
 	}
 	clear_cpu_flag(CIF_MCCK_GUEST);
 
 	if (mcck_pending)
 		schedule_mcck_handler();
 
+	percpu_needs_fixup = percpu_code_check(regs);
 	irqentry_nmi_exit(regs, irq_state);
+	percpu_exit(regs, percpu_needs_fixup);
 }
 NOKPROBE_SYMBOL(s390_do_machine_check);
 

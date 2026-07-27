@@ -19,7 +19,7 @@
 #include <sound/tlv.h>
 #include "max98927.h"
 
-static struct reg_default max98927_reg[] = {
+static const struct reg_default max98927_reg[] = {
 	{MAX98927_R0001_INT_RAW1,  0x00},
 	{MAX98927_R0002_INT_RAW2,  0x00},
 	{MAX98927_R0003_INT_RAW3,  0x00},
@@ -873,8 +873,8 @@ static void max98927_i2c_remove(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id max98927_i2c_id[] = {
-	{ "max98927"},
-	{ },
+	{ .name = "max98927" },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, max98927_i2c_id);

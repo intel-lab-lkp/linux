@@ -20,9 +20,10 @@
 
 #define PER_CPU_VAR(var)	__percpu(var)__percpu_rel
 
-#else /* !__ASSEMBLY__: */
+#else /* !__ASSEMBLER__: */
 
 #include <linux/args.h>
+#include <linux/bits.h>
 #include <linux/build_bug.h>
 #include <linux/stringify.h>
 #include <asm/asm.h>
@@ -39,12 +40,10 @@
 #endif
 
 #define __percpu_prefix
-#define __percpu_seg_override	CONCATENATE(__seg_, __percpu_seg)
 
 #else /* !CONFIG_CC_HAS_NAMED_AS: */
 
 #define __percpu_prefix		__force_percpu_prefix
-#define __percpu_seg_override
 
 #endif /* CONFIG_CC_HAS_NAMED_AS */
 
@@ -81,7 +80,6 @@
 
 #define __force_percpu_prefix
 #define __percpu_prefix
-#define __percpu_seg_override
 
 #define PER_CPU_VAR(var)	(var)__percpu_rel
 
@@ -91,8 +89,6 @@
 # define __my_cpu_type(var)	typeof(var)
 # define __my_cpu_ptr(ptr)	(ptr)
 # define __my_cpu_var(var)	(var)
-
-# define __percpu_qual		__percpu_seg_override
 #else
 # define __my_cpu_type(var)	typeof(var) __percpu_seg_override
 # define __my_cpu_ptr(ptr)	(__my_cpu_type(*(ptr))*)(__force uintptr_t)(ptr)
@@ -136,12 +132,12 @@
 
 #define __raw_cpu_read(size, qual, pcp)					\
 ({									\
-	*(qual __my_cpu_type(pcp) *)__my_cpu_ptr(&(pcp));		\
+	*(qual __my_cpu_type(pcp) * __force)__my_cpu_ptr(&(pcp));	\
 })
 
-#define __raw_cpu_write(size, qual, pcp, val)				\
-do {									\
-	*(qual __my_cpu_type(pcp) *)__my_cpu_ptr(&(pcp)) = (val);	\
+#define __raw_cpu_write(size, qual, pcp, val)					\
+do {										\
+	*(qual __my_cpu_type(pcp) * __force)__my_cpu_ptr(&(pcp)) = (val);	\
 } while (0)
 
 #define __raw_cpu_read_const(pcp)	__raw_cpu_read(, , pcp)
@@ -309,8 +305,7 @@ do {									\
 									\
 	asm qual (__pcpu_op_##size("cmpxchg") "%[nval], "		\
 		  __percpu_arg([var])					\
-		  CC_SET(z)						\
-		  : CC_OUT(z) (success),				\
+		  : "=@ccz" (success),					\
 		    [oval] "+a" (pco_old__),				\
 		    [var] "+m" (__my_cpu_var(_var))			\
 		  : [nval] __pcpu_reg_##size(, pco_new__)		\
@@ -367,8 +362,7 @@ do {									\
 	asm_inline qual (						\
 		ALTERNATIVE("call this_cpu_cmpxchg8b_emu",		\
 			    "cmpxchg8b " __percpu_arg([var]), X86_FEATURE_CX8) \
-		CC_SET(z)						\
-		: ALT_OUTPUT_SP(CC_OUT(z) (success),			\
+		: ALT_OUTPUT_SP("=@ccz" (success),			\
 				[var] "+m" (__my_cpu_var(_var)),	\
 				"+a" (old__.low), "+d" (old__.high))	\
 		: "b" (new__.low), "c" (new__.high),			\
@@ -436,8 +430,7 @@ do {									\
 	asm_inline qual (						\
 		ALTERNATIVE("call this_cpu_cmpxchg16b_emu",		\
 			    "cmpxchg16b " __percpu_arg([var]), X86_FEATURE_CX16) \
-		CC_SET(z)						\
-		: ALT_OUTPUT_SP(CC_OUT(z) (success),			\
+		: ALT_OUTPUT_SP("=@ccz" (success),			\
 				[var] "+m" (__my_cpu_var(_var)),	\
 				"+a" (old__.low), "+d" (old__.high))	\
 		: "b" (new__.low), "c" (new__.high),			\
@@ -575,9 +568,9 @@ do {									\
 #define x86_this_cpu_constant_test_bit(_nr, _var)			\
 ({									\
 	unsigned long __percpu *addr__ =				\
-		(unsigned long __percpu *)&(_var) + ((_nr) / BITS_PER_LONG); \
+		(unsigned long __percpu *)&(_var) + BIT_WORD(_nr);	\
 									\
-	!!((1UL << ((_nr) % BITS_PER_LONG)) & raw_cpu_read(*addr__));	\
+	!!(BIT_MASK(_nr) & raw_cpu_read(*addr__));			\
 })
 
 #define x86_this_cpu_variable_test_bit(_nr, _var)			\
@@ -585,8 +578,7 @@ do {									\
 	bool oldbit;							\
 									\
 	asm volatile("btl %[nr], " __percpu_arg([var])			\
-		     CC_SET(c)						\
-		     : CC_OUT(c) (oldbit)				\
+		     : "=@ccc" (oldbit)					\
 		     : [var] "m" (__my_cpu_var(_var)),			\
 		       [nr] "rI" (_nr));				\
 	oldbit;								\

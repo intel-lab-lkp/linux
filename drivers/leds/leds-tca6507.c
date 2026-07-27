@@ -182,7 +182,7 @@ struct tca6507_chip {
 };
 
 static const struct i2c_device_id tca6507_id[] = {
-	{ "tca6507" },
+	{ .name = "tca6507" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tca6507_id);
@@ -637,7 +637,7 @@ static int tca6507_probe_gpios(struct device *dev,
 	tca->gpio.base = -1;
 	tca->gpio.owner = THIS_MODULE;
 	tca->gpio.direction_output = tca6507_gpio_direction_output;
-	tca->gpio.set_rv = tca6507_gpio_set_value;
+	tca->gpio.set = tca6507_gpio_set_value;
 	tca->gpio.parent = dev;
 	err = devm_gpiochip_add_data(dev, &tca->gpio, tca);
 	if (err) {

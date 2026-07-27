@@ -90,7 +90,7 @@ bool set_capacity_and_notify(struct gendisk *disk, sector_t size)
 	    (disk->flags & GENHD_FL_HIDDEN))
 		return false;
 
-	pr_info("%s: detected capacity change from %lld to %lld\n",
+	pr_info_ratelimited("%s: detected capacity change from %lld to %lld\n",
 		disk->disk_name, capacity, size);
 
 	/*
@@ -264,7 +264,7 @@ int __register_blkdev(unsigned int major, const char *name,
 		goto out;
 	}
 
-	p = kmalloc(sizeof(struct blk_major_name), GFP_KERNEL);
+	p = kmalloc_obj(struct blk_major_name);
 	if (p == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -407,10 +407,6 @@ static void add_disk_final(struct gendisk *disk)
 	struct device *ddev = disk_to_dev(disk);
 
 	if (!(disk->flags & GENHD_FL_HIDDEN)) {
-		/* Make sure the first partition scan will be proceed */
-		if (get_capacity(disk) && disk_has_partscan(disk))
-			set_bit(GD_NEED_PART_SCAN, &disk->state);
-
 		bdev_add(disk->part0, ddev->devt);
 		if (get_capacity(disk))
 			disk_scan_partitions(disk, BLK_OPEN_READ);
@@ -795,11 +791,11 @@ static void disable_elv_switch(struct request_queue *q)
  * partitions associated with the gendisk, and unregisters the associated
  * request_queue.
  *
- * This is the counter to the respective __device_add_disk() call.
+ * This is the counter to the respective device_add_disk() call.
  *
  * The final removal of the struct gendisk happens when its refcount reaches 0
  * with put_disk(), which should be called after del_gendisk(), if
- * __device_add_disk() was used.
+ * device_add_disk() was used.
  *
  * Drivers exist which depend on the release of the gendisk to be synchronous,
  * it should not be deferred.
@@ -914,7 +910,7 @@ static void *disk_seqf_start(struct seq_file *seqf, loff_t *pos)
 	struct class_dev_iter *iter;
 	struct device *dev;
 
-	iter = kmalloc(sizeof(*iter), GFP_KERNEL);
+	iter = kmalloc_obj(*iter);
 	if (!iter)
 		return ERR_PTR(-ENOMEM);
 
@@ -1265,7 +1261,7 @@ static const struct attribute_group *disk_attr_groups[] = {
  *
  * This function releases all allocated resources of the gendisk.
  *
- * Drivers which used __device_add_disk() have a gendisk with a request_queue
+ * Drivers which used device_add_disk() have a gendisk with a request_queue
  * assigned. Since the request_queue sits on top of the gendisk for these
  * drivers we also call blk_put_queue() for them, and we expect the
  * request_queue refcount to reach 0 at this point, and so the request_queue
@@ -1300,9 +1296,10 @@ static void disk_release(struct device *dev)
 
 	disk_release_events(disk);
 	kfree(disk->random);
-	disk_free_zone_resources(disk);
+	disk_release_zone_resources(disk);
 	xa_destroy(&disk->part_tbl);
 
+	kobject_put(&disk->queue_kobj);
 	disk->queue->disk = NULL;
 	blk_put_queue(disk->queue);
 
@@ -1485,7 +1482,12 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 #ifdef CONFIG_BLOCK_HOLDER_DEPRECATED
 	INIT_LIST_HEAD(&disk->slave_bdevs);
 #endif
+#ifdef CONFIG_BLK_ERROR_INJECTION
+	mutex_init(&disk->error_injection_lock);
+	INIT_LIST_HEAD(&disk->error_injection_list);
+#endif
 	mutex_init(&disk->rqos_state_mutex);
+	kobject_init(&disk->queue_kobj, &blk_queue_ktype);
 	return disk;
 
 out_erase_part0:

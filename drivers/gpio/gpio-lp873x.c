@@ -55,7 +55,7 @@ static int lp873x_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	if (ret < 0)
 		return ret;
 
-	return val & BIT(offset * BITS_PER_GPO);
+	return !!(val & BIT(offset * BITS_PER_GPO));
 }
 
 static int lp873x_gpio_set(struct gpio_chip *chip, unsigned int offset,
@@ -124,7 +124,7 @@ static const struct gpio_chip template_chip = {
 	.direction_input	= lp873x_gpio_direction_input,
 	.direction_output	= lp873x_gpio_direction_output,
 	.get			= lp873x_gpio_get,
-	.set_rv			= lp873x_gpio_set,
+	.set			= lp873x_gpio_set,
 	.set_config		= lp873x_gpio_set_config,
 	.base			= -1,
 	.ngpio			= 2,
@@ -156,7 +156,7 @@ static int lp873x_gpio_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id lp873x_gpio_id_table[] = {
-	{ "lp873x-gpio", },
+	{ .name = "lp873x-gpio" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(platform, lp873x_gpio_id_table);

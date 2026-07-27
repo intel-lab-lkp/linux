@@ -2,18 +2,12 @@
 #ifndef __ASM_VDSO_GETTIMEOFDAY_H
 #define __ASM_VDSO_GETTIMEOFDAY_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #include <asm/barrier.h>
 #include <asm/unistd.h>
 #include <asm/csr.h>
 #include <uapi/linux/time.h>
-
-/*
- * 32-bit land is lacking generic time vsyscalls as well as the legacy 32-bit
- * time syscalls like gettimeofday. Skip these definitions since on 32-bit.
- */
-#ifdef CONFIG_GENERIC_TIME_VSYSCALL
 
 #define VDSO_HAS_CLOCK_GETRES	1
 
@@ -66,8 +60,6 @@ int clock_getres_fallback(clockid_t _clkid, struct __kernel_timespec *_ts)
 	return ret;
 }
 
-#endif /* CONFIG_GENERIC_TIME_VSYSCALL */
-
 static __always_inline u64 __arch_get_hw_counter(s32 clock_mode,
 						 const struct vdso_time_data *vd)
 {
@@ -79,6 +71,6 @@ static __always_inline u64 __arch_get_hw_counter(s32 clock_mode,
 	return csr_read(CSR_TIME);
 }
 
-#endif /* !__ASSEMBLY__ */
+#endif /* !__ASSEMBLER__ */
 
 #endif /* __ASM_VDSO_GETTIMEOFDAY_H */

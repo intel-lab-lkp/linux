@@ -19,7 +19,13 @@ struct net_devmem_dmabuf_binding {
 	struct dma_buf *dmabuf;
 	struct dma_buf_attachment *attachment;
 	struct sg_table *sgt;
+	/* Physical NIC that does the actual DMA for this binding. */
 	struct net_device *dev;
+	/* Opaque cookie identifying the virtual device (e.g. netkit) the user
+	 * called bind-tx on. Used only for pointer comparison. Never
+	 * dereferenced.
+	 */
+	void *vdev;
 	struct gen_pool *chunk_pool;
 	/* Protect dev */
 	struct mutex lock;
@@ -41,7 +47,7 @@ struct net_devmem_dmabuf_binding {
 	 * retransmits) hold a reference to the binding until the skb holding
 	 * them is freed.
 	 */
-	refcount_t ref;
+	struct percpu_ref ref;
 
 	/* The list of bindings currently active. Used for netlink to notify us
 	 * of the user dropping the bind.
@@ -55,6 +61,9 @@ struct net_devmem_dmabuf_binding {
 	 * active.
 	 */
 	u32 id;
+
+	/* DMA direction, FROM_DEVICE for Rx binding, TO_DEVICE for Tx. */
+	enum dma_data_direction direction;
 
 	/* Array of net_iov pointers for this binding, sorted by virtual
 	 * address. This array is convenient to map the virtual addresses to
@@ -81,7 +90,8 @@ struct dmabuf_genpool_chunk_owner {
 
 void __net_devmem_dmabuf_binding_free(struct work_struct *wq);
 struct net_devmem_dmabuf_binding *
-net_devmem_bind_dmabuf(struct net_device *dev,
+net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
+		       struct device *dma_dev,
 		       enum dma_data_direction direction,
 		       unsigned int dmabuf_fd, struct netdev_nl_sock *priv,
 		       struct netlink_ext_ack *extack);
@@ -90,7 +100,6 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding);
 int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 				    struct net_devmem_dmabuf_binding *binding,
 				    struct netlink_ext_ack *extack);
-void net_devmem_bind_tx_release(struct sock *sk);
 
 static inline struct dmabuf_genpool_chunk_owner *
 net_devmem_iov_to_chunk_owner(const struct net_iov *niov)
@@ -122,17 +131,13 @@ static inline unsigned long net_iov_virtual_addr(const struct net_iov *niov)
 static inline bool
 net_devmem_dmabuf_binding_get(struct net_devmem_dmabuf_binding *binding)
 {
-	return refcount_inc_not_zero(&binding->ref);
+	return percpu_ref_tryget(&binding->ref);
 }
 
 static inline void
 net_devmem_dmabuf_binding_put(struct net_devmem_dmabuf_binding *binding)
 {
-	if (!refcount_dec_and_test(&binding->ref))
-		return;
-
-	INIT_WORK(&binding->unbind_w, __net_devmem_dmabuf_binding_free);
-	schedule_work(&binding->unbind_w);
+	percpu_ref_put(&binding->ref);
 }
 
 void net_devmem_get_net_iov(struct net_iov *niov);
@@ -142,7 +147,7 @@ struct net_iov *
 net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding);
 void net_devmem_free_dmabuf(struct net_iov *ppiov);
 
-bool net_is_devmem_iov(struct net_iov *niov);
+
 struct net_devmem_dmabuf_binding *
 net_devmem_get_binding(struct sock *sk, unsigned int dmabuf_id);
 struct net_iov *
@@ -165,12 +170,9 @@ static inline void net_devmem_put_net_iov(struct net_iov *niov)
 {
 }
 
-static inline void __net_devmem_dmabuf_binding_free(struct work_struct *wq)
-{
-}
-
 static inline struct net_devmem_dmabuf_binding *
-net_devmem_bind_dmabuf(struct net_device *dev,
+net_devmem_bind_dmabuf(struct net_device *dev, void *vdev,
+		       struct device *dma_dev,
 		       enum dma_data_direction direction,
 		       unsigned int dmabuf_fd,
 		       struct netdev_nl_sock *priv,
@@ -216,11 +218,6 @@ static inline unsigned long net_iov_virtual_addr(const struct net_iov *niov)
 static inline u32 net_devmem_iov_binding_id(const struct net_iov *niov)
 {
 	return 0;
-}
-
-static inline bool net_is_devmem_iov(struct net_iov *niov)
-{
-	return false;
 }
 
 static inline struct net_devmem_dmabuf_binding *

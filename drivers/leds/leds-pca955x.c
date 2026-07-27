@@ -587,7 +587,7 @@ static int pca955x_probe(struct i2c_client *client)
 	struct pca955x_platform_data *pdata;
 	bool keep_psc0 = false;
 	bool set_default_label = false;
-	char default_label[8];
+	char default_label[4];
 	int bit, err, reg;
 
 	chip = i2c_get_match_data(client);
@@ -693,7 +693,7 @@ static int pca955x_probe(struct i2c_client *client)
 			}
 
 			if (set_default_label) {
-				snprintf(default_label, sizeof(default_label), "%u", i);
+				snprintf(default_label, sizeof(default_label), "%hhu", i);
 				init_data.default_label = default_label;
 			} else {
 				init_data.default_label = NULL;
@@ -737,7 +737,7 @@ static int pca955x_probe(struct i2c_client *client)
 	pca955x->gpio.label = "gpio-pca955x";
 	pca955x->gpio.direction_input = pca955x_gpio_direction_input;
 	pca955x->gpio.direction_output = pca955x_gpio_direction_output;
-	pca955x->gpio.set_rv = pca955x_gpio_set_value;
+	pca955x->gpio.set = pca955x_gpio_set_value;
 	pca955x->gpio.get = pca955x_gpio_get_value;
 	pca955x->gpio.request = pca955x_gpio_request_pin;
 	pca955x->gpio.free = pca955x_gpio_free_pin;
@@ -764,12 +764,12 @@ static int pca955x_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id pca955x_id[] = {
-	{ "pca9550", (kernel_ulong_t)&pca955x_chipdefs[pca9550] },
-	{ "pca9551", (kernel_ulong_t)&pca955x_chipdefs[pca9551] },
-	{ "pca9552", (kernel_ulong_t)&pca955x_chipdefs[pca9552] },
-	{ "ibm-pca9552", (kernel_ulong_t)&pca955x_chipdefs[ibm_pca9552] },
-	{ "pca9553", (kernel_ulong_t)&pca955x_chipdefs[pca9553] },
-	{}
+	{ .name = "pca9550", .driver_data = (kernel_ulong_t)&pca955x_chipdefs[pca9550] },
+	{ .name = "pca9551", .driver_data = (kernel_ulong_t)&pca955x_chipdefs[pca9551] },
+	{ .name = "pca9552", .driver_data = (kernel_ulong_t)&pca955x_chipdefs[pca9552] },
+	{ .name = "ibm-pca9552", .driver_data = (kernel_ulong_t)&pca955x_chipdefs[ibm_pca9552] },
+	{ .name = "pca9553", .driver_data = (kernel_ulong_t)&pca955x_chipdefs[pca9553] },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, pca955x_id);
 

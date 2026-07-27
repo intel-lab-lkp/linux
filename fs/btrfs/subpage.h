@@ -7,23 +7,22 @@
 #include <linux/atomic.h>
 #include <linux/sizes.h>
 #include "btrfs_inode.h"
-#include "fs.h"
 
 struct address_space;
 struct folio;
 
 /*
- * Extra info for subpapge bitmap.
+ * Extra info for subpage bitmap.
  *
- * For subpage we pack all uptodate/dirty/writeback/ordered bitmaps into
+ * For subpage we pack all uptodate/dirty/writeback bitmaps into
  * one larger bitmap.
  *
  * This structure records how they are organized in the bitmap:
  *
- * /- uptodate          /- dirty        /- ordered
+ * /- uptodate          /- dirty        /- writeback
  * |			|		|
  * v			v		v
- * |u|u|u|u|........|u|u|d|d|.......|d|d|o|o|.......|o|o|
+ * |u|u|u|u|........|u|u|d|d|.......|d|d|w|w|.......|w|w|
  * |< sectors_per_page >|
  *
  * Unlike regular macro-like enums, here we do not go upper-case names, as
@@ -32,10 +31,15 @@ struct folio;
 enum {
 	btrfs_bitmap_nr_uptodate = 0,
 	btrfs_bitmap_nr_dirty,
+
+	/*
+	 * This can be changed to atomic eventually.  But this change will rely
+	 * on the async delalloc range rework for locked bitmap.  As async
+	 * delalloc can unlock its range and mark blocks writeback at random
+	 * timing.
+	 */
 	btrfs_bitmap_nr_writeback,
-	btrfs_bitmap_nr_ordered,
-	btrfs_bitmap_nr_checked,
-	btrfs_bitmap_nr_locked,
+
 	btrfs_bitmap_nr_max
 };
 
@@ -43,7 +47,7 @@ enum {
  * Structure to trace status of each sector inside a page, attached to
  * page::private for both data and metadata inodes.
  */
-struct btrfs_subpage {
+struct btrfs_folio_state {
 	/* Common members for both data and metadata pages */
 	spinlock_t lock;
 	union {
@@ -51,7 +55,7 @@ struct btrfs_subpage {
 		 * Structures only used by metadata
 		 *
 		 * @eb_refs should only be operated under private_lock, as it
-		 * manages whether the subpage can be detached.
+		 * manages whether the btrfs_folio_state can be detached.
 		 */
 		atomic_t eb_refs;
 
@@ -65,12 +69,11 @@ struct btrfs_subpage {
 	unsigned long bitmaps[];
 };
 
-enum btrfs_subpage_type {
+enum btrfs_folio_type {
 	BTRFS_SUBPAGE_METADATA,
 	BTRFS_SUBPAGE_DATA,
 };
 
-#if PAGE_SIZE > BTRFS_MIN_BLOCKSIZE
 /*
  * Subpage support for metadata is more complex, as we can have dummy extent
  * buffers, where folios have no mapping to determine the owning inode.
@@ -91,29 +94,19 @@ static inline bool btrfs_is_subpage(const struct btrfs_fs_info *fs_info,
 		ASSERT(is_data_inode(BTRFS_I(folio->mapping->host)));
 	return fs_info->sectorsize < folio_size(folio);
 }
-#else
-static inline bool btrfs_meta_is_subpage(const struct btrfs_fs_info *fs_info)
-{
-	return false;
-}
-static inline bool btrfs_is_subpage(const struct btrfs_fs_info *fs_info,
-				    struct folio *folio)
-{
-	if (folio->mapping && folio->mapping->host)
-		ASSERT(is_data_inode(BTRFS_I(folio->mapping->host)));
-	return false;
-}
-#endif
 
-int btrfs_attach_subpage(const struct btrfs_fs_info *fs_info,
-			 struct folio *folio, enum btrfs_subpage_type type);
-void btrfs_detach_subpage(const struct btrfs_fs_info *fs_info, struct folio *folio,
-			  enum btrfs_subpage_type type);
+int btrfs_attach_folio_state(const struct btrfs_fs_info *fs_info,
+			     struct folio *folio, enum btrfs_folio_type type);
+void btrfs_detach_folio_state(const struct btrfs_fs_info *fs_info, struct folio *folio,
+			      enum btrfs_folio_type type);
 
 /* Allocate additional data where page represents more than one sector */
-struct btrfs_subpage *btrfs_alloc_subpage(const struct btrfs_fs_info *fs_info,
-				size_t fsize, enum btrfs_subpage_type type);
-void btrfs_free_subpage(struct btrfs_subpage *subpage);
+struct btrfs_folio_state *btrfs_alloc_folio_state(const struct btrfs_fs_info *fs_info,
+						  size_t fsize, enum btrfs_folio_type type);
+static inline void btrfs_free_folio_state(struct btrfs_folio_state *bfs)
+{
+	kfree(bfs);
+}
 
 void btrfs_folio_inc_eb_refs(const struct btrfs_fs_info *fs_info, struct folio *folio);
 void btrfs_folio_dec_eb_refs(const struct btrfs_fs_info *fs_info, struct folio *folio);
@@ -123,7 +116,7 @@ void btrfs_folio_end_lock(const struct btrfs_fs_info *fs_info,
 void btrfs_folio_set_lock(const struct btrfs_fs_info *fs_info,
 			  struct folio *folio, u64 start, u32 len);
 void btrfs_folio_end_lock_bitmap(const struct btrfs_fs_info *fs_info,
-				 struct folio *folio, unsigned long bitmap);
+				 struct folio *folio, unsigned long *bitmap);
 /*
  * Template for subpage related operations.
  *
@@ -171,8 +164,6 @@ bool btrfs_meta_folio_test_##name(struct folio *folio, const struct extent_buffe
 DECLARE_BTRFS_SUBPAGE_OPS(uptodate);
 DECLARE_BTRFS_SUBPAGE_OPS(dirty);
 DECLARE_BTRFS_SUBPAGE_OPS(writeback);
-DECLARE_BTRFS_SUBPAGE_OPS(ordered);
-DECLARE_BTRFS_SUBPAGE_OPS(checked);
 
 /*
  * Helper for error cleanup, where a folio will have its dirty flag cleared,
@@ -193,9 +184,9 @@ bool btrfs_subpage_clear_and_test_dirty(const struct btrfs_fs_info *fs_info,
 void btrfs_folio_assert_not_dirty(const struct btrfs_fs_info *fs_info,
 				  struct folio *folio, u64 start, u32 len);
 bool btrfs_meta_folio_clear_and_test_dirty(struct folio *folio, const struct extent_buffer *eb);
-void btrfs_get_subpage_dirty_bitmap(struct btrfs_fs_info *fs_info,
-				    struct folio *folio,
-				    unsigned long *ret_bitmap);
+void btrfs_copy_subpage_dirty_bitmap(struct btrfs_fs_info *fs_info,
+				     struct folio *folio,
+				     unsigned long *dst);
 void __cold btrfs_subpage_dump_bitmap(const struct btrfs_fs_info *fs_info,
 				      struct folio *folio, u64 start, u32 len);
 

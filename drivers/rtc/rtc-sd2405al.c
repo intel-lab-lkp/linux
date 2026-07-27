@@ -5,7 +5,9 @@
  * Datasheet:
  * https://image.dfrobot.com/image/data/TOY0021/SD2405AL%20datasheet%20(Angelo%20v0.1).pdf
  *
- * Copyright (C) 2024 Tóth János <gomba007@gmail.com>
+ * I2C slave address: 0x32
+ *
+ * Copyright (C) 2024-2025 Tóth János <gomba007@gmail.com>
  */
 
 #include <linux/bcd.h>
@@ -200,7 +202,7 @@ static int sd2405al_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id sd2405al_id[] = {
-	{ "sd2405al" },
+	{ .name = "sd2405al" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, sd2405al_id);

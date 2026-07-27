@@ -21,6 +21,7 @@
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/ip6_fib.h>
+#include <net/ip6_route.h>
 #include <net/checksum.h>
 #include <net/dsfield.h>
 #include <net/mpls.h>
@@ -572,69 +573,6 @@ static int set_ipv6(struct sk_buff *skb, struct sw_flow_key *flow_key,
 	return 0;
 }
 
-static int set_nsh(struct sk_buff *skb, struct sw_flow_key *flow_key,
-		   const struct nlattr *a)
-{
-	struct nshhdr *nh;
-	size_t length;
-	int err;
-	u8 flags;
-	u8 ttl;
-	int i;
-
-	struct ovs_key_nsh key;
-	struct ovs_key_nsh mask;
-
-	err = nsh_key_from_nlattr(a, &key, &mask);
-	if (err)
-		return err;
-
-	/* Make sure the NSH base header is there */
-	if (!pskb_may_pull(skb, skb_network_offset(skb) + NSH_BASE_HDR_LEN))
-		return -ENOMEM;
-
-	nh = nsh_hdr(skb);
-	length = nsh_hdr_len(nh);
-
-	/* Make sure the whole NSH header is there */
-	err = skb_ensure_writable(skb, skb_network_offset(skb) +
-				       length);
-	if (unlikely(err))
-		return err;
-
-	nh = nsh_hdr(skb);
-	skb_postpull_rcsum(skb, nh, length);
-	flags = nsh_get_flags(nh);
-	flags = OVS_MASKED(flags, key.base.flags, mask.base.flags);
-	flow_key->nsh.base.flags = flags;
-	ttl = nsh_get_ttl(nh);
-	ttl = OVS_MASKED(ttl, key.base.ttl, mask.base.ttl);
-	flow_key->nsh.base.ttl = ttl;
-	nsh_set_flags_and_ttl(nh, flags, ttl);
-	nh->path_hdr = OVS_MASKED(nh->path_hdr, key.base.path_hdr,
-				  mask.base.path_hdr);
-	flow_key->nsh.base.path_hdr = nh->path_hdr;
-	switch (nh->mdtype) {
-	case NSH_M_TYPE1:
-		for (i = 0; i < NSH_MD1_CONTEXT_SIZE; i++) {
-			nh->md1.context[i] =
-			    OVS_MASKED(nh->md1.context[i], key.context[i],
-				       mask.context[i]);
-		}
-		memcpy(flow_key->nsh.context, nh->md1.context,
-		       sizeof(nh->md1.context));
-		break;
-	case NSH_M_TYPE2:
-		memset(flow_key->nsh.context, 0,
-		       sizeof(flow_key->nsh.context));
-		break;
-	default:
-		return -EINVAL;
-	}
-	skb_postpush_rcsum(skb, nh, length);
-	return 0;
-}
-
 /* Must follow skb_ensure_writable() since that can move the skb data. */
 static void set_tp_port(struct sk_buff *skb, __be16 *port,
 			__be16 new_port, __sum16 *check)
@@ -873,7 +811,7 @@ static void ovs_fragment(struct net *net, struct vport *vport,
 		skb_dst_set_noref(skb, &ovs_rt.dst);
 		IP6CB(skb)->frag_max_size = mru;
 
-		ipv6_stub->ipv6_fragment(net, skb->sk, skb, ovs_vport_output);
+		ip6_fragment(net, skb->sk, skb, ovs_vport_output);
 		refdst_drop(orig_dst);
 	} else {
 		WARN_ONCE(1, "Failed fragment ->%s: eth=%04x, MRU=%d, MTU=%d.",
@@ -899,12 +837,8 @@ static void do_output(struct datapath *dp, struct sk_buff *skb, int out_port,
 		u16 mru = OVS_CB(skb)->mru;
 		u32 cutlen = OVS_CB(skb)->cutlen;
 
-		if (unlikely(cutlen > 0)) {
-			if (skb->len - cutlen > ovs_mac_header_len(key))
-				pskb_trim(skb, skb->len - cutlen);
-			else
-				pskb_trim(skb, ovs_mac_header_len(key));
-		}
+		if (unlikely(cutlen < skb->len))
+			pskb_trim(skb, max(cutlen, ovs_mac_header_len(key)));
 
 		if (likely(!mru ||
 		           (skb->len <= mru + vport->dev->hard_header_len))) {
@@ -941,8 +875,10 @@ static int output_userspace(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_USERSPACE_ATTR_PID:
-			if (dp->user_features &
-			    OVS_DP_F_DISPATCH_UPCALL_PER_CPU)
+			if (OVS_CB(skb)->upcall_pid)
+				upcall.portid = OVS_CB(skb)->upcall_pid;
+			else if (dp->user_features &
+				 OVS_DP_F_DISPATCH_UPCALL_PER_CPU)
 				upcall.portid =
 				  ovs_dp_get_upcall_portid(dp,
 							   smp_processor_id());
@@ -1128,10 +1064,6 @@ static int execute_masked_set_action(struct sk_buff *skb,
 				   get_mask(a, struct ovs_key_ethernet *));
 		break;
 
-	case OVS_KEY_ATTR_NSH:
-		err = set_nsh(skb, flow_key, a);
-		break;
-
 	case OVS_KEY_ATTR_IPV4:
 		err = set_ipv4(skb, flow_key, nla_data(a),
 			       get_mask(a, struct ovs_key_ipv4 *));
@@ -1168,6 +1100,7 @@ static int execute_masked_set_action(struct sk_buff *skb,
 	case OVS_KEY_ATTR_CT_LABELS:
 	case OVS_KEY_ATTR_CT_ORIG_TUPLE_IPV4:
 	case OVS_KEY_ATTR_CT_ORIG_TUPLE_IPV6:
+	case OVS_KEY_ATTR_NSH:
 		err = -EINVAL;
 		break;
 	}
@@ -1297,7 +1230,7 @@ static void execute_psample(struct datapath *dp, struct sk_buff *skb,
 
 	psample_group.net = ovs_dp_get_net(dp);
 	md.in_ifindex = OVS_CB(skb)->input_vport->dev->ifindex;
-	md.trunc_size = skb->len - OVS_CB(skb)->cutlen;
+	md.trunc_size = min(skb->len, OVS_CB(skb)->cutlen);
 	md.rate_as_probability = 1;
 
 	rate = OVS_CB(skb)->probability ? OVS_CB(skb)->probability : U32_MAX;
@@ -1347,22 +1280,21 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			clone = skb_clone(skb, GFP_ATOMIC);
 			if (clone)
 				do_output(dp, clone, port, key);
-			OVS_CB(skb)->cutlen = 0;
+			OVS_CB(skb)->cutlen = U32_MAX;
 			break;
 		}
 
 		case OVS_ACTION_ATTR_TRUNC: {
 			struct ovs_action_trunc *trunc = nla_data(a);
 
-			if (skb->len > trunc->max_len)
-				OVS_CB(skb)->cutlen = skb->len - trunc->max_len;
+			OVS_CB(skb)->cutlen = trunc->max_len;
 			break;
 		}
 
 		case OVS_ACTION_ATTR_USERSPACE:
 			output_userspace(dp, skb, key, a, attr,
 						     len, OVS_CB(skb)->cutlen);
-			OVS_CB(skb)->cutlen = 0;
+			OVS_CB(skb)->cutlen = U32_MAX;
 			if (nla_is_last(a, rem)) {
 				consume_skb(skb);
 				return 0;
@@ -1516,7 +1448,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 
 		case OVS_ACTION_ATTR_PSAMPLE:
 			execute_psample(dp, skb, a);
-			OVS_CB(skb)->cutlen = 0;
+			OVS_CB(skb)->cutlen = U32_MAX;
 			if (nla_is_last(a, rem)) {
 				consume_skb(skb);
 				return 0;

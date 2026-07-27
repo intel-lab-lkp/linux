@@ -5,7 +5,6 @@
 #include <linux/memory.h>
 #include <linux/module.h>
 #include <linux/device.h>
-#include <linux/pfn_t.h>
 #include <linux/slab.h>
 #include <linux/dax.h>
 #include <linux/fs.h>
@@ -122,7 +121,7 @@ static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 	init_node_memory_type(numa_node, mtype);
 
 	rc = -ENOMEM;
-	data = kzalloc(struct_size(data, res, dev_dax->nr_range), GFP_KERNEL);
+	data = kzalloc_flex(*data, res, dev_dax->nr_range);
 	if (!data)
 		goto err_dax_kmem_data;
 
@@ -227,6 +226,12 @@ static void dev_dax_kmem_remove(struct dev_dax *dev_dax)
 		rc = dax_kmem_range(dev_dax, i, &range);
 		if (rc)
 			continue;
+
+		/* range was never added during probe */
+		if (!data->res[i]) {
+			success++;
+			continue;
+		}
 
 		rc = remove_memory(range.start, range_len(&range));
 		if (rc == 0) {

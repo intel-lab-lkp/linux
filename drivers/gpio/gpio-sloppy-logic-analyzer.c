@@ -20,7 +20,6 @@
 #include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/ktime.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
@@ -306,7 +305,7 @@ static void gpio_la_poll_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id gpio_la_poll_of_match[] = {
-	{ .compatible = GPIO_LA_NAME },
+	{ .compatible = "gpio-sloppy-logic-analyzer" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpio_la_poll_of_match);

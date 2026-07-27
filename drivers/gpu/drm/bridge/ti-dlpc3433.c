@@ -105,7 +105,7 @@ static const struct regmap_config dlpc_regmap_config = {
 };
 
 static void dlpc_atomic_enable(struct drm_bridge *bridge,
-			       struct drm_atomic_state *state)
+			       struct drm_atomic_commit *state)
 {
 	struct dlpc *dlpc = bridge_to_dlpc(bridge);
 	struct device *dev = dlpc->dev;
@@ -170,7 +170,7 @@ static void dlpc_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void dlpc_atomic_pre_enable(struct drm_bridge *bridge,
-				   struct drm_atomic_state *state)
+				   struct drm_atomic_commit *state)
 {
 	struct dlpc *dlpc = bridge_to_dlpc(bridge);
 	int ret;
@@ -193,7 +193,7 @@ static void dlpc_atomic_pre_enable(struct drm_bridge *bridge,
 }
 
 static void dlpc_atomic_post_disable(struct drm_bridge *bridge,
-				     struct drm_atomic_state *state)
+				     struct drm_atomic_commit *state)
 {
 	struct dlpc *dlpc = bridge_to_dlpc(bridge);
 
@@ -348,9 +348,10 @@ static int dlpc3433_probe(struct i2c_client *client)
 	struct dlpc *dlpc;
 	int ret;
 
-	dlpc = devm_kzalloc(dev, sizeof(*dlpc), GFP_KERNEL);
-	if (!dlpc)
-		return -ENOMEM;
+	dlpc = devm_drm_bridge_alloc(dev, struct dlpc, bridge,
+				     &dlpc_bridge_funcs);
+	if (IS_ERR(dlpc))
+		return PTR_ERR(dlpc);
 
 	dlpc->dev = dev;
 
@@ -365,7 +366,6 @@ static int dlpc3433_probe(struct i2c_client *client)
 	dev_set_drvdata(dev, dlpc);
 	i2c_set_clientdata(client, dlpc);
 
-	dlpc->bridge.funcs = &dlpc_bridge_funcs;
 	dlpc->bridge.of_node = dev->of_node;
 	drm_bridge_add(&dlpc->bridge);
 

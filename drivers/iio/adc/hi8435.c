@@ -15,11 +15,8 @@
 #include <linux/iio/triggered_event.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
 #include <linux/gpio/consumer.h>
-
-#define DRV_NAME "hi8435"
 
 /* Register offsets for HI-8435 */
 #define HI8435_CTRL_REG		0x02
@@ -536,7 +533,7 @@ MODULE_DEVICE_TABLE(spi, hi8435_id);
 
 static struct spi_driver hi8435_driver = {
 	.driver	= {
-		.name		= DRV_NAME,
+		.name		= "hi8435",
 		.of_match_table	= hi8435_dt_ids,
 	},
 	.probe		= hi8435_probe,

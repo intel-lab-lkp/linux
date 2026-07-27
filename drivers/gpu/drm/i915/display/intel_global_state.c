@@ -13,6 +13,36 @@
 #include "intel_display_types.h"
 #include "intel_global_state.h"
 
+#define for_each_new_global_obj_in_state(__state, obj, new_obj_state, __i) \
+	for ((__i) = 0; \
+	     (__i) < (__state)->num_global_objs && \
+		     ((obj) = (__state)->global_objs[__i].ptr, \
+		      (new_obj_state) = (__state)->global_objs[__i].new_state, 1); \
+	     (__i)++) \
+		for_each_if(obj)
+
+#define for_each_old_global_obj_in_state(__state, obj, old_obj_state, __i) \
+	for ((__i) = 0; \
+	     (__i) < (__state)->num_global_objs && \
+		     ((obj) = (__state)->global_objs[__i].ptr, \
+		      (old_obj_state) = (__state)->global_objs[__i].old_state, 1); \
+	     (__i)++) \
+		for_each_if(obj)
+
+#define for_each_oldnew_global_obj_in_state(__state, obj, old_obj_state, new_obj_state, __i) \
+	for ((__i) = 0; \
+	     (__i) < (__state)->num_global_objs && \
+		     ((obj) = (__state)->global_objs[__i].ptr, \
+		      (old_obj_state) = (__state)->global_objs[__i].old_state, \
+		      (new_obj_state) = (__state)->global_objs[__i].new_state, 1); \
+	     (__i)++) \
+		for_each_if(obj)
+
+struct intel_global_objs_state {
+	struct intel_global_obj *ptr;
+	struct intel_global_state *state, *old_state, *new_state;
+};
+
 struct intel_global_commit {
 	struct kref ref;
 	struct completion done;
@@ -22,7 +52,7 @@ static struct intel_global_commit *commit_new(void)
 {
 	struct intel_global_commit *commit;
 
-	commit = kzalloc(sizeof(*commit), GFP_KERNEL);
+	commit = kzalloc_obj(*commit);
 	if (!commit)
 		return NULL;
 
@@ -110,7 +140,7 @@ static void assert_global_state_write_locked(struct intel_display *display)
 {
 	struct intel_crtc *crtc;
 
-	for_each_intel_crtc(display->drm, crtc)
+	for_each_intel_crtc(display, crtc)
 		drm_modeset_lock_assert_held(&crtc->base.mutex);
 }
 
@@ -133,7 +163,7 @@ static void assert_global_state_read_locked(struct intel_atomic_state *state)
 	struct drm_modeset_acquire_ctx *ctx = state->base.acquire_ctx;
 	struct intel_crtc *crtc;
 
-	for_each_intel_crtc(display->drm, crtc) {
+	for_each_intel_crtc(display, crtc) {
 		if (modeset_lock_is_held(ctx, &crtc->base.mutex))
 			return;
 	}
@@ -148,7 +178,7 @@ intel_atomic_get_global_obj_state(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	int index, num_objs, i;
 	size_t size;
-	struct __intel_global_objs_state *arr;
+	struct intel_global_objs_state *arr;
 	struct intel_global_state *obj_state;
 
 	for (i = 0; i < state->num_global_objs; i++)
@@ -271,7 +301,7 @@ int intel_atomic_lock_global_state(struct intel_global_state *obj_state)
 	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc *crtc;
 
-	for_each_intel_crtc(display->drm, crtc) {
+	for_each_intel_crtc(display, crtc) {
 		int ret;
 
 		ret = drm_modeset_lock(&crtc->base.mutex,
@@ -304,7 +334,7 @@ intel_atomic_global_state_is_serialized(struct intel_atomic_state *state)
 	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc *crtc;
 
-	for_each_intel_crtc(display->drm, crtc)
+	for_each_intel_crtc(display, crtc)
 		if (!intel_atomic_get_new_crtc_state(state, crtc))
 			return false;
 	return true;

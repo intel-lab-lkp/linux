@@ -164,14 +164,11 @@ static int virt_cpufreq_get_freq_info(struct cpufreq_policy *policy)
 		policy->cpuinfo.min_freq = 1;
 		policy->cpuinfo.max_freq = virt_cpufreq_get_perftbl_entry(policy->cpu, 0);
 
-		policy->min = policy->cpuinfo.min_freq;
-		policy->max = policy->cpuinfo.max_freq;
-
-		policy->cur = policy->max;
+		policy->cur = policy->cpuinfo.max_freq;
 		return 0;
 	}
 
-	table = kcalloc(num_perftbl_entries + 1, sizeof(*table), GFP_KERNEL);
+	table = kzalloc_objs(*table, num_perftbl_entries + 1);
 	if (!table)
 		return -ENOMEM;
 
@@ -250,7 +247,7 @@ static int virt_cpufreq_offline(struct cpufreq_policy *policy)
 static int virt_cpufreq_verify_policy(struct cpufreq_policy_data *policy)
 {
 	if (policy->freq_table)
-		return cpufreq_frequency_table_verify(policy, policy->freq_table);
+		return cpufreq_frequency_table_verify(policy);
 
 	cpufreq_verify_within_cpu_limits(policy);
 	return 0;

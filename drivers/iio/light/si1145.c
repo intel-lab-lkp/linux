@@ -494,8 +494,9 @@ static irqreturn_t si1145_trigger_handler(int irq, void *private)
 			goto done;
 	}
 
-	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
-		iio_get_time_ns(indio_dev));
+	iio_push_to_buffers_with_ts(indio_dev, data->buffer,
+				    sizeof(data->buffer),
+				    iio_get_time_ns(indio_dev));
 
 done:
 	iio_trigger_notify_done(indio_dev->trig);
@@ -1247,7 +1248,7 @@ static int si1145_probe_trigger(struct iio_dev *indio_dev)
 
 	ret = devm_request_irq(&client->dev, client->irq,
 			  iio_trigger_generic_data_rdy_poll,
-			  IRQF_TRIGGER_FALLING,
+			  IRQF_TRIGGER_FALLING | IRQF_NO_THREAD,
 			  "si1145_irq",
 			  trig);
 	if (ret < 0) {
@@ -1333,13 +1334,13 @@ static int si1145_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id si1145_ids[] = {
-	{ "si1132", SI1132 },
-	{ "si1141", SI1141 },
-	{ "si1142", SI1142 },
-	{ "si1143", SI1143 },
-	{ "si1145", SI1145 },
-	{ "si1146", SI1146 },
-	{ "si1147", SI1147 },
+	{ .name = "si1132", .driver_data = SI1132 },
+	{ .name = "si1141", .driver_data = SI1141 },
+	{ .name = "si1142", .driver_data = SI1142 },
+	{ .name = "si1143", .driver_data = SI1143 },
+	{ .name = "si1145", .driver_data = SI1145 },
+	{ .name = "si1146", .driver_data = SI1146 },
+	{ .name = "si1147", .driver_data = SI1147 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, si1145_ids);

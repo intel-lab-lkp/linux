@@ -204,7 +204,7 @@ static int __lf_x_usb_enable_rx(struct plfxlc_usb *usb)
 	int i, r;
 
 	r = -ENOMEM;
-	urbs = kcalloc(RX_URBS_COUNT, sizeof(struct urb *), GFP_KERNEL);
+	urbs = kzalloc_objs(struct urb *, RX_URBS_COUNT);
 	if (!urbs)
 		goto error;
 
@@ -604,7 +604,7 @@ static int probe(struct usb_interface *intf,
 	r = plfxlc_upload_mac_and_serial(intf, hw_address, serial_number);
 	if (r) {
 		dev_err(&intf->dev, "MAC and Serial upload failed (%d)\n", r);
-		goto error;
+		goto error_free_hw;
 	}
 
 	chip->unit_type = STA;
@@ -613,13 +613,13 @@ static int probe(struct usb_interface *intf,
 	r = plfxlc_mac_preinit_hw(hw, hw_address);
 	if (r) {
 		dev_err(&intf->dev, "Init mac failed (%d)\n", r);
-		goto error;
+		goto error_free_hw;
 	}
 
 	r = ieee80211_register_hw(hw);
 	if (r) {
 		dev_err(&intf->dev, "Register device failed (%d)\n", r);
-		goto error;
+		goto error_free_hw;
 	}
 
 	if ((le16_to_cpu(interface_to_usbdev(intf)->descriptor.idVendor) ==
@@ -632,7 +632,7 @@ static int probe(struct usb_interface *intf,
 	}
 	if (r != 0) {
 		dev_err(&intf->dev, "FPGA download failed (%d)\n", r);
-		goto error;
+		goto error_unreg_hw;
 	}
 
 	tx->mac_fifo_full = 0;
@@ -642,21 +642,21 @@ static int probe(struct usb_interface *intf,
 	r = plfxlc_usb_init_hw(usb);
 	if (r < 0) {
 		dev_err(&intf->dev, "usb_init_hw failed (%d)\n", r);
-		goto error;
+		goto error_unreg_hw;
 	}
 
 	msleep(PLF_MSLEEP_TIME);
 	r = plfxlc_chip_switch_radio(chip, PLFXLC_RADIO_ON);
 	if (r < 0) {
 		dev_dbg(&intf->dev, "chip_switch_radio_on failed (%d)\n", r);
-		goto error;
+		goto error_unreg_hw;
 	}
 
 	msleep(PLF_MSLEEP_TIME);
 	r = plfxlc_chip_set_rate(chip, 8);
 	if (r < 0) {
 		dev_dbg(&intf->dev, "chip_set_rate failed (%d)\n", r);
-		goto error;
+		goto error_unreg_hw;
 	}
 
 	msleep(PLF_MSLEEP_TIME);
@@ -664,7 +664,7 @@ static int probe(struct usb_interface *intf,
 			    hw_address, ETH_ALEN, USB_REQ_MAC_WR);
 	if (r < 0) {
 		dev_dbg(&intf->dev, "MAC_WR failure (%d)\n", r);
-		goto error;
+		goto error_unreg_hw;
 	}
 
 	plfxlc_chip_enable_rxtx(chip);
@@ -691,12 +691,12 @@ static int probe(struct usb_interface *intf,
 	plfxlc_mac_init_hw(hw);
 	usb->initialized = true;
 	return 0;
+
+error_unreg_hw:
+	ieee80211_unregister_hw(hw);
+error_free_hw:
+	plfxlc_mac_release_hw(hw);
 error:
-	if (hw) {
-		plfxlc_mac_release(plfxlc_hw_mac(hw));
-		ieee80211_unregister_hw(hw);
-		ieee80211_free_hw(hw);
-	}
 	dev_err(&intf->dev, "pureLifi:Device error");
 	return r;
 }
@@ -730,8 +730,7 @@ static void disconnect(struct usb_interface *intf)
 	 */
 	usb_reset_device(interface_to_usbdev(intf));
 
-	plfxlc_mac_release(mac);
-	ieee80211_free_hw(hw);
+	plfxlc_mac_release_hw(hw);
 }
 
 static void plfxlc_usb_resume(struct plfxlc_usb *usb)
@@ -852,7 +851,7 @@ static int resume(struct usb_interface *interface)
 
 #endif
 
-static struct usb_driver driver = {
+static struct usb_driver usbdriver = {
 	.name = KBUILD_MODNAME,
 	.id_table = usb_ids,
 	.probe = probe,
@@ -866,25 +865,7 @@ static struct usb_driver driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
-static int __init usb_init(void)
-{
-	int r;
-
-	r = usb_register(&driver);
-	if (r) {
-		pr_err("%s usb_register() failed %d\n", driver.name, r);
-		return r;
-	}
-
-	pr_debug("Driver initialized :%s\n", driver.name);
-	return 0;
-}
-
-static void __exit usb_exit(void)
-{
-	usb_deregister(&driver);
-	pr_debug("%s %s\n", driver.name, __func__);
-}
+module_usb_driver(usbdriver);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("USB driver for pureLiFi devices");
@@ -892,6 +873,3 @@ MODULE_AUTHOR("pureLiFi");
 MODULE_VERSION("1.0");
 MODULE_FIRMWARE("plfxlc/lifi-x.bin");
 MODULE_DEVICE_TABLE(usb, usb_ids);
-
-module_init(usb_init);
-module_exit(usb_exit);

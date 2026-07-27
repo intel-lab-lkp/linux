@@ -14,7 +14,6 @@
 #include <linux/string_choices.h>
 #include <linux/sysfs.h>
 #include <linux/io.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/wait.h>
@@ -26,8 +25,6 @@
 #include <linux/timekeeping.h>
 
 #include <linux/iio/iio.h>
-
-#define DRIVER_NAME	"dht11"
 
 #define DHT11_DATA_VALID_TIME	2000000000  /* 2s in ns */
 
@@ -296,10 +293,8 @@ static int dht11_probe(struct platform_device *pdev)
 	struct iio_dev *iio;
 
 	iio = devm_iio_device_alloc(dev, sizeof(*dht11));
-	if (!iio) {
-		dev_err(dev, "Failed to allocate IIO device\n");
+	if (!iio)
 		return -ENOMEM;
-	}
 
 	dht11 = iio_priv(iio);
 	dht11->dev = dev;
@@ -331,7 +326,7 @@ static int dht11_probe(struct platform_device *pdev)
 
 static struct platform_driver dht11_driver = {
 	.driver = {
-		.name	= DRIVER_NAME,
+		.name	= "dht11",
 		.of_match_table = dht11_dt_ids,
 	},
 	.probe  = dht11_probe,

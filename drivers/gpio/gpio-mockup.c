@@ -17,7 +17,7 @@
 #include <linux/irq.h>
 #include <linux/irq_sim.h>
 #include <linux/irqdomain.h>
-#include <linux/mod_devicetable.h>
+#include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -449,9 +449,9 @@ static int gpio_mockup_probe(struct platform_device *pdev)
 	gc->owner = THIS_MODULE;
 	gc->parent = dev;
 	gc->get = gpio_mockup_get;
-	gc->set_rv = gpio_mockup_set;
+	gc->set = gpio_mockup_set;
 	gc->get_multiple = gpio_mockup_get_multiple;
-	gc->set_multiple_rv = gpio_mockup_set_multiple;
+	gc->set_multiple = gpio_mockup_set_multiple;
 	gc->direction_output = gpio_mockup_dirout;
 	gc->direction_input = gpio_mockup_dirin;
 	gc->get_direction = gpio_mockup_get_direction;
@@ -578,7 +578,7 @@ static int __init gpio_mockup_register_chip(int idx)
 
 static int __init gpio_mockup_init(void)
 {
-	int i, num_chips, err;
+	int i, num_chips, err, base, ngpio;
 
 	if ((gpio_mockup_num_ranges % 2) ||
 	    (gpio_mockup_num_ranges > GPIO_MOCKUP_MAX_RANGES))
@@ -592,8 +592,19 @@ static int __init gpio_mockup_init(void)
 	 * always be greater than 0.
 	 */
 	for (i = 0; i < num_chips; i++) {
-		if (gpio_mockup_range_ngpio(i) < 0)
+		base = gpio_mockup_range_base(i);
+		ngpio = gpio_mockup_range_ngpio(i);
+
+		if (ngpio <= 0)
 			return -EINVAL;
+
+		if (base < 0) {
+			if (ngpio > U16_MAX)
+				return -EINVAL;
+		} else {
+			if (ngpio <= base || ngpio - base > U16_MAX)
+				return -EINVAL;
+		}
 	}
 
 	gpio_mockup_dbg_dir = debugfs_create_dir("gpio-mockup", NULL);

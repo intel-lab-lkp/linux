@@ -693,6 +693,8 @@ static void slip_receive_buf(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 	if (!sl || sl->magic != SLIP_MAGIC || !netif_running(sl->dev))
 		return;
 
+	spin_lock_bh(&sl->lock);
+
 	/* Read the characters out of the buffer */
 	while (count--) {
 		if (fp && *fp++) {
@@ -708,6 +710,8 @@ static void slip_receive_buf(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 #endif
 			slip_unesc(sl, *cp++);
 	}
+
+	spin_unlock_bh(&sl->lock);
 }
 
 /************************************
@@ -1297,8 +1301,7 @@ static int __init slip_init(void)
 	printk(KERN_INFO "SLIP linefill/keepalive option.\n");
 #endif
 
-	slip_devs = kcalloc(slip_maxdev, sizeof(struct net_device *),
-								GFP_KERNEL);
+	slip_devs = kzalloc_objs(struct net_device *, slip_maxdev);
 	if (!slip_devs)
 		return -ENOMEM;
 
