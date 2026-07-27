@@ -1010,6 +1010,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	u32 ufid_flags = ovs_nla_get_ufid_flags(a[OVS_FLOW_ATTR_UFID_FLAGS]);
 	int error;
 	bool log = !a[OVS_FLOW_ATTR_PROBE];
+	bool id_match = false;
 
 	/* Must have key and actions. */
 	error = -EINVAL;
@@ -1075,10 +1076,17 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	/* Check if this is a duplicate flow */
-	if (ovs_identifier_is_ufid(&new_flow->id))
+	if (ovs_identifier_is_ufid(&new_flow->id)) {
 		flow = ovs_flow_tbl_lookup_ufid(&dp->table, &new_flow->id);
-	if (!flow)
+		if (flow)
+			id_match = true;
+	}
+	if (!flow) {
 		flow = ovs_flow_tbl_lookup(&dp->table, key);
+		if (flow)
+			id_match = ovs_identifier_is_key(&new_flow->id) &&
+				   ovs_identifier_is_key(&flow->id);
+	}
 	if (likely(!flow)) {
 		rcu_assign_pointer(new_flow->sf_acts, acts);
 
@@ -1113,9 +1121,12 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 			error = -EEXIST;
 			goto err_unlock_ovs;
 		}
-		/* The flow identifier has to be the same for flow updates.
-		 * Look for any overlapping flow.
-		 */
+		/* The flow identifier has to be the same for flow updates. */
+		if (unlikely(!id_match)) {
+			error = -ENOENT;
+			goto err_unlock_ovs;
+		}
+		/* Look for any overlapping flow. */
 		if (unlikely(!ovs_flow_cmp(flow, &match))) {
 			if (ovs_identifier_is_key(&flow->id))
 				flow = ovs_flow_tbl_lookup_exact(&dp->table,
