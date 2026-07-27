@@ -12,6 +12,7 @@
 
 #include "ext4_jbd2.h"
 #include "ext4.h"
+#include "ext4_extents.h"
 #include "xattr.h"
 #include "truncate.h"
 
@@ -216,51 +217,6 @@ static int ext4_read_inline_data(struct inode *inode, void *buffer,
 
 out:
 	return cp_len;
-}
-
-/*
- * write the buffer to the inline inode.
- * If 'create' is set, we don't need to do the extra copy in the xattr
- * value since it is already handled by ext4_xattr_ibody_set.
- * That saves us one memcpy.
- */
-static void ext4_write_inline_data(struct inode *inode, struct ext4_iloc *iloc,
-				   void *buffer, loff_t pos, unsigned int len)
-{
-	struct ext4_xattr_entry *entry;
-	struct ext4_xattr_ibody_header *header;
-	struct ext4_inode *raw_inode;
-	int cp_len = 0;
-
-	if (unlikely(ext4_emergency_state(inode->i_sb)))
-		return;
-
-	BUG_ON(!EXT4_I(inode)->i_inline_off);
-	BUG_ON(pos + len > EXT4_I(inode)->i_inline_size);
-
-	raw_inode = ext4_raw_inode(iloc);
-	buffer += pos;
-
-	if (pos < EXT4_MIN_INLINE_DATA_SIZE) {
-		cp_len = pos + len > EXT4_MIN_INLINE_DATA_SIZE ?
-			 EXT4_MIN_INLINE_DATA_SIZE - pos : len;
-		memcpy((void *)raw_inode->i_block + pos, buffer, cp_len);
-
-		len -= cp_len;
-		buffer += cp_len;
-		pos += cp_len;
-	}
-
-	if (!len)
-		return;
-
-	pos -= EXT4_MIN_INLINE_DATA_SIZE;
-	header = IHDR(inode, raw_inode);
-	entry = (struct ext4_xattr_entry *)((void *)raw_inode +
-					    EXT4_I(inode)->i_inline_off);
-
-	memcpy((void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs) + pos,
-	       buffer, len);
 }
 
 static int ext4_create_inline_data(handle_t *handle,
@@ -791,23 +747,6 @@ static int ext4_update_inline_dir(handle_t *handle, struct inode *dir,
 	return 0;
 }
 
-static void ext4_restore_inline_data(handle_t *handle, struct inode *inode,
-				     struct ext4_iloc *iloc,
-				     void *buf, int inline_size)
-{
-	int ret;
-
-	ret = ext4_create_inline_data(handle, inode, inline_size);
-	if (ret) {
-		ext4_msg(inode->i_sb, KERN_EMERG,
-			"error restoring inline_data for inode -- potential data loss! (inode %llu, error %d)",
-			inode->i_ino, ret);
-		return;
-	}
-	ext4_write_inline_data(inode, iloc, buf, 0, inline_size);
-	ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
-}
-
 static int ext4_convert_inline_data_nolock(handle_t *handle,
 					   struct inode *inode,
 					   struct ext4_iloc *iloc)
@@ -815,7 +754,7 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 	int error;
 	void *buf = NULL;
 	struct buffer_head *data_bh = NULL;
-	struct ext4_map_blocks map;
+	ext4_fsblk_t pblk;
 	int inline_size;
 
 	inline_size = ext4_get_inline_size(inode);
@@ -841,25 +780,20 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 			goto out;
 	}
 
-	error = ext4_destroy_inline_data_nolock(handle, inode);
+	/*
+	 * Allocate a data block and write the inline data to it before
+	 * destroying the inline data.  This ensures that on failure we
+	 * can simply free the allocated block without needing to restore
+	 * the inline data.
+	 */
+	pblk = ext4_new_meta_blocks(handle, inode, 0, 0, NULL, &error);
 	if (error)
 		goto out;
 
-	map.m_lblk = 0;
-	map.m_len = 1;
-	map.m_flags = 0;
-	error = ext4_map_blocks(handle, inode, &map, EXT4_GET_BLOCKS_CREATE);
-	if (error < 0)
-		goto out_restore;
-	if (!(map.m_flags & EXT4_MAP_MAPPED)) {
-		error = -EIO;
-		goto out_restore;
-	}
-
-	data_bh = sb_getblk(inode->i_sb, map.m_pblk);
+	data_bh = sb_getblk(inode->i_sb, pblk);
 	if (!data_bh) {
 		error = -ENOMEM;
-		goto out_restore;
+		goto out_free_block;
 	}
 
 	lock_buffer(data_bh);
@@ -867,8 +801,7 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 					       EXT4_JTR_NONE);
 	if (error) {
 		unlock_buffer(data_bh);
-		error = -EIO;
-		goto out_restore;
+		goto out_free_block;
 	}
 	memset(data_bh->b_data, 0, inode->i_sb->s_blocksize);
 
@@ -876,26 +809,51 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 		memcpy(data_bh->b_data, buf, inline_size);
 		set_buffer_uptodate(data_bh);
 		unlock_buffer(data_bh);
-		error = ext4_handle_dirty_metadata(handle,
-						   inode, data_bh);
+		error = ext4_handle_dirty_metadata(handle, inode, data_bh);
 	} else {
 		unlock_buffer(data_bh);
-		inode->i_size = inode->i_sb->s_blocksize;
-		i_size_write(inode, inode->i_sb->s_blocksize);
-		EXT4_I(inode)->i_disksize = inode->i_sb->s_blocksize;
-
 		error = ext4_init_dirblock(handle, inode, data_bh,
 			  le32_to_cpu(((struct ext4_dir_entry_2 *)buf)->inode),
 			  buf + EXT4_INLINE_DOTDOT_SIZE,
 			  inline_size - EXT4_INLINE_DOTDOT_SIZE);
-		if (!error)
-			error = ext4_mark_inode_dirty(handle, inode);
+	}
+	if (error)
+		goto out_free_block;
+
+	/*
+	 * Data is safely in the allocated block.  Now destroy the inline
+	 * data (which also initializes the extent tree via
+	 * ext4_ext_tree_init) and then insert the pre-allocated block.
+	 */
+	error = ext4_destroy_inline_data_nolock(handle, inode);
+	if (error)
+		goto out_free_block;
+
+	if (S_ISDIR(inode->i_mode)) {
+		inode->i_size = inode->i_sb->s_blocksize;
+		i_size_write(inode, inode->i_sb->s_blocksize);
+		EXT4_I(inode)->i_disksize = inode->i_sb->s_blocksize;
 	}
 
-out_restore:
-	if (error)
-		ext4_restore_inline_data(handle, inode, iloc, buf, inline_size);
+	/* Insert the pre-allocated block into the extent tree */
+	if (ext4_has_feature_extents(inode->i_sb)) {
+		struct ext4_extent_header *eh = ext_inode_hdr(inode);
+		struct ext4_extent *ex = EXT_FIRST_EXTENT(eh);
 
+		ex->ee_block = cpu_to_le32(0);
+		ex->ee_len = cpu_to_le16(1);
+		ext4_ext_store_pblock(ex, pblk);
+		eh->eh_entries = cpu_to_le16(1);
+	} else {
+		/* indirect mapping: set i_data[0] directly */
+		EXT4_I(inode)->i_data[0] = cpu_to_le32(pblk);
+	}
+
+	error = ext4_mark_inode_dirty(handle, inode);
+	goto out;
+
+out_free_block:
+	ext4_free_blocks(handle, inode, NULL, pblk, 1, 0);
 out:
 	brelse(data_bh);
 	kfree(buf);
