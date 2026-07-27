@@ -1774,6 +1774,50 @@ static int nvme_tcp_start_tls(struct nvme_ctrl *nctrl,
 	return ret;
 }
 
+static struct net_device *nvme_tcp_get_netdev(struct nvme_ctrl *ctrl,
+		netdevice_tracker *tracker, gfp_t gfp)
+{
+	struct net_device *dev = NULL;
+
+	if (ctrl->opts->mask & NVMF_OPT_HOST_IFACE)
+		dev = netdev_get_by_name(&init_net, ctrl->opts->host_iface,
+				tracker, gfp);
+	else {
+		struct nvme_tcp_ctrl *tctrl = to_tcp_ctrl(ctrl);
+		struct sockaddr_storage *src = NULL, *dest = NULL;
+
+		if (ctrl->opts->mask & NVMF_OPT_HOST_TRADDR)
+			src = &tctrl->src_addr;
+
+		dest = &tctrl->addr;
+
+		dev = netdev_get_by_addr(&init_net, src, dest, tracker, gfp);
+	}
+	return dev;
+}
+
+/*
+ * Returns number of active NIC queues (min of TX/RX), or 0 if device cannot
+ * be determined.
+ */
+static int nvme_tcp_get_netdev_current_queue_count(struct nvme_ctrl *ctrl)
+{
+	struct net_device *dev;
+	int tx_queues, rx_queues;
+	netdevice_tracker tracker;
+
+	dev = nvme_tcp_get_netdev(ctrl, &tracker, GFP_KERNEL);
+	if (!dev)
+		return 0;
+
+	tx_queues = dev->real_num_tx_queues;
+	rx_queues = dev->real_num_rx_queues;
+
+	netdev_put(dev, &tracker);
+
+	return min(tx_queues, rx_queues);
+}
+
 static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 				key_serial_t pskid)
 {
@@ -2165,6 +2209,23 @@ static int nvme_tcp_alloc_io_queues(struct nvme_ctrl *ctrl)
 	unsigned int nr_io_queues;
 	int ret;
 
+	if (!(ctrl->opts->mask & NVMF_OPT_NR_IO_QUEUES)) {
+		int nr_hw_queues;
+
+		nr_hw_queues = nvme_tcp_get_netdev_current_queue_count(ctrl);
+		if (nr_hw_queues <= 0)
+			goto init_queue;
+
+		ctrl->opts->nr_io_queues = min(nr_hw_queues, num_online_cpus());
+
+		if (ctrl->opts->nr_io_queues < num_online_cpus())
+			dev_info(ctrl->device,
+				"limiting I/O queues to %u (NIC queues %d, CPUs %u)\n",
+				ctrl->opts->nr_io_queues, nr_hw_queues,
+				num_online_cpus());
+	}
+
+init_queue:
 	nr_io_queues = nvmf_nr_io_queues(ctrl->opts);
 	ret = nvme_set_queue_count(ctrl, &nr_io_queues);
 	if (ret)
