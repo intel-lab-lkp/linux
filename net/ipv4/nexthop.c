@@ -51,6 +51,8 @@ static const struct nla_policy rtm_nh_policy_get[] = {
 
 static const struct nla_policy rtm_nh_policy_del[] = {
 	[NHA_ID]		= { .type = NLA_U32 },
+	[NHA_OP_FLAGS]		= NLA_POLICY_MASK(NLA_U32,
+						  NHA_OP_FLAGS_DUMP_ALL),
 };
 
 static const struct nla_policy rtm_nh_policy_dump[] = {
@@ -82,6 +84,8 @@ static const struct nla_policy rtm_nh_res_bucket_policy_dump[] = {
 static const struct nla_policy rtm_nh_policy_get_bucket[] = {
 	[NHA_ID]		= { .type = NLA_U32 },
 	[NHA_RES_BUCKET]	= { .type = NLA_NESTED },
+	[NHA_OP_FLAGS]		= NLA_POLICY_MASK(NLA_U32,
+						  NHA_OP_FLAGS_DUMP_ALL),
 };
 
 static const struct nla_policy rtm_nh_res_bucket_policy_get[] = {
