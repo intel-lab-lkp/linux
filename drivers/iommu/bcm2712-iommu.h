@@ -19,4 +19,8 @@
 #define BCM2712_APERTURE_SIZE    SZ_4G
 #define BCM2712_APERTURE_END     (BCM2712_APERTURE_BASE + BCM2712_APERTURE_SIZE)
 
+struct bcm2712_iommu_cache;
+
+void bcm2712_iommu_cache_flush(struct bcm2712_iommu_cache *cache);
+
 #endif
