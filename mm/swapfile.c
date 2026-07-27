@@ -2476,7 +2476,8 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	struct page *page;
 	struct folio *swapcache;
 	spinlock_t *ptl;
-	pte_t *pte, new_pte, old_pte;
+	hw_pte_t *pte;
+	pte_t new_pte, old_pte;
 	bool hwpoisoned = false;
 	int ret = 1;
 
@@ -2587,7 +2588,7 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 			unsigned long addr, unsigned long end,
 			unsigned int type)
 {
-	pte_t *pte = NULL;
+	hw_pte_t *pte = NULL;
 
 	do {
 		struct folio *folio;

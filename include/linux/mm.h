@@ -782,7 +782,7 @@ struct vm_fault {
 					 * VM_FAULT_ERROR).
 					 */
 	/* These three entries are valid only while holding ptl lock */
-	pte_t *pte;			/* Pointer to pte entry matching
+	hw_pte_t *pte;			/* Pointer to pte entry matching
 					 * the 'address'. NULL if the page
 					 * table hasn't been allocated.
 					 */
@@ -3188,7 +3188,7 @@ struct follow_pfnmap_args {
 	 * The caller shouldn't touch any of these.
 	 */
 	spinlock_t *lock;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	/**
 	 * Outputs:
 	 *
@@ -3525,7 +3525,7 @@ static inline pud_t pud_mkspecial(pud_t pud)
 }
 #endif	/* CONFIG_ARCH_SUPPORTS_PUD_PFNMAP */
 
-extern pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
+extern hw_pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
 			     spinlock_t **ptl);
 
 #ifdef __PAGETABLE_P4D_FOLDED
@@ -3803,7 +3803,7 @@ static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
 	return ptlock_ptr(page_ptdesc(pmd_page(*pmd)));
 }
 
-static inline spinlock_t *ptep_lockptr(struct mm_struct *mm, pte_t *pte)
+static inline spinlock_t *ptep_lockptr(struct mm_struct *mm, hw_pte_t *pte)
 {
 	BUILD_BUG_ON(IS_ENABLED(CONFIG_HIGHPTE));
 	BUILD_BUG_ON(MAX_PTRS_PER_PTE * sizeof(pte_t) > PAGE_SIZE);
@@ -3834,7 +3834,7 @@ static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
 {
 	return &mm->page_table_lock;
 }
-static inline spinlock_t *ptep_lockptr(struct mm_struct *mm, pte_t *pte)
+static inline spinlock_t *ptep_lockptr(struct mm_struct *mm, hw_pte_t *pte)
 {
 	return &mm->page_table_lock;
 }
@@ -3875,19 +3875,19 @@ static inline bool pagetable_pte_ctor(struct mm_struct *mm,
 	return true;
 }
 
-pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp);
+hw_pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp);
 
-static inline pte_t *pte_offset_map(pmd_t *pmd, unsigned long addr)
+static inline hw_pte_t *pte_offset_map(pmd_t *pmd, unsigned long addr)
 {
 	return __pte_offset_map(pmd, addr, NULL);
 }
 
-pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
+hw_pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
 			   unsigned long addr, spinlock_t **ptlp);
 
-pte_t *pte_offset_map_ro_nolock(struct mm_struct *mm, pmd_t *pmd,
+hw_pte_t *pte_offset_map_ro_nolock(struct mm_struct *mm, pmd_t *pmd,
 				unsigned long addr, spinlock_t **ptlp);
-pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
+hw_pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 				unsigned long addr, pmd_t *pmdvalp,
 				spinlock_t **ptlp);
 
@@ -4836,7 +4836,7 @@ static inline bool gup_can_follow_protnone(const struct vm_area_struct *vma,
 	return !vma_is_accessible(vma);
 }
 
-typedef int (*pte_fn_t)(pte_t *pte, unsigned long addr, void *data);
+typedef int (*pte_fn_t)(hw_pte_t *pte, unsigned long addr, void *data);
 extern int apply_to_page_range(struct mm_struct *mm, unsigned long address,
 			       unsigned long size, pte_fn_t fn, void *data);
 extern int apply_to_existing_page_range(struct mm_struct *mm,
@@ -5086,7 +5086,7 @@ void *vmemmap_alloc_block(unsigned long size, int node);
 struct vmem_altmap;
 void *vmemmap_alloc_block_buf(unsigned long size, int node,
 			      struct vmem_altmap *altmap);
-void vmemmap_verify(pte_t *, int, unsigned long, unsigned long);
+void vmemmap_verify(hw_pte_t *, int, unsigned long, unsigned long);
 void vmemmap_set_pmd(pmd_t *pmd, void *p, int node,
 		     unsigned long addr, unsigned long next);
 int vmemmap_check_pmd(pmd_t *pmd, int node,
@@ -5454,7 +5454,7 @@ static inline bool snapshot_page_is_faithful(const struct page_snapshot *ps)
 
 void snapshot_page(struct page_snapshot *ps, const struct page *page);
 
-void map_anon_folio_pte_nopf(struct folio *folio, pte_t *pte,
+void map_anon_folio_pte_nopf(struct folio *folio, hw_pte_t *pte,
 		struct vm_area_struct *vma, unsigned long addr,
 		bool uffd_wp);
 

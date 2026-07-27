@@ -3056,7 +3056,7 @@ static void __split_huge_zero_page_pmd(struct vm_area_struct *vma,
 	pgtable_t pgtable;
 	pmd_t _pmd, old_pmd;
 	unsigned long addr;
-	pte_t *pte;
+	hw_pte_t *pte;
 	int i;
 
 	/*
@@ -3106,7 +3106,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	bool soft_dirty, uffd_wp = false, young = false, write = false;
 	bool anon_exclusive = false, dirty = false;
 	unsigned long addr;
-	pte_t *pte;
+	hw_pte_t *pte;
 	int i;
 
 	VM_BUG_ON(haddr & ~HPAGE_PMD_MASK);

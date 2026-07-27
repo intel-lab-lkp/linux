@@ -26,7 +26,7 @@ static int real_depth(int depth)
 	return depth;
 }
 
-static int walk_pte_range_inner(pte_t *pte, unsigned long addr,
+static int walk_pte_range_inner(hw_pte_t *pte, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
 	const struct mm_walk_ops *ops = walk->ops;
@@ -61,7 +61,7 @@ static int walk_pte_range_inner(pte_t *pte, unsigned long addr,
 static int walk_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			  struct mm_walk *walk)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	int err = 0;
 	spinlock_t *ptl;
 
@@ -343,7 +343,7 @@ static int walk_hugetlb_range(unsigned long addr, unsigned long end,
 	unsigned long next;
 	unsigned long hmask = huge_page_mask(h);
 	unsigned long sz = huge_page_size(h);
-	pte_t *pte;
+	hw_pte_t *pte;
 	const struct mm_walk_ops *ops = walk->ops;
 	int err = 0;
 
@@ -909,7 +909,8 @@ struct folio *folio_walk_start(struct folio_walk *fw,
 	struct page *page;
 	pud_t *pudp, pud;
 	pmd_t *pmdp, pmd;
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 	spinlock_t *ptl;
 	pgd_t *pgdp;
 	p4d_t *p4dp;

@@ -137,7 +137,7 @@ static void * __meminit altmap_alloc_block_buf(unsigned long size,
 	return __va(__pfn_to_phys(pfn));
 }
 
-void __meminit vmemmap_verify(pte_t *pte, int node,
+void __meminit vmemmap_verify(hw_pte_t *pte, int node,
 				unsigned long start, unsigned long end)
 {
 	unsigned long pfn = pte_pfn(ptep_get(pte));
@@ -148,11 +148,11 @@ void __meminit vmemmap_verify(pte_t *pte, int node,
 			start, end - 1);
 }
 
-static pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node,
+static hw_pte_t * __meminit vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node,
 				       struct vmem_altmap *altmap,
 				       unsigned long ptpfn, unsigned long flags)
 {
-	pte_t *pte = pte_offset_kernel(pmd, addr);
+	hw_pte_t *pte = pte_offset_kernel(pmd, addr);
 	if (pte_none(ptep_get(pte))) {
 		pte_t entry;
 		void *p;
@@ -243,7 +243,7 @@ static pgd_t * __meminit vmemmap_pgd_populate(unsigned long addr, int node)
 	return pgd;
 }
 
-static pte_t * __meminit vmemmap_populate_address(unsigned long addr, int node,
+static hw_pte_t * __meminit vmemmap_populate_address(unsigned long addr, int node,
 					      struct vmem_altmap *altmap,
 					      unsigned long ptpfn,
 					      unsigned long flags)
@@ -252,7 +252,7 @@ static pte_t * __meminit vmemmap_populate_address(unsigned long addr, int node,
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	pgd = vmemmap_pgd_populate(addr, node);
 	if (!pgd)
@@ -281,7 +281,7 @@ static int __meminit vmemmap_populate_range(unsigned long start,
 					    unsigned long flags)
 {
 	unsigned long addr = start;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	for (; addr < end; addr += PAGE_SIZE) {
 		pte = vmemmap_populate_address(addr, node, altmap,
@@ -314,7 +314,7 @@ void vmemmap_wrprotect_hvo(unsigned long addr, unsigned long end,
 				    int node, unsigned long headsize)
 {
 	unsigned long maddr;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	for (maddr = addr + headsize; maddr < end; maddr += PAGE_SIZE) {
 		pte = virt_to_kpte(maddr);
@@ -364,7 +364,7 @@ int __meminit vmemmap_populate_hvo(unsigned long addr, unsigned long end,
 {
 	unsigned long maddr;
 	struct page *tail;
-	pte_t *pte;
+	hw_pte_t *pte;
 	int node = zone_to_nid(zone);
 
 	tail = vmemmap_get_tail(order, zone);
@@ -396,7 +396,7 @@ int __weak __meminit vmemmap_check_pmd(pmd_t *pmd, int node,
 {
 	if (!pmd_leaf(pmdp_get(pmd)))
 		return 0;
-	vmemmap_verify((pte_t *)pmd, node, addr, next);
+	vmemmap_verify((hw_pte_t *)pmd, node, addr, next);
 
 	return 1;
 }
@@ -474,9 +474,9 @@ static bool __meminit reuse_compound_section(unsigned long start_pfn,
 	return !IS_ALIGNED(offset, nr_pages) && nr_pages > PAGES_PER_SUBSECTION;
 }
 
-static pte_t * __meminit compound_section_tail_page(unsigned long addr)
+static hw_pte_t * __meminit compound_section_tail_page(unsigned long addr)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	addr -= PAGE_SIZE;
 
@@ -497,7 +497,7 @@ static int __meminit vmemmap_populate_compound_pages(unsigned long start_pfn,
 						     struct dev_pagemap *pgmap)
 {
 	unsigned long size, addr;
-	pte_t *pte;
+	hw_pte_t *pte;
 	int rc;
 
 	if (reuse_compound_section(start_pfn, pgmap)) {

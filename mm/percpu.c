@@ -3176,7 +3176,7 @@ void __init __weak pcpu_populate_pte(unsigned long addr)
 
 	pmd = pmd_offset(pud, addr);
 	if (!pmd_present(*pmd)) {
-		pte_t *new;
+		hw_pte_t *new;
 
 		new = memblock_alloc_or_panic(PTE_TABLE_SIZE, PTE_TABLE_SIZE);
 		pmd_populate_kernel(&init_mm, pmd, new);

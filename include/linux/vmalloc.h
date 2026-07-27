@@ -120,7 +120,7 @@ static inline unsigned long arch_vmap_pte_range_map_size(unsigned long addr, uns
 
 #ifndef arch_vmap_pte_range_unmap_size
 static inline unsigned long arch_vmap_pte_range_unmap_size(unsigned long addr,
-							   pte_t *ptep)
+							   hw_pte_t *ptep)
 {
 	return PAGE_SIZE;
 }

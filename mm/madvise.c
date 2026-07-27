@@ -189,7 +189,7 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 {
 	struct vm_area_struct *vma = walk->private;
 	struct swap_io_ctx ctx = {};
-	pte_t *ptep = NULL;
+	hw_pte_t *ptep = NULL;
 	spinlock_t *ptl;
 	unsigned long addr;
 
@@ -341,7 +341,7 @@ static inline bool can_do_file_pageout(struct vm_area_struct *vma)
 }
 
 static inline int madvise_folio_pte_batch(unsigned long addr, unsigned long end,
-					  struct folio *folio, pte_t *ptep,
+					  struct folio *folio, hw_pte_t *ptep,
 					  pte_t *ptentp)
 {
 	int max_nr = (end - addr) / PAGE_SIZE;
@@ -359,7 +359,8 @@ static int madvise_cold_or_pageout_pte_range(pmd_t *pmd,
 	bool pageout = private->pageout;
 	struct mm_struct *mm = tlb->mm;
 	struct vm_area_struct *vma = walk->vma;
-	pte_t *start_pte, *pte, ptent;
+	hw_pte_t *start_pte, *pte;
+	pte_t ptent;
 	spinlock_t *ptl;
 	struct folio *folio = NULL;
 	LIST_HEAD(folio_list);
@@ -658,7 +659,8 @@ static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
 	struct mm_struct *mm = tlb->mm;
 	struct vm_area_struct *vma = walk->vma;
 	spinlock_t *ptl;
-	pte_t *start_pte, *pte, ptent;
+	hw_pte_t *start_pte, *pte;
+	pte_t ptent;
 	struct folio *folio;
 	int nr_swap = 0;
 	unsigned long next;
@@ -1083,7 +1085,7 @@ static int guard_install_pmd_entry(pmd_t *pmd, unsigned long addr,
 	return pmd_trans_huge(pmdval);
 }
 
-static int guard_install_pte_entry(pte_t *pte, unsigned long addr,
+static int guard_install_pte_entry(hw_pte_t *pte, unsigned long addr,
 				   unsigned long next, struct mm_walk *walk)
 {
 	pte_t pteval = ptep_get(pte);
@@ -1226,7 +1228,7 @@ static int guard_remove_pmd_entry(pmd_t *pmd, unsigned long addr,
 	return 0;
 }
 
-static int guard_remove_pte_entry(pte_t *pte, unsigned long addr,
+static int guard_remove_pte_entry(hw_pte_t *pte, unsigned long addr,
 				  unsigned long next, struct mm_walk *walk)
 {
 	pte_t ptent = ptep_get(pte);

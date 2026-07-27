@@ -103,7 +103,7 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 	return can_change_shared_pte_writable(vma, pte);
 }
 
-static int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
+static int mprotect_folio_pte_batch(struct folio *folio, hw_pte_t *ptep,
 				    pte_t pte, int max_nr_ptes, fpb_t flags)
 {
 	/* No underlying folio, so cannot batch */
@@ -118,7 +118,7 @@ static int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
 
 /* Set nr_ptes number of ptes, starting from idx */
 static __always_inline void prot_commit_flush_ptes(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, pte_t oldpte, pte_t ptent,
+		unsigned long addr, hw_pte_t *ptep, pte_t oldpte, pte_t ptent,
 		int nr_ptes, int idx, bool set_write, struct mmu_gather *tlb)
 {
 	/*
@@ -170,7 +170,7 @@ static __always_inline int page_anon_exclusive_batch(int start_idx, int max_len,
  * retrieve sub-batches.
  */
 static __always_inline void commit_anon_folio_batch(struct vm_area_struct *vma,
-		struct folio *folio, struct page *first_page, unsigned long addr, pte_t *ptep,
+		struct folio *folio, struct page *first_page, unsigned long addr, hw_pte_t *ptep,
 		pte_t oldpte, pte_t ptent, int nr_ptes, struct mmu_gather *tlb)
 {
 	bool expected_anon_exclusive;
@@ -189,7 +189,7 @@ static __always_inline void commit_anon_folio_batch(struct vm_area_struct *vma,
 }
 
 static __always_inline void set_write_prot_commit_flush_ptes(struct vm_area_struct *vma,
-		struct folio *folio, struct page *page, unsigned long addr, pte_t *ptep,
+		struct folio *folio, struct page *page, unsigned long addr, hw_pte_t *ptep,
 		pte_t oldpte, pte_t ptent, int nr_ptes, struct mmu_gather *tlb)
 {
 	bool set_write;
@@ -212,7 +212,7 @@ static __always_inline void set_write_prot_commit_flush_ptes(struct vm_area_stru
 }
 
 static long change_softleaf_pte(struct vm_area_struct *vma,
-	unsigned long addr, pte_t *pte, pte_t oldpte, unsigned long cp_flags)
+	unsigned long addr, hw_pte_t *pte, pte_t oldpte, unsigned long cp_flags)
 {
 	const bool uffd_prot = cp_flags & (MM_CP_UFFD_WP | MM_CP_UFFD_RWP);
 	const bool uffd_prot_resolve = cp_flags &
@@ -279,7 +279,7 @@ static long change_softleaf_pte(struct vm_area_struct *vma,
 }
 
 static __always_inline void change_present_ptes(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+		struct vm_area_struct *vma, unsigned long addr, hw_pte_t *ptep,
 		int nr_ptes, unsigned long end, pgprot_t newprot,
 		struct folio *folio, struct page *page, unsigned long cp_flags)
 {
@@ -332,7 +332,8 @@ static long change_pte_range(struct mmu_gather *tlb,
 		struct vm_area_struct *vma, pmd_t *pmd, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
 {
-	pte_t *pte, oldpte;
+	hw_pte_t *pte;
+	pte_t oldpte;
 	spinlock_t *ptl;
 	long pages = 0;
 	bool is_private_single_threaded;
@@ -727,7 +728,7 @@ long change_protection(struct mmu_gather *tlb,
 	return pages;
 }
 
-static int prot_none_pte_entry(pte_t *pte, unsigned long addr,
+static int prot_none_pte_entry(hw_pte_t *pte, unsigned long addr,
 			       unsigned long next, struct mm_walk *walk)
 {
 	return pfn_modify_allowed(pte_pfn(ptep_get(pte)),
@@ -736,7 +737,7 @@ static int prot_none_pte_entry(pte_t *pte, unsigned long addr,
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-static int prot_none_hugetlb_entry(pte_t *pte, unsigned long hmask,
+static int prot_none_hugetlb_entry(hw_pte_t *pte, unsigned long hmask,
 				   unsigned long addr, unsigned long next,
 				   struct mm_walk *walk)
 {

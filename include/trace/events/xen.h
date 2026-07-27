@@ -138,10 +138,10 @@ TRACE_EVENT(xen_mc_extend_args,
 TRACE_DEFINE_SIZEOF(pteval_t);
 
 TRACE_EVENT(xen_mmu_set_pte,
-	    TP_PROTO(pte_t *ptep, pte_t pteval),
+	    TP_PROTO(hw_pte_t *ptep, pte_t pteval),
 	    TP_ARGS(ptep, pteval),
 	    TP_STRUCT__entry(
-		    __field(pte_t *, ptep)
+		    __field(hw_pte_t *, ptep)
 		    __field(pteval_t, pteval)
 		    ),
 	    TP_fast_assign(__entry->ptep = ptep;
@@ -207,12 +207,12 @@ TRACE_EVENT(xen_mmu_set_p4d,
 
 DECLARE_EVENT_CLASS(xen_mmu_ptep_modify_prot,
 	    TP_PROTO(struct mm_struct *mm, unsigned long addr,
-		     pte_t *ptep, pte_t pteval),
+		     hw_pte_t *ptep, pte_t pteval),
 	    TP_ARGS(mm, addr, ptep, pteval),
 	    TP_STRUCT__entry(
 		    __field(struct mm_struct *, mm)
 		    __field(unsigned long, addr)
-		    __field(pte_t *, ptep)
+		    __field(hw_pte_t *, ptep)
 		    __field(pteval_t, pteval)
 		    ),
 	    TP_fast_assign(__entry->mm = mm;
@@ -227,7 +227,7 @@ DECLARE_EVENT_CLASS(xen_mmu_ptep_modify_prot,
 #define DEFINE_XEN_MMU_PTEP_MODIFY_PROT(name)				\
 	DEFINE_EVENT(xen_mmu_ptep_modify_prot, name,			\
 		     TP_PROTO(struct mm_struct *mm, unsigned long addr,	\
-			      pte_t *ptep, pte_t pteval),		\
+			      hw_pte_t *ptep, pte_t pteval),		\
 		     TP_ARGS(mm, addr, ptep, pteval))
 
 DEFINE_XEN_MMU_PTEP_MODIFY_PROT(xen_mmu_ptep_modify_prot_start);

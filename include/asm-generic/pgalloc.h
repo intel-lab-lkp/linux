@@ -16,7 +16,7 @@
  *
  * Return: pointer to the allocated memory or %NULL on error
  */
-static inline pte_t *__pte_alloc_one_kernel_noprof(struct mm_struct *mm)
+static inline hw_pte_t *__pte_alloc_one_kernel_noprof(struct mm_struct *mm)
 {
 	struct ptdesc *ptdesc = pagetable_alloc_noprof(GFP_PGTABLE_KERNEL, 0);
 
@@ -40,7 +40,7 @@ static inline pte_t *__pte_alloc_one_kernel_noprof(struct mm_struct *mm)
  *
  * Return: pointer to the allocated memory or %NULL on error
  */
-static inline pte_t *pte_alloc_one_kernel_noprof(struct mm_struct *mm)
+static inline hw_pte_t *pte_alloc_one_kernel_noprof(struct mm_struct *mm)
 {
 	return __pte_alloc_one_kernel_noprof(mm);
 }
@@ -52,7 +52,7 @@ static inline pte_t *pte_alloc_one_kernel_noprof(struct mm_struct *mm)
  * @mm: the mm_struct of the current context
  * @pte: pointer to the memory containing the page table
  */
-static inline void pte_free_kernel(struct mm_struct *mm, pte_t *pte)
+static inline void pte_free_kernel(struct mm_struct *mm, hw_pte_t *pte)
 {
 	pagetable_dtor_free(virt_to_ptdesc(pte));
 }

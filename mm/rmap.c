@@ -1124,7 +1124,7 @@ static int page_vma_mkclean_one(struct page_vma_mapped_walk *pvmw)
 
 		address = pvmw->address;
 		if (pvmw->pte) {
-			pte_t *pte = pvmw->pte;
+			hw_pte_t *pte = pvmw->pte;
 			pte_t entry = ptep_get(pte);
 
 			/*
@@ -2141,7 +2141,7 @@ static pte_t swp_pte_prepare(swp_entry_t entry, pte_t old_pte,
 
 static bool ttu_anon_swapbacked_folio(struct vm_area_struct *vma,
 		struct folio *folio, struct page *page, unsigned long address,
-		pte_t *ptep, pte_t pteval)
+		hw_pte_t *ptep, pte_t pteval)
 {
 	const bool anon_exclusive = folio_test_anon(folio) &&
 				    PageAnonExclusive(page);
@@ -2176,7 +2176,7 @@ static bool ttu_anon_swapbacked_folio(struct vm_area_struct *vma,
 }
 
 static bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *folio,
-		struct page *page, unsigned long address, pte_t *ptep,
+		struct page *page, unsigned long address, hw_pte_t *ptep,
 		pte_t pteval, unsigned long nr_pages)
 {
 	/*

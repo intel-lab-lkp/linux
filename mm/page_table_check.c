@@ -208,7 +208,7 @@ static void page_table_check_pte_flags(pte_t pte)
 }
 
 void __page_table_check_ptes_set(struct mm_struct *mm, unsigned long addr,
-				 pte_t *ptep, pte_t pte, unsigned int nr)
+				 hw_pte_t *ptep, pte_t pte, unsigned int nr)
 {
 	unsigned int i;
 
@@ -279,7 +279,7 @@ void __page_table_check_pte_clear_range(struct mm_struct *mm,
 		return;
 
 	if (!pmd_bad(pmd) && !pmd_leaf(pmd)) {
-		pte_t *ptep = pte_offset_map(&pmd, addr);
+		hw_pte_t *ptep = pte_offset_map(&pmd, addr);
 		unsigned long i;
 
 		if (WARN_ON(!ptep))

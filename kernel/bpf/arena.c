@@ -153,7 +153,7 @@ struct clear_range_data {
 	struct page *scratch_page;
 };
 
-static int apply_range_set_cb(pte_t *pte, unsigned long addr, void *data)
+static int apply_range_set_cb(hw_pte_t *pte, unsigned long addr, void *data)
 {
 	struct apply_range_data *d = data;
 	struct page *page;
@@ -204,7 +204,7 @@ static void flush_vmap_cache(unsigned long start, unsigned long size)
 	flush_cache_vmap(start, start + size);
 }
 
-static int apply_range_clear_cb(pte_t *pte, unsigned long addr, void *data)
+static int apply_range_clear_cb(hw_pte_t *pte, unsigned long addr, void *data)
 {
 	struct clear_range_data *d = data;
 	pte_t old_pte;
@@ -234,7 +234,8 @@ static int apply_range_clear_cb(pte_t *pte, unsigned long addr, void *data)
 	return 0;
 }
 
-static int apply_range_set_scratch_cb(pte_t *pte, unsigned long addr, void *data)
+static int apply_range_set_scratch_cb(hw_pte_t *pte, unsigned long addr,
+				      void *data)
 {
 	struct page *scratch_page = data;
 
@@ -336,7 +337,7 @@ err:
 	return ERR_PTR(err);
 }
 
-static int existing_page_cb(pte_t *ptep, unsigned long addr, void *data)
+static int existing_page_cb(hw_pte_t *ptep, unsigned long addr, void *data)
 {
 	struct bpf_arena *arena = data;
 	struct page *page;

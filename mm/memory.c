@@ -462,7 +462,7 @@ int __pte_alloc(struct mm_struct *mm, pmd_t *pmd)
 
 int __pte_alloc_kernel(pmd_t *pmd)
 {
-	pte_t *new = pte_alloc_one_kernel(&init_mm);
+	hw_pte_t *new = pte_alloc_one_kernel(&init_mm);
 	if (!new)
 		return -ENOMEM;
 
@@ -941,7 +941,7 @@ struct page *vm_normal_page_pud(struct vm_area_struct *vma,
  */
 static void restore_exclusive_pte(struct vm_area_struct *vma,
 		struct folio *folio, struct page *page, unsigned long address,
-		pte_t *ptep, pte_t orig_pte)
+		hw_pte_t *ptep, pte_t orig_pte)
 {
 	pte_t pte;
 
@@ -978,7 +978,7 @@ static void restore_exclusive_pte(struct vm_area_struct *vma,
  * sleeping.
  */
 static int try_restore_exclusive_pte(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, pte_t orig_pte)
+		unsigned long addr, hw_pte_t *ptep, pte_t orig_pte)
 {
 	const softleaf_t entry = softleaf_from_pte(orig_pte);
 	struct page *page = softleaf_to_page(entry);
@@ -1001,7 +1001,7 @@ static int try_restore_exclusive_pte(struct vm_area_struct *vma,
 
 static unsigned long
 copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		pte_t *dst_pte, pte_t *src_pte, struct vm_area_struct *dst_vma,
+		hw_pte_t *dst_pte, hw_pte_t *src_pte, struct vm_area_struct *dst_vma,
 		struct vm_area_struct *src_vma, unsigned long addr, int *rss)
 {
 	vm_flags_t vm_flags = dst_vma->vm_flags;
@@ -1116,7 +1116,7 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
  */
 static inline int
 copy_present_page(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
-		  pte_t *dst_pte, pte_t *src_pte, unsigned long addr, int *rss,
+		  hw_pte_t *dst_pte, hw_pte_t *src_pte, unsigned long addr, int *rss,
 		  struct folio **prealloc, struct page *page)
 {
 	struct folio *new_folio;
@@ -1155,7 +1155,7 @@ copy_present_page(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma
 }
 
 static __always_inline void __copy_present_ptes(struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma, pte_t *dst_pte, pte_t *src_pte,
+		struct vm_area_struct *src_vma, hw_pte_t *dst_pte, hw_pte_t *src_pte,
 		pte_t pte, unsigned long addr, int nr)
 {
 	struct mm_struct *src_mm = src_vma->vm_mm;
@@ -1205,7 +1205,7 @@ static __always_inline void __copy_present_ptes(struct vm_area_struct *dst_vma,
  */
 static inline int
 copy_present_ptes(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
-		 pte_t *dst_pte, pte_t *src_pte, pte_t pte, unsigned long addr,
+		 hw_pte_t *dst_pte, hw_pte_t *src_pte, pte_t pte, unsigned long addr,
 		 int max_nr, int *rss, struct folio **prealloc)
 {
 	fpb_t flags = FPB_MERGE_WRITE;
@@ -1305,8 +1305,8 @@ copy_pte_range(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
 {
 	struct mm_struct *dst_mm = dst_vma->vm_mm;
 	struct mm_struct *src_mm = src_vma->vm_mm;
-	pte_t *orig_src_pte, *orig_dst_pte;
-	pte_t *src_pte, *dst_pte;
+	hw_pte_t *orig_src_pte, *orig_dst_pte;
+	hw_pte_t *src_pte, *dst_pte;
 	pmd_t dummy_pmdval;
 	pte_t ptent;
 	spinlock_t *src_ptl, *dst_ptl;
@@ -1699,7 +1699,7 @@ static inline bool zap_drop_markers(struct zap_details *details)
  * Returns true if uffd-wp PTEs were installed, false otherwise.
  */
 bool cond_install_uffd_wp_ptes(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, pte_t pte,
+		unsigned long addr, hw_pte_t *ptep, pte_t pte,
 		unsigned long nr_ptes)
 {
 	bool arm_uffd_pte = false;
@@ -1753,7 +1753,7 @@ bool cond_install_uffd_wp_ptes(struct vm_area_struct *vma,
  */
 static inline bool
 zap_install_uffd_wp_if_needed(struct vm_area_struct *vma,
-			      unsigned long addr, pte_t *pte, int nr,
+			      unsigned long addr, hw_pte_t *pte, int nr,
 			      struct zap_details *details, pte_t pteval)
 {
 	if (zap_drop_markers(details))
@@ -1764,7 +1764,7 @@ zap_install_uffd_wp_if_needed(struct vm_area_struct *vma,
 
 static __always_inline void zap_present_folio_ptes(struct mmu_gather *tlb,
 		struct vm_area_struct *vma, struct folio *folio,
-		struct page *page, pte_t *pte, pte_t ptent, unsigned int nr,
+		struct page *page, hw_pte_t *pte, pte_t ptent, unsigned int nr,
 		unsigned long addr, struct zap_details *details, int *rss,
 		bool *force_flush, bool *force_break, bool *any_skipped)
 {
@@ -1814,7 +1814,7 @@ static __always_inline void zap_present_folio_ptes(struct mmu_gather *tlb,
  * Returns the number of processed (skipped or zapped) PTEs (at least 1).
  */
 static inline int zap_present_ptes(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, pte_t *pte, pte_t ptent,
+		struct vm_area_struct *vma, hw_pte_t *pte, pte_t ptent,
 		unsigned int max_nr, unsigned long addr,
 		struct zap_details *details, int *rss, bool *force_flush,
 		bool *force_break, bool *any_skipped)
@@ -1860,7 +1860,7 @@ static inline int zap_present_ptes(struct mmu_gather *tlb,
 }
 
 static inline int zap_nonpresent_ptes(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, pte_t *pte, pte_t ptent,
+		struct vm_area_struct *vma, hw_pte_t *pte, pte_t ptent,
 		unsigned int max_nr, unsigned long addr,
 		struct zap_details *details, int *rss, bool *any_skipped)
 {
@@ -1931,7 +1931,7 @@ static inline int zap_nonpresent_ptes(struct mmu_gather *tlb,
 }
 
 static inline int do_zap_pte_range(struct mmu_gather *tlb,
-				   struct vm_area_struct *vma, pte_t *pte,
+				   struct vm_area_struct *vma, hw_pte_t *pte,
 				   unsigned long addr, unsigned long end,
 				   struct zap_details *details, int *rss,
 				   bool *force_flush, bool *force_break,
@@ -1994,7 +1994,7 @@ static bool zap_pte_table_if_empty(struct mm_struct *mm, pmd_t *pmd,
 		unsigned long addr, pmd_t *pmdval)
 {
 	spinlock_t *pml, *ptl = NULL;
-	pte_t *start_pte, *pte;
+	hw_pte_t *start_pte, *pte;
 	int i;
 
 	pml = pmd_lock(mm, pmd);
@@ -2034,8 +2034,8 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	struct mm_struct *mm = tlb->mm;
 	int rss[NR_MM_COUNTERS];
 	spinlock_t *ptl;
-	pte_t *start_pte;
-	pte_t *pte;
+	hw_pte_t *start_pte;
+	hw_pte_t *pte;
 	pmd_t pmdval;
 	unsigned long start = addr;
 	bool direct_reclaim = true;
@@ -2417,7 +2417,7 @@ static pmd_t *walk_to_pmd(struct mm_struct *mm, unsigned long addr)
 	return pmd;
 }
 
-pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
+hw_pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
 		      spinlock_t **ptl)
 {
 	pmd_t *pmd = walk_to_pmd(mm, addr);
@@ -2475,7 +2475,7 @@ static int validate_page_before_insert(struct vm_area_struct *vma,
 	return 0;
 }
 
-static int insert_page_into_pte_locked(struct vm_area_struct *vma, pte_t *pte,
+static int insert_page_into_pte_locked(struct vm_area_struct *vma, hw_pte_t *pte,
 				unsigned long addr, struct page *page,
 				pgprot_t prot, bool mkwrite)
 {
@@ -2520,7 +2520,7 @@ static int insert_page(struct vm_area_struct *vma, unsigned long addr,
 			struct page *page, pgprot_t prot, bool mkwrite)
 {
 	int retval;
-	pte_t *pte;
+	hw_pte_t *pte;
 	spinlock_t *ptl;
 
 	retval = validate_page_before_insert(vma, page);
@@ -2537,7 +2537,7 @@ out:
 	return retval;
 }
 
-static int insert_page_in_batch_locked(struct vm_area_struct *vma, pte_t *pte,
+static int insert_page_in_batch_locked(struct vm_area_struct *vma, hw_pte_t *pte,
 			unsigned long addr, struct page *page, pgprot_t prot)
 {
 	int err;
@@ -2555,7 +2555,7 @@ static int insert_pages(struct vm_area_struct *vma, unsigned long addr,
 			struct page **pages, unsigned long *num, pgprot_t prot)
 {
 	pmd_t *pmd = NULL;
-	pte_t *start_pte, *pte;
+	hw_pte_t *start_pte, *pte;
 	spinlock_t *pte_lock;
 	struct mm_struct *const mm = vma->vm_mm;
 	unsigned long curr_page_idx = 0;
@@ -2798,7 +2798,8 @@ static vm_fault_t insert_pfn(struct vm_area_struct *vma, unsigned long addr,
 			unsigned long pfn, pgprot_t prot, bool mkwrite)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	pte_t *pte, entry;
+	hw_pte_t *pte;
+	pte_t entry;
 	spinlock_t *ptl;
 
 	pte = get_locked_pte(mm, addr, &ptl);
@@ -3039,7 +3040,7 @@ static int remap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			unsigned long addr, unsigned long end,
 			unsigned long pfn, pgprot_t prot)
 {
-	pte_t *pte, *mapped_pte;
+	hw_pte_t *pte, *mapped_pte;
 	spinlock_t *ptl;
 	int err = 0;
 
@@ -3440,7 +3441,7 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 				     pte_fn_t fn, void *data, bool create,
 				     pgtbl_mod_mask *mask)
 {
-	pte_t *pte, *mapped_pte;
+	hw_pte_t *pte, *mapped_pte;
 	int err = 0;
 	spinlock_t *ptl;
 
@@ -4743,7 +4744,7 @@ static vm_fault_t handle_pte_marker(struct vm_fault *vmf)
 /*
  * Check if the PTEs within a range are contiguous swap entries.
  */
-static bool can_swapin_thp(struct vm_fault *vmf, pte_t *ptep, int nr_pages)
+static bool can_swapin_thp(struct vm_fault *vmf, hw_pte_t *ptep, int nr_pages)
 {
 	unsigned long addr;
 	int idx;
@@ -4795,7 +4796,7 @@ static unsigned long thp_swapin_suitable_orders(struct vm_fault *vmf)
 	unsigned long addr;
 	softleaf_t entry;
 	spinlock_t *ptl;
-	pte_t *pte;
+	hw_pte_t *pte;
 	int order;
 
 	/*
@@ -4957,7 +4958,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	int nr_pages;
 	unsigned long page_idx;
 	unsigned long address;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	if (!pte_unmap_same(vmf))
 		goto out;
@@ -5071,7 +5072,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		unsigned long idx = folio_page_idx(folio, page);
 		unsigned long folio_start = address - idx * PAGE_SIZE;
 		unsigned long folio_end = folio_start + nr * PAGE_SIZE;
-		pte_t *folio_ptep;
+		hw_pte_t *folio_ptep;
 		pte_t folio_pte;
 
 		if (unlikely(folio_start < max(address & PMD_MASK, vma->vm_start)))
@@ -5301,7 +5302,7 @@ out_release:
 	return ret;
 }
 
-static bool pte_range_none(pte_t *pte, int nr_pages)
+static bool pte_range_none(hw_pte_t *pte, int nr_pages)
 {
 	int i;
 
@@ -5320,7 +5321,7 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 	unsigned long orders;
 	struct folio *folio;
 	unsigned long addr;
-	pte_t *pte;
+	hw_pte_t *pte;
 	gfp_t gfp;
 	int order;
 
@@ -5402,7 +5403,7 @@ fallback:
 	return folio_prealloc(vma->vm_mm, vma, vmf->address, true);
 }
 
-void map_anon_folio_pte_nopf(struct folio *folio, pte_t *pte,
+void map_anon_folio_pte_nopf(struct folio *folio, hw_pte_t *pte,
 		struct vm_area_struct *vma, unsigned long addr,
 		bool uffd_wp)
 {
@@ -5423,7 +5424,7 @@ void map_anon_folio_pte_nopf(struct folio *folio, pte_t *pte,
 	update_mmu_cache_range(NULL, vma, addr, pte, nr_pages);
 }
 
-static void map_anon_folio_pte_pf(struct folio *folio, pte_t *pte,
+static void map_anon_folio_pte_pf(struct folio *folio, hw_pte_t *pte,
 		struct vm_area_struct *vma, unsigned long addr, bool uffd_wp)
 {
 	const unsigned int order = folio_order(folio);
@@ -6208,7 +6209,7 @@ int numa_migrate_check(struct folio *folio, struct vm_fault *vmf,
 }
 
 static void numa_rebuild_single_mapping(struct vm_fault *vmf, struct vm_area_struct *vma,
-					unsigned long fault_addr, pte_t *fault_pte,
+					unsigned long fault_addr, hw_pte_t *fault_pte,
 					bool writable)
 {
 	pte_t pte, old_pte;
@@ -6230,7 +6231,7 @@ static void numa_rebuild_large_mapping(struct vm_fault *vmf, struct vm_area_stru
 	unsigned long start, end, addr = vmf->address;
 	unsigned long addr_start = addr - (nr << PAGE_SHIFT);
 	unsigned long pt_start = ALIGN_DOWN(addr, PMD_SIZE);
-	pte_t *start_ptep;
+	hw_pte_t *start_ptep;
 
 	/* Stay within the VMA and within the page table. */
 	start = max3(addr_start, pt_start, vma->vm_start);
@@ -6992,7 +6993,7 @@ int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 #endif /* __PAGETABLE_PMD_FOLDED */
 
 static inline void pfnmap_args_setup(struct follow_pfnmap_args *args,
-				     spinlock_t *lock, pte_t *ptep,
+				     spinlock_t *lock, hw_pte_t *ptep,
 				     pgprot_t pgprot, unsigned long pfn_base,
 				     unsigned long addr_mask, bool writable,
 				     bool special)
@@ -7061,7 +7062,8 @@ int follow_pfnmap_start(struct follow_pfnmap_args *args)
 	p4d_t *p4dp, p4d;
 	pud_t *pudp, pud;
 	pmd_t *pmdp, pmd;
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 
 	pfnmap_lockdep_assert(vma);
 

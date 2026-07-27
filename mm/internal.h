@@ -278,7 +278,7 @@ void unmap_vmas(struct mmu_gather *tlb, struct unmap_desc *unmap);
 #ifdef CONFIG_MMU
 
 bool cond_install_uffd_wp_ptes(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, pte_t pte,
+		unsigned long addr, hw_pte_t *ptep, pte_t pte,
 		unsigned long nr_ptes);
 
 static inline void get_anon_vma(struct anon_vma *anon_vma)
@@ -414,7 +414,7 @@ static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
  * Return: the number of table entries in the batch.
  */
 static inline unsigned int folio_pte_batch_flags(struct folio *folio,
-		struct vm_area_struct *vma, pte_t *ptep, pte_t *ptentp,
+		struct vm_area_struct *vma, hw_pte_t *ptep, pte_t *ptentp,
 		unsigned int max_nr, fpb_t flags)
 {
 	bool any_writable = false, any_young = false, any_dirty = false;
@@ -468,7 +468,7 @@ static inline unsigned int folio_pte_batch_flags(struct folio *folio,
 	return min(nr, max_nr);
 }
 
-unsigned int folio_pte_batch(struct folio *folio, pte_t *ptep, pte_t pte,
+unsigned int folio_pte_batch(struct folio *folio, hw_pte_t *ptep, pte_t pte,
 		unsigned int max_nr);
 
 /**
@@ -525,11 +525,11 @@ static inline pte_t pte_next_swp_offset(pte_t pte)
  *
  * Return: the number of table entries in the batch.
  */
-static inline int swap_pte_batch(pte_t *start_ptep, int max_nr, pte_t pte)
+static inline int swap_pte_batch(hw_pte_t *start_ptep, int max_nr, pte_t pte)
 {
 	pte_t expected_pte = pte_next_swp_offset(pte);
-	const pte_t *end_ptep = start_ptep + max_nr;
-	pte_t *ptep = start_ptep + 1;
+	const hw_pte_t *end_ptep = start_ptep + max_nr;
+	hw_pte_t *ptep = start_ptep + 1;
 
 	VM_WARN_ON(max_nr < 1);
 	VM_WARN_ON(!softleaf_is_swap(softleaf_from_pte(pte)));
@@ -1569,7 +1569,7 @@ static inline void maybe_rmap_unlock_action(struct vm_area_struct *vma,
 
 #ifdef CONFIG_MMU_NOTIFIER
 static inline bool clear_flush_young_ptes_notify(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, unsigned int nr)
+		unsigned long addr, hw_pte_t *ptep, unsigned int nr)
 {
 	bool young;
 
@@ -1590,7 +1590,7 @@ static inline bool pmdp_clear_flush_young_notify(struct vm_area_struct *vma,
 }
 
 static inline bool test_and_clear_young_ptes_notify(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep, unsigned int nr)
+		unsigned long addr, hw_pte_t *ptep, unsigned int nr)
 {
 	bool young;
 

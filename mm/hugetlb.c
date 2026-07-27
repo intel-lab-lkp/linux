@@ -120,7 +120,7 @@ static void hugetlb_vma_lock_free(struct vm_area_struct *vma);
 static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma);
 static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma);
 static int __huge_pmd_unshare(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+		struct vm_area_struct *vma, unsigned long addr, hw_pte_t *ptep,
 		bool check_locks);
 static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
 		unsigned long start, unsigned long end, bool take_locks);
@@ -4864,7 +4864,7 @@ static pte_t make_huge_pte(struct vm_area_struct *vma, struct folio *folio,
 }
 
 static void set_huge_ptep_writable(struct vm_area_struct *vma,
-				   unsigned long address, pte_t *ptep)
+				   unsigned long address, hw_pte_t *ptep)
 {
 	pte_t entry;
 
@@ -4874,14 +4874,14 @@ static void set_huge_ptep_writable(struct vm_area_struct *vma,
 }
 
 static void set_huge_ptep_maybe_writable(struct vm_area_struct *vma,
-					 unsigned long address, pte_t *ptep)
+					 unsigned long address, hw_pte_t *ptep)
 {
 	if (vma->vm_flags & VM_WRITE)
 		set_huge_ptep_writable(vma, address, ptep);
 }
 
 static void
-hugetlb_install_folio(struct vm_area_struct *vma, pte_t *ptep, unsigned long addr,
+hugetlb_install_folio(struct vm_area_struct *vma, hw_pte_t *ptep, unsigned long addr,
 		      struct folio *new_folio, pte_t old, unsigned long sz)
 {
 	pte_t newpte = make_huge_pte(vma, new_folio, true);
@@ -4907,7 +4907,8 @@ int copy_hugetlb_page_range(struct mm_struct *dst, struct mm_struct *src,
 			    struct vm_area_struct *dst_vma,
 			    struct vm_area_struct *src_vma)
 {
-	pte_t *src_pte, *dst_pte, entry;
+	hw_pte_t *src_pte, *dst_pte;
+	pte_t entry;
 	struct folio *pte_folio;
 	unsigned long addr;
 	bool cow = is_cow_mapping(src_vma->vm_flags);
@@ -5099,7 +5100,8 @@ next:
 }
 
 static void move_huge_pte(struct vm_area_struct *vma, unsigned long old_addr,
-			  unsigned long new_addr, pte_t *src_pte, pte_t *dst_pte,
+			  unsigned long new_addr, hw_pte_t *src_pte,
+			  hw_pte_t *dst_pte,
 			  unsigned long sz)
 {
 	bool need_clear_uffd_wp = vma_has_uffd_without_event_remap(vma);
@@ -5161,7 +5163,7 @@ int move_hugetlb_page_tables(struct vm_area_struct *vma,
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long old_end = old_addr + len;
 	unsigned long last_addr_mask;
-	pte_t *src_pte, *dst_pte;
+	hw_pte_t *src_pte, *dst_pte;
 	struct mmu_notifier_range range;
 	struct mmu_gather tlb;
 
@@ -5222,7 +5224,7 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	struct mm_struct *mm = vma->vm_mm;
 	const bool folio_provided = !!folio;
 	unsigned long address;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pte_t pte;
 	spinlock_t *ptl;
 	struct hstate *h = hstate_vma(vma);
@@ -5752,7 +5754,7 @@ static inline vm_fault_t hugetlb_handle_userfault(struct vm_fault *vmf,
  * false if pte changed or is changing.
  */
 static bool hugetlb_pte_stable(struct hstate *h, struct mm_struct *mm, unsigned long addr,
-			       pte_t *ptep, pte_t old_pte)
+			       hw_pte_t *ptep, pte_t old_pte)
 {
 	spinlock_t *ptl;
 	bool same;
@@ -6277,7 +6279,7 @@ static struct folio *alloc_hugetlb_folio_vma(struct hstate *h,
  * Used by userfaultfd UFFDIO_* ioctls. Based on userfaultfd's mfill_atomic_pte
  * with modifications for hugetlb pages.
  */
-int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
+int hugetlb_mfill_atomic_pte(hw_pte_t *dst_pte,
 			     struct vm_area_struct *dst_vma,
 			     unsigned long dst_addr,
 			     unsigned long src_addr,
@@ -6336,7 +6338,7 @@ int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
 
 		folio = alloc_hugetlb_folio(dst_vma, dst_addr, false);
 		if (IS_ERR(folio)) {
-			pte_t *actual_pte = hugetlb_walk(dst_vma, dst_addr, PMD_SIZE);
+			hw_pte_t *actual_pte = hugetlb_walk(dst_vma, dst_addr, PMD_SIZE);
 			if (actual_pte) {
 				ret = -EEXIST;
 				goto out;
@@ -6504,7 +6506,7 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long start = address;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pte_t pte;
 	struct hstate *h = hstate_vma(vma);
 	long pages = 0, psize = huge_page_size(h);
@@ -6989,15 +6991,15 @@ void adjust_range_if_pmd_sharing_possible(struct vm_area_struct *vma,
  * racing tasks could either miss the sharing (see huge_pte_offset) or select a
  * bad pmd for sharing.
  */
-pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
+hw_pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
 		      unsigned long addr, pud_t *pud)
 {
 	struct address_space *mapping = vma->vm_file->f_mapping;
 	const pgoff_t idx = linear_page_index(vma, addr);
 	struct vm_area_struct *svma;
 	unsigned long saddr;
-	pte_t *spte = NULL;
-	pte_t *pte;
+	hw_pte_t *spte = NULL;
+	hw_pte_t *pte;
 
 	i_mmap_lock_read(mapping);
 	mapping_rmap_tree_foreach(svma, mapping, idx, idx) {
@@ -7028,13 +7030,13 @@ pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
 	}
 	spin_unlock(&mm->page_table_lock);
 out:
-	pte = (pte_t *)pmd_alloc(mm, pud, addr);
+	pte = (hw_pte_t *)pmd_alloc(mm, pud, addr);
 	i_mmap_unlock_read(mapping);
 	return pte;
 }
 
 static int __huge_pmd_unshare(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+		struct vm_area_struct *vma, unsigned long addr, hw_pte_t *ptep,
 		bool check_locks)
 {
 	unsigned long sz = huge_page_size(hstate_vma(vma));
@@ -7075,7 +7077,7 @@ static int __huge_pmd_unshare(struct mmu_gather *tlb,
  *	    was not a shared PMD table.
  */
 int huge_pmd_unshare(struct mmu_gather *tlb, struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep)
+		unsigned long addr, hw_pte_t *ptep)
 {
 	return __huge_pmd_unshare(tlb, vma, addr, ptep, /*check_locks=*/true);
 }
@@ -7105,21 +7107,21 @@ void huge_pmd_unshare_flush(struct mmu_gather *tlb, struct vm_area_struct *vma)
 
 #else /* !CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING */
 
-pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
+hw_pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
 		      unsigned long addr, pud_t *pud)
 {
 	return NULL;
 }
 
 static int __huge_pmd_unshare(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+		struct vm_area_struct *vma, unsigned long addr, hw_pte_t *ptep,
 		bool check_locks)
 {
 	return 0;
 }
 
 int huge_pmd_unshare(struct mmu_gather *tlb, struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep)
+		unsigned long addr, hw_pte_t *ptep)
 {
 	return 0;
 }
@@ -7140,13 +7142,13 @@ bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
 #endif /* CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING */
 
 #ifdef CONFIG_ARCH_WANT_GENERAL_HUGETLB
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+hw_pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 			unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgd;
 	p4d_t *p4d;
 	pud_t *pud;
-	pte_t *pte = NULL;
+	hw_pte_t *pte = NULL;
 
 	pgd = pgd_offset(mm, addr);
 	p4d = p4d_alloc(mm, pgd, addr);
@@ -7155,13 +7157,13 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 	pud = pud_alloc(mm, p4d, addr);
 	if (pud) {
 		if (sz == PUD_SIZE) {
-			pte = (pte_t *)pud;
+			pte = (hw_pte_t *)pud;
 		} else {
 			BUG_ON(sz != PMD_SIZE);
 			if (want_pmd_share(vma, addr) && pud_none(*pud))
 				pte = huge_pmd_share(mm, vma, addr, pud);
 			else
-				pte = (pte_t *)pmd_alloc(mm, pud, addr);
+				pte = (hw_pte_t *)pmd_alloc(mm, pud, addr);
 		}
 	}
 
@@ -7183,7 +7185,7 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
  * size @sz doesn't match the hugepage size at this level of the page
  * table.
  */
-pte_t *huge_pte_offset(struct mm_struct *mm,
+hw_pte_t *huge_pte_offset(struct mm_struct *mm,
 		       unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgd;
@@ -7201,14 +7203,14 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 	pud = pud_offset(p4d, addr);
 	if (sz == PUD_SIZE)
 		/* must be pud huge, non-present or none */
-		return (pte_t *)pud;
+		return (hw_pte_t *)pud;
 	if (!pud_present(*pud))
 		return NULL;
 	/* must have a valid entry and size to go further */
 
 	pmd = pmd_offset(pud, addr);
 	/* must be pmd huge, non-present or none */
-	return (pte_t *)pmd;
+	return (hw_pte_t *)pmd;
 }
 
 /*
@@ -7387,7 +7389,7 @@ static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
 	struct mmu_gather tlb;
 	unsigned long address;
 	spinlock_t *ptl;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	if (!(vma->vm_flags & VM_MAYSHARE))
 		return;

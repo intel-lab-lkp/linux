@@ -176,7 +176,7 @@ static pte_t move_soft_dirty_pte(pte_t pte)
 }
 
 static int mremap_folio_pte_batch(struct vm_area_struct *vma, unsigned long addr,
-		pte_t *ptep, pte_t pte, int max_nr)
+		hw_pte_t *ptep, pte_t pte, int max_nr)
 {
 	struct folio *folio;
 
@@ -200,7 +200,7 @@ static int move_ptes(struct pagetable_move_control *pmc,
 	struct vm_area_struct *vma = pmc->old;
 	bool need_clear_uffd_wp = vma_has_uffd_without_event_remap(vma);
 	struct mm_struct *mm = vma->vm_mm;
-	pte_t *old_ptep, *new_ptep;
+	hw_pte_t *old_ptep, *new_ptep;
 	pte_t old_pte, pte;
 	pmd_t dummy_pmdval;
 	spinlock_t *old_ptl, *new_ptl;

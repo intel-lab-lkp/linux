@@ -761,7 +761,7 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 #endif	/* CONFIG_PGTABLE_HAS_HUGE_LEAVES */
 
 static int follow_pfn_pte(struct vm_area_struct *vma, unsigned long address,
-		pte_t *pte, unsigned int flags)
+		hw_pte_t *pte, unsigned int flags)
 {
 	if (flags & FOLL_TOUCH) {
 		pte_t orig_entry = ptep_get(pte);
@@ -806,7 +806,8 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 	struct folio *folio;
 	struct page *page;
 	spinlock_t *ptl;
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 	int ret;
 
 	ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
@@ -1035,7 +1036,7 @@ static int get_gate_page(struct mm_struct *mm, unsigned long address,
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 	pte_t entry;
 	int ret = -EFAULT;
 
@@ -2843,7 +2844,7 @@ static int gup_fast_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 		int *nr)
 {
 	int ret = 0;
-	pte_t *ptep, *ptem;
+	hw_pte_t *ptep, *ptem;
 
 	ptem = ptep = pte_offset_map(&pmd, addr);
 	if (!ptep)

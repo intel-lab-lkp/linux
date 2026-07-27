@@ -917,7 +917,8 @@ static struct folio *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 	struct swap_io_ctx ctx = {};
 	struct blk_plug plug;
 	struct folio *folio;
-	pte_t *pte = NULL, pentry;
+	hw_pte_t *pte = NULL;
+	pte_t pentry;
 	int win;
 	unsigned long start, end, addr;
 	pgoff_t ilx = targ_ilx;

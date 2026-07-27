@@ -361,13 +361,13 @@ static int mfill_atomic_install_pte(pmd_t *dst_pmd,
 {
 	int ret;
 	struct mm_struct *dst_mm = dst_vma->vm_mm;
-	pte_t _dst_pte, *dst_pte;
+	hw_pte_t *dst_pte;
 	bool writable = dst_vma->vm_flags & VM_WRITE;
 	bool vm_shared = dst_vma->vm_flags & VM_SHARED;
 	spinlock_t *ptl;
 	struct folio *folio = page_folio(page);
 	bool page_in_cache = folio_mapping(folio);
-	pte_t dst_ptep;
+	pte_t _dst_pte, dst_ptep;
 
 	_dst_pte = mk_pte(page, dst_vma->vm_page_prot);
 	_dst_pte = pte_mkdirty(_dst_pte);
@@ -656,7 +656,8 @@ static int mfill_atomic_pte_zeropage(struct mfill_state *state)
 	struct vm_area_struct *dst_vma = state->vma;
 	unsigned long dst_addr = state->dst_addr;
 	pmd_t *dst_pmd = state->pmd;
-	pte_t _dst_pte, *dst_pte;
+	hw_pte_t *dst_pte;
+	pte_t _dst_pte;
 	spinlock_t *ptl;
 	int ret;
 
@@ -737,7 +738,8 @@ static int mfill_atomic_pte_poison(struct mfill_state *state)
 	struct mm_struct *dst_mm = dst_vma->vm_mm;
 	unsigned long dst_addr = state->dst_addr;
 	pmd_t *dst_pmd = state->pmd;
-	pte_t _dst_pte, *dst_pte;
+	hw_pte_t *dst_pte;
+	pte_t _dst_pte;
 	spinlock_t *ptl;
 	int ret;
 
@@ -784,7 +786,7 @@ static __always_inline ssize_t mfill_atomic_hugetlb(
 {
 	struct mm_struct *dst_mm = dst_vma->vm_mm;
 	ssize_t err;
-	pte_t *dst_pte;
+	hw_pte_t *dst_pte;
 	unsigned long src_addr, dst_addr;
 	long copied;
 	struct folio *folio;
@@ -1261,7 +1263,7 @@ void double_pt_unlock(spinlock_t *ptl1,
 		__release(ptl2);
 }
 
-static inline bool is_pte_pages_stable(pte_t *dst_pte, pte_t *src_pte,
+static inline bool is_pte_pages_stable(hw_pte_t *dst_pte, hw_pte_t *src_pte,
 				       pte_t orig_dst_pte, pte_t orig_src_pte,
 				       pmd_t *dst_pmd, pmd_t dst_pmdval)
 {
@@ -1279,7 +1281,8 @@ static inline bool is_pte_pages_stable(pte_t *dst_pte, pte_t *src_pte,
  */
 static struct folio *check_ptes_for_batched_move(struct vm_area_struct *src_vma,
 						 unsigned long src_addr,
-						 pte_t *src_pte, pte_t *dst_pte)
+						 hw_pte_t *src_pte,
+						 hw_pte_t *dst_pte)
 {
 	pte_t orig_dst_pte, orig_src_pte;
 	struct folio *folio;
@@ -1310,7 +1313,7 @@ static long move_present_ptes(struct mm_struct *mm,
 			      struct vm_area_struct *dst_vma,
 			      struct vm_area_struct *src_vma,
 			      unsigned long dst_addr, unsigned long src_addr,
-			      pte_t *dst_pte, pte_t *src_pte,
+			      hw_pte_t *dst_pte, hw_pte_t *src_pte,
 			      pte_t orig_dst_pte, pte_t orig_src_pte,
 			      pmd_t *dst_pmd, pmd_t dst_pmdval,
 			      spinlock_t *dst_ptl, spinlock_t *src_ptl,
@@ -1398,7 +1401,7 @@ out:
 
 static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
 			 unsigned long dst_addr, unsigned long src_addr,
-			 pte_t *dst_pte, pte_t *src_pte,
+			 hw_pte_t *dst_pte, hw_pte_t *src_pte,
 			 pte_t orig_dst_pte, pte_t orig_src_pte,
 			 pmd_t *dst_pmd, pmd_t dst_pmdval,
 			 spinlock_t *dst_ptl, spinlock_t *src_ptl,
@@ -1464,7 +1467,7 @@ static int move_zeropage_pte(struct mm_struct *mm,
 			     struct vm_area_struct *dst_vma,
 			     struct vm_area_struct *src_vma,
 			     unsigned long dst_addr, unsigned long src_addr,
-			     pte_t *dst_pte, pte_t *src_pte,
+			     hw_pte_t *dst_pte, hw_pte_t *src_pte,
 			     pte_t orig_dst_pte, pte_t orig_src_pte,
 			     pmd_t *dst_pmd, pmd_t dst_pmdval,
 			     spinlock_t *dst_ptl, spinlock_t *src_ptl)
@@ -1510,8 +1513,8 @@ static long move_pages_ptes(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd
 	pte_t orig_src_pte, orig_dst_pte;
 	pte_t src_folio_pte;
 	spinlock_t *src_ptl, *dst_ptl;
-	pte_t *src_pte = NULL;
-	pte_t *dst_pte = NULL;
+	hw_pte_t *src_pte = NULL;
+	hw_pte_t *dst_pte = NULL;
 	pmd_t dummy_pmdval;
 	pmd_t dst_pmdval;
 	struct folio *src_folio = NULL;
@@ -2658,7 +2661,8 @@ static inline bool userfaultfd_huge_must_wait(struct userfaultfd_ctx *ctx,
 					      unsigned long reason)
 {
 	struct vm_area_struct *vma = vmf->vma;
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 
 	assert_fault_locked(vmf);
 
@@ -2731,7 +2735,7 @@ static inline bool userfaultfd_must_wait(struct userfaultfd_ctx *ctx,
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd, _pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 	pte_t ptent;
 	bool ret;
 

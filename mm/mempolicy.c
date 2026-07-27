@@ -691,7 +691,7 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 	struct folio *folio;
 	struct queue_pages *qp = walk->private;
 	unsigned long flags = qp->flags;
-	pte_t *pte, *mapped_pte;
+	hw_pte_t *pte, *mapped_pte;
 	pte_t ptent;
 	spinlock_t *ptl;
 	int max_nr, nr;
@@ -771,7 +771,7 @@ out:
 	return 0;
 }
 
-static int queue_folios_hugetlb(pte_t *pte, unsigned long hmask,
+static int queue_folios_hugetlb(hw_pte_t *pte, unsigned long hmask,
 			       unsigned long addr, unsigned long end,
 			       struct mm_walk *walk)
 {

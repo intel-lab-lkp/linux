@@ -342,7 +342,7 @@ static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 	pte_t ptent;
 
 	VM_BUG_ON_VMA(address == -EFAULT, vma);
@@ -742,7 +742,7 @@ static int hwpoison_pte_range(pmd_t *pmdp, unsigned long addr,
 {
 	struct hwpoison_walk *hwp = walk->private;
 	int ret = 0;
-	pte_t *ptep, *mapped_pte;
+	hw_pte_t *ptep, *mapped_pte;
 	spinlock_t *ptl;
 
 	ptl = pmd_trans_huge_lock(pmdp, walk->vma);
@@ -770,7 +770,7 @@ out:
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-static int hwpoison_hugetlb_range(pte_t *ptep, unsigned long hmask,
+static int hwpoison_hugetlb_range(hw_pte_t *ptep, unsigned long hmask,
 			    unsigned long addr, unsigned long end,
 			    struct mm_walk *walk)
 {

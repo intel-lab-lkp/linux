@@ -3539,7 +3539,7 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 {
 	int i;
 	bool dirty;
-	pte_t *pte;
+	hw_pte_t *pte;
 	spinlock_t *ptl;
 	unsigned long addr;
 	int total = 0;
@@ -3572,7 +3572,7 @@ restart:
 	for (i = pte_index(start), addr = start; addr != end; i += nr, addr += nr * PAGE_SIZE) {
 		unsigned long pfn;
 		struct folio *folio;
-		pte_t *cur_pte = pte + i;
+		hw_pte_t *cur_pte = pte + i;
 		pte_t ptent = ptep_get(cur_pte);
 
 		nr = 1;
@@ -4261,7 +4261,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 	struct lru_gen_mm_walk *walk;
 	struct folio *last = NULL;
 	int young = 1;
-	pte_t *pte = pvmw->pte;
+	hw_pte_t *pte = pvmw->pte;
 	unsigned long addr = pvmw->address;
 	struct vm_area_struct *vma = pvmw->vma;
 	struct folio *folio = pfn_folio(pvmw->pfn);
