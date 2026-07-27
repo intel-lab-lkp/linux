@@ -113,18 +113,18 @@ nc_register_read(struct usbnet *dev, u8 regnum, u16 *retval_ptr)
 	return nc_vendor_read(dev, REQUEST_REGISTER, regnum, retval_ptr);
 }
 
-static void
+static int
 nc_vendor_write(struct usbnet *dev, u8 req, u8 regnum, u16 value)
 {
-	usbnet_write_cmd(dev, req,
-			 USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
-			 value, regnum, NULL, 0);
+	return usbnet_write_cmd(dev, req,
+				USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
+				value, regnum, NULL, 0);
 }
 
-static inline void
+static inline int
 nc_register_write(struct usbnet *dev, u8 regnum, u16 value)
 {
-	nc_vendor_write(dev, REQUEST_REGISTER, regnum, value);
+	return nc_vendor_write(dev, REQUEST_REGISTER, regnum, value);
 }
 
 
