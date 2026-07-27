@@ -3153,6 +3153,12 @@ static int ext4_setup_super(struct super_block *sb, struct ext4_super_block *es,
 		ext4_msg(sb, KERN_WARNING,
 			 "warning: checktime reached, "
 			 "running e2fsck is recommended");
+	if (ext4_has_feature_inline_data(sb))
+		ext4_msg(sb, KERN_WARNING,
+			 "warning: inline_data feature is deprecated and "
+			 "will be removed in a future kernel release. "
+			 "Use 'tune2fs -O ^inline_data' to convert.");
+
 	if (!sbi->s_journal)
 		es->s_state &= cpu_to_le16(~EXT4_VALID_FS);
 	if (!(__s16) le16_to_cpu(es->s_max_mnt_count))
