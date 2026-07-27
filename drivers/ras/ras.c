@@ -12,35 +12,6 @@
 
 #if IS_ENABLED(CONFIG_AMD_ATL)
 /*
- * Once set, this function pointer should never be unset.
- *
- * The library module will set this pointer if it successfully loads. The module
- * should not be unloaded except for testing and debug purposes.
- */
-static unsigned long (*amd_atl_umc_na_to_spa)(struct atl_err *err);
-
-void amd_atl_register_decoder(unsigned long (*f)(struct atl_err *))
-{
-	amd_atl_umc_na_to_spa = f;
-}
-EXPORT_SYMBOL_GPL(amd_atl_register_decoder);
-
-void amd_atl_unregister_decoder(void)
-{
-	amd_atl_umc_na_to_spa = NULL;
-}
-EXPORT_SYMBOL_GPL(amd_atl_unregister_decoder);
-
-unsigned long amd_convert_umc_mca_addr_to_sys_addr(struct atl_err *err)
-{
-	if (!amd_atl_umc_na_to_spa)
-		return -EINVAL;
-
-	return amd_atl_umc_na_to_spa(err);
-}
-EXPORT_SYMBOL_GPL(amd_convert_umc_mca_addr_to_sys_addr);
-
-/*
  * Set by the library module when it loads. Left registered while the module is
  * resident; consumers keep no direct dependency on the library, so translation
  * is simply skipped when it is not loaded.
