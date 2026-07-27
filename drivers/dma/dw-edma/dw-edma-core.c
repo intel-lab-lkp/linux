@@ -302,6 +302,14 @@ static bool dw_edma_core_enable_ll_irq(struct dw_edma_desc *desc, u32 i,
 	return (chan->ll_head + 1) % DW_EDMA_LL_PROGRESS_INTERVAL == 0;
 }
 
+static bool dw_edma_ll_recoverable_pending(struct dw_edma_chan *chan,
+					   enum dma_status ch_status)
+{
+	return chan->request == EDMA_REQ_NONE &&
+	       chan->status != EDMA_ST_PAUSE &&
+	       dw_edma_ll_pending(chan) && ch_status == DMA_COMPLETE;
+}
+
 static void dw_edma_core_ll_start(struct dw_edma_desc *desc)
 {
 	struct dw_edma_chan *chan = desc->chan;
@@ -919,6 +927,38 @@ dw_edma_device_tx_status(struct dma_chan *dchan, dma_cookie_t cookie,
 	if (ret == DMA_COMPLETE)
 		return ret;
 
+	if (!chan->non_ll) {
+		scoped_guard(spinlock_irqsave, &chan->vc.lock) {
+			struct dw_edma_ll_snapshot snapshot;
+			enum dma_status ch_status;
+
+			ch_status = dw_edma_core_ch_status(chan);
+
+			/*
+			 * Do not treat raw DMA_LLP polling as normal progress here. Only
+			 * recycle progress recorded by the IRQ pass that consumed the
+			 * status event.
+			 */
+			if (chan->request == EDMA_REQ_NONE &&
+			    chan->status != EDMA_ST_PAUSE &&
+			    ch_status == DMA_COMPLETE &&
+			    dw_edma_ll_snapshot_take(chan, &snapshot) &&
+			    dw_edma_ll_consume_progress(chan, snapshot.idx)) {
+				dw_edma_start_transfer(chan);
+				chan->status = dw_edma_ll_pending(chan) ?
+					       EDMA_ST_BUSY : EDMA_ST_IDLE;
+			}
+
+			if (dw_edma_ll_recoverable_pending(chan, ch_status))
+				chan->status = EDMA_ST_BUSY;
+			dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
+		}
+
+		/* dw_edma_ll_clean_pending() may have completed this cookie. */
+		ret = dma_cookie_status(dchan, cookie, txstate);
+		if (ret == DMA_COMPLETE)
+			return ret;
+	}
 	if (ret == DMA_IN_PROGRESS && chan->status == EDMA_ST_PAUSE)
 		ret = DMA_PAUSED;
 
