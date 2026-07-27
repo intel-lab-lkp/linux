@@ -1356,7 +1356,8 @@ static void storvsc_on_channel_callback(void *context)
 					continue;
 				}
 				request = (struct storvsc_cmd_request *)scsi_cmd_priv(scmnd);
-				scsi_dma_unmap(scmnd);
+				if (!device->channel->co_external_memory)
+					scsi_dma_unmap(scmnd);
 			}
 
 			storvsc_on_receive(stor_device, packet, request);
@@ -1845,7 +1846,7 @@ static enum scsi_qc_status storvsc_queuecommand(struct Scsi_Host *host,
 		unsigned long offset_in_hvpg = offset_in_hvpage(sgl->offset);
 		unsigned int hvpg_count = HVPFN_UP(offset_in_hvpg + length);
 		struct scatterlist *sg;
-		unsigned long hvpfn, hvpfns_to_add;
+		unsigned long hvpfn, hvpfns_to_add, hvpgoff;
 		int j, i = 0, sg_count;
 
 		payload_sz = (hvpg_count * sizeof(u64) +
@@ -1861,10 +1862,14 @@ static enum scsi_qc_status storvsc_queuecommand(struct Scsi_Host *host,
 		payload->range.len = length;
 		payload->range.offset = offset_in_hvpg;
 
-		sg_count = scsi_dma_map(scmnd);
-		if (sg_count < 0) {
-			ret = SCSI_MLQUEUE_DEVICE_BUSY;
-			goto err_free_payload;
+		if (dev->channel->co_external_memory) {
+			sg_count = scsi_sg_count(scmnd);
+		} else {
+			sg_count = scsi_dma_map(scmnd);
+			if (sg_count < 0) {
+				ret = SCSI_MLQUEUE_DEVICE_BUSY;
+				goto err_free_payload;
+			}
 		}
 
 		for_each_sg(sgl, sg, sg_count, j) {
@@ -1876,9 +1881,16 @@ static enum scsi_qc_status storvsc_queuecommand(struct Scsi_Host *host,
 			 * Such offsets are handled even on other than the first
 			 * sgl entry, provided they are a multiple of PAGE_SIZE.
 			 */
-			hvpfn = HVPFN_DOWN(sg_dma_address(sg));
-			hvpfns_to_add = HVPFN_UP(sg_dma_address(sg) +
-						 sg_dma_len(sg)) - hvpfn;
+			if (dev->channel->co_external_memory) {
+				hvpgoff = HVPFN_DOWN(sg->offset);
+				hvpfn = page_to_hvpfn(sg_page(sg)) + hvpgoff;
+				hvpfns_to_add =	HVPFN_UP(sg->offset + sg->length) -
+							hvpgoff;
+			} else {
+				hvpfn = HVPFN_DOWN(sg_dma_address(sg));
+				hvpfns_to_add = HVPFN_UP(sg_dma_address(sg) +
+							 sg_dma_len(sg)) - hvpfn;
+			}
 
 			/*
 			 * Fill the next portion of the PFN array with
@@ -1900,7 +1912,7 @@ static enum scsi_qc_status storvsc_queuecommand(struct Scsi_Host *host,
 	ret = storvsc_do_io(dev, cmd_request, smp_processor_id());
 	migrate_enable();
 
-	if (ret)
+	if (ret && (!dev->channel->co_external_memory))
 		scsi_dma_unmap(scmnd);
 
 	if (ret == -EAGAIN) {
