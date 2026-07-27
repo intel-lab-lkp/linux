@@ -7,6 +7,8 @@
  * Copyright (c) 2015 - 2024 Intel Corporation
  */
 
+#include <linux/align.h>
+#include <linux/cache.h>
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <crypto/akcipher.h>
@@ -237,12 +239,13 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 		return -EINVAL;
 
 	/* RFC 8017 sec 8.2.2 step 2 - RSA verification */
-	child_req = kmalloc(sizeof(*child_req) + child_reqsize + ctx->key_size,
-			    GFP_KERNEL);
+	child_req = kmalloc(sizeof(*child_req) + child_reqsize +
+				    ctx->key_size + ARCH_DMA_MINALIGN, GFP_KERNEL);
 	if (!child_req)
 		return -ENOMEM;
 
-	out_buf = (u8 *)(child_req + 1) + child_reqsize;
+	out_buf  = PTR_ALIGN((u8 *)(child_req + 1) + child_reqsize,
+				    ARCH_DMA_MINALIGN);
 	memcpy(out_buf, src, slen);
 
 	crypto_init_wait(&cwait);
