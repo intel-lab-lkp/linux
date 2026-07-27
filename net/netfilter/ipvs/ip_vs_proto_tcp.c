@@ -304,11 +304,43 @@ static int
 tcp_csum_check(int af, struct sk_buff *skb, struct ip_vs_protocol *pp,
 	       struct ip_vs_iphdr *iph)
 {
-	if (!ip_vs_checksum_common_check(skb, iph->len, IPPROTO_TCP, af)) {
-		IP_VS_DBG_RL_PKT(0, af, pp, skb, iph->off,
-				 "Failed checksum for");
-		return 0;
+	unsigned int tcphoff = iph->len;
+
+	if (skb_csum_unnecessary(skb))
+		return 1;
+	switch (skb->ip_summed) {
+	case CHECKSUM_NONE:
+		skb->csum = skb_checksum(skb, tcphoff, skb->len - tcphoff, 0);
+		fallthrough;
+	case CHECKSUM_COMPLETE:
+#ifdef CONFIG_IP_VS_IPV6
+		if (af == AF_INET6) {
+			if (csum_ipv6_magic(&ipv6_hdr(skb)->saddr,
+					    &ipv6_hdr(skb)->daddr,
+					    skb->len - tcphoff,
+					    IPPROTO_TCP,
+					    skb->csum)) {
+				IP_VS_DBG_RL_PKT(0, af, pp, skb, iph->off,
+						 "Failed checksum for");
+				return 0;
+			}
+		} else
+#endif
+			if (csum_tcpudp_magic(ip_hdr(skb)->saddr,
+					      ip_hdr(skb)->daddr,
+					      skb->len - tcphoff,
+					      ip_hdr(skb)->protocol,
+					      skb->csum)) {
+				IP_VS_DBG_RL_PKT(0, af, pp, skb, iph->off,
+						 "Failed checksum for");
+				return 0;
+			}
+		break;
+	default:
+		/* No need to checksum. */
+		break;
 	}
+
 	return 1;
 }
 

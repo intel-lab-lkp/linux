@@ -872,6 +872,33 @@ static __sum16 ip_vs_checksum_complete(struct sk_buff *skb, int offset)
 	return csum_fold(skb_checksum(skb, offset, skb->len - offset, 0));
 }
 
+static bool ip_vs_checksum_icmp_check(struct sk_buff *skb, int offset, int af)
+{
+	__wsum csum;
+
+	if (skb_csum_unnecessary(skb))
+		return true;
+	if (skb->ip_summed == CHECKSUM_NONE)
+		csum = skb_checksum(skb, offset, skb->len - offset, 0);
+	else if (skb->ip_summed == CHECKSUM_COMPLETE)
+		csum = csum_sub(skb->csum, skb_checksum(skb, 0, offset, 0));
+	else
+		return true;
+
+#ifdef CONFIG_IP_VS_IPV6
+	if (af == AF_INET6) {
+		if (csum_ipv6_magic(&ipv6_hdr(skb)->saddr,
+				    &ipv6_hdr(skb)->daddr,
+				    skb->len - offset,
+				    IPPROTO_ICMPV6, csum))
+			return false;
+	} else
+#endif
+		if (csum_fold(csum))
+			return false;
+	return true;
+}
+
 static inline enum ip_defrag_users ip_vs_defrag_user(unsigned int hooknum)
 {
 	if (NF_INET_LOCAL_IN == hooknum)
@@ -1026,7 +1053,6 @@ static int handle_response_icmp(int af, struct sk_buff *skb,
 				struct ip_vs_iphdr *ciph,
 				unsigned int toff, unsigned int hooknum)
 {
-	int iproto = af == AF_INET6 ? IPPROTO_ICMPV6 : IPPROTO_ICMP;
 	unsigned int verdict = NF_DROP;
 	unsigned int ctoff = ciph->len;
 	bool has_ports = false;
@@ -1035,7 +1061,7 @@ static int handle_response_icmp(int af, struct sk_buff *skb,
 		goto after_nat;
 
 	/* Ensure the checksum is correct */
-	if (!ip_vs_checksum_common_check(skb, toff, iproto, af)) {
+	if (!ip_vs_checksum_icmp_check(skb, toff, af)) {
 		/* Failed checksum! */
 		IP_VS_DBG_BUF(1, "Forward ICMP: failed checksum from %s!\n",
 			      IP_VS_DBG_ADDR(af, snet));
@@ -1896,7 +1922,7 @@ ip_vs_in_icmp(struct netns_ipvs *ipvs, struct sk_buff *skb, int *related,
 
 	/* Ensure the checksum is correct */
 	if ((IP_VS_FWD_METHOD(cp) == IP_VS_CONN_F_MASQ || tunnel) &&
-	    !ip_vs_checksum_common_check(skb, ihl, IPPROTO_ICMP, AF_INET)) {
+	    !ip_vs_checksum_icmp_check(skb, ihl, AF_INET)) {
 		/* Failed checksum! */
 		IP_VS_DBG(1, "Incoming ICMP: failed checksum from %pI4!\n",
 			  &iph->saddr.ip);
@@ -2057,8 +2083,7 @@ static int ip_vs_in_icmp_v6(struct netns_ipvs *ipvs, struct sk_buff *skb,
 
 	/* Ensure the checksum is correct */
 	if (IP_VS_FWD_METHOD(cp) == IP_VS_CONN_F_MASQ &&
-	    !ip_vs_checksum_common_check(skb, iph->len, IPPROTO_ICMPV6,
-					 AF_INET6)) {
+	    !ip_vs_checksum_icmp_check(skb, iph->len, AF_INET6)) {
 		/* Failed checksum! */
 		IP_VS_DBG(1, "Incoming ICMPv6: failed checksum from %pI6c!\n",
 			  &iph->saddr);
