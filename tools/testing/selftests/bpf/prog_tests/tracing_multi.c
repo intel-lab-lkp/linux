@@ -612,7 +612,7 @@ void serial_test_tracing_multi_bench_attach(void)
 	struct btf *btf;
 	int err;
 
-#ifndef __x86_64__
+#if !ARCH_SUPPORTS_TRACING_MULTI_LINK
 	test__skip();
 	return;
 #endif
@@ -923,6 +923,11 @@ cleanup:
 
 void serial_test_tracing_multi_attach_rollback(void)
 {
+#if !ARCH_SUPPORTS_TRACING_MULTI_LINK
+	test__skip();
+	return;
+#endif
+
 	if (test__start_subtest("put"))
 		test_rollback_put();
 	if (test__start_subtest("unlink"))
@@ -931,7 +936,7 @@ void serial_test_tracing_multi_attach_rollback(void)
 
 void test_tracing_multi_test(void)
 {
-#ifndef __x86_64__
+#if !ARCH_SUPPORTS_TRACING_MULTI_LINK
 	test__skip();
 	return;
 #endif
