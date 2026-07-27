@@ -3918,21 +3918,13 @@ done:
 }
 
 struct damon_system_ram_range_walk_arg {
-	bool walked;
-	struct resource res;
+	unsigned long addr_unit;
+	/* NULL in the counting-only pass */
+	struct damon_addr_range *ranges;
+	unsigned int nr_ranges;
+	unsigned long prev_end;
+	bool has_prev;
 };
-
-static int damon_system_ram_walk_fn(struct resource *res, void *arg)
-{
-	struct damon_system_ram_range_walk_arg *a = arg;
-
-	if (!a->walked) {
-		a->walked = true;
-		a->res.start = res->start;
-	}
-	a->res.end = res->end;
-	return 0;
-}
 
 static unsigned long damon_res_to_core_addr(resource_size_t ra,
 		unsigned long addr_unit)
@@ -3947,23 +3939,66 @@ static unsigned long damon_res_to_core_addr(resource_size_t ra,
 	return ra / addr_unit;
 }
 
-static bool damon_find_system_rams_range(unsigned long *start,
-		unsigned long *end, unsigned long addr_unit)
+static int damon_system_ram_walk_fn(struct resource *res, void *arg)
 {
-	struct damon_system_ram_range_walk_arg arg = {};
+	struct damon_system_ram_range_walk_arg *a = arg;
+	unsigned long start = damon_res_to_core_addr(res->start, a->addr_unit);
+	unsigned long end = damon_res_to_core_addr(res->end + 1, a->addr_unit);
 
+	if (end <= start)
+		return 0;
+	/*
+	 * 'System RAM' resources are visited in the ascending address order.
+	 * Coalesce only truly adjacent (no gap in between) resources into one
+	 * range, so that any hole between discrete System RAM areas is kept out
+	 * of the resulting ranges.
+	 */
+	if (a->has_prev && a->prev_end == start) {
+		a->prev_end = end;
+		if (a->ranges)
+			a->ranges[a->nr_ranges - 1].end = end;
+		return 0;
+	}
+	if (a->ranges) {
+		a->ranges[a->nr_ranges].start = start;
+		a->ranges[a->nr_ranges].end = end;
+	}
+	a->nr_ranges++;
+	a->prev_end = end;
+	a->has_prev = true;
+	return 0;
+}
+
+/*
+ * Find all 'System RAM' areas and return them as an array of coalesced
+ * damon_addr_range.  On success, *ranges points to a kvmalloc'ed array that the
+ * caller should kvfree(), and the number of ranges is returned.  Returns 0 if
+ * no System RAM is found, or a negative error code on failure.
+ */
+static int damon_find_system_rams(struct damon_addr_range **ranges_out,
+				  unsigned long addr_unit)
+{
+	struct damon_system_ram_range_walk_arg arg = { .addr_unit = addr_unit };
+	struct damon_addr_range *ranges;
+
+	/* First pass: count the coalesced ranges. */
 	walk_system_ram_res(0, -1, &arg, damon_system_ram_walk_fn);
-	if (!arg.walked)
-		return false;
-	*start = damon_res_to_core_addr(arg.res.start, addr_unit);
-	*end = damon_res_to_core_addr(arg.res.end + 1, addr_unit);
-	if (*end <= *start)
-		return false;
-	return true;
+	if (!arg.nr_ranges)
+		return 0;
+	ranges = kvmalloc_objs(*ranges, arg.nr_ranges, GFP_KERNEL);
+	if (!ranges)
+		return -ENOMEM;
+	/* Second pass: fill in the coalesced ranges. */
+	arg.ranges = ranges;
+	arg.nr_ranges = 0;
+	arg.has_prev = false;
+	walk_system_ram_res(0, -1, &arg, damon_system_ram_walk_fn);
+	*ranges_out = ranges;
+	return arg.nr_ranges;
 }
 
 /**
- * damon_set_region_system_rams_default() - Set the region of the given
+ * damon_set_region_system_rams_default() - Set the regions of the given
  * monitoring target as requested, or to cover all 'System RAM' resources.
  * @t:		The monitoring target to set the region.
  * @start:	The pointer to the start address of the region.
@@ -3973,9 +4008,11 @@ static bool damon_find_system_rams_range(unsigned long *start,
  *
  * This function sets the region of @t as requested by @start and @end.  If the
  * values of @start and @end are zero, however, this function finds 'System
- * RAM' resources and sets the region to cover all the resource.  In the latter
- * case, this function saves the start and the end addresseses of the first and
- * the last resources in @start and @end, respectively.
+ * RAM' resources and sets the monitoring target regions to cover them.  Each
+ * discrete System RAM area becomes a separate region, so holes between them
+ * (e.g., on multi-socket or CXL systems) are excluded from the monitoring.  In
+ * the latter case, this function saves the start and the end addresses of the
+ * first and the last resources in @start and @end, respectively.
  *
  * Return: 0 on success, negative error code otherwise.
  */
@@ -3984,14 +4021,25 @@ int damon_set_region_system_rams_default(struct damon_target *t,
 			unsigned long addr_unit, unsigned long min_region_sz)
 {
 	struct damon_addr_range addr_range;
+	struct damon_addr_range *ranges;
+	int nr_ranges, err;
 
-	if (!*start && !*end &&
-		!damon_find_system_rams_range(start, end, addr_unit))
+	if (*start || *end) {
+		addr_range.start = *start;
+		addr_range.end = *end;
+		return damon_set_regions(t, &addr_range, 1, min_region_sz);
+	}
+
+	nr_ranges = damon_find_system_rams(&ranges, addr_unit);
+	if (nr_ranges < 0)
+		return nr_ranges;
+	if (!nr_ranges)
 		return -EINVAL;
-
-	addr_range.start = *start;
-	addr_range.end = *end;
-	return damon_set_regions(t, &addr_range, 1, min_region_sz);
+	*start = ranges[0].start;
+	*end = ranges[nr_ranges - 1].end;
+	err = damon_set_regions(t, ranges, nr_ranges, min_region_sz);
+	kvfree(ranges);
+	return err;
 }
 
 /**
