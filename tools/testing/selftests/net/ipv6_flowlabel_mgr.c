@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <error.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <linux/in6.h>
 #include <stdbool.h>
@@ -138,6 +139,19 @@ static void tcp_connect(int listener, uint32_t flowlabel, int *client, int *acce
 	*accepted = afd;
 }
 
+static void set_flowlabel_consistency(bool enable)
+{
+	int fd;
+
+	fd = open("/proc/sys/net/ipv6/flowlabel_consistency", O_WRONLY);
+	if (fd == -1)
+		error(1, errno, "open flowlabel_consistency");
+	if (write(fd, enable ? "1" : "0", 1) != 1)
+		error(1, errno, "write flowlabel_consistency");
+	if (close(fd))
+		error(1, errno, "close flowlabel_consistency");
+}
+
 static void run_tests(int fd)
 {
 	int wstatus;
@@ -254,6 +268,37 @@ static void run_tests(int fd)
 	close(remote_afd);
 	close(remote_cfd);
 	close(remote_listener);
+
+	explain("Prepare TCP SYN for REFLECT flag validation");
+	set_flowlabel_consistency(false);
+	int reflect_listener = tcp_listen();
+	struct in6_flowlabel_req reflect_on = {
+		.flr_action = IPV6_FL_A_GET,
+		.flr_flags = IPV6_FL_F_REFLECT,
+	};
+	explain("Enable REFLECT on the listener before the client connects");
+	expect_pass(setsockopt(reflect_listener, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_on, sizeof(reflect_on)));
+	int reflect_cfd, reflect_afd;
+	tcp_connect(reflect_listener, 7, &reflect_cfd, &reflect_afd);
+	struct in6_flowlabel_req reflect_query = {
+		.flr_action = IPV6_FL_A_GET,
+	};
+	socklen_t reflect_query_len = sizeof(reflect_query);
+	explain("Query the accepted socket's outgoing label, should be reflected");
+	expect_pass(getsockopt(reflect_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_query, &reflect_query_len));
+	expect_pass(ntohl(reflect_query.flr_label) != 7);
+	struct in6_flowlabel_req reflect_off = {
+		.flr_action = IPV6_FL_A_PUT,
+		.flr_flags = IPV6_FL_F_REFLECT,
+	};
+	explain("PUT+REFLECT disables reflection on the accepted socket");
+	expect_pass(setsockopt(reflect_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_off, sizeof(reflect_off)));
+	explain("cannot disable reflection twice");
+	expect_fail(setsockopt(reflect_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &reflect_off, sizeof(reflect_off)));
+	set_flowlabel_consistency(true);
+	close(reflect_afd);
+	close(reflect_cfd);
+	close(reflect_listener);
 }
 
 static void parse_opts(int argc, char **argv)
