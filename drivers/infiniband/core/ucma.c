@@ -1784,10 +1784,12 @@ static ssize_t ucma_write_cm_event(struct ucma_file *file,
 	memcpy(uevent->resp.param.arg32, &event.param.arg,
 	       sizeof(event.param.arg));
 
+	rdma_lock_handler(ctx->cm_id);
 	mutex_lock(&ctx->file->mut);
 	list_add_tail(&uevent->list, &ctx->file->event_list);
 	mutex_unlock(&ctx->file->mut);
 	wake_up_interruptible(&ctx->file->poll_wait);
+	rdma_unlock_handler(ctx->cm_id);
 
 out:
 	ucma_put_ctx(ctx);
