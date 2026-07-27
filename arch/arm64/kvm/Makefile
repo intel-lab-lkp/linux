@@ -32,6 +32,8 @@ kvm-$(CONFIG_PTDUMP_STAGE2_DEBUGFS) += ptdump.o
 
 kvm-$(CONFIG_NVHE_EL2_TRACING) += hyp_trace.o
 
+kvm-$(CONFIG_KVM_PGTABLE_KUNIT_TEST) += pgtable_test.o
+
 always-y := hyp_constants.h hyp-constants.s
 
 define rule_gen_hyp_constants

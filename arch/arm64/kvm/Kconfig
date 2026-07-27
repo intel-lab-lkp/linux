@@ -44,6 +44,17 @@ menuconfig KVM
 
 if KVM
 
+config KVM_PGTABLE_KUNIT_TEST
+	bool "KUnit tests for the stage 2 page table walker" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Say Y here to run unit tests for the stage 2 page table walker
+	  in hyp/pgtable.c against a mock allocator, covering how map and
+	  collapse operations consume the fault handler memcache.
+
+	  If unsure, say N.
+
 config PTDUMP_STAGE2_DEBUGFS
 	bool "Present the stage-2 pagetables to debugfs"
 	depends on DEBUG_KERNEL
