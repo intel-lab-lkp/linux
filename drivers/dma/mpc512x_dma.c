@@ -372,45 +372,47 @@ static irqreturn_t mpc_dma_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-/* process completed descriptors */
-static void mpc_dma_process_completed(struct mpc_dma *mdma)
+static void mpc_dma_process_chan_completed(struct mpc_dma_chan *mchan)
 {
 	dma_cookie_t last_cookie = 0;
-	struct mpc_dma_chan *mchan;
 	struct mpc_dma_desc *mdesc;
 	struct dma_async_tx_descriptor *desc;
 	unsigned long flags;
 	LIST_HEAD(list);
+
+	/* Get all completed descriptors */
+	spin_lock_irqsave(&mchan->lock, flags);
+	if (!list_empty(&mchan->completed))
+		list_splice_tail_init(&mchan->completed, &list);
+	spin_unlock_irqrestore(&mchan->lock, flags);
+
+	if (list_empty(&list))
+		return;
+
+	/* Execute callbacks and run dependencies */
+	list_for_each_entry(mdesc, &list, node) {
+		desc = &mdesc->desc;
+
+		dmaengine_desc_get_callback_invoke(desc, NULL);
+
+		last_cookie = desc->cookie;
+		dma_run_dependencies(desc);
+	}
+
+	/* Free descriptors */
+	spin_lock_irqsave(&mchan->lock, flags);
+	list_splice_tail_init(&list, &mchan->free);
+	mchan->chan.completed_cookie = last_cookie;
+	spin_unlock_irqrestore(&mchan->lock, flags);
+}
+
+/* process completed descriptors */
+static void mpc_dma_process_completed(struct mpc_dma *mdma)
+{
 	int i;
 
-	for (i = 0; i < mdma->dma.chancnt; i++) {
-		mchan = &mdma->channels[i];
-
-		/* Get all completed descriptors */
-		spin_lock_irqsave(&mchan->lock, flags);
-		if (!list_empty(&mchan->completed))
-			list_splice_tail_init(&mchan->completed, &list);
-		spin_unlock_irqrestore(&mchan->lock, flags);
-
-		if (list_empty(&list))
-			continue;
-
-		/* Execute callbacks and run dependencies */
-		list_for_each_entry(mdesc, &list, node) {
-			desc = &mdesc->desc;
-
-			dmaengine_desc_get_callback_invoke(desc, NULL);
-
-			last_cookie = desc->cookie;
-			dma_run_dependencies(desc);
-		}
-
-		/* Free descriptors */
-		spin_lock_irqsave(&mchan->lock, flags);
-		list_splice_tail_init(&list, &mchan->free);
-		mchan->chan.completed_cookie = last_cookie;
-		spin_unlock_irqrestore(&mchan->lock, flags);
-	}
+	for (i = 0; i < mdma->dma.chancnt; i++)
+		mpc_dma_process_chan_completed(&mdma->channels[i]);
 }
 
 /* DMA Tasklet */
@@ -419,6 +421,7 @@ static void mpc_dma_tasklet(struct tasklet_struct *t)
 	struct mpc_dma *mdma = from_tasklet(mdma, t, tasklet);
 	unsigned long flags;
 	uint es;
+	int i;
 
 	spin_lock_irqsave(&mdma->error_status_lock, flags);
 	es = mdma->error_status;
@@ -453,7 +456,21 @@ static void mpc_dma_tasklet(struct tasklet_struct *t)
 			dev_err(mdma->dma.dev, "- Destination Bus Error\n");
 	}
 
-	mpc_dma_process_completed(mdma);
+	for (i = 0; i < mdma->dma.chancnt; i++) {
+		struct mpc_dma_chan *mchan = &mdma->channels[i];
+
+		spin_lock_irqsave(&mchan->lock, flags);
+		if (!list_empty(&mchan->completed))
+			dma_chan_schedule_bh(&mchan->chan);
+		spin_unlock_irqrestore(&mchan->lock, flags);
+	}
+}
+
+static void mpc_dma_chan_bh(struct dma_chan *chan)
+{
+	struct mpc_dma_chan *mchan = dma_chan_to_mpc_dma_chan(chan);
+
+	mpc_dma_process_chan_completed(mchan);
 }
 
 /* Submit descriptor to hardware */
@@ -550,6 +567,8 @@ static void mpc_dma_free_chan_resources(struct dma_chan *chan)
 	dma_addr_t tcd_paddr;
 	unsigned long flags;
 	LIST_HEAD(descs);
+
+	dma_chan_kill_bh(&mchan->chan);
 
 	spin_lock_irqsave(&mchan->lock, flags);
 
@@ -1007,6 +1026,7 @@ static int mpc_dma_probe(struct platform_device *op)
 		INIT_LIST_HEAD(&mchan->completed);
 
 		spin_lock_init(&mchan->lock);
+		dma_chan_init_bh(&mchan->chan, mpc_dma_chan_bh);
 		list_add_tail(&mchan->chan.device_node, &dma->channels);
 	}
 
