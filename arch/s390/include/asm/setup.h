@@ -90,6 +90,9 @@ extern void (*_machine_restart)(char *command);
 extern void (*_machine_halt)(void);
 extern void (*_machine_power_off)(void);
 
+void arch_do_panic(void);
+#define arch_do_panic arch_do_panic
+
 struct oldmem_data {
 	unsigned long start;
 	unsigned long size;
