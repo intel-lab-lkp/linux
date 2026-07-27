@@ -479,6 +479,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 	int async = 0;
 	bool xfrm_gro = false;
 	bool crypto_done = false;
+	bool x_held = false;
 	struct xfrm_offload *xo = xfrm_offload(skb);
 	struct sec_path *sp;
 
@@ -585,6 +586,10 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 		sp = skb_sec_path(skb);
 
 		if (sp->len == XFRM_MAX_DEPTH) {
+			if (x) {
+				xfrm_state_hold(x);
+				x_held = true;
+			}
 			secpath_reset(skb);
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINBUFFERERROR);
 			goto drop;
@@ -727,6 +732,9 @@ resume_decapped:
 		crypto_done = false;
 	} while (!err);
 
+	xfrm_state_hold(x);
+	x_held = true;
+
 	rcu_read_lock();
 	err = xfrm_rcv_cb(skb, family, x->type->proto, 0);
 	if (err) {
@@ -746,6 +754,7 @@ resume_decapped:
 			dev_put(dev);
 		gro_cells_receive(&gro_cells, skb);
 		rcu_read_unlock();
+		xfrm_state_put(x);
 		return 0;
 	} else {
 		xo = xfrm_offload(skb);
@@ -768,6 +777,7 @@ resume_decapped:
 		if (async)
 			dev_put(dev);
 		rcu_read_unlock();
+		xfrm_state_put(x);
 		return err;
 	}
 
@@ -777,6 +787,8 @@ drop:
 	if (async)
 		dev_put(dev);
 	xfrm_rcv_cb(skb, family, x && x->type ? x->type->proto : nexthdr, -1);
+	if (x_held)
+		xfrm_state_put(x);
 	kfree_skb(skb);
 	return 0;
 }
