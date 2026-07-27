@@ -1946,15 +1946,43 @@ static void ath12k_mac_handle_beacon_iter(void *data, u8 *mac,
 	struct sk_buff *skb = data;
 	struct ieee80211_mgmt *mgmt = (void *)skb->data;
 	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
-	struct ath12k_link_vif *arvif = &ahvif->deflink;
+	struct ieee80211_bss_conf *link_conf;
+	struct ath12k_link_vif *arvif;
+	unsigned long links;
+	u8 link_id;
 
-	if (vif->type != NL80211_IFTYPE_STATION || !arvif->is_created)
+	if (vif->type != NL80211_IFTYPE_STATION)
 		return;
 
-	if (!ether_addr_equal(mgmt->bssid, vif->bss_conf.bssid))
+	if (!ieee80211_vif_is_mld(vif)) {
+		arvif = &ahvif->deflink;
+		if (arvif->is_created &&
+		    ether_addr_equal(mgmt->bssid, vif->bss_conf.bssid))
+			cancel_delayed_work(&arvif->connection_loss_work);
 		return;
+	}
 
-	cancel_delayed_work(&arvif->connection_loss_work);
+	/* For MLO, each link has a different AP BSSID. Check the beacon
+	 * against all link BSS configs. If any matches, cancel
+	 * connection_loss_work on all links since it calls per-VIF
+	 * ieee80211_connection_loss() regardless of which link queued it.
+	 */
+	links = ahvif->links_map;
+	for_each_set_bit(link_id, &links, IEEE80211_MLD_MAX_NUM_LINKS) {
+		link_conf = rcu_dereference(vif->link_conf[link_id]);
+		if (link_conf &&
+		    ether_addr_equal(mgmt->bssid, link_conf->bssid))
+			goto found;
+	}
+
+	return;
+
+found:
+	for_each_set_bit(link_id, &links, IEEE80211_MLD_MAX_NUM_LINKS) {
+		arvif = rcu_dereference(ahvif->link[link_id]);
+		if (arvif && arvif->is_created)
+			cancel_delayed_work(&arvif->connection_loss_work);
+	}
 }
 
 void ath12k_mac_handle_beacon(struct ath12k *ar, struct sk_buff *skb)
