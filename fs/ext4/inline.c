@@ -385,7 +385,8 @@ static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 }
 
 static int ext4_destroy_inline_data_nolock(handle_t *handle,
-					   struct inode *inode)
+					   struct inode *inode,
+					   ext4_fsblk_t pblk)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct ext4_xattr_ibody_find is = {
@@ -433,7 +434,21 @@ static int ext4_destroy_inline_data_nolock(handle_t *handle,
 		    S_ISREG(inode->i_mode) || S_ISLNK(inode->i_mode)) {
 			ext4_set_inode_flag(inode, EXT4_INODE_EXTENTS);
 			ext4_ext_tree_init(handle, inode);
+			if (pblk) {
+				struct ext4_extent_header *eh;
+				struct ext4_extent *ex;
+
+				eh = ext_inode_hdr(inode);
+				ex = EXT_FIRST_EXTENT(eh);
+				ex->ee_block = cpu_to_le32(0);
+				ex->ee_len = cpu_to_le16(1);
+				ext4_ext_store_pblock(ex, pblk);
+				eh->eh_entries = cpu_to_le16(1);
+			}
 		}
+	} else if (pblk) {
+		/* indirect mapping: set i_data[0] directly */
+		EXT4_I(inode)->i_data[0] = cpu_to_le32(pblk);
 	}
 	ext4_clear_inode_flag(inode, EXT4_INODE_INLINE_DATA);
 
@@ -750,10 +765,11 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 
 	/*
 	 * Data is safely in the allocated block.  Now destroy the inline
-	 * data (which also initializes the extent tree via
-	 * ext4_ext_tree_init) and then insert the pre-allocated block.
+	 * data and populate the extent entry atomically under i_data_sem
+	 * (inside ext4_destroy_inline_data_nolock).  This ensures no
+	 * concurrent reader sees an empty extent tree.
 	 */
-	error = ext4_destroy_inline_data_nolock(handle, inode);
+	error = ext4_destroy_inline_data_nolock(handle, inode, pblk);
 	if (error)
 		goto out_free_block;
 
@@ -761,20 +777,6 @@ static int ext4_convert_inline_data_nolock(handle_t *handle,
 		inode->i_size = inode->i_sb->s_blocksize;
 		i_size_write(inode, inode->i_sb->s_blocksize);
 		EXT4_I(inode)->i_disksize = inode->i_sb->s_blocksize;
-	}
-
-	/* Insert the pre-allocated block into the extent tree */
-	if (ext4_has_feature_extents(inode->i_sb)) {
-		struct ext4_extent_header *eh = ext_inode_hdr(inode);
-		struct ext4_extent *ex = EXT_FIRST_EXTENT(eh);
-
-		ex->ee_block = cpu_to_le32(0);
-		ex->ee_len = cpu_to_le16(1);
-		ext4_ext_store_pblock(ex, pblk);
-		eh->eh_entries = cpu_to_le16(1);
-	} else {
-		/* indirect mapping: set i_data[0] directly */
-		EXT4_I(inode)->i_data[0] = cpu_to_le32(pblk);
 	}
 
 	error = ext4_mark_inode_dirty(handle, inode);
@@ -1419,7 +1421,7 @@ int ext4_destroy_inline_data(handle_t *handle, struct inode *inode)
 	int ret, no_expand;
 
 	ext4_write_lock_xattr(inode, &no_expand);
-	ret = ext4_destroy_inline_data_nolock(handle, inode);
+	ret = ext4_destroy_inline_data_nolock(handle, inode, 0);
 	ext4_write_unlock_xattr(inode, &no_expand);
 
 	return ret;
