@@ -4669,7 +4669,18 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	if (count > evt->length) {
 		dev_err_ratelimited(dwc->dev, "invalid count(%u) > evt->length(%u)\n",
 			count, evt->length);
-		return IRQ_NONE;
+		/*
+		 * The DWC3 interrupt is level-triggered. Returning IRQ_NONE
+		 * without clearing the IRQ source leaves the line asserted,
+		 * causing a tight IRQ storm that triggers spurious.c:184 BUG.
+		 * Write the bogus count back to GEVNTCOUNT to clear the source,
+		 * consistent with the stale event clearing in
+		 * dwc3_event_buffers_setup(), then schedule a soft disconnect
+		 * to recover the controller state.
+		 */
+		dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), count);
+		schedule_work(&dwc->softcon_work);
+		return IRQ_HANDLED;
 	}
 
 	evt->count = count;
@@ -4729,6 +4740,14 @@ static void dwc_gadget_release(struct device *dev)
 	kfree(gadget);
 }
 
+static void dwc3_softcon_work(struct work_struct *work)
+{
+	struct dwc3 *dwc = container_of(work, struct dwc3, softcon_work);
+
+	dev_err(dwc->dev, "event buffer error: performing soft disconnect\n");
+	dwc3_gadget_soft_disconnect(dwc);
+}
+
 /**
  * dwc3_gadget_init - initializes gadget related registers
  * @dwc: pointer to our controller context structure
@@ -4772,6 +4791,7 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	}
 
 	init_completion(&dwc->ep0_in_setup);
+	INIT_WORK(&dwc->softcon_work, dwc3_softcon_work);
 	dwc->gadget = kzalloc_obj(struct usb_gadget);
 	if (!dwc->gadget) {
 		ret = -ENOMEM;
@@ -4868,6 +4888,7 @@ void dwc3_gadget_exit(struct dwc3 *dwc)
 	if (!dwc->gadget)
 		return;
 
+	cancel_work_sync(&dwc->softcon_work);
 	dwc3_enable_susphy(dwc, true);
 	usb_del_gadget(dwc->gadget);
 	dwc3_gadget_free_endpoints(dwc);
