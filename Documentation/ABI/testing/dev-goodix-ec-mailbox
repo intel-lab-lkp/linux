@@ -1,0 +1,22 @@
+What:		/dev/gxfp
+Date:		July 2026
+KernelVersion:	TBD
+Contact:	Ertugrul Topcu <ertugtopcu0@gmail.com>
+Description:
+		Binary userspace interface for the ACPI Goodix EC mailbox
+		fingerprint transport. Only callers with CAP_SYS_RAWIO may open
+		the device. At most one reader may be open at a time.
+
+		A write consists of struct goodix_ec_tx_header followed by exactly
+		payload_len opaque MP payload bytes. reserved and flags must be zero.
+
+		A read returns one struct goodix_ec_record_header followed by exactly
+		len bytes. mp_type is the normalized MP type and timestamp_ns is a
+		CLOCK_MONOTONIC timestamp captured when the record entered the RX
+		queue. Records are never split across reads.
+
+		poll(2) reports POLLIN while a complete record is queued. Device
+		removal reports POLLERR | POLLHUP. System suspend reports POLLERR.
+
+		GOODIX_EC_IOCTL_FLUSH_RX discards all queued receive records.
+Users:		libfprint Goodix GXFP5130 userspace driver

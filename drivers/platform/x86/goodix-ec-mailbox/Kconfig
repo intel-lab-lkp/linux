@@ -1,0 +1,15 @@
+config GOODIX_EC_MAILBOX
+	tristate "Goodix fingerprint EC mailbox transport"
+	depends on X86
+	depends on ACPI
+	depends on GPIOLIB
+	help
+	  Enable transport support for Goodix fingerprint sensors connected
+	  through an ACPI-described embedded-controller shared-memory mailbox.
+
+	  The driver exposes the opaque mailbox transport through /dev/gxfp.
+	  Sensor configuration, TLS, capture and image processing remain in
+	  userspace.
+
+	  To compile this driver as a module, choose M here. The module will be
+	  called goodix_ec_mailbox.

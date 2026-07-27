@@ -54,6 +54,9 @@ obj-$(CONFIG_AMILO_RFKILL)	+= amilo-rfkill.o
 obj-$(CONFIG_FUJITSU_LAPTOP)	+= fujitsu-laptop.o
 obj-$(CONFIG_FUJITSU_TABLET)	+= fujitsu-tablet.o
 
+# Goodix
+obj-$(CONFIG_GOODIX_EC_MAILBOX)	+= goodix-ec-mailbox/
+
 # GPD
 obj-$(CONFIG_GPD_POCKET_FAN)	+= gpd-pocket-fan.o
 
