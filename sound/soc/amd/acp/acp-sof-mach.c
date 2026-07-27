@@ -114,7 +114,11 @@ static int acp_sof_probe(struct platform_device *pdev)
 		acp_card_drvdata->tdm_mode = dmi_id->driver_data;
 
 	acp_card_drvdata->acp_rev = mach->mach_params.subsystem_rev;
-	ret = acp_sofdsp_dai_links_create(card);
+
+	if (acp_card_drvdata->acp_rev > ACP72_PCI_ID)
+		ret = acp7x_sofdsp_dai_links_create(card);
+	else
+		ret = acp_sofdsp_dai_links_create(card);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Failed to create DAI links\n");
 
