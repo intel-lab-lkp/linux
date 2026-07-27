@@ -127,6 +127,9 @@ struct dw_edma_chan {
 	bool				abort_pending;
 	raw_spinlock_t			event_lock;
 
+	struct delayed_work		ll_recheck_work;
+	unsigned long			ll_recheck_at;
+
 	u32				ll_max;		/* Data entries */
 	struct dw_edma_region		ll_region;	/* Linked list */
 	bool				ll_valid;	/* LL context programmed */
@@ -174,6 +177,8 @@ struct dw_edma {
 	 * WQ_UNBOUND lets different channels run on different CPUs.
 	 */
 	struct workqueue_struct		*wq;
+
+	bool				teardown;	/* Gate asynchronous hardware access */
 
 	raw_spinlock_t			lock;		/* Protect v0 shared registers */
 	raw_spinlock_t			event_lock[2];	/* Per-direction event scopes */

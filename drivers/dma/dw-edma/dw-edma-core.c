@@ -27,6 +27,7 @@
 
 /* Empirically chosen progress interval. */
 #define DW_EDMA_LL_PROGRESS_INTERVAL	4
+#define DW_EDMA_LL_RECHECK_DELAY_MS		30
 
 static inline
 struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
@@ -148,6 +149,26 @@ static void dw_edma_ll_event_discard_locked(struct dw_edma_chan *chan)
 	dw_edma_ll_snapshot_discard_locked(chan);
 }
 
+/* Must be called with vc.lock held. */
+static void dw_edma_ll_recheck_cancel(struct dw_edma_chan *chan)
+{
+	chan->ll_recheck_at = 0;
+	cancel_delayed_work(&chan->ll_recheck_work);
+}
+
+/* Must be called with vc.lock held. */
+static void dw_edma_ll_recheck_schedule(struct dw_edma_chan *chan)
+{
+	unsigned long delay =
+		msecs_to_jiffies(DW_EDMA_LL_RECHECK_DELAY_MS);
+
+	if (unlikely(READ_ONCE(chan->dw->teardown)))
+		return;
+
+	chan->ll_recheck_at = jiffies + delay;
+	mod_delayed_work(chan->dw->wq, &chan->ll_recheck_work, delay);
+}
+
 /* Must be called with vc.lock held for an LL channel. */
 static void dw_edma_ll_event_discard(struct dw_edma_chan *chan)
 {
@@ -160,6 +181,8 @@ static void dw_edma_ll_event_discard(struct dw_edma_chan *chan)
 static void
 dw_edma_set_request(struct dw_edma_chan *chan, enum dw_edma_request request)
 {
+	if (!chan->non_ll && chan->request != request)
+		dw_edma_ll_recheck_cancel(chan);
 	chan->request = request;
 }
 
@@ -191,6 +214,8 @@ static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
 static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 {
 	u32 i;
+
+	dw_edma_ll_recheck_cancel(chan);
 
 	chan->ll_head = 0;
 	chan->ll_done = 0;
@@ -430,7 +455,7 @@ static bool dw_edma_ll_clean_pending(struct dw_edma_chan *chan, int idx)
 
 		if (WARN_ON_ONCE(desc->done_burst > desc->start_burst ||
 				 desc->start_burst > desc->nburst))
-			return advanced;
+			goto out;
 
 		/*
 		 * start_burst is the next burst to append. done_burst counts
@@ -449,7 +474,7 @@ static bool dw_edma_ll_clean_pending(struct dw_edma_chan *chan, int idx)
 			gap = dw_edma_core_get_ll_dist(chan, chan->ll_done,
 						       desc->ll_start);
 			if (gap > done)
-				return advanced;
+				goto out;
 
 			chan->ll_done = desc->ll_start;
 			done -= gap;
@@ -479,6 +504,10 @@ static bool dw_edma_ll_clean_pending(struct dw_edma_chan *chan, int idx)
 	}
 
 	WARN_ON_ONCE(done);
+
+out:
+	if (advanced)
+		dw_edma_ll_recheck_cancel(chan);
 
 	return advanced;
 }
@@ -535,6 +564,59 @@ dw_edma_ll_consume_progress(struct dw_edma_chan *chan, int idx)
 	return dw_edma_ll_clean_pending(chan, idx);
 }
 
+static bool dw_edma_ll_has_hdma_stop_event(struct dw_edma_chan *chan)
+{
+	return chan->dw->chip->mf == EDMA_MF_HDMA_NATIVE;
+}
+
+/*
+ * Must be called with vc.lock held. A DONE-time DMA_LLP sample may miss
+ * the final burst element. For the legacy interrupt interface, accept a
+ * fresh LLP sample only when status is STOPPED and transfer size is zero.
+ * Native HDMA reports STOP directly.
+ */
+static bool dw_edma_ll_reconcile_stopped(struct dw_edma_chan *chan)
+{
+	int idx;
+
+	scoped_guard(raw_spinlock_irqsave, dw_edma_event_lock(chan)) {
+		if (dw_edma_abort_latch_locked(chan))
+			return false;
+
+		/*
+		 * Leave an IRQ-captured event to its worker. Otherwise pair the
+		 * stopped boundary with the status clear before another kick.
+		 */
+		if (chan->ll_irq.event != DW_EDMA_LL_EVENT_NONE ||
+		    dw_edma_core_ch_status(chan) != DMA_COMPLETE)
+			return false;
+
+		/* Native HDMA reports STOP without a transfer-size check. */
+		if (!dw_edma_ll_has_hdma_stop_event(chan) &&
+		    dw_edma_core_ch_transfer_size(chan) != 0)
+			return false;
+
+		idx = dw_edma_ll_recycle_idx(chan,
+					     dw_edma_core_ll_cur_idx(chan),
+					     DW_EDMA_LL_EVENT_STOP);
+		dw_edma_core_ll_irq_clear(chan);
+	}
+
+	return dw_edma_ll_clean_pending(chan, idx);
+}
+
+static bool dw_edma_ll_reconcile_and_refill(struct dw_edma_chan *chan)
+{
+	if (!dw_edma_ll_reconcile_stopped(chan))
+		return false;
+
+	dw_edma_start_transfer(chan);
+	chan->status = dw_edma_ll_pending(chan) ?
+		       EDMA_ST_BUSY : EDMA_ST_IDLE;
+
+	return true;
+}
+
 static void dw_edma_core_ll_sync(struct dw_edma_chan *chan)
 {
 	/*
@@ -548,6 +630,15 @@ static void dw_edma_core_ll_sync(struct dw_edma_chan *chan)
 /* Must be called with vc.lock held for an LL channel. */
 static void dw_edma_core_ch_kick(struct dw_edma_chan *chan)
 {
+	if (unlikely(READ_ONCE(chan->dw->teardown)))
+		return;
+
+	dw_edma_ll_recheck_cancel(chan);
+
+	/*
+	 * Complete the remote LL publication before serializing the new
+	 * hardware run with IRQ capture.
+	 */
 	dw_edma_core_ll_sync(chan);
 
 	guard(raw_spinlock_irqsave)(dw_edma_event_lock(chan));
@@ -566,14 +657,71 @@ static void dw_edma_core_ch_kick(struct dw_edma_chan *chan)
 	dw_edma_core_ch_doorbell(chan);
 }
 
-/* Must be called with vc.lock held. */
-static void dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
+/*
+ * Must be called with vc.lock held. Return true when published work is still
+ * running and may need one later stop recheck.
+ */
+static bool dw_edma_core_ch_maybe_doorbell(struct dw_edma_chan *chan)
 {
 	if (chan->non_ll || chan->request != EDMA_REQ_NONE ||
-	    chan->status != EDMA_ST_BUSY || !dw_edma_ll_pending(chan))
-		return;
+	    chan->status != EDMA_ST_BUSY || !dw_edma_ll_pending(chan) ||
+	    dw_edma_abort_is_pending(chan))
+		return false;
+
+	/*
+	 * While running, both eDMA and HDMA consume newly published
+	 * elements without another doorbell.
+	 */
+	if (dw_edma_core_ch_status(chan) == DMA_IN_PROGRESS)
+		return true;
+
+	dw_edma_ll_reconcile_and_refill(chan);
+	if (!dw_edma_ll_pending(chan))
+		return false;
 
 	dw_edma_core_ch_kick(chan);
+
+	return false;
+}
+
+/*
+ * eDMA may stop at a CB mismatch just after reporting RUNNING.
+ * Recheck once so the stopped tail is not left pending.
+ */
+static void
+dw_edma_core_ch_maybe_doorbell_or_recheck(struct dw_edma_chan *chan)
+{
+	if (dw_edma_core_ch_maybe_doorbell(chan) &&
+	    !dw_edma_ll_has_hdma_stop_event(chan))
+		dw_edma_ll_recheck_schedule(chan);
+}
+
+static void dw_edma_ll_recheck_work(struct work_struct *work)
+{
+	struct dw_edma_chan *chan =
+		container_of(to_delayed_work(work), struct dw_edma_chan,
+			     ll_recheck_work);
+	unsigned long delay;
+
+	guard(spinlock_irqsave)(&chan->vc.lock);
+
+	if (unlikely(READ_ONCE(chan->dw->teardown))) {
+		chan->ll_recheck_at = 0;
+		return;
+	}
+
+	if (!chan->ll_recheck_at)
+		return;
+
+	if (time_before(jiffies, chan->ll_recheck_at)) {
+		delay = chan->ll_recheck_at - jiffies;
+		mod_delayed_work(chan->dw->wq, &chan->ll_recheck_work, delay);
+		return;
+	}
+
+	chan->ll_recheck_at = 0;
+	if (chan->request == EDMA_REQ_NONE)
+		dw_edma_core_ch_maybe_doorbell(chan);
 }
 
 static void dw_edma_device_caps(struct dma_chan *dchan,
@@ -701,7 +849,7 @@ static int dw_edma_device_resume(struct dma_chan *dchan)
 		chan->status = EDMA_ST_BUSY;
 		if (!dw_edma_start_transfer(chan))
 			chan->status = EDMA_ST_IDLE;
-		dw_edma_core_ch_maybe_doorbell(chan);
+		dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
 	}
 
 	return err;
@@ -751,7 +899,7 @@ static void dw_edma_device_issue_pending(struct dma_chan *dchan)
 			dw_edma_ll_snapshot_discard(chan);
 		chan->status = EDMA_ST_BUSY;
 		dw_edma_start_transfer(chan);
-		dw_edma_core_ch_maybe_doorbell(chan);
+		dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
 	}
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
@@ -1101,7 +1249,7 @@ static void dw_edma_ll_interrupt(struct dw_edma_chan *chan)
 	}
 
 out:
-	dw_edma_core_ch_maybe_doorbell(chan);
+	dw_edma_core_ch_maybe_doorbell_or_recheck(chan);
 }
 
 static bool dw_edma_abort_interrupt(struct dw_edma_chan *chan)
@@ -1140,6 +1288,11 @@ static void dw_edma_irq_work(struct work_struct *work)
 						 irq_work);
 	unsigned int events;
 
+	if (unlikely(READ_ONCE(chan->dw->teardown))) {
+		atomic_set(&chan->irq_pending, 0);
+		return;
+	}
+
 	do {
 		events = atomic_xchg(&chan->irq_pending, 0);
 
@@ -1157,6 +1310,9 @@ static void dw_edma_irq_work(struct work_struct *work)
 static void dw_edma_queue_irq_work(struct dw_edma_chan *chan,
 				   unsigned int events)
 {
+	if (unlikely(READ_ONCE(chan->dw->teardown)))
+		return;
+
 	atomic_or(events, &chan->irq_pending);
 	queue_work(chan->dw->wq, &chan->irq_work);
 }
@@ -1394,6 +1550,9 @@ static void dw_edma_device_synchronize(struct dma_chan *dchan)
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
 
 	dw_edma_wait_termination(dchan);
+	scoped_guard(spinlock_irqsave, &chan->vc.lock)
+		dw_edma_ll_recheck_cancel(chan);
+	cancel_delayed_work_sync(&chan->ll_recheck_work);
 	cancel_work_sync(&chan->irq_work);
 	atomic_set(&chan->irq_pending, 0);
 	dw_edma_irq_events_discard(chan);
@@ -1447,6 +1606,8 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->status = EDMA_ST_IDLE;
 		chan->irq_mode = dw_edma_get_default_irq_mode(chan);
 		INIT_WORK(&chan->irq_work, dw_edma_irq_work);
+		INIT_DELAYED_WORK(&chan->ll_recheck_work,
+				  dw_edma_ll_recheck_work);
 		atomic_set(&chan->irq_pending, 0);
 		chan->ll_irq.idx = -1;
 		chan->ll_irq.event = DW_EDMA_LL_EVENT_NONE;
@@ -1789,23 +1950,39 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	if (!dw)
 		return -ENODEV;
 
+	/*
+	 * Stop new clients and asynchronous hardware access before dismantling
+	 * their execution context.
+	 */
+	WRITE_ONCE(dw->teardown, true);
+	dma_async_device_unregister(&dw->dma);
+
+	/*
+	 * Drain channel work that may have passed the teardown gate before
+	 * stopping the hardware. IRQ handlers remain installed while it is
+	 * active.
+	 */
+	for (i = 0; i < dw->wr_ch_cnt + dw->rd_ch_cnt; i++) {
+		disable_delayed_work_sync(&dw->chan[i].ll_recheck_work);
+		cancel_work_sync(&dw->chan[i].irq_work);
+	}
+
 	if (chip->flags & DW_EDMA_CHIP_PARTIAL)
 		err = dw_edma_core_quiesce(dw);
 	else
 		dw_edma_core_off(dw);
 
-	/* Free irqs */
+	/* No new hardware event can be raised after the quiesce. */
 	for (i = (dw->nr_irqs - 1); i >= 0; i--)
 		free_irq(chip->ops->irq_vector(dev, i), &dw->irq[i]);
 	dw_edma_emul_irq_free(dw);
 
+	/* Drain IRQ work queued by a handler that raced with the gate. */
 	for (i = 0; i < dw->wr_ch_cnt + dw->rd_ch_cnt; i++)
 		cancel_work_sync(&dw->chan[i].irq_work);
 
 	destroy_workqueue(dw->wq);
 
-	/* Deregister eDMA device */
-	dma_async_device_unregister(&dw->dma);
 	list_for_each_entry_safe(chan, _chan, &dw->dma.channels,
 				 vc.chan.device_node) {
 		tasklet_kill(&chan->vc.task);
