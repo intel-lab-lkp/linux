@@ -170,7 +170,6 @@ struct msgdma_sw_desc {
 struct msgdma_device {
 	spinlock_t lock;
 	struct device *dev;
-	struct tasklet_struct irq_tasklet;
 	struct list_head pending_list;
 	struct list_head free_list;
 	struct list_head active_list;
@@ -684,11 +683,12 @@ static int msgdma_alloc_chan_resources(struct dma_chan *dchan)
 
 /**
  * msgdma_tasklet - Schedule completion tasklet
- * @t: Pointer to the Altera sSGDMA channel structure
+ * @chan: Pointer to the Altera sSGDMA channel structure
  */
-static void msgdma_tasklet(struct tasklet_struct *t)
+static void msgdma_tasklet(struct dma_chan *chan)
 {
-	struct msgdma_device *mdev = from_tasklet(mdev, t, irq_tasklet);
+	struct msgdma_device *mdev = container_of(chan, struct msgdma_device,
+						  dmachan);
 	u32 count;
 	u32 __maybe_unused size;
 	u32 __maybe_unused status;
@@ -748,7 +748,7 @@ static irqreturn_t msgdma_irq_handler(int irq, void *data)
 		spin_unlock(&mdev->lock);
 	}
 
-	tasklet_schedule(&mdev->irq_tasklet);
+	dma_chan_schedule_bh(&mdev->dmachan);
 
 	/* Clear interrupt in mSGDMA controller */
 	iowrite32(MSGDMA_CSR_STAT_IRQ, mdev->csr + MSGDMA_CSR_STATUS);
@@ -766,7 +766,7 @@ static void msgdma_dev_remove(struct msgdma_device *mdev)
 		return;
 
 	devm_free_irq(mdev->dev, mdev->irq, mdev);
-	tasklet_kill(&mdev->irq_tasklet);
+	dma_chan_kill_bh(&mdev->dmachan);
 	list_del(&mdev->dmachan.device_node);
 }
 
@@ -852,7 +852,7 @@ static int msgdma_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	tasklet_setup(&mdev->irq_tasklet, msgdma_tasklet);
+	dma_chan_init_bh(&mdev->dmachan, msgdma_tasklet);
 
 	dma_cookie_init(&mdev->dmachan);
 
