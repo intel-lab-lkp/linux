@@ -3611,6 +3611,8 @@ void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
 	if (test_kvm_facility(vcpu->kvm, 74) || vcpu->kvm->arch.user_instr0 ||
 	    vcpu->kvm->arch.user_operexec)
 		vcpu->arch.sie_block->ictl |= ICTL_OPEREXC;
+
+	WRITE_ONCE(vcpu->arch.initialized, true);
 }
 
 static bool kvm_has_pckmo_subfunc(struct kvm *kvm, unsigned long nr)
@@ -5037,6 +5039,9 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 	    kvm_run->kvm_dirty_regs & ~KVM_SYNC_S390_VALID_FIELDS)
 		return -EINVAL;
 
+	if (!READ_ONCE(vcpu->arch.initialized))
+		return -EINVAL;
+
 	vcpu_load(vcpu);
 
 	if (guestdbg_exit_pending(vcpu)) {
@@ -5520,6 +5525,9 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	int idx;
 	long r;
 	u16 rc, rrc;
+
+	if (!READ_ONCE(vcpu->arch.initialized))
+		return -EINVAL;
 
 	vcpu_load(vcpu);
 
