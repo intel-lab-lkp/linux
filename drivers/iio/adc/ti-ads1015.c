@@ -1042,6 +1042,8 @@ static int ads1015_probe(struct i2c_client *client)
 	ret = iio_device_register(indio_dev);
 	if (ret < 0) {
 		dev_err(&client->dev, "Failed to register IIO device\n");
+		pm_runtime_disable(&client->dev);
+		pm_runtime_set_suspended(&client->dev);
 		return ret;
 	}
 
