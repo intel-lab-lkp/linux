@@ -2454,6 +2454,21 @@ static int tiocgetd(struct tty_struct *tty, int __user *p)
 	return ret;
 }
 
+#define TTY_BREAK_DEFAULT_MS	250
+#define TTY_TCSBRKP_UNIT_MS	100
+#define TTY_TCSBRKP_MAX_MS	5000
+
+static unsigned int tcsbrkp_duration(unsigned long arg)
+{
+	if (!arg)
+		return TTY_BREAK_DEFAULT_MS;
+
+	if (arg > TTY_TCSBRKP_MAX_MS / TTY_TCSBRKP_UNIT_MS)
+		return TTY_TCSBRKP_MAX_MS;
+
+	return arg * TTY_TCSBRKP_UNIT_MS;
+}
+
 /**
  * send_break - performed time break
  * @tty: device to break on
@@ -2757,7 +2772,7 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return send_break(tty, 250);
 		return 0;
 	case TCSBRKP:	/* support for POSIX tcsendbreak() */
-		return send_break(tty, arg ? arg*100 : 250);
+		return send_break(tty, tcsbrkp_duration(arg));
 
 	case TIOCMGET:
 		return tty_tiocmget(tty, p);
