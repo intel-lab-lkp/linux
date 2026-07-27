@@ -596,7 +596,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		integrity_audit_message(AUDIT_INTEGRITY_STATUS, NULL, NULL,
 					"policy_update",
 					"signed policy required",
-					result, 0, 0);
+					result, 0, result);
 		result = -EACCES;
 	} else {
 		ima_measure_raw_policy(data, datalen);
