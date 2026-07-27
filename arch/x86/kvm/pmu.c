@@ -77,6 +77,21 @@ static const struct x86_cpu_id vmx_pebs_pdist_cpu[] = {
 	{}
 };
 
+/*
+ * CPUs whose RDPMC encodings have been audited for KVM RDPMC
+ * passthrough support.
+ */
+static const struct x86_cpu_id kvm_rdpmc_known_cpus[] = {
+	X86_MATCH_VFM(INTEL_ATOM_DARKMONT_X, NULL),
+	X86_MATCH_VFM(INTEL_LUNARLAKE_M, NULL),
+	X86_MATCH_VFM(INTEL_NOVALAKE, NULL),
+	X86_MATCH_VFM(INTEL_NOVALAKE_L, NULL),
+	X86_MATCH_VFM(INTEL_PANTHERLAKE_L, NULL),
+	X86_MATCH_VFM(INTEL_PANTHERLAKE_R, NULL),
+	X86_MATCH_VFM(INTEL_WILDCATLAKE_L, NULL),
+	{}
+};
+
 /* NOTE:
  * - Each perf counter is defined as "struct kvm_pmc";
  * - There are two types of perf counters: general purpose (gp) and fixed.
@@ -807,6 +822,20 @@ bool kvm_need_perf_global_ctrl_intercept(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_need_perf_global_ctrl_intercept);
 
+static bool kvm_rdpmc_encoding_supported(void)
+{
+	/* KVM understands all RDPMC encodings prior to PMU v6. */
+	if (kvm_host_pmu.version < 6)
+		return true;
+
+	/*
+	 * Future PMU v6 implementations and future PMU versions require RDPMC
+	 * interception until their RDPMC encodings are audited and supported
+	 * by KVM.
+	 */
+	return x86_match_cpu(kvm_rdpmc_known_cpus);
+}
+
 bool kvm_need_rdpmc_intercept(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
@@ -816,6 +845,9 @@ bool kvm_need_rdpmc_intercept(struct kvm_vcpu *vcpu)
 	 * in Ring3 when CR4.PCE=0.
 	 */
 	if (enable_vmware_backdoor)
+		return true;
+
+	if (!kvm_rdpmc_encoding_supported())
 		return true;
 
 	return kvm_need_any_pmc_intercept(vcpu) ||
