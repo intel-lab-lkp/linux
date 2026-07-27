@@ -983,6 +983,8 @@ static int __ip_append_data(struct sock *sk,
 	hh_len = LL_RESERVED_SPACE(rt->dst.dev);
 
 	fragheaderlen = sizeof(struct iphdr) + (opt ? opt->optlen : 0);
+	if (hh_len + exthdrlen + fragheaderlen > U16_MAX)
+		return -EINVAL;
 	maxfraglen = ((mtu - fragheaderlen) & ~7) + fragheaderlen;
 	maxnonfragsize = ip_sk_ignore_df(sk) ? IP_MAX_MTU : mtu;
 

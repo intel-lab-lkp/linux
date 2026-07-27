@@ -1495,6 +1495,10 @@ static int __ip6_append_data(struct sock *sk,
 		     (opt ? opt->opt_flen + opt->opt_nflen : 0) +
 		     rt->rt6i_nfheader_len;
 
+	if (hh_len + sizeof(struct frag_hdr) + dst_exthdrlen + exthdrlen +
+	    fragheaderlen > U16_MAX)
+		return -EINVAL;
+
 	if (mtu <= fragheaderlen ||
 	    ((mtu - fragheaderlen) & ~7) + fragheaderlen <= sizeof(struct frag_hdr))
 		goto emsgsize;
