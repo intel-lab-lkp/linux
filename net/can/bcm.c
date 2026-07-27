@@ -1014,6 +1014,14 @@ static int bcm_delete_rx_op(struct list_head *ops, struct bcm_msg_head *mh,
 						  bcm_rx_handler, op);
 
 			list_del_rcu(&op->list);
+
+			/* wait for any in-flight bcm_rx_handler() to finish so a
+			 * concurrent frame reception cannot re-arm op->timer after
+			 * bcm_remove_op() has cancelled it and the op is freed
+			 * (same drain as the bcm_release() teardown path).
+			 */
+			synchronize_rcu();
+
 			bcm_remove_op(op);
 			return 1; /* done */
 		}
