@@ -72,7 +72,7 @@ static void vmw_bo_free(struct ttm_buffer_object *bo)
 					       0);
 			mutex_unlock(&res->dev_priv->cmdbuf_mutex);
 		}
-		vmw_surface_unreference(&vbo->dumb_surface);
+		vmw_dumb_surface_unref(&vbo->dumb_surface);
 	}
 	WARN_ON(!RB_EMPTY_ROOT(&vbo->res_tree));
 	drm_gem_object_release(&vbo->tbo.base);

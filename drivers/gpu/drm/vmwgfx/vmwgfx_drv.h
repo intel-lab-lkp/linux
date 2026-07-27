@@ -1186,6 +1186,7 @@ u32 vmw_lookup_surface_handle_for_buffer(struct vmw_private *vmw,
 int vmw_dumb_create(struct drm_file *file_priv,
 		    struct drm_device *dev,
 		    struct drm_mode_create_dumb *args);
+void vmw_dumb_surface_unref(struct vmw_surface **dumb_surface);
 
 /*
  * Shader management - vmwgfx_shader.c
