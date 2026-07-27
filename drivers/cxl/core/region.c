@@ -1574,6 +1574,19 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	}
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
+		/*
+		 * A passthrough switch decoder holds no HW decode state.
+		 * It's CXL_DECODER_F_ENABLE flag is pure software bookkeeping
+		 * that is cleared when the region is torn down. On auto-discovery
+		 * re-assembly after a subsequent rescan the decode config still
+		 * matches the region, so restore the flag rather than fail to
+		 * rebuild a region that HW is in fact still decoding.
+		 */
+		if (!cxld->commit && cxld->interleave_ways == iw &&
+		    (iw <= 1 || cxld->interleave_granularity == ig) &&
+		    spa_maps_hpa(p, &cxld->hpa_range))
+			cxld->flags |= CXL_DECODER_F_ENABLE;
+
 		if (cxld->interleave_ways != iw ||
 		    (iw > 1 && cxld->interleave_granularity != ig) ||
 		    !spa_maps_hpa(p, &cxld->hpa_range) ||
