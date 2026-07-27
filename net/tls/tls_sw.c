@@ -37,6 +37,7 @@
 
 #include <linux/bug.h>
 #include <linux/sched/signal.h>
+#include <linux/timekeeping.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/splice.h>
@@ -2049,6 +2050,11 @@ splice_requeue:
 	goto splice_read_end;
 }
 
+/* Bound the time that consecutive empty ingress data records keep
+ * the socket lock held without releasing it.
+ */
+#define TLS_RX_NODATA_NS NSEC_PER_MSEC
+
 int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		     sk_read_actor_t read_actor)
 {
@@ -2057,6 +2063,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	struct tls_prot_info *prot = &tls_ctx->prot_info;
 	struct strp_msg *rxm = NULL;
 	struct sk_buff *skb = NULL;
+	u64 nodata_deadline = 0;
 	struct sk_psock *psock;
 	size_t flushed_at = 0;
 	bool released = true;
@@ -2122,7 +2129,19 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		 * here instead.
 		 */
 		if (rxm->full_len == 0) {
+			err = 0;
 			consume_skb(skb);
+			if (!nodata_deadline) {
+				nodata_deadline = ktime_get_ns() +
+						  TLS_RX_NODATA_NS;
+			} else if (ktime_get_ns() >= nodata_deadline) {
+				/* Queued records raise no new sk_data_ready(),
+				 * and tls_rx_reader_release() announces only to
+				 * saved_data_ready(), not the consumer's own.
+				 */
+				sk->sk_data_ready(sk);
+				break;
+			}
 			continue;
 		}
 
@@ -2133,6 +2152,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			goto read_sock_requeue;
 		}
 		copied += used;
+		nodata_deadline = 0;
 		if (used < rxm->full_len) {
 			rxm->offset += used;
 			rxm->full_len -= used;
