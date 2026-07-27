@@ -180,6 +180,13 @@ struct mv88e6xxx_info {
 	 * port 0, 1 means internal PHYs range starts at port 1, etc
 	 */
 	unsigned int internal_phys_offset;
+
+	/* The switch can embed the PTP arrival time stamp in the reserved2
+	 * field of the PTP common header, which the edsa-ptp-reserved2-ts
+	 * tag protocol selects. Otherwise arrival time stamps are only
+	 * available from the switch registers.
+	 */
+	bool supports_ptp_embedded_ts;
 };
 
 struct mv88e6xxx_atu_entry {
@@ -816,6 +823,14 @@ static inline bool mv88e6xxx_has_pvt(struct mv88e6xxx_chip *chip)
 static inline bool mv88e6xxx_has_lag(struct mv88e6xxx_chip *chip)
 {
 	return !!chip->info->global2_addr;
+}
+
+/* Whether the active tagging protocol has the switch embed arrival time stamps
+ * in the frame instead of leaving them in the PTP arrival registers.
+ */
+static inline bool mv88e6xxx_ptp_embedded_ts(struct mv88e6xxx_chip *chip)
+{
+	return chip->tag_protocol == DSA_TAG_PROTO_EDSA_PTP_RESERVED2_TS;
 }
 
 static inline bool mv88e6xxx_has_tcam(struct mv88e6xxx_chip *chip)

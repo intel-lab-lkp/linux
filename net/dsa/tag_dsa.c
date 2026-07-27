@@ -402,6 +402,23 @@ static const struct dsa_device_ops edsa_netdev_ops = {
 
 DSA_TAG_DRIVER(edsa_netdev_ops);
 MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_EDSA, EDSA_NAME);
+
+#define EDSA_PTP_RESERVED2_TS_NAME	"edsa-ptp-reserved2-ts"
+
+/* Same wire format as EDSA, except that the switch overwrites the reserved2
+ * field of the PTP common header with the frame's arrival time stamp.
+ */
+static const struct dsa_device_ops edsa_ptp_reserved2_ts_netdev_ops = {
+	.name		 = EDSA_PTP_RESERVED2_TS_NAME,
+	.proto		 = DSA_TAG_PROTO_EDSA_PTP_RESERVED2_TS,
+	.xmit		 = edsa_xmit,
+	.rcv		 = edsa_rcv,
+	.needed_headroom = EDSA_HLEN,
+};
+
+DSA_TAG_DRIVER(edsa_ptp_reserved2_ts_netdev_ops);
+MODULE_ALIAS_DSA_TAG_DRIVER(DSA_TAG_PROTO_EDSA_PTP_RESERVED2_TS,
+			    EDSA_PTP_RESERVED2_TS_NAME);
 #endif	/* CONFIG_NET_DSA_TAG_EDSA */
 
 static struct dsa_tag_driver *dsa_tag_drivers[] = {
@@ -410,6 +427,7 @@ static struct dsa_tag_driver *dsa_tag_drivers[] = {
 #endif
 #if IS_ENABLED(CONFIG_NET_DSA_TAG_EDSA)
 	&DSA_TAG_DRIVER_NAME(edsa_netdev_ops),
+	&DSA_TAG_DRIVER_NAME(edsa_ptp_reserved2_ts_netdev_ops),
 #endif
 };
 

@@ -3271,7 +3271,8 @@ static int mv88e6xxx_setup_port_mode(struct mv88e6xxx_chip *chip, int port)
 	if (chip->tag_protocol == DSA_TAG_PROTO_DSA)
 		return mv88e6xxx_set_port_mode_dsa(chip, port);
 
-	if (chip->tag_protocol == DSA_TAG_PROTO_EDSA)
+	if (chip->tag_protocol == DSA_TAG_PROTO_EDSA ||
+	    chip->tag_protocol == DSA_TAG_PROTO_EDSA_PTP_RESERVED2_TS)
 		return mv88e6xxx_set_port_mode_edsa(chip, port);
 
 	return -EINVAL;
@@ -6370,6 +6371,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.edsa_support = MV88E6XXX_EDSA_SUPPORTED,
 		.ptp_support = true,
 		.ops = &mv88e6341_ops,
+		.supports_ptp_embedded_ts = true,
 	},
 
 	[MV88E6350] = {
@@ -6447,6 +6449,7 @@ static const struct mv88e6xxx_info mv88e6xxx_table[] = {
 		.edsa_support = MV88E6XXX_EDSA_SUPPORTED,
 		.ptp_support = true,
 		.ops = &mv88e6352_ops,
+		.supports_ptp_embedded_ts = true,
 	},
 	[MV88E6361] = {
 		.prod_num = MV88E6XXX_PORT_SWITCH_ID_PROD_6361,
@@ -6659,9 +6662,17 @@ static int mv88e6xxx_change_tag_protocol(struct dsa_switch *ds,
 	struct mv88e6xxx_chip *chip = ds->priv;
 	enum dsa_tag_protocol old_protocol;
 	struct dsa_port *cpu_dp;
-	int err;
+	int err = 0;
 
+	/* The embedded arrival-time-stamp protocol is an EDSA extension: EDSA
+	 * is the modern tag format for these switches, so it is the one we
+	 * extend; the legacy DSA tag is intentionally left un-extended.
+	 */
 	switch (proto) {
+	case DSA_TAG_PROTO_EDSA_PTP_RESERVED2_TS:
+		if (!chip->info->supports_ptp_embedded_ts)
+			return -EPROTONOSUPPORT;
+		fallthrough;
 	case DSA_TAG_PROTO_EDSA:
 		switch (chip->info->edsa_support) {
 		case MV88E6XXX_EDSA_UNSUPPORTED:
@@ -6690,7 +6701,12 @@ static int mv88e6xxx_change_tag_protocol(struct dsa_switch *ds,
 			goto unwind;
 		}
 	}
+
+	if (chip->info->ptp_support)
+		err = mv88e6xxx_hwtstamp_setup_arr_ts(chip);
 	mv88e6xxx_reg_unlock(chip);
+	if (err)
+		goto unwind;
 
 	return 0;
 
@@ -6700,6 +6716,15 @@ unwind:
 	mv88e6xxx_reg_lock(chip);
 	dsa_switch_for_each_cpu_port_continue_reverse(cpu_dp, ds)
 		mv88e6xxx_setup_port_mode(chip, cpu_dp->index);
+	if (chip->info->ptp_support) {
+		/* Nothing else can be done here, but leaving a port embedding
+		 * time stamps the driver will not strip corrupts every PTP
+		 * event frame it receives, so make the failure visible.
+		 */
+		if (mv88e6xxx_hwtstamp_setup_arr_ts(chip))
+			dev_err(chip->dev,
+				"failed to restore arrival time stamp mode\n");
+	}
 	mv88e6xxx_reg_unlock(chip);
 
 	return err;

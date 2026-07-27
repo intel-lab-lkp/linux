@@ -13,6 +13,8 @@
 #ifndef _MV88E6XXX_HWTSTAMP_H
 #define _MV88E6XXX_HWTSTAMP_H
 
+#include <linux/ptp_classify.h>
+
 #include "chip.h"
 
 /* Global 6352 PTP registers */
@@ -64,9 +66,20 @@
 
 /* Offset 0x02: PTP Configuration 2 */
 #define MV88E6XXX_PORT_PTP_CFG2				0x02
-#define MV88E6XXX_PORT_PTP_CFG2_EMBED_ARRIVAL		0x1000
 #define MV88E6XXX_PORT_PTP_CFG2_DEP_IRQ_EN		0x0002
 #define MV88E6XXX_PORT_PTP_CFG2_ARR_IRQ_EN		0x0001
+
+/* Arrival Time Stamp Mode (ArrTSMode), CFG2 bits [15:8]: configures how the
+ * switch embeds the arrival time stamp (PTPArr0Time) into enabled PTP event
+ * frames. A non-zero value is the byte offset, from the start of the PTP common
+ * header, at which the switch overwrites four bytes in place; we always point
+ * it at the header's reserved2 field so the frame length is left alone.
+ */
+#define MV88E6XXX_PTP_ARR_TS_OFFSET			\
+	offsetof(struct ptp_header, reserved2)
+#define MV88E6XXX_PORT_PTP_CFG2_ARR_TS_DISABLED		0x0000
+#define MV88E6XXX_PORT_PTP_CFG2_ARR_TS_RESERVED2	\
+	(MV88E6XXX_PTP_ARR_TS_OFFSET << 8)
 
 /* Offset 0x03: PTP LED Configuration */
 #define MV88E6XXX_PORT_PTP_LED_CFG	0x03
@@ -126,6 +139,7 @@ int mv88e6xxx_get_ts_info(struct dsa_switch *ds, int port,
 
 long mv88e6xxx_hwtstamp_work(struct ptp_clock_info *ptp);
 int mv88e6xxx_hwtstamp_setup(struct mv88e6xxx_chip *chip);
+int mv88e6xxx_hwtstamp_setup_arr_ts(struct mv88e6xxx_chip *chip);
 void mv88e6xxx_hwtstamp_free(struct mv88e6xxx_chip *chip);
 int mv88e6352_hwtstamp_port_enable(struct mv88e6xxx_chip *chip, int port);
 int mv88e6352_hwtstamp_port_disable(struct mv88e6xxx_chip *chip, int port);
@@ -168,6 +182,11 @@ static inline int mv88e6xxx_get_ts_info(struct dsa_switch *ds, int port,
 }
 
 static inline int mv88e6xxx_hwtstamp_setup(struct mv88e6xxx_chip *chip)
+{
+	return 0;
+}
+
+static inline int mv88e6xxx_hwtstamp_setup_arr_ts(struct mv88e6xxx_chip *chip)
 {
 	return 0;
 }
