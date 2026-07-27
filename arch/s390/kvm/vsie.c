@@ -1433,7 +1433,6 @@ static int vsie_run(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 		}
 		if (sg)
 			sg = gmap_put(sg);
-		cond_resched();
 	}
 	if (sg)
 		sg = gmap_put(sg);
