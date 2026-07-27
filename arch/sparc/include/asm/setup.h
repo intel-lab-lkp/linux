@@ -43,7 +43,6 @@ void __init device_scan(void);
 
 /* unaligned_32.c */
 unsigned long safe_compute_effective_address(struct pt_regs *, unsigned int);
-
 #endif
 
 #ifdef CONFIG_SPARC64

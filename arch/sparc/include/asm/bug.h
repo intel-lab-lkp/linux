@@ -27,4 +27,7 @@ void do_BUG(const char *file, int line);
 struct pt_regs;
 void __noreturn die_if_kernel(char *str, struct pt_regs *regs);
 
+void arch_do_panic(void);
+#define arch_do_panic arch_do_panic
+
 #endif
