@@ -37,7 +37,8 @@ static int set_addr(struct sk_buff *skb, unsigned int protoff,
 	buf.port = port;
 	addroff += dataoff;
 
-	if (ip_hdr(skb)->protocol == IPPROTO_TCP) {
+	switch (nf_ct_protonum(ct)) {
+	case IPPROTO_TCP:
 		if (!nf_nat_mangle_tcp_packet(skb, ct, ctinfo,
 					      protoff, addroff, sizeof(buf),
 					      (char *) &buf, sizeof(buf))) {
@@ -51,7 +52,8 @@ static int set_addr(struct sk_buff *skb, unsigned int protoff,
 		if (th == NULL)
 			return -1;
 		*data = skb->data + ip_hdrlen(skb) + th->doff * 4 + dataoff;
-	} else {
+		break;
+	case IPPROTO_UDP:
 		if (!nf_nat_mangle_udp_packet(skb, ct, ctinfo,
 					      protoff, addroff, sizeof(buf),
 					      (char *) &buf, sizeof(buf))) {
@@ -62,6 +64,9 @@ static int set_addr(struct sk_buff *skb, unsigned int protoff,
 		 * or pull everything in a linear buffer, so we can safely
 		 * use the skb pointers now */
 		*data = skb->data + ip_hdrlen(skb) + sizeof(struct udphdr);
+		break;
+	default:
+		return -1;
 	}
 
 	return 0;

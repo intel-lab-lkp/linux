@@ -539,6 +539,10 @@ static int h245_help(struct sk_buff *skb, unsigned int protoff,
 	if (ctinfo != IP_CT_ESTABLISHED && ctinfo != IP_CT_ESTABLISHED_REPLY)
 		return NF_ACCEPT;
 
+	/* H.245 is TPKT/TCP; ignore manual bindings to other L4 protocols. */
+	if (nf_ct_protonum(ct) != IPPROTO_TCP)
+		return NF_ACCEPT;
+
 	pr_debug("nf_ct_h245: skblen = %u\n", skb->len);
 
 	spin_lock_bh(&nf_h323_lock);
