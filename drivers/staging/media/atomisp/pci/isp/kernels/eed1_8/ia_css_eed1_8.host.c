@@ -31,8 +31,8 @@ static const s16 chgrinv_x[NUMBER_OF_CHGRINV_POINTS] = {
 
 static const s16 chgrinv_a[NUMBER_OF_CHGRINV_POINTS] = {
 	-7171, -256, -29, -3456, -1071, -475, -189, -102,
-	    -48, -38, -10, -9, -7, -6, 0
-    };
+	-48, -38, -10, -9, -7, -6, 0
+};
 
 static const s16 chgrinv_b[NUMBER_OF_CHGRINV_POINTS] = {
 	8191, 1021, 256, 114, 60, 37, 24, 17,
@@ -50,7 +50,7 @@ static const s16 tcinv_x[NUMBER_OF_TCINV_POINTS] = {
 
 static const s16 tcinv_a[NUMBER_OF_TCINV_POINTS] = {
 	-6364, -631, -126, -34, -13, -6, -4452, -2156, 0
-    };
+};
 
 static const s16 tcinv_b[NUMBER_OF_TCINV_POINTS] = {
 	8191, 1828, 726, 352, 197, 121, 80, 55, 40
@@ -66,7 +66,7 @@ static const s16 fcinv_x[NUMBER_OF_FCINV_POINTS] = {
 
 static const s16 fcinv_a[NUMBER_OF_FCINV_POINTS] = {
 	-5244, -486, -86, -2849, -961, -400, -180, -86, 0
-    };
+};
 
 static const s16 fcinv_b[NUMBER_OF_FCINV_POINTS] = {
 	8191, 1637, 607, 287, 159, 98, 64, 44, 32
@@ -77,10 +77,9 @@ static const s16 fcinv_c[NUMBER_OF_FCINV_POINTS] = {
 };
 
 void
-ia_css_eed1_8_vmem_encode(
-    struct eed1_8_vmem_params *to,
-    const struct ia_css_eed1_8_config *from,
-    size_t size)
+ia_css_eed1_8_vmem_encode(struct eed1_8_vmem_params *to,
+			  const struct ia_css_eed1_8_config *from,
+			  size_t size)
 {
 	unsigned int i, j, base;
 	const unsigned int total_blocks = 4;
@@ -208,10 +207,9 @@ ia_css_eed1_8_vmem_encode(
 }
 
 void
-ia_css_eed1_8_encode(
-    struct eed1_8_dmem_params *to,
-    const struct ia_css_eed1_8_config *from,
-    size_t size)
+ia_css_eed1_8_encode(struct eed1_8_dmem_params *to,
+		     const struct ia_css_eed1_8_config *from,
+		     size_t size)
 {
 	int i;
 	int min_exp = 0;
@@ -266,18 +264,16 @@ ia_css_eed1_8_encode(
 }
 
 void
-ia_css_init_eed1_8_state(
-    void *state,
-    size_t size)
+ia_css_init_eed1_8_state(void *state,
+			 size_t size)
 {
 	memset(state, 0, size);
 }
 
 #ifndef IA_CSS_NO_DEBUG
 void
-ia_css_eed1_8_debug_dtrace(
-    const struct ia_css_eed1_8_config *eed,
-    unsigned int level)
+ia_css_eed1_8_debug_dtrace(const struct ia_css_eed1_8_config *eed,
+			   unsigned int level)
 {
 	if (!eed)
 		return;
