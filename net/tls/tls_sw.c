@@ -1788,6 +1788,24 @@ static void tls_rx_reader_unlock(struct sock *sk, struct tls_sw_context_rx *ctx)
 	release_sock(sk);
 }
 
+/* TLS 1.2 and TLS 1.3 both permit a zero-length application_data
+ * record as a traffic-analysis countermeasure (RFC 5246, Section
+ * 6.2.1; RFC 8446, Section 5.1).
+ */
+static bool tls_rx_empty_data_rec(int len, unsigned char control)
+{
+	return !len && control == TLS_RECORD_TYPE_DATA;
+}
+
+/* sock_intr_errno() maps the zero timeo of a reader that cannot wait
+ * to -EINTR, but such a reader has no blocking to interrupt. The rest
+ * of the receive side reports that case as -EAGAIN.
+ */
+static int tls_rx_intr_errno(long timeo)
+{
+	return timeo ? sock_intr_errno(timeo) : -EAGAIN;
+}
+
 int tls_sw_recvmsg(struct sock *sk,
 		   struct msghdr *msg,
 		   size_t len,
@@ -1991,6 +2009,7 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	struct sock *sk = sock->sk;
 	struct tls_msg *tlm;
 	struct sk_buff *skb;
+	bool released = true;
 	ssize_t copied = 0;
 	int chunk;
 	int err;
@@ -1999,13 +2018,14 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (err < 0)
 		return err;
 
+retry:
 	if (!skb_queue_empty(&ctx->rx_list)) {
 		skb = __skb_dequeue(&ctx->rx_list);
 	} else {
 		struct tls_decrypt_arg darg;
 
 		err = tls_rx_rec_wait(sk, flags & SPLICE_F_NONBLOCK,
-				      true, false);
+				      released, false);
 		if (err <= 0)
 			goto splice_read_end;
 
@@ -2017,6 +2037,11 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 
 		tls_rx_rec_done(ctx);
 		skb = darg.skb;
+
+		/* The socket lock stays held to the retry, so the
+		 * anchor this wait loaded survives it.
+		 */
+		released = false;
 	}
 
 	rxm = strp_msg(skb);
@@ -2026,6 +2051,21 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (tlm->control != TLS_RECORD_TYPE_DATA) {
 		err = -EINVAL;
 		goto splice_requeue;
+	}
+
+	/* Splicing an empty data record delivers zero bytes, which the
+	 * caller reads as EOF. tls_rx_rec_wait() skips its signal check
+	 * while a record is parsed, so test for a signal here.
+	 */
+	if (tls_rx_empty_data_rec(rxm->full_len, tlm->control)) {
+		long timeo = sock_rcvtimeo(sk, flags & SPLICE_F_NONBLOCK);
+
+		consume_skb(skb);
+		if (signal_pending(current)) {
+			err = tls_rx_intr_errno(timeo);
+			goto splice_read_end;
+		}
+		goto retry;
 	}
 
 	chunk = min_t(unsigned int, rxm->full_len, len);
@@ -2122,13 +2162,12 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			goto read_sock_requeue;
 		}
 
-		/* An empty data record (legal in TLS 1.3) gives a zero
-		 * read_actor return, indistinguishable from the consumer
-		 * stalling; the used <= 0 path would requeue it at the
-		 * head of rx_list and block all later records. Consume it
-		 * here instead.
+		/* An empty data record gives a zero read_actor return,
+		 * indistinguishable from the consumer stalling; the
+		 * used <= 0 path would requeue it at the head of rx_list
+		 * and block all later records. Consume it here instead.
 		 */
-		if (rxm->full_len == 0) {
+		if (tls_rx_empty_data_rec(rxm->full_len, tlm->control)) {
 			err = 0;
 			consume_skb(skb);
 			if (!nodata_deadline) {
