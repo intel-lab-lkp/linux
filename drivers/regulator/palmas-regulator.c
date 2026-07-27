@@ -442,6 +442,7 @@ static int palmas_set_mode_smps(struct regulator_dev *dev, unsigned int mode)
 	struct palmas_pmic_driver_data *ddata = pmic->palmas->pmic_ddata;
 	struct palmas_regs_info *rinfo = &ddata->palmas_regs_info[id];
 	unsigned int reg;
+	unsigned int new_mode;
 	bool rail_enable = true;
 
 	ret = palmas_smps_read(pmic->palmas, rinfo->ctrl_addr, &reg);
@@ -467,12 +468,18 @@ static int palmas_set_mode_smps(struct regulator_dev *dev, unsigned int mode)
 		return -EINVAL;
 	}
 
-	pmic->current_reg_mode[id] = reg & PALMAS_SMPS12_CTRL_MODE_ACTIVE_MASK;
-	if (rail_enable)
-		palmas_smps_write(pmic->palmas, rinfo->ctrl_addr, reg);
+	new_mode = reg & PALMAS_SMPS12_CTRL_MODE_ACTIVE_MASK;
+
+	if (rail_enable) {
+		ret = palmas_smps_write(pmic->palmas, rinfo->ctrl_addr, reg);
+		if (ret)
+			return ret;
+	}
+
+	pmic->current_reg_mode[id] = new_mode;
 
 	/* Switch the enable value to ensure this is used for enable */
-	pmic->desc[id].enable_val = pmic->current_reg_mode[id];
+	pmic->desc[id].enable_val = new_mode;
 
 	return 0;
 }
