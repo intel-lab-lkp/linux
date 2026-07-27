@@ -102,8 +102,8 @@ static int __init ima_add_boot_aggregate(void)
 	}
 	return 0;
 err_out:
-	integrity_audit_msg(AUDIT_INTEGRITY_PCR, NULL, filename, op,
-			    audit_cause, result, 0);
+	integrity_audit_message(AUDIT_INTEGRITY_PCR, NULL, filename, op,
+				audit_cause, result, 0, 0);
 	return result;
 }
 

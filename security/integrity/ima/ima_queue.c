@@ -291,8 +291,8 @@ int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 	}
 out:
 	mutex_unlock(&ima_extend_list_mutex);
-	integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
-			    op, audit_cause, result, audit_info);
+	integrity_audit_message(AUDIT_INTEGRITY_PCR, inode, filename, op,
+				audit_cause, result, audit_info, 0);
 	return result;
 }
 

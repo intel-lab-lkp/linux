@@ -559,11 +559,11 @@ static int evm_protect_xattr(struct mnt_idmap *idmap,
 		    || dentry->d_sb->s_magic == SYSFS_MAGIC)
 			return 0;
 
-		integrity_audit_msg(AUDIT_INTEGRITY_METADATA,
-				    dentry->d_inode, dentry->d_name.name,
-				    "update_metadata",
-				    integrity_status_msg[evm_status],
-				    -EPERM, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_METADATA,
+					dentry->d_inode, dentry->d_name.name,
+					"update_metadata",
+					integrity_status_msg[evm_status],
+					-EPERM, 0, 0);
 	}
 out:
 	/* Exception if the HMAC is not going to be calculated. */
@@ -585,10 +585,12 @@ out:
 
 	if (evm_status != INTEGRITY_PASS &&
 	    evm_status != INTEGRITY_PASS_IMMUTABLE)
-		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_backing_inode(dentry),
-				    dentry->d_name.name, "appraise_metadata",
-				    integrity_status_msg[evm_status],
-				    -EPERM, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_METADATA,
+					d_backing_inode(dentry),
+					dentry->d_name.name,
+					"appraise_metadata",
+					integrity_status_msg[evm_status],
+					-EPERM, 0, 0);
 	return evm_status == INTEGRITY_PASS ? 0 : -EPERM;
 }
 
@@ -726,10 +728,12 @@ static int evm_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		return 0;
 
 	if (evm_status != INTEGRITY_PASS_IMMUTABLE)
-		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_backing_inode(dentry),
-				    dentry->d_name.name, "appraise_metadata",
-				    integrity_status_msg[evm_status],
-				    -EPERM, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_METADATA,
+					d_backing_inode(dentry),
+					dentry->d_name.name,
+					"appraise_metadata",
+					integrity_status_msg[evm_status],
+					-EPERM, 0, 0);
 	return -EPERM;
 }
 
@@ -990,9 +994,11 @@ static int evm_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	    !evm_attr_change(idmap, dentry, attr))
 		return 0;
 
-	integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_backing_inode(dentry),
-			    dentry->d_name.name, "appraise_metadata",
-			    integrity_status_msg[evm_status], -EPERM, 0);
+	integrity_audit_message(AUDIT_INTEGRITY_METADATA,
+				d_backing_inode(dentry), dentry->d_name.name,
+				"appraise_metadata",
+				integrity_status_msg[evm_status], -EPERM, 0,
+				0);
 	return -EPERM;
 }
 

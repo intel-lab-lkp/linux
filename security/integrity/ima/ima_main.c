@@ -118,8 +118,9 @@ static int mmap_violation_check(enum ima_hooks func, struct file *file,
 		if (!*pathbuf)	/* ima_rdwr_violation possibly pre-fetched */
 			*pathname = ima_d_path(&file->f_path, pathbuf,
 					       filename);
-		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, *pathname,
-				    "mmap_file", "mmapped_writers", rc, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_DATA, inode, *pathname,
+					"mmap_file", "mmapped_writers", rc, 0,
+					0);
 	}
 	return rc;
 }
@@ -464,9 +465,9 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	    (allowed_algos & (1U << hash_algo)) == 0) {
 		rc = -EACCES;
 
-		integrity_audit_msg(AUDIT_INTEGRITY_DATA, file_inode(file),
-				    pathname, "collect_data",
-				    "denied-hash-algorithm", rc, 0);
+		integrity_audit_message(AUDIT_INTEGRITY_DATA, file_inode(file),
+					pathname, "collect_data",
+					"denied-hash-algorithm", rc, 0, 0);
 	}
 out_locked:
 	if ((mask & MAY_WRITE) && test_bit(IMA_DIGSIG, &iint->atomic_flags) &&
@@ -578,8 +579,9 @@ static int ima_file_mprotect(struct vm_area_struct *vma, unsigned long reqprot,
 
 	file = vma->vm_file;
 	pathname = ima_d_path(&file->f_path, &pathbuf, filename);
-	integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, pathname,
-			    "collect_data", "failed-mprotect", result, 0);
+	integrity_audit_message(AUDIT_INTEGRITY_DATA, inode, pathname,
+				"collect_data", "failed-mprotect", result, 0,
+				0);
 	if (pathbuf)
 		__putname(pathbuf);
 

@@ -558,8 +558,8 @@ out:
 	     (iint->flags & IMA_FAIL_UNVERIFIABLE_SIGS))) {
 		status = INTEGRITY_FAIL;
 		cause = "unverifiable-signature";
-		integrity_audit_msg(audit_msgno, inode, filename,
-				    op, cause, rc, 0);
+		integrity_audit_message(audit_msgno, inode, filename,
+					op, cause, rc, 0, 0);
 	} else if (status != INTEGRITY_PASS) {
 		/* Fix mode, but don't replace file signatures. */
 		if ((ima_appraise & IMA_APPRAISE_FIX) && !try_modsig &&
@@ -583,8 +583,8 @@ out:
 			status = INTEGRITY_PASS;
 		}
 
-		integrity_audit_msg(audit_msgno, inode, filename,
-				    op, cause, rc, 0);
+		integrity_audit_message(audit_msgno, inode, filename,
+					op, cause, rc, 0, 0);
 	} else {
 		ima_cache_flags(iint, func);
 	}
@@ -744,8 +744,8 @@ static int validate_hash_algo(struct dentry *dentry,
 
 	path = dentry_path(dentry, pathbuf, PATH_MAX);
 
-	integrity_audit_msg(AUDIT_INTEGRITY_DATA, d_inode(dentry), path,
-			    "set_data", errmsg, -EACCES, 0);
+	integrity_audit_message(AUDIT_INTEGRITY_DATA, d_inode(dentry), path,
+				"set_data", errmsg, -EACCES, 0, 0);
 
 	kfree(pathbuf);
 
