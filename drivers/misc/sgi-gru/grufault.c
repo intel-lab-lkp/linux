@@ -228,10 +228,10 @@ static int atomic_pte_lookup(struct vm_area_struct *vma, unsigned long vaddr,
 		goto err;
 #ifdef CONFIG_X86_64
 	if (unlikely(pmd_leaf(*pmdp)))
-		pte = ptep_get((pte_t *)pmdp);
+		pte = ptep_get((hw_pte_t *)pmdp);
 	else
 #endif
-		pte = *pte_offset_kernel(pmdp, vaddr);
+		pte = ptep_get(pte_offset_kernel(pmdp, vaddr));
 
 	if (unlikely(!pte_present(pte) ||
 		     (write && (!pte_write(pte) || !pte_dirty(pte)))))
