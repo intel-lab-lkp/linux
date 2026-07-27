@@ -21,10 +21,6 @@
 #define EXT4_INLINE_DOTDOT_OFFSET	2
 #define EXT4_INLINE_DOTDOT_SIZE		4
 
-
-static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
-						 struct inode *inode);
-
 static int ext4_get_inline_size(struct inode *inode)
 {
 	if (EXT4_I(inode)->i_inline_off)
@@ -538,76 +534,8 @@ int ext4_generic_write_inline_data(struct address_space *mapping,
 					  struct folio **foliop,
 					  bool da)
 {
-	int ret;
-	int retries = 0;
-
 	/* Inline data is deprecated: always convert to block format */
-	if (!da)
-		return ext4_convert_inline_data(inode);
-
-retry:
-	ret = ext4_da_convert_inline_data_to_extent(mapping, inode);
-	if (ret == -ENOSPC && ext4_should_retry_alloc(inode->i_sb, &retries))
-		goto retry;
-	return ret;
-}
-
-/*
- * Try to make the page cache and handle ready for the inline data case.
- * We can call this function in 2 cases:
- * 1. The inode is created and the first write exceeds inline size. We can
- *    clear the inode state safely.
- * 2. The inode has inline data, then we need to read the data, make it
- *    update and dirty so that ext4_da_writepages can handle it. We don't
- *    need to start the journal since the file's metadata isn't changed now.
- */
-static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
-						 struct inode *inode)
-{
-	int ret = 0, inline_size;
-	struct folio *folio;
-
-	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN,
-					mapping_gfp_mask(mapping));
-	if (IS_ERR(folio))
-		return PTR_ERR(folio);
-
-	down_read(&EXT4_I(inode)->xattr_sem);
-	if (!ext4_has_inline_data(inode)) {
-		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
-		goto out;
-	}
-
-	inline_size = ext4_get_inline_size(inode);
-
-	if (!folio_test_uptodate(folio)) {
-		ret = ext4_read_inline_folio(inode, folio);
-		if (ret < 0)
-			goto out;
-	}
-
-	ret = ext4_block_write_begin(NULL, folio, 0, inline_size,
-				     ext4_da_get_block_prep);
-	if (ret) {
-		up_read(&EXT4_I(inode)->xattr_sem);
-		folio_unlock(folio);
-		folio_put(folio);
-		ext4_truncate_failed_write(inode);
-		return ret;
-	}
-
-	clear_buffer_new(folio_buffers(folio));
-	folio_mark_dirty(folio);
-	folio_mark_uptodate(folio);
-	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
-
-out:
-	up_read(&EXT4_I(inode)->xattr_sem);
-	if (folio) {
-		folio_unlock(folio);
-		folio_put(folio);
-	}
-	return ret;
+	return ext4_convert_inline_data(inode);
 }
 
 #ifdef INLINE_DIR_DEBUG
@@ -1650,18 +1578,6 @@ int ext4_convert_inline_data(struct inode *inode)
 	if (!ext4_has_inline_data(inode)) {
 		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 		return 0;
-	} else if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
-		/*
-		 * Inode has inline data but EXT4_STATE_MAY_INLINE_DATA is
-		 * cleared. This means we are in the middle of moving of
-		 * inline data to delay allocated block. Just force writeout
-		 * here to finish conversion.
-		 */
-		error = filemap_flush(inode->i_mapping);
-		if (error)
-			return error;
-		if (!ext4_has_inline_data(inode))
-			return 0;
 	}
 
 	needed_blocks = ext4_chunk_trans_extent(inode, 1);
