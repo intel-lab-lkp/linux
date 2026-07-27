@@ -28,6 +28,7 @@ struct ptdump_pg_state {
 	struct seq_file *seq;
 	const struct addr_marker *marker;
 	unsigned long start_address;
+	const struct ptdump_pg_level *pg_level;
 	unsigned long start_pa;
 	unsigned long last_pa;
 	int level;
