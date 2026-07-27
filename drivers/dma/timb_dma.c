@@ -438,6 +438,8 @@ static void td_free_chan_resources(struct dma_chan *chan)
 
 	dev_dbg(chan2dev(chan), "%s: Entry\n", __func__);
 
+	dma_chan_kill_bh(&td_chan->chan);
+
 	/* check that all descriptors are free */
 	BUG_ON(!list_empty(&td_chan->active_list));
 	BUG_ON(!list_empty(&td_chan->queue));
@@ -580,15 +582,23 @@ static void td_tasklet(struct tasklet_struct *t)
 	for (i = 0; i < td->dma.chancnt; i++)
 		if (ipr & (1 << i)) {
 			struct timb_dma_chan *td_chan = td->channels + i;
-			spin_lock(&td_chan->lock);
-			__td_finish(td_chan);
-			if (!list_empty(&td_chan->queue))
-				__td_start_next(td_chan);
-			spin_unlock(&td_chan->lock);
+			dma_chan_schedule_bh(&td_chan->chan);
 		}
 
 	ier = __td_ier_mask(td);
 	iowrite32(ier, td->membase + TIMBDMA_IER);
+}
+
+static void timb_dma_chan_bh(struct dma_chan *chan)
+{
+	struct timb_dma_chan *td_chan = container_of(chan, struct timb_dma_chan,
+						     chan);
+
+	spin_lock(&td_chan->lock);
+	__td_finish(td_chan);
+	if (!list_empty(&td_chan->queue))
+		__td_start_next(td_chan);
+	spin_unlock(&td_chan->lock);
 }
 
 
@@ -697,6 +707,7 @@ static int td_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&td_chan->active_list);
 		INIT_LIST_HEAD(&td_chan->queue);
 		INIT_LIST_HEAD(&td_chan->free_list);
+		dma_chan_init_bh(&td_chan->chan, timb_dma_chan_bh);
 
 		td_chan->descs = pchan->descriptors;
 		td_chan->desc_elems = pchan->descriptor_elements;
