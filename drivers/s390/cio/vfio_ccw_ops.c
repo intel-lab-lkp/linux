@@ -136,6 +136,10 @@ static void vfio_ccw_mdev_release_dev(struct vfio_device *vdev)
 		kfree(crw);
 	}
 
+	/* Should be empty, but just in case */
+	cancel_work_sync(&private->io_work);
+	cancel_work_sync(&private->crw_work);
+
 	kmem_cache_free(vfio_ccw_crw_region, private->crw_region);
 	kmem_cache_free(vfio_ccw_schib_region, private->schib_region);
 	kmem_cache_free(vfio_ccw_cmd_region, private->cmd_region);
@@ -202,6 +206,10 @@ static void vfio_ccw_mdev_close_device(struct vfio_device *vdev)
 		container_of(vdev, struct vfio_ccw_private, vdev);
 
 	vfio_ccw_fsm_event(private, VFIO_CCW_EVENT_CLOSE);
+
+	cancel_work_sync(&private->io_work);
+	cancel_work_sync(&private->crw_work);
+
 	vfio_ccw_unregister_dev_regions(private);
 }
 
