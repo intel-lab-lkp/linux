@@ -789,17 +789,24 @@ cannot_free:
  * remove_mapping() - Attempt to remove a folio from its mapping.
  * @mapping: The address space.
  * @folio: The folio to remove.
+ * @reclaimed: Whether the folio is being reclaimed (record a shadow).
+ * @target_memcg: The memcg to charge the eviction shadow to when @reclaimed;
+ *                the caller must keep it alive across the call. Ignored (may
+ *                be NULL) when @reclaimed is false.
  *
  * If the folio is dirty, under writeback or if someone else has a ref
- * on it, removal will fail.
+ * on it, removal will fail. When @reclaimed is true, a workingset eviction
+ * shadow is stored (like page reclaim does) so that a later refault can be
+ * detected and the folio re-activated.
  * Return: The number of pages removed from the mapping.  0 if the folio
  * could not be removed.
  * Context: The caller should have a single refcount on the folio and
  * hold its lock.
  */
-long remove_mapping(struct address_space *mapping, struct folio *folio)
+long remove_mapping(struct address_space *mapping, struct folio *folio,
+		    bool reclaimed, struct mem_cgroup *target_memcg)
 {
-	if (__remove_mapping(mapping, folio, false, NULL)) {
+	if (__remove_mapping(mapping, folio, reclaimed, target_memcg)) {
 		/*
 		 * Unfreezing the refcount with 1 effectively
 		 * drops the pagecache ref for us without requiring another
