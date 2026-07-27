@@ -286,6 +286,7 @@ u64 remove_base_and_hole(struct addr_ctx *ctx, u64 addr);
 
 /* GUIDs for PRM handlers */
 extern const guid_t norm_to_sys_guid;
+extern const guid_t norm_to_dram_guid;
 
 int prm_umc_norm_to_addr(guid_t guid, struct atl_umc_addr *addr, void *out_buf);
 
