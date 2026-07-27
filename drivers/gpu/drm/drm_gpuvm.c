@@ -1608,7 +1608,7 @@ drm_gpuvm_bo_create(struct drm_gpuvm *gpuvm,
 }
 EXPORT_SYMBOL_GPL(drm_gpuvm_bo_create);
 
-/*
+/**
  * drm_gpuvm_bo_destroy_not_in_lists() - final part of drm_gpuvm_bo cleanup
  * @vm_bo: the &drm_gpuvm_bo to destroy
  *
@@ -1619,7 +1619,7 @@ EXPORT_SYMBOL_GPL(drm_gpuvm_bo_create);
  * object if the refcount reaches zero. It's illegal for this to happen if the
  * caller holds the GEMs gpuva mutex because it would free the mutex.
  */
-static void
+void
 drm_gpuvm_bo_destroy_not_in_lists(struct drm_gpuvm_bo *vm_bo)
 {
 	struct drm_gpuvm *gpuvm = vm_bo->vm;
@@ -1634,6 +1634,7 @@ drm_gpuvm_bo_destroy_not_in_lists(struct drm_gpuvm_bo *vm_bo)
 	drm_gpuvm_put(gpuvm);
 	drm_gem_object_put(obj);
 }
+EXPORT_SYMBOL_GPL(drm_gpuvm_bo_destroy_not_in_lists);
 
 static void
 drm_gpuvm_bo_destroy_not_in_lists_kref(struct kref *kref)

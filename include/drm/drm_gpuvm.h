@@ -760,6 +760,8 @@ bool drm_gpuvm_bo_put(struct drm_gpuvm_bo *vm_bo);
 bool drm_gpuvm_bo_put_deferred(struct drm_gpuvm_bo *vm_bo);
 void drm_gpuvm_bo_deferred_cleanup(struct drm_gpuvm *gpuvm);
 
+void drm_gpuvm_bo_destroy_not_in_lists(struct drm_gpuvm_bo *vm_bo);
+
 struct drm_gpuvm_bo *
 drm_gpuvm_bo_find(struct drm_gpuvm *gpuvm,
 		  struct drm_gem_object *obj);
