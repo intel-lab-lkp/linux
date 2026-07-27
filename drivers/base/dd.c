@@ -936,6 +936,7 @@ __setup("driver_async_probe=", save_async_options);
 static bool driver_allows_async_probing(const struct device_driver *drv)
 {
 	switch (drv->probe_type) {
+	case PROBE_FORCE_ASYNCHRONOUS:
 	case PROBE_PREFER_ASYNCHRONOUS:
 		return true;
 
