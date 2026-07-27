@@ -5,7 +5,10 @@
 use core::ops;
 
 pub mod bounded;
+pub mod casts;
+
 pub use bounded::*;
+pub use casts::*;
 
 /// Designates unsigned primitive types.
 pub enum Unsigned {}
