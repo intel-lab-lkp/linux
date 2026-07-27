@@ -43,7 +43,6 @@ void __init device_scan(void);
 
 /* unaligned_32.c */
 unsigned long safe_compute_effective_address(struct pt_regs *, unsigned int);
-
 #endif
 
 #ifdef CONFIG_SPARC64
@@ -66,5 +65,8 @@ void sunhv_migrate_hvcons_irq(int cpu);
 void sun_do_break(void);
 extern int stop_a_enabled;
 extern int scons_pwroff;
+
+void arch_do_panic(void);
+#define arch_do_panic arch_do_panic
 
 #endif /* _SPARC_SETUP_H */
