@@ -6,6 +6,7 @@
  * Author: Frank <Frank.Sae@motor-comm.com>
  */
 
+#include <linux/clk.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -1055,6 +1056,29 @@ static int yt8531_set_ds(struct phy_device *phydev)
 }
 
 /**
+ * ytphy_get_and_enable_refclk() - get and enable the PHY reference clock
+ * @phydev: a pointer to a &struct phy_device
+ *
+ * A crystal-less YT8521/YT8531 takes its 25 MHz reference from the SoC. When
+ * that reference is described as a clock, enable it for the life of the
+ * device. It is optional, so crystal-clocked boards are unaffected.
+ *
+ * returns 0 or negative errno code
+ */
+static int ytphy_get_and_enable_refclk(struct phy_device *phydev)
+{
+	struct device *dev = &phydev->mdio.dev;
+	struct clk *clk;
+
+	clk = devm_clk_get_optional_enabled(dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk),
+				     "failed to get and enable the reference clock\n");
+
+	return 0;
+}
+
+/**
  * yt8521_probe() - read chip config then set suitable polling_mode
  * @phydev: a pointer to a &struct phy_device
  *
@@ -1074,6 +1098,10 @@ static int yt8521_probe(struct phy_device *phydev)
 		return -ENOMEM;
 
 	phydev->priv = priv;
+
+	ret = ytphy_get_and_enable_refclk(phydev);
+	if (ret)
+		return ret;
 
 	chip_config = ytphy_read_ext_with_lock(phydev, YT8521_CHIP_CONFIG_REG);
 	if (chip_config < 0)
@@ -1182,6 +1210,11 @@ static int yt8531_probe(struct phy_device *phydev)
 	struct device *dev = &phydev->mdio.dev;
 	u16 mask, val;
 	u32 freq;
+	int ret;
+
+	ret = ytphy_get_and_enable_refclk(phydev);
+	if (ret)
+		return ret;
 
 	if (device_property_read_u32(dev, "motorcomm,clk-out-frequency-hz", &freq))
 		freq = YTPHY_DTS_OUTPUT_CLK_DIS;
