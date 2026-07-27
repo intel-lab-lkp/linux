@@ -236,25 +236,24 @@ dwc_descriptor_complete(struct dw_dma_chan *dwc, struct dw_desc *desc,
 	struct dma_async_tx_descriptor	*txd = &desc->txd;
 	struct dw_desc			*child;
 	unsigned long			flags;
-	struct dmaengine_desc_callback	cb;
 
 	dev_vdbg(chan2dev(&dwc->chan), "descriptor %u complete\n", txd->cookie);
 
 	spin_lock_irqsave(&dwc->lock, flags);
 	dma_cookie_complete(txd);
-	if (callback_required)
-		dmaengine_desc_get_callback(txd, &cb);
-	else
-		memset(&cb, 0, sizeof(cb));
+	list_del_init(&desc->desc_node);
 
 	/* async_tx_ack */
 	list_for_each_entry(child, &desc->tx_list, desc_node)
 		async_tx_ack(&child->txd);
 	async_tx_ack(&desc->txd);
-	dwc_desc_put(dwc, desc);
+	if (callback_required) {
+		list_add_tail(&desc->desc_node, &dwc->completed_list);
+		dma_chan_schedule_bh(&dwc->chan);
+	} else {
+		dwc_desc_put(dwc, desc);
+	}
 	spin_unlock_irqrestore(&dwc->lock, flags);
-
-	dmaengine_desc_callback_invoke(&cb, NULL);
 }
 
 static void dwc_complete_all(struct dw_dma *dw, struct dw_dma_chan *dwc)
@@ -283,6 +282,24 @@ static void dwc_complete_all(struct dw_dma *dw, struct dw_dma_chan *dwc)
 
 	list_for_each_entry_safe(desc, _desc, &list, desc_node)
 		dwc_descriptor_complete(dwc, desc, true);
+}
+
+static void dwc_chan_bh(struct dma_chan *chan)
+{
+	struct dw_dma_chan *dwc = to_dw_dma_chan(chan);
+	struct dw_desc *desc, *_desc;
+	struct dmaengine_desc_callback cb;
+	LIST_HEAD(list);
+
+	spin_lock_irq(&dwc->lock);
+	list_splice_init(&dwc->completed_list, &list);
+	spin_unlock_irq(&dwc->lock);
+
+	list_for_each_entry_safe(desc, _desc, &list, desc_node) {
+		dmaengine_desc_get_callback(&desc->txd, &cb);
+		dmaengine_desc_callback_invoke(&cb, NULL);
+		dwc_desc_put(dwc, desc);
+	}
 }
 
 /* Returns how many bytes were already received from source */
@@ -965,6 +982,11 @@ static int dwc_terminate_all(struct dma_chan *chan)
 	return 0;
 }
 
+static void dwc_synchronize(struct dma_chan *chan)
+{
+	dma_chan_kill_bh(chan);
+}
+
 static struct dw_desc *dwc_find_desc(struct dw_dma_chan *dwc, dma_cookie_t c)
 {
 	struct dw_desc *desc;
@@ -1256,6 +1278,8 @@ int do_dma_probe(struct dw_dma_chip *chip)
 
 		INIT_LIST_HEAD(&dwc->active_list);
 		INIT_LIST_HEAD(&dwc->queue);
+		INIT_LIST_HEAD(&dwc->completed_list);
+		dma_chan_init_bh(&dwc->chan, dwc_chan_bh);
 
 		channel_clear_bit(dw, CH_EN, dwc->mask);
 
@@ -1321,6 +1345,7 @@ int do_dma_probe(struct dw_dma_chip *chip)
 	dw->dma.device_pause = dwc_pause;
 	dw->dma.device_resume = dwc_resume;
 	dw->dma.device_terminate_all = dwc_terminate_all;
+	dw->dma.device_synchronize = dwc_synchronize;
 
 	dw->dma.device_tx_status = dwc_tx_status;
 	dw->dma.device_issue_pending = dwc_issue_pending;
@@ -1374,6 +1399,7 @@ int do_dma_remove(struct dw_dma_chip *chip)
 
 	list_for_each_entry_safe(dwc, _dwc, &dw->dma.channels,
 			chan.device_node) {
+		dma_chan_kill_bh(&dwc->chan);
 		list_del(&dwc->chan.device_node);
 		channel_clear_bit(dw, CH_EN, dwc->mask);
 	}
