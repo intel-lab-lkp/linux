@@ -219,16 +219,34 @@ static inline void smc_host_msg_to_cdc(struct smc_cdc_msg *peer,
 	peer->conn_state_flags = local->conn_state_flags;
 }
 
+/* Bound a peer supplied cursor count to the size of the buffer it indexes.
+ * A conforming peer never sends count >= size (see smc_curs_add()), and every
+ * user of the cursor - the byte accounting in smc_cdc_msg_recv_action() and
+ * the direct RMB dereference in smc_cdc_handle_urg_data_arrival() - relies on
+ * that. Nothing validates it, so do it here, once, where the value enters the
+ * connection state.
+ */
+static inline u32 smc_cdc_clamp_count(u32 count, unsigned int size)
+{
+	if (WARN_ON_ONCE(size && count >= size))
+		count = size - 1;
+	return count;
+}
+
+/* @size: size of the buffer the cursor indexes, i.e. conn->rmb_desc->len for
+ *	  a producer cursor and conn->peer_rmbe_size for a consumer cursor
+ */
 static inline void smc_cdc_cursor_to_host(union smc_host_cursor *local,
 					  union smc_cdc_cursor *peer,
-					  struct smc_connection *conn)
+					  struct smc_connection *conn,
+					  unsigned int size)
 {
 	union smc_host_cursor temp, old;
 	union smc_cdc_cursor net;
 
 	smc_curs_copy(&old, local, conn);
 	smc_curs_copy_net(&net, peer, conn);
-	temp.count = ntohl(net.count);
+	temp.count = smc_cdc_clamp_count(ntohl(net.count), size);
 	temp.wrap = ntohs(net.wrap);
 	if ((old.wrap > temp.wrap) && temp.wrap)
 		return;
@@ -246,8 +264,10 @@ static inline void smcr_cdc_msg_to_host(struct smc_host_cdc_msg *local,
 	local->len = peer->len;
 	local->seqno = ntohs(peer->seqno);
 	local->token = ntohl(peer->token);
-	smc_cdc_cursor_to_host(&local->prod, &peer->prod, conn);
-	smc_cdc_cursor_to_host(&local->cons, &peer->cons, conn);
+	smc_cdc_cursor_to_host(&local->prod, &peer->prod, conn,
+			       conn->rmb_desc->len);
+	smc_cdc_cursor_to_host(&local->cons, &peer->cons, conn,
+			       conn->peer_rmbe_size);
 	local->prod_flags = peer->prod_flags;
 	local->conn_state_flags = peer->conn_state_flags;
 }
@@ -259,11 +279,13 @@ static inline void smcd_cdc_msg_to_host(struct smc_host_cdc_msg *local,
 	union smc_host_cursor temp;
 
 	temp.wrap = peer->prod.wrap;
-	temp.count = peer->prod.count;
+	temp.count = smc_cdc_clamp_count(peer->prod.count,
+					 conn->rmb_desc->len);
 	smc_curs_copy(&local->prod, &temp, conn);
 
 	temp.wrap = peer->cons.wrap;
-	temp.count = peer->cons.count;
+	temp.count = smc_cdc_clamp_count(peer->cons.count,
+					 conn->peer_rmbe_size);
 	smc_curs_copy(&local->cons, &temp, conn);
 	local->prod_flags = peer->cons.prod_flags;
 	local->conn_state_flags = peer->cons.conn_state_flags;
