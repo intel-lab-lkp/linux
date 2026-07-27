@@ -2809,9 +2809,7 @@ static void decode_umc_error(int node_id, struct mce *m)
 {
 	u8 ecc_type = (m->status >> 45) & 0x3;
 	struct mem_ctl_info *mci;
-	unsigned long sys_addr;
 	struct amd64_pvt *pvt;
-	struct atl_err a_err;
 	struct err_info err;
 
 	node_id = fixup_node_id(node_id, m);
@@ -2843,17 +2841,18 @@ static void decode_umc_error(int node_id, struct mce *m)
 
 	pvt->ops->get_err_info(m, &err);
 
-	a_err.addr = m->addr;
-	a_err.ipid = m->ipid;
-	a_err.cpu  = m->extcpu;
+	err.a_err.addr      = m->addr;
+	err.a_err.ipid      = m->ipid;
+	err.a_err.cpu       = m->extcpu;
+	err.a_err.requested = ATL_OP_SPA;
 
-	sys_addr = amd_convert_umc_mca_addr_to_sys_addr(&a_err);
-	if (IS_ERR_VALUE(sys_addr)) {
+	amd_translate_umc_mca_addr(&err.a_err);
+	if (!(err.a_err.valid & ATL_OP_SPA)) {
 		err.err_code = ERR_NORM_ADDR;
 		goto log_error;
 	}
 
-	error_address_to_page_and_offset(sys_addr, &err);
+	error_address_to_page_and_offset(err.a_err.spa, &err);
 
 log_error:
 	__log_ecc_error(mci, &err, ecc_type);
