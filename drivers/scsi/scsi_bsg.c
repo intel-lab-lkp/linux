@@ -76,9 +76,8 @@ static enum rq_end_io_ret scsi_bsg_uring_cmd_done(struct request *req,
 
 static int scsi_bsg_map_user_buffer(struct request *req,
 				    struct io_uring_cmd *ioucmd,
-				    unsigned int issue_flags, gfp_t gfp_mask,
-				    bool is_write, u64 buf_addr,
-				    unsigned long buf_len)
+				    unsigned int issue_flags, bool is_write,
+				    u64 buf_addr, unsigned long buf_len)
 {
 	struct iov_iter iter;
 	int ret;
@@ -89,10 +88,10 @@ static int scsi_bsg_map_user_buffer(struct request *req,
 						&iter, ioucmd, issue_flags);
 		if (ret < 0)
 			return ret;
-		ret = blk_rq_map_user_iov(req->q, req, NULL, &iter, gfp_mask);
+		ret = blk_rq_map_user_iov(req->q, req, NULL, &iter, GFP_KERNEL);
 	} else {
 		ret = blk_rq_map_user(req->q, req, NULL, uptr64(buf_addr),
-				      buf_len, gfp_mask);
+				      buf_len, GFP_KERNEL);
 	}
 
 	return ret;
@@ -107,7 +106,6 @@ static int scsi_bsg_uring_cmd(struct request_queue *q, struct io_uring_cmd *iouc
 	struct scsi_cmnd *scmd;
 	struct request *req;
 	blk_mq_req_flags_t blk_flags = 0;
-	gfp_t gfp_mask = GFP_KERNEL;
 	u64 request = READ_ONCE(cmd->request);
 	u32 request_len = READ_ONCE(cmd->request_len);
 	u64 dout_xferp = READ_ONCE(cmd->dout_xferp);
@@ -132,10 +130,8 @@ static int scsi_bsg_uring_cmd(struct request_queue *q, struct io_uring_cmd *iouc
 	if (cmd->dout_iovec_count > 0 || cmd->din_iovec_count > 0)
 		return -EOPNOTSUPP;
 
-	if (issue_flags & IO_URING_F_NONBLOCK) {
+	if (issue_flags & IO_URING_F_NONBLOCK)
 		blk_flags = BLK_MQ_REQ_NOWAIT;
-		gfp_mask = GFP_NOWAIT;
-	}
 
 	req = scsi_alloc_request(q, dout_xfer_len ?
 				 REQ_OP_DRV_OUT : REQ_OP_DRV_IN, blk_flags);
@@ -170,8 +166,7 @@ static int scsi_bsg_uring_cmd(struct request_queue *q, struct io_uring_cmd *iouc
 		unsigned long buf_len = is_write ? dout_xfer_len : din_xfer_len;
 
 		ret = scsi_bsg_map_user_buffer(req, ioucmd, issue_flags,
-					       gfp_mask, is_write, buf_addr,
-					       buf_len);
+					       is_write, buf_addr, buf_len);
 		if (ret)
 			goto out_free_req;
 		pdu->bio = req->bio;
