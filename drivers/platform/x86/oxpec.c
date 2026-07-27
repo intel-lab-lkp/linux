@@ -18,10 +18,12 @@
 #include <linux/dmi.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
+#include <linux/input.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/processor.h>
+#include <linux/usb.h>
 #include <acpi/battery.h>
 
 /* Handle ACPI lock mechanism */
@@ -54,6 +56,14 @@ enum oxp_board {
 
 static enum oxp_board board;
 static struct device *oxp_dev;
+
+struct oxp_platform_data {
+	struct input_dev *tablet_mode_input;
+	struct notifier_block usb_notifier;
+};
+
+#define OXP_SUPER_X_KEYBOARD_VID	0x1a86
+#define OXP_SUPER_X_KEYBOARD_PID	0x1305
 
 /* Fan reading and PWM */
 #define OXP_SENSOR_FAN_REG		0x76 /* Fan reading is 2 registers long */
@@ -291,6 +301,94 @@ static const struct dmi_system_id dmi_table[] = {
 	},
 	{},
 };
+
+static bool oxp_is_super_x_keyboard(const struct usb_device *udev)
+{
+	return le16_to_cpu(udev->descriptor.idVendor) == OXP_SUPER_X_KEYBOARD_VID &&
+	       le16_to_cpu(udev->descriptor.idProduct) == OXP_SUPER_X_KEYBOARD_PID;
+}
+
+static void oxp_report_keyboard_attached(struct oxp_platform_data *data,
+					 bool attached)
+{
+	/* SW_TABLET_MODE is set when the detachable keyboard is absent. */
+	input_report_switch(data->tablet_mode_input, SW_TABLET_MODE, !attached);
+	input_sync(data->tablet_mode_input);
+}
+
+static int oxp_find_super_x_keyboard(struct usb_device *udev, void *data)
+{
+	bool *attached = data;
+
+	if (oxp_is_super_x_keyboard(udev))
+		*attached = true;
+
+	return 0;
+}
+
+static int oxp_usb_notify(struct notifier_block *nb,
+			  unsigned long action, void *notify_data)
+{
+	struct oxp_platform_data *data =
+		container_of(nb, struct oxp_platform_data, usb_notifier);
+	struct usb_device *udev = notify_data;
+
+	if (!oxp_is_super_x_keyboard(udev))
+		return NOTIFY_DONE;
+
+	switch (action) {
+	case USB_DEVICE_ADD:
+		oxp_report_keyboard_attached(data, true);
+		break;
+	case USB_DEVICE_REMOVE:
+		oxp_report_keyboard_attached(data, false);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+
+static void oxp_unregister_usb_notifier(void *notify_block)
+{
+	usb_unregister_notify(notify_block);
+}
+
+static int oxp_register_super_x_tablet_switch(struct device *dev,
+					      struct oxp_platform_data *data)
+{
+	bool keyboard_attached = false;
+	struct input_dev *input;
+	int ret;
+
+	input = devm_input_allocate_device(dev);
+	if (!input)
+		return -ENOMEM;
+
+	input->name = "OneXPlayer Super X Tablet Mode Switch";
+	input->phys = "oxp-platform/input0";
+	input->id.bustype = BUS_HOST;
+	input_set_capability(input, EV_SW, SW_TABLET_MODE);
+
+	ret = input_register_device(input);
+	if (ret)
+		return ret;
+
+	data->tablet_mode_input = input;
+	data->usb_notifier.notifier_call = oxp_usb_notify;
+	usb_register_notify(&data->usb_notifier);
+
+	ret = devm_add_action_or_reset(dev, oxp_unregister_usb_notifier,
+				       &data->usb_notifier);
+	if (ret)
+		return ret;
+
+	usb_for_each_dev(&keyboard_attached, oxp_find_super_x_keyboard);
+	oxp_report_keyboard_attached(data, keyboard_attached);
+
+	return 0;
+}
 
 /* Helper functions to handle EC read/write */
 static int read_from_ec(u8 reg, int size, long *val)
@@ -950,6 +1048,18 @@ static int oxp_platform_probe(struct platform_device *pdev)
 
 	if (oxp_psy_ext_supported()) {
 		ret = devm_battery_hook_register(dev, &battery_hook);
+		if (ret)
+			return ret;
+	}
+
+	if (dmi_match(DMI_BOARD_NAME, "ONEXPLAYER SUPER X")) {
+		struct oxp_platform_data *data;
+
+		data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+		if (!data)
+			return -ENOMEM;
+
+		ret = oxp_register_super_x_tablet_switch(dev, data);
 		if (ret)
 			return ret;
 	}

@@ -1055,11 +1055,14 @@ config OXP_EC
 	depends on ACPI_EC
 	depends on ACPI_BATTERY
 	depends on HWMON
+	depends on INPUT
+	depends on USB
 	depends on X86
 	help
 		Enables support for the platform EC of OneXPlayer and AOKZOE
-		handheld devices. This includes fan speed, fan controls, and
-		disabling the default TDP behavior of the device.
+		handheld devices. This includes fan speed, fan controls, disabling
+		the default TDP behavior of the device, and tablet mode reporting
+		on supported detachable models.
 
 source "drivers/platform/x86/tuxedo/Kconfig"
 
