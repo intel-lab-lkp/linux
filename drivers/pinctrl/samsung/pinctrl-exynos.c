@@ -824,8 +824,8 @@ __init int exynos_eint_wkup_init(struct samsung_pinctrl_drv_data *d)
 			return -ENOMEM;
 
 		for (idx = 0; idx < bank->nr_pins; ++idx) {
-			irq = irq_of_parse_and_map(to_of_node(bank->fwnode), idx);
-			if (!irq) {
+			irq = fwnode_irq_get(bank->fwnode, idx);
+			if (irq < 0) {
 				dev_err(dev, "irq number for eint-%s-%d not found\n",
 							bank->name, idx);
 				continue;
@@ -841,11 +841,9 @@ __init int exynos_eint_wkup_init(struct samsung_pinctrl_drv_data *d)
 	if (!muxed_banks)
 		return 0;
 
-	irq = irq_of_parse_and_map(wkup_np, 0);
-	if (!irq) {
-		dev_err(dev, "irq number for muxed EINTs not found\n");
-		return 0;
-	}
+	irq = of_irq_get(wkup_np, 0);
+	if (irq < 0)
+		return irq;
 
 	muxed_data = devm_kzalloc(dev, sizeof(*muxed_data)
 		+ muxed_banks*sizeof(struct samsung_pin_bank *), GFP_KERNEL);
