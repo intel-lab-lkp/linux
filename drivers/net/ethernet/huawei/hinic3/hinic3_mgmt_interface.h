@@ -143,6 +143,41 @@ struct l2nic_cmd_set_dcb_state {
 	u8                   rsvd[7];
 };
 
+struct l2nic_port_stats_info {
+	struct mgmt_msg_head msg_head;
+	u16                  func_id;
+	u16                  rsvd1;
+};
+
+struct l2nic_vport_stats {
+	u64 tx_unicast_pkts_vport;
+	u64 tx_unicast_bytes_vport;
+	u64 tx_multicast_pkts_vport;
+	u64 tx_multicast_bytes_vport;
+	u64 tx_broadcast_pkts_vport;
+	u64 tx_broadcast_bytes_vport;
+
+	u64 rx_unicast_pkts_vport;
+	u64 rx_unicast_bytes_vport;
+	u64 rx_multicast_pkts_vport;
+	u64 rx_multicast_bytes_vport;
+	u64 rx_broadcast_pkts_vport;
+	u64 rx_broadcast_bytes_vport;
+
+	u64 tx_discard_vport;
+	u64 rx_discard_vport;
+	u64 tx_err_vport;
+	u64 rx_err_vport;
+};
+
+struct l2nic_cmd_vport_stats {
+	struct mgmt_msg_head     msg_head;
+	u32                      stats_size;
+	u32                      rsvd1;
+	struct l2nic_vport_stats stats;
+	u64                      rsvd2[6];
+};
+
 struct l2nic_cmd_lro_config {
 	struct mgmt_msg_head msg_head;
 	u16                  func_id;
@@ -234,6 +269,7 @@ enum l2nic_cmd {
 	L2NIC_CMD_SET_VPORT_ENABLE    = 6,
 	L2NIC_CMD_SET_RX_MODE         = 7,
 	L2NIC_CMD_SET_SQ_CI_ATTR      = 8,
+	L2NIC_CMD_GET_VPORT_STAT      = 9,
 	L2NIC_CMD_CLEAR_QP_RESOURCE   = 11,
 	L2NIC_CMD_CFG_RX_LRO          = 13,
 	L2NIC_CMD_CFG_LRO_TIMER       = 14,
@@ -272,6 +308,7 @@ enum mag_cmd {
 	MAG_CMD_SET_PORT_ENABLE = 6,
 	MAG_CMD_GET_LINK_STATUS = 7,
 
+	MAG_CMD_GET_PORT_STAT   = 151,
 	MAG_CMD_GET_PORT_INFO   = 153,
 };
 
