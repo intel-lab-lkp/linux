@@ -2088,6 +2088,14 @@ ice_flow_set_rss_seg_info(struct ice_flow_seg_info *segs, u8 seg_cnt,
 
 	ICE_FLOW_SET_HDRS(seg, cfg->addl_hdrs);
 
+	/* A GTP segment has no L4 header bit: without IPV_OTHER the "no L4"
+	 * PTYPE sets are picked, and they hold no GTP PTYPE at all.
+	 */
+	if (seg->hdrs & (ICE_FLOW_SEG_HDR_GTPU_IP | ICE_FLOW_SEG_HDR_GTPU_EH |
+			 ICE_FLOW_SEG_HDR_GTPU_UP | ICE_FLOW_SEG_HDR_GTPU_DWN |
+			 ICE_FLOW_SEG_HDR_GTPC | ICE_FLOW_SEG_HDR_GTPC_TEID))
+		seg->hdrs |= ICE_FLOW_SEG_HDR_IPV_OTHER;
+
 	/* set outer most header */
 	if (cfg->hdr_type == ICE_RSS_INNER_HEADERS_W_OUTER_IPV4)
 		segs[ICE_RSS_OUTER_HEADERS].hdrs |= ICE_FLOW_SEG_HDR_IPV4 |
