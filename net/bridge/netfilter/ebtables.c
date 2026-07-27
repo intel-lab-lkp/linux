@@ -1017,16 +1017,6 @@ static int do_replace_finish(struct net *net, struct ebt_replace *repl,
 	struct ebt_table_info *table;
 	struct ebt_table *t;
 
-	/* the user wants counters back
-	 * the check on the size is done later, when we have the lock
-	 */
-	if (repl->num_counters) {
-		counterstmp = vmalloc_array(repl->num_counters,
-					    sizeof(*counterstmp));
-		if (!counterstmp)
-			return -ENOMEM;
-	}
-
 	newinfo->chainstack = NULL;
 	ret = ebt_verify_pointers(repl, newinfo);
 	if (ret != 0)
@@ -1051,6 +1041,15 @@ static int do_replace_finish(struct net *net, struct ebt_replace *repl,
 	if (repl->num_counters && repl->num_counters != t->private->nentries) {
 		ret = -EINVAL;
 		goto free_unlock;
+	}
+
+	if (repl->num_counters) {
+		counterstmp = vmalloc_array(repl->num_counters,
+					    sizeof(*counterstmp));
+		if (!counterstmp) {
+			ret = -ENOMEM;
+			goto free_unlock;
+		}
 	}
 
 	/* we have the mutex lock, so no danger in reading this pointer */
@@ -1386,22 +1385,24 @@ static int do_update_counters(struct net *net, const char *name,
 			      unsigned int num_counters, unsigned int len)
 {
 	int i, ret;
-	struct ebt_counter *tmp;
+	struct ebt_counter *tmp = NULL;
 	struct ebt_table *t;
 
 	if (num_counters == 0)
 		return -EINVAL;
 
-	tmp = vmalloc_array(num_counters, sizeof(*tmp));
-	if (!tmp)
-		return -ENOMEM;
-
 	t = find_table_lock(net, name, &ret, &ebt_mutex);
 	if (!t)
-		goto free_tmp;
+		return ret;
 
 	if (num_counters != t->private->nentries) {
 		ret = -EINVAL;
+		goto unlock_mutex;
+	}
+
+	tmp = vmalloc_array(num_counters, sizeof(*tmp));
+	if (!tmp) {
+		ret = -ENOMEM;
 		goto unlock_mutex;
 	}
 
@@ -1422,7 +1423,6 @@ static int do_update_counters(struct net *net, const char *name,
 	ret = 0;
 unlock_mutex:
 	mutex_unlock(&ebt_mutex);
-free_tmp:
 	vfree(tmp);
 	return ret;
 }
