@@ -249,6 +249,13 @@ static inline unsigned int pt_max_sw_bit(struct pt_common *common)
 	return 0;
 }
 
+/*
+ * In the DMA_INCOHERENT case, if no SW bit has been defined, produce a linker
+ * error (undefined symbol __pt_no_sw_bit) to alert the developer that this
+ * should be implemented. Alternatively, if this is not supported by the
+ * underlying hardware, PT_FEAT_NO_SW_BIT can be set, enabling sw-bit-less
+ * operation with a defensive flushing performance penalty.
+ */
 extern void __pt_no_sw_bit(void);
 static inline bool pt_test_sw_bit_acquire(struct pt_state *pts,
 					  unsigned int bitnr)

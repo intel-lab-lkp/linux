@@ -139,6 +139,13 @@ enum pt_features {
 	 * sub structure with information about which levels were changed.
 	 */
 	PT_FEAT_DETAILED_GATHER,
+	/**
+	 * @PT_FEAT_NO_SW_BIT: No software bit is available to denote when a
+	 * thread has flushed the CPU cache after modifying an entry. Only
+	 * set this if you cannot implement pt_sw_bit() due to hardware
+	 * limitations.
+	 */
+	PT_FEAT_NO_SW_BIT,
 	/* private: */
 	PT_FEAT_FMT_START,
 };
