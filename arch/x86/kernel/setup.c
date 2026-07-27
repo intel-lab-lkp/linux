@@ -21,6 +21,7 @@
 #include <linux/pci.h>
 #include <linux/random.h>
 #include <linux/root_dev.h>
+#include <linux/sprintf.h>
 #include <linux/static_call.h>
 #include <linux/sysfb.h>
 #include <linux/swiotlb.h>
@@ -915,16 +916,18 @@ void __init setup_arch(char **cmdline_p)
 	strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
 #else
 	if (builtin_cmdline[0]) {
+		size_t len = strnlen(builtin_cmdline, COMMAND_LINE_SIZE);
+
 		/* append boot loader cmdline to builtin */
-		strlcat(builtin_cmdline, " ", COMMAND_LINE_SIZE);
-		strlcat(builtin_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+		snprintf(builtin_cmdline + len, COMMAND_LINE_SIZE - len, " %s",
+			 boot_command_line);
 		strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
 	}
 #endif
 	builtin_cmdline_added = true;
 #endif
 
-	strscpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
+	strscpy(command_line, boot_command_line);
 	*cmdline_p = command_line;
 
 	/*
