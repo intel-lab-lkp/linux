@@ -120,6 +120,8 @@ struct dw_edma_chan {
 	 * its consumption with LL state.
 	 */
 	struct dw_edma_ll_snapshot	ll_irq;
+	/* ABORT is terminal and remains pending across LL state changes. */
+	bool				abort_pending;
 	raw_spinlock_t			event_lock;
 
 	u32				ll_max;		/* Data entries */
@@ -187,6 +189,8 @@ struct dw_edma_core_ops {
 	int (*ch_quiesce)(struct dw_edma_chan *chan);
 	u16 (*ch_count)(struct dw_edma *dw, enum dw_edma_dir dir);
 	enum dma_status (*ch_status)(struct dw_edma_chan *chan);
+	/* Called with the event scope locked. */
+	bool (*ch_abort_int_pending)(struct dw_edma_chan *chan);
 	enum dw_edma_event_scope event_scope;
 	irqreturn_t (*handle_int)(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 				  dw_edma_handler_t handler);
@@ -258,6 +262,13 @@ static inline raw_spinlock_t *dw_edma_event_lock(struct dw_edma_chan *chan)
 	return &chan->event_lock;
 }
 
+static inline void dw_edma_abort_event_mark(struct dw_edma_chan *chan)
+{
+	lockdep_assert_held(dw_edma_event_lock(chan));
+
+	chan->abort_pending = true;
+}
+
 /*
  * Return the current LL entry index. A negative value means that the channel
  * context is not initialized or was lost after a link reset.
@@ -303,6 +314,12 @@ static inline
 enum dma_status dw_edma_core_ch_status(struct dw_edma_chan *chan)
 {
 	return chan->dw->core->ch_status(chan);
+}
+
+static inline bool
+dw_edma_core_ch_abort_int_pending(struct dw_edma_chan *chan)
+{
+	return chan->dw->core->ch_abort_int_pending(chan);
 }
 
 static inline irqreturn_t

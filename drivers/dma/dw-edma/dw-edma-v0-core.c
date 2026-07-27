@@ -318,6 +318,13 @@ static enum dma_status dw_edma_v0_core_ch_status(struct dw_edma_chan *chan)
 		return DMA_ERROR;
 }
 
+static bool dw_edma_v0_core_ch_abort_int_pending(struct dw_edma_chan *chan)
+{
+	u32 sts = GET_RW_32(chan->dw, chan->dir, int_status);
+
+	return FIELD_GET(EDMA_V0_ABORT_INT_MASK, sts) & BIT(chan->id);
+}
+
 static void dw_edma_v0_core_clear_done_int(struct dw_edma_chan *chan)
 {
 	struct dw_edma *dw = chan->dw;
@@ -387,6 +394,7 @@ dw_edma_v0_core_handle_int(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
 
 			events[pos] |= DW_EDMA_IRQ_ABORT;
 			active |= BIT(pos);
+			dw_edma_abort_event_mark(chan);
 			dw_edma_v0_core_clear_abort_int(chan);
 		}
 
@@ -664,6 +672,7 @@ static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.ch_quiesce = dw_edma_v0_core_ch_quiesce,
 	.ch_count = dw_edma_v0_core_ch_count,
 	.ch_status = dw_edma_v0_core_ch_status,
+	.ch_abort_int_pending = dw_edma_v0_core_ch_abort_int_pending,
 	.event_scope = DW_EDMA_EVENT_PER_DIR,
 	.handle_int = dw_edma_v0_core_handle_int,
 	.ll_data = dw_edma_v0_core_ll_data,
