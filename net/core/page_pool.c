@@ -500,8 +500,8 @@ out:
 	return err;
 }
 
-static int page_pool_release_dma_index(struct page_pool *pool,
-				       netmem_ref netmem)
+static int page_pool_remove_dma_mapping(struct page_pool *pool,
+					netmem_ref netmem)
 {
 	struct page *old, *page = netmem_to_page(netmem);
 	unsigned long id;
@@ -517,12 +517,7 @@ static int page_pool_release_dma_index(struct page_pool *pool,
 		old = xa_cmpxchg(&pool->dma_mapped, id, page, NULL, 0);
 	else
 		old = xa_cmpxchg_bh(&pool->dma_mapped, id, page, NULL, 0);
-	if (old != page)
-		return -1;
-
-	netmem_set_dma_index(netmem, 0);
-
-	return 0;
+	return (old == page) ? 0 : -1;
 }
 
 static bool page_pool_dma_map(struct page_pool *pool, netmem_ref netmem, gfp_t gfp)
@@ -736,16 +731,19 @@ static __always_inline void __page_pool_release_netmem_dma(struct page_pool *poo
 		 */
 		return;
 
-	if (page_pool_release_dma_index(pool, netmem))
-		return;
-
+	/* Cache dma_addr before xa_cmpxchg. The scrub path holds no page ref;
+	 * the unref path calls put_page() regardless of cmpxchg outcome, so
+	 * after the cmpxchg we cannot safely touch netmem fields.
+	 */
 	dma = page_pool_get_dma_addr_netmem(netmem);
+
+	if (page_pool_remove_dma_mapping(pool, netmem))
+		return;
 
 	/* When page is unmapped, it cannot be returned to our pool */
 	dma_unmap_page_attrs(pool->p.dev, dma,
 			     PAGE_SIZE << pool->p.order, pool->p.dma_dir,
 			     DMA_ATTR_SKIP_CPU_SYNC | DMA_ATTR_WEAK_ORDERING);
-	page_pool_set_dma_addr_netmem(netmem, 0);
 }
 
 /* Disconnects a page (from a page_pool).  API users can have a need
@@ -759,10 +757,17 @@ static void page_pool_return_netmem(struct page_pool *pool, netmem_ref netmem)
 	bool put;
 
 	put = true;
-	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops)
+	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops) {
 		put = pool->mp_ops->release_netmem(pool, netmem);
-	else
+	} else {
 		__page_pool_release_netmem_dma(pool, netmem);
+		/* clear dma_addr/DMA index; safe because we hold a ref */
+		if (pool->dma_map) {
+			page_pool_set_dma_addr_netmem(netmem, 0);
+			if (unlikely(PP_DMA_INDEX_BITS))
+				netmem_set_dma_index(netmem, 0);
+		}
+	}
 
 	/* This may be the last page returned, releasing the pool, so
 	 * it is not safe to reference pool afterwards.
