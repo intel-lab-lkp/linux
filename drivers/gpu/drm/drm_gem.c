@@ -143,6 +143,7 @@ static void
 drm_gem_init_release(struct drm_device *dev, void *ptr)
 {
 	drm_vma_offset_manager_destroy(dev->vma_offset_manager);
+	idr_destroy(&dev->object_name_idr);
 }
 
 /**

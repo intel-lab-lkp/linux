@@ -359,17 +359,23 @@ static struct page *ttm_pool_type_take(struct ttm_pool_type *pt, int nid)
 }
 
 /* Initialize and add a pool type to the global shrinker list */
-static void ttm_pool_type_init(struct ttm_pool_type *pt, struct ttm_pool *pool,
+static int ttm_pool_type_init(struct ttm_pool_type *pt, struct ttm_pool *pool,
 			       enum ttm_caching caching, unsigned int order)
 {
+	int ret = 0;
+
 	pt->pool = pool;
 	pt->caching = caching;
 	pt->order = order;
-	list_lru_init(&pt->pages);
+	ret = list_lru_init(&pt->pages);
+	if (ret)
+		return ret;
 
 	spin_lock(&shrinker_lock);
 	list_add_tail(&pt->shrinker_list, &shrinker_list);
 	spin_unlock(&shrinker_lock);
+
+	return 0;
 }
 
 static enum lru_status pool_move_to_dispose_list(struct list_head *item,
@@ -442,6 +448,9 @@ static unsigned int ttm_pool_shrink(int nid, unsigned long num_to_free)
 	LIST_HEAD(dispose);
 	struct ttm_pool_type *pt;
 	unsigned int num_pages;
+
+	if (shrinker_list.prev == NULL && shrinker_list.next == NULL)
+		return 0;
 
 	down_read(&pool_shrink_rwsem);
 	spin_lock(&shrinker_lock);
@@ -1212,6 +1221,17 @@ void ttm_pool_fini(struct ttm_pool *pool)
 	 * that no shrinker is concurrently freeing pages from the pool.
 	 */
 	ttm_pool_synchronize_shrinkers();
+
+	for (i = 0; i < TTM_NUM_CACHING_TYPES; ++i) {
+		for (j = 0; j < NR_PAGE_ORDERS; ++j) {
+			struct ttm_pool_type *pt;
+
+			pt = ttm_pool_select_type(pool, i, j);
+			if (pt != &pool->caching[i].orders[j])
+				continue;
+			list_lru_destroy(&pt->pages);
+		}
+	}
 }
 EXPORT_SYMBOL(ttm_pool_fini);
 
@@ -1397,6 +1417,22 @@ static inline u64 ttm_get_node_memory_size(int nid)
 	return managed_pages * PAGE_SIZE;
 }
 
+static void ttm_pool_type_fini_and_list_lru_destroy(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < NR_PAGE_ORDERS; ++i) {
+		ttm_pool_type_fini(&global_write_combined[i]);
+		list_lru_destroy(&global_write_combined[i].pages);
+		ttm_pool_type_fini(&global_uncached[i]);
+		list_lru_destroy(&global_uncached[i].pages);
+		ttm_pool_type_fini(&global_dma32_write_combined[i]);
+		list_lru_destroy(&global_dma32_write_combined[i].pages);
+		ttm_pool_type_fini(&global_dma32_uncached[i]);
+		list_lru_destroy(&global_dma32_uncached[i].pages);
+	}
+}
+
 /**
  * ttm_pool_mgr_init - Initialize globals
  *
@@ -1407,6 +1443,7 @@ static inline u64 ttm_get_node_memory_size(int nid)
 int ttm_pool_mgr_init(unsigned long num_pages)
 {
 	unsigned int i;
+	int ret = 0;
 
 	int nid;
 	for_each_node(nid) {
@@ -1444,8 +1481,10 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 #endif
 
 	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
-	if (!mm_shrinker)
-		return -ENOMEM;
+	if (!mm_shrinker) {
+		ret = -ENOMEM;
+		goto err_shrinker;
+	}
 
 	mm_shrinker->count_objects = ttm_pool_shrinker_count;
 	mm_shrinker->scan_objects = ttm_pool_shrinker_scan;
@@ -1455,6 +1494,10 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 	shrinker_register(mm_shrinker);
 
 	return 0;
+
+err_shrinker:
+	ttm_pool_type_fini_and_list_lru_destroy();
+	return ret;
 }
 
 /**
@@ -1464,16 +1507,12 @@ int ttm_pool_mgr_init(unsigned long num_pages)
  */
 void ttm_pool_mgr_fini(void)
 {
-	unsigned int i;
+    if (backup_fault_inject.dname) {
+        dput(backup_fault_inject.dname);
+        backup_fault_inject.dname = NULL;
+    }
 
-	for (i = 0; i < NR_PAGE_ORDERS; ++i) {
-		ttm_pool_type_fini(&global_write_combined[i]);
-		ttm_pool_type_fini(&global_uncached[i]);
-
-		ttm_pool_type_fini(&global_dma32_write_combined[i]);
-		ttm_pool_type_fini(&global_dma32_uncached[i]);
-	}
-
-	shrinker_free(mm_shrinker);
-	WARN_ON(!list_empty(&shrinker_list));
+    shrinker_free(mm_shrinker);
+    ttm_pool_type_fini_and_list_lru_destroy();
+    WARN_ON(!list_empty(&shrinker_list));
 }
