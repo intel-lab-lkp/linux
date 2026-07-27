@@ -706,6 +706,50 @@ out:
 	return ret;
 }
 
+static int ct_lazy_spin(struct intel_guc_ct *ct,
+			struct ct_request *request,
+			const u32 *action,
+			u32 len,
+			u32 *response_buf,
+			u32 response_buf_size,
+			u32 *status)
+{
+	struct intel_guc_ct_buffer *ctb = &ct->ctbs.send;
+	unsigned long flags;
+	u32 fence;
+	int err;
+
+	spin_lock_irqsave(&ctb->lock, flags);
+	if (unlikely(!h2g_has_room(ct, len + GUC_CTB_HDR_LEN) ||
+		     !g2h_has_room(ct, GUC_CTB_HXG_MSG_MAX_LEN))) {
+		if (ct->stall_time == KTIME_MAX)
+			ct->stall_time = ktime_get();
+		spin_unlock_irqrestore(&ctb->lock, flags);
+
+		if (unlikely(ct_deadlocked(ct)))
+			return -EPIPE;
+		return -EBUSY;
+	}
+
+	ct->stall_time = KTIME_MAX;
+
+	fence = ct_get_next_fence(ct);
+	request->fence = fence;
+	request->status = 0;
+	request->response_len = response_buf_size;
+	request->response_buf = response_buf;
+
+	spin_lock(&ct->requests.lock);
+	list_add_tail(&request->link, &ct->requests.pending);
+	spin_unlock(&ct->requests.lock);
+
+	err = ct_write(ct, action, len, fence, 0);
+	g2h_reserve_space(ct, GUC_CTB_HXG_MSG_MAX_LEN);
+
+	spin_unlock_irqrestore(&ctb->lock, flags);
+	return err;
+}
+
 static int ct_send(struct intel_guc_ct *ct,
 		   const u32 *action,
 		   u32 len,
@@ -713,13 +757,10 @@ static int ct_send(struct intel_guc_ct *ct,
 		   u32 response_buf_size,
 		   u32 *status)
 {
-	struct intel_guc_ct_buffer *ctb = &ct->ctbs.send;
 	struct ct_request request;
 	unsigned long flags;
-	unsigned int sleep_period_ms = 1;
 	bool send_again;
-	u32 fence;
-	int err;
+	int err, timedout;
 
 	GEM_BUG_ON(!ct->enabled);
 	GEM_BUG_ON(!len);
@@ -736,41 +777,18 @@ resend:
 	 * rare. Reserving the maximum size in the G2H credits as we don't know
 	 * how big the response is going to be.
 	 */
-retry:
-	spin_lock_irqsave(&ctb->lock, flags);
-	if (unlikely(!h2g_has_room(ct, len + GUC_CTB_HDR_LEN) ||
-		     !g2h_has_room(ct, GUC_CTB_HXG_MSG_MAX_LEN))) {
-		if (ct->stall_time == KTIME_MAX)
-			ct->stall_time = ktime_get();
-		spin_unlock_irqrestore(&ctb->lock, flags);
+	timedout = poll_timeout_us(err = ct_lazy_spin(ct, &request, action,
+						      len, response_buf,
+						      response_buf_size,
+						      status),
+				   err != -EBUSY, USEC_PER_MSEC,
+				   POLL_TIMEOUT_DUR, false);
 
-		if (unlikely(ct_deadlocked(ct)))
-			return -EPIPE;
+	/* This is only the case if ct is deadlocked or we time out */
+	if (ct->stall_time != KTIME_MAX)
+		return timedout ?: err;
 
-		if (msleep_interruptible(sleep_period_ms))
-			return -EINTR;
-		sleep_period_ms = sleep_period_ms << 1;
-
-		goto retry;
-	}
-
-	ct->stall_time = KTIME_MAX;
-
-	fence = ct_get_next_fence(ct);
-	request.fence = fence;
-	request.status = 0;
-	request.response_len = response_buf_size;
-	request.response_buf = response_buf;
-
-	spin_lock(&ct->requests.lock);
-	list_add_tail(&request.link, &ct->requests.pending);
-	spin_unlock(&ct->requests.lock);
-
-	err = ct_write(ct, action, len, fence, 0);
-	g2h_reserve_space(ct, GUC_CTB_HXG_MSG_MAX_LEN);
-
-	spin_unlock_irqrestore(&ctb->lock, flags);
-
+	/* Otherwise, ct_write failed and we need to clean up */
 	if (unlikely(err))
 		goto unlink;
 
