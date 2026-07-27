@@ -220,6 +220,69 @@ static int dw_edma_v0_core_engine_disable(struct dw_edma *dw,
 	return ret;
 }
 
+static void dw_edma_v0_core_engine_dump(struct dw_edma *dw,
+					enum dw_edma_dir dir)
+{
+	u16 cnt = dir == EDMA_DIR_WRITE ? dw->wr_ch_cnt : dw->rd_ch_cnt;
+	u16 i;
+
+	dev_warn(dw->chip->dev, "%s engine: int_status 0x%08x err_status 0x%08x\n",
+		 dir == EDMA_DIR_WRITE ? "wr" : "rd",
+		 GET_RW_32(dw, dir, int_status),
+		 dir == EDMA_DIR_WRITE ? GET_32(dw, wr_err_status) :
+					 GET_32(dw, rd_err_status.lsb));
+	for (i = 0; i < cnt; i++)
+		dev_warn(dw->chip->dev,
+			 "  ch%u: ch_control1 0x%08x transfer_size 0x%08x llp.lsb 0x%08x\n",
+			 i, GET_CH_32(dw, dir, i, ch_control1),
+			 GET_CH_32(dw, dir, i, transfer_size),
+			 GET_CH_32(dw, dir, i, llp.lsb));
+}
+
+static bool dw_edma_v0_core_engine_reset(struct dw_edma *dw,
+					 enum dw_edma_dir dir)
+{
+	/* HDMA compatibility mode does not implement ENGINE_EN. */
+	if (dw->chip->mf == EDMA_MF_HDMA_COMPAT)
+		return false;
+
+	/*
+	 * The databook says clearing ENGINE_EN resets the DMA logic while
+	 * preserving configuration registers, but does not document drain
+	 * semantics. On the tested integration, ENGINE_EN read back as zero
+	 * only after outstanding transactions appeared to drain; the stalled
+	 * channel then resumed after reset.
+	 *
+	 * If ENGINE_EN does not clear, do not re-enable the engine. On the
+	 * tested integration, re-enabling after such a timeout wedged the
+	 * controller and also blocked inbound BAR accesses. Return failure so
+	 * the caller can keep channels gated and retry.
+	 */
+	if (dw_edma_v0_core_engine_disable(dw, dir)) {
+		dw_edma_v0_core_engine_dump(dw, dir);
+		return false;
+	}
+
+	/* Discard interrupt status belonging to the contexts being reset. */
+	SET_RW_32(dw, dir, int_clear,
+		  EDMA_V0_DONE_INT_MASK | EDMA_V0_ABORT_INT_MASK);
+	GET_RW_32(dw, dir, int_status);
+
+	return true;
+}
+
+/*
+ * Re-enabling can resume a previously running channel from preserved
+ * internal state without a doorbell, so the caller must rebuild every
+ * channel context first.
+ */
+static void dw_edma_v0_core_engine_enable(struct dw_edma *dw,
+					  enum dw_edma_dir dir)
+{
+	if (dw->chip->mf != EDMA_MF_HDMA_COMPAT)
+		SET_RW_32(dw, dir, engine_en, BIT(0));
+}
+
 static int dw_edma_v0_core_dir_off(struct dw_edma *dw, enum dw_edma_dir dir)
 {
 	u16 count, id;
@@ -458,8 +521,6 @@ static void dw_edma_v0_core_ch_enable(struct dw_edma_chan *chan)
 	unsigned long flags;
 	u32 tmp;
 
-	 /* Enable engine */
-	SET_RW_32(dw, chan->dir, engine_en, BIT(0));
 	if (dw->chip->mf == EDMA_MF_HDMA_COMPAT)
 		dw_edma_v0_core_ch_power(dw, chan->dir, chan->id, true);
 	/* Interrupt mask/unmask - done, abort */
@@ -686,6 +747,8 @@ static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.ll_clear = dw_edma_v0_core_ll_clear,
 	.ll_cur_idx = dw_edma_v0_core_ll_cur_idx,
 	.ll_irq_clear = dw_edma_v0_core_clear_done_int,
+	.engine_reset = dw_edma_v0_core_engine_reset,
+	.engine_enable = dw_edma_v0_core_engine_enable,
 	.ch_doorbell = dw_edma_v0_core_ch_doorbell,
 	.ch_enable = dw_edma_v0_core_ch_enable,
 	.ch_config = dw_edma_v0_core_ch_config,
