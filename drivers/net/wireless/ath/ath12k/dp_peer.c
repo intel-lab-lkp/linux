@@ -416,8 +416,10 @@ u16 ath12k_dp_peer_get_peerid_index(struct ath12k_dp *dp, u16 peer_id)
 struct ath12k_dp_peer *ath12k_dp_peer_find_by_peerid(struct ath12k_pdev_dp *dp_pdev,
 						     u16 peer_id)
 {
-	u16 index;
+	struct ath12k_dp_hw *dp_hw = dp_pdev->dp_hw;
+	struct ath12k_dp_peer *dp_peer, *tmp;
 	struct ath12k_dp *dp = dp_pdev->dp;
+	u16 index;
 
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
 			 "ath12k dp peer find by peerid index called without rcu lock");
@@ -426,8 +428,23 @@ struct ath12k_dp_peer *ath12k_dp_peer_find_by_peerid(struct ath12k_pdev_dp *dp_p
 		return NULL;
 
 	index = ath12k_dp_peer_get_peerid_index(dp, peer_id);
+	dp_peer = rcu_dereference(dp_hw->dp_peers[index]);
 
-	return rcu_dereference(dp_pdev->dp_hw->dp_peers[index]);
+	if (!dp_peer && (peer_id & ATH12K_PEER_ML_ID_VALID)) {
+		spin_lock_bh(&dp_hw->peer_lock);
+		list_for_each_entry(tmp, &dp_hw->dp_peers_list, list) {
+			if (tmp->is_mlo &&
+			    tmp->peer_id == ATH12K_DP_PEER_ID_INVALID) {
+				tmp->peer_id = peer_id;
+				rcu_assign_pointer(dp_hw->dp_peers[index], tmp);
+				dp_peer = tmp;
+				break;
+			}
+		}
+		spin_unlock_bh(&dp_hw->peer_lock);
+	}
+
+	return dp_peer;
 }
 EXPORT_SYMBOL(ath12k_dp_peer_find_by_peerid);
 
@@ -475,11 +492,11 @@ int ath12k_dp_peer_create(struct ath12k_dp_hw *dp_hw, u8 *addr,
 	dp_peer->is_mlo = params->is_mlo;
 
 	/*
-	 * For MLO client, the host assigns the ML peer ID, so set peer_id in dp_peer
-	 * For non-MLO client, host gets link peer ID from firmware and will be
-	 * assigned at the time of link peer creation
+	 * peer_id starts as INVALID for both MLO and non-MLO clients.
+	 * For MLO: synced from firmware's first data path descriptor.
+	 * For non-MLO: assigned at the time of link peer creation.
 	 */
-	dp_peer->peer_id = params->is_mlo ? params->peer_id : ATH12K_DP_PEER_ID_INVALID;
+	dp_peer->peer_id = ATH12K_DP_PEER_ID_INVALID;
 	dp_peer->ucast_ra_only = params->ucast_ra_only;
 
 	dp_peer->sec_type = HAL_ENCRYPT_TYPE_OPEN;
@@ -491,15 +508,12 @@ int ath12k_dp_peer_create(struct ath12k_dp_hw *dp_hw, u8 *addr,
 	list_add(&dp_peer->list, &dp_hw->dp_peers_list);
 
 	/*
-	 * For MLO client, the peer_id for ath12k_dp_peer is allocated by host
-	 * and that peer_id is known at this point, and hence this ath12k_dp_peer
-	 * can be added to the RCU table using the peer_id.
+	 * For MLO client, the dp_peers[] RCU table entry will be populated
+	 * when the firmware's actual peer_id is learned from the first data
+	 * path descriptor (in ath12k_dp_peer_find_by_peerid).
 	 * For non-MLO client, this addition to RCU table shall be done at the
 	 * time of assignment of ath12k_dp_link_peer to ath12k_dp_peer.
 	 */
-	if (dp_peer->is_mlo)
-		rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id], dp_peer);
-
 	spin_unlock_bh(&dp_hw->peer_lock);
 
 	return 0;
@@ -518,8 +532,11 @@ void ath12k_dp_peer_delete(struct ath12k_dp_hw *dp_hw, u8 *addr,
 		return;
 	}
 
-	if (dp_peer->is_mlo)
-		rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id], NULL);
+	if (dp_peer->is_mlo) {
+		if (dp_peer->peer_id != ATH12K_DP_PEER_ID_INVALID)
+			rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id],
+					   NULL);
+	}
 
 	list_del(&dp_peer->list);
 

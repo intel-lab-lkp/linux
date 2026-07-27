@@ -1287,12 +1287,15 @@ void ath12k_mac_dp_peer_cleanup(struct ath12k_hw *ah)
 	spin_lock_bh(&dp_hw->peer_lock);
 	list_for_each_entry_safe(dp_peer, tmp, &dp_hw->dp_peers_list, list) {
 		if (dp_peer->is_mlo) {
-			rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id], NULL);
-			clear_bit(dp_peer->peer_id, ah->free_ml_peer_id_map);
+			if (dp_peer->peer_id != ATH12K_DP_PEER_ID_INVALID)
+				rcu_assign_pointer(dp_hw->dp_peers[dp_peer->peer_id],
+						   NULL);
 		}
 
 		list_move(&dp_peer->list, &peers);
 	}
+
+	bitmap_zero(ah->free_ml_peer_id_map, ATH12K_MAX_MLO_PEERS);
 
 	spin_unlock_bh(&dp_hw->peer_lock);
 
