@@ -21,7 +21,6 @@ struct virt_dma_desc {
 
 struct virt_dma_chan {
 	struct dma_chan	chan;
-	struct tasklet_struct task;
 	void (*desc_free)(struct virt_dma_desc *);
 
 	spinlock_t lock;
@@ -106,7 +105,7 @@ static inline void vchan_cookie_complete(struct virt_dma_desc *vd)
 		 vd, cookie);
 	list_add_tail(&vd->node, &vc->desc_completed);
 
-	tasklet_schedule(&vc->task);
+	dma_chan_schedule_bh(&vc->chan);
 }
 
 /**
@@ -137,7 +136,7 @@ static inline void vchan_cyclic_callback(struct virt_dma_desc *vd)
 	struct virt_dma_chan *vc = to_virt_chan(vd->tx.chan);
 
 	vc->cyclic = vd;
-	tasklet_schedule(&vc->task);
+	dma_chan_schedule_bh(&vc->chan);
 }
 
 /**
@@ -223,7 +222,7 @@ static inline void vchan_synchronize(struct virt_dma_chan *vc)
 	LIST_HEAD(head);
 	unsigned long flags;
 
-	tasklet_kill(&vc->task);
+	dma_chan_kill_bh(&vc->chan);
 
 	spin_lock_irqsave(&vc->lock, flags);
 

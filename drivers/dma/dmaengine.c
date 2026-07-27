@@ -1428,6 +1428,48 @@ static void dmaengine_destroy_unmap_pool(void)
 	}
 }
 
+static void dma_chan_bh_entry(struct tasklet_struct *tasklet)
+{
+	struct dma_chan *chan = from_tasklet(chan, tasklet, bh_tasklet);
+	dma_chan_bh_work_fn fn = READ_ONCE(chan->bh_work_fn);
+
+	if (fn)
+		fn(chan);
+}
+
+void dma_chan_init_bh(struct dma_chan *chan, dma_chan_bh_work_fn fn)
+{
+	if (WARN_ON(!fn))
+		return;
+
+	if (WARN_ON(chan->bh_work_initialized))
+		return;
+
+	chan->bh_work_fn = fn;
+	tasklet_setup(&chan->bh_tasklet, dma_chan_bh_entry);
+	chan->bh_work_initialized = true;
+}
+EXPORT_SYMBOL_GPL(dma_chan_init_bh);
+
+bool dma_chan_schedule_bh(struct dma_chan *chan)
+{
+	if (WARN_ON(!chan->bh_work_initialized))
+		return false;
+
+	tasklet_schedule(&chan->bh_tasklet);
+	return true;
+}
+EXPORT_SYMBOL_GPL(dma_chan_schedule_bh);
+
+void dma_chan_kill_bh(struct dma_chan *chan)
+{
+	if (!chan->bh_work_initialized)
+		return;
+
+	tasklet_kill(&chan->bh_tasklet);
+}
+EXPORT_SYMBOL_GPL(dma_chan_kill_bh);
+
 static int __init dmaengine_init_unmap_pool(void)
 {
 	int i;
