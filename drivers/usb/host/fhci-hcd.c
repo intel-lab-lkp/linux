@@ -568,6 +568,11 @@ static int of_fhci_probe(struct platform_device *ofdev)
 	if (usb_disabled())
 		return -ENODEV;
 
+	/* USB Host interrupt. */
+	usb_irq = platform_get_irq(ofdev, 0);
+	if (usb_irq < 0)
+		return usb_irq;
+
 	sprop = of_get_property(node, "mode", NULL);
 	if (sprop && strcmp(sprop, "host"))
 		return -ENODEV;
@@ -656,7 +661,7 @@ static int of_fhci_probe(struct platform_device *ofdev)
 	if (IS_ERR(fhci->timer)) {
 		ret = PTR_ERR(fhci->timer);
 		dev_err(dev, "failed to request qe timer: %i", ret);
-		goto err_get_timer;
+		goto err_pins;
 	}
 
 	ret = request_irq(fhci->timer->irq, fhci_frame_limit_timer_irq,
@@ -666,14 +671,6 @@ static int of_fhci_probe(struct platform_device *ofdev)
 		goto err_timer_irq;
 	}
 
-	/* USB Host interrupt. */
-	usb_irq = irq_of_parse_and_map(node, 0);
-	if (!usb_irq) {
-		dev_err(dev, "could not get usb irq\n");
-		ret = -EINVAL;
-		goto err_usb_irq;
-	}
-
 	/* Clocks. */
 	sprop = of_get_property(node, "fsl,fullspeed-clock", NULL);
 	if (sprop) {
@@ -681,7 +678,7 @@ static int of_fhci_probe(struct platform_device *ofdev)
 		if (fhci->fullspeed_clk == QE_CLK_DUMMY) {
 			dev_err(dev, "wrong fullspeed-clock\n");
 			ret = -EINVAL;
-			goto err_clocks;
+			goto err_usb_irq;
 		}
 	}
 
@@ -691,7 +688,7 @@ static int of_fhci_probe(struct platform_device *ofdev)
 		if (fhci->lowspeed_clk == QE_CLK_DUMMY) {
 			dev_err(dev, "wrong lowspeed-clock\n");
 			ret = -EINVAL;
-			goto err_clocks;
+			goto err_usb_irq;
 		}
 	}
 
@@ -699,7 +696,7 @@ static int of_fhci_probe(struct platform_device *ofdev)
 			fhci->lowspeed_clk == QE_CLK_NONE) {
 		dev_err(dev, "no clocks specified\n");
 		ret = -EINVAL;
-		goto err_clocks;
+		goto err_usb_irq;
 	}
 
 	dev_info(dev, "at 0x%p, irq %d\n", hcd->regs, usb_irq);
@@ -721,7 +718,7 @@ static int of_fhci_probe(struct platform_device *ofdev)
 
 	ret = usb_add_hcd(hcd, usb_irq, 0);
 	if (ret < 0)
-		goto err_add_hcd;
+		goto err_usb_irq;
 
 	device_wakeup_enable(hcd->self.controller);
 
@@ -729,14 +726,10 @@ static int of_fhci_probe(struct platform_device *ofdev)
 
 	return 0;
 
-err_add_hcd:
-err_clocks:
-	irq_dispose_mapping(usb_irq);
 err_usb_irq:
 	free_irq(fhci->timer->irq, hcd);
 err_timer_irq:
 	gtm_put_timer16(fhci->timer);
-err_get_timer:
 err_pins:
 	while (--j >= 0)
 		qe_pin_free(fhci->pins[j]);
