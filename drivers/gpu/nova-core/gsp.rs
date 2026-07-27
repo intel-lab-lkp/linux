@@ -11,6 +11,7 @@ use kernel::{
         CoherentBox,
         DmaAddress, //
     },
+    num,
     pci,
     prelude::*,
     transmute::{
@@ -36,7 +37,6 @@ use crate::{
         GspArgumentsPadded,
         LibosMemoryRegionInitArgument, //
     },
-    num,
 };
 
 pub(crate) const GSP_PAGE_SHIFT: usize = 12;

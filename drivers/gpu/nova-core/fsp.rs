@@ -11,6 +11,7 @@ use kernel::{
     device,
     dma::Coherent,
     io::poll::read_poll_timeout,
+    num,
     prelude::*,
     ptr::{
         Alignable,
@@ -42,7 +43,6 @@ use crate::{
         NvdmHeader,
         NvdmType, //
     },
-    num,
     regs, //
 };
 

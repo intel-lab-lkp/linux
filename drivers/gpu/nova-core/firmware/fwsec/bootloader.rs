@@ -17,6 +17,7 @@ use kernel::{
         register::WithBase, //
         Io,
     },
+    num::FromSafeCast,
     prelude::*,
     ptr::{
         Alignable,
@@ -51,7 +52,6 @@ use crate::{
         FIRMWARE_VERSION, //
     },
     gpu::Chipset,
-    num::FromSafeCast,
     regs,
 };
 

@@ -10,6 +10,10 @@ use core::ops::Deref;
 use kernel::{
     device,
     firmware,
+    num::{
+        FromSafeCast,
+        IntoSafeCast, //
+    },
     prelude::*,
     str::CString,
     transmute::FromBytes, //
@@ -21,10 +25,6 @@ use crate::{
         FalconFirmware, //
     },
     gpu,
-    num::{
-        FromSafeCast,
-        IntoSafeCast, //
-    },
 };
 
 pub(crate) mod booter;

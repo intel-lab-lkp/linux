@@ -11,7 +11,10 @@ use kernel::{
         },
         Io, //
     },
-    num::Bounded,
+    num::{
+        usize_into_u32,
+        Bounded, //
+    },
     prelude::*,
     ptr::{
         const_align_up,
@@ -23,7 +26,6 @@ use kernel::{
 use crate::{
     driver::Bar0,
     fb::hal::FbHal,
-    num::usize_into_u32,
     regs, //
 };
 

@@ -10,6 +10,10 @@ use core::marker::PhantomData;
 use kernel::{
     device,
     dma::Coherent,
+    num::{
+        FromSafeCast,
+        IntoSafeCast, //
+    },
     prelude::*,
     transmute::FromBytes, //
 };
@@ -31,11 +35,7 @@ use crate::{
         Signed,
         Unsigned, //
     },
-    gpu::Chipset,
-    num::{
-        FromSafeCast,
-        IntoSafeCast, //
-    },
+    gpu::Chipset, //
 };
 
 /// Local convenience function to return a copy of `S` by reinterpreting the bytes starting at

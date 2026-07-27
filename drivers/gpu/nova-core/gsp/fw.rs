@@ -11,6 +11,10 @@ use core::ops::Range;
 
 use kernel::{
     dma::Coherent,
+    num::{
+        self,
+        FromSafeCast, //
+    },
     prelude::*,
     ptr::{
         Alignable,
@@ -37,10 +41,6 @@ use crate::{
     gsp::{
         cmdq::Cmdq, //
         GSP_PAGE_SIZE,
-    },
-    num::{
-        self,
-        FromSafeCast, //
     },
 };
 

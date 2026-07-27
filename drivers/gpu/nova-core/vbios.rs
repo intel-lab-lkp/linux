@@ -5,6 +5,7 @@
 use kernel::{
     device,
     io::Io,
+    num::FromSafeCast,
     prelude::*,
     ptr::{
         Alignable,
@@ -26,7 +27,6 @@ use crate::{
         FalconUCodeDescV2,
         FalconUCodeDescV3, //
     },
-    num::FromSafeCast,
 };
 
 /// BIOS Image Type from PCI Data Structure code_type field.

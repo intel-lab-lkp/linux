@@ -23,6 +23,10 @@ use kernel::{
         },
         Io,
     },
+    num::{
+        self,
+        FromSafeCast, //
+    },
     prelude::*,
     sync::aref::ARef,
     time::Delta,
@@ -33,11 +37,7 @@ use crate::{
     driver::Bar0,
     falcon::hal::LoadMethod,
     gpu::Chipset,
-    num::{
-        self,
-        FromSafeCast, //
-    },
-    regs,
+    regs, //
 };
 
 pub(crate) mod fsp;

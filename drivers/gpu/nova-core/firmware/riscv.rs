@@ -7,14 +7,12 @@ use kernel::{
     device,
     dma::Coherent,
     firmware::Firmware,
+    num::FromSafeCast,
     prelude::*,
     transmute::FromBytes, //
 };
 
-use crate::{
-    firmware::BinFirmware,
-    num::FromSafeCast, //
-};
+use crate::firmware::BinFirmware;
 
 /// Descriptor for microcode running on a RISC-V core.
 #[repr(C)]

@@ -8,6 +8,7 @@ use kernel::{
         DataDirection,
         DmaAddress, //
     },
+    num::FromSafeCast,
     prelude::*,
     scatterlist::{
         Owned,
@@ -25,7 +26,6 @@ use crate::{
         Chipset, //
     },
     gsp::GSP_PAGE_SIZE,
-    num::FromSafeCast,
 };
 
 /// GSP firmware with 3-level radix page tables for the GSP bootloader.

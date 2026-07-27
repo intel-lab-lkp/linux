@@ -16,6 +16,7 @@ use kernel::{
         Io, //
     },
     new_mutex,
+    num,
     prelude::*,
     ptr,
     sync::{
@@ -26,7 +27,7 @@ use kernel::{
     transmute::{
         AsBytes,
         FromBytes, //
-    },
+    }, //
 };
 
 use continuation::{
@@ -50,7 +51,6 @@ use crate::{
         GSP_PAGE_SHIFT,
         GSP_PAGE_SIZE, //
     },
-    num,
     regs,
     sbuffer::SBufferIter, //
 };

@@ -10,6 +10,7 @@ use kernel::{
         poll::read_poll_timeout,
         Io, //
     },
+    num::FromSafeCast,
     prelude::*,
     time::{
         delay::fsleep,
@@ -32,7 +33,6 @@ use crate::{
         },
         fw,
     },
-    num::FromSafeCast,
     sbuffer::SBufferIter,
 };
 

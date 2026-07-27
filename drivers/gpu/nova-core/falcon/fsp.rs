@@ -16,6 +16,7 @@ use kernel::{
         },
         Io, //
     },
+    num,
     prelude::*,
     time::Delta,
 };
@@ -28,7 +29,6 @@ use crate::{
         PFalcon2Base,
         PFalconBase, //
     },
-    num,
     regs, //
 };
 
