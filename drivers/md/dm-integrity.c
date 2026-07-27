@@ -44,7 +44,6 @@
 #define RECALC_WRITE_SUPER		16
 #define BITMAP_BLOCK_SIZE		4096	/* don't change it */
 #define BITMAP_FLUSH_INTERVAL		(10 * HZ)
-#define DISCARD_FILLER			0xf6
 #define SALT_SIZE			16
 #define RECHECK_POOL_SIZE		256
 
@@ -1414,7 +1413,6 @@ static int dm_integrity_rw_tag(struct dm_integrity_c *ic, unsigned char *tag, se
 {
 	unsigned int hash_offset = 0;
 	unsigned char mismatch_hash = 0;
-	unsigned char mismatch_filler = !ic->discard;
 
 	do {
 		unsigned char *data, *dp;
@@ -1457,16 +1455,14 @@ thorough_test:
 					 * individual bytes.
 					 */
 					mismatch_hash |= dp[i] ^ tag[i];
-					mismatch_filler |= dp[i] ^ DISCARD_FILLER;
 					hash_offset++;
 					if (unlikely(hash_offset == ic->tag_size)) {
-						if (unlikely(mismatch_hash) && unlikely(mismatch_filler)) {
+						if (unlikely(mismatch_hash)) {
 							dm_bufio_release(b);
 							return ts;
 						}
 						hash_offset = 0;
 						mismatch_hash = 0;
-						mismatch_filler = !ic->discard;
 					}
 				}
 			}
@@ -1642,7 +1638,8 @@ static void integrity_end_io(struct bio *bio)
 }
 
 static void integrity_sector_checksum_shash(struct dm_integrity_c *ic, sector_t sector,
-					    const char *data, unsigned offset, char *result)
+					    const char *data, unsigned offset,
+					    unsigned int len, char *result)
 {
 	__le64 sector_le = cpu_to_le64(sector);
 	SHASH_DESC_ON_STACK(req, ic->internal_shash);
@@ -1671,10 +1668,12 @@ static void integrity_sector_checksum_shash(struct dm_integrity_c *ic, sector_t 
 		goto failed;
 	}
 
-	r = crypto_shash_update(req, data + offset, ic->sectors_per_block << SECTOR_SHIFT);
-	if (unlikely(r < 0)) {
-		dm_integrity_io_error(ic, "crypto_shash_update", r);
-		goto failed;
+	if (likely(len)) {
+		r = crypto_shash_update(req, data + offset, len);
+		if (unlikely(r < 0)) {
+			dm_integrity_io_error(ic, "crypto_shash_update", r);
+			goto failed;
+		}
 	}
 
 	r = crypto_shash_final(req, result);
@@ -1695,7 +1694,8 @@ failed:
 }
 
 static void integrity_sector_checksum_ahash(struct dm_integrity_c *ic, struct ahash_request **ahash_req,
-					    sector_t sector, struct page *page, unsigned offset, char *result)
+					    sector_t sector, struct page *page, unsigned offset,
+					    unsigned int len, char *result)
 {
 	__le64 sector_le = cpu_to_le64(sector);
 	struct ahash_request *req;
@@ -1704,6 +1704,7 @@ static void integrity_sector_checksum_ahash(struct dm_integrity_c *ic, struct ah
 	int r;
 	unsigned int digest_size;
 	unsigned int nbytes = 0;
+	unsigned int nents = 1 + (len ? 1 : 0);
 
 	might_sleep();
 
@@ -1717,12 +1718,12 @@ static void integrity_sector_checksum_ahash(struct dm_integrity_c *ic, struct ah
 	ahash_request_set_callback(req, CRYPTO_TFM_REQ_MAY_SLEEP, crypto_req_done, &wait);
 
 	if (ic->sb->flags & cpu_to_le32(SB_FLAG_FIXED_HMAC)) {
-		sg_init_table(sg, 3);
+		sg_init_table(sg, nents + 1);
 		sg_set_buf(s, (const __u8 *)&ic->sb->salt, SALT_SIZE);
 		nbytes += SALT_SIZE;
 		s++;
 	} else {
-		sg_init_table(sg, 2);
+		sg_init_table(sg, nents);
 	}
 
 	if (likely(!is_vmalloc_addr(&sector_le))) {
@@ -1735,8 +1736,10 @@ static void integrity_sector_checksum_ahash(struct dm_integrity_c *ic, struct ah
 	nbytes += sizeof(sector_le);
 	s++;
 
-	sg_set_page(s, page, ic->sectors_per_block << SECTOR_SHIFT, offset);
-	nbytes += ic->sectors_per_block << SECTOR_SHIFT;
+	if (likely(len)) {
+		sg_set_page(s, page, len, offset);
+		nbytes += len;
+	}
 
 	ahash_request_set_crypt(req, sg, result, nbytes);
 
@@ -1760,10 +1763,28 @@ failed:
 static void integrity_sector_checksum(struct dm_integrity_c *ic, struct ahash_request **ahash_req,
 				      sector_t sector, const char *data, unsigned offset, char *result)
 {
+	unsigned int len = ic->sectors_per_block << SECTOR_SHIFT;
+
 	if (likely(ic->internal_shash != NULL))
-		integrity_sector_checksum_shash(ic, sector, data, offset, result);
+		integrity_sector_checksum_shash(ic, sector, data, offset, len, result);
 	else
-		integrity_sector_checksum_ahash(ic, ahash_req, sector, (struct page *)data, offset, result);
+		integrity_sector_checksum_ahash(ic, ahash_req, sector, (struct page *)data,
+						 offset, len, result);
+}
+
+/*
+ * Authenticated marker for a discarded block: HMAC_key(salt || sector), with
+ * no data payload. Because a real data tag's input always covers a full
+ * block, its length differs from this marker's, so the two can never
+ * collide structurally, regardless of block content.
+ */
+static void integrity_discard_checksum(struct dm_integrity_c *ic, struct ahash_request **ahash_req,
+				       sector_t sector, char *result)
+{
+	if (likely(ic->internal_shash != NULL))
+		integrity_sector_checksum_shash(ic, sector, NULL, 0, 0, result);
+	else
+		integrity_sector_checksum_ahash(ic, ahash_req, sector, NULL, 0, 0, result);
 }
 
 static void *integrity_kmap(struct dm_integrity_c *ic, struct page *p)
@@ -1817,6 +1838,7 @@ static noinline void integrity_recheck(struct dm_integrity_io *dio, char *checks
 			char *mem;
 			char *buffer = page_to_virt(page);
 			unsigned int buffer_offset;
+			char on_disk_tag[MAX_T(size_t, HASH_MAX_DIGESTSIZE, MAX_TAG_SIZE)];
 			int r;
 			struct dm_io_request io_req;
 			struct dm_io_region io_loc;
@@ -1844,8 +1866,16 @@ static noinline void integrity_recheck(struct dm_integrity_io *dio, char *checks
 			}
 
 			integrity_sector_checksum(ic, &dio->ahash_req, logical_sector, integrity_identity(ic, buffer), buffer_offset, checksum);
-			r = dm_integrity_rw_tag(ic, checksum, &dio->metadata_block,
-						&dio->metadata_offset, ic->tag_size, TAG_CMP);
+			r = dm_integrity_rw_tag(ic, on_disk_tag, &dio->metadata_block,
+						&dio->metadata_offset, ic->tag_size, TAG_READ);
+			if (likely(!r)) {
+				r = crypto_memneq(on_disk_tag, checksum, ic->tag_size);
+				if (unlikely(r) && ic->discard) {
+					integrity_discard_checksum(ic, &dio->ahash_req,
+								   logical_sector, checksum);
+					r = crypto_memneq(on_disk_tag, checksum, ic->tag_size);
+				}
+			}
 			if (r) {
 				if (r > 0) {
 					DMERR_LIMIT("%pg: Checksum failed at sector 0x%llx",
@@ -1911,13 +1941,18 @@ static void integrity_metadata(struct work_struct *w)
 			unsigned int bi_size = dio->bio_details.bi_iter.bi_size;
 			unsigned int max_size = likely(checksums != checksums_onstack) ? PAGE_SIZE : HASH_MAX_DIGESTSIZE;
 			unsigned int max_blocks = max_size / ic->tag_size;
-
-			memset(checksums, DISCARD_FILLER, max_size);
+			sector_t sector = dio->range.logical_sector;
 
 			while (bi_size) {
+				unsigned int i;
 				unsigned int this_step_blocks = bi_size >> (SECTOR_SHIFT + ic->sb->log2_sectors_per_block);
 
 				this_step_blocks = min(this_step_blocks, max_blocks);
+				for (i = 0; i < this_step_blocks; i++) {
+					integrity_discard_checksum(ic, &dio->ahash_req, sector,
+								   checksums + i * ic->tag_size);
+					sector += ic->sectors_per_block;
+				}
 				r = dm_integrity_rw_tag(ic, checksums, &dio->metadata_block, &dio->metadata_offset,
 							this_step_blocks * ic->tag_size, TAG_WRITE);
 				if (unlikely(r)) {
