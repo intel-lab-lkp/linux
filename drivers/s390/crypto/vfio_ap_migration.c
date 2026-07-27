@@ -4,6 +4,7 @@
  *
  * Copyright IBM Corp. 2025
  */
+#include <linux/anon_inodes.h>
 #include <linux/file.h>
 #include "vfio_ap_private.h"
 
@@ -72,6 +73,92 @@ struct vfio_ap_config {
 	struct vfio_ap_queue_info	qinfo[] __counted_by(num_queues);
 };
 
+static void
+vfio_ap_release_stop_copy_file(struct vfio_ap_migration_data *mig_data)
+{
+	kfree(mig_data->stop_copy_mig_file.ap_config);
+	mig_data->stop_copy_mig_file.ap_config = NULL;
+	mig_data->stop_copy_mig_file.config_sz = 0;
+	mig_data->stop_copy_mig_file.filp = NULL;
+}
+
+static ssize_t
+vfio_ap_stop_copy_read(struct file *, char __user *, size_t, loff_t *)
+{
+	/* TODO */
+	return -EOPNOTSUPP;
+}
+
+static int vfio_ap_release_mig_file(struct inode *file_inode, struct file *filp)
+{
+	struct ap_matrix_mdev *matrix_mdev = filp->private_data;
+	int ret = 0;
+
+	mutex_lock(&matrix_dev->mdevs_lock);
+
+	/*
+	 * mig_data may be NULL if the device was closed (vfio_ap_mdev_close_device)
+	 * before the migration FD was released by userspace. In that case the
+	 * migration file state was already cleaned up; nothing to do here.
+	 */
+	if (!matrix_mdev->mig_data)
+		goto done;
+
+	if (filp == matrix_mdev->mig_data->stop_copy_mig_file.filp)
+		vfio_ap_release_stop_copy_file(matrix_mdev->mig_data);
+	else
+		ret = -ENOENT;
+
+done:
+	mutex_unlock(&matrix_dev->mdevs_lock);
+	vfio_device_put_registration(&matrix_mdev->vdev);
+	return ret;
+}
+
+static const struct file_operations vfio_ap_stop_copy_fops = {
+	.owner = THIS_MODULE,
+	.read = vfio_ap_stop_copy_read,
+	.compat_ioctl = compat_ptr_ioctl,
+	.release = vfio_ap_release_mig_file,
+};
+
+static struct file *vfio_ap_open_file_stream(struct ap_matrix_mdev *matrix_mdev,
+					     const struct file_operations *fops,
+					     int flags)
+{
+	struct file *filp;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	/*
+	 * Pin the vfio_device registration so that matrix_mdev cannot be freed
+	 * while the migration FD is still open. The matching put is in
+	 * vfio_ap_release_mig_file().
+	 */
+	if (!vfio_device_try_get_registration(&matrix_mdev->vdev))
+		return ERR_PTR(-ENODEV);
+
+	filp = anon_inode_getfile("vfio_ap_mig_file", fops, matrix_mdev, flags);
+	if (IS_ERR(filp)) {
+		vfio_device_put_registration(&matrix_mdev->vdev);
+		return filp;
+	}
+
+	stream_open(filp->f_inode, filp);
+
+	/*
+	 * Take a second reference on the file so the driver holds its own
+	 * reference independent of the one consumed when the VFIO core
+	 * installs the FD into the userspace file table. Without this,
+	 * the driver's saved filp could be the only reference; an fput()
+	 * during a device reset would prematurely destroy the file while
+	 * the userspace FD still points to it.
+	 */
+	get_file(filp);
+
+	return filp;
+}
+
 static struct file *
 vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 			    enum vfio_device_mig_state new_state)
@@ -85,10 +172,22 @@ vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 	dev_dbg(matrix_mdev->vdev.dev, "%s: %d -> %d\n", __func__, cur_state,
 		new_state);
 
+	/*
+	 * Begins the process of saving the vfio device state by creating and
+	 * returning a streaming data_fd to be used to read out the internal
+	 * state of the vfio-ap device on the source host.
+	 */
 	if (cur_state == VFIO_DEVICE_STATE_STOP &&
 	    new_state == VFIO_DEVICE_STATE_STOP_COPY) {
-		/* TODO */
-		return ERR_PTR(-EOPNOTSUPP);
+		struct file *filp = vfio_ap_open_file_stream(matrix_mdev,
+							     &vfio_ap_stop_copy_fops,
+							     O_RDONLY);
+		if (IS_ERR(filp))
+			return ERR_CAST(filp);
+
+		mig_data->stop_copy_mig_file.filp = filp;
+
+		return filp;
 	}
 
 	if (cur_state == VFIO_DEVICE_STATE_STOP &&
@@ -259,24 +358,6 @@ int vfio_ap_init_migration_data(struct ap_matrix_mdev *matrix_mdev)
 	return 0;
 }
 
-/**
- * vfio_ap_release_migration_data: reclaim private migration data
- *
- * @vdev: pointer to the mdev
- */
-void vfio_ap_release_migration_data(struct ap_matrix_mdev *matrix_mdev)
-{
-	lockdep_assert_held(&matrix_dev->mdevs_lock);
-
-	if (!matrix_mdev->mig_data)
-		return;
-
-	kfree(matrix_mdev->mig_data->resuming_mig_file.ap_config);
-	kfree(matrix_mdev->mig_data->stop_copy_mig_file.ap_config);
-	kfree(matrix_mdev->mig_data);
-	matrix_mdev->mig_data = NULL;
-}
-
 static void vfio_ap_release_mig_files(struct ap_matrix_mdev *matrix_mdev)
 {
 	struct vfio_ap_migration_data *mig_data;
@@ -309,6 +390,31 @@ static void vfio_ap_release_mig_files(struct ap_matrix_mdev *matrix_mdev)
 	kfree(mig_data->resuming_mig_file.ap_config);
 	mig_data->resuming_mig_file.ap_config = NULL;
 	mig_data->resuming_mig_file.config_sz = 0;
+}
+
+/**
+ * vfio_ap_release_migration_data: reclaim private migration data
+ *
+ * @vdev: pointer to the mdev
+ */
+void vfio_ap_release_migration_data(struct ap_matrix_mdev *matrix_mdev)
+{
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	if (!matrix_mdev->mig_data)
+		return;
+
+	/*
+	 * Drop the driver's get_file() references on any open migration FDs
+	 * and free the associated ap_config buffers before freeing mig_data.
+	 * This ensures that if the device is closed while a migration FD is
+	 * still held by userspace, vfio_ap_release_mig_file() will see
+	 * mig_data == NULL and skip the cleanup (the fput() here will
+	 * eventually trigger .release, but mig_data is gone by then).
+	 */
+	vfio_ap_release_mig_files(matrix_mdev);
+	kfree(matrix_mdev->mig_data);
+	matrix_mdev->mig_data = NULL;
 }
 
 /**
