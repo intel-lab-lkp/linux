@@ -78,6 +78,7 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 static bool split_underused_thp = true;
 
 static atomic_t huge_zero_refcount;
+static DEFINE_SPINLOCK(huge_zero_lock);
 struct folio *huge_zero_folio __read_mostly;
 unsigned long huge_zero_pfn __read_mostly = ~0UL;
 unsigned long huge_anon_orders_always __read_mostly;
@@ -237,17 +238,18 @@ retry:
 	}
 	/* Ensure zero folio won't have large_rmappable flag set. */
 	folio_clear_large_rmappable(zero_folio);
-	preempt_disable();
-	if (cmpxchg(&huge_zero_folio, NULL, zero_folio)) {
-		preempt_enable();
+	spin_lock(&huge_zero_lock);
+	if (READ_ONCE(huge_zero_folio)) {
+		spin_unlock(&huge_zero_lock);
 		folio_put(zero_folio);
 		goto retry;
 	}
 	WRITE_ONCE(huge_zero_pfn, folio_pfn(zero_folio));
+	WRITE_ONCE(huge_zero_folio, zero_folio);
+	spin_unlock(&huge_zero_lock);
 
-	/* We take additional reference here. It will be put back by shrinker */
-	atomic_set(&huge_zero_refcount, 2);
-	preempt_enable();
+	/* Publish the identity before admitting lockless getters. */
+	atomic_set_release(&huge_zero_refcount, 2);
 	count_vm_event(THP_ZERO_PAGE_ALLOC);
 	return true;
 }
@@ -298,9 +300,15 @@ static unsigned long shrink_huge_zero_folio_scan(struct shrinker *shrink,
 						 struct shrink_control *sc)
 {
 	if (atomic_cmpxchg(&huge_zero_refcount, 1, 0) == 1) {
-		struct folio *zero_folio = xchg(&huge_zero_folio, NULL);
+		struct folio *zero_folio;
+
+		spin_lock(&huge_zero_lock);
+		zero_folio = READ_ONCE(huge_zero_folio);
 		BUG_ON(zero_folio == NULL);
 		WRITE_ONCE(huge_zero_pfn, ~0UL);
+		WRITE_ONCE(huge_zero_folio, NULL);
+		spin_unlock(&huge_zero_lock);
+
 		folio_put(zero_folio);
 		return HPAGE_PMD_NR;
 	}
