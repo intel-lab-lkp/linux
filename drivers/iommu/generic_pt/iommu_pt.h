@@ -484,7 +484,8 @@ static inline int pt_iommu_new_table(struct pt_state *pts,
 
 	if (pts_feature(pts, PT_FEAT_DMA_INCOHERENT)) {
 		flush_writes_item(pts);
-		pt_set_sw_bit_release(pts, SW_BIT_CACHE_FLUSH_DONE);
+		if (!pts_feature(pts, PT_FEAT_NO_SW_BIT))
+			pt_set_sw_bit_release(pts, SW_BIT_CACHE_FLUSH_DONE);
 	}
 
 	if (IS_ENABLED(CONFIG_DEBUG_GENERIC_PT)) {
@@ -702,10 +703,12 @@ static int __map_range(struct pt_range *range, void *arg, unsigned int level,
 			 * release of the cache flush so that this can acquire
 			 * visibility at the iommu.
 			 */
-			if (pts_feature(&pts, PT_FEAT_DMA_INCOHERENT) &&
-			    !pt_test_sw_bit_acquire(&pts,
-						    SW_BIT_CACHE_FLUSH_DONE))
-				flush_writes_item(&pts);
+			if (pts_feature(&pts, PT_FEAT_DMA_INCOHERENT)) {
+				if (pts_feature(&pts, PT_FEAT_NO_SW_BIT) ||
+				    !pt_test_sw_bit_acquire(&pts,
+							    SW_BIT_CACHE_FLUSH_DONE))
+					flush_writes_item(&pts);
+			}
 		}
 
 		/*
