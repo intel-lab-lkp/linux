@@ -2513,6 +2513,7 @@ err_master:
 		list_del(pos);
 		kfree(master_image);
 	}
+	kfree(tsi148_device->flush_image);
 
 	tsi148_irq_exit(tsi148_bridge, pdev);
 err_irq:
@@ -2618,6 +2619,8 @@ static void tsi148_remove(struct pci_dev *pdev)
 		list_del(pos);
 		kfree(master_image);
 	}
+
+	kfree(bridge->flush_image);
 
 	iounmap(bridge->base);
 
