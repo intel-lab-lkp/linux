@@ -3611,7 +3611,8 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 	struct shmem_sb_info *sbinfo = SHMEM_SB(inode->i_sb);
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct shmem_falloc shmem_falloc;
-	pgoff_t start, index, end, undo_fallocend;
+	pgoff_t start, index, end, nr_pages, undo_fallocend;
+	loff_t end_pos;
 	int error;
 
 	if (mode & ~(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE))
@@ -3659,23 +3660,29 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 	}
 
 	/* We need to check rlimit even when FALLOC_FL_KEEP_SIZE */
-	error = inode_newsize_ok(inode, offset + len);
+	end_pos = offset + len;
+	error = inode_newsize_ok(inode, end_pos);
 	if (error)
 		goto out;
 
-	if ((info->seals & F_SEAL_GROW) && offset + len > inode->i_size) {
+	if ((info->seals & F_SEAL_GROW) && end_pos > inode->i_size) {
 		error = -EPERM;
 		goto out;
 	}
 
 	start = offset >> PAGE_SHIFT;
-	end = (offset + len + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	end = ((u64)end_pos + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	nr_pages = end - start;
 	/* Try to avoid a swapstorm if len is impossible to satisfy */
-	if (sbinfo->max_blocks && end - start > sbinfo->max_blocks) {
+	if (sbinfo->max_blocks && nr_pages > sbinfo->max_blocks) {
 		error = -ENOSPC;
 		goto out;
 	}
-
+	if (nr_pages > LONG_MAX ||
+	    nr_pages > totalram_pages() + total_swap_pages) {
+		error = -ENOSPC;
+		goto out;
+	}
 	shmem_falloc.waitq = NULL;
 	shmem_falloc.start = start;
 	shmem_falloc.next  = start;
@@ -3709,7 +3716,7 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		else if (shmem_falloc.nr_unswapped > shmem_falloc.nr_falloced)
 			error = -ENOMEM;
 		else
-			error = shmem_get_folio(inode, index, offset + len,
+			error = shmem_get_folio(inode, index, end_pos,
 						&folio, SGP_FALLOC);
 		if (error) {
 			info->fallocend = undo_fallocend;
@@ -3753,8 +3760,8 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		cond_resched();
 	}
 
-	if (!(mode & FALLOC_FL_KEEP_SIZE) && offset + len > inode->i_size)
-		i_size_write(inode, offset + len);
+	if (!(mode & FALLOC_FL_KEEP_SIZE) && end_pos > inode->i_size)
+		i_size_write(inode, end_pos);
 undone:
 	spin_lock(&inode->i_lock);
 	inode->i_private = NULL;
