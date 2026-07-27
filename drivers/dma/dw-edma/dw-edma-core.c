@@ -25,6 +25,9 @@
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 
+/* Empirically chosen progress interval. */
+#define DW_EDMA_LL_PROGRESS_INTERVAL	4
+
 static inline
 struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
 {
@@ -250,6 +253,30 @@ static bool dw_edma_ll_done_is_stopped(struct dw_edma_chan *chan)
 	       dw_edma_core_ch_transfer_size(chan) == 0;
 }
 
+static bool dw_edma_core_enable_ll_irq(struct dw_edma_desc *desc, u32 i,
+				       u32 free)
+{
+	struct dw_edma_chan *chan = desc->chan;
+
+	/* Always report descriptor ends and the last free slot. */
+	if (i == desc->nburst - 1 || free == 1)
+		return true;
+
+	/* Keep one progress point per physical ring lap. */
+	if (chan->ll_head == chan->ll_max - 1)
+		return true;
+
+	/*
+	 * Add periodic progress points only while this descriptor does not fit
+	 * in the current free space or more issued work follows it.
+	 */
+	if (desc->nburst - i <= free &&
+	    list_is_last(&desc->vd.node, &chan->vc.desc_issued))
+		return false;
+
+	return (chan->ll_head + 1) % DW_EDMA_LL_PROGRESS_INTERVAL == 0;
+}
+
 static void dw_edma_core_ll_start(struct dw_edma_desc *desc)
 {
 	struct dw_edma_chan *chan = desc->chan;
@@ -271,7 +298,7 @@ static void dw_edma_core_ll_start(struct dw_edma_desc *desc)
 
 		dw_edma_core_ll_data(chan, &desc->burst[i],
 				     chan->ll_head, chan->cb,
-				     i == desc->nburst - 1 || free == 1);
+				     dw_edma_core_enable_ll_irq(desc, i, free));
 
 		chan->ll_head++;
 
