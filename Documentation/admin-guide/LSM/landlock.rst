@@ -63,6 +63,7 @@ AUDIT_LANDLOCK_ACCESS
     **scope.*** - IPC scoping restrictions (ABI 6+):
         - scope.abstract_unix_socket - Abstract UNIX socket connection denied
         - scope.signal - Signal sending denied
+        - scope.sysv_msg_queue - SysV message queue operation denied (ABI 11+)
 
     Multiple blockers can appear in a single event (comma-separated) when
     multiple access rights are missing. For example, creating a regular file

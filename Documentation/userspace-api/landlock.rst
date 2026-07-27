@@ -86,7 +86,8 @@ to be explicit about the denied-by-default access rights.
             LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP,
         .scoped =
             LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET |
-            LANDLOCK_SCOPE_SIGNAL,
+            LANDLOCK_SCOPE_SIGNAL |
+            LANDLOCK_SCOPE_SYSV_MSG_QUEUE,
     };
 
 Because we may not know which kernel version an application will be executed
@@ -140,6 +141,10 @@ version, and only use the available subset of access rights:
         ruleset_attr.handled_access_net &=
             ~(LANDLOCK_ACCESS_NET_BIND_UDP |
               LANDLOCK_ACCESS_NET_CONNECT_SEND_UDP);
+        __attribute__((fallthrough));
+    case 10:
+        /* Removes LANDLOCK_SCOPE_SYSV_MSG_QUEUE for ABI < 11 */
+        ruleset_attr.scoped &= ~LANDLOCK_SCOPE_SYSV_MSG_QUEUE;
     }
 
 This enables the creation of an inclusive ruleset that will contain our rules.
@@ -419,6 +424,22 @@ The operations which can be scoped are:
 
     A :manpage:`sendto(2)` on a socket which was previously connected will not
     be restricted.  This works for both datagram and stream sockets.
+
+``LANDLOCK_SCOPE_SYSV_MSG_QUEUE``
+    This limits the set of System V message queues to which we can perform
+    :manpage:`msgget(2)`, :manpage:`msgrcv(2)`, :manpage:`msgsnd(2)`, and
+    :manpage:`msgctl(2)` calls to only message queues which were created by a
+    process in the same or a nested Landlock domain.
+
+    Since System V message queues are IPC namespace global constructs and do
+    not use file descriptors, enforcement of a ruleset with this scoping may
+    cause subsequent operations on an msqid that were allowed prior to
+    enforcement to be denied.
+
+    Denials are reported as ``EACCES``.  Unlike other Landlock scopes,
+    the check runs in the generic SysV IPC permission path (the kernel's
+    ``ipcperms()`` helper), whose callers map every denial to ``EACCES``
+    before it reaches user space.
 
 IPC scoping does not support exceptions via :manpage:`landlock_add_rule(2)`.
 If an operation is scoped within a domain, no rules can be added to allow access
@@ -788,6 +809,13 @@ landlock_ruleset_attr.  The object is marked as quiet within a ruleset
 when at least one sys_landlock_add_rule() call is made for it with the
 ``LANDLOCK_ADD_RULE_QUIET`` flag, additional add-rule calls for the same
 object without this flag do not clear it.
+
+System V message queue (ABI < 11)
+---------------------------------
+
+Starting with the Landlock ABI version 11, it is possible to restrict
+operations on System V message queues by setting
+``LANDLOCK_SCOPE_SYSV_MSG_QUEUE`` to the ``scoped`` ruleset attribute.
 
 .. _kernel_support:
 
