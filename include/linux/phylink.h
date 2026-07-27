@@ -518,6 +518,7 @@ struct phylink_pcs {
  *		    the MAC.
  * @pcs_pre_init: configure PCS components necessary for MAC hardware
  *                initialization e.g. RX clock for stmmac.
+ * @pcs_loopback: enable/disable loopback mode at the PCS.
  */
 struct phylink_pcs_ops {
 	int (*pcs_validate)(struct phylink_pcs *pcs, unsigned long *supported,
@@ -542,6 +543,7 @@ struct phylink_pcs_ops {
 	void (*pcs_disable_eee)(struct phylink_pcs *pcs);
 	void (*pcs_enable_eee)(struct phylink_pcs *pcs);
 	int (*pcs_pre_init)(struct phylink_pcs *pcs);
+	int (*pcs_loopback)(struct phylink_pcs *pcs, bool enable);
 };
 
 #if 0 /* For kernel-doc purposes only. */
@@ -717,7 +719,21 @@ void pcs_enable_eee(struct phylink_pcs *pcs);
  */
 int pcs_pre_init(struct phylink_pcs *pcs);
 
+/**
+ * pcs_loopback() - Enable or disable loopback at the PCS
+ * @pcs: a pointer to a &struct phylink_pcs.
+ * @enable: true to enable loopback, false to disable
+ *
+ * Enable or disable loopback mode at the PCS level. This is used by MAC
+ * drivers for selftest purposes when no external PHY is present.
+ *
+ * Returns 0 on success, or a negative error code on failure.
+ */
+int pcs_loopback(struct phylink_pcs *pcs, bool enable);
+
 #endif
+
+int phylink_pcs_loopback(struct phylink_pcs *pcs, bool enable);
 
 struct phylink *phylink_create(struct phylink_config *,
 			       const struct fwnode_handle *,

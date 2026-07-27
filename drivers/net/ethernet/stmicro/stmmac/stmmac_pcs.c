@@ -168,6 +168,22 @@ static void dwmac_integrated_pcs_an_restart(struct phylink_pcs *pcs)
 	}
 }
 
+static int dwmac_integrated_pcs_loopback(struct phylink_pcs *pcs, bool enable)
+{
+	struct stmmac_pcs *spcs = phylink_pcs_to_stmmac_pcs(pcs);
+	void __iomem *an_control = spcs->base + GMAC_AN_CTRL(0);
+	u32 ctrl;
+
+	ctrl = readl(an_control);
+	if (enable)
+		ctrl |= GMAC_AN_CTRL_ELE;
+	else
+		ctrl &= ~GMAC_AN_CTRL_ELE;
+	writel(ctrl, an_control);
+
+	return 0;
+}
+
 static const struct phylink_pcs_ops dwmac_integrated_pcs_ops = {
 	.pcs_inband_caps = dwmac_integrated_pcs_inband_caps,
 	.pcs_enable = dwmac_integrated_pcs_enable,
@@ -175,6 +191,7 @@ static const struct phylink_pcs_ops dwmac_integrated_pcs_ops = {
 	.pcs_get_state = dwmac_integrated_pcs_get_state,
 	.pcs_config = dwmac_integrated_pcs_config,
 	.pcs_an_restart = dwmac_integrated_pcs_an_restart,
+	.pcs_loopback = dwmac_integrated_pcs_loopback,
 };
 
 void stmmac_integrated_pcs_irq(struct stmmac_priv *priv, u32 status,

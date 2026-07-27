@@ -997,6 +997,25 @@ int phylink_pcs_pre_init(struct phylink *pl, struct phylink_pcs *pcs)
 }
 EXPORT_SYMBOL_GPL(phylink_pcs_pre_init);
 
+/**
+ * phylink_pcs_loopback() - Enable or disable loopback at the PCS
+ * @pcs: a pointer to a &struct phylink_pcs.
+ * @enable: true to enable loopback, false to disable
+ *
+ * Enable or disable loopback mode at the PCS level. This is used by MAC
+ * drivers for selftest purposes when no external PHY is present.
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int phylink_pcs_loopback(struct phylink_pcs *pcs, bool enable)
+{
+	if (pcs && pcs->ops->pcs_loopback)
+		return pcs->ops->pcs_loopback(pcs, enable);
+
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL_GPL(phylink_pcs_loopback);
+
 static void phylink_mac_config(struct phylink *pl,
 			       const struct phylink_link_state *state)
 {
