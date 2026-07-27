@@ -135,7 +135,7 @@ static void set_isa(struct cpuinfo_loongarch *c, unsigned int isa)
 
 static void cpu_probe_common(struct cpuinfo_loongarch *c)
 {
-	unsigned int config;
+	unsigned int config, version;
 	unsigned long asid_mask;
 
 	c->options = LOONGARCH_CPU_CPUCFG | LOONGARCH_CPU_CSR | LOONGARCH_CPU_VINT;
@@ -221,6 +221,11 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	if (config & CPUCFG2_LVZP) {
 		c->options |= LOONGARCH_CPU_LVZ;
 		elf_hwcap |= HWCAP_LOONGARCH_LVZ;
+
+		/* Separate VMID and VPID with LVZ version == 2 */
+		version = (config & CPUCFG2_LVZVER) >> 11;
+		if (version == 2)
+			c->options |= LOONGARCH_CPU_GUESTID;
 	}
 #ifdef CONFIG_CPU_HAS_LBT
 	if (config & CPUCFG2_X86BT) {
