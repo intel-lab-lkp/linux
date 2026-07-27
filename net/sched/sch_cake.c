@@ -950,16 +950,19 @@ static struct iphdr *cake_get_iphdr(const struct sk_buff *skb,
 	if (!iph)
 		return NULL;
 
-	if (iph->version == 4 && iph->protocol == IPPROTO_IPV6)
-		return skb_header_pointer(skb, offset + iph->ihl * 4,
-					  sizeof(struct ipv6hdr), buf);
+	if (iph->version == 4 && iph->protocol == IPPROTO_IPV6) {
+		iph = skb_header_pointer(skb, offset + iph->ihl * 4,
+					 sizeof(struct ipv6hdr), buf);
+		if (!iph || iph->version != 6)
+			return NULL;
 
-	else if (iph->version == 4)
 		return iph;
-
-	else if (iph->version == 6)
+	} else if (iph->version == 4) {
+		return iph;
+	} else if (iph->version == 6) {
 		return skb_header_pointer(skb, offset, sizeof(struct ipv6hdr),
 					  buf);
+	}
 
 	return NULL;
 }
@@ -990,7 +993,8 @@ static struct tcphdr *cake_get_tcphdr(const struct sk_buff *skb,
 			ipv6h = skb_header_pointer(skb, offset,
 						   sizeof(_ipv6h), &_ipv6h);
 
-			if (!ipv6h || ipv6h->nexthdr != IPPROTO_TCP)
+			if (!ipv6h || ipv6h->version != 6 ||
+			    ipv6h->nexthdr != IPPROTO_TCP)
 				return NULL;
 
 			offset += sizeof(struct ipv6hdr);
