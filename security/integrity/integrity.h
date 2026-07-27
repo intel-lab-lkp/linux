@@ -216,10 +216,6 @@ static inline void evm_load_x509(void)
 
 #ifdef CONFIG_INTEGRITY_AUDIT
 /* declarations */
-void integrity_audit_msg(int audit_msgno, struct inode *inode,
-			 const unsigned char *fname, const char *op,
-			 const char *cause, int result, int info);
-
 void integrity_audit_message(int audit_msgno, struct inode *inode,
 			     const unsigned char *fname, const char *op,
 			     const char *cause, int result, int info,
@@ -232,13 +228,6 @@ integrity_audit_log_start(struct audit_context *ctx, gfp_t gfp_mask, int type)
 }
 
 #else
-static inline void integrity_audit_msg(int audit_msgno, struct inode *inode,
-				       const unsigned char *fname,
-				       const char *op, const char *cause,
-				       int result, int info)
-{
-}
-
 static inline void integrity_audit_message(int audit_msgno,
 					   struct inode *inode,
 					   const unsigned char *fname,
