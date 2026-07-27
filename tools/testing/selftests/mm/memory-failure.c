@@ -122,13 +122,6 @@ static void teardown_sighandler(void)
 	sigaction(SIGBUS, &sa, NULL);
 }
 
-FIXTURE_TEARDOWN(memory_failure)
-{
-	close(self->kpageflags_fd);
-	close(self->pagemap_fd);
-	teardown_sighandler();
-}
-
 static void prepare(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure) * self,
 		    void *vaddr)
 {
@@ -200,8 +193,7 @@ static void check(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure
 	ASSERT_EQ(pfn_flags & KPF_HWPOISON, KPF_HWPOISON);
 }
 
-static void cleanup(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure) * self,
-		    void *vaddr)
+static void cleanup(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure) * self)
 {
 	unsigned long size;
 	uint64_t pfn_flags;
@@ -215,6 +207,16 @@ static void cleanup(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failu
 	/* Check if the value of HardwareCorrupted has decreased. */
 	ASSERT_EQ(get_hardware_corrupted_size(&size), 0);
 	ASSERT_EQ(size, self->corrupted_size);
+}
+
+FIXTURE_TEARDOWN(memory_failure)
+{
+	if (self->triggered)
+		cleanup(_metadata, self);
+
+	close(self->kpageflags_fd);
+	close(self->pagemap_fd);
+	teardown_sighandler();
 }
 
 TEST_F(memory_failure, anon)
@@ -241,8 +243,6 @@ TEST_F(memory_failure, anon)
 		check(_metadata, self, addr, MADV_HARD_ANON, ret);
 	else
 		check(_metadata, self, addr, MADV_SOFT_ANON, ret);
-
-	cleanup(_metadata, self, addr);
 
 	ASSERT_EQ(munmap(addr, self->page_size), 0);
 }
@@ -307,8 +307,6 @@ TEST_F(memory_failure, clean_pagecache)
 	else
 		check(_metadata, self, addr, MADV_SOFT_CLEAN_PAGECACHE, ret);
 
-	cleanup(_metadata, self, addr);
-
 	ASSERT_EQ(munmap(addr, self->page_size), 0);
 
 	ASSERT_EQ(close(fd), 0);
@@ -347,8 +345,6 @@ TEST_F(memory_failure, dirty_pagecache)
 		check(_metadata, self, addr, MADV_HARD_DIRTY_PAGECACHE, ret);
 	else
 		check(_metadata, self, addr, MADV_SOFT_DIRTY_PAGECACHE, ret);
-
-	cleanup(_metadata, self, addr);
 
 	ASSERT_EQ(munmap(addr, self->page_size), 0);
 
