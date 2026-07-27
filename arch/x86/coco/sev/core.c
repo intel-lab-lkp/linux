@@ -1469,7 +1469,7 @@ static int __init sev_sysfs_init(void)
 	return ret;
 }
 arch_initcall(sev_sysfs_init);
-#endif // CONFIG_SYSFS
+#endif /* CONFIG_SYSFS */
 
 static void free_shared_pages(void *buf, size_t sz)
 {
