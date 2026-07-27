@@ -28,7 +28,10 @@
 #include <linux/vm_sockets.h>
 #include <linux/icmp.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
+#include <linux/tls.h>
 #include "kselftest_harness.h"
 
 #ifndef AF_VSOCK
@@ -39,6 +42,45 @@
 #endif
 #ifndef ICMP_FILTER
 #define ICMP_FILTER 1
+#endif
+#ifndef IPV6_HDRINCL
+#define IPV6_HDRINCL 36
+#endif
+#ifndef IPV6_CHECKSUM
+#define IPV6_CHECKSUM 7
+#endif
+#ifndef AF_IEEE802154
+#define AF_IEEE802154 36
+#endif
+#ifndef SOL_IEEE802154
+#define SOL_IEEE802154 0
+#endif
+#ifndef WPAN_WANTACK
+#define WPAN_WANTACK 0
+#endif
+#ifndef AF_PHONET
+#define AF_PHONET 35
+#endif
+#ifndef SOL_PNPIPE
+#define SOL_PNPIPE 275
+#endif
+#ifndef PN_PROTO_PIPE
+#define PN_PROTO_PIPE 2
+#endif
+#ifndef PNPIPE_ENCAP
+#define PNPIPE_ENCAP 1
+#endif
+#ifndef PNPIPE_ENCAP_NONE
+#define PNPIPE_ENCAP_NONE 0
+#endif
+#ifndef PNPIPE_ENCAP_IP
+#define PNPIPE_ENCAP_IP 1
+#endif
+#ifndef SOL_TLS
+#define SOL_TLS 282
+#endif
+#ifndef TCP_ULP
+#define TCP_ULP 31
 #endif
 
 /* ---------- netlink ---------- */
@@ -392,6 +434,388 @@ TEST_F(raw, bad_optname)
 	ASSERT_EQ(-1, getsockopt(self->fd, SOL_RAW, 0x7fff, &val, &optlen));
 	ASSERT_EQ(ENOPROTOOPT, errno);
 	ASSERT_EQ(sizeof(val), optlen);
+}
+
+/* ---------- raw (ipv6) ---------- */
+
+FIXTURE(rawv6)
+{
+	int fd;
+};
+
+FIXTURE_SETUP(rawv6)
+{
+	self->fd = socket(AF_INET6, SOCK_RAW, IPPROTO_UDP);
+	if (self->fd < 0)
+		SKIP(return, "SOCK_RAW/IPv6 socket: %s", strerror(errno));
+}
+
+FIXTURE_TEARDOWN(rawv6)
+{
+	if (self->fd >= 0)
+		close(self->fd);
+}
+
+TEST_F(rawv6, hdrincl_exact)
+{
+	socklen_t optlen;
+	int val = -1;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(0, getsockopt(self->fd, IPPROTO_IPV6, IPV6_HDRINCL,
+				&val, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+	ASSERT_TRUE(val == 0 || val == 1);
+}
+
+TEST_F(rawv6, hdrincl_oversize_clamped)
+{
+	char buf[16] = {};
+	socklen_t optlen = sizeof(buf);
+
+	ASSERT_EQ(0, getsockopt(self->fd, IPPROTO_IPV6, IPV6_HDRINCL,
+				buf, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+}
+
+/* Raw int options clamp the reported length down to the user buffer
+ * instead of returning EINVAL on a short buffer.
+ */
+TEST_F(rawv6, hdrincl_undersize_clamped)
+{
+	socklen_t optlen = 2;
+	int val = 0;
+
+	ASSERT_EQ(0, getsockopt(self->fd, IPPROTO_IPV6, IPV6_HDRINCL,
+				&val, &optlen));
+	ASSERT_EQ(2, optlen);
+}
+
+TEST_F(rawv6, checksum_default)
+{
+	socklen_t optlen;
+	int val = 0;
+
+	optlen = sizeof(val);
+
+	/* A non-ICMPv6 raw socket has the checksum disabled, reported as -1. */
+	ASSERT_EQ(0, getsockopt(self->fd, IPPROTO_IPV6, IPV6_CHECKSUM,
+				&val, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+	ASSERT_EQ(-1, val);
+}
+
+TEST_F(rawv6, bad_optname)
+{
+	socklen_t optlen;
+	int val;
+
+	optlen = sizeof(val);
+
+	/* SOL_RAW reaches do_rawv6_getsockopt() directly. */
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_RAW, 0x7fff, &val, &optlen));
+	ASSERT_EQ(ENOPROTOOPT, errno);
+	ASSERT_EQ(sizeof(val), optlen);
+}
+
+/* ---------- ieee802154 (dgram) ---------- */
+
+FIXTURE(ieee802154)
+{
+	int fd;
+};
+
+FIXTURE_SETUP(ieee802154)
+{
+	self->fd = socket(AF_IEEE802154, SOCK_DGRAM, 0);
+	if (self->fd < 0)
+		SKIP(return, "AF_IEEE802154 dgram socket: %s", strerror(errno));
+}
+
+FIXTURE_TEARDOWN(ieee802154)
+{
+	if (self->fd >= 0)
+		close(self->fd);
+}
+
+TEST_F(ieee802154, wantack_exact)
+{
+	socklen_t optlen;
+	int val = -1;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_IEEE802154, WPAN_WANTACK,
+				&val, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+	ASSERT_TRUE(val == 0 || val == 1);
+}
+
+TEST_F(ieee802154, wantack_oversize_clamped)
+{
+	char buf[16] = {};
+	socklen_t optlen = sizeof(buf);
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_IEEE802154, WPAN_WANTACK,
+				buf, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+}
+
+TEST_F(ieee802154, wantack_undersize_clamped)
+{
+	socklen_t optlen = 2;
+	int val = 0;
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_IEEE802154, WPAN_WANTACK,
+				&val, &optlen));
+	ASSERT_EQ(2, optlen);
+}
+
+TEST_F(ieee802154, bad_optname)
+{
+	socklen_t optlen;
+	int val;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_IEEE802154, 0x7fff,
+				 &val, &optlen));
+	ASSERT_EQ(ENOPROTOOPT, errno);
+	ASSERT_EQ(sizeof(val), optlen);
+}
+
+/* dgram_getsockopt() rejects any level other than SOL_IEEE802154. */
+TEST_F(ieee802154, bad_level)
+{
+	socklen_t optlen;
+	int val;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_RAW, WPAN_WANTACK,
+				 &val, &optlen));
+	ASSERT_EQ(EOPNOTSUPP, errno);
+	ASSERT_EQ(sizeof(val), optlen);
+}
+
+/* ---------- phonet (pep) ---------- */
+
+FIXTURE(phonet)
+{
+	int fd;
+};
+
+FIXTURE_SETUP(phonet)
+{
+	self->fd = socket(AF_PHONET, SOCK_SEQPACKET, PN_PROTO_PIPE);
+	if (self->fd < 0)
+		SKIP(return, "AF_PHONET pipe socket: %s", strerror(errno));
+}
+
+FIXTURE_TEARDOWN(phonet)
+{
+	if (self->fd >= 0)
+		close(self->fd);
+}
+
+TEST_F(phonet, encap_exact)
+{
+	socklen_t optlen;
+	int val = -1;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_PNPIPE, PNPIPE_ENCAP,
+				&val, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+	ASSERT_TRUE(val == PNPIPE_ENCAP_NONE || val == PNPIPE_ENCAP_IP);
+}
+
+TEST_F(phonet, encap_oversize_clamped)
+{
+	char buf[16] = {};
+	socklen_t optlen = sizeof(buf);
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_PNPIPE, PNPIPE_ENCAP,
+				buf, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+}
+
+/* pep clamps the reported length down to the user buffer. Use an
+ * int-sized backing buffer with a short optlen so the baseline kernel,
+ * which writes a full int via put_user(), does not scribble past it.
+ */
+TEST_F(phonet, encap_undersize_clamped)
+{
+	socklen_t optlen = 2;
+	int val = 0;
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_PNPIPE, PNPIPE_ENCAP,
+				&val, &optlen));
+	ASSERT_EQ(2, optlen);
+}
+
+TEST_F(phonet, bad_optname)
+{
+	socklen_t optlen;
+	int val;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_PNPIPE, 0x7fff, &val, &optlen));
+	ASSERT_EQ(ENOPROTOOPT, errno);
+	ASSERT_EQ(sizeof(val), optlen);
+}
+
+/* pep_getsockopt() rejects any level other than SOL_PNPIPE. */
+TEST_F(phonet, bad_level)
+{
+	socklen_t optlen;
+	int val;
+
+	optlen = sizeof(val);
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_RAW, PNPIPE_ENCAP, &val, &optlen));
+	ASSERT_EQ(ENOPROTOOPT, errno);
+	ASSERT_EQ(sizeof(val), optlen);
+}
+
+/* ---------- tls ---------- */
+
+FIXTURE(tls)
+{
+	int fd;
+	int sfd;
+};
+
+FIXTURE_SETUP(tls)
+{
+	struct sockaddr_in a = {
+		.sin_family = AF_INET,
+		.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+	};
+	socklen_t alen = sizeof(a);
+	int lfd;
+
+	self->fd = -1;
+	self->sfd = -1;
+
+	lfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (lfd < 0)
+		SKIP(return, "TCP socket: %s", strerror(errno));
+	if (bind(lfd, (struct sockaddr *)&a, sizeof(a)) || listen(lfd, 1) ||
+	    getsockname(lfd, (struct sockaddr *)&a, &alen)) {
+		close(lfd);
+		SKIP(return, "listener setup: %s", strerror(errno));
+	}
+	self->fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (connect(self->fd, (struct sockaddr *)&a, sizeof(a))) {
+		close(lfd);
+		SKIP(return, "connect: %s", strerror(errno));
+	}
+	self->sfd = accept(lfd, NULL, NULL);
+	close(lfd);
+	if (setsockopt(self->fd, IPPROTO_TCP, TCP_ULP, "tls", sizeof("tls")))
+		SKIP(return, "TCP_ULP=tls: %s (built without TLS?)",
+		     strerror(errno));
+}
+
+FIXTURE_TEARDOWN(tls)
+{
+	if (self->fd >= 0)
+		close(self->fd);
+	if (self->sfd >= 0)
+		close(self->sfd);
+}
+
+/* do_tls_getsockopt_tx_zc(): fixed-size int, exact length required. */
+TEST_F(tls, tx_zerocopy_exact)
+{
+	socklen_t optlen = sizeof(int);
+	int val = -1;
+
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_TLS, TLS_TX_ZEROCOPY_RO,
+				&val, &optlen));
+	ASSERT_EQ(sizeof(int), optlen);
+	ASSERT_TRUE(val == 0 || val == 1);
+}
+
+TEST_F(tls, tx_zerocopy_wrong_len)
+{
+	socklen_t optlen = 2;
+	int val;
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_TLS, TLS_TX_ZEROCOPY_RO,
+				 &val, &optlen));
+	ASSERT_EQ(EINVAL, errno);
+}
+
+/* do_tls_getsockopt_conf(): NULL optval still yields EINVAL -- the
+ * converted code tests opt->iter_out.ubuf in place of optval.
+ */
+TEST_F(tls, conf_null_optval)
+{
+	socklen_t optlen = 64;
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_TLS, TLS_TX, NULL, &optlen));
+	ASSERT_EQ(EINVAL, errno);
+}
+
+TEST_F(tls, conf_short)
+{
+	socklen_t optlen = 2;
+	char buf[2];
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_TLS, TLS_TX, buf, &optlen));
+	ASSERT_EQ(EINVAL, errno);
+}
+
+/* TLS_TX before crypto is set reports not-ready. */
+TEST_F(tls, conf_not_ready)
+{
+	struct tls_crypto_info info;
+	socklen_t optlen = sizeof(info);
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_TLS, TLS_TX, &info, &optlen));
+	ASSERT_EQ(EBUSY, errno);
+}
+
+/* Set TX crypto, then read it back at the base and full sizes, exercising
+ * both copy_to_iter() branches. SKIP if AES-GCM is unavailable.
+ */
+TEST_F(tls, conf_crypto_roundtrip)
+{
+	struct tls12_crypto_info_aes_gcm_128 tx = {
+		.info.version = TLS_1_2_VERSION,
+		.info.cipher_type = TLS_CIPHER_AES_GCM_128,
+	};
+	struct tls12_crypto_info_aes_gcm_128 full;
+	struct tls_crypto_info base;
+	socklen_t optlen;
+
+	if (setsockopt(self->fd, SOL_TLS, TLS_TX, &tx, sizeof(tx)))
+		SKIP(return, "set TLS_TX aes_gcm_128: %s", strerror(errno));
+
+	optlen = sizeof(base);
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_TLS, TLS_TX, &base, &optlen));
+	ASSERT_EQ(sizeof(base), optlen);
+	ASSERT_EQ(TLS_1_2_VERSION, base.version);
+	ASSERT_EQ(TLS_CIPHER_AES_GCM_128, base.cipher_type);
+
+	optlen = sizeof(full);
+	ASSERT_EQ(0, getsockopt(self->fd, SOL_TLS, TLS_TX, &full, &optlen));
+	ASSERT_EQ(sizeof(full), optlen);
+	ASSERT_EQ(TLS_CIPHER_AES_GCM_128, full.info.cipher_type);
+}
+
+TEST_F(tls, bad_optname)
+{
+	socklen_t optlen = sizeof(int);
+	int val;
+
+	ASSERT_EQ(-1, getsockopt(self->fd, SOL_TLS, 0x7fff, &val, &optlen));
+	ASSERT_EQ(ENOPROTOOPT, errno);
 }
 
 TEST_HARNESS_MAIN
