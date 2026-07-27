@@ -196,7 +196,8 @@ static int ip_vs_estimation_kthread(void *data)
 	}
 
 	while (1) {
-		if (!id && !hlist_empty(&ipvs->est_temp_list))
+		if (!id && READ_ONCE(ipvs->est_chain_max) &&
+		    !hlist_empty(&ipvs->est_temp_list))
 			ip_vs_est_drain_temp_list(ipvs);
 		set_current_state(TASK_IDLE);
 		if (kthread_should_stop())
@@ -421,6 +422,11 @@ static int ip_vs_enqueue_estimator(struct netns_ipvs *ipvs,
 
 add_est:
 	ktid = kd->id;
+	if (!kd->chain_max || !kd->tick_max || !kd->est_max_count) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	/* For small number of estimators prefer to use few ticks,
 	 * otherwise try to add into the last estimated row.
 	 * est_row and add_row point after the row we should use
@@ -449,6 +455,10 @@ add_est:
 			row = find_next_bit(kd->avail, IPVS_EST_NTICKS, crow);
 		if (row >= IPVS_EST_NTICKS)
 			row = find_first_bit(kd->avail, IPVS_EST_NTICKS);
+	}
+	if (row >= IPVS_EST_NTICKS) {
+		ret = -EINVAL;
+		goto out;
 	}
 
 	td = rcu_dereference_protected(kd->ticks[row], 1);
