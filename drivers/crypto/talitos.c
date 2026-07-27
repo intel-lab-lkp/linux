@@ -3242,10 +3242,8 @@ static void talitos_remove(struct platform_device *ofdev)
 		talitos_unregister_rng(dev);
 
 	for (i = 0; i < 2; i++)
-		if (priv->irq[i]) {
+		if (priv->irq[i])
 			free_irq(priv->irq[i], dev);
-			irq_dispose_mapping(priv->irq[i]);
-		}
 
 	tasklet_kill(&priv->done_task[0]);
 	if (priv->irq[1])
@@ -3354,52 +3352,39 @@ static struct talitos_crypto_alg *talitos_alg_alloc(struct device *dev,
 static int talitos_probe_irq(struct platform_device *ofdev)
 {
 	struct device *dev = &ofdev->dev;
-	struct device_node *np = ofdev->dev.of_node;
 	struct talitos_private *priv = dev_get_drvdata(dev);
 	int err;
 	bool is_sec1 = has_ftr_sec1(priv);
 
-	priv->irq[0] = irq_of_parse_and_map(np, 0);
-	if (!priv->irq[0]) {
-		dev_err(dev, "failed to map irq\n");
-		return -EINVAL;
-	}
-	if (is_sec1) {
-		err = request_irq(priv->irq[0], talitos1_interrupt_4ch, 0,
-				  dev_driver_string(dev), dev);
-		goto primary_out;
-	}
+	priv->irq[0] = platform_get_irq(ofdev, 0);
+	if (priv->irq[0] < 0)
+		return priv->irq[0];
 
-	priv->irq[1] = irq_of_parse_and_map(np, 1);
+	if (is_sec1)
+		return request_irq(priv->irq[0], talitos1_interrupt_4ch, 0,
+				  dev_driver_string(dev), dev);
+
+	priv->irq[1] = platform_get_irq_optional(ofdev, 1);
+	if (priv->irq[1] == -EPROBE_DEFER)
+		return priv->irq[1];
 
 	/* get the primary irq line */
-	if (!priv->irq[1]) {
-		err = request_irq(priv->irq[0], talitos2_interrupt_4ch, 0,
+	if (priv->irq[1] < 0)
+		return request_irq(priv->irq[0], talitos2_interrupt_4ch, 0,
 				  dev_driver_string(dev), dev);
-		goto primary_out;
-	}
 
 	err = request_irq(priv->irq[0], talitos2_interrupt_ch0_2, 0,
 			  dev_driver_string(dev), dev);
 	if (err)
-		goto primary_out;
+		return err;
 
 	/* get the secondary irq line */
 	err = request_irq(priv->irq[1], talitos2_interrupt_ch1_3, 0,
 			  dev_driver_string(dev), dev);
 	if (err) {
 		dev_err(dev, "failed to request secondary irq\n");
-		irq_dispose_mapping(priv->irq[1]);
+		free_irq(priv->irq[0], dev);
 		priv->irq[1] = 0;
-	}
-
-	return err;
-
-primary_out:
-	if (err) {
-		dev_err(dev, "failed to request primary irq\n");
-		irq_dispose_mapping(priv->irq[0]);
-		priv->irq[0] = 0;
 	}
 
 	return err;
