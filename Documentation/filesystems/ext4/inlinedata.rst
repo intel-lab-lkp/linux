@@ -3,6 +3,14 @@
 Inline Data
 -----------
 
+.. warning::
+
+   The inline data feature is deprecated and will be removed in a future
+   kernel release.  New regular file inodes no longer store data inline,
+   and writes to existing inline data inodes trigger automatic conversion
+   to block-based storage.  Use ``tune2fs -O ^inline_data`` to convert
+   existing filesystems.
+
 The inline data feature was designed to handle the case that a file's
 data is so tiny that it readily fits inside the inode, which
 (theoretically) reduces disk block consumption and reduces seeks. If the
