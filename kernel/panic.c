@@ -567,6 +567,11 @@ static void panic_other_cpus_shutdown(bool crash_kexec)
 		crash_smp_send_stop();
 }
 
+#ifndef arch_do_panic
+#define arch_do_panic arch_do_panic
+static inline void arch_do_panic(void) {}
+#endif
+
 /**
  * vpanic - halt the system
  * @fmt: The text string to print
@@ -756,6 +761,7 @@ void vpanic(const char *fmt, va_list args)
 #endif
 	pr_emerg("---[ end Kernel panic - not syncing: %s ]---\n", buf);
 
+	arch_do_panic();
 	/* Do not scroll important messages printed above */
 	suppress_printk = 1;
 
