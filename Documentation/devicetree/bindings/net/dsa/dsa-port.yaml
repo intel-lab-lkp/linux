@@ -53,6 +53,7 @@ properties:
     enum:
       - dsa
       - edsa
+      - edsa-ptp-reserved2-ts
       - ocelot
       - ocelot-8021q
       - rtl8_4
