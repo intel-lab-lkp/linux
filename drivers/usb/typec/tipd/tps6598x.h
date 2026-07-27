@@ -373,9 +373,18 @@ struct cd321x {
 	struct usb_pd_identity cur_partner_identity;
 };
 
+struct sn201202x {
+	struct cd321x cd;
+	struct completion select_completion;
+	struct completion sleep_completion;
+	struct completion wake_completion;
+	struct spmi_device *sdev;
+};
+
 extern const struct tipd_data tipd_cd321x_data;
 extern const struct tipd_data tipd_tps6598x_data;
 extern const struct tipd_data tipd_tps25750_data;
+extern const struct tipd_data tipd_sn201202x_data;
 extern const struct regmap_config tps6598x_regmap_config;
 
 int tipd_init(struct tps6598x *tps);
