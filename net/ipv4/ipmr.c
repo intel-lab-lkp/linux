@@ -1058,6 +1058,7 @@ static int ipmr_cache_report(const struct mr_table *mrt,
 			     struct sk_buff *pkt, vifi_t vifi, int assert)
 {
 	const int ihl = ip_hdrlen(pkt);
+	struct in_pktinfo *info;
 	struct sock *mroute_sk;
 	struct igmphdr *igmp;
 	struct igmpmsg *msg;
@@ -1113,7 +1114,10 @@ static int ipmr_cache_report(const struct mr_table *mrt,
 		msg->im_vif = vifi;
 		msg->im_vif_hi = vifi >> 8;
 		ipv4_pktinfo_prepare(mroute_sk, pkt, false);
-		memcpy(skb->cb, pkt->cb, sizeof(skb->cb));
+		info = PKTINFO_SKB_CB(skb);
+		memset(skb->cb, 0, sizeof(skb->cb));
+		info->ipi_ifindex = PKTINFO_SKB_CB(pkt)->ipi_ifindex;
+		info->ipi_spec_dst = PKTINFO_SKB_CB(pkt)->ipi_spec_dst;
 		/* Add our header.
 		 * Note that code, csum and group fields are cleared.
 		 */
