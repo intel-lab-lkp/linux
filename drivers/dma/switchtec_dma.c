@@ -133,8 +133,6 @@ struct switchtec_dma_chan {
 	/* Serialize hardware control register access */
 	spinlock_t hw_ctrl_lock;
 
-	struct tasklet_struct desc_task;
-
 	/* Serialize descriptor preparation */
 	spinlock_t submit_lock;
 	bool ring_active;
@@ -584,6 +582,7 @@ static void switchtec_dma_synchronize(struct dma_chan *chan)
 
 	int rc;
 
+	dma_chan_kill_bh(chan);
 	switchtec_dma_abort_desc(swdma_chan, 1);
 
 	rc = enable_channel(swdma_chan);
@@ -820,9 +819,10 @@ unlock_and_exit:
 	return ret;
 }
 
-static void switchtec_dma_desc_task(unsigned long data)
+static void switchtec_dma_desc_task(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = (void *)data;
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 
 	switchtec_dma_cleanup_completed(swdma_chan);
 }
@@ -832,7 +832,7 @@ static irqreturn_t switchtec_dma_isr(int irq, void *chan)
 	struct switchtec_dma_chan *swdma_chan = chan;
 
 	if (swdma_chan->comp_ring_active)
-		tasklet_schedule(&swdma_chan->desc_task);
+		dma_chan_schedule_bh(&swdma_chan->dma_chan);
 
 	return IRQ_HANDLED;
 }
@@ -1041,6 +1041,7 @@ static void switchtec_dma_free_chan_resources(struct dma_chan *chan)
 	spin_unlock_bh(&swdma_chan->complete_lock);
 
 	switchtec_dma_chan_stop(swdma_chan);
+	dma_chan_kill_bh(chan);
 	switchtec_dma_abort_desc(swdma_chan, 0);
 	switchtec_dma_free_desc(swdma_chan);
 
@@ -1067,8 +1068,6 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 	spin_lock_init(&swdma_chan->hw_ctrl_lock);
 	spin_lock_init(&swdma_chan->submit_lock);
 	spin_lock_init(&swdma_chan->complete_lock);
-	tasklet_init(&swdma_chan->desc_task, switchtec_dma_desc_task,
-		     (unsigned long)swdma_chan);
 
 	swdma_chan->mmio_chan_fw =
 		swdma_dev->bar + SWITCHTEC_DMAC_CHAN_CFG_STS_OFFSET +
@@ -1116,6 +1115,7 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 	chan = &swdma_chan->dma_chan;
 	chan->device = dma;
 	dma_cookie_init(chan);
+	dma_chan_init_bh(chan, switchtec_dma_desc_task);
 
 	list_add_tail(&chan->device_node, &dma->channels);
 
@@ -1138,7 +1138,7 @@ static int switchtec_dma_chan_free(struct pci_dev *pdev,
 	spin_unlock_bh(&swdma_chan->complete_lock);
 
 	pci_free_irq(pdev, swdma_chan->irq, swdma_chan);
-	tasklet_kill(&swdma_chan->desc_task);
+	dma_chan_kill_bh(&swdma_chan->dma_chan);
 
 	switchtec_dma_chan_stop(swdma_chan);
 
