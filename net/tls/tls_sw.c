@@ -1877,9 +1877,12 @@ int tls_sw_recvmsg(struct sock *sk,
 		    tlm->control == TLS_RECORD_TYPE_DATA)
 			darg.zc = true;
 
-		/* Do not use async mode if record is non-data */
+		/* Do not use async mode if record is non-data, or if it
+		 * is empty: the receive loop frees an empty record's skb,
+		 * so its decryption must have completed.
+		 */
 		if (tlm->control == TLS_RECORD_TYPE_DATA)
-			darg.async = ctx->async_capable;
+			darg.async = ctx->async_capable && to_decrypt;
 		else
 			darg.async = false;
 
@@ -1914,6 +1917,27 @@ put_on_rx_list_err:
 		rxm = strp_msg(darg.skb);
 		chunk = rxm->full_len;
 		tls_rx_rec_done(ctx);
+
+		/* An empty record advances neither loop bound, so a flood
+		 * of them can be interrupted only here. On the zero-copy
+		 * path darg.skb is the strparser anchor, already released
+		 * by tls_rx_rec_done().
+		 */
+		if (tls_rx_empty_data_rec(chunk, control)) {
+			long timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
+
+			if (!darg.zc)
+				consume_skb(darg.skb);
+
+			/* An empty record still marks a boundary. */
+			msg->msg_flags |= MSG_EOR;
+
+			if (signal_pending(current)) {
+				err = tls_rx_intr_errno(timeo);
+				goto recv_end;
+			}
+			continue;
+		}
 
 		if (!darg.zc) {
 			bool partially_consumed = chunk > len;
