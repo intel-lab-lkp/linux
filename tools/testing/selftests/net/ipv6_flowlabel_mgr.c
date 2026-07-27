@@ -24,9 +24,19 @@
 #ifndef IPV6_FLOWLABEL_MGR
 #define IPV6_FLOWLABEL_MGR	32
 #endif
+#ifndef IPV6_FLOWINFO_SEND
+#define IPV6_FLOWINFO_SEND	33
+#endif
 
 /* from net/ipv6/ip6_flowlabel.c */
 #define FL_MIN_LINGER		6
+
+#define INIT_SIN6_LOOPBACK(name)					\
+	struct sockaddr_in6 name = {					\
+		.sin6_family	= AF_INET6,				\
+		.sin6_addr	= IN6ADDR_LOOPBACK_INIT,		\
+		.sin6_port	= htons(8888),				\
+	}
 
 #define explain(x)							\
 	do { if (cfg_verbose) fprintf(stderr, "       " x "\n"); } while (0)
@@ -80,6 +90,52 @@ static int flowlabel_renew(int fd, uint32_t label, uint16_t linger)
 	};
 
 	return setsockopt(fd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &req, sizeof(req));
+}
+
+static int tcp_listen(void)
+{
+	INIT_SIN6_LOOPBACK(addr);
+	const int one = 1;
+	int fd;
+
+	fd = socket(PF_INET6, SOCK_STREAM, 0);
+	if (fd == -1)
+		error(1, errno, "socket listener");
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)))
+		error(1, errno, "setsockopt SO_REUSEADDR");
+	if (bind(fd, (void *)&addr, sizeof(addr)))
+		error(1, errno, "bind");
+	if (listen(fd, 1))
+		error(1, errno, "listen");
+
+	return fd;
+}
+
+static void tcp_connect(int listener, uint32_t flowlabel, int *client, int *accepted)
+{
+	INIT_SIN6_LOOPBACK(addr);
+	const int one = 1;
+	int cfd, afd;
+
+	cfd = socket(PF_INET6, SOCK_STREAM, 0);
+	if (cfd == -1)
+		error(1, errno, "socket client");
+
+	if (flowlabel_get(cfd, flowlabel, IPV6_FL_S_EXCL, IPV6_FL_F_CREATE))
+		error(1, errno, "flowlabel_get");
+	if (setsockopt(cfd, SOL_IPV6, IPV6_FLOWINFO_SEND, &one, sizeof(one)))
+		error(1, errno, "setsockopt flowinfo_send");
+	addr.sin6_flowinfo = htonl(flowlabel);
+
+	if (connect(cfd, (void *)&addr, sizeof(addr)))
+		error(1, errno, "connect");
+
+	afd = accept(listener, NULL, NULL);
+	if (afd == -1)
+		error(1, errno, "accept");
+
+	*client = cfd;
+	*accepted = afd;
 }
 
 static void run_tests(int fd)
@@ -183,6 +239,21 @@ static void run_tests(int fd)
 		expect_fail(flowlabel_get(fd, 5, IPV6_FL_S_ANY, IPV6_FL_F_CREATE));
 	}
 
+	explain("Prepare TCP SYN for REMOTE flag validation");
+	int remote_listener = tcp_listen();
+	int remote_cfd, remote_afd;
+	tcp_connect(remote_listener, 6, &remote_cfd, &remote_afd);
+	struct in6_flowlabel_req freq = {
+		.flr_action = IPV6_FL_A_GET,
+		.flr_flags = IPV6_FL_F_REMOTE,
+	};
+	socklen_t freq_len = sizeof(freq);
+	explain("Query for label sent by client with IPV6_FL_F_REMOTE");
+	expect_pass(getsockopt(remote_afd, SOL_IPV6, IPV6_FLOWLABEL_MGR, &freq, &freq_len));
+	expect_pass(ntohl(freq.flr_label) != 6);
+	close(remote_afd);
+	close(remote_cfd);
+	close(remote_listener);
 }
 
 static void parse_opts(int argc, char **argv)
