@@ -16,6 +16,22 @@
 #include "cifs_unicode.h"
 #include "cifs_debug.h"
 
+/* byte area sess_alloc_buffer() hands to a session setup request */
+#define SESS_SETUP_BYTE_AREA	2000
+
+/* what unicode_ssetup_strings() appends after the blob: alignment pad,
+ * user, domain, and three cifs_strtoUTF16() calls capped at 32 characters
+ */
+#define SESS_SETUP_STRINGS_MAX					\
+	(1							\
+	 + 2 * CIFS_MAX_USERNAME_LEN + 2			\
+	 + 2 * CIFS_MAX_DOMAINNAME_LEN + 2			\
+	 + 2 * 32 + 2 * 32 + 2					\
+	 + 2 * 32 + 2)
+
+#define SESS_SETUP_BLOB_MAX					\
+	(SESS_SETUP_BYTE_AREA - SESS_SETUP_STRINGS_MAX)
+
 struct sess_data {
 	unsigned int xid;
 	struct cifs_ses *ses;
@@ -330,8 +346,7 @@ sess_alloc_buffer(struct sess_data *sess_data, int wct)
 	 */
 	sess_data->buf0_type = CIFS_SMALL_BUFFER;
 
-	/* 2000 big enough to fit max user, domain, NOS name etc. */
-	sess_data->iov[2].iov_base = kmalloc(2000, GFP_KERNEL);
+	sess_data->iov[2].iov_base = kmalloc(SESS_SETUP_BYTE_AREA, GFP_KERNEL);
 	if (!sess_data->iov[2].iov_base) {
 		rc = -ENOMEM;
 		goto out_free_smb_buf;
@@ -446,6 +461,14 @@ sess_auth_ntlmv2(struct sess_data *sess_data)
 		rc = setup_ntlmv2_rsp(ses, sess_data->nls_cp);
 		if (rc) {
 			cifs_dbg(VFS, "Error %d during NTLMv2 authentication\n", rc);
+			goto out;
+		}
+
+		if (ses->auth_key.len - CIFS_SESS_KEY_SIZE >
+		    SESS_SETUP_BLOB_MAX) {
+			cifs_dbg(VFS, "NTLMv2 response blob too long (%u)\n",
+				 ses->auth_key.len - CIFS_SESS_KEY_SIZE);
+			rc = -EIO;
 			goto out;
 		}
 
