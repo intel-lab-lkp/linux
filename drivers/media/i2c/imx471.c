@@ -91,6 +91,7 @@
 #define IMX471_CSI_2_LANE_MODE			1
 #define IMX471_CSI_4_LANE_MODE			3
 
+#define IMX471_REG_LINE_LENGTH_PCK		CCI_REG16(0x0342)
 #define IMX471_REG_X_ADD_STA			CCI_REG16(0x0344)
 #define IMX471_REG_Y_ADD_STA			CCI_REG16(0x0346)
 #define IMX471_REG_X_ADD_END			CCI_REG16(0x0348)
@@ -240,6 +241,7 @@ static const struct cci_reg_sequence mode_1928x1088_regs[] = {
 	{ CCI_REG8(0x030d), 0x02 },
 	{ CCI_REG8(0x030e), 0x00 },
 	{ CCI_REG8(0x030f), 0x53 },
+	{ IMX471_REG_LINE_LENGTH_PCK, 5008 },
 	{ IMX471_REG_PLL_MULT_DRIV, IMX471_PLL_DUAL },
 	{ CCI_REG8(0x3f4c), 0x81 },
 	{ CCI_REG8(0x3f4d), 0x81 },
