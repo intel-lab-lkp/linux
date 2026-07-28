@@ -55,6 +55,10 @@
 #define CLKCMU_DOUT_PERIS_GIC              43
 #define CLKCMU_DOUT_PERIS_NOC              44
 #define FOUT_MMC_PLL_CLKOUT_DIV2           45
+#define CLKCMU_MOUT_HSI_NOC                46
+#define CLKCMU_MOUT_HSI_UFS_EMBD           47
+#define CLKCMU_DOUT_HSI_NOC                48
+#define CLKCMU_DOUT_HSI_UFS_EMBD           49
 
 /* CMU_PERIC */
 #define CLK_MOUT_PERIC_IP_USER             1
@@ -94,5 +98,11 @@
 #define CLK_GOUT_SYSREG_PERIS_IPCLKPORT_PCLK 7
 #define CLK_GOUT_WDT0_PERIS_IPCLKPORT_PCLK   8
 #define CLK_GOUT_WDT1_PERIS_IPCLKPORT_PCLK   9
+
+/* CMU_HSI */
+#define CLK_MOUT_HSI_NOC_USER              1
+#define CLK_MOUT_HSI_UFS_EMBD_USER         2
+#define CLK_GOUT_CMU_HSI_IPCLKPORT_PCLK    3
+#define CLK_GOUT_SYSREG_HSI_IPCLKPORT_PCLK 4
 
 #endif /* _DT_BINDINGS_CLOCK_EXYNOS8855_H */
