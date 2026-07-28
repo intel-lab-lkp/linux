@@ -1290,35 +1290,38 @@ err_rollback:
 	return rc;
 }
 
-int cxl_bi_setup(struct cxl_port *endpoint)
+/*
+ * Verify the device and every component in the path up to the root
+ * are BI capable.
+ */
+void cxl_bi_probe_capable(struct cxl_port *endpoint)
 {
 	struct cxl_memdev *cxlmd = to_cxl_memdev(endpoint->uport_dev);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	struct cxl_dport *dport = endpoint->parent_dport;
 	struct cxl_dport *dport_iter;
 	struct cxl_port *port_iter;
-	int rc;
+
+	cxlds->bi_capable = false;
 
 	if (!dev_is_pci(cxlds->dev))
-		return 0;
+		return;
 
 	/* BI is VH-only */
 	if (cxlds->rcd)
-		return 0;
+		return;
 
 	if (!cxl_is_bi_capable(to_pci_dev(cxlds->dev),
 			       endpoint->regs.bi_decoder))
-		return 0;
+		return;
 
-	/* walkup the topology twice, first to check, then to enable */
-	port_iter = dport->port;
-	dport_iter = dport;
+	dport_iter = endpoint->parent_dport;
+	port_iter = dport_iter->port;
 	while (!is_cxl_root(port_iter)) {
 		/* check rp, dsp */
 		if (!cxl_is_bi_capable(to_pci_dev(dport_iter->dport_dev),
 				       dport_iter->regs.bi_decoder)) {
 			dev_dbg(cxlds->dev, "BI not supported by topology\n");
-			return 0;
+			return;
 		}
 
 		/* check usp */
@@ -1328,12 +1331,26 @@ int cxl_bi_setup(struct cxl_port *endpoint)
 		    !cxl_is_bi_capable(to_pci_dev(port_iter->uport_dev),
 				       port_iter->regs.bi_rt)) {
 			dev_dbg(cxlds->dev, "BI not supported by USP\n");
-			return 0;
+			return;
 		}
 
 		dport_iter = port_iter->parent_dport;
 		port_iter = dport_iter->port;
 	}
+
+	cxlds->bi_capable = true;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_bi_probe_capable, "CXL");
+
+int cxl_bi_setup(struct cxl_port *endpoint)
+{
+	struct cxl_memdev *cxlmd = to_cxl_memdev(endpoint->uport_dev);
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_dport *dport = endpoint->parent_dport;
+	int rc;
+
+	if (!cxlds->bi_capable)
+		return 0;
 
 	rc = cxl_bi_enable_path(cxlds, dport->port, dport);
 	if (rc)
