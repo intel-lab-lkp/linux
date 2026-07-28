@@ -9542,6 +9542,26 @@ the APIC ID is found in EDX for all subleaves of 0x0b and 0x1f, and in EAX
 for 0x8000001e; the latter also encodes the core id and node id in bits
 7:0 of EBX and ECX respectively.
 
+Number of ASIDs (nested SVM)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CPUID[0x8000000A]:EBX reports the number of ASIDs supported by the processor
+on AMD CPUs. KVM's ``KVM_GET_SUPPORTED_CPUID`` hardcodes this value to 8 for
+historical reasons. This is value is arbitrary and does not represent a
+limit on the supported number of ASIDs, or even a reasonable default value.
+
+KVM allows userspace to set any value (up to 0xFFFFFFFF), and emulates those
+ASIDs by multiplexing them onto hardware ASIDs. AMD CPUs have only ever
+supported 3 values: 0x40, 0x8000, and 0x1000 -- with modern CPUs advertising
+0x8000.
+
+Advertising a small number of ASIDs could lead an L1 hypervisor to perform
+unnecessary TLB flushes (e.g. older KVM would flush the entire TLB when running
+out of ASIDs). Userspace should probably set the number of ASIDs to a
+reasonably high power of 2 value to remain consistent with hardware and avoid
+any misbehavior by L1 hypervisors, ideally one of the values advertised by
+actual hardware.
+
 Obsolete ioctls and capabilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
