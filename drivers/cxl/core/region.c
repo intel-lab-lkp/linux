@@ -1827,6 +1827,21 @@ err:
 	return rc;
 }
 
+/* Read back the committed BI bit of an auto-discovered decoder */
+static bool cxled_committed_bi(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_port *port = cxled_to_port(cxled);
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
+	u32 ctrl;
+
+	if (!cxlhdm || !cxlhdm->regs.hdm_decoder)
+		return false;
+
+	ctrl = readl(cxlhdm->regs.hdm_decoder +
+		     CXL_HDM_DECODER0_CTRL_OFFSET(cxled->cxld.id));
+	return FIELD_GET(CXL_HDM_DECODER0_CTRL_BI, ctrl);
+}
+
 static int cxl_region_attach_auto(struct cxl_region *cxlr,
 				  struct cxl_endpoint_decoder *cxled, int pos)
 {
@@ -1837,6 +1852,16 @@ static int cxl_region_attach_auto(struct cxl_region *cxlr,
 			"%s: unable to add decoder to autodetected region\n",
 			dev_name(&cxled->cxld.dev));
 		return -EINVAL;
+	}
+
+	/* A committed decoder may only join a region of its own flavor */
+	if (cxled_committed_bi(cxled) !=
+	    (cxlr->type == CXL_DECODER_DEVMEM &&
+	     cxl_root_decoder_is_bi(cxlr->cxlrd))) {
+		dev_err(&cxlr->dev, "%s:%s coherency model mismatch\n",
+			dev_name(&cxled_to_memdev(cxled)->dev),
+			dev_name(&cxled->cxld.dev));
+		return -ENXIO;
 	}
 
 	if (pos >= 0) {
@@ -3805,6 +3830,14 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	if (part < 0)
 		return ERR_PTR(-EBUSY);
+
+	/* avoid UB */
+	if (cxled_committed_bi(cxled) && !cxl_root_decoder_is_bi(cxlrd)) {
+		dev_err(cxlmd->dev.parent,
+			"%s:%s BI decoder in a non-BI window\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev));
+		return ERR_PTR(-ENXIO);
+	}
 
 	do {
 		cxlr = __create_region(cxlrd, cxlds->part[part].mode,

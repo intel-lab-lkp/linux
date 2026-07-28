@@ -1083,6 +1083,18 @@ static int __cxl_bi_commit_decoder(struct device *dev, void __iomem *bi)
 				    scale, base);
 }
 
+/* Committed, or no explicit commit required */
+static bool cxl_bi_decoder_committed(void __iomem *bi)
+{
+	u32 caps = readl(bi + CXL_BI_DECODER_CAPS_OFFSET);
+	u32 sts = readl(bi + CXL_BI_DECODER_STATUS_OFFSET);
+
+	if (!FIELD_GET(CXL_BI_DECODER_CAPS_EXPLICIT_COMMIT_REQ, caps))
+		return true;
+
+	return FIELD_GET(CXL_BI_DECODER_STATUS_BI_COMMITTED, sts);
+}
+
 /* Enable or dealloc BI-ID changes in the given level of the topology. */
 static int __cxl_bi_ctrl_dport(struct cxl_dport *dport, bool enable)
 {
@@ -1127,6 +1139,16 @@ static int __cxl_bi_ctrl_dport(struct cxl_dport *dport, bool enable)
 		return 0;
 	case PCI_EXP_TYPE_DOWNSTREAM:
 		if (enable) {
+			/*
+			 * Adopt a dport that was already programmed and
+			 * committed by firmware: nothing new is enabled
+			 * below it, so no commit is due.
+			 */
+			if (FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE, ctrl) &&
+			    !FIELD_GET(CXL_BI_DECODER_CTRL_BI_FW, ctrl) &&
+			    cxl_bi_decoder_committed(bi))
+				return 0;
+
 			value = ctrl & ~CXL_BI_DECODER_CTRL_BI_FW;
 			value |= CXL_BI_DECODER_CTRL_BI_ENABLE;
 		} else {
@@ -1173,11 +1195,11 @@ static int __cxl_bi_ctrl_endpoint(struct cxl_dev_state *cxlds, bool enable)
 
 	if (enable) {
 		if (FIELD_GET(CXL_BI_DECODER_CTRL_BI_ENABLE, ctrl)) {
-			if (cxlds->bi)
-				return 0;
-			dev_err(cxlds->dev,
-				"BI already enabled in hardware\n");
-			return -EBUSY;
+			/* adopt firmware enabled */
+			if (!cxlds->bi)
+				dev_dbg(cxlds->dev,
+					"adopting firmware-enabled BI\n");
+			goto done;
 		}
 		val = ctrl | CXL_BI_DECODER_CTRL_BI_ENABLE;
 	} else {
@@ -1192,11 +1214,11 @@ static int __cxl_bi_ctrl_endpoint(struct cxl_dev_state *cxlds, bool enable)
 	}
 
 	writel(val, bi + CXL_BI_DECODER_CTRL_OFFSET);
-	cxlds->bi = enable;
 
 	dev_dbg(cxlds->dev, "BI requests %s\n",
 		str_enabled_disabled(enable));
-
+done:
+	cxlds->bi = enable;
 	return 0;
 }
 
