@@ -563,4 +563,25 @@ bool kvm_cpu_has_ept(void);
 void vm_enable_ept(struct kvm_vm *vm);
 void prepare_virtualize_apic_accesses(struct vmx_pages *vmx, struct kvm_vm *vm);
 
+static inline void invvpid(unsigned long ext, u16 vpid, gva_t gva)
+{
+	struct {
+		u64 vpid : 16;
+		u64 rsvd : 48;
+		u64 gva;
+	} operand = { vpid, 0, gva };
+
+	asm volatile("invvpid %0, %1" : : "m"(operand), "r"(ext) : "memory");
+}
+
+static inline void invept(unsigned long ext, u64 eptp)
+{
+	struct {
+		u64 eptp;
+		u64 rsvd;
+	} operand = { eptp, 0 };
+
+	asm volatile("invept %0, %1" : : "m"(operand), "r"(ext) : "memory");
+}
+
 #endif /* SELFTEST_KVM_VMX_H */

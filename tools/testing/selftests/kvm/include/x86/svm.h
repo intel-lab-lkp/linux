@@ -316,4 +316,9 @@ struct __attribute__ ((__packed__)) vmcb {
 
 #define SVM_CR0_SELECTIVE_MASK (X86_CR0_TS | X86_CR0_MP)
 
+static inline void invlpga(unsigned long addr, u32 asid)
+{
+	asm volatile("invlpga %0, %1" : : "a"(addr), "c"(asid));
+}
+
 #endif /* SELFTEST_KVM_SVM_H */
