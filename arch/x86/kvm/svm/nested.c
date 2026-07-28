@@ -553,10 +553,8 @@ void __nested_copy_vmcb_control_to_cache(struct kvm_vcpu *vcpu,
 	to->misc_ctl2		= from->misc_ctl2;
 	to->pause_filter_count  = from->pause_filter_count;
 	to->pause_filter_thresh = from->pause_filter_thresh;
-
-	/* Copy asid here because nested_vmcb_check_controls() will check it */
-	to->asid           = from->asid;
-	to->clean = from->clean;
+	to->asid		= from->asid;
+	to->clean		= from->clean;
 
 #ifdef CONFIG_KVM_HYPERV
 	/* Hyper-V extensions (Enlightened VMCB) */
@@ -688,14 +686,26 @@ static void nested_save_pending_event_to_vmcb12(struct vcpu_svm *svm,
 static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	bool new_asid = false;
 
 	/* Handle pending Hyper-V TLB flush requests */
 	kvm_hv_nested_transtion_tlb_flush(vcpu, npt_enabled);
+
+	if (svm->nested.ctl.asid != svm->nested.last_asid) {
+		svm->nested.last_asid = svm->nested.ctl.asid;
+		new_asid = true;
+	}
 
 	/*
 	 * If L1 requested a TLB flush for L2, flush L2's TLB on nested entry
 	 * and sync the nested NPT MMU, as TLB_CONTROL also flushes NPT
 	 * guest-physical mappings.
+	 *
+	 * Handle L1 changing L2's ASID12 similarly, as KVM only uses one ASID
+	 * for L2 in hardware (per vCPU), so it must start fresh when L1 changes
+	 * ASID12 to emulate different ASIDs correctly.  Additionally, the MMU
+	 * context is not tagged by the ASID, so the shadow NPTs cannot be
+	 * reused across different L2 ASIDs.
 	 *
 	 * If L1 requested a full TLB flush for all ASIDs (including its own),
 	 * L1's own ASID is also flushed on nested VM-Exit, before running L1.
@@ -703,7 +713,7 @@ static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 	 * TLB_CONTROL_FLUSH_ASID and TLB_CONTROL_FLUSH_ASID_LOCAL are handled
 	 * equally for simplicity.
 	 */
-	if (svm->nested.ctl.tlb_ctl != TLB_CONTROL_DO_NOTHING) {
+	if (new_asid || (svm->nested.ctl.tlb_ctl != TLB_CONTROL_DO_NOTHING)) {
 		if (nested_npt_enabled(svm))
 			kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
 		kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
@@ -1885,7 +1895,7 @@ void nested_svm_update_tsc_ratio_msr(struct kvm_vcpu *vcpu)
 	svm_write_tsc_multiplier(vcpu);
 }
 
-/* Inverse operation of nested_copy_vmcb_control_to_cache(). asid is copied too. */
+/* Inverse operation of nested_copy_vmcb_control_to_cache() */
 static void nested_copy_vmcb_cache_to_control(struct vmcb_control_area *dst,
 					      struct vmcb_ctrl_area_cached *from)
 {
