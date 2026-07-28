@@ -8,7 +8,6 @@
 #define _CORESIGHT_TMC_H
 
 #include <linux/dma-mapping.h>
-#include <linux/idr.h>
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
@@ -192,6 +191,11 @@ struct etr_buf {
 	void				*private;
 };
 
+struct etr_buf_mapping {
+	struct etm_session_id		owner;
+	struct etr_buf			*buf;
+};
+
 /**
  * @paddr	: Start address of reserved memory region.
  * @vaddr	: Corresponding CPU virtual address.
@@ -239,8 +243,9 @@ struct tmc_resrv_buf {
  * @etr_caps:	Bitmask of capabilities of the TMC ETR, inferred from the
  *		device configuration register (DEVID)
  * @etr_mode:	User preferred mode of the ETR device, default auto mode.
- * @idr:	Holds etr_bufs allocated for this ETR.
- * @idr_mutex:	Access serialisation for idr.
+ * @perf_bufs:	CPU-wide Perf buffers and their owners.
+ * @nr_perf_bufs: Number of entries in @perf_bufs.
+ * @perf_bufs_mutex: Access serialisation for @perf_bufs.
  * @sysfs_buf:	SYSFS buffer for ETR.
  * @perf_buf:	PERF buffer for ETR.
  * @resrv_buf:  Used by ETR as hardware trace buffer and for trace data
@@ -274,8 +279,9 @@ struct tmc_drvdata {
 	u32			trigger_cntr;
 	u32			etr_caps;
 	enum etr_mode		etr_mode;
-	struct idr		idr;
-	struct mutex		idr_mutex;
+	struct etr_buf_mapping	*perf_bufs;
+	unsigned int		nr_perf_bufs;
+	struct mutex		perf_bufs_mutex;
 	struct etr_buf		*sysfs_buf;
 	struct etr_buf		*perf_buf;
 	struct tmc_resrv_buf	resrv_buf;

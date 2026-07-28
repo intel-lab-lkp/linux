@@ -9,7 +9,6 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/device.h>
-#include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/iommu.h>
 #include <linux/err.h>
@@ -832,8 +831,7 @@ static int __tmc_probe(struct device *dev, struct resource *res)
 		ret = tmc_etr_setup_caps(dev, devid, &desc.access);
 		if (ret)
 			goto out;
-		idr_init(&drvdata->idr);
-		mutex_init(&drvdata->idr_mutex);
+		mutex_init(&drvdata->perf_bufs_mutex);
 		dev_list = "tmc_etr";
 		break;
 	case TMC_CONFIG_TYPE_ETF:

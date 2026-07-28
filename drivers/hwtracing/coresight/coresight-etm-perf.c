@@ -517,7 +517,9 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 	 * sinks.
 	 */
 	event_data->snk_config =
-			sink_ops(sink)->alloc_buffer(sink, event, pages,
+			sink_ops(sink)->alloc_buffer(sink, event,
+						     &event_data->session_id,
+						     pages,
 						     nr_pages, overwrite);
 	if (!event_data->snk_config)
 		goto err;

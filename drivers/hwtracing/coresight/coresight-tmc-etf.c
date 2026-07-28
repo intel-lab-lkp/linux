@@ -419,8 +419,9 @@ static void tmc_disable_etf_link(struct coresight_device *csdev,
 }
 
 static void *tmc_alloc_etf_buffer(struct coresight_device *csdev,
-				  struct perf_event *event, void **pages,
-				  int nr_pages, bool overwrite)
+				  struct perf_event *event,
+				  struct etm_session_id *owner,
+				  void **pages, int nr_pages, bool overwrite)
 {
 	int node;
 	struct cs_buffers *buf;

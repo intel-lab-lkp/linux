@@ -746,7 +746,8 @@ static unsigned long trbe_get_trace_size(struct perf_output_handle *handle,
 }
 
 static void *arm_trbe_alloc_buffer(struct coresight_device *csdev,
-				   struct perf_event *event, void **pages,
+				   struct perf_event *event,
+				   struct etm_session_id *owner, void **pages,
 				   int nr_pages, bool snapshot)
 {
 	struct trbe_buf *buf;

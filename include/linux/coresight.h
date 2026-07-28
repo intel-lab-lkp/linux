@@ -37,6 +37,7 @@
 #define CORESIGHT_UNLOCK	0xc5acce55
 
 extern const struct bus_type coresight_bustype;
+struct etm_session_id;
 
 enum coresight_dev_type {
 	CORESIGHT_DEV_TYPE_SINK,
@@ -371,7 +372,8 @@ struct coresight_ops_sink {
 		      struct coresight_path *path);
 	int (*disable)(struct coresight_device *csdev);
 	void *(*alloc_buffer)(struct coresight_device *csdev,
-			      struct perf_event *event, void **pages,
+			      struct perf_event *event,
+			      struct etm_session_id *owner, void **pages,
 			      int nr_pages, bool overwrite);
 	void (*free_buffer)(void *config);
 	unsigned long (*update_buffer)(struct coresight_device *csdev,
