@@ -34,6 +34,10 @@ properties:
           - enum:
               - anlogic,dr1v90-aclint-sswi
           - const: nuclei,ux900-aclint-sswi
+      - items:
+          - enum:
+              - spacemit,k3-aclint-sswi
+          - const: riscv,aclint-sswi
 
   reg:
     maxItems: 1
