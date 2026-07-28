@@ -210,15 +210,8 @@ static int quicki2c_get_acpi_resources(struct quicki2c_device *qcdev)
 		qcdev->i2c_max_frame_size_enable = i2c_config.FSEN;
 		qcdev->i2c_int_delay_enable = i2c_config.INDE;
 
-		if (i2c_config.FSVL <= qcdev->ddata->max_detect_size)
-			qcdev->i2c_max_frame_size = i2c_config.FSVL;
-		else
-			qcdev->i2c_max_frame_size = qcdev->ddata->max_detect_size;
-
-		if (i2c_config.INDV <= qcdev->ddata->max_interrupt_delay)
-			qcdev->i2c_int_delay = i2c_config.INDV;
-		else
-			qcdev->i2c_int_delay = qcdev->ddata->max_interrupt_delay;
+		qcdev->i2c_max_frame_size = min(i2c_config.FSVL, qcdev->ddata->max_detect_size);
+		qcdev->i2c_int_delay = min(i2c_config.INDV, qcdev->ddata->max_interrupt_delay);
 	}
 
 	return 0;
