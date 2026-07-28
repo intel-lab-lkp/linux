@@ -58,6 +58,7 @@ struct iommu_dma_options {
 struct iommu_dma_cookie {
 	struct iova_domain iovad;
 	struct list_head msi_page_list;
+	struct mutex msi_lock;
 	/* Flush queue */
 	union {
 		struct iova_fq *single_fq;
@@ -80,6 +81,7 @@ struct iommu_dma_cookie {
 struct iommu_dma_msi_cookie {
 	dma_addr_t msi_iova;
 	struct list_head msi_page_list;
+	struct mutex msi_lock;
 };
 
 static DEFINE_STATIC_KEY_FALSE(iommu_deferred_attach_enabled);
@@ -378,6 +380,7 @@ int iommu_get_dma_cookie(struct iommu_domain *domain)
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&cookie->msi_page_list);
+	mutex_init(&cookie->msi_lock);
 	domain->cookie_type = IOMMU_COOKIE_DMA_IOVA;
 	domain->iova_cookie = cookie;
 	return 0;
@@ -411,6 +414,7 @@ int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 
 	cookie->msi_iova = base;
 	INIT_LIST_HEAD(&cookie->msi_page_list);
+	mutex_init(&cookie->msi_lock);
 	domain->cookie_type = IOMMU_COOKIE_DMA_MSI;
 	domain->msi_cookie = cookie;
 	return 0;
@@ -2196,6 +2200,18 @@ static struct list_head *cookie_msi_pages(const struct iommu_domain *domain)
 	}
 }
 
+static struct mutex *cookie_msi_lock(const struct iommu_domain *domain)
+{
+	switch (domain->cookie_type) {
+	case IOMMU_COOKIE_DMA_IOVA:
+		return &domain->iova_cookie->msi_lock;
+	case IOMMU_COOKIE_DMA_MSI:
+		return &domain->msi_cookie->msi_lock;
+	default:
+		BUG();
+	}
+}
+
 static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 		phys_addr_t msi_addr, struct iommu_domain *domain)
 {
@@ -2204,6 +2220,16 @@ static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 	dma_addr_t iova;
 	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
 	size_t size = cookie_msi_granule(domain);
+
+	/*
+	 * A VFIO type1 container can attach the same domain to devices in
+	 * different iommu groups, each serialised by its own group mutex, so
+	 * the group mutex held by iommu_dma_sw_msi()'s caller isn't enough to
+	 * serialise msi_page_list lookups and insertions against each other
+	 * here; take the cookie's own lock instead, scoped to just this
+	 * domain.
+	 */
+	guard(mutex)(cookie_msi_lock(domain));
 
 	msi_addr &= ~(phys_addr_t)(size - 1);
 	list_for_each_entry(msi_page, msi_page_list, list)
