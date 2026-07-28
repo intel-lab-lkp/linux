@@ -555,7 +555,7 @@ static int ecb_paes_do_one_request(struct crypto_engine *engine, void *areq)
 		 * To avoid immediately re-invocation of this callback,
 		 * tell the scheduler to voluntarily give up the CPU here.
 		 */
-		cond_resched();
+		msleep(1);
 		pr_debug("rescheduling request\n");
 		return -ENOSPC;
 	} else if (rc) {
@@ -821,7 +821,7 @@ static int cbc_paes_do_one_request(struct crypto_engine *engine, void *areq)
 		 * To avoid immediately re-invocation of this callback,
 		 * tell the scheduler to voluntarily give up the CPU here.
 		 */
-		cond_resched();
+		msleep(1);
 		pr_debug("rescheduling request\n");
 		return -ENOSPC;
 	} else if (rc) {
@@ -1129,7 +1129,7 @@ static int ctr_paes_do_one_request(struct crypto_engine *engine, void *areq)
 		 * To avoid immediately re-invocation of this callback,
 		 * tell the scheduler to voluntarily give up the CPU here.
 		 */
-		cond_resched();
+		msleep(1);
 		pr_debug("rescheduling request\n");
 		return -ENOSPC;
 	} else if (rc) {
@@ -1572,7 +1572,7 @@ static int xts_paes_do_one_request(struct crypto_engine *engine, void *areq)
 		 * To avoid immediately re-invocation of this callback,
 		 * tell the scheduler to voluntarily give up the CPU here.
 		 */
-		cond_resched();
+		msleep(1);
 		pr_debug("rescheduling request\n");
 		return -ENOSPC;
 	} else if (rc) {

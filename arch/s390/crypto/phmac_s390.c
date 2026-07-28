@@ -895,7 +895,7 @@ static int phmac_do_one_request(struct crypto_engine *engine, void *areq)
 			 * tell scheduler to voluntarily give up the CPU here.
 			 */
 			pr_debug("rescheduling request\n");
-			cond_resched();
+			msleep(1);
 			return -ENOSPC;
 		} else if (rc) {
 			hwh_advance(hwh, rc);
@@ -916,7 +916,7 @@ static int phmac_do_one_request(struct crypto_engine *engine, void *areq)
 			 * tell scheduler to voluntarily give up the CPU here.
 			 */
 			pr_debug("rescheduling request\n");
-			cond_resched();
+			msleep(1);
 			return -ENOSPC;
 		}
 		break;
