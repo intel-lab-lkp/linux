@@ -15,30 +15,31 @@ prefix :=
 
 quiet_cmd_syshdr = SYSHDR  $@
       cmd_syshdr = $(CONFIG_SHELL) $(syshdr) --abis $(abis) --emit-nr \
+      		--common-tbl \
 		$(if $(offset),--offset $(offset)) \
 		$(if $(prefix),--prefix $(prefix)) \
 		$< $@
 quiet_cmd_systbl = SYSTBL  $@
-      cmd_systbl = $(CONFIG_SHELL) $(systbl) --abis $(abis) $< $@
+      cmd_systbl = $(CONFIG_SHELL) $(systbl) --abis $(abis) --common-tbl $(no-compat) $< $@
 
 quiet_cmd_hypercalls = HYPERCALLS $@
       cmd_hypercalls = $(CONFIG_SHELL) '$<' $@ $(filter-out $<, $(real-prereqs))
 
-$(uapi)/unistd_32.h: abis := i386
+$(uapi)/unistd_32.h: abis := common,i386,memfd_secret,32
 $(uapi)/unistd_32.h: $(syscall32) $(syshdr) FORCE
 	$(call if_changed,syshdr)
 
-$(out)/unistd_32_ia32.h: abis := i386
+$(out)/unistd_32_ia32.h: abis := common,i386,memfd_secret,32
 $(out)/unistd_32_ia32.h: prefix := ia32_
 $(out)/unistd_32_ia32.h: $(syscall32) $(syshdr) FORCE
 	$(call if_changed,syshdr)
 
-$(uapi)/unistd_x32.h: abis := common,x32
+$(uapi)/unistd_x32.h: abis := common,x32,memfd_secret
 $(uapi)/unistd_x32.h: offset := __X32_SYSCALL_BIT
 $(uapi)/unistd_x32.h: $(syscall64) $(syshdr) FORCE
 	$(call if_changed,syshdr)
 
-$(uapi)/unistd_64.h: abis := common,64
+$(uapi)/unistd_64.h: abis := common,64,memfd_secret
 $(uapi)/unistd_64.h: $(syscall64) $(syshdr) FORCE
 	$(call if_changed,syshdr)
 
@@ -47,10 +48,11 @@ $(out)/unistd_64_x32.h: prefix := x32_
 $(out)/unistd_64_x32.h: $(syscall64) $(syshdr) FORCE
 	$(call if_changed,syshdr)
 
-$(out)/syscalls_32.h: abis := i386
+$(out)/syscalls_32.h: abis := common,i386,memfd_secret,32
 $(out)/syscalls_32.h: $(syscall32) $(systbl) FORCE
 	$(call if_changed,systbl)
-$(out)/syscalls_64.h: abis := common,64
+$(out)/syscalls_64.h: abis := common,64,memfd_secret
+$(out)/syscalls_64.h: no-compat:= --no-compat
 $(out)/syscalls_64.h: $(syscall64) $(systbl) FORCE
 	$(call if_changed,systbl)
 $(out)/syscalls_x32.h: abis := common,x32

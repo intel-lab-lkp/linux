@@ -348,54 +348,6 @@
 336	common	uprobe			sys_uprobe
 # don't use numbers 387 through 423, add new calls after the last
 # 'common' entry
-424	common	pidfd_send_signal	sys_pidfd_send_signal
-425	common	io_uring_setup		sys_io_uring_setup
-426	common	io_uring_enter		sys_io_uring_enter
-427	common	io_uring_register	sys_io_uring_register
-428	common	open_tree		sys_open_tree
-429	common	move_mount		sys_move_mount
-430	common	fsopen			sys_fsopen
-431	common	fsconfig		sys_fsconfig
-432	common	fsmount			sys_fsmount
-433	common	fspick			sys_fspick
-434	common	pidfd_open		sys_pidfd_open
-435	common	clone3			sys_clone3
-436	common	close_range		sys_close_range
-437	common	openat2			sys_openat2
-438	common	pidfd_getfd		sys_pidfd_getfd
-439	common	faccessat2		sys_faccessat2
-440	common	process_madvise		sys_process_madvise
-441	common	epoll_pwait2		sys_epoll_pwait2
-442	common	mount_setattr		sys_mount_setattr
-443	common	quotactl_fd		sys_quotactl_fd
-444	common	landlock_create_ruleset	sys_landlock_create_ruleset
-445	common	landlock_add_rule	sys_landlock_add_rule
-446	common	landlock_restrict_self	sys_landlock_restrict_self
-447	common	memfd_secret		sys_memfd_secret
-448	common	process_mrelease	sys_process_mrelease
-449	common	futex_waitv		sys_futex_waitv
-450	common	set_mempolicy_home_node	sys_set_mempolicy_home_node
-451	common	cachestat		sys_cachestat
-452	common	fchmodat2		sys_fchmodat2
-453	common	map_shadow_stack	sys_map_shadow_stack
-454	common	futex_wake		sys_futex_wake
-455	common	futex_wait		sys_futex_wait
-456	common	futex_requeue		sys_futex_requeue
-457	common	statmount		sys_statmount
-458	common	listmount		sys_listmount
-459	common	lsm_get_self_attr	sys_lsm_get_self_attr
-460	common	lsm_set_self_attr	sys_lsm_set_self_attr
-461	common	lsm_list_modules	sys_lsm_list_modules
-462 	common  mseal			sys_mseal
-463	common	setxattrat		sys_setxattrat
-464	common	getxattrat		sys_getxattrat
-465	common	listxattrat		sys_listxattrat
-466	common	removexattrat		sys_removexattrat
-467	common	open_tree_attr		sys_open_tree_attr
-468	common	file_getattr		sys_file_getattr
-469	common	file_setattr		sys_file_setattr
-470	common	listns			sys_listns
-471	common	rseq_slice_yield	sys_rseq_slice_yield
 
 #
 # Due to a historical design error, certain syscalls are numbered differently
