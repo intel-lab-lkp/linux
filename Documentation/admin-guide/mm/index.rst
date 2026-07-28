@@ -43,3 +43,4 @@ the Linux memory management.
    userfaultfd
    zswap
    kho
+   pghot
