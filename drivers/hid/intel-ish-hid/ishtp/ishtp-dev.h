@@ -269,7 +269,7 @@ struct ishtp_device {
 
 static inline unsigned long ishtp_secs_to_jiffies(unsigned long sec)
 {
-	return msecs_to_jiffies(sec * MSEC_PER_SEC);
+	return secs_to_jiffies(sec);
 }
 
 /*
