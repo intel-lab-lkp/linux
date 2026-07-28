@@ -936,10 +936,10 @@ ssize_t erst_read_record(u64 record_id, struct cper_record_header *record,
 		goto out;
 
 	/*
-	 * if erst_read return value is less than record head length,
-	 * consider it as -EIO, and clear the record_id cache.
+	 * If the record length is outside the supplied buffer, consider it
+	 * invalid and clear it from the record ID cache.
 	 */
-	if (len < recordlen) {
+	if (len < recordlen || len > buflen) {
 		len = -EIO;
 		erst_clear_cache(record_id);
 		goto out;
