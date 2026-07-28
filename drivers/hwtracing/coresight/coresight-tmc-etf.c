@@ -198,7 +198,7 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 		raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
 
-	if (drvdata->reading) {
+	if (drvdata->sysfs_reading) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -259,7 +259,7 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev,
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 	do {
 		ret = -EINVAL;
-		if (drvdata->reading)
+		if (drvdata->sysfs_reading)
 			break;
 		/*
 		 * No need to continue if the ETB/ETF is already operated
@@ -337,7 +337,7 @@ static int tmc_disable_etf_sink(struct coresight_device *csdev)
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 
-	if (drvdata->reading) {
+	if (drvdata->sysfs_reading) {
 		raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 		return -EBUSY;
 	}
@@ -371,7 +371,7 @@ static int tmc_enable_etf_link(struct coresight_device *csdev,
 	bool first_enable = false;
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
-	if (drvdata->reading) {
+	if (drvdata->sysfs_reading) {
 		raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 		return -EBUSY;
 	}
@@ -401,7 +401,7 @@ static void tmc_disable_etf_link(struct coresight_device *csdev,
 	bool last_disable = false;
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
-	if (drvdata->reading) {
+	if (drvdata->sysfs_reading) {
 		raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 		return;
 	}
@@ -718,7 +718,7 @@ int tmc_read_prepare_etb(struct tmc_drvdata *drvdata)
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 
-	if (drvdata->reading) {
+	if (drvdata->sysfs_reading) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -746,7 +746,7 @@ int tmc_read_prepare_etb(struct tmc_drvdata *drvdata)
 		__tmc_etb_disable_hw(drvdata);
 	}
 
-	drvdata->reading = true;
+	drvdata->sysfs_reading = true;
 out:
 	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
@@ -797,7 +797,7 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 		drvdata->buf = NULL;
 	}
 
-	drvdata->reading = false;
+	drvdata->sysfs_reading = false;
 	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	/*

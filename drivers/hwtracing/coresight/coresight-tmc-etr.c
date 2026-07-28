@@ -1151,7 +1151,7 @@ static int tmc_etr_enable_hw(struct tmc_drvdata *drvdata,
  * starts at anywhere in the buffer, depending on the RRP, we adjust the
  * @len returned to handle buffer wrapping around.
  *
- * We are protected here by drvdata->reading != 0, which ensures the
+ * We are protected here by drvdata->sysfs_reading != 0, which ensures the
  * sysfs_buf stays alive.
  */
 ssize_t tmc_etr_get_sysfs_trace(struct tmc_drvdata *drvdata,
@@ -1268,7 +1268,7 @@ static struct etr_buf *tmc_etr_get_sysfs_buffer(struct coresight_device *csdev)
 		raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
 
-	if (drvdata->reading || coresight_get_mode(csdev) == CS_MODE_PERF) {
+	if (drvdata->sysfs_reading || coresight_get_mode(csdev) == CS_MODE_PERF) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -1732,6 +1732,16 @@ out:
 	return size;
 }
 
+static bool tmc_perf_sysfs_shared(struct tmc_drvdata *drvdata,
+				  struct etr_buf *perf_buf)
+{
+	/* In ETR_MODE_RESRV mode, sysfs and Perf share the same memory. */
+	return perf_buf &&
+	       drvdata->sysfs_buf &&
+	       drvdata->sysfs_buf->mode == ETR_MODE_RESRV &&
+	       perf_buf->mode == ETR_MODE_RESRV;
+}
+
 static int tmc_enable_etr_sink_perf(struct coresight_device *csdev,
 				    struct coresight_path *path)
 {
@@ -1772,6 +1782,18 @@ static int tmc_enable_etr_sink_perf(struct coresight_device *csdev,
 		goto unlock_out;
 	}
 
+	/*
+	 * Don't use if it's shared and being read by sysfs. Sysfs may only
+	 * start reading (the cleared zero length buffer) after the first
+	 * tmc_enable_etr_sink_perf(), which changes the result of this check,
+	 * so it should only be done once.
+	 */
+	if ((drvdata->sysfs_reading &&
+	     tmc_perf_sysfs_shared(drvdata, etr_perf->etr_buf))) {
+		rc = -EBUSY;
+		goto unlock_out;
+	}
+
 	rc = tmc_etr_enable_hw(drvdata, etr_perf->etr_buf);
 	if (!rc) {
 		/* Associate with monitored process. */
@@ -1779,6 +1801,10 @@ static int tmc_enable_etr_sink_perf(struct coresight_device *csdev,
 		coresight_set_mode(csdev, CS_MODE_PERF);
 		drvdata->perf_buf = etr_perf->etr_buf;
 		csdev->refcnt++;
+
+		/* A new Perf session clears an old sysfs one if the buffer is shared */
+		if (tmc_perf_sysfs_shared(drvdata, etr_perf->etr_buf))
+			drvdata->sysfs_buf->len = 0;
 	}
 
 unlock_out:
@@ -1807,7 +1833,13 @@ static int tmc_disable_etr_sink(struct coresight_device *csdev)
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 
-	if (drvdata->reading) {
+	/*
+	 * In SYSFS mode an active read is responsible for disabling and
+	 * enabling HW. Otherwise in Perf mode, an old inactive sysfs session
+	 * may be read which Perf should ignore.
+	 */
+	if (drvdata->sysfs_reading &&
+	    coresight_get_mode(csdev) == CS_MODE_SYSFS) {
 		raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 		return -EBUSY;
 	}
@@ -1928,14 +1960,16 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
-	if (drvdata->reading) {
+	if (drvdata->sysfs_reading) {
 		ret = -EBUSY;
 		goto out;
 	}
 
 	/*
-	 * We can safely allow reads even if the ETR is operating in PERF mode,
-	 * since the sysfs session is captured in mode specific data.
+	 * We can safely allow reads even if the ETR is operating in PERF mode
+	 * since sysfs has it's own buffer. For ETR_MODE_RESRV the buffers are
+	 * shared but Perf discards sysfs data before starting a session to
+	 * avoid corruption.
 	 * If drvdata::sysfs_data is NULL the trace data has been read already.
 	 */
 	if (!drvdata->sysfs_buf) {
@@ -1947,7 +1981,7 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 	if (coresight_get_mode(drvdata->csdev) == CS_MODE_SYSFS)
 		__tmc_etr_disable_hw(drvdata);
 
-	drvdata->reading = true;
+	drvdata->sysfs_reading = true;
 out:
 	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
@@ -1982,7 +2016,7 @@ int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata)
 		drvdata->sysfs_buf = NULL;
 	}
 
-	drvdata->reading = false;
+	drvdata->sysfs_reading = false;
 	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	/* Free allocated memory out side of the spinlock */
