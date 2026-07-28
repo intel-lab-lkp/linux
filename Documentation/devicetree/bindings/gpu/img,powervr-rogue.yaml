@@ -41,6 +41,11 @@ properties:
           - const: img,img-rogue
       - items:
           - enum:
+              - spacemit,k3-gpu
+          - const: img,img-bxm-4-64
+          - const: img,img-rogue
+      - items:
+          - enum:
               - ti,am62p-gpu
               - ti,j721s2-gpu
           - const: img,img-bxs-4-64
@@ -101,6 +106,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - spacemit,k3-gpu
               - ti,am62-gpu
               - ti,am62p-gpu
               - ti,j721s2-gpu
