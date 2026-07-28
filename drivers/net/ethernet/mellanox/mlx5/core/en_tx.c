@@ -909,7 +909,8 @@ void mlx5e_free_txqsq_descs(struct mlx5e_txqsq *sq)
 	sq->cc = sqcc;
 
 	/* Do not update BQL for TXQs that got replaced by new active ones, as
-	 * netdev_tx_reset_queue() is called for them in mlx5e_activate_txqsq().
+	 * netdev_tx_reset_queue() is called for them in mlx5e_activate_txqsq()
+	 * if the queue has zero in-flight WQEs.
 	 */
 	if (sq == sq->priv->txq2sq[sq->txq_ix])
 		netdev_tx_completed_queue(sq->txq, npkts, nbytes);
