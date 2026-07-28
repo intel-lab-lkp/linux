@@ -16267,6 +16267,8 @@ static int bnxt_queue_mem_alloc(struct net_device *dev,
 
 err_free_tpa_info:
 	bnxt_free_one_tpa_info(bp, clone);
+	kfree(clone->rx_agg_bmap);
+	clone->rx_agg_bmap = NULL;
 err_free_rx_agg_ring:
 	bnxt_free_ring(bp, &clone->rx_agg_ring_struct.ring_mem);
 err_free_rx_ring:
