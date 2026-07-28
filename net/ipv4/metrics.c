@@ -44,6 +44,12 @@ static int ip_metrics_convert(struct nlattr *fc_mx,
 			}
 			val = nla_get_u32(nla);
 		}
+		if (type == RTAX_ADVMSS && val && val < TCP_MIN_MSS) {
+			NL_SET_ERR_MSG_ATTR_FMT(extack, nla,
+						"Invalid advmss, must be 0 or >= %u",
+						TCP_MIN_MSS);
+			return -EINVAL;
+		}
 		if (type == RTAX_ADVMSS && val > 65535 - 40)
 			val = 65535 - 40;
 		if (type == RTAX_MTU && val > 65535 - 15)
