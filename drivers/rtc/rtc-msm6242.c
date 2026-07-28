@@ -188,21 +188,20 @@ static const struct rtc_class_ops msm6242_rtc_ops = {
 
 static int __init msm6242_rtc_probe(struct platform_device *pdev)
 {
-	struct resource *res;
 	struct msm6242_priv *priv;
 	struct rtc_device *rtc;
+	void __iomem *regs;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -ENODEV;
+	regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
-	priv->regs = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-	if (!priv->regs)
-		return -ENOMEM;
+	priv->regs = regs;
+
 	platform_set_drvdata(pdev, priv);
 
 	rtc = devm_rtc_device_register(&pdev->dev, "rtc-msm6242",
