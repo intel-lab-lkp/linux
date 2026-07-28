@@ -641,6 +641,7 @@ static void cxl_pmu_event_start(struct perf_event *event, int flags)
 	}
 
 	cfg = readq(base + CXL_PMU_COUNTER_CFG_REG(hwc->idx));
+	cfg &= ~(CXL_PMU_COUNTER_CFG_EDGE | CXL_PMU_COUNTER_CFG_INVERT);
 	cfg |= FIELD_PREP(CXL_PMU_COUNTER_CFG_INT_ON_OVRFLW, 1);
 	cfg |= FIELD_PREP(CXL_PMU_COUNTER_CFG_FREEZE_ON_OVRFLW, 1);
 	cfg |= FIELD_PREP(CXL_PMU_COUNTER_CFG_ENABLE, 1);
@@ -651,6 +652,8 @@ static void cxl_pmu_event_start(struct perf_event *event, int flags)
 
 	/* Fixed purpose counters have next two fields RO */
 	if (test_bit(hwc->idx, info->conf_counter_bm)) {
+		cfg &= ~(CXL_PMU_COUNTER_CFG_EVENT_GRP_ID_IDX_MSK |
+			 CXL_PMU_COUNTER_CFG_EVENTS_MSK);
 		cfg |= FIELD_PREP(CXL_PMU_COUNTER_CFG_EVENT_GRP_ID_IDX_MSK,
 				  hwc->event_base);
 		cfg |= FIELD_PREP(CXL_PMU_COUNTER_CFG_EVENTS_MSK,
