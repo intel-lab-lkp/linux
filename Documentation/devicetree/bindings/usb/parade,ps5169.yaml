@@ -1,0 +1,186 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/parade,ps5169.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Parade PS5169 USB Type-C linear redriver
+
+maintainers:
+  - Esteban Urrutia <esteuwu@proton.me>
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: parade,ps5170
+          - const: parade,ps5169
+      - const: parade,ps5169
+
+  reg:
+    maxItems: 1
+
+  vcc-supply:
+    description: 1.8V power supply
+
+  reset-gpios:
+    maxItems: 1
+
+  orientation-switch: true
+  retimer-switch: true
+
+  parade,dp-eq-level:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Equalization level for DisplayPort channels which is mapped to decibels.
+    # 0: 2    dB
+    # 1: 5.5  dB
+    # 2: 6.5  dB
+    # 3: 7.5  dB
+    # 4: 8    dB
+    # 5: 8.5  dB
+    # 6: 9.5  dB
+    # 7: 10   dB
+    enum: [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+
+  parade,usb-rx-eq-level:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Equalization level for USB receive channels which is mapped to decibels.
+    # 0: 5.2  dB
+    # 1: 6    dB
+    # 2: 7    dB
+    # 3: 8    dB
+    # 4: 8.8  dB
+    # 5: 9.6  dB
+    # 6: 10.4 dB
+    # 7: 11.2 dB
+    enum: [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+
+  parade,usb-tx-eq-level:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Equalization level for USB transmit channels which is mapped to decibels.
+    # 0: 2    dB
+    # 1: 5.5  dB
+    # 2: 6.5  dB
+    # 3: 7.5  dB
+    # 4: 8    dB
+    # 5: 8.5  dB
+    # 6: 9.5  dB
+    # 7: 10   dB
+    enum: [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+
+  parade,aux-rx-data-reverse:
+    type: boolean
+    description:
+      Please check the driver before specifying this property.
+      Usage of this property is design-specific.
+
+  parade,fine-tune-lfps-swing:
+    type: boolean
+    description:
+      If this property is specified a 50 ohm termination will be set on the USB receive channels.
+      Usage of this property is design-specific.
+
+  parade,dp-set-gain:
+    type: boolean
+    description:
+      If this property is specified a gain of -0.9 dB will be applied on the DisplayPort channels.
+
+  parade,usb-rx-set-gain:
+    type: boolean
+    description:
+      If this property is specified a gain of -0.9 dB will be applied on the USB receive channels.
+
+  parade,usb-tx-set-gain:
+    type: boolean
+    description:
+      If this property is specified a gain of -0.9 dB will be applied on the USB transmit channels.
+
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+    properties:
+      port@0:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: Super Speed (SS) Output endpoint to the Type-C connector
+
+      port@1:
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        description: Super Speed (SS) Input endpoint from the Super-Speed PHY
+        unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+  - vcc-supply
+  - reset-gpios
+  - orientation-switch
+  - retimer-switch
+
+allOf:
+  - $ref: usb-switch.yaml#
+  - $ref: usb-switch-ports.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: parade,ps5170
+    then:
+      properties:
+        ports:
+          properties:
+            port@2:
+              $ref: /schemas/graph.yaml#/properties/port
+              description:
+                Sideband Use (SBU) AUX lines endpoint to the Type-C connector for the purpose of
+                handling altmode muxing and orientation switching.
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        typec-retimer@30 {
+            compatible = "parade,ps5169";
+            reg = <0x30>;
+
+            vcc-supply = <&vreg_s10b_1p8>;
+            reset-gpios = <&tlmm 54 GPIO_ACTIVE_LOW>;
+
+            orientation-switch;
+            retimer-switch;
+
+            parade,dp-eq-level = <0>;     /* 2   dB */
+            parade,usb-rx-eq-level = <0>; /* 5.2 dB */
+            parade,usb-tx-eq-level = <0>; /* 2   dB */
+
+            parade,aux-rx-data-reverse;
+            parade,fine-tune-lfps-swing;
+
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+                    usb_con_ss: endpoint {
+                        remote-endpoint = <&typec_con_ss>;
+                    };
+                };
+
+                port@1 {
+                    reg = <1>;
+                    phy_con_ss: endpoint {
+                        remote-endpoint = <&usb_phy_ss>;
+                    };
+                };
+            };
+        };
+    };
+...
