@@ -1,0 +1,11 @@
+What:		/sys/bus/i2c/drivers/lt9611c/.../lt9611c_firmware
+Date:		July 2026
+KernelVersion:	7.3
+Contact:	Mohit Dsor <mohit.dsor@oss.qualcomm.com>
+Description:
+		Read: Returns the current firmware version loaded on the
+		LT9611C(EX/UXD) chip in hex format (e.g. "0x0105").
+
+		Write: Triggers a firmware upgrade of the LT9611C(EX/UXD)
+		chip using the firmware file Lontium/lt9611c_fw.bin loaded
+		via the firmware loader.
