@@ -20,6 +20,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <crypto/aead.h>
+#include <crypto/benchmark.h>
 #include <crypto/hash.h>
 #include <crypto/skcipher.h>
 #include <linux/err.h>
@@ -473,48 +474,6 @@ static int test_aead_jiffies(struct aead_request *req, int enc,
 	return 0;
 }
 
-static int test_aead_cycles(struct aead_request *req, int enc, int blen)
-{
-	unsigned long cycles = 0;
-	int ret = 0;
-	int i;
-
-	/* Warm-up run. */
-	for (i = 0; i < 4; i++) {
-		if (enc)
-			ret = do_one_aead_op(req, crypto_aead_encrypt(req));
-		else
-			ret = do_one_aead_op(req, crypto_aead_decrypt(req));
-
-		if (ret)
-			goto out;
-	}
-
-	/* The real thing. */
-	for (i = 0; i < 8; i++) {
-		cycles_t start, end;
-
-		start = get_cycles();
-		if (enc)
-			ret = do_one_aead_op(req, crypto_aead_encrypt(req));
-		else
-			ret = do_one_aead_op(req, crypto_aead_decrypt(req));
-		end = get_cycles();
-
-		if (ret)
-			goto out;
-
-		cycles += end - start;
-	}
-
-out:
-	if (ret == 0)
-		pr_cont("1 operation in %lu cycles (%d bytes)\n",
-			(cycles + 4) / 8, blen);
-
-	return ret;
-}
-
 static void test_aead_speed(const char *algo, int enc, unsigned int secs,
 			    struct aead_speed_template *template,
 			    unsigned int tcount, u8 authsize,
@@ -669,7 +628,13 @@ static void test_aead_speed(const char *algo, int enc, unsigned int secs,
 							secs);
 				cond_resched();
 			} else {
-				ret = test_aead_cycles(req, enc, bs);
+				u64 cycles;
+
+				ret = crypto_benchmark_aead_cycles(req, enc, 4,
+								   8, &cycles);
+				if (!ret)
+					pr_cont("1 operation in %llu cycles (%d bytes)\n",
+						(cycles + 4) / 8, bs);
 			}
 
 			if (ret) {
@@ -768,101 +733,6 @@ static int test_ahash_jiffies(struct ahash_request *req, int blen,
 	return 0;
 }
 
-static int test_ahash_cycles_digest(struct ahash_request *req, int blen,
-				    char *out)
-{
-	unsigned long cycles = 0;
-	int ret, i;
-
-	/* Warm-up run. */
-	for (i = 0; i < 4; i++) {
-		ret = do_one_ahash_op(req, crypto_ahash_digest(req));
-		if (ret)
-			goto out;
-	}
-
-	/* The real thing. */
-	for (i = 0; i < 8; i++) {
-		cycles_t start, end;
-
-		start = get_cycles();
-
-		ret = do_one_ahash_op(req, crypto_ahash_digest(req));
-		if (ret)
-			goto out;
-
-		end = get_cycles();
-
-		cycles += end - start;
-	}
-
-out:
-	if (ret)
-		return ret;
-
-	pr_cont("%6lu cycles/operation, %4lu cycles/byte\n",
-		cycles / 8, cycles / (8 * blen));
-
-	return 0;
-}
-
-static int test_ahash_cycles(struct ahash_request *req, int blen,
-			     int plen, char *out)
-{
-	unsigned long cycles = 0;
-	int i, pcount, ret;
-
-	if (plen == blen)
-		return test_ahash_cycles_digest(req, blen, out);
-
-	/* Warm-up run. */
-	for (i = 0; i < 4; i++) {
-		ret = do_one_ahash_op(req, crypto_ahash_init(req));
-		if (ret)
-			goto out;
-		for (pcount = 0; pcount < blen; pcount += plen) {
-			ret = do_one_ahash_op(req, crypto_ahash_update(req));
-			if (ret)
-				goto out;
-		}
-		ret = do_one_ahash_op(req, crypto_ahash_final(req));
-		if (ret)
-			goto out;
-	}
-
-	/* The real thing. */
-	for (i = 0; i < 8; i++) {
-		cycles_t start, end;
-
-		start = get_cycles();
-
-		ret = do_one_ahash_op(req, crypto_ahash_init(req));
-		if (ret)
-			goto out;
-		for (pcount = 0; pcount < blen; pcount += plen) {
-			ret = do_one_ahash_op(req, crypto_ahash_update(req));
-			if (ret)
-				goto out;
-		}
-		ret = do_one_ahash_op(req, crypto_ahash_final(req));
-		if (ret)
-			goto out;
-
-		end = get_cycles();
-
-		cycles += end - start;
-	}
-
-out:
-	if (ret)
-		return ret;
-
-	pr_cont("%6lu cycles/operation, %4lu cycles/byte\n",
-		cycles / 8, cycles / (8 * blen));
-
-	return 0;
-}
-
 static void test_ahash_speed_common(const char *algo, unsigned int secs,
 				    struct hash_speed *speed, unsigned mask)
 {
@@ -931,8 +801,15 @@ static void test_ahash_speed_common(const char *algo, unsigned int secs,
 						 speed[i].plen, output, secs);
 			cond_resched();
 		} else {
-			ret = test_ahash_cycles(req, speed[i].blen,
-						speed[i].plen, output);
+			u64 cycles;
+
+			ret = crypto_benchmark_ahash_cycles(req, speed[i].blen,
+							    speed[i].plen, 4, 8,
+							    &cycles);
+			if (!ret)
+				pr_cont("%6llu cycles/operation, %4llu cycles/byte\n",
+					cycles / 8,
+					cycles / (8 * speed[i].blen));
 		}
 
 		if (ret) {
@@ -1249,53 +1126,6 @@ static int test_acipher_jiffies(struct skcipher_request *req, int enc,
 	return 0;
 }
 
-static int test_acipher_cycles(struct skcipher_request *req, int enc,
-			       int blen)
-{
-	unsigned long cycles = 0;
-	int ret = 0;
-	int i;
-
-	/* Warm-up run. */
-	for (i = 0; i < 4; i++) {
-		if (enc)
-			ret = do_one_acipher_op(req,
-						crypto_skcipher_encrypt(req));
-		else
-			ret = do_one_acipher_op(req,
-						crypto_skcipher_decrypt(req));
-
-		if (ret)
-			goto out;
-	}
-
-	/* The real thing. */
-	for (i = 0; i < 8; i++) {
-		cycles_t start, end;
-
-		start = get_cycles();
-		if (enc)
-			ret = do_one_acipher_op(req,
-						crypto_skcipher_encrypt(req));
-		else
-			ret = do_one_acipher_op(req,
-						crypto_skcipher_decrypt(req));
-		end = get_cycles();
-
-		if (ret)
-			goto out;
-
-		cycles += end - start;
-	}
-
-out:
-	if (ret == 0)
-		pr_cont("1 operation in %lu cycles (%d bytes)\n",
-			(cycles + 4) / 8, blen);
-
-	return ret;
-}
-
 static void test_skcipher_speed(const char *algo, int enc, unsigned int secs,
 				struct cipher_speed_template *template,
 				unsigned int tcount, u8 *keysize, bool async)
@@ -1405,8 +1235,13 @@ static void test_skcipher_speed(const char *algo, int enc, unsigned int secs,
 							   bs, secs);
 				cond_resched();
 			} else {
-				ret = test_acipher_cycles(req, enc,
-							  bs);
+				u64 cycles;
+
+				ret = crypto_benchmark_skcipher_cycles(req, enc, 4,
+								       8, &cycles);
+				if (!ret)
+					pr_cont("1 operation in %llu cycles (%d bytes)\n",
+						(cycles + 4) / 8, bs);
 			}
 
 			if (ret) {

@@ -244,13 +244,22 @@ config CRYPTO_KRB5ENC
 	  profile.  This is required for Kerberos 5-style encryption, used by
 	  sunrpc/NFS and rxrpc/AFS.
 
-config CRYPTO_BENCHMARK
-	tristate "Crypto benchmarking module"
-	depends on m || EXPERT
+config CRYPTO_BENCHMARK_LIB
+	tristate
 	select CRYPTO_AEAD
 	select CRYPTO_HASH
 	select CRYPTO_MANAGER
 	select CRYPTO_SKCIPHER
+	help
+	  Build reusable benchmark helpers for Crypto API algorithms.  This
+	  internal library is shared by tcrypt and drivers that select
+	  implementations from measurements made while their devices are
+	  initialized.
+
+config CRYPTO_BENCHMARK
+	tristate "Crypto benchmarking module"
+	depends on m || EXPERT
+	select CRYPTO_BENCHMARK_LIB
 	help
 	  Quick & dirty crypto benchmarking module.
 
