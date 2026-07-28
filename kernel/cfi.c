@@ -74,7 +74,8 @@ void module_cfi_finalize(const Elf_Ehdr *hdr, const Elf_Shdr *sechdrs,
 	secstrings = (char *)hdr + sechdrs[hdr->e_shstrndx].sh_offset;
 
 	for (i = 1; i < hdr->e_shnum; i++) {
-		if (strcmp(secstrings + sechdrs[i].sh_name, "__kcfi_traps"))
+		if (strcmp(secstrings + sechdrs[i].sh_name, "__kcfi_traps") ||
+		    !(sechdrs[i].sh_flags & SHF_ALLOC))
 			continue;
 
 		mod->kcfi_traps = (s32 *)sechdrs[i].sh_addr;
