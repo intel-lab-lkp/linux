@@ -87,15 +87,14 @@ pub mod format_strings {
 ///
 /// # Safety
 ///
-/// The format string must be one of the ones in [`format_strings`], and
-/// the module name must be null-terminated.
+/// The format string must be one of the ones in [`format_strings`].
 ///
 /// [`_printk`]: srctree/include/linux/_printk.h
 #[doc(hidden)]
 #[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
 pub unsafe fn call_printk(
     format_string: &[u8; format_strings::LENGTH],
-    module_name: &[u8],
+    module_name: &CStr,
     args: fmt::Arguments<'_>,
 ) {
     // `_printk` does not seem to fail in any path.
@@ -104,7 +103,7 @@ pub unsafe fn call_printk(
     unsafe {
         bindings::_printk(
             format_string.as_ptr(),
-            module_name.as_ptr(),
+            module_name.as_char_ptr(),
             core::ptr::from_ref(&args).cast::<c_void>(),
         );
     }
@@ -157,9 +156,7 @@ macro_rules! print_macro (
         match $crate::prelude::fmt!($($arg)+) {
             // SAFETY: This hidden macro should only be called by the documented
             // printing macros which ensure the format string is one of the fixed
-            // ones. All `__LOG_PREFIX`s are null-terminated as they are generated
-            // by the `module!` proc macro or fixed values defined in a kernel
-            // crate.
+            // ones.
             args => unsafe {
                 $crate::print::call_printk(
                     &$format_string,

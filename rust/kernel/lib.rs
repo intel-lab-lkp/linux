@@ -146,7 +146,7 @@ pub use macros;
 pub use uapi;
 
 /// Prefix to appear before log messages printed from within the `kernel` crate.
-const __LOG_PREFIX: &[u8] = b"rust_kernel\0";
+const __LOG_PREFIX: &core::ffi::CStr = c"rust_kernel";
 
 /// The top level entrypoint to implementing a kernel module.
 ///

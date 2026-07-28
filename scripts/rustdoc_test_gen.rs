@@ -230,7 +230,7 @@ pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
         BufWriter::new(File::create("rust/doctests_kernel_generated.rs").unwrap()),
         r#"//! `kernel` crate documentation tests.
 
-const __LOG_PREFIX: &[u8] = b"rust_doctests_kernel\0";
+const __LOG_PREFIX: &::core::ffi::CStr = c"rust_doctests_kernel";
 
 {rust_tests}
 "#
