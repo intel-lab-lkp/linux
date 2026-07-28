@@ -748,6 +748,7 @@ static void enetc4_set_rx_pause(struct enetc_pf *pf, bool rx_pause)
 
 static void enetc4_set_tx_pause(struct enetc_pf *pf, int num_rxbdr, bool tx_pause)
 {
+	struct enetc_ndev_priv *priv = netdev_priv(pf->si->ndev);
 	u32 pause_off_thresh = 0, pause_on_thresh = 0;
 	u32 init_quanta = 0, refresh_quanta = 0;
 	struct enetc_hw *hw = &pf->si->hw;
@@ -764,6 +765,8 @@ static void enetc4_set_tx_pause(struct enetc_pf *pf, int num_rxbdr, bool tx_paus
 	}
 
 	if (tx_pause) {
+		set_bit(ENETC_RXBDR_CM, &priv->flags);
+
 		/* When the port first enters congestion, send a PAUSE request
 		 * with the maximum number of quanta. When the port exits
 		 * congestion, it will automatically send a PAUSE frame with
@@ -783,6 +786,8 @@ static void enetc4_set_tx_pause(struct enetc_pf *pf, int num_rxbdr, bool tx_paus
 		 */
 		pause_on_thresh = 3 * ENETC_MAC_MAXFRM_SIZE;
 		pause_off_thresh = 1 * ENETC_MAC_MAXFRM_SIZE;
+	} else {
+		clear_bit(ENETC_RXBDR_CM, &priv->flags);
 	}
 
 	enetc_port_mac_wr(pf->si, ENETC4_PM_PAUSE_QUANTA(0), init_quanta);
@@ -949,7 +954,10 @@ static void enetc4_pl_mac_link_down(struct phylink_config *config,
 				    phy_interface_t interface)
 {
 	struct enetc_pf *pf = phylink_to_enetc_pf(config);
+	struct enetc_ndev_priv *priv;
 
+	priv = netdev_priv(pf->si->ndev);
+	clear_bit(ENETC_RXBDR_CM, &priv->flags);
 	enetc4_mac_rx_graceful_stop(pf);
 	enetc4_mac_tx_graceful_stop(pf);
 }
