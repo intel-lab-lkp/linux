@@ -2688,31 +2688,50 @@ const struct block_device_operations nvme_bdev_ops = {
 	.pr_ops		= &nvme_pr_ops,
 };
 
+/*
+ * Poll CSTS until the requested status is reached.
+ * If exit_if_ctrl_disabled is set, check the cached CC.EN value first and
+ * stop polling when it is cleared.
+ */
+static int nvme_wait_csts(struct nvme_ctrl *ctrl, u32 mask, u32 val,
+			  unsigned long timeout, bool exit_if_ctrl_disabled,
+			  u32 *csts)
+{
+	int ret;
+
+	while ((ret = ctrl->ops->reg_read32(ctrl, NVME_REG_CSTS, csts)) == 0) {
+		if (*csts == ~0)
+			return -ENODEV;
+		if (exit_if_ctrl_disabled &&
+		    !(ctrl->ctrl_config & NVME_CC_ENABLE))
+			return 0;
+		if ((*csts & mask) == val)
+			return 0;
+
+		usleep_range(1000, 2000);
+		if (fatal_signal_pending(current))
+			return -EINTR;
+		if (time_after(jiffies, timeout))
+			return -ETIMEDOUT;
+	}
+
+	return ret;
+}
+
 static int nvme_wait_ready(struct nvme_ctrl *ctrl, u32 mask, u32 val,
-		u32 timeout, const char *op)
+			   u32 timeout, const char *op)
 {
 	unsigned long timeout_jiffies = jiffies + timeout * HZ;
 	u32 csts;
 	int ret;
 
-	while ((ret = ctrl->ops->reg_read32(ctrl, NVME_REG_CSTS, &csts)) == 0) {
-		if (csts == ~0)
-			return -ENODEV;
-		if ((csts & mask) == val)
-			break;
+	ret = nvme_wait_csts(ctrl, mask, val, timeout_jiffies, false, &csts);
+	if (ret != -ETIMEDOUT)
+		return ret;
 
-		usleep_range(1000, 2000);
-		if (fatal_signal_pending(current))
-			return -EINTR;
-		if (time_after(jiffies, timeout_jiffies)) {
-			dev_err(ctrl->device,
-				"Device not ready; aborting %s, CSTS=0x%x\n",
-				op, csts);
-			return -ENODEV;
-		}
-	}
-
-	return ret;
+	dev_err(ctrl->device,
+		"Device not ready; aborting %s, CSTS=0x%x\n", op, csts);
+	return -ENODEV;
 }
 
 int nvme_disable_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
@@ -4748,20 +4767,6 @@ static void nvme_async_event_work(struct work_struct *work)
 		ctrl->ops->submit_async_event(ctrl);
 }
 
-static bool nvme_ctrl_pp_status(struct nvme_ctrl *ctrl)
-{
-
-	u32 csts;
-
-	if (ctrl->ops->reg_read32(ctrl, NVME_REG_CSTS, &csts))
-		return false;
-
-	if (csts == ~0)
-		return false;
-
-	return ((ctrl->ctrl_config & NVME_CC_ENABLE) && (csts & NVME_CSTS_PP));
-}
-
 static void nvme_get_fw_slot_info(struct nvme_ctrl *ctrl)
 {
 	struct nvme_fw_slot_info_log *log;
@@ -4797,6 +4802,8 @@ static void nvme_fw_act_work(struct work_struct *work)
 	struct nvme_ctrl *ctrl = container_of(work,
 				struct nvme_ctrl, fw_act_work);
 	unsigned long fw_act_timeout;
+	u32 csts;
+	int ret;
 
 	nvme_auth_stop(ctrl);
 
@@ -4806,14 +4813,13 @@ static void nvme_fw_act_work(struct work_struct *work)
 		fw_act_timeout = jiffies + secs_to_jiffies(admin_timeout);
 
 	nvme_quiesce_io_queues(ctrl);
-	while (nvme_ctrl_pp_status(ctrl)) {
-		if (time_after(jiffies, fw_act_timeout)) {
-			dev_warn(ctrl->device,
-				"Fw activation timeout, reset controller\n");
-			nvme_try_sched_reset(ctrl);
-			return;
-		}
-		msleep(100);
+	ret = nvme_wait_csts(ctrl, NVME_CSTS_PP, 0, fw_act_timeout, true,
+			     &csts);
+	if (ret == -ETIMEDOUT) {
+		dev_warn(ctrl->device,
+			 "Fw activation timeout, reset controller\n");
+		nvme_try_sched_reset(ctrl);
+		return;
 	}
 
 	if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_CONNECTING) ||
