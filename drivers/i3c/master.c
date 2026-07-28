@@ -1076,7 +1076,7 @@ static int i3c_master_send_ccc_cmd_locked(struct i3c_master_controller *master,
 	for (attempt = 0; attempt < max_attempts; attempt++) {
 		unsigned int i;
 
-		if (cmd->rnw)
+		if (cmd->rnw && (cmd->id & I3C_CCC_DIRECT))
 			for (i = 0; i < cmd->ndests; i++)
 				cmd->dests[i].payload.actual_len = 0;
 
