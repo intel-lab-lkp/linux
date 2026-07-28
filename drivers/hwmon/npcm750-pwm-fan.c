@@ -358,6 +358,13 @@ static void npcm7xx_fan_polling(struct timer_list *t)
 	add_timer(&data->fan_timer);
 }
 
+static void npcm7xx_fan_cleanup(void *data)
+{
+	struct npcm7xx_pwm_fan_data *fan_data = data;
+
+	timer_shutdown_sync(&fan_data->fan_timer);
+}
+
 static inline void npcm7xx_fan_compute(struct npcm7xx_pwm_fan_data *data,
 				       u8 fan, u8 cmp, u8 fan_id, u8 flag_int,
 				       u8 flag_mode, u8 flag_clear)
@@ -1016,10 +1023,16 @@ static int npcm7xx_pwm_fan_probe(struct platform_device *pdev)
 	for (i = 0; i < NPCM7XX_FAN_MAX_CHN_NUM; i++) {
 		if (data->fan_present[i]) {
 			/* fan timer initialization */
-			data->fan_timer.expires = jiffies +
-				msecs_to_jiffies(NPCM7XX_FAN_POLL_TIMER_200MS);
 			timer_setup(&data->fan_timer,
 				    npcm7xx_fan_polling, 0);
+			ret = devm_add_action_or_reset(dev,
+						       npcm7xx_fan_cleanup,
+						       data);
+			if (ret)
+				return ret;
+
+			data->fan_timer.expires = jiffies +
+				msecs_to_jiffies(NPCM7XX_FAN_POLL_TIMER_200MS);
 			add_timer(&data->fan_timer);
 			break;
 		}
