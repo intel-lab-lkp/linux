@@ -12,6 +12,7 @@
 #include <linux/math64.h>
 #include <linux/percpu.h>
 #include <linux/rcupdate.h>
+#include <linux/sched.h>
 #include <linux/sched/isolation.h>
 #include <linux/sched/topology.h>
 #include <linux/smp.h>
@@ -503,16 +504,41 @@ void arch_scale_freq_tick(void)
  */
 #define MAX_SAMPLE_AGE	((unsigned long)HZ / 50)
 
+static void aperfmperf_snapshot_cpu_ipi(void *info)
+{
+	arch_scale_freq_tick();
+}
+
+/*
+ * A NOHZ_FULL CPU with a single runnable task (e.g. an isolated CPU running
+ * a pinned PMD/busy-poll workload) stops its periodic tick, so nothing ever
+ * calls arch_scale_freq_tick() for it again and cpu_samples goes stale
+ * forever, not just for one MAX_SAMPLE_AGE window. Force one on-demand
+ * sample via IPI so a deliberate frequency read doesn't report the P-state
+ * floor from before isolation took effect. Skip idle CPUs: their frequency
+ * genuinely doesn't matter and there is no point poking them with an IPI.
+ */
+static bool aperfmperf_refresh_stale_sample(int cpu)
+{
+	if (!cpu_online(cpu) || idle_cpu(cpu))
+		return false;
+
+	smp_call_function_single(cpu, aperfmperf_snapshot_cpu_ipi, NULL, 1);
+	return true;
+}
+
 int arch_freq_get_on_cpu(int cpu)
 {
 	struct aperfmperf *s = per_cpu_ptr(&cpu_samples, cpu);
 	unsigned int seq, freq;
 	unsigned long last;
+	bool refreshed = false;
 	u64 acnt, mcnt;
 
 	if (!cpu_feature_enabled(X86_FEATURE_APERFMPERF))
 		goto fallback;
 
+again:
 	do {
 		seq = raw_read_seqcount_begin(&s->seq);
 		last = s->last_update;
@@ -524,8 +550,14 @@ int arch_freq_get_on_cpu(int cpu)
 	 * Bail on invalid count and when the last update was too long ago,
 	 * which covers idle and NOHZ full CPUs.
 	 */
-	if (!mcnt || (jiffies - last) > MAX_SAMPLE_AGE)
+	if (!mcnt || (jiffies - last) > MAX_SAMPLE_AGE) {
+		if (!refreshed) {
+			refreshed = true;
+			if (aperfmperf_refresh_stale_sample(cpu))
+				goto again;
+		}
 		goto fallback;
+	}
 
 	return div64_u64((cpu_khz * acnt), mcnt);
 
