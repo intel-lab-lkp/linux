@@ -74,6 +74,7 @@ static int netc_connect_tag_protocol(struct dsa_switch *ds,
 		return -EPROTONOSUPPORT;
 
 	tagger_data = ds->tagger_data;
+	tagger_data->onestep_sync_handler = netc_onestep_sync_handler;
 	tagger_data->twostep_tstamp_handler = netc_twostep_tstamp_handler;
 
 	return 0;
@@ -94,7 +95,7 @@ static void netc_port_rmw(struct netc_port *np, u32 reg,
 	netc_port_wr(np, reg, new);
 }
 
-static void netc_mac_port_wr(struct netc_port *np, u32 reg, u32 val)
+void netc_mac_port_wr(struct netc_port *np, u32 reg, u32 val)
 {
 	if (is_netc_pseudo_port(np))
 		return;
@@ -318,6 +319,8 @@ static int netc_init_all_ports(struct netc_switch *priv)
 			netc_port_init_ptp_ipft_eid(np);
 			spin_lock_init(&np->ptp_lock);
 			__skb_queue_head_init(&np->skb_txtstamp_queue);
+			__skb_queue_head_init(&np->skb_onestep_queue);
+			INIT_WORK(&np->onestep_work, netc_port_onestep_work);
 		}
 	}
 
@@ -1011,6 +1014,8 @@ static void netc_free_ports_resources(struct netc_switch *priv)
 		 * (sock_efree) while holding a spinlock.
 		 */
 		__skb_queue_purge(&np->skb_txtstamp_queue);
+		cancel_work_sync(&np->onestep_work);
+		__skb_queue_purge(&np->skb_onestep_queue);
 	}
 }
 

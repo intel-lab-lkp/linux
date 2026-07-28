@@ -16,6 +16,8 @@
 #define NETC_TAG_TO_PORT		1
 /* SubType0: No request to perform timestamping */
 #define NETC_TAG_TP_SUBTYPE0		0
+/* SubType1: Request to perform one-step timestamping */
+#define NETC_TAG_TP_SUBTYPE1		1
 /* SubType2: Request to perform two-step timestamping */
 #define NETC_TAG_TP_SUBTYPE2		2
 
@@ -31,6 +33,7 @@
 /* NETC switch tag lengths */
 #define NETC_TAG_FORWARD_LEN		6
 #define NETC_TAG_TP_SUBTYPE0_LEN	6
+#define NETC_TAG_TP_SUBTYPE1_LEN	10
 #define NETC_TAG_TP_SUBTYPE2_LEN	6
 #define NETC_TAG_TH_SUBTYPE0_LEN	6
 #define NETC_TAG_TH_SUBTYPE1_LEN	14
@@ -43,12 +46,19 @@
 #define NETC_TAG_IPV			GENMASK(4, 2)
 #define NETC_TAG_SWITCH			GENMASK(2, 0)
 #define NETC_TAG_PORT			GENMASK(7, 3)
+#define NETC_TAG_TIMESTAMP		GENMASK(29, 0)
 
 struct netc_tag_cmn {
 	__be16 tpid;
 	u8 type;
 	u8 qos;
 	u8 switch_port;
+} __packed;
+
+struct netc_tag_tp_subtype1 {
+	struct netc_tag_cmn cmn;
+	u8 resv;
+	__be32 timestamp;
 } __packed;
 
 struct netc_tag_tp_subtype2 {
@@ -117,6 +127,17 @@ static void netc_fill_tp_tag_subtype0(struct sk_buff *skb,
 				NETC_TAG_TP_SUBTYPE0_LEN);
 }
 
+static void netc_fill_tp_tag_subtype1(struct sk_buff *skb,
+				      struct net_device *ndev)
+{
+	u32 ts = FIELD_PREP(NETC_TAG_TIMESTAMP, NETC_SKB_CB(skb)->tstamp);
+	struct netc_tag_tp_subtype1 *tag;
+
+	tag = netc_fill_common_tp_tag(skb, ndev, NETC_TAG_TP_SUBTYPE1,
+				      NETC_TAG_TP_SUBTYPE1_LEN);
+	tag->timestamp = htonl(ts);
+}
+
 static void netc_fill_tp_tag_subtype2(struct sk_buff *skb,
 				      struct net_device *ndev)
 {
@@ -129,6 +150,49 @@ static void netc_fill_tp_tag_subtype2(struct sk_buff *skb,
 	tag->ts_req_id = FIELD_PREP(NETC_TAG_TS_REQ_ID, ts_req_id);
 }
 
+static netdev_tx_t netc_onestep_sync_xmit(struct sk_buff *skb,
+					  struct net_device *dev)
+{
+	/* This deferred one-step Sync frame already went through
+	 * dsa_user_xmit()'s skb_ensure_writable_head_tail() and eth_skb_pad()
+	 * before it was queued in netc_xmit(), and nothing has cloned it or
+	 * shrunk its head/tail room since. So the head/tail room is still
+	 * guaranteed and the skb is still writable; only the tag needs to be
+	 * pushed before handing it directly to the conduit, bypassing
+	 * dsa_user_xmit() so that dev_sw_netstats_tx_add() is not invoked a
+	 * second time for the same frame.
+	 */
+	netc_fill_tp_tag_subtype1(skb, dev);
+
+	return dsa_enqueue_skb(skb, dev);
+}
+
+static struct sk_buff *netc_onestep_sync_process(struct sk_buff *skb,
+						 struct net_device *ndev)
+{
+	struct dsa_port *dp = dsa_user_to_port(ndev);
+	struct netc_tagger_data *tagger_data;
+	struct sk_buff *nskb;
+
+	tagger_data = dp->ds->tagger_data;
+	if (unlikely(!tagger_data->onestep_sync_handler)) {
+		kfree_skb(skb);
+		return NULL;
+	}
+
+	/* Decide, under ptp_lock, whether this one-step Sync can be sent
+	 * now or must be deferred. Returns the skb (with the in-flight
+	 * slot claimed and PM_SINGLE_STEP already programmed) for
+	 * immediate transmission, or NULL if it was queued for deferred
+	 * transmission or dropped.
+	 */
+	nskb = tagger_data->onestep_sync_handler(dp->ds, dp->index, skb);
+	if (unlikely(!nskb))
+		return NULL;
+
+	return nskb;
+}
+
 static struct sk_buff *netc_xmit(struct sk_buff *skb,
 				 struct net_device *ndev)
 {
@@ -138,6 +202,13 @@ static struct sk_buff *netc_xmit(struct sk_buff *skb,
 	if (likely(!ptp_flag)) {
 		netc_fill_tp_tag_subtype0(skb, ndev);
 		return skb;
+	}
+
+	if (ptp_flag == NETC_PTP_FLAG_ONESTEP) {
+		if (!netc_onestep_sync_process(skb, ndev))
+			return NULL;
+
+		netc_fill_tp_tag_subtype1(skb, ndev);
 	} else if (ptp_flag == NETC_PTP_FLAG_TWOSTEP) {
 		netc_fill_tp_tag_subtype2(skb, ndev);
 	} else {
@@ -291,6 +362,7 @@ static int netc_connect(struct dsa_switch *ds)
 	if (!tagger_data)
 		return -ENOMEM;
 
+	tagger_data->onestep_sync_xmit = netc_onestep_sync_xmit;
 	ds->tagger_data = tagger_data;
 
 	return 0;

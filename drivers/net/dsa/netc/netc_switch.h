@@ -82,6 +82,10 @@ enum netc_host_reason {
 	NETC_HR_PTP_TRAP   = 9,
 };
 
+enum netc_port_flags {
+	NETC_FLAG_ONESTEP_IN_PROGRESS = 0,
+};
+
 struct netc_port {
 	void __iomem *iobase;
 	struct netc_switch *switch_priv;
@@ -97,10 +101,14 @@ struct netc_port {
 	u16 pvid;
 	u32 ipft_hf_eid;
 
+	unsigned long flags;
 	/* Serialize PTP operations */
 	spinlock_t ptp_lock;
 	/* skb queue for two-step timestamp frames */
 	struct sk_buff_head skb_txtstamp_queue;
+	/* skb queue for one-step sync frames */
+	struct sk_buff_head skb_onestep_queue;
+	struct work_struct onestep_work;
 	int ptp_tx_type;
 	int ptp_rx_filter;
 	u32 ptp_ipft_eid[NETC_PTP_MAX];
@@ -207,6 +215,7 @@ static inline void netc_del_vlan_entry(struct netc_vlan_entry *entry)
 }
 
 int netc_switch_platform_probe(struct netc_switch *priv);
+void netc_mac_port_wr(struct netc_port *np, u32 reg, u32 val);
 
 /* ethtool APIs */
 void netc_port_get_pause_stats(struct dsa_switch *ds, int port,
@@ -237,5 +246,8 @@ bool netc_port_rxtstamp(struct dsa_switch *ds, int port,
 			struct sk_buff *skb, unsigned int type);
 void netc_port_txtstamp(struct dsa_switch *ds, int port_id,
 			struct sk_buff *skb);
+void netc_port_onestep_work(struct work_struct *work);
+struct sk_buff *netc_onestep_sync_handler(struct dsa_switch *ds, int port,
+					  struct sk_buff *skb);
 
 #endif

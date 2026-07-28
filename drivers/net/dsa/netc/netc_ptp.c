@@ -37,7 +37,8 @@ int netc_get_ts_info(struct dsa_switch *ds, int port,
 				 SOF_TIMESTAMPING_RX_HARDWARE |
 				 SOF_TIMESTAMPING_RAW_HARDWARE;
 
-	info->tx_types = BIT(HWTSTAMP_TX_OFF) | BIT(HWTSTAMP_TX_ON);
+	info->tx_types = BIT(HWTSTAMP_TX_OFF) | BIT(HWTSTAMP_TX_ON) |
+			 BIT(HWTSTAMP_TX_ONESTEP_SYNC);
 
 	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE) |
 			   BIT(HWTSTAMP_FILTER_PTP_V2_EVENT) |
@@ -237,11 +238,18 @@ int netc_port_hwtstamp_set(struct dsa_switch *ds, int port,
 			   struct netlink_ext_ack *extack)
 {
 	struct netc_port *np = NETC_PORT(ds, port);
+	struct netc_switch *priv = ds->priv;
 	int rx_filter, err;
 
 	switch (config->tx_type) {
 	case HWTSTAMP_TX_ON:
 	case HWTSTAMP_TX_OFF:
+		np->ptp_tx_type = config->tx_type;
+		break;
+	case HWTSTAMP_TX_ONESTEP_SYNC:
+		if (!priv->tmr_dev)
+			return -ERANGE;
+
 		np->ptp_tx_type = config->tx_type;
 		break;
 	default:
@@ -384,9 +392,89 @@ bool netc_port_rxtstamp(struct dsa_switch *ds, int port,
 	return false;
 }
 
+static void netc_port_prepare_onestep_sync(struct netc_port *np,
+					   struct sk_buff *skb,
+					   u32 ptp_class, bool *twostep)
+{
+	struct netc_switch *priv = np->switch_priv;
+	u16 correction_offset, timestamp_offset;
+	struct ptp_header *ptp_hdr;
+	u8 msg_type, twostep_flag;
+	bool is_udp = false;
+	u32 pkt_type;
+	u8 *pkt_hdr;
+
+	ptp_hdr = ptp_parse_header(skb, ptp_class);
+	if (!ptp_hdr) {
+		dev_dbg_ratelimited(priv->dev,
+				    "Port %d failed to parse Sync header\n",
+				    np->dp->index);
+		return;
+	}
+
+	pkt_hdr = skb_mac_header(skb);
+	correction_offset = (u8 *)&ptp_hdr->correction - pkt_hdr;
+	timestamp_offset = (u8 *)ptp_hdr + sizeof(*ptp_hdr) - pkt_hdr;
+
+	/* Ensure that the entire originTimestamp field is present in the
+	 * linear buffer of the skb.
+	 */
+	if (pkt_hdr + timestamp_offset + 10 > skb->data + skb_headlen(skb)) {
+		dev_dbg_ratelimited(priv->dev,
+				    "Port %d Sync header not in linear area\n",
+				    np->dp->index);
+		return;
+	}
+
+	msg_type = ptp_get_msgtype(ptp_hdr, ptp_class);
+	twostep_flag = ptp_hdr->flag_field[0] & 0x2;
+
+	/* Only a Sync frame with the twoStepFlag cleared can use one-step
+	 * timestamping. A frame that requests two-step (or is not a Sync)
+	 * carries different on-wire fields, so this is a real classification;
+	 * report it through *twostep so the caller falls back to the two-step
+	 * path.
+	 */
+	if (msg_type != PTP_MSGTYPE_SYNC || twostep_flag != 0) {
+		*twostep = true;
+		return;
+	}
+
+	/* This is a genuine one-step Sync frame. skb_shinfo()->destructor_arg
+	 * is later used to pass the netc_port pointer to
+	 * netc_onestep_skb_destructor() for TX completion notification.
+	 * MSG_ZEROCOPY also uses destructor_arg (via skb_zcopy_init()) to
+	 * track user-space page references. Overwriting it in that case would
+	 * leak the ubuf_info reference and prevent user pages from being
+	 * released. PTP applications do not use MSG_ZEROCOPY, but guard
+	 * against it defensively.
+	 */
+	if (skb_zcopy(skb)) {
+		dev_dbg_ratelimited(priv->dev,
+				    "Port %d one-step Sync not supported on zerocopy skb\n",
+				    np->dp->index);
+		return;
+	}
+
+	pkt_type = ptp_class & PTP_CLASS_PMASK;
+	if (pkt_type == PTP_CLASS_IPV4 || pkt_type == PTP_CLASS_IPV6)
+		is_udp = true;
+
+	/* Cache the parsing results so the tagger xmit path and the deferred
+	 * work do not need to re-parse the PTP header, and so that
+	 * netc_port_program_onestep() can derive these parameters from the
+	 * skb.
+	 */
+	NETC_SKB_CB(skb)->correction_offset = correction_offset;
+	NETC_SKB_CB(skb)->timestamp_offset = timestamp_offset;
+	NETC_SKB_CB(skb)->is_udp = is_udp;
+	NETC_SKB_CB(skb)->ptp_flag = NETC_PTP_FLAG_ONESTEP;
+}
+
 void netc_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb)
 {
 	struct netc_port *np = NETC_PORT(ds, port);
+	bool twostep = false;
 	u32 ptp_class;
 
 	NETC_SKB_CB(skb)->ptp_flag = 0;
@@ -394,7 +482,10 @@ void netc_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb)
 	if (ptp_class == PTP_CLASS_NONE)
 		return;
 
-	if (np->ptp_tx_type == HWTSTAMP_TX_ON) {
+	if (np->ptp_tx_type == HWTSTAMP_TX_ONESTEP_SYNC)
+		netc_port_prepare_onestep_sync(np, skb, ptp_class, &twostep);
+
+	if (np->ptp_tx_type == HWTSTAMP_TX_ON || twostep) {
 		struct sk_buff *clone = skb_clone_sk(skb);
 
 		if (unlikely(!clone))
@@ -408,4 +499,165 @@ void netc_port_txtstamp(struct dsa_switch *ds, int port, struct sk_buff *skb)
 		NETC_SKB_CB(skb)->clone = clone;
 		NETC_SKB_CB(skb)->ptp_flag = NETC_PTP_FLAG_TWOSTEP;
 	}
+}
+
+static void netc_port_set_onestep_control(struct netc_port *np, bool udp,
+					  int offset)
+{
+	u32 val;
+
+	val = PM_SINGLE_STEP_EN | FIELD_PREP(PM_SINGLE_STEP_OFFSET, offset);
+	if (udp)
+		val |= PM_SINGLE_STEP_CH;
+	netc_mac_port_wr(np, NETC_PM_SINGLE_STEP(0), val);
+}
+
+static void netc_onestep_skb_destructor(struct sk_buff *skb)
+{
+	struct netc_port *np = skb_shinfo(skb)->destructor_arg;
+
+	/* skb has been transmitted by hardware, schedule work to send
+	 * the next queued one-step Sync packet.
+	 */
+	schedule_work(&np->onestep_work);
+}
+
+static void netc_port_program_onestep(struct netc_port *np,
+				      struct sk_buff *skb,
+				      u64 tstamp)
+{
+	u16 correction_offset = NETC_SKB_CB(skb)->correction_offset;
+	u16 timestamp_offset = NETC_SKB_CB(skb)->timestamp_offset;
+	bool is_udp = NETC_SKB_CB(skb)->is_udp;
+	u8 *pkt_hdr = skb_mac_header(skb);
+	u64 sec;
+	u32 ns;
+
+	NETC_SKB_CB(skb)->tstamp = tstamp;
+	NETC_SKB_CB(skb)->ptp_flag = NETC_PTP_FLAG_ONESTEP;
+
+	/* Update originTimestamp field of Sync packet
+	 * - 48 bits seconds field
+	 * - 32 bits nanoseconds field
+	 */
+	sec = div_u64_rem(tstamp, NSEC_PER_SEC, &ns);
+	put_unaligned_be16((sec >> 32) & 0xffff, pkt_hdr + timestamp_offset);
+	put_unaligned_be32(sec & 0xffffffff, pkt_hdr + timestamp_offset + 2);
+	put_unaligned_be32(ns, pkt_hdr + timestamp_offset + 6);
+
+	netc_port_set_onestep_control(np, is_udp, correction_offset);
+
+	/* Orphan the skb to release the socket send buffer quota immediately.
+	 * This is safe because sock_wfree() only updates sk_wmem_alloc and
+	 * does not touch skb->data. After skb_orphan(), we install our own
+	 * destructor so that when the conduit driver frees the skb after TX
+	 * completion, we get notified to send the next queued Sync packet.
+	 */
+	skb_orphan(skb);
+	skb_shinfo(skb)->destructor_arg = np;
+	skb->destructor = netc_onestep_skb_destructor;
+}
+
+void netc_port_onestep_work(struct work_struct *work)
+{
+	struct netc_port *np = container_of(work, struct netc_port,
+					    onestep_work);
+	struct netc_switch *priv = np->switch_priv;
+	struct netc_tagger_data *tagger_data;
+	struct sk_buff *skb;
+	u64 tstamp;
+
+	/* Dequeue the next pending skb while still holding the in-flight slot,
+	 * so a newly arriving one-step Sync cannot jump ahead of it. Only
+	 * release the slot when the queue is empty. This keeps ordering and
+	 * closes the enqueue/wakeup race.
+	 */
+	spin_lock_bh(&np->ptp_lock);
+	skb = __skb_dequeue(&np->skb_onestep_queue);
+	if (!skb) {
+		__clear_bit(NETC_FLAG_ONESTEP_IN_PROGRESS, &np->flags);
+		spin_unlock_bh(&np->ptp_lock);
+		return;
+	}
+	spin_unlock_bh(&np->ptp_lock);
+
+	tstamp = netc_timer_get_current_time(priv->tmr_dev);
+	if (!tstamp) {
+		/* The PTP timer is not available, so there is no correct
+		 * timestamp to program. Drop this frame and re-kick to
+		 * process the remaining queued frames (or release the slot).
+		 *
+		 * netc_port_program_onestep() has not run for this skb yet, so
+		 * netc_onestep_skb_destructor() is not installed on it. Freeing
+		 * it therefore does not reschedule onestep_work, so the work
+		 * must be rescheduled explicitly to keep draining the queue.
+		 */
+		dev_dbg_ratelimited(priv->dev,
+				    "Port %d PTP timer unavailable, drop Sync\n",
+				    np->dp->index);
+		kfree_skb(skb);
+		schedule_work(&np->onestep_work);
+		return;
+	}
+
+	/* Reuse the offsets cached at enqueue time; only the timestamp is
+	 * read fresh so it reflects the actual TX moment.
+	 */
+	netc_port_program_onestep(np, skb, tstamp);
+
+	/* Tag and hand the frame directly to the conduit via the tagger,
+	 * bypassing dsa_user_xmit() so the TX stats are not counted twice.
+	 */
+	tagger_data = priv->ds->tagger_data;
+	tagger_data->onestep_sync_xmit(skb, np->dp->user);
+}
+
+struct sk_buff *netc_onestep_sync_handler(struct dsa_switch *ds, int port,
+					  struct sk_buff *skb)
+{
+	struct netc_port *np = NETC_PORT(ds, port);
+	struct netc_switch *priv = ds->priv;
+	u64 tstamp;
+
+	/* Serialize one-step Sync packets: only one can be in-flight at a
+	 * time because the SINGLE_STEP register is shared and must match the
+	 * packet currently being transmitted. Claim the in-flight slot under
+	 * ptp_lock. If another one-step Sync is already in-flight, queue this
+	 * skb and return NULL; ownership is transferred to the queue, so no
+	 * extra reference is needed and netc_xmit() stops processing it.
+	 */
+	spin_lock_bh(&np->ptp_lock);
+	if (test_bit(NETC_FLAG_ONESTEP_IN_PROGRESS, &np->flags)) {
+		__skb_queue_tail(&np->skb_onestep_queue, skb);
+		spin_unlock_bh(&np->ptp_lock);
+
+		return NULL;
+	}
+
+	tstamp = netc_timer_get_current_time(priv->tmr_dev);
+	if (!tstamp) {
+		spin_unlock_bh(&np->ptp_lock);
+
+		/* This is a valid one-step Sync frame, but the PTP timer is
+		 * not available, so there is no correct timestamp to program.
+		 * Drop the frame rather than transmit a Sync with a bogus
+		 * correction field.
+		 */
+		dev_dbg_ratelimited(priv->dev,
+				    "Port %d PTP timer unavailable, drop Sync\n",
+				    np->dp->index);
+		kfree_skb(skb);
+
+		return NULL;
+	}
+
+	__set_bit(NETC_FLAG_ONESTEP_IN_PROGRESS, &np->flags);
+	spin_unlock_bh(&np->ptp_lock);
+
+	/* We own the in-flight slot. Program the register and install the
+	 * destructor.
+	 */
+	netc_port_program_onestep(np, skb, tstamp);
+
+	return skb;
 }
