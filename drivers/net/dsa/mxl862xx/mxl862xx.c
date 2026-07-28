@@ -674,15 +674,49 @@ static int mxl862xx_setup(struct dsa_switch *ds)
 	int n_user_ports = 0, max_vlans;
 	int ingress_finals, vid_rules;
 	struct dsa_port *dp;
-	int ret, i;
+	int ret, i, rescue;
 
-	ret = mxl862xx_reset(priv);
-	if (ret)
-		return ret;
+	/* Detect the loader over SB PDI first: it needs no firmware, unlike the
+	 * C45 API (mxl862xx_reset/wait_ready) which spews CRC errors when none
+	 * answers. Touch C45 only once rescue is ruled out.
+	 */
+	rescue = mxl862xx_rescue_mode_detect(priv);
+	if (rescue < 0)
+		return rescue;
 
-	ret = mxl862xx_wait_ready(ds);
-	if (ret)
-		return ret;
+	if (rescue == MXL862XX_NOT_RESCUE) {
+		ret = mxl862xx_reset(priv);
+		if (ret)
+			return ret;
+
+		ret = mxl862xx_wait_ready(ds);
+		if (ret) {
+			/* the reset may only now have triggered rescue mode */
+			rescue = mxl862xx_rescue_mode_detect(priv);
+			if (rescue < 0)
+				return rescue;
+			if (rescue == MXL862XX_NOT_RESCUE)
+				return ret;
+		}
+	}
+
+	priv->rescue_mode = rescue;
+
+	if (priv->rescue_mode) {
+		if (priv->rescue_ready) {
+			dev_warn(ds->dev,
+				 "switch in MCUboot rescue mode, use devlink to flash new firmware\n");
+		} else {
+			/* Drain the wedged download in the background so it
+			 * never holds the devlink lock; info and flash become
+			 * available once ready.
+			 */
+			dev_warn(ds->dev,
+				 "switch in MCUboot with an interrupted download, recovering in background\n");
+			queue_work(system_long_wq, &priv->rescue_heal_work);
+		}
+		return 0;
+	}
 
 	mutex_init(&priv->serdes_lock);
 	for (i = 0; i < ARRAY_SIZE(priv->serdes_ports); i++)
@@ -767,11 +801,21 @@ static int mxl862xx_port_state(struct dsa_switch *ds, int port, bool enable)
 static int mxl862xx_port_enable(struct dsa_switch *ds, int port,
 				struct phy_device *phydev)
 {
+	struct mxl862xx_priv *priv = ds->priv;
+
+	if (priv->rescue_mode)
+		return 0;
+
 	return mxl862xx_port_state(ds, port, true);
 }
 
 static void mxl862xx_port_disable(struct dsa_switch *ds, int port)
 {
+	struct mxl862xx_priv *priv = ds->priv;
+
+	if (priv->rescue_mode)
+		return;
+
 	if (mxl862xx_port_state(ds, port, false))
 		dev_err(ds->dev, "failed to disable port %d\n", port);
 }
@@ -1389,6 +1433,12 @@ static int mxl862xx_port_setup(struct dsa_switch *ds, int port)
 	bool is_cpu_port = dsa_port_is_cpu(dp);
 	int ret;
 
+	/* DSA reinits failed user ports as unused; shared ports must
+	 * succeed for the tree to register.
+	 */
+	if (priv->rescue_mode)
+		return dsa_port_is_user(dp) ? -ENODEV : 0;
+
 	ret = mxl862xx_port_state(ds, port, false);
 	if (ret)
 		return ret;
@@ -1684,6 +1734,9 @@ static void mxl862xx_port_stp_state_set(struct dsa_switch *ds, int port,
 	};
 	struct mxl862xx_priv *priv = ds->priv;
 	int ret;
+
+	if (priv->rescue_mode)
+		return;
 
 	switch (state) {
 	case BR_STATE_DISABLED:
