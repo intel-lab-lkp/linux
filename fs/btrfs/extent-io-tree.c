@@ -403,6 +403,21 @@ static void set_state_bits(struct extent_io_tree *tree,
 	state->state |= bits_to_set;
 }
 
+static void validate_extent_state(const struct extent_io_tree *tree,
+				  struct extent_state *state)
+{
+	u32 blocksize;
+
+	if (tree->owner != IO_TREE_INODE_IO)
+		return;
+
+	blocksize = btrfs_extent_io_tree_to_fs_info(tree)->sectorsize;
+	ASSERT(IS_ALIGNED(state->start, blocksize) &&
+	       IS_ALIGNED(state->end + 1, blocksize),
+	       "unaligned extent state, blocksize=%u start=%llu end=%llu state=0x%x",
+	       blocksize, state->start, state->end, state->state);
+}
+
 /*
  * Insert an extent_state struct into the tree.  'bits' are set on the
  * struct before it is inserted.
@@ -428,6 +443,8 @@ static struct extent_state *insert_state(struct extent_io_tree *tree,
 	const u64 start = state->start - 1;
 	const u64 end = state->end + 1;
 	const bool try_merge = !(bits & (EXTENT_LOCK_BITS | EXTENT_BOUNDARY));
+
+	validate_extent_state(tree, state);
 
 	set_state_bits(tree, state, bits, changeset);
 
@@ -481,6 +498,8 @@ static void insert_state_fast(struct extent_io_tree *tree,
 			      struct rb_node *parent, unsigned bits,
 			      struct extent_changeset *changeset)
 {
+	validate_extent_state(tree, state);
+
 	set_state_bits(tree, state, bits, changeset);
 	rb_link_node(&state->rb_node, parent, node);
 	rb_insert_color(&state->rb_node, &tree->state);
@@ -533,6 +552,8 @@ static int split_state(struct extent_io_tree *tree, struct extent_state *orig,
 		}
 	}
 
+	validate_extent_state(tree, orig);
+	validate_extent_state(tree, prealloc);
 	rb_link_node(&prealloc->rb_node, parent, node);
 	rb_insert_color(&prealloc->rb_node, &tree->state);
 
