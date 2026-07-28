@@ -117,6 +117,7 @@ struct twl4030_bci {
 	struct usb_phy		*transceiver;
 	struct notifier_block	usb_nb;
 	struct work_struct	work;
+	bool			usb_nb_registered;
 	int			irq_chg;
 	int			irq_bci;
 	int			usb_enabled;
@@ -1031,7 +1032,7 @@ static int twl4030_bci_probe(struct platform_device *pdev)
 		if (phynode) {
 			bci->usb_nb.notifier_call = twl4030_bci_usb_ncb;
 			bci->transceiver = devm_usb_get_phy_by_node(
-				bci->dev, phynode, &bci->usb_nb);
+				bci->dev, phynode, NULL);
 			of_node_put(phynode);
 			if (IS_ERR(bci->transceiver)) {
 				ret = PTR_ERR(bci->transceiver);
@@ -1040,6 +1041,15 @@ static int twl4030_bci_probe(struct platform_device *pdev)
 				dev_warn(&pdev->dev, "could not request transceiver (%d)",
 					ret);
 				bci->transceiver = NULL;
+			} else {
+				ret = usb_register_notifier(bci->transceiver,
+							    &bci->usb_nb);
+				if (ret)
+					dev_warn(&pdev->dev,
+						 "could not register USB notifier (%d)\n",
+						 ret);
+				else
+					bci->usb_nb_registered = true;
 			}
 		}
 	}
@@ -1113,17 +1123,25 @@ static void twl4030_bci_remove(struct platform_device *pdev)
 {
 	struct twl4030_bci *bci = platform_get_drvdata(pdev);
 
-	twl4030_charger_enable_ac(bci, false);
-	twl4030_charger_enable_usb(bci, false);
-	twl4030_charger_enable_backup(0, 0);
+	if (bci->usb_nb_registered)
+		usb_unregister_notifier(bci->transceiver, &bci->usb_nb);
 
 	device_remove_file(&bci->usb->dev, &dev_attr_mode);
 	device_remove_file(&bci->ac->dev, &dev_attr_mode);
+
 	/* mask interrupts */
 	twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, 0xff,
 			 TWL4030_INTERRUPTS_BCIIMR1A);
 	twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, 0xff,
 			 TWL4030_INTERRUPTS_BCIIMR2A);
+
+	cancel_work_sync(&bci->work);
+	bci->usb_cur_target = 0;
+	cancel_delayed_work_sync(&bci->current_worker);
+
+	twl4030_charger_enable_ac(bci, false);
+	twl4030_charger_enable_usb(bci, false);
+	twl4030_charger_enable_backup(0, 0);
 }
 
 static const struct of_device_id twl_bci_of_match[] __maybe_unused = {
