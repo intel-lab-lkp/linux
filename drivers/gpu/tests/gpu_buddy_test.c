@@ -1422,6 +1422,103 @@ static void gpu_test_buddy_alloc_exceeds_max_order(struct kunit *test)
 	gpu_buddy_fini(&mm);
 }
 
+struct test_mgr {
+	struct gpu_buddy mm; /* Buddy memory manager */
+	struct mutex lock; /* Lock to protect vram access */
+	struct list_head allocated_list; /* Safe context tracking; lives as long as mgr */
+};
+
+/* Action 1: Safely destroys the tracking mutex structure */
+static void kunit_action_mutex_destroy(void *lock)
+{
+	mutex_destroy((struct mutex *)lock);
+}
+
+/* Action 2: Safely tears down the initialized buddy allocator instance */
+static void kunit_action_buddy_fini(void *mm)
+{
+	gpu_buddy_fini((struct gpu_buddy *)mm);
+}
+
+/* Action 3: Safely unlocks the tracking mutex if it is currently held */
+static void kunit_action_mutex_unlock(void *lock)
+{
+	struct mutex *m = lock;
+
+	mutex_unlock(m);
+}
+
+/* Action 4: Safely frees allocated blocks using the persistent mgr context frame */
+static void kunit_action_free_blocks(void *mgr_ctx)
+{
+	struct test_mgr *mgr = mgr_ctx;
+
+	if (!list_empty(&mgr->allocated_list))
+		gpu_buddy_free_list(&mgr->mm, &mgr->allocated_list, 0);
+}
+
+static void gpu_test_buddy_addr_to_block(struct kunit *test)
+{
+	struct test_mgr *mgr;
+	struct gpu_buddy_block *allocated_block, *found_block;
+	u64 test_size = SZ_4M;
+	u64 chunk_size = SZ_4K;
+	u64 alloc_size = SZ_2M;
+	u64 target_addr;
+
+	mgr = kunit_kzalloc(test, sizeof(*mgr), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, mgr);
+	INIT_LIST_HEAD(&mgr->allocated_list);
+
+	/* 1. Register Mutex Structure Destruction */
+	mutex_init(&mgr->lock);
+	KUNIT_ASSERT_EQ(test, kunit_add_action(test, kunit_action_mutex_destroy, &mgr->lock), 0);
+
+	/* 2. Register Buddy Manager Infrastructure Teardown */
+	KUNIT_ASSERT_EQ(test, gpu_buddy_init(&mgr->mm, test_size, chunk_size), 0);
+	KUNIT_ASSERT_EQ(test, kunit_add_action(test, kunit_action_buddy_fini, &mgr->mm), 0);
+
+	/* Set up driver lock tracking structure hooks */
+	gpu_buddy_driver_set_lock(&mgr->mm, &mgr->lock);
+
+	/*
+	 * Cleanup runs in LIFO order:
+	 *   4. free_blocks  (lock held)
+	 *   3. mutex_unlock
+	 *   2. buddy_fini
+	 *   1. mutex_destroy
+	 */
+	mutex_lock(&mgr->lock);
+	KUNIT_ASSERT_EQ(test, kunit_add_action(test, kunit_action_mutex_unlock, &mgr->lock), 0);
+
+	/* 3. Allocate blocks and register block cleanup action inside the lock context */
+	KUNIT_ASSERT_EQ(test, gpu_buddy_alloc_blocks(&mgr->mm, 0, test_size, alloc_size,
+						     chunk_size, &mgr->allocated_list, 0), 0);
+	KUNIT_ASSERT_EQ(test, kunit_add_action(test, kunit_action_free_blocks, mgr), 0);
+
+	allocated_block = list_first_entry(&mgr->allocated_list, struct gpu_buddy_block, link);
+	KUNIT_ASSERT_EQ(test, gpu_buddy_block_size(&mgr->mm, allocated_block), alloc_size);
+	target_addr = gpu_buddy_block_offset(allocated_block);
+
+	/* ---------------- RUN TRACKING VALIDATIONS ---------------- */
+
+	/* Test Case 1: Exact Address Matching */
+	found_block = gpu_buddy_allocated_addr_to_block(&mgr->mm, target_addr);
+	KUNIT_EXPECT_PTR_EQ(test, found_block, allocated_block);
+
+	/* Test Case 2: Internal Footprint Offset Queries */
+	found_block = gpu_buddy_allocated_addr_to_block(&mgr->mm, target_addr + SZ_1M);
+	KUNIT_EXPECT_PTR_EQ(test, found_block, allocated_block);
+
+	/* Test Case 3: Free Companion Memory Queries */
+	found_block = gpu_buddy_allocated_addr_to_block(&mgr->mm, target_addr ? 0 : alloc_size);
+	KUNIT_EXPECT_PTR_EQ(test, found_block, NULL);
+
+	/* Test Case 4: Out-of-Bounds Queries (Returns ERR_PTR(-ENXIO)) */
+	found_block = gpu_buddy_allocated_addr_to_block(&mgr->mm, test_size + SZ_1M);
+	KUNIT_EXPECT_PTR_EQ(test, found_block, ERR_PTR(-ENXIO));
+}
+
 static int gpu_buddy_suite_init(struct kunit_suite *suite)
 {
 	while (!random_seed)
@@ -1446,6 +1543,7 @@ static struct kunit_case gpu_buddy_tests[] = {
 	KUNIT_CASE(gpu_test_buddy_alloc_exceeds_max_order),
 	KUNIT_CASE(gpu_test_buddy_offset_aligned_allocation),
 	KUNIT_CASE(gpu_test_buddy_subtree_offset_alignment_stress),
+	KUNIT_CASE(gpu_test_buddy_addr_to_block),
 	{}
 };
 
