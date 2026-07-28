@@ -117,6 +117,7 @@ W:	https://wireless.wiki.kernel.org/
 Q:	https://patchwork.kernel.org/project/linux-wireless/list/
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/wireless/wireless.git
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/wireless/wireless-next.git
+F:	Documentation/ABI/testing/sysfs-class-ieee80211
 F:	Documentation/driver-api/80211/cfg80211.rst
 F:	Documentation/networking/regulatory.rst
 F:	include/linux/ieee80211.h

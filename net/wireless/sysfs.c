@@ -65,12 +65,26 @@ static ssize_t addresses_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(addresses);
 
+static ssize_t fw_version_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
+{
+	struct wiphy *wiphy = &dev_to_rdev(dev)->wiphy;
+
+	if (!wiphy->fw_version[0])
+		return 0;
+
+	return sysfs_emit(buf, "%s\n", wiphy->fw_version);
+}
+static DEVICE_ATTR_RO(fw_version);
+
 static struct attribute *ieee80211_attrs[] = {
 	&dev_attr_index.attr,
 	&dev_attr_macaddress.attr,
 	&dev_attr_address_mask.attr,
 	&dev_attr_addresses.attr,
 	&dev_attr_name.attr,
+	&dev_attr_fw_version.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(ieee80211);

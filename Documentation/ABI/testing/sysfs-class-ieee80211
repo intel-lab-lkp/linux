@@ -1,0 +1,7 @@
+What:		/sys/class/ieee80211/<phyname>/fw_version
+Date:		July 2026
+Contact:	linux-wireless@vger.kernel.org
+Description:	Read-only firmware version string provided by the driver for
+		this wireless device. The read data will match the information
+		provided by ethtool get_drvinfo. As drivers are not required to
+		provide this information, reading may yield no data.
