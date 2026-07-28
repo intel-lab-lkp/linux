@@ -13265,6 +13265,13 @@ S:	Maintained
 F:	drivers/platform/x86/intel/int3472/
 F:	include/linux/platform_data/x86/int3472.h
 
+INTEL SKYLAKE-X IMC SMBUS DRIVER
+M:	Simone Chifari <simone.chifari@gmail.com>
+L:	linux-i2c@vger.kernel.org
+S:	Maintained
+F:	Documentation/i2c/busses/i2c-imc-skylake.rst
+F:	drivers/i2c/busses/i2c-imc-skylake.c
+
 INTEL SPEED SELECT TECHNOLOGY
 M:	Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com>
 L:	platform-driver-x86@vger.kernel.org
