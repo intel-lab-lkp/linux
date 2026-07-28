@@ -14,6 +14,7 @@
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/device/devres.h>
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -34,6 +35,7 @@
 #include <linux/unaligned.h>
 #include <linux/units.h>
 #include <linux/wmi.h>
+#include <linux/workqueue.h>
 
 #define DRV_NAME		"bitland-mifs-wmi"
 #define BITLAND_MIFS_GUID	"B60BFB48-3E5B-49E4-A0E9-8CFFE1B3434B"
@@ -161,6 +163,11 @@ struct bitland_mifs_output {
 #define MIFS_V2_EC_MEM_SIZE	0x100
 #define MIFS_V2_EC_REG_FAN1	0x69
 #define MIFS_V2_EC_REG_FAN2	0x6B
+#define MIFS_V2_EC_REG_LID	0x14	/* bit 0: LSTE, 1 = lid open */
+#define MIFS_V2_EC_LID_OPEN	BIT(0)
+
+/* Interval for the lid-state poll; see bitland_mifs_lid_poll() */
+#define MIFS_V2_LID_POLL_MS	250
 
 static u16 mifs_status(const struct bitland_mifs_output *out)
 {
@@ -200,6 +207,9 @@ struct bitland_mifs_wmi_data {
 	bool profile_valid;
 	bool is_v2;	/* MIFS v2 firmware: QFAN perf-mode codes */
 	u8 __iomem *ec_mem;	/* v2 EC shared-memory window */
+	struct delayed_work lid_work;
+	u8 last_lid;
+	bool lid_quirk;
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -390,6 +400,9 @@ static int bitland_mifs_wmi_suspend(struct device *dev)
 	if (!data->pp_dev)
 		return 0;
 
+	if (data->lid_quirk)
+		cancel_delayed_work_sync(&data->lid_work);
+
 	/*
 	 * Never abort suspend: some firmware revisions answer the perf-mode
 	 * query with values this driver cannot map, or fail the call
@@ -409,6 +422,11 @@ static int bitland_mifs_wmi_resume(struct device *dev)
 	/* Skip event device */
 	if (!data->pp_dev)
 		return 0;
+
+	if (data->lid_quirk) {
+		data->last_lid = 0xff;
+		schedule_delayed_work(&data->lid_work, 0);
+	}
 
 	if (!data->profile_valid)
 		return 0;
@@ -547,6 +565,57 @@ static const struct hwmon_ops laptop_hwmon_ops = {
 static const struct hwmon_chip_info laptop_chip_info = {
 	.ops = &laptop_hwmon_ops,
 	.info = laptop_hwmon_info,
+};
+
+/*
+ * Lid switch quirk (Xiaomi Book Pro 14 2026):
+ *
+ * The firmware of this machine never defines ECON, which is referenced
+ * by \_SB.PC00.LPCB.Q_EC._STA, so the ACPI EC driver never binds and
+ * none of the EC query handlers run. This kills the lid events
+ * (_Q0C/_Q0D) as well as every other EC-driven event. Poll the lid
+ * state bit (LSTE) in the EC shared-memory window and, on a change,
+ * evaluate the very AML methods the EC query would have run: they
+ * update the GFX CLID field and notify the PNP0C0D lid device, which
+ * makes the button driver emit the SW_LID event.
+ */
+#define MIFS_LID_CLOSE_METHOD	"\\_SB.PC00.LPCB.Q_EC._Q0C"
+#define MIFS_LID_OPEN_METHOD	"\\_SB.PC00.LPCB.Q_EC._Q0D"
+
+static void bitland_mifs_lid_poll(struct work_struct *work)
+{
+	struct bitland_mifs_wmi_data *data =
+		container_of(to_delayed_work(work), struct bitland_mifs_wmi_data,
+			     lid_work);
+	u8 lid;
+
+	lid = readb(data->ec_mem + MIFS_V2_EC_REG_LID) & MIFS_V2_EC_LID_OPEN;
+	if (lid != data->last_lid && data->last_lid != 0xff) {
+		acpi_status status;
+		acpi_string method = (acpi_string)(lid ? MIFS_LID_OPEN_METHOD :
+						    MIFS_LID_CLOSE_METHOD);
+
+		status = acpi_evaluate_object(NULL, method, NULL, NULL);
+		if (ACPI_FAILURE(status))
+			dev_warn(&data->wdev->dev,
+				 "lid %s AML failed: %s\n",
+				 lid ? "open" : "close",
+				 acpi_format_exception(status));
+	}
+	data->last_lid = lid;
+
+	schedule_delayed_work(&data->lid_work,
+			      msecs_to_jiffies(MIFS_V2_LID_POLL_MS));
+}
+
+static const struct dmi_system_id bitland_mifs_lid_quirk_table[] = {
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "XIAOMI"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Xiaomi Book Pro 14"),
+		},
+	},
+	{ }
 };
 
 static int laptop_kbd_led_set(struct led_classdev *led_cdev,
@@ -843,6 +912,9 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 			if (!drv_data->ec_mem)
 				dev_warn(&wdev->dev,
 					 "cannot map EC window, fan tach unavailable\n");
+
+			drv_data->lid_quirk = drv_data->ec_mem &&
+				dmi_check_system(bitland_mifs_lid_quirk_table);
 		}
 	}
 
@@ -897,9 +969,20 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 	if (ret)
 		return ret;
 
-	return devm_add_action_or_reset(&wdev->dev,
+	ret = devm_add_action_or_reset(&wdev->dev,
 				       bitland_notifier_unregister,
 				       &drv_data->notifier);
+	if (ret)
+		return ret;
+
+	if (drv_data->lid_quirk) {
+		INIT_DELAYED_WORK(&drv_data->lid_work, bitland_mifs_lid_poll);
+		drv_data->last_lid = 0xff;
+		schedule_delayed_work(&drv_data->lid_work,
+				      msecs_to_jiffies(MIFS_V2_LID_POLL_MS));
+	}
+
+	return 0;
 }
 
 static void bitland_mifs_wmi_notify(struct wmi_device *wdev,
@@ -982,6 +1065,14 @@ static void bitland_mifs_wmi_notify(struct wmi_device *wdev,
 	}
 }
 
+static void bitland_mifs_wmi_remove(struct wmi_device *wdev)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(&wdev->dev);
+
+	if (data->lid_quirk)
+		cancel_delayed_work_sync(&data->lid_work);
+}
+
 static const struct wmi_device_id bitland_mifs_wmi_id_table[] = {
 	{ BITLAND_MIFS_GUID, (void *)BITLAND_WMI_CONTROL },
 	{ BITLAND_EVENT_GUID, (void *)BITLAND_WMI_EVENT },
@@ -999,6 +1090,7 @@ static struct wmi_driver bitland_mifs_wmi_driver = {
 	.id_table = bitland_mifs_wmi_id_table,
 	.min_event_size = sizeof(struct bitland_mifs_event),
 	.probe = bitland_mifs_wmi_probe,
+	.remove = bitland_mifs_wmi_remove,
 	.notify_new = bitland_mifs_wmi_notify,
 };
 
