@@ -1469,7 +1469,9 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 	if (reg)
 		fspi_writel(f, reg, f->iobase + FSPI_INTR);
 
-	nxp_fspi_default_setup(f);
+	ret = nxp_fspi_default_setup(f);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to setup controller");
 
 	init_completion(&f->c);
 	ret = devm_request_irq(dev, irq,
@@ -1516,7 +1518,10 @@ static int nxp_fspi_runtime_resume(struct device *dev)
 		return ret;
 
 	if (f->flags & FSPI_NEED_INIT) {
-		nxp_fspi_default_setup(f);
+		ret = nxp_fspi_default_setup(f);
+		if (ret)
+			return ret;
+
 		ret = pinctrl_pm_select_default_state(dev);
 		if (ret)
 			dev_err(dev, "select flexspi default pinctrl failed!\n");
