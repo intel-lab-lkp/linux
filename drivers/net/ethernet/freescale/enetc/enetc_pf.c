@@ -633,6 +633,8 @@ static void enetc_pl_mac_link_up(struct phylink_config *config,
 	}
 
 	if (tx_pause) {
+		set_bit(ENETC_RXBDR_CM, &priv->flags);
+
 		/* When the port first enters congestion, send a PAUSE request
 		 * with the maximum number of quanta. When the port exits
 		 * congestion, it will automatically send a PAUSE frame with
@@ -652,6 +654,8 @@ static void enetc_pl_mac_link_up(struct phylink_config *config,
 		 */
 		pause_on_thresh = 3 * ENETC_MAC_MAXFRM_SIZE;
 		pause_off_thresh = 1 * ENETC_MAC_MAXFRM_SIZE;
+	} else {
+		clear_bit(ENETC_RXBDR_CM, &priv->flags);
 	}
 
 	enetc_port_mac_wr(si, ENETC_PM0_PAUSE_QUANTA, init_quanta);
@@ -683,6 +687,7 @@ static void enetc_pl_mac_link_down(struct phylink_config *config,
 	struct enetc_ndev_priv *priv;
 
 	priv = netdev_priv(si->ndev);
+	clear_bit(ENETC_RXBDR_CM, &priv->flags);
 
 	if (si->hw_features & ENETC_SI_F_QBU)
 		enetc_mm_link_state_update(priv, false);
