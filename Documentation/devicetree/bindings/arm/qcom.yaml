@@ -1146,6 +1146,15 @@ properties:
 
       - items:
           - enum:
+              - ayntec,odin2
+              - ayntec,odin2mini
+              - ayntec,odin2portal
+              - ayntec,thor
+          - const: qcom,qcs8550
+          - const: qcom,sm8550
+
+      - items:
+          - enum:
               - qcom,qcs8550-rb5gen2
           - const: qcom,qcs8550
           - const: qcom,sm8550
