@@ -1397,6 +1397,7 @@ static struct notifier_block netlbl_unlhsh_netdev_notifier = {
  */
 int __init netlbl_unlabel_init(u32 size)
 {
+	int err;
 	u32 iter;
 	struct netlbl_unlhsh_tbl *hsh_tbl;
 
@@ -1419,7 +1420,16 @@ int __init netlbl_unlabel_init(u32 size)
 	rcu_assign_pointer(netlbl_unlhsh, hsh_tbl);
 	spin_unlock(&netlbl_unlhsh_lock);
 
-	register_netdevice_notifier(&netlbl_unlhsh_netdev_notifier);
+	err = register_netdevice_notifier(&netlbl_unlhsh_netdev_notifier);
+	if (err) {
+		spin_lock(&netlbl_unlhsh_lock);
+		RCU_INIT_POINTER(netlbl_unlhsh, NULL);
+		spin_unlock(&netlbl_unlhsh_lock);
+		synchronize_rcu();
+		kfree(hsh_tbl->tbl);
+		kfree(hsh_tbl);
+		return err;
+	}
 
 	return 0;
 }
