@@ -1497,14 +1497,19 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 	if (clone) {
 		int err = 0;
 		if (actions) { /* Sample action */
-			if (clone_flow_key)
-				__this_cpu_inc(ovs_pcpu_storage->exec_level);
+			__this_cpu_inc(ovs_pcpu_storage->exec_level);
+
+			if (unlikely(__this_cpu_read(ovs_pcpu_storage->exec_level) >
+				     OVS_RECURSION_LIMIT)) {
+				__this_cpu_dec(ovs_pcpu_storage->exec_level);
+				ovs_kfree_skb_reason(skb, OVS_DROP_RECURSION_LIMIT);
+				return -ENETDOWN;
+			}
 
 			err = do_execute_actions(dp, skb, clone,
 						 actions, len);
 
-			if (clone_flow_key)
-				__this_cpu_dec(ovs_pcpu_storage->exec_level);
+			__this_cpu_dec(ovs_pcpu_storage->exec_level);
 		} else { /* Recirc action */
 			clone->recirc_id = recirc_id;
 			ovs_dp_process_packet(skb, clone);
