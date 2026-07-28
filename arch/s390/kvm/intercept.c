@@ -369,27 +369,30 @@ static int handle_mvpg_pei(struct kvm_vcpu *vcpu)
 	if (rc)
 		return kvm_s390_inject_prog_cond(vcpu, rc);
 
+	/* Ensure that the destination is paged-in, no actual access -> no key checking */
+	rc = guest_translate_address_with_key(vcpu, vcpu->run->s.regs.gprs[reg1],
+					      reg1, &dstaddr, GACC_STORE, 0);
+	if (rc)
+		return kvm_s390_inject_prog_cond(vcpu, rc);
+
+	/*
+	 * If an error happens below, the instruction needs to be retried.
+	 * Positive error codes are impossible; addressing exceptions would
+	 * have been discovered and reported above.
+	 */
+	kvm_s390_retry_instr(vcpu);
+
 	do {
 		rc = kvm_s390_faultin_gfn_simple(vcpu, NULL, gpa_to_gfn(srcaddr), false);
 	} while (rc == -EAGAIN);
 	if (rc)
 		return rc;
 
-	/* Ensure that the source is paged-in, no actual access -> no key checking */
-	rc = guest_translate_address_with_key(vcpu, vcpu->run->s.regs.gprs[reg1],
-					      reg1, &dstaddr, GACC_STORE, 0);
-	if (rc)
-		return kvm_s390_inject_prog_cond(vcpu, rc);
-
 	do {
 		rc = kvm_s390_faultin_gfn_simple(vcpu, NULL, gpa_to_gfn(dstaddr), true);
 	} while (rc == -EAGAIN);
-	if (rc)
-		return rc;
 
-	kvm_s390_retry_instr(vcpu);
-
-	return 0;
+	return rc;
 }
 
 static int handle_partial_execution(struct kvm_vcpu *vcpu)
