@@ -635,6 +635,15 @@ int pvr_power_domains_init(struct pvr_device *pvr_dev)
 
 	domain_count = of_count_phandle_with_args(dev->of_node, "power-domains",
 						  "#power-domain-cells");
+	if (domain_count == -ENOENT) {
+		/*
+		 * No "power-domains" property in the device tree: the platform
+		 * handles power domains transparently or at the firmware/bootloader level,
+		 * so there is no domain to attach. Treat this as non-fatal.
+		 */
+		err = 0;
+		goto out;
+	}
 	if (domain_count < 0) {
 		err = domain_count;
 		goto out;
