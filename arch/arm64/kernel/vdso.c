@@ -74,10 +74,21 @@ static inline void __vdso_futex_update_ips(struct mm_struct *mm, bool is_32bit, 
 					   void *endp)
 #endif /* CONFIG_FUTEX_ROBUST_UNLOCK */
 
+static inline void vdso_futex_update_ips(struct mm_struct *mm)
+{
+	unsigned long vdso = (unsigned long) mm->context.vdso;
+
+	__vdso_futex_update_ips(mm, false,
+				VDSO_SYMBOL(vdso, futex_list64_try_unlock_cs_start),
+				VDSO_SYMBOL(vdso, futex_list64_try_unlock_cs_end));
+}
+
 static int vdso_mremap(const struct vm_special_mapping *sm,
 		struct vm_area_struct *new_vma)
 {
 	current->mm->context.vdso = (void *)new_vma->vm_start;
+
+	vdso_futex_update_ips(current->mm);
 
 	return 0;
 }
@@ -365,6 +376,8 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 
 	ret = __setup_additional_pages(VDSO_ABI_AA64, mm, bprm, uses_interp);
 	mmap_write_unlock(mm);
+
+	vdso_futex_update_ips(mm);
 
 	return ret;
 }
