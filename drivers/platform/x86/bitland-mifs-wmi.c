@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/input-event-codes.h>
 #include <linux/input.h>
 #include <linux/input/sparse-keymap.h>
@@ -151,6 +152,16 @@ struct bitland_mifs_output {
  */
 #define MIFS_STATUS_ERROR	0xe000
 
+/*
+ * MIFS v2 EC shared-memory window (DSDT \_SB.PC00.LPCB.Q_EC region
+ * "ERAM"). The firmware exposes no WMI fan function, but the fan
+ * tachometers live here as little-endian u16 RPM (0 = fan stopped).
+ */
+#define MIFS_V2_EC_MEM_BASE	0xFE0B0300
+#define MIFS_V2_EC_MEM_SIZE	0x100
+#define MIFS_V2_EC_REG_FAN1	0x69
+#define MIFS_V2_EC_REG_FAN2	0x6B
+
 static u16 mifs_status(const struct bitland_mifs_output *out)
 {
 	return out->reserved1 | (out->operation << 8);
@@ -188,6 +199,7 @@ struct bitland_mifs_wmi_data {
 	enum platform_profile_option saved_profile;
 	bool profile_valid;
 	bool is_v2;	/* MIFS v2 firmware: QFAN perf-mode codes */
+	u8 __iomem *ec_mem;	/* v2 EC shared-memory window */
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -421,6 +433,27 @@ static const char *const fan_labels[] = {
 	"SYS", /* 2 */
 };
 
+static const char *const fan_labels_v2[] = {
+	"Left Fan", /* 0 */
+	"Right Fan", /* 1 */
+};
+
+static umode_t laptop_hwmon_visible(const void *drvdata,
+				    enum hwmon_sensor_types type,
+				    u32 attr, int channel)
+{
+	const struct bitland_mifs_wmi_data *data = drvdata;
+
+	/* v2 firmware: two fans, no CPU temperature channel */
+	if (data->is_v2) {
+		if (type == hwmon_fan && channel < 2)
+			return 0444;
+		return 0;
+	}
+
+	return 0444;
+}
+
 static int laptop_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			     u32 attr, int channel, long *val)
 {
@@ -432,6 +465,22 @@ static int laptop_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 	};
 	struct bitland_mifs_output res;
 	int ret;
+
+	/* v2: tachometers are u16 RPM in the EC shared-memory window */
+	if (data->is_v2) {
+		if (type != hwmon_fan || !data->ec_mem)
+			return -EINVAL;
+		switch (channel) {
+		case 0:
+			*val = get_unaligned_le16(data->ec_mem + MIFS_V2_EC_REG_FAN1);
+			return 0;
+		case 1:
+			*val = get_unaligned_le16(data->ec_mem + MIFS_V2_EC_REG_FAN2);
+			return 0;
+		default:
+			return -EINVAL;
+		}
+	}
 
 	switch (type) {
 	case hwmon_temp:
@@ -468,9 +517,13 @@ static int laptop_hwmon_read_string(struct device *dev,
 				    enum hwmon_sensor_types type, u32 attr,
 				    int channel, const char **str)
 {
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	const char *const *labels = data->is_v2 ? fan_labels_v2 : fan_labels;
+	int nlabels = data->is_v2 ? ARRAY_SIZE(fan_labels_v2) : ARRAY_SIZE(fan_labels);
+
 	if (type == hwmon_fan && attr == hwmon_fan_label) {
-		if (channel >= 0 && channel < ARRAY_SIZE(fan_labels)) {
-			*str = fan_labels[channel];
+		if (channel >= 0 && channel < nlabels) {
+			*str = labels[channel];
 			return 0;
 		}
 	}
@@ -486,7 +539,7 @@ static const struct hwmon_channel_info *laptop_hwmon_info[] = {
 };
 
 static const struct hwmon_ops laptop_hwmon_ops = {
-	.visible = 0444,
+	.is_visible = laptop_hwmon_visible,
 	.read = laptop_hwmon_read,
 	.read_string = laptop_hwmon_read_string,
 };
@@ -781,6 +834,15 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 			drv_data->is_v2 = true;
 			dev_info(&wdev->dev,
 				 "MIFS v2 firmware detected (QFAN mode codes)\n");
+		}
+
+		if (drv_data->is_v2) {
+			drv_data->ec_mem = devm_ioremap(&wdev->dev,
+							MIFS_V2_EC_MEM_BASE,
+							MIFS_V2_EC_MEM_SIZE);
+			if (!drv_data->ec_mem)
+				dev_warn(&wdev->dev,
+					 "cannot map EC window, fan tach unavailable\n");
 		}
 	}
 
