@@ -731,6 +731,7 @@ static inline bool kvm_arch_has_private_mem(struct kvm *kvm)
 
 #ifdef CONFIG_KVM_GUEST_MEMFD
 bool kvm_arch_supports_gmem_init_shared(struct kvm *kvm);
+bool kvm_arch_supports_gmem_migration(struct kvm *kvm);
 
 static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 {
@@ -738,6 +739,9 @@ static inline u64 kvm_gmem_get_supported_flags(struct kvm *kvm)
 
 	if (!kvm || kvm_arch_supports_gmem_init_shared(kvm))
 		flags |= GUEST_MEMFD_FLAG_INIT_SHARED;
+	if (IS_ENABLED(CONFIG_MIGRATION) &&
+	    (!kvm || kvm_arch_supports_gmem_migration(kvm)))
+		flags |= GUEST_MEMFD_FLAG_MIGRATABLE;
 
 	return flags;
 }
