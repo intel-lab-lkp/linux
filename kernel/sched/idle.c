@@ -194,7 +194,7 @@ static void cpuidle_idle_call(bool stop_tick)
 	}
 
 	if (cpuidle_not_available(drv, dev)) {
-		idle_call_stop_or_retain_tick(stop_tick);
+		tick_nohz_idle_stop_tick();
 
 		default_idle_call();
 		goto exit_idle;
