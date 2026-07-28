@@ -375,14 +375,25 @@ static irqreturn_t tusb320_state_update_handler(struct tusb320_priv *priv,
 						bool force_update)
 {
 	unsigned int reg;
+	int ret;
 
-	if (regmap_read(priv->regmap, TUSB320_REG9, &reg)) {
-		dev_err(priv->dev, "error during i2c read!\n");
+	ret = regmap_read(priv->regmap, TUSB320_REG9, &reg);
+	if (ret) {
+		dev_err(priv->dev, "REG9 read failed: %d\n", ret);
 		return IRQ_NONE;
 	}
 
-	if (!force_update && !(reg & TUSB320_REG9_INTERRUPT_STATUS))
-		return IRQ_NONE;
+	if (!force_update && !(reg & TUSB320_REG9_INTERRUPT_STATUS)) {
+		dev_dbg(priv->dev, "IRQ fired but interrupt status not set\n");
+		/*
+		 * Rewrites to this register are needed for the INT_N
+		 * to be correctly asserted for all interrupt events.
+		 */
+		ret = regmap_write(priv->regmap, TUSB320_REG9, reg);
+		if (ret)
+			dev_err(priv->dev, "REG9 write failed: %d\n", ret);
+		return IRQ_HANDLED;
+	}
 
 	tusb320_extcon_irq_handler(priv, reg);
 
@@ -393,7 +404,9 @@ static irqreturn_t tusb320_state_update_handler(struct tusb320_priv *priv,
 	if (priv->port)
 		tusb320_typec_irq_handler(priv, reg);
 
-	regmap_write(priv->regmap, TUSB320_REG9, reg);
+	ret = regmap_write(priv->regmap, TUSB320_REG9, reg);
+	if (ret)
+		dev_err(priv->dev, "REG9 write failed: %d\n", ret);
 
 	return IRQ_HANDLED;
 }
