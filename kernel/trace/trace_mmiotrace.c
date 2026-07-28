@@ -36,7 +36,6 @@ static void mmio_reset_data(struct trace_array *tr)
 
 static int mmio_trace_init(struct trace_array *tr)
 {
-	pr_debug("in %s\n", __func__);
 	mmio_trace_array = tr;
 
 	mmio_reset_data(tr);
@@ -46,8 +45,6 @@ static int mmio_trace_init(struct trace_array *tr)
 
 static void mmio_trace_reset(struct trace_array *tr)
 {
-	pr_debug("in %s\n", __func__);
-
 	disable_mmiotrace();
 	mmio_reset_data(tr);
 	mmio_trace_array = NULL;
@@ -55,7 +52,6 @@ static void mmio_trace_reset(struct trace_array *tr)
 
 static void mmio_trace_start(struct trace_array *tr)
 {
-	pr_debug("in %s\n", __func__);
 	mmio_reset_data(tr);
 }
 
@@ -113,6 +109,7 @@ static void mmio_pipe_open(struct trace_iterator *iter)
 static void mmio_close(struct trace_iterator *iter)
 {
 	struct header_iter *hiter = iter->private;
+
 	destroy_header_iter(hiter);
 	iter->private = NULL;
 }
@@ -170,7 +167,7 @@ static enum print_line_t mmio_print_rw(struct trace_iterator *iter)
 	struct trace_seq *s	= &iter->seq;
 	unsigned long long t	= ns2usecs(iter->ts);
 	unsigned long usec_rem	= do_div(t, USEC_PER_SEC);
-	unsigned secs		= (unsigned long)t;
+	unsigned int secs	= (unsigned long)t;
 
 	trace_assign_type(field, entry);
 	rw = &field->rw;
@@ -215,7 +212,7 @@ static enum print_line_t mmio_print_map(struct trace_iterator *iter)
 	struct trace_seq *s	= &iter->seq;
 	unsigned long long t	= ns2usecs(iter->ts);
 	unsigned long usec_rem	= do_div(t, USEC_PER_SEC);
-	unsigned secs		= (unsigned long)t;
+	unsigned int secs	= (unsigned long)t;
 
 	trace_assign_type(field, entry);
 	m = &field->map;
@@ -249,7 +246,7 @@ static enum print_line_t mmio_print_mark(struct trace_iterator *iter)
 	struct trace_seq *s	= &iter->seq;
 	unsigned long long t	= ns2usecs(iter->ts);
 	unsigned long usec_rem	= do_div(t, USEC_PER_SEC);
-	unsigned secs		= (unsigned long)t;
+	unsigned int secs	= (unsigned long)t;
 
 	trace_assign_type(print, entry);
 	msg = print->buf;
@@ -274,8 +271,7 @@ static enum print_line_t mmio_print_line(struct trace_iterator *iter)
 	}
 }
 
-static struct tracer mmio_tracer __read_mostly =
-{
+static struct tracer mmio_tracer __read_mostly = {
 	.name		= "mmiotrace",
 	.init		= mmio_trace_init,
 	.reset		= mmio_trace_reset,
@@ -322,6 +318,7 @@ static void __trace_mmiotrace_rw(struct trace_array *tr,
 void mmio_trace_rw(struct mmiotrace_rw *rw)
 {
 	struct trace_array *tr = mmio_trace_array;
+
 	__trace_mmiotrace_rw(tr, rw);
 }
 
@@ -353,6 +350,7 @@ static void __trace_mmiotrace_map(struct trace_array *tr,
 void mmio_trace_mapping(struct mmiotrace_map *map)
 {
 	struct trace_array *tr = mmio_trace_array;
+
 	__trace_mmiotrace_map(tr, map);
 }
 
