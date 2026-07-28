@@ -792,6 +792,15 @@ static irqreturn_t cxl_pmu_irq(int irq, void *data)
 
 	writeq(overflowed, base + CXL_PMU_OVERFLOW_REG);
 
+	/*
+	 * Counters are configured to freeze on overflow (Freeze on Overflow),
+	 * which freezes every counter in the CPMU. Once the overflowed counters
+	 * have been read and their status cleared, unfreeze so counting resumes;
+	 * otherwise all counters stay frozen until the next pmu_enable() and
+	 * events are silently lost.
+	 */
+	writeq(0, base + CXL_PMU_FREEZE_REG);
+
 	return IRQ_HANDLED;
 }
 
