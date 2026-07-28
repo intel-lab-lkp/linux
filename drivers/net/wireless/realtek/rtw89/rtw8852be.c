@@ -92,11 +92,20 @@ static const struct pci_device_id rtw89_8852be_id_table[] = {
 };
 MODULE_DEVICE_TABLE(pci, rtw89_8852be_id_table);
 
+static void rtw89_8852be_shutdown(struct pci_dev *pdev)
+{
+	if (!pci_get_drvdata(pdev))
+		return;
+
+	rtw89_pci_remove(pdev);
+}
+
 static struct pci_driver rtw89_8852be_driver = {
 	.name		= "rtw89_8852be",
 	.id_table	= rtw89_8852be_id_table,
 	.probe		= rtw89_pci_probe,
 	.remove		= rtw89_pci_remove,
+	.shutdown       = rtw89_8852be_shutdown,
 	.driver.pm	= &rtw89_pm_ops,
 	.err_handler    = &rtw89_pci_err_handler,
 };
