@@ -21,6 +21,10 @@ properties:
           - enum:
               - anlogic,dr1v90-aclint-mtimer
           - const: nuclei,ux900-aclint-mtimer
+      - items:
+          - enum:
+              - spacemit,k3-aclint-mtimer
+          - const: riscv,aclint-mtimer
 
   reg:
     items:
