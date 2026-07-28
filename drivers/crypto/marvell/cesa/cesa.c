@@ -527,13 +527,11 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&engine->complete_queue);
 	}
 
-	cesa_dev = cesa;
-
 	ret = mv_cesa_add_algs(cesa);
-	if (ret) {
-		cesa_dev = NULL;
+	if (ret)
 		goto err_cleanup;
-	}
+
+	cesa_dev = cesa;
 
 	dev_info(dev, "CESA device successfully registered\n");
 
@@ -550,6 +548,8 @@ static void mv_cesa_remove(struct platform_device *pdev)
 {
 	struct mv_cesa_dev *cesa = platform_get_drvdata(pdev);
 	int i;
+
+	cesa_dev = NULL;
 
 	mv_cesa_remove_algs(cesa);
 
