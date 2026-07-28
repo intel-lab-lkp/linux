@@ -657,7 +657,7 @@ static int extent_fiemap(struct btrfs_inode *inode,
 
 restart:
 	range_start = round_down(start, sectorsize);
-	range_end = round_up(start + len, sectorsize);
+	range_end = round_up(start + len, sectorsize) - 1;
 	prev_extent_end = range_start;
 
 	btrfs_lock_extent(&inode->io_tree, range_start, range_end, &cached_state);
@@ -710,7 +710,7 @@ restart:
 
 		/* We have in implicit hole (NO_HOLES feature enabled). */
 		if (prev_extent_end < key.offset) {
-			const u64 hole_end = min(key.offset, range_end) - 1;
+			const u64 hole_end = min(key.offset - 1, range_end);
 
 			ret = fiemap_process_hole(inode, fieinfo, &cache,
 						  &delalloc_cached_state,
@@ -812,10 +812,10 @@ check_eof_delalloc:
 	if (!stopped && prev_extent_end < range_end) {
 		ret = fiemap_process_hole(inode, fieinfo, &cache,
 					  &delalloc_cached_state, backref_ctx,
-					  0, 0, 0, prev_extent_end, range_end - 1);
+					  0, 0, 0, prev_extent_end, range_end);
 		if (ret < 0)
 			goto out_unlock;
-		prev_extent_end = range_end;
+		prev_extent_end = range_end + 1;
 	}
 
 	if (cache.cached && cache.offset + cache.len >= last_extent_end) {
