@@ -24,6 +24,7 @@
 #include <net/addrconf.h>
 #include <net/ip6_route.h>
 #include <net/dst_cache.h>
+#include <net/dst_metadata.h>
 #include <net/ip_tunnels.h>
 #ifdef CONFIG_IPV6_SEG6_HMAC
 #include <net/seg6_hmac.h>
@@ -211,6 +212,17 @@ struct seg6_local_lwt {
 static struct seg6_local_lwt *seg6_local_lwtunnel(struct lwtunnel_state *lwt)
 {
 	return (struct seg6_local_lwt *)lwt->data;
+}
+
+static struct seg6_local_lwt *seg6_local_lwt_from_skb(struct sk_buff *skb)
+{
+	struct dst_entry *dst = skb_dst(skb);
+
+	if (!skb_valid_dst(skb) || !dst->lwtstate ||
+	    dst->lwtstate->type != LWTUNNEL_ENCAP_SEG6_LOCAL)
+		return NULL;
+
+	return seg6_local_lwtunnel(dst->lwtstate);
 }
 
 static struct ipv6_sr_hdr *get_and_validate_srh(struct sk_buff *skb)
@@ -905,11 +917,14 @@ drop:
 static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 				       struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
 	struct in6_addr *nhaddr = NULL;
 	struct seg6_local_lwt *slwt;
 
-	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	slwt = seg6_local_lwt_from_skb(skb);
+	if (!slwt) {
+		kfree_skb(skb);
+		return -EINVAL;
+	}
 
 	/* The inner packet is not associated to any local interface,
 	 * so we do not call netif_rx().
@@ -956,13 +971,16 @@ drop:
 static int input_action_end_dx4_finish(struct net *net, struct sock *sk,
 				       struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
 	enum skb_drop_reason reason;
 	struct seg6_local_lwt *slwt;
 	struct iphdr *iph;
 	__be32 nhaddr;
 
-	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	slwt = seg6_local_lwt_from_skb(skb);
+	if (!slwt) {
+		kfree_skb(skb);
+		return -EINVAL;
+	}
 
 	iph = ip_hdr(skb);
 
@@ -1609,13 +1627,17 @@ static void seg6_local_update_counters(struct seg6_local_lwt *slwt,
 static int seg6_local_input_core(struct net *net, struct sock *sk,
 				 struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
 	struct seg6_action_desc *desc;
 	struct seg6_local_lwt *slwt;
 	unsigned int len = skb->len;
 	int rc;
 
-	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	slwt = seg6_local_lwt_from_skb(skb);
+	if (!slwt) {
+		kfree_skb(skb);
+		return -EINVAL;
+	}
+
 	desc = slwt->desc;
 
 	rc = desc->input(skb, slwt);
