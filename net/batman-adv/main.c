@@ -114,8 +114,14 @@ static int __init batadv_init(void)
 	if (ret < 0)
 		goto err_init_wifi;
 
-	register_netdevice_notifier(&batadv_hard_if_notifier);
-	rtnl_link_register(&batadv_link_ops);
+	ret = register_netdevice_notifier(&batadv_hard_if_notifier);
+	if (ret < 0)
+		goto err_reg_notifier;
+
+	ret = rtnl_link_register(&batadv_link_ops);
+	if (ret < 0)
+		goto err_rtnl_link;
+
 	batadv_netlink_register();
 
 	pr_info("B.A.T.M.A.N. advanced %s (compatibility version %i) loaded\n",
@@ -123,6 +129,10 @@ static int __init batadv_init(void)
 
 	return 0;
 
+err_rtnl_link:
+	unregister_netdevice_notifier(&batadv_hard_if_notifier);
+err_reg_notifier:
+	batadv_wifi_net_devices_deinit();
 err_init_wifi:
 	destroy_workqueue(batadv_event_workqueue);
 	batadv_event_workqueue = NULL;
