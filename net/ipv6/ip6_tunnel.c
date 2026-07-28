@@ -1562,15 +1562,26 @@ ip6_tnl_change(struct ip6_tnl *t, const struct __ip6_tnl_parm *p)
 	ip6_tnl_link_config(t);
 }
 
-static void ip6_tnl_update(struct ip6_tnl *t, struct __ip6_tnl_parm *p)
+static void ip6_tnl_update(struct ip6_tnl *t, struct __ip6_tnl_parm *p,
+			   const struct ip6_tnl *encap_tnl)
 {
 	struct net *net = t->net;
 	struct ip6_tnl_net *ip6n = net_generic(net, ip6_tnl_net_id);
+	bool running = netif_running(t->dev);
 
+	if (running)
+		netif_tx_disable(t->dev);
 	ip6_tnl_unlink(ip6n, t);
 	synchronize_net();
+	if (encap_tnl) {
+		t->encap = encap_tnl->encap;
+		t->encap_hlen = encap_tnl->encap_hlen;
+		t->hlen = t->encap_hlen + t->tun_hlen;
+	}
 	ip6_tnl_change(t, p);
 	ip6_tnl_link(ip6n, t);
+	if (running)
+		netif_tx_wake_all_queues(t->dev);
 	netdev_state_change(t->dev);
 }
 
@@ -1705,7 +1716,7 @@ ip6_tnl_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 			if (dev == ip6n->fb_tnl_dev)
 				ip6_tnl0_update(t, &p1, false);
 			else
-				ip6_tnl_update(t, &p1);
+				ip6_tnl_update(t, &p1, NULL);
 		}
 		if (!IS_ERR(t)) {
 			err = 0;
@@ -2105,9 +2116,11 @@ static int ip6_tnl_changelink(struct net_device *dev, struct nlattr *tb[],
 			      struct netlink_ext_ack *extack)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
+	struct ip6_tnl nt = {};
 	struct __ip6_tnl_parm p;
 	struct net *net = t->net;
 	struct ip6_tnl_net *ip6n = net_generic(net, ip6_tnl_net_id);
+	struct ip6_tnl *encap_tnl = NULL;
 	struct ip_tunnel_encap ipencap;
 
 	if (!rtnl_dev_link_net_capable(dev, net))
@@ -2137,10 +2150,11 @@ static int ip6_tnl_changelink(struct net_device *dev, struct nlattr *tb[],
 	}
 
 	if (ip_tunnel_netlink_encap_parms(data, &ipencap)) {
-		int err = ip6_tnl_encap_setup(t, &ipencap);
+		int err = ip6_tnl_encap_setup(&nt, &ipencap);
 
 		if (err < 0)
 			return err;
+		encap_tnl = &nt;
 	}
 	ip6_tnl_netlink_parms(data, &p);
 	if (p.collect_md)
@@ -2153,7 +2167,7 @@ static int ip6_tnl_changelink(struct net_device *dev, struct nlattr *tb[],
 	} else
 		t = netdev_priv(dev);
 
-	ip6_tnl_update(t, &p);
+	ip6_tnl_update(t, &p, encap_tnl);
 	return 0;
 }
 
