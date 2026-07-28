@@ -3100,12 +3100,21 @@ static int _pmbus_regulator_on_off(struct regulator_dev *rdev, bool enable)
 	struct device *dev = rdev_get_dev(rdev);
 	struct i2c_client *client = to_i2c_client(dev->parent);
 	u8 page = rdev_get_id(rdev);
+	int rv;
 
 	guard(pmbus_lock)(client);
+	/*
+	 * pmbus_update_byte_data() can just return the value of
+	 * PMBUS_OPERATION and that's not what we want to return to the
+	 * regulator core.
+	 */
+	rv = pmbus_update_byte_data(client, page, PMBUS_OPERATION,
+				    PB_OPERATION_CONTROL_ON,
+				    enable ? PB_OPERATION_CONTROL_ON : 0);
+	if (rv < 0)
+		return rv;
 
-	return pmbus_update_byte_data(client, page, PMBUS_OPERATION,
-				      PB_OPERATION_CONTROL_ON,
-				      enable ? PB_OPERATION_CONTROL_ON : 0);
+	return 0;
 }
 
 static int pmbus_regulator_enable(struct regulator_dev *rdev)
