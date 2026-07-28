@@ -46,8 +46,9 @@ struct ionic_ctx_resp {
 	__u8 udma_count;
 	__u8 expdb_mask;
 	__u8 expdb_qtypes;
+	__u8 rcq_sign_bit;
 
-	__u8 rsvd2[3];
+	__u8 rsvd2[2];
 	__aligned_u64 phc_offset;
 };
 
@@ -85,6 +86,8 @@ struct ionic_qp_req {
 	__u8 rq_cmb;
 	__u8 udma_mask;
 	__u8 rsvd[3];
+	__u32 ionic_flags;
+	__u32 rsvd_pad;
 };
 
 struct ionic_qp_resp {
