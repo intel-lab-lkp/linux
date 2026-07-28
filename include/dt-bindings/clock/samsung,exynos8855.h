@@ -50,6 +50,11 @@
 #define DOUT_SHARED4_DIV4		   38
 #define FOUT_MMC_PLL_DIV1                  39
 #define FOUT_MMC_PLL_DIV2                  40
+#define CLKCMU_MOUT_PERIS_GIC              41
+#define CLKCMU_MOUT_PERIS_NOC              42
+#define CLKCMU_DOUT_PERIS_GIC              43
+#define CLKCMU_DOUT_PERIS_NOC              44
+#define FOUT_MMC_PLL_CLKOUT_DIV2           45
 
 /* CMU_PERIC */
 #define CLK_MOUT_PERIC_IP_USER             1
@@ -78,5 +83,16 @@
 #define CLK_GOUT_SYSREG_PERIC_IPCLKPORT_PCLK 24
 #define CLK_GOUT_UART_DBG_PERIC_IPCLKPORT_PCLK 25
 #define CLK_GOUT_USI_PERIC_IPCLKPORT_PCLK  26
+
+/* CMU_PERIS */
+#define CLK_MOUT_PERIS_NOC_USER            1
+#define CLK_MOUT_PERIS_GIC                 2
+#define CLK_MOUT_PERIS_GIC_USER            3
+#define CLK_DOUT_PERIS_NOCP                4
+#define CLK_DOUT_PERIS_OTP                 5
+#define CLK_GOUT_CMU_PERIS_IPCLKPORT_PCLK  6
+#define CLK_GOUT_SYSREG_PERIS_IPCLKPORT_PCLK 7
+#define CLK_GOUT_WDT0_PERIS_IPCLKPORT_PCLK   8
+#define CLK_GOUT_WDT1_PERIS_IPCLKPORT_PCLK   9
 
 #endif /* _DT_BINDINGS_CLOCK_EXYNOS8855_H */
