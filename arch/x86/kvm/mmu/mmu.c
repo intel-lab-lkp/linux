@@ -8069,6 +8069,84 @@ void kvm_mmu_pre_destroy_vm(struct kvm *kvm)
 		vhost_task_stop(kvm->arch.nx_huge_page_recovery_thread);
 }
 
+static struct {
+	spinlock_t	lock;
+	unsigned long	*bitmap;
+	unsigned int	nr;
+} tlb_tags;
+
+int kvm_init_tlb_tags(unsigned int nr)
+{
+	/*
+	 * Limit the number of TLB tags to VMX's hardcoded maximum of 0x10000
+	 * to avoid wasting memory for the bitmap in the unlikely scenario the
+	 * CPU supports an inordinate number of ASIDs (on AMD).  If userspace
+	 * wants to concurrently run tens of thousands of vCPUs, they'll likely
+	 * need a solution that works for both Intel and AMD.
+	 */
+	const unsigned int MAX_NR_TLB_TAGS = VMX_NR_VPIDS;
+
+	if (!nr)
+		return 0;
+
+	if (nr > MAX_NR_TLB_TAGS) {
+		pr_warn_once("Number of TLB tags capped (%u instead of %u)\n",
+			     MAX_NR_TLB_TAGS, nr);
+		nr = MAX_NR_TLB_TAGS;
+	}
+
+	tlb_tags.bitmap = bitmap_zalloc(nr, GFP_KERNEL);
+	if (!tlb_tags.bitmap)
+		return -ENOMEM;
+
+	/*
+	 * 0 is the host's TLB tag for both VMX's VPID and SVM's ASID, and is
+	 * returned on failed allocations (e.g. no more tags left).
+	 */
+	__set_bit(0, tlb_tags.bitmap);
+
+	tlb_tags.nr = nr;
+	spin_lock_init(&tlb_tags.lock);
+	return 0;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_init_tlb_tags);
+
+void kvm_destroy_tlb_tags(void)
+{
+	bitmap_free(tlb_tags.bitmap);
+	tlb_tags.bitmap = NULL;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_destroy_tlb_tags);
+
+kvm_tlb_tag_t kvm_alloc_tlb_tag(void)
+{
+	kvm_tlb_tag_t tag;
+
+	if (!tlb_tags.bitmap)
+		return 0;
+
+	guard(spinlock)(&tlb_tags.lock);
+
+	tag = find_first_zero_bit(tlb_tags.bitmap, tlb_tags.nr);
+	if (tag >= tlb_tags.nr)
+		return 0;
+
+	__set_bit(tag, tlb_tags.bitmap);
+	return tag;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_alloc_tlb_tag);
+
+void kvm_free_tlb_tag(kvm_tlb_tag_t tag)
+{
+	if (!tag || WARN_ON_ONCE(tag >= tlb_tags.nr))
+		return;
+
+	guard(spinlock)(&tlb_tags.lock);
+
+	__clear_bit(tag, tlb_tags.bitmap);
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_free_tlb_tag);
+
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 static bool hugepage_test_mixed(struct kvm_memory_slot *slot, gfn_t gfn,
 				int level)

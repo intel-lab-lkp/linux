@@ -182,7 +182,7 @@ struct nested_vmx {
 	u64 pre_vmenter_ssp;
 	u64 pre_vmenter_ssp_tbl;
 
-	u16 vpid02;
+	kvm_tlb_tag_t vpid02;
 	u16 last_vpid;
 
 	int tsc_autostore_slot;
@@ -256,7 +256,7 @@ struct vcpu_vmx {
 			u32 ar;
 		} seg[8];
 	} segment_cache;
-	int vpid;
+	kvm_tlb_tag_t vpid;
 
 	/* Support for a guest hypervisor (nested VMX) */
 	struct nested_vmx nested;
@@ -341,9 +341,29 @@ static __always_inline u32 vmx_get_intr_info(struct kvm_vcpu *vcpu)
 	return vt->exit_intr_info;
 }
 
+static __always_inline int init_vpids(void)
+{
+	return enable_vpid ? kvm_init_tlb_tags(VMX_NR_VPIDS) : 0;
+}
+
+static __always_inline void destroy_vpids(void)
+{
+	if (enable_vpid)
+		kvm_destroy_tlb_tags();
+}
+
+static __always_inline kvm_tlb_tag_t allocate_vpid(void)
+{
+	return enable_vpid ? kvm_alloc_tlb_tag() : 0;
+}
+
+static __always_inline void free_vpid(kvm_tlb_tag_t vpid)
+{
+	if (enable_vpid)
+		kvm_free_tlb_tag(vpid);
+}
+
 void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu);
-int allocate_vpid(void);
-void free_vpid(int vpid);
 void vmx_set_constant_host_state(struct vcpu_vmx *vmx);
 void vmx_prepare_switch_to_guest(struct kvm_vcpu *vcpu);
 void vmx_set_host_fs_gs(struct vmcs_host_state *host, u16 fs_sel, u16 gs_sel,
