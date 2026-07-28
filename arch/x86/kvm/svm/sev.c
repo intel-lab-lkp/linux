@@ -313,11 +313,6 @@ e_put_cg:
 	return ret;
 }
 
-static unsigned int sev_get_asid(struct kvm *kvm)
-{
-	return to_kvm_sev_info(kvm)->asid;
-}
-
 static void sev_asid_free(struct kvm_sev_info *sev)
 {
 	struct svm_cpu_data *sd;

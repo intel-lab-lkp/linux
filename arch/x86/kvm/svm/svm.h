@@ -429,6 +429,11 @@ static __always_inline bool is_sev_snp_guest(struct kvm_vcpu *vcpu)
 {
 	return ____sev_snp_guest(vcpu->kvm);
 }
+
+static __always_inline unsigned int sev_get_asid(struct kvm *kvm)
+{
+	return to_kvm_sev_info(kvm)->asid;
+}
 #else
 static __always_inline bool is_sev_guest(struct kvm_vcpu *vcpu)
 {
@@ -442,6 +447,11 @@ static __always_inline bool is_sev_es_guest(struct kvm_vcpu *vcpu)
 static __always_inline bool is_sev_snp_guest(struct kvm_vcpu *vcpu)
 {
 	return false;
+}
+
+static __always_inline unsigned int sev_get_asid(struct kvm *kvm)
+{
+	return 0;
 }
 #endif
 
