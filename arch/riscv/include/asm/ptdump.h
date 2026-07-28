@@ -10,18 +10,20 @@ struct addr_marker {
 	const char *name;
 };
 
-struct prot_bits {
+struct ptdump_prot_bits {
 	u64 mask;
 	const char *set;
 	const char *clear;
 };
 
-struct pg_level {
+struct ptdump_pg_level {
+	const struct ptdump_prot_bits *bits;
+	size_t num;
 	const char *name;
 	u64 mask;
 };
 
-struct pg_state {
+struct ptdump_pg_state {
 	struct ptdump_state ptdump;
 	struct seq_file *seq;
 	const struct addr_marker *marker;
@@ -32,6 +34,7 @@ struct pg_state {
 	u64 current_prot;
 	bool check_wx;
 	unsigned long wx_pages;
+	const struct ptdump_pg_level *pg_level;
 };
 
 void note_page(struct ptdump_state *pt_st, unsigned long addr,
