@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0+ OR MIT
 
+CFLAGS += $(KHDR_INCLUDES)
+
 TEST_PROGS := \
 	devlink.sh \
 	devlink_in_netns.sh \
@@ -15,8 +17,13 @@ TEST_PROGS := \
 	peer.sh \
 	psample.sh \
 	tc-mq-visibility.sh \
+	tls.sh \
 	udp_tunnel_nic.sh \
 # end of TEST_PROGS
+
+TEST_GEN_FILES := \
+	tls_offload
+# end of TEST_GEN_FILES
 
 TEST_FILES := \
 	ethtool-common.sh
