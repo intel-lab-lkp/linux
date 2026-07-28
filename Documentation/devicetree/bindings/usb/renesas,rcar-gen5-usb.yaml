@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/renesas,rcar-gen5-usb.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas R-Car Gen5 DWC3 xHCI USB controller
+
+maintainers:
+  - Marek Vasut <marek.vasut+renesas@mailbox.org>
+
+properties:
+  compatible:
+    items:
+      - const: renesas,r8a78000-usb
+      - const: renesas,rcar-gen5-usb
+
+  '#address-cells':
+    const: 2
+
+  '#size-cells':
+    const: 2
+
+  ranges: true
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  power-domains:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+patternProperties:
+  '^usb@':
+    $ref: snps,dwc3.yaml#
+
+required:
+  - compatible
+  - '#address-cells'
+  - '#size-cells'
+  - ranges
+  - reg
+  - clocks
+  - power-domains
+  - resets
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    bus {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        usb@c9c54000 {
+            compatible = "renesas,r8a78000-usb", "renesas,rcar-gen5-usb";
+            reg = <0 0xc9c54000 0 0x2000>;
+            clocks = <&scmi_clk 336>;
+            power-domains = <&scmi_devpd 16>;
+            resets = <&scmi_reset 336>;
+
+            #address-cells = <2>;
+            #size-cells = <2>;
+            ranges = <0x0 0xc8800000 0x0 0xc8800000 0x0 0x100000>;
+
+            usb@c8800000 {
+                compatible = "synopsys,dwc3";
+                reg = <0x0 0xc8800000 0x0 0x100000>;
+                interrupts = <GIC_SPI 795 IRQ_TYPE_LEVEL_HIGH>;
+                maximum-speed = "super-speed-plus";
+                phys = <&mp_phy 2>;
+                phy-names = "usb3-phy";
+            };
+        };
+    };
