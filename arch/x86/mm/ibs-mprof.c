@@ -10,6 +10,11 @@
 #include <linux/vm_event_item.h>
 #include <linux/vmstat.h>
 #include <linux/cpuhotplug.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+#include <linux/mutex.h>
+#include <linux/smp.h>
+#include <linux/uaccess.h>
 
 #include <asm/ibs-mprof.h>
 #include <asm/ibs-caps.h>
@@ -53,6 +58,41 @@ struct mprof_worker {
 	unsigned int cpu;
 };
 static DEFINE_PER_CPU(struct mprof_worker, mprof_work);
+
+/*
+ * Runtime-configurable profiler parameters, exposed via debugfs. The
+ * interrupt handler consumes the published snapshot on every re-arm, so
+ * configuration changes need no locking on the fast path. Writers are
+ * serialized by mprof_cfg_lock and publish an immutable snapshot; the hot
+ * path only does an smp_load_acquire() of the pointer.
+ */
+struct mprof_config {
+	bool enabled;		/* profiling enabled (IbsMemDis inverted) */
+	bool l3miss_only;	/* IbsMemL3MissOnly */
+	bool lat_filter;	/* IbsMemLatFltEn */
+	u8   lat_thresh;	/* IbsMemLatThrsh, 0x0 .. 0xf */
+	u32  period;		/* op sample period (IbsMemMaxCnt) */
+	/* Precomputed register values for the interrupt fast path. */
+	u64  ctl;
+	u64  ctl2;
+};
+
+static struct mprof_config mprof_cfg_slots[2];
+static struct mprof_config *mprof_cfg;
+static DEFINE_MUTEX(mprof_cfg_lock);
+
+/*
+ * ibs-memprof: kernel cmdline parameter to arm IBS Memory
+ * Profiler right from boot time.
+ */
+bool ibs_mprof_enabled __read_mostly;
+
+static int __init setup_ibs_mprof(char *str)
+{
+	return (kstrtobool(str, &ibs_mprof_enabled) == 0);
+}
+
+__setup("ibs-memprof=", setup_ibs_mprof);
 
 /*
  * Record the IBS-reported access sample in percpu buffer.
@@ -159,28 +199,55 @@ static inline void mprof_drain_cpu(unsigned int cpu)
 }
 
 /*
- * L3MissOnly + Exclude kernel RIP
+ * Translate the software config into IbsMemCtl / IbsMemCtl2 register values.
+ * Kernel RIP is always excluded: the profiler only samples user memory
+ * accesses.
+ */
+static void mprof_compose(struct mprof_config *cfg)
+{
+	u64 ctl;
+
+	if (!cfg->enabled) {
+		ctl = 0;
+		cfg->ctl = ctl;
+		cfg->ctl2 = IBS_MPROF_CTL2_DISABLE;
+		return;
+	}
+
+	/*
+	 * Assemble bits 26:20 and 19:4 of the periodic op counter in ctl.
+	 * The lower 4 bits are always 0000b.
+	 */
+	ctl = (cfg->period >> 4) & IBS_MPROF_CTL_MAXCNT_MASK;
+	ctl |= cfg->period & IBS_MPROF_CTL_MAXCNT_EXT_MASK;
+	ctl |= IBS_MPROF_CTL_CNT_CTL | IBS_MPROF_CTL_ENABLE;
+
+	if (cfg->l3miss_only)
+		ctl |= IBS_MPROF_CTL_L3MISSONLY;
+
+	if (cfg->lat_filter) {
+		ctl |= IBS_MPROF_CTL_LATFLTEN;
+		ctl |= ((u64)cfg->lat_thresh << IBS_MPROF_CTL_LATTHRSH_SHIFT) &
+			IBS_MPROF_CTL_LATTHRSH_MASK;
+	}
+
+	cfg->ctl = ctl;
+	/* Exclude samples that have bit 63 of their RIP set (kernel). */
+	cfg->ctl2 = IBS_MPROF_CTL2_EXCLUDE_KERNEL;
+}
+
+/*
+ * Program the profiler from the currently published config snapshot. Called
+ * at CPU startup, from the interrupt handler on every re-arm, and via
+ * on_each_cpu() when the config changes.
  */
 static void mprof_enable_profiling(void)
 {
-	u64 mprof_config = IBS_MPROF_CTL_CNT_CTL | IBS_MPROF_CTL_L3MISSONLY;
-	unsigned int period = IBS_MPROF_SAMPLE_PERIOD;
-	u64 ctl, ctl2;
+	/* Acquire the snapshot; pairs with smp_store_release() in the writers. */
+	struct mprof_config *cfg = smp_load_acquire(&mprof_cfg);
 
-	/*
-	 * Assemble bits 26:20 and 19:4 of periodic op counter in ctl.
-	 * The lower 4 bits are always 0000b.
-	 */
-	ctl = (period >> 4) & IBS_MPROF_CTL_MAXCNT_MASK;
-	ctl |= (period & IBS_MPROF_CTL_MAXCNT_EXT_MASK);
-	ctl |= mprof_config;
-	wrmsrq(MSR_AMD64_IBS_MPROF_CTL, ctl);
-
-	/*
-	 * Exclude samples that have bit 63 of their RIP set.
-	 */
-	ctl2 = IBS_MPROF_CTL2_EXCLUDE_KERNEL;
-	wrmsrq(MSR_AMD64_IBS_MPROF_CTL2, ctl2);
+	wrmsrq(MSR_AMD64_IBS_MPROF_CTL, cfg->ctl);
+	wrmsrq(MSR_AMD64_IBS_MPROF_CTL2, cfg->ctl2);
 }
 
 static void mprof_disable_profiling(u64 mem_ctl)
@@ -190,6 +257,52 @@ static void mprof_disable_profiling(u64 mem_ctl)
 	wrmsrq(MSR_AMD64_IBS_MPROF_CTL, mem_ctl);
 
 	wrmsrq(MSR_AMD64_IBS_MPROF_CTL2, IBS_MPROF_CTL2_DISABLE);
+}
+
+static void mprof_reprogram_this_cpu(void *info)
+{
+	mprof_enable_profiling();
+}
+
+/*
+ * Publish a new config snapshot and push it to every online CPU
+ * immediately. Must be called with mprof_cfg_lock held.
+ */
+static void mprof_publish(const struct mprof_config *newcfg)
+{
+	struct mprof_config *slot;
+
+	lockdep_assert_held(&mprof_cfg_lock);
+
+	/* Fill the slot that is not currently published, then flip to it. */
+	slot = (mprof_cfg == &mprof_cfg_slots[0]) ?
+		&mprof_cfg_slots[1] : &mprof_cfg_slots[0];
+	*slot = *newcfg;
+	mprof_compose(slot);
+	/* Publish the fully composed slot; pairs with smp_load_acquire() in readers. */
+	smp_store_release(&mprof_cfg, slot);
+
+	/*
+	 * on_each_cpu() with wait serializes against any in-flight interrupt
+	 * handler on each CPU, so the previously published slot has no readers
+	 * once this returns and can be safely reused by the next writer.
+	 */
+	on_each_cpu(mprof_reprogram_this_cpu, NULL, 1);
+}
+
+static void mprof_config_init(void)
+{
+	struct mprof_config *cfg = &mprof_cfg_slots[0];
+
+	if (ibs_mprof_enabled)
+		cfg->enabled = true;
+	cfg->l3miss_only = true;
+	cfg->lat_filter = false;
+	cfg->lat_thresh = 0;
+	cfg->period = IBS_MPROF_SAMPLE_PERIOD;
+	mprof_compose(cfg);
+	/* Publish the initial snapshot; pairs with smp_load_acquire() in readers. */
+	smp_store_release(&mprof_cfg, cfg);
 }
 
 /*
@@ -215,6 +328,13 @@ static void mprof_overflow_handler(void)
 
 	rdmsrq(MSR_AMD64_IBS_MPROF_DATA3, mem_data3);
 	rdmsrq(MSR_AMD64_IBS_MPROF_DATA2, mem_data2);
+
+	/*
+	 * If L3 miss filtering is turned off, non load/store
+	 * samples may get reported. Ignore them.
+	 */
+	if (!(mem_data3 & (IBS_MPROF_DATA3_LDOP | IBS_MPROF_DATA3_STOP)))
+		goto handled;
 
 	data_src = mem_data2 & IBS_MPROF_DATA2_DATASRC_MASK;
 	data_src |= ((mem_data2 & IBS_MPROF_DATA2_DATASRC_MASK_HIGH) >>
@@ -323,6 +443,223 @@ static int x86_amd_ibs_mprof_teardown(unsigned int cpu)
 	return 0;
 }
 
+/*
+ * debugfs interface. Each parameter is a separate file under
+ * <debugfs>/ibs-mprof/. A write validates the value, updates the current
+ * config and actively propagates it to all CPUs via mprof_publish().
+ */
+enum mprof_field {
+	MPROF_L3MISS_ONLY,
+	MPROF_LAT_FILTER,
+	MPROF_LAT_THRESH,
+	MPROF_PERIOD,
+};
+
+static int mprof_parse_uint(const char __user *ubuf, size_t cnt, unsigned int *val)
+{
+	char buf[16];
+
+	if (cnt > sizeof(buf) - 1)
+		cnt = sizeof(buf) - 1;
+	if (copy_from_user(buf, ubuf, cnt))
+		return -EFAULT;
+	buf[cnt] = '\0';
+	if (kstrtouint(buf, 0, val))
+		return -EINVAL;
+	return 0;
+}
+
+static void mprof_store(enum mprof_field field, unsigned int val)
+{
+	struct mprof_config new;
+
+	mutex_lock(&mprof_cfg_lock);
+	new = *mprof_cfg;
+	switch (field) {
+	case MPROF_L3MISS_ONLY:
+		new.l3miss_only = val;
+		break;
+	case MPROF_LAT_FILTER:
+		new.lat_filter = val;
+		break;
+	case MPROF_LAT_THRESH:
+		new.lat_thresh = val;
+		break;
+	case MPROF_PERIOD:
+		new.period = val;
+		break;
+	}
+	mprof_publish(&new);
+	mutex_unlock(&mprof_cfg_lock);
+}
+
+#define MPROF_SHOW(name, field)						\
+static int mprof_##name##_show(struct seq_file *m, void *v)		\
+{									\
+	/* Acquire the snapshot; pairs with smp_store_release() in writers. */	\
+	struct mprof_config *cfg = smp_load_acquire(&mprof_cfg);	\
+									\
+	seq_printf(m, "%u\n", cfg->field);				\
+	return 0;							\
+}									\
+static int mprof_##name##_open(struct inode *inode, struct file *filp)	\
+{									\
+	return single_open(filp, mprof_##name##_show, NULL);		\
+}
+
+MPROF_SHOW(l3miss_only, l3miss_only)
+MPROF_SHOW(lat_filter, lat_filter)
+MPROF_SHOW(lat_thresh, lat_thresh)
+MPROF_SHOW(period, period)
+
+static ssize_t mprof_l3miss_only_write(struct file *filp, const char __user *ubuf,
+				       size_t cnt, loff_t *ppos)
+{
+	unsigned int val;
+	int ret;
+
+	ret = mprof_parse_uint(ubuf, cnt, &val);
+	if (ret)
+		return ret;
+	if (val > 1)
+		return -EINVAL;
+
+	mprof_store(MPROF_L3MISS_ONLY, val);
+	*ppos += cnt;
+	return cnt;
+}
+
+static ssize_t mprof_lat_filter_write(struct file *filp, const char __user *ubuf,
+				      size_t cnt, loff_t *ppos)
+{
+	unsigned int val;
+	int ret;
+
+	ret = mprof_parse_uint(ubuf, cnt, &val);
+	if (ret)
+		return ret;
+	if (val > 1)
+		return -EINVAL;
+
+	mprof_store(MPROF_LAT_FILTER, val);
+	*ppos += cnt;
+	return cnt;
+}
+
+static ssize_t mprof_lat_thresh_write(struct file *filp, const char __user *ubuf,
+				      size_t cnt, loff_t *ppos)
+{
+	unsigned int val;
+	int ret;
+
+	ret = mprof_parse_uint(ubuf, cnt, &val);
+	if (ret)
+		return ret;
+	if (val > IBS_MPROF_LATTHRSH_MAX)
+		return -EINVAL;
+
+	mprof_store(MPROF_LAT_THRESH, val);
+	*ppos += cnt;
+	return cnt;
+}
+
+static ssize_t mprof_period_write(struct file *filp, const char __user *ubuf,
+				  size_t cnt, loff_t *ppos)
+{
+	unsigned int val;
+	int ret;
+
+	ret = mprof_parse_uint(ubuf, cnt, &val);
+	if (ret)
+		return ret;
+	if (val < IBS_MPROF_MAXCNT_MIN || val > IBS_MPROF_MAXCNT_MAX)
+		return -EINVAL;
+
+	mprof_store(MPROF_PERIOD, val);
+	*ppos += cnt;
+	return cnt;
+}
+
+#define MPROF_FOPS(name)						\
+static const struct file_operations mprof_##name##_fops = {		\
+	.open		= mprof_##name##_open,				\
+	.read		= seq_read,					\
+	.write		= mprof_##name##_write,				\
+	.llseek		= seq_lseek,					\
+	.release	= single_release,				\
+}
+
+MPROF_FOPS(l3miss_only);
+MPROF_FOPS(lat_filter);
+MPROF_FOPS(lat_thresh);
+MPROF_FOPS(period);
+
+static void mprof_debugfs_init(void)
+{
+	struct dentry *dir = debugfs_create_dir("ibs-mprof", NULL);
+
+	debugfs_create_file("l3miss-only", 0644, dir, NULL, &mprof_l3miss_only_fops);
+	debugfs_create_file("lat-filter", 0644, dir, NULL, &mprof_lat_filter_fops);
+	debugfs_create_file("lat-thresh", 0644, dir, NULL, &mprof_lat_thresh_fops);
+	debugfs_create_file("period", 0644, dir, NULL, &mprof_period_fops);
+}
+
+static ssize_t enabled_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	/* Acquire the snapshot; pairs with smp_store_release() in the writers. */
+	struct mprof_config *cfg = smp_load_acquire(&mprof_cfg);
+
+	return sysfs_emit(buf, "%s\n", str_enabled_disabled(cfg->enabled));
+}
+
+static ssize_t enabled_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct mprof_config new;
+	bool enabled;
+	int ret;
+
+	ret = kstrtobool(buf, &enabled);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&mprof_cfg_lock);
+	new = *mprof_cfg;
+	new.enabled = enabled;
+	mprof_publish(&new);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(enabled);
+
+static struct attribute *ibs_mprof_attributes[] = {
+	&dev_attr_enabled.attr,
+	NULL
+};
+
+static const struct attribute_group ibs_mprof_attr_group = {
+	.name = "ibs-mprof",
+	.attrs = ibs_mprof_attributes,
+};
+
+static void mprof_tunables_init(void)
+{
+	struct device *dev_root;
+	int ret;
+
+	dev_root = bus_get_dev_root(&cpu_subsys);
+	if (dev_root) {
+		ret = sysfs_create_group(&dev_root->kobj, &ibs_mprof_attr_group);
+		put_device(dev_root);
+		if (ret)
+			return;
+	}
+
+	mprof_debugfs_init();
+}
+
 static int __init mprof_access_profiling_init(void)
 {
 	u32 mprof_caps = cpuid_eax(IBS_CPUID_FEATURES);
@@ -346,6 +683,9 @@ static int __init mprof_access_profiling_init(void)
 		mw->cpu = cpu;
 	}
 
+	/* Publish the default config before the startup callback consumes it. */
+	mprof_config_init();
+
 	ret = cpuhp_setup_state(CPUHP_AP_MM_AMD_IBS_MEMPROF_STARTING,
 				"x86/amd/ibs_mprof:starting",
 				x86_amd_ibs_mprof_startup,
@@ -356,6 +696,7 @@ static int __init mprof_access_profiling_init(void)
 		pr_err("cpuhp_setup_state failed: %d\n", ret);
 	} else {
 		pr_info("IBS Memory Profiler is available for memory access profiling\n");
+		mprof_tunables_init();
 	}
 	return 0;
 }

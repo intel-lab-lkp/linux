@@ -150,3 +150,47 @@ Path: /proc/vmstat
 5. **hwhint_extmem_accesses**
    - Number of external memory (like CXL) accesses reported by hwhints source.
 
+AMD IBS Memory Profiler Tunables
+================================
+sysfs tunables
+--------------
+1. enabled
+
+Path: /sys/devices/system/cpu/ibs-mprof/enabled
+
+- Enable (1) or disable (0) memory access profiling. Enabling here
+  would only arm the memory profiler and results in generation of IBS
+  samples. pghot will act on the reported samples only if hwhints source
+  is enabled in **pghot_enabled_sources**.
+- Default: 0 (Disabled)
+
+Debugfs tunables
+----------------
+Path: /sys/kernel/debug/ibs-mprof/
+
+These tune the AMD IBS Memory Profiler hardware hints source and are
+present only when AMD_IBS_MEMPROF is enabled. A write takes effect on
+all CPUs immediately.
+
+1. **l3miss-only**
+   - When 1, only accesses that miss the L3 cache are sampled. It is
+     recommended to run the memory profiler with L3 miss filtering
+     enabled.
+   - Default: 1
+
+2. **period**
+   - Sample period as the number of ops between samples (IbsMemMaxCnt).
+   - Range: 5000 to 134217727.
+   - Default: 10000
+
+3. **lat-filter**
+   - When 1, enable load latency filtering: only loads whose latency
+     exceeds the **lat-thresh** threshold are reported.
+   - Default: 0
+
+4. **lat-thresh**
+   - Load latency threshold, effective only when **lat-filter** is 1. A
+     sample is reported when the load latency exceeds
+     (lat-thresh + 1) * 128 core cycles.
+   - Range: 0x0 to 0xf
+   - Default: 0

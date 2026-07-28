@@ -2216,6 +2216,11 @@ Kernel parameters
 			syscalls, essentially overriding IA32_EMULATION_DEFAULT_DISABLED at
 			boot time. When false, unconditionally disables IA32 emulation.
 
+	ibs-memprof=	[X86-64]
+			Format: <bool>
+			When true, IBS Memory Profiler will be enabled at boottime
+			for memory access profiling. It can be changed at runtime too
+			using /sys/devices/system/cpu/ibs-mprof/enabled.
 
 	idle=		[X86,EARLY]
 			Format: idle=poll, idle=halt, idle=nomwait

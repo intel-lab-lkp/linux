@@ -30,12 +30,26 @@
 #define IBS_MPROF_DATA3_SW_PREFETCH	BIT_ULL(21)
 
 /* MSR_AMD64_IBS_MPROF_CTL bits */
+#define IBS_MPROF_CTL_LATFLTEN		BIT_ULL(63)	/* IbsMemLatFltEn */
+#define IBS_MPROF_CTL_LATTHRSH_SHIFT	59
+#define IBS_MPROF_CTL_LATTHRSH_MASK	(0xFULL << IBS_MPROF_CTL_LATTHRSH_SHIFT)
 #define IBS_MPROF_CTL_CNT_CTL		BIT_ULL(19)
 #define IBS_MPROF_CTL_VAL		BIT_ULL(18)
 #define IBS_MPROF_CTL_ENABLE		BIT_ULL(17)
 #define IBS_MPROF_CTL_L3MISSONLY	BIT_ULL(16)
 #define IBS_MPROF_CTL_MAXCNT_MASK	0x0000FFFFULL
 #define IBS_MPROF_CTL_MAXCNT_EXT_MASK	(0x7FULL << 20)	/* separate upper 7 bits */
+
+/*
+ * IbsMemMaxCnt is a 27-bit op count; the low 4 bits are always zero.
+ * The hardware minimum is 16, but such a short interval is impractical
+ * (interrupt storm), so restrict the sample period to a sensible floor.
+ */
+#define IBS_MPROF_MAXCNT_MIN		5000
+#define IBS_MPROF_MAXCNT_MAX		((1U << 27) - 1)
+
+/* IbsMemLatThrsh is a 4-bit field. */
+#define IBS_MPROF_LATTHRSH_MAX		0xF
 
 /* MSR_AMD64_IBS_MPROF_CTL2 bits */
 #define IBS_MPROF_CTL2_DISABLE		BIT_ULL(0)
