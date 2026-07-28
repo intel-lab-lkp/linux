@@ -51,21 +51,13 @@ pub mod format_strings {
     /// given `prefix`, which are the kernel's `KERN_*` constants.
     ///
     /// [`_printk`]: srctree/include/linux/printk.h
-    const fn generate(is_cont: bool, prefix: &[u8; 3]) -> [u8; LENGTH] {
+    const fn generate(prefix: &[u8; 3]) -> [u8; LENGTH] {
         // Ensure the `KERN_*` macros are what we expect.
         assert!(prefix[0] == b'\x01');
-        if is_cont {
-            assert!(prefix[1] == b'c');
-        } else {
-            assert!(prefix[1] >= b'0' && prefix[1] <= b'7');
-        }
+        assert!(prefix[1] >= b'0' && prefix[1] <= b'7');
         assert!(prefix[2] == b'\x00');
 
-        let suffix: &[u8; LENGTH - LENGTH_PREFIX] = if is_cont {
-            b"%pA\0\0\0\0\0"
-        } else {
-            b"%s: %pA\0"
-        };
+        let suffix: &[u8; LENGTH - LENGTH_PREFIX] = b"%s: %pA\0";
 
         [
             prefix[0], prefix[1], suffix[0], suffix[1], suffix[2], suffix[3], suffix[4], suffix[5],
@@ -79,15 +71,14 @@ pub mod format_strings {
     //
     // Furthermore, `static` instead of `const` is used to share the strings
     // for all the kernel.
-    pub static EMERG: [u8; LENGTH] = generate(false, bindings::KERN_EMERG);
-    pub static ALERT: [u8; LENGTH] = generate(false, bindings::KERN_ALERT);
-    pub static CRIT: [u8; LENGTH] = generate(false, bindings::KERN_CRIT);
-    pub static ERR: [u8; LENGTH] = generate(false, bindings::KERN_ERR);
-    pub static WARNING: [u8; LENGTH] = generate(false, bindings::KERN_WARNING);
-    pub static NOTICE: [u8; LENGTH] = generate(false, bindings::KERN_NOTICE);
-    pub static INFO: [u8; LENGTH] = generate(false, bindings::KERN_INFO);
-    pub static DEBUG: [u8; LENGTH] = generate(false, bindings::KERN_DEBUG);
-    pub static CONT: [u8; LENGTH] = generate(true, bindings::KERN_CONT);
+    pub static EMERG: [u8; LENGTH] = generate(bindings::KERN_EMERG);
+    pub static ALERT: [u8; LENGTH] = generate(bindings::KERN_ALERT);
+    pub static CRIT: [u8; LENGTH] = generate(bindings::KERN_CRIT);
+    pub static ERR: [u8; LENGTH] = generate(bindings::KERN_ERR);
+    pub static WARNING: [u8; LENGTH] = generate(bindings::KERN_WARNING);
+    pub static NOTICE: [u8; LENGTH] = generate(bindings::KERN_NOTICE);
+    pub static INFO: [u8; LENGTH] = generate(bindings::KERN_INFO);
+    pub static DEBUG: [u8; LENGTH] = generate(bindings::KERN_DEBUG);
 }
 
 /// Prints a message via the kernel's [`_printk`].
@@ -127,13 +118,23 @@ pub unsafe fn call_printk(
 #[doc(hidden)]
 #[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
 pub fn call_printk_cont(args: fmt::Arguments<'_>) {
+    const CONT_FMT: [u8; 6] = {
+        // Ensure the `KERN_*` macros are what we expect (2 byte + 1 byte nul-termination).
+        assert!(bindings::KERN_CONT.len() == 3);
+
+        let mut fmt = *b"\0\0%pA\0";
+        fmt[0] = bindings::KERN_CONT[0];
+        fmt[1] = bindings::KERN_CONT[1];
+        fmt
+    };
+
     // `_printk` does not seem to fail in any path.
     //
     // SAFETY: The format string is fixed.
     #[cfg(CONFIG_PRINTK)]
     unsafe {
         bindings::_printk(
-            format_strings::CONT.as_ptr(),
+            CONT_FMT.as_ptr(),
             core::ptr::from_ref(&args).cast::<c_void>(),
         );
     }
@@ -147,8 +148,7 @@ pub fn call_printk_cont(args: fmt::Arguments<'_>) {
 #[macro_export]
 #[expect(clippy::crate_in_macro_def)]
 macro_rules! print_macro (
-    // The non-continuation cases (most of them, e.g. `INFO`).
-    ($format_string:path, false, $($arg:tt)+) => (
+    ($format_string:path, $($arg:tt)+) => (
         // To remain sound, `arg`s must be expanded outside the `unsafe` block.
         // Typically one would use a `let` binding for that; however, `format_args!`
         // takes borrows on the arguments, but does not extend the scope of temporaries.
@@ -169,20 +169,13 @@ macro_rules! print_macro (
             }
         }
     );
-
-    // The `CONT` case.
-    ($format_string:path, true, $($arg:tt)+) => (
-        $crate::print::call_printk_cont(
-            $crate::prelude::fmt!($($arg)+),
-        );
-    );
 );
 
 /// Stub for doctests
 #[cfg(testlib)]
 #[macro_export]
 macro_rules! print_macro (
-    ($format_string:path, $e:expr, $($arg:tt)+) => (
+    ($format_string:path, $($arg:tt)+) => (
         ()
     );
 );
@@ -217,7 +210,7 @@ macro_rules! print_macro (
 #[macro_export]
 macro_rules! pr_emerg (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::EMERG, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::EMERG, $($arg)*)
     )
 );
 
@@ -242,7 +235,7 @@ macro_rules! pr_emerg (
 #[macro_export]
 macro_rules! pr_alert (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::ALERT, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::ALERT, $($arg)*)
     )
 );
 
@@ -267,7 +260,7 @@ macro_rules! pr_alert (
 #[macro_export]
 macro_rules! pr_crit (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::CRIT, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::CRIT, $($arg)*)
     )
 );
 
@@ -292,7 +285,7 @@ macro_rules! pr_crit (
 #[macro_export]
 macro_rules! pr_err (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::ERR, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::ERR, $($arg)*)
     )
 );
 
@@ -317,7 +310,7 @@ macro_rules! pr_err (
 #[macro_export]
 macro_rules! pr_warn (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::WARNING, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::WARNING, $($arg)*)
     )
 );
 
@@ -342,7 +335,7 @@ macro_rules! pr_warn (
 #[macro_export]
 macro_rules! pr_notice (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::NOTICE, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::NOTICE, $($arg)*)
     )
 );
 
@@ -368,7 +361,7 @@ macro_rules! pr_notice (
 #[doc(alias = "print")]
 macro_rules! pr_info (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::INFO, false, $($arg)*)
+        $crate::print_macro!($crate::print::format_strings::INFO, $($arg)*)
     )
 );
 
@@ -396,7 +389,7 @@ macro_rules! pr_info (
 macro_rules! pr_debug (
     ($($arg:tt)*) => (
         if cfg!(debug_assertions) {
-            $crate::print_macro!($crate::print::format_strings::DEBUG, false, $($arg)*)
+            $crate::print_macro!($crate::print::format_strings::DEBUG, $($arg)*)
         }
     )
 );
@@ -425,7 +418,9 @@ macro_rules! pr_debug (
 #[macro_export]
 macro_rules! pr_cont (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::CONT, true, $($arg)*)
+        $crate::print::call_printk_cont(
+            $crate::prelude::fmt!($($arg)+),
+        )
     )
 );
 
