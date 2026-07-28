@@ -1174,10 +1174,15 @@ impl Process {
 
         {
             let inner = self.inner.lock();
-            for (node_ptr, node) in &inner.nodes {
+            let cursor = inner.nodes.cursor_lower_bound(&ptr);
+            if let Some(c) = cursor {
+                let (node_ptr, node) = c.current();
                 if *node_ptr > ptr {
                     node.populate_debug_info(&mut out, &inner);
-                    break;
+                } else if *node_ptr == ptr {
+                    if let Some((_, next_node)) = c.peek_next() {
+                        next_node.populate_debug_info(&mut out, &inner);
+                    }
                 }
             }
         }
