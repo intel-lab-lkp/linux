@@ -90,6 +90,16 @@ iop3xx_i2c_enable(struct i2c_algo_iop3xx_data *iop3xx_adap)
 }
 
 static void
+iop3xx_i2c_disable(struct i2c_algo_iop3xx_data *iop3xx_adap)
+{
+	unsigned long cr = __raw_readl(iop3xx_adap->ioaddr + CR_OFFSET);
+
+	cr &= ~(IOP3XX_ICR_ALD_IE | IOP3XX_ICR_BERR_IE |
+		IOP3XX_ICR_RXFULL_IE | IOP3XX_ICR_TXEMPTY_IE);
+	__raw_writel(cr, iop3xx_adap->ioaddr + CR_OFFSET);
+}
+
+static void
 iop3xx_i2c_transaction_cleanup(struct i2c_algo_iop3xx_data *iop3xx_adap)
 {
 	unsigned long cr = __raw_readl(iop3xx_adap->ioaddr + CR_OFFSET);
@@ -392,14 +402,10 @@ iop3xx_i2c_remove(struct platform_device *pdev)
 	struct i2c_algo_iop3xx_data *adapter_data =
 		(struct i2c_algo_iop3xx_data *)padapter->algo_data;
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	unsigned long cr = __raw_readl(adapter_data->ioaddr + CR_OFFSET);
 
-	/*
-	 * Disable the actual HW unit
-	 */
-	cr &= ~(IOP3XX_ICR_ALD_IE | IOP3XX_ICR_BERR_IE |
-		IOP3XX_ICR_RXFULL_IE | IOP3XX_ICR_TXEMPTY_IE);
-	__raw_writel(cr, adapter_data->ioaddr + CR_OFFSET);
+	i2c_del_adapter(padapter);
+	iop3xx_i2c_disable(adapter_data);
+	free_irq(adapter_data->irq, adapter_data);
 
 	iounmap(adapter_data->ioaddr);
 	release_mem_region(res->start, IOP3XX_I2C_IO_SIZE);
@@ -467,6 +473,7 @@ iop3xx_i2c_probe(struct platform_device *pdev)
 		ret = irq;
 		goto unmap;
 	}
+	adapter_data->irq = irq;
 	ret = request_irq(irq, iop3xx_i2c_irq_handler, 0,
 				pdev->name, adapter_data);
 
@@ -492,12 +499,18 @@ iop3xx_i2c_probe(struct platform_device *pdev)
 	iop3xx_i2c_reset(adapter_data);
 	iop3xx_i2c_enable(adapter_data);
 
-	platform_set_drvdata(pdev, new_adapter);
 	new_adapter->algo_data = adapter_data;
 
-	i2c_add_numbered_adapter(new_adapter);
+	ret = i2c_add_numbered_adapter(new_adapter);
+	if (ret)
+		goto disable;
+	platform_set_drvdata(pdev, new_adapter);
 
 	return 0;
+
+disable:
+	iop3xx_i2c_disable(adapter_data);
+	free_irq(adapter_data->irq, adapter_data);
 
 unmap:
 	iounmap(adapter_data->ioaddr);

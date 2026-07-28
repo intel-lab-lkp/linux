@@ -92,6 +92,7 @@ struct i2c_algo_iop3xx_data {
 	spinlock_t lock;
 	u32 SR_enabled, SR_received;
 	int id;
+	int irq;
 	struct gpio_desc *gpio_scl;
 	struct gpio_desc *gpio_sda;
 };
