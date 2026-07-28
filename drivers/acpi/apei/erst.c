@@ -862,6 +862,8 @@ static ssize_t __erst_read(u64 record_id, struct cper_record_header *record,
 		return rc;
 	rcd_tmp = erst_erange.vaddr + offset;
 	len = rcd_tmp->record_length;
+	if (offset > erst_erange.size || len > erst_erange.size - offset)
+		return -EIO;
 	if (len <= buflen)
 		memcpy(record, rcd_tmp, len);
 
