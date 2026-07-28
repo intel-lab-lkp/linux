@@ -44,6 +44,7 @@ struct hisi_hikey_usb {
 
 	struct mutex lock;
 	struct work_struct work;
+	bool removing;
 
 	struct notifier_block nb;
 };
@@ -129,17 +130,23 @@ static void relay_set_role_switch(struct work_struct *work)
 static int hub_usb_role_switch_set(struct usb_role_switch *sw, enum usb_role role)
 {
 	struct hisi_hikey_usb *hisi_hikey_usb = usb_role_switch_get_drvdata(sw);
+	int ret = 0;
 
-	if (!hisi_hikey_usb || !hisi_hikey_usb->dev_role_sw)
-		return -EINVAL;
+	if (!hisi_hikey_usb)
+		return -ENODEV;
 
 	mutex_lock(&hisi_hikey_usb->lock);
-	hisi_hikey_usb->role = role;
+	if (hisi_hikey_usb->removing || !hisi_hikey_usb->dev_role_sw) {
+		if (hisi_hikey_usb->removing)
+			usb_role_switch_set_drvdata(sw, NULL);
+		ret = -ENODEV;
+	} else {
+		hisi_hikey_usb->role = role;
+		schedule_work(&hisi_hikey_usb->work);
+	}
 	mutex_unlock(&hisi_hikey_usb->lock);
 
-	schedule_work(&hisi_hikey_usb->work);
-
-	return 0;
+	return ret;
 }
 
 static int hisi_hikey_usb_of_role_switch(struct platform_device *pdev,
@@ -243,7 +250,15 @@ static void hisi_hikey_usb_remove(struct platform_device *pdev)
 	struct hisi_hikey_usb *hisi_hikey_usb = platform_get_drvdata(pdev);
 
 	if (hisi_hikey_usb->hub_role_sw) {
+		mutex_lock(&hisi_hikey_usb->lock);
+		hisi_hikey_usb->removing = true;
+		mutex_unlock(&hisi_hikey_usb->lock);
+
+		/* Serialize with set callbacks and clear their private data. */
+		usb_role_switch_set_role(hisi_hikey_usb->hub_role_sw,
+					 USB_ROLE_NONE);
 		usb_role_switch_unregister(hisi_hikey_usb->hub_role_sw);
+		cancel_work_sync(&hisi_hikey_usb->work);
 
 		if (hisi_hikey_usb->dev_role_sw)
 			usb_role_switch_put(hisi_hikey_usb->dev_role_sw);
