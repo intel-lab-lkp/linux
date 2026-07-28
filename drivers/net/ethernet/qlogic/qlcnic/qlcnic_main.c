@@ -4221,12 +4221,12 @@ static int __init qlcnic_init_module(void)
 #endif
 
 	ret = pci_register_driver(&qlcnic_driver);
-	if (ret) {
 #ifdef CONFIG_INET
+	if (ret) {
 		unregister_inetaddr_notifier(&qlcnic_inetaddr_cb);
 		unregister_netdevice_notifier(&qlcnic_netdev_cb);
-#endif
 	}
+#endif
 
 	return ret;
 }
