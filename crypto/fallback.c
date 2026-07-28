@@ -9,13 +9,16 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/limits.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
 #include <linux/rtnetlink.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 
@@ -48,10 +51,12 @@ struct crypto_fallback {
 	struct attribute_group sysfs_group;
 	struct attribute **sysfs_attrs;
 	struct device_attribute enabled_attr;
+	struct kref refcount;
 	struct mutex lock; /* Serializes tuning and sysfs writes. */
-	struct fallback_alg *algs;
+	spinlock_t alg_lock; /* Protects algs and fallback_alg state. */
+	struct list_head algs;
+	struct module *owner;
 	unsigned int num_groups;
-	unsigned int num_algs;
 	bool enabled;
 };
 
@@ -422,6 +427,9 @@ static int crypto_fallback_tune_group(const struct crypto_fallback_group *group,
 	return 0;
 }
 
+static int fallback_register_algs(struct crypto_fallback *fallback);
+static void fallback_unregister_algs(struct crypto_fallback *fallback);
+
 static ssize_t fallback_enabled_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
@@ -451,9 +459,6 @@ static ssize_t fallback_enabled_store(struct device *dev,
 		goto out_unlock;
 
 	if (enabled) {
-		for (i = 0; i < fallback->num_groups; i++)
-			WRITE_ONCE(fallback->groups[i].threshold.value, 0);
-
 		for (i = 0; i < fallback->num_groups; i++) {
 			struct crypto_fallback_group_state *state;
 			int threshold;
@@ -463,9 +468,10 @@ static ssize_t fallback_enabled_store(struct device *dev,
 							 &threshold);
 			if (err) {
 				dev_warn(fallback->dev,
-					"%s benchmark failed: %d; using hardware\n",
-					state->group.name, err);
+					 "%s benchmark failed: %d; using hardware\n",
+					 state->group.name, err);
 				threshold = 0;
+				err = 0;
 			}
 			WRITE_ONCE(state->value, threshold);
 			dev_info(fallback->dev,
@@ -476,28 +482,39 @@ static ssize_t fallback_enabled_store(struct device *dev,
 		for (i = 0; i < fallback->num_groups; i++)
 			WRITE_ONCE(fallback->groups[i].threshold.value,
 				   fallback->groups[i].value);
+
+		if (!fallback->enabled) {
+			err = fallback_register_algs(fallback);
+			if (err) {
+				for (i = 0; i < fallback->num_groups; i++)
+					WRITE_ONCE(fallback->groups[i].threshold.value,
+						   0);
+				goto out_unlock;
+			}
+		}
 	} else {
+		WRITE_ONCE(fallback->enabled, false);
 		for (i = 0; i < fallback->num_groups; i++)
 			WRITE_ONCE(fallback->groups[i].threshold.value, 0);
+		fallback_unregister_algs(fallback);
 	}
 	WRITE_ONCE(fallback->enabled, enabled);
 
 out_unlock:
 	mutex_unlock(&fallback->lock);
 
-	return count;
+	return err ?: count;
 }
 
-static void crypto_fallback_free(struct crypto_fallback *fallback)
+static void crypto_fallback_free(struct kref *ref)
 {
+	struct crypto_fallback *fallback;
 	unsigned int i;
 
-	if (!fallback)
-		return;
+	fallback = container_of(ref, struct crypto_fallback, refcount);
 
 	for (i = 0; i < fallback->num_groups; i++)
 		kfree_const(fallback->groups[i].group.name);
-	kfree(fallback->algs);
 	kfree(fallback->sysfs_attrs);
 	kfree(fallback->groups);
 	mutex_destroy(&fallback->lock);
@@ -506,7 +523,8 @@ static void crypto_fallback_free(struct crypto_fallback *fallback)
 }
 
 static struct crypto_fallback *
-fallback_alloc(struct device *dev, const struct crypto_fallback_group *groups,
+fallback_alloc(struct module *owner, struct device *dev,
+	       const struct crypto_fallback_group *groups,
 	       unsigned int num_groups)
 {
 	struct crypto_fallback *fallback;
@@ -520,8 +538,12 @@ fallback_alloc(struct device *dev, const struct crypto_fallback_group *groups,
 	if (!fallback)
 		return ERR_PTR(-ENOMEM);
 
+	kref_init(&fallback->refcount);
 	mutex_init(&fallback->lock);
+	spin_lock_init(&fallback->alg_lock);
+	INIT_LIST_HEAD(&fallback->algs);
 	fallback->dev = get_device(dev);
+	fallback->owner = owner;
 	fallback->num_groups = num_groups;
 	fallback->groups =
 		kcalloc(num_groups, sizeof(*fallback->groups), GFP_KERNEL);
@@ -583,18 +605,9 @@ fallback_alloc(struct device *dev, const struct crypto_fallback_group *groups,
 	return fallback;
 
 err_free:
-	crypto_fallback_free(fallback);
+	kref_put(&fallback->refcount, crypto_fallback_free);
 
 	return ERR_PTR(err);
-}
-
-static void fallback_release(struct crypto_fallback *fallback)
-{
-	if (!fallback || IS_ERR(fallback))
-		return;
-
-	sysfs_remove_group(&fallback->dev->kobj, &fallback->sysfs_group);
-	crypto_fallback_free(fallback);
 }
 
 static bool fallback_use_software(const struct fallback_threshold *threshold,
@@ -630,16 +643,107 @@ struct fallback_ahash_state {
 	u8 state[] CRYPTO_MINALIGN_ATTR;
 };
 
+/*
+ * Allocate proxy algorithms per enable cycle because their destruction can be
+ * deferred until transforms allocated before disable release them.
+ */
 struct fallback_alg {
+	struct list_head list;
+	struct crypto_fallback *fallback;
+	struct kref refcount;
 	const struct fallback_threshold *threshold;
 	char driver_name[CRYPTO_MAX_ALG_NAME];
 	enum crypto_fallback_alg_type type;
+	bool registration_complete;
+	bool registered;
+	bool dead;
 	union {
 		struct skcipher_alg skcipher;
 		struct aead_alg aead;
 		struct ahash_alg ahash;
 	} alg;
 };
+
+static void fallback_alg_release(struct kref *ref)
+{
+	struct fallback_alg *alg;
+	struct crypto_fallback *fallback;
+
+	alg = container_of(ref, struct fallback_alg, refcount);
+	fallback = alg->fallback;
+	kfree(alg);
+	kref_put(&fallback->refcount, crypto_fallback_free);
+}
+
+static void fallback_alg_destroy(struct fallback_alg *alg)
+{
+	struct crypto_fallback *fallback = alg->fallback;
+	unsigned long flags;
+	bool release = false;
+
+	spin_lock_irqsave(&fallback->alg_lock, flags);
+	alg->dead = true;
+	alg->registered = false;
+	if (alg->registration_complete) {
+		list_del_init(&alg->list);
+		release = true;
+	}
+	spin_unlock_irqrestore(&fallback->alg_lock, flags);
+
+	if (release)
+		kref_put(&alg->refcount, fallback_alg_release);
+}
+
+static void fallback_skcipher_destroy(struct crypto_alg *base)
+{
+	struct skcipher_alg *alg;
+
+	alg = container_of(base, struct skcipher_alg, base);
+	fallback_alg_destroy(container_of(alg, struct fallback_alg,
+					  alg.skcipher));
+}
+
+static void fallback_aead_destroy(struct crypto_alg *base)
+{
+	struct aead_alg *alg;
+
+	alg = container_of(base, struct aead_alg, base);
+	fallback_alg_destroy(container_of(alg, struct fallback_alg, alg.aead));
+}
+
+static void fallback_ahash_destroy(struct crypto_alg *base)
+{
+	struct hash_alg_common *halg;
+	struct ahash_alg *alg;
+
+	halg = container_of(base, struct hash_alg_common, base);
+	alg = container_of(halg, struct ahash_alg, halg);
+	fallback_alg_destroy(container_of(alg, struct fallback_alg, alg.ahash));
+}
+
+static int fallback_alg_complete_registration(struct fallback_alg *alg, int err)
+{
+	struct crypto_fallback *fallback = alg->fallback;
+	unsigned long flags;
+	bool release = false;
+
+	spin_lock_irqsave(&fallback->alg_lock, flags);
+	alg->registration_complete = true;
+	if (err || alg->dead) {
+		list_del_init(&alg->list);
+		release = true;
+		if (!err)
+			err = -ENODEV;
+	} else {
+		alg->registered = true;
+	}
+	spin_unlock_irqrestore(&fallback->alg_lock, flags);
+
+	if (release)
+		kref_put(&alg->refcount, fallback_alg_release);
+
+	return err;
+}
 
 static struct fallback_alg *fallback_skcipher_alg(struct crypto_skcipher *tfm)
 {
@@ -1068,6 +1172,7 @@ static int fallback_register_skcipher(struct fallback_alg *entry,
 	if (err)
 		goto out_free_software;
 	fallback_init_base(&alg->base, &hcommon->base, &scommon->base, owner);
+	alg->base.cra_destroy = fallback_skcipher_destroy;
 	alg->min_keysize = max(hcommon->min_keysize, scommon->min_keysize);
 	alg->max_keysize = min(hcommon->max_keysize, scommon->max_keysize);
 	if (alg->min_keysize > alg->max_keysize) {
@@ -1129,6 +1234,7 @@ static int fallback_register_aead(struct fallback_alg *entry,
 	if (err)
 		goto out_free_software;
 	fallback_init_base(&alg->base, &halg->base, &salg->base, owner);
+	alg->base.cra_destroy = fallback_aead_destroy;
 	alg->ivsize = halg->ivsize;
 	alg->maxauthsize = min(halg->maxauthsize, salg->maxauthsize);
 	alg->chunksize = max(halg->chunksize, salg->chunksize);
@@ -1187,6 +1293,7 @@ static int fallback_register_ahash(struct fallback_alg *entry,
 		goto out_free_software;
 	fallback_init_base(&alg->halg.base, &hcommon->base, &scommon->base,
 			   owner);
+	alg->halg.base.cra_destroy = fallback_ahash_destroy;
 	alg->halg.base.cra_flags |= CRYPTO_ALG_REQ_VIRT;
 	alg->halg.base.cra_flags |= hcommon->base.cra_flags &
 				    CRYPTO_ALG_OPTIONAL_KEY;
@@ -1246,87 +1353,124 @@ static void fallback_unregister_alg(struct fallback_alg *alg)
 	}
 }
 
+static void fallback_unregister_algs(struct crypto_fallback *fallback)
+{
+	struct fallback_alg *alg;
+	struct fallback_alg *candidate;
+	unsigned long flags;
+
+	for (;;) {
+		alg = NULL;
+		spin_lock_irqsave(&fallback->alg_lock, flags);
+		list_for_each_entry(candidate, &fallback->algs, list) {
+			if (!candidate->registered)
+				continue;
+
+			alg = candidate;
+			alg->registered = false;
+			kref_get(&alg->refcount);
+			break;
+		}
+		spin_unlock_irqrestore(&fallback->alg_lock, flags);
+
+		if (!alg)
+			break;
+
+		fallback_unregister_alg(alg);
+		kref_put(&alg->refcount, fallback_alg_release);
+	}
+}
+
+static int fallback_register_algs(struct crypto_fallback *fallback)
+{
+	unsigned int i, j;
+	int err;
+
+	for (i = 0; i < fallback->num_groups; i++) {
+		const struct crypto_fallback_group *group;
+
+		group = &fallback->groups[i].group;
+		for (j = 0; j < group->num_algs; j++) {
+			struct fallback_alg *alg;
+			unsigned long flags;
+
+			alg = kzalloc_obj(*alg, GFP_KERNEL);
+			if (!alg) {
+				err = -ENOMEM;
+				goto err_unregister_algs;
+			}
+
+			INIT_LIST_HEAD(&alg->list);
+			kref_init(&alg->refcount);
+			alg->fallback = fallback;
+			alg->threshold = &fallback->groups[i].threshold;
+			alg->type = group->benchmark.type;
+			if (strscpy(alg->driver_name, group->algs[j],
+				    sizeof(alg->driver_name)) < 0) {
+				kfree(alg);
+				err = -ENAMETOOLONG;
+				goto err_unregister_algs;
+			}
+
+			kref_get(&fallback->refcount);
+			spin_lock_irqsave(&fallback->alg_lock, flags);
+			list_add_tail(&alg->list, &fallback->algs);
+			spin_unlock_irqrestore(&fallback->alg_lock, flags);
+
+			err = fallback_register_alg(alg, fallback->owner);
+			err = fallback_alg_complete_registration(alg, err);
+			if (err == -ENOENT)
+				continue;
+			if (err)
+				goto err_unregister_algs;
+		}
+	}
+
+	return 0;
+
+err_unregister_algs:
+	fallback_unregister_algs(fallback);
+
+	return err;
+}
+
 struct crypto_fallback *
 crypto_fallback_register(struct module *owner, struct device *dev,
 			 const struct crypto_fallback_group *groups,
 			 unsigned int num_groups)
 {
-	struct crypto_fallback *fallback;
-	unsigned int num_algs = 0;
 	unsigned int i, j;
-	int err;
 
-	if (!dev || !groups || !num_groups)
+	if (!owner || !dev || !groups || !num_groups)
 		return ERR_PTR(-EINVAL);
 
 	for (i = 0; i < num_groups; i++) {
 		if (!groups[i].algs || !groups[i].num_algs)
 			return ERR_PTR(-EINVAL);
-		if (groups[i].num_algs > UINT_MAX - num_algs)
-			return ERR_PTR(-EOVERFLOW);
-		num_algs += groups[i].num_algs;
+		for (j = 0; j < groups[i].num_algs; j++)
+			if (!groups[i].algs[j])
+				return ERR_PTR(-EINVAL);
 	}
 
-	fallback = fallback_alloc(dev, groups, num_groups);
-	if (IS_ERR(fallback))
-		return fallback;
-
-	fallback->algs = kcalloc(num_algs, sizeof(*fallback->algs), GFP_KERNEL);
-	if (!fallback->algs) {
-		err = -ENOMEM;
-		goto err_release;
-	}
-	for (i = 0; i < num_groups; i++) {
-		const struct fallback_threshold *threshold;
-
-		threshold = &fallback->groups[i].threshold;
-		for (j = 0; j < groups[i].num_algs; j++) {
-			const char *driver_name = groups[i].algs[j];
-			struct fallback_alg *alg =
-				&fallback->algs[fallback->num_algs];
-
-			if (!driver_name) {
-				err = -EINVAL;
-				goto err_unregister_algs;
-			}
-
-			alg->type = groups[i].benchmark.type;
-			alg->threshold = threshold;
-			if (strscpy(alg->driver_name, driver_name,
-				    sizeof(alg->driver_name)) < 0) {
-				err = -ENAMETOOLONG;
-				goto err_unregister_algs;
-			}
-
-			err = fallback_register_alg(alg, owner);
-			if (err == -ENOENT)
-				continue;
-			if (err)
-				goto err_unregister_algs;
-			fallback->num_algs++;
-		}
-	}
-
-	return fallback;
-
-err_unregister_algs:
-	while (fallback->num_algs)
-		fallback_unregister_alg(&fallback->algs[--fallback->num_algs]);
-err_release:
-	fallback_release(fallback);
-
-	return ERR_PTR(err);
+	return fallback_alloc(owner, dev, groups, num_groups);
 }
 EXPORT_SYMBOL_GPL(crypto_fallback_register);
 
 void crypto_fallback_unregister(struct crypto_fallback *fallback)
 {
+	unsigned int i;
+
 	if (!fallback || IS_ERR(fallback))
 		return;
 
-	while (fallback->num_algs)
-		fallback_unregister_alg(&fallback->algs[--fallback->num_algs]);
-	fallback_release(fallback);
+	sysfs_remove_group(&fallback->dev->kobj, &fallback->sysfs_group);
+	mutex_lock(&fallback->lock);
+	WRITE_ONCE(fallback->enabled, false);
+	for (i = 0; i < fallback->num_groups; i++)
+		WRITE_ONCE(fallback->groups[i].threshold.value, 0);
+	fallback_unregister_algs(fallback);
+	mutex_unlock(&fallback->lock);
+	kref_put(&fallback->refcount, crypto_fallback_free);
 }
 EXPORT_SYMBOL_GPL(crypto_fallback_unregister);
 
