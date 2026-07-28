@@ -133,6 +133,32 @@ The driver listens for events from the ``HID_EVENT20`` class
 (GUID: ``{46c93e13-ee9b-4262-8488-563bca757fef}``). These events are triggered
 by hotkeys or system state changes (e.g., plugging in AC power).
 
+MIFS v2 firmware variant
+========================
+
+Some newer machines (e.g. Xiaomi Book Pro 14 2026, REDMI Book Pro 14 2025)
+ship a reduced MIFS firmware, called "v2" here. Its WMAA method implements
+only function groups 0x0800/0x0a00/0x0c00/0x1000, so of the command table
+above only SystemPerMode (0x08) and a few state toggles exist. Differences:
+
+* SystemPerMode (0x08) reports raw QFAN EC codes instead of the 0..3
+  enumeration: 2 = Quiet, 3 = Balanced, 4 = Speed, 9/10 = Extreme
+  (SMM-backed). The driver maps these to platform profiles and detects the
+  variant at probe time when the reported mode is outside the v1 range.
+* There is no WMI fan-speed or CPU-temperature function. The two fan
+  tachometers live in the EC shared-memory window at 0xFE0B0300 (DSDT
+  \_SB.PC00.LPCB.Q_EC region "ERAM") as little-endian u16 RPM values at
+  offsets 0x69 and 0x6B (0 = fan stopped). The EC controls the fans
+  autonomously; no OS fan-speed override exists on this firmware.
+* The firmware never defines ECON, so \_SB.PC00.LPCB.Q_EC._STA fails, the
+  ACPI EC driver never binds and EC query handlers (lid switch _Q0C/_Q0D,
+  hotkey queries) never run. On DMI-matched models the driver polls the
+  LSTE lid bit (offset 0x14, bit 0) in the EC window and evaluates
+  _Q0C/_Q0D itself so the PNP0C0D lid device keeps emitting SW_LID.
+* The reply status word (bytes 0-1 of OutData, SGER) is 0x8000 on success
+  and 0xe000 for unknown/unsupported functions; the driver turns the
+  latter into -EOPNOTSUPP.
+
 Event Structure
 ---------------
 
