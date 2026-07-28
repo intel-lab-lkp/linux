@@ -28277,6 +28277,13 @@ F:	drivers/usb/typec/tcpm/tcpm.c
 F:	include/linux/usb/tcpci.h
 F:	include/linux/usb/tcpm.h
 
+USB TYPEC PS5169 MUX DRIVER
+M:	Esteban Urrutia <esteuwu@proton.me>
+L:	linux-usb@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/usb/parade,ps5169.yaml
+F:	drivers/usb/typec/mux/ps5169.c
+
 USB TYPEC TUSB1046 MUX DRIVER
 M:	Romain Gantois <romain.gantois@bootlin.com>
 L:	linux-usb@vger.kernel.org
