@@ -11,6 +11,7 @@
 #include <drm/ttm/ttm_tt.h>
 
 #include "xe_bo.h"
+#include "xe_module.h"
 #include "xe_pm.h"
 #include "xe_shrinker.h"
 
@@ -54,6 +55,30 @@ xe_shrinker_mod_pages(struct xe_shrinker *shrinker, long shrinkable, long purgea
 	write_unlock(&shrinker->lock);
 }
 
+static bool xe_shrinker_skip_bound_wc(struct ttm_buffer_object *ttm_bo,
+				      const struct xe_bo_shrink_flags flags)
+{
+	struct xe_bo *bo;
+
+	if (flags.purge || xe_modparam.allow_bound_wc_shrink ||
+	    !xe_bo_is_xe_bo(ttm_bo))
+		return false;
+
+	bo = ttm_to_xe_bo(ttm_bo);
+
+	/*
+	 * Restoring a backed-up WC BO changes freshly allocated WB pages to WC.
+	 * On x86 that runs CPA cache/TLB flushes synchronously while validation
+	 * holds this BO's dma-resv. A VM-bound BO is also likely to be reused by
+	 * a following EXEC, so reclaiming it can turn moderate memory pressure
+	 * into a multi-client reservation-lock stall. Keep that working set
+	 * resident; purgeable objects and objects after VM_UNBIND remain
+	 * reclaimable.
+	 */
+	return ttm_bo->ttm->caching == ttm_write_combined &&
+		xe_bo_is_vm_bound(bo);
+}
+
 static s64 __xe_shrinker_walk(struct xe_device *xe,
 			      struct ttm_operation_ctx *ctx,
 			      const struct xe_bo_shrink_flags flags,
@@ -75,6 +100,9 @@ static s64 __xe_shrinker_walk(struct xe_device *xe,
 			continue;
 
 		ttm_bo_lru_for_each_reserved_guarded(&curs, man, &arg, ttm_bo) {
+			if (xe_shrinker_skip_bound_wc(ttm_bo, flags))
+				continue;
+
 			if (!ttm_bo_shrink_suitable(ttm_bo, ctx))
 				continue;
 
