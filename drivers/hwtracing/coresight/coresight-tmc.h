@@ -13,6 +13,7 @@
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/crc32.h>
+#include "coresight-etm-perf.h"
 
 #define TMC_RSZ			0x004
 #define TMC_STS			0x00c
@@ -248,6 +249,7 @@ struct tmc_resrv_buf {
  *		(after crash) by default.
  * @crash_mdata: Reserved memory for storing tmc crash metadata.
  *		 Used by ETR/ETF.
+ * @perf_session: Session identity of the Perf event currently using this sink.
  */
 struct tmc_drvdata {
 	struct clk		*atclk;
@@ -278,6 +280,7 @@ struct tmc_drvdata {
 	struct etr_buf		*perf_buf;
 	struct tmc_resrv_buf	resrv_buf;
 	struct tmc_resrv_buf	crash_mdata;
+	struct etm_session_id	perf_session;
 };
 
 struct etr_buf_operations {

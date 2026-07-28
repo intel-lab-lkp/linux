@@ -715,4 +715,5 @@ int coresight_etm_get_trace_id(struct coresight_device *csdev, enum cs_mode mode
 			       struct coresight_device *sink);
 int coresight_get_enable_clocks(struct device *dev, struct clk **pclk,
 				struct clk **atclk);
+
 #endif		/* _LINUX_COREISGHT_H */

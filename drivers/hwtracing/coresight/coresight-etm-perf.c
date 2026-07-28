@@ -251,6 +251,9 @@ static void free_event_data(struct work_struct *work)
 	}
 
 	free_percpu(event_data->path);
+	put_pid(event_data->session_id.owner);
+	if (event_data->session_id.target)
+		put_task_struct(event_data->session_id.target);
 	kfree(event_data);
 }
 
@@ -452,6 +455,16 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 		event_data->cfg_hash = cfg_hash;
 	}
 
+	/*
+	 * Save an identity that determines if sessions are equivalent enough
+	 * for shared sinks to receive trace from other events.
+	 */
+	event_data->session_id.owner = get_task_pid(current, PIDTYPE_TGID);
+	if (event->attach_state & PERF_ATTACH_TASK) {
+		event_data->session_id.target = get_task_struct(event->hw.target);
+		event_data->session_id.inherit = event->attr.inherit;
+		event_data->session_id.inherit_thread = event->attr.inherit_thread;
+	}
 	mask = &event_data->mask;
 
 	/*
@@ -1078,3 +1091,43 @@ void etm_perf_flush_workqueue(void)
 {
 	flush_workqueue(etm_free_wq);
 }
+
+bool etm_perf_compare_session(struct etm_session_id *a,
+			      struct etm_session_id *b)
+{
+	return a->owner == b->owner &&
+	       a->target == b->target &&
+	       a->inherit == b->inherit &&
+	       a->inherit_thread == b->inherit_thread;
+}
+EXPORT_SYMBOL_GPL(etm_perf_compare_session);
+
+/*
+ * Returns true if a sink that's potentially connected to multiple ETMs can be
+ * used in parallel with another event.
+ */
+bool etm_perf_sink_can_share(struct coresight_device *csdev,
+			     struct etm_session_id *owner,
+			     struct perf_output_handle *new)
+{
+	struct etm_event_data *new_event_data = perf_get_aux(new);
+	struct etm_session_id *new_id = &new_event_data->session_id;
+
+	/* First user can always use the sink */
+	if (csdev->refcnt == 0)
+		return true;
+
+	/*
+	 * Only allow sharing if both events have the same owner and are
+	 * expected to follow the exact same set of processes. For CPU wide
+	 * events, both new and current 'target's are NULL so sharing between
+	 * all events is allowed.
+	 *
+	 * When 'target' mismatches, trace from two different PERF_ATTACH_TASK
+	 * events is prevented from appearing in a buffer targeting another
+	 * process. Inherit flags change which set of processes are followed,
+	 * even for events with the same 'target', so they must also be checked.
+	 */
+	return etm_perf_compare_session(owner, new_id);
+}
+EXPORT_SYMBOL_GPL(etm_perf_sink_can_share);

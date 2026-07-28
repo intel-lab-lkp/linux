@@ -82,6 +82,13 @@ struct etm_filters {
 	bool			ssstatus;
 };
 
+struct etm_session_id {
+	struct pid *owner;
+	struct task_struct *target;
+	bool inherit;
+	bool inherit_thread;
+};
+
 /**
  * struct etm_event_data - Coresight specifics associated to an event
  * @work:		Handle to free allocated memory outside IRQ context.
@@ -90,6 +97,7 @@ struct etm_filters {
  * @snk_config:		The sink configuration.
  * @cfg_hash:		The hash id of any coresight config selected.
  * @path:		An array of path, each slot for one CPU.
+ * @session_id:		Reference to the session that called setup_aux()
  */
 struct etm_event_data {
 	struct work_struct work;
@@ -98,6 +106,7 @@ struct etm_event_data {
 	void *snk_config;
 	u32 cfg_hash;
 	struct coresight_path * __percpu *path;
+	struct etm_session_id session_id;
 };
 
 int etm_perf_symlink(struct coresight_device *csdev, bool link);
@@ -117,5 +126,10 @@ void etm_perf_del_symlink_cscfg(struct cscfg_config_desc *config_desc);
 int __init etm_perf_init(void);
 void etm_perf_exit(void);
 void etm_perf_flush_workqueue(void);
+bool etm_perf_compare_session(struct etm_session_id *a,
+			      struct etm_session_id *b);
+bool etm_perf_sink_can_share(struct coresight_device *csdev,
+			     struct etm_session_id *owner,
+			     struct perf_output_handle *new);
 
 #endif
