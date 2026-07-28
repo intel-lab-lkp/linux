@@ -1383,7 +1383,6 @@ static void nxp_fspi_cleanup(void *data)
 	/* disable the hardware */
 	fspi_writel(f, FSPI_MCR0_MDIS, f->iobase + FSPI_MCR0);
 
-	pm_runtime_disable(f->dev);
 	pm_runtime_put_noidle(f->dev);
 	nxp_fspi_clk_disable_unprep(f);
 
@@ -1453,12 +1452,15 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return dev_err_probe(dev, irq, "Failed to get irq source");
 
-	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, FSPI_RPM_TIMEOUT);
 	pm_runtime_use_autosuspend(dev);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
 
 	/* enable clock */
-	ret = pm_runtime_get_sync(f->dev);
+	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to enable clock");
 
@@ -1468,10 +1470,6 @@ static int nxp_fspi_probe(struct platform_device *pdev)
 		fspi_writel(f, reg, f->iobase + FSPI_INTR);
 
 	nxp_fspi_default_setup(f);
-
-	ret = pm_runtime_put_sync(dev);
-	if (ret < 0)
-		return dev_err_probe(dev, ret, "Failed to disable clock");
 
 	init_completion(&f->c);
 	ret = devm_request_irq(dev, irq,
