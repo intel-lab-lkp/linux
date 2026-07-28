@@ -69,6 +69,7 @@ static int icna3512_init_sequence(struct panel_info *pinfo)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = pinfo->dsi };
 	struct drm_dsc_picture_parameter_set pps;
+	u8 *pps_ptr = (u8 *)&pps;
 
 	pinfo->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
@@ -91,7 +92,14 @@ static int icna3512_init_sequence(struct panel_info *pinfo)
 	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0x48, 0x20);
 
 	drm_dsc_pps_payload_pack(&pps, &pinfo->desc->dsc);
-	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
+	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0x9F, 0x01);
+	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xC6, 0x11, 0x88);
+
+	mipi_dsi_dcs_write(dsi_ctx.dsi, 0xC7, pps_ptr, 32);
+	mipi_dsi_dcs_write(dsi_ctx.dsi, 0xC8, pps_ptr + 32, 32);
+	mipi_dsi_dcs_write(dsi_ctx.dsi, 0xC9, pps_ptr + 64, 24);
+
+	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xFD, 0xA5, 0xA5);
 
 	mipi_dsi_msleep(&dsi_ctx, 20);
 
@@ -104,6 +112,7 @@ static int icna3520_init_sequence(struct panel_info *pinfo)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = pinfo->dsi };
 	struct drm_dsc_picture_parameter_set pps;
+	u8 *pps_ptr = (u8 *)&pps;
 
 	pinfo->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
@@ -133,7 +142,14 @@ static int icna3520_init_sequence(struct panel_info *pinfo)
 	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xB2, 0x24);
 
 	drm_dsc_pps_payload_pack(&pps, &pinfo->desc->dsc);
-	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
+	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0x9F, 0x01);
+	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xC0, 0x1A, 0x71);
+
+	mipi_dsi_dcs_write(dsi_ctx.dsi, 0xC1, pps_ptr, 32);
+	mipi_dsi_dcs_write(dsi_ctx.dsi, 0xC2, pps_ptr + 32, 32);
+	mipi_dsi_dcs_write(dsi_ctx.dsi, 0xC3, pps_ptr + 64, 24);
+
+	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xFD, 0xA5, 0xA5);
 
 	mipi_dsi_msleep(&dsi_ctx, 20);
 
