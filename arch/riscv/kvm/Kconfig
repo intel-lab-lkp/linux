@@ -37,4 +37,16 @@ config KVM
 
 	  If unsure, say N.
 
+config PTDUMP_GSTAGE_DEBUGFS
+	bool "Present the gstage pagetables to debugfs"
+	depends on KVM && DEBUG_KERNEL && DEBUG_FS && PTDUMP_DEBUGFS
+	default n
+	help
+	  Say Y here if you want to show the RISC-V KVM gstage guest
+	  page tables in debugfs under each VM's debugfs directory as
+	  a file named "gstage_page_tables". This allows inspection of
+	  the second-stage address translation setup for each guest.
+
+	  If unsure, say N.
+
 endif # VIRTUALIZATION
