@@ -292,9 +292,12 @@ int i915_gem_object_userptr_submit_init(struct drm_i915_gem_object *obj)
 		obj->userptr.notifier_seq = notifier_seq;
 		pvec = NULL;
 		ret = ____i915_gem_object_get_pages(obj);
+		if (ret)
+			i915_gem_object_userptr_drop_ref(obj);
 	}
 
-	obj->userptr.page_ref--;
+	if (!ret)
+		obj->userptr.page_ref--;
 
 out_unlock:
 	i915_gem_object_unlock(obj);
