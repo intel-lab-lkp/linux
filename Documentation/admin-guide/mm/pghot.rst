@@ -56,7 +56,7 @@ Path: /proc/sys/vm/pghot_target_nid
 Path: /proc/sys/vm/pghot_freq_threshold
 
 - Minimum access frequency before a page is marked ready for promotion.
-  Range is 1 to 3 in default mode.
+  Range is 1 to 3 in default mode and 1 to 7 in precision mode.
 - Default: 2
 - Example:
   # sysctl vm.pghot_freq_threshold=1
@@ -68,7 +68,7 @@ Path: /proc/sys/vm/pghot_promote_freq_window_ms
 - Controls the time window (in ms) for counting access frequency. A page is
   considered hot only when **pghot_freq_threshold** number of accesses occur
   with this time period.
-- Default: 3000 (3 seconds)
+- Default: 3000 (3 seconds) in default mode and 5000 (5s) in precision mode.
 - Example:
   # sysctl vm.pghot_promote_freq_window_ms=3000
 

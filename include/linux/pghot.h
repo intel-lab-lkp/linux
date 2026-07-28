@@ -37,8 +37,40 @@ DECLARE_STATIC_KEY_FALSE(pghot_src_hwhints);
 
 #define PGHOT_DEFAULT_NODE		0
 
+#if defined(CONFIG_PGHOT_PRECISE)
 #define PGHOT_FREQ_WINDOW_MIN		(1 * MSEC_PER_SEC)
-#define PGHOT_FREQ_WINDOW_DEFAULT	(3 * MSEC_PER_SEC)
+#define PGHOT_FREQ_WINDOW_DEFAULT	(5 * MSEC_PER_SEC)
+
+/*
+ * Bits 0-26 are used to store nid, frequency and time.
+ * Bits 27-30 are unused now.
+ * Bit 31 is used to indicate the page is ready for migration.
+ */
+#define PGHOT_MIGRATE_READY		31
+
+#define PGHOT_NID_WIDTH			10
+#define PGHOT_FREQ_WIDTH		3
+/* time is stored in 14 bits which can represent up to 16s with HZ=1000 */
+#define PGHOT_TIME_WIDTH		14
+
+#define PGHOT_NID_SHIFT			0
+#define PGHOT_FREQ_SHIFT		(PGHOT_NID_SHIFT + PGHOT_NID_WIDTH)
+#define PGHOT_TIME_SHIFT		(PGHOT_FREQ_SHIFT + PGHOT_FREQ_WIDTH)
+
+#define PGHOT_NID_MASK			GENMASK(PGHOT_NID_WIDTH - 1, 0)
+#define PGHOT_FREQ_MASK			GENMASK(PGHOT_FREQ_WIDTH - 1, 0)
+#define PGHOT_TIME_MASK			GENMASK(PGHOT_TIME_WIDTH - 1, 0)
+
+#define PGHOT_NID_MAX			((1 << PGHOT_NID_WIDTH) - 1)
+#define PGHOT_FREQ_MAX			((1 << PGHOT_FREQ_WIDTH) - 1)
+#define PGHOT_TIME_MAX			((1 << PGHOT_TIME_WIDTH) - 1)
+#define PGHOT_FREQ_WINDOW_MAX		PGHOT_TIME_MAX
+
+typedef u32 phi_t;
+
+#else	/* !CONFIG_PGHOT_PRECISE */
+#define PGHOT_FREQ_WINDOW_MIN		(1 * MSEC_PER_SEC)
+#define PGHOT_FREQ_WINDOW_DEFAULT       (3 * MSEC_PER_SEC)
 
 /*
  * Bits 0-6 are used to store frequency and time.
@@ -65,6 +97,11 @@ DECLARE_STATIC_KEY_FALSE(pghot_src_hwhints);
 #define PGHOT_FREQ_WINDOW_MAX		PGHOT_TIME_BUCKETS_MASK
 
 typedef u8 phi_t;
+
+static_assert(MAX_NUMNODES <= (1 << PGHOT_NID_WIDTH),
+	      "pghot precise nid field too narrow for MAX_NUMNODES");
+
+#endif /* CONFIG_PGHOT_PRECISE */
 
 #define PGHOT_RECORD_SIZE		sizeof(phi_t)
 
