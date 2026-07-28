@@ -17,10 +17,11 @@
 #include "clk-exynos-arm64.h"
 
 /* NOTE: Must be equal to the last clock ID increased by one */
-#define CLKS_NR_TOP                     (CLKCMU_DOUT_HSI_UFS_EMBD + 1)
+#define CLKS_NR_TOP                     (CLKCMU_DOUT_USB_USB20DRD + 1)
 #define CLKS_NR_PERIC                   (CLK_GOUT_USI_PERIC_IPCLKPORT_PCLK + 1)
 #define CLKS_NR_PERIS                   (CLK_GOUT_WDT1_PERIS_IPCLKPORT_PCLK + 1)
 #define CLKS_NR_HSI                     (CLK_GOUT_SYSREG_HSI_IPCLKPORT_PCLK  + 1)
+#define CLKS_NR_USB                     (CLK_GOUT_SYSREG_USB_IPCLKPORT_PCLK + 1)
 
 /* ---- CMU_TOP --------------------------------------------------------- */
 
@@ -62,6 +63,10 @@
 #define CMU_TOP_CLK_CON_MUX_CLKCMU_HSI_UFS_EMBD              0x1054
 #define CMU_TOP_CLK_CON_DIV_CLKCMU_HSI_NOC                   0x1850
 #define CMU_TOP_CLK_CON_DIV_CLKCMU_HSI_UFS_EMBD              0x1854
+#define CMU_TOP_CLK_CON_MUX_CLKCMU_USB_NOC                   0x1088
+#define CMU_TOP_CLK_CON_MUX_CLKCMU_USB_USB20DRD              0x108c
+#define CMU_TOP_CLK_CON_DIV_CLKCMU_USB_NOC                   0x1888
+#define CMU_TOP_CLK_CON_DIV_CLKCMU_USB_USB20DRD              0x188c
 
 static const unsigned long top_clk_regs[] __initconst = {
 	PLL_LOCKTIME_PLL_MMC,
@@ -96,6 +101,10 @@ static const unsigned long top_clk_regs[] __initconst = {
 	CMU_TOP_CLK_CON_MUX_CLKCMU_HSI_UFS_EMBD,
 	CMU_TOP_CLK_CON_DIV_CLKCMU_HSI_NOC,
 	CMU_TOP_CLK_CON_DIV_CLKCMU_HSI_UFS_EMBD,
+	CMU_TOP_CLK_CON_MUX_CLKCMU_USB_NOC,
+	CMU_TOP_CLK_CON_MUX_CLKCMU_USB_USB20DRD,
+	CMU_TOP_CLK_CON_DIV_CLKCMU_USB_NOC,
+	CMU_TOP_CLK_CON_DIV_CLKCMU_USB_USB20DRD,
 };
 
 static const struct samsung_pll_clock top_pll_clks[] __initconst = {
@@ -146,6 +155,14 @@ PNAME(mout_clkcmu_hsi_ufs_embd_p)            = { "dout_shared0_div2", "dout_shar
 						"dout_shared1_div2", "dout_shared1_div3",
 						"dout_shared2_div2", "dout_shared2_div3",
 						"dout_shared3_div2", "dout_shared3_div3"};
+PNAME(mout_clkcmu_usb_noc_p)            = { "dout_shared0_div2", "dout_shared0_div3",
+						"dout_shared0_div4", "dout_shared1_div3",
+						"dout_shared2_div2", "dout_shared2_div3",
+						"dout_shared3_div2", "dout_shared3_div3"};
+PNAME(mout_clkcmu_usb_usb20drd_p)            = { "dout_shared0_div2", "dout_shared0_div3",
+						"dout_shared0_div4", "dout_shared1_div3",
+						"dout_shared2_div2", "dout_shared2_div3",
+						"dout_shared3_div2", "dout_shared3_div3"};
 
 static const struct samsung_mux_clock top_mux_clks[] __initconst = {
 	MUX(MOUT_SHARED0_PLL, "mout_shared0_pll", mout_shared0_pll_p,
@@ -174,6 +191,10 @@ static const struct samsung_mux_clock top_mux_clks[] __initconst = {
 	    mout_clkcmu_hsi_noc_p, CMU_TOP_CLK_CON_MUX_CLKCMU_HSI_NOC, 0, 3),
 	MUX(CLKCMU_MOUT_HSI_UFS_EMBD, "mout_clkcmu_hsi_ufs_embd",
 	    mout_clkcmu_hsi_ufs_embd_p, CMU_TOP_CLK_CON_MUX_CLKCMU_HSI_UFS_EMBD, 0, 3),
+	MUX(CLKCMU_MOUT_USB_NOC, "mout_clkcmu_usb_noc",
+	    mout_clkcmu_usb_noc_p, CMU_TOP_CLK_CON_MUX_CLKCMU_USB_NOC, 0, 3),
+	MUX(CLKCMU_MOUT_USB_USB20DRD, "mout_clkcmu_usb_usb20drd",
+	    mout_clkcmu_usb_usb20drd_p, CMU_TOP_CLK_CON_MUX_CLKCMU_USB_USB20DRD, 0, 3),
 };
 
 static const struct samsung_div_clock top_div_clks[] __initconst = {
@@ -198,6 +219,12 @@ static const struct samsung_div_clock top_div_clks[] __initconst = {
 	DIV(CLKCMU_DOUT_HSI_UFS_EMBD, "dout_clkcmu_hsi_ufs_embd",
 	    "mout_clkcmu_hsi_ufs_embd", CMU_TOP_CLK_CON_DIV_CLKCMU_HSI_UFS_EMBD,
 	    0, 4),
+	DIV(CLKCMU_DOUT_USB_NOC, "dout_clkcmu_usb_noc",
+	    "mout_clkcmu_usb_noc", CMU_TOP_CLK_CON_DIV_CLKCMU_USB_NOC,
+	    0, 4),
+	DIV(CLKCMU_DOUT_USB_USB20DRD, "dout_clkcmu_usb_usb20drd",
+	    "mout_clkcmu_usb_usb20drd", CMU_TOP_CLK_CON_DIV_CLKCMU_USB_USB20DRD,
+	    0, 5),
 };
 
 static const struct samsung_fixed_factor_clock top_fixed_factor_clks[] __initconst = {
@@ -249,6 +276,10 @@ static const struct samsung_fixed_factor_clock top_fixed_factor_clks[] __initcon
 		"mout_mmc_pll", 1, 2, 0),
 };
 
+static const struct samsung_fixed_rate_clock top_fixed_rate_clks[] __initconst = {
+	FRATE(0, "oscclk_usb_link", NULL, 0, 19200000),
+};
+
 static const struct samsung_cmu_info top_cmu_info __initconst = {
 	.pll_clks		= top_pll_clks,
 	.nr_pll_clks		= ARRAY_SIZE(top_pll_clks),
@@ -258,6 +289,8 @@ static const struct samsung_cmu_info top_cmu_info __initconst = {
 	.nr_div_clks            = ARRAY_SIZE(top_div_clks),
 	.fixed_factor_clks	= top_fixed_factor_clks,
 	.nr_fixed_factor_clks	= ARRAY_SIZE(top_fixed_factor_clks),
+	.fixed_clks             = top_fixed_rate_clks,
+	.nr_fixed_clks          = ARRAY_SIZE(top_fixed_rate_clks),
 	.nr_clk_ids             = CLKS_NR_TOP,
 	.clk_regs               = top_clk_regs,
 	.nr_clk_regs            = ARRAY_SIZE(top_clk_regs),
@@ -566,6 +599,70 @@ static const struct samsung_cmu_info hsi_cmu_info __initconst = {
 	.clk_name               = "bus",
 };
 
+/* ---- CMU_USB --------------------------------------------------------- */
+
+/* Register Offset definitions for CMU_USB (0x13000000) */
+#define CMU_USB_PLL_CON0_MUX_CLKCMU_USB_NOC_USER                   0x600
+#define CMU_USB_PLL_CON0_MUX_CLKCMU_USB_USB20DRD_USER              0x610
+#define CMU_USB_CLK_CON_MUX_CLK_USB_USB20DRD                       0x1000
+#define CMU_USB_CLK_CON_DIV_CLK_USB_NOC_DIV3                       0x1800
+#define CMU_USB_CLK_CON_GAT_BLK_USB_UID_CMU_USB_IPCLKPORT_PCLK     0x2000
+#define CMU_USB_CLK_CON_GAT_BLK_USB_UID_SYSREG_USB_IPCLKPORT_PCLK  0x2030
+
+static const unsigned long usb_clk_regs[] __initconst = {
+	CMU_USB_PLL_CON0_MUX_CLKCMU_USB_NOC_USER,
+	CMU_USB_PLL_CON0_MUX_CLKCMU_USB_USB20DRD_USER,
+	CMU_USB_CLK_CON_MUX_CLK_USB_USB20DRD,
+	CMU_USB_CLK_CON_DIV_CLK_USB_NOC_DIV3,
+	CMU_USB_CLK_CON_GAT_BLK_USB_UID_CMU_USB_IPCLKPORT_PCLK,
+	CMU_USB_CLK_CON_GAT_BLK_USB_UID_SYSREG_USB_IPCLKPORT_PCLK,
+};
+
+/* List of parent clocks for Muxes in CMU_USB */
+PNAME(mout_clkcmu_usb_noc_user_p) = { "oscclk", "dout_clkcmu_usb_noc" };
+PNAME(mout_clkcmu_usb_usb20drd_user_p) = { "oscclk", "dout_clkcmu_usb_usb20drd" };
+PNAME(mout_clk_usb_usb20drd_p) = { "oscclk_usb_link", "mout_clkcmu_usb_usb20drd_user" };
+
+static const struct samsung_mux_clock usb_mux_clks[] __initconst = {
+	MUX(CLK_MOUT_USB_NOC_USER, "mout_clkcmu_usb_noc_user",
+	    mout_clkcmu_usb_noc_user_p, CMU_USB_PLL_CON0_MUX_CLKCMU_USB_NOC_USER, 4, 1),
+	MUX(CLK_MOUT_USB_USB20DRD_USER, "mout_clkcmu_usb_usb20drd_user",
+	    mout_clkcmu_usb_usb20drd_user_p, CMU_USB_PLL_CON0_MUX_CLKCMU_USB_USB20DRD_USER, 4, 1),
+	MUX(CLK_MOUT_USB_USB20DRD, "mout_clk_usb_usb20drd",
+	    mout_clk_usb_usb20drd_p, CMU_USB_CLK_CON_MUX_CLK_USB_USB20DRD, 0, 1),
+};
+
+static const struct samsung_div_clock usb_div_clks[] __initconst = {
+	DIV(CLK_DOUT_USB_NOC_DIV3, "dout_clkcmu_usb_noc_div3",
+	    "mout_clkcmu_usb_noc_user", CMU_USB_CLK_CON_DIV_CLK_USB_NOC_DIV3,
+	    0, 4),
+};
+
+static const struct samsung_gate_clock usb_gate_clks[] __initconst = {
+	/* System will hang if this critical clock is gated */
+	GATE(CLK_GOUT_CMU_USB_IPCLKPORT_PCLK, "gout_cmu_usb_ipclkport_pclk",
+	     "mout_clkcmu_usb_noc_user",
+	     CMU_USB_CLK_CON_GAT_BLK_USB_UID_CMU_USB_IPCLKPORT_PCLK,
+	     21, CLK_IS_CRITICAL, 0),
+	GATE(CLK_GOUT_SYSREG_USB_IPCLKPORT_PCLK, "gout_sysreg_usb_ipclkport_pclk",
+	     "mout_clkcmu_usb_noc_user",
+	     CMU_USB_CLK_CON_GAT_BLK_USB_UID_SYSREG_USB_IPCLKPORT_PCLK,
+	     21, 0, 0),
+};
+
+static const struct samsung_cmu_info usb_cmu_info __initconst = {
+	.mux_clks               = usb_mux_clks,
+	.nr_mux_clks            = ARRAY_SIZE(usb_mux_clks),
+	.div_clks               = usb_div_clks,
+	.nr_div_clks            = ARRAY_SIZE(usb_div_clks),
+	.gate_clks              = usb_gate_clks,
+	.nr_gate_clks           = ARRAY_SIZE(usb_gate_clks),
+	.nr_clk_ids             = CLKS_NR_USB,
+	.clk_regs               = usb_clk_regs,
+	.nr_clk_regs            = ARRAY_SIZE(usb_clk_regs),
+	.clk_name               = "bus",
+};
+
 static int __init exynos8855_cmu_probe(struct platform_device *pdev)
 {
 	const struct samsung_cmu_info *info;
@@ -590,6 +687,9 @@ static const struct of_device_id exynos8855_cmu_of_match[] = {
 	}, {
 		.compatible = "samsung,exynos8855-cmu-top",
 		.data = &top_cmu_info,
+	}, {
+		.compatible = "samsung,exynos8855-cmu-usb",
+		.data = &usb_cmu_info,
 	},
 	{ }
 };
