@@ -180,6 +180,10 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	if (rc)
 		return rc;
 
+	rc = cxl_bi_setup(port);
+	if (rc)
+		dev_dbg(&port->dev, "BI setup failed rc=%d\n", rc);
+
 	/*
 	 * With VH (CXL Virtual Host) topology the cxl_port::add_dport() method
 	 * handles RAS setup for downstream ports. With RCH (CXL Restricted CXL
