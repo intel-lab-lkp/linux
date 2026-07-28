@@ -2499,15 +2499,26 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 	}
 
 	if (is_rmb) {
-		conn->rmb_desc = buf_desc;
 		conn->rmbe_size_comp = bufsize_comp;
 		smc->sk.sk_rcvbuf = bufsize * 2;
 		atomic_set(&conn->bytes_to_rcv, 0);
 		conn->rmbe_update_limit =
 			smc_rmb_wnd_update_limit(buf_desc->len);
+		/* Publish the receive buffer last, with release semantics: the
+		 * connection is already in the link group's token tree, so a
+		 * concurrent CDC receive handler must observe the fully
+		 * initialised receive state above (and the buffer) once it sees
+		 * a non-NULL rmb_desc.  Pairs with the smp_load_acquire() in the
+		 * CDC receive path.
+		 */
+		smp_store_release(&conn->rmb_desc, buf_desc);
 		if (is_smcd)
 			smc_ism_set_conn(conn); /* map RMB/smcd_dev to conn */
 	} else {
+		/* Plain store: this send-buffer pass runs before the RMB pass,
+		 * whose smp_store_release(&conn->rmb_desc) then publishes this
+		 * store too, and the CDC receive path is gated on rmb_desc.
+		 */
 		conn->sndbuf_desc = buf_desc;
 		smc->sk.sk_sndbuf = bufsize * 2;
 		atomic_set(&conn->sndbuf_space, bufsize);
@@ -2599,9 +2610,16 @@ int smcd_buf_attach(struct smc_sock *smc)
 	buf_desc->cpu_addr =
 		(u8 *)buf_desc->cpu_addr + sizeof(struct smcd_cdc_msg);
 	buf_desc->len -= sizeof(struct smcd_cdc_msg);
-	conn->sndbuf_desc = buf_desc;
-	conn->sndbuf_desc->used = 1;
-	atomic_set(&conn->sndbuf_space, conn->sndbuf_desc->len);
+	buf_desc->used = 1;
+	atomic_set(&conn->sndbuf_space, buf_desc->len);
+	/* Publish the ghost send buffer last, with release semantics: the
+	 * connection is already reachable to the ISM device (smc_ism_set_conn()
+	 * ran in __smc_buf_create()), so the CDC receive tasklet must observe
+	 * the fully initialised ghost buffer once it sees a non-NULL
+	 * sndbuf_desc.  Pairs with smp_load_acquire() in
+	 * smc_cdc_msg_recv_action().
+	 */
+	smp_store_release(&conn->sndbuf_desc, buf_desc);
 	return 0;
 
 free:
