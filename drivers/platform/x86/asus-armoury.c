@@ -786,6 +786,17 @@ ASUS_ATTR_GROUP_ROG_TUNABLE(nv_tgp, "nv_tgp", ASUS_WMI_DEVID_DGPU_SET_TGP,
 ASUS_ATTR_GROUP_INT_VALUE_ONLY_RO(nv_base_tgp, ATTR_NV_BASE_TGP, ASUS_WMI_DEVID_DGPU_BASE_TGP,
 				  "Read the base TGP value");
 
+/* Whisper Mode attributes */
+ASUS_ATTR_GROUP_BOOL_RW(whisper_mode, "whisper_mode",
+			ASUS_WMI_DEVID_WHISPER_MODE,
+			"Set BIOS Whisper Mode");
+ASUS_ATTR_GROUP_BOOL_RW(whisper_enable, "whisper_enable",
+			ASUS_WMI_DEVID_WHISPER_ENABLE,
+			"Enable Dynamic Whisper");
+ASUS_ATTR_GROUP_BOOL_RW(whisper_status, "whisper_status",
+			ASUS_WMI_DEVID_WHISPER_STATUS,
+			"Dynamic Whisper status and control");
+
 /* If an attribute does not require any special case handling add it here */
 static const struct asus_attr_group armoury_attr_groups[] = {
 	{ &egpu_connected_attr_group, ASUS_WMI_DEVID_EGPU_CONNECTED },
@@ -809,6 +820,9 @@ static const struct asus_attr_group armoury_attr_groups[] = {
 	{ &panel_od_attr_group, ASUS_WMI_DEVID_PANEL_OD },
 	{ &panel_hd_mode_attr_group, ASUS_WMI_DEVID_PANEL_HD },
 	{ &screen_auto_brightness_attr_group, ASUS_WMI_DEVID_SCREEN_AUTO_BRIGHTNESS },
+	{ &whisper_mode_attr_group, ASUS_WMI_DEVID_WHISPER_MODE },
+	{ &whisper_enable_attr_group, ASUS_WMI_DEVID_WHISPER_ENABLE },
+	{ &whisper_status_attr_group, ASUS_WMI_DEVID_WHISPER_STATUS },
 };
 
 /**
