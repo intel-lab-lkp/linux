@@ -129,6 +129,18 @@ struct bitland_mifs_output {
 	u8 data[28];
 } __packed;
 
+/*
+ * The status word of a WMAA reply is formed by the first two bytes
+ * (reserved1 | operation << 8). MIFS firmware signals "unknown or
+ * unsupported function" with 0xe000 and success with 0x8000.
+ */
+#define MIFS_STATUS_ERROR	0xe000
+
+static u16 mifs_status(const struct bitland_mifs_output *out)
+{
+	return out->reserved1 | (out->operation << 8);
+}
+
 struct bitland_mifs_event {
 	u8 event_type;
 	u8 event_id;
@@ -159,6 +171,7 @@ struct bitland_mifs_wmi_data {
 	struct device *hwmon_dev;
 	struct device *pp_dev;
 	enum platform_profile_option saved_profile;
+	bool profile_valid;
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -180,6 +193,9 @@ static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
 
 	memcpy(output, out_buf.data, sizeof(*output));
 	kfree(out_buf.data);
+
+	if (mifs_status(output) == MIFS_STATUS_ERROR)
+		return -EOPNOTSUPP;
 
 	return 0;
 }
@@ -298,17 +314,21 @@ static int bitland_mifs_wmi_suspend(struct device *dev)
 {
 	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
 	enum platform_profile_option profile;
-	int ret;
 
 	/* Skip event device */
 	if (!data->pp_dev)
 		return 0;
 
-	ret = laptop_profile_get(data->pp_dev, &profile);
-	if (ret == 0)
+	/*
+	 * Never abort suspend: some firmware revisions answer the perf-mode
+	 * query with values this driver cannot map, or fail the call
+	 * entirely while the system is going down.
+	 */
+	data->profile_valid = laptop_profile_get(data->pp_dev, &profile) == 0;
+	if (data->profile_valid)
 		data->saved_profile = profile;
 
-	return ret;
+	return 0;
 }
 
 static int bitland_mifs_wmi_resume(struct device *dev)
@@ -317,6 +337,9 @@ static int bitland_mifs_wmi_resume(struct device *dev)
 
 	/* Skip event device */
 	if (!data->pp_dev)
+		return 0;
+
+	if (!data->profile_valid)
 		return 0;
 
 	dev_dbg(dev, "Resuming, restoring profile %d\n", data->saved_profile);
