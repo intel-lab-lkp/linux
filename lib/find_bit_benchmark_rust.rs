@@ -62,7 +62,7 @@ fn test_next_zero_bit(bitmap: &BitmapVec) {
 }
 
 fn find_bit_test() {
-    pr_err!("Benchmark");
+    pr_err!(continuable, "Benchmark");
     pr_cont!("\nStart testing find_bit() Rust with random-filled bitmap");
 
     let mut bitmap = BitmapVec::new(BITMAP_LEN, GFP_KERNEL).expect("alloc bitmap failed");

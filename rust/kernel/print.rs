@@ -42,6 +42,7 @@ pub mod level {
     use core::ffi::CStr;
 
     pub trait Level {
+        const FORMAT_STRING_CONTINUABLE: &'static CStr;
         const FORMAT_STRING: &'static CStr;
     }
 
@@ -51,7 +52,7 @@ pub mod level {
     /// given `prefix`, which are the kernel's `KERN_*` constants.
     ///
     /// [`_printk`]: srctree/include/linux/printk.h
-    const fn generate(prefix: &[u8; 3]) -> [u8; 10] {
+    const fn generate_continuable(prefix: &[u8; 3]) -> [u8; 10] {
         // Ensure the `KERN_*` macros are what we expect.
         assert!(prefix.len() == 3);
         assert!(prefix[0] == b'\x01');
@@ -63,12 +64,31 @@ pub mod level {
         fmt
     }
 
+    const fn generate(prefix: &[u8; 3]) -> [u8; 11] {
+        // Ensure the `KERN_*` macros are what we expect.
+        assert!(prefix.len() == 3);
+        assert!(prefix[0] == b'\x01');
+        assert!(prefix[1] >= b'0' && prefix[1] <= b'7');
+
+        let mut fmt = *b"\0\0%s: %pA\n\0";
+        fmt[0] = prefix[0];
+        fmt[1] = prefix[1];
+        fmt
+    }
+
     // #[rustfmt::skip] // Rustfmt formats the macro awkwardly.
     macro_rules! define_level {
         ($lvl:ident) => {
             pub struct $lvl;
 
             impl Level for $lvl {
+                const FORMAT_STRING_CONTINUABLE: &'static CStr = match CStr::from_bytes_with_nul(
+                    &generate_continuable(macros::paste!(bindings::[<KERN_ $lvl>])),
+                ) {
+                    Ok(v) => v,
+                    Err(_) => unreachable!(),
+                };
+
                 const FORMAT_STRING: &'static CStr = match CStr::from_bytes_with_nul(&generate(
                     macros::paste!(bindings::[<KERN_ $lvl>]),
                 )) {
@@ -87,6 +107,26 @@ pub mod level {
     define_level!(NOTICE);
     define_level!(INFO);
     define_level!(DEBUG);
+}
+
+/// Prints a message via the kernel's [`_printk`] without newline.
+///
+/// Public but hidden since it should only be used from public macros.
+///
+/// [`_printk`]: srctree/include/linux/_printk.h
+#[doc(hidden)]
+#[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
+pub fn call_printk_continuable<Lvl: level::Level>(module_name: &CStr, args: fmt::Arguments<'_>) {
+    // `_printk` does not seem to fail in any path.
+    #[cfg(CONFIG_PRINTK)]
+    // SAFETY: TODO.
+    unsafe {
+        bindings::_printk(
+            Lvl::FORMAT_STRING_CONTINUABLE.as_char_ptr(),
+            module_name.as_char_ptr(),
+            core::ptr::from_ref(&args).cast::<c_void>(),
+        );
+    }
 }
 
 /// Prints a message via the kernel's [`_printk`].
@@ -147,13 +187,45 @@ pub fn call_printk_cont(args: fmt::Arguments<'_>) {
 #[macro_export]
 #[expect(clippy::crate_in_macro_def)]
 macro_rules! print_macro (
-    ($level:ident, $($arg:tt)+) => (
-        match $crate::prelude::fmt!($($arg)+) {
+    ($level:ident, continuable, $fmt:literal $($arg:tt)*) => (
+        match $crate::prelude::fmt!($fmt $($arg)*) {
             args => {
-                $crate::print::call_printk::<$crate::print::level::$level>(
+                // Perform a check on the format string to ensure last byte is not "\n",
+                // otherwise, the continuable option is pointless.
+                const {
+                    let bytes = str::as_bytes($fmt);
+                    ::core::assert!(
+                        bytes[bytes.len() - 1] != b'\n',
+                        r#"continuable format should not terminate with "\n""#
+                    );
+                }
+
+                $crate::print::call_printk_continuable::<$crate::print::level::$level>(
                     crate::__LOG_PREFIX,
                     args,
                 );
+            }
+        }
+    );
+
+    ($level:ident, $fmt:literal $($arg:tt)*) => (
+        match $crate::prelude::fmt!($fmt $($arg)*) {
+            args => {
+                if const {
+                    let bytes = str::as_bytes($fmt);
+                    bytes[bytes.len() - 1] == b'\n'
+                } {
+                    // Format string already have newline, don't add extra ones.
+                    $crate::print::call_printk_continuable::<$crate::print::level::$level>(
+                        crate::__LOG_PREFIX,
+                        args,
+                    );
+                } else {
+                    $crate::print::call_printk::<$crate::print::level::$level>(
+                        crate::__LOG_PREFIX,
+                        args,
+                    );
+                }
             }
         }
     );
@@ -400,7 +472,7 @@ macro_rules! pr_debug (
 ///
 /// ```
 /// # use kernel::pr_cont;
-/// pr_info!("hello");
+/// pr_info!(continuable, "hello");
 /// pr_cont!(" {}\n", "there");
 /// ```
 #[macro_export]
