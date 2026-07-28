@@ -504,6 +504,13 @@ static int locate_mem_hole_top_down(unsigned long start, unsigned long end,
 			continue;
 		}
 
+		/* Avoid placing the next kernel on hardware-poisoned memory */
+		if (range_contains_hwpoison(temp_start,
+					    temp_end - temp_start + 1)) {
+			temp_start = temp_start - PAGE_SIZE;
+			continue;
+		}
+
 		/* We found a suitable memory range */
 		break;
 	} while (1);
@@ -542,6 +549,13 @@ static int locate_mem_hole_bottom_up(unsigned long start, unsigned long end,
 
 		/* Make sure this does not conflict with exclude range */
 		if (arch_check_excluded_range(image, temp_start, temp_end)) {
+			temp_start = temp_start + PAGE_SIZE;
+			continue;
+		}
+
+		/* Avoid placing the next kernel on hardware-poisoned memory */
+		if (range_contains_hwpoison(temp_start,
+					    temp_end - temp_start + 1)) {
 			temp_start = temp_start + PAGE_SIZE;
 			continue;
 		}

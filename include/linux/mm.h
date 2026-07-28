@@ -5192,6 +5192,7 @@ extern const struct attribute_group memory_failure_attr_group;
 extern void memory_failure_queue(unsigned long pfn, int flags);
 void num_poisoned_pages_inc(unsigned long pfn);
 void num_poisoned_pages_sub(unsigned long pfn, long i);
+bool range_contains_hwpoison(phys_addr_t start, unsigned long size);
 #else
 static inline void memory_failure_queue(unsigned long pfn, int flags)
 {
@@ -5203,6 +5204,11 @@ static inline void num_poisoned_pages_inc(unsigned long pfn)
 
 static inline void num_poisoned_pages_sub(unsigned long pfn, long i)
 {
+}
+
+static inline bool range_contains_hwpoison(phys_addr_t start, unsigned long size)
+{
+	return false;
 }
 #endif
 

@@ -96,6 +96,24 @@ void num_poisoned_pages_sub(unsigned long pfn, long i)
 		memblk_nr_poison_sub(pfn, i);
 }
 
+/*
+ * Check if any page in [start, start + size) has hardware-poisoned segments
+ */
+bool range_contains_hwpoison(phys_addr_t start, unsigned long size)
+{
+	unsigned long pfn, end_pfn;
+
+	if (!size || !atomic_long_read(&num_poisoned_pages))
+		return false;
+
+	end_pfn = PHYS_PFN(start + size - 1);
+	for (pfn = PHYS_PFN(start); pfn <= end_pfn; pfn++) {
+		if (pfn_valid(pfn) && PageHWPoison(pfn_to_page(pfn)))
+			return true;
+	}
+	return false;
+}
+
 /**
  * MF_ATTR_RO - Create sysfs entry for each memory failure statistics.
  * @_name: name of the file in the per NUMA sysfs directory.
