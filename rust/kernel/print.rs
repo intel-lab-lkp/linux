@@ -34,16 +34,16 @@ unsafe extern "C" fn rust_fmt_argument(
     w.pos().cast()
 }
 
-/// Format strings.
+/// Format levels.
 ///
 /// Public but hidden since it should only be used from public macros.
 #[doc(hidden)]
-pub mod format_strings {
-    /// The length we copy from the `KERN_*` kernel prefixes.
-    const LENGTH_PREFIX: usize = 2;
+pub mod level {
+    use core::ffi::CStr;
 
-    /// The length of the fixed format strings.
-    pub const LENGTH: usize = 10;
+    pub trait Level {
+        const FORMAT_STRING: &'static CStr;
+    }
 
     /// Generates a fixed format string for the kernel's [`_printk`].
     ///
@@ -51,58 +51,58 @@ pub mod format_strings {
     /// given `prefix`, which are the kernel's `KERN_*` constants.
     ///
     /// [`_printk`]: srctree/include/linux/printk.h
-    const fn generate(prefix: &[u8; 3]) -> [u8; LENGTH] {
+    const fn generate(prefix: &[u8; 3]) -> [u8; 10] {
         // Ensure the `KERN_*` macros are what we expect.
+        assert!(prefix.len() == 3);
         assert!(prefix[0] == b'\x01');
         assert!(prefix[1] >= b'0' && prefix[1] <= b'7');
-        assert!(prefix[2] == b'\x00');
 
-        let suffix: &[u8; LENGTH - LENGTH_PREFIX] = b"%s: %pA\0";
-
-        [
-            prefix[0], prefix[1], suffix[0], suffix[1], suffix[2], suffix[3], suffix[4], suffix[5],
-            suffix[6], suffix[7],
-        ]
+        let mut fmt = *b"\0\0%s: %pA\0";
+        fmt[0] = prefix[0];
+        fmt[1] = prefix[1];
+        fmt
     }
 
-    // Generate the format strings at compile-time.
-    //
-    // This avoids the compiler generating the contents on the fly in the stack.
-    //
-    // Furthermore, `static` instead of `const` is used to share the strings
-    // for all the kernel.
-    pub static EMERG: [u8; LENGTH] = generate(bindings::KERN_EMERG);
-    pub static ALERT: [u8; LENGTH] = generate(bindings::KERN_ALERT);
-    pub static CRIT: [u8; LENGTH] = generate(bindings::KERN_CRIT);
-    pub static ERR: [u8; LENGTH] = generate(bindings::KERN_ERR);
-    pub static WARNING: [u8; LENGTH] = generate(bindings::KERN_WARNING);
-    pub static NOTICE: [u8; LENGTH] = generate(bindings::KERN_NOTICE);
-    pub static INFO: [u8; LENGTH] = generate(bindings::KERN_INFO);
-    pub static DEBUG: [u8; LENGTH] = generate(bindings::KERN_DEBUG);
+    // #[rustfmt::skip] // Rustfmt formats the macro awkwardly.
+    macro_rules! define_level {
+        ($lvl:ident) => {
+            pub struct $lvl;
+
+            impl Level for $lvl {
+                const FORMAT_STRING: &'static CStr = match CStr::from_bytes_with_nul(&generate(
+                    macros::paste!(bindings::[<KERN_ $lvl>]),
+                )) {
+                    Ok(v) => v,
+                    Err(_) => unreachable!(),
+                };
+            }
+        };
+    }
+
+    define_level!(EMERG);
+    define_level!(ALERT);
+    define_level!(CRIT);
+    define_level!(ERR);
+    define_level!(WARNING);
+    define_level!(NOTICE);
+    define_level!(INFO);
+    define_level!(DEBUG);
 }
 
 /// Prints a message via the kernel's [`_printk`].
 ///
 /// Public but hidden since it should only be used from public macros.
 ///
-/// # Safety
-///
-/// The format string must be one of the ones in [`format_strings`].
-///
 /// [`_printk`]: srctree/include/linux/_printk.h
 #[doc(hidden)]
 #[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
-pub unsafe fn call_printk(
-    format_string: &[u8; format_strings::LENGTH],
-    module_name: &CStr,
-    args: fmt::Arguments<'_>,
-) {
+pub fn call_printk<Lvl: level::Level>(module_name: &CStr, args: fmt::Arguments<'_>) {
     // `_printk` does not seem to fail in any path.
     #[cfg(CONFIG_PRINTK)]
     // SAFETY: TODO.
     unsafe {
         bindings::_printk(
-            format_string.as_ptr(),
+            Lvl::FORMAT_STRING.as_char_ptr(),
             module_name.as_char_ptr(),
             core::ptr::from_ref(&args).cast::<c_void>(),
         );
@@ -147,19 +147,10 @@ pub fn call_printk_cont(args: fmt::Arguments<'_>) {
 #[macro_export]
 #[expect(clippy::crate_in_macro_def)]
 macro_rules! print_macro (
-    ($format_string:path, $($arg:tt)+) => (
-        // To remain sound, `arg`s must be expanded outside the `unsafe` block.
-        // Typically one would use a `let` binding for that; however, `format_args!`
-        // takes borrows on the arguments, but does not extend the scope of temporaries.
-        // Therefore, a `match` expression is used to keep them around, since
-        // the scrutinee is kept until the end of the `match`.
+    ($level:ident, $($arg:tt)+) => (
         match $crate::prelude::fmt!($($arg)+) {
-            // SAFETY: This hidden macro should only be called by the documented
-            // printing macros which ensure the format string is one of the fixed
-            // ones.
-            args => unsafe {
-                $crate::print::call_printk(
-                    &$format_string,
+            args => {
+                $crate::print::call_printk::<$crate::print::level::$level>(
                     crate::__LOG_PREFIX,
                     args,
                 );
@@ -207,7 +198,7 @@ macro_rules! print_macro (
 #[macro_export]
 macro_rules! pr_emerg (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::EMERG, $($arg)*)
+        $crate::print_macro!(EMERG, $($arg)*)
     )
 );
 
@@ -232,7 +223,7 @@ macro_rules! pr_emerg (
 #[macro_export]
 macro_rules! pr_alert (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::ALERT, $($arg)*)
+        $crate::print_macro!(ALERT, $($arg)*)
     )
 );
 
@@ -257,7 +248,7 @@ macro_rules! pr_alert (
 #[macro_export]
 macro_rules! pr_crit (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::CRIT, $($arg)*)
+        $crate::print_macro!(CRIT, $($arg)*)
     )
 );
 
@@ -282,7 +273,7 @@ macro_rules! pr_crit (
 #[macro_export]
 macro_rules! pr_err (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::ERR, $($arg)*)
+        $crate::print_macro!(ERR, $($arg)*)
     )
 );
 
@@ -307,7 +298,7 @@ macro_rules! pr_err (
 #[macro_export]
 macro_rules! pr_warn (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::WARNING, $($arg)*)
+        $crate::print_macro!(WARNING, $($arg)*)
     )
 );
 
@@ -332,7 +323,7 @@ macro_rules! pr_warn (
 #[macro_export]
 macro_rules! pr_notice (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::NOTICE, $($arg)*)
+        $crate::print_macro!(NOTICE, $($arg)*)
     )
 );
 
@@ -358,7 +349,7 @@ macro_rules! pr_notice (
 #[doc(alias = "print")]
 macro_rules! pr_info (
     ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::INFO, $($arg)*)
+        $crate::print_macro!(INFO, $($arg)*)
     )
 );
 
@@ -386,7 +377,7 @@ macro_rules! pr_info (
 macro_rules! pr_debug (
     ($($arg:tt)*) => (
         if cfg!(debug_assertions) {
-            $crate::print_macro!($crate::print::format_strings::DEBUG, $($arg)*)
+            $crate::print_macro!(DEBUG, $($arg)*)
         }
     )
 );
