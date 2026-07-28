@@ -267,7 +267,7 @@ static int mtk_pmic_keys_suspend(struct device *dev)
 	int index;
 
 	for (index = 0; index < MTK_PMIC_MAX_KEY_COUNT; index++) {
-		if (keys->keys[index].wakeup) {
+		if (keys->keys[index].irq > 0 && keys->keys[index].wakeup) {
 			enable_irq_wake(keys->keys[index].irq);
 			if (keys->keys[index].irq_r > 0)
 				enable_irq_wake(keys->keys[index].irq_r);
@@ -283,7 +283,7 @@ static int mtk_pmic_keys_resume(struct device *dev)
 	int index;
 
 	for (index = 0; index < MTK_PMIC_MAX_KEY_COUNT; index++) {
-		if (keys->keys[index].wakeup) {
+		if (keys->keys[index].irq > 0 && keys->keys[index].wakeup) {
 			disable_irq_wake(keys->keys[index].irq);
 			if (keys->keys[index].irq_r > 0)
 				disable_irq_wake(keys->keys[index].irq_r);
@@ -324,13 +324,13 @@ MODULE_DEVICE_TABLE(of, of_mtk_pmic_keys_match_tbl);
 static int mtk_pmic_keys_probe(struct platform_device *pdev)
 {
 	int error, index = 0;
-	unsigned int keycount;
 	struct mt6397_chip *pmic_chip = dev_get_drvdata(pdev->dev.parent);
 	struct device_node *node = pdev->dev.of_node;
 	static const char *const irqnames[] = { "powerkey", "homekey" };
 	static const char *const irqnames_r[] = { "powerkey_r", "homekey_r" };
 	struct mtk_pmic_keys *keys;
 	const struct mtk_pmic_regs *mtk_pmic_regs;
+	struct mtk_pmic_keys_info *key;
 	struct input_dev *input_dev;
 
 	keys = devm_kzalloc(&pdev->dev, sizeof(*keys), GFP_KERNEL);
@@ -353,44 +353,41 @@ static int mtk_pmic_keys_probe(struct platform_device *pdev)
 	input_dev->id.product = 0x0001;
 	input_dev->id.version = 0x0001;
 
-	keycount = of_get_available_child_count(node);
-	if (keycount > MTK_PMIC_MAX_KEY_COUNT ||
-	    keycount > ARRAY_SIZE(irqnames)) {
-		dev_err(keys->dev, "too many keys defined (%d)\n", keycount);
-		return -EINVAL;
-	}
-
 	for_each_child_of_node_scoped(node, child) {
-		keys->keys[index].regs = &mtk_pmic_regs->keys_regs[index];
-
-		keys->keys[index].irq =
-			platform_get_irq_byname(pdev, irqnames[index]);
-		if (keys->keys[index].irq < 0)
-			return keys->keys[index].irq;
-
-		if (mtk_pmic_regs->key_release_irq) {
-			keys->keys[index].irq_r = platform_get_irq_byname(pdev,
-									  irqnames_r[index]);
-
-			if (keys->keys[index].irq_r < 0)
-				return keys->keys[index].irq_r;
+		if (index >= MTK_PMIC_MAX_KEY_COUNT) {
+			dev_err(&pdev->dev, "too many keys defined\n");
+			return -EINVAL;
 		}
 
-		error = of_property_read_u32(child,
-			"linux,keycodes", &keys->keys[index].keycode);
-		if (error) {
-			dev_err(keys->dev,
-				"failed to read key:%d linux,keycode property: %d\n",
-				index, error);
-			return error;
+		if (of_device_is_available(child)) {
+			key = &keys->keys[index];
+			key->regs = &mtk_pmic_regs->keys_regs[index];
+
+			key->irq = platform_get_irq_byname(pdev, irqnames[index]);
+			if (key->irq < 0)
+				return key->irq;
+
+			if (mtk_pmic_regs->key_release_irq) {
+				key->irq_r = platform_get_irq_byname(pdev, irqnames_r[index]);
+				if (key->irq_r < 0)
+					return key->irq_r;
+			}
+
+			error = of_property_read_u32(child, "linux,keycodes", &key->keycode);
+			if (error) {
+				dev_err(keys->dev,
+					"failed to read key:%d linux,keycode property: %d\n",
+					index, error);
+				return error;
+			}
+
+			if (of_property_present(child, "wakeup-source"))
+				key->wakeup = true;
+
+			error = mtk_pmic_key_setup(keys, key);
+			if (error)
+				return error;
 		}
-
-		if (of_property_read_bool(child, "wakeup-source"))
-			keys->keys[index].wakeup = true;
-
-		error = mtk_pmic_key_setup(keys, &keys->keys[index]);
-		if (error)
-			return error;
 
 		index++;
 	}
