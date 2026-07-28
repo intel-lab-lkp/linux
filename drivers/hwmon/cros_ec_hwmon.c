@@ -319,6 +319,7 @@ static umode_t cros_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_type
 					u32 attr, int channel)
 {
 	const struct cros_ec_hwmon_priv *priv = data;
+	u32 threshold;
 	u16 speed;
 
 	if (type == hwmon_fan) {
@@ -334,8 +335,17 @@ static umode_t cros_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_type
 	} else if (type == hwmon_temp) {
 		if (priv->temp_sensor_names[channel]) {
 			if (cros_ec_hwmon_attr_is_temp_threshold(attr)) {
-				if (priv->temp_threshold_supported)
-					return 0444;
+				if (!priv->temp_threshold_supported)
+					return 0;
+
+				if (cros_ec_hwmon_read_temp_threshold(priv->cros_ec, channel,
+								      cros_ec_hwmon_attr_to_thres(attr),
+								      &threshold) != 0)
+					return 0;
+				if (threshold == 0)
+					return 0;
+
+				return 0444;
 			} else {
 				return 0444;
 			}
