@@ -223,9 +223,6 @@ struct tmc_resrv_buf {
  * @crashdev:	specifics to handle "/dev/crash_tmc_xyz" entry for reading
  *		crash tracedata.
  * @spinlock:	only one at a time pls.
- * @pid:	Process ID of the process that owns the session that is using
- *		this component. For example this would be the pid of the Perf
- *		process.
  * @sysfs_reading: Sysfs mode buffer is being read through "/dev/xyz.tmc" entry.
  *                Note: ETR has a separate software buffer for the two modes so
  *		  the device can still be read while in Perf mode if there is a
@@ -264,7 +261,6 @@ struct tmc_drvdata {
 	struct miscdevice	miscdev;
 	struct miscdevice	crashdev;
 	raw_spinlock_t		spinlock;
-	pid_t			pid;
 	bool			sysfs_reading;
 	bool			stop_on_flush;
 	union {
