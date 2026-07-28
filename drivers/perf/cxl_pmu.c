@@ -552,6 +552,8 @@ static int cxl_pmu_get_event_idx(struct perf_event *event, int *counter_idx,
 			return -EINVAL;
 
 		*counter_idx = i;
+		if (event_idx)
+			*event_idx = pmu_ev->event_idx;
 		return 0;
 	}
 
