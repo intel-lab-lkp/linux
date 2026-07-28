@@ -10,6 +10,7 @@
 #include <linux/bitfield.h>
 #include <linux/miscdevice.h>
 #include <linux/spinlock.h>
+#include "coresight-etm-perf.h"
 
 /* Offset of SMB global registers */
 #define SMB_GLB_CFG_REG		0x00
@@ -108,8 +109,7 @@ struct smb_data_buffer {
  * @miscdev:	Specifics to handle "/dev/xyz.smb" entry.
  * @spinlock:	Control data access to one at a time.
  * @reading:	Synchronise user space access to SMB buffer.
- * @pid:	Process ID of the process being monitored by the
- *		session that is using this component.
+ * @perf_session: Session identity of the Perf event currently using this sink.
  */
 struct smb_drv_data {
 	void __iomem *base;
@@ -118,7 +118,7 @@ struct smb_drv_data {
 	struct miscdevice miscdev;
 	raw_spinlock_t spinlock;
 	bool reading;
-	pid_t pid;
+	struct etm_session_id perf_session;
 };
 
 #endif
