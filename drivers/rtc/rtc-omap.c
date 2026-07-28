@@ -407,6 +407,7 @@ static struct omap_rtc *omap_rtc_power_off_rtc;
  * omap_rtc_power_off_program: Set the pmic power off sequence. The RTC
  * generates pmic_pwr_enable control, which can be used to control an external
  * PMIC.
+ * @dev: pointer to RTC device structure
  */
 int omap_rtc_power_off_program(struct device *dev)
 {
