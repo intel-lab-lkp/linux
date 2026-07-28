@@ -799,6 +799,23 @@ static u64 __init guest_default_mask(void)
 	return ~(u64)XFEATURE_MASK_USER_DYNAMIC;
 }
 
+/* Clear any X86_FEATURE_* used by the kernel whose xfeatures are missing. */
+static void __init clear_cpu_caps_with_missing_xfeatures(u64 xfeatures)
+{
+	u64 mask;
+
+	mask = XFEATURE_MASK_FPSSE | XFEATURE_MASK_YMM;
+	if (boot_cpu_has(X86_FEATURE_AVX) && (xfeatures & mask) != mask) {
+		pr_err("x86/fpu: Disabling AVX support due to missing xstate features\n");
+		setup_clear_cpu_cap(X86_FEATURE_AVX);
+	}
+	mask = XFEATURE_MASK_FPSSE | XFEATURE_MASK_YMM | XFEATURE_MASK_AVX512;
+	if (boot_cpu_has(X86_FEATURE_AVX512F) && (xfeatures & mask) != mask) {
+		pr_err("x86/fpu: Disabling AVX-512 support due to missing xstate features\n");
+		setup_clear_cpu_cap(X86_FEATURE_AVX512F);
+	}
+}
+
 /*
  * Enable and initialize the xsave feature.
  * Called once per system bootup.
@@ -812,12 +829,14 @@ void __init fpu__init_system_xstate(unsigned int legacy_size)
 
 	if (!boot_cpu_has(X86_FEATURE_FPU)) {
 		pr_info("x86/fpu: No FPU detected\n");
+		clear_cpu_caps_with_missing_xfeatures(0);
 		return;
 	}
 
 	if (!boot_cpu_has(X86_FEATURE_XSAVE)) {
 		pr_info("x86/fpu: x87 FPU will use %s\n",
 			boot_cpu_has(X86_FEATURE_FXSR) ? "FXSAVE" : "FSAVE");
+		clear_cpu_caps_with_missing_xfeatures(0);
 		return;
 	}
 
@@ -854,6 +873,8 @@ void __init fpu__init_system_xstate(unsigned int legacy_size)
 		       fpu_kernel_cfg.max_features);
 		goto out_disable;
 	}
+
+	clear_cpu_caps_with_missing_xfeatures(fpu_kernel_cfg.max_features);
 
 	fpu_kernel_cfg.independent_features = fpu_kernel_cfg.max_features &
 					      XFEATURE_MASK_INDEPENDENT;
