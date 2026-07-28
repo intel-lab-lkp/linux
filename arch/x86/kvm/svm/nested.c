@@ -707,6 +707,10 @@ static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 	 * context is not tagged by the ASID, so the shadow NPTs cannot be
 	 * reused across different L2 ASIDs.
 	 *
+	 * Note, last_asid is initialized as 0, so the first nested VM-Enter
+	 * after setting EFER.SVME will always flush the TLB to avoid using
+	 * stale entries.
+	 *
 	 * If L1 requested a full TLB flush for all ASIDs (including its own),
 	 * L1's own ASID is also flushed on nested VM-Exit, before running L1.
 	 *
@@ -727,10 +731,6 @@ static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 		WARN_ON_ONCE(svm->asid != fallback_asid && !is_sev_guest(vcpu));
 		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
 	}
-
-	/* TODO: optimize unconditional TLB flush/MMU sync */
-	kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
-	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
 }
 
 static void nested_svm_exit_tlb_flush(struct kvm_vcpu *vcpu)
@@ -745,9 +745,6 @@ static void nested_svm_exit_tlb_flush(struct kvm_vcpu *vcpu)
 
 	if (svm->asid == svm->nested.asid02)
 		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
-
-	kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
-	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
 }
 
 /*
@@ -1554,7 +1551,20 @@ int svm_allocate_nested(struct vcpu_svm *svm)
 
 	svm->nested.vmcb02.ptr = page_address(vmcb02_page);
 	svm->nested.vmcb02.pa = __sme_set(page_to_pfn(vmcb02_page) << PAGE_SHIFT);
-	svm->nested.asid02 = svm->asid;
+	svm->nested.asid02 = allocate_asid(&svm->vcpu);
+
+	/*
+	 * KVM uses a fallback ASID when out of ASIDs, and fails vCPU creation
+	 * if there's no fallback ASID. ASID allocation must succeed here.
+	 */
+	KVM_BUG_ON(!svm->nested.asid02, svm->vcpu.kvm);
+
+	/*
+	 * Clear last_asid to ensure that the ASID is flushed on the first
+	 * nested VM-Enter. Otherwise, stale TLB entries from a previous life of
+	 * the VPID (e.g. different vCPU or even different VM) could be used.
+	 */
+	svm->nested.last_asid = 0;
 
 	return 0;
 
@@ -1570,6 +1580,8 @@ void svm_free_nested(struct vcpu_svm *svm)
 
 	if (WARN_ON_ONCE(svm->vmcb != svm->vmcb01.ptr))
 		svm_switch_vmcb(svm, &svm->vmcb01);
+
+	free_asid(&svm->vcpu, svm->nested.asid02);
 
 	svm_vcpu_free_msrpm(svm->nested.msrpm);
 	svm->nested.msrpm = NULL;
