@@ -461,7 +461,6 @@ static inline int uv_call_sched(unsigned long r1, unsigned long r2)
 
 	do {
 		cc = __uv_call(r1, r2);
-		cond_resched();
 	} while (cc > 1);
 	return cc;
 }
