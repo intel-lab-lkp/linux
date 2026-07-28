@@ -375,6 +375,9 @@ struct svm_cpu_data {
 	struct vmcb *save_area;
 	unsigned long save_area_pa;
 
+	/* Last vCPU to use fallback_asid on this CPU */
+	struct kvm_vcpu *fallback_asid_vcpu;
+
 	/* index = sev_asid, value = vmcb pointer */
 	struct vmcb **sev_vmcbs;
 };
