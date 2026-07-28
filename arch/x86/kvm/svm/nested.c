@@ -719,6 +719,15 @@ static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 		kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
 	}
 
+	/*
+	 * If L1 and L2 share the same ASID in hardware (when using the fallback
+	 * ASID for both, or for SEV guests), flush it on nested transitions.
+	 */
+	if (svm->asid == svm->nested.asid02) {
+		WARN_ON_ONCE(svm->asid != fallback_asid && !is_sev_guest(vcpu));
+		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
+	}
+
 	/* TODO: optimize unconditional TLB flush/MMU sync */
 	kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
 	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
@@ -733,6 +742,9 @@ static void nested_svm_exit_tlb_flush(struct kvm_vcpu *vcpu)
 	/* Flush L1's own ASID if it request a *full* TLB flush on VMRUN */
 	if (svm->nested.ctl.tlb_ctl == TLB_CONTROL_FLUSH_ALL_ASID)
 		kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
+
+	if (svm->asid == svm->nested.asid02)
+		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
 
 	kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
 	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
