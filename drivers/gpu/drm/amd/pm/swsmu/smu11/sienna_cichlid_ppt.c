@@ -479,6 +479,7 @@ static int sienna_cichlid_patch_pptable_quirk(struct smu_context *smu)
 	struct amdgpu_device *adev = smu->adev;
 	uint32_t *board_reserved;
 	uint16_t *freq_table_gfx;
+	uint16_t *power_limit;
 	uint32_t i;
 
 	/* Fix some OEM SKU specific stability issues */
@@ -498,6 +499,18 @@ static int sienna_cichlid_patch_pptable_quirk(struct smu_context *smu)
 		for (i = 0; i < NUM_GFXCLK_DPM_LEVELS; i++) {
 			if (freq_table_gfx[i] > 2500)
 				freq_table_gfx[i] = 2500;
+		}
+	}
+
+	/* Fix some OEM SKU specific power limit issues */
+	if ((adev->pdev->device == 0x73EF) &&
+	    (adev->pdev->subsystem_vendor == 0x1043)) {
+		if (adev->pdev->subsystem_device == 0x1DEC) {
+			GET_PPTABLE_MEMBER(SocketPowerLimitAc, &power_limit);
+			power_limit[PPT_THROTTLER_PPT0] = 100;
+		} else if (adev->pdev->subsystem_device == 0x1DCC) {
+			GET_PPTABLE_MEMBER(SocketPowerLimitAc, &power_limit);
+			power_limit[PPT_THROTTLER_PPT0] = 105;
 		}
 	}
 
