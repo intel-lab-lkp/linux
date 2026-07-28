@@ -128,11 +128,11 @@ static int ch13726a_unprepare(struct drm_panel *panel)
 static const struct drm_display_mode thor_bottom_modes[] = {
 	{
 		/* 120Hz */
-		.clock = (1080 + 28 + 4 + 36) * (1240 + 16 + 4 + 8) * 120 / 1000,
+		.clock = (1080 + 60 + 8 + 60) * (1240 + 16 + 4 + 8) * 120 / 1000,
 		.hdisplay = 1080,
-		.hsync_start = 1080 + 28,
-		.hsync_end = 1080 + 28 + 4,
-		.htotal = 1080 + 28 + 4 + 36,
+		.hsync_start = 1080 + 60,
+		.hsync_end = 1080 + 28 + 8,
+		.htotal = 1080 + 28 + 4 + 60,
 		.vdisplay = 1240,
 		.vsync_start = 1240 + 16,
 		.vsync_end = 1240 + 16 + 4,
@@ -281,7 +281,7 @@ static int ch13726a_probe(struct mipi_dsi_device *dsi)
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO |
-			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
+			  MIPI_DSI_MODE_VIDEO_BURST;
 
 	ctx->panel.prepare_prev_first = true;
 
