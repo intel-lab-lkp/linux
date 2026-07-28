@@ -791,7 +791,7 @@ static irqreturn_t cxl_pmu_irq(int irq, void *data)
 		struct perf_event *event = info->hw_events[i];
 
 		if (!event) {
-			dev_dbg(info->pmu.dev,
+			dev_dbg(info->pmu.parent,
 				"overflow but on non enabled counter %d\n", i);
 			continue;
 		}
@@ -954,7 +954,7 @@ static int cxl_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 	info->on_cpu = -1;
 	target = cpumask_any_but(cpu_online_mask, cpu);
 	if (target >= nr_cpu_ids) {
-		dev_err(info->pmu.dev, "Unable to find a suitable CPU\n");
+		dev_err(info->pmu.parent, "Unable to find a suitable CPU\n");
 		return 0;
 	}
 
