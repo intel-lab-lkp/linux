@@ -59,6 +59,10 @@
 #define CLKCMU_MOUT_HSI_UFS_EMBD           47
 #define CLKCMU_DOUT_HSI_NOC                48
 #define CLKCMU_DOUT_HSI_UFS_EMBD           49
+#define CLKCMU_MOUT_USB_NOC                50
+#define CLKCMU_MOUT_USB_USB20DRD           51
+#define CLKCMU_DOUT_USB_NOC                52
+#define CLKCMU_DOUT_USB_USB20DRD           53
 
 /* CMU_PERIC */
 #define CLK_MOUT_PERIC_IP_USER             1
@@ -104,5 +108,13 @@
 #define CLK_MOUT_HSI_UFS_EMBD_USER         2
 #define CLK_GOUT_CMU_HSI_IPCLKPORT_PCLK    3
 #define CLK_GOUT_SYSREG_HSI_IPCLKPORT_PCLK 4
+
+/* CMU_USB */
+#define CLK_MOUT_USB_NOC_USER              1
+#define CLK_MOUT_USB_USB20DRD              2
+#define CLK_MOUT_USB_USB20DRD_USER         3
+#define CLK_DOUT_USB_NOC_DIV3              4
+#define CLK_GOUT_CMU_USB_IPCLKPORT_PCLK    5
+#define CLK_GOUT_SYSREG_USB_IPCLKPORT_PCLK 6
 
 #endif /* _DT_BINDINGS_CLOCK_EXYNOS8855_H */
