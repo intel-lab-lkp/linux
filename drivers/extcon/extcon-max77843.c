@@ -933,6 +933,7 @@ static void max77843_muic_remove(struct platform_device *pdev)
 	struct max77843_muic_info *info = platform_get_drvdata(pdev);
 	struct max77693_dev *max77843 = info->max77843;
 
+	cancel_delayed_work_sync(&info->wq_detcable);
 	cancel_work_sync(&info->irq_work);
 	regmap_del_irq_chip(max77843->irq, max77843->irq_data_muic);
 	i2c_unregister_device(max77843->i2c_muic);
