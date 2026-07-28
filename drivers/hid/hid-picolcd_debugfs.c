@@ -86,7 +86,7 @@ static ssize_t picolcd_debug_eeprom_read(struct file *f, char __user *u,
 	/* prepare buffer with info about what we want to read (addr & len) */
 	raw_data[0] = *off & 0xff;
 	raw_data[1] = (*off >> 8) & 0xff;
-	raw_data[2] = s < 20 ? s : 20;
+	raw_data[2] = min(s, 20);
 	if (*off + raw_data[2] > 0xff)
 		raw_data[2] = 0x100 - *off;
 	resp = picolcd_send_and_wait(data->hdev, REPORT_EE_READ, raw_data,
