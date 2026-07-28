@@ -1376,14 +1376,21 @@ static const struct spi_controller_mem_caps nxp_fspi_mem_caps_disable_dtr = {
 static void nxp_fspi_cleanup(void *data)
 {
 	struct nxp_fspi *f = data;
+	int ret;
 
-	/* enable clock first since there is register access */
-	pm_runtime_get_sync(f->dev);
+	{
+		/* enable clock first since there is register access */
+		PM_RUNTIME_ACQUIRE(f->dev, pm);
 
-	/* disable the hardware */
-	fspi_writel(f, FSPI_MCR0_MDIS, f->iobase + FSPI_MCR0);
+		ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+		if (ret < 0) {
+			dev_warn(f->dev, "Failed to enable clock for cleanup: %d\n", ret);
+		} else {
+			/* disable the hardware */
+			fspi_writel(f, FSPI_MCR0_MDIS, f->iobase + FSPI_MCR0);
+		}
+	}
 
-	pm_runtime_put_noidle(f->dev);
 	nxp_fspi_clk_disable_unprep(f);
 
 	if (f->ahb_addr)
