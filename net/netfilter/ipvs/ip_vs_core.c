@@ -872,6 +872,33 @@ static __sum16 ip_vs_checksum_complete(struct sk_buff *skb, int offset)
 	return csum_fold(skb_checksum(skb, offset, skb->len - offset, 0));
 }
 
+bool ip_vs_checksum_common_check(struct sk_buff *skb, int offset, int proto,
+				 int af)
+{
+	__wsum csum;
+
+	if (skb_csum_unnecessary(skb))
+		return true;
+	if (skb->ip_summed == CHECKSUM_NONE)
+		csum = skb_checksum(skb, offset, skb->len - offset, 0);
+	else if (skb->ip_summed == CHECKSUM_COMPLETE)
+		csum = csum_sub(skb->csum, skb_checksum(skb, 0, offset, 0));
+	else
+		return true;
+
+#ifdef CONFIG_IP_VS_IPV6
+	if (af == AF_INET6)
+		return !csum_ipv6_magic(&ipv6_hdr(skb)->saddr,
+					&ipv6_hdr(skb)->daddr,
+					skb->len - offset,
+					proto, csum);
+#endif
+	if (proto == IPPROTO_ICMP)
+		return !csum_fold(csum);
+	return !csum_tcpudp_magic(ip_hdr(skb)->saddr, ip_hdr(skb)->daddr,
+				  skb->len - offset, proto, csum);
+}
+
 static inline enum ip_defrag_users ip_vs_defrag_user(unsigned int hooknum)
 {
 	if (NF_INET_LOCAL_IN == hooknum)
