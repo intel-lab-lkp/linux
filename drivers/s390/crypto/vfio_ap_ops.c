@@ -1821,26 +1821,25 @@ static const struct attribute_group *vfio_ap_mdev_attr_groups[] = {
 static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
 				struct kvm *kvm)
 {
-	struct ap_matrix_mdev *m;
-
 	if (kvm->arch.crypto.crycbd) {
+		/*
+		 * Taking the kvm->arch.crypto.pqap_hook_rwsem lock while
+		 * holding the update locks (below) could result in a
+		 * deadlock condition, so let's hold the rwsem here while we
+		 * check and update the pqap_hook.
+		 */
 		down_write(&kvm->arch.crypto.pqap_hook_rwsem);
+		if (kvm->arch.crypto.pqap_hook) {
+			up_write(&kvm->arch.crypto.pqap_hook_rwsem);
+			return -EPERM;
+		}
 		kvm->arch.crypto.pqap_hook = &matrix_mdev->pqap_hook;
 		up_write(&kvm->arch.crypto.pqap_hook_rwsem);
 
 		get_update_locks_for_kvm(kvm);
-
-		list_for_each_entry(m, &matrix_dev->mdev_list, node) {
-			if (m != matrix_mdev && m->kvm == kvm) {
-				release_update_locks_for_kvm(kvm);
-				return -EPERM;
-			}
-		}
-
 		kvm_get_kvm(kvm);
 		matrix_mdev->kvm = kvm;
 		vfio_ap_mdev_update_guest_apcb(matrix_mdev);
-
 		release_update_locks_for_kvm(kvm);
 	}
 
