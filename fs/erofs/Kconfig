@@ -167,6 +167,20 @@ config EROFS_FS_ZIP_ZSTD
 
 	  If unsure, say N.
 
+config EROFS_FS_ZIP_ZSTD_DEFAULT_MAX_STREAMS
+	int "EROFS Zstandard default maximum decompression streams"
+	depends on EROFS_FS_ZIP_ZSTD
+	range 1 NR_CPUS
+	default 16
+	help
+	  By default EROFS allocates one Zstandard decompression stream per
+	  CPU.  Each stream preallocates a workspace sized for the largest
+	  dictionary of any mounted image (up to 1 MiB), so on systems with
+	  many CPUs this can reserve a lot of memory.  This caps the default;
+	  the zstd_streams module parameter still overrides it.
+
+	  If unsure, keep the default of 16.
+
 config EROFS_FS_ZIP_ACCEL
 	bool "EROFS hardware decompression support"
 	depends on EROFS_FS_ZIP

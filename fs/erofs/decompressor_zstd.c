@@ -53,7 +53,8 @@ static int __init z_erofs_zstd_init(void)
 {
 	/* by default, use # of possible CPUs instead */
 	if (!z_erofs_zstd_nstrms)
-		z_erofs_zstd_nstrms = num_possible_cpus();
+		z_erofs_zstd_nstrms = min_t(unsigned int, num_possible_cpus(),
+				CONFIG_EROFS_FS_ZIP_ZSTD_DEFAULT_MAX_STREAMS);
 
 	for (; z_erofs_zstd_avail_strms < z_erofs_zstd_nstrms;
 	     ++z_erofs_zstd_avail_strms) {
