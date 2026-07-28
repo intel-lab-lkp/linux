@@ -288,7 +288,7 @@ enum node_stat_item {
 #ifdef CONFIG_SWAP
 	NR_SWAPCACHE,
 #endif
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_PGHOT
 	PGPROMOTE_SUCCESS,	/* promote successfully */
 	/**
 	 * Candidate pages for promotion based on hint fault latency.  This
@@ -1555,7 +1555,7 @@ typedef struct pglist_data {
 	unsigned long first_deferred_pfn;
 #endif /* CONFIG_DEFERRED_STRUCT_PAGE_INIT */
 
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_PGHOT
 	/* start time in ms of current promote rate limit period */
 	unsigned int nbp_rl_start;
 	/* number of promote candidate pages at start time of current rate limit period */

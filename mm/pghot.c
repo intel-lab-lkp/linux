@@ -17,6 +17,9 @@
  * the hot pages. kmigrated runs for each lower tier node. It iterates
  * over the node's PFNs and  migrates pages marked for migration into
  * their targeted nodes.
+ *
+ * Migration rate-limiting and dynamic threshold logic implementations
+ * were moved from NUMA Balancing mode 2.
  */
 #include <linux/mm.h>
 #include <linux/migrate.h>
@@ -32,10 +35,16 @@ unsigned int pghot_freq_threshold_max = PGHOT_FREQ_MAX;
 unsigned int kmigrated_sleep_ms = KMIGRATED_SLEEP_MS_DEFAULT;
 unsigned int kmigrated_batch_nr = KMIGRATED_BATCH_NR_DEFAULT;
 
-unsigned int sysctl_pghot_src_enabled;
+unsigned int sysctl_pghot_src_enabled = PGHOT_HINTFAULTS_ENABLED;
 unsigned int sysctl_pghot_target_nid = PGHOT_DEFAULT_NODE;
 unsigned int sysctl_pghot_freq_window = PGHOT_FREQ_WINDOW_DEFAULT;
 unsigned int sysctl_pghot_freq_threshold = PGHOT_FREQ_THRESHOLD_DEFAULT;
+
+/* Restrict the NUMA promotion throughput (MB/s) for each target node. */
+static unsigned int sysctl_pghot_promote_rate_limit = 65536;
+
+#define KMIGRATED_MIGRATION_ADJUST_STEPS	16
+#define KMIGRATED_PROMOTION_THRESHOLD_WINDOW	60000
 
 DEFINE_STATIC_KEY_FALSE(pghot_src_hwhints);
 DEFINE_STATIC_KEY_FALSE(pghot_src_hintfaults);
@@ -144,11 +153,35 @@ static const struct ctl_table pghot_sysctls[] = {
 		.extra1		= SYSCTL_ONE,
 		.extra2		= &pghot_freq_threshold_max,
 	},
+	{
+		.procname	= "pghot_promote_rate_limit_MBps",
+		.data		= &sysctl_pghot_promote_rate_limit,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+	},
+};
+
+/*
+ * numa_balancing_promote_rate_limit_MBps has been replaced by
+ * pghot_promote_rate_limit_MBps but retained here for compatibility.
+ */
+static const struct ctl_table compat_pghot_sysctls[] = {
+	{
+		.procname	= "numa_balancing_promote_rate_limit_MBps",
+		.data		= &sysctl_pghot_promote_rate_limit,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+	},
 };
 
 static void __init pghot_sysctl_init(void)
 {
 	register_sysctl_init("vm", pghot_sysctls);
+	register_sysctl_init("kernel", compat_pghot_sysctls);
 }
 #else
 static inline void pghot_sysctl_init(void) { }
@@ -258,6 +291,110 @@ out:
 	return 0;
 }
 
+/*
+ * For memory tiering mode, if there are enough free pages (more than
+ * enough watermark defined here) in fast memory node, to take full
+ * advantage of fast memory capacity, all recently accessed slow
+ * memory pages will be migrated to fast memory node without
+ * considering hot threshold.
+ */
+static bool pgdat_free_space_enough(struct pglist_data *pgdat)
+{
+	int z;
+	unsigned long enough_wmark;
+
+	enough_wmark = max(1UL * 1024 * 1024 * 1024 >> PAGE_SHIFT,
+			   pgdat->node_present_pages >> 4);
+	for (z = pgdat->nr_zones - 1; z >= 0; z--) {
+		struct zone *zone = pgdat->node_zones + z;
+
+		if (!populated_zone(zone))
+			continue;
+
+		if (zone_watermark_ok(zone, 0,
+				      promo_wmark_pages(zone) + enough_wmark,
+				      ZONE_MOVABLE, 0))
+			return true;
+	}
+	return false;
+}
+
+/*
+ * For memory tiering mode, too high promotion/demotion throughput may
+ * hurt application latency.  So we provide a mechanism to rate limit
+ * the number of pages that are tried to be promoted.
+ */
+static bool kmigrated_promotion_rate_limit(struct pglist_data *pgdat, unsigned long rate_limit,
+					   int nr, unsigned int now_ms)
+{
+	unsigned long nr_cand;
+	unsigned int start;
+
+	mod_node_page_state(pgdat, PGPROMOTE_CANDIDATE, nr);
+	nr_cand = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
+	start = pgdat->nbp_rl_start;
+	if (now_ms - start > MSEC_PER_SEC &&
+	    cmpxchg(&pgdat->nbp_rl_start, start, now_ms) == start)
+		pgdat->nbp_rl_nr_cand = nr_cand;
+	if (nr_cand - pgdat->nbp_rl_nr_cand >= rate_limit)
+		return true;
+	return false;
+}
+
+static void kmigrated_promotion_adjust_threshold(struct pglist_data *pgdat,
+						 unsigned long rate_limit, unsigned int ref_th,
+						 unsigned int now_ms)
+{
+	unsigned int start, th_period, unit_th, th;
+	unsigned long nr_cand, ref_cand, diff_cand;
+
+	th_period = KMIGRATED_PROMOTION_THRESHOLD_WINDOW;
+	start = pgdat->nbp_th_start;
+	if (now_ms - start > th_period &&
+	    cmpxchg(&pgdat->nbp_th_start, start, now_ms) == start) {
+		ref_cand = rate_limit *
+			KMIGRATED_PROMOTION_THRESHOLD_WINDOW / MSEC_PER_SEC;
+		nr_cand = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
+		diff_cand = nr_cand - pgdat->nbp_th_nr_cand;
+		unit_th = ref_th * 2 / KMIGRATED_MIGRATION_ADJUST_STEPS;
+		th = pgdat->nbp_threshold ? : ref_th;
+		if (diff_cand > ref_cand * 11 / 10)
+			th = max(th - unit_th, unit_th);
+		else if (diff_cand < ref_cand * 9 / 10)
+			th = min(th + unit_th, ref_th * 2);
+		pgdat->nbp_th_nr_cand = nr_cand;
+		pgdat->nbp_threshold = th;
+	}
+}
+
+static bool kmigrated_should_migrate_memory(unsigned long nr_pages, int nid,
+					    unsigned long time)
+{
+	struct pglist_data *pgdat;
+	unsigned long rate_limit;
+	unsigned int th, def_th;
+	unsigned int now_ms = jiffies_to_msecs(jiffies); /* Based on full-width jiffies */
+	unsigned long now = jiffies;
+
+	pgdat = NODE_DATA(nid);
+	if (pgdat_free_space_enough(pgdat)) {
+		/* workload changed, reset hot threshold */
+		pgdat->nbp_threshold = 0;
+		mod_node_page_state(pgdat, PGPROMOTE_CANDIDATE_NRL, nr_pages);
+		return true;
+	}
+
+	def_th = sysctl_pghot_freq_window;
+	rate_limit = MB_TO_PAGES(sysctl_pghot_promote_rate_limit);
+	kmigrated_promotion_adjust_threshold(pgdat, rate_limit, def_th, now_ms);
+
+	th = pgdat->nbp_threshold ? : def_th;
+	if (pghot_access_latency(time, now) >= th)
+		return false;
+
+	return !kmigrated_promotion_rate_limit(pgdat, rate_limit, nr_pages, now_ms);
+}
+
 static int pghot_get_hotness(unsigned long pfn, int *nid, int *freq,
 			     unsigned long *time)
 {
@@ -336,6 +473,11 @@ static void kmigrated_walk_zone(unsigned long start_pfn, unsigned long end_pfn,
 		}
 
 		if (folio_nid(folio) == nid) {
+			folio_put(folio);
+			goto out_next;
+		}
+
+		if (!kmigrated_should_migrate_memory(nr, nid, time)) {
 			folio_put(folio);
 			goto out_next;
 		}
@@ -692,6 +834,24 @@ static void pghot_debug_init(void)
 			    &pghot_kmigrated_batch_nr_fops);
 }
 
+/*
+ * Sync the hotness-source static keys with the initial value of
+ * sysctl_pghot_src_enabled. Hint faults are enabled by default so that
+ * selecting the NUMA Balancing memory tiering mode (numa_balancing=2)
+ * promotes hot pages without any additional opt-in, matching the
+ * pre-pghot behaviour.
+ *
+ * This runs unconditionally (not only under CONFIG_SYSCTL) because the
+ * static key, not the sysctl variable, gates pghot_record_access().
+ */
+static void __init pghot_src_enabled_init(void)
+{
+	if (sysctl_pghot_src_enabled & PGHOT_HINTFAULTS_ENABLED)
+		static_branch_enable(&pghot_src_hintfaults);
+	if (sysctl_pghot_src_enabled & PGHOT_HWHINTS_ENABLED)
+		static_branch_enable(&pghot_src_hwhints);
+}
+
 static int __init pghot_init(void)
 {
 	pg_data_t *pgdat;
@@ -711,6 +871,7 @@ static int __init pghot_init(void)
 	}
 	pghot_sysctl_init();
 	pghot_debug_init();
+	pghot_src_enabled_init();
 
 	kmigrated_started = true;
 	return 0;

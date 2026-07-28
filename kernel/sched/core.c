@@ -4639,6 +4639,7 @@ void set_numabalancing_state(bool enabled)
 }
 
 #ifdef CONFIG_PROC_SYSCTL
+#ifdef CONFIG_NUMA_BALANCING_TIERING
 static void reset_memory_tiering(void)
 {
 	struct pglist_data *pgdat;
@@ -4649,6 +4650,7 @@ static void reset_memory_tiering(void)
 		pgdat->nbp_th_start = jiffies_to_msecs(jiffies);
 	}
 }
+#endif
 
 static int sysctl_numa_balancing(const struct ctl_table *table, int write,
 			  void *buffer, size_t *lenp, loff_t *ppos)
@@ -4666,9 +4668,14 @@ static int sysctl_numa_balancing(const struct ctl_table *table, int write,
 	if (err < 0)
 		return err;
 	if (write) {
+		if ((state & NUMA_BALANCING_MEMORY_TIERING) &&
+		    !IS_ENABLED(CONFIG_NUMA_BALANCING_TIERING))
+			return -EOPNOTSUPP;
+#ifdef CONFIG_NUMA_BALANCING_TIERING
 		if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
 		    (state & NUMA_BALANCING_MEMORY_TIERING))
 			reset_memory_tiering();
+#endif
 		sysctl_numa_balancing_mode = state;
 		__set_numabalancing_state(state);
 	}

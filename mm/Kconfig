@@ -1511,7 +1511,7 @@ config LAZY_MMU_MODE_KUNIT_TEST
 
 config PGHOT
 	bool "Hot page tracking and promotion"
-	default n
+	default y if NUMA_BALANCING
 	depends on NUMA_MIGRATION && SPARSEMEM
 	help
 	  A sub-system to track page accesses in lower tier memory and

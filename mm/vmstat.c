@@ -1268,7 +1268,7 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_SWAP
 	[I(NR_SWAPCACHE)]			= "nr_swapcached",
 #endif
-#ifdef CONFIG_NUMA_BALANCING
+#ifdef CONFIG_PGHOT
 	[I(PGPROMOTE_SUCCESS)]			= "pgpromote_success",
 	[I(PGPROMOTE_CANDIDATE)]		= "pgpromote_candidate",
 	[I(PGPROMOTE_CANDIDATE_NRL)]		= "pgpromote_candidate_nrl",

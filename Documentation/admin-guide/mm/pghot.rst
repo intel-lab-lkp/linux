@@ -35,7 +35,11 @@ Path: /proc/sys/vm/pghot_enabled_sources
 - Bits:
   - 0: Hint faults (value 0x1)
   - 1: Hardware hints (value 0x2)
-- Default: 0 (disabled)
+- Default: 0x1 (hint faults enabled, hardware hints disabled). Hint faults
+  are enabled by default so that selecting the NUMA Balancing memory
+  tiering mode (kernel.numa_balancing=2) promotes hot pages without any
+  additional opt-in. Hint faults are fed to pghot only while tiering mode
+  is selected, so this default has no effect otherwise.
 - Example:
   # echo 0x3 > /proc/sys/vm/pghot_enabled_sources
   Enables both hint faults and hwhints sources
@@ -87,3 +91,20 @@ Path: /proc/vmstat
 
 3. **pghot_recorded_hwhints**
    - Number of recorded accesses reported by hwhints source.
+
+NUMA Hint Faults Source
+=======================
+The "hint faults" source is the tiering mode of NUMA Balancing
+which acts as a source of page hotness to pghot.
+
+It is controlled by the NUMA_BALANCING_TIERING config option, which
+gates the memory tiering mode (NUMA_BALANCING_MEMORY_TIERING) of NUMA
+Balancing. At runtime that mode must additionally be selected through
+the kernel.numa_balancing sysctl.
+
+This source is enabled by default through the hint faults bit (0x1) of
+**pghot_enabled_sources**, so selecting the tiering mode alone is enough
+to promote hot pages. It can be disabled at runtime by clearing that bit:
+
+# echo 0x0 > /proc/sys/vm/pghot_enabled_sources
+
