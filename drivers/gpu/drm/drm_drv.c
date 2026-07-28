@@ -36,6 +36,7 @@
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 #include <linux/sched.h>
+#include <linux/seq_buf.h>
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 #include <linux/srcu.h>
@@ -570,15 +571,22 @@ int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 	char *envp[] = { event_string, NULL, NULL, NULL };
 	const char *recovery = NULL;
 	unsigned int len, opt;
+	struct seq_buf buf;
 
-	len = scnprintf(event_string, sizeof(event_string), "%s", "WEDGED=");
+	seq_buf_init(&buf, event_string, sizeof(event_string));
+	seq_buf_puts(&buf, "WEDGED=");
+	len = seq_buf_used(&buf);
 
 	for_each_set_bit(opt, &method, BITS_PER_TYPE(method)) {
 		recovery = drm_get_wedge_recovery(opt);
 		if (drm_WARN_ONCE(dev, !recovery, "invalid recovery method %u\n", opt))
 			break;
 
-		len += scnprintf(event_string + len, sizeof(event_string) - len, "%s,", recovery);
+		seq_buf_printf(&buf, "%s,", recovery);
+		if (drm_WARN_ONCE(dev, seq_buf_has_overflowed(&buf),
+				  "WEDGED event string truncated\n"))
+			break;
+		len = seq_buf_used(&buf);
 	}
 
 	if (recovery)
