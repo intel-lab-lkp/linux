@@ -13851,7 +13851,7 @@ static inline int find_new_ilb(void)
 {
 	int this_cpu = smp_processor_id();
 	const struct cpumask *hk_mask;
-	int ilb_cpu;
+	int ilb_cpu, fallback = -1;
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
 
@@ -13859,19 +13859,32 @@ static inline int find_new_ilb(void)
 		if (ilb_cpu == this_cpu)
 			continue;
 
-		if (idle_cpu(ilb_cpu))
+		if (!idle_cpu(ilb_cpu))
+			continue;
+
+		/*
+		 * Running the idle load balancer on an idle sibling of a busy
+		 * SMT core can reduce the capacity available to its sibling. Prefer
+		 * a CPU whose entire core is idle, but retain the first idle CPU as
+		 * a fallback so idle balancing can still make progress when no fully
+		 * idle core exists.
+		 */
+		if (!sched_smt_active() || is_core_idle(ilb_cpu))
 			return ilb_cpu;
+
+		if (fallback < 0)
+			fallback = ilb_cpu;
 	}
 
-	return -1;
+	return fallback;
 }
 
 /*
  * Kick a CPU to do the NOHZ balancing, if it is time for it, via a cross-CPU
  * SMP function call (IPI).
  *
- * We pick the first idle CPU in the HK_TYPE_KERNEL_NOISE housekeeping set
- * (if there is one).
+ * Prefer a CPU on a fully idle core in the HK_TYPE_KERNEL_NOISE housekeeping
+ * set. Fall back to the first idle CPU when no fully idle core exists.
  */
 static void kick_ilb(unsigned int flags)
 {
