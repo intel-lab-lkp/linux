@@ -2071,6 +2071,7 @@ static void sev_migrate_from(struct kvm *dst_kvm, struct kvm *src_kvm)
 	kvm_for_each_vcpu(i, dst_vcpu, dst_kvm) {
 		dst_svm = to_svm(dst_vcpu);
 
+		dst_svm->asid = dst->asid;
 		sev_init_vmcb(dst_svm, false);
 
 		if (!dst->es_active)
@@ -4816,7 +4817,7 @@ void sev_init_vmcb(struct vcpu_svm *svm, bool init_event)
 	svm->vmcb->control.misc_ctl |= SVM_MISC_ENABLE_SEV;
 	clr_exception_intercept(svm, UD_VECTOR);
 
-	svm->asid = sev_get_asid(vcpu->kvm);
+	WARN_ON_ONCE(svm->asid != sev_get_asid(vcpu->kvm));
 	svm->vmcb->control.asid = svm->asid;
 	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
 

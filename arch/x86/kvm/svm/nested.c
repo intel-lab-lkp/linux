@@ -928,9 +928,9 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	else
 		vmcb02->control.bus_lock_counter = 0;
 
-	/* Done at vmrun: asid.  */
+	vmcb02->control.asid = vmcb01->control.asid;
 
-	/* Also overwritten later if necessary.  */
+	/* Overwritten later if necessary.  */
 	vmcb_clr_flush_asid(vmcb02);
 
 	/* Use vmcb01 MMU and format if guest does not use nNPT */

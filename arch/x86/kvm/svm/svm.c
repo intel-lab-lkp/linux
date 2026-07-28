@@ -189,6 +189,8 @@ DEFINE_PER_CPU(struct svm_cpu_data, svm_data);
 
 static DEFINE_MUTEX(vmcb_dump_mutex);
 
+kvm_tlb_tag_t fallback_asid;
+
 /*
  * Only MSR_TSC_AUX is switched via the user return hook.  EFER is switched via
  * the VMCB, and the SYSCALL/SYSENTER MSRs are handled by VMLOAD/VMSAVE.
@@ -571,10 +573,6 @@ static int svm_enable_virtualization_cpu(void)
 		return r;
 
 	sd = per_cpu_ptr(&svm_data, me);
-	sd->asid_generation = 1;
-	sd->max_asid = cpuid_ebx(SVM_CPUID_FUNC) - 1;
-	sd->next_asid = sd->max_asid + 1;
-	sd->min_asid = max_sev_asid + 1;
 
 	wrmsrq(MSR_VM_HSAVE_PA, sd->save_area_pa);
 
@@ -977,6 +975,8 @@ static void svm_hardware_unsetup(void)
 
 	__free_pages(__sme_pa_to_page(iopm_base), get_order(IOPM_SIZE));
 	iopm_base = 0;
+
+	kvm_destroy_tlb_tags();
 }
 
 static void init_seg(struct vmcb_seg *seg)
@@ -1229,8 +1229,8 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
 	if (gmet_enabled)
 		control->misc_ctl |= SVM_MISC_ENABLE_GMET;
 
-	svm->current_vmcb->asid_generation = 0;
-	svm->asid = 0;
+	control->asid = svm->asid;
+	vmcb_set_flush_asid(vmcb);
 
 	svm->nested.vmcb12_gpa = INVALID_GPA;
 	svm->nested.last_vmcb12_gpa = INVALID_GPA;
@@ -1335,6 +1335,12 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 		goto error_free_sev;
 	}
 
+	svm->asid = allocate_asid(vcpu);
+	if (!svm->asid) {
+		err = -EINVAL;
+		goto error_free_msrpm;
+	}
+
 	svm->x2avic_msrs_intercepted = true;
 	svm->lbr_msrs_intercepted = true;
 
@@ -1346,6 +1352,8 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 
 	return 0;
 
+error_free_msrpm:
+	svm_vcpu_free_msrpm(svm->msrpm);
 error_free_sev:
 	sev_free_vcpu(vcpu);
 error_free_vmcb_page:
@@ -1367,6 +1375,8 @@ static void svm_vcpu_free(struct kvm_vcpu *vcpu)
 
 	__free_page(__sme_pa_to_page(svm->vmcb01.pa));
 	svm_vcpu_free_msrpm(svm->msrpm);
+
+	free_asid(vcpu, svm->asid);
 }
 
 #ifdef CONFIG_CPU_MITIGATIONS
@@ -1890,19 +1900,6 @@ static void svm_update_exception_bitmap(struct kvm_vcpu *vcpu)
 		if (vcpu->guest_debug & KVM_GUESTDBG_USE_SW_BP)
 			set_exception_intercept(svm, BP_VECTOR);
 	}
-}
-
-static void new_asid(struct vcpu_svm *svm, struct svm_cpu_data *sd)
-{
-	if (sd->next_asid > sd->max_asid) {
-		++sd->asid_generation;
-		sd->next_asid = sd->min_asid;
-		svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ALL_ASID;
-		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	}
-
-	svm->current_vmcb->asid_generation = sd->asid_generation;
-	svm->asid = sd->next_asid++;
 }
 
 static void svm_set_dr6(struct kvm_vcpu *vcpu, unsigned long value)
@@ -3758,16 +3755,15 @@ static void svm_set_nested_run_soft_int_state(struct kvm_vcpu *vcpu)
 
 static int pre_svm_run(struct kvm_vcpu *vcpu)
 {
-	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, vcpu->cpu);
 	struct vcpu_svm *svm = to_svm(vcpu);
 
 	/*
-	 * If the previous vmrun of the vmcb occurred on a different physical
-	 * cpu, then mark the vmcb dirty and assign a new asid.  Hardware's
-	 * vmcb clean bits are per logical CPU, as are KVM's asid assignments.
+	 * If the previous VMRUN of the VMCB occurred on a different physical
+	 * CPU, then mark the VMCB dirty and flush the ASID.  Hardware's
+	 * VMCB clean bits are per logical CPU, as are KVM's ASID assignments.
 	 */
 	if (unlikely(svm->current_vmcb->cpu != vcpu->cpu)) {
-		svm->current_vmcb->asid_generation = 0;
+		vmcb_set_flush_asid(svm->vmcb);
 		vmcb_mark_all_dirty(svm->vmcb);
 		svm->current_vmcb->cpu = vcpu->cpu;
         }
@@ -3775,14 +3771,8 @@ static int pre_svm_run(struct kvm_vcpu *vcpu)
 	if (is_sev_guest(vcpu))
 		return pre_sev_run(svm, vcpu->cpu);
 
-	/* FIXME: handle wraparound of asid_generation */
-	if (svm->current_vmcb->asid_generation != sd->asid_generation)
-		new_asid(svm, sd);
-
-	if (unlikely(svm->asid != svm->vmcb->control.asid)) {
-		svm->vmcb->control.asid = svm->asid;
-		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	}
+	if (unlikely(svm->vmcb->control.asid == fallback_asid))
+		vmcb_set_flush_asid(svm->vmcb);
 
 	return 0;
 }
@@ -5606,6 +5596,7 @@ static __init void svm_set_cpu_caps(void)
 
 static __init int svm_hardware_setup(void)
 {
+	unsigned long nr_asids;
 	void *iopm_va;
 	int cpu, r;
 
@@ -5757,6 +5748,14 @@ static __init int svm_hardware_setup(void)
 	svm_set_cpu_caps();
 
 	kvm_caps.inapplicable_quirks &= ~KVM_X86_QUIRK_CD_NW_CLEARED;
+
+	/* Consumes max_sev_asid initialized by sev_hardware_setup() */
+	nr_asids = cpuid_ebx(SVM_CPUID_FUNC);
+	r = kvm_init_tlb_tags(nr_asids, max_sev_asid + 1);
+	if (r)
+		goto err;
+
+	fallback_asid = kvm_alloc_tlb_tag();
 
 	for_each_possible_cpu(cpu) {
 		r = svm_cpu_init(cpu);
