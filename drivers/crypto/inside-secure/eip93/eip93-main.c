@@ -25,6 +25,7 @@
 #include "eip93-aes.h"
 #include "eip93-des.h"
 #include "eip93-aead.h"
+#include "eip93-fallback.h"
 #include "eip93-hash.h"
 
 static struct eip93_alg_template *eip93_algs[] = {
@@ -460,10 +461,12 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 	eip93_irq_enable(eip93, EIP93_INT_RDR_THRESH);
 
 	ret = eip93_register_algs(eip93, algo_flags);
-	if (ret) {
-		eip93_cleanup(eip93);
-		return ret;
-	}
+	if (ret)
+		goto err_cleanup;
+
+	ret = eip93_fallback_register(eip93);
+	if (ret)
+		goto err_unregister_algs;
 
 	ver = readl(eip93->base + EIP93_REG_PE_REVISION);
 	/* EIP_EIP_NO:MAJOR_HW_REV:MINOR_HW_REV:HW_PATCH,PE(ALGO_FLAGS) */
@@ -476,6 +479,13 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 		 readl(eip93->base + EIP93_REG_PE_OPTION_0));
 
 	return 0;
+
+err_unregister_algs:
+	eip93_unregister_algs(algo_flags, ARRAY_SIZE(eip93_algs));
+err_cleanup:
+	eip93_cleanup(eip93);
+
+	return ret;
 }
 
 static void eip93_crypto_remove(struct platform_device *pdev)
@@ -485,6 +495,7 @@ static void eip93_crypto_remove(struct platform_device *pdev)
 
 	algo_flags = readl(eip93->base + EIP93_REG_PE_OPTION_1);
 
+	eip93_fallback_unregister();
 	eip93_unregister_algs(algo_flags, ARRAY_SIZE(eip93_algs));
 	eip93_cleanup(eip93);
 }
