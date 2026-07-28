@@ -336,12 +336,24 @@ struct sk_buff *hsr_create_tagged_frame(struct hsr_frame_info *frame,
 	int movelen;
 
 	if (frame->skb_hsr) {
-		struct hsr_ethhdr *hsr_ethhdr =
-			(struct hsr_ethhdr *)skb_mac_header(frame->skb_hsr);
+		struct hsr_ethhdr *hsr_ethhdr;
+
+		/* The original skb data may be shared with another egress
+		 * clone. Make the clone data private before updating the
+		 * path id so the update cannot corrupt the other copy.
+		 */
+		skb = skb_clone(frame->skb_hsr, GFP_ATOMIC);
+		if (!skb)
+			return NULL;
+		if (skb_cow(skb, 0)) {
+			kfree_skb(skb);
+			return NULL;
+		}
 
 		/* set the lane id properly */
+		hsr_ethhdr = (struct hsr_ethhdr *)skb_mac_header(skb);
 		hsr_set_path_id(frame, hsr_ethhdr, port);
-		return skb_clone(frame->skb_hsr, GFP_ATOMIC);
+		return skb;
 	} else if (port->dev->features & NETIF_F_HW_HSR_TAG_INS) {
 		return skb_clone(frame->skb_std, GFP_ATOMIC);
 	}
@@ -377,15 +389,28 @@ struct sk_buff *prp_create_tagged_frame(struct hsr_frame_info *frame,
 	struct sk_buff *skb;
 
 	if (frame->skb_prp) {
-		struct prp_rct *trailer = skb_get_PRP_rct(frame->skb_prp);
+		struct prp_rct *trailer;
 
+		/* Same sharing hazard as above: privatize the clone data
+		 * before updating the LAN id.
+		 */
+		skb = skb_clone(frame->skb_prp, GFP_ATOMIC);
+		if (!skb)
+			return NULL;
+		if (skb_cow(skb, 0)) {
+			kfree_skb(skb);
+			return NULL;
+		}
+
+		trailer = skb_get_PRP_rct(skb);
 		if (trailer) {
 			prp_set_lan_id(trailer, port);
 		} else {
 			WARN_ONCE(!trailer, "errored PRP skb");
+			kfree_skb(skb);
 			return NULL;
 		}
-		return skb_clone(frame->skb_prp, GFP_ATOMIC);
+		return skb;
 	} else if (port->dev->features & NETIF_F_HW_HSR_TAG_INS) {
 		return skb_clone(frame->skb_std, GFP_ATOMIC);
 	}
