@@ -1134,7 +1134,7 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
 		return ret;
 	}
 
-	if (WARN_ON_ONCE(!svm->nested.initialized))
+	if (WARN_ON_ONCE(!svm->nested.vmcb02.ptr))
 		return -EINVAL;
 
 	vmcb12_gpa = kvm_rax_read(vcpu);
@@ -1484,22 +1484,21 @@ int svm_allocate_nested(struct vcpu_svm *svm)
 {
 	struct page *vmcb02_page;
 
-	if (svm->nested.initialized)
+	if (svm->nested.vmcb02.ptr)
 		return 0;
 
 	vmcb02_page = snp_safe_alloc_page();
 	if (!vmcb02_page)
 		return -ENOMEM;
-	svm->nested.vmcb02.ptr = page_address(vmcb02_page);
-	svm->nested.vmcb02.pa = __sme_set(page_to_pfn(vmcb02_page) << PAGE_SHIFT);
 
 	svm->nested.msrpm = svm_vcpu_alloc_msrpm();
 	if (!svm->nested.msrpm)
 		goto err_free_vmcb02;
 
+	svm->nested.vmcb02.ptr = page_address(vmcb02_page);
+	svm->nested.vmcb02.pa = __sme_set(page_to_pfn(vmcb02_page) << PAGE_SHIFT);
 	svm->nested.asid02 = svm->asid;
 
-	svm->nested.initialized = true;
 	return 0;
 
 err_free_vmcb02:
@@ -1509,7 +1508,7 @@ err_free_vmcb02:
 
 void svm_free_nested(struct vcpu_svm *svm)
 {
-	if (!svm->nested.initialized)
+	if (!svm->nested.vmcb02.ptr)
 		return;
 
 	if (WARN_ON_ONCE(svm->vmcb != svm->vmcb01.ptr))
@@ -1529,8 +1528,6 @@ void svm_free_nested(struct vcpu_svm *svm)
 	 * When the vmcb02 is freed, this optimization becomes invalid.
 	 */
 	svm->nested.last_vmcb12_gpa = INVALID_GPA;
-
-	svm->nested.initialized = false;
 }
 
 void svm_leave_nested(struct kvm_vcpu *vcpu)
