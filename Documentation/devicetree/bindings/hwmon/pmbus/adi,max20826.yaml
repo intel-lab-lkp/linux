@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/pmbus/adi,max20826.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices MAX20826 PMBus Voltage Regulator
+
+maintainers:
+  - Nuno Sá <nuno.sa@analog.com>
+
+description:
+  Analog Devices MAX20826 and similar devices are Dual-Output Multiphase
+  High-Current Controller.
+
+properties:
+  compatible:
+    enum:
+      - adi,max20826
+      - adi,max20855b
+      - adi,max20908
+      - adi,max20912
+      - adi,max20916
+
+  reg:
+    maxItems: 1
+
+  avren-gpios:
+    description: GPIO pin to enable/disable the output voltage on Rail A.
+    maxItems: 1
+
+  bvren-gpios:
+    description: GPIO pin to enable/disable the output voltage on Rail B.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        regulator@64 {
+            compatible = "adi,max20826";
+            reg = <0x64>;
+
+            avren-gpios = <&gpio 0 GPIO_ACTIVE_HIGH>;
+            bvren-gpios = <&gpio 1 GPIO_ACTIVE_HIGH>;
+        };
+    };
