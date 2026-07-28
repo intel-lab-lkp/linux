@@ -2741,6 +2741,17 @@ void kill_regions(struct cxl_root_decoder *cxlrd)
 		unregister_region(cxlr);
 }
 
+static const char *cxl_region_coherency(struct cxl_region *cxlr)
+{
+	if (cxlr->type == CXL_DECODER_HOSTONLYMEM)
+		return "HDM-H";
+
+	if (cxl_root_decoder_is_bi(cxlr->cxlrd))
+		return "HDM-DB";
+
+	return "HDM-D";
+}
+
 /**
  * devm_cxl_add_region - Adds a region to a decoder
  * @cxlrd: root decoder
@@ -2785,8 +2796,9 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 		return ERR_PTR(rc);
 	}
 
-	dev_dbg(port->uport_dev, "%s: created %s\n",
-		dev_name(&cxlrd->cxlsd.cxld.dev), dev_name(dev));
+	dev_dbg(port->uport_dev, "%s: created %s %s\n",
+		dev_name(&cxlrd->cxlsd.cxld.dev), cxl_region_coherency(cxlr),
+		dev_name(dev));
 	return cxlr;
 err:
 	put_device(dev);
