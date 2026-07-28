@@ -61,7 +61,7 @@ void thermal_zone_set_trips(struct thermal_zone_device *tz, int low, int high)
 		return;
 
 	/* No need to change trip points */
-	if (tz->prev_low_trip == low && tz->prev_high_trip == high)
+	if (tz->prev_low_trip == low && tz->prev_high_trip == high && tz->temperature >= trip_temp)
 		return;
 
 	tz->prev_low_trip = low;
