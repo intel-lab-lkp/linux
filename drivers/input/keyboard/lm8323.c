@@ -548,6 +548,13 @@ static struct attribute *lm8323_pwm_attrs[] = {
 };
 ATTRIBUTE_GROUPS(lm8323_pwm);
 
+static void lm8323_cancel_pwm_work(void *data)
+{
+	struct lm8323_pwm *pwm = data;
+
+	cancel_work_sync(&pwm->work);
+}
+
 static int init_pwm(struct lm8323_chip *lm, int id, struct device *dev,
 		    const char *name)
 {
@@ -567,6 +574,10 @@ static int init_pwm(struct lm8323_chip *lm, int id, struct device *dev,
 	INIT_WORK(&pwm->work, lm8323_pwm_work);
 	mutex_init(&pwm->lock);
 	pwm->chip = lm;
+
+	err = devm_add_action_or_reset(dev, lm8323_cancel_pwm_work, pwm);
+	if (err)
+		return err;
 
 	if (name) {
 		pwm->cdev.name = name;
