@@ -7,6 +7,7 @@ TEST_PROGS := \
 	hsr_redbox.sh \
 	link_faults.sh \
 	prp_ping.sh \
+	hsr_shared_mutation.sh \
 # end of TEST_PROGS
 
 TEST_FILES += hsr_common.sh
