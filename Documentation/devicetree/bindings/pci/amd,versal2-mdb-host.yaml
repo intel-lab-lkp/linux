@@ -12,24 +12,65 @@ maintainers:
 allOf:
   - $ref: /schemas/pci/pci-host-bridge.yaml#
   - $ref: /schemas/pci/snps,dw-pcie.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: amd,versal2-mdb-host
+    then:
+      properties:
+        reg:
+          items:
+            - description: MDB System Level Control and Status Register (SLCR) Base
+            - description: configuration region
+            - description: data bus interface
+            - description: address translation unit register
+        reg-names:
+          items:
+            - const: slcr
+            - const: config
+            - const: dbi
+            - const: atu
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amd,versal2-cpm6-host
+              - amd,versal2-cpm6-host1
+    then:
+      properties:
+        reg:
+          minItems: 4
+          items:
+            - description: MDB System Level Control and Status Register (SLCR) Base
+            - description: configuration region
+            - description: data bus interface
+            - description: address translation unit register
+            - description: CPM6 PCIe error and event interrupt registers
+        reg-names:
+          minItems: 4
+          items:
+            - const: slcr
+            - const: config
+            - const: dbi
+            - const: atu
+            - const: intr
 
 properties:
   compatible:
-    const: amd,versal2-mdb-host
+    enum:
+      - amd,versal2-mdb-host
+      - amd,versal2-cpm6-host
+      - amd,versal2-cpm6-host1
 
   reg:
-    items:
-      - description: MDB System Level Control and Status Register (SLCR) Base
-      - description: configuration region
-      - description: data bus interface
-      - description: address translation unit register
+    minItems: 4
+    maxItems: 5
 
   reg-names:
-    items:
-      - const: slcr
-      - const: config
-      - const: dbi
-      - const: atu
+    minItems: 4
+    maxItems: 5
 
   ranges:
     maxItems: 2
@@ -135,6 +176,54 @@ examples:
             };
 
             pcie_intc_0: interrupt-controller {
+                #address-cells = <0>;
+                #interrupt-cells = <1>;
+                interrupt-controller;
+            };
+        };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        pcie@fcdd0000 {
+            compatible = "amd,versal2-cpm6-host";
+            reg = <0x0 0xfcdd0000 0x0 0x1000>,
+                  <0x6 0x100000 0x0 0xff00000>,
+                  <0x6 0x0 0x0 0x100000>,
+                  <0x0 0xfc280000 0x0 0x4000>,
+                  <0x0 0xfc840000 0x0 0x1000>;
+            reg-names = "slcr", "config", "dbi", "atu", "intr";
+            ranges = <0x2000000 0x00 0xe0000000 0x00 0xe0000000 0x00 0x8000000>,
+                     <0x43000000 0x80 0x00 0x80 0x00 0x20 0x00>;
+            interrupts = <GIC_SPI 72 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-parent = <&gic>;
+            interrupt-map-mask = <0 0 0 7>;
+            interrupt-map = <0 0 0 1 &pcie_intc_1 0>,
+                            <0 0 0 2 &pcie_intc_1 1>,
+                            <0 0 0 3 &pcie_intc_1 2>,
+                            <0 0 0 4 &pcie_intc_1 3>;
+            msi-map = <0x0 &gic_its 0x00 0x10000>;
+            #address-cells = <3>;
+            #size-cells = <2>;
+            #interrupt-cells = <1>;
+            device_type = "pci";
+
+            pcie@0,0 {
+                device_type = "pci";
+                reg = <0x0 0x0 0x0 0x0 0x0>;
+                reset-gpios = <&gpio1 40 GPIO_ACTIVE_LOW>;
+                #address-cells = <3>;
+                #size-cells = <2>;
+                ranges;
+            };
+
+            pcie_intc_1: interrupt-controller {
                 #address-cells = <0>;
                 #interrupt-cells = <1>;
                 interrupt-controller;
