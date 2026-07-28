@@ -6,6 +6,11 @@
 
 #include <linux/ptp_clock_kernel.h>
 
+/* Number of significant bits in a raw PKB timestamp */
+#define IDPF_PKB_TS_BITS 23
+/* Maximum supported granularity shift for PKB timestamp extension */
+#define IDPF_PKB_GRAN_MAX ((u8)(sizeof(u64) * 8 - IDPF_PKB_TS_BITS))
+
 /**
  * struct idpf_ptp_cmd - PTP command masks
  * @exec_cmd_mask: mask to trigger command execution
@@ -172,7 +177,9 @@ struct idpf_ptp_vport_tx_tstamp_caps {
  * @set_dev_clk_time_access: access type for setting the device clock time
  * @adj_dev_clk_time_access: access type for the adjusting the device clock
  * @tx_tstamp_access: access type for the Tx timestamp value read
- * @rsv: reserved bits
+ * @pkb_tstamp_ena: packet builder (PKB) timestamping enabled
+ * @tx_compl_tstamp_gran_s: number of left shifts to convert Tx completion
+ *			    descriptor timestamp in nanoseconds
  * @secondary_mbx: parameters for using dedicated PTP mailbox
  * @read_dev_clk_lock: spinlock protecting access to the device clock read
  *		       operation executed by the HW latch
@@ -193,7 +200,8 @@ struct idpf_ptp {
 	enum idpf_ptp_access set_dev_clk_time_access:2;
 	enum idpf_ptp_access adj_dev_clk_time_access:2;
 	enum idpf_ptp_access tx_tstamp_access:2;
-	u8 rsv;
+	bool pkb_tstamp_ena:1;
+	u8 tx_compl_tstamp_gran_s;
 	struct idpf_ptp_secondary_mbx secondary_mbx;
 	spinlock_t read_dev_clk_lock;
 };
@@ -283,13 +291,15 @@ int idpf_ptp_set_timestamp_mode(struct idpf_vport *vport,
 				struct kernel_hwtstamp_config *config);
 u64 idpf_ptp_extend_ts(struct idpf_vport *vport, u64 in_tstamp);
 u64 idpf_ptp_tstamp_extend_32b_to_64b(u64 cached_phc_time, u32 in_timestamp);
+u64 idpf_pkb_tstamp_extend_23b_to_64b(u64 cached_phc_time, u32 in_timestamp,
+				      u8 gran);
 int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
 			u32 *idx);
 void idpf_tstamp_task(struct work_struct *work);
 #else /* CONFIG_PTP_1588_CLOCK */
 static inline int idpf_ptp_init(struct idpf_adapter *adapter)
 {
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static inline void idpf_ptp_release(struct idpf_adapter *adapter) { }
@@ -364,6 +374,12 @@ static inline u64 idpf_ptp_extend_ts(struct idpf_vport *vport, u32 in_tstamp)
 
 static inline u64 idpf_ptp_tstamp_extend_32b_to_64b(u64 cached_phc_time,
 						    u32 in_timestamp)
+{
+	return 0;
+}
+
+static inline u64 idpf_pkb_tstamp_extend_23b_to_64b(u64 cached_phc_time,
+						    u32 in_timestamp, u8 gran)
 {
 	return 0;
 }

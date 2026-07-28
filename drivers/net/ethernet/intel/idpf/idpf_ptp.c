@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2024 Intel Corporation */
 
+#include <kunit/visibility.h>
 #include "idpf.h"
 #include "idpf_ptp.h"
 
@@ -327,6 +328,23 @@ static int idpf_ptp_gettimex64(struct ptp_clock_info *info,
 }
 
 /**
+ * idpf_ptp_update_phctime_txq_grp - Update the cached PHC time for a given Tx
+ *				     queue group.
+ * @grp: transmit queue group in which Tx timestamp is enabled
+ * @systime: cached system time
+ */
+static void
+idpf_ptp_update_phctime_txq_grp(const struct idpf_txq_group *grp, u64 systime)
+{
+	for (u16 i = 0; i < grp->num_txq; i++) {
+		struct idpf_tx_queue *txq = grp->txqs[i];
+
+		if (txq)
+			WRITE_ONCE(txq->cached_phc, systime);
+	}
+}
+
+/**
  * idpf_ptp_update_phctime_rxq_grp - Update the cached PHC time for a given Rx
  *				     queue group.
  * @grp: receive queue group in which Rx timestamp is enabled
@@ -369,6 +387,7 @@ idpf_ptp_update_phctime_rxq_grp(const struct idpf_rxq_group *grp, bool split,
  */
 static int idpf_ptp_update_cached_phctime(struct idpf_adapter *adapter)
 {
+	bool pkb_ena = adapter->ptp->pkb_tstamp_ena;
 	u64 systime;
 	int err;
 
@@ -397,6 +416,15 @@ static int idpf_ptp_update_cached_phctime(struct idpf_adapter *adapter)
 			struct idpf_rxq_group *grp = &rsrc->rxq_grps[i];
 
 			idpf_ptp_update_phctime_rxq_grp(grp, split, systime);
+		}
+
+		if (!pkb_ena)
+			continue;
+
+		for (u16 i = 0; i < rsrc->num_txq_grp; i++) {
+			struct idpf_txq_group *grp = &rsrc->txq_grps[i];
+
+			idpf_ptp_update_phctime_txq_grp(grp, systime);
 		}
 	}
 
@@ -598,6 +626,62 @@ u64 idpf_ptp_tstamp_extend_32b_to_64b(u64 cached_phc_time, u32 in_timestamp)
 
 	return ns;
 }
+
+/**
+ * idpf_pkb_tstamp_extend_23b_to_64b - Convert a 23b raw packet builder (PKB)
+ * timestamp value to 64b nanoseconds.
+ * @cached_phc_time: recently cached copy of PHC time
+ * @in_timestamp: raw packet builder timestamp value (at most 23 bits)
+ * @gran: granularity shift, number of left shifts to convert
+ *	  @in_timestamp to nanoseconds
+ *
+ * Hardware captures PKB timestamps with at most 23 significant bits, with
+ * upper bits being zero. The @gran parameter specifies the granularity shift
+ * needed to express the raw value in nanoseconds. The resulting nanosecond
+ * value is then extended to 64 bits using the cached PHC time.
+ *
+ * Return: PKB timestamp value extended to 64 bits based on cached PHC time.
+ */
+u64 idpf_pkb_tstamp_extend_23b_to_64b(u64 cached_phc_time, u32 in_timestamp,
+				      u8 gran)
+{
+	u64 in_tstamp_ns, delta, phc_time_lo, tstamp_mask, ns;
+
+	/*
+	 * Convert the raw timestamp to nanoseconds. Mask to 23 bits first,
+	 * then cast to u64 before shifting to avoid truncation when the result
+	 * exceeds 32 bits.
+	 */
+	in_tstamp_ns = (u64)(in_timestamp & GENMASK(IDPF_PKB_TS_BITS - 1, 0));
+	in_tstamp_ns <<= gran;
+
+	/*
+	 * Mask covering all (23 + gran) significant bits of the timestamp.
+	 * Used to extract the matching low bits from the PHC time and to
+	 * keep delta arithmetic within the same modular range.
+	 */
+	tstamp_mask = GENMASK_ULL(IDPF_PKB_TS_BITS - 1 + gran, 0);
+
+	/* Extract the lower (23 + gran) bits of the PHC time */
+	phc_time_lo = cached_phc_time & tstamp_mask;
+
+	/*
+	 * Calculate the delta between the lower bits of the cached PHC
+	 * time and the in_tstamp_ns value.
+	 */
+	delta = (in_tstamp_ns - phc_time_lo) & tstamp_mask;
+
+	if (delta > tstamp_mask / 2) {
+		/* Reverse the delta calculation here */
+		delta = (phc_time_lo - in_tstamp_ns) & tstamp_mask;
+		ns = cached_phc_time - delta;
+	} else {
+		ns = cached_phc_time + delta;
+	}
+
+	return ns;
+}
+EXPORT_SYMBOL_IF_KUNIT(idpf_pkb_tstamp_extend_23b_to_64b);
 
 /**
  * idpf_ptp_extend_ts - Convert a 40b timestamp to 64b nanoseconds

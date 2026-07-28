@@ -221,6 +221,7 @@ enum virtchnl2_cap_other {
 	/* Other capability 20 is reserved */
 	VIRTCHNL2_CAP_FLOW_STEER		= BIT_ULL(21),
 	VIRTCHNL2_CAP_LAN_MEMORY_REGIONS	= BIT_ULL(22),
+	VIRTCHNL2_CAP_TX_CMPL_TSTMP		= BIT_ULL(23),
 
 	/* this must be the last capability */
 	VIRTCHNL2_CAP_OEM			= BIT_ULL(63),
@@ -513,6 +514,8 @@ VIRTCHNL2_CHECK_STRUCT_LEN(8, virtchnl2_version_info);
  *			 an LSO.
  * @num_rdma_allocated_vectors: Maximum number of allocated RDMA vectors for
  *				the device.
+ * @tx_cmpl_tstamp_ns_s: Number of left shifts to convert Tx completion
+ *			 descriptor timestamp in nanoseconds.
  * @pad1: Padding for future extensions.
  *
  * Dataplane driver sends this message to CP to negotiate capabilities and
@@ -561,7 +564,8 @@ struct virtchnl2_get_capabilities {
 	u8 min_sso_packet_len;
 	u8 max_hdr_buf_per_lso;
 	__le16 num_rdma_allocated_vectors;
-	u8 pad1[8];
+	u8 tx_cmpl_tstamp_ns_s;
+	u8 pad1[7];
 };
 VIRTCHNL2_CHECK_STRUCT_LEN(80, virtchnl2_get_capabilities);
 

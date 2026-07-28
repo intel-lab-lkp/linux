@@ -25,4 +25,17 @@ config IDPF_SINGLEQ
 	  wants to work in this mode as it increases the driver size and adds
 	  runtme checks on hotpath.
 
+config IDPF_KUNIT_TEST
+	tristate "KUnit tests for the IDPF driver" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit-based unit tests for the Intel IDPF driver.
+	  This builds the idpf_kunit test module used to validate internal
+	  helper logic and edge-case behavior in a controlled environment.
+	  The tests are intended to run without physical hardware and can be
+	  executed under KUnit test runners (for example in QEMU).
+
+	  If unsure, say N.
+
 endif # IDPF

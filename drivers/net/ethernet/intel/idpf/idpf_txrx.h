@@ -140,7 +140,6 @@ do {								\
 #define IDPF_TX_FLAGS_IPV4		BIT(1)
 #define IDPF_TX_FLAGS_IPV6		BIT(2)
 #define IDPF_TX_FLAGS_TUNNEL		BIT(3)
-#define IDPF_TX_FLAGS_TSYN		BIT(4)
 
 struct libeth_rq_napi_stats;
 
@@ -629,8 +628,11 @@ libeth_cacheline_set_assert(struct idpf_rx_queue,
  * @xdp_tx: number of pending &xdp_buff or &xdp_frame buffers
  * @timer: timer for XDP Tx queue cleanup
  * @xdp_lock: lock for XDP Tx queues sharing
+ * @compl_tstamp_ns_s: Number of left shifts to convert Tx completion
+ *		       descriptor timestamp in nanoseconds
  * @cached_tstamp_caps: Tx timestamp capabilities negotiated with the CP
  * @tstamp_task: Work that handles Tx timestamp read
+ * @cached_phc: Cached PHC time for the Tx queue
  * @stats_sync: See struct u64_stats_sync
  * @q_stats: See union idpf_tx_queue_stats
  * @q_id: Queue id
@@ -704,6 +706,9 @@ struct idpf_tx_queue {
 
 	struct u64_stats_sync stats_sync;
 	struct idpf_tx_queue_stats q_stats;
+
+	u64 cached_phc;
+	u8 compl_tstamp_ns_s;
 	__cacheline_group_end_aligned(read_write);
 
 	__cacheline_group_begin_aligned(cold);
@@ -718,7 +723,7 @@ struct idpf_tx_queue {
 	__cacheline_group_end_aligned(cold);
 };
 libeth_cacheline_set_assert(struct idpf_tx_queue, 64,
-			    104 +
+			    120 +
 			    offsetof(struct idpf_tx_queue, cached_tstamp_caps) -
 			    offsetofend(struct idpf_tx_queue, timer) +
 			    offsetof(struct idpf_tx_queue, q_stats) -

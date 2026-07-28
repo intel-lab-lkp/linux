@@ -562,7 +562,8 @@ static int idpf_send_get_caps_msg(struct idpf_adapter *adapter)
 			    VIRTCHNL2_CAP_SPLITQ_QSCHED		|
 			    VIRTCHNL2_CAP_PROMISC		|
 			    VIRTCHNL2_CAP_LOOPBACK		|
-			    VIRTCHNL2_CAP_PTP);
+			    VIRTCHNL2_CAP_PTP			|
+			    VIRTCHNL2_CAP_TX_CMPL_TSTMP);
 
 	err = idpf_send_mb_msg(adapter, &xn_params, &caps, sizeof(caps));
 	if (err)
@@ -3136,10 +3137,24 @@ restart:
 	}
 
 	err = idpf_ptp_init(adapter);
-	if (err)
+	if (err == -EOPNOTSUPP) {
+		pci_dbg(adapter->pdev, "PTP is not supported\n");
+	} else if (err) {
 		pci_err(adapter->pdev, "PTP init failed, err=%pe\n",
 			ERR_PTR(err));
-
+	} else if (idpf_is_cap_ena(adapter, IDPF_OTHER_CAPS,
+				   VIRTCHNL2_CAP_TX_CMPL_TSTMP)) {
+		if (adapter->caps.tx_cmpl_tstamp_ns_s > IDPF_PKB_GRAN_MAX)
+			pci_err(adapter->pdev,
+				"Invalid PKB timestamp granularity shift %u (max %u), disabling PKB timestamping\n",
+				adapter->caps.tx_cmpl_tstamp_ns_s,
+				IDPF_PKB_GRAN_MAX);
+		else if (adapter->caps.tx_cmpl_tstamp_ns_s > 0) {
+			adapter->ptp->pkb_tstamp_ena = true;
+			adapter->ptp->tx_compl_tstamp_gran_s =
+				adapter->caps.tx_cmpl_tstamp_ns_s;
+		}
+	}
 	idpf_init_avail_queues(adapter);
 
 	/* Skew the delay for init tasks for each function based on fn number

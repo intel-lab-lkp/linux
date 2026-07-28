@@ -22,3 +22,5 @@ idpf-$(CONFIG_PTP_1588_CLOCK)	+= idpf_virtchnl_ptp.o
 
 idpf-y				+= xdp.o
 idpf-y				+= xsk.o
+
+obj-$(CONFIG_IDPF_KUNIT_TEST)	+= idpf_kunit.o
