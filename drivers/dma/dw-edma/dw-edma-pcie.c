@@ -29,21 +29,21 @@
 #define PCI_DEVICE_ID_XILINX_B054		0xb054
 #define PCI_DEVICE_ID_XILINX_B00F		0xb00f
 
-#define DW_PCIE_XILINX_MDB_VSEC_DMA_ID		0x6
-#define DW_PCIE_XILINX_MDB_VSEC_ID		0x20
-#define DW_PCIE_XILINX_MDB_VSEC_DMA_BAR		GENMASK(10, 8)
-#define DW_PCIE_XILINX_MDB_VSEC_DMA_MAP		GENMASK(2, 0)
-#define DW_PCIE_XILINX_MDB_VSEC_DMA_WR_CH	GENMASK(9, 0)
-#define DW_PCIE_XILINX_MDB_VSEC_DMA_RD_CH	GENMASK(25, 16)
+#define DW_PCIE_XILINX_VSEC_DMA_ID		0x6
+#define DW_PCIE_XILINX_VSEC_ID			0x20
+#define DW_PCIE_XILINX_VSEC_DMA_BAR		GENMASK(10, 8)
+#define DW_PCIE_XILINX_VSEC_DMA_MAP		GENMASK(2, 0)
+#define DW_PCIE_XILINX_VSEC_DMA_WR_CH		GENMASK(9, 0)
+#define DW_PCIE_XILINX_VSEC_DMA_RD_CH		GENMASK(25, 16)
 
-#define DW_PCIE_XILINX_MDB_DEVMEM_OFF_REG_HIGH	0xc
-#define DW_PCIE_XILINX_MDB_DEVMEM_OFF_REG_LOW	0x8
-#define DW_PCIE_XILINX_MDB_INVALID_ADDR		(~0ULL)
+#define DW_PCIE_XILINX_DEVMEM_OFF_REG_HIGH	0xc
+#define DW_PCIE_XILINX_DEVMEM_OFF_REG_LOW	0x8
+#define DW_PCIE_XILINX_INVALID_ADDR		(~0ULL)
 
-#define DW_PCIE_XILINX_MDB_LL_OFF_GAP		0x200000
-#define DW_PCIE_XILINX_MDB_LL_SIZE		0x800
-#define DW_PCIE_XILINX_MDB_DT_OFF_GAP		0x100000
-#define DW_PCIE_XILINX_MDB_DT_SIZE		0x800
+#define DW_PCIE_XILINX_LL_OFF_GAP		0x200000
+#define DW_PCIE_XILINX_LL_SIZE			0x800
+#define DW_PCIE_XILINX_DT_OFF_GAP		0x100000
+#define DW_PCIE_XILINX_DT_SIZE			0x800
 
 #define DW_BLOCK(a, b, c) \
 	{ \
@@ -258,10 +258,10 @@ static void dw_edma_pcie_get_xilinx_dma_data(struct pci_dev *pdev,
 	u16 vsec;
 	u64 off;
 
-	pdata->devmem_phys_off = DW_PCIE_XILINX_MDB_INVALID_ADDR;
+	pdata->devmem_phys_off = DW_PCIE_XILINX_INVALID_ADDR;
 
 	vsec = pci_find_vsec_capability(pdev, PCI_VENDOR_ID_XILINX,
-					DW_PCIE_XILINX_MDB_VSEC_DMA_ID);
+					DW_PCIE_XILINX_VSEC_DMA_ID);
 	if (!vsec)
 		return;
 
@@ -272,18 +272,18 @@ static void dw_edma_pcie_get_xilinx_dma_data(struct pci_dev *pdev,
 
 	pci_dbg(pdev, "Detected Xilinx PCIe Vendor-Specific Extended Capability DMA\n");
 	pci_read_config_dword(pdev, vsec + 0x8, &val);
-	map = FIELD_GET(DW_PCIE_XILINX_MDB_VSEC_DMA_MAP, val);
+	map = FIELD_GET(DW_PCIE_XILINX_VSEC_DMA_MAP, val);
 	if (map != EDMA_MF_HDMA_NATIVE)
 		return;
 
 	pdata->mf = map;
-	pdata->rg.bar = FIELD_GET(DW_PCIE_XILINX_MDB_VSEC_DMA_BAR, val);
+	pdata->rg.bar = FIELD_GET(DW_PCIE_XILINX_VSEC_DMA_BAR, val);
 
 	pci_read_config_dword(pdev, vsec + 0xc, &val);
 	pdata->wr_ch_cnt = min(pdata->wr_ch_cnt,
-			       FIELD_GET(DW_PCIE_XILINX_MDB_VSEC_DMA_WR_CH, val));
+			       FIELD_GET(DW_PCIE_XILINX_VSEC_DMA_WR_CH, val));
 	pdata->rd_ch_cnt = min(pdata->rd_ch_cnt,
-			       FIELD_GET(DW_PCIE_XILINX_MDB_VSEC_DMA_RD_CH, val));
+			       FIELD_GET(DW_PCIE_XILINX_VSEC_DMA_RD_CH, val));
 
 	pci_read_config_dword(pdev, vsec + 0x14, &val);
 	off = val;
@@ -293,16 +293,16 @@ static void dw_edma_pcie_get_xilinx_dma_data(struct pci_dev *pdev,
 	pdata->rg.off = off;
 
 	vsec = pci_find_vsec_capability(pdev, PCI_VENDOR_ID_XILINX,
-					DW_PCIE_XILINX_MDB_VSEC_ID);
+					DW_PCIE_XILINX_VSEC_ID);
 	if (!vsec)
 		return;
 
 	pci_read_config_dword(pdev,
-			      vsec + DW_PCIE_XILINX_MDB_DEVMEM_OFF_REG_HIGH,
+			      vsec + DW_PCIE_XILINX_DEVMEM_OFF_REG_HIGH,
 			      &val);
 	off = val;
 	pci_read_config_dword(pdev,
-			      vsec + DW_PCIE_XILINX_MDB_DEVMEM_OFF_REG_LOW,
+			      vsec + DW_PCIE_XILINX_DEVMEM_OFF_REG_LOW,
 			      &val);
 	off <<= 32;
 	off |= val;
@@ -360,7 +360,7 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 		 * address use the non-LL mode or simple mode supported by
 		 * the HDMA IP.
 		 */
-		if (vsec_data->devmem_phys_off == DW_PCIE_XILINX_MDB_INVALID_ADDR)
+		if (vsec_data->devmem_phys_off == DW_PCIE_XILINX_INVALID_ADDR)
 			non_ll = true;
 
 		/*
@@ -370,10 +370,10 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 		 */
 		if (!non_ll)
 			dw_edma_set_chan_region_offset(vsec_data, BAR_2, 0,
-						       DW_PCIE_XILINX_MDB_LL_OFF_GAP,
-						       DW_PCIE_XILINX_MDB_LL_SIZE,
-						       DW_PCIE_XILINX_MDB_DT_OFF_GAP,
-						       DW_PCIE_XILINX_MDB_DT_SIZE);
+						       DW_PCIE_XILINX_LL_OFF_GAP,
+						       DW_PCIE_XILINX_LL_SIZE,
+						       DW_PCIE_XILINX_DT_OFF_GAP,
+						       DW_PCIE_XILINX_DT_SIZE);
 	}
 
 	/* Mapping PCI BAR regions */
