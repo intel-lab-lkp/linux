@@ -581,7 +581,7 @@ int cscfg_load_config_sets(struct cscfg_config_desc **config_descs,
 	int err = 0;
 
 	mutex_lock(&cscfg_mutex);
-	if (cscfg_mgr->load_state != CSCFG_NONE) {
+	if (!cscfg_mgr || cscfg_mgr->load_state != CSCFG_NONE) {
 		mutex_unlock(&cscfg_mutex);
 		return -EBUSY;
 	}
@@ -662,7 +662,7 @@ int cscfg_unload_config_sets(struct cscfg_load_owner_info *owner_info)
 	struct cscfg_load_owner_info *load_list_item = NULL;
 
 	mutex_lock(&cscfg_mutex);
-	if (cscfg_mgr->load_state != CSCFG_NONE) {
+	if (!cscfg_mgr || cscfg_mgr->load_state != CSCFG_NONE) {
 		mutex_unlock(&cscfg_mutex);
 		return -EBUSY;
 	}
@@ -902,7 +902,7 @@ static int _cscfg_activate_config(unsigned long cfg_hash)
 	struct cscfg_config_desc *config_desc;
 	int err = -EINVAL;
 
-	if (cscfg_mgr->load_state == CSCFG_UNLOAD)
+	if (!cscfg_mgr || cscfg_mgr->load_state == CSCFG_UNLOAD)
 		return -EBUSY;
 
 	list_for_each_entry(config_desc, &cscfg_mgr->config_desc_list, item) {
