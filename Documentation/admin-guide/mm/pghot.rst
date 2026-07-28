@@ -87,7 +87,7 @@ Path: /proc/vmstat
 
 2. **pghot_recorded_hintfaults**
    - Number of recorded accesses reported by NUMA Balancing based
-     hotness source.
+     hint faults source.
 
 3. **pghot_recorded_hwhints**
    - Number of recorded accesses reported by hwhints source.
@@ -107,4 +107,46 @@ This source is enabled by default through the hint faults bit (0x1) of
 to promote hot pages. It can be disabled at runtime by clearing that bit:
 
 # echo 0x0 > /proc/sys/vm/pghot_enabled_sources
+
+Hardware Hints Source
+=====================
+pghot can consume memory access samples reported by hardware profilers.
+This "hardware hints" (hwhints) source feeds hardware-observed accesses
+into pghot for hot page detection and promotion.
+
+Generic in-kernel support for such profilers is controlled by the
+HWMEM_PROFILER config option. It is not enabled directly by the user;
+an in-kernel driver that forwards hardware-observed accesses to pghot
+selects it.
+
+The AMD IBS Memory Profiler (config AMD_IBS_MEMPROF, available on Zen6
+and later AMD CPUs) is one such driver. It uses the AMD Instruction
+Based Sampling (IBS) Memory Profiler facility to sample user memory
+accesses and record them with pghot.
+
+This source can be activated at runtime through the hardware
+hints bit (0x2) of **pghot_enabled_sources**.
+
+# echo 0x2 > /proc/sys/vm/pghot_enabled_sources
+
+HWHINTS Vmstat Counters
+=======================
+Following vmstat counters provide some stats about hardware hints source.
+
+Path: /proc/vmstat
+
+1. **hwhint_total_events**
+   - Number of total hwhint events recorded by hwhints source.
+
+2. **hwhint_useful_events**
+   - Number of actionable events from hwhints source.
+
+3. **hwhint_dropped_events**
+   - Number of events that were dropped due to buffer overrun.
+
+4. **hwhint_dram_accesses**
+   - Number of DRAM accesses reported by hwhints source.
+
+5. **hwhint_extmem_accesses**
+   - Number of external memory (like CXL) accesses reported by hwhints source.
 

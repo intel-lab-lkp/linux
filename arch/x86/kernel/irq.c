@@ -122,6 +122,9 @@ static const struct irq_stat_info irq_stat_info[IRQ_COUNT_MAX] = {
 #ifdef CONFIG_X86_POSTED_MSI
 	ISS(POSTED_MSI_NOTIFICATION,	"PMN",	"  Posted MSI notification event\n"),
 #endif
+#ifdef CONFIG_AMD_IBS_MEMPROF
+	ISS(IBS_MEMPROF,		"IMP",	"  IBS Memory Profiler interrupts\n"),
+#endif
 	IDS(PIC_APIC_ERROR,		"ERR",	"  PIC/APIC error interrupts\n"),
 #ifdef CONFIG_X86_IO_APIC
 	IDS(IOAPIC_MISROUTED,		"MIS",	"  Misrouted IO/APIC interrupts\n"),

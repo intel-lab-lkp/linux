@@ -735,6 +735,12 @@ DECLARE_IDTENTRY_SYSVEC(POSTED_MSI_NOTIFICATION_VECTOR,	sysvec_posted_msi_notifi
 # define fred_sysvec_posted_msi_notification		NULL
 # endif
 
+# ifdef CONFIG_AMD_IBS_MEMPROF
+DECLARE_IDTENTRY_SYSVEC(IBS_MEMPROF_VECTOR,		sysvec_ibs_memprof);
+#else
+# define fred_sysvec_ibs_memprof			NULL
+#endif
+
 #if IS_ENABLED(CONFIG_HYPERV)
 DECLARE_IDTENTRY_SYSVEC(HYPERVISOR_CALLBACK_VECTOR,	sysvec_hyperv_callback);
 DECLARE_IDTENTRY_SYSVEC(HYPERV_REENLIGHTENMENT_VECTOR,	sysvec_hyperv_reenlightenment);

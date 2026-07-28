@@ -169,6 +169,9 @@ static const __initconst struct idt_data apic_idts[] = {
 # ifdef CONFIG_X86_POSTED_MSI
 	INTG(POSTED_MSI_NOTIFICATION_VECTOR,	asm_sysvec_posted_msi_notification),
 # endif
+#ifdef CONFIG_AMD_IBS_MEMPROF
+	INTG(IBS_MEMPROF_VECTOR,		asm_sysvec_ibs_memprof),
+#endif
 #endif
 };
 
