@@ -421,6 +421,14 @@ static irqreturn_t da903x_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void da903x_cancel_irq_work(void *data)
+{
+	struct da903x_chip *chip = data;
+
+	disable_irq(chip->client->irq);
+	cancel_work_sync(&chip->irq_work);
+}
+
 static const struct da903x_chip_ops da903x_ops[] = {
 	[0] = {
 		.init_chip	= da9030_init_chip,
@@ -529,6 +537,11 @@ static int da903x_probe(struct i2c_client *client)
 		return ret;
 	}
 
+	ret = devm_add_action_or_reset(&client->dev, da903x_cancel_irq_work,
+				       chip);
+	if (ret)
+		return ret;
+
 	return da903x_add_subdevs(chip, pdata);
 }
 
@@ -536,6 +549,7 @@ static void da903x_remove(struct i2c_client *client)
 {
 	struct da903x_chip *chip = i2c_get_clientdata(client);
 
+	devm_release_action(&client->dev, da903x_cancel_irq_work, chip);
 	da903x_remove_subdevs(chip);
 }
 
