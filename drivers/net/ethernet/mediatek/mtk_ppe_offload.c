@@ -107,7 +107,7 @@ mtk_flow_get_wdma_info(struct net_device *dev, const u8 *addr, struct mtk_wdma_i
 	if (err)
 		return err;
 
-	path = &stack.path[stack.num_paths - 1];
+	path = &stack.path[stack.num_paths];
 	if (path->type != DEV_PATH_MTK_WDMA)
 		return -1;
 
