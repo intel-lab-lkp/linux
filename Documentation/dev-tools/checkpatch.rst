@@ -1293,6 +1293,13 @@ Others
   **PRINTF_0XDECIMAL**
     Prefixing 0x with decimal output is defective and should be corrected.
 
+  **SELFTESTS_GITIGNORE**
+    Warn that, if the new file(s) added under tools/testing/selftests/
+    generate any test objects, those objects need to be added to
+    .gitignore.
+
+    See: https://www.kernel.org/doc/html/latest/dev-tools/kselftest.html
+
   **SPDX_LICENSE_TAG**
     The source file is missing or has an improper SPDX identifier tag.
     The Linux kernel requires the precise SPDX identifier in all source files,

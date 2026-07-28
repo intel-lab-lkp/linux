@@ -2701,6 +2701,7 @@ sub process {
 	my $commit_log_long_line = 0;
 	my $commit_log_has_diff = 0;
 	my $reported_maintainer_file = 0;
+	my $reported_selftests_gitignore = 0;
 	my $non_utf8_charset = 0;
 
 	my $last_git_commit_id_linenr = -1;
@@ -3490,6 +3491,15 @@ sub process {
 			$reported_maintainer_file = 1;
 			WARN("FILE_PATH_CHANGES",
 			     "added, moved or deleted file(s), does MAINTAINERS need updating?\n" . $herecurr);
+		}
+
+# Check for new files added under kselftests
+		if (!$reported_selftests_gitignore && !$in_commit_log &&
+		    ($line =~ /^new file mode\s*\d+\s*$/) &&
+		    ($realfile =~ m@^tools/testing/selftests/@)) {
+			$reported_selftests_gitignore = 1;
+			WARN("SELFTESTS_GITIGNORE",
+			     "Added file(s) under tools/testing/selftests/, if they generate any test objects make sure they are added to .gitignore. See: Documentation/dev-tools/kselftest.rst\n");
 		}
 
 # Check for adding new DT bindings not in schema format
