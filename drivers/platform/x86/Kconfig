@@ -1055,6 +1055,8 @@ config OXP_EC
 	depends on ACPI_EC
 	depends on ACPI_BATTERY
 	depends on HWMON
+	depends on INPUT
+	depends on USB
 	depends on X86
 	help
 		Enables support for the platform EC of OneXPlayer and AOKZOE
