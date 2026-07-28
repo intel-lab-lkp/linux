@@ -103,7 +103,6 @@ const struct regmap_config inv_icm42600_spi_regmap_config = {
 EXPORT_SYMBOL_NS_GPL(inv_icm42600_spi_regmap_config, "IIO_ICM42600");
 
 struct inv_icm42600_hw {
-	u8 whoami;
 	const char *name;
 	const struct inv_icm42600_conf *conf;
 };
@@ -143,37 +142,30 @@ static const struct inv_icm42600_conf inv_icm42686_default_conf = {
 
 static const struct inv_icm42600_hw inv_icm42600_hw[INV_CHIP_NB] = {
 	[INV_CHIP_ICM42600] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42600,
 		.name = "icm42600",
 		.conf = &inv_icm42600_default_conf,
 	},
 	[INV_CHIP_ICM42602] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42602,
 		.name = "icm42602",
 		.conf = &inv_icm42600_default_conf,
 	},
 	[INV_CHIP_ICM42605] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42605,
 		.name = "icm42605",
 		.conf = &inv_icm42600_default_conf,
 	},
 	[INV_CHIP_ICM42686] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42686,
 		.name = "icm42686",
 		.conf = &inv_icm42686_default_conf,
 	},
 	[INV_CHIP_ICM42622] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42622,
 		.name = "icm42622",
 		.conf = &inv_icm42600_default_conf,
 	},
 	[INV_CHIP_ICM42688] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42688,
 		.name = "icm42688",
 		.conf = &inv_icm42600_default_conf,
 	},
 	[INV_CHIP_ICM42631] = {
-		.whoami = INV_ICM42600_WHOAMI_ICM42631,
 		.name = "icm42631",
 		.conf = &inv_icm42600_default_conf,
 	},
@@ -505,15 +497,6 @@ static int inv_icm42600_setup(struct inv_icm42600_state *st,
 	unsigned int val;
 	int ret;
 
-	/* check chip self-identification value */
-	ret = regmap_read(st->map, INV_ICM42600_REG_WHOAMI, &val);
-	if (ret)
-		return ret;
-	if (val != hw->whoami) {
-		dev_err(dev, "invalid whoami %#02x expected %#02x (%s)\n",
-			val, hw->whoami, hw->name);
-		return -ENODEV;
-	}
 	st->name = hw->name;
 
 	/* reset to make sure previous state are not there */
