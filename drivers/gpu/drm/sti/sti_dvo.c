@@ -465,8 +465,10 @@ static int sti_dvo_bind(struct device *dev, struct device *master, void *data)
 	drm_bridge_add(&dvo->bridge);
 
 	err = drm_bridge_attach(encoder, &dvo->bridge, NULL, 0);
-	if (err)
+	if (err) {
+		drm_bridge_remove(&dvo->bridge);
 		return err;
+	}
 
 	connector->encoder = encoder;
 	dvo->encoder = encoder;
