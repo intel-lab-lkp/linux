@@ -686,7 +686,7 @@ static u64 cxl_pmu_read_counter(struct perf_event *event)
 	return readq(base + CXL_PMU_COUNTER_REG(event->hw.idx));
 }
 
-static void __cxl_pmu_read(struct perf_event *event, bool overflow)
+static void cxl_pmu_read(struct perf_event *event)
 {
 	struct cxl_pmu_info *info = pmu_to_cxl_pmu_info(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
@@ -698,19 +698,13 @@ static void __cxl_pmu_read(struct perf_event *event, bool overflow)
 	} while (local64_cmpxchg(&hwc->prev_count, prev_cnt, new_cnt) != prev_cnt);
 
 	/*
-	 * If we know an overflow occur then take that into account.
-	 * Note counter is not reset as that would lose events
+	 * The counter is not reset on overflow, and the unsigned subtraction
+	 * masked to the counter width already yields the correct delta across a
+	 * single wrap, so no overflow fixup is needed.
 	 */
 	delta = (new_cnt - prev_cnt) & GENMASK_ULL(info->counter_width - 1, 0);
-	if (overflow && delta < GENMASK_ULL(info->counter_width - 1, 0))
-		delta += (1UL << info->counter_width);
 
 	local64_add(delta, &event->count);
-}
-
-static void cxl_pmu_read(struct perf_event *event)
-{
-	__cxl_pmu_read(event, false);
 }
 
 static void cxl_pmu_event_stop(struct perf_event *event, int flags)
@@ -793,7 +787,7 @@ static irqreturn_t cxl_pmu_irq(int irq, void *data)
 			continue;
 		}
 
-		__cxl_pmu_read(event, true);
+		cxl_pmu_read(event);
 	}
 
 	writeq(overflowed, base + CXL_PMU_OVERFLOW_REG);
