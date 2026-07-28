@@ -800,6 +800,16 @@ static bool should_fill_actions(uint32_t ufid_flags)
 	return !(ufid_flags & OVS_UFID_F_OMIT_ACTIONS);
 }
 
+static bool ovs_flow_id_mismatch(const struct sw_flow_id *a,
+				 const struct sw_flow_id *b)
+{
+	if (a->ufid_len != b->ufid_len)
+		return true;
+
+	return ovs_identifier_is_ufid(a) &&
+	       !!memcmp(a->ufid, b->ufid, a->ufid_len);
+}
+
 static size_t ovs_flow_cmd_msg_size(const struct sw_flow_actions *acts,
 				    const struct sw_flow_id *sfid,
 				    uint32_t ufid_flags)
@@ -1113,9 +1123,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 			error = -EEXIST;
 			goto err_unlock_ovs;
 		}
-		/* The flow identifier has to be the same for flow updates.
-		 * Look for any overlapping flow.
-		 */
+		/* Look for any overlapping flow. */
 		if (unlikely(!ovs_flow_cmp(flow, &match))) {
 			if (ovs_identifier_is_key(&flow->id))
 				flow = ovs_flow_tbl_lookup_exact(&dp->table,
@@ -1126,6 +1134,20 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 				error = -ENOENT;
 				goto err_unlock_ovs;
 			}
+		}
+		if (unlikely(reply &&
+			     ovs_flow_id_mismatch(&new_flow->id, &flow->id))) {
+			struct sk_buff *new_reply;
+
+			new_reply = ovs_flow_cmd_alloc_info(acts, &flow->id,
+							    info, false,
+							    ufid_flags);
+			if (IS_ERR(new_reply)) {
+				error = PTR_ERR(new_reply);
+				goto err_unlock_ovs;
+			}
+			kfree_skb(reply);
+			reply = new_reply;
 		}
 		/* Update actions. */
 		old_acts = ovsl_dereference(flow->sf_acts);
