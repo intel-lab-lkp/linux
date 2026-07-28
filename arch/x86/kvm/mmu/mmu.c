@@ -8073,9 +8073,17 @@ static struct {
 	spinlock_t	lock;
 	unsigned long	*bitmap;
 	unsigned int	nr;
+	kvm_tlb_tag_t	start;
 } tlb_tags;
 
-int kvm_init_tlb_tags(unsigned int nr)
+/*
+ * Initialize @nr_total TLB tags, where @nr_reserved of those tags are reserved.
+ * Reserved tags start at 0 and are contiguous. Hence, usable tags are
+ * [nr_reserved, nr_total). At least one reserved tag is required, as 0 is the
+ * host TLB tag on both VMX and AMD, and is the value returned on a failed tag
+ * allocation.
+ */
+int kvm_init_tlb_tags(unsigned int nr_total, unsigned int nr_reserved)
 {
 	/*
 	 * Limit the number of TLB tags to VMX's hardcoded maximum of 0x10000
@@ -8085,7 +8093,12 @@ int kvm_init_tlb_tags(unsigned int nr)
 	 * need a solution that works for both Intel and AMD.
 	 */
 	const unsigned int MAX_NR_TLB_TAGS = VMX_NR_VPIDS;
+	unsigned int nr;
 
+	if (WARN_ON_ONCE(!nr_reserved || nr_reserved > nr_total))
+		return -EINVAL;
+
+	nr = nr_total - nr_reserved;
 	if (!nr)
 		return 0;
 
@@ -8099,13 +8112,8 @@ int kvm_init_tlb_tags(unsigned int nr)
 	if (!tlb_tags.bitmap)
 		return -ENOMEM;
 
-	/*
-	 * 0 is the host's TLB tag for both VMX's VPID and SVM's ASID, and is
-	 * returned on failed allocations (e.g. no more tags left).
-	 */
-	__set_bit(0, tlb_tags.bitmap);
-
 	tlb_tags.nr = nr;
+	tlb_tags.start = nr_reserved;
 	spin_lock_init(&tlb_tags.lock);
 	return 0;
 }
@@ -8120,30 +8128,36 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_destroy_tlb_tags);
 
 kvm_tlb_tag_t kvm_alloc_tlb_tag(void)
 {
-	kvm_tlb_tag_t tag;
+	unsigned int bit;
 
 	if (!tlb_tags.bitmap)
 		return 0;
 
 	guard(spinlock)(&tlb_tags.lock);
 
-	tag = find_first_zero_bit(tlb_tags.bitmap, tlb_tags.nr);
-	if (tag >= tlb_tags.nr)
+	bit = find_first_zero_bit(tlb_tags.bitmap, tlb_tags.nr);
+	if (bit >= tlb_tags.nr)
 		return 0;
 
-	__set_bit(tag, tlb_tags.bitmap);
-	return tag;
+	__set_bit(bit, tlb_tags.bitmap);
+	return tlb_tags.start + bit;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_alloc_tlb_tag);
 
 void kvm_free_tlb_tag(kvm_tlb_tag_t tag)
 {
-	if (!tag || WARN_ON_ONCE(tag >= tlb_tags.nr))
+	unsigned int bit;
+
+	if (!tag || WARN_ON_ONCE(tag < tlb_tags.start))
+		return;
+
+	bit = tag - tlb_tags.start;
+	if (WARN_ON_ONCE(bit >= tlb_tags.nr))
 		return;
 
 	guard(spinlock)(&tlb_tags.lock);
 
-	__clear_bit(tag, tlb_tags.bitmap);
+	__clear_bit(bit, tlb_tags.bitmap);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_free_tlb_tag);
 
