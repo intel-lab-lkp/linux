@@ -3583,6 +3583,11 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 	/* Assign the asid allocated with this SEV guest */
 	svm->asid = asid;
 
+	if (unlikely(svm->asid != svm->vmcb->control.asid)) {
+		svm->vmcb->control.asid = asid;
+		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
+	}
+
 	/*
 	 * Flush guest TLB:
 	 *
@@ -3595,7 +3600,6 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 
 	sd->sev_vmcbs[asid] = svm->vmcb;
 	vmcb_set_flush_asid(svm->vmcb);
-	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
 	return 0;
 }
 
