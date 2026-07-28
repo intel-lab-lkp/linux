@@ -17,6 +17,7 @@
 #include "debug.h"
 #include "ntfs.h"
 #include "ntfs_fs.h"
+#include <trace/events/ntfs3.h>
 
 /*
  * ntfs_read_mft - Read record and parse MFT.
@@ -1202,6 +1203,8 @@ int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 
 	/* New file will be resident or non resident. */
 	const bool new_file_resident = 1;
+
+	trace_ntfs3_create_inode(dir, dentry);
 
 	if (!fnd)
 		ni_lock_dir(dir_ni);
