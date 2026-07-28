@@ -34,7 +34,6 @@ properties:
               - microchip,pic64gx-clint # Microchip PIC64GX
               - sifive,fu540-c000-clint # SiFive FU540
               - spacemit,k1-clint       # SpacemiT K1
-              - spacemit,k3-clint       # SpacemiT K3
               - starfive,jh7100-clint   # StarFive JH7100
               - starfive,jh7110-clint   # StarFive JH7110
               - starfive,jh8100-clint   # StarFive JH8100
@@ -61,6 +60,10 @@ properties:
           - const: riscv,clint0
         deprecated: true
         description: For the QEMU virt machine only
+      - items:
+          - const: spacemit,k3-clint
+          - const: sifive,clint0
+        deprecated: true
 
     description:
       Should be "<vendor>,<chip>-clint", followed by "sifive,clint<version>"
