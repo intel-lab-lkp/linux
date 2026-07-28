@@ -180,8 +180,10 @@ static void ngbe_irq_enable(struct wx *wx, bool queues)
 	/* mask interrupt */
 	if (queues)
 		wx_intr_enable(wx, NGBE_INTR_ALL);
+	else if (test_bit(WX_FLAG_IRQ_VECTOR_SHARED, wx->flags))
+		wx_intr_enable(wx, BIT(0));
 	else
-		wx_intr_enable(wx, NGBE_INTR_MISC(wx));
+		wx_intr_enable(wx, BIT(wx->num_q_vectors));
 }
 
 /**
