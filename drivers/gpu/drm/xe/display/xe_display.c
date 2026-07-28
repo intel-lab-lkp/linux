@@ -37,6 +37,7 @@
 #include "xe_display_bo.h"
 #include "xe_display_pcode.h"
 #include "xe_display_rpm.h"
+#include "xe_display_wa.h"
 #include "xe_dsb_buffer.h"
 #include "xe_fb_pin.h"
 #include "xe_frontbuffer.h"
@@ -444,6 +445,7 @@ static const struct intel_display_parent_interface parent = {
 	.pcode = &xe_display_pcode_interface,
 	.rpm = &xe_display_rpm_interface,
 	.stolen = &xe_display_stolen_interface,
+	.wa = &xe_display_wa_interface,
 	.has_auxccs = has_auxccs,
 };
 
