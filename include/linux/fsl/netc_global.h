@@ -22,4 +22,13 @@ static inline u64 netc_read64(void __iomem *reg)
 	return ioread64(reg);
 }
 
+#if IS_ENABLED(CONFIG_PTP_NETC_V4_TIMER)
+u64 netc_timer_get_current_time(struct pci_dev *timer_dev);
+#else
+static inline u64 netc_timer_get_current_time(struct pci_dev *timer_dev)
+{
+	return 0;
+}
+#endif
+
 #endif

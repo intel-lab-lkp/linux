@@ -165,6 +165,23 @@ static u64 netc_timer_cur_time_read(struct netc_timer *priv)
 	return netc_timer_rd64(priv, NETC_TMR_CUR_TIME_L);
 }
 
+u64 netc_timer_get_current_time(struct pci_dev *pdev)
+{
+	struct netc_timer *priv = pci_get_drvdata(pdev);
+	unsigned long flags;
+	u64 cur_time;
+
+	if (!priv)
+		return 0;
+
+	spin_lock_irqsave(&priv->lock, flags);
+	cur_time = netc_timer_cur_time_read(priv);
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+	return cur_time;
+}
+EXPORT_SYMBOL_GPL(netc_timer_get_current_time);
+
 static void netc_timer_alarm_write(struct netc_timer *priv,
 				   u64 alarm, int index)
 {
