@@ -162,15 +162,15 @@ static void release_card_device(struct device *dev)
  *  @extra_size: allocate this extra size after the main soundcard structure
  *  @card_ret: the pointer to store the created card instance
  *
- *  The function allocates snd_card instance via kzalloc with the given
+ *  The function allocates snd_card instance via kzalloc_flex with the given
  *  space for the driver to use freely.  The allocated struct is stored
  *  in the given card_ret pointer.
  *
  *  Return: Zero if successful or a negative error code.
  */
 int snd_card_new(struct device *parent, int idx, const char *xid,
-		    struct module *module, int extra_size,
-		    struct snd_card **card_ret)
+		 struct module *module, int extra_size,
+		 struct snd_card **card_ret)
 {
 	struct snd_card *card;
 	int err;
