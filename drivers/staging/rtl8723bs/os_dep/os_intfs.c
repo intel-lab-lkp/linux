@@ -71,20 +71,36 @@ int rtw_ht_enable = 1;
  * 0x01 means enable 2.4G 40MHz
  */
 static int rtw_bw_mode = 0x01;
-static int rtw_ampdu_enable = 1;/* for enable tx_ampdu ,0: disable, 0x1:enable (but wifi_spec should be 0), 0x2: force enable (don't care wifi_spec) */
+static int rtw_ampdu_enable = 1;
+/*  for enable tx_ampdu ,0: disable */
+/*  0x1:enable (but wifi_spec should be 0) */
+/*  0x2: force enable (don't care wifi_spec) */
 static int rtw_rx_stbc = 1;/*  0: disable, 1:enable 2.4g */
-static int rtw_ampdu_amsdu;/*  0: disabled, 1:enabled, 2:auto . There is an IOT issu with DLINK DIR-629 when the flag turn on */
+static int rtw_ampdu_amsdu;
+/*  0: disabled */
+/*  1:enabled */
+/*  2:auto */
+/*  There is an IOT issu with DLINK DIR-629 when the flag turn on */
 /*  Short GI support Bit Map */
 /*  BIT0 - 20MHz, 0: non-support, 1: support */
 /*  BIT1 - 40MHz, 0: non-support, 1: support */
 /*  BIT2 - 80MHz, 0: non-support, 1: support */
 /*  BIT3 - 160MHz, 0: non-support, 1: support */
 static int rtw_short_gi = 0xf;
-/*  BIT0: Enable VHT LDPC Rx, BIT1: Enable VHT LDPC Tx, BIT4: Enable HT LDPC Rx, BIT5: Enable HT LDPC Tx */
+/*  BIT0: Enable VHT LDPC Rx */
+/*  BIT1: Enable VHT LDPC Tx */
+/*  BIT4: Enable HT LDPC Rx */
+/*  BIT5: Enable HT LDPC Tx */
 static int rtw_ldpc_cap = 0x33;
-/*  BIT0: Enable VHT STBC Rx, BIT1: Enable VHT STBC Tx, BIT4: Enable HT STBC Rx, BIT5: Enable HT STBC Tx */
+/*  BIT0: Enable VHT STBC Rx */
+/*  BIT1: Enable VHT STBC Tx */
+/*  BIT4: Enable HT STBC Rx */
+/*  BIT5: Enable HT STBC Tx */
 static int rtw_stbc_cap = 0x13;
-/*  BIT0: Enable VHT Beamformer, BIT1: Enable VHT Beamformee, BIT4: Enable HT Beamformer, BIT5: Enable HT Beamformee */
+/*  BIT0: Enable VHT Beamformer */
+/*  BIT1: Enable VHT Beamformee */
+/*  BIT4: Enable HT Beamformer */
+/*  BIT5: Enable HT Beamformee */
 static int rtw_beamform_cap = 0x2;
 
 static int rtw_lowrate_two_xmit = 1;/* Use 2 path Tx to transmit MCS0~7 and legacy mode */
@@ -98,7 +114,11 @@ module_param(rtw_ant_num, int, 0644);
 MODULE_PARM_DESC(rtw_ant_num, "Antenna number setting");
 
 static int rtw_antdiv_cfg = 1; /*  0:OFF , 1:ON, 2:decide by Efuse config */
-static int rtw_antdiv_type; /* 0:decide by efuse  1: for 88EE, 1Tx and 1RxCG are diversity.(2 Ant with SPDT), 2:  for 88EE, 1Tx and 2Rx are diversity.(2 Ant, Tx and RxCG are both on aux port, RxCS is on main port), 3: for 88EE, 1Tx and 1RxCG are fixed.(1Ant, Tx and RxCG are both on aux port) */
+static int rtw_antdiv_type;
+/* 0:decide by efuse  1: for 88EE, 1Tx and 1RxCG are diversity */
+/* (2 Ant with SPDT), 2:  for 88EE, 1Tx and 2Rx are diversity. */
+/* (2 Ant, Tx and RxCG are both on aux port, RxCS is on main port) */
+/*3: for 88EE, 1Tx and 1RxCG are fixed.(1Ant, Tx and RxCG are both on aux port) */
 
 static int rtw_hw_wps_pbc;
 
@@ -473,7 +493,8 @@ u32 rtw_start_drv_threads(struct adapter *padapter)
 	if (IS_ERR(padapter->cmdThread))
 		_status = _FAIL;
 	else
-		wait_for_completion(&padapter->cmdpriv.terminate_cmdthread_comp); /* wait for cmd_thread to run */
+		wait_for_completion(&padapter->cmdpriv.terminate_cmdthread_comp);
+	/* wait for cmd_thread to run */
 
 	padapter->xmitpriv.SdioXmitThread = kthread_run(rtl8723bs_xmit_thread,
 							padapter, "RTWHALXT");
@@ -659,7 +680,7 @@ u8 rtw_init_drv_sw(struct adapter *padapter)
 		goto free_xmit_priv;
 	spin_lock_init(&padapter->security_key_mutex);
 
-	/*  We don't need to memset padapter->XXX to zero, because adapter is allocated by vzalloc(). */
+	/* We don't need to memset padapter->XXX to zero, because adapter is allocated by vzalloc(). */
 	/* memset((unsigned char *)&padapter->securitypriv, 0, sizeof (struct security_priv)); */
 
 	if (_rtw_init_sta_priv(&padapter->stapriv) == _FAIL)
