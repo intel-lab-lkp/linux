@@ -259,7 +259,9 @@ pub fn export(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// [`pr_info!`]: ../kernel/macro.pr_info.html
 #[proc_macro]
 pub fn fmt(input: TokenStream) -> TokenStream {
-    fmt::fmt(input.into()).into()
+    fmt::fmt(input.into())
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
 }
 
 /// Concatenate two identifiers.

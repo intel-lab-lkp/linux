@@ -2,54 +2,60 @@
 
 use std::collections::BTreeSet;
 
-use proc_macro2::{Ident, TokenStream, TokenTree};
-use quote::quote_spanned;
+use proc_macro2::{
+    Ident,
+    Span,
+    TokenStream,
+    TokenTree, //
+};
+use quote::{
+    quote_spanned,
+    ToTokens, //
+};
+use syn::{
+    Error,
+    LitStr,
+    Result, //
+};
 
 /// Please see [`crate::fmt`] for documentation.
-pub(crate) fn fmt(input: TokenStream) -> TokenStream {
+pub(crate) fn fmt(input: TokenStream) -> Result<TokenStream> {
     let mut input = input.into_iter();
 
-    let first_opt = input.next();
-    let first_owned_str;
-    let mut names = BTreeSet::new();
-    let first_span = {
-        let Some((mut first_str, first_span)) = (match first_opt.as_ref() {
-            Some(TokenTree::Literal(first_lit)) => {
-                first_owned_str = first_lit.to_string();
-                Some(first_owned_str.as_str()).and_then(|first| {
-                    let first = first.strip_prefix('"')?;
-                    let first = first.strip_suffix('"')?;
-                    Some((first, first_lit.span()))
-                })
-            }
-            _ => None,
-        }) else {
-            return first_opt.into_iter().chain(input).collect();
-        };
-
-        // Parse `identifier`s from the format string.
-        //
-        // See https://doc.rust-lang.org/std/fmt/index.html#syntax.
-        while let Some((_, rest)) = first_str.split_once('{') {
-            first_str = rest;
-            if let Some(rest) = first_str.strip_prefix('{') {
-                first_str = rest;
-                continue;
-            }
-            if let Some((name, rest)) = first_str.split_once('}') {
-                first_str = rest;
-                let name = name.split_once(':').map_or(name, |(name, _)| name);
-                if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
-                    names.insert(name);
-                }
-            }
-        }
-        first_span
+    let Some(fmt_tt) = input.next() else {
+        return Err(Error::new(
+            Span::call_site(),
+            "requires at least a format string argument",
+        ));
     };
 
-    let adapter = quote_spanned!(first_span => ::kernel::fmt::Adapter);
+    let fmt: LitStr = syn::parse2(fmt_tt.into())?;
+    let fmt_str = fmt.value();
+    let fmt_span = fmt.span();
 
-    let mut args = TokenStream::from_iter(first_opt);
+    // Parse `identifier`s from the format string.
+    //
+    // See https://doc.rust-lang.org/std/fmt/index.html#syntax.
+    let mut names = BTreeSet::new();
+    let mut fmt_str_rest = fmt_str.as_str();
+    while let Some((_, rest)) = fmt_str_rest.split_once('{') {
+        fmt_str_rest = rest;
+        if let Some(rest) = fmt_str_rest.strip_prefix('{') {
+            fmt_str_rest = rest;
+            continue;
+        }
+        if let Some((name, rest)) = fmt_str_rest.split_once('}') {
+            fmt_str_rest = rest;
+            let name = name.split_once(':').map_or(name, |(name, _)| name);
+            if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
+                names.insert(name);
+            }
+        }
+    }
+
+    let adapter = quote_spanned!(fmt_span => ::kernel::fmt::Adapter);
+
+    let mut args = fmt.to_token_stream();
     {
         let mut flush = |args: &mut TokenStream, current: &mut TokenStream| {
             let current = std::mem::take(current);
@@ -69,7 +75,7 @@ pub(crate) fn fmt(input: TokenStream) -> TokenStream {
                     }
                     (None, acc)
                 })();
-                args.extend(quote_spanned!(first_span => #lhs #adapter(&(#rhs))));
+                args.extend(quote_spanned!(fmt_span => #lhs #adapter(&(#rhs))));
             }
         };
 
@@ -88,9 +94,9 @@ pub(crate) fn fmt(input: TokenStream) -> TokenStream {
     }
 
     for name in names {
-        let name = Ident::new(name, first_span);
-        args.extend(quote_spanned!(first_span => , #name = #adapter(&#name)));
+        let name = Ident::new(name, fmt_span);
+        args.extend(quote_spanned!(fmt_span => , #name = #adapter(&#name)));
     }
 
-    quote_spanned!(first_span => ::core::format_args!(#args))
+    Ok(quote_spanned!(fmt_span => ::core::format_args!(#args)))
 }
