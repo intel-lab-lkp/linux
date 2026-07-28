@@ -73,6 +73,21 @@ enum bitland_mifs_power_profile {
 	WMI_PP_FULL_SPEED	= 3,
 };
 
+/*
+ * MIFS v2 firmware (e.g. Xiaomi Book Pro 14 2026, SSDT "WMID" with UID
+ * "MIFS") implements a reduced WMAA command set (only function groups
+ * 0x0800/0x0a00/0x0c00/0x1000) and reports the performance mode as raw
+ * QFAN EC codes instead of the v1 0..3 enumeration. Codes 9 and 10 are
+ * the SMM-backed "extreme" modes.
+ */
+enum bitland_mifs_v2_power_profile {
+	WMI_V2_PP_QUIET		= 2,
+	WMI_V2_PP_BALANCED	= 3,
+	WMI_V2_PP_SPEED		= 4,
+	WMI_V2_PP_EXTREME	= 9,
+	WMI_V2_PP_EXTREME2	= 10,
+};
+
 enum bitland_mifs_event_id {
 	WMI_EVENT_RESERVED_1		= 1,
 	WMI_EVENT_RESERVED_2		= 2,
@@ -172,6 +187,7 @@ struct bitland_mifs_wmi_data {
 	struct device *pp_dev;
 	enum platform_profile_option saved_profile;
 	bool profile_valid;
+	bool is_v2;	/* MIFS v2 firmware: QFAN perf-mode codes */
 };
 
 static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
@@ -216,6 +232,27 @@ static int laptop_profile_get(struct device *dev,
 	ret = bitland_mifs_wmi_call(data, &input, &result);
 	if (ret)
 		return ret;
+
+	if (data->is_v2) {
+		switch (result.data[0]) {
+		case WMI_V2_PP_QUIET:
+			*profile = PLATFORM_PROFILE_LOW_POWER;
+			break;
+		case WMI_V2_PP_BALANCED:
+			*profile = PLATFORM_PROFILE_BALANCED;
+			break;
+		case WMI_V2_PP_SPEED:
+			*profile = PLATFORM_PROFILE_BALANCED_PERFORMANCE;
+			break;
+		case WMI_V2_PP_EXTREME:
+		case WMI_V2_PP_EXTREME2:
+			*profile = PLATFORM_PROFILE_PERFORMANCE;
+			break;
+		default:
+			return -EINVAL;
+		}
+		return 0;
+	}
 
 	switch (result.data[0]) {
 	case WMI_PP_BALANCED:
@@ -271,6 +308,28 @@ static int laptop_profile_set(struct device *dev,
 	};
 	int ret;
 	u8 val;
+
+	if (data->is_v2) {
+		switch (profile) {
+		case PLATFORM_PROFILE_LOW_POWER:
+			val = WMI_V2_PP_QUIET;
+			break;
+		case PLATFORM_PROFILE_BALANCED:
+			val = WMI_V2_PP_BALANCED;
+			break;
+		case PLATFORM_PROFILE_BALANCED_PERFORMANCE:
+			val = WMI_V2_PP_SPEED;
+			break;
+		case PLATFORM_PROFILE_PERFORMANCE:
+			val = WMI_V2_PP_EXTREME;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		input.payload[0] = val;
+
+		return bitland_mifs_wmi_call(data, &input, NULL);
+	}
 
 	switch (profile) {
 	case PLATFORM_PROFILE_LOW_POWER:
@@ -704,6 +763,26 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		return ret;
 
 	dev_set_drvdata(&wdev->dev, drv_data);
+
+	if (dev_type == BITLAND_WMI_CONTROL) {
+		/*
+		 * Firmware variant detection: v1 firmware reports the perf mode
+		 * as 0..3 (enum bitland_mifs_power_profile); anything else means
+		 * the reduced MIFS v2 command set with raw QFAN codes.
+		 */
+		struct bitland_mifs_input probe_in = {
+			.operation = WMI_METHOD_GET,
+			.function = WMI_FN_SYSTEM_PER_MODE,
+		};
+		struct bitland_mifs_output probe_out;
+
+		if (!bitland_mifs_wmi_call(drv_data, &probe_in, &probe_out) &&
+		    probe_out.data[0] > WMI_PP_FULL_SPEED) {
+			drv_data->is_v2 = true;
+			dev_info(&wdev->dev,
+				 "MIFS v2 firmware detected (QFAN mode codes)\n");
+		}
+	}
 
 	if (dev_type == BITLAND_WMI_EVENT) {
 		/* Register input device for hotkeys */
