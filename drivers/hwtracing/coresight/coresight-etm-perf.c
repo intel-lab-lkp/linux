@@ -27,6 +27,7 @@
 #include "coresight-trace-id.h"
 
 static struct pmu etm_pmu;
+static struct workqueue_struct *etm_free_wq;
 static bool etm_perf_up;
 
 /*
@@ -292,7 +293,7 @@ static void etm_free_aux(void *data)
 {
 	struct etm_event_data *event_data = data;
 
-	schedule_work(&event_data->work);
+	queue_work(etm_free_wq, &event_data->work);
 }
 
 /*
@@ -1034,6 +1035,10 @@ int __init etm_perf_init(void)
 {
 	int ret;
 
+	etm_free_wq = alloc_workqueue("coresight_etm_free", WQ_UNBOUND, 0);
+	if (!etm_free_wq)
+		return -ENOMEM;
+
 	etm_pmu.capabilities		= (PERF_PMU_CAP_EXCLUSIVE |
 					   PERF_PMU_CAP_ITRACE |
 					   PERF_PMU_CAP_AUX_PAUSE);
@@ -1054,13 +1059,22 @@ int __init etm_perf_init(void)
 	etm_pmu.module			= THIS_MODULE;
 
 	ret = perf_pmu_register(&etm_pmu, CORESIGHT_ETM_PMU_NAME, -1);
-	if (ret == 0)
-		etm_perf_up = true;
+	if (ret) {
+		destroy_workqueue(etm_free_wq);
+		return ret;
+	}
 
-	return ret;
+	etm_perf_up = true;
+	return 0;
 }
 
 void etm_perf_exit(void)
 {
 	perf_pmu_unregister(&etm_pmu);
+	destroy_workqueue(etm_free_wq);
+}
+
+void etm_perf_flush_workqueue(void)
+{
+	flush_workqueue(etm_free_wq);
 }

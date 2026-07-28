@@ -116,5 +116,6 @@ int etm_perf_add_symlink_cscfg(struct device *dev,
 void etm_perf_del_symlink_cscfg(struct cscfg_config_desc *config_desc);
 int __init etm_perf_init(void);
 void etm_perf_exit(void);
+void etm_perf_flush_workqueue(void);
 
 #endif

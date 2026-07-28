@@ -2094,31 +2094,31 @@ static int __init coresight_init(void)
 	if (ret)
 		return ret;
 
-	ret = etm_perf_init();
-	if (ret)
-		goto exit_bus_unregister;
-
 	/* Register function to be called for panic */
 	ret = atomic_notifier_chain_register(&panic_notifier_list,
 					     &coresight_notifier);
 	if (ret)
-		goto exit_perf;
+		goto exit_bus_unregister;
 
-	/* initialise the coresight syscfg API */
-	ret = cscfg_init();
+	ret = coresight_pm_setup();
 	if (ret)
 		goto exit_notifier;
 
-	ret = coresight_pm_setup();
+	ret = etm_perf_init();
+	if (ret)
+		goto exit_pm;
+
+	/* initialise the coresight syscfg API */
+	ret = cscfg_init();
 	if (!ret)
 		return 0;
 
-	cscfg_exit();
+	etm_perf_exit();
+exit_pm:
+	coresight_pm_cleanup();
 exit_notifier:
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					     &coresight_notifier);
-exit_perf:
-	etm_perf_exit();
 exit_bus_unregister:
 	bus_unregister(&coresight_bustype);
 	return ret;
@@ -2127,6 +2127,12 @@ exit_bus_unregister:
 static void __exit coresight_exit(void)
 {
 	coresight_pm_cleanup();
+	/*
+	 * Flush Perf workqueue before the rest of Coresight is torn down
+	 * because work items touch coresight-config and also require the .text
+	 * to remain loaded.
+	 */
+	etm_perf_flush_workqueue();
 	cscfg_exit();
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					     &coresight_notifier);
