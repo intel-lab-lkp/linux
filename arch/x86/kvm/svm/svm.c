@@ -2425,17 +2425,51 @@ static int clgi_interception(struct kvm_vcpu *vcpu)
 
 static int invlpga_interception(struct kvm_vcpu *vcpu)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
 	/* FIXME: Handle an address size prefix. */
 	gva_t gva = kvm_rax_read(vcpu);
 	u32 asid = kvm_ecx_read(vcpu);
+	int cpu;
 
 	if (nested_svm_check_permissions(vcpu))
 		return 1;
 
 	trace_kvm_invlpga(to_svm(vcpu)->vmcb->save.rip, asid, gva);
 
-	/* Let's treat INVLPGA the same as INVLPG (can be optimized!) */
-	kvm_mmu_invlpg(vcpu, gva);
+	/*
+	 * INVLPG on a non-canonical address is a NOP according to the SDM,
+	 * assumethe same behavior from INVLPGA since the APM doesn't specify.
+	 */
+	if (is_noncanonical_invlpg_address(gva, vcpu))
+		return kvm_skip_emulated_instruction(vcpu);
+
+	/*
+	 * Do nothing if L1 is flushing a different L2 ASID than the one KVM is
+	 * currently tracking.  KVM tracks a single L2 ASID, and performs a TLB
+	 * flush (and MMU resync if needed) when L1 switches ASIDs anyway.
+	 */
+	if (asid && asid != svm->nested.last_asid)
+		return kvm_skip_emulated_instruction(vcpu);
+
+	/*
+	 * Handle INVLPGA similar to INVLPG, with one caveat. If the specified
+	 * ASID is non-zero (i.e. L1 is not flushing it's own ASID), skip
+	 * flushing the TLB for the current context (L1's), and use INVLPGA to
+	 * flush L2's ASID in hardware if running on the same CPU (otherwise
+	 * fallback to a full ASID flush).
+	 *
+	 * Note, if NPT is disabled, this will sync all the shadow page tables.
+	 * This can be optimized by keying off guest_mode.
+	 */
+	__kvm_mmu_invlpg(vcpu, gva, !asid);
+	if (asid) {
+		cpu = get_cpu();
+		if (cpu == svm->nested.vmcb02.cpu)
+			invlpga(gva, svm->nested.asid02);
+		else
+			vmcb_set_flush_asid(svm->nested.vmcb02.ptr);
+		put_cpu();
+	}
 
 	return kvm_skip_emulated_instruction(vcpu);
 }
