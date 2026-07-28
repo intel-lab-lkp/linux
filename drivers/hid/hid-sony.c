@@ -967,7 +967,7 @@ static void sixaxis_parse_report(struct sony_sc *sc, u8 *rd, int size)
 		battery_capacity = 100;
 		battery_status = (rd[offset] & 0x01) ? POWER_SUPPLY_STATUS_FULL : POWER_SUPPLY_STATUS_CHARGING;
 	} else {
-		index = rd[offset] <= 5 ? rd[offset] : 5;
+		index = min(rd[offset], 5);
 		battery_capacity = sixaxis_battery_capacity[index];
 		battery_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	}
