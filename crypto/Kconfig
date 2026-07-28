@@ -267,6 +267,15 @@ config CRYPTO_BENCHMARK
 	  algorithms in the kernel.  It should not be enabled in production
 	  kernels.
 
+config CRYPTO_DYNAMIC_FALLBACK
+	tristate
+	select CRYPTO_BENCHMARK_LIB
+	help
+	  Build generic support for selecting software fallback thresholds
+	  from Crypto API benchmark results.  Crypto drivers select this
+	  internal library when they support runtime fallback tuning for
+	  their hardware implementations.
+
 config CRYPTO_SIMD
 	tristate
 	select CRYPTO_AEAD
