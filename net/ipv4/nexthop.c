@@ -169,7 +169,7 @@ static int nh_notifier_res_table_info_init(struct nh_notifier_info *info,
 	info->type = NH_NOTIFIER_INFO_TYPE_RES_TABLE;
 	size = struct_size(info->nh_res_table, nhs, num_nh_buckets);
 	info->nh_res_table = __vmalloc(size, GFP_KERNEL | __GFP_ZERO |
-				       __GFP_NOWARN);
+				       __GFP_NOWARN | __GFP_ACCOUNT);
 	if (!info->nh_res_table)
 		return -ENOMEM;
 
@@ -533,7 +533,7 @@ static struct nexthop *nexthop_alloc(void)
 {
 	struct nexthop *nh;
 
-	nh = kzalloc_obj(struct nexthop);
+	nh = kzalloc_obj(struct nexthop, GFP_KERNEL_ACCOUNT);
 	if (nh) {
 		INIT_LIST_HEAD(&nh->fi_list);
 		INIT_LIST_HEAD(&nh->f6i_list);
@@ -548,7 +548,7 @@ static struct nh_group *nexthop_grp_alloc(u16 num_nh)
 {
 	struct nh_group *nhg;
 
-	nhg = kzalloc_flex(*nhg, nh_entries, num_nh);
+	nhg = kzalloc_flex(*nhg, nh_entries, num_nh, GFP_KERNEL_ACCOUNT);
 	if (nhg)
 		nhg->num_nh = num_nh;
 
@@ -565,7 +565,8 @@ nexthop_res_table_alloc(struct net *net, u32 nhg_id, struct nh_config *cfg)
 	unsigned long size;
 
 	size = struct_size(res_table, nh_buckets, num_nh_buckets);
-	res_table = __vmalloc(size, GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN);
+	res_table = __vmalloc(size, GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN |
+			      __GFP_ACCOUNT);
 	if (!res_table)
 		return NULL;
 
@@ -2808,7 +2809,8 @@ static struct nexthop *nexthop_create_group(struct net *net,
 			nhg->has_v4 = true;
 
 		nhg->nh_entries[i].stats =
-			netdev_alloc_pcpu_stats(struct nh_grp_entry_stats);
+			__netdev_alloc_pcpu_stats(struct nh_grp_entry_stats,
+						  GFP_KERNEL_ACCOUNT);
 		if (!nhg->nh_entries[i].stats) {
 			err = -ENOMEM;
 			nexthop_put(nhe);
@@ -2952,7 +2954,7 @@ static struct nexthop *nexthop_create(struct net *net, struct nh_config *cfg,
 	if (!nh)
 		return ERR_PTR(-ENOMEM);
 
-	nhi = kzalloc_obj(*nhi);
+	nhi = kzalloc_obj(*nhi, GFP_KERNEL_ACCOUNT);
 	if (!nhi) {
 		kfree(nh);
 		return ERR_PTR(-ENOMEM);
