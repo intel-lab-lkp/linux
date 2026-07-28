@@ -171,6 +171,82 @@ static void test_numa_allocation(int fd, size_t total_size)
 	kvm_munmap(mem, total_size);
 }
 
+/*
+ * Each page is filled with a distinct byte (its index). Check every byte that
+ * data is intact after migration.
+ */
+static void verify_page(const char *page, int page_idx, size_t size,
+			const char *when)
+{
+	char expected = (char)(page_idx & 0xff);
+	size_t off;
+
+	for (off = 0; off < size; off++)
+		TEST_ASSERT(page[off] == expected,
+			    "Page %d corrupted at offset %zu %s", page_idx, off, when);
+}
+
+static void test_migrate_folio(int fd, size_t total_size)
+{
+	const unsigned long nodemask_0 = 1; /* nid: 0 */
+	unsigned long maxnode = BITS_PER_TYPE(nodemask_0);
+	int page_count = total_size / page_size;
+	int *status, *nodes;
+	void **addr;
+	char *mem;
+	int i;
+
+	if (!is_multi_numa_node_system())
+		return;
+
+	mem = kvm_mmap(total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
+
+	addr = calloc(page_count, sizeof(*addr));
+	status = calloc(page_count, sizeof(*status));
+	nodes = calloc(page_count, sizeof(*nodes));
+	TEST_ASSERT(addr && status && nodes, "Failed to allocate page arrays");
+
+	/* Allocate all folios on node 0 and fill each with a known pattern. */
+	kvm_mbind(mem, total_size, MPOL_BIND, &nodemask_0, maxnode, 0);
+	for (i = 0; i < page_count; i++) {
+		memset(mem + i * page_size, (char)(i & 0xff), page_size);
+		addr[i] = mem + i * page_size;
+	}
+
+	kvm_move_pages(0, page_count, addr, NULL, status, 0);
+	for (i = 0; i < page_count; i++)
+		TEST_ASSERT(status[i] == 0, "Page %d should be on node 0", i);
+
+	/* Migrate node 0 -> 1, then check both the location and the data. */
+	for (i = 0; i < page_count; i++)
+		nodes[i] = 1;
+	kvm_move_pages(0, page_count, addr, nodes, status, MPOL_MF_MOVE);
+
+	kvm_move_pages(0, page_count, addr, NULL, status, 0);
+	for (i = 0; i < page_count; i++)
+		TEST_ASSERT(status[i] == 1,
+			    "Page %d should be on node 1 after migration", i);
+	for (i = 0; i < page_count; i++)
+		verify_page(mem + i * page_size, i, page_size, "after migration");
+
+	/* Migrate back node 1 -> 0, then re-check the location and the data. */
+	for (i = 0; i < page_count; i++)
+		nodes[i] = 0;
+	kvm_move_pages(0, page_count, addr, nodes, status, MPOL_MF_MOVE);
+
+	kvm_move_pages(0, page_count, addr, NULL, status, 0);
+	for (i = 0; i < page_count; i++)
+		TEST_ASSERT(status[i] == 0,
+			    "Page %d should be on node 0 after round-trip", i);
+	for (i = 0; i < page_count; i++)
+		verify_page(mem + i * page_size, i, page_size, "after round-trip");
+
+	free(addr);
+	free(status);
+	free(nodes);
+	kvm_munmap(mem, total_size);
+}
+
 static void test_collapse(int fd, u64 flags)
 {
 	const size_t pmd_size = get_trans_hugepagesz();
@@ -472,6 +548,9 @@ static void __test_guest_memfd(struct kvm_vm *vm, u64 flags)
 static void test_guest_memfd(unsigned long vm_type)
 {
 	struct kvm_vm *vm = vm_create_barebones_type(vm_type);
+	const u64 migrate_flags = GUEST_MEMFD_FLAG_MMAP |
+				  GUEST_MEMFD_FLAG_INIT_SHARED |
+				  GUEST_MEMFD_FLAG_MIGRATABLE;
 	u64 flags;
 
 	test_guest_memfd_flags(vm);
@@ -486,6 +565,9 @@ static void test_guest_memfd(unsigned long vm_type)
 	if (flags & GUEST_MEMFD_FLAG_INIT_SHARED)
 		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP |
 				       GUEST_MEMFD_FLAG_INIT_SHARED);
+	/* Testing with move_pages() requires MMAP and INIT_SHARED. */
+	if ((flags & migrate_flags) == migrate_flags)
+		gmem_test(migrate_folio, vm, migrate_flags);
 
 	kvm_vm_free(vm);
 }
