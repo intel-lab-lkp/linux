@@ -783,7 +783,7 @@ EXPORT_SYMBOL(__zerocopy_sg_from_iter);
  */
 int zerocopy_sg_from_iter(struct sk_buff *skb, struct iov_iter *from)
 {
-	int copy = min_t(int, skb_headlen(skb), iov_iter_count(from));
+	int copy = min_t(size_t, skb_headlen(skb), iov_iter_count(from));
 
 	/* copy up to skb headlen */
 	if (skb_copy_datagram_from_iter(skb, 0, from, copy))
