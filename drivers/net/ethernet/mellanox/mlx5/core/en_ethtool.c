@@ -42,6 +42,7 @@
 #include "en/ptp.h"
 #include "lib/clock.h"
 #include "en/fs_ethtool.h"
+#include "en_accel/psp.h"
 
 #define LANES_UNKNOWN		 0
 
@@ -2386,6 +2387,13 @@ static int set_pflag_tx_port_ts(struct net_device *netdev, bool enable)
 			   "%s: MQPRIO mode channel offload is active, cannot set the TX-port-TS\n",
 			   __func__);
 		return -EINVAL;
+	}
+
+	if (enable && mlx5e_psp_tx_keys_active(priv)) {
+		netdev_err(priv->netdev,
+			   "%s: PSP TX keys are active, TX-port-TS cannot be enabled\n",
+			   __func__);
+		return -EBUSY;
 	}
 	MLX5E_SET_PFLAG(&new_params, MLX5E_PFLAG_TX_PORT_TS, enable);
 	/* No need to verify SQ stop room as

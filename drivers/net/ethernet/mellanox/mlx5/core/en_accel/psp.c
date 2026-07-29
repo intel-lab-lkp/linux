@@ -993,6 +993,20 @@ static int mlx5e_psp_assoc_add(struct psp_dev *psd, struct psp_assoc *pas,
 	struct psp_key *nkey;
 	int err;
 
+	/* Mutual exclusion with TX-port-TS (shared WQE metadata). Reserve
+	 * tx_key_cnt under state_lock with the TS check so ethtool cannot
+	 * enable TX-port-TS until key creation completes or fails.
+	 */
+	mutex_lock(&priv->state_lock);
+	if (MLX5E_GET_PFLAG(&priv->channels.params, MLX5E_PFLAG_TX_PORT_TS)) {
+		mutex_unlock(&priv->state_lock);
+		NL_SET_ERR_MSG_MOD(extack,
+				   "TX-port-TS is active, PSP TX keys cannot be added");
+		return -EBUSY;
+	}
+	atomic_inc(&psp->tx_key_cnt);
+	mutex_unlock(&priv->state_lock);
+
 	mdev = priv->mdev;
 	nkey = (struct psp_key *)pas->drv_data;
 
@@ -1001,11 +1015,11 @@ static int mlx5e_psp_assoc_add(struct psp_dev *psd, struct psp_assoc *pas,
 					 MLX5_ACCEL_OBJ_PSP_KEY,
 					 &nkey->id);
 	if (err) {
+		atomic_dec(&psp->tx_key_cnt);
 		mlx5_core_err(mdev, "Failed to create encryption key (err = %d)\n", err);
 		return err;
 	}
 
-	atomic_inc(&psp->tx_key_cnt);
 	return 0;
 }
 

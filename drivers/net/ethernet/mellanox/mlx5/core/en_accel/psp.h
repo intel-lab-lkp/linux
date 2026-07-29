@@ -30,6 +30,11 @@ struct mlx5e_psp {
 	atomic_t tx_drop;
 };
 
+static inline bool mlx5e_psp_tx_keys_active(const struct mlx5e_priv *priv)
+{
+	return priv->psp && atomic_read(&priv->psp->tx_key_cnt);
+}
+
 static inline bool mlx5_is_psp_device(struct mlx5_core_dev *mdev)
 {
 	if (!MLX5_CAP_GEN(mdev, psp))
@@ -52,6 +57,11 @@ void mlx5e_psp_unregister(struct mlx5e_priv *priv);
 int mlx5e_psp_init(struct mlx5e_priv *priv);
 void mlx5e_psp_cleanup(struct mlx5e_priv *priv);
 #else
+static inline bool mlx5e_psp_tx_keys_active(const struct mlx5e_priv *priv)
+{
+	return false;
+}
+
 static inline int mlx5_accel_psp_fs_init_rx_tables(struct mlx5e_priv *priv)
 {
 	return 0;
@@ -74,4 +84,5 @@ static inline void mlx5e_psp_unregister(struct mlx5e_priv *priv) { }
 static inline int mlx5e_psp_init(struct mlx5e_priv *priv) { return 0; }
 static inline void mlx5e_psp_cleanup(struct mlx5e_priv *priv) { }
 #endif /* CONFIG_MLX5_EN_PSP */
+
 #endif /* __MLX5E_ACCEL_PSP_H__ */
