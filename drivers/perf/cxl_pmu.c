@@ -501,8 +501,17 @@ static ssize_t cpumask_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
 	struct cxl_pmu_info *info = dev_get_drvdata(dev);
+	int cpu = READ_ONCE(info->on_cpu);
 
-	return cpumap_print_to_pagebuf(true, buf, cpumask_of(info->on_cpu));
+	/*
+	 * on_cpu is -1 before the first online callback and transiently during
+	 * cxl_pmu_offline_cpu(). cpumask_of(-1) computes an out-of-bounds
+	 * pointer, so report an empty mask instead.
+	 */
+	if (cpu < 0)
+		return sysfs_emit(buf, "\n");
+
+	return cpumap_print_to_pagebuf(true, buf, cpumask_of(cpu));
 }
 static DEVICE_ATTR_RO(cpumask);
 
