@@ -646,15 +646,16 @@ static int test_cpucg_max(const char *root)
 {
 	int ret = KSFT_FAIL;
 	long quota_usec = 1000;
-	long default_period_usec = 100000; /* cpu.max's default period */
+	long period_usec = 100000;
 	long duration_seconds = 1;
 
 	long duration_usec = duration_seconds * USEC_PER_SEC;
 	long usage_usec, n_periods, remainder_usec, expected_usage_usec;
 	char *cpucg;
-	char quota_buf[32];
+	char max_param_buf[32];
 
-	snprintf(quota_buf, sizeof(quota_buf), "%ld", quota_usec);
+	snprintf(max_param_buf, sizeof(max_param_buf), "%ld %ld", quota_usec,
+		 period_usec);
 
 	cpucg = cg_name(root, "cpucg_test");
 	if (!cpucg)
@@ -663,7 +664,7 @@ static int test_cpucg_max(const char *root)
 	if (cg_create(cpucg))
 		goto cleanup;
 
-	if (cg_write(cpucg, "cpu.max", quota_buf))
+	if (cg_write(cpucg, "cpu.max", max_param_buf))
 		goto cleanup;
 
 	struct cpu_hog_func_param param = {
@@ -685,8 +686,8 @@ static int test_cpucg_max(const char *root)
 	 * The following calculation applies only since
 	 * the cpu hog is set to run as per wall-clock time
 	 */
-	n_periods = duration_usec / default_period_usec;
-	remainder_usec = duration_usec - n_periods * default_period_usec;
+	n_periods = duration_usec / period_usec;
+	remainder_usec = duration_usec - n_periods * period_usec;
 	expected_usage_usec
 		= n_periods * quota_usec + MIN(remainder_usec, quota_usec);
 
@@ -710,15 +711,16 @@ static int test_cpucg_max_nested(const char *root)
 {
 	int ret = KSFT_FAIL;
 	long quota_usec = 1000;
-	long default_period_usec = 100000; /* cpu.max's default period */
+	long period_usec = 100000;
 	long duration_seconds = 1;
 
 	long duration_usec = duration_seconds * USEC_PER_SEC;
 	long usage_usec, n_periods, remainder_usec, expected_usage_usec;
 	char *parent, *child;
-	char quota_buf[32];
+	char max_param_buf[32];
 
-	snprintf(quota_buf, sizeof(quota_buf), "%ld", quota_usec);
+	snprintf(max_param_buf, sizeof(max_param_buf), "%ld %ld", quota_usec,
+		 period_usec);
 
 	parent = cg_name(root, "cpucg_parent");
 	child = cg_name(parent, "cpucg_child");
@@ -734,7 +736,7 @@ static int test_cpucg_max_nested(const char *root)
 	if (cg_create(child))
 		goto cleanup;
 
-	if (cg_write(parent, "cpu.max", quota_buf))
+	if (cg_write(parent, "cpu.max", max_param_buf))
 		goto cleanup;
 
 	struct cpu_hog_func_param param = {
@@ -756,8 +758,8 @@ static int test_cpucg_max_nested(const char *root)
 	 * The following calculation applies only since
 	 * the cpu hog is set to run as per wall-clock time
 	 */
-	n_periods = duration_usec / default_period_usec;
-	remainder_usec = duration_usec - n_periods * default_period_usec;
+	n_periods = duration_usec / period_usec;
+	remainder_usec = duration_usec - n_periods * period_usec;
 	expected_usage_usec
 		= n_periods * quota_usec + MIN(remainder_usec, quota_usec);
 
