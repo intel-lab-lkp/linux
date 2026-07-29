@@ -448,6 +448,12 @@ ssize_t fsg_store_file(struct fsg_lun *curlun, struct rw_semaphore *filesem,
 	if (count > 0 && buf[count-1] == '\n')
 		((char *) buf)[count-1] = 0;		/* Ugh! */
 
+	/* Reject relative paths to prevent sb_writers deadlock when
+	 * CWD is on the same filesystem (e.g., configfs).
+	 */
+	if (count > 0 && buf[0] && buf[0] != '/')
+		return -EINVAL;
+
 	/* Load new medium */
 	down_write(filesem);
 	if (count > 0 && buf[0]) {
