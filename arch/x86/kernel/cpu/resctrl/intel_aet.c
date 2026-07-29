@@ -177,6 +177,11 @@ static bool skip_telem_region(struct telemetry_region *tr, struct event_group *e
 			tr->guid);
 		return true;
 	}
+	if (tr->plat_info.package_id >= BITS_PER_LONG_LONG) {
+		pr_warn("Package %u out of range in guid 0x%x\n", tr->plat_info.package_id,
+			tr->guid);
+		return true;
+	}
 	if (tr->size != e->mmio_size) {
 		pr_warn("MMIO space wrong size (%zu bytes) for guid 0x%x. Expected %zu bytes.\n",
 			tr->size, e->guid, e->mmio_size);
@@ -300,6 +305,13 @@ static struct pmt_feature_group *(*get_feature)(enum pmt_feature_id id);
 static void (*put_feature)(struct pmt_feature_group *p);
 
 /*
+ * Bitmask of packages where MMIO virtual mappings have been invalidated
+ * by device unbind/remove operations. May be set to ~0ULL to indicate that
+ * all mappings may have been removed.
+ */
+static u64 invalid_pkg_mask;
+
+/*
  * Request a copy of struct pmt_feature_group for each event group. If there is
  * one, the returned structure has an array of telemetry_region structures,
  * each element of the array describes one telemetry aggregator. The
@@ -373,6 +385,18 @@ void intel_aet_unregister_enumeration(void)
 }
 EXPORT_SYMBOL_NS_GPL(intel_aet_unregister_enumeration, "INTEL_PMT");
 
+/*
+ * pmt_telemetry driver calls this for unbind/remove operations that
+ * will invalidate the virtual addresses of MMIO registers provided
+ * by intel_pmt_get_regions_by_feature().
+ */
+void intel_aet_invalidate(u64 pkgmask)
+{
+	guard(mutex)(&aet_register_lock);
+	invalid_pkg_mask |= pkgmask;
+}
+EXPORT_SYMBOL_NS_GPL(intel_aet_invalidate, "INTEL_PMT");
+
 bool intel_aet_pre_mount(void)
 {
 	guard(mutex)(&aet_register_lock);
@@ -389,6 +413,11 @@ bool intel_aet_pre_mount(void)
 	}
 
 	pmt_in_use = true;
+	/*
+	 * All the regions enumerated by intel_pmt_get_regions_by_feature()
+	 * have valid MMIO mappings.
+	 */
+	invalid_pkg_mask = 0ULL;
 
 	return true;
 }
@@ -435,6 +464,11 @@ int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
 	u64 evtcount;
 	void *pevt0;
 	u32 idx;
+
+	guard(mutex)(&aet_register_lock);
+
+	if (invalid_pkg_mask == ~0ULL || (invalid_pkg_mask & BIT_ULL(domid)))
+		return -EINVAL;
 
 	pevt0 = pevt - pevt->idx;
 	e = container_of(pevt0, struct event_group, evts);
