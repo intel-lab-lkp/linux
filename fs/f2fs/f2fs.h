@@ -25,6 +25,7 @@
 #include <linux/quotaops.h>
 #include <linux/part_stat.h>
 #include <linux/rw_hint.h>
+#include <linux/suspend.h>
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
@@ -1494,6 +1495,7 @@ enum {
 	SBI_IS_FREEZING,			/* freezefs is in process */
 	SBI_IS_WRITABLE,			/* remove ro mountoption transiently */
 	SBI_ENABLE_CHECKPOINT,			/* indicate it's during f2fs_enable_checkpoint() */
+	SBI_IS_SUSPENDING,			/* system suspend is in progress */
 	MAX_SBI_FLAG,
 };
 
@@ -1784,6 +1786,7 @@ struct f2fs_sb_info {
 	struct f2fs_rwsem sb_lock;		/* lock for raw super block */
 	int valid_super_block;			/* valid super block no */
 	unsigned long s_flag;				/* flags for sbi */
+	struct notifier_block pm_nb;		/* for PM notifier */
 	struct mutex writepages;		/* mutex for writepages() */
 
 #ifdef CONFIG_BLK_DEV_ZONED
