@@ -336,6 +336,7 @@ int panthor_gpu_flush_caches(struct panthor_device *ptdev,
 	guard(mutex)(&ptdev->gpu->cache_flush_lock);
 
 	spin_lock(&ptdev->gpu->reqs_lock);
+	trace_gpu_cache_flush_start(ptdev->base.dev, l2, lsc, other);
 	if (!(ptdev->gpu->pending_reqs & GPU_IRQ_CLEAN_CACHES_COMPLETED)) {
 		ptdev->gpu->pending_reqs |= GPU_IRQ_CLEAN_CACHES_COMPLETED;
 		gpu_write(gpu->iomem, GPU_CMD, GPU_FLUSH_CACHES(l2, lsc, other));
@@ -345,6 +346,7 @@ int panthor_gpu_flush_caches(struct panthor_device *ptdev,
 
 	if (ret) {
 		spin_unlock(&ptdev->gpu->reqs_lock);
+		trace_gpu_cache_flush_end(ptdev->base.dev, l2, lsc, other);
 		return ret;
 	}
 
@@ -358,6 +360,7 @@ int panthor_gpu_flush_caches(struct panthor_device *ptdev,
 			ptdev->gpu->pending_reqs &= ~GPU_IRQ_CLEAN_CACHES_COMPLETED;
 	}
 	spin_unlock(&ptdev->gpu->reqs_lock);
+	trace_gpu_cache_flush_end(ptdev->base.dev, l2, lsc, other);
 
 	if (ret) {
 		panthor_device_schedule_reset(ptdev);

@@ -76,6 +76,64 @@ TRACE_EVENT(gpu_job_irq,
 		  __entry->events, __entry->duration_ns)
 );
 
+/**
+ * gpu_cache_flush_start - called after cache flush locks taken, before flush
+ * @dev: pointer to the &struct device, for printing the device name
+ * @l2: "l2" flush flags
+ * @lsc: "lsc" flush flags
+ * @other: "other" flush flags
+ *
+ * Fires after any initial lock contention around the locks needed for flushing
+ * caches, but before the actual cache flush is requested.
+ */
+TRACE_EVENT(gpu_cache_flush_start,
+	TP_PROTO(const struct device *dev, u32 l2, u32 lsc, u32 other),
+	TP_ARGS(dev, l2, lsc, other),
+	TP_STRUCT__entry(
+		__string(dev_name, dev_name(dev))
+		__field(u32, l2)
+		__field(u32, lsc)
+		__field(u32, other)
+	),
+	TP_fast_assign(
+		__assign_str(dev_name);
+		__entry->l2	= l2;
+		__entry->lsc	= lsc;
+		__entry->other	= other;
+	),
+	TP_printk("%s: l2=0x%x lsc=0x%x other=0x%x", __get_str(dev_name),
+		  __entry->l2, __entry->lsc, __entry->other)
+);
+
+/**
+ * gpu_cache_flush_end - called after cache flush
+ * @dev: pointer to the &struct device, for printing the device name
+ * @l2: "l2" flush flags
+ * @lsc: "lsc" flush flags
+ * @other: "other" flush flags
+ *
+ * Fires after either the cache flush is complete, or has failed. Can be used
+ * together with gpu_cache_flush_start to get how long the flush has taken.
+ */
+TRACE_EVENT(gpu_cache_flush_end,
+	TP_PROTO(const struct device *dev, u32 l2, u32 lsc, u32 other),
+	TP_ARGS(dev, l2, lsc, other),
+	TP_STRUCT__entry(
+		__string(dev_name, dev_name(dev))
+		__field(u32, l2)
+		__field(u32, lsc)
+		__field(u32, other)
+	),
+	TP_fast_assign(
+		__assign_str(dev_name);
+		__entry->l2	= l2;
+		__entry->lsc	= lsc;
+		__entry->other	= other;
+	),
+	TP_printk("%s: l2=0x%x lsc=0x%x other=0x%x", __get_str(dev_name),
+		  __entry->l2, __entry->lsc, __entry->other)
+);
+
 #endif /* __PANTHOR_TRACE_H__ */
 
 #undef TRACE_INCLUDE_PATH
