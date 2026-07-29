@@ -212,12 +212,15 @@ bool pm_qos_update_flags(struct pm_qos_flags *pqf,
 #ifdef CONFIG_CPU_IDLE
 /* Definitions related to the CPU latency QoS. */
 
+static BLOCKING_NOTIFIER_HEAD(cpu_latency_qos_notifiers);
+
 static struct pm_qos_constraints cpu_latency_constraints = {
 	.list = PLIST_HEAD_INIT(cpu_latency_constraints.list),
 	.target_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
 	.default_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
 	.no_constraint_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
 	.type = PM_QOS_MIN,
+	.notifiers = &cpu_latency_qos_notifiers,
 };
 
 static inline bool cpu_latency_qos_value_invalid(s32 value)
@@ -335,6 +338,28 @@ void cpu_latency_qos_remove_request(struct pm_qos_request *req)
 }
 EXPORT_SYMBOL_GPL(cpu_latency_qos_remove_request);
 
+/**
+ * cpu_latency_qos_add_notifier - Add CPU latency QoS change notifier.
+ * @notifier: Notifier block managed by the caller.
+ */
+int cpu_latency_qos_add_notifier(struct notifier_block *notifier)
+{
+	return blocking_notifier_chain_register(&cpu_latency_qos_notifiers,
+						notifier);
+}
+EXPORT_SYMBOL_GPL(cpu_latency_qos_add_notifier);
+
+/**
+ * cpu_latency_qos_remove_notifier - Remove CPU latency QoS change notifier.
+ * @notifier: Notifier block previously registered.
+ */
+int cpu_latency_qos_remove_notifier(struct notifier_block *notifier)
+{
+	return blocking_notifier_chain_unregister(&cpu_latency_qos_notifiers,
+						  notifier);
+}
+EXPORT_SYMBOL_GPL(cpu_latency_qos_remove_notifier);
+
 /* User space interface to the CPU latency QoS via misc device. */
 
 static int cpu_latency_qos_open(struct inode *inode, struct file *filp)
@@ -417,12 +442,15 @@ static struct miscdevice cpu_latency_qos_miscdev = {
 
 #ifdef CONFIG_PM_QOS_CPU_SYSTEM_WAKEUP
 /* The CPU system wakeup latency QoS. */
+static BLOCKING_NOTIFIER_HEAD(cpu_wakeup_latency_qos_notifiers);
+
 static struct pm_qos_constraints cpu_wakeup_latency_constraints = {
 	.list = PLIST_HEAD_INIT(cpu_wakeup_latency_constraints.list),
 	.target_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT,
 	.default_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT,
 	.no_constraint_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT,
 	.type = PM_QOS_MIN,
+	.notifiers = &cpu_wakeup_latency_qos_notifiers,
 };
 
 /**
@@ -435,6 +463,28 @@ s32 cpu_wakeup_latency_qos_limit(void)
 {
 	return pm_qos_read_value(&cpu_wakeup_latency_constraints);
 }
+
+/**
+ * cpu_wakeup_latency_qos_add_notifier - Add wakeup latency QoS notifier.
+ * @notifier: Notifier block managed by the caller.
+ */
+int cpu_wakeup_latency_qos_add_notifier(struct notifier_block *notifier)
+{
+	return blocking_notifier_chain_register(&cpu_wakeup_latency_qos_notifiers,
+						notifier);
+}
+EXPORT_SYMBOL_GPL(cpu_wakeup_latency_qos_add_notifier);
+
+/**
+ * cpu_wakeup_latency_qos_remove_notifier - Remove wakeup latency QoS notifier.
+ * @notifier: Notifier block previously registered.
+ */
+int cpu_wakeup_latency_qos_remove_notifier(struct notifier_block *notifier)
+{
+	return blocking_notifier_chain_unregister(&cpu_wakeup_latency_qos_notifiers,
+						  notifier);
+}
+EXPORT_SYMBOL_GPL(cpu_wakeup_latency_qos_remove_notifier);
 
 static int cpu_wakeup_latency_qos_open(struct inode *inode, struct file *filp)
 {
