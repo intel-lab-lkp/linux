@@ -979,6 +979,7 @@ static int redrat3_dev_probe(struct usb_interface *intf,
 	struct usb_endpoint_descriptor *ep_narrow = NULL;
 	struct usb_endpoint_descriptor *ep_wide = NULL;
 	struct usb_endpoint_descriptor *ep_out = NULL;
+	struct rc_dev *rc = NULL;
 	u8 addr, attrs;
 	int pipe, i;
 	int retval = -ENOMEM;
@@ -1102,26 +1103,31 @@ static int redrat3_dev_probe(struct usb_interface *intf,
 	if (retval)
 		goto redrat_free;
 
-	rr3->rc = redrat3_init_rc_dev(rr3);
-	if (!rr3->rc) {
+	rc = redrat3_init_rc_dev(rr3);
+	if (!rc) {
 		retval = -ENOMEM;
 		goto led_free;
 	}
 
+	rr3->rc = rc;
+
 	/* might be all we need to do? */
 	retval = redrat3_enable_detector(rr3);
 	if (retval < 0)
-		goto led_free;
+		goto rc_free;
 
 	/* we can register the device now, as it is ready */
 	usb_set_intfdata(intf, rr3);
 
 	return 0;
 
+rc_free:
+	rc_unregister_device(rc);
 led_free:
 	led_classdev_unregister(&rr3->led);
 redrat_free:
 	redrat3_delete(rr3, rr3->udev);
+	rc_free_device(rc);
 
 no_endpoints:
 	return retval;
