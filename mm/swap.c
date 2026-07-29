@@ -950,6 +950,21 @@ void lru_add_drain_all(void)
 }
 #endif /* CONFIG_SMP */
 
+bool lru_add_drain_progressive(int *drain_state)
+{
+	if (*drain_state == 0) {
+		lru_add_drain();
+		*drain_state = 1;
+		return true;
+	}
+	if (*drain_state == 1) {
+		lru_add_drain_all();
+		*drain_state = 2;
+		return true;
+	}
+	return false;
+}
+
 atomic_t lru_disable_count = ATOMIC_INIT(0);
 
 /*
