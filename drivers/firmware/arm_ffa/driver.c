@@ -560,8 +560,20 @@ static int ffa_msg_send2(struct ffa_device *dev, u16 src_id, void *buf, size_t s
 	return retval;
 }
 
-static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
-				    struct ffa_send_direct_data2 *data)
+/*
+ * Sends @req and reports the callee's X1-X3 through @resp_regs and its
+ * X4-X17 through @resp, both unconditionally, so that a caller bound by
+ * DEN0048D section 2.3.1.2 can copy every register back to AML even when the
+ * callee returned FFA_ERROR. Keeping the response out of @req leaves the
+ * caller free to decide when, if ever, to overwrite its own buffer. Returns
+ * -EIO for FFA_ERROR (the FF-A error code is left in @resp_regs[1] as X2) and
+ * -EPROTO for an unexpected response; both mean the call was made. Callers
+ * that only need an errno should use ffa_msg_send_direct_req2().
+ */
+static int __ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
+				      const struct ffa_send_direct_data2 *req,
+				      struct ffa_send_direct_data2 *resp,
+				      u64 resp_regs[3])
 {
 	u32 src_dst_ids = PACK_TARGET_INFO(src_id, dst_id);
 	union {
@@ -574,21 +586,46 @@ static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
 		.a2 = le64_to_cpu(uuid_regs.regs[0]),
 		.a3 = le64_to_cpu(uuid_regs.regs[1]),
 	};
-	memcpy((void *)&args + offsetof(ffa_value_t, a4), data, sizeof(*data));
+	memcpy((void *)&args + offsetof(ffa_value_t, a4), req, sizeof(*req));
 
 	invoke_ffa_fn(args, &ret);
 
 	ffa_msg_send_wait_for_completion(&ret);
 
-	if (ret.a0 == FFA_ERROR)
-		return ffa_to_linux_errno((int)ret.a2);
+	resp_regs[0] = ret.a1;
+	resp_regs[1] = ret.a2;
+	resp_regs[2] = ret.a3;
+	memcpy(resp, (void *)&ret + offsetof(ffa_value_t, a4), sizeof(*resp));
 
-	if (ret.a0 == FFA_MSG_SEND_DIRECT_RESP2) {
-		memcpy(data, (void *)&ret + offsetof(ffa_value_t, a4), sizeof(*data));
+	if (ret.a0 == FFA_ERROR)
+		return -EIO;
+
+	if (ret.a0 == FFA_MSG_SEND_DIRECT_RESP2)
+		return 0;
+
+	return -EPROTO;
+}
+
+static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
+				    struct ffa_send_direct_data2 *data)
+{
+	struct ffa_send_direct_data2 resp;
+	u64 resp_regs[3];
+	int ret;
+
+	ret = __ffa_msg_send_direct_req2(src_id, dst_id, uuid, data, &resp,
+					 resp_regs);
+	if (!ret) {
+		*data = resp;
 		return 0;
 	}
 
-	return -EINVAL;
+	if (ret == -EIO)
+		return ffa_to_linux_errno((int)resp_regs[1]);
+	if (ret == -EPROTO)
+		return -EINVAL;
+
+	return ret;
 }
 
 static int ffa_mem_first_frag(u32 func_id, phys_addr_t buf, u32 buf_sz,
