@@ -157,13 +157,21 @@ void
 lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 {
 	struct lpfc_nodelist *ndlp;
+	struct lpfc_rport_data *rdata;
 	struct lpfc_vport *vport;
 	struct lpfc_hba   *phba;
 	struct lpfc_work_evt *evtp;
 	unsigned long iflags;
 	bool drop_initial_node_ref = false;
 
-	ndlp = ((struct lpfc_rport_data *)rport->dd_data)->pnode;
+	if (!rport)
+		return;
+
+	rdata = rport->dd_data;
+	if (!rdata)
+		return;
+
+	ndlp = READ_ONCE(rdata->pnode);
 	if (!ndlp)
 		return;
 
@@ -187,6 +195,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	    !test_bit(HBA_SETUP, &phba->hba_flag))) {
 
 		spin_lock_irqsave(&ndlp->lock, iflags);
+		WRITE_ONCE(rdata->pnode, NULL);
 		ndlp->rport = NULL;
 
 		/* Only 1 thread can drop the initial node reference.
@@ -271,7 +280,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	 * rport. Remove the association between rport and ndlp.
 	 */
 	ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
-	((struct lpfc_rport_data *)rport->dd_data)->pnode = NULL;
+	WRITE_ONCE(((struct lpfc_rport_data *)rport->dd_data)->pnode, NULL);
 	ndlp->rport = NULL;
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
 
@@ -4560,8 +4569,10 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 static void
 lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 {
-	struct fc_rport *rport = ndlp->rport;
+	struct fc_rport *rport;
 	struct lpfc_vport *vport = ndlp->vport;
+	struct lpfc_rport_data *rdata;
+	unsigned long iflags;
 
 	if (vport->cfg_enable_fc4_type == LPFC_ENABLE_NVME)
 		return;
@@ -4573,8 +4584,21 @@ lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 	lpfc_printf_vlog(vport, KERN_INFO, LOG_NODE,
 			 "3184 rport unregister x%06x, rport x%px "
 			 "xptflg x%x refcnt %d\n",
-			 ndlp->nlp_DID, rport, ndlp->fc4_xpt_flags,
+			 ndlp->nlp_DID, ndlp->rport, ndlp->fc4_xpt_flags,
 			 kref_read(&ndlp->kref));
+
+	spin_lock_irqsave(&ndlp->lock, iflags);
+	rport = ndlp->rport;
+	if (!rport) {
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
+		return;
+	}
+	rdata = rport->dd_data;
+	if (rdata && READ_ONCE(rdata->pnode) == ndlp)
+		WRITE_ONCE(rdata->pnode, NULL);
+	ndlp->rport = NULL;
+	ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
+	spin_unlock_irqrestore(&ndlp->lock, iflags);
 
 	fc_remote_port_delete(rport);
 	lpfc_nlp_put(ndlp);
