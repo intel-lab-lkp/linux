@@ -31,6 +31,8 @@
 /* default 7 bits integer, can be overridden with pcwibits. */
 #define INTEGER_BITS		7
 
+#define PLL_STABILIZATION_DELAY		20 /* in us */
+
 int mtk_pll_is_prepared(struct clk_hw *hw)
 {
 	struct mtk_clk_pll *pll = to_mtk_clk_pll(hw);
@@ -223,9 +225,9 @@ int mtk_pll_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 	return 0;
 }
 
-int mtk_pll_prepare(struct clk_hw *hw)
+static void mtk_pll_prepare_common(struct mtk_clk_pll *pll,
+				   void __iomem *en_addr)
 {
-	struct mtk_clk_pll *pll = to_mtk_clk_pll(hw);
 	u32 r;
 
 	r = readl(pll->pwr_addr) | CON0_PWR_ON;
@@ -236,8 +238,8 @@ int mtk_pll_prepare(struct clk_hw *hw)
 	writel(r, pll->pwr_addr);
 	udelay(1);
 
-	r = readl(pll->en_addr) | BIT(pll->data->pll_en_bit);
-	writel(r, pll->en_addr);
+	r = readl(en_addr) | BIT(pll->data->pll_en_bit);
+	writel(r, en_addr);
 
 	if (pll->data->en_mask) {
 		r = readl(pll->base_addr + REG_CON0) | pll->data->en_mask;
@@ -246,7 +248,37 @@ int mtk_pll_prepare(struct clk_hw *hw)
 
 	__mtk_pll_tuner_enable(pll);
 
-	udelay(20);
+	udelay(PLL_STABILIZATION_DELAY);
+}
+
+static void mtk_pll_unprepare_common(struct mtk_clk_pll *pll,
+				     void __iomem *en_addr)
+{
+	u32 r;
+
+	__mtk_pll_tuner_disable(pll);
+
+	if (pll->data->en_mask) {
+		r = readl(pll->base_addr + REG_CON0) & ~pll->data->en_mask;
+		writel(r, pll->base_addr + REG_CON0);
+	}
+
+	r = readl(en_addr) & ~BIT(pll->data->pll_en_bit);
+	writel(r, en_addr);
+
+	r = readl(pll->pwr_addr) | CON0_ISO_EN;
+	writel(r, pll->pwr_addr);
+
+	r = readl(pll->pwr_addr) & ~CON0_PWR_ON;
+	writel(r, pll->pwr_addr);
+}
+
+int mtk_pll_prepare(struct clk_hw *hw)
+{
+	struct mtk_clk_pll *pll = to_mtk_clk_pll(hw);
+	u32 r;
+
+	mtk_pll_prepare_common(pll, pll->en_addr);
 
 	if (pll->data->flags & HAVE_RST_BAR) {
 		r = readl(pll->rst_bar_addr);
@@ -256,6 +288,7 @@ int mtk_pll_prepare(struct clk_hw *hw)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(mtk_pll_prepare);
 
 void mtk_pll_unprepare(struct clk_hw *hw)
 {
@@ -268,22 +301,9 @@ void mtk_pll_unprepare(struct clk_hw *hw)
 		writel(r, pll->rst_bar_addr);
 	}
 
-	__mtk_pll_tuner_disable(pll);
-
-	if (pll->data->en_mask) {
-		r = readl(pll->base_addr + REG_CON0) & ~pll->data->en_mask;
-		writel(r, pll->base_addr + REG_CON0);
-	}
-
-	r = readl(pll->en_addr) & ~BIT(pll->data->pll_en_bit);
-	writel(r, pll->en_addr);
-
-	r = readl(pll->pwr_addr) | CON0_ISO_EN;
-	writel(r, pll->pwr_addr);
-
-	r = readl(pll->pwr_addr) & ~CON0_PWR_ON;
-	writel(r, pll->pwr_addr);
+	mtk_pll_unprepare_common(pll, pll->en_addr);
 }
+EXPORT_SYMBOL_GPL(mtk_pll_unprepare);
 
 static int mtk_pll_prepare_fenc_setclr(struct clk_hw *hw)
 {
@@ -312,6 +332,7 @@ const struct clk_ops mtk_pll_ops = {
 	.determine_rate = mtk_pll_determine_rate,
 	.set_rate	= mtk_pll_set_rate,
 };
+EXPORT_SYMBOL_GPL(mtk_pll_ops);
 
 const struct clk_ops mtk_pll_fenc_setclr_ops = {
 	.is_prepared	= mtk_pll_is_prepared_fenc_setclr,
