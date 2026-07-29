@@ -1826,8 +1826,6 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 
 	i2c_host_notify_irq_teardown(adap);
 
-	debugfs_remove_recursive(adap->debugfs);
-
 	/* wait until all references to the device are gone
 	 *
 	 * FIXME: This is old code and should ideally be replaced by an
@@ -1838,6 +1836,8 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	init_completion(&adap->dev_released);
 	device_unregister(&adap->dev);
 	wait_for_completion(&adap->dev_released);
+
+	debugfs_remove_recursive(adap->debugfs);
 
 	/* free bus id */
 	mutex_lock(&core_lock);
