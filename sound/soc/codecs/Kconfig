@@ -305,6 +305,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_WCD9335
 	imply SND_SOC_WCD934X
 	imply SND_SOC_WCD937X_SDW
+	imply SND_SOC_WCD9378_SDW
 	imply SND_SOC_WCD938X_SDW
 	imply SND_SOC_WCD939X_SDW
 	imply SND_SOC_LPASS_MACRO_COMMON
@@ -2472,6 +2473,24 @@ config SND_SOC_WCD937X_SDW
 	  The WCD9370/9375 is an audio codec IC used with SoCs
 	  like SC7280 or QCM6490 chipsets, and it connected
 	  via soundwire.
+	  To compile this codec driver say Y or m.
+
+config SND_SOC_WCD9378
+	tristate
+	depends on SND_SOC_WCD9378_SDW
+	depends on SOUNDWIRE if SOUNDWIRE
+	select SND_SOC_WCD_COMMON
+
+config SND_SOC_WCD9378_SDW
+	tristate "WCD9378 Codec - SDW"
+	depends on SOUNDWIRE
+	select SND_SOC_WCD9378
+	select REGMAP_SOUNDWIRE
+	help
+	  The WCD9378 is an audio codec IC connected to the host over
+	  SoundWire, found on Qualcomm SM7635 boards. It has three ADCs
+	  for analog microphones, mic bias supplies, headphone/earpiece
+	  outputs and MBHC.
 	  To compile this codec driver say Y or m.
 
 config SND_SOC_WCD938X

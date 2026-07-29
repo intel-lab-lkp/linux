@@ -361,6 +361,8 @@ snd-soc-wcd9335-y := wcd9335.o
 snd-soc-wcd934x-y := wcd934x.o
 snd-soc-wcd937x-y := wcd937x.o
 snd-soc-wcd937x-sdw-y := wcd937x-sdw.o
+snd-soc-wcd9378-y := wcd9378.o
+snd-soc-wcd9378-sdw-y := wcd9378-sdw.o
 snd-soc-wcd938x-y := wcd938x.o
 snd-soc-wcd938x-sdw-y := wcd938x-sdw.o
 snd-soc-wcd939x-y := wcd939x.o
@@ -805,6 +807,11 @@ obj-$(CONFIG_SND_SOC_WCD937X)	+= snd-soc-wcd937x.o
 ifdef CONFIG_SND_SOC_WCD937X_SDW
 # avoid link failure by forcing sdw code built-in when needed
 obj-$(CONFIG_SND_SOC_WCD937X) += snd-soc-wcd937x-sdw.o
+endif
+obj-$(CONFIG_SND_SOC_WCD9378)	+= snd-soc-wcd9378.o
+ifdef CONFIG_SND_SOC_WCD9378_SDW
+# avoid link failure by forcing sdw code built-in when needed
+obj-$(CONFIG_SND_SOC_WCD9378) += snd-soc-wcd9378-sdw.o
 endif
 obj-$(CONFIG_SND_SOC_WCD938X)	+= snd-soc-wcd938x.o
 ifdef CONFIG_SND_SOC_WCD938X_SDW
