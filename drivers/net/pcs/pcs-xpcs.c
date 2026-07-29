@@ -1394,6 +1394,69 @@ static int xpcs_read_ids(struct dw_xpcs *xpcs)
 	return 0;
 }
 
+struct pma_pcs_values {
+	int channels;
+	u16 rsfec_ctrl;
+};
+
+static int
+xpcs_config_rsfec_pma(struct dw_xpcs *xpcs, const struct pma_pcs_values *v)
+{
+	/* fbnic's DW IP exposes the RS-FEC PMA at SEP_PMA1, so use it
+	 * directly. Scanning DEVS1 for the correct PMA MMD is left as future
+	 * work for enabling a non-fbnic device on this PCS.
+	 */
+	int pma_mmd = MDIO_MMD_SEP_PMA1;
+	int ret = 0, i;
+
+	for (i = 0; ret >= 0 && i < v->channels; i++) {
+		ret = xpcs_mdev_write_ch(xpcs, i, pma_mmd,
+					 MDIO_PMA_RSFEC_CTRL, v->rsfec_ctrl);
+	}
+
+	return ret;
+}
+
+static int xpcs_25gbaser_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = 0,
+		.channels = 1,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
+static int xpcs_50gbaser_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = DW_VR_RSFEC_CTRL_TC_PAD_ALTER,
+		.channels = 1,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
+static int xpcs_50gbaser2_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = DW_VR_RSFEC_CTRL_TC_PAD_ALTER,
+		.channels = 2,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
+static int xpcs_100gbasep_pma_config(struct dw_xpcs *xpcs)
+{
+	const struct pma_pcs_values v = {
+		.rsfec_ctrl = MDIO_PMA_RSFEC_CTRL_4LANE_PMD,
+		.channels = 2,
+	};
+
+	return xpcs_config_rsfec_pma(xpcs, &v);
+}
+
 static const struct dw_xpcs_compat synopsys_xpcs_compat[] = {
 	{
 		.interface = PHY_INTERFACE_MODE_USXGMII,
@@ -1407,6 +1470,7 @@ static const struct dw_xpcs_compat synopsys_xpcs_compat[] = {
 		.interface = PHY_INTERFACE_MODE_25GBASER,
 		.supported = xpcs_25gbaser_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_25gbaser_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_XLGMII,
 		.supported = xpcs_xlgmii_features,
@@ -1415,14 +1479,17 @@ static const struct dw_xpcs_compat synopsys_xpcs_compat[] = {
 		.interface = PHY_INTERFACE_MODE_50GBASER,
 		.supported = xpcs_50gbaser_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_50gbaser_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_LAUI,
 		.supported = xpcs_50gbaser2_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_50gbaser2_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_100GBASEP,
 		.supported = xpcs_100gbasep_features,
 		.an_mode = DW_AN_C73,
+		.pma_config = xpcs_100gbasep_pma_config,
 	}, {
 		.interface = PHY_INTERFACE_MODE_10GBASER,
 		.supported = xpcs_10gbaser_features,
