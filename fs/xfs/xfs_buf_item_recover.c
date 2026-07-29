@@ -716,6 +716,13 @@ xlog_recover_do_inode_buffer(
 			reg_buf_offset = bit << XFS_BLF_SHIFT;
 			reg_buf_bytes = nbits << XFS_BLF_SHIFT;
 			item_index++;
+
+			if (XFS_IS_CORRUPT(mp, item_index >= item->ri_cnt)) {
+				xfs_alert(mp,
+	"Bad inode buffer log item dirty bitmap: more dirty regions than the %d logged, for buffer at daddr 0x%llx.",
+					item->ri_cnt - 1, xfs_buf_daddr(bp));
+				return -EFSCORRUPTED;
+			}
 		}
 
 		/*
@@ -726,7 +733,6 @@ xlog_recover_do_inode_buffer(
 		if (next_unlinked_offset < reg_buf_offset)
 			continue;
 
-		ASSERT(item->ri_buf[item_index].iov_base != NULL);
 		ASSERT((item->ri_buf[item_index].iov_len % XFS_BLF_CHUNK) == 0);
 		ASSERT((reg_buf_offset + reg_buf_bytes) <= BBTOB(bp->b_length));
 
