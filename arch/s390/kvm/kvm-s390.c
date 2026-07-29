@@ -5822,7 +5822,7 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 {
 	const struct dat_walk_ops ops = { .pte_entry = cmma_d_count_pte, };
 	struct kvm_s390_mmu_cache *mc __free(kvm_s390_mmu_cache) = NULL;
-	int rc = 0;
+	int rc = -ENOMEM;
 
 	guard(mutex)(&kvm->slots_arch_lock);
 
@@ -5830,11 +5830,9 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 		return;
 
 	mc = kvm_s390_new_mmu_cache();
-	if (!mc) {
-		rc = -ENOMEM;
+	if (!mc)
 		goto out;
-	}
-
+retry:
 	scoped_guard(write_lock, &kvm->mmu_lock) {
 		if (kvm->arch.migration_mode && kvm->arch.use_cmma && old) {
 			_dat_walk_gfn_range(old->base_gfn, old->base_gfn + old->npages,
@@ -5857,11 +5855,17 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 		case KVM_MR_FLAGS_ONLY:
 			break;
 		default:
+			rc = 0;
 			WARN(1, "Unknown KVM MR CHANGE: %d\n", change);
 		}
 	}
+	if (rc == -ENOMEM) {
+		rc = kvm_s390_mmu_cache_topup(mc);
+		if (!rc)
+			goto retry;
+	}
 out:
-	if (rc)
+	if (KVM_BUG_ON(rc, kvm))
 		pr_warn("failed to commit memory region\n");
 	return;
 }
