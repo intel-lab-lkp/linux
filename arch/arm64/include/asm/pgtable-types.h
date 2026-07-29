@@ -17,7 +17,11 @@
  * Generic page table descriptor format from which
  * all level specific descriptors can be derived.
  */
+#ifdef CONFIG_ARM64_D128
+typedef u128 ptval_t;
+#else
 typedef u64 ptval_t;
+#endif
 
 typedef ptval_t pteval_t;
 typedef ptval_t pmdval_t;
