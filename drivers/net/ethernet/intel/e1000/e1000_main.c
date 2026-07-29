@@ -1599,24 +1599,18 @@ static void e1000_configure_tx(struct e1000_adapter *adapter)
 	u32 ipgr1, ipgr2;
 
 	/* Setup the HW Tx Head and Tail descriptor pointers */
-
-	switch (adapter->num_tx_queues) {
-	case 1:
-	default:
-		tdba = adapter->tx_ring[0].dma;
-		tdlen = adapter->tx_ring[0].count *
-			sizeof(struct e1000_tx_desc);
-		ew32(TDLEN, tdlen);
-		ew32(TDBAH, (tdba >> 32));
-		ew32(TDBAL, (tdba & 0x00000000ffffffffULL));
-		ew32(TDT, 0);
-		ew32(TDH, 0);
-		adapter->tx_ring[0].tdh = ((hw->mac_type >= e1000_82543) ?
-					   E1000_TDH : E1000_82542_TDH);
-		adapter->tx_ring[0].tdt = ((hw->mac_type >= e1000_82543) ?
-					   E1000_TDT : E1000_82542_TDT);
-		break;
-	}
+	tdba = adapter->tx_ring[0].dma;
+	tdlen = adapter->tx_ring[0].count *
+		sizeof(struct e1000_tx_desc);
+	ew32(TDLEN, tdlen);
+	ew32(TDBAH, (tdba >> 32));
+	ew32(TDBAL, (tdba & 0x00000000ffffffffULL));
+	ew32(TDT, 0);
+	ew32(TDH, 0);
+	adapter->tx_ring[0].tdh = ((hw->mac_type >= e1000_82543) ?
+					E1000_TDH : E1000_82542_TDH);
+	adapter->tx_ring[0].tdt = ((hw->mac_type >= e1000_82543) ?
+					E1000_TDT : E1000_82542_TDT);
 
 	/* Set the default values for the Tx Inter Packet Gap timer */
 	if ((hw->media_type == e1000_media_type_fiber ||
@@ -1884,21 +1878,16 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
 	/* Setup the HW Rx Head and Tail Descriptor Pointers and
 	 * the Base and Length of the Rx Descriptor Ring
 	 */
-	switch (adapter->num_rx_queues) {
-	case 1:
-	default:
-		rdba = adapter->rx_ring[0].dma;
-		ew32(RDLEN, rdlen);
-		ew32(RDBAH, (rdba >> 32));
-		ew32(RDBAL, (rdba & 0x00000000ffffffffULL));
-		ew32(RDT, 0);
-		ew32(RDH, 0);
-		adapter->rx_ring[0].rdh = ((hw->mac_type >= e1000_82543) ?
-					   E1000_RDH : E1000_82542_RDH);
-		adapter->rx_ring[0].rdt = ((hw->mac_type >= e1000_82543) ?
-					   E1000_RDT : E1000_82542_RDT);
-		break;
-	}
+	rdba = adapter->rx_ring[0].dma;
+	ew32(RDLEN, rdlen);
+	ew32(RDBAH, (rdba >> 32));
+	ew32(RDBAL, (rdba & 0x00000000ffffffffULL));
+	ew32(RDT, 0);
+	ew32(RDH, 0);
+	adapter->rx_ring[0].rdh = ((hw->mac_type >= e1000_82543) ?
+					E1000_RDH : E1000_82542_RDH);
+	adapter->rx_ring[0].rdt = ((hw->mac_type >= e1000_82543) ?
+					E1000_RDT : E1000_82542_RDT);
 
 	/* Enable 82543 Receive Checksum Offload for TCP and UDP */
 	if (hw->mac_type >= e1000_82543) {
