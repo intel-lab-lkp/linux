@@ -216,6 +216,7 @@ static int jffs2_create(struct mnt_idmap *idmap, struct inode *dir_i,
 		  f->inocache->pino_nlink, inode->i_mapping->nrpages);
 
 	d_instantiate_new(dentry, inode);
+	jffs2_set_inocache_state(c, f->inocache, INO_STATE_PRESENT);
 	return 0;
 
  fail:
@@ -440,6 +441,7 @@ static int jffs2_symlink (struct mnt_idmap *idmap, struct inode *dir_i,
 	jffs2_complete_reservation(c);
 
 	d_instantiate_new(dentry, inode);
+	jffs2_set_inocache_state(c, f->inocache, INO_STATE_PRESENT);
 	return 0;
 
  fail:
@@ -584,6 +586,7 @@ static struct dentry *jffs2_mkdir (struct mnt_idmap *idmap, struct inode *dir_i,
 	jffs2_complete_reservation(c);
 
 	d_instantiate_new(dentry, inode);
+	jffs2_set_inocache_state(c, f->inocache, INO_STATE_PRESENT);
 	return NULL;
 
  fail:
@@ -762,6 +765,7 @@ static int jffs2_mknod (struct mnt_idmap *idmap, struct inode *dir_i,
 	jffs2_complete_reservation(c);
 
 	d_instantiate_new(dentry, inode);
+	jffs2_set_inocache_state(c, f->inocache, INO_STATE_PRESENT);
 	return 0;
 
  fail:

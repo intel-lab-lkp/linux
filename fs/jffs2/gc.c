@@ -161,7 +161,8 @@ int jffs2_garbage_collect_pass(struct jffs2_sb_info *c)
 					continue;
 
 				if (ic->state != INO_STATE_CHECKEDABSENT &&
-				    ic->state != INO_STATE_PRESENT)
+				    ic->state != INO_STATE_PRESENT &&
+				    ic->state != INO_STATE_CREATING)
 					goto got_next; /* with inocache_lock held */
 
 				jffs2_dbg(1, "Skipping ino #%u already checked\n",
@@ -207,6 +208,19 @@ int jffs2_garbage_collect_pass(struct jffs2_sb_info *c)
 				ic->ino, ic->state);
 			spin_unlock(&c->inocache_lock);
 			BUG();
+
+		case INO_STATE_CREATING:
+			/* We can't process this inode while it is being created
+			   to avoid a deadlock condition because the function
+			   iget_locked() will try to lock the inode to get it.*/
+			jffs2_dbg(1, "Waiting for ino #%u to finish creation\n",
+				  ic->ino);
+			/* We need to come back again for the _same_ inode. We've
+			 made no progress in this case, but that should be OK */
+			c->check_ino = ic->ino;
+			mutex_unlock(&c->alloc_sem);
+			sleep_on_spinunlock(&c->inocache_wq, &c->inocache_lock);
+			return 0;
 
 		case INO_STATE_READING:
 			/* We need to wait for it to finish, lest we move on
@@ -375,6 +389,19 @@ int jffs2_garbage_collect_pass(struct jffs2_sb_info *c)
 				  ic->ino);
 		}
 		break;
+
+	case INO_STATE_CREATING:
+		/* We can't process this inode while it is being created
+		   to avoid a deadlock condition because the function
+		   iget_locked() will try to lock the inode to get it.
+		   Hoever, to finish the creation we need to unlock the
+		   alloc_sem() and because we dropped the alloc_sem we must
+		   return to start again from the beginning. */
+		jffs2_dbg(1, "Waiting for ino #%u to finish creation\n",
+			  ic->ino);
+		mutex_unlock(&c->alloc_sem);
+		sleep_on_spinunlock(&c->inocache_wq, &c->inocache_lock);
+		return 0;
 
 	case INO_STATE_PRESENT:
 		/* It's in-core. GC must iget() it. */

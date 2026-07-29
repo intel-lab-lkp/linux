@@ -35,7 +35,11 @@ int jffs2_do_new_inode(struct jffs2_sb_info *c, struct jffs2_inode_info *f,
 	f->inocache = ic;
 	f->inocache->pino_nlink = 1; /* Will be overwritten shortly for directories */
 	f->inocache->nodes = (struct jffs2_raw_node_ref *)f->inocache;
-	f->inocache->state = INO_STATE_PRESENT;
+	f->inocache->state = INO_STATE_CREATING;
+	/* We set the state equal as INO_STATE_CREATING to avoid a deadlock in GC
+	   because the new inode isn´t completely created and GC tries to get the
+	   locked inode. So, the creation function can´t pick up alloc_sem and
+	   deadlock happens between alloc_sem and the specific inode lock. */
 
 	jffs2_add_ino_cache(c, f->inocache);
 	jffs2_dbg(1, "%s(): Assigned ino# %d\n", __func__, f->inocache->ino);
