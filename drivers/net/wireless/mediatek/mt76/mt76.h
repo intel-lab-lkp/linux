@@ -964,6 +964,8 @@ struct mt76_dev {
 	int tx_dma_idx[4];
 	enum mt76_hwrro_mode hwrro_mode;
 
+	bool tx_prealloc_enabled;
+
 	struct mt76_worker tx_worker;
 	struct napi_struct tx_napi;
 
@@ -1794,6 +1796,7 @@ mt76_tx_status_get_hw(struct mt76_dev *dev, struct sk_buff *skb)
 
 void mt76_put_txwi(struct mt76_dev *dev, struct mt76_txwi_cache *t);
 void mt76_put_rxwi(struct mt76_dev *dev, struct mt76_txwi_cache *t);
+struct mt76_txwi_cache *mt76_get_txwi(struct mt76_dev *dev);
 struct mt76_txwi_cache *mt76_get_rxwi(struct mt76_dev *dev);
 void mt76_free_pending_rxwi(struct mt76_dev *dev);
 void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,

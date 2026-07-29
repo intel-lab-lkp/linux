@@ -3,10 +3,15 @@
 
 #include <linux/module.h>
 #include <linux/firmware.h>
+#include <linux/iommu.h>
+#include <net/page_pool/helpers.h>
+#include <linux/of.h>
 
 #include "mt792x.h"
 #include "dma.h"
 #include "trace.h"
+
+static void mt792x_dma_attach(struct mt76_dev *dev);
 
 irqreturn_t mt792x_irq_handler(int irq, void *dev_instance)
 {
@@ -90,7 +95,7 @@ int mt792x_dma_alloc_queues(struct mt792x_dev *dev,
 {
 	int ret;
 
-	mt76_dma_attach(&dev->mt76);
+	mt792x_dma_attach(&dev->mt76);
 
 	ret = mt792x_dma_disable(dev, true);
 	if (ret)
@@ -444,6 +449,268 @@ int mt792x_wpdma_reinit_cond(struct mt792x_dev *dev)
 }
 EXPORT_SYMBOL_GPL(mt792x_wpdma_reinit_cond);
 
+static int mt792x_create_tx_page_pool(struct mt76_dev *dev, struct mt76_queue *q)
+{
+	struct page_pool_params pp_params = {
+		.order = 0,
+		.flags = 0,
+		.nid = NUMA_NO_NODE,
+		.dev = dev->dma_dev,
+	};
+
+	pp_params.pool_size = 256;
+	pp_params.flags |= PP_FLAG_DMA_MAP;
+	pp_params.dma_dir = DMA_BIDIRECTIONAL;
+	pp_params.max_len = PAGE_SIZE;
+	pp_params.offset = 0;
+
+	q->page_pool = page_pool_create(&pp_params);
+	if (IS_ERR(q->page_pool)) {
+		int err = PTR_ERR(q->page_pool);
+
+		q->page_pool = NULL;
+		dev_warn(dev->dev, "Failed to create TX page pool for queue %d (err=%d)\n",
+			 q->hw_idx, err);
+		return 0;
+	}
+
+	return 0;
+}
+
+int mt792x_dma_tx_page_pool_init(struct mt792x_dev *dev)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	int i, ret, pool_count = 0;
+
+	if (!iommu_get_domain_for_dev(mdev->dma_dev))
+		return 0;
+
+	if (!mt76_is_mmio(mdev))
+		return 0;
+
+	mdev->tx_prealloc_enabled = true;
+
+	for (i = 0; i < ARRAY_SIZE(mdev->phy.q_tx); i++) {
+		struct mt76_queue *q = mdev->phy.q_tx[i];
+
+		if (!q)
+			continue;
+
+		ret = mt792x_create_tx_page_pool(mdev, q);
+		if (ret)
+			return ret;
+
+		if (q->page_pool)
+			pool_count++;
+	}
+
+	if (pool_count > 0)
+		dev_info(mdev->dev,
+			 "IOMMU enabled, created %d TX page pools\n", pool_count);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mt792x_dma_tx_page_pool_init);
+
+static void mt792x_dma_tx_page_pool_cleanup(struct mt792x_dev *dev)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mdev->phy.q_tx); i++) {
+		struct mt76_queue *q = mdev->phy.q_tx[i];
+
+		if (!q || !q->page_pool)
+			continue;
+
+		page_pool_destroy(q->page_pool);
+		q->page_pool = NULL;
+	}
+
+	mdev->tx_prealloc_enabled = false;
+}
+
+static void *
+mt792x_dma_tx_alloc_page_pool_buf(struct mt76_dev *dev, struct mt76_queue *q,
+				  struct sk_buff *skb, dma_addr_t *dma_addr,
+				  int *buf_len)
+{
+	struct page *page;
+	void *buf;
+	int len;
+	u32 offset;
+
+	if (!q->page_pool || !dev->tx_prealloc_enabled)
+		return NULL;
+
+	len = skb_headlen(skb);
+	if (len > PAGE_SIZE)
+		return NULL;
+
+	buf = mt76_get_page_pool_buf(q, &offset, len);
+	if (!buf)
+		return NULL;
+
+	page = virt_to_head_page(buf);
+	*dma_addr = page_pool_get_dma_addr(page) + offset;
+	if (unlikely(!*dma_addr)) {
+		dev_warn_ratelimited(dev->dev, "Page pool returned NULL DMA address\n");
+		mt76_put_page_pool_buf(buf, false);
+		return NULL;
+	}
+
+	*buf_len = len;
+
+	dma_sync_single_for_cpu(dev->dma_dev, *dma_addr, len, DMA_TO_DEVICE);
+	skb_copy_from_linear_data(skb, buf, len);
+	dma_sync_single_for_device(dev->dma_dev, *dma_addr, len, DMA_TO_DEVICE);
+
+	return buf;
+}
+
+static int
+mt792x_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
+			enum mt76_txq_id qid, struct sk_buff *skb,
+			struct mt76_wcid *wcid, struct ieee80211_sta *sta)
+{
+	struct ieee80211_tx_status status = {
+		.sta = sta,
+	};
+	struct mt76_tx_info tx_info = {
+		.skb = skb,
+	};
+	struct mt76_dev *dev = phy->dev;
+	struct ieee80211_hw *hw;
+	int len, n = 0, ret = -ENOMEM;
+	struct mt76_txwi_cache *t;
+	struct sk_buff *iter;
+	dma_addr_t addr;
+	u8 *txwi;
+
+	if (test_bit(MT76_RESET, &phy->state))
+		goto free_skb;
+
+	t = mt76_get_txwi(dev);
+	if (!t)
+		goto free_skb;
+
+	txwi = mt76_get_txwi_ptr(dev, t);
+
+	skb->prev = NULL;
+	skb->next = NULL;
+	if (dev->drv->drv_flags & MT_DRV_TX_ALIGNED4_SKBS)
+		mt76_insert_hdr_pad(skb);
+
+	len = skb_headlen(skb);
+
+	if (dev->tx_prealloc_enabled && q->page_pool &&
+	    !skb_has_frag_list(skb) && !skb_shinfo(skb)->nr_frags) {
+		void *buf;
+		int pp_len;
+
+		buf = mt792x_dma_tx_alloc_page_pool_buf(dev, q, skb, &addr, &pp_len);
+		if (buf) {
+			t->ptr = buf;
+			len = pp_len;
+
+			tx_info.buf[n].addr = t->dma_addr;
+			tx_info.buf[n++].len = dev->drv->txwi_size;
+			tx_info.buf[n].addr = addr;
+			tx_info.buf[n].len = len;
+			tx_info.buf[n].skip_unmap = true;
+			n++;
+
+			goto skip_dma_map;
+		}
+	}
+
+	addr = dma_map_single(dev->dma_dev, skb->data, len, DMA_TO_DEVICE);
+	if (unlikely(dma_mapping_error(dev->dma_dev, addr)))
+		goto free;
+
+	t->ptr = NULL;
+
+	tx_info.buf[n].addr = t->dma_addr;
+	tx_info.buf[n++].len = dev->drv->txwi_size;
+	tx_info.buf[n].addr = addr;
+	tx_info.buf[n++].len = len;
+
+skip_dma_map:
+	skb_walk_frags(skb, iter) {
+		if (n == ARRAY_SIZE(tx_info.buf))
+			goto unmap;
+
+		addr = dma_map_single(dev->dma_dev, iter->data, iter->len,
+				      DMA_TO_DEVICE);
+		if (unlikely(dma_mapping_error(dev->dma_dev, addr)))
+			goto unmap;
+
+		tx_info.buf[n].addr = addr;
+		tx_info.buf[n].skip_unmap = false;
+		tx_info.buf[n++].len = iter->len;
+	}
+	tx_info.nbuf = n;
+
+	if (q->queued + (tx_info.nbuf + 1) / 2 >= q->ndesc - 1) {
+		ret = -ENOMEM;
+		goto unmap;
+	}
+
+	dma_sync_single_for_cpu(dev->dma_dev, t->dma_addr, dev->drv->txwi_size,
+				DMA_TO_DEVICE);
+	ret = dev->drv->tx_prepare_skb(dev, txwi, qid, wcid, sta, &tx_info);
+	dma_sync_single_for_device(dev->dma_dev, t->dma_addr, dev->drv->txwi_size,
+				   DMA_TO_DEVICE);
+	if (ret < 0)
+		goto unmap;
+
+	return mt76_dma_add_buf(dev, q, tx_info.buf, tx_info.nbuf,
+				tx_info.info, tx_info.skb, t);
+
+unmap:
+	for (n--; n > 0; n--) {
+		if (!tx_info.buf[n].skip_unmap)
+			dma_unmap_single(dev->dma_dev, tx_info.buf[n].addr,
+					 tx_info.buf[n].len, DMA_TO_DEVICE);
+	}
+
+	if (t->ptr) {
+		mt76_put_page_pool_buf(t->ptr, false);
+		t->ptr = NULL;
+	}
+
+free:
+#ifdef CONFIG_NL80211_TESTMODE
+	if (mt76_is_testmode_skb(dev, skb, &hw)) {
+		struct mt76_phy *phy = hw->priv;
+
+		if (tx_info.skb == phy->test.tx_skb)
+			phy->test.tx_done--;
+	}
+#endif
+
+	mt76_put_txwi(dev, t);
+
+free_skb:
+	status.skb = tx_info.skb;
+	hw = mt76_tx_status_get_hw(dev, tx_info.skb);
+	spin_lock_bh(&dev->rx_lock);
+	ieee80211_tx_status_ext(hw, &status);
+	spin_unlock_bh(&dev->rx_lock);
+
+	return ret;
+}
+
+static struct mt76_queue_ops mt792x_queue_ops;
+
+static void mt792x_dma_attach(struct mt76_dev *dev)
+{
+	mt76_dma_attach(dev);
+	mt792x_queue_ops = *dev->queue_ops;
+	mt792x_queue_ops.tx_queue_skb = mt792x_dma_tx_queue_skb;
+	dev->queue_ops = &mt792x_queue_ops;
+}
+
 int mt792x_dma_disable(struct mt792x_dev *dev, bool force)
 {
 	/* disable WFDMA0 */
@@ -509,6 +776,8 @@ void mt792x_dma_cleanup(struct mt792x_dev *dev)
 		 MT_WFDMA0_RST_LOGIC_RST);
 
 	mt76_dma_cleanup(&dev->mt76);
+
+	mt792x_dma_tx_page_pool_cleanup(dev);
 }
 EXPORT_SYMBOL_GPL(mt792x_dma_cleanup);
 

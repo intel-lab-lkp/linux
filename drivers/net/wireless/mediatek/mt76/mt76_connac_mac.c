@@ -250,6 +250,12 @@ void mt76_connac_txp_skb_unmap(struct mt76_dev *dev,
 {
 	struct mt76_connac_txp_common *txp;
 
+	if (t->ptr) {
+		mt76_put_page_pool_buf(t->ptr, false);
+		t->ptr = NULL;
+		return;
+	}
+
 	txp = mt76_connac_txwi_to_txp(dev, t);
 	if (is_mt76_fw_txp(dev))
 		mt76_connac_txp_skb_unmap_fw(dev, &txp->fw);

@@ -470,6 +470,8 @@ static int mt7925_dma_init(struct mt792x_dev *dev)
 			  mt792x_poll_tx);
 	napi_enable(&dev->mt76.tx_napi);
 
+	mt792x_dma_tx_page_pool_init(dev);
+
 	return mt792x_dma_enable(dev);
 }
 

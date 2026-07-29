@@ -4,6 +4,8 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <net/page_pool/helpers.h>
 #include "mt76.h"
 #include "dma.h"
 #include "mt76_connac.h"
@@ -80,7 +82,7 @@ __mt76_get_rxwi(struct mt76_dev *dev)
 	return t;
 }
 
-static struct mt76_txwi_cache *
+struct mt76_txwi_cache *
 mt76_get_txwi(struct mt76_dev *dev)
 {
 	struct mt76_txwi_cache *t = __mt76_get_txwi(dev);
@@ -93,6 +95,7 @@ mt76_get_txwi(struct mt76_dev *dev)
 
 	return mt76_alloc_txwi(dev);
 }
+EXPORT_SYMBOL_GPL(mt76_get_txwi);
 
 struct mt76_txwi_cache *
 mt76_get_rxwi(struct mt76_dev *dev)
@@ -323,7 +326,7 @@ done:
 	return idx;
 }
 
-static int
+int
 mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
 		 struct mt76_queue_buf *buf, int nbufs, u32 info,
 		 struct sk_buff *skb, void *txwi)
@@ -391,6 +394,7 @@ mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
 
 	return idx;
 }
+EXPORT_SYMBOL_GPL(mt76_dma_add_buf);
 
 static void
 mt76_dma_tx_cleanup_idx(struct mt76_dev *dev, struct mt76_queue *q, int idx,
@@ -444,6 +448,11 @@ mt76_dma_tx_cleanup(struct mt76_dev *dev, struct mt76_queue *q, bool flush)
 		mt76_queue_tx_complete(dev, q, &entry);
 
 		if (entry.txwi) {
+			if (entry.skb && entry.txwi->ptr) {
+				mt76_put_page_pool_buf(entry.txwi->ptr, false);
+				entry.txwi->ptr = NULL;
+			}
+
 			if (!(dev->drv->drv_flags & MT_DRV_TXWI_NO_FREE))
 				mt76_put_txwi(dev, entry.txwi);
 		}

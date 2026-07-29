@@ -504,6 +504,7 @@ void mt792x_dma_cleanup(struct mt792x_dev *dev);
 int mt792x_dma_alloc_queues(struct mt792x_dev *dev,
 			    const struct mt792x_dma_layout *layout);
 int mt792x_dma_enable(struct mt792x_dev *dev);
+int mt792x_dma_tx_page_pool_init(struct mt792x_dev *dev);
 int mt792x_wpdma_reset(struct mt792x_dev *dev, bool force);
 int mt792x_wpdma_reinit_cond(struct mt792x_dev *dev);
 int mt792x_dma_disable(struct mt792x_dev *dev, bool force);

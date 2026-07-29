@@ -174,6 +174,9 @@ int mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q,
 		     bool allow_direct);
 void mt76_dma_queue_reset(struct mt76_dev *dev, struct mt76_queue *q,
 			  bool reset_idx);
+int mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
+		     struct mt76_queue_buf *buf, int nbufs, u32 info,
+		     struct sk_buff *skb, void *txwi);
 
 static inline void
 mt76_dma_reset_tx_queue(struct mt76_dev *dev, struct mt76_queue *q)
