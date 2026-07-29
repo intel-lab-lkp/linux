@@ -479,6 +479,12 @@ static int ina226_alert_limit_read(struct ina2xx_data *data, enum ina2xx_alert_t
 	u32 mask;
 	int ret;
 
+	/* Avoid nonzero reads from inactive alerts caused by shared limit register */
+	if (data->active_alert != alert) {
+		*val = 0;
+		return 0;
+	}
+
 	ret = regmap_read(regmap, INA226_MASK_ENABLE, &regval);
 	if (ret)
 		return ret;
@@ -557,6 +563,12 @@ static int ina226_alert_read(struct ina2xx_data *data, enum ina2xx_alert_type al
 	unsigned int regval;
 	u32 mask;
 	int ret;
+
+	/* Avoid reading inactive alerts, which may clear the active alert */
+	if (data->active_alert != alert) {
+		*val = 0;
+		return 0;
+	}
 
 	ret = regmap_read_bypassed(data->regmap, INA226_MASK_ENABLE, &regval);
 	if (ret)
