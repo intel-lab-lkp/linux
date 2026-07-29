@@ -2712,10 +2712,12 @@ static void get_jack_mode_name(struct hda_codec *codec, hda_nid_t pin,
 			       char *name, size_t name_len)
 {
 	struct hda_gen_spec *spec = codec->spec;
+	size_t used;
 	int idx = 0;
 
 	snd_hda_get_pin_label(codec, pin, &spec->autocfg, name, name_len, &idx);
-	strlcat(name, " Jack Mode", name_len);
+	used = strnlen(name, name_len);
+	strscpy(name + used, " Jack Mode", name_len - used);
 
 	for (; find_kctl_name(codec, name, idx); idx++)
 		;
@@ -5686,16 +5688,15 @@ static void fill_pcm_stream_name(char *str, size_t len, const char *sfx,
 
 	if (*str)
 		return;
+
 	strscpy(str, chip_name, len);
 
-	/* drop non-alnum chars after a space */
-	for (p = strchr(str, ' '); p; p = strchr(p + 1, ' ')) {
-		if (!isalnum(p[1])) {
-			*p = 0;
+	/* find the append position, trimming decorations if present */
+	for (p = str; *p; p++)
+		if (*p == ' ' && !isalnum(p[1]))
 			break;
-		}
-	}
-	strlcat(str, sfx, len);
+
+	strscpy(p, sfx, len - (p - str));
 }
 
 /* copy PCM stream info from @default_str, and override non-NULL entries
