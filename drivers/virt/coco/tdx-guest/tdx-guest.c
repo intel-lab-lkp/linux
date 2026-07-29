@@ -162,7 +162,7 @@ static void tdx_mr_deinit(const struct attribute_group *mr_grp)
  * DICE-based attestation uses layered evidence that requires
  * larger Quote size (~100K).
  */
-#define GET_QUOTE_BUF_SIZE		SZ_128K
+#define GET_QUOTE_DEFAULT_BUF_SIZE	SZ_128K
 
 #define GET_QUOTE_CMD_VER		1
 
@@ -222,11 +222,31 @@ static void free_quote_buf(void *buf, size_t len)
 	free_pages_exact(buf, len);
 }
 
+/* Return a buffer size large enough to hold a Quote */
+static size_t get_quote_buf_size(void)
+{
+	u32 quote_size = tdx_get_max_quote_size();
+
+	/*
+	 * Older TDX modules do not report a maximum Quote size, so use
+	 * the default.
+	 */
+	if (!quote_size)
+		return GET_QUOTE_DEFAULT_BUF_SIZE;
+
+	/* The reported size does not include the buffer header */
+	return PAGE_ALIGN(TDX_QUOTE_BUF_LEN(quote_size));
+}
+
 static void *alloc_quote_buf(size_t len)
 {
 	unsigned int count = len >> PAGE_SHIFT;
 	void *addr;
 
+	/*
+	 * This fails if the requested size exceeds the buddy allocator's
+	 * maximum order (order-10, 4MB).
+	 */
 	addr = alloc_pages_exact(len, GFP_KERNEL | __GFP_ZERO);
 	if (!addr)
 		return NULL;
@@ -416,7 +436,7 @@ static int __init tdx_guest_init(void)
 	if (ret)
 		goto deinit_mr;
 
-	quote_data_len = GET_QUOTE_BUF_SIZE;
+	quote_data_len = get_quote_buf_size();
 	quote_data = alloc_quote_buf(quote_data_len);
 	if (!quote_data) {
 		pr_err("Failed to allocate Quote buffer\n");
