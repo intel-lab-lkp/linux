@@ -37,6 +37,7 @@
 #include <linux/page_idle.h>
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
+#include <linux/kvm_types.h>
 
 #include "internal.h"
 
@@ -964,6 +965,7 @@ bool lru_add_drain_progressive(int *drain_state)
 	}
 	return false;
 }
+EXPORT_SYMBOL_FOR_KVM(lru_add_drain_progressive);
 
 atomic_t lru_disable_count = ATOMIC_INIT(0);
 

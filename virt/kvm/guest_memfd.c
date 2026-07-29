@@ -8,6 +8,7 @@
 #include <linux/mempolicy.h>
 #include <linux/pseudo_fs.h>
 #include <linux/pagemap.h>
+#include <linux/swap.h>
 
 #include "kvm_mm.h"
 
@@ -554,6 +555,7 @@ static bool kvm_gmem_is_safe_for_conversion(struct inode *inode, pgoff_t start,
 	const int filemap_get_folios_refcount = 1;
 	pgoff_t last = start + nr_pages - 1;
 	struct folio_batch fbatch;
+	int drain_state = 0;
 	bool safe = true;
 	pgoff_t next;
 	int i;
@@ -565,9 +567,15 @@ static bool kvm_gmem_is_safe_for_conversion(struct inode *inode, pgoff_t start,
 
 		for (i = 0; i < folio_batch_count(&fbatch); ++i) {
 			struct folio *folio = fbatch.folios[i];
+			int expected_refcount = folio_nr_pages(folio) +
+						filemap_get_folios_refcount;
 
-			if (folio_ref_count(folio) !=
-			    folio_nr_pages(folio) + filemap_get_folios_refcount) {
+			while (folio_may_be_lru_cached(folio) &&
+			       folio_ref_count(folio) != expected_refcount &&
+			       lru_add_drain_progressive(&drain_state))
+				;
+
+			if (folio_ref_count(folio) != expected_refcount) {
 				safe = false;
 				*err_index = max(start, folio->index);
 				break;
