@@ -773,10 +773,12 @@ static int _rtw_drv_register_netdev(struct adapter *padapter, char *name)
 
 error_register_netdev:
 
-	rtw_free_drv_sw(padapter);
-
-	rtw_free_netdev(pnetdev);
-
+	/* Let the caller (rtw_drv_init -> rtw_sdio_if1_deinit) release the
+	 * adapter and netdev. Freeing them here would lead to a double free:
+	 * rtw_drv_init() still holds a non-NULL if1 and calls
+	 * rtw_sdio_if1_deinit(), which invokes rtw_free_drv_sw() and
+	 * rtw_free_netdev() again on the already-freed objects.
+	 */
 	return ret;
 }
 
