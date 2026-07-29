@@ -29,14 +29,23 @@ struct cpuidle_governor *cpuidle_prev_governor;
  * Per-CPU generation bumped to invalidate that CPU's cached latency
  * constraint.  Global QoS changes invalidate every CPU; per-CPU resume
  * latency changes invalidate only the affected CPU.
+ *
+ * Start at 1 so it does not match a zero-filled latency_req_cache and
+ * falsely hit before the first real fill (which would return 0).
  */
-static DEFINE_PER_CPU(atomic_t, latency_req_gen);
+static DEFINE_PER_CPU(atomic_t, latency_req_gen) = ATOMIC_INIT(1);
+
+struct cpuidle_latency_req_cache {
+	unsigned int gen;
+	s64 latency_ns;
+};
 
 struct cpuidle_cpu_qos_nb {
 	struct notifier_block nb;
 	unsigned int cpu;
 };
 
+static DEFINE_PER_CPU(struct cpuidle_latency_req_cache, latency_req_cache);
 static DEFINE_PER_CPU(struct cpuidle_cpu_qos_nb, cpuidle_cpu_qos_nb);
 
 static void cpuidle_latency_req_invalidate_cpu(unsigned int cpu)
@@ -207,10 +216,14 @@ int cpuidle_register_governor(struct cpuidle_governor *gov)
 }
 
 /**
- * cpuidle_governor_latency_req - Compute a latency constraint for CPU
+ * cpuidle_aggregate_latency_req - Aggregate QoS latency constraints for @cpu
  * @cpu: Target CPU
+ *
+ * Combine the per-CPU resume latency with the global CPU latency and wakeup
+ * latency QoS limits.  Called on a cache miss from
+ * cpuidle_governor_latency_req().
  */
-s64 cpuidle_governor_latency_req(unsigned int cpu)
+static s64 cpuidle_aggregate_latency_req(unsigned int cpu)
 {
 	struct device *device = get_cpu_device(cpu);
 	int device_req = dev_pm_qos_raw_resume_latency(device);
@@ -224,4 +237,31 @@ s64 cpuidle_governor_latency_req(unsigned int cpu)
 		device_req = global_req;
 
 	return (s64)device_req * NSEC_PER_USEC;
+}
+
+/**
+ * cpuidle_governor_latency_req - Cached latency constraint for CPU
+ * @cpu: Target CPU (must be the local CPU; callers are idle governors)
+ *
+ * The per-CPU cache is only accessed by this CPU's idle ->select() path.
+ * Remote CPUs may bump latency_req_gen via QoS notifiers, but they do not
+ * touch the cache fields.
+ */
+s64 cpuidle_governor_latency_req(unsigned int cpu)
+{
+	struct cpuidle_latency_req_cache *cache;
+	unsigned int gen;
+	s64 latency_ns;
+
+	cache = per_cpu_ptr(&latency_req_cache, cpu);
+	gen = atomic_read(per_cpu_ptr(&latency_req_gen, cpu));
+
+	if (likely(cache->gen == gen))
+		return cache->latency_ns;
+
+	latency_ns = cpuidle_aggregate_latency_req(cpu);
+	cache->latency_ns = latency_ns;
+	cache->gen = gen;
+
+	return latency_ns;
 }
