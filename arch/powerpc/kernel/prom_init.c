@@ -980,6 +980,10 @@ static const struct ibm_arch_vec ibm_architecture_vec_template __initconst = {
 			.val  = cpu_to_be32(0x003a0000),
 		},
 		{
+			.mask = cpu_to_be32(0xffffffff), /* all 2.04-compliant and earlier */
+			.val  = cpu_to_be32(0x0f000001),
+		},
+		{
 			.mask = cpu_to_be32(0xffff0000), /* POWER6 */
 			.val  = cpu_to_be32(0x003e0000),
 		},
@@ -1032,12 +1036,8 @@ static const struct ibm_arch_vec ibm_architecture_vec_template __initconst = {
 			.val  = cpu_to_be32(0x0f000003),
 		},
 		{
-			.mask = cpu_to_be32(0xffffffff), /* all 2.05-compliant */
+			.mask = cpu_to_be32(0xfffffffd), /* all 2.05-compliant */
 			.val  = cpu_to_be32(0x0f000002),
-		},
-		{
-			.mask = cpu_to_be32(0xfffffffe), /* all 2.04-compliant and earlier */
-			.val  = cpu_to_be32(0x0f000001),
 		},
 	},
 
@@ -1347,7 +1347,6 @@ static void __init prom_check_platform_support(void)
 	};
 	int prop_len = prom_getproplen(prom.chosen,
 				       "ibm,arch-vec-5-platform-support");
-
 	/*
 	 * First copy the architecture vec template
 	 *
@@ -1403,6 +1402,11 @@ static void __init prom_send_capabilities(void)
 	ihandle root;
 	prom_arg_t ret;
 	u32 cores;
+	int start_index = 0;
+
+	if ((ARRAY_SIZE(ibm_architecture_vec_template.pvrs) > 16) &&
+	    (PVR_VER(mfspr(SPRN_PVR)) <= PVR_POWER11))
+		start_index = ARRAY_SIZE(ibm_architecture_vec_template.pvrs) - 16;
 
 	/* Check ibm,arch-vec-5-platform-support and fixup vec5 if required */
 	prom_check_platform_support();
@@ -1427,7 +1431,7 @@ static void __init prom_send_capabilities(void)
 		if (call_prom_ret("call-method", 3, 2, &ret,
 				  ADDR("ibm,client-architecture-support"),
 				  root,
-				  ADDR(&ibm_architecture_vec)) == 0) {
+				  ADDR(&ibm_architecture_vec.pvrs[start_index])) == 0) {
 			/* the call exists... */
 			if (ret)
 				prom_printf("\nWARNING: ibm,client-architecture"
