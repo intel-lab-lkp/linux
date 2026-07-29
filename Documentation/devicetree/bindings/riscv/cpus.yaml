@@ -26,6 +26,7 @@ description: |
 allOf:
   - $ref: /schemas/cpu.yaml#
   - $ref: extensions.yaml
+  - $ref: worlds.yaml
   - if:
       not:
         properties:
@@ -38,6 +39,44 @@ allOf:
     then:
       properties:
         thead,vlenb: false
+
+  - if:
+      properties:
+        riscv,isa-extensions:
+          not:
+            contains:
+              const: smwid
+    then:
+      properties:
+        riscv,pmwidlist: false
+
+  - if:
+      properties:
+        riscv,isa-extensions:
+          not:
+            contains:
+              const: smlwid
+    then:
+      properties:
+        riscv,pmlwidlist: false
+
+  - if:
+      allOf:
+        - properties:
+            riscv,isa-extensions:
+              not:
+                contains:
+                  const: smwid
+        - properties:
+            riscv,isa-extensions:
+              contains:
+                enum:
+                  - smlwid
+                  - smwiddeleg
+                  - sswid
+    then:
+      required:
+        - riscv,pmwid
 
 properties:
   compatible:
@@ -120,6 +159,28 @@ properties:
       thead systems where the vector register length is not identical on all harts, or
       the vlenb CSR is not available.
 
+  riscv,pmwid:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      M-mode World ID (WID) for this hart, M-mode firmware may read this property
+      to identify the WID for M-mode. For a Worlds-aware platform without any Worlds
+      ISA implemented, this is the WID for all privilege modes.
+    minimum: 0
+    maximum: 63
+
+  riscv,pmwidlist:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description:
+      Optional bitmask of WIDs available for M-mode use on this hart; each set bit N
+      indicates WID N is available. Firmware may read this to select a platform
+      authorized WID.
+
+  riscv,pmlwidlist:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description:
+      Optional bitmask of WIDs available for S-mode and U-mode use on this hart; each
+      set bit N indicates WID N is available. Firmware may read this to select platform
+      authorized WIDs for lower-privilege modes.
   # RISC-V has multiple properties for cache op block sizes as the sizes
   # differ between individual CBO extensions
   cache-op-block-size: false
