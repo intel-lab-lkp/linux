@@ -4,6 +4,7 @@
  * Copyright 2016-2019 NXP
  *
  */
+#include <linux/cleanup.h>
 #include <linux/types.h>
 #include <linux/fsl/mc.h>
 #include <soc/fsl/dpaa2-io.h>
@@ -638,6 +639,36 @@ EXPORT_SYMBOL_GPL(dpaa2_io_service_acquire);
  * assist with parsing those results.
  */
 
+static inline
+struct dpaa2_io_store *dpaa2_io_store_create_impl(unsigned int max_frames, struct device *dev)
+{
+	size_t size;
+	struct dpaa2_io_store *ret __free(kfree) = kmalloc_obj(*ret);
+
+	if (!ret)
+		return NULL;
+
+	ret->max = max_frames;
+	size = max_frames * sizeof(struct dpaa2_dq) + 64;
+	ret->alloced_addr = kzalloc(size, GFP_KERNEL);
+	if (!ret->alloced_addr)
+		return NULL;
+
+	ret->vaddr = PTR_ALIGN(ret->alloced_addr, 64);
+	ret->paddr = dma_map_single(dev, ret->vaddr,
+				    sizeof(struct dpaa2_dq) * max_frames,
+				    DMA_FROM_DEVICE);
+	if (dma_mapping_error(dev, ret->paddr)) {
+		kfree(ret->alloced_addr);
+		return NULL;
+	}
+
+	ret->idx = 0;
+	ret->dev = dev;
+
+	return ret;
+}
+
 /**
  * dpaa2_io_store_create() - Create the dma memory storage for dequeue result.
  * @max_frames: the maximum number of dequeued result for frames, must be <= 32.
@@ -652,38 +683,10 @@ EXPORT_SYMBOL_GPL(dpaa2_io_service_acquire);
 struct dpaa2_io_store *dpaa2_io_store_create(unsigned int max_frames,
 					     struct device *dev)
 {
-	struct dpaa2_io_store *ret;
-	size_t size;
-
 	if (!max_frames || (max_frames > 32))
 		return NULL;
 
-	ret = kmalloc_obj(*ret);
-	if (!ret)
-		return NULL;
-
-	ret->max = max_frames;
-	size = max_frames * sizeof(struct dpaa2_dq) + 64;
-	ret->alloced_addr = kzalloc(size, GFP_KERNEL);
-	if (!ret->alloced_addr) {
-		kfree(ret);
-		return NULL;
-	}
-
-	ret->vaddr = PTR_ALIGN(ret->alloced_addr, 64);
-	ret->paddr = dma_map_single(dev, ret->vaddr,
-				    sizeof(struct dpaa2_dq) * max_frames,
-				    DMA_FROM_DEVICE);
-	if (dma_mapping_error(dev, ret->paddr)) {
-		kfree(ret->alloced_addr);
-		kfree(ret);
-		return NULL;
-	}
-
-	ret->idx = 0;
-	ret->dev = dev;
-
-	return ret;
+	return dpaa2_io_store_create_impl(max_frames, dev);
 }
 EXPORT_SYMBOL_GPL(dpaa2_io_store_create);
 
