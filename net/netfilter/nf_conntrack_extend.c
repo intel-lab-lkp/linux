@@ -87,9 +87,34 @@ static __always_inline unsigned int total_extension_size(void)
 	;
 }
 
+static void nf_ct_ext_helper_save(struct nf_conn *ct,
+				  struct hlist_head *expectations)
+{
+	struct nf_conn_help *help;
+
+	help = nf_ct_ext_find(ct, NF_CT_EXT_HELPER);
+	if (!help)
+		return;
+
+	hlist_move_list(&help->expectations, expectations);
+}
+
+static void nf_ct_ext_helper_restore(struct nf_conn *ct,
+				     struct hlist_head *expectations)
+{
+	struct nf_conn_help *help;
+
+	help = nf_ct_ext_find(ct, NF_CT_EXT_HELPER);
+	if (!help)
+		return;
+
+	hlist_move_list(expectations, &help->expectations);
+}
+
 void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 {
 	unsigned int newlen, newoff, oldlen, alloc;
+	HLIST_HEAD(expectations);
 	struct nf_ct_ext *new;
 
 	/* Conntrack must not be confirmed to avoid races on reallocation. */
@@ -108,13 +133,17 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 		oldlen = sizeof(*new);
 	}
 
+	nf_ct_ext_helper_save(ct, &expectations);
+
 	newoff = ALIGN(oldlen, __alignof__(struct nf_ct_ext));
 	newlen = newoff + nf_ct_ext_type_len[id];
 
 	alloc = max(newlen, NF_CT_EXT_PREALLOC);
 	new = krealloc(ct->ext, alloc, gfp);
-	if (!new)
+	if (!new) {
+		nf_ct_ext_helper_restore(ct, &expectations);
 		return NULL;
+	}
 
 	if (!ct->ext)
 		memset(new->offset, 0, sizeof(new->offset));
@@ -124,6 +153,8 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	memset((void *)new + newoff, 0, newlen - newoff);
 
 	ct->ext = new;
+	nf_ct_ext_helper_restore(ct, &expectations);
+
 	return (void *)new + newoff;
 }
 EXPORT_SYMBOL(nf_ct_ext_add);
