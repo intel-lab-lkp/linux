@@ -2958,6 +2958,8 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 		 * not call the fault handler, so do it here.
 		 */
 		bool unlocked = false;
+		bool write_upgrade = false;
+do_write_upgrade:
 		r = fixup_user_fault(current->mm, kfp->hva,
 				     (write_fault ? FAULT_FLAG_WRITE : 0),
 				     &unlocked);
@@ -2969,6 +2971,17 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 		r = follow_pfnmap_start(&args);
 		if (r)
 			return r;
+
+		if (write_fault && !args.writable && !write_upgrade) {
+			/*
+			 * VM_PFNMAP fault handlers may install read-only PTEs
+			 * via vmf_insert_pfn(), deferring the write upgrade to
+			 * a second fault. Trigger that upgrade now.
+			 */
+			write_upgrade = true;
+			follow_pfnmap_end(&args);
+			goto do_write_upgrade;
+		}
 	}
 
 	if (write_fault && !args.writable) {
