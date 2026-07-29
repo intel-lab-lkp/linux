@@ -2908,8 +2908,23 @@ static int intel_pstate_set_policy(struct cpufreq_policy *policy)
 		 */
 		intel_pstate_clear_update_util_hook(policy->cpu);
 		intel_pstate_set_pstate(cpu, pstate);
+
+		/*
+		 * Report the exact pinned frequency instead of the floor:
+		 * the CPU is pinned to pstate here and nothing else changes
+		 * it, unlike the general case below.
+		 */
+		policy->cur = pstate * cpu->pstate.scaling;
 	} else {
 		intel_pstate_set_update_util_hook(policy->cpu);
+
+		/*
+		 * Keep policy->cur within limits here: outside of the pinned
+		 * CPUFREQ_POLICY_PERFORMANCE case above, it is never updated
+		 * by the intel_pstate driver, but it is used as a stale
+		 * frequency value.
+		 */
+		policy->cur = policy->min;
 	}
 
 	if (hwp_active) {
@@ -2922,11 +2937,6 @@ static int intel_pstate_set_policy(struct cpufreq_policy *policy)
 			intel_pstate_clear_update_util_hook(policy->cpu);
 		intel_pstate_hwp_set(policy->cpu);
 	}
-	/*
-	 * policy->cur is never updated with the intel_pstate driver, but it
-	 * is used as a stale frequency value. So, keep it within limits.
-	 */
-	policy->cur = policy->min;
 
 	mutex_unlock(&intel_pstate_limits_lock);
 
