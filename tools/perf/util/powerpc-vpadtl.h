@@ -20,4 +20,5 @@ struct perf_pmu;
 int powerpc_vpadtl_process_auxtrace_info(union perf_event *event,
 				  struct perf_session *session);
 
+struct auxtrace_record *vpa_dtl_recording_init(struct evsel *pos, int *err);
 #endif
