@@ -201,7 +201,7 @@ static int highbank_mc_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	settings = id->data;
+	settings = of_device_get_match_data(&pdev->dev);
 	drvdata->mc_err_base = base + settings->err_offset;
 	drvdata->mc_int_base = base + settings->int_offset;
 
