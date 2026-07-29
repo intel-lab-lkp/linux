@@ -61,6 +61,20 @@ static void dwxgmac2_set_rx_owner(struct dma_desc *p, int disable_rx_ic)
 	p->des3 |= cpu_to_le32(flags);
 }
 
+static u16 dwxgmac2_wrback_get_rx_vlan_type(struct dma_desc *p)
+{
+	u32 et_lt = FIELD_GET(XGMAC_RDES3_ET_LT, le32_to_cpu(p->des3));
+
+	switch (et_lt) {
+	case XGMAC_ET_LT_VLAN_STAG:
+	case XGMAC_ET_LT_DVLAN_STAG_STAG:
+	case XGMAC_ET_LT_DVLAN_STAG_CTAG:
+		return ETH_P_8021AD;
+	default:
+		return ETH_P_8021Q;
+	}
+}
+
 static u16 dwxgmac2_wrback_get_rx_vlan_tci(struct dma_desc *p)
 {
 	return le32_to_cpu(p->des0) & XGMAC_RDES0_VLAN_TAG_MASK;
@@ -350,6 +364,7 @@ const struct stmmac_desc_ops dwxgmac210_desc_ops = {
 	.rx_status = dwxgmac2_get_rx_status,
 	.set_tx_owner = dwxgmac2_set_tx_owner,
 	.set_rx_owner = dwxgmac2_set_rx_owner,
+	.get_rx_vlan_type = dwxgmac2_wrback_get_rx_vlan_type,
 	.get_rx_vlan_tci = dwxgmac2_wrback_get_rx_vlan_tci,
 	.get_rx_vlan_valid = dwxgmac2_wrback_get_rx_vlan_valid,
 	.get_rx_frame_len = dwxgmac2_get_rx_frame_len,
