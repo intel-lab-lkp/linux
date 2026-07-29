@@ -1316,15 +1316,28 @@ static int cppc_set_reg_val(int cpu, enum cppc_regs reg_idx, u64 val)
 	return cpc_write(cpu, reg, val);
 }
 
+static bool cppc_desired_perf_readable(void)
+{
+	u8 minor_revision = acpi_gbl_FADT.minor_revision & 0x0f;
+
+	return acpi_gbl_FADT.header.revision < 6 ||
+	       (acpi_gbl_FADT.header.revision == 6 && minor_revision < 6);
+}
+
 /**
  * cppc_get_desired_perf - Get the desired performance register value.
  * @cpunum: CPU from which to get desired performance.
  * @desired_perf: Return address.
  *
- * Return: 0 for success, -EIO otherwise.
+ * Return: 0 for success, -EOPNOTSUPP for ACPI 6.6 or later, and a negative
+ * errno otherwise.
  */
 int cppc_get_desired_perf(int cpunum, u64 *desired_perf)
 {
+	/* ACPI 6.6 no longer specifies Desired Performance as readable. */
+	if (!cppc_desired_perf_readable())
+		return -EOPNOTSUPP;
+
 	return cppc_get_reg_val(cpunum, DESIRED_PERF, desired_perf);
 }
 EXPORT_SYMBOL_GPL(cppc_get_desired_perf);
