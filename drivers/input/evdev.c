@@ -565,20 +565,38 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 	if (count != 0 && count < input_event_size())
 		return -EINVAL;
 
-	for (;;) {
+	/*
+	 * count == 0 is special - no IO is done but we still check for
+	 * error conditions, preserving the historical behavior.
+	 */
+	if (count == 0) {
 		if (!evdev->exist || client->revoked)
 			return -ENODEV;
 
-		if (client->packet_head == client->tail &&
-		    (file->f_flags & O_NONBLOCK))
-			return -EAGAIN;
+		return 0;
+	}
+
+	for (;;) {
+		/*
+		 * A revoked client must not consume any more events.
+		 */
+		if (client->revoked)
+			return -ENODEV;
 
 		/*
-		 * count == 0 is special - no IO is done but we check
-		 * for error conditions (see above).
+		 * The input core may queue synthetic release events during
+		 * device unregister before evdev_disconnect() marks the evdev
+		 * node dead. Do not drop those already queued events by
+		 * returning -ENODEV too early. Drain the client queue first and
+		 * report -ENODEV only when there is nothing left to read.
 		 */
-		if (count == 0)
-			break;
+		if (client->packet_head == client->tail) {
+			if (!evdev->exist)
+				return -ENODEV;
+
+			if (file->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+		}
 
 		while (read + input_event_size() <= count &&
 		       evdev_fetch_next_event(client, &event)) {
