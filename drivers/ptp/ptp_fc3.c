@@ -835,16 +835,20 @@ static int idtfc3_enable_ptp(struct idtfc3 *idtfc3)
 
 	err = idtfc3_set_overhead(idtfc3);
 	if (err)
-		return err;
+		goto err_unregister_clock;
 
 	err = idtfc3_init_timecounter(idtfc3);
 	if (err)
-		return err;
+		goto err_unregister_clock;
 
 	dev_info(idtfc3->dev, "TIME_SYNC_CHANNEL registered as ptp%d",
 		 idtfc3->ptp_clock->index);
 
 	return 0;
+
+err_unregister_clock:
+	ptp_clock_unregister(idtfc3->ptp_clock);
+	return err;
 }
 
 static int idtfc3_load_firmware(struct idtfc3 *idtfc3)
