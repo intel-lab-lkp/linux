@@ -1,0 +1,2 @@
+# QoS ceilings x paths, plus no-QoS baselines.
+timeout=180

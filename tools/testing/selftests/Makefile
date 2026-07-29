@@ -13,6 +13,7 @@ TARGETS += clone3
 TARGETS += connector
 TARGETS += core
 TARGETS += cpufreq
+TARGETS += cpuidle
 TARGETS += cpu-hotplug
 TARGETS += damon
 TARGETS += dax
