@@ -985,7 +985,7 @@ config GPIO_I8255
 
 config GPIO_104_DIO_48E
 	tristate "ACCES 104-DIO-48E GPIO support"
-	depends on PC104
+	depends on PC104 || COMPILE_TEST
 	select ISA_BUS_API
 	select REGMAP_MMIO
 	select REGMAP_IRQ
@@ -1000,7 +1000,7 @@ config GPIO_104_DIO_48E
 
 config GPIO_104_IDIO_16
 	tristate "ACCES 104-IDIO-16 GPIO support"
-	depends on PC104
+	depends on PC104 || COMPILE_TEST
 	select ISA_BUS_API
 	select REGMAP_MMIO
 	select GPIO_IDIO_16
@@ -1013,7 +1013,7 @@ config GPIO_104_IDIO_16
 
 config GPIO_104_IDI_48
 	tristate "ACCES 104-IDI-48 GPIO support"
-	depends on PC104
+	depends on PC104 || COMPILE_TEST
 	select ISA_BUS_API
 	select REGMAP_MMIO
 	select REGMAP_IRQ
@@ -1038,7 +1038,7 @@ config GPIO_F7188X
 
 config GPIO_GPIO_MM
 	tristate "Diamond Systems GPIO-MM GPIO support"
-	depends on PC104
+	depends on PC104 || COMPILE_TEST
 	select ISA_BUS_API
 	select REGMAP_MMIO
 	select GPIO_I8255
