@@ -347,6 +347,7 @@ void panfrost_mmu_reset(struct panfrost_device *pfdev)
 	struct panfrost_mmu *mmu, *mmu_tmp;
 
 	clear_bit(PANFROST_COMP_BIT_MMU, pfdev->is_suspended);
+	synchronize_irq(pfdev->mmu_irq);
 
 	spin_lock(&pfdev->as_lock);
 
@@ -983,15 +984,15 @@ int panfrost_mmu_init(struct panfrost_device *pfdev)
 	return 0;
 }
 
-void panfrost_mmu_fini(struct panfrost_device *pfdev)
-{
-	mmu_write(pfdev, MMU_INT_MASK, 0);
-}
-
 void panfrost_mmu_suspend_irq(struct panfrost_device *pfdev)
 {
 	set_bit(PANFROST_COMP_BIT_MMU, pfdev->is_suspended);
 
 	mmu_write(pfdev, MMU_INT_MASK, 0);
 	synchronize_irq(pfdev->mmu_irq);
+}
+
+void panfrost_mmu_fini(struct panfrost_device *pfdev)
+{
+	panfrost_mmu_suspend_irq(pfdev);
 }
