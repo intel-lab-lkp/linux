@@ -14,6 +14,10 @@ struct otx2_nic;
 struct af2pf_fdb_refresh_req;
 struct msg_rsp;
 
+int otx2_mbox_up_handler_af2pf_fdb_refresh(struct otx2_nic *pf,
+					   struct af2pf_fdb_refresh_req *req,
+					   struct msg_rsp *rsp);
+
 #if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
 enum {
 	OTX2_DEV_UP = 1,
@@ -31,10 +35,6 @@ int sw_nb_register(struct net_device *netdev);
 int sw_nb_unregister(struct net_device *netdev);
 bool sw_nb_is_valid_dev(struct net_device *netdev);
 struct net_device *sw_nb_resolve_pf_dev(struct net_device *dev);
-
-int otx2_mbox_up_handler_af2pf_fdb_refresh(struct otx2_nic *pf,
-					   struct af2pf_fdb_refresh_req *req,
-					   struct msg_rsp *rsp);
 
 bool sw_nb_is_cavium_dev(struct net_device *netdev);
 int sw_nb_fib_event_to_otx2_event(int event, struct net_device *netdev);
