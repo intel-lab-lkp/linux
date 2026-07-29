@@ -167,6 +167,7 @@ struct panfrost_device {
 	struct {
 		struct workqueue_struct *wq;
 		struct work_struct work;
+		struct rw_semaphore lock;
 		wait_queue_head_t wait;
 		atomic_t pending;
 	} reset;
