@@ -289,7 +289,6 @@ static int test_cpucg_nice(const char *root)
 		if (!WIFEXITED(status))
 			goto cleanup;
 
-		user_usec = cg_read_key_long(cpucg, "cpu.stat", "user_usec");
 		nice_usec = cg_read_key_long(cpucg, "cpu.stat", "nice_usec");
 		if (!values_close_report(nice_usec, expected_nice_usec, 1))
 			goto cleanup;
