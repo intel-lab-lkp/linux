@@ -347,6 +347,7 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 	struct rxrpc_call *rxcall;
 	struct msghdr msg;
 	struct kvec iov[1];
+	struct key *app_data = NULL;
 	size_t len;
 	s64 tx_total_len;
 	int ret;
@@ -378,8 +379,26 @@ void afs_make_call(struct afs_call *call, gfp_t gfp)
 		call->drop_ref = true;
 	}
 
+	if (call->key && call->server) {
+		u32 krb5_enctype = 0;
+		u8 security_index = 0;
+
+		rxrpc_kernel_query_key(call->key, &security_index, &krb5_enctype);
+		switch (security_index) {
+#ifdef CONFIG_RXGK
+		case RXRPC_SECURITY_YFS_RXGK:
+			/* Read the key pointer before the appdata */
+			app_data = smp_load_acquire(&call->server->yfs_rxgk_appdata);
+			break;
+#endif
+		default:
+			break;
+		}
+	}
+
 	/* create a call */
-	rxcall = rxrpc_kernel_begin_call(call->net->socket, call->peer, call->key,
+	rxcall = rxrpc_kernel_begin_call(call->net->socket, call->peer,
+					 call->key, app_data,
 					 (unsigned long)call,
 					 tx_total_len,
 					 call->max_lifespan,
