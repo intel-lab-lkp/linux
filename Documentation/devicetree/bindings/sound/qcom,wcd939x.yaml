@@ -50,6 +50,7 @@ properties:
 
 required:
   - compatible
+  - qcom,micbias4-microvolt
 
 unevaluatedProperties: false
 

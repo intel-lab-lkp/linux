@@ -89,7 +89,6 @@ required:
   - qcom,micbias1-microvolt
   - qcom,micbias2-microvolt
   - qcom,micbias3-microvolt
-  - qcom,micbias4-microvolt
   - "#sound-dai-cells"
 
 additionalProperties: true

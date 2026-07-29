@@ -31,6 +31,7 @@ properties:
 required:
   - compatible
   - vdd-px-supply
+  - qcom,micbias4-microvolt
 
 unevaluatedProperties: false
 

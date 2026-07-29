@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/qcom,wcd9378-codec.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm WCD9378 Audio Codec
+
+maintainers:
+  - Jorijn van der Graaf <jorijnvdgraaf@catcrafts.net>
+
+description:
+  The Qualcomm WCD9378 is a standalone Hi-Fi audio codec IC with three
+  ADCs, three mic bias supplies, headphone/earpiece/line outputs and
+  MBHC. This node describes the mobile presentation, where the codec
+  appears as two SoundWire slaves on separate masters and this node owns
+  the resources they share; the control registers live in the SDCA control
+  address space reached through the TX slave. In SDCA mode the codec is a
+  single aggregated slave with no node of its own, see
+  qcom,wcd9378-sdw.yaml.
+
+allOf:
+  - $ref: dai-common.yaml#
+  - $ref: qcom,wcd93xx-common.yaml#
+
+properties:
+  compatible:
+    const: qcom,wcd9378-codec
+
+  qcom,micbias4-microvolt: false
+
+required:
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    audio-codec {
+        compatible = "qcom,wcd9378-codec";
+        reset-gpios = <&tlmm 162 GPIO_ACTIVE_LOW>;
+        vdd-buck-supply = <&vreg_l8b>;
+        vdd-rxtx-supply = <&vreg_l7b>;
+        vdd-io-supply = <&vreg_l7b>;
+        vdd-mic-bias-supply = <&vreg_bob>;
+        qcom,micbias1-microvolt = <1800000>;
+        qcom,micbias2-microvolt = <1800000>;
+        qcom,micbias3-microvolt = <1800000>;
+        qcom,rx-device = <&wcd9378_rx>;
+        qcom,tx-device = <&wcd9378_tx>;
+        #sound-dai-cells = <1>;
+    };
+...
