@@ -159,21 +159,29 @@ static int pca9532_setpwm(struct i2c_client *client, int pwm)
 }
 
 /* Set LED routing */
-static void pca9532_setled(struct pca9532_led *led)
+static int pca9532_setled(struct pca9532_led *led)
 {
 	struct i2c_client *client = led->client;
 	struct pca9532_data *data = i2c_get_clientdata(client);
 	u8 maxleds = data->chip_info->num_leds;
-	char reg;
+	int reg;
+	int ret = 0;
 
 	mutex_lock(&data->update_lock);
 	reg = i2c_smbus_read_byte_data(client, LED_REG(maxleds, led->id));
+	if (reg < 0) {
+		dev_warn(&client->dev, "failed to read LED register: %d\n", reg);
+		ret = reg;
+		goto out;
+	}
 	/* zero led bits */
 	reg = reg & ~LED_MASK(led->id);
 	/* set the new value */
 	reg = reg | (led->state << LED_SHIFT(led->id));
-	i2c_smbus_write_byte_data(client, LED_REG(maxleds, led->id), reg);
+	ret = i2c_smbus_write_byte_data(client, LED_REG(maxleds, led->id), reg);
+out:
 	mutex_unlock(&data->update_lock);
+	return ret;
 }
 
 static int pca9532_set_brightness(struct led_classdev *led_cdev,
@@ -196,8 +204,7 @@ static int pca9532_set_brightness(struct led_classdev *led_cdev,
 	}
 	if (led->state == PCA9532_PWM0)
 		pca9532_setpwm(led->client, PCA9532_PWM_ID_0);
-	pca9532_setled(led);
-	return err;
+	return pca9532_setled(led);
 }
 
 static int pca9532_update_hw_blink(struct pca9532_led *led,
@@ -257,9 +264,7 @@ static int pca9532_set_blink(struct led_classdev *led_cdev,
 	if (err)
 		return err;
 
-	pca9532_setled(led);
-
-	return 0;
+	return pca9532_setled(led);
 }
 
 static int pca9532_event(struct input_dev *dev, unsigned int type,
@@ -334,9 +339,7 @@ static int pca9532_gpio_set_value(struct gpio_chip *gc, unsigned int offset,
 	else
 		led->state = PCA9532_ON;
 
-	pca9532_setled(led);
-
-	return 0;
+	return pca9532_setled(led);
 }
 
 static int pca9532_gpio_get_value(struct gpio_chip *gc, unsigned offset)
