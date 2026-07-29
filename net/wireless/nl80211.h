@@ -129,4 +129,6 @@ int nl80211_pmsr_start(struct sk_buff *skb, struct genl_info *info);
 void nl80211_mlo_reconf_add_done(struct net_device *dev,
 				 struct cfg80211_mlo_reconf_done_data *data);
 
+bool cfg80211_validate_ies(const u8 *data, int len);
+
 #endif /* __NET_WIRELESS_NL80211_H */

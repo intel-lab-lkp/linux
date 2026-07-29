@@ -3083,3 +3083,14 @@ bool cfg80211_wdev_channel_allowed(struct wireless_dev *wdev,
 	return false;
 }
 EXPORT_SYMBOL(cfg80211_wdev_channel_allowed);
+
+bool cfg80211_validate_ies(const u8 *data, int len)
+{
+	const struct element *elem;
+
+	for_each_element(elem, data, len) {
+		/* nothing */
+	}
+
+	return for_each_element_completed(elem, data, len);
+}
