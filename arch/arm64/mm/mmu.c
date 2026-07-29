@@ -2330,6 +2330,22 @@ void __cpu_replace_ttbr1(pgd_t *pgdp, bool cnp)
 	cpu_uninstall_idmap();
 }
 
+static const char * const pgtable_level_name[] = {
+	[PGTABLE_LEVEL_PTE] = "pte",
+	[PGTABLE_LEVEL_PMD] = "pmd",
+	[PGTABLE_LEVEL_PUD] = "pud",
+	[PGTABLE_LEVEL_P4D] = "p4d",
+	[PGTABLE_LEVEL_PGD] = "pgd",
+};
+
+void ptval_ERROR(const char *file, int line, enum pgtable_level level, ptval_t val)
+{
+	char str[PTVAL_STR_MAX];
+
+	ptval_to_str(str, val);
+	pr_err("%s:%d: bad %s %s.\n", file, line, pgtable_level_name[level], str);
+}
+
 #ifdef CONFIG_ARCH_HAS_PKEYS
 int arch_set_user_pkey_access(int pkey, unsigned long init_val)
 {
