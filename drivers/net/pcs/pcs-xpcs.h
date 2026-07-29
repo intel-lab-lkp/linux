@@ -105,10 +105,13 @@ enum dw_xpcs_clock {
 	DW_XPCS_NUM_CLKS,
 };
 
+/* 2 channels per group DW PCS devices */
+#define DW_XPCS_MAX_CHANNELS 2
+
 struct dw_xpcs {
 	struct dw_xpcs_info info;
 	const struct dw_xpcs_desc *desc;
-	struct mdio_device *mdiodev;
+	struct mdio_device *mdiodev[DW_XPCS_MAX_CHANNELS];
 	struct clk_bulk_data clks[DW_XPCS_NUM_CLKS];
 	struct phylink_pcs pcs;
 	phy_interface_t interface;
