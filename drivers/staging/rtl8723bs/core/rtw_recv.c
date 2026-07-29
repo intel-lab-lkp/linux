@@ -1146,7 +1146,10 @@ static union recv_frame *recvframe_chk_defrag(struct adapter *padapter, union re
 
 		if (type != WIFI_DATA_TYPE) {
 			psta = rtw_get_bcmc_stainfo(padapter);
-			pdefrag_q = &psta->sta_recvpriv.defrag_q;
+			if (psta)
+				pdefrag_q = &psta->sta_recvpriv.defrag_q;
+			else
+				pdefrag_q = NULL;
 		} else {
 			pdefrag_q = NULL;
 		}
