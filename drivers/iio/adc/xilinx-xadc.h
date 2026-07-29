@@ -19,21 +19,16 @@ struct xadc_ops;
 struct platform_device;
 
 void xadc_handle_events(struct iio_dev *indio_dev, unsigned long events);
-
-int xadc_read_event_config(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir);
-int xadc_write_event_config(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir, bool state);
-int xadc_read_event_value(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir, enum iio_event_info info,
-	int *val, int *val2);
-int xadc_write_event_value(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir, enum iio_event_info info,
-	int val, int val2);
+int xadc_read_event_config(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			   enum iio_event_type type, enum iio_event_direction dir);
+int xadc_write_event_config(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			    enum iio_event_type type, enum iio_event_direction dir, bool state);
+int xadc_read_event_value(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			  enum iio_event_type type, enum iio_event_direction dir,
+			  enum iio_event_info info, int *val, int *val2);
+int xadc_write_event_value(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			   enum iio_event_type type, enum iio_event_direction dir,
+			   enum iio_event_info info, int val, int val2);
 
 enum xadc_external_mux_mode {
 	XADC_EXTERNAL_MUX_NONE,
@@ -47,11 +42,11 @@ struct xadc {
 
 	const struct xadc_ops *ops;
 
-	uint16_t threshold[16];
-	uint16_t temp_hysteresis;
+	u16 threshold[16];
+	u16 temp_hysteresis;
 	unsigned int alarm_mask;
 
-	uint16_t *data;
+	u16 *data;
 
 	struct iio_trigger *trigger;
 	struct iio_trigger *convst_trigger;
@@ -63,7 +58,9 @@ struct xadc {
 	unsigned int zynq_intmask;
 	struct delayed_work zynq_unmask_work;
 
+	/* Serializes register access and device configuration updates */
 	struct mutex mutex;
+	/* Protects interrupt state and FIFO operations */
 	spinlock_t lock;
 
 	struct completion completion;
@@ -75,10 +72,9 @@ enum xadc_type {
 };
 
 struct xadc_ops {
-	int (*read)(struct xadc *xadc, unsigned int reg, uint16_t *val);
-	int (*write)(struct xadc *xadc, unsigned int reg, uint16_t val);
-	int (*setup)(struct platform_device *pdev, struct iio_dev *indio_dev,
-			int irq);
+	int (*read)(struct xadc *xadc, unsigned int reg, u16 *val);
+	int (*write)(struct xadc *xadc, unsigned int reg, u16 val);
+	int (*setup)(struct platform_device *pdev, struct iio_dev *indio_dev, int irq);
 	void (*update_alarm)(struct xadc *xadc, unsigned int alarm);
 	unsigned long (*get_dclk_rate)(struct xadc *xadc);
 	irqreturn_t (*interrupt_handler)(int irq, void *devid);
@@ -89,22 +85,19 @@ struct xadc_ops {
 	int temp_offset;
 };
 
-static inline int _xadc_read_adc_reg(struct xadc *xadc, unsigned int reg,
-	uint16_t *val)
+static inline int _xadc_read_adc_reg(struct xadc *xadc, unsigned int reg, u16 *val)
 {
 	lockdep_assert_held(&xadc->mutex);
 	return xadc->ops->read(xadc, reg, val);
 }
 
-static inline int _xadc_write_adc_reg(struct xadc *xadc, unsigned int reg,
-	uint16_t val)
+static inline int _xadc_write_adc_reg(struct xadc *xadc, unsigned int reg, u16 val)
 {
 	lockdep_assert_held(&xadc->mutex);
 	return xadc->ops->write(xadc, reg, val);
 }
 
-static inline int xadc_read_adc_reg(struct xadc *xadc, unsigned int reg,
-	uint16_t *val)
+static inline int xadc_read_adc_reg(struct xadc *xadc, unsigned int reg, u16 *val)
 {
 	int ret;
 
@@ -114,8 +107,7 @@ static inline int xadc_read_adc_reg(struct xadc *xadc, unsigned int reg,
 	return ret;
 }
 
-static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg,
-	uint16_t val)
+static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg, u16 val)
 {
 	int ret;
 
@@ -168,22 +160,22 @@ static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg,
 #define XADC_CONF0_MUX			BIT(11)
 #define XADC_CONF0_CHAN(x)		(x)
 
-#define XADC_CONF1_SEQ_MASK		(0xf << 12)
-#define XADC_CONF1_SEQ_DEFAULT		(0 << 12)
-#define XADC_CONF1_SEQ_SINGLE_PASS	(1 << 12)
-#define XADC_CONF1_SEQ_CONTINUOUS	(2 << 12)
-#define XADC_CONF1_SEQ_SINGLE_CHANNEL	(3 << 12)
-#define XADC_CONF1_SEQ_SIMULTANEOUS	(4 << 12)
-#define XADC_CONF1_SEQ_INDEPENDENT	(8 << 12)
-#define XADC_CONF1_ALARM_MASK		0x0f0f
+#define XADC_CONF1_SEQ_MASK		GENMASK(15, 12)
+#define XADC_CONF1_SEQ_DEFAULT		0
+#define XADC_CONF1_SEQ_SINGLE_PASS	BIT(12)
+#define XADC_CONF1_SEQ_CONTINUOUS	BIT(13)
+#define XADC_CONF1_SEQ_SINGLE_CHANNEL	GENMASK(13, 12)
+#define XADC_CONF1_SEQ_SIMULTANEOUS	BIT(14)
+#define XADC_CONF1_SEQ_INDEPENDENT	BIT(15)
+#define XADC_CONF1_ALARM_MASK		(GENMASK(11, 8) | GENMASK(3, 0))
 
-#define XADC_CONF2_DIV_MASK	0xff00
+#define XADC_CONF2_DIV_MASK	GENMASK(15, 8)
 #define XADC_CONF2_DIV_OFFSET	8
 
-#define XADC_CONF2_PD_MASK	(0x3 << 4)
-#define XADC_CONF2_PD_NONE	(0x0 << 4)
-#define XADC_CONF2_PD_ADC_B	(0x2 << 4)
-#define XADC_CONF2_PD_BOTH	(0x3 << 4)
+#define XADC_CONF2_PD_MASK	GENMASK(5, 4)
+#define XADC_CONF2_PD_NONE	0
+#define XADC_CONF2_PD_ADC_B	BIT(5)
+#define XADC_CONF2_PD_BOTH	GENMASK(5, 4)
 
 #define XADC_ALARM_TEMP_MASK		BIT(0)
 #define XADC_ALARM_VCCINT_MASK		BIT(1)

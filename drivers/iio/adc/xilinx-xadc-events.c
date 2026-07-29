@@ -8,12 +8,11 @@
 
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
-#include <linux/kernel.h>
 
 #include "xilinx-xadc.h"
 
-static const struct iio_chan_spec *xadc_event_to_channel(
-	struct iio_dev *indio_dev, unsigned int event)
+static const struct iio_chan_spec *xadc_event_to_channel
+		  (struct iio_dev *indio_dev, unsigned int event)
 {
 	switch (event) {
 	case XADC_THRESHOLD_OT_MAX:
@@ -23,7 +22,7 @@ static const struct iio_chan_spec *xadc_event_to_channel(
 	case XADC_THRESHOLD_VCCAUX_MAX:
 		return &indio_dev->channels[event];
 	default:
-		return &indio_dev->channels[event-1];
+		return &indio_dev->channels[event - 1];
 	}
 }
 
@@ -43,9 +42,10 @@ static void xadc_handle_event(struct iio_dev *indio_dev, unsigned int event)
 		 * events.
 		 */
 		iio_push_event(indio_dev,
-			IIO_UNMOD_EVENT_CODE(chan->type, chan->channel,
-				IIO_EV_TYPE_THRESH, IIO_EV_DIR_RISING),
-			iio_get_time_ns(indio_dev));
+			       IIO_UNMOD_EVENT_CODE(chan->type, chan->channel,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_RISING),
+			       iio_get_time_ns(indio_dev));
 	} else {
 		/*
 		 * For other channels we don't know whether it is a upper or
@@ -53,9 +53,10 @@ static void xadc_handle_event(struct iio_dev *indio_dev, unsigned int event)
 		 * channel value if it wants to know.
 		 */
 		iio_push_event(indio_dev,
-			IIO_UNMOD_EVENT_CODE(chan->type, chan->channel,
-				IIO_EV_TYPE_THRESH, IIO_EV_DIR_EITHER),
-			iio_get_time_ns(indio_dev));
+			       IIO_UNMOD_EVENT_CODE(chan->type, chan->channel,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_EITHER),
+			       iio_get_time_ns(indio_dev));
 	}
 }
 
@@ -68,7 +69,7 @@ void xadc_handle_events(struct iio_dev *indio_dev, unsigned long events)
 }
 
 static unsigned int xadc_get_threshold_offset(const struct iio_chan_spec *chan,
-	enum iio_event_direction dir)
+					      enum iio_event_direction dir)
 {
 	unsigned int offset;
 
@@ -110,22 +111,20 @@ static unsigned int xadc_get_alarm_mask(const struct iio_chan_spec *chan)
 	}
 }
 
-int xadc_read_event_config(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir)
+int xadc_read_event_config(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			   enum iio_event_type type, enum iio_event_direction dir)
 {
 	struct xadc *xadc = iio_priv(indio_dev);
 
 	return (bool)(xadc->alarm_mask & xadc_get_alarm_mask(chan));
 }
 
-int xadc_write_event_config(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir, bool state)
+int xadc_write_event_config(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			    enum iio_event_type type, enum iio_event_direction dir, bool state)
 {
 	unsigned int alarm = xadc_get_alarm_mask(chan);
 	struct xadc *xadc = iio_priv(indio_dev);
-	uint16_t cfg, old_cfg;
+	u16 cfg, old_cfg;
 	int ret;
 
 	mutex_lock(&xadc->mutex);
@@ -155,10 +154,9 @@ err_out:
 	return ret;
 }
 
-int xadc_read_event_value(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir, enum iio_event_info info,
-	int *val, int *val2)
+int xadc_read_event_value(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			  enum iio_event_type type, enum iio_event_direction dir,
+			  enum iio_event_info info, int *val, int *val2)
 {
 	unsigned int offset = xadc_get_threshold_offset(chan, dir);
 	struct xadc *xadc = iio_priv(indio_dev);
@@ -180,10 +178,9 @@ int xadc_read_event_value(struct iio_dev *indio_dev,
 	return IIO_VAL_INT;
 }
 
-int xadc_write_event_value(struct iio_dev *indio_dev,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir, enum iio_event_info info,
-	int val, int val2)
+int xadc_write_event_value(struct iio_dev *indio_dev, const struct iio_chan_spec *chan,
+			   enum iio_event_type type, enum iio_event_direction dir,
+			   enum iio_event_info info, int val, int val2)
 {
 	unsigned int offset = xadc_get_threshold_offset(chan, dir);
 	struct xadc *xadc = iio_priv(indio_dev);
@@ -227,9 +224,9 @@ int xadc_write_event_value(struct iio_dev *indio_dev,
 			xadc->threshold[offset + 4] = 0;
 		else
 			xadc->threshold[offset + 4] = xadc->threshold[offset] -
-					xadc->temp_hysteresis;
+				xadc->temp_hysteresis;
 		ret = _xadc_write_adc_reg(xadc, XADC_REG_THRESHOLD(offset + 4),
-			xadc->threshold[offset + 4]);
+					  xadc->threshold[offset + 4]);
 		if (ret)
 			goto out_unlock;
 	}
