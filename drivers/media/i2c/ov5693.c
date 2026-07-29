@@ -375,8 +375,18 @@ static int ov5693_flip_horz_configure(struct ov5693_device *ov5693,
 		  OV5693_FORMAT2_FLIP_HORZ_SENSOR_EN;
 	int ret;
 
+	/* HFLIP is inverted on this sensor: the FLIP_HORZ bits un-mirror the readout. */
 	ret = cci_update_bits(ov5693->regmap, OV5693_FORMAT2_REG, bits,
-			      enable ? bits : 0, NULL);
+			      enable ? 0 : bits, NULL);
+	if (ret)
+		return ret;
+
+	/*
+	 * Clearing the bits shifts the Bayer phase one column off the
+	 * reported SBGGR10; offset the output window to compensate.
+	 */
+	ret = cci_write(ov5693->regmap, OV5693_OFFSET_START_X_REG,
+			enable ? 1 : 0, NULL);
 	if (ret)
 		return ret;
 
