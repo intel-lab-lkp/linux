@@ -1022,6 +1022,14 @@ config NUMA_BALANCING
 
 	  This system will be inactive on UMA systems.
 
+config NUMA_BALANCING_DEFAULT_ENABLED
+	bool "Automatically enable NUMA aware memory/task placement"
+	default y
+	depends on NUMA_BALANCING
+	help
+	  If set, automatic NUMA balancing will be enabled if running on a NUMA
+	  machine.
+
 config SCHED_CACHE
 	bool "Cache aware load balance"
 	default y
@@ -1032,14 +1040,6 @@ config SCHED_CACHE
 	  possible. This improves cache locality by keeping tasks that share
 	  resources within the same cache domain, reducing cache misses and
 	  lowering data access latency.
-
-config NUMA_BALANCING_DEFAULT_ENABLED
-	bool "Automatically enable NUMA aware memory/task placement"
-	default y
-	depends on NUMA_BALANCING
-	help
-	  If set, automatic NUMA balancing will be enabled if running on a NUMA
-	  machine.
 
 config SLAB_OBJ_EXT
 	bool
