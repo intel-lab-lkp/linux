@@ -21,6 +21,7 @@
 		ethernet0 = &ethernet0;
 		i2c1 = &i2c1;
 		serial0 = &uart7;
+		serial1 = &uart2;
 		serial2 = &uart6;
 	};
 
@@ -43,6 +44,38 @@
 		port {
 			usb2_con_hs_ep: endpoint {
 				remote-endpoint = <&usb_2_dwc3_hs>;
+			};
+		};
+	};
+
+	connector-3 {
+		compatible = "pcie-m2-e-connector";
+		vpcie3v3-supply = <&vreg_wcn_3p3>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				m2_e_pcie_ep: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&pcieport0_ep>;
+				};
+			};
+
+			port@3 {
+				reg = <3>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				m2_e_uart_ep: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&uart2_ep>;
+				};
 			};
 		};
 	};
@@ -89,6 +122,30 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
+	};
+
+	vreg_dcin_12v: regulator-dcin-12v {
+		compatible = "regulator-fixed";
+
+		regulator-name = "VREG_DCIN_12V";
+		regulator-min-microvolt = <12000000>;
+		regulator-max-microvolt = <12000000>;
+
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	vreg_wcn_3p3: regulator-wcn-3p3 {
+		compatible = "regulator-fixed";
+
+		regulator-name = "VREG_WCN_3P3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+
+		vin-supply = <&vreg_dcin_12v>;
+
+		regulator-always-on;
+		regulator-boot-on;
 	};
 
 	sound {
@@ -646,6 +703,10 @@
 	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
 };
 
+&pcieport0_ep {
+	remote-endpoint = <&m2_e_pcie_ep>;
+};
+
 &pcieport1 {
 	reset-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
 	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
@@ -922,4 +983,12 @@
 	vdda33-supply = <&vreg_l9a>;
 
 	status = "okay";
+};
+
+&uart2 {
+	status = "okay";
+};
+
+&uart2_ep {
+	remote-endpoint = <&m2_e_uart_ep>;
 };
