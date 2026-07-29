@@ -420,6 +420,23 @@ u32 resctrl_arch_system_num_rmid_idx(void);
 int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid);
 
 /**
+ * resctrl_arch_mon_capable() - Report whether monitor events are enabled
+ *
+ * Some monitor events may be enumerated or implemented in loadable modules.
+ * This means that available events may vary from one mount of the resctrl
+ * file system to another. If modules are not loaded at mount time there
+ * may be no monitor events at all.
+ *
+ * File system code may call it during mount after architecture enumeration is
+ * complete. Calls during domain add/remove operations must check resctrl_mounted
+ * before calling.
+ *
+ * Return:
+ * true if any monitor events are enabled in the current mount cycle.
+ */
+bool resctrl_arch_mon_capable(void);
+
+/**
  * resctrl_enable_mon_event() - Enable monitoring event
  * @eventid:	ID of the event
  * @any_cpu:	True if event data can be read from any CPU.
