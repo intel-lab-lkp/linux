@@ -126,8 +126,8 @@ static int init_recovered_filename(const struct inode *dir,
 	fname->disk_name.len = le32_to_cpu(raw_inode->i_namelen);
 	fname->disk_name.name = raw_inode->i_name;
 
-	if (WARN_ON(fname->disk_name.len > F2FS_NAME_LEN))
-		return -ENAMETOOLONG;
+	if (!fname->disk_name.len || fname->disk_name.len > F2FS_NAME_LEN)
+		return -EFSCORRUPTED;
 
 	if (!IS_ENCRYPTED(dir)) {
 		usr_fname->name = fname->disk_name.name;
@@ -185,8 +185,16 @@ static int recover_dentry(struct inode *inode, struct folio *ifolio,
 
 	dir = entry->inode;
 	err = init_recovered_filename(dir, raw_inode, &fname, &usr_fname);
-	if (err)
+	if (err) {
+		if (err == -EFSCORRUPTED) {
+			f2fs_err(F2FS_I_SB(inode),
+				 "invalid recovered filename length %u for ino %llu",
+				 le32_to_cpu(raw_inode->i_namelen), inode->i_ino);
+			set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_FSCK);
+			f2fs_handle_error(F2FS_I_SB(inode), ERROR_CORRUPTED_INODE);
+		}
 		goto out;
+	}
 retry:
 	de = __f2fs_find_entry(dir, &fname, &folio);
 	if (de && inode->i_ino == le32_to_cpu(de->ino))
