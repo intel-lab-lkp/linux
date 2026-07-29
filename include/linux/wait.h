@@ -1174,6 +1174,13 @@ do {										\
 		      __ret = schedule_timeout(__ret);				\
 		      spin_lock_irq(&lock));
 
+#define __wait_event_lock_timeout(wq_head, condition, lock, timeout, state)	\
+	___wait_event(wq_head, ___wait_cond_timeout(condition),			\
+		      state, 0, timeout,					\
+		      spin_unlock(&lock);					\
+		      __ret = schedule_timeout(__ret);				\
+		      spin_lock(&lock))
+
 /**
  * wait_event_interruptible_lock_irq_timeout - sleep until a condition gets
  *		true or a timeout elapses. The condition is checked under
@@ -1214,6 +1221,83 @@ do {										\
 	long __ret = timeout;							\
 	if (!___wait_cond_timeout(condition))					\
 		__ret = __wait_event_lock_irq_timeout(				\
+					wq_head, condition, lock, timeout,	\
+					TASK_UNINTERRUPTIBLE);			\
+	__ret;									\
+})
+
+/**
+ * wait_event_interruptible_lock_timeout - sleep until a condition gets
+ *		true or a timeout elapses. The condition is checked under
+ *		the lock with IRQs enabled. This is expected to be called
+ *		with the lock taken.
+ * @wq_head: the waitqueue to wait on
+ * @condition: a C expression for the event to wait for
+ * @lock: a spinlock_t that has been locked with spin_lock(), which will be
+ *	  released before schedule() and reacquired afterwards.
+ * @timeout: timeout, in jiffies
+ *
+ * The process is put to sleep (TASK_INTERRUPTIBLE) until the
+ * @condition evaluates to true or signal is received. The @condition is
+ * checked each time the waitqueue @wq_head is woken up.
+ *
+ * wake_up() has to be called after changing any variable that could
+ * change the result of the wait condition.
+ *
+ * This is supposed to be called while holding the lock. The lock is
+ * dropped before going to sleep using spin_unlock() and is reacquired
+ * using spin_lock() afterwards, but without globally disabling IRQs.
+ * This is in contrast to wait_event_interruptible_lock_irq_timeout(),
+ * which uses the spin_lock_irq() and spin_unlock_irq() functions instead.
+ *
+ * The function returns 0 if the @timeout elapsed, -ERESTARTSYS if it
+ * was interrupted by a signal, and the remaining jiffies otherwise
+ * if the condition evaluated to true before the timeout elapsed.
+ */
+#define wait_event_interruptible_lock_timeout(wq_head, condition, lock,		\
+					      timeout)				\
+({										\
+	long __ret = timeout;							\
+	if (!___wait_cond_timeout(condition))					\
+		__ret = __wait_event_lock_timeout(				\
+					wq_head, condition, lock, timeout,	\
+					TASK_INTERRUPTIBLE);			\
+	__ret;									\
+})
+
+/**
+ * wait_event_lock_timeout - sleep until a condition gets true or a timeout
+ *		elapses. The condition is checked under the lock with IRQs
+ *		enabled. This is expected to be called with the lock taken.
+ * @wq_head: the waitqueue to wait on
+ * @condition: a C expression for the event to wait for
+ * @lock: a spinlock_t that has been locked with spin_lock(), which will be
+ *	  released before schedule() and reacquired afterwards.
+ * @timeout: timeout, in jiffies
+ *
+ * The process is put to sleep (TASK_UNINTERRUPTIBLE) until the
+ * @condition evaluates to true or signal is received. The @condition is
+ * checked each time the waitqueue @wq_head is woken up.
+ *
+ * wake_up() has to be called after changing any variable that could
+ * change the result of the wait condition.
+ *
+ * This is supposed to be called while holding the lock. The lock is
+ * dropped before going to sleep using spin_unlock() and is reacquired
+ * using spin_lock() afterwards, but without globally disabling IRQs.
+ * This is in contrast to wait_event_lock_irq_timeout(), which uses the
+ * spin_lock_irq() and spin_unlock_irq() functions instead. Compared to
+ * wait_event_interruptible_lock_timeout(), it uses the %TASK_UNINTERRUPTIBLE
+ * instead of allowing the task to be interrupted.
+ *
+ * The function returns 0 if the @timeout elapsed, or the remaining jiffies
+ * otherwise if the condition evaluated to true before the timeout elapsed.
+ */
+#define wait_event_lock_timeout(wq_head, condition, lock, timeout)		\
+({										\
+	long __ret = timeout;							\
+	if (!___wait_cond_timeout(condition))					\
+		__ret = __wait_event_lock_timeout(				\
 					wq_head, condition, lock, timeout,	\
 					TASK_UNINTERRUPTIBLE);			\
 	__ret;									\
