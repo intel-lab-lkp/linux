@@ -335,6 +335,7 @@ struct nix_txsch {
 	u8   lvl;
 #define NIX_TXSCHQ_FREE		      BIT_ULL(1)
 #define NIX_TXSCHQ_CFG_DONE	      BIT_ULL(0)
+#define NIX_SQ_BMAP_BITS	      (BITS_PER_LONG * 16)
 #define TXSCH_MAP_FUNC(__pfvf_map)    ((__pfvf_map) & 0xFFFF)
 #define TXSCH_MAP_FLAGS(__pfvf_map)   ((__pfvf_map) >> 16)
 #define TXSCH_MAP(__func, __flags)    (((__func) & 0xFFFF) | ((__flags) << 16))
@@ -902,6 +903,11 @@ static inline bool is_vf(u16 pcifunc)
 static inline bool is_pffunc_af(u16 pcifunc)
 {
 	return !pcifunc;
+}
+
+static inline bool rvu_is_switch_pcifunc(struct rvu *rvu, u16 pcifunc)
+{
+	return rvu->rswitch.pcifunc && pcifunc == rvu->rswitch.pcifunc;
 }
 
 static inline bool is_rvu_fwdata_valid(struct rvu *rvu)
