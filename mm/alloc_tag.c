@@ -108,7 +108,11 @@ static void allocinfo_stop(struct seq_file *m, void *arg)
 static void print_allocinfo_header(struct seq_buf *buf)
 {
 	/* Output format version, so we can change it. */
-	seq_buf_printf(buf, "allocinfo - version: 2.0\n");
+	seq_buf_printf(buf, "allocinfo - version: 2.1\n");
+	seq_buf_printf(buf, "# Profiling: %s\n",
+		       mem_alloc_profiling_enabled() ? "Enabled" : "Disabled");
+	seq_buf_printf(buf, "# Compression: %s\n",
+		       static_key_enabled(&mem_profiling_compressed) ? "Enabled" : "Disabled");
 	seq_buf_printf(buf, "#     <size>  <calls> <tag info>\n");
 }
 
