@@ -18,7 +18,6 @@
 #include <linux/fs_parser.h>
 #include <linux/sysfs.h>
 #include <linux/kernfs.h>
-#include <linux/once.h>
 #include <linux/resctrl.h>
 #include <linux/seq_buf.h>
 #include <linux/seq_file.h>
@@ -3166,6 +3165,8 @@ static void resctrl_unmount(void)
 	resctrl_mounted = false;
 	mutex_unlock(&rdtgroup_mutex);
 	cpus_read_unlock();
+
+	resctrl_arch_unmount();
 }
 
 static int rdt_get_tree(struct fs_context *fc)
@@ -3175,9 +3176,11 @@ static int rdt_get_tree(struct fs_context *fc)
 	struct kernfs_node *rdt_root_kn;
 	struct rdt_l3_mon_domain *dom;
 	struct rdt_resource *r;
+	bool cleanup = true;
 	int ret;
 
-	DO_ONCE_SLEEPABLE(resctrl_arch_pre_mount);
+	if (resctrl_arch_pre_mount() == -EBUSY)
+		return -EBUSY;
 
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
@@ -3186,6 +3189,7 @@ static int rdt_get_tree(struct fs_context *fc)
 	 */
 	if (resctrl_mounted) {
 		ret = -EBUSY;
+		cleanup = false;
 		goto out;
 	}
 
@@ -3316,6 +3320,10 @@ out_root:
 out:
 	mutex_unlock(&rdtgroup_mutex);
 	cpus_read_unlock();
+
+	if (cleanup)
+		resctrl_arch_unmount();
+
 	return ret;
 }
 
