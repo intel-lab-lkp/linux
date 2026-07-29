@@ -602,7 +602,7 @@
 #define EM(a, b) a,
 #define E_(a, b) a
 
-enum rxrpc_abort_reason		{ rxrpc_abort_reasons } __mode(byte);
+enum rxrpc_abort_reason		{ rxrpc_abort_reasons };
 enum rxrpc_bundle_trace		{ rxrpc_bundle_traces } __mode(byte);
 enum rxrpc_call_poke_trace	{ rxrpc_call_poke_traces } __mode(byte);
 enum rxrpc_call_trace		{ rxrpc_call_traces } __mode(byte);
