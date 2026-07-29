@@ -784,6 +784,7 @@ static void ath11k_dp_rx_tid_del_func(struct ath11k_dp *dp, void *ctx,
 	dp->reo_cmd_cache_flush_count++;
 
 	/* Flush and invalidate aged REO desc from HW cache */
+retry:
 	list_for_each_entry_safe(elem, tmp, &dp->reo_cmd_cache_flush_list,
 				 list) {
 		if (dp->reo_cmd_cache_flush_count > DP_REO_DESC_FREE_THRESHOLD ||
@@ -796,6 +797,7 @@ static void ath11k_dp_rx_tid_del_func(struct ath11k_dp *dp, void *ctx,
 			ath11k_dp_reo_cache_flush(ab, &elem->data);
 			kfree(elem);
 			spin_lock_bh(&dp->reo_cmd_lock);
+			goto retry;
 		}
 	}
 	spin_unlock_bh(&dp->reo_cmd_lock);
