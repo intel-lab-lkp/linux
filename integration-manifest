@@ -1,0 +1,36 @@
+drm drm-fixes f5098b6bae761e346ebcd9da7f95622c04733cff
+	Linux 7.2-rc5
+drm-misc drm-misc-fixes 48a570c964d8e37d353381e4195106277e17f5cb
+	drm/vc4: Zero the tile state data array before each BIN job
+drm-rust drm-rust-fixes dc59e4fea9d83f03bad6bddf3fa2e52491777482
+	Linux 7.2-rc1
+drm-intel drm-intel-fixes f5098b6bae761e346ebcd9da7f95622c04733cff
+	Linux 7.2-rc5
+drm-xe drm-xe-fixes f5098b6bae761e346ebcd9da7f95622c04733cff
+	Linux 7.2-rc5
+drm drm-next ea97ab2759506d9a818ffed1009bde01062b4091
+	Merge tag 'drm-misc-next-2026-07-24' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes 52d4ab1ca790a668cc8f2c27017138b1c467168c
+	Merge tag 'drm-misc-next-fixes-2026-06-11' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-rust drm-rust-next-fixes 99676aed1fec109d62822e21a06760eb098dc5f4
+	gpu: nova-core: move lifetime to `Bar0`
+drm-intel drm-intel-next-fixes 2ee8dbd880b14fb0b5115bf2353c7900aa33b95b
+	drm/i915/cdclk: Fix up CDCLK_FREQ_DECIMAL without a full PLL re-enable
+drm-xe drm-xe-next-fixes 0b5ed2756d45b04669502a1f13b1657ec7664571
+	drm/xe: Add compact-PT and addr mask handling for page reclaim
+drm-misc drm-misc-next d12ff7e0116f085b57550c2b431f37fd1b2c065f
+	drm/bridge: imx: Add i.MX93 parallel display format configuration support
+drm-rust drm-rust-next 0755a4e3e809610a14befc9ad28d35e2e460da68
+	Merge remote-tracking branch 'drm/drm-next' into drm-rust-next
+drm-intel drm-intel-next f0cabcc880aba3f05ca59d735f6d166b7fceca80
+	drm/i915/fbc: No surface size restrictions from LNL onwards
+drm-intel drm-intel-gt-next 682ea2d28d18bb06f9fc663cb5ab7e80dc0e606a
+	drm/i915/selftests: Fix GT PM sort comparators
+drm-xe drm-xe-next 04eeeb45cb61b8a3e9d785003457e550c920ba49
+	drm/xe/pt: check no-DMA huge-pte cases before DMA segment test
+drm-intel topic/core-for-CI d8451c92a4da76aa7cabb07864ef2a601c482ca7
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI b275cb3f07a7ab3ef3bd419db86bd42fa95dcedb
+	topic/xe-for-CI: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
