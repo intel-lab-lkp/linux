@@ -192,6 +192,7 @@ struct record {
 };
 
 static volatile int done;
+static volatile sig_atomic_t drain_interrupted;
 
 static volatile int auxtrace_record__snapshot_started;
 static DEFINE_TRIGGER(auxtrace_snapshot_trigger);
@@ -681,6 +682,8 @@ static void sig_handler(int sig)
 	else
 		signr = sig;
 
+	if (done && sig != SIGCHLD)
+		drain_interrupted = 1;
 	done = 1;
 #ifdef HAVE_EVENTFD_SUPPORT
 	if (done_fd >= 0) {
@@ -2437,6 +2440,68 @@ static unsigned long record__waking(struct record *rec)
 	return waking;
 }
 
+/*
+ * Weak symbol - architecture can override to indicate if more
+ * data needs to be collected before finishing output.
+ *
+ * Returns: 1 if more data exists, 0 if collection is complete
+ */
+__weak int arch_perf_record__need_read(struct evlist *evlist __maybe_unused)
+{
+	return 0;  /* Default: no arch-specific data to collect */
+}
+
+static void record__final_data(struct record *rec)
+{
+	u64 last_bytes_written = 0;
+	int retries = 0;
+	int t;
+#define FINAL_DATA_MAX_RETRIES 20  /* 20 * 1 ms = 20 ms max wait */
+
+	/*
+	 * Collect any remaining architecture-specific data.
+	 * The arch code checks if more data exists, and we do the actual
+	 * reading here since we have access to record__mmap_read_all().
+	 * This code performs the additional read pass while events are
+	 * still live.  A second SIGINT/SIGTERM during drain sets
+	 * drain_interrupted and aborts the loop immediately.
+	 *
+	 * When --threads is enabled, record__mmap_read_evlist() reads the
+	 * maps belonging to the calling thread's TLS 'thread' pointer.
+	 * Calling record__mmap_read_all() from the main thread only reads
+	 * thread_data[0]'s maps.  Iterate over all thread slots and
+	 * temporarily switch 'thread' to each one so that every worker's
+	 * mmaps are drained, matching the pattern used in record__thread().
+	 */
+	while (arch_perf_record__need_read(rec->evlist)) {
+		if (drain_interrupted)
+			break;
+
+		last_bytes_written = record__bytes_written(rec);
+
+		for (t = 0; t < rec->nr_threads; t++) {
+			thread = &rec->thread_data[t];
+			if (record__mmap_read_all(rec, true) < 0) {
+				thread = &rec->thread_data[0];
+				return;
+			}
+		}
+		thread = &rec->thread_data[0];
+
+		if (record__bytes_written(rec) == last_bytes_written) {
+			if (++retries >= FINAL_DATA_MAX_RETRIES) {
+				pr_warning("Final data drain made no forward progress after %d retries.\n",
+					   FINAL_DATA_MAX_RETRIES);
+				break;
+			}
+			usleep(1000); /* 1 ms: let AUX ring buffer consumer advance */
+		} else {
+			retries = 0;
+			usleep(100);
+		}
+	}
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -2864,10 +2929,22 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		 */
 		if (done && !disabled && !target__none(&opts->target)) {
 			trigger_off(&auxtrace_snapshot_trigger);
+			record__final_data(rec);
 			evlist__disable(rec->evlist);
 			disabled = true;
 		}
 	}
+
+	/*
+	 * If the loop exited via the early break (ring buffer empty when done
+	 * was set, so the in-loop disable block was never reached), or this is
+	 * a child workload (target__none, so the in-loop block is never entered
+	 * and disabled stays false), drain any remaining arch-specific data now.
+	 * Events are still live in both cases: for child workloads they die with
+	 * the process after this point; for non-child they are disabled below.
+	 */
+	if (target__none(&opts->target) || !disabled)
+		record__final_data(rec);
 
 	trigger_off(&auxtrace_snapshot_trigger);
 	trigger_off(&switch_output_trigger);

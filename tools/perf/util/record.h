@@ -10,6 +10,7 @@
 #include "util/target.h"
 
 struct option;
+struct evlist;
 
 struct record_opts {
 	struct target target;
@@ -94,5 +95,7 @@ static inline bool record_opts__no_switch_events(const struct record_opts *opts)
 {
 	return opts->record_switch_events_set && !opts->record_switch_events;
 }
+
+int arch_perf_record__need_read(struct evlist *evlist);
 
 #endif // _PERF_RECORD_H
