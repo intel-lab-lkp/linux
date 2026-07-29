@@ -446,10 +446,8 @@ struct mt76_txwi_cache {
 	struct list_head list;
 	dma_addr_t dma_addr;
 
-	union {
-		struct sk_buff *skb;
-		void *ptr;
-	};
+	struct sk_buff *skb;
+	void *ptr;
 
 	u8 qid;
 	u8 phy_idx;

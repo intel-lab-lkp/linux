@@ -43,6 +43,7 @@ mt76_alloc_rxwi(struct mt76_dev *dev)
 	if (!t)
 		return NULL;
 
+	t->skb = NULL;
 	t->ptr = NULL;
 	return t;
 }
@@ -84,8 +85,11 @@ mt76_get_txwi(struct mt76_dev *dev)
 {
 	struct mt76_txwi_cache *t = __mt76_get_txwi(dev);
 
-	if (t)
+	if (t) {
+		t->skb = NULL;
+		t->ptr = NULL;
 		return t;
+	}
 
 	return mt76_alloc_txwi(dev);
 }
@@ -721,6 +725,7 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 			goto unmap;
 
 		tx_info.buf[n].addr = addr;
+		tx_info.buf[n].skip_unmap = false;
 		tx_info.buf[n++].len = iter->len;
 	}
 	tx_info.nbuf = n;
@@ -745,9 +750,11 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 				tx_info.info, tx_info.skb, t);
 
 unmap:
-	for (n--; n > 0; n--)
-		dma_unmap_single(dev->dma_dev, tx_info.buf[n].addr,
-				 tx_info.buf[n].len, DMA_TO_DEVICE);
+	for (n--; n > 0; n--) {
+		if (!tx_info.buf[n].skip_unmap)
+			dma_unmap_single(dev->dma_dev, tx_info.buf[n].addr,
+					 tx_info.buf[n].len, DMA_TO_DEVICE);
+	}
 
 free:
 #ifdef CONFIG_NL80211_TESTMODE
