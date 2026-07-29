@@ -21,6 +21,12 @@
 #include "otx2_common.h"
 #include "qos.h"
 
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+#include "switch/sw_fl.h"
+#include "switch/sw_nb.h"
+#endif
+#include "sw_fl.h"
+
 #define CN10K_MAX_BURST_MANTISSA	0x7FFFULL
 #define CN10K_MAX_BURST_SIZE		8453888ULL
 
@@ -1598,14 +1604,50 @@ static int otx2_setup_tc_block(struct net_device *netdev,
 					  nic, nic, ingress);
 }
 
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+static int otx2_setup_tc_block_switch(struct net_device *netdev,
+				      struct flow_block_offload *f)
+{
+	struct otx2_nic *nic = netdev_priv(netdev);
+
+	if (f->block_shared)
+		return -EOPNOTSUPP;
+
+	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
+		return -EOPNOTSUPP;
+
+	return flow_block_cb_setup_simple(f, &otx2_block_cb_list,
+					  sw_fl_setup_ft_block_ingress_cb,
+					  nic, nic, true);
+}
+#endif
+
 int otx2_setup_tc(struct net_device *netdev, enum tc_setup_type type,
 		  void *type_data)
 {
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+	struct otx2_nic *nic = netdev_priv(netdev);
+#endif
+
 	switch (type) {
 	case TC_SETUP_BLOCK:
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+		if (netif_is_ovs_port(netdev) && sw_nb_is_valid_dev(netdev))
+			return otx2_setup_tc_block_switch(netdev, type_data);
+#endif
 		return otx2_setup_tc_block(netdev, type_data);
+
 	case TC_SETUP_QDISC_HTB:
 		return otx2_setup_tc_htb(netdev, type_data);
+#if IS_ENABLED(CONFIG_OCTEONTX_SWITCH)
+	case TC_SETUP_FT:
+		if (!sw_nb_is_valid_dev(netdev))
+			return -EOPNOTSUPP;
+		return flow_block_cb_setup_simple(type_data,
+						  &otx2_block_cb_list,
+						  sw_fl_setup_ft_block_ingress_cb,
+						  nic, nic, true);
+#endif
 	default:
 		return -EOPNOTSUPP;
 	}

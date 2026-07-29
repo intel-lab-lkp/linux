@@ -11,7 +11,8 @@ rvu_nicpf-y := otx2_pf.o otx2_common.o otx2_txrx.o otx2_ethtool.o \
                otx2_flows.o otx2_tc.o cn10k.o cn20k.o otx2_dmac_flt.o \
                otx2_devlink.o qos_sq.o qos.o otx2_xsk.o switch/sw_fdb.o \
 	       switch/sw_fl.o
-rvu_nicpf-$(CONFIG_OCTEONTX_SWITCH) += switch/sw_nb.o switch/sw_fib.o \
+rvu_nicpf-$(CONFIG_OCTEONTX_SWITCH) += switch/sw_trace.o switch/sw_nb.o \
+				       switch/sw_fib.o \
 				       switch/sw_nb_v4.o
 # sw_nb_v6.o calls IPv6 symbols exported by the ipv6 module; only link it
 # when those symbols are reachable (IPv6 built-in, or both driver and IPv6
@@ -32,3 +33,4 @@ rvu_nicpf-$(CONFIG_MACSEC) += cn10k_macsec.o
 rvu_nicpf-$(CONFIG_XFRM_OFFLOAD) += cn10k_ipsec.o
 
 ccflags-y += -I$(srctree)/drivers/net/ethernet/marvell/octeontx2/af
+ccflags-y += -I$(src)/switch/
