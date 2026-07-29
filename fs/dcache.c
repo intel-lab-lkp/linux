@@ -1832,6 +1832,9 @@ void shrink_dcache_for_umount(struct super_block *sb)
 				wait_for_completion(&wait.completion);
 		} else {
 			dget_dlock(dentry);
+			// A busy root survives do_one_tree(); unlink it so the
+			// ->s_roots loop keeps making progress.
+			unlink_secondary_root(dentry);
 			spin_unlock(&dentry->d_lock);
 			do_one_tree(dentry);
 		}
