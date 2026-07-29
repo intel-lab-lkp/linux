@@ -2843,8 +2843,8 @@ static void pktgen_finalize_skb(struct pktgen_dev *pkt_dev, struct sk_buff *skb,
 		}
 
 		i = 0;
-		frag_len = min_t(int, datalen / frags, PAGE_SIZE);
-		while (datalen > 0) {
+		frag_len = min_t(int, DIV_ROUND_UP(datalen, frags), PAGE_SIZE);
+		while (datalen > 0 && i < frags) {
 			if (unlikely(!pkt_dev->page)) {
 				int node = numa_node_id();
 
