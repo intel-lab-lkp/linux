@@ -73,7 +73,8 @@ static int xfrm4_transport_output(struct xfrm_state *x, struct sk_buff *skb)
 	skb_set_network_header(skb, -x->props.header_len);
 	skb->mac_header = skb->network_header +
 			  offsetof(struct iphdr, protocol);
-	skb->transport_header = skb->network_header + ihl;
+	if (!skb_set_transport_header_careful(skb, ihl))
+		return -EOVERFLOW;
 	__skb_pull(skb, ihl);
 	memmove(skb_network_header(skb), iph, ihl);
 	return 0;
@@ -179,7 +180,8 @@ static int xfrm6_transport_output(struct xfrm_state *x, struct sk_buff *skb)
 	skb_set_mac_header(skb,
 			   (prevhdr - x->props.header_len) - skb->data);
 	skb_set_network_header(skb, -x->props.header_len);
-	skb->transport_header = skb->network_header + hdr_len;
+	if (!skb_set_transport_header_careful(skb, hdr_len))
+		return -EOVERFLOW;
 	__skb_pull(skb, hdr_len);
 	memmove(ipv6_hdr(skb), iph, hdr_len);
 	return 0;
@@ -209,7 +211,8 @@ static int xfrm6_ro_output(struct xfrm_state *x, struct sk_buff *skb)
 	skb_set_mac_header(skb,
 			   (prevhdr - x->props.header_len) - skb->data);
 	skb_set_network_header(skb, -x->props.header_len);
-	skb->transport_header = skb->network_header + hdr_len;
+	if (!skb_set_transport_header_careful(skb, hdr_len))
+		return -EOVERFLOW;
 	__skb_pull(skb, hdr_len);
 	memmove(ipv6_hdr(skb), iph, hdr_len);
 
@@ -241,7 +244,8 @@ static int xfrm4_beet_encap_add(struct xfrm_state *x, struct sk_buff *skb)
 		skb->network_header += IPV4_BEET_PHMAXLEN;
 	skb->mac_header = skb->network_header +
 			  offsetof(struct iphdr, protocol);
-	skb->transport_header = skb->network_header + sizeof(*top_iph);
+	if (!skb_set_transport_header_careful(skb, sizeof(*top_iph)))
+		return -EOVERFLOW;
 
 	xfrm4_beet_make_header(skb);
 
@@ -288,7 +292,8 @@ static int xfrm4_tunnel_encap_add(struct xfrm_state *x, struct sk_buff *skb)
 	skb_set_network_header(skb, -x->props.header_len);
 	skb->mac_header = skb->network_header +
 			  offsetof(struct iphdr, protocol);
-	skb->transport_header = skb->network_header + sizeof(*top_iph);
+	if (!skb_set_transport_header_careful(skb, sizeof(*top_iph)))
+		return -EOVERFLOW;
 	top_iph = ip_hdr(skb);
 
 	top_iph->ihl = 5;
@@ -335,7 +340,8 @@ static int xfrm6_tunnel_encap_add(struct xfrm_state *x, struct sk_buff *skb)
 	skb_set_network_header(skb, -x->props.header_len);
 	skb->mac_header = skb->network_header +
 			  offsetof(struct ipv6hdr, nexthdr);
-	skb->transport_header = skb->network_header + sizeof(*top_iph);
+	if (!skb_set_transport_header_careful(skb, sizeof(*top_iph)))
+		return -EOVERFLOW;
 	top_iph = ipv6_hdr(skb);
 
 	top_iph->version = 6;
@@ -374,7 +380,8 @@ static int xfrm6_beet_encap_add(struct xfrm_state *x, struct sk_buff *skb)
 		skb->network_header += IPV4_BEET_PHMAXLEN;
 	skb->mac_header = skb->network_header +
 			  offsetof(struct ipv6hdr, nexthdr);
-	skb->transport_header = skb->network_header + sizeof(*top_iph);
+	if (!skb_set_transport_header_careful(skb, sizeof(*top_iph)))
+		return -EOVERFLOW;
 	ph = __skb_pull(skb, XFRM_MODE_SKB_CB(skb)->ihl - hdr_len);
 
 	xfrm6_beet_make_header(skb);

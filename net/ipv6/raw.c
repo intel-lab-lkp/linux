@@ -15,6 +15,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/limits.h>
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/slab.h>
@@ -612,6 +613,9 @@ static int rawv6_send_hdrinc(struct sock *sk, struct msghdr *msg, int length,
 		return -EINVAL;
 	if (flags&MSG_PROBE)
 		goto out;
+
+	if (hlen >= U16_MAX)
+		return -EINVAL;
 
 	skb = sock_alloc_send_skb(sk,
 				  length + hlen + tlen + 15,

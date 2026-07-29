@@ -2379,7 +2379,8 @@ static int iptfs_encap_add_ipv4(struct xfrm_state *x, struct sk_buff *skb)
 
 	skb_set_network_header(skb, -(x->props.header_len - x->props.enc_hdr_len));
 	skb->mac_header = skb->network_header + offsetof(struct iphdr, protocol);
-	skb->transport_header = skb->network_header + sizeof(*top_iph);
+	if (!skb_set_transport_header_careful(skb, sizeof(*top_iph)))
+		return -EOVERFLOW;
 
 	top_iph = ip_hdr(skb);
 	top_iph->ihl = 5;
@@ -2426,7 +2427,8 @@ static int iptfs_encap_add_ipv6(struct xfrm_state *x, struct sk_buff *skb)
 
 	skb_set_network_header(skb, -x->props.header_len + x->props.enc_hdr_len);
 	skb->mac_header = skb->network_header + offsetof(struct ipv6hdr, nexthdr);
-	skb->transport_header = skb->network_header + sizeof(*top_iph);
+	if (!skb_set_transport_header_careful(skb, sizeof(*top_iph)))
+		return -EOVERFLOW;
 
 	top_iph = ipv6_hdr(skb);
 	top_iph->version = 6;
