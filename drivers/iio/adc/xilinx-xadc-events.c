@@ -67,6 +67,7 @@ void xadc_handle_events(struct iio_dev *indio_dev, unsigned long events)
 	for_each_set_bit(i, &events, 8)
 		xadc_handle_event(indio_dev, i);
 }
+EXPORT_SYMBOL_NS_GPL(xadc_handle_events, "IIO_XADC");
 
 static unsigned int xadc_get_threshold_offset(const struct iio_chan_spec *chan,
 					      enum iio_event_direction dir)
