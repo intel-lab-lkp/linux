@@ -100,35 +100,63 @@ static int __init batadv_init(void)
 
 	batadv_recv_handler_init();
 
-	batadv_v_init();
-	batadv_iv_init();
+	ret = batadv_v_init();
+	if (ret < 0)
+		goto err_tt;
+
+	ret = batadv_iv_init();
+	if (ret < 0)
+		goto err_v;
+
 	batadv_tp_meter_init();
 
 	batadv_event_workqueue = create_singlethread_workqueue("bat_events");
 	if (!batadv_event_workqueue) {
 		ret = -ENOMEM;
-		goto err_create_wq;
+		goto err_iv;
 	}
 
 	ret = batadv_wifi_net_devices_init();
 	if (ret < 0)
-		goto err_init_wifi;
+		goto err_wq;
 
-	register_netdevice_notifier(&batadv_hard_if_notifier);
-	rtnl_link_register(&batadv_link_ops);
-	batadv_netlink_register();
+	ret = register_netdevice_notifier(&batadv_hard_if_notifier);
+	if (ret < 0)
+		goto err_wifi;
+
+	ret = rtnl_link_register(&batadv_link_ops);
+	if (ret < 0)
+		goto err_notifier;
+
+	ret = batadv_netlink_register();
+	if (ret < 0)
+		goto err_rtnl;
 
 	pr_info("B.A.T.M.A.N. advanced %s (compatibility version %i) loaded\n",
 		init_utsname()->release, BATADV_COMPAT_VERSION);
 
 	return 0;
 
-err_init_wifi:
+err_rtnl:
+	rtnl_link_unregister(&batadv_link_ops);
+err_notifier:
+	unregister_netdevice_notifier(&batadv_hard_if_notifier);
+err_wifi:
 	destroy_workqueue(batadv_event_workqueue);
 	batadv_event_workqueue = NULL;
 	rcu_barrier();
+	batadv_wifi_net_devices_deinit();
+	goto err_iv;
 
-err_create_wq:
+err_wq:
+	destroy_workqueue(batadv_event_workqueue);
+	batadv_event_workqueue = NULL;
+	rcu_barrier();
+err_iv:
+	batadv_iv_deinit();
+err_v:
+	batadv_v_deinit();
+err_tt:
 	batadv_tt_cache_destroy();
 
 	return ret;
