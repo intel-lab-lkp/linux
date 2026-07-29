@@ -15,7 +15,7 @@
 #include <asm/cputable.h>
 #include <asm/disassemble.h>
 
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 /* Bits in SRR1 that are copied from MSR */
 #define MSR_MASK	0xffffffff87c0ffffUL
 #else
@@ -1256,7 +1256,7 @@ static nokprobe_inline void do_popcnt(const struct pt_regs *regs,
 	op->val = out;	/* popcntd */
 }
 
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 static nokprobe_inline void do_bpermd(const struct pt_regs *regs,
 				      struct instruction_op *op,
 				      unsigned long v1, unsigned long v2)
@@ -1273,7 +1273,7 @@ static nokprobe_inline void do_bpermd(const struct pt_regs *regs,
 	}
 	op->val = perm;
 }
-#endif /* CONFIG_PPC64 */
+#endif /* __powerpc64__ */
 /*
  * The size parameter adjusts the equivalent prty instruction.
  * prtyw = 32, prtyd = 64
@@ -1340,7 +1340,7 @@ static nokprobe_inline int trap_compare(long v1, long v2)
 int analyse_instr(struct instruction_op *op, const struct pt_regs *regs,
 		  ppc_inst_t instr)
 {
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 	unsigned int suffixopcode, prefixtype, prefix_r;
 #endif
 	unsigned int opcode, ra, rb, rc, rd, spr, u;
@@ -1739,7 +1739,7 @@ int analyse_instr(struct instruction_op *op, const struct pt_regs *regs,
 			op->reg = rd;
 			op->val = 0xffffffff & ~(MSR_ME | MSR_LE);
 			return 0;
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 		case 178:	/* mtmsrd */
 			if (user_mode(regs))
 				goto priv;
@@ -2054,7 +2054,7 @@ int analyse_instr(struct instruction_op *op, const struct pt_regs *regs,
 		case 186:	/* prtyd */
 			do_prty(regs, op, regs->gpr[rd], 64);
 			goto logical_done_nocc;
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 		case 252:	/* bpermd */
 			do_bpermd(regs, op, regs->gpr[rd], regs->gpr[rb]);
 			goto logical_done_nocc;
@@ -2082,7 +2082,7 @@ int analyse_instr(struct instruction_op *op, const struct pt_regs *regs,
 		case 476:	/* nand */
 			op->val = ~(regs->gpr[rd] & regs->gpr[rb]);
 			goto logical_done;
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 		case 506:	/* popcntd */
 			do_popcnt(regs, op, regs->gpr[rd], 64);
 			goto logical_done_nocc;
@@ -3247,7 +3247,7 @@ void emulate_update_regs(struct pt_regs *regs, struct instruction_op *op)
 		case BARRIER_EIEIO:
 			eieio();
 			break;
-#ifdef CONFIG_PPC64
+#ifdef __powerpc64__
 		case BARRIER_LWSYNC:
 			asm volatile("lwsync" : : : "memory");
 			break;
