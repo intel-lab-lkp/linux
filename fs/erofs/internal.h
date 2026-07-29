@@ -395,7 +395,7 @@ extern const struct file_operations erofs_file_fops;
 extern const struct file_operations erofs_dir_fops;
 extern const struct file_operations erofs_ishare_fops;
 
-extern const struct iomap_ops z_erofs_iomap_report_ops;
+DECLARE_IOMAP_ITER_NEXT(z_erofs_iomap_next_report);
 
 int erofs_setup_managed_cache(struct super_block *sb);
 #ifdef CONFIG_EROFS_FS_BACKED_BY_FILE

@@ -648,8 +648,8 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 	return 0;
 }
 
-void iomap_read_folio(const struct iomap_ops *ops,
-		struct iomap_read_folio_ctx *ctx, void *private)
+void iomap_read_folio(iomap_iter_next_fn next, struct iomap_read_folio_ctx *ctx,
+		void *private)
 {
 	struct folio *folio = ctx->cur_folio;
 	struct iomap_iter iter = {
@@ -672,7 +672,7 @@ void iomap_read_folio(const struct iomap_ops *ops,
 		fsverity_readahead(ctx->vi, folio->index,
 				   folio_nr_pages(folio));
 
-	while ((ret = iomap_iter(&iter, ops)) > 0) {
+	while ((ret = iomap_iter(&iter, next)) > 0) {
 		iter.status = iomap_read_folio_iter(&iter, ctx,
 				&bytes_submitted);
 		if (ctx->read_ctx && ctx->ops->submit_read)
@@ -711,22 +711,22 @@ static int iomap_readahead_iter(struct iomap_iter *iter,
 
 /**
  * iomap_readahead - Attempt to read pages from a file.
- * @ops: The operations vector for the filesystem.
+ * @next: The iomap iteration function for the filesystem.
  * @ctx: The ctx used for issuing readahead.
  * @private: The filesystem-specific information for issuing iomap_iter.
  *
  * This function is for filesystems to call to implement their readahead
  * address_space operation.
  *
- * Context: The @ops callbacks may submit I/O (eg to read the addresses of
+ * Context: The @next callback may submit I/O (eg to read the addresses of
  * blocks from disc), and may wait for it.  The caller may be trying to
  * access a different page, and so sleeping excessively should be avoided.
  * It may allocate memory, but should avoid costly allocations.  This
  * function is called with memalloc_nofs set, so allocations will not cause
  * the filesystem to be reentered.
  */
-void iomap_readahead(const struct iomap_ops *ops,
-		struct iomap_read_folio_ctx *ctx, void *private)
+void iomap_readahead(iomap_iter_next_fn next, struct iomap_read_folio_ctx *ctx,
+		void *private)
 {
 	struct readahead_control *rac = ctx->rac;
 	struct iomap_iter iter = {
@@ -748,7 +748,7 @@ void iomap_readahead(const struct iomap_ops *ops,
 		fsverity_readahead(ctx->vi, readahead_index(rac),
 				readahead_count(rac));
 
-	while (iomap_iter(&iter, ops) > 0) {
+	while (iomap_iter(&iter, next) > 0) {
 		iter.status = iomap_readahead_iter(&iter, ctx,
 					&cur_bytes_submitted);
 		if (ctx->read_ctx && ctx->ops->submit_read)
@@ -1292,7 +1292,7 @@ retry:
 
 ssize_t
 iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,
-		const struct iomap_ops *ops,
+		iomap_iter_next_fn next,
 		const struct iomap_write_ops *write_ops, void *private)
 {
 	struct iomap_iter iter = {
@@ -1309,7 +1309,7 @@ iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,
 	if (iocb->ki_flags & IOCB_DONTCACHE)
 		iter.flags |= IOMAP_DONTCACHE;
 
-	while ((ret = iomap_iter(&iter, ops)) > 0)
+	while ((ret = iomap_iter(&iter, next)) > 0)
 		iter.status = iomap_write_iter(&iter, i, write_ops);
 
 	if (unlikely(iter.pos == iocb->ki_pos))
@@ -1321,7 +1321,7 @@ iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,
 EXPORT_SYMBOL_GPL(iomap_file_buffered_write);
 
 int iomap_fsverity_write(struct file *file, loff_t pos, size_t length,
-		const void *buf, const struct iomap_ops *ops,
+		const void *buf, iomap_iter_next_fn next,
 		const struct iomap_write_ops *write_ops)
 {
 	int			ret;
@@ -1338,7 +1338,7 @@ int iomap_fsverity_write(struct file *file, loff_t pos, size_t length,
 
 	iov_iter_kvec(&iiter, WRITE, &kvec, 1, length);
 
-	ret = iomap_file_buffered_write(&iocb, &iiter, ops, write_ops, NULL);
+	ret = iomap_file_buffered_write(&iocb, &iiter, next, write_ops, NULL);
 	if (ret < 0)
 		return ret;
 	return ret == length ? 0 : -EIO;
@@ -1610,7 +1610,7 @@ static int iomap_unshare_iter(struct iomap_iter *iter,
 
 int
 iomap_file_unshare(struct inode *inode, loff_t pos, loff_t len,
-		const struct iomap_ops *ops,
+		iomap_iter_next_fn next,
 		const struct iomap_write_ops *write_ops)
 {
 	struct iomap_iter iter = {
@@ -1625,7 +1625,7 @@ iomap_file_unshare(struct inode *inode, loff_t pos, loff_t len,
 		return 0;
 
 	iter.len = min(len, size - pos);
-	while ((ret = iomap_iter(&iter, ops)) > 0)
+	while ((ret = iomap_iter(&iter, next)) > 0)
 		iter.status = iomap_unshare_iter(&iter, write_ops);
 	return ret;
 }
@@ -1738,7 +1738,7 @@ EXPORT_SYMBOL_GPL(iomap_fill_dirty_folios);
 
 int
 iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
-		const struct iomap_ops *ops,
+		iomap_iter_next_fn next,
 		const struct iomap_write_ops *write_ops, void *private)
 {
 	struct folio_batch fbatch;
@@ -1763,7 +1763,7 @@ iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 	 */
 	range_dirty = filemap_range_needs_writeback(mapping, iter.pos,
 					iter.pos + iter.len - 1);
-	while ((ret = iomap_iter(&iter, ops)) > 0) {
+	while ((ret = iomap_iter(&iter, next)) > 0) {
 		const struct iomap *srcmap = iomap_iter_srcmap(&iter);
 
 		if (!(iter.iomap.flags & IOMAP_F_FOLIO_BATCH) &&
@@ -1789,7 +1789,7 @@ EXPORT_SYMBOL_GPL(iomap_zero_range);
 
 int
 iomap_truncate_page(struct inode *inode, loff_t pos, bool *did_zero,
-		const struct iomap_ops *ops,
+		iomap_iter_next_fn next,
 		const struct iomap_write_ops *write_ops, void *private)
 {
 	unsigned int blocksize = i_blocksize(inode);
@@ -1798,7 +1798,7 @@ iomap_truncate_page(struct inode *inode, loff_t pos, bool *did_zero,
 	/* Block boundary? Nothing to do */
 	if (!off)
 		return 0;
-	return iomap_zero_range(inode, pos, blocksize - off, did_zero, ops,
+	return iomap_zero_range(inode, pos, blocksize - off, did_zero, next,
 			write_ops, private);
 }
 EXPORT_SYMBOL_GPL(iomap_truncate_page);
@@ -1823,7 +1823,7 @@ static int iomap_folio_mkwrite_iter(struct iomap_iter *iter,
 	return iomap_iter_advance(iter, length);
 }
 
-vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops,
+vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, iomap_iter_next_fn next,
 		void *private)
 {
 	struct iomap_iter iter = {
@@ -1840,7 +1840,7 @@ vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops,
 		goto out_unlock;
 	iter.pos = folio_pos(folio);
 	iter.len = ret;
-	while ((ret = iomap_iter(&iter, ops)) > 0)
+	while ((ret = iomap_iter(&iter, next)) > 0)
 		iter.status = iomap_folio_mkwrite_iter(&iter, folio);
 
 	if (ret < 0)
