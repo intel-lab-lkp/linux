@@ -1442,8 +1442,7 @@ static void shmem_evict_inode(struct inode *inode)
 	shmem_free_inode(inode->i_sb, freed);
 	if (inode->i_blocks)
 		pr_warn("%s: ino=%llu i_blocks=%llu alloced=%lu swapped=%lu nrpages=%lu\n",
-			__func__, (unsigned long long)inode->i_ino,
-			(unsigned long long)inode->i_blocks,
+			__func__, inode->i_ino, inode->i_blocks,
 			info->alloced, info->swapped, inode->i_mapping->nrpages);
 	clear_inode(inode);
 #ifdef CONFIG_TMPFS_QUOTA
