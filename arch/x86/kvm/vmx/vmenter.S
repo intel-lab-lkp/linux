@@ -213,7 +213,7 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	jz	.Lclear_egprs_done
 	/*
 	 * Unlike legacy GPRs, saving could be conditional here on VM-Fail,
-	 * which however isn't in fastpath. Instead, simply saving EGPRs always.
+	 * which however isn't in fastpath. Instead, always save EGPRs.
 	 */
 	STORE_REGS %_ASM_DI, VMX_vcpu_arch_regs, \
 		   %r16, %r17, %r18, %r19, %r20, %r21, %r22, %r23, \
