@@ -178,6 +178,19 @@ static irqreturn_t pci_endpoint_test_irqhandler(int irq, void *dev_id)
 	if (reg & STATUS_IRQ_RAISED) {
 		test->last_irq = irq;
 		complete(&test->irq_raised);
+		/*
+		 * The endpoint test driver performs all testing sequentially.
+		 * This means that test->irq_raised.done should never exceed 1.
+		 * If it does, then we received two IRQs in a row, without a
+		 * successful wait_for_completion_timeout() call in between.
+		 *
+		 * While complete() increases test->irq_raised.done by one,
+		 * wait_for_completion_timeout() reduces test->irq_raised.done
+		 * by one on success.
+		 *
+		 * Please debug your EPC driver if you see this warning.
+		 */
+		WARN_ON(test->irq_raised.done > 1);
 	}
 
 	return IRQ_HANDLED;
