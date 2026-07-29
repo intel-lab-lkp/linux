@@ -516,9 +516,8 @@ int panfrost_gpu_init(struct panfrost_device *pfdev)
 {
 	int err;
 
-	err = panfrost_gpu_soft_reset(pfdev);
-	if (err)
-		return err;
+	if (!panfrost_device_started(pfdev))
+		return -ETIMEDOUT;
 
 	err = panfrost_gpu_init_features(pfdev);
 	if (err)
@@ -542,8 +541,6 @@ int panfrost_gpu_init(struct panfrost_device *pfdev)
 		dev_err(pfdev->base.dev, "failed to request gpu irq");
 		return err;
 	}
-
-	panfrost_gpu_power_on(pfdev);
 
 	return 0;
 }

@@ -446,7 +446,9 @@ void panfrost_jm_suspend_irq(struct panfrost_device *pfdev)
 	set_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspended);
 
 	job_write(pfdev, JOB_INT_MASK, 0);
-	synchronize_irq(pfdev->js->irq);
+
+	if (pfdev->js)
+		synchronize_irq(pfdev->js->irq);
 }
 
 static void panfrost_job_handle_err(struct panfrost_device *pfdev,
@@ -970,6 +972,9 @@ int panfrost_jm_is_idle(struct panfrost_device *pfdev)
 {
 	struct panfrost_job_slot *js = pfdev->js;
 	int i;
+
+	if (!js)
+		return true;
 
 	for (i = 0; i < NUM_JOB_SLOTS; i++) {
 		/* If there are any jobs in the HW queue, we're not idle */

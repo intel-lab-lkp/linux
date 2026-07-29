@@ -142,6 +142,7 @@ struct panfrost_device {
 	/* pm_domains for devices with more than one. */
 	struct device *pm_domain_devs[MAX_PM_DOMAINS];
 	struct device_link *pm_domain_links[MAX_PM_DOMAINS];
+	bool gpu_started;
 	bool coherent;
 
 	struct panfrost_features features;
@@ -253,6 +254,8 @@ int panfrost_device_init(struct panfrost_device *pfdev);
 void panfrost_device_fini(struct panfrost_device *pfdev);
 void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int);
 
+void panfrost_try_suspend_device(struct panfrost_device *pfdev);
+
 extern const struct dev_pm_ops panfrost_pm_ops;
 
 enum drm_panfrost_exception_type {
@@ -340,6 +343,12 @@ panfrost_device_schedule_reset(struct panfrost_device *pfdev)
 {
 	atomic_set(&pfdev->reset.pending, 1);
 	queue_work(pfdev->reset.wq, &pfdev->reset.work);
+}
+
+static inline bool
+panfrost_device_started(struct panfrost_device *pfdev)
+{
+	return pfdev->gpu_started;
 }
 
 #endif
