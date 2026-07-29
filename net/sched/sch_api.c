@@ -1467,6 +1467,24 @@ check_loop_fn(struct Qdisc *q, unsigned long cl, struct qdisc_walker *w)
 	return 0;
 }
 
+static int qdisc_parent_depth(struct net_device *dev, struct Qdisc *qdisc)
+{
+	int depth = 1;
+
+	while (qdisc->parent != TC_H_ROOT) {
+		if (qdisc->flags & TCQ_F_NOPARENT)
+			break;
+
+		qdisc = qdisc_lookup(dev, TC_H_MAJ(qdisc->parent));
+		if (!qdisc)
+			break;
+
+		depth++;
+	}
+
+	return depth;
+}
+
 const struct nla_policy rtm_tca_policy[TCA_MAX + 1] = {
 	[TCA_KIND]		= { .type = NLA_STRING },
 	[TCA_RATE]		= { .type = NLA_BINARY,
@@ -1749,6 +1767,12 @@ create_n_graft:
 		return -ENOENT;
 	}
 create_n_graft2:
+	if (p && !(p->flags & TCQ_F_MQROOT) &&
+	    qdisc_parent_depth(dev, p) > 7) {
+		NL_SET_ERR_MSG(extack, "Qdisc hierarchy is too deep");
+		return -E2BIG;
+	}
+
 	if (clid == TC_H_INGRESS) {
 		if (dev_ingress_queue(dev)) {
 			q = qdisc_create(dev, dev_ingress_queue(dev),
