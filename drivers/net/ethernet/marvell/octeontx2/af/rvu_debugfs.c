@@ -497,7 +497,7 @@ RVU_DEBUG_SEQ_FOPS(mcs_rx_secy_stats, mcs_rx_secy_stats_display, NULL);
 static void rvu_dbg_mcs_init(struct rvu *rvu)
 {
 	struct mcs *mcs;
-	char dname[10];
+	char dname[24];
 	int i;
 
 	if (!rvu->mcs_blk_cnt)
@@ -508,7 +508,7 @@ static void rvu_dbg_mcs_init(struct rvu *rvu)
 	for (i = 0; i < rvu->mcs_blk_cnt; i++) {
 		mcs = mcs_get_pdata(i);
 
-		sprintf(dname, "mcs%d", i);
+		snprintf(dname, sizeof(dname), "mcs%d", i);
 		rvu->rvu_dbg.mcs = debugfs_create_dir(dname,
 						      rvu->rvu_dbg.mcs_root);
 
