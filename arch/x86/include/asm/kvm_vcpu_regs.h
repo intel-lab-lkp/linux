@@ -100,6 +100,56 @@
 	\opd = 15
 	.endif
 #endif
+#ifdef CONFIG_KVM_APX
+	.ifc \r64,%r16
+	\opd = 16
+	.endif
+	.ifc \r64,%r17
+	\opd = 17
+	.endif
+	.ifc \r64,%r18
+	\opd = 18
+	.endif
+	.ifc \r64,%r19
+	\opd = 19
+	.endif
+	.ifc \r64,%r20
+	\opd = 20
+	.endif
+	.ifc \r64,%r21
+	\opd = 21
+	.endif
+	.ifc \r64,%r22
+	\opd = 22
+	.endif
+	.ifc \r64,%r23
+	\opd = 23
+	.endif
+	.ifc \r64,%r24
+	\opd = 24
+	.endif
+	.ifc \r64,%r25
+	\opd = 25
+	.endif
+	.ifc \r64,%r26
+	\opd = 26
+	.endif
+	.ifc \r64,%r27
+	\opd = 27
+	.endif
+	.ifc \r64,%r28
+	\opd = 28
+	.endif
+	.ifc \r64,%r29
+	\opd = 29
+	.endif
+	.ifc \r64,%r30
+	\opd = 30
+	.endif
+	.ifc \r64,%r31
+	\opd = 31
+	.endif
+#endif
 	.endm
 
 .macro REG_NUM reg_num reg
