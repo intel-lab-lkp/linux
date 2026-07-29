@@ -1,0 +1,356 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2026 SiFive, Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sifive/sifive,wgchecker2.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SiFive WorldGuard Checker
+
+maintainers:
+  - Yu-Chien Peter Lin <peter.lin@sifive.com>
+
+description: |
+  The RISC-V Worlds ISA extension defines World IDs (WIDs) as architectural
+  identifiers that tag each system transaction with its originating context.
+  System integrators assign WIDs to execution contexts such as privilege modes,
+  trusted execution environments, or other isolation boundaries.
+
+  The SiFive WorldGuard Checker is a hardware firewall positioned in the
+  system interconnect fabric. It inspects every transaction, evaluating the
+  WID against access control policies encoded in checker slots for each
+  protected resource. Transactions from unauthorized WIDs are blocked and
+  reported as bus errors, interrupts, or both.
+
+  This enables spatial partitioning of memory regions and memory-mapped devices
+  across execution contexts. Different address ranges can enforce distinct
+  policies, allowing isolated workloads to coexist with hardware-enforced
+  protection.
+
+  The wgChecker acts as an access-controller provider as defined in the
+  access-controllers framework. Protected devices are consumers that declare
+  their access policy via the access-controllers property. The hardware
+  supports up to 32 World IDs.
+
+  The World ID authorized to configure WorldGuard blocks is specified by the
+  sifive,trustedwid property in the /cpus node.
+
+allOf:
+  - $ref: /schemas/access-controllers/access-controllers.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: qemu,wgchecker2
+          - const: sifive,wgchecker2
+      - const: sifive,wgchecker2
+
+  reg:
+    maxItems: 1
+    description:
+      Base address and size of the wgChecker memory-mapped I/O registers.
+
+  interrupts:
+    maxItems: 1
+    description:
+      Interrupt line asserted when a WID access violation is detected and
+      interrupt reporting is enabled in the slot configuration (IR or IW
+      bits set).
+
+  '#access-controller-cells':
+    const: 1
+    description: |
+      Specifies the partition identifier to reference a partition child
+      node that defines the access control region, WID permissions, and
+      access failure configuration. The special ID 0xFFFFFFFF indicates
+      unprotected mode, granting unrestricted access to the device.
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^partition@[0-9a-f]+$":
+    type: object
+    additionalProperties: false
+
+    properties:
+      reg:
+        maximum: 0xFFFFFFFE
+        description:
+          Partition identifier. Must be unique within the wgChecker node.
+          The value 0xFFFFFFFF is reserved for unprotected mode and must
+          not be used.
+
+      sifive,protected-region:
+        $ref: /schemas/types.yaml#/definitions/uint32-array
+        description:
+          Protected memory region encoded as a base address and size.
+        items:
+          - description: Upper 32 bits of the base address
+          - description: Lower 32 bits of the base address
+          - description: Upper 32 bits of the region size
+          - description: Lower 32 bits of the region size
+
+      sifive,slot-permissions:
+        $ref: /schemas/types.yaml#/definitions/uint64
+        description: |
+          64-bit WID permission bitmap. Each WID N uses two consecutive bits:
+            - bit[2*N]  : Read  permission for WID N
+            - bit[2*N+1]: Write permission for WID N
+          Set bits grant access.
+
+      sifive,slot-config:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        maximum: 0x1F
+        description: |
+          Access failure configuration flags for this slot:
+            bit[0] (ER): report read  violations as bus errors
+            bit[1] (EW): report write violations as bus errors
+            bit[2] (IR): report read  violations via interrupt
+            bit[3] (IW): report write violations via interrupt
+            bit[4] (L) : lock this slot against further modification
+          Bits[5:31] are reserved and must be zero.
+
+    required:
+      - reg
+      - sifive,protected-region
+      - sifive,slot-permissions
+      - sifive,slot-config
+
+required:
+  - compatible
+  - reg
+  - '#address-cells'
+  - '#size-cells'
+  - '#access-controller-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    // Example 1: Peripheral device protection
+
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <1000000>;
+        riscv,nworlds = <4>;
+        sifive,trustedwid = <3>;
+
+        cpu@0 {
+            device_type = "cpu";
+            reg = <0>;
+            compatible = "riscv";
+            riscv,isa-base = "rv64i";
+            riscv,isa-extensions = "i", "m", "a", "c", "smlwid";
+            riscv,pmwid = <3>;
+
+            cpu_intc0: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+    };
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        uart: uart@1c1000 {
+            compatible = "ns16550a";
+            reg = <0x0 0x001c1000 0x0 0x1000>;
+            reg-names = "control";
+            interrupts = <10 IRQ_TYPE_LEVEL_HIGH>;
+            access-controllers = <&wgchecker0 0>;
+        };
+
+        wgchecker0: access-controller@1c2000 {
+            compatible = "qemu,wgchecker2", "sifive,wgchecker2";
+            reg = <0x0 0x001c2000 0x0 0x1000>;
+            #access-controller-cells = <1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            interrupts = <80 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-parent = <&aplic0_m>;
+
+            partition@0 {
+                    reg = <0>;
+                    sifive,protected-region = <0x0 0x001c1000 0x0 0x00001000>;
+                    sifive,slot-permissions = <0x0 0x000000c3>;
+                    sifive,slot-config = <0x0f>;
+            };
+        };
+
+        aplic0_m: interrupt-controller@c000000 {
+            compatible = "qemu,aplic", "riscv,aplic";
+            reg = <0x0 0xc000000 0x0 0x4000>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            riscv,num-sources = <96>;
+            interrupts-extended = <&cpu_intc0 11>;
+        };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    // Example 2: Device with multiple address regions and per-region access rules
+
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <1000000>;
+        riscv,nworlds = <16>;
+        sifive,trustedwid = <3>;
+
+        cpu@0 {
+            device_type = "cpu";
+            reg = <0>;
+            compatible = "riscv";
+            riscv,isa-base = "rv64i";
+            riscv,isa-extensions = "i", "m", "a", "c", "smlwid";
+            riscv,pmwid = <3>;
+
+            cpu_intc1: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+    };
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        device: device@10000 {
+            compatible = "vendor,soc1-ip";
+            reg = <0x0 0x00010000 0x0 0x8000>,
+                  <0x0 0x00a00000 0x0 0x4000>;
+            reg-names = "m_mode", "s_mode";
+            // m_mode: WID 3 only; s_mode: WID 0,3 RW
+            access-controllers = <&wgchecker1 0>,
+                                 <&wgchecker1 1>;
+        };
+
+        wgchecker1: access-controller@35000 {
+            compatible = "qemu,wgchecker2", "sifive,wgchecker2";
+            reg = <0x0 0x00035000 0x0 0x1000>;
+            #access-controller-cells = <1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            interrupts = <81 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-parent = <&aplic1_m>;
+
+            partition@0 {
+                    reg = <0>;
+                    sifive,protected-region = <0x0 0x00010000 0x0 0x00008000>;
+                    sifive,slot-permissions = <0x0 0x000000c0>;
+                    sifive,slot-config = <0x0f>;
+            };
+
+            partition@1 {
+                    reg = <1>;
+                    sifive,protected-region = <0x0 0x00a00000 0x0 0x00004000>;
+                    sifive,slot-permissions = <0x0 0x000000c3>;
+                    sifive,slot-config = <0x0f>;
+            };
+        };
+
+        aplic1_m: interrupt-controller@c000000 {
+            compatible = "qemu,aplic", "riscv,aplic";
+            reg = <0x0 0xc000000 0x0 0x4000>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            riscv,num-sources = <96>;
+            interrupts-extended = <&cpu_intc1 11>;
+        };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    // Example 3: DRAM partitioning with a secure enclave
+
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <1000000>;
+        riscv,nworlds = <4>;
+        sifive,trustedwid = <3>;
+
+        cpu@0 {
+            device_type = "cpu";
+            reg = <0>;
+            compatible = "riscv";
+            riscv,isa-base = "rv64i";
+            riscv,isa-extensions = "i", "m", "a", "c", "smlwid", "smwiddeleg", "sswid";
+            riscv,pmwid = <3>;
+
+            cpu_intc2: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+    };
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        memory@80000000 {
+            device_type = "memory";
+            reg = <0x0 0x80000000 0x0 0x80000000>;
+            access-controllers = <&wgchecker2 0>,
+                                 <&wgchecker2 1>,
+                                 <&wgchecker2 2>;
+        };
+
+        wgchecker2: access-controller@40000000 {
+            compatible = "qemu,wgchecker2", "sifive,wgchecker2";
+            reg = <0x0 0x40000000 0x0 0x1000>;
+            #access-controller-cells = <1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            interrupts = <82 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-parent = <&aplic2_m>;
+
+            partition@0 {
+                    reg = <0>;
+                    sifive,protected-region = <0x0 0x80000000 0x0 0x40000000>;
+                    sifive,slot-permissions = <0x0 0x000000cf>;
+                    sifive,slot-config = <0x0f>;
+            };
+
+            partition@1 {
+                    reg = <1>;
+                    sifive,protected-region = <0x0 0xc0000000 0x0 0x01000000>;
+                    sifive,slot-permissions = <0x0 0x000000cc>;
+                    sifive,slot-config = <0x0f>;
+            };
+
+            partition@2 {
+                    reg = <2>;
+                    sifive,protected-region = <0x0 0xc1000000 0x0 0x3f000000>;
+                    sifive,slot-permissions = <0x0 0x000000cf>;
+                    sifive,slot-config = <0x0f>;
+            };
+        };
+
+        aplic2_m: interrupt-controller@c000000 {
+            compatible = "qemu,aplic", "riscv,aplic";
+            reg = <0x0 0xc000000 0x0 0x4000>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            riscv,num-sources = <96>;
+            interrupts-extended = <&cpu_intc2 11>;
+        };
+    };
