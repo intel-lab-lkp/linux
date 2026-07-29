@@ -57,6 +57,8 @@ struct dw_xpcs *xpcs_create_mdiodev(struct mii_bus *bus, int addr);
 struct dw_xpcs *xpcs_create_fwnode(struct fwnode_handle *fwnode);
 void xpcs_destroy(struct dw_xpcs *xpcs);
 
+struct phylink_pcs *
+xpcs_create_pcs_mdiodevs(struct mii_bus *bus, const int *addrs, int channels);
 struct phylink_pcs *xpcs_create_pcs_mdiodev(struct mii_bus *bus, int addr);
 void xpcs_destroy_pcs(struct phylink_pcs *pcs);
 
