@@ -499,10 +499,8 @@ static void panfrost_job_handle_err(struct panfrost_device *pfdev,
 
 	pm_runtime_put_autosuspend(pfdev->base.dev);
 
-	if (panfrost_exception_needs_reset(pfdev, js_status)) {
-		atomic_set(&pfdev->reset.pending, 1);
+	if (panfrost_exception_needs_reset(pfdev, js_status))
 		drm_sched_fault(&pfdev->js->queue[js].sched);
-	}
 }
 
 static void panfrost_jm_handle_done(struct panfrost_device *pfdev,
@@ -757,6 +755,8 @@ panfrost_reset(struct panfrost_device *pfdev,
 	panfrost_jm_enable_interrupts(pfdev);
 
 	dma_fence_end_signalling(cookie);
+
+	wake_up_all(&pfdev->reset.wait);
 }
 
 static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
@@ -893,6 +893,7 @@ int panfrost_jm_init(struct panfrost_device *pfdev)
 	if (!pfdev->reset.wq)
 		return -ENOMEM;
 	args.timeout_wq = pfdev->reset.wq;
+	init_waitqueue_head(&pfdev->reset.wait);
 
 	for (j = 0; j < NUM_JOB_SLOTS; j++) {
 		js->queue[j].fence_context = dma_fence_context_alloc(1);

@@ -167,6 +167,7 @@ struct panfrost_device {
 	struct {
 		struct workqueue_struct *wq;
 		struct work_struct work;
+		wait_queue_head_t wait;
 		atomic_t pending;
 	} reset;
 
@@ -341,8 +342,8 @@ bool panfrost_exception_needs_reset(const struct panfrost_device *pfdev,
 static inline void
 panfrost_device_schedule_reset(struct panfrost_device *pfdev)
 {
-	atomic_set(&pfdev->reset.pending, 1);
-	queue_work(pfdev->reset.wq, &pfdev->reset.work);
+	if (!atomic_cmpxchg(&pfdev->reset.pending, 0, 1))
+		queue_work(pfdev->reset.wq, &pfdev->reset.work);
 }
 
 static inline bool
