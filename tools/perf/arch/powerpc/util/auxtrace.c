@@ -12,6 +12,7 @@
 #include "../../util/debug.h"
 #include "../../util/auxtrace.h"
 #include "../../util/powerpc-vpadtl.h"
+#include "../../util/powerpc-htm.h"
 #include "../../util/record.h"
 
 struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
@@ -19,6 +20,7 @@ struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 {
 	struct evsel *pos;
 	struct evsel *vpa_dtl_evsel = NULL;
+	struct evsel *htm_evsel = NULL;
 
 	/*
 	 * Set err value to zero here. Any fail later
@@ -32,11 +34,30 @@ struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 			/* Remember the first matching VPA DTL event */
 			if (!vpa_dtl_evsel)
 				vpa_dtl_evsel = pos;
+		} else if (!strcmp(evsel__pmu_name(pos), "htm")) {
+			pos->needs_auxtrace_mmap = true;
+			/* Remember the first matching HTM event */
+			if (!htm_evsel)
+				htm_evsel = pos;
 		}
+	}
+
+	/*
+	 * Only one auxtrace PMU can be initialised per session.  Reject
+	 * concurrent VPA DTL and HTM events: HTM AUX buffers would be
+	 * collected without a PERF_RECORD_AUXTRACE_INFO record, making
+	 * the trace undecodable.
+	 */
+	if (vpa_dtl_evsel && htm_evsel) {
+		pr_err("Cannot record VPA DTL and HTM auxtrace events simultaneously\n");
+		*err = -EINVAL;
+		return NULL;
 	}
 
 	if (vpa_dtl_evsel)
 		return vpa_dtl_recording_init(vpa_dtl_evsel, err);
+	else if (htm_evsel)
+		return htm_recording_init(htm_evsel, err);
 
 	return NULL;
 }
