@@ -396,6 +396,9 @@ static int unregister_trace_uprobe(struct trace_uprobe *tu)
 {
 	int ret;
 
+	if (trace_probe_is_enabled(&tu->tp))
+		return -EBUSY;
+
 	if (trace_probe_has_sibling(&tu->tp))
 		goto unreg;
 
