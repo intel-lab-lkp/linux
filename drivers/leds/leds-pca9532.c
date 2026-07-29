@@ -385,6 +385,12 @@ static void pca9532_destroy_devices(struct pca9532_data *data, int n_devs)
 			break;
 		case PCA9532_TYPE_N2100_BEEP:
 			if (data->idev != NULL) {
+				/*
+				 * Unregister the input device first so that no
+				 * new EV_SND events can re-queue the work after
+				 * it has been cancelled.
+				 */
+				input_unregister_device(data->idev);
 				cancel_work_sync(&data->work);
 				data->idev = NULL;
 			}
