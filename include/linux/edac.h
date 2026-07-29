@@ -864,9 +864,9 @@ struct edac_dev_data {
 struct edac_dev_feat_ctx {
 	struct device dev;
 	void *private;
-	struct edac_dev_data *scrub;
 	struct edac_dev_data ecs;
 	struct edac_dev_data *mem_repair;
+	struct edac_dev_data scrub[];
 };
 
 struct edac_dev_feature {

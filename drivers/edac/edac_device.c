@@ -573,7 +573,6 @@ static void edac_dev_release(struct device *dev)
 	struct edac_dev_feat_ctx *ctx = container_of(dev, struct edac_dev_feat_ctx, dev);
 
 	kfree(ctx->mem_repair);
-	kfree(ctx->scrub);
 	kfree(ctx->dev.groups);
 	kfree(ctx);
 }
@@ -639,7 +638,7 @@ int edac_dev_register(struct device *parent, char *name,
 		}
 	}
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc_flex(*ctx, scrub, scrub_cnt);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -647,16 +646,10 @@ int edac_dev_register(struct device *parent, char *name,
 	if (!ras_attr_groups)
 		goto ctx_free;
 
-	if (scrub_cnt) {
-		ctx->scrub = kzalloc_objs(*ctx->scrub, scrub_cnt);
-		if (!ctx->scrub)
-			goto groups_free;
-	}
-
 	if (mem_repair_cnt) {
 		ctx->mem_repair = kzalloc_objs(*ctx->mem_repair, mem_repair_cnt);
 		if (!ctx->mem_repair)
-			goto data_mem_free;
+			goto groups_free;
 	}
 
 	attr_gcnt = 0;
@@ -744,7 +737,6 @@ int edac_dev_register(struct device *parent, char *name,
 
 data_mem_free:
 	kfree(ctx->mem_repair);
-	kfree(ctx->scrub);
 groups_free:
 	kfree(ras_attr_groups);
 ctx_free:
