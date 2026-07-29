@@ -585,6 +585,12 @@ static void user_cache_maint_handler(unsigned long esr, struct pt_regs *regs)
 		__user_cache_maint("dc civac", address, ret);
 		break;
 	case ESR_ELx_SYS64_ISS_CRM_IC_IVAU:	/* IC IVAU */
+		if (cpus_have_final_cap(ARM64_WORKAROUND_NXP_ERR050104)) {
+			/* ERR050104: upgrade IC IVAU to IC IALLUIS */
+			asm volatile("ic ialluis");
+			ret = 0;
+			break;
+		}
 		__user_cache_maint("ic ivau", address, ret);
 		break;
 	default:
