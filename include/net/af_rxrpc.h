@@ -109,6 +109,8 @@ int rxkad_kernel_respond_to_challenge(struct sk_buff *challenge);
 u32 rxgk_kernel_query_challenge(struct sk_buff *challenge);
 int rxgk_kernel_respond_to_challenge(struct sk_buff *challenge,
 				     struct krb5_buffer *appdata);
+void rxrpc_kernel_query_key(const struct key *key, u8 *_security_index,
+			    u32 *_krb5_enctype);
 u8 rxrpc_kernel_query_call_security(struct rxrpc_call *call,
 				    u16 *_service_id, u32 *_enctype);
 
