@@ -49,25 +49,6 @@ static struct device *qcom_tzmem_dev;
 static RADIX_TREE(qcom_tzmem_chunks, GFP_ATOMIC);
 static DEFINE_SPINLOCK(qcom_tzmem_chunks_lock);
 
-#if IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_GENERIC)
-
-static int qcom_tzmem_init(void)
-{
-	return 0;
-}
-
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
-{
-	return 0;
-}
-
-static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
-{
-
-}
-
-#elif IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE)
-
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/of.h>
 
@@ -188,8 +169,6 @@ static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 	qcom_tzmem_shm_bridge_delete(*handle);
 	kfree(handle);
 }
-
-#endif /* CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE */
 
 static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 				      size_t size, gfp_t gfp)
