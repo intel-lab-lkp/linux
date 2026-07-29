@@ -174,8 +174,10 @@ void stmmac_fpe_init(struct stmmac_priv *priv)
 			  &stmmac_mmsv_ops);
 
 	if ((!priv->fpe_cfg.reg || !priv->hw->mac->fpe_map_preemption_class) &&
-	    priv->dma_cap.fpesel)
+	    priv->dma_cap.fpesel) {
 		dev_info(priv->device, "FPE is not supported by driver.\n");
+		return;
+	}
 
 	/* The preemptive MAC in DWMAC is always enabled, so initialize
 	 * pmac_enabled to true to reflect the hardware state.
