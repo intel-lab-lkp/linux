@@ -837,6 +837,42 @@ pub struct CursorMut<'a, K, V> {
 ///
 /// # Ok::<(), Error>(())
 /// ```
+///
+/// [`Cursor::peek_next`] completes a lookup for the first key strictly greater than a
+/// given one. [`RBTree::cursor_lower_bound`] stops on an exact match, so the peek is
+/// needed only when the key was present: when it was absent the cursor already holds
+/// the answer, and peeking there skips an element instead.
+///
+/// ```
+/// use kernel::{alloc::flags, rbtree::RBTree};
+///
+/// // Create a new tree.
+/// let mut tree = RBTree::new();
+///
+/// // Insert four elements.
+/// tree.try_create_and_insert(10, 100, flags::GFP_KERNEL)?;
+/// tree.try_create_and_insert(20, 200, flags::GFP_KERNEL)?;
+/// tree.try_create_and_insert(30, 300, flags::GFP_KERNEL)?;
+/// tree.try_create_and_insert(40, 400, flags::GFP_KERNEL)?;
+///
+/// // 20 is present, so the cursor stops on the key the caller already has and the
+/// // successor is one peek away.
+/// let cursor = tree.cursor_lower_bound(&20).unwrap();
+/// assert_eq!(cursor.current(), (&20, &200));
+/// assert_eq!(cursor.peek_next().unwrap(), (&30, &300));
+///
+/// // 25 is absent, so the cursor already sits on the answer. Peeking from here
+/// // returns 40 and skips 30.
+/// let cursor = tree.cursor_lower_bound(&25).unwrap();
+/// assert_eq!(cursor.current(), (&30, &300));
+/// assert_eq!(cursor.peek_next().unwrap(), (&40, &400));
+///
+/// // The largest key has no successor.
+/// let cursor = tree.cursor_lower_bound(&40).unwrap();
+/// assert!(cursor.peek_next().is_none());
+///
+/// # Ok::<(), Error>(())
+/// ```
 pub struct Cursor<'a, K, V> {
     _tree: PhantomData<&'a RBTree<K, V>>,
     current: NonNull<bindings::rb_node>,
