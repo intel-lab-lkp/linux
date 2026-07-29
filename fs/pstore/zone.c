@@ -372,6 +372,7 @@ static int psz_kmsg_recover_meta(struct psz_context *cxt)
 {
 	struct pstore_zone_info *info = cxt->pstore_zone_info;
 	struct pstore_zone *zone;
+	int datalen;
 	ssize_t rcnt, len;
 	struct psz_buffer *buf;
 	struct psz_kmsg_header *hdr;
@@ -408,7 +409,22 @@ static int psz_kmsg_recover_meta(struct psz_context *cxt)
 			continue;
 		}
 
-		if (zone->buffer_size < atomic_read(&buf->datalen)) {
+		datalen = atomic_read(&buf->datalen);
+		if (!datalen) {
+			pr_debug("found erased zone: %s: id %lu, off %lld, size %zu, datalen %d\n",
+				 zone->name, i, zone->off,
+				 zone->buffer_size, datalen);
+			continue;
+		}
+
+		if (datalen < (int)sizeof(*hdr)) {
+			pr_info("found truncated zone: %s: id %lu, off %lld, size %zu, datalen %d\n",
+				zone->name, i, zone->off,
+				zone->buffer_size, datalen);
+			continue;
+		}
+
+		if (zone->buffer_size < datalen) {
 			pr_info("found overtop zone: %s: id %lu, off %lld, size %zu\n",
 					zone->name, i, zone->off,
 					zone->buffer_size);
@@ -439,19 +455,11 @@ static int psz_kmsg_recover_meta(struct psz_context *cxt)
 			cxt->panic_counter =
 				max(cxt->panic_counter, hdr->counter);
 
-		if (!atomic_read(&buf->datalen)) {
-			pr_debug("found erased zone: %s: id %lu, off %lld, size %zu, datalen %d\n",
-					zone->name, i, zone->off,
-					zone->buffer_size,
-					atomic_read(&buf->datalen));
-			continue;
-		}
-
 		if (!is_on_panic())
 			zone->should_recover = true;
 		pr_debug("found nice zone: %s: id %lu, off %lld, size %zu, datalen %d\n",
 				zone->name, i, zone->off,
-				zone->buffer_size, atomic_read(&buf->datalen));
+				zone->buffer_size, datalen);
 	}
 
 	return 0;
@@ -962,6 +970,12 @@ static ssize_t psz_kmsg_read(struct pstore_zone *zone,
 	ssize_t size, hlen = 0;
 
 	size = buffer_datalen(zone);
+	if (size < (ssize_t)sizeof(struct psz_kmsg_header)) {
+		atomic_set(&zone->buffer->datalen, 0);
+		atomic_set(&zone->dirty, 0);
+		return -ENOMSG;
+	}
+
 	/* Clear and skip this kmsg dump record if it has no valid header */
 	if (psz_kmsg_read_hdr(zone, record)) {
 		atomic_set(&zone->buffer->datalen, 0);
