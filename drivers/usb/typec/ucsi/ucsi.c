@@ -2083,6 +2083,12 @@ static int ucsi_init(struct ucsi *ucsi)
 	ntfy = UCSI_ENABLE_NTFY_CMD_COMPLETE | UCSI_ENABLE_NTFY_ERROR;
 	command = UCSI_SET_NOTIFICATION_ENABLE | ntfy;
 	ret = ucsi_send_command(ucsi, command, NULL, 0);
+	/*
+	 * Some FW may not ack the notification enable the first time.
+	 * If this happens, repeat to confirm it is actually working
+	 */
+	if (ret == -ETIMEDOUT)
+		ret = ucsi_send_command(ucsi, command, NULL, 0);
 	if (ret < 0)
 		goto err_reset;
 
