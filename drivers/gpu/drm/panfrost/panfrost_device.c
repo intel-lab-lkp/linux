@@ -2,6 +2,7 @@
 /* Copyright 2018 Marty E. Plummer <hanetzer@startmail.com> */
 /* Copyright 2019 Linaro, Ltd, Rob Herring <robh@kernel.org> */
 
+#include <linux/debugfs.h>
 #include <linux/clk.h>
 #include <linux/reset.h>
 #include <linux/platform_device.h>
@@ -629,3 +630,43 @@ void panfrost_device_reset(struct panfrost_device *pfdev, bool enable_job_int)
 	if (!panfrost_device_started(pfdev) && !ret)
 		pfdev->gpu_started = true;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int reset_get(void *data, u64 *val)
+{
+	struct panfrost_device *pfdev =
+		container_of(data, struct panfrost_device, base);
+
+	*val = atomic_read(&pfdev->reset.pending);
+	return 0;
+}
+
+static int reset_set(void *data, u64 val)
+{
+	struct panfrost_device *pfdev =
+		container_of(data, struct panfrost_device, base);
+	int ret;
+
+	ret = pm_runtime_get_if_in_use(pfdev->base.dev);
+
+	if (ret > 0) {
+		panfrost_device_schedule_reset(pfdev);
+		ret = wait_event_interruptible_timeout(pfdev->reset.wait,
+						       !atomic_read(&pfdev->reset.pending),
+						       msecs_to_jiffies(60));
+		pm_runtime_put(pfdev->base.dev);
+	}
+
+	return (ret > 0) ? 0 : -ETIMEDOUT;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(panfrost_reset_debugfs_fops,
+			 reset_get, reset_set,
+			 "0x%08llx\n");
+
+void panfrost_reset_debugfs_init(struct drm_minor *minor)
+{
+	debugfs_create_file("reset", 0600, minor->debugfs_root,
+			    minor->dev, &panfrost_reset_debugfs_fops);
+}
+#endif // CONFIG_DEBUG_FS
