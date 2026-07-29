@@ -301,38 +301,43 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_MCH_PC1,	pcie_r
  *
  * https://cdrdv2.intel.com/v1/dl/getContent/837176
  */
-static int limit_mrrs_to_128(struct pci_host_bridge *b, struct pci_dev *pdev)
+static int pci_xeon_x2_bifurc_quirk_perdev(struct pci_dev *pdev, void *data)
 {
-	int readrq = pcie_get_readrq(pdev);
-
-	if (readrq > 128)
-		pcie_set_readrq(pdev, 128);
-
+	/* Only clamp actual endpoints, skip downstream switches/bridges */
+	if (!pci_is_bridge(pdev)) {
+		pci_info(pdev, "Disabling Extended Tags and Clamping MRRS to 128B due to upstream Xeon 6 x2 bifurcation\n");
+		pcie_capability_clear_word(pdev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_EXT_TAG);
+		pcie_capability_clear_word(pdev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_READRQ);
+	}
 	return 0;
 }
 
 static void pci_xeon_x2_bifurc_quirk(struct pci_dev *pdev)
 {
-	struct pci_host_bridge *bridge = pci_find_host_bridge(pdev->bus);
 	u32 linkcap;
 
 	pcie_capability_read_dword(pdev, PCI_EXP_LNKCAP, &linkcap);
 	if (FIELD_GET(PCI_EXP_LNKCAP_MLW, linkcap) != 0x2)
 		return;
 
-	bridge->no_ext_tags = 1;
-	bridge->enable_device = limit_mrrs_to_128;
-	pci_info(pdev, "Disabling Extended Tags and limiting MRRS to 128B (performance reasons due to x2 PCIe link)\n");
+	pci_info(pdev, "Xeon 6 x2 lane bifurcation detected; restricting subordinate devices\n");
+
+	/*
+	 * Walk down only this specific root port's downstream bus tree
+	 * and clear extended tags specifically for devices on this branch.
+	 */
+	if (pdev->subordinate)
+		pci_walk_bus(pdev->subordinate, pci_xeon_x2_bifurc_quirk_perdev, NULL);
 }
 
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db0, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db1, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db2, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db3, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db6, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db7, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db8, pci_xeon_x2_bifurc_quirk);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db9, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db0, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db1, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db2, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db3, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db6, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db7, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db8, pci_xeon_x2_bifurc_quirk);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x0db9, pci_xeon_x2_bifurc_quirk);
 
 /*
  * Fixup to mark boot BIOS video selected by BIOS before it changes
