@@ -15,6 +15,7 @@ import struct
 import sys
 import time
 import types
+import unittest
 import uuid
 
 try:
@@ -1985,6 +1986,11 @@ class ovskey(nla):
                 ovskey.ovs_key_udp,
             ),
             (
+                "OVS_KEY_ATTR_SCTP",
+                "sctp",
+                ovskey.ovs_key_sctp,
+            ),
+            (
                 "OVS_KEY_ATTR_ICMP",
                 "icmp",
                 ovskey.ovs_key_icmp,
@@ -3165,5 +3171,81 @@ def main(argv):
     return 0
 
 
+def _init_ovskey_nlas():
+    """Initialize required NLA classes for ovskey parsing."""
+    nlmsg_atoms.encap_ovskey = encap_ovskey
+    nlmsg_atoms.ovskey = ovskey
+    nlmsg_atoms.ovsactions = ovsactions
+
+
+def _parse_flow(flowstr):
+    """Parse a flow string and return the key."""
+    key = ovskey()
+    key["attrs"] = []
+    remainder = key.parse(flowstr)
+    if remainder:
+        raise ValueError(f"unparsed remainder: {remainder!r}")
+    return key
+
+
+def _find_attr(key, attr_name):
+    """Find an attribute in parsed key."""
+    for attr in key["attrs"]:
+        if attr[0] == attr_name:
+            return attr[1]
+    return None
+
+
+class TestOvsKeyParse(unittest.TestCase):
+    """Unit tests for ovskey.parse() flow string parsing."""
+
+    @classmethod
+    def setUpClass(cls):
+        _init_ovskey_nlas()
+
+    def test_sctp_dst(self):
+        """Test SCTP destination port parsing."""
+        key = _parse_flow("sctp(dst=4443)")
+        attr = _find_attr(key, "OVS_KEY_ATTR_SCTP")
+        self.assertIsNotNone(attr, "SCTP key not found")
+        self.assertEqual(attr["dst"], 4443)
+
+    def test_sctp_src(self):
+        """Test SCTP source port parsing."""
+        key = _parse_flow("sctp(src=4443)")
+        attr = _find_attr(key, "OVS_KEY_ATTR_SCTP")
+        self.assertIsNotNone(attr, "SCTP key not found")
+        self.assertEqual(attr["src"], 4443)
+
+    def test_sctp_src_and_dst(self):
+        """Test SCTP source and destination port parsing."""
+        key = _parse_flow("sctp(src=1234,dst=5678)")
+        attr = _find_attr(key, "OVS_KEY_ATTR_SCTP")
+        self.assertIsNotNone(attr, "SCTP key not found")
+        self.assertEqual(attr["src"], 1234)
+        self.assertEqual(attr["dst"], 5678)
+
+    def test_sctp_roundtrip(self):
+        """Test parse -> dpstr -> parse keeps the SCTP key."""
+        key = _parse_flow("sctp(dst=4443)")
+        key2 = ovskey()
+        key2["attrs"] = []
+        remainder = key2.parse(key.dpstr())
+        self.assertEqual(remainder, "", "round-trip left unparsed text")
+        attr = _find_attr(key2, "OVS_KEY_ATTR_SCTP")
+        self.assertIsNotNone(attr, "SCTP key lost in round-trip")
+        self.assertEqual(attr["dst"], 4443)
+
+
+def test_ovskey_parse():
+    """Test ovskey.parse() method for various flow key types."""
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestOvsKeyParse)
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    return 0 if result.wasSuccessful() else 1
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        sys.exit(test_ovskey_parse())
     sys.exit(main(sys.argv))
