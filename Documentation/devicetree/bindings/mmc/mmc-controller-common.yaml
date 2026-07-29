@@ -291,7 +291,12 @@ properties:
   keep-power-in-suspend:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
-      SDIO only. Preserves card power during a suspend/resume cycle.
+      Preserves card power during a suspend/resume cycle. For SDIO,
+      this is a request an individual function driver can make at
+      runtime via sdio_set_host_pm_flags(). For (e)MMC, it is instead
+      a fixed platform characteristic, needed on boards where firmware
+      accesses the card directly during system resume, before the
+      kernel's own resume path runs.
 
   wakeup-source:
     $ref: /schemas/types.yaml#/definitions/flag
