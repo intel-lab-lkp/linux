@@ -1019,10 +1019,10 @@ static __init bool get_rdt_mon_resources(void)
 	if (rdt_cpu_has(X86_FEATURE_ABMC))
 		ret = true;
 
-	if (!ret)
-		return false;
+	if (ret)
+		rdt_get_l3_mon_config(r);
 
-	return !rdt_get_l3_mon_config(r);
+	return boot_cpu_data.x86_cache_max_rmid > 0;
 }
 
 static __init void __check_quirks_intel(void)
@@ -1168,6 +1168,8 @@ static int __init resctrl_arch_late_init(void)
 
 	if (!get_rdt_resources())
 		return -ENODEV;
+
+	intel_aet_init();
 
 	state = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 				  "x86/resctrl/cat:online:",
