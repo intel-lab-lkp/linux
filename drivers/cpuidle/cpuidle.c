@@ -613,6 +613,8 @@ static void __cpuidle_unregister_device(struct cpuidle_device *dev)
 {
 	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
 
+	cpuidle_latency_req_notifier_unregister(dev->cpu);
+
 	list_del(&dev->device_list);
 	per_cpu(cpuidle_devices, dev->cpu) = NULL;
 	module_put(drv->owner);
@@ -661,10 +663,17 @@ static int __cpuidle_register_device(struct cpuidle_device *dev)
 
 	ret = cpuidle_coupled_register_device(dev);
 	if (ret)
-		__cpuidle_unregister_device(dev);
-	else
-		dev->registered = 1;
+		goto unreg;
 
+	ret = cpuidle_latency_req_notifier_register(cpu);
+	if (ret)
+		goto unreg;
+
+	dev->registered = 1;
+	return 0;
+
+unreg:
+	__cpuidle_unregister_device(dev);
 	return ret;
 }
 

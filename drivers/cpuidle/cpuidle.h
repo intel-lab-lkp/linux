@@ -25,6 +25,8 @@ extern void cpuidle_uninstall_idle_handler(void);
 /* governors */
 extern struct cpuidle_governor *cpuidle_find_governor(const char *str);
 extern int cpuidle_switch_governor(struct cpuidle_governor *gov);
+int cpuidle_latency_req_notifier_register(unsigned int cpu);
+void cpuidle_latency_req_notifier_unregister(unsigned int cpu);
 
 /* sysfs */
 
