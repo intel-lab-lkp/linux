@@ -16,7 +16,6 @@
 
 #define pr_fmt(fmt)	"resctrl: " fmt
 
-#include <linux/cleanup.h>
 #include <linux/cpu.h>
 #include <linux/slab.h>
 #include <linux/err.h>
@@ -807,25 +806,47 @@ static int resctrl_arch_offline_cpu(unsigned int cpu)
 	return 0;
 }
 
-void resctrl_arch_pre_mount(void)
+/*
+ * Linux provides no synchronization for mount(2) system calls.
+ * resctrl_arch_pre_mount() and resctrl_arch_unmount() are called
+ * with no locks held. Mount/unmount may also race with CPU hotplug
+ * events that add/remove per-domain files and directories.
+ *
+ * Use cpus_read_lock() plus domain_list_lock to protect operations.
+ *
+ * Keep track locally at the architecture level whether the file
+ * system is mounted (or in process of being mounted).
+ */
+static bool arch_mounted;
+
+int resctrl_arch_pre_mount(void)
 {
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
+	int ret = -EBUSY;
 	int cpu;
 
+	cpus_read_lock();
+	mutex_lock(&domain_list_lock);
+	if (arch_mounted)
+		goto unlock;
+	arch_mounted = true;
+	ret = 0;
+
 	if (!intel_aet_pre_mount())
-		return;
+		goto unlock;
 
 	/*
 	 * Late discovery of telemetry events means the domains for the
 	 * resource were not built. Do that now.
 	 */
-	cpus_read_lock();
-	mutex_lock(&domain_list_lock);
 	r->mon_capable = true;
 	for_each_online_cpu(cpu)
 		domain_add_cpu_mon(cpu, r);
+unlock:
 	mutex_unlock(&domain_list_lock);
 	cpus_read_unlock();
+
+	return ret;
 }
 
 void resctrl_arch_unmount(void)
@@ -833,16 +854,19 @@ void resctrl_arch_unmount(void)
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
 	int cpu;
 
+	cpus_read_lock();
+	mutex_lock(&domain_list_lock);
+	arch_mounted = false;
+
 	if (!r->mon_capable)
-		return;
+		goto unlock;
 
 	intel_aet_unmount();
 
-	cpus_read_lock();
-	mutex_lock(&domain_list_lock);
 	for_each_online_cpu(cpu)
 		domain_remove_cpu_mon(cpu, r);
 	r->mon_capable = false;
+unlock:
 	mutex_unlock(&domain_list_lock);
 	cpus_read_unlock();
 }

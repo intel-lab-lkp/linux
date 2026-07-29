@@ -158,8 +158,9 @@ bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r)
 	return false;
 }
 
-void resctrl_arch_pre_mount(void)
+int resctrl_arch_pre_mount(void)
 {
+	return 0;
 }
 
 void resctrl_arch_unmount(void)
