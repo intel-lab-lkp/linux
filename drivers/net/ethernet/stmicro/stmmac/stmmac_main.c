@@ -6814,6 +6814,9 @@ static int stmmac_vlan_update(struct stmmac_priv *priv, bool is_double)
 	if (!netif_running(priv->dev))
 		return 0;
 
+	if (!priv->dma_cap.dvlan)
+		is_double = false;
+
 	return stmmac_update_vlan_hash(priv, priv->hw, hash, is_double);
 }
 
