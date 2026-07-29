@@ -33,7 +33,8 @@ struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
 
 enum dw_edma_deferred_event {
 	DW_EDMA_DEFERRED_DONE	= BIT(0),
-	DW_EDMA_DEFERRED_ABORT	= BIT(1),
+	DW_EDMA_DEFERRED_LL	= BIT(1),
+	DW_EDMA_DEFERRED_ABORT	= BIT(2),
 };
 
 static inline
@@ -72,6 +73,52 @@ dw_edma_alloc_desc(struct dw_edma_chan *chan, size_t nburst)
 static void vchan_free_desc(struct virt_dma_desc *vdesc)
 {
 	kfree(vd2dw_edma_desc(vdesc));
+}
+
+static void dw_edma_ll_snapshot_discard_locked(struct dw_edma_chan *chan)
+{
+	lockdep_assert_held(dw_edma_event_lock(chan));
+
+	chan->ll_irq.event = DW_EDMA_LL_EVENT_NONE;
+}
+
+static void dw_edma_ll_snapshot_discard(struct dw_edma_chan *chan)
+{
+	guard(spinlock_irqsave)(dw_edma_event_lock(chan));
+
+	dw_edma_ll_snapshot_discard_locked(chan);
+}
+
+/* Must be called with vc.lock held. */
+static bool
+dw_edma_ll_snapshot_take(struct dw_edma_chan *chan,
+			 struct dw_edma_ll_snapshot *snapshot)
+{
+	guard(spinlock_irqsave)(dw_edma_event_lock(chan));
+
+	if (chan->ll_irq.event == DW_EDMA_LL_EVENT_NONE)
+		return false;
+
+	*snapshot = chan->ll_irq;
+	dw_edma_ll_snapshot_discard_locked(chan);
+
+	return true;
+}
+
+static void dw_edma_ll_event_discard_locked(struct dw_edma_chan *chan)
+{
+	lockdep_assert_held(dw_edma_event_lock(chan));
+
+	dw_edma_core_ll_irq_clear(chan);
+	dw_edma_ll_snapshot_discard_locked(chan);
+}
+
+/* Must be called with vc.lock held for an LL channel. */
+static void dw_edma_ll_event_discard(struct dw_edma_chan *chan)
+{
+	guard(spinlock_irqsave)(dw_edma_event_lock(chan));
+
+	dw_edma_ll_event_discard_locked(chan);
 }
 
 /* Must be called with vc.lock held. */
@@ -120,6 +167,7 @@ static void dw_edma_core_reset_ll(struct dw_edma_chan *chan)
 	dw_edma_core_ll_link(chan, chan->ll_max, chan->cb,
 			     chan->ll_region.paddr);
 
+	dw_edma_ll_event_discard(chan);
 	dw_edma_core_ch_enable(chan);
 	chan->ll_valid = true;
 }
@@ -269,6 +317,17 @@ static void dw_edma_core_ll_sync(struct dw_edma_chan *chan)
 static void dw_edma_core_ch_doorbell(struct dw_edma_chan *chan)
 {
 	dw_edma_core_ll_sync(chan);
+
+	guard(spinlock_irqsave)(dw_edma_event_lock(chan));
+
+	/*
+	 * A recorded event belongs to the current ring and must be consumed
+	 * before starting another hardware run.
+	 */
+	if (chan->ll_irq.event != DW_EDMA_LL_EVENT_NONE)
+		return;
+
+	dw_edma_ll_event_discard_locked(chan);
 	dw_edma_core_do_ch_doorbell(chan);
 }
 
@@ -779,6 +838,18 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
 
+static void dw_edma_ll_interrupt(struct dw_edma_chan *chan)
+{
+	struct dw_edma_ll_snapshot snapshot;
+
+	guard(spinlock_irqsave)(&chan->vc.lock);
+
+	if (!dw_edma_ll_snapshot_take(chan, &snapshot))
+		return;
+
+	dw_edma_done_interrupt_locked(chan);
+}
+
 static void dw_edma_abort_interrupt(struct dw_edma_chan *chan)
 {
 	struct virt_dma_desc *vd;
@@ -811,6 +882,8 @@ static void dw_edma_irq_work(struct work_struct *work)
 
 		if (events & DW_EDMA_DEFERRED_DONE)
 			dw_edma_done_interrupt(chan);
+		if (events & DW_EDMA_DEFERRED_LL)
+			dw_edma_ll_interrupt(chan);
 		if (events & DW_EDMA_DEFERRED_ABORT)
 			dw_edma_abort_interrupt(chan);
 	} while (atomic_read(&chan->irq_pending));
@@ -825,13 +898,28 @@ static void dw_edma_queue_irq_work(struct dw_edma_chan *chan,
 
 static void dw_edma_record_irq(struct dw_edma_chan *chan, unsigned int events)
 {
+	struct dw_edma_ll_snapshot snapshot = {
+		.event = events & DW_EDMA_IRQ_STOP ?
+			 DW_EDMA_LL_EVENT_STOP : DW_EDMA_LL_EVENT_PROGRESS,
+	};
 	unsigned int pending = 0;
 
-	if (events & (DW_EDMA_IRQ_DONE | DW_EDMA_IRQ_PROGRESS |
-		      DW_EDMA_IRQ_STOP))
-		pending |= DW_EDMA_DEFERRED_DONE;
+	lockdep_assert_held(dw_edma_event_lock(chan));
+
 	if (events & DW_EDMA_IRQ_ABORT)
 		pending |= DW_EDMA_DEFERRED_ABORT;
+
+	if (chan->non_ll) {
+		if (events & (DW_EDMA_IRQ_DONE | DW_EDMA_IRQ_STOP))
+			pending |= DW_EDMA_DEFERRED_DONE;
+	} else if (events & (DW_EDMA_IRQ_DONE | DW_EDMA_IRQ_PROGRESS |
+			     DW_EDMA_IRQ_STOP)) {
+		/* STOP is final for this run; do not replace it with progress. */
+		if (chan->ll_irq.event != DW_EDMA_LL_EVENT_STOP ||
+		    snapshot.event == DW_EDMA_LL_EVENT_STOP)
+			chan->ll_irq = snapshot;
+		pending |= DW_EDMA_DEFERRED_LL;
+	}
 
 	if (pending)
 		dw_edma_queue_irq_work(chan, pending);
@@ -1020,6 +1108,7 @@ static void dw_edma_device_synchronize(struct dma_chan *dchan)
 	dw_edma_wait_termination(dchan);
 	cancel_work_sync(&chan->irq_work);
 	atomic_set(&chan->irq_pending, 0);
+	dw_edma_ll_snapshot_discard(chan);
 	vchan_synchronize(&chan->vc);
 }
 
@@ -1071,6 +1160,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->irq_mode = dw_edma_get_default_irq_mode(chan);
 		INIT_WORK(&chan->irq_work, dw_edma_irq_work);
 		atomic_set(&chan->irq_pending, 0);
+		chan->ll_irq.event = DW_EDMA_LL_EVENT_NONE;
 
 		if (chan->dir == EDMA_DIR_WRITE)
 			chan->ll_region = chip->ll_region_wr[chan->id];
@@ -1264,6 +1354,7 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 {
 	struct device *dev;
 	struct dw_edma *dw;
+	struct dw_edma_chan *chan;
 	u16 hw_wr_ch_cnt;
 	u16 hw_rd_ch_cnt;
 	u32 wr_alloc = 0;
@@ -1307,6 +1398,8 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 	}
 
 	raw_spin_lock_init(&dw->lock);
+	for (i = 0; i < ARRAY_SIZE(dw->event_lock_per_dir); i++)
+		spin_lock_init(&dw->event_lock_per_dir[i]);
 
 	/*
 	 * chip->ll_*_cnt describes the channels exposed by this instance. Keep
@@ -1335,6 +1428,19 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 				sizeof(*dw->chan), GFP_KERNEL);
 	if (!dw->chan)
 		return -ENOMEM;
+
+	/* Event locks must be ready before request_irq(). */
+	for (i = 0; i < dw->wr_ch_cnt + dw->rd_ch_cnt; i++) {
+		enum dw_edma_dir dir = i < dw->wr_ch_cnt ?
+				      EDMA_DIR_WRITE : EDMA_DIR_READ;
+
+		chan = &dw->chan[i];
+		spin_lock_init(&chan->event_lock_per_chan);
+		if (chip->mf == EDMA_MF_HDMA_NATIVE)
+			chan->event_lock = &chan->event_lock_per_chan;
+		else
+			chan->event_lock = &dw->event_lock_per_dir[dir];
+	}
 
 	snprintf(dw->name, sizeof(dw->name), "dw-edma-core:%s",
 		 dev_name(chip->dev));
