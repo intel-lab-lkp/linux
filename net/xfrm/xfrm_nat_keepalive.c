@@ -173,7 +173,19 @@ static int nat_keepalive_work_single(struct xfrm_state *x, int count, void *ptr)
 	if (!interval)
 		return 0;
 
-	spin_lock(&x->lock);
+	/* This runs from xfrm_state_walk() with net->xfrm.xfrm_state_lock
+	 * held, while the rest of xfrm takes x->lock first and
+	 * xfrm_state_lock second (see xfrm_timer_handler() ->
+	 * __xfrm_state_delete(), and xfrm_state_flush(), which drops
+	 * xfrm_state_lock before deleting a state).  Blocking on x->lock
+	 * here would invert that order and deadlock.  A keepalive is
+	 * housekeeping, so if the state is busy just look at it again on
+	 * the next run.
+	 */
+	if (!spin_trylock(&x->lock)) {
+		next_run = ctx->now + 1;
+		goto out;
+	}
 
 	delta = (int)(ctx->now - x->lastused);
 	if (delta < interval) {
@@ -192,6 +204,7 @@ static int nat_keepalive_work_single(struct xfrm_state *x, int count, void *ptr)
 	if (send_keepalive)
 		nat_keepalive_send(&ka);
 
+out:
 	if (!ctx->next_run || next_run < ctx->next_run)
 		ctx->next_run = next_run;
 	return 0;
