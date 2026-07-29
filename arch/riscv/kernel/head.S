@@ -281,6 +281,31 @@ SYM_CODE_START(_start_kernel)
 	la a2, boot_cpu_hartid
 	REG_S a0, (a2)
 
+#ifndef CONFIG_RISCV_BOOT_SPINWAIT
+	/*
+	 * On platforms where firmware releases all harts to the same
+	 * entry point (e.g. fw_dynamic), non-primary harts must divert
+	 * here before MMU setup. Wait in the spinwait rendezvous arrays
+	 * until cpu_start() provides boot data. a0 = hartid.
+	 */
+	REG_L a3, (a2)
+	beq a0, a3, .Lprimary_hart
+	slli a3, a0, LGREG
+	la a1, __cpu_spinwait_stack_pointer
+	la a2, __cpu_spinwait_task_pointer
+	add a1, a3, a1
+	add a2, a3, a2
+.Lwait_for_cpu_up_sbi:
+	fence r, r
+	REG_L sp, (a1)
+	REG_L tp, (a2)
+	beqz sp, .Lwait_for_cpu_up_sbi
+	beqz tp, .Lwait_for_cpu_up_sbi
+	fence
+	tail .Lsecondary_start_common
+.Lprimary_hart:
+#endif /* !CONFIG_RISCV_BOOT_SPINWAIT */
+
 	/* Initialize page tables and relocate to virtual addresses */
 	la tp, init_task
 	la sp, init_thread_union + THREAD_SIZE

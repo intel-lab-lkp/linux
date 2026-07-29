@@ -12,6 +12,7 @@
 #include <asm/cpu_ops_sbi.h>
 #include <asm/sbi.h>
 #include <asm/smp.h>
+#include "head.h"
 
 extern char secondary_start_sbi[];
 const struct cpu_operations cpu_ops_sbi;
@@ -22,6 +23,18 @@ const struct cpu_operations cpu_ops_sbi;
  * to handle that.
  */
 static struct sbi_hart_boot_data boot_data[NR_CPUS];
+
+#ifndef CONFIG_RISCV_BOOT_SPINWAIT
+/*
+ * Secondary hart rendezvous arrays, shared with head.S.
+ * These arrays are named for historical reasons after the spinwait
+ * boot protocol, but serve a generic purpose: holding per-hart boot
+ * data until a secondary hart is ready to proceed. Defined here when
+ * CONFIG_RISCV_BOOT_SPINWAIT=n; otherwise defined in cpu_ops_spinwait.c.
+ */
+void *__cpu_spinwait_stack_pointer[NR_CPUS] __section(".data");
+void *__cpu_spinwait_task_pointer[NR_CPUS] __section(".data");
+#endif
 
 static int sbi_hsm_hart_start(unsigned long hartid, unsigned long saddr,
 			      unsigned long priv)
@@ -62,6 +75,7 @@ static int sbi_cpu_start(unsigned int cpuid, struct task_struct *tidle)
 	unsigned long boot_addr = __pa_symbol(secondary_start_sbi);
 	unsigned long hartid = cpuid_to_hartid_map(cpuid);
 	unsigned long hsm_data;
+	int ret;
 	struct sbi_hart_boot_data *bdata = &boot_data[cpuid];
 
 	/* Make sure tidle is updated */
@@ -71,7 +85,32 @@ static int sbi_cpu_start(unsigned int cpuid, struct task_struct *tidle)
 	/* Make sure boot data is updated */
 	smp_mb();
 	hsm_data = __pa(bdata);
-	return sbi_hsm_hart_start(hartid, boot_addr, hsm_data);
+
+	ret = sbi_hsm_hart_start(hartid, boot_addr, hsm_data);
+
+	/*
+	 * The firmware boot hart enters Linux directly from the bootloader
+	 * and is already in SBI_HSM_STATE_STARTED when Linux attempts to
+	 * bring it online as a secondary CPU. HART_START correctly returns
+	 * SBI_ERR_ALREADY_STARTED in this case. The hart is spinning in
+	 * .Lwait_for_cpu_up_sbi waiting for boot data - write the spinwait
+	 * rendezvous arrays to release it into secondary startup.
+	 *
+	 * Guard against invalid or out-of-range hartids, matching the
+	 * same constraint enforced in cpu_ops_spinwait.c.
+	 */
+	if (ret == -EALREADY) {
+		if (hartid != INVALID_HARTID &&
+		    hartid < (unsigned long)NR_CPUS) { /* array bound */
+			/* Ensure bdata writes visible before spinwait arrays */
+			smp_wmb();
+			WRITE_ONCE(__cpu_spinwait_stack_pointer[hartid],
+				task_pt_regs(tidle));
+			WRITE_ONCE(__cpu_spinwait_task_pointer[hartid], tidle);
+		}
+		ret = 0;
+	}
+	return ret;
 }
 
 #ifdef CONFIG_HOTPLUG_CPU

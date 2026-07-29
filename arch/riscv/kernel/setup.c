@@ -47,7 +47,14 @@
  * BSS.
  */
 atomic_t hart_lottery __section(".sdata");
-unsigned long boot_cpu_hartid;
+/*
+ * Initialize to INVALID_HARTID so that the first hart to store its
+ * hartid in head.S is unambiguously the boot CPU. Without this,
+ * boot_cpu_hartid starts as 0 (BSS), which aliases with hart 0 and
+ * causes hart 0 to always appear to win the boot CPU race regardless
+ * of which hart actually wrote first.
+ */
+unsigned long boot_cpu_hartid = INVALID_HARTID;
 EXPORT_SYMBOL_GPL(boot_cpu_hartid);
 
 /*
