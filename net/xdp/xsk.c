@@ -1446,15 +1446,15 @@ out:
 	return mask;
 }
 
-static int xsk_init_queue(u32 entries, struct xsk_queue **queue,
-			  bool umem_queue)
+static int xsk_init_queue(struct sock *sk, u32 entries,
+			  struct xsk_queue **queue, bool umem_queue)
 {
 	struct xsk_queue *q;
 
 	if (entries == 0 || *queue || !is_power_of_2(entries))
 		return -EINVAL;
 
-	q = xskq_create(entries, umem_queue);
+	q = xskq_create(sk, entries, umem_queue);
 	if (!q)
 		return -ENOMEM;
 
@@ -1496,6 +1496,18 @@ static struct xsk_map *xsk_get_map_list_entry(struct xdp_sock *xs,
 	}
 	spin_unlock_bh(&xs->map_list_lock);
 	return map;
+}
+
+static void xsk_put_pool_and_umem(struct xdp_sock *xs)
+{
+	struct xsk_buff_pool *pool = xs->pool;
+	struct xdp_umem *umem = xs->umem;
+
+	xs->pool = NULL;
+	xs->umem = NULL;
+
+	if (!xp_put_pool(pool))
+		xdp_put_umem(umem, !pool);
 }
 
 static void xsk_delete_from_maps(struct xdp_sock *xs)
@@ -1553,6 +1565,7 @@ static int xsk_release(struct socket *sock)
 	xskq_destroy(xs->tx);
 	xskq_destroy(xs->fq_tmp);
 	xskq_destroy(xs->cq_tmp);
+	xsk_put_pool_and_umem(xs);
 
 	sock_orphan(sk);
 	sock->sk = NULL;
@@ -1810,7 +1823,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 			return -EBUSY;
 		}
 		q = (optname == XDP_TX_RING) ? &xs->tx : &xs->rx;
-		err = xsk_init_queue(entries, q, false);
+		err = xsk_init_queue(sock->sk, entries, q, false);
 		if (!err && optname == XDP_TX_RING)
 			/* Tx needs to be explicitly woken up the first time */
 			xs->tx->ring->flags |= XDP_RING_NEED_WAKEUP;
@@ -1879,7 +1892,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 
 		q = (optname == XDP_UMEM_FILL_RING) ? &xs->fq_tmp :
 			&xs->cq_tmp;
-		err = xsk_init_queue(entries, q, true);
+		err = xsk_init_queue(sock->sk, entries, q, true);
 		mutex_unlock(&xs->mutex);
 		return err;
 	}
@@ -2156,8 +2169,7 @@ static void xsk_destruct(struct sock *sk)
 	if (!sock_flag(sk, SOCK_DEAD))
 		return;
 
-	if (!xp_put_pool(xs->pool))
-		xdp_put_umem(xs->umem, !xs->pool);
+	xsk_put_pool_and_umem(xs);
 }
 
 static int xsk_create(struct net *net, struct socket *sock, int protocol,

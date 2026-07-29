@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/overflow.h>
 #include <linux/vmalloc.h>
+#include <net/sock.h>
 #include <net/xdp_sock_drv.h>
 
 #include "xsk_queue.h"
@@ -21,7 +22,25 @@ static size_t xskq_get_ring_size(struct xsk_queue *q, bool umem_queue)
 	return struct_size(rxtx_ring, desc, q->nentries);
 }
 
-struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
+static bool xskq_charge(struct sock *sk, size_t size)
+{
+	int optmem_max = READ_ONCE(sock_net(sk)->core.sysctl_optmem_max);
+	int old, new;
+
+	if (optmem_max <= 0 || size > optmem_max)
+		return false;
+
+	do {
+		old = atomic_read(&sk->sk_omem_alloc);
+		if (old < 0 || old > optmem_max - (int)size)
+			return false;
+		new = old + (int)size;
+	} while (atomic_cmpxchg(&sk->sk_omem_alloc, old, new) != old);
+
+	return true;
+}
+
+struct xsk_queue *xskq_create(struct sock *sk, u32 nentries, bool umem_queue)
 {
 	struct xsk_queue *q;
 	size_t size;
@@ -45,9 +64,18 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
 	}
 
 	size = PAGE_ALIGN(size);
+	if (!xskq_charge(sk, size)) {
+		kfree(q);
+		return NULL;
+	}
+
+	sock_hold(sk);
+	q->sk = sk;
 
 	q->ring = vmalloc_user(size);
 	if (!q->ring) {
+		atomic_sub((int)size, &sk->sk_omem_alloc);
+		sock_put(sk);
 		kfree(q);
 		return NULL;
 	}
@@ -60,6 +88,11 @@ void xskq_destroy(struct xsk_queue *q)
 {
 	if (!q)
 		return;
+
+	if (q->sk) {
+		atomic_sub((int)q->ring_vmalloc_size, &q->sk->sk_omem_alloc);
+		sock_put(q->sk);
+	}
 
 	vfree(q->ring);
 	kfree(q);

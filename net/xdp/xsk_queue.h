@@ -37,6 +37,8 @@ struct xdp_umem_ring {
 	u64 desc[] ____cacheline_aligned_in_smp;
 };
 
+struct sock;
+
 struct xsk_queue {
 	u32 ring_mask;
 	u32 nentries;
@@ -46,6 +48,7 @@ struct xsk_queue {
 	u64 invalid_descs;
 	u64 queue_empty_descs;
 	size_t ring_vmalloc_size;
+	struct sock *sk;
 	/* Mutual exclusion of the completion ring in the SKB mode.
 	 * Protect: when sockets share a single cq when the same netdev
 	 * and queue id is shared.
@@ -531,7 +534,7 @@ static inline u64 xskq_nb_queue_empty_descs(struct xsk_queue *q)
 	return q ? q->queue_empty_descs : 0;
 }
 
-struct xsk_queue *xskq_create(u32 nentries, bool umem_queue);
-void xskq_destroy(struct xsk_queue *q_ops);
+struct xsk_queue *xskq_create(struct sock *sk, u32 nentries, bool umem_queue);
+void xskq_destroy(struct xsk_queue *q);
 
 #endif /* _LINUX_XSK_QUEUE_H */
