@@ -1716,6 +1716,12 @@ static void c2h_wk_callback(struct work_struct *work)
 					kfree(c2h_evt);
 					continue;
 				}
+			} else {
+				/* Give up this event; re-allocation failed. Falling
+				 * through would dereference the NULL c2h_evt in
+				 * rtw_hal_c2h_valid() below.
+				 */
+				continue;
 			}
 		}
 
