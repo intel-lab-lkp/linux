@@ -1137,10 +1137,12 @@ static bool kvm_range_is_private(struct file *file, pgoff_t index,
 {
 	struct inode *inode = file_inode(file);
 
+#ifdef CONFIG_KVM_VM_MEMORY_ATTRIBUTES
 	if (!gmem_in_place_conversion)
 		return kvm_range_has_vm_memory_attributes(kvm, gfn, gfn + nr_pages,
 							  KVM_MEMORY_ATTRIBUTE_PRIVATE,
 							  KVM_MEMORY_ATTRIBUTE_PRIVATE);
+#endif
 
 	return kvm_gmem_range_has_attributes(inode, index, nr_pages,
 					     KVM_MEMORY_ATTRIBUTE_PRIVATE);
