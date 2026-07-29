@@ -811,6 +811,32 @@ pub struct CursorMut<'a, K, V> {
 ///
 /// # Ok::<(), Error>(())
 /// ```
+///
+/// [`Cursor::peek_next`] steps past a key that matched exactly, which is how a caller
+/// reaches the first key strictly greater than the one it looked up.
+///
+/// ```
+/// use kernel::{alloc::flags, rbtree::RBTree};
+///
+/// // Create a new tree.
+/// let mut tree = RBTree::new();
+///
+/// // Insert three elements.
+/// tree.try_create_and_insert(10, 100, flags::GFP_KERNEL)?;
+/// tree.try_create_and_insert(20, 200, flags::GFP_KERNEL)?;
+/// tree.try_create_and_insert(30, 300, flags::GFP_KERNEL)?;
+///
+/// // `cursor_lower_bound` stops on the exact match, so the successor is one peek away.
+/// let cursor = tree.cursor_lower_bound(&20).unwrap();
+/// assert_eq!(cursor.current(), (&20, &200));
+/// assert_eq!(cursor.peek_next().unwrap(), (&30, &300));
+///
+/// // The largest key has no successor.
+/// let cursor = tree.cursor_lower_bound(&30).unwrap();
+/// assert!(cursor.peek_next().is_none());
+///
+/// # Ok::<(), Error>(())
+/// ```
 pub struct Cursor<'a, K, V> {
     _tree: PhantomData<&'a RBTree<K, V>>,
     current: NonNull<bindings::rb_node>,
