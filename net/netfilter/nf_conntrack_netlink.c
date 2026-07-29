@@ -3442,6 +3442,12 @@ static int ctnetlink_del_expect(struct sk_buff *skb,
 			}
 		}
 
+		if (!nf_ct_is_confirmed(exp->master)) {
+			nf_ct_expect_put(exp);
+			spin_unlock_bh(&nf_conntrack_expect_lock);
+			return -EBUSY;
+		}
+
 		/* after list removal, usage count == 1 */
 		nf_ct_unlink_expect_report(exp, NETLINK_CB(skb).portid,
 					   nlmsg_report(info->nlh));

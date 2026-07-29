@@ -620,6 +620,9 @@ void nf_ct_expect_iterate_net(struct net *net,
 			if (!net_eq(nf_ct_exp_net(exp), net))
 				continue;
 
+			if (!nf_ct_is_confirmed(exp->master))
+				continue;
+
 			if (iter(exp, data))
 				nf_ct_unlink_expect_report(exp, portid, report);
 		}
