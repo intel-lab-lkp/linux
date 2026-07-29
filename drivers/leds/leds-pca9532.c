@@ -345,9 +345,14 @@ static int pca9532_gpio_set_value(struct gpio_chip *gc, unsigned int offset,
 static int pca9532_gpio_get_value(struct gpio_chip *gc, unsigned offset)
 {
 	struct pca9532_data *data = gpiochip_get_data(gc);
-	unsigned char reg;
+	int reg;
 
 	reg = i2c_smbus_read_byte_data(data->client, PCA9532_REG_INPUT(offset));
+	if (reg < 0) {
+		dev_warn(&data->client->dev,
+			 "failed to read input register: %d\n", reg);
+		return reg;
+	}
 
 	return !!(reg & (1 << (offset % 8)));
 }
