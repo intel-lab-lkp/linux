@@ -126,7 +126,7 @@ static const struct timing_data td[] = {
 				   NULL,
 				   MMC_CAP_UHS_SDR104},
 	[MMC_TIMING_UHS_DDR50]	= {"ti,otap-del-sel-ddr50",
-				   NULL,
+				   "ti,itap-del-sel-ddr50",
 				   MMC_CAP_UHS_DDR50},
 	[MMC_TIMING_MMC_DDR52]	= {"ti,otap-del-sel-ddr52",
 				   "ti,itap-del-sel-ddr52",
@@ -580,9 +580,15 @@ static int sdhci_am654_platform_execute_tuning(struct sdhci_host *host,
 	} while (++sdhci_am654->tuning_loop < RETRY_TUNING_MAX);
 
 	if (itapdly < 0) {
-		dev_err(dev, "Failed to find itapdly, fail tuning\n");
-		/* Explicitly clear ITAPDLY */
-		sdhci_am654_write_itapdly(sdhci_am654, 0, 0);
+		if (timing == MMC_TIMING_UHS_DDR50) {
+			sdhci_am654_write_itapdly(sdhci_am654,
+						  sdhci_am654->itap_del_sel[timing],
+						  sdhci_am654->itap_del_ena[timing]);
+		} else {
+			dev_err(dev, "Failed to find itapdly, fail tuning\n");
+			/* Explicitly clear ITAPDLY */
+			sdhci_am654_write_itapdly(sdhci_am654, 0, 0);
+		}
 		return -1;
 	}
 
