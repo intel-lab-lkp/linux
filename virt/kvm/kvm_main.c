@@ -2941,6 +2941,7 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 {
 	struct follow_pfnmap_args args = { .vma = vma, .address = kfp->hva };
 	bool write_fault = kfp->flags & FOLL_WRITE;
+	bool unlocked = false;
 	int r;
 
 	/*
@@ -2957,7 +2958,6 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 		 * get_user_pages fails for VM_IO and VM_PFNMAP vmas and does
 		 * not call the fault handler, so do it here.
 		 */
-		bool unlocked = false;
 		r = fixup_user_fault(current->mm, kfp->hva,
 				     (write_fault ? FAULT_FLAG_WRITE : 0),
 				     &unlocked);
@@ -2972,8 +2972,27 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 	}
 
 	if (write_fault && !args.writable) {
-		*p_pfn = KVM_PFN_ERR_RO_FAULT;
-		goto out;
+		/*
+		 * VM_PFNMAP fault handlers may install read-only PTEs via
+		 * vmf_insert_pfn(), deferring the write upgrade to a second
+		 * fault. Trigger that upgrade now.
+		 */
+		follow_pfnmap_end(&args);
+		r = fixup_user_fault(current->mm, kfp->hva, FAULT_FLAG_WRITE,
+				     &unlocked);
+		if (unlocked)
+			return -EAGAIN;
+		if (r)
+			return r;
+
+		r = follow_pfnmap_start(&args);
+		if (r)
+			return r;
+
+		if (!args.writable) {
+			*p_pfn = KVM_PFN_ERR_RO_FAULT;
+			goto out;
+		}
 	}
 
 	*p_pfn = kvm_resolve_pfn(kfp, NULL, &args, args.writable);
