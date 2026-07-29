@@ -121,30 +121,14 @@ static void dpaa2_io_dim_work(struct work_struct *w)
 	dim->state = DIM_START_MEASURE;
 }
 
-/**
- * dpaa2_io_create() - create a dpaa2_io object.
- * @desc: the dpaa2_io descriptor
- * @dev: the actual DPIO device
- *
- * Activates a "struct dpaa2_io" corresponding to the given config of an actual
- * DPIO object.
- *
- * Return a valid dpaa2_io object for success, or NULL for failure.
- */
-struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
-				 struct device *dev)
+static inline
+struct dpaa2_io *dpaa2_io_create_impl(const struct dpaa2_io_desc *desc, struct device *dev)
 {
-	struct dpaa2_io *obj = kmalloc_obj(*obj);
 	u32 qman_256_cycles_per_ns;
+	struct dpaa2_io *obj __free(kfree) = kmalloc_obj(*obj);
 
 	if (!obj)
 		return NULL;
-
-	/* check if CPU is out of range (-1 means any cpu) */
-	if (desc->cpu != DPAA2_IO_ANY_CPU && desc->cpu >= num_possible_cpus()) {
-		kfree(obj);
-		return NULL;
-	}
 
 	obj->dpio_desc = *desc;
 	obj->swp_desc.cena_bar = obj->dpio_desc.regs_cena;
@@ -160,10 +144,8 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 	obj->swp_desc.qman_256_cycles_per_ns = qman_256_cycles_per_ns;
 	obj->swp = qbman_swp_init(&obj->swp_desc);
 
-	if (!obj->swp) {
-		kfree(obj);
+	if (!obj->swp)
 		return NULL;
-	}
 
 	INIT_LIST_HEAD(&obj->node);
 	spin_lock_init(&obj->lock_mgmt_cmd);
@@ -193,6 +175,26 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 	obj->frames = 0;
 
 	return obj;
+}
+
+/**
+ * dpaa2_io_create() - create a dpaa2_io object.
+ * @desc: the dpaa2_io descriptor
+ * @dev: the actual DPIO device
+ *
+ * Activates a "struct dpaa2_io" corresponding to the given config of an actual
+ * DPIO object.
+ *
+ * Return a valid dpaa2_io object for success, or NULL for failure.
+ */
+struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
+				 struct device *dev)
+{
+	/* check if CPU is out of range (-1 means any cpu) */
+	if (desc->cpu != DPAA2_IO_ANY_CPU && desc->cpu >= num_possible_cpus())
+		return NULL;
+
+	return dpaa2_io_create_impl(desc, dev);
 }
 
 /**
