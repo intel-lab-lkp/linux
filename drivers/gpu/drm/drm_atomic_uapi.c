@@ -1464,11 +1464,15 @@ static int prepare_signaling(struct drm_device *dev,
 		if (fence_ptr) {
 			struct dma_fence *fence;
 			struct drm_out_fence_state *f;
+			struct drm_pending_vblank_event *e = crtc_state->event;
 
 			f = krealloc(*fence_state, sizeof(**fence_state) *
 				     (*num_fences + 1), GFP_KERNEL);
-			if (!f)
+			if (!f) {
+				drm_event_cancel_free(dev, &e->base);
+				crtc_state->event = NULL;
 				return -ENOMEM;
+			}
 
 			memset(&f[*num_fences], 0, sizeof(*f));
 
@@ -1476,12 +1480,17 @@ static int prepare_signaling(struct drm_device *dev,
 			*fence_state = f;
 
 			fence = drm_crtc_create_fence(crtc);
-			if (!fence)
+			if (!fence) {
+				drm_event_cancel_free(dev, &e->base);
+				crtc_state->event = NULL;
 				return -ENOMEM;
+			}
 
 			ret = setup_out_fence(&f[(*num_fences)++], fence);
 			if (ret) {
 				dma_fence_put(fence);
+				drm_event_cancel_free(dev, &e->base);
+				crtc_state->event = NULL;
 				return ret;
 			}
 
