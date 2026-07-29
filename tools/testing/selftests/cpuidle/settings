@@ -1,2 +1,2 @@
-# QoS ceilings x paths, plus no-QoS baselines.
+# QoS ceilings x paths, no-QoS baselines, plus disable-state windows.
 timeout=180
