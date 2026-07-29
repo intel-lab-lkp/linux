@@ -366,10 +366,42 @@ pmt_telem_find_and_register_endpoint(struct device *dev, u32 guid, u16 pos)
 }
 EXPORT_SYMBOL_NS_GPL(pmt_telem_find_and_register_endpoint, "INTEL_PMT_TELEMETRY");
 
+static u64 pmt_telem_pkg_mask(struct pmt_telem_priv *priv)
+{
+	u64 mask = 0;
+	int i;
+
+	mutex_lock(&ep_lock);
+	for (i = 0; i < priv->num_entries; i++) {
+		struct intel_pmt_entry *entry = &priv->entry[i];
+		struct pci_dev *pdev = to_pci_dev(entry->ep->dev);
+		struct oobmsm_plat_info *plat_info;
+
+		plat_info = intel_vsec_get_mapping(pdev);
+		if (IS_ERR(plat_info)) {
+			mask = ~0ULL;
+			break;
+		}
+		if (plat_info->package_id < BITS_PER_LONG_LONG)
+			mask |= BIT_ULL(plat_info->package_id);
+		else
+			mask = ~0ULL;
+	}
+	mutex_unlock(&ep_lock);
+
+	return mask;
+}
+
 static void pmt_telem_remove(struct auxiliary_device *auxdev)
 {
 	struct pmt_telem_priv *priv = auxiliary_get_drvdata(auxdev);
 	int i;
+
+	/*
+	 * Tell resctrl/AET that virtual mappings for MMIO space in
+	 * one or more CPU packages are about to be torn down.
+	 */
+	intel_aet_invalidate(pmt_telem_pkg_mask(priv));
 
 	mutex_lock(&ep_lock);
 	for (i = 0; i < priv->num_entries; i++) {
