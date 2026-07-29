@@ -56,6 +56,8 @@ const struct ecc_curve *ecc_get_curve(unsigned int curve_id)
 	/* In FIPS mode only allow P256 and higher */
 	case ECC_CURVE_NIST_P192:
 		return fips_enabled ? NULL : &nist_p192;
+	case ECC_CURVE_NIST_P224:
+		return &nist_p224;
 	case ECC_CURVE_NIST_P256:
 		return &nist_p256;
 	case ECC_CURVE_NIST_P384:

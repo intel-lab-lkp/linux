@@ -29,6 +29,33 @@ static struct ecc_curve nist_p192 = {
 	.b = nist_p192_b
 };
 
+/* NIST P-224: a = p - 3 */
+static u64 nist_p224_g_x[] = { 0x115c1d21ull, 0x56c21122343280d6ull,
+			       0x321390b94a03c1d3ull, 0xb70e0cbd6bb4bf7full };
+static u64 nist_p224_g_y[] = { 0x85007e34ull, 0x5a07476444d58199ull,
+			       0x4c22dfe6cd4375a0ull, 0xbd376388b5f723fbull };
+static u64 nist_p224_p[] = { 0x00000001ull, 0x0000000000000000ull,
+			     0xffffffffffffffffull, 0xffffffffffffffffull };
+static u64 nist_p224_n[] = { 0x5c5c2a3dull, 0xe0b8f03e13dd2945ull,
+			     0xffffffffffff16a2ull, 0xffffffffffffffffull };
+static u64 nist_p224_a[] = { 0xfffffffeull, 0xffffffffffffffffull,
+			     0xfffffffffffffffeull, 0xffffffffffffffffull };
+static u64 nist_p224_b[] = { 0x2355ffb4ull, 0xd7bfd8ba270b3943ull,
+			     0xf54132565044b0b7ull, 0xb4050a850c04b3abull };
+static struct ecc_curve nist_p224 = {
+	.name = "nist_224",
+	.nbits = 224,
+	.g = {
+		.x = nist_p224_g_x,
+		.y = nist_p224_g_y,
+		.ndigits = 4,
+	},
+	.p = nist_p224_p,
+	.n = nist_p224_n,
+	.a = nist_p224_a,
+	.b = nist_p224_b
+};
+
 /* NIST P-256: a = p - 3 */
 static u64 nist_p256_g_x[] = { 0xF4A13945D898C296ull, 0x77037D812DEB33A0ull,
 				0xF8BCE6E563A440F2ull, 0x6B17D1F2E12C4247ull };
