@@ -665,7 +665,8 @@ int main(int argc, char **argv)
 	FILE *fin, *fout;
 	char *buf, *ext_buf;
 	int i, count, compare_flag;
-	struct stat st;
+	int fout_fd;
+	struct stat st, output_st;
 	int opt;
 	struct option longopts[] = {
 		{ "pid", required_argument, NULL, 1 },
@@ -788,10 +789,43 @@ int main(int argc, char **argv)
 	}
 
 	fin = fopen(argv[optind], "r");
-	fout = fopen(argv[optind + 1], "w");
-	if (!fin || !fout) {
+	if (!fin) {
 		usage();
 		perror("open: ");
+		exit(1);
+	}
+
+	if (fstat(fileno(fin), &st)) {
+		perror("fstat input");
+		exit(1);
+	}
+
+	/*
+	 * Do not truncate the output until after checking whether it refers
+	 * to the input file.  Comparing the opened files also catches aliases
+	 * created with hard links or symbolic links.
+	 */
+	fout_fd = open(argv[optind + 1], O_WRONLY | O_CREAT, 0666);
+	if (fout_fd < 0) {
+		perror("open output");
+		exit(1);
+	}
+	if (fstat(fout_fd, &output_st)) {
+		perror("fstat output");
+		exit(1);
+	}
+	if (S_ISREG(st.st_mode) && S_ISREG(output_st.st_mode) &&
+	    st.st_dev == output_st.st_dev && st.st_ino == output_st.st_ino) {
+		fprintf(stderr, "Input and output files must be different\n");
+		exit(1);
+	}
+	if (S_ISREG(output_st.st_mode) && ftruncate(fout_fd, 0)) {
+		perror("truncate output");
+		exit(1);
+	}
+	fout = fdopen(fout_fd, "w");
+	if (!fout) {
+		perror("fdopen output");
 		exit(1);
 	}
 
@@ -806,7 +840,6 @@ int main(int argc, char **argv)
 	if (!check_regcomp(&ts_nsec_pattern, "ts\\s*([0-9]*)\\s*ns"))
 		goto out_ts;
 
-	fstat(fileno(fin), &st);
 	max_size = st.st_size / 100; /* hack ... */
 
 	list = malloc(max_size * sizeof(*list));
