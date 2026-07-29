@@ -237,12 +237,13 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 		return -EINVAL;
 
 	/* RFC 8017 sec 8.2.2 step 2 - RSA verification */
-	child_req = kmalloc(sizeof(*child_req) + child_reqsize + ctx->key_size,
-			    GFP_KERNEL);
+	child_req = kmalloc(sizeof(*child_req) + child_reqsize +
+			    ctx->key_size + CRYPTO_DMA_ALIGN - 1, GFP_KERNEL);
 	if (!child_req)
 		return -ENOMEM;
 
-	out_buf = (u8 *)(child_req + 1) + child_reqsize;
+	out_buf = PTR_ALIGN((u8 *)(child_req + 1) + child_reqsize,
+			    CRYPTO_DMA_ALIGN);
 	memcpy(out_buf, src, slen);
 
 	crypto_init_wait(&cwait);
