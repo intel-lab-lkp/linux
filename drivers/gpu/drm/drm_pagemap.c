@@ -744,12 +744,6 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 			struct drm_pagemap_zdd *src_zdd =
 				drm_pagemap_page_zone_device_data(src_page);
 
-			if (page_pgmap(src_page) == pagemap &&
-			    !mdetails->can_migrate_same_pagemap) {
-				migrate.dst[i] = 0;
-				own_pages++;
-				goto next;
-			}
 			cur.dpagemap = src_zdd->dpagemap;
 			cur.ops = src_zdd->devmem_allocation->ops;
 			cur.device = cur.dpagemap->drm->dev;
@@ -786,7 +780,6 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 			goto err_finalize;
 		}
 
-next:
 		i += NR_PAGES(order);
 	}
 
@@ -796,8 +789,6 @@ next:
 					pages, pagemap_addr, &last, &cur, mdetails);
 	if (err)
 		goto err_finalize;
-
-	drm_WARN_ON(dpagemap->drm, !!own_pages);
 
 	dma_fence_put(devmem_allocation->pre_migrate_fence);
 	devmem_allocation->pre_migrate_fence = NULL;
