@@ -560,6 +560,7 @@ bool load_vmcs(struct vmx_pages *vmx);
 bool ept_1g_pages_supported(void);
 
 bool kvm_cpu_has_ept(void);
+bool kvm_cpu_has_vmx_apic_access_virt(void);
 void vm_enable_ept(struct kvm_vm *vm);
 void prepare_virtualize_apic_accesses(struct vmx_pages *vmx, struct kvm_vm *vm);
 

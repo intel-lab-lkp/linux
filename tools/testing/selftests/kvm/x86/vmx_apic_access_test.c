@@ -78,6 +78,7 @@ int main(int argc, char *argv[])
 	struct kvm_vm *vm;
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_VMX));
+	TEST_REQUIRE(kvm_cpu_has_vmx_apic_access_virt());
 
 	vm = vm_create_with_one_vcpu(&vcpu, l1_guest_code);
 
