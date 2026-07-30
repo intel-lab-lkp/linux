@@ -727,7 +727,7 @@ nouveau_drm_device_del(struct nouveau_drm *drm)
 }
 
 static struct nouveau_drm *
-nouveau_drm_device_new(const struct drm_driver *drm_driver, struct device *parent,
+nouveau_drm_device_new(struct drm_driver *drm_driver, struct device *parent,
 		       struct nvkm_device *device)
 {
 	static const struct nvif_mclass
@@ -769,6 +769,9 @@ nouveau_drm_device_new(const struct drm_driver *drm_driver, struct device *paren
 		NV_ERROR(drm, "Device allocation failed: %d\n", ret);
 		goto done;
 	}
+
+	if (nouveau_atomic)
+		driver_pci.driver_features |= DRIVER_ATOMIC;
 
 	ret = nvif_device_map(&drm->device);
 	if (ret) {
@@ -878,9 +881,6 @@ static int nouveau_drm_probe(struct pci_dev *pdev,
 		goto fail_nvkm;
 
 	pci_set_master(pdev);
-
-	if (nouveau_atomic)
-		driver_pci.driver_features |= DRIVER_ATOMIC;
 
 	drm = nouveau_drm_device_new(&driver_pci, &pdev->dev, device);
 	if (IS_ERR(drm)) {
