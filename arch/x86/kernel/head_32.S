@@ -96,10 +96,10 @@ SYM_CODE_START(startup_32)
  * page tables.
  */
 	movl $pa(boot_params),%edi
-	movl $(PARAM_SIZE/4),%ecx
+	movl $(SIZEOF_boot_params/4),%ecx
 	cld
 	rep movsl
-	movl pa(boot_params) + NEW_CL_POINTER,%esi
+	movl pa(boot_params) + BP_cmd_line_ptr,%esi
 	andl %esi,%esi
 	jz 1f			# No command line
 	movl $pa(boot_command_line),%edi

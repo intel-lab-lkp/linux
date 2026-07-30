@@ -105,6 +105,8 @@ static void __used common(void)
 	OFFSET(BP_kernel_alignment, boot_params, hdr.kernel_alignment);
 	OFFSET(BP_init_size, boot_params, hdr.init_size);
 	OFFSET(BP_pref_address, boot_params, hdr.pref_address);
+	OFFSET(BP_cmd_line_ptr, boot_params, hdr.cmd_line_ptr);
+	DEFINE(SIZEOF_boot_params, sizeof(struct boot_params));
 
 	BLANK();
 	DEFINE(PTREGS_SIZE, sizeof(struct pt_regs));

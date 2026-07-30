@@ -520,11 +520,11 @@ static efi_status_t efi_allocate_bootparams(efi_handle_t handle,
 		return status;
 	}
 
-	status = efi_allocate_pages(PARAM_SIZE, &alloc, ULONG_MAX);
+	status = efi_allocate_pages(sizeof(*boot_params), &alloc, ULONG_MAX);
 	if (status != EFI_SUCCESS)
 		return status;
 
-	boot_params = memset((void *)alloc, 0x0, PARAM_SIZE);
+	boot_params = memset((void *)alloc, 0x0, sizeof(*boot_params));
 	hdr	    = &boot_params->hdr;
 
 	/* Assign the setup_header fields that the kernel actually cares about */
@@ -537,7 +537,7 @@ static efi_status_t efi_allocate_bootparams(efi_handle_t handle,
 	/* Convert unicode cmdline to ascii */
 	cmdline_ptr = efi_convert_cmdline(image);
 	if (!cmdline_ptr) {
-		efi_free(PARAM_SIZE, alloc);
+		efi_free(sizeof(*boot_params), alloc);
 		return EFI_OUT_OF_RESOURCES;
 	}
 
