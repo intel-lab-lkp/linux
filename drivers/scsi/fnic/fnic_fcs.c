@@ -944,6 +944,7 @@ void fnic_free_wq_buf(struct vnic_wq *wq, struct vnic_wq_buf *buf)
 void
 fnic_fdls_add_tport(struct fnic_iport_s *iport, struct fnic_tport_s *tport,
 					unsigned long flags)
+	__must_hold(&iport->fnic->fnic_lock)
 {
 	struct fnic *fnic = iport->fnic;
 	struct fc_rport *rport;
@@ -983,6 +984,7 @@ fnic_fdls_add_tport(struct fnic_iport_s *iport, struct fnic_tport_s *tport,
 void
 fnic_fdls_remove_tport(struct fnic_iport_s *iport,
 					   struct fnic_tport_s *tport, unsigned long flags)
+	__must_hold(&iport->fnic->fnic_lock)
 {
 	struct fnic *fnic = iport->fnic;
 	struct rport_dd_data_s *rdd_data;
@@ -1032,6 +1034,8 @@ void fnic_delete_fcp_tports(struct fnic *fnic)
 	unsigned long flags;
 
 	spin_lock_irqsave(&fnic->fnic_lock, flags);
+	/* Tell the compiler that fnic->iport.fnic == fnic. */
+	__assume_ctx_lock(&fnic->iport.fnic->fnic_lock);
 	list_for_each_entry_safe(tport, next, &fnic->iport.tport_list, links) {
 		FNIC_FCS_DBG(KERN_INFO, fnic,
 					 "removing fcp rport fcid: 0x%x", tport->fcid);
@@ -1059,6 +1063,8 @@ void fnic_tport_event_handler(struct work_struct *work)
 	struct fnic_tport_s *tport;
 
 	spin_lock_irqsave(&fnic->fnic_lock, flags);
+	/* Tell the compiler that fnic->iport.fnic == fnic. */
+	__assume_ctx_lock(&fnic->iport.fnic->fnic_lock);
 	list_for_each_entry_safe(cur_evt, next, &fnic->tport_event_list, links) {
 		tport = cur_evt->arg1;
 		switch (cur_evt->event) {
