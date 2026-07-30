@@ -2563,7 +2563,7 @@ static int insert_pages(struct vm_area_struct *vma, unsigned long addr,
 	unsigned long pages_to_write_in_pmd;
 	int ret;
 more:
-	ret = -EFAULT;
+	ret = -ENOMEM;
 	pmd = walk_to_pmd(mm, addr);
 	if (!pmd)
 		goto out;
