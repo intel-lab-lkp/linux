@@ -1817,6 +1817,14 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 
 	i2c_acpi_remove_space_handler(adap);
 
+	/*
+	 * Remove new_device/delete_device sysfs attrs early to prevent
+	 * new client registrations via userspace while we're tearing down.
+	 * kernfs will wait for any in-flight writes to complete.
+	 */
+	device_remove_file(&adap->dev, &dev_attr_new_device);
+	device_remove_file(&adap->dev, &dev_attr_delete_device);
+
 	i2c_deregister_clients(adap);
 
 	/* device name is gone after device_unregister */
