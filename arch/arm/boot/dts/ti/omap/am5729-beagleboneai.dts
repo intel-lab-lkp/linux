@@ -152,7 +152,7 @@
 		};
 	};
 
-	hdmi_enc: encoder@0 {
+	hdmi_enc: encoder {
 		/* "ti,tpd12s016" software compatible with "ti,tpd12s015"
 		 *  no need for individual driver
 		 */
@@ -168,7 +168,7 @@
 			port@0 {
 				reg = <0x0>;
 
-				hdmi_encoder_in: endpoint@0 {
+				hdmi_encoder_in: endpoint {
 					remote-endpoint = <&hdmi_out>;
 				};
 			};
@@ -176,7 +176,7 @@
 			port@1 {
 				reg = <0x1>;
 
-				hdmi_encoder_out: endpoint@0 {
+				hdmi_encoder_out: endpoint {
 					remote-endpoint = <&hdmi_connector_in>;
 				};
 			};
