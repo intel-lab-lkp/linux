@@ -62,6 +62,13 @@ bool sanity_check_extent_cache(struct inode *inode, struct folio *ifolio)
 			    __func__, inode->i_ino, ei.blk, ei.fofs, ei.len);
 			return false;
 		}
+
+		if ((ei.blk % BLKS_PER_SEC(sbi)) || (ei.len % BLKS_PER_SEC(sbi))) {
+			f2fs_warn(sbi, "%s: device alias inode (ino=%llx)'s extent info [%u, %u, %u] is not aligned to section size %u",
+				  __func__, inode->i_ino, ei.blk, ei.fofs, ei.len,
+				  BLKS_PER_SEC(sbi));
+			return false;
+		}
 		return true;
 	}
 
