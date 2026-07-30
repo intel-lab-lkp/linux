@@ -2111,11 +2111,15 @@ static ssize_t on_panic_store(struct kobject *kobj,
 			      struct kobj_attribute *attr,
 			      const char *buf, size_t len)
 {
+	if (panic_timeout) {
+		pr_warn("on_panic action will be ignored in favor of panic timeout (panic=%d)",
+			panic_timeout);
+	}
 	return set_trigger(buf, &on_panic_trigger, len);
 }
 static struct kobj_attribute on_panic_attr = __ATTR_RW(on_panic);
 
-static void do_panic(void)
+void arch_do_panic(void)
 {
 	lgr_info_log();
 	on_panic_trigger.action->fn(&on_panic_trigger);
@@ -2331,18 +2335,6 @@ static int __init vmcmd_on_poff_setup(char *str)
 }
 __setup("vmpoff=", vmcmd_on_poff_setup);
 
-static int on_panic_notify(struct notifier_block *self,
-			   unsigned long event, void *data)
-{
-	do_panic();
-	return NOTIFY_OK;
-}
-
-static struct notifier_block on_panic_nb = {
-	.notifier_call = on_panic_notify,
-	.priority = INT_MIN,
-};
-
 void __init setup_ipl(void)
 {
 	BUILD_BUG_ON(sizeof(struct ipl_parameter_block) != PAGE_SIZE);
@@ -2375,7 +2367,6 @@ void __init setup_ipl(void)
 		/* We have no info to copy */
 		break;
 	}
-	atomic_notifier_chain_register(&panic_notifier_list, &on_panic_nb);
 }
 
 void __no_stack_protector s390_reset_system(void)
