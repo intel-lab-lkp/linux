@@ -377,11 +377,13 @@ static inline bool ublk_support_batch_io(const struct ublk_queue *ubq)
 }
 
 static inline void ublk_io_lock(struct ublk_io *io)
+	__acquires(&io->lock)
 {
 	spin_lock(&io->lock);
 }
 
 static inline void ublk_io_unlock(struct ublk_io *io)
+	__releases(&io->lock)
 {
 	spin_unlock(&io->lock);
 }
@@ -3261,6 +3263,7 @@ static int ublk_check_fetch_buf(const struct ublk_device *ub, __u64 buf_addr)
 
 static int __ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 			struct ublk_io *io, u16 q_id)
+	__must_hold(&ub->mutex)
 {
 	/* UBLK_IO_FETCH_REQ is only allowed before dev is setup */
 	if (ublk_dev_ready(ub))
@@ -3693,6 +3696,7 @@ static void ublk_batch_revert_prep_cmd(struct ublk_batch_io_iter *iter,
 static int ublk_batch_prep_io(struct ublk_queue *ubq,
 			      const struct ublk_batch_io_data *data,
 			      const struct ublk_elem_header *elem)
+	__must_hold(&data->ub->mutex)
 {
 	struct ublk_io *io = &ubq->ios[elem->tag];
 	const struct ublk_batch_io *uc = &data->header;
@@ -4431,6 +4435,7 @@ static bool ublk_validate_user_pid(struct ublk_device *ub, pid_t ublksrv_pid)
  * UNPREP, daemon death), so re-check it under the mutex and wait again.
  */
 static int ublk_wait_dev_ready_and_lock(struct ublk_device *ub)
+	__cond_acquires(0, &ub->mutex)
 {
 	while (true) {
 		if (wait_var_event_interruptible(&ub->nr_queue_ready,
@@ -5340,6 +5345,7 @@ exit:
  * already holds ub->mutex when calling del_gendisk() which freezes the queue.
 */
 static unsigned int ublk_lock_buf_tree(struct ublk_device *ub)
+	__acquires(&ub->mutex)
 {
 	unsigned int memflags = 0;
 
@@ -5351,6 +5357,7 @@ static unsigned int ublk_lock_buf_tree(struct ublk_device *ub)
 }
 
 static void ublk_unlock_buf_tree(struct ublk_device *ub, unsigned int memflags)
+	__releases(&ub->mutex)
 {
 	if (ub->ub_disk)
 		blk_mq_unfreeze_queue(ub->ub_disk->queue, memflags);
