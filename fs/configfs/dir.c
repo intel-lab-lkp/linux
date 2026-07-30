@@ -1552,12 +1552,14 @@ static int configfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	if (sd->s_type & CONFIGFS_USET_DIR) {
 		configfs_detach_group(dentry);
+		d_drop(dentry);
 
 		mutex_lock(&subsys->su_mutex);
 		client_disconnect_notify(parent_item, item);
 		unlink_group(to_config_group(item));
 	} else {
 		configfs_detach_item(dentry);
+		d_drop(dentry);
 
 		mutex_lock(&subsys->su_mutex);
 		client_disconnect_notify(parent_item, item);
