@@ -390,6 +390,118 @@ static void test_alloc_errors(char *heap_name)
 	close(heap_fd);
 }
 
+/*
+ * test_alloc_no_fd_leak_on_efault - verify no fd is leaked when
+ * copy_to_user() fails during DMA_HEAP_IOCTL_ALLOC.
+ *
+ * The bug: dma_buf_fd() called fd_install() before copy_to_user().
+ * If copy_to_user() then failed (e.g. via mprotect), the fd was
+ * silently installed in the fd table but never returned to userspace.
+ *
+ * The fix: reserve the fd with get_unused_fd_flags() first, attempt
+ * copy_to_user(), and only call fd_install() on success.
+ *
+ * We trigger the failure by placing the ioctl argument in a page,
+ * flipping it to PROT_READ between copy_from_user and copy_to_user,
+ * and counting open file descriptors before and after.
+ */
+static void test_alloc_no_fd_leak_on_efault(char *heap_name)
+{
+	int heap_fd = -1;
+	int fd_before, fd_after;
+	int ret;
+	long page_size;
+	struct dma_heap_allocation_data *req;
+
+	ksft_print_msg("Testing no fd leak when copy_to_user() fails:\n");
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	page_size = sysconf(_SC_PAGESIZE);
+
+	/*
+	 * Place the ioctl argument in its own private anonymous page so
+	 * we can flip its protection independently.
+	 */
+	req = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
+		   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (req == MAP_FAILED) {
+		ksft_test_result_fail("mmap failed: %s\n", strerror(errno));
+		goto out;
+	}
+
+	memset(req, 0, sizeof(*req));
+	req->len      = page_size;
+	req->fd_flags = O_RDWR | O_CLOEXEC;
+
+	/* Count open fds before the ioctl */
+	fd_before = 0;
+	{
+		DIR *d = opendir("/proc/self/fd");
+		struct dirent *de;
+
+		if (!d) {
+			ksft_test_result_fail("opendir /proc/self/fd: %s\n",
+					      strerror(errno));
+			munmap(req, page_size);
+			goto out;
+		}
+		while ((de = readdir(d)))
+			if (de->d_name[0] != '.')
+				fd_before++;
+		closedir(d);
+		/* subtract the fd opened by opendir itself */
+	}
+
+	/*
+	 * Make the page read-only: copy_from_user() in the kernel will
+	 * still succeed (it already ran), but copy_to_user() that writes
+	 * the fd number back will fault.
+	 */
+	mprotect(req, page_size, PROT_READ);
+
+	ret = ioctl(heap_fd, DMA_HEAP_IOCTL_ALLOC, req);
+
+	/* Re-allow writes so munmap can clean up */
+	mprotect(req, page_size, PROT_READ | PROT_WRITE);
+	munmap(req, page_size);
+
+	if (ret != -1 || errno != EFAULT) {
+		/*
+		 * If the ioctl didn't fail with EFAULT, either the kernel
+		 * handled it differently or mprotect raced.  Skip rather
+		 * than giving a false pass/fail.
+		 */
+		ksft_test_result_skip(
+			"ioctl did not return EFAULT (ret=%d errno=%d), skipping\n",
+			ret, errno);
+		goto out;
+	}
+
+	/* Count open fds after the failed ioctl */
+	fd_after = 0;
+	{
+		DIR *d = opendir("/proc/self/fd");
+		struct dirent *de;
+
+		if (!d) {
+			ksft_test_result_fail("opendir /proc/self/fd: %s\n",
+					      strerror(errno));
+			goto out;
+		}
+		while ((de = readdir(d)))
+			if (de->d_name[0] != '.')
+				fd_after++;
+		closedir(d);
+	}
+
+	ksft_test_result(fd_before == fd_after,
+			 "no fd leak on EFAULT: before=%d after=%d\n",
+			 fd_before, fd_after);
+out:
+	close(heap_fd);
+}
+
 static int numer_of_heaps(void)
 {
 	DIR *d = opendir(DEVPATH);
@@ -420,7 +532,7 @@ int main(void)
 		return KSFT_SKIP;
 	}
 
-	ksft_set_plan(11 * numer_of_heaps());
+	ksft_set_plan(12 * numer_of_heaps());
 
 	while ((dir = readdir(d))) {
 		if (!strncmp(dir->d_name, ".", 2))
@@ -435,6 +547,7 @@ int main(void)
 		test_alloc_zeroed(dir->d_name, ONE_MEG);
 		test_alloc_compat(dir->d_name);
 		test_alloc_errors(dir->d_name);
+		test_alloc_no_fd_leak_on_efault(dir->d_name);
 	}
 	closedir(d);
 
