@@ -1896,7 +1896,7 @@ static void rproc_crash_handler_work(struct work_struct *work)
 	if (rproc->state == RPROC_CRASHED) {
 		/* handle only the first crash detected */
 		mutex_unlock(&rproc->lock);
-		return;
+		goto out;
 	}
 
 	if (rproc->state == RPROC_OFFLINE) {
