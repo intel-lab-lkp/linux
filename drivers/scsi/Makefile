@@ -14,6 +14,7 @@
 # satisfy certain initialization assumptions in the SCSI layer.
 # *!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!*!
 
+CONTEXT_ANALYSIS := y
 
 CFLAGS_aha152x.o =   -DAHA152X_STAT -DAUTOCONF
 
