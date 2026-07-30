@@ -666,7 +666,14 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct wireless_dev *wdev,
 		key->conf.flags |= IEEE80211_KEY_FLAG_NO_AUTO_TX;
 
 	if (mac_addr) {
+		bool defer_hw_upload;
+
 		sta = sta_info_get_bss(sdata, mac_addr);
+		defer_hw_upload =
+			sta && pairwise && !sta->sta.epp_peer &&
+			!test_sta_flag(sta, WLAN_STA_ASSOC) &&
+			(sdata->vif.type == NL80211_IFTYPE_AP ||
+			 sdata->vif.type == NL80211_IFTYPE_AP_VLAN);
 		/*
 		 * The ASSOC test makes sure the driver is ready to
 		 * receive the key. When wpa_supplicant has roamed
@@ -681,14 +688,19 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct wireless_dev *wdev,
 		 * If (re)association frame encryption support is not present,
 		 * cfg80211 will not allow key installation in non‑AP STA mode.
 		 *
-		 * TODO: accept the key if we have a station entry and
-		 *	 add it to the device after the station associates.
+		 * AP-side FT may also install a pairwise key before the
+		 * station is associated. Keep it in mac80211 and upload it
+		 * to the driver after the station reaches ASSOC.
 		 */
 		if (!sta || (!sta->sta.epp_peer &&
-			     !test_sta_flag(sta, WLAN_STA_ASSOC))) {
+			     !test_sta_flag(sta, WLAN_STA_ASSOC) &&
+			     !defer_hw_upload)) {
 			ieee80211_key_free_unused(key);
 			return -ENOENT;
 		}
+
+		if (defer_hw_upload)
+			key->flags |= KEY_FLAG_DEFERRED_HW_UPLOAD;
 	}
 
 	switch (sdata->vif.type) {

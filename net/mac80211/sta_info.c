@@ -1468,6 +1468,7 @@ static int _sta_info_move_state(struct sta_info *sta,
 	case IEEE80211_STA_ASSOC:
 		if (sta->sta_state == IEEE80211_STA_AUTH) {
 			set_bit(WLAN_STA_ASSOC, &sta->_flags);
+			ieee80211_upload_deferred_sta_keys(sta);
 			sta->assoc_at = ktime_get_boottime_ns();
 			if (recalc) {
 				ieee80211_recalc_min_chandef(sta->sdata, -1);
