@@ -2859,17 +2859,16 @@ static int blogic_hostreset(struct scsi_cmnd *SCpnt)
 {
 	struct blogic_adapter *adapter =
 		(struct blogic_adapter *) SCpnt->device->host->hostdata;
-
+	struct Scsi_Host *shost = adapter->scsi_host;
 	unsigned int id = SCpnt->device->id;
 	struct blogic_tgt_stats *stats = &adapter->tgt_stats[id];
 	int rc;
 
-	spin_lock_irq(SCpnt->device->host->host_lock);
-
+	spin_lock_irq(shost->host_lock);
 	blogic_inc_count(&stats->adapter_reset_req);
-
 	rc = blogic_resetadapter(adapter, false);
-	spin_unlock_irq(SCpnt->device->host->host_lock);
+	spin_unlock_irq(shost->host_lock);
+
 	return rc;
 }
 
@@ -2886,6 +2885,7 @@ static enum scsi_qc_status blogic_qcmd_lck(struct scsi_cmnd *command)
 	struct blogic_tgt_flags *tgt_flags =
 		&adapter->tgt_flags[command->device->id];
 	struct blogic_tgt_stats *tgt_stats = adapter->tgt_stats;
+	struct Scsi_Host *const shost = command->device->host;
 	unsigned char *cdb = command->cmnd;
 	int cdblen = command->cmd_len;
 	int tgt_id = command->device->id;
@@ -2915,9 +2915,9 @@ static enum scsi_qc_status blogic_qcmd_lck(struct scsi_cmnd *command)
 	 */
 	ccb = blogic_alloc_ccb(adapter);
 	if (ccb == NULL) {
-		spin_unlock_irq(adapter->scsi_host->host_lock);
+		spin_unlock_irq(shost->host_lock);
 		blogic_delay(1);
-		spin_lock_irq(adapter->scsi_host->host_lock);
+		spin_lock_irq(shost->host_lock);
 		ccb = blogic_alloc_ccb(adapter);
 		if (ccb == NULL) {
 			command->result = DID_ERROR << 16;
@@ -3062,10 +3062,10 @@ static enum scsi_qc_status blogic_qcmd_lck(struct scsi_cmnd *command)
 		   be initiated soon.
 		 */
 		if (!blogic_write_outbox(adapter, BLOGIC_MBOX_START, ccb)) {
-			spin_unlock_irq(adapter->scsi_host->host_lock);
+			spin_unlock_irq(shost->host_lock);
 			blogic_warn("Unable to write Outgoing Mailbox - Pausing for 1 second\n", adapter);
 			blogic_delay(1);
-			spin_lock_irq(adapter->scsi_host->host_lock);
+			spin_lock_irq(shost->host_lock);
 			if (!blogic_write_outbox(adapter, BLOGIC_MBOX_START,
 						ccb)) {
 				blogic_warn("Still unable to write Outgoing Mailbox - Host Adapter Dead?\n", adapter);
