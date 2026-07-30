@@ -125,7 +125,9 @@ struct ne_cpu_pool {
 	int		numa_node;
 };
 
-static struct ne_cpu_pool ne_cpu_pool;
+static struct ne_cpu_pool ne_cpu_pool = {
+	.mutex = __MUTEX_INITIALIZER(ne_cpu_pool.mutex),
+};
 
 /**
  * struct ne_phys_contig_mem_regions - Contiguous physical memory regions.
@@ -1761,8 +1763,6 @@ static long ne_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 static int __init ne_init(void)
 {
-	mutex_init(&ne_cpu_pool.mutex);
-
 	return pci_register_driver(&ne_pci_driver);
 }
 
