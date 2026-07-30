@@ -117,6 +117,7 @@ struct tmp401_data {
 	struct hwmon_channel_info temp_info;
 	const struct hwmon_channel_info *info[3];
 	struct hwmon_chip_info chip;
+	const char *channel_label[4];
 };
 
 /* regmap */
@@ -467,6 +468,16 @@ static int tmp401_read(struct device *dev, enum hwmon_sensor_types type,
 	}
 }
 
+static int tmp401_read_string(struct device *dev, enum hwmon_sensor_types type,
+			     u32 attr, int channel, const char **str)
+{
+	struct tmp401_data *data = dev_get_drvdata(dev);
+
+	*str = data->channel_label[channel];
+
+	return 0;
+}
+
 static int tmp401_write(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long val)
 {
@@ -502,6 +513,7 @@ static umode_t tmp401_is_visible(const void *data, enum hwmon_sensor_types type,
 		case hwmon_temp_fault:
 		case hwmon_temp_lowest:
 		case hwmon_temp_highest:
+		case hwmon_temp_label:
 			return 0444;
 		case hwmon_temp_min:
 		case hwmon_temp_max:
@@ -521,6 +533,7 @@ static umode_t tmp401_is_visible(const void *data, enum hwmon_sensor_types type,
 static const struct hwmon_ops tmp401_ops = {
 	.is_visible = tmp401_is_visible,
 	.read = tmp401_read,
+	.read_string = tmp401_read_string,
 	.write = tmp401_write,
 };
 
@@ -531,6 +544,7 @@ static int tmp401_init_client(struct tmp401_data *data)
 	struct regmap *regmap = data->regmap;
 	u32 config, config_orig;
 	int ret;
+	u32 ch;
 	u32 val = 0;
 	s32 nfactor = 0;
 
@@ -588,6 +602,26 @@ static int tmp401_init_client(struct tmp401_data *data)
 		ret = regmap_write(regmap, TMP43X_BETA_RANGE, val);
 		if (ret < 0)
 			return ret;
+	}
+
+	for_each_child_of_node_scoped(data->client->dev.of_node, child) {
+		ret = of_property_read_u32(child, "reg", &ch);
+		if (ret) {
+			dev_err(&data->client->dev, "missing reg property of %pOFn\n", child);
+			return ret;
+		}
+		if (ch >= ARRAY_SIZE(data->temp_channel_config) ||
+		    !data->temp_channel_config[ch]) {
+			dev_err(&data->client->dev, "invalid reg %u of %pOFn\n", ch, child);
+			return -EINVAL;
+		}
+		ret = of_property_read_string(child, "label", &data->channel_label[ch]);
+		if (ret == -ENODATA || ret == -EILSEQ) {
+			dev_err(&data->client->dev, "invalid label property in %pOFn\n", child);
+			return ret;
+		}
+		if (data->channel_label[ch])
+			data->temp_channel_config[ch] |= HWMON_T_LABEL;
 	}
 
 	return 0;
