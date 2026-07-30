@@ -156,6 +156,10 @@ Only regular files are accepted as backing files; to mount an image that
 resides on a block device, use the traditional block device mount path
 instead.
 
+When the same backing file is mounted more than once with compatible
+mount options, the kernel reuses the existing superblock.  If mount
+options conflict, a separate superblock is created transparently.
+
 Sysfs Entries
 =============
 
