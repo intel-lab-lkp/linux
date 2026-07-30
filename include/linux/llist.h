@@ -145,7 +145,7 @@ static inline bool llist_on_list(const struct llist_node *node)
 
 /**
  * llist_for_each_safe - iterate over some deleted entries of a lock-less list
- *			 safe against removal of list entry
+ *	safe against entry removal with a caller-provided temporary cursor
  * @pos:	the &struct llist_node to use as a loop cursor
  * @n:		another &struct llist_node to use as temporary storage
  * @node:	the first entry of deleted list entries
@@ -158,9 +158,35 @@ static inline bool llist_on_list(const struct llist_node *node)
  * traverse order is from the newest to the oldest added entry.  If
  * you want to traverse from the oldest to the newest, you must
  * reverse the order by yourself before traversing.
+ *
+ * If the caller does not need to access the temporary cursor, use
+ * llist_for_each_mutable() instead.
  */
 #define llist_for_each_safe(pos, n, node)			\
 	for ((pos) = (node); (pos) && ((n) = (pos)->next, true); (pos) = (n))
+
+#define __llist_for_each_mutable(pos, tmp, node)			\
+	for (typeof(pos) tmp = ((pos) = (node)) ? (pos)->next : NULL;	\
+	     (pos);							\
+	     (pos) = tmp, tmp = (pos) ? (pos)->next : NULL)
+
+/**
+ * llist_for_each_mutable - iterate over some deleted entries of a lock-less
+ *	list safe against entry removal with an internal temporary cursor
+ * @pos:	the &struct llist_node to use as a loop cursor
+ * @node:	the first entry of deleted list entries
+ *
+ * In general, some entries of the lock-less list can be traversed
+ * safely only after being deleted from list, so start with an entry
+ * instead of list head.
+ *
+ * If being used on entries deleted from lock-less list directly, the
+ * traverse order is from the newest to the oldest added entry.  If
+ * you want to traverse from the oldest to the newest, you must
+ * reverse the order by yourself before traversing.
+ */
+#define llist_for_each_mutable(pos, node)				\
+	__llist_for_each_mutable(pos, __UNIQUE_ID(next), node)
 
 /**
  * llist_for_each_entry - iterate over some deleted entries of lock-less list of given type
@@ -183,8 +209,9 @@ static inline bool llist_on_list(const struct llist_node *node)
 	     (pos) = llist_entry((pos)->member.next, typeof(*(pos)), member))
 
 /**
- * llist_for_each_entry_safe - iterate over some deleted entries of lock-less list of given type
- *			       safe against removal of list entry
+ * llist_for_each_entry_safe - iterate over some deleted entries of a lock-less
+ *	list of given type safe against entry removal with a caller-provided
+ *	temporary cursor
  * @pos:	the type * to use as a loop cursor.
  * @n:		another type * to use as temporary storage
  * @node:	the first entry of deleted list entries.
@@ -198,12 +225,44 @@ static inline bool llist_on_list(const struct llist_node *node)
  * traverse order is from the newest to the oldest added entry.  If
  * you want to traverse from the oldest to the newest, you must
  * reverse the order by yourself before traversing.
+ *
+ * If the caller does not need to access the temporary cursor, use
+ * llist_for_each_entry_mutable() instead.
  */
 #define llist_for_each_entry_safe(pos, n, node, member)			       \
 	for (pos = llist_entry((node), typeof(*pos), member);		       \
 	     member_address_is_nonnull(pos, member) &&			       \
-	        (n = llist_entry(pos->member.next, typeof(*n), member), true); \
+	     (n = llist_entry(pos->member.next, typeof(*n), member), true);    \
 	     pos = n)
+
+#define __llist_for_each_entry_mutable(pos, tmp, node, member)			\
+	for (typeof(pos) tmp =							\
+		((pos) = llist_entry((node), typeof(*(pos)), member),		\
+		member_address_is_nonnull(pos, member) ?			\
+		llist_entry((pos)->member.next, typeof(*(pos)), member) : NULL);\
+	     member_address_is_nonnull(pos, member);				\
+	     (pos) = tmp, tmp = member_address_is_nonnull(pos, member) ?	\
+		llist_entry((pos)->member.next, typeof(*(pos)), member) : NULL)
+
+/**
+ * llist_for_each_entry_mutable - iterate over some deleted entries of a
+ *	lock-less list of given type safe against entry removal with an internal
+ *	temporary cursor
+ * @pos:	the type * to use as a loop cursor.
+ * @node:	the first entry of deleted list entries.
+ * @member:	the name of the llist_node with the struct.
+ *
+ * In general, some entries of the lock-less list can be traversed
+ * safely only after being removed from list, so start with an entry
+ * instead of list head.
+ *
+ * If being used on entries deleted from lock-less list directly, the
+ * traverse order is from the newest to the oldest added entry.  If
+ * you want to traverse from the oldest to the newest, you must
+ * reverse the order by yourself before traversing.
+ */
+#define llist_for_each_entry_mutable(pos, node, member)			\
+	__llist_for_each_entry_mutable(pos, __UNIQUE_ID(next), node, member)
 
 /**
  * llist_empty - tests whether a lock-less list is empty
