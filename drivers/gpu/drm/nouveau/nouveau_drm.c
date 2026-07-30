@@ -723,7 +723,6 @@ nouveau_drm_device_del(struct nouveau_drm *drm)
 	nvif_parent_dtor(&drm->parent);
 
 	mutex_destroy(&drm->client_mutex);
-	kfree(drm);
 }
 
 static struct nouveau_drm *
@@ -740,17 +739,15 @@ nouveau_drm_device_new(const struct drm_driver *drm_driver, struct device *paren
 	struct nouveau_drm *drm;
 	int ret;
 
-	drm = kzalloc_obj(*drm);
+	drm = devm_kzalloc(parent, sizeof(*drm), GFP_KERNEL);
 	if (!drm)
 		return ERR_PTR(-ENOMEM);
 
 	drm->nvkm = device;
 
 	drm->dev = drm_dev_alloc(drm_driver, parent);
-	if (IS_ERR(drm->dev)) {
-		ret = PTR_ERR(drm->dev);
-		goto done;
-	}
+	if (IS_ERR(drm->dev))
+		return ERR_CAST(drm->dev);
 
 	drm->dev->dev_private = drm;
 	dev_set_drvdata(parent, drm);
