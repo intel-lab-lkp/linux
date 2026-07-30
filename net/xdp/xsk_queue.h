@@ -7,6 +7,7 @@
 #define _LINUX_XSK_QUEUE_H
 
 #include <linux/types.h>
+#include <linux/skbuff.h>
 #include <linux/if_xdp.h>
 #include <net/xdp_sock.h>
 #include <net/xsk_buff_pool.h>
@@ -46,6 +47,7 @@ struct xsk_queue {
 	u64 invalid_descs;
 	u64 queue_empty_descs;
 	size_t ring_vmalloc_size;
+	struct mmpin mmp;
 	/* Mutual exclusion of the completion ring in the SKB mode.
 	 * Protect: when sockets share a single cq when the same netdev
 	 * and queue id is shared.
@@ -532,6 +534,6 @@ static inline u64 xskq_nb_queue_empty_descs(struct xsk_queue *q)
 }
 
 struct xsk_queue *xskq_create(u32 nentries, bool umem_queue);
-void xskq_destroy(struct xsk_queue *q_ops);
+void xskq_destroy(struct xsk_queue *q);
 
 #endif /* _LINUX_XSK_QUEUE_H */

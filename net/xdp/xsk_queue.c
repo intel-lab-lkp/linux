@@ -25,6 +25,7 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
 {
 	struct xsk_queue *q;
 	size_t size;
+	int err;
 
 	q = kzalloc_obj(*q);
 	if (!q)
@@ -45,9 +46,15 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
 	}
 
 	size = PAGE_ALIGN(size);
+	err = mm_account_pinned_pages(&q->mmp, size);
+	if (err) {
+		kfree(q);
+		return NULL;
+	}
 
 	q->ring = vmalloc_user(size);
 	if (!q->ring) {
+		mm_unaccount_pinned_pages(&q->mmp);
 		kfree(q);
 		return NULL;
 	}
@@ -62,5 +69,6 @@ void xskq_destroy(struct xsk_queue *q)
 		return;
 
 	vfree(q->ring);
+	mm_unaccount_pinned_pages(&q->mmp);
 	kfree(q);
 }
