@@ -360,6 +360,18 @@ static bool radeon_fence_is_signaled(struct dma_fence *f)
 	if (atomic64_read(&rdev->fence_drv[ring].last_seq) >= seq)
 		return true;
 
+	/*
+	* Poll hardware directly without updating last_seq.
+	* This allows immediate detection of signaled fences (performance)
+	* while leaving last_seq update and wake_up_all() to the interrupt
+	* handler, avoiding:
+	* 1. Deadlock from calling wake_up_all() with fence lock held
+	* 2. Wake event stealing by advancing last_seq without waking waiters
+	* 3. rw_semaphore usage in atomic/irq context (unsafe on PREEMPT_RT)
+	*/
+	if (radeon_fence_read(rdev, ring) >= (u32)seq)
+			return true;
+
 	return false;
 }
 
