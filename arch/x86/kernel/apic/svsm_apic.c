@@ -68,7 +68,8 @@ static void svsm_apic_msr_write(u32 reg, u32 v)
 		}
 		break;
 	default:
-		pr_err("SVSM_APIC_WRITE_REGISTER 0x%x not supported\n", reg);
+		pr_debug("SVSM_APIC_WRITE_REGISTER to HV (0x%x, val:0x%x)\n", reg, v);
+		hvs_ghcb_msr_write(reg, v);
 		break;
 	}
 }
@@ -77,6 +78,7 @@ static u32 svsm_apic_msr_read(u32 reg)
 {
 	u32 msr = APIC_BASE_MSR + (reg >> 4);
 	struct svsm_call call = {};
+	u64 val;
 	int ret;
 
 	switch (reg) {
@@ -93,17 +95,18 @@ static u32 svsm_apic_msr_read(u32 reg)
 		call.rcx = msr;
 
 		ret = svsm_do_call(&call);
+		val = call.rdx_out;
 		if (ret) {
 			pr_err("SVSM_APIC_READ_REGISTER: 0x%x, error: %d\n", reg, ret);
 			sev_es_terminate(SEV_TERM_SET_GEN, GHCB_SNP_UNSUPPORTED);
 		}
 		break;
 	default:
-		pr_err("SVSM_APIC_READ_REGISTER: 0x%x not supported\n", reg);
-		return 0;
+		val = hvs_ghcb_msr_read(reg);
+		pr_debug("SVSM_APIC_READ_REGISTER from HV 0x%x, val: 0x%llx\n", reg, val);
 	}
 
-	return call.rdx_out;
+	return val;
 }
 
 static inline void svsm_apic_msr_eoi(void)
