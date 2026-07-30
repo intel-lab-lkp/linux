@@ -114,80 +114,79 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 {
 	struct inode *ino = file_inode(file);
 	struct pci_dev *dev = pde_data(ino);
-	loff_t pos = *ppos;
-	int size = dev->cfg_size;
-	int cnt, ret;
+	loff_t off = *ppos;
+	unsigned int size = nbytes;
+	int ret;
 
 	ret = security_locked_down(LOCKDOWN_PCI_ACCESS);
 	if (ret)
 		return ret;
 
-	if (resource_is_exclusive(&dev->driver_exclusive_resource, pos,
+	if (resource_is_exclusive(&dev->driver_exclusive_resource, off,
 				  nbytes)) {
 		pci_warn_once(dev, "%s: Unexpected write to kernel-exclusive config offset %llx",
-			      current->comm, pos);
+			      current->comm, off);
 		add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 	}
 
-	if (pos >= size)
+	if (off >= dev->cfg_size)
 		return 0;
-	if (nbytes >= size)
+	if (off + size > dev->cfg_size) {
+		size = dev->cfg_size - off;
 		nbytes = size;
-	if (pos + nbytes > size)
-		nbytes = size - pos;
-	cnt = nbytes;
+	}
 
-	if (!access_ok(buf, cnt))
+	if (!access_ok(buf, size))
 		return -EINVAL;
 
 	pci_config_pm_runtime_get(dev);
 
-	if ((pos & 1) && cnt) {
+	if ((off & 1) && size) {
 		unsigned char val;
 		__get_user(val, buf);
-		pci_user_write_config_byte(dev, pos, val);
+		pci_user_write_config_byte(dev, off, val);
 		buf++;
-		pos++;
-		cnt--;
+		off++;
+		size--;
 	}
 
-	if ((pos & 3) && cnt > 2) {
+	if ((off & 3) && size > 2) {
 		__le16 val;
 		__get_user(val, (__le16 __user *) buf);
-		pci_user_write_config_word(dev, pos, le16_to_cpu(val));
+		pci_user_write_config_word(dev, off, le16_to_cpu(val));
 		buf += 2;
-		pos += 2;
-		cnt -= 2;
+		off += 2;
+		size -= 2;
 	}
 
-	while (cnt >= 4) {
+	while (size > 3) {
 		__le32 val;
 		__get_user(val, (__le32 __user *) buf);
-		pci_user_write_config_dword(dev, pos, le32_to_cpu(val));
+		pci_user_write_config_dword(dev, off, le32_to_cpu(val));
 		buf += 4;
-		pos += 4;
-		cnt -= 4;
+		off += 4;
+		size -= 4;
 	}
 
-	if (cnt >= 2) {
+	if (size >= 2) {
 		__le16 val;
 		__get_user(val, (__le16 __user *) buf);
-		pci_user_write_config_word(dev, pos, le16_to_cpu(val));
+		pci_user_write_config_word(dev, off, le16_to_cpu(val));
 		buf += 2;
-		pos += 2;
-		cnt -= 2;
+		off += 2;
+		size -= 2;
 	}
 
-	if (cnt) {
+	if (size) {
 		unsigned char val;
 		__get_user(val, buf);
-		pci_user_write_config_byte(dev, pos, val);
-		pos++;
+		pci_user_write_config_byte(dev, off, val);
+		off++;
 	}
 
 	pci_config_pm_runtime_put(dev);
 
-	*ppos = pos;
+	*ppos = off;
 	inode_lock(ino);
 	i_size_write(ino, dev->cfg_size);
 	inode_unlock(ino);
