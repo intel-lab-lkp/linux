@@ -686,10 +686,10 @@ out:
 	 * how (for example) the GNU make jobserver uses small writes to
 	 * wake up pending jobs
 	 *
-	 * Epoll nonsensically wants a wakeup whether the pipe
-	 * was already empty or not.
+	 * If poll_et is set, edge-triggered consumers need a wakeup
+	 * on every write regardless of was_empty.
 	 */
-	if (was_empty || pipe->poll_usage)
+	if (was_empty || READ_ONCE(pipe->poll_et))
 		wake_up_interruptible_sync_poll(&pipe->rd_wait, EPOLLIN | EPOLLRDNORM);
 	kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
 	if (wake_next_writer)
@@ -752,7 +752,6 @@ static long pipe_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 }
 
-/* No kernel lock held - fine */
 static __poll_t
 pipe_poll(struct file *filp, poll_table *wait)
 {
@@ -760,9 +759,11 @@ pipe_poll(struct file *filp, poll_table *wait)
 	struct pipe_inode_info *pipe = filp->private_data;
 	union pipe_index idx;
 
-	/* Epoll has some historical nasty semantics, this enables them */
-	if (unlikely(!READ_ONCE(pipe->poll_usage)))
-		WRITE_ONCE(pipe->poll_usage, true);
+	/* Enable edge-triggered (epoll, io_uring) per-write wakeups */
+	if ((filp->f_mode & FMODE_READ) &&
+	    wait && (wait->_key & EPOLLET) &&
+	    unlikely(!READ_ONCE(pipe->poll_et)))
+		WRITE_ONCE(pipe->poll_et, true);
 
 	/*
 	 * Reading pipe state only -- no need for acquiring the semaphore.
