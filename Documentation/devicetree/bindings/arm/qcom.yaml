@@ -1111,6 +1111,11 @@ properties:
           - const: qcom,sm8250
 
       - items:
+          - const: xiaomi,enuma
+          - const: xiaomi,elish
+          - const: qcom,sm8250
+
+      - items:
           - enum:
               - microsoft,surface-duo2
               - qcom,sm8350-hdk
