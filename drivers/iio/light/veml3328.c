@@ -91,11 +91,31 @@ static const struct iio_chan_spec veml3328_channels[] = {
  * Gain indexes: 0 (x0.5), 1 (x1), 2 (x2), 3 (x4)
  * IT indexes: 0 (50ms), 1 (100ms), 2 (200ms), 3 (400ms)
  */
-static const int veml3328_scale_vals[4][8] = {
-	{ 0, 768000, 0, 384000, 0, 192000, 0, 96000 },
-	{ 0, 384000, 0, 192000, 0, 96000,  0, 48000 },
-	{ 0, 192000, 0, 96000,  0, 48000,  0, 24000 },
-	{ 0, 96000,  0, 48000,  0, 24000,  0, 12000 },
+static const int veml3328_scale_vals[4][4][2] = {
+	{ /* 50 ms */
+		{ 0, 768000 },
+		{ 0, 384000 },
+		{ 0, 192000 },
+		{ 0, 96000 },
+	},
+	{ /* 100 ms */
+		{ 0, 384000 },
+		{ 0, 192000 },
+		{ 0, 96000 },
+		{ 0, 48000 },
+	},
+	{ /* 200 ms */
+		{ 0, 192000 },
+		{ 0, 96000 },
+		{ 0, 48000 },
+		{ 0, 24000 },
+	},
+	{ /* 400 ms */
+		{ 0, 96000 },
+		{ 0, 48000 },
+		{ 0, 24000 },
+		{ 0, 12000 },
+	},
 };
 
 /* integration times in microseconds */
@@ -184,9 +204,8 @@ static int veml3328_read_raw(struct iio_dev *indio_dev,
 		if (it_inx >= ARRAY_SIZE(veml3328_it_times) || gain_inx >= 4)
 			return -EINVAL;
 
-		/* Stride by 2 through the flattened array to match (val, val2) */
-		*val = veml3328_scale_vals[it_inx][gain_inx * 2];
-		*val2 = veml3328_scale_vals[it_inx][gain_inx * 2 + 1];
+		*val = veml3328_scale_vals[it_inx][gain_inx][0];
+		*val2 = veml3328_scale_vals[it_inx][gain_inx][1];
 
 		return IIO_VAL_INT_PLUS_MICRO;
 
@@ -282,8 +301,8 @@ static int veml3328_write_raw(struct iio_dev *indio_dev,
 			return -EINVAL;
 
 		for (i = 0; i < 4; i++) {
-			if (val == veml3328_scale_vals[it_inx][i * 2] &&
-			    val2 == veml3328_scale_vals[it_inx][i * 2 + 1])
+			if (val == veml3328_scale_vals[it_inx][i][0] &&
+			    val2 == veml3328_scale_vals[it_inx][i][1])
 				break;
 		}
 
