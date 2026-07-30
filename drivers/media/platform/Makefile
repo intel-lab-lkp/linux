@@ -12,6 +12,7 @@ obj-y += amphion/
 obj-y += arm/
 obj-y += aspeed/
 obj-y += atmel/
+obj-y += axiado/
 obj-y += broadcom/
 obj-y += cadence/
 obj-y += chips-media/

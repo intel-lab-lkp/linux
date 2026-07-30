@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+comment "Axiado media platform drivers"
+
+config VIDEO_AXIADO
+	tristate "Axiado AX3000 video capture driver"
+	depends on ARCH_AXIADO || COMPILE_TEST
+	depends on V4L_PLATFORM_DRIVERS
+	depends on VIDEO_DEV
+	select VIDEOBUF2_VMALLOC
+	help
+	  V4L2 capture driver for the Axiado AX3000 SoC display capture
+	  controller. The controller has no MMIO registers; frames written
+	  by the display engine into a reserved memory region are exposed
+	  as a V4L2 capture device.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called axiado-video.
