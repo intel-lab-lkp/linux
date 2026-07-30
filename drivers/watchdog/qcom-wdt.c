@@ -51,6 +51,9 @@ struct qcom_wdt {
 	unsigned long		rate;
 	void __iomem		*base;
 	const u32		*layout;
+	int			irq;
+	bool			is_nmi;
+	bool			irq_enabled;
 };
 
 static void __iomem *wdt_addr(struct qcom_wdt *wdt, enum wdt_reg reg)
@@ -73,6 +76,30 @@ static irqreturn_t qcom_wdt_isr(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
+static void qcom_wdt_enable_irq(struct qcom_wdt *wdt)
+{
+	if (wdt->is_nmi && wdt->irq > 0 && !wdt->irq_enabled) {
+		enable_nmi(wdt->irq);
+		wdt->irq_enabled = true;
+	}
+}
+
+static void qcom_wdt_disable_irq(struct qcom_wdt *wdt)
+{
+	if (wdt->is_nmi && wdt->irq > 0 && wdt->irq_enabled) {
+		disable_nmi_nosync(wdt->irq);
+		wdt->irq_enabled = false;
+	}
+}
+
+static void qcom_wdt_free_nmi(void *arg)
+{
+	struct qcom_wdt *wdt = arg;
+
+	qcom_wdt_disable_irq(wdt);
+	free_nmi(wdt->irq, &wdt->wdd);
+}
+
 static int qcom_wdt_start(struct watchdog_device *wdd)
 {
 	struct qcom_wdt *wdt = to_qcom_wdt(wdd);
@@ -83,12 +110,16 @@ static int qcom_wdt_start(struct watchdog_device *wdd)
 	writel(bark * wdt->rate, wdt_addr(wdt, WDT_BARK_TIME));
 	writel(wdd->timeout * wdt->rate, wdt_addr(wdt, WDT_BITE_TIME));
 	writel(QCOM_WDT_ENABLE, wdt_addr(wdt, WDT_EN));
+
+	qcom_wdt_enable_irq(wdt);
 	return 0;
 }
 
 static int qcom_wdt_stop(struct watchdog_device *wdd)
 {
 	struct qcom_wdt *wdt = to_qcom_wdt(wdd);
+
+	qcom_wdt_disable_irq(wdt);
 
 	writel(0, wdt_addr(wdt, WDT_EN));
 	return 0;
@@ -240,6 +271,7 @@ static int qcom_wdt_probe(struct platform_device *pdev)
 	u32 percpu_offset;
 	int irq, ret;
 	struct clk *clk;
+	unsigned long irq_flags;
 
 	data = of_device_get_match_data(dev);
 	if (!data) {
@@ -290,10 +322,25 @@ static int qcom_wdt_probe(struct platform_device *pdev)
 	/* check if there is pretimeout support */
 	irq = platform_get_irq_optional(pdev, 0);
 	if (data->pretimeout && irq > 0) {
-		ret = devm_request_irq(dev, irq, qcom_wdt_isr, 0,
-				       "wdt_bark", &wdt->wdd);
-		if (ret)
-			return ret;
+		wdt->irq = irq;
+		irq_flags = IRQF_PERCPU | IRQF_NOBALANCING |
+			    IRQF_NO_AUTOEN | IRQF_NO_THREAD;
+
+		ret = request_nmi(irq, qcom_wdt_isr, irq_flags,
+				  "wdt_bark", &wdt->wdd);
+		if (ret) {
+			/* Fallback to normal interrupt if NMI not supported */
+			ret = devm_request_irq(dev, irq, qcom_wdt_isr, 0,
+					       "wdt_bark", &wdt->wdd);
+			if (ret)
+				return ret;
+		} else {
+			wdt->is_nmi = true;
+			ret = devm_add_action_or_reset(dev, qcom_wdt_free_nmi,
+						       wdt);
+			if (ret)
+				return ret;
+		}
 
 		wdt->wdd.info = &qcom_wdt_pt_info;
 		wdt->wdd.pretimeout = 1;
