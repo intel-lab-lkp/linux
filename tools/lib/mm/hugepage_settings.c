@@ -10,11 +10,16 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "vm_util.h"
+#include "file_utils.h"
 #include "hugepage_settings.h"
 
 #define THP_SYSFS "/sys/kernel/mm/transparent_hugepage/"
 #define MAX_SETTINGS_DEPTH 4
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
+
 static struct thp_settings settings_stack[MAX_SETTINGS_DEPTH];
 static int settings_index;
 static struct thp_settings saved_settings;
@@ -49,6 +54,13 @@ static const char * const shmem_enabled_strings[] = {
 	NULL
 };
 
+static void print_file_error(const char *path, int ret)
+{
+	int err = -ret;
+
+	printf("# %s: %s (%d)\n", path, strerror(err), err);
+}
+
 int thp_read_string(const char *name, const char * const strings[])
 {
 	char path[PATH_MAX];
@@ -64,8 +76,7 @@ int thp_read_string(const char *name, const char * const strings[])
 
 	ret = read_file(path, buf, sizeof(buf));
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 
@@ -108,8 +119,7 @@ void thp_write_string(const char *name, const char *val)
 	}
 	ret = write_file(path, val, strlen(val) + 1);
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -127,8 +137,7 @@ unsigned long thp_read_num(const char *name)
 	}
 	ret = read_num(path, &num);
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 
@@ -147,8 +156,7 @@ void thp_write_num(const char *name, unsigned long num)
 	}
 	ret = write_num(path, num);
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -183,8 +191,7 @@ void thp_read_settings(struct thp_settings *settings)
 				   &settings->read_ahead_kb);
 
 		if (ret < 0) {
-			errno = -ret;
-			ksft_perror(dev_queue_read_ahead_path);
+			print_file_error(dev_queue_read_ahead_path, ret);
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -242,8 +249,7 @@ void thp_write_settings(struct thp_settings *settings)
 				    settings->read_ahead_kb);
 
 		if (ret < 0) {
-			errno = -ret;
-			ksft_perror(dev_queue_read_ahead_path);
+			print_file_error(dev_queue_read_ahead_path, ret);
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -346,8 +352,7 @@ static unsigned long __thp_supported_orders(bool is_shmem)
 		ret = read_file(path, buf, sizeof(buf));
 		if (ret < 0) {
 			if (ret != -ENOENT) {
-				errno = -ret;
-				ksft_perror(path);
+				print_file_error(path, ret);
 				exit(EXIT_FAILURE);
 			}
 			continue;
@@ -427,8 +432,7 @@ int detect_hugetlb_page_sizes(unsigned long sizes[], int max)
 		if (sscanf(entry->d_name, "hugepages-%zukB", &kb) != 1)
 			continue;
 		sizes[count++] = kb * 1024;
-		ksft_print_msg("[INFO] detected hugetlb page size: %zu KiB\n",
-			       kb);
+		printf("# [INFO] detected hugetlb page size: %zu KiB\n", kb);
 	}
 	closedir(dir);
 	return count;
@@ -477,8 +481,7 @@ unsigned long hugetlb_nr_pages(unsigned long size)
 
 	ret = read_num(path, &nr);
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 
@@ -494,8 +497,7 @@ void hugetlb_set_nr_pages(unsigned long size, unsigned long nr)
 
 	ret = write_num(path, nr);
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -510,8 +512,7 @@ unsigned long hugetlb_free_pages(unsigned long size)
 
 	ret = read_num(path, &nr);
 	if (ret < 0) {
-		errno = -ret;
-		ksft_perror(path);
+		print_file_error(path, ret);
 		exit(EXIT_FAILURE);
 	}
 
@@ -571,7 +572,8 @@ unsigned long hugetlb_setup(unsigned long nr, unsigned long sizes[],
 		return 0;
 
 	if (nr_enabled > max) {
-		ksft_print_msg("detected %d huge page sizes, will only test %d\n", nr_enabled, max);
+		printf("# detected %d huge page sizes, will only test %d\n",
+		       nr_enabled, max);
 		nr_enabled = max;
 	}
 
@@ -643,8 +645,10 @@ static void hugepage_restore_settings_atexit(void)
 
 static void hugepage_restore_settings_sighandler(int sig)
 {
+	(void)sig;
+
 	/* exit() will invoke the hugepage_restore_settings_atexit handler. */
-	exit(KSFT_FAIL);
+	exit(EXIT_FAILURE);
 }
 
 void hugepage_save_settings(bool thp, bool hugetlb)
