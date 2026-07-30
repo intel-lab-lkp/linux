@@ -111,6 +111,9 @@ TEST_F(scm_inq, basic)
 		return;
 	}
 
+	if (err && errno == ENOPROTOOPT)
+		SKIP(return, "SO_INQ is not supported");
+
 	ASSERT_EQ(0, err);
 
 	err = ioctl(self->fd[1], SIOCINQ, &inq);
@@ -136,6 +139,10 @@ TEST_F(scm_inq, partial_read)
 		ASSERT_EQ(-ENOPROTOOPT, -errno);
 		return;
 	}
+
+	if (err && errno == ENOPROTOOPT)
+		SKIP(return, "SO_INQ is not supported");
+
 	ASSERT_EQ(0, err);
 
 	ret = send(self->fd[0], buf, sizeof(buf), 0);
