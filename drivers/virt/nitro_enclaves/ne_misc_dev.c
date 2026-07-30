@@ -67,6 +67,7 @@ static const struct file_operations ne_fops = {
 	.owner		= THIS_MODULE,
 	.llseek		= noop_llseek,
 	.unlocked_ioctl	= ne_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 };
 
 static struct miscdevice ne_misc_dev = {
@@ -1569,6 +1570,7 @@ static const struct file_operations ne_enclave_fops = {
 	.llseek		= noop_llseek,
 	.poll		= ne_enclave_poll,
 	.unlocked_ioctl	= ne_enclave_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 	.release	= ne_enclave_release,
 };
 
