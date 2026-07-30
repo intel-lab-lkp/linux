@@ -236,6 +236,10 @@ static const struct rkvdec_ctrls rkvdec_hevc_ctrls = {
 	.num_ctrls = ARRAY_SIZE(rkvdec_hevc_ctrl_descs),
 };
 
+static struct v4l2_ctrl_hevc_sps vdpu38x_hevc_sps_default = {
+	.chroma_format_idc = 1,
+};
+
 static const struct rkvdec_ctrl_desc vdpu38x_hevc_ctrl_descs[] = {
 	{
 		.cfg.id = V4L2_CID_STATELESS_HEVC_DECODE_PARAMS,
@@ -243,6 +247,7 @@ static const struct rkvdec_ctrl_desc vdpu38x_hevc_ctrl_descs[] = {
 	{
 		.cfg.id = V4L2_CID_STATELESS_HEVC_SPS,
 		.cfg.ops = &rkvdec_ctrl_ops,
+		.cfg.p_def.p_hevc_sps = &vdpu38x_hevc_sps_default,
 	},
 	{
 		.cfg.id = V4L2_CID_STATELESS_HEVC_PPS,
