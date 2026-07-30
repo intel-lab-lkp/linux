@@ -22,6 +22,7 @@
 #define DELAY_US_MAX 2000
 
 sem_t *sem;
+static cpu_set_t child_cpu_set;
 
 static void guest_code(void)
 {
@@ -84,15 +85,10 @@ static void run_test(u32 run)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
-	cpu_set_t cpu_set;
 	pthread_t threads[VCPU_NUM];
 	pthread_t throw_away;
 	void *b;
 	u32 i, j;
-
-	CPU_ZERO(&cpu_set);
-	for (i = 0; i < VCPU_NUM; i++)
-		CPU_SET(i, &cpu_set);
 
 	vm = vm_create(VCPU_NUM);
 
@@ -101,12 +97,12 @@ static void run_test(u32 run)
 		vcpu = vm_vcpu_add(vm, i, guest_code);
 
 		check_create_thread(&threads[i], NULL, run_vcpu, vcpu);
-		check_set_affinity(threads[i], &cpu_set);
+		check_set_affinity(threads[i], &child_cpu_set);
 
 		for (j = 0; j < SLEEPING_THREAD_NUM; ++j) {
 			check_create_thread(&throw_away, NULL, sleeping_thread,
 					    (void *)NULL);
-			check_set_affinity(throw_away, &cpu_set);
+			check_set_affinity(throw_away, &child_cpu_set);
 		}
 	}
 	pr_debug("%s: [%d] all threads launched\n", __func__, run);
@@ -147,11 +143,29 @@ void wait_for_child_setup(pid_t pid)
 	}
 }
 
+static void setup_child_cpu_set(void)
+{
+	int cpu;
+
+	kvm_sched_getaffinity(0, sizeof(child_cpu_set), &child_cpu_set);
+
+	if (CPU_COUNT(&child_cpu_set) < 2)
+		return;
+
+	cpu = pin_task_to_random_cpu(pthread_self(), &child_cpu_set);
+	CPU_CLR(cpu, &child_cpu_set);
+
+	while (CPU_COUNT(&child_cpu_set) > VCPU_NUM)
+		CPU_CLR(kvm_pick_random_cpu(&child_cpu_set), &child_cpu_set);
+}
+
 int main(int argc, char **argv)
 {
 	u32 i;
 	int s, r;
 	pid_t pid;
+
+	setup_child_cpu_set();
 
 	sem = sem_open("vm_sem", O_CREAT | O_EXCL, 0644, 0);
 	sem_unlink("vm_sem");
