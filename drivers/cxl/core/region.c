@@ -1350,6 +1350,19 @@ static void cxl_port_detach_region(struct cxl_port *port,
 		free_region_ref(cxl_rr);
 }
 
+/**
+ * check_last_peer() - Verify the previous endpoint routed to this dport
+ * @cxled: endpoint decoder being placed
+ * @ep: this endpoint's entry for the port
+ * @cxl_rr: region reference for the port
+ * @distance: distance to the previous endpoint routed to this dport
+ *
+ * Endpoints routed through the same dport recur at @distance intervals in
+ * region-position order. Verify that the endpoint at ``pos - distance`` used
+ * the same dport.
+ *
+ * Return: 0 on success, -ENXIO on a routing mismatch.
+ */
 static int check_last_peer(struct cxl_endpoint_decoder *cxled,
 			   struct cxl_ep *ep, struct cxl_region_ref *cxl_rr,
 			   int distance)
@@ -1434,135 +1447,87 @@ static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
 	return 0;
 }
 
+/**
+ * get_parent_fanout() - Calculate the switch fan-out above a port
+ * @parent_port: first ancestor port
+ * @cxlr: region under construction
+ * @fanout: filled with the product of the ancestor switch ways
+ *
+ * Walk from @parent_port to the root and multiply the interleave ways of
+ * each switch decoder. Root decoder ways are not included.
+ *
+ * Return: 0 on success.
+ */
+static int get_parent_fanout(struct cxl_port *parent_port,
+			     struct cxl_region *cxlr, int *fanout)
+{
+	int distance = 1;
+	struct cxl_port *iter;
+
+	for (iter = parent_port; !is_cxl_root(iter);
+	     iter = to_cxl_port(iter->dev.parent)) {
+		struct cxl_region_ref *cxl_rr_iter = cxl_rr_load(iter, cxlr);
+
+		distance *= cxl_rr_iter->nr_targets;
+	}
+
+	*fanout = distance;
+	return 0;
+}
+
+/**
+ * derive_port_granularity() - Calculate the granularity for a port decoder
+ * @cxlr: region under construction
+ * @fanout: product of the ancestor switch ways
+ * @ig: filled with the port decoder granularity
+ *
+ * Preserve the existing parent-granularity times parent-ways recurrence in
+ * terms of the region granularity and the fan-out above this port.
+ *
+ * Return: 0 on success.
+ */
+static int derive_port_granularity(struct cxl_region *cxlr, int fanout,
+				   int *ig)
+{
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
+	int root_iw = cxlrd->cxlsd.cxld.interleave_ways;
+	struct cxl_region_params *p = &cxlr->params;
+	int sel_distance;
+
+	sel_distance = is_power_of_2(root_iw) ? root_iw : root_iw / 3;
+	sel_distance *= fanout;
+	*ig = p->interleave_granularity * sel_distance;
+
+	return 0;
+}
+
 static int cxl_port_setup_targets(struct cxl_port *port,
 				  struct cxl_region *cxlr,
 				  struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
-	int parent_iw, parent_ig, ig, iw, rc, pos = cxled->pos;
+	int root_iw = cxlrd->cxlsd.cxld.interleave_ways;
 	struct cxl_port *parent_port = to_cxl_port(port->dev.parent);
 	struct cxl_region_ref *cxl_rr = cxl_rr_load(port, cxlr);
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_ep *ep = cxl_ep_load(port, cxlmd);
 	struct cxl_region_params *p = &cxlr->params;
 	struct cxl_decoder *cxld = cxl_rr->decoder;
-	struct cxl_switch_decoder *cxlsd;
-	struct cxl_port *iter = port;
-	u16 eig, peig;
-	u8 eiw, peiw;
+	struct cxl_switch_decoder *cxlsd = to_cxl_switch_decoder(&cxld->dev);
+	int ig, iw = cxl_rr->nr_targets;
+	int fanout, rc;
+	int pos = cxled->pos;
+	u16 eig;
+	u8 eiw;
 
 	/*
 	 * While root level decoders support x3, x6, x12, switch level
 	 * decoders only support powers of 2 up to x16.
 	 */
-	if (!is_power_of_2(cxl_rr->nr_targets)) {
+	if (!is_power_of_2(iw)) {
 		dev_dbg(&cxlr->dev, "%s:%s: invalid target count %d\n",
-			dev_name(port->uport_dev), dev_name(&port->dev),
-			cxl_rr->nr_targets);
-		return -EINVAL;
-	}
-
-	cxlsd = to_cxl_switch_decoder(&cxld->dev);
-	if (cxl_rr->nr_targets_set) {
-		int i, distance = 1;
-		struct cxl_region_ref *cxl_rr_iter;
-
-		/*
-		 * The "distance" between peer downstream ports represents which
-		 * endpoint positions in the region interleave a given port can
-		 * host.
-		 *
-		 * For example, at the root of a hierarchy the distance is
-		 * always 1 as every index targets a different host-bridge. At
-		 * each subsequent switch level those ports map every Nth region
-		 * position where N is the width of the switch == distance.
-		 */
-		do {
-			cxl_rr_iter = cxl_rr_load(iter, cxlr);
-			distance *= cxl_rr_iter->nr_targets;
-			iter = to_cxl_port(iter->dev.parent);
-		} while (!is_cxl_root(iter));
-		distance *= cxlrd->cxlsd.cxld.interleave_ways;
-
-		for (i = 0; i < cxl_rr->nr_targets_set; i++)
-			if (ep->dport == cxlsd->target[i]) {
-				rc = check_last_peer(cxled, ep, cxl_rr,
-						     distance);
-				if (rc)
-					return rc;
-				goto out_target_set;
-			}
-		goto add_target;
-	}
-
-	if (is_cxl_root(parent_port)) {
-		/*
-		 * Root decoder IG is always set to value in CFMWS which
-		 * may be different than this region's IG.  We can use the
-		 * region's IG here since interleave_granularity_store()
-		 * does not allow interleaved host-bridges with
-		 * root IG != region IG.
-		 */
-		parent_ig = p->interleave_granularity;
-		parent_iw = cxlrd->cxlsd.cxld.interleave_ways;
-		/*
-		 * For purposes of address bit routing, use power-of-2 math for
-		 * switch ports.
-		 */
-		if (!is_power_of_2(parent_iw))
-			parent_iw /= 3;
-	} else {
-		struct cxl_region_ref *parent_rr;
-		struct cxl_decoder *parent_cxld;
-
-		parent_rr = cxl_rr_load(parent_port, cxlr);
-		parent_cxld = parent_rr->decoder;
-		parent_ig = parent_cxld->interleave_granularity;
-		parent_iw = parent_cxld->interleave_ways;
-	}
-
-	rc = granularity_to_eig(parent_ig, &peig);
-	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid parent granularity: %d\n",
-			dev_name(parent_port->uport_dev),
-			dev_name(&parent_port->dev), parent_ig);
-		return rc;
-	}
-
-	rc = ways_to_eiw(parent_iw, &peiw);
-	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid parent interleave: %d\n",
-			dev_name(parent_port->uport_dev),
-			dev_name(&parent_port->dev), parent_iw);
-		return rc;
-	}
-
-	iw = cxl_rr->nr_targets;
-	rc = ways_to_eiw(iw, &eiw);
-	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid port interleave: %d\n",
 			dev_name(port->uport_dev), dev_name(&port->dev), iw);
-		return rc;
-	}
-
-	/*
-	 * Interleave granularity is a multiple of @parent_port granularity.
-	 * Multiplier is the parent port interleave ways.
-	 */
-	rc = granularity_to_eig(parent_ig * parent_iw, &eig);
-	if (rc) {
-		dev_dbg(&cxlr->dev,
-			"%s: invalid granularity calculation (%d * %d)\n",
-			dev_name(&parent_port->dev), parent_ig, parent_iw);
-		return rc;
-	}
-
-	rc = eig_to_granularity(eig, &ig);
-	if (rc) {
-		dev_dbg(&cxlr->dev, "%s:%s: invalid interleave: %d\n",
-			dev_name(port->uport_dev), dev_name(&port->dev),
-			256 << eig);
-		return rc;
+		return -EINVAL;
 	}
 
 	if (iw > 8 || iw > cxlsd->nr_targets) {
@@ -1571,6 +1536,36 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 			dev_name(port->uport_dev), dev_name(&port->dev),
 			dev_name(&cxld->dev), iw, cxlsd->nr_targets);
 		return -ENXIO;
+	}
+
+	rc = get_parent_fanout(parent_port, cxlr, &fanout);
+	if (rc)
+		return rc;
+
+	if (cxl_rr->nr_targets_set) {
+		for (int i = 0; i < cxl_rr->nr_targets_set; i++)
+			if (ep->dport == cxlsd->target[i]) {
+				rc = check_last_peer(cxled, ep, cxl_rr,
+						     root_iw * fanout * iw);
+				if (rc)
+					return rc;
+				goto out_target_set;
+			}
+		goto add_target;
+	}
+
+	rc = derive_port_granularity(cxlr, fanout, &ig);
+	if (rc)
+		return rc;
+
+	rc = ways_to_eiw(iw, &eiw);
+	if (!rc)
+		rc = granularity_to_eig(ig, &eig);
+	if (rc) {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: derived ig %d not a valid granularity (iw %d)\n",
+			dev_name(port->uport_dev), dev_name(&port->dev), ig, iw);
+		return rc;
 	}
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
