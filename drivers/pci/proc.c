@@ -181,7 +181,9 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 	pci_config_pm_runtime_put(dev);
 
 	*ppos = pos;
+	inode_lock(ino);
 	i_size_write(ino, dev->cfg_size);
+	inode_unlock(ino);
 	return nbytes;
 }
 
