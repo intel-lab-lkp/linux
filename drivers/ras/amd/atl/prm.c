@@ -18,36 +18,45 @@
 
 #include <linux/prmt.h>
 
-/*
- * PRM parameter buffer - normalized to system physical address, as described
- * in the "PRM Parameter Buffer" section of the AMD ACPI Porting Guide.
- */
-struct norm_to_sys_param_buf {
+/* See "PRM Parameter Buffer" in the AMD ACPI Porting Guide. */
+struct param_buf {
 	u64 norm_addr;
 	u8 socket;
 	u64 bank_id;
 	void *out_buf;
 } __packed;
 
-unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 bank_id, unsigned long addr)
+int prm_umc_norm_to_addr(guid_t guid, u8 socket_id, u64 bank_id,
+			 unsigned long addr, void *out_buf)
 {
-	struct norm_to_sys_param_buf p_buf;
-	unsigned long ret_addr;
+	struct param_buf p_buf;
 	int ret;
 
 	p_buf.norm_addr = addr;
 	p_buf.socket    = socket_id;
 	p_buf.bank_id   = bank_id;
-	p_buf.out_buf   = &ret_addr;
+	p_buf.out_buf   = out_buf;
 
-	ret = acpi_call_prm_handler(norm_to_sys_guid, &p_buf);
+	ret = acpi_call_prm_handler(guid, &p_buf);
 	if (!ret)
-		return ret_addr;
+		return 0;
 
 	if (ret == -ENODEV || ret == -EOPNOTSUPP)
-		pr_debug("PRM module/handler not available\n");
+		pr_debug("PRM module/handler not available: %d\n", ret);
 	else
-		pr_notice_once("PRM address translation failed\n");
+		pr_notice_once("PRM address translation failed: %d\n", ret);
 
 	return ret;
+}
+
+unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 bank_id, unsigned long addr)
+{
+	unsigned long sys_addr;
+	int ret;
+
+	ret = prm_umc_norm_to_addr(norm_to_sys_guid, socket_id, bank_id, addr, &sys_addr);
+	if (ret)
+		return ret;
+
+	return sys_addr;
 }
