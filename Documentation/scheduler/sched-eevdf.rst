@@ -4,7 +4,7 @@ EEVDF Scheduler
 
 The "Earliest Eligible Virtual Deadline First" (EEVDF) was first introduced
 in a scientific publication in 1995 [1]. The Linux kernel began
-transitioning to EEVDF in version 6.6 (as a new option in 2024), moving
+transitioning to EEVDF in version 6.6 (released in 2023), moving
 away from the earlier Completely Fair Scheduler (CFS) in favor of a version
 of EEVDF proposed by Peter Zijlstra in 2023 [2-4]. More information
 regarding CFS can be found in
@@ -28,8 +28,9 @@ by sleeping briefly to reset their negative lag: when a task sleeps, it
 remains on the run queue but marked for "deferred dequeue," allowing its
 lag to decay over VRT. Hence, long-sleeping tasks eventually have their lag
 reset. Finally, tasks can preempt others if their VD is earlier, and tasks
-can request specific time slices using the new sched_setattr() system call,
-which further facilitates the job of latency-sensitive applications.
+can request specific time slices via the ``sched_runtime`` field of the
+sched_setattr() system call, which further facilitates the job of
+latency-sensitive applications.
 
 REFERENCES
 ==========

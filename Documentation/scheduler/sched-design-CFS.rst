@@ -15,6 +15,16 @@ scheduler's SCHED_OTHER interactivity code. Nowadays, CFS is making room
 for EEVDF, for which documentation can be found in
 Documentation/scheduler/sched-eevdf.rst.
 
+.. note::
+
+   Since Linux 6.6 the fair scheduling class implements EEVDF rather than
+   the original CFS algorithm.  The task selection and placement described
+   in sections 2 and 3 below (running the smallest-vruntime / "leftmost"
+   task, and the ``rq->cfs.min_vruntime`` field) describe the original CFS
+   design and no longer match the code: EEVDF picks the *eligible* task
+   with the earliest virtual deadline, and the runqueue's zero-lag
+   reference is now tracked in ``cfs_rq->zero_vruntime``.
+
 80% of CFS's design can be summed up in a single sentence: CFS basically models
 an "ideal, precise multi-tasking CPU" on real hardware.
 
