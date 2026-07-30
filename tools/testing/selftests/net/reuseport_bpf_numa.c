@@ -104,12 +104,34 @@ static void attach_bpf(int fd)
 	close(bpf_fd);
 }
 
-static void send_from_node(int node_id, int family, int proto)
+static inline bool is_cpuless_node(int node_id)
+{
+	struct bitmask *cpumask;
+	bool ret = false;
+
+	cpumask = numa_allocate_cpumask();
+
+	numa_node_to_cpus(node_id, cpumask);
+	if (!numa_bitmask_weight(cpumask))
+		ret = true;
+
+	numa_bitmask_free(cpumask);
+	return ret;
+}
+
+/*
+ * return -1 on node_id pointing to a cpuless node (like a CXL node),
+ * return 0 on successful numa setup
+ */
+static int send_from_node(int node_id, int family, int proto)
 {
 	struct sockaddr_storage saddr, daddr;
 	struct sockaddr_in  *saddr4, *daddr4;
 	struct sockaddr_in6 *saddr6, *daddr6;
 	int fd;
+
+	if (is_cpuless_node(node_id))
+		return -1;
 
 	switch (family) {
 	case AF_INET:
@@ -155,6 +177,7 @@ static void send_from_node(int node_id, int family, int proto)
 		error(1, errno, "failed to send message");
 
 	close(fd);
+	return 0;
 }
 
 static
@@ -213,7 +236,8 @@ static void test(int *rcv_fd, int len, int family, int proto)
 	for (node = 0; node < len; ++node) {
 		if (!numa_bitmask_isbitset(numa_nodes_ptr, node))
 			continue;
-		send_from_node(node, family, proto);
+		if (send_from_node(node, family, proto))
+			continue;
 		receive_on_node(rcv_fd, len, epfd, node, proto);
 	}
 
@@ -221,7 +245,8 @@ static void test(int *rcv_fd, int len, int family, int proto)
 	for (node = len - 1; node >= 0; --node) {
 		if (!numa_bitmask_isbitset(numa_nodes_ptr, node))
 			continue;
-		send_from_node(node, family, proto);
+		if (send_from_node(node, family, proto))
+			continue;
 		receive_on_node(rcv_fd, len, epfd, node, proto);
 	}
 
