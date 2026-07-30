@@ -3032,6 +3032,11 @@ static __init int kvm_arm_init(void)
 
 	in_hyp_mode = is_kernel_in_hyp_mode();
 
+	if (cpus_have_final_cap(ARM64_WORKAROUND_NXP_ERR050104)) {
+		kvm_info("KVM not supported on NXP iMX8QM (ERR050104)\n");
+		return -ENODEV;
+	}
+
 	if (cpus_have_final_cap(ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE) ||
 	    cpus_have_final_cap(ARM64_WORKAROUND_1508412))
 		kvm_info("Guests without required CPU erratum workarounds can deadlock system!\n" \
