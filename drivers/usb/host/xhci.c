@@ -495,10 +495,8 @@ static void xhci_set_cmd_ring_deq(struct xhci_hcd *xhci)
 	deq_dma &= CMD_RING_PTR_MASK;
 
 	crcr = xhci_read_64(xhci, &xhci->op_regs->cmd_ring);
-	crcr &= ~CMD_RING_PTR_MASK;
+	crcr &= ~(CMD_RING_PTR_MASK | CMD_RING_CYCLE);
 	crcr |= deq_dma;
-
-	crcr &= ~CMD_RING_CYCLE;
 	crcr |= xhci->cmd_ring->cycle_state;
 
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Setting command ring address to 0x%llx", crcr);
