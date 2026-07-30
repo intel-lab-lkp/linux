@@ -144,5 +144,8 @@ const struct zcomp_ops backend_deflate = {
 	.destroy_ctx	= deflate_destroy,
 	.setup_params	= deflate_setup_params,
 	.release_params	= deflate_release_params,
+	.caps		= ZCOMP_CAP_LEVEL,
+	.level_min	= Z_DEFAULT_COMPRESSION,
+	.level_max	= Z_BEST_COMPRESSION,
 	.name		= "deflate",
 };

@@ -217,5 +217,8 @@ const struct zcomp_ops backend_zstd = {
 	.destroy_ctx	= zstd_destroy,
 	.setup_params	= zstd_setup_params,
 	.release_params	= zstd_release_params,
+	.caps		= ZCOMP_CAP_DICT | ZCOMP_CAP_LEVEL,
+	.level_min	= (int)-ZSTD_TARGETLENGTH_MAX,
+	.level_max	= -1,	/* validated by zstd_setup_params() */
 	.name		= "zstd",
 };

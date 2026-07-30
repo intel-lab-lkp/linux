@@ -57,5 +57,6 @@ const struct zcomp_ops backend_842 = {
 	.destroy_ctx	= destroy_842,
 	.setup_params	= setup_params_842,
 	.release_params	= release_params_842,
+	.caps		= 0,
 	.name		= "842",
 };

@@ -55,5 +55,6 @@ const struct zcomp_ops backend_lzorle = {
 	.destroy_ctx	= lzorle_destroy,
 	.setup_params	= lzorle_setup_params,
 	.release_params	= lzorle_release_params,
+	.caps		= 0,
 	.name		= "lzo-rle",
 };

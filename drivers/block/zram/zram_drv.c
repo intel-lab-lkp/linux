@@ -1797,6 +1797,13 @@ static ssize_t algorithm_params_store(struct device *dev,
 			return -EINVAL;
 	}
 
+	if (zram->comp_algs[prio]) {
+		ret = zcomp_validate_params(zram->comp_algs[prio], level,
+					    dict_path);
+		if (ret)
+			return ret;
+	}
+
 	ret = comp_params_store(zram, prio, level, dict_path, &deflate_params);
 	return ret ? ret : len;
 }
