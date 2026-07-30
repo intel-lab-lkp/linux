@@ -7,6 +7,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_buddy.h>
+#include <uapi/drm/xe_drm.h>
 
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_range_manager.h>
@@ -541,7 +542,12 @@ static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
 	xe_bo_unlock(bo);
 	/*  Ban VM if BO is PPGTT */
 	if (vm && (flags & XE_BO_FLAG_PAGETABLE)) {
+		struct xe_exec_queue *eq;
+
 		down_write(&vm->lock);
+		list_for_each_entry(eq, &vm->preempt.exec_queues, lr.link)
+			atomic_or(DRM_XE_EXEC_QUEUE_BAN_REASON_PAGE_OFFLINE, &eq->ban_reason);
+		smp_wmb(); /* Force all queue bits to be visible before killing the VM */
 		xe_vm_kill(vm, true);
 		up_write(&vm->lock);
 	}
@@ -553,7 +559,9 @@ static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
 	/*  Ban exec queue if BO is lrc */
 	if (q && xe_exec_queue_get_unless_zero(q)) {
 		/* ban queue */
-		q_to_put = q;
+                atomic_or(DRM_XE_EXEC_QUEUE_BAN_REASON_PAGE_OFFLINE, &q->ban_reason);
+                smp_wmb(); /* Force bit change to finish before state change triggers */
+                q_to_put = q;
 	}
 
 	if (bo->purgeable.state == XE_MADV_PURGEABLE_PURGED) {
