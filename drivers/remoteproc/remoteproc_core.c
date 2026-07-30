@@ -2754,8 +2754,8 @@ void rproc_report_crash(struct rproc *rproc, enum rproc_crash_type type)
 	}
 
 	/* Prevent suspend while the remoteproc is being recovered */
-	pm_stay_awake(rproc->dev.parent);
-	queue_work(rproc_recovery_wq, &rproc->crash_handler);
+	if (queue_work(rproc_recovery_wq, &rproc->crash_handler))
+		pm_stay_awake(rproc->dev.parent);
 	spin_unlock_irqrestore(&rproc->crash_handler_lock, flags);
 
 	dev_err(&rproc->dev, "crash detected in %s: type %s\n",
