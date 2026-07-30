@@ -4144,6 +4144,9 @@ static void task_numa_work(struct callback_head *work)
 	if (p->flags & PF_EXITING)
 		return;
 
+	if (!node_state(task_node(p), N_MEMORY))
+		return;
+
 	/*
 	 * Memory is pinned to only one NUMA node via cpuset.mems, naturally
 	 * no page can be migrated.
@@ -4432,6 +4435,9 @@ static void task_tick_numa(struct rq *rq, struct task_struct *curr)
 	 * We don't care about NUMA placement if we don't have memory.
 	 */
 	if (!curr->mm || (curr->flags & (PF_EXITING | PF_KTHREAD)) || work->next != work)
+		return;
+
+	if (!node_state(task_node(curr), N_MEMORY))
 		return;
 
 	/*
