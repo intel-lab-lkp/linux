@@ -1553,31 +1553,93 @@ static bool region_selectors_fit(struct cxl_port *port,
 }
 
 /**
- * derive_port_granularity() - Calculate the granularity for a port decoder
- * @cxlr: region under construction
- * @fanout: product of the ancestor switch ways
- * @ig: filled with the port decoder granularity
+ * cxl_region_is_mixed_gran() - Test for a mixed-granularity region
+ * @cxlr: region
  *
- * Preserve the existing parent-granularity times parent-ways recurrence in
- * terms of the region granularity and the fan-out above this port.
+ * A region is mixed-granularity when an interleaving root decoder uses a
+ * larger granularity than the region.
  *
- * Return: 0 on success.
+ * Return: true for a mixed-granularity region.
  */
-static int derive_port_granularity(struct cxl_region *cxlr, int fanout,
-				   int *ig)
+static inline bool cxl_region_is_mixed_gran(struct cxl_region *cxlr)
+{
+	struct cxl_decoder *cxld = &cxlr->cxlrd->cxlsd.cxld;
+
+	return cxld->interleave_ways > 1 &&
+	       cxld->interleave_granularity > cxlr->params.interleave_granularity;
+}
+
+/**
+ * derive_port_granularity() - Calculate the granularity for a port decoder
+ * @port: port being configured
+ * @cxlr: region under construction
+ * @accum: selectors used by the ancestor decoders
+ * @fanout: product of the ancestor switch ways
+ * @iw: port decoder interleave ways
+ * @ig: filled with the derived granularity
+ *
+ * Select the decoder granularity from the region selector bits not already
+ * used by its ancestors. Same-granularity regions allocate the lowest
+ * available selector bits first. Mixed-granularity regions allocate the
+ * highest available selector bits first so decoder granularities decrease
+ * from the root toward the endpoints.
+ *
+ * A passthrough decoder uses no selector bits and retains the granularity
+ * implied by the ancestor fan-out.
+ *
+ * Return: 0 on success, -ENXIO when no valid selector remains.
+ */
+static int derive_port_granularity(struct cxl_port *port,
+				   struct cxl_region *cxlr, u64 accum,
+				   int fanout, int iw, int *ig)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
 	int root_iw = cxlrd->cxlsd.cxld.interleave_ways;
 	struct cxl_region_params *p = &cxlr->params;
+	u64 selector;
 	int sel_distance;
 
-	sel_distance = is_power_of_2(root_iw) ? root_iw : root_iw / 3;
-	sel_distance *= fanout;
-	*ig = p->interleave_granularity * sel_distance;
+	selector = get_selector(p->interleave_ways,
+				p->interleave_granularity) & ~accum;
+
+	if (iw == 1) {
+		sel_distance = is_power_of_2(root_iw) ? root_iw : root_iw / 3;
+		sel_distance *= fanout;
+		*ig = p->interleave_granularity * sel_distance;
+	} else if (selector && cxl_region_is_mixed_gran(cxlr)) {
+		*ig = (1ULL << fls64(selector)) / iw;
+	} else if (selector) {
+		*ig = 1ULL << __ffs64(selector);
+	} else {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: no selector bits available for iw %d\n",
+			dev_name(port->uport_dev), dev_name(&port->dev), iw);
+		return -ENXIO;
+	}
+
+	if (iw > 1 && (~selector & get_selector(iw, *ig))) {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: derived selector %#llx exceeds remaining %#llx (iw %d ig %d)\n",
+			dev_name(port->uport_dev), dev_name(&port->dev),
+			get_selector(iw, *ig), selector, iw, *ig);
+		return -ENXIO;
+	}
 
 	return 0;
 }
 
+/**
+ * cxl_port_setup_targets() - Validate and program a port decoder
+ * @port: port being configured
+ * @cxlr: region under construction
+ * @cxled: endpoint decoder being attached
+ *
+ * Validate the decoder's selector placement and derive its interleave
+ * geometry. User-created regions program the derived values; auto regions
+ * validate the firmware-programmed values.
+ *
+ * Return: 0 on success, negative errno on invalid interleave geometry.
+ */
 static int cxl_port_setup_targets(struct cxl_port *port,
 				  struct cxl_region *cxlr,
 				  struct cxl_endpoint_decoder *cxled)
@@ -1635,7 +1697,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		goto add_target;
 	}
 
-	rc = derive_port_granularity(cxlr, fanout, &ig);
+	rc = derive_port_granularity(port, cxlr, accum, fanout, iw, &ig);
 	if (rc)
 		return rc;
 
@@ -1650,8 +1712,14 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	}
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
+		if (iw > 1 && cxld->interleave_granularity != ig) {
+			dev_dbg(&cxlr->dev,
+				"%s:%s: firmware ig %d != derived ig %d (iw %d)\n",
+				dev_name(port->uport_dev), dev_name(&port->dev),
+				cxld->interleave_granularity, ig, iw);
+			return -ENXIO;
+		}
 		if (cxld->interleave_ways != iw ||
-		    (iw > 1 && cxld->interleave_granularity != ig) ||
 		    !spa_maps_hpa(p, &cxld->hpa_range) ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
