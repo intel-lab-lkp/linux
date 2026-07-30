@@ -121,7 +121,7 @@ Example 'caps' content for the 'tracing' feature:
 	watcher                                  Available: Yes
 	crashlog                                 Available: No
 	streaming                                Available: No
-	threashold                               Available: No
+	threshold                                Available: No
 	window                                   Available: No
 	config                                   Available: Yes
 	tracing                                  Available: No
