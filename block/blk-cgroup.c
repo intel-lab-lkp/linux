@@ -23,7 +23,6 @@
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
 #include <linux/slab.h>
-#include <linux/delay.h>
 #include <linux/wait_bit.h>
 #include <linux/atomic.h>
 #include <linux/ctype.h>
@@ -920,16 +919,6 @@ fail_unlock:
 	spin_unlock_irq(&q->queue_lock);
 fail_exit:
 	mutex_unlock(&q->blkcg_mutex);
-	/*
-	 * If queue was bypassing, we should retry.  Do so after a
-	 * short msleep().  It isn't strictly necessary but queue
-	 * can be bypassing for some time and it's always nice to
-	 * avoid busy looping.
-	 */
-	if (ret == -EBUSY) {
-		msleep(10);
-		ret = restart_syscall();
-	}
 	return ret;
 }
 EXPORT_SYMBOL_GPL(blkg_conf_prep);
