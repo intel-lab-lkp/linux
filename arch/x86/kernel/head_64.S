@@ -27,6 +27,7 @@
 #include <asm/fixmap.h>
 #include <asm/smp.h>
 #include <asm/thread_info.h>
+#include <asm/setup.h>
 
 /*
  * We are not able to switch in one step to the final KERNEL ADDRESS SPACE
@@ -65,6 +66,22 @@ SYM_CODE_START_NOALIGN(startup_64)
 
 	call	clear_bss
 
+	/* Copy the boot parameters and command line into kernel memory. */
+	movq	%r15, %rsi
+	leaq	boot_params(%rip), %rdi
+	movl	$(SIZEOF_boot_params / 4), %ecx
+	rep movsl
+
+	movl	boot_params + BP_cmd_line_ptr(%rip), %esi
+	movl	boot_params + BP_ext_cmd_line_ptr(%rip), %eax
+	shlq	$32, %rax
+	orq	%rax, %rsi
+	jz	.Lno_command_line
+	leaq	boot_command_line(%rip), %rdi
+	movl	$(COMMAND_LINE_SIZE / 4), %ecx
+	rep movsl
+.Lno_command_line:
+
 	/*
 	 * Set up GSBASE.
 	 * Note that on SMP the boot CPU uses the init data section until
@@ -92,9 +109,8 @@ SYM_CODE_START_NOALIGN(startup_64)
 	 * Activate SEV/SME memory encryption if supported/enabled. This needs to
 	 * be done now, since this also includes setup of the SEV-SNP CPUID table,
 	 * which needs to be done before any CPUID instructions are executed in
-	 * subsequent code. Pass the boot_params pointer as the first argument.
+	 * subsequent code.
 	 */
-	movq	%r15, %rdi
 	call	__pi_sme_enable
 #endif
 
@@ -114,7 +130,6 @@ SYM_CODE_START_NOALIGN(startup_64)
 	 * is active) to be added to the initial pgdir entry that will be
 	 * programmed into CR3.
 	 */
-	movq	%r15, %rsi
 	call	__pi___startup_64
 
 	/* Form the CR3 value being sure to include the CR3 modifier */
@@ -194,9 +209,6 @@ SYM_CODE_START(secondary_startup_64)
 SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 	UNWIND_HINT_END_OF_STACK
 	ANNOTATE_NOENDBR
-
-	/* Clear %R15 which holds the boot_params pointer on the boot CPU */
-	xorl	%r15d, %r15d
 
 	/* Derive the runtime physical address of init_top_pgt[] */
 	movq	phys_base(%rip), %rax
@@ -428,9 +440,6 @@ SYM_INNER_LABEL(common_startup_64, SYM_L_LOCAL)
 	/* zero EFLAGS after setting rsp */
 	pushq $0
 	popfq
-
-	/* Pass the boot_params pointer as first argument */
-	movq	%r15, %rdi
 
 .Ljump_to_C_code:
 	xorl	%ebp, %ebp	# clear frame pointer

@@ -30,15 +30,14 @@ static inline bool check_la57_support(void)
 	return true;
 }
 
-static unsigned long __init sme_postprocess_startup(struct boot_params *bp,
-						    pmdval_t *pmd,
+static unsigned long __init sme_postprocess_startup(pmdval_t *pmd,
 						    unsigned long p2v_offset)
 {
 	unsigned long paddr, paddr_end;
 	int i;
 
 	/* Encrypt the kernel and related (if SME is active) */
-	sme_encrypt_kernel(bp);
+	sme_encrypt_kernel();
 
 	/*
 	 * Clear the memory encryption mask from the .bss..decrypted section.
@@ -84,8 +83,7 @@ static unsigned long __init sme_postprocess_startup(struct boot_params *bp,
  * the 1:1 mapping of memory. Kernel virtual addresses can be determined by
  * subtracting p2v_offset from the RIP-relative address.
  */
-unsigned long __init __startup_64(unsigned long p2v_offset,
-				  struct boot_params *bp)
+unsigned long __init __startup_64(unsigned long p2v_offset)
 {
 	pmd_t (*early_pgts)[PTRS_PER_PMD] = rip_rel_ptr(early_dynamic_pgts);
 	unsigned long physaddr = (unsigned long)rip_rel_ptr(_text);
@@ -213,5 +211,5 @@ unsigned long __init __startup_64(unsigned long p2v_offset,
 	for (; i < PTRS_PER_PMD; i++)
 		pmd[i] &= ~_PAGE_PRESENT;
 
-	return sme_postprocess_startup(bp, pmd, p2v_offset);
+	return sme_postprocess_startup(pmd, p2v_offset);
 }

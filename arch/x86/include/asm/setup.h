@@ -47,7 +47,7 @@ extern unsigned long acpi_realmode_flags;
 
 extern void reserve_standard_io_resources(void);
 extern void i386_reserve_resources(void);
-extern unsigned long __startup_64(unsigned long p2v_offset, struct boot_params *bp);
+extern unsigned long __startup_64(unsigned long p2v_offset);
 extern void startup_64_setup_gdt_idt(void);
 extern void startup_64_load_idt(void *vc_handler);
 extern void __pi_startup_64_load_idt(void *vc_handler);
@@ -129,7 +129,7 @@ asmlinkage void __init __noreturn i386_start_kernel(void);
 void __init mk_early_pgtbl_32(void);
 
 #else
-asmlinkage void __init __noreturn x86_64_start_kernel(char *real_mode);
+asmlinkage void __init __noreturn x86_64_start_kernel(void);
 asmlinkage void __init __noreturn x86_64_start_reservations(void);
 
 #endif /* __i386__ */

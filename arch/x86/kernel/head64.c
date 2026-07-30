@@ -172,44 +172,7 @@ void __init do_early_exception(struct pt_regs *regs, int trapnr)
 	early_fixup_exception(regs, trapnr);
 }
 
-static unsigned long get_cmd_line_ptr(void)
-{
-	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
-
-	cmd_line_ptr |= (u64)boot_params.ext_cmd_line_ptr << 32;
-
-	return cmd_line_ptr;
-}
-
-static void __init copy_bootdata(char *real_mode_data)
-{
-	char * command_line;
-	unsigned long cmd_line_ptr;
-
-	/*
-	 * If SME is active, this will create decrypted mappings of the
-	 * boot data in advance of the copy operations.
-	 */
-	sme_map_bootdata(real_mode_data);
-
-	memcpy(&boot_params, real_mode_data, sizeof(boot_params));
-	sanitize_boot_params(&boot_params);
-	cmd_line_ptr = get_cmd_line_ptr();
-	if (cmd_line_ptr) {
-		command_line = __va(cmd_line_ptr);
-		memcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
-	}
-
-	/*
-	 * The old boot data is no longer needed and won't be reserved,
-	 * freeing up that memory for use by the system. If SME is active,
-	 * we need to remove the mappings that were created so that the
-	 * memory doesn't remain mapped as decrypted.
-	 */
-	sme_unmap_bootdata(real_mode_data);
-}
-
-asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode_data)
+asmlinkage __visible void __init __noreturn x86_64_start_kernel(void)
 {
 	/*
 	 * Build-time sanity checks on the kernel image and module
@@ -266,7 +229,7 @@ asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode
 	/* Needed before cc_platform_has() can be used for TDX */
 	tdx_early_init();
 
-	copy_bootdata(__va(real_mode_data));
+	sanitize_boot_params(&boot_params);
 
 	/*
 	 * Load microcode early on BSP.

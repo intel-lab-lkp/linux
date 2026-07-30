@@ -77,6 +77,7 @@ unsigned long _brk_start = (unsigned long)__brk_base;
 unsigned long _brk_end   = (unsigned long)__brk_base;
 
 struct boot_params boot_params;
+SYM_PIC_ALIAS(boot_params);
 
 /*
  * These are the four main kernel memory regions, we put them into

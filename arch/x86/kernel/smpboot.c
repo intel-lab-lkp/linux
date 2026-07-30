@@ -226,7 +226,7 @@ static void ap_calibrate_delay(void)
 /*
  * Activate a secondary processor.
  */
-static void notrace __noendbr start_secondary(void *unused)
+static void notrace __noendbr start_secondary(void)
 {
 	/*
 	 * Don't put *anything* except direct CPU state initialization
