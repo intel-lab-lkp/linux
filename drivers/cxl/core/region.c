@@ -1681,6 +1681,50 @@ static int derive_port_granularity(struct cxl_port *port,
 }
 
 /**
+ * check_gran_ordering() - Check mixed-granularity decoder ordering
+ * @port: port being configured
+ * @cxlr: region under construction
+ * @cxld: port decoder
+ * @accum: selectors used by the ancestor decoders
+ * @iw: port decoder interleave ways
+ * @ig: derived port decoder granularity
+ *
+ * The mixed-granularity position calculation requires each interleaving
+ * decoder below the root to use a smaller granularity than its nearest
+ * interleaving ancestor. Passthrough decoders do not participate.
+ *
+ * Auto regions validate the firmware-programmed granularity. User-created
+ * regions validate @ig.
+ *
+ * Return: 0 on success, -ENXIO on invalid ordering.
+ */
+static int check_gran_ordering(struct cxl_port *port, struct cxl_region *cxlr,
+			       struct cxl_decoder *cxld, u64 accum, int iw,
+			       int ig)
+{
+	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
+	u64 val, ancestor_gran;
+
+	if (!cxl_region_is_mixed_gran(cxlr) || iw <= 1)
+		return 0;
+
+	val = test_bit(CXL_REGION_F_AUTO, &cxlr->flags) ?
+		cxld->interleave_granularity : ig;
+	ancestor_gran = accum ? (1ULL << __ffs64(accum)) :
+		cxlrd->cxlsd.cxld.interleave_granularity;
+
+	if (val >= ancestor_gran) {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: iw %d ig %llu not finer than nearest interleaving ancestor (ig %llu); coarse-to-fine ordering required\n",
+			dev_name(port->uport_dev), dev_name(&port->dev),
+			iw, val, ancestor_gran);
+		return -ENXIO;
+	}
+
+	return 0;
+}
+
+/**
  * cxl_port_setup_targets() - Validate and program a port decoder
  * @port: port being configured
  * @cxlr: region under construction
@@ -1761,6 +1805,10 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 			dev_name(port->uport_dev), dev_name(&port->dev), ig, iw);
 		return rc;
 	}
+
+	rc = check_gran_ordering(port, cxlr, cxld, accum, iw, ig);
+	if (rc)
+		return rc;
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		if (iw > 1 && cxld->interleave_granularity != ig) {
