@@ -1888,19 +1888,9 @@ static void rproc_crash_handler_work(struct work_struct *work)
 
 	mutex_lock(&rproc->lock);
 
-	if (READ_ONCE(rproc->deleting)) {
-		mutex_unlock(&rproc->lock);
-		goto out;
-	}
-
-	if (rproc->state == RPROC_CRASHED) {
-		/* handle only the first crash detected */
-		mutex_unlock(&rproc->lock);
-		goto out;
-	}
-
-	if (rproc->state == RPROC_OFFLINE) {
-		/* Don't recover if the remote processor was stopped */
+	if (READ_ONCE(rproc->deleting) ||
+	    rproc->state == RPROC_CRASHED ||
+	    rproc->state == RPROC_OFFLINE) {
 		mutex_unlock(&rproc->lock);
 		goto out;
 	}
