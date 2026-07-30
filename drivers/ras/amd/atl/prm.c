@@ -20,22 +20,17 @@
 
 /* See "PRM Parameter Buffer" in the AMD ACPI Porting Guide. */
 struct param_buf {
-	u64 norm_addr;
-	u8 socket;
-	u64 bank_id;
+	struct atl_umc_addr addr;
 	void *out_buf;
 } __packed;
 
-int prm_umc_norm_to_addr(guid_t guid, u8 socket_id, u64 bank_id,
-			 unsigned long addr, void *out_buf)
+int prm_umc_norm_to_addr(guid_t guid, struct atl_umc_addr *addr, void *out_buf)
 {
 	struct param_buf p_buf;
 	int ret;
 
-	p_buf.norm_addr = addr;
-	p_buf.socket    = socket_id;
-	p_buf.bank_id   = bank_id;
-	p_buf.out_buf   = out_buf;
+	p_buf.addr    = *addr;
+	p_buf.out_buf = out_buf;
 
 	ret = acpi_call_prm_handler(guid, &p_buf);
 	if (!ret)
@@ -51,10 +46,15 @@ int prm_umc_norm_to_addr(guid_t guid, u8 socket_id, u64 bank_id,
 
 unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 bank_id, unsigned long addr)
 {
+	struct atl_umc_addr uaddr = {
+		.addr		= addr,
+		.socket_id	= socket_id,
+		.ipid		= bank_id,
+	};
 	unsigned long sys_addr;
 	int ret;
 
-	ret = prm_umc_norm_to_addr(norm_to_sys_guid, socket_id, bank_id, addr, &sys_addr);
+	ret = prm_umc_norm_to_addr(norm_to_sys_guid, &uaddr, &sys_addr);
 	if (ret)
 		return ret;
 

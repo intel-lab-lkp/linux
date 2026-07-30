@@ -39,6 +39,34 @@ unsigned long amd_convert_umc_mca_addr_to_sys_addr(struct atl_err *err)
 	return amd_atl_umc_na_to_spa(err);
 }
 EXPORT_SYMBOL_GPL(amd_convert_umc_mca_addr_to_sys_addr);
+
+/*
+ * Set by the library module when it loads. Left registered while the module is
+ * resident; consumers keep no direct dependency on the library, so translation
+ * is simply skipped when it is not loaded.
+ */
+static void (*amd_atl_umc_translate)(struct atl_err *err);
+
+void amd_atl_register_umc_translator(void (*f)(struct atl_err *))
+{
+	amd_atl_umc_translate = f;
+}
+EXPORT_SYMBOL_GPL(amd_atl_register_umc_translator);
+
+void amd_atl_unregister_umc_translator(void)
+{
+	amd_atl_umc_translate = NULL;
+}
+EXPORT_SYMBOL_GPL(amd_atl_unregister_umc_translator);
+
+void amd_translate_umc_mca_addr(struct atl_err *err)
+{
+	err->valid = 0;
+
+	if (amd_atl_umc_translate)
+		amd_atl_umc_translate(err);
+}
+EXPORT_SYMBOL_GPL(amd_translate_umc_mca_addr);
 #endif /* CONFIG_AMD_ATL */
 
 #define CREATE_TRACE_POINTS

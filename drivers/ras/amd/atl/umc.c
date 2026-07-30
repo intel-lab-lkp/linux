@@ -416,3 +416,40 @@ unsigned long convert_umc_mca_addr_to_sys_addr(struct atl_err *err)
 
 	return norm_to_sys_addr(socket_id, die_id, coh_st_inst_id, addr);
 }
+
+/*
+ * Translate a UMC MCA error address into one or more representations as
+ * requested by the caller.
+ *
+ * The caller sets the input values and requests one or more operations
+ * through @err->requested. @err->valid is cleared on entry. Each operation
+ * is attempted independently. The corresponding bit in @err->valid is set
+ * and the related output field is filled for each operation that succeeds.
+ * The caller must check @err->valid before consuming an output value.
+ *
+ * The PRM handlers consume @err->umc_addr directly. Only MI300 needs its
+ * MCA_ADDR value converted to a normalized address first; see get_addr().
+ * MI300 platforms provide no PRM handlers, so the conversion is left to the
+ * native fallback path.
+ *
+ * Registered with the RAS core as the UMC address translator; see
+ * amd_translate_umc_mca_addr().
+ */
+void amd_atl_umc_translate_addr(struct atl_err *err)
+{
+	err->socket_id = topology_physical_package_id(err->cpu);
+	err->valid     = 0;
+
+	if (err->requested & ATL_OP_SPA) {
+		if (!prm_umc_norm_to_addr(norm_to_sys_guid, &err->umc_addr, &err->spa)) {
+			err->valid |= ATL_OP_SPA;
+		} else if (!df_cfg.flags.prm_only) {
+			unsigned long spa = convert_umc_mca_addr_to_sys_addr(err);
+
+			if (!IS_ERR_VALUE(spa)) {
+				err->spa = spa;
+				err->valid |= ATL_OP_SPA;
+			}
+		}
+	}
+}
