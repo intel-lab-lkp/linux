@@ -1347,6 +1347,7 @@ int bnx2i_process_scsi_cmd_resp(struct iscsi_session *session,
 
 	resp_cqe = (struct bnx2i_cmd_response *)cqe;
 	spin_lock_bh(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	task = iscsi_itt_to_task(conn,
 				 resp_cqe->itt & ISCSI_CMD_RESPONSE_INDEX);
 	if (!task)
@@ -1443,6 +1444,7 @@ static int bnx2i_process_login_resp(struct iscsi_session *session,
 
 	login = (struct bnx2i_login_response *) cqe;
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	task = iscsi_itt_to_task(conn,
 				 login->itt & ISCSI_LOGIN_RESPONSE_INDEX);
 	if (!task)
@@ -1511,6 +1513,7 @@ static int bnx2i_process_text_resp(struct iscsi_session *session,
 
 	text = (struct bnx2i_text_response *) cqe;
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	task = iscsi_itt_to_task(conn, text->itt & ISCSI_LOGIN_RESPONSE_INDEX);
 	if (!task)
 		goto done;
@@ -1570,6 +1573,7 @@ static int bnx2i_process_tmf_resp(struct iscsi_session *session,
 
 	tmf_cqe = (struct bnx2i_tmf_response *)cqe;
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	task = iscsi_itt_to_task(conn,
 				 tmf_cqe->itt & ISCSI_TMF_RESPONSE_INDEX);
 	if (!task)
@@ -1609,6 +1613,7 @@ static int bnx2i_process_logout_resp(struct iscsi_session *session,
 
 	logout = (struct bnx2i_logout_response *) cqe;
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	task = iscsi_itt_to_task(conn,
 				 logout->itt & ISCSI_LOGOUT_RESPONSE_INDEX);
 	if (!task)
@@ -1698,6 +1703,7 @@ static int bnx2i_process_nopin_mesg(struct iscsi_session *session,
 	nop_in = (struct bnx2i_nop_in_msg *)cqe;
 
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	hdr = (struct iscsi_nopin *)&bnx2i_conn->gen_pdu.resp_hdr;
 	memset(hdr, 0, sizeof(struct iscsi_hdr));
 	hdr->opcode = nop_in->op_code;
@@ -1758,6 +1764,7 @@ static void bnx2i_process_async_mesg(struct iscsi_session *session,
 	}
 
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	resp_hdr = (struct iscsi_async *) &bnx2i_conn->gen_pdu.resp_hdr;
 	memset(resp_hdr, 0, sizeof(struct iscsi_hdr));
 	resp_hdr->opcode = async_cqe->op_code;
@@ -1803,6 +1810,7 @@ static void bnx2i_process_reject_mesg(struct iscsi_session *session,
 		bnx2i_unsol_pdu_adjust_rq(bnx2i_conn);
 
 	spin_lock(&session->back_lock);
+	__assume_ctx_lock(&conn->session->back_lock);
 	hdr = (struct iscsi_reject *) &bnx2i_conn->gen_pdu.resp_hdr;
 	memset(hdr, 0, sizeof(struct iscsi_hdr));
 	hdr->opcode = reject->op_code;
