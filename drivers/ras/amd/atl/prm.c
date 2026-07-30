@@ -43,20 +43,3 @@ int prm_umc_norm_to_addr(guid_t guid, struct atl_umc_addr *addr, void *out_buf)
 
 	return ret;
 }
-
-unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 bank_id, unsigned long addr)
-{
-	struct atl_umc_addr uaddr = {
-		.addr		= addr,
-		.socket_id	= socket_id,
-		.ipid		= bank_id,
-	};
-	unsigned long sys_addr;
-	int ret;
-
-	ret = prm_umc_norm_to_addr(norm_to_sys_guid, &uaddr, &sys_addr);
-	if (ret)
-		return ret;
-
-	return sys_addr;
-}
