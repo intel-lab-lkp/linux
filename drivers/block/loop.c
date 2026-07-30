@@ -91,8 +91,8 @@ struct loop_cmd {
 #define LOOP_IDLE_WORKER_TIMEOUT (60 * HZ)
 #define LOOP_DEFAULT_HW_Q_DEPTH 128
 
-static DEFINE_IDR(loop_index_idr);
 static DEFINE_MUTEX(loop_ctl_mutex);
+static __guarded_by(&loop_ctl_mutex) DEFINE_IDR(loop_index_idr);
 static DEFINE_MUTEX(loop_validate_mutex);
 
 /**
@@ -107,6 +107,8 @@ static DEFINE_MUTEX(loop_validate_mutex);
  * loop_configure()/loop_change_fd()/__loop_clr_fd() calls.
  */
 static int loop_global_lock_killable(struct loop_device *lo)
+	__cond_acquires(0, &loop_validate_mutex)
+	__cond_acquires(0, &lo->lo_mutex)
 {
 	int err;
 
@@ -125,6 +127,8 @@ static int loop_global_lock_killable(struct loop_device *lo)
  * @lo: struct loop_device
  */
 static void loop_global_unlock(struct loop_device *lo)
+	__releases(&lo->lo_mutex)
+	__releases(&loop_validate_mutex)
 {
 	mutex_unlock(&lo->lo_mutex);
 	mutex_unlock(&loop_validate_mutex);
@@ -2359,6 +2363,7 @@ static void __exit loop_exit(void)
 	 * module unloading is requested). If this is not a clean unloading,
 	 * we have no means to avoid kernel crash.
 	 */
+	__assume_ctx_lock(&loop_ctl_mutex);
 	idr_for_each_entry(&loop_index_idr, lo, id)
 		loop_remove(lo);
 
