@@ -424,7 +424,7 @@ struct hid_item {
 /*
  * HID device groups
  *
- * Note: HID_GROUP_ANY is declared in linux/mod_devicetable.h
+ * Note: HID_GROUP_ANY is declared in <linux/device-id/hid.h>
  * and has a value of 0x0000
  */
 #define HID_GROUP_GENERIC			0x0001
