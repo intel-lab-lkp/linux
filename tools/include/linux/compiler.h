@@ -242,6 +242,8 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 #define ___PASTE(a, b) a##b
 #define __PASTE(a, b) ___PASTE(a, b)
 
+#define __UNIQUE_ID(name) __PASTE(__UNIQUE_ID_, __PASTE(name, __PASTE(_, __COUNTER__)))
+
 #ifndef OPTIMIZER_HIDE_VAR
 /* Make the optimizer believe the variable can be manipulated arbitrarily. */
 #define OPTIMIZER_HIDE_VAR(var)						\
