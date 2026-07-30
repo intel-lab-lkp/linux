@@ -75,7 +75,9 @@ ifneq (,$(filter $(ARCH),arm64 riscv riscv64 x86 x86_64 loongarch32 loongarch64)
 TEST_GEN_FILES += memfd_secret
 endif
 TEST_GEN_FILES += memory-failure
+ifneq ($(NUMA_EXTRA_LIBS),)
 TEST_GEN_FILES += migration
+endif
 TEST_GEN_FILES += mkdirty
 TEST_GEN_FILES += mlock-random-test
 TEST_GEN_FILES += mlock2-tests
@@ -94,7 +96,9 @@ TEST_GEN_FILES += uffd-stress
 TEST_GEN_FILES += uffd-unit-tests
 TEST_GEN_FILES += uffd-wp-mremap
 TEST_GEN_FILES += split_huge_page_test
+ifneq ($(NUMA_EXTRA_LIBS),)
 TEST_GEN_FILES += ksm_tests
+endif
 TEST_GEN_FILES += ksm_functional_tests
 TEST_GEN_FILES += mdwe_test
 TEST_GEN_FILES += hugetlb_fault_after_madv
@@ -103,7 +107,9 @@ TEST_GEN_FILES += hugetlb_dio
 TEST_GEN_FILES += droppable
 TEST_GEN_FILES += guard-regions
 TEST_GEN_FILES += merge
+ifneq ($(NUMA_EXTRA_LIBS),)
 TEST_GEN_FILES += rmap
+endif
 TEST_GEN_FILES += folio_split_race_test
 
 ifneq ($(ARCH),arm64)
@@ -256,11 +262,11 @@ $(OUTPUT)/gup_longterm: LDLIBS += $(IOURING_EXTRA_LIBS)
 
 $(OUTPUT)/mlock-random-test $(OUTPUT)/memfd_secret: LDLIBS += -lcap
 
-$(OUTPUT)/ksm_tests: LDLIBS += -lnuma
+$(OUTPUT)/ksm_tests: LDLIBS += $(NUMA_EXTRA_LIBS)
 
-$(OUTPUT)/migration: LDLIBS += -lnuma
+$(OUTPUT)/migration: LDLIBS += $(NUMA_EXTRA_LIBS)
 
-$(OUTPUT)/rmap: LDLIBS += -lnuma
+$(OUTPUT)/rmap: LDLIBS += $(NUMA_EXTRA_LIBS)
 
 local_config.mk local_config.h: check_config.sh
 	$(call msg,CHK,config,$@)
@@ -274,6 +280,15 @@ all: warn_missing_liburing
 warn_missing_liburing:
 	@echo ; \
 	echo "Warning: missing liburing support. Some tests will be skipped." ; \
+	echo
+endif
+
+ifeq ($(NUMA_EXTRA_LIBS),)
+all: warn_missing_libnuma
+
+warn_missing_libnuma:
+	@echo ; \
+	echo "Warning: missing libnuma support. Some tests (migration, ksm_tests, rmap) will be skipped." ; \
 	echo
 endif
 
