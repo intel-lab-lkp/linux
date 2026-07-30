@@ -438,6 +438,20 @@ struct ff_rumble_effect {
  * @repeat_count: number of times to retrigger effect
  * @retrigger_period: time before effect is retriggered (in ms)
  */
+/**
+ * struct ff_trigger_rumble_effect - parameters of a trigger rumble effect
+ * @left_magnitude: magnitude of the motor behind the left trigger
+ * @right_magnitude: magnitude of the motor behind the right trigger
+ *
+ * Some gamepads carry rumble motors behind their triggers, in addition to
+ * the ones in the grips that FF_RUMBLE drives. Xbox controllers call them
+ * impulse triggers.
+ */
+struct ff_trigger_rumble_effect {
+	__u16 left_magnitude;
+	__u16 right_magnitude;
+};
+
 struct ff_haptic_effect {
 	__u16 hid_usage;
 	__u16 vendor_id;
@@ -483,6 +497,7 @@ struct ff_effect {
 		struct ff_periodic_effect periodic;
 		struct ff_condition_effect condition[2]; /* One for each axis */
 		struct ff_rumble_effect rumble;
+		struct ff_trigger_rumble_effect trigger_rumble;
 		struct ff_haptic_effect haptic;
 	} u;
 };
@@ -491,6 +506,7 @@ struct ff_effect {
  * Force feedback effect types
  */
 
+#define FF_TRIGGER_RUMBLE	0x4e
 #define FF_HAPTIC		0x4f
 #define FF_RUMBLE	0x50
 #define FF_PERIODIC	0x51
@@ -501,7 +517,7 @@ struct ff_effect {
 #define FF_INERTIA	0x56
 #define FF_RAMP		0x57
 
-#define FF_EFFECT_MIN	FF_HAPTIC
+#define FF_EFFECT_MIN	FF_TRIGGER_RUMBLE
 #define FF_EFFECT_MAX	FF_RAMP
 
 /*
