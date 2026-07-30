@@ -47,6 +47,8 @@ struct kvm_aia {
 
 	/* Internal state of APLIC */
 	void		*aplic_state;
+
+	struct kvm_vcpu **hart_to_vcpu;
 };
 
 struct kvm_vcpu_aia_csr {
