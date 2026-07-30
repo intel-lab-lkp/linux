@@ -28,6 +28,7 @@
 #include <linux/poll.h>
 #include <linux/range.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <uapi/linux/vm_sockets.h>
 
@@ -70,17 +71,6 @@ static const struct file_operations ne_fops = {
 	.llseek		= noop_llseek,
 	.unlocked_ioctl	= ne_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
-};
-
-static struct miscdevice ne_misc_dev = {
-	.minor	= MISC_DYNAMIC_MINOR,
-	.name	= "nitro_enclaves",
-	.fops	= &ne_fops,
-	.mode	= 0660,
-};
-
-struct ne_devs ne_devs = {
-	.ne_misc_dev	= &ne_misc_dev,
 };
 
 /*
@@ -131,6 +121,17 @@ MODULE_PARM_DESC(ne_cpus, "<cpu-list> - CPU pool used for Nitro Enclaves");
  *				because from then on they are offline and
  *				cpu_to_node() is not documented to keep
  *				answering for them.
+ * @pool_cpus:			Every CPU thread in the pool, as parsed from
+ *				ne_cpus. Empty if no pool is set up.
+ * @claimed_cpus:		The subset of @pool_cpus that enclaves hold.
+ *				A whole core enters when an enclave takes it
+ *				and leaves when the enclave is released, in
+ *				the same two places that move the core out of
+ *				and back into @avail_threads_per_core.
+ * @avail_cpus:			Scratch mask for the avail sysfs file:
+ *				@pool_cpus without @claimed_cpus, computed
+ *				and emitted under @mutex. It lives here so
+ *				that the read has nothing to allocate.
  */
 struct ne_cpu_pool {
 	cpumask_var_t	*avail_threads_per_core;
@@ -140,11 +141,109 @@ struct ne_cpu_pool {
 	int		numa_node;
 	int		first_nid;
 	int		*core_nid;
+	struct cpumask	pool_cpus;
+	struct cpumask	claimed_cpus;
+	struct cpumask	avail_cpus;
 };
 
 static struct ne_cpu_pool ne_cpu_pool = {
 	.mutex = __MUTEX_INITIALIZER(ne_cpu_pool.mutex),
 	.first_nid = NUMA_NO_NODE,
+};
+
+/*
+ * cpu_pool/ sysfs group on the Nitro Enclaves misc device: report the CPU
+ * pool mode and occupancy.
+ *
+ *   /sys/devices/virtual/misc/nitro_enclaves/cpu_pool/mode
+ *   /sys/devices/virtual/misc/nitro_enclaves/cpu_pool/{total,used,avail}
+ *
+ * total, used and avail are CPU-list strings taken from the pool masks under
+ * the pool mutex. used is claimed_cpus and avail is what is left of the pool
+ * once claimed_cpus is taken out of it, so the two partition total whichever
+ * order they are read in. The three CPU-list files emit from a mask the pool
+ * already owns and mode emits a string constant, so none of the four show
+ * handlers can fail.
+ */
+
+static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	const char *mode;
+
+	mutex_lock(&ne_cpu_pool.mutex);
+	mode = cpumask_empty(&ne_cpu_pool.pool_cpus) ? "none" : "static";
+	mutex_unlock(&ne_cpu_pool.mutex);
+
+	return sysfs_emit(buf, "%s\n", mode);
+}
+static DEVICE_ATTR_RO(mode);
+
+static ssize_t total_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	ssize_t ret;
+
+	mutex_lock(&ne_cpu_pool.mutex);
+	ret = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&ne_cpu_pool.pool_cpus));
+	mutex_unlock(&ne_cpu_pool.mutex);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(total);
+
+static ssize_t used_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	ssize_t ret;
+
+	mutex_lock(&ne_cpu_pool.mutex);
+	ret = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&ne_cpu_pool.claimed_cpus));
+	mutex_unlock(&ne_cpu_pool.mutex);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(used);
+
+static ssize_t avail_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	ssize_t ret;
+
+	mutex_lock(&ne_cpu_pool.mutex);
+	cpumask_andnot(&ne_cpu_pool.avail_cpus, &ne_cpu_pool.pool_cpus,
+		       &ne_cpu_pool.claimed_cpus);
+	ret = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&ne_cpu_pool.avail_cpus));
+	mutex_unlock(&ne_cpu_pool.mutex);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(avail);
+
+static struct attribute *ne_cpu_pool_attrs[] = {
+	&dev_attr_mode.attr,
+	&dev_attr_total.attr,
+	&dev_attr_used.attr,
+	&dev_attr_avail.attr,
+	NULL,
+};
+
+static const struct attribute_group ne_cpu_pool_group = {
+	.name	= "cpu_pool",
+	.attrs	= ne_cpu_pool_attrs,
+};
+__ATTRIBUTE_GROUPS(ne_cpu_pool);
+
+static struct miscdevice ne_misc_dev = {
+	.minor	= MISC_DYNAMIC_MINOR,
+	.name	= "nitro_enclaves",
+	.fops	= &ne_fops,
+	.mode	= 0660,
+	.groups	= ne_cpu_pool_groups,
+};
+
+struct ne_devs ne_devs = {
+	.ne_misc_dev	= &ne_misc_dev,
 };
 
 /**
@@ -445,6 +544,8 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 		}
 	}
 
+	cpumask_copy(&ne_cpu_pool.pool_cpus, cpu_pool);
+	cpumask_clear(&ne_cpu_pool.claimed_cpus);
 	free_cpumask_var(cpu_pool);
 
 	ne_cpu_pool.numa_node = numa_node;
@@ -462,6 +563,8 @@ unlock_hotplug:
 	cpus_read_unlock();
 reset_pool:
 	free_cpumask_var(cpu_pool);
+	cpumask_clear(&ne_cpu_pool.pool_cpus);
+	cpumask_clear(&ne_cpu_pool.claimed_cpus);
 	ne_cpu_pool.nr_parent_vm_cores = 0;
 	ne_cpu_pool.nr_threads_per_core = 0;
 	ne_cpu_pool.numa_node = NUMA_NO_NODE;
@@ -501,6 +604,8 @@ static void ne_teardown_cpu_pool(void)
 		}
 
 	ne_free_core_slots();
+	cpumask_clear(&ne_cpu_pool.pool_cpus);
+	cpumask_clear(&ne_cpu_pool.claimed_cpus);
 	ne_cpu_pool.nr_parent_vm_cores = 0;
 	ne_cpu_pool.nr_threads_per_core = 0;
 	ne_cpu_pool.numa_node = NUMA_NO_NODE;
@@ -649,6 +754,9 @@ static int ne_set_enclave_threads_per_core(struct ne_enclave *ne_enclave,
 
 	for_each_cpu(cpu, ne_cpu_pool.avail_threads_per_core[core_id])
 		cpumask_set_cpu(cpu, ne_enclave->threads_per_core[core_id]);
+
+	cpumask_or(&ne_cpu_pool.claimed_cpus, &ne_cpu_pool.claimed_cpus,
+		   ne_cpu_pool.avail_threads_per_core[core_id]);
 
 	cpumask_clear(ne_cpu_pool.avail_threads_per_core[core_id]);
 
@@ -1564,9 +1672,11 @@ static void ne_enclave_remove_all_vcpu_id_entries(struct ne_enclave *ne_enclave)
 	mutex_lock(&ne_cpu_pool.mutex);
 
 	for (i = 0; i < ne_enclave->nr_parent_vm_cores; i++) {
-		for_each_cpu(cpu, ne_enclave->threads_per_core[i])
+		for_each_cpu(cpu, ne_enclave->threads_per_core[i]) {
 			/* Update the available NE CPU pool. */
 			cpumask_set_cpu(cpu, ne_cpu_pool.avail_threads_per_core[i]);
+			cpumask_clear_cpu(cpu, &ne_cpu_pool.claimed_cpus);
+		}
 
 		free_cpumask_var(ne_enclave->threads_per_core[i]);
 	}
