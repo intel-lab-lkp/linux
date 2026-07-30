@@ -243,7 +243,7 @@ static void ml_combine_effects(struct ff_effect *effect,
 			       int gain)
 {
 	struct ff_effect *new = state->effect;
-	unsigned int strong, weak, i;
+	unsigned int strong, weak, trigger_left, trigger_right, i;
 	int x, y;
 	s16 level;
 
@@ -269,6 +269,8 @@ static void ml_combine_effects(struct ff_effect *effect,
 	case FF_RUMBLE:
 		strong = (u32)new->u.rumble.strong_magnitude * gain / 0xffff;
 		weak = (u32)new->u.rumble.weak_magnitude * gain / 0xffff;
+		trigger_left = (u32)new->u.rumble.trigger_left * gain / 0xffff;
+		trigger_right = (u32)new->u.rumble.trigger_right * gain / 0xffff;
 
 		if (effect->u.rumble.strong_magnitude + strong)
 			effect->direction = ml_calculate_direction(
@@ -287,6 +289,10 @@ static void ml_combine_effects(struct ff_effect *effect,
 			    0xffffU);
 		effect->u.rumble.weak_magnitude =
 			min(weak + effect->u.rumble.weak_magnitude, 0xffffU);
+		effect->u.rumble.trigger_left =
+			min(trigger_left + effect->u.rumble.trigger_left, 0xffffU);
+		effect->u.rumble.trigger_right =
+			min(trigger_right + effect->u.rumble.trigger_right, 0xffffU);
 		break;
 
 	case FF_PERIODIC:
