@@ -824,3 +824,147 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
 	return xe_ttm_vram_reserve_page_at_addr(xe, addr, vram_mgr, mm);
 }
 EXPORT_SYMBOL(xe_ttm_vram_handle_addr_fault);
+
+static size_t serialize_bad_pages(struct xe_ttm_vram_mgr *mgr, char *buf, size_t max_len)
+{
+	struct xe_ttm_vram_offline_resource *pos;
+	struct gpu_buddy_block *block;
+	size_t s = 0;
+	int printed;
+	int count = 0;
+
+	lockdep_assert_held(&mgr->lock);
+
+	printed = scnprintf(buf + s, max_len - s, "max_pages: %d\n", mgr->max_pages);
+	s += printed;
+
+	list_for_each_entry(pos, &mgr->offlined_pages, offlined_link) {
+		if (count >= 10000 || s >= max_len)
+			break;
+
+		block = list_first_entry_or_null(&pos->blocks, struct gpu_buddy_block, link);
+		if (!block)
+			continue;
+
+		printed = scnprintf(buf + s, max_len - s, "0x%016llx : 0x%016llx : %c\n",
+				    gpu_buddy_block_offset(block) >> PAGE_SHIFT,
+				    gpu_buddy_block_size(&mgr->mm, block), 'R');
+		s += printed;
+		count++;
+	}
+	list_for_each_entry(pos, &mgr->queued_pages, queued_link) {
+		u64 pfn, blk_size;
+
+		if (count >= 10000 || s >= max_len)
+			break;
+
+		block = list_first_entry_or_null(&pos->blocks, struct gpu_buddy_block, link);
+		if (block) {
+			pfn = gpu_buddy_block_offset(block) >> PAGE_SHIFT;
+			blk_size = gpu_buddy_block_size(&mgr->mm, block);
+		} else {
+			pfn = pos->addr >> PAGE_SHIFT;
+			blk_size = PAGE_SIZE;
+		}
+
+		printed = scnprintf(buf + s, max_len - s, "0x%016llx : 0x%016llx : %c\n",
+				    pfn, blk_size, pos->status ? 'F' : 'P');
+		s += printed;
+		count++;
+	}
+
+	return s;
+}
+
+static ssize_t vram_bad_pages_bin_read(struct file *filp, struct kobject *kobj,
+				       const struct bin_attribute *attr, char *buf,
+				       loff_t off, size_t count)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct ttm_resource_manager *man;
+	struct xe_ttm_vram_mgr *mgr;
+	size_t allocation_size;
+	struct xe_device *xe;
+	size_t full_data_len;
+	int active_entries;
+	char *temp_buf;
+
+	xe = pdev_to_xe_device(pdev);
+	man = ttm_manager_type(&xe->ttm, XE_PL_VRAM0);
+	if (!man)
+		return -ENODEV;
+	mgr = to_xe_ttm_vram_mgr(man);
+
+	/* Snapshot entry count under lock, then allocate outside to avoid deadlock */
+	mutex_lock(&mgr->lock);
+	active_entries = mgr->n_offlined_pages + mgr->n_queued_pages;
+	mutex_unlock(&mgr->lock);
+
+	if (active_entries > 10000)
+		active_entries = 10000;
+
+	allocation_size = 64 + (active_entries * 48);
+
+	temp_buf = kvmalloc(allocation_size, GFP_KERNEL);
+	if (!temp_buf)
+		return -ENOMEM;
+
+	mutex_lock(&mgr->lock);
+	full_data_len = serialize_bad_pages(mgr, temp_buf, allocation_size);
+	mutex_unlock(&mgr->lock);
+
+	if (off >= full_data_len) {
+		kvfree(temp_buf);
+		return 0;
+	}
+
+	if (off + count > full_data_len)
+		count = full_data_len - off;
+
+	memcpy(buf, temp_buf + off, count);
+
+	kvfree(temp_buf);
+	return count;
+}
+
+static const struct bin_attribute bin_attr_vram_bad_pages = {
+	.attr = { .name = "vram_bad_pages", .mode = 0444 },
+	.read = vram_bad_pages_bin_read,
+	.size = 0,
+};
+
+static void xe_ttm_vram_sysfs_fini(void *arg)
+{
+	struct xe_device *xe = arg;
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+
+	sysfs_remove_bin_file(&pdev->dev.kobj, &bin_attr_vram_bad_pages);
+}
+
+/**
+ * xe_ttm_vram_sysfs_init - Initialize vram bad pages sysfs binary file
+ * @xe: Xe Device object
+ *
+ * Creates a binary sysfs file under the PCI device for reading
+ * offlined and queued VRAM pages. Supports large entry counts
+ * via offset/count pagination.
+ *
+ * Returns: 0 on success, negative error code on error.
+ */
+int xe_ttm_vram_sysfs_init(struct xe_device *xe)
+{
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	int err;
+
+	err = sysfs_create_bin_file(&pdev->dev.kobj, &bin_attr_vram_bad_pages);
+	if (err) {
+		dev_err(&pdev->dev,
+			"Failed to create vram_bad_pages sysfs: %d\n",
+			err);
+		return err;
+	}
+
+	return devm_add_action_or_reset(&pdev->dev, xe_ttm_vram_sysfs_fini, xe);
+}
+EXPORT_SYMBOL(xe_ttm_vram_sysfs_init);
