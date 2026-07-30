@@ -105,11 +105,11 @@ MODULE_PARM_DESC(ne_cpus, "<cpu-list> - CPU pool used for Nitro Enclaves");
 /**
  * struct ne_cpu_pool - CPU pool used for Nitro Enclaves.
  * @avail_threads_per_core:	Available full CPU cores to be dedicated to
- *				enclave(s). The cpumasks from the array, indexed
- *				by core id, contain all the threads from the
- *				available cores, that are not set for created
- *				enclave(s). The full CPU cores are part of the
- *				NE CPU pool.
+ *				enclave(s). Each cpumask in the array holds the
+ *				threads of one core in the pool that are not set
+ *				for created enclave(s). Slots are handed out as
+ *				cores are discovered and carry no meaning
+ *				outside the driver.
  * @mutex:			Mutex for the access to the NE CPU pool.
  * @nr_parent_vm_cores :	The size of the available threads per core array.
  *				The total number of CPU cores available on the
@@ -167,6 +167,102 @@ static bool ne_check_enclaves_created(void)
 }
 
 /**
+ * ne_free_core_slots() - Free the core slot arrays of the NE CPU pool.
+ * @void:	No parameters provided.
+ *
+ * Context: Process context. This function is called with the ne_cpu_pool mutex
+ *	    held.
+ */
+static void ne_free_core_slots(void)
+{
+	unsigned int i = 0;
+
+	if (!ne_cpu_pool.avail_threads_per_core)
+		return;
+
+	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
+		free_cpumask_var(ne_cpu_pool.avail_threads_per_core[i]);
+
+	kfree(ne_cpu_pool.avail_threads_per_core);
+	ne_cpu_pool.avail_threads_per_core = NULL;
+}
+
+/**
+ * ne_build_core_slots() - Group the CPU pool into full cores and give each one
+ *			   a slot of the NE CPU pool arrays.
+ * @cpu_pool:	The CPU pool as parsed out of the ne_cpus parameter.
+ *
+ * The slots preserve the CPU topology of the pool once its CPUs are offlined.
+ * topology_core_id() is package-local on x86, so two cores in different
+ * packages report the same id and would share a slot. The per-CPU sibling
+ * cpumask identifies a core on both architectures this driver builds for, so
+ * walk that and hand each core the next free slot.
+ *
+ * Context: Process context. This function is called with the ne_cpu_pool mutex
+ *	    and the CPU hotplug read lock held.
+ * Return:
+ * * 0 on success.
+ * * Negative return value on failure.
+ */
+static int ne_build_core_slots(const struct cpumask *cpu_pool)
+{
+	unsigned int cpu = 0;
+	unsigned int cpu_sibling = 0;
+	unsigned int i = 0;
+	unsigned int next_core_idx = 0;
+	cpumask_var_t processed;
+	int rc = -ENOMEM;
+
+	ne_cpu_pool.avail_threads_per_core = kzalloc_objs(*ne_cpu_pool.avail_threads_per_core,
+							  ne_cpu_pool.nr_parent_vm_cores);
+	if (!ne_cpu_pool.avail_threads_per_core)
+		return -ENOMEM;
+
+	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
+		if (!zalloc_cpumask_var(&ne_cpu_pool.avail_threads_per_core[i], GFP_KERNEL))
+			goto free_slots;
+
+	if (!zalloc_cpumask_var(&processed, GFP_KERNEL))
+		goto free_slots;
+
+	for_each_cpu(cpu, cpu_pool) {
+		if (cpumask_test_cpu(cpu, processed))
+			continue;
+
+		if (next_core_idx >= ne_cpu_pool.nr_parent_vm_cores) {
+			pr_err("%s: CPU pool has more cores than nr_parent_vm_cores=%d\n",
+			       ne_misc_dev.name, ne_cpu_pool.nr_parent_vm_cores);
+
+			rc = -EINVAL;
+
+			goto free_processed;
+		}
+
+		for_each_cpu(cpu_sibling, topology_sibling_cpumask(cpu)) {
+			if (!cpumask_test_cpu(cpu_sibling, cpu_pool))
+				continue;
+
+			cpumask_set_cpu(cpu_sibling,
+					ne_cpu_pool.avail_threads_per_core[next_core_idx]);
+			cpumask_set_cpu(cpu_sibling, processed);
+		}
+
+		next_core_idx++;
+	}
+
+	free_cpumask_var(processed);
+
+	return 0;
+
+free_processed:
+	free_cpumask_var(processed);
+free_slots:
+	ne_free_core_slots();
+
+	return rc;
+}
+
+/**
  * ne_setup_cpu_pool() - Set the NE CPU pool after handling sanity checks such
  *			 as not sharing CPU cores with the primary / parent VM
  *			 or not using CPU 0, which should remain available for
@@ -181,11 +277,9 @@ static bool ne_check_enclaves_created(void)
  */
 static int ne_setup_cpu_pool(const char *ne_cpu_list)
 {
-	int core_id = -1;
 	unsigned int cpu = 0;
 	cpumask_var_t cpu_pool;
 	unsigned int cpu_sibling = 0;
-	unsigned int i = 0;
 	int numa_node = -1;
 	int rc = -EINVAL;
 
@@ -193,12 +287,13 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 		return -ENOMEM;
 
 	mutex_lock(&ne_cpu_pool.mutex);
+	cpus_read_lock();
 
 	rc = cpulist_parse(ne_cpu_list, cpu_pool);
 	if (rc < 0) {
 		pr_err("%s: Error in cpulist parse [rc=%d]\n", ne_misc_dev.name, rc);
 
-		goto free_pool_cpumask;
+		goto unlock_hotplug;
 	}
 
 	cpu = cpumask_any(cpu_pool);
@@ -207,7 +302,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 		rc = -EINVAL;
 
-		goto free_pool_cpumask;
+		goto unlock_hotplug;
 	}
 
 	/*
@@ -221,7 +316,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 			rc = -EINVAL;
 
-			goto free_pool_cpumask;
+			goto unlock_hotplug;
 		}
 
 	/*
@@ -236,7 +331,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 				rc = -EINVAL;
 
-				goto free_pool_cpumask;
+				goto unlock_hotplug;
 			}
 		} else {
 			if (numa_node != cpu_to_node(cpu)) {
@@ -245,7 +340,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 				rc = -EINVAL;
 
-				goto free_pool_cpumask;
+				goto unlock_hotplug;
 			}
 		}
 
@@ -258,7 +353,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 		rc = -EINVAL;
 
-		goto free_pool_cpumask;
+		goto unlock_hotplug;
 	}
 
 	for_each_cpu(cpu_sibling, topology_sibling_cpumask(0)) {
@@ -268,7 +363,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 			rc = -EINVAL;
 
-			goto free_pool_cpumask;
+			goto unlock_hotplug;
 		}
 	}
 
@@ -285,7 +380,7 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 				rc = -EINVAL;
 
-				goto free_pool_cpumask;
+				goto unlock_hotplug;
 			}
 		}
 	}
@@ -297,38 +392,11 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 
 	ne_cpu_pool.nr_parent_vm_cores = nr_cpu_ids / ne_cpu_pool.nr_threads_per_core;
 
-	ne_cpu_pool.avail_threads_per_core = kzalloc_objs(*ne_cpu_pool.avail_threads_per_core,
-							  ne_cpu_pool.nr_parent_vm_cores);
-	if (!ne_cpu_pool.avail_threads_per_core) {
-		rc = -ENOMEM;
+	rc = ne_build_core_slots(cpu_pool);
+	if (rc < 0)
+		goto unlock_hotplug;
 
-		goto free_pool_cpumask;
-	}
-
-	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
-		if (!zalloc_cpumask_var(&ne_cpu_pool.avail_threads_per_core[i], GFP_KERNEL)) {
-			rc = -ENOMEM;
-
-			goto free_cores_cpumask;
-		}
-
-	/*
-	 * Split the NE CPU pool in threads per core to keep the CPU topology
-	 * after offlining the CPUs.
-	 */
-	for_each_cpu(cpu, cpu_pool) {
-		core_id = topology_core_id(cpu);
-		if (core_id < 0 || core_id >= ne_cpu_pool.nr_parent_vm_cores) {
-			pr_err("%s: Invalid core id  %d for CPU %d\n",
-			       ne_misc_dev.name, core_id, cpu);
-
-			rc = -EINVAL;
-
-			goto clear_cpumask;
-		}
-
-		cpumask_set_cpu(cpu, ne_cpu_pool.avail_threads_per_core[core_id]);
-	}
+	cpus_read_unlock();
 
 	/*
 	 * CPUs that are given to enclave(s) should not be considered online
@@ -361,14 +429,11 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 online_cpus:
 	for_each_cpu(cpu, cpu_pool)
 		add_cpu(cpu);
-clear_cpumask:
-	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
-		cpumask_clear(ne_cpu_pool.avail_threads_per_core[i]);
-free_cores_cpumask:
-	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
-		free_cpumask_var(ne_cpu_pool.avail_threads_per_core[i]);
-	kfree(ne_cpu_pool.avail_threads_per_core);
-free_pool_cpumask:
+	ne_free_core_slots();
+	goto reset_pool;
+unlock_hotplug:
+	cpus_read_unlock();
+reset_pool:
 	free_cpumask_var(cpu_pool);
 	ne_cpu_pool.nr_parent_vm_cores = 0;
 	ne_cpu_pool.nr_threads_per_core = 0;
@@ -399,7 +464,7 @@ static void ne_teardown_cpu_pool(void)
 		return;
 	}
 
-	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++) {
+	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
 		for_each_cpu(cpu, ne_cpu_pool.avail_threads_per_core[i]) {
 			rc = add_cpu(cpu);
 			if (rc != 0)
@@ -407,12 +472,7 @@ static void ne_teardown_cpu_pool(void)
 				       ne_misc_dev.name, cpu, rc);
 		}
 
-		cpumask_clear(ne_cpu_pool.avail_threads_per_core[i]);
-
-		free_cpumask_var(ne_cpu_pool.avail_threads_per_core[i]);
-	}
-
-	kfree(ne_cpu_pool.avail_threads_per_core);
+	ne_free_core_slots();
 	ne_cpu_pool.nr_parent_vm_cores = 0;
 	ne_cpu_pool.nr_threads_per_core = 0;
 	ne_cpu_pool.numa_node = -1;

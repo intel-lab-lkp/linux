@@ -55,10 +55,10 @@ struct ne_mem_region {
  * @numa_node:			NUMA node of the enclave memory and CPUs.
  * @slot_uid:			Slot unique id mapped to the enclave.
  * @state:			Enclave state, updated during enclave lifetime.
- * @threads_per_core:		Enclave full CPU cores array, indexed by core id,
- *				consisting of cpumasks with all their threads.
- *				Full CPU cores are taken from the NE CPU pool
- *				and are available to the enclave.
+ * @threads_per_core:		Enclave full CPU cores array. Each cpumask in the
+ *				array holds the threads of one core taken from
+ *				the NE CPU pool and available to the enclave.
+ *				The array shares the pool's slot indices.
  * @vcpu_ids:			Cpumask of the vCPUs that are set for the enclave.
  */
 struct ne_enclave {
