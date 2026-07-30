@@ -1448,31 +1448,108 @@ static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
 }
 
 /**
- * get_parent_fanout() - Calculate the switch fan-out above a port
+ * get_selector() - Build the HPA selector mask for an interleave
+ * @ways: interleave ways
+ * @gran: interleave granularity in bytes
+ *
+ * Power-of-2 interleaves select targets with contiguous HPA bits beginning
+ * at @gran. For 6-way and 12-way interleaves, only the power-of-2 factor
+ * contributes selector bits. A 3-way interleave contributes no selector
+ * bits.
+ *
+ * Return: the HPA selector mask, or 0 when no selector bits are used.
+ */
+static inline u64 get_selector(int ways, int gran)
+{
+	if (!is_power_of_2(ways))
+		ways /= 3;
+
+	if (!is_power_of_2(ways) || !is_power_of_2(gran))
+		return 0;
+
+	return (u64)(ways - 1) * gran;
+}
+
+/**
+ * get_parent_selectors() - Collect selectors and fan-out above a port
  * @parent_port: first ancestor port
  * @cxlr: region under construction
+ * @cxlrd: region root decoder
+ * @accum: filled with the selectors claimed by the ancestors
  * @fanout: filled with the product of the ancestor switch ways
  *
- * Walk from @parent_port to the root and multiply the interleave ways of
- * each switch decoder. Root decoder ways are not included.
+ * Start with the root decoder selector and walk the ancestor switch
+ * decoders. Reject selectors that overlap. Passthrough decoders contribute
+ * neither selector bits nor fan-out.
  *
- * Return: 0 on success.
+ * Root decoder ways are not included in @fanout.
+ *
+ * Return: 0 on success, -ENXIO on selector overlap.
  */
-static int get_parent_fanout(struct cxl_port *parent_port,
-			     struct cxl_region *cxlr, int *fanout)
+static int get_parent_selectors(struct cxl_port *parent_port,
+				struct cxl_region *cxlr,
+				struct cxl_root_decoder *cxlrd, u64 *accum,
+				int *fanout)
 {
+	u64 selector = get_selector(cxlrd->cxlsd.cxld.interleave_ways,
+				    cxlrd->cxlsd.cxld.interleave_granularity);
 	int distance = 1;
 	struct cxl_port *iter;
 
 	for (iter = parent_port; !is_cxl_root(iter);
 	     iter = to_cxl_port(iter->dev.parent)) {
 		struct cxl_region_ref *cxl_rr_iter = cxl_rr_load(iter, cxlr);
+		struct cxl_decoder *cxld_iter = cxl_rr_iter->decoder;
+		u64 cxld_sel;
 
+		if (cxld_iter->interleave_ways == 1)
+			continue;
+
+		cxld_sel = get_selector(cxld_iter->interleave_ways,
+					cxld_iter->interleave_granularity);
+
+		if (cxld_sel & selector) {
+			dev_dbg(&cxlr->dev,
+				"%s:%s: overlapping selectors: %#llx:%#llx\n",
+				dev_name(iter->uport_dev),
+				dev_name(&iter->dev), cxld_sel, selector);
+			return -ENXIO;
+		}
+
+		selector |= cxld_sel;
 		distance *= cxl_rr_iter->nr_targets;
 	}
 
+	*accum = selector;
 	*fanout = distance;
 	return 0;
+}
+
+/**
+ * region_selectors_fit() - Check ancestor selectors against the region
+ * @port: port being configured
+ * @cxlr: region under construction
+ * @accum: selectors used by the ancestor decoders
+ *
+ * Return: true when every accumulated selector bit is present in the region
+ * selector.
+ */
+static bool region_selectors_fit(struct cxl_port *port,
+				 struct cxl_region *cxlr, u64 accum)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	u64 cxlr_sel = get_selector(p->interleave_ways,
+				    p->interleave_granularity);
+
+	if ((cxlr_sel & accum) != accum) {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: invalid selectors: cxlr %#llx accum %#llx\n",
+			dev_name(port->uport_dev), dev_name(&port->dev),
+			cxlr_sel, accum);
+		return false;
+	}
+
+	return true;
 }
 
 /**
@@ -1517,6 +1594,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	int ig, iw = cxl_rr->nr_targets;
 	int fanout, rc;
 	int pos = cxled->pos;
+	u64 accum;
 	u16 eig;
 	u8 eiw;
 
@@ -1538,9 +1616,12 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		return -ENXIO;
 	}
 
-	rc = get_parent_fanout(parent_port, cxlr, &fanout);
+	rc = get_parent_selectors(parent_port, cxlr, cxlrd, &accum, &fanout);
 	if (rc)
 		return rc;
+
+	if (!region_selectors_fit(port, cxlr, accum))
+		return -ENXIO;
 
 	if (cxl_rr->nr_targets_set) {
 		for (int i = 0; i < cxl_rr->nr_targets_set; i++)
@@ -2086,6 +2167,14 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		dev_dbg(&cxlr->dev, "interleave config missing\n");
 		return -ENXIO;
 	}
+
+	/*
+	 * Mixed-granularity position calculation is added by the next patch.
+	 * Reject it until then so this intermediate state remains bisectable.
+	 */
+	if (cxlrd->cxlsd.cxld.interleave_granularity >
+	    p->interleave_granularity)
+		return -ENXIO;
 
 	if (p->nr_targets >= p->interleave_ways) {
 		dev_dbg(&cxlr->dev, "region already has %d endpoints\n",
