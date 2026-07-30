@@ -11,9 +11,14 @@
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_range_manager.h>
 
+#include "regs/xe_regs.h"
 #include "xe_bo.h"
 #include "xe_device.h"
+#include "xe_exec_queue.h"
+#include "xe_lrc.h"
+#include "xe_mmio.h"
 #include "xe_res_cursor.h"
+#include "xe_ttm_stolen_mgr.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vram_types.h"
 
@@ -46,6 +51,40 @@ static inline bool xe_is_vram_mgr_blocks_contiguous(struct gpu_buddy *mm,
 	return true;
 }
 
+static int xe_ttm_vram_buddy_alloc(struct xe_ttm_vram_mgr *mgr, u64 start,
+				   u64 end, u64 size, u64 min_page_size,
+				   struct list_head *blocks, unsigned long flags,
+				   void *priv, u64 *used_visible)
+{
+	struct gpu_buddy *mm = &mgr->mm;
+	struct gpu_buddy_block *block;
+	int err;
+
+	err = gpu_buddy_alloc_blocks(mm, start, end, size, min_page_size, blocks, flags);
+	if (err)
+		return err;
+
+	list_for_each_entry(block, blocks, link)
+		block->private = priv;
+
+	if (end <= mgr->visible_size) {
+		*used_visible = size;
+	} else {
+		list_for_each_entry(block, blocks, link) {
+			u64 blk_start = gpu_buddy_block_offset(block);
+
+			if (blk_start < mgr->visible_size) {
+				u64 blk_end = blk_start + gpu_buddy_block_size(mm, block);
+
+				*used_visible += min(blk_end, mgr->visible_size) - blk_start;
+			}
+		}
+	}
+
+	mgr->visible_avail -= *used_visible;
+	return 0;
+}
+
 static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 			       struct ttm_buffer_object *tbo,
 			       const struct ttm_place *place,
@@ -54,7 +93,6 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 	struct xe_ttm_vram_mgr *mgr = to_xe_ttm_vram_mgr(man);
 	struct xe_ttm_vram_mgr_resource *vres;
 	struct gpu_buddy *mm = &mgr->mm;
-	struct gpu_buddy_block *block;
 	u64 size, min_page_size;
 	unsigned long lpfn;
 	int err;
@@ -115,32 +153,12 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 		goto error_unlock;
 	}
 
-	err = gpu_buddy_alloc_blocks(mm, (u64)place->fpfn << PAGE_SHIFT,
-				     (u64)lpfn << PAGE_SHIFT, size,
-				     min_page_size, &vres->blocks, vres->flags);
+	err = xe_ttm_vram_buddy_alloc(mgr, (u64)place->fpfn << PAGE_SHIFT,
+				      (u64)lpfn << PAGE_SHIFT, size,
+				      min_page_size, &vres->blocks, vres->flags,
+				      tbo, &vres->used_visible_size);
 	if (err)
 		goto error_unlock;
-
-	if (lpfn <= mgr->visible_size >> PAGE_SHIFT) {
-		vres->used_visible_size = size;
-	} else {
-		struct gpu_buddy_block *block;
-
-		list_for_each_entry(block, &vres->blocks, link) {
-			u64 start = gpu_buddy_block_offset(block);
-
-			if (start < mgr->visible_size) {
-				u64 end = start + gpu_buddy_block_size(mm, block);
-
-				vres->used_visible_size +=
-					min(end, mgr->visible_size) - start;
-			}
-		}
-	}
-
-	mgr->visible_avail -= vres->used_visible_size;
-	list_for_each_entry(block, &vres->blocks, link)
-		block->private = tbo;
 	mutex_unlock(&mgr->lock);
 
 	if (!(vres->base.placement & TTM_PL_FLAG_CONTIGUOUS) &&
@@ -172,20 +190,27 @@ error_fini:
 	return err;
 }
 
+static void xe_ttm_vram_buddy_free(struct xe_ttm_vram_mgr *mgr,
+				   struct list_head *blocks,
+				   u64 used_visible)
+{
+	struct gpu_buddy_block *block;
+
+	list_for_each_entry(block, blocks, link)
+		block->private = NULL;
+	gpu_buddy_free_list(&mgr->mm, blocks, 0);
+	mgr->visible_avail += used_visible;
+}
+
 static void xe_ttm_vram_mgr_del(struct ttm_resource_manager *man,
 				struct ttm_resource *res)
 {
 	struct xe_ttm_vram_mgr_resource *vres =
 		to_xe_ttm_vram_mgr_resource(res);
 	struct xe_ttm_vram_mgr *mgr = to_xe_ttm_vram_mgr(man);
-	struct gpu_buddy *mm = &mgr->mm;
-	struct gpu_buddy_block *block;
 
 	mutex_lock(&mgr->lock);
-	list_for_each_entry(block, &vres->blocks, link)
-		block->private = NULL;
-	gpu_buddy_free_list(mm, &vres->blocks, 0);
-	mgr->visible_avail += vres->used_visible_size;
+	xe_ttm_vram_buddy_free(mgr, &vres->blocks, vres->used_visible_size);
 	mutex_unlock(&mgr->lock);
 
 	ttm_resource_fini(man, res);
@@ -280,6 +305,24 @@ static const struct ttm_resource_manager_func xe_ttm_vram_mgr_func = {
 	.debug	= xe_ttm_vram_mgr_debug
 };
 
+static void xe_ttm_vram_free_bad_pages(struct drm_device *dev, struct xe_ttm_vram_mgr *mgr)
+{
+	struct xe_ttm_vram_offline_resource *pos, *n;
+
+	list_for_each_entry_safe(pos, n, &mgr->offlined_pages, offlined_link) {
+		xe_ttm_vram_buddy_free(mgr, &pos->blocks, pos->used_visible_size);
+		list_del(&pos->offlined_link);
+		--mgr->n_offlined_pages;
+		kfree(pos);
+	}
+	list_for_each_entry_safe(pos, n, &mgr->queued_pages, queued_link) {
+		xe_ttm_vram_buddy_free(mgr, &pos->blocks, 0);
+		list_del(&pos->queued_link);
+		--mgr->n_queued_pages;
+		kfree(pos);
+	}
+}
+
 static void xe_ttm_vram_mgr_fini(struct drm_device *dev, void *arg)
 {
 	struct xe_device *xe = to_xe_device(dev);
@@ -290,6 +333,10 @@ static void xe_ttm_vram_mgr_fini(struct drm_device *dev, void *arg)
 
 	if (ttm_resource_manager_evict_all(&xe->ttm, man))
 		return;
+
+	mutex_lock(&mgr->lock);
+	xe_ttm_vram_free_bad_pages(dev, mgr);
+	mutex_unlock(&mgr->lock);
 
 	WARN_ON_ONCE(mgr->visible_avail != mgr->visible_size);
 
@@ -318,6 +365,8 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
 	err = drmm_mutex_init(&xe->drm, &mgr->lock);
 	if (err)
 		return err;
+	INIT_LIST_HEAD(&mgr->offlined_pages);
+	INIT_LIST_HEAD(&mgr->queued_pages);
 	mgr->default_page_size = default_page_size;
 	mgr->visible_size = io_size;
 	mgr->visible_avail = io_size;
@@ -474,3 +523,294 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man)
 
 	return avail;
 }
+
+static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
+{
+	struct ttm_operation_ctx ctx = {};
+	struct xe_exec_queue *q_to_put = NULL;
+	struct xe_exec_queue *q = NULL;
+	struct xe_vm *vm = NULL;
+	u32	flags;
+	int ret = 0;
+
+	xe_bo_lock(bo, false);
+	if (bo->vm)
+		vm = xe_vm_get(bo->vm);
+	flags = bo->flags;
+	xe_bo_unlock(bo);
+	/*  Ban VM if BO is PPGTT */
+	if (vm && (flags & XE_BO_FLAG_PAGETABLE)) {
+		down_write(&vm->lock);
+		xe_vm_kill(vm, true);
+		up_write(&vm->lock);
+	}
+	if (vm)
+		xe_vm_put(vm);
+
+	xe_bo_lock(bo, false);
+	q = READ_ONCE(bo->q);
+	/*  Ban exec queue if BO is lrc */
+	if (q && xe_exec_queue_get_unless_zero(q)) {
+		/* ban queue */
+		q_to_put = q;
+	}
+
+	if (bo->purgeable.state == XE_MADV_PURGEABLE_PURGED) {
+		/* Already purged by shrinker during unlocked window — nothing to do */
+		xe_bo_unlock(bo);
+		goto out;
+	}
+
+	xe_bo_set_purgeable_state(bo, XE_MADV_PURGEABLE_DONTNEED);
+	ttm_bo_unmap_virtual(&bo->ttm);   /* nuke CPU mmap + VRAM IO mappings */
+	if (xe_bo_is_pinned(bo))
+		xe_bo_unpin(bo);
+	ret = xe_ttm_bo_purge(&bo->ttm, &ctx);
+	xe_bo_unlock(bo);
+
+out:
+	if (q_to_put) {
+		xe_exec_queue_kill(q_to_put);
+		xe_exec_queue_put(q_to_put);
+	}
+
+	return ret;
+}
+
+static bool xe_ttm_vram_page_already_processed(struct xe_ttm_vram_mgr *mgr,
+					       u64 addr)
+{
+	struct xe_ttm_vram_offline_resource *pos;
+
+	lockdep_assert_held(&mgr->lock);
+
+	list_for_each_entry(pos, &mgr->offlined_pages, offlined_link) {
+		if (pos->addr == addr)
+			return true;
+	}
+
+	list_for_each_entry(pos, &mgr->queued_pages, queued_link) {
+		if (pos->addr == addr)
+			return true;
+	}
+
+	return false;
+}
+
+static int xe_ttm_vram_reserve_page_at_addr(struct xe_device *xe, u64 addr,
+					    struct xe_ttm_vram_mgr *vram_mgr, struct gpu_buddy *mm)
+{
+	struct xe_ttm_vram_offline_resource *nentry;
+	struct ttm_buffer_object *tbo = NULL;
+	struct xe_bo *pbo_to_put = NULL;
+	struct gpu_buddy_block *block;
+	enum reserve_status {
+		pending = 0,
+		fail
+	};
+	u64 size = SZ_4K;
+	int ret = 0;
+
+	scoped_guard(mutex, &vram_mgr->lock) {
+		if (xe_ttm_vram_page_already_processed(vram_mgr, addr))
+			return -EEXIST;
+		block = gpu_buddy_allocated_addr_to_block(mm, addr);
+		if (WARN_ON(IS_ERR(block)))
+			return PTR_ERR(block);
+
+		nentry = kzalloc_obj(*nentry);
+		if (!nentry)
+			return -ENOMEM;
+		INIT_LIST_HEAD(&nentry->blocks);
+		nentry->status = pending;
+		nentry->addr = addr;
+
+		if (block) {
+			struct xe_bo *pbo;
+
+			if (!block->private) {
+				/* Race: another thread just reserved this block */
+				kfree(nentry);
+				return -EEXIST;
+			}
+			tbo = block->private;
+			pbo = ttm_to_xe_bo(tbo);
+
+			/* Get reference safely - BO may have zero refcount */
+			if (!xe_bo_get_unless_zero(pbo)) {
+				kfree(nentry);
+				return -ENOENT;
+			}
+			/*
+			 * Critical kernel BO? Best-effort check without resv lock;
+			 * worst case a concurrent pin causes reset path unnecessarily.
+			 */
+			if ((pbo->ttm.type == ttm_bo_type_kernel &&
+			     !(pbo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) ||
+			    (xe_bo_is_user(pbo) && xe_bo_is_pinned(pbo))) {
+				kfree(nentry);
+				pbo_to_put = pbo;
+				drm_err(&xe->drm,
+					"%s: addr: 0x%llx is critical kernel bo, requesting SBR\n",
+					__func__, addr);
+				break;
+			}
+			++vram_mgr->n_queued_pages;
+			list_add(&nentry->queued_link, &vram_mgr->queued_pages);
+		}
+	}
+
+	/* Deferred put outside lock to avoid recursive deadlock */
+	if (pbo_to_put) {
+		xe_bo_put(pbo_to_put);
+		/* Hint System controller driver for reset with -EIO  */
+		return -EIO;
+	}
+
+	if (block) {
+		struct xe_ttm_vram_offline_resource *pos, *n;
+		struct xe_bo *pbo = ttm_to_xe_bo(tbo);
+
+		/*
+		 * Purge BO containing address - reference held from above.
+		 * Note: brief window between purge (freeing blocks) and re-reserve
+		 * below. If another allocation claims the block, buddy_alloc fails
+		 * and the next HW fault at this address will retry.
+		 */
+		ret = xe_ttm_vram_purge_page(xe, pbo);
+		xe_bo_put(pbo);
+		if (ret) {
+			nentry->status = fail;
+			return ret;
+		}
+
+		/* Reserve page at address addr*/
+		scoped_guard(mutex, &vram_mgr->lock) {
+			ret = xe_ttm_vram_buddy_alloc(vram_mgr, addr, addr + size,
+						      size, size, &nentry->blocks,
+						      GPU_BUDDY_RANGE_ALLOCATION,
+						      NULL, &nentry->used_visible_size);
+			if (ret) {
+				drm_warn(&xe->drm,
+					 "Could not reserve page at addr:0x%llx, ret:%d\n",
+					 addr, ret);
+				nentry->status = fail;
+				return ret;
+			}
+
+			list_for_each_entry_safe(pos, n, &vram_mgr->queued_pages, queued_link) {
+				if (pos->addr == nentry->addr) {
+					--vram_mgr->n_queued_pages;
+					list_del(&pos->queued_link);
+					break;
+				}
+			}
+			list_add(&nentry->offlined_link, &vram_mgr->offlined_pages);
+			/* RAS will send command to FW for offlining page based on ret value */
+			++vram_mgr->n_offlined_pages;
+			return ret;
+		}
+	} else {
+		struct xe_ttm_vram_offline_resource *pos, *n;
+
+		scoped_guard(mutex, &vram_mgr->lock) {
+			list_add(&nentry->queued_link, &vram_mgr->queued_pages);
+			ret = xe_ttm_vram_buddy_alloc(vram_mgr, addr, addr + size,
+						      size, size, &nentry->blocks,
+						      GPU_BUDDY_RANGE_ALLOCATION,
+						      NULL, &nentry->used_visible_size);
+			if (ret) {
+				drm_warn(&xe->drm,
+					 "Could not reserve page at addr:0x%llx, ret:%d\n",
+					 addr, ret);
+				nentry->status = fail;
+				return ret;
+			}
+
+			list_for_each_entry_safe(pos, n, &vram_mgr->queued_pages, queued_link) {
+				if (pos->addr == nentry->addr) {
+					--vram_mgr->n_queued_pages;
+					list_del(&pos->queued_link);
+					break;
+				}
+			}
+			++vram_mgr->n_offlined_pages;
+			list_add(&nentry->offlined_link, &vram_mgr->offlined_pages);
+			/* RAS will send command to FW for offlining page based on ret value */
+		}
+	}
+	/* Success */
+	return ret;
+}
+
+static struct xe_vram_region *xe_ttm_vram_addr_to_region(struct xe_device *xe, u64 addr)
+{
+	u64 raw_offset = xe_mmio_read64_2x32(&xe_device_get_root_tile(xe)->mmio, GSMBASE);
+	/* force a 4K (4096 bytes) page alignment */
+	u64 gsmbase_dpa = raw_offset & ~(u64)(PAGE_SIZE - 1);
+	struct xe_vram_region *vr;
+	struct xe_tile *tile;
+	int id;
+
+	/* Addr from GSM? */
+	if (addr >= gsmbase_dpa)
+		/* Return NULL so the caller can request reset (SBR) */
+		return NULL;
+
+	for_each_tile(tile, xe, id) {
+		vr = tile->mem.vram;
+		if (addr >= vr->dpa_base &&
+		    addr < vr->dpa_base + vr->usable_size)
+			return vr;
+	}
+
+	/*
+	 * Return an explicit error pointer so the caller knows the addr
+	 * is invalid and should be ignored, NOT SBR.
+	 */
+	return ERR_PTR(-ENOENT);
+}
+
+/**
+ * xe_ttm_vram_handle_addr_fault - Handle vram physical address error flaged
+ * @xe: pointer to parent device
+ * @addr: physical faulty address
+ *
+ * Handle the physcial faulty address error on specific tile.
+ *
+ * Returns 0 for success, negative error code otherwise as follow:
+ * * %-EIO - critical BO or address outside any VRAM region; next action is reset.
+ * * %-EOPNOTSUPP - log-only policy; no further action.
+ * * %-ENOMEM - allocation failure; next action is reset.
+ * * %-ENXIO - address not found in buddy; next action is reset.
+ * * %-EEXIST - address already processed; no further action.
+ * * % Any other negative error - next action is reset.
+ */
+int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
+{
+	struct xe_ttm_vram_mgr *vram_mgr;
+	struct xe_vram_region *vr;
+	struct gpu_buddy *mm;
+
+	vr = xe_ttm_vram_addr_to_region(xe, addr);
+	if (IS_ERR(vr)) {
+		/*
+		 * The addr is outside VRAM and GSM.
+		 * Log a debug message if needed, and safely exit/ignore.
+		 */
+		drm_dbg(&xe->drm, "Address %llx is out of bounds, ignoring fault.\n", addr);
+		return -EOPNOTSUPP;
+	}
+	if (!vr) {
+		drm_err(&xe->drm, "%s:%d GSM addr:%llx error requesting SBR\n",
+			__func__, __LINE__, addr);
+		/* Hint System controller driver for reset with -EIO  */
+		return -EIO;
+	}
+	vram_mgr = &vr->ttm;
+	mm = &vram_mgr->mm;
+
+	/* Reserve page at address */
+	return xe_ttm_vram_reserve_page_at_addr(xe, addr, vram_mgr, mm);
+}
+EXPORT_SYMBOL(xe_ttm_vram_handle_addr_fault);
