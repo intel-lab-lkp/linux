@@ -3583,6 +3583,7 @@ static const char *software[SW_CNT] = {
 };
 
 static const char *force[FF_CNT] = {
+	[FF_TRIGGER_RUMBLE] = "FF_TRIGGER_RUMBLE",
 	[FF_RUMBLE] = "FF_RUMBLE",
 	[FF_PERIODIC] = "FF_PERIODIC",
 	[FF_CONSTANT] = "FF_CONSTANT",
