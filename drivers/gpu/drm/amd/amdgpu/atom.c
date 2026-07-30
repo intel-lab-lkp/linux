@@ -1032,8 +1032,12 @@ static void atom_op_switch(atom_exec_context *ctx, int *ptr, int arg)
 	uint32_t src, val, target;
 	SDEBUG("   switch: ");
 	src = atom_get_src(ctx, attr, ptr);
-	while (U16(*ptr) != ATOM_CASE_END)
+	while ((uint32_t)*ptr + 2 <= ctx->ctx->bios_size &&
+	       U16(*ptr) != ATOM_CASE_END)
 		if (U8(*ptr) == ATOM_CASE_MAGIC) {
+			/* magic byte + immediate (up to 4) + 2-byte target */
+			if ((uint32_t)*ptr + 7 > ctx->ctx->bios_size)
+				break;
 			(*ptr)++;
 			SDEBUG("   case: ");
 			val =
@@ -1087,7 +1091,14 @@ static void atom_op_debug(atom_exec_context *ctx, int *ptr, int arg)
 
 static void atom_op_processds(atom_exec_context *ctx, int *ptr, int arg)
 {
-	uint16_t val = U16(*ptr);
+	u16 val;
+
+	/* the skip count is bytecode-supplied; validate before reading it */
+	if ((uint32_t)*ptr + 2 > ctx->ctx->bios_size) {
+		ctx->abort = true;
+		return;
+	}
+	val = U16(*ptr);
 	(*ptr) += val + 2;
 	SDEBUG("PROCESSDS output: 0x%02X\n", val);
 }
@@ -1237,6 +1248,13 @@ static int amdgpu_atom_execute_table_locked(struct atom_context *ctx, int index,
 	if (!base)
 		return -EINVAL;
 
+	/* the table offset itself comes from the VBIOS master table */
+	if ((uint32_t)base + ATOM_CT_CODE_PTR >= ctx->bios_size) {
+		DRM_ERROR("atombios command table %d offset 0x%x outside VBIOS image\n",
+			  index, base);
+		return -EINVAL;
+	}
+
 	if (ctx->execute_depth >= ATOM_EXECUTE_MAX_DEPTH) {
 		DRM_ERROR("atombios command table nesting exceeded limit (%u)\n",
 			  ATOM_EXECUTE_MAX_DEPTH);
@@ -1273,6 +1291,13 @@ static int amdgpu_atom_execute_table_locked(struct atom_context *ctx, int index,
 
 	debug_depth++;
 	while (1) {
+		/* jump/skip targets are bytecode-supplied; stay inside the image */
+		if ((uint32_t)ptr >= ctx->bios_size) {
+			DRM_ERROR("atombios cursor 0x%x outside VBIOS image (table %04X)\n",
+				  ptr, base);
+			ret = -EINVAL;
+			goto free;
+		}
 		op = CU8(ptr++);
 		if (op < ATOM_OP_NAMES_CNT)
 			SDEBUG("%s @ 0x%04X\n", atom_op_names[op], ptr - 1);
