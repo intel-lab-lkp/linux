@@ -347,9 +347,10 @@ bool blk_queue_start_drain(struct request_queue *q)
 int blk_queue_enter(struct request_queue *q, blk_mq_req_flags_t flags)
 {
 	const bool pm = flags & BLK_MQ_REQ_PM;
+	const bool nowait = flags & BLK_MQ_REQ_NOWAIT;
 
 	while (!blk_try_enter_queue(q, pm)) {
-		if (flags & BLK_MQ_REQ_NOWAIT)
+		if (nowait)
 			return -EAGAIN;
 
 		/*
@@ -368,17 +369,19 @@ int blk_queue_enter(struct request_queue *q, blk_mq_req_flags_t flags)
 			return -ENODEV;
 	}
 
-	rwsem_acquire_read(&q->q_lockdep_map, 0, 0, _RET_IP_);
+	rwsem_acquire_read(&q->q_lockdep_map, 0, nowait, _RET_IP_);
 	rwsem_release(&q->q_lockdep_map, _RET_IP_);
 	return 0;
 }
 
 int __bio_queue_enter(struct request_queue *q, struct bio *bio)
 {
+	const bool nowait = bio->bi_opf & REQ_NOWAIT;
+
 	while (!blk_try_enter_queue(q, false)) {
 		struct gendisk *disk = bio->bi_bdev->bd_disk;
 
-		if (bio->bi_opf & REQ_NOWAIT) {
+		if (nowait) {
 			if (test_bit(GD_DEAD, &disk->state))
 				goto dead;
 			bio_wouldblock_error(bio);
@@ -401,7 +404,7 @@ int __bio_queue_enter(struct request_queue *q, struct bio *bio)
 			goto dead;
 	}
 
-	rwsem_acquire_read(&q->io_lockdep_map, 0, 0, _RET_IP_);
+	rwsem_acquire_read(&q->io_lockdep_map, 0, nowait, _RET_IP_);
 	rwsem_release(&q->io_lockdep_map, _RET_IP_);
 	return 0;
 dead:
