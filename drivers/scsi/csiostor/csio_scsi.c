@@ -1157,6 +1157,7 @@ csio_scsi_cmpl_handler(struct csio_hw *hw, void *wr, uint32_t len,
  */
 void
 csio_scsi_cleanup_io_q(struct csio_scsim *scm, struct list_head *q)
+	__must_hold(&scm->hw->lock)
 {
 	struct csio_hw *hw = scm->hw;
 	struct csio_ioreq *ioreq;
@@ -1231,6 +1232,7 @@ csio_abrt_cls(struct csio_ioreq *ioreq, struct scsi_cmnd *scmnd)
  */
 static int
 csio_scsi_abort_io_q(struct csio_scsim *scm, struct list_head *q, uint32_t tmo)
+	__must_hold(&scm->hw->lock)
 {
 	struct csio_hw *hw = scm->hw;
 	struct list_head *tmp, *next;
@@ -1271,6 +1273,7 @@ csio_scsi_abort_io_q(struct csio_scsim *scm, struct list_head *q, uint32_t tmo)
  */
 int
 csio_scsim_cleanup_io(struct csio_scsim *scm, bool abort)
+	__must_hold(&scm->hw->lock)
 {
 	struct csio_hw *hw = scm->hw;
 	int rv = 0;
@@ -1316,6 +1319,7 @@ csio_scsim_cleanup_io(struct csio_scsim *scm, bool abort)
  */
 int
 csio_scsim_cleanup_io_lnode(struct csio_scsim *scm, struct csio_lnode *ln)
+	__must_hold(&scm->hw->lock)
 {
 	struct csio_hw *hw = scm->hw;
 	struct csio_scsi_level_data sld;
@@ -2192,6 +2196,8 @@ csio_eh_lun_reset_handler(struct scsi_cmnd *cmnd)
 	 * completes, we gather pending I/Os after the LUN reset.
 	 */
 	spin_lock_irq(&hw->lock);
+	/* Tell the compiler that scsim->hw == hw. */
+	__assume_ctx_lock(&scsim->hw->lock);
 	csio_scsi_gather_active_ios(scsim, &sld, &local_q);
 
 	retval = csio_scsi_abort_io_q(scsim, &local_q, 30000);
