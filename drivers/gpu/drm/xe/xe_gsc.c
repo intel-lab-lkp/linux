@@ -467,8 +467,11 @@ int xe_gsc_init_post_hwconfig(struct xe_gsc *gsc)
 	if (!xe_uc_fw_is_available(&gsc->fw))
 		return 0;
 
-	if (!hwe)
+	if (!hwe) {
+		if (xe->info.platform == XE_DG2)
+			return 0;
 		return -ENODEV;
+	}
 
 	bo = xe_managed_bo_create_pin_map(xe, tile, SZ_4M,
 					  XE_BO_FLAG_STOLEN |

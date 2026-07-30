@@ -19,6 +19,9 @@ struct xe_huc {
 
 	/** @gsc_pkt: bo to store the packet for auth via GSC */
 	struct xe_bo *gsc_pkt;
+
+	/** @auth_work: deferred authentication deferred work */
+	struct delayed_work auth_work;
 };
 
 #endif

@@ -53,6 +53,7 @@ xe-y += xe_bb.o \
 	xe_gsc_debugfs.o \
 	xe_gsc_proxy.o \
 	xe_gsc_submit.o \
+	xe_mei_dg2.o \
 	xe_gt.o \
 	xe_gt_ccs_mode.o \
 	xe_gt_clock.o \

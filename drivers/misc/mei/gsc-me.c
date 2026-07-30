@@ -279,6 +279,10 @@ static const struct auxiliary_device_id mei_gsc_id_table[] = {
 		.driver_data = MEI_ME_GSCFI_CFG,
 	},
 	{
+		.name = "xe.mei-gsc",
+		.driver_data = MEI_ME_GSC_CFG,
+	},
+	{
 		/* sentinel */
 	}
 };
@@ -299,5 +303,6 @@ MODULE_AUTHOR("Intel Corporation");
 MODULE_ALIAS("auxiliary:i915.mei-gsc");
 MODULE_ALIAS("auxiliary:i915.mei-gscfi");
 MODULE_ALIAS("auxiliary:xe.mei-gscfi");
+MODULE_ALIAS("auxiliary:xe.mei-gsc");
 MODULE_DESCRIPTION("Intel(R) Graphics System Controller");
 MODULE_LICENSE("GPL");
