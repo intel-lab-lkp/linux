@@ -9522,6 +9522,30 @@ done:
 	sctp_skb_set_owner_r(skb, sk);
 }
 
+/* Control chunks record their owning socket in skb->sk as a bare pointer and
+ * are not reached by sctp_for_each_tx_datachunk(); re-point the ones the
+ * association still holds so migration does not leave them on the old socket.
+ */
+static void sctp_ctrl_set_owner_w(struct sctp_chunk *chunk, struct sock *sk)
+{
+	if (chunk && chunk->skb)
+		chunk->skb->sk = sk;
+}
+
+static void sctp_for_each_tx_ctrlchunk(struct sctp_association *assoc, struct sock *sk)
+{
+	struct sctp_chunk *chunk;
+
+	list_for_each_entry(chunk, &assoc->outqueue.control_chunk_list, list)
+		sctp_ctrl_set_owner_w(chunk, sk);
+	list_for_each_entry(chunk, &assoc->asconf_ack_list, transmitted_list)
+		sctp_ctrl_set_owner_w(chunk, sk);
+	list_for_each_entry(chunk, &assoc->addip_chunk_list, list)
+		sctp_ctrl_set_owner_w(chunk, sk);
+	sctp_ctrl_set_owner_w(assoc->strreset_chunk, sk);
+	sctp_ctrl_set_owner_w(assoc->addip_last_asconf, sk);
+}
+
 /* Populate the fields of the newsk from the oldsk and migrate the assoc
  * and its messages to the newsk.
  */
@@ -9633,6 +9657,7 @@ static int sctp_sock_migrate(struct sock *oldsk, struct sock *newsk,
 	sctp_for_each_tx_datachunk(assoc, true, sctp_clear_owner_w);
 	sctp_assoc_migrate(assoc, newsk);
 	sctp_for_each_tx_datachunk(assoc, false, sctp_set_owner_w);
+	sctp_for_each_tx_ctrlchunk(assoc, newsk);
 
 	/* If the association on the newsk is already closed before accept()
 	 * is called, set RCV_SHUTDOWN flag.
