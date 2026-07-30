@@ -151,6 +151,7 @@ xfs_bmbt_to_bmdr(
 	int			dmxr;
 	xfs_bmbt_key_t		*fkp;
 	__be64			*fpp;
+	int                     nrecs;
 	xfs_bmbt_key_t		*tkp;
 	__be64			*tpp;
 
@@ -167,12 +168,17 @@ xfs_bmbt_to_bmdr(
 	ASSERT(rblock->bb_level != 0);
 	dblock->bb_level = rblock->bb_level;
 	dblock->bb_numrecs = rblock->bb_numrecs;
+
+	/* Validate record count against destination fork capacity */
+	nrecs = be16_to_cpu(rblock->bb_numrecs);
 	dmxr = xfs_bmdr_maxrecs(dblocklen, 0);
+	if (nrecs > dmxr)
+		return;
+
 	fkp = xfs_bmbt_key_addr(mp, rblock, 1);
 	tkp = xfs_bmdr_key_addr(dblock, 1);
 	fpp = xfs_bmap_broot_ptr_addr(mp, rblock, 1, rblocklen);
-	tpp = xfs_bmdr_ptr_addr(dblock, 1, dmxr);
-	dmxr = be16_to_cpu(dblock->bb_numrecs);
+	tpp = xfs_bmdr_ptr_addr(dblock, 1, nrecs);
 	memcpy(tkp, fkp, sizeof(*fkp) * dmxr);
 	memcpy(tpp, fpp, sizeof(*fpp) * dmxr);
 }
