@@ -6,6 +6,7 @@
  ******************************************************************************/
 #include <drv_types.h>
 #include <hal_data.h>
+#include <linux/cleanup.h>
 #include <linux/jiffies.h>
 
 void _ips_enter(struct adapter *padapter)
@@ -37,9 +38,8 @@ void ips_enter(struct adapter *padapter)
 
 	hal_btcoex_IpsNotify(padapter, pwrpriv->ips_mode_req);
 
-	mutex_lock(&pwrpriv->lock);
+	guard(mutex)(&pwrpriv->lock);
 	_ips_enter(padapter);
-	mutex_unlock(&pwrpriv->lock);
 }
 
 int _ips_leave(struct adapter *padapter)
