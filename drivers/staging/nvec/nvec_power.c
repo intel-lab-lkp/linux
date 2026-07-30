@@ -117,6 +117,32 @@ static void get_bat_mfg_data(struct nvec_power *power)
 	}
 }
 
+static int nvec_bat_str_copy(struct nvec_power *power,
+			     struct bat_response *res, char *dst,
+			     unsigned int dst_size, const char *prop_name)
+{
+	unsigned int len;
+
+	if (res->length < 2) {
+		dev_warn(power->nvec->dev,
+			 "battery %s response length too short (%u)\n",
+			 prop_name, res->length);
+		return -EINVAL;
+	}
+
+	len = res->length - 2;
+	if (len >= dst_size) {
+		dev_warn(power->nvec->dev,
+			 "battery %s string too long (%u)\n",
+			 prop_name, len);
+		len = dst_size - 1;
+	}
+
+	memcpy(dst, &res->plc, len);
+	dst[len] = '\0';
+	return 0;
+}
+
 static int nvec_power_bat_notifier(struct notifier_block *nb,
 				   unsigned long event_type, void *data)
 {
@@ -193,16 +219,19 @@ static int nvec_power_bat_notifier(struct notifier_block *nb,
 		power->bat_temperature = res->plu - 2732;
 		break;
 	case MANUFACTURER:
-		memcpy(power->bat_manu, &res->plc, res->length - 2);
-		power->bat_manu[res->length - 2] = '\0';
+		if (nvec_bat_str_copy(power, res, power->bat_manu,
+				      sizeof(power->bat_manu), "manufacturer") < 0)
+			break;
 		break;
 	case MODEL:
-		memcpy(power->bat_model, &res->plc, res->length - 2);
-		power->bat_model[res->length - 2] = '\0';
+		if (nvec_bat_str_copy(power, res, power->bat_model,
+				      sizeof(power->bat_model), "model") < 0)
+			break;
 		break;
 	case TYPE:
-		memcpy(power->bat_type, &res->plc, res->length - 2);
-		power->bat_type[res->length - 2] = '\0';
+		if (nvec_bat_str_copy(power, res, power->bat_type,
+				      sizeof(power->bat_type), "type") < 0)
+			break;
 		/*
 		 * This differs a little from the spec fill in more if you find
 		 * some.
