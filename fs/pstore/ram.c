@@ -26,6 +26,8 @@
 #include "ram_internal.h"
 
 #define RAMOOPS_KERNMSG_HDR "===="
+#define RAMOOPS_KERNMSG_HDR_MAX_SIZE \
+	sizeof(RAMOOPS_KERNMSG_HDR "-9223372036854775808.999999-D\n")
 #define MIN_MEM_SIZE 4096UL
 
 static ulong record_size = MIN_MEM_SIZE;
@@ -146,13 +148,25 @@ ramoops_get_next_prz(struct persistent_ram_zone *przs[], int id,
 	return prz;
 }
 
-static int ramoops_read_kmsg_hdr(char *buffer, struct timespec64 *time,
-				  bool *compressed)
+static int ramoops_read_kmsg_hdr(const char *buffer, size_t size,
+				 struct timespec64 *time, bool *compressed)
 {
 	char data_type;
+	const char *newline;
+	char header[RAMOOPS_KERNMSG_HDR_MAX_SIZE];
+	size_t header_size;
 	int header_length = 0;
 
-	if (sscanf(buffer, RAMOOPS_KERNMSG_HDR "%lld.%lu-%c\n%n",
+	newline = memchr(buffer, '\n',
+			 min(size, sizeof(header) - 1));
+	if (!newline)
+		goto invalid;
+
+	header_size = newline - buffer + 1;
+	memcpy(header, buffer, header_size);
+	header[header_size] = '\0';
+
+	if (sscanf(header, RAMOOPS_KERNMSG_HDR "%lld.%lu-%c\n%n",
 		   (time64_t *)&time->tv_sec, &time->tv_nsec, &data_type,
 		   &header_length) == 3) {
 		time->tv_nsec *= 1000;
@@ -160,17 +174,21 @@ static int ramoops_read_kmsg_hdr(char *buffer, struct timespec64 *time,
 			*compressed = true;
 		else
 			*compressed = false;
-	} else if (sscanf(buffer, RAMOOPS_KERNMSG_HDR "%lld.%lu\n%n",
+	} else if (sscanf(header, RAMOOPS_KERNMSG_HDR "%lld.%lu\n%n",
 			  (time64_t *)&time->tv_sec, &time->tv_nsec,
 			  &header_length) == 2) {
 		time->tv_nsec *= 1000;
 		*compressed = false;
 	} else {
-		time->tv_sec = 0;
-		time->tv_nsec = 0;
-		*compressed = false;
+		goto invalid;
 	}
 	return header_length;
+
+invalid:
+	time->tv_sec = 0;
+	time->tv_nsec = 0;
+	*compressed = false;
+	return 0;
 }
 
 static bool prz_ok(struct persistent_ram_zone *prz)
@@ -203,8 +221,9 @@ static ssize_t ramoops_pstore_read(struct pstore_record *record)
 		if (!prz_ok(prz))
 			continue;
 		header_length = ramoops_read_kmsg_hdr(persistent_ram_old(prz),
-						      &record->time,
-						      &record->compressed);
+					persistent_ram_old_size(prz),
+					&record->time,
+					&record->compressed);
 		/* Clear and skip this DMESG record if it has no valid header */
 		if (!header_length) {
 			persistent_ram_free_old(prz);
@@ -296,7 +315,7 @@ out:
 static size_t ramoops_write_kmsg_hdr(struct persistent_ram_zone *prz,
 				     struct pstore_record *record)
 {
-	char hdr[36]; /* "===="(4), %lld(20), "."(1), %06lu(6), "-%c\n"(3) */
+	char hdr[RAMOOPS_KERNMSG_HDR_MAX_SIZE];
 	size_t len;
 
 	len = scnprintf(hdr, sizeof(hdr),
