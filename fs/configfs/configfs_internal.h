@@ -119,12 +119,23 @@ static inline struct configfs_bin_attribute *to_bin_attr(struct dentry *dentry)
 
 static inline struct config_item *configfs_get_config_item(struct dentry *dentry)
 {
-	struct config_item * item = NULL;
+	struct config_item *item = NULL;
 
 	spin_lock(&dentry->d_lock);
 	if (!d_unhashed(dentry)) {
-		struct configfs_dirent * sd = dentry->d_fsdata;
-		item = config_item_get(sd->s_element);
+		struct configfs_dirent *sd = dentry->d_fsdata;
+
+		if (sd) {
+			/*
+			 * vfs_rmdir() keeps dentry in hash, if d_count > 1.
+			 * Make sure to check the deletion flag while
+			 * holding the lock.
+			 */
+			spin_lock(&configfs_dirent_lock);
+			if (!(sd->s_type & CONFIGFS_USET_DROPPING))
+				item = config_item_get(sd->s_element);
+			spin_unlock(&configfs_dirent_lock);
+		}
 	}
 	spin_unlock(&dentry->d_lock);
 
