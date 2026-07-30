@@ -47,7 +47,8 @@ The memory regions carved out of the primary VM and given to an enclave need to
 be aligned 2 MiB / 1 GiB physically contiguous memory regions (or multiple of
 this size e.g. 8 MiB). The memory can be allocated e.g. by using hugetlbfs from
 user space [2][3][7]. The memory size for an enclave needs to be at least
-64 MiB. The enclave memory and CPUs need to be from the same NUMA node.
+64 MiB. The enclave memory and CPUs need to be from the same NUMA node,
+unless the CPU pool spans several of them; see `Multi-NUMA CPU pools`_.
 
 An enclave runs on dedicated cores. CPU 0 and its CPU siblings need to remain
 available for the primary VM. A CPU pool has to be set for NE purposes by an
@@ -89,6 +90,28 @@ If the enclave VM crashes or gracefully exits, an interrupt event is received by
 the NE driver. This event is sent further to the user space enclave process
 running in the primary VM via a poll notification mechanism. Then the user space
 enclave process can exit.
+
+Multi-NUMA CPU pools
+--------------------
+
+The CPU pool may span multiple NUMA nodes. When it does, kernel-side
+allocations for a new enclave target the node that owns the first core in
+the pool: NE_ADD_VCPU with vcpu_id == 0 draws a core from that node, and
+does not spill to another node once that node has none left. User space
+moves the target with NE_SET_ALLOC_NUMA_NODE, and can move it between
+allocations to build an enclave that spans nodes. Passing
+NE_ALLOC_NUMA_NODE_ANY as the node lets an allocation come from any node
+in the pool.
+
+The target says where cores come from and nothing else. An enclave built
+out of a pool that spans nodes has no node of its own, so the rule that
+its memory be on that node does not apply to it and its memory can come
+from anywhere.
+
+The pool mode and occupancy are readable under
+/sys/devices/virtual/misc/nitro_enclaves/cpu_pool/. Intersect ``avail``
+with /sys/devices/system/node/nodeN/cpulist for the threads still free on
+one node.
 
 [1] https://aws.amazon.com/ec2/nitro/nitro-enclaves/
 [2] https://www.kernel.org/doc/html/latest/admin-guide/mm/hugetlbpage.html
