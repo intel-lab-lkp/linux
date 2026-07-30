@@ -331,7 +331,8 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 	nsock->sent = 0;
 }
 
-static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize, loff_t blksize)
+static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize, loff_t blksize,
+			bool freeze)
 {
 	struct queue_limits lim;
 	int error;
@@ -371,7 +372,13 @@ static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize, loff_t blksize)
 
 	lim.logical_block_size = blksize;
 	lim.physical_block_size = blksize;
-	error = queue_limits_commit_update_frozen(nbd->disk->queue, &lim);
+
+	if (freeze)
+		error = queue_limits_commit_update_frozen(nbd->disk->queue,
+				&lim);
+	else
+		error = queue_limits_commit_update(nbd->disk->queue, &lim);
+
 	if (error)
 		return error;
 
@@ -1568,7 +1575,7 @@ retry:
 		args->index = i;
 		queue_work(nbd->recv_workq, &args->work);
 	}
-	return nbd_set_size(nbd, config->bytesize, nbd_blksize(config));
+	return nbd_set_size(nbd, config->bytesize, nbd_blksize(config), false);
 }
 
 static int nbd_start_device_ioctl(struct nbd_device *nbd)
@@ -1636,13 +1643,13 @@ static int __nbd_ioctl(struct block_device *bdev, struct nbd_device *nbd,
 	case NBD_SET_SOCK:
 		return nbd_add_socket(nbd, arg, false);
 	case NBD_SET_BLKSIZE:
-		return nbd_set_size(nbd, config->bytesize, arg);
+		return nbd_set_size(nbd, config->bytesize, arg, true);
 	case NBD_SET_SIZE:
-		return nbd_set_size(nbd, arg, nbd_blksize(config));
+		return nbd_set_size(nbd, arg, nbd_blksize(config), true);
 	case NBD_SET_SIZE_BLOCKS:
 		if (check_shl_overflow(arg, config->blksize_bits, &bytesize))
 			return -EINVAL;
-		return nbd_set_size(nbd, bytesize, nbd_blksize(config));
+		return nbd_set_size(nbd, bytesize, nbd_blksize(config), true);
 	case NBD_SET_TIMEOUT:
 		nbd_set_cmd_timeout(nbd, arg);
 		return 0;
@@ -2097,7 +2104,7 @@ static int nbd_genl_size_set(struct genl_info *info, struct nbd_device *nbd)
 		bsize = nla_get_u64(info->attrs[NBD_ATTR_BLOCK_SIZE_BYTES]);
 
 	if (bytes != config->bytesize || bsize != nbd_blksize(config))
-		return nbd_set_size(nbd, bytes, bsize);
+		return nbd_set_size(nbd, bytes, bsize, true);
 	return 0;
 }
 
