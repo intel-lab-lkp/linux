@@ -185,6 +185,31 @@
 #define NE_START_ENCLAVE		_IOWR(0xAE, 0x24, struct ne_enclave_start_info)
 
 /**
+ * NE_SET_ALLOC_NUMA_NODE - Set the NUMA node of the primary VM used for
+ *			    subsequent kernel-side allocations on this enclave
+ *			    fd: NE_ADD_VCPU auto-pick (vcpu_id == 0) draws a
+ *			    core from this node. The setting is sticky
+ *			    until changed or the fd is closed. Pass
+ *			    %NE_ALLOC_NUMA_NODE_ANY for node-agnostic
+ *			    allocation (any pool core).
+ *
+ *			    Without this ioctl the target is the first node
+ *			    that owns a core in the CPU pool, and allocation
+ *			    never spills to another node, so a caller that
+ *			    cares which node it lands on names it here.
+ *
+ * Context: Process context.
+ * Return:
+ * * 0				- On success.
+ * * -1				- On failure, errno is set to:
+ * *   EFAULT			- copy_from_user() failed.
+ * *   EINVAL			- flags is non-zero, or node id is not a
+ *				  possible node.
+ * *   NE_ERR_NOT_IN_INIT_STATE	- Enclave is not in init state.
+ */
+#define NE_SET_ALLOC_NUMA_NODE		_IOW(0xAE, 0x25, struct ne_alloc_numa_node)
+
+/**
  * DOC: NE specific error codes
  */
 
@@ -296,6 +321,23 @@
 #define NE_EIF_IMAGE			(0x01)
 
 #define NE_IMAGE_LOAD_MAX_FLAG_VAL	(0x02)
+
+/**
+ * NE_ALLOC_NUMA_NODE_ANY - Node id for a node-agnostic allocation target.
+ */
+#define NE_ALLOC_NUMA_NODE_ANY		(-1)
+
+/**
+ * struct ne_alloc_numa_node - Argument for %NE_SET_ALLOC_NUMA_NODE.
+ * @numa_node:	NUMA node of the primary VM for subsequent kernel-side
+ *		allocations (NE_ADD_VCPU auto-pick), or
+ *		%NE_ALLOC_NUMA_NODE_ANY for node-agnostic allocation.
+ * @flags:	Must be 0.
+ */
+struct ne_alloc_numa_node {
+	__s32	numa_node;
+	__u32	flags;
+};
 
 /**
  * struct ne_image_load_info - Info necessary for in-memory enclave image

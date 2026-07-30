@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/nitro_enclaves.h>
+#include <linux/nodemask.h>
 #include <linux/numa.h>
 #include <linux/pci.h>
 #include <linux/poll.h>
@@ -1473,6 +1474,43 @@ static long ne_enclave_ioctl(struct file *file, unsigned int cmd, unsigned long 
 		if (copy_to_user((void __user *)arg, &enclave_start_info,
 				 sizeof(enclave_start_info)))
 			return -EFAULT;
+
+		return 0;
+	}
+
+	case NE_SET_ALLOC_NUMA_NODE: {
+		struct ne_alloc_numa_node n;
+		int nid;
+
+		if (copy_from_user(&n, (void __user *)arg, sizeof(n)))
+			return -EFAULT;
+
+		if (n.flags)
+			return -EINVAL;
+
+		nid = n.numa_node;
+		if (nid != NUMA_NO_NODE &&
+		    (nid < 0 || nid >= nr_node_ids || !node_state(nid, N_POSSIBLE))) {
+			dev_err_ratelimited(ne_misc_dev.this_device,
+					    "Invalid NUMA node %d\n", nid);
+
+			return -EINVAL;
+		}
+
+		mutex_lock(&ne_enclave->enclave_info_mutex);
+
+		if (ne_enclave->state != NE_STATE_INIT) {
+			dev_err_ratelimited(ne_misc_dev.this_device,
+					    "Enclave is not in init state\n");
+
+			mutex_unlock(&ne_enclave->enclave_info_mutex);
+
+			return -NE_ERR_NOT_IN_INIT_STATE;
+		}
+
+		ne_enclave->alloc_nid = nid;
+
+		mutex_unlock(&ne_enclave->enclave_info_mutex);
 
 		return 0;
 	}
