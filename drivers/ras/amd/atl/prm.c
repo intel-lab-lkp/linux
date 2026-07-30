@@ -44,7 +44,7 @@ unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 bank_id, unsigned long 
 	if (!ret)
 		return ret_addr;
 
-	if (ret == -ENODEV)
+	if (ret == -ENODEV || ret == -EOPNOTSUPP)
 		pr_debug("PRM module/handler not available\n");
 	else
 		pr_notice_once("PRM address translation failed\n");
