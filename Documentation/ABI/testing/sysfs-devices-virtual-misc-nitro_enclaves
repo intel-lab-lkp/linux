@@ -1,0 +1,44 @@
+What:		/sys/devices/virtual/misc/nitro_enclaves/cpu_pool/mode
+Date:		July 2026
+KernelVersion:	7.3
+Contact:	aws-nitro-enclaves-devel@amazon.com
+Description:
+		Read-only. Mode of the Nitro Enclaves CPU pool, one of:
+
+		  none     the pool is empty (ne_cpus is unset)
+		  static   ne_cpus is a CPU list; the listed CPUs are
+		           offlined and dedicated to the pool
+
+What:		/sys/devices/virtual/misc/nitro_enclaves/cpu_pool/total
+What:		/sys/devices/virtual/misc/nitro_enclaves/cpu_pool/used
+What:		/sys/devices/virtual/misc/nitro_enclaves/cpu_pool/avail
+Date:		July 2026
+KernelVersion:	7.3
+Contact:	aws-nitro-enclaves-devel@amazon.com
+Description:
+		Read-only. CPU-list strings describing the Nitro Enclaves CPU
+		pool: total is every CPU thread dedicated to the pool, used is
+		the threads held on behalf of enclaves, and avail is the
+		threads free for allocation. A thread leaves used when the
+		enclave holding it is released; if that release fails part way
+		through, the thread stays in used until the driver is unloaded
+		or the machine reboots. used and avail partition total at any
+		instant, and each read is a consistent snapshot, so a thread
+		that changes hands between two reads can be absent from both.
+		total changes only when the pool is reconfigured, which
+		requires that no enclave exists.
+
+		These files report no error of their own. A read does take the
+		pool lock, so it can wait for a write to ne_cpus to finish.
+
+		By default, allocation for a new enclave targets the NUMA
+		node that owns the first core in total and does not spill to
+		another node. NE_SET_ALLOC_NUMA_NODE changes the target, and
+		its node-agnostic value lets one enclave take cores from
+		more than one node.
+
+		Pool threads are offline, so the threads free on a given
+		node come from intersecting avail with the nodeN/cpuM
+		symlinks under /sys/devices/system/node, which outlive a CPU
+		going offline. nodeN/cpulist is filtered against
+		cpu_online_mask and lists none of them.

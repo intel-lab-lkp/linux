@@ -19184,6 +19184,7 @@ R:	The AWS Nitro Enclaves Team <aws-nitro-enclaves-devel@amazon.com>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
 W:	https://aws.amazon.com/ec2/nitro/nitro-enclaves/
+F:	Documentation/ABI/testing/sysfs-devices-virtual-misc-nitro_enclaves
 F:	Documentation/virt/ne_overview.rst
 F:	drivers/virt/nitro_enclaves/
 F:	include/linux/nitro_enclaves.h
