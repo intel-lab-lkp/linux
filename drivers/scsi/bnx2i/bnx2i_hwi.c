@@ -1741,6 +1741,7 @@ static void bnx2i_process_async_mesg(struct iscsi_session *session,
 				     struct bnx2i_conn *bnx2i_conn,
 				     struct cqe *cqe)
 {
+	struct iscsi_conn *conn = bnx2i_conn->cls_conn->dd_data;
 	struct bnx2i_async_msg *async_cqe;
 	struct iscsi_async *resp_hdr;
 	u8 async_event;
@@ -1751,7 +1752,7 @@ static void bnx2i_process_async_mesg(struct iscsi_session *session,
 	async_event = async_cqe->async_event;
 
 	if (async_event == ISCSI_ASYNC_MSG_SCSI_EVENT) {
-		iscsi_conn_printk(KERN_ALERT, bnx2i_conn->cls_conn->dd_data,
+		iscsi_conn_printk(KERN_ALERT, conn,
 				  "async: scsi events not supported\n");
 		return;
 	}
@@ -1773,8 +1774,7 @@ static void bnx2i_process_async_mesg(struct iscsi_session *session,
 	resp_hdr->param2 = cpu_to_be16(async_cqe->param2);
 	resp_hdr->param3 = cpu_to_be16(async_cqe->param3);
 
-	__iscsi_complete_pdu(bnx2i_conn->cls_conn->dd_data,
-			     (struct iscsi_hdr *)resp_hdr, NULL, 0);
+	__iscsi_complete_pdu(conn, (struct iscsi_hdr *)resp_hdr, NULL, 0);
 	spin_unlock(&session->back_lock);
 }
 
