@@ -2492,6 +2492,29 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		rc = cxl_region_setup_targets(cxlr);
 		if (rc)
 			return rc;
+
+		/*
+		 * Verify that auto-discovery reconstructs the endpoint
+		 * positions assigned while creating the region.
+		 */
+		root_pos_per_target = root_positions_per_target(cxlr);
+		for (int i = 0; i < p->nr_targets; i++) {
+			struct cxl_endpoint_decoder *target = p->targets[i];
+			int test_pos;
+
+			test_pos = cxl_calc_interleave_pos(target,
+							   &cxlr->hpa_range,
+							   root_pos_per_target,
+							   p->interleave_granularity);
+			if (test_pos != target->pos) {
+				dev_err(&target->cxld.dev,
+					"cxl_calc_interleave_pos() mismatch: test_pos:%d target->pos:%d\n",
+					test_pos, target->pos);
+				cxl_region_teardown_targets(cxlr);
+				return -ENXIO;
+			}
+		}
+
 		p->state = CXL_CONFIG_ACTIVE;
 		cxl_region_shared_upstream_bandwidth_update(cxlr);
 	}
@@ -2502,29 +2525,6 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		.start = p->res->start,
 		.end = p->res->end,
 	};
-
-	if (p->nr_targets != p->interleave_ways)
-		return 0;
-
-	/*
-	 * Test the auto-discovery position calculator function
-	 * against this successfully created user-defined region.
-	 * A fail message here means that this interleave config
-	 * will fail when presented as CXL_REGION_F_AUTO.
-	 */
-	root_pos_per_target = root_positions_per_target(cxlr);
-	for (int i = 0; i < p->nr_targets; i++) {
-		struct cxl_endpoint_decoder *target = p->targets[i];
-		int test_pos;
-
-		test_pos = cxl_calc_interleave_pos(target, &cxlr->hpa_range,
-						   root_pos_per_target,
-						   p->interleave_granularity);
-		dev_dbg(&target->cxld.dev,
-			"Test cxl_calc_interleave_pos(): %s test_pos:%d target->pos:%d\n",
-			(test_pos == target->pos) ? "success" : "fail",
-			test_pos, target->pos);
-	}
 
 	return 0;
 }
