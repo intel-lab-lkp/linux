@@ -415,9 +415,6 @@ static int ocfs2_find_victim_alloc_group(struct inode *inode,
 	for (i = 0; i < le16_to_cpu(cl->cl_next_free_rec); i++) {
 
 		rec = &(cl->cl_recs[i]);
-		if (!rec)
-			continue;
-
 		bg = NULL;
 
 		do {
