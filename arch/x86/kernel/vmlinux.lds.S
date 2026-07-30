@@ -365,9 +365,9 @@ SECTIONS
 		*(.bss..page_aligned)
 		. = ALIGN(PAGE_SIZE);
 		*(BSS_MAIN)
-		BSS_DECRYPTED
 		. = ALIGN(PAGE_SIZE);
 		__bss_stop = .;
+		BSS_DECRYPTED
 	}
 
 	/*

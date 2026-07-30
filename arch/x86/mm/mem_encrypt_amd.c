@@ -476,6 +476,10 @@ void __init early_set_mem_enc_dec_hypercall(unsigned long vaddr, unsigned long s
 
 void __init sme_early_init(void)
 {
+	/* Needs to be cleared even if encryption is not enabled */
+	memset(__start_bss_decrypted, 0,
+	       (unsigned long) __end_bss_decrypted - (unsigned long) __start_bss_decrypted);
+
 	if (!sme_me_mask)
 		return;
 
