@@ -30,7 +30,7 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 				 size_t nbytes, loff_t *ppos)
 {
 	struct pci_dev *dev = pde_data(file_inode(file));
-	unsigned int pos = *ppos;
+	loff_t pos = *ppos;
 	unsigned int cnt, size;
 
 	/*
@@ -114,7 +114,7 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 {
 	struct inode *ino = file_inode(file);
 	struct pci_dev *dev = pde_data(ino);
-	int pos = *ppos;
+	loff_t pos = *ppos;
 	int size = dev->cfg_size;
 	int cnt, ret;
 
