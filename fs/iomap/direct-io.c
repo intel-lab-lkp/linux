@@ -403,6 +403,18 @@ out_put_bio:
 	return ret;
 }
 
+/*
+ * File systems that write out of place and always allocate new blocks
+ * need each bio to be block aligned as that's the unit of allocation.
+ */
+static unsigned int iomap_dio_alignment(const struct iomap_iter *iter,
+					const struct iomap_dio *dio)
+{
+	if (dio->flags & IOMAP_DIO_FSBLOCK_ALIGNED)
+		return i_blocksize(iter->inode);
+	return bdev_logical_block_size(iter->iomap.bdev);
+}
+
 static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 {
 	const struct iomap *iomap = &iter->iomap;
@@ -414,17 +426,8 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	bool need_zeroout = false;
 	u64 copied = 0;
 	size_t orig_count;
-	unsigned int alignment;
+	const unsigned int alignment = iomap_dio_alignment(iter, dio);
 	ssize_t ret = 0;
-
-	/*
-	 * File systems that write out of place and always allocate new blocks
-	 * need each bio to be block aligned as that's the unit of allocation.
-	 */
-	if (dio->flags & IOMAP_DIO_FSBLOCK_ALIGNED)
-		alignment = fs_block_size;
-	else
-		alignment = bdev_logical_block_size(iomap->bdev);
 
 	if ((pos | length) & (alignment - 1))
 		return -EINVAL;
@@ -588,12 +591,15 @@ out:
 
 static int iomap_dio_hole_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 {
-	loff_t length = iov_iter_zero(iomap_length(iter), dio->submit.iter);
+	loff_t copied = iov_iter_zero(iomap_length(iter), dio->submit.iter);
+	const unsigned int alignment = iomap_dio_alignment(iter, dio);
+	const loff_t aligned_copied = round_down(copied, alignment);
 
-	dio->size += length;
-	if (!length)
+	iov_iter_revert(dio->submit.iter, copied - aligned_copied);
+	dio->size += aligned_copied;
+	if (!aligned_copied)
 		return -EFAULT;
-	return iomap_iter_advance(iter, length);
+	return iomap_iter_advance(iter, aligned_copied);
 }
 
 static int iomap_dio_inline_iter(struct iomap_iter *iomi, struct iomap_dio *dio)
