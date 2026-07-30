@@ -190,13 +190,13 @@ struct xhci_op_regs {
 
 /* CRCR - Command Ring Control Register - cmd_ring bitmasks */
 /* bit 0 - Cycle bit indicates the ownership of the command ring */
-#define CMD_RING_CYCLE		BIT(0)
+#define CMD_RING_CYCLE		BIT_ULL(0)
 /* stop ring operation after completion of the currently executing command */
-#define CMD_RING_PAUSE		BIT(1)
+#define CMD_RING_PAUSE		BIT_ULL(1)
 /* stop ring immediately - abort the currently executing command */
-#define CMD_RING_ABORT		BIT(2)
+#define CMD_RING_ABORT		BIT_ULL(2)
 /* true: command ring is running */
-#define CMD_RING_RUNNING	BIT(3)
+#define CMD_RING_RUNNING	BIT_ULL(3)
 /* bits 63:6 - Command Ring pointer */
 #define CMD_RING_PTR_MASK	GENMASK_ULL(63, 6)
 
