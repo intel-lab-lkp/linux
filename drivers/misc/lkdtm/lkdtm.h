@@ -89,10 +89,10 @@ extern struct crashtype_category powerpc_crashtypes;
 /* Each category's init/exit routines. */
 void __init lkdtm_bugs_init(int *recur_param);
 void __init lkdtm_heap_init(void);
-void __exit lkdtm_heap_exit(void);
+void lkdtm_heap_exit(void);
 void __init lkdtm_perms_init(void);
 void __init lkdtm_usercopy_init(void);
-void __exit lkdtm_usercopy_exit(void);
+void lkdtm_usercopy_exit(void);
 
 /* Special declaration for function-in-rodata. */
 void lkdtm_rodata_do_nothing(void);

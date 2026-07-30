@@ -468,6 +468,9 @@ static int __init lkdtm_module_init(void)
 
 out_err:
 	debugfs_remove_recursive(lkdtm_debugfs_root);
+	lkdtm_heap_exit();
+	lkdtm_usercopy_exit();
+	kfree(lkdtm_kernel_info);
 	return ret;
 }
 

@@ -363,7 +363,7 @@ void __init lkdtm_heap_init(void)
 	b_cache = kmem_cache_create("lkdtm-heap-b", 64, 0, SLAB_NO_MERGE, NULL);
 }
 
-void __exit lkdtm_heap_exit(void)
+void lkdtm_heap_exit(void)
 {
 	kmem_cache_destroy(double_free_cache);
 	kmem_cache_destroy(a_cache);

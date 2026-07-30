@@ -433,7 +433,7 @@ void __init lkdtm_usercopy_init(void)
 					   NULL);
 }
 
-void __exit lkdtm_usercopy_exit(void)
+void lkdtm_usercopy_exit(void)
 {
 	kmem_cache_destroy(whitelist_cache);
 }
