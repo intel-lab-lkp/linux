@@ -2988,9 +2988,26 @@ static int sdhci_msm_runtime_resume(struct device *dev)
 	return ret;
 }
 
+static int sdhci_msm_restore(struct device *dev)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+#ifdef CONFIG_MMC_CRYPTO
+	if (host->mmc->caps2 & MMC_CAP2_CRYPTO)
+		blk_crypto_reprogram_all_keys(&host->mmc->crypto_profile);
+#endif
+
+	return pm_runtime_force_resume(dev);
+}
+
 static const struct dev_pm_ops sdhci_msm_pm_ops = {
-	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 	RUNTIME_PM_OPS(sdhci_msm_runtime_suspend, sdhci_msm_runtime_resume, NULL)
+	.suspend	= pm_runtime_force_suspend,
+	.resume		= pm_runtime_force_resume,
+	.freeze		= pm_runtime_force_suspend,
+	.restore	= sdhci_msm_restore,
+	.thaw		= pm_runtime_force_resume,
+	.poweroff	= pm_runtime_force_suspend,
 };
 
 static struct platform_driver sdhci_msm_driver = {
