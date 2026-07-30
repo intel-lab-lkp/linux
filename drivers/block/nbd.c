@@ -49,8 +49,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/nbd.h>
 
-static DEFINE_IDR(nbd_index_idr);
 static DEFINE_MUTEX(nbd_index_mutex);
+static __guarded_by(&nbd_index_mutex) DEFINE_IDR(nbd_index_idr);
 static struct workqueue_struct *nbd_del_wq;
 static int nbd_total_devices = 0;
 
@@ -1506,6 +1506,7 @@ static void nbd_config_put(struct nbd_device *nbd)
 }
 
 static int nbd_start_device(struct nbd_device *nbd)
+	__must_hold(&nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	int num_connections = config->num_connections;
@@ -1578,6 +1579,7 @@ retry:
 }
 
 static int nbd_start_device_ioctl(struct nbd_device *nbd)
+	__must_hold(&nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	int ret;
@@ -1629,6 +1631,7 @@ static void nbd_set_cmd_timeout(struct nbd_device *nbd, u64 timeout)
 /* Must be called with config_lock held */
 static int __nbd_ioctl(struct block_device *bdev, struct nbd_device *nbd,
 		       unsigned int cmd, unsigned long arg)
+	__must_hold(&nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	loff_t bytesize;
@@ -2773,7 +2776,11 @@ static void __exit nbd_cleanup(void)
 	/* Also wait for nbd_dev_remove_work() completes */
 	destroy_workqueue(nbd_del_wq);
 
-	idr_destroy(&nbd_index_idr);
+	{
+		__assume_ctx_lock(&nbd_index_mutex);
+		idr_destroy(&nbd_index_idr);
+	}
+
 	unregister_blkdev(NBD_MAJOR, "nbd");
 }
 
