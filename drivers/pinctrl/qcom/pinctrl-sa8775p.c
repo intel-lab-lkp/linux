@@ -101,11 +101,6 @@
 		.intr_detection_width = -1,		\
 	}
 
-#define QUP_I3C_6_MODE_OFFSET	0xAF000
-#define QUP_I3C_7_MODE_OFFSET	0xB0000
-#define QUP_I3C_13_MODE_OFFSET	0xB1000
-#define QUP_I3C_14_MODE_OFFSET	0xB2000
-
 static const struct pinctrl_pin_desc sa8775p_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),

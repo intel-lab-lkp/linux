@@ -100,11 +100,6 @@
 		.intr_detection_width = -1,		\
 	}
 
-#define QUP_I3C_6_MODE_OFFSET	0xaf000
-#define QUP_I3C_7_MODE_OFFSET	0xb0000
-#define QUP_I3C_13_MODE_OFFSET	0xb1000
-#define QUP_I3C_14_MODE_OFFSET	0xb2000
-
 static const struct pinctrl_pin_desc qcs8300_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),
