@@ -3031,7 +3031,11 @@ static int msdc_drv_probe(struct platform_device *pdev)
 		if (IS_ERR(host->crypto_clk))
 			return PTR_ERR(host->crypto_clk);
 		else if (host->crypto_clk)
+#ifdef CONFIG_MMC_CRYPTO
 			mmc->caps2 |= MMC_CAP2_CRYPTO;
+#else
+			dev_dbg(host->dev, "Enable necessary crypto config\n");
+#endif
 	}
 
 	host->irq = platform_get_irq(pdev, 0);
