@@ -354,3 +354,9 @@ bool snp_svsm_vtpm_probe(void)
 	/* Check platform commands contains TPM_SEND_COMMAND - platform command 8 */
 	return call.rcx_out & BIT_ULL(8);
 }
+
+int svsm_do_call(struct svsm_call *call)
+{
+	call->caa = svsm_get_caa();
+	return svsm_perform_call_protocol(call);
+}

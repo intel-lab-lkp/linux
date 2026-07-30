@@ -435,6 +435,13 @@ struct svsm_call {
 #define SVSM_VTPM_QUERY			0
 #define SVSM_VTPM_CMD			1
 
+#define SVSM_APIC_CALL(x)		((3ULL << 32) | (x))
+#define SVSM_APIC_QUERY_FEATURES	0
+#define SVSM_APIC_CONFIG_EMULATION	1
+#define SVSM_APIC_READ_REGISTER		2
+#define SVSM_APIC_WRITE_REGISTER	3
+#define SVSM_APIC_CONFIG_VECTOR		4
+
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 
 extern u8 snp_vmpl;
@@ -519,6 +526,7 @@ u64 sev_get_status(void);
 void sev_show_status(void);
 int prepare_pte_enc(struct pte_enc_desc *d);
 void set_pte_enc_mask(pte_t *kpte, unsigned long pfn, pgprot_t new_prot);
+int svsm_do_call(struct svsm_call *call);
 void snp_kexec_finish(void);
 void snp_kexec_begin(void);
 
@@ -611,6 +619,7 @@ static inline int rmpadjust(unsigned long vaddr, bool rmp_psize, unsigned long a
 static inline void setup_ghcb(void) { }
 static inline void __init
 early_snp_set_memory_private(unsigned long vaddr, unsigned long paddr, unsigned long npages) { }
+static inline int svsm_do_call(struct svsm_call *call) { return 0; }
 static inline void __init
 early_snp_set_memory_shared(unsigned long vaddr, unsigned long paddr, unsigned long npages) { }
 static inline void snp_set_memory_shared(unsigned long vaddr, unsigned long npages) { }
