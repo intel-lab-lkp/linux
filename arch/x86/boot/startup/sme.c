@@ -566,6 +566,9 @@ void __init sme_enable(struct boot_params *bp)
 	physical_mask	&= ~me_mask;
 	cc_vendor	= CC_VENDOR_AMD;
 	cc_set_mask(me_mask);
+
+	if (snp_vmpl)
+		svsm_config_vectors();
 }
 
 #ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION

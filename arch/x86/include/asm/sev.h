@@ -34,6 +34,13 @@ enum es_result {
 	ES_RETRY,		/* Retry instruction emulation */
 };
 
+enum svsm_vec_enable {
+	SVSM_IRQ_DISABLE_SINGLE,
+	SVSM_IRQ_ENABLE_SINGLE,
+	SVSM_IRQ_DISABLE_ALL,
+	SVSM_IRQ_ENABLE_ALL,
+};
+
 struct es_fault_info {
 	unsigned long vector;
 	unsigned long error_code;
@@ -518,6 +525,7 @@ void snp_set_memory_shared(unsigned long vaddr, unsigned long npages);
 void snp_set_memory_private(unsigned long vaddr, unsigned long npages);
 void snp_set_wakeup_secondary_cpu(void);
 bool snp_init(struct boot_params *bp);
+void svsm_config_vectors(void);
 void snp_dmi_setup(void);
 int snp_issue_svsm_attest_req(u64 call_id, struct svsm_call *call, struct svsm_attest_call *input);
 void snp_accept_memory(phys_addr_t start, phys_addr_t end);
@@ -626,6 +634,7 @@ static inline void snp_set_memory_shared(unsigned long vaddr, unsigned long npag
 static inline void snp_set_memory_private(unsigned long vaddr, unsigned long npages) { }
 static inline void snp_set_wakeup_secondary_cpu(void) { }
 static inline bool snp_init(struct boot_params *bp) { return false; }
+static inline void svsm_config_vectors(void) { }
 static inline void snp_dmi_setup(void) { }
 static inline int snp_issue_svsm_attest_req(u64 call_id, struct svsm_call *call, struct svsm_attest_call *input)
 {

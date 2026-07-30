@@ -191,6 +191,21 @@ static void __init svsm_setup(struct cc_blob_sev_info *cc_info)
 	boot_svsm_caa_pa = pa;
 }
 
+/* Configure the APIC IRQ vectors with Alternate Injection */
+void __init svsm_config_vectors(void)
+{
+	struct svsm_call call = {};
+
+	if (sev_status & MSR_AMD64_SNP_ALTERNATE_INJ) {
+		call.caa = rip_rel_ptr(&boot_svsm_ca_page);
+		call.rax = SVSM_APIC_CALL(SVSM_APIC_CONFIG_VECTOR);
+		call.rcx = SVSM_IRQ_ENABLE_ALL << 8;
+
+		if (svsm_call_msr_protocol(&call))
+			sev_es_terminate(SEV_TERM_SET_GEN, GHCB_SNP_UNSUPPORTED);
+	}
+}
+
 bool __init snp_init(struct boot_params *bp)
 {
 	struct cc_blob_sev_info *cc_info;
