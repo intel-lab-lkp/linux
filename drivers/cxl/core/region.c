@@ -559,10 +559,27 @@ static ssize_t interleave_granularity_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", p->interleave_granularity);
 }
 
+/**
+ * is_ig_allowed() - Check region granularity against the root decoder
+ * @cxlrd: root decoder
+ * @ig: proposed region granularity
+ *
+ * Return: true when the root does not interleave or @ig is no greater than
+ * the root decoder granularity.
+ */
+static inline bool is_ig_allowed(struct cxl_root_decoder *cxlrd, int ig)
+{
+	struct cxl_decoder *cxld = &cxlrd->cxlsd.cxld;
+
+	if (cxld->interleave_ways <= 1)
+		return true;
+
+	return ig <= cxld->interleave_granularity;
+}
+
 static int set_interleave_granularity(struct cxl_region *cxlr, int val)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
-	struct cxl_decoder *cxld = &cxlrd->cxlsd.cxld;
 	struct cxl_region_params *p = &cxlr->params;
 	int rc;
 	u16 ig;
@@ -571,15 +588,7 @@ static int set_interleave_granularity(struct cxl_region *cxlr, int val)
 	if (rc)
 		return rc;
 
-	/*
-	 * When the host-bridge is interleaved, disallow region granularity !=
-	 * root granularity. Regions with a granularity less than the root
-	 * interleave result in needing multiple endpoints to support a single
-	 * slot in the interleave (possible to support in the future). Regions
-	 * with a granularity greater than the root interleave result in invalid
-	 * DPA translations (invalid to support).
-	 */
-	if (cxld->interleave_ways > 1 && val != cxld->interleave_granularity)
+	if (!is_ig_allowed(cxlrd, val))
 		return -EINVAL;
 
 	lockdep_assert_held_write(&cxl_rwsem.region);
@@ -2278,6 +2287,8 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	struct cxl_dport *dport;
 	int rc = -ENXIO;
 	int root_pos_per_target;
+	int root_ways = cxlrd->cxlsd.cxld.interleave_ways;
+	int root_gran = cxlrd->cxlsd.cxld.interleave_granularity;
 
 	rc = check_interleave_cap(&cxled->cxld, p->interleave_ways,
 				  p->interleave_granularity);
@@ -2307,6 +2318,28 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 
 	if (p->state < CXL_CONFIG_INTERLEAVE_ACTIVE) {
 		dev_dbg(&cxlr->dev, "interleave config missing\n");
+		return -ENXIO;
+	}
+
+	if (!is_ig_allowed(cxlrd, p->interleave_granularity)) {
+		dev_dbg(&cxlr->dev,
+			"ig %d incompatible with root ways %d ig %d\n",
+			p->interleave_granularity, root_ways, root_gran);
+		return -ENXIO;
+	}
+
+	/*
+	 * A 3-way-family root contributes no selector bits, so selector
+	 * validation cannot confirm that the root and region cover the same
+	 * interleave span. Check the span explicitly.
+	 */
+	if (!is_power_of_2(root_ways) &&
+	    (u64)p->interleave_ways * p->interleave_granularity !=
+	    (u64)root_ways * root_gran) {
+		dev_dbg(&cxlr->dev,
+			"region ways*gran (%d*%d) != root ways*gran (%d*%d)\n",
+			p->interleave_ways, p->interleave_granularity,
+			root_ways, root_gran);
 		return -ENXIO;
 	}
 
