@@ -880,6 +880,9 @@ void bnx2fc_process_cq_compl(struct bnx2fc_rport *tgt, u16 wqe,
 		return;
 	}
 
+	/* Tell the compiler that there is an alias for tgt->tgt_lock. */
+	__assume_ctx_lock(&io_req->cb_arg->aborted_io_req->tgt->tgt_lock);
+
 	/* Timestamp IO completion time */
 	cmd_type = io_req->cmd_type;
 
