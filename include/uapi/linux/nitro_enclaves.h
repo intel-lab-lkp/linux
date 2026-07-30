@@ -26,8 +26,8 @@
  *		  https://www.kernel.org/doc/html/latest/admin-guide/kernel-parameters.html
  *		  CPU 0 and its siblings have to remain available for the
  *		  primary / parent VM, so they cannot be set for enclaves. Full
- *		  CPU core(s), from the same NUMA node, need(s) to be included
- *		  in the CPU pool.
+ *		  CPU core(s) need(s) to be included in the CPU pool. The
+ *		  pool may span NUMA nodes.
  *
  * Context: Process context.
  * Return:
@@ -50,8 +50,9 @@
  * NE_ADD_VCPU - The command is used to set a vCPU for an enclave. The vCPU can
  *		 be auto-chosen from the NE CPU pool or it can be set by the
  *		 caller, with the note that it needs to be available in the NE
- *		 CPU pool. Full CPU core(s), from the same NUMA node, need(s) to
- *		 be associated with an enclave.
+ *		 CPU pool. Full CPU core(s) need(s) to be associated with an
+ *		 enclave. When the CPU pool spans NUMA nodes, the cores of
+ *		 one enclave can be from different nodes.
  *		 The vCPU id is an input / output parameter. If its value is 0,
  *		 then a CPU is chosen from the enclave CPU pool and returned via
  *		 this parameter.
@@ -108,8 +109,11 @@
 /**
  * NE_SET_USER_MEMORY_REGION - The command is used to set a memory region for an
  *			       enclave, given the allocated memory from the
- *			       userspace. Enclave memory needs to be from the
- *			       same NUMA node as the enclave CPUs.
+ *			       userspace. When the CPU pool sits on one
+ *			       NUMA node, enclave memory needs to be from
+ *			       that node. An enclave built out of a pool
+ *			       that spans nodes has no node of its own, and
+ *			       its memory can come from anywhere.
  *			       The user memory region is an input parameter. It
  *			       includes info provided by the caller - flags,
  *			       memory size and userspace address.
@@ -138,7 +142,9 @@
  * * NE_ERR_MEM_NOT_HUGE_PAGE		- The memory region is not backed by
  *					  huge pages.
  * * NE_ERR_MEM_DIFFERENT_NUMA_NODE	- The memory region is not from the same
- *					  NUMA node as the CPUs.
+ *					  NUMA node as the CPUs. Not returned
+ *					  for an enclave whose CPU pool spans
+ *					  nodes.
  * * NE_ERR_MEM_MAX_REGIONS		- The number of memory regions set for
  *					  the enclave reached maximum.
  * * NE_ERR_INVALID_PAGE_SIZE		- The memory region is not backed by

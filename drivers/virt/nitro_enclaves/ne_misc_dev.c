@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/nitro_enclaves.h>
+#include <linux/numa.h>
 #include <linux/pci.h>
 #include <linux/poll.h>
 #include <linux/range.h>
@@ -34,8 +35,8 @@
 
 /**
  * NE_CPUS_SIZE - Size for max 128 CPUs, for now, in a cpu-list string, comma
- *		  separated. The NE CPU pool includes CPUs from a single NUMA
- *		  node.
+ *		  separated. The NE CPU pool may include CPUs from more than
+ *		  one NUMA node.
  */
 #define NE_CPUS_SIZE		(512)
 
@@ -115,7 +116,20 @@ MODULE_PARM_DESC(ne_cpus, "<cpu-list> - CPU pool used for Nitro Enclaves");
  *				The total number of CPU cores available on the
  *				primary / parent VM.
  * @nr_threads_per_core:	The number of threads that a full CPU core has.
- * @numa_node:			NUMA node of the CPUs in the pool.
+ * @numa_node:			NUMA node of the CPUs in the pool, or
+ *				NUMA_NO_NODE if the pool spans multiple nodes.
+ * @first_nid:			The NUMA node that owns the first core in the
+ *				pool, or NUMA_NO_NODE if the pool is empty.
+ *				This is the node a new enclave targets until
+ *				user space says otherwise.
+ * @core_nid:			The NUMA node of each core slot, indexed the
+ *				same way as @avail_threads_per_core, or
+ *				NUMA_NO_NODE both for a slot that holds no
+ *				core and for a core whose CPUs report no node.
+ *				Taken while the pool CPUs are still online,
+ *				because from then on they are offline and
+ *				cpu_to_node() is not documented to keep
+ *				answering for them.
  */
 struct ne_cpu_pool {
 	cpumask_var_t	*avail_threads_per_core;
@@ -123,10 +137,13 @@ struct ne_cpu_pool {
 	unsigned int	nr_parent_vm_cores;
 	unsigned int	nr_threads_per_core;
 	int		numa_node;
+	int		first_nid;
+	int		*core_nid;
 };
 
 static struct ne_cpu_pool ne_cpu_pool = {
 	.mutex = __MUTEX_INITIALIZER(ne_cpu_pool.mutex),
+	.first_nid = NUMA_NO_NODE,
 };
 
 /**
@@ -185,6 +202,9 @@ static void ne_free_core_slots(void)
 
 	kfree(ne_cpu_pool.avail_threads_per_core);
 	ne_cpu_pool.avail_threads_per_core = NULL;
+
+	kfree(ne_cpu_pool.core_nid);
+	ne_cpu_pool.core_nid = NULL;
 }
 
 /**
@@ -218,9 +238,17 @@ static int ne_build_core_slots(const struct cpumask *cpu_pool)
 	if (!ne_cpu_pool.avail_threads_per_core)
 		return -ENOMEM;
 
-	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
+	ne_cpu_pool.core_nid = kmalloc_objs(*ne_cpu_pool.core_nid,
+					    ne_cpu_pool.nr_parent_vm_cores);
+	if (!ne_cpu_pool.core_nid)
+		goto free_slots;
+
+	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++) {
 		if (!zalloc_cpumask_var(&ne_cpu_pool.avail_threads_per_core[i], GFP_KERNEL))
 			goto free_slots;
+
+		ne_cpu_pool.core_nid[i] = NUMA_NO_NODE;
+	}
 
 	if (!zalloc_cpumask_var(&processed, GFP_KERNEL))
 		goto free_slots;
@@ -247,10 +275,14 @@ static int ne_build_core_slots(const struct cpumask *cpu_pool)
 			cpumask_set_cpu(cpu_sibling, processed);
 		}
 
+		ne_cpu_pool.core_nid[next_core_idx] = cpu_to_node(cpu);
+
 		next_core_idx++;
 	}
 
 	free_cpumask_var(processed);
+
+	ne_cpu_pool.first_nid = ne_cpu_pool.core_nid[0];
 
 	return 0;
 
@@ -280,7 +312,9 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 	unsigned int cpu = 0;
 	cpumask_var_t cpu_pool;
 	unsigned int cpu_sibling = 0;
-	int numa_node = -1;
+	bool have_node = false;
+	bool multi_node = false;
+	int numa_node = NUMA_NO_NODE;
 	int rc = -EINVAL;
 
 	if (!zalloc_cpumask_var(&cpu_pool, GFP_KERNEL))
@@ -320,29 +354,21 @@ static int ne_setup_cpu_pool(const char *ne_cpu_list)
 		}
 
 	/*
-	 * Check if the CPUs from the NE CPU pool are from the same NUMA node.
+	 * Determine the NUMA node of the CPUs in the pool. If the pool spans
+	 * multiple NUMA nodes, set numa_node to NUMA_NO_NODE; the pool is then
+	 * treated as node-agnostic for placement and memory-locality checks.
 	 */
-	for_each_cpu(cpu, cpu_pool)
-		if (numa_node < 0) {
+	for_each_cpu(cpu, cpu_pool) {
+		if (!have_node) {
 			numa_node = cpu_to_node(cpu);
-			if (numa_node < 0) {
-				pr_err("%s: Invalid NUMA node %d\n",
-				       ne_misc_dev.name, numa_node);
-
-				rc = -EINVAL;
-
-				goto unlock_hotplug;
-			}
-		} else {
-			if (numa_node != cpu_to_node(cpu)) {
-				pr_err("%s: CPUs with different NUMA nodes\n",
-				       ne_misc_dev.name);
-
-				rc = -EINVAL;
-
-				goto unlock_hotplug;
-			}
+			have_node = true;
+		} else if (numa_node != cpu_to_node(cpu)) {
+			multi_node = true;
 		}
+	}
+
+	if (multi_node)
+		numa_node = NUMA_NO_NODE;
 
 	/*
 	 * Check if CPU 0 and its siblings are included in the provided CPU pool
@@ -437,7 +463,8 @@ reset_pool:
 	free_cpumask_var(cpu_pool);
 	ne_cpu_pool.nr_parent_vm_cores = 0;
 	ne_cpu_pool.nr_threads_per_core = 0;
-	ne_cpu_pool.numa_node = -1;
+	ne_cpu_pool.numa_node = NUMA_NO_NODE;
+	ne_cpu_pool.first_nid = NUMA_NO_NODE;
 	mutex_unlock(&ne_cpu_pool.mutex);
 
 	return rc;
@@ -475,7 +502,8 @@ static void ne_teardown_cpu_pool(void)
 	ne_free_core_slots();
 	ne_cpu_pool.nr_parent_vm_cores = 0;
 	ne_cpu_pool.nr_threads_per_core = 0;
-	ne_cpu_pool.numa_node = -1;
+	ne_cpu_pool.numa_node = NUMA_NO_NODE;
+	ne_cpu_pool.first_nid = NUMA_NO_NODE;
 
 	mutex_unlock(&ne_cpu_pool.mutex);
 }
@@ -550,7 +578,13 @@ static bool ne_donated_cpu(struct ne_enclave *ne_enclave, unsigned int cpu)
 /**
  * ne_get_unused_core_from_cpu_pool() - Get the id of a full core from the
  *					NE CPU pool.
- * @void:	No parameters provided.
+ * @nid:	Required NUMA node for the core, or NUMA_NO_NODE for no
+ *		node constraint.
+ *
+ * When @nid names a specific node, only a free core whose CPUs are
+ * on that node is returned; if none is available the function returns -1
+ * rather than spilling onto another node. When @nid is NUMA_NO_NODE, any
+ * free core is returned.
  *
  * Context: Process context. This function is called with the ne_enclave and
  *	    ne_cpu_pool mutexes held.
@@ -558,19 +592,19 @@ static bool ne_donated_cpu(struct ne_enclave *ne_enclave, unsigned int cpu)
  * * Core id.
  * * -1 if no CPU core available in the pool.
  */
-static int ne_get_unused_core_from_cpu_pool(void)
+static int ne_get_unused_core_from_cpu_pool(int nid)
 {
-	int core_id = -1;
 	unsigned int i = 0;
 
-	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++)
-		if (!cpumask_empty(ne_cpu_pool.avail_threads_per_core[i])) {
-			core_id = i;
+	for (i = 0; i < ne_cpu_pool.nr_parent_vm_cores; i++) {
+		if (cpumask_empty(ne_cpu_pool.avail_threads_per_core[i]))
+			continue;
+		if (nid != NUMA_NO_NODE && ne_cpu_pool.core_nid[i] != nid)
+			continue;
+		return i;
+	}
 
-			break;
-		}
-
-	return core_id;
+	return -1;
 }
 
 /**
@@ -637,28 +671,37 @@ static int ne_get_cpu_from_cpu_pool(struct ne_enclave *ne_enclave, u32 *vcpu_id)
 	int core_id = -1;
 	unsigned int cpu = 0;
 	unsigned int i = 0;
+	int nid = ne_enclave->alloc_nid;
 	int rc = -EINVAL;
+
+	mutex_lock(&ne_cpu_pool.mutex);
 
 	/*
 	 * If previously allocated a thread of a core to this enclave, first
 	 * check remaining sibling(s) for new CPU allocations, so that full
-	 * CPU cores are used for the enclave.
+	 * CPU cores are used for the enclave. Cores on a node other than the
+	 * allocation target are skipped: the target is a hard constraint, and
+	 * honouring it here is what keeps a sequence of targeted allocations
+	 * from handing back a core on the wrong node.
 	 */
-	for (i = 0; i < ne_enclave->nr_parent_vm_cores; i++)
+	for (i = 0; i < ne_enclave->nr_parent_vm_cores; i++) {
+		if (nid != NUMA_NO_NODE && ne_cpu_pool.core_nid[i] != nid)
+			continue;
+
 		for_each_cpu(cpu, ne_enclave->threads_per_core[i])
 			if (!ne_donated_cpu(ne_enclave, cpu)) {
 				*vcpu_id = cpu;
+				rc = 0;
 
-				return 0;
+				goto unlock_mutex;
 			}
-
-	mutex_lock(&ne_cpu_pool.mutex);
+	}
 
 	/*
 	 * If no remaining siblings, get a core from the NE CPU pool and keep
 	 * track of all the threads in the enclave threads per core data structure.
 	 */
-	core_id = ne_get_unused_core_from_cpu_pool();
+	core_id = ne_get_unused_core_from_cpu_pool(nid);
 
 	rc = ne_set_enclave_threads_per_core(ne_enclave, core_id, *vcpu_id);
 	if (rc < 0)
@@ -886,7 +929,8 @@ static int ne_sanity_check_user_mem_region_page(struct ne_enclave *ne_enclave,
 		return -NE_ERR_INVALID_PAGE_SIZE;
 	}
 
-	if (ne_enclave->numa_node != page_to_nid(mem_region_page)) {
+	if (ne_enclave->numa_node != NUMA_NO_NODE &&
+	    ne_enclave->numa_node != page_to_nid(mem_region_page)) {
 		dev_err_ratelimited(ne_misc_dev.this_device,
 				    "Page is not from NUMA node %d\n",
 				    ne_enclave->numa_node);
@@ -1687,6 +1731,7 @@ static int ne_create_vm_ioctl(struct ne_pci_dev *ne_pci_dev, u64 __user *slot_ui
 	ne_enclave->nr_parent_vm_cores = ne_cpu_pool.nr_parent_vm_cores;
 	ne_enclave->nr_threads_per_core = ne_cpu_pool.nr_threads_per_core;
 	ne_enclave->numa_node = ne_cpu_pool.numa_node;
+	ne_enclave->alloc_nid = ne_cpu_pool.first_nid;
 
 	mutex_unlock(&ne_cpu_pool.mutex);
 

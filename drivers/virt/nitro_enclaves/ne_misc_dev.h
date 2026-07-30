@@ -53,6 +53,13 @@ struct ne_mem_region {
  * @nr_threads_per_core:	The number of threads that a full CPU core has.
  * @nr_vcpus:			Number of vcpus associated with the enclave.
  * @numa_node:			NUMA node of the enclave memory and CPUs.
+ * @alloc_nid:			NUMA node of the primary VM used for
+ *				kernel-side allocations on behalf of this
+ *				enclave (NE_ADD_VCPU auto-pick).
+ *				Set at NE_CREATE_VM to the first node that
+ *				owns a core in the CPU pool. User space
+ *				overrides it via NE_SET_ALLOC_NUMA_NODE.
+ *				NUMA_NO_NODE means "any node".
  * @slot_uid:			Slot unique id mapped to the enclave.
  * @state:			Enclave state, updated during enclave lifetime.
  * @threads_per_core:		Enclave full CPU cores array. Each cpumask in the
@@ -75,6 +82,7 @@ struct ne_enclave {
 	unsigned int		nr_threads_per_core;
 	unsigned int		nr_vcpus;
 	int			numa_node;
+	int			alloc_nid;
 	u64			slot_uid;
 	u16			state;
 	cpumask_var_t		*threads_per_core;
