@@ -44,10 +44,10 @@ static int erofs_init_inode_xattrs(struct inode *inode)
 	/* the most case is that xattrs of this inode are initialized. */
 	if (test_bit(EROFS_I_EA_INITED_BIT, &vi->flags)) {
 		/*
-		 * paired with smp_mb() at the end of the function to ensure
+		 * paired with smp_wmb() at the end of the function to ensure
 		 * fields will only be observed after the bit is set.
 		 */
-		smp_mb();
+		smp_rmb();
 		return 0;
 	}
 	if (wait_on_bit_lock(&vi->flags, EROFS_I_BL_XATTR_BIT, TASK_KILLABLE))
@@ -111,8 +111,8 @@ static int erofs_init_inode_xattrs(struct inode *inode)
 		vi->xattr_shared_xattrs[i] = le32_to_cpu(*xattr_id);
 	}
 
-	/* paired with smp_mb() at the beginning of the function. */
-	smp_mb();
+	/* paired with smp_rmb() at the beginning of the function. */
+	smp_wmb();
 	set_bit(EROFS_I_EA_INITED_BIT, &vi->flags);
 out_unlock:
 	erofs_put_metabuf(&buf);
