@@ -31,6 +31,9 @@ SYM_CODE_START(startup_xen)
 
 	leaq	__top_init_kernel_stack(%rip), %rsp
 
+	movq	%rsi, %r15
+	call	clear_bss
+
 	/*
 	 * Set up GSBASE.
 	 * Note that, on SMP, the boot cpu uses init data section until
@@ -41,7 +44,7 @@ SYM_CODE_START(startup_xen)
 	xorl	%edx, %edx
 	wrmsr
 
-	mov	%rsi, %rdi
+	mov	%r15, %rdi
 	call xen_start_kernel
 SYM_CODE_END(startup_xen)
 	__FINIT

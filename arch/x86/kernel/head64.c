@@ -172,16 +172,6 @@ void __init do_early_exception(struct pt_regs *regs, int trapnr)
 	early_fixup_exception(regs, trapnr);
 }
 
-/* Don't add a printk in there. printk relies on the PDA which is not initialized 
-   yet. */
-void __init clear_bss(void)
-{
-	memset(__bss_start, 0,
-	       (unsigned long) __bss_stop - (unsigned long) __bss_start);
-	memset(__brk_base, 0,
-	       (unsigned long) __brk_limit - (unsigned long) __brk_base);
-}
-
 static unsigned long get_cmd_line_ptr(void)
 {
 	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
@@ -245,8 +235,6 @@ asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode
 		vmalloc_base		= __VMALLOC_BASE_L5;
 		vmemmap_base		= __VMEMMAP_BASE_L5;
 	}
-
-	clear_bss();
 
 	/*
 	 * This needs to happen *before* kasan_early_init() because latter maps stuff

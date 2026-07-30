@@ -37,6 +37,8 @@
 	.code64
 SYM_CODE_START_NOALIGN(startup_64)
 	UNWIND_HINT_END_OF_STACK
+	cld
+
 	/*
 	 * At this point the CPU runs in 64bit mode CS.L = 1 CS.D = 0,
 	 * and someone has loaded an identity mapped page table
@@ -60,6 +62,8 @@ SYM_CODE_START_NOALIGN(startup_64)
 
 	/* Set up the stack for verify_cpu() */
 	leaq	__top_init_kernel_stack(%rip), %rsp
+
+	call	clear_bss
 
 	/*
 	 * Set up GSBASE.
@@ -139,6 +143,22 @@ SYM_CODE_START_NOALIGN(startup_64)
 	ANNOTATE_RETPOLINE_SAFE
 	jmp	*.Lcommon_startup_64(%rip)
 SYM_CODE_END(startup_64)
+
+SYM_FUNC_START(clear_bss)
+	xorl	%eax, %eax
+
+	leaq	__bss_start(%rip), %rdi
+	leaq	__bss_stop(%rip), %rcx
+	subq	%rdi, %rcx
+	rep stosb
+
+	leaq	__brk_base(%rip), %rdi
+	leaq	__brk_limit(%rip), %rcx
+	subq	%rdi, %rcx
+	rep stosb
+
+	RET
+SYM_FUNC_END(clear_bss)
 
 	__INITRODATA
 SYM_DATA_LOCAL(.Lcommon_startup_64, .quad common_startup_64)

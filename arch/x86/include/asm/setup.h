@@ -126,8 +126,6 @@ void *extend_brk(size_t size, size_t align);
 
 extern void probe_roms(void);
 
-void clear_bss(void);
-
 #ifdef __i386__
 
 asmlinkage void __init __noreturn i386_start_kernel(void);

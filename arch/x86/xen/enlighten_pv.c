@@ -1334,8 +1334,6 @@ asmlinkage __visible void __init xen_start_kernel(struct start_info *si)
 	if (!si)
 		return;
 
-	clear_bss();
-
 	xen_start_info = si;
 
 	__text_gen_insn(&early_xen_iret_patch,
