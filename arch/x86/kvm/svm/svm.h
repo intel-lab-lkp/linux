@@ -209,6 +209,12 @@ struct vmcb_ctrl_area_cached {
 	};
 };
 
+struct nested_svm_insn_bytes {
+	bool prepared;
+	u8 insn_len;
+	u8 insn_bytes[X86_MAX_INSTRUCTION_LENGTH];
+};
+
 struct svm_nested_state {
 	struct kvm_vmcb_info vmcb02;
 	u64 hsave_msr;
@@ -248,6 +254,12 @@ struct svm_nested_state {
 	 * hardware VM-Exit currently being reflected to L1.
 	 */
 	bool vmcb02_insn_bytes_fresh;
+
+	/*
+	 * Emulator fetch bytes captured for a synthesized nested #NPF/#PF.  The
+	 * buffer is consumed and cleared when constructing VMCB12.
+	 */
+	struct nested_svm_insn_bytes synthesized_insn_bytes;
 };
 
 struct vcpu_sev_es_state {
