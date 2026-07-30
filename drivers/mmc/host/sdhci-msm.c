@@ -1958,7 +1958,10 @@ static int sdhci_msm_ice_init(struct sdhci_msm_host *msm_host,
 				cap.sdus_mask * 512;
 	}
 
+	blk_crypto_reprogram_all_keys(&mmc->crypto_profile);
+
 	mmc->caps2 |= MMC_CAP2_CRYPTO;
+	mmc->caps2 |= MMC_CAP2_CRYPTO_NO_REPROG;
 	return 0;
 }
 
