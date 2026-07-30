@@ -166,8 +166,12 @@ bool __attribute_const__ btrfs_supported_blocksize(u32 blocksize)
 	 *
 	 * Considering HIGHMEM is such a pain to deal with and it's going
 	 * to be deprecated eventually, just reject HIGHMEM && bs > ps cases.
+	 *
+	 * Finally, for bs > ps cases, we need to set the minimal folio order,
+	 * which requires transparent hugepage.
 	 */
-	if (IS_ENABLED(CONFIG_HIGHMEM) && blocksize > PAGE_SIZE)
+	if (blocksize > PAGE_SIZE &&
+	    (IS_ENABLED(CONFIG_HIGHMEM) || !IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)))
 		return false;
 	return true;
 #endif
