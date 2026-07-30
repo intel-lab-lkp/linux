@@ -9,6 +9,16 @@
 /* Are two types/vars the same type (ignoring qualifiers)? */
 #define __same_type(a, b) __builtin_types_compatible_p(typeof(a), typeof(b))
 
+#ifndef __PASTE
+/* Indirect macros required for expanded argument pasting, eg. __LINE__. */
+#define ___PASTE(a, b) a##b
+#define __PASTE(a, b) ___PASTE(a, b)
+#endif
+
+#ifndef __UNIQUE_ID
+#define __UNIQUE_ID(name) __PASTE(__UNIQUE_ID_, __PASTE(name, __PASTE(_, __COUNTER__)))
+#endif
+
 /**
  * container_of - cast a member of a structure out to the containing structure
  * @ptr:	the pointer to the member.
@@ -298,17 +308,37 @@ static inline int list_empty(const struct list_head *head)
 	     pos = list_prev_entry(pos, member))
 
 /**
- * list_for_each_entry_safe - iterate over list of given type. Safe against removal of list entry
+ * list_for_each_entry_safe - iterate over list of given type safe against
+ *	removal of list entry with a caller-provided temporary cursor
  * @pos:	the type * to use as a loop cursor.
  * @n:		another type * to use as temporary storage
  * @head:	the head for your list.
  * @member:	the name of the list_head within the struct.
+ *
+ * If the caller does not need to access the temporary cursor, use
+ * list_for_each_entry_mutable() instead.
  */
 #define list_for_each_entry_safe(pos, n, head, member)			\
 	for (pos = list_first_entry(head, typeof(*pos), member),	\
 		n = list_next_entry(pos, member);			\
 	     !list_entry_is_head(pos, head, member);			\
 	     pos = n, n = list_next_entry(n, member))
+
+#define __list_for_each_entry_mutable(pos, tmp, head, member)		\
+	for (typeof(pos) tmp = list_next_entry(pos =			\
+		list_first_entry(head, typeof(*pos), member), member);	\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = tmp, tmp = list_next_entry(tmp, member))
+
+/**
+ * list_for_each_entry_mutable - iterate over a list safe against removal of
+ *	list entry with an internal temporary cursor
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ */
+#define list_for_each_entry_mutable(pos, head, member)			\
+	__list_for_each_entry_mutable(pos, __UNIQUE_ID(next), head, member)
 
 /*
  * Double linked lists with a single pointer list head.
@@ -414,15 +444,37 @@ static inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)
 	     pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))
 
 /**
- * hlist_for_each_entry_safe - iterate over list of given type safe against removal of list entry
+ * hlist_for_each_entry_safe - iterate over list of given type safe against
+ *	removal of list entry with a caller-provided temporary cursor
  * @pos:	the type * to use as a loop cursor.
  * @n:		a &struct hlist_node to use as temporary storage
  * @head:	the head for your list.
  * @member:	the name of the hlist_node within the struct.
+ *
+ * If the caller does not need to access the temporary cursor, use
+ * hlist_for_each_entry_mutable() instead.
  */
 #define hlist_for_each_entry_safe(pos, n, head, member) 		\
 	for (pos = hlist_entry_safe((head)->first, typeof(*pos), member);\
 	     pos && ({ n = pos->member.next; 1; });			\
 	     pos = hlist_entry_safe(n, typeof(*pos), member))
+
+#define __hlist_for_each_entry_mutable(pos, tmp, head, member)		\
+	for (struct hlist_node *tmp = (pos =				\
+		hlist_entry_safe((head)->first, typeof(*pos), member)) ? \
+		pos->member.next : NULL;				\
+	     pos;							\
+	     pos = hlist_entry_safe(tmp, typeof(*pos), member),		\
+		tmp = pos ? pos->member.next : NULL)
+
+/**
+ * hlist_for_each_entry_mutable - iterate over hlist safe against removal of
+ *	list entry with an internal temporary cursor
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your hlist.
+ * @member:	the name of the hlist_node within the struct.
+ */
+#define hlist_for_each_entry_mutable(pos, head, member)			\
+	__hlist_for_each_entry_mutable(pos, __UNIQUE_ID(next), head, member)
 
 #endif /* LIST_H */
