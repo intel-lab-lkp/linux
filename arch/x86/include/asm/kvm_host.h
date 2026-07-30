@@ -688,6 +688,7 @@ struct kvm_queued_exception {
 	bool pending;
 	bool injected;
 	bool has_error_code;
+	bool has_emulator_context;
 	u8 vector;
 	u32 error_code;
 	unsigned long payload;
