@@ -1904,7 +1904,7 @@ ssize_t core_alua_store_tg_pt_gp_info(
 	 */
 	struct se_device *dev = rcu_dereference_raw(lun->lun_se_dev);
 	struct t10_alua_tg_pt_gp *tg_pt_gp = NULL, *tg_pt_gp_new = NULL;
-	unsigned char buf[TG_PT_GROUP_NAME_BUF];
+	unsigned char buf[TG_PT_GROUP_NAME_BUF + 1] = { };
 	int move = 0;
 
 	if (dev->transport_flags & TRANSPORT_FLAG_PASSTHROUGH_ALUA ||
@@ -1915,7 +1915,6 @@ ssize_t core_alua_store_tg_pt_gp_info(
 		pr_err("ALUA Target Port Group alias too large!\n");
 		return -EINVAL;
 	}
-	memset(buf, 0, TG_PT_GROUP_NAME_BUF);
 	memcpy(buf, page, count);
 	/*
 	 * Any ALUA target port group alias besides "NULL" means we will be
