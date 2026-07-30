@@ -17,10 +17,10 @@
 #include "kvm_util.h"
 #include "ucall_common.h"
 
-#define VCPU_NUM 4
-#define SLEEPING_THREAD_NUM (1 << 4)
-#define FORK_NUM (1ULL << 9)
-#define DELAY_US_MAX 2000
+#define NR_VCPUS		4
+#define NR_SLEEPERS_PER_VCPU	16
+#define NR_ITERATIONS		512
+#define DELAY_US_MAX		2000
 
 sem_t *sem;
 static cpu_set_t child_cpu_set;
@@ -61,16 +61,16 @@ static void run_test(u32 run)
 	pthread_t thread;
 	u32 i, j;
 
-	vm = vm_create(VCPU_NUM);
+	vm = vm_create(NR_VCPUS);
 
 	pr_debug("%s: [%d] start vcpus\n", __func__, run);
-	for (i = 0; i < VCPU_NUM; ++i) {
+	for (i = 0; i < NR_VCPUS; ++i) {
 		vcpu = vm_vcpu_add(vm, i, guest_code);
 
 		kvm_pthread_create(&thread, NULL, run_vcpu, vcpu);
 		kvm_pthread_setaffinity(thread, &child_cpu_set);
 
-		for (j = 0; j < SLEEPING_THREAD_NUM; ++j) {
+		for (j = 0; j < NR_SLEEPERS_PER_VCPU; ++j) {
 			kvm_pthread_create(&thread, NULL, sleeping_thread, (void *)NULL);
 			kvm_pthread_setaffinity(thread, &child_cpu_set);
 		}
@@ -124,7 +124,7 @@ static void setup_child_cpu_set(void)
 	cpu = pin_task_to_random_cpu(pthread_self(), &child_cpu_set);
 	CPU_CLR(cpu, &child_cpu_set);
 
-	while (CPU_COUNT(&child_cpu_set) > VCPU_NUM)
+	while (CPU_COUNT(&child_cpu_set) > NR_VCPUS)
 		CPU_CLR(kvm_pick_random_cpu(&child_cpu_set), &child_cpu_set);
 }
 
@@ -139,7 +139,7 @@ int main(int argc, char **argv)
 	sem = sem_open("vm_sem", O_CREAT | O_EXCL, 0644, 0);
 	sem_unlink("vm_sem");
 
-	for (i = 0; i < FORK_NUM; ++i) {
+	for (i = 0; i < NR_ITERATIONS; ++i) {
 		pid = fork();
 		TEST_ASSERT(pid >= 0, "%s: unable to fork", __func__);
 		if (pid == 0)
