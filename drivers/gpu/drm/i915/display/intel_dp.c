@@ -1406,7 +1406,7 @@ intel_dp_mode_valid_downstream(struct intel_connector *connector,
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 	int bpc = 8; /* Assume 8bpc for the DP++/HDMI/DVI TMDS/FRL bw check */
 
-	if (!intel_dp_hdmi_sink_max_frl(intel_dp) &&
+	if (!intel_dp_pcon_sink_support_frl(intel_dp) &&
 	    intel_dp->dfp.max_dotclock &&
 	    target_clock > intel_dp->dfp.max_dotclock)
 		return MODE_CLOCK_HIGH;
