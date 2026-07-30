@@ -528,6 +528,7 @@ struct ff_effect {
 
 #define FF_GAIN		0x60
 #define FF_AUTOCENTER	0x61
+#define FF_TRIGGER_RUMBLE	0x62
 
 /*
  * ff->playback(effect_id = FF_GAIN) is the first effect_id to
