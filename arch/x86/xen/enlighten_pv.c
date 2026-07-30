@@ -1556,7 +1556,7 @@ asmlinkage __visible void __init xen_start_kernel(struct start_info *si)
 
 	/* Start the world */
 	cr4_init_shadow(); /* 32b kernel does this in i386_start_kernel() */
-	x86_64_start_reservations((char *)__pa_symbol(&boot_params));
+	x86_64_start_reservations();
 }
 
 static int xen_cpu_up_prepare_pv(unsigned int cpu)

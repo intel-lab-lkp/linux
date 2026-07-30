@@ -130,7 +130,7 @@ void __init mk_early_pgtbl_32(void);
 
 #else
 asmlinkage void __init __noreturn x86_64_start_kernel(char *real_mode);
-asmlinkage void __init __noreturn x86_64_start_reservations(char *real_mode_data);
+asmlinkage void __init __noreturn x86_64_start_reservations(void);
 
 #endif /* __i386__ */
 #endif /* _SETUP */
