@@ -4895,7 +4895,7 @@ long vread_iter(struct iov_iter *iter, const char *addr, size_t count)
 			 * mapping types (vmap, ioremap) don't set nr_pages.
 			 */
 			size = (vm->flags & VM_ALLOC && vm->nr_pages) ?
-				       (vm->nr_pages << PAGE_SHIFT) :
+				       ((unsigned long)vm->nr_pages << PAGE_SHIFT) :
 				       get_vm_area_size(vm);
 		else
 			size = va_size(va);
