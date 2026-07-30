@@ -2572,6 +2572,12 @@ static ssize_t target_dev_alua_lu_gp_store(struct config_item *item,
 		__core_alua_drop_lu_gp_mem(lu_gp_mem, lu_gp);
 		move = 1;
 	}
+
+	if (!lu_gp_new) {
+		spin_unlock(&lu_gp_mem->lu_gp_mem_lock);
+		return count;
+	}
+
 	/*
 	 * Associate lu_gp_mem with lu_gp_new.
 	 */
