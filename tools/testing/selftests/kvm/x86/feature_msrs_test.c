@@ -55,6 +55,19 @@ static void test_feature_msr(u32 msr)
 		return;
 
 	/*
+	 * KVM allows userspace to query MSR_IA32_PERF_CAPABILITIES as a
+	 * feature MSR even if KVM doesn't expose PDCM, but vCPU accesses to
+	 * the MSR will fail in that case. Skip the vCPU checks so that the
+	 * remaining feature MSRs can be tested.
+	 */
+	if (msr == MSR_IA32_PERF_CAPABILITIES &&
+	    !kvm_cpu_has(X86_FEATURE_PDCM)) {
+		printf("KVM does not expose PDCM, skipping vCPU checks for "
+		       "MSR_IA32_PERF_CAPABILITIES (0x%x).\n", msr);
+		return;
+	}
+
+	/*
 	 * More goofy behavior.  KVM reports the host CPU's actual revision ID,
 	 * but initializes the vCPU's revision ID to an arbitrary value.
 	 */
