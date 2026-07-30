@@ -592,7 +592,6 @@ int dma_get_slave_caps(struct dma_chan *chan, struct dma_slave_caps *caps)
 	if (!device->directions)
 		return -ENXIO;
 
-	caps->src_addr_widths = device->src_addr_widths;
 	if (bitmap_empty(device->src_bus_widths, DMA_SLAVE_BUSWIDTH_MAX)) {
 		bitmap_zero(caps->src_bus_widths, DMA_SLAVE_BUSWIDTH_MAX);
 		bitmap_from_arr32(caps->src_bus_widths,
@@ -602,7 +601,6 @@ int dma_get_slave_caps(struct dma_chan *chan, struct dma_slave_caps *caps)
 			    DMA_SLAVE_BUSWIDTH_MAX);
 	}
 
-	caps->dst_addr_widths = device->dst_addr_widths;
 	if (bitmap_empty(device->dst_bus_widths, DMA_SLAVE_BUSWIDTH_MAX)) {
 		bitmap_zero(caps->dst_bus_widths, DMA_SLAVE_BUSWIDTH_MAX);
 		bitmap_from_arr32(caps->dst_bus_widths,

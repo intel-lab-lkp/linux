@@ -495,9 +495,7 @@ enum dma_residue_granularity {
  * @src_bus_widths: bitmap of source bus widths the channel supports.
  *	Width is specified in bytes, e.g. for a channel supporting
  *	a width of 4 the bitmap should have bit 4 set.
- * @src_addr_widths: legacy bit mask of source bus widths the channel supports.
  * @dst_bus_widths: bitmap of destination bus widths the channel supports.
- * @dst_addr_widths: legacy bit mask of destination bus widths the channel supports.
  * @directions: bit mask of slave directions the channel supports.
  *	Since the enum dma_transfer_direction is not defined as bit flag for
  *	each type, the dma controller should set BIT(<TYPE>) and same
@@ -516,14 +514,8 @@ enum dma_residue_granularity {
  * resubmitted multiple times
  */
 struct dma_slave_caps {
-	struct {
-		DECLARE_DMA_BUS_WIDTHS(src_bus_widths);
-		u32 src_addr_widths;
-	};
-	struct {
-		DECLARE_DMA_BUS_WIDTHS(dst_bus_widths);
-		u32 dst_addr_widths;
-	};
+	DECLARE_DMA_BUS_WIDTHS(src_bus_widths);
+	DECLARE_DMA_BUS_WIDTHS(dst_bus_widths);
 	u32 directions;
 	u32 min_burst;
 	u32 max_burst;
@@ -1789,8 +1781,6 @@ dma_slave_caps_clear_src_width(struct dma_slave_caps *caps,
 			       enum dma_slave_buswidth width)
 {
 	__clear_bit(width, caps->src_bus_widths);
-	if (width < DMA_SLAVE_BUSWIDTH_32_BYTES)
-		caps->src_addr_widths &= ~BIT(width);
 }
 
 /**
@@ -1803,8 +1793,6 @@ dma_slave_caps_clear_dst_width(struct dma_slave_caps *caps,
 			       enum dma_slave_buswidth width)
 {
 	__clear_bit(width, caps->dst_bus_widths);
-	if (width < DMA_SLAVE_BUSWIDTH_32_BYTES)
-		caps->dst_addr_widths &= ~BIT(width);
 }
 
 static inline int __dma_set_bus_widths(unsigned long *bus_widths,
