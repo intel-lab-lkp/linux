@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/axiado,ax3000-video.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Axiado AX3000 Video Controller
+
+maintainers:
+  - Shubhangini G <shubhangini@axiado.com>
+  - Tzu-Hao Wei <twei@axiado.com>
+  - Prasad Bolisetty <pbolisetty@axiado.com>
+
+description:
+  Axiado AX3000 video capture controller. Reads frames written by the
+  display engine into a shared reserved memory region and exposes them
+  as a V4L2 capture device.
+
+properties:
+  compatible:
+    oneOf:
+      - const: axiado,ax3000-video
+      - items:
+          - const: axiado,ax3005-video
+          - const: axiado,ax3000-video
+
+  memory-region:
+    minItems: 1
+    items:
+      - description: video frame buffer, shared with the display engine
+      - description: optional control mailbox, shared with the host
+
+required:
+  - compatible
+  - memory-region
+
+additionalProperties: false
+
+examples:
+  - |
+    video {
+        compatible = "axiado,ax3000-video";
+        memory-region = <&pci_ep_disp>, <&pci_ep_ctrl>;
+    };
