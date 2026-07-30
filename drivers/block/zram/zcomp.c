@@ -94,6 +94,33 @@ const char *zcomp_lookup_backend_name(const char *comp)
 	return NULL;
 }
 
+int zcomp_validate_params(const char *comp, s32 level, const char *dict_path)
+{
+	const struct zcomp_ops *backend = lookup_backend_ops(comp);
+
+	if (!backend)
+		return -EINVAL;
+
+	if (dict_path && !(backend->caps & ZCOMP_CAP_DICT)) {
+		pr_err("zram: %s does not support dictionary\n", comp);
+		return -EOPNOTSUPP;
+	}
+
+	if (level != ZCOMP_PARAM_NOT_SET) {
+		if (!(backend->caps & ZCOMP_CAP_LEVEL)) {
+			pr_err("zram: %s does not support level\n", comp);
+			return -EOPNOTSUPP;
+		}
+		/* level_max == -1 means validate in .setup_params() */
+		if (backend->level_max >= 0 &&
+		    (level < backend->level_min || level > backend->level_max)) {
+			pr_err("zram: invalid level %d for %s\n", level, comp);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
 /* show available compressors */
 ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at)
 {

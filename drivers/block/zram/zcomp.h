@@ -7,6 +7,9 @@
 
 #define ZCOMP_PARAM_NOT_SET	INT_MIN
 
+#define ZCOMP_CAP_DICT		BIT(0)	/* dictionary support */
+#define ZCOMP_CAP_LEVEL		BIT(1)	/* adjustable compression level */
+
 struct deflate_params {
 	s32 winbits;
 };
@@ -66,6 +69,9 @@ struct zcomp_ops {
 	int (*setup_params)(struct zcomp_params *params);
 	void (*release_params)(struct zcomp_params *params);
 
+	unsigned int caps;
+	s32 level_min;
+	s32 level_max;
 	const char *name;
 };
 
@@ -81,6 +87,7 @@ int zcomp_cpu_up_prepare(unsigned int cpu, struct hlist_node *node);
 int zcomp_cpu_dead(unsigned int cpu, struct hlist_node *node);
 ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at);
 const char *zcomp_lookup_backend_name(const char *comp);
+int zcomp_validate_params(const char *comp, s32 level, const char *dict_path);
 
 struct zcomp *zcomp_create(const char *alg, struct zcomp_params *params);
 void zcomp_destroy(struct zcomp *comp);
