@@ -1226,12 +1226,18 @@ static int nft_ct_expect_timeout_get(const struct nlattr *attr, u32 *val)
 	return 0;
 }
 
+struct nft_ct_expect_data {
+	unsigned long	flags;
+};
+
 static int nft_ct_expect_obj_init(const struct nft_ctx *ctx,
 				  const struct nlattr * const tb[],
 				  struct nft_object *obj)
 {
 	struct nft_ct_expect_obj *priv = nft_obj_data(obj);
 	int err;
+
+	NF_CT_HELPER_BUILD_BUG_ON(sizeof(struct nft_ct_expect_data));
 
 	if (!tb[NFTA_CT_EXPECT_L4PROTO] ||
 	    !tb[NFTA_CT_EXPECT_DPORT] ||
@@ -1297,11 +1303,14 @@ static int nft_ct_expect_obj_dump(struct sk_buff *skb,
 	return 0;
 }
 
+#define NFT_CT_EXPECT_DONE_BIT	0
+
 static void nft_ct_expect_obj_eval(struct nft_object *obj,
 				   struct nft_regs *regs,
 				   const struct nft_pktinfo *pkt)
 {
 	const struct nft_ct_expect_obj *priv = nft_obj_data(obj);
+	struct nft_ct_expect_data *expect_data;
 	struct nf_conntrack_expect *exp;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn_help *help;
@@ -1310,40 +1319,58 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 	struct nf_conn *ct;
 
 	ct = nf_ct_get(pkt->skb, &ctinfo);
-	if (!ct || nf_ct_is_confirmed(ct) || nf_ct_is_template(ct)) {
+	if (!ct || nf_ct_is_template(ct)) {
 		regs->verdict.code = NFT_BREAK;
 		return;
 	}
-	dir = CTINFO2DIR(ctinfo);
 
 	help = nfct_help(ct);
-	if (!help)
-		help = nf_ct_helper_ext_add(ct, GFP_ATOMIC);
 	if (!help) {
-		regs->verdict.code = NF_DROP;
-		return;
-	}
-
-	if (help->expecting[NF_CT_EXPECT_CLASS_DEFAULT] >= priv->size) {
+		if (!nf_ct_is_confirmed(ct)) {
+			nf_ct_helper_ext_add(ct, GFP_ATOMIC);
+			return;
+		}
 		regs->verdict.code = NFT_BREAK;
 		return;
 	}
+
+	/* Disallow adding expectations if there is a helper. */
+	if (rcu_access_pointer(help->helper)) {
+		regs->verdict.code = NFT_BREAK;
+		return;
+	}
+
+	expect_data = nfct_help_data(ct);
+	if (!expect_data) {
+		regs->verdict.code = NFT_BREAK;
+		return;
+	}
+
+	if (test_and_set_bit(NFT_CT_EXPECT_DONE_BIT, &expect_data->flags)) {
+		regs->verdict.code = NFT_BREAK;
+		return;
+	}
+
 	if (l3num == NFPROTO_INET)
 		l3num = nf_ct_l3num(ct);
 
 	exp = nf_ct_expect_alloc(ct);
 	if (exp == NULL) {
 		regs->verdict.code = NF_DROP;
+		clear_bit(NFT_CT_EXPECT_DONE_BIT, &expect_data->flags);
 		return;
 	}
+	dir = CTINFO2DIR(ctinfo);
 	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, l3num,
 		          &ct->tuplehash[!dir].tuple.src.u3,
 		          &ct->tuplehash[!dir].tuple.dst.u3,
 		          priv->l4proto, NULL, &priv->dport);
 	exp->timeout += priv->timeout;
 
-	if (nf_ct_expect_related(exp, 0) != 0)
+	if (nf_ct_expect_related(exp, 0) != 0) {
 		regs->verdict.code = NF_DROP;
+		clear_bit(NFT_CT_EXPECT_DONE_BIT, &expect_data->flags);
+	}
 
 	nf_ct_expect_put(exp);
 }
