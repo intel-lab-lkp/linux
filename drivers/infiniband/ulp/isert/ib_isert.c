@@ -952,11 +952,6 @@ isert_put_login_tx(struct iscsit_conn *conn, struct iscsi_login *login,
 			if (ret)
 				return ret;
 
-			/* Now we are in FULL_FEATURE phase */
-			mutex_lock(&isert_conn->mutex);
-			isert_conn->state = ISER_CONN_FULL_FEATURE;
-			mutex_unlock(&isert_conn->mutex);
-
 			/* Sent from isert_get_rx_pdu() after registration. */
 			isert_conn->login_rsp_pending = true;
 			return 0;
@@ -1328,6 +1323,14 @@ isert_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 		isert_print_wc(wc, "recv");
 		if (wc->status != IB_WC_WR_FLUSH_ERR)
 			iscsit_cause_connection_reinstatement(isert_conn->conn, 0);
+		return;
+	}
+
+	/* A full-feature PDU before registration is a protocol violation. */
+	if (unlikely(READ_ONCE(isert_conn->state) != ISER_CONN_FULL_FEATURE)) {
+		isert_err("PDU received in state %d, resetting connection\n",
+			  isert_conn->state);
+		iscsit_cause_connection_reinstatement(isert_conn->conn, 0);
 		return;
 	}
 
@@ -2594,6 +2597,12 @@ static void isert_get_rx_pdu(struct iscsit_conn *conn)
 	/* The session is registered by now; see isert_put_login_tx(). */
 	if (isert_conn->login_rsp_pending) {
 		isert_conn->login_rsp_pending = false;
+
+		/* Now we are in FULL_FEATURE phase */
+		mutex_lock(&isert_conn->mutex);
+		isert_conn->state = ISER_CONN_FULL_FEATURE;
+		mutex_unlock(&isert_conn->mutex);
+
 		if (isert_login_post_send(isert_conn,
 					  &isert_conn->login_tx_desc))
 			return;
