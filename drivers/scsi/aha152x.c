@@ -2319,6 +2319,7 @@ static void rsti_run(struct Scsi_Host *shpnt)
  *
  */
 static void is_complete(struct Scsi_Host *shpnt)
+	__context_unsafe(conditional locking)
 {
 	int dataphase;
 	unsigned long flags;
