@@ -455,6 +455,12 @@ static void pata_parport_dev_release(struct device *dev)
 {
 	struct pi_adapter *pi = container_of(dev, struct pi_adapter, dev);
 
+	/*
+	 * pi->proto is NULL when device_register() fails early,
+	 * before __module_get() was called -- skip module_put().
+	 */
+	if (pi->proto)
+		module_put(THIS_MODULE);
 	ida_free(&pata_parport_bus_dev_ids, dev->id);
 	kfree(pi);
 }
@@ -523,6 +529,8 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 	}
 
 	pi->proto = pr;
+
+	__module_get(THIS_MODULE);
 
 	if (!try_module_get(pi->proto->owner))
 		goto out_unreg_dev;
