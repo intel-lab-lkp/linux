@@ -302,7 +302,6 @@ static void save_spa(struct fru_rec *rec, unsigned int entry,
 {
 	unsigned int i, fru_idx, spa_entry;
 	struct atl_err a_err;
-	unsigned long spa;
 
 	if (entry >= max_nr_entries) {
 		pr_warn_once("FRU descriptor entry %d out-of-bounds (max: %d)\n",
@@ -328,19 +327,20 @@ static void save_spa(struct fru_rec *rec, unsigned int entry,
 		return;
 	}
 
-	memset(&a_err, 0, sizeof(struct atl_err));
+	memset(&a_err, 0, sizeof(a_err));
 
 	a_err.addr = addr;
 	a_err.ipid = id;
 	a_err.cpu  = cpu;
+	a_err.requested = ATL_OP_SPA;
 
-	spa = amd_convert_umc_mca_addr_to_sys_addr(&a_err);
-	if (IS_ERR_VALUE(spa)) {
+	amd_translate_umc_mca_addr(&a_err);
+	if (!(a_err.valid & ATL_OP_SPA)) {
 		pr_debug("Failed to get system address\n");
 		return;
 	}
 
-	spa_entries[spa_entry] = spa;
+	spa_entries[spa_entry] = a_err.spa;
 	pr_debug("fru_idx: %u, entry: %u, spa_entry: %u, spa: 0x%016llx\n",
 		 fru_idx, entry, spa_entry, spa_entries[spa_entry]);
 }

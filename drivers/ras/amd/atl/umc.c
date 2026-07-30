@@ -314,15 +314,17 @@ static void _retire_row_mi300(struct atl_err *a_err)
 	struct page *p;
 	u8 col;
 
+	a_err->requested = ATL_OP_SPA;
+
 	for (col = 0; col < MI300_NUM_COL; col++) {
 		a_err->addr &= ~MI300_UMC_MCA_COL;
 		a_err->addr |= FIELD_PREP(MI300_UMC_MCA_COL, col);
 
-		addr = amd_convert_umc_mca_addr_to_sys_addr(a_err);
-		if (IS_ERR_VALUE(addr))
+		amd_atl_umc_translate_addr(a_err);
+		if (!(a_err->valid & ATL_OP_SPA))
 			continue;
 
-		addr = PHYS_PFN(addr);
+		addr = PHYS_PFN(a_err->spa);
 
 		/*
 		 * Skip invalid or already poisoned pages to avoid unnecessary

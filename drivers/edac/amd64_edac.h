@@ -17,6 +17,7 @@
 #include <linux/mmzone.h>
 #include <linux/edac.h>
 #include <linux/bitfield.h>
+#include <linux/ras.h>
 #include <asm/cpu_device_id.h>
 #include <asm/msr.h>
 #include "edac_module.h"
@@ -400,6 +401,7 @@ struct err_info {
 	u16 syndrome;
 	u32 page;
 	u32 offset;
+	struct atl_err a_err;
 };
 
 static inline u32 get_umc_base(u8 channel)
