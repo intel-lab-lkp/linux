@@ -36,7 +36,11 @@ static int q6v5_load_state_toggle(struct qcom_q6v5 *q6v5, bool enable)
 	return ret;
 }
 
-static void q6v5_handover_irq_enable(struct qcom_q6v5 *q6v5)
+/**
+ * qcom_q6v5_handover_irq_enable() - idempotently enable the handover IRQ
+ * @q6v5:	reference to qcom_q6v5 context
+ */
+void qcom_q6v5_handover_irq_enable(struct qcom_q6v5 *q6v5)
 {
 	unsigned long flags;
 	bool enable = false;
@@ -51,8 +55,14 @@ static void q6v5_handover_irq_enable(struct qcom_q6v5 *q6v5)
 	if (enable)
 		enable_irq(q6v5->handover_irq);
 }
+EXPORT_SYMBOL_GPL(qcom_q6v5_handover_irq_enable);
 
-static void q6v5_handover_irq_disable(struct qcom_q6v5 *q6v5, bool sync)
+/**
+ * qcom_q6v5_handover_irq_disable() - idempotently disable the handover IRQ
+ * @q6v5:	reference to qcom_q6v5 context
+ * @sync:	whether to synchronize against an in-flight handler
+ */
+void qcom_q6v5_handover_irq_disable(struct qcom_q6v5 *q6v5, bool sync)
 {
 	unsigned long flags;
 	bool disable = false;
@@ -69,6 +79,7 @@ static void q6v5_handover_irq_disable(struct qcom_q6v5 *q6v5, bool sync)
 	if (sync)
 		synchronize_irq(q6v5->handover_irq);
 }
+EXPORT_SYMBOL_GPL(qcom_q6v5_handover_irq_disable);
 
 /**
  * qcom_q6v5_prepare() - reinitialize the qcom_q6v5 context before start
@@ -98,7 +109,7 @@ int qcom_q6v5_prepare(struct qcom_q6v5 *q6v5)
 	q6v5->running = true;
 	q6v5->handover_issued = false;
 
-	q6v5_handover_irq_enable(q6v5);
+	qcom_q6v5_handover_irq_enable(q6v5);
 
 	return 0;
 }
@@ -112,7 +123,7 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_prepare);
  */
 int qcom_q6v5_unprepare(struct qcom_q6v5 *q6v5)
 {
-	q6v5_handover_irq_disable(q6v5, true);
+	qcom_q6v5_handover_irq_disable(q6v5, true);
 
 	q6v5_load_state_toggle(q6v5, false);
 
@@ -201,7 +212,7 @@ static irqreturn_t q6v5_handover_interrupt(int irq, void *data)
 
 	q6v5->handover_issued = true;
 
-	q6v5_handover_irq_disable(q6v5, false);
+	qcom_q6v5_handover_irq_disable(q6v5, false);
 
 	if (q6v5->handover)
 		q6v5->handover(q6v5);
