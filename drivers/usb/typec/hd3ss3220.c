@@ -436,10 +436,8 @@ static int hd3ss3220_probe(struct i2c_client *client)
 						IRQF_TRIGGER_RISING |
 						IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 						dev_name(hd3ss3220->dev), hd3ss3220);
-		if (ret < 0) {
-			dev_err(hd3ss3220->dev, "failed to get ID irq: %d\n", ret);
+		if (ret < 0)
 			goto err_put_fwnode;
-		}
 	}
 
 	typec_cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
