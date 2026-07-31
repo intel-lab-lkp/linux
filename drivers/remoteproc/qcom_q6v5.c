@@ -210,9 +210,22 @@ static irqreturn_t q6v5_handover_interrupt(int irq, void *data)
 {
 	struct qcom_q6v5 *q6v5 = data;
 
-	q6v5->handover_issued = true;
-
 	qcom_q6v5_handover_irq_disable(q6v5, false);
+
+	/*
+	 * When attaching to an already-running remote processor,
+	 * handover_issued is set before the IRQ is unmasked, since the
+	 * handover already happened out-of-band, before this driver probed.
+	 * The transition that signals it is latched at the interrupt
+	 * controller while masked, so unmasking still delivers this one
+	 * IRQ. Ignore it: this driver instance never enabled the resources
+	 * (proxy PDs, clocks, etc.) that the handover callback would tear
+	 * down.
+	 */
+	if (q6v5->handover_issued)
+		return IRQ_HANDLED;
+
+	q6v5->handover_issued = true;
 
 	if (q6v5->handover)
 		q6v5->handover(q6v5);
