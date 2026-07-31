@@ -99,6 +99,16 @@ __netdev_work_core_cancel(struct net_device *dev, unsigned long mask)
 	return netdev_work_dequeue(dev, &dev->work_core_pending, mask);
 }
 
+/* Cancel all pending core and driver work and release the work_tracker
+ * reference.  Must be called under RTNL, which mutually excludes
+ * netdev_work_proc().
+ */
+void netdev_work_cancel_all(struct net_device *dev)
+{
+	__netdev_work_core_cancel(dev, ~0UL);
+	netdev_work_cancel(dev, ~0UL);
+}
+
 static void netdev_work_run(struct net_device *dev, unsigned long events,
 			    unsigned long core)
 {

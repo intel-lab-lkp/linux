@@ -12456,7 +12456,7 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		dev_uc_flush(dev);
 		dev_mc_flush(dev);
 
-
+		netdev_work_cancel_all(dev);
 		netdev_rss_contexts_free(dev);
 
 		call_netdevice_notifiers(NETDEV_PRE_UNINIT, dev);
