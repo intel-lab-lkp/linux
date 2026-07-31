@@ -289,6 +289,15 @@ static void ml_combine_effects(struct ff_effect *effect,
 			min(weak + effect->u.rumble.weak_magnitude, 0xffffU);
 		break;
 
+	case FF_TRIGGER_RUMBLE:
+		effect->u.trigger_rumble.left_magnitude =
+			min((u32)new->u.trigger_rumble.left_magnitude * gain / 0xffff +
+			    effect->u.trigger_rumble.left_magnitude, 0xffffU);
+		effect->u.trigger_rumble.right_magnitude =
+			min((u32)new->u.trigger_rumble.right_magnitude * gain / 0xffff +
+			    effect->u.trigger_rumble.right_magnitude, 0xffffU);
+		break;
+
 	case FF_PERIODIC:
 		i = apply_envelope(state, abs(new->u.periodic.magnitude),
 				   &new->u.periodic.envelope);
