@@ -752,4 +752,26 @@ INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_FPGA_CONFIG_COMPLETED_WRITE)
 #define INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_NOTIFY (0xEC)
 #define INTEL_SIP_SMC_ASYNC_RSU_NOTIFY \
 	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_NOTIFY)
+
+/**
+ * Request INTEL_SIP_SMC_ASYNC_MBOX_SEND
+ * Async call to send a generic mailbox command to the SDM.
+ * Call register usage:
+ * a0 INTEL_SIP_SMC_ASYNC_MBOX_SEND
+ * a1 transaction job id
+ * a2 mailbox command
+ * a3 physical address of command buffer
+ * a4 size of command buffer
+ * a5 physical address of response buffer
+ * a6 size of response buffer
+ * a7-a17 not used
+ *
+ * Return status:
+ * a0 INTEL_SIP_SMC_STATUS_OK, INTEL_SIP_SMC_STATUS_REJECTED
+ * or INTEL_SIP_SMC_STATUS_BUSY
+ * a1-a17 not used
+ */
+#define INTEL_SIP_SMC_ASYNC_FUNC_ID_MBOX_SEND (0xEE)
+#define INTEL_SIP_SMC_ASYNC_MBOX_SEND \
+	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_MBOX_SEND)
 #endif

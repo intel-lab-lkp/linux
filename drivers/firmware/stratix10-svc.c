@@ -1329,6 +1329,29 @@ int stratix10_svc_async_send(struct stratix10_svc_chan *chan, void *msg,
 		args.a0 = INTEL_SIP_SMC_ASYNC_RSU_NOTIFY;
 		args.a2 = p_msg->arg[0];
 		break;
+	case COMMAND_MBOX_SEND_CMD: {
+		struct stratix10_svc_data_mem *p_mem;
+
+		args.a0 = INTEL_SIP_SMC_ASYNC_MBOX_SEND;
+		args.a2 = p_msg->arg[0];
+
+		guard(mutex)(&svc_mem_lock);
+		list_for_each_entry(p_mem, &svc_data_mem, node)
+			if (p_mem->vaddr == p_msg->payload) {
+				args.a3 = (unsigned long)p_mem->paddr;
+				args.a4 = p_msg->payload_length;
+				break;
+			}
+		if (p_msg->payload_output) {
+			list_for_each_entry(p_mem, &svc_data_mem, node)
+				if (p_mem->vaddr == p_msg->payload_output) {
+					args.a5 = (unsigned long)p_mem->paddr;
+					args.a6 = p_msg->payload_length_output;
+					break;
+				}
+		}
+		break;
+	}
 	default:
 		dev_err(ctrl->dev, "Invalid command ,%d\n", p_msg->command);
 		ret = -EINVAL;
@@ -1422,9 +1445,12 @@ static int stratix10_svc_async_prepare_response(struct stratix10_svc_chan *chan,
 		 */
 		data->kaddr1 = (void *)&handle->res;
 		break;
+	case COMMAND_MBOX_SEND_CMD:
+		data->kaddr1 = (void *)&handle->res.a2;
+		break;
 
 	default:
-		dev_alert(ctrl->dev, "Invalid command\n ,%d", p_msg->command);
+		dev_alert(ctrl->dev, "Invalid command ,%d", p_msg->command);
 		return -ENOENT;
 	}
 	dev_dbg(ctrl->dev, "Async message completed transaction_id 0x%02x\n",
