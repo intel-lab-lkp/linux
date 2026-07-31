@@ -8,7 +8,7 @@ menuconfig BCM_VIDEOCORE
 	help
 		Support for Broadcom VideoCore services including
 		the BCM2835 family of products which is used
-		by the Raspberry PI.
+		by the Raspberry Pi.
 
 if BCM_VIDEOCORE
 
@@ -26,7 +26,7 @@ config BCM2835_VCHIQ
 		API, which is in turn used by several multimedia services on the
 		BCM2835 family of SoCs.
 
-		Defaults to Y when the Broadcom Videocore services are included
+		Defaults to Y when the Broadcom VideoCore services are included
 		in the build, N otherwise.
 
 if BCM2835_VCHIQ
