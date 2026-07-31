@@ -4717,7 +4717,8 @@ static bool isolate_folio(struct lruvec *lruvec, struct folio *folio, struct sca
 
 static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		       struct scan_control *sc, int type, int tier,
-		       struct list_head *list, int *isolatedp)
+		       struct list_head *list, int *isolatedp,
+		       bool *exhausted)
 {
 	int i;
 	int gen;
@@ -4733,8 +4734,10 @@ static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	VM_WARN_ON_ONCE(nr_to_scan > MAX_LRU_BATCH);
 	VM_WARN_ON_ONCE(!list_empty(list));
 
-	if (get_nr_gens(lruvec, type) == MIN_NR_GENS)
+	if (get_nr_gens(lruvec, type) == MIN_NR_GENS) {
+		*exhausted = true;
 		return 0;
+	}
 
 next_gen:
 	gen = lru_gen_from_seq(min_seq);
@@ -4795,6 +4798,11 @@ next_gen:
 				scanned, skipped, isolated,
 				type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 
+	/*
+	 * This scan exhausted the reclaimable lists before reaching the
+	 * scan target or accumulating enough isolated folios.
+	 */
+	*exhausted = remaining > 0 && isolated < MIN_LRU_BATCH;
 	*isolatedp = isolated;
 	return scanned;
 }
@@ -4852,12 +4860,12 @@ static int isolate_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	bool single_type = is_single_type_reclaim(swappiness);
 	int type = get_type_to_scan(lruvec, swappiness);
 	int total_scanned = 0, scanned, tier;
-	bool tried = false;
+	bool tried = false, exhausted;
 
 retry:
 	tier = get_tier_idx(lruvec, type);
 	scanned = scan_folios(nr_to_scan, lruvec, sc,
-			      type, tier, list, isolated);
+			      type, tier, list, isolated, &exhausted);
 
 	total_scanned += scanned;
 	if (*isolated) {
@@ -4870,7 +4878,7 @@ retry:
 	 * We are running out of the current reclaim type. Fall back to
 	 * the other type if allowed.
 	 */
-	if (!tried && !scanned && !single_type) {
+	if (!tried && exhausted && !single_type) {
 		type = !type;
 		tried = true;
 		goto retry;
