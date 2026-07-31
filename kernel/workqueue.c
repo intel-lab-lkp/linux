@@ -5766,6 +5766,12 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 
 	if (ret)
 		goto enomem;
+
+	if (wq->flags & __WQ_PERCPU_POOLS) {
+		for_each_possible_cpu(cpu)
+			unbound_wq_update_pwq(wq, cpu);
+	}
+
 	return 0;
 
 enomem:
