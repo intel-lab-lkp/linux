@@ -22,6 +22,7 @@ properties:
         deprecated: true
       - enum:
           - sinowealth,sh1106
+          - sinowealth,sh1107
           - solomon,ssd1305
           - solomon,ssd1306
           - solomon,ssd1307
@@ -139,6 +140,22 @@ allOf:
           default: 1
         solomon,dclk-frq:
           default: 5
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sinowealth,sh1107
+    then:
+      properties:
+        solomon,width:
+          default: 128
+        solomon,height:
+          default: 64
+        solomon,dclk-div:
+          default: 1
+        solomon,dclk-frq:
+          default: 8
 
   - if:
       properties:
