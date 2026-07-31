@@ -100,6 +100,7 @@ static int rmi_f12_read_sensor_tuning(struct f12_data *f12)
 	int ret;
 	int offset;
 	u8 buf[15];
+	u8 x_mm, y_mm;
 	int pitch_x = 0;
 	int pitch_y = 0;
 	int rx_receivers = 0;
@@ -171,8 +172,8 @@ static int rmi_f12_read_sensor_tuning(struct f12_data *f12)
 		}
 		dpm_resolution = buf[0];
 
-		sensor->x_mm = sensor->max_x / dpm_resolution;
-		sensor->y_mm = sensor->max_y / dpm_resolution;
+		x_mm = sensor->max_x / dpm_resolution;
+		y_mm = sensor->max_y / dpm_resolution;
 	} else {
 		if (rmi_register_desc_has_subpacket(item, 3)) {
 			rx_receivers = buf[offset];
@@ -184,9 +185,22 @@ static int rmi_f12_read_sensor_tuning(struct f12_data *f12)
 		if (rmi_register_desc_has_subpacket(item, 4))
 			offset += 1;
 
-		sensor->x_mm = (pitch_x * rx_receivers) >> 12;
-		sensor->y_mm = (pitch_y * tx_receivers) >> 12;
+		x_mm = (pitch_x * rx_receivers) >> 12;
+		y_mm = (pitch_y * tx_receivers) >> 12;
 	}
+
+	if (sensor->x_mm && sensor->x_mm != x_mm)
+		dev_warn(&fn->dev,
+			 "platform data x_mm (%d) != detected x_mm: (%d)\n",
+			 sensor->x_mm, x_mm);
+
+	if (sensor->y_mm && sensor->y_mm != y_mm)
+		dev_warn(&fn->dev,
+			 "platform data y_mm (%d) != detected y_mm: (%d)\n",
+			 sensor->y_mm, y_mm);
+
+	sensor->x_mm = x_mm;
+	sensor->y_mm = y_mm;
 
 	rmi_dbg(RMI_DEBUG_FN, &fn->dev, "%s: x_mm: %d y_mm: %d\n", __func__,
 		sensor->x_mm, sensor->y_mm);
