@@ -575,35 +575,6 @@ bool __is_module_percpu_address(unsigned long addr, unsigned long *can_addr)
 
 #endif /* CONFIG_SMP */
 
-#define MODINFO_ATTR(field)	\
-static void setup_modinfo_##field(struct module *mod, const char *s)  \
-{                                                                     \
-	mod->field = kstrdup(s, GFP_KERNEL);                          \
-}                                                                     \
-static ssize_t show_modinfo_##field(const struct module_attribute *mattr, \
-			struct module_kobject *mk, char *buffer)      \
-{                                                                     \
-	return scnprintf(buffer, PAGE_SIZE, "%s\n", mk->mod->field);  \
-}                                                                     \
-static int modinfo_##field##_exists(struct module *mod)               \
-{                                                                     \
-	return mod->field != NULL;                                    \
-}                                                                     \
-static void free_modinfo_##field(struct module *mod)                  \
-{                                                                     \
-	kfree(mod->field);                                            \
-	mod->field = NULL;                                            \
-}                                                                     \
-static const struct module_attribute modinfo_##field = {              \
-	.attr = { .name = __stringify(field), .mode = 0444 },         \
-	.show = show_modinfo_##field,                                 \
-	.setup = setup_modinfo_##field,                               \
-	.test = modinfo_##field##_exists,                             \
-	.free = free_modinfo_##field,                                 \
-};
-
-MODINFO_ATTR(srcversion);
-
 static void setup_modinfo_import_ns(struct module *mod, const char *s)
 {
 	mod->imported_namespaces = NULL;
@@ -1083,7 +1054,6 @@ static const struct module_attribute modinfo_taint =
 
 const struct module_attribute *const modinfo_attrs[] = {
 	&module_uevent,
-	&modinfo_srcversion,
 	&modinfo_import_ns,
 	&modinfo_initstate,
 	&modinfo_coresize,

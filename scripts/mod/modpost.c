@@ -33,8 +33,6 @@
 static bool module_enabled;
 /* Are we using CONFIG_MODVERSIONS? */
 static bool modversions;
-/* Is CONFIG_MODULE_SRCVERSION_ALL set? */
-static bool all_versions;
 /* Is CONFIG_BASIC_MODVERSIONS set? */
 static bool basic_modversions;
 /* Is CONFIG_EXTENDED_MODVERSIONS set? */
@@ -1584,7 +1582,6 @@ static void mod_set_crcs(struct module *mod)
 static void read_symbols(const char *modname)
 {
 	const char *symname;
-	char *version;
 	char *license;
 	char *namespace;
 	struct module *mod;
@@ -1644,13 +1641,6 @@ static void read_symbols(const char *modname)
 	}
 
 	check_sec_ref(mod, &info);
-
-	if (!mod->is_vmlinux) {
-		version = get_modinfo(&info, "version");
-		if (version || all_versions)
-			get_src_version(mod->name, mod->srcversion,
-					sizeof(mod->srcversion) - 1);
-	}
 
 	parse_elf_finish(&info);
 
@@ -2035,15 +2025,6 @@ static void add_depends(struct buffer *b, struct module *mod)
 	buf_printf(b, "\");\n");
 }
 
-static void add_srcversion(struct buffer *b, struct module *mod)
-{
-	if (mod->srcversion[0]) {
-		buf_printf(b, "\n");
-		buf_printf(b, "MODULE_INFO(srcversion, \"%s\");\n",
-			   mod->srcversion);
-	}
-}
-
 static void write_buf(struct buffer *b, const char *fname)
 {
 	FILE *file;
@@ -2148,8 +2129,6 @@ static void write_mod_c_file(struct module *mod)
 		list_del(&alias->node);
 		free(alias);
 	}
-
-	add_srcversion(&buf, mod);
 
 	ret = snprintf(fname, sizeof(fname), "%s.mod.c", mod->name);
 	if (ret >= sizeof(fname)) {
@@ -2326,9 +2305,6 @@ int main(int argc, char **argv)
 			break;
 		case 'o':
 			dump_write = optarg;
-			break;
-		case 'a':
-			all_versions = true;
 			break;
 		case 'T':
 			files_source = optarg;

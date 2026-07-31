@@ -377,7 +377,6 @@ struct module {
 	/* Sysfs stuff. */
 	struct module_kobject mkobj;
 	struct module_attribute *modinfo_attrs;
-	const char *srcversion;
 	const char *imported_namespaces;
 	struct kobject *holders_dir;
 

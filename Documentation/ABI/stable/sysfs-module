@@ -33,9 +33,3 @@ Description:
 		Note: If the module is built into the kernel, or if the
 		CONFIG_MODULE_UNLOAD kernel configuration value is not enabled,
 		this file will not be present.
-
-What:		/sys/module/<MODULENAME>/srcversion
-Date:		Jun 2005
-Description:
-		If the module source has MODULE_VERSION, this file will contain
-		the checksum of the source code.
