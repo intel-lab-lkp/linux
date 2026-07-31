@@ -281,20 +281,20 @@ static int eql_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 		return -EOPNOTSUPP;
 
 	switch (cmd) {
-		case EQL_ENSLAVE:
-			return eql_enslave(dev, data);
-		case EQL_EMANCIPATE:
-			return eql_emancipate(dev, data);
-		case EQL_GETSLAVECFG:
-			return eql_g_slave_cfg(dev, data);
-		case EQL_SETSLAVECFG:
-			return eql_s_slave_cfg(dev, data);
-		case EQL_GETMASTRCFG:
-			return eql_g_master_cfg(dev, data);
-		case EQL_SETMASTRCFG:
-			return eql_s_master_cfg(dev, data);
-		default:
-			return -EOPNOTSUPP;
+	case EQL_ENSLAVE:
+		return eql_enslave(dev, data);
+	case EQL_EMANCIPATE:
+		return eql_emancipate(dev, data);
+	case EQL_GETSLAVECFG:
+		return eql_g_slave_cfg(dev, data);
+	case EQL_SETSLAVECFG:
+		return eql_s_slave_cfg(dev, data);
+	case EQL_GETMASTRCFG:
+		return eql_g_master_cfg(dev, data);
+	case EQL_SETMASTRCFG:
+		return eql_s_master_cfg(dev, data);
+	default:
+		return -EOPNOTSUPP;
 	}
 }
 
