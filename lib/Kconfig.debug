@@ -3438,6 +3438,16 @@ config TEST_VMSTAT
 
 	  If unsure, say N.
 
+config TEST_SLAB
+	tristate "Slab Allocator Benchmark"
+	default n
+	help
+	  A synthetic benchmark that measures slab allocator performance,
+	  specifically focusing on single thread testing by repeatedly
+	  allocating then freeing memory and concurrent or remote allocations.
+
+	  If unsure, say N.
+
 config RATELIMIT_KUNIT_TEST
 	tristate "KUnit Test for correctness and stress of ratelimit" if !KUNIT_ALL_TESTS
 	depends on KUNIT
