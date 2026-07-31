@@ -244,6 +244,9 @@ static void qcom_scm_bw_disable(void)
 	mutex_unlock(&__scm->scm_bw_lock);
 }
 
+DEFINE_CLASS(qcom_scm_bw, int, if (!_T) qcom_scm_bw_disable(),
+	     qcom_scm_bw_enable(), void)
+
 enum qcom_scm_convention qcom_scm_convention = SMC_CONVENTION_UNKNOWN;
 static DEFINE_SPINLOCK(scm_query_lock);
 
@@ -614,14 +617,13 @@ static int __qcom_scm_pas_init_image(struct device *dev, u32 pas_id,
 	if (clk)
 		return clk;
 
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		return ret;
+	CLASS(qcom_scm_bw, bw)();
+	if (bw)
+		return bw;
 
 	desc.args[1] = mdata_phys;
 
 	ret = qcom_scm_call(dev, &desc, res);
-	qcom_scm_bw_disable();
 
 	return ret;
 }
@@ -736,12 +738,11 @@ static int __qcom_scm_pas_mem_setup(struct device *dev, u32 pas_id,
 	if (clk)
 		return clk;
 
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		return ret;
+	CLASS(qcom_scm_bw, bw)();
+	if (bw)
+		return bw;
 
 	ret = qcom_scm_call(dev, &desc, &res);
-	qcom_scm_bw_disable();
 
 	return ret ? : res.result[0];
 }
@@ -812,15 +813,14 @@ static void *__qcom_scm_pas_get_rsc_table2(struct device *dev,
 	struct resource_table empty_rsc = {};
 	size_t size = SZ_16K;
 	void *tbl_ptr;
-	int ret;
 
 	CLASS(qcom_scm_clk, clk)();
 	if (clk)
 		return ERR_PTR(clk);
 
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		return ERR_PTR(ret);
+	CLASS(qcom_scm_bw, bw)();
+	if (bw)
+		return ERR_PTR(bw);
 
 	/*
 	 * TrustZone can not accept buffer as NULL value as argument hence,
@@ -835,10 +835,8 @@ static void *__qcom_scm_pas_get_rsc_table2(struct device *dev,
 	void *input_rt_tzm __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
 								  input_rt_size,
 								  GFP_KERNEL);
-	if (!input_rt_tzm) {
-		ret = -ENOMEM;
-		goto disable_scm_bw;
-	}
+	if (!input_rt_tzm)
+		return ERR_PTR(-ENOMEM);
 
 	memcpy(input_rt_tzm, input_rt, input_rt_size);
 
@@ -851,23 +849,16 @@ static void *__qcom_scm_pas_get_rsc_table2(struct device *dev,
 							     input_rt_tzm,
 							     input_rt_size,
 							     &size);
-	if (IS_ERR(output_rt_tzm)) {
-		ret = PTR_ERR(output_rt_tzm);
-		goto disable_scm_bw;
-	}
+	if (IS_ERR(output_rt_tzm))
+		return output_rt_tzm;
 
 	tbl_ptr = kmemdup(output_rt_tzm, size, GFP_KERNEL);
-	if (!tbl_ptr) {
-		ret = -ENOMEM;
-		goto disable_scm_bw;
-	}
+	if (!tbl_ptr)
+		return ERR_PTR(-ENOMEM);
 
 	*output_rt_size = size;
 
-disable_scm_bw:
-	qcom_scm_bw_disable();
-
-	return ret ? ERR_PTR(ret) : tbl_ptr;
+	return tbl_ptr;
 }
 
 struct resource_table *qcom_scm_pas_get_rsc_table(struct qcom_scm_pas_context *ctx,
@@ -898,12 +889,11 @@ static int __qcom_scm_pas_auth_and_reset(struct device *dev, u32 pas_id)
 	if (clk)
 		return clk;
 
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		return ret;
+	CLASS(qcom_scm_bw, bw)();
+	if (bw)
+		return bw;
 
 	ret = qcom_scm_call(dev, &desc, &res);
-	qcom_scm_bw_disable();
 
 	return ret ? : res.result[0];
 }
@@ -990,12 +980,11 @@ static int __qcom_scm_pas_shutdown(struct device *dev, u32 pas_id)
 	if (clk)
 		return clk;
 
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		return ret;
+	CLASS(qcom_scm_bw, bw)();
+	if (bw)
+		return bw;
 
 	ret = qcom_scm_call(dev, &desc, &res);
-	qcom_scm_bw_disable();
 
 	return ret ? : res.result[0];
 }
