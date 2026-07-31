@@ -12,6 +12,8 @@
 #include "abi/gsc_pxp_commands_abi.h"
 #include "regs/xe_gsc_regs.h"
 #include "regs/xe_guc_regs.h"
+#include "xe_pm.h"
+#include "xe_mei_dg2.h"
 #include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_force_wake.h"
@@ -42,6 +44,8 @@ huc_to_guc(struct xe_huc *huc)
 	return &container_of(huc, struct xe_uc, huc)->guc;
 }
 
+static void xe_huc_auth_work(struct work_struct *work);
+
 #define PXP43_HUC_AUTH_INOUT_SIZE SZ_4K
 static int huc_alloc_gsc_pkt(struct xe_huc *huc)
 {
@@ -67,6 +71,7 @@ int xe_huc_init(struct xe_huc *huc)
 	struct xe_gt *gt = huc_to_gt(huc);
 	struct xe_device *xe = gt_to_xe(gt);
 	int ret;
+	INIT_DELAYED_WORK(&huc->auth_work, xe_huc_auth_work);
 
 	huc->fw.type = XE_UC_FW_TYPE_HUC;
 
@@ -228,6 +233,39 @@ static const struct {
 				  HECI1_FWSTS5_HUC_AUTH_DONE },
 };
 
+static void xe_huc_auth_work(struct work_struct *work)
+{
+	struct xe_huc *huc = container_of(work, struct xe_huc, auth_work.work);
+	struct xe_gt *gt = huc_to_gt(huc);
+	struct xe_device *xe = gt_to_xe(gt);
+	int ret;
+
+	xe_pm_runtime_get(xe);
+
+	ret = xe_mei_dg2_auth_huc(xe, huc);
+	if (ret == -EAGAIN || ret == -ENODEV) {
+		schedule_delayed_work(&huc->auth_work, msecs_to_jiffies(1000));
+		goto out;
+	}
+
+	if (ret)
+		goto fail;
+
+	ret = xe_mmio_wait32(&gt->mmio, huc_auth_modes[XE_HUC_AUTH_VIA_GUC].reg,
+			     huc_auth_modes[XE_HUC_AUTH_VIA_GUC].val,
+		      huc_auth_modes[XE_HUC_AUTH_VIA_GUC].val,
+		      100000, NULL, false);
+	if (ret)
+		goto fail;
+
+	xe_uc_fw_change_status(&huc->fw, XE_UC_FIRMWARE_RUNNING);
+	goto out;
+fail:
+	xe_uc_fw_change_status(&huc->fw, XE_UC_FIRMWARE_LOAD_FAIL);
+out:
+	xe_pm_runtime_put(xe);
+}
+
 bool xe_huc_is_authenticated(struct xe_huc *huc, enum xe_huc_auth_types type)
 {
 	struct xe_gt *gt = huc_to_gt(huc);
@@ -252,6 +290,33 @@ int xe_huc_auth(struct xe_huc *huc, enum xe_huc_auth_types type)
 
 	if (!xe_uc_fw_is_loaded(&huc->fw))
 		return -ENOEXEC;
+
+	if (huc_to_xe(huc)->info.platform == XE_DG2) {
+		ret = xe_mei_dg2_auth_huc(huc_to_xe(huc), huc);
+		if (ret == -EAGAIN || ret == -ENODEV) {
+			xe_gt_dbg(gt, "HuC: MEI not ready, deferring authentication\n");
+			schedule_delayed_work(&huc->auth_work, msecs_to_jiffies(1000));
+			return 0;
+		}
+
+		if (ret) {
+			xe_gt_err(gt, "HuC: failed to trigger auth via MEI: %pe\n", ERR_PTR(ret));
+			goto fail;
+		}
+
+		ret = xe_mmio_wait32(&gt->mmio, huc_auth_modes[XE_HUC_AUTH_VIA_GUC].reg,
+				     huc_auth_modes[XE_HUC_AUTH_VIA_GUC].val,
+		       huc_auth_modes[XE_HUC_AUTH_VIA_GUC].val,
+		       100000, NULL, false);
+		if (ret) {
+			xe_gt_err(gt, "HuC: firmware not verified by MEI: %pe\n", ERR_PTR(ret));
+			goto fail;
+		}
+
+		xe_uc_fw_change_status(&huc->fw, XE_UC_FIRMWARE_RUNNING);
+		xe_gt_dbg(gt, "HuC: authenticated via MEI\n");
+		return 0;
+	}
 
 	switch (type) {
 	case XE_HUC_AUTH_VIA_GUC:
@@ -312,3 +377,4 @@ void xe_huc_print_info(struct xe_huc *huc, struct drm_printer *p)
 	drm_printf(p, "\nHuC status: 0x%08x\n",
 		   xe_mmio_read32(&gt->mmio, HUC_KERNEL_LOAD_INFO));
 }
+

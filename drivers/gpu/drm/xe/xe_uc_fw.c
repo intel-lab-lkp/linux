@@ -133,6 +133,7 @@ struct fw_blobs_by_type {
 	fw_def(BATTLEMAGE,	GT_TYPE_ANY,	no_ver(xe,	huc,		bmg))		\
 	fw_def(LUNARLAKE,	GT_TYPE_ANY,	no_ver(xe,	huc,		lnl))		\
 	fw_def(METEORLAKE,	GT_TYPE_ANY,	no_ver(i915,	huc_gsc,	mtl))		\
+	fw_def(DG2,		GT_TYPE_ANY,	no_ver(i915,	huc_gsc,	dg2))		\
 	fw_def(DG1,		GT_TYPE_ANY,	no_ver(i915,	huc,		dg1))		\
 	fw_def(ALDERLAKE_P,	GT_TYPE_ANY,	no_ver(i915,	huc,		tgl))		\
 	fw_def(ALDERLAKE_S,	GT_TYPE_ANY,	no_ver(i915,	huc,		tgl))		\
@@ -488,6 +489,26 @@ static u32 entry_offset(const struct gsc_cpd_header_v2 *header, const char *name
 	return 0;
 }
 
+static int parse_manifest_direct(struct xe_uc_fw *uc_fw, const void *data, size_t size)
+{
+	struct xe_gt *gt = uc_fw_to_gt(uc_fw);
+	const struct gsc_manifest_header *manifest = data;
+	struct xe_uc_fw_version *release = &uc_fw->versions.found[XE_UC_FW_VER_RELEASE];
+
+	/* 0x4 is the expected header_type for a manifest */
+	if (size < sizeof(*manifest) || manifest->header_type != 0x4) {
+		xe_gt_err(gt, "Direct manifest too small or invalid!\n");
+		return -ENODATA;
+	}
+
+	release->major = manifest->fw_version.major;
+	release->minor = manifest->fw_version.minor;
+	release->patch = manifest->fw_version.hotfix;
+
+	uc_fw->has_gsc_headers = true;
+	return 0;
+}
+
 /* Refer to the "GSC-based Firmware Layout" documentation entry for details */
 static int parse_cpd_header(struct xe_uc_fw *uc_fw, const void *data, size_t size,
 			    const char *manifest_entry, const char *css_entry)
@@ -654,9 +675,20 @@ static int parse_headers(struct xe_uc_fw *uc_fw, const struct firmware *fw)
 	case XE_UC_FW_TYPE_GSC:
 		return parse_gsc_layout(uc_fw, fw->data, fw->size);
 	case XE_UC_FW_TYPE_HUC:
-		ret = parse_cpd_header(uc_fw, fw->data, fw->size, "HUCP.man", "huc_fw");
-		if (!ret || ret != -ENOENT)
-			return ret;
+		if (uc_fw_to_xe(uc_fw)->info.platform == XE_DG2) {
+			/* Check if binary starts directly with manifest */
+			if (fw->size >= sizeof(u32) && *(const u32 *)fw->data == 0x4)
+				return parse_manifest_direct(uc_fw, fw->data, fw->size);
+
+			/* DG2 HuC is loaded via MEI, so we don't need a CSS header (pass NULL) */
+			ret = parse_cpd_header(uc_fw, fw->data, fw->size, "HUCP.man", NULL);
+			if (!ret || ret != -ENOENT)
+				return ret;
+		} else {
+			ret = parse_cpd_header(uc_fw, fw->data, fw->size, "HUCP.man", "huc_fw");
+			if (!ret || ret != -ENOENT)
+				return ret;
+		}
 		fallthrough;
 	case XE_UC_FW_TYPE_GUC:
 		return parse_css_header(uc_fw, fw->data, fw->size);
@@ -780,12 +812,14 @@ fail:
 			       XE_UC_FIRMWARE_MISSING :
 			       XE_UC_FIRMWARE_ERROR);
 
-	if (err == -ENOENT)
+	if (err == -ENOENT) {
 		xe_gt_info(gt, "%s firmware %s not found\n",
 			   xe_uc_fw_type_repr(uc_fw->type), uc_fw->path);
-	else
+	} else {
 		xe_gt_notice(gt, "%s firmware %s: fetch failed with error %pe\n",
 			     xe_uc_fw_type_repr(uc_fw->type), uc_fw->path, ERR_PTR(err));
+	}
+
 	xe_gt_info(gt, "%s firmware(s) can be downloaded from %s\n",
 		   xe_uc_fw_type_repr(uc_fw->type), XE_UC_FIRMWARE_URL);
 
