@@ -1066,6 +1066,9 @@ void
 xfs_buf_item_done(
 	struct xfs_buf		*bp)
 {
+	if (atomic_read(&bp->b_log_item->bli_refcount) != 0)
+		return;
+
 	/*
 	 * If we are forcibly shutting down, this may well be off the AIL
 	 * already. That's because we simulate the log-committed callbacks to
