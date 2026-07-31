@@ -144,9 +144,9 @@ static void *contendfn(void *_arg)
 
 	while (!*args->done) {
 		/*
-		 * futex2_wait() will take hb-lock, verify *var == val and
-		 * queue/abort.  By knowingly setting val 'wrong' this will
-		 * abort and thereby generate hb-lock contention.
+		 * By knowingly setting val 'wrong' this wait is always
+		 * refused.  futex2_wait() now detects that before taking
+		 * hb-lock, so this no longer generates hb-lock contention.
 		 */
 		futex2_wait(&args->lock->val, ~0U, fflags, NULL, 0);
 		args->val++;

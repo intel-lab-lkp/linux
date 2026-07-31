@@ -627,17 +627,18 @@ int futex_wait_setup(u32 __user *uaddr, u32 val, unsigned int flags,
 	int ret;
 
 	/*
-	 * Access the page AFTER the hash-bucket is locked.
-	 * Order is important:
+	 * Perform the authoritative value check AFTER the hash-bucket is
+	 * locked. Order is important:
 	 *
 	 *   Userspace waiter: val = var; if (cond(val)) futex_wait(&var, val);
 	 *   Userspace waker:  if (cond(var)) { var = new; futex_wake(&var); }
 	 *
 	 * The basic logical guarantee of a futex is that it blocks ONLY
 	 * if cond(var) is known to be true at the time of blocking, for
-	 * any cond.  If we locked the hash-bucket after testing *uaddr, that
-	 * would open a race condition where we could block indefinitely with
-	 * cond(var) false, which would violate the guarantee.
+	 * any cond.  If the decision to block came from a test of *uaddr taken
+	 * before the hash-bucket is locked, that would open a race where we
+	 * could block indefinitely with cond(var) false, violating the
+	 * guarantee.  The unlocked test below may only refuse to block.
 	 *
 	 * On the other hand, we insert q and release the hash-bucket only
 	 * after testing *uaddr.  This guarantees that futex_wait() will NOT
@@ -648,6 +649,25 @@ retry:
 	ret = get_futex_key(uaddr, flags, &q->key, FUTEX_READ);
 	if (unlikely(ret != 0))
 		return ret;
+
+	/*
+	 * A mismatch here refuses the wait without locating the hash bucket;
+	 * a match is rechecked under the lock below before queueing.
+	 *
+	 * get_futex_key() runs get_user_pages_fast() only for shared futexes,
+	 * so their page is resident and the non-faulting read suffices, with
+	 * the locked path recovering if it does not.  A private futex may
+	 * still be nonresident, so read it faultably here.  Note that
+	 * futex_get_value_locked() only disables faults, it does not need
+	 * hb->lock.
+	 */
+	if (flags & FLAGS_SHARED)
+		ret = futex_get_value_locked(&uval, uaddr);
+	else
+		ret = get_user_inline(uval, uaddr);
+
+	if (!ret && uval != val)
+		return -EWOULDBLOCK;
 
 retry_private:
 	if (1) {
