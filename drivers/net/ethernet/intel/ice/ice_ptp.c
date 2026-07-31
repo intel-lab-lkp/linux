@@ -2917,7 +2917,16 @@ static void ice_ptp_tspll_monitor(struct ice_pf *pf)
 		if (!(pf->ptp.tspll_lock_retries % ICE_TSPLL_LOG_INTERVAL))
 			dev_warn(ice_pf_to_dev(pf),
 				 "TimeSync PLL lock lost. Retrying to acquire lock.\n");
+		/* Serialize R23 restart against TSPLL userspace reconfig
+		 * (ice_dpll_tspll_state_on_dpll_set()). pf->dplls.lock is
+		 * initialized in ice_init_features() before the PTP kworker
+		 * starts and destroyed in ice_deinit_features() only after
+		 * ice_ptp_release() has drained the kworker, so it is always
+		 * valid to take here regardless of DPLL init state.
+		 */
+		mutex_lock(&pf->dplls.lock);
 		err = ice_tspll_restart_e825c(&pf->hw);
+		mutex_unlock(&pf->dplls.lock);
 		if (err)
 			dev_err_ratelimited(ice_pf_to_dev(pf),
 					    "Failed to restart TimeSync PLL (err: %d).\n",
