@@ -647,11 +647,17 @@ static int tipc_release(struct socket *sock)
 	sk_stop_timer(sk, &sk->sk_timer);
 	tipc_sk_remove(tsk);
 
+	/* Purge under the socket lock: a straggler SOCK_WAKEUP that looked the
+	 * socket up before tipc_sk_remove() can still reach tipc_dest_del() on
+	 * this list, and it only holds the socket spinlock.  Purging after
+	 * release_sock() would race that list_del()/kfree().
+	 */
+	tipc_dest_list_purge(&tsk->cong_links);
+	tsk->cong_link_cnt = 0;
+
 	sock_orphan(sk);
 	/* Reject any messages that accumulated in backlog queue */
 	release_sock(sk);
-	tipc_dest_list_purge(&tsk->cong_links);
-	tsk->cong_link_cnt = 0;
 	call_rcu(&tsk->rcu, tipc_sk_callback);
 	sock->sk = NULL;
 
