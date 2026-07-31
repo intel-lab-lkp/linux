@@ -1161,7 +1161,7 @@ int configfs_depend_item(struct configfs_subsystem *subsys,
 	 * subsystem is really registered, and so we need to lock out
 	 * configfs_[un]register_subsystem().
 	 */
-	inode_lock(d_inode(root));
+	inode_lock_nested(d_inode(root), I_MUTEX_PARENT2);
 
 	subsys_sd = configfs_find_subsys_dentry(root->d_fsdata, s_item);
 	if (!subsys_sd) {
@@ -1256,7 +1256,8 @@ int configfs_depend_item_unlocked(struct configfs_subsystem *caller_subsys,
 		 * additional locking to prevent other subsystem from being
 		 * unregistered
 		 */
-		inode_lock(d_inode(root->cg_item.ci_dentry));
+		inode_lock_nested(d_inode(root->cg_item.ci_dentry),
+				  I_MUTEX_PARENT2);
 
 		/*
 		 * As we are trying to depend item from other subsystem
