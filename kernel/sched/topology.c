@@ -2403,8 +2403,17 @@ void sched_init_numa(int offline_node)
 
 	tl = kzalloc((i + nr_levels + 1) *
 			sizeof(struct sched_domain_topology_level), GFP_KERNEL);
-	if (!tl)
+	if (!tl) {
+		rcu_assign_pointer(sched_domains_numa_masks, NULL);
+		synchronize_rcu();
+		for (i = 0; i < nr_levels; i++) {
+			for_each_node(j)
+				kfree(masks[i][j]);
+			kfree(masks[i]);
+		}
+		kfree(masks);
 		return;
+	}
 
 	/*
 	 * Copy the default topology bits..
