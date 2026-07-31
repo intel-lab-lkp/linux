@@ -407,9 +407,17 @@ int nf_conntrack_sctp_packet(struct nf_conn *ct,
 			/* (D) vtag must be same as init_vtag as found in INIT_ACK */
 			if (sh->vtag != ct->proto.sctp.vtag[dir])
 				goto out_unlock;
-		} else if (sch->type == SCTP_CID_COOKIE_ACK) {
-			ct->proto.sctp.init[dir] = 0;
-			ct->proto.sctp.init[!dir] = 0;
+		} else if (sch->type == SCTP_CID_COOKIE_ACK ||
+			   sch->type == SCTP_CID_ERROR ||
+			   sch->type == SCTP_CID_SHUTDOWN ||
+			   sch->type == SCTP_CID_SHUTDOWN_ACK) {
+			if (ct->proto.sctp.vtag[dir] &&
+			    sh->vtag != ct->proto.sctp.vtag[dir])
+				goto out_unlock;
+			if (sch->type == SCTP_CID_COOKIE_ACK) {
+				ct->proto.sctp.init[dir] = 0;
+				ct->proto.sctp.init[!dir] = 0;
+			}
 		} else if (sch->type == SCTP_CID_HEARTBEAT) {
 			if (ct->proto.sctp.vtag[dir] == 0) {
 				pr_debug("Setting %d vtag %x for dir %d\n", sch->type, sh->vtag, dir);
