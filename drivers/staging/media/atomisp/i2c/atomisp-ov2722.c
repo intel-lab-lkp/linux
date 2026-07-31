@@ -731,7 +731,7 @@ static int ov2722_detect(struct i2c_client *client)
 			OV2722_SC_CMMN_CHIP_ID_L, &low);
 	id = (high << 8) | low;
 
-	if ((id != OV2722_ID) && (id != OV2720_ID)) {
+	if (id != OV2722_ID && id != OV2720_ID) {
 		dev_err(&client->dev, "sensor ID error\n");
 		return -ENODEV;
 	}
