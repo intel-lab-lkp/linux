@@ -12,5 +12,6 @@
 #define REG_UFS_AMD_CQD         0x221C  /* CQ Doorbell base */
 #define REG_UFS_AMD_CQIS        0x2224  /* CQ Interrupt Status base */
 #define REG_UFS_AMD_MCQ_STRIDE  0x40    /* 64 bytes per queue */
+#define REG_UFS_AMD_VS_CQES     0xE0    /* Vendor Specific: CQES CQ ID bitmap */
 
 #endif /* !_UFS_AMD_H */

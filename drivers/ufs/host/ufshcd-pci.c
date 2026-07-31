@@ -560,10 +560,18 @@ static int ufs_amd_op_runtime_config(struct ufs_hba *hba)
 	return 0;
 }
 
+static int ufs_amd_get_outstanding_cqs(struct ufs_hba *hba, unsigned long *ocqs)
+{
+	*ocqs = ufshcd_readl(hba, REG_UFS_AMD_VS_CQES);
+
+	return 0;
+}
+
 static struct ufs_hba_variant_ops ufs_amd_hba_vops = {
 	.name			= "amd-pci",
 	.mcq_config_resource	= ufs_amd_mcq_config_resource,
 	.op_runtime_config	= ufs_amd_op_runtime_config,
+	.get_outstanding_cqs	= ufs_amd_get_outstanding_cqs,
 };
 
 #ifdef CONFIG_PM_SLEEP
