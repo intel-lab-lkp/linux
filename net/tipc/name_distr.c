@@ -286,6 +286,9 @@ static bool tipc_update_nametbl(struct net *net, struct distr_item *i,
 	u32 key = ntohl(i->key);
 	struct tipc_uaddr ua;
 
+	if (in_own_node(net, node))
+		return false;
+
 	/* A peer-advertised binding with lower > upper can never be matched
 	 * or withdrawn and would leak the publication; the local bind path
 	 * rejects such ranges, so reject ranges learned from the network too.
