@@ -857,6 +857,13 @@ static int pagefault_dmabuf_mr(struct mlx5_ib_mr *mr, size_t bcnt,
 		return err;
 	}
 
+	err = mlx5_ib_validate_dmabuf_tph(mr, umem_dmabuf->attach->dmabuf);
+	if (err) {
+		ib_umem_dmabuf_unmap_pages(umem_dmabuf);
+		dma_resv_unlock(umem_dmabuf->attach->dmabuf->resv);
+		return err;
+	}
+
 	page_size = mlx5_umem_dmabuf_find_best_pgsz(umem_dmabuf, access_mode);
 	if (!page_size) {
 		ib_umem_dmabuf_unmap_pages(umem_dmabuf);
