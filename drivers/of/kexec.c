@@ -24,7 +24,7 @@
 
 /*
  * Additional space needed for the FDT buffer so that we can add initrd,
- * bootargs, kaslr-seed, rng-seed, useable-memory-range and elfcorehdr.
+ * bootargs, kaslr-seed, rng-seed, usable-memory-range and elfcorehdr.
  */
 #define FDT_EXTRA_SPACE 0x1000
 
