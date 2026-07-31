@@ -433,6 +433,9 @@ static int batadv_tvlv_call_handler(struct batadv_priv *bat_priv,
 			return NET_RX_SUCCESS;
 
 		tvlv_offset = (unsigned char *)tvlv_value - skb->data;
+		if (skb_headroom(skb) + tvlv_offset + tvlv_value_len >= U16_MAX)
+			return -EINVAL;
+
 		skb_set_network_header(skb, tvlv_offset);
 		skb_set_transport_header(skb, tvlv_offset + tvlv_value_len);
 
