@@ -1065,16 +1065,23 @@ static void tipc_node_link_down(struct tipc_node *n, int bearer_id, bool delete)
 {
 	struct tipc_link_entry *le = &n->links[bearer_id];
 	struct tipc_media_addr *maddr = NULL;
-	struct tipc_link *l = le->link;
 	int old_bearer_id = bearer_id;
 	struct sk_buff_head xmitq;
-
-	if (!l)
-		return;
+	struct tipc_link *l;
 
 	__skb_queue_head_init(&xmitq);
 
+	/* Read le->link under n->lock: the delete path below kfree()s it while
+	 * holding the same lock, so an unlocked read here could be raced by a
+	 * concurrent bearer teardown and leave us with a freed pointer.
+	 */
 	tipc_node_write_lock(n);
+	l = le->link;
+	if (!l) {
+		tipc_node_write_unlock(n);
+		return;
+	}
+
 	if (!tipc_link_is_establishing(l)) {
 		__tipc_node_link_down(n, &bearer_id, &xmitq, &maddr);
 	} else {
