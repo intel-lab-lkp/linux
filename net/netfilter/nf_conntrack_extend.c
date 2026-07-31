@@ -112,9 +112,21 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	newlen = newoff + nf_ct_ext_type_len[id];
 
 	alloc = max(newlen, NF_CT_EXT_PREALLOC);
-	new = krealloc(ct->ext, alloc, gfp);
-	if (!new)
-		return NULL;
+	/*
+	 * Once an expectation is linked, its list node points back to the
+	 * hlist head in the helper extension. Reserve all available extension
+	 * space for the helper and do not move it afterward.
+	 */
+	if (ct->ext &&
+	    __nf_ct_ext_exist(ct->ext, NF_CT_EXT_HELPER)) {
+		new = ct->ext;
+	} else {
+		if (id == NF_CT_EXT_HELPER)
+			alloc = U8_MAX;
+		new = krealloc(ct->ext, alloc, gfp);
+		if (!new)
+			return NULL;
+	}
 
 	if (!ct->ext)
 		memset(new->offset, 0, sizeof(new->offset));
