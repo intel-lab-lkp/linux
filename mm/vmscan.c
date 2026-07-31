@@ -4728,6 +4728,7 @@ static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	int skipped = 0;
 	unsigned long remaining = nr_to_scan;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	unsigned long min_seq = lrugen->min_seq[type];
 
 	VM_WARN_ON_ONCE(nr_to_scan > MAX_LRU_BATCH);
 	VM_WARN_ON_ONCE(!list_empty(list));
@@ -4735,8 +4736,8 @@ static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	if (get_nr_gens(lruvec, type) == MIN_NR_GENS)
 		return 0;
 
-	gen = lru_gen_from_seq(lrugen->min_seq[type]);
-
+next_gen:
+	gen = lru_gen_from_seq(min_seq);
 	for (i = MAX_NR_ZONES; i > 0; i--) {
 		LIST_HEAD(moved);
 		int skipped_zone = 0;
@@ -4777,6 +4778,14 @@ static int scan_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 		if (!remaining || isolated >= MIN_LRU_BATCH)
 			break;
 	}
+
+	/*
+	 * This generation is exhausted across all zones, but the scan
+	 * target has not been reached yet. Continue with the next
+	 * reclaimable generation.
+	 */
+	if (i == 0 && ++min_seq + MIN_NR_GENS <= lrugen->max_seq)
+		goto next_gen;
 
 	item = PGSCAN_KSWAPD + reclaimer_offset(sc);
 	mod_lruvec_state(lruvec, item, isolated);
