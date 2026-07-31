@@ -412,6 +412,8 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 				   &fifo->tx_fifo_depth);
 	if (ret)
 		return ret;
+	if (fifo->tx_fifo_depth < 4)
+		return -EINVAL;
 
 	ret = of_property_read_u32(node, "xlnx,use-rx-data",
 				   &fifo->has_rx_fifo);
