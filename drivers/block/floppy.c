@@ -536,6 +536,25 @@ static const struct cont_t {
 				 * succeeded/failed */
 } *cont;
 
+static atomic_t cont_seq = ATOMIC_INIT(0);
+static unsigned int bh_seq;
+
+static void cont_invalidate(void)
+{
+	WRITE_ONCE(cont, NULL);
+	atomic_inc_return_release(&cont_seq);
+}
+
+static const struct cont_t *cont_for_bh(void)
+{
+	unsigned int seq = atomic_read_acquire(&cont_seq);
+	const struct cont_t *c = READ_ONCE(cont);
+
+	if (seq != bh_seq || !c)
+		return NULL;
+	return c;
+}
+
 static void floppy_ready(void);
 static void floppy_start(void);
 static void process_fd_request(void);
@@ -907,7 +926,7 @@ static void unlock_fdc(void)
 	command_status = FD_COMMAND_NONE;
 	cancel_delayed_work(&fd_timeout);
 	do_floppy = NULL;
-	cont = NULL;
+	cont_invalidate();
 	clear_bit(0, &fdc_busy);
 	wake_up(&fdc_wait);
 }
@@ -997,6 +1016,7 @@ static void schedule_bh(void (*handler)(void))
 {
 	WARN_ON(work_pending(&floppy_work));
 
+	bh_seq = atomic_read(&cont_seq);
 	floppy_work_fn = handler;
 	queue_work(floppy_wq, &floppy_work);
 }
@@ -1782,13 +1802,18 @@ static void recalibrate_floppy(void)
  */
 static void reset_interrupt(void)
 {
+	const struct cont_t *c;
+
 	debugt(__func__, "");
 	result(current_fdc);		/* get the status ready for set_fdc */
+	c = cont_for_bh();
+	if (!c)
+		return;
 	if (fdc_state[current_fdc].reset) {
-		pr_info("reset set in interrupt, calling %ps\n", cont->error);
-		cont->error();	/* a reset just after a reset. BAD! */
+		pr_info("reset set in interrupt, calling %ps\n", c->error);
+		c->error();	/* a reset just after a reset. BAD! */
 	}
-	cont->redo();
+	c->redo();
 }
 
 /*
@@ -1988,7 +2013,7 @@ static void floppy_start(void)
 static void do_wakeup(void)
 {
 	reschedule_timeout(MAXTIMEOUT, "do wakeup");
-	cont = NULL;
+	cont_invalidate();
 	command_status += 2;
 	wake_up(&command_done);
 }
