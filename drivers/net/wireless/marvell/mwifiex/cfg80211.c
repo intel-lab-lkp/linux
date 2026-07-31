@@ -4897,7 +4897,15 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 				country_code =
 					mwifiex_11d_code_2_region(
 						adapter->region_code);
+
+				/* WRT3200ACM/WRT32x ROM always reports US, which
+				 * conflicts with routers sold outside the US.
+				 * Ignore this hint so userspace can
+				 * set the correct regulatory domain.
+				 */
 				if (country_code &&
+				    !of_machine_is_compatible("linksys,rango") &&
+				    !of_machine_is_compatible("linksys,venom") &&
 				    regulatory_hint(wiphy, country_code))
 					mwifiex_dbg(priv->adapter, ERROR,
 						    "regulatory_hint() failed\n");
