@@ -123,6 +123,8 @@ static void process_recv(struct ishtp_cl *hid_ishtp_cl, void *recv_buf,
 				break;
 			}
 			client_data->hid_dev_count = (unsigned int)*payload;
+			if (client_data->hid_dev_count > MAX_HID_DEVICES)
+				client_data->hid_dev_count = MAX_HID_DEVICES;
 			if (!client_data->hid_devices)
 				client_data->hid_devices = devm_kcalloc(
 						cl_data_to_dev(client_data),
