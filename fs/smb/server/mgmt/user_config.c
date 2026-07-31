@@ -27,6 +27,7 @@ struct ksmbd_user *ksmbd_login_user(const char *account)
 
 	user = ksmbd_alloc_user(resp, resp_ext);
 out:
+	kvfree(resp_ext);
 	kvfree(resp);
 	return user;
 }
