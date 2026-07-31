@@ -283,9 +283,9 @@ static int st_nci_hci_apdu_reader_event_received(struct nci_dev *ndev,
 	switch (event) {
 	case ST_NCI_EVT_TRANSMIT_DATA:
 		timer_delete_sync(&info->se_info.bwi_timer);
-		info->se_info.bwi_active = false;
-		info->se_info.cb(info->se_info.cb_context,
-				 skb->data, skb->len, 0);
+		if (xchg(&info->se_info.bwi_active, false))
+			info->se_info.cb(info->se_info.cb_context,
+					 skb->data, skb->len, 0);
 	break;
 	case ST_NCI_EVT_WTX_REQUEST:
 		mod_timer(&info->se_info.bwi_timer, jiffies +
@@ -665,9 +665,9 @@ int st_nci_se_io(struct nci_dev *ndev, u32 se_idx,
 	case ST_NCI_ESE_HOST_ID:
 		info->se_info.cb = cb;
 		info->se_info.cb_context = cb_context;
+		xchg(&info->se_info.bwi_active, true);
 		mod_timer(&info->se_info.bwi_timer, jiffies +
 			  msecs_to_jiffies(info->se_info.wt_timeout));
-		info->se_info.bwi_active = true;
 		return nci_hci_send_event(ndev, ST_NCI_APDU_READER_GATE,
 					ST_NCI_EVT_TRANSMIT_DATA, apdu,
 					apdu_length);
@@ -699,7 +699,8 @@ static void st_nci_se_wt_timeout(struct timer_list *t)
 	struct st_nci_info *info = timer_container_of(info, t,
 						      se_info.bwi_timer);
 
-	info->se_info.bwi_active = false;
+	if (!xchg(&info->se_info.bwi_active, false))
+		return;
 
 	if (!info->se_info.xch_error) {
 		info->se_info.xch_error = true;
@@ -751,13 +752,12 @@ void st_nci_se_deinit(struct nci_dev *ndev)
 {
 	struct st_nci_info *info = nci_get_drvdata(ndev);
 
-	if (info->se_info.bwi_active)
-		timer_delete_sync(&info->se_info.bwi_timer);
-	if (info->se_info.se_active)
-		timer_delete_sync(&info->se_info.se_active_timer);
+	timer_shutdown_sync(&info->se_info.bwi_timer);
+	if (xchg(&info->se_info.bwi_active, false))
+		info->se_info.cb(info->se_info.cb_context, NULL, 0, -ENODEV);
 
-	info->se_info.se_active = false;
-	info->se_info.bwi_active = false;
+	timer_shutdown_sync(&info->se_info.se_active_timer);
+	xchg(&info->se_info.se_active, false);
+	complete(&info->se_info.req_completion);
 }
 EXPORT_SYMBOL(st_nci_se_deinit);
-

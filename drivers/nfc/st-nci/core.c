@@ -105,6 +105,7 @@ static const struct nci_ops st_nci_ops = {
 	.hci_load_session = st_nci_hci_load_session,
 	.hci_event_received = st_nci_hci_event_received,
 	.hci_cmd_received = st_nci_hci_cmd_received,
+	.pre_unregister = st_nci_se_deinit,
 	.prop_ops = st_nci_prop_ops,
 	.n_prop_ops = ARRAY_SIZE(st_nci_prop_ops),
 };
