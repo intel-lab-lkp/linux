@@ -841,6 +841,14 @@ sparse_alloc:
 		args.maxlen = args.minlen;
 
 		/*
+		 * Bump minleft by the alloc size delta to maintain consistent
+		 * out of space behavior with normal sized chunks. This isn't a
+		 * requirement, but helps avoid sparse chunk and inobt block
+		 * allocation quirks at or close to AG depletion.
+		 */
+		args.minleft += igeo->ialloc_blks - igeo->ialloc_min_blks;
+
+		/*
 		 * The inode record will be aligned to full chunk size. We must
 		 * prevent sparse allocation from AG boundaries that result in
 		 * invalid inode records, such as records that start at agbno 0
