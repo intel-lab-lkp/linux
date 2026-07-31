@@ -1639,6 +1639,8 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	if (!battmgr)
 		return -ENOMEM;
 
+	auxiliary_set_drvdata(adev, battmgr);
+
 	battmgr->dev = dev;
 
 	psy_cfg.drv_data = battmgr;
@@ -1734,9 +1736,17 @@ static const struct auxiliary_device_id qcom_battmgr_id_table[] = {
 };
 MODULE_DEVICE_TABLE(auxiliary, qcom_battmgr_id_table);
 
+static void qcom_battmgr_remove(struct auxiliary_device *adev)
+{
+	struct qcom_battmgr *battmgr = auxiliary_get_drvdata(adev);
+
+	disable_work_sync(&battmgr->enable_work);
+}
+
 static struct auxiliary_driver qcom_battmgr_driver = {
 	.name = "pmic_glink_power_supply",
 	.probe = qcom_battmgr_probe,
+	.remove = qcom_battmgr_remove,
 	.id_table = qcom_battmgr_id_table,
 };
 
