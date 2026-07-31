@@ -506,9 +506,10 @@ static int iproc_adc_probe(struct platform_device *pdev)
 {
 	struct iproc_adc_priv *adc_priv;
 	struct iio_dev *indio_dev = NULL;
+	struct device *dev = &pdev->dev;
 	int ret;
 
-	indio_dev = devm_iio_device_alloc(&pdev->dev,
+	indio_dev = devm_iio_device_alloc(dev,
 					sizeof(*adc_priv));
 	if (!indio_dev)
 		return -ENOMEM;
@@ -523,14 +524,14 @@ static int iproc_adc_probe(struct platform_device *pdev)
 	adc_priv->regmap = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
 			   "adc-syscon");
 	if (IS_ERR(adc_priv->regmap)) {
-		dev_err(&pdev->dev, "failed to get handle for tsc syscon\n");
+		dev_err(dev, "failed to get handle for tsc syscon\n");
 		ret = PTR_ERR(adc_priv->regmap);
 		return ret;
 	}
 
-	adc_priv->adc_clk = devm_clk_get(&pdev->dev, "tsc_clk");
+	adc_priv->adc_clk = devm_clk_get(dev, "tsc_clk");
 	if (IS_ERR(adc_priv->adc_clk)) {
-		dev_err(&pdev->dev,
+		dev_err(dev,
 			"failed getting clock tsc_clk\n");
 		ret = PTR_ERR(adc_priv->adc_clk);
 		return ret;
@@ -543,11 +544,11 @@ static int iproc_adc_probe(struct platform_device *pdev)
 	ret = regmap_clear_bits(adc_priv->regmap, IPROC_REGCTL2,
 				IPROC_ADC_AUXIN_SCAN_ENA);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to write IPROC_REGCTL2 %d\n", ret);
+		dev_err(dev, "failed to write IPROC_REGCTL2 %d\n", ret);
 		return ret;
 	}
 
-	ret = devm_request_threaded_irq(&pdev->dev, adc_priv->irqno,
+	ret = devm_request_threaded_irq(dev, adc_priv->irqno,
 				iproc_adc_interrupt_handler,
 				iproc_adc_interrupt_thread,
 				IRQF_SHARED, "iproc-adc", indio_dev);
@@ -556,14 +557,14 @@ static int iproc_adc_probe(struct platform_device *pdev)
 
 	ret = clk_prepare_enable(adc_priv->adc_clk);
 	if (ret) {
-		dev_err(&pdev->dev,
+		dev_err(dev,
 			"clk_prepare_enable failed %d\n", ret);
 		return ret;
 	}
 
 	ret = iproc_adc_enable(indio_dev);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to enable adc %d\n", ret);
+		dev_err(dev, "failed to enable adc %d\n", ret);
 		goto err_adc_enable;
 	}
 
@@ -575,7 +576,7 @@ static int iproc_adc_probe(struct platform_device *pdev)
 
 	ret = iio_device_register(indio_dev);
 	if (ret) {
-		dev_err(&pdev->dev, "iio_device_register failed:err %d\n", ret);
+		dev_err(dev, "iio_device_register failed:err %d\n", ret);
 		goto err_clk;
 	}
 
