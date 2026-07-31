@@ -2950,14 +2950,14 @@ static int poison_by_decoder(struct device *dev, void *arg)
 	struct cxl_dev_state *cxlds;
 	struct cxl_memdev *cxlmd;
 	u64 offset, length;
-	int rc = 0;
+	int rc;
 
 	if (!is_endpoint_decoder(dev))
-		return rc;
+		return 0;
 
 	cxled = to_cxl_endpoint_decoder(dev);
 	if (!cxled->dpa_res)
-		return rc;
+		return 0;
 
 	cxlmd = cxled_to_memdev(cxled);
 	cxlds = cxlmd->cxlds;
@@ -2967,18 +2967,14 @@ static int poison_by_decoder(struct device *dev, void *arg)
 		offset = cxled->dpa_res->start - cxled->skip;
 		length = cxled->skip;
 		rc = cxl_mem_get_poison(cxlmd, offset, length, NULL);
-		if (rc == -EFAULT && mode == CXL_PARTMODE_RAM)
-			rc = 0;
-		if (rc)
+		if (rc && (rc != -EFAULT || mode != CXL_PARTMODE_RAM))
 			return rc;
 	}
 
 	offset = cxled->dpa_res->start;
 	length = cxled->dpa_res->end - offset + 1;
 	rc = cxl_mem_get_poison(cxlmd, offset, length, cxled->cxld.region);
-	if (rc == -EFAULT && mode == CXL_PARTMODE_RAM)
-		rc = 0;
-	if (rc)
+	if (rc && (rc != -EFAULT || mode != CXL_PARTMODE_RAM))
 		return rc;
 
 	/* Iterate until commit_end is reached */
