@@ -1782,18 +1782,25 @@ static bool pwq_tryinc_nr_active(struct pool_workqueue *pwq, bool fill)
 {
 	struct workqueue_struct *wq = pwq->wq;
 	struct worker_pool *pool = pwq->pool;
-	struct wq_node_nr_active *nna = wq_node_nr_active(wq, pool->node);
+	struct wq_node_nr_active *nna;
 	bool obtained = false;
 
 	lockdep_assert_held(&pool->lock);
 
-	if (!nna) {
-		/* BH or per-cpu workqueue, pwq->nr_active is sufficient */
+	/*
+	 * A concurrency-managed per-cpu pool accounts nr_active per pwq, so
+	 * pwq->nr_active against wq->max_active is sufficient.
+	 */
+	if (is_pool_cpu_specific(pool)) {
 		obtained = pwq->nr_active < READ_ONCE(wq->max_active);
 		goto out;
 	}
 
 	if (unlikely(pwq->plugged))
+		return false;
+
+	nna = wq_node_nr_active(wq, pool->node);
+	if (WARN_ON_ONCE(!nna))
 		return false;
 
 	/*
@@ -2013,7 +2020,7 @@ out_unlock:
 static void pwq_dec_nr_active(struct pool_workqueue *pwq)
 {
 	struct worker_pool *pool = pwq->pool;
-	struct wq_node_nr_active *nna = wq_node_nr_active(pwq->wq, pool->node);
+	struct wq_node_nr_active *nna;
 
 	lockdep_assert_held(&pool->lock);
 
@@ -2024,13 +2031,17 @@ static void pwq_dec_nr_active(struct pool_workqueue *pwq)
 	pwq->nr_active--;
 
 	/*
-	 * For a percpu workqueue, it's simple. Just need to kick the first
+	 * A concurrency-managed per-cpu pool only needs to kick the first
 	 * inactive work item on @pwq itself.
 	 */
-	if (!nna) {
+	if (is_pool_cpu_specific(pool)) {
 		pwq_activate_first_inactive(pwq, false);
 		return;
 	}
+
+	nna = wq_node_nr_active(pwq->wq, pool->node);
+	if (WARN_ON_ONCE(!nna))
+		return;
 
 	/*
 	 * If @pwq is for an unbound workqueue, it's more complicated because
