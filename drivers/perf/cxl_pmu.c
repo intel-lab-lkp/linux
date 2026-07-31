@@ -875,7 +875,7 @@ static int cxl_pmu_probe(struct device *dev)
 		.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
-	if (info->msi_vec <= 0)
+	if (info->msi_vec < 0)
 		return -EINVAL;
 
 	rc = pci_irq_vector(pdev, info->msi_vec);
