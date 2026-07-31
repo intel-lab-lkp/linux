@@ -207,6 +207,7 @@ struct ep_data {
 	struct usb_endpoint_descriptor	desc, hs_desc;
 	struct list_head		epfiles;
 	wait_queue_head_t		wait;
+	struct inode                    *inode;
 };
 
 static inline void get_ep (struct ep_data *data)
@@ -235,6 +236,7 @@ static void put_ep (struct ep_data *data)
 
 static const char *CHIP;
 static DEFINE_MUTEX(sb_mutex);		/* Serialize superblock operations */
+static struct dev_data *the_device;
 
 /*----------------------------------------------------------------------*/
 
@@ -826,25 +828,39 @@ fail0:
 static int
 ep_open (struct inode *inode, struct file *fd)
 {
-	struct ep_data		*data = inode->i_private;
-	int			value = -EBUSY;
+	struct dev_data *dev = the_device;
+	struct ep_data *data;
+	int value = -ENODEV;
 
-	if (mutex_lock_interruptible(&data->lock) != 0)
+	spin_lock_irq(&dev->lock);
+	data = inode->i_private;
+	if (data == NULL) {
+		spin_unlock_irq(&dev->lock);
+		return -ENOENT;
+	}
+	get_ep(data);
+	spin_unlock_irq(&dev->lock);
+
+	if (mutex_lock_interruptible(&data->lock) != 0) {
+		put_ep(data);
 		return -EINTR;
-	spin_lock_irq (&data->dev->lock);
-	if (data->dev->state == STATE_DEV_UNBOUND)
+	}
+
+	value = -EBUSY;
+	spin_lock_irq(&dev->lock);
+	if (dev->state == STATE_DEV_UNBOUND)
 		value = -ENOENT;
 	else if (data->state == STATE_EP_DISABLED) {
 		value = 0;
 		data->state = STATE_EP_READY;
-		get_ep (data);
 		fd->private_data = data;
-		VDEBUG (data->dev, "%s ready\n", data->name);
+		VDEBUG(dev, "%s ready\n", data->name);
 	} else
-		DBG (data->dev, "%s state %d\n",
-			data->name, data->state);
-	spin_unlock_irq (&data->dev->lock);
+		DBG(dev, "%s state %d\n", data->name, data->state);
+	spin_unlock_irq(&dev->lock);
 	mutex_unlock(&data->lock);
+	if (value)
+		put_ep(data);
 	return value;
 }
 
@@ -1572,6 +1588,7 @@ static void destroy_ep_files (struct dev_data *dev)
 		/* break link to FS */
 		ep = list_first_entry (&dev->epfiles, struct ep_data, epfiles);
 		list_del_init (&ep->epfiles);
+		ep->inode->i_private = NULL;
 		spin_unlock_irq (&dev->lock);
 
 		/* break link to controller */
@@ -1597,7 +1614,8 @@ static void destroy_ep_files (struct dev_data *dev)
 
 
 static int gadgetfs_create_file (struct super_block *sb, char const *name,
-		void *data, const struct file_operations *fops);
+		void *data, const struct file_operations *fops,
+		struct inode **inode_out);
 
 static int activate_ep_files (struct dev_data *dev)
 {
@@ -1627,7 +1645,7 @@ static int activate_ep_files (struct dev_data *dev)
 			goto enomem1;
 
 		err = gadgetfs_create_file (dev->sb, data->name,
-				data, &ep_io_operations);
+				data, &ep_io_operations, &data->inode);
 		if (err)
 			goto enomem2;
 		list_add_tail (&data->epfiles, &dev->epfiles);
@@ -1671,8 +1689,6 @@ gadgetfs_unbind (struct usb_gadget *gadget)
 	DBG (dev, "%s done\n", __func__);
 	put_dev (dev);
 }
-
-static struct dev_data		*the_device;
 
 static int gadgetfs_bind(struct usb_gadget *gadget,
 		struct usb_gadget_driver *driver)
@@ -1993,7 +2009,7 @@ gadgetfs_make_inode (struct super_block *sb,
  * so inode and dentry are paired, until device reconfig.
  */
 static int gadgetfs_create_file (struct super_block *sb, char const *name,
-		void *data, const struct file_operations *fops)
+		void *data, const struct file_operations *fops, struct inode **inode_out)
 {
 	struct dentry	*dentry;
 	struct inode	*inode;
@@ -2002,6 +2018,9 @@ static int gadgetfs_create_file (struct super_block *sb, char const *name,
 			S_IFREG | (default_perm & S_IRWXUGO));
 	if (!inode)
 		return -ENOMEM;
+
+	if (inode_out)
+		*inode_out = inode;
 
 	dentry = simple_start_creating(sb->s_root, name);
 	if (IS_ERR(dentry)) {
@@ -2065,7 +2084,7 @@ gadgetfs_fill_super (struct super_block *sb, struct fs_context *fc)
 		goto Enomem;
 
 	dev->sb = sb;
-	rc = gadgetfs_create_file(sb, CHIP, dev, &ep0_operations);
+	rc = gadgetfs_create_file(sb, CHIP, dev, &ep0_operations, NULL);
 	if (rc) {
 		put_dev(dev);
 		goto Enomem;
