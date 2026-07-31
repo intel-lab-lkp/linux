@@ -663,6 +663,8 @@ struct nvme_ctrl_ops {
 	void (*print_device_info)(struct nvme_ctrl *ctrl);
 	bool (*supports_pci_p2pdma)(struct nvme_ctrl *ctrl);
 	unsigned long (*get_virt_boundary)(struct nvme_ctrl *ctrl, bool is_admin);
+	int (*print_io_queue_info)(struct seq_file *m, struct nvme_ctrl *ctrl,
+			int qid);
 };
 
 /*

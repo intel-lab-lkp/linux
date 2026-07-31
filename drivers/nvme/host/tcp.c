@@ -2651,6 +2651,59 @@ free_ctrl:
 	kfree(ctrl);
 }
 
+static int nvme_tcp_print_io_queue_info(struct seq_file *m,
+		struct nvme_ctrl *ctrl, int qid)
+{
+	int cpu;
+	struct sockaddr_storage src, dst;
+	struct nvme_tcp_ctrl *tctrl = to_tcp_ctrl(ctrl);
+	struct nvme_tcp_queue *queue = &tctrl->queues[qid];
+	int ret = -EINVAL;
+
+	if (!qid || qid >= ctrl->queue_count)
+		return -EINVAL;
+
+	if (!test_bit(NVME_TCP_Q_LIVE, &queue->flags))
+		return 0;
+
+	mutex_lock(&queue->queue_lock);
+	if (!queue->sock)
+		goto unlock;
+
+	ret = kernel_getsockname(queue->sock, (struct sockaddr *)&src);
+	if (ret <= 0)
+		goto unlock;
+
+	ret = kernel_getpeername(queue->sock, (struct sockaddr *)&dst);
+	if (ret <= 0)
+		goto unlock;
+
+	cpu = (queue->io_cpu == WORK_CPU_UNBOUND) ? -1 : queue->io_cpu;
+
+	if (src.ss_family == AF_INET) {
+		struct sockaddr_in *sip = (struct sockaddr_in *)&src;
+		struct sockaddr_in *dip = (struct sockaddr_in *)&dst;
+
+		seq_printf(m, "qid=%d cpu=%d src_ip=%pI4 src_port=%u dst_ip=%pI4 dst_port=%u\n",
+				qid, cpu,
+				&sip->sin_addr.s_addr, ntohs(sip->sin_port),
+				&dip->sin_addr.s_addr, ntohs(dip->sin_port));
+		ret = 0;
+	} else if (src.ss_family == AF_INET6) {
+		struct sockaddr_in6 *sip6 = (struct sockaddr_in6 *)&src;
+		struct sockaddr_in6 *dip6 = (struct sockaddr_in6 *)&dst;
+
+		seq_printf(m, "qid=%d cpu=%d src_ip=%pI6c src_port=%u dst_ip=%pI6c dst_port=%u\n",
+				qid, cpu,
+				&sip6->sin6_addr, ntohs(sip6->sin6_port),
+				&dip6->sin6_addr, ntohs(dip6->sin6_port));
+		ret = 0;
+	}
+unlock:
+	mutex_unlock(&queue->queue_lock);
+	return ret;
+}
+
 static void nvme_tcp_set_sg_null(struct nvme_command *c)
 {
 	struct nvme_sgl_desc *sg = &c->common.dptr.sgl;
@@ -2951,6 +3004,7 @@ static const struct nvme_ctrl_ops nvme_tcp_ctrl_ops = {
 	.get_address		= nvme_tcp_get_address,
 	.stop_ctrl		= nvme_tcp_stop_ctrl,
 	.get_virt_boundary	= nvmf_get_virt_boundary,
+	.print_io_queue_info	= nvme_tcp_print_io_queue_info,
 };
 
 static bool
