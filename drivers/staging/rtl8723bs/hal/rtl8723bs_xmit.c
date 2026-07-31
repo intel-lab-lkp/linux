@@ -15,7 +15,7 @@ static u8 rtw_sdio_wait_enough_TxOQT_space(struct adapter *padapter, u8 agg_num)
 
 	while (pHalData->SdioTxOQTFreeSpace < agg_num) {
 		if (
-			(padapter->bSurpriseRemoved) ||
+			(padapter->surprise_removed) ||
 			(padapter->driver_stopped)
 		)
 			return false;
@@ -88,7 +88,7 @@ query_free_page:
 	}
 
 	if (
-		(padapter->bSurpriseRemoved) ||
+		(padapter->surprise_removed) ||
 		(padapter->driver_stopped)
 	)
 		goto free_xmitbuf;
@@ -130,7 +130,7 @@ s32 rtl8723bs_xmit_buf_handler(struct adapter *padapter)
 		return _FAIL;
 	}
 
-	ret = (padapter->driver_stopped) || (padapter->bSurpriseRemoved);
+	ret = (padapter->driver_stopped) || (padapter->surprise_removed);
 	if (ret)
 		return _FAIL;
 
@@ -363,7 +363,7 @@ static s32 rtl8723bs_xmit_handler(struct adapter *padapter)
 next:
 	if (
 		(padapter->driver_stopped) ||
-		(padapter->bSurpriseRemoved)
+		(padapter->surprise_removed)
 	)
 		return _FAIL;
 
