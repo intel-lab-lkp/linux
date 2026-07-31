@@ -983,10 +983,13 @@ static int vcc_install(struct tty_driver *driver, struct tty_struct *tty)
 static void vcc_cleanup(struct tty_struct *tty)
 {
 	struct vcc_port *port;
+	unsigned long flags;
 
 	port = vcc_get(tty->index, true);
 	if (port) {
+		spin_lock_irqsave(&port->lock, flags);
 		port->tty = NULL;
+		spin_unlock_irqrestore(&port->lock, flags);
 
 		if (port->removed) {
 			vcc_table_remove(tty->index);
