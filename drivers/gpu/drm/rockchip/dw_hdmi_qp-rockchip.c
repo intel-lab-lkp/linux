@@ -728,8 +728,12 @@ static int __maybe_unused dw_hdmi_qp_rockchip_suspend(struct device *dev)
 {
 	struct rockchip_hdmi_qp *hdmi = dev_get_drvdata(dev);
 
-	if (hdmi)
-		dw_hdmi_qp_suspend(dev, hdmi->hdmi);
+	if (!hdmi)
+		return 0;
+
+	dw_hdmi_qp_suspend(dev, hdmi->hdmi);
+
+	cancel_delayed_work_sync(&hdmi->hpd_work);
 
 	return 0;
 }
