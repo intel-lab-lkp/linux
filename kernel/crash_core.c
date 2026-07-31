@@ -23,6 +23,7 @@
 #include <linux/objtool.h>
 #include <linux/delay.h>
 #include <linux/panic.h>
+#include <linux/timekeeping.h>
 
 #include <asm/page.h>
 #include <asm/sections.h>
@@ -32,6 +33,22 @@
 
 /* Per cpu memory for storing cpu states in case of system crash. */
 note_buf_t __percpu *crash_notes;
+
+#ifdef CONFIG_CRASH_ZEROIZE
+ATOMIC_NOTIFIER_HEAD(crash_zeroize_notifier_list);
+EXPORT_SYMBOL_GPL(crash_zeroize_notifier_list);
+
+static void crash_zeroize(void)
+{
+	ktime_t zeroize_start = ktime_get();
+
+	pr_info("Wiping sensitive secrets...\n");
+	atomic_notifier_call_chain(&crash_zeroize_notifier_list, 0, NULL);
+	pr_info("Done in %lld us\n", ktime_us_delta(ktime_get(), zeroize_start));
+}
+#else
+static inline void crash_zeroize(void) { }
+#endif /* CONFIG_CRASH_ZEROIZE */
 
 /* time to wait for possible DMA to finish before starting the kdump kernel
  * when a CMA reservation is used
@@ -142,6 +159,7 @@ void __noclone __crash_kexec(struct pt_regs *regs)
 			crash_save_vmcoreinfo();
 			machine_crash_shutdown(&fixed_regs);
 			crash_cma_clear_pending_dma();
+			crash_zeroize();
 			machine_kexec(kexec_crash_image);
 		}
 		kexec_unlock();
