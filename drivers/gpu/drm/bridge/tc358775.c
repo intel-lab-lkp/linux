@@ -287,7 +287,7 @@ static inline struct tc_data *bridge_to_tc(struct drm_bridge *b)
 }
 
 static void tc_bridge_atomic_pre_enable(struct drm_bridge *bridge,
-					struct drm_atomic_state *state)
+					struct drm_atomic_commit *state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	struct device *dev = &tc->dsi->dev;
@@ -311,7 +311,7 @@ static void tc_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 }
 
 static void tc_bridge_atomic_post_disable(struct drm_bridge *bridge,
-					  struct drm_atomic_state *state)
+					  struct drm_atomic_commit *state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	struct device *dev = &tc->dsi->dev;
@@ -371,7 +371,7 @@ static void d2l_write(struct i2c_client *i2c, u16 addr, u32 val)
 }
 
 static void tc_bridge_atomic_enable(struct drm_bridge *bridge,
-				    struct drm_atomic_state *state)
+				    struct drm_atomic_commit *state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	u32 hback_porch, hsync_len, hfront_porch, hactive, htime1, htime2;
@@ -659,9 +659,10 @@ static int tc_probe(struct i2c_client *client)
 	struct tc_data *tc;
 	int ret;
 
-	tc = devm_kzalloc(dev, sizeof(*tc), GFP_KERNEL);
-	if (!tc)
-		return -ENOMEM;
+	tc = devm_drm_bridge_alloc(dev, struct tc_data, bridge,
+				   &tc_bridge_funcs);
+	if (IS_ERR(tc))
+		return PTR_ERR(tc);
 
 	tc->dev = dev;
 	tc->i2c = client;
@@ -701,7 +702,6 @@ static int tc_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	tc->bridge.funcs = &tc_bridge_funcs;
 	tc->bridge.of_node = dev->of_node;
 	tc->bridge.pre_enable_prev_first = true;
 	drm_bridge_add(&tc->bridge);

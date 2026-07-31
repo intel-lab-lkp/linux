@@ -720,12 +720,21 @@ static int apple_msi_init(struct apple_pcie *pcie)
 	return 0;
 }
 
+static struct apple_pcie *apple_pcie_lookup(struct device *dev)
+{
+	return pci_host_bridge_priv(dev_get_drvdata(dev));
+}
+
 static struct apple_pcie_port *apple_pcie_get_port(struct pci_dev *pdev)
 {
 	struct pci_config_window *cfg = pdev->sysdata;
-	struct apple_pcie *pcie = cfg->priv;
+	struct apple_pcie *pcie;
 	struct pci_dev *port_pdev;
 	struct apple_pcie_port *port;
+
+	pcie = apple_pcie_lookup(cfg->parent);
+	if (WARN_ON(!pcie))
+		return NULL;
 
 	/* Find the root port this device is on */
 	port_pdev = pcie_find_root_port(pdev);
@@ -746,6 +755,7 @@ static int apple_pcie_enable_device(struct pci_host_bridge *bridge, struct pci_d
 {
 	u32 sid, rid = pci_dev_id(pdev);
 	struct apple_pcie_port *port;
+	struct of_phandle_args iommu_spec = {};
 	int idx, err;
 
 	port = apple_pcie_get_port(pdev);
@@ -755,11 +765,12 @@ static int apple_pcie_enable_device(struct pci_host_bridge *bridge, struct pci_d
 	dev_dbg(&pdev->dev, "added to bus %s, index %d\n",
 		pci_name(pdev->bus->self), port->idx);
 
-	err = of_map_id(port->pcie->dev->of_node, rid, "iommu-map",
-			"iommu-map-mask", NULL, &sid);
+	err = of_map_iommu_id(port->pcie->dev->of_node, rid, &iommu_spec);
 	if (err)
 		return err;
 
+	of_node_put(iommu_spec.np);
+	sid = iommu_spec.args[0];
 	mutex_lock(&port->pcie->lock);
 
 	idx = bitmap_find_free_region(port->sid_map, port->sid_map_sz, 0);
@@ -806,9 +817,13 @@ static void apple_pcie_disable_device(struct pci_host_bridge *bridge, struct pci
 
 static int apple_pcie_init(struct pci_config_window *cfg)
 {
-	struct apple_pcie *pcie = cfg->priv;
 	struct device *dev = cfg->parent;
+	struct apple_pcie *pcie;
 	int ret;
+
+	pcie = apple_pcie_lookup(dev);
+	if (WARN_ON(!pcie))
+		return -ENOENT;
 
 	for_each_available_child_of_node_scoped(dev->of_node, of_port) {
 		ret = apple_pcie_setup_port(pcie, of_port);
@@ -835,13 +850,15 @@ static const struct pci_ecam_ops apple_pcie_cfg_ecam_ops = {
 static int apple_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct pci_host_bridge *bridge;
 	struct apple_pcie *pcie;
 	int ret;
 
-	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
-	if (!pcie)
+	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
+	if (!bridge)
 		return -ENOMEM;
 
+	pcie = pci_host_bridge_priv(bridge);
 	pcie->dev = dev;
 	pcie->hw = of_device_get_match_data(dev);
 	if (!pcie->hw)
@@ -852,13 +869,12 @@ static int apple_pcie_probe(struct platform_device *pdev)
 
 	mutex_init(&pcie->lock);
 	INIT_LIST_HEAD(&pcie->ports);
-	dev_set_drvdata(dev, pcie);
 
 	ret = apple_msi_init(pcie);
 	if (ret)
 		return ret;
 
-	return pci_host_common_init(pdev, &apple_pcie_cfg_ecam_ops);
+	return pci_host_common_init(pdev, bridge, &apple_pcie_cfg_ecam_ops);
 }
 
 static const struct of_device_id apple_pcie_of_match[] = {

@@ -6,17 +6,16 @@
  *  Author(s): Hendrik Brueckner <brueckner@linux.ibm.com>
  *	       Thomas Richter <tmricht@linux.ibm.com>
  */
-#define KMSG_COMPONENT	"cpum_cf"
-#define pr_fmt(fmt)	KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "cpum_cf: " fmt
 
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
 #include <linux/percpu.h>
 #include <linux/notifier.h>
 #include <linux/init.h>
-#include <linux/export.h>
 #include <linux/miscdevice.h>
 #include <linux/perf_event.h>
+#include <linux/nospec.h>
 
 #include <asm/cpu_mf.h>
 #include <asm/hwctrset.h>
@@ -254,7 +253,7 @@ static int cpum_cf_alloc_cpu(int cpu)
 	cpuhw = p->cpucf;
 
 	if (!cpuhw) {
-		cpuhw = kzalloc(sizeof(*cpuhw), GFP_KERNEL);
+		cpuhw = kzalloc_obj(*cpuhw);
 		if (cpuhw) {
 			p->cpucf = cpuhw;
 			refcount_set(&cpuhw->refcnt, 1);
@@ -761,8 +760,6 @@ static int __hw_perf_event_init(struct perf_event *event, unsigned int type)
 		break;
 
 	case PERF_TYPE_HARDWARE:
-		if (is_sampling_event(event))	/* No sampling support */
-			return -ENOENT;
 		ev = attr->config;
 		if (!attr->exclude_user && attr->exclude_kernel) {
 			/*
@@ -772,6 +769,7 @@ static int __hw_perf_event_init(struct perf_event *event, unsigned int type)
 			if (!is_userspace_event(ev)) {
 				if (ev >= ARRAY_SIZE(cpumf_generic_events_user))
 					return -EOPNOTSUPP;
+				ev = array_index_nospec(ev, ARRAY_SIZE(cpumf_generic_events_user));
 				ev = cpumf_generic_events_user[ev];
 			}
 		} else if (!attr->exclude_kernel && attr->exclude_user) {
@@ -782,6 +780,7 @@ static int __hw_perf_event_init(struct perf_event *event, unsigned int type)
 			if (!is_userspace_event(ev)) {
 				if (ev >= ARRAY_SIZE(cpumf_generic_events_basic))
 					return -EOPNOTSUPP;
+				ev = array_index_nospec(ev, ARRAY_SIZE(cpumf_generic_events_basic));
 				ev = cpumf_generic_events_basic[ev];
 			}
 		}
@@ -860,6 +859,8 @@ static int cpumf_pmu_event_init(struct perf_event *event)
 	unsigned int type = event->attr.type;
 	int err = -ENOENT;
 
+	if (is_sampling_event(event))	/* No sampling support */
+		return err;
 	if (type == PERF_TYPE_HARDWARE || type == PERF_TYPE_RAW)
 		err = __hw_perf_event_init(event, type);
 	else if (event->pmu->type == type)
@@ -1207,7 +1208,7 @@ static int __init cpumf_pmu_init(void)
 	}
 
 	/* Setup s390dbf facility */
-	cf_dbg = debug_register(KMSG_COMPONENT, 2, 1, 128);
+	cf_dbg = debug_register("cpum_cf", 2, 1, 128);
 	if (!cf_dbg) {
 		pr_err("Registration of s390dbf(cpum_cf) failed\n");
 		rc = -ENOMEM;
@@ -1618,7 +1619,7 @@ static long cfset_ioctl_start(unsigned long arg, struct file *file)
 	if (!start.counter_sets)
 		return -EINVAL;		/* No counter set at all? */
 
-	preq = kzalloc(sizeof(*preq), GFP_KERNEL);
+	preq = kzalloc_obj(*preq);
 	if (!preq)
 		return -ENOMEM;
 	cpumask_clear(&preq->mask);
@@ -1690,7 +1691,6 @@ static const struct file_operations cfset_fops = {
 	.open = cfset_open,
 	.release = cfset_release,
 	.unlocked_ioctl	= cfset_ioctl,
-	.compat_ioctl = cfset_ioctl,
 };
 
 static struct miscdevice cfset_dev = {

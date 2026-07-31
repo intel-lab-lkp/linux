@@ -289,7 +289,7 @@ struct sctp_association *sctp_association_new(const struct sctp_endpoint *ep,
 {
 	struct sctp_association *asoc;
 
-	asoc = kzalloc(sizeof(*asoc), gfp);
+	asoc = kzalloc_obj(*asoc, gfp);
 	if (!asoc)
 		goto fail;
 
@@ -613,6 +613,9 @@ struct sctp_transport *sctp_assoc_add_peer(struct sctp_association *asoc,
 		}
 		return peer;
 	}
+
+	if (asoc->peer.transport_count == U16_MAX)
+		return NULL;
 
 	peer = sctp_transport_new(asoc->base.net, addr, gfp);
 	if (!peer)

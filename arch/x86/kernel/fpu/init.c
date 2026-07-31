@@ -36,12 +36,7 @@ static void fpu__init_cpu_generic(void)
 	write_cr0(cr0);
 
 	/* Flush out any pending x87 state: */
-#ifdef CONFIG_MATH_EMULATION
-	if (!boot_cpu_has(X86_FEATURE_FPU))
-		;
-	else
-#endif
-		asm volatile ("fninit");
+	asm volatile ("fninit");
 }
 
 /*
@@ -86,13 +81,11 @@ static void __init fpu__init_system_early_generic(void)
 			setup_clear_cpu_cap(X86_FEATURE_FPU);
 	}
 
-#ifndef CONFIG_MATH_EMULATION
 	if (!test_cpu_cap(&boot_cpu_data, X86_FEATURE_FPU)) {
 		pr_emerg("x86/fpu: Giving up, no FPU found and no math emulation present\n");
 		for (;;)
 			asm volatile("hlt");
 	}
-#endif
 }
 
 /*
@@ -205,6 +198,7 @@ static void __init fpu__init_system_xstate_size_legacy(void)
 	fpu_kernel_cfg.default_size = size;
 	fpu_user_cfg.max_size = size;
 	fpu_user_cfg.default_size = size;
+	guest_default_cfg.size = size;
 }
 
 /*

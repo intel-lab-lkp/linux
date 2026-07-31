@@ -238,7 +238,7 @@ static ssize_t manage_show(struct kobject *kobj,
 	struct manage_flash_t *const args_buf = &manage_flash_data;
 	int rc;
 
-	rc = sprintf(buf, "%d\n", args_buf->status);
+	rc = sysfs_emit(buf, "%d\n", args_buf->status);
 	/* Set status to default*/
 	args_buf->status = FLASH_NO_OP;
 	return rc;
@@ -321,7 +321,7 @@ static ssize_t update_show(struct kobject *kobj,
 			   struct kobj_attribute *attr, char *buf)
 {
 	struct update_flash_t *const args_buf = &update_flash_data;
-	return sprintf(buf, "%d\n", args_buf->status);
+	return sysfs_emit(buf, "%d\n", args_buf->status);
 }
 
 /*
@@ -493,7 +493,7 @@ out:
 static const struct bin_attribute image_data_attr = {
 	.attr = {.name = "image", .mode = 0200},
 	.size = MAX_IMAGE_SIZE,	/* Limit image size */
-	.write_new = image_data_write,
+	.write = image_data_write,
 };
 
 static struct kobj_attribute validate_attribute =

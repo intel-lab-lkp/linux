@@ -5854,8 +5854,8 @@ static int nv_probe(struct pci_dev *pci_dev, const struct pci_device_id *id)
 			goto out_unmap;
 		np->tx_ring.ex = &np->rx_ring.ex[np->rx_ring_size];
 	}
-	np->rx_skb = kcalloc(np->rx_ring_size, sizeof(struct nv_skb_map), GFP_KERNEL);
-	np->tx_skb = kcalloc(np->tx_ring_size, sizeof(struct nv_skb_map), GFP_KERNEL);
+	np->rx_skb = kzalloc_objs(struct nv_skb_map, np->rx_ring_size);
+	np->tx_skb = kzalloc_objs(struct nv_skb_map, np->tx_ring_size);
 	if (!np->rx_skb || !np->tx_skb)
 		goto out_freering;
 
@@ -6187,9 +6187,9 @@ static void nv_remove(struct pci_dev *pci_dev)
 	struct net_device *dev = pci_get_drvdata(pci_dev);
 	struct fe_priv *np = netdev_priv(dev);
 
-	free_percpu(np->txrx_stats);
-
 	unregister_netdev(dev);
+
+	free_percpu(np->txrx_stats);
 
 	nv_restore_mac_addr(pci_dev);
 

@@ -150,7 +150,7 @@ static int init_tasklet_work(struct otx2_cptlfs_info *lfs)
 	int i, ret = 0;
 
 	for (i = 0; i < lfs->lfs_num; i++) {
-		wqe = kzalloc(sizeof(struct otx2_cptlf_wqe), GFP_KERNEL);
+		wqe = kzalloc_obj(struct otx2_cptlf_wqe);
 		if (!wqe) {
 			ret = -ENOMEM;
 			goto cleanup_tasklet;
@@ -265,17 +265,33 @@ static int cptvf_lf_init(struct otx2_cptvf_dev *cptvf)
 	u8 eng_grp_msk;
 
 	/* Get engine group number for symmetric crypto */
-	cptvf->lfs.kcrypto_eng_grp_num = OTX2_CPT_INVALID_CRYPTO_ENG_GRP;
+	cptvf->lfs.kcrypto_se_eng_grp_num = OTX2_CPT_INVALID_CRYPTO_ENG_GRP;
 	ret = otx2_cptvf_send_eng_grp_num_msg(cptvf, OTX2_CPT_SE_TYPES);
 	if (ret)
 		return ret;
 
-	if (cptvf->lfs.kcrypto_eng_grp_num == OTX2_CPT_INVALID_CRYPTO_ENG_GRP) {
-		dev_err(dev, "Engine group for kernel crypto not available\n");
-		ret = -ENOENT;
-		return ret;
+	if (cptvf->lfs.kcrypto_se_eng_grp_num ==
+		OTX2_CPT_INVALID_CRYPTO_ENG_GRP) {
+		dev_err(dev,
+			"Symmetric Engine group for crypto not available\n");
+		return -ENOENT;
 	}
-	eng_grp_msk = 1 << cptvf->lfs.kcrypto_eng_grp_num;
+
+	/* Get engine group number for asymmetric crypto */
+	cptvf->lfs.kcrypto_ae_eng_grp_num = OTX2_CPT_INVALID_CRYPTO_ENG_GRP;
+	ret = otx2_cptvf_send_eng_grp_num_msg(cptvf, OTX2_CPT_AE_TYPES);
+	if (ret)
+		return ret;
+
+	if (cptvf->lfs.kcrypto_ae_eng_grp_num ==
+		OTX2_CPT_INVALID_CRYPTO_ENG_GRP) {
+		dev_err(dev,
+			"Asymmetric Engine group for crypto not available\n");
+		return -ENOENT;
+	}
+
+	eng_grp_msk = BIT(cptvf->lfs.kcrypto_se_eng_grp_num) |
+		      BIT(cptvf->lfs.kcrypto_ae_eng_grp_num);
 
 	ret = otx2_cptvf_send_kvf_limits_msg(cptvf);
 	if (ret)
@@ -444,10 +460,11 @@ static void otx2_cptvf_remove(struct pci_dev *pdev)
 
 /* Supported devices */
 static const struct pci_device_id otx2_cptvf_id_table[] = {
-	{PCI_VDEVICE(CAVIUM, OTX2_CPT_PCI_VF_DEVICE_ID), 0},
-	{PCI_VDEVICE(CAVIUM, CN10K_CPT_PCI_VF_DEVICE_ID), 0},
-	{ 0, }  /* end of table */
+	{ PCI_VDEVICE(CAVIUM, OTX2_CPT_PCI_VF_DEVICE_ID) },
+	{ PCI_VDEVICE(CAVIUM, CN10K_CPT_PCI_VF_DEVICE_ID) },
+	{ }  /* end of table */
 };
+MODULE_DEVICE_TABLE(pci, otx2_cptvf_id_table);
 
 static struct pci_driver otx2_cptvf_pci_driver = {
 	.name = OTX2_CPTVF_DRV_NAME,
@@ -463,4 +480,3 @@ MODULE_IMPORT_NS("CRYPTO_DEV_OCTEONTX2_CPT");
 MODULE_AUTHOR("Marvell");
 MODULE_DESCRIPTION("Marvell RVU CPT Virtual Function Driver");
 MODULE_LICENSE("GPL v2");
-MODULE_DEVICE_TABLE(pci, otx2_cptvf_id_table);
