@@ -298,6 +298,9 @@ void x25_link_device_up(struct net_device *dev)
  */
 static void __x25_remove_neigh(struct x25_neigh *nb)
 {
+	timer_shutdown_sync(&nb->t20timer);
+	skb_queue_purge(&nb->queue);
+
 	if (nb->node.next) {
 		list_del(&nb->node);
 		x25_neigh_put(nb);
