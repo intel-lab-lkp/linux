@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Hyper-V IOMMU support
+
+config HYPERV_IOMMU
+	bool "Hyper-V IOMMU Device"
+	depends on HYPERV && X86
+	select IOMMU_API
+	default HYPERV
+	help
+	  This enables Hyper-V pseudo IOMMU device. When running as privileged
+          VM aka root on Microsoft Hyper-V hypervisor, this must be enabled
+          for doing any PCI passthru of devices to guest VMs. This applies to
+          both PFs and VFs. When enabling this, it is best to disable amd/intel
+          iommus via: intel_iommu=off amd_iommu=off as the hypervisor really
+          owns the iommu.
