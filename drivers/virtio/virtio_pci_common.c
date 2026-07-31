@@ -849,7 +849,15 @@ static pci_ers_result_t virtio_pci_error_detected(struct pci_dev *pci_dev,
 	case pci_channel_io_perm_failure:
 		dev_warn(&pci_dev->dev,
 			 "permanent failure, disconnecting device\n");
-		virtio_break_device(&vp_dev->vdev);
+		{
+			struct virtio_driver *drv =
+				drv_to_virtio(vp_dev->vdev.dev.driver);
+
+			if (drv && drv->shutdown)
+				drv->shutdown(&vp_dev->vdev);
+			else
+				virtio_break_device(&vp_dev->vdev);
+		}
 		return PCI_ERS_RESULT_DISCONNECT;
 	default:
 		break;

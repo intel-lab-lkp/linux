@@ -435,6 +435,12 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 	blk_status_t status;
 	int err;
 
+	/* VQs may be gone after frozen reset_prepare; avoid NULL deref. */
+	if (unlikely(!vblk->vqs || !vblk->vdev)) {
+		blk_mq_start_request(req);
+		return BLK_STS_IOERR;
+	}
+
 	status = virtblk_prep_rq(hctx, vblk, req, vbr);
 	if (unlikely(status))
 		return status;
@@ -1561,6 +1567,30 @@ out:
 	return err;
 }
 
+
+/* Stop I/O and mark the gendisk dead (ERS perm_failure or system shutdown). */
+static void virtblk_shutdown(struct virtio_device *vdev)
+{
+	struct virtio_blk *vblk = vdev->priv;
+	struct request_queue *q;
+	unsigned int memflags;
+
+	if (!vblk || !vblk->disk)
+		return;
+
+	virtio_break_device(vdev);
+	flush_work(&vblk->config_work);
+
+	q = vblk->disk->queue;
+	memflags = blk_mq_freeze_queue(q);
+	blk_mq_quiesce_queue_nowait(q);
+
+	blk_mark_disk_dead(vblk->disk);
+
+	blk_mq_unquiesce_queue(q);
+	blk_mq_unfreeze_queue(q, memflags);
+}
+
 static void virtblk_remove(struct virtio_device *vdev)
 {
 	struct virtio_blk *vblk = vdev->priv;
@@ -1684,6 +1714,7 @@ static struct virtio_driver virtio_blk = {
 	.probe				= virtblk_probe,
 	.remove				= virtblk_remove,
 	.config_changed			= virtblk_config_changed,
+	.shutdown			= virtblk_shutdown,
 #ifdef CONFIG_PM_SLEEP
 	.freeze				= virtblk_freeze,
 	.restore			= virtblk_restore,
