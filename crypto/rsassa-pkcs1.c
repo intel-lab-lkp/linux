@@ -223,11 +223,12 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 	struct rsassa_pkcs1_ctx *ctx = crypto_sig_ctx(tfm);
 	unsigned int child_reqsize = crypto_akcipher_reqsize(ctx->child);
 	struct akcipher_request *child_req __free(kfree_sensitive) = NULL;
+	u8 *buf __free(kfree_sensitive) = NULL;
 	struct crypto_wait cwait;
 	struct scatterlist sg;
 	unsigned int dst_len;
 	unsigned int pos;
-	u8 *out_buf;
+	u8 *buf_ptr;
 	int err;
 
 	/* RFC 8017 sec 8.2.2 step 1 - length checking */
@@ -237,16 +238,16 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 		return -EINVAL;
 
 	/* RFC 8017 sec 8.2.2 step 2 - RSA verification */
-	child_req = kmalloc(sizeof(*child_req) + child_reqsize + ctx->key_size,
-			    GFP_KERNEL);
-	if (!child_req)
+	child_req = kmalloc(sizeof(*child_req) + child_reqsize, GFP_KERNEL);
+	buf = kmalloc(ctx->key_size, GFP_KERNEL);
+	if (!child_req || !buf)
 		return -ENOMEM;
 
-	out_buf = (u8 *)(child_req + 1) + child_reqsize;
-	memcpy(out_buf, src, slen);
+	buf_ptr = buf;
+	memcpy(buf_ptr, src, slen);
 
 	crypto_init_wait(&cwait);
-	sg_init_one(&sg, out_buf, slen);
+	sg_init_one(&sg, buf_ptr, slen);
 	akcipher_request_set_tfm(child_req, ctx->child);
 	akcipher_request_set_crypt(child_req, &sg, &sg, slen, slen);
 	akcipher_request_set_callback(child_req, CRYPTO_TFM_REQ_MAY_SLEEP,
@@ -263,35 +264,35 @@ static int rsassa_pkcs1_verify(struct crypto_sig *tfm,
 		return -EINVAL;
 
 	if (dst_len == ctx->key_size) {
-		if (out_buf[0] != 0x00)
+		if (buf_ptr[0] != 0x00)
 			/* Encrypted value had no leading 0 byte */
 			return -EINVAL;
 
 		dst_len--;
-		out_buf++;
+		buf_ptr++;
 	}
 
-	if (out_buf[0] != 0x01)
+	if (buf_ptr[0] != 0x01)
 		return -EBADMSG;
 
 	for (pos = 1; pos < dst_len; pos++)
-		if (out_buf[pos] != 0xff)
+		if (buf_ptr[pos] != 0xff)
 			break;
 
-	if (pos < 9 || pos == dst_len || out_buf[pos] != 0x00)
+	if (pos < 9 || pos == dst_len || buf_ptr[pos] != 0x00)
 		return -EBADMSG;
 	pos++;
 
 	if (hash_prefix->size > dst_len - pos)
 		return -EBADMSG;
-	if (crypto_memneq(out_buf + pos, hash_prefix->data, hash_prefix->size))
+	if (crypto_memneq(buf_ptr + pos, hash_prefix->data, hash_prefix->size))
 		return -EBADMSG;
 	pos += hash_prefix->size;
 
-	/* RFC 8017 sec 8.2.2 step 4 - comparison of digest with out_buf */
+	/* RFC 8017 sec 8.2.2 step 4 - comparison of digest with buf */
 	if (dlen != dst_len - pos)
 		return -EKEYREJECTED;
-	if (memcmp(digest, out_buf + pos, dlen) != 0)
+	if (memcmp(digest, buf_ptr + pos, dlen) != 0)
 		return -EKEYREJECTED;
 
 	return 0;
