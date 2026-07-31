@@ -848,6 +848,9 @@ static bool __nbcon_context_update_unsafe(struct nbcon_context *ctxt, bool unsaf
 		if (!nbcon_context_can_proceed(ctxt, &cur))
 			return false;
 
+		/* Unsafe sections are not reentrant. */
+		WARN_ON_ONCE(unsafe && cur.unsafe);
+
 		new.atom = cur.atom;
 		new.unsafe = unsafe;
 	} while (!nbcon_state_try_cmpxchg(con, &cur, &new));
