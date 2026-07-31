@@ -806,7 +806,7 @@ static irqreturn_t cxl_pmu_irq(int irq, void *data)
 		struct perf_event *event = info->hw_events[i];
 
 		if (!event) {
-			dev_dbg(info->pmu.dev,
+			dev_dbg(info->pmu.parent,
 				"overflow but on non enabled counter %d\n", i);
 			continue;
 		}
@@ -902,6 +902,15 @@ static int cxl_pmu_probe(struct device *dev)
 	irq_name = devm_kasprintf(dev, GFP_KERNEL, "%s_overflow", dev_name);
 	if (!irq_name)
 		return -ENOMEM;
+
+	/*
+	 * Clear any overflow status left set by firmware or a previous kernel
+	 * before the handler goes live, so it cannot mistake a stale bit for an
+	 * overflow on a counter no event owns yet. The register is RW1C, and
+	 * bits above the implemented counters are RsvdZ, so only write those.
+	 */
+	writeq(GENMASK_ULL(info->num_counters - 1, 0),
+	       info->base + CXL_PMU_OVERFLOW_REG);
 
 	/*
 	 * The handler must run on info->on_cpu, so the interrupt cannot be
