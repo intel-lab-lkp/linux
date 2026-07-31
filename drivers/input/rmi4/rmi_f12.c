@@ -199,8 +199,19 @@ static int rmi_f12_read_sensor_tuning(struct f12_data *f12)
 			 "platform data y_mm (%d) != detected y_mm: (%d)\n",
 			 sensor->y_mm, y_mm);
 
-	sensor->x_mm = x_mm;
-	sensor->y_mm = y_mm;
+	if (x_mm)
+		sensor->x_mm = x_mm;
+	else
+		dev_warn(&fn->dev,
+			 "x_mm detection returned 0, keeping %d\n",
+			 sensor->x_mm);
+
+	if (y_mm)
+		sensor->y_mm = y_mm;
+	else
+		dev_warn(&fn->dev,
+			 "y_mm detection returned 0, keeping %d\n",
+			 sensor->y_mm);
 
 	rmi_dbg(RMI_DEBUG_FN, &fn->dev, "%s: x_mm: %d y_mm: %d\n", __func__,
 		sensor->x_mm, sensor->y_mm);
