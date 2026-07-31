@@ -1137,8 +1137,10 @@ static void ip6gre_tnl_link_config_route(struct ip6_tnl *t, int set_mtu,
 			return;
 
 		if (rt->dst.dev) {
-			unsigned short dst_len = rt->dst.dev->hard_header_len +
-						 t_hlen;
+			unsigned int dst_len;
+
+			dst_len = ip_tunnel_limit_headroom(rt->dst.dev->hard_header_len +
+							   t_hlen);
 
 			if (t->dev->header_ops)
 				dev->hard_header_len = dst_len;

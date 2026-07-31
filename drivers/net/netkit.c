@@ -25,6 +25,8 @@
 #define NETKIT_NUM_RX_QUEUES_REAL 1
 #define NETKIT_NUM_TX_QUEUES_REAL 1
 
+#define NETKIT_HEADROOM_MAX 512
+
 struct netkit {
 	__cacheline_group_begin(netkit_fastpath);
 	struct net_device __rcu *peer;
@@ -1244,7 +1246,8 @@ static const struct nla_policy netkit_policy[IFLA_NETKIT_MAX + 1] = {
 	[IFLA_NETKIT_MODE]		= NLA_POLICY_MAX(NLA_U32, NETKIT_L3),
 	[IFLA_NETKIT_POLICY]		= { .type = NLA_U32 },
 	[IFLA_NETKIT_PEER_POLICY]	= { .type = NLA_U32 },
-	[IFLA_NETKIT_HEADROOM]		= { .type = NLA_U16 },
+	[IFLA_NETKIT_HEADROOM]		= NLA_POLICY_MAX(NLA_U16,
+							 NETKIT_HEADROOM_MAX),
 	[IFLA_NETKIT_TAILROOM]		= { .type = NLA_U16 },
 	[IFLA_NETKIT_SCRUB]		= NLA_POLICY_MAX(NLA_U32, NETKIT_SCRUB_DEFAULT),
 	[IFLA_NETKIT_PEER_SCRUB]	= NLA_POLICY_MAX(NLA_U32, NETKIT_SCRUB_DEFAULT),
