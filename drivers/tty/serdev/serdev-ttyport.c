@@ -85,13 +85,21 @@ static const struct tty_port_client_operations client_ops = {
 static ssize_t ttyport_write_buf(struct serdev_controller *ctrl, const u8 *data, size_t len)
 {
 	struct serport *serport = serdev_controller_get_drvdata(ctrl);
-	struct tty_struct *tty = serport->tty;
+	struct tty_struct *tty;
+	ssize_t ret;
 
 	if (!test_bit(SERPORT_ACTIVE, &serport->flags))
 		return 0;
 
+	tty = tty_port_tty_get(serport->port);
+	if (!tty)
+		return 0;
+
 	set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
-	return tty->ops->write(serport->tty, data, len);
+	ret = tty->ops->write(tty, data, len);
+	tty_kref_put(tty);
+
+	return ret;
 }
 
 static void ttyport_write_flush(struct serdev_controller *ctrl)
