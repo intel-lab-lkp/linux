@@ -4983,9 +4983,62 @@ retry:
 	return scanned;
 }
 
+static inline bool swappiness_is_balanced(int swappiness)
+{
+	int range = MAX_SWAPPINESS - MIN_SWAPPINESS;
+	int middle = MIN_SWAPPINESS + range / 2;
+
+	return swappiness >= middle - range / 5 &&
+	       swappiness <= middle + range / 5;
+}
+
+static bool lru_gen_imbalanced(struct lruvec *lruvec, int type,
+		unsigned long max_seq, unsigned long min_seq,
+		struct scan_control *sc, int swappiness)
+{
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	unsigned long young = 0, old = 0, seq;
+	unsigned long old_ratio, gb;
+
+	/* Skip swappiness bias for single-type reclaim or balanced swappiness */
+	if (is_single_type_reclaim(swappiness) || swappiness_is_balanced(swappiness))
+		return false;
+
+	/* More than two generations remain to reclaim */
+	if (min_seq + MIN_NR_GENS < max_seq)
+		return false;
+
+	/*
+	 * Run aging if the only remaining reclaimable generation
+	 * has few folios.
+	 */
+	for (seq = min_seq; seq <= max_seq; seq++) {
+		int gen = lru_gen_from_seq(seq);
+		unsigned long size = 0;
+		int zone;
+
+		for (zone = 0; zone < MAX_NR_ZONES; zone++)
+			size += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+
+		if (seq + MIN_NR_GENS > max_seq)
+			young += size;
+		else
+			old += size;
+	}
+	/*
+	 * Copied from inactive_is_low(), but uses a higher old_ratio to
+	 * make aging less aggressive.
+	 */
+	gb = (young + old) >> (30 - PAGE_SHIFT);
+	old_ratio = gb ? int_sqrt(10 * gb) : 1;
+	old_ratio *= MAX_NR_GENS;
+	return young > old * old_ratio;
+}
+
 static bool should_run_aging(struct lruvec *lruvec, unsigned long max_seq,
 			     struct scan_control *sc, int swappiness)
 {
+	int type = get_type_to_scan(lruvec, swappiness);
 	DEFINE_MIN_SEQ(lruvec);
 
 	/* have to run aging, since eviction is not possible anymore */
@@ -4997,7 +5050,11 @@ static bool should_run_aging(struct lruvec *lruvec, unsigned long max_seq,
 		return false;
 
 	/* better to run aging even though eviction is still possible */
-	return evictable_min_seq(min_seq, swappiness) + MIN_NR_GENS == max_seq;
+	if (evictable_min_seq(min_seq, swappiness) + MIN_NR_GENS == max_seq)
+		return true;
+
+	/* Run aging if the preferred type is severely imbalanced across gens */
+	return lru_gen_imbalanced(lruvec, type, max_seq, min_seq[type], sc, swappiness);
 }
 
 static long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
