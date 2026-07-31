@@ -1184,6 +1184,7 @@ static bool iavf_cleanup_headers(struct iavf_ring *rx_ring, struct sk_buff *skb)
 
 /**
  * iavf_add_rx_frag - Add contents of Rx buffer to sk_buff
+ * @pp: page pool the buffer was allocated from
  * @skb: sk_buff to place the data into
  * @rx_buffer: buffer containing page to add
  * @size: packet length from rx_desc
@@ -1193,11 +1194,11 @@ static bool iavf_cleanup_headers(struct iavf_ring *rx_ring, struct sk_buff *skb)
  *
  * The function will then update the page offset.
  **/
-static void iavf_add_rx_frag(struct sk_buff *skb,
+static void iavf_add_rx_frag(const struct page_pool *pp, struct sk_buff *skb,
 			     const struct libeth_fqe *rx_buffer,
 			     unsigned int size)
 {
-	u32 hr = netmem_get_pp(rx_buffer->netmem)->p.offset;
+	u32 hr = pp->p.offset;
 
 	skb_add_rx_frag_netmem(skb, skb_shinfo(skb)->nr_frags,
 			       rx_buffer->netmem, rx_buffer->offset + hr,
@@ -1206,17 +1207,19 @@ static void iavf_add_rx_frag(struct sk_buff *skb,
 
 /**
  * iavf_build_skb - Build skb around an existing buffer
+ * @pp: page pool the buffer was allocated from
  * @rx_buffer: Rx buffer to pull data from
  * @size: size of buffer to add to skb
  *
  * This function builds an skb around an existing Rx buffer, taking care
  * to set up the skb correctly and avoid any memcpy overhead.
  */
-static struct sk_buff *iavf_build_skb(const struct libeth_fqe *rx_buffer,
+static struct sk_buff *iavf_build_skb(const struct page_pool *pp,
+				      const struct libeth_fqe *rx_buffer,
 				      unsigned int size)
 {
 	struct page *buf_page = __netmem_to_page(rx_buffer->netmem);
-	u32 hr = pp_page_to_nmdesc(buf_page)->pp->p.offset;
+	u32 hr = pp->p.offset;
 	struct sk_buff *skb;
 	void *va;
 
@@ -1430,9 +1433,9 @@ static int iavf_clean_rx_irq(struct iavf_ring *rx_ring, int budget)
 
 		/* retrieve a buffer from the ring */
 		if (skb)
-			iavf_add_rx_frag(skb, rx_buffer, fields.len);
+			iavf_add_rx_frag(pp, skb, rx_buffer, fields.len);
 		else
-			skb = iavf_build_skb(rx_buffer, fields.len);
+			skb = iavf_build_skb(pp, rx_buffer, fields.len);
 
 		/* exit if we failed to retrieve a buffer */
 		if (!skb) {
