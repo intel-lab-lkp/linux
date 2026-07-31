@@ -543,17 +543,24 @@ static struct dx_root_info *dx_get_dx_info(struct inode *dir, void *de_buf)
 {
 	unsigned int blocksize = dir->i_sb->s_blocksize;
 	void *base = de_buf;
+	unsigned int rlen;
 
 	/* '.' and '..' never carry the casefold+fscrypt hash, so pass NULL
 	 * for dir regardless of the directory's flags */
-	if (ext4_rec_len_from_disk(((struct ext4_dir_entry_2 *)de_buf)->rec_len,
-				   blocksize) < EXT4_BASE_DIR_LEN)
+	rlen = ext4_rec_len_from_disk(((struct ext4_dir_entry_2 *)de_buf)->rec_len,
+				      blocksize);
+	if (rlen < EXT4_BASE_DIR_LEN || rlen > blocksize)
 		return ERR_PTR(-EFSCORRUPTED);
 	de_buf += ext4_dir_entry_len(de_buf, blocksize, NULL);
 
 	/* dx root info is after dotdot entry */
 	if (de_buf < base || (char *)de_buf - (char *)base +
 	    EXT4_BASE_DIR_LEN > blocksize)
+		return ERR_PTR(-EFSCORRUPTED);
+	rlen = ext4_rec_len_from_disk(((struct ext4_dir_entry_2 *)de_buf)->rec_len,
+				      blocksize);
+	if (rlen < EXT4_BASE_DIR_LEN ||
+	    (char *)de_buf - (char *)base + rlen > blocksize)
 		return ERR_PTR(-EFSCORRUPTED);
 	de_buf += ext4_dir_entry_len(de_buf, blocksize, NULL);
 
@@ -613,6 +620,9 @@ static inline unsigned dx_root_limit(struct inode *dir,
 
 	info = dx_get_dx_info(dir, dot_de);
 	if (IS_ERR(info))
+		return 0;
+	if ((char *)info - (char *)dot_de + info->info_length >
+	    dir->i_sb->s_blocksize)
 		return 0;
 	entry_space = dir->i_sb->s_blocksize - ((char *)info - (char *)dot_de) -
 		info->info_length;
@@ -1485,9 +1495,9 @@ unsigned char ext4_dirdata_get(struct ext4_dir_entry_2 *de, struct inode *dir,
  * directories requires an e2fsck migration pass before tune2fs sets the
  * EXT4_FEATURE_INCOMPAT_DIRDATA superblock flag.
  */
-static void ext4_dirdata_set(struct ext4_dir_entry_2 *de, struct inode *dir,
-			     struct ext4_dirent_fid *dfid,
-			     struct ext4_filename *fname)
+static int ext4_dirdata_set(struct ext4_dir_entry_2 *de, struct inode *dir,
+			    struct ext4_dirent_fid *dfid,
+			    struct ext4_filename *fname)
 {
 	struct dx_hash_info *hinfo = &fname->hinfo;
 	unsigned int data_offset = de->name_len + 1;
@@ -1508,7 +1518,7 @@ static void ext4_dirdata_set(struct ext4_dir_entry_2 *de, struct inode *dir,
 
 		if (EXT4_BASE_DIR_LEN + data_offset + dlen > rec_len) {
 			EXT4_ERROR_INODE(dir, "Can not insert FID");
-			return;
+			return -EIO;
 		}
 
 		memcpy((char *)de + EXT4_BASE_DIR_LEN + data_offset, dfid, dlen);
@@ -1523,7 +1533,7 @@ static void ext4_dirdata_set(struct ext4_dir_entry_2 *de, struct inode *dir,
 
 			if (EXT4_BASE_DIR_LEN + data_offset + sizeof(*dh) > rec_len) {
 				EXT4_ERROR_INODE(dir, "Can not insert dhash dirdata");
-				return;
+				return -EIO;
 			}
 
 			dh->dh_header.ddh_length = sizeof(*dh);
@@ -1531,11 +1541,18 @@ static void ext4_dirdata_set(struct ext4_dir_entry_2 *de, struct inode *dir,
 			dh->dh_hash.minor_hash = cpu_to_le32(hinfo->minor_hash);
 			de->file_type |= EXT4_DIRENT_CFHASH;
 		} else {
-			/* Compatibility: store hash inline after filename */
-			if (EXT4_BASE_DIR_LEN + data_offset +
-			    sizeof(struct ext4_dir_entry_hash) > rec_len) {
+			/* Compatibility: store hash inline after filename.
+			 * EXT4_DIRENT_HASHES places the hash at the
+			 * 4-byte-aligned offset (8 + name_len + 3) & ~3, which
+			 * may be less than EXT4_BASE_DIR_LEN + data_offset when
+			 * name_len is a multiple of 4 (gap byte counted twice).
+			 * Use the same aligned offset for the bounds check. */
+			unsigned int hash_off =
+				(EXT4_BASE_DIR_LEN + de->name_len + 3) & ~3;
+
+			if (hash_off + sizeof(struct ext4_dir_entry_hash) > rec_len) {
 				EXT4_ERROR_INODE(dir, "Can not insert dhash");
-				return;
+				return -EIO;
 			}
 
 			EXT4_DIRENT_HASHES(de)->hash = cpu_to_le32(hinfo->hash);
@@ -1543,6 +1560,7 @@ static void ext4_dirdata_set(struct ext4_dir_entry_2 *de, struct inode *dir,
 						cpu_to_le32(hinfo->minor_hash);
 		}
 	}
+	return 0;
 }
 
 /*
@@ -2372,9 +2390,9 @@ int ext4_find_dest_de(struct inode *dir, struct buffer_head *bh,
 	return 0;
 }
 
-void ext4_insert_dentry_data(struct inode *dir, struct inode *inode,
-			     struct ext4_dir_entry_2 *de, int buf_size,
-			     struct ext4_filename *fname, void *data)
+int ext4_insert_dentry_data(struct inode *dir, struct inode *inode,
+			    struct ext4_dir_entry_2 *de, int buf_size,
+			    struct ext4_filename *fname, void *data)
 {
 	int nlen, rlen;
 
@@ -2392,7 +2410,7 @@ void ext4_insert_dentry_data(struct inode *dir, struct inode *inode,
 	ext4_set_de_type(inode->i_sb, de, inode->i_mode);
 	de->name_len = fname_len(fname);
 	memcpy(de->name, fname_name(fname), fname_len(fname));
-	ext4_dirdata_set(de, dir, data, fname);
+	return ext4_dirdata_set(de, dir, data, fname);
 }
 
 /*
@@ -2444,7 +2462,11 @@ static int add_dirent_to_buf(handle_t *handle, struct ext4_filename *fname,
 	}
 
 	/* By now the buffer is marked for journaling */
-	ext4_insert_dentry_data(dir, inode, de, blocksize, fname, dfid);
+	err = ext4_insert_dentry_data(dir, inode, de, blocksize, fname, dfid);
+	if (err) {
+		ext4_std_error(dir->i_sb, err);
+		return err;
+	}
 
 	/*
 	 * XXX shouldn't update any times until successful
@@ -3258,14 +3280,15 @@ int ext4_init_dirblock(handle_t *handle, struct inode *inode,
 	struct ext4_dir_entry_2 *de = (struct ext4_dir_entry_2 *) bh->b_data;
 	size_t			blocksize = bh->b_size;
 	int			csum_size = 0, header_size;
+	unsigned int		dot_rec_len;
 
 	if (ext4_has_feature_metadata_csum(inode->i_sb))
 		csum_size = sizeof(struct ext4_dir_entry_tail);
 
 	de->inode = cpu_to_le32(inode->i_ino);
 	de->name_len = 1;
-	de->rec_len = ext4_rec_len_to_disk(ext4_dirent_rec_len(de->name_len, NULL),
-					   blocksize);
+	dot_rec_len = ext4_dirent_rec_len(de->name_len, NULL);
+	de->rec_len = ext4_rec_len_to_disk(dot_rec_len, blocksize);
 	memcpy(de->name, ".", 2);
 	ext4_set_de_type(inode->i_sb, de, S_IFDIR);
 
@@ -3285,7 +3308,7 @@ int ext4_init_dirblock(handle_t *handle, struct inode *inode,
 			blocksize - csum_size);
 	} else {
 		de->rec_len = ext4_rec_len_to_disk(blocksize -
-					(csum_size + ext4_dirent_rec_len(1, NULL)),
+					(csum_size + dot_rec_len),
 					blocksize);
 	}
 
@@ -3318,6 +3341,12 @@ int ext4_init_new_dir_data(handle_t *handle, struct inode *dir,
 	dir_block = ext4_append(handle, inode, &block);
 	if (IS_ERR(dir_block))
 		return PTR_ERR(dir_block);
+	/*
+	 * data1 and data2 are reserved for callers that need to embed
+	 * dirdata into the '.' and '..' entries of a new directory.
+	 * That path is not yet implemented here; a caller requiring it
+	 * must write the dirdata entries after this function returns.
+	 */
 	err = ext4_init_dirblock(handle, inode, dir_block, dir->i_ino, NULL, 0);
 out:
 	brelse(dir_block);
@@ -4464,14 +4493,13 @@ static int ext4_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 			 * ext4_fc_mark_ineligible() inside __ext4_add_entry(). */
 			unsigned fid_size = old_snap.fid->df_header.ddh_length;
 
-			edp = kmalloc(offsetof(struct ext4_dentry_param,
-					       edp_dfid) + fid_size, GFP_NOFS);
+			edp = kmalloc(sizeof(*edp) + fid_size, GFP_NOFS);
 			if (!edp) {
 				retval = -ENOMEM;
 				goto end_rename;
 			}
 			edp->edp_magic = EXT4_LUFID_MAGIC;
-			memcpy(&edp->edp_dfid, old_snap.fid, fid_size);
+			memcpy(edp->edp_dfid, old_snap.fid, fid_size);
 		}
 		new.dentry->d_fsdata = edp;
 		retval = ext4_add_entry(handle, new.dentry, old.inode);
@@ -4786,6 +4814,266 @@ static int ext4_rename2(struct mnt_idmap *idmap,
 	}
 
 	return ext4_rename(idmap, old_dir, old_dentry, new_dir, new_dentry, flags);
+}
+
+/*
+ * ext4_dirdata_set_lufid() - Set LUFID data on an existing directory entry
+ * @dir:        parent directory inode
+ * @filename:   name of the file in the directory
+ * @namelen:    length of filename
+ * @edp:        pointer to initialized dentry param with LUFID data
+ *
+ * This function finds an existing directory entry, deletes it, and re-creates it
+ * with LUFID data attached. Used by the EXT4_IOC_SET_LUFID ioctl.
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int ext4_dirdata_set_lufid(struct mnt_idmap *idmap, struct inode *dir,
+			    const char *filename, int namelen,
+			    struct ext4_dentry_param *edp)
+{
+	struct super_block *sb = dir->i_sb;
+	 /* zero-init: safe to free on any path */
+	struct ext4_filename fname = {};
+	struct ext4_dir_entry_2 *de = NULL;
+	struct buffer_head *bh = NULL;
+	struct inode *inode = NULL;
+	handle_t *handle = NULL;
+	struct ext4_lufid_snap old_snap = {};
+	struct qstr d_name;
+	/* on-disk name snapshot for non-encrypted casefolded directories: the
+	 * on-disk case may differ from what the caller supplied. */
+	char ondisk_name[EXT4_NAME_LEN];
+	struct qstr real_name = {};
+	/* name to pass to ext4_add_entry() for the re-add and rollback */
+	const struct qstr *add_name;
+	__u32 ino = 0;
+	bool child_locked = false;
+	int err = 0;
+
+	if (!ext4_has_feature_dirdata(sb))
+		return -EOPNOTSUPP;
+
+	if (namelen > EXT4_NAME_LEN)
+		return -ENAMETOOLONG;
+	if (namelen != strnlen(filename, namelen + 1))
+		return -EINVAL;
+
+	d_name.name = filename;
+	d_name.len = namelen;
+
+	err = ext4_fname_setup_filename(dir, &d_name, 0, &fname);
+	if (err)
+		goto out_free;
+
+	/* Lock dir with the VFS parent-mutation subclass.  The lookup and any
+	 * mutation must be inside this lock to prevent TOCTOU races. */
+	inode_lock_nested(dir, I_MUTEX_PARENT);
+
+	/* Phase 1: look up the entry without holding a journal handle to
+	 * obtain the child inode reference before taking the child lock.
+	 * VFS locking order requires all inode locks to be acquired before
+	 * starting a jbd2 transaction; starting the journal while already
+	 * holding the child lock would invert that order and risk deadlock
+	 * if jbd2 blocks waiting for a commit that the child lock holder
+	 * prevents from finishing. */
+	bh = ext4_find_entry(dir, &d_name, &de, NULL);
+	if (IS_ERR(bh)) {
+		err = PTR_ERR(bh);
+		bh = NULL;
+		goto out_unlock_dir;
+	}
+	if (!bh) {
+		err = -ENOENT;
+		goto out_unlock_dir;
+	}
+	ino = le32_to_cpu(de->inode);
+	brelse(bh);
+	bh = NULL;
+	de = NULL;
+
+	inode = ext4_iget(sb, ino, EXT4_IGET_NORMAL);
+	if (IS_ERR(inode)) {
+		err = PTR_ERR(inode);
+		inode = NULL;
+		goto out_unlock_dir;
+	}
+
+	/* Enforce sticky-bit restriction: on a sticky directory only the
+	 * directory owner, the file owner, or a privileged process may
+	 * modify entries.  inode_permission(MAY_WRITE) alone does not cover
+	 * this, so check it explicitly here as may_delete() does. */
+	err = check_sticky(idmap, dir, inode);
+	if (err)
+		goto out_iput;
+
+	/* The ioctl calls ext4_delete_entry() on the parent directory, which
+	 * bypasses the VFS may_delete() path.  inode_permission(MAY_WRITE)
+	 * above blocks IS_IMMUTABLE(dir) but does NOT block IS_APPEND(dir):
+	 * append-only directories allow new entries but forbid deletion, and
+	 * that restriction lives only in may_delete(), not in
+	 * inode_permission().  Enforce it explicitly here. */
+	if (IS_APPEND(dir)) {
+		err = -EPERM;
+		goto out_iput;
+	}
+
+	/* The ioctl deletes and re-creates the directory entry, which
+	 * effectively modifies the target file's namespace presence.
+	 * Refuse if the target itself is immutable or append-only. */
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
+		err = -EPERM;
+		goto out_iput;
+	}
+
+	/* Lock the target inode BEFORE starting the journal (dir-then-child,
+	 * VFS-locks-before-journal ordering).  Use I_MUTEX_CHILD for directory
+	 * inodes (consistent with VFS rename/rmdir) and I_MUTEX_NONDIR2 for
+	 * all others; mixing subclasses on the same inode triggers lockdep
+	 * cycles with concurrent rename. */
+	if (inode != dir) {
+		if (S_ISDIR(inode->i_mode))
+			inode_lock_nested(inode, I_MUTEX_CHILD);
+		else
+			inode_lock_nested(inode, I_MUTEX_NONDIR2);
+		child_locked = true;
+	}
+
+	handle = ext4_journal_start(dir, EXT4_HT_DIR,
+				    3 * EXT4_DATA_TRANS_BLOCKS(sb) +
+				    2 * EXT4_INDEX_EXTRA_TRANS_BLOCKS);
+	if (IS_ERR(handle)) {
+		err = PTR_ERR(handle);
+		handle = NULL;
+		goto out_unlock;
+	}
+
+	/* Phase 2: re-look up the entry inside the journal to obtain a stable
+	 * de pointer.  Verify it still refers to the same inode (TOCTOU
+	 * guard: a concurrent unlink+create between phase 1 and here would
+	 * change the inode number). */
+	bh = ext4_find_entry(dir, &d_name, &de, NULL);
+	if (IS_ERR(bh)) {
+		err = PTR_ERR(bh);
+		bh = NULL;
+		goto out_journal;
+	}
+	if (!bh) {
+		err = -ENOENT;
+		goto out_journal;
+	}
+	if (le32_to_cpu(de->inode) != ino) {
+		err = -ENOENT;
+		goto out_brelse;
+	}
+
+	/* Choose the name to use for re-adding the entry after deletion.
+	 *
+	 * For non-encrypted casefolded directories ext4_find_entry() matches
+	 * case-insensitively, so de->name may differ in case from the
+	 * caller-supplied filename.  Re-adding with the caller's case would
+	 * silently rename the entry, so preserve the on-disk bytes.
+	 *
+	 * For encrypted directories (with or without casefold) de->name holds
+	 * the raw ciphertext.  ext4_fname_setup_filename() deterministically
+	 * re-encrypts d_name (the plaintext) to the identical ciphertext, so
+	 * using d_name for the re-add is correct.  Passing the raw ciphertext
+	 * bytes would cause double-encryption and make the entry unreachable. */
+	if (IS_CASEFOLDED(dir) && !IS_ENCRYPTED(dir)) {
+		memcpy(ondisk_name, de->name, de->name_len);
+		real_name.name = ondisk_name;
+		real_name.len = de->name_len;
+		add_name = &real_name;
+	} else {
+		add_name = &d_name;
+	}
+
+	/* Snapshot the old LUFID before deleting so we can restore it if the
+	 * re-add fails.  Without this the rollback path re-adds the entry
+	 * without any LUFID, silently orphaning the old FID-to-path mapping. */
+	err = ext4_lufid_snapshot(de, sb->s_blocksize, &old_snap);
+	if (err)
+		goto out_brelse;
+
+	err = ext4_delete_entry(handle, dir, de, bh);
+	if (err)
+		goto out_brelse;
+
+	brelse(bh);
+	bh = NULL;
+
+	/* Re-add with LUFID via dentry->d_fsdata.  ext4_add_entry() resolves
+	 * dfid from d_fsdata into fname.dfid and passes it through to
+	 * add_dirent_to_buf() without touching the shared i_dirdata field,
+	 * eliminating the race with concurrent link() calls. */
+	{
+		struct dentry parent_dentry = { .d_inode = dir };
+		struct dentry new_dentry = {
+			.d_name = *add_name,
+			.d_parent = &parent_dentry,
+			.d_inode = inode,
+			.d_fsdata = edp,
+		};
+		err = ext4_add_entry(handle, &new_dentry, inode);
+	}
+
+	if (err) {
+		/* Delete succeeded but re-add failed; try to restore so the
+		 * inode is not left without a directory entry.  Restore the
+		 * original LUFID too: without it the entry is re-added clean
+		 * and the old FID-to-path mapping is silently lost. */
+		struct dentry parent_dentry = { .d_inode = dir };
+		struct dentry orig_dentry = {
+			.d_name = *add_name,
+			.d_parent = &parent_dentry,
+			.d_inode = inode,
+		};
+		int rollback_err;
+
+		if (old_snap.fid) {
+			unsigned int fid_size = old_snap.fid->df_header.ddh_length;
+			struct ext4_dentry_param *old_edp =
+				kmalloc(sizeof(*old_edp) + fid_size, GFP_NOFS);
+
+			if (old_edp) {
+				old_edp->edp_magic = EXT4_LUFID_MAGIC;
+				memcpy(old_edp->edp_dfid, old_snap.fid, fid_size);
+				orig_dentry.d_fsdata = old_edp;
+			}
+		}
+
+		rollback_err = ext4_add_entry(handle, &orig_dentry, inode);
+		kfree(orig_dentry.d_fsdata);
+
+		if (rollback_err)
+			EXT4_ERROR_INODE(dir,
+				"Failed to set LUFID on '%.*s' (err=%d) and failed to restore the original directory entry (err=%d); inode %llu may be orphaned",
+				namelen, filename, err, rollback_err,
+				inode->i_ino);
+		goto out_journal;
+	}
+
+	inode_set_ctime_current(dir);
+	inode_inc_iversion(dir);
+	ext4_mark_inode_dirty(handle, dir);
+
+out_brelse:
+	brelse(bh);
+out_journal:
+	ext4_lufid_snap_release(&old_snap);
+	if (handle)
+		ext4_journal_stop(handle);
+out_unlock:
+	if (child_locked)
+		inode_unlock(inode);
+out_iput:
+	iput(inode);
+out_unlock_dir:
+	inode_unlock(dir);
+out_free:
+	ext4_fname_free_filename(&fname);
+
+	return err;
 }
 
 /*
