@@ -324,7 +324,8 @@ static int zloop_update_seq_zone(struct zloop_device *zlo, unsigned int zone_no)
 	}
 
 	file_sectors = stat.size >> SECTOR_SHIFT;
-	if (file_sectors > zlo->zone_capacity) {
+	if (file_sectors > zlo->zone_capacity &&
+	    file_sectors != zlo->zone_size) {
 		pr_err("Zone %u file too large (%llu sectors > %llu)\n",
 		       zone_no, file_sectors, zlo->zone_capacity);
 		return -EINVAL;
@@ -339,7 +340,8 @@ static int zloop_update_seq_zone(struct zloop_device *zlo, unsigned int zone_no)
 	spin_lock(&zone->wp_lock);
 	if (!file_sectors) {
 		zloop_mark_empty(zlo, zone);
-	} else if (file_sectors == zlo->zone_capacity) {
+	} else if (file_sectors == zlo->zone_capacity ||
+		   file_sectors == zlo->zone_size) {
 		zloop_mark_full(zlo, zone);
 	} else {
 		if (zone->cond != BLK_ZONE_COND_IMP_OPEN &&
