@@ -552,10 +552,8 @@ enum {
  * The youngest generation number is stored in max_seq for both anon and file
  * types as they are aged on an equal footing. The oldest generation numbers are
  * stored in min_seq[] separately for anon and file types so that they can be
- * incremented independently. Ideally min_seq[] are kept in sync when both anon
- * and file types are evictable. However, to adapt to situations like extreme
- * swappiness, they are allowed to be out of sync by at most
- * MAX_NR_GENS-MIN_NR_GENS-1.
+ * incremented independently. For both file and anonymous memory, the minimum
+ * generation must be at least MIN_NR_GENS.
  *
  * The number of pages in each generation is eventually consistent and therefore
  * can be transiently negative when reset_batch_size() is pending.
