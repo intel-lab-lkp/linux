@@ -1506,12 +1506,41 @@ static inline bool mlx5e_build_rx_skb(struct mlx5_cqe64 *cqe,
 	return false;
 }
 
+/* Real (unpadded) L2 frame length, or 0 when it can't be determined. */
+static u32 mlx5e_shampo_frame_len(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe,
+				  struct sk_buff *skb)
+{
+	u16 head_size = cqe->shampo.header_size;
+	struct iphdr *iph;
+	int thoff, nhoff;
+
+	if (rq->hw_gro_data->fk.basic.n_proto != htons(ETH_P_IP) ||
+	    rq->hw_gro_data->fk.control.flags & FLOW_DIS_ENCAPSULATION)
+		return 0;
+
+	thoff = rq->hw_gro_data->fk.control.thoff;
+	if (head_size < ETH_HLEN + thoff)
+		return 0;
+
+	nhoff = ETH_HLEN + thoff - sizeof(struct iphdr);
+	if (skb) {
+		iph = (struct iphdr *)(skb->data + thoff - sizeof(struct iphdr));
+	} else {
+		void *hdr = mlx5e_shampo_get_hdr(rq, cqe, ETH_HLEN + thoff);
+
+		iph = (struct iphdr *)(hdr + nhoff);
+	}
+
+	return nhoff + ntohs(iph->tot_len);
+}
+
 static bool mlx5e_shampo_complete_rx_cqe(struct mlx5e_rq *rq,
 					 struct mlx5_cqe64 *cqe,
 					 u32 cqe_bcnt,
 					 struct sk_buff *skb)
 {
 	struct mlx5e_rq_stats *stats = rq->stats;
+	u32 frame_len;
 
 	stats->packets++;
 	stats->bytes += cqe_bcnt;
@@ -1525,6 +1554,13 @@ static bool mlx5e_shampo_complete_rx_cqe(struct mlx5e_rq *rq,
 	if (!skb_flow_dissect_flow_keys(skb, &rq->hw_gro_data->fk, 0)) {
 		napi_gro_receive(rq->cq.napi, skb);
 		rq->hw_gro_data->skb = NULL;
+	} else {
+		frame_len = mlx5e_shampo_frame_len(rq, cqe, skb);
+		if (frame_len && frame_len >= cqe->shampo.header_size &&
+		    frame_len < cqe_bcnt) {
+			pskb_trim_rcsum(skb, skb->len - (cqe_bcnt - frame_len));
+			skb_shinfo(skb)->gso_size = frame_len - cqe->shampo.header_size;
+		}
 	}
 	return false;
 }
@@ -2244,6 +2280,7 @@ static void mlx5e_handle_rx_cqe_mpwrq_shampo(struct mlx5e_rq *rq, struct mlx5_cq
 	struct mlx5e_rx_wqe_ll *wqe;
 	struct mlx5e_mpw_info *wi;
 	struct mlx5_wq_ll *wq;
+	u32 frame_len = 0;
 	u32 data_offset;
 	u32 page_idx;
 
@@ -2263,11 +2300,22 @@ static void mlx5e_handle_rx_cqe_mpwrq_shampo(struct mlx5e_rq *rq, struct mlx5_cq
 
 	data_offset = wqe_offset & (page_size - 1);
 	page_idx = wqe_offset >> rq->mpwqe.page_shift;
-	if (*skb &&
-	    !(match && mlx5e_hw_gro_skb_has_enough_space(*skb, data_bcnt,
-							 page_size))) {
-		match = false;
-		mlx5e_shampo_flush_skb(rq, cqe, match);
+
+	if (*skb) {
+		u32 gro_bcnt = data_bcnt;
+
+		if (match) {
+			frame_len = mlx5e_shampo_frame_len(rq, cqe, NULL);
+			if (frame_len && frame_len >= head_size &&
+			    frame_len - head_size < gro_bcnt)
+				gro_bcnt = frame_len - head_size;
+		}
+
+		if (!(match && mlx5e_hw_gro_skb_has_enough_space(*skb, gro_bcnt,
+								 page_size))) {
+			match = false;
+			mlx5e_shampo_flush_skb(rq, cqe, match);
+		}
 	}
 
 	if (!*skb) {
@@ -2311,10 +2359,18 @@ static void mlx5e_handle_rx_cqe_mpwrq_shampo(struct mlx5e_rq *rq, struct mlx5_cq
 
 	if (likely(head_size)) {
 		if (data_bcnt) {
-			struct mlx5e_frag_page *frag_page;
+			if (NAPI_GRO_CB(*skb)->count > 1 &&
+			    frame_len >= head_size &&
+			    frame_len - head_size < data_bcnt)
+				data_bcnt = frame_len - head_size;
 
-			frag_page = &wi->alloc_units.frag_pages[page_idx];
-			mlx5e_shampo_fill_skb_data(*skb, rq, frag_page, data_bcnt, data_offset);
+			if (data_bcnt) {
+				struct mlx5e_frag_page *frag_page =
+					&wi->alloc_units.frag_pages[page_idx];
+
+				mlx5e_shampo_fill_skb_data(*skb, rq, frag_page,
+							   data_bcnt, data_offset);
+			}
 		} else {
 			stats->hds_nodata_packets++;
 			stats->hds_nodata_bytes += head_size;
