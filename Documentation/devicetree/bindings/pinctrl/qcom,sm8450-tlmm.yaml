@@ -17,7 +17,9 @@ allOf:
 
 properties:
   compatible:
-    const: qcom,sm8450-tlmm
+    enum:
+      - qcom,sm8450-tlmm
+      - qcom,sm8475-tlmm
 
   reg:
     maxItems: 1
