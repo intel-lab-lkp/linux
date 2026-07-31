@@ -83,6 +83,12 @@ void nf_ct_l4proto_log_invalid(const struct sk_buff *skb,
 	if (likely(net->ct.sysctl_log_invalid == 0))
 		return;
 
+	/* nfnetlink_log may re-enter conntrack attribute dumping and try to
+	 * take ct->lock again via helpers such as tcp_to_nlattr(), so invalid
+	 * conntrack logs must only be emitted after dropping ct->lock.
+	 */
+	lockdep_assert_not_held(&ct->lock);
+
 	va_start(args, fmt);
 	vaf.fmt = fmt;
 	vaf.va = &args;
