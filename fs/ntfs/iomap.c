@@ -95,6 +95,8 @@ static int ntfs_read_iomap_begin_resident(struct inode *inode, loff_t offset, lo
 	else
 		base_ni = ni;
 
+	mutex_lock(&base_ni->mrec_lock);
+
 	ctx = ntfs_attr_get_search_ctx(base_ni, NULL);
 	if (!ctx) {
 		err = -ENOMEM;
@@ -137,6 +139,8 @@ static int ntfs_read_iomap_begin_resident(struct inode *inode, loff_t offset, lo
 out:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
+
+	mutex_unlock(&base_ni->mrec_lock);
 
 	return err;
 }
