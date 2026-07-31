@@ -415,16 +415,23 @@ EXPORT_SYMBOL_GPL(inet_lookup_reuseport);
 /* called with rcu_read_lock() : No refcount taken on the socket */
 static struct sock *inet_lhash2_lookup(const struct net *net,
 				struct inet_listen_hashbucket *ilb2,
+				unsigned int slot,
 				struct sk_buff *skb, int doff,
 				const __be32 saddr, __be16 sport,
 				const __be32 daddr, const unsigned short hnum,
 				const int dif, const int sdif)
 {
-	struct sock *sk, *result = NULL;
+	struct sock *sk, *result;
 	struct hlist_nulls_node *node;
-	int score, hiscore = 0;
+	int score, hiscore;
 
+begin:
+	result = NULL;
+	hiscore = 0;
 	sk_nulls_for_each_rcu(sk, node, &ilb2->nulls_head) {
+		if (READ_ONCE(sk->sk_state) != TCP_LISTEN)
+			continue;
+
 		score = compute_score(sk, net, hnum, daddr, dif, sdif);
 		if (score > hiscore) {
 			result = inet_lookup_reuseport(net, sk, skb, doff,
@@ -436,6 +443,9 @@ static struct sock *inet_lhash2_lookup(const struct net *net,
 			hiscore = score;
 		}
 	}
+
+	if (get_nulls_value(node) != slot + LISTENING_NULLS_BASE)
+		goto begin;
 
 	return result;
 }
@@ -486,7 +496,8 @@ struct sock *__inet_lookup_listener(const struct net *net,
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
 
-	result = inet_lhash2_lookup(net, ilb2, skb, doff,
+	result = inet_lhash2_lookup(net, ilb2,
+				    hash2 & hashinfo->lhash2_mask, skb, doff,
 				    saddr, sport, daddr, hnum,
 				    dif, sdif);
 	if (result)
@@ -496,7 +507,8 @@ struct sock *__inet_lookup_listener(const struct net *net,
 	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
 
-	result = inet_lhash2_lookup(net, ilb2, skb, doff,
+	result = inet_lhash2_lookup(net, ilb2,
+				    hash2 & hashinfo->lhash2_mask, skb, doff,
 				    saddr, sport, htonl(INADDR_ANY), hnum,
 				    dif, sdif);
 done:
