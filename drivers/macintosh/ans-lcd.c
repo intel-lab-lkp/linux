@@ -168,9 +168,11 @@ anslcd_init(void)
 	of_node_put(node);
 
 	anslcd_ptr = ioremap(ANSLCD_ADDR, 0x20);
-	
+	if (!anslcd_ptr)
+		return -ENOMEM;
+
 	retval = misc_register(&anslcd_dev);
-	if(retval < 0){
+	if (retval < 0) {
 		printk(KERN_INFO "LCD: misc_register failed\n");
 		iounmap(anslcd_ptr);
 		return retval;
