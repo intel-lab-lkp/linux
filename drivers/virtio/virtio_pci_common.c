@@ -828,7 +828,37 @@ static void virtio_pci_reset_done(struct pci_dev *pci_dev)
 		dev_warn(&pci_dev->dev, "Reset done failure: %d", ret);
 }
 
+static pci_ers_result_t virtio_pci_error_detected(struct pci_dev *pci_dev,
+						  pci_channel_state_t state)
+{
+	struct virtio_pci_device *vp_dev = pci_get_drvdata(pci_dev);
+
+	/*
+	 * PCI ERS error_detected: quiesce on frozen before bus reset; on
+	 * permanent failure break virtqueues (follow-up may call driver
+	 * .shutdown for block teardown).
+	 */
+	switch (state) {
+	case pci_channel_io_normal:
+		return PCI_ERS_RESULT_CAN_RECOVER;
+	case pci_channel_io_frozen:
+		pci_info(pci_dev, "frozen error detected, quiesce device\n");
+		if (virtio_device_reset_prepare(&vp_dev->vdev))
+			dev_warn(&pci_dev->dev, "frozen: reset prepare failed\n");
+		return PCI_ERS_RESULT_NEED_RESET;
+	case pci_channel_io_perm_failure:
+		dev_warn(&pci_dev->dev,
+			 "permanent failure, disconnecting device\n");
+		virtio_break_device(&vp_dev->vdev);
+		return PCI_ERS_RESULT_DISCONNECT;
+	default:
+		break;
+	}
+	return PCI_ERS_RESULT_NEED_RESET;
+}
+
 static const struct pci_error_handlers virtio_pci_err_handler = {
+	.error_detected = virtio_pci_error_detected,
 	.reset_prepare  = virtio_pci_reset_prepare,
 	.reset_done     = virtio_pci_reset_done,
 };
