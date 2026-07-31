@@ -2552,9 +2552,13 @@ static void calc_vtime_cost_builtin(struct bio *bio, struct ioc_gq *iocg,
 		goto out;
 	}
 
-	if (iocg->cursor) {
-		seek_pages = abs(bio->bi_iter.bi_sector - iocg->cursor);
-		seek_pages >>= IOC_SECT_TO_PAGE_SHIFT;
+	{
+		sector_t cursor = READ_ONCE(iocg->cursor);
+
+		if (cursor) {
+			seek_pages = abs(bio->bi_iter.bi_sector - cursor);
+			seek_pages >>= IOC_SECT_TO_PAGE_SHIFT;
+		}
 	}
 
 	if (!is_merge) {
@@ -2708,7 +2712,7 @@ static void ioc_rqos_throttle(struct rq_qos *rqos, struct bio *bio)
 	if (!iocg_activate(iocg, &now))
 		return;
 
-	iocg->cursor = bio_end_sector(bio);
+	WRITE_ONCE(iocg->cursor, bio_end_sector(bio));
 	vtime = atomic64_read(&iocg->vtime);
 	cost = adjust_inuse_and_calc_cost(iocg, vtime, abs_cost, &now);
 
@@ -2797,8 +2801,8 @@ static void ioc_rqos_merge(struct rq_qos *rqos, struct request *rq,
 
 	/* update cursor if backmerging into the request at the cursor */
 	if (blk_rq_pos(rq) < bio_end &&
-	    blk_rq_pos(rq) + blk_rq_sectors(rq) == iocg->cursor)
-		iocg->cursor = bio_end;
+	    blk_rq_pos(rq) + blk_rq_sectors(rq) == READ_ONCE(iocg->cursor))
+		WRITE_ONCE(iocg->cursor, bio_end);
 
 	/*
 	 * Charge if there's enough vtime budget and the existing request has
