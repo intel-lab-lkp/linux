@@ -20,8 +20,8 @@
 #include <linux/notifier.h>
 
 #ifdef CONFIG_XFRM_OFFLOAD
-static void __xfrm_transport_prep(struct xfrm_state *x, struct sk_buff *skb,
-				  unsigned int hsize)
+static int __xfrm_transport_prep(struct xfrm_state *x, struct sk_buff *skb,
+				 unsigned int hsize)
 {
 	struct xfrm_offload *xo = xfrm_offload(skb);
 
@@ -30,30 +30,33 @@ static void __xfrm_transport_prep(struct xfrm_state *x, struct sk_buff *skb,
 		skb->transport_header -= x->props.header_len;
 
 	pskb_pull(skb, skb_transport_offset(skb) + x->props.header_len);
+	return 0;
 }
 
-static void __xfrm_mode_tunnel_prep(struct xfrm_state *x, struct sk_buff *skb,
-				    unsigned int hsize)
-
+static int __xfrm_mode_tunnel_prep(struct xfrm_state *x, struct sk_buff *skb,
+				   unsigned int hsize)
 {
 	struct xfrm_offload *xo = xfrm_offload(skb);
 
-	if (xo->flags & XFRM_GSO_SEGMENT)
-		skb->transport_header = skb->network_header + hsize;
+	if (xo->flags & XFRM_GSO_SEGMENT &&
+	    !skb_set_transport_header_careful(skb, hsize))
+		return -EOVERFLOW;
 
 	skb_reset_mac_len(skb);
 	pskb_pull(skb,
 		  skb->mac_len + x->props.header_len - x->props.enc_hdr_len);
+	return 0;
 }
 
-static void __xfrm_mode_beet_prep(struct xfrm_state *x, struct sk_buff *skb,
-				  unsigned int hsize)
+static int __xfrm_mode_beet_prep(struct xfrm_state *x, struct sk_buff *skb,
+				 unsigned int hsize)
 {
 	struct xfrm_offload *xo = xfrm_offload(skb);
 	int phlen = 0;
 
-	if (xo->flags & XFRM_GSO_SEGMENT)
-		skb->transport_header = skb->network_header + hsize;
+	if (xo->flags & XFRM_GSO_SEGMENT &&
+	    !skb_set_transport_header_careful(skb, hsize))
+		return -EOVERFLOW;
 
 	skb_reset_mac_len(skb);
 	if (x->sel.family != AF_INET6) {
@@ -63,10 +66,11 @@ static void __xfrm_mode_beet_prep(struct xfrm_state *x, struct sk_buff *skb,
 	}
 
 	pskb_pull(skb, skb->mac_len + hsize + (x->props.header_len - phlen));
+	return 0;
 }
 
 /* Adjust pointers into the packet when IPsec is done at layer2 */
-static void xfrm_outer_mode_prep(struct xfrm_state *x, struct sk_buff *skb)
+static int xfrm_outer_mode_prep(struct xfrm_state *x, struct sk_buff *skb)
 {
 	switch (x->outer_mode.encap) {
 	case XFRM_MODE_IPTFS:
@@ -98,6 +102,8 @@ static void xfrm_outer_mode_prep(struct xfrm_state *x, struct sk_buff *skb)
 	case XFRM_MODE_IN_TRIGGER:
 		break;
 	}
+
+	return 0;
 }
 
 static inline bool xmit_xfrm_check_overflow(struct sk_buff *skb)
@@ -175,7 +181,12 @@ struct sk_buff *validate_xmit_xfrm(struct sk_buff *skb, netdev_features_t featur
 
 	if (!skb->next) {
 		esp_features |= skb->dev->gso_partial_features;
-		xfrm_outer_mode_prep(x, skb);
+		err = xfrm_outer_mode_prep(x, skb);
+		if (err) {
+			XFRM_INC_STATS(xs_net(x), LINUX_MIB_XFRMOUTSTATEPROTOERROR);
+			kfree_skb(skb);
+			return NULL;
+		}
 
 		xo->flags |= XFRM_DEV_RESUME;
 
@@ -201,7 +212,13 @@ struct sk_buff *validate_xmit_xfrm(struct sk_buff *skb, netdev_features_t featur
 		xo = xfrm_offload(skb2);
 		xo->flags |= XFRM_DEV_RESUME;
 
-		xfrm_outer_mode_prep(x, skb2);
+		err = xfrm_outer_mode_prep(x, skb2);
+		if (err) {
+			XFRM_INC_STATS(xs_net(x), LINUX_MIB_XFRMOUTSTATEPROTOERROR);
+			skb2->next = nskb;
+			kfree_skb_list(skb2);
+			return NULL;
+		}
 
 		err = x->type_offload->xmit(x, skb2, esp_features);
 		if (!err) {

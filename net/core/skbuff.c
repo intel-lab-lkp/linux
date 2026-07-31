@@ -387,6 +387,9 @@ get:
 }
 EXPORT_SYMBOL_GPL(napi_skb_cache_get_bulk);
 
+static int skb_headers_offset_update_careful(struct sk_buff *skb, int off);
+static int skb_transport_header_add_careful(struct sk_buff *skb, int off);
+
 static inline void __finalize_skb_around(struct sk_buff *skb, void *data,
 					 unsigned int size)
 {
@@ -976,7 +979,11 @@ int skb_pp_cow_data(struct page_pool *pool, struct sk_buff **pskb,
 	skb_put(nskb, size);
 
 	head_off = skb_headroom(nskb) - skb_headroom(skb);
-	skb_headers_offset_update(nskb, head_off);
+	err = skb_headers_offset_update_careful(nskb, head_off);
+	if (err) {
+		consume_skb(nskb);
+		return err;
+	}
 
 	off = size;
 	len = skb->len - off;
@@ -2140,6 +2147,86 @@ void skb_headers_offset_update(struct sk_buff *skb, int off)
 }
 EXPORT_SYMBOL(skb_headers_offset_update);
 
+static bool skb_header_offset_overflow(unsigned int offset, int add)
+{
+	if (add <= 0)
+		return false;
+	if (add > U16_MAX)
+		return true;
+
+	return offset > U16_MAX - add;
+}
+
+static bool skb_transport_header_offset_overflow(unsigned int offset, int add)
+{
+	if (add <= 0)
+		return false;
+	if (add >= U16_MAX)
+		return true;
+
+	return offset >= U16_MAX - add;
+}
+
+static bool skb_headers_offset_overflow(const struct sk_buff *skb, int off)
+{
+	if (skb_header_offset_overflow(skb->network_header, off))
+		return true;
+	if (skb_transport_header_was_set(skb) &&
+	    skb_transport_header_offset_overflow(skb->transport_header, off))
+		return true;
+	if (skb_mac_header_was_set(skb) &&
+	    skb_header_offset_overflow(skb->mac_header, off))
+		return true;
+	if (skb_header_offset_overflow(skb->inner_transport_header, off))
+		return true;
+	if (skb_inner_network_header_was_set(skb)) {
+		if (skb_header_offset_overflow(skb->inner_network_header, off))
+			return true;
+		if (skb_header_offset_overflow(skb->inner_mac_header, off))
+			return true;
+	}
+	if (skb->ip_summed == CHECKSUM_PARTIAL &&
+	    skb_header_offset_overflow(skb->csum_start, off))
+		return true;
+
+	return false;
+}
+
+static int skb_headers_offset_update_careful(struct sk_buff *skb, int off)
+{
+	if (skb_headers_offset_overflow(skb, off))
+		return -EOVERFLOW;
+
+	if (skb->ip_summed == CHECKSUM_PARTIAL)
+		skb->csum_start += off;
+	if (skb_transport_header_was_set(skb))
+		skb->transport_header += off;
+	skb->network_header += off;
+	if (skb_mac_header_was_set(skb))
+		skb->mac_header += off;
+	if (skb->inner_transport_header != (typeof(skb->inner_transport_header))~0U)
+		skb->inner_transport_header += off;
+	if (skb_inner_network_header_was_set(skb)) {
+		skb->inner_network_header += off;
+		skb->inner_mac_header += off;
+	}
+
+	return 0;
+}
+
+static int skb_transport_header_add_careful(struct sk_buff *skb, int off)
+{
+	if (off > 0 && !skb_transport_header_was_set(skb))
+		return -EOVERFLOW;
+	if (skb_transport_header_was_set(skb) &&
+	    skb_transport_header_offset_overflow(skb->transport_header, off))
+		return -EOVERFLOW;
+
+	skb->transport_header += off;
+
+	return 0;
+}
+
 void skb_copy_header(struct sk_buff *new, const struct sk_buff *old)
 {
 	__copy_skb_header(new, old);
@@ -2304,6 +2391,9 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 
 	BUG_ON(skb_shared(skb));
 
+	if (skb_headers_offset_overflow(skb, nhead))
+		return -EOVERFLOW;
+
 	skb_zcopy_downgrade_managed(skb);
 
 	if (skb_pfmemalloc(skb))
@@ -2354,7 +2444,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	off           = nhead;
 #endif
 	skb->tail	      += off;
-	skb_headers_offset_update(skb, nhead);
+	skb_headers_offset_update_careful(skb, nhead);
 	skb->cloned   = 0;
 	skb->hdr_len  = 0;
 	skb->nohdr    = 0;
@@ -2541,7 +2631,10 @@ struct sk_buff *skb_copy_expand(const struct sk_buff *skb,
 
 	skb_copy_header(n, skb);
 
-	skb_headers_offset_update(n, newheadroom - oldheadroom);
+	if (skb_headers_offset_update_careful(n, newheadroom - oldheadroom)) {
+		kfree_skb(n);
+		return NULL;
+	}
 
 	return n;
 }
@@ -4680,7 +4773,7 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 	unsigned int delta_len = 0;
 	struct sk_buff *tail = NULL;
 	struct sk_buff *nskb, *tmp;
-	int len_diff, err;
+	int head_off, len_diff, err;
 
 	/* Only skb_gro_receive_list generated skbs arrive here */
 	DEBUG_NET_WARN_ON_ONCE(!(skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST));
@@ -4732,8 +4825,17 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 		len_diff = skb_network_header_len(nskb) - skb_network_header_len(skb);
 		__copy_skb_header(nskb, skb);
 
-		skb_headers_offset_update(nskb, skb_headroom(nskb) - skb_headroom(skb));
-		nskb->transport_header += len_diff;
+		head_off = skb_headroom(nskb) - skb_headroom(skb);
+		err = skb_headers_offset_update_careful(nskb, head_off);
+		if (unlikely(err)) {
+			nskb->next = list_skb;
+			goto err_list;
+		}
+		err = skb_transport_header_add_careful(nskb, len_diff);
+		if (unlikely(err)) {
+			nskb->next = list_skb;
+			goto err_list;
+		}
 		skb_copy_from_linear_data_offset(skb, -tnl_hlen,
 						 nskb->data - tnl_hlen,
 						 offset + tnl_hlen);
@@ -4759,9 +4861,11 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 	return skb;
 
 err_linearize:
+	err = -ENOMEM;
+err_list:
 	kfree_skb_list(skb->next);
 	skb->next = NULL;
-	return ERR_PTR(-ENOMEM);
+	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(skb_segment_list);
 
@@ -4961,7 +5065,11 @@ normal:
 
 		__copy_skb_header(nskb, head_skb);
 
-		skb_headers_offset_update(nskb, skb_headroom(nskb) - headroom);
+		err = skb_headers_offset_update_careful(nskb,
+							skb_headroom(nskb) - headroom);
+		if (unlikely(err))
+			goto err;
+		err = -ENOMEM;
 		skb_reset_mac_len(nskb);
 
 		skb_copy_from_linear_data_offset(head_skb, -tnl_hlen,

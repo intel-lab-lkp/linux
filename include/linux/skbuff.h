@@ -3126,6 +3126,34 @@ static inline void skb_set_transport_header(struct sk_buff *skb,
 	skb->transport_header += offset;
 }
 
+static inline bool __must_check
+skb_set_transport_header_careful(struct sk_buff *skb, const int offset)
+{
+	if (unlikely(offset < 0 || offset >= U16_MAX))
+		return false;
+	if (unlikely(skb->network_header >= U16_MAX - offset))
+		return false;
+
+	skb->transport_header = skb->network_header + offset;
+	return true;
+}
+
+static inline bool __must_check
+skb_add_transport_header_careful(struct sk_buff *skb, const int offset)
+{
+	if (offset > 0) {
+		if (unlikely(!skb_transport_header_was_set(skb)))
+			return false;
+		if (unlikely(offset >= U16_MAX))
+			return false;
+		if (unlikely(skb->transport_header >= U16_MAX - offset))
+			return false;
+	}
+
+	skb->transport_header += offset;
+	return true;
+}
+
 static inline unsigned char *skb_network_header(const struct sk_buff *skb)
 {
 	return skb->head + skb->network_header;

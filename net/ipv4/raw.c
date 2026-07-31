@@ -356,6 +356,8 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 		goto out;
 
 	hlen = LL_RESERVED_SPACE(rt->dst.dev);
+	if (hlen >= U16_MAX - sizeof(struct iphdr))
+		return -EINVAL;
 	tlen = rt->dst.dev->needed_tailroom;
 	skb = sock_alloc_send_skb(sk,
 				  length + hlen + tlen + 15,
@@ -398,6 +400,8 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 	 */
 	err = -EINVAL;
 	if (iphlen > length || iphlen < sizeof(*iph))
+		goto error_free;
+	if (hlen >= U16_MAX - iphlen)
 		goto error_free;
 
 	if (iphlen >= sizeof(*iph)) {
