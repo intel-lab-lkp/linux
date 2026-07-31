@@ -1,0 +1,337 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Test module for in kernel synthetic page allocator testing.
+ *
+ * Compiled as a module. The module needs to be loaded to run.
+ *
+ * (C) 2009 Linux Foundation, Christoph Lameter <cl@gentwo.org>
+ */
+
+#include <linux/jiffies.h>
+#include <linux/init.h>
+#include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <asm/timex.h>
+
+#define TEST_COUNT 1000
+
+#define CONCURRENT_MAX_ORDER 6
+
+#ifdef CONFIG_SMP
+#include <linux/completion.h>
+#include <linux/sched.h>
+#include <linux/workqueue.h>
+#include <linux/kthread.h>
+
+static struct test_struct {
+	struct task_struct *task;
+	int cpu;
+	int order;
+	int count;
+	struct page **v;
+	void (*test_p1)(struct test_struct *t);
+	void (*test_p2)(struct test_struct *t);
+	unsigned long start1;
+	unsigned long stop1;
+	unsigned long start2;
+	unsigned long stop2;
+} test[NR_CPUS];
+
+/*
+ * Allocate TEST_COUNT objects on cpus > 0 and then all the
+ * objects later on cpu 0
+ */
+static void remote_free_test_p1(struct test_struct *t)
+{
+	int i;
+
+	/* Perform no allocations on cpu 0 */
+	for (i = 0; i < t->count; i++) {
+		struct page *p;
+
+		if (smp_processor_id()) {
+			p = alloc_pages(GFP_KERNEL | __GFP_COMP, t->order);
+			/* Use object */
+			memset(page_address(p), 17, 4);
+		} else
+			p = NULL;
+		t->v[i] = p;
+	}
+}
+
+static void remote_free_test_p2(struct test_struct *t)
+{
+	int i;
+	int cpu;
+
+	/* All frees are completed on cpu zero */
+	if (smp_processor_id())
+		return;
+
+	for_each_online_cpu(cpu)
+		for (i = 0; i < t->count; i++) {
+			struct page *p = test[cpu].v[i];
+
+			if (!p)
+				continue;
+
+			__free_pages(p, t->order);
+		}
+}
+
+/*
+ * Allocate TEST_COUNT objects and later free them all again
+ */
+static void alloc_then_free_test_p1(struct test_struct *t)
+{
+	int i;
+
+	for (i = 0; i < t->count; i++) {
+		struct page *p = alloc_pages(GFP_KERNEL | __GFP_COMP, t->order);
+
+		memset(page_address(p), 14, 4);
+		t->v[i] = p;
+	}
+}
+
+static void alloc_then_free_test_p2(struct test_struct *t)
+{
+	int i;
+
+	for (i = 0; i < t->count; i++) {
+		struct page *p = t->v[i];
+
+		__free_pages(p, t->order);
+	}
+}
+
+/*
+ * Allocate TEST_COUNT objects. Free them immediately.
+ */
+static void alloc_free_test_p1(struct test_struct *t)
+{
+	int i;
+
+	for (i = 0; i < TEST_COUNT; i++) {
+		struct page *p = alloc_pages(GFP_KERNEL | __GFP_COMP, t->order);
+
+		memset(page_address(p), 12, 4);
+		__free_pages(p, t->order);
+	}
+}
+
+static atomic_t tests_running;
+static atomic_t phase1_complete;
+static DECLARE_COMPLETION(completion1);
+static DECLARE_COMPLETION(completion2);
+static DECLARE_COMPLETION(completion3);
+
+static int test_func(void *private)
+{
+	struct test_struct *t = private;
+	cpumask_t newmask = CPU_MASK_NONE;
+
+	cpumask_set_cpu(t->cpu, &newmask);
+	set_cpus_allowed_ptr(current, &newmask);
+	t->v = kmalloc_array(t->count, sizeof(struct page *), GFP_KERNEL);
+
+	atomic_inc(&tests_running);
+	wait_for_completion(&completion1);
+	t->start1 = get_cycles();
+	t->test_p1(t);
+	t->stop1 = get_cycles();
+	atomic_inc(&phase1_complete);
+	wait_for_completion(&completion2);
+	t->start2 = get_cycles();
+	if (t->test_p2)
+		t->test_p2(t);
+	t->stop2 = get_cycles();
+	atomic_dec(&tests_running);
+	wait_for_completion(&completion3);
+	kfree(t->v);
+	while (!kthread_should_stop()) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_timeout(10);
+	}
+	return 0;
+}
+
+static void do_concurrent_test(void (*p1)(struct test_struct *),
+		void (*p2)(struct test_struct *),
+		int order, const char *name)
+{
+	int cpu;
+	unsigned long time1 = 0;
+	unsigned long time2 = 0;
+	unsigned long sum1 = 0;
+	unsigned long sum2 = 0;
+
+	atomic_set(&tests_running, 0);
+	atomic_set(&phase1_complete, 0);
+	init_completion(&completion1);
+	init_completion(&completion2);
+	init_completion(&completion3);
+
+	for_each_online_cpu(cpu) {
+		struct test_struct *t = &test[cpu];
+
+		t->cpu = cpu;
+		t->count = TEST_COUNT;
+		t->test_p1 = p1;
+		t->test_p2 = p2;
+		t->order = order;
+		t->task = kthread_run(test_func, t, "test%d", cpu);
+		if (IS_ERR(t->task)) {
+			pr_err("Failed to start test func\n");
+			return;
+		}
+	}
+
+	/* Wait till all processes are running */
+	while (atomic_read(&tests_running) < num_online_cpus()) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_timeout(10);
+	}
+	complete_all(&completion1);
+
+	/* Wait till all processes have completed phase 1 */
+	while (atomic_read(&phase1_complete) < num_online_cpus()) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_timeout(10);
+	}
+	complete_all(&completion2);
+
+	/* Wait till all processes have completed phase 2 */
+	while (atomic_read(&tests_running)) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_timeout(10);
+	}
+	complete_all(&completion3);
+
+	for_each_online_cpu(cpu)
+		kthread_stop(test[cpu].task);
+
+	pr_alert("%s(%d):", name, order);
+	for_each_online_cpu(cpu) {
+		struct test_struct *t = &test[cpu];
+
+		time1 = t->stop1 - t->start1;
+		time2 = t->stop2 - t->start2;
+		sum1 += time1;
+		sum2 += time2;
+		pr_cont(" %d=%lu", cpu, time1 / TEST_COUNT);
+		if (p2)
+			pr_cont("/%lu", time2 / TEST_COUNT);
+	}
+	pr_cont(" Average=%lu", sum1 / num_online_cpus() / TEST_COUNT);
+	if (p2)
+		pr_cont("/%lu", sum2 / num_online_cpus() / TEST_COUNT);
+	pr_cont("\n");
+	schedule_timeout(200);
+}
+#endif
+
+static int pagealloc_test_init(void)
+{
+	void **v = kmalloc_array(TEST_COUNT, sizeof(void *), GFP_KERNEL);
+	unsigned int i;
+	cycles_t time1, time2, time;
+	int rem;
+	int order;
+
+	pr_alert("test init\n");
+
+	pr_alert("Single thread testing\n");
+	pr_alert("=====================\n");
+	pr_alert("1. Repeatedly allocate then free test\n");
+	for (order = 0; order <= MAX_PAGE_ORDER; order++) {
+		time1 = get_cycles();
+		for (i = 0; i < TEST_COUNT; i++) {
+			struct page *p = alloc_pages(GFP_KERNEL | __GFP_COMP,
+						order);
+
+			if (!p) {
+				pr_err("Cannot allocate order=%d\n", order);
+				break;
+			}
+
+			/* Touch page */
+			memset(page_address(p), 22, 4);
+			v[i] = p;
+		}
+		time2 = get_cycles();
+		time = time2 - time1;
+
+		pr_alert("%i times alloc_page(,%d) ", i, order);
+		time = div_u64_rem(time, TEST_COUNT, &rem);
+		pr_cont("-> %llu cycles ", (unsigned long long) time);
+
+		time1 = get_cycles();
+		for (i = 0; i < TEST_COUNT; i++) {
+			struct page *p = v[i];
+
+			__free_pages(p, order);
+		}
+		time2 = get_cycles();
+		time = time2 - time1;
+
+		pr_cont("__free_pages(,%d)", order);
+		time = div_u64_rem(time, TEST_COUNT, &rem);
+		pr_cont("-> %llu cycles\n", (unsigned long long) time);
+	}
+
+	pr_alert("2. alloc/free test\n");
+	for (order = 0; order <= MAX_PAGE_ORDER; order++) {
+		time1 = get_cycles();
+		for (i = 0; i < TEST_COUNT; i++) {
+			struct page *p = alloc_pages(GFP_KERNEL | __GFP_COMP,
+						     order);
+			__free_pages(p, order);
+		}
+		time2 = get_cycles();
+		time = time2 - time1;
+
+		pr_alert("%i times alloc( ,%d)/free ", i, order);
+		time = div_u64_rem(time, TEST_COUNT, &rem);
+		pr_cont("-> %llu cycles\n", (unsigned long long) time);
+	}
+	kfree(v);
+#ifdef CONFIG_SMP
+	pr_info("Concurrent allocs\n");
+	pr_info("=================\n");
+	for (order = 0; order < CONCURRENT_MAX_ORDER; order++) {
+		do_concurrent_test(alloc_then_free_test_p1,
+			alloc_then_free_test_p2,
+			order, "Page alloc N*alloc N*free");
+	}
+	pr_info("----Fastpath---\n");
+	for (order = 0; order < CONCURRENT_MAX_ORDER; order++) {
+		do_concurrent_test(alloc_free_test_p1, NULL,
+			order, "Page N*(alloc free)");
+	}
+
+	pr_info("Remote free test\n");
+	pr_info("================\n");
+	for (order = 0; order < CONCURRENT_MAX_ORDER; order++) {
+		do_concurrent_test(remote_free_test_p1,
+				remote_free_test_p2,
+			order, "N*remote free");
+	}
+
+#endif
+
+	return -EAGAIN; /* Fail will directly unload the module */
+}
+
+static void pagealloc_test_exit(void)
+{
+	pr_alert("test exit\n");
+}
+
+module_init(pagealloc_test_init)
+module_exit(pagealloc_test_exit)
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Christoph Lameter");
+MODULE_DESCRIPTION("page allocator performance test");

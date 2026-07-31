@@ -107,6 +107,7 @@ obj-$(CONFIG_TEST_OBJPOOL) += test_objpool.o
 obj-$(CONFIG_TEST_KEXEC_HANDOVER) += test_kho.o
 obj-$(CONFIG_TEST_VMSTAT) += test_vmstat.o
 obj-$(CONFIG_TEST_SLAB) += test_slab.o
+obj-$(CONFIG_TEST_PAGEALLOC) += test_pagealloc.o
 
 obj-$(CONFIG_TEST_FPU) += test_fpu.o
 test_fpu-y := test_fpu_glue.o test_fpu_impl.o

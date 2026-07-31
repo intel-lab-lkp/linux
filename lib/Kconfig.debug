@@ -3448,6 +3448,16 @@ config TEST_SLAB
 
 	  If unsure, say N.
 
+config TEST_PAGEALLOC
+	tristate "Page Allocator Benchmark"
+	default n
+	help
+	  A benchmark measuring the performance of the page allocator, useful
+	  to analyze any improvements or regressions when repeatedly allocating
+	  and freeing memory as well as concurrent and remote allocations.
+
+	  If unsure, say N.
+
 config RATELIMIT_KUNIT_TEST
 	tristate "KUnit Test for correctness and stress of ratelimit" if !KUNIT_ALL_TESTS
 	depends on KUNIT
