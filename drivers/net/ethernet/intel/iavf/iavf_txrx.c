@@ -1387,6 +1387,7 @@ static int iavf_clean_rx_irq(struct iavf_ring *rx_ring, int budget)
 {
 	bool flex = rx_ring->rxdid == VIRTCHNL_RXDID_2_FLEX_SQ_NIC;
 	unsigned int total_rx_bytes = 0, total_rx_packets = 0;
+	const struct page_pool *pp = rx_ring->pp;
 	struct sk_buff *skb = rx_ring->skb;
 	u16 cleaned_count = IAVF_DESC_UNUSED(rx_ring);
 	bool failure = false;
@@ -1424,7 +1425,7 @@ static int iavf_clean_rx_irq(struct iavf_ring *rx_ring, int budget)
 		iavf_trace(clean_rx_irq, rx_ring, rx_desc, skb);
 
 		rx_buffer = &rx_ring->rx_fqes[rx_ring->next_to_clean];
-		if (!libeth_rx_sync_for_cpu(rx_buffer, fields.len))
+		if (!__libeth_rx_sync_for_cpu(pp, rx_buffer, fields.len))
 			goto skip_data;
 
 		/* retrieve a buffer from the ring */
