@@ -26,8 +26,13 @@ static size_t ttyport_receive_buf(struct tty_port *port, const u8 *cp,
 				  const u8 *fp, size_t count)
 {
 	struct serdev_controller *ctrl = port->client_data;
-	struct serport *serport = serdev_controller_get_drvdata(ctrl);
+	struct serport *serport;
 	size_t ret;
+
+	if (!ctrl)
+		return 0;
+
+	serport = serdev_controller_get_drvdata(ctrl);
 
 	if (!test_bit(SERPORT_ACTIVE, &serport->flags))
 		return 0;
@@ -46,8 +51,13 @@ static size_t ttyport_receive_buf(struct tty_port *port, const u8 *cp,
 static void ttyport_write_wakeup(struct tty_port *port)
 {
 	struct serdev_controller *ctrl = port->client_data;
-	struct serport *serport = serdev_controller_get_drvdata(ctrl);
+	struct serport *serport;
 	struct tty_struct *tty;
+
+	if (!ctrl)
+		return;
+
+	serport = serdev_controller_get_drvdata(ctrl);
 
 	tty = tty_port_tty_get(port);
 	if (!tty)
@@ -312,6 +322,7 @@ int serdev_tty_port_unregister(struct tty_port *port)
 		return -ENODEV;
 
 	serdev_controller_remove(ctrl);
+	cancel_work_sync(&port->buf.work);
 	port->client_data = NULL;
 	port->client_ops = &tty_port_default_client_ops;
 	serdev_controller_put(ctrl);
