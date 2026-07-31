@@ -163,6 +163,8 @@
 #include <net/page_pool/memory_provider.h>
 #include <net/rps.h>
 #include <linux/phy_link_topology.h>
+#include <net/route.h>
+#include <net/ip6_route.h>
 
 #include "dev.h"
 #include "devmem.h"
@@ -943,6 +945,88 @@ struct net_device *netdev_get_by_name(struct net *net, const char *name,
 	return dev;
 }
 EXPORT_SYMBOL(netdev_get_by_name);
+
+/**
+ *	netdev_get_by_addr() - find an egress device by destination address
+ *	@net: the applicable net namespace
+ *	@src: optional source address
+ *	@dest: destination address
+ *	@tracker: tracking onject for the acquired reference
+ *	@gfp: allocation flag for the tracker
+ *
+ *	Find an interface by looking up route table entry based on dest address
+ *	and an optional src address. The returned handle has the usage count
+ *	incremented and the caller must use netdev_put() to release it when it
+ *	is no longer needed. %NULL is returned if dest is not specified, or src
+ *	and dest belong to different address families, or no matching device is
+ *	found.
+ */
+struct net_device *netdev_get_by_addr(struct net *net,
+				      struct sockaddr_storage *src,
+				      struct sockaddr_storage *dest,
+				      netdevice_tracker *tracker,
+				      gfp_t gfp)
+{
+	struct net_device *dev = NULL;
+
+	if (!dest)
+		return NULL;
+
+	if (src && src->ss_family != dest->ss_family)
+		return NULL;
+
+	if (dest->ss_family == AF_INET) {
+		struct rtable *rt;
+		struct flowi4 fl4 = {};
+
+		fl4.daddr = ((struct sockaddr_in *)dest)->sin_addr.s_addr;
+		if (src)
+			fl4.saddr = ((struct sockaddr_in *)src)->sin_addr.s_addr;
+
+		rt = ip_route_output_key(net, &fl4);
+		if (IS_ERR(rt))
+			return NULL;
+
+		dev = dst_dev(&rt->dst);
+		/*
+		 * Get reference to netdev as ip_rt_put() will release netdev
+		 * reference.
+		 */
+		if (dev)
+			netdev_hold(dev, tracker, gfp);
+
+		ip_rt_put(rt);
+
+#if IS_ENABLED(CONFIG_IPV6)
+	} else if (dest->ss_family == AF_INET6) {
+		struct dst_entry *dst;
+		struct flowi6 fl6 = {};
+
+		fl6.daddr = ((struct sockaddr_in6 *)dest)->sin6_addr;
+		if (src)
+			fl6.saddr = ((struct sockaddr_in6 *)src)->sin6_addr;
+
+		dst = ip6_route_output(net, NULL, &fl6);
+		if (dst->error) {
+			dst_release(dst);
+			return NULL;
+		}
+
+		dev = dst_dev(dst);
+		/*
+		 * Get reference to netdev as dst_release() will
+		 * release the netdev reference.
+		 */
+		if (dev)
+			netdev_hold(dev, tracker, gfp);
+
+		dst_release(dst);
+#endif
+	}
+
+	return dev;
+}
+EXPORT_SYMBOL(netdev_get_by_addr);
 
 /**
  *	__dev_get_by_index - find a device by its ifindex
