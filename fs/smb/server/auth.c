@@ -464,6 +464,7 @@ int ksmbd_krb5_authenticate(struct ksmbd_session *sess, char *in_blob,
 	*out_len = resp->spnego_blob_len;
 	retval = 0;
 out:
+	kvfree(resp_ext);
 	kvfree(resp);
 	return retval;
 }
