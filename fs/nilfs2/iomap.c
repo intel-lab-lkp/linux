@@ -18,6 +18,7 @@ static int nilfs_iomap_begin(struct inode *inode, loff_t offset,
 	struct the_nilfs *nilfs = inode->i_sb->s_fs_info;
 	struct nilfs_inode_info *ii = NILFS_I(inode);
 	sector_t blkoff = offset >> inode->i_blkbits;
+	loff_t iomap_offset = (loff_t)blkoff << inode->i_blkbits;
 	unsigned int maxblocks;
 	__u64 blknum = 0;
 	int ret;
@@ -50,15 +51,15 @@ static int nilfs_iomap_begin(struct inode *inode, loff_t offset,
 	if (ret == -ENOENT) {
 		iomap->type = IOMAP_HOLE;
 		iomap->addr = IOMAP_NULL_ADDR;
-		iomap->offset = offset;
-		iomap->length = min_t(loff_t, length, i_blocksize(inode));
+		iomap->offset = iomap_offset;
+		iomap->length = i_blocksize(inode);
 		return 0;
 	} else if (ret < 0)
 		return ret;
 
 	iomap->bdev = inode->i_sb->s_bdev;
-	iomap->offset = offset;
-	iomap->length = min_t(loff_t, length, (loff_t)ret << inode->i_blkbits);
+	iomap->offset = iomap_offset;
+	iomap->length = (loff_t)ret << inode->i_blkbits;
 	iomap->addr = (loff_t)blknum << inode->i_blkbits;
 	iomap->type = IOMAP_MAPPED;
 	iomap->flags = IOMAP_F_MERGED;
