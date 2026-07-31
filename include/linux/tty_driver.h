@@ -7,6 +7,7 @@
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/cdev.h>
+#include <linux/mutex.h>
 #include <linux/uaccess.h>
 #include <linux/termios.h>
 #include <linux/seq_file.h>
@@ -497,6 +498,7 @@ struct tty_operations {
  * @kref: reference counting. Reaching zero frees all the internals and the
  *	  driver.
  * @cdevs: allocated/registered character /dev devices
+ * @device_mutex: serializes device registration and removal
  * @owner: modules owning this driver. Used drivers cannot be rmmod'ed.
  *	   Automatically set by tty_alloc_driver().
  * @driver_name: name of the driver used in /proc/tty
@@ -532,6 +534,7 @@ struct tty_operations {
 struct tty_driver {
 	struct kref kref;
 	struct cdev **cdevs;
+	struct mutex device_mutex;
 	struct module	*owner;
 	const char	*driver_name;
 	const char	*name;

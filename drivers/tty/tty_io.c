@@ -3185,7 +3185,8 @@ static int tty_cdev_add(struct tty_driver *driver, dev_t dev,
  * that bit is not set, this function should not be called by a tty
  * driver.
  *
- * Locking: ??
+ * Locking: device registration and removal are serialized by
+ * @driver->device_mutex.
  *
  * Return: A pointer to the struct device for this tty device (or
  * ERR_PTR(-EFOO) on error).
@@ -3217,7 +3218,8 @@ static void tty_device_create_release(struct device *dev)
  * tty driver's flags have the %TTY_DRIVER_DYNAMIC_DEV bit set. If that bit is
  * not set, this function should not be called by a tty driver.
  *
- * Locking: ??
+ * Locking: device registration and removal are serialized by
+ * @driver->device_mutex.
  *
  * Return: A pointer to the struct device for this tty device (or
  * ERR_PTR(-EFOO) on error).
@@ -3257,6 +3259,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	dev_set_drvdata(dev, drvdata);
 
 	dev_set_uevent_suppress(dev, 1);
+	guard(mutex)(&driver->device_mutex);
 
 	retval = device_register(dev);
 	if (retval)
@@ -3300,10 +3303,13 @@ EXPORT_SYMBOL_GPL(tty_register_device_attr);
  * If a tty device is registered with a call to tty_register_device() then
  * this function must be called when the tty device is gone.
  *
- * Locking: ??
+ * Locking: device registration and removal are serialized by
+ * @driver->device_mutex.
  */
 void tty_unregister_device(struct tty_driver *driver, unsigned index)
 {
+	guard(mutex)(&driver->device_mutex);
+
 	device_destroy(&tty_class, MKDEV(driver->major, driver->minor_start) + index);
 	if (!(driver->flags & TTY_DRIVER_DYNAMIC_ALLOC)) {
 		cdev_del(driver->cdevs[index]);
@@ -3338,6 +3344,7 @@ struct tty_driver *__tty_alloc_driver(unsigned int lines, struct module *owner,
 		return ERR_PTR(-ENOMEM);
 
 	kref_init(&driver->kref);
+	mutex_init(&driver->device_mutex);
 	driver->num = lines;
 	driver->owner = owner;
 	driver->flags = flags;
