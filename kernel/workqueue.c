@@ -5404,6 +5404,27 @@ static struct pool_workqueue *alloc_unbound_pwq(struct workqueue_struct *wq,
 	return pwq;
 }
 
+/*
+ * Create a pwq backing @wq on @cpu with the static per-cpu pool instead of a
+ * dedicated unbound pool. Used by the unbound pwq machinery for a workqueue
+ * that requests the per-cpu backend.
+ */
+static struct pool_workqueue *alloc_percpu_pwq(struct workqueue_struct *wq,
+					       int cpu)
+{
+	struct worker_pool *pool = get_percpu_pool(wq, cpu);
+	struct pool_workqueue *pwq;
+
+	lockdep_assert_held(&wq_pool_mutex);
+
+	pwq = kmem_cache_alloc_node(pwq_cache, GFP_KERNEL, pool->node);
+	if (!pwq)
+		return NULL;
+
+	init_pwq(pwq, wq, pool);
+	return pwq;
+}
+
 /**
  * wq_calc_pod_cpumask - calculate a wq_attrs' cpumask for a pod
  * @attrs: the wq_attrs of the default pwq of the target workqueue
@@ -5643,6 +5664,17 @@ static void unbound_wq_update_pwq(struct workqueue_struct *wq, int cpu)
 	if (!(wq->flags & WQ_UNBOUND) || wq->unbound_attrs->ordered)
 		return;
 
+	if (wq->flags & __WQ_PERCPU_POOLS) {
+		/* nothing to do if @cpu is already backed by its per-cpu pool */
+		if (is_pool_cpu_specific(unbound_pwq(wq, cpu)->pool))
+			return;
+
+		pwq = alloc_percpu_pwq(wq, cpu);
+		if (!pwq)
+			goto use_dfl_pwq;
+		goto install;
+	}
+
 	/*
 	 * We don't wanna alloc/free wq_attrs for each wq for each CPU.
 	 * Let's use a preallocated one.  The following buf is protected by
@@ -5666,6 +5698,7 @@ static void unbound_wq_update_pwq(struct workqueue_struct *wq, int cpu)
 		goto use_dfl_pwq;
 	}
 
+install:
 	/* Install the new pwq. */
 	mutex_lock(&wq->mutex);
 	old_pwq = install_unbound_pwq(wq, cpu, pwq);

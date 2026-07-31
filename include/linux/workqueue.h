@@ -410,6 +410,7 @@ enum wq_flags {
 	__WQ_ORDERED		= 1 << 17, /* internal: workqueue is ordered */
 	__WQ_LEGACY		= 1 << 18, /* internal: create*_workqueue() */
 	__WQ_DEPRECATED		= 1 << 19, /* internal: workqueue is deprecated */
+	__WQ_PERCPU_POOLS	= 1 << 20, /* internal: back unbound pwqs with percpu pools */
 
 	/* BH wq only allows the following flags */
 	__WQ_BH_ALLOWS		= WQ_BH | WQ_HIGHPRI | WQ_PERCPU,
