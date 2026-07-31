@@ -650,7 +650,7 @@ int xfs_btree_get_buf_block(struct xfs_btree_cur *cur,
 		const union xfs_btree_ptr *ptr, struct xfs_btree_block **block,
 		struct xfs_buf **bpp);
 int xfs_btree_read_buf_block(struct xfs_btree_cur *cur,
-		const union xfs_btree_ptr *ptr, int flags,
+		const union xfs_btree_ptr *ptr, int level, int flags,
 		struct xfs_btree_block **block, struct xfs_buf **bpp);
 void xfs_btree_set_sibling(struct xfs_btree_cur *cur,
 		struct xfs_btree_block *block, const union xfs_btree_ptr *ptr,

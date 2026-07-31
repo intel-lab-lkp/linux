@@ -385,6 +385,7 @@ xfs_btree_bload_leaf(
 STATIC int
 xfs_btree_bload_node(
 	struct xfs_btree_cur	*cur,
+	unsigned int		level,
 	unsigned int		recs_this_block,
 	union xfs_btree_ptr	*child_ptr,
 	struct xfs_btree_block	*block)
@@ -407,8 +408,8 @@ xfs_btree_bload_node(
 		 * been reclaimed.  LRU refs will be set on the block, which is
 		 * desirable if the new btree commits.
 		 */
-		ret = xfs_btree_read_buf_block(cur, child_ptr, 0, &child_block,
-				&child_bp);
+		ret = xfs_btree_read_buf_block(cur, child_ptr, level - 1, 0,
+					       &child_block, &child_bp);
 		if (ret)
 			return ret;
 
@@ -767,8 +768,8 @@ xfs_btree_bload(
 			trace_xfs_btree_bload_block(cur, level, i, blocks,
 					&ptr, nr_this_block);
 
-			ret = xfs_btree_bload_node(cur, nr_this_block,
-					&child_ptr, block);
+			ret = xfs_btree_bload_node(cur, level, nr_this_block,
+						   &child_ptr, block);
 			if (ret)
 				goto out;
 
