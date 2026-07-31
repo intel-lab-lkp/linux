@@ -578,22 +578,21 @@ int fsl_mc_err_probe(struct platform_device *op)
 	pdata->orig_ddr_err_disable = ddr_in32(pdata, FSL_MC_ERR_DISABLE);
 	ddr_out32(pdata, FSL_MC_ERR_DISABLE, 0);
 
+	/* store the original SBE threshold */
+	pdata->orig_ddr_err_sbe = ddr_in32(pdata, FSL_MC_ERR_SBE) & 0xff0000;
+
 	/* clear all error bits */
 	ddr_out32(pdata, FSL_MC_ERR_DETECT, ~0);
 
 	res = edac_mc_add_mc_with_groups(mci, fsl_ddr_dev_groups);
 	if (res) {
 		edac_dbg(3, "failed edac_mc_add_mc()\n");
-		goto err;
+		goto err1;
 	}
 
 	if (edac_op_state == EDAC_OPSTATE_INT) {
 		ddr_out32(pdata, FSL_MC_ERR_INT_EN,
 			  DDR_EIE_MBEE | DDR_EIE_SBEE);
-
-		/* store the original error management threshold */
-		pdata->orig_ddr_err_sbe = ddr_in32(pdata,
-						   FSL_MC_ERR_SBE) & 0xff0000;
 
 		/* set threshold to 1 error per interrupt */
 		ddr_out32(pdata, FSL_MC_ERR_SBE, 0x10000);
@@ -622,6 +621,11 @@ int fsl_mc_err_probe(struct platform_device *op)
 
 err2:
 	edac_mc_del_mc(&op->dev);
+	ddr_out32(pdata, FSL_MC_ERR_INT_EN, 0);
+err1:
+	ddr_out32(pdata, FSL_MC_ERR_DISABLE,
+		  pdata->orig_ddr_err_disable);
+	ddr_out32(pdata, FSL_MC_ERR_SBE, pdata->orig_ddr_err_sbe);
 err:
 	edac_mc_free(mci);
 	return res;
