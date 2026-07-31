@@ -350,6 +350,7 @@ int hv_call_add_logical_proc(int node, u32 lp_index, u32 acpi_id);
 int hv_call_notify_all_processors_started(void);
 bool hv_lp_exists(u32 lp_index);
 int hv_call_create_vp(int node, u64 partition_id, u32 vp_index, u32 flags);
+u64 mshv_current_partid(void);
 
 #else /* CONFIG_MSHV_ROOT */
 static inline bool hv_root_partition(void) { return false; }
@@ -379,6 +380,10 @@ static inline bool hv_lp_exists(u32 lp_index)
 static inline int hv_call_create_vp(int node, u64 partition_id, u32 vp_index, u32 flags)
 {
 	return -EOPNOTSUPP;
+}
+static inline u64 mshv_current_partid(void)
+{
+	return HV_PARTITION_ID_INVALID;
 }
 #endif /* CONFIG_MSHV_ROOT */
 

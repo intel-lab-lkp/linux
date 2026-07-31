@@ -1908,17 +1908,48 @@ mshv_partition_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+/* Given a process tgid, return partition id if it is a VMM process */
+u64 mshv_current_partid(void)
+{
+	struct mshv_partition *pt;
+	int i;
+	u64 ret_ptid = HV_PARTITION_ID_INVALID;
+
+	rcu_read_lock();
+
+	hash_for_each_rcu(mshv_root.pt_htable, i, pt, pt_hnode) {
+		if (pt->pt_vmm_tgid == current->tgid) {
+			ret_ptid = pt->pt_id;
+			break;
+		}
+	}
+
+	rcu_read_unlock();
+	return ret_ptid;
+}
+EXPORT_SYMBOL_GPL(mshv_current_partid);
+
+/* At present, we only allow one partition per VMM instance */
 static int
 add_partition(struct mshv_partition *partition)
 {
+	int rc = 0;
+
 	spin_lock(&mshv_root.pt_ht_lock);
 
+	if (mshv_current_partid() != HV_PARTITION_ID_INVALID) {
+		rc = -EEXIST;
+		goto out;
+	}
+
+	partition->pt_vmm_tgid = current->tgid;
 	hash_add_rcu(mshv_root.pt_htable, &partition->pt_hnode,
 		     partition->pt_id);
 
+out:
 	spin_unlock(&mshv_root.pt_ht_lock);
 
-	return 0;
+	return rc;
 }
 
 static_assert(MSHV_NUM_CPU_FEATURES_BANKS ==
