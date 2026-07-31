@@ -838,6 +838,9 @@ static bool __nbcon_context_update_unsafe(struct nbcon_context *ctxt, bool unsaf
 	nbcon_state_read(con, &cur);
 
 	do {
+		/* Unsafe sections are not reentrant. */
+		WARN_ON_ONCE(unsafe && cur.unsafe);
+
 		/*
 		 * The unsafe bit must not be cleared if an
 		 * unsafe hostile takeover has occurred.
