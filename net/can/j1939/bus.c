@@ -131,7 +131,17 @@ static enum hrtimer_restart j1939_ecu_timer_handler(struct hrtimer *hrtimer)
 		container_of(hrtimer, struct j1939_ecu, ac_timer);
 	struct j1939_priv *priv = ecu->priv;
 
-	write_lock_bh(&priv->lock);
+	/*
+	 * j1939_ac_process() cancels this timer while holding priv->lock.
+	 * Don't block here, otherwise the timer and receive paths can deadlock
+	 * waiting for each other on different CPUs. Retry shortly if address
+	 * claim processing currently owns the lock.
+	 */
+	if (!write_trylock(&priv->lock)) {
+		hrtimer_forward_now(hrtimer, ms_to_ktime(1));
+		return HRTIMER_RESTART;
+	}
+
 	/* TODO: can we test if ecu->addr is unicast before starting
 	 * the timer?
 	 */
@@ -141,7 +151,7 @@ static enum hrtimer_restart j1939_ecu_timer_handler(struct hrtimer *hrtimer)
 	 * j1939_ecu_timer_start().
 	 */
 	j1939_ecu_put(ecu);
-	write_unlock_bh(&priv->lock);
+	write_unlock(&priv->lock);
 
 	return HRTIMER_NORESTART;
 }
