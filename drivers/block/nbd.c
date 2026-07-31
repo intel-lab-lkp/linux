@@ -327,8 +327,8 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 		}
 	}
 	nsock->dead = true;
-	nsock->pending = NULL;
-	nsock->sent = 0;
+	if (!nsock->pending)
+		nsock->sent = 0;
 }
 
 static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize, loff_t blksize)
@@ -793,8 +793,10 @@ requeue:
 	 *
 	 * We must run from pending work function.
 	 * */
-	if (test_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags))
+	if (test_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags)) {
+		nbd_mark_nsock_dead(nbd, nsock, 1);
 		return BLK_STS_OK;
+	}
 
 	/* retry on a different socket */
 	dev_err_ratelimited(disk_to_dev(nbd->disk),
@@ -826,8 +828,18 @@ static void nbd_pending_cmd_work(struct work_struct *work)
 		if (!nsock->pending)
 			break;
 
+		if (nsock->dead)
+			goto dead;
+
 		/* don't bother timeout handler for partial sending */
 		if (READ_ONCE(jiffies) + msecs_to_jiffies(wait_ms) >= deadline) {
+			/*
+			 * The socket contains a partially transmitted request
+			 * and cannot be reused for another NBD request.
+			 */
+			nbd_mark_nsock_dead(nbd, nsock, 1);
+			nsock->pending = NULL;
+			nsock->sent = 0;
 			cmd->status = BLK_STS_IOERR;
 			blk_mq_complete_request(req);
 			break;
@@ -839,6 +851,18 @@ static void nbd_pending_cmd_work(struct work_struct *work)
 	clear_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags);
 out:
 	mutex_unlock(&cmd->lock);
+	nbd_config_put(nbd);
+	return;
+
+	/* Complete the request here; nbd_clear_req() will not handle it. */
+dead:
+	nsock->pending = NULL;
+	nsock->sent = 0;
+	mutex_unlock(&nsock->tx_lock);
+	clear_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags);
+	cmd->status = BLK_STS_IOERR;
+	mutex_unlock(&cmd->lock);
+	blk_mq_complete_request(req);
 	nbd_config_put(nbd);
 }
 
@@ -1373,6 +1397,10 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 
 		mutex_lock(&nsock->tx_lock);
 		if (!nsock->dead) {
+			mutex_unlock(&nsock->tx_lock);
+			continue;
+		}
+		if (nsock->pending) {
 			mutex_unlock(&nsock->tx_lock);
 			continue;
 		}
