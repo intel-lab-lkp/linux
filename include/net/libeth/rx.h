@@ -118,6 +118,35 @@ static inline dma_addr_t libeth_rx_alloc(const struct libeth_fq_fp *fq, u32 i)
 void libeth_rx_recycle_slow(netmem_ref netmem);
 
 /**
+ * __libeth_rx_sync_for_cpu - synchronize or recycle buffer post DMA
+ * @pool: &page_pool the buffer was allocated from
+ * @fqe: buffer to process
+ * @len: frame length from the descriptor
+ *
+ * Variant for callers which already know the buffer's pool, typically
+ * their Rx queue's fill queue pool.
+ *
+ * Return: true when there's data to process, false otherwise.
+ */
+static inline bool __libeth_rx_sync_for_cpu(const struct page_pool *pool,
+					    const struct libeth_fqe *fqe,
+					    u32 len)
+{
+	/* Very rare, but possible case. The most common reason:
+	 * the last fragment contained FCS only, which was then
+	 * stripped by the HW.
+	 */
+	if (unlikely(!len)) {
+		libeth_rx_recycle_slow(fqe->netmem);
+		return false;
+	}
+
+	page_pool_dma_sync_netmem_for_cpu(pool, fqe->netmem, fqe->offset, len);
+
+	return true;
+}
+
+/**
  * libeth_rx_sync_for_cpu - synchronize or recycle buffer post DMA
  * @fqe: buffer to process
  * @len: frame length from the descriptor
@@ -131,21 +160,7 @@ void libeth_rx_recycle_slow(netmem_ref netmem);
 static inline bool libeth_rx_sync_for_cpu(const struct libeth_fqe *fqe,
 					  u32 len)
 {
-	netmem_ref netmem = fqe->netmem;
-
-	/* Very rare, but possible case. The most common reason:
-	 * the last fragment contained FCS only, which was then
-	 * stripped by the HW.
-	 */
-	if (unlikely(!len)) {
-		libeth_rx_recycle_slow(netmem);
-		return false;
-	}
-
-	page_pool_dma_sync_netmem_for_cpu(netmem_get_pp(netmem), netmem,
-					  fqe->offset, len);
-
-	return true;
+	return __libeth_rx_sync_for_cpu(netmem_get_pp(fqe->netmem), fqe, len);
 }
 
 /* Converting abstract packet type numbers into a software structure with
