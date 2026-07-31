@@ -82,6 +82,7 @@ struct nci_ops {
 				    struct sk_buff *skb);
 	void  (*hci_cmd_received)(struct nci_dev *ndev, u8 pipe, u8 cmd,
 				  struct sk_buff *skb);
+	void  (*pre_unregister)(struct nci_dev *ndev);
 
 	const struct nci_driver_ops *prop_ops;
 	size_t n_prop_ops;

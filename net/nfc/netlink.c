@@ -1426,6 +1426,11 @@ static int nfc_se_io(struct nfc_dev *dev, u32 se_idx,
 
 	device_lock(&dev->dev);
 
+	if (dev->shutting_down) {
+		rc = -ENODEV;
+		goto error;
+	}
+
 	if (!device_is_registered(&dev->dev)) {
 		rc = -ENODEV;
 		goto error;

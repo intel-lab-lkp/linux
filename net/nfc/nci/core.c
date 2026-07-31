@@ -1321,6 +1321,9 @@ void nci_unregister_device(struct nci_dev *ndev)
 
 	nfc_unregister_rfkill(ndev->nfc_dev);
 
+	if (ndev->ops->pre_unregister)
+		ndev->ops->pre_unregister(ndev);
+
 	/* This set_bit is not protected with specialized barrier,
 	 * However, it is fine because the mutex_lock(&ndev->req_lock);
 	 * in nci_close_device() will help to emit one.
