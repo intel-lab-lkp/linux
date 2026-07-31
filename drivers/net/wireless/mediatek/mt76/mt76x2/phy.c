@@ -121,15 +121,8 @@ mt76x2_get_min_rate_power(struct mt76x02_rate_power *r)
 	int i;
 	s8 ret = 0;
 
-	for (i = 0; i < sizeof(r->all); i++) {
-		if (!r->all[i])
-			continue;
-
-		if (ret)
-			ret = min(ret, r->all[i]);
-		else
-			ret = r->all[i];
-	}
+	for (i = 0; i < sizeof(r->all); i++)
+		ret = min_not_zero(ret, r->all[i]);
 
 	return ret;
 }
