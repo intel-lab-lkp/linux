@@ -15,6 +15,7 @@
 #include "internal.h"
 
 static int logon_vet_description(const char *desc);
+static void user_zeroize(struct key *key);
 
 /*
  * user defined keys take an arbitrary string as the description and an
@@ -28,6 +29,7 @@ struct key_type key_type_user = {
 	.update			= user_update,
 	.revoke			= user_revoke,
 	.destroy		= user_destroy,
+	.zeroize		= user_zeroize,
 	.describe		= user_describe,
 	.read			= user_read,
 };
@@ -48,6 +50,7 @@ struct key_type key_type_logon = {
 	.update			= user_update,
 	.revoke			= user_revoke,
 	.destroy		= user_destroy,
+	.zeroize		= user_zeroize,
 	.describe		= user_describe,
 	.vet_description	= logon_vet_description,
 };
@@ -151,6 +154,14 @@ void user_destroy(struct key *key)
 }
 
 EXPORT_SYMBOL_GPL(user_destroy);
+
+static void user_zeroize(struct key *key)
+{
+	struct user_key_payload *upayload = key->payload.data[0];
+
+	if (upayload)
+		memzero_explicit(upayload->data, upayload->datalen);
+}
 
 /*
  * describe the user key
