@@ -348,6 +348,12 @@ static int tb_drom_parse_entry_generic(struct tb_switch *sw,
 		const struct tb_drom_entry_desc *desc =
 			(const struct tb_drom_entry_desc *)entry;
 
+		/* Header, USB spec, vendor ID, and product ID. */
+		if (header->len < sizeof(*header) + 3 * sizeof(u16)) {
+			tb_sw_warn(sw, "USB4 product descriptor entry is too short\n");
+			return -EIO;
+		}
+
 		if (!sw->vendor && !sw->device) {
 			sw->vendor = desc->idVendor;
 			sw->device = desc->idProduct;
@@ -414,9 +420,16 @@ static int tb_drom_parse_entries(struct tb_switch *sw, size_t header_size)
 	int res;
 
 	while (pos < drom_size) {
-		struct tb_drom_entry_header *entry = (void *) (sw->drom + pos);
-		if (pos + 1 == drom_size || pos + entry->len > drom_size
-				|| !entry->len) {
+		struct tb_drom_entry_header *entry;
+
+		if (drom_size - pos < sizeof(*entry)) {
+			tb_sw_warn(sw, "DROM buffer overrun\n");
+			return -EIO;
+		}
+
+		entry = (void *)(sw->drom + pos);
+		if (entry->len < sizeof(*entry) ||
+		    entry->len > drom_size - pos) {
 			tb_sw_warn(sw, "DROM buffer overrun\n");
 			return -EIO;
 		}
