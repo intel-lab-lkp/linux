@@ -544,8 +544,7 @@ static u64 slots_fetch_random(void)
 		return slot_areas[i].addr + ((u64)slot * CONFIG_PHYSICAL_ALIGN);
 	}
 
-	if (i == slot_area_index)
-		debug_putstr("slots_fetch_random() failed!?\n");
+	debug_putstr("slots_fetch_random() failed!?\n");
 	return 0;
 }
 
@@ -893,14 +892,10 @@ void choose_random_location(unsigned long input,
 
 	/* Walk available memory entries to find a random address. */
 	random_addr = find_random_phys_addr(min_addr, output_size);
-	if (!random_addr) {
+	if (!random_addr)
 		warn("Physical KASLR disabled: no suitable memory region!");
-	} else {
-		/* Update the new physical address location. */
-		if (*output != random_addr)
-			*output = random_addr;
-	}
-
+	else
+		*output = random_addr;
 
 	/* Pick random virtual address starting from LOAD_PHYSICAL_ADDR. */
 	if (IS_ENABLED(CONFIG_X86_64))
