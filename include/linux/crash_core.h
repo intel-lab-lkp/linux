@@ -5,6 +5,7 @@
 #include <linux/linkage.h>
 #include <linux/elfcore.h>
 #include <linux/elf.h>
+#include <linux/notifier.h>
 
 struct kimage;
 
@@ -32,6 +33,10 @@ static inline void arch_kexec_protect_crashkres(void) { }
 
 #ifndef arch_kexec_unprotect_crashkres
 static inline void arch_kexec_unprotect_crashkres(void) { }
+#endif
+
+#ifdef CONFIG_CRASH_ZEROIZE
+extern struct atomic_notifier_head crash_zeroize_notifier_list;
 #endif
 
 #ifndef arch_crash_handle_hotplug_event

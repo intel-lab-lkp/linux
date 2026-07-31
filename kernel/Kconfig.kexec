@@ -179,4 +179,12 @@ config CRASH_MAX_MEMORY_RANGES
 	  the computation behind the value provided through the
 	  /sys/kernel/crash_elfcorehdr_size attribute.
 
+config CRASH_ZEROIZE
+	bool "Zeroize secrets on panic"
+	depends on CRASH_DUMP
+	help
+	  Wipe secrets (e.g. kernel keyring and memfd_secret pages) on crash or panic.
+
+	  If unsure, say N.
+
 endmenu
