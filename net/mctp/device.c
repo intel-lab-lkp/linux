@@ -303,6 +303,11 @@ void mctp_dev_hold(struct mctp_dev *mdev)
 	refcount_inc(&mdev->refs);
 }
 
+bool mctp_dev_try_hold(struct mctp_dev *mdev)
+{
+	return mdev && refcount_inc_not_zero(&mdev->refs);
+}
+
 void mctp_dev_put(struct mctp_dev *mdev)
 {
 	if (mdev && refcount_dec_and_test(&mdev->refs)) {

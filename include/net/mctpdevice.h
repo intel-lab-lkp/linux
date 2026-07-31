@@ -50,6 +50,7 @@ int mctp_register_netdev(struct net_device *dev,
 void mctp_unregister_netdev(struct net_device *dev);
 
 void mctp_dev_hold(struct mctp_dev *mdev);
+bool mctp_dev_try_hold(struct mctp_dev *mdev);
 void mctp_dev_put(struct mctp_dev *mdev);
 
 void mctp_dev_set_key(struct mctp_dev *dev, struct mctp_sk_key *key);
