@@ -21,6 +21,8 @@
 #include <linux/splice.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/iomap.h>
+#include <linux/highmem.h>
+#include <linux/rmap.h>
 
 static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 			  unsigned int open_flags, int opcode,
@@ -1200,19 +1202,63 @@ static ssize_t fuse_send_write(struct fuse_io_args *ia, loff_t pos,
 	return err ?: ia->write.out.size;
 }
 
+/*
+ * An operation extended i_size past a non-folio-aligned old EOF at @from,
+ * turning [@from, @to) into a hole that must read back as zero.  If the old
+ * last folio is cached and was dirtied beyond the old EOF (e.g. mmap stores
+ * into the post-EOF region, which are undefined until the file grows), zero
+ * that tail so it is not exposed as stale data (xfstests generic/363).
+ *
+ * pagecache_isize_extended() cannot be used: it bails out for
+ * i_blocksize() >= PAGE_SIZE, and a non-fuseblk mount has
+ * s_blocksize == PAGE_SIZE, so the zeroing has to be done here.
+ * Callers hold i_rwsem, serialising this against concurrent writes and
+ * truncates; it must not run under fi->lock, as it locks the folio.
+ */
+void fuse_zero_partial_eof_folio(struct inode *inode, loff_t from, loff_t to)
+{
+	struct folio *folio;
+	size_t offset, end;
+
+	if (from >= to)
+		return;
+
+	folio = filemap_lock_folio(inode->i_mapping, from >> PAGE_SHIFT);
+	if (IS_ERR(folio))
+		return;
+
+	if (folio_mkclean(folio))
+		folio_mark_dirty(folio);
+
+	if (folio_test_dirty(folio)) {
+		offset = offset_in_folio(folio, from);
+		end = min_t(loff_t, to - folio_pos(folio), folio_size(folio));
+		folio_zero_segment(folio, offset, end);
+	}
+
+	folio_unlock(folio);
+	folio_put(folio);
+}
+
 bool fuse_write_update_attr(struct inode *inode, loff_t pos, ssize_t written)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	bool ret = false;
+	loff_t old_size = 0;
 
 	spin_lock(&fi->lock);
 	fi->attr_version = atomic64_inc_return(&fc->attr_version);
 	if (written > 0 && pos > inode->i_size) {
+		old_size = inode->i_size;
 		i_size_write(inode, pos);
 		ret = true;
 	}
 	spin_unlock(&fi->lock);
+
+	/* [old_size, pos - written) is the hole this write opened past EOF. */
+	if (ret)
+		fuse_zero_partial_eof_folio(inode, old_size, pos - written);
 
 	fuse_invalidate_attr_mask(inode, FUSE_STATX_MODSIZE);
 
@@ -2913,8 +2959,18 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 
 	/* we could have extended the file */
 	if (!(mode & FALLOC_FL_KEEP_SIZE)) {
+		loff_t oldsize = i_size_read(inode);
+
 		if (fuse_write_update_attr(inode, offset + length, length))
 			file_update_time(file);
+		/*
+		 * fuse_write_update_attr() already zeroes up to @offset when
+		 * the write started past the old EOF; this additionally covers
+		 * a fallocate whose range starts at or before it.  fallocate
+		 * writes no data, so the whole extension must read as zero; the
+		 * overlap is a no-op.
+		 */
+		fuse_zero_partial_eof_folio(inode, oldsize, offset + length);
 	}
 
 	if (mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE))
