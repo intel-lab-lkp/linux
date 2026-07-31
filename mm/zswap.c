@@ -154,11 +154,19 @@ struct zswap_pool {
 	struct zs_pool *zs_pool;
 	struct crypto_acomp_ctx __percpu *acomp_ctx;
 	struct percpu_ref ref;
-	struct list_head list;
 	struct work_struct release_work;
 	struct hlist_node node;
+	u8 idx;
 	char tfm_name[CRYPTO_MAX_ALG_NAME];
 };
+
+#define ZSWAP_MAX_POOLS 16
+static struct zswap_pool __rcu *zswap_pools[ZSWAP_MAX_POOLS];
+/*
+ * The current pool (NULL if none): an alias of one zswap_pools[] slot.  It
+ * always holds a ref, so it is never retired from under us.
+ */
+static struct zswap_pool __rcu *zswap_current_pool;
 
 /* Global LRU lists shared by all zswap pools. */
 static struct list_lru zswap_list_lru;
@@ -200,9 +208,7 @@ struct zswap_entry {
 static struct xarray *zswap_trees[MAX_SWAPFILES];
 static unsigned int nr_zswap_trees[MAX_SWAPFILES];
 
-/* RCU-protected iteration */
-static LIST_HEAD(zswap_pools);
-/* protects zswap_pools list modification */
+/* protects the zswap_pools array and zswap_current_pool */
 static DEFINE_SPINLOCK(zswap_pools_lock);
 /* pool counter to provide unique names to zsmalloc */
 static atomic_t zswap_pools_count = ATOMIC_INIT(0);
@@ -270,6 +276,25 @@ static void acomp_ctx_free(struct crypto_acomp_ctx *acomp_ctx)
 	acomp_ctx->buffer = NULL;
 }
 
+static int zswap_pool_reserve_slot(struct zswap_pool *pool)
+{
+	int i, ret = -ENOSPC;
+
+	spin_lock_bh(&zswap_pools_lock);
+	for (i = 0; i < ZSWAP_MAX_POOLS; i++) {
+		if (!rcu_access_pointer(zswap_pools[i])) {
+			/* Set idx before publishing so readers never see it stale. */
+			pool->idx = i;
+			rcu_assign_pointer(zswap_pools[i], pool);
+			ret = i;
+			break;
+		}
+	}
+	spin_unlock_bh(&zswap_pools_lock);
+
+	return ret;
+}
+
 static struct zswap_pool *zswap_pool_create(char *compressor)
 {
 	struct zswap_pool *pool;
@@ -313,19 +338,27 @@ static struct zswap_pool *zswap_pool_create(char *compressor)
 	if (ret)
 		goto cpuhp_add_fail;
 
-	/* being the current pool takes 1 ref; this func expects the
-	 * caller to always add the new pool as the current pool
+	/*
+	 * After a successful create, the caller makes this the current pool.
+	 * If the caller fails, it kills the ref to free the reserved slot.
 	 */
 	ret = percpu_ref_init(&pool->ref, __zswap_pool_empty,
 			      PERCPU_REF_ALLOW_REINIT, GFP_KERNEL);
 	if (ret)
 		goto ref_fail;
-	INIT_LIST_HEAD(&pool->list);
+
+	ret = zswap_pool_reserve_slot(pool);
+	if (ret < 0) {
+		pr_err("cannot create more than %d pools\n", ZSWAP_MAX_POOLS);
+		goto slot_fail;
+	}
 
 	zswap_pool_debug("created", pool);
 
 	return pool;
 
+slot_fail:
+	percpu_ref_exit(&pool->ref);
 ref_fail:
 	cpuhp_state_remove_instance(CPUHP_MM_ZSWP_POOL_PREPARE, &pool->node);
 
@@ -388,7 +421,7 @@ static void __zswap_pool_release(struct work_struct *work)
 	WARN_ON(!percpu_ref_is_zero(&pool->ref));
 	percpu_ref_exit(&pool->ref);
 
-	/* pool is now off zswap_pools list and has no references. */
+	/* Slot cleared in __zswap_pool_empty(); synchronize_rcu() drained readers. */
 	zswap_pool_destroy(pool);
 }
 
@@ -404,7 +437,11 @@ static void __zswap_pool_empty(struct percpu_ref *ref)
 
 	WARN_ON(pool == zswap_pool_current());
 
-	list_del_rcu(&pool->list);
+	/*
+	 * Clear the slot before scheduling the release so new readers cannot
+	 * see it; __zswap_pool_release()'s synchronize_rcu() drains the rest.
+	 */
+	rcu_assign_pointer(zswap_pools[pool->idx], NULL);
 
 	INIT_WORK(&pool->release_work, __zswap_pool_release);
 	schedule_work(&pool->release_work);
@@ -435,7 +472,8 @@ static struct zswap_pool *__zswap_pool_current(void)
 {
 	struct zswap_pool *pool;
 
-	pool = list_first_or_null_rcu(&zswap_pools, typeof(*pool), list);
+	pool = rcu_dereference_check(zswap_current_pool,
+				     lockdep_is_held(&zswap_pools_lock));
 	WARN_ONCE(!pool && zswap_has_pool,
 		  "%s: no page storage pool!\n", __func__);
 
@@ -468,11 +506,14 @@ static struct zswap_pool *zswap_pool_current_get(void)
 static struct zswap_pool *zswap_pool_find_get(char *compressor)
 {
 	struct zswap_pool *pool;
+	int i;
 
 	assert_spin_locked(&zswap_pools_lock);
 
-	list_for_each_entry_rcu(pool, &zswap_pools, list) {
-		if (strcmp(pool->tfm_name, compressor))
+	for (i = 0; i < ZSWAP_MAX_POOLS; i++) {
+		pool = rcu_dereference_protected(zswap_pools[i],
+					lockdep_is_held(&zswap_pools_lock));
+		if (!pool || strcmp(pool->tfm_name, compressor))
 			continue;
 		/* if we can't get it, it's about to be destroyed */
 		if (!zswap_pool_tryget(pool))
@@ -497,10 +538,14 @@ unsigned long zswap_total_pages(void)
 {
 	struct zswap_pool *pool;
 	unsigned long total = 0;
+	int i;
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(pool, &zswap_pools, list)
-		total += zs_get_total_pages(pool->zs_pool);
+	for (i = 0; i < ZSWAP_MAX_POOLS; i++) {
+		pool = rcu_dereference(zswap_pools[i]);
+		if (pool)
+			total += zs_get_total_pages(pool->zs_pool);
+	}
 	rcu_read_unlock();
 
 	return total;
@@ -562,7 +607,6 @@ static int zswap_compressor_param_set(const char *val, const struct kernel_param
 	if (pool) {
 		zswap_pool_debug("using existing", pool);
 		WARN_ON(pool == zswap_pool_current());
-		list_del_rcu(&pool->list);
 	}
 
 	spin_unlock_bh(&zswap_pools_lock);
@@ -589,16 +633,15 @@ static int zswap_compressor_param_set(const char *val, const struct kernel_param
 	spin_lock_bh(&zswap_pools_lock);
 
 	if (!ret) {
+		/* The new pool becomes current; drop the ref of the old one. */
 		put_pool = zswap_pool_current();
-		list_add_rcu(&pool->list, &zswap_pools);
+		rcu_assign_pointer(zswap_current_pool, pool);
 		zswap_has_pool = true;
 	} else if (pool) {
 		/*
-		 * Add the possibly pre-existing pool to the end of the pools
-		 * list; if it's new (and empty) then it'll be removed and
-		 * destroyed by the put after we drop the lock
+		 * Not current; drop the ref below.  This frees a new pool
+		 * (and its slot), or decommissions a reused one (slot kept).
 		 */
-		list_add_tail_rcu(&pool->list, &zswap_pools);
 		put_pool = pool;
 	}
 
@@ -1763,6 +1806,9 @@ static int zswap_setup(void)
 	struct zswap_pool *pool;
 	int ret;
 
+	/* Slot indices are stored in a u8 (pool->idx). */
+	BUILD_BUG_ON(ZSWAP_MAX_POOLS - 1 > U8_MAX);
+
 	zswap_entry_cache = KMEM_CACHE(zswap_entry, 0);
 	if (!zswap_entry_cache) {
 		pr_err("entry cache creation failed\n");
@@ -1793,7 +1839,7 @@ static int zswap_setup(void)
 	pool = __zswap_pool_create_fallback();
 	if (pool) {
 		pr_info("loaded using pool %s\n", pool->tfm_name);
-		list_add(&pool->list, &zswap_pools);
+		rcu_assign_pointer(zswap_current_pool, pool);
 		zswap_has_pool = true;
 		static_branch_enable(&zswap_ever_enabled);
 	} else {
