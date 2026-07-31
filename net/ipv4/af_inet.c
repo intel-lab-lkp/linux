@@ -1470,6 +1470,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	const struct net_offload *ops;
 	struct sk_buff *pp = NULL;
 	const struct iphdr *iph;
+	unsigned int tot_len;
 	struct sk_buff *p;
 	unsigned int hlen;
 	unsigned int off;
@@ -1498,6 +1499,25 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 		goto out;
 
 	NAPI_GRO_CB(skb)->proto = proto;
+
+	tot_len = ntohs(iph->tot_len);
+	if (unlikely(skb_gro_len(skb) > tot_len)) {
+		if (!skb_is_nonlinear(skb)) {
+			if (tot_len < sizeof(*iph) ||
+			    pskb_trim_rcsum(skb, off + tot_len))
+				goto out;
+
+			NAPI_GRO_CB(skb)->frag0 = skb->data;
+			NAPI_GRO_CB(skb)->frag0_len = skb->len;
+			iph = skb_gro_header(skb, hlen, off);
+			if (unlikely(!iph))
+				goto out;
+			if (skb->ip_summed == CHECKSUM_COMPLETE)
+				NAPI_GRO_CB(skb)->csum =
+					skb_checksum(skb, off, tot_len, 0);
+		}
+	}
+
 	flush = (u16)((ntohl(*(__be32 *)iph) ^ skb_gro_len(skb)) | (ntohl(*(__be32 *)&iph->id) & ~IP_DF));
 
 	list_for_each_entry(p, head, list) {
