@@ -383,6 +383,7 @@ static int virtio_gpu_queue_ctrl_sgs(struct virtio_gpu_device *vgdev,
 	if (!drm_dev_enter(vgdev->ddev, &idx)) {
 		if (fence && vbuf->objs)
 			virtio_gpu_array_unlock_resv(vbuf->objs);
+		virtio_gpu_array_put_free(vbuf->objs);
 		free_vbuf(vgdev, vbuf);
 		return -ENODEV;
 	}
