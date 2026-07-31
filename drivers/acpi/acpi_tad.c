@@ -51,6 +51,9 @@ MODULE_AUTHOR("Rafael J. Wysocki");
 #define ACPI_TAD_AC_TIMER	(u32)0
 #define ACPI_TAD_DC_TIMER	(u32)1
 
+/* ACPI TAD wake alarm status flags (ACPI 6.6, Section 9.17.5) */
+#define ACPI_TAD_WAKE_STATUS_EXPIRED	BIT(0)
+
 /* Special value for disabled timer or expired timer wake policy. */
 #define ACPI_TAD_WAKE_DISABLED	(~(u32)0)
 
@@ -709,6 +712,7 @@ static int acpi_tad_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 static int acpi_tad_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 {
 	unsigned long long retval;
+	unsigned long long status;
 	struct rtc_time tm_now;
 	struct acpi_tad_rt rt;
 	int ret;
@@ -740,7 +744,14 @@ static int acpi_tad_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 	if (retval > U32_MAX)
 		return -ENODATA;
 
-	t->pending = 0;
+	ret = __acpi_tad_wake_read(dev, "_GWS", ACPI_TAD_AC_TIMER, &status);
+	if (ret)
+		return ret;
+
+	if (status > U32_MAX)
+		return -ENODATA;
+
+	t->pending = !!(status & ACPI_TAD_WAKE_STATUS_EXPIRED);
 
 	if (retval != ACPI_TAD_WAKE_DISABLED) {
 		t->enabled = 1;
