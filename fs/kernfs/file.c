@@ -495,8 +495,11 @@ static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 
 	rc = 0;
 	if (!of->mmapped) {
-		of->mmapped = true;
+		struct mutex *mutex = kernfs_open_file_mutex_lock(of->kn);
+
 		of_on(of)->nr_mmapped++;
+		mutex_unlock(mutex);
+		of->mmapped = true;
 		of->vm_ops = vma->vm_ops;
 	}
 	vma->vm_ops = &kernfs_vm_ops;
