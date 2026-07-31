@@ -9,6 +9,7 @@
 #include <linux/termios.h>	/* For TIOCINQ/OUTQ */
 #include <linux/spinlock.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 
 #include <net/sock.h>
 
@@ -120,8 +121,11 @@ static DEFINE_XARRAY_ALLOC(qrtr_ports);
  * @nid: node id
  * @qrtr_tx_flow: xarray of qrtr_tx_flow, keyed by node << 32 | port
  * @qrtr_tx_lock: lock for qrtr_tx_flow inserts
+ * @hello_sent: hello packet sent to endpoint
+ * @hello_rcvd: hello packet received from endpoint
  * @rx_queue: receive queue
  * @item: list item for broadcast list
+ * @say_hello: scheduled work for initiating hello
  */
 struct qrtr_node {
 	struct mutex ep_lock;
@@ -132,8 +136,12 @@ struct qrtr_node {
 	struct xarray qrtr_tx_flow;
 	struct mutex qrtr_tx_lock; /* for qrtr_tx_flow */
 
+	atomic_t hello_sent;
+	atomic_t hello_rcvd;
+
 	struct sk_buff_head rx_queue;
 	struct list_head item;
+	struct work_struct say_hello;
 };
 
 /**
@@ -186,6 +194,8 @@ static void __qrtr_node_release(struct kref *kref)
 
 	list_del(&node->item);
 	mutex_unlock(&qrtr_node_lock);
+
+	cancel_work_sync(&node->say_hello);
 
 	skb_queue_purge(&node->rx_queue);
 
@@ -341,6 +351,12 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	size_t len = skb->len;
 	int rc, confirm_rx;
 
+	if (type == QRTR_TYPE_HELLO &&
+	    atomic_cmpxchg(&node->hello_sent, 0, 1) != 0) {
+		kfree_skb(skb);
+		return 0;
+	}
+
 	confirm_rx = qrtr_tx_wait(node, to->sq_node, to->sq_port, type);
 	if (confirm_rx < 0) {
 		kfree_skb(skb);
@@ -378,6 +394,11 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	 * confirm_rx flag if we dropped this one */
 	if (rc && confirm_rx)
 		qrtr_tx_flow_failed(node, to->sq_node, to->sq_port);
+
+	if (rc && type == QRTR_TYPE_HELLO) {
+		atomic_set(&node->hello_sent, 0);
+		schedule_work(&node->say_hello);
+	}
 
 	return rc;
 }
@@ -527,6 +548,13 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 		if (!ipc)
 			goto err;
 
+		if (cb->type == QRTR_TYPE_HELLO &&
+		    atomic_cmpxchg(&node->hello_rcvd, 0, 1) != 0) {
+			qrtr_port_put(ipc);
+			kfree_skb(skb);
+			return 0;
+		}
+
 		if (sock_queue_rcv_skb(&ipc->sk, skb)) {
 			qrtr_port_put(ipc);
 			goto err;
@@ -570,6 +598,35 @@ static struct sk_buff *qrtr_alloc_ctrl_packet(struct qrtr_ctrl_pkt **pkt,
 	return skb;
 }
 
+static void qrtr_hello_work(struct work_struct *work)
+{
+	struct sockaddr_qrtr from = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
+	struct sockaddr_qrtr to = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
+	struct qrtr_ctrl_pkt *pkt;
+	struct qrtr_node *node;
+	struct qrtr_sock *ctrl;
+	struct sk_buff *skb;
+
+	node = container_of(work, struct qrtr_node, say_hello);
+
+	/* NS must be bound before we can send */
+	ctrl = qrtr_port_lookup(QRTR_PORT_CTRL);
+	if (!ctrl)
+		return;
+
+	skb = qrtr_alloc_ctrl_packet(&pkt, GFP_KERNEL);
+	if (!skb) {
+		qrtr_port_put(ctrl);
+		return;
+	}
+
+	pkt->cmd = cpu_to_le32(QRTR_TYPE_HELLO);
+	from.sq_node = qrtr_local_nid;
+	to.sq_node = node->nid;
+	qrtr_node_enqueue(node, skb, QRTR_TYPE_HELLO, &from, &to);
+	qrtr_port_put(ctrl);
+}
+
 /**
  * qrtr_endpoint_register() - register a new endpoint
  * @ep: endpoint to register
@@ -595,6 +652,10 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int nid)
 	node->nid = QRTR_EP_NID_AUTO;
 	node->ep = ep;
 
+	atomic_set(&node->hello_sent, 0);
+	atomic_set(&node->hello_rcvd, 0);
+	INIT_WORK(&node->say_hello, qrtr_hello_work);
+
 	xa_init(&node->qrtr_tx_flow);
 	mutex_init(&node->qrtr_tx_lock);
 
@@ -604,6 +665,9 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int nid)
 	list_add(&node->item, &qrtr_all_nodes);
 	mutex_unlock(&qrtr_node_lock);
 	ep->node = node;
+
+	/* Initiate HELLO handshake from the core layer */
+	schedule_work(&node->say_hello);
 
 	return 0;
 }
@@ -796,8 +860,21 @@ static int __qrtr_bind(struct socket *sock,
 	sock_reset_flag(sk, SOCK_ZAPPED);
 
 	/* Notify all open ports about the new controller */
-	if (port == QRTR_PORT_CTRL)
+	if (port == QRTR_PORT_CTRL) {
+		struct qrtr_node *node;
+
+		/* Reset HELLO state on all nodes so the handshake can be
+		 * re-established with the new NS instance.
+		 */
+		mutex_lock(&qrtr_node_lock);
+		list_for_each_entry(node, &qrtr_all_nodes, item) {
+			atomic_set(&node->hello_sent, 0);
+			atomic_set(&node->hello_rcvd, 0);
+		}
+		mutex_unlock(&qrtr_node_lock);
+
 		qrtr_reset_ports();
+	}
 
 	return 0;
 }
