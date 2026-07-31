@@ -4512,11 +4512,13 @@ static inline void netdev_tracker_alloc(struct net_device *dev,
 #endif
 }
 
-static inline void netdev_tracker_free(struct net_device *dev,
+static inline int netdev_tracker_free(struct net_device *dev,
 				       netdevice_tracker *tracker)
 {
 #ifdef CONFIG_NET_DEV_REFCNT_TRACKER
-	ref_tracker_free(&dev->refcnt_tracker, tracker);
+	return ref_tracker_free(&dev->refcnt_tracker, tracker);
+#else
+	return 0;
 #endif
 }
 
@@ -4533,8 +4535,12 @@ static inline void netdev_put(struct net_device *dev,
 			      netdevice_tracker *tracker)
 {
 	if (dev) {
-		netdev_tracker_free(dev, tracker);
-		__dev_put(dev);
+		/* Skip __dev_put() on -EINVAL: ref_tracker_free() already
+		 * warned and the refcount was decremented by the first
+		 * successful free.
+		 */
+		if (netdev_tracker_free(dev, tracker) != -EINVAL)
+			__dev_put(dev);
 	}
 }
 
@@ -4569,11 +4575,10 @@ static inline void netdev_ref_replace(struct net_device *odev,
 				      netdevice_tracker *tracker,
 				      gfp_t gfp)
 {
-	if (odev)
-		netdev_tracker_free(odev, tracker);
+	if (odev && netdev_tracker_free(odev, tracker) != -EINVAL)
+		__dev_put(odev);
 
 	__dev_hold(ndev);
-	__dev_put(odev);
 
 	if (ndev)
 		__netdev_tracker_alloc(ndev, tracker, gfp);
