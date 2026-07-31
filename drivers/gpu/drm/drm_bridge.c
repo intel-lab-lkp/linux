@@ -21,6 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/err.h>
 #include <linux/export.h>
@@ -454,8 +455,10 @@ void drm_bridge_add(struct drm_bridge *bridge)
 	 * in bridge_lingering_list. Remove it or bridge_lingering_list will be
 	 * corrupted when adding this bridge to bridge_list below.
 	 */
-	if (!list_empty(&bridge->list))
-		list_del_init(&bridge->list);
+	scoped_guard(mutex, &bridge_lock) {
+		if (!list_empty(&bridge->list))
+			list_del_init(&bridge->list);
+	}
 
 	mutex_init(&bridge->hpd_state_mutex);
 	mutex_init(&bridge->hpd_mutex);
