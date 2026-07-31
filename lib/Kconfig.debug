@@ -3428,6 +3428,16 @@ config TEST_KEXEC_HANDOVER
 
 	  If unsure, say N.
 
+config TEST_VMSTAT
+	tristate "VM Statistics Benchmark"
+	default n
+	help
+	  A synthetic benchmark measuring the performance of VM statistics,
+	  useful to analyze any improvements or regressions in functions that
+	  are frequently used in hot code paths.
+
+	  If unsure, say N.
+
 config RATELIMIT_KUNIT_TEST
 	tristate "KUnit Test for correctness and stress of ratelimit" if !KUNIT_ALL_TESTS
 	depends on KUNIT
