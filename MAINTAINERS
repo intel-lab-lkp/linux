@@ -27746,6 +27746,12 @@ F:	Documentation/scsi/ufs.rst
 F:	drivers/ufs/core/
 F:	include/ufs/
 
+UNIVERSAL FLASH STORAGE HOST CONTROLLER DRIVER AMD PCI
+M:	Rajeshkumar Sambandham <Rajeshkumar.Sambandham@amd.com>
+L:	linux-scsi@vger.kernel.org
+S:	Maintained
+F:	drivers/ufs/host/ufs-amd.h
+
 UNIVERSAL FLASH STORAGE HOST CONTROLLER DRIVER AMD VERSAL2
 M:	Sai Krishna Potthuri <sai.krishna.potthuri@amd.com>
 M:	Ajay Neeli <ajay.neeli@amd.com>
