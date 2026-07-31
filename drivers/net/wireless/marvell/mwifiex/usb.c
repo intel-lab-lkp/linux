@@ -102,7 +102,8 @@ static int mwifiex_usb_recv(struct mwifiex_adapter *adapter,
 			mwifiex_dbg(adapter, EVENT,
 				    "event_cause %#x\n", adapter->event_cause);
 
-			if (skb->len > MAX_EVENT_SIZE) {
+			if (skb->len - MWIFIEX_EVENT_HEADER_LEN >
+			    MAX_EVENT_SIZE) {
 				mwifiex_dbg(adapter, ERROR,
 					    "EVENT: event body too large\n");
 				ret = -1;
@@ -110,7 +111,8 @@ static int mwifiex_usb_recv(struct mwifiex_adapter *adapter,
 			}
 
 			memcpy(adapter->event_body, skb->data +
-			       MWIFIEX_EVENT_HEADER_LEN, skb->len);
+			       MWIFIEX_EVENT_HEADER_LEN,
+			       skb->len - MWIFIEX_EVENT_HEADER_LEN);
 
 			adapter->event_received = true;
 			adapter->event_skb = skb;
