@@ -25,6 +25,7 @@
 #include "tss.h"
 #include "regs.h"
 #include "kvm_emulate.h"
+#include "mmu/ever_mapped.h"
 #include "mmu/page_track.h"
 #include "x86.h"
 #include "cpuid.h"
@@ -2391,6 +2392,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_READONLY_MEM:
 		r = kvm ? kvm_arch_has_readonly_mem(kvm) : 1;
 		break;
+	case KVM_CAP_EVER_MAPPED:
+		r = (tdp_enabled && IS_ENABLED(CONFIG_X86_64));
+		break;
 	default:
 		break;
 	}
@@ -4190,10 +4194,107 @@ disable_exits_unlock:
 		mutex_unlock(&kvm->lock);
 		break;
 	}
+	case KVM_CAP_EVER_MAPPED: {
+		unsigned long *mapped_bitmap;
+		unsigned long num_granules;
+
+		r = 0;
+		mutex_lock(&kvm->lock);
+		if (!tdp_enabled) {
+			r = -EOPNOTSUPP;
+		} else if (kvm->arch.ever_mapped_bitmap) {
+			r = -EEXIST;
+		} else if (cap->args[0] == 0 ||
+			   cap->args[0] > (1ULL << kvm_host.maxphyaddr)) {
+			r = -EINVAL;
+		} else {
+			num_granules = DIV_ROUND_UP(cap->args[0], 1ULL << KVM_EVER_MAPPED_SHIFT);
+			mapped_bitmap =
+				kvcalloc(BITS_TO_LONGS(num_granules),
+					 sizeof(long), GFP_KERNEL_ACCOUNT);
+			if (!mapped_bitmap)
+				r = -ENOMEM;
+			else {
+				write_lock(&kvm->mmu_lock);
+				kvm->arch.ever_mapped_bitmap = mapped_bitmap;
+				kvm->arch.ever_mapped_max_gpa = num_granules << KVM_EVER_MAPPED_SHIFT;
+				write_unlock(&kvm->mmu_lock);
+			}
+		}
+		mutex_unlock(&kvm->lock);
+		break;
+	}
 	default:
 		r = -EINVAL;
 		break;
 	}
+	return r;
+}
+
+static int kvm_vm_ioctl_get_ever_mapped_log(struct kvm *kvm,
+					    struct kvm_ever_mapped_log *log)
+{
+	u64 max_granules;
+	unsigned int coarseness;
+	unsigned long *bitmap;
+	int r;
+
+	if (!kvm->arch.ever_mapped_bitmap)
+		return -ENOENT;
+
+	if (log->flags)
+		return -EINVAL;
+
+	if (log->granule_shift < KVM_EVER_MAPPED_SHIFT || log->granule_shift >= 64)
+		return -EINVAL;
+
+	max_granules = kvm->arch.ever_mapped_max_gpa >> log->granule_shift;
+	if (log->num_granules > max_granules ||
+	    log->first_granule > max_granules - log->num_granules)
+		return -EINVAL;
+
+	/*
+	 * For the case where the request uses the same granularity as our internal
+	 * tracking, and we are byte-aligned (the expected common case), we can
+	 * just copy_to_user. Otherwise, we have to create a new bitmap to pass.
+	 *
+	 * We do not lock against concurrent vCPUs mapping new memory on any of
+	 * these operations. Bits are set atomically and never cleared, so any race
+	 * here is indistinguishable from a write happening after this handler
+	 * finishes but before the caller reads the results.
+	 */
+	coarseness = log->granule_shift - KVM_EVER_MAPPED_SHIFT;
+	if (coarseness == 0 && !(log->first_granule & 7) && !(log->num_granules & 7)) {
+		if (copy_to_user(log->bitmap,
+				 (u8 *)kvm->arch.ever_mapped_bitmap + log->first_granule / 8,
+				 log->num_granules / 8))
+			return -EFAULT;
+		return 0;
+	}
+
+	bitmap = kvzalloc(DIV_ROUND_UP(log->num_granules, 8), GFP_KERNEL_ACCOUNT);
+	if (!bitmap)
+		return -ENOMEM;
+
+	for (u64 gran = log->first_granule;
+	     gran < log->first_granule + log->num_granules;
+	     gran++) {
+		unsigned long start = gran << coarseness;
+		unsigned long end = start + (1UL << coarseness);
+
+		if (find_next_bit(kvm->arch.ever_mapped_bitmap, end, start) < end)
+			__set_bit(gran - log->first_granule, bitmap);
+	}
+
+	if (copy_to_user(log->bitmap, bitmap, DIV_ROUND_UP(log->num_granules, 8))) {
+		r = -EFAULT;
+		goto out_free;
+	}
+
+	r = 0;
+
+out_free:
+	kvfree(bitmap);
 	return r;
 }
 
@@ -4708,6 +4809,15 @@ set_pit2_out:
 			return -EFAULT;
 
 		r = kvm_vm_ioctl_set_msr_filter(kvm, &filter);
+		break;
+	}
+	case KVM_GET_EVER_MAPPED_LOG: {
+		struct kvm_ever_mapped_log mapped_log;
+
+		if (copy_from_user(&mapped_log, argp, sizeof(mapped_log)))
+			return -EFAULT;
+
+		r = kvm_vm_ioctl_get_ever_mapped_log(kvm, &mapped_log);
 		break;
 	}
 	default:

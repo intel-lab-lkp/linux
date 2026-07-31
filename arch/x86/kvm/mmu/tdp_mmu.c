@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include "ever_mapped.h"
 #include "mmu.h"
 #include "mmu_internal.h"
 #include "mmutrace.h"
@@ -552,6 +553,17 @@ static int __handle_changed_spte(struct kvm *kvm, struct kvm_mmu_page *sp,
 
 		trace_kvm_tdp_mmu_spte_changed(as_id, gfn, level, old_spte, new_spte);
 		return 0;
+	}
+
+	/*
+	 * Whenever a page becomes a fresh leaf, mark the memory as mapped.
+	 * On hugepage breakup, this triggers for each new lower-level page,
+	 * even though the memory was already marked when the hugepage was
+	 * mapped, but the overhead is negligible.
+	 */
+	if (unlikely(kvm->arch.ever_mapped_bitmap) &&
+	    is_leaf && !was_leaf) {
+		kvm_ever_mapped_set_range(kvm, gfn, KVM_PAGES_PER_HPAGE(level));
 	}
 
 	/*

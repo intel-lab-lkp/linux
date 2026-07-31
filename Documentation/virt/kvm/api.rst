@@ -6566,6 +6566,53 @@ KVM_S390_KEYOP_SSKE
   Sets the storage key for the guest address ``guest_addr`` to the key
   specified in ``key``, returning the previous value in ``key``.
 
+4.145 KVM_GET_EVER_MAPPED_LOG
+-----------------------------
+
+:Capability: KVM_CAP_EVER_MAPPED
+:Architectures: x86
+:Type: vm ioctl
+:Parameters: struct kvm_ever_mapped_log
+:Returns: 0 on success, -ERRNO on error
+
+Errors:
+
+  ======     ============================================================
+  ENOENT     KVM_CAP_EVER_MAPPED has not been enabled for this VM
+  EINVAL     ``granule_shift`` is below 21 (internal tracking granularity) or
+             above 63
+  EINVAL     ``first_granule`` + ``num_granules`` extendends beyond the maxgpa
+             set up when KVM_CAP_EVER_MAPPED was enabled
+  EINVAL     ``flags`` is not 0
+  EFAULT     copy_{from,to}_user of ``bitmap`` failed, e.g., bitmap wasn't
+             sufficiently sized
+  ENOMEM     setting up temporary bitmap for copying to userspace failed
+  ======     ============================================================
+
+This requires KVM_CAP_EVER_MAPPED to have been enabled for the VM with a maxgpa
+parameter.
+
+::
+
+  struct kvm_ever_mapped_log {
+	__u64 first_granule;
+	__u64 num_granules;
+	__u32 granule_shift;
+	__u32 flags;
+	union {
+		void __user *bitmap;
+		__u64 padding;
+	};
+	__u64 reserved[4];
+  };
+
+``first_granule``, ``num_granules``, and ``granule_shift`` encode the GPA range
+the caller inquires about. For example, values of 2, 25, and 21, respectively,
+inquire about the address range [4MB, 54MB). The caller provides a ``bitmap``
+of the required length (in the above case 4 bytes). The call will write a 1 if
+any memory in the granule has been mapped at some point since
+KVM_CAP_EVER_MAPPED was enabled, 0 if not.
+
 .. _kvm_run:
 
 5. The kvm_run structure
@@ -8948,6 +8995,26 @@ through hugetlbfs can be enabled for a VM. After the capability is
 enabled, cmma can't be enabled anymore and pfmfi and the storage key
 interpretation are disabled. If cmma has already been enabled or the
 hpage_2g module parameter is not set to 1, -EINVAL is returned.
+
+7.48 KVM_CAP_EVER_MAPPED
+------------------------
+
+:Architectures: x86
+:Parameters: args[0] - maximum GPA to track mapped memory
+:Returns: 0 on success, -EOPNOTSUPP if TDP is not available, -EINVAL if args[0]
+          is 0 or beyond the maximum possible GPA, -ENOMEM if tracking setup
+          failed, -EEXIST if already set up.
+
+The presence of this capability indicates that KVM can track if pages have ever
+been mapped by the guest. This allows a conservative estimate of which pages
+are not zero any more.
+
+On enabling the capability, the caller provides a max GPA value. KVM will then
+track GPAs between 0 and this value. Note that this capability can be enabled
+at any time, but it is strongly recommended to enable it before vCPUs start
+running. Any page accesses by the guest before capability enablement will not
+be tracked. The max GPA value can only be set once; subsequent attempts to
+enable the capability with a different or even same value will fail.
 
 8. Other capabilities.
 ======================

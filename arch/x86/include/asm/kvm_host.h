@@ -1533,6 +1533,15 @@ struct kvm_arch {
 	 */
 	bool shadow_root_allocated;
 
+	/*
+	 * Tracks which guest pages have ever been mapped. This allows
+	 * tracking which memory is guaranteed to still be zero, e.g., for
+	 * supporting the HvExtCallGetBootZeroedMemory enlightenment.
+	 * The granularity is defined by KVM_EVER_MAPPED_SHIFT.
+	 */
+	unsigned long *ever_mapped_bitmap;
+	u64 ever_mapped_max_gpa;
+
 #ifdef CONFIG_KVM_EXTERNAL_WRITE_TRACKING
 	/*
 	 * If set, the VM has (or had) an external write tracking user, and
