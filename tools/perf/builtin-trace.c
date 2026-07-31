@@ -2098,6 +2098,37 @@ static bool is_internal_field(struct tep_format_field *field)
 	return !strcmp(field->type, "__data_loc char[]");
 }
 
+static bool field_has_hex_fmt(struct tep_format_field *field, int len)
+{
+	const char *fmt, *pos, *end;
+
+	if (!field || !field->event || !field->event->print_fmt.format)
+		return false;
+
+	fmt = field->event->print_fmt.format;
+
+	/* Limit scanning strictly to the quoted printf format string */
+	if (*fmt == '"') {
+		fmt++;
+		end = strchr(fmt, '"');
+	} else {
+		end = strchr(fmt, ',');
+	}
+
+	for (pos = strstr(fmt, field->name); pos && (!end || pos < end); pos = strstr(pos + 1, field->name)) {
+		if (pos == fmt || !(isalnum(pos[-1]) || pos[-1] == '_')) {
+			const char *after = pos + len;
+
+			if (*after == '=' && (strstarts(after + 1, "0x") ||
+					      strstarts(after + 1, "%#") ||
+					      strstarts(after + 1, "%p")))
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static struct tep_format_field *
 syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field *field,
 			    bool *use_btf)
@@ -2125,7 +2156,8 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 		    ((len >= 4 && strcmp(field->name + len - 4, "name") == 0) ||
 		     strstr(field->name, "path") != NULL)) {
 			arg->scnprintf = SCA_FILENAME;
-		} else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr"))
+		} else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr") ||
+			   field_has_hex_fmt(field, len))
 			arg->scnprintf = SCA_PTR;
 		else if (strcmp(field->type, "pid_t") == 0)
 			arg->scnprintf = SCA_PID;
