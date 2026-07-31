@@ -62,15 +62,6 @@ struct module_attribute {
 	void (*free)(struct module *);
 };
 
-struct module_version_attribute {
-	struct module_attribute mattr;
-	const char *module_name;
-	const char *version;
-};
-
-extern ssize_t __modver_version_show(const struct module_attribute *,
-				     struct module_kobject *, char *);
-
 extern const struct module_attribute module_uevent;
 
 /* These are either module local, or the kernel's dummy ones. */
@@ -256,43 +247,18 @@ struct module_kobject *lookup_or_create_module_kobject(const char *name);
 static typeof(name) __mod_device_table(type, name)			\
   __attribute__ ((used, alias(__stringify(name))))
 
-/* Version of form [<epoch>:]<version>[-<extra-version>].
- * Or for CVS/RCS ID version, everything but the number is stripped.
- * <epoch>: A (small) unsigned integer which allows you to start versions
- * anew. If not mentioned, it's zero.  eg. "2:1.0" is after
- * "1:2.0".
-
- * <version>: The <version> may contain only alphanumerics and the
- * character `.'.  Ordered by numeric sort for numeric parts,
- * ascii sort for ascii parts (as per RPM or DEB algorithm).
-
- * <extraversion>: Like <version>, but inserted for local
- * customizations, eg "rh3" or "rusty1".
-
- * Using this automatically adds a checksum of the .c files and the
- * local headers in "srcversion".
+/*
+ * Module "versions" do not make sense as the kernel is built all at once, the
+ * "version" is the overall kernel version number, so modules can not really be
+ * described as having a unique version given that they rely on the
+ * infrastructure of the whole kernel.
+ *
+ * For now, just make this an "empty" define, to keep existing code building
+ * properly as the tree is slowly purged of the use of this over time.
+ *
+ * It will be removed in the future when there are no in-tree users.
  */
-
-#if defined(MODULE) || !defined(CONFIG_SYSFS)
-#define MODULE_VERSION(_version) MODULE_INFO(version, _version)
-#else
-#define MODULE_VERSION(_version)					\
-	MODULE_INFO(version, _version);					\
-	static const struct module_version_attribute __modver_attr	\
-		__used __section("__modver")				\
-		__aligned(__alignof__(struct module_version_attribute)) \
-		= {							\
-			.mattr	= {					\
-				.attr	= {				\
-					.name	= "version",		\
-					.mode	= S_IRUGO,		\
-				},					\
-				.show	= __modver_version_show,	\
-			},						\
-			.module_name	= KBUILD_MODNAME,		\
-			.version	= _version,			\
-		}
-#endif
+#define MODULE_VERSION(_version)
 
 /* Optional firmware file (or files) needed by the module
  * format is simply firmware file name.  Multiple firmware
@@ -411,7 +377,6 @@ struct module {
 	/* Sysfs stuff. */
 	struct module_kobject mkobj;
 	struct module_attribute *modinfo_attrs;
-	const char *version;
 	const char *srcversion;
 	const char *imported_namespaces;
 	struct kobject *holders_dir;

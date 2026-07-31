@@ -81,7 +81,6 @@ static const char * const	sym_regex_kernel[S_NSYMTYPES] = {
 	"__(start|stop)___ksymtab(_gpl)?|"
 	"__(start|stop)___kcrctab(_gpl)?|"
 	"__(start|stop)___param|"
-	"__(start|stop)___modver|"
 	"__(start|stop)___bug_table|"
 	"__tracedata_(start|end)|"
 	"__(start|stop)_notes|"

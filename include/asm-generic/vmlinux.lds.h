@@ -544,11 +544,6 @@
 		BOUNDED_SECTION_BY(__param, ___param)			\
 	}								\
 									\
-	/* Built-in module versions. */					\
-	__modver : AT(ADDR(__modver) - LOAD_OFFSET) {			\
-		BOUNDED_SECTION_BY(__modver, ___modver)			\
-	}								\
-									\
 	KCFI_TRAPS							\
 									\
 	RO_EXCEPTION_TABLE						\
