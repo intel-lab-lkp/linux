@@ -656,6 +656,70 @@ static DEVICE_ATTR_RW(device_lvl_exception_count);
 static DEVICE_ATTR_RO(device_lvl_exception_id);
 static DEVICE_ATTR_RW(dme_qos_notification);
 
+static ssize_t iag_enable_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", READ_ONCE(hba->iag_enabled));
+}
+
+static ssize_t iag_enable_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	bool enable;
+	ssize_t res;
+
+	if (!ufshcd_is_mcq_iag_allowed(hba))
+		return -EOPNOTSUPP;
+
+	if (kstrtobool(buf, &enable))
+		return -EINVAL;
+
+	down(&hba->host_sem);
+	if (!ufshcd_is_user_access_allowed(hba)) {
+		res = -EBUSY;
+		goto out;
+	}
+
+	if (enable == READ_ONCE(hba->iag_enabled)) {
+		res = count;
+		goto out;
+	}
+
+	ufshcd_rpm_get_sync(hba);
+	res = ufshcd_mcq_toggle_iag(hba, enable);
+	ufshcd_rpm_put_sync(hba);
+out:
+	up(&hba->host_sem);
+	return res < 0 ? res : count;
+}
+
+static DEVICE_ATTR_RW(iag_enable);
+
+static struct attribute *ufs_sysfs_iag_attrs[] = {
+	&dev_attr_iag_enable.attr,
+	NULL,
+};
+
+static umode_t ufs_sysfs_iag_is_visible(struct kobject *kobj,
+					struct attribute *attr, int n)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	/* Only expose IAG controls on controllers that support IAG. */
+	return (hba->mcq_enabled && ufshcd_is_mcq_iag_allowed(hba)) ?
+		attr->mode : 0;
+}
+
+static const struct attribute_group ufs_sysfs_iag_group = {
+	.attrs = ufs_sysfs_iag_attrs,
+	.is_visible = ufs_sysfs_iag_is_visible,
+};
+
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
 	&dev_attr_rpm_target_dev_state.attr,
@@ -2014,6 +2078,7 @@ static const struct attribute_group ufs_sysfs_hid_group = {
 
 static const struct attribute_group *ufs_sysfs_groups[] = {
 	&ufs_sysfs_default_group,
+	&ufs_sysfs_iag_group,
 	&ufs_sysfs_capabilities_group,
 	&ufs_sysfs_ufshci_group,
 	&ufs_sysfs_monitor_group,

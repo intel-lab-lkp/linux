@@ -1080,6 +1080,8 @@ enum ufshcd_mcq_opr {
  * @iag_grp_cqs: MCQ interrupt-aggregation group to member-CQ bitmap, indexed
  *	by group id; built by ufshcd_mcq_config_iag() and used to reap a group's
  *	CQs on an IAGES interrupt
+ * @iag_enabled: current runtime state of MCQ interrupt aggregation, toggled via
+ *	the iag_enable sysfs attribute and preserved across controller resets
  * @ufs_rtc_update_work: A work for UFS RTC periodic update
  * @pm_qos_req: PM QoS request handle
  * @pm_qos_enabled: flag to check if pm qos is enabled
@@ -1263,6 +1265,7 @@ struct ufs_hba {
 	struct ufs_hw_queue *uhq;
 	struct ufshcd_mcq_opr_info_t mcq_opr[OPR_MAX];
 	u32 iag_grp_cqs[UFS_MAX_IAG_GROUPS];
+	bool iag_enabled;
 
 	struct delayed_work ufs_rtc_update_work;
 	struct pm_qos_request pm_qos_req;

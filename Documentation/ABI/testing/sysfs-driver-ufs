@@ -1791,3 +1791,26 @@ Description:
 		will be rejected.
 
 		The attribute is read/write.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/iag_enable
+What:		/sys/bus/platform/devices/*.ufs/iag_enable
+What:		/sys/bus/pci/drivers/ufshcd-pci/*/iag_enable
+Date:		August 2026
+Contact:	Rajeshkumar Sambandham <Rajeshkumar.Sambandham@amd.com>
+Description:	This node enables or disables MCQ interrupt aggregation (IAG) at
+		runtime. Echo 1 to batch command completions into fewer
+		interrupts, lowering host CPU and interrupt load at high queue
+		depth; echo 0 to deliver one completion interrupt per command,
+		which lowers latency at low queue depth. Reading it returns the
+		current state. IAG is disabled by default; enable it for
+		high-queue-depth workloads.
+
+		The controller is briefly quiesced (outstanding commands are
+		drained) while the new setting is applied, as required by the
+		UFSHCI specification for writing the aggregation parameters. The
+		setting is preserved across controller resets.
+
+		This node is present only when the controller supports IAG
+		(MCQCAP.MIAG != 0) and the platform enables it.
+
+		The attribute is read/write.

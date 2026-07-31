@@ -314,9 +314,9 @@ static u32 ufshcd_mcq_cq_to_group(struct ufs_hba *hba, int cq)
  * @hba: per adapter instance
  * @i: completion queue id
  *
- * Associates the CQ with its group (CQCFGy.IAG) and programs the group's
- * counter threshold and timeout once, on the first CQ that maps to it.
- * IAPWEN is set so IACTH/IATOVAL are latched. The counter/timer are re-armed
+ * Associates the CQ with its group (CQCFGy.IAG). When aggregation is enabled,
+ * it also programs the group's counter threshold and timeout (with IAPWEN)
+ * once, on the first CQ that maps to it. The counter/timer are re-armed
  * after each IAG interrupt by ufshcd_handle_mcq_cq_events(). @iag_grp_cqs
  * records the group -> member-CQ map used to reap on an IAG event.
  */
@@ -330,8 +330,11 @@ static void ufshcd_mcq_config_iag(struct ufs_hba *hba, int i)
 	cqcfg |= CQCFG_IAGVLD | (grp & CQCFG_IAG_MASK);
 	ufsmcq_writel(hba, cqcfg, ufshcd_mcq_cfg_offset(REG_CQCFG, i));
 
-	/* Program the group's counter/timer once, on its first member CQ. */
-	if (!hba->iag_grp_cqs[grp]) {
+	/*
+	 * Program the group's counter/timer once, on its first member CQ, and
+	 * only while aggregation is enabled (state preserved across resets).
+	 */
+	if (!hba->iag_grp_cqs[grp] && READ_ONCE(hba->iag_enabled)) {
 		u32 iacth = min(hba->nutrs - 1, UFS_MCQ_IAG_MAX_IACTH);
 		u32 mcqiacr = INT_AGGR_ENABLE | INT_AGGR_PARAM_WRITE |
 			      INT_AGGR_COUNTER_THLD_VAL(iacth) |
@@ -340,6 +343,56 @@ static void ufshcd_mcq_config_iag(struct ufs_hba *hba, int i)
 		ufshcd_mcq_write_mcqiacr(hba, mcqiacr, grp);
 	}
 	hba->iag_grp_cqs[grp] |= BIT(i);
+}
+
+/**
+ * ufshcd_mcq_toggle_iag - enable/disable MCQ interrupt aggregation
+ * @hba: per adapter instance
+ * @enable: true to enable aggregation, false to disable it
+ *
+ * Reprograms every configured group's MCQIACR. IACTH/IATOVAL may only be
+ * written with no commands outstanding (UFSHCI 4.0, MCQIACR IAPWEN), so the
+ * controller is paused and drained first. On disable only IAEN is cleared, so
+ * completions fall back to the per-CQ (CQES) path.
+ *
+ * Return: 0 on success, -EBUSY if outstanding commands did not drain in time.
+ */
+int ufshcd_mcq_toggle_iag(struct ufs_hba *hba, bool enable)
+{
+	u32 nr_groups = ufshcd_mcq_nr_iag_groups(hba);
+	u32 iacth = min(hba->nutrs - 1, UFS_MCQ_IAG_MAX_IACTH);
+	int g, ret;
+
+	/* Keep the clocks ungated for MCQIACR access, then drain (IAPWEN rule). */
+	ufshcd_hold(hba);
+
+	ret = ufshcd_pause_command_processing(hba, 1 * USEC_PER_SEC);
+	if (ret) {
+		ufshcd_release(hba);
+		return ret;
+	}
+
+	for (g = 0; g < nr_groups; g++) {
+		u32 mcqiacr;
+
+		if (!hba->iag_grp_cqs[g])
+			continue;	/* group has no member CQ */
+
+		if (enable)
+			mcqiacr = INT_AGGR_ENABLE | INT_AGGR_PARAM_WRITE |
+				  INT_AGGR_COUNTER_THLD_VAL(iacth) |
+				  INT_AGGR_TIMEOUT_VAL(UFS_MCQ_IAG_TIMEOUT);
+		else
+			mcqiacr = ufshcd_mcq_read_mcqiacr(hba, g) &
+				  ~INT_AGGR_ENABLE;
+
+		ufshcd_mcq_write_mcqiacr(hba, mcqiacr, g);
+	}
+	WRITE_ONCE(hba->iag_enabled, enable);
+
+	ufshcd_resume_command_processing(hba);
+	ufshcd_release(hba);
+	return 0;
 }
 
 /*
@@ -540,6 +593,9 @@ int ufshcd_mcq_init(struct ufs_hba *hba)
 {
 	struct ufs_hw_queue *hwq;
 	int ret, i;
+
+	/* IAG defaults to disabled; opt in at runtime via the iag_enable sysfs. */
+	WRITE_ONCE(hba->iag_enabled, false);
 
 	ret = ufshcd_mcq_config_nr_queues(hba);
 	if (ret)
