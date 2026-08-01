@@ -980,6 +980,8 @@ int __gue_build_header(struct sk_buff *skb, struct ip_tunnel_encap *e,
 						skb, 0, 0, false);
 
 	hdrlen = sizeof(struct guehdr) + optlen;
+	if (skb_cow_head(skb, hdrlen + sizeof(struct udphdr)))
+		return -ENOMEM;
 
 	skb_push(skb, hdrlen);
 
