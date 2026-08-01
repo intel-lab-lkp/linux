@@ -227,6 +227,15 @@ static struct fw_node *build_tree(struct fw_card *card, const u32 *sid, int self
 		    (enumerator.quadlet_count > 0 && parent_count != 1)) {
 			fw_err(card, "parent port inconsistency for node %d: "
 			       "parent_count=%d\n", phy_id, parent_count);
+			while (h != &stack) {
+				child = fw_node(h);
+				for (i = 0; i < child->port_count; i++) {
+					if (child->ports[i] == node)
+						child->ports[i] = NULL;
+				}
+				h = h->next;
+			}
+			fw_node_put(node);
 			return NULL;
 		}
 
