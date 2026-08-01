@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -375,7 +374,7 @@ static ssize_t ath11k_write_simulate_fw_crash(struct file *file,
 	struct ath11k_base *ab = file->private_data;
 	struct ath11k_pdev *pdev;
 	struct ath11k *ar = ab->pdevs[0].ar;
-	char buf[32] = {0};
+	char buf[32] = {};
 	ssize_t rc;
 	int i, ret, radioup = 0;
 
@@ -473,7 +472,7 @@ static ssize_t ath11k_read_enable_extd_tx_stats(struct file *file,
 						size_t count, loff_t *ppos)
 
 {
-	char buf[32] = {0};
+	char buf[32] = {};
 	struct ath11k *ar = file->private_data;
 	int len = 0;
 
@@ -497,7 +496,7 @@ static ssize_t ath11k_write_extd_rx_stats(struct file *file,
 {
 	struct ath11k *ar = file->private_data;
 	struct ath11k_base *ab = ar->ab;
-	struct htt_rx_ring_tlv_filter tlv_filter = {0};
+	struct htt_rx_ring_tlv_filter tlv_filter = {};
 	u32 enable, rx_filter = 0, ring_id;
 	int i;
 	int ret;
@@ -707,7 +706,7 @@ static ssize_t ath11k_debugfs_dump_soc_dp_stats(struct file *file,
 	len += scnprintf(buf + len, size - len, "\nSOC TX STATS:\n");
 	len += scnprintf(buf + len, size - len, "\nTCL Ring Full Failures:\n");
 
-	for (i = 0; i < ab->hw_params.max_tx_ring; i++)
+	for (i = 0; i < ab->hw_params.hal_params->num_tx_rings; i++)
 		len += scnprintf(buf + len, size - len, "ring%d: %u\n",
 				 i, soc_stats->tx_err.desc_na[i]);
 
@@ -737,7 +736,7 @@ static ssize_t ath11k_write_fw_dbglog(struct file *file,
 				      size_t count, loff_t *ppos)
 {
 	struct ath11k *ar = file->private_data;
-	char buf[128] = {0};
+	char buf[128] = {};
 	struct ath11k_fw_dbglog dbglog;
 	unsigned int param, mod_id_index, is_end;
 	u64 value;
@@ -950,9 +949,9 @@ static ssize_t ath11k_write_pktlog_filter(struct file *file,
 {
 	struct ath11k *ar = file->private_data;
 	struct ath11k_base *ab = ar->ab;
-	struct htt_rx_ring_tlv_filter tlv_filter = {0};
+	struct htt_rx_ring_tlv_filter tlv_filter = {};
 	u32 rx_filter = 0, ring_id, filter, mode;
-	u8 buf[128] = {0};
+	u8 buf[128] = {};
 	int i, ret, rx_buf_sz = 0;
 	ssize_t rc;
 
@@ -1081,7 +1080,7 @@ static ssize_t ath11k_read_pktlog_filter(struct file *file,
 					 size_t count, loff_t *ppos)
 
 {
-	char buf[32] = {0};
+	char buf[32] = {};
 	struct ath11k *ar = file->private_data;
 	int len = 0;
 
@@ -1193,8 +1192,7 @@ static int ath11k_debugfs_dbr_dbg_init(struct ath11k *ar, int dbr_id)
 	if (ar->debug.dbr_debug[dbr_id])
 		return 0;
 
-	ar->debug.dbr_debug[dbr_id] = kzalloc(sizeof(*dbr_debug),
-					      GFP_KERNEL);
+	ar->debug.dbr_debug[dbr_id] = kzalloc_obj(*dbr_debug);
 
 	if (!ar->debug.dbr_debug[dbr_id])
 		return -ENOMEM;
@@ -1216,9 +1214,8 @@ static int ath11k_debugfs_dbr_dbg_init(struct ath11k *ar, int dbr_id)
 	dbr_debug->dbr_debug_enabled = true;
 	dbr_dbg_data->num_ring_debug_entries = ATH11K_DEBUG_DBR_ENTRIES_MAX;
 	dbr_dbg_data->dbr_debug_idx = 0;
-	dbr_dbg_data->entries = kcalloc(ATH11K_DEBUG_DBR_ENTRIES_MAX,
-					sizeof(struct ath11k_dbg_dbr_entry),
-					GFP_KERNEL);
+	dbr_dbg_data->entries = kzalloc_objs(struct ath11k_dbg_dbr_entry,
+					     ATH11K_DEBUG_DBR_ENTRIES_MAX);
 	if (!dbr_dbg_data->entries)
 		return -ENOMEM;
 
@@ -1235,7 +1232,7 @@ static ssize_t ath11k_debugfs_write_enable_dbr_dbg(struct file *file,
 						   size_t count, loff_t *ppos)
 {
 	struct ath11k *ar = file->private_data;
-	char buf[32] = {0};
+	char buf[32] = {};
 	u32 dbr_id, enable;
 	int ret;
 
@@ -1473,7 +1470,7 @@ int ath11k_debugfs_register(struct ath11k *ar)
 {
 	struct ath11k_base *ab = ar->ab;
 	char pdev_name[10];
-	char buf[100] = {0};
+	char buf[100] = {};
 
 	snprintf(pdev_name, sizeof(pdev_name), "%s%u", "mac", ar->pdev_idx);
 
@@ -1556,10 +1553,10 @@ static ssize_t ath11k_write_twt_add_dialog(struct file *file,
 					   size_t count, loff_t *ppos)
 {
 	struct ath11k_vif *arvif = file->private_data;
-	struct wmi_twt_add_dialog_params params = { 0 };
-	struct wmi_twt_enable_params twt_params = {0};
+	struct wmi_twt_add_dialog_params params = {};
+	struct wmi_twt_enable_params twt_params = {};
 	struct ath11k *ar = arvif->ar;
-	u8 buf[128] = {0};
+	u8 buf[128] = {};
 	int ret;
 
 	if (ar->twt_enabled == 0) {
@@ -1632,10 +1629,10 @@ static ssize_t ath11k_write_twt_del_dialog(struct file *file,
 					   size_t count, loff_t *ppos)
 {
 	struct ath11k_vif *arvif = file->private_data;
-	struct wmi_twt_del_dialog_params params = { 0 };
-	struct wmi_twt_enable_params twt_params = {0};
+	struct wmi_twt_del_dialog_params params = {};
+	struct wmi_twt_enable_params twt_params = {};
 	struct ath11k *ar = arvif->ar;
-	u8 buf[64] = {0};
+	u8 buf[64] = {};
 	int ret;
 
 	if (ar->twt_enabled == 0) {
@@ -1679,8 +1676,8 @@ static ssize_t ath11k_write_twt_pause_dialog(struct file *file,
 					     size_t count, loff_t *ppos)
 {
 	struct ath11k_vif *arvif = file->private_data;
-	struct wmi_twt_pause_dialog_params params = { 0 };
-	u8 buf[64] = {0};
+	struct wmi_twt_pause_dialog_params params = {};
+	u8 buf[64] = {};
 	int ret;
 
 	if (arvif->ar->twt_enabled == 0) {
@@ -1718,8 +1715,8 @@ static ssize_t ath11k_write_twt_resume_dialog(struct file *file,
 					      size_t count, loff_t *ppos)
 {
 	struct ath11k_vif *arvif = file->private_data;
-	struct wmi_twt_resume_dialog_params params = { 0 };
-	u8 buf[64] = {0};
+	struct wmi_twt_resume_dialog_params params = {};
+	u8 buf[64] = {};
 	int ret;
 
 	if (arvif->ar->twt_enabled == 0) {

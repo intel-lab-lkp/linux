@@ -7,11 +7,11 @@
  *  Author(s): Harald Freudenberger
  */
 
-#define KMSG_COMPONENT "pkey"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "pkey: " fmt
 
 #include <linux/init.h>
 #include <linux/miscdevice.h>
+#include <linux/export.h>
 #include <linux/slab.h>
 
 #include "zcrypt_api.h"
@@ -223,7 +223,7 @@ static int pkey_ioctl_findcard(struct pkey_findcard __user *ufc)
 		return -EFAULT;
 
 	nr_apqns = MAXAPQNSINLIST;
-	apqns = kmalloc_array(nr_apqns, sizeof(struct pkey_apqn), GFP_KERNEL);
+	apqns = kmalloc_objs(struct pkey_apqn, nr_apqns);
 	if (!apqns)
 		return -ENOMEM;
 
@@ -327,16 +327,14 @@ static int pkey_ioctl_verifyprotk(struct pkey_verifyprotk __user *uvp)
 {
 	struct pkey_verifyprotk kvp;
 	struct protaeskeytoken *t;
-	u32 keytype;
 	u8 *tmpbuf;
 	int rc;
 
 	if (copy_from_user(&kvp, uvp, sizeof(kvp)))
 		return -EFAULT;
 
-	keytype = pkey_aes_bitsize_to_keytype(8 * kvp.protkey.len);
-	if (!keytype) {
-		PKEY_DBF_ERR("%s unknown/unsupported protkey length %u\n",
+	if (kvp.protkey.len > sizeof(kvp.protkey.protkey)) {
+		PKEY_DBF_ERR("%s protkey length %u exceeds protkey buffer size\n",
 			     __func__, kvp.protkey.len);
 		memzero_explicit(&kvp, sizeof(kvp));
 		return -EINVAL;
@@ -351,7 +349,7 @@ static int pkey_ioctl_verifyprotk(struct pkey_verifyprotk __user *uvp)
 	t = (struct protaeskeytoken *)tmpbuf;
 	t->type = TOKTYPE_NON_CCA;
 	t->version = TOKVER_PROTECTED_KEY;
-	t->keytype = keytype;
+	t->keytype = kvp.protkey.type;
 	t->len = kvp.protkey.len;
 	memcpy(t->protkey, kvp.protkey.protkey, kvp.protkey.len);
 
@@ -569,9 +567,7 @@ static int pkey_ioctl_apqns4k(struct pkey_apqns4key __user *uak)
 		return -EFAULT;
 	nr_apqns = kak.apqn_entries;
 	if (nr_apqns) {
-		apqns = kmalloc_array(nr_apqns,
-				      sizeof(struct pkey_apqn),
-				      GFP_KERNEL);
+		apqns = kmalloc_objs(struct pkey_apqn, nr_apqns);
 		if (!apqns)
 			return -ENOMEM;
 	}
@@ -620,9 +616,7 @@ static int pkey_ioctl_apqns4kt(struct pkey_apqns4keytype __user *uat)
 		return -EFAULT;
 	nr_apqns = kat.apqn_entries;
 	if (nr_apqns) {
-		apqns = kmalloc_array(nr_apqns,
-				      sizeof(struct pkey_apqn),
-				      GFP_KERNEL);
+		apqns = kmalloc_objs(struct pkey_apqn, nr_apqns);
 		if (!apqns)
 			return -ENOMEM;
 	}

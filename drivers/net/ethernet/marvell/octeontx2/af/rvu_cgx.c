@@ -184,7 +184,7 @@ static int rvu_cgx_send_link_info(int cgx_id, int lmac_id, struct rvu *rvu)
 	unsigned long flags;
 	int err;
 
-	qentry = kmalloc(sizeof(*qentry), GFP_KERNEL);
+	qentry = kmalloc_obj(*qentry);
 	if (!qentry)
 		return -ENOMEM;
 
@@ -215,7 +215,7 @@ static int cgx_lmac_postevent(struct cgx_link_event *event, void *data)
 	struct rvu *rvu = data;
 
 	/* post event to the event queue */
-	qentry = kmalloc(sizeof(*qentry), GFP_ATOMIC);
+	qentry = kmalloc_obj(*qentry, GFP_ATOMIC);
 	if (!qentry)
 		return -ENOMEM;
 	qentry->link_event = *event;
@@ -315,7 +315,7 @@ static int cgx_lmac_event_handler_init(struct rvu *rvu)
 	spin_lock_init(&rvu->cgx_evq_lock);
 	INIT_LIST_HEAD(&rvu->cgx_evq_head);
 	INIT_WORK(&rvu->cgx_evh_work, cgx_evhandler_task);
-	rvu->cgx_evh_wq = alloc_workqueue("rvu_evh_wq", 0, 0);
+	rvu->cgx_evh_wq = alloc_workqueue("rvu_evh_wq", WQ_PERCPU, 0);
 	if (!rvu->cgx_evh_wq) {
 		dev_err(rvu->dev, "alloc workqueue failed");
 		return -ENOMEM;
@@ -682,16 +682,19 @@ int rvu_mbox_handler_cgx_mac_addr_set(struct rvu *rvu,
 				      struct cgx_mac_addr_set_or_get *rsp)
 {
 	int pf = rvu_get_pf(rvu->pdev, req->hdr.pcifunc);
+	struct rvu_pfvf *pfvf;
 	u8 cgx_id, lmac_id;
 
-	if (!is_cgx_config_permitted(rvu, req->hdr.pcifunc))
-		return -EPERM;
+	if (!is_pf_cgxmapped(rvu, pf))
+		return LMAC_AF_ERR_PF_NOT_MAPPED;
 
 	if (rvu_npc_exact_has_match_table(rvu))
 		return rvu_npc_exact_mac_addr_set(rvu, req, rsp);
 
 	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
 
+	pfvf = &rvu->pf[pf];
+	ether_addr_copy(pfvf->mac_addr, req->mac_addr);
 	cgx_lmac_addr_set(cgx_id, lmac_id, req->mac_addr);
 
 	return 0;
@@ -769,20 +772,12 @@ int rvu_mbox_handler_cgx_mac_addr_get(struct rvu *rvu,
 				      struct cgx_mac_addr_set_or_get *req,
 				      struct cgx_mac_addr_set_or_get *rsp)
 {
-	int pf = rvu_get_pf(rvu->pdev, req->hdr.pcifunc);
-	u8 cgx_id, lmac_id;
-	int rc = 0;
-	u64 cfg;
+	struct rvu_pfvf *pfvf = rvu_get_pfvf(rvu, req->hdr.pcifunc);
 
-	if (!is_cgx_config_permitted(rvu, req->hdr.pcifunc))
-		return -EPERM;
+	if (!is_pf_cgxmapped(rvu, rvu_get_pf(rvu->pdev, req->hdr.pcifunc)))
+		return LMAC_AF_ERR_PF_NOT_MAPPED;
 
-	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
-
-	rsp->hdr.rc = rc;
-	cfg = cgx_lmac_addr_get(cgx_id, lmac_id);
-	/* copy 48 bit mac address to req->mac_addr */
-	u64_to_ether_addr(cfg, rsp->mac_addr);
+	ether_addr_copy(rsp->mac_addr, pfvf->mac_addr);
 	return 0;
 }
 
@@ -1227,6 +1222,9 @@ int rvu_mbox_handler_cgx_set_link_mode(struct rvu *rvu,
 	u8 cgx_idx, lmac;
 	void *cgxd;
 
+	if (!rvu->fwdata)
+		return LMAC_AF_ERR_FIRMWARE_DATA_NOT_MAPPED;
+
 	if (!is_cgx_config_permitted(rvu, req->hdr.pcifunc))
 		return -EPERM;
 
@@ -1356,4 +1354,83 @@ void rvu_mac_reset(struct rvu *rvu, u16 pcifunc)
 
 	if (mac_ops->mac_reset(cgxd, lmac, !is_vf(pcifunc)))
 		dev_err(rvu->dev, "Failed to reset MAC\n");
+}
+
+/* Do not allow CGX-mapped VFs to overwrite PKIND when special parse kinds
+ * (HiGig, EDSA, etc.) are in use on the shared LMAC. VFs must not program
+ * NPC_TX_DEF_PKIND on NIX_AF_LFX_TX_PARSE_CFG in that case: the PF owns
+ * parse mode and no separate NPC_TX_HIGIG_PKIND is installed on the VF LF.
+ * TX-parse callers skip the write when denied; rvu_lf_reset() clears each LF
+ * before alloc so the next permitted owner programs NPC_TX_DEF_PKIND.
+ */
+bool rvu_cgx_is_pkind_config_permitted(struct rvu *rvu, u16 pcifunc)
+{
+	int pf, err, rxpkind;
+	u8 cgx_id, lmac_id;
+	void *cgxd;
+
+	pf = rvu_get_pf(rvu->pdev, pcifunc);
+
+	if (!(pcifunc & RVU_PFVF_FUNC_MASK))
+		return true;
+
+	if (!is_pf_cgxmapped(rvu, pf))
+		return true;
+
+	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
+	cgxd = rvu_cgx_pdata(cgx_id, rvu);
+	err = cgx_get_pkind(cgxd, lmac_id, &rxpkind);
+	if (err)
+		return false;
+
+	switch (rxpkind) {
+	case NPC_RX_HIGIG_PKIND:
+	case NPC_RX_EDSA_PKIND:
+		return false;
+	default:
+		return true;
+	}
+}
+
+/* Do not allow CGX-mapped VFs to overwrite PKIND when special parse kinds
+ * (HiGig, EDSA, etc.) are in use on the shared LMAC.
+ */
+bool rvu_cgx_check_permission_and_set_pkind(struct rvu *rvu, u16 pcifunc, int pkind)
+{
+	int pf, err, rxpkind;
+	u8 cgx_id, lmac_id;
+	struct cgx *cgxd;
+
+	pf = rvu_get_pf(rvu->pdev, pcifunc);
+
+	if (!is_pf_cgxmapped(rvu, pf))
+		return false;
+
+	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
+	cgxd = rvu_cgx_pdata(cgx_id, rvu);
+
+	mutex_lock(&cgxd->lock);
+	if (!is_vf(pcifunc))
+		goto set;
+
+	err = cgx_get_pkind(cgxd, lmac_id, &rxpkind);
+	if (err)
+		goto err;
+
+	switch (rxpkind) {
+	case NPC_RX_HIGIG_PKIND:
+	case NPC_RX_EDSA_PKIND:
+		goto err;
+	default:
+		break;
+	}
+
+set:
+	cgx_set_pkind(rvu_cgx_pdata(cgx_id, rvu), lmac_id, pkind);
+	mutex_unlock(&cgxd->lock);
+	return true;
+
+err:
+	mutex_unlock(&cgxd->lock);
+	return false;
 }

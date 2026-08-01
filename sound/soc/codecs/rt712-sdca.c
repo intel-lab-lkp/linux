@@ -479,7 +479,6 @@ static int rt712_sdca_set_jack_detect(struct snd_soc_component *component,
 
 	rt712_sdca_jack_init(rt712);
 
-	pm_runtime_mark_last_busy(component->dev);
 	pm_runtime_put_autosuspend(component->dev);
 
 	return 0;
@@ -744,8 +743,7 @@ static const struct snd_kcontrol_new rt712_sdca_spk_controls[] = {
 static int rt712_sdca_mux_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_dapm_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
 	struct rt712_sdca_priv *rt712 = snd_soc_component_get_drvdata(component);
 	unsigned int val = 0, mask = 0x3300;
 
@@ -769,10 +767,8 @@ static int rt712_sdca_mux_get(struct snd_kcontrol *kcontrol,
 static int rt712_sdca_mux_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_dapm_kcontrol_component(kcontrol);
-	struct snd_soc_dapm_context *dapm =
-		snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_to_dapm(kcontrol);
 	struct rt712_sdca_priv *rt712 = snd_soc_component_get_drvdata(component);
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
 	unsigned int *item = ucontrol->value.enumerated.item;
@@ -1018,7 +1014,7 @@ static int rt712_sdca_parse_dt(struct rt712_sdca_priv *rt712, struct device *dev
 
 static int rt712_sdca_probe(struct snd_soc_component *component)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(component);
+	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	struct rt712_sdca_priv *rt712 = snd_soc_component_get_drvdata(component);
 	int ret;
 
@@ -1231,8 +1227,7 @@ static const struct snd_kcontrol_new rt712_sdca_dmic_snd_controls[] = {
 static int rt712_sdca_dmic_mux_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_dapm_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
 	struct rt712_sdca_priv *rt712 = snd_soc_component_get_drvdata(component);
 	unsigned int val = 0, mask_sft;
 
@@ -1254,10 +1249,8 @@ static int rt712_sdca_dmic_mux_get(struct snd_kcontrol *kcontrol,
 static int rt712_sdca_dmic_mux_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_dapm_kcontrol_component(kcontrol);
-	struct snd_soc_dapm_context *dapm =
-		snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_to_dapm(kcontrol);
 	struct rt712_sdca_priv *rt712 = snd_soc_component_get_drvdata(component);
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
 	unsigned int *item = ucontrol->value.enumerated.item;
@@ -1850,6 +1843,15 @@ static void rt712_sdca_vb_io_init(struct rt712_sdca_priv *rt712)
 	}
 }
 
+static void rt712_sdca_reset(struct rt712_sdca_priv *rt712)
+{
+	rt712_sdca_index_update_bits(rt712, RT712_VENDOR_REG,
+		RT712_PARA_VERB_CTL, RT712_HIDDEN_REG_SW_RESET,
+		RT712_HIDDEN_REG_SW_RESET);
+	rt712_sdca_index_update_bits(rt712, RT712_VENDOR_HDA_CTL,
+		RT712_HDA_LEGACY_RESET_CTL, 0x1, 0x1);
+}
+
 int rt712_sdca_io_init(struct device *dev, struct sdw_slave *slave)
 {
 	struct rt712_sdca_priv *rt712 = dev_get_drvdata(dev);
@@ -1877,6 +1879,8 @@ int rt712_sdca_io_init(struct device *dev, struct sdw_slave *slave)
 
 	pm_runtime_get_noresume(&slave->dev);
 
+	rt712_sdca_reset(rt712);
+
 	rt712_sdca_index_read(rt712, RT712_VENDOR_REG, RT712_JD_PRODUCT_NUM, &val);
 	rt712->hw_id = (val & 0xf000) >> 12;
 	rt712->version_id = (val & 0x0f00) >> 8;
@@ -1891,11 +1895,9 @@ int rt712_sdca_io_init(struct device *dev, struct sdw_slave *slave)
 
 		rt712_sdca_va_io_init(rt712);
 	} else {
-		if (!rt712->dmic_function_found) {
-			dev_err(&slave->dev, "%s RT712 VB detected but no SMART_MIC function exposed in ACPI\n",
+		if (!rt712->dmic_function_found)
+			dev_warn(&slave->dev, "%s RT712 VB detected but no SMART_MIC function exposed in ACPI\n",
 				__func__);
-			goto suspend;
-		}
 
 		/* multilanes and DMIC are supported by rt712vb */
 		prop->lane_control_support = true;
@@ -1925,7 +1927,6 @@ int rt712_sdca_io_init(struct device *dev, struct sdw_slave *slave)
 	dev_dbg(&slave->dev, "%s hw_init complete\n", __func__);
 
 suspend:
-	pm_runtime_mark_last_busy(&slave->dev);
 	pm_runtime_put_autosuspend(&slave->dev);
 
 	return 0;

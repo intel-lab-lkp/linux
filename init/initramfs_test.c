@@ -3,7 +3,9 @@
 #include <linux/fcntl.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/init.h>
 #include <linux/init_syscalls.h>
+#include <linux/initrd.h>
 #include <linux/stringify.h>
 #include <linux/timekeeping.h>
 #include "initramfs_internal.h"
@@ -27,7 +29,18 @@ struct initramfs_test_cpio {
 	char *data;
 };
 
-static size_t fill_cpio(struct initramfs_test_cpio *cs, size_t csz, char *out)
+/* regular newc header format */
+#define CPIO_HDR_FMT "%s%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%s"
+/*
+ * Bogus newc header with "0x" prefixes on the uid, gid, and namesize values.
+ * parse_header()/simple_str[n]toul() accepted this, contrary to the initramfs
+ * specification. hex2bin() now fails.
+ */
+#define CPIO_HDR_OX_INJECT \
+	"%s%08x%08x0x%06x0X%06x%08x%08x%08x%08x%08x%08x%08x0x%06x%08x%s"
+
+static size_t fill_cpio(struct initramfs_test_cpio *cs, size_t csz,
+			bool inject_ox, char *out)
 {
 	int i;
 	size_t off = 0;
@@ -38,15 +51,17 @@ static size_t fill_cpio(struct initramfs_test_cpio *cs, size_t csz, char *out)
 		size_t thislen;
 
 		/* +1 to account for nulterm */
-		thislen = sprintf(pos, "%s"
-			"%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x"
-			"%s",
+		thislen = sprintf(pos,
+			inject_ox ? CPIO_HDR_OX_INJECT : CPIO_HDR_FMT,
 			c->magic, c->ino, c->mode, c->uid, c->gid, c->nlink,
 			c->mtime, c->filesize, c->devmajor, c->devminor,
 			c->rdevmajor, c->rdevminor, c->namesize, c->csum,
 			c->fname) + 1;
+
 		pr_debug("packing (%zu): %.*s\n", thislen, (int)thislen, pos);
-		off += thislen;
+		if (thislen != CPIO_HDRLEN + c->namesize)
+			pr_debug("padded to: %u\n", CPIO_HDRLEN + c->namesize);
+		off += CPIO_HDRLEN + c->namesize;
 		while (off & 3)
 			out[off++] = '\0';
 
@@ -99,7 +114,7 @@ static void __init initramfs_test_extract(struct kunit *test)
 	/* +3 to cater for any 4-byte end-alignment */
 	cpio_srcbuf = kzalloc(ARRAY_SIZE(c) * (CPIO_HDRLEN + PATH_MAX + 3),
 			      GFP_KERNEL);
-	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, cpio_srcbuf);
 
 	ktime_get_real_ts64(&ts_before);
 	err = unpack_to_rootfs(cpio_srcbuf, len);
@@ -174,7 +189,7 @@ static void __init initramfs_test_fname_overrun(struct kunit *test)
 	/* limit overrun to avoid crashes / filp_open() ENAMETOOLONG */
 	cpio_srcbuf[CPIO_HDRLEN + strlen(c[0].fname) + 20] = '\0';
 
-	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, cpio_srcbuf);
 	/* overwrite trailing fname terminator and padding */
 	suffix_off = len - 1;
 	while (cpio_srcbuf[suffix_off] == '\0') {
@@ -216,7 +231,7 @@ static void __init initramfs_test_data(struct kunit *test)
 	cpio_srcbuf = kmalloc(CPIO_HDRLEN + c[0].namesize + c[0].filesize + 6,
 			      GFP_KERNEL);
 
-	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, cpio_srcbuf);
 
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
@@ -271,7 +286,7 @@ static void __init initramfs_test_csum(struct kunit *test)
 
 	cpio_srcbuf = kmalloc(8192, GFP_KERNEL);
 
-	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, cpio_srcbuf);
 
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
@@ -281,7 +296,7 @@ static void __init initramfs_test_csum(struct kunit *test)
 
 	/* mess up the csum and confirm that unpack fails */
 	c[0].csum--;
-	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, cpio_srcbuf);
 
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NOT_NULL(test, err);
@@ -303,7 +318,7 @@ static void __init initramfs_test_hardlink(struct kunit *test)
 {
 	char *err, *cpio_srcbuf;
 	size_t len;
-	struct kstat st0, st1;
+	struct kstat st0 = {}, st1 = {};
 	struct initramfs_test_cpio c[] = { {
 		.magic = "070701",
 		.ino = 1,
@@ -327,7 +342,7 @@ static void __init initramfs_test_hardlink(struct kunit *test)
 
 	cpio_srcbuf = kmalloc(8192, GFP_KERNEL);
 
-	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, cpio_srcbuf);
 
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
@@ -368,7 +383,7 @@ static void __init initramfs_test_many(struct kunit *test)
 		};
 
 		c.namesize = 1 + sprintf(thispath, "initramfs_test_many-%d", i);
-		p += fill_cpio(&c, 1, p);
+		p += fill_cpio(&c, 1, false, p);
 	}
 
 	len = p - cpio_srcbuf;
@@ -384,6 +399,153 @@ static void __init initramfs_test_many(struct kunit *test)
 }
 
 /*
+ * An initramfs filename is namesize in length, including the zero-terminator.
+ * A filename can be zero-terminated prior to namesize, with the remainder used
+ * as padding. This can be useful for e.g. alignment of file data segments with
+ * a 4KB filesystem block, allowing for extent sharing (reflinks) between cpio
+ * source and destination. This hack works with both GNU cpio and initramfs, as
+ * long as PATH_MAX isn't exceeded.
+ */
+static void __init initramfs_test_fname_pad(struct kunit *test)
+{
+	char *err;
+	size_t len;
+	struct file *file;
+	char fdata[] = "this file data is aligned at 4K in the archive";
+	struct test_fname_pad {
+		char padded_fname[4096 - CPIO_HDRLEN];
+		char cpio_srcbuf[CPIO_HDRLEN + PATH_MAX + 3 + sizeof(fdata)];
+	} *tbufs = kzalloc_obj(struct test_fname_pad);
+	struct initramfs_test_cpio c[] = { {
+		.magic = "070701",
+		.ino = 1,
+		.mode = S_IFREG | 0777,
+		.uid = 0,
+		.gid = 0,
+		.nlink = 1,
+		.mtime = 1,
+		.filesize = sizeof(fdata),
+		.devmajor = 0,
+		.devminor = 1,
+		.rdevmajor = 0,
+		.rdevminor = 0,
+		/* align file data at 4K archive offset via padded fname */
+		.namesize = 4096 - CPIO_HDRLEN,
+		.csum = 0,
+		.fname = tbufs->padded_fname,
+		.data = fdata,
+	} };
+
+	memcpy(tbufs->padded_fname, "padded_fname", sizeof("padded_fname"));
+	len = fill_cpio(c, ARRAY_SIZE(c), false, tbufs->cpio_srcbuf);
+
+	err = unpack_to_rootfs(tbufs->cpio_srcbuf, len);
+	KUNIT_EXPECT_NULL(test, err);
+
+	file = filp_open(c[0].fname, O_RDONLY, 0);
+	if (IS_ERR(file)) {
+		KUNIT_FAIL(test, "open failed");
+		goto out;
+	}
+
+	/* read back file contents into @cpio_srcbuf and confirm match */
+	len = kernel_read(file, tbufs->cpio_srcbuf, c[0].filesize, NULL);
+	KUNIT_EXPECT_EQ(test, len, c[0].filesize);
+	KUNIT_EXPECT_MEMEQ(test, tbufs->cpio_srcbuf, c[0].data, len);
+
+	fput(file);
+	KUNIT_EXPECT_EQ(test, init_unlink(c[0].fname), 0);
+out:
+	kfree(tbufs);
+}
+
+static void __init initramfs_test_fname_path_max(struct kunit *test)
+{
+	char *err;
+	size_t len;
+	struct kstat st0 = {}, st1 = {};
+	char fdata[] = "this file data will not be unpacked";
+	struct test_fname_path_max {
+		char fname_oversize[PATH_MAX + 1];
+		char fname_ok[PATH_MAX];
+		char cpio_src[(CPIO_HDRLEN + PATH_MAX + 3 + sizeof(fdata)) * 2];
+	} *tbufs = kzalloc_obj(struct test_fname_path_max);
+	struct initramfs_test_cpio c[] = { {
+		.magic = "070701",
+		.ino = 1,
+		.mode = S_IFDIR | 0777,
+		.nlink = 1,
+		.namesize = sizeof(tbufs->fname_oversize),
+		.fname = tbufs->fname_oversize,
+		.filesize = sizeof(fdata),
+		.data = fdata,
+	}, {
+		.magic = "070701",
+		.ino = 2,
+		.mode = S_IFDIR | 0777,
+		.nlink = 1,
+		.namesize = sizeof(tbufs->fname_ok),
+		.fname = tbufs->fname_ok,
+	} };
+
+	memset(tbufs->fname_oversize, '/', sizeof(tbufs->fname_oversize) - 1);
+	memset(tbufs->fname_ok, '/', sizeof(tbufs->fname_ok) - 1);
+	memcpy(tbufs->fname_oversize, "fname_oversize",
+	       sizeof("fname_oversize") - 1);
+	memcpy(tbufs->fname_ok, "fname_ok", sizeof("fname_ok") - 1);
+	len = fill_cpio(c, ARRAY_SIZE(c), false, tbufs->cpio_src);
+
+	/* unpack skips over fname_oversize instead of returning an error */
+	err = unpack_to_rootfs(tbufs->cpio_src, len);
+	KUNIT_EXPECT_NULL(test, err);
+
+	KUNIT_EXPECT_EQ(test, init_stat("fname_oversize", &st0, 0), -ENOENT);
+	KUNIT_EXPECT_EQ(test, init_stat("fname_ok", &st1, 0), 0);
+	KUNIT_EXPECT_EQ(test, init_rmdir("fname_ok"), 0);
+
+	kfree(tbufs);
+}
+
+static void __init initramfs_test_hdr_hex(struct kunit *test)
+{
+	char *err;
+	size_t len;
+	char fdata[] = "this file data will not be unpacked";
+	struct initramfs_test_bufs {
+		char cpio_src[(CPIO_HDRLEN + PATH_MAX + 3 + sizeof(fdata)) * 2];
+	} *tbufs = kzalloc(sizeof(struct initramfs_test_bufs), GFP_KERNEL);
+	struct initramfs_test_cpio c[] = { {
+		.magic = "070701",
+		.ino = 1,
+		.mode = S_IFREG | 0777,
+		.uid = 0x123456,
+		.gid = 0x123457,
+		.nlink = 1,
+		.namesize = sizeof("initramfs_test_hdr_hex_0"),
+		.fname = "initramfs_test_hdr_hex_0",
+		.filesize = sizeof(fdata),
+		.data = fdata,
+	}, {
+		.magic = "070701",
+		.ino = 2,
+		.mode = S_IFDIR | 0777,
+		.uid = 0x000056,
+		.gid = 0x000057,
+		.nlink = 1,
+		.namesize = sizeof("initramfs_test_hdr_hex_1"),
+		.fname = "initramfs_test_hdr_hex_1",
+	} };
+
+	/* inject_ox=true to add "0x" cpio field prefixes */
+	len = fill_cpio(c, ARRAY_SIZE(c), true, tbufs->cpio_src);
+
+	err = unpack_to_rootfs(tbufs->cpio_src, len);
+	KUNIT_EXPECT_NOT_NULL(test, err);
+
+	kfree(tbufs);
+}
+
+/*
  * The kunit_case/_suite struct cannot be marked as __initdata as this will be
  * used in debugfs to retrieve results after test has run.
  */
@@ -394,11 +556,27 @@ static struct kunit_case __refdata initramfs_test_cases[] = {
 	KUNIT_CASE(initramfs_test_csum),
 	KUNIT_CASE(initramfs_test_hardlink),
 	KUNIT_CASE(initramfs_test_many),
+	KUNIT_CASE(initramfs_test_fname_pad),
+	KUNIT_CASE(initramfs_test_fname_path_max),
+	KUNIT_CASE(initramfs_test_hdr_hex),
 	{},
 };
 
-static struct kunit_suite initramfs_test_suite = {
+static int __init initramfs_test_init(struct kunit_suite *suite)
+{
+	/*
+	 * unpack_to_rootfs() uses module-static state (victim, byte_count,
+	 * state, ...). The boot-time async do_populate_rootfs() may still be
+	 * running, so wait for it to finish before we call unpack_to_rootfs()
+	 * from the test thread, otherwise the two writers race and crash.
+	 */
+	wait_for_initramfs();
+	return 0;
+}
+
+static struct kunit_suite __refdata initramfs_test_suite = {
 	.name = "initramfs",
+	.suite_init = initramfs_test_init,
 	.test_cases = initramfs_test_cases,
 };
 kunit_test_init_section_suites(&initramfs_test_suite);

@@ -29,6 +29,7 @@
 #include <linux/delay.h>
 #include <linux/hdmi.h>
 #include <linux/i2c.h>
+#include <linux/iopoll.h>
 #include <linux/slab.h>
 #include <linux/string_helpers.h>
 
@@ -41,12 +42,9 @@
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/intel/intel_lpe_audio.h>
-
 #include <media/cec-notifier.h>
 
 #include "g4x_hdmi.h"
-#include "i915_reg.h"
-#include "i915_utils.h"
 #include "intel_atomic.h"
 #include "intel_audio.h"
 #include "intel_connector.h"
@@ -54,18 +52,34 @@
 #include "intel_ddi.h"
 #include "intel_de.h"
 #include "intel_display_driver.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_display_utils.h"
 #include "intel_dp.h"
+#include "intel_dpll.h"
 #include "intel_gmbus.h"
 #include "intel_hdcp.h"
 #include "intel_hdcp_regs.h"
 #include "intel_hdcp_shim.h"
 #include "intel_hdmi.h"
+#include "intel_link_bw.h"
 #include "intel_lspcon.h"
 #include "intel_panel.h"
 #include "intel_pfit.h"
 #include "intel_snps_phy.h"
 #include "intel_vrr.h"
+
+bool intel_hdmi_is_frl(u32 clock)
+{
+	u32 rates[] = { 300000, 600000, 800000, 1000000, 1200000 };
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(rates); i++)
+		if (intel_dpll_clock_matches(clock, rates[i]))
+			return true;
+
+	return false;
+}
 
 static void
 assert_hdmi_port_disabled(struct intel_hdmi *intel_hdmi)
@@ -159,7 +173,7 @@ static u32 hsw_infoframe_enable(unsigned int type)
 	}
 }
 
-static i915_reg_t
+static intel_reg_t
 hsw_dip_data_reg(struct intel_display *display,
 		 enum transcoder cpu_transcoder,
 		 unsigned int type,
@@ -284,7 +298,7 @@ static void ibx_write_infoframe(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	const u32 *data = frame;
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	i915_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
+	intel_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
 	u32 val = intel_de_read(display, reg);
 	int i;
 
@@ -337,7 +351,7 @@ static u32 ibx_infoframes_enabled(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	enum pipe pipe = to_intel_crtc(pipe_config->uapi.crtc)->pipe;
-	i915_reg_t reg = TVIDEO_DIP_CTL(pipe);
+	intel_reg_t reg = TVIDEO_DIP_CTL(pipe);
 	u32 val = intel_de_read(display, reg);
 
 	if ((val & VIDEO_DIP_ENABLE) == 0)
@@ -359,7 +373,7 @@ static void cpt_write_infoframe(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	const u32 *data = frame;
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	i915_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
+	intel_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
 	u32 val = intel_de_read(display, reg);
 	int i;
 
@@ -433,7 +447,7 @@ static void vlv_write_infoframe(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	const u32 *data = frame;
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	i915_reg_t reg = VLV_TVIDEO_DIP_CTL(crtc->pipe);
+	intel_reg_t reg = VLV_TVIDEO_DIP_CTL(crtc->pipe);
 	u32 val = intel_de_read(display, reg);
 	int i;
 
@@ -509,7 +523,7 @@ void hsw_write_infoframe(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	const u32 *data = frame;
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
-	i915_reg_t ctl_reg = HSW_TVIDEO_DIP_CTL(display, cpu_transcoder);
+	intel_reg_t ctl_reg = HSW_TVIDEO_DIP_CTL(display, cpu_transcoder);
 	int data_size;
 	int i;
 	u32 val = intel_de_read(display, ctl_reg);
@@ -870,7 +884,7 @@ static void g4x_set_infoframes(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	struct intel_hdmi *intel_hdmi = &dig_port->hdmi;
-	i915_reg_t reg = VIDEO_DIP_CTL;
+	intel_reg_t reg = VIDEO_DIP_CTL;
 	u32 val = intel_de_read(display, reg);
 	u32 port = VIDEO_DIP_PORT(encoder->port);
 
@@ -981,7 +995,7 @@ static bool intel_hdmi_set_gcp_infoframe(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	i915_reg_t reg;
+	intel_reg_t reg;
 
 	if ((crtc_state->infoframes.enable &
 	     intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GENERAL_CONTROL)) == 0)
@@ -1006,7 +1020,7 @@ void intel_hdmi_read_gcp_infoframe(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	i915_reg_t reg;
+	intel_reg_t reg;
 
 	if ((crtc_state->infoframes.enable &
 	     intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GENERAL_CONTROL)) == 0)
@@ -1055,7 +1069,7 @@ static void ibx_set_infoframes(struct intel_encoder *encoder,
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	struct intel_hdmi *intel_hdmi = &dig_port->hdmi;
-	i915_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
+	intel_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
 	u32 val = intel_de_read(display, reg);
 	u32 port = VIDEO_DIP_PORT(encoder->port);
 
@@ -1113,7 +1127,7 @@ static void cpt_set_infoframes(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
-	i915_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
+	intel_reg_t reg = TVIDEO_DIP_CTL(crtc->pipe);
 	u32 val = intel_de_read(display, reg);
 
 	assert_hdmi_port_disabled(intel_hdmi);
@@ -1162,7 +1176,7 @@ static void vlv_set_infoframes(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
-	i915_reg_t reg = VLV_TVIDEO_DIP_CTL(crtc->pipe);
+	intel_reg_t reg = VLV_TVIDEO_DIP_CTL(crtc->pipe);
 	u32 val = intel_de_read(display, reg);
 	u32 port = VIDEO_DIP_PORT(encoder->port);
 
@@ -1217,7 +1231,7 @@ void intel_hdmi_fastset_infoframes(struct intel_encoder *encoder,
 				   const struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(encoder);
-	i915_reg_t reg = HSW_TVIDEO_DIP_CTL(display,
+	intel_reg_t reg = HSW_TVIDEO_DIP_CTL(display,
 					    crtc_state->cpu_transcoder);
 	u32 val = intel_de_read(display, reg);
 
@@ -1242,7 +1256,7 @@ static void hsw_set_infoframes(struct intel_encoder *encoder,
 			       const struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(encoder);
-	i915_reg_t reg = HSW_TVIDEO_DIP_CTL(display,
+	intel_reg_t reg = HSW_TVIDEO_DIP_CTL(display,
 					    crtc_state->cpu_transcoder);
 	u32 val = intel_de_read(display, reg);
 
@@ -1583,9 +1597,9 @@ bool intel_hdmi_hdcp_check_link_once(struct intel_digital_port *dig_port,
 	intel_de_write(display, HDCP_RPRIME(display, cpu_transcoder, port), ri.reg);
 
 	/* Wait for Ri prime match */
-	if (wait_for((intel_de_read(display, HDCP_STATUS(display, cpu_transcoder, port)) &
-		      (HDCP_STATUS_RI_MATCH | HDCP_STATUS_ENC)) ==
-		     (HDCP_STATUS_RI_MATCH | HDCP_STATUS_ENC), 1)) {
+	ret = intel_de_wait_for_set_ms(display, HDCP_STATUS(display, cpu_transcoder, port),
+				       HDCP_STATUS_RI_MATCH | HDCP_STATUS_ENC, 1);
+	if (ret) {
 		drm_dbg_kms(display->drm, "Ri' mismatch detected (%x)\n",
 			    intel_de_read(display, HDCP_STATUS(display, cpu_transcoder,
 							       port)));
@@ -1690,11 +1704,10 @@ intel_hdmi_hdcp2_wait_for_msg(struct intel_digital_port *dig_port,
 	if (timeout < 0)
 		return timeout;
 
-	ret = __wait_for(ret = hdcp2_detect_msg_availability(dig_port,
-							     msg_id, &msg_ready,
-							     &msg_sz),
-			 !ret && msg_ready && msg_sz, timeout * 1000,
-			 1000, 5 * 1000);
+	ret = poll_timeout_us(ret = hdcp2_detect_msg_availability(dig_port, msg_id,
+								  &msg_ready, &msg_sz),
+			      !ret && msg_ready && msg_sz,
+			      4000, timeout * 1000, false);
 	if (ret)
 		drm_dbg_kms(display->drm,
 			    "msg_id: %d, ret: %d, timeout: %d\n",
@@ -2009,18 +2022,62 @@ intel_hdmi_mode_clock_valid(struct drm_connector *_connector, int clock,
 }
 
 static enum drm_mode_status
+intel_hdmi_sink_format_valid(struct intel_connector *connector,
+			     const struct drm_display_mode *mode,
+			     bool has_hdmi_sink,
+			     enum intel_output_format sink_format)
+{
+	const struct drm_display_info *info = &connector->base.display_info;
+
+	switch (sink_format) {
+	case INTEL_OUTPUT_FORMAT_YCBCR420:
+		if (!has_hdmi_sink ||
+		    !connector->base.ycbcr_420_allowed ||
+		    !drm_mode_is_420(info, mode))
+			return MODE_NO_420;
+
+		return MODE_OK;
+	case INTEL_OUTPUT_FORMAT_RGB:
+		return MODE_OK;
+	default:
+		MISSING_CASE(sink_format);
+		return MODE_BAD;
+	}
+}
+
+static enum drm_mode_status
+intel_hdmi_mode_valid_format(struct intel_connector *connector,
+			     const struct drm_display_mode *mode,
+			     int clock, bool has_hdmi_sink,
+			     enum intel_output_format sink_format)
+{
+	struct intel_display *display = to_intel_display(connector);
+	enum drm_mode_status status;
+
+	status = intel_hdmi_sink_format_valid(connector, mode,
+					      has_hdmi_sink, sink_format);
+	if (status != MODE_OK)
+		return status;
+
+	status = intel_pfit_mode_valid(display, mode, sink_format, 0);
+	if (status != MODE_OK)
+		return status;
+
+	return intel_hdmi_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
+}
+
+static enum drm_mode_status
 intel_hdmi_mode_valid(struct drm_connector *_connector,
 		      const struct drm_display_mode *mode)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_hdmi *hdmi = intel_attached_hdmi(connector);
+	const struct drm_display_info *info = &connector->base.display_info;
 	enum drm_mode_status status;
 	int clock = mode->clock;
 	int max_dotclk = display->cdclk.max_dotclk_freq;
 	bool has_hdmi_sink = intel_has_hdmi_sink(hdmi, connector->base.state);
-	bool ycbcr_420_only;
-	enum intel_output_format sink_format;
 
 	status = intel_cpu_transcoder_mode_valid(display, mode);
 	if (status != MODE_OK)
@@ -2047,26 +2104,19 @@ intel_hdmi_mode_valid(struct drm_connector *_connector,
 	if (clock > 600000)
 		return MODE_CLOCK_HIGH;
 
-	ycbcr_420_only = drm_mode_is_420_only(&connector->base.display_info, mode);
+	if (drm_mode_is_420_only(info, mode)) {
+		status = intel_hdmi_mode_valid_format(connector, mode, clock, has_hdmi_sink,
+						      INTEL_OUTPUT_FORMAT_YCBCR420);
+	} else {
+		status = intel_hdmi_mode_valid_format(connector, mode, clock, has_hdmi_sink,
+						      INTEL_OUTPUT_FORMAT_RGB);
 
-	if (ycbcr_420_only)
-		sink_format = INTEL_OUTPUT_FORMAT_YCBCR420;
-	else
-		sink_format = INTEL_OUTPUT_FORMAT_RGB;
-
-	status = intel_hdmi_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
-	if (status != MODE_OK) {
-		if (ycbcr_420_only ||
-		    !connector->base.ycbcr_420_allowed ||
-		    !drm_mode_is_420_also(&connector->base.display_info, mode))
-			return status;
-
-		sink_format = INTEL_OUTPUT_FORMAT_YCBCR420;
-		status = intel_hdmi_mode_clock_valid(&connector->base, clock, has_hdmi_sink,
-						     sink_format);
-		if (status != MODE_OK)
-			return status;
+		if (status != MODE_OK && drm_mode_is_420_also(info, mode))
+			status = intel_hdmi_mode_valid_format(connector, mode, clock, has_hdmi_sink,
+							      INTEL_OUTPUT_FORMAT_YCBCR420);
 	}
+	if (status != MODE_OK)
+		return status;
 
 	return intel_mode_valid_max_plane_size(display, mode, 1);
 }
@@ -2225,20 +2275,6 @@ static bool intel_hdmi_has_audio(struct intel_encoder *encoder,
 }
 
 static enum intel_output_format
-intel_hdmi_sink_format(const struct intel_crtc_state *crtc_state,
-		       struct intel_connector *connector,
-		       bool ycbcr_420_output)
-{
-	if (!crtc_state->has_hdmi_sink)
-		return INTEL_OUTPUT_FORMAT_RGB;
-
-	if (connector->base.ycbcr_420_allowed && ycbcr_420_output)
-		return INTEL_OUTPUT_FORMAT_YCBCR420;
-	else
-		return INTEL_OUTPUT_FORMAT_RGB;
-}
-
-static enum intel_output_format
 intel_hdmi_output_format(const struct intel_crtc_state *crtc_state)
 {
 	return crtc_state->sink_format;
@@ -2246,37 +2282,55 @@ intel_hdmi_output_format(const struct intel_crtc_state *crtc_state)
 
 static int intel_hdmi_compute_output_format(struct intel_encoder *encoder,
 					    struct intel_crtc_state *crtc_state,
-					    const struct drm_connector_state *conn_state,
-					    bool respect_downstream_limits)
+					    struct intel_connector *connector,
+					    bool respect_downstream_limits,
+					    enum intel_output_format sink_format)
+{
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+
+	if (intel_hdmi_sink_format_valid(connector, adjusted_mode,
+					 crtc_state->has_hdmi_sink, sink_format) != MODE_OK)
+		return -EINVAL;
+
+	crtc_state->sink_format = sink_format;
+	crtc_state->output_format = intel_hdmi_output_format(crtc_state);
+
+	return intel_hdmi_compute_clock(encoder, crtc_state, respect_downstream_limits);
+}
+
+static int intel_hdmi_compute_formats(struct intel_encoder *encoder,
+				      struct intel_crtc_state *crtc_state,
+				      const struct drm_connector_state *conn_state,
+				      bool respect_downstream_limits)
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	const struct drm_display_info *info = &connector->base.display_info;
-	bool ycbcr_420_only = drm_mode_is_420_only(info, adjusted_mode);
 	int ret;
 
-	crtc_state->sink_format =
-		intel_hdmi_sink_format(crtc_state, connector, ycbcr_420_only);
+	if (drm_mode_is_420_only(info, adjusted_mode)) {
+		ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
+						       respect_downstream_limits,
+						       INTEL_OUTPUT_FORMAT_YCBCR420);
 
-	if (ycbcr_420_only && crtc_state->sink_format != INTEL_OUTPUT_FORMAT_YCBCR420) {
-		drm_dbg_kms(display->drm,
-			    "YCbCr 4:2:0 mode but YCbCr 4:2:0 output not possible. Falling back to RGB.\n");
-		crtc_state->sink_format = INTEL_OUTPUT_FORMAT_RGB;
-	}
+		if (ret && !respect_downstream_limits) {
+			drm_dbg_kms(display->drm,
+				    "YCbCr 4:2:0 mode but YCbCr 4:2:0 output not possible. Falling back to RGB.\n");
 
-	crtc_state->output_format = intel_hdmi_output_format(crtc_state);
-	ret = intel_hdmi_compute_clock(encoder, crtc_state, respect_downstream_limits);
-	if (ret) {
-		if (crtc_state->sink_format == INTEL_OUTPUT_FORMAT_YCBCR420 ||
-		    !crtc_state->has_hdmi_sink ||
-		    !connector->base.ycbcr_420_allowed ||
-		    !drm_mode_is_420_also(info, adjusted_mode))
-			return ret;
+			ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
+							       respect_downstream_limits,
+							       INTEL_OUTPUT_FORMAT_RGB);
+		}
+	} else {
+		ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
+						       respect_downstream_limits,
+						       INTEL_OUTPUT_FORMAT_RGB);
 
-		crtc_state->sink_format = INTEL_OUTPUT_FORMAT_YCBCR420;
-		crtc_state->output_format = intel_hdmi_output_format(crtc_state);
-		ret = intel_hdmi_compute_clock(encoder, crtc_state, respect_downstream_limits);
+		if (ret && drm_mode_is_420_also(info, adjusted_mode))
+			ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
+							       respect_downstream_limits,
+							       INTEL_OUTPUT_FORMAT_YCBCR420);
 	}
 
 	return ret;
@@ -2342,6 +2396,9 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLCLK)
 		pipe_config->pixel_multiplier = 2;
 
+	if (!intel_link_bw_compute_pipe_bpp(pipe_config))
+		return -EINVAL;
+
 	pipe_config->has_audio =
 		intel_hdmi_has_audio(encoder, pipe_config, conn_state) &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
@@ -2350,9 +2407,9 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 	 * Try to respect downstream TMDS clock limits first, if
 	 * that fails assume the user might know something we don't.
 	 */
-	ret = intel_hdmi_compute_output_format(encoder, pipe_config, conn_state, true);
+	ret = intel_hdmi_compute_formats(encoder, pipe_config, conn_state, true);
 	if (ret)
-		ret = intel_hdmi_compute_output_format(encoder, pipe_config, conn_state, false);
+		ret = intel_hdmi_compute_formats(encoder, pipe_config, conn_state, false);
 	if (ret) {
 		drm_dbg_kms(display->drm,
 			    "unsupported HDMI clock (%d kHz), rejecting mode\n",
@@ -2360,11 +2417,9 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 		return ret;
 	}
 
-	if (intel_hdmi_is_ycbcr420(pipe_config)) {
-		ret = intel_pfit_compute_config(pipe_config, conn_state);
-		if (ret)
-			return ret;
-	}
+	ret = intel_pfit_compute_config(pipe_config, conn_state);
+	if (ret)
+		return ret;
 
 	pipe_config->limited_color_range =
 		intel_hdmi_limited_color_range(pipe_config, conn_state);
@@ -2497,7 +2552,7 @@ intel_hdmi_set_edid(struct drm_connector *_connector)
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
 	struct i2c_adapter *ddc = connector->base.ddc;
-	intel_wakeref_t wakeref;
+	struct ref_tracker *wakeref;
 	const struct drm_edid *drm_edid;
 	bool connected = false;
 
@@ -2540,7 +2595,7 @@ intel_hdmi_detect(struct drm_connector *_connector, bool force)
 	enum drm_connector_status status = connector_status_disconnected;
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
 	struct intel_encoder *encoder = &hdmi_to_dig_port(intel_hdmi)->base;
-	intel_wakeref_t wakeref;
+	struct ref_tracker *wakeref;
 
 	drm_dbg_kms(display->drm, "[CONNECTOR:%d:%s]\n",
 		    connector->base.base.id, connector->base.name);
@@ -2636,7 +2691,7 @@ static const struct drm_connector_funcs intel_hdmi_connector_funcs = {
 };
 
 static int intel_hdmi_connector_atomic_check(struct drm_connector *_connector,
-					     struct drm_atomic_state *state)
+					     struct drm_atomic_commit *state)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_display *display = to_intel_display(connector);

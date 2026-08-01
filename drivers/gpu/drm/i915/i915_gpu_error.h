@@ -149,7 +149,6 @@ struct intel_gt_coredump {
 	u32 gtier[6], ngtier;
 	u32 forcewake;
 	u32 error; /* gen6+ */
-	u32 err_int; /* gen7 */
 	u32 fault_data0; /* gen8, gen9 */
 	u32 fault_data1; /* gen8, gen9 */
 	u32 done_reg;
@@ -177,6 +176,7 @@ struct intel_gt_coredump {
 			struct intel_ctb_coredump ctb[2];
 			struct i915_vma_coredump *vma_ctb;
 			struct i915_vma_coredump *vma_log;
+			u32 *hw_state;
 			u32 timestamp;
 			u16 last_fence;
 			bool is_guc_capture;

@@ -20,7 +20,6 @@
 #include <linux/lcm.h>
 #include <linux/math.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/property.h>
 #include <linux/spi/spi.h>
 
@@ -1929,7 +1928,6 @@ static int adis16475_config_irq_pin(struct adis16475 *st)
 
 	return 0;
 }
-
 
 static int adis16475_probe(struct spi_device *spi)
 {

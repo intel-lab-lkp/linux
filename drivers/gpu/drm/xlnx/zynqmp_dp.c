@@ -353,7 +353,6 @@ struct zynqmp_dp_train_set_priv {
  * @lock: Mutex protecting this struct and register access (but not AUX)
  * @irq: irq
  * @bridge: DRM bridge for the DP encoder
- * @next_bridge: The downstream bridge
  * @test: Configuration for test mode
  * @config: IP core configuration from DTS
  * @aux: aux channel
@@ -385,7 +384,6 @@ struct zynqmp_dp {
 	struct completion aux_done;
 	struct mutex lock;
 
-	struct drm_bridge *next_bridge;
 	struct device *dev;
 	struct zynqmp_dpsub *dpsub;
 	void __iomem *iomem;
@@ -1437,7 +1435,7 @@ zynqmp_dp_disp_connected_live_layer(struct zynqmp_dp *dp)
 }
 
 static void zynqmp_dp_disp_enable(struct zynqmp_dp *dp,
-				  struct drm_atomic_state *state)
+				  struct drm_atomic_commit *state)
 {
 	struct zynqmp_disp_layer *layer;
 	struct drm_bridge_state *bridge_state;
@@ -1494,8 +1492,8 @@ static int zynqmp_dp_bridge_attach(struct drm_bridge *bridge,
 		return ret;
 	}
 
-	if (dp->next_bridge) {
-		ret = drm_bridge_attach(encoder, dp->next_bridge,
+	if (dp->bridge.next_bridge) {
+		ret = drm_bridge_attach(encoder, dp->bridge.next_bridge,
 					bridge, flags);
 		if (ret < 0)
 			goto error;
@@ -1549,7 +1547,7 @@ zynqmp_dp_bridge_mode_valid(struct drm_bridge *bridge,
 }
 
 static void zynqmp_dp_bridge_atomic_enable(struct drm_bridge *bridge,
-					   struct drm_atomic_state *state)
+					   struct drm_atomic_commit *state)
 {
 	struct zynqmp_dp *dp = bridge_to_dp(bridge);
 	const struct drm_crtc_state *crtc_state;
@@ -1626,7 +1624,7 @@ static void zynqmp_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void zynqmp_dp_bridge_atomic_disable(struct drm_bridge *bridge,
-					    struct drm_atomic_state *state)
+					    struct drm_atomic_commit *state)
 {
 	struct drm_bridge_state *old_bridge_state = drm_atomic_get_old_bridge_state(state,
 										    bridge);
@@ -1720,7 +1718,8 @@ disconnected:
 	return connector_status_disconnected;
 }
 
-static enum drm_connector_status zynqmp_dp_bridge_detect(struct drm_bridge *bridge)
+static enum drm_connector_status
+zynqmp_dp_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
 {
 	struct zynqmp_dp *dp = bridge_to_dp(bridge);
 
@@ -1738,7 +1737,7 @@ static const struct drm_edid *zynqmp_dp_bridge_edid_read(struct drm_bridge *brid
 
 static u32 *zynqmp_dp_bridge_default_bus_fmts(unsigned int *num_input_fmts)
 {
-	u32 *formats = kzalloc(sizeof(*formats), GFP_KERNEL);
+	u32 *formats = kzalloc_obj(*formats);
 
 	if (formats)
 		*formats = MEDIA_BUS_FMT_FIXED;
@@ -1869,20 +1868,14 @@ static int zynqmp_dp_test_setup(struct zynqmp_dp *dp)
 static ssize_t zynqmp_dp_pattern_read(struct file *file, char __user *user_buf,
 				      size_t count, loff_t *ppos)
 {
-	struct dentry *dentry = file->f_path.dentry;
 	struct zynqmp_dp *dp = file->private_data;
 	char buf[16];
 	ssize_t ret;
-
-	ret = debugfs_file_get(dentry);
-	if (unlikely(ret))
-		return ret;
 
 	scoped_guard(mutex, &dp->lock)
 		ret = snprintf(buf, sizeof(buf), "%s\n",
 			       test_pattern_str[dp->test.pattern]);
 
-	debugfs_file_put(dentry);
 	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 }
 
@@ -1890,27 +1883,20 @@ static ssize_t zynqmp_dp_pattern_write(struct file *file,
 				       const char __user *user_buf,
 				       size_t count, loff_t *ppos)
 {
-	struct dentry *dentry = file->f_path.dentry;
 	struct zynqmp_dp *dp = file->private_data;
 	char buf[16];
 	ssize_t ret;
 	int pattern;
 
-	ret = debugfs_file_get(dentry);
-	if (unlikely(ret))
-		return ret;
-
 	ret = simple_write_to_buffer(buf, sizeof(buf) - 1, ppos, user_buf,
 				     count);
 	if (ret < 0)
-		goto out;
+		return ret;
 	buf[ret] = '\0';
 
 	pattern = sysfs_match_string(test_pattern_str, buf);
-	if (pattern < 0) {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (pattern < 0)
+		return -EINVAL;
 
 	mutex_lock(&dp->lock);
 	dp->test.pattern = pattern;
@@ -1919,8 +1905,6 @@ static ssize_t zynqmp_dp_pattern_write(struct file *file,
 						 dp->test.custom) ?: ret;
 	mutex_unlock(&dp->lock);
 
-out:
-	debugfs_file_put(dentry);
 	return ret;
 }
 
@@ -2026,20 +2010,13 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_zynqmp_dp_active, zynqmp_dp_active_get,
 static ssize_t zynqmp_dp_custom_read(struct file *file, char __user *user_buf,
 				     size_t count, loff_t *ppos)
 {
-	struct dentry *dentry = file->f_path.dentry;
 	struct zynqmp_dp *dp = file->private_data;
 	ssize_t ret;
-
-	ret = debugfs_file_get(dentry);
-	if (unlikely(ret))
-		return ret;
 
 	mutex_lock(&dp->lock);
 	ret = simple_read_from_buffer(user_buf, count, ppos, &dp->test.custom,
 				      sizeof(dp->test.custom));
 	mutex_unlock(&dp->lock);
-
-	debugfs_file_put(dentry);
 	return ret;
 }
 
@@ -2047,18 +2024,13 @@ static ssize_t zynqmp_dp_custom_write(struct file *file,
 				      const char __user *user_buf,
 				      size_t count, loff_t *ppos)
 {
-	struct dentry *dentry = file->f_path.dentry;
 	struct zynqmp_dp *dp = file->private_data;
 	ssize_t ret;
 	char buf[sizeof(dp->test.custom)];
 
-	ret = debugfs_file_get(dentry);
-	if (unlikely(ret))
-		return ret;
-
 	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	mutex_lock(&dp->lock);
 	memcpy(dp->test.custom, buf, ret);
@@ -2066,9 +2038,6 @@ static ssize_t zynqmp_dp_custom_write(struct file *file,
 		ret = zynqmp_dp_set_test_pattern(dp, dp->test.pattern,
 						 dp->test.custom) ?: ret;
 	mutex_unlock(&dp->lock);
-
-out:
-	debugfs_file_put(dentry);
 	return ret;
 }
 
@@ -2439,9 +2408,9 @@ int zynqmp_dp_probe(struct zynqmp_dpsub *dpsub)
 	struct zynqmp_dp *dp;
 	int ret;
 
-	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
-	if (!dp)
-		return -ENOMEM;
+	dp = devm_drm_bridge_alloc(&pdev->dev, struct zynqmp_dp, bridge, &zynqmp_dp_bridge_funcs);
+	if (IS_ERR(dp))
+		return PTR_ERR(dp);
 
 	dp->dev = &pdev->dev;
 	dp->dpsub = dpsub;
@@ -2454,31 +2423,25 @@ int zynqmp_dp_probe(struct zynqmp_dpsub *dpsub)
 
 	/* Acquire all resources (IOMEM, IRQ and PHYs). */
 	dp->iomem = devm_platform_ioremap_resource_byname(pdev, "dp");
-	if (IS_ERR(dp->iomem)) {
-		ret = PTR_ERR(dp->iomem);
-		goto err_free;
-	}
+	if (IS_ERR(dp->iomem))
+		return PTR_ERR(dp->iomem);
 
 	dp->irq = platform_get_irq(pdev, 0);
-	if (dp->irq < 0) {
-		ret = dp->irq;
-		goto err_free;
-	}
+	if (dp->irq < 0)
+		return dp->irq;
 
 	dp->reset = devm_reset_control_get(dp->dev, NULL);
-	if (IS_ERR(dp->reset)) {
-		ret = dev_err_probe(dp->dev, PTR_ERR(dp->reset),
+	if (IS_ERR(dp->reset))
+		return dev_err_probe(dp->dev, PTR_ERR(dp->reset),
 				    "failed to get reset\n");
-		goto err_free;
-	}
 
 	ret = zynqmp_dp_reset(dp, true);
 	if (ret < 0)
-		goto err_free;
+		return ret;
 
 	ret = zynqmp_dp_reset(dp, false);
 	if (ret < 0)
-		goto err_free;
+		return ret;
 
 	ret = zynqmp_dp_phy_probe(dp);
 	if (ret)
@@ -2486,7 +2449,6 @@ int zynqmp_dp_probe(struct zynqmp_dpsub *dpsub)
 
 	/* Initialize the bridge. */
 	bridge = &dp->bridge;
-	bridge->funcs = &zynqmp_dp_bridge_funcs;
 	bridge->ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID
 		    | DRM_BRIDGE_OP_HPD;
 	bridge->type = DRM_MODE_CONNECTOR_DisplayPort;
@@ -2497,10 +2459,15 @@ int zynqmp_dp_probe(struct zynqmp_dpsub *dpsub)
 	 * Acquire the next bridge in the chain. Ignore errors caused by port@5
 	 * not being connected for backward-compatibility with older DTs.
 	 */
-	ret = drm_of_find_panel_or_bridge(dp->dev->of_node, 5, 0, NULL,
-					  &dp->next_bridge);
-	if (ret < 0 && ret != -ENODEV)
-		goto err_reset;
+	dp->bridge.next_bridge = of_drm_get_bridge_by_endpoint(dp->dev->of_node, 5, 0);
+	if (IS_ERR(dp->bridge.next_bridge)) {
+		if (PTR_ERR(dp->bridge.next_bridge) != -ENODEV) {
+			ret = PTR_ERR(dp->bridge.next_bridge);
+			goto err_reset;
+		}
+
+		dp->bridge.next_bridge = NULL;
+	}
 
 	/* Initialize the hardware. */
 	dp->config.misc0 &= ~ZYNQMP_DP_MAIN_STREAM_MISC0_SYNC_LOCK;
@@ -2539,8 +2506,6 @@ err_phy_exit:
 	zynqmp_dp_phy_exit(dp);
 err_reset:
 	zynqmp_dp_reset(dp, true);
-err_free:
-	kfree(dp);
 	return ret;
 }
 

@@ -10,6 +10,7 @@
 #include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
+#include <linux/hex.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -394,6 +395,7 @@ static void ucsi_ccg_update_get_current_cam_cmd(struct ucsi_ccg *uc, u8 *data)
 }
 
 static bool ucsi_ccg_update_altmodes(struct ucsi *ucsi,
+				     u8 recipient,
 				     struct ucsi_altmode *orig,
 				     struct ucsi_altmode *updated)
 {
@@ -401,6 +403,9 @@ static bool ucsi_ccg_update_altmodes(struct ucsi *ucsi,
 	struct ucsi_ccg_altmode *alt, *new_alt;
 	int i, j, k = 0;
 	bool found = false;
+
+	if (recipient != UCSI_RECIPIENT_CON)
+		return false;
 
 	alt = uc->orig;
 	new_alt = uc->updated;
@@ -603,7 +608,8 @@ static int ucsi_ccg_async_control(struct ucsi *ucsi, u64 command)
 }
 
 static int ucsi_ccg_sync_control(struct ucsi *ucsi, u64 command, u32 *cci,
-				 void *data, size_t size)
+				 void *data, size_t size, void *msg_out,
+				 size_t msg_out_size)
 {
 	struct ucsi_ccg *uc = ucsi_get_drvdata(ucsi);
 	struct ucsi_connector *con;
@@ -625,7 +631,8 @@ static int ucsi_ccg_sync_control(struct ucsi *ucsi, u64 command, u32 *cci,
 		ucsi_ccg_update_set_new_cam_cmd(uc, con, &command);
 	}
 
-	ret = ucsi_sync_control_common(ucsi, command, cci, data, size);
+	ret = ucsi_sync_control_common(ucsi, command, cci, data, size,
+				       msg_out, msg_out_size);
 
 	switch (UCSI_COMMAND(command)) {
 	case UCSI_GET_CURRENT_CAM:
@@ -1238,6 +1245,11 @@ not_signed_fw:
 	 *****************************************************************/
 
 	p = strnchr(fw->data, fw->size, ':');
+	if (!p) {
+		dev_err(dev, "Bad FW format: no ':' record header found\n");
+		err = -EINVAL;
+		goto release_mem;
+	}
 	while (p < eof) {
 		s = strnchr(p + 1, eof - p - 1, ':');
 
@@ -1509,8 +1521,8 @@ static void ucsi_ccg_remove(struct i2c_client *client)
 	cancel_work_sync(&uc->work);
 	pm_runtime_disable(uc->dev);
 	ucsi_unregister(uc->ucsi);
-	ucsi_destroy(uc->ucsi);
 	free_irq(uc->irq, uc);
+	ucsi_destroy(uc->ucsi);
 }
 
 static const struct of_device_id ucsi_ccg_of_match_table[] = {
@@ -1520,8 +1532,8 @@ static const struct of_device_id ucsi_ccg_of_match_table[] = {
 MODULE_DEVICE_TABLE(of, ucsi_ccg_of_match_table);
 
 static const struct i2c_device_id ucsi_ccg_device_id[] = {
-	{ "ccgx-ucsi" },
-	{}
+	{ .name = "ccgx-ucsi" },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ucsi_ccg_device_id);
 

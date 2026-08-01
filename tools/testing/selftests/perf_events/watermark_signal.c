@@ -15,9 +15,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "../kselftest_harness.h"
-
-#define __maybe_unused __attribute__((__unused__))
+#include "kselftest_harness.h"
 
 static int sigio_count;
 
@@ -104,7 +102,7 @@ TEST(watermark_signal)
 	}
 
 	p = mmap(NULL, 2 * page_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (p == NULL) {
+	if (p == MAP_FAILED) {
 		perror("mmap");
 		goto cleanup;
 	}

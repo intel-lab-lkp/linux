@@ -12,7 +12,6 @@
 
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
@@ -150,7 +149,7 @@ static int tc358762_init(struct tc358762 *ctx)
 }
 
 static void tc358762_post_disable(struct drm_bridge *bridge,
-				  struct drm_atomic_state *state)
+				  struct drm_atomic_commit *state)
 {
 	struct tc358762 *ctx = bridge_to_tc358762(bridge);
 	int ret;
@@ -173,7 +172,7 @@ static void tc358762_post_disable(struct drm_bridge *bridge,
 }
 
 static void tc358762_pre_enable(struct drm_bridge *bridge,
-				struct drm_atomic_state *state)
+				struct drm_atomic_commit *state)
 {
 	struct tc358762 *ctx = bridge_to_tc358762(bridge);
 	int ret;
@@ -191,7 +190,7 @@ static void tc358762_pre_enable(struct drm_bridge *bridge,
 }
 
 static void tc358762_enable(struct drm_bridge *bridge,
-			    struct drm_atomic_state *state)
+			    struct drm_atomic_commit *state)
 {
 	struct tc358762 *ctx = bridge_to_tc358762(bridge);
 	int ret;
@@ -265,9 +264,10 @@ static int tc358762_probe(struct mipi_dsi_device *dsi)
 	struct tc358762 *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(struct tc358762), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_bridge_alloc(dev, struct tc358762, bridge,
+				    &tc358762_bridge_funcs);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	mipi_dsi_set_drvdata(dsi, ctx);
 
@@ -288,7 +288,6 @@ static int tc358762_probe(struct mipi_dsi_device *dsi)
 	if (ret < 0)
 		return ret;
 
-	ctx->bridge.funcs = &tc358762_bridge_funcs;
 	ctx->bridge.type = DRM_MODE_CONNECTOR_DPI;
 	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.pre_enable_prev_first = true;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024-2025 Intel Corporation
+ * Copyright (C) 2024-2026 Intel Corporation
  */
 #include "agg.h"
 #include "sta.h"
@@ -64,6 +64,9 @@ static void iwl_mld_release_frames_from_notif(struct iwl_mld *mld,
 	}
 
 	/* pick any STA ID to find the pointer */
+	if (WARN_ON_ONCE(!ba_data->sta_mask))
+		goto out_unlock;
+
 	sta_id = ffs(ba_data->sta_mask) - 1;
 	link_sta = rcu_dereference(mld->fw_id_to_link_sta[sta_id]);
 	if (WARN_ON_ONCE(IS_ERR_OR_NULL(link_sta) || !link_sta->sta))
@@ -166,6 +169,9 @@ void iwl_mld_del_ba(struct iwl_mld *mld, int queue,
 		goto out_unlock;
 
 	/* pick any STA ID to find the pointer */
+	if (WARN_ON_ONCE(!ba_data->sta_mask))
+		goto out_unlock;
+
 	sta_id = ffs(ba_data->sta_mask) - 1;
 	link_sta = rcu_dereference(mld->fw_id_to_link_sta[sta_id]);
 	if (WARN_ON_ONCE(IS_ERR_OR_NULL(link_sta) || !link_sta->sta))
@@ -214,6 +220,11 @@ iwl_mld_reorder(struct iwl_mld *mld, struct napi_struct *napi,
 	 * have any BA sessions.
 	 */
 	if (baid == IWL_RX_REORDER_DATA_INVALID_BAID)
+		return IWL_MLD_PASS_SKB;
+
+	if (IWL_FW_CHECK(mld, baid >= ARRAY_SIZE(mld->fw_id_to_ba),
+			 "Got out-of-range BAID %u in reorder_data=0x%x\n",
+			 baid, reorder))
 		return IWL_MLD_PASS_SKB;
 
 	/* no sta yet */
@@ -305,10 +316,15 @@ iwl_mld_reorder(struct iwl_mld *mld, struct napi_struct *napi,
 	 * already ahead and it will be dropped.
 	 * If the last sub-frame is not on this queue - we will get frame
 	 * release notification with up to date NSSN.
+	 * If this is the first frame that is stored in the buffer, the head_sn
+	 * may be outdated. Update it based on the last NSSN to make sure it
+	 * will be released when the frame release notification arrives.
 	 */
 	if (!amsdu || last_subframe)
 		iwl_mld_reorder_release_frames(mld, sta, napi, baid_data,
 					       buffer, nssn);
+	else if (buffer->num_stored == 1)
+		buffer->head_sn = nssn;
 
 	return IWL_MLD_BUFFERED_SKB;
 }
@@ -342,6 +358,9 @@ static void iwl_mld_rx_agg_session_expired(struct timer_list *t)
 	}
 
 	/* timer expired, pick any STA ID to find the pointer */
+	if (WARN_ON_ONCE(!ba_data->sta_mask))
+		goto unlock;
+
 	sta_id = ffs(ba_data->sta_mask) - 1;
 	link_sta = rcu_dereference(ba_data->mld->fw_id_to_link_sta[sta_id]);
 

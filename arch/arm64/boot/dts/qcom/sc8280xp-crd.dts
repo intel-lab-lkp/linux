@@ -225,11 +225,6 @@
 	};
 
 	reserved-memory {
-		gpu_mem: gpu-mem@8bf00000 {
-			reg = <0 0x8bf00000 0 0x2000>;
-			no-map;
-		};
-
 		linux,cma {
 			compatible = "shared-dma-pool";
 			size = <0x0 0x8000000>;
@@ -495,13 +490,24 @@
 	status = "okay";
 };
 
+&gpi_dma0 {
+	status = "okay";
+};
+
+&gpi_dma1 {
+	status = "okay";
+};
+
+&gpi_dma2 {
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
+};
 
-	zap-shader {
-		memory-region = <&gpu_mem>;
-		firmware-name = "qcom/sc8280xp/qcdxkmsuc8280.mbn";
-	};
+&gpu_zap_shader {
+	firmware-name = "qcom/sc8280xp/qcdxkmsuc8280.mbn";
 };
 
 &mdss0 {
@@ -548,15 +554,10 @@
 			};
 		};
 	};
+};
 
-	ports {
-		port@1 {
-			reg = <1>;
-			mdss0_dp3_out: endpoint {
-				remote-endpoint = <&edp_panel_in>;
-			};
-		};
-	};
+&mdss0_dp3_out {
+	remote-endpoint = <&edp_panel_in>;
 };
 
 &mdss0_dp3_phy {
@@ -786,7 +787,7 @@
 		vddbtcmx-supply = <&vreg_pmu_btcmx_0p8>;
 		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
 		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
-		vddrfa1p8-supply = <&vreg_pmu_rfa_1p7>;
+		vddrfa1p7-supply = <&vreg_pmu_rfa_1p7>;
 	};
 };
 

@@ -23,6 +23,8 @@
 /*
  * buffered_read.c
  */
+void netfs_queue_read(struct netfs_io_request *rreq,
+		      struct netfs_io_subrequest *subreq);
 void netfs_cache_read_terminated(void *priv, ssize_t transferred_or_error);
 int netfs_prefetch_for_write(struct file *file, struct folio *folio,
 			     size_t offset, size_t len);
@@ -87,6 +89,7 @@ struct netfs_io_request *netfs_alloc_request(struct address_space *mapping,
 void netfs_get_request(struct netfs_io_request *rreq, enum netfs_rreq_ref_trace what);
 void netfs_clear_subrequests(struct netfs_io_request *rreq);
 void netfs_put_request(struct netfs_io_request *rreq, enum netfs_rreq_ref_trace what);
+void netfs_put_failed_request(struct netfs_io_request *rreq);
 struct netfs_io_subrequest *netfs_alloc_subrequest(struct netfs_io_request *rreq);
 
 static inline void netfs_see_request(struct netfs_io_request *rreq,
@@ -107,6 +110,7 @@ static inline void netfs_see_subrequest(struct netfs_io_subrequest *subreq,
  */
 bool netfs_read_collection(struct netfs_io_request *rreq);
 void netfs_read_collection_worker(struct work_struct *work);
+void netfs_cancel_read(struct netfs_io_subrequest *subreq, int error);
 void netfs_cache_read_terminated(void *priv, ssize_t transferred_or_error);
 
 /*
@@ -197,6 +201,9 @@ struct netfs_io_request *netfs_create_write_req(struct address_space *mapping,
 						struct file *file,
 						loff_t start,
 						enum netfs_io_origin origin);
+void netfs_prepare_write(struct netfs_io_request *wreq,
+			 struct netfs_io_stream *stream,
+			 loff_t start);
 void netfs_reissue_write(struct netfs_io_stream *stream,
 			 struct netfs_io_subrequest *subreq,
 			 struct iov_iter *source);
@@ -211,7 +218,6 @@ int netfs_advance_writethrough(struct netfs_io_request *wreq, struct writeback_c
 			       struct folio **writethrough_cache);
 ssize_t netfs_end_writethrough(struct netfs_io_request *wreq, struct writeback_control *wbc,
 			       struct folio *writethrough_cache);
-int netfs_unbuffered_write(struct netfs_io_request *wreq, bool may_wait, size_t len);
 
 /*
  * write_retry.c
@@ -228,6 +234,18 @@ static inline bool netfs_is_cache_enabled(struct netfs_inode *ctx)
 
 	return fscache_cookie_valid(cookie) && cookie->cache_priv &&
 		fscache_cookie_enabled(cookie);
+#else
+	return false;
+#endif
+}
+
+static inline bool netfs_is_cache_maybe_enabled(struct netfs_inode *ctx)
+{
+#if IS_ENABLED(CONFIG_FSCACHE)
+	struct fscache_cookie *cookie = ctx->cache;
+
+	return fscache_cookie_valid(cookie) &&
+		test_bit(FSCACHE_COOKIE_IS_CACHING, &cookie->flags);
 #else
 	return false;
 #endif

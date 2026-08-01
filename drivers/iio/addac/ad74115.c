@@ -1577,7 +1577,7 @@ static int ad74115_setup_gpio_chip(struct ad74115_state *st)
 		.direction_input = ad74115_gpio_direction_input,
 		.direction_output = ad74115_gpio_direction_output,
 		.get = ad74115_gpio_get,
-		.set_rv = ad74115_gpio_set,
+		.set = ad74115_gpio_set,
 	};
 
 	return devm_gpiochip_add_data(dev, &st->gc, st);
@@ -1835,7 +1835,10 @@ static int ad74115_probe(struct spi_device *spi)
 	st = iio_priv(indio_dev);
 
 	st->spi = spi;
-	mutex_init(&st->lock);
+	ret = devm_mutex_init(dev, &st->lock);
+	if (ret)
+		return ret;
+
 	init_completion(&st->adc_data_completion);
 
 	indio_dev->name = AD74115_NAME;

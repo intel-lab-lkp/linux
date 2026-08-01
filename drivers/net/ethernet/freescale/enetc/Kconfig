@@ -10,6 +10,7 @@ config FSL_ENETC_CORE
 
 config NXP_ENETC_PF_COMMON
 	tristate
+	select CRC_ITU_T
 	help
 	  This module supports common functionality between drivers of
 	  different versions of NXP ENETC PF controllers.
@@ -28,6 +29,7 @@ config NXP_NTMP
 
 config FSL_ENETC
 	tristate "ENETC PF driver"
+	depends on PTP_1588_CLOCK_OPTIONAL
 	depends on PCI_MSI
 	select FSL_ENETC_CORE
 	select FSL_ENETC_IERB
@@ -45,6 +47,7 @@ config FSL_ENETC
 
 config NXP_ENETC4
 	tristate "ENETC4 PF driver"
+	depends on PTP_1588_CLOCK_OPTIONAL
 	depends on PCI_MSI
 	select FSL_ENETC_CORE
 	select FSL_ENETC_MDIO
@@ -62,11 +65,13 @@ config NXP_ENETC4
 
 config FSL_ENETC_VF
 	tristate "ENETC VF driver"
+	depends on PTP_1588_CLOCK_OPTIONAL
 	depends on PCI_MSI
 	select FSL_ENETC_CORE
 	select FSL_ENETC_MDIO
 	select PHYLINK
 	select DIMLIB
+	select CRC_ITU_T
 	help
 	  This driver supports NXP ENETC gigabit ethernet controller PCIe
 	  virtual function (VF) devices enabled by the ENETC PF driver.

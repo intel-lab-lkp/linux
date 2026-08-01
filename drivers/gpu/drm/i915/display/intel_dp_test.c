@@ -6,13 +6,12 @@
 #include <drm/display/drm_dp.h>
 #include <drm/display/drm_dp_helper.h>
 #include <drm/drm_edid.h>
-#include <drm/drm_file.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
-#include "i915_reg.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
 #include "intel_dp_link_training.h"
@@ -472,7 +471,7 @@ static int intel_dp_do_phy_test(struct intel_encoder *encoder,
 	drm_dbg_kms(display->drm, "[ENCODER:%d:%s] PHY test\n",
 		    encoder->base.base.id, encoder->base.name);
 
-	for_each_intel_crtc_in_pipe_mask(display->drm, crtc, pipe_mask) {
+	for_each_intel_crtc_in_pipe_mask(display, crtc, pipe_mask) {
 		const struct intel_crtc_state *crtc_state =
 			to_intel_crtc_state(crtc->base.state);
 
@@ -753,13 +752,12 @@ static const struct {
 
 void intel_dp_test_debugfs_register(struct intel_display *display)
 {
-	struct drm_minor *minor = display->drm->primary;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(intel_display_debugfs_files); i++) {
 		debugfs_create_file(intel_display_debugfs_files[i].name,
 				    0644,
-				    minor->debugfs_root,
+				    display->drm->debugfs_root,
 				    display,
 				    intel_display_debugfs_files[i].fops);
 	}

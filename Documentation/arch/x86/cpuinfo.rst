@@ -11,7 +11,7 @@ The list of feature flags in /proc/cpuinfo is not complete and
 represents an ill-fated attempt from long time ago to put feature flags
 in an easy to find place for userspace.
 
-However, the amount of feature flags is growing by the CPU generation,
+However, the number of feature flags is growing with each CPU generation,
 leading to unparseable and unwieldy /proc/cpuinfo.
 
 What is more, those feature flags do not even need to be in that file
@@ -186,6 +186,10 @@ to disable features using the feature number as defined in
 /arch/x86/include/asm/cpufeatures.h. For instance, User Mode Instruction
 Protection can be disabled using clearcpuid=514. The number 514 is calculated
 from #define X86_FEATURE_UMIP (16*32 + 2).
+
+DO NOT USE this cmdline option in production - it is meant to be used only as
+a quick'n'dirty debugging aid to rule out a feature-enabling code is the
+culprit. If you use it, it'll taint the kernel.
 
 In addition, there exists a variety of custom command-line parameters that
 disable specific features. The list of parameters includes, but is not limited

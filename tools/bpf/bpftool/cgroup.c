@@ -2,6 +2,10 @@
 // Copyright (C) 2017 Facebook
 // Author: Roman Gushchin <guro@fb.com>
 
+#undef GCC_VERSION
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #define _XOPEN_SOURCE 500
 #include <errno.h>
 #include <fcntl.h>
@@ -73,6 +77,13 @@ static const int cgroup_attach_types[] = {
 static unsigned int query_flags;
 static struct btf *btf_vmlinux;
 static __u32 btf_vmlinux_id;
+
+static void free_btf_vmlinux(void)
+{
+	btf__free(btf_vmlinux);
+	btf_vmlinux = NULL;
+	btf_vmlinux_id = 0;
+}
 
 static enum bpf_attach_type parse_attach_type(const char *str)
 {
@@ -384,6 +395,8 @@ static int do_show(int argc, char **argv)
 	if (json_output)
 		jsonw_end_array(json_wtr);
 
+	free_btf_vmlinux();
+
 exit_cgroup:
 	close(cgroup_fd);
 exit:
@@ -433,7 +446,9 @@ static int do_show_tree_fn(const char *fpath, const struct stat *sb,
 		printf("%s\n", fpath);
 	}
 
-	btf_vmlinux = libbpf_find_kernel_btf();
+	if (!btf_vmlinux)
+		btf_vmlinux = libbpf_find_kernel_btf();
+
 	for (i = 0; i < ARRAY_SIZE(cgroup_attach_types); i++)
 		show_bpf_progs(cgroup_fd, cgroup_attach_types[i], ftw->level);
 
@@ -536,6 +551,7 @@ static int do_show_tree(int argc, char **argv)
 	if (json_output)
 		jsonw_end_array(json_wtr);
 
+	free_btf_vmlinux();
 	free(cgroup_alloced);
 
 	return ret;

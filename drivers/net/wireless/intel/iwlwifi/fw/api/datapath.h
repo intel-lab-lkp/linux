@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2024-2025 Intel Corporation
+ * Copyright (C) 2024-2026 Intel Corporation
  * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
@@ -56,7 +56,8 @@ enum iwl_data_path_subcmd_ids {
 	RFH_QUEUE_CONFIG_CMD = 0xD,
 
 	/**
-	 * @TLC_MNG_CONFIG_CMD: &struct iwl_tlc_config_cmd_v4
+	 * @TLC_MNG_CONFIG_CMD: &struct iwl_tlc_config_cmd_v4 or
+	 *	&struct iwl_tlc_config_cmd.
 	 */
 	TLC_MNG_CONFIG_CMD = 0xF,
 
@@ -91,10 +92,11 @@ enum iwl_data_path_subcmd_ids {
 	SEC_KEY_CMD = 0x18,
 
 	/**
-	 * @OMI_SEND_STATUS_NOTIF: notification after OMI was sent
-	 *	uses &struct iwl_omi_send_status_notif
+	 * @RSC_NOTIF: notification to update each Rx queue with the RSC. This
+	 *	notification is sent after resume and uses
+	 *	&struct iwl_wowlan_all_rsc_tsc_v5.
 	 */
-	OMI_SEND_STATUS_NOTIF = 0xF2,
+	RSC_NOTIF = 0xF1,
 
 	/**
 	 * @ESR_MODE_NOTIF: notification to recommend/force a wanted esr mode,
@@ -123,6 +125,16 @@ enum iwl_data_path_subcmd_ids {
 	 * @TLC_MNG_UPDATE_NOTIF: &struct iwl_tlc_update_notif
 	 */
 	TLC_MNG_UPDATE_NOTIF = 0xF7,
+
+	/**
+	 * @BEACON_FILTER_IN_NOTIF: &struct iwl_beacon_filter_notif
+	 */
+	BEACON_FILTER_IN_NOTIF = 0xF8,
+
+	/**
+	 * @PHY_AIR_SNIFFER_NOTIF: &struct iwl_rx_phy_air_sniffer_ntfy
+	 */
+	PHY_AIR_SNIFFER_NOTIF = 0xF9,
 
 	/**
 	 * @STA_PM_NOTIF: &struct iwl_mvm_pm_state_notification
@@ -693,14 +705,5 @@ struct iwl_sec_key_cmd {
 		} __packed remove; /* SEC_KEY_REMOVE_CMD_API_S_VER_1 */
 	} __packed u; /* SEC_KEY_OPERATION_API_U_VER_1 */
 } __packed; /* SEC_KEY_CMD_API_S_VER_1 */
-
-/**
- * struct iwl_omi_send_status_notif - OMI status notification
- * @success: indicates that the OMI was sent successfully
- *	(currently always set)
- */
-struct iwl_omi_send_status_notif {
-	__le32 success;
-} __packed; /* OMI_SEND_STATUS_NTFY_API_S_VER_1 */
 
 #endif /* __iwl_fw_api_datapath_h__ */
