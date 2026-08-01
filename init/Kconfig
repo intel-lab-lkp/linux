@@ -2102,8 +2102,9 @@ config KALLSYMS_LINEINFO
 	    anon_vma_clone+0x2ed/0xcf0 (mm/rmap.c:412)
 
 	  This requires libelf and libdw (from elfutils) on the build host.
-	  Costs 10 bytes per DWARF line-table entry; for x86_64_defconfig
-	  with CONFIG_DEBUG_INFO that is about 18MB.
+	  Costs about 3.8 bytes per DWARF line-table entry after delta
+	  compression; for x86_64_defconfig with CONFIG_DEBUG_INFO that is
+	  about 8MB.
 
 	  If unsure, say N.
 
@@ -2116,7 +2117,8 @@ config KALLSYMS_LINEINFO_MODULES
 	  so stack traces from module code include (file.c:123) annotations.
 
 	  This requires libelf and libdw (from elfutils) on the build host.
-	  Costs 10 bytes per DWARF line entry in each .ko.
+	  Costs about 3.8 bytes per DWARF line entry in each .ko after
+	  delta compression.
 
 	  If unsure, say N.
 

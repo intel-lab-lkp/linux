@@ -498,9 +498,9 @@ out:
 #include <linux/mod_lineinfo.h>
 
 /*
- * Search one per-section sub-table for @section_offset using flat parallel
- * arrays.  @hdr is the per-section header at byte offset @hdr_offset within
- * @blob.  Returns true on hit and populates @file / @line.
+ * Search one per-section sub-table for @section_offset.
+ * @hdr is the per-section header at byte offset @hdr_offset within @blob.
+ * Returns true on hit and populates @file / @line.
  */
 static bool module_lookup_lineinfo_section(const void *blob, u32 blob_size,
 					   u32 hdr_offset,
@@ -510,13 +510,8 @@ static bool module_lookup_lineinfo_section(const void *blob, u32 blob_size,
 					   unsigned int *line)
 {
 	const struct mod_lineinfo_header *hdr;
-	const u8 *base;
-	const u32 *addrs, *lines, *file_offsets;
-	const u16 *file_ids;
-	const char *filenames;
-	u32 num_entries, num_files, filenames_size;
-	unsigned int low, high, mid;
-	u16 file_id;
+	struct lineinfo_table tbl;
+	const void *base;
 
 	if (hdr_offset > blob_size ||
 	    blob_size - hdr_offset < sizeof(*hdr))
@@ -532,80 +527,63 @@ static bool module_lookup_lineinfo_section(const void *blob, u32 blob_size,
 		return false;
 
 	base = (const u8 *)blob + hdr_offset;
-	hdr = (const struct mod_lineinfo_header *)base;
-	num_entries = hdr->num_entries;
-	num_files = hdr->num_files;
-	filenames_size = hdr->filenames_size;
+	hdr = base;
 
-	if (num_entries == 0)
+	if (hdr->num_entries == 0 || hdr->num_blocks == 0)
 		return false;
 
-	/*
-	 * Validate counts before multiplying — sizing arithmetic could
-	 * otherwise overflow on 32-bit with a malformed blob.  Each entry
-	 * contributes one u32 (addrs), one u16 (file_ids), and one u32
-	 * (lines); each file contributes one u32 (file_offsets).
-	 */
+	/* Validate each sub-array fits within the remaining blob bytes */
 	{
 		u32 avail = blob_size - hdr_offset;
-		u32 needed = mod_lineinfo_filenames_off(num_entries, num_files);
 
-		if (num_entries > U32_MAX / sizeof(u32))
+		if (hdr->blocks_offset > avail ||
+		    hdr->blocks_size > avail - hdr->blocks_offset)
 			return false;
-		if (num_files > U32_MAX / sizeof(u32))
+		if (hdr->data_offset > avail ||
+		    hdr->data_size > avail - hdr->data_offset)
 			return false;
-		if (needed > avail || filenames_size > avail - needed)
+		if (hdr->files_offset > avail ||
+		    hdr->files_size > avail - hdr->files_offset)
+			return false;
+		if (hdr->filenames_offset > avail ||
+		    hdr->filenames_size > avail - hdr->filenames_offset)
 			return false;
 	}
+
+	/*
+	 * Validate counts before multiplying by element size — multiplication
+	 * could otherwise overflow on 32-bit builds with a malformed blob.
+	 * num_blocks contributes (addr,offset) u32 pairs; num_files contributes
+	 * one u32 each.
+	 */
+	if (hdr->num_blocks > hdr->blocks_size / (2 * sizeof(u32)))
+		return false;
+	if (hdr->num_files > hdr->files_size / sizeof(u32))
+		return false;
 
 	/*
 	 * Filenames are read as NUL-terminated C strings.  Require the blob
 	 * to end in NUL so a malformed file_offsets entry can never lead the
 	 * later "%s" consumer past the end of the section.
 	 */
-	if (filenames_size == 0 ||
-	    base[mod_lineinfo_filenames_off(num_entries, num_files) +
-		 filenames_size - 1] != 0)
+	if (hdr->filenames_size == 0 ||
+	    ((const u8 *)base)[hdr->filenames_offset +
+			       hdr->filenames_size - 1] != 0)
 		return false;
 
-	addrs = (const u32 *)(base + mod_lineinfo_addrs_off());
-	file_ids = (const u16 *)(base + mod_lineinfo_file_ids_off(num_entries));
-	lines = (const u32 *)(base + mod_lineinfo_lines_off(num_entries));
-	file_offsets = (const u32 *)(base + mod_lineinfo_file_offsets_off(num_entries));
-	filenames = (const char *)(base + mod_lineinfo_filenames_off(num_entries, num_files));
+	tbl.blk_addrs	= base + hdr->blocks_offset;
+	tbl.blk_offsets	= base + hdr->blocks_offset +
+			  hdr->num_blocks * sizeof(u32);
+	tbl.data	= base + hdr->data_offset;
+	tbl.data_size	= hdr->data_size;
+	tbl.file_offsets = base + hdr->files_offset;
+	tbl.filenames	= base + hdr->filenames_offset;
+	tbl.num_entries	= hdr->num_entries;
+	tbl.num_blocks	= hdr->num_blocks;
+	tbl.num_files	= hdr->num_files;
+	tbl.filenames_size = hdr->filenames_size;
 
-	/* Binary search for largest entry <= section_offset. */
-	low = 0;
-	high = num_entries;
-	while (low < high) {
-		mid = low + (high - low) / 2;
-		if (addrs[mid] <= section_offset)
-			low = mid + 1;
-		else
-			high = mid;
-	}
-
-	if (low == 0)
-		return false;
-	low--;
-
-	/*
-	 * Reject entries below the resolved symbol's start so a symbol
-	 * without line entries of its own does not inherit the preceding
-	 * symbol's annotation.
-	 */
-	if (addrs[low] < min_offset)
-		return false;
-
-	file_id = file_ids[low];
-	if (file_id >= num_files)
-		return false;
-	if (file_offsets[file_id] >= filenames_size)
-		return false;
-
-	*file = &filenames[file_offsets[file_id]];
-	*line = lines[low];
-	return true;
+	return lineinfo_search(&tbl, section_offset, min_offset, file, line);
 }
 
 /*
@@ -632,6 +610,7 @@ static bool module_lookup_lineinfo_blob(const void *blob, u32 blob_size,
 	if (root->num_sections == 0)
 		return false;
 
+	/* Validate sections[] array fits within the blob */
 	if (root->num_sections > U32_MAX / sizeof(struct mod_lineinfo_section))
 		return false;
 	sections_end = sizeof(*root) +
@@ -667,6 +646,9 @@ static bool module_lookup_lineinfo_blob(const void *blob, u32 blob_size,
 
 /*
  * Look up source file:line for an address within a loaded module.
+ * Uses the .mod_lineinfo / .init.mod_lineinfo sections embedded in the .ko
+ * at build time.  Each section contains one or more per-section sub-tables
+ * keyed by an ELF-relocation-resolved anchor.
  *
  * Safe in NMI/panic context: no locks, no allocations.
  * Caller must hold RCU read lock (or be in a context where the module

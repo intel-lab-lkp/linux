@@ -467,13 +467,17 @@ static int append_buildid(char *buffer,   const char *modname,
 
 #endif /* CONFIG_STACKTRACE_BUILD_ID */
 
+#include <linux/mod_lineinfo.h>
+
 bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
 			      const char **file, unsigned int *line)
 {
 	unsigned long raw_offset, raw_min;
-	unsigned int offset, min_offset = 0, low, high, mid, file_id;
+	unsigned int offset, min_offset = 0;
+	struct lineinfo_table tbl;
 
-	if (!IS_ENABLED(CONFIG_KALLSYMS_LINEINFO) || !lineinfo_num_entries)
+	if (!IS_ENABLED(CONFIG_KALLSYMS_LINEINFO) ||
+	    !lineinfo_num_entries || !lineinfo_num_blocks)
 		return false;
 
 	/* Compute offset from _text */
@@ -491,8 +495,8 @@ bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
 		return false;
 
 	/*
-	 * The search below returns the closest entry at or below @offset, so
-	 * a symbol without line entries of its own (assembly without debug
+	 * The search returns the closest entry at or below the offset, so a
+	 * symbol without line entries of its own (assembly without debug
 	 * info, or anything past the _etext cap like .init.text) would
 	 * inherit the last entry of whatever precedes it.  Bound the result
 	 * to entries at or above the resolved symbol's start.
@@ -504,35 +508,18 @@ bool kallsyms_lookup_lineinfo(unsigned long addr, unsigned long sym_start,
 			min_offset = raw_min;
 	}
 
-	/* Binary search for largest entry <= offset */
-	low = 0;
-	high = lineinfo_num_entries;
-	while (low < high) {
-		mid = low + (high - low) / 2;
-		if (lineinfo_addrs[mid] <= offset)
-			low = mid + 1;
-		else
-			high = mid;
-	}
+	tbl.blk_addrs	= lineinfo_block_addrs;
+	tbl.blk_offsets	= lineinfo_block_offsets;
+	tbl.data	= lineinfo_data;
+	tbl.data_size	= lineinfo_data_size;
+	tbl.file_offsets = lineinfo_file_offsets;
+	tbl.filenames	= lineinfo_filenames;
+	tbl.num_entries	= lineinfo_num_entries;
+	tbl.num_blocks	= lineinfo_num_blocks;
+	tbl.num_files	= lineinfo_num_files;
+	tbl.filenames_size = lineinfo_filenames_size;
 
-	if (low == 0)
-		return false;
-	low--;
-
-	if (lineinfo_addrs[low] < min_offset)
-		return false;
-
-	file_id = lineinfo_file_ids[low];
-	*line = lineinfo_lines[low];
-
-	if (file_id >= lineinfo_num_files)
-		return false;
-
-	if (lineinfo_file_offsets[file_id] >= lineinfo_filenames_size)
-		return false;
-
-	*file = &lineinfo_filenames[lineinfo_file_offsets[file_id]];
-	return true;
+	return lineinfo_search(&tbl, offset, min_offset, file, line);
 }
 
 /* Look up a kernel symbol and return it in a text buffer. */
