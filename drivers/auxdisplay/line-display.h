@@ -13,6 +13,7 @@
 #define _LINEDISP_H
 
 #include <linux/device.h>
+#include <linux/mutex.h>
 #include <linux/timer_types.h>
 
 #include <linux/map_to_7segment.h>
@@ -58,6 +59,7 @@ struct linedisp_ops {
 /**
  * struct linedisp - character line display private data structure
  * @dev: the line display device
+ * @lock: serializes sysfs access to the display state
  * @timer: timer used to implement scrolling
  * @ops: character line display operations
  * @buf: pointer to the buffer for the string currently displayed
@@ -70,6 +72,7 @@ struct linedisp_ops {
  */
 struct linedisp {
 	struct device dev;
+	struct mutex lock; /* serializes sysfs access to the display state */
 	struct timer_list timer;
 	const struct linedisp_ops *ops;
 	struct linedisp_map *map;

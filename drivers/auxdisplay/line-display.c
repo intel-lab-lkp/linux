@@ -164,6 +164,7 @@ static void linedisp_scroll(struct timer_list *t)
 static int linedisp_display(struct linedisp *linedisp, const char *msg,
 			    ssize_t count)
 {
+	guard(mutex)(&linedisp->lock);
 	char *new_msg;
 
 	/* stop the scroll timer */
@@ -226,6 +227,7 @@ static ssize_t message_show(struct device *dev, struct device_attribute *attr,
 {
 	struct linedisp *linedisp = to_linedisp(dev);
 
+	guard(mutex)(&linedisp->lock);
 	return sysfs_emit(buf, "%s\n", linedisp->message);
 }
 
@@ -267,6 +269,7 @@ static ssize_t scroll_step_ms_show(struct device *dev,
 {
 	struct linedisp *linedisp = to_linedisp(dev);
 
+	guard(mutex)(&linedisp->lock);
 	return sysfs_emit(buf, "%u\n", jiffies_to_msecs(linedisp->scroll_rate));
 }
 
@@ -281,6 +284,8 @@ static ssize_t scroll_step_ms_store(struct device *dev,
 	err = kstrtouint(buf, 10, &ms);
 	if (err)
 		return err;
+
+	guard(mutex)(&linedisp->lock);
 
 	timer_delete_sync(&linedisp->timer);
 
@@ -444,6 +449,7 @@ int linedisp_attach(struct linedisp *linedisp, struct device *dev,
 	linedisp->ops = ops;
 	linedisp->num_chars = num_chars;
 	linedisp->scroll_rate = DEFAULT_SCROLL_RATE;
+	mutex_init(&linedisp->lock);
 
 	linedisp->buf = kzalloc(linedisp->num_chars, GFP_KERNEL);
 	if (!linedisp->buf)
@@ -531,6 +537,7 @@ int linedisp_register(struct linedisp *linedisp, struct device *parent,
 	linedisp->ops = ops;
 	linedisp->num_chars = num_chars;
 	linedisp->scroll_rate = DEFAULT_SCROLL_RATE;
+	mutex_init(&linedisp->lock);
 
 	err = ida_alloc(&linedisp_id, GFP_KERNEL);
 	if (err < 0)
