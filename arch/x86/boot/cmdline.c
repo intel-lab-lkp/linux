@@ -94,8 +94,8 @@ int __cmdline_find_option(unsigned long cmdline_ptr, const char *option, char *b
 /*
  * Find a boolean option (like quiet,noapic,nosmp....)
  *
- * Returns the position of that option (starts counting with 1)
- * or 0 on not found
+ * Returns the position of that option (starts counting with 1),
+ * or 0 if the option is not found or the command line is unavailable.
  */
 int __cmdline_find_option_bool(unsigned long cmdline_ptr, const char *option)
 {
@@ -110,7 +110,7 @@ int __cmdline_find_option_bool(unsigned long cmdline_ptr, const char *option)
 	} state = st_wordstart;
 
 	if (!cmdline_ptr)
-		return -1;      /* No command line */
+		return 0;	/* No command line */
 
 	cptr = cmdline_ptr & 0xf;
 	set_fs(cmdline_ptr >> 4);

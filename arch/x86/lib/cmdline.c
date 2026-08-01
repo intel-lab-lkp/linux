@@ -23,10 +23,11 @@ static inline int myisspace(u8 c)
  * @max_cmdline_size: the maximum size of cmdline
  * @option: option string to look for
  *
- * Returns the position of that @option (starts counting with 1)
- * or 0 on not found.  @option will only be found if it is found
- * as an entire word in @cmdline.  For instance, if @option="car"
- * then a cmdline which contains "cart" will not match.
+ * Returns the position of that @option (starts counting with 1),
+ * or 0 if the option is not found or the command line is unavailable.
+ * @option will only be found if it is found as an entire word in
+ * @cmdline.  For instance, if @option="car" then a cmdline which
+ * contains "cart" will not match.
  */
 static int
 __cmdline_find_option_bool(const char *cmdline, int max_cmdline_size,
@@ -42,7 +43,7 @@ __cmdline_find_option_bool(const char *cmdline, int max_cmdline_size,
 	} state = st_wordstart;
 
 	if (!cmdline)
-		return -1;      /* No command line */
+		return 0;	/* No command line */
 
 	/*
 	 * This 'pos' check ensures we do not overrun
