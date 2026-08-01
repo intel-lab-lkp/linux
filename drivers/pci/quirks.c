@@ -97,6 +97,7 @@ int pcie_failed_link_retrain(struct pci_dev *dev)
 	u16 lnksta, lnkctl2, oldlnkctl2;
 	enum pci_bus_speed speed_cap;
 	int ret = -ENOTTY;
+	u32 lnkcap;
 
 	if (!pci_is_pcie(dev) || !pcie_downstream_port(dev) ||
 	    !pcie_cap_has_lnkctl2(dev) || !dev->link_active_reporting)
@@ -115,9 +116,25 @@ int pcie_failed_link_retrain(struct pci_dev *dev)
 			goto err;
 	}
 
+	pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
 	pcie_capability_read_word(dev, PCI_EXP_LNKCTL2, &lnkctl2);
 	if ((lnkctl2 & PCI_EXP_LNKCTL2_TLS) == PCI_EXP_LNKCTL2_TLS_2_5GT) {
 		pci_info(dev, "removing 2.5GT/s downstream link speed restriction\n");
+
+		/*
+		 * With no link partner the retraining can never complete and
+		 * every attempt costs PCIE_LINK_RETRAIN_TIMEOUT_MS.  Program
+		 * the Target Link Speed directly and skip the retraining; the
+		 * link will train at that speed once a device shows up.
+		 */
+		if (!(lnksta & PCI_EXP_LNKSTA_DLLLA)) {
+			pcie_capability_read_dword(dev, PCI_EXP_LNKCAP, &lnkcap);
+			pcie_capability_clear_and_set_word(dev, PCI_EXP_LNKCTL2,
+							   PCI_EXP_LNKCTL2_TLS,
+							   lnkcap & PCI_EXP_LNKCAP_SLS);
+			return ret;
+		}
+
 		ret = pcie_set_target_speed(dev, speed_cap, false);
 		if (ret)
 			goto err;
