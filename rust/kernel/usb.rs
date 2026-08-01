@@ -33,6 +33,7 @@ use core::{
     slice,
 };
 
+pub mod control;
 pub mod endpoint;
 
 /// An adapter for the registration of USB drivers.
@@ -550,7 +551,7 @@ unsafe impl Sync for Interface {}
 ///
 /// [`struct usb_device`]: https://www.kernel.org/doc/html/latest/driver-api/usb/usb.html#c.usb_device
 #[repr(transparent)]
-struct Device<Ctx: device::DeviceContext = device::Normal>(
+pub struct Device<Ctx: device::DeviceContext = device::Normal>(
     Opaque<bindings::usb_device>,
     PhantomData<Ctx>,
 );
