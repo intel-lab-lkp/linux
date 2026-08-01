@@ -76,6 +76,9 @@ struct nested_vmx {
 	gpa_t vmxon_ptr;
 	bool pml_full;
 
+	/* Set when freeing the vCPU, to suppress emulation of guest state. */
+	bool vcpu_is_dying;
+
 	/* The guest-physical address of the current VMCS L1 keeps for L2 */
 	gpa_t current_vmptr;
 	/*

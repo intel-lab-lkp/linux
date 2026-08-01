@@ -378,6 +378,8 @@ static void free_nested(struct kvm_vcpu *vcpu)
  */
 void nested_vmx_free_vcpu(struct kvm_vcpu *vcpu)
 {
+	to_vmx(vcpu)->nested.vcpu_is_dying = true;
+
 	vcpu_load(vcpu);
 	vmx_leave_nested(vcpu);
 	vcpu_put(vcpu);
@@ -5175,6 +5177,16 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 
 	/* in case we halted in L2 */
 	kvm_set_mp_state(vcpu, KVM_MP_STATE_RUNNABLE);
+
+	/*
+	 * Don't emulate guest-controlled state, e.g. vmcs12's VM-Exit MSR load
+	 * list, when freeing the vCPU.  Bail only after leaving guest mode,
+	 * canceling the preemption timer, and switching back to vmcs01.
+	 */
+	if (vmx->nested.vcpu_is_dying) {
+		nested_ept_uninit_mmu_context(vcpu);
+		return;
+	}
 
 	if (likely(!vmx->fail)) {
 		if (vm_exit_reason != -1)
