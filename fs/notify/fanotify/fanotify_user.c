@@ -1271,12 +1271,11 @@ static int fanotify_remove_mark(struct fsnotify_group *group,
 	return 0;
 }
 
-static bool fanotify_mark_update_flags(struct fsnotify_mark *fsn_mark,
+static void fanotify_mark_update_flags(struct fsnotify_mark *fsn_mark,
 				       unsigned int fan_flags)
 {
 	bool want_iref = !(fan_flags & FAN_MARK_EVICTABLE);
 	unsigned int ignore = fan_flags & FANOTIFY_MARK_IGNORE_BITS;
-	bool recalc = false;
 
 	/*
 	 * When using FAN_MARK_IGNORE for the first time, mark starts using
@@ -1288,20 +1287,15 @@ static bool fanotify_mark_update_flags(struct fsnotify_mark *fsn_mark,
 		fsn_mark->flags |= FSNOTIFY_MARK_FLAG_HAS_IGNORE_FLAGS;
 
 	/*
-	 * Setting FAN_MARK_IGNORED_SURV_MODIFY for the first time may lead to
-	 * the removal of the FS_MODIFY bit in calculated mask if it was set
-	 * because of an ignore mask that is now going to survive FS_MODIFY.
+	 * Setting FAN_MARK_IGNORED_SURV_MODIFY may remove FS_MODIFY from the
+	 * calculated mask if it was included only to clear the ignore mask.
 	 */
-	if (ignore && (fan_flags & FAN_MARK_IGNORED_SURV_MODIFY) &&
-	    !(fsn_mark->flags & FSNOTIFY_MARK_FLAG_IGNORED_SURV_MODIFY)) {
+	if (ignore && (fan_flags & FAN_MARK_IGNORED_SURV_MODIFY))
 		fsn_mark->flags |= FSNOTIFY_MARK_FLAG_IGNORED_SURV_MODIFY;
-		if (!(fsn_mark->mask & FS_MODIFY))
-			recalc = true;
-	}
 
 	if (fsn_mark->connector->type != FSNOTIFY_OBJ_TYPE_INODE ||
 	    want_iref == !(fsn_mark->flags & FSNOTIFY_MARK_FLAG_NO_IREF))
-		return recalc;
+		return;
 
 	/*
 	 * NO_IREF may be removed from a mark, but not added.
@@ -1309,28 +1303,19 @@ static bool fanotify_mark_update_flags(struct fsnotify_mark *fsn_mark,
 	 */
 	WARN_ON_ONCE(!want_iref);
 	fsn_mark->flags &= ~FSNOTIFY_MARK_FLAG_NO_IREF;
-
-	return true;
 }
 
-static bool fanotify_mark_add_to_mask(struct fsnotify_mark *fsn_mark,
+static void fanotify_mark_add_to_mask(struct fsnotify_mark *fsn_mark,
 				      __u32 mask, unsigned int fan_flags)
 {
-	bool recalc;
-
 	spin_lock(&fsn_mark->lock);
 	if (!(fan_flags & FANOTIFY_MARK_IGNORE_BITS))
 		fsn_mark->mask |= mask;
 	else
 		fsn_mark->ignore_mask |= mask;
 
-	recalc = fsnotify_calc_mask(fsn_mark) &
-		~fsnotify_conn_mask(fsn_mark->connector);
-
-	recalc |= fanotify_mark_update_flags(fsn_mark, fan_flags);
+	fanotify_mark_update_flags(fsn_mark, fan_flags);
 	spin_unlock(&fsn_mark->lock);
-
-	return recalc;
 }
 
 struct fan_fsid {
@@ -1497,7 +1482,6 @@ static int fanotify_add_mark(struct fsnotify_group *group,
 			     struct fan_fsid *fsid)
 {
 	struct fsnotify_mark *fsn_mark;
-	bool recalc;
 	int ret = 0;
 
 	fsnotify_group_lock(group);
@@ -1529,9 +1513,8 @@ static int fanotify_add_mark(struct fsnotify_group *group,
 			goto out;
 	}
 
-	recalc = fanotify_mark_add_to_mask(fsn_mark, mask, fan_flags);
-	if (recalc)
-		fsnotify_recalc_mask(fsn_mark->connector);
+	fanotify_mark_add_to_mask(fsn_mark, mask, fan_flags);
+	fsnotify_recalc_mask(fsn_mark->connector);
 
 out:
 	fsnotify_group_unlock(group);
