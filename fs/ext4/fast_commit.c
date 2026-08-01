@@ -213,7 +213,7 @@ static void ext4_end_buffer_io_sync(struct bio *bio)
 	} else {
 		ext4_debug("%s: Block %lld not up-to-date",
 			   __func__, bh->b_blocknr);
-		clear_buffer_uptodate(bh);
+		mark_buffer_write_io_error(bh);
 	}
 
 	unlock_buffer(bh);
