@@ -71,16 +71,47 @@ static int upper_bound(struct btree_node *n, uint64_t key)
 	return bsearch(n, key, 1);
 }
 
-void inc_children(struct dm_transaction_manager *tm, struct btree_node *n,
-		  struct dm_btree_value_type *vt)
+/*
+ * value_ptr() takes an entry's address from the value_size stored on disk,
+ * but the caller supplies the length it copies.  node_check() sees the block
+ * and never the caller, so the two are compared here, wherever both are in
+ * hand.  Internal nodes are exempt: node_check() already holds them to
+ * sizeof(__le64), which is what value64() assumes.
+ */
+int check_value_size(struct btree_node *n, size_t expected)
+{
+	uint32_t value_size = le32_to_cpu(n->header.value_size);
+
+	if (le32_to_cpu(n->header.flags) & INTERNAL_NODE)
+		return 0;
+
+	if (value_size != expected) {
+		DMERR_LIMIT("%s failed: value_size %u != %zu expected by the caller",
+			    __func__, value_size, expected);
+		return -EILSEQ;
+	}
+
+	return 0;
+}
+
+int inc_children(struct dm_transaction_manager *tm, struct btree_node *n,
+		 struct dm_btree_value_type *vt)
 {
 	uint32_t nr_entries = le32_to_cpu(n->header.nr_entries);
 
 	if (le32_to_cpu(n->header.flags) & INTERNAL_NODE)
 		dm_tm_with_runs(tm, value_ptr(n, 0), nr_entries, dm_tm_inc_range);
 
-	else if (vt->inc)
+	else if (vt->inc) {
+		int r = check_value_size(n, vt->size);
+
+		if (r)
+			return r;
+
 		vt->inc(vt->context, value_ptr(n, 0), nr_entries);
+	}
+
+	return 0;
 }
 
 static int insert_at(size_t value_size, struct btree_node *node, unsigned int index,
@@ -314,6 +345,10 @@ int dm_btree_del(struct dm_btree_info *info, dm_block_t root)
 				goto out;
 
 		} else if (is_internal_level(info, f)) {
+			r = check_value_size(f->n, sizeof(__le64));
+			if (r)
+				goto out;
+
 			b = value64(f->n, f->current_child);
 			f->current_child++;
 			r = push_frame(s, b, f->level + 1);
@@ -321,9 +356,14 @@ int dm_btree_del(struct dm_btree_info *info, dm_block_t root)
 				goto out;
 
 		} else {
-			if (info->value_type.dec)
+			if (info->value_type.dec) {
+				r = check_value_size(f->n, info->value_type.size);
+				if (r)
+					goto out;
+
 				info->value_type.dec(info->value_type.context,
 						     value_ptr(f->n, 0), f->nr_children);
+			}
 			pop_frame(s);
 		}
 	}
@@ -365,8 +405,13 @@ static int btree_lookup_raw(struct ro_spine *s, dm_block_t block, uint64_t key,
 	} while (!(flags & LEAF_NODE));
 
 	*result_key = le64_to_cpu(ro_node(s)->keys[i]);
-	if (v)
+	if (v) {
+		r = check_value_size(ro_node(s), value_size);
+		if (r)
+			return r;
+
 		memcpy(v, value_ptr(ro_node(s), i), value_size);
+	}
 
 	return 0;
 }
@@ -460,6 +505,10 @@ static int dm_btree_lookup_next_single(struct dm_btree_info *info, dm_block_t ro
 		}
 
 		*rkey = le64_to_cpu(n->keys[i]);
+		r = check_value_size(n, info->value_type.size);
+		if (r)
+			goto out;
+
 		memcpy(value_le, value_ptr(n, i), info->value_type.size);
 	}
 out:
@@ -721,8 +770,14 @@ static int shadow_child(struct dm_btree_info *info, struct dm_btree_value_type *
 
 	node = dm_block_data(*result);
 
-	if (inc)
-		inc_children(info->tm, node, vt);
+	r = check_value_size(node, vt->size);
+	if (!r && inc)
+		r = inc_children(info->tm, node, vt);
+
+	if (r) {
+		unlock_block(info, *result);
+		return r;
+	}
 
 	*((__le64 *) value_ptr(parent, index)) =
 		cpu_to_le64(dm_block_location(*result));
@@ -1441,6 +1496,10 @@ static int walk_node(struct dm_btree_info *info, dm_block_t block,
 			if (r)
 				goto out;
 		} else {
+			r = check_value_size(n, info->value_type.size);
+			if (r)
+				goto out;
+
 			keys = le64_to_cpu(*key_ptr(n, i));
 			r = fn(context, &keys, value_ptr(n, i));
 			if (r)
@@ -1473,6 +1532,9 @@ static void prefetch_values(struct dm_btree_cursor *c)
 	struct dm_block_manager *bm = dm_tm_get_bm(c->info->tm);
 
 	BUG_ON(c->info->value_type.size != sizeof(value_le));
+
+	if (check_value_size(bn, sizeof(value_le)))
+		return;
 
 	nr = le32_to_cpu(bn->header.nr_entries);
 	for (i = 0; i < nr; i++) {
@@ -1626,6 +1688,9 @@ int dm_btree_cursor_get_value(struct dm_btree_cursor *c, uint64_t *key, void *va
 
 		if (le32_to_cpu(bn->header.flags) & INTERNAL_NODE)
 			return -EINVAL;
+
+		if (check_value_size(bn, c->info->value_type.size))
+			return -EILSEQ;
 
 		*key = le64_to_cpu(*key_ptr(bn, n->index));
 		memcpy(value_le, value_ptr(bn, n->index), c->info->value_type.size);

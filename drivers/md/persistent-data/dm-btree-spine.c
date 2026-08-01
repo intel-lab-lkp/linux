@@ -121,8 +121,19 @@ static int bn_shadow(struct dm_btree_info *info, dm_block_t orig,
 
 	r = dm_tm_shadow_block(info->tm, orig, &btree_node_validator,
 			       result, &inc);
+	if (r)
+		return r;
+
+	/*
+	 * Everything that modifies a node reaches it through here, so this is
+	 * where a leaf laid out for a different value size is caught.
+	 */
+	r = check_value_size(dm_block_data(*result), vt->size);
 	if (!r && inc)
-		inc_children(info->tm, dm_block_data(*result), vt);
+		r = inc_children(info->tm, dm_block_data(*result), vt);
+
+	if (r)
+		unlock_block(info, *result);
 
 	return r;
 }

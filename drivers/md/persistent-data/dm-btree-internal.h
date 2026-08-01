@@ -51,8 +51,10 @@ uint32_t calc_max_entries(size_t value_size, size_t block_size);
 int bn_read_lock(struct dm_btree_info *info, dm_block_t b,
 		 struct dm_block **result);
 
-void inc_children(struct dm_transaction_manager *tm, struct btree_node *n,
-		  struct dm_btree_value_type *vt);
+int check_value_size(struct btree_node *n, size_t expected);
+
+int inc_children(struct dm_transaction_manager *tm, struct btree_node *n,
+		 struct dm_btree_value_type *vt);
 
 int new_block(struct dm_btree_info *info, struct dm_block **result);
 void unlock_block(struct dm_btree_info *info, struct dm_block *b);

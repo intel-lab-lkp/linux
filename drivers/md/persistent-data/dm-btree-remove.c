@@ -175,8 +175,14 @@ static int init_child(struct dm_btree_info *info, struct dm_btree_value_type *vt
 
 	result->n = dm_block_data(result->block);
 
-	if (inc)
-		inc_children(info->tm, result->n, vt);
+	r = check_value_size(result->n, vt->size);
+	if (!r && inc)
+		r = inc_children(info->tm, result->n, vt);
+
+	if (r) {
+		dm_tm_unlock(info->tm, result->block);
+		return r;
+	}
 
 	*((__le64 *) value_ptr(parent, index)) =
 		cpu_to_le64(dm_block_location(result->block));
@@ -501,8 +507,18 @@ static int rebalance_children(struct shadow_spine *s,
 		if (r)
 			return r;
 
-		if (is_shared)
-			inc_children(info->tm, dm_block_data(child), vt);
+		/*
+		 * The child is copied over the node the spine already
+		 * checked, so it has to answer for itself first.
+		 */
+		r = check_value_size(dm_block_data(child), vt->size);
+		if (!r && is_shared)
+			r = inc_children(info->tm, dm_block_data(child), vt);
+
+		if (r) {
+			dm_tm_unlock(info->tm, child);
+			return r;
+		}
 
 		memcpy(n, dm_block_data(child),
 		       dm_bm_block_size(dm_tm_get_bm(info->tm)));
