@@ -86,7 +86,8 @@ static u16 pcie_bwctrl_select_speed(struct pci_dev *port, enum pci_bus_speed spe
 	return pcie_supported_speeds2target_speed(supported_speeds & desired_speeds);
 }
 
-static int pcie_bwctrl_change_speed(struct pci_dev *port, u16 target_speed, bool use_lt)
+static int pcie_bwctrl_change_speed(struct pci_dev *port, u16 target_speed,
+				    bool use_lt, bool retrain)
 {
 	int ret;
 
@@ -95,28 +96,15 @@ static int pcie_bwctrl_change_speed(struct pci_dev *port, u16 target_speed, bool
 	if (ret != PCIBIOS_SUCCESSFUL)
 		return pcibios_err_to_errno(ret);
 
+	if (!retrain)
+		return 0;
+
 	return pcie_retrain_link(port, use_lt);
 }
 
-/**
- * pcie_set_target_speed - Set downstream Link Speed for PCIe Port
- * @port:	PCIe Port
- * @speed_req:	Requested PCIe Link Speed
- * @use_lt:	Wait for the LT or DLLLA bit to detect the end of link training
- *
- * Attempt to set PCIe Port Link Speed to @speed_req. @speed_req may be
- * adjusted downwards to the best speed supported by both the Port and PCIe
- * Device underneath it.
- *
- * Return:
- * * 0		- on success
- * * -EINVAL	- @speed_req is not a PCIe Link Speed
- * * -ENODEV	- @port is not controllable
- * * -ETIMEDOUT	- changing Link Speed took too long
- * * -EAGAIN	- Link Speed was changed but @speed_req was not achieved
- */
-int pcie_set_target_speed(struct pci_dev *port, enum pci_bus_speed speed_req,
-			  bool use_lt)
+static int __pcie_set_target_speed(struct pci_dev *port,
+				   enum pci_bus_speed speed_req,
+				   bool use_lt, bool retrain)
 {
 	struct pci_bus *bus = port->subordinate;
 	u16 target_speed;
@@ -140,7 +128,8 @@ int pcie_set_target_speed(struct pci_dev *port, enum pci_bus_speed speed_req,
 		if (data)
 			mutex_lock(&data->set_speed_mutex);
 
-		ret = pcie_bwctrl_change_speed(port, target_speed, use_lt);
+		ret = pcie_bwctrl_change_speed(port, target_speed, use_lt,
+					       retrain);
 
 		if (data)
 			mutex_unlock(&data->set_speed_mutex);
@@ -155,6 +144,51 @@ int pcie_set_target_speed(struct pci_dev *port, enum pci_bus_speed speed_req,
 		ret = -EAGAIN;
 
 	return ret;
+}
+
+/**
+ * pcie_set_target_speed - Set downstream Link Speed for PCIe Port
+ * @port:	PCIe Port
+ * @speed_req:	Requested PCIe Link Speed
+ * @use_lt:	Wait for the LT or DLLLA bit to detect the end of link training
+ *
+ * Attempt to set PCIe Port Link Speed to @speed_req. @speed_req may be
+ * adjusted downwards to the best speed supported by both the Port and PCIe
+ * Device underneath it.
+ *
+ * Return:
+ * * 0		- on success
+ * * -EINVAL	- @speed_req is not a PCIe Link Speed
+ * * -ENODEV	- @port is not controllable
+ * * -ETIMEDOUT	- changing Link Speed took too long
+ * * -EAGAIN	- Link Speed was changed but @speed_req was not achieved
+ */
+int pcie_set_target_speed(struct pci_dev *port, enum pci_bus_speed speed_req,
+			  bool use_lt)
+{
+	return __pcie_set_target_speed(port, speed_req, use_lt, true);
+}
+
+/**
+ * pcie_set_target_speed_no_retrain - Program Target Link Speed, skip retraining
+ * @port:	PCIe Port
+ * @speed_req:	Requested PCIe Link Speed
+ *
+ * Program the Target Link Speed of @port as pcie_set_target_speed() does, but
+ * do not request Link retraining afterwards.  Intended for Ports with no Link
+ * partner, where retraining cannot succeed and each attempt costs
+ * PCIE_LINK_RETRAIN_TIMEOUT_MS.  The Link trains at the programmed speed once
+ * a Device appears.
+ *
+ * Return:
+ * * 0		- on success
+ * * -EINVAL	- @speed_req is not a PCIe Link Speed
+ * * -ENODEV	- @port is not controllable
+ */
+int pcie_set_target_speed_no_retrain(struct pci_dev *port,
+				     enum pci_bus_speed speed_req)
+{
+	return __pcie_set_target_speed(port, speed_req, false, false);
 }
 
 static void pcie_bwnotif_enable(struct pcie_device *srv)

@@ -1167,8 +1167,15 @@ static inline void pcie_ecrc_get_policy(char *str) { }
 
 #ifdef CONFIG_PCIEPORTBUS
 void pcie_reset_lbms(struct pci_dev *port);
+int pcie_set_target_speed_no_retrain(struct pci_dev *port,
+				     enum pci_bus_speed speed_req);
 #else
 static inline void pcie_reset_lbms(struct pci_dev *port) {}
+static inline int pcie_set_target_speed_no_retrain(struct pci_dev *port,
+						   enum pci_bus_speed speed_req)
+{
+	return -EOPNOTSUPP;
+}
 #endif
 
 struct pci_dev_reset_methods {
