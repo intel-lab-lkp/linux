@@ -1605,6 +1605,11 @@ static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
 	opts = container_of(fi, struct f_hid_opts, func_inst);
 
 	mutex_lock(&opts->lock);
+	if (!opts->report_length) {
+		mutex_unlock(&opts->lock);
+		kfree(hidg);
+		return ERR_PTR(-EINVAL);
+	}
 
 	spin_lock_init(&hidg->write_spinlock);
 	spin_lock_init(&hidg->read_spinlock);
