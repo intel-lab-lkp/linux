@@ -1301,7 +1301,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 #include "pelt.h"
 
-static int select_idle_sibling(struct task_struct *p, int prev_cpu, int cpu);
+static int select_idle_sibling(struct task_struct *p, int prev_cpu, int cpu, int sync_cpu);
 static unsigned long task_h_load(struct task_struct *p);
 static unsigned long capacity_of(int cpu);
 
@@ -8604,13 +8604,24 @@ unlock:
  * sd_balance_shared->has_idle_cores and enabled through update_idle_core()
  * above.
  */
-static int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus, int *idle_cpu)
+static int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus,
+				int *idle_cpu, int sync_cpu)
 {
 	bool idle = true;
 	int cpu;
 
 	for_each_cpu(cpu, cpu_smt_mask(core)) {
-		if (!available_idle_cpu(cpu)) {
+		bool sync_waker = (cpu == sync_cpu);
+
+		/*
+		 * @sync_cpu, if set, is running a waker that is about to
+		 * block with nothing else runnable behind it. Treat it as
+		 * idle so this core stays an idle-core candidate: placing
+		 * the wakee on a sibling keeps the cache sharing that
+		 * stacking on the waker's rq would get, without serialising
+		 * the wakee behind the waker's remaining work.
+		 */
+		if (!available_idle_cpu(cpu) && !sync_waker) {
 			idle = false;
 			if (*idle_cpu == -1) {
 				if (choose_sched_idle_rq(cpu_rq(cpu), p) &&
@@ -8622,7 +8633,12 @@ static int select_idle_core(struct task_struct *p, int core, struct cpumask *cpu
 			}
 			break;
 		}
-		if (*idle_cpu == -1 && cpumask_test_cpu(cpu, cpus))
+
+		/*
+		 * The waker is not idle yet, so it must not be offered as
+		 * the fallback target if this core turns out to be busy.
+		 */
+		if (!sync_waker && *idle_cpu == -1 && cpumask_test_cpu(cpu, cpus))
 			*idle_cpu = cpu;
 	}
 
@@ -8661,7 +8677,8 @@ static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int t
  * comparing the average scan cost (tracked in sd->avg_scan_cost) against the
  * average idle time for this rq (as found in rq->avg_idle).
  */
-static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool has_idle_core, int target)
+static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool has_idle_core,
+				int target, int sync_cpu)
 {
 	struct cpumask *cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
 	int i, cpu, idle_cpu = -1, nr = INT_MAX;
@@ -8694,7 +8711,7 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 					continue;
 
 				if (has_idle_core) {
-					i = select_idle_core(p, cpu, cpus, &idle_cpu);
+					i = select_idle_core(p, cpu, cpus, &idle_cpu, sync_cpu);
 					if ((unsigned int)i < nr_cpumask_bits)
 						return i;
 				} else {
@@ -8711,7 +8728,7 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 
 	for_each_cpu_wrap(cpu, cpus, target + 1) {
 		if (has_idle_core) {
-			i = select_idle_core(p, cpu, cpus, &idle_cpu);
+			i = select_idle_core(p, cpu, cpus, &idle_cpu, sync_cpu);
 			if ((unsigned int)i < nr_cpumask_bits)
 				return i;
 
@@ -8928,7 +8945,7 @@ static inline bool asym_fits_cpu(unsigned long util,
 /*
  * Try and locate an idle core/thread in the LLC cache domain.
  */
-static int select_idle_sibling(struct task_struct *p, int prev, int target)
+static int select_idle_sibling(struct task_struct *p, int prev, int target, int sync_cpu)
 {
 	bool has_idle_core = false;
 	struct sched_domain *sd;
@@ -9037,7 +9054,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 		}
 	}
 
-	i = select_idle_cpu(p, sd, has_idle_core, target);
+	i = select_idle_cpu(p, sd, has_idle_core, target, sync_cpu);
 	if ((unsigned)i < nr_cpumask_bits)
 		return i;
 
@@ -9733,8 +9750,18 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		return sched_balance_find_dst_cpu(sd, p, cpu, prev_cpu, sd_flag);
 
 	/* Fast path */
-	if (wake_flags & WF_TTWU)
-		return select_idle_sibling(p, prev_cpu, new_cpu);
+	if (wake_flags & WF_TTWU) {
+		int sync_cpu = -1;
+
+		if (want_affine && sync && new_cpu == cpu) {
+			struct rq *rq = cpu_rq(cpu);
+
+			if ((rq->nr_running - cfs_h_nr_delayed(rq)) == 1)
+				sync_cpu = cpu;
+		}
+
+		return select_idle_sibling(p, prev_cpu, new_cpu, sync_cpu);
+	}
 
 	return new_cpu;
 }
