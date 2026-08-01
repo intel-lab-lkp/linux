@@ -77,7 +77,7 @@ Allows user space to retrieve machine and kvm specific cpu related information::
 	    0 in case of success.
 
 2.2. ATTRIBUTE: KVM_S390_VM_CPU_PROCESSOR (r/w)
-===============================================
+-----------------------------------------------
 
 Allows user space to retrieve or request to change cpu related information for a vcpu::
 
