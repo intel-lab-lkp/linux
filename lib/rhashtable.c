@@ -189,7 +189,6 @@ static struct bucket_table *bucket_table_alloc(struct rhashtable *ht,
 	struct bucket_table *tbl = NULL;
 	size_t size;
 	int i;
-	static struct lock_class_key __key;
 
 	tbl = alloc_hooks_tag(ht->alloc_tag,
 			kvmalloc_node_align_noprof(struct_size(tbl, buckets, nbuckets),
@@ -205,7 +204,12 @@ static struct bucket_table *bucket_table_alloc(struct rhashtable *ht,
 	if (tbl == NULL)
 		return NULL;
 
-	lockdep_init_map(&tbl->dep_map, "rhashtable_bucket", &__key, 0);
+	/*
+	 * Keep all bucket tables belonging to the same rhashtable in the
+	 * per-init-site lock class, including tables created during resize.
+	 */
+	lockdep_init_map(&tbl->dep_map, "rhashtable_bucket",
+			 ht->bucket_lock_key, 0);
 
 	tbl->size = size;
 
@@ -1162,7 +1166,8 @@ static u32 rhashtable_jhash2(const void *key, u32 length, u32 seed)
  */
 int __rhashtable_init_noprof(struct rhashtable *ht,
 		    const struct rhashtable_params *params,
-		    struct lock_class_key *key)
+		    struct lock_class_key *mutex_key,
+		    struct lock_class_key *bucket_key)
 {
 	struct bucket_table *tbl;
 	size_t size;
@@ -1172,7 +1177,8 @@ int __rhashtable_init_noprof(struct rhashtable *ht,
 		return -EINVAL;
 
 	memset(ht, 0, sizeof(*ht));
-	mutex_init_with_key(&ht->mutex, key);
+	mutex_init_with_key(&ht->mutex, mutex_key);
+	ht->bucket_lock_key = bucket_key;
 	spin_lock_init(&ht->lock);
 	memcpy(&ht->p, params, sizeof(*params));
 
@@ -1237,11 +1243,12 @@ EXPORT_SYMBOL_GPL(__rhashtable_init_noprof);
  */
 int __rhltable_init_noprof(struct rhltable *hlt,
 			   const struct rhashtable_params *params,
-			   struct lock_class_key *key)
+			   struct lock_class_key *mutex_key,
+			   struct lock_class_key *bucket_key)
 {
 	int err;
 
-	err = __rhashtable_init_noprof(&hlt->ht, params, key);
+	err = __rhashtable_init_noprof(&hlt->ht, params, mutex_key, bucket_key);
 	hlt->ht.rhlist = true;
 	return err;
 }

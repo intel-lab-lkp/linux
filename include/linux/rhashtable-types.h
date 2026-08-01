@@ -82,6 +82,7 @@ struct rhashtable_params {
  * @mutex: Mutex to protect current/future table swapping
  * @lock: Spin lock to protect walker list
  * @nelems: Number of elements in table
+ * @bucket_lock_key: Per-init-site lockdep class for bucket bit-locks
  */
 struct rhashtable {
 	struct bucket_table __rcu	*tbl;
@@ -94,6 +95,7 @@ struct rhashtable {
 	struct mutex                    mutex;
 	spinlock_t			lock;
 	atomic_t			nelems;
+	struct lock_class_key		*bucket_lock_key;
 #ifdef CONFIG_MEM_ALLOC_PROFILING
 	struct alloc_tag		*alloc_tag;
 #endif
@@ -138,23 +140,29 @@ struct rhashtable_iter {
 
 int __rhashtable_init_noprof(struct rhashtable *ht,
 		    const struct rhashtable_params *params,
-		    struct lock_class_key *key);
+		    struct lock_class_key *mutex_key,
+		    struct lock_class_key *bucket_key);
 #define rhashtable_init_noprof(ht, params)				\
 ({									\
-	static struct lock_class_key __key;				\
+	static struct lock_class_key __mutex_key;			\
+	static struct lock_class_key __bucket_key;			\
 									\
-	__rhashtable_init_noprof(ht, params, &__key);			\
+	__rhashtable_init_noprof(ht, params, &__mutex_key,		\
+				 &__bucket_key);			\
 })
 #define rhashtable_init(...)	alloc_hooks(rhashtable_init_noprof(__VA_ARGS__))
 
 int __rhltable_init_noprof(struct rhltable *hlt,
 		  const struct rhashtable_params *params,
-		  struct lock_class_key *key);
+		  struct lock_class_key *mutex_key,
+		  struct lock_class_key *bucket_key);
 #define rhltable_init_noprof(hlt, params)				\
 ({									\
-	static struct lock_class_key __key;				\
+	static struct lock_class_key __mutex_key;			\
+	static struct lock_class_key __bucket_key;			\
 									\
-	__rhltable_init_noprof(hlt, params, &__key);			\
+	__rhltable_init_noprof(hlt, params, &__mutex_key,		\
+			       &__bucket_key);				\
 })
 #define rhltable_init(...)	alloc_hooks(rhltable_init_noprof(__VA_ARGS__))
 
