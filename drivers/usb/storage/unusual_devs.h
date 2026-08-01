@@ -2184,6 +2184,13 @@ UNUSUAL_DEV(0x152d, 0x0578, 0x0000, 0x9999,
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_BROKEN_FUA),
 
+/* JMicron JMS581 / SSK 'SHE-C325 PRO' NVMe enclosure */
+UNUSUAL_DEV(0x152d, 0x581d, 0x0000, 0x9999,
+		"JMicron",
+		"JMS581 NVMe enclosure",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_IGNORE_UAS),
+
 /*
  * Reported by Alexandre Oliva <oliva@lsd.ic.unicamp.br>
  * JMicron responds to USN and several other SCSI ioctls with a
