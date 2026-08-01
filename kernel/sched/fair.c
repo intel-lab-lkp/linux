@@ -10646,6 +10646,18 @@ alb_break_llc(struct lb_env *env)
 }
 
 /*
+ * Returns true if p's preferred LLC does not match the destination CPU,
+ * meaning this task should not be migrated under migrate_llc_task semantics.
+ */
+static inline bool
+migrate_llc_task_wrong_dst(struct task_struct *p, struct lb_env *env)
+{
+	return sched_cache_enabled() &&
+	       env->migration_type == migrate_llc_task &&
+	       READ_ONCE(p->preferred_llc) != llc_id(env->dst_cpu);
+}
+
+/*
  * Check if migrating task p from env->src_cpu to
  * env->dst_cpu breaks LLC localiy.
  */
@@ -10673,8 +10685,7 @@ static bool migrate_degrades_llc(struct task_struct *p, struct lb_env *env)
 	 * run on env->dst_cpu, skip the tasks do not prefer
 	 * env->dst_cpu, and find the one that prefers.
 	 */
-	if (env->migration_type == migrate_llc_task &&
-	    READ_ONCE(p->preferred_llc) != llc_id(env->dst_cpu))
+	if (migrate_llc_task_wrong_dst(p, env))
 		return true;
 
 	if (can_migrate_llc_task(env->src_cpu,
@@ -10693,6 +10704,12 @@ static inline bool get_llc_stats(int cpu, unsigned long *util,
 
 static inline bool
 alb_break_llc(struct lb_env *env)
+{
+	return false;
+}
+
+static inline bool
+migrate_llc_task_wrong_dst(struct task_struct *p, struct lb_env *env)
 {
 	return false;
 }
@@ -10796,7 +10813,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	 * 4) too many balance attempts have failed.
 	 */
 	if (env->flags & LBF_ACTIVE_LB)
-		return 1;
+		return !migrate_llc_task_wrong_dst(p, env);
 
 	degrades = migrate_degrades_locality(p, env);
 	if (!degrades) {
@@ -13485,6 +13502,7 @@ more_balance:
 			if (!busiest->active_balance) {
 				busiest->active_balance = 1;
 				busiest->push_cpu = this_cpu;
+				busiest->active_balance_type = env.migration_type;
 				active_balance = 1;
 			}
 
@@ -13654,6 +13672,7 @@ static int active_load_balance_cpu_stop(void *data)
 			.src_rq		= busiest_rq,
 			.idle		= CPU_IDLE,
 			.flags		= LBF_ACTIVE_LB,
+			.migration_type	= (enum migration_type)busiest_rq->active_balance_type,
 		};
 
 		schedstat_inc(sd->alb_count);

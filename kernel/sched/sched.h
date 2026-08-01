@@ -1266,6 +1266,7 @@ struct rq {
 	/* For active balancing */
 	int			active_balance;
 	int			push_cpu;
+	int			active_balance_type; /* enum migration_type */
 	struct cpu_stop_work	active_balance_work;
 
 	/* CPU of this runqueue: */
