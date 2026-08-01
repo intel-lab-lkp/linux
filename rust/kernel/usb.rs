@@ -20,6 +20,7 @@ use crate::{
     prelude::*,
     sync::aref::AlwaysRefCounted,
     types::Opaque,
+    usb::endpoint::HostEndpoint,
     ThisModule, //
 };
 use core::{
@@ -29,7 +30,10 @@ use core::{
         MaybeUninit, //
     },
     ptr::NonNull,
+    slice,
 };
+
+pub mod endpoint;
 
 /// An adapter for the registration of USB drivers.
 pub struct Adapter<T: Driver>(T);
@@ -334,6 +338,78 @@ pub trait Driver {
     );
 }
 
+/// A single alternate setting of an [`Interface`].
+///
+/// A USB interface declares one or more alternate settings, each of which describes a different
+/// endpoint configuration for the same logical function - for example a UVC camera exposing one
+/// setting per bandwidth tier, plus a zero-bandwidth setting used while idle. Exactly one is
+/// active at a time; see [`Interface::current_alt_setting()`].
+///
+/// # Invariants
+///
+/// The wrapped [`Opaque`] holds an initialised `struct usb_host_interface`. Instances are never
+/// constructed by Rust code: they are only ever borrowed out of the `altsetting` array of a
+/// `struct usb_interface` owned by the C side, which guarantees that `desc` is initialised and
+/// that the setting outlives the borrow.
+#[repr(transparent)]
+pub struct AlternateSetting(Opaque<bindings::usb_host_interface>);
+
+impl AlternateSetting {
+    /// Returns a raw pointer to the underlying `struct usb_host_interface`.
+    ///
+    /// By the type invariants the pointer is non-null and points at an initialised alternate
+    /// setting for at least the lifetime of `&self`.
+    fn as_raw(&self) -> *mut bindings::usb_host_interface {
+        self.0.get()
+    }
+
+    /// Returns this setting's `bAlternateSetting` number.
+    ///
+    /// Alternate settings of one interface are numbered from zero; setting 0 always exists and is
+    /// the one the device defaults to after a configuration is selected. This is the value passed
+    /// to `usb_set_interface()` to activate the setting.
+    pub fn number(&self) -> u8 {
+        // SAFETY: By the type invariants, `self.as_raw()` points at a valid
+        // `struct usb_host_interface` with an initialised `desc`.
+        unsafe { (*self.as_raw()).desc.bAlternateSetting }
+    }
+
+    /// Returns the `bInterfaceNumber` of the interface this setting belongs to.
+    ///
+    /// Every alternate setting of a given interface reports the same number, so this identifies
+    /// the interface within its configuration rather than distinguishing settings from one
+    /// another, use [`number()`](Self::number) for that.
+    pub fn interface_number(&self) -> u8 {
+        // SAFETY: By the type invariants, `self.as_raw()` points at a valid
+        // `struct usb_host_interface` with an initialised `desc`.
+        unsafe { (*self.as_raw()).desc.bInterfaceNumber }
+    }
+
+    /// Returns the endpoints declared by this alternate setting, in descriptor order.
+    ///
+    /// The endpoints come back untyped, as `Endpoint<Generic, Generic>`; refine them with
+    /// [`Endpoint::as_in()`], [`Endpoint::as_out()`] and [`Endpoint::as_control()`].
+    pub fn endpoints(&self) -> &[HostEndpoint] {
+        // SAFETY: By the type invariants, `self.as_raw()` points at a valid
+        // `struct usb_host_interface` with an initialised `desc`.
+        let (ptr, len) = (unsafe { (*self.as_raw()).endpoint }, unsafe {
+            (*self.as_raw()).desc.bNumEndpoints
+        });
+
+        if len == 0 {
+            &[]
+        } else {
+            // SAFETY: When `bNumEndpoints` is non-zero the C side has allocated an array of that
+            // many initialised `struct usb_host_endpoint` at `ptr`, living as long as the
+            // interface. `Endpoint` is a `#[repr(transparent)]` wrapper around
+            // `Opaque<bindings::usb_host_endpoint>`, which is itself layout-compatible with
+            // `struct usb_host_endpoint`, so the cast preserves both size and alignment and the
+            // resulting slice borrows for no longer than `&self`.
+            unsafe { slice::from_raw_parts(ptr.cast(), len as usize) }
+        }
+    }
+}
+
 /// A USB interface.
 ///
 /// This structure represents the Rust abstraction for a C [`struct usb_interface`].
@@ -355,6 +431,54 @@ pub struct Interface<Ctx: device::DeviceContext = device::Normal>(
 impl<Ctx: device::DeviceContext> Interface<Ctx> {
     fn as_raw(&self) -> *mut bindings::usb_interface {
         self.0.get()
+    }
+
+    /// Returns all alternate settings of this interface, in `bAlternateSetting` order.
+    ///
+    /// The slice is never empty: every interface has at least setting 0.
+    pub fn alternate_settings(&self) -> &[AlternateSetting] {
+        // SAFETY: By the type invariants, `self.as_raw()` points at a valid `struct usb_interface`,
+        // so both fields are initialised. Reading them requires nothing of the device context:
+        // `altsetting` is filled in when the interface is created and holds until it is released.
+        let (ptr, len) = (unsafe { (*self.as_raw()).altsetting }, unsafe {
+            (*self.as_raw()).num_altsetting
+        });
+
+        if len == 0 {
+            &[]
+        } else {
+            // SAFETY: When `num_altsetting` is non-zero the C side has allocated an array of that
+            // many initialised `struct usb_host_interface` at `ptr`, kept alive by the interface's
+            // reference for at least as long as `&self`.
+            //
+            // `AlternateSetting` is a `#[repr(transparent)]` wrapper around
+            // `Opaque<bindings::usb_host_interface>`, which is itself layout-compatible with
+            // `struct usb_host_interface`, so the cast preserves both size and alignment and
+            // the resulting slice borrows for no longer than `&self`.
+            unsafe { slice::from_raw_parts(ptr.cast(), len as usize) }
+        }
+    }
+
+    /// Returns the alternate setting that is currently active on this interface.
+    ///
+    /// This is the setting whose endpoints the device is actually prepared to service, so it is
+    /// the one a driver should read endpoint descriptors from. After configuration it is
+    /// setting 0.
+    ///
+    /// The result is a snapshot. `usb_set_interface()` can repoint the interface at a different
+    /// setting, which does not invalidate the returned reference - both point into the same live
+    /// array - but does stop it being the current one. A driver that caches endpoints across a
+    /// setting switch will go on using the previous setting's descriptors.
+    pub fn current_alternate_setting(&self) -> &AlternateSetting {
+        // SAFETY: By the type invariants, `self.as_raw()` points at a valid `struct usb_interface`.
+        // `cur_altsetting` is set when the interface is created and only ever repointed within
+        // that same array by `usb_set_interface()`, so it is non-null and names an initialised
+        // `struct usb_host_interface` for at least the lifetime of `&self`.
+        //
+        // `AlternateSetting` is a `#[repr(transparent)]` wrapper around
+        // `Opaque<bindings::usb_host_interface>` and so layout-compatible with it, and the borrow
+        // lasts no longer than `&self`.
+        unsafe { &*(*self.as_raw()).cur_altsetting.cast() }
     }
 }
 
