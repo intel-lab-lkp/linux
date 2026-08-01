@@ -57,6 +57,25 @@ static int node_check(const struct dm_block_validator *v,
 	nr_entries = le32_to_cpu(h->nr_entries);
 	max_entries = le32_to_cpu(h->max_entries);
 	value_size = le32_to_cpu(h->value_size);
+	flags = le32_to_cpu(h->flags);
+
+	if (!value_size) {
+		DMERR_LIMIT("%s failed: value_size is zero", __func__);
+		return -EILSEQ;
+	}
+
+	if ((flags & INTERNAL_NODE) && value_size != sizeof(__le64)) {
+		DMERR_LIMIT("%s failed: internal node value_size %zu != %zu",
+			    __func__, value_size, sizeof(__le64));
+		return -EILSEQ;
+	}
+
+	if (max_entries != calc_max_entries(value_size, block_size)) {
+		DMERR_LIMIT("%s failed: max_entries %u != wanted %u for value_size %zu",
+			    __func__, max_entries,
+			    calc_max_entries(value_size, block_size), value_size);
+		return -EILSEQ;
+	}
 
 	if (sizeof(struct node_header) +
 	    (sizeof(__le64) + value_size) * max_entries > block_size) {
@@ -72,7 +91,6 @@ static int node_check(const struct dm_block_validator *v,
 	/*
 	 * The node must be either INTERNAL or LEAF.
 	 */
-	flags = le32_to_cpu(h->flags);
 	if (!(flags & INTERNAL_NODE) && !(flags & LEAF_NODE)) {
 		DMERR_LIMIT("%s failed: node is neither INTERNAL or LEAF", __func__);
 		return -EILSEQ;

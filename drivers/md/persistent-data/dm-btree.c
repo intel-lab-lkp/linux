@@ -114,7 +114,7 @@ static int insert_at(size_t value_size, struct btree_node *node, unsigned int in
  * We want 3n entries (for some n).  This works more nicely for repeated
  * insert remove loops than (2n + 1).
  */
-static uint32_t calc_max_entries(size_t value_size, size_t block_size)
+uint32_t calc_max_entries(size_t value_size, size_t block_size)
 {
 	uint32_t total, n;
 	size_t elt_size = sizeof(uint64_t) + value_size; /* key + value */

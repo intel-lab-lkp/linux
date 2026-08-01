@@ -43,6 +43,8 @@ struct btree_node {
 } __packed __aligned(8);
 
 
+uint32_t calc_max_entries(size_t value_size, size_t block_size);
+
 /*
  * Locks a block using the btree node validator.
  */
