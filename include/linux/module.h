@@ -507,6 +507,12 @@ struct module {
 	void *btf_data;
 	void *btf_base_data;
 #endif
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+	void *lineinfo_data;		/* .mod_lineinfo section in MOD_RODATA */
+	unsigned int lineinfo_data_size;
+	void *init_lineinfo_data;	/* .init.mod_lineinfo, NULL after init runs */
+	unsigned int init_lineinfo_data_size;
+#endif
 #ifdef CONFIG_JUMP_LABEL
 	struct jump_entry *jump_entries;
 	unsigned int num_jump_entries;
@@ -1019,6 +1025,40 @@ static inline unsigned long find_kallsyms_symbol_value(struct module *mod,
 }
 
 #endif  /* CONFIG_MODULES && CONFIG_KALLSYMS */
+
+bool module_lookup_lineinfo(struct module *mod, unsigned long addr,
+			    unsigned long sym_start,
+			    const char **file, unsigned int *line);
+
+/*
+ * Reader accessors so callers don't need to duplicate the
+ * CONFIG_KALLSYMS_LINEINFO_MODULES guard around mod->lineinfo_data /
+ * mod->init_lineinfo_data field access.  Setters/clearers in the loader
+ * use the field directly under a matching #ifdef.
+ */
+static inline void *module_lineinfo_data(const struct module *mod,
+					 unsigned int *size)
+{
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+	*size = mod->lineinfo_data_size;
+	return mod->lineinfo_data;
+#else
+	*size = 0;
+	return NULL;
+#endif
+}
+
+static inline void *module_init_lineinfo_data(const struct module *mod,
+					      unsigned int *size)
+{
+#ifdef CONFIG_KALLSYMS_LINEINFO_MODULES
+	*size = READ_ONCE(mod->init_lineinfo_data_size);
+	return READ_ONCE(mod->init_lineinfo_data);
+#else
+	*size = 0;
+	return NULL;
+#endif
+}
 
 /* Define __free(module_put) macro for struct module *. */
 DEFINE_FREE(module_put, struct module *, if (_T) module_put(_T))

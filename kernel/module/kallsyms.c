@@ -494,3 +494,212 @@ out:
 	mutex_unlock(&module_mutex);
 	return ret;
 }
+
+#include <linux/mod_lineinfo.h>
+
+/*
+ * Search one per-section sub-table for @section_offset using flat parallel
+ * arrays.  @hdr is the per-section header at byte offset @hdr_offset within
+ * @blob.  Returns true on hit and populates @file / @line.
+ */
+static bool module_lookup_lineinfo_section(const void *blob, u32 blob_size,
+					   u32 hdr_offset,
+					   unsigned int section_offset,
+					   unsigned int min_offset,
+					   const char **file,
+					   unsigned int *line)
+{
+	const struct mod_lineinfo_header *hdr;
+	const u8 *base;
+	const u32 *addrs, *lines, *file_offsets;
+	const u16 *file_ids;
+	const char *filenames;
+	u32 num_entries, num_files, filenames_size;
+	unsigned int low, high, mid;
+	u16 file_id;
+
+	if (hdr_offset > blob_size ||
+	    blob_size - hdr_offset < sizeof(*hdr))
+		return false;
+
+	/*
+	 * The header and every array it points at are u32-aligned by
+	 * construction.  Refuse anything else rather than take an alignment
+	 * fault here -- this runs from NMI and panic context, where a
+	 * recursive fault would lose the backtrace entirely.
+	 */
+	if (!IS_ALIGNED(hdr_offset, sizeof(u32)))
+		return false;
+
+	base = (const u8 *)blob + hdr_offset;
+	hdr = (const struct mod_lineinfo_header *)base;
+	num_entries = hdr->num_entries;
+	num_files = hdr->num_files;
+	filenames_size = hdr->filenames_size;
+
+	if (num_entries == 0)
+		return false;
+
+	/*
+	 * Validate counts before multiplying — sizing arithmetic could
+	 * otherwise overflow on 32-bit with a malformed blob.  Each entry
+	 * contributes one u32 (addrs), one u16 (file_ids), and one u32
+	 * (lines); each file contributes one u32 (file_offsets).
+	 */
+	{
+		u32 avail = blob_size - hdr_offset;
+		u32 needed = mod_lineinfo_filenames_off(num_entries, num_files);
+
+		if (num_entries > U32_MAX / sizeof(u32))
+			return false;
+		if (num_files > U32_MAX / sizeof(u32))
+			return false;
+		if (needed > avail || filenames_size > avail - needed)
+			return false;
+	}
+
+	/*
+	 * Filenames are read as NUL-terminated C strings.  Require the blob
+	 * to end in NUL so a malformed file_offsets entry can never lead the
+	 * later "%s" consumer past the end of the section.
+	 */
+	if (filenames_size == 0 ||
+	    base[mod_lineinfo_filenames_off(num_entries, num_files) +
+		 filenames_size - 1] != 0)
+		return false;
+
+	addrs = (const u32 *)(base + mod_lineinfo_addrs_off());
+	file_ids = (const u16 *)(base + mod_lineinfo_file_ids_off(num_entries));
+	lines = (const u32 *)(base + mod_lineinfo_lines_off(num_entries));
+	file_offsets = (const u32 *)(base + mod_lineinfo_file_offsets_off(num_entries));
+	filenames = (const char *)(base + mod_lineinfo_filenames_off(num_entries, num_files));
+
+	/* Binary search for largest entry <= section_offset. */
+	low = 0;
+	high = num_entries;
+	while (low < high) {
+		mid = low + (high - low) / 2;
+		if (addrs[mid] <= section_offset)
+			low = mid + 1;
+		else
+			high = mid;
+	}
+
+	if (low == 0)
+		return false;
+	low--;
+
+	/*
+	 * Reject entries below the resolved symbol's start so a symbol
+	 * without line entries of its own does not inherit the preceding
+	 * symbol's annotation.
+	 */
+	if (addrs[low] < min_offset)
+		return false;
+
+	file_id = file_ids[low];
+	if (file_id >= num_files)
+		return false;
+	if (file_offsets[file_id] >= filenames_size)
+		return false;
+
+	*file = &filenames[file_offsets[file_id]];
+	*line = lines[low];
+	return true;
+}
+
+/*
+ * Walk a single .mod_lineinfo / .init.mod_lineinfo blob, find the section
+ * descriptor whose [anchor, anchor+size) range contains @addr, then search
+ * that section's sub-table.
+ */
+static bool module_lookup_lineinfo_blob(const void *blob, u32 blob_size,
+					unsigned long addr,
+					unsigned long sym_start,
+					const char **file, unsigned int *line)
+{
+	const struct mod_lineinfo_root *root;
+	u32 i, sections_end;
+
+	if (!blob || blob_size < sizeof(*root))
+		return false;
+
+	/* The section is emitted with .balign 8; see the note above. */
+	if (!IS_ALIGNED((unsigned long)blob, __alignof__(struct mod_lineinfo_section)))
+		return false;
+
+	root = blob;
+	if (root->num_sections == 0)
+		return false;
+
+	if (root->num_sections > U32_MAX / sizeof(struct mod_lineinfo_section))
+		return false;
+	sections_end = sizeof(*root) +
+		       root->num_sections * sizeof(struct mod_lineinfo_section);
+	if (sections_end > blob_size)
+		return false;
+
+	for (i = 0; i < root->num_sections; i++) {
+		const struct mod_lineinfo_section *s = &root->sections[i];
+		unsigned long base = (unsigned long)s->anchor;
+		unsigned long offset, min_offset = 0;
+
+		if (!base)
+			continue;	/* relocation didn't resolve */
+		if (addr < base)
+			continue;
+		offset = addr - base;
+		/* s->size is u32, so this also bounds offset to u32. */
+		if (offset >= s->size)
+			continue;
+
+		if (sym_start > base && sym_start - base <= offset)
+			min_offset = sym_start - base;
+
+		return module_lookup_lineinfo_section(blob, blob_size,
+						      s->table_offset,
+						      offset, min_offset,
+						      file, line);
+	}
+
+	return false;
+}
+
+/*
+ * Look up source file:line for an address within a loaded module.
+ *
+ * Safe in NMI/panic context: no locks, no allocations.
+ * Caller must hold RCU read lock (or be in a context where the module
+ * cannot be unloaded).
+ */
+bool module_lookup_lineinfo(struct module *mod, unsigned long addr,
+			    unsigned long sym_start,
+			    const char **file, unsigned int *line)
+{
+	const void *blob;
+	unsigned int size;
+
+	if (!IS_ENABLED(CONFIG_KALLSYMS_LINEINFO_MODULES))
+		return false;
+
+	blob = module_lineinfo_data(mod, &size);
+	if (blob && module_lookup_lineinfo_blob(blob, size, addr, sym_start,
+						file, line))
+		return true;
+
+	/*
+	 * The init blob lives in MOD_INIT_RODATA and is revoked by
+	 * do_init_module() before do_free_init() releases the memory.  The
+	 * READ_ONCE inside module_init_lineinfo_data() pairs with the
+	 * WRITE_ONCE in do_init_module so we never see a partial
+	 * pointer/size pair, and an RCU grace period in do_free_init()
+	 * guarantees the memory still exists for the duration of any lookup
+	 * that captured the pointer before the revocation.
+	 */
+	blob = module_init_lineinfo_data(mod, &size);
+	if (blob && module_lookup_lineinfo_blob(blob, size, addr, sym_start,
+						file, line))
+		return true;
+
+	return false;
+}
