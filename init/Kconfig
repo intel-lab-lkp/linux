@@ -2087,6 +2087,26 @@ config KALLSYMS_ALL
 
 	  Say N unless you really need all symbols, or kernel live patching.
 
+config KALLSYMS_LINEINFO
+	bool "Embed source file:line information in stack traces"
+	depends on KALLSYMS && DEBUG_INFO
+	help
+	  Embeds an address-to-source-line mapping table in the kernel
+	  image so that stack traces directly include file:line information,
+	  similar to what scripts/decode_stacktrace.sh provides but without
+	  needing external tools or a vmlinux with debug info at runtime.
+
+	  When enabled, stack traces will look like:
+
+	    kmem_cache_alloc_noprof+0x60/0x630 (mm/slub.c:3456)
+	    anon_vma_clone+0x2ed/0xcf0 (mm/rmap.c:412)
+
+	  This requires libelf and libdw (from elfutils) on the build host.
+	  Costs 10 bytes per DWARF line-table entry; for x86_64_defconfig
+	  with CONFIG_DEBUG_INFO that is about 18MB.
+
+	  If unsure, say N.
+
 # end of the "standard kernel features (expert users)" menu
 
 config ARCH_HAS_MEMBARRIER_CALLBACKS
