@@ -831,6 +831,8 @@ static int load_copro_firmware(struct fsi_master_acf *master)
 	const struct firmware *fw;
 	uint16_t sig = 0, wanted_sig;
 	const u8 *data;
+	const u8 *end;
+	const size_t image_hdr_size = HDR_OFFSET + HDR_FW_SIZE + sizeof(__be32);
 	size_t size = 0;
 	int rc;
 
@@ -851,9 +853,23 @@ static int load_copro_firmware(struct fsi_master_acf *master)
 	dev_dbg(master->dev, "Looking for image sig %04x\n", wanted_sig);
 
 	/* Try to find it */
-	for (data = fw->data; data < (fw->data + fw->size);) {
+	end = fw->data + fw->size;
+	for (data = fw->data; data < end;) {
+		if (end - data < image_hdr_size) {
+			dev_err(master->dev, "Truncated firmware image header\n");
+			rc = -EINVAL;
+			goto release_fw;
+		}
+
 		sig = be16_to_cpup((__be16 *)(data + HDR_OFFSET + HDR_SYS_SIG));
 		size = be32_to_cpup((__be32 *)(data + HDR_OFFSET + HDR_FW_SIZE));
+		if (size < image_hdr_size ||
+		    size > end - data) {
+			dev_err(master->dev, "Invalid firmware image size %zu\n", size);
+			rc = -EINVAL;
+			goto release_fw;
+		}
+
 		if (sig == wanted_sig)
 			break;
 		data += size;
