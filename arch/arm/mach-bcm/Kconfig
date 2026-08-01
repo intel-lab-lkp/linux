@@ -184,6 +184,7 @@ config ARCH_BRCMSTB
 	depends on ARCH_MULTI_V7
 	select ARCH_HAS_RESET_CONTROLLER
 	select ARM_AMBA
+	select ARM_PSCI_FW
 	select ARM_GIC
 	select ARM_GIC_V3
 	select ARM_ERRATA_798181 if SMP
