@@ -705,11 +705,13 @@ u8 *rtw_get_wps_ie(u8 *in_ie, uint in_len, u8 *wps_ie, uint *wps_ielen)
  * @wps_ielen: Length limit from wps_ie
  * @target_attr_id: The attribute ID of WPS attribute to search
  * @buf_attr: If not NULL and the WPS attribute is found, WPS attribute will be copied to the buf starting from buf_attr
+ * @buf_attr_len: Length of buf_attr
  * @len_attr: If not NULL and the WPS attribute is found, will set to the length of the entire WPS attribute
  *
  * Returns: the address of the specific WPS attribute found, or NULL
  */
-u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_attr, u32 *len_attr)
+u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id,
+		     u8 *buf_attr, u32 buf_attr_len, u32 *len_attr)
 {
 	u8 *attr_ptr = NULL;
 	u8 *target_attr_ptr = NULL;
@@ -735,13 +737,19 @@ u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_att
 			break;
 		u16 attr_id = get_unaligned_be16(attr_ptr);
 		u16 attr_data_len = get_unaligned_be16(attr_ptr + 2);
-		u16 attr_len = attr_data_len + 4;
+		u32 attr_len = attr_data_len + 4;
+
+		if (attr_len > wps_ie + wps_ielen - attr_ptr)
+			break;
 
 		if (attr_id == target_attr_id) {
 			target_attr_ptr = attr_ptr;
 
-			if (buf_attr)
+			if (buf_attr) {
+				if (attr_len > buf_attr_len)
+					return NULL;
 				memcpy(buf_attr, attr_ptr, attr_len);
+			}
 
 			if (len_attr)
 				*len_attr = attr_len;
@@ -760,26 +768,35 @@ u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_att
  * @wps_ielen: Length limit from wps_ie
  * @target_attr_id: The attribute ID of WPS attribute to search
  * @buf_content: If not NULL and the WPS attribute is found, WPS attribute content will be copied to the buf starting from buf_content
+ * @buf_content_len: Length of buf_content
  * @len_content: If not NULL and the WPS attribute is found, will set to the length of the WPS attribute content
  *
  * Returns: the address of the specific WPS attribute content found, or NULL
  */
-u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_content, uint *len_content)
+u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id,
+			     u8 *buf_content, uint buf_content_len,
+			     uint *len_content)
 {
 	u8 *attr_ptr;
 	u32 attr_len;
+	u32 content_len;
 
 	if (len_content)
 		*len_content = 0;
 
-	attr_ptr = rtw_get_wps_attr(wps_ie, wps_ielen, target_attr_id, NULL, &attr_len);
+	attr_ptr = rtw_get_wps_attr(wps_ie, wps_ielen, target_attr_id, NULL, 0,
+				    &attr_len);
 
 	if (attr_ptr && attr_len) {
-		if (buf_content)
-			memcpy(buf_content, attr_ptr + 4, attr_len - 4);
+		content_len = attr_len - 4;
+		if (buf_content) {
+			if (content_len > buf_content_len)
+				return NULL;
+			memcpy(buf_content, attr_ptr + 4, content_len);
+		}
 
 		if (len_content)
-			*len_content = attr_len - 4;
+			*len_content = content_len;
 
 		return attr_ptr + 4;
 	}
