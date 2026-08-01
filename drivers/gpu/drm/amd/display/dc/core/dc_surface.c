@@ -85,8 +85,8 @@ uint8_t  dc_plane_get_pipe_mask(struct dc_state *dc_state, const struct dc_plane
  ******************************************************************************/
 struct dc_plane_state *dc_create_plane_state(const struct dc *dc)
 {
-	struct dc_plane_state *plane_state = kvzalloc_obj(*plane_state,
-							  GFP_ATOMIC);
+	struct dc_plane_state *plane_state;
+	DC_RUN_WITH_PREEMPTION_ENABLED(plane_state = kvzalloc_obj(*plane_state, GFP_ATOMIC));
 
 	if (NULL == plane_state)
 		return NULL;
