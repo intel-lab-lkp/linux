@@ -785,7 +785,7 @@ void xfrm_dev_state_free(struct xfrm_state *x)
 	if (dev && dev->xfrmdev_ops) {
 		spin_lock_bh(&xfrm_state_dev_gc_lock);
 		if (!hlist_unhashed(&x->dev_gclist))
-			hlist_del(&x->dev_gclist);
+			hlist_del_init(&x->dev_gclist);
 		spin_unlock_bh(&xfrm_state_dev_gc_lock);
 
 		if (dev->xfrmdev_ops->xdo_dev_state_free)
@@ -1006,8 +1006,13 @@ restart_gc:
 		xso = &x->xso;
 
 		if (xso->dev == dev) {
+			/* The device GC list does not hold a reference to x. */
+			if (!xfrm_state_hold_rcu(x))
+				continue;
+
 			spin_unlock_bh(&xfrm_state_dev_gc_lock);
 			xfrm_dev_state_free(x);
+			xfrm_state_put(x);
 			spin_lock_bh(&xfrm_state_dev_gc_lock);
 			goto restart_gc;
 		}
