@@ -855,9 +855,16 @@ __ip_set_put_byindex(struct ip_set_net *inst, ip_set_id_t index)
 	struct ip_set *set;
 
 	rcu_read_lock();
+	/* Serialize the list lookup with ip_set_swap(), which swaps both
+	 * ip_set_list[] entries and set->ref under ip_set_ref_lock.
+	 */
+	write_lock_bh(&ip_set_ref_lock);
 	set = rcu_dereference(inst->ip_set_list)[index];
-	if (set)
-		__ip_set_put(set);
+	if (set) {
+		BUG_ON(set->ref == 0);
+		set->ref--;
+	}
+	write_unlock_bh(&ip_set_ref_lock);
 	rcu_read_unlock();
 }
 
