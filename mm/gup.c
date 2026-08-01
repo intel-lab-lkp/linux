@@ -827,18 +827,20 @@ static inline bool can_follow_write_pte(pte_t pte, struct page *page,
 
 /*
  * The caller has already run every per-PTE safety check (present,
- * write-fault, gup_must_unshare()) on the PTE, so this only does the
- * per-folio work: the refcount grab, the FOLL_PIN accessibility fault-in,
- * dirty/accessed marking, and the array fill with the cache flush.
+ * write-fault, gup_must_unshare()) on each PTE in the run, so this only
+ * does the per-folio work: the refcount grab, the FOLL_PIN accessibility
+ * fault-in, dirty/accessed marking, and the array fill with per-subpage
+ * cache flushes.
  */
 static long follow_page_pte_commit(struct vm_area_struct *vma,
-		unsigned long address, struct folio *folio, struct page *page,
-		pte_t pte, unsigned int flags, struct page **pages)
+		unsigned long run_address, struct folio *folio,
+		struct page *run_page, pte_t run_pte, unsigned long run_len,
+		unsigned int flags, struct page **pages)
 {
 	long ret;
 
 	/* try_grab_folio() does nothing unless FOLL_GET or FOLL_PIN is set. */
-	ret = try_grab_folio(folio, 1, flags);
+	ret = try_grab_folio(folio, run_len, flags);
 	if (unlikely(ret))
 		return ret;
 
@@ -850,13 +852,13 @@ static long follow_page_pte_commit(struct vm_area_struct *vma,
 	if (flags & FOLL_PIN) {
 		ret = arch_make_folio_accessible(folio);
 		if (ret) {
-			gup_put_folio(folio, 1, flags);
+			gup_put_folio(folio, run_len, flags);
 			return ret;
 		}
 	}
 	if (flags & FOLL_TOUCH) {
 		if ((flags & FOLL_WRITE) &&
-		    !pte_dirty(pte) && !folio_test_dirty(folio))
+		    !pte_dirty(run_pte) && !folio_test_dirty(folio))
 			folio_mark_dirty(folio);
 		/*
 		 * pte_mkyoung() would be more correct here, but atomic care
@@ -866,79 +868,158 @@ static long follow_page_pte_commit(struct vm_area_struct *vma,
 		folio_mark_accessed(folio);
 	}
 
-	gup_fill_pages(vma, address, page, 1, pages);
+	gup_fill_pages(vma, run_address, run_page, run_len, pages);
 
 	return 0;
 }
 
+/*
+ * Return how many PTEs from @ptep can batch with @pte's page:
+ * consecutive present, uniform-write PTEs of @folio, bounded by
+ * @walk_end. Returns at least 1. A cheap pte_same() scan, so a
+ * large folio's run costs one scan.
+ *
+ * gup_must_unshare()/write-fault checks are per PTE, but a writable
+ * run is always safe: a writable anon page is exclusive. A read-only
+ * run under FOLL_WRITE/FOLL_PIN needs a per-page check instead, so
+ * it falls back to one page at a time.
+ */
+static unsigned long follow_pte_batch(struct vm_area_struct *vma,
+		unsigned long address, unsigned long walk_end, struct folio *folio,
+		pte_t *ptep, pte_t pte, unsigned int flags)
+{
+	pte_t batch_pte = pte;
+	unsigned long max;
+
+	if (!folio_test_large(folio))
+		return 1;
+	if (!pte_write(pte) && (flags & (FOLL_WRITE | FOLL_PIN)))
+		return 1;
+
+	max = (walk_end - address) >> PAGE_SHIFT;
+	if (max <= 1)
+		return 1;
+
+	return folio_pte_batch_flags(folio, vma, ptep, &batch_pte, max,
+				     FPB_RESPECT_WRITE);
+}
+
+/*
+ * Walk every PTE from @address to @end (this page table and VMA).
+ *
+ * If the first PTE can't be included (not present, a write/unshare
+ * fault, PFN-special, ...), that reason is returned directly.
+ * A failure in a subsequent page results in a short read;
+ * __get_user_pages retrying the read will get the error.
+ */
 static long follow_page_pte(struct vm_area_struct *vma,
-		unsigned long address, pmd_t *pmd, unsigned int flags,
-		struct page **pages)
+		unsigned long address, unsigned long end, pmd_t *pmd,
+		unsigned int flags, struct page **pages)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	struct folio *folio;
-	struct page *page;
 	spinlock_t *ptl;
-	pte_t *ptep, pte;
-	long ret;
+	pte_t *ptep, *orig_ptep;
+	unsigned long walk_end;
+	unsigned long nr = 0;
+	bool need_no_page_table = false;
+	long ret = 0;
 
-	ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
+	orig_ptep = ptep = pte_offset_map_lock(mm, pmd, address, &ptl);
 	if (!ptep)
 		return no_page_table(vma, flags, address);
-	pte = ptep_get(ptep);
-	if (!pte_present(pte))
-		goto no_page;
-	if (pte_protnone(pte) && !gup_can_follow_protnone(vma, flags))
-		goto no_page;
 
-	page = vm_normal_page(vma, address, pte);
+	walk_end = min(pmd_addr_end(address, end), vma->vm_end);
 
-	/*
-	 * We only care about anon pages in can_follow_write_pte().
-	 */
-	if ((flags & FOLL_WRITE) &&
-	    !can_follow_write_pte(pte, page, vma, flags)) {
-		ret = 0;
-		goto out;
-	}
+	for (; address < walk_end; address += PAGE_SIZE, ptep++) {
+		pte_t pte = ptep_get(ptep);
+		struct page *page;
+		struct folio *folio;
+		unsigned long batch;
 
-	if (unlikely(!page)) {
-		if (flags & FOLL_DUMP) {
-			/* Avoid special (like zero) pages in core dumps */
-			ret = -EFAULT;
-			goto out;
+		if (!pte_present(pte)) {
+			if (nr)
+				break;
+			if (pte_none(pte))
+				need_no_page_table = true;
+			goto unlock;
+		}
+		if (pte_protnone(pte) && !gup_can_follow_protnone(vma, flags)) {
+			if (nr)
+				break;
+			goto unlock;
 		}
 
-		if (is_zero_pfn(pte_pfn(pte))) {
-			page = pte_page(pte);
-		} else {
-			ret = follow_pfn_pte(vma, address, ptep, flags);
-			goto out;
+		page = vm_normal_page(vma, address, pte);
+
+		/*
+		 * We only care about anon pages in can_follow_write_pte().
+		 */
+		if ((flags & FOLL_WRITE) &&
+		    !can_follow_write_pte(pte, page, vma, flags)) {
+			if (nr)
+				break;
+			goto unlock;
 		}
+
+		if (unlikely(!page)) {
+			if (flags & FOLL_DUMP) {
+				/* Avoid special (like zero) pages in core dumps */
+				if (nr)
+					break;
+				ret = -EFAULT;
+				goto unlock;
+			}
+
+			if (is_zero_pfn(pte_pfn(pte))) {
+				page = pte_page(pte);
+			} else {
+				/*
+				 * Proper page table entry exists, but no
+				 * corresponding struct page: the caller decides
+				 * whether that is fatal (see the -EEXIST handling
+				 * in __get_user_pages()).
+				 */
+				if (nr)
+					break;
+				ret = follow_pfn_pte(vma, address, ptep, flags);
+				goto unlock;
+			}
+		}
+		folio = page_folio(page);
+
+		if (!pte_write(pte) && gup_must_unshare(vma, flags, page)) {
+			if (nr)
+				break;
+			ret = -EMLINK;
+			goto unlock;
+		}
+
+		VM_WARN_ON_ONCE_PAGE((flags & FOLL_PIN) && PageAnon(page) &&
+				     !PageAnonExclusive(page), page);
+
+		batch = follow_pte_batch(vma, address, walk_end, folio, ptep, pte,
+					 flags);
+
+		ret = follow_page_pte_commit(vma, address, folio, page, pte,
+					     batch, flags,
+					     pages ? pages + nr : NULL);
+		if (ret) {
+			if (nr)
+				break;
+			goto unlock;
+		}
+		nr += batch;
+
+		/* The loop's own increment covers one PTE; skip the rest of the batch. */
+		ptep += batch - 1;
+		address += (batch - 1) * PAGE_SIZE;
 	}
-	folio = page_folio(page);
 
-	if (!pte_write(pte) && gup_must_unshare(vma, flags, page)) {
-		ret = -EMLINK;
-		goto out;
-	}
-
-	VM_WARN_ON_ONCE_PAGE((flags & FOLL_PIN) && PageAnon(page) &&
-			     !PageAnonExclusive(page), page);
-
-	ret = follow_page_pte_commit(vma, address, folio, page, pte, flags,
-				     pages);
-	if (ret)
-		goto out;
-	ret = 1;
-out:
-	pte_unmap_unlock(ptep, ptl);
-	return ret;
-no_page:
-	pte_unmap_unlock(ptep, ptl);
-	if (!pte_none(pte))
-		return 0;
-	return no_page_table(vma, flags, address);
+unlock:
+	pte_unmap_unlock(orig_ptep, ptl);
+	if (need_no_page_table)
+		ret = no_page_table(vma, flags, address);
+	return nr ? (long)nr : ret;
 }
 
 static long follow_pmd_mask(struct vm_area_struct *vma,
@@ -957,7 +1038,7 @@ static long follow_pmd_mask(struct vm_area_struct *vma,
 	if (!pmd_present(pmdval))
 		return no_page_table(vma, flags, address);
 	if (likely(!pmd_leaf(pmdval)))
-		return follow_page_pte(vma, address, pmd, flags, pages);
+		return follow_page_pte(vma, address, end, pmd, flags, pages);
 
 	if (pmd_protnone(pmdval) && !gup_can_follow_protnone(vma, flags))
 		return no_page_table(vma, flags, address);
@@ -970,14 +1051,14 @@ static long follow_pmd_mask(struct vm_area_struct *vma,
 	}
 	if (unlikely(!pmd_leaf(pmdval))) {
 		spin_unlock(ptl);
-		return follow_page_pte(vma, address, pmd, flags, pages);
+		return follow_page_pte(vma, address, end, pmd, flags, pages);
 	}
 	if (pmd_trans_huge(pmdval) && (flags & FOLL_SPLIT_PMD)) {
 		spin_unlock(ptl);
 		split_huge_pmd(vma, pmd, address);
 		/* If pmd was left empty, stuff a page table in there quickly */
 		return pte_alloc(mm, pmd) ? -ENOMEM :
-			follow_page_pte(vma, address, pmd, flags, pages);
+			follow_page_pte(vma, address, end, pmd, flags, pages);
 	}
 	ret = follow_huge_pmd(vma, address, end, pmd, flags, pages);
 	spin_unlock(ptl);
