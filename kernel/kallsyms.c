@@ -656,6 +656,7 @@ int sprint_backtrace(char *buffer, unsigned long address)
 {
 	return __sprint_symbol(buffer, address, -1, 1, 0, 1);
 }
+EXPORT_SYMBOL_GPL(sprint_backtrace);
 
 /**
  * sprint_backtrace_build_id - Look up a backtrace symbol and return it in a text buffer
@@ -676,6 +677,7 @@ int sprint_backtrace_build_id(char *buffer, unsigned long address)
 {
 	return __sprint_symbol(buffer, address, -1, 1, 1, 1);
 }
+EXPORT_SYMBOL_GPL(sprint_backtrace_build_id);
 
 /* To avoid using get_symbol_offset for every symbol, we carry prefix along. */
 struct kallsym_iter {
