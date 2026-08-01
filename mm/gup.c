@@ -633,6 +633,23 @@ static long no_page_table(struct vm_area_struct *vma,
 	return 0;
 }
 
+static void gup_fill_pages(struct vm_area_struct *vma, unsigned long address,
+		struct page *page, unsigned long nr, struct page **pages)
+{
+	unsigned long i;
+
+	if (!pages)
+		return;
+
+	for (i = 0; i < nr; i++) {
+		struct page *subpage = page + i;
+
+		pages[i] = subpage;
+		flush_anon_page(vma, subpage, address + i * PAGE_SIZE);
+		flush_dcache_page(subpage);
+	}
+}
+
 #ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 /* FOLL_FORCE can write to even unwritable PUDs in COW mappings. */
 static inline bool can_follow_write_pud(pud_t pud, struct page *page,
@@ -678,11 +695,7 @@ static long follow_huge_pud(struct vm_area_struct *vma,
 
 	*page_mask = HPAGE_PUD_NR - 1;
 
-	if (pages) {
-		pages[0] = page;
-		flush_anon_page(vma, page, addr);
-		flush_dcache_page(page);
-	}
+	gup_fill_pages(vma, addr, page, 1, pages);
 
 	return 1;
 }
@@ -747,11 +760,7 @@ static long follow_huge_pmd(struct vm_area_struct *vma,
 	page += (addr & ~HPAGE_PMD_MASK) >> PAGE_SHIFT;
 	*page_mask = HPAGE_PMD_NR - 1;
 
-	if (pages) {
-		pages[0] = page;
-		flush_anon_page(vma, page, addr);
-		flush_dcache_page(page);
-	}
+	gup_fill_pages(vma, addr, page, 1, pages);
 
 	return 1;
 }
@@ -854,11 +863,7 @@ static long follow_page_pte_commit(struct vm_area_struct *vma,
 		folio_mark_accessed(folio);
 	}
 
-	if (pages) {
-		pages[0] = page;
-		flush_anon_page(vma, page, address);
-		flush_dcache_page(page);
-	}
+	gup_fill_pages(vma, address, page, 1, pages);
 
 	return 0;
 }
