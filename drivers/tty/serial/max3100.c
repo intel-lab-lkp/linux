@@ -107,6 +107,7 @@ struct max3100_port {
 	int  force_end_work;
 	/* need to know we are suspending to avoid deadlock on workqueue */
 	int suspending;
+	bool irq_registered;
 
 	struct timer_list	timer;
 };
@@ -538,8 +539,10 @@ static void max3100_shutdown(struct uart_port *port)
 		destroy_workqueue(s->workqueue);
 		s->workqueue = NULL;
 	}
-	if (port->irq)
+	if (s->irq_registered) {
 		free_irq(port->irq, s);
+		s->irq_registered = false;
+	}
 
 	/* set shutdown mode to save power */
 	max3100_sr(s, MAX3100_WC | MAX3100_SHDN, &rx);
@@ -575,12 +578,12 @@ static int max3100_startup(struct uart_port *port)
 	ret = request_irq(port->irq, max3100_irq, IRQF_TRIGGER_FALLING, "max3100", s);
 	if (ret < 0) {
 		dev_warn(&s->spi->dev, "cannot allocate irq %d\n", port->irq);
-		port->irq = 0;
 		destroy_workqueue(s->workqueue);
 		s->workqueue = NULL;
 		return -EBUSY;
 	}
 
+	s->irq_registered = true;
 	s->conf_commit = 1;
 	max3100_dowork(s);
 	/* wait for clock to settle */
@@ -753,6 +756,17 @@ static void max3100_remove(struct spi_device *spi)
 		if (max3100s[i] == s) {
 			dev_dbg(&spi->dev, "%s: removing port %d\n", __func__, i);
 			uart_remove_one_port(&max3100_uart_driver, &max3100s[i]->port);
+
+			s->force_end_work = 1;
+			timer_shutdown_sync(&s->timer);
+			if (s->irq_registered) {
+				free_irq(s->port.irq, s);
+				s->irq_registered = false;
+			}
+			if (s->workqueue) {
+				destroy_workqueue(s->workqueue);
+				s->workqueue = NULL;
+			}
 			kfree(max3100s[i]);
 			max3100s[i] = NULL;
 			break;
