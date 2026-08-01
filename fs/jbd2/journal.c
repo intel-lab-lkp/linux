@@ -329,6 +329,7 @@ int jbd2_journal_write_metadata_buffer(transaction_t *transaction,
 	struct buffer_head *new_bh;
 	struct folio *new_folio;
 	unsigned int new_offset;
+	bool frozen = false;
 	struct buffer_head *bh_in = jh2bh(jh_in);
 	journal_t *journal = transaction->t_journal;
 
@@ -354,8 +355,7 @@ int jbd2_journal_write_metadata_buffer(transaction_t *transaction,
 	 * we use that version of the data for the commit.
 	 */
 	if (jh_in->b_frozen_data) {
-		new_folio = virt_to_folio(jh_in->b_frozen_data);
-		new_offset = offset_in_folio(new_folio, jh_in->b_frozen_data);
+		frozen = true;
 		do_escape = jbd2_data_needs_escaping(jh_in->b_frozen_data);
 		if (do_escape)
 			jbd2_data_do_escape(jh_in->b_frozen_data);
@@ -400,13 +400,22 @@ int jbd2_journal_write_metadata_buffer(transaction_t *transaction,
 		jh_in->b_frozen_triggers = jh_in->b_triggers;
 
 copy_done:
-		new_folio = virt_to_folio(jh_in->b_frozen_data);
-		new_offset = offset_in_folio(new_folio, jh_in->b_frozen_data);
+		frozen = true;
 		jbd2_data_do_escape(jh_in->b_frozen_data);
 	}
 
 escape_done:
-	folio_set_bh(new_bh, new_folio, new_offset);
+	if (frozen) {
+		/*
+		 * b_frozen_data is slab memory, not page cache.  Point the
+		 * buffer at it directly rather than at a slab folio, whose
+		 * ->mapping is not an address_space.
+		 */
+		new_bh->b_folio = NULL;
+		new_bh->b_data = jh_in->b_frozen_data;
+	} else {
+		folio_set_bh(new_bh, new_folio, new_offset);
+	}
 	new_bh->b_size = bh_in->b_size;
 	new_bh->b_bdev = journal->j_dev;
 	new_bh->b_blocknr = blocknr;
