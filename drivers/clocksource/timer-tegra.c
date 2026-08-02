@@ -331,6 +331,14 @@ static int __init tegra_init_timer(struct device_node *np, bool tegra20,
 		}
 	}
 
+	ret = cpuhp_setup_state(CPUHP_AP_TEGRA_TIMER_STARTING,
+				"AP_TEGRA_TIMER_STARTING", tegra_timer_setup,
+				tegra_timer_stop);
+	if (ret) {
+		pr_err("failed to set up cpu hp state: %d\n", ret);
+		goto out_irq;
+	}
+
 	sched_clock_register(tegra_read_sched_clock, 32, TIMER_1MHz);
 
 	ret = clocksource_mmio_init(timer_reg_base + TIMERUS_CNTR_1US,
@@ -343,13 +351,7 @@ static int __init tegra_init_timer(struct device_node *np, bool tegra20,
 	register_current_timer_delay(&tegra_delay_timer);
 #endif
 
-	ret = cpuhp_setup_state(CPUHP_AP_TEGRA_TIMER_STARTING,
-				"AP_TEGRA_TIMER_STARTING", tegra_timer_setup,
-				tegra_timer_stop);
-	if (ret)
-		pr_err("failed to set up cpu hp state: %d\n", ret);
-
-	return ret;
+	return 0;
 
 out_irq:
 	for_each_possible_cpu(cpu) {
