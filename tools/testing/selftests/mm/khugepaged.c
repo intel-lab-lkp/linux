@@ -573,8 +573,17 @@ static void madvise_collapse(const char *msg, char *p, int nr_hpages,
 static bool wait_for_scan(const char *msg, char *p, int nr_hpages,
 			  struct mem_ops *ops)
 {
+	/*
+	 * The budget has to cover khugepaged copying nr_hpages *
+	 * hpage_pmd_size, plus two of its passes over the mm. Three seconds
+	 * does that at a 2M PMD, but the same test moves 2G at a 512M PMD
+	 * (arm64 with 64K base pages) and 3s is then marginal: it fails on a
+	 * collapse that completes correctly, just not inside the budget.
+	 * Allow a further second per 64M to collapse.
+	 */
+	const unsigned long bytes = (unsigned long)nr_hpages * hpage_pmd_size;
+	int timeout = 6 + 2 * (bytes / (64UL << 20));
 	int full_scans;
-	int timeout = 6; /* 3 seconds */
 
 	/* Sanity check */
 	if (!ops->check_huge(p, 0))
