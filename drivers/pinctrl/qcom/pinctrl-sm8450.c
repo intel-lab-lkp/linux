@@ -962,7 +962,7 @@ static const char * const pri_mi2s_groups[] = {
 };
 
 static const char * const prng_rosc_groups[] = {
-	"gpio73", "gpio75", "gpio81", "gpio83",  "gpio81",
+	"gpio73", "gpio75", "gpio81", "gpio83",
 };
 
 static const char * const qdss_cti_groups[] = {
