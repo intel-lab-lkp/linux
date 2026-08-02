@@ -498,7 +498,7 @@ static int rnbd_clt_add_dev_kobj(struct rnbd_clt_dev *dev)
 	if (ret) {
 		rnbd_clt_err(dev, "Failed to create device sysfs dir, err: %d\n",
 			      ret);
-		kobject_put(&dev->kobj);
+		return ret;
 	}
 	kobject_uevent(gd_kobj, KOBJ_ONLINE);
 
