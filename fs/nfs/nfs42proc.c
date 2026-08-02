@@ -1302,7 +1302,8 @@ static int _nfs42_proc_clone(struct rpc_message *msg, struct file *src_f,
 		return -ENOMEM;
 
 	nfs4_bitmask_set(dst_bitmask, server->cache_consistency_bitmask,
-			 dst_inode, NFS_INO_INVALID_BLOCKS);
+			 dst_inode,
+			 NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_MODE);
 
 	status = nfs4_call_sync(server->client, server, msg,
 				&args.seq_args, &res.seq_res, 0);
