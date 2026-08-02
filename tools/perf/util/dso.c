@@ -643,7 +643,7 @@ static int __open_dso(struct dso *dso, struct machine *machine)
 	if (name)
 		fd = do_open(name);
 	else
-		fd = -errno;
+		fd = errno ? -errno : -ENOENT;
 
 	if (decomp)
 		unlink(name);
