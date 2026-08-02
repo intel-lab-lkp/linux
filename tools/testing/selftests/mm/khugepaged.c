@@ -857,6 +857,21 @@ static void collapse_compound_extreme(struct collapse_context *c, struct mem_ops
 	void *p;
 	int i;
 
+	/*
+	 * Builds a PMD's worth of distinct PTE-mapped compound pages by cycling
+	 * hpage_pmd_nr fault-time THPs through mremap. Fault-time THP allocation
+	 * is best-effort, and this needs hpage_pmd_nr PMD-order pages in a row:
+	 * fine at a 2M (4K base) or 32M (16K base) PMD, but a 512M PMD (arm64/64K)
+	 * is an order-13 allocation the allocator cannot reliably hand out even
+	 * once, let alone 8192 times. Cap at a 32M PMD; MADV_COLLAPSE-driven cases
+	 * still cover PMD-order collapse on the larger configs.
+	 */
+	if (hpage_pmd_size > (32UL << 20)) {
+		ksft_test_result_skip("%s: PMD too large for fault-time THP construction\n",
+				      __func__);
+		return;
+	}
+
 	p = ops->setup_area(1);
 	ksft_print_msg("Construct PTE page table full of different PTE-mapped compound pages\n");
 	for (i = 0; i < hpage_pmd_nr; i++) {
