@@ -322,6 +322,36 @@ exit:
 	return ret;
 }
 
+static int qca8k_fdb_purge_dynamic(struct qca8k_priv *priv, const u8 *mac,
+				   u16 vid)
+{
+	struct qca8k_fdb fdb = { 0 };
+	int ret;
+
+	mutex_lock(&priv->reg_mutex);
+
+	qca8k_fdb_write(priv, vid, 0, mac, 0);
+	ret = qca8k_fdb_access(priv, QCA8K_FDB_SEARCH, -1);
+	if (ret < 0)
+		goto out;
+
+	ret = qca8k_fdb_read(priv, &fdb);
+	if (ret < 0)
+		goto out;
+
+	/* Keep deliberately configured static entries. */
+	if (!fdb.aging || fdb.aging == QCA8K_ATU_STATUS_STATIC) {
+		ret = 0;
+		goto out;
+	}
+
+	ret = qca8k_fdb_access(priv, QCA8K_FDB_PURGE, -1);
+
+out:
+	mutex_unlock(&priv->reg_mutex);
+	return ret;
+}
+
 static int qca8k_vlan_access(struct qca8k_priv *priv,
 			     enum qca8k_vlan_cmd cmd, u16 vid)
 {
@@ -829,6 +859,14 @@ int qca8k_port_fdb_add(struct dsa_switch *ds, int port,
 	struct qca8k_priv *priv = ds->priv;
 	u16 port_mask = BIT(port);
 
+	/* Unknown unicast flooding delivers host traffic to the conduit. */
+	if (dsa_is_cpu_port(ds, port)) {
+		if (!vid)
+			vid = QCA8K_PORT_VID_DEF;
+
+		return qca8k_fdb_purge_dynamic(priv, addr, vid);
+	}
+
 	return qca8k_port_fdb_insert(priv, addr, port_mask, vid);
 }
 
@@ -838,6 +876,9 @@ int qca8k_port_fdb_del(struct dsa_switch *ds, int port,
 {
 	struct qca8k_priv *priv = ds->priv;
 	u16 port_mask = BIT(port);
+
+	if (dsa_is_cpu_port(ds, port))
+		return 0;
 
 	if (!vid)
 		vid = QCA8K_PORT_VID_DEF;
@@ -881,6 +922,25 @@ static u8 qca8k_lag_port_mask(struct dsa_switch *ds,
 	return port_mask;
 }
 
+static bool qca8k_lag_is_cpu(struct dsa_switch *ds,
+			     const struct dsa_lag *lag)
+{
+	struct dsa_port *dp;
+	bool has_cpu = false;
+
+	dsa_lag_foreach_port(dp, ds->dst, lag) {
+		if (dp->ds != ds)
+			continue;
+
+		if (!dsa_port_is_cpu(dp))
+			return false;
+
+		has_cpu = true;
+	}
+
+	return has_cpu;
+}
+
 int qca8k_lag_fdb_add(struct dsa_switch *ds, struct dsa_lag lag,
 		      const unsigned char *addr, u16 vid,
 		      struct dsa_db db)
@@ -889,6 +949,13 @@ int qca8k_lag_fdb_add(struct dsa_switch *ds, struct dsa_lag lag,
 	u8 port_mask;
 
 	port_mask = qca8k_lag_port_mask(ds, &lag);
+
+	if (qca8k_lag_is_cpu(ds, &lag)) {
+		if (!vid)
+			vid = QCA8K_PORT_VID_DEF;
+
+		return qca8k_fdb_purge_dynamic(priv, addr, vid);
+	}
 
 	return qca8k_port_fdb_insert(priv, addr, port_mask, vid);
 }
@@ -899,6 +966,9 @@ int qca8k_lag_fdb_del(struct dsa_switch *ds, struct dsa_lag lag,
 {
 	struct qca8k_priv *priv = ds->priv;
 	u8 port_mask;
+
+	if (qca8k_lag_is_cpu(ds, &lag))
+		return 0;
 
 	if (!vid)
 		vid = QCA8K_PORT_VID_DEF;
