@@ -6733,6 +6733,31 @@ static void drm_displayid_process_base_section_header(struct drm_connector *conn
 		info->non_desktop = true;
 }
 
+/*
+ * Convert an IEEE 754 binary16 value, the encoding DisplayID 2.0 uses for
+ * luminance, to nits rounded to nearest. Negative, zero, subnormal, infinite
+ * and NaN all report 0, meaning "no usable value".
+ */
+static u32 displayid_binary16_to_nits(u16 val)
+{
+	int exp = (val >> 10) & 0x1f;
+	u32 mant = (val & 0x3ff) | 0x400;
+	int shift;
+
+	if (val & 0x8000 || exp == 0 || exp == 0x1f)
+		return 0;
+
+	shift = exp - 25;
+	if (shift >= 0)
+		return shift > 15 ? 0 : mant << shift;
+
+	shift = -shift;
+	if (shift > 11)
+		return 0;
+
+	return (mant + (1 << (shift - 1))) >> shift;
+}
+
 static void
 drm_displayid_parse_display_params(struct drm_connector *connector,
 				   const struct displayid_block *block)
@@ -6740,6 +6765,7 @@ drm_displayid_parse_display_params(struct drm_connector *connector,
 	struct drm_display_info *info = &connector->display_info;
 	const struct displayid_display_params_block *params =
 		(const struct displayid_display_params_block *)block;
+	u32 max_luminance, min_luminance;
 	u8 tech;
 
 	if (block->num_bytes < sizeof(*params) - sizeof(params->base)) {
@@ -6770,6 +6796,27 @@ drm_displayid_parse_display_params(struct drm_connector *connector,
 	default:
 		break;
 	}
+
+	/*
+	 * CTA HDR static metadata is parsed before this and takes precedence,
+	 * so panels providing both keep the range they already have.
+	 */
+	if (info->luminance_range.max_luminance)
+		return;
+
+	max_luminance = displayid_binary16_to_nits(le16_to_cpu(params->max_luminance_full));
+	min_luminance = displayid_binary16_to_nits(le16_to_cpu(params->min_luminance));
+
+	if (!max_luminance || min_luminance >= max_luminance)
+		return;
+
+	info->luminance_range.max_luminance = max_luminance;
+	info->luminance_range.min_luminance = min_luminance;
+
+	drm_dbg_kms(connector->dev,
+		    "[CONNECTOR:%d:%s] DisplayID luminance range %u-%u nits\n",
+		    connector->base.id, connector->name,
+		    min_luminance, max_luminance);
 }
 
 static void update_displayid_info(struct drm_connector *connector,

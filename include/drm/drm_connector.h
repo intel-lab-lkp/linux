@@ -425,7 +425,8 @@ struct drm_monitor_range_info {
  * &drm_display_info. Calculated using data in EDID
  *
  * This struct is used to store a luminance range supported by panel
- * as calculated using data from EDID's static hdr metadata.
+ * as calculated using data from EDID's static hdr metadata, or as read
+ * from the DisplayID 2.0 Display Parameters Data Block.
  *
  * @min_luminance: This is the min supported luminance value
  *
