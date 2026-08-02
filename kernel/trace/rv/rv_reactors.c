@@ -465,18 +465,25 @@ int init_rv_reactors(struct dentry *root_dir)
 
 void rv_react(struct rv_monitor *monitor, const char *msg, ...)
 {
-	static DEFINE_WAIT_OVERRIDE_MAP(rv_react_map, LD_WAIT_FREE);
+	/*
+	 * A reactor callback can be preempted; the scheduler then takes
+	 * rq->__lock (LD_WAIT_SPIN).  Advertise that in preemptible contexts
+	 * to avoid a spurious lockdep report, and keep LD_WAIT_FREE in atomic
+	 * ones where the scheduler cannot run.
+	 */
+	static DEFINE_WAIT_OVERRIDE_MAP(rv_react_map,        LD_WAIT_SPIN);
+	static DEFINE_WAIT_OVERRIDE_MAP(rv_react_map_atomic, LD_WAIT_FREE);
+	struct lockdep_map * __maybe_unused map;
 	va_list args;
 
 	if (!rv_reacting_on() || !monitor->react)
 		return;
 
+	map = (in_nmi() || in_hardirq()) ? &rv_react_map_atomic : &rv_react_map;
 	va_start(args, msg);
-
-	lock_map_acquire_try(&rv_react_map);
+	lock_map_acquire_try(map);
 	monitor->react(msg, args);
-	lock_map_release(&rv_react_map);
-
+	lock_map_release(map);
 	va_end(args);
 }
 EXPORT_SYMBOL_GPL(rv_react);
