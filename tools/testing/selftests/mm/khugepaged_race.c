@@ -15,8 +15,12 @@
  *   madvise	MADV_COLLAPSE in a loop — the legacy-PMD regression
  *		axis.
  *
- * All anon THP orders are enabled (inherit) and max_ptes_none is set
- * mid-range, so the MADV_DONTNEED holes steer selection across orders.
+ * All anon THP orders are enabled (inherit). max_ptes_none is 0 by
+ * default — racing MADV_DONTNEED then steers selection across orders —
+ * or the permissive limit with -z, which floods the batch engine with
+ * hole and zeropage slots so the population paths (park-time zeropage
+ * clear, zero-filled copy, install-time pte_none() verify and abort)
+ * race the faulters directly.
  *
  * Correctness signals: every racing page must read as its pattern or
  * zero (MADV_DONTNEED), never anything else — checked continuously by
@@ -196,7 +200,8 @@ static unsigned long now_ms(void)
 static void usage(void)
 {
 	fprintf(stderr,
-		"Usage: khugepaged_race [-d seconds] [-m stepped|free|madvise] [-a areas]\n"
+		"Usage: khugepaged_race [-d seconds] [-m stepped|free|madvise] [-z] [-a areas]\n"
+		"\t-z: permissive max_ptes_none (hole-heavy windows)\n"
 		"\t-a: number of shared PMD-sized playground areas (default 3)\n");
 	exit(1);
 }
@@ -219,11 +224,12 @@ int main(int argc, char **argv)
 	int duration_s = 10;
 	unsigned long thread_mask = ~0UL;
 	int nr_areas_arg = 0;
+	bool permissive_none = false;
 	unsigned long i;
 	int steps = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "a:d:m:t:h")) != -1) {
+	while ((opt = getopt(argc, argv, "a:d:m:t:zh")) != -1) {
 		switch (opt) {
 		case 'a':
 			nr_areas_arg = atoi(optarg);
@@ -237,6 +243,9 @@ int main(int argc, char **argv)
 		case 't':
 			/* debug: bitmask of racing threads to start */
 			thread_mask = strtoul(optarg, NULL, 0);
+			break;
+		case 'z':
+			permissive_none = true;
 			break;
 		default:
 			usage();
@@ -274,13 +283,17 @@ int main(int argc, char **argv)
 		strcmp(mode, "free") ? 1000 : 0;
 	settings.khugepaged.alloc_sleep_millisecs = 10;
 	/*
-	 * Strict occupancy: mTHP collapse only supports 0 or
-	 * HPAGE_PMD_NR - 1 and coerces anything else to 0 anyway, and 0
-	 * also keeps khugepaged from burning the whole step in doomed
-	 * PMD-sized allocations on 512M-PMD configs: under racing
-	 * MADV_DONTNEED a fully populated PMD area is rare.
+	 * mTHP collapse only supports the two ends of the occupancy
+	 * scale: 0 or HPAGE_PMD_NR - 1 (anything else coerces to 0).
+	 * Strict is the default — it also keeps khugepaged from burning
+	 * the whole step in doomed PMD-sized allocations on 512M-PMD
+	 * configs, where a fully populated area is rare under racing
+	 * MADV_DONTNEED. -z selects the permissive end: selection then
+	 * emits hole-heavy windows and the engine's population paths
+	 * take the brunt of the racing faults and zaps.
 	 */
-	settings.khugepaged.max_ptes_none = 0;
+	settings.khugepaged.max_ptes_none = permissive_none ?
+		(hpage_pmd_size / page_size) - 1 : 0;
 	settings.khugepaged.pages_to_scan =
 		nr_areas * (hpage_pmd_size / page_size) * 8;
 	for (i = 0; i < NR_ORDERS; i++) {
