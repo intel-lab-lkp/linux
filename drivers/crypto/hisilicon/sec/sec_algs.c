@@ -381,10 +381,9 @@ static void sec_alg_free_el(struct sec_request_el *el,
 }
 
 /* queuelock must be held */
-static int sec_send_request(struct sec_request *sec_req, struct sec_queue *queue)
+static void sec_send_request(struct sec_request *sec_req, struct sec_queue *queue)
 {
 	struct sec_request_el *el, *temp;
-	int ret = 0;
 
 	mutex_lock(&sec_req->lock);
 	list_for_each_entry_safe(el, temp, &sec_req->elements, head) {
@@ -400,22 +399,36 @@ static int sec_send_request(struct sec_request *sec_req, struct sec_queue *queue
 		 */
 		if (!queue->havesoftqueue ||
 		    (kfifo_is_empty(&queue->softqueue) &&
-		     sec_queue_empty(queue))) {
-			ret = sec_queue_send(queue, &el->req, sec_req);
-			if (ret == -EAGAIN) {
-				/* Wait unti we can send then try again */
-				/* DEAD if here - should not happen */
-				ret = -EBUSY;
-				goto err_unlock;
-			}
-		} else {
-			kfifo_put(&queue->softqueue, el);
-		}
+		     sec_queue_empty(queue)))
+			WARN_ON_ONCE(sec_queue_send(queue, &el->req,
+						    sec_req));
+		else
+			WARN_ON_ONCE(!kfifo_put(&queue->softqueue, el));
 	}
-err_unlock:
 	mutex_unlock(&sec_req->lock);
+}
 
-	return ret;
+/*
+ * Check whether a request of @steps elements can be queued without
+ * exceeding the capacity of the hardware and software queues.
+ *
+ * When the softqueue has pending entries, all new entries must go to
+ * the softqueue to preserve ordering.  When both queues are empty the
+ * first entry goes to hardware and the rest to the softqueue (if
+ * enabled).
+ *
+ * queuelock must be held.
+ */
+static bool sec_can_send_request(struct sec_queue *queue, unsigned int steps)
+{
+	if (!queue->havesoftqueue)
+		return sec_queue_can_enqueue(queue, steps);
+
+	if (!kfifo_is_empty(&queue->softqueue) || !sec_queue_empty(queue))
+		return kfifo_avail(&queue->softqueue) > steps;
+
+	return sec_queue_can_enqueue(queue, 1) &&
+	       kfifo_avail(&queue->softqueue) >= steps - 1;
 }
 
 static void sec_skcipher_alg_callback(struct sec_bd_info *sec_resp,
@@ -498,11 +511,8 @@ static void sec_skcipher_alg_callback(struct sec_bd_info *sec_resp,
 		backlog_req = list_first_entry(&ctx->backlog,
 					       typeof(*backlog_req),
 					       backlog_head);
-		if (sec_queue_can_enqueue(ctx->queue,
-		    backlog_req->num_elements) ||
-		    (ctx->queue->havesoftqueue &&
-		     kfifo_avail(&ctx->queue->softqueue) >
-		     backlog_req->num_elements)) {
+		if (sec_can_send_request(ctx->queue,
+					 backlog_req->num_elements)) {
 			sec_send_request(backlog_req, ctx->queue);
 			crypto_request_complete(backlog_req->req_base,
 						-EINPROGRESS);
@@ -713,7 +723,7 @@ static int sec_alg_skcipher_crypto(struct skcipher_request *skreq,
 	struct sec_queue *queue = ctx->queue;
 	struct sec_request *sec_req = skcipher_request_ctx(skreq);
 	struct sec_dev_info *info = queue->dev_info;
-	int i, ret, steps;
+	int i, ret = 0, steps;
 	size_t *split_sizes;
 	struct scatterlist **splits_in;
 	struct scatterlist **splits_out = NULL;
@@ -790,28 +800,32 @@ static int sec_alg_skcipher_crypto(struct skcipher_request *skreq,
 
 	/*
 	 * Only attempt to queue if the whole lot can fit in the queue -
-	 * we can't successfully cleanup after a partial queing so this
+	 * we can't successfully cleanup after a partial queuing so this
 	 * must succeed or fail atomically.
 	 *
-	 * Big hammer test of both software and hardware queues - could be
-	 * more refined but this is unlikely to happen so no need.
+	 * When the softqueue has pending entries, all new entries must
+	 * go to the softqueue to preserve ordering.  When both queues
+	 * are empty the first entry goes to hardware and the rest to
+	 * the softqueue (if enabled).
 	 */
 
 	/* Grab a big lock for a long time to avoid concurrency issues */
 	spin_lock_bh(&queue->queuelock);
 
 	/*
-	 * Can go on to queue if we have space in either:
-	 * 1) The hardware queue and no software queue
-	 * 2) The software queue
-	 * AND there is nothing in the backlog.  If there is backlog we
-	 * have to only queue to the backlog queue and return busy.
+	 * Can go on to queue if we have space for everything upfront.
+	 * If there is backlog we must queue to the backlog and return busy.
 	 */
-	if ((!sec_queue_can_enqueue(queue, steps) &&
-	     (!queue->havesoftqueue ||
-	      kfifo_avail(&queue->softqueue) > steps)) ||
-	    !list_empty(&ctx->backlog)) {
+	if (!list_empty(&ctx->backlog)) {
 		ret = -EBUSY;
+		goto backlog;
+	}
+
+	if (!sec_can_send_request(queue, steps))
+		ret = -EBUSY;
+
+	if (ret) {
+backlog:
 		if ((skreq->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)) {
 			list_add_tail(&sec_req->backlog_head, &ctx->backlog);
 			spin_unlock_bh(&queue->queuelock);
@@ -821,10 +835,8 @@ static int sec_alg_skcipher_crypto(struct skcipher_request *skreq,
 		spin_unlock_bh(&queue->queuelock);
 		goto err_free_elements;
 	}
-	ret = sec_send_request(sec_req, queue);
+	sec_send_request(sec_req, queue);
 	spin_unlock_bh(&queue->queuelock);
-	if (ret)
-		goto err_free_elements;
 
 	ret = -EINPROGRESS;
 out:
