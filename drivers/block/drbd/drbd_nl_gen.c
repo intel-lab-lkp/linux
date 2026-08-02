@@ -51,8 +51,8 @@ const struct nla_policy drbd_disconnect_parms_nl_policy[DRBD_A_DISCONNECT_PARMS_
 };
 
 const struct nla_policy drbd_disk_conf_nl_policy[DRBD_A_DISK_CONF_DISABLE_WRITE_SAME + 1] = {
-	[DRBD_A_DISK_CONF_BACKING_DEV] = { .type = NLA_NUL_STRING, .len = 128, },
-	[DRBD_A_DISK_CONF_META_DEV] = { .type = NLA_NUL_STRING, .len = 128, },
+	[DRBD_A_DISK_CONF_BACKING_DEV] = { .type = NLA_NUL_STRING, .len = 128 - 1, },
+	[DRBD_A_DISK_CONF_META_DEV] = { .type = NLA_NUL_STRING, .len = 128 - 1, },
 	[DRBD_A_DISK_CONF_META_DEV_IDX] = { .type = NLA_U32, },
 	[DRBD_A_DISK_CONF_DISK_SIZE] = { .type = NLA_U64, },
 	[DRBD_A_DISK_CONF_MAX_BIO_BVECS] = { .type = NLA_U32, },
@@ -80,17 +80,17 @@ const struct nla_policy drbd_disk_conf_nl_policy[DRBD_A_DISK_CONF_DISABLE_WRITE_
 
 const struct nla_policy drbd_drbd_cfg_context_nl_policy[DRBD_A_DRBD_CFG_CONTEXT_CTX_PEER_ADDR + 1] = {
 	[DRBD_A_DRBD_CFG_CONTEXT_CTX_VOLUME] = { .type = NLA_U32, },
-	[DRBD_A_DRBD_CFG_CONTEXT_CTX_RESOURCE_NAME] = { .type = NLA_NUL_STRING, .len = 128, },
+	[DRBD_A_DRBD_CFG_CONTEXT_CTX_RESOURCE_NAME] = { .type = NLA_NUL_STRING, .len = 128 - 1, },
 	[DRBD_A_DRBD_CFG_CONTEXT_CTX_MY_ADDR] = NLA_POLICY_MAX_LEN(128),
 	[DRBD_A_DRBD_CFG_CONTEXT_CTX_PEER_ADDR] = NLA_POLICY_MAX_LEN(128),
 };
 
 const struct nla_policy drbd_net_conf_nl_policy[DRBD_A_NET_CONF_SOCK_CHECK_TIMEO + 1] = {
-	[DRBD_A_NET_CONF_SHARED_SECRET] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX, },
-	[DRBD_A_NET_CONF_CRAM_HMAC_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX, },
-	[DRBD_A_NET_CONF_INTEGRITY_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX, },
-	[DRBD_A_NET_CONF_VERIFY_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX, },
-	[DRBD_A_NET_CONF_CSUMS_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX, },
+	[DRBD_A_NET_CONF_SHARED_SECRET] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX - 1, },
+	[DRBD_A_NET_CONF_CRAM_HMAC_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX - 1, },
+	[DRBD_A_NET_CONF_INTEGRITY_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX - 1, },
+	[DRBD_A_NET_CONF_VERIFY_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX - 1, },
+	[DRBD_A_NET_CONF_CSUMS_ALG] = { .type = NLA_NUL_STRING, .len = SHARED_SECRET_MAX - 1, },
 	[DRBD_A_NET_CONF_WIRE_PROTOCOL] = { .type = NLA_U32, },
 	[DRBD_A_NET_CONF_CONNECT_INT] = { .type = NLA_U32, },
 	[DRBD_A_NET_CONF_TIMEOUT] = { .type = NLA_U32, },
@@ -143,7 +143,7 @@ const struct nla_policy drbd_peer_device_statistics_nl_policy[DRBD_A_PEER_DEVICE
 };
 
 const struct nla_policy drbd_res_opts_nl_policy[DRBD_A_RES_OPTS_ON_NO_DATA + 1] = {
-	[DRBD_A_RES_OPTS_CPU_MASK] = { .type = NLA_NUL_STRING, .len = DRBD_CPU_MASK_SIZE, },
+	[DRBD_A_RES_OPTS_CPU_MASK] = { .type = NLA_NUL_STRING, .len = DRBD_CPU_MASK_SIZE - 1, },
 	[DRBD_A_RES_OPTS_ON_NO_DATA] = { .type = NLA_U32, },
 };
 
