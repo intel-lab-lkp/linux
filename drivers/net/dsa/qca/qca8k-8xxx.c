@@ -1087,22 +1087,6 @@ qca8k_setup_mac_pwr_sel(struct qca8k_priv *priv)
 	return ret;
 }
 
-static int qca8k_find_cpu_port(struct dsa_switch *ds)
-{
-	struct qca8k_priv *priv = ds->priv;
-
-	/* Find the connected cpu port. Valid port are 0 or 6 */
-	if (dsa_is_cpu_port(ds, 0))
-		return 0;
-
-	dev_dbg(priv->dev, "port 0 is not the CPU port. Checking port 6");
-
-	if (dsa_is_cpu_port(ds, 6))
-		return 6;
-
-	return -EINVAL;
-}
-
 static int
 qca8k_setup_of_pws_reg(struct qca8k_priv *priv)
 {
@@ -1844,13 +1828,13 @@ qca8k_setup(struct dsa_switch *ds)
 {
 	struct qca8k_priv *priv = ds->priv;
 	struct dsa_port *dp;
-	int cpu_port, ret;
-	u32 mask;
+	u32 cpu_ports, mask;
+	int ret;
 
-	cpu_port = qca8k_find_cpu_port(ds);
-	if (cpu_port < 0) {
-		dev_err(priv->dev, "No cpu port configured in both cpu port0 and port6");
-		return cpu_port;
+	cpu_ports = dsa_cpu_ports(ds);
+	if (!cpu_ports || cpu_ports & ~(BIT(0) | BIT(6))) {
+		dev_err(priv->dev, "CPU ports must be port 0 or 6");
+		return -EINVAL;
 	}
 
 	/* Parse CPU port config to be later used in phy_link mac_config */
@@ -1922,25 +1906,20 @@ qca8k_setup(struct dsa_switch *ds)
 		}
 	}
 
-	/* Forward all unknown frames to CPU port for Linux processing */
-	ret = qca8k_write(priv, QCA8K_REG_GLOBAL_FW_CTRL1,
-			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_IGMP_DP_MASK, dsa_cpu_ports(ds)) |
-			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_BC_DP_MASK, dsa_cpu_ports(ds)) |
-			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_MC_DP_MASK, dsa_cpu_ports(ds)) |
-			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_UC_DP_MASK, dsa_cpu_ports(ds)));
-	if (ret)
-		return ret;
-
-	/* CPU port gets connected to all user ports of the switch */
-	ret = qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(cpu_port),
-			QCA8K_PORT_LOOKUP_MEMBER, dsa_user_ports(ds));
-	if (ret)
-		return ret;
-
-	/* Setup connection between CPU port & user ports
-	 * Individual user ports get connected to CPU port only
+	/* Forward unknown frames to every CPU port. The ingress port lookup
+	 * membership restricts each frame to its assigned CPU port.
 	 */
+	ret = qca8k_write(priv, QCA8K_REG_GLOBAL_FW_CTRL1,
+			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_IGMP_DP_MASK, cpu_ports) |
+			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_BC_DP_MASK, cpu_ports) |
+			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_MC_DP_MASK, cpu_ports) |
+			  FIELD_PREP(QCA8K_GLOBAL_FW_CTRL1_UC_DP_MASK, cpu_ports));
+	if (ret)
+		return ret;
+
+	/* Connect each user port bidirectionally to its assigned CPU port. */
 	dsa_switch_for_each_user_port(dp, ds) {
+		u8 cpu_port = dp->cpu_dp->index;
 		u8 port = dp->index;
 
 		ret = qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(port),
@@ -1951,6 +1930,11 @@ qca8k_setup(struct dsa_switch *ds)
 
 		ret = regmap_clear_bits(priv->regmap, QCA8K_PORT_LOOKUP_CTRL(port),
 					QCA8K_PORT_LOOKUP_LEARN);
+		if (ret)
+			return ret;
+
+		ret = qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(cpu_port),
+				BIT(port), BIT(port));
 		if (ret)
 			return ret;
 
