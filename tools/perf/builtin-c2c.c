@@ -2093,8 +2093,18 @@ static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 	char *sort   = sort_   ? strdup(sort_) : NULL;
 	int ret;
 
+	/* strdup() returns NULL on OOM, don't silently treat as empty */
+	if ((output_ && !output) || (sort_ && !sort)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
 	PARSE_LIST(output, c2c_hists__init_output);
+	if (ret)
+		goto out;
 	PARSE_LIST(sort,   c2c_hists__init_sort);
+	if (ret)
+		goto out;
 
 	/* copy sort keys to output fields */
 	perf_hpp__setup_output_field(hpp_list);
@@ -2111,6 +2121,7 @@ static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 	perf_hpp__append_sort_keys(&hists->list);
 #endif
 
+out:
 	free(output);
 	free(sort);
 	return ret;
