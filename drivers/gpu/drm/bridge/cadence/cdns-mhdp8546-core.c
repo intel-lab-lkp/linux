@@ -53,6 +53,8 @@
 #include "cdns-mhdp8546-hdcp.h"
 #include "cdns-mhdp8546-j721e.h"
 
+static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp);
+
 static void cdns_mhdp_bridge_hpd_enable(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
@@ -698,7 +700,9 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	 * MHDP_HW_STOPPED happens only due to driver removal when
 	 * bridge should already be detached.
 	 */
-	cdns_mhdp_bridge_hpd_enable(&mhdp->bridge);
+
+	if (!mhdp->no_hpd)
+		cdns_mhdp_bridge_hpd_enable(&mhdp->bridge);
 
 	spin_unlock(&mhdp->start_lock);
 
@@ -739,7 +743,13 @@ static void cdns_mhdp_fw_cb(const struct firmware *fw, void *context)
 	spin_lock(&mhdp->start_lock);
 	bridge_attached = mhdp->bridge_attached;
 	spin_unlock(&mhdp->start_lock);
-	if (bridge_attached)
+
+	if (!bridge_attached)
+		return;
+
+	if (mhdp->no_hpd)
+		cdns_mhdp_update_link_status(mhdp);
+	else
 		drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
 }
 
@@ -788,9 +798,14 @@ static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 		ret = cdns_mhdp_dpcd_read(mhdp, msg->address,
 					  msg->buffer, msg->size);
 		if (ret) {
-			dev_dbg(mhdp->dev,
-				"Failed to read DPCD addr %u\n",
-				msg->address);
+			if (mhdp->no_hpd)
+				dev_dbg(mhdp->dev,
+					"Failed to read DPCD addr %u\n",
+					msg->address);
+			else
+				dev_err(mhdp->dev,
+					"Failed to read DPCD addr %u\n",
+					msg->address);
 
 			return ret;
 		}
@@ -1523,6 +1538,19 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 
 	spin_unlock(&mhdp->start_lock);
 
+	if (mhdp->no_hpd) {
+		/*
+		 * In no-hpd mode there are no HPD interrupts to trigger
+		 * detection. If firmware is already ready, do the initial
+		 * AUX poll immediately. Otherwise fw_cb() will call
+		 * cdns_mhdp_update_link_status() once firmware finishes
+		 * loading and sees bridge_attached is true.
+		 */
+		if (hw_ready)
+			cdns_mhdp_update_link_status(mhdp);
+		return 0;
+	}
+
 	/* Enable SW event interrupts */
 	if (hw_ready)
 		cdns_mhdp_bridge_hpd_enable(bridge);
@@ -2012,6 +2040,16 @@ static enum drm_connector_status
 cdns_mhdp_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	bool hw_ready;
+
+	if (mhdp->no_hpd) {
+		spin_lock(&mhdp->start_lock);
+		hw_ready = mhdp->hw_state == MHDP_HW_READY;
+		spin_unlock(&mhdp->start_lock);
+
+		if (hw_ready)
+			cdns_mhdp_update_link_status(mhdp);
+	}
 
 	return cdns_mhdp_detect(mhdp);
 }
@@ -2100,7 +2138,29 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	mutex_lock(&mhdp->link_mutex);
 
-	mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
+	if (mhdp->no_hpd) {
+		u8 rev;
+
+		/*
+		 * Use a side-effect-free capability register for presence
+		 * detection. A successful AUX read means a sink is present;
+		 * we do not need link training status registers here.
+		 */
+		ret = drm_dp_dpcd_read(&mhdp->aux, DP_DPCD_REV, &rev, 1);
+		mhdp->plugged = (ret == 1);
+		ret = mhdp->plugged ? 0 : -EIO;
+		hpd_pulse = false;
+
+		/*
+		 * If the monitor is still connected and the link is already
+		 * up, there is nothing to do. Avoid falling through to
+		 * cdns_mhdp_sst_enable() on every poll cycle.
+		 */
+		if (mhdp->plugged && old_plugged && mhdp->link_up)
+			goto out;
+	} else {
+		mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
+	}
 
 	if (!mhdp->plugged) {
 		cdns_mhdp_link_down(mhdp);
@@ -2288,6 +2348,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	mhdp->aux.dev = dev;
 	mhdp->aux.transfer = cdns_mhdp_transfer;
 
+	mhdp->no_hpd = of_property_read_bool(dev->of_node, "no-hpd");
+
 	mhdp->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(mhdp->regs)) {
 		dev_err(dev, "Failed to get memory resource\n");
@@ -2360,8 +2422,9 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	mhdp->display_fmt.bpc = 8;
 
 	mhdp->bridge.of_node = pdev->dev.of_node;
-	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
-			   DRM_BRIDGE_OP_HPD;
+	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
+	if (!mhdp->no_hpd)
+		mhdp->bridge.ops |= DRM_BRIDGE_OP_HPD;
 	mhdp->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
 
 	ret = phy_init(mhdp->phy);
