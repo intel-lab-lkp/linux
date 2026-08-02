@@ -1458,7 +1458,7 @@ static int iocg_wake_fn(struct wait_queue_entry *wq_entry, unsigned mode,
 		return -1;
 
 	iocg_commit_bio(ctx->iocg, wait->bio, wait->abs_cost, cost);
-	wait->committed = true;
+	WRITE_ONCE(wait->committed, true);
 
 	/*
 	 * autoremove_wake_function() removes the wait entry only when it
@@ -2763,7 +2763,7 @@ retry_lock:
 
 	while (true) {
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (wait.committed)
+		if (READ_ONCE(wait.committed))
 			break;
 		io_schedule();
 	}
