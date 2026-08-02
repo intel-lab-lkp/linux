@@ -868,6 +868,46 @@ int qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static u8 qca8k_lag_port_mask(struct dsa_switch *ds,
+			      const struct dsa_lag *lag)
+{
+	struct dsa_port *dp;
+	u8 port_mask = 0;
+
+	dsa_lag_foreach_port(dp, ds->dst, lag)
+		if (dp->ds == ds)
+			port_mask |= BIT(dp->index);
+
+	return port_mask;
+}
+
+int qca8k_lag_fdb_add(struct dsa_switch *ds, struct dsa_lag lag,
+		      const unsigned char *addr, u16 vid,
+		      struct dsa_db db)
+{
+	struct qca8k_priv *priv = ds->priv;
+	u8 port_mask;
+
+	port_mask = qca8k_lag_port_mask(ds, &lag);
+
+	return qca8k_port_fdb_insert(priv, addr, port_mask, vid);
+}
+
+int qca8k_lag_fdb_del(struct dsa_switch *ds, struct dsa_lag lag,
+		      const unsigned char *addr, u16 vid,
+		      struct dsa_db db)
+{
+	struct qca8k_priv *priv = ds->priv;
+	u8 port_mask;
+
+	if (!vid)
+		vid = QCA8K_PORT_VID_DEF;
+
+	port_mask = qca8k_lag_port_mask(ds, &lag);
+
+	return qca8k_fdb_del(priv, addr, port_mask, vid);
+}
+
 int qca8k_port_mdb_add(struct dsa_switch *ds, int port,
 		       const struct switchdev_obj_port_mdb *mdb,
 		       struct dsa_db db)

@@ -561,6 +561,12 @@ int qca8k_port_fdb_del(struct dsa_switch *ds, int port,
 		       struct dsa_db db);
 int qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
 			dsa_fdb_dump_cb_t *cb, void *data);
+int qca8k_lag_fdb_add(struct dsa_switch *ds, struct dsa_lag lag,
+		      const unsigned char *addr, u16 vid,
+		      struct dsa_db db);
+int qca8k_lag_fdb_del(struct dsa_switch *ds, struct dsa_lag lag,
+		      const unsigned char *addr, u16 vid,
+		      struct dsa_db db);
 
 /* Common MDB function */
 int qca8k_port_mdb_add(struct dsa_switch *ds, int port,
