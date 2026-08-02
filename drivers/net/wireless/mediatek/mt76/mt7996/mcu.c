@@ -648,13 +648,37 @@ static void
 mt7996_mcu_rx_all_sta_info_event(struct mt7996_dev *dev, struct sk_buff *skb)
 {
 	struct mt7996_mcu_all_sta_info_event *res;
-	u16 i;
+	size_t elem_size;
+	u16 i, sta_num;
 
-	skb_pull(skb, sizeof(struct mt7996_mcu_rxd));
+	if (!skb_pull(skb, sizeof(struct mt7996_mcu_rxd)))
+		return;
+
+	if (skb->len < sizeof(*res))
+		return;
 
 	res = (struct mt7996_mcu_all_sta_info_event *)skb->data;
 
-	for (i = 0; i < le16_to_cpu(res->sta_num); i++) {
+	switch (le16_to_cpu(res->tag)) {
+	case UNI_ALL_STA_TXRX_RATE:
+		elem_size = sizeof(res->rate[0]);
+		break;
+	case UNI_ALL_STA_TXRX_ADM_STAT:
+		elem_size = sizeof(res->adm_stat[0]);
+		break;
+	case UNI_ALL_STA_TXRX_MSDU_COUNT:
+		elem_size = sizeof(res->msdu_cnt[0]);
+		break;
+	default:
+		return;
+	}
+
+	/* the firmware-provided station count must fit in the received event */
+	sta_num = le16_to_cpu(res->sta_num);
+	if (sta_num > (skb->len - sizeof(*res)) / elem_size)
+		return;
+
+	for (i = 0; i < sta_num; i++) {
 		u8 ac;
 		u16 wlan_idx;
 		struct mt76_wcid *wcid;
