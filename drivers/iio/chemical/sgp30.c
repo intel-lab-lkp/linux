@@ -82,7 +82,7 @@ struct sgp_version {
 struct sgp_crc_word {
 	__be16 value;
 	u8 crc8;
-} __attribute__((__packed__));
+} __packed;
 
 union sgp_reading {
 	u8 start;
