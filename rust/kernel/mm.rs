@@ -174,26 +174,20 @@ impl MmWithUser {
     /// When per-vma locks are disabled, this always returns `None`.
     #[inline]
     pub fn lock_vma_under_rcu(&self, vma_addr: usize) -> Option<VmaReadGuard<'_>> {
-        #[cfg(CONFIG_PER_VMA_LOCK)]
         {
             // SAFETY: Calling `bindings::lock_vma_under_rcu` is always okay given an mm where
             // `mm_users` is non-zero.
             let vma = unsafe { bindings::lock_vma_under_rcu(self.as_raw(), vma_addr) };
-            if !vma.is_null() {
-                return Some(VmaReadGuard {
-                    // SAFETY: If `lock_vma_under_rcu` returns a non-null ptr, then it points at a
-                    // valid vma. The vma is stable for as long as the vma read lock is held.
-                    vma: unsafe { VmaRef::from_raw(vma) },
-                    _nts: NotThreadSafe,
-                });
+            if vma.is_null() {
+                return None;
             }
+            Some(VmaReadGuard {
+                // SAFETY: If `lock_vma_under_rcu` returns a non-null ptr, then it points at a
+                // valid vma. The vma is stable for as long as the vma read lock is held.
+                vma: unsafe { VmaRef::from_raw(vma) },
+                _nts: NotThreadSafe,
+            })
         }
-
-        // Silence warnings about unused variables.
-        #[cfg(not(CONFIG_PER_VMA_LOCK))]
-        let _ = vma_addr;
-
-        None
     }
 
     /// Lock the mmap read lock.
