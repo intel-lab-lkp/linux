@@ -317,6 +317,8 @@ static int spu_process_callback(struct spu_context *ctx)
 	/* get syscall block from local store */
 	npc = ctx->ops->npc_read(ctx) & ~3;
 	ls = (void __iomem *)ctx->ops->get_ls(ctx);
+	if (npc > (LS_SIZE - sizeof(ls_pointer)))
+		return -EFAULT;
 	ls_pointer = in_be32(ls + npc);
 	if (ls_pointer > (LS_SIZE - sizeof(s)))
 		return -EFAULT;
