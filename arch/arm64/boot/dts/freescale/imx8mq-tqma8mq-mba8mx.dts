@@ -97,7 +97,9 @@
 	clocks = <&clk IMX8MQ_CLK_PCIE1_ROOT>,
 		 <&pcieclk 3>,
 		 <&pcieclk 2>,
-		 <&clk IMX8MQ_CLK_PCIE1_AUX>;
+		 <&clk IMX8MQ_CLK_PCIE1_AUX>,
+		 <&pcieclk 3>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "extref";
 	status = "okay";
 };
 
@@ -109,7 +111,9 @@
 	clocks = <&clk IMX8MQ_CLK_PCIE2_ROOT>,
 		 <&pcieclk 1>,
 		 <&pcieclk 0>,
-		 <&clk IMX8MQ_CLK_PCIE2_AUX>;
+		 <&clk IMX8MQ_CLK_PCIE2_AUX>,
+		 <&pcieclk 1>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "extref";
 	status = "okay";
 };
 

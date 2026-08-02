@@ -199,7 +199,9 @@
 	clocks = <&clk IMX8MQ_CLK_PCIE2_ROOT>,
 		 <&pcie1_refclk>,
 		 <&clk IMX8MQ_CLK_PCIE2_PHY>,
-		 <&clk IMX8MQ_CLK_PCIE2_AUX>;
+		 <&clk IMX8MQ_CLK_PCIE2_AUX>,
+		 <&pcie1_refclk>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "extref";
 	status = "okay";
 };
 

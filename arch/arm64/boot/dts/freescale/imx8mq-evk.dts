@@ -374,7 +374,9 @@
 	clocks = <&clk IMX8MQ_CLK_PCIE1_ROOT>,
 		 <&pcie0_refclk>,
 		 <&clk IMX8MQ_CLK_PCIE1_PHY>,
-		 <&clk IMX8MQ_CLK_PCIE1_AUX>;
+		 <&clk IMX8MQ_CLK_PCIE1_AUX>,
+		 <&pcie0_refclk>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "extref";
 	vph-supply = <&vgen5_reg>;
 	supports-clkreq;
 	status = "okay";
@@ -402,7 +404,9 @@
 	clocks = <&clk IMX8MQ_CLK_PCIE2_ROOT>,
 		 <&pcie0_refclk>,
 		 <&clk IMX8MQ_CLK_PCIE2_PHY>,
-		 <&clk IMX8MQ_CLK_PCIE2_AUX>;
+		 <&clk IMX8MQ_CLK_PCIE2_AUX>,
+		 <&pcie0_refclk>;
+	clock-names = "pcie", "pcie_bus", "pcie_phy", "pcie_aux", "extref";
 	vpcie-supply = <&reg_pcie1>;
 	vpcie3v3aux-supply = <&reg_pcie1>;
 	vph-supply = <&vgen5_reg>;
