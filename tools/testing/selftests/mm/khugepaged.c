@@ -181,6 +181,21 @@ static void get_finfo(const char *dir)
 	ksft_exit_fail_msg("%s: Could not read: %s\n", __func__, path);
 }
 
+static bool has_swap(void)
+{
+	FILE *fp = fopen("/proc/swaps", "r");
+	char line[MAX_LINE_LENGTH];
+	bool ret = false;
+
+	if (!fp)
+		return false;
+	/* First line is the header; any following line is a swap area. */
+	if (fgets(line, sizeof(line), fp) && fgets(line, sizeof(line), fp))
+		ret = true;
+	fclose(fp);
+	return ret;
+}
+
 static bool check_swap(void *addr, unsigned long size)
 {
 	bool swap = false;
@@ -739,6 +754,10 @@ static void collapse_swapin_single_pte(struct collapse_context *c, struct mem_op
 	void *p;
 
 	p = ops->setup_area(1);
+	if (!has_swap()) {
+		skip("Skip (no swap configured)");
+		goto out;
+	}
 	ops->fault(p, 0, hpage_pmd_size);
 
 	ksft_print_msg("Swapout one page...");
@@ -765,6 +784,10 @@ static void collapse_max_ptes_swap(struct collapse_context *c, struct mem_ops *o
 	void *p;
 
 	p = ops->setup_area(1);
+	if (!has_swap()) {
+		skip("Skip (no swap configured)");
+		goto out;
+	}
 	ops->fault(p, 0, hpage_pmd_size);
 
 	ksft_print_msg("Swapout %d of %d pages...", max_ptes_swap + 1, hpage_pmd_nr);
