@@ -2017,9 +2017,10 @@ qca8k_setup(struct dsa_switch *ds)
 
 	/* Initial setup of all ports */
 	dsa_switch_for_each_port(dp, ds) {
-		/* Disable forwarding by default on all ports */
+		/* Disable forwarding and learning by default on all ports */
 		ret = qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(dp->index),
-				QCA8K_PORT_LOOKUP_MEMBER, 0);
+				QCA8K_PORT_LOOKUP_MEMBER |
+				QCA8K_PORT_LOOKUP_LEARN, 0);
 		if (ret)
 			return ret;
 	}
@@ -2058,11 +2059,6 @@ qca8k_setup(struct dsa_switch *ds)
 		ret = qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(port),
 				QCA8K_PORT_LOOKUP_MEMBER,
 				BIT(cpu_port));
-		if (ret)
-			return ret;
-
-		ret = regmap_clear_bits(priv->regmap, QCA8K_PORT_LOOKUP_CTRL(port),
-					QCA8K_PORT_LOOKUP_LEARN);
 		if (ret)
 			return ret;
 
@@ -2121,6 +2117,8 @@ qca8k_setup(struct dsa_switch *ds)
 
 	/* Set max number of LAGs supported */
 	ds->num_lag_ids = QCA8K_NUM_LAGS;
+
+	ds->assisted_learning_on_cpu_port = true;
 
 	return 0;
 }
