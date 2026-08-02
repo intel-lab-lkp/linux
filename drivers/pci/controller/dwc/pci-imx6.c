@@ -445,11 +445,16 @@ static int pcie_phy_write(struct imx_pcie *imx_pcie, int addr, u16 data)
 
 static int imx8mq_pcie_init_phy(struct imx_pcie *imx_pcie)
 {
-	/* TODO: This code assumes external oscillator is being used */
+	bool ext = imx_pcie->enable_ext_refclk;
+
+	/*
+	 * Select the off-chip oscillator as REF_CLK when an "extref" clock is
+	 * supplied, otherwise fall back to the internal PLL.
+	 */
 	regmap_update_bits(imx_pcie->iomuxc_gpr,
 			   imx_pcie_grp_offset(imx_pcie),
 			   IMX8MQ_GPR_PCIE_REF_USE_PAD,
-			   IMX8MQ_GPR_PCIE_REF_USE_PAD);
+			   ext ? IMX8MQ_GPR_PCIE_REF_USE_PAD : 0);
 	/*
 	 * Per the datasheet, the PCIE_VPH is suggested to be 1.8V.  If the
 	 * PCIE_VPH is supplied by 3.3V, the VREG_BYPASS should be cleared
