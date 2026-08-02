@@ -405,6 +405,13 @@ CATEGORY="cow" run_test ./cow
 
 CATEGORY="thp" run_test ./folio_order_check
 
+
+CATEGORY="thp" run_test ./khugepaged_race -d 5 -m stepped
+
+CATEGORY="thp" run_test ./khugepaged_race -d 5 -m free
+
+CATEGORY="thp" run_test ./khugepaged_race -d 5 -m madvise
+
 CATEGORY="thp" run_test ./khugepaged
 
 CATEGORY="thp" run_test ./khugepaged -s 2
