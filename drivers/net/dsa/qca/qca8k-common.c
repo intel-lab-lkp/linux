@@ -637,14 +637,59 @@ void qca8k_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	qca8k_port_configure_learning(ds, port, learning);
 }
 
+int qca8k_conduit_port_mask(struct dsa_switch *ds,
+			    struct net_device *conduit,
+			    u32 *port_mask,
+			    struct netlink_ext_ack *extack)
+{
+	struct dsa_switch_tree *dst = ds->dst;
+	struct dsa_port *dp;
+	int id;
+
+	*port_mask = 0;
+
+	if (!netif_is_lag_master(conduit)) {
+		dp = conduit->dsa_ptr;
+		if (!dp || dp->ds != ds || !dsa_port_is_cpu(dp)) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Conduit is not a local CPU port");
+			return -EOPNOTSUPP;
+		}
+
+		*port_mask = BIT(dp->index);
+		return 0;
+	}
+
+	id = dsa_lag_id(dst, conduit);
+	if (id < 0)
+		return id;
+
+	dsa_lag_foreach_port(dp, dst, dsa_lag_by_id(dst, id))
+		if (dp->ds == ds && dsa_port_is_cpu(dp))
+			*port_mask |= BIT(dp->index);
+
+	if (!*port_mask) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Conduit LAG has no local CPU port");
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static int qca8k_update_port_member(struct qca8k_priv *priv, int port,
 				    const struct net_device *bridge_dev,
 				    bool join)
 {
 	bool isolated = !!(priv->port_isolated_map & BIT(port)), other_isolated;
 	struct dsa_port *dp = dsa_to_port(priv->ds, port), *other_dp;
-	u32 port_mask = BIT(dp->cpu_dp->index);
+	u32 port_mask;
 	int i, ret;
+
+	ret = qca8k_conduit_port_mask(priv->ds, dsa_port_to_conduit(dp),
+				      &port_mask, NULL);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < QCA8K_NUM_PORTS; i++) {
 		if (i == port)

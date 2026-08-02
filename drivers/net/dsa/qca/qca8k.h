@@ -523,6 +523,10 @@ int qca8k_get_sset_count(struct dsa_switch *ds, int port, int sset);
 int qca8k_set_mac_eee(struct dsa_switch *ds, int port, struct ethtool_keee *eee);
 
 /* Common bridge function */
+int qca8k_conduit_port_mask(struct dsa_switch *ds,
+			    struct net_device *conduit,
+			    u32 *port_mask,
+			    struct netlink_ext_ack *extack);
 void qca8k_port_stp_state_set(struct dsa_switch *ds, int port, u8 state);
 int qca8k_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 				struct switchdev_brport_flags flags,

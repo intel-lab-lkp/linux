@@ -1743,6 +1743,139 @@ qca8k_get_tag_protocol(struct dsa_switch *ds, int port,
 	return DSA_TAG_PROTO_QCA;
 }
 
+static int qca8k_port_get_conduit_membership(struct dsa_switch *ds, int port,
+					     u32 *user_members,
+					     u32 *cpu_members)
+{
+	struct qca8k_priv *priv = ds->priv;
+	struct dsa_port *cpu_dp;
+	u32 val;
+	int ret;
+
+	ret = regmap_read(priv->regmap, QCA8K_PORT_LOOKUP_CTRL(port), &val);
+	if (ret)
+		return ret;
+
+	*user_members = val & dsa_cpu_ports(ds);
+	*cpu_members = 0;
+
+	dsa_switch_for_each_cpu_port(cpu_dp, ds) {
+		ret = regmap_read(priv->regmap,
+				  QCA8K_PORT_LOOKUP_CTRL(cpu_dp->index), &val);
+		if (ret)
+			return ret;
+
+		if (val & BIT(port))
+			*cpu_members |= BIT(cpu_dp->index);
+	}
+
+	return 0;
+}
+
+static int qca8k_port_set_conduit_membership(struct dsa_switch *ds, int port,
+					     u32 user_members,
+					     u32 cpu_members)
+{
+	struct qca8k_priv *priv = ds->priv;
+	struct dsa_port *cpu_dp;
+	int ret;
+
+	ret = regmap_update_bits(priv->regmap,
+				 QCA8K_PORT_LOOKUP_CTRL(port),
+				 dsa_cpu_ports(ds), user_members);
+	if (ret)
+		return ret;
+
+	dsa_switch_for_each_cpu_port(cpu_dp, ds) {
+		u32 member = cpu_members & BIT(cpu_dp->index) ? BIT(port) : 0;
+
+		ret = regmap_update_bits(priv->regmap,
+					 QCA8K_PORT_LOOKUP_CTRL(cpu_dp->index),
+					 BIT(port), member);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int qca8k_port_change_conduit(struct dsa_switch *ds, int port,
+				     struct net_device *conduit,
+				     struct netlink_ext_ack *extack)
+{
+	struct qca8k_priv *priv = ds->priv;
+	u32 cpu_port_mask, old_cpu_members, old_user_members;
+	int restore_ret, ret;
+
+	ret = qca8k_conduit_port_mask(ds, conduit, &cpu_port_mask, extack);
+	if (ret)
+		return ret;
+
+	ret = qca8k_port_get_conduit_membership(ds, port, &old_user_members,
+						&old_cpu_members);
+	if (ret)
+		return ret;
+
+	ret = qca8k_port_set_conduit_membership(ds, port, cpu_port_mask,
+						cpu_port_mask);
+	if (!ret)
+		return 0;
+
+	restore_ret = qca8k_port_set_conduit_membership(ds, port,
+							old_user_members,
+							old_cpu_members);
+	if (restore_ret)
+		dev_err(priv->dev,
+			"failed to restore conduit membership for port %d: %pe\n",
+			port, ERR_PTR(restore_ret));
+
+	return ret;
+}
+
+static int qca8k_lag_refresh_conduit_ports(struct dsa_switch *ds,
+					   struct dsa_lag lag)
+{
+	struct dsa_port *dp;
+	int ret;
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		if (dsa_port_to_conduit(dp) != lag.dev)
+			continue;
+
+		ret = qca8k_port_change_conduit(ds, dp->index, lag.dev, NULL);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int qca8k_port_lag_join_with_conduits(struct dsa_switch *ds, int port,
+					     struct dsa_lag lag,
+					     struct netdev_lag_upper_info *info,
+					     struct netlink_ext_ack *extack)
+{
+	int ret;
+
+	ret = qca8k_port_lag_join(ds, port, lag, info, extack);
+	if (ret)
+		return ret;
+
+	return qca8k_lag_refresh_conduit_ports(ds, lag);
+}
+
+static int qca8k_port_lag_leave_with_conduits(struct dsa_switch *ds, int port,
+					      struct dsa_lag lag)
+{
+	int ret;
+
+	ret = qca8k_port_lag_leave(ds, port, lag);
+	if (ret)
+		return ret;
+
+	return qca8k_lag_refresh_conduit_ports(ds, lag);
+}
+
 static void
 qca8k_conduit_change(struct dsa_switch *ds, const struct net_device *conduit,
 		     bool operational)
@@ -2032,8 +2165,9 @@ static const struct dsa_switch_ops qca8k_switch_ops = {
 	.port_vlan_del		= qca8k_port_vlan_del,
 	.phylink_get_caps	= qca8k_phylink_get_caps,
 	.get_phy_flags		= qca8k_get_phy_flags,
-	.port_lag_join		= qca8k_port_lag_join,
-	.port_lag_leave		= qca8k_port_lag_leave,
+	.port_lag_join		= qca8k_port_lag_join_with_conduits,
+	.port_lag_leave		= qca8k_port_lag_leave_with_conduits,
+	.port_change_conduit	= qca8k_port_change_conduit,
 	.conduit_state_change	= qca8k_conduit_change,
 	.connect_tag_protocol	= qca8k_connect_tag_protocol,
 };
