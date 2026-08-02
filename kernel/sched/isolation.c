@@ -28,6 +28,17 @@ struct housekeeping {
 
 static struct housekeeping housekeeping;
 
+/*
+ * Bootmem cpumasks that housekeeping_init() has replaced with kmalloc()ed
+ * copies. They can't be released right there: housekeeping_init() runs once
+ * the page allocator and slab are up, but before page_alloc_init_late() has
+ * initialized the deferred part of the memory map, and memblock_free() then
+ * reaches __free_reserved_area(), which refuses to touch a memory map that
+ * isn't fully initialized yet. Record them instead and release them from a
+ * core_initcall, which runs after page_alloc_init_late().
+ */
+static struct cpumask *housekeeping_bootmem_masks[HK_TYPE_MAX] __initdata;
+
 bool housekeeping_enabled(enum hk_type type)
 {
 	return !!(READ_ONCE(housekeeping.flags) & BIT(type));
@@ -189,9 +200,20 @@ void __init housekeeping_init(void)
 		WARN_ON_ONCE(cpumask_empty(omask));
 		cpumask_copy(nmask, omask);
 		RCU_INIT_POINTER(housekeeping.cpumasks[type], nmask);
-		memblock_free(omask, cpumask_size());
+		housekeeping_bootmem_masks[type] = omask;
 	}
 }
+
+static int __init housekeeping_free_bootmem_masks(void)
+{
+	enum hk_type type;
+
+	for (type = 0; type < HK_TYPE_MAX; type++)
+		memblock_free(housekeeping_bootmem_masks[type], cpumask_size());
+
+	return 0;
+}
+core_initcall(housekeeping_free_bootmem_masks);
 
 static void __init housekeeping_setup_type(enum hk_type type,
 					   cpumask_var_t housekeeping_staging)
