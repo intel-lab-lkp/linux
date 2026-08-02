@@ -2256,8 +2256,10 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw,
 		else if (rflags & IEEE80211_TX_RC_160_MHZ_WIDTH)
 			bw = NL80211_CHAN_WIDTH_160;
 
-		if (WARN_ON(hwsim_get_chanwidth(bw) > hwsim_get_chanwidth(confbw)))
+		if (hwsim_get_chanwidth(bw) > hwsim_get_chanwidth(confbw)) {
+			ieee80211_free_txskb(hw, skb);
 			return;
+		}
 	}
 
 	/* wmediumd mode check */
