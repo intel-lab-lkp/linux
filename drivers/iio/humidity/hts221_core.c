@@ -521,9 +521,9 @@ static int hts221_validate_trigger(struct iio_dev *iio_dev,
 	return hw->trig == trig ? 0 : -EINVAL;
 }
 
-static IIO_DEVICE_ATTR(in_humidity_oversampling_ratio_available, S_IRUGO,
+static IIO_DEVICE_ATTR(in_humidity_oversampling_ratio_available, 0444,
 		       hts221_sysfs_rh_oversampling_avail, NULL, 0);
-static IIO_DEVICE_ATTR(in_temp_oversampling_ratio_available, S_IRUGO,
+static IIO_DEVICE_ATTR(in_temp_oversampling_ratio_available, 0444,
 		       hts221_sysfs_temp_oversampling_avail, NULL, 0);
 static IIO_DEV_ATTR_SAMP_FREQ_AVAIL(hts221_sysfs_sampling_freq);
 
