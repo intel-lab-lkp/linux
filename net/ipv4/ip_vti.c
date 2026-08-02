@@ -585,7 +585,7 @@ static int vti_newlink(struct net_device *dev,
 
 	vti_netlink_parms(data, &parms, &fwmark);
 	return ip_tunnel_newlink(params->link_net ? : dev_net(dev), dev, tb,
-				 &parms, fwmark);
+				 &parms, fwmark, extack);
 }
 
 static int vti_changelink(struct net_device *dev, struct nlattr *tb[],
@@ -600,7 +600,7 @@ static int vti_changelink(struct net_device *dev, struct nlattr *tb[],
 		return -EPERM;
 
 	vti_netlink_parms(data, &p, &fwmark);
-	return ip_tunnel_changelink(dev, tb, &p, fwmark);
+	return ip_tunnel_changelink(dev, tb, &p, fwmark, extack);
 }
 
 static size_t vti_get_size(const struct net_device *dev)

@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/limits.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/skbuff.h>
@@ -277,16 +278,31 @@ failed:
 	return ERR_PTR(err);
 }
 
-static int ip_tunnel_bind_dev(struct net_device *dev)
+static bool ip_tunnel_headroom_too_large(const struct net_device *dev,
+					 unsigned int needed_headroom)
+{
+	unsigned int hlen;
+
+	hlen = ((dev->hard_header_len + needed_headroom) &
+		~(HH_DATA_MOD - 1)) + HH_DATA_MOD;
+
+	return hlen >= U16_MAX - (sizeof(struct iphdr) + MAX_IPOPTLEN);
+}
+
+static int ip_tunnel_calc_dev_config(struct net_device *dev,
+				     const struct ip_tunnel_parm_kern *parms,
+				     __u32 fwmark,
+				     unsigned int *needed_headroom,
+				     int *mtu,
+				     struct netlink_ext_ack *extack)
 {
 	struct net_device *tdev = NULL;
 	struct ip_tunnel *tunnel = netdev_priv(dev);
-	const struct iphdr *iph;
+	const struct iphdr *iph = &parms->iph;
 	int hlen = LL_MAX_HEADER;
-	int mtu = ETH_DATA_LEN;
 	int t_hlen = tunnel->hlen + sizeof(struct iphdr);
 
-	iph = &tunnel->parms.iph;
+	*mtu = ETH_DATA_LEN;
 
 	/* Guess output device to choose reasonable mtu and needed_headroom */
 	if (iph->daddr) {
@@ -294,36 +310,58 @@ static int ip_tunnel_bind_dev(struct net_device *dev)
 		struct rtable *rt;
 
 		ip_tunnel_init_flow(&fl4, iph->protocol, iph->daddr,
-				    iph->saddr, tunnel->parms.o_key,
+				    iph->saddr, parms->o_key,
 				    iph->tos & INET_DSCP_MASK, tunnel->net,
-				    tunnel->parms.link, tunnel->fwmark, 0, 0);
+				    parms->link, fwmark, 0, 0);
 		rt = ip_route_output_key(tunnel->net, &fl4);
 
 		if (!IS_ERR(rt)) {
 			tdev = rt->dst.dev;
 			ip_rt_put(rt);
 		}
-		if (dev->type != ARPHRD_ETHER)
-			dev->flags |= IFF_POINTOPOINT;
-
-		dst_cache_reset(&tunnel->dst_cache);
 	}
 
-	if (!tdev && tunnel->parms.link)
-		tdev = __dev_get_by_index(tunnel->net, tunnel->parms.link);
+	if (!tdev && parms->link)
+		tdev = __dev_get_by_index(tunnel->net, parms->link);
 
 	if (tdev) {
 		hlen = tdev->hard_header_len + tdev->needed_headroom;
-		mtu = min(tdev->mtu, IP_MAX_MTU);
+		*mtu = min(tdev->mtu, IP_MAX_MTU);
 	}
 
-	dev->needed_headroom = t_hlen + hlen;
-	mtu -= t_hlen + (dev->type == ARPHRD_ETHER ? dev->hard_header_len : 0);
+	*needed_headroom = t_hlen + hlen;
+	if (ip_tunnel_headroom_too_large(dev, *needed_headroom)) {
+		NL_SET_ERR_MSG(extack, "tunnel headroom exceeds skb header offset limit");
+		return -E2BIG;
+	}
 
-	if (mtu < IPV4_MIN_MTU)
-		mtu = IPV4_MIN_MTU;
+	*mtu -= t_hlen + (dev->type == ARPHRD_ETHER ? dev->hard_header_len : 0);
+	if (*mtu < IPV4_MIN_MTU)
+		*mtu = IPV4_MIN_MTU;
 
-	return mtu;
+	return 0;
+}
+
+static int ip_tunnel_bind_dev(struct net_device *dev, int *mtu,
+			      struct netlink_ext_ack *extack)
+{
+	struct ip_tunnel *tunnel = netdev_priv(dev);
+	unsigned int needed_headroom;
+	int err;
+
+	err = ip_tunnel_calc_dev_config(dev, &tunnel->parms, tunnel->fwmark,
+					&needed_headroom, mtu, extack);
+	if (err)
+		return err;
+
+	if (tunnel->parms.iph.daddr) {
+		if (dev->type != ARPHRD_ETHER)
+			dev->flags |= IFF_POINTOPOINT;
+		dst_cache_reset(&tunnel->dst_cache);
+	}
+	dev->needed_headroom = needed_headroom;
+
+	return 0;
 }
 
 static struct ip_tunnel *ip_tunnel_create(struct net *net,
@@ -340,7 +378,9 @@ static struct ip_tunnel *ip_tunnel_create(struct net *net,
 	if (IS_ERR(dev))
 		return ERR_CAST(dev);
 
-	mtu = ip_tunnel_bind_dev(dev);
+	err = ip_tunnel_bind_dev(dev, &mtu, NULL);
+	if (err)
+		goto err_dev_set_mtu;
 	err = dev_set_mtu(dev, mtu);
 	if (err)
 		goto err_dev_set_mtu;
@@ -859,13 +899,20 @@ tx_error:
 }
 EXPORT_SYMBOL_GPL(ip_tunnel_xmit);
 
-static void ip_tunnel_update(struct ip_tunnel_net *itn,
-			     struct ip_tunnel *t,
-			     struct net_device *dev,
-			     struct ip_tunnel_parm_kern *p,
-			     bool set_mtu,
-			     __u32 fwmark)
+static int ip_tunnel_update(struct ip_tunnel_net *itn,
+			    struct ip_tunnel *t, struct net_device *dev,
+			    struct ip_tunnel_parm_kern *p, bool set_mtu,
+			    __u32 fwmark, struct netlink_ext_ack *extack)
 {
+	unsigned int needed_headroom;
+	int mtu;
+	int err;
+
+	err = ip_tunnel_calc_dev_config(dev, p, fwmark, &needed_headroom,
+					&mtu, extack);
+	if (err)
+		return err;
+
 	ip_tunnel_del(itn, t);
 	t->parms.iph.saddr = p->iph.saddr;
 	t->parms.iph.daddr = p->iph.daddr;
@@ -880,18 +927,15 @@ static void ip_tunnel_update(struct ip_tunnel_net *itn,
 	t->parms.iph.ttl = p->iph.ttl;
 	t->parms.iph.tos = p->iph.tos;
 	t->parms.iph.frag_off = p->iph.frag_off;
-
-	if (t->parms.link != p->link || t->fwmark != fwmark) {
-		int mtu;
-
-		WRITE_ONCE(t->parms.link, p->link);
-		t->fwmark = fwmark;
-		mtu = ip_tunnel_bind_dev(dev);
-		if (set_mtu)
-			WRITE_ONCE(dev->mtu, mtu);
-	}
+	WRITE_ONCE(t->parms.link, p->link);
+	t->fwmark = fwmark;
+	dev->needed_headroom = needed_headroom;
+	if (set_mtu)
+		WRITE_ONCE(dev->mtu, mtu);
 	dst_cache_reset(&t->dst_cache);
 	netdev_state_change(dev);
+
+	return 0;
 }
 
 int ip_tunnel_ctl(struct net_device *dev, struct ip_tunnel_parm_kern *p,
@@ -962,8 +1006,7 @@ int ip_tunnel_ctl(struct net_device *dev, struct ip_tunnel_parm_kern *p,
 		}
 
 		if (t) {
-			err = 0;
-			ip_tunnel_update(itn, t, dev, p, true, 0);
+			err = ip_tunnel_update(itn, t, dev, p, true, 0, NULL);
 		} else {
 			err = -ENOENT;
 		}
@@ -1128,6 +1171,7 @@ int ip_tunnel_init_net(struct net *net, unsigned int ip_tnl_net_id,
 	struct ip_tunnel_net *itn = net_generic(net, ip_tnl_net_id);
 	struct ip_tunnel_parm_kern parms;
 	unsigned int i;
+	int mtu;
 
 	itn->rtnl_link_ops = ops;
 	for (i = 0; i < IP_TNL_HASH_SIZE; i++)
@@ -1153,9 +1197,11 @@ int ip_tunnel_init_net(struct net *net, unsigned int ip_tnl_net_id,
 	 */
 	if (!IS_ERR(itn->fb_tunnel_dev)) {
 		itn->fb_tunnel_dev->netns_immutable = true;
-		itn->fb_tunnel_dev->mtu = ip_tunnel_bind_dev(itn->fb_tunnel_dev);
-		ip_tunnel_add(itn, netdev_priv(itn->fb_tunnel_dev));
-		itn->type = itn->fb_tunnel_dev->type;
+		if (!ip_tunnel_bind_dev(itn->fb_tunnel_dev, &mtu, NULL)) {
+			itn->fb_tunnel_dev->mtu = mtu;
+			ip_tunnel_add(itn, netdev_priv(itn->fb_tunnel_dev));
+			itn->type = itn->fb_tunnel_dev->type;
+		}
 	}
 	rtnl_unlock();
 
@@ -1194,7 +1240,7 @@ EXPORT_SYMBOL_GPL(ip_tunnel_delete_net);
 
 int ip_tunnel_newlink(struct net *net, struct net_device *dev,
 		      struct nlattr *tb[], struct ip_tunnel_parm_kern *p,
-		      __u32 fwmark)
+		      __u32 fwmark, struct netlink_ext_ack *extack)
 {
 	struct ip_tunnel *nt;
 	struct ip_tunnel_net *itn;
@@ -1222,7 +1268,9 @@ int ip_tunnel_newlink(struct net *net, struct net_device *dev,
 	if (dev->type == ARPHRD_ETHER && !tb[IFLA_ADDRESS])
 		eth_hw_addr_random(dev);
 
-	mtu = ip_tunnel_bind_dev(dev);
+	err = ip_tunnel_bind_dev(dev, &mtu, extack);
+	if (err)
+		goto err_dev_set_mtu;
 	if (tb[IFLA_MTU]) {
 		unsigned int max = IP_MAX_MTU - (nt->hlen + sizeof(struct iphdr));
 
@@ -1247,7 +1295,8 @@ err_register_netdevice:
 EXPORT_SYMBOL_GPL(ip_tunnel_newlink);
 
 int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
-			 struct ip_tunnel_parm_kern *p, __u32 fwmark)
+			 struct ip_tunnel_parm_kern *p, __u32 fwmark,
+			 struct netlink_ext_ack *extack)
 {
 	struct ip_tunnel *t;
 	struct ip_tunnel *tunnel = netdev_priv(dev);
@@ -1279,8 +1328,7 @@ int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
 		}
 	}
 
-	ip_tunnel_update(itn, t, dev, p, !tb[IFLA_MTU], fwmark);
-	return 0;
+	return ip_tunnel_update(itn, t, dev, p, !tb[IFLA_MTU], fwmark, extack);
 }
 EXPORT_SYMBOL_GPL(ip_tunnel_changelink);
 

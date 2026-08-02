@@ -481,7 +481,7 @@ static int ipip_newlink(struct net_device *dev,
 
 	ipip_netlink_parms(data, &p, &t->collect_md, &fwmark);
 	return ip_tunnel_newlink(params->link_net ? : dev_net(dev), dev, tb, &p,
-				 fwmark);
+				 fwmark, extack);
 }
 
 static int ipip_changelink(struct net_device *dev, struct nlattr *tb[],
@@ -512,7 +512,7 @@ static int ipip_changelink(struct net_device *dev, struct nlattr *tb[],
 	    (!(dev->flags & IFF_POINTOPOINT) && p.iph.daddr))
 		return -EINVAL;
 
-	return ip_tunnel_changelink(dev, tb, &p, fwmark);
+	return ip_tunnel_changelink(dev, tb, &p, fwmark, extack);
 }
 
 static size_t ipip_get_size(const struct net_device *dev)

@@ -1424,7 +1424,7 @@ static int ipgre_newlink(struct net_device *dev,
 	if (err < 0)
 		return err;
 	return ip_tunnel_newlink(params->link_net ? : dev_net(dev), dev, tb, &p,
-				 fwmark);
+				 fwmark, extack);
 }
 
 static int erspan_newlink(struct net_device *dev,
@@ -1445,7 +1445,7 @@ static int erspan_newlink(struct net_device *dev,
 	if (err)
 		return err;
 	return ip_tunnel_newlink(params->link_net ? : dev_net(dev), dev, tb, &p,
-				 fwmark);
+				 fwmark, extack);
 }
 
 static int ipgre_changelink(struct net_device *dev, struct nlattr *tb[],
@@ -1468,7 +1468,7 @@ static int ipgre_changelink(struct net_device *dev, struct nlattr *tb[],
 	if (err < 0)
 		return err;
 
-	err = ip_tunnel_changelink(dev, tb, &p, fwmark);
+	err = ip_tunnel_changelink(dev, tb, &p, fwmark, extack);
 	if (err < 0)
 		return err;
 
@@ -1500,7 +1500,7 @@ static int erspan_changelink(struct net_device *dev, struct nlattr *tb[],
 	if (err < 0)
 		return err;
 
-	err = ip_tunnel_changelink(dev, tb, &p, fwmark);
+	err = ip_tunnel_changelink(dev, tb, &p, fwmark, extack);
 	if (err < 0)
 		return err;
 

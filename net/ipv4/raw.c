@@ -43,6 +43,7 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/limits.h>
 #include <linux/export.h>
 #include <linux/spinlock.h>
 #include <linux/sockios.h>
@@ -356,6 +357,8 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 		goto out;
 
 	hlen = LL_RESERVED_SPACE(rt->dst.dev);
+	if (hlen >= U16_MAX - (sizeof(struct iphdr) + MAX_IPOPTLEN))
+		return -EINVAL;
 	tlen = rt->dst.dev->needed_tailroom;
 	skb = sock_alloc_send_skb(sk,
 				  length + hlen + tlen + 15,
