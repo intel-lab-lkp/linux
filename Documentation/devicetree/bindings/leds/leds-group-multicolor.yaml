@@ -19,6 +19,8 @@ properties:
 
   leds: true
 
+  default-intensity: true
+
 required:
   - leds
 
