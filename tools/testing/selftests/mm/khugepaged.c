@@ -1126,23 +1126,10 @@ static bool range_not_collapsed(void *p, size_t len)
 	return true;
 }
 
-/*
- * Completion barrier: one full khugepaged pass that started after this
- * call. Waiting for full_scans to advance by two guarantees it; a +1
- * step might complete a pass that scanned our mm before the setup.
- */
 static bool khugepaged_wait_full_pass(void)
 {
-	int full_scans = thp_read_num("khugepaged/full_scans") + 2;
-	int timeout = 60; /* 30 seconds */
-
-	while (timeout--) {
-		if (thp_read_num("khugepaged/full_scans") >= full_scans)
-			return true;
-		printf(".");
-		usleep(TICK);
-	}
-	return false;
+	/* Wait up to 30 seconds for the pass to complete. */
+	return khugepaged_full_pass(30);
 }
 
 /*
