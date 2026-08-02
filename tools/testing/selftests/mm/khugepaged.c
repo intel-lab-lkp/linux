@@ -26,9 +26,13 @@
 
 #define BASE_ADDR ((void *)(1UL << 30))
 static unsigned long hpage_pmd_size;
+static int hpage_pmd_order;
 static unsigned long page_size;
 static int hpage_pmd_nr;
 static int anon_order;
+static int anon_target_order;
+static int pagemap_fd = -1;
+static int kpageflags_fd = -1;
 
 #define PID_SMAPS "/proc/self/smaps"
 #define TEST_FILE "collapse_test_file"
@@ -1088,6 +1092,231 @@ static void madvise_retracted_page_tables(struct collapse_context *c,
 	ksft_test_result_report(exit_status, "%s\n", __func__);
 }
 
+/*
+ * Order-parameterized collapse cases (-o <order>): khugepaged collapses
+ * 4K-faulted memory into folios of the given sub-PMD order. Detection is
+ * folio-based (vm_util), not smaps: AnonHugePages only accounts PMD
+ * mappings.
+ *
+ * The region is faulted before MADV_HUGEPAGE and the target order is
+ * configured "inherit" under enabled=madvise, so faults are always
+ * order 0 and the collapse product can only come from khugepaged.
+ */
+static size_t anon_order_size(void)
+{
+	return page_size << anon_target_order;
+}
+
+static bool range_collapsed(void *p, size_t len)
+{
+	return is_range_backed_by_folio_orders(p, len, anon_target_order,
+					       pagemap_fd, kpageflags_fd);
+}
+
+/* No aligned window in [p, p + len) is backed at the target order. */
+static bool range_not_collapsed(void *p, size_t len)
+{
+	size_t window = anon_order_size();
+	char *addr = p;
+
+	for (; len >= window; addr += window, len -= window) {
+		if (range_collapsed(addr, window))
+			return false;
+	}
+	return true;
+}
+
+/*
+ * Completion barrier: one full khugepaged pass that started after this
+ * call. Waiting for full_scans to advance by two guarantees it; a +1
+ * step might complete a pass that scanned our mm before the setup.
+ */
+static bool khugepaged_wait_full_pass(void)
+{
+	int full_scans = thp_read_num("khugepaged/full_scans") + 2;
+	int timeout = 60; /* 30 seconds */
+
+	while (timeout--) {
+		if (thp_read_num("khugepaged/full_scans") >= full_scans)
+			return true;
+		printf(".");
+		usleep(TICK);
+	}
+	return false;
+}
+
+/*
+ * Cases whose geometry needs a window strictly below the PMD skip at
+ * -o <PMD order>; the rest run there unchanged, baselining the legacy
+ * PMD engine with the same test text used for the mTHP orders.
+ */
+static bool skip_at_pmd_order(const char *name)
+{
+	if (anon_target_order < hpage_pmd_order)
+		return false;
+	ksft_test_result_skip("%s: needs a window below the PMD\n", name);
+	return true;
+}
+
+static void collapse_order_full(struct collapse_context *c, struct mem_ops *ops)
+{
+	void *p;
+
+	p = ops->setup_area(1);
+	ops->fault(p, 0, hpage_pmd_size);
+	if (!range_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse fully populated PTE table to target order...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (range_collapsed(p, hpage_pmd_size))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, 0, hpage_pmd_size);
+	ops->cleanup_area(p, hpage_pmd_size);
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
+static void collapse_order_single_window(struct collapse_context *c,
+					 struct mem_ops *ops)
+{
+	size_t window = anon_order_size();
+	void *p;
+
+	if (skip_at_pmd_order(__func__))
+		return;
+
+	p = ops->setup_area(1);
+	ops->fault(p, window, 2 * window);
+	if (!range_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse one fully populated window...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (range_collapsed(p + window, window) &&
+		 range_not_collapsed(p, window) &&
+		 range_not_collapsed(p + 2 * window,
+				     hpage_pmd_size - 2 * window))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, window, 2 * window);
+	ops->cleanup_area(p, hpage_pmd_size);
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
+static void collapse_order_partial_window(struct collapse_context *c,
+					  struct mem_ops *ops)
+{
+	void *p;
+
+	p = ops->setup_area(1);
+	ops->fault(p, 0, page_size);
+	if (!range_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse window with single PTE entry present...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (range_collapsed(p, anon_order_size()))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, 0, page_size);
+	ops->cleanup_area(p, hpage_pmd_size);
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
+static void collapse_order_max_ptes_none(struct collapse_context *c,
+					 struct mem_ops *ops)
+{
+	struct thp_settings settings = *thp_current_settings();
+	size_t window = anon_order_size();
+	void *p;
+
+	if (skip_at_pmd_order(__func__))
+		return;
+
+	settings.khugepaged.max_ptes_none = 0;
+	thp_push_settings(&settings);
+
+	p = ops->setup_area(1);
+	ops->fault(p, 0, 2 * window - page_size);
+	if (!range_not_collapsed(p, hpage_pmd_size))
+		ksft_exit_fail_msg("Unexpected large folio after fault\n");
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse full window, not the one missing a page...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (range_collapsed(p, window) &&
+		 range_not_collapsed(p + window, window))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, 0, 2 * window - page_size);
+	ops->cleanup_area(p, hpage_pmd_size);
+	thp_pop_settings();
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
+/* Smallest order khugepaged will consider for mTHP collapse. */
+#define MIN_MTHP_ORDER 2
+
+/*
+ * A region backed by large folios of a smaller order is a valid source
+ * for collapse to the target order:
+ * __collapse_huge_page_isolate() accepts any source folio of an order
+ * strictly below the candidate's.
+ */
+static void collapse_order_mixed_sources(struct collapse_context *c,
+					 struct mem_ops *ops)
+{
+	struct thp_settings settings = *thp_current_settings();
+	void *p;
+
+	if (anon_target_order <= MIN_MTHP_ORDER) {
+		ksft_test_result_skip("%s: no source order below target\n",
+				      __func__);
+		return;
+	}
+
+	/* Fault the whole region as order-MIN_MTHP_ORDER folios. */
+	settings.hugepages[MIN_MTHP_ORDER].enabled = THP_ALWAYS;
+	thp_push_settings(&settings);
+	p = ops->setup_area(1);
+	ops->fault(p, 0, hpage_pmd_size);
+	thp_pop_settings();
+
+	if (!is_range_backed_by_folio_orders(p, hpage_pmd_size, MIN_MTHP_ORDER,
+					     pagemap_fd, kpageflags_fd))
+		ksft_exit_fail_msg("Region not backed by order-%d folios after fault\n",
+				   MIN_MTHP_ORDER);
+
+	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
+	ksft_print_msg("Collapse region backed by smaller large folios...");
+	if (!khugepaged_wait_full_pass())
+		fail("Timeout");
+	else if (range_collapsed(p, hpage_pmd_size))
+		success("OK");
+	else
+		fail("Fail");
+
+	validate_memory(p, 0, hpage_pmd_size);
+	ops->cleanup_area(p, hpage_pmd_size);
+	ksft_test_result_report(exit_status, "%s\n", __func__);
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "\nUsage: ./khugepaged [OPTIONS] <test type> [dir]\n\n");
@@ -1103,6 +1332,9 @@ static void usage(void)
 	fprintf(stderr,	"\t\t-h: This help message.\n");
 	fprintf(stderr,	"\t\t-s: mTHP size, expressed as page order.\n");
 	fprintf(stderr,	"\t\t    Defaults to 0. Use this size for anon or shmem allocations.\n");
+	fprintf(stderr,	"\t\t-o: collapse target order for khugepaged:anon.\n");
+	fprintf(stderr,	"\t\t    Runs the order-parameterized collapse cases instead\n");
+	fprintf(stderr,	"\t\t    of the PMD cases. Cannot be combined with -s.\n");
 	exit(1);
 }
 
@@ -1112,16 +1344,22 @@ static void parse_test_type(int argc, char **argv)
 	char *buf;
 	const char *token;
 
-	while ((opt = getopt(argc, argv, "s:h")) != -1) {
+	while ((opt = getopt(argc, argv, "s:o:h")) != -1) {
 		switch (opt) {
 		case 's':
 			anon_order = atoi(optarg);
+			break;
+		case 'o':
+			anon_target_order = atoi(optarg);
 			break;
 		case 'h':
 		default:
 			usage();
 		}
 	}
+
+	if (anon_target_order && anon_order)
+		usage();
 
 	argv += optind;
 	argc -= optind;
@@ -1207,7 +1445,6 @@ static int nr_test_cases;
 
 int main(int argc, char **argv)
 {
-	int hpage_pmd_order;
 	struct thp_settings default_settings = {
 		.thp_enabled = THP_MADVISE,
 		.thp_defrag = THP_DEFRAG_ALWAYS,
@@ -1244,6 +1481,13 @@ int main(int argc, char **argv)
 	hpage_pmd_nr = hpage_pmd_size / page_size;
 	hpage_pmd_order = __builtin_ctz(hpage_pmd_nr);
 
+	if (anon_target_order &&
+	    !(thp_supported_orders() & (1UL << anon_target_order)))
+		ksft_exit_skip("Order %d is not a supported anon THP order\n",
+			       anon_target_order);
+	if (anon_target_order > hpage_pmd_order)
+		ksft_exit_fail_msg("-o takes at most the PMD order\n");
+
 	default_settings.khugepaged.max_ptes_none = hpage_pmd_nr - 1;
 	default_settings.khugepaged.max_ptes_swap = hpage_pmd_nr / 8;
 	default_settings.khugepaged.max_ptes_shared = hpage_pmd_nr / 2;
@@ -1253,8 +1497,48 @@ int main(int argc, char **argv)
 	default_settings.shmem_hugepages[hpage_pmd_order].enabled = SHMEM_INHERIT;
 	default_settings.shmem_hugepages[anon_order].enabled = SHMEM_ALWAYS;
 
+	if (anon_target_order) {
+		/*
+		 * Only the target order may produce large folios, and only
+		 * from khugepaged: "inherit" under enabled=madvise keeps
+		 * pre-MADV_HUGEPAGE faults at order 0.
+		 */
+		default_settings.hugepages[hpage_pmd_order].enabled = THP_NEVER;
+		default_settings.hugepages[anon_target_order].enabled = THP_INHERIT;
+		/*
+		 * Order-parameterized cases are driven strictly by the
+		 * khugepaged_full_pass() barrier, which wakes the daemon
+		 * itself. A long scan_sleep keeps khugepaged from
+		 * free-running between barrier steps, and a pages_to_scan
+		 * covering everything makes one wake complete one full
+		 * pass (the barrier's contract), so a run performs a
+		 * deterministic number of passes — what the stage A/B
+		 * trace comparisons rely on.
+		 */
+		default_settings.khugepaged.scan_sleep_millisecs = 60000;
+		default_settings.khugepaged.pages_to_scan = 1UL << 24;
+
+		pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+		if (pagemap_fd < 0)
+			ksft_exit_fail_perror("open(\"/proc/self/pagemap\")");
+		kpageflags_fd = open("/proc/kpageflags", O_RDONLY);
+		if (kpageflags_fd < 0)
+			ksft_exit_skip("open(\"/proc/kpageflags\") requires root\n");
+	}
+
 	save_settings();
 	thp_push_settings(&default_settings);
+
+	if (anon_target_order) {
+		TEST(collapse_order_full, khugepaged_context, anon_ops);
+		TEST(collapse_order_single_window, khugepaged_context, anon_ops);
+		TEST(collapse_order_partial_window, khugepaged_context, anon_ops);
+		TEST(collapse_order_max_ptes_none, khugepaged_context, anon_ops);
+		TEST(collapse_order_mixed_sources, khugepaged_context, anon_ops);
+
+		ksft_set_plan(nr_test_cases);
+		goto run;
+	}
 
 	TEST(collapse_full, khugepaged_context, anon_ops);
 	TEST(collapse_full, khugepaged_context, read_only_file_ops);
@@ -1336,6 +1620,7 @@ int main(int argc, char **argv)
 	ksft_set_plan(nr_test_cases + 1);
 
 	alloc_at_fault();
+run:
 	for (int i = 0; i < nr_test_cases; i++) {
 		struct test_case *t = &test_cases[i];
 
