@@ -46,7 +46,8 @@ properties:
       - description: PCIe PHY clock.
       - description: Additional required clock entry for imx6sx-pcie,
            imx6sx-pcie-ep, imx8mq-pcie, imx8mq-pcie-ep.
-      - description: PCIe internal reference clock.
+      - description: PCIe internal reference clock for imx95-pcie, or the
+          external reference clock for imx8mq-pcie.
       - description: PCIe additional external reference clock.
 
   clock-names:
@@ -173,13 +174,16 @@ allOf:
     then:
       properties:
         clocks:
-          maxItems: 4
+          minItems: 4
+          maxItems: 5
         clock-names:
+          minItems: 4
           items:
             - const: pcie
             - const: pcie_bus
             - const: pcie_phy
             - const: pcie_aux
+            - const: extref  # Optional
 
   - if:
       properties:
