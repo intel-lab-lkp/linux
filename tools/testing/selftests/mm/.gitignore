@@ -67,4 +67,5 @@ prctl_thp_disable
 rmap
 folio_split_race_test
 folio_order_check
+khugepaged_sync_check
 khugepaged_race

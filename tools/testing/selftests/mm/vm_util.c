@@ -411,6 +411,55 @@ bool is_range_backed_by_folio_orders(char *start, size_t len, int order,
 	return true;
 }
 
+#define TRACEFS_ROOT "/sys/kernel/tracing"
+
+static int tracing_events_write(const char *subsys, const char *val)
+{
+	char path[256];
+	int fd;
+
+	snprintf(path, sizeof(path), TRACEFS_ROOT "/events/%s/enable",
+		 subsys);
+	fd = open(path, O_WRONLY);
+	if (fd < 0)
+		return -1;
+	if (write(fd, val, 1) != 1) {
+		close(fd);
+		return -1;
+	}
+	close(fd);
+	return 0;
+}
+
+/*
+ * Enable one ftrace event subsystem (e.g. "huge_memory") and clear the
+ * trace buffer. Returns -1 if tracefs is unavailable; parse the results
+ * via tracing_open_trace() after tracing_events_stop().
+ */
+int tracing_events_start(const char *subsys)
+{
+	int fd;
+
+	if (tracing_events_write(subsys, "1"))
+		return -1;
+
+	fd = open(TRACEFS_ROOT "/trace", O_WRONLY | O_TRUNC);
+	if (fd < 0)
+		return -1;
+	close(fd);
+	return 0;
+}
+
+int tracing_events_stop(const char *subsys)
+{
+	return tracing_events_write(subsys, "0");
+}
+
+FILE *tracing_open_trace(void)
+{
+	return fopen(TRACEFS_ROOT "/trace", "r");
+}
+
 /* If `ioctls' non-NULL, the allowed ioctls will be returned into the var */
 int uffd_register_with_ioctls(int uffd, void *addr, uint64_t len,
 			      bool miss, bool wp, bool minor, uint64_t *ioctls)
