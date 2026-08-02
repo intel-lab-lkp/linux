@@ -105,12 +105,12 @@ static const struct iio_chan_spec htu21_channels[] = {
 		.type = IIO_TEMP,
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_PROCESSED),
 		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),
-	 },
+	},
 	{
 		.type = IIO_HUMIDITYRELATIVE,
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_PROCESSED),
 		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),
-	 }
+	}
 };
 
 /*
@@ -122,7 +122,7 @@ static const struct iio_chan_spec ms8607_channels[] = {
 		.type = IIO_HUMIDITYRELATIVE,
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_PROCESSED),
 		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),
-	 }
+	}
 };
 
 static ssize_t htu21_show_battery_low(struct device *dev,
