@@ -4314,7 +4314,7 @@ static const struct opcode opcode_table[256] = {
 	I(Stack, em_leave),
 	I(ImplicitOps | SrcImmU16 | IsBranch | ShadowStack, em_ret_far_imm),
 	I(ImplicitOps | IsBranch | ShadowStack, em_ret_far),
-	D(ImplicitOps | IsBranch), DI(SrcImmByte | IsBranch | ShadowStack, intn),
+	D(ImplicitOps | IsBranch), DI(SrcImmUByte | IsBranch | ShadowStack, intn),
 	D(ImplicitOps | No64 | IsBranch),
 	II(ImplicitOps | IsBranch | ShadowStack, em_iret, iret),
 	/* 0xD0 - 0xD7 */
