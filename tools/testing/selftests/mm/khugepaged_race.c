@@ -22,6 +22,12 @@
  * clear, zero-filled copy, install-time pte_none() verify and abort)
  * race the faulters directly.
  *
+ * -p adds memory pressure to any of the above: MADV_PAGEOUT cycling
+ * on a dedicated neighbor region (swap traffic and LRU churn; skipped
+ * with a note when the host has no swap) and a compact_memory trigger
+ * loop (compaction migrates source folios, racing collapse's freeze
+ * with refcount elevation and migration entries of its own).
+ *
  * Correctness signals: every racing page must read as its pattern or
  * zero (MADV_DONTNEED), never anything else — checked continuously by
  * the faulters and the fork children and once at the end — plus
@@ -64,6 +70,8 @@ static unsigned long page_size;
 static char *region;		/* NR_AREAS * hpage_pmd_size */
 static char *mremap_area;	/* region + NR_SHARED_AREAS areas */
 static char *mremap_scratch;	/* well above the region */
+static char *pageout_area;	/* -p: dedicated pressure region */
+static size_t pageout_size;
 static int gup_fd = -1;
 static volatile int stop;
 static volatile int corrupted;
@@ -189,6 +197,70 @@ static void *mremapper_fn(void *arg)
 	return NULL;
 }
 
+/*
+ * -p: swap traffic and LRU churn on a region of our own. The content
+ * check is exact — a page out and back through swap must preserve the
+ * pattern, and nothing else ever writes here.
+ */
+static void *pageout_fn(void *arg)
+{
+	unsigned int seed = (unsigned long)arg;
+	unsigned long nr = pageout_size / page_size;
+	unsigned long i;
+
+	for (i = 0; i < nr; i++)
+		*(unsigned int *)(pageout_area + i * page_size) = pattern(i);
+
+	while (!stop) {
+		madvise(pageout_area, pageout_size, MADV_PAGEOUT);
+		for (i = 0; i < nr && !stop; i++) {
+			unsigned int val = *(unsigned int *)(pageout_area +
+							     i * page_size);
+
+			if (val != pattern(i)) {
+				corrupted = 1;
+				ksft_print_msg("Pageout corruption at page %lu: %#x != %#x\n",
+					       i, val, pattern(i));
+			}
+		}
+		usleep(rand_r(&seed) % 2000);
+	}
+	return NULL;
+}
+
+/* -p: compaction migrates the collapse sources out from under us. */
+static void *compactor_fn(void *arg)
+{
+	unsigned int seed = (unsigned long)arg;
+	int fd = open("/proc/sys/vm/compact_memory", O_WRONLY);
+
+	if (fd < 0) {
+		ksft_print_msg("No compact_memory; compactor idle\n");
+		return NULL;
+	}
+	while (!stop) {
+		if (write(fd, "1", 1) < 0)
+			break;
+		usleep(10000 + rand_r(&seed) % 100000);
+	}
+	close(fd);
+	return NULL;
+}
+
+static bool swap_available(void)
+{
+	char line[256];
+	int lines = 0;
+	FILE *fp = fopen("/proc/swaps", "r");
+
+	if (!fp)
+		return false;
+	while (fgets(line, sizeof(line), fp))
+		lines++;
+	fclose(fp);
+	return lines > 1;
+}
+
 static unsigned long now_ms(void)
 {
 	struct timeval tv;
@@ -200,8 +272,9 @@ static unsigned long now_ms(void)
 static void usage(void)
 {
 	fprintf(stderr,
-		"Usage: khugepaged_race [-d seconds] [-m stepped|free|madvise] [-z] [-a areas]\n"
+		"Usage: khugepaged_race [-d seconds] [-m stepped|free|madvise] [-z] [-p] [-a areas]\n"
 		"\t-z: permissive max_ptes_none (hole-heavy windows)\n"
+		"\t-p: memory pressure (pageout + compaction) threads\n"
 		"\t-a: number of shared PMD-sized playground areas (default 3)\n");
 	exit(1);
 }
@@ -210,12 +283,13 @@ int main(int argc, char **argv)
 {
 	static const char * const thread_names[] = {
 		"faulter", "faulter2", "dontneed", "pinner", "forker",
-		"mremapper",
+		"mremapper", "pageout", "compactor",
 	};
 	void *(*const thread_fns[])(void *) = {
 		faulter_fn, faulter_fn, dontneed_fn, pinner_fn, forker_fn,
-		mremapper_fn,
+		mremapper_fn, pageout_fn, compactor_fn,
 	};
+	const unsigned long pageout_bit = 1UL << 6, compactor_bit = 1UL << 7;
 	const int nr_threads = ARRAY_SIZE(thread_names);
 	pthread_t threads[ARRAY_SIZE(thread_names)];
 	const char *mode = "stepped";
@@ -225,11 +299,12 @@ int main(int argc, char **argv)
 	unsigned long thread_mask = ~0UL;
 	int nr_areas_arg = 0;
 	bool permissive_none = false;
+	bool pressure = false;
 	unsigned long i;
 	int steps = 0;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "a:d:m:t:zh")) != -1) {
+	while ((opt = getopt(argc, argv, "a:d:m:t:zph")) != -1) {
 		switch (opt) {
 		case 'a':
 			nr_areas_arg = atoi(optarg);
@@ -246,6 +321,9 @@ int main(int argc, char **argv)
 			break;
 		case 'z':
 			permissive_none = true;
+			break;
+		case 'p':
+			pressure = true;
 			break;
 		default:
 			usage();
@@ -270,6 +348,14 @@ int main(int argc, char **argv)
 
 	nr_shared_areas = nr_areas_arg > 0 ? nr_areas_arg : DEFAULT_SHARED_AREAS;
 	nr_areas = nr_shared_areas + 1;
+
+	if (!pressure) {
+		thread_mask &= ~(pageout_bit | compactor_bit);
+	} else if (!swap_available()) {
+		/* No swap, no anon reclaim: compaction-only pressure. */
+		ksft_print_msg("-p without swap: pageout thread disabled\n");
+		thread_mask &= ~pageout_bit;
+	}
 
 	ksft_set_plan(1);
 
@@ -310,6 +396,21 @@ int main(int argc, char **argv)
 		ksft_exit_fail_msg("Failed to allocate VMA at %p\n", BASE_ADDR);
 	mremap_area = region + nr_shared_areas * hpage_pmd_size;
 	mremap_scratch = (char *)BASE_ADDR + 2 * nr_areas * hpage_pmd_size;
+
+	if (thread_mask & pageout_bit) {
+		/*
+		 * Big enough to cycle real reclaim, small enough not to
+		 * dominate a TCG guest: 4 PMD areas, clamped to [16M, 64M].
+		 */
+		pageout_size = 4 * hpage_pmd_size;
+		pageout_size = pageout_size < (16UL << 20) ? (16UL << 20) :
+			       pageout_size > (64UL << 20) ? (64UL << 20) :
+			       pageout_size;
+		pageout_area = mmap(NULL, pageout_size, PROT_READ | PROT_WRITE,
+				    MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+		if (pageout_area == MAP_FAILED)
+			ksft_exit_fail_perror("mmap() pageout area");
+	}
 
 	/* Populate so the first pass has something to collapse. */
 	for (i = 0; i < nr_shared_areas * hpage_pmd_size / page_size; i++)
