@@ -365,6 +365,52 @@ fail:
 	return false;
 }
 
+/*
+ * Check whether the range [start, start + len) is backed by folios of
+ * exactly @order, mapped at their natural alignment.
+ *
+ * is_backed_by_folio() classifies the folio backing one page; here we
+ * additionally require that each order-aligned window of the range maps
+ * one such folio head-to-tail: the VA range must be naturally aligned,
+ * each window's PFN run must be contiguous, and the first PFN must be
+ * the (naturally aligned) folio head.
+ *
+ * This is the check "did this range collapse into order-@order folios":
+ * a window assembled from parts of several folios, or mapping a folio
+ * shifted from its natural position, fails.
+ */
+bool is_range_backed_by_folio_orders(char *start, size_t len, int order,
+				     int pagemap_fd, int kpageflags_fd)
+{
+	const unsigned long nr_pages = 1UL << order;
+	const size_t window = nr_pages * psize();
+	char *vaddr;
+
+	if ((uintptr_t)start % window || len % window)
+		return false;
+
+	for (vaddr = start; vaddr < start + len; vaddr += window) {
+		unsigned long pfn = pagemap_get_pfn(pagemap_fd, vaddr);
+		unsigned long i;
+
+		/* Not present, or not mapping the folio head. */
+		if (pfn == -1UL || pfn % nr_pages)
+			return false;
+
+		for (i = 1; i < nr_pages; i++) {
+			if (pagemap_get_pfn(pagemap_fd, vaddr + i * psize()) !=
+			    pfn + i)
+				return false;
+		}
+
+		if (!is_backed_by_folio(vaddr, order, pagemap_fd,
+					kpageflags_fd))
+			return false;
+	}
+
+	return true;
+}
+
 /* If `ioctls' non-NULL, the allowed ioctls will be returned into the var */
 int uffd_register_with_ioctls(int uffd, void *addr, uint64_t len,
 			      bool miss, bool wp, bool minor, uint64_t *ioctls)
