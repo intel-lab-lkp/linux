@@ -368,7 +368,12 @@ enum write_ordering_e {
 #define DRBD_MD_INDEX_FLEX_EXT -2
 #define DRBD_MD_INDEX_FLEX_INT -3
 
-#define DRBD_CPU_MASK_SIZE 32
+/*
+ * Maximum size of the cpu-mask string, including the terminating NUL.
+ * The netlink policy accepts DRBD_CPU_MASK_SIZE - 1 characters, which is
+ * enough for a full mask covering 908 CPUs.
+ */
+#define DRBD_CPU_MASK_SIZE 256
 
 /**
  * struct drbd_genlmsghdr - DRBD specific header used in NETLINK_GENERIC requests
