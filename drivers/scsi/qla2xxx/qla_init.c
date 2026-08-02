@@ -10001,10 +10001,16 @@ struct qla_qpair *qla2xxx_create_qpair(struct scsi_qla_host *vha, int qos,
 	return qpair;
 
 fail_bufpool:
-	mempool_destroy(qpair->srb_mempool);
 fail_mempool:
-	qla25xx_delete_req_que(vha, qpair->req);
 fail_req:
+	qpair->delete_in_progress = 1;
+	if (qpair->srb_mempool) {
+		mempool_destroy(qpair->srb_mempool);
+		qpair->srb_mempool = NULL;
+	}
+	if (qpair->hw->wq)
+		cancel_work_sync(&qpair->q_work);
+	qla25xx_delete_req_que(vha, qpair->req);
 	qla25xx_delete_rsp_que(vha, qpair->rsp);
 fail_rsp:
 	mutex_lock(&ha->mq_lock);
@@ -10028,6 +10034,8 @@ int qla2xxx_delete_qpair(struct scsi_qla_host *vha, struct qla_qpair *qpair)
 	struct qla_hw_data *ha = qpair->hw;
 
 	qpair->delete_in_progress = 1;
+	if (qpair->hw->wq)
+		cancel_work_sync(&qpair->q_work);
 
 	qla_free_buf_pool(qpair);
 
