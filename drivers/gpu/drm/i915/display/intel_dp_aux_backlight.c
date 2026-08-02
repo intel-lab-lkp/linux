@@ -136,19 +136,18 @@ intel_dp_aux_supports_hdr_backlight(struct intel_connector *connector)
 		return false;
 
 	/*
-	 * If we don't have HDR static metadata there is no way to
-	 * runtime detect used range for nits based control. For now
-	 * do not use Intel proprietary eDP backlight control if we
-	 * don't have this data in panel EDID. In case we find panel
-	 * which supports only nits based control, but doesn't provide
-	 * HDR static metadata we need to start maintaining table of
-	 * ranges for such panels.
+	 * Nits based control needs to know the panel's luminance range. The
+	 * DRM core fills it in from CTA HDR static metadata, or from the
+	 * DisplayID 2.0 Display Parameters block for the panels that publish
+	 * it only there. With neither there is no way to detect the range at
+	 * runtime, so do not use the Intel proprietary eDP backlight control.
 	 */
 	if (display->params.enable_dpcd_backlight != INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL &&
 	    !(connector->base.display_info.hdr_sink_metadata.hdmi_type1.metadata_type &
-	      BIT(HDMI_STATIC_METADATA_TYPE1))) {
+	      BIT(HDMI_STATIC_METADATA_TYPE1)) &&
+	    !connector->base.display_info.luminance_range.max_luminance) {
 		drm_info(display->drm,
-			 "[CONNECTOR:%d:%s] Panel is missing HDR static metadata. Possible support for Intel HDR backlight interface is not used. If your backlight controls don't work try booting with i915.enable_dpcd_backlight=%d.\n",
+			 "[CONNECTOR:%d:%s] Panel is missing its luminance range. Possible support for Intel HDR backlight interface is not used. If your backlight controls don't work try booting with i915.enable_dpcd_backlight=%d.\n",
 			 connector->base.base.id, connector->base.name,
 			 INTEL_DP_AUX_BACKLIGHT_FORCE_INTEL);
 		return false;
