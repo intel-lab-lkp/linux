@@ -1363,28 +1363,32 @@ static void collapse_order_mixed_sources(struct collapse_context *c,
 					 struct mem_ops *ops)
 {
 	struct thp_settings settings = *thp_current_settings();
+	int source_order = anon_order ? anon_order : MIN_MTHP_ORDER;
 	void *p;
 
-	if (anon_target_order <= MIN_MTHP_ORDER) {
+	/* Sources must be a supported mTHP order strictly below the target. */
+	if (source_order >= anon_target_order ||
+	    !(thp_supported_orders() & (1UL << source_order))) {
 		ksft_test_result_skip("%s: no source order below target\n",
 				      __func__);
 		return;
 	}
 
-	/* Fault the whole region as order-MIN_MTHP_ORDER folios. */
-	settings.hugepages[MIN_MTHP_ORDER].enabled = THP_ALWAYS;
+	/* Fault the whole region as order-@source_order folios. */
+	settings.hugepages[source_order].enabled = THP_ALWAYS;
 	thp_push_settings(&settings);
 	p = ops->setup_area(1);
 	ops->fault(p, 0, hpage_pmd_size);
 	thp_pop_settings();
 
-	if (!is_range_backed_by_folio_orders(p, hpage_pmd_size, MIN_MTHP_ORDER,
+	if (!is_range_backed_by_folio_orders(p, hpage_pmd_size, source_order,
 					     pagemap_fd, kpageflags_fd))
 		ksft_exit_fail_msg("Region not backed by order-%d folios after fault\n",
-				   MIN_MTHP_ORDER);
+				   source_order);
 
 	madvise(p, hpage_pmd_size, MADV_HUGEPAGE);
-	ksft_print_msg("Collapse region backed by smaller large folios...");
+	ksft_print_msg("Collapse region backed by order-%d sources...",
+		       source_order);
 	if (!khugepaged_wait_full_pass())
 		fail("Timeout");
 	else if (range_collapsed(p, hpage_pmd_size))
@@ -1414,7 +1418,9 @@ static void usage(void)
 	fprintf(stderr,	"\t\t    Defaults to 0. Use this size for anon or shmem allocations.\n");
 	fprintf(stderr,	"\t\t-o: collapse target order for khugepaged:anon.\n");
 	fprintf(stderr,	"\t\t    Runs the order-parameterized collapse cases instead\n");
-	fprintf(stderr,	"\t\t    of the PMD cases. Cannot be combined with -s.\n");
+	fprintf(stderr,	"\t\t    of the PMD cases.\n");
+	fprintf(stderr,	"\t\t    With -s, -s names the mTHP source order for the\n");
+	fprintf(stderr,	"\t\t    mixed-source case (source order below the target).\n");
 	exit(1);
 }
 
@@ -1438,7 +1444,15 @@ static void parse_test_type(int argc, char **argv)
 		}
 	}
 
-	if (anon_target_order && anon_order)
+	/*
+	 * -s and -o compose: -s then names the mTHP source order for the
+	 * mixed-source case, which needs a source strictly below the
+	 * target (and at or above the smallest mTHP order). Alone, -s is
+	 * the source order for the default PMD suite; alone, -o is the
+	 * collapse target for the order-parameterized suite.
+	 */
+	if (anon_target_order && anon_order &&
+	    (anon_order < MIN_MTHP_ORDER || anon_order >= anon_target_order))
 		usage();
 
 	argv += optind;
@@ -1573,9 +1587,17 @@ int main(int argc, char **argv)
 	default_settings.khugepaged.max_ptes_shared = hpage_pmd_nr / 2;
 	default_settings.khugepaged.pages_to_scan = hpage_pmd_nr * 8;
 	default_settings.hugepages[hpage_pmd_order].enabled = THP_INHERIT;
-	default_settings.hugepages[anon_order].enabled = THP_ALWAYS;
 	default_settings.shmem_hugepages[hpage_pmd_order].enabled = SHMEM_INHERIT;
-	default_settings.shmem_hugepages[anon_order].enabled = SHMEM_ALWAYS;
+	/*
+	 * Under -o the order-parameterized cases want order-0 sources by
+	 * default; the mixed-source case enables its own (possibly -s
+	 * selected) source order locally. Enabling it globally here would
+	 * make every case fault that order.
+	 */
+	if (!anon_target_order) {
+		default_settings.hugepages[anon_order].enabled = THP_ALWAYS;
+		default_settings.shmem_hugepages[anon_order].enabled = SHMEM_ALWAYS;
+	}
 
 	if (anon_target_order) {
 		/*
