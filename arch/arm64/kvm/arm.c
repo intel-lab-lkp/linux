@@ -3176,4 +3176,9 @@ enum kvm_mode kvm_get_mode(void)
 	return kvm_mode;
 }
 
+void kvm_disable_mode(void)
+{
+	kvm_mode = KVM_MODE_NONE;
+}
+
 module_init(kvm_arm_init);
