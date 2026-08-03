@@ -389,19 +389,25 @@ static void zpci_event_reappear(struct zpci_dev *zdev)
 
 static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 {
-	struct zpci_dev *zdev = get_zdev_by_fid(ccdf->fid);
-	bool existing_zdev = !!zdev;
+	struct zpci_dev *zdev;
 	enum zpci_state state;
 
 	zpci_dbg(3, "avl fid:%x, fh:%x, pec:%x\n",
 		 ccdf->fid, ccdf->fh, ccdf->pec);
 
-	if (existing_zdev)
-		mutex_lock(&zdev->state_lock);
+	/* 0x0306 - No handle or fid stored */
+	if (ccdf->pec == 0x0306) {
+		/* 0x308 or 0x302 for multiple devices */
+		zpci_remove_reserved_devices();
+		zpci_scan_devices();
+		return;
+	}
 
-	switch (ccdf->pec) {
-	case 0x0301: /* Reserved|Standby -> Configured */
-		if (!zdev) {
+	zdev = get_zdev_by_fid(ccdf->fid);
+
+	if (!zdev) {
+		switch (ccdf->pec) {
+		case 0x0301: /* Reserved|Standby -> Configured */
 			zdev = zpci_create_device(ccdf->fid, ccdf->fh, ZPCI_FN_STATE_CONFIGURED);
 			if (IS_ERR(zdev))
 				break;
@@ -409,18 +415,9 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 				kfree(zdev);
 				break;
 			}
-		} else {
-			if (zdev->state == ZPCI_FN_STATE_RESERVED)
-				zpci_event_reappear(zdev);
-			/* the configuration request may be stale */
-			else if (zdev->state != ZPCI_FN_STATE_STANDBY)
-				break;
-			zdev->state = ZPCI_FN_STATE_CONFIGURED;
-		}
-		zpci_scan_configured_device(zdev, ccdf->fh);
-		break;
-	case 0x0302: /* Reserved -> Standby */
-		if (!zdev) {
+			zpci_scan_configured_device(zdev, ccdf->fh);
+			break;
+		case 0x0302: /* Reserved -> Standby */
 			zdev = zpci_create_device(ccdf->fid, ccdf->fh, ZPCI_FN_STATE_STANDBY);
 			if (IS_ERR(zdev))
 				break;
@@ -428,53 +425,54 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 				kfree(zdev);
 				break;
 			}
-		} else {
-			if (zdev->state == ZPCI_FN_STATE_RESERVED)
-				zpci_event_reappear(zdev);
-			zpci_update_fh(zdev, ccdf->fh);
+			break;
 		}
+		return;
+	}
+
+	mutex_lock(&zdev->state_lock);
+	switch (ccdf->pec) {
+	case 0x0301: /* Reserved|Standby -> Configured */
+		if (zdev->state == ZPCI_FN_STATE_RESERVED)
+			zpci_event_reappear(zdev);
+		/* the configuration request may be stale */
+		else if (zdev->state != ZPCI_FN_STATE_STANDBY)
+			break;
+		zdev->state = ZPCI_FN_STATE_CONFIGURED;
+		zpci_scan_configured_device(zdev, ccdf->fh);
+		break;
+	case 0x0302: /* Reserved -> Standby */
+		if (zdev->state == ZPCI_FN_STATE_RESERVED)
+			zpci_event_reappear(zdev);
+		zpci_update_fh(zdev, ccdf->fh);
 		break;
 	case 0x0303: /* Deconfiguration requested */
-		if (zdev) {
-			/* The event may have been queued before we configured
-			 * the device.
-			 */
-			if (zdev->state != ZPCI_FN_STATE_CONFIGURED)
-				break;
-			zpci_update_fh(zdev, ccdf->fh);
-			zpci_deconfigure_device(zdev);
-		}
+		/* The event may have been queued before we configured
+		 * the device.
+		 */
+		if (zdev->state != ZPCI_FN_STATE_CONFIGURED)
+			break;
+		zpci_update_fh(zdev, ccdf->fh);
+		zpci_deconfigure_device(zdev);
 		break;
 	case 0x0304: /* Configured -> Standby|Reserved */
-		if (zdev) {
-			/* The event may have been queued before we configured
-			 * the device.:
-			 */
-			if (zdev->state == ZPCI_FN_STATE_CONFIGURED)
-				zpci_event_hard_deconfigured(zdev, ccdf->fh);
-			/* The 0x0304 event may immediately reserve the device */
-			if (!clp_get_state(zdev->fid, &state) &&
-			    state == ZPCI_FN_STATE_RESERVED) {
-				zpci_device_reserved(zdev);
-			}
+		/* The event may have been queued before we configured
+		 * the device.:
+		 */
+		if (zdev->state == ZPCI_FN_STATE_CONFIGURED)
+			zpci_event_hard_deconfigured(zdev, ccdf->fh);
+		/* The 0x0304 event may immediately reserve the device */
+		if (!clp_get_state(zdev->fid, &state) &&
+		    state == ZPCI_FN_STATE_RESERVED) {
+			zpci_device_reserved(zdev);
 		}
 		break;
-	case 0x0306: /* 0x308 or 0x302 for multiple devices */
-		zpci_remove_reserved_devices();
-		zpci_scan_devices();
-		break;
 	case 0x0308: /* Standby -> Reserved */
-		if (!zdev)
-			break;
 		zpci_device_reserved(zdev);
 		break;
-	default:
-		break;
 	}
-	if (existing_zdev) {
-		mutex_unlock(&zdev->state_lock);
-		zpci_zdev_put(zdev);
-	}
+	mutex_unlock(&zdev->state_lock);
+	zpci_zdev_put(zdev);
 }
 
 void zpci_event_availability(void *data)
