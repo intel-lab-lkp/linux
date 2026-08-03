@@ -228,7 +228,7 @@ static irqreturn_t dw_spi_transfer_handler(struct dw_spi *dws)
 	 */
 	dw_reader(dws);
 	if (!dws->rx_len) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		spi_finalize_current_transfer(dws->ctlr);
 	} else if (dws->rx_len <= dw_readl(dws, DW_SPI_RXFTLR)) {
 		dw_writel(dws, DW_SPI_RXFTLR, dws->rx_len - 1);
@@ -258,7 +258,7 @@ static irqreturn_t dw_spi_irq(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	if (!ctlr->cur_msg) {
-		dw_spi_mask_intr(dws, 0xff);
+		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 		return IRQ_HANDLED;
 	}
 
@@ -445,7 +445,7 @@ static int dw_spi_transfer_one(struct spi_controller *ctlr,
 	dws->dma_mapped = spi_xfer_is_dma_mapped(ctlr, spi, transfer);
 
 	/* For poll mode just disable all interrupts */
-	dw_spi_mask_intr(dws, 0xff);
+	dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 
 	if (dws->dma_mapped) {
 		ret = dws->dma_ops->dma_setup(dws, transfer);
@@ -706,7 +706,7 @@ static int dw_spi_exec_mem_op(struct spi_mem *mem, const struct spi_mem_op *op)
 
 	dw_spi_update_config(dws, mem->spi, &cfg);
 
-	dw_spi_mask_intr(dws, 0xff);
+	dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 
 	dw_spi_enable_chip(dws, 1);
 
