@@ -2093,8 +2093,18 @@ static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 	char *sort   = sort_   ? strdup(sort_) : NULL;
 	int ret;
 
+	/* strdup() returns NULL on OOM, don't silently treat as empty */
+	if ((output_ && !output) || (sort_ && !sort)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
 	PARSE_LIST(output, c2c_hists__init_output);
+	if (ret)
+		goto out;
 	PARSE_LIST(sort,   c2c_hists__init_sort);
+	if (ret)
+		goto out;
 
 	/* copy sort keys to output fields */
 	perf_hpp__setup_output_field(hpp_list);
@@ -2111,6 +2121,7 @@ static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 	perf_hpp__append_sort_keys(&hists->list);
 #endif
 
+out:
 	free(output);
 	free(sort);
 	return ret;
@@ -2281,6 +2292,7 @@ static int resort_cl_cb(struct hist_entry *he, void *arg)
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *c2c_hists;
 	bool display = he__display(he, &c2c.shared_clines_stats);
+	int ret;
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
@@ -2291,7 +2303,9 @@ static int resort_cl_cb(struct hist_entry *he, void *arg)
 		c2c_he->cacheline_idx = idx++;
 		calc_width(c2c_he);
 
-		c2c_hists__reinit(c2c_hists, c2c.cl_output, c2c.cl_resort, env);
+		ret = c2c_hists__reinit(c2c_hists, c2c.cl_output, c2c.cl_resort, env);
+		if (ret)
+			return ret;
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort_cb(&c2c_hists->hists, NULL, filter_cb);
@@ -3356,13 +3370,19 @@ static int perf_c2c__report(int argc, const char **argv)
 	else if (c2c.display == DISPLAY_SNP_PEER)
 		sort_str = "tot_peer";
 
-	c2c_hists__reinit(&c2c.hists, output_str, sort_str, perf_session__env(session));
+	err = c2c_hists__reinit(&c2c.hists, output_str, sort_str, perf_session__env(session));
+	if (err) {
+		pr_err("Failed to reinitialize hists\n");
+		goto out_mem2node;
+	}
 
 	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
 
 	hists__collapse_resort(&c2c.hists.hists, NULL);
 	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_shared_cl_cb);
-	hists__iterate_cb(&c2c.hists.hists, resort_cl_cb, perf_session__env(session));
+	err = hists__iterate_cb(&c2c.hists.hists, resort_cl_cb, perf_session__env(session));
+	if (err)
+		goto out_mem2node;
 
 	ui_progress__finish();
 
