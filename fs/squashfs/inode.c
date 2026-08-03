@@ -156,6 +156,16 @@ int squashfs_read_inode(struct inode *inode, long long ino)
 				goto failed_read;
 			}
 			frag_offset = le32_to_cpu(sqsh_ino->offset);
+			/*
+			 * the tailend has to lie within the uncompressed
+			 * fragment block, which is at most block_size bytes
+			 */
+			if (frag_offset +
+			    (inode->i_size & (msblk->block_size - 1)) >
+					msblk->block_size) {
+				err = -EINVAL;
+				goto failed_read;
+			}
 			frag_size = squashfs_frag_lookup(sb, frag, &frag_blk);
 			if (frag_size < 0) {
 				err = frag_size;
@@ -212,6 +222,16 @@ int squashfs_read_inode(struct inode *inode, long long ino)
 				goto failed_read;
 			}
 			frag_offset = le32_to_cpu(sqsh_ino->offset);
+			/*
+			 * the tailend has to lie within the uncompressed
+			 * fragment block, which is at most block_size bytes
+			 */
+			if (frag_offset +
+			    (inode->i_size & (msblk->block_size - 1)) >
+					msblk->block_size) {
+				err = -EINVAL;
+				goto failed_read;
+			}
 			frag_size = squashfs_frag_lookup(sb, frag, &frag_blk);
 			if (frag_size < 0) {
 				err = frag_size;
