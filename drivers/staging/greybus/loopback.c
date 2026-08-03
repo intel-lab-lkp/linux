@@ -563,7 +563,7 @@ static int gb_loopback_async_sink(struct gb_loopback *gb, u32 len)
 }
 
 static int gb_loopback_async_transfer_complete(
-				struct gb_loopback_async_operation *op_async)
+	struct gb_loopback_async_operation *op_async)
 {
 	struct gb_loopback *gb;
 	struct gb_operation *operation;
