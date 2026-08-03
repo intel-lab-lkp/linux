@@ -831,15 +831,12 @@ void jbd2_journal_wait_updates(journal_t *journal)
 		 */
 		transaction_t *transaction = journal->j_running_transaction;
 
-		if (!transaction)
+		if (!transaction || !atomic_read(&transaction->t_updates))
 			break;
 
 		prepare_to_wait(&journal->j_wait_updates, &wait,
 				TASK_UNINTERRUPTIBLE);
-		if (!atomic_read(&transaction->t_updates)) {
-			finish_wait(&journal->j_wait_updates, &wait);
-			break;
-		}
+
 		write_unlock(&journal->j_state_lock);
 		schedule();
 		finish_wait(&journal->j_wait_updates, &wait);
