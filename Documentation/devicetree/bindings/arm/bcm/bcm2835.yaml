@@ -29,6 +29,12 @@ properties:
               - raspberrypi,5-model-b
           - const: brcm,bcm2712
 
+      - description: BCM2712 based Boards d0 stepping
+        items:
+          - const: raspberrypi,5-model-b-d0
+          - const: raspberrypi,5-model-b
+          - const: brcm,bcm2712
+
       - description: BCM2835 based Boards
         items:
           - enum:
