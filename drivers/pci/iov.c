@@ -646,6 +646,46 @@ failed:
 	return rc;
 }
 
+static void sriov_restore_vf_rebar_initial_sizes(struct pci_dev *dev)
+{
+	struct pci_sriov *iov = dev->sriov;
+	u16 ctrl;
+	int i;
+
+	if (!iov || !iov->vf_rebar_cap)
+		return;
+
+	/* Skip if device is inaccessible (surprise-removed, D3cold). */
+	pci_read_config_word(dev, iov->pos + PCI_SRIOV_CTRL, &ctrl);
+	if (PCI_POSSIBLE_ERROR(ctrl))
+		return;
+
+	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
+		int resno = pci_resource_num_from_vf_bar(i);
+		resource_size_t orig_sz = iov->barsz_orig[i];
+		resource_size_t cur_sz = iov->barsz[i];
+		int size, cur, rc;
+
+		if (!orig_sz || cur_sz == orig_sz)
+			continue;
+
+		size = pci_rebar_bytes_to_size(orig_sz);
+		rc = pci_iov_vf_bar_set_size(dev, resno, size);
+		if (!rc)
+			continue;
+
+		pci_warn(dev, "failed to restore %s size %#llx -> %#llx: %d\n",
+			 pci_resource_name(dev, resno),
+			 (unsigned long long)cur_sz,
+			 (unsigned long long)orig_sz, rc);
+
+		/* Re-sync in-memory size with what hardware actually has. */
+		cur = pci_rebar_get_current_size(dev, resno);
+		if (cur >= 0)
+			iov->barsz[i] = pci_rebar_size_to_bytes(cur);
+	}
+}
+
 static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 {
 	int rc;
@@ -666,12 +706,16 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_INITIAL_VF, &initial);
 	if (initial > iov->total_VFs ||
-	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (initial != iov->total_VFs)))
-		return -EIO;
+	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (initial != iov->total_VFs))) {
+		rc = -EIO;
+		goto err_restore;
+	}
 
 	if (nr_virtfn < 0 || nr_virtfn > iov->total_VFs ||
-	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (nr_virtfn > initial)))
-		return -EINVAL;
+	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (nr_virtfn > initial))) {
+		rc = -EINVAL;
+		goto err_restore;
+	}
 
 	nres = 0;
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
@@ -687,36 +731,42 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 	}
 	if (nres != iov->nres) {
 		pci_err(dev, "not enough MMIO resources for SR-IOV\n");
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err_restore;
 	}
 
 	bus = pci_iov_virtfn_bus(dev, nr_virtfn - 1);
 	if (bus > dev->bus->busn_res.end) {
 		pci_err(dev, "can't enable %d VFs (bus %02x out of range of %pR)\n",
 			nr_virtfn, bus, &dev->bus->busn_res);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err_restore;
 	}
 
 	if (pci_enable_resources(dev, bars)) {
 		pci_err(dev, "SR-IOV: IOV BARS not allocated\n");
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err_restore;
 	}
 
 	if (iov->link != dev->devfn) {
 		pdev = pci_get_slot(dev->bus, iov->link);
-		if (!pdev)
-			return -ENODEV;
+		if (!pdev) {
+			rc = -ENODEV;
+			goto err_restore;
+		}
 
 		if (!pdev->is_physfn) {
 			pci_dev_put(pdev);
-			return -ENOSYS;
+			rc = -ENOSYS;
+			goto err_restore;
 		}
 
 		rc = sysfs_create_link(&dev->dev.kobj,
 					&pdev->dev.kobj, "dep_link");
 		pci_dev_put(pdev);
 		if (rc)
-			return rc;
+			goto err_restore;
 	}
 
 	iov->initial_VFs = initial;
@@ -758,6 +808,12 @@ err_pcibios:
 		sysfs_remove_link(&dev->dev.kobj, "dep_link");
 
 	pci_iov_set_numvfs(dev, 0);
+	sriov_restore_vf_rebar_initial_sizes(dev);
+	return rc;
+
+err_restore:
+	/* pcibios_sriov_enable() was not called on these early-exit paths. */
+	sriov_restore_vf_rebar_initial_sizes(dev);
 	return rc;
 }
 
@@ -791,6 +847,7 @@ static void sriov_disable(struct pci_dev *dev)
 
 	iov->num_VFs = 0;
 	pci_iov_set_numvfs(dev, 0);
+	sriov_restore_vf_rebar_initial_sizes(dev);
 }
 
 static int sriov_init(struct pci_dev *dev, int pos)
