@@ -57,6 +57,20 @@ static int apple_spmi_wait_rx_not_empty(struct spmi_controller *ctrl)
 	return 0;
 }
 
+static void flush_extra_data(struct spmi_controller *ctrl)
+{
+	struct apple_spmi *spmi = spmi_controller_get_drvdata(ctrl);
+	bool warned = false;
+
+	while (!(readl(spmi->regs + SPMI_STATUS_REG) & SPMI_RX_FIFO_EMPTY)) {
+		if (!warned) {
+			dev_warn(&ctrl->dev, "FIFO has extra data\n");
+			warned = true;
+		}
+		readl(spmi->regs + SPMI_RSP_REG);
+	}
+}
+
 static int spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 			 u16 saddr, u8 *buf, size_t len)
 {
@@ -78,6 +92,11 @@ static int spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 
 	/* Read SPMI data reply */
 	while (len_read < len) {
+		if (readl(spmi->regs + SPMI_STATUS_REG) & SPMI_RX_FIFO_EMPTY) {
+			dev_err_ratelimited(&ctrl->dev,
+					    "FIFO lacks reply data, controller stuck?\n");
+			return -EIO;
+		}
 		rsp = readl(spmi->regs + SPMI_RSP_REG);
 		i = 0;
 		while ((len_read < len) && (i < 4)) {
@@ -85,6 +104,8 @@ static int spmi_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 			i += 1;
 		}
 	}
+
+	flush_extra_data(ctrl);
 
 	return 0;
 }
@@ -114,6 +135,8 @@ static int spmi_write_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 
 	/* Discard */
 	readl(spmi->regs + SPMI_RSP_REG);
+
+	flush_extra_data(ctrl);
 
 	return 0;
 }
