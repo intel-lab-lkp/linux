@@ -132,7 +132,7 @@ int can_calc_bittiming(const struct net_device *dev, struct can_bittiming *bt,
 			continue;
 
 		bitrate = priv->clock.freq / (brp * tsegall);
-		bitrate_error = abs(bt->bitrate - bitrate);
+		bitrate_error = abs_diff(bt->bitrate, bitrate);
 
 		/* tseg brp biterror */
 		if (bitrate_error > best_bitrate_error)
