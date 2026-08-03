@@ -781,6 +781,13 @@ int risp_core_registered(struct rcar_isp_core *core, struct v4l2_subdev *sd)
 	return 0;
 }
 
+static void risp_core_put_device(void *data)
+{
+	struct device *dev = data;
+
+	put_device(dev);
+}
+
 static int risp_core_probe_resources(struct rcar_isp_core *core,
 				     struct platform_device *pdev)
 {
@@ -820,8 +827,14 @@ static int risp_core_probe_resources(struct rcar_isp_core *core,
 		return -ENODEV;
 
 	vspx = of_find_device_by_node(of_vspx);
+	of_node_put(of_vspx);
 	if (!vspx)
 		return -ENODEV;
+
+	ret = devm_add_action_or_reset(&pdev->dev, risp_core_put_device,
+				       &vspx->dev);
+	if (ret)
+		return ret;
 
 	/* Attach to VSP-X */
 	core->vspx.dev = &vspx->dev;
