@@ -1538,6 +1538,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x94>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x98>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1559,6 +1560,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x95>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x99>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1580,6 +1582,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x96>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x9a>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1601,6 +1604,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x97>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x9b>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1622,6 +1626,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x98>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x9c>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1643,6 +1648,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x99>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x9d>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1664,6 +1670,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x9a>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x9e>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1685,6 +1692,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x9b>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0x9f>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
@@ -1706,6 +1714,7 @@
 			interrupt-names = "tei", "ri", "ti", "spi", "sti",
 					  "naki", "ali", "tmoi";
 			clocks = <&cpg CPG_MOD 0x93>;
+			clock-frequency = <100000>;
 			resets = <&cpg 0xa0>;
 			power-domains = <&cpg>;
 			#address-cells = <1>;
