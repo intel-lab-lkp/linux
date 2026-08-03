@@ -3053,7 +3053,7 @@ int __ksm_enter(struct mm_struct *mm)
 {
 	struct ksm_mm_slot *mm_slot;
 	struct mm_slot *slot;
-	int needs_wakeup;
+	bool needs_wakeup;
 
 	mm_slot = mm_slot_alloc(mm_slot_cache);
 	if (!mm_slot)
@@ -3061,10 +3061,9 @@ int __ksm_enter(struct mm_struct *mm)
 
 	slot = &mm_slot->slot;
 
+	spin_lock(&ksm_mmlist_lock);
 	/* Check ksm_run too?  Would need tighter locking */
 	needs_wakeup = list_empty(&ksm_mm_head.slot.mm_node);
-
-	spin_lock(&ksm_mmlist_lock);
 	mm_slot_insert(mm_slots_hash, mm, slot);
 	/*
 	 * When KSM_RUN_MERGE (or KSM_RUN_STOP),
