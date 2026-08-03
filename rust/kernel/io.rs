@@ -80,6 +80,7 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 /// # Examples
 ///
 /// ```no_run
+/// # #![cfg(CONFIG_HAS_IOMEM)]
 /// use kernel::{
 ///     bindings,
 ///     ffi::c_void,
