@@ -705,7 +705,7 @@ void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 		free_pages((unsigned long)pgd, get_order(kvm_riscv_gstage_pgd_size));
 }
 
-void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
+void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu, int cpu)
 {
 	struct kvm_arch *ka = &vcpu->kvm->arch;
 	unsigned long hgatp = kvm_riscv_gstage_mode(ka->pgd_levels)
@@ -718,4 +718,7 @@ void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
 
 	if (!kvm_riscv_gstage_vmid_bits())
 		kvm_riscv_local_hfence_gvma_all();
+
+	if (vcpu->arch.last_exit_cpu != cpu)
+		asm volatile(HFENCE_VVMA(zero, zero) : : : "memory");
 }
