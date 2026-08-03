@@ -217,6 +217,12 @@ static bool __futex_pivot_hash(struct mm_struct *mm, struct futex_private_hash *
 		rcu_assign_pointer(mmph->hash, new);
 	}
 	kvfree_rcu(fph, rcu);
+	/*
+	 * Pair with set_current_state() in wait_var_event(), as required by
+	 * the lockless waitqueue_active() check in wake_up_var().
+	 */
+	smp_mb();
+	wake_up_var(mm);
 	return true;
 }
 
