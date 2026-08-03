@@ -1431,9 +1431,23 @@ static ssize_t vmpl_show(struct kobject *kobj,
 	return sysfs_emit(buf, "%d\n", snp_vmpl);
 }
 
-static struct kobj_attribute vmpl_attr = __ATTR_RO(vmpl);
+static ssize_t sev_status_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "0x%llx\n", sev_status);
+}
 
-static struct attribute_group sev_attr_group = {};
+static struct kobj_attribute vmpl_attr = __ATTR_RO(vmpl);
+static struct kobj_attribute sev_status_attr = __ATTR_RO(sev_status);
+
+static struct attribute *sev_status_attrs[] = {
+	&sev_status_attr.attr,
+	NULL
+};
+
+static struct attribute_group sev_attr_group = {
+	.attrs = sev_status_attrs,
+};
 
 static int __init sev_sysfs_init(void)
 {
