@@ -1295,6 +1295,7 @@ static ssize_t epf_ntb_##_name##_show(struct config_item *item,		\
 	struct config_group *group = to_config_group(item);		\
 	struct epf_ntb *ntb = to_epf_ntb(group);			\
 	struct device *dev = &ntb->epf->dev;				\
+	u32 packed_mws;							\
 	int win_no, idx;						\
 									\
 	if (sscanf(#_name, "mw%d", &win_no) != 1)			\
@@ -1305,6 +1306,14 @@ static ssize_t epf_ntb_##_name##_show(struct config_item *item,		\
 		dev_err(dev, "MW%d out of range (num_mws=%d)\n",	\
 			win_no, ntb->num_mws);				\
 		return -ERANGE;						\
+	}								\
+	packed_mws = ntb->packed_mws;					\
+	if (packed_mws && idx > 0) {					\
+		u64 size = ntb->mws_size[0];				\
+									\
+		if (size % packed_mws)					\
+			return -EINVAL;					\
+		return sprintf(page, "%llu\n", size / packed_mws);	\
 	}								\
 	idx = array_index_nospec(idx, ntb->num_mws);			\
 	return sprintf(page, "%llu\n", ntb->mws_size[idx]);		\
@@ -1337,6 +1346,8 @@ static ssize_t epf_ntb_##_name##_store(struct config_item *item,	\
 			win_no, ntb->num_mws);				\
 		return -ERANGE;						\
 	}								\
+	if (ntb->packed_mws && idx > 0)					\
+		return -EINVAL;						\
 	idx = array_index_nospec(idx, ntb->num_mws);			\
 	ntb->mws_size[idx] = val;					\
 									\
@@ -1372,6 +1383,9 @@ static ssize_t epf_ntb_##_name##_store(struct config_item *item,	\
 		if (val < NO_BAR || val > BAR_5)			\
 			return -EINVAL;					\
 									\
+		if (ntb->packed_mws && _id >= BAR_MW2)			\
+			return -EINVAL;					\
+									\
 		ntb->epf_ntb_bar[_id] = val;				\
 									\
 		return len;						\
@@ -1392,10 +1406,51 @@ static ssize_t epf_ntb_num_mws_store(struct config_item *item,
 	if (ret)
 		return ret;
 
-	if (val > MAX_MW)
+	if (val > EPF_NTB_MAX_MW)
+		return -EINVAL;
+
+	if (ntb->packed_mws && val != ntb->packed_mws)
 		return -EINVAL;
 
 	ntb->num_mws = val;
+
+	return len;
+}
+
+static ssize_t epf_ntb_packed_mws_store(struct config_item *item,
+					const char *page, size_t len)
+{
+	struct config_group *group = to_config_group(item);
+	struct epf_ntb *ntb = to_epf_ntb(group);
+	u32 val;
+	int ret;
+	int i;
+
+	if (epf_ntb_epc_attached(ntb))
+		return -EOPNOTSUPP;
+
+	ret = kstrtou32(page, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val > EPF_NTB_MAX_MW ||
+	    (val && (val < 2 || !is_power_of_2(val))))
+		return -EINVAL;
+
+	if (val && ntb->num_mws && val != ntb->num_mws)
+		return -EINVAL;
+
+	if (val) {
+		for (i = 1; i < MAX_MW; i++)
+			if (ntb->mws_size[i])
+				return -EINVAL;
+
+		for (i = BAR_MW2; i <= BAR_MW4; i++)
+			if (ntb->epf_ntb_bar[i] != NO_BAR)
+				return -EINVAL;
+	}
+
+	ntb->packed_mws = val;
 
 	return len;
 }
@@ -1427,6 +1482,7 @@ EPF_NTB_R(spad_count)
 EPF_NTB_W(spad_count)
 EPF_NTB_R(db_count)
 EPF_NTB_R(num_mws)
+EPF_NTB_R(packed_mws)
 EPF_NTB_R(vbus_number)
 EPF_NTB_W(vbus_number)
 EPF_NTB_R(vntb_pid)
@@ -1457,6 +1513,7 @@ EPF_NTB_BAR_W(mw4_bar, BAR_MW4)
 CONFIGFS_ATTR(epf_ntb_, spad_count);
 CONFIGFS_ATTR(epf_ntb_, db_count);
 CONFIGFS_ATTR(epf_ntb_, num_mws);
+CONFIGFS_ATTR(epf_ntb_, packed_mws);
 CONFIGFS_ATTR(epf_ntb_, mw1);
 CONFIGFS_ATTR(epf_ntb_, mw2);
 CONFIGFS_ATTR(epf_ntb_, mw3);
@@ -1475,6 +1532,7 @@ static struct configfs_attribute *epf_ntb_attrs[] = {
 	&epf_ntb_attr_spad_count,
 	&epf_ntb_attr_db_count,
 	&epf_ntb_attr_num_mws,
+	&epf_ntb_attr_packed_mws,
 	&epf_ntb_attr_mw1,
 	&epf_ntb_attr_mw2,
 	&epf_ntb_attr_mw3,

@@ -92,7 +92,7 @@ attributes that can be configured by the user::
 	# ls functions/pci_epf_vntb/func1/pci_epf_vntb.0/
 	ctrl_bar  db_count  mw1_bar  mw2_bar  mw3_bar  mw4_bar	spad_count
 	db_bar	  mw1	    mw2      mw3      mw4      num_mws	vbus_number
-	vntb_vid  vntb_pid
+	vntb_vid  vntb_pid  packed_mws
 
 A sample configuration for NTB function is given below::
 
@@ -104,6 +104,20 @@ A sample configuration for NTB function is given below::
 By default, each construct is assigned a BAR, as needed and in order.
 Should a specific BAR setup be required by the platform, BAR may be assigned
 to each construct using the related ``XYZ_bar`` entry.
+
+Without packing, ``num_mws`` is limited to four and each memory window uses
+its corresponding ``mwN`` size and ``mwN_bar``. To expose 2, 4, 8, or 16
+logical memory windows in one BAR, set ``packed_mws`` to the same value as
+``num_mws``. In that mode, ``mw1`` is the aggregate BAR size and must be a
+power of two no larger than 2 GiB. It is divided equally
+into 4 KiB-aligned logical windows, and ``mw1_bar`` is their shared BAR. The
+``mw2`` through ``mw4`` entries report the logical window size when in range
+and reject writes.
+
+Packed MWs require an NTB client that uses MW translation group operations;
+``ntb_transport`` supports them. Per-MW size limiting through its
+``max_mw_size`` parameter is not supported. ``ntb_transport`` also needs four
+control scratchpads plus two scratchpads per logical MW.
 
 A sample configuration for virtual NTB driver for virtual PCI bus::
 
