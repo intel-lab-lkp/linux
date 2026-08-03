@@ -493,6 +493,24 @@ static int mem_check(struct sock *sk)
 	return 0;
 }
 
+static int mem_check_dup(struct sock *sk)
+{
+	struct ipv6_fl_socklist *sfl;
+	int count = 0;
+
+	lockdep_assert_held(&ip6_fl_lock);
+
+	rcu_read_lock();
+	for_each_sk_fl_rcu(sk, sfl)
+		count++;
+	rcu_read_unlock();
+
+	if (count >= FL_MAX_PER_SOCK && !capable(CAP_NET_ADMIN))
+		return -ENOBUFS;
+
+	return 0;
+}
+
 static inline void fl_link(struct sock *sk, struct ipv6_fl_socklist *sfl,
 			   struct ip6_flowlabel *fl)
 {
@@ -679,10 +697,17 @@ recheck:
 			err = -ENOMEM;
 			if (!sfl1)
 				goto release;
-			if (fl->linger > fl1->linger)
-				fl1->linger = fl->linger;
-			if ((long)(fl->expires - fl1->expires) > 0)
-				fl1->expires = fl->expires;
+			spin_lock_bh(&ip6_fl_lock);
+			err = mem_check_dup(sk);
+			if (err == 0) {
+				if (fl->linger > fl1->linger)
+					fl1->linger = fl->linger;
+				if ((long)(fl->expires - fl1->expires) > 0)
+					fl1->expires = fl->expires;
+			}
+			spin_unlock_bh(&ip6_fl_lock);
+			if (err != 0)
+				goto release;
 			fl_link(sk, sfl1, fl1);
 			fl_free(fl);
 			return 0;
