@@ -801,7 +801,7 @@ static void cdns_spi_remove(struct platform_device *pdev)
  *
  * Return:	0 on success and error value on error
  */
-static int __maybe_unused cdns_spi_suspend(struct device *dev)
+static int cdns_spi_suspend(struct device *dev)
 {
 	struct spi_controller *ctlr = dev_get_drvdata(dev);
 
@@ -816,7 +816,7 @@ static int __maybe_unused cdns_spi_suspend(struct device *dev)
  *
  * Return:	0 on success and error value on error
  */
-static int __maybe_unused cdns_spi_resume(struct device *dev)
+static int cdns_spi_resume(struct device *dev)
 {
 	struct spi_controller *ctlr = dev_get_drvdata(dev);
 	struct cdns_spi *xspi = spi_controller_get_devdata(ctlr);
@@ -833,7 +833,7 @@ static int __maybe_unused cdns_spi_resume(struct device *dev)
  *
  * Return:	0 on success and error value on error
  */
-static int __maybe_unused cdns_spi_runtime_resume(struct device *dev)
+static int cdns_spi_runtime_resume(struct device *dev)
 {
 	struct spi_controller *ctlr = dev_get_drvdata(dev);
 	struct cdns_spi *xspi = spi_controller_get_devdata(ctlr);
@@ -862,7 +862,7 @@ static int __maybe_unused cdns_spi_runtime_resume(struct device *dev)
  *
  * Return:	Always 0
  */
-static int __maybe_unused cdns_spi_runtime_suspend(struct device *dev)
+static int cdns_spi_runtime_suspend(struct device *dev)
 {
 	struct spi_controller *ctlr = dev_get_drvdata(dev);
 	struct cdns_spi *xspi = spi_controller_get_devdata(ctlr);
@@ -874,9 +874,8 @@ static int __maybe_unused cdns_spi_runtime_suspend(struct device *dev)
 }
 
 static const struct dev_pm_ops cdns_spi_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(cdns_spi_runtime_suspend,
-			   cdns_spi_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(cdns_spi_suspend, cdns_spi_resume)
+	RUNTIME_PM_OPS(cdns_spi_runtime_suspend, cdns_spi_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(cdns_spi_suspend, cdns_spi_resume)
 };
 
 static const struct of_device_id cdns_spi_of_match[] = {
@@ -894,7 +893,7 @@ static struct platform_driver cdns_spi_driver = {
 	.driver = {
 		.name = CDNS_SPI_NAME,
 		.of_match_table = cdns_spi_of_match,
-		.pm = &cdns_spi_dev_pm_ops,
+		.pm = pm_ptr(&cdns_spi_dev_pm_ops),
 	},
 };
 
