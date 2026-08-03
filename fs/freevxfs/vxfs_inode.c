@@ -107,6 +107,14 @@ static inline void dip2vip_cpy(struct vxfs_sb_info *sbi,
 	i_gid_write(inode, (gid_t)vip->vii_gid);
 
 	set_nlink(inode, vip->vii_nlink);
+
+	/*
+	 * For immed inodes all data lives in the VXFS_NIMMED-byte
+	 * immediate area of the inode itself, so a larger on-disk size
+	 * is bogus and must not be trusted.
+	 */
+	if (VXFS_ISIMMED(vip) && vip->vii_size > VXFS_NIMMED)
+		vip->vii_size = VXFS_NIMMED;
 	inode->i_size = vip->vii_size;
 
 	inode_set_atime(inode, vip->vii_atime, 0);
