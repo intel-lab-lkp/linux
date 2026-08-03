@@ -4536,7 +4536,7 @@ static loff_t ocfs2_reflink_remap_extent(struct inode *s_inode,
 		/* Punch out the dest range. */
 		pstart = ocfs2_clusters_to_bytes(t_inode->i_sb, tpos);
 		plen = ocfs2_clusters_to_bytes(t_inode->i_sb, num_clusters);
-		ret = ocfs2_remove_inode_range(t_inode, t_bh, pstart, plen);
+		ret = ocfs2_remove_inode_range(t_inode, t_bh, pstart, plen, NULL);
 		if (ret) {
 			mlog_errno(ret);
 			goto out;

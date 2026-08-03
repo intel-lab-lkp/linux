@@ -7412,12 +7412,12 @@ bail:
 /*
  * 'start' is inclusive, 'end' is not.
  */
-int ocfs2_truncate_inline(struct inode *inode, struct buffer_head *di_bh,
-			  unsigned int start, unsigned int end, int trunc)
+int ocfs2_truncate_inline(handle_t *handle, struct inode *inode,
+			  struct buffer_head *di_bh, unsigned int start,
+			  unsigned int end, int trunc)
 {
 	int ret;
 	unsigned int numbytes;
-	handle_t *handle;
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 	struct ocfs2_dinode *di = (struct ocfs2_dinode *)di_bh->b_data;
 	struct ocfs2_inline_data *idata = &di->id2.i_data;
@@ -7444,18 +7444,11 @@ int ocfs2_truncate_inline(struct inode *inode, struct buffer_head *di_bh,
 		goto out;
 	}
 
-	handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS);
-	if (IS_ERR(handle)) {
-		ret = PTR_ERR(handle);
-		mlog_errno(ret);
-		goto out;
-	}
-
 	ret = ocfs2_journal_access_di(handle, INODE_CACHE(inode), di_bh,
 				      OCFS2_JOURNAL_ACCESS_WRITE);
 	if (ret) {
 		mlog_errno(ret);
-		goto out_commit;
+		goto out;
 	}
 
 	numbytes = end - start;
@@ -7480,9 +7473,6 @@ int ocfs2_truncate_inline(struct inode *inode, struct buffer_head *di_bh,
 
 	ocfs2_update_inode_fsync_trans(handle, inode, 1);
 	ocfs2_journal_dirty(handle, di_bh);
-
-out_commit:
-	ocfs2_commit_trans(osb, handle);
 
 out:
 	return ret;

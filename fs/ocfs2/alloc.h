@@ -217,8 +217,9 @@ int ocfs2_zero_range_for_truncate(struct inode *inode, handle_t *handle,
 int ocfs2_commit_truncate(struct ocfs2_super *osb,
 			  struct inode *inode,
 			  struct buffer_head *di_bh);
-int ocfs2_truncate_inline(struct inode *inode, struct buffer_head *di_bh,
-			  unsigned int start, unsigned int end, int trunc);
+int ocfs2_truncate_inline(handle_t *handle, struct inode *inode,
+			  struct buffer_head *di_bh, unsigned int start,
+			  unsigned int end, int trunc);
 
 int ocfs2_find_leaf(struct ocfs2_caching_info *ci,
 		    struct ocfs2_extent_list *root_el, u32 cpos,

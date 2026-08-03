@@ -441,6 +441,7 @@ int ocfs2_truncate_file(struct inode *inode,
 			       u64 new_i_size)
 {
 	int status = 0;
+	handle_t *handle = NULL;
 	struct ocfs2_dinode *fe = NULL;
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 
@@ -474,7 +475,23 @@ int ocfs2_truncate_file(struct inode *inode,
 		goto bail;
 	}
 
+	if ((OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) &&
+	    new_i_size < i_size_read(inode)) {
+		handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS);
+		if (IS_ERR(handle)) {
+			status = PTR_ERR(handle);
+			handle = NULL;
+			mlog_errno(status);
+			goto bail;
+		}
+	}
+
 	down_write(&OCFS2_I(inode)->ip_alloc_sem);
+	if (!(OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) &&
+	    handle) {
+		ocfs2_commit_trans(osb, handle);
+		handle = NULL;
+	}
 
 	ocfs2_resv_discard(&osb->osb_la_resmap,
 			   &OCFS2_I(inode)->ip_la_data_resv);
@@ -491,10 +508,19 @@ int ocfs2_truncate_file(struct inode *inode,
 		unmap_mapping_range(inode->i_mapping,
 				    new_i_size + PAGE_SIZE - 1, 0, 1);
 		truncate_inode_pages(inode->i_mapping, new_i_size);
-		status = ocfs2_truncate_inline(inode, di_bh, new_i_size,
-					       i_size_read(inode), 1);
-		if (status)
-			mlog_errno(status);
+		if (new_i_size < i_size_read(inode)) {
+			if (unlikely(!handle)) {
+				status = -EIO;
+				mlog_errno(status);
+				goto bail_unlock_sem;
+			}
+
+			status = ocfs2_truncate_inline(handle, inode, di_bh,
+						       new_i_size,
+						       i_size_read(inode), 1);
+			if (status)
+				mlog_errno(status);
+		}
 
 		goto bail_unlock_sem;
 	}
@@ -521,6 +547,8 @@ int ocfs2_truncate_file(struct inode *inode,
 	/* TODO: orphan dir cleanup here. */
 bail_unlock_sem:
 	up_write(&OCFS2_I(inode)->ip_alloc_sem);
+	if (handle)
+		ocfs2_commit_trans(osb, handle);
 
 bail:
 	if (!status && OCFS2_I(inode)->ip_clusters == 0)
@@ -1772,7 +1800,7 @@ static void ocfs2_calc_trunc_pos(struct inode *inode,
 
 int ocfs2_remove_inode_range(struct inode *inode,
 			     struct buffer_head *di_bh, u64 byte_start,
-			     u64 byte_len)
+			     u64 byte_len, handle_t *inline_handle)
 {
 	int ret = 0, flags = 0, done = 0, i;
 	u32 trunc_start, trunc_len, trunc_end, trunc_cpos, phys_cpos;
@@ -1807,11 +1835,20 @@ int ocfs2_remove_inode_range(struct inode *inode,
 			goto out;
 		}
 
-		ret = ocfs2_truncate_inline(inode, di_bh, byte_start,
-					    byte_start + byte_len, 0);
-		if (ret) {
-			mlog_errno(ret);
-			goto out;
+		if (byte_start < i_size_read(inode)) {
+			if (!inline_handle) {
+				ret = -EINVAL;
+				mlog_errno(ret);
+				goto out;
+			}
+
+			ret = ocfs2_truncate_inline(inline_handle, inode,
+						    di_bh, byte_start,
+						    byte_start + byte_len, 0);
+			if (ret) {
+				mlog_errno(ret);
+				goto out;
+			}
 		}
 		/*
 		 * There's no need to get fancy with the page cache
@@ -1953,6 +1990,7 @@ static int __ocfs2_change_file_space(struct file *file, struct inode *inode,
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 	struct buffer_head *di_bh = NULL;
 	handle_t *handle;
+	handle_t *inline_handle = NULL;
 	unsigned long long max_off = inode->i_sb->s_maxbytes;
 
 	if (unlikely(ocfs2_emergency_state(osb)))
@@ -2024,7 +2062,26 @@ static int __ocfs2_change_file_space(struct file *file, struct inode *inode,
 		}
 	}
 
+	if ((cmd == OCFS2_IOC_UNRESVSP || cmd == OCFS2_IOC_UNRESVSP64) &&
+	    (OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) &&
+	    sr->l_start < i_size_read(inode)) {
+		inline_handle = ocfs2_start_trans(osb,
+						  OCFS2_INODE_UPDATE_CREDITS);
+		if (IS_ERR(inline_handle)) {
+			ret = PTR_ERR(inline_handle);
+			inline_handle = NULL;
+			mlog_errno(ret);
+			goto out_inode_unlock;
+		}
+	}
+
 	down_write(&OCFS2_I(inode)->ip_alloc_sem);
+	if (!(OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) &&
+	    inline_handle) {
+		ocfs2_commit_trans(osb, inline_handle);
+		inline_handle = NULL;
+	}
+
 	switch (cmd) {
 	case OCFS2_IOC_RESVSP:
 	case OCFS2_IOC_RESVSP64:
@@ -2038,7 +2095,7 @@ static int __ocfs2_change_file_space(struct file *file, struct inode *inode,
 	case OCFS2_IOC_UNRESVSP:
 	case OCFS2_IOC_UNRESVSP64:
 		ret = ocfs2_remove_inode_range(inode, di_bh, sr->l_start,
-					       sr->l_len);
+					       sr->l_len, inline_handle);
 		break;
 	default:
 		ret = -EINVAL;
@@ -2053,6 +2110,10 @@ static int __ocfs2_change_file_space(struct file *file, struct inode *inode,
 			i_size_write(inode, size);
 	}
 	up_write(&OCFS2_I(inode)->ip_alloc_sem);
+	if (inline_handle) {
+		ocfs2_commit_trans(osb, inline_handle);
+		inline_handle = NULL;
+	}
 	if (ret) {
 		mlog_errno(ret);
 		goto out_inode_unlock;
