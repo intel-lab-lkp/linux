@@ -4629,13 +4629,17 @@ static void __set_numabalancing_state(bool enabled)
 		static_branch_disable(&sched_numa_balancing);
 }
 
+static DEFINE_MUTEX(numabalancing_mutex);
+
 void set_numabalancing_state(bool enabled)
 {
+	mutex_lock(&numabalancing_mutex);
 	if (enabled)
 		sysctl_numa_balancing_mode = NUMA_BALANCING_NORMAL;
 	else
 		sysctl_numa_balancing_mode = NUMA_BALANCING_DISABLED;
 	__set_numabalancing_state(enabled);
+	mutex_unlock(&numabalancing_mutex);
 }
 
 #ifdef CONFIG_PROC_SYSCTL
