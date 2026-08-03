@@ -1433,14 +1433,7 @@ static ssize_t vmpl_show(struct kobject *kobj,
 
 static struct kobj_attribute vmpl_attr = __ATTR_RO(vmpl);
 
-static struct attribute *vmpl_attrs[] = {
-	&vmpl_attr.attr,
-	NULL
-};
-
-static struct attribute_group sev_attr_group = {
-	.attrs = vmpl_attrs,
-};
+static struct attribute_group sev_attr_group = {};
 
 static int __init sev_sysfs_init(void)
 {
@@ -1448,7 +1441,7 @@ static int __init sev_sysfs_init(void)
 	struct device *dev_root;
 	int ret;
 
-	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if (!cc_platform_has(CC_ATTR_GUEST_SEV))
 		return -ENODEV;
 
 	dev_root = bus_get_dev_root(&cpu_subsys);
@@ -1463,9 +1456,25 @@ static int __init sev_sysfs_init(void)
 
 	ret = sysfs_create_group(sev_kobj, &sev_attr_group);
 	if (ret)
-		kobject_put(sev_kobj);
+		goto drop_kobj;
+
+	/* Add SEV-SNP specific attributes */
+	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP)) {
+		/* VMPL */
+		ret = sysfs_add_file_to_group(sev_kobj, &vmpl_attr.attr, NULL);
+		if (ret)
+			goto drop_sysfs;
+	}
+
+	return 0;
+
+drop_sysfs:
+	sysfs_remove_group(sev_kobj, &sev_attr_group);
+drop_kobj:
+	kobject_put(sev_kobj);
 
 	return ret;
+
 }
 arch_initcall(sev_sysfs_init);
 #endif // CONFIG_SYSFS
