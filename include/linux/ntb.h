@@ -217,6 +217,9 @@ static inline int ntb_ctx_ops_is_valid(const struct ntb_ctx_ops *ops)
  * @link_disable:	See ntb_link_disable().
  * @mw_count:		See ntb_mw_count().
  * @mw_get_align:	See ntb_mw_get_align().
+ * @mw_get_trans_group: See ntb_mw_get_trans_group().
+ * @mw_set_trans_group: See ntb_mw_set_trans_group().
+ * @mw_clear_trans_group: See ntb_mw_clear_trans_group().
  * @mw_set_trans:	See ntb_mw_set_trans().
  * @mw_clear_trans:	See ntb_mw_clear_trans().
  * @peer_mw_count:	See ntb_peer_mw_count().
@@ -275,6 +278,11 @@ struct ntb_dev_ops {
 			    resource_size_t *addr_align,
 			    resource_size_t *size_align,
 			    resource_size_t *size_max);
+	int (*mw_get_trans_group)(struct ntb_dev *ntb, int pidx, int widx,
+				  int *gidx, int *gcount);
+	int (*mw_set_trans_group)(struct ntb_dev *ntb, int pidx, int widx,
+				  dma_addr_t addr, resource_size_t size);
+	int (*mw_clear_trans_group)(struct ntb_dev *ntb, int pidx, int widx);
 	int (*mw_set_trans)(struct ntb_dev *ntb, int pidx, int widx,
 			    dma_addr_t addr, resource_size_t size);
 	int (*mw_clear_trans)(struct ntb_dev *ntb, int pidx, int widx);
@@ -352,6 +360,11 @@ static inline int ntb_dev_ops_is_valid(const struct ntb_dev_ops *ops)
 		ops->mw_get_align			&&
 		(ops->mw_set_trans			||
 		 ops->peer_mw_set_trans)		&&
+		(!ops->mw_set_trans_group		||
+		 ops->mw_get_trans_group)		&&
+		/* Group set and clear operations must be provided together */
+		!ops->mw_set_trans_group ==
+			!ops->mw_clear_trans_group	&&
 		/* ops->mw_clear_trans			&& */
 		ops->peer_mw_count			&&
 		ops->peer_mw_get_addr			&&
@@ -837,6 +850,102 @@ static inline int ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int widx,
 }
 
 /**
+ * ntb_mw_get_trans_group() - get the translation group for an inbound MW
+ * @ntb:	NTB device context.
+ * @pidx:	Port index of peer device.
+ * @widx:	Memory window index.
+ * @gidx:	OUT - first memory window index in the group.
+ * @gcount:	OUT - number of memory windows in the group.
+ *
+ * Return the first window index and number of consecutive windows in the
+ * group containing @widx. All translations in a group must be set and cleared
+ * together. If the device operation is not implemented, each window forms a
+ * singleton group.
+ *
+ * Group definitions for @pidx must not change while @ntb is registered. This
+ * function may be called regardless of the link state.
+ *
+ * NULL may be given for either output parameter.
+ *
+ * Return: Zero on success, otherwise a negative error number.
+ */
+static inline int ntb_mw_get_trans_group(struct ntb_dev *ntb, int pidx,
+					 int widx, int *gidx, int *gcount)
+{
+	if (!ntb->ops->mw_get_trans_group) {
+		if (gidx)
+			*gidx = widx;
+		if (gcount)
+			*gcount = 1;
+
+		return 0;
+	}
+
+	return ntb->ops->mw_get_trans_group(ntb, pidx, widx, gidx, gcount);
+}
+
+static inline int ntb_mw_check_singleton(struct ntb_dev *ntb, int pidx,
+					 int widx)
+{
+	int first, group_count;
+	int ret;
+
+	ret = ntb_mw_get_trans_group(ntb, pidx, widx, &first, &group_count);
+	if (ret)
+		return ret;
+
+	if (first < 0 || group_count <= 0 ||
+	    widx < first || widx - first >= group_count)
+		return -EINVAL;
+
+	return group_count == 1 ? 0 : -EOPNOTSUPP;
+}
+
+/**
+ * ntb_mw_set_trans_group() - set all translations in an inbound MW group
+ * @ntb:	NTB device context.
+ * @pidx:	Port index of peer device.
+ * @widx:	First memory window index in the group.
+ * @addr:	DMA address of the local memory exposed to the peer.
+ * @size:	Size of the local memory exposed to the peer.
+ *
+ * Set the translation for a multi-member group. @widx must be the first MW in
+ * the group. @addr and @size describe one contiguous backing range covering
+ * the complete group. Singleton groups use ntb_mw_set_trans().
+ *
+ * Return: Zero on success, otherwise a negative error number.
+ */
+static inline int
+ntb_mw_set_trans_group(struct ntb_dev *ntb, int pidx, int widx,
+		       dma_addr_t addr, resource_size_t size)
+{
+	if (!ntb->ops->mw_set_trans_group)
+		return -EOPNOTSUPP;
+
+	return ntb->ops->mw_set_trans_group(ntb, pidx, widx, addr, size);
+}
+
+/**
+ * ntb_mw_clear_trans_group() - clear all translations in an inbound MW group
+ * @ntb:	NTB device context.
+ * @pidx:	Port index of peer device.
+ * @widx:	First memory window index in the group.
+ *
+ * Clear the translation for a multi-member group. @widx must be the first MW
+ * in the group. Singleton groups use ntb_mw_clear_trans().
+ *
+ * Return: Zero on success, otherwise a negative error number.
+ */
+static inline int ntb_mw_clear_trans_group(struct ntb_dev *ntb, int pidx,
+					   int widx)
+{
+	if (!ntb->ops->mw_clear_trans_group)
+		return -EOPNOTSUPP;
+
+	return ntb->ops->mw_clear_trans_group(ntb, pidx, widx);
+}
+
+/**
  * ntb_mw_set_trans() - set the translation of an inbound memory window
  * @ntb:	NTB device context.
  * @pidx:	Port index of peer device.
@@ -851,13 +960,20 @@ static inline int ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int widx,
  * of that method.
  *
  * This method may not be implemented due to the hardware specific memory
- * windows interface.
+ * windows interface. A per-member request for a translation group with
+ * multiple members returns -EOPNOTSUPP.
  *
  * Return: Zero on success, otherwise an error number.
  */
 static inline int ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
 				   dma_addr_t addr, resource_size_t size)
 {
+	int ret;
+
+	ret = ntb_mw_check_singleton(ntb, pidx, widx);
+	if (ret)
+		return ret;
+
 	if (!ntb->ops->mw_set_trans)
 		return 0;
 
@@ -872,16 +988,23 @@ static inline int ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
  * @widx:	Memory window index.
  *
  * Clear the translation of an inbound memory window.  The peer may no longer
- * access local memory through the window.
+ * access local memory through the window. A per-member request for a
+ * translation group with multiple members returns -EOPNOTSUPP.
  *
  * Return: Zero on success, otherwise an error number.
  */
 static inline int ntb_mw_clear_trans(struct ntb_dev *ntb, int pidx, int widx)
 {
-	if (!ntb->ops->mw_clear_trans)
-		return ntb_mw_set_trans(ntb, pidx, widx, 0, 0);
+	int ret;
 
-	return ntb->ops->mw_clear_trans(ntb, pidx, widx);
+	ret = ntb_mw_check_singleton(ntb, pidx, widx);
+	if (ret)
+		return ret;
+
+	if (ntb->ops->mw_clear_trans)
+		return ntb->ops->mw_clear_trans(ntb, pidx, widx);
+
+	return ntb_mw_set_trans(ntb, pidx, widx, 0, 0);
 }
 
 /**
