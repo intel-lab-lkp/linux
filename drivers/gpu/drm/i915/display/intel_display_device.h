@@ -147,6 +147,7 @@ struct intel_display_platforms {
 
 #define HAS_128B_Y_TILING(__display)	(!(__display)->platform.i915g && !(__display)->platform.i915gm)
 #define HAS_2PPC(__display)		(DISPLAY_VER(__display) >= 10)
+#define HAS_3DLUT(__display)		(DISPLAY_RUNTIME_INFO(__display)->has_3dlut)
 #define HAS_4TILE(__display)		((__display)->platform.dg2 || DISPLAY_VER(__display) >= 14)
 #define HAS_ASYNC_FLIPS(__display)	(DISPLAY_VER(__display) >= 5)
 #define HAS_AS_SDP(__display)		(DISPLAY_VER(__display) >= 13)
@@ -304,6 +305,7 @@ struct intel_display_runtime_info {
 
 	u8 fbc_mask;
 
+	bool has_3dlut;
 	bool has_hdcp;
 	bool has_dmc;
 	bool has_dsc;

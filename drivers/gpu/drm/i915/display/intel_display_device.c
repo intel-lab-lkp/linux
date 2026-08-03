@@ -864,6 +864,7 @@ static const struct platform_desc glk_desc = {
 		GLK_COLORS,
 
 		.__runtime_defaults.ip.ver = 10,
+		.__runtime_defaults.has_3dlut = 1,
 	},
 	STEP_INFO(glk_steppings),
 };
@@ -899,6 +900,7 @@ static const struct platform_desc glk_desc = {
 	ICL_COLORS, \
 	\
 	.__runtime_defaults.ip.ver = 11, \
+	.__runtime_defaults.has_3dlut = 1, \
 	.__runtime_defaults.has_dmc = 1, \
 	.__runtime_defaults.has_dsc = 1, \
 	.__runtime_defaults.has_hdcp = 1, \
@@ -990,6 +992,7 @@ static const struct platform_desc ehl_desc = {
 	ICL_COLORS, \
 	\
 	.__runtime_defaults.ip.ver = 12, \
+	.__runtime_defaults.has_3dlut = 1, \
 	.__runtime_defaults.has_dmc = 1, \
 	.__runtime_defaults.has_dsc = 1, \
 	.__runtime_defaults.has_hdcp = 1, \
@@ -1156,6 +1159,7 @@ static const struct platform_desc adl_s_desc = {
 	TGL_CURSOR_OFFSETS,							\
 										\
 	.__runtime_defaults.ip.ver = 13,					\
+	.__runtime_defaults.has_3dlut = 1,					\
 	.__runtime_defaults.has_dmc = 1,					\
 	.__runtime_defaults.has_dsc = 1,					\
 	.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A),			\
@@ -1335,6 +1339,7 @@ static const struct platform_desc dg2_desc = {
 		BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |				\
 		BIT(TRANSCODER_C) | BIT(TRANSCODER_D),				\
 	.__runtime_defaults.fbc_mask = BIT(INTEL_FBC_A) | BIT(INTEL_FBC_B),	\
+	.__runtime_defaults.has_3dlut = 1,					\
 	.__runtime_defaults.has_dmc = 1,					\
 	.__runtime_defaults.has_dsc = 1,					\
 	.__runtime_defaults.has_hdcp = 1,					\
