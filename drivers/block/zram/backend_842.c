@@ -13,6 +13,14 @@ static void release_params_842(struct zcomp_params *params)
 
 static int setup_params_842(struct zcomp_params *params)
 {
+	if (params->dict_sz) {
+		pr_err("842: dictionary is not supported\n");
+		return -EOPNOTSUPP;
+	}
+	if (params->level != ZCOMP_PARAM_NOT_SET) {
+		pr_err("842: compression level is not supported\n");
+		return -EOPNOTSUPP;
+	}
 	return 0;
 }
 

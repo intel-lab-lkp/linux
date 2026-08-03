@@ -12,6 +12,14 @@ static void lzo_release_params(struct zcomp_params *params)
 
 static int lzo_setup_params(struct zcomp_params *params)
 {
+	if (params->dict_sz) {
+		pr_err("lzo: dictionary is not supported\n");
+		return -EOPNOTSUPP;
+	}
+	if (params->level != ZCOMP_PARAM_NOT_SET) {
+		pr_err("lzo: compression level is not supported\n");
+		return -EOPNOTSUPP;
+	}
 	return 0;
 }
 

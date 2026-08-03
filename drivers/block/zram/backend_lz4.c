@@ -30,6 +30,10 @@ static int lz4_setup_params(struct zcomp_params *params)
 
 	if (params->level == ZCOMP_PARAM_NOT_SET)
 		params->level = LZ4_ACCELERATION_DEFAULT;
+	else if (params->level < LZ4_ACCELERATION_DEFAULT) {
+		pr_err("lz4: invalid compression level %d\n", params->level);
+		return -EINVAL;
+	}
 
 	if (!params->dict || !params->dict_sz)
 		return 0;

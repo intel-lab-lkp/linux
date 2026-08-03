@@ -20,6 +20,10 @@ static int lz4hc_setup_params(struct zcomp_params *params)
 {
 	if (params->level == ZCOMP_PARAM_NOT_SET)
 		params->level = LZ4HC_DEFAULT_CLEVEL;
+	else if (params->level < 1 || params->level > LZ4HC_MAX_CLEVEL) {
+		pr_err("lz4hc: invalid compression level %d\n", params->level);
+		return -EINVAL;
+	}
 
 	return 0;
 }

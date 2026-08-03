@@ -60,6 +60,11 @@ static int zstd_setup_params(struct zcomp_params *params)
 	params->drv_data = zp;
 	if (params->level == ZCOMP_PARAM_NOT_SET)
 		params->level = zstd_default_clevel();
+	else if (params->level < zstd_min_clevel() ||
+		 params->level > zstd_max_clevel()) {
+		pr_err("zstd: invalid compression level %d\n", params->level);
+		goto error;
+	}
 
 	zp->cprm = zstd_get_params(params->level, PAGE_SIZE);
 
