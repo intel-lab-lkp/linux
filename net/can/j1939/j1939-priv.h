@@ -36,6 +36,7 @@ struct j1939_ecu {
 
 	/* indicates that this ecu successfully claimed @sa as its address */
 	struct hrtimer ac_timer;
+	unsigned int ac_timer_retries;
 	struct kref kref;
 	struct j1939_priv *priv;
 	netdevice_tracker priv_dev_tracker;

@@ -10,9 +10,18 @@
  * Since rtnetlink, no real bus is used.
  */
 
+#include <linux/net.h>
+
 #include <net/sock.h>
 
 #include "j1939-priv.h"
+
+#define J1939_ECU_TIMER_RETRY_DELAY_MS 1
+/*
+ * J1939 does not specify a lock-contention retry count. Five retries are a
+ * pragmatic threshold for warning about an unusual address-claim delay.
+ */
+#define J1939_ECU_TIMER_RETRY_WARN 5
 
 static void __j1939_ecu_release(struct kref *kref)
 {
@@ -109,6 +118,8 @@ void j1939_ecu_unmap_all(struct j1939_priv *priv)
 
 void j1939_ecu_timer_start(struct j1939_ecu *ecu)
 {
+	ecu->ac_timer_retries = 0;
+
 	/* The ECU is held here and released in the
 	 * j1939_ecu_timer_handler() or j1939_ecu_timer_cancel().
 	 */
@@ -131,7 +142,26 @@ static enum hrtimer_restart j1939_ecu_timer_handler(struct hrtimer *hrtimer)
 		container_of(hrtimer, struct j1939_ecu, ac_timer);
 	struct j1939_priv *priv = ecu->priv;
 
-	write_lock_bh(&priv->lock);
+	/*
+	 * j1939_ac_process() cancels this timer while holding priv->lock.
+	 * Don't block here, otherwise the timer and receive paths can
+	 * deadlock waiting for each other on different CPUs. Retry shortly
+	 * if the lock is held by the address claim writer or by a reader on
+	 * the receive path.
+	 */
+	if (!write_trylock(&priv->lock)) {
+		ecu->ac_timer_retries++;
+		if (ecu->ac_timer_retries == J1939_ECU_TIMER_RETRY_WARN &&
+		    net_ratelimit())
+			netdev_warn(priv->ndev,
+				    "address claim timer retried %u times due to lock contention, name: 0x%016llx\n",
+				    ecu->ac_timer_retries, ecu->name);
+
+		hrtimer_forward_now(hrtimer,
+				    ms_to_ktime(J1939_ECU_TIMER_RETRY_DELAY_MS));
+		return HRTIMER_RESTART;
+	}
+
 	/* TODO: can we test if ecu->addr is unicast before starting
 	 * the timer?
 	 */
@@ -141,7 +171,7 @@ static enum hrtimer_restart j1939_ecu_timer_handler(struct hrtimer *hrtimer)
 	 * j1939_ecu_timer_start().
 	 */
 	j1939_ecu_put(ecu);
-	write_unlock_bh(&priv->lock);
+	write_unlock(&priv->lock);
 
 	return HRTIMER_NORESTART;
 }
