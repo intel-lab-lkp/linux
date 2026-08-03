@@ -88,6 +88,7 @@
 #define PORT_AFR_L1_ENTRANCE_LAT_MASK	GENMASK(29, 27)
 
 #define PCIE_PORT_LINK_CONTROL		0x710
+#define PORT_LINK_LOOPBACK_EN		BIT(2)
 #define PORT_LINK_DLL_LINK_EN		BIT(5)
 #define PORT_LINK_FAST_LINK_MODE	BIT(7)
 #define PORT_LINK_MODE_MASK		GENMASK(21, 16)
@@ -172,6 +173,9 @@
 
 #define COHERENCY_CONTROL_2_OFF			0x8E4
 #define COHERENCY_CONTROL_3_OFF			0x8E8
+
+#define PCIE_PIPE_LOOPBACK_CONTROL	0x8B8
+#define PCIE_PIPE_LOOPBACK_EN		BIT(31)
 
 #define PCIE_PORT_MULTI_LANE_CTRL	0x8C0
 #define PORT_MLTI_UPCFG_SUPPORT		BIT(7)
@@ -471,6 +475,19 @@ struct dw_pcie_rp {
 	bool			native_ecam;
 	bool                    skip_l23_ready;
 	bool			skip_pwrctrl_off;
+	struct dw_pcie_loopback	*loopback;
+};
+
+struct dw_pcie_loopback {
+	struct dw_pcie_rp	*pp;
+	/* Protects busy and buf_size against concurrent sysfs access */
+	struct mutex		lock;
+	bool			busy;
+	size_t			buf_size;
+	struct device_attribute	attr_run;
+	struct device_attribute	attr_buf_size;
+	struct attribute	*attrs[3];	/* run, buf_size, NULL */
+	struct attribute_group	attr_group;
 };
 
 struct dw_pcie_ep_ops {

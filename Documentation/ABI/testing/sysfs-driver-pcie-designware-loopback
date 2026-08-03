@@ -1,0 +1,69 @@
+What:		/sys/devices/.../loopback/run
+Date:		August 2026
+KernelVersion:	7.2
+Contact:	linux-pci@vger.kernel.org
+Description:
+		(RW) Diagnostic local loopback test interface for Synopsys
+		DesignWare PCIe root-port controllers.
+
+		Reading this file returns the current test state:
+
+		  - ``idle``  - no test is running
+		  - ``busy``  - a test is in progress
+
+		Writing ``local`` triggers a synchronous, blocking
+		data-integrity test performed entirely within the local
+		controller, without requiring a connected endpoint.  The
+		write does not return until the test completes, and logs
+		``PASSED`` or ``FAILED`` via dev_info().
+
+		The test allocates a coherent DMA buffer, configures an
+		inbound iATU window to redirect PCIe writes to that buffer,
+		writes random data through the PCIe window, and compares
+		the result byte-by-byte against what was written.
+
+		The test only runs while the PCIe link is down; writing
+		``local`` while the link is up returns -EBUSY.  This avoids
+		disrupting an active link and any devices behind it.
+
+		Only one test may run at a time.  Concurrent writes
+		return -EBUSY.
+
+		Example::
+
+		  # Run a local loopback test
+		  $ echo local  > /sys/devices/.../loopback/run
+
+		  # Check whether a test is in progress
+		  $ cat /sys/devices/.../loopback/run
+		  idle
+
+What:		/sys/devices/.../loopback/buf_size
+Date:		August 2026
+KernelVersion:	7.2
+Contact:	linux-pci@vger.kernel.org
+Description:
+		(RW) Size in bytes of the data buffer used by the
+		loopback test.
+
+		Reading this file returns the current buffer size as a
+		decimal integer.
+
+		Writing a decimal integer sets a new buffer size.  The
+		value is rounded up to the next power of two and clamped
+		to a minimum of 4096 (4 KiB) and a maximum of 1048576
+		(1 MiB); values above the maximum are rejected with
+		-EINVAL.  The new size takes effect on the next test run;
+		it cannot be changed while a test is in progress (returns
+		-EBUSY).
+
+		The default value is 4096.
+
+		Example::
+
+		  # Set the test buffer to 64 KiB
+		  $ echo 65536 > /sys/devices/.../loopback/buf_size
+
+		  # Read back the (rounded) value
+		  $ cat /sys/devices/.../loopback/buf_size
+		  65536

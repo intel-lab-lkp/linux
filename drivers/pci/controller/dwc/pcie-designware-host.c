@@ -19,6 +19,8 @@
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
 #include <linux/platform_device.h>
+#include <linux/random.h>
+#include <linux/sizes.h>
 
 #include "../pci-host-common.h"
 #include "../../pci.h"
@@ -567,6 +569,297 @@ static int dw_pcie_host_get_resources(struct dw_pcie_rp *pp)
 	return 0;
 }
 
+#define DW_PCIE_LB_BUF_SIZE_MIN	SZ_4K
+#define DW_PCIE_LB_BUF_SIZE_MAX	SZ_1M
+#define DW_PCIE_LB_SETTLE_MS		100
+#define DW_PCIE_LB_LTSSM_SETTLE_US	(DW_PCIE_LB_SETTLE_MS * USEC_PER_MSEC)
+#define DW_PCIE_LB_LTSSM_POLL_US	1000
+
+static int dw_pcie_loopback_run(struct dw_pcie_rp *pp, size_t buf_size)
+{
+	struct resource lb_res = { .name = "pcie-loopback",
+				   .flags = IORESOURCE_MEM };
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	enum dw_pcie_ltssm ltssm;
+	void __iomem *src_base;
+	u32 plc, gen3, pipe_lb;
+	dma_addr_t dst_dma;
+	void *dst_virt;
+	int ret, rret;
+	void *tx_buf;
+	int ib_index;
+
+	ib_index = pci->num_ib_windows - 1;
+
+	ret = pci_bus_alloc_resource(pp->bridge->bus, &lb_res,
+				     buf_size, buf_size,
+				     PCIBIOS_MIN_MEM, 0,
+				     pcibios_align_resource,
+				     &pp->bridge->dev);
+	if (ret) {
+		dev_err(pci->dev, "loopback: failed to alloc PCIe MEM resource: %d\n", ret);
+		return ret;
+	}
+
+	src_base = ioremap(lb_res.start, buf_size);
+	if (!src_base) {
+		dev_err(pci->dev, "loopback: ioremap of PCIe source window failed\n");
+		ret = -ENOMEM;
+		goto err_release_res;
+	}
+
+	dst_virt = dma_alloc_coherent(pci->dev, buf_size, &dst_dma, GFP_KERNEL);
+	if (!dst_virt) {
+		ret = -ENOMEM;
+		goto err_iounmap;
+	}
+
+	ret = dw_pcie_prog_inbound_atu(pci, ib_index, PCIE_TLP_TYPE_MEM_RDWR,
+				       dst_dma, lb_res.start, buf_size);
+	if (ret) {
+		dev_err(pci->dev, "loopback: inbound iATU programming failed: %d\n", ret);
+		goto err_free_dma;
+	}
+
+	plc = dw_pcie_readl_dbi(pci, PCIE_PORT_LINK_CONTROL);
+
+	gen3 = dw_pcie_readl_dbi(pci, GEN3_RELATED_OFF);
+	dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF,
+			   gen3 | GEN3_RELATED_OFF_GEN3_EQ_DISABLE);
+
+	pipe_lb = dw_pcie_readl_dbi(pci, PCIE_PIPE_LOOPBACK_CONTROL);
+	dw_pcie_writel_dbi(pci, PCIE_PIPE_LOOPBACK_CONTROL,
+			   pipe_lb | PCIE_PIPE_LOOPBACK_EN);
+
+	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, plc | PORT_LINK_LOOPBACK_EN);
+
+	msleep(DW_PCIE_LB_SETTLE_MS);
+
+	tx_buf = kmalloc(buf_size, GFP_KERNEL);
+	if (!tx_buf) {
+		ret = -ENOMEM;
+		goto err_restore_link;
+	}
+
+	get_random_bytes(tx_buf, buf_size);
+	memcpy_toio(src_base, tx_buf, buf_size);
+	msleep(DW_PCIE_LB_SETTLE_MS);
+
+	if (memcmp(tx_buf, dst_virt, buf_size))
+		ret = -EIO;
+
+	dev_info(pci->dev, "PCIe local loopback test %s\n", ret ? "FAILED" : "PASSED");
+
+	kfree(tx_buf);
+
+err_restore_link:
+	dw_pcie_writel_dbi(pci, PCIE_PORT_LINK_CONTROL, plc);
+	dw_pcie_writel_dbi(pci, PCIE_PIPE_LOOPBACK_CONTROL, pipe_lb);
+	dw_pcie_writel_dbi(pci, GEN3_RELATED_OFF, gen3);
+
+	if (read_poll_timeout(dw_pcie_get_ltssm, ltssm,
+			      ltssm == DW_PCIE_LTSSM_DETECT_QUIET,
+			      DW_PCIE_LB_LTSSM_POLL_US, DW_PCIE_LB_LTSSM_SETTLE_US,
+			      false, pci)) {
+		/*
+		 * LTSSM has been observed stuck outside DETECT_QUIET on some
+		 * platforms; only a full controller reinit (mirroring system
+		 * suspend/resume) reliably recovers it.
+		 */
+		dev_warn(pci->dev,
+			 "loopback: LTSSM did not settle in DETECT_QUIET (in %s), reinitializing controller\n",
+			 dw_pcie_ltssm_status_string(ltssm));
+
+		if (pp->ops->deinit)
+			pp->ops->deinit(pp);
+
+		pci->suspended = true;
+
+		rret = dw_pcie_resume_noirq(pci);
+		if (rret) {
+			dev_err(pci->dev, "loopback: controller reinit failed: %d\n", rret);
+			if (!ret)
+				ret = rret;
+		}
+
+		ltssm = dw_pcie_get_ltssm(pci);
+	} else {
+		dw_pcie_disable_atu(pci, PCIE_ATU_REGION_DIR_IB, ib_index);
+	}
+
+	dev_info(pci->dev, "PCIe LTSSM state after loopback exit: %s\n",
+		 dw_pcie_ltssm_status_string(ltssm));
+
+err_free_dma:
+	dma_free_coherent(pci->dev, buf_size, dst_virt, dst_dma);
+err_iounmap:
+	iounmap(src_base);
+err_release_res:
+	release_resource(&lb_res);
+
+	return ret;
+}
+
+static ssize_t buf_size_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct dw_pcie_loopback *lb =
+		container_of(attr, struct dw_pcie_loopback, attr_buf_size);
+
+	return sysfs_emit(buf, "%zu\n", lb->buf_size);
+}
+
+static ssize_t buf_size_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct dw_pcie_loopback *lb =
+		container_of(attr, struct dw_pcie_loopback, attr_buf_size);
+	struct dw_pcie *pci = to_dw_pcie_from_pp(lb->pp);
+	unsigned long req;
+	size_t new_size;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &req);
+	if (ret)
+		return ret;
+
+	if (!req)
+		return -EINVAL;
+
+	if (req > DW_PCIE_LB_BUF_SIZE_MAX)
+		return -EINVAL;
+
+	/* Round up to next power-of-two, then enforce the 4 KiB minimum */
+	new_size = max_t(size_t, DW_PCIE_LB_BUF_SIZE_MIN,
+			 roundup_pow_of_two((size_t)req));
+
+	if (mutex_lock_interruptible(&lb->lock))
+		return -ERESTARTSYS;
+
+	if (lb->busy) {
+		mutex_unlock(&lb->lock);
+		return -EBUSY;
+	}
+
+	lb->buf_size = new_size;
+	mutex_unlock(&lb->lock);
+
+	dev_dbg(pci->dev, "loopback: buf_size set to %zu bytes\n", new_size);
+
+	return count;
+}
+
+static ssize_t run_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct dw_pcie_loopback *lb =
+		container_of(attr, struct dw_pcie_loopback, attr_run);
+
+	return sysfs_emit(buf, "%s\n", lb->busy ? "busy" : "idle");
+}
+
+static ssize_t run_store(struct device *dev,
+			 struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct dw_pcie_loopback *lb =
+		container_of(attr, struct dw_pcie_loopback, attr_run);
+	struct dw_pcie_rp *pp = lb->pp;
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	size_t buf_size;
+	int ret;
+
+	if (!sysfs_streq(buf, "local"))
+		return -EINVAL;
+
+	if (dw_pcie_link_up(pci)) {
+		dev_err(pci->dev,
+			"loopback: refusing to run while the link is up\n");
+		return -EBUSY;
+	}
+
+	if (mutex_lock_interruptible(&lb->lock))
+		return -ERESTARTSYS;
+
+	if (lb->busy) {
+		dev_warn(pci->dev, "loopback: test already in progress\n");
+		mutex_unlock(&lb->lock);
+		return -EBUSY;
+	}
+
+	lb->busy  = true;
+	buf_size  = lb->buf_size;
+	mutex_unlock(&lb->lock);
+
+	ret = dw_pcie_loopback_run(pp, buf_size);
+
+	mutex_lock(&lb->lock);
+	lb->busy = false;
+	mutex_unlock(&lb->lock);
+
+	return ret ? ret : count;
+}
+
+static int dw_pcie_loopback_sysfs_init(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct dw_pcie_loopback *lb;
+	int ret;
+
+	lb = devm_kzalloc(pci->dev, sizeof(*lb), GFP_KERNEL);
+	if (!lb)
+		return -ENOMEM;
+
+	lb->pp = pp;
+
+	mutex_init(&lb->lock);
+	lb->buf_size = DW_PCIE_LB_BUF_SIZE_MIN;
+
+	lb->attr_run      = (struct device_attribute)
+		__ATTR(run, 0644, run_show, run_store);
+	lb->attr_buf_size = (struct device_attribute)
+		__ATTR(buf_size, 0644, buf_size_show, buf_size_store);
+
+	sysfs_attr_init(&lb->attr_run.attr);
+	sysfs_attr_init(&lb->attr_buf_size.attr);
+
+	lb->attrs[0] = &lb->attr_run.attr;
+	lb->attrs[1] = &lb->attr_buf_size.attr;
+	lb->attrs[2] = NULL;
+	lb->attr_group.name  = "loopback";
+	lb->attr_group.attrs = lb->attrs;
+
+	pp->loopback = lb;
+
+	ret = device_add_group(pci->dev, &lb->attr_group);
+	if (ret) {
+		dev_err(pci->dev, "loopback: device_add_group failed: %d\n", ret);
+		pp->loopback = NULL;
+		return ret;
+	}
+
+	return 0;
+}
+
+static void dw_pcie_loopback_sysfs_deinit(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct dw_pcie_loopback *lb = pp->loopback;
+
+	if (!lb)
+		return;
+
+	/*
+	 * device_remove_group() blocks until any in-flight run_store()/
+	 * run_show() has returned, so pp/pci/bridge are guaranteed not to be
+	 * accessed by the loopback code once this returns. Must run before
+	 * the rest of dw_pcie_host_deinit() tears down pp->bridge.
+	 */
+	device_remove_group(pci->dev, &lb->attr_group);
+	pp->loopback = NULL;
+}
+
 int dw_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -675,6 +968,9 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 
 	dwc_pcie_debugfs_init(pci, DW_PCIE_RC_TYPE);
 
+	if (dw_pcie_loopback_sysfs_init(pp))
+		dev_warn(dev, "failed to create loopback sysfs entry\n");
+
 	return 0;
 
 err_stop_link:
@@ -702,6 +998,8 @@ EXPORT_SYMBOL_GPL(dw_pcie_host_init);
 void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+
+	dw_pcie_loopback_sysfs_deinit(pp);
 
 	dwc_pcie_debugfs_deinit(pci);
 
