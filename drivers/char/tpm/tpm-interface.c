@@ -474,13 +474,12 @@ int tpm_pm_resume(struct device *dev)
 	if (chip == NULL)
 		return -ENODEV;
 
-	chip->flags &= ~TPM_CHIP_FLAG_SUSPENDED;
-
 	/*
 	 * Guarantee that SUSPENDED is written last, so that hwrng does not
 	 * activate before the chip has been fully resumed.
 	 */
 	wmb();
+	chip->flags &= ~TPM_CHIP_FLAG_SUSPENDED;
 
 	return 0;
 }

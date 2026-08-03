@@ -173,6 +173,9 @@ int tpm_try_get_ops(struct tpm_chip *chip)
 	if (chip->flags & TPM_CHIP_FLAG_SUSPENDED)
 		goto out_lock;
 
+	/* Ensure that device is fully resumed */
+	rmb();
+
 	rc = tpm_chip_start(chip);
 	if (rc)
 		goto out_lock;
