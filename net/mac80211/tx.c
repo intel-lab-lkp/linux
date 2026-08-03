@@ -4367,8 +4367,7 @@ EXPORT_SYMBOL(ieee80211_txq_schedule_start);
 void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 				  struct net_device *dev,
 				  u32 info_flags,
-				  u32 ctrl_flags,
-				  u64 cookie)
+				  u32 ctrl_flags)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
@@ -4426,7 +4425,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 			ctrl_flags |= IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP;
 
 		skb = ieee80211_build_hdr(sdata, skb, info_flags,
-					  sta, ctrl_flags, cookie);
+					  sta, ctrl_flags, 0);
 		if (IS_ERR(skb)) {
 			kfree_skb_list(next);
 			goto out;
@@ -4563,7 +4562,7 @@ static void ieee80211_mlo_multicast_tx_one(struct ieee80211_sub_if_data *sdata,
 		return;
 
 	ctrl_flags |= u32_encode_bits(link_id, IEEE80211_TX_CTRL_MLO_LINK);
-	__ieee80211_subif_start_xmit(out, sdata->dev, 0, ctrl_flags, 0);
+	__ieee80211_subif_start_xmit(out, sdata->dev, 0, ctrl_flags);
 }
 
 static void ieee80211_mlo_multicast_tx(struct net_device *dev,
@@ -4578,7 +4577,7 @@ static void ieee80211_mlo_multicast_tx(struct net_device *dev,
 		ctrl_flags |= u32_encode_bits(__ffs(links),
 					      IEEE80211_TX_CTRL_MLO_LINK);
 
-		__ieee80211_subif_start_xmit(skb, sdata->dev, 0, ctrl_flags, 0);
+		__ieee80211_subif_start_xmit(skb, sdata->dev, 0, ctrl_flags);
 		return;
 	}
 
@@ -4619,8 +4618,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 		ieee80211_convert_to_unicast(skb, dev, &queue);
 		while ((skb = __skb_dequeue(&queue)))
 			__ieee80211_subif_start_xmit(skb, dev, 0,
-						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,
-						     0);
+						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC);
 	} else if (ieee80211_vif_is_mld(&sdata->vif) &&
 		   ((sdata->vif.type == NL80211_IFTYPE_AP &&
 		     !ieee80211_hw_check(&sdata->local->hw, MLO_MCAST_MULTI_LINK_TX)) ||
@@ -4630,8 +4628,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 	} else {
 normal:
 		__ieee80211_subif_start_xmit(skb, dev, 0,
-					     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,
-					     0);
+					     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC);
 	}
 
 	return NETDEV_TX_OK;
@@ -4729,8 +4726,7 @@ static void ieee80211_8023_xmit(struct ieee80211_sub_if_data *sdata,
 		if (!test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state)) {
 			/* fall back to non-offload slow path */
 			__ieee80211_subif_start_xmit(skb, dev, 0,
-						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,
-						     0);
+						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC);
 			return;
 		}
 
@@ -6660,8 +6656,7 @@ int ieee80211_probe_mesh_link(struct wiphy *wiphy, struct net_device *dev,
 
 	local_bh_disable();
 	__ieee80211_subif_start_xmit(skb, skb->dev, 0,
-				     IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP,
-				     0);
+				     IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP);
 	local_bh_enable();
 
 	return 0;
