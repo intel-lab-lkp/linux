@@ -403,6 +403,8 @@ patternProperties:
     description: CZ.NIC, z.s.p.o.
   "^dallas,.*":
     description: Maxim Integrated Products (formerly Dallas Semiconductor)
+  "^dapu,.*":
+    description: Guangdong Dapu Telecom Co., Ltd.
   "^dataimage,.*":
     description: DataImage, Inc.
   "^davicom,.*":
