@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
@@ -608,6 +609,12 @@ static int __mtk_clk_simple_probe(struct platform_device *pdev,
 
 	if (mcd->need_runtime_pm)
 		pm_runtime_put(&pdev->dev);
+
+	if (mcd->populate_children) {
+		r = devm_of_platform_populate(&pdev->dev);
+		if (r)
+			goto unregister_clks;
+	}
 
 	return r;
 
