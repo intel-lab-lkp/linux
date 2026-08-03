@@ -925,7 +925,9 @@ void
 trap_init(void)
 {
 	/* Tell PAL-code what global pointer we want in the kernel.  */
-	register unsigned long gptr __asm__("$29");
+	unsigned long gptr;
+
+	__asm__ volatile("mov $29, %0" : "=r"(gptr));
 	wrkgp(gptr);
 
 	wrent(entArith, 1);
