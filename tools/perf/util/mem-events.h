@@ -146,5 +146,6 @@ enum mem_stat_dtlb {
 
 int mem_stat_index(const enum mem_stat_type mst, const u64 data_src);
 const char *mem_stat_name(const enum mem_stat_type mst, const int idx);
+void perf_mem__set_show_region(bool val);
 
 #endif /* __PERF_MEM_EVENTS_H */
