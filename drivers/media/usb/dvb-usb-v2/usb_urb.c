@@ -276,7 +276,8 @@ int usb_urb_reconfig(struct usb_data_stream *stream,
 	}
 
 	/* check if all fields are same */
-	if (stream->props.type == props->type &&
+	if (stream->urbs_initialized &&
+			stream->props.type == props->type &&
 			stream->props.count == props->count &&
 			stream->props.endpoint == props->endpoint) {
 		if (props->type == USB_BULK &&
