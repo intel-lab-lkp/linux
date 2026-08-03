@@ -635,18 +635,12 @@ static int lan743x_intr_open(struct lan743x_adapter *adapter)
 		lan743x_csr_write(adapter, INT_VEC_EN_SET,
 				  INT_VEC_EN_(0));
 
+	/* The interrupt-vector-to-moderation-timer mapping is static, so
+	 * program it once here. The timer values themselves are set later
+	 * (per link speed) via lan743x_config_int_mod().
+	 */
 	if (!(adapter->csr.flags & LAN743X_CSR_FLAG_IS_A0)) {
-		lan743x_csr_write(adapter, INT_MOD_CFG0, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG1, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG2, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG3, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG4, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG5, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG6, LAN743X_INT_MOD);
-		lan743x_csr_write(adapter, INT_MOD_CFG7, LAN743X_INT_MOD);
 		if (adapter->is_pci11x1x) {
-			lan743x_csr_write(adapter, INT_MOD_CFG8, LAN743X_INT_MOD);
-			lan743x_csr_write(adapter, INT_MOD_CFG9, LAN743X_INT_MOD);
 			lan743x_csr_write(adapter, INT_MOD_MAP0, 0x00007654);
 			lan743x_csr_write(adapter, INT_MOD_MAP1, 0x00003210);
 		} else {
@@ -3077,6 +3071,28 @@ static void lan743x_phylink_mac_link_down(struct phylink_config *config,
 	netif_tx_stop_all_queues(netdev);
 }
 
+/* Program the interrupt moderation timer value into the per-vector
+ * INT_MOD_CFG registers. Only the timer value is written here; the vector
+ * mapping (INT_MOD_MAP) is static and is set once at interrupt open.
+ */
+static void lan743x_config_int_mod(struct lan743x_adapter *adapter, u32 int_mod)
+{
+	if (!(adapter->csr.flags & LAN743X_CSR_FLAG_IS_A0)) {
+		lan743x_csr_write(adapter, INT_MOD_CFG0, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG1, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG2, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG3, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG4, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG5, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG6, int_mod);
+		lan743x_csr_write(adapter, INT_MOD_CFG7, int_mod);
+		if (adapter->is_pci11x1x) {
+			lan743x_csr_write(adapter, INT_MOD_CFG8, int_mod);
+			lan743x_csr_write(adapter, INT_MOD_CFG9, int_mod);
+		}
+	}
+}
+
 static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 					struct phy_device *phydev,
 					unsigned int link_an_mode,
@@ -3086,6 +3102,7 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 {
 	struct net_device *netdev = to_net_dev(config->dev);
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
+	u32 int_mod;
 	int mac_cr;
 	u8 cap;
 
@@ -3094,12 +3111,18 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 	 * Resulting value corresponds to SPEED_10
 	 */
 	mac_cr &= ~(MAC_CR_CFG_H_ | MAC_CR_CFG_L_);
-	if (speed == SPEED_2500)
+	if (speed == SPEED_2500) {
 		mac_cr |= MAC_CR_CFG_H_ | MAC_CR_CFG_L_;
-	else if (speed == SPEED_1000)
+		int_mod = LAN743X_INT_MOD_2_5G;
+	} else if (speed == SPEED_1000) {
 		mac_cr |= MAC_CR_CFG_H_;
-	else if (speed == SPEED_100)
+		int_mod = LAN743X_INT_MOD_1G;
+	} else if (speed == SPEED_100) {
 		mac_cr |= MAC_CR_CFG_L_;
+		int_mod = LAN743X_INT_MOD_100M;
+	} else {
+		int_mod = LAN743X_INT_MOD_10M;
+	}
 
 	if (duplex == DUPLEX_FULL)
 		mac_cr |= MAC_CR_DPX_;
@@ -3107,6 +3130,8 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 		mac_cr &= ~MAC_CR_DPX_;
 
 	lan743x_csr_write(adapter, MAC_CR, mac_cr);
+
+	lan743x_config_int_mod(adapter, int_mod);
 
 	lan743x_ptp_update_latency(adapter, speed);
 
