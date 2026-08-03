@@ -19,23 +19,26 @@ int adfs_dir_copyfrom(void *dst, struct adfs_dir *dir, unsigned int offset,
 		      size_t len)
 {
 	struct super_block *sb = dir->sb;
+	size_t size = (size_t)dir->nr_buffers << sb->s_blocksize_bits;
 	unsigned int index, remain;
+
+	if (offset >= size || len > size - offset)
+		return -EINVAL;
 
 	index = offset >> sb->s_blocksize_bits;
 	offset &= sb->s_blocksize - 1;
-	remain = sb->s_blocksize - offset;
-	if (index + (remain < len) >= dir->nr_buffers)
-		return -EINVAL;
 
-	if (remain < len) {
+	while (len) {
+		remain = sb->s_blocksize - offset;
+		if (remain > len)
+			remain = len;
+
 		memcpy(dst, dir->bhs[index]->b_data + offset, remain);
 		dst += remain;
 		len -= remain;
 		index += 1;
 		offset = 0;
 	}
-
-	memcpy(dst, dir->bhs[index]->b_data + offset, len);
 
 	return 0;
 }
