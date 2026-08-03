@@ -145,6 +145,7 @@ static int usb_urb_alloc_bulk_urbs(struct usb_data_stream *stream)
 			dev_dbg(&stream->udev->dev, "%s: failed\n", __func__);
 			for (j = 0; j < i; j++)
 				usb_free_urb(stream->urb_list[j]);
+			stream->urbs_initialized = 0;
 			return -ENOMEM;
 		}
 		usb_fill_bulk_urb(stream->urb_list[i],
@@ -175,6 +176,7 @@ static int usb_urb_alloc_isoc_urbs(struct usb_data_stream *stream)
 			dev_dbg(&stream->udev->dev, "%s: failed\n", __func__);
 			for (j = 0; j < i; j++)
 				usb_free_urb(stream->urb_list[j]);
+			stream->urbs_initialized = 0;
 			return -ENOMEM;
 		}
 
