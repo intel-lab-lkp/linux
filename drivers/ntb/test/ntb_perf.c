@@ -1436,7 +1436,7 @@ static int perf_setup_peer_mw(struct perf_peer *peer)
 static int perf_init_peers(struct perf_ctx *perf)
 {
 	struct perf_peer *peer;
-	int pidx, lport, ret;
+	int first, count, pidx, lport, ret;
 
 	lport = ntb_port_number(perf->ntb);
 	perf->gidx = -1;
@@ -1469,7 +1469,19 @@ static int perf_init_peers(struct perf_ctx *perf)
 	}
 
 	for (pidx = 0; pidx < perf->pcnt; pidx++) {
-		ret = perf_setup_peer_mw(&perf->peers[pidx]);
+		peer = &perf->peers[pidx];
+		ret = ntb_mw_get_trans_group(perf->ntb, peer->pidx,
+					     peer->gidx, &first, &count);
+		if (ret)
+			return ret;
+		if (first != peer->gidx || count != 1) {
+			dev_err(&perf->ntb->dev,
+				"Peer %d MW %d is not a standalone window\n",
+				peer->pidx, peer->gidx);
+			return -EOPNOTSUPP;
+		}
+
+		ret = perf_setup_peer_mw(peer);
 		if (ret)
 			return ret;
 	}
