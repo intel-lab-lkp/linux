@@ -885,8 +885,10 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 		      COMMAND_PORT_ROC;
 
 	dw_i3c_master_enqueue_xfer(master, xfer);
-	if (!wait_for_completion_timeout(&xfer->comp, XFER_TIMEOUT))
+	if (!wait_for_completion_timeout(&xfer->comp, XFER_TIMEOUT)) {
 		dw_i3c_master_dequeue_xfer(master, xfer);
+		goto rpm_out;
+	}
 
 	newdevs = GENMASK(master->maxdevs - cmd->rx_len - 1, 0);
 	newdevs &= ~olddevs;
