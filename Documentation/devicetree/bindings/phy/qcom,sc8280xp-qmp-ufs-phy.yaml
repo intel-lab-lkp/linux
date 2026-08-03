@@ -81,9 +81,15 @@ properties:
     items:
       - const: ufsphy
 
-  vdda-phy-supply: true
+  vdda-phy-supply:
+    description:
+      Supply for the PHY, typically around 0.8V, though the exact voltage
+      varies per SoC.
 
-  vdda-pll-supply: true
+  vdda-pll-supply:
+    description:
+      Supply for the PLL, typically around 1.2V, though the exact voltage
+      varies per SoC.
 
   "#clock-cells":
     const: 1
