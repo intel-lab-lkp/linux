@@ -213,6 +213,19 @@ int sanity_check_segment_list(struct kimage *image)
 #endif
 
 	/*
+	 * Reject destinations that land on hardware-poisoned memory: the
+	 * relocation copy would machine-check on the bad frame.
+	 */
+	for (i = 0; i < nr_segments; i++) {
+		phys_addr_t poison;
+
+		poison = range_last_hwpoison(image->segment[i].mem,
+					     image->segment[i].memsz);
+		if (poison != PHYS_ADDR_MAX)
+			return -EADDRNOTAVAIL;
+	}
+
+	/*
 	 * The destination addresses are searched from system RAM rather than
 	 * being allocated from the buddy allocator, so they are not guaranteed
 	 * to be accepted by the current kernel.  Accept the destination
