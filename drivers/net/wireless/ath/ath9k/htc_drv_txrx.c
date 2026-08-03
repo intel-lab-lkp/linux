@@ -1145,6 +1145,12 @@ void ath9k_htc_rxep(void *drv_priv, struct sk_buff *skb,
 	if (!data_race(priv->rx.initialized))
 		goto err;
 
+	/*
+	 * Make sure all the ath9k_rx_init() memory writes are visible before
+	 * proceeding.
+	 */
+	smp_rmb();
+
 	spin_lock_irqsave(&priv->rx.rxbuflock, flags);
 	list_for_each_entry(tmp_buf, &priv->rx.rxbuf, list) {
 		if (!tmp_buf->in_process) {
