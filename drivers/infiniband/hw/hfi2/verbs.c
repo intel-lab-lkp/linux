@@ -1752,6 +1752,7 @@ static int get_hw_stats(struct ib_device *ibdev, struct rdma_hw_stats *stats,
 static const struct ib_device_ops hfi2_dev_ops = {
 	.owner = THIS_MODULE,
 	.driver_id = RDMA_DRIVER_HFI2,
+	.uverbs_abi_ver = HFI2_UVERBS_ABI_VERSION,
 
 	.alloc_hw_device_stats = hfi2_alloc_hw_device_stats,
 	.alloc_hw_port_stats = hfi_alloc_hw_port_stats,
@@ -1763,12 +1764,12 @@ static const struct ib_device_ops hfi2_dev_ops = {
 	/* keep process mad in the driver */
 	.process_mad = hfi2_process_mad,
 	.rdma_netdev_get_params = hfi2_ipoib_rn_get_params,
-	.write_iter = hfi2_uverbs_write_iter,
 };
 
 static const struct ib_device_ops cport_dev_ops = {
 	.owner = THIS_MODULE,
 	.driver_id = RDMA_DRIVER_HFI2,
+	.uverbs_abi_ver = HFI2_UVERBS_ABI_VERSION,
 
 	.alloc_hw_device_stats = hfi2_alloc_hw_device_stats,
 	.alloc_hw_port_stats = hfi_alloc_hw_port_stats,
@@ -1780,12 +1781,12 @@ static const struct ib_device_ops cport_dev_ops = {
 	/* keep process mad in the driver */
 	.process_mad = hfi2_cport_process_mad,
 	.rdma_netdev_get_params = hfi2_ipoib_rn_get_params,
-	.write_iter = hfi2_uverbs_write_iter,
 };
 
 static const struct ib_device_ops vf_dev_ops = {
 	.owner = THIS_MODULE,
 	.driver_id = RDMA_DRIVER_HFI2,
+	.uverbs_abi_ver = HFI2_UVERBS_ABI_VERSION,
 
 	.alloc_hw_device_stats = hfi2_alloc_hw_device_stats,
 	.alloc_hw_port_stats = hfi_alloc_hw_port_stats,
@@ -1876,7 +1877,7 @@ int hfi2_register_ib_device(struct hfi2_devdata *dd)
 	/*
 	 * Fill in rvt info object.
 	 */
-	dd->verbs_dev.rdi.driver_f.hfi2_get_pci_dev = hfi2_get_pci_dev;
+	dd->verbs_dev.rdi.driver_f.get_pci_dev = hfi2_get_pci_dev;
 	dd->verbs_dev.rdi.driver_f.check_ah = hfi2_check_ah;
 	dd->verbs_dev.rdi.driver_f.notify_new_ah = hfi2_notify_new_ah;
 	dd->verbs_dev.rdi.driver_f.get_guid_be = hfi2_get_guid_be;
@@ -1909,22 +1910,21 @@ int hfi2_register_ib_device(struct hfi2_devdata *dd)
 			(dd->rsrcs.c.first_rcv_context << 1) -
 			(1 << max_qos_shift);
 	}
-	dd->verbs_dev.rdi.driver_f.qp_priv_alloc = qp_priv_alloc;
+	dd->verbs_dev.rdi.driver_f.qp_priv_alloc = hfi2_qp_priv_alloc;
 	dd->verbs_dev.rdi.driver_f.qp_priv_init = hfi2_qp_priv_init;
-	dd->verbs_dev.rdi.driver_f.qp_priv_free = qp_priv_free;
-	dd->verbs_dev.rdi.driver_f.hfi2_free_all_qps = hfi2_free_all_qps;
-	dd->verbs_dev.rdi.driver_f.hfi2_notify_qp_reset = hfi2_notify_qp_reset;
+	dd->verbs_dev.rdi.driver_f.qp_priv_free = hfi2_qp_priv_free;
+	dd->verbs_dev.rdi.driver_f.free_all_qps = hfi2_free_all_qps;
+	dd->verbs_dev.rdi.driver_f.notify_qp_reset = hfi2_notify_qp_reset;
 	dd->verbs_dev.rdi.driver_f.do_send = hfi2_do_send_from_rvt;
 	dd->verbs_dev.rdi.driver_f.schedule_send = hfi2_schedule_send;
 	dd->verbs_dev.rdi.driver_f.schedule_send_no_lock = _hfi2_schedule_send;
-	dd->verbs_dev.rdi.driver_f.hfi2_get_pmtu_from_attr = hfi2_get_pmtu_from_attr;
-	dd->verbs_dev.rdi.driver_f.hfi2_notify_error_qp = hfi2_notify_error_qp;
-	dd->verbs_dev.rdi.driver_f.hfi2_flush_qp_waiters = hfi2_flush_qp_waiters;
-	dd->verbs_dev.rdi.driver_f.hfi2_stop_send_queue = hfi2_stop_send_queue;
-	dd->verbs_dev.rdi.driver_f.hfi2_quiesce_qp = hfi2_quiesce_qp;
-	dd->verbs_dev.rdi.driver_f.hfi2_notify_error_qp = hfi2_notify_error_qp;
-	dd->verbs_dev.rdi.driver_f.hfi2_mtu_from_qp = hfi2_mtu_from_qp;
-	dd->verbs_dev.rdi.driver_f.hfi2_mtu_to_path_mtu = hfi2_mtu_to_path_mtu;
+	dd->verbs_dev.rdi.driver_f.get_pmtu_from_attr = hfi2_get_pmtu_from_attr;
+	dd->verbs_dev.rdi.driver_f.notify_error_qp = hfi2_notify_error_qp;
+	dd->verbs_dev.rdi.driver_f.flush_qp_waiters = hfi2_flush_qp_waiters;
+	dd->verbs_dev.rdi.driver_f.stop_send_queue = hfi2_stop_send_queue;
+	dd->verbs_dev.rdi.driver_f.quiesce_qp = hfi2_quiesce_qp;
+	dd->verbs_dev.rdi.driver_f.mtu_from_qp = hfi2_mtu_from_qp;
+	dd->verbs_dev.rdi.driver_f.mtu_to_path_mtu = hfi2_mtu_to_path_mtu;
 	dd->verbs_dev.rdi.driver_f.check_modify_qp = hfi2_check_modify_qp;
 	dd->verbs_dev.rdi.driver_f.modify_qp = hfi2_modify_qp;
 	dd->verbs_dev.rdi.driver_f.notify_restart_rc = hfi2_restart_rc;
