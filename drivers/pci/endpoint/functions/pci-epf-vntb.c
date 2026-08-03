@@ -226,6 +226,15 @@ static int epf_ntb_get_mw_group(struct epf_ntb *ntb, unsigned int mw,
 	return 0;
 }
 
+static u64 epf_ntb_mw_group_size(struct epf_ntb *ntb, unsigned int first,
+				 unsigned int count)
+{
+	unsigned int last = first + count - 1;
+
+	return ntb->mw_layout[last].offset - ntb->mw_layout[first].offset +
+	       ntb->mw_layout[last].size;
+}
+
 /**
  * epf_ntb_configure_mw() - Configure the Outbound Address Space for VHOST
  *   to access the memory window of HOST
@@ -891,6 +900,8 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 	struct device *dev = &ntb->epf->dev;
 	u64 bar_size[BAR_5 + 1] = {};
 	bool bar_set[BAR_5 + 1] = {};
+	unsigned int count;
+	unsigned int j;
 
 	for (i = 0; i < ntb->num_mws; i++) {
 		size = ntb->mw_layout[i].size;
@@ -900,7 +911,6 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 	}
 
 	for (i = 0; i < ntb->num_mws; i++) {
-		size = ntb->mw_layout[i].size;
 		barno = ntb->mw_layout[i].barno;
 
 		if (bar_set[barno])
@@ -926,6 +936,9 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 
 alloc_vpci_mw:
 		/* Allocate EPC outbound memory windows to vpci vntb device */
+		count = ntb->packed_mws ? ntb->packed_mws : 1;
+		size = epf_ntb_mw_group_size(ntb, i, count);
+		/* Only the group head owns the allocation handle. */
 		ntb->vpci_mw_addr[i] = pci_epc_mem_alloc_addr(ntb->epf->epc,
 							      &ntb->vpci_mw_phy[i],
 							      size);
@@ -935,6 +948,13 @@ alloc_vpci_mw:
 			i++;
 			goto err_alloc_mem;
 		}
+
+		for (j = 1; j < count; j++)
+			ntb->vpci_mw_phy[i + j] = ntb->vpci_mw_phy[i] +
+				ntb->mw_layout[i + j].offset -
+				ntb->mw_layout[i].offset;
+
+		i += count - 1;
 	}
 
 	return ret;
@@ -953,6 +973,7 @@ static void epf_ntb_mw_bar_clear(struct epf_ntb *ntb, int num_mws)
 {
 	bool bar_cleared[BAR_5 + 1] = {};
 	enum pci_barno barno;
+	unsigned int count;
 	int i;
 
 	for (i = 0; i < num_mws; i++) {
@@ -968,10 +989,11 @@ static void epf_ntb_mw_bar_clear(struct epf_ntb *ntb, int num_mws)
 		if (!ntb->vpci_mw_addr[i])
 			continue;
 
+		count = ntb->packed_mws ? ntb->packed_mws : 1;
 		pci_epc_mem_free_addr(ntb->epf->epc,
 				      ntb->vpci_mw_phy[i],
 				      ntb->vpci_mw_addr[i],
-				      ntb->mw_layout[i].size);
+				      epf_ntb_mw_group_size(ntb, i, count));
 		ntb->vpci_mw_addr[i] = NULL;
 	}
 }
