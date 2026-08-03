@@ -42,6 +42,9 @@ properties:
   "#clock-cells":
     const: 0
 
+  clock-frequency:
+    description: for audio_clkout
+
   "#address-cells":
     const: 1
 
