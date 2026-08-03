@@ -1279,10 +1279,19 @@ static int __init pppoe_init(void)
 		dev_add_offload(&pppoe_packet_offload);
 	dev_add_pack(&pppoes_ptype);
 	dev_add_pack(&pppoed_ptype);
-	register_netdevice_notifier(&pppoe_notifier);
+
+	err = register_netdevice_notifier(&pppoe_notifier);
+	if (err)
+		goto out_unregister_packs;
 
 	return 0;
 
+out_unregister_packs:
+	dev_remove_pack(&pppoed_ptype);
+	dev_remove_pack(&pppoes_ptype);
+	if (IS_ENABLED(CONFIG_INET))
+		dev_remove_offload(&pppoe_packet_offload);
+	unregister_pppox_proto(PX_PROTO_OE);
 out_unregister_pppoe_proto:
 	proto_unregister(&pppoe_sk_proto);
 out_unregister_net_ops:
