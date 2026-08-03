@@ -186,11 +186,11 @@ static inline struct device *dport_to_host(struct cxl_dport *dport)
 void cxl_ras_init(void);
 void cxl_ras_exit(void);
 bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport,
-		    void __iomem *ras_base);
+		    void __iomem *ras_base, u64 serial);
 void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port,
 		     struct cxl_dport *dport);
 void cxl_handle_cor_ras(struct cxl_port *port, struct cxl_dport *dport,
-			void __iomem *ras_base);
+			void __iomem *ras_base, u64 serial);
 void cxl_dport_map_rch_aer(struct cxl_dport *dport);
 void cxl_disable_rch_root_ints(struct cxl_dport *dport);
 void cxl_handle_rdport_errors(struct pci_dev *pdev);
@@ -200,14 +200,14 @@ void devm_cxl_dport_ras_setup(struct cxl_dport *dport);
 static inline void cxl_ras_init(void) { }
 static inline void cxl_ras_exit(void) { }
 static inline bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport,
-				  void __iomem *ras_base)
+				  void __iomem *ras_base, u64 serial)
 {
 	return false;
 }
 static inline void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port,
 				   struct cxl_dport *dport) { }
 static inline void cxl_handle_cor_ras(struct cxl_port *port, struct cxl_dport *dport,
-				      void __iomem *ras_base) { }
+				      void __iomem *ras_base, u64 serial) { }
 static inline void cxl_dport_map_rch_aer(struct cxl_dport *dport) { }
 static inline void cxl_disable_rch_root_ints(struct cxl_dport *dport) { }
 static inline void cxl_handle_rdport_errors(struct pci_dev *pdev) { }
