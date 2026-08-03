@@ -173,6 +173,23 @@ struct hwc_caller_ctx {
 
 	u32 error; /* Linux error code */
 	u32 status_code;
+
+	/* Protects output_buf against concurrent access from
+	 * handle_resp() (CQ interrupt) and the sender timeout path.
+	 */
+	spinlock_t lock;
+
+	/* Tracks sender + handle_resp ownership.  The last put
+	 * (refcount reaches 0) releases the bitmap slot.
+	 */
+	refcount_t refcnt;
+	u16 msg_id;
+
+	/* Set under lock by the first handle_resp() for this slot so a
+	 * duplicate or replayed response is dropped instead of consuming
+	 * the response-side reference a second time.
+	 */
+	bool responded;
 };
 
 struct hw_channel_context {
@@ -193,12 +210,18 @@ struct hw_channel_context {
 	struct hwc_wq *txq;
 	struct hwc_cq *cq;
 
-	struct semaphore sema;
 	struct gdma_resource inflight_msg_res;
+	/* Waitqueue for senders blocked on a full inflight bitmap. */
+	wait_queue_head_t msg_waitq;
 
 	u32 pf_dest_vrq_id;
 	u32 pf_dest_vrcq_id;
 	u32 hwc_timeout;
+
+	/* Set on first HWC timeout.  Causes get_msg_index() to return
+	 * -ETIMEDOUT instead of waiting, draining all queued senders.
+	 */
+	bool hwc_timed_out;
 
 	/* Set after mana_smc_setup_hwc() succeeds (hardware has active
 	 * MST entries).  Cleared only after mana_smc_teardown_hwc()
