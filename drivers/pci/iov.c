@@ -869,6 +869,7 @@ found:
 			goto failed;
 		}
 		iov->barsz[i] = resource_size(res);
+		iov->barsz_orig[i] = iov->barsz[i];
 		resource_set_size(res, resource_size(res) * total);
 		pci_info(dev, "%s %pR: contains BAR %d for %d VFs\n",
 			 res_name, res, i, total);
