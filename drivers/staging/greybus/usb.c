@@ -105,8 +105,29 @@ static int hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u16 wIndex,
 	size_t response_size;
 	int ret;
 
-	/* FIXME: handle unspecified lengths */
-	response_size = sizeof(*response) + wLength;
+	/*
+	 * Several USB hub class requests have a response length that is
+	 * fixed by the request type rather than by wLength (which may be
+	 * zero, or otherwise smaller than the actual data the module will
+	 * return). Make sure we always allocate enough room for those.
+	 */
+	switch (typeReq) {
+	case GetHubDescriptor:
+		response_size = sizeof(*response) +
+				 sizeof(struct usb_hub_descriptor);
+		break;
+	case GetHubStatus:
+		response_size = sizeof(*response) +
+				 sizeof(struct usb_hub_status);
+		break;
+	case GetPortStatus:
+		response_size = sizeof(*response) +
+				 sizeof(struct usb_port_status);
+		break;
+	default:
+		response_size = sizeof(*response) + wLength;
+		break;
+	}
 
 	operation = gb_operation_create(dev->connection,
 					GB_USB_TYPE_HUB_CONTROL,
@@ -126,10 +147,12 @@ static int hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u16 wIndex,
 	if (ret)
 		goto out;
 
-	if (wLength) {
+	if (response_size > sizeof(*response)) {
+		size_t data_size = response_size - sizeof(*response);
+
 		/* Greybus core has verified response size */
 		response = operation->response->payload;
-		memcpy(buf, response->buf, wLength);
+		memcpy(buf, response->buf, data_size);
 	}
 out:
 	gb_operation_put(operation);
