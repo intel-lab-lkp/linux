@@ -11,6 +11,40 @@ Contact:	Jonathan Lemon <jonathan.lemon@gmail.com>
 Description:	This directory contains the attributes of the Nth timecard
 		registered.
 
+What:		/sys/class/timecard/ocpN/cpld_device_id
+Date:		July 2026
+Contact:	Sagi Maimon <maimon.sagi@gmail.com>
+Description:	(RO) The 32-bit Lattice device ID of the TAP CPLD, reported as
+		a hex string, e.g. "0xe12bc043".
+
+		Only present on ADVA x1 TAP boards (PCI ID 0xad5a:0x0410).
+		The Lattice LCMXO3LF-210 reports 0xe12bc043.
+
+		The driver acquires the MicroBlaze I2C bus internally before
+		issuing the READ_IDCODE command; no bus arbitration is required
+		from userspace.
+
+What:		/sys/class/timecard/ocpN/cpld_status
+Date:		July 2026
+Contact:	Sagi Maimon <maimon.sagi@gmail.com>
+Description:	(RO) The status register of the TAP CPLD, in human-readable
+		form:
+
+		  done=<0|1> busy=<0|1> failed=<0|1>
+
+		Only present on ADVA x1 TAP boards (PCI ID 0xad5a:0x0410).
+
+		done=1 indicates the configuration flash was successfully
+		programmed and is active.  busy=1 means an internal operation
+		is in progress.  failed=1 means the last ISC operation failed.
+
+		The driver acquires the MicroBlaze I2C bus internally; no bus
+		arbitration is required from userspace.
+
+		To program new CPLD firmware use the standard kernel
+		firmware-upload interface registered at:
+		/sys/class/firmware/adva-cpld/
+
 What:		/sys/class/timecard/ocpN/available_clock_sources
 Date:		September 2021
 Contact:	Jonathan Lemon <jonathan.lemon@gmail.com>
