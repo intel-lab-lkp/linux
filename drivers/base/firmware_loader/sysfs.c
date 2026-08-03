@@ -117,7 +117,12 @@ int register_sysfs_loader(void)
 
 	if (ret != 0)
 		return ret;
-	return register_firmware_config_sysctl();
+
+	ret = register_firmware_config_sysctl();
+	if (ret)
+		class_unregister(&firmware_class);
+
+	return ret;
 }
 
 void unregister_sysfs_loader(void)

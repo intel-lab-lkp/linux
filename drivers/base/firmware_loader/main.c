@@ -1727,8 +1727,14 @@ static int __init firmware_class_init(void)
 	if (ret)
 		goto out;
 
-	return register_sysfs_loader();
+	ret = register_sysfs_loader();
+	if (ret)
+		goto out_reboot;
 
+	return 0;
+
+out_reboot:
+	unregister_reboot_notifier(&fw_shutdown_nb);
 out:
 	unregister_fw_pm_ops();
 	return ret;
