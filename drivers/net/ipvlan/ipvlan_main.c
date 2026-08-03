@@ -1048,7 +1048,9 @@ static int __init ipvlan_init_module(void)
 	int err;
 
 	ipvlan_init_secret();
-	register_netdevice_notifier(&ipvlan_notifier_block);
+	err = register_netdevice_notifier(&ipvlan_notifier_block);
+	if (err)
+		return err;
 #if IS_ENABLED(CONFIG_IPV6)
 	register_inet6addr_notifier(&ipvlan_addr6_notifier_block);
 	register_inet6addr_validator_notifier(
