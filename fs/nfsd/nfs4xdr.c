@@ -4383,13 +4383,18 @@ nfsd4_setup_notify_entry4(struct notify_entry4 *ne, struct xdr_stream *xdr,
 	struct path path = nf->nf_file->f_path;
 	struct nfsd4_fattr_args args = { };
 	const u32 *reqmask;
-	uint32_t *attrmask;
+	u32 *attrmask;
 	__be32 status;
 	bool parent;
 	int ret;
 
-	/* Reserve space for attrmask */
-	attrmask = xdr_reserve_space(xdr, 3 * sizeof(uint32_t));
+	/*
+	 * attrmask is the host-order bmval[3] that nfsd4_encode_attr_vals()
+	 * consumes and that ne_attrs.attrmask.element points at. It must
+	 * outlive this call, so steal a few words from the xdr stream to hold
+	 * it.
+	 */
+	attrmask = (u32 *)xdr_reserve_space(xdr, 3 * sizeof(*attrmask));
 	if (!attrmask)
 		return false;
 
