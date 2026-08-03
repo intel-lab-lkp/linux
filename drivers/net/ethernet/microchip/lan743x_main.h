@@ -871,6 +871,7 @@ struct lan743x_adapter;
 #define LAN743X_INT_MOD_1G		(150)
 #define LAN743X_INT_MOD_100M		(330)
 #define LAN743X_INT_MOD_10M		(330)
+#define LAN743X_INT_MOD_MAX		(8191)
 
 #if (LAN743X_USED_RX_CHANNELS > LAN743X_MAX_RX_CHANNELS)
 #error Invalid LAN743X_USED_RX_CHANNELS
@@ -1098,6 +1099,12 @@ struct lan743x_adapter {
 	phy_interface_t		phy_interface;
 	struct phylink		*phylink;
 	struct phylink_config	phylink_config;
+	/* Interrupt moderation timer value currently programmed in hardware. */
+	u32			int_mod;
+	/* When set, the moderation timer tracks the link speed automatically. */
+	bool			use_adaptive_mod;
+	/* Last negotiated link speed, used to derive the adaptive value. */
+	int			link_speed;
 	int			rx_tstamp_filter;
 };
 
@@ -1219,5 +1226,7 @@ void lan743x_hs_syslock_release(struct lan743x_adapter *adapter);
 void lan743x_mac_flow_ctrl_set_enables(struct lan743x_adapter *adapter,
 				       bool tx_enable, bool rx_enable);
 int lan743x_sgmii_read(struct lan743x_adapter *adapter, u8 mmd, u16 addr);
+void lan743x_config_int_mod(struct lan743x_adapter *adapter, u32 int_mod);
+u32 lan743x_get_int_mod(int speed);
 
 #endif /* _LAN743X_H */

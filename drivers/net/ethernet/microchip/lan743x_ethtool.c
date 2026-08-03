@@ -1355,7 +1355,77 @@ static int lan743x_set_pauseparam(struct net_device *dev,
 	return phylink_ethtool_set_pauseparam(adapter->phylink, pause);
 }
 
+static int lan743x_ethtool_get_coalesce(struct net_device *netdev,
+					struct ethtool_coalesce *ec,
+					struct kernel_ethtool_coalesce *kernel_coal,
+					struct netlink_ext_ack *extack)
+{
+	struct lan743x_adapter *adapter = netdev_priv(netdev);
+
+	/* The driver programs the same value into every per-vector
+	 * INT_MOD_CFG register, so RX and TX moderation share one value;
+	 * report it for both.
+	 */
+	ec->rx_coalesce_usecs = adapter->int_mod;
+	ec->tx_coalesce_usecs = adapter->int_mod;
+	ec->use_adaptive_rx_coalesce = adapter->use_adaptive_mod;
+	ec->use_adaptive_tx_coalesce = adapter->use_adaptive_mod;
+
+	return 0;
+}
+
+static int lan743x_ethtool_set_coalesce(struct net_device *netdev,
+					struct ethtool_coalesce *ec,
+					struct kernel_ethtool_coalesce *kernel_coal,
+					struct netlink_ext_ack *extack)
+{
+	struct lan743x_adapter *adapter = netdev_priv(netdev);
+	u32 int_mod;
+
+	/* RX and TX share a single moderation value, so adaptive mode must be
+	 * enabled or disabled for both together.
+	 */
+	if (ec->use_adaptive_rx_coalesce != ec->use_adaptive_tx_coalesce) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "adaptive-rx and adaptive-tx must match");
+		return -EINVAL;
+	}
+
+	if (ec->use_adaptive_rx_coalesce) {
+		/* Resume speed-adaptive moderation and apply the value for the
+		 * current link speed right away.
+		 */
+		adapter->use_adaptive_mod = true;
+		int_mod = lan743x_get_int_mod(adapter->link_speed);
+	} else {
+		/* All per-vector INT_MOD_CFG registers get the same value, so
+		 * RX and TX moderation cannot differ; reject a mismatch.
+		 */
+		if (ec->rx_coalesce_usecs != ec->tx_coalesce_usecs) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "rx-usecs and tx-usecs must be equal");
+			return -EINVAL;
+		}
+		if (ec->rx_coalesce_usecs > LAN743X_INT_MOD_MAX) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "coalesce value exceeds maximum");
+			return -EINVAL;
+		}
+		adapter->use_adaptive_mod = false;
+		int_mod = ec->rx_coalesce_usecs;
+	}
+
+	lan743x_config_int_mod(adapter, int_mod);
+
+	return 0;
+}
+
 const struct ethtool_ops lan743x_ethtool_ops = {
+	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
+				     ETHTOOL_COALESCE_USE_ADAPTIVE_RX |
+				     ETHTOOL_COALESCE_USE_ADAPTIVE_TX,
+	.get_coalesce = lan743x_ethtool_get_coalesce,
+	.set_coalesce = lan743x_ethtool_set_coalesce,
 	.get_drvinfo = lan743x_ethtool_get_drvinfo,
 	.get_msglevel = lan743x_ethtool_get_msglevel,
 	.set_msglevel = lan743x_ethtool_set_msglevel,

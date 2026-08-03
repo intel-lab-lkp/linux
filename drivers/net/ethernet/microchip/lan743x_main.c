@@ -3071,12 +3071,31 @@ static void lan743x_phylink_mac_link_down(struct phylink_config *config,
 	netif_tx_stop_all_queues(netdev);
 }
 
+/* Map a link speed to the interrupt moderation timer value to use. */
+u32 lan743x_get_int_mod(int speed)
+{
+	switch (speed) {
+	case SPEED_2500:
+		return LAN743X_INT_MOD_2_5G;
+	case SPEED_1000:
+		return LAN743X_INT_MOD_1G;
+	case SPEED_100:
+		return LAN743X_INT_MOD_100M;
+	default:
+		return LAN743X_INT_MOD_10M;
+	}
+}
+
 /* Program the interrupt moderation timer value into the per-vector
  * INT_MOD_CFG registers. Only the timer value is written here; the vector
  * mapping (INT_MOD_MAP) is static and is set once at interrupt open.
  */
-static void lan743x_config_int_mod(struct lan743x_adapter *adapter, u32 int_mod)
+void lan743x_config_int_mod(struct lan743x_adapter *adapter, u32 int_mod)
 {
+	/* Nothing to do if the value is already programmed in hardware. */
+	if (int_mod == adapter->int_mod)
+		return;
+
 	if (!(adapter->csr.flags & LAN743X_CSR_FLAG_IS_A0)) {
 		lan743x_csr_write(adapter, INT_MOD_CFG0, int_mod);
 		lan743x_csr_write(adapter, INT_MOD_CFG1, int_mod);
@@ -3090,6 +3109,7 @@ static void lan743x_config_int_mod(struct lan743x_adapter *adapter, u32 int_mod)
 			lan743x_csr_write(adapter, INT_MOD_CFG8, int_mod);
 			lan743x_csr_write(adapter, INT_MOD_CFG9, int_mod);
 		}
+		adapter->int_mod = int_mod;
 	}
 }
 
@@ -3102,7 +3122,6 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 {
 	struct net_device *netdev = to_net_dev(config->dev);
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
-	u32 int_mod;
 	int mac_cr;
 	u8 cap;
 
@@ -3111,18 +3130,12 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 	 * Resulting value corresponds to SPEED_10
 	 */
 	mac_cr &= ~(MAC_CR_CFG_H_ | MAC_CR_CFG_L_);
-	if (speed == SPEED_2500) {
+	if (speed == SPEED_2500)
 		mac_cr |= MAC_CR_CFG_H_ | MAC_CR_CFG_L_;
-		int_mod = LAN743X_INT_MOD_2_5G;
-	} else if (speed == SPEED_1000) {
+	else if (speed == SPEED_1000)
 		mac_cr |= MAC_CR_CFG_H_;
-		int_mod = LAN743X_INT_MOD_1G;
-	} else if (speed == SPEED_100) {
+	else if (speed == SPEED_100)
 		mac_cr |= MAC_CR_CFG_L_;
-		int_mod = LAN743X_INT_MOD_100M;
-	} else {
-		int_mod = LAN743X_INT_MOD_10M;
-	}
 
 	if (duplex == DUPLEX_FULL)
 		mac_cr |= MAC_CR_DPX_;
@@ -3131,7 +3144,13 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 
 	lan743x_csr_write(adapter, MAC_CR, mac_cr);
 
-	lan743x_config_int_mod(adapter, int_mod);
+	/* Track the link speed so a later ethtool request to re-enable
+	 * adaptive moderation can restore the speed-based value, and refresh
+	 * the timer now when adaptive moderation is active.
+	 */
+	adapter->link_speed = speed;
+	if (adapter->use_adaptive_mod)
+		lan743x_config_int_mod(adapter, lan743x_get_int_mod(speed));
 
 	lan743x_ptp_update_latency(adapter, speed);
 
@@ -3613,6 +3632,13 @@ static int lan743x_hardware_init(struct lan743x_adapter *adapter,
 
 	adapter->intr.irq = adapter->pdev->irq;
 	lan743x_csr_write(adapter, INT_EN_CLR, 0xFFFFFFFF);
+
+	/* Enable speed-adaptive interrupt moderation by default and program
+	 * the timer for the default (1G) value until the link comes up.
+	 */
+	adapter->use_adaptive_mod = true;
+	adapter->link_speed = SPEED_UNKNOWN;
+	lan743x_config_int_mod(adapter, LAN743X_INT_MOD_1G);
 
 	ret = lan743x_gpio_init(adapter);
 	if (ret)
