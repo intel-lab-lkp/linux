@@ -1757,6 +1757,68 @@ static struct irq_domain *stm32_pctrl_get_irq_domain(struct platform_device *pde
 	return domain;
 }
 
+/*
+ * The interrupt mux registers are written from stm32_gpio_domain_activate(),
+ * which the irq core calls with the raw desc->lock held. The regmap the
+ * generic syscon driver hands out is protected by a spinlock_t, which may
+ * sleep on PREEMPT_RT and therefore must not be taken from there.
+ *
+ * Publish a raw spinlock regmap for the node before looking it up, so that
+ * all of its users keep sharing one regmap, and one lock.
+ */
+static const struct regmap_config stm32_pctrl_syscfg_regmap_config = {
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_stride = 4,
+	.use_raw_spinlock = true,
+};
+
+static void stm32_pctrl_publish_syscfg_regmap(struct device_node *np)
+{
+	struct regmap_config config = stm32_pctrl_syscfg_regmap_config;
+	struct device_node *syscfg_np;
+	struct regmap *regmap;
+	void __iomem *base;
+	struct resource res;
+
+	syscfg_np = of_parse_phandle(np, "st,syscfg", 0);
+	if (!syscfg_np)
+		return;
+
+	if (of_address_to_resource(syscfg_np, 0, &res) ||
+	    resource_size(&res) < config.reg_stride)
+		goto out_put;
+
+	config.max_register = resource_size(&res) - config.reg_stride;
+
+	base = of_iomap(syscfg_np, 0);
+	if (!base)
+		goto out_put;
+
+	/*
+	 * The regmap is handed over to the syscon layer, which never releases
+	 * it, so it must outlive this driver: no device managed allocation
+	 * here, and no device to attach it to either.
+	 */
+	regmap = regmap_init_mmio(NULL, base, &config);
+	if (IS_ERR(regmap)) {
+		iounmap(base);
+		goto out_put;
+	}
+
+	/*
+	 * A regmap is already registered for that node, most likely by the
+	 * other pinctrl instance sharing it. Drop ours and use that one.
+	 */
+	if (of_syscon_register_regmap(syscfg_np, regmap)) {
+		regmap_exit(regmap);
+		iounmap(base);
+	}
+
+out_put:
+	of_node_put(syscfg_np);
+}
+
 static int stm32_pctrl_dt_setup_irq(struct platform_device *pdev,
 			   struct stm32_pinctrl *pctl)
 {
@@ -1765,6 +1827,8 @@ static int stm32_pctrl_dt_setup_irq(struct platform_device *pdev,
 	struct regmap *rm;
 	int offset, ret, i;
 	int mask, mask_width;
+
+	stm32_pctrl_publish_syscfg_regmap(np);
 
 	pctl->regmap = syscon_regmap_lookup_by_phandle(np, "st,syscfg");
 	if (IS_ERR(pctl->regmap))
