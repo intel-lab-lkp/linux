@@ -1085,8 +1085,12 @@ void pci_iov_remove(struct pci_dev *dev)
 		return;
 
 	iov->driver_max_VFs = iov->total_VFs;
-	if (iov->num_VFs)
+	if (iov->num_VFs) {
 		pci_warn(dev, "driver left SR-IOV enabled after remove\n");
+		return;
+	}
+
+	sriov_restore_vf_rebar_initial_sizes(dev);
 }
 
 /**
