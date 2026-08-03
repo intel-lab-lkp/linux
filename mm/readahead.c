@@ -302,7 +302,7 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 		}
 		if (i == mark)
 			folio_set_readahead(folio);
-		ractl->_workingset |= folio_test_workingset(folio);
+		ractl->_workingset |= folio_is_workingset(folio);
 		ractl->_nr_pages += min_nrpages;
 		i += min_nrpages;
 	}
@@ -474,7 +474,7 @@ static inline int ra_alloc_folio(struct readahead_control *ractl, pgoff_t index,
 	}
 
 	ractl->_nr_pages += 1UL << order;
-	ractl->_workingset |= folio_test_workingset(folio);
+	ractl->_workingset |= folio_is_workingset(folio);
 	return 0;
 }
 
@@ -817,7 +817,7 @@ void readahead_expand(struct readahead_control *ractl,
 			folio_put(folio);
 			return;
 		}
-		if (unlikely(folio_test_workingset(folio)) &&
+		if (unlikely(folio_is_workingset(folio)) &&
 				!ractl->_workingset) {
 			ractl->_workingset = true;
 			psi_memstall_enter(&ractl->_pflags);
@@ -846,7 +846,7 @@ void readahead_expand(struct readahead_control *ractl,
 			folio_put(folio);
 			return;
 		}
-		if (unlikely(folio_test_workingset(folio)) &&
+		if (unlikely(folio_is_workingset(folio)) &&
 				!ractl->_workingset) {
 			ractl->_workingset = true;
 			psi_memstall_enter(&ractl->_pflags);

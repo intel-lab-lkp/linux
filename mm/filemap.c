@@ -1259,7 +1259,7 @@ static inline int folio_wait_bit_common(struct folio *folio, int bit_nr,
 	bool in_thrashing;
 
 	if (bit_nr == PG_locked &&
-	    !folio_test_uptodate(folio) && folio_test_workingset(folio)) {
+	    !folio_test_uptodate(folio) && folio_is_workingset(folio)) {
 		delayacct_thrashing_start(&in_thrashing);
 		psi_memstall_enter(&pflags);
 		thrashing = true;
@@ -1414,7 +1414,7 @@ void softleaf_entry_wait_on_locked(softleaf_t entry, spinlock_t *ptl)
 	struct folio *folio = softleaf_to_folio(entry);
 
 	q = folio_waitqueue(folio);
-	if (!folio_test_uptodate(folio) && folio_test_workingset(folio)) {
+	if (!folio_test_uptodate(folio) && folio_is_workingset(folio)) {
 		delayacct_thrashing_start(&in_thrashing);
 		psi_memstall_enter(&pflags);
 		thrashing = true;
@@ -2510,7 +2510,7 @@ retry:
 static int filemap_read_folio(struct file *file, filler_t filler,
 		struct folio *folio)
 {
-	bool workingset = folio_test_workingset(folio);
+	bool workingset = folio_is_workingset(folio);
 	unsigned long pflags;
 	int error;
 
@@ -3981,7 +3981,7 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 		 */
 		if ((map_ret & VM_FAULT_NOPAGE) &&
 		    !(vmf->flags & FAULT_FLAG_TRIED) &&
-		    !folio_test_workingset(folio) &&
+		    !folio_is_workingset(folio) &&
 		    !(vma->vm_flags & (VM_SEQ_READ | VM_EXEC))) {
 			unsigned short mmap_miss;
 
