@@ -917,16 +917,19 @@ gen11_dsi_set_transcoder_timings(struct intel_encoder *encoder,
 	if (is_vid_mode(intel_dsi)) {
 		vtotal = adjusted_mode->crtc_vtotal;
 	} else {
-		int bpp, line_time_us, byte_clk_period_ns;
+		u64 line_time_ns;
+		int bpp;
 
 		if (crtc_state->dsc.compression_enable)
 			bpp = fxp_q4_to_int(crtc_state->dsc.compressed_bpp_x16);
 		else
 			bpp = mipi_dsi_pixel_format_to_bpp(intel_dsi->pixel_format);
 
-		byte_clk_period_ns = 1000000 / afe_clk(encoder, crtc_state);
-		line_time_us = (htotal * (bpp / 8) * byte_clk_period_ns) / (1000 * intel_dsi->lane_count);
-		vtotal = vactive + DIV_ROUND_UP(400, line_time_us);
+		line_time_ns = DIV_ROUND_UP_ULL((u64)htotal * bpp * 1000000,
+						afe_clk(encoder, crtc_state) *
+						intel_dsi->lane_count);
+		vtotal = vactive +
+			DIV_ROUND_UP_ULL(400 * 1000, line_time_ns);
 	}
 	vsync_start = adjusted_mode->crtc_vsync_start;
 	vsync_end = adjusted_mode->crtc_vsync_end;
