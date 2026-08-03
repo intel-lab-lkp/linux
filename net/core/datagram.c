@@ -638,7 +638,7 @@ int zerocopy_fill_skb_from_iter(struct sk_buff *skb,
 	int frag = skb_shinfo(skb)->nr_frags;
 
 	if (!skb_frags_readable(skb))
-		return -EFAULT;
+		return -EMSGSIZE;
 
 	while (length && iov_iter_count(from)) {
 		struct page *head, *last_head = NULL;
@@ -713,7 +713,7 @@ zerocopy_fill_skb_from_devmem(struct sk_buff *skb, struct iov_iter *from,
 	struct net_iov *niov;
 
 	if (i && skb_frags_readable(skb))
-		return -EFAULT;
+		return -EMSGSIZE;
 
 	/* Devmem filling works by taking an IOVEC from the user where the
 	 * iov_addrs are interpreted as an offset in bytes into the dma-buf to
