@@ -61,7 +61,7 @@ cxl_cper_trace_uncorr_prot_err(struct cxl_memdev *cxlmd,
 
 	/*
 	 * ras_cap.header_log[] holds CXL_HEADERLOG_SIZE_U32 (16) hardware
-	 * dwords.  Copy them into the front of a zero-filled
+	 * dwords. Copy them into the front of a zero-filled
 	 * CXL_HEADERLOG_TRACE_SIZE_U32 (128) u32 staging buffer so the trace
 	 * event memcpy sees a full 512-byte source and the userspace ABI
 	 * (rasdaemon) is preserved.
@@ -320,8 +320,8 @@ bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem
 	return true;
 }
 
-pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
-				    pci_channel_state_t state)
+pci_ers_result_t cxl_pci_error_detected(struct pci_dev *pdev,
+					pci_channel_state_t state)
 {
 	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_uport(&pdev->dev);
 	bool ue = false;
@@ -343,9 +343,16 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 		/*
 		 * The CXL RAS read is unconditional regardless of channel
 		 * state. Any uncorrectable error bit set in the CXL RAS
-		 * status register triggers a panic below because CXL.mem
-		 * cache coherency is already lost; continuing risks silent
-		 * data corruption.
+		 * status register triggers a panic because CXL.mem cache
+		 * coherency is already lost; continuing risks silent data
+		 * corruption.
+		 *
+		 * On a dead link readl() returns 0xFFFFFFFF which sets all
+		 * UCE bits and also triggers the panic - this is intentional.
+		 * If RAS registers are not mapped the read is skipped, the
+		 * panic is not reached, and the frozen/perm_failure switch
+		 * cases below handle AER recovery for devices without active
+		 * CXL.mem traffic.
 		 */
 		ue = cxl_handle_ras(port, NULL, to_ras_base(port, NULL));
 	}
@@ -373,7 +380,7 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	}
 	return PCI_ERS_RESULT_NEED_RESET;
 }
-EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
+EXPORT_SYMBOL_NS_GPL(cxl_pci_error_detected, "CXL");
 
 static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
 				   struct cxl_dport *dport, int severity)
