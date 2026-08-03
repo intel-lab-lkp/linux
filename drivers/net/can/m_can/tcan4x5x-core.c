@@ -211,15 +211,21 @@ static int tcan4x5x_write_fifo(struct m_can_classdev *cdev,
 	return regmap_bulk_write(priv->regmap, TCAN4X5X_MRAM_START + addr_offset, val, val_count);
 }
 
-static int tcan4x5x_power_enable(struct regulator *reg, int enable)
+static int tcan4x5x_power_enable(struct tcan4x5x_priv *priv, int enable)
 {
-	if (IS_ERR_OR_NULL(reg))
+	if (IS_ERR_OR_NULL(priv->power)) {
+		if (priv->reset_gpio && !enable)
+			return regmap_update_bits(priv->regmap, TCAN4X5X_CONFIG,
+						  TCAN4X5X_MODE_SEL_MASK,
+						  TCAN4X5X_MODE_SLEEP);
+
 		return 0;
+	}
 
 	if (enable)
-		return regulator_enable(reg);
+		return regulator_enable(priv->power);
 	else
-		return regulator_disable(reg);
+		return regulator_disable(priv->power);
 }
 
 static int tcan4x5x_write_tcan_reg(struct m_can_classdev *cdev,
@@ -476,7 +482,7 @@ static int tcan4x5x_can_probe(struct spi_device *spi)
 		goto out_m_can_class_free_dev;
 	}
 
-	ret = tcan4x5x_power_enable(priv->power, 1);
+	ret = tcan4x5x_power_enable(priv, 1);
 	if (ret) {
 		dev_err(&spi->dev, "Enabling regulator failed %pe\n",
 			ERR_PTR(ret));
@@ -531,7 +537,7 @@ static int tcan4x5x_can_probe(struct spi_device *spi)
 	return 0;
 
 out_power:
-	tcan4x5x_power_enable(priv->power, 0);
+	tcan4x5x_power_enable(priv, 0);
  out_m_can_class_free_dev:
 	m_can_class_free_dev(mcan_class->net);
 	return ret;
