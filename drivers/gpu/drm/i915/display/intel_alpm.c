@@ -439,21 +439,31 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 
 		if (intel_dp->as_sdp_supported) {
 			u32 pr_alpm_ctl = get_pr_alpm_as_sdp_transmission_time(crtc_state);
-
-			if (crtc_state->link_off_after_as_sdp_when_pr_active)
-				pr_alpm_ctl |= PR_ALPM_CTL_ALLOW_LINK_OFF_BETWEEN_AS_SDP_AND_SU;
-			if (crtc_state->disable_as_sdp_when_pr_active)
-				pr_alpm_ctl |= PR_ALPM_CTL_AS_SDP_TRANSMISSION_IN_ACTIVE_DISABLE;
-
-			if (intel_display_power_dc3co_allowed(display))
-				pr_alpm_ctl |= PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL;
-			else
-				pr_alpm_ctl &= ~PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL;
+			u32 skip_frames = 0;
 
 			/* AS SDP skip frames field only exists on Xe3LPD+ */
 			if (DISPLAY_VER(display) >= 35)
-				pr_alpm_ctl |= PR_ALPM_CTL_AS_SDP_SKIP_FRAMES(
-					intel_pr_as_sdp_skip_frames(crtc_state));
+				skip_frames = intel_pr_as_sdp_skip_frames(crtc_state);
+
+			if (crtc_state->link_off_after_as_sdp_when_pr_active)
+				pr_alpm_ctl |= PR_ALPM_CTL_ALLOW_LINK_OFF_BETWEEN_AS_SDP_AND_SU;
+
+			/*
+			 * Skip frames needs the AS SDP to keep flowing during PR
+			 * active, so it is mutually exclusive with disabling AS SDP
+			 * transmission in active and with the DC3CO idle protocol.
+			 */
+			if (skip_frames) {
+				pr_alpm_ctl |= PR_ALPM_CTL_AS_SDP_SKIP_FRAMES(skip_frames);
+				pr_alpm_ctl &= ~PR_ALPM_CTL_AS_SDP_TRANSMISSION_IN_ACTIVE_DISABLE;
+				pr_alpm_ctl &= ~PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL;
+			} else {
+				if (crtc_state->disable_as_sdp_when_pr_active)
+					pr_alpm_ctl |= PR_ALPM_CTL_AS_SDP_TRANSMISSION_IN_ACTIVE_DISABLE;
+
+				if (intel_display_power_dc3co_allowed(display))
+					pr_alpm_ctl |= PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL;
+			}
 
 			intel_de_write(display, PR_ALPM_CTL(display, cpu_transcoder),
 				       pr_alpm_ctl);
