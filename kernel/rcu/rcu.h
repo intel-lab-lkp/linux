@@ -586,6 +586,9 @@ static inline bool should_rcu_defer(void)
 	return irqs_disabled() && rcu_scheduler_active != RCU_SCHEDULER_INACTIVE;
 }
 
+/* Drain an outgoing CPU's deferred SRCU callbacks; see rcutree_migrate_callbacks(). */
+void srcu_offline_drain(int cpu);
+
 enum rcutorture_type {
 	RCU_FLAVOR,
 	RCU_TASKS_FLAVOR,

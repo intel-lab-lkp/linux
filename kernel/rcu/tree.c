@@ -4637,6 +4637,8 @@ void rcutree_migrate_callbacks(int cpu)
 	 * returns; the re-issue lands on this CPU.
 	 */
 	rcu_defer_drain(&rdp->defer_work);
+	/* Likewise for the outgoing CPU's deferred call_srcu() callbacks. */
+	srcu_offline_drain(cpu);
 
 	if (rcu_rdp_is_offloaded(rdp))
 		return;
