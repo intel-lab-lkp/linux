@@ -358,6 +358,14 @@ reload:
 	if (txb)
 		rxrpc_see_txbuf(txb, rxrpc_txbuf_see_send_more);
 
+	ret = -EPROTO;
+	if (test_bit(RXRPC_CALL_TX_NO_MORE, &call->flags)) {
+		trace_rxrpc_abort(call->debug_id, rxrpc_sendmsg_late_send,
+				  call->cid, call->call_id, call->rx_consumed,
+				  0, -EPROTO);
+		goto maybe_error;
+	}
+
 	ret = -EPIPE;
 	if (sk->sk_shutdown & SEND_SHUTDOWN)
 		goto maybe_error;
