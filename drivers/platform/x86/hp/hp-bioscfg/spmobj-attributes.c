@@ -48,7 +48,7 @@ size_t hp_calculate_security_buffer(const char *authentication)
 
 	authlen = strlen(authentication);
 	if (!authlen)
-		return sizeof(u16) * 2;
+		return sizeof(u16) + strlen(UTF_PREFIX) * sizeof(u16);
 
 	size = sizeof(u16) + authlen * sizeof(u16);
 	if (!strstarts(authentication, BEAM_PREFIX))
