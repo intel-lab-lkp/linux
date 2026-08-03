@@ -24,6 +24,7 @@
 #include <linux/smp.h>
 #include <linux/rcupdate_wait.h>
 #include <linux/interrupt.h>
+#include <linux/llist.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/nmi.h>
@@ -3148,20 +3149,27 @@ static void check_cb_ovld(struct rcu_data *rdp)
 	raw_spin_unlock_rcu_node(rnp);
 }
 
-static void
-__call_rcu_common(struct rcu_head *head, rcu_callback_t func, bool lazy_in)
+/*
+ * The callback list is only accessed with interrupts disabled, so a call_rcu()
+ * that arrives with interrupts off (see should_rcu_defer()) stages the callback
+ * on a per-CPU llist that an irq_work re-issues once interrupts are on.
+ */
+static void rcu_defer_drain(struct irq_work *iw);
+
+/* Set while rcu_defer_drain() re-issues, to catch a re-entrant call_rcu(). */
+static DEFINE_PER_CPU(bool, rcu_defer_draining);
+
+/*
+ * Enqueue @head on this CPU's rcu_segcblist.  Also called by rcu_defer_drain()
+ * to re-issue a deferred callback, so it must not re-check the deferral
+ * condition.  Either caller may have interrupts already disabled.
+ */
+static void rcu_do_enqueue(struct rcu_head *head, rcu_callback_t func, bool lazy_in)
 {
 	static atomic_t doublefrees;
 	unsigned long flags;
 	bool lazy;
 	struct rcu_data *rdp;
-
-	/* Misaligned rcu_head! */
-	WARN_ON_ONCE((unsigned long)head & (sizeof(void *) - 1));
-
-	/* Avoid NULL dereference if callback is NULL. */
-	if (WARN_ON_ONCE(!func))
-		return;
 
 	if (debug_rcu_head_queue(head)) {
 		/*
@@ -3204,6 +3212,92 @@ __call_rcu_common(struct rcu_head *head, rcu_callback_t func, bool lazy_in)
 	else
 		call_rcu_core(rdp, head, flags);
 	local_irq_restore(flags);
+}
+
+/*
+ * Re-issue deferred callbacks straight to the enqueue so they cannot defer
+ * again.  ->defer_lock serializes the drainers: this CPU's irq_work,
+ * rcu_defer_flush() and rcutree_migrate_callbacks().
+ */
+static void rcu_defer_drain(struct irq_work *iw)
+{
+	struct rcu_data *rdp = container_of(iw, struct rcu_data, defer_work);
+	struct llist_node *node, *next;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&rdp->defer_lock, flags);
+	this_cpu_write(rcu_defer_draining, true);
+	llist_for_each_safe(node, next, llist_del_all(&rdp->defer_head)) {
+		struct rcu_head *head = (struct rcu_head *)node;
+
+		rcu_do_enqueue(head, head->func, false);
+	}
+	this_cpu_write(rcu_defer_draining, false);
+	raw_spin_unlock_irqrestore(&rdp->defer_lock, flags);
+}
+
+/* Stage @head for this CPU's irq_work when call_rcu() cannot enqueue now. */
+static void call_rcu_defer(struct rcu_head *head, rcu_callback_t func)
+{
+	struct rcu_data *rdp = this_cpu_ptr(&rcu_data);
+
+	/*
+	 * Instrumentation on the enqueue path can re-enter here from inside
+	 * rcu_defer_drain().  Re-queuing would livelock the drain, so drop the
+	 * callback; an NMI is one-shot and cannot loop, so let it through.
+	 */
+	if (this_cpu_read(rcu_defer_draining) && !in_nmi()) {
+		WARN_ONCE(1, "call_rcu() re-entered during callback drain; leaking callback\n");
+		return;
+	}
+	head->func = func;
+	if (llist_add((struct llist_node *)head, &rdp->defer_head))
+		irq_work_queue(&rdp->defer_work);
+}
+
+/*
+ * Register pending deferred callbacks into the callback lists so a following
+ * rcu_barrier() waits for them.  This runs before rcu_barrier() scans the
+ * lists.  An online CPU's own irq_work re-issues its callbacks, so wait it out;
+ * an offline CPU's irq_work may never run again, so drain its list directly
+ * onto this CPU instead.
+ */
+static void rcu_defer_flush(void)
+{
+	int cpu;
+
+	if (!IS_ENABLED(CONFIG_RCU_DEFER))
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
+
+		if (cpu_online(cpu))
+			irq_work_sync(&rdp->defer_work);
+		else
+			rcu_defer_drain(&rdp->defer_work);
+	}
+}
+
+static void
+__call_rcu_common(struct rcu_head *head, rcu_callback_t func, bool lazy_in)
+{
+	/* Misaligned rcu_head! */
+	WARN_ON_ONCE((unsigned long)head & (sizeof(void *) - 1));
+
+	/* Avoid NULL dereference if callback is NULL. */
+	if (WARN_ON_ONCE(!func))
+		return;
+
+	if (should_rcu_defer()) {
+		call_rcu_defer(head, func);
+		return;
+	}
+
+	/* An NMI reaching here entered with irqs enabled, so the enqueue can race. */
+	WARN_ON_ONCE(IS_ENABLED(CONFIG_PROVE_RCU) && in_nmi());
+
+	rcu_do_enqueue(head, func, lazy_in);
 }
 
 #ifdef CONFIG_RCU_LAZY
@@ -3896,8 +3990,12 @@ void rcu_barrier(void)
 	unsigned long flags;
 	unsigned long gseq;
 	struct rcu_data *rdp;
-	unsigned long s = rcu_seq_snap(&rcu_state.barrier_sequence);
+	unsigned long s;
 
+	/* Register any deferred callbacks before snapshotting the sequence. */
+	rcu_defer_flush();
+
+	s = rcu_seq_snap(&rcu_state.barrier_sequence);
 	rcu_barrier_trace(TPS("Begin"), -1, s);
 
 	/* Take mutex to serialize concurrent rcu_barrier() requests. */
@@ -4231,6 +4329,10 @@ rcu_boot_init_percpu_data(int cpu)
 	rdp->rcu_onl_gp_state = RCU_GP_CLEANED;
 	rdp->last_sched_clock = jiffies;
 	rdp->cpu = cpu;
+	init_llist_head(&rdp->defer_head);
+	raw_spin_lock_init(&rdp->defer_lock);
+	/* Hard irq_work so the re-issue runs promptly. */
+	rdp->defer_work = IRQ_WORK_INIT_HARD(rcu_defer_drain);
 	rcu_boot_init_nocb_percpu_data(rdp);
 }
 
@@ -4527,6 +4629,14 @@ void rcutree_migrate_callbacks(int cpu)
 	struct rcu_node *my_rnp;
 	struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
 	bool needwake;
+
+	/*
+	 * Callbacks the outgoing CPU deferred late in the offline path (past the
+	 * point its irq_work can run) sit on ->defer_head, which the ->cblist
+	 * migration below does not cover.  Drain them here, before the early
+	 * returns; the re-issue lands on this CPU.
+	 */
+	rcu_defer_drain(&rdp->defer_work);
 
 	if (rcu_rdp_is_offloaded(rdp))
 		return;
