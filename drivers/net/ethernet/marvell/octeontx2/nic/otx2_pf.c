@@ -2158,6 +2158,9 @@ int otx2_stop(struct net_device *netdev)
 	if (pf->flags & OTX2_FLAG_INTF_DOWN)
 		return 0;
 
+	/* Mqprio offload is not preserved across stop; user must reconfigure. */
+	otx2_mqprio_down(pf);
+
 	netif_carrier_off(netdev);
 	netif_tx_stop_all_queues(netdev);
 
