@@ -82,6 +82,15 @@ static int adfs_checkdiscrecord(struct adfs_discrecord *dr)
 	if (dr->idlen > max_idlen)
 		return 1;
 
+	/*
+	 * zone_spare is subtracted from the number of bits in a map zone to
+	 * give the zone size, which is computed as an unsigned quantity and
+	 * is also the divisor for the number of ids per zone.  Require it to
+	 * leave room for at least one fragment id.
+	 */
+	if (le16_to_cpu(dr->zone_spare) > (8 << dr->log2secsize) - dr->idlen - 1)
+		return 1;
+
 	/* reserved bytes should be zero */
 	for (i = 0; i < sizeof(dr->unused52); i++)
 		if (dr->unused52[i] != 0)
