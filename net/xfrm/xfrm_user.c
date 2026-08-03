@@ -1622,31 +1622,35 @@ static struct sk_buff *xfrm_state_netlink(struct sk_buff *in_skb,
 }
 
 /* A wrapper for nlmsg_multicast() checking that nlsk is still available.
- * Must be called with RCU read lock.
+ * Takes the RCU read lock internally around the multicast.
  */
 static inline int xfrm_nlmsg_multicast(struct net *net, struct sk_buff *skb,
-				       u32 pid, unsigned int group)
+				      u32 pid, unsigned int group)
 {
-	struct sock *nlsk = rcu_dereference(net->xfrm.nlsk);
+	struct sock *nlsk;
 	struct xfrm_translator *xtr;
+	int err;
 
+	rcu_read_lock();
+	nlsk = rcu_dereference(net->xfrm.nlsk);
 	if (!nlsk) {
+		rcu_read_unlock();
 		kfree_skb(skb);
 		return -EPIPE;
 	}
-
 	xtr = xfrm_get_translator();
 	if (xtr) {
-		int err = xtr->alloc_compat(skb, nlmsg_hdr(skb));
-
+		err = xtr->alloc_compat(skb, nlmsg_hdr(skb));
 		xfrm_put_translator(xtr);
 		if (err) {
+			rcu_read_unlock();
 			kfree_skb(skb);
 			return err;
 		}
 	}
-
-	return nlmsg_multicast(nlsk, skb, pid, group, GFP_ATOMIC);
+	err = nlmsg_multicast(nlsk, skb, pid, group, GFP_ATOMIC);
+	rcu_read_unlock();
+	return err;
 }
 
 static inline unsigned int xfrm_spdinfo_msgsize(void)
@@ -2536,9 +2540,7 @@ static int xfrm_notify_userpolicy(struct net *net)
 
 	nlmsg_end(skb, nlh);
 
-	rcu_read_lock();
 	err = xfrm_nlmsg_multicast(net, skb, 0, XFRMNLGRP_POLICY);
-	rcu_read_unlock();
 
 	return err;
 }
