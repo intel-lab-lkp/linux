@@ -375,6 +375,46 @@ static u32 get_pr_alpm_as_sdp_transmission_time(const struct intel_crtc_state *c
 	}
 }
 
+/*
+ * Periodic Adaptive-Sync SDP skip frames.
+ *
+ * While Panel Replay is active the transcoder timing generator runs at the
+ * panel's maximum refresh rate, but content may be presented at a lower rate.
+ * The Adaptive-Sync SDP only needs to reach the panel often enough to satisfy
+ * its maximum frame time, so transmitting it on every frame is unnecessary and
+ * shows up as repeated SDPs on the link. Program the HW skip counter so that a
+ * single AS SDP is followed by (max_vrefresh / flip_vrefresh - 1) idle frames,
+ * matching the effective content rate.
+ *
+ * ToDo: Actual flip rate is currently passed on by userspace through debugfs
+ * create for CMRRR, but will be extended later as a property interface.
+ */
+static u32 intel_pr_as_sdp_skip_frames(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	int max_vrefresh = drm_mode_vrefresh(&crtc_state->hw.adjusted_mode);
+	int flip_vrefresh;
+	u32 skip_frames;
+
+	/*
+	 * Actual (flip) refresh rate comes from the CMRR target: numerator is
+	 * in milli-Hz, denominator is 1000 (1:1) or 1001 (1000/1001 timing).
+	 */
+	if (!crtc->force_cmrr.numerator || !crtc->force_cmrr.denominator)
+		return 0;
+
+	flip_vrefresh = DIV_ROUND_CLOSEST(crtc->force_cmrr.numerator,
+					  crtc->force_cmrr.denominator);
+
+	if (max_vrefresh <= 0 || flip_vrefresh <= 0 || max_vrefresh <= flip_vrefresh)
+		return 0;
+
+	skip_frames = max_vrefresh / flip_vrefresh - 1;
+
+	return min_t(u32, skip_frames,
+		     REG_FIELD_MAX(PR_ALPM_CTL_AS_SDP_SKIP_FRAMES_MASK));
+}
+
 static void lnl_alpm_configure(struct intel_dp *intel_dp,
 			       const struct intel_crtc_state *crtc_state)
 {
@@ -409,6 +449,11 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 				pr_alpm_ctl |= PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL;
 			else
 				pr_alpm_ctl &= ~PR_ALPM_CTL_USE_DC3CO_IDLE_PROTOCOL;
+
+			/* AS SDP skip frames field only exists on Xe3LPD+ */
+			if (DISPLAY_VER(display) >= 35)
+				pr_alpm_ctl |= PR_ALPM_CTL_AS_SDP_SKIP_FRAMES(
+					intel_pr_as_sdp_skip_frames(crtc_state));
 
 			intel_de_write(display, PR_ALPM_CTL(display, cpu_transcoder),
 				       pr_alpm_ctl);
