@@ -1369,6 +1369,59 @@ xfs_falloc_force_zero(
 }
 
 /*
+ * Allocate only mappings that are not already backed by physical blocks.
+ * This avoids reserving data space for real extents before
+ * xfs_bmapi_write() discovers the existing mappings.
+ */
+static int
+xfs_falloc_allocate_space(
+	struct xfs_inode	*ip,
+	loff_t			offset,
+	loff_t			len)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_bmbt_irec	imap;
+	xfs_fileoff_t		start_fsb = XFS_B_TO_FSBT(mp, offset);
+	xfs_fileoff_t		end_fsb = XFS_B_TO_FSB(mp, offset + len);
+	unsigned int		lock_mode;
+	int			error = 0;
+
+	xfs_assert_ilocked(ip, XFS_IOLOCK_EXCL | XFS_MMAPLOCK_EXCL);
+
+	lock_mode = xfs_ilock_data_map_shared(ip);
+	while (start_fsb < end_fsb) {
+		xfs_filblks_t		count_fsb = end_fsb - start_fsb;
+		int			nimaps = 1;
+
+		error = xfs_bmapi_read(ip, start_fsb, count_fsb, &imap,
+				       &nimaps, 0);
+		if (error)
+			break;
+		if (XFS_IS_CORRUPT(mp, nimaps != 1 ||
+				   imap.br_startoff != start_fsb ||
+				   !imap.br_blockcount ||
+				   imap.br_blockcount > count_fsb)) {
+			error = -EFSCORRUPTED;
+			break;
+		}
+
+		start_fsb += imap.br_blockcount;
+		if (xfs_bmap_is_real_extent(&imap))
+			continue;
+
+		xfs_iunlock(ip, lock_mode);
+		error = xfs_alloc_file_space(ip,
+					     XFS_FSB_TO_B(mp, imap.br_startoff),
+					     XFS_FSB_TO_B(mp, imap.br_blockcount));
+		if (error)
+			return error;
+		lock_mode = xfs_ilock_data_map_shared(ip);
+	}
+	xfs_iunlock(ip, lock_mode);
+	return error;
+}
+
+/*
  * Punch a hole and prealloc the range.  We use a hole punch rather than
  * unwritten extent conversion for two reasons:
  *
@@ -1406,7 +1459,7 @@ xfs_falloc_zero_range(
 		len = round_up(offset + len, blksize) -
 			round_down(offset, blksize);
 		offset = round_down(offset, blksize);
-		error = xfs_alloc_file_space(ip, offset, len);
+		error = xfs_falloc_allocate_space(ip, offset, len);
 	}
 	if (error)
 		return error;
@@ -1432,7 +1485,7 @@ xfs_falloc_unshare_range(
 	if (error)
 		return error;
 
-	error = xfs_alloc_file_space(XFS_I(inode), offset, len);
+	error = xfs_falloc_allocate_space(XFS_I(inode), offset, len);
 	if (error)
 		return error;
 	return xfs_falloc_setsize(file, new_size);
@@ -1460,7 +1513,7 @@ xfs_falloc_allocate_range(
 	if (error)
 		return error;
 
-	error = xfs_alloc_file_space(XFS_I(inode), offset, len);
+	error = xfs_falloc_allocate_space(XFS_I(inode), offset, len);
 	if (error)
 		return error;
 	return xfs_falloc_setsize(file, new_size);
