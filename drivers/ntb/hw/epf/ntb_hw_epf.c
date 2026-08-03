@@ -31,18 +31,22 @@
 #define NTB_EPF_LINK_STATUS	0x0A
 #define LINK_STATUS_UP		BIT(0)
 
-#define NTB_EPF_TOPOLOGY	0x0C
+#define NTB_EPF_CTRL_VERSION	0x0C
+#define NTB_EPF_CTRL_V1		1
 #define NTB_EPF_LOWER_ADDR	0x10
 #define NTB_EPF_UPPER_ADDR	0x14
 #define NTB_EPF_LOWER_SIZE	0x18
 #define NTB_EPF_UPPER_SIZE	0x1C
 #define NTB_EPF_MW_COUNT	0x20
-#define NTB_EPF_MW1_OFFSET	0x24
+#define NTB_EPF_MW1_OFFSET	0x24	/* v0 only */
 #define NTB_EPF_SPAD_OFFSET	0x28
 #define NTB_EPF_SPAD_COUNT	0x2C
 #define NTB_EPF_DB_ENTRY_SIZE	0x30
 #define NTB_EPF_DB_DATA(n)	(0x34 + (n) * 4)
 #define NTB_EPF_DB_OFFSET(n)	(0xB4 + (n) * 4)
+/* v1 only */
+#define NTB_EPF_MW_BAR		0x134
+#define NTB_EPF_MW_GROUP_SIZE	0x138
 
 /*
  * Legacy doorbell slot layout when paired with pci-epf-*ntb:
@@ -88,7 +92,8 @@ enum epf_irq_slot {
 	EPF_IRQ_DB_START,
 };
 
-#define NTB_EPF_MAX_MW_COUNT	(NTB_BAR_NUM - BAR_MW1)
+#define NTB_EPF_LEGACY_MAX_MW_COUNT	(NTB_BAR_NUM - BAR_MW1)
+#define NTB_EPF_MAX_MW_COUNT		16
 
 struct ntb_epf_dev;
 
@@ -105,9 +110,12 @@ struct ntb_epf_dev {
 
 	const enum pci_barno *barno_map;
 
+	u32 ctrl_version;
 	unsigned int mw_count;
 	unsigned int spad_count;
 	unsigned int db_count;
+	u32 mw_bar;
+	u32 mw_size;
 
 	void __iomem *ctrl_reg;
 	void __iomem *db_reg;
@@ -171,6 +179,9 @@ static int ntb_epf_mw_to_bar(struct ntb_epf_dev *ndev, int idx)
 		return -EINVAL;
 	}
 
+	if (ndev->ctrl_version >= NTB_EPF_CTRL_V1)
+		return ndev->mw_bar;
+
 	return ndev->barno_map[BAR_MW1 + idx];
 }
 
@@ -211,8 +222,37 @@ static int ntb_epf_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 	if (size_align)
 		*size_align = 1;
 
-	if (size_max)
-		*size_max = pci_resource_len(ndev->ntb.pdev, bar);
+	if (size_max) {
+		if (ndev->ctrl_version >= NTB_EPF_CTRL_V1)
+			*size_max = ndev->mw_size;
+		else
+			*size_max = pci_resource_len(ndev->ntb.pdev, bar);
+	}
+
+	return 0;
+}
+
+static int ntb_epf_mw_get_trans_group(struct ntb_dev *ntb, int pidx, int idx,
+				      int *gidx, int *gcount)
+{
+	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
+	struct device *dev = ndev->dev;
+
+	if (pidx != NTB_DEF_PEER_IDX) {
+		dev_err(dev, "Unsupported Peer ID %d\n", pidx);
+		return -EINVAL;
+	}
+
+	if (idx < 0 || idx >= ndev->mw_count) {
+		dev_err(dev, "Unsupported Memory Window index %d\n", idx);
+		return -EINVAL;
+	}
+
+	if (gidx)
+		*gidx = ndev->ctrl_version >= NTB_EPF_CTRL_V1 ? 0 : idx;
+	if (gcount)
+		*gcount = ndev->ctrl_version >= NTB_EPF_CTRL_V1 ?
+			  ndev->mw_count : 1;
 
 	return 0;
 }
@@ -520,21 +560,27 @@ static int ntb_epf_peer_mw_get_addr(struct ntb_dev *ntb, int idx,
 				    phys_addr_t *base, resource_size_t *size)
 {
 	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
-	u32 offset = 0;
+	resource_size_t offset = 0;
 	int bar;
-
-	if (idx == 0)
-		offset = readl(ndev->ctrl_reg + NTB_EPF_MW1_OFFSET);
 
 	bar = ntb_epf_mw_to_bar(ndev, idx);
 	if (bar < 0)
 		return bar;
 
+	if (ndev->ctrl_version >= NTB_EPF_CTRL_V1)
+		offset = (resource_size_t)idx * ndev->mw_size;
+	else if (idx == 0)
+		offset = readl(ndev->ctrl_reg + NTB_EPF_MW1_OFFSET);
+
 	if (base)
 		*base = pci_resource_start(ndev->ntb.pdev, bar) + offset;
 
-	if (size)
-		*size = pci_resource_len(ndev->ntb.pdev, bar) - offset;
+	if (size) {
+		if (ndev->ctrl_version >= NTB_EPF_CTRL_V1)
+			*size = ndev->mw_size;
+		else
+			*size = pci_resource_len(ndev->ntb.pdev, bar) - offset;
+	}
 
 	return 0;
 }
@@ -601,6 +647,7 @@ static const struct ntb_dev_ops ntb_epf_ops = {
 	.db_vector_count	= ntb_epf_db_vector_count,
 	.db_vector_mask		= ntb_epf_db_vector_mask,
 	.db_set_mask		= ntb_epf_db_set_mask,
+	.mw_get_trans_group	= ntb_epf_mw_get_trans_group,
 	.mw_set_trans		= ntb_epf_mw_set_trans,
 	.mw_clear_trans		= ntb_epf_mw_clear_trans,
 	.peer_mw_get_addr	= ntb_epf_peer_mw_get_addr,
@@ -629,12 +676,43 @@ static inline void ntb_epf_init_struct(struct ntb_epf_dev *ndev,
 static int ntb_epf_init_dev(struct ntb_epf_dev *ndev)
 {
 	struct device *dev = ndev->dev;
+	resource_size_t bar_len;
+	u32 group_size;
 	int ret;
 
+	ndev->ctrl_version = readl(ndev->ctrl_reg + NTB_EPF_CTRL_VERSION);
 	ndev->mw_count = readl(ndev->ctrl_reg + NTB_EPF_MW_COUNT);
-	if (ndev->mw_count > NTB_EPF_MAX_MW_COUNT) {
+
+	if (ndev->ctrl_version && ndev->ctrl_version != NTB_EPF_CTRL_V1) {
+		dev_err(dev, "Unsupported control region version: %u\n",
+			ndev->ctrl_version);
+		return -EINVAL;
+	}
+
+	if ((!ndev->ctrl_version &&
+	     ndev->mw_count > NTB_EPF_LEGACY_MAX_MW_COUNT) ||
+	    ndev->mw_count > NTB_EPF_MAX_MW_COUNT) {
 		dev_err(dev, "Unsupported MW count: %u\n", ndev->mw_count);
 		return -EINVAL;
+	}
+
+	if (ndev->ctrl_version >= NTB_EPF_CTRL_V1) {
+		ndev->mw_bar = readl(ndev->ctrl_reg + NTB_EPF_MW_BAR);
+		group_size = readl(ndev->ctrl_reg + NTB_EPF_MW_GROUP_SIZE);
+
+		if (ndev->mw_count < 2 || ndev->mw_bar > BAR_5 ||
+		    !group_size || group_size % ndev->mw_count) {
+			dev_err(dev, "Invalid packed MW layout\n");
+			return -EINVAL;
+		}
+
+		ndev->mw_size = group_size / ndev->mw_count;
+		bar_len = pci_resource_len(ndev->ntb.pdev, ndev->mw_bar);
+		if (!IS_ALIGNED(ndev->mw_size, SZ_4K) || group_size != bar_len) {
+			dev_err(dev, "Packed MW layout does not match BAR%u\n",
+				ndev->mw_bar);
+			return -EINVAL;
+		}
 	}
 
 	/* One Link interrupt and rest doorbell interrupt */
