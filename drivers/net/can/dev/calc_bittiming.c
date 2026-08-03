@@ -119,8 +119,12 @@ int can_calc_bittiming(const struct net_device *dev, struct can_bittiming *bt,
 	     tseg >= (btc->tseg1_min + btc->tseg2_min) * 2; tseg--) {
 		tsegall = CAN_SYNC_SEG + tseg / 2;
 
-		/* Compute all possible tseg choices (tseg=tseg1+tseg2) */
-		brp = priv->clock.freq / (tsegall * bt->bitrate) + tseg % 2;
+		/* Compute all possible tseg choices (tseg=tseg1+tseg2).
+		 * A 32 bit tsegall * bt->bitrate can wrap to zero for large
+		 * userspace bitrates, so compute the product in 64 bit.
+		 */
+		brp = div64_u64(priv->clock.freq,
+				mul_u32_u32(tsegall, bt->bitrate)) + tseg % 2;
 
 		/* choose brp step which is possible in system */
 		brp = (brp / btc->brp_inc) * btc->brp_inc;
