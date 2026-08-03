@@ -1338,6 +1338,96 @@ static int phy_poll_reset(struct phy_device *phydev)
 	return 0;
 }
 
+bool phy_has_autonomous_eee(struct phy_device *phydev)
+{
+	return phydev->drv && phydev->drv->set_autonomous_eee;
+}
+EXPORT_SYMBOL_GPL(phy_has_autonomous_eee);
+
+static int phy_configure_autonomous_eee(struct phy_device *phydev,
+					bool enable)
+{
+	if (phydev->drv->set_autonomous_eee)
+		return phydev->drv->set_autonomous_eee(phydev, enable,
+					phydev->eee_cfg.tx_lpi_timer);
+
+	if (!enable && phydev->drv->disable_autonomous_eee)
+		return phydev->drv->disable_autonomous_eee(phydev);
+
+	return enable ? -EOPNOTSUPP : 0;
+}
+
+static int phy_set_eee_lpi_provider(struct phy_device *phydev,
+				    enum phy_eee_lpi_provider provider)
+{
+	bool autonomous;
+	int ret;
+
+	if (!phydev->drv)
+		return -EIO;
+
+	switch (provider) {
+	case PHY_EEE_LPI_PROVIDER_MAC:
+		autonomous = false;
+		break;
+	case PHY_EEE_LPI_PROVIDER_PHY:
+		if (!phy_has_autonomous_eee(phydev))
+			return -EOPNOTSUPP;
+		autonomous = phydev->eee_cfg.tx_lpi_enabled;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (phydev->eee_lpi_provider == provider)
+		return 0;
+
+	ret = phy_configure_autonomous_eee(phydev, autonomous);
+	if (ret)
+		return ret;
+
+	phydev->eee_lpi_provider = provider;
+	phydev->enable_tx_lpi = provider != PHY_EEE_LPI_PROVIDER_PHY &&
+				phydev->eee_cfg.tx_lpi_enabled &&
+				phydev->eee_active;
+
+	return 0;
+}
+
+/**
+ * phy_disable_autonomous_eee - hand EEE Tx LPI control to the MAC
+ * @phydev: PHY device to configure
+ *
+ * Disable PHY-autonomous EEE without changing EEE advertisement. The current
+ * Tx LPI policy remains in &phy_device.eee_cfg and phylib reports its resolved
+ * state to the MAC through &phy_device.enable_tx_lpi.
+ *
+ * Return: 0 on success or a negative error code.
+ */
+int phy_disable_autonomous_eee(struct phy_device *phydev)
+{
+	return phy_set_eee_lpi_provider(phydev,
+					PHY_EEE_LPI_PROVIDER_MAC);
+}
+EXPORT_SYMBOL_GPL(phy_disable_autonomous_eee);
+
+/**
+ * phy_support_autonomous_eee - hand EEE Tx LPI control to the PHY
+ * @phydev: PHY device to configure
+ *
+ * Apply the current ethtool Tx LPI policy through the PHY driver's autonomous
+ * EEE operation. Phylib continues to resolve EEE negotiation, but no longer
+ * asks the MAC to generate Tx LPI.
+ *
+ * Return: 0 on success or a negative error code.
+ */
+int phy_support_autonomous_eee(struct phy_device *phydev)
+{
+	return phy_set_eee_lpi_provider(phydev,
+					PHY_EEE_LPI_PROVIDER_PHY);
+}
+EXPORT_SYMBOL_GPL(phy_support_autonomous_eee);
+
 int phy_init_hw(struct phy_device *phydev)
 {
 	int ret = 0;
@@ -1375,10 +1465,13 @@ int phy_init_hw(struct phy_device *phydev)
 			return ret;
 	}
 
-	/* Re-apply autonomous EEE disable after soft reset */
-	if (phydev->autonomous_eee_disabled &&
-	    phydev->drv->disable_autonomous_eee) {
-		ret = phydev->drv->disable_autonomous_eee(phydev);
+	/* Restore the selected LPI provider after a soft reset. */
+	if (phydev->eee_lpi_provider != PHY_EEE_LPI_PROVIDER_LEGACY) {
+		bool enable = phydev->eee_lpi_provider ==
+			      PHY_EEE_LPI_PROVIDER_PHY &&
+			      phydev->eee_cfg.tx_lpi_enabled;
+
+		ret = phy_configure_autonomous_eee(phydev, enable);
 		if (ret)
 			return ret;
 	}
@@ -2895,9 +2988,7 @@ EXPORT_SYMBOL_GPL(phy_advertise_eee_all);
  * This function configures the initial policy for Energy Efficient Ethernet
  * (EEE) on the specified PHY device, influencing that EEE capabilities are
  * advertised before the link is established. It should be called during PHY
- * registration by the MAC driver and/or the PHY driver (for SmartEEE PHYs)
- * if MAC supports LPI or PHY is capable to compensate missing LPI functionality
- * of the MAC.
+ * registration by a MAC driver which supports LPI generation.
  *
  * The function sets default EEE policy parameters, including preparing the PHY
  * to advertise EEE capabilities based on hardware support.
@@ -2915,18 +3006,15 @@ void phy_support_eee(struct phy_device *phydev)
 	phydev->eee_cfg.tx_lpi_enabled = true;
 	phydev->eee_cfg.eee_enabled = true;
 
-	/* If the PHY supports autonomous EEE, disable it so the MAC can
-	 * manage LPI signaling instead. The flag is stored so it can be
-	 * re-applied after a PHY soft reset (e.g. suspend/resume).
-	 */
-	if (phydev->drv && phydev->drv->disable_autonomous_eee) {
-		int ret = phydev->drv->disable_autonomous_eee(phydev);
+	/* Select the MAC as the LPI provider and disable autonomous EEE. */
+	if (phydev->drv) {
+		int ret;
+
+		ret = phy_disable_autonomous_eee(phydev);
 
 		if (ret)
 			phydev_warn(phydev, "Failed to disable autonomous EEE: %pe\n",
 				    ERR_PTR(ret));
-		else
-			phydev->autonomous_eee_disabled = true;
 	}
 }
 EXPORT_SYMBOL(phy_support_eee);

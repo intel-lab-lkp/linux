@@ -556,6 +556,22 @@ struct phy_oatc14_sqi_capability {
 };
 
 /**
+ * enum phy_eee_lpi_provider - provider of EEE Tx LPI signalling
+ * @PHY_EEE_LPI_PROVIDER_LEGACY: No provider has been selected explicitly
+ * @PHY_EEE_LPI_PROVIDER_MAC: The MAC generates Tx LPI
+ * @PHY_EEE_LPI_PROVIDER_PHY: The PHY generates Tx LPI autonomously
+ *
+ * The legacy state preserves the behaviour of drivers which predate explicit
+ * provider selection. In that state, phylib continues to report the resolved
+ * Tx LPI state to the MAC through &phy_device.enable_tx_lpi.
+ */
+enum phy_eee_lpi_provider {
+	PHY_EEE_LPI_PROVIDER_LEGACY,
+	PHY_EEE_LPI_PROVIDER_MAC,
+	PHY_EEE_LPI_PROVIDER_PHY,
+};
+
+/**
  * struct phy_device - An instance of a PHY
  *
  * @mdio: MDIO bus this PHY is on
@@ -612,8 +628,7 @@ struct phy_oatc14_sqi_capability {
  * @advertising_eee: Currently advertised EEE linkmodes
  * @enable_tx_lpi: When True, MAC should transmit LPI to PHY
  * @eee_active: phylib private state, indicating that EEE has been negotiated
- * @autonomous_eee_disabled: Set when autonomous EEE has been disabled,
- *	used to re-apply after PHY soft reset
+ * @eee_lpi_provider: Provider selected to generate EEE Tx LPI
  * @eee_cfg: User configuration of EEE
  * @lp_advertising: Current link partner advertised linkmodes
  * @host_interfaces: PHY interface modes supported by host
@@ -741,7 +756,7 @@ struct phy_device {
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(eee_disabled_modes);
 	bool enable_tx_lpi;
 	bool eee_active;
-	bool autonomous_eee_disabled;
+	enum phy_eee_lpi_provider eee_lpi_provider;
 	struct eee_config eee_cfg;
 
 	/* Host supported PHY interface types. Should be ignored if empty. */
@@ -1372,6 +1387,23 @@ struct phy_driver {
 	 * Return: 0 on success, negative errno on failure.
 	 */
 	int (*disable_autonomous_eee)(struct phy_device *dev);
+
+	/**
+	 * @set_autonomous_eee: Configure PHY-autonomous EEE
+	 * @dev: PHY device to configure
+	 * @enable: Whether the PHY should generate Tx LPI autonomously
+	 * @tx_lpi_timer: Time in microseconds before entering LPI
+	 *
+	 * The presence of this callback advertises that the driver supports
+	 * using the PHY as the EEE Tx LPI provider. Phylib calls it for ethtool
+	 * Tx LPI configuration only while the PHY is the selected provider. A
+	 * request with @enable false must be accepted regardless of
+	 * @tx_lpi_timer, since the timer has no meaning while Tx LPI is disabled.
+	 *
+	 * Return: 0 on success, negative errno on failure.
+	 */
+	int (*set_autonomous_eee)(struct phy_device *dev, bool enable,
+				  u32 tx_lpi_timer);
 
 	/* Get and Set PHY tunables */
 	/** @get_tunable: Return the value of a tunable */
@@ -2392,6 +2424,9 @@ void phy_advertise_eee_all(struct phy_device *phydev);
 void phy_support_sym_pause(struct phy_device *phydev);
 void phy_support_asym_pause(struct phy_device *phydev);
 void phy_support_eee(struct phy_device *phydev);
+bool phy_has_autonomous_eee(struct phy_device *phydev);
+int phy_disable_autonomous_eee(struct phy_device *phydev);
+int phy_support_autonomous_eee(struct phy_device *phydev);
 void phy_disable_eee(struct phy_device *phydev);
 void phy_set_sym_pause(struct phy_device *phydev, bool rx, bool tx,
 		       bool autoneg);

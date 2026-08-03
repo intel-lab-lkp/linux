@@ -1024,8 +1024,10 @@ static int phy_check_link_status(struct phy_device *phydev)
 		phydev->state = PHY_RUNNING;
 		err = genphy_c45_eee_is_active(phydev, NULL);
 		phydev->eee_active = err > 0;
-		phydev->enable_tx_lpi = phydev->eee_cfg.tx_lpi_enabled &&
-					phydev->eee_active;
+		phydev->enable_tx_lpi =
+			phydev->eee_lpi_provider !=
+			PHY_EEE_LPI_PROVIDER_PHY &&
+			phydev->eee_cfg.tx_lpi_enabled && phydev->eee_active;
 
 		phy_link_up(phydev);
 	} else if (!phydev->link && phydev->state != PHY_NOLINK) {
@@ -1970,7 +1972,8 @@ static void phy_ethtool_set_eee_noneg(struct phy_device *phydev,
 {
 	bool enable_tx_lpi;
 
-	if (!phydev->link)
+	if (!phydev->link ||
+	    phydev->eee_lpi_provider == PHY_EEE_LPI_PROVIDER_PHY)
 		return;
 
 	enable_tx_lpi = phydev->eee_cfg.tx_lpi_enabled && phydev->eee_active;
@@ -1996,6 +1999,8 @@ static void phy_ethtool_set_eee_noneg(struct phy_device *phydev,
 int phy_ethtool_set_eee(struct phy_device *phydev, struct ethtool_keee *data)
 {
 	struct eee_config old_cfg;
+	bool tx_lpi_cfg_attempted = false;
+	bool tx_lpi_cfg_changed;
 	int ret;
 
 	if (!phydev->drv)
@@ -2005,16 +2010,49 @@ int phy_ethtool_set_eee(struct phy_device *phydev, struct ethtool_keee *data)
 
 	old_cfg = phydev->eee_cfg;
 	eee_to_eeecfg(&phydev->eee_cfg, data);
+	tx_lpi_cfg_changed = phydev->eee_cfg.tx_lpi_enabled !=
+			     old_cfg.tx_lpi_enabled ||
+			     phydev->eee_cfg.tx_lpi_timer !=
+			     old_cfg.tx_lpi_timer;
+
+	if (tx_lpi_cfg_changed &&
+	    phydev->eee_lpi_provider == PHY_EEE_LPI_PROVIDER_PHY) {
+		ret = phydev->drv->set_autonomous_eee(phydev,
+				phydev->eee_cfg.tx_lpi_enabled,
+				phydev->eee_cfg.tx_lpi_timer);
+		tx_lpi_cfg_attempted = true;
+		if (ret)
+			goto restore_tx_lpi;
+	}
 
 	ret = genphy_c45_ethtool_set_eee(phydev, data);
 	if (ret == 0)
 		phy_ethtool_set_eee_noneg(phydev, &old_cfg);
 	else if (ret < 0)
-		phydev->eee_cfg = old_cfg;
+		goto restore_tx_lpi;
 
 	mutex_unlock(&phydev->lock);
 
-	return ret < 0 ? ret : 0;
+	return 0;
+
+restore_tx_lpi:
+	if (tx_lpi_cfg_attempted) {
+		int rollback_ret;
+
+		rollback_ret = phydev->drv->set_autonomous_eee(phydev,
+				old_cfg.tx_lpi_enabled,
+				old_cfg.tx_lpi_timer);
+		if (rollback_ret)
+			phydev_warn(phydev,
+				    "Failed to restore autonomous Tx LPI: %pe\n",
+				    ERR_PTR(rollback_ret));
+	}
+
+	phydev->eee_cfg = old_cfg;
+
+	mutex_unlock(&phydev->lock);
+
+	return ret;
 }
 EXPORT_SYMBOL(phy_ethtool_set_eee);
 
