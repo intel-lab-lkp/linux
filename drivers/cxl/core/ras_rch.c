@@ -89,31 +89,10 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
-/* Get AER severity. Return false if there is no error. */
-static bool cxl_rch_get_aer_severity(struct aer_capability_regs *aer_regs,
-				     int *severity)
-{
-	u32 uncor_status = aer_regs->uncor_status & ~aer_regs->uncor_mask;
-
-	if (uncor_status) {
-		*severity = (uncor_status & aer_regs->uncor_severity) ?
-			     AER_FATAL : AER_NONFATAL;
-		return true;
-	}
-
-	if (aer_regs->cor_status & ~aer_regs->cor_mask) {
-		*severity = AER_CORRECTABLE;
-		return true;
-	}
-
-	return false;
-}
-
 void cxl_handle_rdport_errors(struct pci_dev *pdev)
 {
 	struct aer_capability_regs aer_regs;
 	struct cxl_dport *dport;
-	int severity;
 
 	struct cxl_port *port __free(put_cxl_port) = cxl_pci_find_port(pdev, NULL);
 	if (!port)
@@ -127,12 +106,21 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
 		return;
 
-	if (!cxl_rch_get_aer_severity(&aer_regs, &severity))
-		return;
+	/*
+	 * Handle correctable and uncorrectable errors independently; both
+	 * may be set in the same pass and cxl_rch_get_aer_info() has already
+	 * cleared both status registers.
+	 */
+	if (aer_regs.cor_status & ~aer_regs.cor_mask) {
+		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
+		cxl_handle_cor_ras(dport->dport_dev, to_ras_base(port, dport));
+	}
 
-	pci_print_aer(pdev, severity, &aer_regs);
-	if (severity == AER_CORRECTABLE)
-		cxl_handle_cor_ras(&pdev->dev, to_ras_base(port, dport));
-	else
+	if (aer_regs.uncor_status & ~aer_regs.uncor_mask) {
+		int severity = (aer_regs.uncor_status & aer_regs.uncor_severity) ?
+			       AER_FATAL : AER_NONFATAL;
+
+		pci_print_aer(pdev, severity, &aer_regs);
 		cxl_do_recovery(pdev, dport->port, dport);
+	}
 }
