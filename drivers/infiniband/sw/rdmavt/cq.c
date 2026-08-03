@@ -318,7 +318,7 @@ int rvt_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 	if (notify_flags & IB_CQ_REPORT_MISSED_EVENTS) {
 		if (cq->queue) {
 			if (RDMA_READ_UAPI_ATOMIC(cq->queue->head) !=
-				RDMA_READ_UAPI_ATOMIC(cq->queue->tail))
+			    RDMA_READ_UAPI_ATOMIC(cq->queue->tail))
 				ret = 1;
 		} else {
 			if (cq->kqueue->head != cq->kqueue->tail)
@@ -426,6 +426,7 @@ int rvt_resize_cq(struct ib_cq *ibcq, unsigned int cqe, struct ib_udata *udata)
 	}
 	spin_unlock_irq(&cq->lock);
 
+	synchronize_rcu();
 	if (u_wc)
 		vfree(old_u_wc);
 	else
@@ -518,9 +519,9 @@ int rvt_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
  */
 int rvt_driver_cq_init(void)
 {
-	comp_vector_wq = alloc_workqueue("%s",
-					 WQ_HIGHPRI | WQ_CPU_INTENSIVE | WQ_PERCPU,
-					 0, "rdmavt_cq");
+	comp_vector_wq =
+		alloc_workqueue("%s", WQ_HIGHPRI | WQ_CPU_INTENSIVE | WQ_PERCPU,
+				0, "rdmavt_cq");
 	if (!comp_vector_wq)
 		return -ENOMEM;
 

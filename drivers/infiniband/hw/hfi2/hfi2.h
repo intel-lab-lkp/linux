@@ -1284,6 +1284,12 @@ struct chip_params {
 	u32 csr_err_mask_reg;
 	u32 csr_err_clear_reg;
 
+	/*
+	 * Chip-variant operation callbacks. Function pointers are used here
+	 * to abstract differences between chip variants (e.g. JKR and future
+	 * generations). Each variant populates its own chip_params instance
+	 * with the appropriate implementations at driver init time.
+	 */
 	void (*hfi2_setextled)(struct hfi2_pportdata *ppd, u32 on);
 	void (*start_led_override)(struct hfi2_pportdata *ppd,
 				   unsigned int timeon, unsigned int timeoff);
@@ -1307,9 +1313,9 @@ struct chip_params {
 				    u32 size);
 	bool (*check_synth_status)(struct hfi2_devdata *dd);
 	void (*update_synth_status)(struct hfi2_devdata *dd);
-	u64 (*create_pbc)(struct hfi2_pportdata *ppd, bool hfi2_loopback, u64 flags,
-			  int srate_mbs, u32 vl, u32 dw_len, u32 l2, u32 dlid,
-			  u32 sctxt);
+	u64 (*create_pbc)(struct hfi2_pportdata *ppd, bool hfi2_loopback,
+			  u64 flags, int srate_mbs, u32 vl, u32 dw_len, u32 l2,
+			  u32 dlid, u32 sctxt);
 	void (*set_pio_integrity)(struct hfi2_devdata *dd, u32 pidx, u32 ctxt,
 				  int type, enum spi_cmds cmd);
 	int (*find_used_resources)(struct hfi2_devdata *dd);
@@ -1834,7 +1840,7 @@ void hfi2_pf0_cleanup(struct hfi2_devdata *dd);
 
 void hfi2_handle_linkup_change(struct hfi2_pportdata *ppd, u32 linkup);
 void hfi2_cport_handle_linkup_change(struct hfi2_pportdata *ppd,
-				struct opa_port_info *pi, u32 linkup);
+				     struct opa_port_info *pi, u32 linkup);
 void hfi2_go_port_active(struct hfi2_pportdata *ppd);
 
 void hfi2_handle_user_interrupt(struct hfi2_ctxtdata *rcd);
@@ -1854,10 +1860,14 @@ int hfi2_rcd_put(struct hfi2_ctxtdata *rcd);
 int hfi2_rcd_get(struct hfi2_ctxtdata *rcd);
 struct hfi2_ctxtdata *hfi2_rcd_get_by_index(struct hfi2_devdata *dd, u16 ctxt);
 int hfi2_handle_receive_interrupt(struct hfi2_ctxtdata *rcd, int thread);
-int hfi2_handle_receive_interrupt_nodma_rtail(struct hfi2_ctxtdata *rcd, int thread);
-int hfi2_handle_receive_interrupt_dma_rtail(struct hfi2_ctxtdata *rcd, int thread);
-int hfi2_handle_receive_interrupt_napi_fp(struct hfi2_ctxtdata *rcd, int budget);
-int hfi2_handle_receive_interrupt_napi_sp(struct hfi2_ctxtdata *rcd, int budget);
+int hfi2_handle_receive_interrupt_nodma_rtail(struct hfi2_ctxtdata *rcd,
+					      int thread);
+int hfi2_handle_receive_interrupt_dma_rtail(struct hfi2_ctxtdata *rcd,
+					    int thread);
+int hfi2_handle_receive_interrupt_napi_fp(struct hfi2_ctxtdata *rcd,
+					  int budget);
+int hfi2_handle_receive_interrupt_napi_sp(struct hfi2_ctxtdata *rcd,
+					  int budget);
 void hfi2_set_all_slowpath(struct hfi2_pportdata *ppd);
 
 extern const struct pci_device_id hfi2_pci_tbl[];
@@ -2154,20 +2164,20 @@ static inline u32 egress_cycles(u32 len, u32 rate)
 
 void hfi2_set_link_ipg(struct hfi2_pportdata *ppd);
 void hfi2_process_becn(struct hfi2_pportdata *ppd, u8 sl, u32 rlid, u32 lqpn,
-		  u32 rqpn, u8 svc_type);
+		       u32 rqpn, u8 svc_type);
 void hfi2_return_cnp(struct hfi2_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
-		u16 pkey, u32 slid, u32 dlid, u8 sc5,
-		const struct ib_grh *old_grh);
-void hfi2_return_cnp_16B(struct hfi2_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
-		    u16 pkey, u32 slid, u32 dlid, u8 sc5,
-		    const struct ib_grh *old_grh);
+		     u16 pkey, u32 slid, u32 dlid, u8 sc5,
+		     const struct ib_grh *old_grh);
+void hfi2_return_cnp_16B(struct hfi2_ibport *ibp, struct rvt_qp *qp,
+			 u32 remote_qpn, u16 pkey, u32 slid, u32 dlid, u8 sc5,
+			 const struct ib_grh *old_grh);
 typedef void (*hfi2_handle_cnp)(struct hfi2_ibport *ibp, struct rvt_qp *qp,
 				u32 remote_qpn, u16 pkey, u32 slid, u32 dlid,
 				u8 sc5, const struct ib_grh *old_grh);
 
 #define PKEY_CHECK_INVALID -1
-int hfi2_egress_pkey_check(struct hfi2_pportdata *ppd, u32 slid, u16 pkey, u8 sc5,
-		      int8_t s_pkey_index);
+int hfi2_egress_pkey_check(struct hfi2_pportdata *ppd, u32 slid, u16 pkey,
+			   u8 sc5, int8_t s_pkey_index);
 
 #define PACKET_EGRESS_TIMEOUT 350
 static inline void pause_for_credit_return(struct hfi2_devdata *dd)
@@ -2357,7 +2367,8 @@ void hfi2_set_up_vl15(struct hfi2_pportdata *ppd, u16 vl15buf);
 void hfi2_reset_link_credits(struct hfi2_pportdata *ppd);
 void hfi2_assign_remote_cm_au_table(struct hfi2_pportdata *ppd, u8 vcu);
 
-int hfi2_set_buffer_control(struct hfi2_pportdata *ppd, struct buffer_control *bc);
+int hfi2_set_buffer_control(struct hfi2_pportdata *ppd,
+			    struct buffer_control *bc);
 
 static inline struct hfi2_devdata *dd_from_ppd(struct hfi2_pportdata *ppd)
 {
@@ -3158,14 +3169,16 @@ static inline u64 read_iport_csr(const struct hfi2_devdata *dd, int pidx,
 				 u32 offset)
 {
 	/* IPORT CSRs are separated by rxe_iport_stride */
-	return hfi2_read_csr(dd, offset + (dd->params->rxe_iport_stride * pidx));
+	return hfi2_read_csr(dd,
+			     offset + (dd->params->rxe_iport_stride * pidx));
 }
 
 static inline void write_iport_csr(struct hfi2_devdata *dd, int pidx,
 				   u32 offset, u64 value)
 {
 	/* IPORT CSRs are separated by rxe_iport_stride */
-	hfi2_write_csr(dd, offset + (dd->params->rxe_iport_stride * pidx), value);
+	hfi2_write_csr(dd, offset + (dd->params->rxe_iport_stride * pidx),
+		       value);
 }
 
 static inline u64 read_iprc_csr(const struct hfi2_devdata *dd, int pidx, int rc,
@@ -3175,8 +3188,9 @@ static inline u64 read_iprc_csr(const struct hfi2_devdata *dd, int pidx, int rc,
 	 * IPORT receive context CSRs are separated by rxe_iport_stride and
 	 * rxe_iprc_stride.
 	 */
-	return hfi2_read_ctxt_csr(dd, offset + (dd->params->rxe_iport_stride * pidx),
-			     rc, dd->params->rxe_iprc_stride);
+	return hfi2_read_ctxt_csr(
+		dd, offset + (dd->params->rxe_iport_stride * pidx), rc,
+		dd->params->rxe_iprc_stride);
 }
 
 static inline void write_iprc_csr(struct hfi2_devdata *dd, int pidx, int rc,
@@ -3186,36 +3200,40 @@ static inline void write_iprc_csr(struct hfi2_devdata *dd, int pidx, int rc,
 	 * IPORT receive context CSRs are separated by rxe_iport_stride and
 	 * rxe_iprc_stride.
 	 */
-	hfi2_write_ctxt_csr(dd, offset + (dd->params->rxe_iport_stride * pidx), rc,
-		       dd->params->rxe_iprc_stride, value);
+	hfi2_write_ctxt_csr(dd, offset + (dd->params->rxe_iport_stride * pidx),
+			    rc, dd->params->rxe_iprc_stride, value);
 }
 
 static inline u64 read_rctxt_csr(const struct hfi2_devdata *dd, int ctxt,
 				 u32 offset)
 {
 	/* restricted rcv context CSRs are separated by rxe_rctxt_stride */
-	return hfi2_read_ctxt_csr(dd, offset, ctxt, dd->params->rxe_rctxt_stride);
+	return hfi2_read_ctxt_csr(dd, offset, ctxt,
+				  dd->params->rxe_rctxt_stride);
 }
 
 static inline void write_rctxt_csr(struct hfi2_devdata *dd, int ctxt,
 				   u32 offset, u64 value)
 {
 	/* restricted rcv context CSRs are separated by rxe_rctxt_stride */
-	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->rxe_rctxt_stride, value);
+	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->rxe_rctxt_stride,
+			    value);
 }
 
 static inline u64 read_kctxt_csr(const struct hfi2_devdata *dd, int ctxt,
 				 u32 offset)
 {
 	/* kernel rcv context CSRs are separated by rxe_kctxt_stride */
-	return hfi2_read_ctxt_csr(dd, offset, ctxt, dd->params->rxe_kctxt_stride);
+	return hfi2_read_ctxt_csr(dd, offset, ctxt,
+				  dd->params->rxe_kctxt_stride);
 }
 
 static inline void write_kctxt_csr(struct hfi2_devdata *dd, int ctxt,
 				   u32 offset, u64 value)
 {
 	/* kernel rcv context CSRs are separated by rxe_kctxt_stride */
-	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->rxe_kctxt_stride, value);
+	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->rxe_kctxt_stride,
+			    value);
 }
 
 static inline u64 read_ku_csr(const struct hfi2_devdata *dd, int ctxt,
@@ -3236,42 +3254,48 @@ static inline u64 read_uctxt_csr(const struct hfi2_devdata *dd, int ctxt,
 				 u32 offset)
 {
 	/* user per-context CSRs are separated by rxe_uctxt_stride */
-	return hfi2_read_ctxt_csr(dd, offset, ctxt, dd->params->rxe_uctxt_stride);
+	return hfi2_read_ctxt_csr(dd, offset, ctxt,
+				  dd->params->rxe_uctxt_stride);
 }
 
 static inline void write_uctxt_csr(struct hfi2_devdata *dd, int ctxt,
 				   u32 offset, u64 value)
 {
 	/* user per-context CSRs are separated by rxe_uctxt_stride */
-	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->rxe_uctxt_stride, value);
+	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->rxe_uctxt_stride,
+			    value);
 }
 
 static inline u64 read_sctxt_csr(const struct hfi2_devdata *dd, int ctxt,
 				 u32 offset)
 {
 	/* send context CSRs are separated by txe_sctxt_stride */
-	return hfi2_read_ctxt_csr(dd, offset, ctxt, dd->params->txe_sctxt_stride);
+	return hfi2_read_ctxt_csr(dd, offset, ctxt,
+				  dd->params->txe_sctxt_stride);
 }
 
 static inline void write_sctxt_csr(struct hfi2_devdata *dd, int ctxt,
 				   u32 offset, u64 value)
 {
 	/* send context CSRs are separated by txe_sctxt_stride */
-	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->txe_sctxt_stride, value);
+	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->txe_sctxt_stride,
+			    value);
 }
 
 static inline u64 read_tctxt_csr(const struct hfi2_devdata *dd, int ctxt,
 				 u32 offset)
 {
 	/* TXE send context CSRs are separated by txe_tctxt_stride */
-	return hfi2_read_ctxt_csr(dd, offset, ctxt, dd->params->txe_tctxt_stride);
+	return hfi2_read_ctxt_csr(dd, offset, ctxt,
+				  dd->params->txe_tctxt_stride);
 }
 
 static inline void write_tctxt_csr(struct hfi2_devdata *dd, int ctxt,
 				   u32 offset, u64 value)
 {
 	/* TXE send context CSRs are separated by txe_tctxt_stride */
-	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->txe_tctxt_stride, value);
+	hfi2_write_ctxt_csr(dd, offset, ctxt, dd->params->txe_tctxt_stride,
+			    value);
 }
 
 static inline u64 read_sdma_csr(const struct hfi2_devdata *dd, int eng,
@@ -3292,28 +3316,32 @@ static inline u64 read_sdmacfg_csr(const struct hfi2_devdata *dd, int eng,
 				   u32 offset)
 {
 	/* SDMA config engine CSRs are separated by txe_sdmacfg_stride */
-	return hfi2_read_csr(dd, offset + (dd->params->txe_sdmacfg_stride * eng));
+	return hfi2_read_csr(dd,
+			     offset + (dd->params->txe_sdmacfg_stride * eng));
 }
 
 static inline void write_sdmacfg_csr(struct hfi2_devdata *dd, int eng,
 				     u32 offset, u64 value)
 {
 	/* SDMA config engine CSRs are separated by txe_sdmacfg_stride */
-	hfi2_write_csr(dd, offset + (dd->params->txe_sdmacfg_stride * eng), value);
+	hfi2_write_csr(dd, offset + (dd->params->txe_sdmacfg_stride * eng),
+		       value);
 }
 
 static inline u64 read_eport_csr(const struct hfi2_devdata *dd, int pidx,
 				 u32 offset)
 {
 	/* EPORT CSRs are separated by txe_eport_stride */
-	return hfi2_read_csr(dd, offset + (dd->params->txe_eport_stride * pidx));
+	return hfi2_read_csr(dd,
+			     offset + (dd->params->txe_eport_stride * pidx));
 }
 
 static inline void write_eport_csr(struct hfi2_devdata *dd, int pidx,
 				   u32 offset, u64 value)
 {
 	/* EPORT CSRs are separated by txe_eport_stride */
-	hfi2_write_csr(dd, offset + (dd->params->txe_eport_stride * pidx), value);
+	hfi2_write_csr(dd, offset + (dd->params->txe_eport_stride * pidx),
+		       value);
 }
 
 static inline u64 read_epsc_csr(const struct hfi2_devdata *dd, int pidx, int sc,
@@ -3323,8 +3351,9 @@ static inline u64 read_epsc_csr(const struct hfi2_devdata *dd, int pidx, int sc,
 	 * EPORT send context CSRs are separated by txe_eport_stride and
 	 * txe_epsc_stride.
 	 */
-	return hfi2_read_ctxt_csr(dd, offset + (dd->params->txe_eport_stride * pidx),
-			     sc, dd->params->txe_epsc_stride);
+	return hfi2_read_ctxt_csr(
+		dd, offset + (dd->params->txe_eport_stride * pidx), sc,
+		dd->params->txe_epsc_stride);
 }
 
 static inline void write_epsc_csr(struct hfi2_devdata *dd, int pidx, int sc,
@@ -3334,8 +3363,8 @@ static inline void write_epsc_csr(struct hfi2_devdata *dd, int pidx, int sc,
 	 * EPORT send context CSRs are separated by txe_eport_stride and
 	 * txe_epsc_stride.
 	 */
-	hfi2_write_ctxt_csr(dd, offset + (dd->params->txe_eport_stride * pidx), sc,
-		       dd->params->txe_epsc_stride, value);
+	hfi2_write_ctxt_csr(dd, offset + (dd->params->txe_eport_stride * pidx),
+			    sc, dd->params->txe_epsc_stride, value);
 }
 
 static inline u64 read_epscarr_csr(const struct hfi2_devdata *dd, int pidx,
@@ -3345,8 +3374,8 @@ static inline u64 read_epscarr_csr(const struct hfi2_devdata *dd, int pidx,
 	 * EPORT send context array CSRs are separated by txe_eport_stride and
 	 * a per-context stride of 8.
 	 */
-	return hfi2_read_ctxt_csr(dd, offset + (dd->params->txe_eport_stride * pidx),
-			     sc, 8);
+	return hfi2_read_ctxt_csr(
+		dd, offset + (dd->params->txe_eport_stride * pidx), sc, 8);
 }
 
 static inline void write_epscarr_csr(struct hfi2_devdata *dd, int pidx, int sc,
@@ -3356,8 +3385,8 @@ static inline void write_epscarr_csr(struct hfi2_devdata *dd, int pidx, int sc,
 	 * EPORT send context array CSRs are separated by txe_eport_stride and
 	 * a per-context stride of 8.
 	 */
-	hfi2_write_ctxt_csr(dd, offset + (dd->params->txe_eport_stride * pidx), sc,
-		       8, value);
+	hfi2_write_ctxt_csr(dd, offset + (dd->params->txe_eport_stride * pidx),
+			    sc, 8, value);
 }
 
 static inline u32 rhe_rcv_type_err(struct hfi2_packet *packet)
@@ -3408,7 +3437,7 @@ enum preg_op {
 };
 
 int hfi2_priv_reg_op(struct hfi2_devdata *dd, int pidx, u32 ctxt, int type,
-		enum preg_op op, u64 arg);
+		     enum preg_op op, u64 arg);
 
 enum csr_type {
 	CSR_TYPE_IPORT = 1,
@@ -3427,6 +3456,6 @@ enum csr_type {
 };
 
 u64 hfi2_read_csr_type(struct hfi2_devdata *dd, enum csr_type type, u32 off,
-		  u16 ctxt, u8 pidx_eng);
+		       u16 ctxt, u8 pidx_eng);
 
 #endif /* _HFI2_KERNEL_H */

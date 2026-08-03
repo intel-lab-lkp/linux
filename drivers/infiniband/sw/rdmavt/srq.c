@@ -53,10 +53,9 @@ int rvt_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *srq_init_attr,
 	 */
 	srq->rq.size = srq_init_attr->attr.max_wr + 1;
 	srq->rq.max_sge = srq_init_attr->attr.max_sge;
-	sz = sizeof(struct ib_sge) * srq->rq.max_sge +
-		sizeof(struct rvt_rwqe);
-	if (rvt_alloc_rq(&srq->rq, srq->rq.size * sz,
-			 dev->dparms.node, udata)) {
+	sz = sizeof(struct ib_sge) * srq->rq.max_sge + sizeof(struct rvt_rwqe);
+	if (rvt_alloc_rq(&srq->rq, srq->rq.size * sz, dev->dparms.node,
+			 udata)) {
 		ret = -ENOMEM;
 		goto bail_srq;
 	}
@@ -122,8 +121,7 @@ bail_srq:
  * Return: 0 on success
  */
 int rvt_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
-		   enum ib_srq_attr_mask attr_mask,
-		   struct ib_udata *udata)
+		   enum ib_srq_attr_mask attr_mask, struct ib_udata *udata)
 {
 	struct rvt_srq *srq = ibsrq_to_rvtsrq(ibsrq);
 	struct rvt_dev_info *dev = ib_to_rvt(ibsrq->device);
@@ -139,14 +137,13 @@ int rvt_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 
 		/* Check that the requested sizes are below the limits. */
 		if ((attr->max_wr > dev->dparms.props.max_srq_wr) ||
-		    ((attr_mask & IB_SRQ_LIMIT) ?
-		     attr->srq_limit : srq->limit) > attr->max_wr)
+		    ((attr_mask & IB_SRQ_LIMIT) ? attr->srq_limit :
+						  srq->limit) > attr->max_wr)
 			return -EINVAL;
 		sz = sizeof(struct rvt_rwqe) +
-			srq->rq.max_sge * sizeof(struct ib_sge);
+		     srq->rq.max_sge * sizeof(struct ib_sge);
 		size = attr->max_wr + 1;
-		if (rvt_alloc_rq(&tmp_rq, size * sz, dev->dparms.node,
-				 udata))
+		if (rvt_alloc_rq(&tmp_rq, size * sz, dev->dparms.node, udata))
 			return -ENOMEM;
 		/* Check that we can write the offset to mmap. */
 		if (udata && udata->inlen >= sizeof(__u64)) {
@@ -220,6 +217,7 @@ int rvt_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			srq->limit = attr->srq_limit;
 		spin_unlock_irq(&srq->rq.kwq->c_lock);
 
+		synchronize_rcu();
 		vfree(owq);
 		kvfree(okwq);
 
