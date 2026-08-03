@@ -2496,6 +2496,7 @@ static int mana_create_txq(struct mana_port_context *apc,
 	struct mana_obj_spec cq_spec;
 	struct gdma_queue_spec spec;
 	struct gdma_context *gc;
+	struct gdma_queue __rcu **cq_table;
 	struct mana_txq *txq;
 	struct mana_cq *cq;
 	u32 txq_size;
@@ -2596,12 +2597,18 @@ static int mana_create_txq(struct mana_port_context *apc,
 
 		cq->gdma_id = cq->gdma_cq->id;
 
-		if (WARN_ON(cq->gdma_id >= gc->max_num_cqs)) {
+		/* No rcu_read_lock(): mana_create_txq runs under RTNL during
+		 * netdev bring-up, inside the netdev lifetime that
+		 * mana_remove() drains before the base cq_table can be freed.
+		 * See gdma_context::cq_table in gdma.h for why "true" is sound.
+		 */
+		cq_table = rcu_dereference_protected(gc->cq_table, true);
+		if (WARN_ON(!cq_table || cq->gdma_id >= gc->max_num_cqs)) {
 			err = -EINVAL;
 			goto out;
 		}
 
-		gc->cq_table[cq->gdma_id] = cq->gdma_cq;
+		rcu_assign_pointer(cq_table[cq->gdma_id], cq->gdma_cq);
 
 		mana_create_txq_debugfs(apc, i);
 
@@ -2821,6 +2828,7 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	struct gdma_queue_spec spec;
 	struct mana_cq *cq = NULL;
 	struct gdma_context *gc;
+	struct gdma_queue __rcu **cq_table;
 	u32 cq_size, rq_size;
 	struct mana_rxq *rxq;
 	int err;
@@ -2905,12 +2913,18 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	if (err)
 		goto out;
 
-	if (WARN_ON(cq->gdma_id >= gc->max_num_cqs)) {
+	/* No rcu_read_lock(): mana_create_rxq runs under RTNL during netdev
+	 * bring-up, inside the netdev lifetime that mana_remove() drains
+	 * before the base cq_table can be freed.  See gdma_context::cq_table
+	 * in gdma.h for why "true" is sound.
+	 */
+	cq_table = rcu_dereference_protected(gc->cq_table, true);
+	if (WARN_ON(!cq_table || cq->gdma_id >= gc->max_num_cqs)) {
 		err = -EINVAL;
 		goto out;
 	}
 
-	gc->cq_table[cq->gdma_id] = cq->gdma_cq;
+	rcu_assign_pointer(cq_table[cq->gdma_id], cq->gdma_cq);
 
 	netif_napi_add_weight_locked(ndev, &cq->napi, mana_poll, 1);
 
