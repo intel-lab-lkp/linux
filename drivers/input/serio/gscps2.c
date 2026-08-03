@@ -22,19 +22,18 @@
  *                 was usable/enabled ?)
  */
 
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/serio.h>
+#include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
-#include <linux/spinlock.h>
-#include <linux/delay.h>
+#include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/property.h>
+#include <linux/serio.h>
 
 #include <asm/irq.h>
-#include <asm/io.h>
 #include <asm/parisc-device.h>
+
+#include "hpps2atkbd.h"
 
 MODULE_AUTHOR("Laurent Canet <canetl@esiee.fr>, Thibaut Varene <varenet@parisc-linux.org>, Helge Deller <deller@gmx.de>");
 MODULE_DESCRIPTION("HP GSC PS2 port driver");
@@ -398,6 +397,17 @@ static int __init gscps2_probe(struct parisc_device *dev)
 		goto fail;
 #endif
 
+	if (ps2port->id == GSC_ID_KEYBOARD) {
+		ret = device_add_software_node(&serio->dev,
+					       &gscps2_keyboard_node);
+		if (ret) {
+			dev_err(&dev->dev,
+				"failed to add software node for keyboard: %d\n",
+				ret);
+			goto fail;
+		}
+	}
+
 	pr_info("serio: %s port at 0x%08lx irq %d @ %s\n",
 		ps2port->port->name,
 		hpa,
@@ -411,11 +421,16 @@ static int __init gscps2_probe(struct parisc_device *dev)
 	return 0;
 
 fail:
+	if (ps2port->id == GSC_ID_KEYBOARD)
+		device_remove_software_node(&serio->dev);
+
 	free_irq(dev->irq, ps2port);
 
 fail_miserably:
 	iounmap(ps2port->addr);
+#if 0
 	release_mem_region(dev->hpa.start, GSC_STATUS + 4);
+#endif
 
 fail_nomem:
 	kfree(ps2port);
@@ -433,6 +448,9 @@ fail_nomem:
 static void __exit gscps2_remove(struct parisc_device *dev)
 {
 	struct gscps2port *ps2port = dev_get_drvdata(&dev->dev);
+
+	if (ps2port->id == GSC_ID_KEYBOARD)
+		device_remove_software_node(&ps2port->port->dev);
 
 	serio_unregister_port(ps2port->port);
 	free_irq(dev->irq, ps2port);
@@ -465,16 +483,25 @@ static struct parisc_driver parisc_ps2_driver __refdata = {
 
 static int __init gscps2_init(void)
 {
-	register_parisc_driver(&parisc_ps2_driver);
-	return 0;
+	int error;
+
+	error = software_node_register(&gscps2_keyboard_node);
+	if (error)
+		return error;
+
+	error = register_parisc_driver(&parisc_ps2_driver);
+	if (error)
+		software_node_unregister(&gscps2_keyboard_node);
+
+	return error;
 }
 
 static void __exit gscps2_exit(void)
 {
 	unregister_parisc_driver(&parisc_ps2_driver);
+	software_node_unregister(&gscps2_keyboard_node);
 }
 
 
 module_init(gscps2_init);
 module_exit(gscps2_exit);
-
