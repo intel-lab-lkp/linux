@@ -233,6 +233,12 @@ pub struct IoMem<'a, const SIZE: usize = 0> {
 }
 
 impl<'a, const SIZE: usize> IoMem<'a, SIZE> {
+    #[cfg(not(CONFIG_HAS_IOMEM))]
+    fn ioremap(_dev: &'a Device<Bound>, _resource: &Resource) -> Result<Self> {
+        Err(EINVAL)
+    }
+
+    #[cfg(CONFIG_HAS_IOMEM)]
     fn ioremap(dev: &'a Device<Bound>, resource: &Resource) -> Result<Self> {
         // Note: Some ioremap() implementations use types that depend on the CPU
         // word width rather than the bus address width.
@@ -286,8 +292,11 @@ impl<'a, const SIZE: usize> IoMem<'a, SIZE> {
 
 impl<const SIZE: usize> Drop for IoMem<'_, SIZE> {
     fn drop(&mut self) {
+        #[cfg(CONFIG_HAS_IOMEM)]
         // SAFETY: Safe as by the invariant of `Io`.
-        unsafe { bindings::iounmap(self.io.addr() as *mut c_void) }
+        unsafe {
+            bindings::iounmap(self.io.addr() as *mut c_void)
+        }
     }
 }
 
