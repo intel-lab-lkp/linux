@@ -24,7 +24,8 @@ struct ntb_msi {
  * the peer memory windows.
  *
  * This function reserves the last N outbound memory windows (where N
- * is the number of peers).
+ * is the number of peers). The corresponding inbound memory windows must
+ * each form a singleton translation group.
  *
  * Return: Zero on success, otherwise a negative error number.
  */
@@ -33,6 +34,7 @@ int ntb_msi_init(struct ntb_dev *ntb,
 {
 	phys_addr_t mw_phys_addr;
 	resource_size_t mw_size;
+	int first, count;
 	int peer_widx;
 	int peers;
 	int ret;
@@ -41,6 +43,21 @@ int ntb_msi_init(struct ntb_dev *ntb,
 	peers = ntb_peer_port_count(ntb);
 	if (peers <= 0)
 		return -EINVAL;
+
+	if (ntb->ops->mw_get_trans_group) {
+		for (i = 0; i < peers; i++) {
+			peer_widx = ntb_peer_highest_mw_idx(ntb, i);
+			if (peer_widx < 0)
+				return peer_widx;
+
+			ret = ntb_mw_get_trans_group(ntb, i, peer_widx, &first,
+						     &count);
+			if (ret)
+				return ret;
+			if (first != peer_widx || count != 1)
+				return -EOPNOTSUPP;
+		}
+	}
 
 	ntb->msi = devm_kzalloc(&ntb->dev, struct_size(ntb->msi, peer_mws, peers),
 				GFP_KERNEL);
