@@ -955,6 +955,7 @@ static int panthor_init_csg_iface(struct panthor_device *ptdev,
 	u64 shared_section_sz = panthor_kernel_bo_size(ptdev->fw->shared_section->mem);
 	u64 iface_offset = CSF_GROUP_CONTROL_OFFSET +
 			   ((u64)csg_idx * glb_iface->control->group_stride);
+	u32 stream_num;
 	unsigned int i;
 
 	if (iface_offset > shared_section_sz ||
@@ -968,8 +969,13 @@ static int panthor_init_csg_iface(struct panthor_device *ptdev,
 	csg_iface->output = iface_fw_to_cpu_addr(ptdev, csg_iface->control->output_va,
 						 sizeof(*csg_iface->output));
 
-	if (csg_iface->control->stream_num < MIN_CS_PER_CSG ||
-	    csg_iface->control->stream_num > MAX_CS_PER_CSG)
+	/*
+	 * To protect against self-modifying control sections
+	 * take a single snapshot from the control section so validation and
+	 * iteration use the same value.
+	 */
+	stream_num = READ_ONCE(csg_iface->control->stream_num);
+	if (stream_num < MIN_CS_PER_CSG || stream_num > MAX_CS_PER_CSG)
 		return -EINVAL;
 
 	if (!csg_iface->input || !csg_iface->output) {
@@ -987,7 +993,7 @@ static int panthor_init_csg_iface(struct panthor_device *ptdev,
 		}
 	}
 
-	for (i = 0; i < csg_iface->control->stream_num; i++) {
+	for (i = 0; i < stream_num; i++) {
 		int ret = panthor_init_cs_iface(ptdev, csg_idx, i);
 
 		if (ret)
@@ -1011,6 +1017,7 @@ static int panthor_fw_init_ifaces(struct panthor_device *ptdev)
 {
 	struct panthor_fw_global_iface *glb_iface = &ptdev->fw->iface.global;
 	u64 shared_section_sz = panthor_kernel_bo_size(ptdev->fw->shared_section->mem);
+	u32 group_num;
 	unsigned int i;
 
 	if (!ptdev->fw->shared_section->mem->kmap)
@@ -1036,13 +1043,18 @@ static int panthor_fw_init_ifaces(struct panthor_device *ptdev)
 		return -EINVAL;
 	}
 
-	if (glb_iface->control->group_num > MAX_CSGS ||
-	    glb_iface->control->group_num < MIN_CSGS) {
+	/*
+	 * To protect against self-modifying control sections
+	 * take a single snapshot from the control section so validation and
+	 * iteration use the same value.
+	 */
+	group_num = READ_ONCE(glb_iface->control->group_num);
+	if (group_num > MAX_CSGS || group_num < MIN_CSGS) {
 		drm_err(&ptdev->base, "Invalid number of control groups");
 		return -EINVAL;
 	}
 
-	for (i = 0; i < glb_iface->control->group_num; i++) {
+	for (i = 0; i < group_num; i++) {
 		int ret = panthor_init_csg_iface(ptdev, i);
 
 		if (ret)
