@@ -56,7 +56,6 @@ int hfi2_sriov_get_config(struct hfi2_devdata *dd, struct hfi2_devrsrcs *out, in
 #ifdef HFI_SRIOV_MOD_PARAMS
 	num_vfs = max_num_vfs;
 #endif
-	/* TODO: other methods of SRIOV config... */
 
 	if (!num_vfs)
 		return -ENODEV;
@@ -170,7 +169,6 @@ int hfi2_sriov_set_si(struct hfi2_devdata *dd)
 		if (dd->is_vm)
 			si = hfi2_vf2pf_probe_si(dd); /* hope for the best */
 		else
-			/* TODO: need to adjust for CYR? does pci_iov already do that? */
 			si = pci_iov_vf_id(dd->pcidev) + 1;
 	}
 	if (!si) {
@@ -276,10 +274,8 @@ void hfi2_sriov_free_cfg(struct hfi2_devdata *dd)
  *		since pdev->physfn cannot be valid - nor pdev->sriov?)
  *		(this needs to have a 'dd' but handled different)
  *
- * TODO: how to determine whether we're host or guest?!
  *	PCI_FUNC(pdev->devfn) != 0 && !pdev->is_virtfn for guest VFs?
  *
- * TODO: does PCI_FUNC() need to be something different if ARI is active?
  */
 
 int hfi2_sriov_is_enabled(void)
@@ -287,7 +283,6 @@ int hfi2_sriov_is_enabled(void)
 #ifdef HFI_SRIOV_MOD_PARAMS
 	return max_num_vfs > 0;
 #else
-	/* TODO: how to determine SRIOV is allowed */
 	return 0;
 #endif
 }
@@ -297,7 +292,6 @@ int hfi2_sriov_is_enabled(void)
  *
  * Normally, the VF devices will be pass-through to VMs, in which
  * case the host driver does not want to claim the device.
- * TODO: Does KVM (virtsh) tolerate the driver claiming the VF,
  * by calling the remove_one() function when assigning the device
  * to the guest? If so, we can go ahead and claim the device here,
  * however that will cause a complete setup (and tear-down) of a 'dd' for it.
@@ -372,16 +366,11 @@ int hfi2_sriov_disable(struct pci_dev *pdev)
  */
 static int hfi2_sriov_deconfigure(struct hfi2_devdata *dd)
 {
-	/* TODO: do paranoid cleanup? */
 	pci_disable_sriov(dd->pcidev);
 	hfi2_pf0_cleanup(dd);
 	return 0;
 }
 
-/* TODO: any setup required for RPMSG, etc.
- *
- * pdev is PF0.
- */
 int hfi2_sriov_configure(struct pci_dev *pdev, int nvf)
 {
 	struct hfi2_devdata *dd = pci_get_drvdata(pdev);
