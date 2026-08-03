@@ -74,6 +74,15 @@ enum cc_attr {
 	CC_ATTR_GUEST_UNROLL_STRING_IO,
 
 	/**
+	 * @CC_ATTR_GUEST_SEV: Guest SEV is active.
+	 *
+	 * The platform/OS is running as a virtual machine guest and actively
+	 * using AMD SEV memory encryption. This is true for SEV, SEV-ES, and
+	 * SEV-SNP guests.
+	 */
+	CC_ATTR_GUEST_SEV,
+
+	/**
 	 * @CC_ATTR_GUEST_SEV_SNP: Guest SNP is active.
 	 *
 	 * The platform/OS is running as a guest/virtual machine and actively
