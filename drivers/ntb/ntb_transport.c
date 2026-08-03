@@ -56,6 +56,7 @@
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/seq_file.h>
@@ -757,22 +758,65 @@ static void ntb_transport_msi_desc_changed(void *data)
 	ntb_peer_db_set(nt->ndev, nt->msi_db_mask);
 }
 
+static int ntb_mw_get_group(struct ntb_transport_ctx *nt, unsigned int widx,
+			    unsigned int *first, unsigned int *count)
+{
+	int gidx, gcount;
+	int rc;
+
+	rc = ntb_mw_get_trans_group(nt->ndev, PIDX, widx, &gidx, &gcount);
+	if (rc)
+		return rc;
+	if (gidx < 0 || gcount <= 0)
+		return -EINVAL;
+
+	*first = gidx;
+	*count = gcount;
+	if (*first >= nt->mw_count || *count > nt->mw_count - *first ||
+	    widx < *first || widx >= *first + *count)
+		return -EINVAL;
+
+	return 0;
+}
+
 static void ntb_free_mw(struct ntb_transport_ctx *nt, int num_mw)
 {
 	struct ntb_transport_mw *mw = &nt->mw_vec[num_mw];
 	struct device *dma_dev = ntb_get_dma_dev(nt->ndev);
+	dma_addr_t original_dma_addr;
+	void *alloc_addr;
+	size_t alloc_size;
+	unsigned int first, count;
+	unsigned int i;
+	int rc;
 
 	if (!mw->virt_addr)
 		return;
 
-	ntb_mw_clear_trans(nt->ndev, PIDX, num_mw);
-	dma_free_attrs(dma_dev, mw->alloc_size, mw->alloc_addr,
-		       mw->original_dma_addr, DMA_ATTR_FORCE_CONTIGUOUS);
-	mw->xlat_size = 0;
-	mw->buff_size = 0;
-	mw->alloc_size = 0;
-	mw->alloc_addr = NULL;
-	mw->virt_addr = NULL;
+	rc = ntb_mw_get_group(nt, num_mw, &first, &count);
+	if (rc || num_mw != first)
+		return;
+
+	if (count > 1)
+		ntb_mw_clear_trans_group(nt->ndev, PIDX, first);
+	else
+		ntb_mw_clear_trans(nt->ndev, PIDX, first);
+
+	alloc_addr = mw->alloc_addr;
+	alloc_size = mw->alloc_size;
+	original_dma_addr = mw->original_dma_addr;
+	for (i = first; i < first + count; i++) {
+		mw = &nt->mw_vec[i];
+		mw->xlat_size = 0;
+		mw->buff_size = 0;
+		mw->alloc_size = 0;
+		mw->alloc_addr = NULL;
+		mw->virt_addr = NULL;
+		mw->dma_addr = 0;
+	}
+
+	dma_free_attrs(dma_dev, alloc_size, alloc_addr, original_dma_addr,
+		       DMA_ATTR_FORCE_CONTIGUOUS);
 }
 
 static int ntb_alloc_mw_buffer(struct ntb_transport_mw *mw,
@@ -838,9 +882,11 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 {
 	struct ntb_transport_mw *mw = &nt->mw_vec[num_mw];
 	struct device *dma_dev = ntb_get_dma_dev(nt->ndev);
-	size_t xlat_size, buff_size;
+	size_t xlat_size, buff_size, group_size;
 	resource_size_t xlat_align;
 	resource_size_t xlat_align_size;
+	unsigned int first, count;
+	unsigned int i;
 	int rc;
 
 	if (!size)
@@ -861,15 +907,30 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 	if (mw->buff_size)
 		ntb_free_mw(nt, num_mw);
 
+	rc = ntb_mw_get_group(nt, num_mw, &first, &count);
+	if (rc)
+		return rc;
+	if (count > 1) {
+		if (first != num_mw)
+			return -EINVAL;
+		if (xlat_size != buff_size)
+			return -EINVAL;
+		if (check_mul_overflow(xlat_size, count, &group_size))
+			return -EOVERFLOW;
+	} else {
+		group_size = buff_size;
+	}
+
 	/* Alloc memory for receiving data.  Must be aligned */
-	mw->xlat_size = xlat_size;
-	mw->buff_size = buff_size;
-	mw->alloc_size = buff_size;
+	mw->buff_size = group_size;
+	mw->alloc_size = group_size;
 
 	rc = ntb_alloc_mw_buffer(mw, dma_dev, xlat_align);
 	if (rc) {
-		mw->alloc_size *= 2;
-		rc = ntb_alloc_mw_buffer(mw, dma_dev, xlat_align);
+		if (check_mul_overflow(mw->alloc_size, 2, &mw->alloc_size))
+			rc = -EOVERFLOW;
+		else
+			rc = ntb_alloc_mw_buffer(mw, dma_dev, xlat_align);
 		if (rc) {
 			dev_err(dma_dev,
 				"Unable to alloc aligned MW buff\n");
@@ -880,15 +941,28 @@ static int ntb_set_mw(struct ntb_transport_ctx *nt, int num_mw,
 		}
 	}
 
-	/* Notify HW the memory location of the receive buffer */
-	rc = ntb_mw_set_trans(nt->ndev, PIDX, num_mw, mw->dma_addr,
-			      mw->xlat_size);
-	if (rc) {
-		dev_err(dma_dev, "Unable to set mw%d translation", num_mw);
-		ntb_free_mw(nt, num_mw);
-		return -EIO;
+	for (i = 0; i < count; i++) {
+		mw = &nt->mw_vec[first + i];
+		mw->xlat_size = xlat_size;
+		mw->buff_size = buff_size;
+		mw->virt_addr = (u8 *)nt->mw_vec[first].virt_addr +
+				 i * xlat_size;
+		mw->dma_addr = nt->mw_vec[first].dma_addr + i * xlat_size;
 	}
 
+	/* Notify HW the memory location of the receive buffer */
+	if (count > 1)
+		rc = ntb_mw_set_trans_group(nt->ndev, PIDX, first,
+					    nt->mw_vec[first].dma_addr,
+					    group_size);
+	else
+		rc = ntb_mw_set_trans(nt->ndev, PIDX, num_mw, mw->dma_addr,
+				      mw->xlat_size);
+	if (rc) {
+		dev_err(dma_dev, "Unable to set mw%d translation", num_mw);
+		ntb_free_mw(nt, first);
+		return -EIO;
+	}
 	return 0;
 }
 
@@ -1238,6 +1312,7 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 	struct ntb_transport_ctx *nt;
 	struct ntb_transport_mw *mw;
 	unsigned int mw_count, qp_count, spad_count, max_mw_count_for_spads;
+	int group_first, group_count;
 	u64 qp_bitmap;
 	int node;
 	int rc, i;
@@ -1291,6 +1366,22 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 
 	max_mw_count_for_spads = (spad_count - MW0_SZ_HIGH) / 2;
 	nt->mw_count = min(mw_count, max_mw_count_for_spads);
+	if (nt->mw_count) {
+		rc = ntb_mw_get_trans_group(ndev, PIDX, nt->mw_count - 1,
+					    &group_first, &group_count);
+		if (rc)
+			goto err;
+
+		if (group_first < 0 || group_count <= 0 ||
+		    (unsigned int)group_first >= nt->mw_count ||
+		    (unsigned int)group_count !=
+		    nt->mw_count - (unsigned int)group_first) {
+			dev_err(&ndev->dev,
+				"Scratchpad limit splits an MW translation group\n");
+			rc = -EOPNOTSUPP;
+			goto err;
+		}
+	}
 
 	nt->msi_spad_offset = nt->mw_count * 2 + MW0_SZ_HIGH;
 
