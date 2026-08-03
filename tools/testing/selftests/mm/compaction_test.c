@@ -7,6 +7,7 @@
  * allocated.
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -29,30 +30,40 @@ struct map_list {
 
 int read_memory_info(unsigned long *memfree, unsigned long *hugepagesize)
 {
-	char  buffer[256] = {0};
-	char *cmd = "cat /proc/meminfo | grep -i memfree | grep -o '[0-9]*'";
-	FILE *cmdfile = popen(cmd, "r");
+	char buffer[256];
+	bool memfree_found = false;
+	bool hugepagesize_found = false;
+	FILE *file;
+	int ret = -1;
 
-	if (!(fgets(buffer, sizeof(buffer), cmdfile))) {
-		ksft_print_msg("Failed to read meminfo: %s\n", strerror(errno));
+	file = fopen("/proc/meminfo", "r");
+	if (!file) {
+		ksft_print_msg("Failed to open /proc/meminfo: %s\n",
+			       strerror(errno));
 		return -1;
 	}
 
-	pclose(cmdfile);
+	while (fgets(buffer, sizeof(buffer), file)) {
+		if (sscanf(buffer, "MemFree: %lu kB", memfree) == 1)
+			memfree_found = true;
+		else if (sscanf(buffer, "Hugepagesize: %lu kB",
+				hugepagesize) == 1)
+			hugepagesize_found = true;
 
-	*memfree = atoll(buffer);
-	cmd = "cat /proc/meminfo | grep -i hugepagesize | grep -o '[0-9]*'";
-	cmdfile = popen(cmd, "r");
-
-	if (!(fgets(buffer, sizeof(buffer), cmdfile))) {
-		ksft_print_msg("Failed to read meminfo: %s\n", strerror(errno));
-		return -1;
+		if (memfree_found && hugepagesize_found) {
+			ret = 0;
+			break;
+		}
 	}
 
-	pclose(cmdfile);
-	*hugepagesize = atoll(buffer);
+	if (ferror(file))
+		ksft_print_msg("Failed to read /proc/meminfo: %s\n",
+			       strerror(errno));
+	else if (ret)
+		ksft_print_msg("Failed to parse /proc/meminfo\n");
 
-	return 0;
+	fclose(file);
+	return ret;
 }
 
 int prereq(void)
