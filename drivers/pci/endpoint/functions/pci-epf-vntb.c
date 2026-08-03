@@ -1622,6 +1622,31 @@ static int vntb_epf_mw_clear_trans(struct ntb_dev *ntb, int pidx, int idx)
 	return 0;
 }
 
+static int
+vntb_epf_mw_set_trans_group(struct ntb_dev *ndev, int pidx, int widx,
+			    dma_addr_t addr, resource_size_t size)
+{
+	struct epf_ntb *ntb = ntb_ndev(ndev);
+	struct pci_epf_bar *epf_bar;
+
+	if (pidx != NTB_DEF_PEER_IDX || !ntb->packed_mws || widx)
+		return -EINVAL;
+	if (!IS_ALIGNED(addr, SZ_4K) || size != ntb->mws_size[0])
+		return -EINVAL;
+
+	epf_bar = &ntb->epf->bar[ntb->mw_layout[0].barno];
+	epf_bar->phys_addr = addr;
+
+	return pci_epc_set_bar(ntb->epf->epc, ntb->epf->func_no,
+			       ntb->epf->vfunc_no, epf_bar);
+}
+
+static int vntb_epf_mw_clear_trans_group(struct ntb_dev *ndev, int pidx,
+					 int widx)
+{
+	return 0;
+}
+
 static int vntb_epf_peer_mw_get_addr(struct ntb_dev *ndev, int idx,
 				phys_addr_t *base, resource_size_t *size)
 {
@@ -1839,6 +1864,8 @@ static const struct ntb_dev_ops vntb_epf_ops = {
 	.db_vector_mask		= vntb_epf_db_vector_mask,
 	.db_set_mask		= vntb_epf_db_set_mask,
 	.mw_get_trans_group	= vntb_epf_mw_get_trans_group,
+	.mw_set_trans_group	= vntb_epf_mw_set_trans_group,
+	.mw_clear_trans_group	= vntb_epf_mw_clear_trans_group,
 	.mw_set_trans		= vntb_epf_mw_set_trans,
 	.mw_clear_trans		= vntb_epf_mw_clear_trans,
 	.peer_mw_get_addr	= vntb_epf_peer_mw_get_addr,
