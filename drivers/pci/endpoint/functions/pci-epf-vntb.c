@@ -68,6 +68,9 @@ static struct workqueue_struct *kpcintb_workqueue;
 #define DB_COUNT_MASK			GENMASK(15, 0)
 #define MSIX_ENABLE			BIT(16)
 #define MAX_MW				4
+#define EPF_NTB_MAX_MW			16
+#define EPF_NTB_CTRL_V0			0
+#define EPF_NTB_CTRL_V1			1
 
 /* Limit per-work execution to avoid monopolizing kworker on doorbell storms. */
 #define VNTB_PEER_DB_WORK_BUDGET	5
@@ -119,7 +122,7 @@ struct epf_ntb_ctrl {
 	u32 argument;
 	u16 command_status;
 	u16 link_status;
-	u32 topology;
+	u32 version;
 	u64 addr;
 	u64 size;
 	u32 num_mws;
@@ -129,7 +132,15 @@ struct epf_ntb_ctrl {
 	u32 db_entry_size;
 	u32 db_data[MAX_DB_COUNT];
 	u32 db_offset[MAX_DB_COUNT];
+	u32 mw_bar;
+	u32 mw_group_size;
 } __packed;
+
+struct epf_ntb_mw_layout {
+	enum pci_barno barno;
+	u64 offset;
+	u64 size;
+};
 
 struct epf_ntb {
 	struct ntb_dev ntb;
@@ -137,9 +148,11 @@ struct epf_ntb {
 	struct config_group group;
 
 	u32 num_mws;
+	u32 packed_mws;
 	u32 db_count;
 	u32 spad_count;
 	u64 mws_size[MAX_MW];
+	struct epf_ntb_mw_layout mw_layout[EPF_NTB_MAX_MW];
 	atomic64_t db;
 	atomic64_t peer_db_pending;
 	struct work_struct peer_db_work;
@@ -162,8 +175,8 @@ struct epf_ntb {
 
 	u32 *epf_db;
 
-	phys_addr_t vpci_mw_phy[MAX_MW];
-	void __iomem *vpci_mw_addr[MAX_MW];
+	phys_addr_t vpci_mw_phy[EPF_NTB_MAX_MW];
+	void __iomem *vpci_mw_addr[EPF_NTB_MAX_MW];
 
 	struct delayed_work cmd_handler;
 };
@@ -199,11 +212,25 @@ static int epf_ntb_link_up(struct epf_ntb *ntb, bool link_up)
 	return 0;
 }
 
+static int epf_ntb_get_mw_group(struct epf_ntb *ntb, unsigned int mw,
+				unsigned int *first, unsigned int *count)
+{
+	if (mw >= ntb->num_mws)
+		return -EINVAL;
+
+	if (first)
+		*first = ntb->packed_mws ? 0 : mw;
+	if (count)
+		*count = ntb->packed_mws ? ntb->num_mws : 1;
+
+	return 0;
+}
+
 /**
  * epf_ntb_configure_mw() - Configure the Outbound Address Space for VHOST
  *   to access the memory window of HOST
  * @ntb: NTB device that facilitates communication between HOST and VHOST
- * @mw: Index of the memory window (either 0, 1, 2 or 3)
+ * @mw: Index of the memory window
  *
  *                          EP Outbound Window
  * +--------+              +-----------+
@@ -227,12 +254,22 @@ static int epf_ntb_configure_mw(struct epf_ntb *ntb, u32 mw)
 {
 	phys_addr_t phys_addr;
 	u8 func_no, vfunc_no;
+	unsigned int count;
 	u64 addr, size;
-	int ret = 0;
+	int ret;
+
+	ret = epf_ntb_get_mw_group(ntb, mw, NULL, &count);
+	if (ret)
+		return ret;
+	if (count > 1)
+		return -EOPNOTSUPP;
 
 	phys_addr = ntb->vpci_mw_phy[mw];
 	addr = ntb->reg->addr;
 	size = ntb->reg->size;
+
+	if (!size || size > ntb->mw_layout[mw].size)
+		return -EINVAL;
 
 	func_no = ntb->epf->func_no;
 	vfunc_no = ntb->epf->vfunc_no;
@@ -247,17 +284,30 @@ static int epf_ntb_configure_mw(struct epf_ntb *ntb, u32 mw)
 /**
  * epf_ntb_teardown_mw() - Teardown the configured OB ATU
  * @ntb: NTB device that facilitates communication between HOST and VHOST
- * @mw: Index of the memory window (either 0, 1, 2 or 3)
+ * @mw: Index of the memory window
  *
  * Teardown the configured OB ATU configured in epf_ntb_configure_mw() using
  * pci_epc_unmap_addr()
+ *
+ * Returns: Zero for success, or an error code in case of failure
  */
-static void epf_ntb_teardown_mw(struct epf_ntb *ntb, u32 mw)
+static int epf_ntb_teardown_mw(struct epf_ntb *ntb, u32 mw)
 {
+	unsigned int count;
+	int ret;
+
+	ret = epf_ntb_get_mw_group(ntb, mw, NULL, &count);
+	if (ret)
+		return ret;
+	if (count > 1)
+		return -EOPNOTSUPP;
+
 	pci_epc_unmap_addr(ntb->epf->epc,
 			   ntb->epf->func_no,
 			   ntb->epf->vfunc_no,
 			   ntb->vpci_mw_phy[mw]);
+
+	return 0;
 }
 
 /**
@@ -316,8 +366,8 @@ static void epf_ntb_cmd_handler(struct work_struct *work)
 			ctrl->command_status = COMMAND_STATUS_OK;
 		break;
 	case COMMAND_TEARDOWN_MW:
-		epf_ntb_teardown_mw(ntb, argument);
-		ctrl->command_status = COMMAND_STATUS_OK;
+		ret = epf_ntb_teardown_mw(ntb, argument);
+		ctrl->command_status = ret ? COMMAND_STATUS_ERROR : COMMAND_STATUS_OK;
 		break;
 	case COMMAND_LINK_UP:
 		ntb->linkup = true;
@@ -434,6 +484,78 @@ static void epf_ntb_config_spad_bar_free(struct epf_ntb *ntb)
 	pci_epf_free_space(ntb->epf, ntb->reg, barno, 0);
 }
 
+static int epf_ntb_build_mw_layout(struct epf_ntb *ntb)
+{
+	struct device *dev = &ntb->epf->dev;
+	u64 size;
+	int i;
+
+	if (ntb->packed_mws) {
+		enum pci_barno barno = ntb->epf_ntb_bar[BAR_MW1];
+
+		/*
+		 * A packed group requires contiguous backing for the entire BAR.
+		 * Per-MW size limits such as max_mw_size are not supported.
+		 */
+		if (ntb->packed_mws != ntb->num_mws) {
+			dev_err(dev, "packed_mws must match num_mws\n");
+			return -EINVAL;
+		}
+
+		if (barno < 0) {
+			dev_err(dev, "packed MW has no BAR\n");
+			return -EINVAL;
+		}
+
+		if (!ntb->mws_size[0] ||
+		    ntb->mws_size[0] > U32_MAX ||
+		    !is_power_of_2(ntb->mws_size[0]) ||
+		    ntb->mws_size[0] % ntb->packed_mws) {
+			dev_err(dev, "invalid packed MW size\n");
+			return -EINVAL;
+		}
+
+		size = ntb->mws_size[0] / ntb->packed_mws;
+		if (!IS_ALIGNED(size, SZ_4K)) {
+			dev_err(dev, "invalid packed MW member size\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < ntb->num_mws; i++) {
+			ntb->mw_layout[i].barno = barno;
+			ntb->mw_layout[i].offset = i * size;
+			ntb->mw_layout[i].size = size;
+		}
+
+		return 0;
+	}
+
+	if (ntb->num_mws > MAX_MW) {
+		dev_err(dev, "num_mws=%u requires packed_mws\n", ntb->num_mws);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < ntb->num_mws; i++) {
+		enum pci_barno barno = ntb->epf_ntb_bar[BAR_MW1 + i];
+
+		if (barno < 0) {
+			dev_err(dev, "MW%d has no BAR\n", i + 1);
+			return -EINVAL;
+		}
+
+		if (!ntb->mws_size[i]) {
+			dev_err(dev, "MW%d has no size\n", i + 1);
+			return -EINVAL;
+		}
+
+		ntb->mw_layout[i].barno = barno;
+		ntb->mw_layout[i].offset = 0;
+		ntb->mw_layout[i].size = ntb->mws_size[i];
+	}
+
+	return 0;
+}
+
 /**
  * epf_ntb_config_spad_bar_alloc() - Allocate memory for config + scratchpad
  *   region
@@ -474,6 +596,7 @@ static int epf_ntb_config_spad_bar_alloc(struct epf_ntb *ntb)
 	ntb->reg = base;
 
 	ctrl = ntb->reg;
+	ctrl->version = ntb->packed_mws ? EPF_NTB_CTRL_V1 : EPF_NTB_CTRL_V0;
 	ctrl->spad_offset = ctrl_size;
 
 	ctrl->spad_count = spad_count;
@@ -485,6 +608,11 @@ static int epf_ntb_config_spad_bar_alloc(struct epf_ntb *ntb)
 	for (i = 0; i < ntb->db_count; i++) {
 		ntb->reg->db_data[i] = 1 + i;
 		ntb->reg->db_offset[i] = 0;
+	}
+
+	if (ntb->packed_mws) {
+		ctrl->mw_bar = ntb->mw_layout[0].barno;
+		ctrl->mw_group_size = ntb->mws_size[0];
 	}
 
 	return 0;
@@ -761,16 +889,28 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 	u64 size;
 	enum pci_barno barno;
 	struct device *dev = &ntb->epf->dev;
+	u64 bar_size[BAR_5 + 1] = {};
+	bool bar_set[BAR_5 + 1] = {};
 
 	for (i = 0; i < ntb->num_mws; i++) {
-		size = ntb->mws_size[i];
-		barno = ntb->epf_ntb_bar[BAR_MW1 + i];
+		size = ntb->mw_layout[i].size;
+		barno = ntb->mw_layout[i].barno;
+		bar_size[barno] = max(bar_size[barno],
+				      ntb->mw_layout[i].offset + size);
+	}
+
+	for (i = 0; i < ntb->num_mws; i++) {
+		size = ntb->mw_layout[i].size;
+		barno = ntb->mw_layout[i].barno;
+
+		if (bar_set[barno])
+			goto alloc_vpci_mw;
 
 		ntb->epf->bar[barno].barno = barno;
-		ntb->epf->bar[barno].size = size;
+		ntb->epf->bar[barno].size = bar_size[barno];
 		ntb->epf->bar[barno].addr = NULL;
 		ntb->epf->bar[barno].phys_addr = 0;
-		ntb->epf->bar[barno].flags |= upper_32_bits(size) ?
+		ntb->epf->bar[barno].flags |= upper_32_bits(bar_size[barno]) ?
 				PCI_BASE_ADDRESS_MEM_TYPE_64 :
 				PCI_BASE_ADDRESS_MEM_TYPE_32;
 
@@ -782,7 +922,9 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 			dev_err(dev, "MW set failed\n");
 			goto err_alloc_mem;
 		}
+		bar_set[barno] = true;
 
+alloc_vpci_mw:
 		/* Allocate EPC outbound memory windows to vpci vntb device */
 		ntb->vpci_mw_addr[i] = pci_epc_mem_alloc_addr(ntb->epf->epc,
 							      &ntb->vpci_mw_phy[i],
@@ -790,17 +932,13 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 		if (!ntb->vpci_mw_addr[i]) {
 			ret = -ENOMEM;
 			dev_err(dev, "Failed to allocate source address\n");
-			goto err_set_bar;
+			i++;
+			goto err_alloc_mem;
 		}
 	}
 
 	return ret;
 
-err_set_bar:
-	pci_epc_clear_bar(ntb->epf->epc,
-			  ntb->epf->func_no,
-			  ntb->epf->vfunc_no,
-			  &ntb->epf->bar[barno]);
 err_alloc_mem:
 	epf_ntb_mw_bar_clear(ntb, i);
 	return ret;
@@ -809,24 +947,32 @@ err_alloc_mem:
 /**
  * epf_ntb_mw_bar_clear() - Clear Memory window BARs
  * @ntb: NTB device that facilitates communication between HOST and VHOST
- * @num_mws: the number of Memory window BARs that to be cleared
+ * @num_mws: Number of logical memory windows to clean up
  */
 static void epf_ntb_mw_bar_clear(struct epf_ntb *ntb, int num_mws)
 {
+	bool bar_cleared[BAR_5 + 1] = {};
 	enum pci_barno barno;
 	int i;
 
 	for (i = 0; i < num_mws; i++) {
-		barno = ntb->epf_ntb_bar[BAR_MW1 + i];
-		pci_epc_clear_bar(ntb->epf->epc,
-				  ntb->epf->func_no,
-				  ntb->epf->vfunc_no,
-				  &ntb->epf->bar[barno]);
+		barno = ntb->mw_layout[i].barno;
+		if (!bar_cleared[barno]) {
+			pci_epc_clear_bar(ntb->epf->epc,
+					  ntb->epf->func_no,
+					  ntb->epf->vfunc_no,
+					  &ntb->epf->bar[barno]);
+			bar_cleared[barno] = true;
+		}
+
+		if (!ntb->vpci_mw_addr[i])
+			continue;
 
 		pci_epc_mem_free_addr(ntb->epf->epc,
 				      ntb->vpci_mw_phy[i],
 				      ntb->vpci_mw_addr[i],
-				      ntb->mws_size[i]);
+				      ntb->mw_layout[i].size);
+		ntb->vpci_mw_addr[i] = NULL;
 	}
 }
 
@@ -916,16 +1062,21 @@ static int epf_ntb_init_epc_bar(struct epf_ntb *ntb)
 		}
 	}
 
-	/* These are optional BARs which don't impact NTB functionality */
-	for (bar = BAR_MW1, i = 1; i < num_mws; bar++, i++) {
-		barno = epf_ntb_find_bar(ntb, epc_features, bar, barno);
-		if (barno < 0) {
-			ntb->num_mws = i;
-			dev_dbg(dev, "BAR not available for > MW%d\n", i + 1);
+	if (!ntb->packed_mws) {
+		/* These are optional BARs which don't impact NTB functionality */
+		for (bar = BAR_MW1, i = 1;
+		     i < num_mws && bar <= BAR_MW4; bar++, i++) {
+			barno = epf_ntb_find_bar(ntb, epc_features, bar, barno);
+			if (barno < 0) {
+				ntb->num_mws = i;
+				dev_dbg(dev, "BAR not available for > MW%d\n",
+					i + 1);
+				break;
+			}
 		}
 	}
 
-	return 0;
+	return epf_ntb_build_mw_layout(ntb);
 }
 
 /**
@@ -1352,6 +1503,28 @@ static int vntb_epf_mw_count(struct ntb_dev *ntb, int pidx)
 	return ndev->num_mws;
 }
 
+static int vntb_epf_mw_get_trans_group(struct ntb_dev *ndev, int pidx,
+				       int idx, int *gidx, int *gcount)
+{
+	struct epf_ntb *ntb = ntb_ndev(ndev);
+	unsigned int first, count;
+	int ret;
+
+	if (pidx != NTB_DEF_PEER_IDX || idx < 0 || idx >= ntb->num_mws)
+		return -EINVAL;
+
+	ret = epf_ntb_get_mw_group(ntb, idx, &first, &count);
+	if (ret)
+		return ret;
+
+	if (gidx)
+		*gidx = first;
+	if (gcount)
+		*gcount = count;
+
+	return 0;
+}
+
 static int vntb_epf_spad_count(struct ntb_dev *ntb)
 {
 	return ntb_ndev(ntb)->spad_count;
@@ -1415,13 +1588,22 @@ static int vntb_epf_mw_set_trans(struct ntb_dev *ndev, int pidx, int idx,
 		dma_addr_t addr, resource_size_t size)
 {
 	struct epf_ntb *ntb = ntb_ndev(ndev);
+	struct epf_ntb_mw_layout *mw;
 	struct pci_epf_bar *epf_bar;
 	enum pci_barno barno;
 	int ret;
 	struct device *dev;
 
 	dev = &ntb->ntb.dev;
-	barno = ntb->epf_ntb_bar[BAR_MW1 + idx];
+	if (pidx != NTB_DEF_PEER_IDX ||
+	    idx < 0 || idx >= ntb->num_mws)
+		return -EINVAL;
+
+	mw = &ntb->mw_layout[idx];
+	if (size > mw->size)
+		return -EINVAL;
+
+	barno = mw->barno;
 	epf_bar = &ntb->epf->bar[barno];
 	epf_bar->phys_addr = addr;
 	epf_bar->barno = barno;
@@ -1450,7 +1632,7 @@ static int vntb_epf_peer_mw_get_addr(struct ntb_dev *ndev, int idx,
 		*base = ntb->vpci_mw_phy[idx];
 
 	if (size)
-		*size = ntb->mws_size[idx];
+		*size = ntb->mw_layout[idx].size;
 
 	return 0;
 }
@@ -1608,7 +1790,7 @@ static int vntb_epf_mw_get_align(struct ntb_dev *ndev, int pidx, int idx,
 		*size_align = 1;
 
 	if (size_max)
-		*size_max = ntb->mws_size[idx];
+		*size_max = ntb->mw_layout[idx].size;
 
 	return 0;
 }
@@ -1656,6 +1838,7 @@ static const struct ntb_dev_ops vntb_epf_ops = {
 	.db_vector_count	= vntb_epf_db_vector_count,
 	.db_vector_mask		= vntb_epf_db_vector_mask,
 	.db_set_mask		= vntb_epf_db_set_mask,
+	.mw_get_trans_group	= vntb_epf_mw_get_trans_group,
 	.mw_set_trans		= vntb_epf_mw_set_trans,
 	.mw_clear_trans		= vntb_epf_mw_clear_trans,
 	.peer_mw_get_addr	= vntb_epf_peer_mw_get_addr,
