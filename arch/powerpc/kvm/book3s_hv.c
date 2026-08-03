@@ -15,6 +15,7 @@
  * by Alexander Graf <agraf@suse.de>.
  */
 
+#include "asm/guest-state-buffer.h"
 #include <linux/kvm_host.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -4253,17 +4254,15 @@ static int kvmhv_vcpu_entry_nestedv2(struct kvm_vcpu *vcpu, u64 time_limit,
 	int trap;
 	long rc;
 
-	if (vcpu->arch.doorbell_request) {
-		vcpu->arch.doorbell_request = 0;
-		kvmppc_set_dpdes(vcpu, 1);
-	}
-
 	io = &vcpu->arch.nestedv2_io;
 
 	msr = mfmsr();
 	kvmppc_msr_hard_disable_set_facilities(vcpu, msr);
 	if (lazy_irq_pending())
 		return 0;
+
+	if (vcpu->arch.doorbell_request)
+		kvmppc_set_dpdes(vcpu, 1);
 
 	rc = kvmhv_nestedv2_flush_vcpu(vcpu, time_limit);
 	if (rc < 0)
@@ -4295,6 +4294,17 @@ static int kvmhv_vcpu_entry_nestedv2(struct kvm_vcpu *vcpu, u64 time_limit,
 	rc = kvmhv_nestedv2_parse_output(vcpu);
 	if (rc < 0)
 		return -EINVAL;
+
+	/* Check if privileged door bell was requested and handled */
+	if (vcpu->arch.vcore->dpdes) {
+		kvmhv_nestedv2_cached_reload(vcpu, KVMPPC_GSID_DPDES);
+		if (vcpu->arch.vcore->dpdes)
+			vcpu->arch.doorbell_request |= vcpu->arch.vcore->dpdes;
+		else
+			cpu->arch.doorbell_request = 0;
+	} else {
+		vcpu->arch.doorbell_request = 0;
+	}
 
 	timer_rearm_host_dec(*tb);
 
