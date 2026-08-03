@@ -311,6 +311,14 @@ int ocfs2_group_extend(struct inode * inode, int new_clusters)
 		goto out_unlock;
 	}
 
+	cl_bpc = le16_to_cpu(fe->id2.i_chain.cl_bpc);
+	if (cl_bpc != 1) {
+		ret = ocfs2_error(main_bm_inode->i_sb,
+				  "Invalid global bitmap bits per cluster %u\n",
+				  cl_bpc);
+		goto out_unlock;
+	}
+
 	if (le16_to_cpu(fe->id2.i_chain.cl_cpg) !=
 		ocfs2_group_bitmap_size(osb->sb, 0,
 					osb->s_feature_incompat) * 8) {
@@ -332,7 +340,6 @@ int ocfs2_group_extend(struct inode * inode, int new_clusters)
 	}
 	group = (struct ocfs2_group_desc *)group_bh->b_data;
 
-	cl_bpc = le16_to_cpu(fe->id2.i_chain.cl_bpc);
 	if (le16_to_cpu(group->bg_bits) / cl_bpc + new_clusters >
 		le16_to_cpu(fe->id2.i_chain.cl_cpg)) {
 		ret = -EINVAL;
