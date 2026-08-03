@@ -2213,6 +2213,7 @@ static int afiucv_netdev_event(struct notifier_block *this,
 	switch (event) {
 	case NETDEV_REBOOT:
 	case NETDEV_GOING_DOWN:
+		read_lock_bh(&iucv_sk_list.lock);
 		sk_for_each(sk, &iucv_sk_list.head) {
 			iucv = iucv_sk(sk);
 			if ((iucv->hs_dev == event_dev) &&
@@ -2223,6 +2224,7 @@ static int afiucv_netdev_event(struct notifier_block *this,
 				sk->sk_state_change(sk);
 			}
 		}
+		read_unlock_bh(&iucv_sk_list.lock);
 		break;
 	case NETDEV_DOWN:
 	case NETDEV_UNREGISTER:
