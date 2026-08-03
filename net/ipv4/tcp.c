@@ -1278,6 +1278,11 @@ new_segment:
 		if (copy > msg_data_left(msg))
 			copy = msg_data_left(msg);
 
+		if (zc != MSG_ZEROCOPY && unlikely(!skb_frags_readable(skb))) {
+			tcp_mark_push(tp, skb);
+			goto new_segment;
+		}
+
 		if (zc == 0) {
 			bool merge = true;
 			int i = skb_shinfo(skb)->nr_frags;
