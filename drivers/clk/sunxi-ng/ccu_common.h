@@ -29,6 +29,9 @@
 /* Some clocks need this bit to actually apply register changes */
 #define CCU_SUNXI_UPDATE_BIT		BIT(27)
 
+/* Key value for clocks with CCU_FEATURE_KEY_FIELD (reads as zero) */
+#define CCU_MUX_KEY_VALUE		0x16aa0000
+
 struct device_node;
 
 struct ccu_common {
