@@ -425,7 +425,69 @@ static acpi_status acpi_pci_osc_control_set(acpi_handle handle, u32 *mask,
 	return AE_OK;
 }
 
-static u32 calculate_support(void)
+/*
+ * Some platforms advertise ASPM support in _OSC but withhold related
+ * control (e.g. LTR, DPC) from the OS on a specific root complex. The
+ * resulting split ownership between OS-managed ASPM and firmware-owned
+ * LTR/DPC can cause resume failures on s2idle. Rather than disabling
+ * ASPM system-wide, strip the offending support bits only on the
+ * affected root bridge so the OS abstains from requesting _OSC control
+ * there, leaving every other root complex on the system unaffected.
+ */
+struct osc_support_quirk {
+	const struct dmi_system_id dmi_match[2];
+	u16 segment;
+	u8 bus;
+	u32 strip_support;
+};
+
+static const struct osc_support_quirk osc_support_quirks[] = {
+	/*
+	 * MSI Claw A8 (MS-1T8K): firmware withholds LTR/DPC control on
+	 * the primary root complex despite advertising ASPM support,
+	 * causing a hard lock on s2idle resume when the onboard RTS525A
+	 * SD card reader is populated.
+	 */
+	{
+		.dmi_match = {
+			{
+				.ident = "MSI Claw A8 BZ2EM",
+				.matches = {
+					DMI_MATCH(DMI_SYS_VENDOR,
+						  "Micro-Star International Co., Ltd."),
+					DMI_MATCH(DMI_BOARD_NAME, "MS-1T8K"),
+				},
+			},
+			{}
+		},
+		.segment = 0,
+		.bus = 0,
+		.strip_support = OSC_PCI_ASPM_SUPPORT | OSC_PCI_CLOCK_PM_SUPPORT,
+	},
+};
+
+static u32 pci_osc_support_quirk_mask(struct acpi_pci_root *root)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(osc_support_quirks); i++) {
+		const struct osc_support_quirk *q = &osc_support_quirks[i];
+
+		if (dmi_first_match(q->dmi_match) &&
+		    root->segment == q->segment &&
+		    root->secondary.start == q->bus) {
+			dev_info(&root->device->dev,
+				 "PCI Root Bridge [%04x:%02x] _OSC quirk: stripping support 0x%08x (%s)\n",
+				 root->segment, (unsigned int)root->secondary.start,
+				 q->strip_support, q->dmi_match[0].ident);
+			return ~q->strip_support;
+		}
+	}
+
+	return ~0;
+}
+
+static u32 calculate_support(struct acpi_pci_root *root)
 {
 	u32 support;
 
@@ -443,6 +505,8 @@ static u32 calculate_support(void)
 		support |= OSC_PCI_MSI_SUPPORT;
 	if (IS_ENABLED(CONFIG_PCIE_EDR))
 		support |= OSC_PCI_EDR_SUPPORT;
+
+	support &= pci_osc_support_quirk_mask(root);
 
 	return support;
 }
@@ -574,7 +638,7 @@ static void negotiate_os_control(struct acpi_pci_root *root, int *no_aspm)
 		return;
 	}
 
-	support = calculate_support();
+	support = calculate_support(root);
 
 	decode_osc_support(root, "OS supports", support);
 
