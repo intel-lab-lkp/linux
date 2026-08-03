@@ -843,6 +843,7 @@ static int do_server(struct memory_buffer *mem)
 	char iobuf[819200];
 	int ret, err = -1;
 	char buffer[256];
+	int retries = 10;
 	int socket_fd;
 	int client_fd;
 
@@ -898,7 +899,12 @@ static int do_server(struct memory_buffer *mem)
 	fprintf(stderr, "binding to address %s:%d\n", server_ip,
 		ntohs(server_sin.sin6_port));
 
-	ret = bind(socket_fd, &server_sin, sizeof(server_sin));
+	while (retries--) {
+		ret = bind(socket_fd, &server_sin, sizeof(server_sin));
+		if (!ret)
+			break;
+		sleep(1);
+	}
 	if (ret) {
 		pr_err("Failed to bind");
 		goto err_close_socket;
