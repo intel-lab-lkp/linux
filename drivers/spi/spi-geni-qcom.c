@@ -1150,7 +1150,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	return devm_spi_register_controller(dev, spi);
 }
 
-static int __maybe_unused spi_geni_runtime_suspend(struct device *dev)
+static int spi_geni_runtime_suspend(struct device *dev)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
@@ -1166,7 +1166,7 @@ static int __maybe_unused spi_geni_runtime_suspend(struct device *dev)
 	return geni_icc_disable(&mas->se);
 }
 
-static int __maybe_unused spi_geni_runtime_resume(struct device *dev)
+static int spi_geni_runtime_resume(struct device *dev)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
@@ -1183,7 +1183,7 @@ static int __maybe_unused spi_geni_runtime_resume(struct device *dev)
 	return dev_pm_opp_set_rate(mas->dev, mas->cur_sclk_hz);
 }
 
-static int __maybe_unused spi_geni_suspend(struct device *dev)
+static int spi_geni_suspend(struct device *dev)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
 	int ret;
@@ -1199,7 +1199,7 @@ static int __maybe_unused spi_geni_suspend(struct device *dev)
 	return ret;
 }
 
-static int __maybe_unused spi_geni_resume(struct device *dev)
+static int spi_geni_resume(struct device *dev)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
 	int ret;
@@ -1216,9 +1216,8 @@ static int __maybe_unused spi_geni_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops spi_geni_pm_ops = {
-	SET_RUNTIME_PM_OPS(spi_geni_runtime_suspend,
-					spi_geni_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(spi_geni_suspend, spi_geni_resume)
+	RUNTIME_PM_OPS(spi_geni_runtime_suspend, spi_geni_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(spi_geni_suspend, spi_geni_resume)
 };
 
 static const struct of_device_id spi_geni_dt_match[] = {
@@ -1231,7 +1230,7 @@ static struct platform_driver spi_geni_driver = {
 	.probe  = spi_geni_probe,
 	.driver = {
 		.name = "geni_spi",
-		.pm = &spi_geni_pm_ops,
+		.pm = pm_ptr(&spi_geni_pm_ops),
 		.of_match_table = spi_geni_dt_match,
 	},
 };
