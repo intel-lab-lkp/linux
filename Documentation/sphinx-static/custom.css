@@ -82,6 +82,11 @@ div.kerneltoc li.current ul { background-color: white; }
 section#the-linux-kernel-documentation p.caption { display: none; }
 
 /*
+ * Make section titles bold in the sidebar.
+ */
+div.sphinxsidebar p.caption { font-weight: bold; }
+
+/*
  * The CSS magic to toggle the contents on small screens.
  */
 label.kernel-toc-title { display: none; }
