@@ -109,7 +109,7 @@ static int aes_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 {
 	struct aes_ctx *ctx = aes_ctx(tfm);
 	const __le32 *key = (const __le32 *)in_key;
-	struct crypto_aes_ctx gen_aes;
+	struct crypto_aes_ctx gen_aes __cleanup(aes_clear_ctx);
 	int cpu;
 
 	if (key_len % 8)
