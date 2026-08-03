@@ -485,11 +485,13 @@ void rxrpc_destroy_all_connections(struct rxrpc_net *rxnet)
 	write_unlock(&rxnet->conn_lock);
 	BUG_ON(leak);
 
-	ASSERT(list_empty(&rxnet->conn_proc_list));
-
-	/* We need to wait for the connections to be destroyed by RCU as they
-	 * pin things that we still need to get rid of.
+	/* Connection destruction is normally deferred to system_wq because
+	 * the final-ACK timer is still pending when the last ref is dropped.
+	 * Wait for the deferred destructors (and the RCU frees) to complete
+	 * before checking conn_proc_list; they remove conns from it.
 	 */
 	wait_var_event(&rxnet->nr_conns, !atomic_read(&rxnet->nr_conns));
+
+	ASSERT(list_empty(&rxnet->conn_proc_list));
 	_leave("");
 }
