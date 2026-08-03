@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/atomic.h>
 #include <linux/device.h>
+#include <linux/mutex.h>
 #include <linux/pm_runtime.h>
 #include <linux/poll.h>
 #include <linux/security.h>
@@ -1014,6 +1015,8 @@ void debugfs_create_bool(const char *name, umode_t mode, struct dentry *parent,
 }
 EXPORT_SYMBOL_GPL(debugfs_create_bool);
 
+static DEFINE_MUTEX(debugfs_str_write_mutex);
+
 ssize_t debugfs_read_file_str(struct file *file, char __user *user_buf,
 			      size_t count, loff_t *ppos)
 {
@@ -1026,15 +1029,18 @@ ssize_t debugfs_read_file_str(struct file *file, char __user *user_buf,
 	if (unlikely(ret))
 		return ret;
 
-	str = *(char **)file->private_data;
+	rcu_read_lock();
+	str = rcu_dereference(*(char __rcu **)file->private_data);
 	len = strlen(str) + 1;
-	copy = kmalloc(len, GFP_KERNEL);
+	copy = kmalloc(len, GFP_ATOMIC);
 	if (!copy) {
+		rcu_read_unlock();
 		debugfs_file_put(dentry);
 		return -ENOMEM;
 	}
 
 	copy_len = strscpy(copy, str, len);
+	rcu_read_unlock();
 	debugfs_file_put(dentry);
 	if (copy_len < 0) {
 		kfree(copy);
@@ -1061,7 +1067,9 @@ static ssize_t debugfs_write_file_str(struct file *file, const char __user *user
 	if (unlikely(r))
 		return r;
 
-	old = *(char **)file->private_data;
+	mutex_lock(&debugfs_str_write_mutex);
+	old = rcu_dereference_protected(*(char __rcu **)file->private_data,
+					lockdep_is_held(&debugfs_str_write_mutex));
 
 	/* only allow strict concatenation */
 	r = -EINVAL;
@@ -1091,11 +1099,13 @@ static ssize_t debugfs_write_file_str(struct file *file, const char __user *user
 	synchronize_rcu();
 	kfree(old);
 
+	mutex_unlock(&debugfs_str_write_mutex);
 	debugfs_file_put(dentry);
 	return count;
 
 error:
 	kfree(new);
+	mutex_unlock(&debugfs_str_write_mutex);
 	debugfs_file_put(dentry);
 	return r;
 }
