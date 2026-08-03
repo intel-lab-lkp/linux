@@ -1196,7 +1196,7 @@ static int zloop_ctl_add(struct zloop_options *opts)
 
 	__module_get(THIS_MODULE);
 
-	nr_zones = opts->capacity >> ilog2(opts->zone_size);
+	nr_zones = DIV_ROUND_UP_SECTOR_T(opts->capacity, opts->zone_size);
 	if (opts->nr_conv_zones >= nr_zones) {
 		pr_err("Invalid number of conventional zones %u\n",
 		       opts->nr_conv_zones);
