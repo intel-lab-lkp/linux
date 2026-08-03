@@ -12335,11 +12335,13 @@ int hfi2_wfr_early_per_chip_init(struct hfi2_devdata *dd)
 
 	/* call before get_platform_config(), after hfi2_init_chip_resources() */
 	ret = hfi2_eprom_init(dd);
+	/* call before hfi2_get_platform_config(), after hfi2_init_chip_resources() */
+	ret = hfi2_eprom_init(dd);
 	if (ret)
 		return ret;
 
 	/* Needs to be called before hfi2_firmware_init */
-	get_platform_config(&dd->pport[HFI2_PORT_IDX]);
+	hfi2_get_platform_config(&dd->pport[HFI2_PORT_IDX]);
 
 	/* read in firmware */
 	ret = hfi2_firmware_init(dd);
