@@ -347,6 +347,13 @@ struct ptp_ocp_serial_port {
 #define OCP_SIGNAL_NUM			4
 #define OCP_FREQ_NUM			4
 
+enum ptp_ocp_board_id_state {
+	OCP_BOARD_ID_UNREAD,
+	OCP_BOARD_ID_VALID,
+	OCP_BOARD_ID_ERASED,
+	OCP_BOARD_ID_INVALID,
+};
+
 enum {
 	PORT_GNSS,
 	PORT_GNSS2,
@@ -401,8 +408,9 @@ struct ptp_ocp {
 	bool			fw_loader;
 	u8			fw_tag;
 	u16			fw_version;
-	u8			board_id[OCP_BOARD_ID_LEN];
+	char			board_id[OCP_BOARD_ID_LEN + 1];
 	u8			serial[OCP_SERIAL_LEN];
+	enum ptp_ocp_board_id_state board_id_state;
 	bool			has_eeprom_data;
 	u32			pps_req_map;
 	int			flash_start;
@@ -472,18 +480,23 @@ struct ptp_ocp_eeprom_map {
 	.len = sizeof_field(struct ptp_ocp, member),		\
 	.bp_offset = offsetof(struct ptp_ocp, member)
 
+#define EEPROM_ENTRY_LEN(addr, member, entry_len)		\
+	.off = addr,						\
+	.len = entry_len,					\
+	.bp_offset = offsetof(struct ptp_ocp, member)
+
 #define BP_MAP_ENTRY_ADDR(bp, map) ({				\
 	(void *)((uintptr_t)(bp) + (map)->bp_offset);		\
 })
 
 static struct ptp_ocp_eeprom_map fb_eeprom_map[] = {
-	{ EEPROM_ENTRY(0x43, board_id) },
+	{ EEPROM_ENTRY_LEN(0x43, board_id, OCP_BOARD_ID_LEN) },
 	{ EEPROM_ENTRY(0x00, serial), .tag = "mac" },
 	{ }
 };
 
 static struct ptp_ocp_eeprom_map art_eeprom_map[] = {
-	{ EEPROM_ENTRY(0x200 + 0x43, board_id) },
+	{ EEPROM_ENTRY_LEN(0x200 + 0x43, board_id, OCP_BOARD_ID_LEN) },
 	{ EEPROM_ENTRY(0x200 + 0x63, serial) },
 	{ }
 };
@@ -1969,6 +1982,52 @@ ptp_ocp_nvmem_device_put(struct nvmem_device **nvmemp)
 	*nvmemp = NULL;
 }
 
+static enum ptp_ocp_board_id_state
+ptp_ocp_classify_board_id(char *board_id)
+{
+	bool all_zero = true;
+	bool all_ones = true;
+	bool terminated = false;
+	unsigned int i;
+
+	board_id[OCP_BOARD_ID_LEN] = '\0';
+	for (i = 0; i < OCP_BOARD_ID_LEN; i++) {
+		u8 value = board_id[i];
+
+		all_zero &= value == 0;
+		all_ones &= value == 0xff;
+	}
+
+	if (all_zero || all_ones) {
+		board_id[0] = '\0';
+		return OCP_BOARD_ID_ERASED;
+	}
+
+	for (i = 0; i < OCP_BOARD_ID_LEN; i++) {
+		u8 value = board_id[i];
+
+		if (terminated) {
+			if (value)
+				goto invalid;
+			continue;
+		}
+
+		if (!value) {
+			terminated = true;
+			continue;
+		}
+		if (value < 0x20 || value > 0x7e)
+			goto invalid;
+	}
+
+	if (board_id[0])
+		return OCP_BOARD_ID_VALID;
+
+invalid:
+	board_id[0] = '\0';
+	return OCP_BOARD_ID_INVALID;
+}
+
 static void
 ptp_ocp_read_eeprom(struct ptp_ocp *bp)
 {
@@ -2001,6 +2060,7 @@ ptp_ocp_read_eeprom(struct ptp_ocp *bp)
 			goto fail;
 	}
 
+	bp->board_id_state = ptp_ocp_classify_board_id(bp->board_id);
 	bp->has_eeprom_data = true;
 
 out:
@@ -2176,6 +2236,9 @@ ptp_ocp_devlink_info_get(struct devlink *devlink, struct devlink_info_req *req,
 	err = devlink_info_serial_number_put(req, buf);
 	if (err)
 		return err;
+
+	if (bp->board_id_state != OCP_BOARD_ID_VALID)
+		return 0;
 
 	err = devlink_info_version_fixed_put(req,
 			DEVLINK_INFO_VERSION_GENERIC_BOARD_ID,
