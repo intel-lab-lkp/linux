@@ -24,7 +24,6 @@
 #include "bus.h"
 #include "tracepoint.h"
 
-
 #define MSGBUF_IOCTL_RESP_TIMEOUT		msecs_to_jiffies(2000)
 
 #define MSGBUF_TYPE_GEN_STATUS			0x1
@@ -291,7 +290,6 @@ struct brcmf_msgbuf_pktids {
 
 static void brcmf_msgbuf_rxbuf_ioctlresp_post(struct brcmf_msgbuf *msgbuf);
 
-
 static struct brcmf_msgbuf_pktids *
 brcmf_msgbuf_init_pktids(u32 nr_array_entries,
 			 enum dma_data_direction direction)
@@ -314,7 +312,6 @@ brcmf_msgbuf_init_pktids(u32 nr_array_entries,
 
 	return pktids;
 }
-
 
 static int
 brcmf_msgbuf_alloc_pktid(struct device *dev,
@@ -363,7 +360,6 @@ brcmf_msgbuf_alloc_pktid(struct device *dev,
 	return 0;
 }
 
-
 static struct sk_buff *
 brcmf_msgbuf_get_pktid(struct device *dev, struct brcmf_msgbuf_pktids *pktids,
 		       u32 idx)
@@ -391,7 +387,6 @@ brcmf_msgbuf_get_pktid(struct device *dev, struct brcmf_msgbuf_pktids *pktids,
 	return NULL;
 }
 
-
 static void
 brcmf_msgbuf_release_array(struct device *dev,
 			   struct brcmf_msgbuf_pktids *pktids)
@@ -417,7 +412,6 @@ brcmf_msgbuf_release_array(struct device *dev,
 	kfree(pktids);
 }
 
-
 static void brcmf_msgbuf_release_pktids(struct brcmf_msgbuf *msgbuf)
 {
 	if (msgbuf->rx_pktids)
@@ -427,7 +421,6 @@ static void brcmf_msgbuf_release_pktids(struct brcmf_msgbuf *msgbuf)
 		brcmf_msgbuf_release_array(msgbuf->drvr->bus_if->dev,
 					   msgbuf->tx_pktids);
 }
-
 
 static int brcmf_msgbuf_tx_ioctl(struct brcmf_pub *drvr, int ifidx,
 				 uint cmd, void *buf, uint len)
@@ -474,7 +467,6 @@ static int brcmf_msgbuf_tx_ioctl(struct brcmf_pub *drvr, int ifidx,
 	return err;
 }
 
-
 static int brcmf_msgbuf_ioctl_resp_wait(struct brcmf_msgbuf *msgbuf)
 {
 	return wait_event_timeout(msgbuf->ioctl_resp_wait,
@@ -482,13 +474,11 @@ static int brcmf_msgbuf_ioctl_resp_wait(struct brcmf_msgbuf *msgbuf)
 				  MSGBUF_IOCTL_RESP_TIMEOUT);
 }
 
-
 static void brcmf_msgbuf_ioctl_resp_wake(struct brcmf_msgbuf *msgbuf)
 {
 	msgbuf->ctl_completed = true;
 	wake_up(&msgbuf->ioctl_resp_wait);
 }
-
 
 static int brcmf_msgbuf_query_dcmd(struct brcmf_pub *drvr, int ifidx,
 				   uint cmd, void *buf, uint len, int *fwerr)
@@ -527,13 +517,11 @@ static int brcmf_msgbuf_query_dcmd(struct brcmf_pub *drvr, int ifidx,
 	return 0;
 }
 
-
 static int brcmf_msgbuf_set_dcmd(struct brcmf_pub *drvr, int ifidx,
 				 uint cmd, void *buf, uint len, int *fwerr)
 {
 	return brcmf_msgbuf_query_dcmd(drvr, ifidx, cmd, buf, len, fwerr);
 }
-
 
 static int brcmf_msgbuf_hdrpull(struct brcmf_pub *drvr, bool do_fws,
 				struct sk_buff *skb, struct brcmf_if **ifp)
@@ -583,7 +571,6 @@ static bool brcmf_msgbuf_get_flowid(struct brcmf_msgbuf *msgbuf,
 	return true;
 }
 
-
 static struct brcmf_msgbuf_work_item *
 brcmf_msgbuf_dequeue_work(struct brcmf_msgbuf *msgbuf)
 {
@@ -600,7 +587,6 @@ brcmf_msgbuf_dequeue_work(struct brcmf_msgbuf *msgbuf)
 
 	return work;
 }
-
 
 static u32
 brcmf_msgbuf_flowring_create_worker(struct brcmf_msgbuf *msgbuf,
@@ -670,7 +656,6 @@ brcmf_msgbuf_flowring_create_worker(struct brcmf_msgbuf *msgbuf,
 	return flowid;
 }
 
-
 static void brcmf_msgbuf_flowring_worker(struct work_struct *work)
 {
 	struct brcmf_msgbuf *msgbuf;
@@ -683,7 +668,6 @@ static void brcmf_msgbuf_flowring_worker(struct work_struct *work)
 		kfree(create);
 	}
 }
-
 
 static u32 brcmf_msgbuf_flowring_create(struct brcmf_msgbuf *msgbuf, int ifidx,
 					struct sk_buff *skb)
@@ -716,7 +700,6 @@ static u32 brcmf_msgbuf_flowring_create(struct brcmf_msgbuf *msgbuf, int ifidx,
 
 	return flowid;
 }
-
 
 static void brcmf_msgbuf_txflow(struct brcmf_msgbuf *msgbuf, u16 flowid)
 {
@@ -791,7 +774,6 @@ static void brcmf_msgbuf_txflow(struct brcmf_msgbuf *msgbuf, u16 flowid)
 	brcmf_commonring_unlock(commonring);
 }
 
-
 static void brcmf_msgbuf_txflow_worker(struct work_struct *worker)
 {
 	struct brcmf_msgbuf *msgbuf;
@@ -803,7 +785,6 @@ static void brcmf_msgbuf_txflow_worker(struct work_struct *worker)
 		brcmf_msgbuf_txflow(msgbuf, flowid);
 	}
 }
-
 
 static int brcmf_msgbuf_schedule_txdata(struct brcmf_msgbuf *msgbuf, u32 flowid,
 					bool force)
@@ -818,7 +799,6 @@ static int brcmf_msgbuf_schedule_txdata(struct brcmf_msgbuf *msgbuf, u32 flowid,
 
 	return 0;
 }
-
 
 static int brcmf_msgbuf_tx_queue_data(struct brcmf_pub *drvr, int ifidx,
 				      struct sk_buff *skb)
@@ -847,7 +827,6 @@ static int brcmf_msgbuf_tx_queue_data(struct brcmf_pub *drvr, int ifidx,
 	return 0;
 }
 
-
 static void
 brcmf_msgbuf_configure_addr_mode(struct brcmf_pub *drvr, int ifidx,
 				 enum proto_addr_mode addr_mode)
@@ -857,7 +836,6 @@ brcmf_msgbuf_configure_addr_mode(struct brcmf_pub *drvr, int ifidx,
 	brcmf_flowring_configure_addr_mode(msgbuf->flow, ifidx, addr_mode);
 }
 
-
 static void
 brcmf_msgbuf_delete_peer(struct brcmf_pub *drvr, int ifidx, u8 peer[ETH_ALEN])
 {
@@ -866,7 +844,6 @@ brcmf_msgbuf_delete_peer(struct brcmf_pub *drvr, int ifidx, u8 peer[ETH_ALEN])
 	brcmf_flowring_delete_peer(msgbuf->flow, ifidx, peer);
 }
 
-
 static void
 brcmf_msgbuf_add_tdls_peer(struct brcmf_pub *drvr, int ifidx, u8 peer[ETH_ALEN])
 {
@@ -874,7 +851,6 @@ brcmf_msgbuf_add_tdls_peer(struct brcmf_pub *drvr, int ifidx, u8 peer[ETH_ALEN])
 
 	brcmf_flowring_add_tdls_peer(msgbuf->flow, ifidx, peer);
 }
-
 
 static void
 brcmf_msgbuf_process_ioctl_complete(struct brcmf_msgbuf *msgbuf, void *buf)
@@ -894,7 +870,6 @@ brcmf_msgbuf_process_ioctl_complete(struct brcmf_msgbuf *msgbuf, void *buf)
 		msgbuf->cur_ioctlrespbuf--;
 	brcmf_msgbuf_rxbuf_ioctlresp_post(msgbuf);
 }
-
 
 static void
 brcmf_msgbuf_process_txstatus(struct brcmf_msgbuf *msgbuf, void *buf)
@@ -927,7 +902,6 @@ brcmf_msgbuf_process_txstatus(struct brcmf_msgbuf *msgbuf, void *buf)
 	brcmf_txfinalize(brcmf_get_ifp(msgbuf->drvr, tx_status->msg.ifidx),
 			 skb, true);
 }
-
 
 static u32 brcmf_msgbuf_rxbuf_data_post(struct brcmf_msgbuf *msgbuf, u32 count)
 {
@@ -1006,7 +980,6 @@ static u32 brcmf_msgbuf_rxbuf_data_post(struct brcmf_msgbuf *msgbuf, u32 count)
 	return i;
 }
 
-
 static void
 brcmf_msgbuf_rxbuf_data_fill(struct brcmf_msgbuf *msgbuf)
 {
@@ -1024,7 +997,6 @@ brcmf_msgbuf_rxbuf_data_fill(struct brcmf_msgbuf *msgbuf)
 	}
 }
 
-
 static void
 brcmf_msgbuf_update_rxbufpost_count(struct brcmf_msgbuf *msgbuf, u16 rxcnt)
 {
@@ -1033,7 +1005,6 @@ brcmf_msgbuf_update_rxbufpost_count(struct brcmf_msgbuf *msgbuf, u16 rxcnt)
 				  BRCMF_MSGBUF_RXBUFPOST_THRESHOLD))
 		brcmf_msgbuf_rxbuf_data_fill(msgbuf);
 }
-
 
 static u32
 brcmf_msgbuf_rxbuf_ctrl_post(struct brcmf_msgbuf *msgbuf, bool event_buf,
@@ -1108,7 +1079,6 @@ brcmf_msgbuf_rxbuf_ctrl_post(struct brcmf_msgbuf *msgbuf, bool event_buf,
 	return i;
 }
 
-
 static void brcmf_msgbuf_rxbuf_ioctlresp_post(struct brcmf_msgbuf *msgbuf)
 {
 	u32 count;
@@ -1118,7 +1088,6 @@ static void brcmf_msgbuf_rxbuf_ioctlresp_post(struct brcmf_msgbuf *msgbuf)
 	msgbuf->cur_ioctlrespbuf += count;
 }
 
-
 static void brcmf_msgbuf_rxbuf_event_post(struct brcmf_msgbuf *msgbuf)
 {
 	u32 count;
@@ -1127,7 +1096,6 @@ static void brcmf_msgbuf_rxbuf_event_post(struct brcmf_msgbuf *msgbuf)
 	count = brcmf_msgbuf_rxbuf_ctrl_post(msgbuf, true, count);
 	msgbuf->cur_eventbuf += count;
 }
-
 
 static void brcmf_msgbuf_process_event(struct brcmf_msgbuf *msgbuf, void *buf)
 {
@@ -1170,7 +1138,6 @@ static void brcmf_msgbuf_process_event(struct brcmf_msgbuf *msgbuf, void *buf)
 exit:
 	brcmu_pkt_buf_free_skb(skb);
 }
-
 
 static void
 brcmf_msgbuf_process_rx_complete(struct brcmf_msgbuf *msgbuf, void *buf)
@@ -1289,7 +1256,6 @@ brcmf_msgbuf_process_flow_ring_create_response(struct brcmf_msgbuf *msgbuf,
 	brcmf_msgbuf_schedule_txdata(msgbuf, flowid, true);
 }
 
-
 static void
 brcmf_msgbuf_process_flow_ring_delete_response(struct brcmf_msgbuf *msgbuf,
 					       void *buf)
@@ -1318,7 +1284,6 @@ brcmf_msgbuf_process_flow_ring_delete_response(struct brcmf_msgbuf *msgbuf,
 
 	brcmf_msgbuf_remove_flowring(msgbuf, flowid);
 }
-
 
 static void brcmf_msgbuf_process_msgtype(struct brcmf_msgbuf *msgbuf, void *buf)
 {
@@ -1368,7 +1333,6 @@ static void brcmf_msgbuf_process_msgtype(struct brcmf_msgbuf *msgbuf, void *buf)
 	}
 }
 
-
 static void brcmf_msgbuf_process_rx(struct brcmf_msgbuf *msgbuf,
 				    struct brcmf_commonring *commonring)
 {
@@ -1400,7 +1364,6 @@ again:
 		goto again;
 }
 
-
 int brcmf_proto_msgbuf_rx_trigger(struct device *dev)
 {
 	struct brcmf_bus *bus_if = dev_get_drvdata(dev);
@@ -1431,7 +1394,6 @@ int brcmf_proto_msgbuf_rx_trigger(struct device *dev)
 
 	return 0;
 }
-
 
 void brcmf_msgbuf_delete_flowring(struct brcmf_pub *drvr, u16 flowid)
 {
@@ -1648,7 +1610,6 @@ int brcmf_proto_msgbuf_attach(struct brcmf_pub *drvr)
 	if (!msgbuf->flow)
 		goto fail;
 
-
 	brcmf_dbg(MSGBUF, "Feeding buffers, rx data %d, rx event %d, rx ioctl resp %d\n",
 		  msgbuf->max_rxbufpost, msgbuf->max_eventbuf,
 		  msgbuf->max_ioctlrespbuf);
@@ -1687,7 +1648,6 @@ fail:
 	}
 	return -ENOMEM;
 }
-
 
 void brcmf_proto_msgbuf_detach(struct brcmf_pub *drvr)
 {
