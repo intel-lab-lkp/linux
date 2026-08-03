@@ -807,7 +807,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!dvsec)
 		pci_warn(pdev, "Device DVSEC not present, skip CXL.mem init\n");
 
-	mds = cxl_memdev_state_create(&pdev->dev, pci_get_dsn(pdev), dvsec);
+	mds = cxl_memdev_state_create(&pdev->dev, pdev->dsn, dvsec);
 	if (IS_ERR(mds))
 		return PTR_ERR(mds);
 	cxlds = &mds->cxlds;

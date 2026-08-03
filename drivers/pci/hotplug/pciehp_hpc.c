@@ -587,7 +587,7 @@ bool pciehp_device_replaced(struct controller *ctrl)
 	     reg != (pdev->subsystem_vendor | (pdev->subsystem_device << 16))))
 		return true;
 
-	if (pci_get_dsn(pdev) != ctrl->dsn)
+	if (pci_get_dsn(pdev) != pdev->dsn)
 		return true;
 
 	return false;
@@ -1084,11 +1084,6 @@ struct controller *pcie_init(struct pcie_device *dev)
 			pciehp_power_off_slot(ctrl);
 		}
 	}
-
-	pdev = pci_get_slot(subordinate, PCI_DEVFN(0, 0));
-	if (pdev)
-		ctrl->dsn = pci_get_dsn(pdev);
-	pci_dev_put(pdev);
 
 	return ctrl;
 }
