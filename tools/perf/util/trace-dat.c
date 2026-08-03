@@ -43,6 +43,7 @@
 /* Buffer size for reading trace_clock string from debugfs/tracefs */
 #define CLOCK_BUFFER_SIZE 256
 
+bool trace_dat_write_failed;
 FILE *trace_dat_fp;
 int trace_dat_page_size;
 int trace_dat_nr_cpus;
@@ -143,10 +144,12 @@ int trace_dat__collect_cpu_event(int cpu, unsigned long long ts,
 }
 
 /* Write a single page of trace records */
-static int trace_dat__write_page(FILE *fp, unsigned long long base_ts,
+static int trace_dat__write_page(FILE *fp, struct tep_handle *pevent, unsigned long long base_ts,
 			char **records, int *rec_sizes, int nr_recs)
 {
 	unsigned long long commit = 0;
+	unsigned long long ts_out;
+	unsigned long long commit_out;
 	int offset = TRACE_DAT_RECORD_HEADER_SIZE;
 	int i;
 	char *page;
@@ -161,8 +164,12 @@ static int trace_dat__write_page(FILE *fp, unsigned long long base_ts,
 		commit += rec_sizes[i];
 	}
 
-	memcpy(page, &base_ts, sizeof(base_ts));
-	memcpy(page + sizeof(base_ts), &commit, sizeof(commit));
+	/* Byte-swap page header for cross-arch compatibility */
+	ts_out = to_file_u64(pevent, base_ts);
+	commit_out = to_file_u64(pevent, commit);
+
+	memcpy(page, &ts_out, sizeof(ts_out));
+	memcpy(page + sizeof(ts_out), &commit_out, sizeof(commit_out));
 
 	if (!fwrite(page, 1, trace_dat_page_size, fp)) {
 		free(page);
@@ -174,7 +181,8 @@ static int trace_dat__write_page(FILE *fp, unsigned long long base_ts,
 }
 
 /* Write all trace data for a single CPU as trace.dat flyrecord pages */
-static int trace_dat__write_cpu_dat(FILE *fp, int cpu, unsigned long long *file_offset_out)
+static int trace_dat__write_cpu_dat(FILE *fp, struct tep_handle *pevent,
+		int cpu, unsigned long long *file_offset_out)
 {
 	struct cpu_events *cpu_events = &trace_cpu_data[cpu];
 	unsigned long long base_ts;
@@ -229,11 +237,18 @@ static int trace_dat__write_cpu_dat(FILE *fp, int cpu, unsigned long long *file_
 			if (!extend)
 				return -ENOMEM;
 
-			extend_hdr =
-				((time_delta & TRACE_DAT_RECORD_TIME_MASK) <<
-				 TRACE_DAT_RECORD_TIME_SHIFT) |
-				TRACE_DAT_RECORD_TYPE_TIME_EXTEND;
-			delta_upper = time_delta >> TRACE_DAT_RECORD_TIME_SHIFT;
+			if (tep_is_file_bigendian(pevent)) {
+				extend_hdr = (time_delta & TRACE_DAT_RECORD_TIME_MASK) |
+				     (TRACE_DAT_RECORD_TYPE_TIME_EXTEND << 27);
+				delta_upper = time_delta >> 27;
+			} else {
+				extend_hdr = ((time_delta & TRACE_DAT_RECORD_TIME_MASK) <<
+					TRACE_DAT_RECORD_TIME_SHIFT) |
+					TRACE_DAT_RECORD_TYPE_TIME_EXTEND;
+				delta_upper = time_delta >> TRACE_DAT_RECORD_TIME_SHIFT;
+			}
+			extend_hdr  = to_file_u32(pevent, extend_hdr);   /* still needed */
+			delta_upper = to_file_u32(pevent, delta_upper);   /* still needed */
 
 			memcpy(extend, &extend_hdr, TRACE_DAT_WORD_SIZE);
 			memcpy(extend + TRACE_DAT_WORD_SIZE, &delta_upper,
@@ -273,7 +288,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, int cpu, unsigned long long *file_
 		/* Check page fit BEFORE allocating data record */
 		if (page_size_used + needed_size >
 			trace_dat_page_size - TRACE_DAT_RECORD_HEADER_SIZE) {
-			ret = trace_dat__write_page(fp, base_ts,
+			ret = trace_dat__write_page(fp, pevent, base_ts,
 					page_records, page_rec_sizes,
 					nr_page_recs);
 
@@ -299,7 +314,13 @@ static int trace_dat__write_cpu_dat(FILE *fp, int cpu, unsigned long long *file_
 			time_delta = 0;
 		}
 
-		hdr_word = (time_delta << TRACE_DAT_RECORD_TIME_SHIFT) | type_len;
+		if (tep_is_file_bigendian(pevent))
+			hdr_word = ((unsigned int)time_delta & TRACE_DAT_RECORD_TIME_MASK) |
+				(type_len << 27);
+		else
+			hdr_word = ((unsigned int)time_delta << TRACE_DAT_RECORD_TIME_SHIFT) |
+				type_len;
+		hdr_word = to_file_u32(pevent, hdr_word);
 
 		data_rec = calloc(1, data_rec_size);
 		if (!data_rec) {
@@ -311,8 +332,11 @@ static int trace_dat__write_cpu_dat(FILE *fp, int cpu, unsigned long long *file_
 		memcpy(data_rec, &hdr_word, TRACE_DAT_WORD_SIZE);
 
 		/* Large events: write actual byte length after header */
-		if (type_len == 0)
-			memcpy(data_rec + TRACE_DAT_WORD_SIZE, &data_len, TRACE_DAT_WORD_SIZE);
+		if (type_len == 0) {
+			unsigned int data_len_out = to_file_u32(pevent, data_len);
+
+			memcpy(data_rec + TRACE_DAT_WORD_SIZE, &data_len_out, TRACE_DAT_WORD_SIZE);
+		}
 
 		memcpy(data_rec + payload_offset, event->raw, data_len);
 
@@ -366,7 +390,7 @@ static int trace_dat__write_cpu_dat(FILE *fp, int cpu, unsigned long long *file_
 	}
 
 	if (nr_page_recs > 0) {
-		ret = trace_dat__write_page(fp, base_ts,
+		ret = trace_dat__write_page(fp, pevent, base_ts,
 				page_records, page_rec_sizes, nr_page_recs);
 	}
 out_free:
@@ -378,11 +402,11 @@ out_free:
 }
 
 /* Write the strings section containing section name lookup table */
-int trace_dat__write_strings_section(void)
+int trace_dat__write_strings_section(struct tep_handle *pevent)
 {
-	unsigned short section_id = TRACE_DAT_SECTION_STRINGS;
-	unsigned short flags = 0;
 	unsigned long long section_size = 0;
+	unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_STRINGS);
+	unsigned short flags = to_file_u16(pevent, 0);
 	static const char * const section_names[] = {
 		"headers",		/* offset 0 - strid for section 16  */
 		"ftrace event formats", /* offset 8 - strid for section 17  */
@@ -397,7 +421,7 @@ int trace_dat__write_strings_section(void)
 	};
 
 	/* string_id points to "strings" string itself */
-	unsigned int string_id = STRID_STRINGS;
+	unsigned int string_id = to_file_u32(pevent, STRID_STRINGS);
 	int i;
 
 	if (!trace_dat_fp)
@@ -405,47 +429,59 @@ int trace_dat__write_strings_section(void)
 
 	for (i = 0; section_names[i] != NULL; i++)
 		section_size += strlen(section_names[i]) + 1;
+	section_size = to_file_u64(pevent, section_size);
 
 	/* write section header */
 	if (!fwrite(&section_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 		       !fwrite(&flags, sizeof(unsigned short), 1, trace_dat_fp) ||
 		       !fwrite(&string_id, sizeof(unsigned int), 1, trace_dat_fp) ||
-		       !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp))
-		return -EIO;
+		       !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp)) {
+		pr_warning("Failed to write strings section\n");
+		trace_dat_write_failed = true;
+	}
 
 	/* write strings */
 	for (i = 0; section_names[i] != NULL; i++)
-		if (!fwrite(section_names[i], 1, strlen(section_names[i]) + 1, trace_dat_fp))
-			return -EIO;
+		if (!fwrite(section_names[i], 1, strlen(section_names[i]) + 1, trace_dat_fp)) {
+			pr_warning("Failed to write strings section\n");
+			trace_dat_write_failed = true;
+		}
 	return 0;
 }
 
 /* Writes options section containing CPUCOUNT, TRACECLOCK, EVENT_FORMAT, HEADER_INFO,
  * FTRACE_EVENTS, KALLSYMS, CMDLINES options, ending with DONE option pointing to next section.
  */
-int trace_dat__write_options_section1(void)
+int trace_dat__write_options_section1(struct tep_handle *pevent)
 {
-	unsigned short section_id = TRACE_DAT_SECTION_OPTIONS;
-	unsigned short flags = 0;
-	unsigned int string_id = STRID_OPTIONS_1;
+	unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_OPTIONS);
+	unsigned short flags = to_file_u16(pevent, 0);
+	unsigned int string_id = to_file_u32(pevent, STRID_OPTIONS_1);
 	unsigned long long section_size = 0;
 	long section_size_pos;
 	long payload_start;
 	unsigned long long section_start;
 	unsigned short opt_id;
 	unsigned int opt_size;
+	unsigned int raw_opt_size;
+	unsigned int nr_cpus;
 	char clock_buf[CLOCK_BUFFER_SIZE];
 	FILE *clock_file;
 	size_t bytes_read;
 	char *path;
 	unsigned long long next_offset;
+	unsigned long long events_off;
+	unsigned long long header_off;
+	unsigned long long ftrace_off;
+	unsigned long long kallsyms_off;
+	unsigned long long cmdline_off;
 	long end_pos;
 
 	if (!trace_dat_fp)
 		return -EBADF;
 
 	/* fill options_offset in initial format */
-	section_start = ftell(trace_dat_fp);
+	section_start = to_file_u64(pevent, ftell(trace_dat_fp));
 
 	if (fseek(trace_dat_fp, trace_dat_options_offset, SEEK_SET) < 0 ||
 	   !fwrite(&section_start, sizeof(unsigned long long), 1, trace_dat_fp) ||
@@ -464,16 +500,17 @@ int trace_dat__write_options_section1(void)
 	payload_start = ftell(trace_dat_fp);
 
 	/* CPUCOUNT option */
-	opt_id = TRACE_DAT_OPTION_CPUCOUNT;
-	opt_size = sizeof(unsigned int);
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_CPUCOUNT);
+	opt_size = to_file_u32(pevent, sizeof(unsigned int));
+	nr_cpus = to_file_u32(pevent, trace_dat_nr_cpus);
 
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(&trace_dat_nr_cpus, sizeof(unsigned int), 1, trace_dat_fp))
+	    !fwrite(&nr_cpus, sizeof(unsigned int), 1, trace_dat_fp))
 		return -EIO;
 
 	/* TRACECLOCK option */
-	opt_id = TRACE_DAT_OPTION_TRACECLOCK;
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_TRACECLOCK);
 
 	path = get_tracing_file("trace_clock");
 	if (path) {
@@ -490,66 +527,72 @@ int trace_dat__write_options_section1(void)
 		strcpy(clock_buf, "local\n");
 		bytes_read = strlen(clock_buf);
 	}
-	opt_size = bytes_read + 1;
+	raw_opt_size = bytes_read + 1;
+	opt_size = to_file_u32(pevent, bytes_read + 1);
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(clock_buf, 1, opt_size, trace_dat_fp))
+	    !fwrite(clock_buf, 1, raw_opt_size, trace_dat_fp))
 		return -EIO;
 
 	/* EVENT option */
-	opt_id = TRACE_DAT_OPTION_EVENT;
-	opt_size = sizeof(unsigned long long);
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_EVENT);
+	opt_size = to_file_u32(pevent, sizeof(unsigned long long));
+	events_off = to_file_u64(pevent, trace_dat_events_format_offset);
 
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	   !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	   !fwrite(&trace_dat_events_format_offset, sizeof(unsigned long long),
+	   !fwrite(&events_off, sizeof(unsigned long long),
 		   1, trace_dat_fp))
 		return -EIO;
 
 	/* HEADER option */
-	opt_id = TRACE_DAT_OPTION_HEADER;
-	opt_size = sizeof(unsigned long long);
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_HEADER);
+	opt_size = to_file_u32(pevent, sizeof(unsigned long long));
+	header_off = to_file_u64(pevent, trace_dat_header_info_offset);
 
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(&trace_dat_header_info_offset, sizeof(unsigned long long),
+	    !fwrite(&header_off, sizeof(unsigned long long),
 		    1, trace_dat_fp))
 		return -EIO;
 
 	/* FTRACE option */
-	opt_id = TRACE_DAT_OPTION_FTRACE;
-	opt_size = sizeof(unsigned long long);
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_FTRACE);
+	opt_size = to_file_u32(pevent, sizeof(unsigned long long));
+	ftrace_off = to_file_u64(pevent, trace_dat_ftrace_format_offset);
 
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(&trace_dat_ftrace_format_offset, sizeof(unsigned long long),
+	    !fwrite(&ftrace_off, sizeof(unsigned long long),
 		   1, trace_dat_fp))
 		return -EIO;
 
 	/* KALLSYMS option */
-	opt_id = TRACE_DAT_OPTION_KALLSYMS;
-	opt_size = sizeof(unsigned long long);
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_KALLSYMS);
+	opt_size = to_file_u32(pevent, sizeof(unsigned long long));
+	kallsyms_off = to_file_u64(pevent, trace_dat_kallsyms_offset);
 
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(&trace_dat_kallsyms_offset, sizeof(unsigned long long),
+	    !fwrite(&kallsyms_off, sizeof(unsigned long long),
 		    1, trace_dat_fp))
 		return -EIO;
 
 	/* CMDLINE option */
-	opt_id = TRACE_DAT_OPTION_CMDLINE;
-	opt_size = sizeof(unsigned long long);
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_CMDLINE);
+	opt_size = to_file_u32(pevent, sizeof(unsigned long long));
+	cmdline_off = to_file_u64(pevent, trace_dat_cmdline_offset);
 
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(&trace_dat_cmdline_offset, sizeof(unsigned long long),
+	    !fwrite(&cmdline_off, sizeof(unsigned long long),
 		    1, trace_dat_fp))
 		return -EIO;
 
 	/* DONE option id - next_options_offset filled later */
-	opt_id = TRACE_DAT_OPTION_DONE;
-	opt_size = sizeof(unsigned long long);
-	next_offset = 0;  /* placeholder */
+	opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_DONE);
+	opt_size = to_file_u32(pevent, sizeof(unsigned long long));
+	next_offset = to_file_u64(pevent, 0);
 
 	trace_dat_next_options_offset = ftell(trace_dat_fp);
 	if (!fwrite(&opt_id, sizeof(unsigned short), 1, trace_dat_fp) ||
@@ -560,7 +603,7 @@ int trace_dat__write_options_section1(void)
 	/* fill section size */
 	end_pos = ftell(trace_dat_fp);
 
-	section_size = end_pos - payload_start;
+	section_size = to_file_u64(pevent, end_pos - payload_start);
 	if (fseek(trace_dat_fp, section_size_pos, SEEK_SET) < 0 ||
 	    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
 	    fseek(trace_dat_fp, end_pos, SEEK_SET) < 0)
@@ -574,20 +617,21 @@ int trace_dat__write_options_section1(void)
  * (flyrecord section offset, clock type, page size, CPU count,
  * per-CPU offsets/sizes) and DONE option.
  */
-int trace_dat__write_options_section2(void)
+int trace_dat__write_options_section2(struct tep_handle *pevent)
 {
-	unsigned short section_id  = TRACE_DAT_SECTION_OPTIONS;
-	unsigned short flags = 0;
-	unsigned int string_id = STRID_OPTIONS_2;
+	unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_OPTIONS);
+	unsigned short flags = to_file_u16(pevent, 0);
+	unsigned int string_id = to_file_u32(pevent, STRID_OPTIONS_2);
 	unsigned long long section_size = 0;
 	long section_size_pos;
 	long payload_start;
 	int cpu;
-	unsigned short opt_id = TRACE_DAT_OPTION_BUFFER;
-	unsigned int opt_size = 0;
+	unsigned short opt_id = to_file_u16(pevent, TRACE_DAT_OPTION_BUFFER);
+	unsigned int opt_size = 0;  /* filled after payload written */
 	long opt_size_pos;
 	unsigned long long data_offset = 0;
-	unsigned int page_size = (unsigned int)trace_dat_page_size;
+	unsigned int page_size = to_file_u32(pevent, (unsigned int)trace_dat_page_size);
+	unsigned int nr_cpus   = to_file_u32(pevent, trace_dat_nr_cpus);
 	const char *clock = "local";
 	unsigned long long next;
 	long end_pos;
@@ -600,7 +644,7 @@ int trace_dat__write_options_section2(void)
 		return -EINVAL;
 
 	/* fill done1 next offset - points to this section */
-	next = ftell(trace_dat_fp);
+	next = to_file_u64(pevent, ftell(trace_dat_fp));
 
 	if (fseek(trace_dat_fp, trace_dat_next_options_offset + 2 + 4, SEEK_SET) < 0 ||
 	    !fwrite(&next, sizeof(unsigned long long), 1, trace_dat_fp) ||
@@ -631,15 +675,16 @@ int trace_dat__write_options_section2(void)
 	    !fwrite("\0", 1, 1, trace_dat_fp) ||
 	    !fwrite(clock, 1, strlen(clock) + 1, trace_dat_fp) ||
 	    !fwrite(&page_size, sizeof(unsigned int), 1, trace_dat_fp) ||
-	    !fwrite(&trace_dat_nr_cpus, sizeof(unsigned int), 1, trace_dat_fp))
+	    !fwrite(&nr_cpus, sizeof(unsigned int), 1, trace_dat_fp))
 		return -EIO;
 
 	/* per cpu: cpu_id + offset placeholder + size */
 	for (cpu = 0; cpu < trace_dat_nr_cpus; cpu++) {
+		unsigned int cpu_out          = to_file_u32(pevent, cpu);
 		cpu_offset = 0;  /* filled in write_flyrecord */
-		cpu_size   = 0;  /* filled in write_flyrecord */
+		cpu_size = 0;  /* filled in write_flyrecord */
 
-		if (!fwrite(&cpu, sizeof(unsigned int), 1, trace_dat_fp))
+		if (!fwrite(&cpu_out, sizeof(unsigned int), 1, trace_dat_fp))
 			return -EIO;
 		buffer_opt_cpu_offsets_pos[cpu] = ftell(trace_dat_fp);
 		if (!fwrite(&cpu_offset, sizeof(unsigned long long), 1, trace_dat_fp) ||
@@ -650,17 +695,17 @@ int trace_dat__write_options_section2(void)
 	/* fill opt_size */
 	end_pos = ftell(trace_dat_fp);
 
-	opt_size = end_pos - opt_payload_start;
-	fseek(trace_dat_fp, opt_size_pos, SEEK_SET);
-	if (!fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp))
+	opt_size = to_file_u32(pevent, end_pos - opt_payload_start);
+	if (fseek(trace_dat_fp, opt_size_pos, SEEK_SET) < 0 ||
+	    !fwrite(&opt_size, sizeof(unsigned int), 1, trace_dat_fp) ||
+	    fseek(trace_dat_fp, end_pos, SEEK_SET) < 0)
 		return -EIO;
-	fseek(trace_dat_fp, end_pos, SEEK_SET);
 
 	/* DONE id=0 */
-	done_id = TRACE_DAT_OPTION_DONE;
-	done_size = sizeof(unsigned long long);
+	done_id = to_file_u16(pevent, TRACE_DAT_OPTION_DONE);
+	done_size = to_file_u32(pevent, sizeof(unsigned long long));
 	/* No additional options sections follow this one */
-	next = 0;
+	next = to_file_u64(pevent, 0);
 
 	if (!fwrite(&done_id, sizeof(unsigned short), 1, trace_dat_fp) ||
 	    !fwrite(&done_size, sizeof(unsigned int), 1, trace_dat_fp) ||
@@ -670,24 +715,25 @@ int trace_dat__write_options_section2(void)
 	/* fill section size */
 	end_pos = ftell(trace_dat_fp);
 
-	section_size = end_pos - payload_start;
-	fseek(trace_dat_fp, section_size_pos, SEEK_SET);
-	if (!fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp))
+	section_size = to_file_u64(pevent, end_pos - payload_start);
+	if (fseek(trace_dat_fp, section_size_pos, SEEK_SET) < 0 ||
+	    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp) ||
+	    fseek(trace_dat_fp, end_pos, SEEK_SET) < 0)
 		return -EIO;
-	fseek(trace_dat_fp, end_pos, SEEK_SET);
 
 	return 0;
 
 }
 
-int trace_dat__write_flyrecord_section(void)
+int trace_dat__write_flyrecord_section(struct tep_handle *pevent)
 {
-	unsigned short section_id = TRACE_DAT_SECTION_FLYRECORD;
-	unsigned short flags = 0;
-	unsigned int string_id = STRID_BUFFER_FLYRECORD;
+	unsigned short section_id = to_file_u16(pevent, TRACE_DAT_SECTION_FLYRECORD);
+	unsigned short flags = to_file_u16(pevent, 0);
+	unsigned int string_id = to_file_u32(pevent, STRID_BUFFER_FLYRECORD);
 	unsigned long long section_size = 0;
 	long section_size_pos;
 	long flyrecord_start;
+	unsigned long long flyrecord_out;
 	long after_header;
 	long padding_needed;
 	unsigned long long *cpu_offsets;
@@ -750,7 +796,7 @@ int trace_dat__write_flyrecord_section(void)
 	for (cpu = 0; cpu < trace_dat_nr_cpus; cpu++) {
 		start = ftell(trace_dat_fp);
 
-		ret = trace_dat__write_cpu_dat(trace_dat_fp, cpu, &cpu_offsets[cpu]);
+		ret = trace_dat__write_cpu_dat(trace_dat_fp, pevent, cpu, &cpu_offsets[cpu]);
 
 		if (ret < 0) {
 			pr_err("Failed to write CPU %d data\n", cpu);
@@ -762,7 +808,7 @@ int trace_dat__write_flyrecord_section(void)
 	/* fill section size */
 	end_pos = ftell(trace_dat_fp);
 
-	section_size = end_pos - after_header;
+	section_size = to_file_u64(pevent, end_pos - after_header);
 	if (fseek(trace_dat_fp, section_size_pos, SEEK_SET) < 0 ||
 	    !fwrite(&section_size, sizeof(unsigned long long), 1, trace_dat_fp)) {
 		ret = -EIO;
@@ -775,6 +821,8 @@ int trace_dat__write_flyrecord_section(void)
 
 	/* fill cpu offsets and sizes in BUFFER option */
 	for (cpu = 0; cpu < trace_dat_nr_cpus; cpu++) {
+		cpu_offsets[cpu] = to_file_u64(pevent, cpu_offsets[cpu]);
+		cpu_sizes[cpu]   = to_file_u64(pevent, cpu_sizes[cpu]);
 		if (fseek(trace_dat_fp, buffer_opt_cpu_offsets_pos[cpu], SEEK_SET) < 0 ||
 		    !fwrite(&cpu_offsets[cpu], sizeof(unsigned long long), 1, trace_dat_fp) ||
 		    !fwrite(&cpu_sizes[cpu], sizeof(unsigned long long), 1, trace_dat_fp)) {
@@ -784,8 +832,9 @@ int trace_dat__write_flyrecord_section(void)
 	}
 
 	/* fill data offset in buffer option */
+	flyrecord_out = to_file_u64(pevent, flyrecord_start);
 	if (fseek(trace_dat_fp, opt_payload_start, SEEK_SET) < 0 ||
-	    !fwrite(&flyrecord_start, sizeof(unsigned long long), 1, trace_dat_fp)) {
+	    !fwrite(&flyrecord_out, sizeof(unsigned long long), 1, trace_dat_fp)) {
 		ret = -EIO;
 		goto cleanup;
 	}
@@ -794,7 +843,6 @@ int trace_dat__write_flyrecord_section(void)
 		ret = -EIO;
 		goto cleanup;
 	}
-
 
 cleanup:
 	free(cpu_offsets);
