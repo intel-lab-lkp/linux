@@ -116,8 +116,8 @@ Shared pins
 A single pin object can be attached to multiple dpll devices.
 Then there are two groups of configuration knobs:
 
-1) Set on a pin - the configuration affects all dpll devices pin is
-   registered to (i.e., ``DPLL_A_PIN_FREQUENCY``),
+1) Set on a pin - the configuration is performed through the pin owner's
+   dpll reference only (i.e., ``DPLL_A_PIN_FREQUENCY``),
 2) Set on a pin-dpll tuple - the configuration affects only selected
    dpll device (i.e., ``DPLL_A_PIN_PRIO``, ``DPLL_A_PIN_STATE``,
    ``DPLL_A_PIN_DIRECTION``).
@@ -507,9 +507,9 @@ as well as parameter being configured (``DPLL_A_MODE``).
 ``DPLL_CMD_PIN_SET`` - to target a pin user must provide a
 ``DPLL_A_PIN_ID``, which is unique identifier of a pin in the system.
 Also configured pin parameters must be added.
-If ``DPLL_A_PIN_FREQUENCY`` is configured, this affects all the dpll
-devices that are connected with the pin, that is why frequency attribute
-shall not be enclosed in ``DPLL_A_PIN_PARENT_DEVICE``.
+If ``DPLL_A_PIN_FREQUENCY`` is configured, it is set through the pin
+owner's dpll reference only.  The frequency attribute shall not be
+enclosed in ``DPLL_A_PIN_PARENT_DEVICE``.
 Other attributes: ``DPLL_A_PIN_PRIO``, ``DPLL_A_PIN_STATE`` or
 ``DPLL_A_PIN_DIRECTION`` must be enclosed in
 ``DPLL_A_PIN_PARENT_DEVICE`` as their configuration relates to only one
