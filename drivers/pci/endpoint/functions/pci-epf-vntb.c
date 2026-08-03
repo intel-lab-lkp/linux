@@ -56,6 +56,8 @@ static struct workqueue_struct *kpcintb_workqueue;
 #define COMMAND_TEARDOWN_MW		4
 #define COMMAND_LINK_UP			5
 #define COMMAND_LINK_DOWN		6
+#define COMMAND_CONFIGURE_MW_GROUP	7
+#define COMMAND_TEARDOWN_MW_GROUP	8
 
 #define COMMAND_STATUS_OK		1
 #define COMMAND_STATUS_ERROR		2
@@ -319,6 +321,50 @@ static int epf_ntb_teardown_mw(struct epf_ntb *ntb, u32 mw)
 	return 0;
 }
 
+static int epf_ntb_configure_mw_group(struct epf_ntb *ntb, u32 mw)
+{
+	unsigned int first, count;
+	u64 addr, size;
+	int ret;
+
+	ret = epf_ntb_get_mw_group(ntb, mw, &first, &count);
+	if (ret)
+		return ret;
+	if (count <= 1)
+		return -EOPNOTSUPP;
+	if (mw != first)
+		return -EINVAL;
+
+	addr = ntb->reg->addr;
+	size = ntb->reg->size;
+	if (!IS_ALIGNED(addr, SZ_4K) ||
+	    size != epf_ntb_mw_group_size(ntb, first, count))
+		return -EINVAL;
+
+	return pci_epc_map_addr(ntb->epf->epc, ntb->epf->func_no,
+				ntb->epf->vfunc_no, ntb->vpci_mw_phy[first],
+				addr, size);
+}
+
+static int epf_ntb_teardown_mw_group(struct epf_ntb *ntb, u32 mw)
+{
+	unsigned int first, count;
+	int ret;
+
+	ret = epf_ntb_get_mw_group(ntb, mw, &first, &count);
+	if (ret)
+		return ret;
+	if (count <= 1)
+		return -EOPNOTSUPP;
+	if (mw != first)
+		return -EINVAL;
+
+	pci_epc_unmap_addr(ntb->epf->epc, ntb->epf->func_no,
+			   ntb->epf->vfunc_no, ntb->vpci_mw_phy[first]);
+
+	return 0;
+}
+
 /**
  * epf_ntb_cmd_handler() - Handle commands provided by the NTB HOST
  * @work: work_struct for the epf_ntb_epc
@@ -378,6 +424,14 @@ static void epf_ntb_cmd_handler(struct work_struct *work)
 		ret = epf_ntb_teardown_mw(ntb, argument);
 		ctrl->command_status = ret ? COMMAND_STATUS_ERROR : COMMAND_STATUS_OK;
 		break;
+	case COMMAND_CONFIGURE_MW_GROUP:
+		ret = epf_ntb_configure_mw_group(ntb, argument);
+		ctrl->command_status = ret ? COMMAND_STATUS_ERROR : COMMAND_STATUS_OK;
+		break;
+	case COMMAND_TEARDOWN_MW_GROUP:
+		ret = epf_ntb_teardown_mw_group(ntb, argument);
+		ctrl->command_status = ret ? COMMAND_STATUS_ERROR : COMMAND_STATUS_OK;
+		break;
 	case COMMAND_LINK_UP:
 		ntb->linkup = true;
 		ret = epf_ntb_link_up(ntb, true);
@@ -388,6 +442,8 @@ static void epf_ntb_cmd_handler(struct work_struct *work)
 		goto reset_handler;
 	case COMMAND_LINK_DOWN:
 		ntb->linkup = false;
+		if (ntb->packed_mws)
+			epf_ntb_teardown_mw_group(ntb, 0);
 		ret = epf_ntb_link_up(ntb, false);
 		if (ret < 0)
 			ctrl->command_status = COMMAND_STATUS_ERROR;
@@ -975,6 +1031,9 @@ static void epf_ntb_mw_bar_clear(struct epf_ntb *ntb, int num_mws)
 	enum pci_barno barno;
 	unsigned int count;
 	int i;
+
+	if (ntb->packed_mws)
+		epf_ntb_teardown_mw_group(ntb, 0);
 
 	for (i = 0; i < num_mws; i++) {
 		barno = ntb->mw_layout[i].barno;
