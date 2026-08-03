@@ -53,11 +53,6 @@ struct mlx5e_ethtool_steering {
 
 static int flow_type_to_traffic_type(u32 flow_type);
 
-static u32 flow_type_mask(u32 flow_type)
-{
-	return flow_type & ~(FLOW_EXT | FLOW_MAC_EXT | FLOW_RSS);
-}
-
 struct mlx5e_ethtool_rule {
 	struct list_head             list;
 	struct ethtool_rx_flow_spec  flow_spec;
@@ -91,7 +86,7 @@ static struct mlx5e_ethtool_table *get_flow_table(struct mlx5e_priv *priv,
 	int table_size;
 	int prio;
 
-	switch (flow_type_mask(fs->flow_type)) {
+	switch (ethtool_flow_type_mask(fs->flow_type)) {
 	case TCP_V4_FLOW:
 	case UDP_V4_FLOW:
 	case TCP_V6_FLOW:
@@ -350,7 +345,7 @@ static int set_flow_attrs(u32 *match_c, u32 *match_v,
 					     outer_headers);
 	void *outer_headers_v = MLX5_ADDR_OF(fte_match_param, match_v,
 					     outer_headers);
-	u32 flow_type = flow_type_mask(fs->flow_type);
+	u32 flow_type = ethtool_flow_type_mask(fs->flow_type);
 
 	switch (flow_type) {
 	case TCP_V4_FLOW:
@@ -435,7 +430,7 @@ static int flow_get_tirn(struct mlx5e_priv *priv,
 		if (!rss)
 			return -ENOENT;
 
-		flow_type = flow_type_mask(fs->flow_type);
+		flow_type = ethtool_flow_type_mask(fs->flow_type);
 		tt = flow_type_to_traffic_type(flow_type);
 		if (tt < 0)
 			return -EINVAL;
@@ -673,7 +668,7 @@ static int validate_flow(struct mlx5e_priv *priv,
 		if (fs->ring_cookie >= priv->channels.params.num_channels)
 			return -EINVAL;
 
-	switch (flow_type_mask(fs->flow_type)) {
+	switch (ethtool_flow_type_mask(fs->flow_type)) {
 	case ETHER_FLOW:
 		num_tuples += validate_ethter(fs);
 		break;
@@ -906,7 +901,7 @@ int mlx5e_ethtool_set_rxfh_fields(struct mlx5e_priv *priv,
 
 	rss_idx = nfc->rss_context;
 
-	flow_type = flow_type_mask(nfc->flow_type);
+	flow_type = ethtool_flow_type_mask(nfc->flow_type);
 	tt = flow_type_to_traffic_type(flow_type);
 	if (tt < 0)
 		return tt;
@@ -951,7 +946,7 @@ int mlx5e_ethtool_get_rxfh_fields(struct mlx5e_priv *priv,
 
 	rss_idx = nfc->rss_context;
 
-	flow_type = flow_type_mask(nfc->flow_type);
+	flow_type = ethtool_flow_type_mask(nfc->flow_type);
 	tt = flow_type_to_traffic_type(flow_type);
 	if (tt < 0)
 		return tt;
