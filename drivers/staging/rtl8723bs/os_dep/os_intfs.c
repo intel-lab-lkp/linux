@@ -843,7 +843,7 @@ netdev_open_error:
 	netif_carrier_off(pnetdev);
 	rtw_netif_stop_queue(pnetdev);
 
-	return (-1);
+	return -1;
 }
 
 int netdev_open(struct net_device *pnetdev)
