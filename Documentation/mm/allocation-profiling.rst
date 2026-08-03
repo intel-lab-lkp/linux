@@ -43,6 +43,19 @@ sysctl:
   warnings produced by allocations made while profiling is disabled and freed
   when it's enabled.
 
+  /proc/sys/vm/mem_profiling_compressed
+
+  1: Page extension compression is enabled.
+
+  0: Page extension compression is disabled.
+
+  This control is read-only and reflects the compression status initialized at boot.
+  Note that, unlike `mem_profiling`, which represents the current state of profiling,
+  `mem_profiling_compressed` represents the state configured at boot time. Turning off
+  profiling at runtime will implicitly make this sysctl effectively dormant. However, if
+  profiling is toggled off and then toggled on again, it will resume with compression
+  still enabled as long as the value of `mem_profiling_compressed` is 1.
+
 Runtime info:
   /proc/allocinfo
 
