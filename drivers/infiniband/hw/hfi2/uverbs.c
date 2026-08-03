@@ -14,30 +14,42 @@
 
 static const u64 zero8; /* 8 bytes of 0 */
 
+/* rdmavt mmap for CQ/QP/SRQ fallback */
+#include "../../sw/rdmavt/mmap.h"
+
 /*
- * RDMA mmap token: <type> << <page offset>
- *
- * Expect type to be less than 256 (8 bits).  rdmavt reserves the bottom 256
- * tokens for the driver.  A type of zero is always considered invalid.
- * Types >= 256 are used for rdmavt's dynamic token generation.
+ * Insert a driver mmap entry into the rdma_user_mmap infrastructure.
+ * Returns 0 on success and stores the opaque offset in *offset for
+ * userspace to pass back to mmap(2).
  */
-
-/* convert RDMA mmap token to type: the first 8 bits above a page */
-static inline u8 rdma_mmap_get_type(unsigned long token)
+static int hfi2_mmap_entry_insert(struct ib_ucontext *ucontext,
+				  struct hfi2_filedata *fd, u8 type,
+				  size_t length, u64 address, void *memvirt,
+				  dma_addr_t memdma, u64 *offset)
 {
-	return token >> PAGE_SHIFT;
-}
+	struct hfi2_user_mmap_entry *entry;
+	int ret;
 
-/* calculate the token from an integer offset */
-static inline unsigned long rdma_mmap_token_i(u8 type, unsigned long offset)
-{
-	return ((unsigned long)type << PAGE_SHIFT) | offset_in_page(offset);
-}
+	entry = kzalloc_obj(*entry, GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
 
-/* calculate the token from a pointer offset */
-static inline unsigned long rdma_mmap_token_p(u8 type, void *offset)
-{
-	return rdma_mmap_token_i(type, (unsigned long)offset);
+	entry->address = address;
+	entry->memvirt = memvirt;
+	entry->memdma = memdma;
+	entry->mmap_flag = type;
+
+	ret = rdma_user_mmap_entry_insert(ucontext, &entry->rdma_entry, length);
+	if (ret) {
+		kfree(entry);
+		return ret;
+	}
+
+	*offset = rdma_user_mmap_get_offset(&entry->rdma_entry);
+	if (fd->mmap_entries[type])
+		rdma_user_mmap_entry_remove(fd->mmap_entries[type]);
+	fd->mmap_entries[type] = &entry->rdma_entry;
+	return 0;
 }
 
 int hfi2_alloc_ucontext(struct ib_ucontext *ucontext, struct ib_udata *udata)
@@ -61,9 +73,18 @@ void hfi2_dealloc_ucontext(struct ib_ucontext *ucontext)
 	struct rvt_ucontext *rcontext =
 		container_of(ucontext, struct rvt_ucontext, ibucontext);
 	struct hfi2_filedata *fd;
+	int i;
 
 	fd = rcontext->priv;
 	if (fd) {
+		/* Remove all mmap entries before freeing the filedata */
+		for (i = 0; i < ARRAY_SIZE(fd->mmap_entries); i++) {
+			if (fd->mmap_entries[i]) {
+				rdma_user_mmap_entry_remove(
+					fd->mmap_entries[i]);
+				fd->mmap_entries[i] = NULL;
+			}
+		}
 		hfi2_dealloc_filedata(fd);
 		rcontext->priv = NULL;
 	}
@@ -149,7 +170,6 @@ UVERBS_HANDLER(HFI2_METHOD_USER_INFO)(struct uverbs_attr_bundle *attrs)
 	struct hfi2_ctxtdata *uctxt = fd->uctxt;
 	struct hfi2_user_info_rsp rsp = {};
 	struct hfi2_devdata *dd;
-	unsigned long offset;
 
 	if (!uctxt)
 		return -EINVAL;
@@ -165,36 +185,157 @@ UVERBS_HANDLER(HFI2_METHOD_USER_INFO)(struct uverbs_attr_bundle *attrs)
 	 * the context's credit return address is mapped.  Calculate the offset
 	 * in the proper page.
 	 */
-	offset = ((u64)uctxt->sc->hw_free -
-		  (u64)dd->cr_base[uctxt->numa_id].va) %
-		 PAGE_SIZE;
-	rsp.sc_credits_addr = rdma_mmap_token_i(PIO_CRED, offset);
-	rsp.pio_bufbase = rdma_mmap_token_p(PIO_BUFS, uctxt->sc->base_addr);
-	rsp.pio_bufbase_sop =
-		rdma_mmap_token_p(PIO_BUFS_SOP, uctxt->sc->base_addr);
-	rsp.rcvhdr_bufbase = rdma_mmap_token_p(RCV_HDRQ, uctxt->rcvhdrq);
-	rsp.rcvegr_bufbase =
-		rdma_mmap_token_i(RCV_EGRBUF, uctxt->egrbufs.rcvtids[0].dma);
-	rsp.sdma_comp_bufbase = rdma_mmap_token_i(SDMA_COMP, 0);
-	/*
-	 * user regs are at
-	 * (RXE_PER_CONTEXT_USER + (ctxt * RXE_PER_CONTEXT_SIZE))
-	 */
-	rsp.user_regbase = rdma_mmap_token_i(UREGS, 0);
-	offset = offset_in_page((uctxt_offset(uctxt) + fd->subctxt) *
-				sizeof(*dd->events));
-	rsp.events_bufbase = rdma_mmap_token_i(EVENTS, offset);
-	rsp.status_bufbase = rdma_mmap_token_p(STATUS, dd->status);
-	if (HFI2_CAP_IS_USET(DMA_RTAIL))
-		rsp.rcvhdrtail_base = rdma_mmap_token_i(RTAIL, 0);
-	if (uctxt->subctxt_cnt) {
-		rsp.subctxt_uregbase = rdma_mmap_token_i(SUBCTXT_UREGS, 0);
-		rsp.subctxt_rcvhdrbuf = rdma_mmap_token_i(SUBCTXT_RCV_HDRQ, 0);
-		rsp.subctxt_rcvegrbuf = rdma_mmap_token_i(SUBCTXT_EGRBUF, 0);
-	}
 
-	if (dd->params->chip_type != CHIP_WFR)
-		rsp.rheq_bufbase = rdma_mmap_token_p(RCV_RHEQ, uctxt->rcvhdrq);
+	/*
+	 * Replace the old token scheme with rdma_user_mmap_entry_insert().
+	 * Each buffer type gets an entry in the xarray; the opaque offset
+	 * returned to userspace is passed back to mmap(2).
+	 */
+	{
+		struct ib_ucontext *ucontext = ib_uverbs_get_ucontext(attrs);
+		u64 cr_page_offset;
+		u32 cbi, cbc;
+		int ret;
+
+		/* PIO send buffers (write-combine MMIO) */
+		cbi = ctxt_bar_idx(uctxt->sc->hw_context);
+		cbc = ctxt_bar_ctxt(uctxt->sc->hw_context);
+		ret = hfi2_mmap_entry_insert(
+			ucontext, fd, PIO_BUFS,
+			PAGE_ALIGN(uctxt->sc->credits * PIO_BLOCK_SIZE),
+			dd->bar_maps[cbi].physaddr + TXE_PIO_SEND +
+				(cbc * BIT(16)),
+			NULL, 0, &rsp.pio_bufbase);
+		if (ret)
+			return ret;
+
+		ret = hfi2_mmap_entry_insert(
+			ucontext, fd, PIO_BUFS_SOP,
+			PAGE_ALIGN(uctxt->sc->credits * PIO_BLOCK_SIZE),
+			dd->bar_maps[cbi].physaddr + TXE_PIO_SEND +
+				(cbc * BIT(16)) + (TXE_PIO_SIZE / 2),
+			NULL, 0, &rsp.pio_bufbase_sop);
+		if (ret)
+			return ret;
+
+		/*
+		 * PIO credit return (DMA-coherent). If more than 64 contexts are
+		 * enabled, the credit return spans multiple pages; map only the page
+		 * containing this context's credit return address.
+		 */
+		cr_page_offset = ((u64)uctxt->sc->hw_free -
+				  (u64)dd->cr_base[uctxt->numa_id].va) &
+				 PAGE_MASK;
+		ret = hfi2_mmap_entry_insert(
+			ucontext, fd, PIO_CRED, PAGE_SIZE, 0,
+			(void *)dd->cr_base[uctxt->numa_id].va + cr_page_offset,
+			dd->cr_base[uctxt->numa_id].dma + cr_page_offset,
+			&rsp.sc_credits_addr);
+		if (ret)
+			return ret;
+
+		/* Receive header queue (DMA-coherent) */
+		ret = hfi2_mmap_entry_insert(ucontext, fd, RCV_HDRQ,
+					     rcvhdrq_size(uctxt), 0,
+					     uctxt->rcvhdrq, uctxt->rcvhdrq_dma,
+					     &rsp.rcvhdr_bufbase);
+		if (ret)
+			return ret;
+
+		/* Receive eager buffers (DMA-coherent, multi-segment) */
+		ret = hfi2_mmap_entry_insert(ucontext, fd, RCV_EGRBUF,
+					     uctxt->egrbufs.size, 0, NULL, 0,
+					     &rsp.rcvegr_bufbase);
+		if (ret)
+			return ret;
+
+		/* SDMA completion queue (vmalloc'd) */
+		ret = hfi2_mmap_entry_insert(
+			ucontext, fd, SDMA_COMP,
+			PAGE_ALIGN(sizeof(*fd->cq->comps) * fd->cq->nentries),
+			(u64)fd->cq->comps, NULL, 0, &rsp.sdma_comp_bufbase);
+		if (ret)
+			return ret;
+
+		/*
+		 * User registers (non-cached MMIO).
+		 * RcvHdrTail is the first register in the hardware UCTXT block.
+		 */
+		cbi = ctxt_bar_idx(uctxt->ctxt);
+		cbc = ctxt_bar_ctxt(uctxt->ctxt);
+		ret = hfi2_mmap_entry_insert(
+			ucontext, fd, UREGS, dd->params->rxe_uctxt_stride,
+			(u64)dd->bar_maps[cbi].physaddr +
+				dd->params->rcv_hdr_tail_reg +
+				(cbc * dd->params->rxe_uctxt_stride),
+			NULL, 0, &rsp.user_regbase);
+		if (ret)
+			return ret;
+
+		/* Events page (vmalloc'd) */
+		ret = hfi2_mmap_entry_insert(
+			ucontext, fd, EVENTS, PAGE_SIZE,
+			(unsigned long)(dd->events + uctxt_offset(uctxt)) &
+				PAGE_MASK,
+			NULL, 0, &rsp.events_bufbase);
+		if (ret)
+			return ret;
+
+		/* Status page (kernel virtual) */
+		ret = hfi2_mmap_entry_insert(ucontext, fd, STATUS, PAGE_SIZE, 0,
+					     (void *)dd->status, 0,
+					     &rsp.status_bufbase);
+		if (ret)
+			return ret;
+
+		/* Receive header tail (DMA-coherent) */
+		if (HFI2_CAP_IS_USET(DMA_RTAIL)) {
+			ret = hfi2_mmap_entry_insert(
+				ucontext, fd, RTAIL, PAGE_SIZE, 0,
+				(void *)hfi2_rcvhdrtail_kvaddr(uctxt),
+				uctxt->rcvhdrqtailaddr_dma,
+				&rsp.rcvhdrtail_base);
+			if (ret)
+				return ret;
+		}
+
+		/* Sub-context shared regions (vmalloc'd) */
+		if (uctxt->subctxt_cnt) {
+			ret = hfi2_mmap_entry_insert(
+				ucontext, fd, SUBCTXT_UREGS, PAGE_SIZE,
+				(u64)uctxt->subctxt_uregbase, NULL, 0,
+				&rsp.subctxt_uregbase);
+			if (ret)
+				return ret;
+
+			ret = hfi2_mmap_entry_insert(
+				ucontext, fd, SUBCTXT_RCV_HDRQ,
+				rcvhdrq_size(uctxt) * uctxt->subctxt_cnt,
+				(u64)uctxt->subctxt_rcvhdr_base, NULL, 0,
+				&rsp.subctxt_rcvhdrbuf);
+			if (ret)
+				return ret;
+
+			ret = hfi2_mmap_entry_insert(
+				ucontext, fd, SUBCTXT_EGRBUF,
+				uctxt->egrbufs.size * uctxt->subctxt_cnt,
+				(u64)uctxt->subctxt_rcvegrbuf, NULL, 0,
+				&rsp.subctxt_rcvegrbuf);
+			if (ret)
+				return ret;
+		}
+
+		/* Receive header error queue (DMA-coherent, JKR only) */
+		if (dd->params->chip_type != CHIP_WFR) {
+			ret = hfi2_mmap_entry_insert(ucontext, fd, RCV_RHEQ,
+						     rheq_size(uctxt), 0,
+						     uctxt->rheq,
+						     uctxt->rheq_dma,
+						     &rsp.rheq_bufbase);
+			if (ret)
+				return ret;
+		}
+	}
 
 	return uverbs_copy_to(attrs, HFI2_ATTR_USER_INFO_RSP, &rsp,
 			      sizeof(rsp));
@@ -628,19 +769,32 @@ const struct uapi_definition hfi2_ib_defs[] = {
 	{}
 };
 
-int hfi2_rdma_mmap(struct ib_ucontext *ucontext, struct vm_area_struct *vma)
+int hfi2_mmap(struct ib_ucontext *ucontext, struct vm_area_struct *vma)
 {
 	struct rvt_ucontext *rcontext =
 		container_of(ucontext, struct rvt_ucontext, ibucontext);
 	struct hfi2_filedata *fd = rcontext->priv;
-	unsigned long token;
-	u8 type;
+	struct rdma_user_mmap_entry *rdma_entry;
+	struct hfi2_user_mmap_entry *entry;
+	int ret;
 
-	if (!fd)
-		return -EINVAL;
+	/*
+	 * Try to look up the offset in the rdma_user_mmap xarray.
+	 * If found, this is a driver data-path buffer mmap.
+	 */
+	rdma_entry = rdma_user_mmap_entry_get(ucontext, vma);
+	if (rdma_entry) {
+		entry = to_hfi2_mmap(rdma_entry);
+		ret = hfi2_do_mmap(fd, entry->mmap_flag, vma, rdma_entry,
+				   ucontext);
+		rdma_user_mmap_entry_put(rdma_entry);
+		return ret;
+	}
 
-	token = vma->vm_pgoff << PAGE_SHIFT;
-	type = rdma_mmap_get_type(token);
+	return rvt_mmap(ucontext, vma);
+}
 
-	return hfi2_do_mmap(fd, type, vma);
+void hfi2_mmap_free(struct rdma_user_mmap_entry *rdma_entry)
+{
+	kfree(to_hfi2_mmap(rdma_entry));
 }

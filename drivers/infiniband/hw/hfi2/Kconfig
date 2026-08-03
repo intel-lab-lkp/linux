@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright(c) 2025-2026 Cornelis Networks, Inc.
+config INFINIBAND_HFI2
+	tristate "Cornelis OPX Gen2 (JKR) support"
+	depends on X86_64 && INFINIBAND_RDMAVT && I2C && !UML
+	depends on PCI_IOV
+	select MMU_NOTIFIER
+	select CRC32
+	select I2C_ALGOBIT
+	help
+	This is a low-level driver for Cornelis OPX Gen2 (JKR) adapters.
+	For Gen1 (WFR) adapters use INFINIBAND_HFI1. This separation is
+	temporary; hfi2 will eventually support both WFR and JKR hardware
+	at which point hfi1 will be removed.
+config HFI2_DEBUG_SDMA_ORDER
+	bool "HFI2 SDMA Order debug"
+	depends on INFINIBAND_HFI2
+	default n
+	help
+	  Enable this debug flag to test for out-of-order SDMA completions
+	  during unit testing. This option adds extra tracking to detect
+	  when SDMA completions arrive out of sequence, which should not
+	  happen in normal operation.
+config HFI2_SDMA_VERBOSITY
+	bool "Config SDMA Verbosity"
+	depends on INFINIBAND_HFI2
+	default n
+	help
+	  Enable this flag to turn on verbose SDMA debug logging. This
+	  produces additional diagnostic output useful for debugging SDMA
+	  issues. Should not be enabled in production as it generates
+	  significant log output.
