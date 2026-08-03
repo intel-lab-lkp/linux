@@ -239,6 +239,7 @@ nvkm_iccsense_oneinit(struct nvkm_subdev *subdev)
 		return 0;
 
 	iccsense->data_valid = true;
+	ret = 0;
 	for (i = 0; i < stbl.nr_entry; ++i) {
 		struct pwr_rail_t *pwr_rail = &stbl.rail[i];
 		struct nvkm_iccsense_sensor *sensor;
@@ -280,8 +281,10 @@ nvkm_iccsense_oneinit(struct nvkm_subdev *subdev)
 			}
 
 			rail = kmalloc_obj(*rail);
-			if (!rail)
-				return -ENOMEM;
+			if (!rail) {
+				ret = -ENOMEM;
+				goto done;
+			}
 
 			rail->read = read;
 			rail->sensor = sensor;
@@ -291,7 +294,10 @@ nvkm_iccsense_oneinit(struct nvkm_subdev *subdev)
 			list_add_tail(&rail->head, &iccsense->rails);
 		}
 	}
-	return 0;
+
+done:
+	kfree(stbl.rail);
+	return ret;
 }
 
 static int
