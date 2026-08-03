@@ -20,6 +20,8 @@
 #define CMD_TEARDOWN_MW		4
 #define CMD_LINK_UP		5
 #define CMD_LINK_DOWN		6
+#define CMD_CONFIGURE_MW_GROUP	7
+#define CMD_TEARDOWN_MW_GROUP	8
 
 #define NTB_EPF_ARGUMENT	0x4
 #define MSIX_ENABLE		BIT(16)
@@ -509,6 +511,43 @@ static int ntb_epf_db_set_mask(struct ntb_dev *ntb, u64 db_bits)
 	return 0;
 }
 
+static int
+ntb_epf_mw_set_trans_group(struct ntb_dev *ntb, int pidx, int widx,
+			   dma_addr_t addr, resource_size_t size)
+{
+	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
+	resource_size_t group_size;
+
+	if (ndev->ctrl_version < NTB_EPF_CTRL_V1)
+		return -EOPNOTSUPP;
+	if (pidx != NTB_DEF_PEER_IDX || widx)
+		return -EINVAL;
+
+	group_size = (resource_size_t)ndev->mw_size * ndev->mw_count;
+	if (!IS_ALIGNED(addr, SZ_4K) || size != group_size)
+		return -EINVAL;
+
+	writel(lower_32_bits(addr), ndev->ctrl_reg + NTB_EPF_LOWER_ADDR);
+	writel(upper_32_bits(addr), ndev->ctrl_reg + NTB_EPF_UPPER_ADDR);
+	writel(lower_32_bits(size), ndev->ctrl_reg + NTB_EPF_LOWER_SIZE);
+	writel(upper_32_bits(size), ndev->ctrl_reg + NTB_EPF_UPPER_SIZE);
+
+	return ntb_epf_send_command(ndev, CMD_CONFIGURE_MW_GROUP, widx);
+}
+
+static int ntb_epf_mw_clear_trans_group(struct ntb_dev *ntb, int pidx,
+					int widx)
+{
+	struct ntb_epf_dev *ndev = ntb_ndev(ntb);
+
+	if (ndev->ctrl_version < NTB_EPF_CTRL_V1)
+		return -EOPNOTSUPP;
+	if (pidx != NTB_DEF_PEER_IDX || widx)
+		return -EINVAL;
+
+	return ntb_epf_send_command(ndev, CMD_TEARDOWN_MW_GROUP, widx);
+}
+
 static int ntb_epf_mw_set_trans(struct ntb_dev *ntb, int pidx, int idx,
 				dma_addr_t addr, resource_size_t size)
 {
@@ -648,6 +687,8 @@ static const struct ntb_dev_ops ntb_epf_ops = {
 	.db_vector_mask		= ntb_epf_db_vector_mask,
 	.db_set_mask		= ntb_epf_db_set_mask,
 	.mw_get_trans_group	= ntb_epf_mw_get_trans_group,
+	.mw_set_trans_group	= ntb_epf_mw_set_trans_group,
+	.mw_clear_trans_group	= ntb_epf_mw_clear_trans_group,
 	.mw_set_trans		= ntb_epf_mw_set_trans,
 	.mw_clear_trans		= ntb_epf_mw_clear_trans,
 	.peer_mw_get_addr	= ntb_epf_peer_mw_get_addr,
