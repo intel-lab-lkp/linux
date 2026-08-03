@@ -270,6 +270,22 @@ void dev_disable_lro(struct net_device *dev)
 EXPORT_SYMBOL(dev_disable_lro);
 
 /**
+ * dev_disable_gro() - disable Generic Receive Offload on a device
+ * @dev: device
+ *
+ * Disable Generic Receive Offload (GRO) on a net device.  Must be
+ * called under RTNL.  This is needed if received packets may be
+ * forwarded to another interface.
+ */
+void dev_disable_gro(struct net_device *dev)
+{
+	netdev_lock_ops(dev);
+	netif_disable_gro(dev);
+	netdev_unlock_ops(dev);
+}
+EXPORT_SYMBOL(dev_disable_gro);
+
+/**
  * dev_set_promiscuity() - update promiscuity count on a device
  * @dev: device
  * @inc: modifier
