@@ -3222,6 +3222,27 @@ again:
 }
 
 #ifdef CONFIG_MEMORY_FAILURE
+static bool ksm_rmap_item_mapped(const struct page *page,
+				 struct vm_area_struct *vma,
+				 unsigned long addr)
+{
+	struct page_vma_mapped_walk pvmw = {
+		.pfn = page_to_pfn(page),
+		.nr_pages = 1,
+		.vma = vma,
+		.address = addr,
+		.flags = PVMW_SYNC,
+	};
+
+	if (addr < vma->vm_start || addr >= vma->vm_end)
+		return false;
+	if (!page_vma_mapped_walk(&pvmw))
+		return false;
+	page_vma_mapped_walk_done(&pvmw);
+
+	return true;
+}
+
 /*
  * Collect processes when the error hit an ksm page.
  */
@@ -3237,13 +3258,13 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 	if (!stable_node)
 		return;
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
+		unsigned long addr = rmap_item->address & PAGE_MASK;
 		struct anon_vma *av = rmap_item->anon_vma;
 
 		anon_vma_lock_read(av);
 		rcu_read_lock();
 		for_each_process(tsk) {
 			struct anon_vma_chain *vmac;
-			unsigned long addr;
 			struct task_struct *t =
 				task_early_kill(tsk, force_early);
 			if (!t)
@@ -3253,7 +3274,9 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 			{
 				vma = vmac->vma;
 				if (vma->vm_mm == t->mm) {
-					addr = rmap_item->address & PAGE_MASK;
+					if (!ksm_rmap_item_mapped(page, vma,
+								  addr))
+						continue;
 					add_to_kill_ksm(t, page, vma, to_kill,
 							addr);
 				}
