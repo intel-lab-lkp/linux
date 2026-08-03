@@ -106,9 +106,10 @@ struct ublk_shmem_buf_reg {
  * IO commands, issued by ublk server, and handled by ublk driver.
  *
  * FETCH_REQ: issued via sqe(URING_CMD) beforehand for fetching IO request
- *      from ublk driver, should be issued only when starting device. After
- *      the associated cqe is returned, request's tag can be retrieved via
- *      cqe->userdata.
+ *      from ublk driver, should be issued only when starting device. The
+ *      server could encode request's tag in sqe->user_data so that after
+ *      the associated cqe is returned, request's tag can be retrieved from
+ *      the same field.
  *
  * COMMIT_AND_FETCH_REQ: issued via sqe(URING_CMD) after ublkserver handled
  *      this IO request, request's handling result is committed to ublk
