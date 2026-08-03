@@ -2747,7 +2747,7 @@ def print_dump_type_free(ri):
     ri.cw.block_start()
     ri.cw.p(f"{sub_type} *next = rsp;")
     ri.cw.nl()
-    ri.cw.block_start(line='while ((void *)next != YNL_LIST_END)')
+    ri.cw.block_start(line='while (next && (void *)next != YNL_LIST_END)')
     _free_type_members_iter(ri, ri.struct['reply'])
     ri.cw.p('rsp = next;')
     ri.cw.p('next = rsp->next;')
