@@ -113,7 +113,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	 */
 	if (aer_regs.cor_status & ~aer_regs.cor_mask) {
 		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
-		cxl_handle_cor_ras(dport->dport_dev, to_ras_base(port, dport));
+		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport));
 	}
 
 	if (aer_regs.uncor_status & ~aer_regs.uncor_mask) {
