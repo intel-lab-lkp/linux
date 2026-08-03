@@ -1512,6 +1512,47 @@ static void phylink_deactivate_lpi(struct phylink *pl)
 	}
 }
 
+static bool phylink_phy_supports_autonomous_eee(struct phy_device *phy)
+{
+	return phy && phy_has_autonomous_eee(phy);
+}
+
+static bool phylink_phy_manages_eee(struct phy_device *phy)
+{
+	return phy &&
+	       phy->eee_lpi_provider == PHY_EEE_LPI_PROVIDER_PHY;
+}
+
+static bool phylink_mac_manages_eee(struct phy_device *phy)
+{
+	return phy &&
+	       phy->eee_lpi_provider == PHY_EEE_LPI_PROVIDER_MAC;
+}
+
+static bool
+phylink_mac_supports_eee_interface(struct phylink *pl,
+				   phy_interface_t interface)
+{
+	return pl->mac_supports_eee &&
+	       test_bit(interface, pl->config->lpi_interfaces);
+}
+
+static bool phylink_mac_supports_eee_phy(struct phylink *pl,
+					 struct phy_device *phy,
+					 phy_interface_t interface)
+{
+	if (!pl->mac_supports_eee)
+		return false;
+
+	/* Keep one provider for PHYs which change their interface with speed. */
+	if (!phy_interface_empty(phy->possible_interfaces))
+		return bitmap_subset(phy->possible_interfaces,
+				     pl->config->lpi_interfaces,
+				     PHY_INTERFACE_MODE_MAX);
+
+	return phylink_mac_supports_eee_interface(pl, interface);
+}
+
 static void phylink_activate_lpi(struct phylink *pl)
 {
 	int err;
@@ -2090,6 +2131,8 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 {
 	struct phylink_link_state config;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
+	bool phy_eee;
+	bool mac_eee;
 	char *irq_str;
 	int ret;
 
@@ -2106,6 +2149,8 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 	linkmode_copy(supported, phy->supported);
 	linkmode_copy(config.advertising, phy->advertising);
 	config.interface = interface;
+	mac_eee = phylink_mac_supports_eee_phy(pl, phy, interface);
+	phy_eee = !mac_eee && phylink_phy_supports_autonomous_eee(phy);
 
 	ret = phylink_validate_phy(pl, phy, supported, &config);
 	if (ret) {
@@ -2141,10 +2186,21 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 	/* Restrict the phy advertisement according to the MAC support. */
 	linkmode_copy(phy->advertising, config.advertising);
 
+	if (pl->mac_supports_eee) {
+		/* Convert the MAC's LPI capabilities to linkmodes. */
+		linkmode_zero(pl->supported_lpi);
+		phylink_caps_to_linkmodes(pl->supported_lpi,
+					  pl->config->lpi_capabilities);
+	}
+
 	/* If the MAC supports phylink managed EEE, restrict the EEE
 	 * advertisement according to the MAC's LPI capabilities.
 	 */
-	if (pl->mac_supports_eee) {
+	if (mac_eee) {
+		ret = phy_disable_autonomous_eee(phy);
+		if (ret)
+			goto out_unlock;
+
 		/* If EEE is enabled, then we need to call phy_support_eee()
 		 * to ensure that the advertising mask is appropriately set.
 		 * This also enables EEE at the PHY.
@@ -2155,24 +2211,30 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 		phy->eee_cfg.tx_lpi_enabled = pl->eee_cfg.tx_lpi_enabled;
 		phy->eee_cfg.tx_lpi_timer = pl->eee_cfg.tx_lpi_timer;
 
-		/* Convert the MAC's LPI capabilities to linkmodes */
-		linkmode_zero(pl->supported_lpi);
-		phylink_caps_to_linkmodes(pl->supported_lpi,
-					  pl->config->lpi_capabilities);
-
 		/* Restrict the PHYs EEE support/advertisement to the modes
 		 * that the MAC supports.
 		 */
 		linkmode_and(phy->advertising_eee, phy->advertising_eee,
 			     pl->supported_lpi);
+	} else if (phy_eee) {
+		if (pl->eee_cfg.eee_enabled)
+			phy_advertise_eee_all(phy);
+
+		phy->eee_cfg = pl->eee_cfg;
+		ret = phy_support_autonomous_eee(phy);
+		if (ret)
+			goto out_unlock;
 	} else if (pl->mac_supports_eee_ops) {
 		/* MAC supports phylink EEE, but wants EEE always disabled. */
 		phy_disable_eee(phy);
 	}
 
+out_unlock:
 	mutex_unlock(&pl->state_mutex);
 	mutex_unlock(&phy->lock);
 	mutex_unlock(&pl->phydev_mutex);
+	if (ret)
+		return ret;
 
 	phylink_dbg(pl,
 		    "phy: %s setting supported %*pb advertising %*pb\n",
@@ -3300,17 +3362,20 @@ EXPORT_SYMBOL_GPL(phylink_get_eee_err);
  */
 int phylink_ethtool_get_eee(struct phylink *pl, struct ethtool_keee *eee)
 {
+	bool mac_eee;
 	int ret = -EOPNOTSUPP;
 
 	ASSERT_RTNL();
+	mac_eee = phylink_mac_manages_eee(pl->phydev);
 
-	if (pl->mac_supports_eee_ops && !pl->mac_supports_eee)
+	if (pl->mac_supports_eee_ops && !mac_eee &&
+	    !phylink_phy_manages_eee(pl->phydev))
 		return ret;
 
 	if (pl->phydev) {
 		ret = phy_ethtool_get_eee(pl->phydev, eee);
 		/* Restrict supported linkmode mask */
-		if (ret == 0 && pl->mac_supports_eee_ops)
+		if (ret == 0 && mac_eee)
 			linkmode_and(eee->supported, eee->supported,
 				     pl->supported_lpi);
 	}
@@ -3326,10 +3391,11 @@ EXPORT_SYMBOL_GPL(phylink_ethtool_get_eee);
  */
 int phylink_ethtool_set_eee(struct phylink *pl, struct ethtool_keee *eee)
 {
-	bool mac_eee = pl->mac_supports_eee;
+	bool mac_eee;
 	int ret = -EOPNOTSUPP;
 
 	ASSERT_RTNL();
+	mac_eee = phylink_mac_manages_eee(pl->phydev);
 
 	phylink_dbg(pl, "mac %s phylink EEE%s, adv %*pbl, LPI%s timer %uus\n",
 		    mac_eee ? "supports" : "does not support",
@@ -3337,12 +3403,13 @@ int phylink_ethtool_set_eee(struct phylink *pl, struct ethtool_keee *eee)
 		    __ETHTOOL_LINK_MODE_MASK_NBITS, eee->advertised,
 		    eee->tx_lpi_enabled ? " enabled" : "", eee->tx_lpi_timer);
 
-	if (pl->mac_supports_eee_ops && !mac_eee)
+	if (pl->mac_supports_eee_ops && !mac_eee &&
+	    !phylink_phy_manages_eee(pl->phydev))
 		return ret;
 
 	if (pl->phydev) {
 		/* Restrict advertisement mask */
-		if (pl->mac_supports_eee_ops)
+		if (mac_eee)
 			linkmode_and(eee->advertised, eee->advertised,
 				     pl->supported_lpi);
 		ret = phy_ethtool_set_eee(pl->phydev, eee);
