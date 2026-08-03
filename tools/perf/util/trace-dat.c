@@ -861,6 +861,9 @@ void trace_dat__free_cpu_buffers(void)
 	for (cpu = 0; cpu < trace_dat_nr_cpus; cpu++) {
 		int i;
 
+		if (!trace_cpu_data[cpu].events)
+			continue;
+
 		for (i = 0; i < trace_cpu_data[cpu].count; i++)
 			free(trace_cpu_data[cpu].events[i].raw);
 		free(trace_cpu_data[cpu].events);
