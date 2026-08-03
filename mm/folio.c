@@ -474,17 +474,13 @@ void folio_add_lru(struct folio *folio)
 	VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
 
 	/*
-	 * For refaulted workingset folios, set PG_active so they
-	 * can be added to active generations.
 	 * For prefaulted file folios, folio_mark_accessed() sets
 	 * PG_referenced so lru_gen_folio_seq() places them into
 	 * the second oldest generation.
 	 */
 	if (lru_gen_enabled() && !folio_test_unevictable(folio) &&
 	    lru_gen_in_fault() && !(current->flags & PF_MEMALLOC)) {
-		if (folio_test_workingset(folio))
-			folio_set_active(folio);
-		else if (!folio_test_referenced(folio))
+		if (!folio_test_referenced(folio) && !folio_test_workingset(folio))
 			folio_mark_accessed(folio);
 	}
 

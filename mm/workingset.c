@@ -320,12 +320,11 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	atomic_long_add(delta, &lrugen->refaulted[hist][type][tier]);
 
 	if (workingset) {
-		/*
-		 * see folio_add_lru(), where folio_set_active() is
-		 * called for workingset folios
-		 */
-		if (lru_gen_in_fault())
+		/* Send refaulted workingset folios to active generations. */
+		if (lru_gen_in_fault()) {
+			folio_set_active(folio);
 			mod_lruvec_state(lruvec, WORKINGSET_ACTIVATE_BASE + type, delta);
+		}
 		folio_set_workingset(folio);
 		mod_lruvec_state(lruvec, WORKINGSET_RESTORE_BASE + type, delta);
 	} else
