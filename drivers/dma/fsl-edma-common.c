@@ -55,10 +55,37 @@ void fsl_edma_tx_chan_handler(struct fsl_edma_chan *fsl_chan)
 	}
 
 	if (!fsl_chan->edesc->iscyclic) {
-		list_del(&fsl_chan->edesc->vdesc.node);
-		vchan_cookie_complete(&fsl_chan->edesc->vdesc);
+		u16 csr = edma_read_tcdreg(fsl_chan, csr);
+		u8 link_sg_id = FIELD_GET(EDMA_TCD_CSR_LINKCH, csr);
+		bool e_link = FIELD_GET(EDMA_TCD_CSR_E_LINK, csr);
+		struct virt_dma_desc *vdesc, *tmp;
+
+		/* Channel is DONE when a TCD with D_REQ set completes */
+		if (!(fsl_edma_drvflags(fsl_chan) & FSL_EDMA_DRV_SPLIT_REG) ||
+		    (edma_readl_chreg(fsl_chan, ch_csr) & EDMA_V3_CH_CSR_DONE)) {
+			fsl_chan->status = DMA_COMPLETE;
+		}
+
+		list_for_each_entry_safe(vdesc, tmp, &fsl_chan->vchan.desc_issued, node) {
+			struct fsl_edma_desc *fsl_desc = to_fsl_edma_desc(vdesc);
+			bool id_match = (link_sg_id == fsl_desc->link_sg_id);
+
+			/*
+			 * If the transfer is still running,
+			 * don't mark as complete the current descriptor
+			 */
+			if ((e_link || id_match) && fsl_chan->status != DMA_COMPLETE)
+				break;
+
+			list_del(&vdesc->node);
+			vchan_cookie_complete(vdesc);
+
+			if (e_link || id_match)
+				break;
+		}
+
 		fsl_chan->edesc = NULL;
-		fsl_chan->status = DMA_COMPLETE;
+
 	} else {
 		vchan_cyclic_callback(&fsl_chan->edesc->vdesc);
 	}
@@ -931,14 +958,93 @@ void fsl_edma_xfer_desc(struct fsl_edma_chan *fsl_chan)
 	if (!vdesc)
 		return;
 	fsl_chan->edesc = to_fsl_edma_desc(vdesc);
-	fsl_edma_set_tcd_regs(fsl_chan, fsl_chan->edesc->tcd[0].vtcd);
-	fsl_edma_enable_request(fsl_chan);
-	fsl_chan->status = DMA_IN_PROGRESS;
+
+	if (fsl_chan->status != DMA_IN_PROGRESS) {
+		fsl_edma_set_tcd_regs(fsl_chan, fsl_chan->edesc->tcd[0].vtcd);
+		fsl_edma_enable_request(fsl_chan);
+		fsl_chan->status = DMA_IN_PROGRESS;
+	}
+}
+
+static void fsl_edma_link_sg(struct fsl_edma_chan *fsl_chan, struct fsl_edma_desc *fsl_desc)
+{
+	u32 flags = fsl_edma_drvflags(fsl_chan);
+	struct fsl_edma_hw_tcd *last_tcd;
+	struct fsl_edma_desc *prev_desc;
+	struct virt_dma_desc *vdesc;
+	u16 last_csr;
+
+	lockdep_assert_held(&fsl_chan->vchan.lock);
+
+	if (!(flags & FSL_EDMA_DRV_SPLIT_REG) || fsl_desc->iscyclic)
+		return;
+
+	vdesc = list_last_entry_or_null(&fsl_chan->vchan.desc_issued,
+					struct virt_dma_desc, node);
+	if (!vdesc)
+		return;
+
+	prev_desc = to_fsl_edma_desc(vdesc);
+	if (prev_desc->iscyclic)
+		return;
+
+	last_tcd = prev_desc->tcd[prev_desc->n_tcds - 1].vtcd;
+	last_csr = fsl_edma_get_tcd_to_cpu(fsl_chan, last_tcd, csr);
+
+	for (unsigned int i = 0; i < fsl_desc->n_tcds; i++) {
+		struct fsl_edma_hw_tcd *tcd = fsl_desc->tcd[i].vtcd;
+
+		if (fsl_edma_get_tcd_to_cpu(fsl_chan, tcd, csr) & EDMA_TCD_CSR_E_LINK)
+			return;
+	}
+
+	if (!(last_csr & EDMA_TCD_CSR_D_REQ) ||
+	    last_csr & EDMA_TCD_CSR_E_LINK ||
+	    list_count_nodes(&fsl_chan->vchan.desc_issued) >= FIELD_MAX(EDMA_TCD_CSR_LINKCH))
+		return;
+
+	/* Set a non-zero linked SG identifier to all TCD of the new descriptor */
+	fsl_chan->link_sg_id++;
+	if (fsl_chan->link_sg_id > FIELD_MAX(EDMA_TCD_CSR_LINKCH))
+		fsl_chan->link_sg_id = 1;
+
+	fsl_desc->link_sg_id = fsl_chan->link_sg_id;
+
+	for (unsigned int i = 0; i < fsl_desc->n_tcds; i++) {
+		struct fsl_edma_hw_tcd *tcd = fsl_desc->tcd[i].vtcd;
+		u16 csr = fsl_edma_get_tcd_to_cpu(fsl_chan, tcd, csr);
+
+		csr |= FIELD_PREP(EDMA_TCD_CSR_LINKCH, fsl_chan->link_sg_id);
+		fsl_edma_set_tcd_to_le(fsl_chan, tcd, csr, csr);
+	}
+
+	/*
+	 * Set DLAST_SGA before enabling E_SG in CSR: if the DMA engine
+	 * only picks up the former, it updates DADDR at end of transfer,
+	 * which is not reused.
+	 */
+	fsl_edma_set_tcd_to_le(fsl_chan, last_tcd, fsl_desc->tcd[0].ptcd, dlast_sga);
+
+	dma_wmb();
+
+	last_csr &= ~EDMA_TCD_CSR_D_REQ;
+	last_csr |= EDMA_TCD_CSR_E_SG;
+	fsl_edma_set_tcd_to_le(fsl_chan, last_tcd, last_csr, csr);
+
+	if (prev_desc == fsl_chan->edesc &&
+	    prev_desc->n_tcds == 1 &&
+	    !(flags & FSL_EDMA_DRV_CLEAR_DONE_E_SG)) {
+		edma_cp_tcd_to_reg(fsl_chan, last_tcd, dlast_sga);
+		edma_cp_tcd_to_reg(fsl_chan, last_tcd, csr);
+	}
+
+	trace_edma_link_sg(fsl_chan, last_tcd);
 }
 
 void fsl_edma_issue_pending(struct dma_chan *chan)
 {
 	struct fsl_edma_chan *fsl_chan = to_fsl_edma_chan(chan);
+	struct virt_dma_desc *vdesc, *tmp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&fsl_chan->vchan.lock, flags);
@@ -949,7 +1055,12 @@ void fsl_edma_issue_pending(struct dma_chan *chan)
 		return;
 	}
 
-	if (vchan_issue_pending(&fsl_chan->vchan) && !fsl_chan->edesc)
+	list_for_each_entry_safe(vdesc, tmp, &fsl_chan->vchan.desc_submitted, node) {
+		fsl_edma_link_sg(fsl_chan, to_fsl_edma_desc(vdesc));
+		list_move_tail(&vdesc->node, &fsl_chan->vchan.desc_issued);
+	}
+
+	if (!list_empty(&fsl_chan->vchan.desc_issued) && !fsl_chan->edesc)
 		fsl_edma_xfer_desc(fsl_chan);
 
 	spin_unlock_irqrestore(&fsl_chan->vchan.lock, flags);
