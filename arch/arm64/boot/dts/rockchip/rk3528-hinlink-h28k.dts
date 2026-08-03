@@ -191,6 +191,8 @@
 		    <&rgmii_rx_bus2>,
 		    <&rgmii_rgmii_clk>,
 		    <&rgmii_rgmii_bus>;
+	snps,reset-gpios = <&gpio4 RK_PC2 GPIO_ACTIVE_LOW>;
+	snps,reset-delays-us = <0 20000 100000>;
 	status = "okay";
 };
 
@@ -205,9 +207,6 @@
 		reg = <0x1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&gmac1_rstn_l>;
-		reset-assert-us = <20000>;
-		reset-deassert-us = <100000>;
-		reset-gpios = <&gpio4 RK_PC2 GPIO_ACTIVE_LOW>;
 	};
 };
 
