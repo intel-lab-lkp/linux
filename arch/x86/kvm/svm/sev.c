@@ -2049,8 +2049,14 @@ static void sev_migrate_from(struct kvm *dst_kvm, struct kvm *src_kvm)
 	if (is_mirroring_enc_context(dst_kvm)) {
 		struct kvm_sev_info *owner_sev_info = to_kvm_sev_info(dst->enc_context_owner);
 
+		/*
+		 * All other writers of the owner's mirror list (COPY,
+		 * destroy) serialize on the owner's lock; do the same.
+		 */
+		mutex_lock_nested(&dst->enc_context_owner->lock, SINGLE_DEPTH_NESTING);
 		list_del(&src->mirror_entry);
 		list_add_tail(&dst->mirror_entry, &owner_sev_info->mirror_vms);
+		mutex_unlock(&dst->enc_context_owner->lock);
 	}
 
 	kvm_for_each_vcpu(i, dst_vcpu, dst_kvm) {
