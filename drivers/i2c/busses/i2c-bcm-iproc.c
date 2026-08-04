@@ -15,6 +15,7 @@
 #define CFG_OFFSET                   0x00
 #define CFG_RESET_SHIFT              31
 #define CFG_EN_SHIFT                 30
+#define CFG_BITBANG_EN_SHIFT         29
 #define CFG_SLAVE_ADDR_0_SHIFT       28
 #define CFG_M_RETRY_CNT_SHIFT        16
 #define CFG_M_RETRY_CNT_MASK         0x0f
@@ -55,6 +56,12 @@
 #define S_FIFO_RX_CNT_MASK           0x7f
 #define S_FIFO_RX_THLD_SHIFT         8
 #define S_FIFO_RX_THLD_MASK          0x3f
+
+#define BITBANG_CTRL_OFFSET          0x14
+#define BITBANG_CLK_IN_SHIFT         31
+#define BITBANG_CLK_OUT_EN_SHIFT     30
+#define BITBANG_DATA_IN_SHIFT        29
+#define BITBANG_DATA_OUT_EN_SHIFT    28
 
 #define M_CMD_OFFSET                 0x30
 #define M_CMD_START_BUSY_SHIFT       31
@@ -715,6 +722,76 @@ static void bcm_iproc_i2c_init(struct bcm_iproc_i2c_dev *iproc_i2c)
 	iproc_i2c_wr_reg(iproc_i2c, IS_OFFSET, 0xffffffff);
 }
 
+static void bcm_iproc_i2c_prepare_recovery(struct i2c_adapter *adapter)
+{
+	struct bcm_iproc_i2c_dev *iproc_i2c = i2c_get_adapdata(adapter);
+	u32 val;
+
+	/* enable bit-bang mode to allow manually driving SDA/SCL */
+	val = iproc_i2c_rd_reg(iproc_i2c, CFG_OFFSET);
+	val |= BIT(CFG_BITBANG_EN_SHIFT);
+	iproc_i2c_wr_reg(iproc_i2c, CFG_OFFSET, val);
+	usleep_range(50, 75);
+}
+
+static void bcm_iproc_i2c_unprepare_recovery(struct i2c_adapter *adapter)
+{
+	struct bcm_iproc_i2c_dev *iproc_i2c = i2c_get_adapdata(adapter);
+	u32 val;
+
+	/* disable bit-bang mode again */
+	val = iproc_i2c_rd_reg(iproc_i2c, CFG_OFFSET);
+	val &= ~BIT(CFG_BITBANG_EN_SHIFT);
+	iproc_i2c_wr_reg(iproc_i2c, CFG_OFFSET, val);
+	usleep_range(10, 15);
+}
+
+static int bcm_iproc_i2c_get_scl(struct i2c_adapter *adapter)
+{
+	struct bcm_iproc_i2c_dev *iproc_i2c = i2c_get_adapdata(adapter);
+	u32 val;
+
+	val = iproc_i2c_rd_reg(iproc_i2c, BITBANG_CTRL_OFFSET);
+
+	return !!(val & BIT(BITBANG_CLK_IN_SHIFT));
+}
+
+static void bcm_iproc_i2c_set_scl(struct i2c_adapter *adapter, int scl)
+{
+	struct bcm_iproc_i2c_dev *iproc_i2c = i2c_get_adapdata(adapter);
+	u32 val;
+
+	val = iproc_i2c_rd_reg(iproc_i2c, BITBANG_CTRL_OFFSET);
+	if (scl)
+		val |= BIT(BITBANG_CLK_OUT_EN_SHIFT);
+	else
+		val &= ~BIT(BITBANG_CLK_OUT_EN_SHIFT);
+	iproc_i2c_wr_reg(iproc_i2c, BITBANG_CTRL_OFFSET, val);
+}
+
+static int bcm_iproc_i2c_get_sda(struct i2c_adapter *adapter)
+{
+	struct bcm_iproc_i2c_dev *iproc_i2c = i2c_get_adapdata(adapter);
+	u32 val;
+
+	val = iproc_i2c_rd_reg(iproc_i2c, BITBANG_CTRL_OFFSET);
+
+	return !!(val & BIT(BITBANG_DATA_IN_SHIFT));
+}
+
+static void bcm_iproc_i2c_set_sda(struct i2c_adapter *adapter, int sda)
+{
+	struct bcm_iproc_i2c_dev *iproc_i2c = i2c_get_adapdata(adapter);
+	u32 val;
+
+	val = iproc_i2c_rd_reg(iproc_i2c, BITBANG_CTRL_OFFSET);
+	if (sda)
+		val |= BIT(BITBANG_DATA_OUT_EN_SHIFT);
+	else
+		val &= ~BIT(BITBANG_DATA_OUT_EN_SHIFT);
+	iproc_i2c_wr_reg(iproc_i2c, BITBANG_CTRL_OFFSET, val);
+}
+
 static int bcm_iproc_i2c_check_status(struct bcm_iproc_i2c_dev *iproc_i2c,
 				      struct i2c_msg *msg)
 {
@@ -803,6 +880,10 @@ static int bcm_iproc_i2c_xfer_wait(struct bcm_iproc_i2c_dev *iproc_i2c,
 	}
 
 	if (!time_left && !iproc_i2c->xfer_is_done) {
+		/* Recover bus if SDA is held low */
+		if (bcm_iproc_i2c_get_sda(&iproc_i2c->adapter) == 0)
+			i2c_recover_bus(&iproc_i2c->adapter);
+
 		/*
 		 * The controller may fail to clear START_BUSY after a timeout,
 		 * reset the controller to recover in that case.
@@ -1064,6 +1145,16 @@ static const struct i2c_adapter_quirks bcm_iproc_i2c_quirks = {
 	.max_read_len = M_RX_MAX_READ_LEN,
 };
 
+static struct i2c_bus_recovery_info bcm_iproc_i2c_recovery_info = {
+	.recover_bus = i2c_generic_scl_recovery,
+	.get_scl = bcm_iproc_i2c_get_scl,
+	.set_scl = bcm_iproc_i2c_set_scl,
+	.get_sda = bcm_iproc_i2c_get_sda,
+	.set_sda = bcm_iproc_i2c_set_sda,
+	.prepare_recovery = bcm_iproc_i2c_prepare_recovery,
+	.unprepare_recovery = bcm_iproc_i2c_unprepare_recovery,
+};
+
 static int bcm_iproc_i2c_cfg_speed(struct bcm_iproc_i2c_dev *iproc_i2c)
 {
 	unsigned int bus_speed;
@@ -1164,6 +1255,7 @@ static int bcm_iproc_i2c_probe(struct platform_device *pdev)
 		 of_node_full_name(iproc_i2c->device->of_node));
 	adap->algo = &bcm_iproc_algo;
 	adap->quirks = &bcm_iproc_i2c_quirks;
+	adap->bus_recovery_info = &bcm_iproc_i2c_recovery_info;
 	adap->dev.parent = &pdev->dev;
 	adap->dev.of_node = pdev->dev.of_node;
 
