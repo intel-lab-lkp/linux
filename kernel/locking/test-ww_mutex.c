@@ -392,6 +392,7 @@ struct stress {
 	struct ww_class *class;
 	unsigned long timeout;
 	int nlocks;
+	int result;
 };
 
 struct rnd_state rng;
@@ -440,6 +441,9 @@ static void stress_inorder_work(struct work_struct *work)
 	struct ww_mutex *locks = stress->locks;
 	struct ww_acquire_ctx ctx;
 	int *order;
+	int err;
+
+	stress->result = -ENOMEM;
 
 	order = get_random_order(nlocks);
 	if (!order)
@@ -447,7 +451,7 @@ static void stress_inorder_work(struct work_struct *work)
 
 	do {
 		int contended = -1;
-		int n, err;
+		int n;
 
 		ww_acquire_init(&ctx, stress->class);
 retry:
@@ -485,6 +489,7 @@ retry:
 	} while (!time_after(jiffies, stress->timeout));
 
 	kfree(order);
+	stress->result = err;
 }
 
 struct reorder_lock {
@@ -500,6 +505,8 @@ static void stress_reorder_work(struct work_struct *work)
 	struct reorder_lock *ll, *ln;
 	int *order;
 	int n, err;
+
+	stress->result = -ENOMEM;
 
 	order = get_random_order(stress->nlocks);
 	if (!order)
@@ -545,6 +552,8 @@ static void stress_reorder_work(struct work_struct *work)
 		ww_acquire_fini(&ctx);
 	} while (!time_after(jiffies, stress->timeout));
 
+	stress->result = err;
+
 out:
 	list_for_each_entry_safe(ll, ln, &locks, link)
 		kfree(ll);
@@ -569,6 +578,8 @@ static void stress_one_work(struct work_struct *work)
 			break;
 		}
 	} while (!time_after(jiffies, stress->timeout));
+
+	stress->result = err;
 }
 
 #define STRESS_INORDER BIT(0)
@@ -581,6 +592,7 @@ static int stress(struct ww_class *class, int nlocks, int nthreads, unsigned int
 	struct ww_mutex *locks;
 	struct stress *stress_array;
 	int n, count;
+	int res = 0;
 
 	locks = kmalloc_objs(*locks, nlocks);
 	if (!locks)
@@ -635,10 +647,15 @@ static int stress(struct ww_class *class, int nlocks, int nthreads, unsigned int
 
 	for (n = 0; n < nlocks; n++)
 		ww_mutex_destroy(&locks[n]);
+
+	/* Report the first error */
+	for (n = 0; !res && n < count; n++)
+		res = stress_array[n].result;
+
 	kfree(stress_array);
 	kfree(locks);
 
-	return 0;
+	return res;
 }
 
 static int run_tests(struct ww_class *class)
