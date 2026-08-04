@@ -13557,9 +13557,10 @@ static int kvm_alloc_memslot_metadata(struct kvm *kvm,
 		slot->arch.lpage_info[i - 1] = linfo;
 
 		if (slot->base_gfn & (KVM_PAGES_PER_HPAGE(level) - 1))
-			linfo[0].disallow_lpage = 1;
+			linfo[0].disallow_lpage = KVM_LPAGE_SLOT_DISALLOW_FLAG;
 		if ((slot->base_gfn + npages) & (KVM_PAGES_PER_HPAGE(level) - 1))
-			linfo[lpages - 1].disallow_lpage = 1;
+			linfo[lpages - 1].disallow_lpage =
+				KVM_LPAGE_SLOT_DISALLOW_FLAG;
 		ugfn = slot->userspace_addr >> PAGE_SHIFT;
 		/*
 		 * If the gfn and userspace address are not aligned wrt each
@@ -13569,7 +13570,8 @@ static int kvm_alloc_memslot_metadata(struct kvm *kvm,
 			unsigned long j;
 
 			for (j = 0; j < lpages; ++j)
-				linfo[j].disallow_lpage = 1;
+				linfo[j].disallow_lpage =
+					KVM_LPAGE_SLOT_DISALLOW_FLAG;
 		}
 	}
 

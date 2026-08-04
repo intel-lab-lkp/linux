@@ -742,13 +742,43 @@ static bool kvm_gfn_is_lpage_allowed(struct kvm *kvm,
 	return true;
 }
 
-/*
- * The most significant bit in disallow_lpage tracks whether or not memory
- * attributes are mixed, i.e. not identical for all gfns at the current level.
- * The lower order bits are used to refcount other cases where a hugepage is
- * disallowed, e.g. if KVM has shadow a page table at the gfn.
- */
-#define KVM_LPAGE_MIXED_FLAG	BIT(31)
+static bool kvm_gfn_is_lpage_allowed_for_mapping(struct kvm *kvm,
+						 const struct kvm_memory_slot *slot,
+						 gfn_t gfn, int level)
+{
+	const struct kvm_memory_slot *other_slot;
+	struct kvm_memslot_iter iter;
+	struct kvm_memslots *slots;
+	gfn_t start, end;
+
+	if (lpage_info_slot(gfn, slot, level)->disallow_lpage)
+		return false;
+
+	if (kvm_arch_nr_memslot_as_ids(kvm) == 1)
+		return true;
+
+	start = gfn_round_for_level(gfn, level);
+	end = start + KVM_PAGES_PER_HPAGE(level);
+	slots = __kvm_memslots(kvm, slot->as_id ^ 1);
+
+	if (kvm_memslots_empty(slots))
+		return true;
+
+	other_slot = __gfn_to_memslot(slots, start);
+	if (other_slot && other_slot->base_gfn + other_slot->npages >= end)
+		return !(lpage_info_slot(start, other_slot, level)->disallow_lpage &
+			 KVM_LPAGE_DYNAMIC_DISALLOW_MASK);
+
+	kvm_for_each_memslot_in_gfn_range(&iter, slots, start, end) {
+		gfn_t slot_gfn = max(start, iter.slot->base_gfn);
+
+		if (lpage_info_slot(slot_gfn, iter.slot, level)->disallow_lpage &
+		    KVM_LPAGE_DYNAMIC_DISALLOW_MASK)
+			return false;
+	}
+
+	return true;
+}
 
 static void update_gfn_disallow_lpage_count(const struct kvm_memory_slot *slot,
 					    gfn_t gfn, int count)
@@ -761,7 +791,8 @@ static void update_gfn_disallow_lpage_count(const struct kvm_memory_slot *slot,
 
 		old = linfo->disallow_lpage;
 		linfo->disallow_lpage += count;
-		WARN_ON_ONCE((old ^ linfo->disallow_lpage) & KVM_LPAGE_MIXED_FLAG);
+		WARN_ON_ONCE((old ^ linfo->disallow_lpage) &
+			     KVM_LPAGE_DISALLOW_FLAGS);
 	}
 }
 
@@ -801,7 +832,7 @@ static void account_shadowed(struct kvm *kvm, struct kvm_mmu_page *sp)
 
 	kvm_mmu_gfn_disallow_lpage(slot, gfn);
 
-	if (kvm_mmu_slot_gfn_write_protect(kvm, slot, gfn, PG_LEVEL_4K))
+	if (kvm_mmu_gfn_write_protect(kvm, slot, gfn, PG_LEVEL_4K))
 		kvm_flush_remote_tlbs_gfn(kvm, gfn, PG_LEVEL_4K);
 }
 
@@ -1510,12 +1541,33 @@ bool kvm_mmu_slot_gfn_write_protect(struct kvm *kvm,
 	return write_protected;
 }
 
+bool kvm_mmu_gfn_write_protect(struct kvm *kvm,
+			       struct kvm_memory_slot *slot, gfn_t gfn,
+			       int min_level)
+{
+	struct kvm_memory_slot *other_slot;
+	bool write_protected;
+
+	BUILD_BUG_ON(KVM_MAX_NR_ADDRESS_SPACES > 2);
+
+	write_protected = kvm_mmu_slot_gfn_write_protect(kvm, slot, gfn, min_level);
+	if (kvm_arch_nr_memslot_as_ids(kvm) > 1) {
+		other_slot = __gfn_to_memslot(__kvm_memslots(kvm, slot->as_id ^ 1), gfn);
+		if (other_slot)
+			write_protected |= kvm_mmu_slot_gfn_write_protect(kvm,
+							     other_slot,
+							     gfn, min_level);
+	}
+
+	return write_protected;
+}
+
 static bool kvm_vcpu_write_protect_gfn(struct kvm_vcpu *vcpu, u64 gfn)
 {
 	struct kvm_memory_slot *slot;
 
 	slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
-	return kvm_mmu_slot_gfn_write_protect(vcpu->kvm, slot, gfn, PG_LEVEL_4K);
+	return kvm_mmu_gfn_write_protect(vcpu->kvm, slot, gfn, PG_LEVEL_4K);
 }
 
 static bool kvm_zap_rmap(struct kvm *kvm, struct kvm_rmap_head *rmap_head,
@@ -3396,7 +3448,6 @@ static u8 kvm_gmem_max_mapping_level(struct kvm *kvm, struct kvm_page_fault *fau
 int kvm_mmu_max_mapping_level(struct kvm *kvm, struct kvm_page_fault *fault,
 			      const struct kvm_memory_slot *slot, gfn_t gfn)
 {
-	struct kvm_lpage_info *linfo;
 	int host_level, max_level;
 	bool is_private;
 
@@ -3412,8 +3463,8 @@ int kvm_mmu_max_mapping_level(struct kvm *kvm, struct kvm_page_fault *fault,
 
 	max_level = min(max_level, max_huge_page_level);
 	for ( ; max_level > PG_LEVEL_4K; max_level--) {
-		linfo = lpage_info_slot(gfn, slot, max_level);
-		if (!linfo->disallow_lpage)
+		if (kvm_gfn_is_lpage_allowed_for_mapping(kvm, slot, gfn,
+							 max_level))
 			break;
 	}
 

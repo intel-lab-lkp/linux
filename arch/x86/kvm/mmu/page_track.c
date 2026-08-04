@@ -106,7 +106,7 @@ void __kvm_write_track_add_gfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 	 */
 	kvm_mmu_gfn_disallow_lpage(slot, gfn);
 
-	if (kvm_mmu_slot_gfn_write_protect(kvm, slot, gfn, PG_LEVEL_4K))
+	if (kvm_mmu_gfn_write_protect(kvm, slot, gfn, PG_LEVEL_4K))
 		kvm_flush_remote_tlbs(kvm);
 }
 

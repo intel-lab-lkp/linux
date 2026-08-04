@@ -274,6 +274,17 @@ static inline bool kvm_memslots_have_rmaps(struct kvm *kvm)
 	return !tdp_mmu_enabled || kvm_shadow_root_allocated(kvm);
 }
 
+/*
+ * The upper bits of disallow_lpage describe restrictions that are intrinsic
+ * to the memslot or its memory attributes.  The lower bits refcount dynamic
+ * restrictions, e.g. shadowed or externally write-tracked GFNs.
+ */
+#define KVM_LPAGE_MIXED_FLAG		BIT(31)
+#define KVM_LPAGE_SLOT_DISALLOW_FLAG	BIT(30)
+#define KVM_LPAGE_DISALLOW_FLAGS	(KVM_LPAGE_MIXED_FLAG | \
+					 KVM_LPAGE_SLOT_DISALLOW_FLAG)
+#define KVM_LPAGE_DYNAMIC_DISALLOW_MASK	GENMASK(29, 0)
+
 static inline gfn_t gfn_to_index(gfn_t gfn, gfn_t base_gfn, int level)
 {
 	/* KVM_HPAGE_GFN_SHIFT(PG_LEVEL_4K) must be 0. */
