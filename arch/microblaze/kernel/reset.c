@@ -27,6 +27,7 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
+	do_kernel_power_off();
 	pr_notice("Machine power off...\n");
 	while (1)
 		;
