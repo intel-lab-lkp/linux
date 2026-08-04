@@ -63,8 +63,10 @@ void nf_dup_netdev_egress(const struct nft_pktinfo *pkt, int oif)
 		return;
 
 	skb = skb_clone(pkt->skb, GFP_ATOMIC);
-	if (skb)
+	if (skb) {
+		skb_scrub_packet(skb, false);
 		nf_do_netdev_egress(skb, dev, nft_hook(pkt));
+	}
 }
 EXPORT_SYMBOL_GPL(nf_dup_netdev_egress);
 
