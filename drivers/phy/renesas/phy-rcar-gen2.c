@@ -390,7 +390,7 @@ static int rcar_gen2_phy_probe(struct platform_device *pdev)
 		error = of_property_read_u32(np, "reg", &channel_num);
 		if (error || channel_num >= data->num_channels) {
 			dev_err(dev, "Invalid \"reg\" property\n");
-			return error;
+			return error ?: -EINVAL;
 		}
 		channel->select_mask = select_mask[channel_num];
 
