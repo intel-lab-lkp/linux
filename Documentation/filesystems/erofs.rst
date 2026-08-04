@@ -139,6 +139,9 @@ inode_share            Enable inode page sharing for this filesystem.  Inodes wi
                        page cache.
 source=%s              (For file-backed mounts) Specify the backing image as a path
                        or as an already-opened file descriptor.
+superblock_share       (For file-backed mounts) Share the superblock when the same
+                       backing file is mounted more than once with compatible
+                       options.  Remount is not allowed on shared superblocks.
 ===================    =========================================================
 
 File-backed mounts
@@ -155,6 +158,11 @@ source.
 Only regular files are accepted as backing files; to mount an image that
 resides on a block device, use the traditional block device mount path
 instead.
+
+When superblock_share is specified and the same backing file (identified
+by inode and fsoffset) is mounted more than once with compatible mount
+options, the kernel reuses the existing superblock instead of creating a
+new one.  Remount is not allowed on shared superblocks.
 
 Sysfs Entries
 =============
