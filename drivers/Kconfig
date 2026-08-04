@@ -73,6 +73,8 @@ source "drivers/i3c/Kconfig"
 
 source "drivers/spi/Kconfig"
 
+source "drivers/espi/Kconfig"
+
 source "drivers/spmi/Kconfig"
 
 source "drivers/hsi/Kconfig"
