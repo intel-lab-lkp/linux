@@ -167,6 +167,14 @@ static void panthor_device_free_page(struct drm_device *ddev, void *data)
 	__free_page(data);
 }
 
+static void panthor_device_flush_cleanup_wq(struct drm_device *ddev, void *data)
+{
+	/* Make sure works queued to panthor_cleanup_wq are executed
+	 * before the device is destroyed.
+	 */
+	flush_workqueue(panthor_cleanup_wq);
+}
+
 int panthor_device_init(struct panthor_device *ptdev)
 {
 	u32 *dummy_page_virt;
@@ -217,6 +225,10 @@ int panthor_device_init(struct panthor_device *ptdev)
 		return -ENOMEM;
 
 	ret = drmm_add_action_or_reset(&ptdev->base, panthor_device_reset_cleanup, NULL);
+	if (ret)
+		return ret;
+
+	ret = drmm_add_action(&ptdev->base, panthor_device_flush_cleanup_wq, NULL);
 	if (ret)
 		return ret;
 
