@@ -2966,9 +2966,31 @@ void sev_vm_destroy(struct kvm *kvm)
 	 * Note, mirror VMs don't support registering encrypted regions.
 	 */
 	if (is_mirroring_enc_context(kvm)) {
-		struct kvm *owner_kvm = sev->enc_context_owner;
+		struct kvm *owner_kvm;
 
-		mutex_lock(&owner_kvm->lock);
+		/*
+		 * sev_migrate_from() can transfer this mirror's reference to a
+		 * new owner while holding the current owner's lock.  Take the
+		 * owner's lock and re-check enc_context_owner: if it changed,
+		 * the migration already moved the mirror entry and the reference
+		 * to the new owner, so retry with the new owner.  The owner
+		 * cannot be freed while this mirror holds a reference to it, or
+		 * while a migration that takes the reference over holds the
+		 * owner's file reference.
+		 */
+		for (;;) {
+			owner_kvm = READ_ONCE(sev->enc_context_owner);
+
+			/* Defensive; mirrors always hold an owner. */
+			if (!owner_kvm)
+				return;
+
+			mutex_lock(&owner_kvm->lock);
+			if (READ_ONCE(sev->enc_context_owner) == owner_kvm)
+				break;
+			mutex_unlock(&owner_kvm->lock);
+		}
+
 		list_del(&sev->mirror_entry);
 		mutex_unlock(&owner_kvm->lock);
 		kvm_put_kvm(owner_kvm);
