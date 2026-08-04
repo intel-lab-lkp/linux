@@ -6863,7 +6863,17 @@ int btrfs_create_new_inode(struct btrfs_trans_handle *trans,
 	} else {
 		ret = btrfs_add_link(trans, BTRFS_I(dir), BTRFS_I(inode), name,
 				     false, BTRFS_I(inode)->dir_index);
-		if (unlikely(ret)) {
+		if (ret == -ENOMEM) {
+			clear_nlink(inode);
+			/*
+			 * btrfs_orphan_add() aborts the transaction itself if it
+			 * fails, so only override ret to -ENOMEM on success.
+			 */
+			ret = btrfs_orphan_add(trans, BTRFS_I(inode));
+			if (!ret)
+				ret = -ENOMEM;
+			goto discard;
+		} else if (unlikely(ret)) {
 			btrfs_abort_transaction(trans, ret);
 			goto discard;
 		}
@@ -6925,7 +6935,7 @@ int btrfs_add_link(struct btrfs_trans_handle *trans,
 
 	ret = btrfs_insert_dir_item(trans, name, parent_inode, &key,
 				    btrfs_inode_type(inode), index, NULL);
-	if (ret == -EEXIST || ret == -EOVERFLOW)
+	if (ret == -EEXIST || ret == -EOVERFLOW || ret == -ENOMEM)
 		goto fail_dir_item;
 	else if (unlikely(ret)) {
 		btrfs_abort_transaction(trans, ret);
