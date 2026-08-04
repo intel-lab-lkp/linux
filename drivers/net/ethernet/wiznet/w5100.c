@@ -22,6 +22,7 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/gpio/consumer.h>
 
 #include "w5100.h"
 
@@ -154,6 +155,8 @@ struct w5100_priv {
 	u16 s0_rx_buf_size;
 
 	int irq;
+	int link_irq;
+	struct gpio_desc *link_gpio;
 
 	struct napi_struct napi;
 	struct net_device *ndev;
@@ -414,6 +417,16 @@ static void w5100_get_drvinfo(struct net_device *ndev,
 		sizeof(info->bus_info));
 }
 
+static u32 w5100_get_link(struct net_device *ndev)
+{
+	struct w5100_priv *priv = netdev_priv(ndev);
+
+	if (priv->link_gpio)
+		return !!gpiod_get_value_cansleep(priv->link_gpio);
+
+	return 1;
+}
+
 static u32 w5100_get_msglevel(struct net_device *ndev)
 {
 	struct w5100_priv *priv = netdev_priv(ndev);
@@ -616,6 +629,24 @@ static irqreturn_t w5100_interrupt(int irq, void *ndev_instance)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t w5100_detect_link(int irq, void *ndev_instance)
+{
+	struct net_device *ndev = ndev_instance;
+	struct w5100_priv *priv = netdev_priv(ndev);
+
+	if (netif_running(ndev)) {
+		if (gpiod_get_value(priv->link_gpio) != 0) {
+			netif_info(priv, link, ndev, "link is up\n");
+			netif_carrier_on(ndev);
+		} else {
+			netif_info(priv, link, ndev, "link is down\n");
+			netif_carrier_off(ndev);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
 static void w5100_setrx_work(struct work_struct *work)
 {
 	struct w5100_priv *priv = container_of(work, struct w5100_priv,
@@ -659,6 +690,14 @@ static int w5100_open(struct net_device *ndev)
 	w5100_hw_start(priv);
 	napi_enable(&priv->napi);
 	netif_start_queue(ndev);
+
+	if (priv->link_gpio) {
+		if (gpiod_get_value_cansleep(priv->link_gpio) != 0)
+			netif_carrier_on(ndev);
+		else
+			netif_carrier_off(ndev);
+	}
+
 	return 0;
 }
 
@@ -678,6 +717,7 @@ static const struct ethtool_ops w5100_ethtool_ops = {
 	.get_drvinfo		= w5100_get_drvinfo,
 	.get_msglevel		= w5100_get_msglevel,
 	.set_msglevel		= w5100_set_msglevel,
+	.get_link		= w5100_get_link,
 	.get_regs_len		= w5100_get_regs_len,
 	.get_regs		= w5100_get_regs,
 };
@@ -751,6 +791,13 @@ int w5100_probe(struct device *dev, const struct w5100_ops *ops,
 	priv->ndev = ndev;
 	priv->ops = ops;
 	priv->irq = irq;
+	priv->link_gpio = gpiod_get_optional(dev, "link", GPIOD_IN);
+	if (IS_ERR(priv->link_gpio)) {
+		err = dev_err_probe(dev, PTR_ERR(priv->link_gpio),
+				    "failed to get link GPIO\n");
+		priv->link_gpio = NULL;
+		goto err_register;
+	}
 
 	ndev->netdev_ops = &w5100_netdev_ops;
 	ndev->ethtool_ops = &w5100_ethtool_ops;
@@ -803,13 +850,40 @@ int w5100_probe(struct device *dev, const struct w5100_ops *ops,
 	if (err)
 		goto err_hw;
 
+	if (priv->link_gpio) {
+		char *link_name = devm_kasprintf(dev, GFP_KERNEL, "%s-link",
+						 dev_name(dev));
+		if (!link_name) {
+			err = -ENOMEM;
+			goto err_gpio;
+		}
+
+		priv->link_irq = gpiod_to_irq(priv->link_gpio);
+		if (priv->link_irq < 0) {
+			err = priv->link_irq;
+			goto err_gpio;
+		}
+
+		err = request_any_context_irq(priv->link_irq, w5100_detect_link,
+					      IRQF_TRIGGER_RISING |
+						      IRQF_TRIGGER_FALLING,
+					      link_name, priv->ndev);
+		if (err < 0)
+			goto err_gpio;
+	}
+
 	return 0;
 
+err_gpio:
+	free_irq(priv->irq, ndev);
 err_hw:
 	destroy_workqueue(priv->xfer_wq);
 err_wq:
 	unregister_netdev(ndev);
 err_register:
+	if (priv->link_gpio)
+		gpiod_put(priv->link_gpio);
+
 	free_netdev(ndev);
 	return err;
 }
@@ -822,6 +896,10 @@ void w5100_remove(struct device *dev)
 
 	w5100_hw_reset(priv);
 	free_irq(priv->irq, ndev);
+	if (priv->link_gpio) {
+		free_irq(priv->link_irq, ndev);
+		gpiod_put(priv->link_gpio);
+	}
 
 	flush_work(&priv->setrx_work);
 	flush_work(&priv->restart_work);
@@ -840,6 +918,7 @@ static int w5100_suspend(struct device *dev)
 
 	if (netif_running(ndev)) {
 		netif_carrier_off(ndev);
+
 		netif_device_detach(ndev);
 
 		w5100_hw_close(priv);
@@ -857,7 +936,12 @@ static int w5100_resume(struct device *dev)
 		w5100_hw_start(priv);
 
 		netif_device_attach(ndev);
+
+		if (!priv->link_gpio ||
+		    gpiod_get_value_cansleep(priv->link_gpio) != 0)
+			netif_carrier_on(ndev);
 	}
+
 	return 0;
 }
 #endif /* CONFIG_PM_SLEEP */

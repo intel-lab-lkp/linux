@@ -25,6 +25,7 @@ Optional properties:
   According to the w5500 datasheet, the chip allows a maximum of 80 MHz, however,
   board designs may need to limit this value.
 - local-mac-address: See ethernet.txt in the same directory.
+- link-gpios: a GPIO line used for the link detection interrupt
 
 
 Example (for Raspberry Pi with pin control stuff for GPIO irq):
@@ -38,13 +39,14 @@ Example (for Raspberry Pi with pin control stuff for GPIO irq):
 		interrupt-parent = <&gpio>;
 		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
 		spi-max-frequency = <30000000>;
+		link-gpios = <&gpio 4 GPIO_ACTIVE_HIGH>;
 	};
 };
 
 &gpio {
 	eth1_pins: eth1_pins {
-		brcm,pins = <25>;
-		brcm,function = <0>; /* in */
-		brcm,pull = <0>; /* none */
+		brcm,pins = <25 4>;
+		brcm,function = <0 0>; /* in */
+		brcm,pull = <0 0>; /* none */
 	};
 };
