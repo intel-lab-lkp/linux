@@ -1,0 +1,126 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/*
+ * AMD eSPI Controller Driver - internal definitions
+ * Copyright (c) 2026, Advanced Micro Devices, Inc.
+ */
+#ifndef _ESPI_AMD_H_
+#define _ESPI_AMD_H_
+
+#include <linux/bits.h>
+#include <linux/types.h>
+
+#define AMD_ESPI_DN_TXHDR_REG0			0x00
+#define AMD_ESPI_DN_TXHDR_REG1			0x04
+#define AMD_ESPI_DN_TXHDR_REG2			0x08
+#define AMD_ESPI_DN_TXDATA_REG0			0x0C
+#define AMD_ESPI_MASTER_CAP_REG			0x2C
+#define AMD_ESPI_GLOBAL_CNTRL_REG0		0x30
+#define AMD_ESPI_GLOBAL_CNTRL_REG1		0x34
+#define AMD_ESPI_SLAVE0_CONFIG_REG		0x68
+#define AMD_ESPI_SLAVE0_INT_EN_REG		0x6C
+#define AMD_ESPI_SLAVE0_INT_STS_REG		0x70
+#define AMD_ESPI_SLAVE0_RX_VW_REG		0x9C
+#define AMD_ESPI_SLAVE0_VW_MISC_CNTRL_REG	0xA8
+
+/*
+ * SLAVE0_CONFIG (0x68) host-side link fields. The negotiated bus clock and
+ * I/O mode use AMD's own encoding (clock 000=16.6/001=33/010=66 MHz).
+ */
+#define AMD_ESPI_SLAVE0_CFG_CLK_FREQ		GENMASK(27, 25)
+#define AMD_ESPI_SLAVE0_CFG_IO_MODE		GENMASK(29, 28)
+#define AMD_ESPI_SLAVE0_CFG_ALERT_MODE		BIT(30)
+#define AMD_ESPI_SLAVE0_CFG_CRC_EN		BIT(31)
+#define AMD_ESPI_SLAVE0_CLK_FREQ_16MHZ		0x0
+#define AMD_ESPI_SLAVE0_CLK_FREQ_33MHZ		0x1
+#define AMD_ESPI_SLAVE0_CLK_FREQ_66MHZ		0x2
+#define AMD_ESPI_SLAVE0_IO_MODE_SINGLE		0x0
+#define AMD_ESPI_SLAVE0_IO_MODE_DUAL		0x1
+#define AMD_ESPI_SLAVE0_IO_MODE_QUAD		0x2
+
+/* GLOBAL_CNTRL_REG0 (0x30) */
+#define AMD_ESPI_GLOBAL0_WDG_EN			BIT(0)
+#define AMD_ESPI_GLOBAL0_WAIT_CHK_EN		BIT(1)
+#define AMD_ESPI_GLOBAL0_WAIT_STATE		GENMASK(29, 23)
+#define AMD_ESPI_WAIT_STATE_CNT			0x3f
+
+/* GLOBAL_CNTRL_REG1 (0x34) */
+#define AMD_ESPI_ERR_INT_MAP			GENMASK(12, 8)
+#define AMD_ESPI_RGCMD_INT_MAP			GENMASK(17, 13)
+#define AMD_ESPI_INT_MAP_SMI			0x1f
+#define AMD_ESPI_BUS_MASTER_EN			BIT(1)
+#define AMD_ESPI_VW_REQ_EN			BIT(21)
+
+/* SLAVE0_INT_EN (0x6C): error [19:0] and register-command [31:24] enables */
+#define AMD_ESPI_ALL_ERR_INT			GENMASK(19, 0)
+#define AMD_ESPI_REG_CMD_INT			GENMASK(31, 24)
+
+/* SLAVE0_RX_VW_REG (0x9C): clears stale VW status [31:8], preserves IRQ [7:0]. */
+#define AMD_ESPI_SLAVE0_RX_VW_INIT_MASK		0xffff6f00
+
+/*
+ * DN_TXHDR_REG0 fields. The 16-bit target register address occupies
+ * [23:8]; the eSPI wire order places the address MSB first, so the high
+ * byte goes in HDATA0 [15:8] and the low byte in HDATA1 [23:16].
+ */
+#define AMD_ESPI_TXHDR0_CMD_TYPE		GENMASK(2, 0)
+#define AMD_ESPI_TXHDR0_CMD_STATUS		BIT(3)
+#define AMD_ESPI_TXHDR0_HDATA0			GENMASK(15, 8)
+#define AMD_ESPI_TXHDR0_HDATA1			GENMASK(23, 16)
+
+/* SLAVE0_INT_STS (0x70) status and interrupt bits */
+#define AMD_ESPI_BUS_ERR_INT			BIT(0)
+#define AMD_ESPI_WAIT_TIMEOUT_INT		BIT(1)
+#define AMD_ESPI_CRC_ERR_INT			BIT(2)
+#define AMD_ESPI_NO_RESP_INT			BIT(4)
+#define AMD_ESPI_FATAL_ERR_INT			BIT(5)
+#define AMD_ESPI_NON_FATAL_ERR_INT		BIT(6)
+#define AMD_ESPI_INVALID_RESP_CODE_INT		BIT(7)
+#define AMD_ESPI_INVALID_CYCLE_TYPE_INT		BIT(8)
+#define AMD_ESPI_UNSUCCESS_CPL_RECV_INT		BIT(9)
+#define AMD_ESPI_ILLEGAL_RESP_TAG_INT		BIT(10)
+#define AMD_ESPI_ILLEGAL_RESP_LEN_INT		BIT(11)
+#define AMD_ESPI_RX_OOB_OVERFLOW_INT		BIT(12)
+#define AMD_ESPI_RX_PC_MSG_OVERFLOW_INT		BIT(13)
+#define AMD_ESPI_RX_FLASH_MSG_OVERFLOW_INT	BIT(14)
+#define AMD_ESPI_PROTOCOL_ERR_INT		BIT(15)
+#define AMD_ESPI_DNCMD_INT			BIT(28)
+#define AMD_ESPI_INTR_MASK			GENMASK(31, 0)
+
+#define AMD_ESPI_ERR_INT_MASK	\
+	(AMD_ESPI_BUS_ERR_INT | AMD_ESPI_WAIT_TIMEOUT_INT | \
+	 AMD_ESPI_CRC_ERR_INT | AMD_ESPI_NO_RESP_INT | \
+	 AMD_ESPI_FATAL_ERR_INT | AMD_ESPI_NON_FATAL_ERR_INT | \
+	 AMD_ESPI_INVALID_RESP_CODE_INT | AMD_ESPI_INVALID_CYCLE_TYPE_INT | \
+	 AMD_ESPI_UNSUCCESS_CPL_RECV_INT | AMD_ESPI_ILLEGAL_RESP_TAG_INT | \
+	 AMD_ESPI_ILLEGAL_RESP_LEN_INT | AMD_ESPI_RX_OOB_OVERFLOW_INT | \
+	 AMD_ESPI_RX_PC_MSG_OVERFLOW_INT | AMD_ESPI_RX_FLASH_MSG_OVERFLOW_INT | \
+	 AMD_ESPI_PROTOCOL_ERR_INT)
+
+#define AMD_ESPI_MSG_DELAY_MIN_US		50
+#define AMD_ESPI_RESP_MAX_TIMEOUT_US		200000	/* 200 ms */
+
+#define AMD_ESPI_CAP_FLASH_SUPPORT		BIT(0)
+#define AMD_ESPI_CAP_OOB_SUPPORT		BIT(1)
+#define AMD_ESPI_CAP_VW_SUPPORT			BIT(2)
+#define AMD_ESPI_CAP_PR_SUPPORT			BIT(3)
+#define AMD_ESPI_CAP_FLASH_MAX_SIZE		GENMASK(9, 7)
+#define AMD_ESPI_CAP_OOB_MAX_SIZE		GENMASK(12, 10)
+#define AMD_ESPI_CAP_VW_MAX_SIZE		GENMASK(18, 13)
+#define AMD_ESPI_CAP_PR_MAX_SIZE		GENMASK(21, 19)
+#define AMD_ESPI_CAP_SLAVE_NUM			GENMASK(24, 22)
+#define AMD_ESPI_CAP_CLK_FREQ			GENMASK(27, 25)
+#define AMD_ESPI_CAP_IO_MODE			GENMASK(29, 28)
+#define AMD_ESPI_CAP_ALERT_MODE			BIT(30)
+#define AMD_ESPI_CAP_CRC_CHECK			BIT(31)
+
+enum amd_espi_versions {
+	AMD_ESPI_V1 = 1,
+};
+
+struct amd_espi_data {
+	void __iomem *base;
+	struct device *dev;
+	enum amd_espi_versions version;
+};
+
+#endif /* _ESPI_AMD_H_ */
