@@ -725,6 +725,8 @@ static void request_wait_answer(struct fuse_req *req)
 
 		if (req->args->abort_on_kill) {
 			fuse_chan_abort(fch, false);
+			wait_event(req->waitq,
+				   test_bit(FR_FINISHED, &req->flags));
 			return;
 		}
 
