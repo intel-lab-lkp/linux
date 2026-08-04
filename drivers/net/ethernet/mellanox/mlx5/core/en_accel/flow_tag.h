@@ -14,14 +14,16 @@
  *   [23:21] = protocol ID (3 bits):
  *              0 = none (default)
  *              1 = IPsec
+ *              2 = MACsec
  *              3 = PSP (HW decrypted, PSP header present)
- *              2,4-7 = reserved
+ *              4-7 = reserved
  *   [20:16] = reserved
  *   [15:0]  = used by other subsystems (e.g. TC).
  */
 #define MLX5E_ACCEL_FLOW_TAG_PROTO_MASK		GENMASK(23, 21)
 #define MLX5E_ACCEL_FLOW_TAG_PROTO_NONE		(0 << 21)
 #define MLX5E_ACCEL_FLOW_TAG_PROTO_IPSEC	(1 << 21)
+#define MLX5E_ACCEL_FLOW_TAG_PROTO_MACSEC	(2 << 21)
 #define MLX5E_ACCEL_FLOW_TAG_PROTO_PSP		(3 << 21)
 
 static inline u32 mlx5e_accel_flow_tag(struct mlx5_cqe64 *cqe)
