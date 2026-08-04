@@ -13,6 +13,7 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "test_util.h"
+#include "vgic.h"
 #include <linux/bitfield.h>
 
 enum ftr_type {
@@ -803,6 +804,93 @@ static void test_reset_preserves_id_regs(struct kvm_vcpu *vcpu)
 	ksft_test_result_pass("%s\n", __func__);
 }
 
+/*
+ * ID registers must stay immutable even when a vCPU's first KVM_RUN fails
+ * after finalization but before KVM_ARCH_FLAG_HAS_RAN_ONCE is set.
+ */
+static void test_idreg_frozen_after_failed_run(void)
+{
+	u64 reg = 0, val = 0, new_val = 0;
+	struct kvm_vcpu_init init;
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	bool found = false;
+	int r;
+
+	if (!kvm_has_cap(KVM_CAP_ARM_PMU_V3)) {
+		ksft_test_result_skip("%s (PMUv3 unsupported)\n", __func__);
+		return;
+	}
+
+	/*
+	 * Fail the first run after finalization: a PMUv3 vCPU left without PMU
+	 * init is rejected by kvm_arm_pmu_v3_enable(). Skip the default vGIC so
+	 * the KVM_CREATE_DEVICE gate can also be exercised.
+	 */
+	test_disable_default_vgic();
+
+	vm = vm_create(1);
+	kvm_get_default_vcpu_target(vm, &init);
+	init.features[0] |= (1 << KVM_ARM_VCPU_PMU_V3);
+	vcpu = aarch64_vcpu_add(vm, 0, &init, guest_code);
+	kvm_arch_vm_finalize_vcpus(vm);
+
+	r = _vcpu_run(vcpu);
+	TEST_ASSERT(r < 0 && errno == EINVAL,
+		    "first KVM_RUN should fail post-finalization: r=%d errno=%d",
+		    r, errno);
+
+	/* Pick a field whose lower value would be accepted before finalization. */
+	for (int i = 0; i < ARRAY_SIZE(test_regs) && !found; i++) {
+		const struct reg_ftr_bits *ftr_bits = test_regs[i].ftr_bits;
+
+		reg = KVM_ARM64_SYS_REG(test_regs[i].reg);
+		val = vcpu_get_reg(vcpu, reg);
+
+		for (int j = 0; ftr_bits[j].type != FTR_END; j++) {
+			u64 ftr = (val & ftr_bits[j].mask) >> ftr_bits[j].shift;
+			u64 safe = get_safe_value(&ftr_bits[j], ftr);
+
+			/* Skip fields KVM re-derives itself, e.g. the GIC field. */
+			if (ftr_bits[j].mutable || safe == ftr)
+				continue;
+
+			new_val = (val & ~ftr_bits[j].mask) |
+				  (safe << ftr_bits[j].shift);
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		ksft_test_result_skip("%s (no immutable ID reg field to test)\n",
+				      __func__);
+		kvm_vm_free(vm);
+		return;
+	}
+
+	r = __vcpu_set_reg(vcpu, reg, new_val);
+	TEST_ASSERT(r < 0 && errno == EBUSY,
+		    "ID reg write after failed first run: r=%d errno=%d",
+		    r, errno);
+	TEST_ASSERT_EQ(vcpu_get_reg(vcpu, reg), val);
+
+	/* A write matching the finalized value is still accepted. */
+	r = __vcpu_set_reg(vcpu, reg, val);
+	TEST_ASSERT(!r, "matching ID reg write should be accepted: r=%d", r);
+
+	/* Creating an in-kernel irqchip after finalization must be rejected. */
+	if (kvm_supports_vgic_v3()) {
+		r = __kvm_create_device(vm, KVM_DEV_TYPE_ARM_VGIC_V3);
+		TEST_ASSERT(r < 0 && errno == EBUSY,
+			    "vGIC creation after failed first run: r=%d errno=%d",
+			    r, errno);
+	}
+
+	kvm_vm_free(vm);
+	ksft_test_result_pass("%s\n", __func__);
+}
+
 int main(void)
 {
 	struct kvm_vcpu *vcpu;
@@ -828,7 +916,7 @@ int main(void)
 
 	ksft_print_header();
 
-	test_cnt = 3 + MPAM_IDREG_TEST + MTE_IDREG_TEST;
+	test_cnt = 4 + MPAM_IDREG_TEST + MTE_IDREG_TEST;
 	for (i = 0; i < ARRAY_SIZE(test_regs); i++)
 		for (j = 0; test_regs[i].ftr_bits[j].type != FTR_END; j++)
 			test_cnt++;
@@ -846,6 +934,8 @@ int main(void)
 	test_reset_preserves_id_regs(vcpu);
 
 	kvm_vm_free(vm);
+
+	test_idreg_frozen_after_failed_run();
 
 	ksft_finished();
 }
