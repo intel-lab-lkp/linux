@@ -5910,14 +5910,14 @@ static int virtnet_xsk_pool_enable(struct net_device *dev,
 	if (vi->hdr_len > xsk_pool_get_headroom(pool))
 		return -EINVAL;
 
+	if (qid >= vi->curr_queue_pairs)
+		return -EINVAL;
+
 	/* In big_packets mode, xdp cannot work, so there is no need to
 	 * initialize xsk of rq.
 	 */
 	if (!vi->rq[qid].page_pool)
 		return -ENOENT;
-
-	if (qid >= vi->curr_queue_pairs)
-		return -EINVAL;
 
 	sq = &vi->sq[qid];
 	rq = &vi->rq[qid];
