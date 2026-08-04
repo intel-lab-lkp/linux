@@ -158,25 +158,13 @@
 
 static inline unsigned int sio_in(struct uart_port *up, int offset)
 {
-	switch (up->iotype) {
-	default:
-		return __raw_readl(up->membase + offset);
-	case UPIO_PORT:
-		return inl(up->iobase + offset);
-	}
+	return inl(up->iobase + offset);
 }
 
 static inline void
 sio_out(struct uart_port *up, int offset, int value)
 {
-	switch (up->iotype) {
-	default:
-		__raw_writel(value, up->membase + offset);
-		break;
-	case UPIO_PORT:
-		outl(value, up->iobase + offset);
-		break;
-	}
+	outl(value, up->iobase + offset);
 }
 
 static inline void
@@ -698,57 +686,15 @@ serial_txx9_pm(struct uart_port *port, unsigned int state,
 
 static int serial_txx9_request_resource(struct uart_port *up)
 {
-	unsigned int size = TXX9_REGION_SIZE;
-	int ret = 0;
+	if (!request_region(up->iobase, TXX9_REGION_SIZE, "serial_txx9"))
+		return -EBUSY;
 
-	switch (up->iotype) {
-	default:
-		if (!up->mapbase)
-			break;
-
-		if (!request_mem_region(up->mapbase, size, "serial_txx9")) {
-			ret = -EBUSY;
-			break;
-		}
-
-		if (up->flags & UPF_IOREMAP) {
-			up->membase = ioremap(up->mapbase, size);
-			if (!up->membase) {
-				release_mem_region(up->mapbase, size);
-				ret = -ENOMEM;
-			}
-		}
-		break;
-
-	case UPIO_PORT:
-		if (!request_region(up->iobase, size, "serial_txx9"))
-			ret = -EBUSY;
-		break;
-	}
-	return ret;
+	return 0;
 }
 
 static void serial_txx9_release_resource(struct uart_port *up)
 {
-	unsigned int size = TXX9_REGION_SIZE;
-
-	switch (up->iotype) {
-	default:
-		if (!up->mapbase)
-			break;
-
-		if (up->flags & UPF_IOREMAP) {
-			iounmap(up->membase);
-			up->membase = NULL;
-		}
-
-		release_mem_region(up->mapbase, size);
-		break;
-
-	case UPIO_PORT:
-		release_region(up->iobase, size);
-		break;
-	}
+	release_region(up->iobase, TXX9_REGION_SIZE);
 }
 
 static void serial_txx9_release_port(struct uart_port *up)
@@ -983,7 +929,7 @@ static int serial_txx9_register_port(struct uart_port *port)
 		uart->membase = port->membase;
 		uart->irq      = port->irq;
 		uart->uartclk  = port->uartclk;
-		uart->iotype   = port->iotype;
+		uart->iotype   = UPIO_PORT;
 		uart->flags    = port->flags
 			| UPF_BOOT_AUTOCONF | UPF_FIXED_PORT;
 		uart->mapbase  = port->mapbase;
@@ -1081,7 +1027,6 @@ pciserial_txx9_init_one(struct pci_dev *dev, const struct pci_device_id *ent)
 	port.flags |= UPF_TXX9_HAVE_CTS_LINE;
 	port.uartclk = 66670000;
 	port.irq = dev->irq;
-	port.iotype = UPIO_PORT;
 	port.iobase = pci_resource_start(dev, 1);
 	port.dev = &dev->dev;
 	line = serial_txx9_register_port(&port);
