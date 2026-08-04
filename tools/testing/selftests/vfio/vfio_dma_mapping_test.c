@@ -138,7 +138,6 @@ TEST_F(vfio_dma_mapping_test, dma_map_unmap)
 	struct dma_region region;
 	struct iommu_mapping mapping;
 	u64 mapping_size = size;
-	u64 unmapped;
 	int rc;
 
 	region.vaddr = mmap(NULL, size, PROT_READ | PROT_WRITE, flags, -1, 0);
@@ -190,9 +189,7 @@ TEST_F(vfio_dma_mapping_test, dma_map_unmap)
 	}
 
 unmap:
-	rc = __iommu_unmap(self->iommu, &region, &unmapped);
-	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(unmapped, region.size);
+	iommu_unmap(self->iommu, &region);
 	printf("Unmapped IOVA 0x%lx\n", region.iova);
 	ASSERT_NE(0, __to_iova(self->device, region.vaddr, NULL));
 	ASSERT_NE(0, iommu_mapping_get(device_bdf, region.iova, &mapping));
@@ -260,15 +257,11 @@ FIXTURE_TEARDOWN(vfio_dma_map_limit_test)
 TEST_F(vfio_dma_map_limit_test, unmap_range)
 {
 	struct dma_region *region = &self->region;
-	u64 unmapped;
-	int rc;
 
 	iommu_map(self->iommu, region);
 	ASSERT_EQ(region->iova, to_iova(self->device, region->vaddr));
 
-	rc = __iommu_unmap(self->iommu, region, &unmapped);
-	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(unmapped, region->size);
+	iommu_unmap(self->iommu, region);
 }
 
 TEST_F(vfio_dma_map_limit_test, unmap_all)
