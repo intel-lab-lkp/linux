@@ -9707,7 +9707,8 @@ int kvm_arch_enable_virtualization_cpu(void)
 
 	local_tsc = rdtsc();
 	stable = !kvm_check_tsc_unstable();
-	list_for_each_entry(kvm, &vm_list, vm_list) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(kvm, &vm_list, vm_list) {
 		kvm_for_each_vcpu(i, vcpu, kvm) {
 			if (!stable && vcpu->cpu == smp_processor_id())
 				kvm_make_request(KVM_REQ_CLOCK_UPDATE, vcpu);
@@ -9759,7 +9760,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 	 */
 	if (backwards_tsc) {
 		u64 delta_cyc = max_tsc - local_tsc;
-		list_for_each_entry(kvm, &vm_list, vm_list) {
+		list_for_each_entry_rcu(kvm, &vm_list, vm_list) {
 			kvm->arch.backwards_tsc_observed = true;
 			kvm_for_each_vcpu(i, vcpu, kvm) {
 				vcpu->arch.tsc_offset_adjustment += delta_cyc;
@@ -9778,6 +9779,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 		}
 
 	}
+	rcu_read_unlock();
 	return 0;
 }
 

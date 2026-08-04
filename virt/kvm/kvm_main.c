@@ -1199,7 +1199,7 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 		goto out_err_no_debugfs;
 
 	mutex_lock(&kvm_lock);
-	list_add(&kvm->vm_list, &vm_list);
+	list_add_rcu(&kvm->vm_list, &vm_list);
 	mutex_unlock(&kvm_lock);
 
 	preempt_notifier_inc();
@@ -1261,8 +1261,9 @@ static void kvm_destroy_vm(struct kvm *kvm)
 	kvm_uevent_notify_change(KVM_EVENT_DESTROY_VM, kvm);
 	kvm_destroy_vm_debugfs(kvm);
 	mutex_lock(&kvm_lock);
-	list_del(&kvm->vm_list);
+	list_del_rcu(&kvm->vm_list);
 	mutex_unlock(&kvm_lock);
+	synchronize_rcu();
 	kvm_arch_pre_destroy_vm(kvm);
 
 	kvm_free_irq_routing(kvm);
