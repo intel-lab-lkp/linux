@@ -9,18 +9,15 @@ title: Active-semi ACT8945a regulator
 maintainers:
   - Paul Cercueil <paul@crapouillou.net>
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     const: active-semi,act8945a
 
   reg:
     maxItems: 1
-
-  system-power-controller:
-    description:
-      Indicates that the ACT8945a is responsible for powering OFF
-      the system.
-    type: boolean
 
   active-semi,vsel-high:
     description:
@@ -127,7 +124,7 @@ properties:
       - active-semi,chglev-gpios
       - active-semi,lbo-gpios
 
-additionalProperties: false
+unevaluatedProperties: false
 
 required:
   - reg

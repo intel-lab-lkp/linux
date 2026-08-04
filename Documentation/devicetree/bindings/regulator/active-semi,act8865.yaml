@@ -9,18 +9,15 @@ title: Active-semi ACT8865 regulator
 maintainers:
   - Paul Cercueil <paul@crapouillou.net>
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     const: active-semi,act8865
 
   reg:
     maxItems: 1
-
-  system-power-controller:
-    description:
-      Indicates that the ACT8865 is responsible for powering OFF
-      the system.
-    type: boolean
 
   active-semi,vsel-high:
     description:
@@ -79,7 +76,7 @@ properties:
           inl67-supply:
             description: Handle to the INL67 input supply
 
-additionalProperties: false
+unevaluatedProperties: false
 
 required:
   - reg

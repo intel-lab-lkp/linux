@@ -9,18 +9,15 @@ title: Active-semi ACT8600 regulator
 maintainers:
   - Paul Cercueil <paul@crapouillou.net>
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     const: active-semi,act8600
 
   reg:
     maxItems: 1
-
-  system-power-controller:
-    description:
-      Indicates that the ACT8600 is responsible for powering OFF
-      the system.
-    type: boolean
 
   active-semi,vsel-high:
     description:
@@ -75,7 +72,7 @@ properties:
           inl-supply:
             description: Handle to the INL input supply
 
-additionalProperties: false
+unevaluatedProperties: false
 
 required:
   - reg
