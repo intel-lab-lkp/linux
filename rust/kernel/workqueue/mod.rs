@@ -585,6 +585,14 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
         // the compiler does not complain that the `work` field is unused.
         unsafe { Opaque::cast_into(core::ptr::addr_of!((*ptr).work)) }
     }
+
+    /// Cancels the work item and waits for it to finish if it is running.
+    ///
+    /// Returns `true` if the work was pending, `false` otherwise.
+    pub fn cancel_work_sync(&self) -> bool {
+        // SAFETY: We have a reference to a valid, initialized Work, so the pointer is valid.
+        unsafe { bindings::cancel_work_sync(Self::raw_get(self)) }
+    }
 }
 
 /// Declares that a type contains a [`Work<T, ID>`].
