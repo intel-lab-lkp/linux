@@ -7,10 +7,10 @@
 
 #include <linux/bitfield.h>
 #include "rvu.h"
-#include "rvu_sw.h"
 #include "rvu_sw_l2.h"
 #include "rvu_sw_l3.h"
 #include "rvu_sw_fl.h"
+#include "rvu_sw.h"
 
 /*
  * rep_cnt and rep2pfvf_map are populated once when the representor driver
@@ -79,6 +79,12 @@ int rvu_mbox_handler_swdev2af_notify(struct rvu *rvu,
 		rc = rvu_sw_l2_fdb_list_entry_add(rvu, req->pcifunc, req->mac);
 		break;
 
+	case SWDEV2AF_MSG_TYPE_REFRESH_FL:
+		if (req->cnt <= 0 || req->cnt > ARRAY_SIZE(req->fl))
+			return -EINVAL;
+		rc = rvu_sw_fl_stats_sync2db(rvu, req->fl, req->cnt);
+		break;
+
 	default:
 		rc = -EOPNOTSUPP;
 		break;
@@ -91,6 +97,7 @@ void rvu_sw_shutdown(void)
 {
 	rvu_sw_l2_shutdown();
 	rvu_sw_l3_shutdown();
+	rvu_sw_fl_shutdown();
 }
 
 void rvu_sw_clear_shutdown(void)
