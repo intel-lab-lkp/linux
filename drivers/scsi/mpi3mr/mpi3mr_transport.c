@@ -588,6 +588,30 @@ static enum sas_linkrate mpi3mr_convert_phy_link_rate(u8 link_rate)
 }
 
 /**
+ * mpi3mr_sas_link_rate_valid - validate a standalone SAS link-rate code
+ * @link_rate: MPI3 standalone SAS negotiated link-rate code
+ *
+ * DevicePage0 stores one plain negotiated link-rate code. Accept only
+ * negotiated data rates supported by the SAS transport conversion code;
+ * reserved or transitional values must use the existing PHY-page path.
+ *
+ * Return: true for a supported negotiated data rate, false otherwise.
+ */
+static bool mpi3mr_sas_link_rate_valid(u8 link_rate)
+{
+	switch (link_rate) {
+	case MPI3_SAS_NEG_LINK_RATE_1_5:
+	case MPI3_SAS_NEG_LINK_RATE_3_0:
+	case MPI3_SAS_NEG_LINK_RATE_6_0:
+	case MPI3_SAS_NEG_LINK_RATE_12_0:
+	case MPI3_SAS_NEG_LINK_RATE_22_5:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/**
  * mpi3mr_delete_sas_phy - Remove a single phy from port
  * @mrioc: Adapter instance reference
  * @mr_sas_port: Internal Port object
@@ -2292,18 +2316,26 @@ void mpi3mr_expander_remove(struct mpi3mr_ioc *mrioc, u64 sas_address,
 static u8 mpi3mr_get_sas_negotiated_logical_linkrate(struct mpi3mr_ioc *mrioc,
 	struct mpi3mr_tgt_dev *tgtdev)
 {
-	u8 link_rate = MPI3_SAS_NEG_LINK_RATE_1_5, phy_number;
+	u8 cached_link_rate, link_rate = MPI3_SAS_NEG_LINK_RATE_1_5;
+	u8 phy_number;
 	struct mpi3_sas_expander_page1 expander_pg1;
 	struct mpi3_sas_phy_page0 phy_pg0;
 	u32 phynum_handle;
 	u16 ioc_status;
 
-	/* First, try to use link rate from DevicePage0 (populated by firmware) */
-	if (tgtdev->dev_spec.sas_sata_inf.negotiated_link_rate >=
-	    MPI3_SAS_NEG_LINK_RATE_1_5) {
-		link_rate = tgtdev->dev_spec.sas_sata_inf.negotiated_link_rate;
-		goto out;
-	}
+	cached_link_rate =
+		tgtdev->dev_spec.sas_sata_inf.negotiated_link_rate;
+
+	/*
+	 * For a directly attached target, DevicePage0 and the parent host PHY
+	 * describe the same link, so the standalone cached code can be used
+	 * without packed-field decoding. For an expander-attached target, the
+	 * caller updates the parent expander PHY and DevicePage0 can differ from
+	 * that local segment; retain the Expander Page 1 read in that case.
+	 */
+	if ((tgtdev->devpg0_flag & MPI3_DEVICE0_FLAGS_ATT_METHOD_DIR_ATTACHED) &&
+	    mpi3mr_sas_link_rate_valid(cached_link_rate))
+		return cached_link_rate;
 
 	/* Fallback to reading from phy pages if DevicePage0 value not available */
 	phy_number = tgtdev->dev_spec.sas_sata_inf.phy_id;
