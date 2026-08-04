@@ -1169,8 +1169,9 @@ mpi3mr_debug_dump_devpg0(struct mpi3mr_ioc *mrioc, struct mpi3_device_page0 *dev
 		struct mpi3_device0_sas_sata_format *sasinf =
 		    &dev_pg0->device_specific.sas_sata_format;
 		ioc_info(mrioc,
-		    "device_pg0: sas_sata: sas_address(0x%016llx),flags(0x%04x),\n"
-		    "device_info(0x%04x), phy_num(%d), attached_phy_id(%d),negotiated_link_rate(0x%02x)\n",
+		    "device_pg0: sas_sata: sas_address(0x%016llx), flags(0x%04x), "
+		    "device_info(0x%04x), phy_num(%d), attached_phy_id(%d), "
+		    "negotiated_link_rate(0x%02x)\n",
 		    le64_to_cpu(sasinf->sas_address),
 		    le16_to_cpu(sasinf->flags),
 		    le16_to_cpu(sasinf->device_info), sasinf->phy_num,
