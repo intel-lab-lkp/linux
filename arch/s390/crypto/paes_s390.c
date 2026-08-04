@@ -932,15 +932,63 @@ static inline unsigned int __ctrblk_init(u8 *ctrptr, u8 *iv, unsigned int nbytes
 	return n;
 }
 
+static int __ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
+			       struct s390_pctr_req_ctx *req_ctx,
+			       bool tested, bool maysleep, bool locked)
+{
+	struct skcipher_walk *walk = &req_ctx->walk;
+	struct ctr_param *param = &req_ctx->param;
+	unsigned int nbytes, n, k;
+	u8 *ctrptr;
+	int rc = 0;
+
+	/*
+	 * Note that in case of partial processing or failure the walk
+	 * is NOT unmapped here. So a follow up task may reuse the walk
+	 * or in case of unrecoverable failure needs to unmap it.
+	 */
+	while ((nbytes = walk->nbytes) >= AES_BLOCK_SIZE) {
+		n = AES_BLOCK_SIZE;
+		if (nbytes >= 2 * AES_BLOCK_SIZE && locked)
+			n = __ctrblk_init(ctrblk, walk->iv, nbytes);
+		ctrptr = (n > AES_BLOCK_SIZE) ? ctrblk : walk->iv;
+		k = cpacf_kmctr(ctx->fc, param, walk->dst.virt.addr,
+				walk->src.virt.addr, n, ctrptr);
+		if (k) {
+			if (ctrptr == ctrblk) {
+				memcpy(walk->iv, ctrptr + k - AES_BLOCK_SIZE,
+				       AES_BLOCK_SIZE);
+			}
+			crypto_inc(walk->iv, AES_BLOCK_SIZE);
+			rc = skcipher_walk_done(walk, nbytes - k);
+		}
+		if (k < n) {
+			if (!maysleep) {
+				rc = -EKEYEXPIRED;
+				goto out;
+			}
+			rc = paes_convert_key(ctx, tested);
+			if (rc)
+				goto out;
+			spin_lock_bh(&ctx->pk_lock);
+			memcpy(param->key, ctx->pk.protkey, sizeof(param->key));
+			spin_unlock_bh(&ctx->pk_lock);
+		}
+	}
+
+out:
+	return rc;
+}
+
 static int ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
 			     struct s390_pctr_req_ctx *req_ctx,
 			     bool tested, bool maysleep)
 {
-	struct ctr_param *param = &req_ctx->param;
 	struct skcipher_walk *walk = &req_ctx->walk;
-	u8 buf[AES_BLOCK_SIZE], *ctrptr;
-	unsigned int nbytes, n, k;
-	int pk_state, locked, rc = 0;
+	struct ctr_param *param = &req_ctx->param;
+	u8 buf[AES_BLOCK_SIZE];
+	int pk_state, rc = 0;
+	unsigned int nbytes;
 
 	if (!req_ctx->param_init_done) {
 		/* fetch and check protected key state */
@@ -966,49 +1014,17 @@ static int ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
 	if (rc)
 		goto out;
 
-	locked = mutex_trylock(&ctrblk_lock);
-
-	/*
-	 * Note that in case of partial processing or failure the walk
-	 * is NOT unmapped here. So a follow up task may reuse the walk
-	 * or in case of unrecoverable failure needs to unmap it.
-	 */
-	while ((nbytes = walk->nbytes) >= AES_BLOCK_SIZE) {
-		n = AES_BLOCK_SIZE;
-		if (nbytes >= 2 * AES_BLOCK_SIZE && locked)
-			n = __ctrblk_init(ctrblk, walk->iv, nbytes);
-		ctrptr = (n > AES_BLOCK_SIZE) ? ctrblk : walk->iv;
-		k = cpacf_kmctr(ctx->fc, param, walk->dst.virt.addr,
-				walk->src.virt.addr, n, ctrptr);
-		if (k) {
-			if (ctrptr == ctrblk)
-				memcpy(walk->iv, ctrptr + k - AES_BLOCK_SIZE,
-				       AES_BLOCK_SIZE);
-			crypto_inc(walk->iv, AES_BLOCK_SIZE);
-			rc = skcipher_walk_done(walk, nbytes - k);
-		}
-		if (k < n) {
-			if (!maysleep) {
-				if (locked)
-					mutex_unlock(&ctrblk_lock);
-				rc = -EKEYEXPIRED;
-				goto out;
-			}
-			rc = paes_convert_key(ctx, tested);
-			if (rc) {
-				if (locked)
-					mutex_unlock(&ctrblk_lock);
-				goto out;
-			}
-			spin_lock_bh(&ctx->pk_lock);
-			memcpy(param->key, ctx->pk.protkey, sizeof(param->key));
-			spin_unlock_bh(&ctx->pk_lock);
-		}
-	}
-	if (locked)
+	if (mutex_trylock(&ctrblk_lock)) {
+		rc = __ctr_paes_do_crypt(ctx, req_ctx, tested, maysleep, true);
 		mutex_unlock(&ctrblk_lock);
+	} else {
+		rc = __ctr_paes_do_crypt(ctx, req_ctx, tested, maysleep, false);
+	}
+	if (rc)
+		goto out;
 
 	/* final block may be < AES_BLOCK_SIZE, copy only nbytes */
+	nbytes = walk->nbytes;
 	if (nbytes) {
 		memset(buf, 0, AES_BLOCK_SIZE);
 		memcpy(buf, walk->src.virt.addr, nbytes);
