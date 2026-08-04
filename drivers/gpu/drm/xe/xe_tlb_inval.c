@@ -99,6 +99,9 @@ static void xe_tlb_inval_fence_timeout(struct work_struct *work)
 			fence->seqno, tlb_inval->seqno_recv);
 
 		timedout_seqno = fence->seqno;
+		tlb_inval->timedout_seqno = fence->seqno;
+		tlb_inval->timedout_inval_time = fence->inval_time;
+		tlb_inval->timedout_time = ktime_get();
 
 		fence->base.error = -ETIME;
 		xe_tlb_inval_fence_signal(fence);
@@ -227,6 +230,7 @@ void xe_tlb_inval_reset(struct xe_tlb_inval *tlb_inval)
 	else
 		pending_seqno = tlb_inval->seqno - 1;
 	WRITE_ONCE(tlb_inval->seqno_recv, pending_seqno);
+	tlb_inval->timedout_seqno = 0;
 
 	list_for_each_entry_safe(fence, next,
 				 &tlb_inval->pending_fences, link)
@@ -423,6 +427,18 @@ void xe_tlb_inval_done_handler(struct xe_tlb_inval *tlb_inval, int seqno)
 	}
 
 	WRITE_ONCE(tlb_inval->seqno_recv, seqno);
+
+	if (tlb_inval->timedout_seqno &&
+	    xe_tlb_inval_seqno_past(tlb_inval, tlb_inval->timedout_seqno)) {
+		ktime_t now = ktime_get();
+
+		drm_warn(&xe->drm,
+			 "TLB invalidation late ack: seqno=%d recv=%d, request-to-ack=%lldms, timeout-to-ack=%lldms",
+			 tlb_inval->timedout_seqno, seqno,
+			 ktime_ms_delta(now, tlb_inval->timedout_inval_time),
+			 ktime_ms_delta(now, tlb_inval->timedout_time));
+		tlb_inval->timedout_seqno = 0;
+	}
 
 	list_for_each_entry_safe(fence, next,
 				 &tlb_inval->pending_fences, link) {
