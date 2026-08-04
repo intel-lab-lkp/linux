@@ -1614,6 +1614,31 @@ config LOCKDEP_CHAINS_BITS
 	help
 	  Try increasing this value if you hit "BUG: MAX_LOCKDEP_CHAINS too low!" message.
 
+config LOCKDEP_CHAIN_DEPTH
+	int "Average depth for MAX_LOCKDEP_CHAIN_HLOCKS"
+	depends on LOCKDEP
+	range 3 7
+	default 5
+	help
+	  Average per-chain depth used to size the static chain_hlocks[]
+	  pool: MAX_LOCKDEP_CHAIN_HLOCKS = MAX_LOCKDEP_CHAINS *
+	  LOCKDEP_CHAIN_DEPTH.
+
+	  Workloads that build unusually deep lock chains (heavy irq/softirq
+	  nesting stacked on top of deep filesystem or scheduler call chains)
+	  can exhaust this pool and trip "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too
+	  low!" well before MAX_LOCKDEP_CHAINS itself is exhausted, silently
+	  disabling lock debugging. Increase this value if you hit that
+	  message and LOCKDEP_CHAINS_BITS increases alone don't help.
+
+	  The upper bound of 7 is not arbitrary: struct lock_chain::base is
+	  a 24-bit index into chain_hlocks[], and add_chain_cache() has
+	  BUILD_BUG_ON((1UL << 24) <= ARRAY_SIZE(chain_hlocks)). At the
+	  maximum LOCKDEP_CHAINS_BITS of 21, a depth of 8 or higher makes
+	  MAX_LOCKDEP_CHAIN_HLOCKS reach 2^24 and fails the build, so the
+	  range here is capped to stay safe for every valid
+	  LOCKDEP_CHAINS_BITS setting rather than just the default.
+
 config LOCKDEP_STACK_TRACE_BITS
 	int "Size for MAX_STACK_TRACE_ENTRIES (as Nth power of 2)"
 	depends on LOCKDEP && !LOCKDEP_SMALL
