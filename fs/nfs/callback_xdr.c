@@ -338,6 +338,17 @@ static __be32 decode_notify_add(struct xdr_stream *xdr,
 	return 0;
 }
 
+static __be32 decode_notify_rename(struct xdr_stream *xdr,
+				   struct cb_notify_rename *args)
+{
+	__be32 status;
+
+	status = decode_notify_remove(xdr, &args->nrn_old_entry);
+	if (unlikely(status != 0))
+		return status;
+	return decode_notify_add(xdr, &args->nrn_new_entry);
+}
+
 static
 __be32 decode_notify_args(struct svc_rqst *rqstp,
 			  struct xdr_stream *xdr,
@@ -389,6 +400,9 @@ __be32 decode_notify_args(struct svc_rqst *rqstp,
 			break;
 		case CB_NOTIFY4_ADD_ENTRY:
 			status = decode_notify_add(xdr, &change->notify_add);
+			break;
+		case CB_NOTIFY4_RENAME_ENTRY:
+			status = decode_notify_rename(xdr, &change->notify_rename);
 			break;
 		default:
 			goto err;

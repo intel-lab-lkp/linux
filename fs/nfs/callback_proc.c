@@ -441,6 +441,18 @@ out:
 	return 0;
 }
 
+static __be32 nfs4_cb_notify_rename(struct cb_process_state *cps,
+				    struct dentry *parent,
+				    struct cb_notify_rename *cb_rename)
+{
+	__be32 status;
+
+	status = nfs4_cb_notify_remove(cps, parent, &cb_rename->nrn_old_entry);
+	if (status != 0)
+		return status;
+	return nfs4_cb_notify_add(cps, parent, &cb_rename->nrn_new_entry);
+}
+
 __be32 nfs4_callback_notify(void *argp, void *resp,
 			    struct cb_process_state *cps)
 {
@@ -477,6 +489,10 @@ __be32 nfs4_callback_notify(void *argp, void *resp,
 		case CB_NOTIFY4_ADD_ENTRY:
 			res = nfs4_cb_notify_add(cps, parent,
 						 &change->notify_add);
+			break;
+		case CB_NOTIFY4_RENAME_ENTRY:
+			res = nfs4_cb_notify_rename(cps, parent,
+						    &change->notify_rename);
 			break;
 		default:
 			res = htonl(NFS4ERR_NOTSUPP);
