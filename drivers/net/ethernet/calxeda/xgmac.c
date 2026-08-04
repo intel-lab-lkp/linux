@@ -1830,6 +1830,9 @@ static void xgmac_remove(struct platform_device *pdev)
 	free_irq(priv->pmt_irq, ndev);
 
 	unregister_netdev(ndev);
+
+	cancel_work_sync(&priv->tx_timeout_work);
+
 	netif_napi_del(&priv->napi);
 
 	iounmap(priv->base);
