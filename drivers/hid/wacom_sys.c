@@ -2359,12 +2359,6 @@ static void wacom_set_shared_values(struct wacom_wac *wacom_wac)
 			wacom_wac->shared->is_touch_on = true;
 	}
 
-	if (wacom_wac->shared->has_mute_touch_switch &&
-	    wacom_wac->shared->touch_input) {
-		set_bit(EV_SW, wacom_wac->shared->touch_input->evbit);
-		input_set_capability(wacom_wac->shared->touch_input, EV_SW,
-				     SW_MUTE_DEVICE);
-	}
 }
 
 static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
@@ -2413,6 +2407,23 @@ static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
 	/* Retrieve the physical and logical size for touch devices */
 	wacom_retrieve_hid_descriptor(hdev, features);
 	wacom_setup_device_quirks(wacom);
+
+	if (features->type == HID_GENERIC &&
+	    (features->device_type & WACOM_DEVICETYPE_TOUCH)) {
+		if (wacom->usbdev && wacom->usbdev->actconfig &&
+		    wacom->usbdev->actconfig->desc.bNumInterfaces > 1) {
+			/*
+			 * Heuristic: Composite USB devices (like tablets with
+			 * pen/pad + touch) likely have a touch mute switch.
+			 * We flag it here to advertise the capability before
+			 * registration. We also set is_soft_touch_switch to
+			 * default touch to ON in case there is no physical
+			 * switch.
+			 */
+			wacom_wac->has_mute_touch_switch = true;
+			wacom_wac->is_soft_touch_switch = true;
+		}
+	}
 
 	if (features->device_type == WACOM_DEVICETYPE_NONE &&
 	    features->type != WIRELESS) {
