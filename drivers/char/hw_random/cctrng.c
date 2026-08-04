@@ -568,6 +568,12 @@ static void cctrng_remove(struct platform_device *pdev)
 
 	cc_trng_pm_fini(drvdata);
 
+	/* Mask RNG interrupts so cc_isr cannot schedule new work */
+	cc_iowrite(drvdata, CC_RNG_IMR_REG_OFFSET, 0xFFFFFFFF);
+
+	cancel_work_sync(&drvdata->compwork);
+	cancel_work_sync(&drvdata->startwork);
+
 	dev_info(dev, "ARM cctrng device terminated\n");
 }
 
