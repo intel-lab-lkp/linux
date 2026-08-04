@@ -225,6 +225,11 @@ resources, scheduled and executed.
   each other.  Each maintains its separate pool of workers and
   implements concurrency management among its workers.
 
+``WQ_RTPRI``
+  Real time priority workqueues must be created as unbound and have the strict
+  CPU affinity set.  Their worker threads use the FIFO scheduling policy with
+  the lowest priority.
+
 ``WQ_CPU_INTENSIVE``
   Work items of a CPU intensive wq do not contribute to the
   concurrency level.  In other words, runnable CPU intensive
