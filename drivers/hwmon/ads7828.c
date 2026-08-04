@@ -112,6 +112,7 @@ static int ads7828_probe(struct i2c_client *client)
 	unsigned int regval;
 	enum ads7828_chips chip;
 	struct regulator *reg;
+	int ret;
 
 	data = devm_kzalloc(dev, sizeof(struct ads7828_data), GFP_KERNEL);
 	if (!data)
@@ -166,8 +167,13 @@ static int ads7828_probe(struct i2c_client *client)
 	 * voltage needs to settle before getting valid ADC data. So perform a
 	 * dummy read to enable the internal reference voltage.
 	 */
-	if (!ext_vref)
-		regmap_read(data->regmap, data->cmd_byte, &regval);
+	if (!ext_vref) {
+		ret = regmap_read(data->regmap, data->cmd_byte, &regval);
+		if (ret) {
+			dev_err(dev, "dummy read failed to enable internal VREF: %d\n", ret);
+			return ret;
+		}
+	}
 
 	hwmon_dev = devm_hwmon_device_register_with_groups(dev, client->name,
 							   data,
