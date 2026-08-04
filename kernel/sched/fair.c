@@ -8186,6 +8186,56 @@ static int wake_wide(struct task_struct *p)
 }
 
 /*
+ * Decline WF_SYNC "stack on waker" wakeup when it would overload this LLC.
+ *
+ * Only decline when prev and this do not share a cache, this LLC has
+ * run out of idle headroom and prev is actually less loaded.
+ *
+ * Returns true when WF_SYNC should be declined.
+ */
+static bool sched_llc_over_commited(int this_cpu, int prev_cpu)
+{
+	struct sched_domain_shared *sds;
+	int this_busy, this_size, prev_busy, prev_size;
+	int headroom;
+
+	/* Same LLC: stacking cannot spread anywhere. */
+	if (cpus_share_cache(this_cpu, prev_cpu))
+		return false;
+
+	sds = rcu_dereference_all(per_cpu(sd_llc_shared, this_cpu));
+	if (!sds)
+		return false;
+	/* FIXME: if NO_HZ nr_busy_cpus is not updated, always accept? */
+	this_busy = atomic_read(&sds->nr_busy_cpus);
+	this_size = per_cpu(sd_llc_size, this_cpu);
+
+	/*
+	 * Decline only once the waker LLC has no spare CPU beyond the
+	 * waker's own, which is going to be replaced by this sync
+	 * wakeup (the caller already made sure that nr_running == 1).
+	 * If at least another idle CPU remains, keep stacking.
+	 */
+	headroom = 1;
+
+	if (this_size - this_busy > headroom)
+		return false;
+
+	sds = rcu_dereference_all(per_cpu(sd_llc_shared, prev_cpu));
+	if (!sds)
+		return false;
+	prev_busy = atomic_read(&sds->nr_busy_cpus);
+	prev_size = per_cpu(sd_llc_size, prev_cpu);
+
+	/*
+	 * Waker LLC is near saturation: spread only if prev is the less
+	 * busy fraction (cross multiplied to take into account different
+	 * LLC sizes).
+	 */
+	return (u64)this_busy * prev_size > (u64)prev_busy * this_size;
+}
+
+/*
  * The purpose of wake_affine() is to quickly determine on which CPU we can run
  * soonest. For the purpose of speed we only consider the waking and previous
  * CPU.
@@ -8218,7 +8268,8 @@ wake_affine_idle(int this_cpu, int prev_cpu, int sync)
 	if (sync) {
 		struct rq *rq = cpu_rq(this_cpu);
 
-		if ((rq->nr_running - cfs_h_nr_delayed(rq)) == 1)
+		if ((rq->nr_running - cfs_h_nr_delayed(rq)) == 1 &&
+		    !sched_llc_over_commited(this_cpu, prev_cpu))
 			return this_cpu;
 	}
 
@@ -8237,7 +8288,7 @@ wake_affine_weight(struct sched_domain *sd, struct task_struct *p,
 
 	this_eff_load = cpu_load(cpu_rq(this_cpu));
 
-	if (sync) {
+	if (sync && !sched_llc_over_commited(this_cpu, prev_cpu)) {
 		unsigned long current_load = task_h_load(current);
 
 		if (current_load > this_eff_load)
