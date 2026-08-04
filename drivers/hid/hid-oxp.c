@@ -1501,13 +1501,13 @@ skip_rgb:
 	drvdata.gamepad_mode = OXP_GP_MODE_XINPUT;
 	drvdata.rumble_intensity = 5;
 
-	INIT_DELAYED_WORK(&drvdata.oxp_mcu_init, oxp_mcu_init_fn);
-	mod_delayed_work(system_wq, &drvdata.oxp_mcu_init, msecs_to_jiffies(50));
-
 	ret = devm_device_add_group(&hdev->dev, &oxp_cfg_attrs_group);
 	if (ret)
 		return dev_err_probe(&hdev->dev, ret,
 				     "Failed to attach configuration attributes\n");
+
+	INIT_DELAYED_WORK(&drvdata.oxp_mcu_init, oxp_mcu_init_fn);
+	mod_delayed_work(system_wq, &drvdata.oxp_mcu_init, msecs_to_jiffies(50));
 
 	return 0;
 }
@@ -1552,9 +1552,9 @@ static int oxp_hid_probe(struct hid_device *hdev,
 
 static void oxp_hid_remove(struct hid_device *hdev)
 {
-	cancel_delayed_work(&drvdata.oxp_rgb_queue);
-	cancel_delayed_work(&drvdata.oxp_btn_queue);
-	cancel_delayed_work(&drvdata.oxp_mcu_init);
+	disable_delayed_work_sync(&drvdata.oxp_rgb_queue);
+	disable_delayed_work_sync(&drvdata.oxp_btn_queue);
+	disable_delayed_work_sync(&drvdata.oxp_mcu_init);
 	hid_hw_close(hdev);
 	hid_hw_stop(hdev);
 }
