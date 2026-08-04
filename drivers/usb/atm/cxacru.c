@@ -923,7 +923,8 @@ reschedule:
 				instance->line_status == 0) /* down */
 		instance->poll_state = CXPOLL_STOPPED;
 
-	if (instance->poll_state == CXPOLL_STOPPED)
+	if (instance->poll_state == CXPOLL_STOPPED ||
+	    instance->poll_state == CXPOLL_SHUTDOWN)
 		keep_polling = 0;
 	mutex_unlock(&instance->poll_state_serialize);
 
