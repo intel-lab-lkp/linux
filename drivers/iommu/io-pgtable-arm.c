@@ -86,6 +86,21 @@
 /* Software bit for solving coherency races */
 #define ARM_LPAE_PTE_SW_SYNC		(((arm_lpae_iopte)1) << 55)
 
+/* PTE Contiguous Bit */
+#define ARM_LPAE_PTE_CONT		(((arm_lpae_iopte)1) << 52)
+
+/*
+ * Contiguous hint group sizes per granule:
+ *
+ *------------------------------------------------------------------
+ *| Page Size | CONT PTE |  Block  | CONT Block | L1 Block | CONT L1 |
+ *------------------------------------------------------------------
+ *|     4K    |   64K    |   2M    |    32M     |    1G    |   16G   |
+ *|    16K    |    2M    |  32M    |     1G     |          |         |
+ *|    64K    |    2M    | 512M    |    16G     |          |         |
+ *------------------------------------------------------------------
+ */
+
 /* Stage-1 PTE */
 #define ARM_LPAE_PTE_AP_UNPRIV		(((arm_lpae_iopte)1) << 6)
 #define ARM_LPAE_PTE_AP_RDONLY_BIT	7
@@ -453,6 +468,137 @@ static arm_lpae_iopte arm_lpae_install_table(arm_lpae_iopte *table,
 	return old;
 }
 
+static int arm_lpae_num_cont(size_t size)
+{
+	switch (size) {
+	case SZ_4K:
+	case SZ_2M:
+	case SZ_1G:
+		return 16;
+	case SZ_64K:
+	case SZ_32M:
+	case SZ_512M:
+		return 32;
+	case SZ_16K:
+		return 128;
+	default:
+		return 1;
+	}
+}
+
+/*
+ * A group is only usable if its span fits within both the configured
+ * ias and oas. Otherwise no aligned iova/paddr pair for a full group
+ * can exist, and advertising the size would let callers pick a
+ * mapping that unconditionally fails.
+ */
+static bool arm_lpae_cont_size_fits(struct io_pgtable_cfg *cfg, unsigned long size)
+{
+	int size_bits = ilog2(size);
+
+	return size_bits <= cfg->ias && size_bits <= cfg->oas;
+}
+
+static unsigned long arm_lpae_get_cont_sizes(struct io_pgtable_cfg *cfg)
+{
+	unsigned long pg_size, blk_size, l1_blk_size, cont_sizes = 0;
+	unsigned long cont_leaf_size, cont_blk_size, cont_l1_blk_size;
+	int pg_shift, bits_per_level;
+
+	if (!cfg->pgsize_bitmap || (cfg->quirks & IO_PGTABLE_QUIRK_ARM_NO_CONT_HINT))
+		return 0;
+
+	pg_shift = __ffs(cfg->pgsize_bitmap);
+	bits_per_level = pg_shift - ilog2(sizeof(arm_lpae_iopte));
+	pg_size = 1UL << pg_shift;
+	blk_size = pg_size << bits_per_level;
+	l1_blk_size = blk_size << bits_per_level;
+
+	cont_leaf_size = arm_lpae_num_cont(pg_size) * pg_size;
+	if ((cfg->pgsize_bitmap & pg_size) &&
+	    arm_lpae_cont_size_fits(cfg, cont_leaf_size))
+		cont_sizes |= cont_leaf_size;
+
+	if (cfg->pgsize_bitmap & blk_size) {
+		cont_blk_size = arm_lpae_num_cont(blk_size) * blk_size;
+		if (arm_lpae_cont_size_fits(cfg, cont_blk_size))
+			cont_sizes |= cont_blk_size;
+	}
+
+	/*
+	 * l1_blk_size is only set in pgsize_bitmap if level-1 blocks are
+	 * supported for this granule (not 16K/64K, per
+	 * arm_lpae_restrict_pgsizes()), so no extra gating is needed here.
+	 */
+	if (cfg->pgsize_bitmap & l1_blk_size) {
+		cont_l1_blk_size = arm_lpae_num_cont(l1_blk_size) * l1_blk_size;
+		if (arm_lpae_cont_size_fits(cfg, cont_l1_blk_size))
+			cont_sizes |= cont_l1_blk_size;
+	}
+
+	return cont_sizes;
+}
+
+/*
+ * Install num_entries leaf entries starting at ptep (index map_idx_start
+ * within the current table), tagging arm_lpae_num_cont()-sized groups with
+ * the contiguous hint where both idx and paddr are aligned to the group
+ * size. Entries in a misaligned group are installed without the hint.
+ *
+ * idx and paddr both advance by block_size per entry, so their alignment
+ * relative to the group size is invariant across a run of entries within
+ * this call: once a group qualifies (or fails to), every later whole group
+ * does too, up to num_entries. This merges each such run into a single
+ * arm_lpae_init_pte() call instead of one call per group.
+ */
+static int arm_lpae_install_leaf(struct arm_lpae_io_pgtable *data,
+				 unsigned long iova, phys_addr_t paddr,
+				 arm_lpae_iopte prot, int lvl,
+				 int map_idx_start, int num_entries, int num_cont,
+				 arm_lpae_iopte *ptep, size_t *mapped)
+{
+	size_t block_size = ARM_LPAE_BLOCK_SIZE(lvl, data);
+	size_t cont_size = num_cont * block_size;
+	int done = 0;
+
+	while (done < num_entries) {
+		int idx = map_idx_start + done;
+		int remaining = num_entries - done;
+		int off = idx % num_cont;
+		arm_lpae_iopte pte = prot;
+		int chunk, ret;
+
+		if (off) {
+			/* Misaligned prefix: advance to the next boundary */
+			chunk = min_t(int, num_cont - off, remaining);
+		} else if (remaining >= num_cont && IS_ALIGNED(paddr, cont_size)) {
+			/* Aligned: merge every full group in this run */
+			chunk = remaining - remaining % num_cont;
+			pte |= ARM_LPAE_PTE_CONT;
+		} else {
+			/*
+			 * Aligned idx but paddr doesn't line up with cont_size,
+			 * or too short for a full group. That holds for the
+			 * rest of this call too, so install the remainder
+			 * plain in one go.
+			 */
+			chunk = remaining;
+		}
+
+		ret = arm_lpae_init_pte(data, iova, paddr, pte, lvl, chunk, ptep);
+		if (ret)
+			return ret;
+
+		*mapped += chunk * block_size;
+		ptep += chunk;
+		iova += chunk * block_size;
+		paddr += chunk * block_size;
+		done += chunk;
+	}
+
+	return 0;
+}
+
 static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 			  phys_addr_t paddr, size_t size, size_t pgcount,
 			  arm_lpae_iopte prot, int lvl, arm_lpae_iopte *ptep,
@@ -462,21 +608,44 @@ static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 	size_t block_size = ARM_LPAE_BLOCK_SIZE(lvl, data);
 	size_t tblsz = ARM_LPAE_GRANULE(data);
 	struct io_pgtable_cfg *cfg = &data->iop.cfg;
-	int ret = 0, num_entries, max_entries, map_idx_start;
+	bool cont_hint_enabled = !(cfg->quirks & IO_PGTABLE_QUIRK_ARM_NO_CONT_HINT);
+	int num_entries, max_entries, map_idx_start;
+	int num_cont = cont_hint_enabled ? arm_lpae_num_cont(block_size) : 1;
+	bool use_cont = cont_hint_enabled && num_cont > 1;
 
 	/* Find our entry at the current level */
 	map_idx_start = ARM_LPAE_LVL_IDX(iova, lvl, data);
 	ptep += map_idx_start;
 
+	/*
+	 * Normalize an exact whole-CONT-group request down to the
+	 * equivalent block_size/pgcount so it funnels through the same
+	 * leaf path below. arm_lpae_install_leaf() independently decides,
+	 * per sub-chunk, whether the CONT hint actually applies.
+	 */
+	if (use_cont && size == block_size * num_cont) {
+		pgcount *= num_cont;
+		size = block_size;
+	}
+
 	/* If we can install a leaf entry at this level, then do so */
 	if (size == block_size) {
-		max_entries = arm_lpae_max_entries(map_idx_start, data);
-		num_entries = min_t(int, pgcount, max_entries);
-		ret = arm_lpae_init_pte(data, iova, paddr, prot, lvl, num_entries, ptep);
-		if (!ret)
-			*mapped += num_entries * size;
+		int ret;
 
-		return ret;
+		max_entries = arm_lpae_max_entries(map_idx_start, data);
+		num_entries = min_t(size_t, pgcount, max_entries);
+
+		if (!use_cont) {
+			ret = arm_lpae_init_pte(data, iova, paddr, prot, lvl,
+						num_entries, ptep);
+			if (!ret)
+				*mapped += num_entries * size;
+			return ret;
+		}
+
+		return arm_lpae_install_leaf(data, iova, paddr, prot, lvl,
+					     map_idx_start, num_entries,
+					     num_cont, ptep, mapped);
 	}
 
 	/* We can't allocate tables at the final level */
@@ -660,6 +829,8 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 {
 	arm_lpae_iopte pte;
 	struct io_pgtable *iop = &data->iop;
+	size_t block_size = ARM_LPAE_BLOCK_SIZE(lvl, data);
+	int num_cont = arm_lpae_num_cont(block_size);
 	int i = 0, num_entries, max_entries, unmap_idx_start;
 
 	/* Something went horribly wrong and we ran out of page table */
@@ -674,10 +845,22 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 		return 0;
 	}
 
+	/*
+	 * Normalize an exact whole-CONT-group request down to the
+	 * equivalent block_size/pgcount, mirroring __arm_lpae_map().
+	 */
+	if (!(data->iop.cfg.quirks & IO_PGTABLE_QUIRK_ARM_NO_CONT_HINT) &&
+	    num_cont > 1 && size == block_size * num_cont) {
+		pgcount *= num_cont;
+		size = block_size;
+	}
+
 	/* If the size matches this level, we're in the right place */
-	if (size == ARM_LPAE_BLOCK_SIZE(lvl, data)) {
+	if (size == block_size) {
+		size_t cont_size = num_cont * block_size;
+
 		max_entries = arm_lpae_max_entries(unmap_idx_start, data);
-		num_entries = min_t(int, pgcount, max_entries);
+		num_entries = min_t(size_t, pgcount, max_entries);
 
 		/* Find and handle non-leaf entries */
 		for (i = 0; i < num_entries; i++) {
@@ -685,6 +868,40 @@ static size_t __arm_lpae_unmap(struct arm_lpae_io_pgtable *data,
 			if (!pte) {
 				WARN_ON(!(data->iop.cfg.quirks & IO_PGTABLE_QUIRK_NO_WARN));
 				break;
+			}
+
+			/*
+			 * A real CONT group must always be invalidated as a
+			 * unit, so reject an unmap that splits one. Check the
+			 * PTE's own CONT bit rather than the caller's size,
+			 * since a legitimate unmap can span multiple prior
+			 * iommu_map() calls and its size alone doesn't say how
+			 * the underlying PTEs were grouped. Only the first and
+			 * last entries can straddle a group boundary; an
+			 * interior CONT-tagged entry's group is necessarily
+			 * fully covered by this unmap, since groups can't
+			 * overlap without also covering everything between
+			 * them.
+			 */
+			if (pte & ARM_LPAE_PTE_CONT) {
+				bool ok = true;
+
+				if (i == 0)
+					ok = ok && IS_ALIGNED(iova, cont_size);
+				if (i == num_entries - 1)
+					ok = ok && IS_ALIGNED(iova + (i + 1) * block_size,
+							      cont_size);
+
+				/*
+				 * Stop short of this entry instead of returning
+				 * 0: entries before i may already have had
+				 * non-leaf sub-tables torn down above, so the
+				 * caller needs the real unmapped count, and the
+				 * loop exit below still clears/gathers entries
+				 * [0, i) correctly.
+				 */
+				if (WARN_ON_ONCE(!ok))
+					break;
 			}
 
 			if (!iopte_leaf(pte, lvl, iop->fmt)) {
@@ -943,6 +1160,7 @@ static void arm_lpae_restrict_pgsizes(struct io_pgtable_cfg *cfg)
 	}
 
 	cfg->pgsize_bitmap &= page_sizes;
+	cfg->pgsize_bitmap |= arm_lpae_get_cont_sizes(cfg);
 	cfg->ias = min(cfg->ias, max_addr_bits);
 	cfg->oas = min(cfg->oas, max_addr_bits);
 }
@@ -1001,7 +1219,8 @@ arm_64_lpae_alloc_pgtable_s1(struct io_pgtable_cfg *cfg, void *cookie)
 			    IO_PGTABLE_QUIRK_ARM_TTBR1 |
 			    IO_PGTABLE_QUIRK_ARM_OUTER_WBWA |
 			    IO_PGTABLE_QUIRK_ARM_HD |
-			    IO_PGTABLE_QUIRK_NO_WARN))
+			    IO_PGTABLE_QUIRK_NO_WARN |
+			    IO_PGTABLE_QUIRK_ARM_NO_CONT_HINT))
 		return NULL;
 
 	data = arm_lpae_alloc_pgtable(cfg);
@@ -1103,7 +1322,8 @@ arm_64_lpae_alloc_pgtable_s2(struct io_pgtable_cfg *cfg, void *cookie)
 	typeof(&cfg->arm_lpae_s2_cfg.vtcr) vtcr = &cfg->arm_lpae_s2_cfg.vtcr;
 
 	if (cfg->quirks & ~(IO_PGTABLE_QUIRK_ARM_S2FWB |
-			    IO_PGTABLE_QUIRK_NO_WARN))
+			    IO_PGTABLE_QUIRK_NO_WARN |
+			    IO_PGTABLE_QUIRK_ARM_NO_CONT_HINT))
 		return NULL;
 
 	data = arm_lpae_alloc_pgtable(cfg);
@@ -1224,6 +1444,8 @@ arm_mali_lpae_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie)
 		return NULL;
 
 	cfg->pgsize_bitmap &= (SZ_4K | SZ_2M | SZ_1G);
+	/* Mali LPAE has no CONT bit - never advertise CONT page sizes */
+	cfg->quirks |= IO_PGTABLE_QUIRK_ARM_NO_CONT_HINT;
 
 	data = arm_lpae_alloc_pgtable(cfg);
 	if (!data)
