@@ -73,8 +73,10 @@ impl super::Gsp {
 
         dev_dbg!(pdev, "RISC-V active? {}\n", gsp_falcon.is_riscv_active(),);
 
-        self.cmdq
-            .send_command_no_wait(bar, commands::SetSystemInfo::new(pdev, chipset))?;
+        self.cmdq.send_command_no_wait(
+            bar,
+            commands::SetSystemInfo::new(pdev, chipset, ctx.vgpu.state()),
+        )?;
         self.cmdq
             .send_command_no_wait(bar, commands::SetRegistry::new(ctx.vgpu.state())?)?;
 
