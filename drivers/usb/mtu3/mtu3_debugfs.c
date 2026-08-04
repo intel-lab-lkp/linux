@@ -300,14 +300,12 @@ static ssize_t mtu3_probe_write(struct file *file, const char __user *ubuf,
 	struct seq_file *sf = file->private_data;
 	struct mtu3 *mtu = sf->private;
 	const struct debugfs_reg32 *regs = debugfs_get_aux(file);
-	char buf[32];
+	int ret;
 	u32 val;
 
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
-		return -EFAULT;
-
-	if (kstrtou32(buf, 0, &val))
-		return -EINVAL;
+	ret = kstrtou32_from_user(ubuf, count, 0, &val);
+	if (ret)
+		return ret;
 
 	mtu3_writel(mtu->ippc_base, (u32)regs->offset, val);
 
@@ -470,16 +468,12 @@ static ssize_t ssusb_vbus_write(struct file *file, const char __user *ubuf,
 	struct seq_file *sf = file->private_data;
 	struct ssusb_mtk *ssusb = sf->private;
 	struct otg_switch_mtk *otg_sx = &ssusb->otg_switch;
-	char buf[16];
 	bool enable;
+	int ret;
 
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
-		return -EFAULT;
-
-	if (kstrtobool(buf, &enable)) {
-		dev_err(ssusb->dev, "wrong setting\n");
-		return -EINVAL;
-	}
+	ret = kstrtobool_from_user(ubuf, count, &enable);
+	if (ret)
+		return ret;
 
 	ssusb_set_vbus(otg_sx, enable);
 
