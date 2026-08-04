@@ -97,15 +97,15 @@ int sw_nb_v6_netdev_event(struct notifier_block *unused,
 
 	netdev_dbg(dev, "netdev event addr=%pI6c plen=%u mac=%pM\n",
 		   &addr, prefix_len, entry->mac);
-	kfree(entry);
+	sw_fib_add_to_list(pf_dev, entry, 1);
 	return NOTIFY_DONE;
 }
 
 int sw_nb_v6_fib_event(struct notifier_block *nb,
 		       unsigned long event, void *ptr)
 {
-	struct fib6_entry_notifier_info *f6_eni;
 	struct fib_notifier_info *info = ptr;
+	struct fib6_entry_notifier_info *f6_eni;
 	struct net_device *fib_dev, *pf_dev;
 	struct fib_entry *entry;
 	struct fib6_info *f6i;
@@ -143,6 +143,11 @@ int sw_nb_v6_fib_event(struct notifier_block *nb,
 		   f6i->fib6_flags, f6i->fib6_protocol, f6i->fib6_type);
 
 	nh6 = f6i->nh ? nexthop_fib6_nh(f6i->nh) : f6i->fib6_nh;
+	/*
+	 * TODO: Offload directly connected IPv6 subnets without an IPv6
+	 * gateway. fib_nh_gw_family is only AF_INET6 when RTF_GATEWAY is set,
+	 * so connected routes are dropped here today.
+	 */
 	if (nh6->fib_nh_gw_family != AF_INET6)
 		return NOTIFY_DONE;
 
@@ -174,10 +179,14 @@ int sw_nb_v6_fib_event(struct notifier_block *nb,
 	/* TODO: No replay mechanism yet when the gateway neighbor is unresolved.
 	 * If ip_neigh_gw6() returns NULL the route is skipped here; add replay
 	 * from the neighbor update handler once nexthop resolution completes.
+	 *
+	 * TODO: Bypass gateway neighbour lookup for directly connected IPv6
+	 * routes, similar to sw_nb_v4_fib_event(). Unconditional ip_neigh_gw6()
+	 * is incorrect when no gateway is configured.
 	 */
 	rcu_read_lock();
 	neigh = ip_neigh_gw6(fib_dev, &nh6->fib_nh_gw6);
-	if (!neigh || IS_ERR(neigh)) {
+	if (IS_ERR_OR_NULL(neigh)) {
 		rcu_read_unlock();
 		kfree(entry);
 		return NOTIFY_DONE;
@@ -189,8 +198,8 @@ int sw_nb_v6_fib_event(struct notifier_block *nb,
 		netdev_dbg(fib_dev, "fib found MAC=%pM\n", entry->mac);
 	}
 
+	sw_fib_add_to_list(pf_dev, entry, 1);
 	rcu_read_unlock();
-	kfree(entry);
 
 	return NOTIFY_DONE;
 }
@@ -234,7 +243,7 @@ int sw_nb_net_v6_neigh_update(struct notifier_block *nb,
 	netdev_dbg(n->dev, "v6 neigh update %pI6c mac=%pM plen=%u\n",
 		   (struct in6_addr *)n->primary_key, entry->mac,
 		   n->tbl->key_len * 8);
-	kfree(entry);
+	sw_fib_add_to_list(pf_dev, entry, 1);
 
 	return NOTIFY_DONE;
 }
@@ -284,15 +293,17 @@ int sw_nb_v6_inetaddr_event(struct notifier_block *nb,
 	entry->ipv6 = 1;
 	entry->port_id = pf->pcifunc;
 
+	rcu_read_lock();
 	for_each_dev_addr(dev, dev_addr) {
 		ether_addr_copy(entry->mac, dev_addr->addr);
 		entry->mac_valid = 1;
 		break;
 	}
+	rcu_read_unlock();
 
 	netdev_dbg(dev, "inetaddr addr=%pI6c len=%u %pM\n",
 		   &ifa6->addr, ifa6->prefix_len, entry->mac);
-	kfree(entry);
+	sw_fib_add_to_list(pf_dev, entry, 1);
 
 	return NOTIFY_DONE;
 }
