@@ -2025,6 +2025,8 @@ static void detach_buf_packed_in_order(struct vring_virtqueue *vq,
 	unsigned int i, curr;
 
 	state = &vq->packed.desc_state[id];
+	if (unlikely(!state))
+		return;
 
 	/* Clear data ptr. */
 	state->data = NULL;
