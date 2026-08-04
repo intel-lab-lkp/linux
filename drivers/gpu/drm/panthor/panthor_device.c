@@ -86,6 +86,9 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	 */
 	drm_dev_unplug(&ptdev->base);
 
+	/* Make sure we're not interrupted by resets while we're unplugging. */
+	disable_work_sync(&ptdev->reset.work);
+
 	/* We do the rest of the unplug with the unplug lock released,
 	 * future callers will wait on ptdev->unplug.done anyway.
 	 */
