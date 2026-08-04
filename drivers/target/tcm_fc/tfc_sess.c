@@ -172,7 +172,8 @@ static struct ft_sess *ft_sess_get(struct fc_lport *lport, u32 port_id)
 	head = &tport->hash[ft_sess_hash(port_id)];
 	hlist_for_each_entry_rcu(sess, head, hash) {
 		if (sess->port_id == port_id) {
-			kref_get(&sess->kref);
+			if (!kref_get_unless_zero(&sess->kref))
+				break;
 			rcu_read_unlock();
 			TFC_SESS_DBG(lport, "port_id %x found %p\n",
 				     port_id, sess);
