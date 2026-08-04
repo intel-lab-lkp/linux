@@ -244,17 +244,19 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 		hung_task_call_panic = true;
 	}
 
+	/* Always print the blocked message */
+	pr_err("INFO: task %s:%d blocked%s for more than %ld seconds.\n",
+	       t->comm, t->pid, t->in_iowait ? " in I/O wait" : "",
+	       (jiffies - t->last_switch_time) / HZ);
+
 	/*
 	 * The given task did not get scheduled for more than
 	 * CONFIG_DEFAULT_HUNG_TASK_TIMEOUT. Therefore, complain
-	 * accordingly
+	 * accordingly with full details if the budget is not exhausted.
 	 */
 	if (hung_task_warnings_printed || hung_task_call_panic) {
 		if (hung_task_warnings_printed > 0)
 			hung_task_warnings_printed--;
-		pr_err("INFO: task %s:%d blocked%s for more than %ld seconds.\n",
-		       t->comm, t->pid, t->in_iowait ? " in I/O wait" : "",
-		       (jiffies - t->last_switch_time) / HZ);
 		pr_err("      %s %s %.*s\n",
 			print_tainted(), init_utsname()->release,
 			(int)strcspn(init_utsname()->version, " "),
@@ -267,7 +269,7 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 		debug_show_blocker(t, timeout);
 
 		if (!hung_task_warnings_printed)
-			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
+			pr_info("Future hung task reports won't print details about each process, see sysctl kernel.hung_task_warnings\n");
 	}
 
 	touch_nmi_watchdog();
