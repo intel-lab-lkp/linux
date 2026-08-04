@@ -342,17 +342,13 @@ static int rcar_gen2_phy_probe(struct platform_device *pdev)
 	const struct rcar_gen2_phy_data *data;
 	int i = 0;
 
-	if (!dev->of_node) {
-		dev_err(dev,
-			"This driver is required to be instantiated from device tree\n");
-		return -EINVAL;
-	}
+	if (!dev->of_node)
+		return dev_err_probe(dev, -EINVAL,
+				     "This driver is required to be instantiated from device tree\n");
 
 	clk = devm_clk_get(dev, "usbhs");
-	if (IS_ERR(clk)) {
-		dev_err(dev, "Can't get USBHS clock\n");
-		return PTR_ERR(clk);
-	}
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk), "Can't get USBHS clock\n");
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -388,10 +384,9 @@ static int rcar_gen2_phy_probe(struct platform_device *pdev)
 		channel->selected_phy = -1;
 
 		error = of_property_read_u32(np, "reg", &channel_num);
-		if (error || channel_num >= data->num_channels) {
-			dev_err(dev, "Invalid \"reg\" property\n");
-			return error ?: -EINVAL;
-		}
+		if (error || channel_num >= data->num_channels)
+			return dev_err_probe(dev, error ?: -EINVAL,
+					     "Invalid \"reg\" property\n");
 		channel->select_mask = select_mask[channel_num];
 
 		for (n = 0; n < PHYS_PER_CHANNEL; n++) {
@@ -403,10 +398,9 @@ static int rcar_gen2_phy_probe(struct platform_device *pdev)
 
 			phy->phy = devm_phy_create(dev, NULL,
 						   data->gen2_phy_ops);
-			if (IS_ERR(phy->phy)) {
-				dev_err(dev, "Failed to create PHY\n");
-				return PTR_ERR(phy->phy);
-			}
+			if (IS_ERR(phy->phy))
+				return dev_err_probe(dev, PTR_ERR(phy->phy),
+						     "Failed to create PHY\n");
 			phy_set_drvdata(phy->phy, phy);
 		}
 
@@ -414,10 +408,9 @@ static int rcar_gen2_phy_probe(struct platform_device *pdev)
 	}
 
 	provider = devm_of_phy_provider_register(dev, rcar_gen2_phy_xlate);
-	if (IS_ERR(provider)) {
-		dev_err(dev, "Failed to register PHY provider\n");
-		return PTR_ERR(provider);
-	}
+	if (IS_ERR(provider))
+		return dev_err_probe(dev, PTR_ERR(provider),
+				     "Failed to register PHY provider\n");
 
 	dev_set_drvdata(dev, drv);
 
