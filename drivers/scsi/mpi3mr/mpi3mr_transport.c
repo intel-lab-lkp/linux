@@ -12,6 +12,42 @@
 #include "mpi3mr.h"
 
 /**
+ * mpi3mr_sas_phy_bit - build a bit for a firmware PHY identifier
+ * @phy_id: Firmware PHY identifier to represent in a 64-bit port mask
+ *
+ * The port mask is a u64, so every shift must be performed in a 64-bit
+ * unsigned type. Reject identifiers that cannot be represented before the
+ * shift to avoid undefined behavior.
+ *
+ * Return: BIT_ULL(@phy_id) for a representable identifier, otherwise zero.
+ */
+static u64 mpi3mr_sas_phy_bit(u8 phy_id)
+{
+	if (WARN_ON_ONCE(phy_id >= sizeof(u64) * 8))
+		return 0;
+
+	return BIT_ULL(phy_id);
+}
+
+/**
+ * mpi3mr_sas_port_lowest_phy - find the lowest PHY in a port mask
+ * @phy_mask: 64-bit bitmap of PHY identifiers assigned to the port
+ *
+ * Use a 64-bit find-first-set operation so PHY identifiers 32 through 63
+ * are not truncated to int. Keep -1 as the empty-mask sentinel used by the
+ * surrounding port bookkeeping.
+ *
+ * Return: lowest set PHY identifier, or -1 when the mask is empty.
+ */
+static int mpi3mr_sas_port_lowest_phy(u64 phy_mask)
+{
+	if (!phy_mask)
+		return -1;
+
+	return __ffs64(phy_mask);
+}
+
+/**
  * mpi3mr_post_transport_req - Issue transport requests and wait
  * @mrioc: Adapter instance reference
  * @request: Properly populated MPI3 request
@@ -610,10 +646,11 @@ static void mpi3mr_delete_sas_phy(struct mpi3mr_ioc *mrioc,
 	mr_sas_port->num_phys--;
 
 	if (host_node) {
-		mr_sas_port->phy_mask &= ~(1 << mr_sas_phy->phy_id);
+		mr_sas_port->phy_mask &= ~mpi3mr_sas_phy_bit(mr_sas_phy->phy_id);
 
 		if (mr_sas_port->lowest_phy == mr_sas_phy->phy_id)
-			mr_sas_port->lowest_phy = ffs(mr_sas_port->phy_mask) - 1;
+			mr_sas_port->lowest_phy =
+				mpi3mr_sas_port_lowest_phy(mr_sas_port->phy_mask);
 	}
 	sas_port_delete_phy(mr_sas_port->port, mr_sas_phy->phy);
 	mr_sas_phy->phy_belongs_to_port = 0;
@@ -641,10 +678,12 @@ static void mpi3mr_add_sas_phy(struct mpi3mr_ioc *mrioc,
 	list_add_tail(&mr_sas_phy->port_siblings, &mr_sas_port->phy_list);
 	mr_sas_port->num_phys++;
 	if (host_node) {
-		mr_sas_port->phy_mask |= (1 << mr_sas_phy->phy_id);
+		mr_sas_port->phy_mask |= mpi3mr_sas_phy_bit(mr_sas_phy->phy_id);
 
-		if (mr_sas_phy->phy_id < mr_sas_port->lowest_phy)
-			mr_sas_port->lowest_phy = ffs(mr_sas_port->phy_mask) - 1;
+		if (mr_sas_port->lowest_phy < 0 ||
+		    mr_sas_phy->phy_id < mr_sas_port->lowest_phy)
+			mr_sas_port->lowest_phy =
+				mpi3mr_sas_port_lowest_phy(mr_sas_port->phy_mask);
 	}
 	sas_port_add_phy(mr_sas_port->port, mr_sas_phy->phy);
 	mr_sas_phy->phy_belongs_to_port = 1;
@@ -1396,7 +1435,7 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 		    &mr_sas_port->phy_list);
 		mr_sas_port->num_phys++;
 		if (mr_sas_node->host_node)
-			mr_sas_port->phy_mask |= (1 << i);
+			mr_sas_port->phy_mask |= mpi3mr_sas_phy_bit(i);
 	}
 
 	if (!mr_sas_port->num_phys) {
@@ -1406,7 +1445,8 @@ static struct mpi3mr_sas_port *mpi3mr_sas_port_add(struct mpi3mr_ioc *mrioc,
 	}
 
 	if (mr_sas_node->host_node)
-		mr_sas_port->lowest_phy = ffs(mr_sas_port->phy_mask) - 1;
+		mr_sas_port->lowest_phy =
+			mpi3mr_sas_port_lowest_phy(mr_sas_port->phy_mask);
 
 	if (mr_sas_port->remote_identify.device_type == SAS_END_DEVICE) {
 		tgtdev = mpi3mr_get_tgtdev_by_addr(mrioc,
@@ -1738,7 +1778,7 @@ mpi3mr_refresh_sas_ports(struct mpi3mr_ioc *mrioc)
 		found = 0;
 		for (j = 0; j < host_port_count; j++) {
 			if (h_port[j].handle == attached_handle) {
-				h_port[j].phy_mask |= (1 << i);
+				h_port[j].phy_mask |= mpi3mr_sas_phy_bit(i);
 				found = 1;
 				break;
 			}
@@ -1765,7 +1805,7 @@ mpi3mr_refresh_sas_ports(struct mpi3mr_ioc *mrioc)
 		port_idx = host_port_count;
 		h_port[port_idx].sas_address = le64_to_cpu(sasinf->sas_address);
 		h_port[port_idx].handle = attached_handle;
-		h_port[port_idx].phy_mask = (1 << i);
+		h_port[port_idx].phy_mask = mpi3mr_sas_phy_bit(i);
 		h_port[port_idx].iounit_port_id = sas_io_unit_pg0->phy_data[i].io_unit_port;
 		h_port[port_idx].lowest_phy = sasinf->phy_num;
 		h_port[port_idx].used = 0;
