@@ -467,7 +467,7 @@ int devpts_new_index(struct pts_fs_info *fsi)
 {
 	int index = -ENOSPC;
 
-	if (atomic_inc_return(&pty_count) >= (pty_limit -
+	if (atomic_inc_return(&pty_count) > (pty_limit -
 			  (fsi->mount_opts.reserve ? 0 : pty_reserve)))
 		goto out;
 
