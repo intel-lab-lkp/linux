@@ -171,6 +171,8 @@ extern void hibernate_release(void);
 bool hibernation_snapshot_dev_available(void);
 
 extern sector_t alloc_swapdev_block(int swap);
+bool swsusp_swap_range_allocated(int swap, loff_t pos, size_t count);
+u64 swsusp_swap_map_bytes(u64 image_bytes);
 extern void free_all_swap_pages(int swap);
 extern int swsusp_swap_in_use(void);
 

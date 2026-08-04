@@ -31,7 +31,7 @@ struct uswsusp_key_blob {
  * image.
  */
 struct uswsusp_user_key {
-	/* Kernel returns the metadata size. */
+	/* Kernel returns the metadata size; resume passes the saved value in. */
 	__u64 meta_size;
 	__u32 key_len;
 	__u32 reserved;

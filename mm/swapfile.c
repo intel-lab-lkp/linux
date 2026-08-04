@@ -2366,6 +2366,38 @@ sector_t swapdev_block(int type, pgoff_t offset)
 	return se->start_block + (offset - se->start_page);
 }
 
+int swapdev_block_to_extent(int type, sector_t block, pgoff_t *offset,
+			    pgoff_t *nr_pages)
+{
+	struct swap_info_struct *si = swap_type_to_info(type);
+	struct swap_extent *se;
+	struct rb_node *rb;
+
+	if (!si || !(si->flags & SWP_WRITEOK))
+		return -ENODEV;
+
+	for (rb = rb_first(&si->swap_extent_root); rb; rb = rb_next(rb)) {
+		se = rb_entry(rb, struct swap_extent, rb_node);
+		if (block >= se->start_block &&
+		    block - se->start_block < se->nr_pages) {
+			pgoff_t page = block - se->start_block;
+
+			*offset = se->start_page + page;
+			*nr_pages = se->nr_pages - page;
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+
+int swapdev_block_to_offset(int type, sector_t block, pgoff_t *offset)
+{
+	pgoff_t nr_pages;
+
+	return swapdev_block_to_extent(type, block, offset, &nr_pages);
+}
+
 /*
  * Return either the total number of swap pages of given type, or the number
  * of free pages of that type (depending on @free)

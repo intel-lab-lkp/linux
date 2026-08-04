@@ -723,43 +723,65 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct file *file = iocb->ki_filp;
 	struct inode *bd_inode = bdev_file_inode(file);
 	struct block_device *bdev = I_BDEV(bd_inode);
+	dev_t dev = bd_inode->i_rdev;
 	bool atomic = iocb->ki_flags & IOCB_ATOMIC;
 	loff_t size = bdev_nr_bytes(bdev);
+	enum hibernate_snapshot_write hibernate_write;
+	size_t hibernate_len = 0;
 	size_t shorted = 0;
+	ssize_t hibernate_written = 0;
 	ssize_t ret;
 
 	if (bdev_read_only(bdev))
 		return -EPERM;
 
-	if (IS_SWAPFILE(bd_inode) && !is_hibernate_resume_dev(bd_inode->i_rdev))
-		return -ETXTBSY;
+	if (IS_SWAPFILE(bd_inode) && !is_hibernate_resume_dev(dev)) {
+		if (!is_sync_kiocb(iocb) || !iocb_is_dsync(iocb) ||
+		    (iocb->ki_flags & IOCB_DIRECT))
+			return -ETXTBSY;
 
-	if (!iov_iter_count(from))
-		return 0;
+		hibernate_len = iov_iter_count(from);
+		hibernate_write = hibernate_snapshot_write_begin(dev, iocb->ki_pos, hibernate_len);
+		if (hibernate_write == HIBERNATE_SNAPSHOT_WRITE_NONE)
+			return -ETXTBSY;
+	} else {
+		hibernate_write = HIBERNATE_SNAPSHOT_WRITE_NONE;
+	}
 
-	if (iocb->ki_pos >= size)
-		return -ENOSPC;
+	if (!iov_iter_count(from)) {
+		ret = 0;
+		goto out_hibernate;
+	}
 
-	if ((iocb->ki_flags & (IOCB_NOWAIT | IOCB_DIRECT)) == IOCB_NOWAIT)
-		return -EOPNOTSUPP;
+	if (iocb->ki_pos >= size) {
+		ret = -ENOSPC;
+		goto out_hibernate;
+	}
+
+	if ((iocb->ki_flags & (IOCB_NOWAIT | IOCB_DIRECT)) == IOCB_NOWAIT) {
+		ret = -EOPNOTSUPP;
+		goto out_hibernate;
+	}
 
 	if (atomic) {
 		ret = generic_atomic_write_valid(iocb, from);
 		if (ret)
-			return ret;
+			goto out_hibernate;
 	}
 
 	size -= iocb->ki_pos;
 	if (iov_iter_count(from) > size) {
-		if (atomic)
-			return -EINVAL;
+		if (atomic) {
+			ret = -EINVAL;
+			goto out_hibernate;
+		}
 		shorted = iov_iter_count(from) - size;
 		iov_iter_truncate(from, size);
 	}
 
 	ret = file_update_time(file);
 	if (ret)
-		return ret;
+		goto out_hibernate;
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
 		ret = blkdev_direct_write(iocb, from);
@@ -777,9 +799,16 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		inode_unlock_shared(bd_inode);
 	}
 
-	if (ret > 0)
+	if (ret > 0) {
+		hibernate_written = ret;
 		ret = generic_write_sync(iocb, ret);
+	}
 	iov_iter_reexpand(from, iov_iter_count(from) + shorted);
+
+out_hibernate:
+	if (hibernate_len)
+		hibernate_snapshot_write_end(hibernate_write, hibernate_len,
+					     hibernate_written);
 	return ret;
 }
 

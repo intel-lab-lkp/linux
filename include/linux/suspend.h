@@ -426,10 +426,32 @@ static inline bool pm_hibernation_mode_is_suspend(void) { return false; }
 
 int arch_resume_nosmt(void);
 
+enum hibernate_snapshot_write {
+	HIBERNATE_SNAPSHOT_WRITE_NONE,
+	HIBERNATE_SNAPSHOT_WRITE_IMAGE,
+	HIBERNATE_SNAPSHOT_WRITE_HEADER,
+};
+
 #ifdef CONFIG_HIBERNATION_SNAPSHOT_DEV
 int is_hibernate_resume_dev(dev_t dev);
+enum hibernate_snapshot_write
+hibernate_snapshot_write_begin(dev_t dev, loff_t pos, size_t count);
+void hibernate_snapshot_write_end(enum hibernate_snapshot_write type,
+				  size_t reserved, ssize_t written);
 #else
 static inline int is_hibernate_resume_dev(dev_t dev) { return 0; }
+
+static inline enum hibernate_snapshot_write
+hibernate_snapshot_write_begin(dev_t dev, loff_t pos, size_t count)
+{
+	return HIBERNATE_SNAPSHOT_WRITE_NONE;
+}
+
+static inline void hibernate_snapshot_write_end(enum hibernate_snapshot_write type,
+						size_t reserved,
+						ssize_t written)
+{
+}
 #endif
 
 /* Hibernation and suspend events */

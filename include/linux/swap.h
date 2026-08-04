@@ -439,6 +439,9 @@ extern int find_hibernation_swap_type(dev_t device, sector_t offset);
 int find_first_swap(dev_t *device);
 extern unsigned int count_swap_pages(int, int);
 extern sector_t swapdev_block(int, pgoff_t);
+int swapdev_block_to_offset(int type, sector_t block, pgoff_t *offset);
+int swapdev_block_to_extent(int type, sector_t block, pgoff_t *offset,
+			    pgoff_t *nr_pages);
 extern int __swap_count(swp_entry_t entry);
 extern bool swap_entry_swapped(struct swap_info_struct *si, swp_entry_t entry);
 extern int swp_swapcount(swp_entry_t entry);
@@ -532,6 +535,19 @@ static inline bool folio_free_swap(struct folio *folio)
 static inline int add_swap_extent(struct swap_info_struct *sis,
 				  unsigned long start_page,
 				  unsigned long nr_pages, sector_t start_block)
+{
+	return -EINVAL;
+}
+
+static inline int swapdev_block_to_offset(int type, sector_t block,
+					  pgoff_t *offset)
+{
+	return -EINVAL;
+}
+
+static inline int swapdev_block_to_extent(int type, sector_t block,
+					  pgoff_t *offset,
+					  pgoff_t *nr_pages)
 {
 	return -EINVAL;
 }

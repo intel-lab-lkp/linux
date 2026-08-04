@@ -5,6 +5,7 @@
 #include <crypto/aead.h>
 #include <crypto/gcm.h>
 #include <crypto/sha2.h>
+#include <crypto/utils.h>
 #include <linux/hex.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
@@ -52,7 +53,7 @@ int snapshot_store_encryption_seed(const char *buf, size_t count)
 
 	mutex_lock(&snapshot_seed_mutex);
 	if (snapshot_seed_valid) {
-		ret = memcmp(snapshot_seed, seed, sizeof(seed)) ? -EPERM : 0;
+		ret = crypto_memneq(snapshot_seed, seed, sizeof(seed)) ? -EPERM : 0;
 		goto out;
 	}
 
@@ -266,6 +267,22 @@ static int snapshot_check_user_key_switch(struct snapshot_data *data)
 	return 0;
 }
 
+static loff_t snapshot_encrypted_byte_count(loff_t plain_size);
+
+static void snapshot_set_meta_size(struct snapshot_data *data, u64 meta_size)
+{
+	data->meta_size = meta_size;
+	data->crypt_meta_size = snapshot_encrypted_byte_count(meta_size);
+}
+
+static void snapshot_record_encrypted_read(struct snapshot_data *data,
+					   size_t count)
+{
+	spin_lock(&data->crypt_lock);
+	data->crypt_bytes_read += count;
+	spin_unlock(&data->crypt_lock);
+}
+
 /* Encrypt more data from the snapshot into the staging area. */
 static int snapshot_encrypt_refill(struct snapshot_data *data)
 {
@@ -277,7 +294,8 @@ static int snapshot_encrypt_refill(struct snapshot_data *data)
 	int res;
 
 	if (data->crypt_total == 0) {
-		data->meta_size = snapshot_get_meta_page_count() << PAGE_SHIFT;
+		snapshot_set_meta_size(data,
+				       snapshot_get_meta_page_count() << PAGE_SHIFT);
 	} else {
 		res = snapshot_check_user_key_switch(data);
 		if (res)
@@ -294,8 +312,8 @@ static int snapshot_encrypt_refill(struct snapshot_data *data)
 	for (pg_idx = 0; pg_idx < CHUNK_SIZE; pg_idx++) {
 		void *buf = data->crypt_pages[pg_idx];
 
-		/* Stop at the meta page boundary to potentially switch keys. */
-		if (total &&
+		/* Stop at the meta page boundary before switching keys. */
+		if (data->user_key_valid && total &&
 		    ((data->crypt_total + total) == data->meta_size))
 			break;
 
@@ -315,6 +333,9 @@ static int snapshot_encrypt_refill(struct snapshot_data *data)
 		sg_set_buf(&data->sg[1 + pg_idx], buf, PAGE_SIZE);
 		total += PAGE_SIZE;
 	}
+
+	if (!total)
+		return 0;
 
 	sg_set_buf(&data->sg[1 + pg_idx], &data->auth_tag, SNAPSHOT_AUTH_TAG_SIZE);
 	aead_request_set_callback(req, 0, crypto_req_done, &wait);
@@ -422,8 +443,12 @@ static int snapshot_decrypt_drain(struct snapshot_data *data)
 		total += PAGE_SIZE;
 	}
 
-	if (data->crypt_total == 0)
+	if (data->crypt_total == 0) {
 		data->meta_size = snapshot_get_meta_page_count() << PAGE_SHIFT;
+		if (data->user_key_valid)
+			data->crypt_meta_size =
+				snapshot_encrypted_byte_count(data->meta_size);
+	}
 
 	data->crypt_total += total;
 	res = snapshot_check_user_key_switch(data);
@@ -449,6 +474,8 @@ static ssize_t snapshot_read_next_encrypted(struct snapshot_data *data,
 		rc = snapshot_encrypt_refill(data);
 		if (rc < 0)
 			return rc;
+		if (!data->crypt_size)
+			return 0;
 	}
 
 	/* Return data pages if the offset is in that region. */
@@ -471,133 +498,130 @@ static ssize_t snapshot_read_next_encrypted(struct snapshot_data *data,
 static ssize_t snapshot_write_next_encrypted(struct snapshot_data *data,
 					     void **buf)
 {
+	size_t size_avail;
 	size_t tag_off;
 
 	/* Return data pages if the offset is in that region. */
 	if (data->crypt_offset < (PAGE_SIZE * CHUNK_SIZE)) {
 		size_t pg_idx = data->crypt_offset >> PAGE_SHIFT;
 		size_t pg_off = data->crypt_offset & (PAGE_SIZE - 1);
-		size_t size_avail = PAGE_SIZE;
+
 		*buf = data->crypt_pages[pg_idx] + pg_off;
+		size_avail = PAGE_SIZE - pg_off;
+	} else {
+		/* Use offsets just beyond the size to return the tag. */
+		tag_off = data->crypt_offset - (PAGE_SIZE * CHUNK_SIZE);
+		if (tag_off > SNAPSHOT_AUTH_TAG_SIZE)
+			tag_off = SNAPSHOT_AUTH_TAG_SIZE;
 
-		/*
-		 * If this is the boundary where the meta pages end, then just
-		 * return enough for the auth tag.
-		 */
-		if (data->meta_size &&
-		    data->crypt_total < data->meta_size) {
-			u64 total_done =
-				data->crypt_total + data->crypt_offset;
-
-			if (total_done >= data->meta_size &&
-			    (total_done <
-			     (data->meta_size + SNAPSHOT_AUTH_TAG_SIZE))) {
-				size_avail = SNAPSHOT_AUTH_TAG_SIZE;
-			}
-		}
-
-		return size_avail - pg_off;
+		*buf = data->auth_tag + tag_off;
+		size_avail = SNAPSHOT_AUTH_TAG_SIZE - tag_off;
 	}
 
-	/* Use offsets just beyond the size to return the tag. */
-	tag_off = data->crypt_offset - (PAGE_SIZE * CHUNK_SIZE);
-	if (tag_off > SNAPSHOT_AUTH_TAG_SIZE)
-		tag_off = SNAPSHOT_AUTH_TAG_SIZE;
+	if (data->crypt_meta_size &&
+	    data->crypt_stream_total < data->crypt_meta_size) {
+		u64 meta_avail = data->crypt_meta_size - data->crypt_stream_total;
 
-	*buf = data->auth_tag + tag_off;
-	return SNAPSHOT_AUTH_TAG_SIZE - tag_off;
+		size_avail = min_t(u64, size_avail, meta_avail);
+	}
+
+	return size_avail;
 }
 
 ssize_t snapshot_read_encrypted(struct snapshot_data *data,
 				char __user *buf, size_t count, loff_t *offp)
 {
-	ssize_t total = 0;
+	size_t copy_size;
+	size_t not_done;
+	size_t pg_off;
+	void *src;
+	ssize_t src_size;
 
-	/* Loop getting buffers of varying sizes and copying to userspace. */
-	while (count) {
-		size_t copy_size;
-		size_t not_done;
-		void *src;
-		ssize_t src_size = snapshot_read_next_encrypted(data, &src);
+	if (!count)
+		return 0;
 
-		if (src_size <= 0) {
-			if (total == 0)
-				return src_size;
+	pg_off = *offp & (PAGE_SIZE - 1);
+	count = min_t(size_t, count, PAGE_SIZE - pg_off);
 
-			break;
-		}
+	src_size = snapshot_read_next_encrypted(data, &src);
+	if (src_size <= 0)
+		return src_size;
 
-		copy_size = min(count, (size_t)src_size);
-		not_done = copy_to_user(buf + total, src, copy_size);
-		copy_size -= not_done;
-		total += copy_size;
-		count -= copy_size;
-		data->crypt_offset += copy_size;
-		if (copy_size == 0) {
-			if (total == 0)
-				return -EFAULT;
+	copy_size = min_t(size_t, count, src_size);
+	not_done = copy_to_user(buf, src, copy_size);
+	copy_size -= not_done;
+	if (!copy_size)
+		return -EFAULT;
 
-			break;
-		}
-	}
-
-	*offp += total;
-	return total;
+	data->crypt_offset += copy_size;
+	*offp += copy_size;
+	snapshot_record_encrypted_read(data, copy_size);
+	return copy_size;
 }
 
 ssize_t snapshot_write_encrypted(struct snapshot_data *data,
 				 const char __user *buf, size_t count,
 				 loff_t *offp)
 {
-	ssize_t total = 0;
+	size_t copy_size;
+	size_t not_done;
+	size_t pg_off;
+	void *dst;
+	ssize_t dst_size;
+	int rc;
 
-	/* Loop getting buffers of varying sizes and copying from. */
-	while (count) {
-		size_t copy_size;
-		size_t not_done;
-		void *dst;
-		ssize_t dst_size = snapshot_write_next_encrypted(data, &dst);
+	if (!count)
+		return 0;
 
-		if (dst_size <= 0) {
-			if (total == 0)
-				return dst_size;
+	pg_off = *offp & (PAGE_SIZE - 1);
+	count = min_t(size_t, count, PAGE_SIZE - pg_off);
 
-			break;
-		}
+	dst_size = snapshot_write_next_encrypted(data, &dst);
+	if (dst_size <= 0)
+		return dst_size;
 
-		copy_size = min(count, (size_t)dst_size);
-		not_done = copy_from_user(dst, buf + total, copy_size);
-		copy_size -= not_done;
-		total += copy_size;
-		count -= copy_size;
-		data->crypt_offset += copy_size;
-		if (copy_size == 0) {
-			if (total == 0)
-				return -EFAULT;
+	copy_size = min_t(size_t, count, dst_size);
+	not_done = copy_from_user(dst, buf, copy_size);
+	copy_size -= not_done;
+	if (!copy_size)
+		return -EFAULT;
 
-			break;
-		}
-
-		/*
-		 * Drain the encrypted buffer if it's full, or if we hit the end
-		 * of the meta pages and need a key change.
-		 */
-		if (data->crypt_offset >=
-		    (PAGE_SIZE * CHUNK_SIZE) + SNAPSHOT_AUTH_TAG_SIZE ||
-		    (data->meta_size &&
-		     data->crypt_total < data->meta_size &&
-		     data->crypt_total + data->crypt_offset ==
-		     data->meta_size + SNAPSHOT_AUTH_TAG_SIZE)) {
-			int rc;
-
-			rc = snapshot_decrypt_drain(data);
-			if (rc < 0)
-				return rc;
-		}
+	data->crypt_offset += copy_size;
+	data->crypt_stream_total += copy_size;
+	/*
+	 * Drain the encrypted buffer if it's full, or if we hit the end of the
+	 * encrypted metadata and need a key change before user data pages.
+	 */
+	if (data->crypt_offset >=
+	    (PAGE_SIZE * CHUNK_SIZE) + SNAPSHOT_AUTH_TAG_SIZE ||
+	    (data->crypt_meta_size &&
+	     data->crypt_stream_total == data->crypt_meta_size)) {
+		rc = snapshot_decrypt_drain(data);
+		if (rc < 0)
+			return rc;
 	}
 
-	*offp += total;
-	return total;
+	*offp += copy_size;
+	return copy_size;
+}
+
+static void snapshot_reset_encryption_state(struct snapshot_data *data)
+{
+	data->crypt_offset = 0;
+	data->crypt_size = 0;
+	data->crypt_total = 0;
+	data->crypt_stream_total = 0;
+	data->nonce_low = 0;
+	data->nonce_high = 0;
+	data->meta_size = 0;
+	data->crypt_meta_size = 0;
+	data->user_key_valid = false;
+	spin_lock(&data->crypt_lock);
+	data->crypt_bytes_read = 0;
+	data->crypt_swap_reserved = 0;
+	data->crypt_header_reserved = 0;
+	spin_unlock(&data->crypt_lock);
+	memset(data->auth_tag, 0, sizeof(data->auth_tag));
 }
 
 void snapshot_teardown_encryption(struct snapshot_data *data)
@@ -623,20 +647,19 @@ void snapshot_teardown_encryption(struct snapshot_data *data)
 
 	memzero_explicit(data->encryption_key, sizeof(data->encryption_key));
 	memzero_explicit(data->user_key, sizeof(data->user_key));
+	snapshot_reset_encryption_state(data);
 }
 
 static int snapshot_setup_encryption_common(struct snapshot_data *data)
 {
 	int i, rc;
 
-	data->crypt_total = 0;
-	data->crypt_offset = 0;
-	data->crypt_size = 0;
-	data->user_key_valid = false;
-	memset(data->crypt_pages, 0, sizeof(data->crypt_pages));
 	/* This only works once per hibernate. */
 	if (data->aead_tfm)
 		return -EINVAL;
+
+	snapshot_reset_encryption_state(data);
+	memset(data->crypt_pages, 0, sizeof(data->crypt_pages));
 
 	/* Set up the encryption transform */
 	data->aead_tfm = crypto_alloc_aead("gcm(aes)", 0, 0);
@@ -653,7 +676,7 @@ static int snapshot_setup_encryption_common(struct snapshot_data *data)
 
 	/* Allocate the staging area */
 	for (i = 0; i < CHUNK_SIZE; i++) {
-		data->crypt_pages[i] = (void *)__get_free_page(GFP_ATOMIC);
+		data->crypt_pages[i] = (void *)__get_free_page(GFP_KERNEL);
 		if (!data->crypt_pages[i])
 			goto setup_fail;
 	}
@@ -714,13 +737,15 @@ int snapshot_get_encryption_key(struct snapshot_data *data,
 
 	BUILD_BUG_ON(sizeof(wrapped) >
 		     sizeof(((struct uswsusp_key_blob *)0)->blob));
-	rc = copy_to_user(&key->blob, &wrapped, sizeof(wrapped));
-	if (rc)
+	if (copy_to_user(&key->blob, &wrapped, sizeof(wrapped))) {
+		rc = -EFAULT;
 		goto fail;
+	}
 
-	rc = copy_to_user(&key->nonce, &nonce, sizeof(nonce));
-	if (rc)
+	if (copy_to_user(&key->nonce, &nonce, sizeof(nonce))) {
+		rc = -EFAULT;
 		goto fail;
+	}
 
 	memzero_explicit(image_key, sizeof(image_key));
 	memzero_explicit(&wrapped, sizeof(wrapped));
@@ -801,47 +826,73 @@ static loff_t snapshot_encrypted_byte_count(loff_t plain_size)
 	return plain_size + (chunks * SNAPSHOT_AUTH_TAG_SIZE);
 }
 
-static loff_t snapshot_get_meta_data_size(void)
+static loff_t snapshot_encrypted_split_byte_count(loff_t raw_size,
+						  loff_t meta_plain_size)
 {
-	loff_t pages = snapshot_get_meta_page_count();
+	if (raw_size <= meta_plain_size)
+		return snapshot_encrypted_byte_count(raw_size);
 
-	return snapshot_encrypted_byte_count(pages << PAGE_SHIFT);
+	return snapshot_encrypted_byte_count(meta_plain_size) +
+		snapshot_encrypted_byte_count(raw_size - meta_plain_size);
 }
 
 int snapshot_set_user_key(struct snapshot_data *data,
 			  struct uswsusp_user_key __user *key)
 {
-	struct uswsusp_user_key user_key;
+	struct uswsusp_user_key user_key = {};
 	unsigned int key_len;
 	u64 size;
 	int rc;
+
+	if (!snapshot_encryption_enabled(data))
+		return -EINVAL;
+
+	if (copy_from_user(&user_key, key, sizeof(struct uswsusp_user_key)))
+		return -EFAULT;
+
+	BUILD_BUG_ON(sizeof(data->user_key) < sizeof(user_key.key));
+	rc = -EINVAL;
+	if (user_key.reserved)
+		goto out;
+	if (user_key.key_len > sizeof(data->user_key))
+		goto out;
+	if (user_key.key_len < 8)
+		goto out;
+
+	if (data->mode == O_RDONLY && !data->ready) {
+		rc = -ENODATA;
+		goto out;
+	}
 
 	/*
 	 * Return the metadata size, the number of bytes that can be fed in before
 	 * the user data key is needed at resume time.
 	 */
-	size = snapshot_get_meta_data_size();
+	if (data->mode == O_WRONLY && !data->meta_size) {
+		if (user_key.meta_size < PAGE_SIZE + SNAPSHOT_AUTH_TAG_SIZE)
+			goto out;
+
+		data->crypt_meta_size = user_key.meta_size;
+		size = data->crypt_meta_size;
+	} else {
+		snapshot_set_meta_size(data,
+				       snapshot_get_meta_page_count() << PAGE_SHIFT);
+		size = data->crypt_meta_size;
+	}
+
 	rc = put_user(size, &key->meta_size);
 	if (rc)
-		return rc;
-
-	rc = copy_from_user(&user_key, key, sizeof(struct uswsusp_user_key));
-	if (rc)
-		return rc;
-
-	BUILD_BUG_ON(sizeof(data->user_key) < sizeof(user_key.key));
-	if (user_key.reserved)
-		return -EINVAL;
-	if (user_key.key_len > sizeof(data->user_key))
-		return -EINVAL;
-	if (user_key.key_len < 8)
-		return -EINVAL;
+		goto out;
 
 	key_len = user_key.key_len;
 
 	/* Don't allow it if it's too late. */
-	if (data->crypt_total > data->meta_size)
-		return -EBUSY;
+	if ((data->meta_size && data->crypt_total > data->meta_size) ||
+	    (data->crypt_meta_size &&
+	     data->crypt_stream_total > data->crypt_meta_size)) {
+		rc = -EBUSY;
+		goto out;
+	}
 
 	memset(data->user_key, 0, sizeof(data->user_key));
 	memcpy(data->user_key, user_key.key, key_len);
@@ -849,19 +900,30 @@ int snapshot_set_user_key(struct snapshot_data *data,
 	/* Install the key if the user is just under the wire. */
 	rc = snapshot_check_user_key_switch(data);
 	if (rc)
-		return rc;
+		goto out;
 
-	return 0;
+	rc = 0;
+
+out:
+	memzero_explicit(&user_key, sizeof(user_key));
+	return rc;
 }
 
-loff_t snapshot_get_encrypted_image_size(loff_t raw_size)
+loff_t snapshot_get_encrypted_image_size(struct snapshot_data *data,
+					 loff_t raw_size)
 {
-	loff_t pages = raw_size >> PAGE_SHIFT;
-	loff_t meta_size;
+	loff_t meta_plain_size = data->meta_size;
+	loff_t split_size;
 
-	pages -= snapshot_get_meta_page_count();
-	meta_size = snapshot_get_meta_data_size();
-	return snapshot_encrypted_byte_count(pages << PAGE_SHIFT) + meta_size;
+	if (!meta_plain_size)
+		meta_plain_size = snapshot_get_meta_page_count() << PAGE_SHIFT;
+
+	split_size = snapshot_encrypted_split_byte_count(raw_size,
+							 meta_plain_size);
+	if (!data->user_key_valid)
+		return max(snapshot_encrypted_byte_count(raw_size), split_size);
+
+	return split_size;
 }
 
 int snapshot_finalize_decrypted_image(struct snapshot_data *data)

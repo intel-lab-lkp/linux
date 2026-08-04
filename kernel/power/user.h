@@ -2,9 +2,12 @@
 
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
+#include <linux/spinlock.h>
 #include <linux/suspend_ioctls.h>
 #include <crypto/aead.h>
 #include <crypto/aes.h>
+
+struct pid;
 
 #define SNAPSHOT_ENCRYPTION_KEY_SIZE AES_KEYSIZE_128
 #define SNAPSHOT_AUTH_TAG_SIZE 16
@@ -32,12 +35,25 @@ struct snapshot_data {
 	size_t crypt_offset;
 	size_t crypt_size;
 	u64 crypt_total;
+	u64 crypt_stream_total;
 	u64 nonce_low;
 	u64 nonce_high;
 	u8 encryption_key[SNAPSHOT_ENCRYPTION_KEY_SIZE] __nonstring;
 	u8 user_key[USWSUSP_USER_KEY_SIZE] __nonstring;
 	bool user_key_valid;
 	u64 meta_size;
+	u64 crypt_meta_size;
+	/*
+	 * Protects crypt_bytes_read and the reservation counters below.
+	 * crypt_swap_reserved covers encrypted snapshot bytes and userspace
+	 * generated swap-map pages.
+	 */
+	spinlock_t crypt_lock;
+	u64 crypt_bytes_read;
+	u64 crypt_swap_reserved;
+	u64 crypt_header_reserved;
+	loff_t swap_header_offset;
+	struct pid *owner_tgid;
 #endif
 
 };
@@ -66,7 +82,8 @@ int snapshot_set_user_key(struct snapshot_data *data,
 
 int snapshot_store_encryption_seed(const char *buf, size_t count);
 
-loff_t snapshot_get_encrypted_image_size(loff_t raw_size);
+loff_t snapshot_get_encrypted_image_size(struct snapshot_data *data,
+					 loff_t raw_size);
 
 int snapshot_finalize_decrypted_image(struct snapshot_data *data);
 
@@ -115,7 +132,8 @@ static inline int snapshot_store_encryption_seed(const char *buf, size_t count)
 	return -ENOTTY;
 }
 
-static inline loff_t snapshot_get_encrypted_image_size(loff_t raw_size)
+static inline loff_t snapshot_get_encrypted_image_size(struct snapshot_data *data,
+						       loff_t raw_size)
 {
 	return raw_size;
 }

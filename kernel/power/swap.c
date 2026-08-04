@@ -166,6 +166,104 @@ static int swsusp_extents_insert(unsigned long swap_offset)
 	return 0;
 }
 
+static bool swsusp_extents_contain_range(unsigned long swap_offset,
+					 unsigned long nr_pages)
+{
+	struct rb_node *node = swsusp_extents.rb_node;
+	struct swsusp_extent *ext;
+	unsigned long end;
+
+	if (!nr_pages)
+		return false;
+
+	end = swap_offset + nr_pages - 1;
+	if (end < swap_offset)
+		return false;
+
+	while (node) {
+		ext = rb_entry(node, struct swsusp_extent, node);
+		if (swap_offset < ext->start)
+			node = node->rb_left;
+		else if (swap_offset > ext->end)
+			node = node->rb_right;
+		else
+			goto found;
+	}
+
+	return false;
+
+found:
+	for (;;) {
+		if (swap_offset < ext->start)
+			return false;
+		if (end <= ext->end)
+			return true;
+		if (ext->end == (unsigned long)-1)
+			return false;
+
+		swap_offset = ext->end + 1;
+		node = rb_next(&ext->node);
+		if (!node)
+			return false;
+
+		ext = rb_entry(node, struct swsusp_extent, node);
+	}
+}
+
+bool swsusp_swap_range_allocated(int swap, loff_t pos, size_t count)
+{
+	u64 block;
+	u64 end;
+	u64 end_block;
+
+	if (swap < 0 || pos < 0 || !count)
+		return false;
+
+	end = (u64)pos + count - 1;
+	if (end < (u64)pos)
+		return false;
+
+	block = (u64)pos >> PAGE_SHIFT;
+	end_block = end >> PAGE_SHIFT;
+
+	for (;;) {
+		u64 remaining_pages = end_block - block + 1;
+		pgoff_t swap_offset;
+		pgoff_t mapped_pages;
+		sector_t page_block = block;
+		u64 pages;
+
+		if (!remaining_pages)
+			return false;
+		if ((u64)page_block != block)
+			return false;
+		if (swapdev_block_to_extent(swap, page_block, &swap_offset,
+					    &mapped_pages))
+			return false;
+		if (!mapped_pages)
+			return false;
+		pages = min_t(u64, mapped_pages, remaining_pages);
+		if ((u64)(unsigned long)pages != pages)
+			return false;
+		if (!swsusp_extents_contain_range(swap_offset, pages))
+			return false;
+		if (pages == remaining_pages)
+			return true;
+		block += pages;
+	}
+}
+
+u64 swsusp_swap_map_bytes(u64 image_bytes)
+{
+	u64 image_pages = DIV_ROUND_UP_ULL(image_bytes, PAGE_SIZE);
+	u64 map_pages = image_pages / MAP_PAGE_ENTRIES + 1;
+
+	if (map_pages > U64_MAX >> PAGE_SHIFT)
+		return U64_MAX;
+
+	return map_pages << PAGE_SHIFT;
+}
+
 sector_t alloc_swapdev_block(int swap)
 {
 	unsigned long offset;
