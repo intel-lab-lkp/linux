@@ -1269,7 +1269,6 @@ static unsigned long __init zone_spanned_pages_in_node(int nid,
 		return 0;
 
 	/* Move the zone boundaries inside the node if necessary */
-	*zone_end_pfn = min(*zone_end_pfn, node_end_pfn);
 	*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
 
 	/* Return the spanned pages */
