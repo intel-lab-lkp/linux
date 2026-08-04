@@ -71,8 +71,9 @@ follows.
 ===================   =========================================================
 id                    Device number (the X in /dev/zloopX).
                       Default: automatically assigned.
-capacity_mb           Device total capacity in MiB. This is always rounded up
-                      to the nearest higher multiple of the zone size.
+capacity_mb           Device total capacity in MiB. A smaller last zone is not
+                      supported, so an unaligned value is rounded down to a
+                      zone-size multiple.
                       Default: 16384 MiB (16 GiB).
 zone_size_mb          Device zone size in MiB. Default: 256 MiB.
 zone_capacity_mb      Device zone capacity (must always be equal to or lower
