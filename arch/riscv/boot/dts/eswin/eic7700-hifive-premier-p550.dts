@@ -6,6 +6,7 @@
 /dts-v1/;
 
 #include "eic7700.dtsi"
+#include "eic7700-pinctrl.dtsi"
 
 / {
 	compatible = "sifive,hifive-premier-p550", "eswin,eic7700";
@@ -18,6 +19,15 @@
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
+
+	vcc_1v8: regulator-vcc1v8 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc1v8";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
 };
 
 &osc {
@@ -25,10 +35,119 @@
 	clock-output-names = "osc_24m";
 };
 
+&gpio0_pins {
+	bias-disable;
+	input-enable;
+};
+
+&gpio5_pins {
+	bias-disable;
+	input-enable;
+};
+
+&gpio11_pins {
+	bias-disable;
+	input-enable;
+};
+
+&gpio14_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio15_pins {
+	bias-disable;
+	input-enable;
+};
+
+&gpio28_pins {
+	bias-disable;
+	input-enable;
+};
+
+&gpio43_pins {
+	bias-disable;
+	input-disable;
+};
+
+&gpio71_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio74_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio76_pins {
+	bias-disable;
+	input-disable;
+};
+
+&gpio77_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio79_pins {
+	bias-disable;
+	input-disable;
+};
+
+&gpio80_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio82_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio84_pins {
+	bias-disable;
+	input-disable;
+};
+
+&gpio85_pins {
+	bias-pull-up;
+	input-disable;
+};
+
+&gpio94_pins {
+	bias-disable;
+	input-disable;
+};
+
+&gpio106_pins {
+	bias-disable;
+	input-disable;
+};
+
+&gpio111_pins {
+	bias-disable;
+	input-disable;
+};
+
+&pinctrl {
+	pinctrl-names = "default";
+	pinctrl-0 = <&gpio0_pins>, <&gpio5_pins>, <&gpio11_pins>,
+		    <&gpio14_pins>, <&gpio15_pins>, <&gpio28_pins>, <&gpio43_pins>,
+		    <&gpio71_pins>, <&gpio74_pins>, <&gpio76_pins>, <&gpio77_pins>,
+		    <&gpio79_pins>, <&gpio80_pins>, <&gpio82_pins>, <&gpio84_pins>,
+		    <&gpio85_pins>, <&gpio94_pins>, <&gpio106_pins>, <&gpio111_pins>;
+	vrgmii-supply = <&vcc_1v8>;
+};
+
 &uart0 {
 	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
 };
 
 &uart2 {
 	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_pins>;
 };
