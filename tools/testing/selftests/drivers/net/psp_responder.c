@@ -185,22 +185,22 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 			}
 
 			off += n;
-			n = off;
 
 #define __consume(sz)						\
 		({						\
-			if (n == (sz)) {			\
-				off = 0;			\
-			} else {				\
-				off -= (sz);			\
-				memmove(buf, &buf[(sz)], off);	\
-			}					\
+			off -= (sz);				\
+			memmove(buf, &buf[(sz)], off);		\
 		})
 
-#define cmd(_name)							\
+/* Only match once the command and its _extra_sz byte payload are both
+ * buffered, otherwise a split read would consume the name and strand
+ * the payload, desynchronizing the parser for good.
+ */
+#define cmd(_name, _extra_sz)						\
 		({							\
 			ssize_t sz = sizeof(_name);			\
-			bool match = n >= sz &&	!memcmp(buf, _name, sz); \
+			bool match = off >= sz + (_extra_sz) &&		\
+				!memcmp(buf, _name, sz);		\
 									\
 			if (match) {					\
 				dbg("command: " _name "\n");		\
@@ -213,10 +213,10 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 			do {
 				consumed = false;
 
-				if (cmd("read len"))
+				if (cmd("read len", 0))
 					send_str(comm_sock, data_read);
 
-				if (cmd("data echo")) {
+				if (cmd("data echo", 0)) {
 					if (data_sock >= 0)
 						send(data_sock, "echo", 5,
 						     MSG_WAITALL);
@@ -224,7 +224,7 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 						fprintf(stderr, "WARN: echo but no data sock\n");
 					send_ack(comm_sock);
 				}
-				if (cmd("data close")) {
+				if (cmd("data close", 0)) {
 					if (data_sock >= 0) {
 						close(data_sock);
 						data_sock = -1;
@@ -233,26 +233,22 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 						race_close = true;
 					}
 				}
-				if (cmd("conn psp")) {
+				if (cmd("conn psp", 2)) {
 					if (accept_cfg != ACCEPT_CFG_NONE)
 						fprintf(stderr, "WARN: old conn config still set!\n");
 					accept_cfg = ACCEPT_CFG_PSP;
 					send_ack(comm_sock);
 					/* next two bytes are versions */
-					if (off >= 2) {
-						memcpy(&psp_vers, buf, 2);
-						__consume(2);
-					} else {
-						fprintf(stderr, "WARN: short conn psp command!\n");
-					}
+					memcpy(&psp_vers, buf, 2);
+					__consume(2);
 				}
-				if (cmd("conn clr")) {
+				if (cmd("conn clr", 0)) {
 					if (accept_cfg != ACCEPT_CFG_NONE)
 						fprintf(stderr, "WARN: old conn config still set!\n");
 					accept_cfg = ACCEPT_CFG_CLEAR;
 					send_ack(comm_sock);
 				}
-				if (cmd("exit"))
+				if (cmd("exit", 0))
 					should_quit = true;
 #undef cmd
 
