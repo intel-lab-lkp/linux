@@ -35,6 +35,13 @@ struct iommu {
 struct iommu *iommu_init(const char *iommu_mode);
 void iommu_cleanup(struct iommu *iommu);
 
+int __iommufd_map_file(struct iommu *iommu, struct dma_region *region, int fd);
+
+static inline void iommufd_map_file(struct iommu *iommu, struct dma_region *region, int fd)
+{
+	VFIO_ASSERT_EQ(__iommufd_map_file(iommu, region, fd), 0);
+}
+
 int __iommu_map(struct iommu *iommu, struct dma_region *region);
 
 static inline void iommu_map(struct iommu *iommu, struct dma_region *region)
