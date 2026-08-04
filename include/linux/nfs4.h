@@ -618,6 +618,9 @@ enum {
 #define THRESHOLD_RD_IO                 (1UL << 2)
 #define THRESHOLD_WR_IO                 (1UL << 3)
 
+/* Directory Delegation / CB_NOTIFY bits */
+#define CB_NOTIFY4_GFLAG_EXTEND		(1UL << 6)
+
 #define NFSPROC4_NULL 0
 #define NFSPROC4_COMPOUND 1
 #define NFS4_VERSION 4

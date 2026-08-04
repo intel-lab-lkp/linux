@@ -31,6 +31,7 @@
 #define CB_OP_RECALL_RES_MAXSZ		(CB_OP_HDR_RES_MAXSZ)
 
 #define CB_OP_LAYOUTRECALL_RES_MAXSZ	(CB_OP_HDR_RES_MAXSZ)
+#define CB_OP_NOTIFY_RES_MAXSZ		(CB_OP_HDR_RES_MAXSZ)
 #define CB_OP_DEVICENOTIFY_RES_MAXSZ	(CB_OP_HDR_RES_MAXSZ)
 #define CB_OP_SEQUENCE_RES_MAXSZ	(CB_OP_HDR_RES_MAXSZ + \
 					 NFS4_MAX_SESSIONID_LEN + \
@@ -249,6 +250,52 @@ static __be32 decode_layoutrecall_args(struct svc_rqst *rqstp,
 	} else if (args->cbl_recall_type != RETURN_ALL)
 		return htonl(NFS4ERR_BADXDR);
 	return 0;
+}
+
+static
+__be32 decode_notify_args(struct svc_rqst *rqstp,
+			  struct xdr_stream *xdr,
+			  void *argp)
+{
+	struct cb_notifyargs *args = argp;
+	__be32 status;
+	size_t res;
+	__be32 *p;
+	int i;
+
+	status = decode_stateid(xdr, &args->cna_stateid);
+	if (unlikely(status != 0))
+		return status;
+
+	status = decode_fh(xdr, &args->cna_fh);
+	if (unlikely(status != 0))
+		return status;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		goto out;
+
+	args->cna_n_changes = ntohl(*p++);
+	args->cna_changes = kmalloc_array(args->cna_n_changes,
+					  sizeof(*args->cna_changes),
+					  GFP_KERNEL);
+	if (!args->cna_changes)
+		goto out;
+
+	for (i = 0; i < args->cna_n_changes; i++) {
+		struct cb_notify_changes *change = &args->cna_changes[i];
+
+		res = xdr_stream_decode_uint32_array(xdr,
+						     &change->notify_mask, 1);
+		if (unlikely(res < 0))
+			goto err;
+	}
+
+	return 0;
+err:
+	kfree(args->cna_changes);
+out:
+	return htonl(NFS4ERR_BADXDR);
 }
 
 static
@@ -798,12 +845,12 @@ preprocess_nfs41_op(int nop, unsigned int op_nr, struct callback_op **op)
 	case OP_CB_RECALL_ANY:
 	case OP_CB_RECALL_SLOT:
 	case OP_CB_LAYOUTRECALL:
+	case OP_CB_NOTIFY:
 	case OP_CB_NOTIFY_DEVICEID:
 	case OP_CB_NOTIFY_LOCK:
 		*op = &callback_ops[op_nr];
 		break;
 
-	case OP_CB_NOTIFY:
 	case OP_CB_PUSH_DELEG:
 	case OP_CB_RECALLABLE_OBJ_AVAIL:
 	case OP_CB_WANTS_CANCELLED:
@@ -1034,6 +1081,11 @@ static struct callback_op callback_ops[] = {
 		.process_op = nfs4_callback_layoutrecall,
 		.decode_args = decode_layoutrecall_args,
 		.res_maxsize = CB_OP_LAYOUTRECALL_RES_MAXSZ,
+	},
+	[OP_CB_NOTIFY] = {
+		.process_op = nfs4_callback_notify,
+		.decode_args = decode_notify_args,
+		.res_maxsize = CB_OP_NOTIFY_RES_MAXSZ,
 	},
 	[OP_CB_NOTIFY_DEVICEID] = {
 		.process_op = nfs4_callback_devicenotify,
