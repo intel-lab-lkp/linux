@@ -160,8 +160,8 @@ void ODM_TxPwrTrackSetPwr_8723B(
 	u8 PwrTrackingLimit_OFDM = 34; /* 0dB */
 	u8 PwrTrackingLimit_CCK = 28; /* 2dB */
 	u8 TxRate = 0xFF;
-	u8 Final_OFDM_Swing_Index = 0;
-	u8 Final_CCK_Swing_Index = 0;
+	int Final_OFDM_Swing_Index = 0;
+	int Final_CCK_Swing_Index = 0;
 
 	{
 		u16 rate = *(pDM_Odm->pForcedDataRate);
