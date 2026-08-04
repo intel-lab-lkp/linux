@@ -2395,6 +2395,13 @@ static void __tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 	 * the same host router USB4 downstream port.
 	 */
 	tb_enable_clx(sw);
+
+	/*
+	 * Some host routers may hang the Tx ring after DMA path teardowns.
+	 * Issue a Host Interface Reset to prevent it.
+	 */
+	if (tb->root_switch->quirks & QUIRK_HOST_INTERFACE_RESET)
+		tb_nhi_host_interface_reset(tb);
 }
 
 static int tb_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,

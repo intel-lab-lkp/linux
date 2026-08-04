@@ -52,6 +52,12 @@ static void quirk_block_rpm_in_redrive(struct tb_switch *sw)
 	tb_sw_dbg(sw, "preventing runtime PM in DP redrive mode\n");
 }
 
+static void quirk_host_interface_reset(struct tb_switch *sw)
+{
+	sw->quirks |= QUIRK_HOST_INTERFACE_RESET;
+	tb_sw_dbg(sw, "enabling host interface reset on DMA path teardown\n");
+}
+
 struct tb_quirk {
 	u16 hw_vendor_id;
 	u16 hw_device_id;
@@ -114,6 +120,16 @@ static const struct tb_quirk tb_quirks[] = {
 	{ 0x0438, 0x0209, 0x0000, 0x0000, quirk_clx_disable },
 	{ 0x0438, 0x020a, 0x0000, 0x0000, quirk_clx_disable },
 	{ 0x0438, 0x020b, 0x0000, 0x0000, quirk_clx_disable },
+	/*
+	 * AMD USB4 host routers may hang the Tx ring after repeated
+	 * DMA path teardowns. Issue a Host Interface Reset on each
+	 * teardown to prevent the hang.
+	 */
+	{ 0x0438, 0x020d, 0x0000, 0x0000, quirk_host_interface_reset },
+	{ 0x0438, 0x020e, 0x0000, 0x0000, quirk_host_interface_reset },
+	{ 0x0438, 0x020f, 0x0000, 0x0000, quirk_host_interface_reset },
+	{ 0x0438, 0x0210, 0x0000, 0x0000, quirk_host_interface_reset },
+	{ 0x0438, 0x0211, 0x0000, 0x0000, quirk_host_interface_reset },
 };
 
 /**

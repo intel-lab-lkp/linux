@@ -1160,6 +1160,54 @@ static void nhi_reset(struct tb_nhi *nhi)
 	dev_warn(nhi->dev, "timeout resetting host router\n");
 }
 
+/**
+ * nhi_host_interface_reset() - Issue a host interface reset
+ * @nhi: Pointer to the NHI structure
+ *
+ * Resets the Host Interface by setting the RST bit in the Host Interface
+ * Reset register. This brings the registers in the memory BAR to their
+ * default state and clears the End-to-End Flow Control state.
+ *
+ * The caller must ensure that the control channel (Ring 0) is stopped
+ * before calling this function, since the reset clears ring state.
+ * The caller is responsible for restarting Ring 0 afterward.
+ *
+ * After setting the RST bit, waits for tHIReset (10 ms) for the reset
+ * to complete.
+ */
+static void nhi_host_interface_reset(struct tb_nhi *nhi)
+{
+	struct device *dev = nhi->dev;
+	u32 val;
+
+	val = ioread32(nhi->iobase + REG_CAPS);
+	/* Host Interface Reset only applies to Ver. 1 routers */
+	if (FIELD_GET(REG_CAPS_VERSION_MASK, val) >= REG_CAPS_VERSION_2)
+		return;
+
+	dev_dbg(dev, "issuing host interface reset\n");
+
+	iowrite32(REG_HOST_INTERFACE_RESET_RST,
+		  nhi->iobase + REG_HOST_INTERFACE_RESET);
+
+	/* Wait for tHIReset (10 ms) for the reset to complete */
+	usleep_range(10000, 20000);
+}
+
+/**
+ * tb_nhi_host_interface_reset() - Reset host interface with control channel
+ * @tb: Pointer to the thunderbolt domain
+ *
+ * Stops the control channel, issues a Host Interface Reset, and restarts
+ * the control channel.
+ */
+void tb_nhi_host_interface_reset(struct tb *tb)
+{
+	tb_ctl_stop(tb->ctl);
+	nhi_host_interface_reset(tb->nhi);
+	tb_ctl_start(tb->ctl);
+}
+
 static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 {
 	struct tb *tb;

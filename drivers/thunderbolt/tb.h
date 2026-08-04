@@ -26,6 +26,8 @@
 #define QUIRK_NO_CLX					BIT(1)
 /* Need to keep power on while USB4 port is in redrive mode */
 #define QUIRK_KEEP_POWER_IN_DP_REDRIVE			BIT(2)
+/* Reset Host Interface on DMA path teardown to prevent Tx ring hang */
+#define QUIRK_HOST_INTERFACE_RESET			BIT(3)
 
 /**
  * struct tb_nvm - Structure holding NVM information
@@ -1506,6 +1508,7 @@ static inline bool usb4_port_device_is_offline(const struct usb4_port *usb4)
 }
 
 void tb_check_quirks(struct tb_switch *sw);
+void tb_nhi_host_interface_reset(struct tb *tb);
 
 #ifdef CONFIG_ACPI
 bool tb_acpi_add_links(struct tb_nhi *nhi);
