@@ -637,13 +637,17 @@ enum sctp_disposition sctp_sf_do_5_1C_ack(struct net *net,
 	return SCTP_DISPOSITION_CONSUME;
 }
 
-static bool sctp_auth_chunk_verify(struct net *net, struct sctp_chunk *chunk,
-				   const struct sctp_association *asoc)
+static enum sctp_ierror sctp_auth_chunk_verify(struct net *net,
+					       struct sctp_chunk *chunk,
+					       const struct sctp_association *asoc)
 {
 	struct sctp_chunk auth;
 
-	if (!chunk->auth_chunk)
-		return !sctp_auth_recv_cid(chunk->chunk_hdr->type, asoc);
+	if (!chunk->auth_chunk) {
+		if (sctp_auth_recv_cid(chunk->chunk_hdr->type, asoc))
+			return SCTP_IERROR_BAD_SIG;
+		return SCTP_IERROR_NO_ERROR;
+	}
 
 	/* SCTP-AUTH:  auth_chunk pointer is only set when the cookie-echo
 	 * is supposed to be authenticated and we have to do delayed
@@ -654,7 +658,7 @@ static bool sctp_auth_chunk_verify(struct net *net, struct sctp_chunk *chunk,
 
 	/* Make sure that we and the peer are AUTH capable */
 	if (!net->sctp.auth_enable || !asoc->peer.auth_capable)
-		return false;
+		return SCTP_IERROR_BAD_SIG;
 
 	/* set-up our fake chunk so that we can process it */
 	auth.skb = chunk->auth_chunk;
@@ -666,7 +670,7 @@ static bool sctp_auth_chunk_verify(struct net *net, struct sctp_chunk *chunk,
 	skb_pull(chunk->auth_chunk, sizeof(struct sctp_chunkhdr));
 	auth.transport = chunk->transport;
 
-	return sctp_sf_authenticate(asoc, &auth) == SCTP_IERROR_NO_ERROR;
+	return sctp_sf_authenticate(asoc, &auth);
 }
 
 /*
@@ -826,8 +830,11 @@ enum sctp_disposition sctp_sf_do_5_1D_ce(struct net *net,
 	if (error)
 		goto nomem_init;
 
-	if (!sctp_auth_chunk_verify(net, chunk, new_asoc)) {
+	error = sctp_auth_chunk_verify(net, chunk, new_asoc);
+	if (error != SCTP_IERROR_NO_ERROR) {
 		sctp_association_free(new_asoc);
+		if (error == SCTP_IERROR_NOMEM)
+			return SCTP_DISPOSITION_NOMEM;
 		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
 	}
 
@@ -1889,6 +1896,7 @@ static enum sctp_disposition sctp_sf_do_dupcook_a(
 {
 	struct sctp_init_chunk *peer_init;
 	enum sctp_disposition disposition;
+	enum sctp_ierror error;
 	struct sctp_ulpevent *ev;
 	struct sctp_chunk *repl;
 	struct sctp_chunk *err;
@@ -1904,8 +1912,12 @@ static enum sctp_disposition sctp_sf_do_dupcook_a(
 	if (sctp_auth_asoc_init_active_key(new_asoc, GFP_ATOMIC))
 		goto nomem;
 
-	if (!sctp_auth_chunk_verify(net, chunk, new_asoc))
+	error = sctp_auth_chunk_verify(net, chunk, new_asoc);
+	if (error != SCTP_IERROR_NO_ERROR) {
+		if (error == SCTP_IERROR_NOMEM)
+			return SCTP_DISPOSITION_NOMEM;
 		return SCTP_DISPOSITION_DISCARD;
+	}
 
 	/* Make sure no new addresses are being added during the
 	 * restart.  Though this is a pretty complicated attack
@@ -2011,6 +2023,7 @@ static enum sctp_disposition sctp_sf_do_dupcook_b(
 					struct sctp_association *new_asoc)
 {
 	struct sctp_init_chunk *peer_init;
+	enum sctp_ierror error;
 	struct sctp_chunk *repl;
 
 	/* new_asoc is a brand-new association, so these are not yet
@@ -2024,8 +2037,12 @@ static enum sctp_disposition sctp_sf_do_dupcook_b(
 	if (sctp_auth_asoc_init_active_key(new_asoc, GFP_ATOMIC))
 		goto nomem;
 
-	if (!sctp_auth_chunk_verify(net, chunk, new_asoc))
+	error = sctp_auth_chunk_verify(net, chunk, new_asoc);
+	if (error != SCTP_IERROR_NO_ERROR) {
+		if (error == SCTP_IERROR_NOMEM)
+			return SCTP_DISPOSITION_NOMEM;
 		return SCTP_DISPOSITION_DISCARD;
+	}
 
 	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_STATE,
 			SCTP_STATE(SCTP_STATE_ESTABLISHED));
@@ -2118,6 +2135,7 @@ static enum sctp_disposition sctp_sf_do_dupcook_d(
 					struct sctp_association *new_asoc)
 {
 	struct sctp_ulpevent *ev = NULL, *ai_ev = NULL, *auth_ev = NULL;
+	enum sctp_ierror error;
 	struct sctp_chunk *repl;
 
 	/* Clarification from Implementor's Guide:
@@ -2127,8 +2145,12 @@ static enum sctp_disposition sctp_sf_do_dupcook_d(
 	 * a COOKIE ACK.
 	 */
 
-	if (!sctp_auth_chunk_verify(net, chunk, asoc))
+	error = sctp_auth_chunk_verify(net, chunk, asoc);
+	if (error != SCTP_IERROR_NO_ERROR) {
+		if (error == SCTP_IERROR_NOMEM)
+			return SCTP_DISPOSITION_NOMEM;
 		return SCTP_DISPOSITION_DISCARD;
+	}
 
 	/* Don't accidentally move back into established state. */
 	if (asoc->state < SCTP_STATE_ESTABLISHED) {
@@ -4455,9 +4477,12 @@ static enum sctp_ierror sctp_sf_authenticate(
 
 	memset(digest, 0, sig_len);
 
-	sctp_auth_calculate_hmac(asoc, chunk->skb,
-				 (struct sctp_auth_chunk *)chunk->chunk_hdr,
-				 sh_key, GFP_ATOMIC);
+	if (sctp_auth_calculate_hmac(asoc, chunk->skb,
+				     (struct sctp_auth_chunk *)chunk->chunk_hdr,
+				     sh_key, GFP_ATOMIC)) {
+		kfree(save_digest);
+		return SCTP_IERROR_NOMEM;
+	}
 
 	/* Discard the packet if the digests do not match */
 	if (crypto_memneq(save_digest, digest, sig_len)) {
