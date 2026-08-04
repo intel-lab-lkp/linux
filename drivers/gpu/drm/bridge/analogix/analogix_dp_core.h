@@ -168,6 +168,7 @@ struct analogix_dp_device {
 	bool			force_hpd;
 	bool			fast_train_enable;
 	bool			psr_supported;
+	bool			last_bridge_is_panel;
 
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 

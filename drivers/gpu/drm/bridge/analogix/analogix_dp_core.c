@@ -906,8 +906,15 @@ analogix_dp_bridge_detect(struct drm_bridge *bridge, struct drm_connector *conne
 	struct analogix_dp_device *dp = to_dp(bridge);
 	enum drm_connector_status status = connector_status_disconnected;
 
-	if (dp->plat_data->next_bridge)
-		return connector_status_connected;
+	/*
+	 * Only assume connected when the bridge chain ends with a panel.
+	 * Panel bridges lack a detect callback and historically rely on
+	 * this shortcut. For other next bridge types (e.g., DP connector
+	 * bridges), fall through to analogix_dp_detect_hpd() to report
+	 * accurate hotplug state.
+	 */
+	if (dp->plat_data->next_bridge && dp->last_bridge_is_panel)
+		status = connector_status_connected;
 
 	if (!analogix_dp_detect_hpd(dp))
 		status = connector_status_connected;
@@ -920,6 +927,7 @@ static int analogix_dp_bridge_attach(struct drm_bridge *bridge,
 				     enum drm_bridge_attach_flags flags)
 {
 	struct analogix_dp_device *dp = to_dp(bridge);
+	struct drm_bridge *last_bridge;
 	int ret = 0;
 
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)) {
@@ -934,6 +942,10 @@ static int analogix_dp_bridge_attach(struct drm_bridge *bridge,
 			dev_err(dp->dev, "failed to attach following panel or bridge (%d)\n", ret);
 			return ret;
 		}
+
+		last_bridge = drm_bridge_chain_get_last_bridge(dp->encoder);
+		if (drm_bridge_is_panel(last_bridge))
+			dp->last_bridge_is_panel = true;
 	}
 
 	return 0;
