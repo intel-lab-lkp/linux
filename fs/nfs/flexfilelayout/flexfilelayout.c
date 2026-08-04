@@ -515,7 +515,8 @@ ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 		    dss_count == 0)
 			goto out_err_free;
 
-		if (dss_count > 1 && stripe_unit == 0)
+		if (dss_count > 1 &&
+		    (stripe_unit == 0 || stripe_unit > U32_MAX))
 			goto out_err_free;
 
 		fls->mirror_array[i] = ff_layout_alloc_mirror(dss_count, gfp_flags);
