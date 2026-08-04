@@ -3512,6 +3512,8 @@ static void update_task_scan_period(struct task_struct *p,
 		p->mm->numa_next_scan = jiffies +
 			msecs_to_jiffies(p->numa_scan_period);
 
+		memset(p->numa_faults_locality, 0,
+			sizeof(p->numa_faults_locality));
 		return;
 	}
 
