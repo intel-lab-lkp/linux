@@ -58,6 +58,11 @@ static const char *ufs_hs_gear_to_string(enum ufs_hs_gear_tag gear)
 	}
 }
 
+static int ufs_gear_token_to_u32(const char *s, u32 *gear)
+{
+	return kstrtou32(s + str_has_prefix(s, "HS_GEAR"), 10, gear);
+}
+
 static const char *ufs_wb_resize_hint_to_string(enum wb_resize_hint hint)
 {
 	switch (hint) {
@@ -1101,10 +1106,64 @@ static ssize_t gear_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_pa_layer_attr *p = &hba->pwr_info;
+	u32 tx = p->gear_tx;
+	u32 rx = p->gear_rx;
+	bool hs = p->hs_rate;
 
-	return sysfs_emit(buf, "%s\n", hba->pwr_info.hs_rate ?
-			  ufs_hs_gear_to_string(hba->pwr_info.gear_rx) :
-			  ufs_pwm_gear_to_string(hba->pwr_info.gear_rx));
+	/* Symmetric: one value (unchanged). Asymmetric: "<tx> <rx>". */
+	if (tx == rx)
+		return sysfs_emit(buf, "%s\n", hs ?
+				  ufs_hs_gear_to_string(rx) :
+				  ufs_pwm_gear_to_string(rx));
+
+	if (hs)
+		return sysfs_emit(buf, "%s %s\n",
+				  ufs_hs_gear_to_string(tx),
+				  ufs_hs_gear_to_string(rx));
+
+	return sysfs_emit(buf, "%s %s\n",
+			  ufs_pwm_gear_to_string(tx),
+			  ufs_pwm_gear_to_string(rx));
+}
+
+/*
+ * Gear selection is a high-speed mode only feature. Write "<gear>" to change
+ * both TX and RX to that gear (symmetric), or "<tx> <rx>" to change them
+ * independently. Each token may be an integer (e.g. "5") or the "HS_GEARx"
+ * name that gear_show emits in HS mode (e.g. "HS_GEAR5"), so a shell round-trip
+ * works in HS mode: echo $(cat gear) > gear. A "PWM_GEARx" name is not accepted
+ * (writes are rejected in PWM mode regardless). The asymmetric form (tx != rx)
+ * requires UFSHCD_CAP_ASYMMETRIC_GEAR.
+ */
+static ssize_t gear_store(struct device *dev, struct device_attribute *attr,
+			  const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	char t1[16], t2[16], extra[2];
+	u32 tx_gear, rx_gear;
+	ssize_t res;
+	int n;
+
+	n = sscanf(buf, "%15s %15s %1s", t1, t2, extra);
+	if (n < 1 || n > 2)
+		return -EINVAL;
+	if (ufs_gear_token_to_u32(t1, &tx_gear))
+		return -EINVAL;
+	rx_gear = tx_gear;
+	if (n == 2 && ufs_gear_token_to_u32(t2, &rx_gear))
+		return -EINVAL;
+
+	down(&hba->host_sem);
+	if (!ufshcd_is_user_access_allowed(hba)) {
+		res = -EBUSY;
+		goto out;
+	}
+
+	res = ufshcd_change_gear(hba, tx_gear, rx_gear);
+out:
+	up(&hba->host_sem);
+	return res < 0 ? res : count;
 }
 
 static ssize_t dev_pm_show(struct device *dev, struct device_attribute *attr,
@@ -1126,7 +1185,7 @@ static ssize_t link_state_show(struct device *dev,
 static DEVICE_ATTR_RO(lane);
 static DEVICE_ATTR_RO(mode);
 static DEVICE_ATTR_RO(rate);
-static DEVICE_ATTR_RO(gear);
+static DEVICE_ATTR_RW(gear);
 static DEVICE_ATTR_RO(dev_pm);
 static DEVICE_ATTR_RO(link_state);
 

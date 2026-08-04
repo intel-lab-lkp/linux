@@ -1254,9 +1254,36 @@ What:		/sys/bus/platform/drivers/ufshcd/*/power_info/gear
 What:		/sys/bus/platform/devices/*.ufs/power_info/gear
 Date:		September 2023
 Contact:	Can Guo <quic_cang@quicinc.com>
-Description:	This file shows the gear of UFS link.
+Description:	Shows and sets the gear of the UFS link.
 
-		The file is read only.
+		Read returns a single gear (e.g. "HS_GEAR4") when TX and RX use
+		the same gear, or "<tx> <rx>" when they differ. In PWM mode the
+		names are "PWM_GEARx".
+
+		Gear selection is a high-speed mode only feature. Write "<gear>"
+		to set both TX and RX to that gear (symmetric), or "<tx> <rx>"
+		to set them independently. Each value may be an integer (e.g.
+		"5") or the "HS_GEARx" name that read returns in HS mode, so a
+		shell round-trip works in HS mode: echo $(cat gear) > gear. A
+		"PWM_GEARx" name is not accepted (writes are rejected in PWM
+		mode regardless).
+
+		A write fails:
+
+		- with -EOPNOTSUPP if the link is not in HS mode, or for an
+		  asymmetric request (tx != rx) on a controller that does not
+		  support it;
+		- with -EBUSY while the devfreq clock-scaling governor is
+		  enabled (disable it via clkscale_enable to take manual
+		  control), if user access is not currently allowed (e.g. during
+		  error recovery or shutdown), or if in-flight I/O could not be
+		  drained in time;
+		- with -EIO if the device renegotiates to a different gear;
+		- with -EINVAL for a malformed gear value, if a gear is below 1
+		  or exceeds the maximum negotiated during link startup, or if
+		  the link parameters are not yet valid (link not brought up).
+
+		The file is read-write.
 
 What:		/sys/bus/platform/drivers/ufshcd/*/power_info/dev_pm
 What:		/sys/bus/platform/devices/*.ufs/power_info/dev_pm

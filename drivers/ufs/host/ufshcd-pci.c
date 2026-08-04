@@ -542,6 +542,8 @@ static int ufs_amd_init(struct ufs_hba *hba)
 	/* Drive WriteBooster flushing from the flush-needed exception event. */
 	hba->quirks |= UFSHCI_QUIRK_ENABLE_WB_EXCEPTION_EVENT_CTRL;
 
+	hba->caps |= UFSHCD_CAP_ASYMMETRIC_GEAR;
+
 	return 0;
 }
 

@@ -912,6 +912,12 @@ enum ufshcd_caps {
 	 * which controls the legacy single-doorbell (SDB) UTRIACR aggregation.
 	 */
 	UFSHCD_CAP_MCQ_INTR_AGGR			= 1 << 14,
+
+	/*
+	 * This capability allows independent TX and RX gears (asymmetric power
+	 * mode).
+	 */
+	UFSHCD_CAP_ASYMMETRIC_GEAR			= 1 << 15,
 };
 
 struct ufs_hba_variant_params {

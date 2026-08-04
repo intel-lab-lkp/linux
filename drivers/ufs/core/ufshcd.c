@@ -4950,6 +4950,78 @@ int ufshcd_config_pwr_mode(struct ufs_hba *hba,
 EXPORT_SYMBOL_GPL(ufshcd_config_pwr_mode);
 
 /**
+ * ufshcd_change_gear - change the UFS TX/RX gear at runtime
+ * @hba: per-adapter instance
+ * @tx_gear: desired TX gear
+ * @rx_gear: desired RX gear
+ *
+ * Quiesces command processing and performs a power-mode change to the
+ * requested gears, keeping the current rate, lanes and power modes. Symmetric
+ * changes (tx == rx) are always allowed; asymmetric changes require
+ * UFSHCD_CAP_ASYMMETRIC_GEAR. Refused while devfreq clock scaling owns the
+ * gear, so the two never race.
+ *
+ * Return: 0 on success; -EINVAL on a bad gear, -EOPNOTSUPP for an unsupported
+ * asymmetric request, -EBUSY if clock scaling is active or I/O could not be
+ * drained, -EIO if the device renegotiated to a different gear.
+ */
+int ufshcd_change_gear(struct ufs_hba *hba, u32 tx_gear, u32 rx_gear)
+{
+	struct ufs_pa_layer_attr new_pwr;
+	int ret;
+
+	if (!hba->max_pwr_info.is_valid)
+		return -EINVAL;
+
+	if (!hba->pwr_info.hs_rate)
+		return -EOPNOTSUPP;
+
+	if (tx_gear < UFS_HS_G1 || tx_gear > hba->max_pwr_info.info.gear_tx ||
+	    rx_gear < UFS_HS_G1 || rx_gear > hba->max_pwr_info.info.gear_rx)
+		return -EINVAL;
+
+	if (tx_gear != rx_gear && !(hba->caps & UFSHCD_CAP_ASYMMETRIC_GEAR))
+		return -EOPNOTSUPP;
+
+	if (hba->clk_scaling.is_enabled)
+		return -EBUSY;
+
+	ufshcd_rpm_get_sync(hba);
+	ufshcd_hold(hba);
+
+	ret = ufshcd_pause_command_processing(hba, USEC_PER_SEC);
+	if (ret)
+		goto release;
+
+	new_pwr = hba->pwr_info;
+	new_pwr.gear_tx = tx_gear;
+	new_pwr.gear_rx = rx_gear;
+
+	ret = ufshcd_config_pwr_mode(hba, &new_pwr, UFSHCD_PMC_POLICY_DONT_FORCE);
+	if (ret) {
+		dev_err(hba->dev, "gear change to tx %u rx %u failed %d\n",
+			tx_gear, rx_gear, ret);
+		goto resume;
+	}
+
+	/* The device may renegotiate; report if it did not honour the request. */
+	if (hba->pwr_info.gear_tx != tx_gear || hba->pwr_info.gear_rx != rx_gear) {
+		dev_err(hba->dev, "gear renegotiated to tx %u rx %u, wanted tx %u rx %u\n",
+			hba->pwr_info.gear_tx, hba->pwr_info.gear_rx,
+			tx_gear, rx_gear);
+		ret = -EIO;
+	}
+
+resume:
+	ufshcd_resume_command_processing(hba);
+release:
+	ufshcd_release(hba);
+	ufshcd_rpm_put_sync(hba);
+
+	return ret;
+}
+
+/**
  * ufshcd_complete_dev_init() - checks device readiness
  * @hba: per-adapter instance
  *
