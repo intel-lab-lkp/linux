@@ -1245,6 +1245,22 @@ static struct snd_soc_acpi_adr_device *find_acpi_adr_device(struct device *dev,
 			((u64)(sdw_device->id.sdw_version & 0xF) << 44) |
 			((u64)(sdw_device->bus->link_id & 0xF) << 48);
 
+	/*
+	 * Firmware may describe a single physical part with more than one _ADR
+	 * entry, differing only in SDCA class id. Those entries are the same
+	 * device: they must share a name prefix, and only the first of them may
+	 * consume an amp index. Otherwise the part that actually enumerates is
+	 * named as though it were the second amplifier, and UCM profiles
+	 * written for the first one address a device that is not there.
+	 */
+	for (j = 0; j < index; j++) {
+		if ((adr_dev[j].adr & ~SDW_CLASS_ID_MASK) ==
+		    (adr_dev[index].adr & ~SDW_CLASS_ID_MASK)) {
+			adr_dev[index].name_prefix = adr_dev[j].name_prefix;
+			goto done_name_prefix;
+		}
+	}
+
 	if (!codec_info_list[i].is_amp) {
 		/* For non-amp codecs, get name_prefix from codec_info_list[] */
 		adr_dev[index].name_prefix = devm_kasprintf(dev, GFP_KERNEL, "%s", name_prefix);
