@@ -1126,7 +1126,7 @@ e.g. of tty devices. In this case the driver flag IFF_ECHO has to be
 set to prevent the PF_CAN core from locally echoing sent frames
 (aka loopback) as fallback solution::
 
-    dev->flags = (IFF_NOARP | IFF_ECHO);
+    dev->flags |= IFF_ECHO;
 
 
 CAN Controller Hardware Filters
