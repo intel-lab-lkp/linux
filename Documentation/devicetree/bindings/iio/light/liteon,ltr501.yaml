@@ -17,6 +17,7 @@ properties:
     enum:
       - liteon,ltr301
       - liteon,ltr303
+      - liteon,ltr329
       - liteon,ltr501
       - liteon,ltr559
 
