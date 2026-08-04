@@ -2045,6 +2045,10 @@ static int m88ds3103_probe(struct i2c_client *client)
 	struct m88ds3103_platform_data *pdata = client->dev.platform_data;
 	int ret;
 	unsigned int utmp;
+	static const struct regmap_config regmap_config = {
+		.reg_bits = 8,
+		.val_bits = 8,
+	};
 
 	dev = kzalloc_obj(*dev);
 	if (!dev) {
@@ -2067,10 +2071,7 @@ static int m88ds3103_probe(struct i2c_client *client)
 	dev->config.lnb_en_pol = pdata->lnb_en_pol;
 	dev->cfg = &dev->config;
 	/* create regmap */
-	dev->regmap_config.reg_bits = 8;
-	dev->regmap_config.val_bits = 8;
-	dev->regmap_config.lock_arg = dev;
-	dev->regmap = devm_regmap_init_i2c(client, &dev->regmap_config);
+	dev->regmap = devm_regmap_init_i2c(client, &regmap_config);
 	if (IS_ERR(dev->regmap)) {
 		ret = PTR_ERR(dev->regmap);
 		goto err_kfree;
