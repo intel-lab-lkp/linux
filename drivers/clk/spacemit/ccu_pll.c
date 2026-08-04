@@ -148,7 +148,7 @@ static int ccu_pll_init(struct clk_hw *hw)
 	ccu_pll_disable(hw);
 	ccu_pll_update_param(pll, &pll->config.rate_tbl[0]);
 
-	return 0;
+	return ccu_pll_enable(hw);
 }
 
 static const struct ccu_pll_rate_tbl *ccu_plla_lookup_matched_entry(struct ccu_pll *pll)
@@ -252,7 +252,7 @@ static int ccu_plla_init(struct clk_hw *hw)
 	ccu_plla_disable(hw);
 	ccu_plla_update_param(pll, &pll->config.rate_tbl[0]);
 
-	return 0;
+	return ccu_plla_enable(hw);
 }
 
 const struct clk_ops spacemit_ccu_pll_ops = {
