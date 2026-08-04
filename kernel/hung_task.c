@@ -59,6 +59,8 @@ static unsigned long __read_mostly sysctl_hung_task_check_interval_secs;
 
 static int __read_mostly sysctl_hung_task_warnings = 10;
 
+static int hung_task_warnings_printed = 10;
+
 static int __read_mostly did_panic;
 static bool hung_task_call_panic;
 
@@ -247,9 +249,9 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 	 * CONFIG_DEFAULT_HUNG_TASK_TIMEOUT. Therefore, complain
 	 * accordingly
 	 */
-	if (sysctl_hung_task_warnings || hung_task_call_panic) {
-		if (sysctl_hung_task_warnings > 0)
-			sysctl_hung_task_warnings--;
+	if (hung_task_warnings_printed || hung_task_call_panic) {
+		if (hung_task_warnings_printed > 0)
+			hung_task_warnings_printed--;
 		pr_err("INFO: task %s:%d blocked%s for more than %ld seconds.\n",
 		       t->comm, t->pid, t->in_iowait ? " in I/O wait" : "",
 		       (jiffies - t->last_switch_time) / HZ);
@@ -264,7 +266,7 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 		sched_show_task(t);
 		debug_show_blocker(t, timeout);
 
-		if (!sysctl_hung_task_warnings)
+		if (!hung_task_warnings_printed)
 			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
 	}
 
@@ -304,7 +306,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	unsigned long last_break = jiffies;
 	struct task_struct *g, *t;
 	unsigned long this_round_count;
-	int need_warning = sysctl_hung_task_warnings;
+	int need_warning = hung_task_warnings_printed;
 	unsigned long si_mask = hung_task_si_mask;
 
 	/*
@@ -340,8 +342,10 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
  unlock:
 	rcu_read_unlock();
 
-	if (!this_round_count)
+	if (!this_round_count) {
+		hung_task_warnings_printed = sysctl_hung_task_warnings;
 		return;
+	}
 
 	if (need_warning || hung_task_call_panic) {
 		si_mask |= SYS_INFO_LOCKS;
@@ -425,6 +429,22 @@ static int proc_dohung_task_timeout_secs(const struct ctl_table *table, int writ
 	return ret;
 }
 
+static int proc_dohung_task_warnings(const struct ctl_table *table, int write,
+				     void *buffer,
+				     size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+
+	if (ret || !write)
+		return ret;
+
+	hung_task_warnings_printed = sysctl_hung_task_warnings;
+
+	return 0;
+}
+
 /*
  * This is needed for proc_doulongvec_minmax of sysctl_hung_task_timeout_secs
  * and hung_task_check_interval_secs
@@ -480,7 +500,7 @@ static const struct ctl_table hung_task_sysctls[] = {
 		.data		= &sysctl_hung_task_warnings,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler	= proc_dohung_task_warnings,
 		.extra1		= SYSCTL_NEG_ONE,
 	},
 	{
