@@ -2982,7 +2982,7 @@ static int __init hv_acpi_init(void)
 		return -ENODEV;
 
 	if (hv_root_partition() && !hv_nested)
-		return 0;
+		return -ENODEV;
 
 	/*
 	 * Get ACPI resources first.
