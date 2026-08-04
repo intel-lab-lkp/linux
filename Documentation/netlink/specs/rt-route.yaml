@@ -78,6 +78,15 @@ definitions:
       -
         name: rta-used
         type: u32
+  -
+    name: del-reason
+    type: enum
+    name-prefix: rt-del-reason-
+    enum-name: rt-del-reason
+    entries:
+      - unspec
+      - expired
+      - ra-withdrawn
 
 attribute-sets:
   -
@@ -185,6 +194,10 @@ attribute-sets:
         type: u32
         byte-order: big-endian
         display-hint: hex
+      -
+        name: del-reason
+        type: u32
+        enum: del-reason
   -
     name: metrics
     name-prefix: rtax-
@@ -299,6 +312,7 @@ operations:
             - dport
             - nh-id
             - flowlabel
+            - del-reason
       dump:
         request:
           value: 26
@@ -313,6 +327,9 @@ operations:
       do:
         request:
           value: 24
+          # del-reason is notification-only. It is above
+          # strict_start_type in rtm_ipv6_policy, so the kernel rejects
+          # it in requests.
           attributes: &route-req-attrs
             - dst
             - src
