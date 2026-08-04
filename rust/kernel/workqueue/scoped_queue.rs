@@ -153,19 +153,34 @@ impl<'scope> ScopedQueue<'scope> {
     where
         W: RawWorkItem<ID> + Send + 'scope,
     {
+        // SAFETY: `W: 'scope` and dropck keep borrowed data alive until this queue
+        // is dropped. The constructor requires that the queue is not leaked and
+        // dropping `inner` drains pending and running work, so the function pointer
+        // is not called after any lifetime in `W` expires.
+        unsafe { self.enqueue_scoped(work) }
+    }
+
+    /// Enqueues a work item without the `'scope` lifetime bound.
+    ///
+    /// Unlike [`ScopedQueue::enqueue`], this does not require `W: 'scope`.
+    ///
+    /// Prefer [`ScopedQueue::enqueue`] when the work item's lifetime satisfies
+    /// `'scope`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the work item's destructor runs before any
+    /// lifetime it captures expires (i.e., the work item must not be forgotten).
+    pub unsafe fn enqueue_scoped<W, const ID: u64>(&self, work: W) -> W::EnqueueOutput
+    where
+        W: RawWorkItem<ID> + Send,
+    {
         let queue_ptr = self.inner.0.get();
 
-        // SAFETY:
-        // - Closure returns `false` only if `queue_work_on` returns `false`
-        //   and that means `work_ptr` is already in a workqueue.
-        //
-        // - `W: 'scope` and dropck keep borrowed data alive until this queue is
-        //   dropped. The constructor requires that the queue is not leaked and
-        //   dropping `inner` drains pending and running work so the function
-        //   pointer is not called after any lifetime in `W` expires.
-        //
-        // - The last requirement of `__enqueue` is not relevant here because `W`
-        //   is `Send`.
+        // SAFETY: The caller guarantees the work item remains valid until the work
+        // function runs or the item is cancelled. `W: Send` satisfies the
+        // cross-thread safety requirement. The closure only returns `false` if the
+        // `work_struct` is already in a workqueue.
         unsafe {
             work.__enqueue(move |work_ptr| {
                 bindings::queue_work_on(
