@@ -289,9 +289,6 @@ int panthor_device_init(struct panthor_device *ptdev)
 
 	panthor_gem_init(ptdev);
 
-	/* Now that everything is initialized, we can enable the reset work. */
-	enable_work(&ptdev->reset.work);
-
 	/* ~3 frames */
 	pm_runtime_set_autosuspend_delay(ptdev->base.dev, 50);
 	pm_runtime_use_autosuspend(ptdev->base.dev);
@@ -299,6 +296,14 @@ int panthor_device_init(struct panthor_device *ptdev)
 	ret = drm_dev_register(&ptdev->base, 0);
 	if (ret)
 		goto err_disable_autosuspend;
+
+	/* Now that everything is initialized, we can enable the reset work.
+	 * If there was a reset pending, clear and reschedule, otherwise the
+	 * reset.pending bit is stuck.
+	 */
+	enable_work(&ptdev->reset.work);
+	if (atomic_cmpxchg(&ptdev->reset.pending, 1, 0))
+		panthor_device_schedule_reset(ptdev);
 
 	pm_runtime_put_autosuspend(ptdev->base.dev);
 	return 0;
