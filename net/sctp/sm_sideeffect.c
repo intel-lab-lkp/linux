@@ -275,6 +275,12 @@ static void sctp_generate_timeout_event(struct sctp_association *asoc,
 	int error = 0;
 
 	bh_lock_sock(sk);
+
+	/* Take an extra ref to keep asoc alive through sctp_do_sm().
+	 * The timer already holds one ref; we'll release both at out_unlock.
+	 */
+	sctp_association_hold(asoc);
+
 	if (sock_owned_by_user(sk)) {
 		pr_debug("%s: sock is busy: timer %d\n", __func__,
 			 timeout_type);
@@ -296,13 +302,13 @@ static void sctp_generate_timeout_event(struct sctp_association *asoc,
 			   SCTP_ST_TIMEOUT(timeout_type),
 			   asoc->state, asoc->ep, asoc,
 			   (void *)timeout_type, GFP_ATOMIC);
-
-	if (error)
+	if (!asoc->base.dead && error)
 		sk->sk_err = -error;
 
 out_unlock:
 	bh_unlock_sock(sk);
-	sctp_association_put(asoc);
+	sctp_association_put(asoc); 	/* release timer's ref */
+	sctp_association_put(asoc);	/* release our extra ref */
 }
 
 static void sctp_generate_t1_cookie_event(struct timer_list *t)
