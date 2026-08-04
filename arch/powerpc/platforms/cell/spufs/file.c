@@ -602,13 +602,17 @@ static ssize_t spufs_mbox_read(struct file *file, char __user *buf,
 	if (len < 4)
 		return -EINVAL;
 
-	count = spu_acquire(ctx);
-	if (count)
-		return count;
-
 	for (count = 0; (count + 4) <= len; count += 4, udata++) {
 		int ret;
+
+		ret = spu_acquire(ctx);
+		if (ret) {
+			if (!count)
+				count = ret;
+			break;
+		}
 		ret = ctx->ops->mbox_read(ctx, &mbox_data);
+		spu_release(ctx);
 		if (ret == 0)
 			break;
 
@@ -624,7 +628,6 @@ static ssize_t spufs_mbox_read(struct file *file, char __user *buf,
 			break;
 		}
 	}
-	spu_release(ctx);
 
 	if (!count)
 		count = -EAGAIN;
@@ -705,29 +708,34 @@ static ssize_t spufs_ibox_read(struct file *file, char __user *buf,
 
 	count = spu_acquire(ctx);
 	if (count)
-		goto out;
+		return count;
 
 	/* wait only for the first element */
-	count = 0;
 	if (file->f_flags & O_NONBLOCK) {
 		if (!spu_ibox_read(ctx, &ibox_data)) {
-			count = -EAGAIN;
-			goto out_unlock;
+			spu_release(ctx);
+			return -EAGAIN;
 		}
 	} else {
 		count = spufs_wait(ctx->ibox_wq, spu_ibox_read(ctx, &ibox_data));
 		if (count)
-			goto out;
+			return count;
 	}
+	spu_release(ctx);
 
 	/* if we can't write at all, return -EFAULT */
 	count = put_user(ibox_data, udata);
 	if (count)
-		goto out_unlock;
+		return count;
 
 	for (count = 4, udata++; (count + 4) <= len; count += 4, udata++) {
 		int ret;
+
+		ret = spu_acquire(ctx);
+		if (ret)
+			break;
 		ret = ctx->ops->ibox_read(ctx, &ibox_data);
+		spu_release(ctx);
 		if (ret == 0)
 			break;
 		/*
@@ -740,9 +748,6 @@ static ssize_t spufs_ibox_read(struct file *file, char __user *buf,
 			break;
 	}
 
-out_unlock:
-	spu_release(ctx);
-out:
 	return count;
 }
 
@@ -839,40 +844,41 @@ static ssize_t spufs_wbox_write(struct file *file, const char __user *buf,
 
 	count = spu_acquire(ctx);
 	if (count)
-		goto out;
+		return count;
 
 	/*
 	 * make sure we can at least write one element, by waiting
 	 * in case of !O_NONBLOCK
 	 */
-	count = 0;
 	if (file->f_flags & O_NONBLOCK) {
 		if (!spu_wbox_write(ctx, wbox_data)) {
-			count = -EAGAIN;
-			goto out_unlock;
+			spu_release(ctx);
+			return -EAGAIN;
 		}
 	} else {
 		count = spufs_wait(ctx->wbox_wq, spu_wbox_write(ctx, wbox_data));
 		if (count)
-			goto out;
+			return count;
 	}
-
+	spu_release(ctx);
 
 	/* write as much as possible */
 	for (count = 4, udata++; (count + 4) <= len; count += 4, udata++) {
 		int ret;
+
 		ret = get_user(wbox_data, udata);
 		if (ret)
 			break;
 
+		ret = spu_acquire(ctx);
+		if (ret)
+			break;
 		ret = spu_wbox_write(ctx, wbox_data);
+		spu_release(ctx);
 		if (ret == 0)
 			break;
 	}
 
-out_unlock:
-	spu_release(ctx);
-out:
 	return count;
 }
 
