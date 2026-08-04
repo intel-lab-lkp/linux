@@ -625,13 +625,13 @@ intel_dp_set_source_rates(struct intel_dp *intel_dp)
 
 static int intersect_rates(const int *source_rates, int source_len,
 			   const int *sink_rates, int sink_len,
-			   int *common_rates)
+			   int *common_rates, int common_len)
 {
 	int i = 0, j = 0, k = 0;
 
 	while (i < source_len && j < sink_len) {
 		if (source_rates[i] == sink_rates[j]) {
-			if (WARN_ON(k >= DP_MAX_SUPPORTED_RATES))
+			if (WARN_ON(k >= common_len))
 				return k;
 			common_rates[k] = source_rates[i];
 			++k;
@@ -671,7 +671,8 @@ static void intel_dp_get_common_rates(struct intel_dp *intel_dp,
 					    intel_dp->num_source_rates,
 					    intel_dp->sink_rates,
 					    intel_dp->num_sink_rates,
-					    common_rates);
+					    intel_dp->common_rates,
+					    ARRAY_SIZE(intel_dp->common_rates));
 
 	/* Paranoia, there should always be something in common. */
 	if (drm_WARN_ON(display->drm, *num_common_rates == 0)) {
