@@ -244,11 +244,15 @@ void tty_buffer_flush(struct tty_struct *tty, struct tty_ldisc *ld)
 	buf->head->read = buf->head->commit;
 	buf->head->lookahead = buf->head->read;
 
-	if (ld && ld->ops->flush_buffer)
-		ld->ops->flush_buffer(tty);
-
 	atomic_dec(&buf->priority);
 	mutex_unlock(&buf->lock);
+	/*
+	 * Call flush_buffer() outside buf->lock: n_tty_flush_buffer()
+	 * acquires termios_rwsem, but the required lock order is
+	 * termios_rwsem -> buf->lock, not the other way around.
+	 */
+	if (ld && ld->ops->flush_buffer)
+		ld->ops->flush_buffer(tty);
 }
 
 /**
