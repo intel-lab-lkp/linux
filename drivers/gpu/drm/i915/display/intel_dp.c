@@ -625,13 +625,13 @@ intel_dp_set_source_rates(struct intel_dp *intel_dp)
 
 static int intersect_rates(const int *source_rates, int source_len,
 			   const int *sink_rates, int sink_len,
-			   int *common_rates)
+			   int *common_rates, int common_len)
 {
 	int i = 0, j = 0, k = 0;
 
 	while (i < source_len && j < sink_len) {
 		if (source_rates[i] == sink_rates[j]) {
-			if (WARN_ON(k >= DP_MAX_SUPPORTED_RATES))
+			if (WARN_ON(k >= common_len))
 				return k;
 			common_rates[k] = source_rates[i];
 			++k;
@@ -660,6 +660,7 @@ int intel_dp_rate_index(const int *rates, int len, int rate)
 
 static void intel_dp_get_common_rates(struct intel_dp *intel_dp,
 				      int common_rates[DP_MAX_SUPPORTED_RATES],
+				      int common_len,
 				      int *num_common_rates)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -671,7 +672,8 @@ static void intel_dp_get_common_rates(struct intel_dp *intel_dp,
 					    intel_dp->num_source_rates,
 					    intel_dp->sink_rates,
 					    intel_dp->num_sink_rates,
-					    common_rates);
+					    common_rates,
+					    common_len);
 
 	/* Paranoia, there should always be something in common. */
 	if (drm_WARN_ON(display->drm, *num_common_rates == 0)) {
@@ -687,7 +689,8 @@ static bool intel_dp_set_common_link_params(struct intel_dp *intel_dp)
 	int common_rates[DP_MAX_SUPPORTED_RATES];
 	bool params_changed = false;
 
-	intel_dp_get_common_rates(intel_dp, common_rates, &num_common_rates);
+	intel_dp_get_common_rates(intel_dp, common_rates, ARRAY_SIZE(common_rates),
+				  &num_common_rates);
 	if (intel_dp_link_caps_update(intel_dp->link.caps,
 				      common_rates, num_common_rates,
 				      intel_dp_get_max_common_lane_count(intel_dp),
