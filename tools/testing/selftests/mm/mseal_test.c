@@ -1914,7 +1914,6 @@ int main(void)
 	test_seal_mprotect_partial_mprotect(true);
 
 	test_seal_mprotect_two_vma_with_gap();
-	test_seal_mprotect_two_vma_with_gap();
 
 	test_seal_mprotect_merge(false);
 	test_seal_mprotect_merge(true);
