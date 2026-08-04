@@ -1124,7 +1124,10 @@ As described in :ref:`socketcan-local-loopback1` the CAN network device driver s
 support a local loopback functionality similar to the local echo
 e.g. of tty devices. In this case the driver flag IFF_ECHO has to be
 set to prevent the PF_CAN core from locally echoing sent frames
-(aka loopback) as fallback solution::
+(aka loopback) as fallback solution. For CAN drivers which request
+echo skb slots through ``alloc_candev()`` or ``alloc_candev_mqs()``,
+the framework sets ``IFF_ECHO`` automatically. The other drivers need
+to set it manually::
 
     dev->flags |= IFF_ECHO;
 

@@ -338,6 +338,7 @@ struct net_device *alloc_candev_mqs(int sizeof_priv, unsigned int echo_skb_max,
 		priv->echo_skb_max = echo_skb_max;
 		priv->echo_skb = (void *)priv +
 			(size - echo_skb_max * sizeof(struct sk_buff *));
+		dev->flags |= IFF_ECHO;
 	}
 
 	priv->state = CAN_STATE_STOPPED;
