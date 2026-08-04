@@ -407,8 +407,11 @@ static int test_zswap_writeback(const char *root, bool wb)
 	 * Thus, the parent's setting shall be what's in effect. */
 	if (cg_write(test_group, "memory.zswap.max", "max"))
 		goto out;
-	if (cg_write(test_group, "cgroup.subtree_control", "+memory"))
-		goto out;
+	while (cg_write(test_group, "cgroup.subtree_control", "+memory")) {
+		if (errno != EBUSY)
+			goto out;
+		usleep(1000);
+	}
 
 	test_group_child = cg_name(test_group, "zswap_writeback_test_child");
 	if (!test_group_child)
