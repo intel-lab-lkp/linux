@@ -20,3 +20,22 @@ menuconfig ESPI
 	  chain for delivering hardware events to slave drivers.
 
 	  If unsure, say N.
+
+if ESPI
+comment "eSPI Controller Drivers"
+
+config ESPI_AMD
+	tristate "AMD eSPI Controller"
+	depends on X86 || COMPILE_TEST
+	help
+	  Enable support for the AMD eSPI controller found on AMD SoCs and
+	  APUs (ACPI HID: AMDI0070). This controller drives the Enhanced
+	  Serial Peripheral Interface link to an eSPI target such as a BMC
+	  and implements the channel-independent configuration commands
+	  (GET_CONFIGURATION, SET_CONFIGURATION and In-Band Reset) used to
+	  bring up and negotiate the link's I/O mode, clock and CRC.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called espi-amd. If unsure, say N.
+
+endif # ESPI
