@@ -303,6 +303,8 @@ static int gadget_bind(struct usb_gadget *gadget,
 	dev->req->context = dev;
 	dev->req->complete = gadget_ep0_complete;
 	dev->gadget = gadget;
+	/* Keep the gadget alive while the device holds a reference to it. */
+	usb_get_gadget(gadget);
 	gadget_for_each_ep(ep, dev->gadget) {
 		dev->eps[i].ep = ep;
 		dev->eps[i].addr = get_ep_addr(ep->name);
@@ -316,6 +318,10 @@ static int gadget_bind(struct usb_gadget *gadget,
 	ret = raw_queue_event(dev, USB_RAW_EVENT_CONNECT, 0, NULL);
 	if (ret < 0) {
 		dev_err(&gadget->dev, "failed to queue connect event\n");
+		spin_lock_irqsave(&dev->lock, flags);
+		dev->gadget = NULL;
+		spin_unlock_irqrestore(&dev->lock, flags);
+		usb_put_gadget(gadget);
 		set_gadget_data(gadget, NULL);
 		return ret;
 	}
@@ -328,7 +334,19 @@ static int gadget_bind(struct usb_gadget *gadget,
 static void gadget_unbind(struct usb_gadget *gadget)
 {
 	struct raw_dev *dev = get_gadget_data(gadget);
+	unsigned long flags;
 
+	/*
+	 * The gadget is going away (e.g. the UDC is being removed), so stop
+	 * using it. Hold the lock to synchronize with ioctls that check
+	 * dev->gadget and may dereference it after dropping the lock.
+	 */
+	spin_lock_irqsave(&dev->lock, flags);
+	dev->state = STATE_DEV_FAILED;
+	dev->gadget = NULL;
+	spin_unlock_irqrestore(&dev->lock, flags);
+	/* Matches usb_get_gadget() in gadget_bind(). */
+	usb_put_gadget(gadget);
 	set_gadget_data(gadget, NULL);
 	/* Matches kref_get() in gadget_bind(). */
 	kref_put(&dev->count, dev_free);
