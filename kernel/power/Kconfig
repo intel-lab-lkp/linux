@@ -115,6 +115,21 @@ config HIBERNATION_DEF_COMP
 	help
 	  Default compressor to be used for hibernation.
 
+config ENCRYPTED_HIBERNATION
+	bool "Encryption support for userspace snapshots"
+	depends on HIBERNATION_SNAPSHOT_DEV
+	select CRYPTO_AES
+	select CRYPTO_GCM
+	select CRYPTO_LIB_SHA256
+	help
+	  Enable support for kernel-based encryption of hibernation snapshots
+	  created by uswsusp tools. A trusted early userspace component must
+	  provide the snapshot encryption seed before enabling encryption.
+
+	  Say N if userspace handles the image encryption.
+
+	  If in doubt, say N.
+
 config PM_STD_PARTITION
 	string "Default resume partition"
 	depends on HIBERNATION
