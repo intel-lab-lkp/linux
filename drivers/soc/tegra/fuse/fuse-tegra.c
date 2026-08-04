@@ -525,7 +525,7 @@ static int __init tegra_init_fuse(void)
 
 			default:
 				pr_warn("Unsupported SoC: %02x\n", chip);
-				break;
+				return -ENODEV;
 			}
 		} else {
 			/*
