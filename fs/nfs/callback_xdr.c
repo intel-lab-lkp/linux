@@ -252,6 +252,50 @@ static __be32 decode_layoutrecall_args(struct svc_rqst *rqstp,
 	return 0;
 }
 
+static __be32 decode_notify_entry(struct xdr_stream *xdr,
+				  struct cb_notify_entry *args)
+{
+	uint32_t bitmap[3] = {0};
+	__be32 status;
+	u32 attrlen;
+	__be32 *p;
+
+	status = decode_string(xdr, &args->ne_namelen, &args->ne_name,
+				NFS4_OPAQUE_LIMIT);
+	if (unlikely(status != 0))
+		return status;
+
+	status = decode_bitmap(xdr, bitmap);
+	if (unlikely(status != 0))
+		return status;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return htonl(NFS4ERR_BADXDR);
+
+	attrlen = be32_to_cpup(p);
+	if (attrlen != 0)
+		return htonl(NFS4ERR_BADXDR);
+	return 0;
+}
+
+static __be32 decode_notify_remove(struct xdr_stream *xdr,
+				   struct cb_notify_remove *args)
+{
+	__be32 status;
+	__be32 *p;
+
+	status = decode_notify_entry(xdr, &args->nrm_old_entry);
+	if (unlikely(status != 0))
+		return status;
+
+	p = xdr_inline_decode(xdr, 8);
+	if (unlikely(!p))
+		return htonl(NFS4ERR_BADXDR);
+	xdr_decode_hyper(p, &args->nrm_old_entry_cookie);
+	return 0;
+}
+
 static
 __be32 decode_notify_args(struct svc_rqst *rqstp,
 			  struct xdr_stream *xdr,
@@ -289,6 +333,21 @@ __be32 decode_notify_args(struct svc_rqst *rqstp,
 						     &change->notify_mask, 1);
 		if (unlikely(res < 0))
 			goto err;
+
+		/* Decode opaque size */
+		p = xdr_inline_decode(xdr, 4);
+		if (unlikely(!p))
+			goto err;
+		res = ntohl(*p);
+
+		switch (change->notify_mask) {
+		case CB_NOTIFY4_REMOVE_ENTRY:
+			status = decode_notify_remove(xdr,
+						      &change->notify_remove);
+			break;
+		default:
+			goto err;
+		}
 	}
 
 	return 0;

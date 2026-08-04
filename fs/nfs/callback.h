@@ -143,8 +143,22 @@ struct cb_layoutrecallargs {
 extern __be32 nfs4_callback_layoutrecall(void *argp, void *resp,
 		struct cb_process_state *cps);
 
+struct cb_notify_entry {
+	u32			ne_namelen;
+	const char		*ne_name;
+	struct nfs_fattr	ne_attrs;
+};
+
+struct cb_notify_remove {
+	struct cb_notify_entry	nrm_old_entry;
+	u64			nrm_old_entry_cookie;
+};
+
 struct cb_notify_changes {
-	u32 notify_mask;
+	u32	notify_mask;
+	union {
+		struct cb_notify_remove notify_remove;
+	};
 };
 
 struct cb_notifyargs {
