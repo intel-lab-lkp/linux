@@ -13,6 +13,9 @@ description: |
 maintainers:
   - Lubomir Rintel <lkundrak@v3.sk>
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     items:
@@ -26,13 +29,11 @@ properties:
     description: GPIO used with the shutdown protocol on Ariel
     maxItems: 2
 
-  system-power-controller: true
-
 required:
   - compatible
   - reg
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |

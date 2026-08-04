@@ -13,7 +13,9 @@ description: |
 maintainers:
   - Dmitry Osipenko <digetx@gmail.com>
 
-$ref: /schemas/power/supply/power-supply.yaml
+allOf:
+  - $ref: /schemas/power/supply/power-supply.yaml
+  - $ref: /schemas/power/power-controller.yaml#
 
 properties:
   compatible:
@@ -23,8 +25,6 @@ properties:
       - const: ene,kb930
   reg:
     maxItems: 1
-
-  system-power-controller: true
 
 required:
   - compatible
