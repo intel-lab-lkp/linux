@@ -524,11 +524,9 @@ static void acpi_device_release(struct device *dev)
 	kfree(acpi_dev);
 }
 
-static void acpi_device_del(struct acpi_device *device)
+static void acpi_device_remove_bus_id(struct acpi_device *device)
 {
 	struct acpi_device_bus_id *acpi_device_bus_id;
-
-	mutex_lock(&acpi_device_lock);
 
 	list_for_each_entry(acpi_device_bus_id, &acpi_bus_id_list, node)
 		if (!strcmp(acpi_device_bus_id->bus_id,
@@ -542,8 +540,16 @@ static void acpi_device_del(struct acpi_device *device)
 			}
 			break;
 		}
+}
 
-	list_del(&device->wakeup_list);
+static void acpi_device_del(struct acpi_device *device)
+{
+	mutex_lock(&acpi_device_lock);
+
+	acpi_device_remove_bus_id(device);
+
+	if (device->wakeup.flags.valid)
+		list_del(&device->wakeup_list);
 
 	mutex_unlock(&acpi_device_lock);
 
@@ -803,7 +809,9 @@ int acpi_device_add(struct acpi_device *device)
 err:
 	mutex_lock(&acpi_device_lock);
 
-	list_del(&device->wakeup_list);
+	acpi_device_remove_bus_id(device);
+	if (device->wakeup.flags.valid)
+		list_del(&device->wakeup_list);
 
 err_unlock:
 	mutex_unlock(&acpi_device_lock);
