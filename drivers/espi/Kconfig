@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# eSPI (Enhanced Serial Peripheral Interface) bus configuration
+#
+
+menuconfig ESPI
+	bool "eSPI (Enhanced Serial Peripheral Interface) bus support"
+	help
+	  Enhanced Serial Peripheral Interface (eSPI) bus framework.
+
+	  eSPI is a serial bus specification by Intel that replaces the
+	  legacy Low Pin Count (LPC) bus. It connects a host controller to
+	  one or more slave devices (for example an EC or BMC) over a
+	  low-pin-count link clocked up to 66 MHz with single, dual or quad
+	  I/O, and carries traffic on four logically independent channels
+	  over a shared physical link: Peripheral (I/O and memory), Virtual
+	  Wire, OOB (Out-of-Band) messaging, and Flash Access.
+
+	  If unsure, say N.
