@@ -2999,15 +2999,10 @@ retry:
 	 * or the page might be absent.
 	 */
 
-	if (vma == NULL || unlikely(!(vma->vm_flags & VM_READ))) {
+	if (vma == NULL ||
+	    unlikely(!(vma->vm_flags & VM_READ)) ||
+	    ((kfp->flags & FOLL_WRITE) && unlikely(!(vma->vm_flags & VM_WRITE)))) {
 		pfn = KVM_PFN_ERR_FAULT;
-	} else if ((kfp->flags & FOLL_WRITE) && unlikely(!(vma->vm_flags & VM_WRITE))) {
-		/*
-		 * Exit to userspace for PROT_READ mappings in a writable
-		 * memslot, as this is part of the API.
-		 */
-		pfn = vma->vm_flags & (VM_IO | VM_PFNMAP) ? KVM_PFN_ERR_RO_FAULT :
-			KVM_PFN_ERR_FAULT;
 	} else if (vma->vm_flags & (VM_IO | VM_PFNMAP)) {
 		r = hva_to_pfn_remapped(vma, kfp, &pfn);
 		if (r == -EAGAIN)
