@@ -1608,27 +1608,6 @@ release_node:
 	return ret;
 }
 
-/* Will return 0, -ENOMEM or -EEXIST (index number collision, unexpected). */
-int btrfs_insert_delayed_dir_index(struct btrfs_trans_handle *trans,
-				   const char *name, int name_len,
-				   struct btrfs_inode *dir,
-				   const struct btrfs_disk_key *disk_key, u8 flags,
-				   u64 index)
-{
-	struct btrfs_dir_index_prealloc prealloc;
-	int ret;
-
-	ret = btrfs_prealloc_delayed_dir_index(dir, name, name_len, &prealloc);
-	if (ret)
-		return ret;
-
-	memcpy(prealloc.item->data + sizeof(struct btrfs_dir_item), name,
-	       name_len);
-
-	return btrfs_insert_delayed_dir_index_prealloc(trans, dir, &prealloc,
-						       disk_key, flags, index);
-}
-
 static bool btrfs_delete_delayed_insertion_item(struct btrfs_delayed_node *node,
 						u64 index)
 {
