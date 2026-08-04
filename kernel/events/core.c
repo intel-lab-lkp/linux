@@ -7053,11 +7053,19 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 		mutex_unlock(&rb->aux_mutex);
 	}
 
+	/*
+	 * Serialize both count updates with perf_mmap() so they cannot
+	 * refer to different ring buffer generations.
+	 */
+	mutex_lock(&event->mmap_mutex);
+
 	if (refcount_dec_and_test(&rb->mmap_count))
 		detach_rest = true;
 
-	if (!refcount_dec_and_mutex_lock(&event->mmap_count, &event->mmap_mutex))
+	if (!refcount_dec_and_test(&event->mmap_count)) {
+		mutex_unlock(&event->mmap_mutex);
 		goto out_put;
+	}
 
 	ring_buffer_attach(event, NULL);
 	mutex_unlock(&event->mmap_mutex);
