@@ -2882,8 +2882,9 @@ out_unlock:
  * Context: Process context.  May allocate using %GFP_KERNEL.
  * Return: vm_fault_t value.
  */
-vm_fault_t vmf_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
-			unsigned long pfn, pgprot_t pgprot)
+static vm_fault_t __vmf_insert_pfn_prot(struct vm_area_struct *vma,
+		unsigned long addr, unsigned long pfn, pgprot_t pgprot,
+		bool mkwrite)
 {
 	/*
 	 * Technically, architectures with pte_special can avoid all these
@@ -2905,9 +2906,38 @@ vm_fault_t vmf_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
 
 	pfnmap_setup_cachemode_pfn(pfn, &pgprot);
 
-	return insert_pfn(vma, addr, pfn, pgprot, false);
+	return insert_pfn(vma, addr, pfn, pgprot, mkwrite);
+}
+
+vm_fault_t vmf_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
+			unsigned long pfn, pgprot_t pgprot)
+{
+	return __vmf_insert_pfn_prot(vma, addr, pfn, pgprot, false);
 }
 EXPORT_SYMBOL(vmf_insert_pfn_prot);
+
+/**
+ * vmf_insert_pfn_mkwrite - insert single pfn into user vma, making it writable
+ * @vma: user vma to map to
+ * @addr: target user address of this page
+ * @pfn: source kernel pfn
+ *
+ * Similar to vmf_insert_pfn(), but the inserted PTE is made young, dirty and
+ * writable (subject to the VMA's write permission).  For use by fault
+ * handlers of write-notify VMAs (where vma->vm_page_prot has the write bit
+ * removed) that serve a write fault and do their own dirty accounting, so
+ * that a "handled" write fault always results in a writable PTE.  The
+ * VM_PFNMAP counterpart of vmf_insert_mixed_mkwrite().
+ *
+ * Context: Process context.  May allocate using %GFP_KERNEL.
+ * Return: vm_fault_t value.
+ */
+vm_fault_t vmf_insert_pfn_mkwrite(struct vm_area_struct *vma,
+		unsigned long addr, unsigned long pfn)
+{
+	return __vmf_insert_pfn_prot(vma, addr, pfn, vma->vm_page_prot, true);
+}
+EXPORT_SYMBOL(vmf_insert_pfn_mkwrite);
 
 /**
  * vmf_insert_pfn - insert single pfn into user vma

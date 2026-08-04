@@ -593,7 +593,25 @@ static vm_fault_t try_insert_pfn(struct vm_fault *vmf, unsigned int order,
 				 unsigned long pfn)
 {
 	if (!order) {
-		return vmf_insert_pfn(vmf->vma, vmf->address, pfn);
+		vm_fault_t ret;
+
+		/* .pfn_mkwrite enables write-notify, so vm_page_prot lacks
+		 * the write bit and a plain vmf_insert_pfn() would install
+		 * a read-only PTE even for a write fault.  Not every fault
+		 * resolver refaults into .pfn_mkwrite() to upgrade it (KVM
+		 * doesn't), so install a writable PTE and record the write
+		 * directly, like the PMD path below.
+		 */
+		if (vmf->flags & FAULT_FLAG_WRITE) {
+			ret = vmf_insert_pfn_mkwrite(vmf->vma, vmf->address,
+						     pfn);
+			if (ret == VM_FAULT_NOPAGE)
+				drm_gem_shmem_record_mkwrite(vmf);
+		} else {
+			ret = vmf_insert_pfn(vmf->vma, vmf->address, pfn);
+		}
+
+		return ret;
 #ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
 	} else if (order == PMD_ORDER) {
 		unsigned long paddr = pfn << PAGE_SHIFT;
