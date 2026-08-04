@@ -2629,7 +2629,7 @@ static int cdrom_ioctl_get_subchnl(struct cdrom_device_info *cdi,
 static int cdrom_ioctl_read_tochdr(struct cdrom_device_info *cdi,
 		void __user *argp)
 {
-	struct cdrom_tochdr header;
+	struct cdrom_tochdr header = {};
 	int ret;
 
 	/* cd_dbg(CD_DO_IOCTL, "entering CDROMREADTOCHDR\n"); */
