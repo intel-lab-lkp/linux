@@ -2057,7 +2057,7 @@ struct sctp_association {
 	     force_delay:1;
 
 	__u8 strreset_enable;
-	__u8 strreset_outstanding; /* request param count on the fly */
+	__u8 strreset_outstanding; /* request param bitmask on the fly */
 
 	__u32 strreset_outseq; /* Update after receiving response */
 	__u32 strreset_inseq; /* Update after receiving request */
@@ -2087,6 +2087,20 @@ struct sctp_association {
 	struct rcu_head rcu;
 };
 
+/* Track the outstanding stream reconf requests per request param type, so
+ * that a response can only clear the request it belongs to, and only once.
+ * The reconf param types range from SCTP_PARAM_RESET_OUT_REQUEST (0x000d)
+ * to SCTP_PARAM_RESET_ADD_IN_STREAMS (0x0012), so one bit each fits in
+ * asoc->strreset_outstanding.
+ */
+#define SCTP_STRRESET_MASK(type) \
+	(1 << (ntohs(type) - ntohs(SCTP_PARAM_RESET_OUT_REQUEST)))
+#define SCTP_STRRESET_TEST(asoc, type) \
+	((asoc)->strreset_outstanding & SCTP_STRRESET_MASK(type))
+#define SCTP_STRRESET_SET(asoc, type) \
+	((asoc)->strreset_outstanding |= SCTP_STRRESET_MASK(type))
+#define SCTP_STRRESET_CLEAR(asoc, type) \
+	((asoc)->strreset_outstanding &= ~SCTP_STRRESET_MASK(type))
 
 /* An eyecatcher for determining if we are really looking at an
  * association data structure.
