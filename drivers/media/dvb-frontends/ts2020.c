@@ -18,7 +18,6 @@
 struct ts2020_priv {
 	struct i2c_client *client;
 	struct mutex regmap_mutex;
-	struct regmap_config regmap_config;
 	struct regmap *regmap;
 	struct dvb_frontend *fe;
 	struct delayed_work stat_work;
@@ -559,6 +558,12 @@ static int ts2020_probe(struct i2c_client *client)
 	u8 u8tmp;
 	unsigned int utmp;
 	char *chip_str;
+	struct regmap_config regmap_config = {
+		.reg_bits = 8,
+		.val_bits = 8,
+		.lock = ts2020_regmap_lock,
+		.unlock = ts2020_regmap_unlock,
+	};
 
 	if (!pdata) {
 		dev_err(&client->dev, "platform data is mandatory\n");
@@ -574,12 +579,8 @@ static int ts2020_probe(struct i2c_client *client)
 
 	/* create regmap */
 	mutex_init(&dev->regmap_mutex);
-	dev->regmap_config.reg_bits = 8;
-	dev->regmap_config.val_bits = 8;
-	dev->regmap_config.lock = ts2020_regmap_lock;
-	dev->regmap_config.unlock = ts2020_regmap_unlock;
-	dev->regmap_config.lock_arg = dev;
-	dev->regmap = regmap_init_i2c(client, &dev->regmap_config);
+	regmap_config.lock_arg = dev;
+	dev->regmap = regmap_init_i2c(client, &regmap_config);
 	if (IS_ERR(dev->regmap)) {
 		ret = PTR_ERR(dev->regmap);
 		goto err_kfree;
