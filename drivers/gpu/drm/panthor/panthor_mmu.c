@@ -216,6 +216,25 @@ struct panthor_as_op_ctx {
 };
 
 /**
+ * enum panthor_as_restriction - List of restrictions that can apply to an AS.
+ *
+ * An AS always starts unrestricted, but based on the faults or device state
+ * changes, restrictions can be added over time. Restrictions can't be removed
+ * though. Once a VM is restricted, a new one must be created to lift the
+ * restrictions.
+ */
+enum panthor_as_restriction {
+	/** @PANTHOR_AS_FORBID_MAP: The AS can't map new buffers. */
+	PANTHOR_AS_FORBID_MAP = BIT(0),
+
+	/** @PANTHOR_AS_FORBID_UNMAP: The AS can't remove existing mappings. */
+	PANTHOR_AS_FORBID_UNMAP = BIT(1),
+
+	/** @PANTHOR_AS_FORBID_USE: The AS can't become active again. */
+	PANTHOR_AS_FORBID_USE = BIT(2),
+};
+
+/**
  * struct panthor_as - Used to managed a GPU address space.
  */
 struct panthor_as {
@@ -294,6 +313,9 @@ struct panthor_as {
 	 * situation, where the logical device needs to be re-created.
 	 */
 	bool unusable;
+
+	/** @restrictions: Bitmask of panthor_as_restriction flags. */
+	atomic_t restrictions;
 
 	/**
 	 * @unhandled_fault: Unhandled fault happened.
@@ -410,13 +432,6 @@ struct panthor_vm {
 
 	/** @for_mcu: True if this is the MCU VM. */
 	bool for_mcu;
-
-	/**
-	 * @destroyed: True if the VM was destroyed.
-	 *
-	 * No further bind requests should be queued to a destroyed VM.
-	 */
-	bool destroyed;
 
 	/**
 	 * @dummy: Dummy object used for sparse mappings.
@@ -693,7 +708,9 @@ bool panthor_vm_has_unhandled_faults(struct panthor_vm *vm)
  */
 bool panthor_vm_is_unusable(struct panthor_vm *vm)
 {
-	return vm->as->unusable;
+	return (atomic_read(&vm->as->restrictions) &
+		(PANTHOR_AS_FORBID_USE | PANTHOR_AS_FORBID_MAP |
+		 PANTHOR_AS_FORBID_UNMAP));
 }
 
 static void panthor_as_release_hw_slot_locked(struct panthor_as *as)
@@ -751,6 +768,11 @@ int panthor_vm_active(struct panthor_vm *vm)
 	 */
 	mutex_lock(&as->op_lock);
 	mutex_lock(&ptdev->mmu->as.slots_lock);
+
+	if (atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_USE) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
 
 	if (refcount_inc_not_zero(&as->active_cnt))
 		goto out_unlock;
@@ -920,21 +942,27 @@ static size_t get_pgsize(u64 addr, size_t size, size_t *count)
 	return SZ_2M;
 }
 
-static void panthor_as_declare_unusable(struct panthor_as *as)
+static void panthor_as_restrict_usage_locked(struct panthor_as *as,
+					     u32 new_restrictions)
 {
 	struct panthor_device *ptdev = container_of(as->base.drm, struct panthor_device, base);
 	int cookie;
 
-	if (as->unusable)
-		return;
-
-	as->unusable = true;
-	mutex_lock(&ptdev->mmu->as.slots_lock);
-	if (as->hw_slot.id >= 0 && drm_dev_enter(&ptdev->base, &cookie)) {
-		panthor_mmu_as_disable(ptdev, as->hw_slot.id, false);
-		drm_dev_exit(cookie);
+	if (new_restrictions & PANTHOR_AS_FORBID_USE) {
+		guard(mutex)(&ptdev->mmu->as.slots_lock);
+		if (as->hw_slot.id >= 0 && drm_dev_enter(&ptdev->base, &cookie)) {
+			/* Try to disable the AS. If as_disable() passed, this should cause
+			 * a fault on the next memory access. If it failed, a reset is
+			 * scheduled to recover from the GPU hang.
+			 * We intentionally don't call release_as_locked() here, because
+			 * this would mess up with the active_cnt refcount.
+			 */
+			panthor_mmu_as_disable(ptdev, as->hw_slot.id, false);
+			drm_dev_exit(cookie);
+		}
 	}
-	mutex_unlock(&ptdev->mmu->as.slots_lock);
+
+	atomic_or(new_restrictions, &as->restrictions);
 }
 
 static void panthor_as_unmap_pages(struct panthor_as *as, u64 iova, u64 size)
@@ -970,7 +998,9 @@ static void panthor_as_unmap_pages(struct panthor_as *as, u64 iova, u64 size)
 			 * so flag the VM unusable to make sure it's not going
 			 * to be used anymore.
 			 */
-			panthor_as_declare_unusable(as);
+			panthor_as_restrict_usage_locked(as,
+							 PANTHOR_AS_FORBID_USE |
+							 PANTHOR_AS_FORBID_MAP);
 
 			/* If we don't make progress, we're screwed. That also means
 			 * something else prevents us from unmapping the region, but
@@ -1046,7 +1076,9 @@ panthor_as_map_pages(struct panthor_as *as, u64 iova, int prot,
 				 * table pages behind.
 				 */
 				panthor_as_unmap_pages(as, start_iova, iova - start_iova);
-				panthor_as_declare_unusable(as);
+				panthor_as_restrict_usage_locked(as,
+								 PANTHOR_AS_FORBID_USE |
+								 PANTHOR_AS_FORBID_MAP);
 				return ret;
 			}
 		}
@@ -1339,6 +1371,9 @@ static int panthor_as_prepare_map_op_ctx(struct panthor_as_op_ctx *op_ctx,
 	struct sg_table *sgt = NULL;
 	int ret;
 
+	if (atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_MAP)
+		return -EINVAL;
+
 	if (!bo)
 		return -EINVAL;
 
@@ -1430,6 +1465,9 @@ static int panthor_as_prepare_unmap_op_ctx(struct panthor_as_op_ctx *op_ctx,
 {
 	u32 pt_count = 0;
 	int ret;
+
+	if (atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_UNMAP)
+		return -EINVAL;
 
 	memset(op_ctx, 0, sizeof(*op_ctx));
 	op_ctx->va.range = size;
@@ -1640,7 +1678,9 @@ static void panthor_vm_destroy(struct panthor_vm *vm)
 
 	as = vm->as;
 	ptdev = container_of(as->base.drm, struct panthor_device, base);
-	vm->destroyed = true;
+	panthor_as_restrict_usage_locked(as,
+					 PANTHOR_AS_FORBID_USE |
+					 PANTHOR_AS_FORBID_MAP);
 
 	/* Tell scheduler to stop all GPU work related to this VM */
 	if (refcount_read(&as->active_cnt) > 0)
@@ -2150,7 +2190,7 @@ struct panthor_heap_pool *panthor_vm_get_heap_pool(struct panthor_vm *vm, bool c
 
 	mutex_lock(&vm->heaps.lock);
 	if (!vm->heaps.pool && create) {
-		if (vm->destroyed)
+		if (panthor_vm_is_unusable(vm))
 			pool = ERR_PTR(-EINVAL);
 		else
 			pool = panthor_heap_pool_create(ptdev, vm);
@@ -2769,7 +2809,7 @@ static int panthor_as_exec_op(struct panthor_as *as,
 			.map.gem.offset = op->map.bo_offset,
 		};
 
-		if (as->unusable) {
+		if (atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_MAP) {
 			ret = -EINVAL;
 			break;
 		}
@@ -2779,6 +2819,11 @@ static int panthor_as_exec_op(struct panthor_as *as,
 	}
 
 	case DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP:
+		if (atomic_read(&as->restrictions) & PANTHOR_AS_FORBID_UNMAP) {
+			ret = -EINVAL;
+			break;
+		}
+
 		ret = drm_gpuvm_sm_unmap(&as->base, as, op->va.addr, op->va.range);
 		break;
 
@@ -2790,8 +2835,11 @@ static int panthor_as_exec_op(struct panthor_as *as,
 	panthor_as_unlock_region(as);
 
 out:
-	if (ret && flag_vm_unusable_on_failure)
-		panthor_as_declare_unusable(as);
+	if (ret && flag_vm_unusable_on_failure) {
+		panthor_as_restrict_usage_locked(as,
+						 PANTHOR_AS_FORBID_USE |
+						 PANTHOR_AS_FORBID_MAP);
+	}
 
 	as->op_ctx = NULL;
 	mutex_unlock(&as->op_lock);
@@ -3111,9 +3159,6 @@ panthor_vm_bind_job_create(struct drm_file *file,
 	int ret;
 
 	if (!vm)
-		return ERR_PTR(-EINVAL);
-
-	if (vm->destroyed || vm->as->unusable)
 		return ERR_PTR(-EINVAL);
 
 	job = kzalloc_obj(*job);
