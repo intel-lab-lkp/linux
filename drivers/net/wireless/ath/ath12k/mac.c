@@ -4283,11 +4283,21 @@ ath12k_mac_op_change_vif_links(struct ieee80211_hw *hw,
 	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
 	unsigned long to_remove = old_links & ~new_links;
 	unsigned long to_add = ~old_links & new_links;
+	unsigned long existing = old_links;
 	struct ath12k_hw *ah = ath12k_hw_to_ah(hw);
 	struct ath12k_link_vif *arvif;
 	u8 link_id;
 
 	lockdep_assert_wiphy(hw->wiphy);
+
+	if (old_links) {
+		for_each_set_bit(link_id, &existing, IEEE80211_MLD_MAX_NUM_LINKS) {
+			arvif = wiphy_dereference(hw->wiphy, ahvif->link[link_id]);
+			if (arvif && arvif->ar &&
+			    test_bit(ATH12K_FLAG_RECOVERY, &arvif->ar->ab->dev_flags))
+				return -EINVAL;
+		}
+	}
 
 	ath12k_generic_dbg(ATH12K_DBG_MAC,
 			   "mac vif link changed for MLD %pM old_links 0x%x new_links 0x%x\n",
@@ -5967,6 +5977,9 @@ static int ath12k_clear_peer_keys(struct ath12k_link_vif *arvif,
 
 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
 
+	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags))
+		return 0;
+
 	spin_lock_bh(&dp->dp_lock);
 	peer = ath12k_dp_link_peer_find_by_vdev_and_addr(dp, arvif->vdev_id, addr);
 	if (!peer || !peer->dp_peer) {
@@ -6042,6 +6055,8 @@ static int ath12k_mac_set_key(struct ath12k *ar, enum set_key_cmd cmd,
 		spin_unlock_bh(&dp->dp_lock);
 
 		if (cmd == SET_KEY) {
+			if (test_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags))
+				return 0;
 			ath12k_warn(ab, "cannot install key for non-existent peer %pM\n",
 				    peer_addr);
 			return -EOPNOTSUPP;
@@ -7056,7 +7071,8 @@ static int ath12k_mac_station_remove(struct ath12k *ar,
 
 	wiphy_work_cancel(ar->ah->hw->wiphy, &arsta->update_wk);
 
-	if (ahvif->vdev_type == WMI_VDEV_TYPE_STA) {
+	if (ahvif->vdev_type == WMI_VDEV_TYPE_STA &&
+	    !test_bit(ATH12K_FLAG_CRASH_FLUSH, &ar->ab->dev_flags)) {
 		ath12k_bss_disassoc(ar, arvif);
 		ret = ath12k_mac_vdev_stop(arvif);
 		if (ret)
@@ -7811,6 +7827,10 @@ int ath12k_mac_op_sta_state(struct ieee80211_hw *hw,
 		 * MLO case. Other cases would be handled in the future.
 		 */
 		ab = ah->radio[0].ab;
+		if (test_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags)) {
+			ret = 0;
+			goto exit;
+		}
 		if (ab->ag->num_devices == 1) {
 			ret = ath12k_mac_select_links(ab, vif, hw, &selected_links);
 			if (ret) {
@@ -12613,6 +12633,9 @@ static int ath12k_mac_flush(struct ath12k *ar)
 	long time_left;
 	int ret = 0;
 
+	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ar->ab->dev_flags))
+		return -ESHUTDOWN;
+
 	time_left = wait_event_timeout(ar->dp.tx_empty_waitq,
 				       (atomic_read(&ar->dp.num_tx_pending) == 0),
 				       ATH12K_FLUSH_TIMEOUT);
@@ -13510,6 +13533,8 @@ ath12k_mac_op_reconfig_complete(struct ieee80211_hw *hw,
 
 	for_each_ar(ah, ar, i) {
 		ab = ar->ab;
+
+		clear_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
 
 		ath12k_warn(ar->ab, "pdev %d successfully recovered\n",
 			    ar->pdev->pdev_id);

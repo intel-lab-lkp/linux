@@ -351,11 +351,17 @@ int ath12k_peer_mlo_link_peers_delete(struct ath12k_vif *ahvif, struct ath12k_st
 	unsigned long links;
 	struct ath12k *ar;
 	u8 link_id;
+	int i;
 
 	lockdep_assert_wiphy(ah->hw->wiphy);
 
 	if (!sta->mlo)
 		return -EINVAL;
+
+	for_each_ar(ah, ar, i) {
+		if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ar->ab->dev_flags))
+			return 0;
+	}
 
 	struct ath12k_peer_delete_wait *waits __free(kfree) =
 				kzalloc_objs(*waits, IEEE80211_MLD_MAX_NUM_LINKS);

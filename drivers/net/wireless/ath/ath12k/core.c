@@ -1391,8 +1391,6 @@ static int ath12k_core_reconfigure_on_crash(struct ath12k_base *ab)
 	if (ret)
 		goto err_hal_srng_deinit;
 
-	clear_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
-
 	return 0;
 
 err_hal_srng_deinit:
