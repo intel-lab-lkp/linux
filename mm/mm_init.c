@@ -1253,6 +1253,17 @@ static unsigned long __init zone_spanned_pages_in_node(int nid,
 			*zone_end_pfn = min(node_end_pfn,
 				arch_zone_highest_possible_pfn[movable_zone]);
 
+			/*
+			 * Check that this node has pages within the
+			 * zone's required range
+			 */
+			if (*zone_end_pfn < node_start_pfn ||
+			    *zone_start_pfn > node_end_pfn)
+				return 0;
+
+			/* Move the zone start inside the node if necessary */
+			*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
+
 		/* Adjust for ZONE_MOVABLE starting within this range */
 		} else if (!mirrored_kernelcore &&
 			*zone_start_pfn < zone_movable_pfn[nid] &&
@@ -1263,13 +1274,6 @@ static unsigned long __init zone_spanned_pages_in_node(int nid,
 		} else if (*zone_start_pfn >= zone_movable_pfn[nid])
 			*zone_start_pfn = *zone_end_pfn;
 	}
-
-	/* Check that this node has pages within the zone's required range */
-	if (*zone_end_pfn < node_start_pfn || *zone_start_pfn > node_end_pfn)
-		return 0;
-
-	/* Move the zone boundaries inside the node if necessary */
-	*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
 
 	/* Return the spanned pages */
 	return *zone_end_pfn - *zone_start_pfn;
