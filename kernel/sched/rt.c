@@ -1482,7 +1482,7 @@ requeue_rt_entity(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se, int head)
 	}
 }
 
-static void requeue_task_rt(struct rq *rq, struct task_struct *p, int head)
+static void requeue_task_rt(struct task_struct *p, int head)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
 	struct rt_rq *rt_rq;
@@ -1495,7 +1495,7 @@ static void requeue_task_rt(struct rq *rq, struct task_struct *p, int head)
 
 static void yield_task_rt(struct rq *rq)
 {
-	requeue_task_rt(rq, rq->donor, 0);
+	requeue_task_rt(rq->donor, 0);
 }
 
 static int find_lowest_rq(struct task_struct *task);
@@ -1592,7 +1592,7 @@ static void check_preempt_equal_prio(struct rq *rq, struct task_struct *p)
 	 * the current task but none can run 'p', so lets reschedule
 	 * to try and push the current task away:
 	 */
-	requeue_task_rt(rq, p, 1);
+	requeue_task_rt(p, 1);
 	resched_curr(rq);
 }
 
@@ -2565,7 +2565,7 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 	 */
 	for_each_sched_rt_entity(rt_se) {
 		if (rt_se->run_list.prev != rt_se->run_list.next) {
-			requeue_task_rt(rq, p, 0);
+			requeue_task_rt(p, 0);
 			resched_curr(rq);
 			return;
 		}
