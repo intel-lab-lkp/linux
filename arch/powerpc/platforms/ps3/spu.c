@@ -371,8 +371,10 @@ static int __init ps3_create_spu(struct spu *spu, void *data)
 	return result;
 
 fail_enable:
+	BUG_ON(lv1_destruct_logical_spe(spu_pdata(spu)->spe_id));
 fail_construct:
-	ps3_destroy_spu(spu);
+	kfree(spu->pdata);
+	spu->pdata = NULL;
 fail_malloc:
 	return result;
 }
