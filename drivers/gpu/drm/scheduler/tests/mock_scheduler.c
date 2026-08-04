@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2025 Valve Corporation */
 
+#include <linux/device.h>
+
 #include "sched_tests.h"
 
 /*
@@ -288,12 +290,16 @@ static const struct drm_sched_backend_ops drm_mock_scheduler_ops = {
  */
 struct drm_mock_scheduler *drm_mock_sched_new(struct kunit *test, long timeout)
 {
+	static struct device mock_dev = {
+		.init_name = "drm-mock-device",
+	};
 	struct drm_sched_init_args args = {
 		.ops		= &drm_mock_scheduler_ops,
 		.credit_limit	= U32_MAX,
 		.hang_limit	= 1,
 		.timeout	= timeout,
 		.name		= "drm-mock-scheduler",
+		.dev		= &mock_dev,
 	};
 	struct drm_mock_scheduler *sched;
 	int ret;
