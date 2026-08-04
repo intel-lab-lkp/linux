@@ -1909,6 +1909,46 @@ int asoc_sdw_get_dai_type(u32 type)
 }
 EXPORT_SYMBOL_NS(asoc_sdw_get_dai_type, "SND_SOC_SDW_UTILS");
 
+/*
+ * Some firmware describes one physical peripheral with two _ADR entries that
+ * differ only in SDCA class id, on the same link and with the same unique id.
+ * Only the entry whose class id matches the part ever enumerates; the other is
+ * a phantom. Building DAI links for it fails the whole link rather than
+ * degrading it, so the endpoints have to be skipped.
+ *
+ * This cannot be decided from the BIOS description: on the machine that
+ * prompted this, both entries declare an identical set of SDCA functions, so
+ * is_sdca_endpoint_present() below matches for either. Bus presence is the only
+ * thing that distinguishes them.
+ */
+static bool is_peripheral_attached(struct device *dev,
+				   const struct snd_soc_acpi_link_adr *adr_link,
+				   int adr_index)
+{
+	const char *sdw_codec_name;
+	struct device *sdw_dev;
+	struct sdw_slave *slave;
+	bool attached;
+
+	sdw_codec_name = _asoc_sdw_get_codec_name(dev, adr_link, adr_index);
+	if (!sdw_codec_name)
+		return true;
+
+	sdw_dev = bus_find_device_by_name(&sdw_bus_type, NULL, sdw_codec_name);
+	if (!sdw_dev)
+		return true;
+
+	slave = dev_to_sdw_dev(sdw_dev);
+	attached = slave->status != SDW_SLAVE_UNATTACHED;
+	if (!attached)
+		dev_dbg(dev, "%s not present on the bus, skipping its endpoints\n",
+			sdw_codec_name);
+
+	put_device(sdw_dev);
+
+	return attached;
+}
+
 /**
  * is_sdca_endpoint_present - Check if an SDCA endpoint is present on the SDW peripheral
  * @dev: Device pointer
@@ -2064,6 +2104,12 @@ int asoc_sdw_parse_sdw_endpoints(struct snd_soc_card *card,
 				adr_end = &adr_dev->endpoints[j];
 				dai_info = &codec_info->dais[adr_end->num];
 				soc_dai = asoc_sdw_find_dailink(soc_dais, adr_end);
+
+				/* skip a peripheral that is not on the bus at all */
+				if (!is_peripheral_attached(dev, adr_link, i)) {
+					(*num_devs)--;
+					continue;
+				}
 
 				/*
 				 * quirk should have higher priority than the sdca properties
