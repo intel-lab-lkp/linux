@@ -294,6 +294,11 @@ static int pdsc_identify(struct pdsc *pdsc)
 	 */
 	mutex_lock(&pdsc->devcmd_lock);
 
+	if (!pdsc->cmd_regs) {
+		mutex_unlock(&pdsc->devcmd_lock);
+		return -ENXIO;
+	}
+
 	sz = min_t(size_t, sizeof(drv), sizeof(pdsc->cmd_regs->data));
 	memcpy_toio(&pdsc->cmd_regs->data, &drv, sz);
 

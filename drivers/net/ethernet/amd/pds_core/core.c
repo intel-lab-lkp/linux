@@ -364,6 +364,14 @@ static int pdsc_core_init(struct pdsc *pdsc)
 
 	mutex_lock(&pdsc->devcmd_lock);
 
+	if (!pdsc->cmd_regs) {
+		mutex_unlock(&pdsc->devcmd_lock);
+		err = -ENXIO;
+		dev_err(pdsc->dev, "Device init command failed: %pe\n",
+			ERR_PTR(err));
+		goto err_out_uninit;
+	}
+
 	sz = min_t(size_t, sizeof(cidi), sizeof(pdsc->cmd_regs->data));
 	memcpy_toio(&pdsc->cmd_regs->data, &cidi, sz);
 
