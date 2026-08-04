@@ -4,6 +4,7 @@
 /* Copyright 2023 Collabora ltd. */
 /* Copyright 2025 ARM Limited. All rights reserved. */
 
+#include <linux/debugfs.h>
 #include <linux/clk.h>
 #include <linux/mm.h>
 #include <linux/platform_device.h>
@@ -62,8 +63,40 @@ static int panthor_init_power(struct device *dev)
 	return devm_pm_domain_attach_list(dev, NULL, &pd_list);
 }
 
+static int panthor_device_stop_before_unplug(struct panthor_device *ptdev)
+{
+	int ret;
+
+	/* Make sure any further modification to the existing VMs are blocked
+	 * before proceeding with the SOFT_RESET.
+	 */
+	panthor_mmu_freeze_before_unplug(ptdev);
+
+	/* Core clock should be enough to issue a reset. */
+	ret = clk_prepare_enable(ptdev->clks.core);
+	if (ret)
+		return ret;
+
+	/* A successful soft-reset should guarantee that all components of the
+	 * HW are off, meaning we can proceed with the rest of the unplug
+	 * procedure.
+	 */
+	ret = panthor_hw_soft_reset(ptdev);
+	if (ret)
+		goto err_disable_core_clk;
+
+	return ptdev->unplug.fake_failure ? -EIO : 0;
+
+
+err_disable_core_clk:
+	clk_disable_unprepare(ptdev->clks.core);
+	return ret;
+}
+
 void panthor_device_unplug(struct panthor_device *ptdev)
 {
+	int ret;
+
 	/* This function can be called from two different path: the reset work
 	 * and the platform device remove callback. drm_dev_unplug() doesn't
 	 * deal with concurrent callers, so we have to protect drm_dev_unplug()
@@ -89,6 +122,16 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 
 	/* Make sure we're not interrupted by resets while we're unplugging. */
 	disable_work_sync(&ptdev->reset.work);
+
+	/* Do anything we can to stop the HW. If we can't guarantee that the HW
+	 * is fully stopped, we also can't guarantee the resources it had access
+	 * too won't be touched after the device is gone (clocks and regulators
+	 * can be shared, and the HW might still be running behind our back).
+	 */
+	ret = panthor_device_stop_before_unplug(ptdev);
+	if (drm_WARN(&ptdev->base, ret,
+		     "Couldn't stop the device, this might lead to resource leaks"))
+		ptdev->unplug.leak_active_resources = true;
 
 	/* We do the rest of the unplug with the unplug lock released,
 	 * future callers will wait on ptdev->unplug.done anyway.
@@ -631,8 +674,33 @@ int panthor_device_suspend(struct device *dev)
 }
 
 #ifdef CONFIG_DEBUG_FS
+static int panthor_device_fake_unplug_failure_get(void *data, u64 *val)
+{
+	struct panthor_device *ptdev = data;
+
+	*val = ptdev->unplug.fake_failure ? 1 : 0;
+	return 0;
+}
+
+static int panthor_device_fake_unplug_failure_set(void *data, u64 val)
+{
+	struct panthor_device *ptdev = data;
+
+	ptdev->unplug.fake_failure = val ? true : false;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(panthor_device_fake_unplug_failure_fops,
+			 panthor_device_fake_unplug_failure_get,
+			 panthor_device_fake_unplug_failure_set, "%llu\n");
+
 void panthor_device_debugfs_init(struct drm_minor *minor)
 {
+	struct panthor_device *ptdev = container_of(minor->dev, struct panthor_device, base);
+
+	debugfs_create_file("fake_unplug_failure", 0644,
+			    minor->debugfs_root, ptdev,
+			    &panthor_device_fake_unplug_failure_fops);
 	panthor_mmu_debugfs_init(minor);
 	panthor_gem_debugfs_init(minor);
 }

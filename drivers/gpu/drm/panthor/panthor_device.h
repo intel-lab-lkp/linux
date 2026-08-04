@@ -264,6 +264,29 @@ struct panthor_device {
 		 * operation is done.
 		 */
 		struct completion done;
+
+		/**
+		 * @leak_active_resources: Sub-components should leak resources HW has
+		 * access to.
+		 *
+		 * This is set to true when we can guarantee the HW has been fully stopped
+		 * in the unplug path. In that case, we'd rather leak resource than return
+		 * them to the system with the risk that they might be accessed by the
+		 * HW behind our back.
+		 *
+		 * This is particularly important for any piece of memory used by the GPU
+		 * (MMU page tables, FW sections, group resources shared with the FW,
+		 * any BO attached to an active VM, ...).
+		 */
+		bool leak_active_resources;
+
+		/**
+		 * @fake_failure: When true, pretend the SOFT_RESET in the unplug path failed.
+		 *
+		 * This is important to check that we're doing the right thing in this very
+		 * unlikely case.
+		 */
+		bool fake_failure;
 	} unplug;
 
 	/** @reset: Reset related fields. */

@@ -4069,6 +4069,23 @@ void panthor_sched_unplug(struct panthor_device *ptdev)
 	disable_work_sync(&sched->sync_upd_work);
 
 	mutex_lock(&sched->lock);
+
+	/* Do a pass on the on-slot groups, and schedule termination. */
+	for (u32 i = 0; i < sched->csg_slot_count; i++) {
+		struct panthor_csg_slot *csg_slot = &sched->csg_slots[i];
+		struct panthor_group *group = csg_slot->group;
+
+		if (!group)
+			continue;
+
+		group_get(group);
+		group->state = PANTHOR_CS_GROUP_TERMINATED;
+		group_unbind_locked(group);
+		list_del_init(&group->wait_node);
+		group_queue_work(group, term);
+		group_put(group);
+	}
+
 	if (sched->pm.has_ref) {
 		pm_runtime_put(ptdev->base.dev);
 		sched->pm.has_ref = false;

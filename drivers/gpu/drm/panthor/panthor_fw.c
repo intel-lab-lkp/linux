@@ -1285,11 +1285,9 @@ void panthor_fw_unplug(struct panthor_device *ptdev)
 
 	disable_delayed_work_sync(&ptdev->fw->watchdog.ping_work);
 
-	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_active(ptdev->base.dev)) {
-		/* Make sure the IRQ handler cannot be called after that point. */
+	/* Make sure the IRQ handler cannot be called after that point. */
+	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_active(ptdev->base.dev))
 		panthor_job_irq_suspend(&ptdev->fw->irq);
-		panthor_fw_stop(ptdev);
-	}
 
 	list_for_each_entry(section, &ptdev->fw->sections, node)
 		panthor_kernel_bo_destroy(section->mem);
@@ -1301,9 +1299,6 @@ void panthor_fw_unplug(struct panthor_device *ptdev)
 	 */
 	panthor_vm_put(ptdev->fw->vm);
 	ptdev->fw->vm = NULL;
-
-	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_active(ptdev->base.dev))
-		panthor_hw_l2_power_off(ptdev);
 }
 
 /**
