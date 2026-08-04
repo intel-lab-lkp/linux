@@ -1210,6 +1210,73 @@ static int tc_setup_etf(struct stmmac_priv *priv,
 	return 0;
 }
 
+static int tc_setup_sp_sched(struct stmmac_priv *priv)
+{
+	struct plat_stmmacenet_data *pdata = priv->plat;
+	int i;
+
+	for (i = 0; i < pdata->tx_queues_to_use; i++)
+		pdata->tx_queues_cfg[i].weight = 0;
+	stmmac_set_tx_queue_weight(priv);
+
+	pdata->tx_sched_algorithm = MTL_TX_ALGORITHM_SP;
+	stmmac_prog_mtl_tx_algorithms(priv, priv->hw,
+				      pdata->tx_sched_algorithm);
+
+	return 0;
+}
+
+static int tc_setup_ets_sched(struct stmmac_priv *priv,
+			      struct tc_ets_qopt_offload *qopt)
+{
+	struct tc_ets_qopt_offload_replace_params *p = &qopt->replace_params;
+	struct plat_stmmacenet_data *pdata = priv->plat;
+	int i, nstrict = 0;
+
+	if (p->bands > priv->plat->tx_queues_to_use)
+		return -EOPNOTSUPP;
+
+	for (i = 0; i < p->bands; i++) {
+		if (!p->quanta[i])
+			nstrict++;
+	}
+
+	if (p->bands && nstrict)
+		return -EOPNOTSUPP;
+
+	if (nstrict) {
+		tc_setup_sp_sched(priv);
+	} else {
+		for (i = 0; i < pdata->tx_queues_to_use; i++) {
+			if (i < p->bands)
+				pdata->tx_queues_cfg[i].weight = p->weights[i];
+			else
+				pdata->tx_queues_cfg[i].weight = 0;
+		}
+		stmmac_set_tx_queue_weight(priv);
+		pdata->tx_sched_algorithm = MTL_TX_ALGORITHM_DWRR;
+		stmmac_prog_mtl_tx_algorithms(priv, priv->hw,
+					      pdata->tx_sched_algorithm);
+	}
+
+	return 0;
+}
+
+static int tc_setup_ets(struct stmmac_priv *priv,
+			struct tc_ets_qopt_offload *qopt)
+{
+	switch (qopt->command) {
+	case TC_ETS_REPLACE:
+		return tc_setup_ets_sched(priv, qopt);
+	case TC_ETS_DESTROY:
+		return tc_setup_sp_sched(priv);
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static int tc_query_caps(struct stmmac_priv *priv,
 			 struct tc_query_caps_base *base)
 {
@@ -1308,6 +1375,7 @@ const struct stmmac_tc_ops dwmac4_tc_ops = {
 	.setup_cls = tc_setup_cls,
 	.setup_taprio = tc_setup_taprio_without_fpe,
 	.setup_etf = tc_setup_etf,
+	.setup_ets = tc_setup_ets,
 	.query_caps = tc_query_caps,
 	.setup_mqprio = tc_setup_mqprio_unimplemented,
 };
@@ -1319,6 +1387,7 @@ const struct stmmac_tc_ops dwmac510_tc_ops = {
 	.setup_cls = tc_setup_cls,
 	.setup_taprio = tc_setup_taprio,
 	.setup_etf = tc_setup_etf,
+	.setup_ets = tc_setup_ets,
 	.query_caps = tc_query_caps,
 	.setup_mqprio = tc_setup_dwmac510_mqprio,
 };
