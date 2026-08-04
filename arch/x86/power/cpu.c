@@ -467,9 +467,24 @@ static int msr_save_cpuid_features(const struct x86_cpu_id *c)
 	return msr_build_context(cpuid_msr_id, ARRAY_SIZE(cpuid_msr_id));
 }
 
+static int msr_save_amd_leaf7_cpuid_features(const struct x86_cpu_id *c)
+{
+	u32 cpuid_msr_id[] = {
+		MSR_AMD64_CPUID_FN_7,
+	};
+
+	pr_info("x86/pm: AMD family %#x CPU detected, saving CPUID leaf 7 MSR across suspend.\n",
+		c->family);
+
+	return msr_build_context(cpuid_msr_id, ARRAY_SIZE(cpuid_msr_id));
+}
+
 static const struct x86_cpu_id msr_save_cpu_table[] = {
 	X86_MATCH_VENDOR_FAM(AMD, 0x15, &msr_save_cpuid_features),
 	X86_MATCH_VENDOR_FAM(AMD, 0x16, &msr_save_cpuid_features),
+	X86_MATCH_VENDOR_FAM(AMD, 0x17, &msr_save_amd_leaf7_cpuid_features),
+	X86_MATCH_VENDOR_FAM(AMD, 0x19, &msr_save_amd_leaf7_cpuid_features),
+	X86_MATCH_VENDOR_FAM(AMD, 0x1a, &msr_save_amd_leaf7_cpuid_features),
 	{}
 };
 
