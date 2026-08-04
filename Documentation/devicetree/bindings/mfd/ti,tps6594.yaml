@@ -15,6 +15,9 @@ description:
   PFSM (Pre-configurable Finite State Machine) managing the state of the device.
   TPS6594 is the super-set device while TPS6593 and LP8764 are derivatives.
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     enum:
@@ -37,8 +40,6 @@ properties:
       accomplished through a SPMI bus: the primary PMIC is the controller
       device on the SPMI bus, and the secondary PMICs are the target devices
       on the SPMI bus.
-
-  system-power-controller: true
 
   gpio-controller: true
   gpio-line-names: true
@@ -104,7 +105,7 @@ required:
   - reg
   - interrupts
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
