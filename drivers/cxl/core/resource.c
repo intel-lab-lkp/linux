@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/memregion.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 
@@ -75,6 +76,26 @@ static int cxld_await_commit(void __iomem *hdm, int id)
 			return -EIO;
 		}
 		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMITTED, ctrl))
+			return 0;
+		fsleep(1000);
+	}
+
+	return -ETIMEDOUT;
+}
+
+static int cxld_await_uncommit(void __iomem *hdm, int id)
+{
+	u32 ctrl;
+	int i;
+
+	for (i = 0; i < COMMIT_TIMEOUT_MS; i++) {
+		ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMIT_ERROR, ctrl)) {
+			ctrl &= ~CXL_HDM_DECODER0_CTRL_COMMIT;
+			writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+			return -EIO;
+		}
+		if (!FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMITTED, ctrl))
 			return 0;
 		fsleep(1000);
 	}
@@ -286,6 +307,31 @@ static void __iomem *cxl_pci_hdm_map(struct pci_dev *pdev,
 	return hdm;
 }
 
+static void __iomem *cxl_pci_hdm_ioremap_current(struct pci_dev *pdev,
+						 int bar,
+						 resource_size_t offset,
+						 resource_size_t size)
+{
+	resource_size_t hdm_start, bar_len;
+	void __iomem *hdm;
+
+	if (bar < 0 || bar >= PCI_STD_NUM_BARS || !size)
+		return ERR_PTR(-EINVAL);
+
+	bar_len = pci_resource_len(pdev, bar);
+	if (!bar_len || offset > bar_len || size > bar_len - offset)
+		return ERR_PTR(-ENODEV);
+
+	hdm_start = pci_resource_start(pdev, bar) + offset;
+	hdm = ioremap(hdm_start, size);
+	if (!hdm) {
+		pci_err(pdev, "failed to remap CXL HDM decoder registers\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	return hdm;
+}
+
 static void cxl_pci_hdm_read_decoder_state(struct cxl_hdm_decoder_state *state,
 					   void __iomem *hdm, int id)
 {
@@ -296,6 +342,40 @@ static void cxl_pci_hdm_read_decoder_state(struct cxl_hdm_decoder_state *state,
 	state->size_high = readl(hdm + CXL_HDM_DECODER0_SIZE_HIGH_OFFSET(id));
 	state->target_low = readl(hdm + CXL_HDM_DECODER0_TL_LOW(id));
 	state->target_high = readl(hdm + CXL_HDM_DECODER0_TL_HIGH(id));
+}
+
+static int cxl_hdm_enable_mem(struct pci_dev *pdev, u16 *command,
+			      bool *restore_command)
+{
+	int rc;
+
+	*restore_command = false;
+
+	rc = pci_read_config_word(pdev, PCI_COMMAND, command);
+	if (rc)
+		return pcibios_err_to_errno(rc);
+
+	if (*command & PCI_COMMAND_MEMORY)
+		return 0;
+
+	rc = pci_write_config_word(pdev, PCI_COMMAND,
+				   *command | PCI_COMMAND_MEMORY);
+	if (rc)
+		return pcibios_err_to_errno(rc);
+
+	*restore_command = true;
+	return 0;
+}
+
+static int cxl_hdm_restore_command(struct pci_dev *pdev, u16 command)
+{
+	int rc;
+
+	rc = pci_write_config_word(pdev, PCI_COMMAND, command);
+	if (rc)
+		return pcibios_err_to_errno(rc);
+
+	return 0;
 }
 
 static int cxl_pci_hdm_read_decoder(struct pci_dev *pdev,
@@ -488,6 +568,218 @@ void pci_cxl_hdm_init(struct pci_dev *pdev)
 		pci_dbg(pdev, "CXL HDM cache init failed: %d\n", rc);
 }
 
+static int cxl_hdm_decoder_uncommit(struct pci_dev *pdev, void __iomem *hdm,
+				    int id)
+{
+	u32 ctrl;
+	int rc;
+
+	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+	if (ctrl & CXL_HDM_DECODER0_CTRL_LOCK) {
+		if (ctrl & CXL_HDM_DECODER0_CTRL_COMMITTED) {
+			pci_dbg(pdev,
+				"CXL HDM decoder %d retained locked committed state\n",
+				id);
+			return -EBUSY;
+		}
+
+		pci_err(pdev, "CXL HDM decoder %d is locked and uncommitted\n",
+			id);
+		return -EIO;
+	}
+
+	if (!(ctrl & CXL_HDM_DECODER0_CTRL_COMMITTED))
+		return 0;
+
+	ctrl &= ~CXL_HDM_DECODER0_CTRL_COMMIT;
+	writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+
+	rc = cxld_await_uncommit(hdm, id);
+	if (rc)
+		pci_err(pdev, "CXL HDM decoder %d uncommit failed: %d\n",
+			id, rc);
+
+	return rc;
+}
+
+static void cxl_restore_hdm_decoder_state(struct cxl_hdm_decoder_state *state,
+					  void __iomem *hdm, int id)
+{
+	u32 ctrl = state->ctrl;
+
+	ctrl &= ~(CXL_HDM_DECODER0_CTRL_COMMIT |
+		  CXL_HDM_DECODER0_CTRL_COMMITTED |
+		  CXL_HDM_DECODER0_CTRL_COMMIT_ERROR |
+		  CXL_HDM_DECODER0_CTRL_LOCK);
+
+	writel(state->base_high, hdm + CXL_HDM_DECODER0_BASE_HIGH_OFFSET(id));
+	writel(state->base_low, hdm + CXL_HDM_DECODER0_BASE_LOW_OFFSET(id));
+	writel(state->size_high, hdm + CXL_HDM_DECODER0_SIZE_HIGH_OFFSET(id));
+	writel(state->size_low, hdm + CXL_HDM_DECODER0_SIZE_LOW_OFFSET(id));
+	writel(state->target_high, hdm + CXL_HDM_DECODER0_TL_HIGH(id));
+	writel(state->target_low, hdm + CXL_HDM_DECODER0_TL_LOW(id));
+	writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+}
+
+static int cxl_restore_hdm_decoder(struct pci_dev *pdev,
+				   struct cxl_hdm_decoder_state *state,
+				   struct cxl_decoder_settings *settings,
+				   void __iomem *hdm)
+{
+	int rc;
+
+	rc = cxl_hdm_decoder_uncommit(pdev, hdm, settings->id);
+	if (rc == -EBUSY)
+		return 0;
+	if (rc)
+		return rc;
+
+	cxl_restore_hdm_decoder_state(state, hdm, settings->id);
+
+	if (!(settings->flags & CXL_DECODER_F_ENABLE))
+		return 0;
+
+	scoped_guard(rwsem_read, &cxl_rwsem.dpa)
+		rc = cxl_commit_start(settings, hdm);
+	if (!rc)
+		rc = cxl_commit_wait(settings, hdm);
+	if (rc)
+		pci_err(pdev, "CXL HDM decoder %d restore failed: %d\n",
+			settings->id, rc);
+
+	return rc;
+}
+
+static struct cxl_hdm_info *cxl_snapshot_hdm(struct pci_dev *pdev)
+{
+	struct cxl_hdm_info *snap;
+	struct cxl_hdm_info *info;
+	size_t state_sz;
+
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+
+	info = pdev->hdm;
+	if (!info)
+		return NULL;
+	if (info->decoder_count < 0 ||
+	    info->decoder_count > CXL_HDM_DECODER_MAX_COUNT ||
+	    (info->decoder_count && !info->decoder_state))
+		return ERR_PTR(-EINVAL);
+
+	state_sz = array_size(info->decoder_count, sizeof(*info->decoder_state));
+	snap = kzalloc(size_add(sizeof(*snap), state_sz), GFP_KERNEL);
+	if (!snap)
+		return ERR_PTR(-ENOMEM);
+
+	*snap = *info;
+	snap->decoder_state = (void *)(snap + 1);
+	memcpy(snap->decoder_state, info->decoder_state, state_sz);
+
+	return snap;
+}
+
+static void cxl_restore_pci_state_for_hdm_restore(struct pci_dev *pdev,
+						  u16 *command)
+{
+	u32 saved_config = pdev->saved_config_space[PCI_COMMAND / 4];
+
+	pdev->saved_config_space[PCI_COMMAND / 4] &= ~PCI_COMMAND_MASTER;
+	pdev->saved_config_space[PCI_COMMAND / 4] |= PCI_COMMAND_INTX_DISABLE;
+	pci_restore_state(pdev);
+	pdev->saved_config_space[PCI_COMMAND / 4] = saved_config;
+	*command = saved_config & 0xffff;
+}
+
+static int cxl_restore_hdm(struct pci_dev *pdev)
+{
+	struct cxl_hdm_info *snap = cxl_snapshot_hdm(pdev);
+	bool restore_command = false;
+	void __iomem *hdm;
+	int first_rc = 0;
+	u16 command;
+	int rc;
+
+	if (!snap)
+		return 0;
+	if (IS_ERR(snap))
+		return PTR_ERR(snap);
+
+	rc = cxl_hdm_enable_mem(pdev, &command, &restore_command);
+	if (rc) {
+		kfree(snap);
+		return rc;
+	}
+
+	hdm = cxl_pci_hdm_ioremap_current(pdev, snap->hdm_bar,
+					  snap->hdm_offset, snap->hdm_size);
+	if (IS_ERR(hdm)) {
+		first_rc = PTR_ERR(hdm);
+	} else {
+		/*
+		 * Restore global HDM control before per-decoder commit. PCI
+		 * config memory decoding is enabled for MMIO access, but bus
+		 * mastering remains disabled until HDM restore completes.
+		 */
+		writel(snap->global_ctrl, hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+
+		for (int i = 0; i < snap->decoder_count; i++) {
+			rc = cxl_restore_hdm_decoder(pdev,
+						     &snap->decoder_state[i],
+						     &snap->settings[i], hdm);
+			if (rc && !first_rc)
+				first_rc = rc;
+		}
+
+		iounmap(hdm);
+	}
+
+	if (restore_command) {
+		rc = cxl_hdm_restore_command(pdev, command);
+		if (rc && !first_rc)
+			first_rc = rc;
+	}
+
+	kfree(snap);
+	return first_rc;
+}
+
+static void cxl_reset_save_disabled_state(struct pci_dev *pdev)
+{
+	int rc;
+
+	rc = pci_write_config_word(pdev, PCI_COMMAND, PCI_COMMAND_INTX_DISABLE);
+	if (rc) {
+		pci_warn(pdev, "failed to keep device disabled after CXL reset restore failure: %d\n",
+			 pcibios_err_to_errno(rc));
+		return;
+	}
+
+	rc = pci_save_state(pdev);
+	if (rc)
+		pci_warn(pdev, "failed to save disabled state after CXL reset restore failure: %d\n",
+			 rc);
+}
+
+static int cxl_reset_save_restored_state(struct pci_dev *pdev, u16 command)
+{
+	int rc;
+
+	rc = cxl_hdm_restore_command(pdev, command);
+	if (rc) {
+		cxl_reset_save_disabled_state(pdev);
+		return rc;
+	}
+
+	rc = pci_save_state(pdev);
+	if (rc) {
+		pci_warn(pdev, "failed to save restored state after CXL reset: %d\n",
+			 rc);
+		cxl_reset_save_disabled_state(pdev);
+	}
+
+	return rc;
+}
+
 /*
  * CXL r4.0 sec 9.7.2 defines the reset completion timeout encodings.
  * Sec 9.7.3 leaves config-space access behavior undefined for 100 ms after
@@ -513,6 +805,34 @@ struct cxl_hdm_range {
 struct cxl_hdm_range_context {
 	struct list_head ranges;
 };
+
+static void cxl_pci_target_reset_done(struct pci_dev *pdev,
+				      bool *target_prepared)
+{
+	if (!*target_prepared)
+		return;
+
+	pci_dev_reset_iommu_done(pdev);
+	*target_prepared = false;
+}
+
+static int cxl_pci_target_reset_prepare(struct pci_dev *pdev,
+					bool *target_prepared)
+{
+	int rc;
+
+	if (!pci_wait_for_pending_transaction(pdev))
+		pci_err(pdev, "timed out waiting for pending transactions\n");
+
+	rc = pci_dev_reset_iommu_prepare(pdev);
+	if (rc) {
+		pci_err(pdev, "failed to stop IOMMU for CXL reset: %d\n", rc);
+		return rc;
+	}
+
+	*target_prepared = true;
+	return 0;
+}
 
 static void cxl_hdm_range_context_init(struct cxl_hdm_range_context *ctx)
 {
@@ -934,24 +1254,16 @@ static int cxl_reset_wait_done(struct pci_dev *pdev, int dvsec, u16 cap)
 	} while (true);
 }
 
-static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
+static int cxl_reset_execute(struct pci_dev *pdev, bool *target_prepared,
+			     int dvsec, u16 cap)
 {
-	bool target_prepared = false;
 	int rc, rc2;
 
 	rc = cxl_reset_disable_cache(pdev, dvsec, cap);
 	if (rc)
 		return rc;
 
-	if (!pci_wait_for_pending_transaction(pdev))
-		pci_err(pdev, "timed out waiting for pending transactions\n");
-
-	rc = pci_dev_reset_iommu_prepare(pdev);
-	if (rc)
-		pci_err(pdev, "failed to stop IOMMU for CXL reset: %d\n", rc);
-	else
-		target_prepared = true;
-
+	rc = cxl_pci_target_reset_prepare(pdev, target_prepared);
 	if (!rc)
 		rc = cxl_reset_initiate(pdev, dvsec);
 	if (!rc)
@@ -963,14 +1275,13 @@ static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
 	else if (rc2)
 		rc = rc2;
 
-	if (target_prepared)
-		pci_dev_reset_iommu_done(pdev);
 	return rc;
 }
 
 int cxl_reset_function(struct pci_dev *pdev, bool probe)
 {
 	struct cxl_hdm_range_context range_ctx;
+	bool target_prepared = false;
 	int dvsec;
 	int rc;
 	u16 cap;
@@ -993,9 +1304,21 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	scoped_guard(rwsem_write, &cxl_rwsem.region) {
 		rc = cxl_hdm_ranges_prepare(&range_ctx, pdev);
 		if (!rc)
-			rc = cxl_reset_execute(pdev, dvsec, cap);
+			rc = cxl_reset_execute(pdev, &target_prepared, dvsec, cap);
+		if (!rc) {
+			u16 command;
+
+			cxl_restore_pci_state_for_hdm_restore(pdev, &command);
+			rc = cxl_restore_hdm(pdev);
+			if (rc)
+				cxl_reset_save_disabled_state(pdev);
+			else
+				rc = cxl_reset_save_restored_state(pdev,
+								  command);
+		}
 		cxl_hdm_range_context_destroy(&range_ctx);
 	}
 
+	cxl_pci_target_reset_done(pdev, &target_prepared);
 	return rc;
 }
