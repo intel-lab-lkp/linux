@@ -3503,9 +3503,13 @@ static void update_task_scan_period(struct task_struct *p,
 	 * completely idle or all activity is in areas that are not of interest
 	 * to automatic numa balancing. Related to that, if there were failed
 	 * migration then it implies we are migrating too quickly or the local
-	 * node is overloaded. In either case, scan slower
+	 * node is overloaded. In either case, scan slower.
+	 *
+	 * Slow down if there are no actual memory faults (local + remote == 0),
+	 * or if previous migrations failed. Otherwise, use the locality ratios
+	 * to decide whether the scan rate should be adjusted.
 	 */
-	if (local + shared == 0 || p->numa_faults_locality[2]) {
+	if (local + remote == 0 || p->numa_faults_locality[2]) {
 		p->numa_scan_period = min(p->numa_scan_period_max,
 			p->numa_scan_period << 1);
 
@@ -3527,8 +3531,8 @@ static void update_task_scan_period(struct task_struct *p,
 
 	if (ps_ratio >= NUMA_PERIOD_THRESHOLD) {
 		/*
-		 * Most memory accesses are local. There is no need to
-		 * do fast NUMA scanning, since memory is already local.
+		 * Most memory accesses are private. Slow down NUMA scanning
+		 * since there is little shared memory to rebalance.
 		 */
 		int slot = ps_ratio - NUMA_PERIOD_THRESHOLD;
 		if (!slot)
@@ -3536,9 +3540,8 @@ static void update_task_scan_period(struct task_struct *p,
 		diff = slot * period_slot;
 	} else if (lr_ratio >= NUMA_PERIOD_THRESHOLD) {
 		/*
-		 * Most memory accesses are shared with other tasks.
-		 * There is no point in continuing fast NUMA scanning,
-		 * since other tasks may just move the memory elsewhere.
+		 * Most memory accesses are local. There is no need to
+		 * do fast NUMA scanning, since memory is already local.
 		 */
 		int slot = lr_ratio - NUMA_PERIOD_THRESHOLD;
 		if (!slot)
