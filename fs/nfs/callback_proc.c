@@ -371,10 +371,15 @@ static void pnfs_recall_all_layouts(struct nfs_client *clp,
 }
 
 static struct dentry *nfs4_cb_notify_lookup(struct dentry *parent,
-					    struct cb_notify_entry *entry)
+					    struct cb_notify_entry *entry,
+					    bool alloc_missing)
 {
 	struct qstr filename = QSTR_INIT(entry->ne_name, entry->ne_namelen);
-	return try_lookup_noperm(&filename, parent);
+	struct dentry *child = try_lookup_noperm(&filename, parent);
+
+	if (!child && alloc_missing)
+		child = d_alloc(parent, &filename);
+	return child;
 }
 
 static __be32 nfs4_cb_notify_remove(struct cb_process_state *cps,
@@ -383,13 +388,56 @@ static __be32 nfs4_cb_notify_remove(struct cb_process_state *cps,
 {
 	struct dentry *child;
 
-	child = nfs4_cb_notify_lookup(parent, &cb_remove->nrm_old_entry);
+	child = nfs4_cb_notify_lookup(parent, &cb_remove->nrm_old_entry, false);
 	if (IS_ERR_OR_NULL(child))
 		return htonl(NFS4ERR_BADHANDLE);
 
 	nfs_set_cache_invalid(parent->d_inode, NFS_INO_INVALID_DATA);
 	d_drop(child);
 	dput(child);
+	return 0;
+}
+
+static __be32 nfs4_cb_notify_add(struct cb_process_state *cps,
+				 struct dentry *parent,
+				 struct cb_notify_add *cb_add)
+{
+	struct nfs_entry entry = {
+		.cookie = cb_add->na_new_entry_cookie,
+		.name = cb_add->na_new_entry.ne_name,
+		.len = cb_add->na_new_entry.ne_namelen,
+		.eof = cb_add->na_last_entry,
+		.fh = &cb_add->na_new_entry.ne_fh,
+		.fattr = &cb_add->na_new_entry.ne_attrs,
+		.server = NFS_SERVER(d_inode(parent)),
+	};
+	struct dentry *dentry;
+
+	dentry = nfs4_cb_notify_lookup(parent, &cb_add->na_new_entry, true);
+	if (IS_ERR_OR_NULL(dentry))
+		return 0;
+
+	if (!d_in_lookup(dentry) && entry.fh->size > 0) {
+		struct inode *inode = d_inode(dentry);
+
+		if (!inode) {
+			inode = nfs_fhget(parent->d_sb, entry.fh, entry.fattr);
+			if (IS_ERR(inode))
+				goto out;
+		}
+		if (inode) {
+			nfs_set_verifier(dentry, parent->d_time);
+			nfs_refresh_inode(inode, entry.fattr);
+			d_instantiate(dentry, inode);
+			iput(inode);
+		}
+	}
+
+out:
+	d_lookup_done(dentry);
+	dput(dentry);
+
+	nfs_set_cache_invalid(parent->d_inode, NFS_INO_INVALID_DATA);
 	return 0;
 }
 
@@ -425,6 +473,10 @@ __be32 nfs4_callback_notify(void *argp, void *resp,
 		case CB_NOTIFY4_REMOVE_ENTRY:
 			res = nfs4_cb_notify_remove(cps, parent,
 						    &change->notify_remove);
+			break;
+		case CB_NOTIFY4_ADD_ENTRY:
+			res = nfs4_cb_notify_add(cps, parent,
+						 &change->notify_add);
 			break;
 		default:
 			res = htonl(NFS4ERR_NOTSUPP);

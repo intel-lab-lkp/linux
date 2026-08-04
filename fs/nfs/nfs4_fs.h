@@ -586,6 +586,8 @@ extern const u32 nfs42_maxlistxattrs_overhead;
 #endif
 
 struct nfs4_mount_data;
+int decode_fattr_cb(struct xdr_stream *xdr, uint32_t *bitmap,
+		    struct nfs_fattr *fattr, struct nfs_fh *fhandle);
 
 /* callback_xdr.c */
 extern const struct svc_version nfs4_callback_version1;

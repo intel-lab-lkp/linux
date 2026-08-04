@@ -620,6 +620,7 @@ enum {
 
 /* Directory Delegation / CB_NOTIFY bits */
 #define CB_NOTIFY4_REMOVE_ENTRY		(1UL << 2)
+#define CB_NOTIFY4_ADD_ENTRY		(1UL << 3)
 #define CB_NOTIFY4_GFLAG_EXTEND		(1UL << 6)
 
 #define NFSPROC4_NULL 0
