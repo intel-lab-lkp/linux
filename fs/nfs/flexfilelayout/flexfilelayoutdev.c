@@ -79,6 +79,11 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	mp_count = be32_to_cpup(p);
 	dprintk("%s: multipath ds count %d\n", __func__, mp_count);
 
+	if (mp_count > NFS4_FLEXFILE_LAYOUT_MAX_MULTIPATH_CNT) {
+		ret = -EINVAL;
+		goto out_err_drain_dsaddrs;
+	}
+
 	for (i = 0; i < mp_count; i++) {
 		/* multipath ds */
 		da = nfs4_decode_mp_ds_addr(net, &stream, gfp_flags);
