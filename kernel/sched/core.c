@@ -4654,6 +4654,8 @@ static void reset_memory_tiering(void)
 	}
 }
 
+static DEFINE_MUTEX(numabalancing_mutex);
+
 static int sysctl_numa_balancing(const struct ctl_table *table, int write,
 			  void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -4670,6 +4672,7 @@ static int sysctl_numa_balancing(const struct ctl_table *table, int write,
 	if (err < 0)
 		return err;
 	if (write) {
+		guard(mutex)(&numabalancing_mutex);
 		if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
 		    (state & NUMA_BALANCING_MEMORY_TIERING))
 			reset_memory_tiering();
