@@ -8,6 +8,7 @@
 #include "mcu.h"
 #include "mac.h"
 #include "nan.h"
+#include "ies.h"
 
 #define MT_STA_BFER			BIT(0)
 #define MT_STA_BFEE			BIT(1)
@@ -2110,6 +2111,70 @@ mt7925_mcu_sta_mld_tlv(struct sk_buff *skb,
 }
 
 static void
+mt7928_mcu_sta_suswm_tlv(struct sk_buff *skb,
+			 struct ieee80211_vif *vif, struct mt76_wcid *wcid)
+{
+	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+	struct mt792x_phy *phy = mvif->phy;
+	struct ieee80211_link_sta *link_sta;
+	struct ieee80211_bss_conf *link_conf;
+	struct cfg80211_chan_def *chandef;
+	struct mt792x_bss_conf *mconf;
+	enum nl80211_band band;
+	struct ieee80211_sta *sta;
+	struct ieee80211_supported_band *sband;
+	const struct cfg80211_bss_ies *ies;
+	struct cfg80211_bss *bss;
+	struct mt7928_suswm_cap cap = {};
+	struct sta_rec_su_swm *su_swm;
+	struct tlv *tlv;
+
+	if (vif->type != NL80211_IFTYPE_STATION || !vif->cfg.assoc)
+		return;
+
+	rcu_read_lock();
+	sta = ieee80211_find_sta(vif, vif->bss_conf.bssid);
+
+	if (!sta)
+		goto exit;
+
+	link_sta = mt792x_sta_to_link_sta(vif, sta, wcid->link_id);
+
+	if (!link_sta)
+		goto exit;
+
+	link_conf = mt792x_vif_to_bss_conf(vif, link_sta->link_id);
+	mconf = mt792x_vif_to_link(mvif, link_sta->link_id);
+
+	chandef = mconf->mt76.ctx ? &mconf->mt76.ctx->def :
+				    &link_conf->chanreq.oper;
+	band = chandef->chan->band;
+
+	sband = phy->mt76->hw->wiphy->bands[band];
+
+	bss = link_conf->bss;
+	if (!bss || !bss->ies)
+		goto exit;
+
+	ies = rcu_dereference(bss->ies);
+
+	mt7928_get_bss_suswm_cap(ies, link_sta, sband, vif->type, &cap);
+
+	tlv = mt76_connac_mcu_add_tlv(skb, STA_REC_SUSWM, sizeof(*su_swm));
+	su_swm = (struct sta_rec_su_swm *)tlv;
+
+	if (cap.bfer_en)
+		su_swm->su_swm_cap_map |= MT_SU_SWM_BFER;
+	if (cap.bfee_en)
+		su_swm->su_swm_cap_map |= MT_SU_SWM_BFEE;
+	if (cap.nsts > 0 && cap.nsts <= 2)
+		su_swm->su_swm_cap_map |= MT_SU_SWM_NSTS_MEET;
+
+exit:
+	rcu_read_unlock();
+}
+
+static void
 mt7925_mcu_sta_remove_tlv(struct sk_buff *skb)
 {
 	struct sta_rec_remove *rem;
@@ -2178,6 +2243,8 @@ mt7925_mcu_sta_cmd(struct mt76_phy *phy,
 			mlink = &mvif->sta.deflink;
 
 		mt7925_mcu_sta_hdr_trans_tlv(skb, info->vif, mlink);
+		if (is_mt7928(dev))
+			mt7928_mcu_sta_suswm_tlv(skb, info->vif, info->wcid);
 	}
 
 	return mt76_mcu_skb_send_msg(dev, skb, info->cmd, true);

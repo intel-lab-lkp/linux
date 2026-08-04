@@ -493,6 +493,13 @@ struct sta_rec_eht_mld {
 	u8 __rsv2[3];
 } __packed;
 
+struct sta_rec_su_swm {
+	__le16 tag;
+	__le16 len;
+	u8   su_swm_cap_map;
+	u8 rsv[3];
+} __packed;
+
 struct bss_ifs_time_tlv {
 	__le16 tag;
 	__le16 len;
@@ -542,6 +549,7 @@ struct bss_rlm_tlv {
 					 sizeof(struct sta_rec_eht) +		\
 					 sizeof(struct sta_rec_hdr_trans) +	\
 					 sizeof(struct sta_rec_mld) +		\
+					 sizeof(struct sta_rec_su_swm) +		\
 					 sizeof(struct tlv) * 2 +		\
 					 sizeof(struct sta_rec_remove))
 
