@@ -544,8 +544,7 @@ static u64 slots_fetch_random(void)
 		return slot_areas[i].addr + ((u64)slot * CONFIG_PHYSICAL_ALIGN);
 	}
 
-	if (i == slot_area_index)
-		debug_putstr("slots_fetch_random() failed!?\n");
+	debug_putstr("slots_fetch_random() failed!?\n");
 	return 0;
 }
 
