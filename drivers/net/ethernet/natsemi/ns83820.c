@@ -2209,6 +2209,9 @@ static void ns83820_remove_one(struct pci_dev *pci_dev)
 
 	unregister_netdev(ndev);
 	free_irq(dev->pci_dev->irq, ndev);
+
+	cancel_work_sync(&dev->tq_refill);
+
 	iounmap(dev->base);
 	dma_free_coherent(&dev->pci_dev->dev, 4 * DESC_SIZE * NR_TX_DESC,
 			  dev->tx_descs, dev->tx_phy_descs);
