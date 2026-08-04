@@ -1519,7 +1519,8 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	int max_rate, mode_rate, max_lanes, max_link_clock;
 	unsigned long bw_overhead_flags =
 		DRM_DP_BW_OVERHEAD_MST | DRM_DP_BW_OVERHEAD_SSC_REF_CLK;
-	int min_link_bpp_x16 = fxp_q4_from_int(18);
+	int src_min_link_bpp_x16 = fxp_q4_from_int(18);
+	int sink_min_link_bpp_x16 = fxp_q4_from_int(18);
 	struct intel_dp_link_config max_bw_config;
 	static bool supports_dsc;
 	int ret;
@@ -1549,9 +1550,13 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 	supports_dsc = intel_dp_has_dsc(connector) &&
 		       drm_dp_sink_supports_fec(connector->dp.fec_capability);
 
+	if (supports_dsc && connector->dp.dsc_decompression_aux)
+		src_min_link_bpp_x16 =
+			intel_dp_compute_min_compressed_bpp_x16(connector,
+								INTEL_OUTPUT_FORMAT_RGB);
+
 	if (supports_dsc && connector->mst.port->passthrough_aux)
-		min_link_bpp_x16 = intel_dp_compute_min_compressed_bpp_x16(connector,
-									   INTEL_OUTPUT_FORMAT_RGB);
+		sink_min_link_bpp_x16 = src_min_link_bpp_x16;
 
 	intel_dp_link_caps_get_max_bw_config(intel_dp->link.caps, &max_bw_config);
 	max_link_clock = max_bw_config.rate;
@@ -1561,19 +1566,11 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 					       max_link_clock, max_lanes);
 	mode_rate = intel_dp_link_required(max_link_clock, max_lanes,
 					   mode->clock, mode->hdisplay,
-					   min_link_bpp_x16,
+					   src_min_link_bpp_x16,
 					   bw_overhead_flags);
 
 	/*
 	 * TODO:
-	 * - Also check if compression would allow for the mode
-	 *   in non-passthrough mode, i.e. the last branch device
-	 *   decompressing the stream. This makes a difference only if
-	 *   the BW on the link between the last branch device and the
-	 *   sink is higher than the BW on the whole MST path from the
-	 *   source to the last branch device. Relying on the extra BW
-	 *   this provides also requires the
-	 *   DFP_Link_Available_Payload_Bandwidth_Number described below.
 	 * - Calculate the overhead using drm_dp_bw_overhead() /
 	 *   drm_dp_bw_channel_coding_efficiency(), similarly to the
 	 *   compute config code, as drm_dp_calc_pbn_mode() doesn't
@@ -1588,7 +1585,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 		return ret;
 
 	if (mode_rate > max_rate ||
-	    drm_dp_calc_pbn_mode(mode->clock, min_link_bpp_x16) > port->full_pbn) {
+	    drm_dp_calc_pbn_mode(mode->clock, sink_min_link_bpp_x16) > port->full_pbn) {
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
