@@ -1114,7 +1114,8 @@ nfs4_decode_mp_ds_addr(struct net *net, struct xdr_stream *xdr, gfp_t gfp_flags)
 	}
 
 	portstr++;
-	sscanf(portstr, "%d-%d", &tmp[0], &tmp[1]);
+	if (sscanf(portstr, "%d-%d", &tmp[0], &tmp[1]) != 2)
+		goto out_free_da;
 	port = htons((tmp[0] << 8) | (tmp[1]));
 
 	switch (da->da_addr.ss_family) {
