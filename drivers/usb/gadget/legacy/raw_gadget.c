@@ -226,6 +226,7 @@ static void dev_free(struct kref *kref)
 		kfree(dev->eps[i].ep->desc);
 		dev->eps[i].state = STATE_EP_DISABLED;
 	}
+	usb_put_gadget(dev->gadget);
 	kfree(dev);
 }
 
@@ -302,7 +303,7 @@ static int gadget_bind(struct usb_gadget *gadget,
 	dev->req = req;
 	dev->req->context = dev;
 	dev->req->complete = gadget_ep0_complete;
-	dev->gadget = gadget;
+	dev->gadget = usb_get_gadget(gadget);
 	gadget_for_each_ep(ep, dev->gadget) {
 		dev->eps[i].ep = ep;
 		dev->eps[i].addr = get_ep_addr(ep->name);
@@ -329,6 +330,8 @@ static void gadget_unbind(struct usb_gadget *gadget)
 {
 	struct raw_dev *dev = get_gadget_data(gadget);
 
+	scoped_guard(spinlock_irqsave, &dev->lock)
+		dev->state = STATE_DEV_FAILED;
 	set_gadget_data(gadget, NULL);
 	/* Matches kref_get() in gadget_bind(). */
 	kref_put(&dev->count, dev_free);
