@@ -294,6 +294,8 @@ static void test_cycle_work(struct work_struct *work)
 	struct test_cycle *cycle = container_of(work, typeof(*cycle), work);
 	struct ww_acquire_ctx ctx;
 	int err, erra = 0;
+	const int max_attempts = 5;
+	int attempt;
 
 	ww_acquire_init_noinject(&ctx, cycle->class);
 	ww_mutex_lock(&cycle->a_mutex, &ctx);
@@ -302,13 +304,26 @@ static void test_cycle_work(struct work_struct *work)
 	wait_for_completion(&cycle->b_signal);
 
 	err = ww_mutex_lock(cycle->b_mutex, &ctx);
-	if (err == -EDEADLK) {
+	if (err != -EDEADLK)
+		goto out;
+
+	for (attempt = 0; attempt < max_attempts; ++attempt) {
 		err = 0;
 		ww_mutex_unlock(&cycle->a_mutex);
 		ww_mutex_lock_slow(cycle->b_mutex, &ctx);
 		erra = ww_mutex_lock(&cycle->a_mutex, &ctx);
+		if (erra != -EDEADLK)
+			break;
+
+		erra = 0;
+		ww_mutex_unlock(cycle->b_mutex);
+		ww_mutex_lock_slow(&cycle->a_mutex, &ctx);
+		err = ww_mutex_lock(cycle->b_mutex, &ctx);
+		if (err != -EDEADLK)
+			break;
 	}
 
+out:
 	if (!err)
 		ww_mutex_unlock(cycle->b_mutex);
 	if (!erra)
