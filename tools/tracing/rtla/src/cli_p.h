@@ -305,6 +305,9 @@ static int opt_filter_cb(const struct option *opt, const char *arg, int unset)
 	"the minimum delta to be considered a noise", \
 	opt_llong_callback)
 
+#define OSNOISE_OPT_IPI OPT_BOOLEAN(0, "ipi", &params->common.ipi, \
+	"track sources of IPIs")
+
 /*
  * Callback functions for command line options for osnoise tools
  */
