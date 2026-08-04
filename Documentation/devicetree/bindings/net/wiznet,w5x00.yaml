@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/wiznet,w5x00.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Wiznet w5x00 SPI Ethernet Controller
+
+description: |
+  This is a standalone 10/100 MBit Ethernet controller with SPI interface.
+
+  For each device connected to a SPI bus, define a child node within the SPI master node.
+
+allOf:
+  - $ref: /schemas/net/ethernet-controller.yaml#
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+properties:
+  compatible:
+    enum:
+      - wiznet,w5100
+      - wiznet,w5200
+      - wiznet,w5500
+
+  reg:
+    description: Specify the SPI chip select the chip is wired to.
+    maxItems: 1
+    minItems: 1
+
+  interrupts:
+    description:
+      Specify the interrupt index within the interrupt controller (referred to
+      above in interrupt-parent) and interrupt type. w5x00 natively generates
+      falling edge interrupts, however, additional board logic might invert the
+      signal.
+    maxItems: 1
+    minItems: 1
+
+  pinctrl-names:
+    description:
+      List of assigned state names, see pinctrl binding documentation.
+    enum:
+      - default
+    minItems: 1
+
+  pinctrl-0:
+    description:
+      List of phandles to configure the GPIO pin used as interrupt line, see
+      also generic and your platform specific pinctrl binding documentation.
+    minItems: 1
+
+  local-mac-address: true
+
+  spi-max-frequency:
+    description:
+      Maximum frequency of the SPI bus when accessing the w5500. According to
+      the w5500 datasheet, the chip allows a maximum of 80 MHz, however, board
+      designs may need to limit this value.
+    maximum: 80000000
+
+  link-gpios:
+    description: A GPIO line used for the link detection interrupt.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - pinctrl-names
+  - pinctrl-0
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    /* Example (for Raspberry Pi with pin control stuff for GPIO irq) */
+
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet@0: w5500@0 {
+          compatible = "wiznet,w5500";
+            reg = <0>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&eth1_pins>;
+            interrupt-parent = <&gpio>;
+            interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
+            spi-max-frequency = <30000000>;
+            link-gpios = <&gpio 4 GPIO_ACTIVE_HIGH>;
+            local-mac-address = [ a0 b0 c0 d0 e0 f0 ];
+        };
+    };
+
+    &gpio {
+      eth1_pins: eth1_pins {
+        brcm,pins = <25 4>;
+        brcm,function = <0 0>; /* in */
+        brcm,pull = <0 0>; /* none */
+    };
