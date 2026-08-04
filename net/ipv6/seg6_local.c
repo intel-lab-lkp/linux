@@ -1186,6 +1186,9 @@ static int input_action_end_dt4(struct sk_buff *skb,
 	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto drop;
 
+	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
+	IPCB(skb)->iif = skb->skb_iif;
+
 	skb = end_dt_vrf_core(skb, slwt, AF_INET);
 	if (!skb)
 		/* packet has been processed and consumed by the VRF */
