@@ -29,8 +29,6 @@ properties:
   '#gpio-cells':
     const: 2
 
-  system-power-controller: true
-
   rockchip,reset-mode:
     $ref: /schemas/types.yaml#/definitions/uint32
     enum: [0, 1, 2]
@@ -136,6 +134,7 @@ patternProperties:
         enum: [gpio_pwrctrl1, gpio_pwrctrl2, gpio_pwrctrl3]
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - $ref: /schemas/spi/spi-peripheral-props.yaml
 
 required:

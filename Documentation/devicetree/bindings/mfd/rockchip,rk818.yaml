@@ -14,6 +14,9 @@ description: |
   Rockchip RK818 series PMIC. This device consists of an i2c controlled MFD
   that includes regulators, an RTC, and a power button.
 
+allOf:
+  - $ref: /schemas/power/power-controller.yaml#
+
 properties:
   compatible:
     enum:
@@ -40,8 +43,6 @@ properties:
     deprecated: true
     description:
       Telling whether or not this PMIC is controlling the system power.
-
-  system-power-controller: true
 
   wakeup-source:
     type: boolean
@@ -111,7 +112,7 @@ required:
   - interrupts
   - "#clock-cells"
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
@@ -130,7 +131,7 @@ examples:
             interrupts = <4 IRQ_TYPE_LEVEL_LOW>;
             pinctrl-names = "default";
             pinctrl-0 = <&pmic_int>;
-            rockchip,system-power-controller;
+            system-power-controller;
             wakeup-source;
             #clock-cells = <1>;
 

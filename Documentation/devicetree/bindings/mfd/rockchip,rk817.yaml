@@ -53,8 +53,6 @@ properties:
   '#sound-dai-cells':
     const: 0
 
-  system-power-controller: true
-
   wakeup-source:
     type: boolean
     description:
@@ -157,6 +155,7 @@ properties:
     additionalProperties: false
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - $ref: /schemas/sound/dai-common.yaml#
   - if:
       properties:
@@ -195,7 +194,7 @@ required:
   - interrupts
   - "#clock-cells"
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
