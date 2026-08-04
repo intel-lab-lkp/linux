@@ -1067,8 +1067,16 @@ static void rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
 {
 	struct rcar_gen3_chan *channel = platform_get_drvdata(pdev);
 
-	if (channel->is_otg_channel)
+	if (channel->is_otg_channel) {
+		/* Disable OTG interrupts so the IRQ handler cannot
+		 * schedule new work.
+		 */
+		rcar_gen3_control_otg_irq(channel, 0);
+
 		device_remove_file(&pdev->dev, &dev_attr_role);
+
+		cancel_work_sync(&channel->work);
+	}
 }
 
 static int rcar_gen3_phy_usb2_suspend(struct device *dev)
