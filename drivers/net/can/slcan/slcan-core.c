@@ -826,7 +826,7 @@ static int slcan_open(struct tty_struct *tty)
 	if (!tty->ops->write)
 		return -EOPNOTSUPP;
 
-	dev = alloc_candev(sizeof(*sl), 1);
+	dev = alloc_candev(sizeof(*sl), 0);
 	if (!dev)
 		return -ENFILE;
 
