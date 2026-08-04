@@ -551,7 +551,8 @@ ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 			if (!p)
 				goto out_err_free;
 			fh_count = be32_to_cpup(p);
-			if (fh_count == 0) {
+			if (fh_count == 0 ||
+			    fh_count > NFS4_FLEXFILE_LAYOUT_MAX_FH_CNT) {
 				rc = -EINVAL;
 				goto out_err_free;
 			}

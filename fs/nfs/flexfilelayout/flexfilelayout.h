@@ -27,6 +27,11 @@
  * otherwise let a server spin the GETDEVICEINFO decode loop. */
 #define NFS4_FLEXFILE_LAYOUT_MAX_MULTIPATH_CNT 4096
 
+/* Filter out insanely large filehandle version counts, which would
+ * otherwise let a server size a kernel allocation from the LAYOUTGET
+ * body. */
+#define NFS4_FLEXFILE_LAYOUT_MAX_FH_CNT 4096
+
 /* LAYOUTSTATS report interval in ms */
 #define FF_LAYOUTSTATS_REPORT_INTERVAL (60000L)
 #define FF_LAYOUTSTATS_MAXDEV 4
