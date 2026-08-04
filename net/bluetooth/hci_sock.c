@@ -1190,6 +1190,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr_unsized *addr,
 	struct sock *sk = sock->sk;
 	struct hci_dev *hdev = NULL;
 	struct sk_buff *skb;
+	bool notify_user_channel = false;
 	int len, err = 0;
 
 	BT_DBG("sock %p sk %p", sock, sk);
@@ -1324,6 +1325,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr_unsized *addr,
 				 * is still active.
 				 */
 				err = 0;
+				notify_user_channel = true;
 			} else {
 				hci_dev_clear_flag(hdev, HCI_USER_CHANNEL);
 				mgmt_index_added(hdev);
@@ -1364,6 +1366,8 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr_unsized *addr,
 		}
 
 		atomic_inc(&hdev->promisc);
+		if (notify_user_channel && hdev->notify)
+			hdev->notify(hdev, HCI_NOTIFY_USER_CHANNEL);
 		break;
 
 	case HCI_CHANNEL_MONITOR:
@@ -1894,6 +1898,7 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		hci_skb_opcode(skb) = opcode;
 
 		if (ogf == 0x3f) {
+			bt_cb(skb)->hci.req_flags |= HCI_REQ_RAW;
 			skb_queue_tail(&hdev->raw_q, skb);
 			queue_work(hdev->workqueue, &hdev->tx_work);
 		} else {

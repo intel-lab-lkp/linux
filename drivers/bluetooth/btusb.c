@@ -957,6 +957,18 @@ struct qca_dump_info {
 #define BTUSB_USE_ALT3_FOR_WBS	15
 #define BTUSB_ALT6_CONTINUOUS_TX	16
 #define BTUSB_HW_SSR_ACTIVE	17
+#define BTUSB_REMOTE_WAKEUP_ACTIVE	18
+#define BTUSB_REMOTE_WAKEUP_COREDUMP	19
+
+#define BTUSB_REMOTE_WAKEUP_RETRY	msecs_to_jiffies(100)
+
+struct btusb_raw_vendor_cmd {
+	struct list_head list;
+	struct sk_buff *skb;
+	unsigned long expires;
+	u16 opcode;
+	bool submitted;
+};
 
 struct btusb_data {
 	struct hci_dev       *hdev;
@@ -969,9 +981,25 @@ struct btusb_data {
 	unsigned long flags;
 
 	bool poll_sync;
+	bool intel_idle_power_manageable;
+	int (*setup)(struct hci_dev *hdev);
+	int (*set_diag)(struct hci_dev *hdev, bool enable);
+	int (*set_quality_report)(struct hci_dev *hdev, bool enable);
+	void (*coredump)(struct hci_dev *hdev);
+	void (*coredump_notify)(struct hci_dev *hdev, int state);
 	int intr_interval;
 	struct work_struct  work;
 	struct work_struct  waker;
+	struct delayed_work remote_wakeup;
+	struct delayed_work remote_wakeup_retry;
+	struct delayed_work coredump_remote_wakeup;
+	struct delayed_work raw_vendor_cmd_timeout;
+	unsigned long coredump_remote_wakeup_expires;
+	struct list_head raw_vendor_cmds;
+	unsigned int raw_vendor_cmd_count;
+	unsigned int raw_vendor_cmd_submitted;
+	/* Protects remote wake update scheduling against close/remove. */
+	spinlock_t remote_wakeup_lock;
 	struct delayed_work rx_work;
 
 	struct sk_buff_head acl_q;
@@ -1025,6 +1053,16 @@ struct btusb_data {
 
 	struct qca_dump_info qca_dump;
 };
+
+static bool btusb_needs_runtime_remote_wakeup(struct btusb_data *data);
+static bool btusb_raw_vendor_cmd_pending(struct btusb_data *data);
+static void btusb_raw_vendor_cmd_done(struct btusb_data *data, u16 opcode);
+static bool btusb_event_completes_raw_vendor_cmd(struct sk_buff *skb,
+						 u16 *opcode);
+static void btusb_raw_vendor_cmd_free_list(struct list_head *cmds);
+static void btusb_remote_wakeup_set_active(struct btusb_data *data,
+					   bool active);
+static void btusb_queue_remote_wakeup_update(struct btusb_data *data);
 
 static void btusb_reset(struct hci_dev *hdev)
 {
@@ -1237,12 +1275,26 @@ static inline void btusb_free_frags(struct btusb_data *data)
 
 static int btusb_recv_event(struct btusb_data *data, struct sk_buff *skb)
 {
+	bool raw_vendor_cmd_done;
+	u16 raw_vendor_opcode;
+	int err;
+
 	if (data->intr_interval) {
 		/* Trigger dequeue immediately if an event is received */
 		schedule_delayed_work(&data->rx_work, 0);
 	}
 
-	return data->recv_event(data->hdev, skb);
+	raw_vendor_cmd_done = btusb_event_completes_raw_vendor_cmd(skb,
+								   &raw_vendor_opcode);
+
+	err = data->recv_event(data->hdev, skb);
+	if (!err) {
+		if (raw_vendor_cmd_done)
+			btusb_raw_vendor_cmd_done(data, raw_vendor_opcode);
+		btusb_queue_remote_wakeup_update(data);
+	}
+
+	return err;
 }
 
 static int btusb_recv_intr(struct btusb_data *data, void *buffer, int count)
@@ -2010,7 +2062,10 @@ static int btusb_open(struct hci_dev *hdev)
 			goto setup_fail;
 	}
 
-	data->intf->needs_remote_wakeup = 1;
+	data->intf->needs_remote_wakeup =
+		btusb_needs_runtime_remote_wakeup(data);
+	if (data->intel_idle_power_manageable)
+		btusb_remote_wakeup_set_active(data, true);
 
 	if (test_and_set_bit(BTUSB_INTR_RUNNING, &data->flags))
 		goto done;
@@ -2039,6 +2094,7 @@ done:
 
 failed:
 	clear_bit(BTUSB_INTR_RUNNING, &data->flags);
+	btusb_remote_wakeup_set_active(data, false);
 setup_fail:
 	usb_autopm_put_interface(data->intf);
 	return err;
@@ -2053,6 +2109,657 @@ static void btusb_stop_traffic(struct btusb_data *data)
 	usb_kill_anchored_urbs(&data->ctrl_anchor);
 }
 
+static bool btusb_needs_runtime_remote_wakeup(struct btusb_data *data)
+{
+	struct hci_dev *hdev = data->hdev;
+
+	if (!data->intel_idle_power_manageable)
+		return true;
+
+	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL))
+		return true;
+
+	/*
+	 * HCI_CMD_PENDING only covers synchronous requests. cmd_cnt reaches
+	 * zero while any accepted HCI command is awaiting Command Complete or
+	 * Command Status.
+	 */
+	if (!atomic_read(&hdev->cmd_cnt) ||
+	    hci_dev_test_flag(hdev, HCI_CMD_PENDING) ||
+	    test_bit(HCI_INIT, &hdev->flags) ||
+	    hci_dev_test_flag(hdev, HCI_VENDOR_DIAG) ||
+	    hci_dev_test_flag(hdev, HCI_QUALITY_REPORT) ||
+	    hci_dev_test_flag(hdev, HCI_DUT_MODE))
+		return true;
+
+	if (test_bit(BTUSB_REMOTE_WAKEUP_COREDUMP, &data->flags))
+		return true;
+
+	if (btusb_raw_vendor_cmd_pending(data))
+		return true;
+
+	if (hci_conn_count(hdev))
+		return true;
+
+	if (hdev->discovery.state == DISCOVERY_FINDING ||
+	    hdev->discovery.state == DISCOVERY_RESOLVING)
+		return true;
+
+	if (hci_dev_test_flag(hdev, HCI_LE_SCAN) ||
+	    hci_dev_test_flag(hdev, HCI_LE_ADV) ||
+	    hci_dev_test_flag(hdev, HCI_LE_PER_ADV) ||
+	    hci_dev_test_flag(hdev, HCI_ADVERTISING) ||
+	    test_bit(HCI_PSCAN, &hdev->flags) ||
+	    test_bit(HCI_ISCAN, &hdev->flags) ||
+	    test_bit(HCI_INQUIRY, &hdev->flags) ||
+	    hci_dev_test_flag(hdev, HCI_PERIODIC_INQ))
+		return true;
+
+	return false;
+}
+
+static void btusb_remote_wakeup_set_active(struct btusb_data *data, bool active)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	if (active)
+		set_bit(BTUSB_REMOTE_WAKEUP_ACTIVE, &data->flags);
+	else
+		clear_bit(BTUSB_REMOTE_WAKEUP_ACTIVE, &data->flags);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+}
+
+static bool btusb_remote_wakeup_active(struct btusb_data *data)
+{
+	unsigned long flags;
+	bool active;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	active = test_bit(BTUSB_REMOTE_WAKEUP_ACTIVE, &data->flags) &&
+		 !hci_dev_test_flag(data->hdev, HCI_CMD_DRAIN_WORKQUEUE);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	return active;
+}
+
+static bool btusb_queue_remote_wakeup_work(struct btusb_data *data)
+{
+	unsigned long flags;
+	bool active;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	active = test_bit(BTUSB_REMOTE_WAKEUP_ACTIVE, &data->flags) &&
+		 !hci_dev_test_flag(data->hdev, HCI_CMD_DRAIN_WORKQUEUE);
+	if (active)
+		mod_delayed_work(data->hdev->workqueue, &data->remote_wakeup, 0);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	return active;
+}
+
+static bool btusb_queue_remote_wakeup_retry(struct btusb_data *data)
+{
+	unsigned long flags;
+	bool active;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	active = test_bit(BTUSB_REMOTE_WAKEUP_ACTIVE, &data->flags) &&
+		 !hci_dev_test_flag(data->hdev, HCI_CMD_DRAIN_WORKQUEUE);
+	if (active)
+		mod_delayed_work(system_freezable_wq, &data->remote_wakeup_retry,
+				 BTUSB_REMOTE_WAKEUP_RETRY);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	return active;
+}
+
+static bool btusb_remote_wakeup_pm_retryable(int err)
+{
+	return err == -EACCES || err == -EAGAIN || err == -EBUSY;
+}
+
+static void btusb_remote_wakeup_work(struct work_struct *work)
+{
+	struct btusb_data *data = container_of(work, struct btusb_data,
+					       remote_wakeup.work);
+	int err;
+
+	if (!btusb_remote_wakeup_active(data))
+		return;
+
+	err = usb_autopm_get_interface(data->intf);
+	if (err < 0) {
+		if (btusb_remote_wakeup_pm_retryable(err))
+			btusb_queue_remote_wakeup_retry(data);
+		return;
+	}
+
+	if (btusb_remote_wakeup_active(data))
+		data->intf->needs_remote_wakeup =
+			btusb_needs_runtime_remote_wakeup(data);
+
+	usb_autopm_put_interface(data->intf);
+}
+
+static void btusb_remote_wakeup_retry_work(struct work_struct *work)
+{
+	struct btusb_data *data = container_of(work, struct btusb_data,
+					       remote_wakeup_retry.work);
+
+	btusb_queue_remote_wakeup_work(data);
+}
+
+static void btusb_queue_remote_wakeup_update(struct btusb_data *data)
+{
+	btusb_queue_remote_wakeup_work(data);
+}
+
+static bool btusb_raw_vendor_cmd_pending(struct btusb_data *data)
+{
+	unsigned long flags;
+	bool pending;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	pending = data->raw_vendor_cmd_submitted;
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	return pending;
+}
+
+static bool btusb_skb_raw_vendor_cmd_opcode(struct sk_buff *skb, u16 *opcode)
+{
+	struct hci_command_hdr *cmd;
+	u16 cmd_opcode;
+
+	if (hci_skb_pkt_type(skb) != HCI_COMMAND_PKT ||
+	    !(bt_cb(skb)->hci.req_flags & HCI_REQ_RAW) ||
+	    skb->len < HCI_COMMAND_HDR_SIZE)
+		return false;
+
+	cmd = (void *)skb->data;
+	cmd_opcode = le16_to_cpu(cmd->opcode);
+
+	if (hci_opcode_ogf(cmd_opcode) != 0x3f)
+		return false;
+
+	*opcode = cmd_opcode;
+
+	return true;
+}
+
+static void btusb_raw_vendor_cmd_add(struct btusb_data *data,
+				     struct btusb_raw_vendor_cmd *cmd)
+{
+	unsigned long flags;
+
+	if (!data->intel_idle_power_manageable)
+		return;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_add_tail(&cmd->list, &data->raw_vendor_cmds);
+	data->raw_vendor_cmd_count++;
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+}
+
+static void btusb_raw_vendor_cmd_schedule_locked(struct btusb_data *data)
+{
+	struct btusb_raw_vendor_cmd *cmd;
+	unsigned long expires = 0;
+
+	if (!data->raw_vendor_cmd_submitted)
+		return;
+
+	list_for_each_entry(cmd, &data->raw_vendor_cmds, list) {
+		if (!cmd->submitted)
+			continue;
+
+		if (!expires || time_before(cmd->expires, expires))
+			expires = cmd->expires;
+	}
+
+	if (expires)
+		mod_delayed_work(system_wq, &data->raw_vendor_cmd_timeout,
+				 time_after(expires, jiffies) ?
+				 expires - jiffies : 0);
+}
+
+static void btusb_raw_vendor_cmd_remove_locked(struct btusb_data *data,
+					       struct btusb_raw_vendor_cmd *cmd,
+					       struct list_head *cmds,
+					       bool *queue)
+{
+	list_move_tail(&cmd->list, cmds);
+	data->raw_vendor_cmd_count--;
+
+	if (!cmd->submitted)
+		return;
+
+	data->raw_vendor_cmd_submitted--;
+	*queue = true;
+}
+
+static bool btusb_raw_vendor_cmd_submitted(struct btusb_data *data,
+					   struct btusb_raw_vendor_cmd *cmd)
+{
+	struct btusb_raw_vendor_cmd *iter;
+	unsigned long flags;
+	bool arm = false;
+
+	if (!data->intel_idle_power_manageable || !cmd)
+		return false;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_for_each_entry(iter, &data->raw_vendor_cmds, list) {
+		if (iter != cmd || iter->submitted)
+			continue;
+
+		iter->submitted = true;
+		iter->expires = jiffies + HCI_CMD_TIMEOUT;
+		data->raw_vendor_cmd_submitted++;
+		arm = true;
+		break;
+	}
+
+	if (arm)
+		btusb_raw_vendor_cmd_schedule_locked(data);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	return arm;
+}
+
+static struct btusb_raw_vendor_cmd *
+btusb_raw_vendor_cmd_submitted_by_skb(struct btusb_data *data,
+				      struct sk_buff *skb)
+{
+	struct btusb_raw_vendor_cmd *cmd, *submitted = NULL;
+	unsigned long flags;
+
+	if (!data->intel_idle_power_manageable)
+		return NULL;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_for_each_entry(cmd, &data->raw_vendor_cmds, list) {
+		if (cmd->skb != skb || cmd->submitted)
+			continue;
+
+		cmd->submitted = true;
+		cmd->expires = jiffies + HCI_CMD_TIMEOUT;
+		data->raw_vendor_cmd_submitted++;
+		submitted = cmd;
+		break;
+	}
+
+	if (submitted)
+		btusb_raw_vendor_cmd_schedule_locked(data);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	return submitted;
+}
+
+static void btusb_raw_vendor_cmd_cancel(struct btusb_data *data,
+					struct btusb_raw_vendor_cmd *cmd)
+{
+	LIST_HEAD(cmds);
+	struct btusb_raw_vendor_cmd *iter, *tmp;
+	unsigned long flags;
+	bool queue = false;
+
+	if (!data->intel_idle_power_manageable || !cmd)
+		return;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_for_each_entry_safe(iter, tmp, &data->raw_vendor_cmds, list) {
+		if (iter != cmd)
+			continue;
+
+		btusb_raw_vendor_cmd_remove_locked(data, iter, &cmds, &queue);
+		break;
+	}
+	btusb_raw_vendor_cmd_schedule_locked(data);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	btusb_raw_vendor_cmd_free_list(&cmds);
+
+	if (queue)
+		btusb_queue_remote_wakeup_update(data);
+}
+
+static void btusb_raw_vendor_cmd_cancel_unsubmitted(struct btusb_data *data,
+						    struct sk_buff *skb)
+{
+	struct btusb_raw_vendor_cmd *cmd, *tmp;
+	LIST_HEAD(cmds);
+	unsigned long flags;
+	bool queue = false;
+
+	if (!data->intel_idle_power_manageable)
+		return;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_for_each_entry_safe(cmd, tmp, &data->raw_vendor_cmds, list) {
+		if (cmd->skb != skb || cmd->submitted)
+			continue;
+
+		btusb_raw_vendor_cmd_remove_locked(data, cmd, &cmds, &queue);
+		break;
+	}
+	btusb_raw_vendor_cmd_schedule_locked(data);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	btusb_raw_vendor_cmd_free_list(&cmds);
+
+	if (queue)
+		btusb_queue_remote_wakeup_update(data);
+}
+
+static void btusb_raw_vendor_cmd_free_list(struct list_head *cmds)
+{
+	struct btusb_raw_vendor_cmd *cmd, *tmp;
+
+	list_for_each_entry_safe(cmd, tmp, cmds, list) {
+		list_del(&cmd->list);
+		kfree(cmd);
+	}
+}
+
+static void btusb_raw_vendor_cmd_done(struct btusb_data *data, u16 opcode)
+{
+	struct btusb_raw_vendor_cmd *cmd, *tmp;
+	LIST_HEAD(cmds);
+	unsigned long flags;
+	bool queue = false;
+
+	if (!data->intel_idle_power_manageable)
+		return;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_for_each_entry_safe(cmd, tmp, &data->raw_vendor_cmds, list) {
+		if (!cmd->submitted || cmd->opcode != opcode)
+			continue;
+
+		btusb_raw_vendor_cmd_remove_locked(data, cmd, &cmds, &queue);
+		break;
+	}
+	btusb_raw_vendor_cmd_schedule_locked(data);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	btusb_raw_vendor_cmd_free_list(&cmds);
+
+	if (queue)
+		btusb_queue_remote_wakeup_update(data);
+}
+
+static void btusb_raw_vendor_cmd_clear(struct btusb_data *data)
+{
+	LIST_HEAD(cmds);
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_splice_init(&data->raw_vendor_cmds, &cmds);
+	data->raw_vendor_cmd_count = 0;
+	data->raw_vendor_cmd_submitted = 0;
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	btusb_raw_vendor_cmd_free_list(&cmds);
+}
+
+static void btusb_raw_vendor_cmd_timeout_work(struct work_struct *work)
+{
+	struct btusb_data *data = container_of(work, struct btusb_data,
+					       raw_vendor_cmd_timeout.work);
+	LIST_HEAD(cmds);
+	struct btusb_raw_vendor_cmd *cmd, *tmp;
+	unsigned long flags;
+	bool queue = false;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	list_for_each_entry_safe(cmd, tmp, &data->raw_vendor_cmds, list) {
+		if (!cmd->submitted || time_before(jiffies, cmd->expires))
+			continue;
+
+		btusb_raw_vendor_cmd_remove_locked(data, cmd, &cmds, &queue);
+	}
+	btusb_raw_vendor_cmd_schedule_locked(data);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	btusb_raw_vendor_cmd_free_list(&cmds);
+
+	if (queue)
+		btusb_queue_remote_wakeup_update(data);
+}
+
+static bool btusb_event_completes_raw_vendor_cmd(struct sk_buff *skb,
+						 u16 *opcode)
+{
+	struct hci_event_hdr *hdr;
+	u16 event_opcode;
+
+	if (skb->len < HCI_EVENT_HDR_SIZE)
+		return false;
+
+	hdr = (void *)skb->data;
+	if (hdr->evt == HCI_EV_CMD_COMPLETE) {
+		struct hci_ev_cmd_complete *ev;
+
+		if (skb->len < HCI_EVENT_HDR_SIZE + sizeof(*ev))
+			return false;
+
+		ev = (void *)(skb->data + HCI_EVENT_HDR_SIZE);
+		event_opcode = le16_to_cpu(ev->opcode);
+	} else if (hdr->evt == HCI_EV_CMD_STATUS) {
+		struct hci_ev_cmd_status *ev;
+
+		if (skb->len < HCI_EVENT_HDR_SIZE + sizeof(*ev))
+			return false;
+
+		ev = (void *)(skb->data + HCI_EVENT_HDR_SIZE);
+		event_opcode = le16_to_cpu(ev->opcode);
+		if (!ev->status)
+			return false;
+	} else {
+		return false;
+	}
+
+	if (hci_opcode_ogf(event_opcode) != 0x3f)
+		return false;
+
+	*opcode = event_opcode;
+
+	return true;
+}
+
+static int btusb_hold_remote_wakeup(struct btusb_data *data)
+{
+	int err;
+
+	if (!data->intel_idle_power_manageable)
+		return 0;
+
+	err = usb_autopm_get_interface(data->intf);
+	if (err < 0)
+		return err;
+
+	data->intf->needs_remote_wakeup = true;
+
+	return 0;
+}
+
+static void btusb_put_remote_wakeup(struct btusb_data *data)
+{
+	if (data->intel_idle_power_manageable)
+		usb_autopm_put_interface(data->intf);
+}
+
+static void btusb_free_tx_urb(struct urb *urb)
+{
+	kfree(urb->setup_packet);
+	usb_free_urb(urb);
+}
+
+static void btusb_coredump_remote_wakeup_clear(struct btusb_data *data)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	data->coredump_remote_wakeup_expires = 0;
+	clear_bit(BTUSB_REMOTE_WAKEUP_COREDUMP, &data->flags);
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+}
+
+static void btusb_coredump_remote_wakeup_work(struct work_struct *work)
+{
+	struct btusb_data *data = container_of(work, struct btusb_data,
+					       coredump_remote_wakeup.work);
+	unsigned long flags;
+	bool queue = false;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	if (time_after_eq(jiffies, data->coredump_remote_wakeup_expires)) {
+		data->coredump_remote_wakeup_expires = 0;
+		clear_bit(BTUSB_REMOTE_WAKEUP_COREDUMP, &data->flags);
+		queue = true;
+	}
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	if (queue)
+		btusb_queue_remote_wakeup_update(data);
+}
+
+static void btusb_coredump_remote_wakeup_set(struct btusb_data *data,
+					     bool active)
+{
+	unsigned long flags;
+	int err;
+	bool queue = false;
+
+	spin_lock_irqsave(&data->remote_wakeup_lock, flags);
+	if (active && test_bit(BTUSB_REMOTE_WAKEUP_ACTIVE, &data->flags) &&
+	    !hci_dev_test_flag(data->hdev, HCI_CMD_DRAIN_WORKQUEUE)) {
+		data->coredump_remote_wakeup_expires =
+			jiffies + DEVCOREDUMP_TIMEOUT;
+		set_bit(BTUSB_REMOTE_WAKEUP_COREDUMP, &data->flags);
+		mod_delayed_work(system_wq, &data->coredump_remote_wakeup,
+				 DEVCOREDUMP_TIMEOUT);
+		queue = true;
+	} else {
+		data->coredump_remote_wakeup_expires = 0;
+		clear_bit(BTUSB_REMOTE_WAKEUP_COREDUMP, &data->flags);
+	}
+	spin_unlock_irqrestore(&data->remote_wakeup_lock, flags);
+
+	if (queue) {
+		err = btusb_hold_remote_wakeup(data);
+		if (!err)
+			btusb_put_remote_wakeup(data);
+	}
+
+	btusb_queue_remote_wakeup_update(data);
+}
+
+static void btusb_intel_coredump_notify(struct hci_dev *hdev, int state)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+
+	if (data->coredump_notify)
+		data->coredump_notify(hdev, state);
+
+	if (state == HCI_DEVCOREDUMP_ACTIVE)
+		btusb_coredump_remote_wakeup_set(data, true);
+	else
+		btusb_coredump_remote_wakeup_set(data, false);
+}
+
+static void btusb_intel_coredump(struct hci_dev *hdev)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+
+	btusb_coredump_remote_wakeup_set(data, true);
+
+	if (data->coredump)
+		data->coredump(hdev);
+}
+
+static int btusb_intel_set_diag(struct hci_dev *hdev, bool enable)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	int err;
+
+	if (enable) {
+		hci_dev_set_flag(hdev, HCI_VENDOR_DIAG);
+		btusb_queue_remote_wakeup_update(data);
+	}
+
+	err = data->set_diag(hdev, enable);
+	if (err) {
+		if (enable) {
+			hci_dev_clear_flag(hdev, HCI_VENDOR_DIAG);
+			btusb_queue_remote_wakeup_update(data);
+		}
+		return err;
+	}
+
+	if (!enable) {
+		hci_dev_clear_flag(hdev, HCI_VENDOR_DIAG);
+		btusb_queue_remote_wakeup_update(data);
+	}
+
+	return 0;
+}
+
+static int btusb_intel_set_quality_report(struct hci_dev *hdev, bool enable)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	int err;
+
+	if (enable) {
+		hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
+		btusb_queue_remote_wakeup_update(data);
+	}
+
+	err = data->set_quality_report(hdev, enable);
+	if (err) {
+		if (enable) {
+			hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
+			btusb_queue_remote_wakeup_update(data);
+		}
+		return err;
+	}
+
+	if (!enable) {
+		hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
+		btusb_queue_remote_wakeup_update(data);
+	}
+
+	return 0;
+}
+
+static int btusb_intel_setup(struct hci_dev *hdev)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	int err;
+
+	err = data->setup(hdev);
+	if (err)
+		return err;
+
+	if (hdev->set_quality_report &&
+	    hdev->set_quality_report != btusb_intel_set_quality_report) {
+		data->set_quality_report = hdev->set_quality_report;
+		hdev->set_quality_report = btusb_intel_set_quality_report;
+	}
+
+	if (hdev->dump.coredump &&
+	    hdev->dump.coredump != btusb_intel_coredump) {
+		data->coredump = hdev->dump.coredump;
+		data->coredump_notify = hdev->dump.notify_change;
+		hdev->dump.coredump = btusb_intel_coredump;
+		hdev->dump.notify_change = btusb_intel_coredump_notify;
+	}
+
+	return 0;
+}
+
 static int btusb_close(struct hci_dev *hdev)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
@@ -2063,6 +2770,13 @@ static int btusb_close(struct hci_dev *hdev)
 	cancel_delayed_work(&data->rx_work);
 	cancel_work_sync(&data->work);
 	cancel_work_sync(&data->waker);
+	btusb_remote_wakeup_set_active(data, false);
+	cancel_delayed_work_sync(&data->coredump_remote_wakeup);
+	btusb_coredump_remote_wakeup_clear(data);
+	cancel_delayed_work_sync(&data->raw_vendor_cmd_timeout);
+	btusb_raw_vendor_cmd_clear(data);
+	cancel_delayed_work_sync(&data->remote_wakeup_retry);
+	cancel_delayed_work_sync(&data->remote_wakeup);
 
 	skb_queue_purge(&data->acl_q);
 
@@ -2218,7 +2932,16 @@ static int submit_tx_urb(struct hci_dev *hdev, struct urb *urb)
 	return err;
 }
 
-static int submit_or_queue_tx_urb(struct hci_dev *hdev, struct urb *urb)
+static void btusb_defer_tx_urb(struct btusb_data *data, struct urb *urb)
+{
+	usb_anchor_urb(urb, &data->deferred);
+	schedule_work(&data->waker);
+
+	usb_free_urb(urb);
+}
+
+static bool btusb_defer_tx_urb_if_suspending(struct hci_dev *hdev,
+					     struct urb *urb)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 	unsigned long flags;
@@ -2226,18 +2949,119 @@ static int submit_or_queue_tx_urb(struct hci_dev *hdev, struct urb *urb)
 
 	spin_lock_irqsave(&data->txlock, flags);
 	suspending = test_bit(BTUSB_SUSPENDING, &data->flags);
-	if (!suspending)
-		data->tx_in_flight++;
 	spin_unlock_irqrestore(&data->txlock, flags);
 
 	if (!suspending)
+		return false;
+
+	btusb_defer_tx_urb(data, urb);
+
+	return true;
+}
+
+static int submit_or_queue_tx_urb(struct hci_dev *hdev, struct urb *urb)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->txlock, flags);
+	if (!test_bit(BTUSB_SUSPENDING, &data->flags)) {
+		data->tx_in_flight++;
+		spin_unlock_irqrestore(&data->txlock, flags);
+
 		return submit_tx_urb(hdev, urb);
+	}
+	spin_unlock_irqrestore(&data->txlock, flags);
 
-	usb_anchor_urb(urb, &data->deferred);
-	schedule_work(&data->waker);
+	btusb_defer_tx_urb(data, urb);
 
-	usb_free_urb(urb);
 	return 0;
+}
+
+static int btusb_raw_vendor_cmd_prepare(struct btusb_data *data,
+					struct sk_buff *skb,
+					struct btusb_raw_vendor_cmd **cmd)
+{
+	u16 opcode;
+
+	*cmd = NULL;
+
+	if (!data->intel_idle_power_manageable ||
+	    !btusb_skb_raw_vendor_cmd_opcode(skb, &opcode))
+		return 0;
+
+	*cmd = kzalloc(sizeof(**cmd), GFP_KERNEL);
+	if (!*cmd)
+		return -ENOMEM;
+
+	(*cmd)->skb = skb;
+	(*cmd)->opcode = opcode;
+	btusb_raw_vendor_cmd_add(data, *cmd);
+
+	return 0;
+}
+
+static int submit_or_queue_cmd_urb(struct hci_dev *hdev, struct urb *urb,
+				   struct btusb_raw_vendor_cmd *raw_vendor_cmd)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->txlock, flags);
+	if (!test_bit(BTUSB_SUSPENDING, &data->flags)) {
+		data->tx_in_flight++;
+		btusb_raw_vendor_cmd_submitted(data, raw_vendor_cmd);
+		spin_unlock_irqrestore(&data->txlock, flags);
+
+		return submit_tx_urb(hdev, urb);
+	}
+	spin_unlock_irqrestore(&data->txlock, flags);
+
+	btusb_defer_tx_urb(data, urb);
+
+	return 0;
+}
+
+static int btusb_submit_cmd_urb(struct hci_dev *hdev, struct urb *urb,
+				struct sk_buff *skb)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	struct btusb_raw_vendor_cmd *raw_vendor_cmd;
+	int err;
+
+	err = btusb_raw_vendor_cmd_prepare(data, skb, &raw_vendor_cmd);
+	if (err < 0) {
+		btusb_free_tx_urb(urb);
+		return err;
+	}
+
+	hdev->stat.cmd_tx++;
+	if (btusb_defer_tx_urb_if_suspending(hdev, urb)) {
+		btusb_queue_remote_wakeup_update(data);
+		return 0;
+	}
+
+	err = btusb_hold_remote_wakeup(data);
+	if (err < 0) {
+		if (err == -EACCES &&
+		    btusb_defer_tx_urb_if_suspending(hdev, urb)) {
+			btusb_queue_remote_wakeup_update(data);
+			return 0;
+		}
+
+		if (raw_vendor_cmd)
+			btusb_raw_vendor_cmd_cancel(data, raw_vendor_cmd);
+		btusb_free_tx_urb(urb);
+		return err;
+	}
+
+	err = submit_or_queue_cmd_urb(hdev, urb, raw_vendor_cmd);
+	btusb_put_remote_wakeup(data);
+	if (err < 0 && raw_vendor_cmd)
+		btusb_raw_vendor_cmd_cancel(data, raw_vendor_cmd);
+	btusb_queue_remote_wakeup_update(data);
+
+	return err;
 }
 
 static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
@@ -2252,8 +3076,7 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		if (IS_ERR(urb))
 			return PTR_ERR(urb);
 
-		hdev->stat.cmd_tx++;
-		return submit_or_queue_tx_urb(hdev, urb);
+		return btusb_submit_cmd_urb(hdev, urb, skb);
 
 	case HCI_ACLDATA_PKT:
 		urb = alloc_bulk_urb(hdev, skb);
@@ -2286,13 +3109,26 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	return -EILSEQ;
 }
 
+static bool btusb_notify_is_sco(unsigned int evt)
+{
+	return evt == HCI_NOTIFY_ENABLE_SCO_CVSD ||
+	       evt == HCI_NOTIFY_ENABLE_SCO_TRANSP ||
+	       evt == HCI_NOTIFY_DISABLE_SCO;
+}
+
 static void btusb_notify(struct hci_dev *hdev, unsigned int evt)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 
 	BT_DBG("%s evt %d", hdev->name, evt);
 
-	if (hci_conn_num(hdev, SCO_LINK) != data->sco_num) {
+	if (evt == HCI_NOTIFY_CONN_ADD || evt == HCI_NOTIFY_CONN_DEL ||
+	    evt == HCI_NOTIFY_DUT_MODE || evt == HCI_NOTIFY_INIT_DONE ||
+	    evt == HCI_NOTIFY_ADV_STATE || evt == HCI_NOTIFY_USER_CHANNEL)
+		btusb_queue_remote_wakeup_update(data);
+
+	if (btusb_notify_is_sco(evt) &&
+	    hci_conn_num(hdev, SCO_LINK) != data->sco_num) {
 		data->sco_num = hci_conn_num(hdev, SCO_LINK);
 		data->air_mode = evt;
 		schedule_work(&data->work);
@@ -2727,16 +3563,15 @@ static int btusb_send_frame_intel(struct hci_dev *hdev, struct sk_buff *skb)
 			 */
 			if (opcode == BTINTEL_HCI_OP_RESET)
 				inject_cmd_complete(hdev, opcode);
-		} else {
-			urb = alloc_ctrl_urb(hdev, skb);
-		}
-		if (IS_ERR(urb))
-			return PTR_ERR(urb);
+			} else {
+				urb = alloc_ctrl_urb(hdev, skb);
+			}
+			if (IS_ERR(urb))
+				return PTR_ERR(urb);
 
-		hdev->stat.cmd_tx++;
-		return submit_or_queue_tx_urb(hdev, urb);
+			return btusb_submit_cmd_urb(hdev, urb, skb);
 
-	case HCI_ACLDATA_PKT:
+		case HCI_ACLDATA_PKT:
 		urb = alloc_bulk_urb(hdev, skb);
 		if (IS_ERR(urb))
 			return PTR_ERR(urb);
@@ -4125,6 +4960,15 @@ static int btusb_probe(struct usb_interface *intf,
 
 	INIT_WORK(&data->work, btusb_work);
 	INIT_WORK(&data->waker, btusb_waker);
+	INIT_DELAYED_WORK(&data->remote_wakeup, btusb_remote_wakeup_work);
+	INIT_DELAYED_WORK(&data->remote_wakeup_retry,
+			  btusb_remote_wakeup_retry_work);
+	INIT_DELAYED_WORK(&data->coredump_remote_wakeup,
+			  btusb_coredump_remote_wakeup_work);
+	INIT_DELAYED_WORK(&data->raw_vendor_cmd_timeout,
+			  btusb_raw_vendor_cmd_timeout_work);
+	INIT_LIST_HEAD(&data->raw_vendor_cmds);
+	spin_lock_init(&data->remote_wakeup_lock);
 	INIT_DELAYED_WORK(&data->rx_work, btusb_rx_work);
 
 	skb_queue_head_init(&data->acl_q);
@@ -4146,6 +4990,12 @@ static int btusb_probe(struct usb_interface *intf,
 	data->recv_bulk = btusb_recv_bulk;
 
 	if (id->driver_info & BTUSB_INTEL_COMBINED) {
+		data->intel_idle_power_manageable =
+			IS_ENABLED(CONFIG_ACPI) &&
+			data->udev->parent && data->udev->portnum &&
+			usb_acpi_power_manageable(data->udev->parent,
+						  data->udev->portnum - 1);
+
 		/* Allocate extra space for Intel device */
 		priv_size += sizeof(struct btintel_data);
 
@@ -4240,6 +5090,11 @@ static int btusb_probe(struct usb_interface *intf,
 		err = btintel_configure_setup(hdev, btusb_driver.name);
 		if (err)
 			goto err_kill_tx_urbs;
+
+		data->set_diag = hdev->set_diag;
+		hdev->set_diag = btusb_intel_set_diag;
+		data->setup = hdev->setup;
+		hdev->setup = btusb_intel_setup;
 
 		/* Transport specific configuration */
 		hdev->send = btusb_send_frame_intel;
@@ -4487,7 +5342,14 @@ static void btusb_disconnect(struct usb_interface *intf)
 	if (data->disconnect)
 		data->disconnect(hdev);
 
+	btusb_remote_wakeup_set_active(data, false);
+	cancel_delayed_work_sync(&data->remote_wakeup_retry);
+	cancel_delayed_work_sync(&data->remote_wakeup);
 	hci_unregister_dev(hdev);
+	cancel_delayed_work_sync(&data->coredump_remote_wakeup);
+	btusb_coredump_remote_wakeup_clear(data);
+	cancel_delayed_work_sync(&data->raw_vendor_cmd_timeout);
+	btusb_raw_vendor_cmd_clear(data);
 
 	if (data->oob_wake_irq) {
 		device_init_wakeup(&data->udev->dev, false);
@@ -4575,19 +5437,27 @@ static int btusb_suspend(struct usb_interface *intf, pm_message_t message)
 	return 0;
 }
 
-static void play_deferred(struct btusb_data *data)
+static bool play_deferred(struct btusb_data *data)
 {
+	struct btusb_raw_vendor_cmd *raw_vendor_cmd;
 	struct urb *urb;
+	bool queue = false;
 	int err;
 
 	while ((urb = usb_get_from_anchor(&data->deferred))) {
+		struct sk_buff *skb = urb->context;
+
 		usb_anchor_urb(urb, &data->tx_anchor);
+		raw_vendor_cmd = btusb_raw_vendor_cmd_submitted_by_skb(data, skb);
+		if (hci_skb_pkt_type(skb) == HCI_COMMAND_PKT)
+			queue = true;
 
 		err = usb_submit_urb(urb, GFP_ATOMIC);
 		if (err < 0) {
 			if (err != -EPERM && err != -ENODEV)
 				BT_ERR("%s urb %p submission failed (%d)",
 				       data->hdev->name, urb, -err);
+			btusb_raw_vendor_cmd_cancel(data, raw_vendor_cmd);
 			kfree(urb->setup_packet);
 			usb_unanchor_urb(urb);
 			usb_free_urb(urb);
@@ -4600,15 +5470,19 @@ static void play_deferred(struct btusb_data *data)
 
 	/* Cleanup the rest deferred urbs. */
 	while ((urb = usb_get_from_anchor(&data->deferred))) {
+		btusb_raw_vendor_cmd_cancel_unsubmitted(data, urb->context);
 		kfree(urb->setup_packet);
 		usb_free_urb(urb);
 	}
+
+	return queue;
 }
 
 static int btusb_resume(struct usb_interface *intf)
 {
 	struct btusb_data *data = usb_get_intfdata(intf);
 	struct hci_dev *hdev = data->hdev;
+	bool queue_remote_wakeup;
 	int err = 0;
 
 	BT_DBG("intf %p", intf);
@@ -4654,14 +5528,17 @@ static int btusb_resume(struct usb_interface *intf)
 		data->resume(hdev);
 
 	spin_lock_irq(&data->txlock);
-	play_deferred(data);
+	queue_remote_wakeup = play_deferred(data);
 	clear_bit(BTUSB_SUSPENDING, &data->flags);
 	spin_unlock_irq(&data->txlock);
+	if (queue_remote_wakeup)
+		btusb_queue_remote_wakeup_update(data);
 	schedule_work(&data->work);
 
 	return 0;
 
 failed:
+	btusb_raw_vendor_cmd_clear(data);
 	usb_scuttle_anchored_urbs(&data->deferred);
 done:
 	spin_lock_irq(&data->txlock);

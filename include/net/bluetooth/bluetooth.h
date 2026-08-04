@@ -469,6 +469,7 @@ int hci_ethtool_ts_info(unsigned int index, int sk_proto,
 
 #define HCI_REQ_START	BIT(0)
 #define HCI_REQ_SKB	BIT(1)
+#define HCI_REQ_RAW	BIT(2)
 
 struct hci_ctrl {
 	struct sock *sk;

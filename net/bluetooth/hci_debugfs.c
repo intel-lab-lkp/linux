@@ -1299,6 +1299,12 @@ static ssize_t dut_mode_write(struct file *file, const char __user *user_buf,
 	if (enable == hci_dev_test_flag(hdev, HCI_DUT_MODE))
 		return -EALREADY;
 
+	if (enable) {
+		hci_dev_set_flag(hdev, HCI_DUT_MODE);
+		if (hdev->notify)
+			hdev->notify(hdev, HCI_NOTIFY_DUT_MODE);
+	}
+
 	hci_req_sync_lock(hdev);
 	if (enable)
 		skb = __hci_cmd_sync(hdev, HCI_OP_ENABLE_DUT_MODE, 0, NULL,
@@ -1308,12 +1314,22 @@ static ssize_t dut_mode_write(struct file *file, const char __user *user_buf,
 				     HCI_CMD_TIMEOUT);
 	hci_req_sync_unlock(hdev);
 
-	if (IS_ERR(skb))
+	if (IS_ERR(skb)) {
+		if (enable) {
+			hci_dev_clear_flag(hdev, HCI_DUT_MODE);
+			if (hdev->notify)
+				hdev->notify(hdev, HCI_NOTIFY_DUT_MODE);
+		}
 		return PTR_ERR(skb);
+	}
 
 	kfree_skb(skb);
 
-	hci_dev_change_flag(hdev, HCI_DUT_MODE);
+	if (!enable) {
+		hci_dev_clear_flag(hdev, HCI_DUT_MODE);
+		if (hdev->notify)
+			hdev->notify(hdev, HCI_NOTIFY_DUT_MODE);
+	}
 
 	return count;
 }

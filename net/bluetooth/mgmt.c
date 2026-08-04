@@ -2579,6 +2579,7 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 	enabled = lmp_host_le_capable(hdev);
 
 	if (!hdev_is_powered(hdev) || val == enabled) {
+		bool advertising_changed = false;
 		bool changed = false;
 
 		if (val != hci_dev_test_flag(hdev, HCI_LE_ENABLED)) {
@@ -2588,6 +2589,7 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 
 		if (!val && hci_dev_test_flag(hdev, HCI_ADVERTISING)) {
 			hci_dev_clear_flag(hdev, HCI_ADVERTISING);
+			advertising_changed = true;
 			changed = true;
 		}
 
@@ -2595,8 +2597,11 @@ static int set_le(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 		if (err < 0)
 			goto unlock;
 
-		if (changed)
+		if (changed) {
+			if (advertising_changed && hdev->notify)
+				hdev->notify(hdev, HCI_NOTIFY_ADV_STATE);
 			err = new_settings(hdev, sk);
+		}
 
 		goto unlock;
 	}
@@ -6503,6 +6508,9 @@ static void set_advertising_complete(struct hci_dev *hdev, void *data, int err)
 	else
 		hci_dev_clear_flag(hdev, HCI_ADVERTISING);
 
+	if (hdev->notify)
+		hdev->notify(hdev, HCI_NOTIFY_ADV_STATE);
+
 	settings_rsp(cmd, &match);
 	mgmt_pending_free(cmd);
 
@@ -6637,8 +6645,11 @@ static int set_advertising(struct sock *sk, struct hci_dev *hdev, void *data,
 		if (err < 0)
 			goto unlock;
 
-		if (changed)
+		if (changed) {
+			if (hdev->notify)
+				hdev->notify(hdev, HCI_NOTIFY_ADV_STATE);
 			err = new_settings(hdev, sk);
+		}
 
 		goto unlock;
 	}

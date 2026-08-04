@@ -5275,6 +5275,8 @@ static int hci_dev_init_sync(struct hci_dev *hdev)
 	}
 
 	clear_bit(HCI_INIT, &hdev->flags);
+	if (hdev->notify)
+		hdev->notify(hdev, HCI_NOTIFY_INIT_DONE);
 
 	return ret;
 }
