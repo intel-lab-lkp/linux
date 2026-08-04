@@ -2881,6 +2881,9 @@ static ssize_t disksize_store(struct device *dev, struct device_attribute *attr,
 		return -EBUSY;
 	}
 
+	if (disksize > (u64)U32_MAX << PAGE_SHIFT)
+		return -EINVAL;
+
 	disksize = PAGE_ALIGN(disksize);
 	if (!zram_meta_alloc(zram, disksize))
 		return -ENOMEM;
