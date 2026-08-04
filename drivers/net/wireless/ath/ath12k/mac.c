@@ -5725,6 +5725,11 @@ int ath12k_mac_op_hw_scan(struct ieee80211_hw *hw,
 
 	lockdep_assert_wiphy(hw->wiphy);
 
+	for_each_ar(ah, ar, i) {
+		if (test_bit(ATH12K_FLAG_RECOVERY, &ar->ab->dev_flags))
+			return -EBUSY;
+	}
+
 	chan_list = kzalloc_objs(*chan_list, hw_req->req.n_channels);
 	if (!chan_list)
 		return -ENOMEM;
