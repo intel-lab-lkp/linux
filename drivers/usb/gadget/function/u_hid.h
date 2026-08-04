@@ -15,6 +15,11 @@
 
 #include <linux/usb/composite.h>
 
+struct f_hid_opt_interval {
+	unsigned char value;
+	bool user_set;
+};
+
 struct f_hid_opts {
 	struct usb_function_instance	func_inst;
 	int				minor;
@@ -26,7 +31,9 @@ struct f_hid_opts {
 	unsigned char			*report_desc;
 	bool				report_desc_alloc;
 	unsigned char			interval;
-	bool				interval_user_set;
+	struct f_hid_opt_interval	interval_fs;
+	struct f_hid_opt_interval	interval_hs;
+	struct f_hid_opt_interval	interval_ss;
 
 	/*
 	 * Protect the data form concurrent access by read/write
