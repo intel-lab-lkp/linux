@@ -2868,11 +2868,6 @@ static inline bool sched_rt_runnable(struct rq *rq)
 	return rq->rt.rt_queued > 0;
 }
 
-static inline bool sched_fair_runnable(struct rq *rq)
-{
-	return rq->cfs.nr_queued > 0;
-}
-
 extern struct task_struct *pick_task_fair(struct rq *rq, struct rq_flags *rf);
 extern struct task_struct *pick_task_idle(struct rq *rq, struct rq_flags *rf);
 
