@@ -2254,7 +2254,7 @@ EXPORT_SYMBOL_GPL(cdrom_multisession);
 static int cdrom_ioctl_multisession(struct cdrom_device_info *cdi,
 		void __user *argp)
 {
-	struct cdrom_multisession info;
+	struct cdrom_multisession info = {0};
 	int ret;
 
 	cd_dbg(CD_DO_IOCTL, "entering CDROMMULTISESSION\n");
@@ -2361,7 +2361,7 @@ static int cdrom_ioctl_timed_media_change(struct cdrom_device_info *cdi,
 {
 	int ret;
 	struct cdrom_timed_media_change_info __user *info;
-	struct cdrom_timed_media_change_info tmp_info;
+	struct cdrom_timed_media_change_info tmp_info = {0};
 
 	if (!CDROM_CAN(CDC_MEDIA_CHANGED))
 		return -ENOSYS;
@@ -2510,7 +2510,7 @@ static int cdrom_ioctl_get_capability(struct cdrom_device_info *cdi)
 static int cdrom_ioctl_get_mcn(struct cdrom_device_info *cdi,
 		void __user *argp)
 {
-	struct cdrom_mcn mcn;
+	struct cdrom_mcn mcn = {0};
 	int ret;
 
 	cd_dbg(CD_DO_IOCTL, "entering CDROM_GET_MCN\n");
@@ -2598,7 +2598,7 @@ static int cdrom_ioctl_changer_nslots(struct cdrom_device_info *cdi)
 static int cdrom_ioctl_get_subchnl(struct cdrom_device_info *cdi,
 		void __user *argp)
 {
-	struct cdrom_subchnl q;
+	struct cdrom_subchnl q = {0};
 	u8 requested, back;
 	int ret;
 
@@ -2629,7 +2629,7 @@ static int cdrom_ioctl_get_subchnl(struct cdrom_device_info *cdi,
 static int cdrom_ioctl_read_tochdr(struct cdrom_device_info *cdi,
 		void __user *argp)
 {
-	struct cdrom_tochdr header;
+	struct cdrom_tochdr header = {0};
 	int ret;
 
 	/* cd_dbg(CD_DO_IOCTL, "entering CDROMREADTOCHDR\n"); */
@@ -2669,7 +2669,7 @@ EXPORT_SYMBOL_GPL(cdrom_read_tocentry);
 static int cdrom_ioctl_read_tocentry(struct cdrom_device_info *cdi,
 		void __user *argp)
 {
-	struct cdrom_tocentry entry;
+	struct cdrom_tocentry entry = {0};
 	int ret;
 
 	if (copy_from_user(&entry, argp, sizeof(entry)))
@@ -3055,7 +3055,7 @@ static noinline int mmc_ioctl_cdrom_subchannel(struct cdrom_device_info *cdi,
 					       void __user *arg)
 {
 	int ret;
-	struct cdrom_subchnl q;
+	struct cdrom_subchnl q = {0};
 	u_char requested, back;
 	if (copy_from_user(&q, (struct cdrom_subchnl __user *)arg, sizeof(q)))
 		return -EFAULT;
