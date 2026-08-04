@@ -251,6 +251,15 @@ static inline void mlx5e_accel_cleanup_rx(struct mlx5e_priv *priv)
 	mlx5_accel_psp_fs_cleanup_rx_tables(priv);
 }
 
+static inline int mlx5e_accel_update_rx(struct mlx5e_priv *priv)
+{
+#ifdef CONFIG_MLX5_EN_PSP
+	return mlx5e_psp_update_rx(priv);
+#else
+	return 0;
+#endif
+}
+
 static inline int mlx5e_accel_init_tx(struct mlx5e_priv *priv)
 {
 	return mlx5e_ktls_init_tx(priv);
