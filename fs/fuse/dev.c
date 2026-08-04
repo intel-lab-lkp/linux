@@ -1781,26 +1781,22 @@ void fuse_chan_resend(struct fuse_chan *fch)
 	}
 	spin_unlock(&fch->lock);
 
+	spin_lock(&fiq->lock);
+	if (!fiq->connected) {
+		spin_unlock(&fiq->lock);
+		fuse_dev_end_requests(&to_queue);
+		return;
+	}
 	list_for_each_entry_safe(req, next, &to_queue, list) {
+		/* must be set under fiq->lock, see fuse_remove_pending_req() */
 		set_bit(FR_PENDING, &req->flags);
 		clear_bit(FR_SENT, &req->flags);
 		/* mark the request as resend request */
 		req->in.h.unique |= FUSE_UNIQUE_RESEND;
-	}
-
-	spin_lock(&fiq->lock);
-	if (!fiq->connected) {
-		spin_unlock(&fiq->lock);
-		list_for_each_entry(req, &to_queue, list)
-			clear_bit(FR_PENDING, &req->flags);
-		fuse_dev_end_requests(&to_queue);
-		return;
-	}
-	/*
-	 * Remove interrupt entries for resent requests to prevent stale
-	 * intr_entry on fiq->interrupts after the request is re-queued.
-	 */
-	list_for_each_entry(req, &to_queue, list) {
+		/*
+		 * Remove interrupt entries for resent requests to prevent stale
+		 * intr_entry on fiq->interrupts after the request is re-queued.
+		 */
 		if (test_bit(FR_INTERRUPTED, &req->flags))
 			list_del_init(&req->intr_entry);
 	}
