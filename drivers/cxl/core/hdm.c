@@ -84,6 +84,110 @@ static void parse_hdm_decoder_caps(struct cxl_hdm *cxlhdm)
 		cxlhdm->iw_cap_mask |= BIT(16);
 }
 
+static int cxl_pci_hdm_info_match(struct pci_dev *pdev, int decoder_count,
+				      bool *present)
+{
+	struct cxl_hdm_info *info;
+	int rc = 0;
+
+	*present = false;
+	down_read(&cxl_rwsem.dpa);
+	info = pdev->hdm;
+	if (info) {
+		*present = true;
+		if (info->decoder_count != decoder_count) {
+			pci_warn(pdev,
+				 "CXL HDM cache decoder count mismatch: cached=%d hdm=%d\n",
+				 info->decoder_count, decoder_count);
+			rc = -ENXIO;
+		}
+	}
+	up_read(&cxl_rwsem.dpa);
+
+	return rc;
+}
+
+static int cxl_pci_setup_hdm_info(struct cxl_hdm *cxlhdm)
+{
+	struct pci_dev *pdev __free(pci_dev_put) =
+		cxl_port_get_uport_pci_dev(cxlhdm->port);
+	bool present;
+
+	if (!pdev)
+		return 0;
+
+	return cxl_pci_hdm_info_match(pdev, cxlhdm->decoder_count, &present);
+}
+
+static u64 cxl_switch_target_list(struct cxl_switch_decoder *cxlsd)
+{
+	struct cxl_decoder *cxld = &cxlsd->cxld;
+	u64 targets = 0;
+	int ways = min(cxld->interleave_ways, cxlsd->nr_targets);
+
+	/* target_map[] holds the raw list before target[] is resolved. */
+	for (int i = 0; i < ways && i < 8; i++) {
+		u8 port_id;
+
+		if (cxlsd->target[i])
+			port_id = cxlsd->target[i]->port_id;
+		else
+			port_id = cxld->target_map[i];
+
+		targets |= (u64)port_id << (i * 8);
+	}
+
+	return targets;
+}
+
+static void cxl_decoder_snapshot(struct cxl_decoder *cxld,
+				 struct cxl_decoder_settings *settings)
+{
+	*settings = (struct cxl_decoder_settings) {
+		.id = cxld->id,
+		.hpa_range = cxld->hpa_range,
+		.interleave_ways = cxld->interleave_ways,
+		.interleave_granularity = cxld->interleave_granularity,
+		.target_type = cxld->target_type,
+		.flags = cxld->flags,
+	};
+
+	if (is_endpoint_decoder(&cxld->dev)) {
+		struct cxl_endpoint_decoder *cxled =
+			to_cxl_endpoint_decoder(&cxld->dev);
+
+		settings->target_or_skip = cxled->skip;
+	} else if (is_switch_decoder(&cxld->dev)) {
+		struct cxl_switch_decoder *cxlsd =
+			to_cxl_switch_decoder(&cxld->dev);
+
+		settings->target_or_skip = cxl_switch_target_list(cxlsd);
+	}
+}
+
+static void cxl_hdm_info_set_decoder(struct cxl_hdm *cxlhdm,
+				     struct cxl_decoder *cxld)
+{
+	struct pci_dev *pdev __free(pci_dev_put) =
+		cxl_port_get_uport_pci_dev(cxlhdm->port);
+	struct cxl_hdm_info *info;
+
+	if (!pdev)
+		return;
+
+	guard(rwsem_write)(&cxl_rwsem.dpa);
+	info = pdev->hdm;
+	if (!info || cxld->id >= info->decoder_count)
+		return;
+
+	if (cxld->flags & CXL_DECODER_F_ENABLE)
+		cxl_decoder_snapshot(cxld, &info->settings[cxld->id]);
+	else
+		info->settings[cxld->id] = (struct cxl_decoder_settings) {
+			.id = cxld->id,
+		};
+}
+
 static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
 {
 	struct cxl_hdm *cxlhdm;
@@ -767,6 +871,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	}
 	port->commit_end++;
 	cxld->flags |= CXL_DECODER_F_ENABLE;
+	cxl_hdm_info_set_decoder(cxlhdm, cxld);
 
 	return 0;
 }
@@ -839,6 +944,7 @@ static void cxl_decoder_reset(struct cxl_decoder *cxld)
 	writel(0, hdm + CXL_HDM_DECODER0_BASE_LOW_OFFSET(id));
 
 	cxld->flags &= ~CXL_DECODER_F_ENABLE;
+	cxl_hdm_info_set_decoder(cxlhdm, cxld);
 
 	/* Userspace is now responsible for reconfiguring this decoder */
 	if (is_endpoint_decoder(&cxld->dev)) {
@@ -1058,11 +1164,16 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 	struct cxl_port *port = cxlhdm->port;
 	int i;
 	u64 dpa_base = 0;
+	int rc;
 
 	cxl_settle_decoders(cxlhdm);
 
+	rc = cxl_pci_setup_hdm_info(cxlhdm);
+	if (rc)
+		return rc;
+
 	for (i = 0; i < cxlhdm->decoder_count; i++) {
-		int rc, target_count = cxlhdm->target_count;
+		int target_count = cxlhdm->target_count;
 		struct cxl_decoder *cxld;
 
 		if (is_cxl_endpoint(port)) {
@@ -1097,6 +1208,7 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 			put_device(&cxld->dev);
 			return rc;
 		}
+		cxl_hdm_info_set_decoder(cxlhdm, cxld);
 		rc = add_hdm_decoder(port, cxld);
 		if (rc) {
 			dev_warn(&port->dev,
