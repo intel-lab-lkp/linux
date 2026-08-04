@@ -310,6 +310,14 @@ struct panthor_device {
 		 * all FW sections to make sure we start from a fresh state.
 		 */
 		bool fast;
+
+		/**
+		 * @fake_failure: When true, pretend the FW boot in the reset path failed.
+		 *
+		 * This is important to check that we're doing the right thing in this very
+		 * unlikely case.
+		 */
+		bool fake_failure;
 	} reset;
 
 	/** @pm: Power management related data. */
@@ -398,7 +406,7 @@ struct panthor_file {
 };
 
 int panthor_device_init(struct panthor_device *ptdev);
-void panthor_device_unplug(struct panthor_device *ptdev);
+void panthor_device_unplug(struct panthor_device *ptdev, bool from_reset_work);
 
 /**
  * panthor_device_schedule_reset() - Schedules a reset operation

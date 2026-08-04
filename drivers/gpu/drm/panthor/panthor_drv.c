@@ -1827,7 +1827,7 @@ static void panthor_remove(struct platform_device *pdev)
 {
 	struct panthor_device *ptdev = platform_get_drvdata(pdev);
 
-	panthor_device_unplug(ptdev);
+	panthor_device_unplug(ptdev, false);
 }
 
 static ssize_t profiling_show(struct device *dev,
