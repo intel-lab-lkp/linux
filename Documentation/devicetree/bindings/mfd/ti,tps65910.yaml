@@ -72,6 +72,7 @@ properties:
   ti,system-power-controller:
     type: boolean
     description: Identify whether or not this pmic controls the system power
+    deprecated: true
 
   ti,sleep-enable:
     type: boolean
@@ -170,9 +171,10 @@ required:
   - '#gpio-cells'
   - regulators
 
-additionalProperties: false
+unevaluatedProperties: false
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       properties:
         compatible:
@@ -216,7 +218,7 @@ examples:
             #interrupt-cells = <2>;
             interrupt-controller;
 
-            ti,system-power-controller;
+            system-power-controller;
 
             ti,vmbch-threshold = <0>;
             ti,vmbch2-threshold = <0>;
