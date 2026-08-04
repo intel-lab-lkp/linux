@@ -893,7 +893,6 @@ static int rkcanfd_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 
 	ndev->netdev_ops = &rkcanfd_netdev_ops;
-	ndev->flags |= IFF_ECHO;
 
 	platform_set_drvdata(pdev, priv);
 	priv->can.clock.freq = clk_get_rate(priv->clks[0].clk);

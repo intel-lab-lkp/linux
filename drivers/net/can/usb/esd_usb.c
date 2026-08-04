@@ -1263,8 +1263,6 @@ static int esd_usb_probe_one_net(struct usb_interface *intf, int index)
 	priv->can.do_set_mode = esd_usb_set_mode;
 	priv->can.do_get_berr_counter = esd_usb_get_berr_counter;
 
-	netdev->flags |= IFF_ECHO; /* we support local echo */
-
 	netdev->netdev_ops = &esd_usb_netdev_ops;
 	netdev->ethtool_ops = &esd_usb_ethtool_ops;
 

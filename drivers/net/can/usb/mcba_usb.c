@@ -853,8 +853,6 @@ static int mcba_usb_probe(struct usb_interface *intf,
 	netdev->netdev_ops = &mcba_netdev_ops;
 	netdev->ethtool_ops = &mcba_ethtool_ops;
 
-	netdev->flags |= IFF_ECHO; /* we support local echo */
-
 	SET_NETDEV_DEV(netdev, &intf->dev);
 
 	err = register_candev(netdev);

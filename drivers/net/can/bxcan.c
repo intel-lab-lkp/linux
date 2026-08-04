@@ -987,7 +987,6 @@ static int bxcan_probe(struct platform_device *pdev)
 	ndev->netdev_ops = &bxcan_netdev_ops;
 	ndev->ethtool_ops = &bxcan_ethtool_ops;
 	ndev->irq = rx_irq;
-	ndev->flags |= IFF_ECHO;
 
 	priv->dev = dev;
 	priv->ndev = ndev;

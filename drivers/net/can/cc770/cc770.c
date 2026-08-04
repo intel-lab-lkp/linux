@@ -852,8 +852,6 @@ int register_cc770dev(struct net_device *dev)
 	dev->netdev_ops = &cc770_netdev_ops;
 	dev->ethtool_ops = &cc770_ethtool_ops;
 
-	dev->flags |= IFF_ECHO;	/* we support local echo */
-
 	/* Should we use additional functions? */
 	if (!i82527_compat && priv->control_normal_mode & CTRL_EAF) {
 		priv->can.do_get_berr_counter = cc770_get_berr_counter;

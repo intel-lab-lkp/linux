@@ -2281,7 +2281,6 @@ static int mcp251xfd_probe(struct spi_device *spi)
 
 	ndev->netdev_ops = &mcp251xfd_netdev_ops;
 	ndev->irq = spi->irq;
-	ndev->flags |= IFF_ECHO;
 
 	priv = netdev_priv(ndev);
 	spi_set_drvdata(spi, priv);

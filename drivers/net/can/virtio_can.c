@@ -425,7 +425,6 @@ static const struct net_device_ops virtio_can_netdev_ops = {
 
 static int register_virtio_can_dev(struct net_device *dev)
 {
-	dev->flags |= IFF_ECHO;	/* we support local echo */
 	dev->netdev_ops = &virtio_can_netdev_ops;
 
 	return register_candev(dev);

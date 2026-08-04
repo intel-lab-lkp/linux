@@ -1361,7 +1361,6 @@ static int mcp251x_can_probe(struct spi_device *spi)
 
 	net->netdev_ops = &mcp251x_netdev_ops;
 	net->ethtool_ops = &mcp251x_ethtool_ops;
-	net->flags |= IFF_ECHO;
 
 	priv = netdev_priv(net);
 	priv->can.bittiming_const = &mcp251x_bittiming_const;

@@ -827,7 +827,6 @@ struct net_device *alloc_peak_canfd_dev(int sizeof_priv, int index,
 	priv->cmd_len = 0;
 	spin_lock_init(&priv->echo_lock);
 
-	ndev->flags |= IFF_ECHO;
 	ndev->netdev_ops = &peak_canfd_netdev_ops;
 	ndev->ethtool_ops = &peak_canfd_ethtool_ops;
 	ndev->dev_id = index;

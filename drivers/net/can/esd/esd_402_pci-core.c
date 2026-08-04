@@ -362,7 +362,6 @@ static int pci402_init_cores(struct pci_dev *pdev)
 		}
 		core->netdev = netdev;
 
-		netdev->flags |= IFF_ECHO;
 		netdev->dev_port = i;
 		netdev->netdev_ops = &pci402_acc_netdev_ops;
 		netdev->ethtool_ops = &pci402_acc_ethtool_ops;

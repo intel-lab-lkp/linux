@@ -675,8 +675,6 @@ struct net_device *alloc_mscandev(void)
 	dev->netdev_ops = &mscan_netdev_ops;
 	dev->ethtool_ops = &mscan_ethtool_ops;
 
-	dev->flags |= IFF_ECHO;	/* we support local echo */
-
 	netif_napi_add_weight(dev, &priv->napi, mscan_rx_poll, 8);
 
 	priv->can.bittiming_const = &mscan_bittiming_const;

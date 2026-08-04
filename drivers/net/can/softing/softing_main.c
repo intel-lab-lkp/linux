@@ -651,7 +651,6 @@ static struct net_device *softing_netdev_create(struct softing *card,
 	priv->output = softing_default_output(netdev);
 	SET_NETDEV_DEV(netdev, &card->pdev->dev);
 
-	netdev->flags |= IFF_ECHO;
 	netdev->netdev_ops = &softing_netdev_ops;
 	netdev->ethtool_ops = &softing_ethtool_ops;
 	priv->can.do_set_mode = softing_candev_set_mode;

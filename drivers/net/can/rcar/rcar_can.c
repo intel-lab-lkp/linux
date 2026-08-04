@@ -792,7 +792,6 @@ static int rcar_can_probe(struct platform_device *pdev)
 	ndev->netdev_ops = &rcar_can_netdev_ops;
 	ndev->ethtool_ops = &rcar_can_ethtool_ops;
 	ndev->irq = irq;
-	ndev->flags |= IFF_ECHO;
 	priv->ndev = ndev;
 	priv->regs = addr;
 	priv->clock_select = clock_select;

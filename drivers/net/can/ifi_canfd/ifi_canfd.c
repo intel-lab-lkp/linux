@@ -985,7 +985,6 @@ static int ifi_canfd_plat_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ndev->irq = irq;
-	ndev->flags |= IFF_ECHO;	/* we support local echo */
 	ndev->netdev_ops = &ifi_canfd_netdev_ops;
 	ndev->ethtool_ops = &ifi_canfd_ethtool_ops;
 

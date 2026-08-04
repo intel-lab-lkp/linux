@@ -688,7 +688,6 @@ int register_sja1000dev(struct net_device *dev)
 	if (!sja1000_probe_chip(dev))
 		return -ENODEV;
 
-	dev->flags |= IFF_ECHO;	/* we support local echo */
 	dev->netdev_ops = &sja1000_netdev_ops;
 	dev->ethtool_ops = &sja1000_ethtool_ops;
 

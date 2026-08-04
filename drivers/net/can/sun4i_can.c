@@ -874,7 +874,6 @@ static int sun4ican_probe(struct platform_device *pdev)
 	dev->netdev_ops = &sun4ican_netdev_ops;
 	dev->ethtool_ops = &sun4ican_ethtool_ops;
 	dev->irq = irq;
-	dev->flags |= IFF_ECHO;
 
 	priv = netdev_priv(dev);
 	priv->can.clock.freq = clk_get_rate(clk);

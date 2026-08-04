@@ -1381,7 +1381,6 @@ int ctucan_probe_common(struct device *dev, void __iomem *addr, int irq, unsigne
 
 	/* Get IRQ for the device */
 	ndev->irq = irq;
-	ndev->flags |= IFF_ECHO;	/* We support local echo */
 
 	if (set_drvdata_fnc)
 		set_drvdata_fnc(dev, ndev);

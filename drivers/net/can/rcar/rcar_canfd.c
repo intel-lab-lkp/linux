@@ -1878,7 +1878,6 @@ static int rcar_canfd_channel_probe(struct rcar_canfd_global *gpriv, u32 ch,
 
 	ndev->netdev_ops = &rcar_canfd_netdev_ops;
 	ndev->ethtool_ops = &rcar_canfd_ethtool_ops;
-	ndev->flags |= IFF_ECHO;
 	priv->ndev = ndev;
 	priv->base = gpriv->base;
 	priv->transceiver = transceiver;

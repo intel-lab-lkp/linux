@@ -1005,7 +1005,6 @@ static int kvaser_pciefd_setup_can_ctrls(struct kvaser_pciefd *pcie)
 		if (status & KVASER_PCIEFD_KCAN_STAT_CAP)
 			can->can.ctrlmode_supported |= CAN_CTRLMODE_ONE_SHOT;
 
-		netdev->flags |= IFF_ECHO;
 		SET_NETDEV_DEV(netdev, &pcie->pci->dev);
 
 		iowrite32(GENMASK(31, 0), can->reg_base + KVASER_PCIEFD_KCAN_IRQ_REG);

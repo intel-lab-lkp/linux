@@ -2330,7 +2330,6 @@ static int register_m_can_dev(struct m_can_classdev *cdev)
 {
 	struct net_device *dev = cdev->net;
 
-	dev->flags |= IFF_ECHO;	/* we support local echo */
 	dev->netdev_ops = &m_can_netdev_ops;
 	if (dev->irq && cdev->is_peripheral)
 		dev->ethtool_ops = &m_can_ethtool_ops_coalescing;

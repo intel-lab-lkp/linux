@@ -957,8 +957,6 @@ static int peak_usb_create_dev(const struct peak_usb_adapter *peak_usb_adapter,
 
 	netdev->netdev_ops = &peak_usb_netdev_ops;
 
-	netdev->flags |= IFF_ECHO; /* we support local echo */
-
 	/* add ethtool support */
 	netdev->ethtool_ops = peak_usb_adapter->ethtool_ops;
 

@@ -1996,8 +1996,6 @@ static int xcan_probe(struct platform_device *pdev)
 
 	ndev->irq = ret;
 
-	ndev->flags |= IFF_ECHO;	/* We support local echo */
-
 	platform_set_drvdata(pdev, ndev);
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 	ndev->netdev_ops = &xcan_netdev_ops;

@@ -1201,7 +1201,6 @@ static int f81604_probe(struct usb_interface *intf,
 
 		netdev->ethtool_ops = &f81604_ethtool_ops;
 		netdev->netdev_ops = &f81604_netdev_ops;
-		netdev->flags |= IFF_ECHO;
 		netdev->dev_port = i;
 
 		SET_NETDEV_DEV(netdev, &intf->dev);

@@ -886,8 +886,6 @@ static int kvaser_usb_init_one(struct kvaser_usb *dev, int channel)
 		priv->can.fd.do_set_data_bittiming = kvaser_usb_set_data_bittiming;
 	}
 
-	netdev->flags |= IFF_ECHO;
-
 	netdev->netdev_ops = &kvaser_usb_netdev_ops;
 	netdev->ethtool_ops = &kvaser_usb_ethtool_ops;
 	SET_NETDEV_DEV(netdev, &dev->intf->dev);

@@ -743,7 +743,6 @@ static int nct6694_canfd_probe(struct platform_device *pdev)
 	}
 
 	ndev->irq = irq;
-	ndev->flags |= IFF_ECHO;
 	ndev->dev_port = port;
 	ndev->netdev_ops = &nct6694_canfd_netdev_ops;
 	ndev->ethtool_ops = &nct6694_canfd_ethtool_ops;

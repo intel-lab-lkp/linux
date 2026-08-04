@@ -861,7 +861,6 @@ static int hi3110_can_probe(struct spi_device *spi)
 
 	net->netdev_ops = &hi3110_netdev_ops;
 	net->ethtool_ops = &hi3110_ethtool_ops;
-	net->flags |= IFF_ECHO;
 
 	priv = netdev_priv(net);
 	priv->can.bittiming_const = &hi3110_bittiming_const;

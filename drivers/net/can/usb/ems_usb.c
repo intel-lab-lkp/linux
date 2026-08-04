@@ -1058,8 +1058,6 @@ static int ems_usb_probe(struct usb_interface *intf,
 	netdev->netdev_ops = &ems_usb_netdev_ops;
 	netdev->ethtool_ops = &ems_usb_ethtool_ops;
 
-	netdev->flags |= IFF_ECHO; /* we support local echo */
-
 	init_usb_anchor(&dev->rx_submitted);
 
 	init_usb_anchor(&dev->tx_submitted);

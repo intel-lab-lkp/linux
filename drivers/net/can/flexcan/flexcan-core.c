@@ -2182,7 +2182,6 @@ static int flexcan_probe(struct platform_device *pdev)
 	dev->netdev_ops = &flexcan_netdev_ops;
 	dev->ethtool_ops = &flexcan_ethtool_ops;
 	dev->irq = irq;
-	dev->flags |= IFF_ECHO;
 
 	priv = netdev_priv(dev);
 	priv->devtype_data = *devtype_data;

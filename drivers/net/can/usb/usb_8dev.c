@@ -939,8 +939,6 @@ static int usb_8dev_probe(struct usb_interface *intf,
 	netdev->netdev_ops = &usb_8dev_netdev_ops;
 	netdev->ethtool_ops = &usb_8dev_ethtool_ops;
 
-	netdev->flags |= IFF_ECHO; /* we support local echo */
-
 	init_usb_anchor(&priv->rx_submitted);
 
 	init_usb_anchor(&priv->tx_submitted);
