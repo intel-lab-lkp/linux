@@ -704,6 +704,34 @@ static inline bool fault_flag_allow_retry_first(enum fault_flag flags)
 	    (!(flags & FAULT_FLAG_TRIED));
 }
 
+/**
+ * fault_should_retry_under_vma_lock - decide whether to retry with VMA lock
+ * @fault: fault result from handle_mm_fault() under FAULT_FLAG_VMA_LOCK
+ * @flags: fault flags for the current fault, updated on retry
+ *
+ * Architecture page fault handlers call this after a VMA-lock fault returns
+ * VM_FAULT_RETRY. If the fault result also has VM_FAULT_MAY_USE_VMA_LOCK,
+ * allow one bounded retry under the VMA lock and set FAULT_FLAG_TRIED.
+ *
+ * When the fault must fall back to the mmap_lock path, preserve the existing
+ * VM_FAULT_MAJOR behavior by marking FAULT_FLAG_TRIED before the retry.
+ *
+ * Return: true if the caller should retry under the VMA lock, false if it
+ * should fall back to the mmap_lock fault path.
+ */
+static inline bool fault_should_retry_under_vma_lock(vm_fault_t fault, unsigned int *flags)
+{
+	if ((fault & VM_FAULT_MAY_USE_VMA_LOCK) && !(*flags & FAULT_FLAG_TRIED)) {
+		*flags |= FAULT_FLAG_TRIED;
+		return true;
+	}
+
+	if (fault & VM_FAULT_MAJOR)
+		*flags |= FAULT_FLAG_TRIED;
+
+	return false;
+}
+
 #define FAULT_FLAG_TRACE \
 	{ FAULT_FLAG_WRITE,		"WRITE" }, \
 	{ FAULT_FLAG_MKWRITE,		"MKWRITE" }, \

@@ -1669,6 +1669,8 @@ typedef __bitwise unsigned int vm_fault_t;
  * @VM_FAULT_NOPAGE:		->fault installed the pte, not return page
  * @VM_FAULT_LOCKED:		->fault locked the returned page
  * @VM_FAULT_RETRY:		->fault blocked, must retry
+ * @VM_FAULT_MAY_USE_VMA_LOCK:	->fault blocked, retry may be handled under
+ *				the VMA lock
  * @VM_FAULT_FALLBACK:		huge page fault failed, fall back to small
  * @VM_FAULT_DONE_COW:		->fault has fully handled COW
  * @VM_FAULT_NEEDDSYNC:		->fault did not modify page tables and needs
@@ -1692,6 +1694,7 @@ enum vm_fault_reason {
 	VM_FAULT_DONE_COW       = (__force vm_fault_t)0x001000,
 	VM_FAULT_NEEDDSYNC      = (__force vm_fault_t)0x002000,
 	VM_FAULT_COMPLETED      = (__force vm_fault_t)0x004000,
+	VM_FAULT_MAY_USE_VMA_LOCK = (__force vm_fault_t)0x008000,
 	VM_FAULT_HINDEX_MASK    = (__force vm_fault_t)0x0f0000,
 };
 
@@ -1716,6 +1719,7 @@ enum vm_fault_reason {
 	{ VM_FAULT_FALLBACK,            "FALLBACK" },	\
 	{ VM_FAULT_DONE_COW,            "DONE_COW" },	\
 	{ VM_FAULT_NEEDDSYNC,           "NEEDDSYNC" },	\
+	{ VM_FAULT_MAY_USE_VMA_LOCK,    "MAY_USE_VMA_LOCK" },	\
 	{ VM_FAULT_COMPLETED,           "COMPLETED" }
 
 struct vm_special_mapping {
