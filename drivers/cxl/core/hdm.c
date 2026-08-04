@@ -16,7 +16,6 @@
  * for enumerating these registers and capabilities.
  */
 
-
 static int add_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld)
 {
 	int rc;
@@ -675,12 +674,44 @@ int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
 }
 
+static void cxlsd_set_targets(struct cxl_switch_decoder *cxlsd, u64 *tgt)
+{
+	struct cxl_dport **t = &cxlsd->target[0];
+	int ways = cxlsd->cxld.interleave_ways;
+
+	*tgt = FIELD_PREP(GENMASK(7, 0), t[0]->port_id);
+	if (ways > 1)
+		*tgt |= FIELD_PREP(GENMASK(15, 8), t[1]->port_id);
+	if (ways > 2)
+		*tgt |= FIELD_PREP(GENMASK(23, 16), t[2]->port_id);
+	if (ways > 3)
+		*tgt |= FIELD_PREP(GENMASK(31, 24), t[3]->port_id);
+	if (ways > 4)
+		*tgt |= FIELD_PREP(GENMASK_ULL(39, 32), t[4]->port_id);
+	if (ways > 5)
+		*tgt |= FIELD_PREP(GENMASK_ULL(47, 40), t[5]->port_id);
+	if (ways > 6)
+		*tgt |= FIELD_PREP(GENMASK_ULL(55, 48), t[6]->port_id);
+	if (ways > 7)
+		*tgt |= FIELD_PREP(GENMASK_ULL(63, 56), t[7]->port_id);
+}
+
 static int cxl_decoder_commit(struct cxl_decoder *cxld)
 {
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
 	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
-	int id = cxld->id, rc;
+	struct cxl_endpoint_decoder *cxled = NULL;
+	struct cxl_switch_decoder *cxlsd = NULL;
+	struct cxl_decoder_settings settings = {
+		.id = cxld->id,
+		.hpa_range = cxld->hpa_range,
+		.interleave_ways = cxld->interleave_ways,
+		.interleave_granularity = cxld->interleave_granularity,
+		.target_type = cxld->target_type,
+		.flags = cxld->flags,
+	};
+	int id = cxld->id, rc = 0;
 
 	if (cxld->flags & CXL_DECODER_F_ENABLE)
 		return 0;
@@ -693,29 +724,42 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 		return -EBUSY;
 	}
 
-	/*
-	 * For endpoint decoders hosted on CXL memory devices that
-	 * support the sanitize operation, make sure sanitize is not in-flight.
-	 */
 	if (is_endpoint_decoder(&cxld->dev)) {
-		struct cxl_endpoint_decoder *cxled =
-			to_cxl_endpoint_decoder(&cxld->dev);
-		struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-		struct cxl_memdev_state *mds =
-			to_cxl_memdev_state(cxlmd->cxlds);
+		struct cxl_memdev *cxlmd;
+		struct cxl_memdev_state *mds;
 
+		cxled = to_cxl_endpoint_decoder(&cxld->dev);
+		cxlmd = cxled_to_memdev(cxled);
+		mds = to_cxl_memdev_state(cxlmd->cxlds);
+		/*
+		 * For endpoint decoders hosted on CXL memory devices that
+		 * support the sanitize operation, make sure sanitize is not in-flight.
+		 */
 		if (mds && mds->security.sanitize_active) {
 			dev_dbg(&cxlmd->dev,
 				"attempted to commit %s during sanitize\n",
 				dev_name(&cxld->dev));
 			return -EBUSY;
 		}
+	} else if (is_switch_decoder(&cxld->dev)) {
+		cxlsd = to_cxl_switch_decoder(&cxld->dev);
 	}
 
-	scoped_guard(rwsem_read, &cxl_rwsem.dpa)
-		cxl_setup_hw_decoder(cxld, hdm);
+	scoped_guard(rwsem_read, &cxl_rwsem.dpa) {
+		if (cxled)
+			settings.target_or_skip = cxled->skip;
+		else if (cxlsd)
+			cxlsd_set_targets(cxlsd, &settings.target_or_skip);
 
-	rc = cxld_await_commit(hdm, cxld->id);
+		rc = cxl_commit_start(&settings, hdm);
+	}
+	if (rc) {
+		dev_dbg(&port->dev, "%s: error %d committing decoder\n",
+			dev_name(&cxld->dev), rc);
+		return rc;
+	}
+
+	rc = cxl_commit_wait(&settings, hdm);
 	if (rc) {
 		dev_dbg(&port->dev, "%s: error %d committing decoder\n",
 			dev_name(&cxld->dev), rc);

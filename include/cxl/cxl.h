@@ -32,6 +32,26 @@ enum cxl_decoder_type {
 	CXL_DECODER_HOSTONLYMEM = 3,
 };
 
+/**
+ * struct cxl_decoder_settings - CXL HDM decoder programming snapshot
+ * @id: decoder id
+ * @hpa_range: Host physical address range mapped by this decoder
+ * @target_or_skip: switch target list or endpoint skip register value
+ * @interleave_ways: number of cxl_dports in this decode
+ * @interleave_granularity: data stride per dport
+ * @target_type: accelerator vs expander (type2 vs type3) selector
+ * @flags: memory type capabilities and locking
+ */
+struct cxl_decoder_settings {
+	int id;
+	struct range hpa_range;
+	u64 target_or_skip;
+	int interleave_ways;
+	int interleave_granularity;
+	enum cxl_decoder_type target_type;
+	unsigned long flags;
+};
+
 /*
  * Current specification goes up to 8, double that seems a reasonable
  * software max for the foreseeable future
