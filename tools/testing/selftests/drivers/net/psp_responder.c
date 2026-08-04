@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/poll.h>
@@ -118,6 +119,34 @@ static void send_str(int sock, int value)
 	send(sock, buf, ret + 1, MSG_WAITALL);
 }
 
+static int send_data(int sock, size_t len)
+{
+	char sbuf[8192] = {0};
+	ssize_t sent;
+
+	while (len > 0) {
+		size_t chunk = len;
+
+		if (chunk > sizeof(sbuf))
+			chunk = sizeof(sbuf);
+
+		sent = send(sock, sbuf, chunk, MSG_NOSIGNAL);
+		if (sent < 0) {
+			if (errno == EINTR)
+				continue;
+			fprintf(stderr, "ERR: %s: %s\n", __func__,
+				strerror(errno));
+			return -1;
+		}
+		if (sent == 0) {
+			fprintf(stderr, "ERR: %s: peer closed\n", __func__);
+			return -1;
+		}
+		len -= sent;
+	}
+	return 0;
+}
+
 static void
 run_session(struct ynl_sock *ys, struct opts *opts,
 	    int server_sock, int comm_sock)
@@ -223,6 +252,26 @@ run_session(struct ynl_sock *ys, struct opts *opts,
 					else
 						fprintf(stderr, "WARN: echo but no data sock\n");
 					send_ack(comm_sock);
+				}
+				if (cmd("data send", 4)) {
+					__u32 len;
+
+					memcpy(&len, buf, sizeof(len));
+					__consume(sizeof(len));
+					len = ntohl(len);
+
+					if (data_sock < 0) {
+						fprintf(stderr,
+							"WARN: send but no data sock\n");
+						send_err(comm_sock);
+						continue;
+					}
+
+					send_ack(comm_sock);
+					if (send_data(data_sock, len))
+						fprintf(stderr,
+							"WARN: send incomplete for %u bytes\n",
+							len);
 				}
 				if (cmd("data close", 0)) {
 					if (data_sock >= 0) {

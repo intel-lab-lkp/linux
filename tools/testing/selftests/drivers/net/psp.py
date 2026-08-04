@@ -16,11 +16,12 @@ from lib.py import ksft_run, ksft_exit, ksft_pr
 from lib.py import ksft_true, ksft_eq, ksft_ne, ksft_gt, ksft_raises
 from lib.py import ksft_not_none
 from lib.py import ksft_variants, KsftNamedVariant
-from lib.py import KsftSkipEx, KsftFailEx
+from lib.py import KsftSkipEx, KsftFailEx, KsftXfailEx
 from lib.py import NetDrvEpEnv, NetDrvContEnv
-from lib.py import Netlink, NlError, PSPFamily, RtnlFamily
+from lib.py import Netlink, NlError, NetdevFamily, PSPFamily, RtnlFamily
 from lib.py import NetNSEnter
 from lib.py import bkg, rand_port, wait_port_listen
+from lib.py import bkg, ethtool, rand_port, wait_port_listen, CmdExitFailure
 from lib.py import ip
 
 
@@ -30,15 +31,25 @@ def _get_outq(s):
     return struct.unpack("I", outq)[0]
 
 
+def _recv_exact(sock, n):
+    buf = b''
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            break
+        buf += chunk
+    return buf
+
+
 def _send_with_ack(cfg, msg):
-    cfg.comm_sock.send(msg)
-    response = cfg.comm_sock.recv(4)
+    cfg.comm_sock.sendall(msg)
+    response = _recv_exact(cfg.comm_sock, 4)
     if response != b'ack\0':
         raise RuntimeError("Unexpected server response", response)
 
 
 def _remote_read_len(cfg):
-    cfg.comm_sock.send(b'read len\0')
+    cfg.comm_sock.sendall(b'read len\0')
     return int(cfg.comm_sock.recv(1024)[:-1].decode('utf-8'))
 
 
@@ -97,7 +108,7 @@ def _send_careful(cfg, s, rounds):
 def _check_data_rx(cfg, exp_len):
     read_len = -1
     for _ in range(30):
-        cfg.comm_sock.send(b'read len\0')
+        cfg.comm_sock.sendall(b'read len\0')
         read_len = int(cfg.comm_sock.recv(1024)[:-1].decode('utf-8'))
         if read_len == exp_len:
             break
@@ -583,6 +594,108 @@ def _get_psp_ver_ip_variants():
         for ipv in ("4", "6"):
             yield KsftNamedVariant(f"v{ver}_ip{ipv}", ver, ipv)
 
+def _enable_local_hw_gro(cfg):
+    cfg.require_cmd("ethtool")
+    feat = ethtool(f"-k {cfg.ifname}", json=True)[0]
+    gro = feat.get("rx-gro-hw")
+    if not gro or "active" not in gro or "fixed" not in gro:
+        raise KsftSkipEx("HW GRO feature not reported by ethtool")
+    if gro["fixed"] and not gro["active"]:
+        raise KsftXfailEx("HW GRO not supported by device")
+    if not gro["active"]:
+        try:
+            ethtool(f"-K {cfg.ifname} rx-gro-hw on")
+        except CmdExitFailure as e:
+            raise KsftSkipEx("Cannot enable HW GRO via ethtool") from e
+        defer(ethtool, f"-K {cfg.ifname} rx-gro-hw off")
+        feat = ethtool(f"-k {cfg.ifname}", json=True)[0]
+        gro = feat.get("rx-gro-hw", {})
+        if not gro.get("active"):
+            raise KsftSkipEx("HW GRO failed to activate")
+
+
+def _remote_send(cfg, size):
+    cfg.comm_sock.sendall(b'data send\0' + struct.pack('!I', size))
+    response = _recv_exact(cfg.comm_sock, 4)
+    if response != b'ack\0':
+        raise RuntimeError("Unexpected server response to data send", response)
+
+
+def _recv_all(s, expected, timeout=20):
+    s.settimeout(timeout)
+    total = 0
+    try:
+        while total < expected:
+            data = s.recv(min(65536, expected - total))
+            if not data:
+                break
+            total += len(data)
+    except socket.timeout:
+        raise RuntimeError(
+            f"Timed out receiving data: got {total}/{expected} bytes "
+            f"(responder may have failed to send)")
+    if total < expected:
+        raise RuntimeError(
+            f"Short read: got {total}/{expected} bytes "
+            f"(responder connection closed early)")
+    return total
+
+
+def _data_hw_gro(cfg, version, ipver):
+    """ Test PSP data transfer with HW GRO enabled """
+    _init_psp_dev(cfg)
+    # Version 0 is required by spec, don't let it skip
+    if version:
+        name = cfg.pspnl.consts["version"].entries_by_val[version].name
+        if name not in cfg.psp_info['psp-versions-cap']:
+            raise KsftSkipEx("PSP version not supported", name)
+
+    _enable_local_hw_gro(cfg)
+
+    s = _make_psp_conn(cfg, version, ipver)
+    try:
+        rx_assoc = cfg.pspnl.rx_assoc({"version": version,
+                                        "dev-id": cfg.psp_dev_id,
+                                        "sock-fd": s.fileno()})
+        rx = rx_assoc['rx-key']
+        tx = _spi_xchg(s, rx)
+        cfg.pspnl.tx_assoc({"dev-id": cfg.psp_dev_id,
+                             "version": version,
+                             "tx-key": tx,
+                             "sock-fd": s.fileno()})
+
+        try:
+            before = cfg.netnl.qstats_get({"ifindex": cfg.ifindex}, dump=True)[0]
+        except NlError as e:
+            if e.error == errno.EOPNOTSUPP:
+                raise KsftSkipEx("qstats not supported by the device") from e
+            raise
+        if ('rx-hw-gro-packets' not in before or
+            'rx-hw-gro-wire-packets' not in before):
+            raise KsftSkipEx("rx-hw-gro-packets counter not available")
+
+        # Remote sends data in 8KB chunks; GSO on remote TX segments them,
+        # HW GRO reassembles on local RX
+        data_len = 10 * 65536
+        _remote_send(cfg, data_len)
+        recv_len = _recv_all(s, data_len)
+        ksft_eq(recv_len, data_len)
+
+        cfg.wait_hw_stats_settle()
+        after = cfg.netnl.qstats_get({"ifindex": cfg.ifindex}, dump=True)[0]
+        ksft_gt(after['rx-hw-gro-packets'],
+                before['rx-hw-gro-packets'])
+        ksft_gt(after['rx-hw-gro-wire-packets'],
+                before['rx-hw-gro-wire-packets'])
+    finally:
+        _close_psp_conn(cfg, s)
+
+@ksft_variants(_get_psp_ver_ip_variants())
+def data_hw_gro(cfg, version, ipver):
+    """ Test PSP data transfer with HW GRO enabled """
+    cfg.require_ipver(ipver)
+    _data_hw_gro(cfg, version, ipver)
+
 
 def _get_ip_variants():
     for ipv in ("4", "6"):
@@ -937,7 +1050,6 @@ def _setup_psp_attributes(cfg):
     cfg.psp_dev_peer_nsid = _get_nsid(cfg.netns.name)
 
 
-
 def main() -> None:
     """ Ksft boiler plate main """
 
@@ -954,6 +1066,7 @@ def main() -> None:
 
     with env as cfg:
         cfg.pspnl = PSPFamily()
+        cfg.netnl = NetdevFamily()
 
         if has_cont:
             _setup_psp_attributes(cfg)
@@ -973,7 +1086,7 @@ def main() -> None:
                                                           cfg.comm_port),
                                                          timeout=1)
 
-                cases = [data_basic_send, data_mss_adjust]
+                cases = [data_basic_send, data_hw_gro, data_mss_adjust]
 
                 if has_cont:
                     cases += [
@@ -990,7 +1103,7 @@ def main() -> None:
                          case_pfx={"dev_", "data_", "assoc_", "removal_"},
                          args=(cfg, ))
 
-                cfg.comm_sock.send(b"exit\0")
+                cfg.comm_sock.sendall(b"exit\0")
                 cfg.comm_sock.close()
         finally:
             if srv and (srv.stdout or srv.stderr):
