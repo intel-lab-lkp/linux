@@ -4295,6 +4295,7 @@ static int virtnet_set_hashflow(struct net_device *dev,
 				struct netlink_ext_ack *extack)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
+	u32 old_hashtypes = vi->rss_hash_types_saved;
 	u32 new_hashtypes = vi->rss_hash_types_saved;
 	bool is_disable = info->data & RXH_DISCARD;
 	bool is_l4 = info->data == (RXH_IP_SRC | RXH_IP_DST | RXH_L4_B_0_1 | RXH_L4_B_2_3);
@@ -4350,9 +4351,13 @@ static int virtnet_set_hashflow(struct net_device *dev,
 	if (new_hashtypes != vi->rss_hash_types_saved) {
 		vi->rss_hash_types_saved = new_hashtypes;
 		vi->rss_hdr->hash_types = cpu_to_le32(vi->rss_hash_types_saved);
-		if (vi->dev->features & NETIF_F_RXHASH)
-			if (!virtnet_commit_rss_command(vi))
+		if (vi->dev->features & NETIF_F_RXHASH) {
+			if (!virtnet_commit_rss_command(vi)) {
+				vi->rss_hash_types_saved = old_hashtypes;
+				vi->rss_hdr->hash_types = cpu_to_le32(old_hashtypes);
 				return -EINVAL;
+			}
+		}
 	}
 
 	return 0;
@@ -5546,6 +5551,8 @@ static int virtnet_set_rxfh(struct net_device *dev,
 			    struct netlink_ext_ack *extack)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
+	struct virtio_net_rss_config_hdr *old_rss_hdr = NULL;
+	u8 old_rss_key[NETDEV_RSS_KEY_LEN];
 	bool update = false;
 	int i;
 
@@ -5553,14 +5560,8 @@ static int virtnet_set_rxfh(struct net_device *dev,
 	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
-	if (rxfh->indir) {
-		if (!vi->has_rss)
-			return -EOPNOTSUPP;
-
-		for (i = 0; i < vi->rss_indir_table_size; ++i)
-			vi->rss_hdr->indirection_table[i] = cpu_to_le16(rxfh->indir[i]);
-		update = true;
-	}
+	if (rxfh->indir && !vi->has_rss)
+		return -EOPNOTSUPP;
 
 	if (rxfh->key) {
 		/* If either _F_HASH_REPORT or _F_RSS are negotiated, the
@@ -5569,13 +5570,36 @@ static int virtnet_set_rxfh(struct net_device *dev,
 		 */
 		if (!vi->has_rss && !vi->has_rss_hash_report)
 			return -EOPNOTSUPP;
+	}
 
+	if (rxfh->indir) {
+		old_rss_hdr = kmemdup(vi->rss_hdr, virtnet_rss_hdr_size(vi),
+				      GFP_KERNEL);
+		if (!old_rss_hdr)
+			return -ENOMEM;
+
+		for (i = 0; i < vi->rss_indir_table_size; ++i)
+			vi->rss_hdr->indirection_table[i] =
+				cpu_to_le16(rxfh->indir[i]);
+		update = true;
+	}
+
+	if (rxfh->key) {
+		memcpy(old_rss_key, vi->rss_hash_key_data, vi->rss_key_size);
 		memcpy(vi->rss_hash_key_data, rxfh->key, vi->rss_key_size);
 		update = true;
 	}
 
-	if (update)
-		virtnet_commit_rss_command(vi);
+	if (update && !virtnet_commit_rss_command(vi)) {
+		if (old_rss_hdr)
+			memcpy(vi->rss_hdr, old_rss_hdr, virtnet_rss_hdr_size(vi));
+		if (rxfh->key)
+			memcpy(vi->rss_hash_key_data, old_rss_key, vi->rss_key_size);
+		kfree(old_rss_hdr);
+		return -EINVAL;
+	}
+
+	kfree(old_rss_hdr);
 
 	return 0;
 }
@@ -6171,13 +6195,17 @@ static int virtnet_set_features(struct net_device *dev,
 	}
 
 	if ((dev->features ^ features) & NETIF_F_RXHASH) {
+		__le32 hash_types = vi->rss_hdr->hash_types;
+
 		if (features & NETIF_F_RXHASH)
 			vi->rss_hdr->hash_types = cpu_to_le32(vi->rss_hash_types_saved);
 		else
 			vi->rss_hdr->hash_types = cpu_to_le32(VIRTIO_NET_HASH_REPORT_NONE);
 
-		if (!virtnet_commit_rss_command(vi))
+		if (!virtnet_commit_rss_command(vi)) {
+			vi->rss_hdr->hash_types = hash_types;
 			return -EINVAL;
+		}
 	}
 
 	return 0;
