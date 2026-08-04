@@ -9,6 +9,34 @@
 #include <libvfio/vfio_pci_device.h>
 #include <libvfio/vfio_pci_driver.h>
 
+#include <stdint.h>
+#include <time.h>
+#include <linux/time64.h>
+
+static inline void timer_start(struct timespec *start)
+{
+	clock_gettime(CLOCK_MONOTONIC, start);
+}
+
+static inline uint64_t timer_elapsed_ns(struct timespec start)
+{
+	struct timespec end;
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	return (uint64_t)(end.tv_sec - start.tv_sec) * NSEC_PER_SEC +
+	       (uint64_t)(end.tv_nsec - start.tv_nsec);
+}
+
+#define TIME(_name, _expression) do {				   \
+	struct timespec __start;				   \
+								   \
+	timer_start(&__start);					   \
+	_expression;						   \
+	printf(_name " = %.2lfms\n",				   \
+	       (double)timer_elapsed_ns(__start) / NSEC_PER_MSEC); \
+} while (0)
+
 /*
  * Return the BDF string of the device that the test should use.
  *
