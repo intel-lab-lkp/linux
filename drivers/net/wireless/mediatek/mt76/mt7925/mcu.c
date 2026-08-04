@@ -3624,7 +3624,7 @@ EXPORT_SYMBOL_GPL(mt7925_mcu_set_channel_domain);
 static int
 __mt7925_mcu_set_clc(struct mt792x_dev *dev, u8 *alpha2,
 		     enum environment_cap env_cap,
-		     struct mt7925_clc *clc, u8 idx)
+		     struct mt7925_clc *clc, u8 idx, bool power_type_change)
 {
 	struct mt7925_clc_segment *seg;
 	struct sk_buff *skb;
@@ -3642,18 +3642,37 @@ __mt7925_mcu_set_clc(struct mt792x_dev *dev, u8 *alpha2,
 		u8 pad1;
 		u8 alpha2[2];
 		u8 type[2];
-		u8 rsvd[64];
+		u8 env_6g;
+		u8 rsvd[63];
 	} __packed req = {
 		.tag = cpu_to_le16(0x3),
 
 		.idx = idx,
 		.env = env_cap,
+		.env_6g = dev->phy.power_type,
 	};
 	int ret, valid_cnt = 0;
 	u8 *pos, *last_pos;
+	u8 target_6g_type;
 
 	if (!clc)
 		return 0;
+
+	/* Determine target 6G power type based on phy->power_type */
+	switch (dev->phy.power_type) {
+	case MT_AP_LPI:
+		target_6g_type = '0';
+		break;
+	case MT_AP_SP:
+		target_6g_type = '1';
+		break;
+	case MT_AP_VLP:
+		target_6g_type = '2';
+		break;
+	default:
+		target_6g_type = '0'; /* default to LPI */
+		break;
+	}
 
 	req.ver = clc->ver;
 	pos = clc->data + sizeof(*seg) * clc->t0.nr_seg;
@@ -3665,6 +3684,23 @@ __mt7925_mcu_set_clc(struct mt792x_dev *dev, u8 *alpha2,
 		if (rule->alpha2[0] != alpha2[0] ||
 		    rule->alpha2[1] != alpha2[1])
 			continue;
+
+		/* Filter power tables based on call source:
+		 * power_type_change == false: from mt7925_mcu_regd_update()
+		 *   - Send 2/5G ('-') and 6G LPI ('0') and 6G VLP ('2')
+		 * power_type_change == true: from mt7925_regd_set_6ghz_power_type()
+		 *   - Send only the specific 6G power table based on power_type
+		 */
+		if (power_type_change) {
+			/* Only send the specific 6G power table */
+			if (rule->type[0] != target_6g_type)
+				continue;
+		} else {
+			/* Send 2/5G and 6G LPI and VLP only */
+			if (rule->type[0] != '-' && rule->type[0] != '0' &&
+			    rule->type[0] != '2')
+				continue;
+		}
 
 		seg = (struct mt7925_clc_segment *)clc->data
 			  + rule->seg_idx - 1;
@@ -3699,7 +3735,7 @@ __mt7925_mcu_set_clc(struct mt792x_dev *dev, u8 *alpha2,
 }
 
 int mt7925_mcu_set_clc(struct mt792x_dev *dev, u8 *alpha2,
-		       enum environment_cap env_cap)
+		       enum environment_cap env_cap, bool power_type_change)
 {
 	struct mt792x_phy *phy = (struct mt792x_phy *)&dev->phy;
 	int i, ret;
@@ -3714,13 +3750,13 @@ int mt7925_mcu_set_clc(struct mt792x_dev *dev, u8 *alpha2,
 			continue;
 
 		ret = __mt7925_mcu_set_clc(dev, alpha2, env_cap,
-					   phy->clc[i], i);
+					   phy->clc[i], i, power_type_change);
 
 		/* If no country found, set "00" as default */
 		if (ret == -ENOENT)
 			ret = __mt7925_mcu_set_clc(dev, "00",
 						   ENVIRON_INDOOR,
-						   phy->clc[i], i);
+						   phy->clc[i], i, power_type_change);
 		if (ret < 0)
 			return ret;
 	}

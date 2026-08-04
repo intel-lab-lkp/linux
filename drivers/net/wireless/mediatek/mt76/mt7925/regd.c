@@ -137,14 +137,14 @@ mt7925_regd_channel_update(struct wiphy *wiphy, struct mt792x_dev *dev)
 	}
 }
 
-static int mt7925_mcu_apply_regd(struct mt792x_dev *dev, u8 *alpha2,
-				  enum environment_cap env)
+int mt7925_mcu_apply_regd(struct mt792x_dev *dev, u8 *alpha2,
+			  enum environment_cap env, bool power_type_change)
 {
 	struct ieee80211_hw *hw = mt76_hw(dev);
 	struct wiphy *wiphy = hw->wiphy;
 	int ret;
 
-	ret = mt7925_mcu_set_clc(dev, alpha2, env);
+	ret = mt7925_mcu_set_clc(dev, alpha2, env, power_type_change);
 	if (ret < 0)
 		return ret;
 
@@ -167,7 +167,7 @@ int mt7925_mcu_regd_update(struct mt792x_dev *dev, u8 *alpha2,
 
 	mt792x_mutex_acquire(dev);
 	if (dev->regd_change)
-		ret = mt7925_mcu_apply_regd(dev, alpha2, country_ie_env);
+		ret = mt7925_mcu_apply_regd(dev, alpha2, country_ie_env, false);
 	mt792x_mutex_release(dev);
 	dev->regd_change = false;
 	dev->regd_in_progress = false;
@@ -453,7 +453,7 @@ int mt7925_regd_change(struct mt792x_phy *phy, char *alpha2)
 	} else if (phy->chip_cap & MT792x_CHIP_CAP_11D_EN) {
 		return regulatory_hint(wiphy, alpha2);
 	} else {
-		return mt7925_mcu_set_clc(dev, alpha2, ENVIRON_INDOOR);
+		return mt7925_mcu_set_clc(dev, alpha2, ENVIRON_INDOOR, false);
 	}
 }
 EXPORT_SYMBOL_GPL(mt7925_regd_change);
