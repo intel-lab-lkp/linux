@@ -10,7 +10,9 @@
 #include "xe_force_wake.h"
 #include "xe_gt_stats.h"
 #include "xe_gt_types.h"
+#include "xe_guc.h"
 #include "xe_guc_ct.h"
+#include "xe_guc_pc.h"
 #include "xe_guc_tlb_inval.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
@@ -29,6 +31,15 @@
  */
 
 #define FENCE_STACK_BIT		DMA_FENCE_FLAG_USER_BITS
+
+/*
+ * Delay before poking the GuC about a pending invalidation that has not been
+ * acked yet. Acks normally arrive in microseconds; when the GuC stalls they
+ * only show up seconds later, after the timeout has already fired.
+ */
+#define XE_TLB_INVAL_KICK_DELAY_MS	250
+
+static void xe_tlb_inval_kick(struct work_struct *work);
 
 /* The frontend is only ever embedded in a GT */
 static struct xe_gt *tlb_inval_to_gt(struct xe_tlb_inval *tlb_inval)
@@ -54,8 +65,10 @@ xe_tlb_inval_fence_signal(struct xe_tlb_inval_fence *fence)
 	lockdep_assert_held(&fence->tlb_inval->pending_lock);
 
 	list_del(&fence->link);
-	if (list_empty(&tlb_inval->pending_fences))
+	if (list_empty(&tlb_inval->pending_fences)) {
 		cancel_delayed_work(&tlb_inval->fence_tdr);
+		cancel_delayed_work(&tlb_inval->kick_work);
+	}
 	trace_xe_tlb_inval_fence_signal(fence->tlb_inval->xe, fence);
 	xe_tlb_inval_fence_fini(fence);
 	dma_fence_signal(&fence->base);
@@ -168,6 +181,7 @@ int xe_gt_tlb_inval_init_early(struct xe_gt *gt)
 	spin_lock_init(&tlb_inval->pending_lock);
 	spin_lock_init(&tlb_inval->lock);
 	INIT_DELAYED_WORK(&tlb_inval->fence_tdr, xe_tlb_inval_fence_timeout);
+	INIT_DELAYED_WORK(&tlb_inval->kick_work, xe_tlb_inval_kick);
 
 	err = drmm_mutex_init(&xe->drm, &tlb_inval->seqno_lock);
 	if (err)
@@ -218,6 +232,7 @@ void xe_tlb_inval_reset(struct xe_tlb_inval *tlb_inval)
 	mutex_lock(&tlb_inval->seqno_lock);
 	spin_lock_irq(&tlb_inval->pending_lock);
 	cancel_delayed_work(&tlb_inval->fence_tdr);
+	cancel_delayed_work(&tlb_inval->kick_work);
 	/*
 	 * We might have various kworkers waiting for TLB flushes to complete
 	 * which are not tracked with an explicit TLB fence, however at this
@@ -231,6 +246,8 @@ void xe_tlb_inval_reset(struct xe_tlb_inval *tlb_inval)
 		pending_seqno = tlb_inval->seqno - 1;
 	WRITE_ONCE(tlb_inval->seqno_recv, pending_seqno);
 	tlb_inval->timedout_seqno = 0;
+	tlb_inval->kicked_seqno = 0;
+	tlb_inval->kicked_count = 0;
 
 	list_for_each_entry_safe(fence, next,
 				 &tlb_inval->pending_fences, link)
@@ -268,6 +285,55 @@ static bool xe_tlb_inval_seqno_past(struct xe_tlb_inval *tlb_inval, int seqno)
 	return seqno_recv >= seqno;
 }
 
+static void xe_tlb_inval_kick(struct work_struct *work)
+{
+	struct xe_tlb_inval *tlb_inval = container_of(work, struct xe_tlb_inval,
+						      kick_work.work);
+	struct xe_gt *gt = tlb_inval_to_gt(tlb_inval);
+	struct xe_tlb_inval_fence *fence;
+	ktime_t inval_time = 0;
+	int seqno = 0;
+
+	spin_lock_irq(&tlb_inval->pending_lock);
+	fence = list_first_entry_or_null(&tlb_inval->pending_fences,
+					 struct xe_tlb_inval_fence, link);
+	if (fence) {
+		seqno = fence->seqno;
+		inval_time = fence->inval_time;
+	}
+	spin_unlock_irq(&tlb_inval->pending_lock);
+
+	if (!seqno)
+		return;
+
+	/*
+	 * Poke the GuC: read its status register, flush the CT fast-path and
+	 * ring the doorbell. On ARL with GuC 70.53.0 the ack for a pending
+	 * invalidation sometimes only arrives seconds after the request even
+	 * though the H2G was consumed immediately; a doorbell ring while the
+	 * ack is overdue usually unsticks it within ~250ms (see Link in the
+	 * commit message). Keep kicking every interval until the ack shows
+	 * up; the TDR bounds how long this can go on.
+	 */
+	if (gt->gtidle.idle_residency)
+		xe_guc_pc_c_status(&gt->uc.guc.pc);
+	tlb_inval->ops->flush(tlb_inval);
+	xe_guc_notify(&gt->uc.guc);
+
+	spin_lock_irq(&tlb_inval->pending_lock);
+	if (!xe_tlb_inval_seqno_past(tlb_inval, seqno)) {
+		if (tlb_inval->kicked_seqno != seqno)
+			tlb_inval->kicked_count = 0;
+		tlb_inval->kicked_seqno = seqno;
+		tlb_inval->kicked_inval_time = inval_time;
+		tlb_inval->kicked_time = ktime_get();
+		tlb_inval->kicked_count++;
+		queue_delayed_work(tlb_inval->timeout_wq, &tlb_inval->kick_work,
+				   msecs_to_jiffies(XE_TLB_INVAL_KICK_DELAY_MS));
+	}
+	spin_unlock_irq(&tlb_inval->pending_lock);
+}
+
 static void xe_tlb_inval_fence_prep(struct xe_tlb_inval_fence *fence)
 {
 	struct xe_tlb_inval *tlb_inval = fence->tlb_inval;
@@ -279,9 +345,12 @@ static void xe_tlb_inval_fence_prep(struct xe_tlb_inval_fence *fence)
 	fence->inval_time = ktime_get();
 	list_add_tail(&fence->link, &tlb_inval->pending_fences);
 
-	if (list_is_singular(&tlb_inval->pending_fences))
+	if (list_is_singular(&tlb_inval->pending_fences)) {
 		queue_delayed_work(tlb_inval->timeout_wq, &tlb_inval->fence_tdr,
 				   tlb_inval->ops->timeout_delay(tlb_inval));
+		queue_delayed_work(tlb_inval->timeout_wq, &tlb_inval->kick_work,
+				   msecs_to_jiffies(XE_TLB_INVAL_KICK_DELAY_MS));
+	}
 	spin_unlock_irq(&tlb_inval->pending_lock);
 
 	tlb_inval->seqno = (tlb_inval->seqno + 1) %
@@ -440,6 +509,20 @@ void xe_tlb_inval_done_handler(struct xe_tlb_inval *tlb_inval, int seqno)
 		tlb_inval->timedout_seqno = 0;
 	}
 
+	if (tlb_inval->kicked_seqno &&
+	    xe_tlb_inval_seqno_past(tlb_inval, tlb_inval->kicked_seqno)) {
+		ktime_t now = ktime_get();
+
+		drm_warn(&xe->drm,
+			 "TLB invalidation ack after kick: seqno=%d recv=%d, request-to-ack=%lldms, last-kick-to-ack=%lldms, kicks=%d",
+			 tlb_inval->kicked_seqno, seqno,
+			 ktime_ms_delta(now, tlb_inval->kicked_inval_time),
+			 ktime_ms_delta(now, tlb_inval->kicked_time),
+			 tlb_inval->kicked_count);
+		tlb_inval->kicked_seqno = 0;
+		tlb_inval->kicked_count = 0;
+	}
+
 	list_for_each_entry_safe(fence, next,
 				 &tlb_inval->pending_fences, link) {
 		trace_xe_tlb_inval_fence_recv(xe, fence);
@@ -450,12 +533,16 @@ void xe_tlb_inval_done_handler(struct xe_tlb_inval *tlb_inval, int seqno)
 		xe_tlb_inval_fence_signal(fence);
 	}
 
-	if (!list_empty(&tlb_inval->pending_fences))
+	if (!list_empty(&tlb_inval->pending_fences)) {
 		mod_delayed_work(tlb_inval->timeout_wq,
 				 &tlb_inval->fence_tdr,
 				 tlb_inval->ops->timeout_delay(tlb_inval));
-	else
+		mod_delayed_work(tlb_inval->timeout_wq, &tlb_inval->kick_work,
+				 msecs_to_jiffies(XE_TLB_INVAL_KICK_DELAY_MS));
+	} else {
 		cancel_delayed_work(&tlb_inval->fence_tdr);
+		cancel_delayed_work(&tlb_inval->kick_work);
+	}
 
 	spin_unlock_irqrestore(&tlb_inval->pending_lock, flags);
 }

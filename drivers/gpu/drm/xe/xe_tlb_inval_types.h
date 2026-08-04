@@ -124,6 +124,31 @@ struct xe_tlb_inval {
 	 * the timeout interval is over.
 	 */
 	struct delayed_work fence_tdr;
+	/**
+	 * @kick_work: pokes the GuC while an invalidation ack is overdue,
+	 * bounding ack stalls on GuC firmware that misses CT notifications.
+	 */
+	struct delayed_work kick_work;
+	/**
+	 * @kicked_seqno: seqno the last kick was issued for, 0 if none.
+	 * Protected by @pending_lock.
+	 */
+	int kicked_seqno;
+	/**
+	 * @kicked_inval_time: request time of @kicked_seqno. Protected by
+	 * @pending_lock.
+	 */
+	ktime_t kicked_inval_time;
+	/**
+	 * @kicked_time: time the last kick for @kicked_seqno ran. Protected
+	 * by @pending_lock.
+	 */
+	ktime_t kicked_time;
+	/**
+	 * @kicked_count: number of kicks issued for @kicked_seqno. Protected
+	 * by @pending_lock.
+	 */
+	int kicked_count;
 	/** @job_wq: schedules TLB invalidation jobs */
 	struct workqueue_struct *job_wq;
 	/** @tlb_inval.lock: protects TLB invalidation fences */
