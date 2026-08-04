@@ -13727,7 +13727,7 @@ static int get_amd_vsdb(struct amdgpu_dm_connector *aconnector,
 void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 				    const struct drm_edid *drm_edid, bool do_mccs)
 {
-	int i = 0;
+	bool has_vsdb = 0;
 	struct amdgpu_dm_connector *amdgpu_dm_connector =
 			to_amdgpu_dm_connector(connector);
 	struct dm_connector_state *dm_con_state = NULL;
@@ -13771,63 +13771,57 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 	     connector->display_info.monitor_range.max_vfreq == 0))
 		parse_edid_displayid_vrr(connector, edid);
 
-	if (edid && (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT ||
-		     sink->sink_signal == SIGNAL_TYPE_EDP)) {
-		if (amdgpu_dm_connector->dc_link &&
-		    amdgpu_dm_connector->dc_link->dpcd_caps.allow_invalid_MSA_timing_param) {
-			amdgpu_dm_connector->min_vfreq = connector->display_info.monitor_range.min_vfreq;
-			amdgpu_dm_connector->max_vfreq = connector->display_info.monitor_range.max_vfreq;
-			if (amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
-				freesync_capable = true;
-		}
+	has_vsdb = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info) != 0;
 
-		get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
+	if (has_vsdb) {
+		amdgpu_dm_connector->vsdb_info = vsdb_info;
+
+		/* copy refresh rate info as long as VSDB advertises FreeSync */
+		if (vsdb_info.freesync_supported) {
+			amdgpu_dm_connector->min_vfreq = vsdb_info.min_refresh_rate_hz;
+			amdgpu_dm_connector->max_vfreq = vsdb_info.max_refresh_rate_hz;
+
+			connector->display_info.monitor_range.min_vfreq =
+				vsdb_info.min_refresh_rate_hz;
+			connector->display_info.monitor_range.max_vfreq =
+				vsdb_info.max_refresh_rate_hz;
+		}
+	} else {
+		/* fall back to the base EDID range when there is no VSDB */
+		amdgpu_dm_connector->min_vfreq = connector->display_info.monitor_range.min_vfreq;
+		amdgpu_dm_connector->max_vfreq = connector->display_info.monitor_range.max_vfreq;
+	}
+
+	if (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT ||
+	    sink->sink_signal == SIGNAL_TYPE_EDP) {
+		if (amdgpu_dm_connector->dc_link &&
+		    amdgpu_dm_connector->dc_link->dpcd_caps.allow_invalid_MSA_timing_param &&
+		    amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
+			freesync_capable = true;
 
 		if (vsdb_info.replay_mode) {
-			amdgpu_dm_connector->vsdb_info.replay_mode = vsdb_info.replay_mode;
-			amdgpu_dm_connector->vsdb_info.amd_vsdb_version = vsdb_info.amd_vsdb_version;
 			amdgpu_dm_connector->as_type = ADAPTIVE_SYNC_TYPE_EDP;
 		}
+	} else if (has_vsdb && sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A) {
+		sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
 
-	} else if (drm_edid && sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A) {
-		i = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
-		if (i) {
-			amdgpu_dm_connector->vsdb_info = vsdb_info;
-			sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
-
-			if (vsdb_info.freesync_supported) {
-				amdgpu_dm_connector->min_vfreq = vsdb_info.min_refresh_rate_hz;
-				amdgpu_dm_connector->max_vfreq = vsdb_info.max_refresh_rate_hz;
-				if (amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
-					freesync_capable = true;
-
-				connector->display_info.monitor_range.min_vfreq = vsdb_info.min_refresh_rate_hz;
-				connector->display_info.monitor_range.max_vfreq = vsdb_info.max_refresh_rate_hz;
-			}
-		}
+		if (vsdb_info.freesync_supported &&
+		    amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
+			freesync_capable = true;
 	}
 
 	if (amdgpu_dm_connector->dc_link)
 		as_type = dm_get_adaptive_sync_support_type(amdgpu_dm_connector->dc_link);
 
-	if (as_type == FREESYNC_TYPE_PCON_IN_WHITELIST) {
-		i = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
-		if (i) {
-			amdgpu_dm_connector->vsdb_info = vsdb_info;
-			sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
+	if (has_vsdb && as_type == FREESYNC_TYPE_PCON_IN_WHITELIST) {
+		sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
 
-			if (vsdb_info.freesync_supported && vsdb_info.amd_vsdb_version > 0) {
-				amdgpu_dm_connector->pack_sdp_v1_3 = true;
-				amdgpu_dm_connector->as_type = as_type;
+		if (vsdb_info.freesync_supported && vsdb_info.amd_vsdb_version > 0) {
+			amdgpu_dm_connector->pack_sdp_v1_3 = true;
+			amdgpu_dm_connector->as_type = as_type;
 
-				amdgpu_dm_connector->min_vfreq = vsdb_info.min_refresh_rate_hz;
-				amdgpu_dm_connector->max_vfreq = vsdb_info.max_refresh_rate_hz;
-				if (amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
-					freesync_capable = true;
-
-				connector->display_info.monitor_range.min_vfreq = vsdb_info.min_refresh_rate_hz;
-				connector->display_info.monitor_range.max_vfreq = vsdb_info.max_refresh_rate_hz;
-			}
+			if (amdgpu_dm_connector->max_vfreq - amdgpu_dm_connector->min_vfreq > 10)
+				freesync_capable = true;
 		}
 	}
 
