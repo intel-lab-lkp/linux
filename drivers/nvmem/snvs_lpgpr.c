@@ -50,7 +50,7 @@ static const struct snvs_lpgpr_cfg snvs_lpgpr_cfg_imx7d = {
 	.size		= 16,
 };
 
-static int snvs_lpgpr_write(void *context, unsigned int offset, void *val,
+static int snvs_lpgpr_write(void *context, unsigned int offset, const void *val,
 			    size_t bytes)
 {
 	struct snvs_lpgpr_priv *priv = context;
@@ -127,7 +127,7 @@ static int snvs_lpgpr_probe(struct platform_device *pdev)
 	cfg->size = dcfg->size;
 	cfg->owner = THIS_MODULE;
 	cfg->reg_read  = snvs_lpgpr_read;
-	cfg->reg_write = snvs_lpgpr_write;
+	cfg->reg_write_const = snvs_lpgpr_write;
 
 	nvmem = devm_nvmem_register(dev, cfg);
 

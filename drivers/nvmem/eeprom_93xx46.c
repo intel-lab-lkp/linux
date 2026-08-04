@@ -268,10 +268,10 @@ eeprom_93xx46_write_word(struct eeprom_93xx46_dev *edev,
 }
 
 static int eeprom_93xx46_write(void *priv, unsigned int off,
-				   void *val, size_t count)
+			       const void *val, size_t count)
 {
 	struct eeprom_93xx46_dev *edev = priv;
-	char *buf = val;
+	const char *buf = val;
 	int ret, step = 1;
 	unsigned int i;
 
@@ -510,7 +510,7 @@ static int eeprom_93xx46_probe(struct spi_device *spi)
 	edev->nvmem_config.compat = true;
 	edev->nvmem_config.base_dev = &spi->dev;
 	edev->nvmem_config.reg_read = eeprom_93xx46_read;
-	edev->nvmem_config.reg_write = eeprom_93xx46_write;
+	edev->nvmem_config.reg_write_const = eeprom_93xx46_write;
 	edev->nvmem_config.priv = edev;
 	edev->nvmem_config.stride = 4;
 	edev->nvmem_config.word_size = 1;

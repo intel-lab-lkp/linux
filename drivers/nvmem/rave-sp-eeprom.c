@@ -278,10 +278,10 @@ static int rave_sp_eeprom_reg_read(void *eeprom, unsigned int offset,
 }
 
 static int rave_sp_eeprom_reg_write(void *eeprom, unsigned int offset,
-				    void *val, size_t bytes)
+				    const void *val, size_t bytes)
 {
 	return rave_sp_eeprom_access(eeprom, RAVE_SP_EEPROM_WRITE,
-				     offset, val, bytes);
+				     offset, (void *)val, bytes);
 }
 
 static int rave_sp_eeprom_probe(struct platform_device *pdev)
@@ -331,7 +331,7 @@ static int rave_sp_eeprom_probe(struct platform_device *pdev)
 	config.add_legacy_fixed_of_cells	= true;
 	config.size		= size;
 	config.reg_read		= rave_sp_eeprom_reg_read;
-	config.reg_write	= rave_sp_eeprom_reg_write;
+	config.reg_write_const	= rave_sp_eeprom_reg_write;
 	config.word_size	= 1;
 	config.stride		= 1;
 

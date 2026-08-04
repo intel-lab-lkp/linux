@@ -477,11 +477,11 @@ static int at24_read(void *priv, unsigned int off, void *val, size_t count)
 	return 0;
 }
 
-static int at24_write(void *priv, unsigned int off, void *val, size_t count)
+static int at24_write(void *priv, unsigned int off, const void *val, size_t count)
 {
 	struct at24_data *at24;
 	struct device *dev;
-	char *buf = val;
+	const char *buf = val;
 	int ret;
 
 	at24 = priv;
@@ -743,7 +743,7 @@ static int at24_probe(struct i2c_client *client)
 	nvmem_config.compat = true;
 	nvmem_config.base_dev = dev;
 	nvmem_config.reg_read = at24_read;
-	nvmem_config.reg_write = at24_write;
+	nvmem_config.reg_write_const = at24_write;
 	nvmem_config.priv = at24;
 	nvmem_config.stride = 1;
 	nvmem_config.word_size = 1;

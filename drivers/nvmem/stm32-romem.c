@@ -118,12 +118,12 @@ static int stm32_bsec_read(void *context, unsigned int offset, void *buf,
 	return 0;
 }
 
-static int stm32_bsec_write(void *context, unsigned int offset, void *buf,
+static int stm32_bsec_write(void *context, unsigned int offset, const void *buf,
 			    size_t bytes)
 {
 	struct stm32_romem_priv *priv = context;
 	struct device *dev = priv->cfg.dev;
-	u32 *buf32 = buf;
+	const u32 *buf32 = buf;
 	int ret, i;
 
 	/* Allow only writing complete 32-bits aligned words */
@@ -153,7 +153,7 @@ static int stm32_bsec_pta_read(void *context, unsigned int offset, void *buf,
 	return stm32_bsec_optee_ta_read(priv->ctx, offset, buf, bytes);
 }
 
-static int stm32_bsec_pta_write(void *context, unsigned int offset, void *buf,
+static int stm32_bsec_pta_write(void *context, unsigned int offset, const void *buf,
 				size_t bytes)
 {
 	struct stm32_romem_priv *priv = context;
@@ -239,10 +239,10 @@ static int stm32_romem_probe(struct platform_device *pdev)
 				return rc;
 			}
 			priv->cfg.reg_read = stm32_bsec_pta_read;
-			priv->cfg.reg_write = stm32_bsec_pta_write;
+			priv->cfg.reg_write_const = stm32_bsec_pta_write;
 		} else {
 			priv->cfg.reg_read = stm32_bsec_read;
-			priv->cfg.reg_write = stm32_bsec_write;
+			priv->cfg.reg_write_const = stm32_bsec_write;
 		}
 	}
 

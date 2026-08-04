@@ -203,7 +203,7 @@ out_tee_session:
 
 /* stm32_bsec_optee_ta_write() - nvmem write access using PTA client driver */
 int stm32_bsec_optee_ta_write(struct tee_context *ctx, unsigned int lower,
-			      unsigned int offset, void *buf, size_t bytes)
+			      unsigned int offset, const void *buf, size_t bytes)
 {	struct tee_shm *shm;
 	struct tee_ioctl_invoke_arg arg;
 	struct tee_param param[2];

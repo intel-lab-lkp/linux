@@ -178,11 +178,11 @@ static int imx_scu_ocotp_read(void *context, unsigned int offset,
 }
 
 static int imx_scu_ocotp_write(void *context, unsigned int offset,
-			       void *val, size_t bytes)
+			       const void *val, size_t bytes)
 {
 	struct ocotp_priv *priv = context;
 	struct arm_smccc_res res;
-	u32 *buf = val;
+	const u32 *buf = val;
 	u32 tmp;
 	u32 index;
 	int ret;
@@ -226,7 +226,7 @@ static struct nvmem_config imx_scu_ocotp_nvmem_config = {
 	.stride = 1,
 	.owner = THIS_MODULE,
 	.reg_read = imx_scu_ocotp_read,
-	.reg_write = imx_scu_ocotp_write,
+	.reg_write_const = imx_scu_ocotp_write,
 };
 
 static const struct of_device_id imx_scu_ocotp_dt_ids[] = {
