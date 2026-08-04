@@ -301,15 +301,6 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_MCH_PC1,	pcie_r
  *
  * https://cdrdv2.intel.com/v1/dl/getContent/837176
  */
-static int limit_mrrs_to_128(struct pci_host_bridge *b, struct pci_dev *pdev)
-{
-	int readrq = pcie_get_readrq(pdev);
-
-	if (readrq > 128)
-		pcie_set_readrq(pdev, 128);
-
-	return 0;
-}
 
 static void pci_xeon_x2_bifurc_quirk(struct pci_dev *pdev)
 {
@@ -320,9 +311,8 @@ static void pci_xeon_x2_bifurc_quirk(struct pci_dev *pdev)
 	if (FIELD_GET(PCI_EXP_LNKCAP_MLW, linkcap) != 0x2)
 		return;
 
-	bridge->no_ext_tags = 1;
-	bridge->enable_device = limit_mrrs_to_128;
-	pci_info(pdev, "Disabling Extended Tags and limiting MRRS to 128B (performance reasons due to x2 PCIe link)\n");
+	bridge->no_inc_mrrs = 1;
+	pci_info(pdev, "Blocking devices on this bridge from increasing MRRS for performance reasons due to x2 PCIe link)\n");
 }
 
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db0, pci_xeon_x2_bifurc_quirk);
@@ -333,6 +323,50 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db6, pci_xeon_x2_bifurc_quirk);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db7, pci_xeon_x2_bifurc_quirk);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db8, pci_xeon_x2_bifurc_quirk);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x0db9, pci_xeon_x2_bifurc_quirk);
+
+/* Helper to check if a device descends from an affected Xeon 6 x2 Root Port */
+static bool is_descendant_of_xeon6_x2_rp(struct pci_dev *pdev)
+{
+	u32 linkcap;
+	struct pci_dev *upstream = pci_upstream_bridge(pdev);
+
+	while (upstream) {
+		if (upstream->vendor == PCI_VENDOR_ID_INTEL &&
+		    upstream->device >= 0x0db0 &&
+		    upstream->device <= 0x0db9) {
+			pcie_capability_read_dword(upstream, PCI_EXP_LNKCAP, &linkcap);
+			if (FIELD_GET(PCI_EXP_LNKCAP_MLW, linkcap) != 0x2)
+				return false;
+			else
+				return true;
+		}
+		upstream = pci_upstream_bridge(upstream);
+	}
+	return false;
+}
+
+static void pci_xeon6_x2_local_endpoint_fixup(struct pci_dev *pdev)
+{
+	/* Skip bridges/switches; only target actual endpoints */
+	if (pci_is_bridge(pdev))
+		return;
+
+	/* Only apply to devices under the x2 branch; leaves x4 branches completely untouched */
+	if (!is_descendant_of_xeon6_x2_rp(pdev))
+		return;
+
+	pci_info(pdev, "Applying local Xeon 6 x2 quirk: Disabling Extended Tags and locking MRRS to 128B\n");
+
+	pcie_capability_clear_word(pdev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_EXT_TAG);
+	pcie_capability_clear_word(pdev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_READRQ);
+}
+
+/*
+ * HEADER fixups run for EVERY endpoint during its initial discovery phase.
+ * This natively catches boot devices, hotplugged devices, and SR-IOV VFs.
+ */
+DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, pci_xeon6_x2_local_endpoint_fixup);
+
 
 /*
  * Fixup to mark boot BIOS video selected by BIOS before it changes
