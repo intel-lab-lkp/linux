@@ -213,6 +213,8 @@ int cxl_gpf_port_setup(struct cxl_dport *dport);
 struct cxl_hdm;
 int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 			struct cxl_endpoint_dvsec_info *info);
+void cxl_setup_hw_decoder(struct cxl_decoder *cxld, void __iomem *hdm);
+int cxld_await_commit(void __iomem *hdm, int id);
 int cxl_port_get_possible_dports(struct cxl_port *port);
 
 #ifdef CONFIG_CXL_FEATURES
