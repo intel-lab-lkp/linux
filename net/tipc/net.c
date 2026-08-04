@@ -138,7 +138,12 @@ static void tipc_net_finalize(struct net *net, u32 addr)
 	tipc_named_reinit(net);
 	tipc_sk_reinit(net);
 	tipc_mon_reinit_self(net);
-	tipc_nametbl_publish(net, &ua, &sk, addr);
+	tipc_nametbl_publish(net, &ua, &sk, addr, NULL);
+	atomic_set(&tn->finalized, 1);
+	/* Wake up nodes waiting for distributing bulk of publications
+	 * if applicable.
+	 */
+	tipc_node_wakeup(net);
 }
 
 void tipc_net_finalize_work(struct work_struct *work)

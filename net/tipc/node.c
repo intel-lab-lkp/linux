@@ -111,6 +111,9 @@ struct tipc_bclink_entry {
  * @peer_net: peer's net namespace
  * @peer_hash_mix: hash for this peer (FIXME)
  * @crypto_rx: RX crypto handler
+ * @work: work item for bulk distribution of cluster scope publications
+ * @work_scheduled: flag to indicate the work has been scheduled
+ * @finalized: flag to wake up scheduled work
  */
 struct tipc_node {
 	u32 addr;
@@ -145,6 +148,9 @@ struct tipc_node {
 #ifdef CONFIG_TIPC_CRYPTO
 	struct tipc_crypto *crypto_rx;
 #endif
+	struct work_struct work;
+	atomic_t work_scheduled;
+	atomic_t finalized;
 };
 
 /* Node FSM states and events:
@@ -393,6 +399,59 @@ static void tipc_node_write_unlock_fast(struct tipc_node *n)
 	write_unlock_bh(&n->lock);
 }
 
+static void tipc_node_down(struct tipc_node *n)
+{
+	int bearer_id;
+
+	for (bearer_id = 0; bearer_id < MAX_BEARERS; bearer_id++)
+		tipc_node_link_down(n, bearer_id, false);
+}
+
+static void tipc_node_dist_bulk(struct work_struct *work)
+{
+	struct tipc_node *node = container_of(work, struct tipc_node, work);
+	struct tipc_net *tn = tipc_net(node->net);
+
+	wait_var_event(&node->finalized, atomic_read(&node->finalized));
+
+	/* node is down */
+	if (!atomic_read(&node->work_scheduled))
+		goto exit;
+
+	/* Stop waking up work in tipc_node_timeout() */
+	atomic_set(&node->work_scheduled, 0);
+
+	if (tipc_named_dist_cluster_scope(node->net, node->addr) == -ENOBUFS)
+		tipc_node_down(node);
+
+exit:
+	if (atomic_dec_and_test(&tn->node_wq_count))
+		wake_up_var(&tn->node_wq_count);
+
+	tipc_node_put(node);
+}
+
+static void tipc_node_cancel_work(struct tipc_node *node)
+{
+	if (atomic_read(&node->work_scheduled)) {
+		struct tipc_net *tn = tipc_net(node->net);
+
+		/* Wake up scheduled work if it is waiting. */
+		if (!atomic_read(&node->finalized)) {
+			atomic_set(&node->work_scheduled, 0);
+			atomic_set(&node->finalized, 1);
+			wake_up_var(&node->finalized);
+		}
+
+		/* Work is pending */
+		if (cancel_work(&node->work)) {
+			if (atomic_dec_and_test(&tn->node_wq_count))
+				wake_up_var(&tn->node_wq_count);
+			tipc_node_put(node);
+		}
+	}
+}
+
 static void tipc_node_write_unlock(struct tipc_node *n)
 	__releases(n->lock)
 {
@@ -402,6 +461,7 @@ static void tipc_node_write_unlock(struct tipc_node *n)
 	struct list_head *publ_list;
 	struct tipc_uaddr ua;
 	u32 bearer_id, node;
+	int rc = 0, err = 0;
 
 	if (likely(!flags)) {
 		write_unlock_bh(&n->lock);
@@ -421,20 +481,44 @@ static void tipc_node_write_unlock(struct tipc_node *n)
 
 	write_unlock_bh(&n->lock);
 
-	if (flags & TIPC_NOTIFY_NODE_DOWN)
+	if (flags & TIPC_NOTIFY_NODE_DOWN) {
 		tipc_publ_notify(net, publ_list, node, n->capabilities);
+		tipc_node_cancel_work(n);
+	}
 
-	if (flags & TIPC_NOTIFY_NODE_UP)
-		tipc_named_node_up(net, node, n->capabilities);
+	if (flags & TIPC_NOTIFY_NODE_UP) {
+		struct tipc_net *tn = tipc_net(net);
+
+		rc = tipc_named_node_up(net, node, n->capabilities);
+		/* Defer bulk distribution to workqueue */
+		if (rc > 0) {
+			atomic_set(&n->finalized, 0);
+			atomic_inc(&tn->node_wq_count);
+			atomic_set(&n->work_scheduled, 1);
+			tipc_node_get(n);
+			if (!schedule_work(&n->work)) {
+				atomic_dec(&tn->node_wq_count);
+				tipc_node_put(n);
+			}
+		}
+	}
 
 	if (flags & TIPC_NOTIFY_LINK_UP) {
 		tipc_mon_peer_up(net, node, bearer_id);
-		tipc_nametbl_publish(net, &ua, &sk, sk.ref);
+		tipc_nametbl_publish(net, &ua, &sk, sk.ref, &err);
 	}
 	if (flags & TIPC_NOTIFY_LINK_DOWN) {
 		tipc_mon_peer_down(net, node, bearer_id);
 		tipc_nametbl_withdraw(net, &ua, &sk, sk.ref);
 	}
+
+	/* Memory allocation has failed. Bring the node down to start over bulk
+	 * distribution when the first link is up again.
+	 */
+	if (rc < 0)
+		tipc_node_down(n);
+	else if (err == -ENOBUFS)
+		tipc_node_link_down(n, bearer_id, false);
 }
 
 static void tipc_node_assign_peer_net(struct tipc_node *n, u32 hash_mixes)
@@ -564,6 +648,9 @@ update:
 	INIT_LIST_HEAD(&n->list);
 	INIT_LIST_HEAD(&n->publ_list);
 	INIT_LIST_HEAD(&n->conn_sks);
+	INIT_WORK(&n->work, tipc_node_dist_bulk);
+	atomic_set(&n->work_scheduled, 0);
+	atomic_set(&n->finalized, 0);
 	skb_queue_head_init(&n->bc_entry.namedq);
 	skb_queue_head_init(&n->bc_entry.inputq1);
 	__skb_queue_head_init(&n->bc_entry.arrvq);
@@ -651,6 +738,21 @@ void tipc_node_stop(struct net *net)
 	list_for_each_entry_safe(node, t_node, &tn->node_list, list)
 		tipc_node_delete(node);
 	spin_unlock_bh(&tn->node_list_lock);
+}
+
+void tipc_node_wakeup(struct net *net)
+{
+	struct tipc_net *tn = tipc_net(net);
+	struct tipc_node *node;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(node, &tn->node_list, list) {
+		if (atomic_read(&node->work_scheduled)) {
+			atomic_set(&node->finalized, 1);
+			wake_up_var(&node->finalized);
+		}
+	}
+	rcu_read_unlock();
 }
 
 void tipc_node_subscribe(struct net *net, struct list_head *subscr, u32 addr)
@@ -801,6 +903,7 @@ static bool tipc_node_cleanup(struct tipc_node *peer)
 static void tipc_node_timeout(struct timer_list *t)
 {
 	struct tipc_node *n = timer_container_of(n, t, timer);
+	struct tipc_net *tn = tipc_net(n->net);
 	struct tipc_link_entry *le;
 	struct sk_buff_head xmitq;
 	int remains = n->link_cnt;
@@ -812,6 +915,11 @@ static void tipc_node_timeout(struct timer_list *t)
 		/*Removing the reference of Timer*/
 		tipc_node_put(n);
 		return;
+	}
+
+	if (atomic_read(&tn->finalized) && atomic_read(&n->work_scheduled)) {
+		atomic_set(&n->finalized, 1);
+		wake_up_var(&n->finalized);
 	}
 
 #ifdef CONFIG_TIPC_CRYPTO

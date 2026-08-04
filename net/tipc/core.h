@@ -145,6 +145,10 @@ struct tipc_net {
 	struct work_struct work;
 	/* The numbers of work queues in schedule */
 	atomic_t wq_count;
+	/* The numbers of works of created nodes in schedule */
+	atomic_t node_wq_count;
+	/* flag to wake up scheduled works of created nodes */
+	atomic_t finalized;
 };
 
 static inline struct tipc_net *tipc_net(struct net *net)
