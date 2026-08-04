@@ -220,7 +220,8 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 		if (lun->lun_tpg->tpg_rtpi != rtpi)
 			continue;
 
-		kref_get(&deve->pr_kref);
+		if (!kref_get_unless_zero(&deve->pr_kref))
+			continue;
 		rcu_read_unlock();
 
 		return deve;
