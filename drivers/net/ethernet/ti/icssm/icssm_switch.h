@@ -331,6 +331,12 @@
 #define P0_COL_BUFFER_OFFSET	0xEE00
 #define P0_Q1_BUFFER_OFFSET	0x0000
 
+/* Enable/disable interrupts for high/low priority instead of per port.
+ * 0 = disabled (default), 1 = enabled
+ */
+#define SWITCH_PRIORITY_INTRS_STATUS_OFFSET	0x1FAA
+#define SWITCH_TIMESTAMP_PKTS_STATUS_OFFSET	0x1FAB
+
 #define V2_1_FDB_TBL_LOC          PRUETH_MEM_SHARED_RAM
 #define V2_1_FDB_TBL_OFFSET       0x2000
 
