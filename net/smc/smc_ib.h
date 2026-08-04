@@ -51,6 +51,8 @@ struct smc_ib_device {				/* ib-device infos for smc */
 	struct work_struct	port_event_work;
 	unsigned long		port_event_mask;
 	DECLARE_BITMAP(ports_going_away, SMC_MAX_PORTS);
+	atomic_t		init_cnt;	/* number of device selections */
+	wait_queue_head_t	init_wait;	/* wait for selections to end */
 	atomic_t		lnk_cnt;	/* number of links on ibdev */
 	wait_queue_head_t	lnks_deleted;	/* wait 4 removal of all links*/
 	struct mutex		mutex;		/* protect dev setup+cleanup */
@@ -58,6 +60,17 @@ struct smc_ib_device {				/* ib-device infos for smc */
 						/* number of links per port */
 	int			ndev_ifidx[SMC_MAX_PORTS]; /* ndev if indexes */
 };
+
+static inline void smc_ibdev_init_get(struct smc_ib_device *smcibdev)
+{
+	atomic_inc(&smcibdev->init_cnt);
+}
+
+static inline void smc_ibdev_init_put(struct smc_ib_device *smcibdev)
+{
+	if (atomic_dec_and_test(&smcibdev->init_cnt))
+		wake_up(&smcibdev->init_wait);
+}
 
 static inline __be32 smc_ib_gid_to_ipv4(u8 gid[SMC_GID_SIZE])
 {

@@ -55,6 +55,17 @@ static void __smc_lgr_terminate(struct smc_link_group *lgr, bool soft);
 
 static void smc_link_down_work(struct work_struct *work);
 
+void smc_init_info_free(struct smc_init_info *ini)
+{
+	if (!ini)
+		return;
+	if (ini->ib_dev_ref)
+		smc_ibdev_init_put(ini->ib_dev);
+	if (ini->smcrv2.ib_dev_v2_ref)
+		smc_ibdev_init_put(ini->smcrv2.ib_dev_v2);
+	kfree(ini);
+}
+
 /* return head of link group list and its lock for a given link group */
 static inline struct list_head *smc_lgr_list_head(struct smc_link_group *lgr,
 						  spinlock_t **lgr_lock)

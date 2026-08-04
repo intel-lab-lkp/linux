@@ -1118,7 +1118,7 @@ out_clear_lnk:
 out_reject:
 	smc_llc_cli_add_link_reject(qentry);
 out:
-	kfree(ini);
+	smc_init_info_free(ini);
 	kfree(qentry);
 	return rc;
 }
@@ -1192,7 +1192,7 @@ static void smc_llc_cli_add_link_invite(struct smc_link *link,
 	smc_llc_send_add_link(link, ini->ib_dev->mac[ini->ib_port - 1],
 			      ini->ib_gid, NULL, SMC_LLC_REQ);
 out:
-	kfree(ini);
+	smc_init_info_free(ini);
 	kfree(qentry);
 }
 
@@ -1512,7 +1512,7 @@ int smc_llc_srv_add_link(struct smc_link *link,
 	rc = smc_llc_srv_conf_link(link, link_new, lgr_new_t);
 	if (rc)
 		goto out_err;
-	kfree(ini);
+	smc_init_info_free(ini);
 	return 0;
 out_err:
 	if (link_new) {
@@ -1520,7 +1520,7 @@ out_err:
 		smcr_link_clear(link_new, false);
 	}
 out:
-	kfree(ini);
+	smc_init_info_free(ini);
 	if (send_req_add_link_resp)
 		smc_llc_send_req_add_link_response(req_qentry);
 	return rc;
