@@ -240,6 +240,11 @@ void fuse_dev_queue_forget(struct fuse_iqueue *fiq,
 void fuse_dev_queue_interrupt(struct fuse_iqueue *fiq, struct fuse_req *req)
 {
 	spin_lock(&fiq->lock);
+	/* fuse_chan_resend() may have put the request back on fiq->pending */
+	if (!test_bit(FR_SENT, &req->flags)) {
+		spin_unlock(&fiq->lock);
+		return;
+	}
 	if (list_empty(&req->intr_entry)) {
 		list_add_tail(&req->intr_entry, &fiq->interrupts);
 		/*
