@@ -235,17 +235,10 @@ static const struct iio_buffer_setup_ops max30102_buffer_setup_ops = {
 	.predisable = max30102_buffer_predisable,
 };
 
-static inline int max30102_fifo_count(struct max30102_data *data)
+static inline int max30102_fifo_count(unsigned int status)
 {
-	unsigned int val;
-	int ret;
-
-	ret = regmap_read(data->regmap, MAX30102_REG_INT_STATUS, &val);
-	if (ret)
-		return ret;
-
 	/* FIFO has one sample slot left */
-	if (val & MAX30102_REG_INT_STATUS_FIFO_RDY)
+	if (status & MAX30102_REG_INT_STATUS_FIFO_RDY)
 		return 1;
 
 	return 0;
@@ -290,19 +283,39 @@ static irqreturn_t max30102_interrupt_handler(int irq, void *private)
 {
 	struct iio_dev *indio_dev = private;
 	struct max30102_data *data = iio_priv(indio_dev);
-	unsigned int measurements = bitmap_weight(indio_dev->active_scan_mask,
-						  iio_get_masklength(indio_dev));
+	unsigned int measurements, status;
 	int ret, cnt = 0;
+
+	ret = regmap_read(data->regmap, MAX30102_REG_INT_STATUS, &status);
+	if (ret) {
+		dev_err_ratelimited(&data->client->dev,
+				    "Failed to read IRQ status: %d\n", ret);
+		return IRQ_HANDLED;
+	}
+	if (!(status & MAX30102_REG_INT_STATUS_FIFO_RDY))
+		return IRQ_HANDLED;
+
+	measurements = bitmap_weight(indio_dev->active_scan_mask,
+				     iio_get_masklength(indio_dev));
 
 	mutex_lock(&data->lock);
 
-	while (cnt || (cnt = max30102_fifo_count(data)) > 0) {
+	while (cnt || (cnt = max30102_fifo_count(status)) > 0) {
 		ret = max30102_read_measurement(data, measurements);
 		if (ret)
 			break;
 
 		iio_push_to_buffers(data->indio_dev, data->processed_buffer);
 		cnt--;
+
+		ret = regmap_read(data->regmap, MAX30102_REG_INT_STATUS,
+				  &status);
+		if (ret) {
+			dev_err_ratelimited(&data->client->dev,
+					    "Failed to read IRQ status: %d\n",
+					    ret);
+			break;
+		}
 	}
 
 	mutex_unlock(&data->lock);
