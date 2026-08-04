@@ -255,7 +255,7 @@ DEFINE_KVM_HOST_HCALL0(void, __pkvm_vcpu_put)
 }
 
 DEFINE_KVM_HOST_HCALL(int, __kvm_vcpu_run,
-	struct kvm_vcpu *, host_vcpu)
+	struct kvm_vcpu __kern *, host_vcpu)
 {
 	int ret;
 
@@ -280,7 +280,7 @@ DEFINE_KVM_HOST_HCALL(int, __kvm_vcpu_run,
 
 		sync_hyp_vcpu(hyp_vcpu);
 	} else {
-		struct kvm_vcpu *vcpu = kern_hyp_va(host_vcpu);
+		struct kvm_vcpu *vcpu = kern_hyp_va_host(host_vcpu);
 
 		/* The host is fully trusted, run its vCPU directly. */
 		fpsimd_lazy_switch_to_guest(vcpu);
@@ -407,9 +407,9 @@ DEFINE_KVM_HOST_HCALL(int, __pkvm_host_mkyoung_guest,
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_adjust_pc,
-	struct kvm_vcpu *, vcpu)
+	struct kvm_vcpu __kern *, vcpu)
 {
-	__kvm_adjust_pc(kern_hyp_va(vcpu));
+	__kvm_adjust_pc(kern_hyp_va_host(vcpu));
 }
 
 DEFINE_KVM_HOST_HCALL0(void, __kvm_flush_vm_context)
@@ -418,27 +418,27 @@ DEFINE_KVM_HOST_HCALL0(void, __kvm_flush_vm_context)
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_tlb_flush_vmid_ipa,
-	struct kvm_s2_mmu *, mmu, phys_addr_t, ipa, int, level)
+	struct kvm_s2_mmu __kern *, mmu, phys_addr_t, ipa, int, level)
 {
-	__kvm_tlb_flush_vmid_ipa(kern_hyp_va(mmu), ipa, level);
+	__kvm_tlb_flush_vmid_ipa(kern_hyp_va_host(mmu), ipa, level);
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_tlb_flush_vmid_ipa_nsh,
-	struct kvm_s2_mmu *, mmu, phys_addr_t, ipa, int, level)
+	struct kvm_s2_mmu __kern *, mmu, phys_addr_t, ipa, int, level)
 {
-	__kvm_tlb_flush_vmid_ipa_nsh(kern_hyp_va(mmu), ipa, level);
+	__kvm_tlb_flush_vmid_ipa_nsh(kern_hyp_va_host(mmu), ipa, level);
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_tlb_flush_vmid_range,
-	struct kvm_s2_mmu *, mmu, phys_addr_t, start, unsigned long, pages)
+	struct kvm_s2_mmu __kern *, mmu, phys_addr_t, start, unsigned long, pages)
 {
-	__kvm_tlb_flush_vmid_range(kern_hyp_va(mmu), start, pages);
+	__kvm_tlb_flush_vmid_range(kern_hyp_va_host(mmu), start, pages);
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_tlb_flush_vmid,
-	struct kvm_s2_mmu *, mmu)
+	struct kvm_s2_mmu __kern *, mmu)
 {
-	__kvm_tlb_flush_vmid(kern_hyp_va(mmu));
+	__kvm_tlb_flush_vmid(kern_hyp_va_host(mmu));
 }
 
 DEFINE_KVM_HOST_HCALL(void, __pkvm_tlb_flush_vmid,
@@ -454,9 +454,9 @@ DEFINE_KVM_HOST_HCALL(void, __pkvm_tlb_flush_vmid,
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_flush_cpu_context,
-	struct kvm_s2_mmu *, mmu)
+	struct kvm_s2_mmu __kern *, mmu)
 {
-	__kvm_flush_cpu_context(kern_hyp_va(mmu));
+	__kvm_flush_cpu_context(kern_hyp_va_host(mmu));
 }
 
 DEFINE_KVM_HOST_HCALL(void, __kvm_timer_set_cntvoff,
@@ -485,15 +485,15 @@ DEFINE_KVM_HOST_HCALL0(void, __vgic_v3_init_lrs)
 }
 
 DEFINE_KVM_HOST_HCALL(void, __vgic_v3_save_aprs,
-	struct vgic_v3_cpu_if *, cpu_if)
+	struct vgic_v3_cpu_if __kern *, cpu_if)
 {
-	__vgic_v3_save_aprs(kern_hyp_va(cpu_if));
+	__vgic_v3_save_aprs(kern_hyp_va_host(cpu_if));
 }
 
 DEFINE_KVM_HOST_HCALL(void, __vgic_v3_restore_vmcr_aprs,
-	struct vgic_v3_cpu_if *, cpu_if)
+	struct vgic_v3_cpu_if __kern *, cpu_if)
 {
-	__vgic_v3_restore_vmcr_aprs(kern_hyp_va(cpu_if));
+	__vgic_v3_restore_vmcr_aprs(kern_hyp_va_host(cpu_if));
 }
 
 DEFINE_KVM_HOST_HCALL(int, __pkvm_init,
@@ -565,16 +565,17 @@ DEFINE_KVM_HOST_HCALL(void, __pkvm_unreserve_vm,
 }
 
 DEFINE_KVM_HOST_HCALL(int, __pkvm_init_vm,
-	struct kvm *, host_kvm, void *, vm_hva, void *, pgd_hva)
+	struct kvm __kern *, host_kvm, void __kern *, vm_hva,
+	void __kern *, pgd_hva)
 {
-	return __pkvm_init_vm(kern_hyp_va(host_kvm), vm_hva, pgd_hva);
+	return __pkvm_init_vm(kern_hyp_va_host(host_kvm), vm_hva, pgd_hva);
 }
 
 DEFINE_KVM_HOST_HCALL(int, __pkvm_init_vcpu,
-	pkvm_handle_t, handle, struct kvm_vcpu *, host_vcpu,
-	void *, vcpu_hva)
+	pkvm_handle_t, handle, struct kvm_vcpu __kern *, host_vcpu,
+	void __kern *, vcpu_hva)
 {
-	return __pkvm_init_vcpu(handle, kern_hyp_va(host_vcpu), vcpu_hva);
+	return __pkvm_init_vcpu(handle, kern_hyp_va_host(host_vcpu), vcpu_hva);
 }
 
 DEFINE_KVM_HOST_HCALL0(int, __pkvm_vcpu_in_poison_fault)
@@ -609,7 +610,7 @@ DEFINE_KVM_HOST_HCALL(int, __pkvm_finalize_teardown_vm,
 }
 
 DEFINE_KVM_HOST_HCALL(int, __tracing_load,
-	void *, desc_hva, size_t, desc_size)
+	void __kern *, desc_hva, size_t, desc_size)
 {
 	return __tracing_load(desc_hva, desc_size);
 }
@@ -656,15 +657,15 @@ DEFINE_KVM_HOST_HCALL(void, __tracing_write_event,
 }
 
 DEFINE_KVM_HOST_HCALL(void, __vgic_v5_save_apr,
-	struct vgic_v5_cpu_if *, cpu_if)
+	struct vgic_v5_cpu_if __kern *, cpu_if)
 {
-	__vgic_v5_save_apr(kern_hyp_va(cpu_if));
+	__vgic_v5_save_apr(kern_hyp_va_host(cpu_if));
 }
 
 DEFINE_KVM_HOST_HCALL(void, __vgic_v5_restore_vmcr_apr,
-	struct vgic_v5_cpu_if *, cpu_if)
+	struct vgic_v5_cpu_if __kern *, cpu_if)
 {
-	__vgic_v5_restore_vmcr_apr(kern_hyp_va(cpu_if));
+	__vgic_v5_restore_vmcr_apr(kern_hyp_va_host(cpu_if));
 }
 
 typedef void (*hcall_t)(struct kvm_cpu_context *);
