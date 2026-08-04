@@ -267,7 +267,7 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 
 		/* Never error on prefaulted PTEs */
 		if (unlikely((ret & VM_FAULT_ERROR))) {
-			if (i == 0)
+			if (i > 0)
 				return VM_FAULT_NOPAGE;
 			else
 				break;
