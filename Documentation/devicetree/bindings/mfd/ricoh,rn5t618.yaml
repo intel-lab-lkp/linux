@@ -18,6 +18,7 @@ description: |
   The RC5T619 additionally includes USB charger detection and an RTC.
 
 allOf:
+  - $ref: /schemas/power/power-controller.yaml#
   - if:
       properties:
         compatible:
@@ -68,15 +69,10 @@ properties:
   interrupts:
     maxItems: 1
 
-  system-power-controller:
-    type: boolean
-    description: |
-      See Documentation/devicetree/bindings/power/power-controller.txt
-
   regulators:
     type: object
 
-additionalProperties: false
+unevaluatedProperties: false
 
 required:
   - compatible
