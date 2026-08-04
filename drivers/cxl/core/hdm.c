@@ -112,9 +112,16 @@ static int cxl_pci_setup_hdm_info(struct cxl_hdm *cxlhdm)
 	struct pci_dev *pdev __free(pci_dev_put) =
 		cxl_port_get_uport_pci_dev(cxlhdm->port);
 	bool present;
+	int rc;
 
 	if (!pdev)
 		return 0;
+
+	rc = cxl_pci_hdm_info_match(pdev, cxlhdm->decoder_count, &present);
+	if (rc || present)
+		return rc;
+
+	pci_cxl_hdm_init(pdev);
 
 	return cxl_pci_hdm_info_match(pdev, cxlhdm->decoder_count, &present);
 }
@@ -179,6 +186,10 @@ static void cxl_hdm_info_set_decoder(struct cxl_hdm *cxlhdm,
 	info = pdev->hdm;
 	if (!info || cxld->id >= info->decoder_count)
 		return;
+
+	if (cxlhdm->regs.hdm_decoder)
+		info->global_ctrl = readl(cxlhdm->regs.hdm_decoder +
+					  CXL_HDM_DECODER_CTRL_OFFSET);
 
 	if (cxld->flags & CXL_DECODER_F_ENABLE)
 		cxl_decoder_snapshot(cxld, &info->settings[cxld->id]);
@@ -1002,11 +1013,11 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 {
 	struct cxl_endpoint_decoder *cxled = NULL;
 	u64 size, base, skip, dpa_size, lo, hi;
+	struct cxl_decoder_settings settings;
 	bool committed;
 	u32 remainder;
 	int i, rc;
 	u32 ctrl, tl_low, tl_high;
-	struct cxl_decoder_settings settings;
 
 	if (should_emulate_decoders(info))
 		return cxl_setup_hdm_decoder_from_dvsec(port, cxld, dpa_base,
