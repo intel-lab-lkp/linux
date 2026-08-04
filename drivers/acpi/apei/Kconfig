@@ -80,8 +80,8 @@ config ACPI_APEI_GHES_NVIDIA
 	help
 	  Support for decoding NVIDIA-specific CPER sections delivered via
 	  the APEI GHES vendor record notifier chain. Registers a handler
-	  for the NVIDIA section GUID and logs error signatures, severity,
-	  socket, and diagnostic register address-value pairs.
+	  for the NVIDIA Grace and Vera section GUIDs and logs decoded
+	  metadata and per-context key/value entries (bounded).
 
 	  Enable on NVIDIA server platforms (e.g. DGX, HGX) that expose
 	  ACPI device NVDA2012 in their firmware tables.
