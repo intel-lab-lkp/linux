@@ -979,6 +979,9 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	if (dvsec < 0)
 		return dvsec;
 
+	if (pdev->multifunction)
+		return -ENOTTY;
+
 	if (probe)
 		return 0;
 
