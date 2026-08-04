@@ -100,9 +100,10 @@ struct htable {
 
 /* Book-keeping of the prefixes added to the set */
 struct net_prefix {
-	u8 cidr;			/* the cidr value */
-	u32 count;			/* number of elements of this cidr */
+	u32 cidr:8;
+	u32 count:24;
 };
+#define CIDR_MAX_COUNT ((1 << 24) - 1)
 
 struct net_prefixes {
 	struct rcu_head rcu;
@@ -143,8 +144,11 @@ htable_size(u8 hbits)
 #endif
 
 #define INIT_CIDR(n, host_mask) ({				\
-	const struct net_prefixes *__n = rcu_dereference(n);		\
-	DCIDR_PUT((__n)->len ? (__n)->nets[0].cidr : host_mask);\
+	const struct net_prefixes *__n = rcu_dereference(n);	\
+	struct net_prefix __p =					\
+		__n->len ? READ_ONCE(__n->nets[0])		\
+			 : (struct net_prefix){};		\
+	DCIDR_PUT(__p.count ? __p.cidr : host_mask);		\
 })
 
 #endif /* IP_SET_HASH_WITH_NETS */
@@ -338,7 +342,10 @@ mtype_add_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 		} else if (nets->nets[i].cidr < cidr) {
 			found = i;
 		} else if (nets->nets[i].cidr == cidr) {
-			nets->nets[i].count++;
+			if (nets->nets[i].count < CIDR_MAX_COUNT)
+				nets->nets[i].count++;
+			else
+				ret = -EOVERFLOW;
 			goto unlock;
 		}
 	}
@@ -374,39 +381,43 @@ unlock:
 static void
 mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 {
-	struct net_prefixes *nets, *tmp;
-	u8 i, j, len = 0;
+	struct net_prefixes *nets;
+	struct net_prefix np;
 	int found;
+	u8 i, j;
+
+	BUILD_BUG_ON(sizeof(struct net_prefix) != sizeof(u32));
 
 	spin_lock_bh(&set->lock);
 	nets = __ipset_dereference(h->rnets[n]);
 	for (i = 0, found = -1; i < nets->len; i++) {
-		if (nets->nets[i].count)
-			len++;
-		if (nets->nets[i].cidr == cidr)
+		np = READ_ONCE(nets->nets[i]);
+		if (np.count && np.cidr == cidr) {
+			np.count--;
 			found = i;
+			break;
+		}
 	}
 	if (unlikely(found == -1))
 		goto unlock;
 
-	nets->nets[found].count--;
-	if (nets->nets[found].count)
+	if (np.count) {
+		WRITE_ONCE(nets->nets[found], np);
 		goto unlock;
-	len--;
-	tmp = kzalloc_flex(*tmp, nets, len, GFP_ATOMIC);
-	if (!tmp)
-		/* Leave a hole */
-		goto unlock;
-
-	tmp->len = len;
-	for (i = 0, j = 0; i < nets->len; i++) {
-		if (!nets->nets[i].count || i == found)
-			continue;
-		tmp->nets[j].cidr = nets->nets[i].cidr;
-		tmp->nets[j++].count = nets->nets[i].count;
 	}
-	rcu_assign_pointer(h->rnets[n], tmp);
-	kfree_rcu(nets, rcu);
+
+	for (i = 0, j = 0; i < nets->len; i++) {
+		if (i == found)
+			continue;
+
+		np = READ_ONCE(nets->nets[i]);
+		if (i != j)
+			WRITE_ONCE(nets->nets[j], np);
+		j++;
+	}
+
+	while (j < nets->len)
+		WRITE_ONCE(nets->nets[j++], (struct net_prefix){});
 unlock:
 	spin_unlock_bh(&set->lock);
 }
@@ -1267,17 +1278,21 @@ mtype_test_cidrs(struct ip_set *set, struct mtype_elem *d,
 	nets1 = rcu_dereference_bh(h->rnets[1]);
 #endif
 	for (j = 0; j < nets0->len && !multi; j++) {
-		if (!nets0->nets[j].count)
+		struct net_prefix p0 = READ_ONCE(nets0->nets[j]);
+
+		if (!p0.count)
 			continue;
 #if IPSET_NET_COUNT == 2
 		mtype_data_reset_elem(d, &orig);
-		mtype_data_netmask(d, nets0->nets[j].cidr, false);
+		mtype_data_netmask(d, p0.cidr, false);
 		for (k = 0; k < nets1->len && !multi; k++) {
-			if (!nets1->nets[k].count)
+			struct net_prefix p1 = READ_ONCE(nets1->nets[k]);
+
+			if (!p1.count)
 				continue;
-			mtype_data_netmask(d, nets1->nets[k].cidr, true);
+			mtype_data_netmask(d, p1.cidr, true);
 #else
-		mtype_data_netmask(d, nets0->nets[j].cidr);
+		mtype_data_netmask(d, p0.cidr);
 #endif
 		key = HKEY(d, h->initval, t->htable_bits);
 		n = rcu_dereference_bh(hbucket(t, key));
