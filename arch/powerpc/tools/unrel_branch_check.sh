@@ -59,7 +59,7 @@ while IFS=: read -r from branch to sym; do
 		fi
 		printf -v to '0x%x' $(( "0x$from" + to ))
 		;;
-	*)	printf 'Unkown branch format\n'
+	*)	printf 'Unknown branch format\n'
 		;;
 	esac
 	if [ "$to" = "$sim" ]; then
