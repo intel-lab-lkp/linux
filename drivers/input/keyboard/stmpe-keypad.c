@@ -280,35 +280,44 @@ static int stmpe_keypad_chip_init(struct stmpe_keypad *keypad)
 
 	ret = stmpe_keypad_altfunc_init(keypad);
 	if (ret < 0)
-		return ret;
+		goto disable_keypad;
 
 	ret = stmpe_reg_write(stmpe, STMPE_KPC_COL, keypad->cols);
 	if (ret < 0)
-		return ret;
+		goto disable_keypad;
 
 	ret = stmpe_reg_write(stmpe, STMPE_KPC_ROW_LSB, keypad->rows);
 	if (ret < 0)
-		return ret;
+		goto disable_keypad;
 
 	if (variant->max_rows > 8) {
 		ret = stmpe_set_bits(stmpe, STMPE_KPC_ROW_MSB,
 				     STMPE_KPC_ROW_MSB_ROWS,
 				     keypad->rows >> 8);
 		if (ret < 0)
-			return ret;
+			goto disable_keypad;
 	}
 
 	ret = stmpe_set_bits(stmpe, STMPE_KPC_CTRL_MSB,
 			     STMPE_KPC_CTRL_MSB_SCAN_COUNT,
 			     keypad->scan_count << 4);
 	if (ret < 0)
-		return ret;
+		goto disable_keypad;
 
-	return stmpe_set_bits(stmpe, STMPE_KPC_CTRL_LSB,
-			      STMPE_KPC_CTRL_LSB_SCAN |
-			      STMPE_KPC_CTRL_LSB_DEBOUNCE,
-			      STMPE_KPC_CTRL_LSB_SCAN |
-			      (keypad->debounce_ms << 1));
+	ret = stmpe_set_bits(stmpe, STMPE_KPC_CTRL_LSB,
+			     STMPE_KPC_CTRL_LSB_SCAN |
+			     STMPE_KPC_CTRL_LSB_DEBOUNCE,
+			     STMPE_KPC_CTRL_LSB_SCAN |
+			     (keypad->debounce_ms << 1));
+	if (ret < 0)
+		goto disable_keypad;
+
+	return 0;
+
+disable_keypad:
+	stmpe_disable(stmpe, STMPE_BLOCK_KEYPAD);
+
+	return ret;
 }
 
 static void stmpe_keypad_fill_used_pins(struct stmpe_keypad *keypad,
@@ -389,19 +398,24 @@ static int stmpe_keypad_probe(struct platform_device *pdev)
 					  IRQF_ONESHOT, "stmpe-keypad", keypad);
 	if (error) {
 		dev_err(&pdev->dev, "unable to get irq: %d\n", error);
-		return error;
+		goto disable_keypad;
 	}
 
 	error = input_register_device(input);
 	if (error) {
 		dev_err(&pdev->dev,
 			"unable to register input device: %d\n", error);
-		return error;
+		goto disable_keypad;
 	}
 
 	platform_set_drvdata(pdev, keypad);
 
 	return 0;
+
+disable_keypad:
+	stmpe_disable(stmpe, STMPE_BLOCK_KEYPAD);
+
+	return error;
 }
 
 static void stmpe_keypad_remove(struct platform_device *pdev)
