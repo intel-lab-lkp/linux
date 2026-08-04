@@ -336,7 +336,7 @@ static struct usb_serial_driver * const serial_drivers[] = {
  *  with the equivalent code.
  */
 
-static long cond_wait_interruptible_timeout_irqrestore(
+static __always_inline long cond_wait_interruptible_timeout_irqrestore(
 	wait_queue_head_t *q, long timeout,
 	spinlock_t *lock, unsigned long flags)
 __releases(lock)
