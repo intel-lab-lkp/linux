@@ -3694,7 +3694,7 @@ out_retry:
 		filemap_invalidate_unlock_shared(mapping);
 	if (fpin)
 		fput(fpin);
-	return ret | VM_FAULT_RETRY;
+	return ret | VM_FAULT_RETRY | VM_FAULT_MAY_USE_VMA_LOCK;
 }
 EXPORT_SYMBOL(filemap_fault);
 
