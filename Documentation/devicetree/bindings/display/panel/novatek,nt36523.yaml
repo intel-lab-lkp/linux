@@ -23,6 +23,10 @@ properties:
               - xiaomi,elish-csot-nt36523
           - const: novatek,nt36523
       - items:
+          - const: xiaomi,enuma-csot-nt36523
+          - const: xiaomi,elish-csot-nt36523
+          - const: novatek,nt36523
+      - items:
           - enum:
               - lenovo,j606f-boe-nt36523w
           - const: novatek,nt36523w
