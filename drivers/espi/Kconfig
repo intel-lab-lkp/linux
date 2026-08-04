@@ -16,4 +16,7 @@ menuconfig ESPI
 	  over a shared physical link: Peripheral (I/O and memory), Virtual
 	  Wire, OOB (Out-of-Band) messaging, and Flash Access.
 
+	  Includes slave device registration and a blocking-notifier event
+	  chain for delivering hardware events to slave drivers.
+
 	  If unsure, say N.
