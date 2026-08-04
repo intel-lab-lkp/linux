@@ -11,15 +11,21 @@
 struct drm_printer;
 struct xe_device;
 struct xe_exec_queue;
+struct xe_gt;
 struct xe_sched_job;
 
 #ifdef CONFIG_DEV_COREDUMP
 void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const char *fmt, ...);
+void xe_devcoredump_gt(struct xe_gt *gt, const char *fmt, ...);
 int xe_devcoredump_init(struct xe_device *xe);
 #else
 static inline void xe_devcoredump(struct xe_exec_queue *q,
 				  struct xe_sched_job *job,
 				  const char *fmt, ...)
+{
+}
+
+static inline void xe_devcoredump_gt(struct xe_gt *gt, const char *fmt, ...)
 {
 }
 

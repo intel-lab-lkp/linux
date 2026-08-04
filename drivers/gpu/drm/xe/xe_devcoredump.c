@@ -403,6 +403,74 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
 	mutex_unlock(&coredump->lock);
 }
 
+static void devcoredump_snapshot_gt(struct xe_devcoredump *coredump,
+				    struct xe_gt *gt)
+{
+	struct xe_devcoredump_snapshot *ss = &coredump->snapshot;
+	struct xe_guc *guc = &gt->uc.guc;
+	bool cookie;
+
+	ss->snapshot_time = ktime_get_real();
+	ss->boot_time = ktime_get_boottime();
+
+	strscpy(ss->process_name, "no process");
+
+	ss->gt = gt;
+	INIT_WORK(&ss->work, xe_devcoredump_deferred_snap_work);
+
+	/* keep going if fw fails as we still want to save the SW data */
+	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FORCEWAKE_ALL);
+
+	cookie = dma_fence_begin_signalling();
+
+	ss->guc.log = xe_guc_log_snapshot_capture(&guc->log, true);
+	ss->guc.ct = xe_guc_ct_snapshot_capture(&guc->ct);
+
+	queue_work(system_dfl_wq, &ss->work);
+
+	dma_fence_end_signalling(cookie);
+}
+
+/**
+ * xe_devcoredump_gt - Take GT-level snapshots and initialize coredump device.
+ * @gt: The GT where the issue was detected.
+ * @fmt: Printf format + args to describe the reason for the core dump
+ *
+ * Variant of xe_devcoredump() for hangs that are not tied to an exec queue
+ * or job, e.g. TLB invalidation timeouts. Captures the GuC log and CT state
+ * of @gt so the firmware side of the hang can be inspected. Skipped if a
+ * coredump is already captured, same as xe_devcoredump().
+ */
+__printf(2, 3)
+void xe_devcoredump_gt(struct xe_gt *gt, const char *fmt, ...)
+{
+	struct xe_device *xe = gt_to_xe(gt);
+	struct xe_devcoredump *coredump = &xe->devcoredump;
+	va_list varg;
+
+	mutex_lock(&coredump->lock);
+
+	if (coredump->captured) {
+		drm_dbg(&xe->drm, "Multiple hangs are occurring, but only the first snapshot was taken\n");
+		mutex_unlock(&coredump->lock);
+		return;
+	}
+
+	coredump->captured = true;
+
+	va_start(varg, fmt);
+	coredump->snapshot.reason = kvasprintf(GFP_ATOMIC, fmt, varg);
+	va_end(varg);
+
+	devcoredump_snapshot_gt(coredump, gt);
+
+	drm_info(&xe->drm, "Xe device coredump has been created\n");
+	drm_info(&xe->drm, "Check your /sys/class/drm/card%d/device/devcoredump/data\n",
+		 xe->drm.primary->index);
+
+	mutex_unlock(&coredump->lock);
+}
+
 static void xe_driver_devcoredump_fini(void *arg)
 {
 	struct drm_device *drm = arg;
