@@ -1240,41 +1240,41 @@ static unsigned long __init zone_spanned_pages_in_node(int nid,
 {
 	unsigned long zone_low = arch_zone_lowest_possible_pfn[zone_type];
 	unsigned long zone_high = arch_zone_highest_possible_pfn[zone_type];
+	unsigned long movable_pfn = zone_movable_pfn[nid];
 
 	/* Get the start and end of the zone */
 	*zone_start_pfn = clamp(node_start_pfn, zone_low, zone_high);
 	*zone_end_pfn = clamp(node_end_pfn, zone_low, zone_high);
 
-	/* Only adjust if ZONE_MOVABLE is on this node */
-	if (zone_movable_pfn[nid]) {
-		/* Size ZONE_MOVABLE */
-		if (zone_type == ZONE_MOVABLE) {
-			*zone_start_pfn = zone_movable_pfn[nid];
-			*zone_end_pfn = min(node_end_pfn,
-				arch_zone_highest_possible_pfn[movable_zone]);
+	/* Nothing to adjust if ZONE_MOVABLE is not on this node */
+	if (!movable_pfn)
+		goto out;
 
-			/*
-			 * Check that this node has pages within the
-			 * zone's required range
-			 */
-			if (*zone_end_pfn < node_start_pfn ||
-			    *zone_start_pfn > node_end_pfn)
-				return 0;
+	/* Size ZONE_MOVABLE */
+	if (zone_type == ZONE_MOVABLE) {
+		*zone_start_pfn = movable_pfn;
+		*zone_end_pfn = min(node_end_pfn,
+			arch_zone_highest_possible_pfn[movable_zone]);
 
-			/* Move the zone start inside the node if necessary */
-			*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
+		/* Check that this node has pages within the zone's required range */
+		if (*zone_end_pfn < node_start_pfn ||
+		    *zone_start_pfn > node_end_pfn)
+			return 0;
 
-		/* Adjust for ZONE_MOVABLE starting within this range */
-		} else if (!mirrored_kernelcore &&
-			*zone_start_pfn < zone_movable_pfn[nid] &&
-			*zone_end_pfn > zone_movable_pfn[nid]) {
-			*zone_end_pfn = zone_movable_pfn[nid];
+		/* Move the zone start inside the node if necessary */
+		*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
 
-		/* Check if this whole range is within ZONE_MOVABLE */
-		} else if (*zone_start_pfn >= zone_movable_pfn[nid])
-			*zone_start_pfn = *zone_end_pfn;
+	/* Adjust for ZONE_MOVABLE starting within this range */
+	} else if (!mirrored_kernelcore && *zone_start_pfn < movable_pfn &&
+		   *zone_end_pfn > movable_pfn) {
+		*zone_end_pfn = movable_pfn;
+
+	/* Check if this whole range is within ZONE_MOVABLE */
+	} else if (*zone_start_pfn >= movable_pfn) {
+		*zone_start_pfn = *zone_end_pfn;
 	}
 
+out:
 	/* Return the spanned pages */
 	return *zone_end_pfn - *zone_start_pfn;
 }
