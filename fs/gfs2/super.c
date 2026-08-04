@@ -565,6 +565,14 @@ void gfs2_make_fs_ro(struct gfs2_sbd *sdp)
 				   HZ * 5);
 		gfs2_assert_warn(sdp, gfs2_log_is_empty(sdp));
 	}
+
+	/*
+	 * Once the final quota/statfs sync and log shutdown are complete, the VFS
+	 * must see the filesystem as read-only so later inode eviction cannot
+	 * re-enter deallocation paths that still expect live quota state.
+	 */
+	sdp->sd_vfs->s_flags |= SB_RDONLY;
+
 	gfs2_quota_cleanup(sdp);
 }
 
