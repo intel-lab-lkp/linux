@@ -6,6 +6,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/stddef.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/module.h>
@@ -189,7 +190,7 @@ int rvu_mbox_handler_nix_lf_stats(struct rvu *rvu,
 	return 0;
 }
 
-static u16 rvu_rep_get_vlan_id(struct rvu *rvu, u16 pcifunc)
+u16 rvu_rep_get_vlan_id(struct rvu *rvu, u16 pcifunc)
 {
 	int id;
 
@@ -429,6 +430,26 @@ int rvu_rep_pf_init(struct rvu *rvu)
 	return 0;
 }
 
+/* ESW_CFG is always sent as the sole message in a mailbox transaction
+ * (see rvu_eswitch_config()), so next_msgoff minus the mailbox header
+ * offset yields this message's size. The calculation is not valid if
+ * ESW_CFG were ever batched with other messages.
+ */
+static bool esw_cfg_req_has_switch_id(const struct esw_cfg_req *req)
+{
+	u16 hdr_len = ALIGN(sizeof(struct mbox_hdr), MBOX_MSG_ALIGN);
+	u16 next_off = req->hdr.next_msgoff;
+	u16 msg_len;
+
+	if (next_off < hdr_len)
+		return false;
+
+	msg_len = next_off - hdr_len;
+
+	return msg_len >= offsetof(struct esw_cfg_req, switch_id) +
+			  MAX_PHYS_ITEM_ID_LEN;
+}
+
 int rvu_mbox_handler_esw_cfg(struct rvu *rvu, struct esw_cfg_req *req,
 			     struct msg_rsp *rsp)
 {
@@ -436,6 +457,9 @@ int rvu_mbox_handler_esw_cfg(struct rvu *rvu, struct esw_cfg_req *req,
 		return 0;
 
 	rvu->rep_mode = req->ena;
+	if (esw_cfg_req_has_switch_id(req))
+		memcpy(rvu->rswitch.switch_id, req->switch_id,
+		       MAX_PHYS_ITEM_ID_LEN);
 
 	if (!rvu->rep_mode)
 		rvu_npc_free_mcam_entries(rvu, req->hdr.pcifunc, -1);
@@ -449,6 +473,9 @@ int rvu_mbox_handler_get_rep_cnt(struct rvu *rvu, struct msg_req *req,
 	int pf, vf, numvfs, hwvf, rep = 0;
 	u16 pcifunc;
 
+	/* Called once from representor driver probe during devlink eswitch
+	 * SWITCHDEV bring-up; not re-run during switch device operation.
+	 */
 	rvu->rep_pcifunc = req->hdr.pcifunc;
 	rsp->rep_cnt = rvu->cgx_mapped_pfs + rvu->cgx_mapped_vfs;
 	rvu->rep_cnt = rsp->rep_cnt;
