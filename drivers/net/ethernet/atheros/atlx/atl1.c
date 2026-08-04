@@ -3142,6 +3142,10 @@ static void atl1_remove(struct pci_dev *pdev)
 
 	iowrite16(0, adapter->hw.hw_addr + REG_PHY_ENABLE);
 	unregister_netdev(netdev);
+
+	cancel_work_sync(&adapter->reset_dev_task);
+	cancel_work_sync(&adapter->link_chg_task);
+
 	pci_iounmap(pdev, adapter->hw.hw_addr);
 	pci_release_regions(pdev);
 	free_netdev(netdev);
