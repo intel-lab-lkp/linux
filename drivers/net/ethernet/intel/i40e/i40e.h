@@ -668,6 +668,8 @@ struct i40e_pf {
 	struct timespec64 ptp_prev_hw_time;
 	struct work_struct ptp_extts0_work;
 	ktime_t ptp_reset_start;
+	/* Serializes timestamp configuration with PTP teardown. */
+	struct mutex ptp_config_lock;
 	struct mutex tmreg_lock; /* Used to protect the SYSTIME registers. */
 	u32 ptp_adj_mult;
 	u32 tx_hwtstamp_timeouts;
