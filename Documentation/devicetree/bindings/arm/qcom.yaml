@@ -1220,7 +1220,7 @@ properties:
       - items:
           - enum:
               - qcom,hamoa-iot-evk
-          - const: qcom,hamoa-iot-som
+          - const: qcom,iq-x7181-evk-som
           - const: qcom,x1e80100
 
       - items:
@@ -1235,7 +1235,7 @@ properties:
       - items:
           - enum:
               - qcom,purwa-iot-evk
-          - const: qcom,purwa-iot-som
+          - const: qcom,iq-x5121-evk-som
           - const: qcom,x1p42100
 
       - items:
