@@ -1787,14 +1787,14 @@ static int dvb_ca_en50221_io_release(struct inode *inode, struct file *file)
 
 	module_put(ca->pub->owner);
 
-	dvb_ca_private_put(ca);
-
 	if (dvbdev->users == 1 && ca->exit == 1) {
 		mutex_unlock(&ca->remove_mutex);
 		wake_up(&dvbdev->wait_queue);
 	} else {
 		mutex_unlock(&ca->remove_mutex);
 	}
+
+	dvb_ca_private_put(ca);
 
 	return err;
 }
