@@ -4,6 +4,8 @@
 
 #include <linux/phy.h>
 
+#define AC300_EPHY_CONTROL_ADDR_OFFSET	16
+
 struct acx00_ephy_control {
 	int (*power_on)(struct acx00_ephy_control *control,
 			unsigned int phy_addr);
