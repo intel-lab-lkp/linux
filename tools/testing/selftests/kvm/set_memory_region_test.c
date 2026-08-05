@@ -500,6 +500,50 @@ static void test_add_private_memory_region(void)
 	kvm_vm_free(vm);
 }
 
+static void test_toggle_private_memory_region(void)
+{
+	struct kvm_vm *vm;
+	int memfd, r;
+
+	pr_info("Testing that toggling KVM_MEM_GUEST_MEMFD on existing slot is rejected\n");
+
+	vm = vm_create_barebones_type(KVM_X86_SW_PROTECTED_VM);
+	memfd = vm_create_guest_memfd(vm, MEM_REGION_SIZE, 0);
+
+	/* Create a private slot. */
+	vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+				   MEM_REGION_GPA, MEM_REGION_SIZE,
+				   0, memfd, 0);
+
+	/*
+	 * Attempt a FLAGS_ONLY update that clears KVM_MEM_GUEST_MEMFD.
+	 * Must fail with EINVAL. Before commit 9935df5333aa this caused
+	 * a slab-use-after-free in kvm_gmem_release() because the old slot
+	 * was freed without calling kvm_gmem_unbind().
+	 */
+	r = __vm_set_user_memory_region2(vm, MEM_REGION_SLOT, 0,
+					 MEM_REGION_GPA, MEM_REGION_SIZE,
+					 0, memfd, 0);
+	TEST_ASSERT(r == -1 && errno == EINVAL,
+		    "Clearing KVM_MEM_GUEST_MEMFD should have failed with EINVAL, got r=%d errno=%d", r, errno);
+
+	/*
+	 * Symmetrically, attempting to set KVM_MEM_GUEST_MEMFD on a slot
+	 * that was created without it must also be rejected.
+	 */
+	vm_set_user_memory_region(vm, MEM_REGION_SLOT + 1, 0,
+				  MEM_REGION_GPA * 2, MEM_REGION_SIZE, NULL);
+	r = __vm_set_user_memory_region2(vm, MEM_REGION_SLOT + 1,
+					 KVM_MEM_GUEST_MEMFD,
+					 MEM_REGION_GPA * 2, MEM_REGION_SIZE,
+					 0, memfd, 0);
+	TEST_ASSERT(r == -1 && errno == EINVAL,
+		    "Setting KVM_MEM_GUEST_MEMFD should have failed with EINVAL, got r=%d errno=%d", r, errno);
+
+	close(memfd);
+	kvm_vm_free(vm);
+}
+
 static void test_add_overlapping_private_memory_regions(void)
 {
 	struct kvm_vm *vm;
@@ -645,6 +689,7 @@ int main(int argc, char *argv[])
 	    (kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM))) {
 		test_add_private_memory_region();
 		test_add_overlapping_private_memory_regions();
+		test_toggle_private_memory_region();
 	} else {
 		pr_info("Skipping tests for KVM_MEM_GUEST_MEMFD memory regions\n");
 	}
