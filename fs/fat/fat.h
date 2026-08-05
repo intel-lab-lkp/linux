@@ -121,6 +121,9 @@ struct msdos_inode_info {
 	/* for avoiding the race between fat_free() and fat_get_cluster() */
 	unsigned int cache_valid_id;
 
+	/* Number of writable struct file instances. */
+	atomic_t write_open_count;
+
 	/* NOTE: mmu_private is 64bits, so must hold ->i_mutex to access */
 	loff_t mmu_private;	/* physically allocated size */
 
@@ -407,6 +410,8 @@ extern const struct inode_operations fat_file_inode_operations;
 extern int fat_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		       struct iattr *attr);
 extern void fat_truncate_blocks(struct inode *inode, loff_t offset);
+extern bool fat_has_eofblocks(struct inode *inode);
+extern void fat_free_eofblocks(struct inode *inode);
 extern int fat_getattr(struct mnt_idmap *idmap,
 		       const struct path *path, struct kstat *stat,
 		       u32 request_mask, unsigned int flags);

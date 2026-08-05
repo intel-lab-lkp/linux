@@ -659,22 +659,31 @@ sync_bhs:
 	return mmb_sync(&MSDOS_I(inode)->i_metadata_bhs);
 }
 
-static void fat_free_eofblocks(struct inode *inode)
+bool fat_has_eofblocks(struct inode *inode)
+{
+	struct msdos_inode_info *ei = MSDOS_I(inode);
+	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
+	u64 allocated_bytes = (u64)inode->i_blocks << 9;
+	u64 valid_bytes = round_up((u64)ei->mmu_private,
+				   (u64)sbi->cluster_size);
+
+	return allocated_bytes > valid_bytes;
+}
+
+void fat_free_eofblocks(struct inode *inode)
 {
 	/* Release unwritten fallocated blocks on inode eviction. */
-	if ((inode->i_blocks << 9) >
-			round_up(MSDOS_I(inode)->mmu_private,
-				MSDOS_SB(inode->i_sb)->cluster_size)) {
+	if (fat_has_eofblocks(inode)) {
 		int err;
 
 		fat_truncate_blocks(inode, MSDOS_I(inode)->mmu_private);
 		/* Fallocate results in updating the i_start/iogstart
 		 * for the zero byte file. So, make it return to
-		 * original state during evict and commit it to avoid
+		 * * original state during cleanup and commit it to avoid
 		 * any corruption on the next access to the cluster
 		 * chain for the file.
 		 */
-		err = sync_inode_metadata(inode, inode_needs_sync(inode));
+		err = __fat_write_inode(inode, inode_needs_sync(inode));
 		if (err) {
 			fat_msg(inode->i_sb, KERN_WARNING, "Failed to "
 					"update on disk inode for unused "
@@ -789,6 +798,7 @@ static struct inode *fat_alloc_inode(struct super_block *sb)
 		return NULL;
 
 	init_rwsem(&ei->truncate_lock);
+	atomic_set(&ei->write_open_count, 0);
 	/* Zeroing to allow iput() even if partial initialized inode. */
 	ei->mmu_private = 0;
 	ei->i_start = 0;

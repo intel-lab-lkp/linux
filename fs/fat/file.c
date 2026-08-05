@@ -173,8 +173,53 @@ long fat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 }
 
+static int fat_file_open(struct inode *inode, struct file *filp)
+{
+	if (filp->f_mode & FMODE_WRITER)
+		atomic_inc(&MSDOS_I(inode)->write_open_count);
+
+	return 0;
+}
+
 static int fat_file_release(struct inode *inode, struct file *filp)
 {
+	struct msdos_inode_info *ei = MSDOS_I(inode);
+	struct super_block *sb = inode->i_sb;
+
+	if (filp->f_mode & FMODE_WRITER) {
+		int writers = atomic_dec_return(&ei->write_open_count);
+
+		if (WARN_ON_ONCE(writers < 0)) {
+			atomic_inc(&ei->write_open_count);
+			goto flush;
+		}
+
+		if (!writers) {
+			sb_start_intwrite(sb);
+			inode_lock(inode);
+
+			/*
+			 * A writer which appeared before i_rwsem was acquired
+			 * keeps the reservation alive.  A writer opened after
+			 * this check has its write and fallocate operations
+			 * serialized with the cleanup by i_rwsem and must
+			 * re-establish the reservation after reopening.
+			 */
+			if (!atomic_read(&ei->write_open_count) &&
+			    inode->i_nlink && fat_has_eofblocks(inode)) {
+				inode_dio_wait(inode);
+
+				down_write(&ei->truncate_lock);
+				mmb_sync(&ei->i_metadata_bhs);
+				fat_free_eofblocks(inode);
+				up_write(&ei->truncate_lock);
+			}
+
+			inode_unlock(inode);
+			sb_end_intwrite(sb);
+		}
+	}
+flush:
 	if ((filp->f_mode & FMODE_WRITE) &&
 	    MSDOS_SB(inode->i_sb)->options.flush) {
 		fat_flush_inodes(inode->i_sb, inode, NULL);
@@ -207,6 +252,7 @@ const struct file_operations fat_file_operations = {
 	.read_iter	= generic_file_read_iter,
 	.write_iter	= generic_file_write_iter,
 	.mmap_prepare	= generic_file_mmap_prepare,
+	.open		= fat_file_open,
 	.release	= fat_file_release,
 	.unlocked_ioctl	= fat_generic_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
