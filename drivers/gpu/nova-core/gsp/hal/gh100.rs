@@ -5,7 +5,7 @@ use kernel::prelude::*;
 
 use kernel::{
     device,
-    dma::Coherent,
+    dma::StreamingInFlight,
     io::poll::read_poll_timeout,
     time::Delta, //
 };
@@ -156,7 +156,7 @@ impl GspHal for Gh100 {
         bar: Bar0<'a>,
         chipset: Chipset,
         fb_layout: &FbLayout,
-        wpr_meta: &Coherent<GspFwWprMeta>,
+        wpr_meta: &StreamingInFlight<'_, KBox<GspFwWprMeta>>,
         gsp_falcon: &'a Falcon<GspEngine>,
         sec2_falcon: &'a Falcon<Sec2>,
     ) -> Result<BootUnloadGuard<'a>> {

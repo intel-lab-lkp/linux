@@ -4,7 +4,10 @@
 use kernel::{
     bits,
     device,
-    dma::Coherent,
+    dma::{
+        DataDirection,
+        Streaming, //
+    },
     io::poll::read_poll_timeout,
     pci,
     prelude::*,
@@ -117,7 +120,12 @@ impl super::Gsp {
         let fb_layout = FbLayout::new(chipset, bar, &gsp_fw)?;
         dev_dbg!(dev, "{:#x?}\n", fb_layout);
 
-        let wpr_meta = Coherent::init(dev, GFP_KERNEL, GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
+        let wpr_meta = Streaming::new(
+            dev,
+            KBox::init(GspFwWprMeta::new(&gsp_fw, &fb_layout), GFP_KERNEL)?,
+            DataDirection::ToDevice,
+        )?
+        .submit();
 
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
         let unload_guard = hal.boot(
@@ -130,6 +138,14 @@ impl super::Gsp {
             gsp_falcon,
             sec2_falcon,
         )?;
+
+        // The chipset-specific boot sequence only succeeds once the device is done reading the
+        // WPR metadata: on Tu102 the Booter-load falcon has halted, on GH100 GSP-FMC has released
+        // the lockdown. If it fails instead, `wpr_meta` drops in flight and leaks, as the falcon
+        // may still be reading the buffer.
+        //
+        // SAFETY: Per the above, the device has finished accessing the buffer.
+        let _ = unsafe { wpr_meta.complete() };
 
         gsp_falcon.write_os_version(bar, gsp_fw.bootloader.app_version);
 
