@@ -274,12 +274,22 @@ static int as102_stream_ctrl(void *priv, int acquire, uint32_t elna_cfg)
 	return ret;
 }
 
+static void as102_frontend_release(void *priv)
+{
+	struct as10x_bus_adapter_t *bus_adap = priv;
+	struct as102_dev_t *as102_dev;
+
+	as102_dev = container_of(bus_adap, struct as102_dev_t, bus_adap);
+	kref_put(&as102_dev->kref, as102_usb_release);
+}
+
 static const struct as102_fe_ops as102_fe_ops = {
 	.set_tune = as102_set_tune,
 	.get_tps  = as102_get_tps,
 	.get_status = as102_get_status,
 	.get_stats = as102_get_stats,
 	.stream_ctrl = as102_stream_ctrl,
+	.release = as102_frontend_release,
 };
 
 int as102_dvb_register(struct as102_dev_t *as102_dev)
@@ -333,12 +343,13 @@ int as102_dvb_register(struct as102_dev_t *as102_dev)
 		    __func__, ret);
 		goto efereg;
 	}
+	kref_get(&as102_dev->kref);
 
 	ret =  dvb_register_frontend(&as102_dev->dvb_adap, as102_dev->dvb_fe);
 	if (ret < 0) {
 		dev_err(dev, "%s: as102_dvb_register_frontend() failed: %d",
 		    __func__, ret);
-		goto efereg;
+		goto eferegister;
 	}
 
 	/* init bus mutex for token locking */
@@ -358,6 +369,8 @@ int as102_dvb_register(struct as102_dev_t *as102_dev)
 	pr_info("Registered device %s", as102_dev->name);
 	return 0;
 
+eferegister:
+	dvb_frontend_detach(as102_dev->dvb_fe);
 efereg:
 	dvb_dmxdev_release(&as102_dev->dvb_dmxdev);
 edmxdinit:

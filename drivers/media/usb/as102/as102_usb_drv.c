@@ -298,7 +298,7 @@ static int as102_usb_start_stream(struct as102_dev_t *dev)
 	return 0;
 }
 
-static void as102_usb_release(struct kref *kref)
+void as102_usb_release(struct kref *kref)
 {
 	struct as102_dev_t *as102_dev;
 

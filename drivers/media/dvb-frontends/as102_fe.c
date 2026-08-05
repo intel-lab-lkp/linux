@@ -403,6 +403,8 @@ static void as102_fe_release(struct dvb_frontend *fe)
 {
 	struct as102_state *state = fe->demodulator_priv;
 
+	if (state->ops->release)
+		state->ops->release(state->priv);
 	kfree(state);
 }
 

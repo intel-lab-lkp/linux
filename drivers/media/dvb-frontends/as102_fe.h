@@ -12,6 +12,7 @@ struct as102_fe_ops {
 	int (*get_status)(void *priv, struct as10x_tune_status *tstate);
 	int (*get_stats)(void *priv, struct as10x_demod_stats *demod_stats);
 	int (*stream_ctrl)(void *priv, int acquire, uint32_t elna_cfg);
+	void (*release)(void *priv);
 };
 
 struct dvb_frontend *as102_attach(const char *name,

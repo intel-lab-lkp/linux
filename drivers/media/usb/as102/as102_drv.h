@@ -70,5 +70,6 @@ struct as102_dev_t {
 
 int as102_dvb_register(struct as102_dev_t *dev);
 void as102_dvb_unregister(struct as102_dev_t *dev);
+void as102_usb_release(struct kref *kref);
 
 #endif
