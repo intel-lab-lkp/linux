@@ -309,6 +309,23 @@ bool bdev_zone_is_seq(struct block_device *bdev, sector_t sector)
 EXPORT_SYMBOL_GPL(bdev_zone_is_seq);
 
 /**
+ * bdev_zone_is_offline - check if a sector belongs to an offline zone
+ * @bdev:       block device to check
+ * @sector:     sector number
+ *
+ * Check if @sector on @bdev is contained in an offline zone.
+ */
+bool bdev_zone_is_offline(struct block_device *bdev, sector_t sector)
+{
+	enum blk_zone_cond cond = disk_zone_get_cond(bdev->bd_disk, sector);
+
+	if (!bdev_is_zoned(bdev))
+		return false;
+
+	return cond == BLK_ZONE_COND_OFFLINE;
+}
+
+/**
  * bdev_check_zone_mgmt - check if a sector belongs to a valid sequential zone
  * @bdev:       block device to check
  * @sector:     sector number

@@ -866,6 +866,11 @@ void submit_bio_noacct(struct bio *bio)
 
 	switch (bio_op(bio)) {
 	case REQ_OP_READ:
+		if (bdev_is_zoned(bdev) &&
+		    bdev_zone_is_offline(bdev, bio->bi_iter.bi_sector)) {
+			bio_set_flag(bio, BIO_QUIET);
+			goto end_io;
+		}
 		break;
 	case REQ_OP_WRITE:
 		if (bio->bi_opf & REQ_ATOMIC) {
