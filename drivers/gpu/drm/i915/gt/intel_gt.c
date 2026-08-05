@@ -659,7 +659,9 @@ static void __intel_gt_disable(struct intel_gt *gt)
 	GEM_BUG_ON(intel_gt_pm_is_awake(gt));
 }
 
-int intel_gt_wait_for_idle(struct intel_gt *gt, long timeout)
+static int __intel_gt_wait_for_idle(struct intel_gt *gt,
+				    bool interruptible,
+				    long timeout)
 {
 	long remaining_timeout;
 
@@ -667,10 +669,11 @@ int intel_gt_wait_for_idle(struct intel_gt *gt, long timeout)
 	if (!intel_gt_pm_is_awake(gt))
 		return 0;
 
-	while ((timeout = intel_gt_retire_requests_timeout(gt, timeout,
-							   &remaining_timeout)) > 0) {
+	while ((timeout = __intel_gt_retire_requests_timeout(gt, interruptible,
+							     timeout,
+							     &remaining_timeout)) > 0) {
 		cond_resched();
-		if (signal_pending(current))
+		if (interruptible && signal_pending(current))
 			return -EINTR;
 	}
 
@@ -680,7 +683,18 @@ int intel_gt_wait_for_idle(struct intel_gt *gt, long timeout)
 	if (remaining_timeout < 0)
 		remaining_timeout = 0;
 
-	return intel_uc_wait_for_idle(&gt->uc, remaining_timeout);
+	return intel_uc_wait_for_idle(&gt->uc, interruptible,
+				      remaining_timeout);
+}
+
+int intel_gt_wait_for_idle(struct intel_gt *gt, long timeout)
+{
+	return __intel_gt_wait_for_idle(gt, true, timeout);
+}
+
+int intel_gt_wait_for_idle_uninterruptible(struct intel_gt *gt, long timeout)
+{
+	return __intel_gt_wait_for_idle(gt, false, timeout);
 }
 
 int intel_gt_init(struct intel_gt *gt)

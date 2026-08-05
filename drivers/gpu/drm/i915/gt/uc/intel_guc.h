@@ -509,7 +509,8 @@ static inline void intel_guc_disable_msg(struct intel_guc *guc, u32 mask)
 	spin_unlock_irq(&guc->irq_lock);
 }
 
-int intel_guc_wait_for_idle(struct intel_guc *guc, long timeout);
+int intel_guc_wait_for_idle(struct intel_guc *guc, bool interruptible,
+			    long timeout);
 
 int intel_guc_deregister_done_process_msg(struct intel_guc *guc,
 					  const u32 *msg, u32 len);

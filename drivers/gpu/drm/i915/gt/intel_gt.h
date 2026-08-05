@@ -143,6 +143,7 @@ void intel_gt_driver_release(struct intel_gt *gt);
 void intel_gt_driver_late_release_all(struct drm_i915_private *i915);
 
 int intel_gt_wait_for_idle(struct intel_gt *gt, long timeout);
+int intel_gt_wait_for_idle_uninterruptible(struct intel_gt *gt, long timeout);
 
 void intel_gt_check_and_clear_faults(struct intel_gt *gt);
 i915_reg_t intel_gt_perf_limit_reasons_reg(struct intel_gt *gt);

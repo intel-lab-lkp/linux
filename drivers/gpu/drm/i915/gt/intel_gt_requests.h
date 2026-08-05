@@ -12,8 +12,17 @@ struct intel_engine_cs;
 struct intel_gt;
 struct intel_timeline;
 
-long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout,
-				      long *remaining_timeout);
+long __intel_gt_retire_requests_timeout(struct intel_gt *gt,
+					bool interruptible,
+					long timeout,
+					long *remaining_timeout);
+static inline long
+intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout,
+				 long *remaining_timeout)
+{
+	return __intel_gt_retire_requests_timeout(gt, true, timeout,
+						    remaining_timeout);
+}
 static inline void intel_gt_retire_requests(struct intel_gt *gt)
 {
 	intel_gt_retire_requests_timeout(gt, 0, NULL);

@@ -680,14 +680,15 @@ int intel_guc_wait_for_pending_msg(struct intel_guc *guc,
 	return (timeout < 0) ? timeout : 0;
 }
 
-int intel_guc_wait_for_idle(struct intel_guc *guc, long timeout)
+int intel_guc_wait_for_idle(struct intel_guc *guc, bool interruptible,
+			    long timeout)
 {
 	if (!intel_uc_uses_guc_submission(&guc_to_gt(guc)->uc))
 		return 0;
 
 	return intel_guc_wait_for_pending_msg(guc,
 					      &guc->outstanding_submission_g2h,
-					      true, timeout);
+					      interruptible, timeout);
 }
 
 static int guc_context_policy_init_v70(struct intel_context *ce, bool loop);

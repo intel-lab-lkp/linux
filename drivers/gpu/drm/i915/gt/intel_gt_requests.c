@@ -130,8 +130,10 @@ void intel_engine_fini_retire(struct intel_engine_cs *engine)
 	GEM_BUG_ON(engine->retire);
 }
 
-long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout,
-				      long *remaining_timeout)
+long __intel_gt_retire_requests_timeout(struct intel_gt *gt,
+					bool interruptible,
+					long timeout,
+					long *remaining_timeout)
 {
 	struct intel_gt_timelines *timelines = &gt->timelines;
 	struct intel_timeline *tl, *tn;
@@ -159,7 +161,7 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout,
 				mutex_unlock(&tl->mutex);
 
 				timeout = dma_fence_wait_timeout(fence,
-								 true,
+								 interruptible,
 								 timeout);
 				dma_fence_put(fence);
 
