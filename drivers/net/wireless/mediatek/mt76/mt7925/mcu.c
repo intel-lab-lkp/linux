@@ -671,6 +671,7 @@ static void
 mt7925_mcu_uni_rx_unsolicited_event(struct mt792x_dev *dev,
 				    struct sk_buff *skb)
 {
+#define COREDUMP_END_STR	"; coredump end"
 	struct mt7925_mcu_rxd *rxd;
 
 	rxd = (struct mt7925_mcu_rxd *)skb->data;
@@ -700,10 +701,17 @@ mt7925_mcu_uni_rx_unsolicited_event(struct mt792x_dev *dev,
 	case MCU_UNI_EVENT_RSSI_MONITOR:
 		mt7925_mcu_rssi_monitor_event(dev, skb);
 		break;
-	case MCU_UNI_EVENT_COREDUMP:
+	case MCU_UNI_EVENT_COREDUMP: {
+		size_t hdr_len = sizeof(struct mt7925_mcu_rxd) + 8;
+
 		dev->fw_assert = true;
+		if (skb->len > hdr_len &&
+			strnstr(skb->data + hdr_len, COREDUMP_END_STR,
+				skb->len - hdr_len))
+			dev->coredump.complete = true;
 		mt76_connac_mcu_coredump_event(&dev->mt76, skb, &dev->coredump);
 		return;
+	}
 	case MCU_UNI_EVENT_NAN:
 		mt7925_nan_mcu_event(dev, skb);
 		break;
