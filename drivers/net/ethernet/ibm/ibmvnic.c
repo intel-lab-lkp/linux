@@ -495,6 +495,9 @@ static int alloc_long_term_buff(struct ibmvnic_adapter *adapter,
 	adapter->fw_done_rc = 0;
 	reinit_completion(&adapter->fw_done);
 
+	/* Snapshot gen before the map wait so a reconnect mid-wait is stale. */
+	ltb->crq_gen = adapter->crq.gen;
+
 	rc = send_request_map(adapter, ltb->addr, ltb->size, ltb->map_id);
 	if (rc) {
 		dev_err(dev, "send_request_map failed, rc = %d\n", rc);
@@ -529,11 +532,12 @@ static void free_long_term_buff(struct ibmvnic_adapter *adapter,
 	if (!ltb->buff)
 		return;
 
-	/* VIOS automatically unmaps the long term buffer at remote
-	 * end for the following resets:
-	 * FAILOVER, MOBILITY, TIMEOUT.
+	/* Skip unmap if mapped on a prior crq generation, or after resets
+	 * where the VIOS has already dropped mappings (FAILOVER/MOBILITY/
+	 * TIMEOUT).
 	 */
-	if (adapter->reset_reason != VNIC_RESET_FAILOVER &&
+	if (ltb->crq_gen == adapter->crq.gen &&
+	    adapter->reset_reason != VNIC_RESET_FAILOVER &&
 	    adapter->reset_reason != VNIC_RESET_MOBILITY &&
 	    adapter->reset_reason != VNIC_RESET_TIMEOUT)
 		send_request_unmap(adapter, ltb->map_id);
@@ -5974,6 +5978,18 @@ static int handle_query_phys_parms_rsp(union ibmvnic_crq *crq,
 	return rc;
 }
 
+/**
+ * ibmvnic_crq_deactivate() - Mark the crq connection inactive
+ * @crq: crq queue
+ *
+ * Bump gen so LTB mappings from the old connection can be freed locally.
+ */
+static void ibmvnic_crq_deactivate(struct ibmvnic_crq_queue *crq)
+{
+	crq->active = false;
+	crq->gen++;
+}
+
 static void ibmvnic_handle_crq(union ibmvnic_crq *crq,
 			       struct ibmvnic_adapter *adapter)
 {
@@ -6036,7 +6052,7 @@ static void ibmvnic_handle_crq(union ibmvnic_crq *crq,
 		return;
 	case IBMVNIC_CRQ_XPORT_EVENT:
 		netif_carrier_off(netdev);
-		adapter->crq.active = false;
+		ibmvnic_crq_deactivate(&adapter->crq);
 		/* terminate any thread waiting for a response
 		 * from the device
 		 */
@@ -6241,7 +6257,7 @@ static int ibmvnic_reset_crq(struct ibmvnic_adapter *adapter)
 
 	memset(crq->msgs, 0, PAGE_SIZE);
 	crq->cur = 0;
-	crq->active = false;
+	ibmvnic_crq_deactivate(crq);
 
 	/* And re-open it again */
 	rc = plpar_hcall_norets(H_REG_CRQ, vdev->unit_address,
@@ -6276,7 +6292,7 @@ static void release_crq_queue(struct ibmvnic_adapter *adapter)
 			 DMA_BIDIRECTIONAL);
 	free_page((unsigned long)crq->msgs);
 	crq->msgs = NULL;
-	crq->active = false;
+	ibmvnic_crq_deactivate(crq);
 }
 
 static int init_crq_queue(struct ibmvnic_adapter *adapter)

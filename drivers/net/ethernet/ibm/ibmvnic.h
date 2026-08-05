@@ -794,6 +794,7 @@ struct ibmvnic_crq_queue {
 	/* Used for serialization of msgs, cur */
 	spinlock_t lock;
 	bool active;
+	u32 gen; /* bumped when the crq connection drops */
 	char name[32];
 };
 
@@ -839,6 +840,7 @@ struct ibmvnic_long_term_buff {
 	dma_addr_t addr;
 	u64 size;
 	u8 map_id;
+	u32 crq_gen; /* crq.gen when this buffer was mapped */
 };
 
 struct ibmvnic_ltb_set {
