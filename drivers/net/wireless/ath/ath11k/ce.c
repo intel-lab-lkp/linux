@@ -472,6 +472,17 @@ static struct sk_buff *ath11k_ce_completed_send_next(struct ath11k_ce_pipe *pipe
 
 	spin_lock_bh(&srng->lock);
 
+	/*
+	 * ath11k_ce_cleanup_pipes() can reach this on a ring that
+	 * ath11k_hal_srng_clear() has zeroed and that recovery has not
+	 * rebuilt. Bail out as for an empty ring rather than dereference
+	 * the NULL tp_addr in ath11k_hal_srng_access_begin().
+	 */
+	if (unlikely(!srng->u.src_ring.tp_addr)) {
+		skb = ERR_PTR(-EIO);
+		goto err_unlock;
+	}
+
 	ath11k_hal_srng_access_begin(ab, srng);
 
 	desc = ath11k_hal_srng_src_reap_next(ab, srng);
@@ -749,6 +760,19 @@ int ath11k_ce_send(struct ath11k_base *ab, struct sk_buff *skb, u8 pipe_id,
 	nentries_mask = pipe->src_ring->nentries_mask;
 
 	srng = &ab->hal.srng_list[pipe->src_ring->hal_ring_id];
+
+	/*
+	 * ATH11K_FLAG_CRASH_FLUSH is cleared before the copy engine rings
+	 * are rebuilt, so the check above lets a send through while the
+	 * ring is still zeroed. Test the pointer that would be
+	 * dereferenced: ath11k_hal_srng_setup() publishes ->initialized
+	 * before ->tp_addr without a barrier, so ->initialized would still
+	 * race the rebuild.
+	 */
+	if (unlikely(!srng->u.src_ring.tp_addr)) {
+		spin_unlock_bh(&ab->ce.ce_lock);
+		return -ESHUTDOWN;
+	}
 
 	spin_lock_bh(&srng->lock);
 
