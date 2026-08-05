@@ -65,6 +65,7 @@ static int xswap_map_clusters(struct swap_info_struct *si,
 			      unsigned long start_idx, unsigned long nr);
 static void xswap_unmap_clusters(struct swap_info_struct *si,
 				 unsigned long start_idx, unsigned long nr);
+static int xswap_check_mapped(pte_t *pte, unsigned long addr, void *data);
 #endif
 
 static void swap_range_alloc(struct swap_info_struct *si,
@@ -1204,6 +1205,48 @@ new_cluster:
 		if (found)
 			goto done;
 	}
+
+#ifdef CONFIG_XSWAP
+	/*
+	 * For xswap: if no free cluster was found and more clusters
+	 * can be mapped, grow the cluster_info array and retry.
+	 */
+	if (!found && (si->flags & SWP_XSWAP) &&
+	    READ_ONCE(si->nr_clusters_mapped) < READ_ONCE(si->nr_clusters) &&
+	    list_empty(&si->free_clusters)) {
+		unsigned long nr_new = min(READ_ONCE(si->nr_clusters) -
+					  READ_ONCE(si->nr_clusters_mapped),
+					  XSWAP_GROW_CLUSTERS);
+		unsigned long start = READ_ONCE(si->nr_clusters_mapped);
+		unsigned long i;
+
+		if (!xswap_map_clusters(si, start, nr_new)) {
+			unsigned long added = 0;
+
+			spin_lock(&si->lock);
+			for (i = start; i < start + nr_new; i++) {
+				struct swap_cluster_info *ci = &si->cluster_info[i];
+				spin_lock(&ci->lock);
+				/*
+				 * A concurrent grower may have already added
+				 * these clusters to the free list.  Only add
+				 * clusters that are still off-list (NONE).
+				 */
+				if (ci->flags == CLUSTER_FLAG_NONE) {
+					ci->flags = CLUSTER_FLAG_FREE;
+					list_add_tail(&ci->list, &si->free_clusters);
+					added++;
+				}
+				spin_unlock(&ci->lock);
+			}
+			spin_unlock(&si->lock);
+
+			/* Retry allocation from the free list */
+			found = alloc_swap_scan_list(si, &si->free_clusters,
+						    folio, false);
+		}
+	}
+#endif
 done:
 	if (!(si->flags & SWP_SOLIDSTATE))
 		spin_unlock(&si->global_cluster_lock);
@@ -3737,7 +3780,32 @@ static int xswap_map_clusters(struct swap_info_struct *si,
 			goto fail;
 	}
 
-	if (vm_area_map_pages(si->cluster_vm, vm_start, vm_end, pages)) {
+	/*
+	 * Check if the target pages are already mapped by a concurrent
+	 * grower.  We must do this after page allocation because
+	 * alloc_page(GFP_KERNEL) can sleep, opening a race window.
+	 * If someone already mapped these pages, free ours and continue.
+	 */
+	if (apply_to_existing_page_range(&init_mm, vm_start,
+					 vm_end - vm_start,
+					 xswap_check_mapped, NULL)) {
+		i = npages;
+		goto fail_nounmap;
+	}
+
+	int err = vm_area_map_pages(si->cluster_vm, vm_start, vm_end, pages);
+	if (err) {
+		/*
+		 * -EBUSY means the PTEs are already present:
+		 * another thread raced with us and mapped the
+		 * same pages between our check above and this
+		 * call.  Treat as success — free our unused
+		 * pages and continue.
+		 */
+		if (err == -EBUSY) {
+			i = npages;
+			goto fail_nounmap;
+		}
 		i = npages; /* free all pages on failure */
 		goto fail;
 	}
@@ -3752,6 +3820,28 @@ static int xswap_map_clusters(struct swap_info_struct *si,
 	/*
 	 * Pairs with READ_ONCE() in shrink/grow paths.
 	 */
+	WRITE_ONCE(si->nr_clusters_mapped, start_idx + nr);
+	mutex_unlock(&si->xswap_lock);
+	return 0;
+
+fail_nounmap:
+	/*
+	 * Pages already mapped by a concurrent grower.  Free our unused
+	 * pages, then fall through to initialize spinlocks.  The vmalloc
+	 * PTEs now point to the concurrent grower's pages.
+	 */
+	while (i > 0) {
+		i--;
+		if (pages[i])
+			__free_page(pages[i]);
+	}
+	kfree(pages);
+	memalloc_noreclaim_restore(noreclaim_flags);
+
+	/* Initialize spinlocks for newly mapped clusters */
+	for (i = start_idx; i < start_idx + nr; i++)
+		spin_lock_init(&si->cluster_info[i].lock);
+
 	WRITE_ONCE(si->nr_clusters_mapped, start_idx + nr);
 	mutex_unlock(&si->xswap_lock);
 	return 0;
@@ -3803,6 +3893,15 @@ out:
 	 * Pairs with READ_ONCE() in shrink/grow paths.
 	 */
 	WRITE_ONCE(si->nr_clusters_mapped, start_idx);
+}
+
+/*
+ * Callback for apply_to_existing_page_range(): return 1 to stop at the
+ * first present PTE, signalling that the range is already mapped.
+ */
+static int xswap_check_mapped(pte_t *pte, unsigned long addr, void *data)
+{
+	return 1;
 }
 #endif /* CONFIG_XSWAP */
 
