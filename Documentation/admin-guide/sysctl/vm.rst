@@ -394,6 +394,11 @@ the order of KMALLOC_MAX_CACHE_SIZE up to MAX_PAGE_ORDER.
 Requests above KMALLOC_MAX_SIZE end up in vmalloc() whatever this is set to,
 since kmalloc() cannot serve them at all.
 
+The kvmalloc_forced_vmalloc counter in /proc/vmstat counts the allocations
+that were routed to vmalloc() because of this limit.  Requests that
+kmalloc() could not have served anyway are not counted, so the counter only
+reflects allocations the limit itself diverted.
+
 
 legacy_va_layout
 ================

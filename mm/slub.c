@@ -51,6 +51,7 @@
 #include <linux/kprobes.h>
 #include <linux/debugfs.h>
 #include <linux/sysctl.h>
+#include <linux/vmstat.h>
 #include <trace/events/kmem.h>
 
 #include "internal.h"
@@ -6916,7 +6917,19 @@ static bool kvmalloc_order_denied(size_t size)
 	if (likely(sysctl_kvmalloc_max_contig_order >= MAX_PAGE_ORDER))
 		return false;
 
-	return get_order(size) > sysctl_kvmalloc_max_contig_order;
+	if (get_order(size) <= sysctl_kvmalloc_max_contig_order)
+		return false;
+
+	/*
+	 * kmalloc() cannot serve anything above KMALLOC_MAX_SIZE, so such a
+	 * request would have reached vmalloc() with or without the limit.
+	 * Skipping the doomed attempt is still worthwhile, but the limit did
+	 * not divert anything, so do not account it.
+	 */
+	if (size <= KMALLOC_MAX_SIZE)
+		count_vm_event(KVMALLOC_FORCED_VMALLOC);
+
+	return true;
 }
 
 static const struct ctl_table kvmalloc_sysctl_table[] = {

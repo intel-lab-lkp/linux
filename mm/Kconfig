@@ -262,6 +262,8 @@ config KVMALLOC_ORDER_LIMIT
 	  This enables the vm.kvmalloc_max_contig_order sysctl, which caps
 	  the allocation order kvmalloc() is willing to ask the page
 	  allocator for.  Larger requests are routed to vmalloc() directly.
+	  It also adds the kvmalloc_forced_vmalloc counter to /proc/vmstat,
+	  which tells how many allocations were routed this way.
 
 	  The default value of the sysctl preserves the existing behavior,
 	  so saying Y here only makes the tunable available.
