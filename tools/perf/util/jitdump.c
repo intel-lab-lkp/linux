@@ -646,9 +646,10 @@ static int jit_repipe_code_move(struct jit_buf_desc *jd, union jr_entry *jr)
 	idr_size = jd->machine->id_hdr_size;
 
 	/*
-	 * +16 to account for sample_id_all (hack)
+	 * Sample ID is written past the end of the mmap2 record; size
+	 * the allocation to account for it instead of a hardcoded +16.
 	 */
-	event = calloc(1, sizeof(*event) + 16);
+	event = calloc(1, sizeof(*event) + idr_size);
 	if (!event)
 		return -1;
 
