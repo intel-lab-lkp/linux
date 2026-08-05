@@ -141,7 +141,7 @@ void tcp_ao_calc_traffic_key(const struct tcp_ao_key *mkt, u8 *traffic_key,
 					traffic_key);
 		return;
 	case TCP_AO_ALGO_AES_128_CMAC: {
-		struct aes_cmac_key k;
+		struct aes_cmac_key k __cleanup(aes_cmac_zeroize_key);
 
 		aes_cmac_preparekey(&k, mkt->key, AES_KEYSIZE_128);
 		aes_cmac(&k, input, input_len, traffic_key);
