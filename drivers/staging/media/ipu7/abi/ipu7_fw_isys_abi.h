@@ -315,10 +315,6 @@ struct ipu7_insys_resp {
 	u8 pad[2];
 };
 
-struct ipu7_insys_resp_queue_token {
-	struct ipu7_insys_resp resp_info;
-};
-
 struct ipu7_insys_send_queue_token {
 	u64 buf_handle;
 	ia_gofo_addr_t addr;

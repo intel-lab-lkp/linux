@@ -55,18 +55,6 @@ enum ipu7_msg_node_profile_type {
 	IPU_MSG_NODE_PROFILE_TYPE_N
 };
 
-struct ipu7_msg_node_profile {
-	struct ia_gofo_tlv_header tlv_header;
-	ipu7_msg_teb_t teb;
-};
-
-struct ipu7_msg_cb_profile {
-	struct ipu7_msg_node_profile profile_base;
-	ipu7_msg_deb_t deb;
-	ipu7_msg_rbm_t rbm;
-	ipu7_msg_rbm_t reb;
-};
-
 #define IPU_MSG_NODE_MAX_PROFILES	(2U)
 #define IPU_MSG_NODE_DEF_PROFILE_IDX	(0U)
 #define IPU_MSG_NODE_RSRC_ID_EXT_IP	(0xff)
@@ -74,17 +62,6 @@ struct ipu7_msg_cb_profile {
 #define IPU_MSG_NODE_DONT_CARE_TEB_HI	(0xffffffff)
 #define IPU_MSG_NODE_DONT_CARE_TEB_LO	(0xffffffff)
 #define IPU_MSG_NODE_RSRC_ID_IS		(0xfe)
-
-struct ipu7_msg_node {
-	struct ia_gofo_tlv_header tlv_header;
-	u8 node_rsrc_id;
-	u8 node_ctx_id;
-	u8 num_frags;
-	u8 reserved[1];
-	struct ia_gofo_tlv_list profiles_list;
-	struct ia_gofo_tlv_list terms_list;
-	struct ia_gofo_tlv_list node_options;
-};
 
 enum ipu7_msg_node_option_types {
 	IPU_MSG_NODE_OPTION_TYPES_PADDING = 0,
@@ -118,61 +95,15 @@ enum ipu7_msg_link_cmprs_option_bit_depth {
 #define IPU_MSG_LINK_CMPRS_SPACE_SAVING_NUM_MAX \
 	(IPU_MSG_LINK_CMPRS_SPACE_SAVING_DENOM - 1U)
 
-struct ipu7_msg_link_cmprs_plane_desc {
-	u8 plane_enable;
-	u8 cmprs_enable;
-	u8 encoder_plane_id;
-	u8 decoder_plane_id;
-	u8 cmprs_is_lossy;
-	u8 cmprs_is_footprint;
-	u8 bit_depth;
-	u8 space_saving_numerator;
-	u32 pixels_offset;
-	u32 ts_offset;
-	u32 tile_row_to_tile_row_stride;
-	u32 rows_of_tiles;
-	u32 lossy_cfg[IPU_MSG_LINK_CMPRS_LOSSY_CFG_PAYLOAD_SIZE];
-};
-
 #define IPU_MSG_LINK_CMPRS_MAX_PLANES		(2U)
 #define IPU_MSG_LINK_CMPRS_NO_ALIGN_INTERVAL	(0U)
 #define IPU_MSG_LINK_CMPRS_MIN_ALIGN_INTERVAL	(16U)
 #define IPU_MSG_LINK_CMPRS_MAX_ALIGN_INTERVAL	(1024U)
-struct ipu7_msg_link_cmprs_option {
-	struct ia_gofo_tlv_header header;
-	u32 cmprs_buf_size;
-	u16 align_interval;
-	u8 reserved[2];
-	struct ipu7_msg_link_cmprs_plane_desc plane_descs[2];
-};
-
-struct ipu7_msg_link_ep {
-	u8 node_ctx_id;
-	u8 term_id;
-};
-
-struct ipu7_msg_link_ep_pair {
-	struct ipu7_msg_link_ep ep_src;
-	struct ipu7_msg_link_ep ep_dst;
-};
-
 #define IPU_MSG_LINK_FOREIGN_KEY_NONE		(65535U)
 #define IPU_MSG_LINK_FOREIGN_KEY_MAX		(64U)
 #define IPU_MSG_LINK_PBK_ID_DONT_CARE		(255U)
 #define IPU_MSG_LINK_PBK_SLOT_ID_DONT_CARE	(255U)
 #define IPU_MSG_LINK_TERM_ID_DONT_CARE		(0xff)
-
-struct ipu7_msg_link {
-	struct ia_gofo_tlv_header tlv_header;
-	struct ipu7_msg_link_ep_pair endpoints;
-	u16 foreign_key;
-	u8 streaming_mode;
-	u8 pbk_id;
-	u8 pbk_slot_id;
-	u8 delayed_link;
-	u8 reserved[2];
-	struct ia_gofo_tlv_list link_options;
-};
 
 #pragma pack(pop)
 
@@ -208,30 +139,6 @@ enum ipu7_msg_err_groups {
 };
 
 #pragma pack(push, 1)
-struct ipu7_msg_task {
-	struct ia_gofo_msg_header header;
-	u8 graph_id;
-	u8 profile_idx;
-	u8 node_ctx_id;
-	u8 frame_id;
-	u8 frag_id;
-	u8 req_done_msg;
-	u8 req_done_irq;
-	u8 reserved[1];
-	ipu7_msg_teb_t payload_reuse_bm;
-	ia_gofo_addr_t term_buffers[IPU_MSG_MAX_NODE_TERMS];
-};
-
-struct ipu7_msg_task_done {
-	struct ia_gofo_msg_header_ack header;
-	u8 graph_id;
-	u8 frame_id;
-	u8 node_ctx_id;
-	u8 profile_idx;
-	u8 frag_id;
-	u8 reserved[3];
-};
-
 enum ipu7_msg_err_task {
 	IPU_MSG_ERR_TASK_OK = IA_GOFO_MSG_ERR_OK,
 	IPU_MSG_ERR_TASK_GRAPH_ID = 1,
@@ -262,31 +169,9 @@ enum ipu7_msg_term_type {
 #define IPU_MSG_TERM_EVENT_TYPE_PROGRESS	1U
 #define IPU_MSG_TERM_EVENT_TYPE_N	(IPU_MSG_TERM_EVENT_TYPE_PROGRESS + 1U)
 
-struct ipu7_msg_term {
-	struct ia_gofo_tlv_header tlv_header;
-	u8 term_id;
-	u8 event_req_bm;
-	u8 reserved[2];
-	u32 payload_size;
-	struct ia_gofo_tlv_list term_options;
-};
-
 enum ipu7_msg_term_option_types {
 	IPU_MSG_TERM_OPTION_TYPES_PADDING = 0,
 	IPU_MSG_TERM_OPTION_TYPES_N
-};
-
-struct ipu7_msg_term_event {
-	struct ia_gofo_msg_header header;
-	u8 graph_id;
-	u8 frame_id;
-	u8 node_ctx_id;
-	u8 profile_idx;
-	u8 frag_id;
-	u8 term_id;
-	u8 event_type;
-	u8 reserved[1];
-	u64 event_ts;
 };
 
 #pragma pack(pop)
@@ -300,28 +185,6 @@ struct ipu7_msg_term_event {
 
 #define IPU_MSG_DEVICE_CLOSE_SEND_RESP		BIT(0)
 #define IPU_MSG_DEVICE_CLOSE_SEND_IRQ		BIT(1)
-
-struct ipu7_msg_dev_open {
-	struct ia_gofo_msg_header header;
-	u32 max_graphs;
-	u8 dev_msg_map;
-	u8 enable_power_gating;
-	u8 reserved[2];
-};
-
-struct ipu7_msg_dev_open_ack {
-	struct ia_gofo_msg_header_ack header;
-};
-
-struct ipu7_msg_dev_close {
-	struct ia_gofo_msg_header header;
-	u8 dev_msg_map;
-	u8 reserved[7];
-};
-
-struct ipu7_msg_dev_close_ack {
-	struct ia_gofo_msg_header_ack header;
-};
 
 enum ipu7_msg_err_device {
 	IPU_MSG_ERR_DEVICE_OK = IA_GOFO_MSG_ERR_OK,
@@ -343,45 +206,10 @@ enum ipu7_msg_err_device {
 #define IPU_MSG_GRAPH_CLOSE_SEND_RESP	BIT(0)
 #define IPU_MSG_GRAPH_CLOSE_SEND_IRQ	BIT(1)
 
-struct ipu7_msg_graph_open {
-	struct ia_gofo_msg_header header;
-	struct ia_gofo_tlv_list nodes;
-	struct ia_gofo_tlv_list links;
-	u8 graph_id;
-	u8 graph_msg_map;
-	u8 reserved[6];
-};
-
 enum ipu7_msg_graph_ack_option_types {
 	IPU_MSG_GRAPH_ACK_OPTION_TYPES_PADDING = 0,
 	IPU_MSG_GRAPH_ACK_TASK_Q_INFO,
 	IPU_MSG_GRAPH_ACK_OPTION_TYPES_N
-};
-
-struct ipu7_msg_graph_open_ack_task_q_info {
-	struct ia_gofo_tlv_header header;
-	u8 node_ctx_id;
-	u8 q_id;
-	u8 reserved[2];
-};
-
-struct ipu7_msg_graph_open_ack {
-	struct ia_gofo_msg_header_ack header;
-	u8 graph_id;
-	u8 reserved[7];
-};
-
-struct ipu7_msg_graph_close {
-	struct ia_gofo_msg_header header;
-	u8 graph_id;
-	u8 graph_msg_map;
-	u8 reserved[6];
-};
-
-struct ipu7_msg_graph_close_ack {
-	struct ia_gofo_msg_header_ack header;
-	u8 graph_id;
-	u8 reserved[7];
 };
 
 enum ipu7_msg_err_graph {

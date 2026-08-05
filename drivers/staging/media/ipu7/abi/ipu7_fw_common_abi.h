@@ -41,16 +41,6 @@ struct ia_gofo_msg_version_list {
 
 #define IA_GOFO_ABI_BITS_PER_BYTE	(8U)
 
-struct ia_gofo_tlv_header {
-	u16 tlv_type;
-	u16 tlv_len32;
-};
-
-struct ia_gofo_tlv_list {
-	u16 num_elems;
-	u16 head_offset;
-};
-
 #define TLV_ITEM_ALIGNMENT	((u32)sizeof(u32))
 #define TLV_MSG_ALIGNMENT	((u32)sizeof(u64))
 #define TLV_LIST_ALIGNMENT	TLV_ITEM_ALIGNMENT
@@ -97,22 +87,6 @@ enum ia_gofo_msg_err_general {
 #define IA_GOFO_MSG_TYPE_LOG		2
 #define IA_GOFO_MSG_TYPE_GENERAL_ERR	3
 
-struct ia_gofo_msg_header {
-	struct ia_gofo_tlv_header tlv_header;
-	struct ia_gofo_tlv_list msg_options;
-	u64 user_token;
-};
-
-struct ia_gofo_msg_header_ack {
-	struct ia_gofo_msg_header header;
-	struct ia_gofo_msg_err err;
-
-};
-
-struct ia_gofo_msg_general_err {
-	struct ia_gofo_msg_header_ack header;
-};
-
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -131,12 +105,6 @@ enum ia_gofo_soc_pbk_instance_id {
 };
 
 #define IA_GOFO_MSG_LINK_PBK_MAX_SLOTS	(2U)
-
-struct ia_gofo_msg_indirect {
-	struct ia_gofo_msg_header header;
-	struct ia_gofo_tlv_header ref_header;
-	ia_gofo_addr_t ref_msg_ptr;
-};
 
 #pragma pack(pop)
 
@@ -159,11 +127,6 @@ struct ia_gofo_msg_log_info {
 struct ia_gofo_msg_log_info_ts {
 	u64 msg_ts;
 	struct ia_gofo_msg_log_info log_info;
-};
-
-struct ia_gofo_msg_log {
-	struct ia_gofo_msg_header header;
-	struct ia_gofo_msg_log_info_ts log_info_ts;
 };
 
 #pragma pack(pop)
