@@ -5146,3 +5146,7 @@ err0:
  * include needing to have boardinfo data structures be much more public.
  */
 postcore_initcall(spi_init);
+
+#ifdef CONFIG_SPI_KUNIT_TEST
+#include "tests/spi_kunit.c"
+#endif

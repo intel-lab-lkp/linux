@@ -48,6 +48,17 @@ config SPI_MASTER
 
 if SPI_MASTER
 
+config SPI_KUNIT_TEST
+	bool "KUnit tests for the SPI core" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y && HAS_DMA
+	default KUNIT_ALL_TESTS
+	help
+	  Run the SPI core's KUnit tests, covering the DMA mapping error
+	  paths of the message map/unmap state machine.
+
+	  If unsure say N.
+
+
 config SPI_MEM
 	bool "SPI memory extension"
 	help
