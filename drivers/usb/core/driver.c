@@ -32,7 +32,7 @@
 #include <linux/usb/quirks.h>
 #include <linux/usb/hcd.h>
 
-#include "usb.h"
+#include "hub.h"	/* includes "usb.h" */
 
 
 /*
@@ -1224,6 +1224,78 @@ void usb_unbind_and_rebind_marked_interfaces(struct usb_device *udev)
 
 #ifdef CONFIG_PM
 
+/*
+ * Defer slow leaf-device resume off the S3 critical path.  The per-device
+ * port reset (~1-2 s for webcams, USB NICs, etc.) is moved to a work item
+ * queued from usb_resume_complete(), after all hubs have finished resume.
+ * The deferred work reuses the same udev (in-place reset, devnum
+ * preserved).  Drivers such as ax_usb_nic lack reset_resume; the work
+ * performs unbind+rebind after reset.
+ *
+ * If a new suspend or a disconnect arrives before the work item runs, the
+ * reset is abandoned, not flushed: the device is still port-suspended,
+ * which is exactly what the new suspend needs, and the work item then only
+ * releases the runtime reference taken by the deferred resume.  The
+ * abandon decision is serialized with the work item by the device lock, so
+ * no cancel_work_sync() (which would deadlock against the work item's
+ * device_lock()) is needed on the suspend path.
+ */
+bool usb_defer_resume_enabled;
+module_param_named(defer_resume, usb_defer_resume_enabled, bool, 0644);
+MODULE_PARM_DESC(defer_resume,
+	"defer leaf USB device resume to a workqueue (off the S3 critical path)");
+
+static int usb_resume_both(struct usb_device *udev, pm_message_t msg);
+
+static bool usb_should_defer_leaf_resume(struct usb_device *udev,
+		pm_message_t msg)
+{
+	struct usb_hub *hub;
+	u16 portstatus, portchange;
+
+	if (!usb_defer_resume_enabled || PMSG_IS_AUTO(msg))
+		return false;
+	if (!udev->parent || udev->maxchild)
+		return false;
+	if (udev->state != USB_STATE_SUSPENDED)
+		return false;
+
+	/*
+	 * Only defer when the port is not connected: link training is
+	 * either still pending or the device was removed while asleep,
+	 * which is where the long waits (the 2000 ms CONNECT timeout in
+	 * wait_for_connected()) happen.  A connected port resumes in a
+	 * bounded time, so keep the synchronous path -- and its exact
+	 * "resume complete means device usable" semantics -- for it.
+	 */
+	hub = usb_hub_to_struct_hub(udev->parent);
+	if (!hub)
+		return false;
+	if (usb_hub_port_status(hub, udev->portnum, &portstatus, &portchange))
+		return false;	/* cannot read port status: stay synchronous */
+	if (portstatus & USB_PORT_STAT_CONNECTION)
+		return false;	/* connected: resume is fast, keep sync */
+
+	return true;
+}
+
+/* Finish a deferred resume synchronously.  The caller holds the device lock. */
+static int usb_defer_flush_resume(struct usb_device *udev)
+{
+	pm_message_t msg = udev->defer_resume_msg;
+	int status;
+
+	status = usb_resume_both(udev, msg);
+	if (status == 0) {
+		unbind_marked_interfaces(udev);
+		rebind_marked_interfaces(udev);
+	} else if (status != -ENODEV && status != -ESHUTDOWN) {
+		/* Don't log when the device is being disconnected */
+		dev_err(&udev->dev, "deferred resume failed: %d\n", status);
+	}
+	return status;
+}
+
 /* Unbind drivers for @udev's interfaces that don't support suspend/resume
  * There is no check for reset_resume here because it can be determined
  * only during resume whether reset_resume is needed.
@@ -1591,6 +1663,30 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 	return status;
 }
 
+void usb_defer_resume_workfn(struct work_struct *work)
+{
+	struct usb_device *udev =
+		container_of(work, struct usb_device, defer_resume_work);
+	int status = -ENODEV;
+
+	device_lock(&udev->dev);
+	if (!udev->defer_resume_cancel) {
+		if (udev->state == USB_STATE_SUSPENDED)
+			status = usb_defer_flush_resume(udev);
+		else if (udev->state != USB_STATE_NOTATTACHED)
+			/* Already resumed via the runtime PM path. */
+			status = 0;
+	}
+	device_unlock(&udev->dev);
+
+	if (status == 0) {
+		pm_runtime_disable(&udev->dev);
+		pm_runtime_set_active(&udev->dev);
+		pm_runtime_enable(&udev->dev);
+	}
+	pm_runtime_put(&udev->dev);
+}
+
 static void choose_wakeup(struct usb_device *udev, pm_message_t msg)
 {
 	int	w;
@@ -1625,6 +1721,21 @@ int usb_suspend(struct device *dev, pm_message_t msg)
 	struct usb_device	*udev = to_usb_device(dev);
 	int r;
 
+	/* A deferred leaf resume may still be outstanding (queued or
+	 * running).  The device is still port-suspended, which is exactly
+	 * what this suspend needs, so abandon the deferred port reset:
+	 * if the work item was never queued, drop the runtime reference
+	 * taken by the deferred resume here; otherwise the flag makes
+	 * the work item skip the reset and just release the reference.
+	 * Serialized with the work item by the device lock.
+	 */
+	if (udev->defer_resume_pending) {
+		udev->defer_resume_pending = 0;
+		pm_runtime_put(&udev->dev);
+	} else {
+		udev->defer_resume_cancel = 1;
+	}
+
 	unbind_no_pm_drivers_interfaces(udev);
 
 	/* From now on we are sure all drivers support suspend/resume
@@ -1647,11 +1758,22 @@ int usb_resume_complete(struct device *dev)
 {
 	struct usb_device *udev = to_usb_device(dev);
 
+	if (udev->state == USB_STATE_NOTATTACHED)
+		return 0;
+
+	/* Queue the real port reset after dpm_complete, once every hub in
+	 * the tree has finished resume and downstream ports are settled.
+	 */
+	if (udev->defer_resume_pending) {
+		udev->defer_resume_pending = 0;
+		queue_work(system_unbound_wq, &udev->defer_resume_work);
+		return 0;
+	}
+
 	/* For PM complete calls, all we do is rebind interfaces
 	 * whose needs_binding flag is set
 	 */
-	if (udev->state != USB_STATE_NOTATTACHED)
-		rebind_marked_interfaces(udev);
+	rebind_marked_interfaces(udev);
 	return 0;
 }
 
@@ -1660,6 +1782,17 @@ int usb_resume(struct device *dev, pm_message_t msg)
 {
 	struct usb_device	*udev = to_usb_device(dev);
 	int			status;
+
+	if (usb_should_defer_leaf_resume(udev, msg)) {
+		udev->defer_resume_msg = msg;
+		udev->defer_resume_pending = 1;
+		udev->defer_resume_cancel = 0;
+		pm_runtime_get_noresume(dev);
+		pm_runtime_disable(dev);
+		pm_runtime_set_suspended(dev);
+		pm_runtime_enable(dev);
+		return 0;
+	}
 
 	/* For all calls, take the device back to full power and
 	 * tell the PM core in case it was autosuspended previously.

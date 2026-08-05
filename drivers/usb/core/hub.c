@@ -2332,6 +2332,22 @@ void usb_disconnect(struct usb_device **pdev)
 	dev_info(&udev->dev, "USB disconnect, device number %d\n",
 			udev->devnum);
 
+#ifdef CONFIG_PM
+	/* A deferred leaf resume may still be outstanding.  If the work
+	 * item was never queued, drop the runtime reference taken by the
+	 * deferred resume here; otherwise cancel the work item so it
+	 * cannot run after teardown begins — it will release the
+	 * reference itself.  No device lock is held here, so the sync
+	 * cancel cannot deadlock against the work item.
+	 */
+	if (udev->defer_resume_pending) {
+		udev->defer_resume_pending = 0;
+		pm_runtime_put(&udev->dev);
+	}
+	if (cancel_work_sync(&udev->defer_resume_work))
+		pm_runtime_put(&udev->dev);
+#endif
+
 	/*
 	 * Ensure that the pm runtime code knows that the USB device
 	 * is in the process of being disconnected.

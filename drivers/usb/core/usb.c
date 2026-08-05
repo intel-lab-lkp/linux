@@ -681,6 +681,9 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 	/* ep0 maxpacket comes later, from device descriptor */
 	usb_enable_endpoint(dev, &dev->ep0, false);
 	dev->can_submit = 1;
+#ifdef CONFIG_PM
+	INIT_WORK(&dev->defer_resume_work, usb_defer_resume_workfn);
+#endif
 
 	/* Save readable and stable topology id, distinguishing devices
 	 * by location for diagnostics, tools, driver model, etc.  The

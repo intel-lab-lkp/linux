@@ -95,6 +95,7 @@ extern int usb_port_disable(struct usb_device *udev);
 extern int usb_suspend(struct device *dev, pm_message_t msg);
 extern int usb_resume(struct device *dev, pm_message_t msg);
 extern int usb_resume_complete(struct device *dev);
+extern void usb_defer_resume_workfn(struct work_struct *work);
 
 extern int usb_port_suspend(struct usb_device *dev, pm_message_t msg);
 extern int usb_port_resume(struct usb_device *dev, pm_message_t msg);

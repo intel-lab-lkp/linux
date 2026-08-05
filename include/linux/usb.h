@@ -743,6 +743,19 @@ struct usb_device {
 
 	u16 hub_delay;
 	unsigned use_generic_driver:1;
+
+#ifdef CONFIG_PM
+	/* Deferred leaf-device resume: the slow port reset runs in this
+	 * work item after dpm_complete, reusing the same udev (devnum
+	 * preserved).  defer_resume_cancel is set by a new suspend to
+	 * abandon the reset; the work item then only drops the runtime
+	 * reference.
+	 */
+	struct work_struct defer_resume_work;
+	pm_message_t defer_resume_msg;
+	unsigned defer_resume_pending:1;
+	unsigned defer_resume_cancel:1;
+#endif
 };
 
 #define to_usb_device(__dev)	container_of_const(__dev, struct usb_device, dev)
