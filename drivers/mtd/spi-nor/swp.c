@@ -628,10 +628,15 @@ static int spi_nor_is_locked(struct mtd_info *mtd, loff_t ofs, u64 len)
  */
 void spi_nor_try_unlock_all(struct spi_nor *nor)
 {
+	struct device_node *np = spi_nor_get_flash_node(nor);
+	bool force_unlock = of_property_read_bool(np, "linux,force-sr-unlock");
 	int ret;
 
-	if (!(nor->flags & SNOR_F_HAS_LOCK))
+	if (!(nor->flags & SNOR_F_HAS_LOCK) && !force_unlock)
 		return;
+
+	if (!nor->params->locking_ops)
+		spi_nor_init_default_locking_ops(nor);
 
 	dev_dbg(nor->dev, "Unprotecting entire flash array\n");
 
