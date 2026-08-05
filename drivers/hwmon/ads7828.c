@@ -133,6 +133,8 @@ static int ads7828_probe(struct i2c_client *client)
 			    vref_mv > ADS7828_EXT_VREF_MV_MAX)
 				return -EINVAL;
 			ext_vref = true;
+		} else if (PTR_ERR(reg) != -ENODEV) {
+			return PTR_ERR(reg);
 		}
 	}
 
