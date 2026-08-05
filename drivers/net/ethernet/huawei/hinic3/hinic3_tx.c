@@ -97,8 +97,12 @@ static int hinic3_tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
 
 	dma_info[0].dma = dma_map_single(&pdev->dev, skb->data,
 					 skb_headlen(skb), DMA_TO_DEVICE);
-	if (dma_mapping_error(&pdev->dev, dma_info[0].dma))
+	if (dma_mapping_error(&pdev->dev, dma_info[0].dma)) {
+		u64_stats_update_begin(&txq->txq_stats.syncp);
+		txq->txq_stats.map_frag_err++;
+		u64_stats_update_end(&txq->txq_stats.syncp);
 		return -EFAULT;
+	}
 
 	dma_info[0].len = skb_headlen(skb);
 
@@ -117,6 +121,9 @@ static int hinic3_tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
 						     skb_frag_size(frag),
 						     DMA_TO_DEVICE);
 		if (dma_mapping_error(&pdev->dev, dma_info[idx].dma)) {
+			u64_stats_update_begin(&txq->txq_stats.syncp);
+			txq->txq_stats.map_frag_err++;
+			u64_stats_update_end(&txq->txq_stats.syncp);
 			err = -EFAULT;
 			goto err_unmap_page;
 		}
@@ -260,9 +267,11 @@ static int hinic3_tx_csum(struct hinic3_txq *txq, struct hinic3_sq_task *task,
 		if (l4_proto != IPPROTO_UDP ||
 		    ((struct udphdr *)skb_transport_header(skb))->dest !=
 		    VXLAN_OFFLOAD_PORT_LE) {
+			u64_stats_update_begin(&txq->txq_stats.syncp);
+			txq->txq_stats.unknown_tunnel_pkt++;
+			u64_stats_update_end(&txq->txq_stats.syncp);
 			/* Unsupported tunnel packet, disable csum offload */
-			skb_checksum_help(skb);
-			return 0;
+			return skb_checksum_help(skb);
 		}
 	}
 
@@ -412,6 +421,10 @@ static u32 hinic3_tx_offload(struct sk_buff *skb, struct hinic3_sq_task *task,
 		offload |= HINIC3_TX_OFFLOAD_TSO;
 	} else {
 		tso_cs_en = hinic3_tx_csum(txq, task, skb);
+		if (tso_cs_en < 0) {
+			offload = HINIC3_TX_OFFLOAD_INVALID;
+			return offload;
+		}
 		if (tso_cs_en)
 			offload |= HINIC3_TX_OFFLOAD_CSUM;
 	}
@@ -539,12 +552,17 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 	int err;
 
 	if (unlikely(skb->len < MIN_SKB_LEN)) {
-		if (skb_pad(skb, MIN_SKB_LEN - skb->len))
+		if (skb_pad(skb, MIN_SKB_LEN - skb->len)) {
+			u64_stats_update_begin(&txq->txq_stats.syncp);
+			txq->txq_stats.skb_pad_err++;
+			u64_stats_update_end(&txq->txq_stats.syncp);
 			goto err_out;
+		}
 
 		skb->len = MIN_SKB_LEN;
 	}
 
+	offload = hinic3_tx_offload(skb, &task, &queue_info, txq);
 	num_sge = skb_shinfo(skb)->nr_frags + 1;
 	/* assume normal wqe format + 1 wqebb for task info */
 	wqebb_cnt = num_sge + 1;
@@ -560,7 +578,6 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 		return NETDEV_TX_BUSY;
 	}
 
-	offload = hinic3_tx_offload(skb, &task, &queue_info, txq);
 	if (unlikely(offload == HINIC3_TX_OFFLOAD_INVALID)) {
 		goto err_drop_pkt;
 	} else if (!offload) {
@@ -604,6 +621,10 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 err_drop_pkt:
 	dev_kfree_skb_any(skb);
 err_out:
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.dropped++;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+
 	return NETDEV_TX_OK;
 }
 
