@@ -38,6 +38,13 @@ static int cxl_mock_accel_probe(struct platform_device *pdev)
 	cxlmd = devm_cxl_probe_mem(cxlds, &mock_range);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
+	if (mock_range.start > mock_range.end ||
+	    range_len(&mock_range) != SZ_512M) {
+		dev_err(dev,
+			"accelerator%d returned invalid HPA range %pra (expected 512 MiB)\n",
+			pdev->id, &mock_range);
+		return -ERANGE;
+	}
 	cxl_accel->cxlmd = cxlmd;
 
 	dev_dbg(dev, "Probed mock accelerator with range %pra\n", &mock_range);
