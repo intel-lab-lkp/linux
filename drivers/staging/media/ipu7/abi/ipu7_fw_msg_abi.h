@@ -8,8 +8,6 @@
 
 #include "ipu7_fw_common_abi.h"
 
-#pragma pack(push, 1)
-
 #define IPU_MSG_NODE_MAX_DEVICES	(128U)
 #define DEB_NUM_UINT32	(IPU_MSG_NODE_MAX_DEVICES / (sizeof(u32) * 8U))
 
@@ -21,28 +19,10 @@ typedef u32 ipu7_msg_deb_t[DEB_NUM_UINT32];
 
 typedef u32 ipu7_msg_rbm_t[RBM_NUM_UINT32];
 
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-
 #define IPU_MSG_LINK_FOREIGN_KEY_NONE		(65535U)
 #define IPU_MSG_LINK_PBK_ID_DONT_CARE		(255U)
 #define IPU_MSG_LINK_PBK_SLOT_ID_DONT_CARE	(255U)
 
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-#pragma pack(pop)
 
 #define FWPS_MSG_ABI_MAX_INPUT_QUEUES	(60U)
 #define FWPS_MSG_ABI_MAX_OUTPUT_QUEUES	(2U)

@@ -29,9 +29,6 @@ struct ia_gofo_msg_version_list {
 
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-#pragma pack(pop)
-
 #define IA_GOFO_MSG_ERR_MAX_DETAILS		(4U)
 #define IA_GOFO_MSG_ERR_OK			(0U)
 #define IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED	(0U)
@@ -49,13 +46,10 @@ struct ia_gofo_msg_err {
 #define IA_GOFO_MSG_ERR_GROUP_RESERVED	IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED
 #define IA_GOFO_MSG_ERR_GROUP_GENERAL		1
 
-#pragma pack(push, 1)
 #define IA_GOFO_MSG_TYPE_RESERVED	0
 #define IA_GOFO_MSG_TYPE_INDIRECT	1
 #define IA_GOFO_MSG_TYPE_LOG		2
 #define IA_GOFO_MSG_TYPE_GENERAL_ERR	3
-
-#pragma pack(pop)
 
 #pragma pack(push, 1)
 enum ia_gofo_msg_link_streaming_mode {
