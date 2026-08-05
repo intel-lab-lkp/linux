@@ -673,6 +673,47 @@ const struct imx678_variant imx678_variant_def = {
 	.hmax_min = imx678_min_hmax_4lane,
 };
 
+static const struct cci_reg_sequence imx662_common_regs[] = {
+	{ IMX678_REG_WDMODE, 0x00 },
+	{ IMX678_REG_MDBIT, 0x01 },
+	{ IMX678_REG_XXS_DRV, 0x00 },
+};
+
+static const u16 imx662_min_hmax_4lane[] = {
+	[IMX678_LINK_FREQ_297MHZ] = 990,
+	[IMX678_LINK_FREQ_360MHZ] = 990,
+	[IMX678_LINK_FREQ_445MHZ] = 990,
+	[IMX678_LINK_FREQ_594MHZ] = 990,
+	[IMX678_LINK_FREQ_720MHZ] = 990,
+	[IMX678_LINK_FREQ_891MHZ] = 990,
+	[IMX678_LINK_FREQ_1039MHZ] = 990,
+	[IMX678_LINK_FREQ_1188MHZ] = 990,
+};
+
+const struct imx678_variant imx662_variant_def = {
+	.name = "imx662",
+	.id_reg = IMX678_REG_MODULE_ID,
+	.id_value = 0x296,
+	.native_area = {
+		.top = 0,
+		.left = 0,
+		.width = 1937,
+		.height = 1101,
+	},
+	.active_area = {
+		.top = 0,
+		.left = 0,
+		.width = 1936,
+		.height = 1096,
+	},
+	.pixel_rate = 222750000,
+	.pix_per_clk = 3,
+	.common_regs = imx662_common_regs,
+	.num_common_regs = ARRAY_SIZE(imx662_common_regs),
+	.vmax_default = 1096 + 40,
+	.hmax_min = imx662_min_hmax_4lane,
+};
+
 struct imx678_model_info {
 	enum imx678_type type;
 	const u32 *codes;
@@ -701,6 +742,26 @@ static const struct imx678_model_info imx678_autodetect_info = {
 	.variant = &imx678_variant_def,
 	.auto_detect_colour = &imx678_aaqr_info,
 	.auto_detect_mono = &imx678_aamr_info,
+};
+
+static const struct imx678_model_info imx662_aaqr_info = {
+	.type = IMX678_COLOR,
+	.codes = codes_bayer,
+	.num_codes = ARRAY_SIZE(codes_bayer),
+	.variant = &imx662_variant_def,
+};
+
+static const struct imx678_model_info imx662_aamr_info = {
+	.type = IMX678_MONOCHROME,
+	.codes = codes_monochrome,
+	.num_codes = ARRAY_SIZE(codes_monochrome),
+	.variant = &imx662_variant_def,
+};
+
+static const struct imx678_model_info imx662_autodetect_info = {
+	.variant = &imx662_variant_def,
+	.auto_detect_colour = &imx662_aaqr_info,
+	.auto_detect_mono = &imx662_aamr_info,
 };
 
 static const char * const imx678_supply_name[] = {
@@ -1470,8 +1531,11 @@ static const struct dev_pm_ops imx678_pm_ops = {
 static const struct of_device_id imx678_of_match[] = {
 	{ .compatible = "sony,imx678-aamr", .data = &imx678_aamr_info },
 	{ .compatible = "sony,imx678-aaqr", .data = &imx678_aaqr_info },
+	{ .compatible = "sony,imx662-aamr", .data = &imx662_aamr_info },
+	{ .compatible = "sony,imx662-aaqr", .data = &imx662_aaqr_info },
 	/* for non-conforming DTs that rely on runtime check */
 	{ .compatible = "sony,imx678", .data = &imx678_autodetect_info },
+	{ .compatible = "sony,imx662", .data = &imx662_autodetect_info },
 	{ /* sentinel */ }
 };
 
