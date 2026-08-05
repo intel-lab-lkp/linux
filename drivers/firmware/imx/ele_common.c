@@ -5,6 +5,27 @@
 
 #include "ele_base_msg.h"
 #include "ele_common.h"
+#include "ele_fw_api.h"
+#include "se_ctrl.h"
+
+int se_chk_tx_msg_hdr(struct se_if_device_ctx *dev_ctx, struct se_msg_hdr *header)
+{
+	struct se_if_priv *priv = dev_ctx->priv;
+
+	if (!header->size || header->size > MAX_WORD_SIZE)
+		return -EINVAL;
+
+	if (header->tag != priv->if_defs->cmd_tag &&
+	    header->tag != priv->if_defs->rsp_tag)
+		return -EINVAL;
+
+	if (header->ver == priv->if_defs->base_api_ver)
+		return ele_uapi_allowed_base_cmd(priv, header);
+	else if (header->ver == priv->if_defs->fw_api_ver)
+		return ele_uapi_allowed_fw_cmd(dev_ctx, header);
+
+	return -EINVAL;
+}
 
 /*
  * se_update_msg_chksum() - calculate and update message checksum word.
@@ -46,6 +67,25 @@ int se_update_msg_chksum(u32 *msg, u32 msg_len)
 	return 0;
 }
 
+static void se_mark_fw_busy(struct se_if_device_ctx *dev_ctx)
+{
+	struct se_if_priv *priv = dev_ctx->priv;
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->fw_busy_lock, flags);
+	if (!priv->fw_busy_dev_ctx) {
+		kref_get(&dev_ctx->refcount);
+		priv->fw_busy_dev_ctx = dev_ctx;
+		atomic_set(&priv->fw_busy, 1);
+	}
+	spin_unlock_irqrestore(&priv->fw_busy_lock, flags);
+}
+
+void set_se_rcv_msg_timeout(struct se_if_device_ctx *dev_ctx, u32 timeout_ms)
+{
+	dev_ctx->rcv_msg_timeout_jiffies = msecs_to_jiffies(timeout_ms);
+}
+
 int ele_msg_rcv(struct se_if_device_ctx *dev_ctx, struct se_clbk_handle *se_clbk_hdl)
 {
 	struct se_if_priv *priv = dev_ctx->priv;
@@ -56,10 +96,20 @@ int ele_msg_rcv(struct se_if_device_ctx *dev_ctx, struct se_clbk_handle *se_clbk
 	unsigned long flags;
 	int ret;
 
-	remaining_jiffies = msecs_to_jiffies(SE_RCV_MSG_DEFAULT_TIMEOUT_MS);
+	remaining_jiffies = dev_ctx->rcv_msg_timeout_jiffies;
 	if (se_clbk_hdl == &priv->waiting_rsp_clbk_hdl) {
 		is_rsp_wait_with_timeout = true;
 		deadline_jiffies = jiffies + remaining_jiffies;
+
+		/*
+		 * Internal kernel transactions run on priv_dev_ctx (probe
+		 * get_info/ping, FW auth, PM IMEM swap). They are not tied to a
+		 * restartable syscall, so wait uninterruptibly: PM freezer fake
+		 * signals must not abort them with -ERESTARTSYS. Userspace
+		 * waiters stay interruptible via the deferred-signal path below.
+		 */
+		if (se_clbk_hdl->dev_ctx == priv->priv_dev_ctx)
+			wait_uninterruptible = true;
 	}
 
 	do {
@@ -71,7 +121,7 @@ int ele_msg_rcv(struct se_if_device_ctx *dev_ctx, struct se_clbk_handle *se_clbk
 				spin_lock_irqsave(&se_clbk_hdl->clbk_rx_lock, flags);
 				se_clbk_hdl->rx_msg = NULL;
 				if (!completion_done(&se_clbk_hdl->done))
-					atomic_set(&priv->fw_busy, 1);
+					se_mark_fw_busy(dev_ctx);
 				spin_unlock_irqrestore(&se_clbk_hdl->clbk_rx_lock, flags);
 				ret = -ETIMEDOUT;
 				break;
@@ -119,7 +169,7 @@ int ele_msg_rcv(struct se_if_device_ctx *dev_ctx, struct se_clbk_handle *se_clbk
 			spin_lock_irqsave(&se_clbk_hdl->clbk_rx_lock, flags);
 			se_clbk_hdl->rx_msg = NULL;
 			if (!completion_done(&se_clbk_hdl->done))
-				atomic_set(&priv->fw_busy, 1);
+				se_mark_fw_busy(dev_ctx);
 
 			spin_unlock_irqrestore(&se_clbk_hdl->clbk_rx_lock, flags);
 			ret = -ETIMEDOUT;
@@ -128,8 +178,35 @@ int ele_msg_rcv(struct se_if_device_ctx *dev_ctx, struct se_clbk_handle *se_clbk
 				get_se_if_name(priv->if_defs->se_if_type));
 			break;
 		}
+
+		/*
+		 * A positive wait return normally means a real response. During
+		 * teardown, se_if_probe_cleanup() forces this wait to return via
+		 * complete_all() with no response, while the enclave may still
+		 * DMA into the shared buffer. Treat that as a failed transaction
+		 * and arm the circuit breaker so the buffer is quarantined, not
+		 * freed.
+		 *
+		 * rx_delivered tells the two apart: se_if_rx_callback() sets it
+		 * under clbk_rx_lock only after copying a real response. This
+		 * keeps teardown-time session/storage close responses from being
+		 * mistaken for the forced abort, which would fail the close and
+		 * leak its DMA buffer.
+		 */
+		spin_lock_irqsave(&se_clbk_hdl->clbk_rx_lock, flags);
+		if (is_rsp_wait_with_timeout && atomic_read(&priv->going_away) &&
+		    !se_clbk_hdl->rx_delivered) {
+			se_clbk_hdl->rx_msg = NULL;
+			se_mark_fw_busy(dev_ctx);
+			spin_unlock_irqrestore(&se_clbk_hdl->clbk_rx_lock, flags);
+			ret = -ENODEV;
+			break;
+		}
+		spin_unlock_irqrestore(&se_clbk_hdl->clbk_rx_lock, flags);
+
 		ret = se_clbk_hdl->rx_msg_sz;
 		break;
+
 	} while (ret < 0);
 
 	return ret;
@@ -190,16 +267,42 @@ int ele_msg_send_rcv(struct se_if_device_ctx *dev_ctx, void *tx_msg,
 
 	guard(mutex)(&priv->se_if_cmd_lock);
 
+	/*
+	 * Arm the transaction under clbk_rx_lock. se_if_probe_cleanup() sets
+	 * going_away under this same lock, then complete_all()s, so checking
+	 * going_away and arming (reinit_completion() + publish) together makes
+	 * teardown and arming mutually exclusive and closes the lost-wakeup
+	 * window. priv_dev_ctx teardown-close commands are still let through.
+	 *
+	 * Check going_away before fw_busy so a caller racing unbind gets
+	 * -ENODEV, not a misleading retryable -EBUSY. fw_busy is only
+	 * atomic_read() here, so no fw_busy_lock is taken and there is no
+	 * deadlock.
+	 */
+	spin_lock_irqsave(&priv->waiting_rsp_clbk_hdl.clbk_rx_lock, flags);
+	if (atomic_read(&priv->going_away) &&
+	    (dev_ctx != priv->priv_dev_ctx ||
+	    !is_msg_xchng_for_tdown(tx_msg))) {
+		spin_unlock_irqrestore(&priv->waiting_rsp_clbk_hdl.clbk_rx_lock, flags);
+		return -ENODEV;
+	}
+
 	if (atomic_read(&priv->fw_busy)) {
+		spin_unlock_irqrestore(&priv->waiting_rsp_clbk_hdl.clbk_rx_lock, flags);
 		dev_dbg(priv->dev, "%s: ELE became unresponsive.\n", dev_ctx->devname);
 		return -EBUSY;
 	}
+
 	reinit_completion(&priv->waiting_rsp_clbk_hdl.done);
-	/* Publish rx_msg/rx_msg_sz under the lock read by se_if_rx_callback(). */
-	spin_lock_irqsave(&priv->waiting_rsp_clbk_hdl.clbk_rx_lock, flags);
 	priv->waiting_rsp_clbk_hdl.dev_ctx = dev_ctx;
 	priv->waiting_rsp_clbk_hdl.rx_msg_sz = exp_rx_msg_sz;
 	priv->waiting_rsp_clbk_hdl.rx_msg = rx_msg;
+	/*
+	 * Arm a fresh transaction: clear the delivered flag so a stale value
+	 * from a previous response cannot make ele_msg_rcv() mistake a
+	 * teardown-forced complete_all() for a genuine firmware response.
+	 */
+	priv->waiting_rsp_clbk_hdl.rx_delivered = false;
 	spin_unlock_irqrestore(&priv->waiting_rsp_clbk_hdl.clbk_rx_lock, flags);
 
 	err = ele_msg_send(dev_ctx, tx_msg, tx_msg_sz);
@@ -248,6 +351,7 @@ static bool check_hdr_exception_for_sz(struct se_if_priv *priv,
 void se_if_rx_callback(struct mbox_client *mbox_cl, void *msg)
 {
 	struct se_clbk_handle *se_clbk_hdl;
+	bool schedule_fw_busy_work = false;
 	struct device *dev = mbox_cl->dev;
 	const char *devname = NULL;
 	struct se_msg_hdr *header;
@@ -325,9 +429,13 @@ void se_if_rx_callback(struct mbox_client *mbox_cl, void *msg)
 		se_clbk_hdl = &priv->waiting_rsp_clbk_hdl;
 		spin_lock_irqsave(&se_clbk_hdl->clbk_rx_lock, flags);
 		if (!se_clbk_hdl->rx_msg) {
-			/* Close circuit breaker on spinlock race */
-			atomic_set(&priv->fw_busy, 0);
+			if (atomic_read(&priv->fw_busy))
+				schedule_fw_busy_work = true;
 			spin_unlock_irqrestore(&se_clbk_hdl->clbk_rx_lock, flags);
+
+			if (schedule_fw_busy_work)
+				schedule_work(&priv->fw_busy_work);
+
 			dev_info(dev, "ELE responded (late), recovery FW available.");
 			return;
 		}
@@ -347,6 +455,12 @@ void se_if_rx_callback(struct mbox_client *mbox_cl, void *msg)
 		se_clbk_hdl->rx_msg_sz = min(rx_msg_sz, exp_rx_msg_sz);
 		devname = se_clbk_hdl->dev_ctx->devname;
 		memcpy(se_clbk_hdl->rx_msg, msg, se_clbk_hdl->rx_msg_sz);
+		/*
+		 * Mark that a genuine firmware response was delivered. ele_msg_rcv()
+		 * reads this under clbk_rx_lock to avoid mistaking this response for
+		 * a teardown-forced complete_all() wakeup.
+		 */
+		se_clbk_hdl->rx_delivered = true;
 		complete(&se_clbk_hdl->done);
 		spin_unlock_irqrestore(&se_clbk_hdl->clbk_rx_lock, flags);
 
@@ -398,7 +512,7 @@ int se_val_rsp_hdr_n_status(struct se_if_priv *priv, struct se_api_msg *msg,
 		return -EINVAL;
 	}
 
-	if (header->size > SE_MU_HDR_WORD_SZ) {
+	if (header->size > SE_MU_HDR_WORD_SZ && (sz >> 2) > SE_MU_HDR_WORD_SZ) {
 		status = RES_STATUS(msg->data[0]);
 		if (status != priv->if_defs->success_tag) {
 			dev_dbg(priv->dev, "Command Id[%x], Response Failure = 0x%x",
