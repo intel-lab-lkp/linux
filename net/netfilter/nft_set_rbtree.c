@@ -900,6 +900,8 @@ static void nft_rbtree_gc_scan(struct nft_set *set)
 		next = rb_next(node);
 
 		rbe = rb_entry(node, struct nft_rbtree_elem, node);
+		if (!nft_set_elem_active(&rbe->ext, NFT_GENMASK_ANY))
+			continue;
 
 		/* elements are reversed in the rbtree for historical reasons,
 		 * from highest to lowest value, that is why end element is
@@ -1035,10 +1037,32 @@ static void nft_array_free_rcu(struct rcu_head *rcu_head)
 	__nft_array_free(array);
 }
 
+static struct nft_rbtree_elem *
+__nft_rbtree_prev_active(struct rb_node **pnode, u8 genmask)
+{
+	struct nft_rbtree_elem *prev_rbe;
+	struct rb_node *node = *pnode;
+
+	while (node) {
+		prev_rbe = rb_entry(node, struct nft_rbtree_elem, node);
+		if (!nft_set_elem_active(&prev_rbe->ext, genmask)) {
+			node = rb_prev(node);
+			continue;
+		}
+
+		*pnode = node;
+		return prev_rbe;
+	}
+
+	return NULL;
+}
+
 static void nft_rbtree_commit(struct nft_set *set)
 {
 	struct nft_rbtree *priv = nft_set_priv(set);
 	struct nft_rbtree_elem *rbe, *prev_rbe;
+	struct net *net = read_pnet(&set->net);
+	u8 genmask = nft_genmask_next(net);
 	struct nft_array *old;
 	u32 num_intervals = 0;
 	struct rb_node *node;
@@ -1060,12 +1084,12 @@ static void nft_rbtree_commit(struct nft_set *set)
 
 	/* Reverse walk to create an array from smaller to largest interval. */
 	node = rb_last(&priv->root);
-	if (node)
-		prev_rbe = rb_entry(node, struct nft_rbtree_elem, node);
-	else
-		prev_rbe = NULL;
 
-	while (prev_rbe) {
+	while (node) {
+		prev_rbe = __nft_rbtree_prev_active(&node, genmask);
+		if (!prev_rbe)
+			break;
+
 		rbe = prev_rbe;
 
 		if (nft_rbtree_interval_start(rbe))
@@ -1082,7 +1106,9 @@ static void nft_rbtree_commit(struct nft_set *set)
 		if (!node)
 			break;
 
-		prev_rbe = rb_entry(node, struct nft_rbtree_elem, node);
+		prev_rbe = __nft_rbtree_prev_active(&node, genmask);
+		if (!prev_rbe)
+			break;
 
 		/* For anonymous sets, when adjacent ranges are found,
 		 * the end element is not added to the set to pack the set

@@ -10853,11 +10853,14 @@ static void nf_tables_commit_audit_log(struct list_head *adl, u32 generation)
 	}
 }
 
-static void nft_set_commit_update(struct nftables_pernet *nft_net)
+static void nft_set_commit_update(struct nftables_pernet *nft_net, bool early_commit)
 {
 	struct nft_set *set, *next;
 
 	list_for_each_entry_safe(set, next, &nft_net->set_update_list, pending_update) {
+		if (set->ops->abort_skip_removal && early_commit)
+			continue;
+
 		list_del_init(&set->pending_update);
 
 		if (!set->ops->commit || set->dead)
@@ -10964,6 +10967,8 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 	}
 
 	/* step 2.  Make rules_gen_X visible to packet path */
+	nft_set_commit_update(nft_net, true);
+
 	list_for_each_entry(table, &nft_net->tables, list) {
 		list_for_each_entry(chain, &table->chains, list)
 			nf_tables_commit_chain(net, chain);
@@ -11170,7 +11175,7 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 		}
 	}
 
-	nft_set_commit_update(nft_net);
+	nft_set_commit_update(nft_net, false);
 
 	nft_commit_notify(net, NETLINK_CB(skb).portid);
 	nf_tables_gen_notify(net, skb, NFT_MSG_NEWGEN);
