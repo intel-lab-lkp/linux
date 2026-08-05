@@ -3198,7 +3198,9 @@ static int i40e_tso(struct i40e_tx_buffer *first, u8 *hdr_len,
 static int i40e_tsyn(struct i40e_ring *tx_ring, struct sk_buff *skb,
 		     u32 tx_flags, u64 *cd_type_cmd_tso_mss)
 {
+	unsigned long flags;
 	struct i40e_pf *pf;
+	int tsyn = 0;
 
 	if (likely(!(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)))
 		return 0;
@@ -3211,23 +3213,28 @@ static int i40e_tsyn(struct i40e_ring *tx_ring, struct sk_buff *skb,
 	 * we are not already transmitting a packet to be timestamped
 	 */
 	pf = i40e_netdev_to_pf(tx_ring->netdev);
-	if (!test_bit(I40E_FLAG_PTP_ENA, pf->flags))
-		return 0;
+	spin_lock_irqsave(&pf->ptp_tx_lock, flags);
 
-	if (pf->ptp_tx &&
-	    !test_and_set_bit_lock(__I40E_PTP_TX_IN_PROGRESS, pf->state)) {
+	if (!test_bit(I40E_FLAG_PTP_ENA, pf->flags))
+		goto out_unlock;
+
+	if (pf->ptp_tx && !pf->ptp_tx_skb) {
 		skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 		pf->ptp_tx_start = jiffies;
 		pf->ptp_tx_skb = skb_get(skb);
+		tsyn = 1;
 	} else {
 		pf->tx_hwtstamp_skipped++;
-		return 0;
 	}
 
-	*cd_type_cmd_tso_mss |= (u64)I40E_TX_CTX_DESC_TSYN <<
-				I40E_TXD_CTX_QW1_CMD_SHIFT;
+out_unlock:
+	spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
 
-	return 1;
+	if (tsyn)
+		*cd_type_cmd_tso_mss |= (u64)I40E_TX_CTX_DESC_TSYN <<
+					I40E_TXD_CTX_QW1_CMD_SHIFT;
+
+	return tsyn;
 }
 
 /**
@@ -3957,10 +3964,21 @@ out_drop:
 cleanup_tx_tstamp:
 	if (unlikely(tx_flags & I40E_TX_FLAGS_TSYN)) {
 		struct i40e_pf *pf = i40e_netdev_to_pf(tx_ring->netdev);
+		struct sk_buff *ptp_skb = NULL;
+		unsigned long flags;
 
-		dev_kfree_skb_any(pf->ptp_tx_skb);
-		pf->ptp_tx_skb = NULL;
-		clear_bit_unlock(__I40E_PTP_TX_IN_PROGRESS, pf->state);
+		spin_lock_irqsave(&pf->ptp_tx_lock, flags);
+		/* Another cleanup path may have handed the slot
+		 * to a new skb.
+		 */
+		if (pf->ptp_tx_skb == skb) {
+			ptp_skb = pf->ptp_tx_skb;
+			pf->ptp_tx_skb = NULL;
+		}
+		spin_unlock_irqrestore(&pf->ptp_tx_lock, flags);
+
+		if (ptp_skb)
+			dev_kfree_skb_any(ptp_skb);
 	}
 
 	return NETDEV_TX_OK;
