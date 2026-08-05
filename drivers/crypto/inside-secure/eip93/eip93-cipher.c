@@ -116,7 +116,7 @@ static int eip93_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	}
 
 	if (flags & EIP93_ALG_AES) {
-		struct crypto_aes_ctx aes;
+		struct crypto_aes_ctx aes __cleanup(aes_zeroize_ctx);
 
 		ctx->blksize = AES_BLOCK_SIZE;
 		ret = aes_expandkey(&aes, key, keylen);
