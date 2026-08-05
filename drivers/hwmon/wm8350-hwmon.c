@@ -23,14 +23,17 @@ static const char * const input_names[] = {
 };
 
 static ssize_t show_voltage(struct device *dev,
-			    struct device_attribute *attr, char *buf)
+			  struct device_attribute *attr, char *buf)
 {
 	struct wm8350 *wm8350 = dev_get_drvdata(dev);
 	int channel = to_sensor_dev_attr(attr)->index;
 	int val;
 
-	val = wm8350_read_auxadc(wm8350, channel, 0, 0) * WM8350_AUX_COEFF;
-	val = DIV_ROUND_CLOSEST(val, 1000);
+	val = wm8350_read_auxadc(wm8350, channel, 0, 0);
+	if (val < 0)
+		return val;
+
+	val = DIV_ROUND_CLOSEST(val * WM8350_AUX_COEFF, 1000);
 
 	return sprintf(buf, "%d\n", val);
 }

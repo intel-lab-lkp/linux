@@ -19,20 +19,32 @@
 
 static int wm8350_read_battery_uvolts(struct wm8350 *wm8350)
 {
-	return wm8350_read_auxadc(wm8350, WM8350_AUXADC_BATT, 0, 0)
-		* WM8350_AUX_COEFF;
+	int val = wm8350_read_auxadc(wm8350, WM8350_AUXADC_BATT, 0, 0);
+
+	if (val < 0)
+		return val;
+
+	return val * WM8350_AUX_COEFF;
 }
 
 static int wm8350_read_line_uvolts(struct wm8350 *wm8350)
 {
-	return wm8350_read_auxadc(wm8350, WM8350_AUXADC_LINE, 0, 0)
-		* WM8350_AUX_COEFF;
+	int val = wm8350_read_auxadc(wm8350, WM8350_AUXADC_LINE, 0, 0);
+
+	if (val < 0)
+		return val;
+
+	return val * WM8350_AUX_COEFF;
 }
 
 static int wm8350_read_usb_uvolts(struct wm8350 *wm8350)
 {
-	return wm8350_read_auxadc(wm8350, WM8350_AUXADC_USB, 0, 0)
-		* WM8350_AUX_COEFF;
+	int val = wm8350_read_auxadc(wm8350, WM8350_AUXADC_USB, 0, 0);
+
+	if (val < 0)
+		return val;
+
+	return val * WM8350_AUX_COEFF;
 }
 
 #define WM8350_BATT_SUPPLY	1
@@ -257,7 +269,10 @@ static int wm8350_ac_get_prop(struct power_supply *psy,
 				 WM8350_LINE_SUPPLY);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = wm8350_read_line_uvolts(wm8350);
+		ret = wm8350_read_line_uvolts(wm8350);
+		if (ret < 0)
+			return ret;
+		val->intval = ret;
 		break;
 	default:
 		ret = -EINVAL;
@@ -287,7 +302,10 @@ static int wm8350_usb_get_prop(struct power_supply *psy,
 				 WM8350_USB_SUPPLY);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = wm8350_read_usb_uvolts(wm8350);
+		ret = wm8350_read_usb_uvolts(wm8350);
+		if (ret < 0)
+			return ret;
+		val->intval = ret;
 		break;
 	default:
 		ret = -EINVAL;
@@ -308,8 +326,12 @@ static enum power_supply_property wm8350_usb_props[] = {
 static int wm8350_bat_check_health(struct wm8350 *wm8350)
 {
 	u16 reg;
+	int uvolts = wm8350_read_battery_uvolts(wm8350);
 
-	if (wm8350_read_battery_uvolts(wm8350) < 2850000)
+	if (uvolts < 0)
+		return POWER_SUPPLY_HEALTH_UNKNOWN;
+
+	if (uvolts < 2850000)
 		return POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
 
 	reg = wm8350_reg_read(wm8350, WM8350_CHARGER_OVERRIDES);
@@ -356,7 +378,10 @@ static int wm8350_bat_get_property(struct power_supply *psy,
 				 WM8350_BATT_SUPPLY);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = wm8350_read_battery_uvolts(wm8350);
+		ret = wm8350_read_battery_uvolts(wm8350);
+		if (ret < 0)
+			return ret;
+		val->intval = ret;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = wm8350_bat_check_health(wm8350);
