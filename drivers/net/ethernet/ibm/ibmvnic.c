@@ -1022,6 +1022,24 @@ static void release_rx_pools(struct ibmvnic_adapter *adapter)
 }
 
 /**
+ * rx_pool_entries() - Number of buffers one rx pool may hold
+ * @adapter: ibmvnic adapter
+ *
+ * send_request_cap() budgets the entry count with req_mtu, but the
+ * buffers are sized from cur_rx_buf_sz. Cap against that size here.
+ */
+static u64 rx_pool_entries(struct ibmvnic_adapter *adapter)
+{
+	u64 buff_size = ALIGN(adapter->cur_rx_buf_sz, L1_CACHE_BYTES);
+
+	if (!buff_size)
+		return adapter->req_rx_add_entries_per_subcrq;
+
+	return min_t(u64, adapter->req_rx_add_entries_per_subcrq,
+		     IBMVNIC_LTB_SET_SIZE / buff_size);
+}
+
+/**
  * reuse_rx_pools() - Check if the existing rx pools can be reused.
  * @adapter: ibmvnic adapter
  *
@@ -1048,7 +1066,7 @@ static bool reuse_rx_pools(struct ibmvnic_adapter *adapter)
 	new_num_pools = adapter->req_rx_queues;
 
 	old_pool_size = adapter->prev_rx_pool_size;
-	new_pool_size = adapter->req_rx_add_entries_per_subcrq;
+	new_pool_size = rx_pool_entries(adapter);
 
 	old_buff_size = adapter->prev_rx_buf_sz;
 	new_buff_size = adapter->cur_rx_buf_sz;
@@ -1082,7 +1100,7 @@ static int init_rx_pools(struct net_device *netdev)
 	u64 buff_size;
 	int i, j, rc;
 
-	pool_size = adapter->req_rx_add_entries_per_subcrq;
+	pool_size = rx_pool_entries(adapter);
 	num_pools = adapter->req_rx_queues;
 	buff_size = adapter->cur_rx_buf_sz;
 
@@ -2000,7 +2018,6 @@ static void clean_rx_pools(struct ibmvnic_adapter *adapter)
 {
 	struct ibmvnic_rx_pool *rx_pool;
 	struct ibmvnic_rx_buff *rx_buff;
-	u64 rx_entries;
 	int rx_scrqs;
 	int i, j;
 
@@ -2008,7 +2025,6 @@ static void clean_rx_pools(struct ibmvnic_adapter *adapter)
 		return;
 
 	rx_scrqs = adapter->num_active_rx_pools;
-	rx_entries = adapter->req_rx_add_entries_per_subcrq;
 
 	/* Free any remaining skbs in the rx buffer pools */
 	for (i = 0; i < rx_scrqs; i++) {
@@ -2017,7 +2033,7 @@ static void clean_rx_pools(struct ibmvnic_adapter *adapter)
 			continue;
 
 		netdev_dbg(adapter->netdev, "Cleaning rx_pool[%d]\n", i);
-		for (j = 0; j < rx_entries; j++) {
+		for (j = 0; j < rx_pool->size; j++) {
 			rx_buff = &rx_pool->rx_buff[j];
 			if (rx_buff && rx_buff->skb) {
 				dev_kfree_skb_any(rx_buff->skb);
