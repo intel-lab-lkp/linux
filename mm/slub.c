@@ -52,6 +52,7 @@
 #include <linux/debugfs.h>
 #include <linux/sysctl.h>
 #include <linux/vmstat.h>
+#include <kunit/visibility.h>
 #include <trace/events/kmem.h>
 
 #include "internal.h"
@@ -6890,7 +6891,8 @@ static gfp_t kmalloc_gfp_adjust(gfp_t flags, size_t size)
 }
 
 #ifdef CONFIG_KVMALLOC_ORDER_LIMIT
-static unsigned int sysctl_kvmalloc_max_contig_order __read_mostly = MAX_PAGE_ORDER;
+VISIBLE_IF_KUNIT unsigned int sysctl_kvmalloc_max_contig_order __read_mostly = MAX_PAGE_ORDER;
+EXPORT_SYMBOL_IF_KUNIT(sysctl_kvmalloc_max_contig_order);
 
 /*
  * The limit only ever applies to requests too large for a kmalloc cache, so

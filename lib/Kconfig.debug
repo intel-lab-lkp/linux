@@ -2998,6 +2998,21 @@ config SLUB_KUNIT_TEST
 
 	  If unsure, say N.
 
+config KVMALLOC_ORDER_LIMIT_KUNIT_TEST
+	tristate "KUnit test for the kvmalloc order limit" if !KUNIT_ALL_TESTS
+	depends on KVMALLOC_ORDER_LIMIT && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the unit test for vm.kvmalloc_max_contig_order.
+	  Tests that requests above the limit are served by vmalloc(), that
+	  requests a kmalloc cache can serve are never diverted, and that the
+	  kvmalloc_forced_vmalloc counter only accounts allocations the limit
+	  actually diverted.
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config RATIONAL_KUNIT_TEST
 	tristate "KUnit test for rational.c" if !KUNIT_ALL_TESTS
 	depends on KUNIT && RATIONAL

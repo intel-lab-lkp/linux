@@ -782,4 +782,8 @@ static inline bool slub_debug_orig_size(struct kmem_cache *s)
 void skip_orig_size_check(struct kmem_cache *s, const void *object);
 #endif
 
+#if defined(CONFIG_KVMALLOC_ORDER_LIMIT) && IS_ENABLED(CONFIG_KUNIT)
+extern unsigned int sysctl_kvmalloc_max_contig_order;
+#endif
+
 #endif /* MM_SLAB_H */
