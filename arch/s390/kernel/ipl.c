@@ -13,6 +13,7 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/kstrtox.h>
+#include <linux/panic.h>
 #include <linux/panic_notifier.h>
 #include <linux/reboot.h>
 #include <linux/ctype.h>
@@ -2342,6 +2343,11 @@ static struct notifier_block on_panic_nb = {
 	.notifier_call = on_panic_notify,
 	.priority = INT_MIN,
 };
+
+void arch_do_panic(void)
+{
+	disabled_wait();
+}
 
 void __init setup_ipl(void)
 {
