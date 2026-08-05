@@ -1926,9 +1926,13 @@ static void sfp_hwmon_probe(struct work_struct *work)
 							 sfp->hwmon_name, sfp,
 							 &sfp_hwmon_chip_info,
 							 NULL);
-	if (IS_ERR(sfp->hwmon_dev))
+	if (IS_ERR(sfp->hwmon_dev)) {
 		dev_err(sfp->dev, "failed to register hwmon device: %ld\n",
 			PTR_ERR(sfp->hwmon_dev));
+		kfree(sfp->hwmon_name);
+		sfp->hwmon_name = NULL;
+		sfp->hwmon_dev  = NULL;
+	 }
 }
 
 static int sfp_hwmon_insert(struct sfp *sfp)
