@@ -729,6 +729,7 @@ static int kset_replay(struct pcache_cache *cache, struct pcache_cache_kset_onme
 		}
 
 		__set_bit(key->cache_pos.cache_seg->cache_seg_id, cache->seg_map);
+		cache_seg_get(key->cache_pos.cache_seg);
 
 		/* Check if the segment generation is valid for insertion. */
 		if (key->seg_gen < key->cache_pos.cache_seg->gen) {
@@ -739,8 +740,6 @@ static int kset_replay(struct pcache_cache *cache, struct pcache_cache_kset_onme
 			cache_key_insert(&cache->req_key_tree, key, true);
 			spin_unlock(&cache_subtree->tree_lock);
 		}
-
-		cache_seg_get(key->cache_pos.cache_seg);
 	}
 
 	return 0;
