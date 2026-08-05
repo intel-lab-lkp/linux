@@ -177,6 +177,10 @@ struct RustMiscDevice {
 impl MiscDevice for RustMiscDevice {
     type Ptr = Pin<KBox<Self>>;
 
+    // Set the OWNER constant to the current module to prevent the unloading
+    // of this module while this device is in use.
+    const OWNER: Option<&'static ThisModule> = Some(&crate::THIS_MODULE);
+
     fn open(_file: &File, misc: &MiscDeviceRegistration<Self>) -> Result<Pin<KBox<Self>>> {
         let dev = ARef::from(misc.device());
 

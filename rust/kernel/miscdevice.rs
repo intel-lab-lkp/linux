@@ -31,7 +31,7 @@ use crate::{
         Opaque, //
     },
 };
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ptr};
 
 /// Options for creating a misc device.
 #[derive(Copy, Clone)]
@@ -125,6 +125,12 @@ impl<T> PinnedDrop for MiscDeviceRegistration<T> {
 pub trait MiscDevice: Sized {
     /// What kind of pointer should `Self` be wrapped in.
     type Ptr: ForeignOwnable + Send + Sync;
+
+    /// Set the owner of this `MiscDevice` instance.
+    ///
+    /// In case this is compiled as a module, setting this prevents
+    /// the module unloading while the device is still in use.
+    const OWNER: Option<&'static ThisModule> = None;
 
     /// Called when the misc device is opened.
     ///
@@ -429,6 +435,11 @@ impl<T: MiscDevice> MiscdeviceVTable<T> {
             Some(Self::show_fdinfo)
         } else {
             None
+        },
+        #[cfg(CONFIG_MODULES)]
+        owner: match T::OWNER {
+            Some(module) => module.as_ptr(),
+            None => ptr::null_mut(),
         },
         ..pin_init::zeroed()
     };
