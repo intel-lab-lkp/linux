@@ -49,7 +49,6 @@ u64 satp_mode __ro_after_init = SATP_MODE_57;
 #else
 u64 satp_mode __ro_after_init = SATP_MODE_32;
 #endif
-EXPORT_SYMBOL(satp_mode);
 
 #ifdef CONFIG_64BIT
 bool pgtable_l4_enabled __ro_after_init = true;
