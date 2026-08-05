@@ -345,6 +345,7 @@ struct readahead_control;
 #define IOCB_DONTCACHE		(__force int) RWF_DONTCACHE
 #define IOCB_NOSIGNAL		(__force int) RWF_NOSIGNAL
 #define IOCB_WRITETHROUGH	(__force int) RWF_WRITETHROUGH
+#define IOCB_NOSERIAL		(__force int) RWF_NOSERIAL
 
 /* non-RWF related bits - start at 16 */
 #define IOCB_EVENTFD		(1 << 16)
@@ -3475,6 +3476,15 @@ static inline int kiocb_set_rw_flags(struct kiocb *ki, rwf_t flags,
 		if (IS_DAX(ki->ki_filp->f_mapping->host))
 			return -EOPNOTSUPP;
 	}
+
+	/*
+	 * For now we don't allow users to pass the NOSERIAL flag
+	 * TODO: Once the semantics of this flag are finalized we can lift this
+	 * restriction.
+	 */
+	if (flags & IOCB_NOSERIAL)
+		return -EOPNOTSUPP;
+
 	kiocb_flags |= (__force int) (flags & RWF_SUPPORTED);
 	if (flags & RWF_SYNC)
 		kiocb_flags |= IOCB_DSYNC;

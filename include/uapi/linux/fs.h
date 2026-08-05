@@ -454,10 +454,14 @@ typedef int __bitwise __kernel_rwf_t;
 /* buffered IO that is asynchronously written through to disk after write */
 #define RWF_WRITETHROUGH	((__force __kernel_rwf_t)0x00000200)
 
+/* buffered IO writes that are non sequential because they use a shared lock */
+#define RWF_NOSERIAL	((__force __kernel_rwf_t)0x00000400)
+
 /* mask of flags supported by the kernel */
 #define RWF_SUPPORTED	(RWF_HIPRI | RWF_DSYNC | RWF_SYNC | RWF_NOWAIT |\
 			 RWF_APPEND | RWF_NOAPPEND | RWF_ATOMIC |\
-			 RWF_DONTCACHE | RWF_NOSIGNAL | RWF_WRITETHROUGH)
+			 RWF_DONTCACHE | RWF_NOSIGNAL | RWF_WRITETHROUGH |\
+			 RWF_NOSERIAL)
 
 #define PROCFS_IOCTL_MAGIC 'f'
 
