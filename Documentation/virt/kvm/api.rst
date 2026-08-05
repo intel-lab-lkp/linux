@@ -6461,6 +6461,9 @@ specified via KVM_CREATE_GUEST_MEMFD.  Currently defined flags:
                                without INIT_SHARED will be marked private).
                                Shared memory can be faulted into host userspace
                                page tables. Private memory cannot.
+ GUEST_MEMFD_FLAG_MIGRATABLE   Allow MM to migrate guest_memfd folios.
+                               Availability is architecture sepecific. Without
+                               this flag, folios remain unmovable.
   ============================ ================================================
 
 When the KVM MMU performs a PFN lookup to service a guest fault and the backing
