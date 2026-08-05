@@ -989,10 +989,10 @@ static void csk_act_open_retry_timer(struct timer_list *t)
 {
 	struct sk_buff *skb = NULL;
 	struct cxgbi_sock *csk = timer_container_of(csk, t, retry_timer);
-	struct cxgb4_lld_info *lldi = cxgbi_cdev_priv(csk->cdev);
+	struct cxgb4_lld_info *lldi;
 	void (*send_act_open_func)(struct cxgbi_sock *, struct sk_buff *,
 				   struct l2t_entry *);
-	int t4 = is_t4(lldi->adapter_type), size, size6;
+	int t4, size, size6;
 
 	log_debug(1 << CXGBI_DBG_TOE | 1 << CXGBI_DBG_SOCK,
 		"csk 0x%p,%u,0x%lx,%u.\n",
@@ -1000,6 +1000,15 @@ static void csk_act_open_retry_timer(struct timer_list *t)
 
 	cxgbi_sock_get(csk);
 	spin_lock_bh(&csk->lock);
+
+	if (cxgbi_sock_flag(csk, CTPF_OFFLOAD_DOWN)) {
+		spin_unlock_bh(&csk->lock);
+		cxgbi_sock_put(csk);
+		return;
+	}
+
+	lldi = cxgbi_cdev_priv(csk->cdev);
+	t4 = is_t4(lldi->adapter_type);
 
 	if (t4) {
 		size = sizeof(struct cpl_act_open_req);
@@ -1075,7 +1084,8 @@ static void do_act_open_rpl(struct cxgbi_device *cdev, struct sk_buff *skb)
 	cxgbi_sock_get(csk);
 	spin_lock_bh(&csk->lock);
 
-	if (status == CPL_ERR_CONN_EXIST &&
+	if (!cxgbi_sock_flag(csk, CTPF_OFFLOAD_DOWN) &&
+	    status == CPL_ERR_CONN_EXIST &&
 	    csk->retry_timer.function != csk_act_open_retry_timer) {
 		csk->retry_timer.function = csk_act_open_retry_timer;
 		mod_timer(&csk->retry_timer, jiffies + HZ / 2);
