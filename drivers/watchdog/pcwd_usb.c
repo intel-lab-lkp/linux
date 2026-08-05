@@ -27,6 +27,7 @@
 #include <linux/types.h>	/* For standard types (like size_t) */
 #include <linux/errno.h>	/* For the -ENODEV/... values */
 #include <linux/kernel.h>	/* For printk/panic/... */
+#include <linux/kref.h>	/* For reference counting */
 #include <linux/delay.h>	/* For mdelay function */
 #include <linux/miscdevice.h>	/* For struct miscdevice */
 #include <linux/watchdog.h>	/* For the watchdog specific items */
@@ -112,6 +113,7 @@ static char expect_release;
 
 /* Structure to hold all of our device specific stuff */
 struct usb_pcwd_private {
+	struct kref		kref;
 	/* save off the usb device pointer */
 	struct usb_device	*udev;
 	/* the interface for this device */
@@ -152,6 +154,7 @@ static DEFINE_MUTEX(disconnect_mutex);
 static int usb_pcwd_probe(struct usb_interface *interface,
 						const struct usb_device_id *id);
 static void usb_pcwd_disconnect(struct usb_interface *interface);
+static void usb_pcwd_delete(struct kref *kref);
 
 /* usb specific object needed to register this driver with the usb subsystem */
 static struct usb_driver usb_pcwd_driver = {
@@ -210,14 +213,23 @@ static int usb_pcwd_send_command(struct usb_pcwd_private *usb_pcwd,
 	int got_response, count;
 	unsigned char *buf;
 
+	if (!usb_pcwd)
+		return -ENODEV;
+
+	mutex_lock(&usb_pcwd->mtx);
+
 	/* We will not send any commands if the USB PCWD device does
 	 * not exist */
-	if ((!usb_pcwd) || (!usb_pcwd->exists))
-		return -1;
+	if (!usb_pcwd->exists) {
+		got_response = -ENODEV;
+		goto out_unlock;
+	}
 
 	buf = kmalloc(6, GFP_KERNEL);
-	if (buf == NULL)
-		return 0;
+	if (!buf) {
+		got_response = 0;
+		goto out_unlock;
+	}
 
 	/* The USB PC Watchdog uses a 6 byte report format.
 	 * The board currently uses only 3 of the six bytes of the report. */
@@ -258,6 +270,8 @@ static int usb_pcwd_send_command(struct usb_pcwd_private *usb_pcwd,
 
 	kfree(buf);
 
+out_unlock:
+	mutex_unlock(&usb_pcwd->mtx);
 	return got_response;
 }
 
@@ -327,8 +341,11 @@ static int usb_pcwd_get_temperature(struct usb_pcwd_private *usb_pcwd,
 {
 	unsigned char msb = 0x00;
 	unsigned char lsb = 0x00;
+	int ret;
 
-	usb_pcwd_send_command(usb_pcwd, CMD_READ_TEMP, &msb, &lsb);
+	ret = usb_pcwd_send_command(usb_pcwd, CMD_READ_TEMP, &msb, &lsb);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * Convert celsius to fahrenheit, since this was
@@ -344,10 +361,14 @@ static int usb_pcwd_get_timeleft(struct usb_pcwd_private *usb_pcwd,
 {
 	unsigned char msb = 0x00;
 	unsigned char lsb = 0x00;
+	int ret;
 
 	/* Read the time that's left before rebooting */
 	/* Note: if the board is not yet armed then we will read 0xFFFF */
-	usb_pcwd_send_command(usb_pcwd, CMD_READ_WATCHDOG_TIMEOUT, &msb, &lsb);
+	ret = usb_pcwd_send_command(usb_pcwd, CMD_READ_WATCHDOG_TIMEOUT,
+				    &msb, &lsb);
+	if (ret < 0)
+		return ret;
 
 	*time_left = (msb << 8) + lsb;
 
@@ -361,6 +382,8 @@ static int usb_pcwd_get_timeleft(struct usb_pcwd_private *usb_pcwd,
 static ssize_t usb_pcwd_write(struct file *file, const char __user *data,
 						size_t len, loff_t *ppos)
 {
+	struct usb_pcwd_private *usb_pcwd = file->private_data;
+
 	/* See if we got the magic character 'V' and reload the timer */
 	if (len) {
 		if (!nowayout) {
@@ -382,7 +405,7 @@ static ssize_t usb_pcwd_write(struct file *file, const char __user *data,
 		}
 
 		/* someone wrote to us, we should reload the timer */
-		usb_pcwd_keepalive(usb_pcwd_device);
+		usb_pcwd_keepalive(usb_pcwd);
 	}
 	return len;
 }
@@ -390,6 +413,7 @@ static ssize_t usb_pcwd_write(struct file *file, const char __user *data,
 static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 						unsigned long arg)
 {
+	struct usb_pcwd_private *usb_pcwd = file->private_data;
 	void __user *argp = (void __user *)arg;
 	int __user *p = argp;
 	static const struct watchdog_info ident = {
@@ -411,9 +435,11 @@ static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 	case WDIOC_GETTEMP:
 	{
 		int temperature;
+		int ret;
 
-		if (usb_pcwd_get_temperature(usb_pcwd_device, &temperature))
-			return -EFAULT;
+		ret = usb_pcwd_get_temperature(usb_pcwd, &temperature);
+		if (ret)
+			return ret;
 
 		return put_user(temperature, p);
 	}
@@ -426,12 +452,12 @@ static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 
 		if (new_options & WDIOS_DISABLECARD) {
-			usb_pcwd_stop(usb_pcwd_device);
+			usb_pcwd_stop(usb_pcwd);
 			retval = 0;
 		}
 
 		if (new_options & WDIOS_ENABLECARD) {
-			usb_pcwd_start(usb_pcwd_device);
+			usb_pcwd_start(usb_pcwd);
 			retval = 0;
 		}
 
@@ -439,7 +465,7 @@ static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 	}
 
 	case WDIOC_KEEPALIVE:
-		usb_pcwd_keepalive(usb_pcwd_device);
+		usb_pcwd_keepalive(usb_pcwd);
 		return 0;
 
 	case WDIOC_SETTIMEOUT:
@@ -449,10 +475,10 @@ static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 		if (get_user(new_heartbeat, p))
 			return -EFAULT;
 
-		if (usb_pcwd_set_heartbeat(usb_pcwd_device, new_heartbeat))
+		if (usb_pcwd_set_heartbeat(usb_pcwd, new_heartbeat))
 			return -EINVAL;
 
-		usb_pcwd_keepalive(usb_pcwd_device);
+		usb_pcwd_keepalive(usb_pcwd);
 	}
 		fallthrough;
 
@@ -462,9 +488,11 @@ static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 	case WDIOC_GETTIMELEFT:
 	{
 		int time_left;
+		int ret;
 
-		if (usb_pcwd_get_timeleft(usb_pcwd_device, &time_left))
-			return -EFAULT;
+		ret = usb_pcwd_get_timeleft(usb_pcwd, &time_left);
+		if (ret)
+			return ret;
 
 		return put_user(time_left, p);
 	}
@@ -476,29 +504,55 @@ static long usb_pcwd_ioctl(struct file *file, unsigned int cmd,
 
 static int usb_pcwd_open(struct inode *inode, struct file *file)
 {
+	struct usb_pcwd_private *usb_pcwd;
+	int ret;
+
+	mutex_lock(&disconnect_mutex);
+	usb_pcwd = usb_pcwd_device;
+	if (!usb_pcwd || !usb_pcwd->exists) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 	/* /dev/watchdog can only be opened once */
-	if (test_and_set_bit(0, &is_active))
-		return -EBUSY;
+	if (test_and_set_bit(0, &is_active)) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+	kref_get(&usb_pcwd->kref);
+	file->private_data = usb_pcwd;
+	mutex_unlock(&disconnect_mutex);
 
 	/* Activate */
-	usb_pcwd_start(usb_pcwd_device);
-	usb_pcwd_keepalive(usb_pcwd_device);
-	return stream_open(inode, file);
+	usb_pcwd_start(usb_pcwd);
+	usb_pcwd_keepalive(usb_pcwd);
+	ret = stream_open(inode, file);
+	if (ret) {
+		kref_put(&usb_pcwd->kref, usb_pcwd_delete);
+		clear_bit(0, &is_active);
+	}
+	return ret;
+
+out_unlock:
+	mutex_unlock(&disconnect_mutex);
+	return ret;
 }
 
 static int usb_pcwd_release(struct inode *inode, struct file *file)
 {
+	struct usb_pcwd_private *usb_pcwd = file->private_data;
+
 	/*
 	 *      Shut off the timer.
 	 */
 	if (expect_release == 42) {
-		usb_pcwd_stop(usb_pcwd_device);
+		usb_pcwd_stop(usb_pcwd);
 	} else {
 		pr_crit("Unexpected close, not stopping watchdog!\n");
-		usb_pcwd_keepalive(usb_pcwd_device);
+		usb_pcwd_keepalive(usb_pcwd);
 	}
 	expect_release = 0;
 	clear_bit(0, &is_active);
+	kref_put(&usb_pcwd->kref, usb_pcwd_delete);
 	return 0;
 }
 
@@ -509,10 +563,13 @@ static int usb_pcwd_release(struct inode *inode, struct file *file)
 static ssize_t usb_pcwd_temperature_read(struct file *file, char __user *data,
 				size_t len, loff_t *ppos)
 {
+	struct usb_pcwd_private *usb_pcwd = file->private_data;
 	int temperature;
+	int ret;
 
-	if (usb_pcwd_get_temperature(usb_pcwd_device, &temperature))
-		return -EFAULT;
+	ret = usb_pcwd_get_temperature(usb_pcwd, &temperature);
+	if (ret)
+		return ret;
 
 	if (copy_to_user(data, &temperature, 1))
 		return -EFAULT;
@@ -522,11 +579,33 @@ static ssize_t usb_pcwd_temperature_read(struct file *file, char __user *data,
 
 static int usb_pcwd_temperature_open(struct inode *inode, struct file *file)
 {
-	return stream_open(inode, file);
+	struct usb_pcwd_private *usb_pcwd;
+	int ret;
+
+	mutex_lock(&disconnect_mutex);
+	usb_pcwd = usb_pcwd_device;
+	if (!usb_pcwd || !usb_pcwd->exists) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
+	kref_get(&usb_pcwd->kref);
+	file->private_data = usb_pcwd;
+	mutex_unlock(&disconnect_mutex);
+	ret = stream_open(inode, file);
+	if (ret)
+		kref_put(&usb_pcwd->kref, usb_pcwd_delete);
+	return ret;
+
+out_unlock:
+	mutex_unlock(&disconnect_mutex);
+	return ret;
 }
 
 static int usb_pcwd_temperature_release(struct inode *inode, struct file *file)
 {
+	struct usb_pcwd_private *usb_pcwd = file->private_data;
+
+	kref_put(&usb_pcwd->kref, usb_pcwd_delete);
 	return 0;
 }
 
@@ -582,11 +661,19 @@ static struct notifier_block usb_pcwd_notifier = {
 /*
  *	usb_pcwd_delete
  */
-static inline void usb_pcwd_delete(struct usb_pcwd_private *usb_pcwd)
+static void usb_pcwd_delete(struct kref *kref)
 {
-	usb_free_urb(usb_pcwd->intr_urb);
-	usb_free_coherent(usb_pcwd->udev, usb_pcwd->intr_size,
-			  usb_pcwd->intr_buffer, usb_pcwd->intr_dma);
+	struct usb_pcwd_private *usb_pcwd;
+
+	usb_pcwd = container_of(kref, struct usb_pcwd_private, kref);
+	if (usb_pcwd->intr_urb) {
+		usb_kill_urb(usb_pcwd->intr_urb);
+		usb_free_urb(usb_pcwd->intr_urb);
+	}
+	if (usb_pcwd->intr_buffer)
+		usb_free_coherent(usb_pcwd->udev, usb_pcwd->intr_size,
+				  usb_pcwd->intr_buffer, usb_pcwd->intr_dma);
+	usb_put_dev(usb_pcwd->udev);
 	kfree(usb_pcwd);
 }
 
@@ -644,11 +731,12 @@ static int usb_pcwd_probe(struct usb_interface *interface,
 	usb_pcwd = kzalloc_obj(struct usb_pcwd_private);
 	if (usb_pcwd == NULL)
 		goto error;
+	kref_init(&usb_pcwd->kref);
 
 	usb_pcwd_device = usb_pcwd;
 
 	mutex_init(&usb_pcwd->mtx);
-	usb_pcwd->udev = udev;
+	usb_pcwd->udev = usb_get_dev(udev);
 	usb_pcwd->interface = interface;
 	usb_pcwd->interface_number = iface_desc->desc.bInterfaceNumber;
 	usb_pcwd->intr_size = (le16_to_cpu(endpoint->wMaxPacketSize) > 8 ?
@@ -747,12 +835,20 @@ static int usb_pcwd_probe(struct usb_interface *interface,
 	return 0;
 
 err_out_misc_deregister:
+	mutex_lock(&disconnect_mutex);
+	if (usb_pcwd_device == usb_pcwd)
+		usb_pcwd_device = NULL;
+	mutex_unlock(&disconnect_mutex);
+	mutex_lock(&usb_pcwd->mtx);
+	usb_pcwd->exists = 0;
+	mutex_unlock(&usb_pcwd->mtx);
+	usb_kill_urb(usb_pcwd->intr_urb);
 	misc_deregister(&usb_pcwd_temperature_miscdev);
 err_out_unregister_reboot:
 	unregister_reboot_notifier(&usb_pcwd_notifier);
 error:
 	if (usb_pcwd)
-		usb_pcwd_delete(usb_pcwd);
+		kref_put(&usb_pcwd->kref, usb_pcwd_delete);
 	usb_pcwd_device = NULL;
 	return retval;
 }
@@ -775,29 +871,29 @@ static void usb_pcwd_disconnect(struct usb_interface *interface)
 
 	usb_pcwd = usb_get_intfdata(interface);
 	usb_set_intfdata(interface, NULL);
-
-	mutex_lock(&usb_pcwd->mtx);
+	if (usb_pcwd_device == usb_pcwd)
+		usb_pcwd_device = NULL;
+	mutex_unlock(&disconnect_mutex);
 
 	/* Stop the timer before we leave */
 	if (!nowayout)
 		usb_pcwd_stop(usb_pcwd);
 
+	mutex_lock(&usb_pcwd->mtx);
 	/* We should now stop communicating with the USB PCWD device */
 	usb_pcwd->exists = 0;
+	mutex_unlock(&usb_pcwd->mtx);
+	usb_kill_urb(usb_pcwd->intr_urb);
 
 	/* Deregister */
 	misc_deregister(&usb_pcwd_miscdev);
 	misc_deregister(&usb_pcwd_temperature_miscdev);
 	unregister_reboot_notifier(&usb_pcwd_notifier);
 
-	mutex_unlock(&usb_pcwd->mtx);
-
-	/* Delete the USB PCWD device */
-	usb_pcwd_delete(usb_pcwd);
+	/* Drop the probe reference. Open files keep the object alive. */
+	kref_put(&usb_pcwd->kref, usb_pcwd_delete);
 
 	cards_found--;
-
-	mutex_unlock(&disconnect_mutex);
 
 	pr_info("USB PC Watchdog disconnected\n");
 }
