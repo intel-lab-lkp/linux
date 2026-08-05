@@ -814,6 +814,17 @@ struct arm_smmu_tlbi {
 	/* Base Translation Granule of the page table */
 	u8 tgsz_lg2;
 	bool leaf_only;
+
+	struct {
+		bool use_full_inv;
+		u16 num;
+	} single;
+
+	struct {
+		bool use_full_inv;
+		u32 data0;
+		u64 data1;
+	} range;
 };
 
 struct arm_smmu_evtq {
