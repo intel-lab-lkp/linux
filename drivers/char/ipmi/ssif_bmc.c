@@ -7,12 +7,14 @@
  */
 
 #include <linux/i2c.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/timer.h>
@@ -78,6 +80,7 @@ enum ssif_state {
 };
 
 struct ssif_bmc_ctx {
+	struct kref            refcount;
 	struct i2c_client       *client;
 	struct miscdevice       miscdev;
 	int                     msg_idx;
@@ -101,6 +104,7 @@ struct ssif_bmc_ctx {
 	bool                    response_in_progress;
 	bool                    busy;
 	bool                    aborting;
+	bool                    dead;
 	/* Buffer for SSIF Transaction part*/
 	struct ssif_part_buffer part_buf;
 	struct ipmi_ssif_msg    response;
@@ -109,7 +113,15 @@ struct ssif_bmc_ctx {
 
 static inline struct ssif_bmc_ctx *to_ssif_bmc(struct file *file)
 {
-	return container_of(file->private_data, struct ssif_bmc_ctx, miscdev);
+	return file->private_data;
+}
+
+static void ssif_bmc_free(struct kref *refcount)
+{
+	struct ssif_bmc_ctx *ssif_bmc;
+
+	ssif_bmc = container_of(refcount, struct ssif_bmc_ctx, refcount);
+	kfree(ssif_bmc);
 }
 
 static const char *state_to_string(enum ssif_state state)
@@ -142,10 +154,15 @@ static ssize_t ssif_bmc_read(struct file *file, char __user *buf, size_t count, 
 
 	spin_lock_irqsave(&ssif_bmc->lock, flags);
 	while (!ssif_bmc->request_available) {
+		if (ssif_bmc->dead) {
+			spin_unlock_irqrestore(&ssif_bmc->lock, flags);
+			return -ENODEV;
+		}
 		spin_unlock_irqrestore(&ssif_bmc->lock, flags);
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 		ret = wait_event_interruptible(ssif_bmc->wait_queue,
+					       READ_ONCE(ssif_bmc->dead) ||
 					       ssif_bmc->request_available);
 		if (ret)
 			return ret;
@@ -195,14 +212,23 @@ static ssize_t ssif_bmc_write(struct file *file, const char __user *buf, size_t 
 
 	spin_lock_irqsave(&ssif_bmc->lock, flags);
 	while (ssif_bmc->response_in_progress) {
+		if (ssif_bmc->dead) {
+			ret = -ENODEV;
+			goto exit;
+		}
 		spin_unlock_irqrestore(&ssif_bmc->lock, flags);
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 		ret = wait_event_interruptible(ssif_bmc->wait_queue,
+					       READ_ONCE(ssif_bmc->dead) ||
 					       !ssif_bmc->response_in_progress);
 		if (ret)
 			return ret;
 		spin_lock_irqsave(&ssif_bmc->lock, flags);
+	}
+	if (ssif_bmc->dead) {
+		ret = -ENODEV;
+		goto exit;
 	}
 
 	/*
@@ -235,14 +261,21 @@ exit:
 
 static int ssif_bmc_open(struct inode *inode, struct file *file)
 {
-	struct ssif_bmc_ctx *ssif_bmc = to_ssif_bmc(file);
+	struct ssif_bmc_ctx *ssif_bmc;
 	int ret = 0;
 
+	ssif_bmc = container_of(file->private_data, struct ssif_bmc_ctx,
+				miscdev);
 	spin_lock_irq(&ssif_bmc->lock);
-	if (!ssif_bmc->running)
+	if (ssif_bmc->dead) {
+		ret = -ENODEV;
+	} else if (!ssif_bmc->running) {
 		ssif_bmc->running = 1;
-	else
+		kref_get(&ssif_bmc->refcount);
+		file->private_data = ssif_bmc;
+	} else {
 		ret = -EBUSY;
+	}
 	spin_unlock_irq(&ssif_bmc->lock);
 
 	return ret;
@@ -259,6 +292,8 @@ static __poll_t ssif_bmc_poll(struct file *file, poll_table *wait)
 	/* The request is available, userspace application can get the request */
 	if (ssif_bmc->request_available)
 		mask |= EPOLLIN;
+	if (ssif_bmc->dead)
+		mask |= EPOLLERR | EPOLLHUP;
 
 	spin_unlock_irq(&ssif_bmc->lock);
 
@@ -272,6 +307,7 @@ static int ssif_bmc_release(struct inode *inode, struct file *file)
 	spin_lock_irq(&ssif_bmc->lock);
 	ssif_bmc->running = 0;
 	spin_unlock_irq(&ssif_bmc->lock);
+	kref_put(&ssif_bmc->refcount, ssif_bmc_free);
 
 	return 0;
 }
@@ -825,9 +861,10 @@ static int ssif_bmc_probe(struct i2c_client *client)
 	struct ssif_bmc_ctx *ssif_bmc;
 	int ret;
 
-	ssif_bmc = devm_kzalloc(&client->dev, sizeof(*ssif_bmc), GFP_KERNEL);
+	ssif_bmc = kzalloc_obj(struct ssif_bmc_ctx);
 	if (!ssif_bmc)
 		return -ENOMEM;
+	kref_init(&ssif_bmc->refcount);
 
 	spin_lock_init(&ssif_bmc->lock);
 
@@ -837,6 +874,8 @@ static int ssif_bmc_probe(struct i2c_client *client)
 	ssif_bmc->busy = false;
 	ssif_bmc->response_timer_inited = false;
 
+	ssif_bmc->client = client;
+	ssif_bmc->client->flags |= I2C_CLIENT_SLAVE;
 	/* Register misc device interface */
 	ssif_bmc->miscdev.minor = MISC_DYNAMIC_MINOR;
 	ssif_bmc->miscdev.name = DEVICE_NAME;
@@ -844,17 +883,25 @@ static int ssif_bmc_probe(struct i2c_client *client)
 	ssif_bmc->miscdev.parent = &client->dev;
 	ret = misc_register(&ssif_bmc->miscdev);
 	if (ret)
-		return ret;
-
-	ssif_bmc->client = client;
-	ssif_bmc->client->flags |= I2C_CLIENT_SLAVE;
+		goto err_put;
 
 	/* Register I2C slave */
 	i2c_set_clientdata(client, ssif_bmc);
 	ret = i2c_slave_register(client, ssif_bmc_cb);
 	if (ret)
-		misc_deregister(&ssif_bmc->miscdev);
+		goto err_misc;
 
+	return 0;
+
+err_misc:
+	spin_lock_irq(&ssif_bmc->lock);
+	ssif_bmc->dead = true;
+	spin_unlock_irq(&ssif_bmc->lock);
+	misc_deregister(&ssif_bmc->miscdev);
+	wake_up_all(&ssif_bmc->wait_queue);
+	i2c_set_clientdata(client, NULL);
+err_put:
+	kref_put(&ssif_bmc->refcount, ssif_bmc_free);
 	return ret;
 }
 
@@ -862,9 +909,15 @@ static void ssif_bmc_remove(struct i2c_client *client)
 {
 	struct ssif_bmc_ctx *ssif_bmc = i2c_get_clientdata(client);
 
-	timer_delete_sync(&ssif_bmc->response_timer);
-	i2c_slave_unregister(client);
+	spin_lock_irq(&ssif_bmc->lock);
+	ssif_bmc->dead = true;
+	spin_unlock_irq(&ssif_bmc->lock);
 	misc_deregister(&ssif_bmc->miscdev);
+	wake_up_all(&ssif_bmc->wait_queue);
+	i2c_slave_unregister(client);
+	timer_delete_sync(&ssif_bmc->response_timer);
+	i2c_set_clientdata(client, NULL);
+	kref_put(&ssif_bmc->refcount, ssif_bmc_free);
 }
 
 static const struct of_device_id ssif_bmc_match[] = {
