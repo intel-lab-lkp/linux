@@ -1198,10 +1198,14 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 				 * device private or coherent memory.
 				 *
 				 * Try to get rid of swap cache if possible.
+				 *
+				 * @folio may have been split into @nr folios
+				 * above, so clear all of them.
 				 */
 				if (!folio_test_anon(folio) ||
 				    !folio_free_swap(folio)) {
-					src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
+					for (j = 0; j < nr && i + j < npages; j++)
+						src_pfns[i+j] &= ~MIGRATE_PFN_MIGRATE;
 					goto next;
 				}
 			}
@@ -1209,7 +1213,8 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 			/*
 			 * Other types of ZONE_DEVICE page are not supported.
 			 */
-			src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
+			for (j = 0; j < nr && i + j < npages; j++)
+				src_pfns[i+j] &= ~MIGRATE_PFN_MIGRATE;
 			goto next;
 		}
 
