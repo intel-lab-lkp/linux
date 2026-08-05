@@ -2359,7 +2359,8 @@ void unregister_kretprobes(struct kretprobe **rps, int num)
 #ifdef CONFIG_KRETPROBE_ON_RETHOOK
 		rethook_free(rps[i]->rh);
 #else
-		rcu_assign_pointer(rps[i]->rph->rp, NULL);
+		if (rps[i]->rph)
+			rcu_assign_pointer(rps[i]->rph->rp, NULL);
 #endif
 	}
 
