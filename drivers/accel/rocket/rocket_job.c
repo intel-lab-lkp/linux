@@ -7,6 +7,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include <drm/rocket_accel.h>
+#include <linux/hrtimer.h>
 #include <linux/interrupt.h>
 #include <linux/overflow.h>
 #include <linux/iommu.h>
@@ -20,6 +21,15 @@
 #include "rocket_registers.h"
 
 #define JOB_TIMEOUT_MS 500
+
+/*
+ * RK3576 arms the same DPU completion as RK3588, but the interrupt never
+ * reaches the GIC. The completion itself is visible in INTERRUPT_RAW_STATUS,
+ * so sample that instead. The tick cap bounds jobs that never raise it at all,
+ * which is the same open problem as the wrong inference results.
+ */
+#define RK3576_POLL_INTERVAL_NS	1000000LL	/* 1 ms */
+#define RK3576_POLL_MAX_TICKS	8
 
 static struct rocket_job *
 to_rocket_job(struct drm_sched_job *sched_job)
@@ -150,6 +160,14 @@ static void rocket_job_hw_submit(struct rocket_core *core, struct rocket_job *jo
 	rocket_pc_writel(core, TASK_DMA_BASE_ADDR, PC_TASK_DMA_BASE_ADDR_DMA_BASE_ADDR(0x0));
 
 	rocket_pc_writel(core, OPERATION_ENABLE, PC_OPERATION_ENABLE_OP_EN(1));
+
+	if (core->soc->poll_completion) {
+		core->poll_ticks = 0;
+		core->poll_seq++;
+		atomic_set(&core->poll_active, 1);
+		hrtimer_start(&core->poll_timer, ns_to_ktime(RK3576_POLL_INTERVAL_NS),
+			      HRTIMER_MODE_REL);
+	}
 
 	dev_dbg(core->dev, "Submitted regcmd at 0x%llx to core %d", task->regcmd, core->index);
 }
@@ -341,25 +359,87 @@ err_put_fences:
 	return ERR_PTR(ret);
 }
 
+static void rocket_job_handle_irq(struct rocket_core *core);
+
+static enum hrtimer_restart rocket_poll_timer_fn(struct hrtimer *timer)
+{
+	struct rocket_core *core = container_of(timer, struct rocket_core, poll_timer);
+	u32 raw;
+
+	if (!atomic_read(&core->poll_active))
+		return HRTIMER_NORESTART;
+
+	core->poll_work_seq = core->poll_seq;
+
+	raw = rocket_pc_readl(core, INTERRUPT_RAW_STATUS);
+	if ((raw & (PC_INTERRUPT_RAW_STATUS_DPU_0 | PC_INTERRUPT_RAW_STATUS_DPU_1)) ||
+	    ++core->poll_ticks >= RK3576_POLL_MAX_TICKS) {
+		atomic_set(&core->poll_active, 0);
+		schedule_work(&core->poll_work);
+		return HRTIMER_NORESTART;
+	}
+
+	hrtimer_forward_now(timer, ns_to_ktime(RK3576_POLL_INTERVAL_NS));
+	return HRTIMER_RESTART;
+}
+
+/* Start the job's next task, or retire it. Caller holds job_lock. */
+static void rocket_job_next_locked(struct rocket_core *core)
+{
+	lockdep_assert_held(&core->job_lock);
+
+	if (!core->in_flight_job)
+		return;
+
+	if (core->in_flight_job->next_task_idx < core->in_flight_job->task_count) {
+		rocket_job_hw_submit(core, core->in_flight_job);
+		return;
+	}
+
+	iommu_detach_group(NULL, iommu_group_get(core->dev));
+	dma_fence_signal(core->in_flight_job->done_fence);
+	pm_runtime_put_autosuspend(core->dev);
+	core->in_flight_job = NULL;
+}
+
+static void rocket_poll_work_fn(struct work_struct *work)
+{
+	struct rocket_core *core = container_of(work, struct rocket_core, poll_work);
+
+	pm_runtime_mark_last_busy(core->dev);
+
+	scoped_guard(mutex, &core->job_lock) {
+		/*
+		 * The interrupt can land while this work is queued, retire the job
+		 * and start the next task. poll_seq only moves under job_lock, in
+		 * hw_submit, so comparing it here says whether that happened. Doing
+		 * it outside the lock would leave the window open rather than close
+		 * it, and this work would then submit a task on top of a live one.
+		 */
+		if (READ_ONCE(core->poll_dying) || core->poll_work_seq != core->poll_seq)
+			return;
+
+		rocket_pc_writel(core, OPERATION_ENABLE, 0x0);
+		rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
+
+		rocket_job_next_locked(core);
+	}
+}
+
 static void rocket_job_handle_irq(struct rocket_core *core)
 {
+	if (core->soc->poll_completion) {
+		atomic_set(&core->poll_active, 0);
+		hrtimer_cancel(&core->poll_timer);
+	}
+
 	pm_runtime_mark_last_busy(core->dev);
 
 	rocket_pc_writel(core, OPERATION_ENABLE, 0x0);
 	rocket_pc_writel(core, INTERRUPT_CLEAR, 0x1ffff);
 
 	scoped_guard(mutex, &core->job_lock)
-		if (core->in_flight_job) {
-			if (core->in_flight_job->next_task_idx < core->in_flight_job->task_count) {
-				rocket_job_hw_submit(core, core->in_flight_job);
-				return;
-			}
-
-			iommu_detach_group(NULL, iommu_group_get(core->dev));
-			dma_fence_signal(core->in_flight_job->done_fence);
-			pm_runtime_put_autosuspend(core->dev);
-			core->in_flight_job = NULL;
-		}
+		rocket_job_next_locked(core);
 }
 
 static void
@@ -461,6 +541,10 @@ int rocket_job_init(struct rocket_core *core)
 	int ret;
 
 	INIT_WORK(&core->reset.work, rocket_reset_work);
+	INIT_WORK(&core->poll_work, rocket_poll_work_fn);
+	hrtimer_setup(&core->poll_timer, rocket_poll_timer_fn, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_REL);
+	atomic_set(&core->poll_active, 0);
 	spin_lock_init(&core->fence_lock);
 	mutex_init(&core->job_lock);
 
@@ -502,7 +586,22 @@ err_sched:
 
 void rocket_job_fini(struct rocket_core *core)
 {
+	/*
+	 * Stop the poll from starting hardware work before tearing anything
+	 * down: it submits the next task, and drm_sched_fini() does not wait
+	 * for work already queued. Cancel after the scheduler is gone, so a
+	 * job running now cannot re-arm the timer behind the cancel.
+	 */
+	if (core->soc->poll_completion)
+		WRITE_ONCE(core->poll_dying, true);
+
 	drm_sched_fini(&core->sched);
+
+	if (core->soc->poll_completion) {
+		atomic_set(&core->poll_active, 0);
+		hrtimer_cancel(&core->poll_timer);
+		cancel_work_sync(&core->poll_work);
+	}
 
 	cancel_work_sync(&core->reset.work);
 	destroy_workqueue(core->reset.wq);
