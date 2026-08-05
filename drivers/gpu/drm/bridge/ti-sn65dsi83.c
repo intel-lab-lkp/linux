@@ -298,9 +298,14 @@ static int sn65dsi83_attach(struct drm_bridge *bridge,
 			    enum drm_bridge_attach_flags flags)
 {
 	struct sn65dsi83 *ctx = bridge_to_sn65dsi83(bridge);
+	int ret;
 
-	return drm_bridge_attach(encoder, ctx->panel_bridge,
-				 &ctx->bridge, flags);
+	ret = drm_bridge_attach(encoder, ctx->panel_bridge, &ctx->bridge,
+				flags);
+	if (!ret && ctx->irq)
+		enable_irq(ctx->irq);
+
+	return ret;
 }
 
 static void sn65dsi83_detach(struct drm_bridge *bridge)
@@ -996,6 +1001,19 @@ static irqreturn_t sn65dsi83_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void sn65dsi83_stop_error_recovery(struct sn65dsi83 *ctx)
+{
+	/* Stop the IRQ before the unplug barrier rejects its handler. */
+	if (ctx->irq)
+		disable_irq(ctx->irq);
+
+	/* Block new bridge users and wait for existing critical sections. */
+	drm_bridge_unplug(&ctx->bridge);
+
+	cancel_delayed_work_sync(&ctx->monitor_work);
+	cancel_work_sync(&ctx->reset_work);
+}
+
 static int sn65dsi83_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -1038,7 +1056,8 @@ static int sn65dsi83_probe(struct i2c_client *client)
 	if (client->irq) {
 		ctx->irq = client->irq;
 		ret = devm_request_threaded_irq(ctx->dev, ctx->irq, NULL, sn65dsi83_irq,
-						IRQF_ONESHOT, dev_name(ctx->dev), ctx);
+						IRQF_ONESHOT | IRQF_NO_AUTOEN,
+						dev_name(ctx->dev), ctx);
 		if (ret)
 			return dev_err_probe(dev, ret, "failed to request irq\n");
 	}
@@ -1060,7 +1079,7 @@ static int sn65dsi83_probe(struct i2c_client *client)
 	return 0;
 
 err_remove_bridge:
-	drm_bridge_remove(&ctx->bridge);
+	sn65dsi83_stop_error_recovery(ctx);
 	return ret;
 }
 
@@ -1068,7 +1087,7 @@ static void sn65dsi83_remove(struct i2c_client *client)
 {
 	struct sn65dsi83 *ctx = i2c_get_clientdata(client);
 
-	drm_bridge_unplug(&ctx->bridge);
+	sn65dsi83_stop_error_recovery(ctx);
 }
 
 static const struct i2c_device_id sn65dsi83_id[] = {
