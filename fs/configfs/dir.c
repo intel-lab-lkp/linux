@@ -411,6 +411,21 @@ static void configfs_remove_dir(struct dentry *d)
 {
 	struct dentry * parent = dget(d->d_parent);
 
+	/*
+	 * Unhash before dropping any reference to the dirent/item this
+	 * dentry pins: a concurrent configfs_get_config_item() (e.g. from
+	 * configfs_symlink()'s target resolution, which runs unlocked
+	 * against directories it doesn't otherwise own) only checks
+	 * d_unhashed() under d_lock before pinning the item.  Unhashing
+	 * first ensures that check reliably fails once we're past this
+	 * point, instead of racing the dirent/item's refcount reaching
+	 * zero while the dentry is still (briefly) hashed.
+	 */
+	spin_lock(&d->d_lock);
+	if (simple_positive(d))
+		__d_drop(d);
+	spin_unlock(&d->d_lock);
+
 	configfs_remove_dirent(d);
 
 	if (d_really_is_positive(d)) {

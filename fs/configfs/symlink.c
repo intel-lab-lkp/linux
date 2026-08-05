@@ -78,18 +78,40 @@ static int create_link(struct config_item *parent_item,
 		       struct config_item *item,
 		       struct dentry *dentry)
 {
-	struct configfs_dirent *target_sd = item->ci_dentry->d_fsdata;
+	struct dentry *target_dentry = item->ci_dentry;
+	struct configfs_dirent *target_sd;
 	char *body;
 	int ret;
 
-	if (!configfs_dirent_is_ready(target_sd))
+	/*
+	 * item is pinned by the caller, but that only keeps the config_item
+	 * itself alive.  item->ci_dentry's configfs_dirent (and thus its
+	 * s_count) is a separate refcount that a concurrent rmdir of this
+	 * same directory can drop to zero and free independently -- see the
+	 * matching d_lock/d_unhashed() dance in configfs_get_config_item()
+	 * and the unhash-before-free ordering configfs_remove_dir() now
+	 * guarantees.  Do the same check here instead of trusting
+	 * target_dentry->d_fsdata unconditionally.
+	 */
+	spin_lock(&target_dentry->d_lock);
+	if (d_unhashed(target_dentry)) {
+		spin_unlock(&target_dentry->d_lock);
 		return -ENOENT;
+	}
+	target_sd = configfs_get(target_dentry->d_fsdata);
+	spin_unlock(&target_dentry->d_lock);
+
+	if (!configfs_dirent_is_ready(target_sd)) {
+		configfs_put(target_sd);
+		return -ENOENT;
+	}
 
 	body = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!body)
+	if (!body) {
+		configfs_put(target_sd);
 		return -ENOMEM;
+	}
 
-	configfs_get(target_sd);
 	spin_lock(&configfs_dirent_lock);
 	if (target_sd->s_type & CONFIGFS_USET_DROPPING) {
 		spin_unlock(&configfs_dirent_lock);
