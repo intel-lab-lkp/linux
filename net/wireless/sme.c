@@ -1067,6 +1067,7 @@ void cfg80211_connect_done(struct net_device *dev,
 	ev->cr.status = params->status;
 	ev->cr.timeout_reason = params->timeout_reason;
 	ev->cr.assoc_encrypted = params->assoc_encrypted;
+	ev->cr.authorized = params->authorized;
 
 	spin_lock_irqsave(&wdev->event_lock, flags);
 	list_add_tail(&ev->list, &wdev->event_list);
@@ -1253,6 +1254,7 @@ void cfg80211_roamed(struct net_device *dev, struct cfg80211_roam_info *info,
 		next += ETH_ALEN;
 	}
 	ev->rm.valid_links = info->valid_links;
+	ev->rm.authorized = info->authorized;
 	for_each_valid_link(info, link) {
 		ev->rm.links[link].bss = info->links[link].bss;
 
