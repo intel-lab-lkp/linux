@@ -2599,19 +2599,15 @@ bfa_fcs_fdmi_get_hbaattr(struct bfa_fcs_lport_fdmi_s *fdmi,
 	strscpy(hba_attr->driver_version, (char *)driver_info->version,
 		sizeof(hba_attr->driver_version));
 
-	strscpy(hba_attr->os_name, driver_info->host_os_name,
-		sizeof(hba_attr->os_name));
-
 	/*
 	 * If there is a patch level, append it
 	 * to the os name along with a separator
 	 */
-	if (driver_info->host_os_patch[0] != '\0') {
-		strlcat(hba_attr->os_name, BFA_FCS_PORT_SYMBNAME_SEPARATOR,
-			sizeof(hba_attr->os_name));
-		strlcat(hba_attr->os_name, driver_info->host_os_patch,
-				sizeof(hba_attr->os_name));
-	}
+	scnprintf(hba_attr->os_name, sizeof(hba_attr->os_name), "%s%s%s",
+		  driver_info->host_os_name,
+		  driver_info->host_os_patch[0] != '\0' ?
+			BFA_FCS_PORT_SYMBNAME_SEPARATOR : "",
+		  driver_info->host_os_patch);
 
 	/* Retrieve the max frame size from the port attr */
 	bfa_fcs_fdmi_get_portattr(fdmi, &fcs_port_attr);
@@ -4589,13 +4585,10 @@ bfa_fcs_lport_ns_send_rspn_id(void *ns_cbarg, struct bfa_fcxp_s *fcxp_alloced)
 		 * to that of the base port.
 		 */
 
-		strscpy(symbl,
-			(char *)&(bfa_fcs_lport_get_psym_name
-			 (bfa_fcs_get_base_port(port->fcs))),
-			sizeof(symbl));
-
-		strlcat(symbl, (char *)&(bfa_fcs_lport_get_psym_name(port)),
-			sizeof(symbl));
+		scnprintf(symbl, sizeof(symbl), "%s%s",
+			  (char *)&(bfa_fcs_lport_get_psym_name
+			   (bfa_fcs_get_base_port(port->fcs))),
+			  (char *)&(bfa_fcs_lport_get_psym_name(port)));
 	} else {
 		psymbl = (u8 *) &(bfa_fcs_lport_get_psym_name(port));
 	}
@@ -5116,13 +5109,10 @@ bfa_fcs_lport_ns_util_send_rspn_id(void *cbarg, struct bfa_fcxp_s *fcxp_alloced)
 		 * For Vports, we append the vport's port symbolic name
 		 * to that of the base port.
 		 */
-		strscpy(symbl, (char *)&(bfa_fcs_lport_get_psym_name
-			(bfa_fcs_get_base_port(port->fcs))),
-			sizeof(symbl));
-
-		strlcat(symbl,
-			(char *)&(bfa_fcs_lport_get_psym_name(port)),
-			sizeof(symbl));
+		scnprintf(symbl, sizeof(symbl), "%s%s",
+			  (char *)&(bfa_fcs_lport_get_psym_name
+			   (bfa_fcs_get_base_port(port->fcs))),
+			  (char *)&(bfa_fcs_lport_get_psym_name(port)));
 	}
 
 	len = fc_rspnid_build(&fchs, bfa_fcxp_get_reqbuf(fcxp),
