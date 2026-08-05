@@ -4227,6 +4227,11 @@ reset_complete:
 	return 0;
 }
 
+#ifdef CONFIG_PPC_PSERIES
+/* Defined in arch/powerpc/platforms/pseries/pci.c */
+int reset_spyre(struct pci_dev *dev, bool probe);
+#endif
+
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
 		 reset_intel_82599_sfp_virtfn },
@@ -4242,6 +4247,10 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 		reset_chelsio_generic_dev },
 	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HINIC_VF,
 		reset_hinic_vf_dev },
+#ifdef CONFIG_PPC_PSERIES
+	{ PCI_VENDOR_ID_IBM, 0x06a7,
+		reset_spyre},
+#endif
 	{ 0 }
 };
 

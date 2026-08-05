@@ -92,6 +92,10 @@ extern struct pci_controller_ops pseries_pci_controller_ops;
 int pseries_msi_allocate_domains(struct pci_controller *phb);
 void pseries_msi_free_domains(struct pci_controller *phb);
 
+/* PCI device reset method for Spyre adapter */
+struct pci_dev;
+int reset_spyre(struct pci_dev *dev, bool probe);
+
 extern int CMO_PrPSP;
 extern int CMO_SecPSP;
 extern unsigned long CMO_PageSize;
