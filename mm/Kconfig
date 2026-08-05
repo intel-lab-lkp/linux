@@ -1503,6 +1503,20 @@ config LAZY_MMU_MODE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config FOLIO_SPLIT_KUNIT_TEST
+	bool "KUnit tests for folio splitting" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y
+	depends on TRANSPARENT_HUGEPAGE
+	depends on SWAP
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test folio split eligibility checks. The tests
+	  verify support for mappingless folios in the swap cache and ensure
+	  that unsupported target orders and split types are still rejected.
+	  The tests are built into the kernel and run during KUnit execution.
+
+	  If unsure, say N.
+
 source "mm/damon/Kconfig"
 
 endmenu
