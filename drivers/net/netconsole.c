@@ -477,6 +477,13 @@ static int netcons_netpoll_setup(struct netconsole_target *nt)
 		goto unlock;
 	}
 
+	if (nt->local_ip.family != AF_UNSPEC &&
+	    nt->local_ip.family != nt->remote_ip.family) {
+		np_err(np, "local and remote IP address families differ, aborting\n");
+		err = -EINVAL;
+		goto unlock;
+	}
+
 	if (np->dev_name[0])
 		ndev = __dev_get_by_name(net, np->dev_name);
 	else if (is_valid_ether_addr(np->dev_mac))
