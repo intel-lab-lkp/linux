@@ -12825,6 +12825,7 @@ static int i40e_sw_init(struct i40e_pf *pf)
 			 "total-port-shutdown was enabled, link-down-on-close is forced on\n");
 	}
 	mutex_init(&pf->switch_mutex);
+	mutex_init(&pf->ptp_config_lock);
 	spin_lock_init(&pf->ptp_tx_lock);
 
 sw_init_done:
