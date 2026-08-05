@@ -564,6 +564,63 @@ impl<T: AsBytes + FromBytes + KnownSize + ?Sized> From<CoherentBox<T>> for Coher
     }
 }
 
+/// Backing storage that can be passed to the single-buffer streaming DMA API.
+///
+/// # Safety
+///
+/// Implementers must guarantee that, for as long as `Self` is alive and not mutated:
+///
+/// * [`ptr`](Self::ptr) returns a pointer to the start of a single, physically contiguous region
+///   of [`size`](Self::size) bytes, and [`data`](Self::data) refers to exactly that region.
+/// * The region lives in the kernel's linear mapping, i.e. it is neither `vmalloc()`ed nor stack
+///   memory, both of which `dma_map_single()` rejects.
+/// * The region is DMA-safe in the sense of the [DMA API howto].
+///
+/// [DMA API howto]: srctree/Documentation/core-api/dma-api-howto.rst
+pub unsafe trait ContiguousBuffer {
+    /// The CPU-side view of the region.
+    ///
+    /// [`FromBytes`] because the device may write an arbitrary byte pattern into the region,
+    /// [`AsBytes`] because it may read the region, which must therefore have no uninitialized
+    /// padding.
+    type Data: ?Sized + FromBytes + AsBytes;
+
+    /// Returns a pointer to the start of the region.
+    fn ptr(&mut self) -> *mut c_void;
+
+    /// Returns the size of the region in bytes.
+    fn size(&self) -> usize;
+
+    /// Returns a mutable reference to the region.
+    fn data(&mut self) -> &mut Self::Data;
+}
+
+// SAFETY: `KBox` allocates via `kmalloc()`, which returns a single physically contiguous,
+// DMA-safe region in the kernel's linear mapping. All three methods describe that allocation.
+unsafe impl<T: FromBytes + AsBytes> ContiguousBuffer for KBox<T> {
+    type Data = T;
+
+    fn ptr(&mut self) -> *mut c_void {
+        let ptr = &raw mut **self;
+        ptr.cast()
+    }
+
+    fn size(&self) -> usize {
+        const {
+            assert!(
+                core::mem::size_of::<T>() > 0,
+                "It doesn't make sense to map a ZST for DMA"
+            );
+        }
+
+        core::mem::size_of_val(&**self)
+    }
+
+    fn data(&mut self) -> &mut Self::Data {
+        self
+    }
+}
+
 /// An abstraction of the `dma_alloc_coherent` API.
 ///
 /// This is an abstraction around the `dma_alloc_coherent` API which is used to allocate and map
