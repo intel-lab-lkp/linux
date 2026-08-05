@@ -41,6 +41,7 @@ Currently, these files are in /proc/sys/vm:
 - extfrag_threshold
 - highmem_is_dirtyable
 - hugetlb_shm_group
+- kvmalloc_max_contig_order (only if CONFIG_KVMALLOC_ORDER_LIMIT=y)
 - legacy_va_layout
 - lowmem_reserve_ratio
 - max_map_count
@@ -363,6 +364,35 @@ hugetlb_shm_group
 
 hugetlb_shm_group contains group id that is allowed to create SysV
 shared memory segment using hugetlb page.
+
+
+kvmalloc_max_contig_order
+=========================
+
+The largest allocation order for which kvmalloc() attempts a physically
+contiguous allocation.  Requests larger than ``PAGE_SIZE << order`` are served
+by vmalloc() without attempting kmalloc() first.
+
+kvmalloc() callers state that they do not require physical contiguity, so the
+contiguous attempt is only ever an optimization for them: it saves a vmap
+area, the page tables backing it and the TLB flush when the memory is freed.
+That optimization is not free for the rest of the system, though, as high
+order requests fragment the buddy allocator and wake up kswapd and kcompactd
+even when they succeed.  On workloads where large kvmalloc() calls are
+frequent and the callers do not benefit from contiguity, capping the order is
+a net win.
+
+The default is MAX_PAGE_ORDER, which preserves the behavior of always
+attempting kmalloc() first.  Setting it to PAGE_ALLOC_COSTLY_ORDER (3) limits
+kvmalloc() to the orders the page allocator itself considers cheap.
+
+Requests up to KMALLOC_MAX_CACHE_SIZE are served by the kmalloc caches, out of
+slabs shared by many objects, which is cheaper than an equivalent vmalloc()
+would be.  The limit does not apply to them, so the accepted range runs from
+the order of KMALLOC_MAX_CACHE_SIZE up to MAX_PAGE_ORDER.
+
+Requests above KMALLOC_MAX_SIZE end up in vmalloc() whatever this is set to,
+since kmalloc() cannot serve them at all.
 
 
 legacy_va_layout

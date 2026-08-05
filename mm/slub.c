@@ -50,6 +50,7 @@
 #include <linux/irq_work.h>
 #include <linux/kprobes.h>
 #include <linux/debugfs.h>
+#include <linux/sysctl.h>
 #include <trace/events/kmem.h>
 
 #include "internal.h"
@@ -6887,6 +6888,62 @@ static gfp_t kmalloc_gfp_adjust(gfp_t flags, size_t size)
 	return flags;
 }
 
+#ifdef CONFIG_KVMALLOC_ORDER_LIMIT
+static unsigned int sysctl_kvmalloc_max_contig_order __read_mostly = MAX_PAGE_ORDER;
+
+/*
+ * The limit only ever applies to requests too large for a kmalloc cache, so
+ * the smallest value it can take is the order of KMALLOC_MAX_CACHE_SIZE,
+ * which is KMALLOC_SHIFT_HIGH - PAGE_SHIFT.  kvmalloc_order_denied() relies
+ * on this floor, do not lower it.
+ */
+static unsigned int kvmalloc_max_contig_order_min = KMALLOC_SHIFT_HIGH - PAGE_SHIFT;
+static unsigned int kvmalloc_max_contig_order_max = MAX_PAGE_ORDER;
+
+/*
+ * Decide whether the physically contiguous attempt is worth its cost to the
+ * rest of the system.
+ *
+ * Requests that a kmalloc cache can serve are never denied, as they come out
+ * of slabs shared by many objects and put far less pressure on the buddy
+ * allocator than the page tables, vmap area and unmap-time TLB flush a
+ * vmalloc() of the same size would cost.  No explicit check is needed for
+ * that, as the floor on the sysctl keeps the comparison below from ever
+ * denying a request that small.
+ */
+static bool kvmalloc_order_denied(size_t size)
+{
+	if (likely(sysctl_kvmalloc_max_contig_order >= MAX_PAGE_ORDER))
+		return false;
+
+	return get_order(size) > sysctl_kvmalloc_max_contig_order;
+}
+
+static const struct ctl_table kvmalloc_sysctl_table[] = {
+	{
+		.procname	= "kvmalloc_max_contig_order",
+		.data		= &sysctl_kvmalloc_max_contig_order,
+		.maxlen		= sizeof(sysctl_kvmalloc_max_contig_order),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= &kvmalloc_max_contig_order_min,
+		.extra2		= &kvmalloc_max_contig_order_max,
+	},
+};
+
+static int __init init_kvmalloc_sysctls(void)
+{
+	register_sysctl_init("vm", kvmalloc_sysctl_table);
+	return 0;
+}
+subsys_initcall(init_kvmalloc_sysctls);
+#else
+static bool kvmalloc_order_denied(size_t size)
+{
+	return false;
+}
+#endif /* CONFIG_KVMALLOC_ORDER_LIMIT */
+
 void *__kvmalloc_node_noprof(DECL_KMALLOC_PARAMS(size, b, token), unsigned long align,
 			     gfp_t flags, int node)
 {
@@ -6899,14 +6956,21 @@ void *__kvmalloc_node_noprof(DECL_KMALLOC_PARAMS(size, b, token), unsigned long 
 	};
 
 	/*
-	 * It doesn't really make sense to fallback to vmalloc for sub page
-	 * requests
+	 * The limit never denies anything a kmalloc cache could have served,
+	 * so a denied request is always larger than a page and is therefore
+	 * guaranteed to be vmalloc-able.
 	 */
-	ret = __do_kmalloc_node(PASS_BUCKET_PARAM(b),
-				kmalloc_gfp_adjust(flags, size),
-				node, PASS_TOKEN_PARAM(token), &ac);
-	if (ret || size <= PAGE_SIZE)
-		return ret;
+	if (!kvmalloc_order_denied(size)) {
+		/*
+		 * It doesn't really make sense to fallback to vmalloc for sub
+		 * page requests
+		 */
+		ret = __do_kmalloc_node(PASS_BUCKET_PARAM(b),
+					kmalloc_gfp_adjust(flags, size),
+					node, PASS_TOKEN_PARAM(token), &ac);
+		if (ret || size <= PAGE_SIZE)
+			return ret;
+	}
 
 	/* Don't even allow crazy sizes */
 	if (unlikely(size > INT_MAX)) {

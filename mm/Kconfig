@@ -248,6 +248,26 @@ config SLUB_STATS
 	  out which slabs are relevant to a particular load.
 	  Try running: slabinfo -DA
 
+config KVMALLOC_ORDER_LIMIT
+	default n
+	bool "Allow limiting the allocation order kvmalloc() may use"
+	depends on SYSCTL
+	help
+	  kvmalloc() attempts a physically contiguous allocation before it
+	  falls back to vmalloc().  Most callers do not benefit from the
+	  contiguity in any way, yet large requests still have to be served
+	  by the page allocator, which fragments the buddy allocator and
+	  wakes up kswapd/kcompactd for no gain.
+
+	  This enables the vm.kvmalloc_max_contig_order sysctl, which caps
+	  the allocation order kvmalloc() is willing to ask the page
+	  allocator for.  Larger requests are routed to vmalloc() directly.
+
+	  The default value of the sysctl preserves the existing behavior,
+	  so saying Y here only makes the tunable available.
+
+	  If unsure, say N.
+
 config KMALLOC_PARTITION_CACHES
 	depends on !SLUB_TINY
 	bool "Partitioned slab caches for normal kmalloc"
