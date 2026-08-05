@@ -1670,8 +1670,10 @@ static int mv_port_start(struct ata_port *ap)
 {
 	struct device *dev = ap->host->dev;
 	struct mv_host_priv *hpriv = ap->host->private_data;
+	struct phy *phy = hpriv->port_phys[ap->port_no];
 	struct mv_port_priv *pp;
 	unsigned long flags;
+	int rc = -ENOMEM;
 	int tag;
 
 	pp = devm_kzalloc(dev, sizeof(*pp), GFP_KERNEL);
@@ -1711,11 +1713,23 @@ static int mv_port_start(struct ata_port *ap)
 	mv_edma_cfg(ap, 0, 0);
 	spin_unlock_irqrestore(ap->lock, flags);
 
+	if (phy) {
+		rc = phy_init(phy);
+		if (rc)
+			goto out_port_free_dma_mem;
+
+		rc = phy_power_on(phy);
+		if (rc)
+			goto out_port_phy_exit;
+	}
+
 	return 0;
 
+out_port_phy_exit:
+	phy_exit(phy);
 out_port_free_dma_mem:
 	mv_port_free_dma_mem(ap);
-	return -ENOMEM;
+	return rc;
 }
 
 /**
@@ -1729,6 +1743,8 @@ out_port_free_dma_mem:
  */
 static void mv_port_stop(struct ata_port *ap)
 {
+	struct mv_host_priv *hpriv = ap->host->private_data;
+	struct phy *phy = hpriv->port_phys[ap->port_no];
 	unsigned long flags;
 
 	spin_lock_irqsave(ap->lock, flags);
@@ -1736,6 +1752,11 @@ static void mv_port_stop(struct ata_port *ap)
 	mv_enable_port_irqs(ap, 0);
 	spin_unlock_irqrestore(ap->lock, flags);
 	mv_port_free_dma_mem(ap);
+
+	if (phy) {
+		phy_power_off(phy);
+		phy_exit(phy);
+	}
 }
 
 /**
@@ -4096,26 +4117,18 @@ static int mv_platform_probe(struct platform_device *pdev)
 		char port_number[16];
 		sprintf(port_number, "%d", port);
 		hpriv->port_clks[port] = devm_clk_get_optional_enabled(&pdev->dev, port_number);
-		if (IS_ERR(hpriv->port_clks[port])) {
-			rc = PTR_ERR(hpriv->port_clks[port]);
-			hpriv->n_ports = port;
-			goto err;
-		}
+		if (IS_ERR(hpriv->port_clks[port]))
+			return PTR_ERR(hpriv->port_clks[port]);
 
 		sprintf(port_number, "port%d", port);
 		hpriv->port_phys[port] = devm_phy_optional_get(&pdev->dev,
 							       port_number);
 		if (IS_ERR(hpriv->port_phys[port])) {
 			rc = PTR_ERR(hpriv->port_phys[port]);
-			hpriv->port_phys[port] = NULL;
 			if (rc != -EPROBE_DEFER)
 				dev_warn(&pdev->dev, "error getting phy %d", rc);
-
-			/* Cleanup only the initialized ports */
-			hpriv->n_ports = port;
-			goto err;
+			return rc;
 		}
-		phy_power_on(hpriv->port_phys[port]);
 	}
 
 	/* All the ports have been initialized */
@@ -4130,7 +4143,7 @@ static int mv_platform_probe(struct platform_device *pdev)
 
 	rc = mv_create_dma_pools(hpriv, &pdev->dev);
 	if (rc)
-		goto err;
+		return rc;
 
 	/*
 	 * To allow disk hotplug on Armada 370/XP SoCs, the PHY speed must be
@@ -4144,39 +4157,12 @@ static int mv_platform_probe(struct platform_device *pdev)
 	/* initialize adapter */
 	rc = mv_init_host(host);
 	if (rc)
-		goto err;
+		return rc;
 
 	dev_info(&pdev->dev, "slots %u ports %d\n",
 		 (unsigned)MV_MAX_Q_DEPTH, host->n_ports);
 
-	rc = ata_host_activate(host, irq, mv_interrupt, IRQF_SHARED, &mv6_sht);
-	if (!rc)
-		return 0;
-
-err:
-	for (port = 0; port < hpriv->n_ports; port++)
-		phy_power_off(hpriv->port_phys[port]);
-
-	return rc;
-}
-
-/*
- *
- *      mv_platform_remove    -       unplug a platform interface
- *      @pdev: platform device
- *
- *      A platform bus SATA device has been unplugged. Perform the needed
- *      cleanup. Also called on module unload for any active devices.
- */
-static void mv_platform_remove(struct platform_device *pdev)
-{
-	struct ata_host *host = platform_get_drvdata(pdev);
-	struct mv_host_priv *hpriv = host->private_data;
-	int port;
-	ata_host_detach(host);
-
-	for (port = 0; port < host->n_ports; port++)
-		phy_power_off(hpriv->port_phys[port]);
+	return ata_host_activate(host, irq, mv_interrupt, IRQF_SHARED, &mv6_sht);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -4232,7 +4218,7 @@ MODULE_DEVICE_TABLE(of, mv_sata_dt_ids);
 
 static struct platform_driver mv_platform_driver = {
 	.probe		= mv_platform_probe,
-	.remove		= mv_platform_remove,
+	.remove		= ata_platform_remove_one,
 	.suspend	= mv_platform_suspend,
 	.resume		= mv_platform_resume,
 	.driver		= {
