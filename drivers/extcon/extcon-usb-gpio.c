@@ -6,6 +6,7 @@
  * Author: Roger Quadros <rogerq@ti.com>
  */
 
+#include <linux/devm-helpers.h>
 #include <linux/extcon-provider.h>
 #include <linux/gpio/consumer.h>
 #include <linux/init.h>
@@ -145,7 +146,10 @@ static int usb_extcon_probe(struct platform_device *pdev)
 	if (ret < 0)
 		info->debounce_jiffies = msecs_to_jiffies(USB_GPIO_DEBOUNCE_MS);
 
-	INIT_DELAYED_WORK(&info->wq_detcable, usb_extcon_detect_cable);
+	ret = devm_delayed_work_autocancel(dev, &info->wq_detcable,
+					   usb_extcon_detect_cable);
+	if (ret)
+		return ret;
 
 	if (info->id_gpiod) {
 		info->id_irq = gpiod_to_irq(info->id_gpiod);
@@ -194,9 +198,6 @@ static int usb_extcon_probe(struct platform_device *pdev)
 
 static void usb_extcon_remove(struct platform_device *pdev)
 {
-	struct usb_extcon_info *info = platform_get_drvdata(pdev);
-
-	cancel_delayed_work_sync(&info->wq_detcable);
 	device_init_wakeup(&pdev->dev, false);
 }
 
