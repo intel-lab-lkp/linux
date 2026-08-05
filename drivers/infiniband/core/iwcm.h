@@ -57,5 +57,6 @@ struct iwcm_id_private {
 
 #define IWCM_F_DROP_EVENTS	  1
 #define IWCM_F_CONNECT_WAIT       2
+#define IWCM_F_CONNECT_SENT       3
 
 #endif /* IWCM_H */

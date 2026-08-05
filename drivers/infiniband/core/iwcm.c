@@ -308,9 +308,18 @@ int iw_cm_disconnect(struct iw_cm_id *cm_id, int abrupt)
 	struct ib_qp *qp = NULL;
 
 	cm_id_priv = container_of(cm_id, struct iwcm_id_private, id);
-	/* Wait if we're currently in a connect or accept downcall */
+	/*
+	 * Wait if we're currently in a connect or accept downcall.  A
+	 * pending active connect whose downcall already returned
+	 * (IWCM_F_CONNECT_SENT) is not waited for: the CONNECT_REPLY that
+	 * would end such a wait comes from the provider and may never
+	 * arrive if the peer died during connection setup, so the
+	 * CONN_SENT state is handled below instead of sleeping without
+	 * bound here.
+	 */
 	wait_event(cm_id_priv->connect_wait,
-		   !test_bit(IWCM_F_CONNECT_WAIT, &cm_id_priv->flags));
+		   !test_bit(IWCM_F_CONNECT_WAIT, &cm_id_priv->flags) ||
+		   test_bit(IWCM_F_CONNECT_SENT, &cm_id_priv->flags));
 
 	spin_lock_irqsave(&cm_id_priv->lock, flags);
 	switch (cm_id_priv->state) {
@@ -338,7 +347,14 @@ int iw_cm_disconnect(struct iw_cm_id *cm_id, int abrupt)
 		 */
 		break;
 	case IW_CM_STATE_CONN_SENT:
-		/* Can only get here if wait above fails */
+		/*
+		 * Active connect still waiting for the provider's
+		 * CONNECT_REPLY: there is no established connection to
+		 * disconnect.  Tell the caller; aborting the pending
+		 * connect is iw_destroy_cm_id()'s job.
+		 */
+		ret = -ENOTCONN;
+		break;
 	default:
 		BUG();
 	}
@@ -375,10 +391,15 @@ static void destroy_cm_id(struct iw_cm_id *cm_id)
 	cm_id_priv = container_of(cm_id, struct iwcm_id_private, id);
 	/*
 	 * Wait if we're currently in a connect or accept downcall. A
-	 * listening endpoint should never block here.
+	 * listening endpoint should never block here.  A pending active
+	 * connect whose downcall already returned (IWCM_F_CONNECT_SENT)
+	 * is not waited for, since its CONNECT_REPLY may never arrive if
+	 * the peer died during connection setup; it is aborted locally
+	 * in the CONN_SENT case below.
 	 */
 	wait_event(cm_id_priv->connect_wait,
-		   !test_bit(IWCM_F_CONNECT_WAIT, &cm_id_priv->flags));
+		   !test_bit(IWCM_F_CONNECT_WAIT, &cm_id_priv->flags) ||
+		   test_bit(IWCM_F_CONNECT_SENT, &cm_id_priv->flags));
 
 	/*
 	 * Since we're deleting the cm_id, drop any events that
@@ -422,6 +443,21 @@ static void destroy_cm_id(struct iw_cm_id *cm_id)
 		spin_lock_irqsave(&cm_id_priv->lock, flags);
 		break;
 	case IW_CM_STATE_CONN_SENT:
+		/*
+		 * Abort a pending active connect: the connect downcall has
+		 * returned (IWCM_F_CONNECT_SENT) but the provider has not
+		 * delivered CONNECT_REPLY.  Move the QP to error so the
+		 * provider tears the connection attempt down.  A late
+		 * CONNECT_REPLY is dropped via IWCM_F_DROP_EVENTS or the
+		 * DESTROYING check in cm_conn_rep_handler(), and the
+		 * provider's own reference (cm_id->add_ref) keeps this
+		 * cm_id alive until that reply has been delivered.
+		 */
+		cm_id_priv->state = IW_CM_STATE_DESTROYING;
+		spin_unlock_irqrestore(&cm_id_priv->lock, flags);
+		(void)iwcm_modify_qp_err(qp);
+		spin_lock_irqsave(&cm_id_priv->lock, flags);
+		break;
 	case IW_CM_STATE_DESTROYING:
 	default:
 		BUG();
@@ -689,9 +725,11 @@ EXPORT_SYMBOL(iw_cm_accept);
 /*
  * Active Side: CM_ID <-- CONN_SENT
  *
- * If successful, results in the generation of a CONNECT_REPLY
- * event. iw_cm_disconnect and iw_cm_destroy will block until the
- * CONNECT_REPLY event is received from the provider.
+ * If successful, results in the generation of a CONNECT_REPLY event.
+ * IWCM_F_CONNECT_SENT marks the window between the connect downcall
+ * returning and that CONNECT_REPLY arriving; during it
+ * iw_cm_disconnect() returns -ENOTCONN and iw_destroy_cm_id() aborts
+ * the pending connect locally instead of blocking on the provider.
  */
 int iw_cm_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *iw_param)
 {
@@ -728,8 +766,16 @@ int iw_cm_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *iw_param)
 	ret = iw_cm_map(cm_id, true);
 	if (!ret)
 		ret = cm_id->device->ops.iw_connect(cm_id, iw_param);
-	if (!ret)
+	if (!ret) {
+		/*
+		 * The downcall is done; only the provider's CONNECT_REPLY
+		 * is outstanding.  Let teardown waiters proceed so they
+		 * can abort instead of depending on that reply.
+		 */
+		set_bit(IWCM_F_CONNECT_SENT, &cm_id_priv->flags);
+		wake_up_all(&cm_id_priv->connect_wait);
 		return 0;	/* success */
+	}
 
 	spin_lock_irqsave(&cm_id_priv->lock, flags);
 	qp = cm_id_priv->qp;
@@ -882,7 +928,7 @@ static int cm_conn_rep_handler(struct iwcm_id_private *cm_id_priv,
 {
 	struct ib_qp *qp = NULL;
 	unsigned long flags;
-	int ret;
+	int ret = 0;
 
 	spin_lock_irqsave(&cm_id_priv->lock, flags);
 	/*
@@ -890,6 +936,15 @@ static int cm_conn_rep_handler(struct iwcm_id_private *cm_id_priv,
 	 * iw_cm_disconnect will not wait and deadlock this thread
 	 */
 	clear_bit(IWCM_F_CONNECT_WAIT, &cm_id_priv->flags);
+	clear_bit(IWCM_F_CONNECT_SENT, &cm_id_priv->flags);
+	if (cm_id_priv->state == IW_CM_STATE_DESTROYING) {
+		/*
+		 * destroy_cm_id() aborted the pending connect and already
+		 * released the QP; drop the late reply.
+		 */
+		spin_unlock_irqrestore(&cm_id_priv->lock, flags);
+		goto out;
+	}
 	BUG_ON(cm_id_priv->state != IW_CM_STATE_CONN_SENT);
 	if (iw_event->status == 0) {
 		cm_id_priv->id.m_local_addr = iw_event->local_addr;
@@ -908,6 +963,7 @@ static int cm_conn_rep_handler(struct iwcm_id_private *cm_id_priv,
 		cm_id_priv->id.device->ops.iw_rem_ref(qp);
 	ret = cm_id_priv->id.cm_handler(&cm_id_priv->id, iw_event);
 
+out:
 	if (iw_event->private_data_len)
 		kfree(iw_event->private_data);
 
