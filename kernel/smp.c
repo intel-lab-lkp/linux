@@ -237,11 +237,30 @@ bool csd_lock_is_stuck(void)
 }
 
 /*
+ * Report a CSD lock that came back.  @ts_start is when the wait began and
+ * @ts_unstuck is when the release was noticed, both from
+ * ktime_get_mono_fast_ns().  A zero @ts_resend means no IPI was re-sent, so
+ * there is no re-send delta to report.
+ */
+static void csd_lock_print_unstuck(int bug_id, int cpu, u64 ts_start, u64 ts_unstuck,
+				   u64 ts_resend)
+{
+	if (ts_resend)
+		pr_alert("csd: CSD lock (#%d) got unstuck on CPU#%02d, CPU#%02d released the lock after %lld ns, %lld ns after the last IPI re-send.\n",
+			 bug_id, raw_smp_processor_id(), cpu, (s64)(ts_unstuck - ts_start),
+			 (s64)(ts_unstuck - ts_resend));
+	else
+		pr_alert("csd: CSD lock (#%d) got unstuck on CPU#%02d, CPU#%02d released the lock after %lld ns.\n",
+			 bug_id, raw_smp_processor_id(), cpu, (s64)(ts_unstuck - ts_start));
+}
+
+/*
  * Complain if too much time spent waiting.  Note that only
  * the CSD_TYPE_SYNC/ASYNC types provide the destination CPU,
  * so waiting on other types gets much less information.
  */
-static bool csd_lock_wait_toolong(call_single_data_t *csd, u64 ts0, u64 *ts1, int *bug_id, unsigned long *nmessages)
+static bool csd_lock_wait_toolong(call_single_data_t *csd, u64 ts0, u64 *ts1, u64 *ts_resend,
+				  int *bug_id, unsigned long *nmessages)
 {
 	int cpu = -1;
 	int cpux;
@@ -254,9 +273,9 @@ static bool csd_lock_wait_toolong(call_single_data_t *csd, u64 ts0, u64 *ts1, in
 	if (!(flags & CSD_FLAG_LOCK)) {
 		if (!unlikely(*bug_id))
 			return true;
+		ts2 = ktime_get_mono_fast_ns();
 		cpu = csd_lock_wait_getcpu(csd);
-		pr_alert("csd: CSD lock (#%d) got unstuck on CPU#%02d, CPU#%02d released the lock.\n",
-			 *bug_id, raw_smp_processor_id(), cpu);
+		csd_lock_print_unstuck(*bug_id, cpu, ts0, ts2, *ts_resend);
 		atomic_dec(&n_csd_lock_stuck);
 		return true;
 	}
@@ -320,6 +339,7 @@ static bool csd_lock_wait_toolong(call_single_data_t *csd, u64 ts0, u64 *ts1, in
 		if (!cpu_cur_csd) {
 			pr_alert("csd: Re-sending CSD lock (#%d) IPI from CPU#%02d to CPU#%02d\n", *bug_id, raw_smp_processor_id(), cpu);
 			arch_send_call_function_single_ipi(cpu);
+			*ts_resend = ktime_get_mono_fast_ns();
 		}
 	}
 	if (firsttime)
@@ -339,14 +359,14 @@ static bool csd_lock_wait_toolong(call_single_data_t *csd, u64 ts0, u64 *ts1, in
 static void __csd_lock_wait(call_single_data_t *csd)
 {
 	unsigned long nmessages = 0;
+	u64 ts0, ts1, ts_resend = 0;
 	int bug_id = 0;
-	u64 ts0, ts1;
 
 	guard(preempt)();
 
 	ts1 = ts0 = ktime_get_mono_fast_ns();
 	for (;;) {
-		if (csd_lock_wait_toolong(csd, ts0, &ts1, &bug_id, &nmessages))
+		if (csd_lock_wait_toolong(csd, ts0, &ts1, &ts_resend, &bug_id, &nmessages))
 			break;
 		cpu_relax();
 	}
