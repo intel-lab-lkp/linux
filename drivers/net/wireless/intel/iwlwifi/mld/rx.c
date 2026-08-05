@@ -1524,10 +1524,8 @@ static void iwl_mld_rx_fill_status(struct iwl_mld *mld, int link_id,
 		iwl_mld_add_rtap_sniffer_config(mld, skb);
 
 		if (mld->monitor.ptp_time) {
-			u64 adj_time =
-				iwl_mld_ptp_get_adj_time(mld,
-							 phy_data->gp2_on_air_rise *
-							 NSEC_PER_USEC);
+			u64 gp2_ns = (u64)phy_data->gp2_on_air_rise * NSEC_PER_USEC;
+			u64 adj_time = iwl_mld_ptp_get_adj_time(mld, gp2_ns);
 
 			rx_status->mactime = div64_u64(adj_time, NSEC_PER_USEC);
 			rx_status->flag |= RX_FLAG_MACTIME_IS_RTAP_TS64;
