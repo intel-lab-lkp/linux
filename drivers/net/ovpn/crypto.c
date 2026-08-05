@@ -60,10 +60,12 @@ bool ovpn_crypto_kill_key(struct ovpn_crypto_state *cs, u8 key_id)
 	struct ovpn_crypto_key_slot *ks = NULL;
 
 	spin_lock_bh(&cs->lock);
-	if (rcu_access_pointer(cs->slots[0])->key_id == key_id) {
+	if (rcu_access_pointer(cs->slots[0]) &&
+	    rcu_access_pointer(cs->slots[0])->key_id == key_id) {
 		ks = rcu_replace_pointer(cs->slots[0], NULL,
 					 lockdep_is_held(&cs->lock));
-	} else if (rcu_access_pointer(cs->slots[1])->key_id == key_id) {
+	} else if (rcu_access_pointer(cs->slots[1]) &&
+		   rcu_access_pointer(cs->slots[1])->key_id == key_id) {
 		ks = rcu_replace_pointer(cs->slots[1], NULL,
 					 lockdep_is_held(&cs->lock));
 	}
