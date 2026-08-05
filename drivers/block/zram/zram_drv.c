@@ -19,6 +19,7 @@
 #include <linux/bio.h>
 #include <linux/bitops.h>
 #include <linux/blkdev.h>
+#include <linux/blk-mq.h>
 #include <linux/buffer_head.h>
 #include <linux/device.h>
 #include <linux/highmem.h>
@@ -2858,6 +2859,9 @@ static void zram_destroy_comps(struct zram *zram)
 
 static void zram_reset_device(struct zram *zram)
 {
+	unsigned int memflags;
+
+	memflags = blk_mq_freeze_queue(zram->disk->queue);
 	guard(rwsem_write)(&zram->dev_lock);
 
 	zram->limit_pages = 0;
@@ -2871,6 +2875,7 @@ static void zram_reset_device(struct zram *zram)
 	zram_destroy_comps(zram);
 	memset(&zram->stats, 0, sizeof(zram->stats));
 	reset_bdev(zram);
+	blk_mq_unfreeze_queue(zram->disk->queue, memflags);
 }
 
 static ssize_t disksize_store(struct device *dev, struct device_attribute *attr,
