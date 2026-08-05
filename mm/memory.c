@@ -2268,7 +2268,7 @@ void zap_special_vma_range(struct vm_area_struct *vma, unsigned long address,
 }
 EXPORT_SYMBOL_GPL(zap_special_vma_range);
 
-static pmd_t *walk_to_pmd(struct mm_struct *mm, unsigned long addr)
+static pmd_t *populate_to_pmd(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
 	p4d_t *p4d;
@@ -2293,7 +2293,7 @@ static pmd_t *walk_to_pmd(struct mm_struct *mm, unsigned long addr)
 pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
 		      spinlock_t **ptl)
 {
-	pmd_t *pmd = walk_to_pmd(mm, addr);
+	pmd_t *pmd = populate_to_pmd(mm, addr);
 
 	if (!pmd)
 		return NULL;
@@ -2437,7 +2437,7 @@ static int insert_pages(struct vm_area_struct *vma, unsigned long addr,
 	int ret;
 more:
 	ret = -EFAULT;
-	pmd = walk_to_pmd(mm, addr);
+	pmd = populate_to_pmd(mm, addr);
 	if (!pmd)
 		goto out;
 
