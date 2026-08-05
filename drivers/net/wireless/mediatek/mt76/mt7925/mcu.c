@@ -99,6 +99,7 @@ int mt7925_mcu_regval(struct mt792x_dev *dev, u32 regidx, u32 *val, bool set)
 		};
 	} __packed * res, req;
 	struct sk_buff *skb;
+	int cmd_len;
 	int ret;
 
 	if (u32_get_bits(regidx, MT_RF_REG_HDR) == RF_REG_PREFIX) {
@@ -107,20 +108,22 @@ int mt7925_mcu_regval(struct mt792x_dev *dev, u32 regidx, u32 *val, bool set)
 		req.rf_reg.ant = cpu_to_le16(u32_get_bits(regidx, MT_RF_REG_ANT));
 		req.rf_reg.idx = cpu_to_le32(regidx);
 		req.rf_reg.data = set ? cpu_to_le32(*val) : 0;
+		cmd_len = sizeof(req.__rsv) + sizeof(req.rf_reg);
 	} else {
 		req.reg.tag = cpu_to_le16(UNI_CMD_ACCESS_REG_BASIC);
 		req.reg.len = cpu_to_le16(sizeof(req.reg));
 		req.reg.idx = cpu_to_le32(regidx);
 		req.reg.data = set ? cpu_to_le32(*val) : 0;
+		cmd_len = sizeof(req.__rsv) + sizeof(req.reg);
 	}
 
 	if (set)
 		return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(REG_ACCESS),
-					 &req, sizeof(req), true);
+					 &req, cmd_len, true);
 
 	ret = mt76_mcu_send_and_get_msg(&dev->mt76,
 					MCU_WM_UNI_CMD_QUERY(REG_ACCESS),
-					&req, sizeof(req), true, &skb);
+					&req, cmd_len, true, &skb);
 	if (ret)
 		return ret;
 
