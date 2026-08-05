@@ -4660,8 +4660,10 @@ static int btrfs_uring_read_extent(struct kiocb *iocb, struct iov_iter *iter,
 
 	nr_pages = DIV_ROUND_UP(disk_io_size, PAGE_SIZE);
 	pages = kzalloc_objs(struct page *, nr_pages, GFP_NOFS);
-	if (!pages)
-		return -ENOMEM;
+	if (!pages) {
+		ret = -ENOMEM;
+		goto out_fail;
+	}
 	ret = btrfs_alloc_page_array(nr_pages, pages, GFP_NOFS);
 	if (ret) {
 		ret = -ENOMEM;
@@ -4711,9 +4713,11 @@ out_fail:
 	btrfs_unlock_extent(io_tree, start, lockend, &cached_state);
 	btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
 	kfree(priv);
-	for (int i = 0; i < nr_pages; i++) {
-		if (pages[i])
-			__free_page(pages[i]);
+	if (pages) {
+		for (int i = 0; i < nr_pages; i++) {
+			if (pages[i])
+				__free_page(pages[i]);
+		}
 	}
 	kfree(pages);
 	return ret;
