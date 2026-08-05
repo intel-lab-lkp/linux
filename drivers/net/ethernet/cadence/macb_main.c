@@ -302,10 +302,26 @@ static void macb_get_hwaddr(struct macb *bp)
 
 static int macb_mdio_wait_for_idle(struct macb *bp)
 {
+	/*
+	 * NSR.IDLE is not deasserted until the MDIO state machine begins the
+	 * frame, which takes up to one MDC period after MAN is written. MDC is
+	 * never clocked above 2.5 MHz, so one period is at most ~400 ns; allow
+	 * an order of magnitude of margin. read_poll_timeout() sleeps at least
+	 * (sleep_us >> 2) + 1 us, so the guaranteed minimum here is 6 us.
+	 */
+	const unsigned int start_delay_us = 20;
 	u32 val;
 
-	return readx_poll_timeout(MACB_READ_NSR, bp, val, val & MACB_BIT(IDLE),
-				  1, MACB_MDIO_TIMEOUT);
+	/*
+	 * Do not sample NSR.IDLE immediately. When this is called straight
+	 * after a MAN write, IDLE is still set from the previous operation,
+	 * so the poll would return at once and the caller would go on to read
+	 * a MAN DATA field that still holds the previous transaction's
+	 * result. Sleeping first guarantees the new operation has started and
+	 * IDLE has gone low before it is sampled.
+	 */
+	return read_poll_timeout(MACB_READ_NSR, val, val & MACB_BIT(IDLE),
+				 start_delay_us, MACB_MDIO_TIMEOUT, true, bp);
 }
 
 static int macb_mdio_read_c22(struct mii_bus *bus, int mii_id, int regnum)
