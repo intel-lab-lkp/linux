@@ -146,8 +146,12 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 	if (thp_disabled_by_hw() || vma_thp_disabled(vma, vm_flags, forced_collapse))
 		return 0;
 
-	/* khugepaged doesn't collapse DAX vma, but page fault is fine. */
-	if (vma_is_dax(vma))
+	/*
+	 * khugepaged doesn't collapse DAX or special huge VMAs, but page
+	 * fault is fine. These map physical addresses directly — the THP
+	 * policy is irrelevant for them.
+	 */
+	if (vma_is_dax(vma) || vma_is_special_huge(vma))
 		return in_pf ? orders : 0;
 
 	/*
