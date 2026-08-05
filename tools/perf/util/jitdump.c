@@ -530,7 +530,7 @@ static int jit_repipe_code_load(struct jit_buf_desc *jd, union jr_entry *jr)
 		jd->nr_debug_entries = 0;
 	}
 
-	if (jd->unwinding_data && jd->eh_frame_hdr_size) {
+	if (jd->unwinding_data) {
 		zfree(&jd->unwinding_data);
 		jd->eh_frame_hdr_size = 0;
 		jd->unwinding_mapped_size = 0;
