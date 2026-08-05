@@ -128,6 +128,7 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	const char *name = dev_name(&vp_dev->vdev.dev);
+	struct irq_affinity tmp_aff, *aff = NULL;
 	unsigned int flags = PCI_IRQ_MSIX;
 	unsigned int i, v;
 	int err = -ENOMEM;
@@ -146,16 +147,19 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 					GFP_KERNEL))
 			goto error;
 
-	if (!per_vq_vectors)
-		desc = NULL;
-
-	if (desc) {
+	if (per_vq_vectors && desc) {
+		/*
+		 * Do not mutate the caller's irq_affinity across MSI-X
+		 * fallback retries in vp_find_vqs().
+		 */
+		tmp_aff = *desc;
+		tmp_aff.pre_vectors++; /* virtio config vector */
+		aff = &tmp_aff;
 		flags |= PCI_IRQ_AFFINITY;
-		desc->pre_vectors++; /* virtio config vector */
 	}
 
 	err = pci_alloc_irq_vectors_affinity(vp_dev->pci_dev, nvectors,
-					     nvectors, flags, desc);
+					     nvectors, flags, aff);
 	if (err < 0)
 		goto error;
 	vp_dev->msix_enabled = 1;
