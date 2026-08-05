@@ -286,6 +286,51 @@ static int mt7925_chip_reset(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7925_chip_reset, "%lld\n");
 
+static int
+mt7925_vefuse_read(struct seq_file *s, void *data)
+{
+	struct mt792x_dev *dev = dev_get_drvdata(s->private);
+	u16 size = dev->vefuse_cap.size;
+	int off = 0;
+	u8 *buf;
+	int ret = 0;
+
+	if (!dev->vefuse_cap.present || !size) {
+		seq_puts(s, "vefuse: no region in FW image\n");
+		return 0;
+	}
+
+	buf = kzalloc(size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	mt792x_mutex_acquire(dev);
+	while (off < (int)size) {
+		u16 chunk = min_t(u16, 512, size - off);
+
+		ret = mt7925_mcu_read_vefuse(dev, off, chunk, buf + off);
+		if (ret)
+			break;
+		off += chunk;
+	}
+	mt792x_mutex_release(dev);
+
+	if (ret) {
+		seq_printf(s, "vefuse: read failed at 0x%04x (%d)\n", off, ret);
+		kfree(buf);
+		return 0;
+	}
+
+	seq_printf(s, "vefuse content: %u bytes\n", size);
+	for (off = 0; off < (int)size; off += 16)
+		seq_printf(s, "%04x: %*ph\n", off,
+			   (int)min_t(u16, 16, size - off), buf + off);
+
+	kfree(buf);
+
+	return 0;
+}
+
 int mt7925_init_debugfs(struct mt792x_dev *dev)
 {
 	struct dentry *dir;
@@ -309,6 +354,13 @@ int mt7925_init_debugfs(struct mt792x_dev *dev)
 	debugfs_create_file("idle-timeout", 0600, dir, dev,
 			    &fops_pm_idle_timeout);
 	debugfs_create_file("chip_reset", 0600, dir, dev, &fops_reset);
+	/* only expose the vefuse read node when a vefuse region was found in the
+	 * FW image (FW reports the capability unconditionally, so gate on the
+	 * actual region presence instead)
+	 */
+	if (dev->vefuse_cap.present)
+		debugfs_create_devm_seqfile(dev->mt76.dev, "vefuse", dir,
+					    mt7925_vefuse_read);
 	debugfs_create_devm_seqfile(dev->mt76.dev, "runtime_pm_stats", dir,
 				    mt792x_pm_stats);
 	debugfs_create_file("deep-sleep", 0600, dir, dev, &fops_ds);

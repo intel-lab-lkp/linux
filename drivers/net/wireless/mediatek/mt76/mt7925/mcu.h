@@ -137,6 +137,41 @@ enum {
 	UNI_EFUSE_BUFFER_RD,
 };
 
+/* page size and content_format layout follow the FW buffer-mode ABI */
+#define MT7925_VEFUSE_PAGE_SIZE		1024	/* FW BUFFER_BIN_PAGE_SIZE (0x400) */
+#define MT7925_VEFUSE_MAX_PAGES		7	/* content_format page fields are 3-bit */
+
+#define MT7925_VEFUSE_TOTAL_PAGE	GENMASK(7, 5)	/* FW BUFFER_BIN_TOTAL_PAGE */
+#define MT7925_VEFUSE_PAGE_INDEX	GENMASK(4, 2)	/* FW BUFFER_BIN_PAGE_INDEX */
+
+/* buffer mode content source, aligns with FW BUFFER_SOURCE_MODE_INFO_* */
+enum {
+	UNI_EFUSE_SOURCE_EFUSE = 0,
+	UNI_EFUSE_SOURCE_EEPROM = 1,
+	UNI_EFUSE_SOURCE_VEFUSE = 2,
+};
+
+struct mt7925_vefuse_cap {
+	u8 version;
+	u8 enabled;
+	__le16 size;
+	__le32 hash_addr;
+} __packed;
+
+struct mt7925_vefuse_page_cmd {
+	u8 rsv[4];		/* UNI_CMD_EFUSE_CONTROL header before TLV */
+
+	__le16 tag;		/* UNI_EFUSE_BUFFER_MODE */
+	__le16 len;
+	u8 source_mode;		/* UNI_EFUSE_SOURCE_VEFUSE */
+	u8 content_format;	/* [7:5]=total_pages [4:2]=page_idx */
+	__le16 count;		/* valid bytes in this page */
+	u8 bin_content[MT7925_VEFUSE_PAGE_SIZE];
+} __packed;
+
+int mt7925_mcu_read_vefuse(struct mt792x_dev *dev, u16 offset, u16 count,
+			   u8 *out);
+
 enum {
 	UNI_CMD_ACCESS_REG_BASIC = 0x0,
 	UNI_CMD_ACCESS_RF_REG_BASIC,

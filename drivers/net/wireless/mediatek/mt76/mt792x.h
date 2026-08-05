@@ -342,6 +342,12 @@ struct mt792x_dev {
 	struct ieee80211_vif *nan_vif;
 	const struct ieee80211_iface_combination *iface_combinations;
 	int n_iface_combinations;
+
+	struct {
+		bool enabled;	/* FW reports vefuse capability (unconditional) */
+		bool present;	/* a vefuse region was found in the FW image */
+		u16 size;
+	} vefuse_cap;
 };
 
 static inline struct mt792x_bss_conf *

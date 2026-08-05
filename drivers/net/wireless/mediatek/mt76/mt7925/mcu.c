@@ -871,6 +871,214 @@ static int mt7925_mcu_read_eeprom(struct mt792x_dev *dev, u32 offset, u8 *val)
 	return 0;
 }
 
+static int
+mt7925_mcu_send_vefuse_page(struct mt792x_dev *dev,
+			    const u8 *data, u32 total_len,
+			    int page_idx, int total_pages)
+{
+	struct mt7925_vefuse_page_cmd *cmd;
+	size_t offset = (size_t)page_idx * MT7925_VEFUSE_PAGE_SIZE;
+	u16 page_len = (u16)min_t(size_t,
+				  MT7925_VEFUSE_PAGE_SIZE,
+				  total_len - offset);
+	int ret;
+
+	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	cmd->tag            = cpu_to_le16(UNI_EFUSE_BUFFER_MODE);
+	cmd->len            = cpu_to_le16(sizeof(*cmd) - sizeof(cmd->rsv));
+	cmd->source_mode    = UNI_EFUSE_SOURCE_VEFUSE;
+	cmd->content_format = FIELD_PREP(MT7925_VEFUSE_TOTAL_PAGE, total_pages) |
+			      FIELD_PREP(MT7925_VEFUSE_PAGE_INDEX, page_idx);
+	cmd->count          = cpu_to_le16(page_len);
+	memcpy(cmd->bin_content, data + offset, page_len);
+
+	ret = mt76_mcu_send_msg(&dev->mt76, MCU_UNI_CMD(EFUSE_CTRL),
+				cmd, sizeof(*cmd), true);
+	kfree(cmd);
+	return ret;
+}
+
+/* Read back vefuse content from FW (UNI EFUSE_CTRL query, BUFFER_RD tag).
+ * offset is the raw 0-based index into the FW vefuse buffer; source_mode
+ * selects the VEFUSE region. Exposed for the debugfs "vefuse" node.
+ */
+int mt7925_mcu_read_vefuse(struct mt792x_dev *dev, u16 offset, u16 count,
+			   u8 *out)
+{
+	struct {
+		u8 rsv[4];
+
+		__le16 tag;
+		__le16 len;
+
+		u8 source_mode;
+		u8 content_format;
+		__le16 offset;
+		__le16 count;
+		__le16 rsv1;
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_EFUSE_BUFFER_RD),
+		.len = cpu_to_le16(sizeof(req) - sizeof(req.rsv)),
+		.source_mode = UNI_EFUSE_SOURCE_VEFUSE,
+		.offset = cpu_to_le16(offset),
+		.count = cpu_to_le16(count),
+	};
+	struct {
+		u8 rsv[4];
+
+		__le16 tag;
+		__le16 len;
+
+		u8 source_mode;
+		u8 content_format;
+		__le16 offset;
+		__le16 count;
+		u8 rsv1[2];
+		u8 data[];
+	} __packed * res;
+	struct sk_buff *skb;
+	int ret;
+
+	ret = mt76_mcu_send_and_get_msg(&dev->mt76, MCU_WM_UNI_CMD_QUERY(EFUSE_CTRL),
+					&req, sizeof(req), true, &skb);
+	if (ret)
+		return ret;
+
+	res = (void *)skb->data;
+	if (skb->len < sizeof(*res) + count) {
+		dev_kfree_skb(skb);
+		return -EINVAL;
+	}
+
+	memcpy(out, res->data, count);
+	dev_kfree_skb(skb);
+
+	return 0;
+}
+
+static int
+mt7925_load_vefuse_from_fw(struct mt792x_dev *dev, const char *fw_name)
+{
+	const struct mt76_connac2_fw_trailer *hdr;
+	const struct mt76_connac2_fw_region *region;
+	struct mt76_dev *mdev = &dev->mt76;
+	const struct firmware *fw = NULL;
+	const u8 *vefuse_base = NULL;
+	u32 offset = 0, len = 0, payload;
+	int i, total_pages, ret = 0;
+
+	if (!dev->vefuse_cap.enabled)
+		return 0;
+
+	/* recomputed on every FW load; set true only once a vefuse region is
+	 * found in the image below (the debugfs node is gated on this).
+	 */
+	dev->vefuse_cap.present = false;
+
+	ret = request_firmware(&fw, fw_name, mdev->dev);
+	if (ret) {
+		dev_warn(mdev->dev,
+			 "vefuse: firmware %s not available (%d), skipping\n",
+			 fw_name, ret);
+		ret = 0;
+		goto out;
+	}
+
+	if (!fw || !fw->data || fw->size < sizeof(*hdr)) {
+		dev_warn(mdev->dev, "vefuse: invalid firmware, skipping\n");
+		goto out;
+	}
+
+	hdr = (const void *)(fw->data + fw->size - sizeof(*hdr));
+
+	/* Region descriptors sit right before the trailer. Make sure the whole
+	 * descriptor array is within the image before dereferencing them, so a
+	 * corrupt n_region cannot walk the region pointer before fw->data.
+	 */
+	if (fw->size < sizeof(*hdr) + (size_t)hdr->n_region * sizeof(*region)) {
+		dev_warn(mdev->dev,
+			 "vefuse: firmware too small for %u region descriptors, skipping\n",
+			 hdr->n_region);
+		goto out;
+	}
+
+	for (i = 0; i < hdr->n_region; i++) {
+		region = (const void *)((const u8 *)hdr -
+					(hdr->n_region - i) * sizeof(*region));
+		len = le32_to_cpu(region->len);
+
+		if (len > fw->size - offset) {
+			dev_warn(mdev->dev, "vefuse: invalid firmware region, skipping\n");
+			goto out;
+		}
+
+		if ((region->feature_set & FW_FEATURE_NON_DL) &&
+		    region->type == FW_TYPE_EXTEND_BIN_EFUSE) {
+			vefuse_base = fw->data + offset;
+			dev->vefuse_cap.present = true;
+			break;
+		}
+		offset += len;
+	}
+
+	if (!vefuse_base) {
+		dev_warn(mdev->dev,
+			 "FW_TYPE_EXTEND_BIN_EFUSE chunk not found in FW image, virtual efuse skipped\n");
+		/* vefuse_cap.present stays false -> debugfs node not exposed on a
+		 * WF without a virtual efuse. vefuse_cap.enabled (the FW-reported
+		 * capability) is left untouched.
+		 */
+		goto out;
+	}
+
+	/* The packed FW region carries the vefuse payload plus connac
+	 * per-region framing (4-byte CRC + 16-byte alignment), so region
+	 * length is larger than the FW-reported payload. Only the leading
+	 * vefuse_cap.size bytes are the actual vefuse content to push.
+	 */
+	payload = dev->vefuse_cap.size;
+
+	/* virtual efuse is an optional override: if it cannot be applied the
+	 * chip still works on its default efuse values, so the checks below
+	 * only warn and skip - they must not fail firmware bring-up.
+	 */
+
+	/* [Check #1] region must hold at least the FW-reported payload */
+	if (len < payload) {
+		dev_warn(mdev->dev,
+			 "vefuse: region size %u smaller than FW capability %u, skipping\n",
+			 len, payload);
+		goto out;
+	}
+
+	total_pages = DIV_ROUND_UP(payload, MT7925_VEFUSE_PAGE_SIZE);
+	if (total_pages > MT7925_VEFUSE_MAX_PAGES) {
+		dev_warn(mdev->dev,
+			 "vefuse: payload too large: %u bytes (%d pages), max %d pages supported, skipping\n",
+			 payload, total_pages, MT7925_VEFUSE_MAX_PAGES);
+		goto out;
+	}
+
+	for (i = 0; i < total_pages; i++) {
+		ret = mt7925_mcu_send_vefuse_page(dev, vefuse_base, payload,
+						  i, total_pages);
+		if (ret) {
+			dev_warn(mdev->dev,
+				 "vefuse page %d/%d send failed: %d, skipping\n",
+				 i + 1, total_pages, ret);
+			ret = 0;
+			goto out;
+		}
+	}
+
+out:
+	release_firmware(fw);
+	return ret;
+}
+
 static int mt7925_load_clc(struct mt792x_dev *dev, const char *fw_name)
 {
 	const struct mt76_connac2_fw_trailer *hdr;
@@ -1126,6 +1334,17 @@ mt7925_mcu_get_nic_capability(struct mt792x_dev *dev)
 		case MT_NIC_CAP_EML_CAP:
 			mt7925_mcu_parse_eml_cap(dev, tlv->data);
 			break;
+		case MT_NIC_CAP_VEFUSE_INFO: {
+			struct mt7925_vefuse_cap *cap;
+
+			if (len < sizeof(*tlv) + sizeof(*cap))
+				break;
+
+			cap = (struct mt7925_vefuse_cap *)tlv->data;
+			dev->vefuse_cap.enabled   = cap->enabled;
+			dev->vefuse_cap.size      = le16_to_cpu(cap->size);
+			break;
+		}
 		default:
 			break;
 		}
@@ -1196,6 +1415,13 @@ int mt7925_run_firmware(struct mt792x_dev *dev)
 		return err;
 
 	err = mt7925_mcu_get_nic_capability(dev);
+	if (err)
+		return err;
+
+	/* Virtual efuse is best-effort and currently never fails bring-up, but
+	 * keep the error propagation for a possible future fatal vefuse error.
+	 */
+	err = mt7925_load_vefuse_from_fw(dev, mt792x_ram_name(dev));
 	if (err)
 		return err;
 
