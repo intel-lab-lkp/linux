@@ -693,6 +693,9 @@ static bool ntfs_non_resident_attr_value_is_valid(const struct attr_record *a)
 	u32 attr_len;
 	u32 min_len;
 	u16 mp_offset;
+	u16 name_offset;
+	u16 name_len;
+	u32 name_end;
 
 	attr_len = le32_to_cpu(a->length);
 	min_len = offsetof(struct attr_record, data.non_resident.initialized_size) +
@@ -701,7 +704,35 @@ static bool ntfs_non_resident_attr_value_is_valid(const struct attr_record *a)
 		return false;
 
 	mp_offset = le16_to_cpu(a->data.non_resident.mapping_pairs_offset);
-	return mp_offset >= min_len && mp_offset <= attr_len;
+	if (mp_offset < min_len || mp_offset > attr_len)
+		return false;
+
+	/*
+	 * Validate name_offset for named attributes.
+	 * Unnamed attributes have name_length = 0 and name_offset may be 0.
+	 */
+	name_len = le16_to_cpu(a->name_length);
+	if (name_len) {
+		name_offset = le16_to_cpu(a->name_offset);
+
+		if (name_offset < min_len || name_offset >= attr_len)
+			return false;
+
+		name_end = name_offset + name_len * sizeof(__le16);
+		if (name_end > attr_len || name_end > mp_offset)
+			return false;
+
+		/*
+		 * For non-sparse -> sparse conversion, name shifts forward
+		 * by 8 bytes. Ensure there's room for the shift.
+		 */
+		if (!(a->flags & ATTR_IS_SPARSE) &&
+		     name_end + 8 > attr_len)
+			return false;
+	}
+
+	return true;
+
 }
 
 static bool ntfs_attr_value_is_valid(struct ntfs_volume *vol,
