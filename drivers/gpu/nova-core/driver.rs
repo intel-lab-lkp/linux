@@ -18,7 +18,10 @@ use kernel::{
     types::ForLt,
 };
 
-use crate::gpu::Gpu;
+use crate::{
+    gpu::Gpu,
+    trace::nova_core_trace_driver, //
+};
 
 /// Counter for generating unique auxiliary device IDs.
 static AUXILIARY_ID_COUNTER: Atomic<u32> = Atomic::new(0);
@@ -73,7 +76,7 @@ impl pci::Driver for NovaCoreDriver {
         _info: &'bound Self::IdInfo,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound {
         pin_init::pin_init_scope(move || {
-            dev_dbg!(pdev, "Probe Nova Core GPU driver.\n");
+            nova_core_trace_driver!(pdev, "Probe Nova Core GPU driver.");
 
             pdev.enable_device_mem()?;
             pdev.set_master();

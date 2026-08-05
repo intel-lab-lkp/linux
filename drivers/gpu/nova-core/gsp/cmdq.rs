@@ -58,7 +58,8 @@ use crate::{
         GSP_PAGE_SIZE, //
     },
     num,
-    sbuffer::SBufferIter, //
+    sbuffer::SBufferIter,
+    trace::nova_core_trace_gsp, //
 };
 
 use super::regs;
@@ -675,9 +676,9 @@ impl CmdqInner {
                 dst.contents.1,
             ])));
 
-        dev_dbg!(
+        nova_core_trace_gsp!(
             &self.dev,
-            "GSP RPC: send: seq# {}, function={:?}, length=0x{:x}\n",
+            "GSP RPC: send: seq# {}, function={:?}, length=0x{:x}",
             self.seq,
             M::FUNCTION,
             dst.header.length(),
@@ -754,9 +755,9 @@ impl CmdqInner {
         // Extract the `GspMsgElement`.
         let (header, slice_1) = GspMsgElement::from_bytes_prefix(slice_1).ok_or(EIO)?;
 
-        dev_dbg!(
+        nova_core_trace_gsp!(
             &self.dev,
-            "GSP RPC: receive: seq# {}, function={:?}, length=0x{:x}\n",
+            "GSP RPC: receive: seq# {}, function={:?}, length=0x{:x}",
             header.sequence(),
             header.function(),
             header.length(),

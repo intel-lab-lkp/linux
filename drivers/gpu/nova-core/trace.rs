@@ -55,7 +55,6 @@ pub(crate) mod raw {
 ///
 /// `trace` must synchronously consume `dev`, `message`, and `message_len`
 /// according to the `nova_core_trace_class` event prototype.
-#[expect(dead_code)]
 pub(crate) unsafe fn nova_core_trace_fmt(
     dev: &CStr,
     args: fmt::Arguments<'_>,
@@ -81,7 +80,6 @@ pub(crate) unsafe fn nova_core_trace_fmt(
     }
 }
 
-#[expect(unused_macros)]
 macro_rules! nova_core_trace_impl {
     ($event:ident, $dev:expr, $($arg:tt)*) => {{
         #[cfg(CONFIG_TRACEPOINTS)]
@@ -121,24 +119,20 @@ macro_rules! nova_core_trace_impl {
 
 // Frontend macros expand in their caller's module and invoke this helper by
 // path, so the re-export must be visible from the parent module.
-#[expect(unused_imports)]
 pub(super) use nova_core_trace_impl;
 
-#[expect(unused_macros)]
 macro_rules! nova_core_trace_driver {
     ($dev:expr, $($arg:tt)*) => {
         $crate::trace::nova_core_trace_impl!(nova_core_trace_driver, $dev, $($arg)*)
     };
 }
 
-#[expect(unused_macros)]
 macro_rules! nova_core_trace_fsp {
     ($dev:expr, $($arg:tt)*) => {
         $crate::trace::nova_core_trace_impl!(nova_core_trace_fsp, $dev, $($arg)*)
     };
 }
 
-#[expect(unused_macros)]
 macro_rules! nova_core_trace_gsp {
     ($dev:expr, $($arg:tt)*) => {
         $crate::trace::nova_core_trace_impl!(nova_core_trace_gsp, $dev, $($arg)*)
@@ -152,11 +146,8 @@ macro_rules! nova_core_trace_vgpu {
     };
 }
 
-#[expect(unused_imports)]
 pub(crate) use nova_core_trace_driver;
-#[expect(unused_imports)]
 pub(crate) use nova_core_trace_fsp;
-#[expect(unused_imports)]
 pub(crate) use nova_core_trace_gsp;
 #[expect(unused_imports)]
 pub(crate) use nova_core_trace_vgpu;

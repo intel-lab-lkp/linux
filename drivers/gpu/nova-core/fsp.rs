@@ -51,7 +51,8 @@ use crate::{
         NvdmType, //
     },
     num,
-    regs, //
+    regs,
+    trace::nova_core_trace_fsp, //
 };
 
 mod hal;
@@ -434,6 +435,12 @@ impl<'a> Fsp<'a> {
     where
         M: MessageToFsp,
     {
+        nova_core_trace_fsp!(
+            dev,
+            "FSP NVDM: send: type={:?}, length=0x{:x}",
+            M::NVDM_TYPE,
+            msg.as_bytes().len(),
+        );
         self.falcon.send_msg(msg.as_bytes())?;
 
         let response_buf = self.falcon.recv_msg().inspect_err(|e| {
@@ -488,6 +495,13 @@ impl<'a> Fsp<'a> {
             );
             return Err(EIO);
         }
+
+        nova_core_trace_fsp!(
+            dev,
+            "FSP NVDM: receive: type={:?}, length=0x{:x}",
+            M::NVDM_TYPE,
+            response_buf.len(),
+        );
 
         Ok(response_buf)
     }
