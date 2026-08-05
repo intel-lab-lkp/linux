@@ -49,3 +49,38 @@ __rust_helper void rust_helper_dma_set_max_seg_size(struct device *dev,
 {
 	dma_set_max_seg_size(dev, size);
 }
+
+__rust_helper dma_addr_t rust_helper_dma_map_single_attrs(struct device *dev,
+							  void *ptr, size_t size,
+							  enum dma_data_direction dir,
+							  unsigned long attrs)
+{
+	return dma_map_single_attrs(dev, ptr, size, dir, attrs);
+}
+
+__rust_helper void rust_helper_dma_unmap_single_attrs(struct device *dev,
+						      dma_addr_t addr, size_t size,
+						      enum dma_data_direction dir,
+						      unsigned long attrs)
+{
+	dma_unmap_single_attrs(dev, addr, size, dir, attrs);
+}
+
+__rust_helper int rust_helper_dma_mapping_error(struct device *dev, dma_addr_t addr)
+{
+	return dma_mapping_error(dev, addr);
+}
+
+__rust_helper void rust_helper_dma_sync_single_for_cpu(struct device *dev,
+						       dma_addr_t addr, size_t size,
+						       enum dma_data_direction dir)
+{
+	dma_sync_single_for_cpu(dev, addr, size, dir);
+}
+
+__rust_helper void rust_helper_dma_sync_single_for_device(struct device *dev,
+							  dma_addr_t addr, size_t size,
+							  enum dma_data_direction dir)
+{
+	dma_sync_single_for_device(dev, addr, size, dir);
+}
