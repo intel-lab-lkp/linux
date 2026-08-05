@@ -110,6 +110,32 @@ void aes_cmac_update(struct aes_cmac_ctx *ctx, const u8 *data, size_t data_len);
 void aes_cmac_final(struct aes_cmac_ctx *ctx, u8 out[at_least AES_BLOCK_SIZE]);
 
 /**
+ * aes_cmac_zeroize_key - Clear a aes_cmac_key structure
+ * @ctx: The location of the key structure that should be zeroized
+ *
+ * Explicitly fills the aes_cmac_key with zeroes. This should be done once
+ * the key is not required anymore to avoid that its contents are leaked
+ * on the stack or heap.
+ */
+static inline void aes_cmac_zeroize_key(struct aes_cmac_key *key)
+{
+	memzero_explicit(key, sizeof(*key));
+}
+
+/**
+ * aes_cmac_zeroize_ctx - Clear a aes_cmac_ctx structure
+ * @ctx: The location of the context that should be zeroized
+ *
+ * Explicitly fills the aes_cmac_ctx with zeroes. This should be done once
+ * the context is not required anymore to avoid that its contents are
+ * leaked on the stack or heap. Only required if not using aes_cmac_final().
+ */
+static inline void aes_cmac_zeroize_ctx(struct aes_cmac_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
+
+/**
  * aes_cmac() - Compute AES-CMAC or AES-XCBC-MAC in one shot
  * @key: The key to use
  * @data: The message data
