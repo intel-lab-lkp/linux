@@ -60,11 +60,18 @@ static bool get_spe_event_has_cx(struct perf_event *event)
 }
 
 #define ARM_SPE_BUF_PAD_BYTE			0
+#define ARM_SPE_DISCARD_BUF_SIZE		SZ_4M
 
 struct arm_spe_pmu_buf {
 	int					nr_pages;
 	bool					snapshot;
 	void					*base;
+};
+
+struct arm_spe_pmu_sw_discard_buf {
+	struct page				*page;
+	void					*base;
+	refcount_t				refcount;
 };
 
 struct arm_spe_pmu {
@@ -85,7 +92,7 @@ struct arm_spe_pmu {
 #define SPE_PMU_FEAT_LDS			(1UL << 4)
 #define SPE_PMU_FEAT_ERND			(1UL << 5)
 #define SPE_PMU_FEAT_INV_FILT_EVT		(1UL << 6)
-#define SPE_PMU_FEAT_DISCARD			(1UL << 7)
+#define SPE_PMU_FEAT_HW_DISCARD			(1UL << 7)
 #define SPE_PMU_FEAT_EFT			(1UL << 8)
 #define SPE_PMU_FEAT_FDS			(1UL << 9)
 #define SPE_PMU_FEAT_DEV_PROBED			(1UL << 63)
@@ -218,7 +225,8 @@ static const struct attribute_group arm_spe_pmu_cap_group = {
 #define ATTR_CFG_FLD_store_filter_CFG		config	/* PMSFCR_EL1.ST */
 #define ATTR_CFG_FLD_store_filter_LO		34
 #define ATTR_CFG_FLD_store_filter_HI		34
-#define ATTR_CFG_FLD_discard_CFG		config	/* PMBLIMITR_EL1.FM = DISCARD */
+/* PMBLIMITR_EL1.FM = DISCARD, or scratch buffer if no HW support */
+#define ATTR_CFG_FLD_discard_CFG		config
 #define ATTR_CFG_FLD_discard_LO			35
 #define ATTR_CFG_FLD_discard_HI			35
 #define ATTR_CFG_FLD_branch_filter_mask_CFG	config	/* PMSFCR_EL1.Bm */
@@ -309,9 +317,6 @@ static umode_t arm_spe_pmu_format_attr_is_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct arm_spe_pmu *spe_pmu = dev_get_drvdata(dev);
 
-	if (attr == &format_attr_discard.attr && !(spe_pmu->features & SPE_PMU_FEAT_DISCARD))
-		return 0;
-
 	if (attr == &format_attr_inv_event_filter.attr && !(spe_pmu->features & SPE_PMU_FEAT_INV_FILT_EVT))
 		return 0;
 
@@ -366,6 +371,82 @@ static const struct attribute_group *arm_spe_pmu_attr_groups[] = {
 static bool arm_spe_discard_mode(struct perf_event *event)
 {
 	return ATTR_CFG_GET_FLD(&event->attr, discard);
+}
+
+static bool arm_spe_uses_sw_discard_buf(struct perf_event *event)
+{
+	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
+
+	return arm_spe_discard_mode(event) &&
+	       !(spe_pmu->features & SPE_PMU_FEAT_HW_DISCARD);
+}
+
+static void arm_spe_pmu_free_discard_buf(struct perf_event *event)
+{
+	struct arm_spe_pmu_sw_discard_buf *buf = event->pmu_private;
+
+	event->pmu_private = NULL;
+	if (!refcount_dec_and_test(&buf->refcount))
+		return;
+
+	vunmap(buf->base);
+	__free_page(buf->page);
+	kfree(buf);
+}
+
+/*
+ * Map a single page multiple times to make up ARM_SPE_DISCARD_BUF_SIZE.
+ *
+ * This reduces the number of interrupts that have to be serviced in software
+ * discard mode, but at the same time only uses a page of memory. We don't need
+ * to worry about samples being overwritten because they're never read.
+ */
+static int arm_spe_pmu_alloc_discard_buf(struct perf_event *event)
+{
+	int node = (event->cpu == -1) ? -1 : cpu_to_node(event->cpu);
+	int nr_pages = ARM_SPE_DISCARD_BUF_SIZE / PAGE_SIZE;
+	struct arm_spe_pmu_sw_discard_buf *buf;
+	struct page **pglist;
+	int i;
+
+	if (event->parent) {
+		buf = event->parent->pmu_private;
+		refcount_inc(&buf->refcount);
+		event->pmu_private = buf;
+		event->destroy = arm_spe_pmu_free_discard_buf;
+		return 0;
+	}
+
+	buf = kzalloc_node(sizeof(*buf), GFP_KERNEL, node);
+	if (!buf)
+		return -ENOMEM;
+
+	buf->page = alloc_pages_node(node, GFP_KERNEL, 0);
+	if (!buf->page)
+		goto out_free_buf;
+
+	pglist = kvmalloc_array(nr_pages, sizeof(*pglist), GFP_KERNEL);
+	if (!pglist)
+		goto out_free_page;
+
+	for (i = 0; i < nr_pages; i++)
+		pglist[i] = buf->page;
+
+	buf->base = vmap(pglist, nr_pages, VM_MAP, PAGE_KERNEL);
+	kvfree(pglist);
+	if (!buf->base)
+		goto out_free_page;
+
+	refcount_set(&buf->refcount, 1);
+	event->pmu_private = buf;
+	event->destroy = arm_spe_pmu_free_discard_buf;
+	return 0;
+
+out_free_page:
+	__free_page(buf->page);
+out_free_buf:
+	kfree(buf);
+	return -ENOMEM;
 }
 
 /* Convert between user ABI and register values */
@@ -617,10 +698,26 @@ static u64 arm_spe_pmu_next_off(struct perf_output_handle *handle)
 static void arm_spe_pmu_begin_discard(struct perf_output_handle *handle,
 				      struct perf_event *event)
 {
-	u64 limit;
+	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
+	struct arm_spe_pmu_sw_discard_buf *discard_buf = event->pmu_private;
+	u64 base, limit;
 
-	limit = FIELD_PREP(PMBLIMITR_EL1_FM, PMBLIMITR_EL1_FM_DISCARD);
-	limit |= PMBLIMITR_EL1_E;
+	if (spe_pmu->features & SPE_PMU_FEAT_HW_DISCARD) {
+		limit = FIELD_PREP(PMBLIMITR_EL1_FM, PMBLIMITR_EL1_FM_DISCARD);
+		limit |= PMBLIMITR_EL1_E;
+	} else {
+		base = (u64) discard_buf->base;
+		limit = base + ARM_SPE_DISCARD_BUF_SIZE;
+		limit |= PMBLIMITR_EL1_E;
+		write_sysreg_s(base, SYS_PMBPTR_EL1);
+
+		/*
+		 * Track the event so we can access the discard buffer through
+		 * event->pmu_private. perf_aux_output_begin() normally handles
+		 * this, but we can do it manually if that's not being used.
+		 */
+		handle->event = event;
+	}
 
 	write_sysreg_s(limit, SYS_PMBLIMITR_EL1);
 }
@@ -757,15 +854,20 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 	enum arm_spe_pmu_buf_fault_action act;
 	u64 aux_flags;
 
-	if (!perf_get_aux(handle))
+	if (!event)
+		return IRQ_NONE;
+
+	if (!arm_spe_discard_mode(event) && !perf_get_aux(handle))
 		return IRQ_NONE;
 
 	act = arm_spe_pmu_buf_get_fault_act(&aux_flags);
 	if (act == SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
 		return IRQ_NONE;
 
-	perf_aux_output_flag(handle, aux_flags);
-	arm_spe_perf_aux_output_end(handle);
+	if (!arm_spe_discard_mode(event)) {
+		perf_aux_output_flag(handle, aux_flags);
+		arm_spe_perf_aux_output_end(handle);
+	}
 
 	/*
 	 * Ensure perf callbacks have completed, which may disable the
@@ -819,6 +921,7 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 static int arm_spe_pmu_event_init(struct perf_event *event)
 {
 	u64 reg;
+	int ret;
 	struct perf_event_attr *attr = &event->attr;
 	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
 
@@ -880,14 +983,16 @@ static int arm_spe_pmu_event_init(struct perf_event *event)
 	    !(spe_pmu->features & SPE_PMU_FEAT_EFT))
 		return -EOPNOTSUPP;
 
-	if (arm_spe_discard_mode(event) &&
-	    !(spe_pmu->features & SPE_PMU_FEAT_DISCARD))
-		return -EOPNOTSUPP;
-
 	set_spe_event_has_cx(event);
 	reg = arm_spe_event_to_pmscr(event);
-	if (reg & (PMSCR_EL1_PA | PMSCR_EL1_PCT))
-		return perf_allow_kernel();
+	if (reg & (PMSCR_EL1_PA | PMSCR_EL1_PCT)) {
+		ret = perf_allow_kernel();
+		if (ret)
+			return ret;
+	}
+
+	if (arm_spe_uses_sw_discard_buf(event))
+		return arm_spe_pmu_alloc_discard_buf(event);
 
 	return 0;
 }
@@ -954,22 +1059,25 @@ static void arm_spe_pmu_stop(struct perf_event *event, int flags)
 	arm_spe_pmu_disable_and_drain_local();
 
 	if (flags & PERF_EF_UPDATE) {
+		enum arm_spe_pmu_buf_fault_action act;
+
 		/*
 		 * If there's a fault pending then ensure we contain it
 		 * to this buffer, since we might be on the context-switch
 		 * path.
 		 */
-		if (perf_get_aux(handle)) {
-			enum arm_spe_pmu_buf_fault_action act;
-
-			act = arm_spe_pmu_buf_get_fault_act(&aux_flags);
+		act = arm_spe_pmu_buf_get_fault_act(&aux_flags);
+		if (!arm_spe_discard_mode(event) && perf_get_aux(handle)) {
 			perf_aux_output_flag(handle, aux_flags);
 			arm_spe_perf_aux_output_end(handle);
-
-			/* Assume PMBSR only needs clearing for real faults */
-			if (act != SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
-				write_sysreg_s(0, SYS_PMBSR_EL1);
+		} else {
+			/* Discard mode tracks event outside of perf_aux_output_X() */
+			handle->event = NULL;
 		}
+
+		/* Assume PMBSR only needs clearing for real faults */
+		if (act != SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
+			write_sysreg_s(0, SYS_PMBSR_EL1);
 
 		/*
 		 * This may also contain ECOUNT, but nobody else should
@@ -1180,7 +1288,7 @@ static void __arm_spe_pmu_dev_probe(void *info)
 		spe_pmu->features |= SPE_PMU_FEAT_ERND;
 
 	if (spe_pmu->pmsver >= ID_AA64DFR0_EL1_PMSVer_V1P2)
-		spe_pmu->features |= SPE_PMU_FEAT_DISCARD;
+		spe_pmu->features |= SPE_PMU_FEAT_HW_DISCARD;
 
 	if (FIELD_GET(PMSIDR_EL1_EFT, reg))
 		spe_pmu->features |= SPE_PMU_FEAT_EFT;
