@@ -9917,15 +9917,12 @@ struct task_struct *pick_task_fair(struct rq *rq, struct rq_flags *rf)
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
 	struct task_struct *p;
-	bool throttled;
 	int new_tasks;
 
 again:
 	cfs_rq = &rq->cfs;
 	if (!cfs_rq->nr_queued)
 		goto idle;
-
-	throttled = false;
 
 	do {
 		/* Might not have done put_prev_entity() */
@@ -9939,8 +9936,6 @@ again:
 	} while (cfs_rq);
 
 	p = task_of(se);
-	if (unlikely(throttled))
-		task_throttle_setup_work(p);
 	return p;
 
 idle:
