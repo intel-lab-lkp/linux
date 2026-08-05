@@ -385,6 +385,9 @@ static void b53_enable_vlan(struct b53_device *dev, int port, bool enable,
 {
 	u8 mgmt, vc0, vc1, vc4 = 0, vc5;
 
+	if (!enable_filtering && dev->tag_protocol != DSA_TAG_PROTO_NONE)
+		enable = false;
+
 	b53_read8(dev, B53_CTRL_PAGE, B53_SWITCH_MODE, &mgmt);
 	b53_read8(dev, B53_VLAN_PAGE, B53_VLAN_CTRL0, &vc0);
 	b53_read8(dev, B53_VLAN_PAGE, B53_VLAN_CTRL1, &vc1);
@@ -916,7 +919,7 @@ int b53_configure_vlan(struct dsa_switch *ds)
 		b53_do_vlan_op(dev, VTA_CMD_CLEAR);
 	}
 
-	b53_enable_vlan(dev, -1, dev->vlan_enabled, dev->vlan_filtering);
+	b53_enable_vlan(dev, -1, true, dev->vlan_filtering);
 
 	/* Create an untagged VLAN entry for the default PVID in case
 	 * CONFIG_VLAN_8021Q is disabled and there are no calls to
