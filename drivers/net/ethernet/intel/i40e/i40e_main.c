@@ -16190,6 +16190,20 @@ static void i40e_remove(struct pci_dev *pdev)
 
 	i40e_devlink_unregister(pf);
 
+	/* Interrupts can queue the service task until __I40E_DOWN is set.
+	 * Disable it so no service work can outlive the PF.
+	 */
+	set_bit(__I40E_SUSPENDED, pf->state);
+	if (pf->service_timer.function)
+		timer_shutdown_sync(&pf->service_timer);
+	if (pf->service_task.func)
+		disable_work_sync(&pf->service_task);
+
+	/* Wait for any reset owner before tearing down device resources. */
+	while (test_and_set_bit(__I40E_RESET_RECOVERY_PENDING, pf->state))
+		usleep_range(1000, 2000);
+	set_bit(__I40E_IN_REMOVE, pf->state);
+
 	i40e_dbg_pf_exit(pf);
 
 	i40e_ptp_stop(pf);
@@ -16198,26 +16212,12 @@ static void i40e_remove(struct pci_dev *pdev)
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), 0);
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(1), 0);
 
-	/* Grab __I40E_RESET_RECOVERY_PENDING and set __I40E_IN_REMOVE
-	 * flags, once they are set, i40e_rebuild should not be called as
-	 * i40e_prep_for_reset always returns early.
-	 */
-	while (test_and_set_bit(__I40E_RESET_RECOVERY_PENDING, pf->state))
-		usleep_range(1000, 2000);
-	set_bit(__I40E_IN_REMOVE, pf->state);
-
 	if (test_bit(I40E_FLAG_SRIOV_ENA, pf->flags)) {
 		set_bit(__I40E_VF_RESETS_DISABLED, pf->state);
 		i40e_free_vfs(pf);
 		clear_bit(I40E_FLAG_SRIOV_ENA, pf->flags);
 	}
-	/* no more scheduling of any task */
-	set_bit(__I40E_SUSPENDED, pf->state);
 	set_bit(__I40E_DOWN, pf->state);
-	if (pf->service_timer.function)
-		timer_shutdown_sync(&pf->service_timer);
-	if (pf->service_task.func)
-		cancel_work_sync(&pf->service_task);
 
 	if (test_bit(__I40E_RECOVERY_MODE, pf->state)) {
 		struct i40e_vsi *vsi = pf->vsi[0];
