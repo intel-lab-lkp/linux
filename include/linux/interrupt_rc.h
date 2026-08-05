@@ -12,6 +12,7 @@
  */
 
 #include <linux/irqflags.h>
+#include <linux/debug_locks.h>
 #include <linux/preempt.h>
 #include <linux/processor.h>
 #include <linux/smp.h>
@@ -63,6 +64,13 @@ static inline void local_interrupt_disable(void)
 
 	new_count = hardirq_disable_enter();
 
+	/* Is hardirq disable count overflow soon? */
+	if (IS_ENABLED(CONFIG_DEBUG_PREEMPT) &&
+	    DEBUG_LOCKS_WARN_ON((new_count & HARDIRQ_DISABLE_MASK) +
+				(10 << HARDIRQ_DISABLE_SHIFT) >=
+				HARDIRQ_DISABLE_MASK))
+	    return;
+
 	/* Interrupts can happen here, but it's OK, see __irq_exit_rcu(). */
 
 	if ((new_count & HARDIRQ_DISABLE_MASK) == HARDIRQ_DISABLE_OFFSET)
@@ -72,6 +80,11 @@ static inline void local_interrupt_disable(void)
 static inline void local_interrupt_enable(void)
 {
 	int new_count;
+
+	/* Unpaired local_interrupt_enable()? Warn and abort. */
+	if (IS_ENABLED(CONFIG_DEBUG_PREEMPT) &&
+	    DEBUG_LOCKS_WARN_ON((preempt_count() & HARDIRQ_DISABLE_MASK) == 0))
+		return;
 
 	new_count = hardirq_disable_exit();
 
