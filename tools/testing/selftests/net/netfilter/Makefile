@@ -25,6 +25,7 @@ TEST_PROGS := \
 	nft_audit.sh \
 	nft_concat_range.sh \
 	nft_conntrack_helper.sh \
+	nft_ct_timeout.sh \
 	nft_fib.sh \
 	nft_fib_nexthop.sh \
 	nft_flowtable.sh \
