@@ -22,6 +22,7 @@ mod mctp;
 mod num;
 mod regs;
 mod sbuffer;
+mod trace;
 mod vbios;
 mod vgpu;
 

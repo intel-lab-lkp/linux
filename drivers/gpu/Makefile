@@ -14,7 +14,9 @@ obj-$(CONFIG_TRACE_GPU_MEM)		+= trace/
 # system supports cross-crate dependencies natively.
 
 obj-$(CONFIG_NOVA_CORE) += nova-core.o
-nova-core-y := nova-core/nova_core.o nova-core/nova_core_exports.o
+nova-core-y := nova-core/nova_core.o \
+	       nova-core/trace.o \
+	       nova-core/nova_core_exports.o
 
 obj-$(CONFIG_DRM_NOVA) += nova-drm.o
 nova-drm-y := drm/nova/nova.o
