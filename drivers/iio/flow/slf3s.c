@@ -462,6 +462,7 @@ static int slf3s_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct slf3s_data *sf = iio_priv(indio_dev);
+	int restart_ret;
 	int ret;
 
 	guard(mutex)(&sf->lock);
@@ -470,7 +471,16 @@ static int slf3s_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	return regulator_disable(sf->vdd);
+	ret = regulator_disable(sf->vdd);
+	if (!ret)
+		return 0;
+
+	restart_ret = slf3s_start_meas(sf, sf->medium);
+	if (restart_ret)
+		dev_warn(dev, "failed to restart measurement after suspend failure: %d\n",
+			 restart_ret);
+
+	return ret;
 }
 
 static int slf3s_resume(struct device *dev)
