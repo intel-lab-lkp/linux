@@ -898,22 +898,104 @@ abort:
 	return 0;
 }
 
+static bool migrate_vma_split_pmd_one(struct folio *folio,
+				      struct vm_area_struct *vma,
+				      unsigned long addr, void *arg)
+{
+	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
+
+	while (page_vma_mapped_walk(&pvmw)) {
+		if (pvmw.pte)
+			continue;
+
+		addr = pvmw.address;
+		page_vma_mapped_walk_done(&pvmw);
+
+		/*
+		 * Demote with freeze = false: the PMD already holds a
+		 * migration entry, so __split_huge_pmd_locked() creates PTE
+		 * sized migration entries from it and leaves the refcount
+		 * alone. There is at most one PMD mapping @folio per VMA, so
+		 * stop the walk here.
+		 */
+		split_huge_pmd_address(vma, addr, false);
+		break;
+	}
+
+	return true;
+}
+
+/*
+ * Demote every PMD sized migration entry that maps @folio to PTE sized ones.
+ *
+ * migrate_device_unmap() unmaps with try_to_migrate(folio, 0), i.e. without
+ * TTU_SPLIT_HUGE_PMD, so a folio that was PMD mapped in several VMAs -- after
+ * fork(), for instance -- ends up with a PMD sized migration entry in every one
+ * of them. folio_split_unmapped() below does not care, it only looks at the
+ * refcount, so splitting the folio without demoting all of those first would
+ * leave the other VMAs pointing a huge PMD at what is now an order-0 folio.
+ * remove_migration_ptes() trips over that in migrate_vma_finalize().
+ */
+static void migrate_vma_split_pmd_mappings(struct folio *folio)
+{
+	struct rmap_walk_control rwc = {
+		.rmap_one = migrate_vma_split_pmd_one,
+	};
+
+	/*
+	 * Do not pass .anon_lock: folio_lock_anon_vma_read() requires
+	 * folio_mapped(), and @folio is already fully unmapped here.
+	 */
+	rmap_walk(folio, &rwc);
+}
+
 static int migrate_vma_split_unmapped_folio(struct migrate_vma *migrate,
-					    unsigned long idx, unsigned long addr,
+					    unsigned long idx,
 					    struct folio *folio)
 {
 	unsigned long i;
 	unsigned long pfn;
 	unsigned long flags;
+	bool fault_folio;
 	int ret = 0;
 
 	/*
-	 * take a reference, since split_huge_pmd_address() with freeze = true
-	 * drops a reference at the end.
+	 * migrate_vma_split_pmd_mappings() walks the rmap, and
+	 * split_huge_pmd_address() zaps rather than demotes a PMD in a VMA that
+	 * is not anonymous. migrate_vma_collect_huge_pmd() does not check the
+	 * VMA type, so a file THP can reach here; the rest of the migrate_vma()
+	 * machinery only supports anonymous memory anyway.
 	 */
-	folio_get(folio);
-	split_huge_pmd_address(migrate->vma, addr, true);
+	if (!folio_test_anon(folio))
+		return -EINVAL;
+
+	/*
+	 * A CPU fault on a device private PMD holds an extra reference on the
+	 * folio, taken by do_huge_pmd_device_private(). folio_split_unmapped()
+	 * only tolerates a single caller reference, so the split would always
+	 * fail with -EAGAIN while this fault reference is held.
+	 *
+	 * do_huge_pmd_device_private() derives the fault page from the PMD
+	 * entry, so it is always the head page of @folio, and therefore always
+	 * ends up in the head folio after an uniform split to order 0. Drop
+	 * the reference across the split and re-take it on the head folio
+	 * afterwards, leaving the reference exactly where it is expected to be
+	 * released.
+	 *
+	 * The folio cannot go away while the reference is dropped: the
+	 * reference taken by migrate_vma_collect_huge_pmd() is still held.
+	 */
+	fault_folio = migrate->fault_page &&
+		page_folio(migrate->fault_page) == folio;
+
+	migrate_vma_split_pmd_mappings(folio);
+
+	if (fault_folio)
+		folio_put(folio);
 	ret = folio_split_unmapped(folio, 0);
+	if (fault_folio)
+		folio_get(folio);
+
 	if (ret)
 		return ret;
 	migrate->src[idx] &= ~MIGRATE_PFN_COMPOUND;
@@ -934,7 +1016,7 @@ static int migrate_vma_insert_huge_pmd_page(struct migrate_vma *migrate,
 }
 
 static int migrate_vma_split_unmapped_folio(struct migrate_vma *migrate,
-					    unsigned long idx, unsigned long addr,
+					    unsigned long idx,
 					    struct folio *folio)
 {
 	return 0;
@@ -1102,7 +1184,6 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 	struct mmu_notifier_range range;
 	unsigned long i, j;
 	bool notified = false;
-	unsigned long addr;
 
 	for (i = 0; i < npages; ) {
 		struct page *newpage = migrate_pfn_to_page(dst_pfns[i]);
@@ -1176,8 +1257,7 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 					goto next;
 				}
 				nr = 1 << folio_order(folio);
-				addr = migrate->start + i * PAGE_SIZE;
-				if (migrate_vma_split_unmapped_folio(migrate, i, addr, folio)) {
+				if (migrate_vma_split_unmapped_folio(migrate, i, folio)) {
 					src_pfns[i] &= ~(MIGRATE_PFN_MIGRATE |
 							 MIGRATE_PFN_COMPOUND);
 					goto next;
