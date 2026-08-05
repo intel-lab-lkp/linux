@@ -308,6 +308,7 @@ macro_rules! bitfield {
         $(#[$attr])*
         #[repr(transparent)]
         #[derive(Clone, Copy, PartialEq, Eq)]
+        #[derive($crate::prelude::FromBytes, $crate::prelude::IntoBytes)]
         $vis struct $name {
             inner: $storage,
         }
@@ -345,6 +346,10 @@ macro_rules! bitfield {
             fn from(val: $storage) -> $name {
                 Self::from_raw(val)
             }
+        }
+
+        impl $crate::io::IoRepr for $name {
+            type Repr = $storage;
         }
     };
 
