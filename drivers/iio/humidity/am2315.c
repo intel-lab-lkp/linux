@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Aosong AM2315 relative humidity and temperature
+ * Aosong AM2315/AM2320 relative humidity and temperature
  *
  * Copyright (c) 2016, Intel Corporation.
  *
@@ -251,6 +251,7 @@ static int am2315_probe(struct i2c_client *client)
 
 static const struct i2c_device_id am2315_i2c_id[] = {
 	{ .name = "am2315" },
+	{ .name = "am2320" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, am2315_i2c_id);
