@@ -46,6 +46,7 @@ struct NullBlkDevice;
 
 impl NullBlkDevice {
     fn new(
+        this_module: &'static ThisModule,
         name: &CStr,
         block_size: u32,
         rotational: bool,
@@ -61,7 +62,7 @@ impl NullBlkDevice {
             .logical_block_size(block_size)?
             .physical_block_size(block_size)?
             .rotational(rotational)
-            .build(fmt!("{}", name.to_str()?), tagset, queue_data)
+            .build(this_module, fmt!("{}", name.to_str()?), tagset, queue_data)
     }
 }
 

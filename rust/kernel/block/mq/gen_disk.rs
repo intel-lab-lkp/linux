@@ -95,8 +95,12 @@ impl GenDiskBuilder {
     }
 
     /// Build a new `GenDisk` and add it to the VFS.
+    ///
+    /// `this_module` must be the [`ThisModule`] for the kernel module registering
+    /// the disk.
     pub fn build<T: Operations>(
         self,
+        this_module: &'static ThisModule,
         name: fmt::Arguments<'_>,
         tagset: Arc<TagSet<T>>,
         queue_data: T::QueueData,
@@ -125,30 +129,32 @@ impl GenDiskBuilder {
             )
         })?;
 
-        const TABLE: bindings::block_device_operations = bindings::block_device_operations {
-            submit_bio: None,
-            open: None,
-            release: None,
-            ioctl: None,
-            compat_ioctl: None,
-            check_events: None,
-            unlock_native_capacity: None,
-            getgeo: None,
-            set_read_only: None,
-            swap_slot_free_notify: None,
-            report_zones: None,
-            devnode: None,
-            alternative_gpt_sector: None,
-            get_unique_id: None,
-            // TODO: Set to `THIS_MODULE`.
-            owner: core::ptr::null_mut(),
-            pr_ops: core::ptr::null_mut(),
-            free_disk: None,
-            poll_bio: None,
-        };
+        let fops = KBox::new(
+            bindings::block_device_operations {
+                submit_bio: None,
+                open: None,
+                release: None,
+                ioctl: None,
+                compat_ioctl: None,
+                check_events: None,
+                unlock_native_capacity: None,
+                getgeo: None,
+                set_read_only: None,
+                swap_slot_free_notify: None,
+                report_zones: None,
+                devnode: None,
+                alternative_gpt_sector: None,
+                get_unique_id: None,
+                owner: this_module.as_ptr(),
+                pr_ops: core::ptr::null_mut(),
+                free_disk: None,
+                poll_bio: None,
+            },
+            GFP_KERNEL,
+        )?;
 
-        // SAFETY: `gendisk` is a valid pointer as we initialized it above
-        unsafe { (*gendisk).fops = &TABLE };
+        // SAFETY: `gendisk` is a valid pointer as we initialized it above.
+        unsafe { (*gendisk).fops = core::ptr::from_ref(&*fops) };
 
         let cleanup_failure = ScopeGuard::new_with_data((gendisk, data), |(gendisk, data)| {
             // SAFETY: `gendisk` came from `__blk_mq_alloc_disk()` above and
@@ -193,6 +199,7 @@ impl GenDiskBuilder {
         // `__blk_mq_alloc_disk` above.
         Ok(GenDisk {
             _tagset: tagset,
+            _fops: fops,
             gendisk,
         })
     }
@@ -206,8 +213,11 @@ impl GenDiskBuilder {
 ///  - `gendisk` was added to the VFS through a call to
 ///    `bindings::device_add_disk`.
 ///  - `self.gendisk.queue.queuedata` is initialized by a call to `ForeignOwnable::into_foreign`.
+///  - `self._fops` stores the [`bindings::block_device_operations`] pointed to by
+///    `gendisk.fops`.
 pub struct GenDisk<T: Operations> {
     _tagset: Arc<TagSet<T>>,
+    _fops: KBox<bindings::block_device_operations>,
     gendisk: *mut bindings::gendisk,
 }
 
