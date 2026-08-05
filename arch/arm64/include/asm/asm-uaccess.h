@@ -94,4 +94,10 @@ alternative_else_nop_endif
 
 		_asm_extable_uaccess	8888b, \l;
 	.endm
+
+	.macro user_ldst_pair l, inst, reg1, reg2, addr, post_inc
+8888:		\inst		\reg1, \reg2, [\addr], \post_inc;
+
+		_asm_extable_uaccess    8888b, \l;
+	.endm
 #endif

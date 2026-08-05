@@ -48,7 +48,18 @@
 	.endm
 
 	.macro stp1 reg1, reg2, ptr, val
+#ifdef CONFIG_ARM64_LSUI
+	alternative_if_not ARM64_HAS_LSUI
+		user_stp 9997f, \reg1, \reg2, \ptr, \val
+	alternative_else
+		.arch_extension lsui
+		user_ldst_pair 9997f, sttp, \reg1, \reg2, \ptr, \val
+		nop
+		nop
+	alternative_endif
+#else
 	user_stp 9997f, \reg1, \reg2, \ptr, \val
+#endif
 	.endm
 
 	.macro cpy1 dst, src, count
