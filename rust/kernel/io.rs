@@ -1022,6 +1022,8 @@ pub trait Io<'a>: IoBase<'a> {
     /// };
     ///
     /// register! {
+    ///     base: Region;
+    ///
     ///     VERSION(u32) @ 0x100 {
     ///         15:8 major;
     ///         7:0  minor;
@@ -1164,6 +1166,8 @@ pub trait Io<'a>: IoBase<'a> {
     /// };
     ///
     /// register! {
+    ///     base: Region<0x1000>;
+    ///
     ///     VERSION(u32) @ 0x100 {
     ///         15:8 major;
     ///         7:0  minor;

@@ -13,9 +13,14 @@
 //! # Simple example
 //!
 //! ```no_run
-//! use kernel::io::register;
+//! use kernel::io::{
+//!     register,
+//!     Region,
+//! };
 //!
 //! register! {
+//!     base: Region<0x1000>;
+//!
 //!     /// Basic information about the chip.
 //!     pub BOOT_0(u32) @ 0x00000100 {
 //!         /// Vendor ID.
@@ -55,11 +60,14 @@
 //!         register,
 //!         Io,
 //!         IoLoc,
+//!         Region,
 //!     },
 //!     num::Bounded,
 //! };
-//! # use kernel::io::{Mmio, Region};
+//! # use kernel::io::Mmio;
 //! # register! {
+//! #     base: Region<0x1000>;
+//! #
 //! #     pub BOOT_0(u32) @ 0x00000100 {
 //! #         15:8 vendor_id;
 //! #         7:4 major_revision;
@@ -429,11 +437,14 @@ where
 ///     io::{
 ///         register,
 ///         Io,
+///         Region,
 ///     },
 /// };
-/// # use kernel::io::{Mmio, Region};
+/// # use kernel::io::Mmio;
 ///
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     FIXED_REG(u32) @ 0x100 {
 ///         15:8 high_byte;
 ///         7:0  low_byte;
@@ -464,9 +475,14 @@ where
 /// the context:
 ///
 /// ```no_run
-/// use kernel::io::register;
+/// use kernel::io::{
+///     register,
+///     Region,
+/// };
 ///
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Scratch register.
 ///     pub SCRATCH(u32) @ 0x00000200 {
 ///         31:0 value;
@@ -516,6 +532,7 @@ where
 ///
 /// ```ignore
 /// register! {
+///     ...
 ///     pub RELATIVE_REG(u32) @ Base + 0x80 {
 ///         ...
 ///     }
@@ -542,9 +559,10 @@ where
 ///             WithBase,
 ///         },
 ///         Io,
+///         Region,
 ///     },
 /// };
-/// # use kernel::io::{Mmio, Region};
+/// # use kernel::io::Mmio;
 ///
 /// // Type used to identify the base.
 /// pub struct CpuCtlBase;
@@ -563,6 +581,8 @@ where
 ///
 /// // This makes `CPU_CTL` accessible from all implementors of `RegisterBase<CpuCtlBase>`.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// CPU core control.
 ///     pub CPU_CTL(u32) @ CpuCtlBase + 0x10 {
 ///         0:0 start;
@@ -579,6 +599,8 @@ where
 ///
 /// // Aliases can also be defined for relative register.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Alias to CPU core control.
 ///     pub CPU_CTL_ALIAS(u32) => CpuCtlBase + CPU_CTL {
 ///         /// Start the aliased CPU core.
@@ -621,15 +643,18 @@ where
 ///         register,
 ///         register::Array,
 ///         Io,
+///         Region,
 ///     },
 /// };
-/// # use kernel::io::{Mmio, Region};
+/// # use kernel::io::Mmio;
 /// # fn get_scratch_idx() -> usize {
 /// #   0x15
 /// # }
 ///
 /// // Array of 64 consecutive registers with the same layout starting at offset `0x80`.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Scratch registers.
 ///     pub SCRATCH(u32)[64] @ 0x00000080 {
 ///         31:0 value;
@@ -655,6 +680,8 @@ where
 /// // Alias to a specific register in an array.
 /// // Here `SCRATCH[8]` is used to convey the firmware exit code.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Firmware exit status code.
 ///     pub FIRMWARE_STATUS(u32) => SCRATCH[8] {
 ///         7:0 status;
@@ -667,6 +694,8 @@ where
 /// // Here, each of the 16 registers of the array is separated by 8 bytes, meaning that the
 /// // registers of the two declarations below are interleaved.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Scratch registers bank 0.
 ///     pub SCRATCH_INTERLEAVED_0(u32)[16, stride = 8] @ 0x000000c0 {
 ///         31:0 value;
@@ -688,6 +717,7 @@ where
 ///
 /// ```ignore
 /// register! {
+///     ...
 ///     pub RELATIVE_REGISTER_ARRAY(u8)[10, stride = 4] @ Base + 0x100 {
 ///         ...
 ///     }
@@ -707,9 +737,10 @@ where
 ///             WithBase,
 ///         },
 ///         Io,
+///         Region,
 ///     },
 /// };
-/// # use kernel::io::{Mmio, Region};
+/// # use kernel::io::Mmio;
 /// # fn get_scratch_idx() -> usize {
 /// #   0x15
 /// # }
@@ -731,6 +762,8 @@ where
 ///
 /// // 64 per-cpu scratch registers, arranged as a contiguous array.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Per-CPU scratch registers.
 ///     pub CPU_SCRATCH(u32)[64] @ CpuCtlBase + 0x00000080 {
 ///         31:0 value;
@@ -758,6 +791,8 @@ where
 ///
 /// // Alias to `SCRATCH[8]` used to convey the firmware exit code.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Per-CPU firmware exit status code.
 ///     pub CPU_FIRMWARE_STATUS(u32) => CpuCtlBase + CPU_SCRATCH[8] {
 ///         7:0 status;
@@ -768,6 +803,8 @@ where
 /// // Here, each of the 16 registers of the array is separated by 8 bytes, meaning that the
 /// // registers of the two declarations below are interleaved.
 /// register! {
+///     base: Region<0x1000>;
+///
 ///     /// Scratch registers bank 0.
 ///     pub CPU_SCRATCH_INTERLEAVED_0(u32)[16, stride = 8] @ CpuCtlBase + 0x00000d00 {
 ///         31:0 value;
@@ -786,13 +823,19 @@ where
 /// ```
 #[macro_export]
 macro_rules! register {
-    () => {};
+    (base: $reg_base:ty;) => {
+        const _: () = {
+            #[allow(unused)]
+            type Base = $reg_base;
+        };
+    };
 
     // Creates a register at a fixed offset of the MMIO space.
     //
     // This handles all of the fixed offset `@ offset`, alias of register `=> alias` and alias of
     // register array element `=> alias[idx]` cases.
     (
+        base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             $(@ $offset:literal)?
             $(=> $alias:path $([$alias_idx:expr])? )?
@@ -804,11 +847,12 @@ macro_rules! register {
             @ $crate::register!(@offset $(@ $offset)? $(=> $alias $([$alias_idx])?)?)
         );
         $crate::register!(@io_fixed $(#[$attr])* $vis $name);
-        $crate::register!($($rest)*);
+        $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // Creates a register at a relative offset from a base address provider.
     (
+        base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) @ $base:ident + $offset:literal
             { $($fields:tt)* }
         $($rest:tt)*
@@ -816,11 +860,12 @@ macro_rules! register {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(@io_base $name @ $offset);
         $crate::register!(@io_relative $vis $name @ $base);
-        $crate::register!($($rest)*);
+        $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // Creates an alias register of relative offset register `alias` with its own fields.
     (
+        base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $base:ident + $alias:ident
             { $($fields:tt)* }
         $($rest:tt)*
@@ -828,11 +873,12 @@ macro_rules! register {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(@io_base $name @ $crate::register!(@offset => $alias));
         $crate::register!(@io_relative $vis $name @ $base);
-        $crate::register!($($rest)*);
+        $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // Creates an array of registers at a fixed offset of the MMIO space.
     (
+        base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             [ $size:expr $(, stride = $stride:expr)? ] @ $offset:literal { $($fields:tt)* }
         $($rest:tt)*
@@ -842,11 +888,12 @@ macro_rules! register {
         $crate::register!(@io_array $vis $name
             [ $size, stride = $crate::register!(@stride $storage $(, $stride)?) ]
         );
-        $crate::register!($($rest)*);
+        $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // Creates an array of registers at a relative offset from a base address provider.
     (
+        base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             [ $size:expr $(, stride = $stride:expr)? ]
             @ $base:ident + $offset:literal { $($fields:tt)* }
@@ -857,12 +904,13 @@ macro_rules! register {
         $crate::register!(@io_relative_array $vis $name
             [ $size, stride = $crate::register!(@stride $storage $(, $stride)?) ] @ $base + $offset
         );
-        $crate::register!($($rest)*);
+        $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // Creates an alias of register `idx` of relative array of registers `alias` with its own
     // fields.
     (
+        base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             => $base:ident + $alias:ident [ $idx:expr ] { $($fields:tt)* }
         $($rest:tt)*
@@ -874,7 +922,7 @@ macro_rules! register {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(@io_base $name @ $crate::register!(@offset => $alias [$idx]));
         $crate::register!(@io_relative $vis $name @ $base);
-        $crate::register!($($rest)*);
+        $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // All the rules below are private helpers.
@@ -962,4 +1010,12 @@ macro_rules! register {
 
         impl $crate::io::register::RelativeRegisterArray for $name {}
     };
+
+    // Compatibility rule when base is not specified.
+    ($($rest:tt)*) => {
+        $crate::register!(
+            base: $crate::io::Region;
+            $($rest)*
+        );
+    }
 }
