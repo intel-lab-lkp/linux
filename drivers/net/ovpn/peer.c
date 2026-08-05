@@ -302,7 +302,12 @@ void ovpn_peer_endpoints_update(struct ovpn_peer *peer, struct sk_buff *skb)
 		spin_lock_bh(&peer->lock);
 		bind = rcu_dereference_protected(peer->bind,
 						 lockdep_is_held(&peer->lock));
-		if (unlikely(!bind)) {
+		/* peer->lock was released above, therefore the peer may have
+		 * been removed in the meantime: ovpn_peer_remove() unhashes
+		 * hash_entry_id under ovpn->lock. Re-linking a removed peer
+		 * would leave it reachable after it has been freed.
+		 */
+		if (unlikely(!bind || hlist_unhashed(&peer->hash_entry_id))) {
 			spin_unlock_bh(&peer->lock);
 			spin_unlock_bh(&peer->ovpn->lock);
 			return;
