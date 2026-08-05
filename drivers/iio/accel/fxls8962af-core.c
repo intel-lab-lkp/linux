@@ -966,6 +966,7 @@ static int fxls8962af_fifo_flush(struct iio_dev *indio_dev)
 	}
 
 	count = reg & FXLS8962AF_BUF_STATUS_BUF_CNT;
+	count = min_t(u8, count, FXLS8962AF_FIFO_LENGTH);
 	if (!count)
 		return 0;
 
