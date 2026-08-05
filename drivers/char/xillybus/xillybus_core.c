@@ -343,7 +343,8 @@ static int xilly_map_single(struct xilly_endpoint *ep,
 static int xilly_get_dma_buffers(struct xilly_endpoint *ep,
 				 struct xilly_alloc_state *s,
 				 struct xilly_buffer **buffers,
-				 int bufnum, int bytebufsize)
+				 unsigned int bufnum,
+				 unsigned int bytebufsize)
 {
 	int i, rc;
 	dma_addr_t dma_addr;
@@ -431,8 +432,8 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 	struct device *dev = ep->dev;
 	int i, entry, rc;
 	struct xilly_channel *channel;
-	int channelnum, bufnum, bufsize, format, is_writebuf;
-	int bytebufsize;
+	unsigned int channelnum, bufnum, bufsize, format, is_writebuf;
+	unsigned int bytebufsize;
 	int synchronous, allowpartial, exclusive_open, seekable;
 	int supports_nonempty;
 	int msg_buf_done = 0;
@@ -531,8 +532,7 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 			channel->log2_element_size = ((format > 2) ?
 						      2 : format);
 
-			bytebufsize = bufsize *
-				(1 << channel->log2_element_size);
+			bytebufsize = bufsize << channel->log2_element_size;
 
 			buffers = devm_kcalloc(dev, bufnum,
 					       sizeof(struct xilly_buffer *),
@@ -589,7 +589,7 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 static int xilly_scan_idt(struct xilly_endpoint *endpoint,
 			  struct xilly_idt_handle *idt_handle)
 {
-	int count = 0;
+	unsigned int count = 0;
 	unsigned char *idt = endpoint->channels[1]->wr_buffers[0]->addr;
 	unsigned char *end_of_idt = idt + endpoint->idtlen - 4;
 	unsigned char *scan;
