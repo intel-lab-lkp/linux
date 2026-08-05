@@ -13,7 +13,8 @@ use crate::{
         Fsp,
         VgpuMode, //
     },
-    gpu::Chipset, //
+    gpu::Chipset,
+    trace::nova_core_trace_vgpu, //
 };
 
 mod hal;
@@ -50,7 +51,7 @@ impl VgpuManager {
             );
             VgpuState::Disabled
         });
-        dev_dbg!(pdev, "vGPU state: {:?}\n", state);
+        nova_core_trace_vgpu!(pdev, "state: {:?}", state);
 
         Self { state }
     }

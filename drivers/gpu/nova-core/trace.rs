@@ -139,7 +139,6 @@ macro_rules! nova_core_trace_gsp {
     };
 }
 
-#[expect(unused_macros)]
 macro_rules! nova_core_trace_vgpu {
     ($dev:expr, $($arg:tt)*) => {
         $crate::trace::nova_core_trace_impl!(nova_core_trace_vgpu, $dev, $($arg)*)
@@ -149,5 +148,4 @@ macro_rules! nova_core_trace_vgpu {
 pub(crate) use nova_core_trace_driver;
 pub(crate) use nova_core_trace_fsp;
 pub(crate) use nova_core_trace_gsp;
-#[expect(unused_imports)]
 pub(crate) use nova_core_trace_vgpu;
