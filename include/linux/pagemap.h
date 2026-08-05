@@ -306,7 +306,8 @@ static inline void mapping_clear_release_always(struct address_space *mapping)
 
 static inline bool mapping_stable_writes(const struct address_space *mapping)
 {
-	return test_bit(AS_STABLE_WRITES, &mapping->flags);
+	return test_bit(AS_STABLE_WRITES, &mapping->flags) ||
+	       atomic_read(&mapping->inflight_stable_writes_count) > 0;
 }
 
 static inline void mapping_set_stable_writes(struct address_space *mapping)
@@ -317,6 +318,17 @@ static inline void mapping_set_stable_writes(struct address_space *mapping)
 static inline void mapping_clear_stable_writes(struct address_space *mapping)
 {
 	clear_bit(AS_STABLE_WRITES, &mapping->flags);
+}
+
+static inline void mapping_inc_inflight_stable_writes(struct address_space *mapping)
+{
+	atomic_inc(&mapping->inflight_stable_writes_count);
+}
+
+static inline void mapping_dec_inflight_stable_writes(struct address_space *mapping)
+{
+	WARN_ON_ONCE(atomic_read(&mapping->inflight_stable_writes_count) == 0);
+	atomic_dec_if_positive(&mapping->inflight_stable_writes_count);
 }
 
 static inline void mapping_set_inaccessible(struct address_space *mapping)
