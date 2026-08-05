@@ -121,8 +121,8 @@ use crate::{
     io::IoLoc, //
 };
 
-/// Trait implemented by all registers.
-pub trait Register: Sized {
+/// Trait implemented by registers with a fixed offset.
+pub trait FixedRegister: Sized {
     /// Base type for this register.
     type Base: ?Sized;
 
@@ -131,9 +131,6 @@ pub trait Register: Sized {
     /// The interpretation of this offset depends on the type of the register.
     const OFFSET: usize;
 }
-
-/// Trait implemented by registers with a fixed offset.
-pub trait FixedRegister: Register {}
 
 /// Allows `()` to be used as the `location` parameter of [`Io::write`](super::Io::write) when
 /// passing a [`FixedRegister`] value.
@@ -200,7 +197,14 @@ impl<Base: ?Sized, T> IoLoc<Base, T> for OffsetLoc<Base, T> {
 }
 
 /// Trait implemented by arrays of registers.
-pub trait RegisterArray: Register {
+pub trait RegisterArray: Sized {
+    /// Base type for this register.
+    type Base: ?Sized;
+
+    /// Start offset of the register.
+    ///
+    /// The interpretation of this offset depends on the type of the register.
+    const OFFSET: usize;
     /// Number of elements in the registers array.
     const SIZE: usize;
     /// Number of bytes between the start of elements in the registers array.
@@ -266,8 +270,8 @@ pub trait Array {
 ///
 /// Implementors can be used with [`Io::write_reg`](super::Io::write_reg).
 pub trait LocatedRegister<Base: ?Sized> {
-    /// Register value to write.
-    type Value: Register;
+    /// Value to write.
+    type Value;
     /// Full location information at which to write the value.
     type Location: IoLoc<Base, Self::Value>;
 
@@ -601,11 +605,22 @@ macro_rules! register {
         { $($fields:tt)* }
         $($rest:tt)*
     ) => {
-        $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $reg_base; $name
-            @ $crate::register!(@offset $(@ $offset)? $(=> $alias $([$alias_idx])?)?)
+        $crate::bitfield!(
+            #[allow(non_camel_case_types)]
+            $(#[$attr])* $vis struct $name($storage) { $($fields)* }
         );
-        $crate::register!(@io_fixed $(#[$attr])* $vis $name);
+
+        impl $crate::io::register::FixedRegister for $name {
+            type Base = $reg_base;
+
+            const OFFSET: usize =
+                $crate::register!(@offset $(@ $offset)? $(=> $alias $([$alias_idx])?)?);
+        }
+
+        $(#[$attr])*
+        $vis const $name: $crate::io::register::FixedRegisterLoc<$name> =
+            $crate::io::register::FixedRegisterLoc::<$name>::new();
+
         $crate::register!(base: $reg_base; $($rest)*);
     };
 
@@ -616,38 +631,35 @@ macro_rules! register {
             [ $size:expr $(, stride = $stride:expr)? ] @ $offset:literal { $($fields:tt)* }
         $($rest:tt)*
     ) => {
-        $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $reg_base; $name @ $offset);
-        $crate::register!(@io_array $vis $name
-            [ $size, stride = $crate::register!(@stride $storage $(, $stride)?) ]
+        $crate::bitfield!(
+            #[allow(non_camel_case_types)]
+            $(#[$attr])* $vis struct $name($storage) { $($fields)* }
         );
+
+        impl $crate::io::register::Array for $name {}
+
+        impl $crate::io::register::RegisterArray for $name {
+            type Base = $reg_base;
+
+            const OFFSET: usize = $offset;
+            const SIZE: usize = $size;
+            const STRIDE: usize = $crate::register!(@stride $storage $(, $stride)?);
+        }
+
         $crate::register!(base: $reg_base; $($rest)*);
     };
 
     // All the rules below are private helpers.
 
-    // Generates the bitfield for the register.
-    //
-    // `#[allow(non_camel_case_types)]` is added since register names typically use
-    // `SCREAMING_CASE`.
-    (
-        @bitfield $(#[$attr:meta])* $vis:vis struct $name:ident($storage:ty) { $($fields:tt)* }
-    ) => {
-        $crate::bitfield!(
-            #[allow(non_camel_case_types)]
-            $(#[$attr])* $vis struct $name($storage) { $($fields)* }
-        );
-    };
-
     // Offset computation helper rules.
     (@offset @ $offset:expr) => { $offset };
-    (@offset => $alias:path) => { <$alias as $crate::io::register::Register>::OFFSET };
+    (@offset => $alias:path) => { <$alias as $crate::io::register::FixedRegister>::OFFSET };
     (@offset => $alias:path [$idx:expr]) => {{
         $crate::build_assert::static_assert!(
             $idx < <$alias as $crate::io::register::RegisterArray>::SIZE
         );
 
-        <$alias as $crate::io::register::Register>::OFFSET +
+        <$alias as $crate::io::register::RegisterArray>::OFFSET +
             $idx * <$alias as $crate::io::register::RegisterArray>::STRIDE
     }};
 
@@ -657,32 +669,4 @@ macro_rules! register {
         $stride
     }};
     (@stride $ty: ty) => { ::core::mem::size_of::<$ty>() };
-
-    // Implementations shared by all registers types.
-    (@io_base $reg_base:ty; $name:ident @ $offset:expr) => {
-        impl $crate::io::register::Register for $name {
-            type Base = $reg_base;
-
-            const OFFSET: usize = $offset;
-        }
-    };
-
-    // Implementations of fixed registers.
-    (@io_fixed $(#[$attr:meta])* $vis:vis $name:ident) => {
-        impl $crate::io::register::FixedRegister for $name {}
-
-        $(#[$attr])*
-        $vis const $name: $crate::io::register::FixedRegisterLoc<$name> =
-            $crate::io::register::FixedRegisterLoc::<$name>::new();
-    };
-
-    // Implementations of register arrays.
-    (@io_array $vis:vis $name:ident [ $size:expr, stride = $stride:expr ]) => {
-        impl $crate::io::register::Array for $name {}
-
-        impl $crate::io::register::RegisterArray for $name {
-            const SIZE: usize = $size;
-            const STRIDE: usize = $stride;
-        }
-    };
 }
