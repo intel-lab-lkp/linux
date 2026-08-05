@@ -786,44 +786,25 @@ where
 /// ```
 #[macro_export]
 macro_rules! register {
-    // Entry point for the macro, allowing multiple registers to be defined in one call.
-    // It matches all possible register declaration patterns to dispatch them to corresponding
-    // `@reg` rule that defines a single register.
-    (
-        $(
-            $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
-                $([ $size:expr $(, stride = $stride:expr)? ])?
-                $(@ $($base:ident +)? $offset:literal)?
-                $(=> $alias:ident $(+ $alias_offset:ident)? $([$alias_idx:expr])? )?
-            { $($fields:tt)* }
-        )*
-    ) => {
-        $(
-        $crate::register!(
-            @reg $(#[$attr])* $vis $name ($storage) $([$size $(, stride = $stride)?])?
-                $(@ $($base +)? $offset)?
-                $(=> $alias $(+ $alias_offset)? $([$alias_idx])? )?
-            { $($fields)* }
-        );
-        )*
-    };
-
-    // All the rules below are private helpers.
+    () => {};
 
     // Creates a register at a fixed offset of the MMIO space.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) @ $offset:literal
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) @ $offset:literal
             { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(@io_base $name @ $offset);
         $crate::register!(@io_fixed $(#[$attr])* $vis $name);
+        $crate::register!($($rest)*);
     };
 
     // Creates an alias register of fixed offset register `alias` with its own fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:ident
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:ident
             { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(
@@ -831,57 +812,67 @@ macro_rules! register {
             <$alias as $crate::io::register::Register>::OFFSET
         );
         $crate::register!(@io_fixed $(#[$attr])* $vis $name);
+        $crate::register!($($rest)*);
     };
 
     // Creates a register at a relative offset from a base address provider.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) @ $base:ident + $offset:literal
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) @ $base:ident + $offset:literal
             { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(@io_base $name @ $offset);
         $crate::register!(@io_relative $vis $name @ $base);
+        $crate::register!($($rest)*);
     };
 
     // Creates an alias register of relative offset register `alias` with its own fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $base:ident + $alias:ident
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $base:ident + $alias:ident
             { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(
             @io_base $name @ <$alias as $crate::io::register::Register>::OFFSET
         );
         $crate::register!(@io_relative $vis $name @ $base);
+        $crate::register!($($rest)*);
     };
 
     // Creates an array of registers at a fixed offset of the MMIO space.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             [ $size:expr, stride = $stride:expr ] @ $offset:literal { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::build_assert::static_assert!(::core::mem::size_of::<$storage>() <= $stride);
 
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
         $crate::register!(@io_base $name @ $offset);
         $crate::register!(@io_array $vis $name [ $size, stride = $stride ]);
+        $crate::register!($($rest)*);
     };
 
     // Shortcut for contiguous array of registers (stride == size of element).
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) [ $size:expr ] @ $offset:literal
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) [ $size:expr ] @ $offset:literal
             { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::register!(
             $(#[$attr])* $vis $name($storage) [ $size, stride = ::core::mem::size_of::<$storage>() ]
                 @ $offset { $($fields)* }
         );
+        $crate::register!($($rest)*);
     };
 
     // Creates an alias of register `idx` of array of registers `alias` with its own fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:ident [ $idx:expr ]
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) => $alias:ident [ $idx:expr ]
             { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::build_assert::static_assert!(
             $idx < <$alias as $crate::io::register::RegisterArray>::SIZE
@@ -894,13 +885,15 @@ macro_rules! register {
                 + $idx * <$alias as $crate::io::register::RegisterArray>::STRIDE
         );
         $crate::register!(@io_fixed $(#[$attr])* $vis $name);
+        $crate::register!($($rest)*);
     };
 
     // Creates an array of registers at a relative offset from a base address provider.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             [ $size:expr, stride = $stride:expr ]
             @ $base:ident + $offset:literal { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::build_assert::static_assert!(::core::mem::size_of::<$storage>() <= $stride);
 
@@ -909,24 +902,28 @@ macro_rules! register {
         $crate::register!(
             @io_relative_array $vis $name [ $size, stride = $stride ] @ $base + $offset
         );
+        $crate::register!($($rest)*);
     };
 
     // Shortcut for contiguous array of relative registers (stride == size of element).
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) [ $size:expr ]
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty) [ $size:expr ]
             @ $base:ident + $offset:literal { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::register!(
             $(#[$attr])* $vis $name($storage) [ $size, stride = ::core::mem::size_of::<$storage>() ]
                 @ $base + $offset { $($fields)* }
         );
+        $crate::register!($($rest)*);
     };
 
     // Creates an alias of register `idx` of relative array of registers `alias` with its own
     // fields.
     (
-        @reg $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
+        $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
             => $base:ident + $alias:ident [ $idx:expr ] { $($fields:tt)* }
+        $($rest:tt)*
     ) => {
         $crate::build_assert::static_assert!(
             $idx < <$alias as $crate::io::register::RegisterArray>::SIZE
@@ -939,7 +936,10 @@ macro_rules! register {
                 $idx * <$alias as $crate::io::register::RegisterArray>::STRIDE
         );
         $crate::register!(@io_relative $vis $name @ $base);
+        $crate::register!($($rest)*);
     };
+
+    // All the rules below are private helpers.
 
     // Generates the bitfield for the register.
     //
