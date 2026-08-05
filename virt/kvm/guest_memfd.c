@@ -488,13 +488,45 @@ static struct file_operations kvm_gmem_fops = {
 	.fallocate	= kvm_gmem_fallocate,
 };
 
+#ifdef CONFIG_MIGRATION
 static int kvm_gmem_migrate_folio(struct address_space *mapping,
 				  struct folio *dst, struct folio *src,
 				  enum migrate_mode mode)
 {
-	WARN_ON_ONCE(1);
-	return -EINVAL;
+	struct inode *inode = mapping->host;
+	pgoff_t start, end;
+	int ret;
+
+	/*
+	 * Migration invokes ->migrate_folio() while holding the folio lock.
+	 * Use a non-blocking trylock to avoid inverting the lock order with
+	 * truncation, which takes the invalidate lock before locking the
+	 * folios.
+	 */
+	if (!filemap_invalidate_trylock_shared(mapping))
+		return -EAGAIN;
+
+	start = src->index;
+	end = start + folio_nr_pages(src);
+
+	kvm_gmem_invalidate_start(inode, start, end);
+
+	/*
+	 * For non-confidential guests the folio is host-readable, so
+	 * filemap_migrate_folio() can copy the contents itself via
+	 * folio_mc_copy().
+	 * For confidential guests, this would need firmware assistance.
+	 */
+	ret = filemap_migrate_folio(mapping, dst, src, mode);
+
+	kvm_gmem_invalidate_end(inode, start, end);
+
+	filemap_invalidate_unlock_shared(mapping);
+	return ret;
 }
+#else
+#define kvm_gmem_migrate_folio NULL
+#endif
 
 static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *folio)
 {
