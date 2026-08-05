@@ -32,6 +32,15 @@ int iomap_iter_advance(struct iomap_iter *iter, u64 count)
 	return 0;
 }
 
+int iomap_iter_revert(struct iomap_iter *iter, u64 count)
+{
+	if (WARN_ON_ONCE(count > iter->pos))
+		return -EIO;
+	iter->pos -= count;
+	iter->len += count;
+	return 0;
+}
+
 static inline void iomap_iter_done(struct iomap_iter *iter)
 {
 	WARN_ON_ONCE(iter->iomap.offset > iter->pos);
