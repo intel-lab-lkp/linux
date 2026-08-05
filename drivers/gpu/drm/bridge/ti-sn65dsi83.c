@@ -979,6 +979,18 @@ static irqreturn_t sn65dsi83_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void sn65dsi83_stop_error_recovery(struct sn65dsi83 *ctx)
+{
+	/* Block new bridge users and wait for existing critical sections. */
+	drm_bridge_unplug(&ctx->bridge);
+
+	if (ctx->irq)
+		disable_irq(ctx->irq);
+
+	cancel_delayed_work_sync(&ctx->monitor_work);
+	cancel_work_sync(&ctx->reset_work);
+}
+
 static int sn65dsi83_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -1043,7 +1055,7 @@ static int sn65dsi83_probe(struct i2c_client *client)
 	return 0;
 
 err_remove_bridge:
-	drm_bridge_remove(&ctx->bridge);
+	sn65dsi83_stop_error_recovery(ctx);
 	return ret;
 }
 
@@ -1051,7 +1063,7 @@ static void sn65dsi83_remove(struct i2c_client *client)
 {
 	struct sn65dsi83 *ctx = i2c_get_clientdata(client);
 
-	drm_bridge_unplug(&ctx->bridge);
+	sn65dsi83_stop_error_recovery(ctx);
 }
 
 static const struct i2c_device_id sn65dsi83_id[] = {
