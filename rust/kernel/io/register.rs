@@ -121,10 +121,11 @@ use crate::{
     io::IoLoc, //
 };
 
-use super::Region;
-
 /// Trait implemented by all registers.
 pub trait Register: Sized {
+    /// Base type for this register.
+    type Base: ?Sized;
+
     /// Start offset of the register.
     ///
     /// The interpretation of this offset depends on the type of the register.
@@ -136,9 +137,9 @@ pub trait FixedRegister: Register {}
 
 /// Allows `()` to be used as the `location` parameter of [`Io::write`](super::Io::write) when
 /// passing a [`FixedRegister`] value.
-impl<const SIZE: usize, T> IoLoc<Region<SIZE>, T> for ()
+impl<Base: ?Sized, T> IoLoc<Base, T> for ()
 where
-    T: FixedRegister,
+    T: FixedRegister<Base = Base>,
 {
     #[inline(always)]
     fn offset(self) -> usize {
@@ -148,9 +149,9 @@ where
 
 /// A [`FixedRegister`] carries its location in its type. Thus `FixedRegister` values can be used
 /// as an [`IoLoc`].
-impl<const SIZE: usize, T> IoLoc<Region<SIZE>, T> for T
+impl<Base: ?Sized, T> IoLoc<Base, T> for T
 where
-    T: FixedRegister,
+    T: FixedRegister<Base = Base>,
 {
     #[inline(always)]
     fn offset(self) -> usize {
@@ -171,9 +172,9 @@ impl<T: FixedRegister> FixedRegisterLoc<T> {
     }
 }
 
-impl<const SIZE: usize, T> IoLoc<Region<SIZE>, T> for FixedRegisterLoc<T>
+impl<Base: ?Sized, T> IoLoc<Base, T> for FixedRegisterLoc<T>
 where
-    T: FixedRegister,
+    T: FixedRegister<Base = Base>,
 {
     #[inline(always)]
     fn offset(self) -> usize {
@@ -240,9 +241,9 @@ where
     }
 }
 
-impl<const SIZE: usize, T, B> IoLoc<Region<SIZE>, T> for RelativeRegisterLoc<T, B>
+impl<SuperBase: ?Sized, T, B> IoLoc<SuperBase, T> for RelativeRegisterLoc<T, B>
 where
-    T: RelativeRegister,
+    T: RelativeRegister<Base = SuperBase>,
     B: RegisterBase<T::BaseFamily> + ?Sized,
 {
     #[inline(always)]
@@ -282,9 +283,9 @@ impl<T: RegisterArray> RegisterArrayLoc<T> {
     }
 }
 
-impl<const SIZE: usize, T> IoLoc<Region<SIZE>, T> for RegisterArrayLoc<T>
+impl<Base: ?Sized, T> IoLoc<Base, T> for RegisterArrayLoc<T>
 where
-    T: RegisterArray,
+    T: RegisterArray<Base = Base>,
 {
     #[inline(always)]
     fn offset(self) -> usize {
@@ -367,9 +368,9 @@ where
     }
 }
 
-impl<const SIZE: usize, T, B> IoLoc<Region<SIZE>, T> for RelativeRegisterArrayLoc<T, B>
+impl<SuperBase: ?Sized, T, B> IoLoc<SuperBase, T> for RelativeRegisterArrayLoc<T, B>
 where
-    T: RelativeRegisterArray,
+    T: RelativeRegisterArray<Base = SuperBase>,
     B: RegisterBase<T::BaseFamily> + ?Sized,
 {
     #[inline(always)]
@@ -393,9 +394,9 @@ pub trait LocatedRegister<Base: ?Sized> {
     fn into_io_op(self) -> (Self::Location, Self::Value);
 }
 
-impl<const SIZE: usize, T> LocatedRegister<Region<SIZE>> for T
+impl<Base: ?Sized, T> LocatedRegister<Base> for T
 where
-    T: FixedRegister,
+    T: FixedRegister<Base = Base>,
 {
     type Location = FixedRegisterLoc<Self::Value>;
     type Value = T;
@@ -823,12 +824,7 @@ where
 /// ```
 #[macro_export]
 macro_rules! register {
-    (base: $reg_base:ty;) => {
-        const _: () = {
-            #[allow(unused)]
-            type Base = $reg_base;
-        };
-    };
+    (base: $reg_base:ty;) => {};
 
     // Creates a register at a fixed offset of the MMIO space.
     //
@@ -843,7 +839,7 @@ macro_rules! register {
         $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $name
+        $crate::register!(@io_base $reg_base; $name
             @ $crate::register!(@offset $(@ $offset)? $(=> $alias $([$alias_idx])?)?)
         );
         $crate::register!(@io_fixed $(#[$attr])* $vis $name);
@@ -858,7 +854,7 @@ macro_rules! register {
         $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $name @ $offset);
+        $crate::register!(@io_base $reg_base; $name @ $offset);
         $crate::register!(@io_relative $vis $name @ $base);
         $crate::register!(base: $reg_base; $($rest)*);
     };
@@ -871,7 +867,7 @@ macro_rules! register {
         $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $name @ $crate::register!(@offset => $alias));
+        $crate::register!(@io_base $reg_base; $name @ $crate::register!(@offset => $alias));
         $crate::register!(@io_relative $vis $name @ $base);
         $crate::register!(base: $reg_base; $($rest)*);
     };
@@ -884,7 +880,7 @@ macro_rules! register {
         $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $name @ $offset);
+        $crate::register!(@io_base $reg_base; $name @ $offset);
         $crate::register!(@io_array $vis $name
             [ $size, stride = $crate::register!(@stride $storage $(, $stride)?) ]
         );
@@ -900,7 +896,7 @@ macro_rules! register {
         $($rest:tt)*
     ) => {
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $name @ $offset);
+        $crate::register!(@io_base $reg_base; $name @ $offset);
         $crate::register!(@io_relative_array $vis $name
             [ $size, stride = $crate::register!(@stride $storage $(, $stride)?) ] @ $base + $offset
         );
@@ -920,7 +916,7 @@ macro_rules! register {
         );
 
         $crate::register!(@bitfield $(#[$attr])* $vis struct $name($storage) { $($fields)* });
-        $crate::register!(@io_base $name @ $crate::register!(@offset => $alias [$idx]));
+        $crate::register!(@io_base $reg_base; $name @ $crate::register!(@offset => $alias [$idx]));
         $crate::register!(@io_relative $vis $name @ $base);
         $crate::register!(base: $reg_base; $($rest)*);
     };
@@ -960,8 +956,10 @@ macro_rules! register {
     (@stride $ty: ty) => { ::core::mem::size_of::<$ty>() };
 
     // Implementations shared by all registers types.
-    (@io_base $name:ident @ $offset:expr) => {
+    (@io_base $reg_base:ty; $name:ident @ $offset:expr) => {
         impl $crate::io::register::Register for $name {
+            type Base = $reg_base;
+
             const OFFSET: usize = $offset;
         }
     };
@@ -1010,12 +1008,4 @@ macro_rules! register {
 
         impl $crate::io::register::RelativeRegisterArray for $name {}
     };
-
-    // Compatibility rule when base is not specified.
-    ($($rest:tt)*) => {
-        $crate::register!(
-            base: $crate::io::Region;
-            $($rest)*
-        );
-    }
 }
