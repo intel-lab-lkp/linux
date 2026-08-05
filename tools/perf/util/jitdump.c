@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <linux/stringify.h>
+#include <linux/kernel.h>
+#include <linux/unaligned.h>
 
 #include "event.h"
 #include "debug.h"
@@ -343,9 +345,14 @@ jit_get_next_entry(struct jit_buf_desc *jd)
 				/* name must be NUL-terminated within the record */
 				if (!memchr(ent->name, '\0', (char *)end - ent->name))
 					break;
-				ent->addr    = bswap_64(ent->addr);
-				ent->lineno  = bswap_32(ent->lineno);
-				ent->discrim = bswap_32(ent->discrim);
+				/*
+				 * debug entries are packed with a variable-length
+				 * name[], so entries after the first may be
+				 * unaligned: byte-swap via unaligned-safe accessors.
+				 */
+				put_unaligned(bswap_64(get_unaligned(&ent->addr)), &ent->addr);
+				put_unaligned(bswap_32(get_unaligned(&ent->lineno)), &ent->lineno);
+				put_unaligned(bswap_32(get_unaligned(&ent->discrim)), &ent->discrim);
 				ent = debug_entry_next(ent);
 			}
 			/* clamp so downstream consumers don't overrun */
