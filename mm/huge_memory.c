@@ -3882,12 +3882,10 @@ int folio_check_splittable(struct folio *folio, unsigned int new_order,
 	VM_WARN_ON_FOLIO(!folio_test_locked(folio), folio);
 	/*
 	 * Folios that just got truncated cannot get split. Signal to the
-	 * caller that there was a race.
-	 *
-	 * TODO: this will also currently refuse folios without a mapping in the
-	 * swapcache (shmem or to-be-anon folios).
+	 * caller that there was a race. A mappingless swapcache folio can be
+	 * either shmem or not yet associated with an anon_vma, and is valid.
 	 */
-	if (!folio->mapping && !folio_test_anon(folio))
+	if (!folio->mapping && !folio_test_swapcache(folio))
 		return -EBUSY;
 
 	/* order-1 is not supported for anonymous THP. */
@@ -4022,10 +4020,7 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 			if (do_lru)
 				lru_add_split_folio(folio, new_folio, lruvec, list);
 
-			/*
-			 * Anonymous folio with swap cache.
-			 * NOTE: shmem in swap cache is not supported yet.
-			 */
+			/* Folio in the swap cache. */
 			if (ci) {
 				__swap_cache_replace_folio(ci, folio, new_folio);
 				continue;
@@ -4103,7 +4098,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		struct page *split_at, struct page *lock_at,
 		struct list_head *list, enum split_type split_type)
 {
-	XA_STATE(xas, &folio->mapping->i_pages, folio->index);
+	XA_STATE(xas, NULL, folio->index);
 	struct folio *end_folio = folio_next(folio);
 	bool is_anon = folio_test_anon(folio);
 	struct mem_cgroup *memcg, *old_memcg;
@@ -4158,11 +4153,12 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		}
 		anon_vma_lock_write(anon_vma);
 		mapping = NULL;
-	} else {
+	} else if (folio->mapping) {
 		unsigned int min_order;
 		gfp_t gfp;
 
 		mapping = folio->mapping;
+		xas.xa = &mapping->i_pages;
 		min_order = mapping_min_folio_order(mapping);
 		if (new_order < min_order) {
 			ret = -EINVAL;
