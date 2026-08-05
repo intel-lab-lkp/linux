@@ -3495,6 +3495,13 @@ static inline int kiocb_set_rw_flags(struct kiocb *ki, rwf_t flags,
 		ki->ki_flags &= ~IOCB_APPEND;
 	}
 
+	/*
+	 * Writethrough implies non-serial writes ie writes can go
+	 * parallelly.
+	 */
+	if (flags & RWF_WRITETHROUGH)
+		kiocb_flags |= IOCB_NOSERIAL;
+
 	ki->ki_flags |= kiocb_flags;
 	return 0;
 }
