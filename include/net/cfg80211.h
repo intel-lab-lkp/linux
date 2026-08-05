@@ -9103,6 +9103,8 @@ struct cfg80211_fils_resp_params {
  * @assoc_encrypted: The driver should set this flag to indicate that the
  *	(Re)Association Request/Response frames are transmitted encrypted over
  *	the air.
+ * @authorized: Indicates whether the connection is ready to transport data
+ *	packets.
  */
 struct cfg80211_connect_resp_params {
 	int status;
@@ -9113,6 +9115,7 @@ struct cfg80211_connect_resp_params {
 	struct cfg80211_fils_resp_params fils;
 	enum nl80211_timeout_reason timeout_reason;
 	bool assoc_encrypted;
+	bool authorized;
 
 	const u8 *ap_mld_addr;
 	u16 valid_links;
@@ -9281,6 +9284,8 @@ cfg80211_connect_timeout(struct net_device *dev, const u8 *bssid,
  * @links.bss: For MLO roaming, entry of new bss to which STA link got
  *	roamed. For non-MLO roaming, links[0].bss points to entry of bss to
  *	which STA got roamed (may be %NULL if %links.bssid is set)
+ * @authorized: Indicates whether the new connection is ready to transport data
+ *	packets.
  */
 struct cfg80211_roam_info {
 	const u8 *req_ie;
@@ -9297,6 +9302,7 @@ struct cfg80211_roam_info {
 		struct ieee80211_channel *channel;
 		struct cfg80211_bss *bss;
 	} links[IEEE80211_MLD_MAX_NUM_LINKS];
+	bool authorized;
 };
 
 /**
