@@ -1717,7 +1717,8 @@ void folio_end_writethrough(struct folio *folio, bool error)
 	if (!error)
 		node_stat_mod_folio(folio, NR_WRITTEN, nr);
 
-	if (folio_xor_flags_has_waiters(folio, 1 << PG_writeback))
+	folio_test_clear_writeback(folio);
+	if (folio_test_waiters(folio))
 		folio_wake_bit(folio, PG_writeback);
 }
 EXPORT_SYMBOL(folio_end_writethrough);
