@@ -1952,7 +1952,8 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 						    struct tcf_proto *tp_new,
 						    u32 protocol, u32 prio,
-						    bool rtnl_held)
+						    bool rtnl_held,
+						    bool *inserted)
 {
 	struct tcf_chain_info chain_info;
 	struct tcf_proto *tp;
@@ -1963,6 +1964,7 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 	if (tcf_proto_exists_destroying(chain, tp_new)) {
 		mutex_unlock(&chain->filter_chain_lock);
 		tcf_proto_destroy(tp_new, rtnl_held, false, NULL);
+		*inserted = false;
 		return ERR_PTR(-EAGAIN);
 	}
 
@@ -1978,6 +1980,11 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 		tcf_proto_destroy(tp_new, rtnl_held, false, NULL);
 		tp_new = ERR_PTR(err);
 	}
+
+	/* Tell the caller whether tp_new was actually inserted, or an
+	 * already existing tp is being returned instead.
+	 */
+	*inserted = !tp && !err;
 
 	return tp_new;
 }
@@ -2269,11 +2276,13 @@ static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 	void *fh;
 	int err;
 	int tp_created;
+	bool tp_inserted;
 	bool rtnl_held = false;
 	u32 flags;
 
 replay:
 	tp_created = 0;
+	tp_inserted = false;
 
 	err = nlmsg_parse_deprecated(n, sizeof(*t), tca, TCA_MAX,
 				     rtm_tca_policy, extack);
@@ -2397,7 +2406,7 @@ replay:
 
 		tp_created = 1;
 		tp = tcf_chain_tp_insert_unique(chain, tp_new, protocol, prio,
-						rtnl_held);
+						rtnl_held, &tp_inserted);
 		if (IS_ERR(tp)) {
 			err = PTR_ERR(tp);
 			goto errout_tp;
@@ -2455,7 +2464,13 @@ replay:
 	}
 
 errout:
-	if (err && tp_created)
+	/* Only delete a tp that we actually inserted ourselves. When
+	 * tcf_chain_tp_insert_unique() raced with a concurrent insertion
+	 * it returns the existing tp; tp_created must stay set then (the
+	 * chain reference was consumed by the destroyed tp_new), but the
+	 * existing tp must not be deleted.
+	 */
+	if (err && tp_inserted)
 		tcf_chain_tp_delete_empty(chain, tp, rtnl_held, NULL);
 errout_tp:
 	if (chain) {
