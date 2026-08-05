@@ -293,17 +293,33 @@ endpoint_reset:
 	clear_bit(CXL_REGION_F_NEEDS_RESET, &cxlr->flags);
 }
 
+/*
+ * A single-dport host-bridge need not publish an HDM decoder capability
+ * when passthrough decode can be assumed. The resulting decoder is a
+ * software-only construct with no registers to program, so it carries no
+ * ->commit() operation, see devm_cxl_add_passthrough_decoder().
+ *
+ * A NULL ->commit() alone does not identify one, it is also NULL for
+ * DVSEC-emulated endpoint decoders. Test the decoder type and target
+ * count as well.
+ */
+static bool cxl_decoder_is_passthrough(struct cxl_decoder *cxld)
+{
+	if (cxld->commit)
+		return false;
+
+	if (!is_switch_decoder(&cxld->dev))
+		return false;
+
+	return to_cxl_switch_decoder(&cxld->dev)->nr_targets <= 1;
+}
+
 static int commit_decoder(struct cxl_decoder *cxld)
 {
-	struct cxl_switch_decoder *cxlsd = NULL;
-
 	if (cxld->commit)
 		return cxld->commit(cxld);
 
-	if (is_switch_decoder(&cxld->dev))
-		cxlsd = to_cxl_switch_decoder(&cxld->dev);
-
-	if (dev_WARN_ONCE(&cxld->dev, !cxlsd || cxlsd->nr_targets > 1,
+	if (dev_WARN_ONCE(&cxld->dev, !cxl_decoder_is_passthrough(cxld),
 			  "->commit() is required\n"))
 		return -ENXIO;
 	return 0;
