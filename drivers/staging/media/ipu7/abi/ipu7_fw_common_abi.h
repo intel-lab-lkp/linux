@@ -11,18 +11,12 @@
 #pragma pack(push, 1)
 typedef u32	ia_gofo_addr_t;
 
-#define IA_GOFO_ADDR_NULL	(0U)
-
 struct ia_gofo_version_s {
 	u8 patch;
 	u8 subminor;
 	u8 minor;
 	u8 major;
 };
-
-#define IA_GOFO_MSG_VERSION_INIT(major_val, minor_val, subminor_val, patch_val)\
-	{.major = (major_val), .minor = (minor_val), .subminor = \
-	(subminor_val), .patch = (patch_val)}
 
 #define IA_GOFO_MSG_VERSION_LIST_MAX_ENTRIES	(3U)
 #define IA_GOFO_MSG_RESERVED_SIZE		(3U)
@@ -35,22 +29,11 @@ struct ia_gofo_msg_version_list {
 
 #pragma pack(pop)
 
-#define TLV_TYPE_PADDING		(0U)
-
 #pragma pack(push, 1)
-
-#define IA_GOFO_ABI_BITS_PER_BYTE	(8U)
-
-#define TLV_ITEM_ALIGNMENT	((u32)sizeof(u32))
-#define TLV_MSG_ALIGNMENT	((u32)sizeof(u64))
-#define TLV_LIST_ALIGNMENT	TLV_ITEM_ALIGNMENT
 #pragma pack(pop)
-
-#define IA_GOFO_MODULO(dividend, divisor) ((dividend) % (divisor))
 
 #define IA_GOFO_MSG_ERR_MAX_DETAILS		(4U)
 #define IA_GOFO_MSG_ERR_OK			(0U)
-#define IA_GOFO_MSG_ERR_UNSPECIFED		(0xffffffff)
 #define IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED	(0U)
 #define IA_GOFO_MSG_ERR_IS_OK(err)	(IA_GOFO_MSG_ERR_OK == (err).err_code)
 
@@ -63,9 +46,6 @@ struct ia_gofo_msg_err {
 
 #pragma pack(pop)
 
-#define IA_GOFO_MSG_ERR_GROUP_APP_EXT_START	(16U)
-#define IA_GOFO_MSG_ERR_GROUP_MAX		(31U)
-#define IA_GOFO_MSG_ERR_GROUP_INTERNAL_START	(IA_GOFO_MSG_ERR_GROUP_MAX + 1U)
 #define IA_GOFO_MSG_ERR_GROUP_RESERVED	IA_GOFO_MSG_ERR_GROUP_UNSPECIFIED
 #define IA_GOFO_MSG_ERR_GROUP_GENERAL		1
 
@@ -104,16 +84,10 @@ enum ia_gofo_soc_pbk_instance_id {
 	IA_GOFO_SOC_PBK_ID_N
 };
 
-#define IA_GOFO_MSG_LINK_PBK_MAX_SLOTS	(2U)
-
 #pragma pack(pop)
 
 #pragma pack(push, 1)
 #define IA_GOFO_MSG_LOG_MAX_PARAMS	(4U)
-#define IA_GOFO_MSG_LOG_DOC_FMT_ID_MIN	(0U)
-
-#define IA_GOFO_MSG_LOG_DOC_FMT_ID_MAX	(4095U)
-#define IA_GOFO_MSG_LOG_FMT_ID_INVALID	(0xfffffff)
 
 struct ia_gofo_msg_log_info {
 	u16 log_counter;
@@ -131,8 +105,6 @@ struct ia_gofo_msg_log_info_ts {
 
 #pragma pack(pop)
 
-#define IA_GOFO_MSG_ABI_OUT_ACK_QUEUE_ID	(0U)
 #define IA_GOFO_MSG_ABI_OUT_LOG_QUEUE_ID	(1U)
-#define IA_GOFO_MSG_ABI_IN_DEV_QUEUE_ID		(2U)
 
 #endif

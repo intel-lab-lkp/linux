@@ -11,7 +11,6 @@
 #include "ipu7_fw_common_abi.h"
 
 #pragma pack(push, 1)
-#define SYSCOM_QUEUE_MIN_CAPACITY	2U
 
 struct syscom_queue_params_config {
 	ia_gofo_addr_t token_array_mem;
