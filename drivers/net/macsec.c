@@ -3436,6 +3436,11 @@ static struct sk_buff *macsec_insert_tx_tag(struct sk_buff *skb,
 	int err;
 
 	ops = macsec_get_ops(macsec, &ctx);
+	if (unlikely(!ops)) {
+		err = -EOPNOTSUPP;
+		goto cleanup;
+	}
+
 	skb_final_len = skb->len - ETH_HLEN + ops->needed_headroom +
 		ops->needed_tailroom;
 	if (unlikely(skb_final_len > macsec->real_dev->mtu)) {
