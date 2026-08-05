@@ -67,6 +67,7 @@ struct zcomp_ops {
 	void (*release_params)(struct zcomp_params *params);
 
 	const char *name;
+	bool async;
 };
 
 /* dynamic per-device compression frontend */
@@ -86,7 +87,7 @@ struct zcomp *zcomp_create(const char *alg, struct zcomp_params *params);
 void zcomp_destroy(struct zcomp *comp);
 
 struct zcomp_strm *zcomp_stream_get(struct zcomp *comp);
-void zcomp_stream_put(struct zcomp_strm *zstrm);
+void zcomp_stream_put(struct zcomp *comp);
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
 		   const void *src, unsigned int *dst_len);

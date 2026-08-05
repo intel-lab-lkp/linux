@@ -1373,7 +1373,7 @@ static int decompress_bdev_page(struct zram *zram, struct page *page, u32 index)
 	if (!ret)
 		copy_page(src, zstrm->local_copy);
 	kunmap_local(src);
-	zcomp_stream_put(zstrm);
+	zcomp_stream_put(zram->comps[prio]);
 	slot_unlock(zram, index);
 
 	return ret;
@@ -2106,7 +2106,7 @@ static int read_compressed_page(struct zram *zram, struct page *page, u32 index)
 	ret = zcomp_decompress(zram->comps[prio], zstrm, src, size, dst);
 	kunmap_local(dst);
 	zs_obj_read_end(zram->mem_pool, handle, size, src);
-	zcomp_stream_put(zstrm);
+	zcomp_stream_put(zram->comps[prio]);
 
 	return ret;
 }
@@ -2132,7 +2132,7 @@ static int read_from_zspool_raw(struct zram *zram, struct page *page, u32 index)
 				zstrm->local_copy);
 	memcpy_to_page(page, 0, src, size);
 	zs_obj_read_end(zram->mem_pool, handle, size, src);
-	zcomp_stream_put(zstrm);
+	zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
 
 	memzero_page(page, size, PAGE_SIZE - size);
 
@@ -2226,20 +2226,40 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
 	return 0;
 }
 
+/*
+ * try non-sleepable allocation for !async backend, then try
+ * sleepable allocation; for async backend, we always begin
+ * from sleepable allocation
+ */
+static unsigned long zram_zs_malloc(struct zram *zram, size_t comp_len,
+		bool async, const int nid)
+{
+	unsigned long handle;
+
+	if (!async && !IS_ENABLED(CONFIG_PREEMPT_RT)) {
+		handle = zs_malloc(zram->mem_pool, comp_len,
+				__GFP_KSWAPD_RECLAIM | __GFP_NOWARN |
+				__GFP_HIGHMEM | __GFP_MOVABLE, nid);
+		if (!IS_ERR_VALUE(handle))
+			return handle;
+		preempt_enable();
+	}
+
+	handle = zs_malloc(zram->mem_pool, comp_len,
+			   GFP_NOIO | __GFP_NOWARN |
+			   __GFP_HIGHMEM | __GFP_MOVABLE, nid);
+	if (!async && !IS_ENABLED(CONFIG_PREEMPT_RT))
+		preempt_disable();
+	return handle;
+}
+
 static int write_incompressible_page(struct zram *zram, struct page *page,
-				     u32 index)
+				     u32 index, bool async)
 {
 	unsigned long handle;
 	void *src;
 
-	/*
-	 * This function is called from preemptible context so we don't need
-	 * to do optimistic and fallback to pessimistic handle allocation,
-	 * like we do for compressible pages.
-	 */
-	handle = zs_malloc(zram->mem_pool, PAGE_SIZE,
-			   GFP_NOIO | __GFP_NOWARN |
-			   __GFP_HIGHMEM | __GFP_MOVABLE, page_to_nid(page));
+	handle = zram_zs_malloc(zram, PAGE_SIZE, async, page_to_nid(page));
 	if (IS_ERR_VALUE(handle))
 		return PTR_ERR((void *)handle);
 
@@ -2276,6 +2296,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	struct zcomp_strm *zstrm;
 	unsigned long element;
 	bool same_filled;
+	bool async;
 
 	mem = kmap_local_page(page);
 	same_filled = page_same_filled(mem, &element);
@@ -2283,6 +2304,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	if (same_filled)
 		return write_same_filled_page(zram, element, index);
 
+	async = zram->comps[ZRAM_PRIMARY_COMP]->ops->async;
 	zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP]);
 	mem = kmap_local_page(page);
 	ret = zcomp_compress(zram->comps[ZRAM_PRIMARY_COMP], zstrm,
@@ -2290,32 +2312,30 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	kunmap_local(mem);
 
 	if (unlikely(ret)) {
-		zcomp_stream_put(zstrm);
+		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
 		pr_err("Compression failed! err=%d\n", ret);
 		return ret;
 	}
 
 	if (comp_len >= huge_class_size) {
-		zcomp_stream_put(zstrm);
-		return write_incompressible_page(zram, page, index);
+		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		return write_incompressible_page(zram, page, index, async);
 	}
 
-	handle = zs_malloc(zram->mem_pool, comp_len,
-			   GFP_NOIO | __GFP_NOWARN |
-			   __GFP_HIGHMEM | __GFP_MOVABLE, page_to_nid(page));
+	handle = zram_zs_malloc(zram, comp_len, async, page_to_nid(page));
 	if (IS_ERR_VALUE(handle)) {
-		zcomp_stream_put(zstrm);
+		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
 		return PTR_ERR((void *)handle);
 	}
 
 	if (!zram_can_store_page(zram)) {
-		zcomp_stream_put(zstrm);
+		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
 		zs_free(zram->mem_pool, handle);
 		return -ENOMEM;
 	}
 
 	zs_obj_write(zram->mem_pool, handle, zstrm->buffer, comp_len);
-	zcomp_stream_put(zstrm);
+	zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
 
 	slot_lock(zram, index);
 	slot_free(zram, index);
@@ -2431,6 +2451,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 	unsigned int class_index_old;
 	unsigned int class_index_new;
 	void *src;
+	bool async;
 	int ret = 0;
 
 	handle_old = get_slot_handle(zram, index);
@@ -2455,6 +2476,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 	 */
 	clear_slot_flag(zram, index, ZRAM_IDLE);
 
+	async = zram->comps[prio]->ops->async;
 	zstrm = zcomp_stream_get(zram->comps[prio]);
 	src = kmap_local_page(page);
 	ret = zcomp_compress(zram->comps[prio], zstrm, src, &comp_len_new);
@@ -2470,7 +2492,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		*num_recomp_pages -= 1;
 
 	if (ret) {
-		zcomp_stream_put(zstrm);
+		zcomp_stream_put(zram->comps[prio]);
 		return ret;
 	}
 
@@ -2479,7 +2501,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 
 	if (class_index_new >= class_index_old ||
 	    (threshold && comp_len_new >= threshold)) {
-		zcomp_stream_put(zstrm);
+		zcomp_stream_put(zram->comps[prio]);
 
 		/*
 		 * Secondary algorithms failed to re-compress the page
@@ -2493,27 +2515,14 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		return 0;
 	}
 
-	/*
-	 * We are holding per-CPU stream mutex and entry lock so better
-	 * avoid direct reclaim.  Allocation error is not fatal since
-	 * we still have the old object in the mem_pool.
-	 *
-	 * XXX: technically, the node we really want here is the node that
-	 * holds the original compressed data. But that would require us to
-	 * modify zsmalloc API to return this information. For now, we will
-	 * make do with the node of the page allocated for recompression.
-	 */
-	handle_new = zs_malloc(zram->mem_pool, comp_len_new,
-			       GFP_NOIO | __GFP_NOWARN |
-			       __GFP_HIGHMEM | __GFP_MOVABLE,
-			       page_to_nid(page));
+	handle_new = zram_zs_malloc(zram, comp_len_new, async, page_to_nid(page));
 	if (IS_ERR_VALUE(handle_new)) {
-		zcomp_stream_put(zstrm);
+		zcomp_stream_put(zram->comps[prio]);
 		return PTR_ERR((void *)handle_new);
 	}
 
 	zs_obj_write(zram->mem_pool, handle_new, zstrm->buffer, comp_len_new);
-	zcomp_stream_put(zstrm);
+	zcomp_stream_put(zram->comps[prio]);
 
 	slot_free(zram, index);
 	set_slot_handle(zram, index, handle_new);
