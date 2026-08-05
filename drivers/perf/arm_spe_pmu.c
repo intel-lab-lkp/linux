@@ -363,6 +363,11 @@ static const struct attribute_group *arm_spe_pmu_attr_groups[] = {
 	NULL,
 };
 
+static bool arm_spe_discard_mode(struct perf_event *event)
+{
+	return ATTR_CFG_GET_FLD(&event->attr, discard);
+}
+
 /* Convert between user ABI and register values */
 static u64 arm_spe_event_to_pmscr(struct perf_event *event)
 {
@@ -609,17 +614,22 @@ static u64 arm_spe_pmu_next_off(struct perf_output_handle *handle)
 	return limit;
 }
 
+static void arm_spe_pmu_begin_discard(struct perf_output_handle *handle,
+				      struct perf_event *event)
+{
+	u64 limit;
+
+	limit = FIELD_PREP(PMBLIMITR_EL1_FM, PMBLIMITR_EL1_FM_DISCARD);
+	limit |= PMBLIMITR_EL1_E;
+
+	write_sysreg_s(limit, SYS_PMBLIMITR_EL1);
+}
+
 static int arm_spe_perf_aux_output_begin(struct perf_output_handle *handle,
 					 struct perf_event *event)
 {
 	u64 base, limit;
 	struct arm_spe_pmu_buf *buf;
-
-	if (ATTR_CFG_GET_FLD(&event->attr, discard)) {
-		limit = FIELD_PREP(PMBLIMITR_EL1_FM, PMBLIMITR_EL1_FM_DISCARD);
-		limit |= PMBLIMITR_EL1_E;
-		goto out_write_limit;
-	}
 
 	/* Start a new aux session */
 	buf = perf_aux_output_begin(handle, event);
@@ -775,6 +785,12 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 		arm_spe_pmu_disable_and_drain_local();
 		break;
 	case SPE_PMU_BUF_FAULT_ACT_OK:
+		if (arm_spe_discard_mode(event)) {
+			arm_spe_pmu_begin_discard(handle, event);
+			isb();
+			break;
+		}
+
 		/*
 		 * We handled the fault (the buffer was full), so resume
 		 * profiling as long as we didn't detect truncation.
@@ -864,7 +880,7 @@ static int arm_spe_pmu_event_init(struct perf_event *event)
 	    !(spe_pmu->features & SPE_PMU_FEAT_EFT))
 		return -EOPNOTSUPP;
 
-	if (ATTR_CFG_GET_FLD(&event->attr, discard) &&
+	if (arm_spe_discard_mode(event) &&
 	    !(spe_pmu->features & SPE_PMU_FEAT_DISCARD))
 		return -EOPNOTSUPP;
 
@@ -884,7 +900,9 @@ static void arm_spe_pmu_start(struct perf_event *event, int flags)
 	struct perf_output_handle *handle = this_cpu_ptr(spe_pmu->handle);
 
 	hwc->state = 0;
-	if (arm_spe_perf_aux_output_begin(handle, event)) {
+	if (arm_spe_discard_mode(event)) {
+		arm_spe_pmu_begin_discard(handle, event);
+	} else if (arm_spe_perf_aux_output_begin(handle, event)) {
 		arm_spe_pmu_stop(event, 0);
 		return;
 	}
