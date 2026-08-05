@@ -1473,11 +1473,12 @@ static int madvise_inject_error(struct madvise_behavior *madv_behavior)
 		pfn = page_to_pfn(page);
 
 		/*
-		 * When soft offlining hugepages, after migrating the page
-		 * we dissolve it, therefore in the second loop "page" will
-		 * no longer be a compound page.
+		 * Non-hugetlb large folios are split and only the addressed
+		 * base page is handled. Hugetlb folios are handled as a
+		 * whole and may be dissolved, so save their size beforehand.
 		 */
-		size = page_size(compound_head(page));
+		size = PageHuge(page) ?
+			page_size(compound_head(page)) : PAGE_SIZE;
 
 		if (madv_behavior->behavior == MADV_SOFT_OFFLINE) {
 			pr_info("Soft offlining pfn %#lx at process virtual address %#lx\n",
