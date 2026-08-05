@@ -558,7 +558,7 @@ int vfs_dedupe_file_range(struct file *file, struct file_dedupe_range *same)
 		else if (!deduped && len)
 			info->status = -EINVAL;
 		else
-			info->bytes_deduped = len;
+			info->bytes_deduped = deduped;
 
 next_loop:
 		if (fatal_signal_pending(current))
