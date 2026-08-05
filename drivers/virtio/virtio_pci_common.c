@@ -128,6 +128,7 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	const char *name = dev_name(&vp_dev->vdev.dev);
+	struct irq_affinity affinity;
 	unsigned int flags = PCI_IRQ_MSIX;
 	unsigned int i, v;
 	int err = -ENOMEM;
@@ -150,8 +151,10 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 		desc = NULL;
 
 	if (desc) {
+		affinity = *desc;
+		affinity.pre_vectors++; /* virtio config vector */
+		desc = &affinity;
 		flags |= PCI_IRQ_AFFINITY;
-		desc->pre_vectors++; /* virtio config vector */
 	}
 
 	err = pci_alloc_irq_vectors_affinity(vp_dev->pci_dev, nvectors,
