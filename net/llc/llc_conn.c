@@ -32,6 +32,7 @@ static int llc_exec_conn_trans_actions(struct sock *sk,
 				       struct sk_buff *ev);
 static const struct llc_conn_state_trans *llc_qualify_conn_ev(struct sock *sk,
 							      struct sk_buff *skb);
+static void llc_release_incoming_sock(struct sock *sk);
 
 /* Offset table on connection states transition diagram */
 static int llc_offset_table[NBR_CONN_STATES][NBR_CONN_EV];
@@ -88,6 +89,7 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 		 * skb->sk pointing to the newly created struct sock in
 		 * llc_conn_handler. -acme
 		 */
+		llc_sk(skb->sk)->incoming_pend = 0;
 		skb_get(skb);
 		skb_queue_tail(&sk->sk_receive_queue, skb);
 		sk->sk_state_change(sk);
@@ -765,16 +767,32 @@ static struct sock *llc_create_incoming_sock(struct sock *sk,
 	memcpy(&newllc->laddr, daddr, sizeof(newllc->laddr));
 	memcpy(&newllc->daddr, saddr, sizeof(newllc->daddr));
 	newllc->dev = dev;
+	newllc->incoming_pend = 1;
 	dev_hold(dev);
 	llc_sap_add_socket(llc->sap, newsk);
 out:
 	return newsk;
 }
 
+static void llc_release_incoming_sock(struct sock *sk)
+{
+	struct llc_sock *llc = llc_sk(sk);
+
+	if (!llc->incoming_pend)
+		return;
+
+	llc->incoming_pend = 0;
+	llc_sap_remove_socket(llc->sap, sk);
+	dev_put(llc->dev);
+	sock_orphan(sk);
+	llc_sk_free(sk);
+}
+
 void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 {
 	struct llc_addr saddr, daddr;
 	struct sock *sk;
+	struct sock *newsk = NULL;
 
 	llc_pdu_decode_sa(skb, saddr.mac);
 	llc_pdu_decode_ssap(skb, &saddr.lsap);
@@ -795,11 +813,11 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 	 * in the newly created struct sock private area. -acme
 	 */
 	if (unlikely(sk->sk_state == TCP_LISTEN)) {
-		struct sock *newsk = llc_create_incoming_sock(sk, skb->dev,
-							      &saddr, &daddr);
+		newsk = llc_create_incoming_sock(sk, skb->dev, &saddr, &daddr);
 		if (!newsk)
 			goto drop_unlock;
 		skb_set_owner_r(skb, newsk);
+		llc_set_incoming_flag(skb, true);
 	} else {
 		/*
 		 * Can't be skb_set_owner_r, this will be done at the
@@ -812,14 +830,22 @@ void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb)
 		sock_hold(sk);
 		skb->sk = sk;
 		skb->destructor = sock_efree;
+		llc_set_incoming_flag(skb, false);
 	}
-	if (!sock_owned_by_user(sk))
+	if (!sock_owned_by_user(sk)) {
 		llc_conn_rcv(sk, skb);
-	else {
+		if (newsk && llc_sk(newsk)->incoming_pend)
+			llc_release_incoming_sock(newsk);
+	} else {
 		dprintk("%s: adding to backlog...\n", __func__);
 		llc_set_backlog_type(skb, LLC_PACKET);
-		if (sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf)))
+		if (sk_add_backlog(sk, skb, READ_ONCE(sk->sk_rcvbuf))) {
+			if (newsk) {
+				skb_orphan(skb);
+				llc_release_incoming_sock(newsk);
+			}
 			goto drop_unlock;
+		}
 	}
 out:
 	bh_unlock_sock(sk);
@@ -852,6 +878,7 @@ static int llc_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	int rc = 0;
 	struct llc_sock *llc = llc_sk(sk);
+	struct sock *newsk = llc_incoming_flag(skb) ? skb->sk : NULL;
 
 	if (likely(llc_backlog_type(skb) == LLC_PACKET)) {
 		if (likely(llc->state > 1)) /* not closed */
@@ -868,10 +895,14 @@ static int llc_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 		printk(KERN_ERR "%s: invalid skb in backlog\n", __func__);
 		goto out_kfree_skb;
 	}
+	if (newsk && llc_sk(newsk)->incoming_pend)
+		llc_release_incoming_sock(newsk);
 out:
 	return rc;
 out_kfree_skb:
 	kfree_skb(skb);
+	if (newsk && llc_sk(newsk)->incoming_pend)
+		llc_release_incoming_sock(newsk);
 	goto out;
 }
 

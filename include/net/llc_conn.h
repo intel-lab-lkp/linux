@@ -72,6 +72,7 @@ struct llc_sock {
 					      received and caused sending FRMR.
 					      Used for resending FRMR */
 	u32		    cmsg_flags;
+	u8		    incoming_pend;
 	struct hlist_node   dev_hash_node;
 };
 
@@ -88,6 +89,16 @@ static __inline__ void llc_set_backlog_type(struct sk_buff *skb, char type)
 static __inline__ char llc_backlog_type(struct sk_buff *skb)
 {
 	return skb->cb[sizeof(skb->cb) - 1];
+}
+
+static __inline__ void llc_set_incoming_flag(struct sk_buff *skb, bool incoming)
+{
+	skb->cb[sizeof(skb->cb) - 2] = incoming;
+}
+
+static __inline__ bool llc_incoming_flag(const struct sk_buff *skb)
+{
+	return skb->cb[sizeof(skb->cb) - 2];
 }
 
 struct sock *llc_sk_alloc(struct net *net, int family, gfp_t priority,
