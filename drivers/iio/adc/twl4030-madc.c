@@ -718,7 +718,7 @@ static int twl4030_madc_set_power(struct twl4030_madc_data *madc, int on)
 	u8 regval;
 	int ret;
 
-	ret = twl_i2c_read_u8(TWL_MODULE_MAIN_CHARGE,
+	ret = twl_i2c_read_u8(TWL4030_MODULE_MADC,
 			      &regval, TWL4030_MADC_CTRL1);
 	if (ret) {
 		dev_err(madc->dev, "unable to read madc ctrl1 reg 0x%X\n",
