@@ -978,6 +978,10 @@ impl NodeDeath {
         ))
     }
 
+    pub(crate) fn belongs_to_process(&self, process: &Process) -> bool {
+        core::ptr::eq(&*self.process, process)
+    }
+
     /// Sets the cleared flag to `true`.
     ///
     /// It removes `self` from the node's death notification list if needed.
@@ -1103,7 +1107,7 @@ impl DeliverToRead for NodeDeath {
             }
             // We're still holding the inner lock, so it cannot be aborted while we insert it into
             // the delivered list.
-            process_inner.death_delivered(self.clone());
+            process.death_delivered(&mut process_inner, self.clone());
             BR_DEAD_BINDER
         };
 

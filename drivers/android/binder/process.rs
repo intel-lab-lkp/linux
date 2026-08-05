@@ -309,14 +309,6 @@ impl ProcessInner {
         None
     }
 
-    pub(crate) fn death_delivered(&mut self, death: DArc<NodeDeath>) {
-        if let Some(death) = ListArc::try_from_arc_or_drop(death) {
-            self.delivered_deaths.push_back(death);
-        } else {
-            pr_warn!("Notification added to `delivered_deaths` twice.");
-        }
-    }
-
     pub(crate) fn add_outstanding_txn(&mut self) {
         self.outstanding_txns += 1;
     }
@@ -918,6 +910,21 @@ impl Process {
             .ok_or(ENOENT)?
             .node_ref()
             .clone(strong)
+    }
+
+    pub(crate) fn death_delivered(
+        &self,
+        inner: &mut Guard<'_, ProcessInner, SpinLockBackend>,
+        death: DArc<NodeDeath>,
+    ) {
+        assert!(core::ptr::eq(&self.inner, inner.lock_ref()));
+        assert!(death.belongs_to_process(self));
+
+        if let Some(death) = ListArc::try_from_arc_or_drop(death) {
+            inner.delivered_deaths.push_back(death);
+        } else {
+            pr_warn!("Notification added to `delivered_deaths` twice.");
+        }
     }
 
     pub(crate) fn remove_from_delivered_deaths(&self, death: &DArc<NodeDeath>) {
