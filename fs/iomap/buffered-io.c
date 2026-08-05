@@ -11,6 +11,9 @@
 #include <linux/fserror.h>
 #include <linux/fsverity.h>
 #include <linux/rmap.h>
+#include <linux/task_io_accounting_ops.h>
+#include "linux/pagemap.h"
+#include "linux/page-flags.h"
 #include "internal.h"
 #include "trace.h"
 
@@ -1163,6 +1166,34 @@ static bool iomap_write_end_inline(const struct iomap_iter *iter,
 }
 
 /*
+ * __iomap_writethrough_end() is almost same as __iomap_write_end() but with the difference
+ * that we don't mark folio dirty since we are about to issue it for IO anyways.
+ * Consequently, most of the accounting is skipped.
+ */
+static bool __iomap_writethrough_end(struct inode *inode, loff_t pos, size_t len,
+		size_t copied, struct folio *folio)
+{
+	flush_dcache_folio(folio);
+
+	/*
+	 * The blocks that were entirely written will now be up-to-date, so we
+	 * don't have to worry about a read_folio reading them and overwriting a
+	 * partial write.  However, if we've encountered a short write and only
+	 * partially written into a block, it will not be marked up-to-date, so a
+	 * read_folio might come in and destroy our partial write.
+	 *
+	 * Do the simplest thing and just treat any short write to a
+	 * non-uptodate page as a zero-length write, and force the caller to
+	 * redo the whole thing.
+	 */
+	if (unlikely(copied < len && !folio_test_uptodate(folio)))
+		return false;
+	iomap_set_range_uptodate(folio, offset_in_folio(folio, pos), len);
+	return true;
+}
+
+
+/*
  * Returns true if all copied bytes have been written to the pagecache,
  * otherwise return false.
  */
@@ -1183,7 +1214,10 @@ static bool iomap_write_end(struct iomap_iter *iter, size_t len, size_t copied,
 		return bh_written == copied;
 	}
 
-	return __iomap_write_end(iter->inode, pos, len, copied, folio);
+	if (iter->flags & IOMAP_WRITETHROUGH)
+		return __iomap_writethrough_end(iter->inode, pos, len, copied, folio);
+	else
+		return __iomap_write_end(iter->inode, pos, len, copied, folio);
 }
 
 static ssize_t iomap_writethrough_complete(struct iomap_writethrough_ctx *wt_ctx)
@@ -1254,7 +1288,7 @@ static void iomap_writethrough_bio_end_io(struct bio *bio)
 		cmpxchg(&wt_ctx->error, 0,
 			blk_status_to_errno(bio->bi_status));
 	bio_for_each_folio_all(fi, bio)
-		folio_end_writeback(fi.folio);
+		folio_end_writethrough(fi.folio, wt_ctx->error);
 
 	bio_put(bio);
 	if (atomic_dec_and_test(&wt_ctx->ref))
@@ -1299,9 +1333,11 @@ iomap_writethrough_submit_bio(struct iomap_writethrough_ctx *wt_ctx,
 
 	/*
 	 * In case of error we still need the I/O completion to run so we can
-	 * release references and end writeback on the folios.
+	 * release references, handle accounting and end writeback on the
+	 * folios.
 	 */
 	if (error) {
+		task_io_account_cancelled_write(len);
 		bio->bi_status = errno_to_blk_status(error);
 		bio_endio(bio);
 		return error;
@@ -1351,6 +1387,7 @@ static void iomap_folio_prepare_writethrough(struct folio *folio, size_t off,
 {
 	bool fully_written;
 	u64 zero = 0;
+	u64 tmp_off = off;
 
 	if (folio_test_writeback(folio))
 		folio_wait_writeback(folio);
@@ -1359,17 +1396,20 @@ static void iomap_folio_prepare_writethrough(struct folio *folio, size_t off,
 		folio_mark_dirty(folio);
 
 	/*
-	 * We might either write through the complete folio or a partial folio
-	 * writethrough might result in all blocks becoming non-dirty, so we need to
-	 * check and mark the folio clean if that is the case.
+	 * For writethrough, we don't mark the write range dirty but we still
+	 * need clear the dirty range if someone else has dirtied it before.
+	 * Further, if the clearing results in folio becoming completely clean,
+	 * then we need to take care of accounting.
 	 */
-	fully_written = (off == 0 && len == folio_size(folio));
-	iomap_clear_range_dirty(folio, off, len);
-	if (fully_written ||
-	    !iomap_find_dirty_range(folio, &zero, folio_size(folio)))
-		folio_clear_dirty_for_writethrough(folio);
+	if (iomap_find_dirty_range(folio, &tmp_off, tmp_off + len)) {
+		iomap_clear_range_dirty(folio, off, len);
 
-	folio_start_writeback(folio);
+		if (!iomap_find_dirty_range(folio, &zero, folio_size(folio)))
+			folio_clear_dirty_for_writethrough(folio);
+	}
+
+	task_io_account_write(folio_nr_pages(folio) * PAGE_SIZE);
+	folio_test_set_writeback(folio);
 }
 
 /**
