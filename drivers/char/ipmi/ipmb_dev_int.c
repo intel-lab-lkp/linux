@@ -11,6 +11,7 @@
 #include <linux/acpi.h>
 #include <linux/errno.h>
 #include <linux/i2c.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -54,6 +55,7 @@ struct ipmb_request_elem {
 };
 
 struct ipmb_dev {
+	struct kref refcount;
 	struct i2c_client *client;
 	struct miscdevice miscdev;
 	struct ipmb_msg request;
@@ -64,11 +66,26 @@ struct ipmb_dev {
 	wait_queue_head_t wait_queue;
 	struct mutex file_mutex;
 	bool is_i2c_protocol;
+	bool dead;
 };
 
 static inline struct ipmb_dev *to_ipmb_dev(struct file *file)
 {
-	return container_of(file->private_data, struct ipmb_dev, miscdev);
+	return file->private_data;
+}
+
+static void ipmb_dev_release(struct kref *refcount)
+{
+	struct ipmb_dev *ipmb_dev;
+	struct ipmb_request_elem *elem, *tmp;
+
+	ipmb_dev = container_of(refcount, struct ipmb_dev, refcount);
+	list_for_each_entry_safe(elem, tmp, &ipmb_dev->request_queue, list) {
+		list_del(&elem->list);
+		kfree(elem);
+	}
+	kfree(ipmb_dev->miscdev.name);
+	kfree(ipmb_dev);
 }
 
 static ssize_t ipmb_read(struct file *file, char __user *buf, size_t count,
@@ -84,12 +101,17 @@ static ssize_t ipmb_read(struct file *file, char __user *buf, size_t count,
 	spin_lock_irq(&ipmb_dev->lock);
 
 	while (list_empty(&ipmb_dev->request_queue)) {
+		if (READ_ONCE(ipmb_dev->dead)) {
+			spin_unlock_irq(&ipmb_dev->lock);
+			return -ENODEV;
+		}
 		spin_unlock_irq(&ipmb_dev->lock);
 
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
 		ret = wait_event_interruptible(ipmb_dev->wait_queue,
+				READ_ONCE(ipmb_dev->dead) ||
 				!list_empty(&ipmb_dev->request_queue));
 		if (ret)
 			return ret;
@@ -150,6 +172,12 @@ static ssize_t ipmb_write(struct file *file, const char __user *buf,
 	if (msg[IPMB_MSG_LEN_IDX] < IPMB_REQUEST_LEN_MIN ||
 	    count < (size_t)msg[IPMB_MSG_LEN_IDX] + 1)
 		return -EINVAL;
+	if (mutex_lock_interruptible(&ipmb_dev->file_mutex))
+		return -ERESTARTSYS;
+	if (ipmb_dev->dead) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 
 	rq_sa = GET_7BIT_ADDR(msg[RQ_SA_8BIT_IDX]);
 	netf_rq_lun = msg[NETFN_LUN_IDX];
@@ -157,7 +185,8 @@ static ssize_t ipmb_write(struct file *file, const char __user *buf,
 	/* Check i2c block transfer vs smbus */
 	if (ipmb_dev->is_i2c_protocol) {
 		ret = ipmb_i2c_write(ipmb_dev->client, msg, rq_sa);
-		return (ret == 1) ? count : ret;
+		ret = (ret == 1) ? count : ret;
+		goto out_unlock;
 	}
 
 	/*
@@ -166,8 +195,10 @@ static ssize_t ipmb_write(struct file *file, const char __user *buf,
 	 */
 	msg_len = msg[IPMB_MSG_LEN_IDX] - SMBUS_MSG_HEADER_LENGTH;
 	temp_client = kmemdup(ipmb_dev->client, sizeof(*temp_client), GFP_KERNEL);
-	if (!temp_client)
-		return -ENOMEM;
+	if (!temp_client) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
 
 	temp_client->addr = rq_sa;
 
@@ -175,7 +206,11 @@ static ssize_t ipmb_write(struct file *file, const char __user *buf,
 					 msg + SMBUS_MSG_IDX_OFFSET);
 	kfree(temp_client);
 
-	return ret < 0 ? ret : count;
+	ret = ret < 0 ? ret : count;
+
+out_unlock:
+	mutex_unlock(&ipmb_dev->file_mutex);
+	return ret;
 }
 
 static __poll_t ipmb_poll(struct file *file, poll_table *wait)
@@ -184,6 +219,10 @@ static __poll_t ipmb_poll(struct file *file, poll_table *wait)
 	__poll_t mask = EPOLLOUT;
 
 	mutex_lock(&ipmb_dev->file_mutex);
+	if (ipmb_dev->dead) {
+		mutex_unlock(&ipmb_dev->file_mutex);
+		return EPOLLERR | EPOLLHUP;
+	}
 	poll_wait(file, &ipmb_dev->wait_queue, wait);
 
 	if (atomic_read(&ipmb_dev->request_queue_len))
@@ -193,11 +232,38 @@ static __poll_t ipmb_poll(struct file *file, poll_table *wait)
 	return mask;
 }
 
+static int ipmb_open(struct inode *inode, struct file *file)
+{
+	struct ipmb_dev *ipmb_dev;
+	int ret = 0;
+
+	ipmb_dev = container_of(file->private_data, struct ipmb_dev, miscdev);
+	mutex_lock(&ipmb_dev->file_mutex);
+	if (ipmb_dev->dead) {
+		ret = -ENODEV;
+	} else {
+		kref_get(&ipmb_dev->refcount);
+		file->private_data = ipmb_dev;
+	}
+	mutex_unlock(&ipmb_dev->file_mutex);
+	return ret;
+}
+
+static int ipmb_release(struct inode *inode, struct file *file)
+{
+	struct ipmb_dev *ipmb_dev = to_ipmb_dev(file);
+
+	kref_put(&ipmb_dev->refcount, ipmb_dev_release);
+	return 0;
+}
+
 static const struct file_operations ipmb_fops = {
 	.owner	= THIS_MODULE,
+	.open	= ipmb_open,
 	.read	= ipmb_read,
 	.write	= ipmb_write,
 	.poll	= ipmb_poll,
+	.release = ipmb_release,
 };
 
 /* Called with ipmb_dev->lock held. */
@@ -305,10 +371,10 @@ static int ipmb_probe(struct i2c_client *client)
 	struct ipmb_dev *ipmb_dev;
 	int ret;
 
-	ipmb_dev = devm_kzalloc(&client->dev, sizeof(*ipmb_dev),
-					GFP_KERNEL);
+	ipmb_dev = kzalloc_obj(struct ipmb_dev);
 	if (!ipmb_dev)
 		return -ENOMEM;
+	kref_init(&ipmb_dev->refcount);
 
 	spin_lock_init(&ipmb_dev->lock);
 	init_waitqueue_head(&ipmb_dev->wait_queue);
@@ -319,38 +385,51 @@ static int ipmb_probe(struct i2c_client *client)
 
 	ipmb_dev->miscdev.minor = MISC_DYNAMIC_MINOR;
 
-	ipmb_dev->miscdev.name = devm_kasprintf(&client->dev, GFP_KERNEL,
-						"%s%d", "ipmb-",
-						client->adapter->nr);
-	if (!ipmb_dev->miscdev.name)
-		return -ENOMEM;
+	ipmb_dev->miscdev.name = kasprintf(GFP_KERNEL, "%s%d", "ipmb-",
+					   client->adapter->nr);
+	if (!ipmb_dev->miscdev.name) {
+		ret = -ENOMEM;
+		goto err_put;
+	}
 
 	ipmb_dev->miscdev.fops = &ipmb_fops;
 	ipmb_dev->miscdev.parent = &client->dev;
-	ret = misc_register(&ipmb_dev->miscdev);
-	if (ret)
-		return ret;
-
 	ipmb_dev->is_i2c_protocol
 		= device_property_read_bool(&client->dev, "i2c-protocol");
 
 	ipmb_dev->client = client;
 	i2c_set_clientdata(client, ipmb_dev);
 	ret = i2c_slave_register(client, ipmb_slave_cb);
-	if (ret) {
-		misc_deregister(&ipmb_dev->miscdev);
-		return ret;
-	}
+	if (ret)
+		goto err_data;
+
+	ret = misc_register(&ipmb_dev->miscdev);
+	if (ret)
+		goto err_slave;
 
 	return 0;
+
+err_slave:
+	i2c_slave_unregister(client);
+err_data:
+	i2c_set_clientdata(client, NULL);
+err_put:
+	kref_put(&ipmb_dev->refcount, ipmb_dev_release);
+	return ret;
 }
 
 static void ipmb_remove(struct i2c_client *client)
 {
 	struct ipmb_dev *ipmb_dev = i2c_get_clientdata(client);
 
-	i2c_slave_unregister(client);
+	mutex_lock(&ipmb_dev->file_mutex);
+	WRITE_ONCE(ipmb_dev->dead, true);
+	mutex_unlock(&ipmb_dev->file_mutex);
 	misc_deregister(&ipmb_dev->miscdev);
+	wake_up_all(&ipmb_dev->wait_queue);
+	i2c_slave_unregister(client);
+	i2c_set_clientdata(client, NULL);
+	kref_put(&ipmb_dev->refcount, ipmb_dev_release);
 }
 
 static const struct i2c_device_id ipmb_id[] = {
