@@ -461,7 +461,7 @@ HOSTCC	= gcc
 HOSTCXX	= g++
 endif
 HOSTRUSTC = rustc
-HOSTPKG_CONFIG	= pkg-config
+HOSTPKG_CONFIG	?= pkg-config
 
 # the KERNELDOC macro needs to be exported, as scripts/Makefile.build
 # has a logic to call it

@@ -110,6 +110,11 @@ HOSTLDLIBS
 ----------
 Additional libraries to link against when building host programs.
 
+HOSTPKG_CONFIG
+--------------
+The pkg-config to use when building host programs. Set this when cross
+building, where the default would otherwise answer for the target.
+
 .. _userkbuildflags:
 
 USERCFLAGS
