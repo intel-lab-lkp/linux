@@ -166,12 +166,21 @@ static int airoha_npu_send_msg(struct airoha_npu *npu, int func_id,
 	u16 core = 0; /* FIXME */
 	u32 val, offset = core << 4;
 	dma_addr_t dma_addr;
+	void *dma_buf;
 	int ret;
 
-	dma_addr = dma_map_single(npu->dev, p, size, DMA_BIDIRECTIONAL);
-	ret = dma_mapping_error(npu->dev, dma_addr);
-	if (ret)
-		return ret;
+	/*
+	 * Mailbox payloads are small and bidirectional (CPU sets the
+	 * request, NPU writes the response). Streaming DMA_BIDIRECTIONAL
+	 * mapping regresses EN7581+MT7996: MBOX reports success but
+	 * WLAN_FUNC_GET_WAIT_NPU_VERSION still reads as 0.0. Use a
+	 * coherent bounce buffer so the CPU always sees the NPU response.
+	 */
+	dma_buf = dma_alloc_coherent(npu->dev, size, &dma_addr, GFP_ATOMIC);
+	if (!dma_buf)
+		return -ENOMEM;
+
+	memcpy(dma_buf, p, size);
 
 	spin_lock_bh(&npu->cores[core].lock);
 
@@ -191,7 +200,9 @@ static int airoha_npu_send_msg(struct airoha_npu *npu, int func_id,
 
 	spin_unlock_bh(&npu->cores[core].lock);
 
-	dma_unmap_single(npu->dev, dma_addr, size, DMA_BIDIRECTIONAL);
+	if (!ret)
+		memcpy(p, dma_buf, size);
+	dma_free_coherent(npu->dev, size, dma_buf, dma_addr);
 
 	return ret;
 }
