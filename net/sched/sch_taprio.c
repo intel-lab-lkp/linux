@@ -990,7 +990,8 @@ first_run:
 	hrtimer_set_expires(&q->advance_timer, end_time);
 
 	rcu_read_lock();
-	__netif_schedule(sch);
+	if (!test_bit(__QDISC_STATE_DEACTIVATED, &sch->state))
+		__netif_schedule(sch);
 	rcu_read_unlock();
 
 	return HRTIMER_RESTART;
