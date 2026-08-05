@@ -6,12 +6,12 @@
 /dts-v1/;
 
 #include <dt-bindings/leds/common.h>
-#include "purwa-iot-som.dtsi"
+#include "iq-x5121-evk-som.dtsi"
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 
 / {
 	model = "Qualcomm Technologies, Inc. Purwa IoT EVK";
-	compatible = "qcom,purwa-iot-evk", "qcom,purwa-iot-som", "qcom,x1p42100";
+	compatible = "qcom,purwa-iot-evk", "qcom,iq-x5121-evk-som", "qcom,x1p42100";
 	chassis-type = "embedded";
 
 	aliases {
