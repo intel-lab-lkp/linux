@@ -795,9 +795,12 @@ static void xpad360w_poweroff_controller(struct usb_xpad *xpad);
  *	The used report descriptor was taken from ITO Takayuki's website:
  *	 http://euc.jp/periphs/xbox-controller.ja.html
  */
-static void xpad_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char *data)
+static void xpad_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char *data, u32 len)
 {
 	struct input_dev *dev = xpad->dev;
+
+	if (len < 20)
+		return;
 
 	if (!(xpad->mapping & MAP_STICKS_TO_NULL)) {
 		/* left stick */
@@ -1259,7 +1262,7 @@ static void xpad_irq_in(struct urb *urb)
 		xpadone_process_packet(xpad, 0, xpad->idata, urb->actual_length);
 		break;
 	default:
-		xpad_process_packet(xpad, 0, xpad->idata);
+		xpad_process_packet(xpad, 0, xpad->idata, urb->actual_length);
 	}
 
 exit:
