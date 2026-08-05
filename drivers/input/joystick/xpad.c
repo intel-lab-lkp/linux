@@ -870,10 +870,10 @@ static void xpad_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char *d
  */
 
 static void xpad360_process_packet(struct usb_xpad *xpad, struct input_dev *dev,
-				   u16 cmd, unsigned char *data)
+				   u16 cmd, unsigned char *data, u32 len)
 {
 	/* valid pad data */
-	if (data[0] != 0x00)
+	if (data[0] != 0x00 || len < 14)
 		return;
 
 	/* digital pad */
@@ -998,10 +998,13 @@ static void xpad_presence_work(struct work_struct *work)
  * 01.1 - Pad state (Bytes 4+) valid
  *
  */
-static void xpad360w_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char *data)
+static void xpad360w_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char *data, u32 len)
 {
 	struct input_dev *dev;
 	bool present;
+
+	if (len < 2)
+		return;
 
 	/* Presence change */
 	if (data[0] & 0x08) {
@@ -1019,8 +1022,8 @@ static void xpad360w_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned cha
 
 	rcu_read_lock();
 	dev = rcu_dereference(xpad->x360w_dev);
-	if (dev)
-		xpad360_process_packet(xpad, dev, cmd, &data[4]);
+	if (dev && len > 4)
+		xpad360_process_packet(xpad, dev, cmd, &data[4], len - 4);
 	rcu_read_unlock();
 }
 
@@ -1253,10 +1256,10 @@ static void xpad_irq_in(struct urb *urb)
 
 	switch (xpad->xtype) {
 	case XTYPE_XBOX360:
-		xpad360_process_packet(xpad, xpad->dev, 0, xpad->idata);
+		xpad360_process_packet(xpad, xpad->dev, 0, xpad->idata, urb->actual_length);
 		break;
 	case XTYPE_XBOX360W:
-		xpad360w_process_packet(xpad, 0, xpad->idata);
+		xpad360w_process_packet(xpad, 0, xpad->idata, urb->actual_length);
 		break;
 	case XTYPE_XBOXONE:
 		xpadone_process_packet(xpad, 0, xpad->idata, urb->actual_length);
