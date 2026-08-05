@@ -531,6 +531,9 @@ int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct vm_area_struct *
 	struct drm_gem_object *obj = &dma_obj->base;
 	int ret;
 
+	if (obj->size < vma->vm_end - vma->vm_start)
+		return -EINVAL;
+
 	/*
 	 * Clear the VM_PFNMAP flag that was set by drm_gem_mmap(), and set the
 	 * vm_pgoff (used as a fake buffer offset by DRM) to 0 as we want to map
@@ -543,12 +546,12 @@ int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct vm_area_struct *
 		vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 
 		ret = dma_mmap_pages(drm_dev_dma_dev(dma_obj->base.dev),
-				     vma, vma->vm_end - vma->vm_start,
+				     vma, obj->size,
 				     virt_to_page(dma_obj->vaddr));
 	} else {
 		ret = dma_mmap_wc(drm_dev_dma_dev(dma_obj->base.dev), vma,
 				  dma_obj->vaddr, dma_obj->dma_addr,
-				  vma->vm_end - vma->vm_start);
+				  obj->size);
 	}
 	if (ret)
 		drm_gem_vm_close(vma);
