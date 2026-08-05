@@ -3705,8 +3705,34 @@ out:
 static int ibmvnic_change_mtu(struct net_device *netdev, int new_mtu)
 {
 	struct ibmvnic_adapter *adapter = netdev_priv(netdev);
+	u64 new_mtu_with_hdr = new_mtu + ETH_HLEN;
+	u64 old_buff_size, new_buff_size;
 
-	adapter->desired.mtu = new_mtu + ETH_HLEN;
+	if (adapter->req_mtu == new_mtu_with_hdr)
+		return 0;
+
+	old_buff_size = ALIGN(adapter->prev_mtu + VLAN_HLEN, L1_CACHE_BYTES);
+	new_buff_size = ALIGN(new_mtu_with_hdr + VLAN_HLEN, L1_CACHE_BYTES);
+
+	/* Skip the reset when backing_mtu and the current buffers already
+	 * cover the new mtu. Keep desired.mtu in sync with req_mtu.
+	 */
+	if (new_mtu_with_hdr <= adapter->backing_mtu &&
+	    new_buff_size <= old_buff_size) {
+		netdev_dbg(netdev, "mtu %u->%d without reset\n",
+			   netdev->mtu, new_mtu);
+
+		WRITE_ONCE(netdev->mtu, new_mtu);
+		adapter->req_mtu = new_mtu_with_hdr;
+		adapter->desired.mtu = new_mtu_with_hdr;
+
+		return 0;
+	}
+
+	netdev_dbg(netdev, "mtu %u->%d needs larger buffers, resetting\n",
+		   netdev->mtu, new_mtu);
+
+	adapter->desired.mtu = new_mtu_with_hdr;
 
 	return wait_for_reset(adapter);
 }
@@ -5558,14 +5584,17 @@ static void handle_request_cap_rsp(union ibmvnic_crq *crq,
 
 	switch (crq->request_capability_rsp.rc.code) {
 	case SUCCESS:
+		if (cap == REQ_MTU)
+			adapter->backing_mtu = *req_value;
 		break;
 	case PARTIALSUCCESS:
 		rsp_value = be64_to_cpu(crq->request_capability_rsp.number);
 
-		/* Covering PARTIALSUCCESS: keep the request. Otherwise
-		 * retry with rsp_value.
+		/* Covering PARTIALSUCCESS: keep the request and record
+		 * backing_mtu. Otherwise retry with rsp_value.
 		 */
 		if (cap == REQ_MTU && rsp_value >= *req_value) {
+			adapter->backing_mtu = rsp_value;
 			netdev_dbg(adapter->netdev,
 				   "backing mtu %llu covers requested %llu\n",
 				   rsp_value, *req_value);

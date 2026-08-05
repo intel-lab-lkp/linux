@@ -1020,6 +1020,7 @@ struct ibmvnic_adapter {
 	u64 max_mtu;
 	u64 req_mtu;
 	u64 prev_mtu;
+	u64 backing_mtu; /* mtu the backing device currently carries */
 	u64 max_multicast_filters;
 	u64 vlan_header_insertion;
 	u64 rx_vlan_header_insertion;
