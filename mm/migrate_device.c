@@ -1414,7 +1414,7 @@ int migrate_device_range(unsigned long *src_pfns, unsigned long start,
 		nr = folio_nr_pages(folio);
 		if (nr > 1) {
 			src_pfns[i] |= MIGRATE_PFN_COMPOUND;
-			for (j = 1; j < nr; j++)
+			for (j = 1; j < nr && (i + j) < npages; j++)
 				src_pfns[i+j] = 0;
 			i += j - 1;
 			pfn += j - 1;
@@ -1448,7 +1448,7 @@ int migrate_device_pfns(unsigned long *src_pfns, unsigned long npages)
 		nr = folio_nr_pages(folio);
 		if (nr > 1) {
 			src_pfns[i] |= MIGRATE_PFN_COMPOUND;
-			for (j = 1; j < nr; j++)
+			for (j = 1; j < nr && (i + j) < npages; j++)
 				src_pfns[i+j] = 0;
 			i += j - 1;
 		}
