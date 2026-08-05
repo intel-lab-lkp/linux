@@ -3030,6 +3030,9 @@ static void __exit vmbus_exit(void)
 {
 	int cpu;
 
+	if (hv_root_partition() && !hv_nested)
+		return;
+
 	unregister_syscore(&hv_synic_syscore);
 
 	hv_remove_kexec_handler();
