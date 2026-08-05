@@ -763,7 +763,7 @@ void sd_int_dpc(struct adapter *adapter)
 			}
 		} else {
 			/* Error handling for malloc fail */
-			rtw_cbuf_push(adapter->evtpriv.c2h_queue, NULL);
+			kfifo_put(&adapter->evtpriv.c2h_queue, NULL);
 			_set_workitem(&adapter->evtpriv.c2h_wk);
 		}
 	}

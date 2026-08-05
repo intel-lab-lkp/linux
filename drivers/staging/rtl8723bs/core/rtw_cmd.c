@@ -202,8 +202,7 @@ int rtw_init_evt_priv(struct evt_priv *pevtpriv)
 
 	_init_workitem(&pevtpriv->c2h_wk, c2h_wk_callback, NULL);
 	pevtpriv->c2h_wk_alive = false;
-	pevtpriv->c2h_queue = rtw_cbuf_alloc(C2H_QUEUE_MAX_LEN + 1);
-	if (!pevtpriv->c2h_queue)
+	if (kfifo_alloc(&pevtpriv->c2h_queue, C2H_QUEUE_MAX_LEN, GFP_KERNEL))
 		return -ENOMEM;
 
 	return 0;
@@ -211,17 +210,17 @@ int rtw_init_evt_priv(struct evt_priv *pevtpriv)
 
 void _rtw_free_evt_priv(struct	evt_priv *pevtpriv)
 {
+	void *c2h;
+
 	_cancel_workitem_sync(&pevtpriv->c2h_wk);
 	while (pevtpriv->c2h_wk_alive)
 		fsleep(10 * USEC_PER_MSEC);
 
-	while (!rtw_cbuf_empty(pevtpriv->c2h_queue)) {
-		void *c2h = rtw_cbuf_pop(pevtpriv->c2h_queue);
-
+	while (kfifo_get(&pevtpriv->c2h_queue, &c2h)) {
 		if (c2h && c2h != (void *)pevtpriv)
 			kfree(c2h);
 	}
-	kfree(pevtpriv->c2h_queue);
+	kfifo_free(&pevtpriv->c2h_queue);
 }
 
 void _rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
@@ -1695,12 +1694,13 @@ static void c2h_wk_callback(struct work_struct *work)
 	struct evt_priv *evtpriv = container_of(work, struct evt_priv, c2h_wk);
 	struct adapter *adapter = container_of(evtpriv, struct adapter, evtpriv);
 	u8 *c2h_evt;
+	void *c2h_ptr;
 	c2h_id_filter ccx_id_filter = rtw_hal_c2h_id_filter_ccx(adapter);
 
 	evtpriv->c2h_wk_alive = true;
 
-	while (!rtw_cbuf_empty(evtpriv->c2h_queue)) {
-		c2h_evt = (u8 *)rtw_cbuf_pop(evtpriv->c2h_queue);
+	while (kfifo_get(&evtpriv->c2h_queue, &c2h_ptr)) {
+		c2h_evt = (u8 *)c2h_ptr;
 		if (c2h_evt) {
 			/* This C2H event is read, clear it */
 			c2h_evt_clear(adapter);
