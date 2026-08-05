@@ -677,11 +677,12 @@ static void arm_spe_pmu_disable_and_drain_local(void)
 
 /* IRQ handling */
 static enum arm_spe_pmu_buf_fault_action
-arm_spe_pmu_buf_get_fault_act(struct perf_output_handle *handle)
+arm_spe_pmu_buf_get_fault_act(u64 *aux_flags)
 {
 	const char *err_str;
 	u64 pmbsr;
-	enum arm_spe_pmu_buf_fault_action ret;
+
+	*aux_flags = 0;
 
 	/*
 	 * Ensure new profiling data is visible to the CPU and any external
@@ -703,12 +704,11 @@ arm_spe_pmu_buf_get_fault_act(struct perf_output_handle *handle)
 	 * flag to indicate that the last record is corrupted.
 	 */
 	if (FIELD_GET(PMBSR_EL1_DL, pmbsr))
-		perf_aux_output_flag(handle, PERF_AUX_FLAG_TRUNCATED |
-					     PERF_AUX_FLAG_PARTIAL);
+		*aux_flags |= PERF_AUX_FLAG_TRUNCATED | PERF_AUX_FLAG_PARTIAL;
 
 	/* Report collisions to userspace so that it can up the period */
 	if (FIELD_GET(PMBSR_EL1_COLL, pmbsr))
-		perf_aux_output_flag(handle, PERF_AUX_FLAG_COLLISION);
+		*aux_flags |= PERF_AUX_FLAG_COLLISION;
 
 	/* We only expect buffer management events */
 	switch (FIELD_GET(PMBSR_EL1_EC, pmbsr)) {
@@ -727,8 +727,7 @@ arm_spe_pmu_buf_get_fault_act(struct perf_output_handle *handle)
 	/* Buffer management event */
 	switch (FIELD_GET(PMBSR_EL1_BUF_BSC_MASK, pmbsr)) {
 	case PMBSR_EL1_BUF_BSC_FULL:
-		ret = SPE_PMU_BUF_FAULT_ACT_OK;
-		goto out_stop;
+		return SPE_PMU_BUF_FAULT_ACT_OK;
 	default:
 		err_str = "Unknown buffer status code";
 	}
@@ -738,11 +737,7 @@ out_err:
 			   err_str, smp_processor_id(), pmbsr,
 			   read_sysreg_s(SYS_PMBPTR_EL1),
 			   read_sysreg_s(SYS_PMBLIMITR_EL1));
-	ret = SPE_PMU_BUF_FAULT_ACT_FATAL;
-
-out_stop:
-	arm_spe_perf_aux_output_end(handle);
-	return ret;
+	return SPE_PMU_BUF_FAULT_ACT_FATAL;
 }
 
 static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
@@ -750,13 +745,17 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 	struct perf_output_handle *handle = dev;
 	struct perf_event *event = handle->event;
 	enum arm_spe_pmu_buf_fault_action act;
+	u64 aux_flags;
 
 	if (!perf_get_aux(handle))
 		return IRQ_NONE;
 
-	act = arm_spe_pmu_buf_get_fault_act(handle);
+	act = arm_spe_pmu_buf_get_fault_act(&aux_flags);
 	if (act == SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
 		return IRQ_NONE;
+
+	perf_aux_output_flag(handle, aux_flags);
+	arm_spe_perf_aux_output_end(handle);
 
 	/*
 	 * Ensure perf callbacks have completed, which may disable the
@@ -927,6 +926,7 @@ static void arm_spe_pmu_stop(struct perf_event *event, int flags)
 	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 	struct perf_output_handle *handle = this_cpu_ptr(spe_pmu->handle);
+	u64 aux_flags;
 
 	/* If we're already stopped, then nothing to do */
 	if (hwc->state & PERF_HES_STOPPED)
@@ -944,10 +944,12 @@ static void arm_spe_pmu_stop(struct perf_event *event, int flags)
 		if (perf_get_aux(handle)) {
 			enum arm_spe_pmu_buf_fault_action act;
 
-			act = arm_spe_pmu_buf_get_fault_act(handle);
-			if (act == SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
-				arm_spe_perf_aux_output_end(handle);
-			else
+			act = arm_spe_pmu_buf_get_fault_act(&aux_flags);
+			perf_aux_output_flag(handle, aux_flags);
+			arm_spe_perf_aux_output_end(handle);
+
+			/* Assume PMBSR only needs clearing for real faults */
+			if (act != SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
 				write_sysreg_s(0, SYS_PMBSR_EL1);
 		}
 
