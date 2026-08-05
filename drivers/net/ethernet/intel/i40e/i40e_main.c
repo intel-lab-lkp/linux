@@ -12828,6 +12828,7 @@ static int i40e_sw_init(struct i40e_pf *pf)
 	}
 	mutex_init(&pf->switch_mutex);
 	mutex_init(&pf->ptp_config_lock);
+	i40e_ptp_init_work(pf);
 	spin_lock_init(&pf->ptp_tx_lock);
 
 sw_init_done:
