@@ -17,6 +17,7 @@
 #include <net/netdev_rx_queue.h>
 #include <net/tcp.h>
 #include <net/rps.h>
+#include <net/netdev_lock.h>
 
 #include <trace/events/page_pool.h>
 
@@ -904,6 +905,15 @@ static int zcrx_register_netdev(struct io_zcrx_ifq *ifq,
 		return -ENODEV;
 
 	netdev_hold(ifq->netdev, &ifq->netdev_tracker, GFP_KERNEL);
+
+	/*
+	 * netdev_queue_get_dma_dev() requires the netdev ops locking
+	 * model. Reject devices which do not support it.
+	 */
+	if (!netdev_need_ops_lock(ifq->netdev)) {
+		ret = -EOPNOTSUPP;
+		goto netdev_put_unlock;
+	}
 
 	ifq->dev = netdev_queue_get_dma_dev(ifq->netdev, if_rxq, NETDEV_QUEUE_TYPE_RX);
 	if (!ifq->dev) {
