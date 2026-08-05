@@ -826,6 +826,13 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 #if IS_ENABLED(CONFIG_EEH)
 	eeh_dev_release(vdev->pdev);
 #endif
+
+	if (pci_num_vf(vdev->pdev)) {
+		device_lock(&vdev->pdev->dev);
+		vfio_pci_core_sriov_configure(vdev, 0);
+		device_unlock(&vdev->pdev->dev);
+	}
+
 	vfio_pci_dma_buf_cleanup(vdev);
 
 	vfio_pci_core_disable(vdev);
