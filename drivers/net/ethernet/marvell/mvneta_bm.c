@@ -389,7 +389,7 @@ static int mvneta_bm_get_sram(struct device_node *dn,
 
 static void mvneta_bm_put_sram(struct mvneta_bm *priv)
 {
-	gen_pool_free(priv->bppi_pool, priv->bppi_phys_addr,
+	gen_pool_free(priv->bppi_pool, (unsigned long)priv->bppi_virt_addr,
 		      MVNETA_BM_BPPI_SIZE);
 }
 
