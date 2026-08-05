@@ -702,6 +702,36 @@ static const struct iomap_dio_ops xfs_dio_write_ops = {
 	.end_io		= xfs_dio_write_end_io,
 };
 
+static int
+xfs_writethrough_end_io(
+	struct iomap_writethrough_ctx	*wt_ctx,
+	ssize_t				size,
+	int				error,
+	unsigned int			flags)
+{
+	struct xfs_inode *ip = XFS_I(wt_ctx->inode);
+	xfs_off_t offset = wt_ctx->iocb->ki_pos;
+
+	if (unlikely(error)) {
+		if (wt_ctx->flags & IOMAP_DIO_COW)
+			xfs_reflink_cancel_cow_range(ip, offset, size, true);
+
+		return error;
+	}
+
+	/*
+	 * writethrough completions are handled same as dio with the exception
+	 * that we need to explicitly change the i_disk_size. This is because
+	 * unlike dio, we have already updated the i_size and hence the
+	 * (i_disk_size < i_size) check will fail in dio code
+	 */
+	xfs_dio_write_end_io(wt_ctx->iocb, size, error, flags);
+	if (offset + size > ip->i_disk_size)
+		return xfs_setfilesize(ip, offset, size);
+
+	return 0;
+}
+
 static void
 xfs_dio_zoned_submit_io(
 	const struct iomap_iter	*iter,
@@ -1033,6 +1063,39 @@ out:
 	return ret;
 }
 
+static int
+xfs_writethrough_submit(
+	struct inode		*inode,
+	struct iomap		*iomap,
+	loff_t			offset,
+	u64			count)
+{
+	int error = 0;
+	unsigned int		nofs_flag;
+
+	/*
+	 * Convert CoW extents to regular.
+	 *
+	 * We are under writethrough context with folio lock possibly held. To
+	 * avoid memory allocation deadlocks, set the task-wide nofs context.
+	 */
+	if (iomap->flags & IOMAP_F_SHARED) {
+		nofs_flag = memalloc_nofs_save();
+		error = xfs_reflink_convert_cow(XFS_I(inode), offset, count);
+		memalloc_nofs_restore(nofs_flag);
+	}
+
+	return error;
+}
+
+const struct iomap_writethrough_ops xfs_writethrough_ops = {
+	.ops			= &xfs_direct_write_iomap_ops,
+	.write_ops		= &xfs_iomap_write_ops,
+	.end_io		= xfs_writethrough_end_io,
+	.writethrough_submit	= &xfs_writethrough_submit
+};
+
+
 STATIC ssize_t
 xfs_file_buffered_write(
 	struct kiocb		*iocb,
@@ -1055,9 +1118,13 @@ write_retry:
 		goto out;
 
 	trace_xfs_file_buffered_write(iocb, from);
-	ret = iomap_file_buffered_write(iocb, from,
-			&xfs_buffered_write_iomap_ops, &xfs_iomap_write_ops,
-			NULL);
+	if (iocb->ki_flags & IOCB_WRITETHROUGH) {
+		ret = iomap_file_writethrough_write(iocb, from,
+						    &xfs_writethrough_ops, NULL);
+	} else
+		ret = iomap_file_buffered_write(iocb, from,
+						&xfs_buffered_write_iomap_ops,
+						&xfs_iomap_write_ops, NULL);
 
 	/*
 	 * If we hit a space limit, try to free up some lingering preallocated
@@ -1092,8 +1159,12 @@ out:
 
 	if (ret > 0) {
 		XFS_STATS_ADD(ip->i_mount, xs_write_bytes, ret);
-		/* Handle various SYNC-type writes */
-		ret = generic_write_sync(iocb, ret);
+		/*
+		 * Handle various SYNC-type writes.
+		 * For writethrough, we handle sync during completion.
+		 */
+		if (!(iocb->ki_flags & IOCB_WRITETHROUGH))
+			ret = generic_write_sync(iocb, ret);
 	}
 	return ret;
 }
@@ -2104,7 +2175,7 @@ const struct file_operations xfs_file_operations = {
 	.remap_file_range = xfs_file_remap_range,
 	.fop_flags	= FOP_MMAP_SYNC | FOP_BUFFER_RASYNC |
 			  FOP_BUFFER_WASYNC | FOP_DIO_PARALLEL_WRITE |
-			  FOP_DONTCACHE,
+			  FOP_DONTCACHE | FOP_WRITETHROUGH,
 	.setlease	= generic_setlease,
 };
 
