@@ -1081,9 +1081,15 @@ static int tap_get_user_xdp(struct tap_queue *q, struct xdp_buff *xdp)
 	}
 
 	/* Move network header to the right position for VLAN tagged packets */
-	if (eth_type_vlan(skb->protocol) &&
-	    vlan_get_protocol_and_depth(skb, skb->protocol, &depth) != 0)
-		skb_set_network_header(skb, depth);
+	if (eth_type_vlan(skb->protocol)) {
+		__be16 proto = vlan_get_protocol_and_depth(skb, skb->protocol,
+							   &depth);
+
+		if (proto != 0) {
+			skb_set_network_header(skb, depth);
+			skb->protocol = proto;
+		}
+	}
 
 	rcu_read_lock();
 	tap = rcu_dereference(q->tap);
