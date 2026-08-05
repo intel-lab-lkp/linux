@@ -182,6 +182,23 @@ where
     }
 }
 
+#[doc(hidden)]
+pub struct OffsetLoc<Base: ?Sized, T>(usize, PhantomData<(T, Base)>);
+
+impl<Base: ?Sized, T> OffsetLoc<Base, T> {
+    #[inline]
+    pub const fn new(offset: usize) -> Self {
+        Self(offset, PhantomData)
+    }
+}
+
+impl<Base: ?Sized, T> IoLoc<Base, T> for OffsetLoc<Base, T> {
+    #[inline(always)]
+    fn offset(self) -> usize {
+        self.0
+    }
+}
+
 /// Trait providing a base address to be added to the offset of a relative register to obtain
 /// its actual offset.
 ///
@@ -498,6 +515,19 @@ where
 ///
 /// In this example, `SCRATCH_BOOT_STATUS` uses the same I/O address as `SCRATCH`, while providing
 /// its own `completed` field.
+///
+/// If you do not wish to have a bitfield defined, you can also create a register using an existing
+/// type.
+///
+/// ```no_run
+/// # use kernel::io::*;
+/// register! {
+///     base: Region<0x1000>;
+///
+///     /// TX FIFO register.
+///     pub TX_FIFO: u32 @ 0x00001000;
+/// }
+/// ```
 ///
 /// ## Relative registers
 ///
@@ -825,6 +855,23 @@ where
 #[macro_export]
 macro_rules! register {
     (base: $reg_base:ty;) => {};
+
+    // Creates a register at a fixed offset of the MMIO space with provided type.
+    (
+        base: $reg_base:ty;
+        // `$ty` cannot be `:ty` due to follow-set restrictions.
+        $(#[$attr:meta])* $vis:vis $name:ident: $ty: ident $(:: $path_frag:ident)*
+            $(@ $offset:literal)?
+            $(=> $alias:path $([$alias_idx:expr])? )?;
+        $($rest:tt)*
+    ) => {
+        $(#[$attr])* $vis
+        const $name: $crate::io::register::OffsetLoc<$reg_base, $ty $(:: $path_frag)*> =
+            $crate::io::register::OffsetLoc::new(
+                $crate::register!(@offset $(@ $offset)? $(=> $alias $([$alias_idx])?)?)
+            );
+        $crate::register!(base: $reg_base; $($rest)*);
+    };
 
     // Creates a register at a fixed offset of the MMIO space.
     //
