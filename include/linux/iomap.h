@@ -212,6 +212,7 @@ struct iomap_write_ops {
 #endif /* CONFIG_FS_DAX */
 #define IOMAP_ATOMIC		(1 << 9) /* torn-write protection */
 #define IOMAP_DONTCACHE		(1 << 10)
+#define IOMAP_WRITETHROUGH	(1 << 11)
 
 /*
  * Return the existing mapping at pos, or reserve space starting at pos for up
@@ -561,6 +562,29 @@ struct iomap_writepage_ctx {
 	void			*wb_ctx;	/* pending writeback context */
 };
 
+struct iomap_writethrough_ctx {
+	struct kiocb		*iocb;
+	struct inode		*inode;
+	loff_t			old_i_size;
+	loff_t			new_i_size;
+	loff_t			pos;
+	size_t			written;
+	atomic_t		ref;
+	unsigned int		flags;
+	int			error;
+
+	/* used during submission and for non-aio completion */
+	struct task_struct	*waiter;
+	int (*end_io)(struct iomap_writethrough_ctx *wt_ctx, ssize_t size,
+		      int error, unsigned int flags);
+
+	loff_t			bio_pos;
+	unsigned int		nr_bvecs;
+	unsigned int		max_bvecs;
+	struct bio_vec		bvec[];
+
+};
+
 struct iomap_ioend *iomap_init_ioend(struct inode *inode, struct bio *bio,
 		loff_t file_offset, u16 ioend_flags);
 struct iomap_ioend *iomap_split_ioend(struct iomap_ioend *ioend,
@@ -750,6 +774,24 @@ static __always_inline ssize_t iomap_dio_read_simple(struct kiocb *iocb,
 
 	return __iomap_dio_read_simple(iocb, iter, &iomi);
 }
+
+/*
+ * In writethrough, we copy user data to folio first and then send the folio
+ * to writeback via dio path. To achieve this, we need callbacks from iomap_ops
+ * and iomap_write_ops. This struct packs them together.
+ */
+struct iomap_writethrough_ops {
+	const struct iomap_ops *ops;
+	const struct iomap_write_ops *write_ops;
+	int (*writethrough_submit)(struct inode *inode, struct iomap *iomap,
+				   loff_t offset, u64 len);
+	int (*end_io)(struct iomap_writethrough_ctx *iocb, ssize_t size,
+		      int error, unsigned int flags);
+};
+
+ssize_t iomap_file_writethrough_write(struct kiocb *iocb, struct iov_iter *i,
+				      const struct iomap_writethrough_ops *wt_ops,
+				      void *private);
 
 #ifdef CONFIG_SWAP
 struct file;
