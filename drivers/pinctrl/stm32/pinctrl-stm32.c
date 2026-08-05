@@ -87,7 +87,7 @@
 #define gpio_range_to_bank(chip) \
 		container_of(chip, struct stm32_gpio_bank, range)
 
-#define HWSPNLCK_TIMEOUT	1000 /* usec */
+#define HWSPNLCK_TIMEOUT	1 /* msec */
 
 static const char * const stm32_gpio_functions[] = {
 	"gpio", "af0", "af1",
