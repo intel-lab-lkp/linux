@@ -336,6 +336,26 @@ next_pte:
 }
 
 #ifdef CONFIG_MEMORY_FAILURE
+unsigned long page_mapped_in_vma_at_address(const struct page *page,
+		struct vm_area_struct *vma, unsigned long addr)
+{
+	struct page_vma_mapped_walk pvmw = {
+		.pfn = page_to_pfn(page),
+		.nr_pages = 1,
+		.vma = vma,
+		.address = addr,
+		.flags = PVMW_SYNC,
+	};
+
+	if (addr < vma->vm_start || addr >= vma->vm_end)
+		return -EFAULT;
+	if (!page_vma_mapped_walk(&pvmw))
+		return -EFAULT;
+	page_vma_mapped_walk_done(&pvmw);
+
+	return pvmw.address;
+}
+
 /**
  * page_mapped_in_vma - check whether a page is really mapped in a VMA
  * @page: the page to test
@@ -350,20 +370,10 @@ unsigned long page_mapped_in_vma(const struct page *page,
 		struct vm_area_struct *vma)
 {
 	const struct folio *folio = page_folio(page);
-	struct page_vma_mapped_walk pvmw = {
-		.pfn = page_to_pfn(page),
-		.nr_pages = 1,
-		.vma = vma,
-		.flags = PVMW_SYNC,
-	};
+	const unsigned long addr = vma_address(vma, page_pgoff(folio, page), 1);
 
-	pvmw.address = vma_address(vma, page_pgoff(folio, page), 1);
-	if (pvmw.address == -EFAULT)
-		goto out;
-	if (!page_vma_mapped_walk(&pvmw))
+	if (addr == -EFAULT)
 		return -EFAULT;
-	page_vma_mapped_walk_done(&pvmw);
-out:
-	return pvmw.address;
+	return page_mapped_in_vma_at_address(page, vma, addr);
 }
 #endif

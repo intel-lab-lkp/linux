@@ -1424,6 +1424,8 @@ void add_to_kill_ksm(struct task_struct *tsk, const struct page *p,
 		     unsigned long ksm_addr);
 unsigned long page_mapped_in_vma(const struct page *page,
 		struct vm_area_struct *vma);
+unsigned long page_mapped_in_vma_at_address(const struct page *page,
+		struct vm_area_struct *vma, unsigned long addr);
 
 #else
 static inline int unmap_poisoned_folio(struct folio *folio, unsigned long pfn, bool must_kill)
