@@ -265,8 +265,12 @@ iscsi_sw_tcp_conn_restore_callbacks(struct iscsi_conn *conn)
 {
 	struct iscsi_tcp_conn *tcp_conn = conn->dd_data;
 	struct iscsi_sw_tcp_conn *tcp_sw_conn = tcp_conn->dd_data;
-	struct sock *sk = tcp_sw_conn->sock->sk;
+	struct sock *sk;
 
+	if (!tcp_sw_conn->sock)
+		return;
+
+	sk = tcp_sw_conn->sock->sk;
 	/* restore socket callbacks, see also: iscsi_sw_tcp_conn_set_callbacks() */
 	write_lock_bh(&sk->sk_callback_lock);
 	sk->sk_user_data    = NULL;
@@ -276,6 +280,7 @@ iscsi_sw_tcp_conn_restore_callbacks(struct iscsi_conn *conn)
 	sk->sk_no_check_tx = 0;
 	write_unlock_bh(&sk->sk_callback_lock);
 }
+
 
 /**
  * iscsi_sw_tcp_xmit_segment - transmit segment
