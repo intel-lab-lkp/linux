@@ -106,6 +106,7 @@ struct cxl_pmu_info {
 	int on_cpu;
 	struct hlist_node node;
 	bool filter_hdm;
+	int msi_vec;
 	int irq;
 };
 
@@ -143,9 +144,9 @@ static int cxl_pmu_parse_caps(struct device *dev, struct cxl_pmu_info *info)
 
 	info->filter_hdm = FIELD_GET(CXL_PMU_CAP_FILTERS_SUP_MSK, val) & CXL_PMU_FILTER_HDM;
 	if (FIELD_GET(CXL_PMU_CAP_INT, val))
-		info->irq = FIELD_GET(CXL_PMU_CAP_MSI_N_MSK, val);
+		info->msi_vec = FIELD_GET(CXL_PMU_CAP_MSI_N_MSK, val);
 	else
-		info->irq = -1;
+		info->msi_vec = -1;
 
 	/* First handle fixed function counters; note if configurable counters found */
 	for (i = 0; i < info->num_counters; i++) {
@@ -873,10 +874,10 @@ static int cxl_pmu_probe(struct device *dev)
 		.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
-	if (info->irq < 0)
+	if (info->msi_vec < 0)
 		return -EINVAL;
 
-	rc = pci_irq_vector(pdev, info->irq);
+	rc = pci_irq_vector(pdev, info->msi_vec);
 	if (rc < 0)
 		return rc;
 	irq = rc;
