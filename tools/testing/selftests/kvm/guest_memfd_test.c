@@ -201,6 +201,102 @@ static void test_numa_allocation(int fd, size_t total_size)
 	kvm_munmap(mem, total_size);
 }
 
+static void verify_pages_on_node(char **pages, int page_count, int *status,
+				 int nid, const char *when)
+{
+	int i;
+
+	kvm_move_pages(0, page_count, pages, NULL, status, 0);
+
+	for (i = 0; i < page_count; i++) {
+		char expected = i;
+		size_t off;
+
+		TEST_ASSERT(status[i] == nid,
+			    "Expected page %d on node %d %s, got it on node %d",
+			    i, nid, when, status[i]);
+
+		for (off = 0; off < page_size; off++)
+			TEST_ASSERT(pages[i][off] == expected,
+				    "Page %d corrupted at offset %zu %s",
+				    i, off, when);
+	}
+}
+
+static void move_pages_to_node(char **pages, int page_count, int *nodes,
+			       int *status, int nid)
+{
+	int i;
+
+	for (i = 0; i < page_count; i++)
+		nodes[i] = nid;
+
+	kvm_move_pages(0, page_count, pages, nodes, status, MPOL_MF_MOVE);
+}
+
+static void __test_migrate_folio(int fd, size_t total_size, bool migratable)
+{
+	int page_count = total_size / page_size;
+	unsigned long nodemask;
+	unsigned long maxnode = BITS_PER_TYPE(nodemask) + 1;
+	int *nodes, *status;
+	char **pages;
+	char *mem;
+	int nids[2];
+	int i;
+
+	if (!get_numa_node_ids(nids, ARRAY_SIZE(nids)))
+		return;
+
+	mem = kvm_mmap(total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
+
+	pages = calloc(page_count, sizeof(*pages));
+	nodes = calloc(page_count, sizeof(*nodes));
+	status = calloc(page_count, sizeof(*status));
+	TEST_ASSERT(pages && nodes && status, "Failed to allocate page arrays");
+
+	/* Allocate all folios on the source node and fill in a known pattern. */
+	nodemask = 1UL << nids[0];
+	kvm_mbind(mem, total_size, MPOL_BIND, &nodemask, maxnode, 0);
+	for (i = 0; i < page_count; i++) {
+		pages[i] = mem + i * page_size;
+		memset(pages[i], i, page_size);
+	}
+	verify_pages_on_node(pages, page_count, status, nids[0], "on allocation");
+
+	if (migratable) {
+		move_pages_to_node(pages, page_count, nodes, status, nids[1]);
+		verify_pages_on_node(pages, page_count, status, nids[1],
+				     "after migration");
+
+		move_pages_to_node(pages, page_count, nodes, status, nids[0]);
+		verify_pages_on_node(pages, page_count, status, nids[0],
+				     "after round-trip");
+	} else {
+		for (i = 0; i < page_count; i++)
+			nodes[i] = nids[1];
+		TEST_ASSERT_EQ(move_pages(0, page_count, pages, nodes, status,
+					  MPOL_MF_MOVE), page_count);
+		verify_pages_on_node(pages, page_count, status, nids[0],
+				     "after rejected migration");
+	}
+
+	free(status);
+	free(nodes);
+	free(pages);
+	kvm_munmap(mem, total_size);
+}
+
+static void test_migrate_folio_supported(int fd, size_t total_size)
+{
+	__test_migrate_folio(fd, total_size, true);
+}
+
+static void test_migrate_folio_not_supported(int fd, size_t total_size)
+{
+	__test_migrate_folio(fd, total_size, false);
+}
+
 static void test_collapse(int fd, u64 flags)
 {
 	const size_t pmd_size = get_trans_hugepagesz();
@@ -483,6 +579,11 @@ static void __test_guest_memfd(struct kvm_vm *vm, u64 flags)
 			gmem_test(fault_overflow, vm, flags);
 			gmem_test(numa_allocation, vm, flags);
 			__gmem_test(collapse, vm, flags, pmd_size);
+
+			if (flags & GUEST_MEMFD_FLAG_MIGRATABLE)
+				gmem_test(migrate_folio_supported, vm, flags);
+			else
+				gmem_test(migrate_folio_not_supported, vm, flags);
 		} else {
 			gmem_test(fault_private, vm, flags);
 		}
@@ -501,6 +602,9 @@ static void __test_guest_memfd(struct kvm_vm *vm, u64 flags)
 
 static void test_guest_memfd(unsigned long vm_type)
 {
+	const u64 migratable_flags = GUEST_MEMFD_FLAG_MMAP |
+				     GUEST_MEMFD_FLAG_INIT_SHARED |
+				     GUEST_MEMFD_FLAG_MIGRATABLE;
 	struct kvm_vm *vm = vm_create_barebones_type(vm_type);
 	u64 flags;
 
@@ -516,6 +620,9 @@ static void test_guest_memfd(unsigned long vm_type)
 	if (flags & GUEST_MEMFD_FLAG_INIT_SHARED)
 		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP |
 				       GUEST_MEMFD_FLAG_INIT_SHARED);
+
+	if ((flags & migratable_flags) == migratable_flags)
+		__test_guest_memfd(vm, migratable_flags);
 
 	kvm_vm_free(vm);
 }
