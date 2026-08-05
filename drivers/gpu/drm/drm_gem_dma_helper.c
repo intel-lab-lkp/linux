@@ -550,8 +550,6 @@ int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct vm_area_struct *
 				  dma_obj->vaddr, dma_obj->dma_addr,
 				  vma->vm_end - vma->vm_start);
 	}
-	if (ret)
-		drm_gem_vm_close(vma);
 
 	return ret;
 }
