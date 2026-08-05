@@ -1051,6 +1051,12 @@ static void sn65dsi83_remove(struct i2c_client *client)
 {
 	struct sn65dsi83 *ctx = i2c_get_clientdata(client);
 
+	/* Stop the reset_work producers, then drain, before unplug. */
+	if (ctx->irq)
+		disable_irq(ctx->irq);
+	cancel_delayed_work_sync(&ctx->monitor_work);
+	cancel_work_sync(&ctx->reset_work);
+
 	drm_bridge_unplug(&ctx->bridge);
 }
 
