@@ -471,6 +471,12 @@ static int netcons_netpoll_setup(struct netconsole_target *nt)
 	int err;
 
 	rtnl_lock();
+	if (nt->remote_ip.family == AF_UNSPEC) {
+		np_err(np, "remote IP address not configured, aborting\n");
+		err = -EDESTADDRREQ;
+		goto unlock;
+	}
+
 	if (np->dev_name[0])
 		ndev = __dev_get_by_name(net, np->dev_name);
 	else if (is_valid_ether_addr(np->dev_mac))
