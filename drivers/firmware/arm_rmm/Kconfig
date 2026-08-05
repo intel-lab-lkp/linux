@@ -1,0 +1,18 @@
+
+config ARCH_SUPPORTS_RMM
+	bool
+
+config ARM_RMM
+	bool "Realm Management Monitor (RMM) Support"
+	depends on ARCH_SUPPORTS_RMM
+	default y
+	help
+	  Support the Realm Management Monitor (RMM) on Arm systems that
+	  implement the Realm Management Extension (RME), as defined by the
+	  Arm Confidential Compute Architecture.
+
+	  The RMM provides the Realm Management Interface (RMI) for use by
+	  the Normal World host and the Realm Service Interface (RSI) for
+	  use by Realm guests. The RSI is used to negotiate the RSI version
+	  and Realm configuration with the RMM and manage the protected
+	  state of memory.
