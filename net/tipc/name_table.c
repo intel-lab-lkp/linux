@@ -251,11 +251,12 @@ static struct publication *tipc_publ_create(struct tipc_uaddr *ua,
  * tipc_service_create - create a service structure for the specified 'type'
  * @net: network namespace
  * @ua: address representing the service to be bound
+ * @err: output error code
  *
  * Allocates a single range structure and sets it to all 0's.
  */
 static struct tipc_service *tipc_service_create(struct net *net,
-						struct tipc_uaddr *ua)
+						struct tipc_uaddr *ua, int *err)
 {
 	struct name_table *nt = tipc_name_table(net);
 	struct tipc_service *service;
@@ -263,6 +264,8 @@ static struct tipc_service *tipc_service_create(struct net *net,
 
 	service = kzalloc_obj(*service, GFP_ATOMIC);
 	if (!service) {
+		if (err)
+			*err = -ENOBUFS;
 		pr_warn("Service creation failed, no memory\n");
 		return NULL;
 	}
@@ -329,7 +332,7 @@ static struct service_range *tipc_service_create_range(struct tipc_service *sc,
 
 static bool tipc_service_insert_publ(struct net *net,
 				     struct tipc_service *sc,
-				     struct publication *p)
+				     struct publication *p, int *err)
 {
 	struct tipc_subscription *sub, *tmp;
 	struct service_range *sr;
@@ -341,8 +344,11 @@ static bool tipc_service_insert_publ(struct net *net,
 
 	spin_lock_bh(&sc->lock);
 	sr = tipc_service_create_range(sc, p);
-	if (!sr)
+	if (!sr) {
+		if (err)
+			*err = -ENOBUFS;
 		goto  exit;
+	}
 
 	first = list_empty(&sr->all_publ);
 
@@ -353,6 +359,8 @@ static bool tipc_service_insert_publ(struct net *net,
 			pr_debug("Failed to bind duplicate %u,%u,%u/%u:%u/%u\n",
 				 p->sr.type, p->sr.lower, p->sr.upper,
 				 node, p->sk.ref, key);
+			if (err)
+				*err = -EINVAL;
 			goto exit;
 		}
 	}
@@ -478,19 +486,22 @@ static struct tipc_service *tipc_service_find(struct net *net,
 struct publication *tipc_nametbl_insert_publ(struct net *net,
 					     struct tipc_uaddr *ua,
 					     struct tipc_socket_addr *sk,
-					     u32 key)
+					     u32 key, int *err)
 {
 	struct tipc_service *sc;
 	struct publication *p;
 
 	p = tipc_publ_create(ua, sk, key);
-	if (!p)
+	if (!p) {
+		if (err)
+			*err = -ENOBUFS;
 		return NULL;
+	}
 
 	sc = tipc_service_find(net, ua);
 	if (!sc)
-		sc = tipc_service_create(net, ua);
-	if (sc && tipc_service_insert_publ(net, sc, p))
+		sc = tipc_service_create(net, ua, err);
+	if (sc && tipc_service_insert_publ(net, sc, p, err))
 		return p;
 	kfree(p);
 	return NULL;
@@ -760,24 +771,46 @@ exit:
 /* tipc_nametbl_publish - add service binding to name table
  */
 struct publication *tipc_nametbl_publish(struct net *net, struct tipc_uaddr *ua,
-					 struct tipc_socket_addr *sk, u32 key)
+					 struct tipc_socket_addr *sk,
+					 u32 key, int *err)
 {
 	struct name_table *nt = tipc_name_table(net);
+	u32 max_user_pub = TIPC_MAX_PUBL - 1;
 	struct tipc_net *tn = tipc_net(net);
 	struct publication *p = NULL;
 	struct sk_buff *skb = NULL;
+	bool protocol_type = false;
 	u32 rc_dests;
 
-	spin_lock_bh(&tn->nametbl_lock);
+	if (ua->sr.type == TIPC_NODE_STATE || ua->sr.type == TIPC_LINK_STATE ||
+	    ua->sr.type == TIPC_TOP_SRV)
+		protocol_type = true;
 
-	if (nt->local_publ_count >= TIPC_MAX_PUBL) {
-		pr_warn("Bind failed, max limit %u reached\n", TIPC_MAX_PUBL);
+	spin_lock_bh(&tn->nametbl_lock);
+	if (protocol_type)
+		goto insert;
+
+	/* Reserve one entry for node state service type because it has cluster
+	 * scope and it is distributed in bulk. So, the maximum number of user's
+	 * publications is (TIPC_MAX_PUBL - 1).
+	 */
+	if (nt->local_publ_count >= max_user_pub) {
+		pr_warn("Bind failed, max limit %u reached\n", max_user_pub);
+		if (err)
+			*err = -EINVAL;
 		goto exit;
 	}
 
-	p = tipc_nametbl_insert_publ(net, ua, sk, key);
+insert:
+	p = tipc_nametbl_insert_publ(net, ua, sk, key, err);
 	if (p) {
-		nt->local_publ_count++;
+		/* Not count node state, link state and topology server types
+		 * so that maximum nt->local_publ_count does not prevent
+		 * protocol service types from being inserted into the name
+		 * table.
+		 */
+		if (!protocol_type)
+			nt->local_publ_count++;
 		skb = tipc_named_publish(net, p);
 	}
 	rc_dests = nt->rc_dests;
@@ -786,8 +819,10 @@ exit:
 
 	if (skb)
 		tipc_node_broadcast(net, skb, rc_dests);
-	return p;
+	else if (p && (p->scope == TIPC_CLUSTER_SCOPE) && err)
+		*err = -ENOBUFS;
 
+	return p;
 }
 
 /**
@@ -810,7 +845,10 @@ void tipc_nametbl_withdraw(struct net *net, struct tipc_uaddr *ua,
 
 	p = tipc_nametbl_remove_publ(net, ua, sk, key);
 	if (p) {
-		nt->local_publ_count--;
+		if (p->sr.type != TIPC_NODE_STATE &&
+		    p->sr.type != TIPC_LINK_STATE &&
+		    p->sr.type != TIPC_TOP_SRV)
+			nt->local_publ_count--;
 		skb = tipc_named_withdraw(net, p);
 		list_del_init(&p->binding_sock);
 		kfree_rcu(p, rcu);
@@ -839,7 +877,7 @@ bool tipc_nametbl_subscribe(struct tipc_subscription *sub)
 	spin_lock_bh(&tn->nametbl_lock);
 	sc = tipc_service_find(sub->net, &ua);
 	if (!sc)
-		sc = tipc_service_create(sub->net, &ua);
+		sc = tipc_service_create(sub->net, &ua, NULL);
 	if (sc) {
 		spin_lock_bh(&sc->lock);
 		tipc_service_subscribe(sc, sub);
