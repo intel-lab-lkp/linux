@@ -121,61 +121,15 @@ use crate::{
     io::IoLoc, //
 };
 
-/// Trait implemented by registers with a fixed offset.
-pub trait FixedRegister: Sized {
-    /// Base type for this register.
-    type Base: ?Sized;
-
-    /// Start offset of the register.
-    ///
-    /// The interpretation of this offset depends on the type of the register.
-    const OFFSET: usize;
-}
-
 /// Allows `()` to be used as the `location` parameter of [`Io::write`](super::Io::write) when
-/// passing a [`FixedRegister`] value.
+/// passing a [`FixedIoLoc`] value.
 impl<Base: ?Sized, T> IoLoc<Base, T> for ()
 where
-    T: FixedRegister<Base = Base>,
+    T: FixedIoLoc<Base>,
 {
     #[inline(always)]
     fn offset(self) -> usize {
-        T::OFFSET
-    }
-}
-
-/// A [`FixedRegister`] carries its location in its type. Thus `FixedRegister` values can be used
-/// as an [`IoLoc`].
-impl<Base: ?Sized, T> IoLoc<Base, T> for T
-where
-    T: FixedRegister<Base = Base>,
-{
-    #[inline(always)]
-    fn offset(self) -> usize {
-        T::OFFSET
-    }
-}
-
-/// Location of a fixed register.
-pub struct FixedRegisterLoc<T: FixedRegister>(PhantomData<T>);
-
-impl<T: FixedRegister> FixedRegisterLoc<T> {
-    /// Returns the location of `T`.
-    #[inline(always)]
-    // We do not implement `Default` so we can be const.
-    #[expect(clippy::new_without_default)]
-    pub const fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<Base: ?Sized, T> IoLoc<Base, T> for FixedRegisterLoc<T>
-where
-    T: FixedRegister<Base = Base>,
-{
-    #[inline(always)]
-    fn offset(self) -> usize {
-        T::OFFSET
+        T::LOCATION.offset()
     }
 }
 
@@ -186,6 +140,11 @@ impl<Base: ?Sized, T> OffsetLoc<Base, T> {
     #[inline]
     pub const fn new(offset: usize) -> Self {
         Self(offset, PhantomData)
+    }
+
+    #[inline]
+    pub const fn const_offset(self) -> usize {
+        self.0
     }
 }
 
@@ -265,6 +224,17 @@ pub trait Array {
     }
 }
 
+/// Trait implemented by types that indicate there is a fixed I/O location for this given type.
+///
+/// Implementors can be used with [`Io::write_reg`](super::Io::write_reg).
+pub trait FixedIoLoc<Base: ?Sized>: Sized {
+    /// Type of [`FixedIoLoc::location`].
+    type Location: IoLoc<Base, Self>;
+
+    /// Location of this type within given base.
+    const LOCATION: Self::Location;
+}
+
 /// Trait implemented by items that contain both a register value and the absolute I/O location at
 /// which to write it.
 ///
@@ -282,14 +252,14 @@ pub trait LocatedRegister<Base: ?Sized> {
 
 impl<Base: ?Sized, T> LocatedRegister<Base> for T
 where
-    T: FixedRegister<Base = Base>,
+    T: FixedIoLoc<Base>,
 {
-    type Location = FixedRegisterLoc<Self::Value>;
+    type Location = T::Location;
     type Value = T;
 
     #[inline(always)]
-    fn into_io_op(self) -> (FixedRegisterLoc<T>, T) {
-        (FixedRegisterLoc::new(), self)
+    fn into_io_op(self) -> (T::Location, T) {
+        (T::LOCATION, self)
     }
 }
 
@@ -577,6 +547,9 @@ macro_rules! register {
     (base: $reg_base:ty;) => {};
 
     // Creates a register at a fixed offset of the MMIO space with provided type.
+    //
+    // This handles all of the fixed offset `@ offset`, alias of register `=> alias` and alias of
+    // register array element `=> alias[idx]` cases.
     (
         base: $reg_base:ty;
         // `$ty` cannot be `:ty` due to follow-set restrictions.
@@ -593,10 +566,29 @@ macro_rules! register {
         $crate::register!(base: $reg_base; $($rest)*);
     };
 
+    // `#[unique]` indicates that this is the only register of this type in this given register.
+    // Thus generate a `FixedIoLoc` impl for it as well.
+    (
+        base: $reg_base:ty;
+        $(#[$attr:meta])* $vis:vis $name:ident: #[unique] $ty: ident $(:: $path_frag:ident)*
+            $(@ $offset:literal)?
+            $(=> $alias:path $([$alias_idx:expr])? )?;
+        $($rest:tt)*
+    ) => {
+        impl $crate::io::register::FixedIoLoc<$reg_base> for $name {
+            type Location = $crate::io::register::OffsetLoc<$reg_base, $ty $(:: $path_frag)*>;
+            const LOCATION: Self::Location = $name;
+        }
+
+        $crate::register!(
+            base: $reg_base;
+            $(#[$attr])* $vis $name: $ty $(:: $path_frag)*
+                $(@ $offset)? $(=> $alias $([$alias_idx])? )?;
+            $($rest)*
+        );
+    };
+
     // Creates a register at a fixed offset of the MMIO space.
-    //
-    // This handles all of the fixed offset `@ offset`, alias of register `=> alias` and alias of
-    // register array element `=> alias[idx]` cases.
     (
         base: $reg_base:ty;
         $(#[$attr:meta])* $vis:vis $name:ident ($storage:ty)
@@ -610,18 +602,11 @@ macro_rules! register {
             $(#[$attr])* $vis struct $name($storage) { $($fields)* }
         );
 
-        impl $crate::io::register::FixedRegister for $name {
-            type Base = $reg_base;
-
-            const OFFSET: usize =
-                $crate::register!(@offset $(@ $offset)? $(=> $alias $([$alias_idx])?)?);
-        }
-
-        $(#[$attr])*
-        $vis const $name: $crate::io::register::FixedRegisterLoc<$name> =
-            $crate::io::register::FixedRegisterLoc::<$name>::new();
-
-        $crate::register!(base: $reg_base; $($rest)*);
+        $crate::register!(
+            base: $reg_base;
+            $(#[$attr])* $vis $name: #[unique] $name $(@ $offset)? $(=> $alias $([$alias_idx])? )?;
+            $($rest)*
+        );
     };
 
     // Creates an array of registers at a fixed offset of the MMIO space.
@@ -653,7 +638,7 @@ macro_rules! register {
 
     // Offset computation helper rules.
     (@offset @ $offset:expr) => { $offset };
-    (@offset => $alias:path) => { <$alias as $crate::io::register::FixedRegister>::OFFSET };
+    (@offset => $alias:path) => { $alias.const_offset() };
     (@offset => $alias:path [$idx:expr]) => {{
         $crate::build_assert::static_assert!(
             $idx < <$alias as $crate::io::register::RegisterArray>::SIZE
