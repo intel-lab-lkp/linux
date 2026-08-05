@@ -31,7 +31,7 @@ struct mdio_device {
 
 	int (*bus_match)(struct device *dev, const struct device_driver *drv);
 	void (*device_free)(struct mdio_device *mdiodev);
-	void (*device_remove)(struct mdio_device *mdiodev);
+	int (*device_remove)(struct mdio_device *mdiodev, bool dynamic);
 
 	/* Bus address of the MDIO device (0-31) */
 	int addr;
@@ -694,6 +694,8 @@ static inline int mdiodev_c45_write(struct mdio_device *mdiodev, u32 devad,
 
 bool mdiobus_is_registered_device(struct mii_bus *bus, int addr);
 struct phy_device *mdiobus_get_phy(struct mii_bus *bus, int addr);
+int mdiobus_device_change_begin(struct mii_bus *bus, bool removing);
+void mdiobus_device_change_end(struct mii_bus *bus, bool removing);
 
 /**
  * mdio_module_driver() - Helper macro for registering mdio drivers

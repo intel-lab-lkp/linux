@@ -1279,10 +1279,8 @@ static struct vsc8531_private *vsc8584_base_priv(struct phy_device *phydev)
 	struct vsc8531_private *vsc8531 = phydev->priv;
 
 	if (vsc8531->ts_base_addr != phydev->mdio.addr) {
-		struct mdio_device *dev;
-
-		dev = phydev->mdio.bus->mdio_map[vsc8531->ts_base_addr];
-		phydev = container_of(dev, struct phy_device, mdio);
+		phydev = mdiobus_get_phy(phydev->mdio.bus,
+					 vsc8531->ts_base_addr);
 
 		return phydev->priv;
 	}
