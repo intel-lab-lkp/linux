@@ -8,12 +8,14 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/timer.h>
 
 /*
@@ -55,6 +57,7 @@
 #define BT_BMC_BUFFER_SIZE 256
 
 struct bt_bmc {
+	struct kref		refcount;
 	struct device		dev;
 	struct miscdevice	miscdev;
 	void __iomem		*base;
@@ -62,6 +65,9 @@ struct bt_bmc {
 	wait_queue_head_t	queue;
 	struct timer_list	poll_timer;
 	struct mutex		mutex;
+	/* Protects the disconnect state against MMIO access. */
+	spinlock_t		state_lock;
+	bool			dead;
 };
 
 static atomic_t open_count = ATOMIC_INIT(0);
@@ -143,20 +149,61 @@ static void set_sms_atn(struct bt_bmc *bt_bmc)
 
 static struct bt_bmc *file_bt_bmc(struct file *file)
 {
-	return container_of(file->private_data, struct bt_bmc, miscdev);
+	return file->private_data;
+}
+
+static void bt_bmc_free(struct kref *refcount)
+{
+	struct bt_bmc *bt_bmc;
+
+	bt_bmc = container_of(refcount, struct bt_bmc, refcount);
+	kfree(bt_bmc);
+}
+
+static bool bt_bmc_request_ready(struct bt_bmc *bt_bmc)
+{
+	unsigned long flags;
+	bool ready;
+
+	spin_lock_irqsave(&bt_bmc->state_lock, flags);
+	ready = bt_bmc->dead ||
+		(bt_inb(bt_bmc, BT_CTRL) & BT_CTRL_H2B_ATN);
+	spin_unlock_irqrestore(&bt_bmc->state_lock, flags);
+	return ready;
+}
+
+static bool bt_bmc_response_ready(struct bt_bmc *bt_bmc)
+{
+	unsigned long flags;
+	bool ready;
+
+	spin_lock_irqsave(&bt_bmc->state_lock, flags);
+	ready = bt_bmc->dead ||
+		!(bt_inb(bt_bmc, BT_CTRL) &
+		  (BT_CTRL_H_BUSY | BT_CTRL_B2H_ATN));
+	spin_unlock_irqrestore(&bt_bmc->state_lock, flags);
+	return ready;
 }
 
 static int bt_bmc_open(struct inode *inode, struct file *file)
 {
-	struct bt_bmc *bt_bmc = file_bt_bmc(file);
+	struct bt_bmc *bt_bmc;
+	int ret = 0;
 
-	if (atomic_inc_return(&open_count) == 1) {
+	bt_bmc = container_of(file->private_data, struct bt_bmc, miscdev);
+	mutex_lock(&bt_bmc->mutex);
+	if (bt_bmc->dead) {
+		ret = -ENODEV;
+	} else if (atomic_inc_return(&open_count) == 1) {
+		kref_get(&bt_bmc->refcount);
+		file->private_data = bt_bmc;
 		clr_b_busy(bt_bmc);
-		return 0;
+	} else {
+		atomic_dec(&open_count);
+		ret = -EBUSY;
 	}
-
-	atomic_dec(&open_count);
-	return -EBUSY;
+	mutex_unlock(&bt_bmc->mutex);
+	return ret;
 }
 
 /*
@@ -185,10 +232,14 @@ static ssize_t bt_bmc_read(struct file *file, char __user *buf,
 	WARN_ON(*ppos);
 
 	if (wait_event_interruptible(bt_bmc->queue,
-				     bt_inb(bt_bmc, BT_CTRL) & BT_CTRL_H2B_ATN))
+				     bt_bmc_request_ready(bt_bmc)))
 		return -ERESTARTSYS;
 
 	mutex_lock(&bt_bmc->mutex);
+	if (bt_bmc->dead) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 
 	if (unlikely(!(bt_inb(bt_bmc, BT_CTRL) & BT_CTRL_H2B_ATN))) {
 		ret = -EIO;
@@ -259,11 +310,14 @@ static ssize_t bt_bmc_write(struct file *file, const char __user *buf,
 	 * poll
 	 */
 	if (wait_event_interruptible(bt_bmc->queue,
-				     !(bt_inb(bt_bmc, BT_CTRL) &
-				       (BT_CTRL_H_BUSY | BT_CTRL_B2H_ATN))))
+				     bt_bmc_response_ready(bt_bmc)))
 		return -ERESTARTSYS;
 
 	mutex_lock(&bt_bmc->mutex);
+	if (bt_bmc->dead) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 
 	if (unlikely(bt_inb(bt_bmc, BT_CTRL) &
 		     (BT_CTRL_H_BUSY | BT_CTRL_B2H_ATN))) {
@@ -298,21 +352,35 @@ static long bt_bmc_ioctl(struct file *file, unsigned int cmd,
 			 unsigned long param)
 {
 	struct bt_bmc *bt_bmc = file_bt_bmc(file);
+	long ret = -EINVAL;
 
+	mutex_lock(&bt_bmc->mutex);
+	if (bt_bmc->dead) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 	switch (cmd) {
 	case BT_BMC_IOCTL_SMS_ATN:
 		set_sms_atn(bt_bmc);
-		return 0;
+		ret = 0;
+		break;
 	}
-	return -EINVAL;
+
+out_unlock:
+	mutex_unlock(&bt_bmc->mutex);
+	return ret;
 }
 
 static int bt_bmc_release(struct inode *inode, struct file *file)
 {
 	struct bt_bmc *bt_bmc = file_bt_bmc(file);
 
+	mutex_lock(&bt_bmc->mutex);
 	atomic_dec(&open_count);
-	set_b_busy(bt_bmc);
+	if (!bt_bmc->dead)
+		set_b_busy(bt_bmc);
+	mutex_unlock(&bt_bmc->mutex);
+	kref_put(&bt_bmc->refcount, bt_bmc_free);
 	return 0;
 }
 
@@ -324,6 +392,11 @@ static __poll_t bt_bmc_poll(struct file *file, poll_table *wait)
 
 	poll_wait(file, &bt_bmc->queue, wait);
 
+	mutex_lock(&bt_bmc->mutex);
+	if (bt_bmc->dead) {
+		mutex_unlock(&bt_bmc->mutex);
+		return EPOLLERR | EPOLLHUP;
+	}
 	ctrl = bt_inb(bt_bmc, BT_CTRL);
 
 	if (ctrl & BT_CTRL_H2B_ATN)
@@ -331,6 +404,7 @@ static __poll_t bt_bmc_poll(struct file *file, poll_table *wait)
 
 	if (!(ctrl & (BT_CTRL_H_BUSY | BT_CTRL_B2H_ATN)))
 		mask |= EPOLLOUT;
+	mutex_unlock(&bt_bmc->mutex);
 
 	return mask;
 }
@@ -357,16 +431,25 @@ static void poll_timer(struct timer_list *t)
 static irqreturn_t bt_bmc_irq(int irq, void *arg)
 {
 	struct bt_bmc *bt_bmc = arg;
+	unsigned long flags;
 	u32 reg;
 
+	spin_lock_irqsave(&bt_bmc->state_lock, flags);
+	if (bt_bmc->dead) {
+		spin_unlock_irqrestore(&bt_bmc->state_lock, flags);
+		return IRQ_NONE;
+	}
 	reg = readl(bt_bmc->base + BT_CR2);
 
 	reg &= BT_CR2_IRQ_H2B | BT_CR2_IRQ_HBUSY;
-	if (!reg)
+	if (!reg) {
+		spin_unlock_irqrestore(&bt_bmc->state_lock, flags);
 		return IRQ_NONE;
+	}
 
 	/* ack pending IRQs */
 	writel(reg, bt_bmc->base + BT_CR2);
+	spin_unlock_irqrestore(&bt_bmc->state_lock, flags);
 
 	wake_up(&bt_bmc->queue);
 	return IRQ_HANDLED;
@@ -413,17 +496,21 @@ static int bt_bmc_probe(struct platform_device *pdev)
 	dev = &pdev->dev;
 	dev_info(dev, "Found bt bmc device\n");
 
-	bt_bmc = devm_kzalloc(dev, sizeof(*bt_bmc), GFP_KERNEL);
+	bt_bmc = kzalloc_obj(struct bt_bmc);
 	if (!bt_bmc)
 		return -ENOMEM;
+	kref_init(&bt_bmc->refcount);
 
 	dev_set_drvdata(&pdev->dev, bt_bmc);
 
 	bt_bmc->base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(bt_bmc->base))
-		return PTR_ERR(bt_bmc->base);
+	if (IS_ERR(bt_bmc->base)) {
+		rc = PTR_ERR(bt_bmc->base);
+		goto err_free;
+	}
 
 	mutex_init(&bt_bmc->mutex);
+	spin_lock_init(&bt_bmc->state_lock);
 	init_waitqueue_head(&bt_bmc->queue);
 
 	bt_bmc->miscdev.minor	= MISC_DYNAMIC_MINOR;
@@ -433,7 +520,7 @@ static int bt_bmc_probe(struct platform_device *pdev)
 	rc = misc_register(&bt_bmc->miscdev);
 	if (rc) {
 		dev_err(dev, "Unable to register misc device\n");
-		return rc;
+		goto err_free;
 	}
 
 	bt_bmc_config_irq(bt_bmc, pdev);
@@ -457,15 +544,31 @@ static int bt_bmc_probe(struct platform_device *pdev)
 	clr_b_busy(bt_bmc);
 
 	return 0;
+
+err_free:
+	dev_set_drvdata(dev, NULL);
+	kref_put(&bt_bmc->refcount, bt_bmc_free);
+	return rc;
 }
 
 static void bt_bmc_remove(struct platform_device *pdev)
 {
 	struct bt_bmc *bt_bmc = dev_get_drvdata(&pdev->dev);
+	unsigned long flags;
 
+	mutex_lock(&bt_bmc->mutex);
+	spin_lock_irqsave(&bt_bmc->state_lock, flags);
+	bt_bmc->dead = true;
+	spin_unlock_irqrestore(&bt_bmc->state_lock, flags);
+	mutex_unlock(&bt_bmc->mutex);
 	misc_deregister(&bt_bmc->miscdev);
+	wake_up_all(&bt_bmc->queue);
 	if (bt_bmc->irq < 0)
-		timer_delete_sync(&bt_bmc->poll_timer);
+		timer_shutdown_sync(&bt_bmc->poll_timer);
+	else
+		devm_free_irq(&pdev->dev, bt_bmc->irq, bt_bmc);
+	dev_set_drvdata(&pdev->dev, NULL);
+	kref_put(&bt_bmc->refcount, bt_bmc_free);
 }
 
 static const struct of_device_id bt_bmc_match[] = {
