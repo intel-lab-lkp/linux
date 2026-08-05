@@ -1308,8 +1308,10 @@ static bool kick_pool_pick(struct worker_pool *pool, struct task_struct **wakep)
 	 * If @pool has non-strict affinity, @worker might have ended up outside
 	 * its affinity scope. Repatriate.
 	 */
-	if (!pool->attrs->affn_strict &&
-	    !cpumask_test_cpu(p->wake_cpu, pool->attrs->__pod_cpumask)) {
+	bool wake_cpu_in_pod = cpumask_test_cpu(READ_ONCE(p->wake_cpu),
+						pool->attrs->__pod_cpumask);
+
+	if (!pool->attrs->affn_strict && !wake_cpu_in_pod) {
 		struct work_struct *work = list_first_entry(&pool->worklist,
 						struct work_struct, entry);
 		int wake_cpu = cpumask_any_and_distribute(pool->attrs->__pod_cpumask,
