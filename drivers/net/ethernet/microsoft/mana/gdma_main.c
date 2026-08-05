@@ -689,15 +689,16 @@ out:
 
 static void mana_serv_reset(struct pci_dev *pdev)
 {
-	struct gdma_context *gc = pci_get_drvdata(pdev);
+	struct gdma_context *gc;
 	struct hw_channel_context *hwc;
 	int ret;
 
+	device_lock(&pdev->dev);
+	gc = pci_get_drvdata(pdev);
 	if (!gc) {
 		/* Perform PCI rescan on device if GC is not set up */
 		dev_err(&pdev->dev, "MANA service: GC not setup, rescanning\n");
-		mana_serv_rescan(pdev);
-		return;
+		goto rescan;
 	}
 
 	hwc = gc->hwc.driver_data;
@@ -719,8 +720,8 @@ static void mana_serv_reset(struct pci_dev *pdev)
 	if (ret == -ETIMEDOUT || ret == -EPROTO) {
 		/* Perform PCI rescan on device if we failed on HWC */
 		dev_err(&pdev->dev, "MANA service: resume failed, rescanning\n");
-		mana_serv_rescan(pdev);
-		return;
+		clear_bit(GC_IN_SERVICE, &gc->flags);
+		goto rescan;
 	}
 
 	if (ret)
@@ -730,6 +731,12 @@ static void mana_serv_reset(struct pci_dev *pdev)
 
 out:
 	clear_bit(GC_IN_SERVICE, &gc->flags);
+	device_unlock(&pdev->dev);
+	return;
+
+rescan:
+	device_unlock(&pdev->dev);
+	mana_serv_rescan(pdev);
 }
 
 static void mana_do_service(enum gdma_eqe_type type, struct pci_dev *pdev)
@@ -2616,6 +2623,7 @@ static void mana_gd_remove(struct pci_dev *pdev)
 
 	pci_iounmap(pdev, gc->bar0_va);
 
+	pci_set_drvdata(pdev, NULL);
 	vfree(gc);
 
 	pci_release_regions(pdev);
