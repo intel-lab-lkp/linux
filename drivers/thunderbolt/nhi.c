@@ -1160,6 +1160,43 @@ static void nhi_reset(struct tb_nhi *nhi)
 	dev_warn(nhi->dev, "timeout resetting host router\n");
 }
 
+/**
+ * nhi_host_interface_reset() - Issue host interface reset
+ * @tb: Domain whose host interface is reset
+ *
+ * Resets the host interface by setting the RST bit in the host interface
+ * reset register. This brings the registers in the memory BAR to their
+ * default state and clears the End-to-End Flow Control state. Does nothing
+ * unless the host interface is known to need this (QUIRK_HOST_INTERFACE_RESET).
+ *
+ * The control channel is stopped over the reset because the reset clears
+ * the ring state as well.
+ */
+void nhi_host_interface_reset(struct tb *tb)
+{
+	struct tb_nhi *nhi = tb->nhi;
+	u32 val;
+
+	if (!(nhi->quirks & QUIRK_HOST_INTERFACE_RESET))
+		return;
+
+	val = ioread32(nhi->iobase + REG_CAPS);
+	/* Only v1 host interfaces implement the reset */
+	if (FIELD_GET(REG_CAPS_VERSION_MASK, val) >= REG_CAPS_VERSION_2)
+		return;
+
+	dev_dbg(nhi->dev, "issuing host interface reset\n");
+
+	tb_ctl_stop(tb->ctl);
+
+	iowrite32(REG_HOST_INTERFACE_RESET_RST,
+		  nhi->iobase + REG_HOST_INTERFACE_RESET);
+	/* Wait for tHIReset (10 ms) to complete */
+	usleep_range(10000, 20000);
+
+	tb_ctl_start(tb->ctl);
+}
+
 static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 {
 	struct tb *tb;

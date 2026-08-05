@@ -62,6 +62,27 @@ static void nhi_pci_check_quirks(struct tb_nhi_pci *nhi_pci)
 			nhi->quirks |= QUIRK_E2E;
 			break;
 		}
+	} else if (pdev->vendor == PCI_VENDOR_ID_AMD) {
+		switch (pdev->device) {
+		case 0x1120:
+		case 0x1121:
+		case 0x113b:
+		case 0x113c:
+		case 0x1155:
+		case 0x1158:
+		case 0x1159:
+		case 0x151c:
+		case 0x151d:
+		case 0x158d:
+		case 0x158e:
+			/*
+			 * These AMD hosts may hang the Tx ring when the
+			 * DMA paths are torn down so they need the host
+			 * interface reset after each teardown.
+			 */
+			nhi->quirks |= QUIRK_HOST_INTERFACE_RESET;
+			break;
+		}
 	}
 }
 
