@@ -1155,6 +1155,9 @@ static int install_breakpoint(struct uprobe *uprobe, struct vm_area_struct *vma,
 	bool first_uprobe;
 	int ret;
 
+	if (!(vma->vm_flags & VM_EXEC))
+		return 0;
+
 	ret = prepare_uprobe(uprobe, vma->vm_file, mm, vaddr);
 	if (ret)
 		return ret;
