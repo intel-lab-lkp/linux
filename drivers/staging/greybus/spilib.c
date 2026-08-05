@@ -444,7 +444,6 @@ static int gb_spi_setup_device(struct gb_spilib *spi, u8 cs)
 	struct gb_spi_device_config_request request;
 	struct gb_spi_device_config_response response;
 	struct spi_board_info spi_board = { {0} };
-	struct spi_device *spidev;
 	int ret;
 	u8 dev_type;
 
@@ -458,25 +457,29 @@ static int gb_spi_setup_device(struct gb_spilib *spi, u8 cs)
 
 	dev_type = response.device_type;
 
-	if (dev_type == GB_SPI_SPI_DEV)
+	switch (dev_type) {
+	case GB_SPI_SPI_DEV:
 		strscpy(spi_board.modalias, "spidev",
 			sizeof(spi_board.modalias));
-	else if (dev_type == GB_SPI_SPI_NOR)
+		break;
+	case GB_SPI_SPI_NOR:
 		strscpy(spi_board.modalias, "spi-nor",
 			sizeof(spi_board.modalias));
-	else if (dev_type == GB_SPI_SPI_MODALIAS)
+		break;
+	case GB_SPI_SPI_MODALIAS:
 		memcpy(spi_board.modalias, response.name,
-		       sizeof(spi_board.modalias));
-	else
+		sizeof(spi_board.modalias));
+		break;
+	default:
 		return -EINVAL;
+	}
 
 	spi_board.mode		= le16_to_cpu(response.mode);
 	spi_board.bus_num	= ctlr->bus_num;
 	spi_board.chip_select	= cs;
 	spi_board.max_speed_hz	= le32_to_cpu(response.max_speed_hz);
 
-	spidev = spi_new_device(ctlr, &spi_board);
-	if (!spidev)
+	if (!spi_new_device(ctlr, &spi_board))
 		return -EINVAL;
 
 	return 0;
