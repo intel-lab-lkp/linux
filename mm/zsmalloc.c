@@ -2041,7 +2041,8 @@ static unsigned long zs_can_compact(struct size_class *class)
 }
 
 static unsigned long __zs_compact(struct zs_pool *pool,
-				  struct size_class *class)
+				  struct size_class *class,
+				  unsigned long max_pages)
 {
 	struct zspage *src_zspage = NULL;
 	struct zspage *dst_zspage = NULL;
@@ -2054,7 +2055,7 @@ static unsigned long __zs_compact(struct zs_pool *pool,
 	 */
 	write_lock(&pool->lock);
 	spin_lock(&class->lock);
-	while (zs_can_compact(class)) {
+	while ((pages_freed < max_pages) && zs_can_compact(class)) {
 		int fg;
 
 		if (!dst_zspage) {
@@ -2105,11 +2106,15 @@ static unsigned long __zs_compact(struct zs_pool *pool,
 	return pages_freed;
 }
 
-unsigned long zs_compact(struct zs_pool *pool)
+static unsigned long zs_compact_pool(struct zs_pool *pool,
+					unsigned long max_pages)
 {
 	int i;
 	struct size_class *class;
 	unsigned long pages_freed = 0;
+
+	if (!max_pages)
+		return 0;
 
 	/*
 	 * Pool compaction is performed under pool->lock so it is basically
@@ -2124,12 +2129,20 @@ unsigned long zs_compact(struct zs_pool *pool)
 		class = pool->size_class[i];
 		if (class->index != i)
 			continue;
-		pages_freed += __zs_compact(pool, class);
+		pages_freed += __zs_compact(pool, class,
+					max_pages - pages_freed);
+		if (pages_freed >= max_pages)
+			break;
 	}
 	atomic_long_add(pages_freed, &pool->stats.pages_compacted);
 	atomic_set(&pool->compaction_in_progress, 0);
 
 	return pages_freed;
+}
+
+unsigned long zs_compact(struct zs_pool *pool)
+{
+	return zs_compact_pool(pool, ULONG_MAX);
 }
 EXPORT_SYMBOL_GPL(zs_compact);
 
