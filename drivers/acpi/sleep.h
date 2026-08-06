@@ -18,6 +18,7 @@ static inline acpi_status acpi_set_waking_vector(u32 wakeup_address)
 extern int acpi_s2idle_begin(void);
 extern int acpi_s2idle_prepare(void);
 extern bool acpi_s2idle_wake(void);
+extern void acpi_s2idle_restore_check_powerkey(void);
 extern void acpi_s2idle_restore(void);
 extern void acpi_s2idle_end(void);
 

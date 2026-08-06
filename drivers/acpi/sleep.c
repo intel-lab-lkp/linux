@@ -22,6 +22,7 @@
 #include <linux/syscore_ops.h>
 #include <asm/io.h>
 #include <trace/events/power.h>
+#include <acpi/button.h>
 
 #include "internal.h"
 #include "sleep.h"
@@ -518,6 +519,7 @@ static void acpi_pm_finish(void)
 						    NULL, -1);
 	if (pwr_btn_adev) {
 		pm_wakeup_event(&pwr_btn_adev->dev, 0);
+		acpi_power_button_wakeup(pwr_btn_adev);
 		acpi_dev_put(pwr_btn_adev);
 	}
 }
@@ -818,6 +820,24 @@ bool acpi_s2idle_wake(void)
 	return false;
 }
 
+void acpi_s2idle_restore_check_powerkey(void)
+{
+	struct acpi_device *pwr_btn_adev;
+	acpi_event_status pwr_btn_status = ACPI_EVENT_FLAG_DISABLED;
+
+	acpi_get_event_status(ACPI_EVENT_POWER_BUTTON, &pwr_btn_status);
+
+	if (pwr_btn_status & ACPI_EVENT_FLAG_STATUS_SET) {
+		pwr_btn_adev = acpi_dev_get_first_match_dev(ACPI_BUTTON_HID_POWERF,
+							    NULL, -1);
+		if (pwr_btn_adev) {
+			pm_wakeup_event(&pwr_btn_adev->dev, 0);
+			acpi_power_button_wakeup(pwr_btn_adev);
+			acpi_dev_put(pwr_btn_adev);
+		}
+	}
+}
+
 void acpi_s2idle_restore(void)
 {
 	/*
@@ -849,6 +869,7 @@ static const struct platform_s2idle_ops acpi_s2idle_ops = {
 	.begin = acpi_s2idle_begin,
 	.prepare = acpi_s2idle_prepare,
 	.wake = acpi_s2idle_wake,
+	.restore_early = acpi_s2idle_restore_check_powerkey,
 	.restore = acpi_s2idle_restore,
 	.end = acpi_s2idle_end,
 };

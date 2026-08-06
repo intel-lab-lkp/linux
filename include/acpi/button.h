@@ -8,10 +8,15 @@
 
 #if IS_ENABLED(CONFIG_ACPI_BUTTON)
 extern int acpi_lid_open(void);
+extern void acpi_power_button_wakeup(struct acpi_device *device);
 #else
 static inline int acpi_lid_open(void)
 {
 	return 1;
+}
+
+static inline void acpi_power_button_wakeup(struct acpi_device *device)
+{
 }
 #endif /* IS_ENABLED(CONFIG_ACPI_BUTTON) */
 

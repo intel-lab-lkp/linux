@@ -598,8 +598,10 @@ static void acpi_s2idle_restore_early_lps0(void)
 {
 	struct acpi_s2idle_dev_ops *handler;
 
-	if (!lps0_device_handle || sleep_no_lps0)
+	if (!lps0_device_handle || sleep_no_lps0) {
+		acpi_s2idle_restore_check_powerkey();
 		return;
+	}
 
 	list_for_each_entry(handler, &lps0_s2idle_devops_head, list_node)
 		if (handler->restore)
