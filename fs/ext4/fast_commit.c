@@ -203,17 +203,16 @@ static inline void ext4_fc_set_snap_err(int *snap_err, int err)
 static void ext4_end_buffer_io_sync(struct bio *bio)
 {
 	struct buffer_head *bh;
-	bool uptodate = bio_endio_bh(bio, &bh);
+	bool success = bio_endio_bh(bio, &bh);
 
 	BUFFER_TRACE(bh, "");
-	if (uptodate) {
-		ext4_debug("%s: Block %lld up-to-date",
+	if (success) {
+		ext4_debug("%s: Block %lld written",
 			   __func__, bh->b_blocknr);
-		set_buffer_uptodate(bh);
 	} else {
-		ext4_debug("%s: Block %lld not up-to-date",
+		ext4_debug("%s: Block %lld write failed",
 			   __func__, bh->b_blocknr);
-		clear_buffer_uptodate(bh);
+		mark_buffer_write_io_error(bh);
 	}
 
 	unlock_buffer(bh);
