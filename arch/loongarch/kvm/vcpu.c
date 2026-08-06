@@ -210,7 +210,8 @@ static int kvm_check_requests(struct kvm_vcpu *vcpu)
 		return RESUME_GUEST;
 
 	if (kvm_check_request(KVM_REQ_TLB_FLUSH, vcpu))
-		vcpu->arch.vpid = 0;  /* Drop vpid for this vCPU */
+		if (!cpu_has_guestid)
+			vcpu->arch.vpid = 0;  /* Drop vpid for this vCPU */
 
 	if (kvm_dirty_ring_check_request(vcpu))
 		return RESUME_HOST;

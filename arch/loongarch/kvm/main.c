@@ -218,7 +218,8 @@ static void kvm_update_vpid(struct kvm_vcpu *vcpu, int cpu)
 		++vpid; /* vpid 0 reserved for root */
 
 		/* start new vpid cycle */
-		kvm_flush_tlb_all();
+		if (!cpu_has_guestid)
+			kvm_flush_tlb_all();
 	}
 
 	context->vpid_cache = vpid;
@@ -282,10 +283,13 @@ static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
 {
 	unsigned long vmid;
 
-	vmid = vcpu->arch.vpid & vpid_mask;
-	if (vcpu->arch.hw_vmid != vmid) {
-		vcpu->arch.hw_vmid = vcpu->arch.vpid & vpid_mask;
-		kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
+	/* On some machines like 3A5000, vmid needs the same with vpid */
+	if (!cpu_has_guestid) {
+		vmid = vcpu->arch.vpid & vpid_mask;
+		if (vcpu->arch.hw_vmid != vmid) {
+			vcpu->arch.hw_vmid = vcpu->arch.vpid & vpid_mask;
+			kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
+		}
 	}
 }
 
