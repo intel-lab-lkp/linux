@@ -308,6 +308,16 @@ static int macb_mdio_wait_for_idle(struct macb *bp)
 				  1, MACB_MDIO_TIMEOUT);
 }
 
+/* IDLE clears only once the frame has started, up to one MDC period after
+ * MAN is written.
+ */
+static int macb_mdio_wait_for_frame_done(struct macb *bp)
+{
+	fsleep(20);
+
+	return macb_mdio_wait_for_idle(bp);
+}
+
 static int macb_mdio_read_c22(struct mii_bus *bus, int mii_id, int regnum)
 {
 	struct macb *bp = bus->priv;
@@ -327,7 +337,7 @@ static int macb_mdio_read_c22(struct mii_bus *bus, int mii_id, int regnum)
 			      | MACB_BF(REGA, regnum)
 			      | MACB_BF(CODE, MACB_MAN_C22_CODE)));
 
-	status = macb_mdio_wait_for_idle(bp);
+	status = macb_mdio_wait_for_frame_done(bp);
 	if (status < 0)
 		goto mdio_read_exit;
 
@@ -362,7 +372,7 @@ static int macb_mdio_read_c45(struct mii_bus *bus, int mii_id, int devad,
 			      | MACB_BF(DATA, regnum & 0xFFFF)
 			      | MACB_BF(CODE, MACB_MAN_C45_CODE)));
 
-	status = macb_mdio_wait_for_idle(bp);
+	status = macb_mdio_wait_for_frame_done(bp);
 	if (status < 0)
 		goto mdio_read_exit;
 
@@ -372,7 +382,7 @@ static int macb_mdio_read_c45(struct mii_bus *bus, int mii_id, int devad,
 			      | MACB_BF(REGA, devad & 0x1F)
 			      | MACB_BF(CODE, MACB_MAN_C45_CODE)));
 
-	status = macb_mdio_wait_for_idle(bp);
+	status = macb_mdio_wait_for_frame_done(bp);
 	if (status < 0)
 		goto mdio_read_exit;
 
@@ -405,7 +415,7 @@ static int macb_mdio_write_c22(struct mii_bus *bus, int mii_id, int regnum,
 			      | MACB_BF(CODE, MACB_MAN_C22_CODE)
 			      | MACB_BF(DATA, value)));
 
-	status = macb_mdio_wait_for_idle(bp);
+	status = macb_mdio_wait_for_frame_done(bp);
 	if (status < 0)
 		goto mdio_write_exit;
 
@@ -439,7 +449,7 @@ static int macb_mdio_write_c45(struct mii_bus *bus, int mii_id,
 			      | MACB_BF(DATA, regnum & 0xFFFF)
 			      | MACB_BF(CODE, MACB_MAN_C45_CODE)));
 
-	status = macb_mdio_wait_for_idle(bp);
+	status = macb_mdio_wait_for_frame_done(bp);
 	if (status < 0)
 		goto mdio_write_exit;
 
@@ -450,7 +460,7 @@ static int macb_mdio_write_c45(struct mii_bus *bus, int mii_id,
 			      | MACB_BF(CODE, MACB_MAN_C45_CODE)
 			      | MACB_BF(DATA, value)));
 
-	status = macb_mdio_wait_for_idle(bp);
+	status = macb_mdio_wait_for_frame_done(bp);
 	if (status < 0)
 		goto mdio_write_exit;
 
