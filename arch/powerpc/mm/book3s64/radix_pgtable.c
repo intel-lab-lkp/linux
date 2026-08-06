@@ -987,31 +987,6 @@ bool vmemmap_can_optimize(struct vmem_altmap *altmap, struct dev_pagemap *pgmap)
 }
 #endif
 
-int __meminit vmemmap_check_pmd(pmd_t *pmdp, int node,
-				unsigned long addr, unsigned long next)
-{
-	int large = pmd_leaf(*pmdp);
-
-	if (large)
-		vmemmap_verify(pmdp_ptep(pmdp), node, addr, next);
-
-	return large;
-}
-
-void __meminit vmemmap_set_pmd(pmd_t *pmdp, void *p, int node,
-			       unsigned long addr, unsigned long next)
-{
-	pte_t entry;
-	pte_t *ptep = pmdp_ptep(pmdp);
-
-	VM_BUG_ON(!IS_ALIGNED(addr, PMD_SIZE));
-	entry = pfn_pte(__pa(p) >> PAGE_SHIFT, PAGE_KERNEL);
-	set_pte_at(&init_mm, addr, ptep, entry);
-	asm volatile("ptesync": : :"memory");
-
-	vmemmap_verify(ptep, node, addr, next);
-}
-
 static pte_t * __meminit radix__vmemmap_pte_populate(pmd_t *pmdp, unsigned long addr,
 						     int node,
 						     struct vmem_altmap *altmap,
@@ -1055,7 +1030,6 @@ static pte_t * __meminit radix__vmemmap_pte_populate(pmd_t *pmdp, unsigned long 
 		VM_BUG_ON(!PAGE_ALIGNED(addr));
 		entry = pfn_pte(__pa(p) >> PAGE_SHIFT, PAGE_KERNEL);
 		set_pte_at(&init_mm, addr, pte, entry);
-		asm volatile("ptesync": : :"memory");
 	}
 	return pte;
 }
