@@ -25891,6 +25891,12 @@ F:	Documentation/devicetree/bindings/phy/starfive,jh7110-usb-phy.yaml
 F:	drivers/phy/starfive/phy-jh7110-pcie.c
 F:	drivers/phy/starfive/phy-jh7110-usb.c
 
+STARFIVE JHB100 DEVICETREES
+M:	Changhuang Liang <changhuang.liang@starfivetech.com>
+L:	linux-riscv@lists.infradead.org
+S:	Supported
+F:	arch/riscv/boot/dts/starfive/jhb100*
+
 STARFIVE JHB100 EXTERNAL INTERRUPT CONTROLLER DRIVER
 M:	Changhuang Liang <changhuang.liang@starfivetech.com>
 S:	Supported
