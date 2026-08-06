@@ -166,11 +166,32 @@ asmlinkage efi_status_t efi_handle_corrupted_x18(efi_status_t s, const char *f)
 	return s;
 }
 
+/*
+ * Whether an EFI runtime service call may run preemptibly.
+ *
+ * When PAN is emulated by switching TTBR0_EL1, the EFI mm is installed into
+ * the register by uaccess_ttbr0_enable() below, and only a return from
+ * exception ever puts it back: check_and_switch_context() deliberately skips
+ * the write ("Defer TTBR0_EL1 setting for user threads to uaccess_enable()
+ * when emulating PAN"), and __switch_to() never touches it. A voluntary
+ * reschedule performs no return from exception, so a preemptible runtime call
+ * can be scheduled back in holding another task's TTBR0_EL1 and take a level 0
+ * translation fault on its next efi_mm access. Keep those configurations on
+ * the non-preemptible path, which is what they used before commit
+ * a5baf582f4c0 ("arm64/efi: Call EFI runtime services without disabling
+ * preemption").
+ */
+static bool efi_runtime_preemptible(void)
+{
+	return !system_uses_ttbr0_pan() && preemptible() &&
+	       (current->flags & PF_KTHREAD);
+}
+
 void arch_efi_call_virt_setup(void)
 {
 	efi_runtime_assert_lock_held();
 
-	if (preemptible() && (current->flags & PF_KTHREAD)) {
+	if (efi_runtime_preemptible()) {
 		/*
 		 * Disable migration to ensure that a preempted EFI runtime
 		 * service call will be resumed on the same CPU. This avoids
@@ -207,7 +228,7 @@ void arch_efi_call_virt_teardown(void)
 	 */
 	uaccess_ttbr0_disable();
 
-	if (preemptible() && (current->flags & PF_KTHREAD)) {
+	if (efi_runtime_preemptible()) {
 		kthread_unuse_mm(&efi_mm);
 		migrate_enable();
 	} else {
