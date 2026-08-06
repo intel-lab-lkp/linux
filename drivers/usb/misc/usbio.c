@@ -341,6 +341,9 @@ read:
 	if (bpkt->header.flags & USBIO_PKTFLAG_ERR)
 		return -EREMOTEIO;
 
+	if (bpkt_len > act - sizeof(*bpkt))
+		return -EPROTO;
+
 	if (ibuf_len < bpkt_len)
 		return -ENOSPC;
 
