@@ -8571,7 +8571,8 @@ gva_t vmx_get_untagged_addr(struct kvm_vcpu *vcpu, gva_t gva, unsigned int flags
 	int lam_bit;
 	unsigned long cr3_bits;
 
-	if (flags & (X86EMUL_F_FETCH | X86EMUL_F_IMPLICIT | X86EMUL_F_INVLPG))
+	if (flags & (X86EMUL_F_FETCH | X86EMUL_F_BRANCH | X86EMUL_F_IMPLICIT |
+		     X86EMUL_F_INVLPG))
 		return gva;
 
 	if (!is_64_bit_mode(vcpu))
