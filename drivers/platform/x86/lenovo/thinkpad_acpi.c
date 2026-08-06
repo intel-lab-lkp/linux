@@ -448,11 +448,14 @@ do {									\
 		       __func__, ##arg);				\
 } while (0)
 
+static inline const char * __init str_supported(bool is_supported)
+{
+	return is_supported ? "supported" : "not supported";
+}
+
 #ifdef CONFIG_THINKPAD_ACPI_DEBUG
 #define vdbg_printk dbg_printk
-static const char *str_supported(int is_supported);
 #else
-static inline const char *str_supported(int is_supported) { return ""; }
 #define vdbg_printk(a_dbg_level, format, arg...)	\
 	do { if (0) no_printk(format, ##arg); } while (0)
 #endif
@@ -5798,7 +5801,7 @@ static int __init led_init(struct ibm_init_struct *iibm)
 	}
 
 	vdbg_printk(TPACPI_DBG_INIT, "LED commands are %s, mode %d\n",
-		str_supported(led_supported), led_supported);
+		str_supported(led_supported != TPACPI_LED_NONE), led_supported);
 
 	if (led_supported == TPACPI_LED_NONE)
 		return -ENODEV;
@@ -11514,15 +11517,6 @@ static struct proc_dir_entry *proc_dir;
  */
 
 static bool force_load;
-
-#ifdef CONFIG_THINKPAD_ACPI_DEBUG
-static const char * __init str_supported(int is_supported)
-{
-	static char text_unsupported[] __initdata = "not supported";
-
-	return (is_supported) ? &text_unsupported[4] : &text_unsupported[0];
-}
-#endif /* CONFIG_THINKPAD_ACPI_DEBUG */
 
 static struct dentry *tpacpi_dbg;
 static void tpacpi_debugfs_init(void)
