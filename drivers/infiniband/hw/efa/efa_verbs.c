@@ -272,6 +272,9 @@ int efa_query_device(struct ib_device *ibdev,
 		if (EFA_DEV_CAP(dev, EVENT_COUNTERS))
 			resp.device_caps |= EFA_QUERY_DEVICE_CAPS_COMP_CNTR;
 
+		if (EFA_DEV_CAP(dev, MR_RELAXED_ORDERING))
+			resp.device_caps |= EFA_QUERY_DEVICE_CAPS_MR_RELAXED_ORDERING;
+
 		if (EFA_DEV_CAP(dev, SQ_64_BIT_REQ_ID))
 			resp.device_caps |= EFA_QUERY_DEVICE_CAPS_SQ_64_BIT_REQ_ID;
 
@@ -1647,6 +1650,9 @@ static struct efa_mr *efa_alloc_mr(struct ib_pd *ibpd, int access_flags,
 		(EFA_DEV_CAP(dev, RDMA_READ) ? IB_ACCESS_REMOTE_READ : 0) |
 		(EFA_DEV_CAP(dev, RDMA_WRITE) ? IB_ACCESS_REMOTE_WRITE : 0);
 
+	if (EFA_DEV_CAP(dev, MR_RELAXED_ORDERING))
+		supp_access_flags |= IB_ACCESS_RELAXED_ORDERING;
+
 	access_flags &= ~IB_ACCESS_OPTIONAL;
 	if (access_flags & ~supp_access_flags) {
 		ibdev_dbg(&dev->ibdev,
@@ -1679,6 +1685,7 @@ static int efa_register_mr(struct ib_pd *ibpd, struct efa_mr *mr, u64 start,
 	params.permissions.local_write = !!(access_flags & IB_ACCESS_LOCAL_WRITE);
 	params.permissions.remote_write = !!(access_flags & IB_ACCESS_REMOTE_WRITE);
 	params.permissions.remote_read = !!(access_flags & IB_ACCESS_REMOTE_READ);
+	params.relaxed_ordering = !!(access_flags & IB_ACCESS_RELAXED_ORDERING);
 
 	pg_sz = ib_umem_find_best_pgsz(mr->umem,
 				       dev->dev_attr.page_size_cap,
