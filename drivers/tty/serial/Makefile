@@ -26,6 +26,7 @@ obj-y += 8250/
 
 obj-$(CONFIG_SERIAL_ALTERA_JTAGUART)	+= altera_jtaguart.o
 obj-$(CONFIG_SERIAL_ALTERA_UART)	+= altera_uart.o
+obj-$(CONFIG_SERIAL_AMBARELLA)		+= ambarella_uart.o
 obj-$(CONFIG_SERIAL_AMBA_PL010)		+= amba-pl010.o
 obj-$(CONFIG_SERIAL_AMBA_PL011)		+= amba-pl011.o
 obj-$(CONFIG_SERIAL_GRLIB_GAISLER_APBUART) += apbuart.o

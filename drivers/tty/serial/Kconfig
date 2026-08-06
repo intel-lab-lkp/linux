@@ -18,6 +18,27 @@ source "drivers/tty/serial/8250/Kconfig"
 
 comment "Non-8250 serial port support"
 
+config SERIAL_AMBARELLA
+	bool "Ambarella UART support"
+	depends on ARCH_AMBARELLA || COMPILE_TEST
+	select SERIAL_CORE
+	help
+	  Say Y here to enable the on-chip UART controller found on Ambarella
+	  SoCs. The driver supports interrupt-driven transmit and receive
+	  operation through the serial core. It can also provide a system
+	  console when SERIAL_AMBARELLA_CONSOLE is enabled.
+
+config SERIAL_AMBARELLA_CONSOLE
+	bool "Console on Ambarella UART"
+	depends on SERIAL_AMBARELLA
+	select SERIAL_CORE_CONSOLE
+	select SERIAL_EARLYCON
+	help
+	  Say Y here to use an Ambarella UART as the system console. This
+	  enables both the regular serial console and earlycon support for
+	  messages emitted before the full UART driver is initialized.
+	  Select this option for early boot diagnostics on Ambarella systems.
+
 config SERIAL_AMBA_PL010
 	tristate "ARM AMBA PL010 serial port support"
 	depends on ARM_AMBA || COMPILE_TEST
