@@ -212,11 +212,16 @@ int get_cpu_topology(struct cpupower_topology *cpu_top)
 	qsort(cpu_top->core_info, cpus, sizeof(struct cpuid_core_info),
 	      __compare_core_cpu_list);
 
-	last_cpu_list = cpu_top->core_info[0].core_cpu_list;
-	cpu_top->cores = 1;
-	for (cpu = 1; cpu < cpus; cpu++) {
-		if (strcmp(cpu_top->core_info[cpu].core_cpu_list, last_cpu_list) != 0 &&
-		    cpu_top->core_info[cpu].pkg != -1) {
+	last_cpu_list = NULL;
+	cpu_top->cores = 0;
+	for (cpu = 0; cpu < cpus; cpu++) {
+		if (cpu_top->core_info[cpu].pkg == -1 ||
+		    cpu_top->core_info[cpu].core == -1)
+			continue;
+
+		if (!last_cpu_list ||
+		    strcmp(cpu_top->core_info[cpu].core_cpu_list,
+			   last_cpu_list) != 0) {
 			last_cpu_list = cpu_top->core_info[cpu].core_cpu_list;
 			cpu_top->cores++;
 		}
