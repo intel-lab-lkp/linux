@@ -37,6 +37,7 @@
 #include <linux/smp.h>
 #include <linux/mm.h>
 #include <linux/kvm_types.h>
+#include <linux/units.h>
 
 #include <xen/xen.h>
 
@@ -176,7 +177,7 @@ static struct resource lapic_resource = {
 };
 
 /* Measured in ticks per HZ. */
-unsigned int lapic_timer_period = 0;
+static unsigned int lapic_timer_period;
 
 static void apic_pm_activate(void);
 
@@ -794,6 +795,22 @@ bool __init apic_needs_pit(void)
 	 * required. If unknown, let the PIT be initialized.
 	 */
 	return lapic_timer_period == 0;
+}
+
+void apic_set_timer_frequency_hz(u64 freq_hz, const char *source)
+{
+	u32 f_remainder;
+	u64 f_khz = div_u64_rem(freq_hz, HZ_PER_KHZ, &f_remainder);
+
+	lapic_timer_period = div_u64(freq_hz, HZ);
+
+	pr_info("Local APIC Timer Frequency set to %llu.%03u KHz (from '%s').\n",
+		f_khz, f_remainder, source);
+}
+
+void apic_set_timer_frequency_khz(u64 freq_khz, const char *source)
+{
+	apic_set_timer_frequency_hz(freq_khz * HZ_PER_KHZ, source);
 }
 
 static int __init calibrate_APIC_clock(void)

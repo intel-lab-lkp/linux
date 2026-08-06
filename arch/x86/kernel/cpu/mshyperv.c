@@ -646,10 +646,7 @@ static void __init ms_hyperv_init_platform(void)
 		u64	hv_lapic_frequency;
 
 		rdmsrq(HV_X64_MSR_APIC_FREQUENCY, hv_lapic_frequency);
-		hv_lapic_frequency = div_u64(hv_lapic_frequency, HZ);
-		lapic_timer_period = hv_lapic_frequency;
-		pr_info("Hyper-V: LAPIC Timer Frequency: %#x\n",
-			lapic_timer_period);
+		apic_set_timer_frequency_hz(hv_lapic_frequency, "Hyper-V hypervisor");
 	}
 
 	register_nmi_handler(NMI_UNKNOWN, hv_nmi_unknown, NMI_FLAG_FIRST,

@@ -65,7 +65,7 @@ static void jailhouse_get_wallclock(struct timespec64 *now)
 
 static void __init jailhouse_timer_init(void)
 {
-	lapic_timer_period = setup_data.v1.apic_khz * (1000 / HZ);
+	apic_set_timer_frequency_khz(setup_data.v1.apic_khz, "Jailhouse hypervisor");
 }
 
 static unsigned long jailhouse_get_tsc(void)

@@ -63,7 +63,6 @@ extern int apic_verbosity;
 extern int local_apic_timer_c2_ok;
 
 extern bool apic_is_disabled;
-extern unsigned int lapic_timer_period;
 
 extern enum apic_intr_mode_id apic_intr_mode;
 enum apic_intr_mode_id {
@@ -138,6 +137,8 @@ void register_lapic_address(unsigned long address);
 extern void setup_boot_APIC_clock(void);
 extern void setup_secondary_APIC_clock(void);
 extern void lapic_update_tsc_freq(void);
+extern void apic_set_timer_frequency_hz(u64 freq_hz, const char *source);
+extern void apic_set_timer_frequency_khz(u64 freq_khz, const char *source);
 
 #ifdef CONFIG_X86_64
 static inline bool apic_force_enable(unsigned long addr)

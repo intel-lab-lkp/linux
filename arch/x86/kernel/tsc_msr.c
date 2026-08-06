@@ -212,7 +212,7 @@ unsigned long cpu_khz_from_msr(void)
 		pr_err("Error MSR_FSB_FREQ index %d is unknown\n", index);
 
 #ifdef CONFIG_X86_LOCAL_APIC
-	lapic_timer_period = (freq * 1000) / HZ;
+	apic_set_timer_frequency_khz(freq, "MSR_FSB_FREQ");
 #endif
 
 	/*
