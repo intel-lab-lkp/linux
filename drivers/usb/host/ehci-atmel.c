@@ -177,9 +177,8 @@ static void ehci_atmel_drv_remove(struct platform_device *pdev)
 	struct usb_hcd *hcd = platform_get_drvdata(pdev);
 
 	usb_remove_hcd(hcd);
-	usb_put_hcd(hcd);
-
 	atmel_stop_ehci(pdev);
+	usb_put_hcd(hcd);
 }
 
 static int __maybe_unused ehci_atmel_drv_suspend(struct device *dev)
