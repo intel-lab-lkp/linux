@@ -94,6 +94,23 @@ static void release_sys_lock(struct pci1xxxx_otp_eeprom_device *priv)
 	writel(0, sys_lock);
 }
 
+/*
+ * The system lock has a hardware timeout: if it is held for longer than the
+ * configured timeout, the hardware releases it automatically. Under heavy
+ * load this can happen in the middle of an OTP/EEPROM byte access, leaving
+ * the access only partially completed while the code still assumes the lock
+ * is held. Re-read the lock and confirm this function (PF3) still owns it; a
+ * cleared ownership bit means the access raced with a lock timeout and its
+ * result cannot be trusted.
+ */
+static bool is_sys_lock_owned(struct pci1xxxx_otp_eeprom_device *priv)
+{
+	void __iomem *sys_lock = priv->reg_base +
+				 MMAP_CFG_OFFSET(CFG_SYS_LOCK_OFFSET);
+
+	return readl(sys_lock) & CFG_SYS_LOCK_PF3;
+}
+
 static bool is_eeprom_responsive(struct pci1xxxx_otp_eeprom_device *priv)
 {
 	void __iomem *rb = priv->reg_base;
@@ -133,11 +150,11 @@ static int pci1xxxx_eeprom_read(void *priv_t, unsigned int off,
 	if ((off + count) > priv->nvmem_config_eeprom.size)
 		count = priv->nvmem_config_eeprom.size - off;
 
-	ret = set_sys_lock(priv);
-	if (ret)
-		return ret;
-
 	for (byte = 0; byte < count; byte++) {
+		ret = set_sys_lock(priv);
+		if (ret)
+			return ret;
+
 		writel(EEPROM_CMD_EPC_BUSY_BIT | (off + byte), rb +
 		       MMAP_EEPROM_OFFSET(EEPROM_CMD_REG));
 
@@ -148,13 +165,20 @@ static int pci1xxxx_eeprom_read(void *priv_t, unsigned int off,
 					rb + MMAP_EEPROM_OFFSET(EEPROM_CMD_REG));
 		if (ret < 0 || (!ret && (regval & EEPROM_CMD_EPC_TIMEOUT_BIT))) {
 			ret = -EIO;
+			release_sys_lock(priv);
 			goto error;
 		}
 
 		buf[byte] = readl(rb + MMAP_EEPROM_OFFSET(EEPROM_DATA_REG));
+
+		if (!is_sys_lock_owned(priv)) {
+			ret = -ETIMEDOUT;
+			goto error;
+		}
+
+		release_sys_lock(priv);
 	}
 error:
-	release_sys_lock(priv);
 	return ret;
 }
 
@@ -174,11 +198,12 @@ static int pci1xxxx_eeprom_write(void *priv_t, unsigned int off,
 	if ((off + count) > priv->nvmem_config_eeprom.size)
 		count = priv->nvmem_config_eeprom.size - off;
 
-	ret = set_sys_lock(priv);
-	if (ret)
-		return ret;
 
 	for (byte = 0; byte < count; byte++) {
+		ret = set_sys_lock(priv);
+		if (ret)
+			return ret;
+
 		writel(*(value + byte), rb + MMAP_EEPROM_OFFSET(EEPROM_DATA_REG));
 		regval = EEPROM_CMD_EPC_TIMEOUT_BIT | EEPROM_CMD_EPC_WRITE |
 			 (off + byte);
@@ -193,11 +218,18 @@ static int pci1xxxx_eeprom_write(void *priv_t, unsigned int off,
 					rb + MMAP_EEPROM_OFFSET(EEPROM_CMD_REG));
 		if (ret < 0 || (!ret && (regval & EEPROM_CMD_EPC_TIMEOUT_BIT))) {
 			ret = -EIO;
+			release_sys_lock(priv);
 			goto error;
 		}
+
+		if (!is_sys_lock_owned(priv)) {
+			ret = -ETIMEDOUT;
+			goto error;
+		}
+
+		release_sys_lock(priv);
 	}
 error:
-	release_sys_lock(priv);
 	return ret;
 }
 
@@ -229,11 +261,11 @@ static int pci1xxxx_otp_read(void *priv_t, unsigned int off,
 	if ((off + count) > priv->nvmem_config_otp.size)
 		count = priv->nvmem_config_otp.size - off;
 
-	ret = set_sys_lock(priv);
-	if (ret)
-		return ret;
-
 	for (byte = 0; byte < count; byte++) {
+		ret = set_sys_lock(priv);
+		if (ret)
+			return ret;
+
 		otp_device_set_address(priv, (u16)(off + byte));
 		data = readl(rb + MMAP_OTP_OFFSET(OTP_FUNC_CMD_OFFSET));
 		writel(data | OTP_FUNC_RD_BIT,
@@ -251,13 +283,20 @@ static int pci1xxxx_otp_read(void *priv_t, unsigned int off,
 		data = readl(rb + MMAP_OTP_OFFSET(OTP_PASS_FAIL_OFFSET));
 		if (ret < 0 || data & OTP_FAIL_BIT) {
 			ret = -EIO;
+			release_sys_lock(priv);
 			goto error;
 		}
 
 		buf[byte] = readl(rb + MMAP_OTP_OFFSET(OTP_RD_DATA_OFFSET));
+
+		if (!is_sys_lock_owned(priv)) {
+			ret = -ETIMEDOUT;
+			goto error;
+		}
+
+		release_sys_lock(priv);
 	}
 error:
-	release_sys_lock(priv);
 	return ret;
 }
 
@@ -278,11 +317,12 @@ static int pci1xxxx_otp_write(void *priv_t, unsigned int off,
 	if ((off + count) > priv->nvmem_config_otp.size)
 		count = priv->nvmem_config_otp.size - off;
 
-	ret = set_sys_lock(priv);
-	if (ret)
-		return ret;
 
 	for (byte = 0; byte < count; byte++) {
+		ret = set_sys_lock(priv);
+		if (ret)
+			return ret;
+
 		otp_device_set_address(priv, (u16)(off + byte));
 
 		/*
@@ -309,11 +349,18 @@ static int pci1xxxx_otp_write(void *priv_t, unsigned int off,
 		data = readl(rb + MMAP_OTP_OFFSET(OTP_PASS_FAIL_OFFSET));
 		if (ret < 0 || data & OTP_FAIL_BIT) {
 			ret = -EIO;
+			release_sys_lock(priv);
 			goto error;
 		}
+
+		if (!is_sys_lock_owned(priv)) {
+			ret = -ETIMEDOUT;
+			goto error;
+		}
+
+		release_sys_lock(priv);
 	}
 error:
-	release_sys_lock(priv);
 	return ret;
 }
 
