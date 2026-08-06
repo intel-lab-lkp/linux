@@ -808,6 +808,10 @@ err_unreg_video:
 	video_unregister_device(&sur40->vdev);
 err_unreg_v4l2:
 	v4l2_device_unregister(&sur40->v4l2);
+	input_unregister_device(input);
+	kfree(sur40->bulk_in_buffer);
+	kfree(sur40);
+	return error;
 err_free_buffer:
 	kfree(sur40->bulk_in_buffer);
 err_free_input:
