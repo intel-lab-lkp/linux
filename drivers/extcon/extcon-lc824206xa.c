@@ -18,6 +18,7 @@
 
 #include <linux/bits.h>
 #include <linux/delay.h>
+#include <linux/devm-helpers.h>
 #include <linux/device.h>
 #include <linux/extcon-provider.h>
 #include <linux/i2c.h>
@@ -424,7 +425,6 @@ static int lc824206xa_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	data->client = client;
-	INIT_WORK(&data->work, lc824206xa_work);
 	data->cable = EXTCON_NONE;
 	data->previous_cable = EXTCON_NONE;
 	data->usb_type = POWER_SUPPLY_USB_TYPE_UNKNOWN;
@@ -462,6 +462,10 @@ static int lc824206xa_probe(struct i2c_client *client)
 	data->psy = devm_power_supply_register(dev, &lc824206xa_psy_desc, &psy_cfg);
 	if (IS_ERR(data->psy))
 		return dev_err_probe(dev, PTR_ERR(data->psy), "registering power supply\n");
+
+	ret = devm_work_autocancel(dev, &data->work, lc824206xa_work);
+	if (ret)
+		return ret;
 
 	ret = devm_request_threaded_irq(dev, client->irq, NULL, lc824206xa_irq,
 					IRQF_TRIGGER_LOW | IRQF_ONESHOT,
