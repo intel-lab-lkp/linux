@@ -1571,9 +1571,9 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q)
  */
 void xe_exec_queue_kill(struct xe_exec_queue *q)
 {
-	struct xe_exec_queue *eq = q, *next;
+	struct xe_exec_queue *eq, *next;
 
-	list_for_each_entry_safe(eq, next, &eq->multi_gt_list,
+	list_for_each_entry_safe(eq, next, &q->multi_gt_list,
 				 multi_gt_link) {
 		q->ops->kill(eq);
 		xe_vm_remove_compute_exec_queue(q->vm, eq);
