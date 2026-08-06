@@ -28,6 +28,12 @@
 #define pmd_ERROR(e) \
 	printk("%s:%d: bad pmd %016llx.\n", __FILE__, __LINE__, pmd_val(e))
 
+#define pud_ERROR(e) \
+	printk("%s:%d: bad pud %016llx.\n", __FILE__, __LINE__, pud_val(e))
+
+#define p4d_ERROR(e) \
+	printk("%s:%d: bad p4d %016llx.\n", __FILE__, __LINE__, p4d_val(e))
+
 typedef union {
 	struct {
 		unsigned long pmd_low;
