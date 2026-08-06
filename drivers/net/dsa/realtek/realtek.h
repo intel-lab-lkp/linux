@@ -166,6 +166,8 @@ struct realtek_variant {
 	u8 cmd_read;
 	u8 cmd_write;
 	size_t chip_data_sz;
+	/* NULL-terminated list of regulator supply names, or NULL */
+	const char *const *supplies;
 };
 
 /* RTL8366 library helpers */
