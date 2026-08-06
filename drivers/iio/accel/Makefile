@@ -52,6 +52,7 @@ obj-$(CONFIG_IIO_KX022A_SPI)	+= kionix-kx022a-spi.o
 
 obj-$(CONFIG_INV_ICM42370) += inv-icm42370.o
 inv-icm42370-y += inv_icm42370_core.o
+inv-icm42370-y += inv_icm42370_buffer.o
 obj-$(CONFIG_INV_ICM42370_I2C) += inv_icm42370_i2c.o
 
 obj-$(CONFIG_KXCJK1013) += kxcjk-1013.o

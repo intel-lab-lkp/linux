@@ -15,6 +15,8 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/common/inv_sensors_timestamp.h>
 
+#include "inv_icm42370_buffer.h"
+
 enum inv_icm42370_chip {
 	INV_CHIP_INVALID,
 	INV_CHIP_ICM42370,
@@ -252,6 +254,8 @@ static const int inv_icm42370_accel_odr[] = {
 #define INV_ICM42370_REG_INT_STATUS 0x3A
 #define INV_ICM42370_REG_TEMP_CONFIG0 0x34
 #define INV_ICM42370_REG_INTF_CONFIG0 0x35
+#define INV_ICM42370_REG_FIFO_COUNT 0x3D
+#define INV_ICM42370_REG_FIFO_DATA 0x3F
 #define INV_ICM42370_REG_WHO_AM_I 0x75
 #define INV_ICM42370_REG_BLK_SEL_W 0x79
 #define INV_ICM42370_REG_MADDR_W 0x7A
@@ -275,8 +279,8 @@ static const int inv_icm42370_accel_odr[] = {
 	FIELD_PREP(INV_ICM42370_DRIVE_CONFIG3_SPI_MASK, (_rate))
 
 #define INV_ICM42370_SIGNAL_PATH_RESET_FIFO_FLUSH BIT(2)
-#define INV_ICM42370_FIFO_CONFIG_MODE_MASK BIT(0)
-#define INV_ICM42370_FIFO_CONFIG_BYPASS_MASK BIT(1)
+#define INV_ICM42370_FIFO_CONFIG_MODE_MASK BIT(1)
+#define INV_ICM42370_FIFO_CONFIG_BYPASS_MASK BIT(0)
 #define INV_ICM42370_FIFO_CONFIG_STREAM \
 	FIELD_PREP(INV_ICM42370_FIFO_CONFIG_MODE_MASK, 0)
 #define INV_ICM42370_FIFO_CONFIG_STOP_ON_FULL \
@@ -361,5 +365,7 @@ int inv_icm42370_set_accel_conf(struct inv_icm42370_data *dev_data,
 				unsigned int *sleep_ms);
 
 int inv_icm42370_accel_parse_fifo(struct iio_dev *indio_dev);
+int inv_icm42370_mreg_write(struct regmap *map, u8 bank, u8 addr, u8 val);
+int inv_icm42370_mreg_read(struct regmap *map, u8 bank, u8 addr, u8 *val);
 
 #endif
