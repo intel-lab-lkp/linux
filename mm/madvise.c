@@ -1464,20 +1464,25 @@ static int madvise_inject_error(struct madvise_behavior *madv_behavior)
 
 	for (; start < end; start += size) {
 		unsigned long pfn;
+		struct folio *folio;
 		struct page *page;
 		int ret;
 
 		ret = get_user_pages_fast(start, 1, 0, &page);
 		if (ret != 1)
 			return ret;
+		folio = page_folio(page);
 		pfn = page_to_pfn(page);
 
 		/*
-		 * When soft offlining hugepages, after migrating the page
-		 * we dissolve it, therefore in the second loop "page" will
-		 * no longer be a compound page.
+		 * Non-hugetlb large folios in system memory are split and only
+		 * the addressed base page is handled. Hugetlb folios may be
+		 * dissolved and ZONE_DEVICE folios may be handled as a whole,
+		 * so save their size before error injection.
 		 */
-		size = page_size(compound_head(page));
+		size = PAGE_SIZE;
+		if (folio_test_hugetlb(folio) || folio_is_zone_device(folio))
+			size = folio_size(folio);
 
 		if (madv_behavior->behavior == MADV_SOFT_OFFLINE) {
 			pr_info("Soft offlining pfn %#lx at process virtual address %#lx\n",
