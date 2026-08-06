@@ -41,6 +41,17 @@ config D3323AA
 	  To compile this driver as a module, choose M here: the module will be
 	  called d3323aa.
 
+config GP2AP070S
+	tristate "Sharp GP2AP070S proximity sensor"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y here to build a driver for the Sharp GP2AP070S proximity
+	  sensor.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called gp2ap070s.
+
 config HX9023S
 	tristate "TYHX HX9023S SAR sensor"
 	select IIO_BUFFER
