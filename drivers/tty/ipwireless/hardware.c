@@ -1721,7 +1721,7 @@ void ipwireless_stop_interrupts(struct ipw_hardware *hw)
 	if (!hw->shutting_down) {
 		/* Tell everyone we are going down. */
 		hw->shutting_down = 1;
-		timer_delete(&hw->setup_timer);
+		timer_shutdown_sync(&hw->setup_timer);
 
 		/* Prevent the hardware from sending any more interrupts */
 		do_close_hardware(hw);
