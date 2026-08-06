@@ -841,6 +841,25 @@ static void amd_pmu_v2_disable_all(void)
 	amd_pmu_check_overflow();
 }
 
+static void amd_pmu_v2_print_debug(int cpu)
+{
+	u64 ctrl, status, debugextn;
+
+	rdmsrq(MSR_AMD64_PERF_CNTR_GLOBAL_CTL, ctrl);
+	rdmsrq(MSR_AMD64_PERF_CNTR_GLOBAL_STATUS, status);
+
+	pr_info("\n");
+	pr_info("CPU#%d: ctrl:       %016llx\n", cpu, ctrl);
+	pr_info("CPU#%d: status:     %016llx\n", cpu, status);
+
+	if (cpu_feature_enabled(X86_FEATURE_AMD_LBR_V2)) {
+		rdmsrq(MSR_AMD_DBG_EXTN_CFG, debugextn);
+		pr_info("CPU#%d: debugextn:  %016llx\n", cpu, debugextn);
+	}
+
+	x86_pmu_print_debug(cpu);
+}
+
 DEFINE_STATIC_CALL_NULL(amd_pmu_branch_add, *x86_pmu.add);
 
 static void amd_pmu_add_event(struct perf_event *event)
@@ -1452,6 +1471,7 @@ static int __init amd_core_pmu_init(void)
 		x86_pmu.disable_all = amd_pmu_v2_disable_all;
 		x86_pmu.enable = amd_pmu_v2_enable_event;
 		x86_pmu.handle_irq = amd_pmu_v2_handle_irq;
+		x86_pmu.print_debug = amd_pmu_v2_print_debug;
 		static_call_update(amd_pmu_test_overflow, amd_pmu_test_overflow_status);
 	}
 
