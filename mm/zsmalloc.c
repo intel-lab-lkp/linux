@@ -288,6 +288,8 @@ struct zs_pool {
 	/* protect zspage migration/compaction */
 	rwlock_t lock;
 	atomic_t compaction_in_progress;
+	/* next class shrinker triggered compaction */
+	unsigned int compact_cursor;
 };
 
 static inline void zpdesc_set_first(struct zpdesc *zpdesc)
@@ -2107,9 +2109,10 @@ static unsigned long __zs_compact(struct zs_pool *pool,
 }
 
 static unsigned long zs_compact_pool(struct zs_pool *pool,
-					unsigned long max_pages)
+					unsigned long max_pages,
+					bool use_cursor)
 {
-	int i;
+	unsigned int index, nr_scanned;
 	struct size_class *class;
 	unsigned long pages_freed = 0;
 
@@ -2125,15 +2128,19 @@ static unsigned long zs_compact_pool(struct zs_pool *pool,
 	if (atomic_xchg(&pool->compaction_in_progress, 1))
 		return 0;
 
-	for (i = ZS_SIZE_CLASSES - 1; i >= 0; i--) {
-		class = pool->size_class[i];
-		if (class->index != i)
-			continue;
-		pages_freed += __zs_compact(pool, class,
-					max_pages - pages_freed);
+	index = use_cursor ? pool->compact_cursor : ZS_SIZE_CLASSES - 1;
+	for (nr_scanned = ZS_SIZE_CLASSES; nr_scanned; nr_scanned--) {
+		class = pool->size_class[index];
+		if (class->index == index)
+			pages_freed += __zs_compact(pool, class,
+						max_pages - pages_freed);
+		index = index ? index - 1 : ZS_SIZE_CLASSES - 1;
 		if (pages_freed >= max_pages)
 			break;
 	}
+	if (use_cursor)
+		pool->compact_cursor = index;
+
 	atomic_long_add(pages_freed, &pool->stats.pages_compacted);
 	atomic_set(&pool->compaction_in_progress, 0);
 
@@ -2142,7 +2149,7 @@ static unsigned long zs_compact_pool(struct zs_pool *pool,
 
 unsigned long zs_compact(struct zs_pool *pool)
 {
-	return zs_compact_pool(pool, ULONG_MAX);
+	return zs_compact_pool(pool, ULONG_MAX, false);
 }
 EXPORT_SYMBOL_GPL(zs_compact);
 
@@ -2158,12 +2165,7 @@ static unsigned long zs_shrinker_scan(struct shrinker *shrinker,
 	unsigned long pages_freed;
 	struct zs_pool *pool = shrinker->private_data;
 
-	/*
-	 * Compact classes and calculate compaction delta.
-	 * Can run concurrently with a manually triggered
-	 * (by user) compaction.
-	 */
-	pages_freed = zs_compact(pool);
+	pages_freed = zs_compact_pool(pool, sc->nr_to_scan, true);
 
 	return pages_freed ? pages_freed : SHRINK_STOP;
 }
@@ -2252,6 +2254,7 @@ struct zs_pool *zs_create_pool(const char *name)
 	init_deferred_free(pool);
 	rwlock_init(&pool->lock);
 	atomic_set(&pool->compaction_in_progress, 0);
+	pool->compact_cursor = ZS_SIZE_CLASSES - 1;
 
 	pool->name = kstrdup(name, GFP_KERNEL);
 	if (!pool->name)
