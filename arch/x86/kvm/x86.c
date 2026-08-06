@@ -5800,6 +5800,12 @@ static gva_t emulator_get_untagged_addr(struct x86_emulate_ctxt *ctxt,
 					       addr, flags);
 }
 
+static bool emulator_is_lass_violation(struct x86_emulate_ctxt *ctxt, gva_t addr,
+				       unsigned int size, unsigned int flags)
+{
+	return kvm_x86_call(is_lass_violation)(emul_to_vcpu(ctxt), addr, size, flags);
+}
+
 static bool emulator_is_canonical_addr(struct x86_emulate_ctxt *ctxt,
 				       gva_t addr, unsigned int flags)
 {
@@ -5859,6 +5865,7 @@ static const struct x86_emulate_ops emulate_ops = {
 	.get_xcr             = emulator_get_xcr,
 	.set_xcr             = emulator_set_xcr,
 	.get_untagged_addr   = emulator_get_untagged_addr,
+	.is_lass_violation   = emulator_is_lass_violation,
 	.is_canonical_addr   = emulator_is_canonical_addr,
 	.page_address_valid  = emulator_page_address_valid,
 };
