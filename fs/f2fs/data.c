@@ -43,8 +43,19 @@ struct f2fs_folio_state {
 
 struct f2fs_bio {
 	struct work_struct work;
+	bool dropbehind;
 	struct bio bio;
 };
+
+static inline struct f2fs_bio *f2fs_bio_to_f2bio(struct bio *bio)
+{
+	return container_of(bio, struct f2fs_bio, bio);
+}
+
+static inline bool f2fs_write_folio_is_dropbehind(const struct f2fs_io_info *fio)
+{
+	return fio->folio && folio_test_dropbehind(fio->folio);
+}
 
 #define	F2FS_BIO_POOL_SIZE	NR_CURSEG_TYPE
 
@@ -418,6 +429,15 @@ static void f2fs_write_end_io_work(struct work_struct *work)
 	f2fs_write_end_bio(bio);
 }
 
+static void f2fs_queue_write_end_io(struct f2fs_sb_info *sbi, struct bio *bio)
+{
+	struct work_struct *work = &container_of(bio, struct f2fs_bio,
+						 bio)->work;
+
+	INIT_WORK(work, f2fs_write_end_io_work);
+	queue_work(sbi->wq, work);
+}
+
 static void f2fs_write_end_io(struct bio *bio)
 {
 	struct f2fs_sb_info *sbi;
@@ -426,15 +446,15 @@ static void f2fs_write_end_io(struct bio *bio)
 
 	sbi = bio->bi_private;
 
-	if (in_atomic() && bio->bi_iter.bi_size > sbi->max_atc_write_bio_size) {
-		struct work_struct *w;
-
-		w = &container_of(bio, struct f2fs_bio, bio)->work;
-		INIT_WORK(w, f2fs_write_end_io_work);
-		queue_work(sbi->wq, w);
-	} else {
-		f2fs_write_end_bio(bio);
+	if (f2fs_bio_to_f2bio(bio)->dropbehind && !in_task()) {
+		f2fs_queue_write_end_io(sbi, bio);
+		return;
 	}
+
+	if (in_atomic() && bio->bi_iter.bi_size > sbi->max_atc_write_bio_size)
+		f2fs_queue_write_end_io(sbi, bio);
+	else
+		f2fs_write_end_bio(bio);
 }
 
 #ifdef CONFIG_BLK_DEV_ZONED
@@ -530,6 +550,7 @@ static struct bio *__bio_alloc(struct f2fs_io_info *fio, int npages)
 	bio = bio_alloc_bioset(bdev, npages,
 				fio->op | fio->op_flags | f2fs_io_flags(fio),
 				GFP_NOIO, &f2fs_bioset);
+	f2fs_bio_to_f2bio(bio)->dropbehind = false;
 	bio->bi_iter.bi_sector = sector;
 	if (is_read_io(fio->op)) {
 		bio->bi_end_io = f2fs_read_end_io;
@@ -796,6 +817,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 
 	/* Allocate a new bio */
 	bio = __bio_alloc(fio, 1);
+	f2fs_bio_to_f2bio(bio)->dropbehind = f2fs_write_folio_is_dropbehind(fio);
 
 	f2fs_set_bio_crypt_ctx(bio, fio_folio->mapping->host,
 			fio_folio->index, fio, GFP_NOIO);
@@ -1010,6 +1032,7 @@ int f2fs_merge_page_bio(struct f2fs_io_info *fio)
 	struct folio *data_folio = fio->encrypted_page ?
 			page_folio(fio->encrypted_page) : fio->folio;
 	struct folio *folio = fio->folio;
+	bool is_dropbehind = f2fs_write_folio_is_dropbehind(fio);
 
 	if (!f2fs_is_valid_blkaddr(fio->sbi, fio->new_blkaddr,
 			__is_meta_io(fio) ? META_GENERIC : DATA_GENERIC))
@@ -1017,17 +1040,24 @@ int f2fs_merge_page_bio(struct f2fs_io_info *fio)
 
 	trace_f2fs_submit_folio_bio(data_folio, fio);
 
-	if (bio && !page_is_mergeable(fio->sbi, bio, *fio->last_block,
-						fio->new_blkaddr))
+	if (bio && (f2fs_bio_to_f2bio(bio)->dropbehind != is_dropbehind ||
+		    !page_is_mergeable(fio->sbi, bio, *fio->last_block,
+				       fio->new_blkaddr)))
 		f2fs_submit_merged_ipu_write(fio->sbi, &bio, NULL);
 alloc_new:
 	if (!bio) {
 		bio = __bio_alloc(fio, BIO_MAX_VECS);
+		f2fs_bio_to_f2bio(bio)->dropbehind = is_dropbehind;
 		f2fs_set_bio_crypt_ctx(bio, folio->mapping->host,
 				folio->index, fio, GFP_NOIO);
 
 		add_bio_entry(fio->sbi, bio, data_folio, fio->temp);
 	} else {
+		if (f2fs_bio_to_f2bio(bio)->dropbehind != is_dropbehind) {
+			f2fs_submit_merged_ipu_write(fio->sbi, &bio, NULL);
+			goto alloc_new;
+		}
+
 		if (add_ipu_page(fio, &bio, data_folio))
 			goto alloc_new;
 	}
@@ -1073,6 +1103,7 @@ void f2fs_submit_page_write(struct f2fs_io_info *fio)
 	struct folio *bio_folio;
 	struct f2fs_lock_context lc;
 	enum count_type type;
+	bool is_dropbehind;
 
 	f2fs_bug_on(sbi, is_read_io(fio->op));
 
@@ -1100,6 +1131,7 @@ next:
 	}
 
 	verify_fio_blkaddr(fio);
+	is_dropbehind = f2fs_write_folio_is_dropbehind(fio);
 
 	if (fio->encrypted_page)
 		bio_folio = page_folio(fio->encrypted_page);
@@ -1115,7 +1147,8 @@ next:
 	inc_page_count(sbi, type);
 
 	if (io->bio &&
-	    (!io_is_mergeable(sbi, io->bio, io, fio, io->last_block_in_bio,
+	    (f2fs_bio_to_f2bio(io->bio)->dropbehind != is_dropbehind ||
+	     !io_is_mergeable(sbi, io->bio, io, fio, io->last_block_in_bio,
 			      fio->new_blkaddr) ||
 	     !f2fs_crypt_mergeable_bio(io->bio, fio_inode(fio),
 				bio_folio->index, fio)))
@@ -1123,6 +1156,7 @@ next:
 alloc_new:
 	if (io->bio == NULL) {
 		io->bio = __bio_alloc(fio, BIO_MAX_VECS);
+		f2fs_bio_to_f2bio(io->bio)->dropbehind = is_dropbehind;
 		f2fs_set_bio_crypt_ctx(io->bio, fio_inode(fio),
 				bio_folio->index, fio, GFP_NOIO);
 		io->fio = *fio;
