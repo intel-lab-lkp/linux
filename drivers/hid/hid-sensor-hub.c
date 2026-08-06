@@ -187,6 +187,38 @@ int sensor_hub_remove_callback(struct hid_sensor_hub_device *hsdev,
 }
 EXPORT_SYMBOL_GPL(sensor_hub_remove_callback);
 
+static void sensor_hub_remove_callback_helper(void *ptr)
+{
+	struct sensor_hub_cb_devres *res = ptr;
+
+	sensor_hub_remove_callback(res->hsdev, res->usage_id);
+}
+
+int devm_sensor_hub_register_callback(struct device *dev,
+				      struct hid_sensor_hub_device *hsdev,
+				      u32 usage_id,
+				      struct hid_sensor_hub_callbacks *usage_callback)
+{
+	struct sensor_hub_cb_devres *res;
+	int ret;
+
+	ret = sensor_hub_register_callback(hsdev, usage_id, usage_callback);
+	if (ret)
+		return ret;
+
+	res = devm_kmalloc(dev, sizeof(*res), GFP_KERNEL);
+	if (!res) {
+		sensor_hub_remove_callback(hsdev, usage_id);
+		return -ENOMEM;
+	}
+
+	res->hsdev = hsdev;
+	res->usage_id = usage_id;
+
+	return devm_add_action_or_reset(dev, sensor_hub_remove_callback_helper, res);
+}
+EXPORT_SYMBOL_GPL(devm_sensor_hub_register_callback);
+
 int sensor_hub_set_feature(struct hid_sensor_hub_device *hsdev, u32 report_id,
 			   u32 field_index, int buffer_size, void *buffer)
 {
