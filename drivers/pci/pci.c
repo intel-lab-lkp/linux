@@ -3563,6 +3563,26 @@ static bool pci_acs_egress_vector_port(const struct pci_dev *dev)
 }
 
 /**
+ * pci_acs_egress_port_valid - Is a target port within the Egress Control Vector
+ * @acs_caps: the ingress port's ACS Capability register
+ * @target_port: the target Downstream Port number
+ *
+ * The Egress Control Vector Size occupies bits 15:8 of the ACS Capability
+ * register (PCIe r7.0, sec 7.7.12).  A size of 0 encodes 256 bits, so
+ * every port number is addressable.
+ *
+ * Return: %true if @target_port has a bit in the Egress Control Vector.
+ */
+VISIBLE_IF_KUNIT
+bool pci_acs_egress_port_valid(u16 acs_caps, u8 target_port)
+{
+	unsigned int vector_size = acs_caps >> 8;
+
+	return !vector_size || target_port < vector_size;
+}
+EXPORT_SYMBOL_IF_KUNIT(pci_acs_egress_port_valid);
+
+/**
  * pci_acs_egress_ctrl_is_set - Read an ACS Egress Control Vector bit
  * @pdev: ingress Root or Switch Downstream Port
  * @target: target Root or Switch Downstream Port
@@ -3572,7 +3592,6 @@ static bool pci_acs_egress_vector_port(const struct pci_dev *dev)
  */
 int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target)
 {
-	unsigned int vector_size;
 	u32 lnkcap, vector;
 	u8 target_port;
 	int ret;
@@ -3597,10 +3616,8 @@ int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target)
 		return pcibios_err_to_errno(ret);
 
 	target_port = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
-	vector_size = pdev->acs_capabilities >> 8;
 
-	/* An Egress Control Vector Size of 0 encodes 256 bits. */
-	if (vector_size && target_port >= vector_size)
+	if (!pci_acs_egress_port_valid(pdev->acs_capabilities, target_port))
 		return -ERANGE;
 
 	ret = pci_read_config_dword(pdev,
@@ -3612,6 +3629,7 @@ int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target)
 
 	return !!(vector & BIT(target_port % 32));
 }
+EXPORT_SYMBOL_IF_KUNIT(pci_acs_egress_ctrl_is_set);
 
 static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
 				  enum pci_acs_scope scope)

@@ -538,16 +538,40 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
 	return NULL;
 }
 
-enum pci_acs_p2pdma_state {
-	PCI_ACS_P2PDMA_DIRECT,
-	PCI_ACS_P2PDMA_REDIRECT,
-	PCI_ACS_P2PDMA_NOT_SUPPORTED,
-};
+/*
+ * PCIe r7.0, sec 6.12.3, table 6-11: decide how a peer-to-peer request at an
+ * ACS-capable ingress port routes, given its Egress Control register @ctrl,
+ * whether the target port is known (@has_target), and that target's Egress
+ * Control Vector bit (@egress: 1 set, 0 clear, negative if it could not be
+ * read).
+ *
+ * Egress Control applies only where the target is known (the path divergence).
+ * There, a set vector bit redirects the request only when Request Redirect is
+ * set; with Request Redirect clear it is an ACS Violation.  A clear vector bit
+ * permits direct routing, subject to Completion Redirect.
+ */
+VISIBLE_IF_KUNIT enum pci_acs_p2pdma_state
+pci_acs_p2pdma_decision(u16 ctrl, bool has_target, int egress)
+{
+	if (!has_target || !(ctrl & PCI_ACS_EC))
+		return ctrl & (PCI_ACS_RR | PCI_ACS_CR) ?
+			PCI_ACS_P2PDMA_REDIRECT : PCI_ACS_P2PDMA_DIRECT;
+
+	if (egress < 0)
+		return PCI_ACS_P2PDMA_NOT_SUPPORTED;
+	if (egress)
+		return ctrl & PCI_ACS_RR ? PCI_ACS_P2PDMA_REDIRECT :
+					   PCI_ACS_P2PDMA_NOT_SUPPORTED;
+
+	return ctrl & PCI_ACS_CR ? PCI_ACS_P2PDMA_REDIRECT :
+				   PCI_ACS_P2PDMA_DIRECT;
+}
+EXPORT_SYMBOL_IF_KUNIT(pci_acs_p2pdma_decision);
 
 static enum pci_acs_p2pdma_state
 pci_acs_p2pdma_state(struct pci_dev *pdev, struct pci_dev *target)
 {
-	int pos, ret;
+	int pos, egress = 0;
 	u16 ctrl;
 
 	pos = pdev->acs_cap;
@@ -557,27 +581,11 @@ pci_acs_p2pdma_state(struct pci_dev *pdev, struct pci_dev *target)
 	if (pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl))
 		return PCI_ACS_P2PDMA_NOT_SUPPORTED;
 
-	/* EC applies only at the path divergence where the target is known. */
-	if (!target || !(ctrl & PCI_ACS_EC))
-		return ctrl & (PCI_ACS_RR | PCI_ACS_CR) ?
-			PCI_ACS_P2PDMA_REDIRECT : PCI_ACS_P2PDMA_DIRECT;
+	/* Egress Control is evaluated only where the target is known. */
+	if (target && (ctrl & PCI_ACS_EC))
+		egress = pci_acs_egress_ctrl_is_set(pdev, target);
 
-	/*
-	 * PCIe r7.0, sec 6.12.3, table 6-11: a set Egress Control Vector
-	 * bit redirects the request only when Request Redirect is set.  With
-	 * Request Redirect clear, the request is handled as an ACS Violation.
-	 * A clear vector bit permits direct routing, subject to Completion
-	 * Redirect.
-	 */
-	ret = pci_acs_egress_ctrl_is_set(pdev, target);
-	if (ret < 0)
-		return PCI_ACS_P2PDMA_NOT_SUPPORTED;
-	if (ret)
-		return ctrl & PCI_ACS_RR ? PCI_ACS_P2PDMA_REDIRECT :
-						PCI_ACS_P2PDMA_NOT_SUPPORTED;
-
-	return ctrl & PCI_ACS_CR ? PCI_ACS_P2PDMA_REDIRECT :
-				    PCI_ACS_P2PDMA_DIRECT;
+	return pci_acs_p2pdma_decision(ctrl, !!target, egress);
 }
 
 static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *pdev)
