@@ -6423,3 +6423,26 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+/*
+ * The MSI Claw A8 firmware advertises native PCIe hotplug support for
+ * this root port, but native hotplug handling causes resume failures.
+ * Prevent the PCIe port driver from claiming native hotplug ownership
+ * of this port.
+ */
+static void quirk_claw_a8_no_native_hotplug(struct pci_dev *pdev)
+{
+	if (!dmi_match(DMI_BOARD_NAME, "MS-1T8K"))
+		return;
+
+	if (pdev->bus->number != 0 ||
+	    PCI_SLOT(pdev->devfn) != 2 ||
+	    PCI_FUNC(pdev->devfn) != 2)
+		return;
+
+	pci_info(pdev, "disabling native PCIe hotplug\n");
+	pdev->is_hotplug_bridge = 0;
+	pdev->is_pciehp = 0;
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_AMD, 0x150b,
+			 quirk_claw_a8_no_native_hotplug);
