@@ -1170,6 +1170,10 @@ efct_get_wwpn(struct efct_hw *hw)
 	return get_unaligned_be64(p);
 }
 
+static void
+efct_hw_rx_buffer_free(struct efct_hw *hw, struct efc_hw_rq_buffer *rq_buf,
+		       u32 count);
+
 static struct efc_hw_rq_buffer *
 efct_hw_rx_buffer_alloc(struct efct_hw *hw, u32 rqindex, u32 count,
 			u32 size)
@@ -1196,7 +1200,7 @@ efct_hw_rx_buffer_alloc(struct efct_hw *hw, u32 rqindex, u32 count,
 						   GFP_KERNEL);
 		if (!prq->dma.virt) {
 			efc_log_err(hw->os, "DMA allocation failed\n");
-			kfree(rq_buf);
+			efct_hw_rx_buffer_free(hw, rq_buf, i);
 			return NULL;
 		}
 	}
