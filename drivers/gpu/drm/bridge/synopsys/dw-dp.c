@@ -330,6 +330,8 @@ struct dw_dp {
 	struct dw_dp_plat_data plat_data;
 	u8 pixel_mode;
 
+	struct drm_bridge *next_bridge;
+
 	DECLARE_BITMAP(sdp_reg_bank, SDP_REG_BANK_SIZE);
 };
 
@@ -1893,7 +1895,27 @@ static int dw_dp_bridge_attach(struct drm_bridge *bridge,
 		goto err_disable_irq;
 	}
 
+	dp->next_bridge = of_drm_get_bridge_by_endpoint(dev->of_node, 1, 0);
+	if (IS_ERR(dp->next_bridge)) {
+		ret = PTR_ERR(dp->next_bridge);
+		dev_err(dev, "failed to get follow-up bridge: %d\n", ret);
+		goto err_unregister_dp_aux;
+	}
+
+	ret = drm_bridge_attach(encoder, dp->next_bridge, bridge,
+				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
+	if (ret) {
+		dev_err(dev, "Failed to attach next bridge: %d\n", ret);
+		goto err_put_next_bridge;
+	}
+
 	return 0;
+
+err_put_next_bridge:
+	drm_bridge_put(dp->next_bridge);
+
+err_unregister_dp_aux:
+	drm_dp_aux_unregister(&dp->aux);
 
 err_disable_irq:
 	disable_irq(dp->irq);
@@ -1905,6 +1927,7 @@ static void dw_dp_bridge_detach(struct drm_bridge *bridge)
 {
 	struct dw_dp *dp = bridge_to_dp(bridge);
 
+	drm_bridge_put(dp->next_bridge);
 	drm_dp_aux_unregister(&dp->aux);
 	disable_irq(dp->irq);
 	cancel_work_sync(&dp->hpd_work);
