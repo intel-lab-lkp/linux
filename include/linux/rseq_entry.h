@@ -127,6 +127,8 @@ do {									\
 
 static __always_inline bool __rseq_grant_slice_extension(bool work_pending)
 {
+	lockdep_assert_irqs_disabled();
+
 	struct task_struct *curr = current;
 	struct rseq_slice_ctrl usr_ctrl;
 	union rseq_slice_state state;
@@ -219,10 +221,8 @@ static __always_inline bool __rseq_grant_slice_extension(bool work_pending)
 	 *
 	 * which would be inconsistent state.
 	 */
-	scoped_guard(irq) {
-		clear_tsk_need_resched(curr);
-		clear_preempt_need_resched();
-	}
+	clear_tsk_need_resched(curr);
+	clear_preempt_need_resched();
 	return true;
 
 efault:
