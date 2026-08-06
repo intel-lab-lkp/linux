@@ -3545,6 +3545,74 @@ void pci_configure_ari(struct pci_dev *dev)
 	}
 }
 
+/*
+ * PCIe r7.0, sec 7.7.12: only for Root Ports and Switch Downstream Ports does
+ * each Egress Control Vector bit correspond to a Port Number.  Elsewhere the
+ * vector is indexed by Function or Function Group Number, so a Link
+ * Capabilities Port Number must not be used to select a bit.
+ *
+ * pcie_downstream_port() is too permissive here because it also accepts a
+ * PCI/PCI-X to PCIe Bridge.
+ */
+static bool pci_acs_egress_vector_port(const struct pci_dev *dev)
+{
+	int type = pci_pcie_type(dev);
+
+	return type == PCI_EXP_TYPE_ROOT_PORT ||
+	       type == PCI_EXP_TYPE_DOWNSTREAM;
+}
+
+/**
+ * pci_acs_egress_ctrl_is_set - Read an ACS Egress Control Vector bit
+ * @pdev: ingress Root or Switch Downstream Port
+ * @target: target Root or Switch Downstream Port
+ *
+ * Return: 1 if @pdev's Egress Control Vector bit for @target is set, 0 if
+ * it is clear, or a negative errno if the bit cannot be determined.
+ */
+int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target)
+{
+	unsigned int vector_size;
+	u32 lnkcap, vector;
+	u8 target_port;
+	int ret;
+
+	if (!(pdev->acs_capabilities & PCI_ACS_EC) ||
+	    !pci_acs_egress_vector_port(pdev) ||
+	    !pci_acs_egress_vector_port(target))
+		return -EOPNOTSUPP;
+
+	/*
+	 * Each vector bit corresponds to a Port Number within one Switch or
+	 * Root Complex (PCIe r7.0, sec 7.7.12.4). Downstream Ports of one
+	 * Switch share its internal bus and Root Ports of one Root Complex
+	 * share a root bus, so anything else numbers its ports elsewhere and
+	 * would index an unrelated bit here.
+	 */
+	if (pdev->bus != target->bus)
+		return -EOPNOTSUPP;
+
+	ret = pcie_capability_read_dword(target, PCI_EXP_LNKCAP, &lnkcap);
+	if (ret)
+		return pcibios_err_to_errno(ret);
+
+	target_port = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
+	vector_size = pdev->acs_capabilities >> 8;
+
+	/* An Egress Control Vector Size of 0 encodes 256 bits. */
+	if (vector_size && target_port >= vector_size)
+		return -ERANGE;
+
+	ret = pci_read_config_dword(pdev,
+				    pdev->acs_cap + PCI_ACS_EGRESS_CTL_V +
+				    (target_port / 32) * sizeof(vector),
+				    &vector);
+	if (ret)
+		return pcibios_err_to_errno(ret);
+
+	return !!(vector & BIT(target_port % 32));
+}
+
 static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
 				  enum pci_acs_scope scope)
 {

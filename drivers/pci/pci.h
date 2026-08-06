@@ -1069,6 +1069,7 @@ static inline bool pci_acs_rr_ineffective(u32 ctrl, u16 acs_flags,
 	       (ctrl & PCI_ACS_DT) && !(ctrl & PCI_ACS_TB);
 }
 
+int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target);
 #ifdef CONFIG_PCI_QUIRKS
 int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags,
 				 enum pci_acs_scope scope);
