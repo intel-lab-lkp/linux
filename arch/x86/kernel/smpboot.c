@@ -675,17 +675,26 @@ int arch_sched_node_distance(int from, int to)
 {
 	int d = node_distance(from, to);
 
+	if (topology_max_packages() == 1)
+		return d;
+
+	/* Handle SNC-3/NPS-6 asymmetries. */
 	switch (boot_cpu_data.x86_vfm) {
 	case INTEL_GRANITERAPIDS_X:
 	case INTEL_ATOM_DARKMONT_X:
-		if (topology_max_packages() == 1 ||
-		    topology_num_nodes_per_package() < 3)
-			return d;
-
+		if (topology_num_nodes_per_package() >= 3)
+			d = slit_cluster_distance(from, to);
+		break;
+	case HYGON_F18_M07:
 		/*
-		 * Handle SNC-3 asymmetries.
+		 * Hygon model 7 CPUs have either 4 or 6 compute dies (aka CDD). All
+		 * 6‑die variants share the same interconnect topology. Apply remote
+		 * socket distance averaging if the CPU exposes 6 dies when NPS is
+		 * enabled.
 		 */
-		return slit_cluster_distance(from, to);
+		if (topology_num_nodes_per_package() >= 6)
+			d = slit_cluster_distance(from, to);
+		break;
 	}
 	return d;
 }
