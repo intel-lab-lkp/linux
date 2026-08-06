@@ -74,6 +74,7 @@ struct ocfs2_xattr_set_ctxt {
 	struct ocfs2_alloc_context *data_ac;
 	struct ocfs2_cached_dealloc_ctxt dealloc;
 	int set_abort;
+	int alloc_sem_protected;
 };
 
 #define OCFS2_XATTR_ROOT_SIZE	(sizeof(struct ocfs2_xattr_def_value_root))
@@ -2916,7 +2917,8 @@ static int ocfs2_xattr_has_space_inline(struct inode *inode,
 static int ocfs2_xattr_ibody_find(struct inode *inode,
 				  int name_index,
 				  const char *name,
-				  struct ocfs2_xattr_search *xs)
+				  struct ocfs2_xattr_search *xs,
+				  int lock_alloc_sem)
 {
 	struct ocfs2_inode_info *oi = OCFS2_I(inode);
 	struct ocfs2_dinode *di = (struct ocfs2_dinode *)xs->inode_bh->b_data;
@@ -2927,9 +2929,11 @@ static int ocfs2_xattr_ibody_find(struct inode *inode,
 		return 0;
 
 	if (!(oi->ip_dyn_features & OCFS2_INLINE_XATTR_FL)) {
-		down_read(&oi->ip_alloc_sem);
+		if (lock_alloc_sem)
+			down_read(&oi->ip_alloc_sem);
 		has_space = ocfs2_xattr_has_space_inline(inode, di);
-		up_read(&oi->ip_alloc_sem);
+		if (lock_alloc_sem)
+			up_read(&oi->ip_alloc_sem);
 		if (!has_space)
 			return 0;
 	}
@@ -3016,14 +3020,17 @@ static int ocfs2_xattr_ibody_set(struct inode *inode,
 				 struct ocfs2_xattr_search *xs,
 				 struct ocfs2_xattr_set_ctxt *ctxt)
 {
-	int ret;
+	int ret, took_alloc_sem = 0;
 	struct ocfs2_inode_info *oi = OCFS2_I(inode);
 	struct ocfs2_xa_loc loc;
 
 	if (inode->i_sb->s_blocksize == OCFS2_MIN_BLOCKSIZE)
 		return -ENOSPC;
 
-	down_write(&oi->ip_alloc_sem);
+	if (!ctxt->alloc_sem_protected) {
+		down_write(&oi->ip_alloc_sem);
+		took_alloc_sem = 1;
+	}
 	if (!(oi->ip_dyn_features & OCFS2_INLINE_XATTR_FL)) {
 		ret = ocfs2_xattr_ibody_init(inode, xs->inode_bh, ctxt);
 		if (ret) {
@@ -3044,7 +3051,8 @@ static int ocfs2_xattr_ibody_set(struct inode *inode,
 	xs->here = loc.xl_entry;
 
 out:
-	up_write(&oi->ip_alloc_sem);
+	if (took_alloc_sem)
+		up_write(&oi->ip_alloc_sem);
 
 	return ret;
 }
@@ -3729,6 +3737,7 @@ int ocfs2_xattr_set_handle(handle_t *handle,
 		.handle = handle,
 		.meta_ac = meta_ac,
 		.data_ac = data_ac,
+		.alloc_sem_protected = 1,
 	};
 
 	if (!ocfs2_supports_xattr(OCFS2_SB(inode->i_sb)))
@@ -3750,7 +3759,7 @@ int ocfs2_xattr_set_handle(handle_t *handle,
 	xis.inode_bh = xbs.inode_bh = di_bh;
 	di = (struct ocfs2_dinode *)di_bh->b_data;
 
-	ret = ocfs2_xattr_ibody_find(inode, name_index, name, &xis);
+	ret = ocfs2_xattr_ibody_find(inode, name_index, name, &xis, 0);
 	if (ret)
 		goto cleanup;
 	if (xis.not_found) {
@@ -3834,7 +3843,7 @@ int ocfs2_xattr_set(struct inode *inode,
 	 * Scan inode and external block to find the same name
 	 * extended attribute and collect search information.
 	 */
-	ret = ocfs2_xattr_ibody_find(inode, name_index, name, &xis);
+	ret = ocfs2_xattr_ibody_find(inode, name_index, name, &xis, 1);
 	if (ret)
 		goto cleanup;
 	if (xis.not_found) {
@@ -3856,6 +3865,8 @@ int ocfs2_xattr_set(struct inode *inode,
 			goto cleanup;
 	}
 
+	down_write(&OCFS2_I(inode)->ip_alloc_sem);
+
 	/* Check whether the value is refcounted and do some preparation. */
 	if (ocfs2_is_refcount_inode(inode) &&
 	    (!xis.not_found || !xbs.not_found)) {
@@ -3864,7 +3875,7 @@ int ocfs2_xattr_set(struct inode *inode,
 						   &ref_meta, &ref_credits);
 		if (ret) {
 			mlog_errno(ret);
-			goto cleanup;
+			goto out_unlock_alloc;
 		}
 	}
 
@@ -3875,7 +3886,7 @@ int ocfs2_xattr_set(struct inode *inode,
 		if (ret < 0) {
 			inode_unlock(tl_inode);
 			mlog_errno(ret);
-			goto cleanup;
+			goto out_unlock_alloc;
 		}
 	}
 	inode_unlock(tl_inode);
@@ -3884,8 +3895,9 @@ int ocfs2_xattr_set(struct inode *inode,
 					&xbs, &ctxt, ref_meta, &credits);
 	if (ret) {
 		mlog_errno(ret);
-		goto cleanup;
+		goto out_unlock_alloc;
 	}
+	ctxt.alloc_sem_protected = 1;
 
 	/* we need to update inode's ctime field, so add credit for it. */
 	credits += OCFS2_INODE_UPDATE_CREDITS;
@@ -3893,15 +3905,15 @@ int ocfs2_xattr_set(struct inode *inode,
 	if (IS_ERR(ctxt.handle)) {
 		ret = PTR_ERR(ctxt.handle);
 		mlog_errno(ret);
-		goto out_free_ac;
+		goto out_unlock_alloc;
 	}
 
 	ret = __ocfs2_xattr_set_handle(inode, di, &xi, &xis, &xbs, &ctxt);
 	ocfs2_update_inode_fsync_trans(ctxt.handle, inode, 0);
 
 	ocfs2_commit_trans(osb, ctxt.handle);
-
-out_free_ac:
+out_unlock_alloc:
+	up_write(&OCFS2_I(inode)->ip_alloc_sem);
 	if (ctxt.data_ac)
 		ocfs2_free_alloc_context(ctxt.data_ac);
 	if (ctxt.meta_ac)
@@ -4520,6 +4532,7 @@ static int ocfs2_xattr_create_index_block(struct inode *inode,
 	u64 blkno;
 	handle_t *handle = ctxt->handle;
 	struct ocfs2_inode_info *oi = OCFS2_I(inode);
+	int took_alloc_sem = 0;
 	struct buffer_head *xb_bh = xs->xattr_bh;
 	struct ocfs2_xattr_block *xb =
 			(struct ocfs2_xattr_block *)xb_bh->b_data;
@@ -4537,7 +4550,10 @@ static int ocfs2_xattr_create_index_block(struct inode *inode,
 	 * We can use this lock for now, and maybe move to a dedicated mutex
 	 * if performance becomes a problem later.
 	 */
-	down_write(&oi->ip_alloc_sem);
+	if (!ctxt->alloc_sem_protected) {
+		down_write(&oi->ip_alloc_sem);
+		took_alloc_sem = 1;
+	}
 
 	ret = ocfs2_journal_access_xb(handle, INODE_CACHE(inode), xb_bh,
 				      OCFS2_JOURNAL_ACCESS_WRITE);
@@ -4600,7 +4616,8 @@ static int ocfs2_xattr_create_index_block(struct inode *inode,
 	ocfs2_journal_dirty(handle, xb_bh);
 
 out:
-	up_write(&oi->ip_alloc_sem);
+	if (took_alloc_sem)
+		up_write(&oi->ip_alloc_sem);
 
 	return ret;
 }
