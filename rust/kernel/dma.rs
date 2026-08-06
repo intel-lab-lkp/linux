@@ -41,6 +41,142 @@ use core::{
 /// Note that this may be `u64` even on 32-bit architectures.
 pub type DmaAddress = bindings::dma_addr_t;
 
+/// A range of DMA addresses.
+///
+/// Couples a base [`DmaAddress`] with the length in bytes of the region it belongs to,
+/// representing the half-open range `[start, start + len)` of DMA addresses.
+///
+/// Unlike a bare [`DmaAddress`], a [`Range`] only hands out addresses and sub-ranges that are
+/// guaranteed to lie within `[start, start + len)`; all arithmetic is checked against both the
+/// length of the range and overflow of the underlying [`DmaAddress`].
+///
+/// # Invariants
+///
+/// `start + len` does not overflow [`DmaAddress`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Range {
+    start: DmaAddress,
+    len: DmaAddress,
+}
+
+impl Range {
+    /// Creates a new [`Range`] of `len` bytes, starting at `start`.
+    ///
+    /// Returns [`EOVERFLOW`] if `start + len` overflows [`DmaAddress`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::dma::{DmaAddress, Range};
+    ///
+    /// let range = Range::new(0x1000, 0x200)?;
+    /// assert_eq!(range.start(), 0x1000);
+    /// assert_eq!(range.end(), 0x1200);
+    /// assert_eq!(range.len(), 0x200);
+    ///
+    /// assert!(Range::new(DmaAddress::MAX, 1).is_err());
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[inline]
+    pub const fn new(start: DmaAddress, len: DmaAddress) -> Result<Self> {
+        if start.checked_add(len).is_none() {
+            return Err(EOVERFLOW);
+        }
+
+        // INVARIANT: We just checked that `start + len` does not overflow `DmaAddress`.
+        Ok(Self { start, len })
+    }
+
+    /// Returns the first address of the range.
+    #[inline]
+    pub const fn start(&self) -> DmaAddress {
+        self.start
+    }
+
+    /// Returns the first address after the end of the range.
+    #[inline]
+    pub const fn end(&self) -> DmaAddress {
+        // By the type invariant, `start + len` does not overflow `DmaAddress`.
+        self.start + self.len
+    }
+
+    /// Returns the length of the range in bytes.
+    #[inline]
+    pub const fn len(&self) -> DmaAddress {
+        self.len
+    }
+
+    /// Returns `true` if the range is empty.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Returns the address at `offset` bytes into the range.
+    ///
+    /// The returned address is guaranteed to lie within the range; returns [`EINVAL`] if `offset`
+    /// is not smaller than the length of the range.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::dma::Range;
+    ///
+    /// let range = Range::new(0x1000, 0x200)?;
+    ///
+    /// assert_eq!(range.address(0)?, 0x1000);
+    /// assert_eq!(range.address(0x1ff)?, 0x11ff);
+    /// assert!(range.address(0x200).is_err());
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[inline]
+    pub const fn address(&self, offset: DmaAddress) -> Result<DmaAddress> {
+        if offset >= self.len {
+            return Err(EINVAL);
+        }
+
+        // By the type invariant, `start + offset < start + len` does not overflow `DmaAddress`.
+        Ok(self.start + offset)
+    }
+
+    /// Returns the sub-range of `len` bytes, starting `offset` bytes into the range.
+    ///
+    /// The returned range is guaranteed to lie within the range; returns [`EINVAL`] if
+    /// `offset + len` overflows [`DmaAddress`] or exceeds the length of the range.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::dma::Range;
+    ///
+    /// let range = Range::new(0x1000, 0x200)?;
+    ///
+    /// let sub = range.subrange(0x100, 0x80)?;
+    /// assert_eq!(sub.start(), 0x1100);
+    /// assert_eq!(sub.end(), 0x1180);
+    ///
+    /// assert!(range.subrange(0x100, 0x101).is_err());
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[inline]
+    pub const fn subrange(&self, offset: DmaAddress, len: DmaAddress) -> Result<Self> {
+        let Some(end) = offset.checked_add(len) else {
+            return Err(EINVAL);
+        };
+
+        if end > self.len {
+            return Err(EINVAL);
+        }
+
+        // INVARIANT: `start + offset + len <= start + self.len`, which by the type invariant of
+        // `self` does not overflow `DmaAddress`.
+        Ok(Self {
+            start: self.start + offset,
+            len,
+        })
+    }
+}
+
 /// Trait to be implemented by DMA capable bus devices.
 ///
 /// The [`dma::Device`](Device) trait should be implemented by bus specific device representations,
@@ -626,6 +762,25 @@ impl<T: KnownSize + ?Sized> Coherent<T> {
         self.dma_handle
     }
 
+    /// Returns the [`Range`] of DMA addresses covering this allocation.
+    ///
+    /// Unlike [`Self::dma_handle`], which hands out the base address as a bare integer, the
+    /// returned [`Range`] couples the base address with the size of the allocation, such that
+    /// any offset arithmetic performed on it is checked.
+    #[inline]
+    pub fn dma_range(&self) -> Range {
+        // INVARIANT: By the type invariants of `Self`, `dma_handle` is the DMA address base of an
+        // allocated region of `self.size()` bytes; the DMA API guarantees that a mapped region
+        // never wraps the DMA address space, hence `dma_handle + size` does not overflow
+        // `DmaAddress`.
+        Range {
+            start: self.dma_handle,
+            // CAST: `usize` always fits in `DmaAddress`, which is at least 32 bits wide and
+            // always 64 bits wide on 64-bit architectures.
+            len: self.size() as DmaAddress,
+        }
+    }
+
     /// Returns a reference to the data in the region.
     ///
     /// # Safety
@@ -1099,6 +1254,25 @@ impl CoherentHandle {
     #[inline]
     pub fn dma_handle(&self) -> DmaAddress {
         self.dma_handle
+    }
+
+    /// Returns the [`Range`] of DMA addresses covering this allocation.
+    ///
+    /// Unlike [`Self::dma_handle`], which hands out the base address as a bare integer, the
+    /// returned [`Range`] couples the base address with the size of the allocation, such that
+    /// any offset arithmetic performed on it is checked.
+    #[inline]
+    pub fn dma_range(&self) -> Range {
+        // INVARIANT: By the type invariants of `Self`, `dma_handle` is the DMA address base of an
+        // allocated region of `self.size` bytes; the DMA API guarantees that a mapped region
+        // never wraps the DMA address space, hence `dma_handle + size` does not overflow
+        // `DmaAddress`.
+        Range {
+            start: self.dma_handle,
+            // CAST: `usize` always fits in `DmaAddress`, which is at least 32 bits wide and
+            // always 64 bits wide on 64-bit architectures.
+            len: self.size as DmaAddress,
+        }
     }
 
     /// Returns the size in bytes of this allocation.
