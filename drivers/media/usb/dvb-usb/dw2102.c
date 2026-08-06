@@ -1902,9 +1902,11 @@ static int dw2102_load_firmware(struct usb_device *dev,
 	if (p) {
 		memcpy(p, fw->data, fw->size);
 		for (i = 0; i < fw->size; i += 0x40) {
+			int len = min_t(size_t, fw->size - i, 0x40);
+
 			b = (u8 *)p + i;
-			if (dw210x_op_rw(dev, 0xa0, i, 0, b, 0x40,
-					 DW210X_WRITE_MSG) != 0x40) {
+			if (dw210x_op_rw(dev, 0xa0, i, 0, b, len,
+					 DW210X_WRITE_MSG) != len) {
 				err("error while transferring firmware");
 				ret = -EINVAL;
 				break;
