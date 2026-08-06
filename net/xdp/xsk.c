@@ -297,10 +297,11 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 {
 	u32 frame_size = __xsk_pool_get_rx_frame_size(xs->pool);
 	void *copy_from = xsk_copy_xdp_start(xdp), *copy_to;
+	struct xdp_buff *first, *next, *xsk_xdp;
 	u32 from_len, meta_len, rem, num_desc;
 	struct xdp_buff_xsk *xskb;
-	struct xdp_buff *xsk_xdp;
 	skb_frag_t *frag;
+	u32 i;
 
 	from_len = xdp->data_end - copy_from;
 	meta_len = xdp->data - copy_from;
@@ -343,11 +344,34 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		frag =  &sinfo->frags[0];
 	}
 
+	if (WARN_ON_ONCE(!list_empty(&xs->pool->xskb_list)))
+		goto err_alloc;
+
+	first = xsk_buff_alloc(xs->pool);
+	if (!first)
+		goto err_alloc;
+
+	xdp_buff_set_frags_flag(first);
+	for (i = 1; i < num_desc; i++) {
+		xsk_xdp = xsk_buff_alloc(xs->pool);
+		if (!xsk_xdp)
+			goto err_free;
+
+		xskb = container_of(xsk_xdp, struct xdp_buff_xsk, xdp);
+		if (unlikely(xsk_xdp == first ||
+			     !list_empty(&xskb->list_node)))
+			goto err_free;
+
+		list_add_tail(&xskb->list_node, &xs->pool->xskb_list);
+	}
+
+	xdp_buff_clear_frags_flag(first);
+	xsk_xdp = first;
 	do {
 		u32 to_len = frame_size + meta_len;
 		u32 copied;
 
-		xsk_xdp = xsk_buff_alloc(xs->pool);
+		next = xsk_buff_get_frag(xsk_xdp);
 		copy_to = xsk_xdp->data - meta_len;
 
 		copied = xsk_copy_xdp(copy_to, &copy_from, to_len, &from_len, &frag, rem);
@@ -356,10 +380,21 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		xskb = container_of(xsk_xdp, struct xdp_buff_xsk, xdp);
 		__xsk_rcv_zc_safe(xs, xskb, copied - meta_len,
 				  rem ? XDP_PKT_CONTD : 0);
+		xsk_xdp = next;
 		meta_len = 0;
 	} while (rem);
 
 	return 0;
+
+err_free:
+	/* Re-set frags flag; xsk_buff_alloc() may have cleared first->flags
+	 * if the same Fill Ring address aliased back to first.
+	 */
+	xdp_buff_set_frags_flag(first);
+	xsk_buff_free(first);
+err_alloc:
+	xs->rx_dropped++;
+	return -ENOMEM;
 }
 
 static bool xsk_tx_writeable(struct xdp_sock *xs)
