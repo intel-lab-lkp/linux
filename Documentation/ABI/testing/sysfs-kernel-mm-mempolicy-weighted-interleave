@@ -52,3 +52,20 @@ Description:	Auto-weighting configuration interface
 
 		Writing a new weight to a node directly via the nodeN interface
 		will also automatically switch the system to manual mode.
+
+What:		/sys/kernel/mm/mempolicy/weighted_interleave/package_mode
+Date:		August 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Package-aware weighted interleave toggle
+
+		'true' restricts weighted interleave node selection to the
+		NUMA nodes of the package (CPU socket) the allocating task
+		is running on. 'false' (the default) uses the existing
+		weighted interleave behavior.
+
+		Enabling is rejected with -EINVAL while the package topology
+		is not symmetric.
+
+		Writing any true value string (e.g. Y or 1) enables the
+		restriction, any false value string (e.g. N or 0) disables
+		it. All other strings return -EINVAL.

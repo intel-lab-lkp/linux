@@ -117,6 +117,7 @@
 #include <asm/tlb.h>
 #include <linux/uaccess.h>
 #include <linux/memory.h>
+#include <linux/memory-tiers.h>
 
 #include "internal.h"
 
@@ -167,6 +168,8 @@ static unsigned int *node_bw_table;
  */
 static DEFINE_MUTEX(wi_state_lock);
 
+static bool package_mode_enabled;
+
 static u8 get_il_weight(int node)
 {
 	struct weighted_interleave_state *state;
@@ -178,6 +181,11 @@ static u8 get_il_weight(int node)
 		weight = state->iw_table[node];
 	rcu_read_unlock();
 	return weight;
+}
+
+static bool wi_package_mode_enabled(void)
+{
+	return READ_ONCE(package_mode_enabled) && mp_is_topology_symmetric();
 }
 
 /*
@@ -2138,17 +2146,97 @@ bool apply_policy_zone(struct mempolicy *policy, enum zone_type zone)
 	return zone >= dynamic_policy_zone;
 }
 
+/**
+ * policy_resolve_package_nodes - Restrict policy nodes to the current package
+ * @policy: Target mempolicy whose user-selected nodes are in @policy->nodes.
+ * @mask:   Output nodemask. On success, contains policy->nodes limited to
+ *          the package that should be used for the allocation.
+ *
+ * This helper combines two constraints to decide where within a package
+ * memory may be allocated:
+ *
+ *   1) The caller's package: derived via mp_get_package_nodes(numa_node_id()).
+ *   2) The user's preselected set @policy->nodes (cpusets/mempolicy).
+ *
+ * The function obtains the nodemask of the current CPU's package and
+ * intersects it with @policy->nodes. If the intersection is empty (e.g. the
+ * user excluded every node of the current package), it falls back to the
+ * node in @policy->nodes, derives that node's package, and intersects
+ * again. If the fallback also yields an empty set, @mask stays empty and a
+ * non-zero error is returned.
+ *
+ * Examples (packages: P0={CPU:0, MEM:2}, P1={CPU:1, MEM:3}):
+ *   - policy->nodes = {0,1,2,3}
+ *       on P0: mask = {0,2}; on P1: mask = {1,3}.
+ *   - policy->nodes = {0,1,3}
+ *       on P0: mask = {0}      (only node 0 from P0 is allowed).
+ *   - policy->nodes = {1,2,3}
+ *       on P0: mask = {2}      (only node 2 from P0 is allowed).
+ *   - policy->nodes = {1,3}
+ *       on P0: current package (P0) & policy = NULL -> fallback to policy=1,
+ *               package(1)=P1, mask = {1,3}. (User effectively opted out of P0.)
+ *
+ * If the selected node is low on memory, the allocation may use another node.
+ *
+ * Return:
+ *   0 on success with @mask set as above;
+ *   -EINVAL if @policy/@mask is NULL;
+ *   -ENOENT if even the fallback intersection is empty;
+ *   Propagated error from mp_get_package_nodes() on failure.
+ */
+static int policy_resolve_package_nodes(struct mempolicy *policy, nodemask_t *mask)
+{
+	nodemask_t package_mask;
+	int node, ret;
+
+	if (!policy || !mask)
+		return -EINVAL;
+
+	nodes_clear(*mask);
+
+	node = numa_node_id();
+	ret = mp_get_package_nodes(node, &package_mask);
+	if (ret)
+		return ret;
+
+	nodes_and(*mask, package_mask, policy->nodes);
+	if (!nodes_empty(*mask))
+		return 0;
+
+	/*
+	 * The user's nodemask excludes every node of the current package;
+	 * fall back to the package spanned by the user's own first node.
+	 */
+	node = first_node(policy->nodes);
+	ret = mp_get_package_nodes(node, &package_mask);
+	if (ret)
+		return ret;
+
+	nodes_and(*mask, package_mask, policy->nodes);
+	if (nodes_empty(*mask))
+		return -ENOENT;
+
+	return 0;
+}
+
 static unsigned int weighted_interleave_nodes(struct mempolicy *policy)
 {
 	unsigned int node;
 	unsigned int cpuset_mems_cookie;
+	nodemask_t mask;
 
 retry:
 	/* to prevent miscount use tsk->mems_allowed_seq to detect rebind */
 	cpuset_mems_cookie = read_mems_allowed_begin();
 	node = current->il_prev;
-	if (!current->il_weight || !node_isset(node, policy->nodes)) {
-		node = next_node_in(node, policy->nodes);
+
+	/* Package mode off or unresolved: fall back to the full policy nodemask. */
+	if (!wi_package_mode_enabled() ||
+	    policy_resolve_package_nodes(policy, &mask))
+		mask = policy->nodes;
+
+	if (!current->il_weight || !node_isset(node, mask)) {
+		node = next_node_in(node, mask);
 		if (read_mems_allowed_retry(cpuset_mems_cookie))
 			goto retry;
 		if (node == MAX_NUMNODES)
@@ -2241,6 +2329,30 @@ static unsigned int read_once_policy_nodemask(struct mempolicy *pol,
 	return nodes_weight(*mask);
 }
 
+/*
+ * Package-aware counterpart of read_once_policy_nodemask(): resolve the
+ * current package's nodes intersected with the policy, falling back to the
+ * full policy nodemask when package mode is off or resolution fails.
+ */
+static unsigned int read_once_policy_package_nodemask(struct mempolicy *pol,
+						      nodemask_t *mask)
+{
+	nodemask_t package_mask;
+
+	barrier();
+	if (!wi_package_mode_enabled()) {
+		memcpy(mask, &pol->nodes, sizeof(nodemask_t));
+		return nodes_weight(*mask);
+	}
+	if (policy_resolve_package_nodes(pol, &package_mask))
+		memcpy(mask, &pol->nodes, sizeof(nodemask_t));
+	else
+		memcpy(mask, &package_mask, sizeof(nodemask_t));
+	barrier();
+
+	return nodes_weight(*mask);
+}
+
 static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
 	struct weighted_interleave_state *state;
@@ -2251,7 +2363,7 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 	u8 weight;
 	int nid = 0;
 
-	nr_nodes = read_once_policy_nodemask(pol, &nodemask);
+	nr_nodes = read_once_policy_package_nodemask(pol, &nodemask);
 	if (!nr_nodes)
 		return numa_node_id();
 
@@ -2695,7 +2807,7 @@ static unsigned long alloc_pages_bulk_weighted_interleave(gfp_t gfp,
 	/* read the nodes onto the stack, retry if done during rebind */
 	do {
 		cpuset_mems_cookie = read_mems_allowed_begin();
-		nnodes = read_once_policy_nodemask(pol, &nodes);
+		nnodes = read_once_policy_package_nodemask(pol, &nodes);
 	} while (read_mems_allowed_retry(cpuset_mems_cookie));
 
 	/* if the nodemask has become invalid, we cannot do anything */
@@ -3835,7 +3947,42 @@ static struct kobj_attribute wi_auto_attr = {
 	.store = weighted_interleave_auto_store,
 };
 
+static ssize_t package_mode_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", str_true_false(READ_ONCE(package_mode_enabled)));
+}
+
+static ssize_t package_mode_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	bool input;
+	int err;
+
+	err = kstrtobool(buf, &input);
+	if (err)
+		return err;
+
+	/*
+	 * Disable package-aware weighted interleave on non-symmetric topologies.
+	 * Non-symmetric topology (e.g., asymmetric CXL memory attachment) can
+	 * cause performance degradation if package-aware allocation is used.
+	 * Reject enable request if topology is not symmetric.
+	 */
+	if (input && !mp_is_topology_symmetric()) {
+		pr_warn("package_mode cannot be enabled on non-symmetric topology\n");
+		return -EINVAL;
+	}
+
+	WRITE_ONCE(package_mode_enabled, input);
+	return count;
+}
+
+static struct kobj_attribute wi_package_mode_attr =
+	__ATTR(package_mode, 0664, package_mode_show, package_mode_store);
+
 static void wi_cleanup(void) {
+	sysfs_remove_file(&wi_group->wi_kobj, &wi_package_mode_attr.attr);
 	sysfs_remove_file(&wi_group->wi_kobj, &wi_auto_attr.attr);
 	sysfs_wi_node_delete_all();
 	wi_state_free();
@@ -3940,6 +4087,10 @@ static int __init add_weighted_interleave_group(struct kobject *mempolicy_kobj)
 	err = sysfs_create_file(&wi_group->wi_kobj, &wi_auto_attr.attr);
 	if (err)
 		goto err_put_kobj;
+
+	err = sysfs_create_file(&wi_group->wi_kobj, &wi_package_mode_attr.attr);
+	if (err)
+		goto err_cleanup_kobj;
 
 	for_each_online_node(nid) {
 		if (!node_state(nid, N_MEMORY))
