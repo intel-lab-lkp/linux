@@ -378,6 +378,13 @@ static inline struct zswap_entry *vswap_zswap_load(swp_entry_t entry)
 static inline void folio_release_vswap_backing(struct folio *folio) {}
 static inline void folio_release_non_phys_swap_backing(struct folio *folio) {}
 
+static inline int __vswap_check_backing(struct swap_cluster_info_dynamic *ci_dyn,
+					unsigned int voff, int nr,
+					enum vswap_backing_type *typep)
+{
+	return 0;
+}
+
 static inline int vswap_cluster_alloc_vtable(struct swap_cluster_info_dynamic *ci_dyn)
 {
 	return 0;

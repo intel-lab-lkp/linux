@@ -4815,11 +4815,15 @@ static unsigned long thp_swapin_suitable_orders(struct vm_fault *vmf)
 	entry = softleaf_from_pte(vmf->orig_pte);
 
 	/*
-	 * THP swapin for vswap is not supported yet. Also, a large swapped
-	 * out folio could be partially or fully in zswap, which we lack
-	 * handling for. In both cases, fall back to order-0 swapin.
+	 * A large swapped out folio could be partially or fully in zswap.
+	 * For vswap entries the THP-amenability of the backing is checked
+	 * later under the cluster lock in __swap_cache_add_check, which
+	 * rejects ZSWAP and mixed batches via -EBUSY and triggers
+	 * order-fallback. For non-vswap entries we still need the
+	 * zswap_never_enabled() bail: zswap_load rejects large folios with
+	 * -EINVAL, which would SIGBUS the fault.
 	 */
-	if (is_vswap_entry(entry) || !zswap_never_enabled())
+	if (!is_vswap_entry(entry) && !zswap_never_enabled())
 		return 0;
 
 	/*
