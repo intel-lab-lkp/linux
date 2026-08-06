@@ -1012,6 +1012,7 @@ static int ipv6_get_msfilter(struct sock *sk, sockptr_t optval,
 {
 	const int size0 = offsetof(struct group_filter, gf_slist_flex);
 	struct group_filter gsf;
+	unsigned int max_numsrc;
 	int num;
 	int err;
 
@@ -1021,6 +1022,11 @@ static int ipv6_get_msfilter(struct sock *sk, sockptr_t optval,
 		return -EFAULT;
 	if (gsf.gf_group.ss_family != AF_INET6)
 		return -EADDRNOTAVAIL;
+
+	/* Number of sources that would fit in the userspace buffer */
+	max_numsrc = (len - size0) / sizeof(gsf.gf_slist_flex[0]);
+	gsf.gf_numsrc = min_t(u32, gsf.gf_numsrc, max_numsrc);
+
 	num = gsf.gf_numsrc;
 	sockopt_lock_sock(sk);
 	err = ip6_mc_msfget(sk, &gsf, optval, size0);
@@ -1041,6 +1047,7 @@ static int compat_ipv6_get_msfilter(struct sock *sk, sockptr_t optval,
 {
 	const int size0 = offsetof(struct compat_group_filter, gf_slist_flex);
 	struct compat_group_filter gf32;
+	unsigned int max_numsrc;
 	struct group_filter gf;
 	int err;
 	int num;
@@ -1050,6 +1057,10 @@ static int compat_ipv6_get_msfilter(struct sock *sk, sockptr_t optval,
 
 	if (copy_from_sockptr(&gf32, optval, size0))
 		return -EFAULT;
+
+	max_numsrc = (len - size0) / sizeof(gf32.gf_slist_flex[0]);
+	gf32.gf_numsrc = min_t(u32, gf32.gf_numsrc, max_numsrc);
+
 	gf.gf_interface = gf32.gf_interface;
 	gf.gf_fmode = gf32.gf_fmode;
 	num = gf.gf_numsrc = gf32.gf_numsrc;
