@@ -37,6 +37,21 @@ config DEBUG_PINCTRL
 	help
 	  Say Y here to add some extra checks and diagnostics to PINCTRL calls.
 
+config PINCTRL_AMB
+	bool "Ambarella pin controller support"
+	depends on ARCH_AMBARELLA || COMPILE_TEST
+	select GENERIC_PINCONF
+	select GPIOLIB
+	select GPIOLIB_IRQCHIP
+	select MFD_SYSCON
+	select PINCONF
+	select PINMUX
+	help
+	  Say Y here to enable the pin controller found on Ambarella SoCs.
+	  The driver provides pin multiplexing and pin configuration as well
+	  as GPIO and GPIO interrupt support. It is required to configure
+	  peripheral pins on systems using an Ambarella SoC.
+
 config PINCTRL_AMD
 	bool "AMD GPIO pin control"
 	depends on HAS_IOMEM
