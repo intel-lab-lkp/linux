@@ -128,6 +128,7 @@ void rds_tcp_reset_callbacks(struct socket *sock,
 {
 	struct rds_tcp_connection *tc = cp->cp_transport_data;
 	struct socket *osock = tc->t_sock;
+	bool in_xmit_held = false;
 
 	if (!osock)
 		goto newsock;
@@ -153,7 +154,14 @@ void rds_tcp_reset_callbacks(struct socket *sock,
 	 * cannot mark rds_conn_path_up() in the window before lock_sock()
 	 */
 	atomic_set(&cp->cp_state, RDS_CONN_RESETTING);
-	wait_event(cp->cp_waitq, !test_bit(RDS_IN_XMIT, &cp->cp_flags));
+	/* Acquire the send-path lock rather than waiting for it to be
+	 * released: a mere wait is racy, since rds_send_xmit() may take
+	 * the lock again right after we sample it clear and then run
+	 * concurrently with rds_send_path_reset() below.
+	 */
+	wait_event(cp->cp_waitq,
+		   !test_and_set_bit_lock(RDS_IN_XMIT, &cp->cp_flags));
+	in_xmit_held = true;
 	/* reset receive side state for rds_tcp_data_recv() for osock  */
 	cancel_delayed_work_sync(&cp->cp_send_w);
 	cancel_delayed_work_sync(&cp->cp_recv_w);
@@ -172,6 +180,11 @@ newsock:
 	lock_sock(sock->sk);
 	rds_tcp_set_callbacks(sock, cp);
 	release_sock(sock->sk);
+
+	if (in_xmit_held) {
+		clear_bit_unlock(RDS_IN_XMIT, &cp->cp_flags);
+		wake_up_all(&cp->cp_waitq);
+	}
 }
 
 /* Add tc to rds_tcp_tc_list and set tc->t_sock. See comments
