@@ -817,14 +817,25 @@ cifs_clear_stats(struct cifs_tcon *tcon)
 static void
 cifs_print_stats(struct seq_file *m, struct cifs_tcon *tcon)
 {
+	u64 bytes_read = 0, bytes_written = 0;
+
+#ifdef CONFIG_CIFS_DEBUG2
+	bytes_read = tcon->bytes_read;
+	bytes_written = tcon->bytes_written;
+#endif /* CONFIG_CIFS_DEBUG2 */
+
 	seq_printf(m, " Oplocks breaks: %d",
 		   atomic_read(&tcon->stats.cifs_stats.num_oplock_brks));
 	seq_printf(m, "\nReads:  %d Bytes: %llu",
-		   atomic_read(&tcon->stats.cifs_stats.num_reads),
-		   (long long)(tcon->bytes_read));
+		   atomic_read(&tcon->stats.cifs_stats.num_reads), bytes_read);
+#ifndef CONFIG_CIFS_DEBUG2
+	seq_puts(m, " (CONFIG_CIFS_DEBUG2 is disabled)");
+#endif /* !CONFIG_CIFS_DEBUG2 */
 	seq_printf(m, "\nWrites: %d Bytes: %llu",
-		   atomic_read(&tcon->stats.cifs_stats.num_writes),
-		   (long long)(tcon->bytes_written));
+		   atomic_read(&tcon->stats.cifs_stats.num_writes), bytes_written);
+#ifndef CONFIG_CIFS_DEBUG2
+	seq_puts(m, " (CONFIG_CIFS_DEBUG2 is disabled)");
+#endif /* !CONFIG_CIFS_DEBUG2 */
 	seq_printf(m, "\nFlushes: %d",
 		   atomic_read(&tcon->stats.cifs_stats.num_flushes));
 	seq_printf(m, "\nLocks: %d HardLinks: %d Symlinks: %d",

@@ -1425,9 +1425,12 @@ smb2_print_stats(struct seq_file *m, struct cifs_tcon *tcon)
 	 *  Can't display SMB2_NEGOTIATE, SESSION_SETUP, LOGOFF, CANCEL and ECHO
 	 *  totals (requests sent) since those SMBs are per-session not per tcon
 	 */
+#ifdef CONFIG_CIFS_DEBUG2
 	seq_printf(m, "\nBytes read: %llu  Bytes written: %llu",
-		   (long long)(tcon->bytes_read),
-		   (long long)(tcon->bytes_written));
+		   tcon->bytes_read, tcon->bytes_written);
+#else /* CONFIG_CIFS_DEBUG2 */
+	seq_puts(m, "\nBytes read: 0 Bytes written: 0 (CONFIG_CIFS_DEBUG2 is disabled)");
+#endif /* !CONFIG_CIFS_DEBUG2 */
 	seq_printf(m, "\nOpen files: %d total (local), %d open on server",
 		   atomic_read(&tcon->num_local_opens),
 		   atomic_read(&tcon->num_remote_opens));

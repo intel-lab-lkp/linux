@@ -145,7 +145,9 @@ tcon_info_alloc(bool dir_leases_enabled, enum smb3_tcon_ref_trace trace)
 	INIT_LIST_HEAD(&ret_buf->tcon_list);
 	INIT_LIST_HEAD(&ret_buf->cifs_sb_list);
 	spin_lock_init(&ret_buf->open_file_lock);
+#ifdef CONFIG_CIFS_DEBUG2
 	spin_lock_init(&ret_buf->stat_lock);
+#endif /* CONFIG_CIFS_DEBUG2 */
 	spin_lock_init(&ret_buf->sb_list_lock);
 	atomic_set(&ret_buf->num_local_opens, 0);
 	atomic_set(&ret_buf->num_remote_opens, 0);

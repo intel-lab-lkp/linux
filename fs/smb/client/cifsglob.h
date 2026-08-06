@@ -1240,9 +1240,11 @@ struct cifs_tcon {
 			atomic_t smb2_com_failed[NUMBER_OF_SMB2_COMMANDS];
 		} smb2_stats;
 	} stats;
+#ifdef CONFIG_CIFS_DEBUG2
 	__u64    bytes_read;
 	__u64    bytes_written;
 	spinlock_t stat_lock;  /* protects the two fields above */
+#endif /* CONFIG_CIFS_DEBUG2 */
 	time64_t stats_from_time;
 	FILE_SYSTEM_DEVICE_INFO fsDevInfo;
 	FILE_SYSTEM_ATTRIBUTE_INFO fsAttrInfo; /* ok if fs name truncated */
@@ -1655,10 +1657,11 @@ convert_delimiter(char *path, char delim)
 
 #define cifs_stats_inc atomic_inc
 
+#ifdef CONFIG_CIFS_DEBUG2
 static inline void cifs_stats_bytes_written(struct cifs_tcon *tcon,
 					    unsigned int bytes)
 {
-	if (bytes) {
+	if (likely(bytes)) {
 		spin_lock(&tcon->stat_lock);
 		tcon->bytes_written += bytes;
 		spin_unlock(&tcon->stat_lock);
@@ -1668,10 +1671,23 @@ static inline void cifs_stats_bytes_written(struct cifs_tcon *tcon,
 static inline void cifs_stats_bytes_read(struct cifs_tcon *tcon,
 					 unsigned int bytes)
 {
-	spin_lock(&tcon->stat_lock);
-	tcon->bytes_read += bytes;
-	spin_unlock(&tcon->stat_lock);
+	if (likely(bytes)) {
+		spin_lock(&tcon->stat_lock);
+		tcon->bytes_read += bytes;
+		spin_unlock(&tcon->stat_lock);
+	}
 }
+#else /* CONFIG_CIFS_DEBUG2 */
+static inline void cifs_stats_bytes_written(struct cifs_tcon *tcon,
+					    unsigned int bytes)
+{
+}
+
+static inline void cifs_stats_bytes_read(struct cifs_tcon *tcon,
+					 unsigned int bytes)
+{
+}
+#endif /* !CONFIG_CIFS_DEBUG2 */
 
 
 /*

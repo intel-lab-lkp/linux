@@ -762,11 +762,13 @@ static ssize_t cifs_stats_proc_write(struct file *file,
 					continue;
 				list_for_each_entry(tcon, &ses->tcon_list, tcon_list) {
 					atomic_set(&tcon->num_smbs_sent, 0);
+#ifdef CONFIG_CIFS_DEBUG2
 					spin_lock(&tcon->stat_lock);
 					tcon->bytes_read = 0;
 					tcon->bytes_written = 0;
-					tcon->stats_from_time = ktime_get_real_seconds();
 					spin_unlock(&tcon->stat_lock);
+#endif /* CONFIG_CIFS_DEBUG2 */
+					tcon->stats_from_time = ktime_get_real_seconds();
 					if (server->ops->clear_stats)
 						server->ops->clear_stats(tcon);
 				}
