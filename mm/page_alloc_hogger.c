@@ -88,6 +88,7 @@
 #include <linux/gfp.h>
 #include <linux/gfp_types.h>
 #include <linux/kernel.h>
+#include <linux/mmzone.h>
 #include <linux/module.h>
 #include <linux/nodemask.h>
 #include <linux/printk.h>
@@ -126,21 +127,62 @@ struct page_alloc {
 static struct kmem_cache *req_alloc_cache;
 static struct kmem_cache *page_alloc_cache;
 
+
+/**
+ * create_zones_subdirs() - Creates a directory for each populated zone in the
+ * node.
+ *
+ * Note: ZONE_DEVICE pages won't be allocated using this driver. The main reason
+ * is because they are not managed by the Buddy Allocator or CMA allocator.
+ */
+static inline int create_zones_subdirs(struct dentry *nodedir,
+					struct pglist_data *pgdata)
+{
+	struct dentry *zonedir;
+	struct zone *zone;
+	struct zone *node_zones = pgdata->node_zones;
+	char dirname[24];
+
+	for (zone = node_zones; zone - node_zones < MAX_NR_ZONES; ++zone) {
+		if (!populated_zone(zone))
+			continue;
+
+		/* ZONE_DEVICE pages won't be allocated using this driver. */
+		if (zone_is_zone_device(zone))
+			continue;
+
+		snprintf(dirname, sizeof(dirname), "zone-%s", zone->name);
+		zonedir = debugfs_create_dir(dirname, nodedir);
+		if (IS_ERR(zonedir))
+			return PTR_ERR(zonedir);
+	}
+
+	return 0;
+}
+
 /**
  * create_nodes_subdirs() - Creates a directory for each node that contains
- * memory.
+ * memory. Once that the node directory is created, it creates a directory for
+ * each zone in the node.
  */
 static inline int create_nodes_subdirs(struct dentry *mmdir)
 {
 	struct dentry *nodedir;
-	int nid;
 	char dirname[12];
+	int nid;
+	int ret;
 
 	for_each_node_state(nid, N_MEMORY) {
+		struct pglist_data *pgdata = NODE_DATA(nid);
+
 		snprintf(dirname, sizeof(dirname), "node-%d", nid);
 		nodedir = debugfs_create_dir(dirname, mmdir);
 		if (IS_ERR(nodedir))
 			return PTR_ERR(nodedir);
+
+		ret = create_zones_subdirs(nodedir, pgdata);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
