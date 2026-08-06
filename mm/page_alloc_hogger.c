@@ -155,6 +155,24 @@ static inline void set_zone_to_alloc_from(int zone_idx, gfp_t *flags_ptr)
 	}
 }
 
+static inline void set_migrate_type_to_alloc_from(int migrate_type, gfp_t *flags_ptr)
+{
+	switch (migrate_type) {
+	case MIGRATE_UNMOVABLE:
+		*flags_ptr &= ~(__GFP_RECLAIMABLE | __GFP_MOVABLE);
+		break;
+	case MIGRATE_RECLAIMABLE:
+		*flags_ptr |= __GFP_RECLAIMABLE;
+		break;
+	case MIGRATE_HIGHATOMIC:
+		*flags_ptr |= __GFP_HIGH;
+		break;
+	case MIGRATE_MOVABLE: default:
+		*flags_ptr |= __GFP_MOVABLE;
+		break;
+	}
+}
+
 /**
  * req_page_alloc_write() - Allocates the pages on the requested node, zone,
  * order and migrate type. Once the allocation is performed, a file is created
@@ -179,6 +197,7 @@ static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 		return -ENOMEM;
 
 	set_zone_to_alloc_from(req->zone_idx, &flags);
+	set_migrate_type_to_alloc_from(req->migrate_type, &flags);
 
 	kfree(allocs_ids);
 
@@ -248,6 +267,9 @@ static inline int create_migrate_type_subdirs(struct dentry *orderdir, int nid,
 		if (mtype == MIGRATE_ISOLATE) /* can't allocate from here */
 			continue;
 #endif
+		if (zone_idx == ZONE_MOVABLE && mtype != MIGRATE_MOVABLE)
+			continue;
+
 		snprintf(dirname, sizeof(dirname), "migrate-%s",
 			 migratetype_names[mtype]);
 		migratedir = debugfs_create_dir(dirname, orderdir);
