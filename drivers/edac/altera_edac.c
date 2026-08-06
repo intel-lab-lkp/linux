@@ -290,7 +290,7 @@ static int altr_sdram_probe(struct platform_device *pdev)
 	unsigned long mem_size, irqflags = 0;
 
 	/* Grab the register range from the sdr controller in device tree */
-	mc_vbase = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
+	mc_vbase = syscon_regmap_lookup_by_phandle(dev_of_node(&pdev->dev),
 						   "altr,sdr-syscon");
 	if (IS_ERR(mc_vbase)) {
 		edac_printk(KERN_ERR, EDAC_MC,
@@ -507,9 +507,12 @@ MODULE_DEVICE_TABLE(of, altr_edac_of_match);
 
 static int altr_edac_probe(struct platform_device *pdev)
 {
-	of_platform_populate(pdev->dev.of_node, altr_edac_device_of_match,
-			     NULL, &pdev->dev);
-	return 0;
+	int ret;
+
+	ret = of_platform_populate(dev_of_node(&pdev->dev), altr_edac_device_of_match,
+				   NULL, &pdev->dev);
+
+	return ret;
 }
 
 static struct platform_driver altr_edac_driver = {
@@ -2184,7 +2187,7 @@ static int altr_edac_a10_probe(struct platform_device *pdev)
 						 altr_edac_a10_irq_handler, edac);
 	}
 
-	for_each_child_of_node(pdev->dev.of_node, child) {
+	for_each_child_of_node(dev_of_node(&pdev->dev), child) {
 		if (!of_device_is_available(child))
 			continue;
 
@@ -2193,7 +2196,7 @@ static int altr_edac_a10_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_EDAC_ALTERA_SDRAM
 		else if (of_device_is_compatible(child, "altr,sdram-edac-a10"))
-			of_platform_populate(pdev->dev.of_node,
+			of_platform_populate(dev_of_node(&pdev->dev),
 					     altr_sdram_ctrl_of_match,
 					     NULL, &pdev->dev);
 #endif
