@@ -1100,7 +1100,22 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 
 	cdb = hdr->cdb;
 
-	if (hdr->hlength) {
+	if (!hdr->hlength) {
+		/*
+		 * Without an Extended CDB AHS the CDB is limited to the 16
+		 * bytes in the basic header. The CDB is later re-parsed by
+		 * scsi_command_size() based on its opcode, which may claim a
+		 * larger length (e.g. VARIABLE_LENGTH_CMD with cdb[7]=252).
+		 * Reject such a mismatch before handing the CDB to
+		 * target_cmd_init_cdb() to avoid an out-of-bounds read.
+		 */
+		if (scsi_command_size(hdr->cdb) > ISCSI_CDB_SIZE) {
+			pr_err("SCSI command size %u exceeds CDB size %u, protocol error.\n",
+			       scsi_command_size(hdr->cdb), ISCSI_CDB_SIZE);
+			return iscsit_add_reject_cmd(cmd,
+				ISCSI_REASON_PROTOCOL_ERROR, buf);
+		}
+	} else {
 		ecdb_ahdr = (struct iscsi_ecdb_ahdr *) (hdr + 1);
 		if (ecdb_ahdr->ahstype != ISCSI_AHSTYPE_CDB) {
 			pr_err("Additional Header Segment type %d not supported!\n",
@@ -1123,6 +1138,20 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 		}
 
 		cdb_length = ahslength - 1 + ISCSI_CDB_SIZE;
+
+		/*
+		 * The CDB buffer is later re-parsed by scsi_command_size()
+		 * based on its opcode, which may claim a length larger than
+		 * the AHS provided. Reject such a mismatch before allocating
+		 * to avoid an out-of-bounds read of the CDB buffer in
+		 * target_cmd_init_cdb().
+		 */
+		if (scsi_command_size(hdr->cdb) > cdb_length) {
+			pr_err("Extended CDB AHS: SCSI command size %u exceeds AHS-provided CDB length %u, protocol error.\n",
+			       scsi_command_size(hdr->cdb), cdb_length);
+			return iscsit_add_reject_cmd(cmd,
+				ISCSI_REASON_PROTOCOL_ERROR, buf);
+		}
 
 		cdb = kmalloc(cdb_length, GFP_KERNEL);
 		if (cdb == NULL)
