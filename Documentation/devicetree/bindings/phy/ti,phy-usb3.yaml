@@ -52,6 +52,20 @@ properties:
       enum: [wkupclk, sysclk, refclk, dpll_ref,
              dpll_ref_m2, phy-div, div-clk]
 
+  ti,syscon-acspcie-tx-rx:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: |
+      Syscon register and setting to configure the clock buffer to run
+      in RX mode (clock pins are inputs, the clock is recovered from
+      the bus), or in TX mode (pins are outputs, internal reference
+      clock drives the bus).
+    maxItems: 1
+    items:
+      items:
+        - description: Phandle to the system control module
+        - description: Register offset of CTRL_CORE_SMA_SW_6
+        - description: Setting for PCIE_TX_RX_CONTROL
+
   syscon-phy-power:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     maxItems: 1
@@ -94,6 +108,17 @@ allOf:
     else:
       properties:
         syscon-pllreset: false
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,phy-pipe3-pcie
+    then:
+      properties:
+        ti,syscon-acspcie-tx-rx: true
+    else:
+      properties:
+        ti,syscon-acspcie-tx-rx: false
 
 required:
   - reg
@@ -134,5 +159,20 @@ examples:
         clock-names = "sysclk", "refclk";
         syscon-pllreset = <&scm_conf 0x3fc>;
         #phy-cells = <0>;
+    };
+
+  - |
+    /* TI PIPE3 PCIE PHY */
+    pcie-phy@4a0a4000 {
+        compatible = "ti,phy-pipe3-pcie";
+        reg = <0x4a0a4000 0x80>,  /* phy_rx */
+              <0x4a0a4400 0x64>;  /* phy_tx */
+        reg-names = "phy_rx", "phy_tx";
+        clocks = <&dpll_pcie_ref_ck>, <&dpll_pcie_ref_m2ldo_ck>;
+        clock-names = "dpll_ref", "dpll_ref_m2";
+        #phy-cells = <0>;
+        syscon-phy-power = <&scm_conf_pcie 0x1c>;
+        syscon-pcs = <&scm_conf_pcie 0x10>;
+        ti,syscon-acspcie-tx-rx = <&scm_conf1 0x10 0x2>;
     };
 ...
