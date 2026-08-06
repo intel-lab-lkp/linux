@@ -17,6 +17,23 @@ use crate::{
     types::{ForeignOwnable, ScopeGuard},
 };
 
+/// # Safety
+///
+/// `disk` must be valid.
+unsafe extern "C" fn free_fops(disk: *mut bindings::gendisk) {
+    // SAFETY: `disk` is valid.
+    let fops = unsafe { (*disk).fops };
+    if fops.is_null() {
+        return;
+    }
+
+    // SAFETY: `disk` is valid; `fops` came from `KBox::into_raw` in `build`.
+    unsafe {
+        (*disk).fops = core::ptr::null_mut();
+        drop(KBox::from_raw(fops.cast_mut()));
+    }
+}
+
 /// A builder for [`GenDisk`].
 ///
 /// Use this struct to configure and add new [`GenDisk`] to the VFS.
@@ -95,8 +112,12 @@ impl GenDiskBuilder {
     }
 
     /// Build a new `GenDisk` and add it to the VFS.
+    ///
+    /// `this_module` must be the [`ThisModule`] for the kernel module registering
+    /// the disk.
     pub fn build<T: Operations>(
         self,
+        this_module: &'static ThisModule,
         name: fmt::Arguments<'_>,
         tagset: Arc<TagSet<T>>,
         queue_data: T::QueueData,
@@ -125,32 +146,16 @@ impl GenDiskBuilder {
             )
         })?;
 
-        const TABLE: bindings::block_device_operations = bindings::block_device_operations {
-            submit_bio: None,
-            open: None,
-            release: None,
-            ioctl: None,
-            compat_ioctl: None,
-            check_events: None,
-            unlock_native_capacity: None,
-            getgeo: None,
-            set_read_only: None,
-            swap_slot_free_notify: None,
-            report_zones: None,
-            devnode: None,
-            alternative_gpt_sector: None,
-            get_unique_id: None,
-            // TODO: Set to `THIS_MODULE`.
-            owner: core::ptr::null_mut(),
-            pr_ops: core::ptr::null_mut(),
-            free_disk: None,
-            poll_bio: None,
-        };
-
-        // SAFETY: `gendisk` is a valid pointer as we initialized it above
-        unsafe { (*gendisk).fops = &TABLE };
-
         let cleanup_failure = ScopeGuard::new_with_data((gendisk, data), |(gendisk, data)| {
+            // SAFETY: `gendisk` came from `__blk_mq_alloc_disk()` above and
+            // has not been added to the VFS on this cleanup path.
+            let fops = unsafe { (*gendisk).fops };
+            if !fops.is_null() {
+                // SAFETY: `gendisk` came from `__blk_mq_alloc_disk()` above.
+                unsafe { (*gendisk).fops = core::ptr::null_mut() };
+                // SAFETY: `fops` came from `KBox::into_raw` below on this path.
+                drop(unsafe { KBox::from_raw(fops.cast_mut()) });
+            }
             // SAFETY: `gendisk` came from `__blk_mq_alloc_disk()` above and
             // has not been added to the VFS on this cleanup path.
             unsafe { bindings::put_disk(gendisk) };
@@ -158,6 +163,33 @@ impl GenDiskBuilder {
             // converted back on this cleanup path.
             drop(unsafe { T::QueueData::from_foreign(data) });
         });
+
+        let fops = KBox::new(
+            bindings::block_device_operations {
+                submit_bio: None,
+                open: None,
+                release: None,
+                ioctl: None,
+                compat_ioctl: None,
+                check_events: None,
+                unlock_native_capacity: None,
+                getgeo: None,
+                set_read_only: None,
+                swap_slot_free_notify: None,
+                report_zones: None,
+                devnode: None,
+                alternative_gpt_sector: None,
+                get_unique_id: None,
+                owner: this_module.as_ptr(),
+                pr_ops: core::ptr::null_mut(),
+                free_disk: Some(free_fops),
+                poll_bio: None,
+            },
+            GFP_KERNEL,
+        )?;
+
+        // SAFETY: `gendisk` is a valid pointer as we initialized it above.
+        unsafe { (*gendisk).fops = KBox::into_raw(fops).cast() };
 
         // The failure guard now owns both pieces of cleanup; the early guard
         // must not run on this path anymore.

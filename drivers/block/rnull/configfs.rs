@@ -147,6 +147,7 @@ impl configfs::AttributeOperations<0> for DeviceConfig {
 
         if !guard.powered && power_op {
             guard.disk = Some(NullBlkDevice::new(
+                &THIS_MODULE,
                 &guard.name,
                 guard.block_size,
                 guard.rotational,
