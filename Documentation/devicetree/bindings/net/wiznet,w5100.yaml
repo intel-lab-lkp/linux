@@ -35,6 +35,12 @@ properties:
       however, board designs may need to limit this value.
     maximum: 80000000
 
+  link-gpios:
+    description:
+      An optional GPIO line that can be wired to the LINKLED pin of the w5500
+      as an interrupt to detect link status changes.
+    maxItems: 1
+
 required:
   - compatible
   - reg
@@ -60,6 +66,7 @@ examples:
             pinctrl-0 = <&eth1_pins>;
             interrupt-parent = <&gpio>;
             interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
+            link-gpios = <&gpio 24 GPIO_ACTIVE_LOW>;
             spi-max-frequency = <30000000>;
             local-mac-address = [ a0 b0 c0 d0 e0 f0 ];
         };
