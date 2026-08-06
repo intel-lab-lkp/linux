@@ -5299,11 +5299,12 @@ int get_vmx_mem_address(struct kvm_vcpu *vcpu, unsigned long exit_qualification,
 			*ret = off;
 
 		*ret = vmx_get_untagged_addr(vcpu, *ret, 0);
-		/* Long mode: #GP(0)/#SS(0) if the memory address is in a
-		 * non-canonical form. This is the only check on the memory
-		 * destination for long mode!
+		/*
+		 * Long mode: #GP(0)/#SS(0) if the memory address is in a
+		 * non-canonical form, or if the access violates LASS.
 		 */
-		exn = is_noncanonical_address(*ret, vcpu, 0);
+		exn = is_noncanonical_address(*ret, vcpu, 0) ||
+		      vmx_is_lass_violation(vcpu, *ret, len, 0);
 	} else {
 		/*
 		 * When not in long mode, the virtual/linear address is
@@ -6108,7 +6109,7 @@ static int handle_invvpid(struct kvm_vcpu *vcpu)
 	if (type != VMX_VPID_EXTENT_ALL_CONTEXT && !operand.vpid)
 		return nested_vmx_fail(vcpu, VMXERR_INVALID_OPERAND_TO_INVEPT_INVVPID);
 
-	/* LAM doesn't apply to addresses that are inputs to TLB invalidation. */
+	/* LAM and LASS don't apply to addresses that are inputs to TLB invalidation. */
 	if (type == VMX_VPID_EXTENT_INDIVIDUAL_ADDR &&
 	    is_noncanonical_invlpg_address(operand.gla, vcpu))
 		return nested_vmx_fail(vcpu, VMXERR_INVALID_OPERAND_TO_INVEPT_INVVPID);
