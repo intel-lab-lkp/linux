@@ -72,6 +72,8 @@ static u64 calc_supported_cr4_feature_bits(void)
 		cr4 |= X86_CR4_SMAP;
 	if (kvm_cpu_has(X86_FEATURE_PKU))
 		cr4 |= X86_CR4_PKE;
+	if (kvm_cpu_has(X86_FEATURE_LASS))
+		cr4 |= X86_CR4_LASS;
 
 	return cr4;
 }
@@ -128,6 +130,7 @@ static void test_cr_bits(struct kvm_vcpu *vcpu, u64 cr4)
 	TEST_INVALID_SREG_BIT(vcpu, cr4, sregs, X86_CR4_SMEP);
 	TEST_INVALID_SREG_BIT(vcpu, cr4, sregs, X86_CR4_SMAP);
 	TEST_INVALID_SREG_BIT(vcpu, cr4, sregs, X86_CR4_PKE);
+	TEST_INVALID_SREG_BIT(vcpu, cr4, sregs, X86_CR4_LASS);
 
 	for (i = 32; i < 64; i++)
 		TEST_INVALID_SREG_BIT(vcpu, cr0, sregs, BIT(i));
