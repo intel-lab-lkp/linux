@@ -34,6 +34,8 @@
 
 #include "vhost.h"
 
+#define VHOST_MAX_IOTLB_MSGS 2048
+
 static ushort max_mem_regions = 64;
 module_param(max_mem_regions, ushort, 0444);
 MODULE_PARM_DESC(max_mem_regions,
@@ -603,6 +605,8 @@ void vhost_dev_init(struct vhost_dev *dev,
 	init_waitqueue_head(&dev->wait);
 	INIT_LIST_HEAD(&dev->read_list);
 	INIT_LIST_HEAD(&dev->pending_list);
+	INIT_LIST_HEAD(&dev->iotlb_wait_list);
+	dev->iotlb_msg_count = 0;
 	spin_lock_init(&dev->iotlb_lock);
 	xa_init_flags(&dev->worker_xa, XA_FLAGS_ALLOC);
 
@@ -615,6 +619,9 @@ void vhost_dev_init(struct vhost_dev *dev,
 		vq->dev = dev;
 		mutex_init(&vq->mutex);
 		vhost_vq_reset(dev, vq);
+		vq->iotlb_miss_node = NULL;
+		vq->iotlb_miss_waiting = false;
+		INIT_LIST_HEAD(&vq->iotlb_miss_wait_node);
 		if (vq->handle_kick)
 			vhost_poll_init(&vq->poll, vq->handle_kick,
 					EPOLLIN, dev, vq);
@@ -1191,20 +1198,104 @@ void vhost_dev_stop(struct vhost_dev *dev)
 }
 EXPORT_SYMBOL_GPL(vhost_dev_stop);
 
+static void vhost_wait_iotlb_miss(struct vhost_dev *dev,
+				  struct vhost_virtqueue *vq)
+{
+	lockdep_assert_held(&dev->iotlb_lock);
+
+	if (vq->iotlb_miss_waiting)
+		return;
+
+	vq->iotlb_miss_waiting = true;
+	list_add_tail(&vq->iotlb_miss_wait_node, &dev->iotlb_wait_list);
+}
+
+static void vhost_unwait_iotlb_miss(struct vhost_dev *dev,
+				    struct vhost_virtqueue *vq)
+{
+	lockdep_assert_held(&dev->iotlb_lock);
+
+	if (!vq->iotlb_miss_waiting)
+		return;
+
+	vq->iotlb_miss_waiting = false;
+	list_del_init(&vq->iotlb_miss_wait_node);
+}
+
+static void vhost_wake_iotlb_waiter(struct vhost_dev *dev)
+{
+	struct vhost_virtqueue *vq;
+
+	lockdep_assert_held(&dev->iotlb_lock);
+
+	if (!dev->iotlb || dev->iotlb_msg_count >= VHOST_MAX_IOTLB_MSGS ||
+	    list_empty(&dev->iotlb_wait_list))
+		return;
+
+	vq = list_first_entry(&dev->iotlb_wait_list,
+			      struct vhost_virtqueue, iotlb_miss_wait_node);
+	vhost_unwait_iotlb_miss(dev, vq);
+	vhost_poll_queue(&vq->poll);
+}
+
+static void __vhost_free_msg(struct vhost_dev *dev,
+			     struct vhost_msg_node *node)
+{
+	bool iotlb_miss = node->iotlb_miss;
+
+	lockdep_assert_held(&dev->iotlb_lock);
+
+	if (iotlb_miss) {
+		if (node->vq->iotlb_miss_node == node)
+			node->vq->iotlb_miss_node = NULL;
+		dev->iotlb_msg_count--;
+	}
+
+	kfree(node);
+
+	if (iotlb_miss)
+		vhost_wake_iotlb_waiter(dev);
+}
+
+static void vhost_free_msg(struct vhost_msg_node *node)
+{
+	struct vhost_dev *dev = node->vq->dev;
+
+	spin_lock(&dev->iotlb_lock);
+	if (node->iotlb_miss)
+		__vhost_free_msg(dev, node);
+	else
+		kfree(node);
+	spin_unlock(&dev->iotlb_lock);
+}
+
 void vhost_clear_msg(struct vhost_dev *dev)
 {
 	struct vhost_msg_node *node, *n;
+	struct vhost_virtqueue *vq, *vq_n;
+	int i;
 
 	spin_lock(&dev->iotlb_lock);
 
 	list_for_each_entry_safe(node, n, &dev->read_list, node) {
-		list_del(&node->node);
-		kfree(node);
+		list_del_init(&node->node);
+		__vhost_free_msg(dev, node);
 	}
 
 	list_for_each_entry_safe(node, n, &dev->pending_list, node) {
-		list_del(&node->node);
-		kfree(node);
+		list_del_init(&node->node);
+		__vhost_free_msg(dev, node);
+	}
+
+	if (!dev->iotlb) {
+		list_for_each_entry_safe(vq, vq_n, &dev->iotlb_wait_list,
+					 iotlb_miss_wait_node) {
+			list_del_init(&vq->iotlb_miss_wait_node);
+			vq->iotlb_miss_waiting = false;
+		}
+
+		for (i = 0; i < dev->nvqs; ++i)
+			dev->vqs[i]->iotlb_miss_node = NULL;
 	}
 
 	spin_unlock(&dev->iotlb_lock);
@@ -1602,18 +1693,25 @@ static inline int vhost_get_desc(struct vhost_virtqueue *vq,
 static void vhost_iotlb_notify_vq(struct vhost_dev *d,
 				  struct vhost_iotlb_msg *msg)
 {
-	struct vhost_msg_node *node, *n;
+	int i;
 
 	spin_lock(&d->iotlb_lock);
 
-	list_for_each_entry_safe(node, n, &d->pending_list, node) {
-		struct vhost_iotlb_msg *vq_msg = &node->msg.iotlb;
-		if (msg->iova <= vq_msg->iova &&
-		    msg->iova + msg->size - 1 >= vq_msg->iova &&
-		    vq_msg->type == VHOST_IOTLB_MISS) {
-			vhost_poll_queue(&node->vq->poll);
-			list_del(&node->node);
-			kfree(node);
+	for (i = 0; i < d->nvqs; ++i) {
+		struct vhost_virtqueue *vq = d->vqs[i];
+		struct vhost_msg_node *node = vq->iotlb_miss_node;
+
+		if (!node || msg->iova > node->iotlb_miss_iova ||
+		    msg->iova + msg->size - 1 < node->iotlb_miss_iova)
+			continue;
+
+		vq->iotlb_miss_node = NULL;
+		node->iotlb_miss_resolved = true;
+		vhost_poll_queue(&vq->poll);
+		if (node->iotlb_miss_pending) {
+			node->iotlb_miss_pending = false;
+			list_del_init(&node->node);
+			__vhost_free_msg(d, node);
 		}
 	}
 
@@ -1827,7 +1925,7 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 
 		ret = copy_to_iter(start, size, to);
 		if (ret != size || msg->type != VHOST_IOTLB_MISS) {
-			kfree(node);
+			vhost_free_msg(node);
 			return ret;
 		}
 		vhost_enqueue_msg(dev, &dev->pending_list, node);
@@ -1837,12 +1935,42 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 }
 EXPORT_SYMBOL_GPL(vhost_chr_read_iter);
 
+static bool vhost_iotlb_miss_exists(struct vhost_virtqueue *vq, u64 iova,
+				    int access)
+{
+	struct vhost_msg_node *node = vq->iotlb_miss_node;
+
+	lockdep_assert_held(&vq->dev->iotlb_lock);
+
+	return node && !node->iotlb_miss_resolved &&
+	       node->iotlb_miss_iova == iova &&
+	       node->iotlb_miss_perm == access;
+}
+
 static int vhost_iotlb_miss(struct vhost_virtqueue *vq, u64 iova, int access)
 {
 	struct vhost_dev *dev = vq->dev;
 	struct vhost_msg_node *node;
 	struct vhost_iotlb_msg *msg;
 	bool v2 = vhost_backend_has_feature(vq, VHOST_BACKEND_F_IOTLB_MSG_V2);
+	bool queued = false;
+	int ret = 0;
+
+	/* A failed translation stops this VQ before another miss can occur. */
+	lockdep_assert_held(&vq->mutex);
+
+	spin_lock(&dev->iotlb_lock);
+	if (vhost_iotlb_miss_exists(vq, iova, access)) {
+		vhost_unwait_iotlb_miss(dev, vq);
+		spin_unlock(&dev->iotlb_lock);
+		return 0;
+	}
+	if (dev->iotlb_msg_count >= VHOST_MAX_IOTLB_MSGS) {
+		vhost_wait_iotlb_miss(dev, vq);
+		spin_unlock(&dev->iotlb_lock);
+		return -ENOSPC;
+	}
+	spin_unlock(&dev->iotlb_lock);
 
 	node = vhost_new_msg(vq, v2 ? VHOST_IOTLB_MSG_V2 : VHOST_IOTLB_MSG);
 	if (!node)
@@ -1858,8 +1986,40 @@ static int vhost_iotlb_miss(struct vhost_virtqueue *vq, u64 iova, int access)
 	msg->type = VHOST_IOTLB_MISS;
 	msg->iova = iova;
 	msg->perm = access;
+	node->iotlb_miss = true;
+	node->iotlb_miss_iova = iova;
+	node->iotlb_miss_perm = access;
 
-	vhost_enqueue_msg(dev, &dev->read_list, node);
+	spin_lock(&dev->iotlb_lock);
+	if (vhost_iotlb_miss_exists(vq, iova, access)) {
+		vhost_unwait_iotlb_miss(dev, vq);
+		goto unlock;
+	}
+	if (WARN_ON_ONCE(vq->iotlb_miss_node)) {
+		ret = -EAGAIN;
+		goto unlock;
+	}
+	if (dev->iotlb_msg_count >= VHOST_MAX_IOTLB_MSGS) {
+		vhost_wait_iotlb_miss(dev, vq);
+		ret = -ENOSPC;
+		goto unlock;
+	}
+
+	dev->iotlb_msg_count++;
+	vq->iotlb_miss_node = node;
+	list_add_tail(&node->node, &dev->read_list);
+	vhost_unwait_iotlb_miss(dev, vq);
+	queued = true;
+
+unlock:
+	spin_unlock(&dev->iotlb_lock);
+
+	if (!queued) {
+		kfree(node);
+		return ret;
+	}
+
+	wake_up_interruptible_poll(&dev->wait, EPOLLIN | EPOLLRDNORM);
 
 	return 0;
 }
@@ -3314,11 +3474,25 @@ EXPORT_SYMBOL_GPL(vhost_new_msg);
 void vhost_enqueue_msg(struct vhost_dev *dev, struct list_head *head,
 		       struct vhost_msg_node *node)
 {
+	bool free = false;
+
 	spin_lock(&dev->iotlb_lock);
-	list_add_tail(&node->node, head);
+	if (node->iotlb_miss) {
+		node->iotlb_miss_pending = head == &dev->pending_list;
+		if (node->iotlb_miss_pending && node->iotlb_miss_resolved) {
+			__vhost_free_msg(dev, node);
+			free = true;
+		} else {
+			list_add_tail(&node->node, head);
+		}
+	} else {
+		list_add_tail(&node->node, head);
+	}
 	spin_unlock(&dev->iotlb_lock);
 
-	wake_up_interruptible_poll(&dev->wait, EPOLLIN | EPOLLRDNORM);
+	if (!free)
+		wake_up_interruptible_poll(&dev->wait,
+					   EPOLLIN | EPOLLRDNORM);
 }
 EXPORT_SYMBOL_GPL(vhost_enqueue_msg);
 
@@ -3331,7 +3505,9 @@ struct vhost_msg_node *vhost_dequeue_msg(struct vhost_dev *dev,
 	if (!list_empty(head)) {
 		node = list_first_entry(head, struct vhost_msg_node,
 					node);
-		list_del(&node->node);
+		list_del_init(&node->node);
+		if (node->iotlb_miss)
+			node->iotlb_miss_pending = false;
 	}
 	spin_unlock(&dev->iotlb_lock);
 

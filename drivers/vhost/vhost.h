@@ -29,6 +29,7 @@ struct vhost_work {
 
 struct vhost_worker;
 struct vhost_dev;
+struct vhost_msg_node;
 
 struct vhost_worker_ops {
 	int (*create)(struct vhost_worker *worker, struct vhost_dev *dev,
@@ -164,6 +165,11 @@ struct vhost_virtqueue {
 	bool user_be;
 #endif
 	u32 busyloop_timeout;
+
+	/* Protected by dev->iotlb_lock. */
+	struct vhost_msg_node *iotlb_miss_node;
+	struct list_head iotlb_miss_wait_node;
+	bool iotlb_miss_waiting;
 };
 
 struct vhost_msg_node {
@@ -173,6 +179,12 @@ struct vhost_msg_node {
   };
   struct vhost_virtqueue *vq;
   struct list_head node;
+	/* Protected by vq->dev->iotlb_lock. */
+	u64 iotlb_miss_iova;
+	u8 iotlb_miss_perm;
+	bool iotlb_miss;
+	bool iotlb_miss_resolved;
+	bool iotlb_miss_pending;
 };
 
 struct vhost_dev {
@@ -202,8 +214,11 @@ struct vhost_dev {
 	 * The default value is set by fork_from_owner_default
 	 */
 	bool fork_owner;
+	/* Includes messages being copied to userspace. Protected by iotlb_lock. */
+	u16 iotlb_msg_count;
 	int (*msg_handler)(struct vhost_dev *dev, u32 asid,
 			   struct vhost_iotlb_msg *msg);
+	struct list_head iotlb_wait_list;
 };
 
 bool vhost_exceeds_weight(struct vhost_virtqueue *vq, int pkts, int total_len);
