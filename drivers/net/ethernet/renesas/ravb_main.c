@@ -1779,7 +1779,8 @@ static int ravb_get_ts_info(struct net_device *ndev,
 			(1 << HWTSTAMP_FILTER_NONE) |
 			(1 << HWTSTAMP_FILTER_PTP_V2_L2_EVENT) |
 			(1 << HWTSTAMP_FILTER_ALL);
-		info->phc_index = ptp_clock_index(priv->ptp.clock);
+		if (priv->ptp.clock)
+			info->phc_index = ptp_clock_index(priv->ptp.clock);
 	}
 
 	return 0;
