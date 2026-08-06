@@ -209,6 +209,7 @@ static void ext4_end_buffer_io_sync(struct bio *bio)
 	if (success) {
 		ext4_debug("%s: Block %lld written",
 			   __func__, bh->b_blocknr);
+		clear_buffer_write_io_error(bh);
 	} else {
 		ext4_debug("%s: Block %lld write failed",
 			   __func__, bh->b_blocknr);
