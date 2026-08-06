@@ -128,13 +128,69 @@ static struct kmem_cache *req_alloc_cache;
 static struct kmem_cache *page_alloc_cache;
 
 /**
- * create_migrate_type_subdirs() - Creates a directory for each migrate type
- * inside the order directory.
+ * req_page_alloc_write() - Allocates the pages on the requested node, zone,
+ * order and migrate type. Once the allocation is performed, a file is created
+ * to free the allocation later.
  */
-static inline int create_migrate_type_subdirs(struct dentry *orderdir)
+static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
+				     size_t cnt, loff_t *ppos)
+{
+	return cnt;
+}
+
+static const struct file_operations req_page_alloc_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = req_page_alloc_write,
+};
+
+/**
+ * create_nr_pages_allocs_file() - Creates the file "nr_pages_allocs".
+ *
+ * The "nr_pages_allocs" file will be used to write the number of allocations
+ * that will be performed. When the allocations are performed, a new file for
+ * each allocation will be created in @migratedir.
+ */
+static inline int create_nr_pages_allocs_file(struct dentry *migratedir,
+					      int nid, int zone_idx,
+					      int order, int mtype)
+{
+	struct req_alloc *req;
+	struct dentry *nr_pages;
+
+	req = kmem_cache_alloc(req_alloc_cache, GFP_KERNEL);
+	if (!req) {
+		pr_err("Failed to create nr_pages_allocs_info");
+		return -ENOMEM;
+	}
+
+	req->node_idx = nid;
+	req->zone_idx = zone_idx;
+	req->order = order;
+	req->migrate_type = mtype;
+	req->parentdir = migratedir;
+
+	nr_pages = debugfs_create_file("nr_pages_allocs", 0200, migratedir, req,
+				       &req_page_alloc_fops);
+	if (IS_ERR(nr_pages)) {
+		kmem_cache_free(req_alloc_cache, req);
+		return PTR_ERR(nr_pages);
+	}
+
+	return 0;
+}
+
+/**
+ * create_migrate_type_subdirs() - Creates a directory for each migrate type
+ * inside the order directory. Once the migrate type directory is created, it
+ * creates the "nr_pages_allocs" file.
+ */
+static inline int create_migrate_type_subdirs(struct dentry *orderdir, int nid,
+					int zone_idx, int order)
 {
 	struct dentry *migratedir;
 	char dirname[24];
+	int ret;
 
 	for (int mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
 #ifdef CONFIG_CMA
@@ -150,6 +206,11 @@ static inline int create_migrate_type_subdirs(struct dentry *orderdir)
 		migratedir = debugfs_create_dir(dirname, orderdir);
 		if (IS_ERR(migratedir))
 			return PTR_ERR(migratedir);
+
+		ret = create_nr_pages_allocs_file(migratedir, nid, zone_idx,
+						order, mtype);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -160,7 +221,8 @@ static inline int create_migrate_type_subdirs(struct dentry *orderdir)
  * the zone directory. Once that the page order directory is created, it creates
  * a directory for each migrate type.
  */
-static inline int create_page_orders_subdirs(struct dentry *zonedir)
+static inline int create_page_orders_subdirs(struct dentry *zonedir, int nid,
+					int zone_idx)
 {
 	struct dentry *orderdir;
 	char dirname[12];
@@ -172,7 +234,8 @@ static inline int create_page_orders_subdirs(struct dentry *zonedir)
 		if (IS_ERR(orderdir))
 			return PTR_ERR(orderdir);
 
-		ret = create_migrate_type_subdirs(orderdir);
+		ret = create_migrate_type_subdirs(orderdir, nid, zone_idx,
+						order);
 		if (ret)
 			return ret;
 	}
@@ -189,15 +252,17 @@ static inline int create_page_orders_subdirs(struct dentry *zonedir)
  * is because they are not managed by the Buddy Allocator or CMA allocator.
  */
 static inline int create_zones_subdirs(struct dentry *nodedir,
-					struct pglist_data *pgdata)
+					struct pglist_data *pgdata, int nid)
 {
 	struct dentry *zonedir;
 	struct zone *zone;
 	struct zone *node_zones = pgdata->node_zones;
+	int zone_idx;
 	char dirname[24];
 	int ret;
 
-	for (zone = node_zones; zone - node_zones < MAX_NR_ZONES; ++zone) {
+	for (zone = node_zones, zone_idx = 0; zone - node_zones < MAX_NR_ZONES;
+			++zone, ++zone_idx) {
 		if (!populated_zone(zone))
 			continue;
 
@@ -210,7 +275,7 @@ static inline int create_zones_subdirs(struct dentry *nodedir,
 		if (IS_ERR(zonedir))
 			return PTR_ERR(zonedir);
 
-		ret = create_page_orders_subdirs(zonedir);
+		ret = create_page_orders_subdirs(zonedir, nid, zone_idx);
 		if (ret)
 			return ret;
 	}
@@ -238,7 +303,7 @@ static inline int create_nodes_subdirs(struct dentry *mmdir)
 		if (IS_ERR(nodedir))
 			return PTR_ERR(nodedir);
 
-		ret = create_zones_subdirs(nodedir, pgdata);
+		ret = create_zones_subdirs(nodedir, pgdata, nid);
 		if (ret)
 			return ret;
 	}
