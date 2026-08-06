@@ -2,6 +2,7 @@
 /* Copyright (C) 2023 Intel Corporation */
 
 #include <linux/export.h>
+#include <linux/log2.h>
 #include <net/libeth/rx.h>
 
 #include "idpf.h"
@@ -1001,7 +1002,8 @@ static int idpf_send_get_caps_msg(struct idpf_adapter *adapter)
 			    VIRTCHNL2_CAP_SPLITQ_QSCHED		|
 			    VIRTCHNL2_CAP_PROMISC		|
 			    VIRTCHNL2_CAP_LOOPBACK		|
-			    VIRTCHNL2_CAP_PTP);
+			    VIRTCHNL2_CAP_PTP			|
+			    VIRTCHNL2_CAP_EDT);
 
 	xn_params.vc_op = VIRTCHNL2_OP_GET_CAPS;
 	xn_params.send_buf.iov_base = &caps;
@@ -1015,6 +1017,49 @@ static int idpf_send_get_caps_msg(struct idpf_adapter *adapter)
 		return reply_sz;
 	if (reply_sz < sizeof(adapter->caps))
 		return -EIO;
+
+	return 0;
+}
+
+/**
+ * idpf_send_get_edt_caps_msg - Send virtchnl get EDT caps msg
+ * @adapter: Driver specific private struct
+ *
+ * Return: 0 on success or error code on failure.
+ */
+static int idpf_send_get_edt_caps_msg(struct idpf_adapter *adapter)
+{
+	struct virtchnl2_edt_caps caps = {};
+	struct idpf_vc_xn_params xn_params = {
+		.vc_op = VIRTCHNL2_OP_GET_EDT_CAPS,
+		.send_buf = {
+			.iov_base = &caps,
+			.iov_len = sizeof(caps),
+		},
+		.recv_buf = {
+			.iov_base = &caps,
+			.iov_len = sizeof(caps),
+		},
+		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
+	};
+	ssize_t reply_sz;
+	u64 gran_ns, horizon_ns;
+
+	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
+	if (reply_sz < 0)
+		return reply_sz;
+	if (reply_sz < sizeof(caps))
+		return -EIO;
+
+	horizon_ns = le64_to_cpu(caps.time_horizon_ns);
+	if (horizon_ns > U32_MAX) {
+		dev_warn(&adapter->pdev->dev, "EDT horizon exceeds U32\n");
+		return 0;
+	}
+
+	adapter->edt_caps.time_horizon_ns = horizon_ns;
+	gran_ns = le64_to_cpu(caps.tstamp_granularity_ns);
+	adapter->edt_caps.tstamp_granularity_pow2 = gran_ns ? ilog2(gran_ns) : 9;
 
 	return 0;
 }
@@ -3544,6 +3589,15 @@ restart:
 			dev_err(&adapter->pdev->dev, "Failed to allocate BAR0 region(s): %d\n",
 				err);
 			return -ENOMEM;
+		}
+	}
+
+	if (idpf_is_cap_ena(adapter, IDPF_OTHER_CAPS, VIRTCHNL2_CAP_EDT)) {
+		err = idpf_send_get_edt_caps_msg(adapter);
+		if (err) {
+			dev_err(&adapter->pdev->dev, "Failed to get EDT caps: %d\n",
+				err);
+			return -EINVAL;
 		}
 	}
 

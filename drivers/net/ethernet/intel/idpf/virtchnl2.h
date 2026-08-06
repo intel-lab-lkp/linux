@@ -458,6 +458,16 @@ struct virtchnl2_edt_caps {
 VIRTCHNL2_CHECK_STRUCT_LEN(16, virtchnl2_edt_caps);
 
 /**
+ * struct virtchnl2_edt_caps_ilog2 - Host parsed EDT caps.
+ * @time_horizon_ns: Total time window in nanoseconds.
+ * @tstamp_granularity_pow2: Log2 of timestamp granularity in nanoseconds.
+ */
+struct virtchnl2_edt_caps_ilog2 {
+	u32 time_horizon_ns;
+	u8 tstamp_granularity_pow2;
+};
+
+/**
  * struct virtchnl2_version_info - Version information.
  * @major: Major version.
  * @minor: Minor version.
