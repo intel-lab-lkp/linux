@@ -54,9 +54,9 @@ static int riscv_kexec_elf_load(struct kimage *image, struct elfhdr *ehdr,
  * Go through the available phsyical memory regions and find one that hold
  * an image of the specified size.
  */
-static int elf_find_pbase(struct kimage *image, unsigned long kernel_len,
-			  struct elfhdr *ehdr, struct kexec_elf_info *elf_info,
-			  unsigned long *old_pbase, unsigned long *new_pbase)
+static int elf_find_pbase(struct kimage *image, struct elfhdr *ehdr,
+			  struct kexec_elf_info *elf_info, unsigned long *old_pbase,
+			  unsigned long *new_pbase)
 {
 	int i;
 	int ret;
@@ -64,6 +64,7 @@ static int elf_find_pbase(struct kimage *image, unsigned long kernel_len,
 	const struct elf_phdr *phdr;
 	unsigned long lowest_paddr = ULONG_MAX;
 	unsigned long lowest_vaddr = ULONG_MAX;
+	unsigned long highest_paddr = 0;
 
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		phdr = &elf_info->proghdrs[i];
@@ -75,6 +76,9 @@ static int elf_find_pbase(struct kimage *image, unsigned long kernel_len,
 
 		if (lowest_vaddr > phdr->p_vaddr)
 			lowest_vaddr = phdr->p_vaddr;
+
+		highest_paddr = max(highest_paddr,
+				    (unsigned long)(phdr->p_paddr + phdr->p_memsz));
 	}
 
 	kbuf.image = image;
@@ -88,7 +92,12 @@ static int elf_find_pbase(struct kimage *image, unsigned long kernel_len,
 	 */
 	kbuf.buf_align = PMD_SIZE;
 	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
-	kbuf.memsz = ALIGN(kernel_len, PAGE_SIZE);
+	/*
+	 * The segments are added at fixed addresses later on, which makes
+	 * kexec_add_buffer() skip the memory hole check, so the range searched
+	 * here has to cover the whole extent the image occupies in memory.
+	 */
+	kbuf.memsz = ALIGN(highest_paddr - lowest_paddr, PAGE_SIZE);
 	kbuf.cma = NULL;
 	kbuf.top_down = false;
 	ret = arch_kexec_locate_mem_hole(&kbuf);
@@ -115,8 +124,8 @@ static void *elf_kexec_load(struct kimage *image, char *kernel_buf,
 	if (ret)
 		return ERR_PTR(ret);
 
-	ret = elf_find_pbase(image, kernel_len, &ehdr, &elf_info,
-			     &old_kernel_pbase, &new_kernel_pbase);
+	ret = elf_find_pbase(image, &ehdr, &elf_info, &old_kernel_pbase,
+			     &new_kernel_pbase);
 	if (ret)
 		goto out;
 
