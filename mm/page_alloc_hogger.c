@@ -127,10 +127,29 @@ struct page_alloc {
 static struct kmem_cache *req_alloc_cache;
 static struct kmem_cache *page_alloc_cache;
 
+/**
+ * create_page_orders_subdirs() - Creates a directory for each page order inside
+ * the zone directory.
+ */
+static inline int create_page_orders_subdirs(struct dentry *zonedir)
+{
+	struct dentry *orderdir;
+	char dirname[12];
+
+	for (int order = 0; order < NR_PAGE_ORDERS; order++) {
+		snprintf(dirname, sizeof(dirname), "order-%d", order);
+		orderdir = debugfs_create_dir(dirname, zonedir);
+		if (IS_ERR(orderdir))
+			return PTR_ERR(orderdir);
+	}
+
+	return 0;
+}
 
 /**
  * create_zones_subdirs() - Creates a directory for each populated zone in the
- * node.
+ * node. Once that the zone directory is created, it creates a directory for
+ * each order supported.
  *
  * Note: ZONE_DEVICE pages won't be allocated using this driver. The main reason
  * is because they are not managed by the Buddy Allocator or CMA allocator.
@@ -142,6 +161,7 @@ static inline int create_zones_subdirs(struct dentry *nodedir,
 	struct zone *zone;
 	struct zone *node_zones = pgdata->node_zones;
 	char dirname[24];
+	int ret;
 
 	for (zone = node_zones; zone - node_zones < MAX_NR_ZONES; ++zone) {
 		if (!populated_zone(zone))
@@ -155,6 +175,10 @@ static inline int create_zones_subdirs(struct dentry *nodedir,
 		zonedir = debugfs_create_dir(dirname, nodedir);
 		if (IS_ERR(zonedir))
 			return PTR_ERR(zonedir);
+
+		ret = create_page_orders_subdirs(zonedir);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
