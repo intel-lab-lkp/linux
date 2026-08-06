@@ -10,9 +10,13 @@
 #include <linux/blk-mq-dma.h>
 #include <linux/blk-integrity.h>
 #include <linux/dmi.h>
+#include <linux/hrtimer.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/irq_poll.h>
+#include <linux/jump_label.h>
+#include <linux/ktime.h>
 #include <linux/kstrtox.h>
 #include <linux/memremap.h>
 #include <linux/mm.h>
@@ -81,6 +85,57 @@ struct quirk_entry {
 
 static int use_threaded_interrupts;
 module_param(use_threaded_interrupts, int, 0444);
+
+static DEFINE_STATIC_KEY_FALSE(nvme_adaptive_irq_polling_key);
+static bool use_adaptive_irq_polling;
+
+static int nvme_adaptive_irq_polling_set(const char *val,
+					 const struct kernel_param *kp)
+{
+	int ret = param_set_bool(val, kp);
+
+	if (ret)
+		return ret;
+	if (use_adaptive_irq_polling)
+		static_branch_enable(&nvme_adaptive_irq_polling_key);
+	else
+		static_branch_disable(&nvme_adaptive_irq_polling_key);
+	return 0;
+}
+
+static const struct kernel_param_ops nvme_adaptive_irq_polling_ops = {
+	.set = nvme_adaptive_irq_polling_set,
+	.get = param_get_bool,
+};
+
+module_param_cb(use_adaptive_irq_polling, &nvme_adaptive_irq_polling_ops,
+		&use_adaptive_irq_polling, 0644);
+MODULE_PARM_DESC(use_adaptive_irq_polling,
+		 "enable adaptive polling on non-threaded MSI-X I/O queues");
+
+/*
+ * Adaptive IRQ polling flips a busy interrupt-driven queue over to a
+ * timer-based poll path and back, based only on how fast that queue is
+ * completing.  Each queue goes through three stages:
+ *
+ *  1. Sample (still in IRQ mode): count completions over
+ *     NVME_ADAPTIVE_SAMPLE_CQES interrupts and work out the average gap
+ *     between them.  If the queue is too slow to fill a batch within
+ *     NVME_ADAPTIVE_MAX_DELAY_NS, or already fast enough to batch on its own,
+ *     leave it alone on the normal IRQ path.
+ *  2. Poll: mask the queue's IRQ and drain the CQ from an hrtimer, arming
+ *     each wait for NVME_ADAPTIVE_TARGET_BATCH gaps (but never less than 2 us
+ *     or more than NVME_ADAPTIVE_MAX_DELAY_NS).  Keep polling as long as the
+ *     queue keeps up, up to NVME_ADAPTIVE_EPISODE_CQES completions.
+ *  3. Back off: once a queue falls behind, go back to IRQ mode and skip the
+ *     next deficit * NVME_ADAPTIVE_BACKOFF_MULT completions before sampling
+ *     it again.  Queues that don't benefit get retried only now and then.
+ */
+#define NVME_ADAPTIVE_TARGET_BATCH	5U
+#define NVME_ADAPTIVE_SAMPLE_CQES	256U
+#define NVME_ADAPTIVE_MAX_DELAY_NS	(10U * NSEC_PER_USEC)
+#define NVME_ADAPTIVE_EPISODE_CQES	(32U * NVME_ADAPTIVE_SAMPLE_CQES)
+#define NVME_ADAPTIVE_BACKOFF_MULT	20U
 
 static bool use_cmb_sqes = true;
 module_param(use_cmb_sqes, bool, 0444);
@@ -359,6 +414,25 @@ static inline struct nvme_dev *to_nvme_dev(struct nvme_ctrl *ctrl)
 }
 
 /*
+ * Per-queue adaptive polling state.  This sits outside struct nvme_queue on
+ * purpose, so the completion path's layout doesn't change when the feature is
+ * built in but not used.  @lock covers every field below; it's separate from
+ * the legacy polling lock because the two paths never touch the same queue at
+ * the same time.
+ */
+struct nvme_adaptive_poll {
+	struct hrtimer timer;		/* fires the next poll drain */
+	struct irq_poll iopoll;		/* softirq context for the drain */
+	struct nvme_queue *nvmeq;
+	spinlock_t lock;
+	u64 start_ns;			/* when the current sample/episode started */
+	u64 retry_completions;		/* IRQ completions to skip before sampling again */
+	u32 interval_ns;		/* average gap between completions, last sample */
+	u32 completions;		/* completions seen so far this sample/episode */
+	int irq;
+};
+
+/*
  * An NVM Express queue.  Each device has at least two (one for admin
  * commands and one for I/O commands).
  */
@@ -367,7 +441,8 @@ struct nvme_queue {
 	struct nvme_descriptor_pools descriptor_pools;
 	spinlock_t sq_lock;
 	void *sq_cmds;
-	 /* only used for poll queues: */
+	struct nvme_adaptive_poll *adaptive;
+	/* Only used for poll queues. */
 	spinlock_t cq_poll_lock ____cacheline_aligned_in_smp;
 	struct nvme_completion *cqes;
 	dma_addr_t sq_dma_addr;
@@ -386,6 +461,8 @@ struct nvme_queue {
 #define NVMEQ_SQ_CMB		1
 #define NVMEQ_DELETE_ERROR	2
 #define NVMEQ_POLLED		3
+#define NVMEQ_ADAPTIVE_POLLING	4
+#define NVMEQ_ADAPTIVE_STALE_IRQ	5
 	__le32 *dbbuf_sq_db;
 	__le32 *dbbuf_cq_db;
 	__le32 *dbbuf_sq_ei;
@@ -1606,13 +1683,12 @@ static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 	}
 }
 
-static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
-			        struct io_comp_batch *iob)
+static inline unsigned int nvme_poll_cq(struct nvme_queue *nvmeq,
+					struct io_comp_batch *iob)
 {
-	bool found = false;
+	unsigned int found = 0;
 
 	while (nvme_cqe_pending(nvmeq)) {
-		found = true;
 		/*
 		 * load-load control dependency between phase and the rest of
 		 * the cqe requires a full read memory barrier
@@ -1620,11 +1696,264 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 		dma_rmb();
 		nvme_handle_cqe(nvmeq, iob, nvmeq->cq_head);
 		nvme_update_cq_head(nvmeq);
+		found++;
 	}
 
 	if (found)
 		nvme_ring_cq_doorbell(nvmeq);
 	return found;
+}
+
+/* Keep the normal completion loop branch-free. */
+static unsigned int nvme_poll_cq_bounded(struct nvme_queue *nvmeq,
+					 struct io_comp_batch *iob,
+					 unsigned int limit)
+{
+	unsigned int found = 0;
+
+	while (found < limit && nvme_cqe_pending(nvmeq)) {
+		dma_rmb();
+		nvme_handle_cqe(nvmeq, iob, nvmeq->cq_head);
+		nvme_update_cq_head(nvmeq);
+		found++;
+	}
+	if (found)
+		nvme_ring_cq_doorbell(nvmeq);
+	return found;
+}
+
+static irqreturn_t nvme_irq_check(int irq, void *data)
+{
+	struct nvme_queue *nvmeq = data;
+
+	if (nvme_cqe_pending(nvmeq))
+		return IRQ_WAKE_THREAD;
+	return IRQ_NONE;
+}
+
+static bool nvme_adaptive_enabled(struct nvme_queue *nvmeq)
+{
+	return READ_ONCE(use_adaptive_irq_polling) &&
+		test_bit(NVMEQ_ENABLED, &nvmeq->flags);
+}
+
+/*
+ * Stop polling and turn the queue's IRQ back on.  @elapsed is how long the
+ * episode ran after it started falling behind, or 0 if it ended cleanly.
+ * The bigger @elapsed is, the more completions we missed, and the longer we
+ * wait before sampling this queue again, so a queue that polling doesn't
+ * help is left alone most of the time.
+ */
+static void nvme_adaptive_poll_end(struct nvme_queue *nvmeq, u64 elapsed)
+{
+	struct nvme_adaptive_poll *adaptive = nvmeq->adaptive;
+	u64 deficit = 0;
+
+	if (elapsed) {
+		deficit = div64_u64(elapsed - 1, adaptive->interval_ns) + 1;
+		deficit -= min_t(u64, deficit, adaptive->completions);
+	}
+	adaptive->retry_completions =
+		deficit > U64_MAX / NVME_ADAPTIVE_BACKOFF_MULT ? U64_MAX :
+		deficit * NVME_ADAPTIVE_BACKOFF_MULT;
+	adaptive->start_ns = 0;
+	adaptive->completions = 0;
+	set_bit(NVMEQ_ADAPTIVE_STALE_IRQ, &nvmeq->flags);
+	clear_bit(NVMEQ_ADAPTIVE_POLLING, &nvmeq->flags);
+	enable_irq(adaptive->irq);
+}
+
+/*
+ * Set the poll timer to fire one batch from now: how long the sampled
+ * rate needs to produce NVME_ADAPTIVE_TARGET_BATCH completions.
+ */
+static void nvme_adaptive_arm(struct nvme_adaptive_poll *adaptive, u64 now)
+{
+	u64 delay = clamp_t(u64,
+		(u64)adaptive->interval_ns * NVME_ADAPTIVE_TARGET_BATCH,
+		2U * NSEC_PER_USEC, NVME_ADAPTIVE_MAX_DELAY_NS);
+
+	hrtimer_start(&adaptive->timer,
+		      ns_to_ktime(now + delay), HRTIMER_MODE_ABS_PINNED_HARD);
+}
+
+static enum hrtimer_restart nvme_adaptive_poll_timer(struct hrtimer *timer)
+{
+	struct nvme_adaptive_poll *adaptive = container_of(timer,
+					struct nvme_adaptive_poll, timer);
+	struct nvme_queue *nvmeq = adaptive->nvmeq;
+
+	if (test_bit(NVMEQ_ADAPTIVE_POLLING, &nvmeq->flags))
+		irq_poll_sched(&adaptive->iopoll);
+	return HRTIMER_NORESTART;
+}
+
+/*
+ * The poll drain, run from softirq when the timer fires.  Reap some CQEs, then
+ * pick one of three things: stop if we hit the episode cap, wait again if the
+ * queue is keeping up, or go back to IRQ mode if it went idle or slowed down.
+ */
+static int nvme_adaptive_irq_poll(struct irq_poll *iop, int budget)
+{
+	struct nvme_adaptive_poll *adaptive = container_of(iop,
+					struct nvme_adaptive_poll, iopoll);
+	struct nvme_queue *nvmeq = adaptive->nvmeq;
+	unsigned int completions, limit;
+	unsigned long flags;
+	bool on_schedule;
+	u64 elapsed, now;
+	DEFINE_IO_COMP_BATCH(iob);
+
+	spin_lock_irqsave(&adaptive->lock, flags);
+	if (unlikely(!test_bit(NVMEQ_ADAPTIVE_POLLING, &nvmeq->flags))) {
+		completions = 0;
+		irq_poll_complete(iop);
+		goto out;
+	}
+
+	limit = min_t(unsigned int,
+		      budget - !nvme_adaptive_enabled(nvmeq),
+		      NVME_ADAPTIVE_EPISODE_CQES - adaptive->completions);
+	completions = nvme_poll_cq_bounded(nvmeq, &iob, limit);
+	adaptive->completions += completions;
+	if (!rq_list_empty(&iob.req_list))
+		nvme_pci_complete_batch(&iob);
+
+	if (completions >= budget)
+		goto out;
+	irq_poll_complete(iop);
+
+	if (!nvme_adaptive_enabled(nvmeq)) {
+		nvme_adaptive_poll_end(nvmeq, 0);
+		goto out;
+	}
+
+	/*
+	 * Only keep polling if the queue is still hitting the sampled rate.
+	 * MAX_DELAY leaves room for one empty wait, so a queue that's still
+	 * completing keeps polling; one that stalled or slowed down goes back
+	 * to IRQ mode and backs off.
+	 */
+	now = ktime_get_ns();
+	elapsed = now - adaptive->start_ns;
+	on_schedule = elapsed <= (u64)adaptive->completions *
+		adaptive->interval_ns + NVME_ADAPTIVE_MAX_DELAY_NS;
+	if (adaptive->completions >= NVME_ADAPTIVE_EPISODE_CQES)
+		nvme_adaptive_poll_end(nvmeq, on_schedule ? 0 : elapsed);
+	else if (on_schedule)
+		nvme_adaptive_arm(adaptive, now);
+	else
+		nvme_adaptive_poll_end(nvmeq, elapsed);
+out:
+	spin_unlock_irqrestore(&adaptive->lock, flags);
+	return completions;
+}
+
+/*
+ * Called from the IRQ handler after a reap that found something.  If we're
+ * still in backoff, just count it down.  Otherwise time how long
+ * NVME_ADAPTIVE_SAMPLE_CQES completions take to get the average gap between
+ * them.  If that looks worth polling (see the filter below) mask the IRQ and
+ * switch to poll mode; if not, leave the queue on interrupts.
+ */
+static void nvme_adaptive_sample(struct nvme_queue *nvmeq,
+				 unsigned int completions)
+{
+	struct nvme_adaptive_poll *adaptive = nvmeq->adaptive;
+	unsigned int sample;
+	unsigned long flags;
+	u64 delta, interval, now;
+
+	if (adaptive->retry_completions) {
+		if (adaptive->retry_completions != U64_MAX)
+			adaptive->retry_completions -= min_t(u64, completions,
+							 adaptive->retry_completions);
+		return;
+	}
+	if (!adaptive->start_ns) {
+		adaptive->start_ns = ktime_get_ns();
+		return;
+	}
+	adaptive->completions += completions;
+	if (adaptive->completions < NVME_ADAPTIVE_SAMPLE_CQES)
+		return;
+
+	now = ktime_get_ns();
+	delta = now - adaptive->start_ns;
+	sample = adaptive->completions;
+	adaptive->start_ns = now;
+	adaptive->completions = 0;
+	if (!delta || delta > (u64)NVME_ADAPTIVE_SAMPLE_CQES *
+			       NVME_ADAPTIVE_MAX_DELAY_NS)
+		return;
+	/*
+	 * Is this rate worth polling?  The 100/99 factor trims 1% off the gap so
+	 * a queue sitting right on the threshold isn't pulled in.  Skip it if
+	 * it's too slow to fill a batch within MAX_DELAY, and also skip it if
+	 * it's already fast enough to batch by itself.  The hardware's own
+	 * coalescing already handles that case, so leave it on interrupts.
+	 */
+	interval = div64_u64(delta * 100, sample * 99);
+	if (!interval || interval > NVME_ADAPTIVE_MAX_DELAY_NS ||
+	    (delta > NSEC_PER_MSEC &&
+	     interval <= NVME_ADAPTIVE_MAX_DELAY_NS /
+			 NVME_ADAPTIVE_TARGET_BATCH))
+		return;
+
+	spin_lock_irqsave(&adaptive->lock, flags);
+	if (nvme_adaptive_enabled(nvmeq)) {
+		adaptive->interval_ns = interval;
+		set_bit(NVMEQ_ADAPTIVE_POLLING, &nvmeq->flags);
+		disable_irq_nosync(adaptive->irq);
+		nvme_adaptive_arm(adaptive, now);
+	}
+
+	spin_unlock_irqrestore(&adaptive->lock, flags);
+}
+
+static irqreturn_t nvme_irq(int irq, void *data);
+
+/*
+ * IRQ handler for queues that may switch to adaptive polling.  It reaps the CQ
+ * like the normal handler, then feeds the count to the sampler, which may flip
+ * the queue into poll mode.  An empty CQ right after an IRQ we masked ourselves
+ * (NVMEQ_ADAPTIVE_STALE_IRQ) is still ours to ack.
+ */
+static noinline irqreturn_t nvme_irq_adaptive_enabled(int irq, void *data)
+{
+	struct nvme_queue *nvmeq = data;
+	unsigned int completions;
+	DEFINE_IO_COMP_BATCH(iob);
+
+	completions = nvme_poll_cq(nvmeq, &iob);
+	if (!completions)
+		return test_and_clear_bit(NVMEQ_ADAPTIVE_STALE_IRQ,
+					  &nvmeq->flags) ? IRQ_HANDLED : IRQ_NONE;
+	if (!rq_list_empty(&iob.req_list))
+		nvme_pci_complete_batch(&iob);
+	nvme_adaptive_sample(nvmeq, completions);
+	return IRQ_HANDLED;
+}
+
+static __always_inline bool nvme_adaptive_armed(void)
+{
+	return static_branch_unlikely(&nvme_adaptive_irq_polling_key) &&
+		READ_ONCE(use_adaptive_irq_polling);
+}
+
+static irqreturn_t nvme_irq_adaptive(int irq, void *data)
+{
+	struct nvme_queue *nvmeq = data;
+	irqreturn_t ret;
+
+	if (nvme_adaptive_armed())
+		return nvme_irq_adaptive_enabled(irq, data);
+
+	ret = nvme_irq(irq, data);
+	if (ret == IRQ_NONE &&
+	    test_and_clear_bit(NVMEQ_ADAPTIVE_STALE_IRQ, &nvmeq->flags))
+		return IRQ_HANDLED;
+	return ret;
 }
 
 static irqreturn_t nvme_irq(int irq, void *data)
@@ -1640,13 +1969,20 @@ static irqreturn_t nvme_irq(int irq, void *data)
 	return IRQ_NONE;
 }
 
-static irqreturn_t nvme_irq_check(int irq, void *data)
+static unsigned long nvme_adaptive_lock(struct nvme_queue *nvmeq)
 {
-	struct nvme_queue *nvmeq = data;
+	unsigned long flags = 0;
 
-	if (nvme_cqe_pending(nvmeq))
-		return IRQ_WAKE_THREAD;
-	return IRQ_NONE;
+	if (nvmeq->adaptive)
+		spin_lock_irqsave(&nvmeq->adaptive->lock, flags);
+	return flags;
+}
+
+static void nvme_adaptive_unlock(struct nvme_queue *nvmeq,
+				 unsigned long flags)
+{
+	if (nvmeq->adaptive)
+		spin_unlock_irqrestore(&nvmeq->adaptive->lock, flags);
 }
 
 /*
@@ -1656,15 +1992,18 @@ static irqreturn_t nvme_irq_check(int irq, void *data)
 static void nvme_poll_irqdisable(struct nvme_queue *nvmeq)
 {
 	struct pci_dev *pdev = to_pci_dev(nvmeq->dev->dev);
+	unsigned long flags;
 	int irq;
 
 	WARN_ON_ONCE(test_bit(NVMEQ_POLLED, &nvmeq->flags));
 
 	irq = pci_irq_vector(pdev, nvmeq->cq_vector);
 	disable_irq(irq);
+	flags = nvme_adaptive_lock(nvmeq);
 	spin_lock(&nvmeq->cq_poll_lock);
 	nvme_poll_cq(nvmeq, NULL);
 	spin_unlock(&nvmeq->cq_poll_lock);
+	nvme_adaptive_unlock(nvmeq, flags);
 	enable_irq(irq);
 }
 
@@ -2017,8 +2356,7 @@ static void nvme_free_queue(struct nvme_queue *nvmeq)
 	dma_free_coherent(nvmeq->dev->dev, CQ_SIZE(nvmeq),
 				(void *)nvmeq->cqes, nvmeq->cq_dma_addr);
 	if (!nvmeq->sq_cmds)
-		return;
-
+		goto free_adaptive;
 	if (test_and_clear_bit(NVMEQ_SQ_CMB, &nvmeq->flags)) {
 		pci_free_p2pmem(to_pci_dev(nvmeq->dev->dev),
 				nvmeq->sq_cmds, SQ_SIZE(nvmeq));
@@ -2026,6 +2364,9 @@ static void nvme_free_queue(struct nvme_queue *nvmeq)
 		dma_free_coherent(nvmeq->dev->dev, SQ_SIZE(nvmeq),
 				nvmeq->sq_cmds, nvmeq->sq_dma_addr);
 	}
+free_adaptive:
+	kfree(nvmeq->adaptive);
+	nvmeq->adaptive = NULL;
 }
 
 static void nvme_free_queues(struct nvme_dev *dev, int lowest)
@@ -2038,9 +2379,42 @@ static void nvme_free_queues(struct nvme_dev *dev, int lowest)
 	}
 }
 
+static int nvme_adaptive_suspend(struct nvme_queue *nvmeq)
+{
+	struct nvme_adaptive_poll *adaptive = nvmeq->adaptive;
+	unsigned long flags;
+	int irq;
+
+	if (!adaptive || adaptive->irq < 0)
+		return -1;
+	irq = adaptive->irq;
+	synchronize_irq(irq);
+	irq_poll_disable(&adaptive->iopoll);
+	spin_lock_irqsave(&adaptive->lock, flags);
+	spin_unlock_irqrestore(&adaptive->lock, flags);
+	hrtimer_cancel(&adaptive->timer);
+	spin_lock_irqsave(&adaptive->lock, flags);
+	if (test_and_clear_bit(NVMEQ_ADAPTIVE_POLLING, &nvmeq->flags)) {
+		set_bit(NVMEQ_ADAPTIVE_STALE_IRQ, &nvmeq->flags);
+		enable_irq(irq);
+	}
+	spin_unlock_irqrestore(&adaptive->lock, flags);
+	return irq;
+}
+
+static void nvme_adaptive_suspend_done(struct nvme_queue *nvmeq, int irq)
+{
+	if (irq < 0)
+		return;
+	nvmeq->adaptive->irq = -1;
+	irq_poll_enable(&nvmeq->adaptive->iopoll);
+}
+
 static void nvme_suspend_queue(struct nvme_dev *dev, unsigned int qid)
 {
 	struct nvme_queue *nvmeq = &dev->queues[qid];
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+	int irq;
 
 	if (!test_and_clear_bit(NVMEQ_ENABLED, &nvmeq->flags))
 		return;
@@ -2051,8 +2425,11 @@ static void nvme_suspend_queue(struct nvme_dev *dev, unsigned int qid)
 	nvmeq->dev->online_queues--;
 	if (!nvmeq->qid && nvmeq->dev->ctrl.admin_q)
 		nvme_quiesce_admin_queue(&nvmeq->dev->ctrl);
-	if (!test_and_clear_bit(NVMEQ_POLLED, &nvmeq->flags))
-		pci_free_irq(to_pci_dev(dev->dev), nvmeq->cq_vector, nvmeq);
+	if (!test_and_clear_bit(NVMEQ_POLLED, &nvmeq->flags)) {
+		irq = nvme_adaptive_suspend(nvmeq);
+		pci_free_irq(pdev, nvmeq->cq_vector, nvmeq);
+		nvme_adaptive_suspend_done(nvmeq, irq);
+	}
 }
 
 static void nvme_suspend_io_queues(struct nvme_dev *dev)
@@ -2166,18 +2543,74 @@ static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
 	return -ENOMEM;
 }
 
+static bool nvme_adaptive_init(struct nvme_queue *nvmeq)
+{
+	struct nvme_adaptive_poll *adaptive = nvmeq->adaptive;
+	int irq = pci_irq_vector(to_pci_dev(nvmeq->dev->dev),
+				 nvmeq->cq_vector);
+
+	if (irq < 0)
+		return false;
+	if (!adaptive) {
+		adaptive = kzalloc_node(sizeof(*adaptive), GFP_KERNEL,
+					dev_to_node(nvmeq->dev->dev));
+		if (!adaptive)
+			return false;
+		adaptive->nvmeq = nvmeq;
+		spin_lock_init(&adaptive->lock);
+		hrtimer_setup(&adaptive->timer, nvme_adaptive_poll_timer,
+			      CLOCK_MONOTONIC, HRTIMER_MODE_ABS_PINNED_HARD);
+		irq_poll_init(&adaptive->iopoll, 64, nvme_adaptive_irq_poll);
+		adaptive->irq = irq;
+		WRITE_ONCE(nvmeq->adaptive, adaptive);
+		return true;
+	}
+	adaptive->irq = irq;
+	return true;
+}
+
 static int queue_request_irq(struct nvme_queue *nvmeq)
 {
 	struct pci_dev *pdev = to_pci_dev(nvmeq->dev->dev);
 	int nr = nvmeq->dev->ctrl.instance;
+	bool adaptive_queue;
+	int ret;
 
 	if (use_threaded_interrupts) {
 		return pci_request_irq(pdev, nvmeq->cq_vector, nvme_irq_check,
 				nvme_irq, nvmeq, "nvme%dq%d", nr, nvmeq->qid);
-	} else {
-		return pci_request_irq(pdev, nvmeq->cq_vector, nvme_irq,
-				NULL, nvmeq, "nvme%dq%d", nr, nvmeq->qid);
 	}
+	/*
+	 * Decide once, at setup, whether this queue can ever poll adaptively.
+	 * nvme_irq_adaptive() is only installed when the adaptive state is
+	 * allocated and armed here, so its fast path never has to re-check
+	 * these static queue properties on every completion IRQ.
+	 */
+	adaptive_queue = nvmeq->qid && nvmeq->dev->num_vecs > 1 &&
+		pdev->msix_enabled &&
+		nvmeq->q_depth >= NVME_ADAPTIVE_TARGET_BATCH;
+	if (adaptive_queue)
+		adaptive_queue = nvme_adaptive_init(nvmeq);
+	ret = pci_request_irq(pdev, nvmeq->cq_vector,
+			      adaptive_queue ? nvme_irq_adaptive : nvme_irq,
+			      NULL, nvmeq, "nvme%dq%d", nr, nvmeq->qid);
+	if (ret && nvmeq->adaptive)
+		nvmeq->adaptive->irq = -1;
+	return ret;
+}
+
+static void nvme_adaptive_reset(struct nvme_queue *nvmeq)
+{
+	struct nvme_adaptive_poll *adaptive = nvmeq->adaptive;
+
+	clear_bit(NVMEQ_ADAPTIVE_POLLING, &nvmeq->flags);
+	clear_bit(NVMEQ_ADAPTIVE_STALE_IRQ, &nvmeq->flags);
+	if (!adaptive)
+		return;
+	adaptive->start_ns = 0;
+	adaptive->completions = 0;
+	adaptive->retry_completions = 0;
+	adaptive->irq = -1;
 }
 
 static void nvme_init_queue(struct nvme_queue *nvmeq, u16 qid)
@@ -2188,6 +2621,7 @@ static void nvme_init_queue(struct nvme_queue *nvmeq, u16 qid)
 	nvmeq->last_sq_tail = 0;
 	nvmeq->cq_head = 0;
 	nvmeq->cq_phase = 1;
+	nvme_adaptive_reset(nvmeq);
 	nvmeq->q_db = &dev->dbs[qid * 2 * dev->db_stride];
 	memset((void *)nvmeq->cqes, 0, CQ_SIZE(nvmeq));
 	nvme_dbbuf_init(dev, nvmeq, qid);
