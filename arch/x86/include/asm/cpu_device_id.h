@@ -42,6 +42,8 @@
 #include <linux/device-id/x86_cpu.h>
 /* Get the INTEL_FAM* model defines */
 #include <asm/intel-family.h>
+/* Hygon HFM model defines */
+#include <asm/hygon-family.h>
 /* And the X86_VENDOR_* ones */
 #include <asm/processor.h>
 
