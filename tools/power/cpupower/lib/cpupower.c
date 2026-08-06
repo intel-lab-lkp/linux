@@ -171,7 +171,7 @@ int get_cpu_topology(struct cpupower_topology *cpu_top)
 	char path[SYSFS_PATH_MAX];
 	char *last_cpu_list;
 
-	cpu_top->core_info = malloc(sizeof(struct cpuid_core_info) * cpus);
+	cpu_top->core_info = calloc(cpus, sizeof(struct cpuid_core_info));
 	if (cpu_top->core_info == NULL)
 		return -ENOMEM;
 	cpu_top->pkgs = cpu_top->cores = 0;
