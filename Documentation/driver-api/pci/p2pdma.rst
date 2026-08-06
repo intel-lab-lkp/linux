@@ -15,6 +15,14 @@ then based on the ACS settings the transaction can route entirely within
 the PCIe hierarchy and never reach the root port. The kernel will evaluate
 the PCIe topology and always permit P2P in these well-defined cases.
 
+ACS P2P Egress Control does not, by itself, force a transaction upstream. A
+clear Egress Control Vector bit for the peer port permits direct routing; a
+set bit redirects the request upstream when P2P Request Redirect is enabled.
+When Request Redirect is disabled, a set vector bit causes an ACS Violation
+instead. The kernel evaluates these controls together and routes P2P DMA
+through the host bridge when the direct path is blocked or cannot be
+determined.
+
 This evaluation covers the ACS controls that govern Requests carrying an
 Untranslated address. Unless ACS Translation Blocking is enabled, a Port
 with ACS Direct Translated P2P enabled routes a Request carrying a Translated
