@@ -8113,9 +8113,10 @@ static int max_dotclock(struct intel_display *display)
 {
 	int max_dotclock = display->cdclk.max_dotclk_freq;
 
-	if (HAS_ULTRAJOINER(display))
+	if (HAS_ULTRAJOINER(display) && INTEL_NUM_PIPES(display) >= 4)
 		max_dotclock *= 4;
-	else if (HAS_UNCOMPRESSED_JOINER(display) || HAS_BIGJOINER(display))
+	else if ((HAS_UNCOMPRESSED_JOINER(display) || HAS_BIGJOINER(display)) &&
+		 INTEL_NUM_PIPES(display) >= 2)
 		max_dotclock *= 2;
 
 	return max_dotclock;
