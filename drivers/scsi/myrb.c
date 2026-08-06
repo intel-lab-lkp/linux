@@ -3496,9 +3496,10 @@ static void myrb_remove(struct pci_dev *pdev)
 	struct myrb_hba *cb = pci_get_drvdata(pdev);
 
 	shost_printk(KERN_NOTICE, cb->host, "Flushing Cache...");
+	scsi_remove_host(cb->host);
 	myrb_exec_type3(cb, MYRB_CMD_FLUSH, 0);
-	myrb_cleanup(cb);
 	myrb_destroy_mempools(cb);
+	myrb_cleanup(cb);
 }
 
 
