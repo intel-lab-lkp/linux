@@ -440,8 +440,22 @@ static void vmd_remove_irq_domain(struct vmd_dev *vmd)
 static void __iomem *vmd_cfg_addr(struct vmd_dev *vmd, struct pci_bus *bus,
 				  unsigned int devfn, int reg, int len)
 {
-	unsigned int busnr_ecam = bus->number - vmd->busn_start[VMD_BUS_0];
-	u32 offset = PCIE_ECAM_OFFSET(busnr_ecam, devfn, reg);
+	unsigned char bus_number;
+	unsigned int busnr_ecam;
+	u32 offset;
+
+	/*
+	 * BUS1 is registered with logical bus number 0x80 to avoid bridge
+	 * reconfiguration, but cfg accesses must target the original BUS1
+	 * restricted range start.
+	 */
+	if (vmd->bus1_rootbus && bus->number == VMD_PRIMARY_BUS1)
+		bus_number = vmd->busn_start[VMD_BUS_1];
+	else
+		bus_number = bus->number;
+
+	busnr_ecam = bus_number - vmd->busn_start[VMD_BUS_0];
+	offset = PCIE_ECAM_OFFSET(busnr_ecam, devfn, reg);
 
 	if (offset + len >= resource_size(&vmd->dev->resource[VMD_CFGBAR]))
 		return NULL;
@@ -520,18 +534,37 @@ static struct pci_ops vmd_ops = {
 static struct acpi_device *vmd_acpi_find_companion(struct pci_dev *pci_dev)
 {
 	struct pci_host_bridge *bridge;
-	u32 busnr, addr;
+	struct vmd_dev *vmd;
+	u32 addr;
+	int busnr;
+	u8 pci_bus_number;
+	u8 bridge_bus_number;
 
 	if (pci_dev->bus->ops != &vmd_ops)
 		return NULL;
 
+	vmd = vmd_from_bus(pci_dev->bus);
 	bridge = pci_find_host_bridge(pci_dev->bus);
-	busnr = pci_dev->bus->number - bridge->bus->number;
+	pci_bus_number = pci_dev->bus->number;
+	bridge_bus_number = bridge->bus->number;
+
+	/*
+	 * BUS1 is registered with logical root number 0x80. For ACPI companion
+	 * matching, compute the relative bus number against the original BUS1
+	 * restricted range base.
+	 */
+	if (vmd->bus1_rootbus && bridge->bus == vmd->bus[VMD_BUS_1]) {
+		bridge_bus_number = vmd->busn_start[VMD_BUS_1];
+		if (pci_bus_number == VMD_PRIMARY_BUS1)
+			pci_bus_number = vmd->busn_start[VMD_BUS_1];
+	}
+
+	busnr = pci_bus_number - bridge_bus_number;
 	/*
 	 * The address computation below is only applicable to relative bus
 	 * numbers below 32.
 	 */
-	if (busnr > 31)
+	if (busnr < 0 || busnr > 31)
 		return NULL;
 
 	addr = (busnr << 24) | ((u32)pci_dev->devfn << 16) | 0x8000FFFFU;
@@ -1045,6 +1078,7 @@ static int vmd_create_bus(struct vmd_dev *vmd, enum vmd_rootbus bus_number,
 			  struct pci_sysdata *sd, resource_size_t *offset,
 			  u8 primary)
 {
+	u8 root_busnr;
 	u8 cfgbar = bus_number * 3;
 	u8 membar1 = cfgbar + 1;
 	u8 membar2 = cfgbar + 2;
@@ -1057,8 +1091,27 @@ static int vmd_create_bus(struct vmd_dev *vmd, enum vmd_rootbus bus_number,
 	pci_add_resource_offset(&resources, &vmd->resources[membar2],
 				offset[1]);
 
-	vmd_bus = pci_create_root_bus(&vmd->dev->dev,
-				      vmd->busn_start[bus_number], &vmd_ops, sd,
+	/*
+	 * Register BUS1 with its logical root number (0x80) up front so PCI core
+	 * bridge scanning does not see a post-registration bus-number mutation.
+	 *
+	 * This is a workaround for pci_scan_bridge_extend() code.
+	 * It marks bridge invalid configuration when detecting a
+	 * non-zero (0x80) the VMD BUS1 root bus number. Thus Primary Bus Number
+	 * of Root Ports on BUS1 is deconfigured in the first pass of
+	 * pci_scan_bridge() to be re-assigned to 0x0 in the second pass.
+	 * As a result no subordinate bus number behind VMD BUS1 is found.
+	 * Workaround: VMD_BUS_1 bus number shall be set to VMD_PRIMARY_BUS1 so it has
+	 * the same value as vmd->bus[VMD_BUS_1]->primary, it will bypass bus number
+	 * reconfiguration.
+	 */
+
+	if (bus_number == VMD_BUS_1 && vmd->bus1_rootbus)
+		root_busnr = VMD_PRIMARY_BUS1;
+	else
+		root_busnr = vmd->busn_start[bus_number];
+
+	vmd_bus = pci_create_root_bus(&vmd->dev->dev, root_busnr, &vmd_ops, sd,
 				      &resources);
 
 	if (!vmd_bus) {
