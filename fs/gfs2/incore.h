@@ -391,7 +391,7 @@ struct gfs2_inode {
 	u64 i_generation;
 	u64 i_eattr;
 	unsigned long i_flags;		/* GIF_... */
-	struct gfs2_glock *i_gl;
+	struct gfs2_glock __rcu *i_gl;
 	struct gfs2_holder i_iopen_gh;
 	struct gfs2_qadata *i_qadata; /* quota allocation data */
 	struct gfs2_holder i_rgd_gh;
@@ -879,5 +879,13 @@ static inline unsigned gfs2_max_stuffed_size(const struct gfs2_inode *ip)
 	return GFS2_SB(&ip->i_inode)->sd_sb.sb_bsize - sizeof(struct gfs2_dinode);
 }
 
-#endif /* __INCORE_DOT_H__ */
 
+static inline struct gfs2_glock *gfs2_inode_glock(const struct gfs2_inode *ip)
+{
+	/*
+	 * i_gl is set once at instantiation and only NULLed at evict,
+	 * so it is stable for any live inode.
+	 */
+	return rcu_dereference_protected(ip->i_gl, 1);
+}
+#endif /* __INCORE_DOT_H__ */

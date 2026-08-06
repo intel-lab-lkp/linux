@@ -407,13 +407,13 @@ void gfs2_journal_wipe(struct gfs2_inode *ip, u64 bstart, u32 blen)
 	int ty;
 
 	/* This can only happen during incomplete inode creation. */
-	if (!ip->i_gl)
+	if (!gfs2_inode_glock(ip))
 		return;
 
 	gfs2_ail1_wipe(sdp, bstart, blen);
 	while (blen) {
 		ty = REMOVE_META;
-		bh = gfs2_getbuf(ip->i_gl, bstart, NO_CREATE);
+		bh = gfs2_getbuf(gfs2_inode_glock(ip), bstart, NO_CREATE);
 		if (!bh && gfs2_is_jdata(ip)) {
 			bh = gfs2_getjdatabuf(ip, bstart);
 			ty = REMOVE_JDATA;
@@ -448,7 +448,7 @@ int gfs2_meta_buffer(struct gfs2_inode *ip, u32 mtype, u64 num,
 		     struct buffer_head **bhp)
 {
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
-	struct gfs2_glock *gl = ip->i_gl;
+	struct gfs2_glock *gl = gfs2_inode_glock(ip);
 	struct buffer_head *bh;
 	int ret = 0;
 	int rahead = 0;

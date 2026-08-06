@@ -67,8 +67,8 @@ struct posix_acl *gfs2_get_acl(struct inode *inode, int type, bool rcu)
 	if (rcu)
 		return ERR_PTR(-ECHILD);
 
-	if (!gfs2_glock_is_locked_by_me(ip->i_gl)) {
-		int ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED,
+	if (!gfs2_glock_is_locked_by_me(gfs2_inode_glock(ip))) {
+		int ret = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED,
 					     LM_FLAG_ANY, &gh);
 		if (ret)
 			return ERR_PTR(ret);
@@ -119,8 +119,8 @@ int gfs2_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 	if (ret)
 		return ret;
 
-	if (!gfs2_glock_is_locked_by_me(ip->i_gl)) {
-		ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &gh);
+	if (!gfs2_glock_is_locked_by_me(gfs2_inode_glock(ip))) {
+		ret = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &gh);
 		if (ret)
 			goto out;
 		need_unlock = true;

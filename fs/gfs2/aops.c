@@ -111,7 +111,7 @@ static int __gfs2_jdata_write_folio(struct folio *folio,
 					inode->i_sb->s_blocksize,
 					BIT(BH_Dirty)|BIT(BH_Uptodate));
 		}
-		gfs2_trans_add_databufs(ip->i_gl, folio, 0, folio_size(folio));
+		gfs2_trans_add_databufs(gfs2_inode_glock(ip), folio, 0, folio_size(folio));
 	}
 	return gfs2_write_jdata_folio(folio, wbc);
 }
@@ -132,7 +132,7 @@ int gfs2_jdata_writeback(struct address_space *mapping, struct writeback_control
 	int error;
 
 	BUG_ON(current->journal_info);
-	if (gfs2_assert_withdraw(sdp, ip->i_gl->gl_state == LM_ST_EXCLUSIVE))
+	if (gfs2_assert_withdraw(sdp, gfs2_inode_glock(ip)->gl_state == LM_ST_EXCLUSIVE))
 		return 0;
 
 	while ((folio = writeback_iter(mapping, wbc, folio, &error))) {
@@ -368,7 +368,7 @@ static int gfs2_jdata_writepages(struct address_space *mapping,
 
 	ret = gfs2_write_cache_jdata(mapping, wbc);
 	if (ret == 0 && wbc->sync_mode == WB_SYNC_ALL) {
-		gfs2_log_flush(sdp, ip->i_gl, GFS2_LOG_HEAD_FLUSH_NORMAL |
+		gfs2_log_flush(sdp, gfs2_inode_glock(ip), GFS2_LOG_HEAD_FLUSH_NORMAL |
 			       GFS2_LFC_JDATA_WPAGES);
 		ret = gfs2_write_cache_jdata(mapping, wbc);
 	}
@@ -566,7 +566,7 @@ static sector_t gfs2_bmap(struct address_space *mapping, sector_t lblock)
 	sector_t dblock = 0;
 	int error;
 
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, LM_FLAG_ANY, &i_gh);
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, LM_FLAG_ANY, &i_gh);
 	if (error)
 		return 0;
 

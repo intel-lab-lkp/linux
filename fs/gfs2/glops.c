@@ -603,7 +603,7 @@ static int freeze_go_xmote_bh(struct gfs2_glock *gl)
 {
 	struct gfs2_sbd *sdp = glock_sbd(gl);
 	struct gfs2_inode *ip = GFS2_I(sdp->sd_jdesc->jd_inode);
-	struct gfs2_glock *j_gl = ip->i_gl;
+	struct gfs2_glock *j_gl = gfs2_inode_glock(ip);
 	struct gfs2_log_header_host head;
 	int error;
 

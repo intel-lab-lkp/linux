@@ -891,7 +891,7 @@ static void gfs2_try_to_evict(struct gfs2_glock *gl)
 		/* If the inode was evicted, gl->gl_object will now be NULL. */
 		ip = gfs2_grab_existing_inode(gl);
 		if (ip) {
-			gfs2_glock_poke(ip->i_gl);
+			gfs2_glock_poke(gfs2_inode_glock(ip));
 			iput(&ip->i_inode);
 		}
 	}

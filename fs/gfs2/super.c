@@ -133,7 +133,7 @@ int gfs2_jdesc_check(struct gfs2_jdesc *jd)
 int gfs2_make_fs_rw(struct gfs2_sbd *sdp)
 {
 	struct gfs2_inode *ip = GFS2_I(sdp->sd_jdesc->jd_inode);
-	struct gfs2_glock *j_gl = ip->i_gl;
+	struct gfs2_glock *j_gl = gfs2_inode_glock(ip);
 	int error;
 
 	j_gl->gl_ops->go_inval(j_gl, DIO_METADATA);
@@ -183,7 +183,7 @@ int gfs2_statfs_init(struct gfs2_sbd *sdp)
 	struct gfs2_holder gh;
 	int error;
 
-	error = gfs2_glock_nq_init(m_ip->i_gl, LM_ST_EXCLUSIVE, GL_NOCACHE,
+	error = gfs2_glock_nq_init(gfs2_inode_glock(m_ip), LM_ST_EXCLUSIVE, GL_NOCACHE,
 				   &gh);
 	if (error)
 		return error;
@@ -222,7 +222,7 @@ void gfs2_statfs_change(struct gfs2_sbd *sdp, s64 total, s64 free,
 	s64 x, y;
 	int need_sync = 0;
 
-	gfs2_trans_add_meta(l_ip->i_gl, sdp->sd_sc_bh);
+	gfs2_trans_add_meta(gfs2_inode_glock(l_ip), sdp->sd_sc_bh);
 
 	spin_lock(&sdp->sd_statfs_spin);
 	l_sc->sc_total += total;
@@ -249,8 +249,8 @@ void update_statfs(struct gfs2_sbd *sdp, struct buffer_head *m_bh)
 	struct gfs2_statfs_change_host *m_sc = &sdp->sd_statfs_master;
 	struct gfs2_statfs_change_host *l_sc = &sdp->sd_statfs_local;
 
-	gfs2_trans_add_meta(l_ip->i_gl, sdp->sd_sc_bh);
-	gfs2_trans_add_meta(m_ip->i_gl, m_bh);
+	gfs2_trans_add_meta(gfs2_inode_glock(l_ip), sdp->sd_sc_bh);
+	gfs2_trans_add_meta(gfs2_inode_glock(m_ip), m_bh);
 
 	spin_lock(&sdp->sd_statfs_spin);
 	m_sc->sc_total += l_sc->sc_total;
@@ -273,7 +273,7 @@ int gfs2_statfs_sync(struct super_block *sb, int type)
 	struct buffer_head *m_bh;
 	int error;
 
-	error = gfs2_glock_nq_init(m_ip->i_gl, LM_ST_EXCLUSIVE, GL_NOCACHE,
+	error = gfs2_glock_nq_init(gfs2_inode_glock(m_ip), LM_ST_EXCLUSIVE, GL_NOCACHE,
 				   &gh);
 	if (error)
 		goto out;
@@ -342,7 +342,7 @@ static int gfs2_lock_fs_check_clean(struct gfs2_sbd *sdp)
 			goto out;
 		}
 		ip = GFS2_I(jd->jd_inode);
-		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &lfcc->gh);
+		error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, 0, &lfcc->gh);
 		if (error) {
 			kfree(lfcc);
 			goto out;
@@ -440,13 +440,13 @@ static int gfs2_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
-	struct address_space *metamapping = gfs2_glock2aspace(ip->i_gl);
+	struct address_space *metamapping = gfs2_glock2aspace(gfs2_inode_glock(ip));
 	struct backing_dev_info *bdi = inode_to_bdi(metamapping->host);
 	int ret = 0;
 	bool flush_all = (wbc->sync_mode == WB_SYNC_ALL || gfs2_is_jdata(ip));
 
 	if (flush_all)
-		gfs2_log_flush(GFS2_SB(inode), ip->i_gl,
+		gfs2_log_flush(GFS2_SB(inode), gfs2_inode_glock(ip),
 			       GFS2_LOG_HEAD_FLUSH_NORMAL |
 			       GFS2_LFC_WRITE_INODE);
 	if (bdi_wb_dirty_exceeded(bdi))
@@ -490,20 +490,20 @@ static void gfs2_dirty_inode(struct inode *inode, int flags)
 	int ret;
 
 	/* This can only happen during incomplete inode creation. */
-	if (unlikely(!ip->i_gl))
+	if (unlikely(!gfs2_inode_glock(ip)))
 		return;
 
 	if (gfs2_withdrawn(sdp))
 		return;
-	if (!gfs2_glock_is_locked_by_me(ip->i_gl)) {
-		ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &gh);
+	if (!gfs2_glock_is_locked_by_me(gfs2_inode_glock(ip))) {
+		ret = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &gh);
 		if (ret) {
 			fs_err(sdp, "dirty_inode: glock %d\n", ret);
-			gfs2_dump_glock(NULL, ip->i_gl, true);
+			gfs2_dump_glock(NULL, gfs2_inode_glock(ip), true);
 			return;
 		}
 		need_unlock = 1;
-	} else if (WARN_ON_ONCE(ip->i_gl->gl_state != LM_ST_EXCLUSIVE))
+	} else if (WARN_ON_ONCE(gfs2_inode_glock(ip)->gl_state != LM_ST_EXCLUSIVE))
 		return;
 
 	if (current->journal_info == NULL) {
@@ -517,7 +517,7 @@ static void gfs2_dirty_inode(struct inode *inode, int flags)
 
 	ret = gfs2_meta_inode_buffer(ip, &bh);
 	if (ret == 0) {
-		gfs2_trans_add_meta(ip->i_gl, bh);
+		gfs2_trans_add_meta(gfs2_inode_glock(ip), bh);
 		gfs2_dinode_out(ip, bh->b_data);
 		brelse(bh);
 	}
@@ -1211,11 +1211,11 @@ static enum evict_behavior gfs2_upgrade_iopen_glock(struct inode *inode)
 
 	wait_event_interruptible_timeout(sdp->sd_async_glock_wait,
 		!test_bit(HIF_WAIT, &gh->gh_iflags) ||
-		glock_needs_demote(ip->i_gl),
+		glock_needs_demote(gfs2_inode_glock(ip)),
 		5 * HZ);
 	if (!test_bit(HIF_HOLDER, &gh->gh_iflags)) {
 		gfs2_glock_dq(gh);
-		if (glock_needs_demote(ip->i_gl))
+		if (glock_needs_demote(gfs2_inode_glock(ip)))
 			return EVICT_SHOULD_SKIP_DELETE;
 		return EVICT_SHOULD_DEFER_DELETE;
 	}
@@ -1255,11 +1255,11 @@ static enum evict_behavior evict_should_delete(struct inode *inode,
 		return EVICT_SHOULD_DEFER_DELETE;
 
 	/* Must not read inode block until block type has been verified */
-	ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, GL_SKIP, gh);
+	ret = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, GL_SKIP, gh);
 	if (unlikely(ret))
 		return EVICT_SHOULD_SKIP_DELETE;
 
-	if (gfs2_inode_already_deleted(ip->i_gl, ip->i_no_formal_ino))
+	if (gfs2_inode_already_deleted(gfs2_inode_glock(ip), ip->i_no_formal_ino))
 		return EVICT_SHOULD_SKIP_DELETE;
 	ret = gfs2_check_blk_type(sdp, ip->i_no_addr, GFS2_BLKST_UNLINKED);
 	if (ret)
@@ -1289,7 +1289,7 @@ static enum evict_behavior evict_should_delete(struct inode *inode,
 static int evict_unlinked_inode(struct inode *inode, struct gfs2_holder *gh)
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
-	struct gfs2_glock *gl = ip->i_gl;
+	struct gfs2_glock *gl = gfs2_inode_glock(ip);
 	int ret;
 
 	/* The inode glock must be held exclusively and be instantiated. */
@@ -1391,7 +1391,7 @@ static int evict_linked_inode(struct inode *inode, struct gfs2_holder *gh)
 	struct super_block *sb = inode->i_sb;
 	struct gfs2_sbd *sdp = sb->s_fs_info;
 	struct gfs2_inode *ip = GFS2_I(inode);
-	struct gfs2_glock *gl = ip->i_gl;
+	struct gfs2_glock *gl = gfs2_inode_glock(ip);
 	struct address_space *metamapping = gfs2_glock2aspace(gl);
 	int ret;
 
@@ -1452,7 +1452,7 @@ static void gfs2_evict_inode(struct inode *inode)
 	int ret;
 
 	gfs2_holder_mark_uninitialized(&gh);
-	if (sb_rdonly(sb) || !ip->i_no_addr || !ip->i_gl)
+	if (sb_rdonly(sb) || !ip->i_no_addr || !gfs2_inode_glock(ip))
 		goto out;
 
 	/*
@@ -1505,10 +1505,10 @@ out:
 		gfs2_glock_dq_uninit(&ip->i_iopen_gh);
 		gfs2_glock_put_eventually(gl);
 	}
-	if (ip->i_gl) {
-		glock_clear_object(ip->i_gl, ip);
+	if (gfs2_inode_glock(ip)) {
+		glock_clear_object(gfs2_inode_glock(ip), ip);
 		wait_on_bit_io(&ip->i_flags, GIF_GLOP_PENDING, TASK_UNINTERRUPTIBLE);
-		gfs2_glock_put_eventually(ip->i_gl);
+		gfs2_glock_put_eventually(gfs2_inode_glock(ip));
 		rcu_assign_pointer(ip->i_gl, NULL);
 	}
 }
@@ -1523,7 +1523,7 @@ static struct inode *gfs2_alloc_inode(struct super_block *sb)
 	ip->i_no_addr = 0;
 	ip->i_no_formal_ino = 0;
 	ip->i_flags = 0;
-	ip->i_gl = NULL;
+	rcu_assign_pointer(ip->i_gl, NULL);
 	gfs2_holder_mark_uninitialized(&ip->i_iopen_gh);
 	memset(&ip->i_res, 0, sizeof(ip->i_res));
 	RB_CLEAR_NODE(&ip->i_res.rs_node);

@@ -63,7 +63,7 @@ static loff_t gfs2_llseek(struct file *file, loff_t offset, int whence)
 
 	switch (whence) {
 	case SEEK_END:
-		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, LM_FLAG_ANY,
+		error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, LM_FLAG_ANY,
 					   &i_gh);
 		if (!error) {
 			error = generic_file_llseek(file, offset, whence);
@@ -109,7 +109,7 @@ static int gfs2_readdir(struct file *file, struct dir_context *ctx)
 	struct gfs2_holder d_gh;
 	int error;
 
-	error = gfs2_glock_nq_init(dip->i_gl, LM_ST_SHARED, 0, &d_gh);
+	error = gfs2_glock_nq_init(gfs2_inode_glock(dip), LM_ST_SHARED, 0, &d_gh);
 	if (error)
 		return error;
 
@@ -166,7 +166,7 @@ int gfs2_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	if (d_is_special(dentry))
 		return -ENOTTY;
 
-	gfs2_holder_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_SHARED, 0, &gh);
 	error = gfs2_glock_nq(&gh);
 	if (error)
 		goto out_uninit;
@@ -225,7 +225,7 @@ static int do_gfs2_set_flags(struct inode *inode, u32 reqflags, u32 mask)
 	int error;
 	u32 new_flags, flags;
 
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &gh);
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &gh);
 	if (error)
 		return error;
 
@@ -242,7 +242,7 @@ static int do_gfs2_set_flags(struct inode *inode, u32 reqflags, u32 mask)
 	}
 	if ((flags ^ new_flags) & GFS2_DIF_JDATA) {
 		if (new_flags & GFS2_DIF_JDATA)
-			gfs2_log_flush(sdp, ip->i_gl,
+			gfs2_log_flush(sdp, gfs2_inode_glock(ip),
 				       GFS2_LOG_HEAD_FLUSH_NORMAL |
 				       GFS2_LFC_SET_FLAGS);
 		error = filemap_fdatawrite(inode->i_mapping);
@@ -262,7 +262,7 @@ static int do_gfs2_set_flags(struct inode *inode, u32 reqflags, u32 mask)
 	if (error)
 		goto out_trans_end;
 	inode_set_ctime_current(inode);
-	gfs2_trans_add_meta(ip->i_gl, bh);
+	gfs2_trans_add_meta(gfs2_inode_glock(ip), bh);
 	ip->i_diskflags = new_flags;
 	gfs2_dinode_out(ip, bh->b_data);
 	brelse(bh);
@@ -430,7 +430,7 @@ static vm_fault_t gfs2_page_mkwrite(struct vm_fault *vmf)
 
 	sb_start_pagefault(inode->i_sb);
 
-	gfs2_holder_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &gh);
 	err = gfs2_glock_nq(&gh);
 	if (err) {
 		ret = vmf_fs_error(err);
@@ -455,7 +455,7 @@ static vm_fault_t gfs2_page_mkwrite(struct vm_fault *vmf)
 
 	gfs2_size_hint(vmf->vma->vm_file, pos, length);
 
-	set_bit(GLF_DIRTY, &ip->i_gl->gl_flags);
+	set_bit(GLF_DIRTY, &gfs2_inode_glock(ip)->gl_flags);
 	set_bit(GIF_SW_PAGED, &ip->i_flags);
 
 	/*
@@ -557,7 +557,7 @@ static vm_fault_t gfs2_fault(struct vm_fault *vmf)
 	vm_fault_t ret;
 	int err;
 
-	gfs2_holder_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_SHARED, 0, &gh);
 	err = gfs2_glock_nq(&gh);
 	if (err) {
 		ret = vmf_fs_error(err);
@@ -597,7 +597,7 @@ static int gfs2_mmap(struct file *file, struct vm_area_struct *vma)
 		struct gfs2_holder i_gh;
 		int error;
 
-		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, LM_FLAG_ANY,
+		error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, LM_FLAG_ANY,
 					   &i_gh);
 		if (error)
 			return error;
@@ -680,7 +680,7 @@ static int gfs2_open(struct inode *inode, struct file *file)
 	bool need_unlock = false;
 
 	if (S_ISREG(ip->i_inode.i_mode)) {
-		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, LM_FLAG_ANY,
+		error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, LM_FLAG_ANY,
 					   &i_gh);
 		if (error)
 			return error;
@@ -767,7 +767,7 @@ static int gfs2_fsync(struct file *file, loff_t start, loff_t end,
 			ret = file_write_and_wait(file);
 		if (ret)
 			return ret;
-		gfs2_ail_flush(ip->i_gl, 1);
+		gfs2_ail_flush(gfs2_inode_glock(ip), 1);
 	}
 
 	if (mapping->nrpages)
@@ -837,7 +837,7 @@ static ssize_t gfs2_file_direct_read(struct kiocb *iocb, struct iov_iter *to,
 	if (!iov_iter_count(to))
 		return 0; /* skip atime */
 
-	gfs2_holder_init(ip->i_gl, LM_ST_DEFERRED, 0, gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_DEFERRED, 0, gh);
 retry:
 	ret = gfs2_glock_nq(gh);
 	if (ret)
@@ -900,7 +900,7 @@ static ssize_t gfs2_file_direct_write(struct kiocb *iocb, struct iov_iter *from,
 	 * unfortunately, have the option of only flushing a range like the
 	 * VFS does.
 	 */
-	gfs2_holder_init(ip->i_gl, LM_ST_DEFERRED, 0, gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_DEFERRED, 0, gh);
 retry:
 	ret = gfs2_glock_nq(gh);
 	if (ret)
@@ -980,7 +980,7 @@ static ssize_t gfs2_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			return ret;
 	}
 	ip = GFS2_I(iocb->ki_filp->f_mapping->host);
-	gfs2_holder_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_SHARED, 0, &gh);
 retry:
 	ret = gfs2_glock_nq(&gh);
 	if (ret)
@@ -1034,7 +1034,7 @@ static ssize_t gfs2_file_buffered_write(struct kiocb *iocb,
 			return -ENOMEM;
 	}
 
-	gfs2_holder_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, gh);
 	if (should_fault_in_pages(from, iocb, &prev_count, &window_size)) {
 retry:
 		window_size -= fault_in_iov_iter_readable(from, window_size);
@@ -1051,7 +1051,7 @@ retry:
 	if (inode == sdp->sd_rindex) {
 		struct gfs2_inode *m_ip = GFS2_I(sdp->sd_statfs_inode);
 
-		ret = gfs2_glock_nq_init(m_ip->i_gl, LM_ST_EXCLUSIVE,
+		ret = gfs2_glock_nq_init(gfs2_inode_glock(m_ip), LM_ST_EXCLUSIVE,
 					 GL_NOCACHE, statfs_gh);
 		if (ret)
 			goto out_unlock;
@@ -1112,7 +1112,7 @@ static ssize_t gfs2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	gfs2_size_hint(file, iocb->ki_pos, iov_iter_count(from));
 
 	if (iocb->ki_flags & IOCB_APPEND) {
-		ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
+		ret = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, 0, &gh);
 		if (ret)
 			return ret;
 		gfs2_glock_dq_uninit(&gh);
@@ -1189,7 +1189,7 @@ static int fallocate_chunk(struct inode *inode, loff_t offset, loff_t len)
 	if (unlikely(error))
 		return error;
 
-	gfs2_trans_add_meta(ip->i_gl, dibh);
+	gfs2_trans_add_meta(gfs2_inode_glock(ip), dibh);
 
 	if (gfs2_is_stuffed(ip)) {
 		error = gfs2_unstuff_dinode(ip);
@@ -1390,7 +1390,7 @@ static long gfs2_fallocate(struct file *file, int mode, loff_t offset, loff_t le
 
 	inode_lock(inode);
 
-	gfs2_holder_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &gh);
+	gfs2_holder_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &gh);
 	ret = gfs2_glock_nq(&gh);
 	if (ret)
 		goto out_uninit;

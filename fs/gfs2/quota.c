@@ -434,7 +434,7 @@ static int bh_get(struct gfs2_quota_data *qd)
 	if (iomap.type != IOMAP_MAPPED)
 		return error;
 
-	error = gfs2_meta_read(ip->i_gl, iomap.addr >> inode->i_blkbits,
+	error = gfs2_meta_read(gfs2_inode_glock(ip), iomap.addr >> inode->i_blkbits,
 			       DIO_WAIT, 0, &bh);
 	if (error)
 		return error;
@@ -692,7 +692,7 @@ static void do_qc(struct gfs2_quota_data *qd, s64 change)
 	bool needs_put = false;
 	s64 x;
 
-	gfs2_trans_add_meta(ip->i_gl, qd->qd_bh);
+	gfs2_trans_add_meta(gfs2_inode_glock(ip), qd->qd_bh);
 
 	/*
 	 * The QDF_CHANGE flag indicates that the slot in the quota change file
@@ -780,7 +780,7 @@ static int gfs2_write_buf_to_page(struct gfs2_sbd *sdp, unsigned long index,
 			set_buffer_uptodate(bh);
 		if (bh_read(bh, REQ_META | REQ_PRIO) < 0)
 			goto unlock_out;
-		gfs2_trans_add_data(ip->i_gl, bh);
+		gfs2_trans_add_data(gfs2_inode_glock(ip), bh);
 
 		/* If we need to write to the next block as well */
 		if (to_write > (bsize - boff)) {
@@ -935,7 +935,7 @@ static int do_sync(unsigned int num_qd, struct gfs2_quota_data **qda,
 			goto out_dq;
 	}
 
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &i_gh);
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &i_gh);
 	if (error)
 		goto out_dq;
 
@@ -993,7 +993,7 @@ out_dq:
 		gfs2_glock_dq_uninit(&ghs[qx]);
 	inode_unlock(&ip->i_inode);
 	kfree(ghs);
-	gfs2_log_flush(glock_sbd(ip->i_gl), ip->i_gl,
+	gfs2_log_flush(glock_sbd(gfs2_inode_glock(ip)), gfs2_inode_glock(ip),
 		       GFS2_LOG_HEAD_FLUSH_NORMAL | GFS2_LFC_DO_SYNC);
 	if (!error) {
 		for (x = 0; x < num_qd; x++) {
@@ -1062,7 +1062,7 @@ restart:
 		if (error)
 			return error;
 
-		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &i_gh);
+		error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, 0, &i_gh);
 		if (error)
 			goto fail;
 
@@ -1439,7 +1439,7 @@ int gfs2_quota_init(struct gfs2_sbd *sdp)
 				goto fail;
 		}
 		error = -EIO;
-		bh = gfs2_meta_ra(ip->i_gl, dblock, extlen);
+		bh = gfs2_meta_ra(gfs2_inode_glock(ip), dblock, extlen);
 		if (!bh)
 			goto fail;
 		if (gfs2_metatype_check(sdp, bh, GFS2_METATYPE_QC))
@@ -1745,7 +1745,7 @@ static int gfs2_set_dqblk(struct super_block *sb, struct kqid qid,
 	error = gfs2_glock_nq_init(qd->qd_gl, LM_ST_EXCLUSIVE, 0, &q_gh);
 	if (error)
 		goto out_unlockput;
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, &i_gh);
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, 0, &i_gh);
 	if (error)
 		goto out_q;
 

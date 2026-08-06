@@ -58,7 +58,7 @@ int check_journal_clean(struct gfs2_sbd *sdp, struct gfs2_jdesc *jd,
 	struct gfs2_inode *ip;
 
 	ip = GFS2_I(jd->jd_inode);
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, LM_FLAG_RECOVER |
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED, LM_FLAG_RECOVER |
 				   GL_EXACT | GL_NOCACHE, &j_gh);
 	if (error) {
 		if (verbose)
@@ -342,7 +342,7 @@ void gfs2_consist_inode_i(struct gfs2_inode *ip,
 		(unsigned long long)ip->i_no_formal_ino,
 		(unsigned long long)ip->i_no_addr,
 		function, file, line);
-	gfs2_dump_glock(NULL, ip->i_gl, 1);
+	gfs2_dump_glock(NULL, gfs2_inode_glock(ip), 1);
 	gfs2_withdraw(sdp);
 }
 

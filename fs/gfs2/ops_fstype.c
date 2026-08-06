@@ -545,7 +545,7 @@ static int gfs2_jindex_hold(struct gfs2_sbd *sdp, struct gfs2_holder *ji_gh)
 	mutex_lock(&sdp->sd_jindex_mutex);
 
 	for (;;) {
-		error = gfs2_glock_nq_init(dip->i_gl, LM_ST_SHARED, 0, ji_gh);
+		error = gfs2_glock_nq_init(gfs2_inode_glock(dip), LM_ST_SHARED, 0, ji_gh);
 		if (error)
 			break;
 
@@ -657,7 +657,7 @@ static int init_statfs(struct gfs2_sbd *sdp)
 	iput(pn);
 	pn = NULL;
 	ip = GFS2_I(sdp->sd_sc_inode);
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, GL_NOPID,
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, GL_NOPID,
 				   &sdp->sd_sc_gh);
 	if (error) {
 		fs_err(sdp, "can't lock local \"sc\" file: %d\n", error);
@@ -752,7 +752,7 @@ static int init_journal(struct gfs2_sbd *sdp, int undo)
 		}
 
 		ip = GFS2_I(sdp->sd_jdesc->jd_inode);
-		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED,
+		error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_SHARED,
 					   LM_FLAG_RECOVER | GL_EXACT |
 					   GL_NOCACHE | GL_NOPID,
 					   &sdp->sd_jinode_gh);
@@ -921,7 +921,7 @@ static int init_per_node(struct gfs2_sbd *sdp, int undo)
 	pn = NULL;
 
 	ip = GFS2_I(sdp->sd_qc_inode);
-	error = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, GL_NOPID,
+	error = gfs2_glock_nq_init(gfs2_inode_glock(ip), LM_ST_EXCLUSIVE, GL_NOPID,
 				   &sdp->sd_qc_gh);
 	if (error) {
 		fs_err(sdp, "can't lock local \"qc\" file: %d\n", error);
