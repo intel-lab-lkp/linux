@@ -299,8 +299,8 @@ static const char *z_erofs_transform_plain(struct z_erofs_decompress_req *rq,
 		return ERR_PTR(-EOPNOTSUPP);
 	if (rq->alg == Z_EROFS_COMPRESSION_INTERLACED) {
 		cur = bs - (rq->pageofs_out & (bs - 1));
-		pi = (rq->pageofs_in + rq->inputsize - cur) & ~PAGE_MASK;
 		cur = min(cur, rq->outputsize);
+		pi = (rq->pageofs_in + rq->inputsize - cur) & ~PAGE_MASK;
 		if (cur && rq->out[0]) {
 			kin = kmap_local_page(rq->in[nrpages_in - 1]);
 			if (rq->out[0] == rq->in[nrpages_in - 1])
