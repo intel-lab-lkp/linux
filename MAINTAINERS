@@ -25267,6 +25267,7 @@ SONY IMX908 SENSOR DRIVER
 M:	Lachlan Michael <lachlan.michael@sony.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/sony,imx908.yaml
+F:	drivers/media/i2c/imx908.c
 
 SONY MEMORYSTICK SUBSYSTEM
 M:	Maxim Levitsky <maximlevitsky@gmail.com>
