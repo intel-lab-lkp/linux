@@ -4793,9 +4793,10 @@ static int btrfs_uring_encoded_read(struct io_uring_cmd *cmd, unsigned int issue
 		}
 
 		data->iov = data->iovstack;
-		ret = import_iovec(ITER_DEST, data->args.iov, data->args.iovcnt,
-				   ARRAY_SIZE(data->iovstack), &data->iov,
-				   &data->iter);
+		ret = __import_iovec(ITER_DEST, data->args.iov, data->args.iovcnt,
+				     ARRAY_SIZE(data->iovstack), &data->iov,
+				     &data->iter,
+				     !!(issue_flags & IO_URING_F_COMPAT));
 		if (ret < 0)
 			goto out_acct;
 
@@ -4948,9 +4949,10 @@ static int btrfs_uring_encoded_write(struct io_uring_cmd *cmd, unsigned int issu
 			goto out_acct;
 
 		data->iov = data->iovstack;
-		ret = import_iovec(ITER_SOURCE, data->args.iov, data->args.iovcnt,
-				   ARRAY_SIZE(data->iovstack), &data->iov,
-				   &data->iter);
+		ret = __import_iovec(ITER_SOURCE, data->args.iov, data->args.iovcnt,
+				     ARRAY_SIZE(data->iovstack), &data->iov,
+				     &data->iter,
+				     !!(issue_flags & IO_URING_F_COMPAT));
 		if (ret < 0)
 			goto out_acct;
 
