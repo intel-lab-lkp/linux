@@ -27,6 +27,7 @@
 #include <linux/zswap.h>
 #include "swap.h"
 #include "swap_table.h"
+#include "vswap.h"
 
 int generic_swapfile_activate(struct swap_info_struct *sis,
 				struct file *swap_file,
@@ -246,6 +247,15 @@ int swap_writeout(struct swap_io_ctx *ctx, struct folio *folio)
 		return AOP_WRITEPAGE_ACTIVATE;
 	}
 	rcu_read_unlock();
+
+	/*
+	 * A vswap folio that reaches here could not be stored to a backend
+	 * (zswap) and has no physical slot to write to, so keep it dirty.
+	 */
+	if (is_vswap_entry(folio->swap)) {
+		folio_mark_dirty(folio);
+		return AOP_WRITEPAGE_ACTIVATE;
+	}
 
 	__swap_writepage(ctx, folio);
 	return 0;
@@ -478,6 +488,11 @@ void swap_read_folio(struct swap_io_ctx *ctx, struct folio *folio)
 
 	if (zswap_load(folio) != -ENOENT)
 		goto finish;
+
+	if (unlikely(swap_is_vswap(sis))) {
+		folio_unlock(folio);
+		goto finish;
+	}
 
 	/* We have to read from slower devices. Increase zswap protection. */
 	zswap_folio_swapin(folio);
