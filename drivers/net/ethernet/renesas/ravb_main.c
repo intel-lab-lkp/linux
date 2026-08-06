@@ -1765,8 +1765,13 @@ static int ravb_set_ringparam(struct net_device *ndev,
 static int ravb_get_ts_info(struct net_device *ndev,
 			    struct kernel_ethtool_ts_info *info)
 {
-	struct ravb_private *priv = netdev_priv(ndev);
-	const struct ravb_hw_info *hw_info = priv->info;
+	const struct ravb_hw_info *hw_info;
+	struct ravb_private *priv;
+	struct ptp_clock *clock;
+	unsigned long flags;
+
+	priv = netdev_priv(ndev);
+	hw_info = priv->info;
 
 	if (hw_info->gptp || hw_info->ccc_gac) {
 		info->so_timestamping =
@@ -1779,8 +1784,11 @@ static int ravb_get_ts_info(struct net_device *ndev,
 			(1 << HWTSTAMP_FILTER_NONE) |
 			(1 << HWTSTAMP_FILTER_PTP_V2_L2_EVENT) |
 			(1 << HWTSTAMP_FILTER_ALL);
-		if (priv->ptp.clock)
-			info->phc_index = ptp_clock_index(priv->ptp.clock);
+		spin_lock_irqsave(&priv->lock, flags);
+		clock = priv->ptp.clock;
+		if (clock)
+			info->phc_index = ptp_clock_index(clock);
+		spin_unlock_irqrestore(&priv->lock, flags);
 	}
 
 	return 0;

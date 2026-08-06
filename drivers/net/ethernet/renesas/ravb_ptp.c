@@ -289,16 +289,17 @@ static const struct ptp_clock_info ravb_ptp_info = {
 void ravb_ptp_interrupt(struct net_device *ndev)
 {
 	struct ravb_private *priv = netdev_priv(ndev);
+	struct ptp_clock *clock = priv->ptp.clock;
 	u32 gis = ravb_read(ndev, GIS);
 
 	gis &= ravb_read(ndev, GIC);
-	if (gis & GIS_PTCF) {
+	if ((gis & GIS_PTCF) && clock) {
 		struct ptp_clock_event event;
 
 		event.type = PTP_CLOCK_EXTTS;
 		event.index = 0;
 		event.timestamp = ravb_read(ndev, GCPT);
-		ptp_clock_event(priv->ptp.clock, &event);
+		ptp_clock_event(clock, &event);
 	}
 	if (gis & GIS_PTMF) {
 		struct ravb_ptp_perout *perout = priv->ptp.perout;
@@ -334,16 +335,24 @@ void ravb_ptp_init(struct net_device *ndev, struct platform_device *pdev)
 		clock = NULL;
 	}
 
+	spin_lock_irqsave(&priv->lock, flags);
 	priv->ptp.clock = clock;
+	spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 void ravb_ptp_stop(struct net_device *ndev)
 {
 	struct ravb_private *priv = netdev_priv(ndev);
+	struct ptp_clock *clock;
+	unsigned long flags;
 
+	spin_lock_irqsave(&priv->lock, flags);
 	ravb_write(ndev, 0, GIC);
 	ravb_write(ndev, 0, GIS);
+	clock = priv->ptp.clock;
+	priv->ptp.clock = NULL;
+	spin_unlock_irqrestore(&priv->lock, flags);
 
-	if (priv->ptp.clock)
-		ptp_clock_unregister(priv->ptp.clock);
+	if (clock)
+		ptp_clock_unregister(clock);
 }
