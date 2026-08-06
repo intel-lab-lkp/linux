@@ -87,6 +87,12 @@ struct cppc_saved_vals {
 
 struct cppc_policy_state {
 	struct cppc_saved_vals regs[CPPC_NR_SAVED_REGS];
+	/*
+	 * Set by suspend() after it saves the OSPM-set values and restores the
+	 * firmware ones, so a later offline() does not repeat those accesses.
+	 * Cleared at init() and by online().
+	 */
+	bool suspend_regs_handled;
 };
 
 static DEFINE_PER_CPU(struct cppc_policy_state, cppc_policy_state);
@@ -124,6 +130,9 @@ static void cppc_cpufreq_save_regs(struct cpufreq_policy *policy,
 	unsigned int cpu = policy->cpu;
 	u64 val;
 	int i;
+
+	if (saved_type == CPPC_SAVED_FIRMWARE)
+		st->suspend_regs_handled = false;
 
 	for (i = 0; i < CPPC_NR_SAVED_REGS; i++) {
 		if (cppc_saved_regs[i].get(cpu, &val))
@@ -952,9 +961,14 @@ static int cppc_cpufreq_cpu_offline(struct cpufreq_policy *policy)
 	unsigned int cpu = policy->cpu;
 	int ret;
 
-	/* Leave the platform in its pre-driver state while offline. */
-	cppc_cpufreq_save_regs(policy, CPPC_SAVED_REQUESTED);
-	cppc_cpufreq_apply_saved_regs(policy, CPPC_SAVED_FIRMWARE);
+	/*
+	 * Leave the platform in its pre-driver state while offline, unless
+	 * suspend() already did so earlier in this suspend cycle.
+	 */
+	if (!cppc_cpufreq_policy_state(policy)->suspend_regs_handled) {
+		cppc_cpufreq_save_regs(policy, CPPC_SAVED_REQUESTED);
+		cppc_cpufreq_apply_saved_regs(policy, CPPC_SAVED_FIRMWARE);
+	}
 
 	/*
 	 * Request the lowest desired performance while the policy has no online
@@ -1014,6 +1028,8 @@ static int cppc_cpufreq_cpu_online(struct cpufreq_policy *policy)
 	unsigned int cpu = policy->cpu;
 	int ret;
 
+	cppc_cpufreq_policy_state(policy)->suspend_regs_handled = false;
+
 	cppc_cpufreq_cpu_fie_resync(policy);
 
 	ret = cppc_set_enable(cpu, true);
@@ -1048,6 +1064,36 @@ static int cppc_cpufreq_cpu_online(struct cpufreq_policy *policy)
 	cppc_cpufreq_apply_saved_regs(policy, CPPC_SAVED_REQUESTED);
 
 	return 0;
+}
+
+/*
+ * Save the OSPM-set values and restore the firmware values here, while CPPC
+ * access is still safe. Secondary CPUs go offline much later, with devices
+ * already suspended, so offline() is too late for these accesses and leaves
+ * them alone until resume. Doing it here covers every policy, including one
+ * whose CPUs stay online, for which offline() never runs.
+ */
+static int cppc_cpufreq_cpu_suspend(struct cpufreq_policy *policy)
+{
+	cppc_cpufreq_save_regs(policy, CPPC_SAVED_REQUESTED);
+	cppc_cpufreq_apply_saved_regs(policy, CPPC_SAVED_FIRMWARE);
+	cppc_cpufreq_policy_state(policy)->suspend_regs_handled = true;
+
+	return 0;
+}
+
+/*
+ * CPUs offlined during suspend come back before the core calls resume(), so
+ * online() has already run for their policies and cleared the flag. It remains
+ * set only for a policy whose CPUs stayed online, and only that policy needs
+ * online() here.
+ */
+static int cppc_cpufreq_cpu_resume(struct cpufreq_policy *policy)
+{
+	if (!cppc_cpufreq_policy_state(policy)->suspend_regs_handled)
+		return 0;
+
+	return cppc_cpufreq_cpu_online(policy);
 }
 
 static void cppc_cpufreq_cpu_exit(struct cpufreq_policy *policy)
@@ -1364,6 +1410,8 @@ static struct cpufreq_driver cppc_cpufreq_driver = {
 	.exit = cppc_cpufreq_cpu_exit,
 	.online = cppc_cpufreq_cpu_online,
 	.offline = cppc_cpufreq_cpu_offline,
+	.suspend = cppc_cpufreq_cpu_suspend,
+	.resume = cppc_cpufreq_cpu_resume,
 	.set_boost = cppc_cpufreq_set_boost,
 	.attr = cppc_cpufreq_attr,
 	.name = "cppc_cpufreq",
