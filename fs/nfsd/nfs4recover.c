@@ -116,7 +116,8 @@ __nfsd4_create_reclaim_record_grace(struct nfs4_client *clp,
 	struct nfs4_client_reclaim *crp;
 
 	crp = nfs4_client_to_reclaim(name, princhash, nn);
-	crp->cr_clp = clp;
+	if (crp)
+		crp->cr_clp = clp;
 }
 
 static void
