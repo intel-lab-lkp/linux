@@ -7,6 +7,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/migrate.h>
 #include <linux/pagemap.h>
+#include <linux/bitmap.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_pagemap.h>
 #include <drm/drm_pagemap_util.h>
@@ -66,6 +67,12 @@
  * @refcount: Reference count for the zdd
  * @devmem_allocation: device memory allocation
  * @dpagemap: Refcounted pointer to the underlying struct drm_pagemap.
+ * @range_start: Virtual start address of the device memory allocation. Used to
+ * translate a clipped CPU-fault range into an allocation-relative page offset.
+ * @range_npages: Number of pages covered by the allocation, i.e. the number of
+ * valid bits in @retire_map.
+ * @retire_map: Allocation-relative bitmap. Every base page covered by a
+ * migrated folio remains marked until this mapping generation is destroyed.
  *
  * This structure serves as a generic wrapper installed in
  * page->zone_device_data. It provides infrastructure for looking up a device
@@ -78,29 +85,38 @@ struct drm_pagemap_zdd {
 	struct kref refcount;
 	struct drm_pagemap_devmem *devmem_allocation;
 	struct drm_pagemap *dpagemap;
+	unsigned long range_start;
+	unsigned long range_npages;
+	unsigned long retire_map[];
 };
 
 /**
  * drm_pagemap_zdd_alloc() - Allocate a zdd structure.
  * @dpagemap: Pointer to the underlying struct drm_pagemap.
+ * @start: Virtual start address of the device memory allocation.
+ * @npages: Number of pages in the device memory allocation.
  *
  * This function allocates and initializes a new zdd structure. It sets up the
- * reference count and initializes the destroy work.
+ * reference count and a zeroed retirement bitmap sized for @npages.
  *
- * Return: Pointer to the allocated zdd on success, ERR_PTR() on failure.
+ * Return: Pointer to the allocated zdd on success, NULL on failure.
  */
 static struct drm_pagemap_zdd *
-drm_pagemap_zdd_alloc(struct drm_pagemap *dpagemap)
+drm_pagemap_zdd_alloc(struct drm_pagemap *dpagemap, unsigned long start,
+		      unsigned long npages)
 {
 	struct drm_pagemap_zdd *zdd;
 
-	zdd = kmalloc_obj(*zdd);
+	zdd = kzalloc(struct_size(zdd, retire_map, BITS_TO_LONGS(npages)),
+		      GFP_KERNEL);
 	if (!zdd)
 		return NULL;
 
 	kref_init(&zdd->refcount);
 	zdd->devmem_allocation = NULL;
 	zdd->dpagemap = drm_pagemap_get(dpagemap);
+	zdd->range_start = start;
+	zdd->range_npages = npages;
 
 	return zdd;
 }
@@ -669,7 +685,7 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
 	pagemap_addr = buf + (2 * sizeof(*migrate.src) * npages);
 	pages = buf + (2 * sizeof(*migrate.src) + sizeof(*pagemap_addr)) * npages;
 
-	zdd = drm_pagemap_zdd_alloc(dpagemap);
+	zdd = drm_pagemap_zdd_alloc(dpagemap, start, npages);
 	if (!zdd) {
 		err = -ENOMEM;
 		kvfree(buf);
@@ -1098,11 +1114,114 @@ void drm_pagemap_put(struct drm_pagemap *dpagemap)
 EXPORT_SYMBOL(drm_pagemap_put);
 
 /**
+ * drm_pagemap_is_devmem_page() - Check whether a page is device memory
+ * @page: page to check
+ *
+ * Return: true if @page is device-private or device-coherent
+ */
+static bool drm_pagemap_is_devmem_page(const struct page *page)
+{
+	return is_device_private_page(page) || is_device_coherent_page(page);
+}
+
+/**
+ * drm_pagemap_retire_migrated_pages() - Record migrated device folios
+ * @src_pfns: source array after migrate_vma_pages() or migrate_device_pages()
+ * @npages: number of entries in @src_pfns
+ * @first: allocation-relative page offset of @src_pfns[0]
+ *
+ * Record successful migrations in the zdd retirement bitmap before finalize
+ * unlocks the sources. The bit is set only after a confirmed migration, and
+ * test_and_set_bit() is used because concurrent CPU faults on clipped ranges
+ * can update different bits in the same word.
+ */
+static void drm_pagemap_retire_migrated_pages(unsigned long *src_pfns,
+					      unsigned long npages,
+					      unsigned long first)
+{
+	unsigned long i = 0;
+
+	while (i < npages) {
+		struct page *page = migrate_pfn_to_page(src_pfns[i]);
+		struct drm_pagemap_zdd *zdd;
+		unsigned long bit, j, nr = 1;
+
+		if (!page) {
+			i++;
+			continue;
+		}
+
+		nr = folio_nr_pages(page_folio(page));
+
+		if (!(src_pfns[i] & MIGRATE_PFN_MIGRATE) ||
+		    !drm_pagemap_is_devmem_page(page))
+			goto next;
+
+		zdd = drm_pagemap_page_zone_device_data(page);
+		bit = first + i;
+
+		if (WARN_ON_ONCE(bit >= zdd->range_npages ||
+				 nr > zdd->range_npages - bit))
+			goto next;
+
+		/* Keep later folio splits covered. */
+		for (j = 0; j < nr; j++)
+			WARN_ON_ONCE(test_and_set_bit(bit + j, zdd->retire_map));
+next:
+		i += nr;
+	}
+}
+
+/**
+ * drm_pagemap_skip_retired_pages() - Drop retired PFNs from a raw-PFN eviction
+ * @src_pfns: source array after migrate_device_pfns() (MIGRATE_PFN encoded)
+ * @npages: number of entries in @src_pfns
+ *
+ * Skip source PFNs already migrated to RAM by either migration path. The
+ * raw-PFN eviction array starts at allocation offset zero, so the array index
+ * is also the retirement bitmap index.
+ */
+static void drm_pagemap_skip_retired_pages(unsigned long *src_pfns,
+					   unsigned long npages)
+{
+	unsigned long i = 0;
+
+	while (i < npages) {
+		struct page *page = migrate_pfn_to_page(src_pfns[i]);
+		struct drm_pagemap_zdd *zdd;
+		unsigned long nr = 1;
+
+		if (!page) {
+			i++;
+			continue;
+		}
+
+		nr = folio_nr_pages(page_folio(page));
+
+		if (!(src_pfns[i] & MIGRATE_PFN_MIGRATE) ||
+		    !drm_pagemap_is_devmem_page(page))
+			goto next;
+
+		zdd = drm_pagemap_page_zone_device_data(page);
+		if (WARN_ON_ONCE(i >= zdd->range_npages)) {
+			src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
+			goto next;
+		}
+
+		if (test_bit(i, zdd->retire_map))
+			src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
+next:
+		i += nr;
+	}
+}
+
+/**
  * drm_pagemap_evict_to_ram() - Evict GPU SVM range to RAM
  * @devmem_allocation: Pointer to the device memory allocation
  *
- * Similar to __drm_pagemap_migrate_to_ram but does not require mmap lock and
- * migration done via migrate_device_* functions.
+ * Similar to __drm_pagemap_migrate_to_ram(), but uses the
+ * migrate_device_* helpers and does not require the mmap lock. Device
+ * PFNs already migrated to RAM by either migration path are skipped.
  *
  * Return: 0 on success, negative error code on failure.
  */
@@ -1143,6 +1262,8 @@ retry:
 	if (err)
 		goto err_free;
 
+	drm_pagemap_skip_retired_pages(src, npages);
+
 	err = drm_pagemap_migrate_populate_ram_pfn(NULL, NULL, npages, &mpages,
 						   src, dst, 0);
 	if (err || !mpages)
@@ -1173,6 +1294,8 @@ err_finalize:
 	if (err)
 		drm_pagemap_migration_unlock_put_pages(npages, dst);
 	migrate_device_pages(src, dst, npages);
+	/* Raw-PFN eviction: array starts at allocation offset zero. */
+	drm_pagemap_retire_migrated_pages(src, npages, 0);
 	migrate_device_finalize(src, dst, npages);
 	drm_pagemap_migrate_unmap_pages(devmem_allocation->dev, pagemap_addr, dst, npages,
 					DMA_FROM_DEVICE, &state);
@@ -1245,6 +1368,10 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 	if (end > vas->vm_end)
 		end = vas->vm_end;
 
+	/* Keep the range within the ZDD allocation so retirement offsets stay valid. */
+	start = max(start, zdd->range_start);
+	end = min(end, zdd->range_start + (zdd->range_npages << PAGE_SHIFT));
+
 	migrate.start = start;
 	migrate.end = end;
 	npages = npages_in_range(start, end);
@@ -1303,6 +1430,8 @@ err_finalize:
 	if (err)
 		drm_pagemap_migration_unlock_put_pages(npages, migrate.dst);
 	migrate_vma_pages(&migrate);
+	drm_pagemap_retire_migrated_pages(migrate.src, npages,
+					  (start - zdd->range_start) >> PAGE_SHIFT);
 	migrate_vma_finalize(&migrate);
 	if (dev)
 		drm_pagemap_migrate_unmap_pages(dev, pagemap_addr, migrate.dst,
