@@ -11,6 +11,7 @@
 #include <linux/compat.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/gcd.h>
 #include <linux/hdreg.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -2530,12 +2531,89 @@ out:
 	return ret;
 }
 
-static void nvme_stack_zone_resources(struct queue_limits *t,
-				      const struct queue_limits *b)
+static void nvme_apply_ns_head_identify_limits(struct queue_limits *lim,
+		const struct queue_limits *ns_lim)
 {
-	t->max_open_zones = min_not_zero(t->max_open_zones, b->max_open_zones);
-	t->max_active_zones =
-		min_not_zero(t->max_active_zones, b->max_active_zones);
+	/*
+	 * The namespace scan sets these values from Identify data and limits
+	 * calculated from it. Refresh them instead of combining them with values
+	 * left from an earlier namespace scan.
+	 */
+	lim->features &= ~BLK_FEAT_ZONED;
+	lim->features |= ns_lim->features & BLK_FEAT_ZONED;
+	lim->logical_block_size = ns_lim->logical_block_size;
+	lim->physical_block_size = ns_lim->physical_block_size;
+	lim->io_min = ns_lim->io_min;
+	lim->io_opt = ns_lim->io_opt;
+	/* A non-zoned path may have a controller-specific stripe size. */
+	if (ns_lim->features & BLK_FEAT_ZONED)
+		lim->chunk_sectors = ns_lim->chunk_sectors;
+	else if (ns_lim->chunk_sectors)
+		lim->chunk_sectors = gcd(lim->chunk_sectors,
+					 ns_lim->chunk_sectors);
+	lim->alignment_offset = 0;
+	lim->discard_alignment = 0;
+	lim->flags &= ~BLK_FLAG_MISALIGNED;
+	lim->discard_granularity = ns_lim->discard_granularity;
+	lim->zone_write_granularity = ns_lim->zone_write_granularity;
+	lim->max_write_streams = ns_lim->max_write_streams;
+	lim->write_stream_granularity = ns_lim->write_stream_granularity;
+}
+
+static void nvme_apply_ns_head_operation_limits(struct queue_limits *lim,
+		const struct queue_limits *ns_lim)
+{
+	/* Keep the existing minimums for controller command limits. */
+	lim->max_write_zeroes_sectors =
+		min(lim->max_write_zeroes_sectors,
+		    ns_lim->max_write_zeroes_sectors);
+	lim->max_hw_wzeroes_unmap_sectors =
+		min(lim->max_hw_wzeroes_unmap_sectors,
+		    ns_lim->max_hw_wzeroes_unmap_sectors);
+	lim->max_discard_segments =
+		min_not_zero(lim->max_discard_segments,
+			     ns_lim->max_discard_segments);
+	if (ns_lim->discard_granularity)
+		lim->max_hw_discard_sectors =
+			min_not_zero(lim->max_hw_discard_sectors,
+				     ns_lim->max_hw_discard_sectors);
+	blk_stack_atomic_writes_limits(lim, ns_lim, 0);
+}
+
+static void nvme_apply_ns_head_zone_limits(struct queue_limits *lim,
+		const struct queue_limits *ns_lim)
+{
+	/*
+	 * Zone geometry was set above. max_hw_zone_append_sectors must work
+	 * for every path, while max_open_zones and max_active_zones are
+	 * namespace resources.
+	 */
+	lim->max_hw_zone_append_sectors =
+		min(lim->max_hw_zone_append_sectors,
+		    ns_lim->max_hw_zone_append_sectors);
+	lim->max_open_zones = min_not_zero(lim->max_open_zones,
+					   ns_lim->max_open_zones);
+	lim->max_active_zones =
+		min_not_zero(lim->max_active_zones,
+			     ns_lim->max_active_zones);
+}
+
+static void nvme_apply_ns_head_limits(struct queue_limits *lim,
+		const struct queue_limits *ns_lim)
+{
+	nvme_apply_ns_head_identify_limits(lim, ns_lim);
+	/*
+	 * Keep inherited non-path features that can describe an NVMe path.
+	 * Zoned was handled as namespace layout above, and the RAID partial
+	 * stripes flag is not an NVMe namespace-head property.
+	 */
+	lim->features |= ns_lim->features &
+		(BLK_FEAT_WRITE_CACHE | BLK_FEAT_FUA |
+		 BLK_FEAT_ROTATIONAL | BLK_FEAT_STABLE_WRITES);
+	blk_stack_path_limits(lim, ns_lim);
+	nvme_apply_ns_head_operation_limits(lim, ns_lim);
+	if (lim->features & BLK_FEAT_ZONED)
+		nvme_apply_ns_head_zone_limits(lim, ns_lim);
 }
 
 static int nvme_update_ns_head_limits(struct nvme_ns *ns,
@@ -2549,35 +2627,12 @@ static int nvme_update_ns_head_limits(struct nvme_ns *ns,
 
 	lim = queue_limits_start_update(head_q);
 	memflags = blk_mq_freeze_queue(head_q);
-	/*
-	 * queue_limits mixes values that are the hardware limitations
-	 * for bio splitting with what is the device configuration.
-	 *
-	 * For NVMe the device configuration can change after e.g. a
-	 * Format command, and we really want to pick up the new format
-	 * value here. But we must still stack the queue limits to the
-	 * least common denominator for multipathing to split the bios
-	 * properly.
-	 *
-	 * To work around this, we explicitly set the device
-	 * configuration to those that we just queried, but only stack
-	 * the splitting limits in to make sure we still obey possibly
-	 * lower limitations of other controllers.
-	 */
-	lim.logical_block_size = ns_lim->logical_block_size;
-	lim.physical_block_size = ns_lim->physical_block_size;
-	lim.io_min = ns_lim->io_min;
-	lim.io_opt = ns_lim->io_opt;
-	queue_limits_stack_bdev(&lim, ns->disk->part0, 0,
-				ns->head->disk->disk_name);
-	if (lim.features & BLK_FEAT_ZONED)
-		nvme_stack_zone_resources(&lim, ns_lim);
+
+	nvme_apply_ns_head_limits(&lim, ns_lim);
 	if (unsupported)
 		ns->head->disk->flags |= GENHD_FL_HIDDEN;
 	else
 		nvme_init_integrity(ns->head, &lim, info);
-	lim.max_write_streams = ns_lim->max_write_streams;
-	lim.write_stream_granularity = ns_lim->write_stream_granularity;
 	ret = queue_limits_commit_update(head_q, &lim);
 	if (ret)
 		goto unfreeze_head_queue;

@@ -726,8 +726,14 @@ static bool blk_stack_atomic_writes_head(struct queue_limits *t,
 	return true;
 }
 
-static void blk_stack_atomic_writes_limits(struct queue_limits *t,
-				struct queue_limits *b, sector_t start)
+/**
+ * blk_stack_atomic_writes_limits - stack atomic write limits
+ * @t: the stacking driver limits (top device)
+ * @b: the underlying queue limits (bottom device)
+ * @start: first data sector within bottom device
+ */
+void blk_stack_atomic_writes_limits(struct queue_limits *t,
+		struct queue_limits *b, sector_t start)
 {
 	if (!(b->features & BLK_FEAT_ATOMIC_WRITES))
 		goto unsupported;
@@ -755,8 +761,18 @@ unsupported:
 	t->atomic_write_hw_unit_min = 0;
 	t->atomic_write_hw_boundary = 0;
 }
+EXPORT_SYMBOL_GPL(blk_stack_atomic_writes_limits);
 
-static void blk_stack_path_limits(struct queue_limits *t,
+/**
+ * blk_stack_path_limits - update limits that must hold for every I/O path
+ * @t: the queue limits to update
+ * @b: the queue limits for an I/O path
+ *
+ * Clear BLK_FEAT_NOWAIT, BLK_FEAT_POLL and BLK_FEAT_PCI_P2PDMA when they
+ * are not set in @b. Stack the sector, segment, integrity segment and DMA
+ * alignment limits that every path must support.
+ */
+void blk_stack_path_limits(struct queue_limits *t,
 		const struct queue_limits *b)
 {
 	/*
@@ -785,6 +801,7 @@ static void blk_stack_path_limits(struct queue_limits *t,
 					   b->max_segment_size);
 	t->dma_alignment = max(t->dma_alignment, b->dma_alignment);
 }
+EXPORT_SYMBOL_GPL(blk_stack_path_limits);
 
 /*
  * Stack and check logical_block_size, physical_block_size, io_min, io_opt,
