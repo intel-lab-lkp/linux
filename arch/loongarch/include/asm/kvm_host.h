@@ -232,6 +232,9 @@ struct kvm_vcpu_arch {
 	/* Cache for pages needed inside spinlock regions */
 	struct kvm_mmu_memory_cache mmu_page_cache;
 
+	/* hw vmid info for guest VM */
+	unsigned long hw_vmid;
+
 	/* vcpu's vpid */
 	u64 vpid;
 	gpa_t flush_gpa;

@@ -223,6 +223,7 @@ static void kvm_update_vpid(struct kvm_vcpu *vcpu, int cpu)
 
 	context->vpid_cache = vpid;
 	vcpu->arch.vpid = vpid;
+	vcpu->arch.hw_vmid = vcpu->arch.vpid & vpid_mask;
 }
 
 void kvm_check_vpid(struct kvm_vcpu *vcpu)
