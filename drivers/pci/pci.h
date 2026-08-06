@@ -1056,6 +1056,12 @@ void pci_enable_acs(struct pci_dev *dev);
  * says nothing about an Untranslated Request, so a caller asking only about
  * those is unaffected.
  *
+ * Egress Control can override Request Redirect for any peer Request,
+ * Untranslated ones included, so it applies in either scope.  This
+ * target-independent test cannot prove that every applicable Egress Control
+ * Vector bit is set, so Request Redirect does not guarantee that the Request
+ * leaves the direct path while Egress Control is enabled.
+ *
  * @ctrl is the ACS Control register, @acs_flags the controls the caller asked
  * for, and @scope the Requests its answer has to cover.
  */
@@ -1065,8 +1071,11 @@ static inline bool pci_acs_rr_ineffective(u32 ctrl, u16 acs_flags,
 	if (!(acs_flags & PCI_ACS_RR))
 		return false;
 
-	return scope == PCI_ACS_SCOPE_ALL &&
-	       (ctrl & PCI_ACS_DT) && !(ctrl & PCI_ACS_TB);
+	if (scope == PCI_ACS_SCOPE_ALL &&
+	    (ctrl & PCI_ACS_DT) && !(ctrl & PCI_ACS_TB))
+		return true;
+
+	return ctrl & PCI_ACS_EC;
 }
 
 int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target);

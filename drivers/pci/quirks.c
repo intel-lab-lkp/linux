@@ -4998,8 +4998,11 @@ static int pci_quirk_intel_spt_pch_acs(struct pci_dev *dev, u16 acs_flags,
 		return -ENOTTY;
 
 	/* see pci_acs_flags_enabled() */
-	pci_read_config_dword(dev, pos + PCI_ACS_CAP, &cap);
-	pci_read_config_dword(dev, pos + INTEL_SPT_ACS_CTRL, &ctrl);
+	if (pci_read_config_dword(dev, pos + PCI_ACS_CAP, &cap))
+		return 0;
+
+	if (pci_read_config_dword(dev, pos + INTEL_SPT_ACS_CTRL, &ctrl))
+		return 0;
 
 	if (pci_acs_rr_ineffective(ctrl, acs_flags, scope))
 		return 0;

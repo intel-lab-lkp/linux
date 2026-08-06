@@ -3623,7 +3623,8 @@ static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
 	if (!pos)
 		return false;
 
-	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl);
+	if (pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl))
+		return false;
 
 	if (pci_acs_rr_ineffective(ctrl, acs_flags, scope))
 		return false;
