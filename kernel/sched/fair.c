@@ -2162,9 +2162,6 @@ static inline bool is_core_idle(int cpu)
 	int sibling;
 
 	for_each_cpu(sibling, cpu_smt_mask(cpu)) {
-		if (cpu == sibling)
-			continue;
-
 		if (!idle_cpu(sibling))
 			return false;
 	}
