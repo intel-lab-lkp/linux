@@ -2956,6 +2956,9 @@ static void spi_nor_init_flags(struct spi_nor *nor)
 	if (of_property_read_bool(np, "no-wp"))
 		nor->flags |= SNOR_F_NO_WP;
 
+	if (of_property_read_bool(np, "linux,force-sr-unlock"))
+		nor->flags |= SNOR_F_HAS_LOCK;
+
 	if (flags & SPI_NOR_SWP_IS_VOLATILE)
 		nor->flags |= SNOR_F_SWP_IS_VOLATILE;
 
@@ -3332,7 +3335,8 @@ static int spi_nor_init(struct spi_nor *nor)
 	spi_nor_cache_sr_lock_bits(nor, NULL);
 	if (IS_ENABLED(CONFIG_MTD_SPI_NOR_SWP_DISABLE) ||
 	    (IS_ENABLED(CONFIG_MTD_SPI_NOR_SWP_DISABLE_ON_VOLATILE) &&
-	     nor->flags & SNOR_F_SWP_IS_VOLATILE)) {
+	     nor->flags & SNOR_F_SWP_IS_VOLATILE) ||
+	    of_property_read_bool(spi_nor_get_flash_node(nor), "linux,force-sr-unlock")) {
 		spi_nor_try_unlock_all(nor);
 	}
 
