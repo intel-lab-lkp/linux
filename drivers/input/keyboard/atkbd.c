@@ -1444,6 +1444,47 @@ static ssize_t atkbd_attr_set_helper(struct device *dev, const char *buf, size_t
 	return -EINTR;
 }
 
+static int atkbd_recreate_device(struct atkbd *atkbd,
+				 unsigned char new_set, bool new_extra)
+{
+	struct input_dev *new_dev, *old_dev = atkbd->dev;
+	bool old_extra = atkbd->extra;
+	u8 old_set = atkbd->set;
+	int err;
+
+	/*
+	 * Since device's properties will change we need to unregister
+	 * the old device. But allocate and register the new one first
+	 * to make sure we have it.
+	 */
+	new_dev = input_allocate_device();
+	if (!new_dev)
+		return -ENOMEM;
+
+	atkbd->dev = new_dev;
+	atkbd->set = atkbd_select_set(atkbd, new_set, new_extra);
+	atkbd_reset_state(atkbd);
+	atkbd_activate(atkbd);
+	atkbd_set_keycode_table(atkbd);
+	atkbd_set_device_attrs(atkbd);
+
+	err = input_register_device(atkbd->dev);
+	if (err) {
+		input_free_device(new_dev);
+
+		atkbd->dev = old_dev;
+		atkbd->set = atkbd_select_set(atkbd, old_set, old_extra);
+		atkbd_set_keycode_table(atkbd);
+		atkbd_set_device_attrs(atkbd);
+
+		return err;
+	}
+
+	input_unregister_device(old_dev);
+
+	return 0;
+}
+
 static ssize_t atkbd_show_extra(struct atkbd *atkbd, char *buf)
 {
 	return sprintf(buf, "%d\n", atkbd->extra ? 1 : 0);
@@ -1451,11 +1492,8 @@ static ssize_t atkbd_show_extra(struct atkbd *atkbd, char *buf)
 
 static ssize_t atkbd_set_extra(struct atkbd *atkbd, const char *buf, size_t count)
 {
-	struct input_dev *old_dev, *new_dev;
 	unsigned int value;
 	int err;
-	bool old_extra;
-	u8 old_set;
 
 	if (!atkbd->write)
 		return -EIO;
@@ -1468,38 +1506,9 @@ static ssize_t atkbd_set_extra(struct atkbd *atkbd, const char *buf, size_t coun
 		return -EINVAL;
 
 	if (atkbd->extra != value) {
-		/*
-		 * Since device's properties will change we need to
-		 * unregister old device. But allocate and register
-		 * new one first to make sure we have it.
-		 */
-		old_dev = atkbd->dev;
-		old_extra = atkbd->extra;
-		old_set = atkbd->set;
-
-		new_dev = input_allocate_device();
-		if (!new_dev)
-			return -ENOMEM;
-
-		atkbd->dev = new_dev;
-		atkbd->set = atkbd_select_set(atkbd, atkbd->set, value);
-		atkbd_reset_state(atkbd);
-		atkbd_activate(atkbd);
-		atkbd_set_keycode_table(atkbd);
-		atkbd_set_device_attrs(atkbd);
-
-		err = input_register_device(atkbd->dev);
-		if (err) {
-			input_free_device(new_dev);
-
-			atkbd->dev = old_dev;
-			atkbd->set = atkbd_select_set(atkbd, old_set, old_extra);
-			atkbd_set_keycode_table(atkbd);
-			atkbd_set_device_attrs(atkbd);
-
+		err = atkbd_recreate_device(atkbd, atkbd->set, value);
+		if (err)
 			return err;
-		}
-		input_unregister_device(old_dev);
 	}
 
 	return count;
@@ -1586,11 +1595,8 @@ static ssize_t atkbd_show_set(struct atkbd *atkbd, char *buf)
 
 static ssize_t atkbd_set_set(struct atkbd *atkbd, const char *buf, size_t count)
 {
-	struct input_dev *old_dev, *new_dev;
 	unsigned int value;
 	int err;
-	u8 old_set;
-	bool old_extra;
 
 	if (!atkbd->write)
 		return -EIO;
@@ -1603,34 +1609,11 @@ static ssize_t atkbd_set_set(struct atkbd *atkbd, const char *buf, size_t count)
 		return -EINVAL;
 
 	if (atkbd->set != value) {
-		old_dev = atkbd->dev;
-		old_extra = atkbd->extra;
-		old_set = atkbd->set;
-
-		new_dev = input_allocate_device();
-		if (!new_dev)
-			return -ENOMEM;
-
-		atkbd->dev = new_dev;
-		atkbd->set = atkbd_select_set(atkbd, value, atkbd->extra);
-		atkbd_reset_state(atkbd);
-		atkbd_activate(atkbd);
-		atkbd_set_keycode_table(atkbd);
-		atkbd_set_device_attrs(atkbd);
-
-		err = input_register_device(atkbd->dev);
-		if (err) {
-			input_free_device(new_dev);
-
-			atkbd->dev = old_dev;
-			atkbd->set = atkbd_select_set(atkbd, old_set, old_extra);
-			atkbd_set_keycode_table(atkbd);
-			atkbd_set_device_attrs(atkbd);
-
+		err = atkbd_recreate_device(atkbd, value, atkbd->extra);
+		if (err)
 			return err;
-		}
-		input_unregister_device(old_dev);
 	}
+
 	return count;
 }
 
