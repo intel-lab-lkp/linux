@@ -287,7 +287,9 @@ static int stm32_iwdg_irq_init(struct platform_device *pdev,
 		return 0;
 
 	irq = platform_get_irq_optional(pdev, 0);
-	if (irq <= 0)
+	if (irq == -EPROBE_DEFER)
+		return irq;
+	if (irq < 0)
 		return 0;
 
 	if (of_property_read_bool(np, "wakeup-source")) {
