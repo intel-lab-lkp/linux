@@ -95,7 +95,6 @@ required:
   - interrupts
   - interrupt-names
   - clocks
-  - clock-frequency
   - power-domains
   - '#address-cells'
   - '#size-cells'
