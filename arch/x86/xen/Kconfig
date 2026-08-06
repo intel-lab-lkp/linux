@@ -51,7 +51,7 @@ config XEN_PV_DOM0
 	depends on XEN_PV && XEN_DOM0
 
 config XEN_PVHVM
-	def_bool y
+	bool
 	depends on XEN && X86_LOCAL_APIC
 
 config XEN_PVHVM_SMP
@@ -61,13 +61,15 @@ config XEN_PVHVM_SMP
 config XEN_PVHVM_GUEST
 	bool "Xen PVHVM guest support"
 	default y
-	depends on XEN_PVHVM && PCI
+	depends on XEN && PCI
+	select XEN_PVHVM
 	help
 	  Support running as a Xen PVHVM guest.
 
 config XEN_PVH
 	bool "Xen PVH guest support"
-	depends on XEN && XEN_PVHVM && ACPI
+	depends on XEN && ACPI
+	select XEN_PVHVM
 	select PVH
 	help
 	  Support for running as a Xen PVH guest.
