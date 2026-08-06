@@ -3569,6 +3569,11 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/media/samsung,s5p-mfc.yaml
 F:	drivers/media/platform/samsung/s5p-mfc/
 
+ARM/SOCFPGA AGILEX72 CLOCK DRIVER
+M:	Chiam, Evon <evon.chiam@altera.com>
+S:	Maintained
+F:	drivers/clk/socfpga/clk-agilex72.[ch]
+
 ARM/SOCFPGA ARCHITECTURE
 M:	Dinh Nguyen <dinguyen@kernel.org>
 S:	Maintained
