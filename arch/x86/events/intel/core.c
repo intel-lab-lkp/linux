@@ -3738,6 +3738,36 @@ static void intel_pmu_reset(void)
 	local_irq_restore(flags);
 }
 
+static void intel_pmu_print_debug(int cpu)
+{
+	struct event_constraint *pebs_constraints;
+	struct cpu_hw_events *cpuc;
+	u64 ctrl, status, fixed;
+	u64 pebs, debugctl;
+
+	cpuc = &per_cpu(cpu_hw_events, cpu);
+	pebs_constraints = hybrid(cpuc->pmu, pebs_constraints);
+
+	rdmsrq(MSR_CORE_PERF_GLOBAL_CTRL, ctrl);
+	rdmsrq(MSR_CORE_PERF_GLOBAL_STATUS, status);
+	rdmsrq(MSR_ARCH_PERFMON_FIXED_CTR_CTRL, fixed);
+
+	pr_info("\n");
+	pr_info("CPU#%d: ctrl:       %016llx\n", cpu, ctrl);
+	pr_info("CPU#%d: status:     %016llx\n", cpu, status);
+	pr_info("CPU#%d: fixed:      %016llx\n", cpu, fixed);
+	if (pebs_constraints) {
+		rdmsrq(MSR_IA32_PEBS_ENABLE, pebs);
+		pr_info("CPU#%d: pebs:       %016llx\n", cpu, pebs);
+	}
+	if (x86_pmu.lbr_nr) {
+		rdmsrq(MSR_IA32_DEBUGCTLMSR, debugctl);
+		pr_info("CPU#%d: debugctl:   %016llx\n", cpu, debugctl);
+	}
+
+	x86_pmu_print_debug(cpu);
+}
+
 /*
  * We may be running with guest PEBS events created by KVM, and the
  * PEBS records are logged into the guest's DS and invisible to host.
@@ -6680,6 +6710,8 @@ static __initconst const struct x86_pmu intel_pmu = {
 	 * counting SMM by default.
 	 */
 	.attr_freeze_on_smi	= 1,
+
+	.print_debug		= intel_pmu_print_debug,
 };
 
 static __init void intel_clovertown_quirk(void)
