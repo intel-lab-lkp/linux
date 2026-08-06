@@ -185,12 +185,26 @@ static inline void set_migrate_type_to_alloc_from(int migrate_type, gfp_t *flags
 	}
 }
 
+static ssize_t page_alloc_read(struct file *file, char __user *ubuf,
+				    size_t cnt, loff_t *ppos)
+{
+	/*  Which information should be print about the page or allocation? */
+	return 0;
+}
+
+static const struct file_operations page_alloc_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = page_alloc_read,
+};
+
 static int make_alloc(struct req_alloc *req,
 			    gfp_t flags, unsigned long *alloc_id)
 {
 	struct page_alloc *pa;
 	struct page *page;
 	char new_alloc_name[20];
+	struct dentry *new_alloc_dentry;
 	int ret;
 
 	page = alloc_pages_node_noprof(req->node_idx, flags, req->order);
@@ -205,17 +219,29 @@ static int make_alloc(struct req_alloc *req,
 		snprintf(new_alloc_name, sizeof(new_alloc_name), "%lu",
 			 *alloc_id);
 
+		new_alloc_dentry = debugfs_create_file(
+			new_alloc_name, 0400, req->parentdir,
+			pa, &page_alloc_fops);
+		if (IS_ERR(new_alloc_dentry)) {
+			ret = PTR_ERR(new_alloc_dentry);
+			goto free_page_alloc;
+		}
+
 		pa->req_alloc = req;
 		pa->page = page;
+		pa->alloc_dentry = new_alloc_dentry;
 
 		ret = xa_insert(&allocs_xa, *alloc_id, pa, GFP_KERNEL);
 		if (ret)
-			goto free_page_alloc;
+			goto remove_alloc_dentry;
 	} else {
 		return -ENOMEM;
 	}
 
 	return 0;
+
+remove_alloc_dentry:
+	debugfs_remove(new_alloc_dentry);
 
 free_page_alloc:
 	kmem_cache_free(page_alloc_cache, pa);
