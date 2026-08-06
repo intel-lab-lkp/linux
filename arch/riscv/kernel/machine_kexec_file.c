@@ -254,6 +254,29 @@ int arch_kexec_apply_relocations_add(struct purgatory_info *pi,
 }
 
 
+/*
+ * The next kernel may run in Sv39 even when the current kernel runs in Sv48 or
+ * Sv57, in which case the direct map of the next kernel is narrower. Any
+ * segment placed above it is unreachable by the next kernel during early boot.
+ * The next kernel derives its direct map from the start of the memory it is
+ * given, which is the crash kernel region for a crash image. A NOMMU kernel
+ * has no direct map, so only the limit of the current kernel applies.
+ */
+static unsigned long kexec_segment_limit(struct kimage *image)
+{
+	unsigned long limit = PFN_PHYS(max_low_pfn);
+#ifdef CONFIG_MMU
+	unsigned long base = phys_ram_base;
+
+#ifdef CONFIG_CRASH_DUMP
+	if (image->type == KEXEC_TYPE_CRASH)
+		base = crashk_res.start;
+#endif
+	limit = min(limit, base + BIT(VA_BITS_SV39 - 2) - 1);
+#endif
+	return limit;
+}
+
 int load_extra_segments(struct kimage *image, unsigned long kernel_start,
 			    unsigned long kernel_len, char *initrd,
 			    unsigned long initrd_len, char *cmdline,
@@ -267,7 +290,7 @@ int load_extra_segments(struct kimage *image, unsigned long kernel_start,
 
 	kbuf.image = image;
 	kbuf.buf_min = kernel_start + kernel_len;
-	kbuf.buf_max = PFN_PHYS(max_low_pfn);
+	kbuf.buf_max = kexec_segment_limit(image);
 
 #ifdef CONFIG_CRASH_DUMP
 	/* Add elfcorehdr */
