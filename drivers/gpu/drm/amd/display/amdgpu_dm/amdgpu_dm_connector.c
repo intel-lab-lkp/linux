@@ -1572,8 +1572,22 @@ create_stream_for_sink(struct drm_connector *connector,
 	update_stream_signal(stream, sink);
 
 	if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A ||
-	    stream->signal == SIGNAL_TYPE_HDMI_FRL)
-		mod_build_hf_vsif_infopacket(stream, &stream->vsp_infopacket, false, false);
+	    stream->signal == SIGNAL_TYPE_HDMI_FRL) {
+		/*
+		 * Enable HDMI ALLM (Auto Low-Latency Mode) when the sink
+		 * advertises ALLM in the SCDS and the content type is Game.
+		 * Setting content-type = Game is how userspace requests the
+		 * Sink's low-latency mode (HDMI GCTS HF1-56).
+		 */
+		bool allm = connector->display_info.hdmi.allm &&
+			stream->content_type == DISPLAY_CONTENT_TYPE_GAME;
+
+		drm_dbg_driver(dev,
+			       "ALLM: set mode: sink_allm=%d content_type=%d -> ALLM_Mode=%d\n",
+			    connector->display_info.hdmi.allm, stream->content_type, allm);
+
+		mod_build_hf_vsif_infopacket(stream, &stream->vsp_infopacket, allm, allm);
+	}
 
 	if (stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
 	    stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST ||
