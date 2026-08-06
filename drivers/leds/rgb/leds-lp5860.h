@@ -263,6 +263,5 @@ struct lp5860 {
 };
 
 int lp5860_device_init(struct device *dev);
-void lp5860_device_remove(struct device *dev);
 
 #endif /* _DRIVERS_LEDS_RGB_LP5860_H */
