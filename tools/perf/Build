@@ -21,6 +21,7 @@ perf-y += builtin-mem.o
 perf-y += builtin-data.o
 perf-y += builtin-version.o
 perf-y += builtin-c2c.o
+perf-$(CONFIG_SLANG) += ui/browsers/c2c-function.o
 perf-y += builtin-daemon.o
 
 perf-$(CONFIG_LIBTRACEEVENT) += builtin-kmem.o

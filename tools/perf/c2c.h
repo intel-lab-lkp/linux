@@ -132,15 +132,21 @@ void c2c_fmt_free(struct perf_hpp_fmt *fmt);
 bool c2c_fmt_equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b);
 
 /*
- * The TUI browser is only built with SLANG support. The stub below keeps the
- * header self-contained for NO_SLANG builds, as util/hist.h does for its own
- * TUI entry points.
+ * The TUI browsers are only built with SLANG support. The stubs below keep
+ * the header self-contained for NO_SLANG builds, as util/hist.h does for its
+ * own TUI entry points.
  */
 #ifdef HAVE_SLANG_SUPPORT
 int perf_c2c__browse_cacheline(struct hist_entry *he);
+int perf_c2c__browse_function_view(void);
 #else
 static inline int
 perf_c2c__browse_cacheline(struct hist_entry *he __maybe_unused)
+{
+	return 0;
+}
+
+static inline int perf_c2c__browse_function_view(void)
 {
 	return 0;
 }
