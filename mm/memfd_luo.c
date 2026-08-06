@@ -451,16 +451,16 @@ static int memfd_luo_retrieve_folios(struct file *file,
 
 		err = mem_cgroup_charge(folio, NULL, mapping_gfp_mask(mapping));
 		if (err) {
-			pr_err("shmem: failed to charge folio index %ld: %d\n",
-			       i, err);
+			pr_err("shmem: failed to charge folio index %llu: %d\n",
+			       (unsigned long long)index, err);
 			goto unlock_folio;
 		}
 
 		err = shmem_add_to_page_cache(folio, mapping, index, NULL,
 					      mapping_gfp_mask(mapping));
 		if (err) {
-			pr_err("shmem: failed to add to page cache folio index %ld: %d\n",
-			       i, err);
+			pr_err("shmem: failed to add to page cache folio index %llu: %d\n",
+			       (unsigned long long)index, err);
 			goto unlock_folio;
 		}
 
@@ -472,8 +472,8 @@ static int memfd_luo_retrieve_folios(struct file *file,
 		npages = folio_nr_pages(folio);
 		err = shmem_inode_acct_blocks(inode, npages);
 		if (err) {
-			pr_err("shmem: failed to account folio index %ld(%ld pages): %d\n",
-			       i, npages, err);
+			pr_err("shmem: failed to account folio index %llu(%ld pages): %d\n",
+			       (unsigned long long)index, npages, err);
 			goto remove_from_cache;
 		}
 
