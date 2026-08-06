@@ -10,6 +10,7 @@
 
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
+#include <hyp/switch.h>
 
 void __kvm_timer_set_cntvoff(u64 cntvoff)
 {
@@ -63,7 +64,7 @@ void __timer_enable_traps(struct kvm_vcpu *vcpu)
 	 * Trap the virtual counter/timer if we have a broken cntvoff
 	 * implementation.
 	 */
-	if (has_broken_cntvoff())
+	if (has_broken_cntvoff() && hyp_timer_get_offset(vcpu_vtimer(vcpu)))
 		set |= CNTHCTL_EL1TVT | CNTHCTL_EL1TVCT;
 
 	sysreg_clear_set(cnthctl_el2, clr, set);
