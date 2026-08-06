@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config CLK_AMBARELLA_CV75
+	bool "Ambarella CV75 RCT clock controller"
+	depends on ARCH_AMBARELLA || COMPILE_TEST
+	select CLK_AMBARELLA_CCU
+	default ARCH_AMBARELLA
+	help
+	  Say Y to enable support for the Reset and Clock Tree controller
+	  found on Ambarella CV75 SoCs. The controller provides the core PLL,
+	  bus clocks and UART clock required during early platform boot.
+	  It is needed to use the serial console on CV75-based systems.
+
+config CLK_AMBARELLA_CCU
+	bool
+	select REGMAP_MMIO
