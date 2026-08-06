@@ -3007,6 +3007,7 @@ efct_hw_send_frame(struct efct_hw *hw, struct fc_frame_header *hdr,
 				ctx->wqcb->instance_index);
 	if (rc) {
 		efc_log_err(hw->os, "sli_send_frame_wqe failed: %d\n", rc);
+		efct_hw_reqtag_free(hw, ctx->wqcb);
 		return -EIO;
 	}
 
