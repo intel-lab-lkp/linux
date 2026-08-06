@@ -53,6 +53,8 @@ struct nvme_rdma_device {
 	struct list_head	entry
 		__guarded_by(&device_list_mutex);
 	unsigned int		num_inline_segments;
+	/* set under device_list_mutex when removal starts */
+	bool			dying;
 };
 
 struct nvme_rdma_qe {
@@ -378,6 +380,18 @@ nvme_rdma_find_get_device(struct rdma_cm_id *cm_id)
 
 	mutex_lock(&device_list_mutex);
 	list_for_each_entry(ndev, &device_list, entry) {
+		if (READ_ONCE(ndev->dying)) {
+			/*
+			 * Removal has already sampled nvme_rdma_ctrl_list, so
+			 * a controller created here would never be deleted.
+			 * A re-probed device with the same node GUID is a
+			 * distinct ib_device and gets a fresh
+			 * nvme_rdma_device below.
+			 */
+			if (ndev->dev == cm_id->device)
+				goto out_err;
+			continue;
+		}
 		if (ndev->dev->node_guid == cm_id->device->node_guid &&
 		    nvme_rdma_dev_get(ndev))
 			goto out_unlock;
@@ -2378,6 +2392,24 @@ static struct nvme_ctrl *nvme_rdma_create_ctrl(struct device *dev,
 		nvmf_ctrl_subsysnqn(&ctrl->ctrl), &ctrl->addr, opts->host->nqn);
 
 	mutex_lock(&nvme_rdma_ctrl_mutex);
+	if (READ_ONCE(ctrl->device->dying)) {
+		mutex_unlock(&nvme_rdma_ctrl_mutex);
+		/*
+		 * Removal already walked nvme_rdma_ctrl_list, so publishing
+		 * now would leave this controller behind and stall
+		 * cma_remove_one() forever. ->list is still empty, so
+		 * nvme_rdma_free_ctrl() leaves opts for nvmf_create_ctrl().
+		 * nvme_init_ctrl() left two references and
+		 * nvme_delete_ctrl_sync() consumes only the one that
+		 * nvme_uninit_ctrl() drops, so put the other here.
+		 */
+		dev_info(ctrl->ctrl.device,
+			 "hca %s is being removed, aborting connect\n",
+			 dev_name(ctrl->device->dev->dma_device));
+		nvme_delete_ctrl_sync(&ctrl->ctrl);
+		nvme_put_ctrl(&ctrl->ctrl);
+		return ERR_PTR(-ECONNREFUSED);
+	}
 	list_add_tail(&ctrl->list, &nvme_rdma_ctrl_list);
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
@@ -2409,9 +2441,16 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 	struct nvme_rdma_device *ndev;
 	bool found = false;
 
+	/*
+	 * Stop handing this device out to new queues, and stop new controllers
+	 * from being published on it, before sampling nvme_rdma_ctrl_list
+	 * below. Pairs with the READ_ONCE() of ->dying in
+	 * nvme_rdma_find_get_device() and nvme_rdma_create_ctrl().
+	 */
 	mutex_lock(&device_list_mutex);
 	list_for_each_entry(ndev, &device_list, entry) {
 		if (ndev->dev == ib_device) {
+			WRITE_ONCE(ndev->dying, true);
 			found = true;
 			break;
 		}
@@ -2421,7 +2460,15 @@ static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 	if (!found)
 		return;
 
-	/* Delete all controllers using this device */
+	/*
+	 * Delete all controllers using this device. ->dying is stored before
+	 * nvme_rdma_ctrl_mutex is acquired here, and nvme_rdma_create_ctrl()
+	 * checks it while holding that same mutex, so the two orderings are
+	 * exhaustive: a publisher that got the mutex first is on the list and
+	 * is deleted below, and one that gets it afterwards observes ->dying
+	 * and tears its controller down itself. No controller can be added
+	 * behind this walk.
+	 */
 	mutex_lock(&nvme_rdma_ctrl_mutex);
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list) {
 		if (ctrl->device->dev != ib_device)
