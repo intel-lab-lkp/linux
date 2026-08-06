@@ -44,6 +44,10 @@ SECTIONS {
 	.text			0 : {
 		*(.text .text.[0-9a-zA-Z_]*)
 	}
+#if defined(CONFIG_ARM) && defined(CONFIG_ARM_UNWIND)
+	.ARM.extab : {*(.ARM.extab .ARM.extab.text.[0-9a-z-A-Z_]*) }
+	.ARM.exidx : {*(.ARM.exidx .ARM.exidx.text.[0-9a-z-A-Z_]*) }
+#endif
 #endif
 
 	.bss			0 : {
