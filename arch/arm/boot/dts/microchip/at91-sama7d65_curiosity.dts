@@ -79,6 +79,14 @@
 	};
 };
 
+&adc {
+	vddana-supply = <&vddout25>;
+	vref-supply = <&vddout25>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_adc_default &pinctrl_adtrg_default>;
+	status = "okay";
+};
+
 &can1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_can1_default>;
@@ -95,6 +103,10 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_can3_default>;
 	status = "okay";
+};
+
+&cpu0 {
+	cpu-supply = <&vddcpu>;
 };
 
 &dma0 {
@@ -334,6 +346,16 @@
 };
 
 &pioa {
+	pinctrl_adc_default: adc-default {
+		pinmux = <PIN_PC5__GPIO>;
+		bias-disable;
+	};
+
+	pinctrl_adtrg_default: adtrg-default {
+		pinmux = <PIN_PB7__ADTRG>;
+		bias-pull-up;
+	};
+
 	pinctrl_can1_default: can1-default {
 		pinmux = <PIN_PD10__CANTX1>,
 			 <PIN_PD11__CANRX1>;
@@ -456,4 +478,9 @@
 
 &slow_xtal {
 	clock-frequency = <32768>;
+};
+
+&vddout25 {
+	vin-supply = <&vdd_3v3>;
+	status = "okay";
 };
