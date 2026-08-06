@@ -756,6 +756,36 @@ unsupported:
 	t->atomic_write_hw_boundary = 0;
 }
 
+static void blk_stack_path_limits(struct queue_limits *t,
+		const struct queue_limits *b)
+{
+	/*
+	 * Some features need to be supported both by the stacking driver and all
+	 * underlying devices. The stacking driver sets these flags before
+	 * stacking the limits, and this will clear the flags if any of the
+	 * underlying devices does not support it.
+	 */
+	if (!(b->features & BLK_FEAT_NOWAIT))
+		t->features &= ~BLK_FEAT_NOWAIT;
+	if (!(b->features & BLK_FEAT_POLL))
+		t->features &= ~BLK_FEAT_POLL;
+	if (!(b->features & BLK_FEAT_PCI_P2PDMA))
+		t->features &= ~BLK_FEAT_PCI_P2PDMA;
+
+	t->max_hw_sectors = min_not_zero(t->max_hw_sectors, b->max_hw_sectors);
+	t->max_dev_sectors = min_not_zero(t->max_dev_sectors, b->max_dev_sectors);
+	t->seg_boundary_mask = min_not_zero(t->seg_boundary_mask,
+					    b->seg_boundary_mask);
+	t->virt_boundary_mask = min_not_zero(t->virt_boundary_mask,
+					     b->virt_boundary_mask);
+	t->max_segments = min_not_zero(t->max_segments, b->max_segments);
+	t->max_integrity_segments = min_not_zero(t->max_integrity_segments,
+						 b->max_integrity_segments);
+	t->max_segment_size = min_not_zero(t->max_segment_size,
+					   b->max_segment_size);
+	t->dma_alignment = max(t->dma_alignment, b->dma_alignment);
+}
+
 /*
  * Stack and check logical_block_size, physical_block_size, io_min, io_opt,
  * chunk_sectors and alignment_offset for a bottom-device range, then round
@@ -874,25 +904,11 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 	int ret;
 
 	t->features |= (b->features & BLK_FEAT_INHERIT_MASK);
-
-	/*
-	 * Some feaures need to be supported both by the stacking driver and all
-	 * underlying devices.  The stacking driver sets these flags before
-	 * stacking the limits, and this will clear the flags if any of the
-	 * underlying devices does not support it.
-	 */
-	if (!(b->features & BLK_FEAT_NOWAIT))
-		t->features &= ~BLK_FEAT_NOWAIT;
-	if (!(b->features & BLK_FEAT_POLL))
-		t->features &= ~BLK_FEAT_POLL;
-	if (!(b->features & BLK_FEAT_PCI_P2PDMA))
-		t->features &= ~BLK_FEAT_PCI_P2PDMA;
+	blk_stack_path_limits(t, b);
 
 	t->max_sectors = min_not_zero(t->max_sectors, b->max_sectors);
 	t->max_user_sectors = min_not_zero(t->max_user_sectors,
 			b->max_user_sectors);
-	t->max_hw_sectors = min_not_zero(t->max_hw_sectors, b->max_hw_sectors);
-	t->max_dev_sectors = min_not_zero(t->max_dev_sectors, b->max_dev_sectors);
 	t->max_write_zeroes_sectors = min(t->max_write_zeroes_sectors,
 					b->max_write_zeroes_sectors);
 	t->max_user_wzeroes_unmap_sectors =
@@ -904,21 +920,8 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 
 	t->max_hw_zone_append_sectors = min(t->max_hw_zone_append_sectors,
 					b->max_hw_zone_append_sectors);
-
-	t->seg_boundary_mask = min_not_zero(t->seg_boundary_mask,
-					    b->seg_boundary_mask);
-	t->virt_boundary_mask = min_not_zero(t->virt_boundary_mask,
-					    b->virt_boundary_mask);
-
-	t->max_segments = min_not_zero(t->max_segments, b->max_segments);
 	t->max_discard_segments = min_not_zero(t->max_discard_segments,
 					       b->max_discard_segments);
-	t->max_integrity_segments = min_not_zero(t->max_integrity_segments,
-						 b->max_integrity_segments);
-
-	t->max_segment_size = min_not_zero(t->max_segment_size,
-					   b->max_segment_size);
-	t->dma_alignment = max(t->dma_alignment, b->dma_alignment);
 
 	ret = blk_stack_topology_limits(t, b, start);
 
