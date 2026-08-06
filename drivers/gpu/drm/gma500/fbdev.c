@@ -26,8 +26,14 @@ static vm_fault_t psb_fbdev_vm_fault(struct vm_fault *vmf)
 	unsigned long address = vmf->address - (vmf->pgoff << PAGE_SHIFT);
 	unsigned long pfn = info->fix.smem_start >> PAGE_SHIFT;
 	vm_fault_t err = VM_FAULT_SIGBUS;
+	unsigned long obj_pages = info->fix.smem_len >> PAGE_SHIFT;
 	unsigned long page_num = vma_pages(vma);
 	unsigned long i;
+
+	if (vmf->pgoff >= obj_pages)
+		return VM_FAULT_SIGBUS;
+	if (page_num > obj_pages)
+		page_num = obj_pages;
 
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
