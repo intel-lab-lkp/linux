@@ -13568,6 +13568,7 @@ L:	linux-iio@vger.kernel.org
 S:	Maintained
 W:	https://invensense.tdk.com/
 F:	Documentation/devicetree/bindings/iio/accel/invensense,icm42370.yaml
+F:	drivers/iio/accel/inv_icm42370*
 
 INVENSENSE ICM-426xx IMU DRIVER
 M:	Jean-Baptiste Maneyrol <jean-baptiste.maneyrol@tdk.com>

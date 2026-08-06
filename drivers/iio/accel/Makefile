@@ -49,6 +49,11 @@ obj-$(CONFIG_HID_SENSOR_ACCEL_3D) += hid-sensor-accel-3d.o
 obj-$(CONFIG_IIO_KX022A)	+= kionix-kx022a.o
 obj-$(CONFIG_IIO_KX022A_I2C)	+= kionix-kx022a-i2c.o
 obj-$(CONFIG_IIO_KX022A_SPI)	+= kionix-kx022a-spi.o
+
+obj-$(CONFIG_INV_ICM42370) += inv-icm42370.o
+inv-icm42370-y += inv_icm42370_core.o
+obj-$(CONFIG_INV_ICM42370_I2C) += inv_icm42370_i2c.o
+
 obj-$(CONFIG_KXCJK1013) += kxcjk-1013.o
 obj-$(CONFIG_KXSD9)	+= kxsd9.o
 obj-$(CONFIG_KXSD9_SPI)	+= kxsd9-spi.o
