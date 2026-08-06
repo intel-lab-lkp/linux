@@ -828,7 +828,60 @@ static void virtio_pci_reset_done(struct pci_dev *pci_dev)
 		dev_warn(&pci_dev->dev, "Reset done failure: %d", ret);
 }
 
+static pci_ers_result_t virtio_pci_error_detected(struct pci_dev *pci_dev,
+						  pci_channel_state_t state)
+{
+	struct virtio_pci_device *vp_dev = pci_get_drvdata(pci_dev);
+
+	/*
+	 * Quiesce on frozen/unknown before AER bus reset.  That path does
+	 * not call .reset_prepare.  On permanent failure only break
+	 * virtqueues.
+	 */
+	switch (state) {
+	case pci_channel_io_normal:
+		return PCI_ERS_RESULT_CAN_RECOVER;
+	case pci_channel_io_perm_failure:
+		dev_warn(&pci_dev->dev,
+			 "permanent failure, disconnecting device\n");
+		virtio_break_device(&vp_dev->vdev);
+		return PCI_ERS_RESULT_DISCONNECT;
+	case pci_channel_io_frozen:
+	default:
+		pci_info(pci_dev, "channel state %u, quiesce device\n", state);
+		if (virtio_device_reset_prepare(&vp_dev->vdev))
+			dev_warn(&pci_dev->dev, "reset prepare failed\n");
+		return PCI_ERS_RESULT_NEED_RESET;
+	}
+}
+
+static pci_ers_result_t virtio_pci_slot_reset(struct pci_dev *pci_dev)
+{
+	struct virtio_pci_device *vp_dev = pci_get_drvdata(pci_dev);
+	int ret;
+
+	if (pci_enable_device(pci_dev)) {
+		dev_err(&pci_dev->dev,
+			"Cannot re-enable PCI device after reset\n");
+		return PCI_ERS_RESULT_DISCONNECT;
+	}
+
+	pci_set_master(pci_dev);
+	pci_restore_state(pci_dev);
+
+	ret = virtio_device_reset_done(&vp_dev->vdev);
+	if (ret && ret != -EOPNOTSUPP) {
+		dev_warn(&pci_dev->dev, "slot reset restore failed: %d\n",
+			 ret);
+		return PCI_ERS_RESULT_DISCONNECT;
+	}
+
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
 static const struct pci_error_handlers virtio_pci_err_handler = {
+	.error_detected = virtio_pci_error_detected,
+	.slot_reset     = virtio_pci_slot_reset,
 	.reset_prepare  = virtio_pci_reset_prepare,
 	.reset_done     = virtio_pci_reset_done,
 };
