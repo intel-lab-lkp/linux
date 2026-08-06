@@ -184,7 +184,6 @@ int get_cpu_topology(struct cpupower_topology *cpu_top)
 			&(cpu_top->core_info[cpu].pkg)) < 0) {
 			cpu_top->core_info[cpu].pkg = -1;
 			cpu_top->core_info[cpu].core = -1;
-			continue;
 		}
 		if(sysfs_topology_read_file(
 			cpu,
@@ -192,7 +191,6 @@ int get_cpu_topology(struct cpupower_topology *cpu_top)
 			&(cpu_top->core_info[cpu].core)) < 0) {
 			cpu_top->core_info[cpu].pkg = -1;
 			cpu_top->core_info[cpu].core = -1;
-			continue;
 		}
 		if (cpu_top->core_info[cpu].core == -1) {
 			strncpy(cpu_top->core_info[cpu].core_cpu_list, "-1", CPULIST_BUFFER);
