@@ -179,6 +179,10 @@ struct airoha_npu {
 
 	struct airoha_foe_stats __iomem *stats;
 
+	/* Coherent bounce buffer for mailbox cmd/rsp (airoha_npu_send_msg) */
+	void *mbox_buf;
+	dma_addr_t mbox_dma;
+
 	struct {
 		int (*ppe_init)(struct airoha_npu *npu);
 		int (*ppe_deinit)(struct airoha_npu *npu);
