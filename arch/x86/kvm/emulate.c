@@ -2573,12 +2573,12 @@ static bool emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
 #ifdef CONFIG_X86_64
 	base |= ((u64)base3) << 32;
 #endif
-	r = ops->read_std(ctxt, base + 102, &io_bitmap_ptr, 2, NULL, true);
+	r = linear_read_system(ctxt, base + 102, &io_bitmap_ptr, 2);
 	if (r != X86EMUL_CONTINUE)
 		return false;
-	if (io_bitmap_ptr + port/8 > desc_limit_scaled(&tr_seg))
+	if (io_bitmap_ptr + port/8 + 1 > desc_limit_scaled(&tr_seg))
 		return false;
-	r = ops->read_std(ctxt, base + io_bitmap_ptr + port/8, &perm, 2, NULL, true);
+	r = linear_read_system(ctxt, base + io_bitmap_ptr + port/8, &perm, 2);
 	if (r != X86EMUL_CONTINUE)
 		return false;
 	if ((perm >> bit_idx) & mask)
