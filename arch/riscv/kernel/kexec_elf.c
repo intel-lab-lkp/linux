@@ -28,6 +28,15 @@ static int riscv_kexec_elf_load(struct kimage *image, struct elfhdr *ehdr,
 	int ret = 0;
 	struct kexec_buf kbuf = {};
 	const struct elf_phdr *phdr;
+	unsigned long highest_paddr = 0;
+
+	/* Find the highest physical end address of the kernel image. */
+	for (i = 0; i < ehdr->e_phnum; i++) {
+		phdr = &elf_info->proghdrs[i];
+		if (phdr->p_type == PT_LOAD)
+			highest_paddr = max(highest_paddr,
+					    (unsigned long)(phdr->p_paddr + phdr->p_memsz));
+	}
 
 	kbuf.image = image;
 
@@ -41,6 +50,13 @@ static int riscv_kexec_elf_load(struct kimage *image, struct elfhdr *ehdr,
 		kbuf.buf_align = phdr->p_align;
 		kbuf.mem = phdr->p_paddr - old_pbase + new_pbase;
 		kbuf.memsz = phdr->p_memsz;
+		/*
+		 * The next kernel aligns its image reservation on PMD_SIZE, as
+		 * explained by a comment in setup_bootmem(). Reserve that tail
+		 * so subsequent segments do not overlap it.
+		 */
+		if (phdr->p_paddr + phdr->p_memsz == highest_paddr)
+			kbuf.memsz = ALIGN(kbuf.mem + phdr->p_memsz, PMD_SIZE) - kbuf.mem;
 		kbuf.top_down = false;
 		ret = kexec_add_buffer(&kbuf);
 		if (ret)
@@ -95,9 +111,10 @@ static int elf_find_pbase(struct kimage *image, struct elfhdr *ehdr,
 	/*
 	 * The segments are added at fixed addresses later on, which makes
 	 * kexec_add_buffer() skip the memory hole check, so the range searched
-	 * here has to cover the whole extent the image occupies in memory.
+	 * here has to cover the whole extent the image occupies in memory,
+	 * including the PMD-aligned tail of the last segment.
 	 */
-	kbuf.memsz = ALIGN(highest_paddr - lowest_paddr, PAGE_SIZE);
+	kbuf.memsz = ALIGN(highest_paddr - lowest_paddr, PMD_SIZE);
 	kbuf.cma = NULL;
 	kbuf.top_down = false;
 	ret = arch_kexec_locate_mem_hole(&kbuf);
