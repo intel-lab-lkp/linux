@@ -1760,9 +1760,16 @@ static int __dwc3_gadget_get_frame(struct dwc3 *dwc)
  */
 static int __dwc3_stop_active_transfer(struct dwc3_ep *dep, bool force, bool interrupt)
 {
+	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_gadget_ep_cmd_params params;
 	u32 cmd;
 	int ret;
+
+	/*
+	 * Per the DWC_usb31 programming guide (section 3.2.2.7), EndTransfer
+	 * must be issued with ForceRM cleared starting from version 2.00a.
+	 */
+	force = force && (!DWC3_IP_IS(DWC31) || DWC3_VER_IS_PRIOR(DWC31, 200A));
 
 	cmd = DWC3_DEPCMD_ENDTRANSFER;
 	cmd |= force ? DWC3_DEPCMD_HIPRI_FORCERM : 0;
