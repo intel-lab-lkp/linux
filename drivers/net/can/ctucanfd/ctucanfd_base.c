@@ -884,8 +884,6 @@ static void ctucan_err_interrupt(struct net_device *ndev, u32 isr)
 
 	/* Check for Arbitration Lost interrupt */
 	if (FIELD_GET(REG_INT_STAT_ALI, isr)) {
-		if (dologerr)
-			netdev_info(ndev, "arbitration lost\n");
 		priv->can.can_stats.arbitration_lost++;
 		if (skb) {
 			cf->can_id |= CAN_ERR_LOSTARB;
@@ -895,7 +893,6 @@ static void ctucan_err_interrupt(struct net_device *ndev, u32 isr)
 
 	/* Check for Bus Error interrupt */
 	if (FIELD_GET(REG_INT_STAT_BEI, isr)) {
-		netdev_info(ndev, "bus error\n");
 		priv->can.can_stats.bus_error++;
 		stats->rx_errors++;
 		if (skb) {
