@@ -4061,9 +4061,15 @@ disable_exits_unlock:
 		if (!kvm_caps.has_bus_lock_exit)
 			break;
 
-		if (cap->args[0] & KVM_BUS_LOCK_DETECTION_EXIT)
-			kvm->arch.bus_lock_detection_enabled = true;
 		r = 0;
+		if (cap->args[0] & KVM_BUS_LOCK_DETECTION_EXIT) {
+			mutex_lock(&kvm->lock);
+			if (!kvm->created_vcpus)
+				kvm->arch.bus_lock_detection_enabled = true;
+			else
+				r = -EINVAL;
+			mutex_unlock(&kvm->lock);
+		}
 		break;
 #ifdef CONFIG_X86_SGX_KVM
 	case KVM_CAP_SGX_ATTRIBUTE: {
