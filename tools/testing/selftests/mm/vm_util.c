@@ -68,7 +68,6 @@ static uint64_t pagemap_scan_get_categories(int fd, char *start)
 	return r.categories;
 }
 
-/* `start` is any valid address. */
 static bool pagemap_scan_supported(int fd)
 {
 	const size_t pagesize = getpagesize();
