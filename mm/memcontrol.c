@@ -2607,98 +2607,97 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	unsigned long pflags;
 	bool allow_spinning = gfpflags_allow_spinning(gfp_mask);
 
-retry:
-	if (consume_stock(memcg, nr_pages))
-		return 0;
+	for (; nr_retries >= 0; nr_retries--) {
 
-	if (!allow_spinning)
-		/* Avoid the refill and flush of the older stock */
-		batch = nr_pages;
+		if (consume_stock(memcg, nr_pages))
+			return 0;
 
-	reclaim_options = MEMCG_RECLAIM_MAY_SWAP;
-	if (!do_memsw_account() ||
-	    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
-		if (page_counter_try_charge(&memcg->memory, batch, &counter))
-			goto done_restock;
-		if (do_memsw_account())
-			page_counter_uncharge(&memcg->memsw, batch);
-		mem_over_limit = mem_cgroup_from_counter(counter, memory);
-	} else {
-		mem_over_limit = mem_cgroup_from_counter(counter, memsw);
-		reclaim_options &= ~MEMCG_RECLAIM_MAY_SWAP;
-	}
+		if (!allow_spinning)
+			/* Avoid the refill and flush of the older stock */
+			batch = nr_pages;
 
-	if (batch > nr_pages) {
-		batch = nr_pages;
-		goto retry;
-	}
+		reclaim_options = MEMCG_RECLAIM_MAY_SWAP;
+		if (!do_memsw_account() ||
+		    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
+			if (page_counter_try_charge(&memcg->memory, batch, &counter))
+				goto done_restock;
+			if (do_memsw_account())
+				page_counter_uncharge(&memcg->memsw, batch);
+			mem_over_limit = mem_cgroup_from_counter(counter, memory);
+		} else {
+			mem_over_limit = mem_cgroup_from_counter(counter, memsw);
+			reclaim_options &= ~MEMCG_RECLAIM_MAY_SWAP;
+		}
 
-	/*
-	 * Prevent unbounded recursion when reclaim operations need to
-	 * allocate memory. This might exceed the limits temporarily,
-	 * but we prefer facilitating memory reclaim and getting back
-	 * under the limit over triggering OOM kills in these cases.
-	 */
-	if (unlikely(current->flags & PF_MEMALLOC))
-		goto force;
+		if (batch > nr_pages) {
+			batch = nr_pages;
+			continue;
+		}
 
-	if (unlikely(task_in_memcg_oom(current)))
-		goto nomem;
+		/*
+		 * Prevent unbounded recursion when reclaim operations need to
+		 * allocate memory. This might exceed the limits temporarily,
+		 * but we prefer facilitating memory reclaim and getting back
+		 * under the limit over triggering OOM kills in these cases.
+		 */
+		if (unlikely(current->flags & PF_MEMALLOC))
+			goto force;
 
-	if (!gfpflags_allow_blocking(gfp_mask))
-		goto nomem;
+		if (unlikely(task_in_memcg_oom(current)))
+			goto nomem;
 
-	__memcg_memory_event(mem_over_limit, MEMCG_MAX, allow_spinning);
-	raised_max_event = true;
+		if (!gfpflags_allow_blocking(gfp_mask))
+			goto nomem;
 
-	psi_memstall_enter(&pflags);
-	nr_reclaimed = try_to_free_mem_cgroup_pages(mem_over_limit, nr_pages,
+		__memcg_memory_event(mem_over_limit, MEMCG_MAX, allow_spinning);
+		raised_max_event = true;
+
+		psi_memstall_enter(&pflags);
+		nr_reclaimed = try_to_free_mem_cgroup_pages(mem_over_limit, nr_pages,
 						    gfp_mask, reclaim_options, NULL);
-	psi_memstall_leave(&pflags);
+		psi_memstall_leave(&pflags);
 
-	if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
-		goto retry;
+		if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
+			continue;
 
-	if (!drained) {
-		drain_all_stock(mem_over_limit);
-		drained = true;
-		goto retry;
-	}
+		if (!drained) {
+			drain_all_stock(mem_over_limit);
+			drained = true;
+			continue;
+		}
 
-	if (gfp_mask & __GFP_NORETRY)
-		goto nomem;
-	/*
-	 * Even though the limit is exceeded at this point, reclaim
-	 * may have been able to free some pages.  Retry the charge
-	 * before killing the task.
-	 *
-	 * Only for regular pages, though: huge pages are rather
-	 * unlikely to succeed so close to the limit, and we fall back
-	 * to regular pages anyway in case of failure.
-	 */
-	if (nr_reclaimed && nr_pages <= (1 << PAGE_ALLOC_COSTLY_ORDER))
-		goto retry;
+		if (gfp_mask & __GFP_NORETRY)
+			goto nomem;
+		/*
+		 * Even though the limit is exceeded at this point, reclaim
+		 * may have been able to free some pages.  Retry the charge
+		 * before killing the task.
+		 *
+		 * Only for regular pages, though: huge pages are rather
+		 * unlikely to succeed so close to the limit, and we fall back
+		 * to regular pages anyway in case of failure.
+		 */
+		if (nr_reclaimed && nr_pages <= (1 << PAGE_ALLOC_COSTLY_ORDER))
+			continue;
 
-	if (nr_retries--)
-		goto retry;
+		if (gfp_mask & __GFP_RETRY_MAYFAIL)
+			goto nomem;
 
-	if (gfp_mask & __GFP_RETRY_MAYFAIL)
-		goto nomem;
+		/* Avoid endless loop for tasks bypassed by the oom killer */
+		if (passed_oom && task_is_dying())
+			goto nomem;
 
-	/* Avoid endless loop for tasks bypassed by the oom killer */
-	if (passed_oom && task_is_dying())
-		goto nomem;
-
-	/*
-	 * keep retrying as long as the memcg oom killer is able to make
-	 * a forward progress or bypass the charge if the oom killer
-	 * couldn't make any progress.
-	 */
-	if (mem_cgroup_oom(mem_over_limit, gfp_mask,
-			   get_order(nr_pages * PAGE_SIZE))) {
-		passed_oom = true;
-		nr_retries = MAX_RECLAIM_RETRIES;
-		goto retry;
+		/*
+		 * keep retrying as long as the memcg oom killer is able to make
+		 * a forward progress or bypass the charge if the oom killer
+		 * couldn't make any progress.
+		 */
+		if (mem_cgroup_oom(mem_over_limit, gfp_mask,
+				   get_order(nr_pages * PAGE_SIZE))) {
+			passed_oom = true;
+			nr_retries = MAX_RECLAIM_RETRIES;
+			continue;
+		}
 	}
 nomem:
 	/*
