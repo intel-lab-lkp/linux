@@ -61,6 +61,8 @@ use syn::parse_macro_input;
 ///
 /// [`Module`]: ../kernel/trait.Module.html
 ///
+/// The trailing comma after the final field is optional.
+///
 /// # Examples
 ///
 /// ```ignore
@@ -112,7 +114,7 @@ use syn::parse_macro_input;
 ///     authors: ["Rust for Linux Contributors"],
 ///     description: "My device driver requires firmware",
 ///     license: "GPL",
-///     firmware: ["my_device_firmware1.bin", "my_device_firmware2.bin"],
+///     firmware: ["my_device_firmware1.bin", "my_device_firmware2.bin"]
 /// }
 ///
 /// struct MyDeviceDriverModule;

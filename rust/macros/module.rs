@@ -261,8 +261,13 @@ macro_rules! parse_ordered_fields {
                 }
             }
 
-            $input.parse::<Token![,]>()?;
             seen_keys.push(key);
+
+            if $input.is_empty() {
+                break;
+            }
+
+            $input.parse::<Token![,]>()?;
         }
 
         for key in REQUIRED_KEYS {
