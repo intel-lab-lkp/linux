@@ -591,6 +591,12 @@ error_exit:
 
 static void __exit page_alloc_hogger_debugfs_exit(void)
 {
+	struct page_alloc *pa;
+	unsigned long idx;
+
+	xa_for_each(&allocs_xa, idx, pa)
+		free_alloc_helper(idx);
+
 	debugfs_remove_recursive(mmdir);
 	kmem_cache_destroy(req_alloc_cache);
 	kmem_cache_destroy(page_alloc_cache);
