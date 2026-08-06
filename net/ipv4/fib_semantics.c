@@ -1910,9 +1910,10 @@ void fib_nhc_update_mtu(struct fib_nh_common *nhc, u32 new, u32 orig)
 	struct fnhe_hash_bucket *bucket;
 	int i;
 
+	spin_lock_bh(&fnhe_lock);
 	bucket = rcu_dereference_protected(nhc->nhc_exceptions, 1);
 	if (!bucket)
-		return;
+		goto out;
 
 	for (i = 0; i < FNHE_HASH_SIZE; i++) {
 		struct fib_nh_exception *fnhe;
@@ -1931,6 +1932,8 @@ void fib_nhc_update_mtu(struct fib_nh_common *nhc, u32 new, u32 orig)
 			}
 		}
 	}
+out:
+	spin_unlock_bh(&fnhe_lock);
 }
 
 void fib_sync_mtu(struct net_device *dev, u32 orig_mtu)

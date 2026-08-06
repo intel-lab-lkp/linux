@@ -12,6 +12,7 @@
 #ifndef _NET_IP_FIB_H
 #define _NET_IP_FIB_H
 
+#include <linux/spinlock.h>
 #include <net/flow.h>
 #include <linux/seq_file.h>
 #include <linux/rcupdate.h>
@@ -494,6 +495,9 @@ int fib_sync_down_addr(struct net_device *dev, __be32 local);
 int fib_sync_up(struct net_device *dev, unsigned char nh_flags);
 void fib_sync_mtu(struct net_device *dev, u32 orig_mtu);
 void fib_nhc_update_mtu(struct fib_nh_common *nhc, u32 new, u32 orig);
+
+/* Protects nexthop exception table updates. */
+extern spinlock_t fnhe_lock;
 
 /* Fields used for sysctl_fib_multipath_hash_fields.
  * Common to IPv4 and IPv6.
