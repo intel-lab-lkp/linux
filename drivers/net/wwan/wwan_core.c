@@ -1018,7 +1018,15 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 #endif
 
 	case TIOCMGET:
-		ret = put_user(port->at_data.mdmbits, (int __user *)arg);
+		if (port->ops->tiocmget) {
+			ret = port->ops->tiocmget(port);
+			if (ret >= 0) {
+				port->at_data.mdmbits = ret;
+				ret = 0;
+			}
+		}
+		if (!ret)
+			ret = put_user(port->at_data.mdmbits, (int __user *)arg);
 		break;
 
 	case TIOCMSET:
@@ -1036,6 +1044,8 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 			port->at_data.mdmbits |= mdmbits;
 		else
 			port->at_data.mdmbits = mdmbits;
+		if (port->ops->tiocmset)
+			ret = port->ops->tiocmset(port, port->at_data.mdmbits);
 		break;
 	}
 
