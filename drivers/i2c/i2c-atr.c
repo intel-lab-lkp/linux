@@ -857,6 +857,7 @@ int i2c_atr_add_adapter(struct i2c_atr *atr, struct i2c_atr_adap_desc *desc)
 	if (ret) {
 		dev_err(dev, "failed to add atr-adapter %u (error=%d)\n",
 			chan_id, ret);
+		atr->adapter[chan_id] = NULL;
 		goto err_free_alias_pool;
 	}
 
