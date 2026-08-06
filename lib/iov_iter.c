@@ -1410,6 +1410,7 @@ ssize_t __import_iovec(int type, const struct iovec __user *uvec,
 		*iovp = iov;
 	return total_len;
 }
+EXPORT_SYMBOL_GPL(__import_iovec);
 
 /**
  * import_iovec() - Copy an array of &struct iovec from userspace
