@@ -4058,8 +4058,10 @@ disable_exits_unlock:
 		    (cap->args[0] & KVM_BUS_LOCK_DETECTION_EXIT))
 			break;
 
-		if (kvm_caps.has_bus_lock_exit &&
-		    cap->args[0] & KVM_BUS_LOCK_DETECTION_EXIT)
+		if (!kvm_caps.has_bus_lock_exit)
+			break;
+
+		if (cap->args[0] & KVM_BUS_LOCK_DETECTION_EXIT)
 			kvm->arch.bus_lock_detection_enabled = true;
 		r = 0;
 		break;
