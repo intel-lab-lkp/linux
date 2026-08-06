@@ -280,7 +280,19 @@ static void thread_stack_free_rcu(struct rcu_head *rh)
 	if (try_release_thread_stack_to_cache(vm_stack->stack_vm_area))
 		return;
 
-	vfree(vm_area->addr);
+	/*
+	 * Reset the pointer tag before vfree(): in RCU callback context
+	 * vfree() routes to vfree_atomic(), which writes to the freed
+	 * memory as llist storage.  Resetting the tag to KASAN_TAG_KERNEL
+	 * (0xFF) makes KASAN bypass tag checks for that write in all modes
+	 * (HW_TAGS, SW_TAGS, Generic), avoiding a false tag-mismatch report.
+	 *
+	 * kasan_unpoison_vmalloc() is not needed here: in HW_TAGS it is a
+	 * no-op without KASAN_VMALLOC_VM_ALLOC, and in SW_TAGS/Generic the
+	 * 0xFF pointer already bypasses shadow checks.  This mirrors the
+	 * intent of the fix in scs_free() (commit 528a4ab45300).
+	 */
+	vfree(kasan_reset_tag(vm_area->addr));
 }
 
 static void thread_stack_delayed_free(struct task_struct *tsk)
