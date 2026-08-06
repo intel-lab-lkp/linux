@@ -2245,7 +2245,7 @@ static __init void xen_alloc_callback_vector(void)
 #else
 void xen_setup_callback_vector(void) {}
 static inline void xen_init_setup_upcall_vector(void) {}
-int xen_set_upcall_vector(unsigned int cpu) {}
+int xen_set_upcall_vector(unsigned int cpu) { return -EINVAL; }
 static inline void xen_alloc_callback_vector(void) {}
 #endif /* CONFIG_XEN_PVHVM */
 #endif /* CONFIG_X86 */
