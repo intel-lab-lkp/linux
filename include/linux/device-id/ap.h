@@ -14,7 +14,6 @@ typedef unsigned long kernel_ulong_t;
 struct ap_device_id {
 	__u16 match_flags;	/* which fields to match against */
 	__u8 dev_type;		/* device type */
-	kernel_ulong_t driver_info;
 };
 
 #endif /* ifndef LINUX_DEVICE_ID_AP_H */
