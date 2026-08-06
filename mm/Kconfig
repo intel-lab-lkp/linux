@@ -29,6 +29,17 @@ config VSWAP
 	  swapfile, or kept in memory - with the backing changeable at
 	  runtime without invalidating page table entries.
 
+config VSWAP_DEFAULT_ON
+	bool "Route swapouts through virtual swap by default"
+	depends on VSWAP
+	default n
+	help
+	  Say Y to route swapouts through the virtual swap layer from
+	  boot.
+
+	  Say N (default) to leave vswap off until it is enabled at
+	  runtime via /proc/sys/vm/vswap_enabled.
+
 config ZSWAP
 	bool "Compressed cache for swap pages"
 	depends on SWAP

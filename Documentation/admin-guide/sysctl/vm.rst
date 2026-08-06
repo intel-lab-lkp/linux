@@ -74,6 +74,7 @@ Currently, these files are in /proc/sys/vm:
 - user_reserve_kbytes
 - vfs_cache_pressure
 - vfs_cache_pressure_denom
+- vswap_enabled
 - watermark_boost_factor
 - watermark_scale_factor
 - zone_reclaim_mode
@@ -1151,6 +1152,21 @@ vfs_cache_pressure_denom
 
 Defaults to 100 (minimum allowed value). Requires corresponding
 vfs_cache_pressure setting to take effect.
+
+vswap_enabled
+=============
+
+Controls whether new swapouts are routed through the virtual swap layer
+(only present when the kernel is built with CONFIG_VSWAP). Set to 1 to
+route swapouts through vswap, 0 to send them straight to the physical
+swap device.
+
+The default is 0 unless the kernel was built with
+CONFIG_VSWAP_DEFAULT_ON=y.
+
+Disabling is allocation-only: it only stops new swapouts from using
+vswap. Swap entries already backed by vswap keep being served and drain
+naturally as they are faulted back in or freed.
 
 watermark_boost_factor
 ======================
