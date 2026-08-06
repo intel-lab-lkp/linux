@@ -10,6 +10,7 @@
 #include <kunit/test.h>
 
 #include <linux/pci.h>
+#include <linux/pci-p2pdma.h>
 #include <linux/pci_regs.h>
 
 #include "pci.h"
@@ -388,6 +389,205 @@ static void acs_egress_root_port_test(struct kunit *test)
 			1);
 }
 
+/*
+ * calc_map_type_and_dist(): drive the full provider->client hierarchy walk
+ * over a fabricated PCIe fabric matching the canonical "two devices behind one
+ * switch" tree:
+ *
+ *   host bridge / root bus
+ *     Root Port
+ *       Switch Upstream Port
+ *         Switch Downstream Port 0 -- provider
+ *         Switch Downstream Port 1 -- client
+ *
+ * A fake pci_ops answers the ACS Control, Egress Control Vector and LNKCAP
+ * reads for the two downstream ports, so the ACS Egress Control evaluated at
+ * the path divergence (Downstream Port 0 targeting Downstream Port 1) decides
+ * the mapping without any real hardware.
+ */
+
+struct acs_dn_cfg {
+	u16	acs_ctrl;		/* ACS Control register value */
+	u8	port;			/* this port's LNKCAP Port Number */
+	u32	egress[8];		/* Egress Control Vector (256 bits) */
+};
+
+struct acs_fabric {
+	struct pci_dev		*provider;
+	struct pci_dev		*client;
+	struct pci_dev		*dn0;	/* Downstream Port 0 (provider side) */
+	struct pci_dev		*dn1;	/* Downstream Port 1 (client side) */
+	struct acs_dn_cfg	dn0_cfg;
+	struct acs_dn_cfg	dn1_cfg;
+};
+
+static void acs_dn_read(struct pci_dev *dn, struct acs_dn_cfg *c,
+			int where, int size, u32 *val)
+{
+	int vec = dn->acs_cap + PCI_ACS_EGRESS_CTL_V;
+
+	if (size == 4 && where == dn->pcie_cap + PCI_EXP_LNKCAP)
+		*val = FIELD_PREP(PCI_EXP_LNKCAP_PN, c->port);
+	else if (dn->acs_cap && size == 2 && where == dn->acs_cap + PCI_ACS_CTRL)
+		*val = c->acs_ctrl;
+	else if (dn->acs_cap && size == 4 &&
+		 where >= vec && where < vec + (int)sizeof(c->egress))
+		*val = c->egress[(where - vec) / 4];
+}
+
+static int acs_fabric_read(struct pci_bus *bus, unsigned int devfn,
+			   int where, int size, u32 *val)
+{
+	struct acs_fabric *f = bus->sysdata;
+
+	*val = 0;
+	if (bus == f->dn0->bus && devfn == f->dn0->devfn)
+		acs_dn_read(f->dn0, &f->dn0_cfg, where, size, val);
+	else if (bus == f->dn1->bus && devfn == f->dn1->devfn)
+		acs_dn_read(f->dn1, &f->dn1_cfg, where, size, val);
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static int acs_fabric_write(struct pci_bus *bus, unsigned int devfn,
+			    int where, int size, u32 val)
+{
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static struct pci_ops acs_fabric_ops = {
+	.read	= acs_fabric_read,
+	.write	= acs_fabric_write,
+};
+
+static struct pci_bus *acs_add_bus(struct kunit *test, struct pci_bus *parent,
+				   struct pci_dev *self, u8 nr, void *sysdata)
+{
+	struct pci_bus *bus = kunit_kzalloc(test, sizeof(*bus), GFP_KERNEL);
+
+	KUNIT_ASSERT_NOT_NULL(test, bus);
+	bus->parent = parent;
+	bus->self = self;
+	bus->number = nr;
+	bus->ops = &acs_fabric_ops;
+	bus->sysdata = sysdata;
+	INIT_LIST_HEAD(&bus->devices);
+	return bus;
+}
+
+static struct pci_dev *acs_add_dev(struct kunit *test, struct pci_bus *bus,
+				   unsigned int devfn, int pcie_type)
+{
+	struct pci_dev *dev = kunit_kzalloc(test, sizeof(*dev), GFP_KERNEL);
+
+	KUNIT_ASSERT_NOT_NULL(test, dev);
+	dev->bus = bus;
+	dev->devfn = devfn;
+	dev->pcie_cap = 0x40;
+	dev->pcie_flags_reg = ACS_TEST_PCIE_FLAGS(pcie_type);
+	list_add_tail(&dev->bus_list, &bus->devices);
+	return dev;
+}
+
+static void acs_build_fabric(struct kunit *test, struct acs_fabric *f)
+{
+	struct pci_bus *bus0, *bus1, *bus2, *bus3, *bus4;
+	struct pci_dev *rootport, *swup;
+	struct pci_host_bridge *host;
+
+	host = kunit_kzalloc(test, sizeof(*host), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, host);
+
+	bus0 = acs_add_bus(test, NULL, NULL, 0, f);		/* root bus */
+	/* The Root Port doubles as the whitelisted host-bridge device. */
+	rootport = acs_add_dev(test, bus0, PCI_DEVFN(0, 0),
+			       PCI_EXP_TYPE_ROOT_PORT);
+	rootport->vendor = PCI_VENDOR_ID_GOOGLE;
+	rootport->device = 0x1234;
+	host->bus = bus0;
+	bus0->bridge = &host->dev;
+
+	bus1 = acs_add_bus(test, bus0, rootport, 1, f);
+	swup = acs_add_dev(test, bus1, PCI_DEVFN(0, 0), PCI_EXP_TYPE_UPSTREAM);
+
+	bus2 = acs_add_bus(test, bus1, swup, 2, f);
+	f->dn0 = acs_add_dev(test, bus2, PCI_DEVFN(0, 0), PCI_EXP_TYPE_DOWNSTREAM);
+	f->dn1 = acs_add_dev(test, bus2, PCI_DEVFN(1, 0), PCI_EXP_TYPE_DOWNSTREAM);
+
+	bus3 = acs_add_bus(test, bus2, f->dn0, 3, f);
+	f->provider = acs_add_dev(test, bus3, PCI_DEVFN(0, 0),
+				  PCI_EXP_TYPE_ENDPOINT);
+
+	bus4 = acs_add_bus(test, bus2, f->dn1, 4, f);
+	f->client = acs_add_dev(test, bus4, PCI_DEVFN(0, 0),
+				PCI_EXP_TYPE_ENDPOINT);
+}
+
+static enum pci_p2pdma_map_type acs_walk_map(struct acs_fabric *f)
+{
+	int dist;
+
+	return calc_map_type_and_dist(f->provider, f->client, &dist, false);
+}
+
+static void acs_walk_bus_addr_test(struct kunit *test)
+{
+	struct acs_fabric f = {};
+
+	acs_build_fabric(test, &f);
+	/* No ACS on the path: peer-to-peer is allowed directly. */
+	KUNIT_EXPECT_EQ(test, acs_walk_map(&f), PCI_P2PDMA_MAP_BUS_ADDR);
+}
+
+static void acs_walk_ec_violation_test(struct kunit *test)
+{
+	struct acs_fabric f = {};
+
+	acs_build_fabric(test, &f);
+	/*
+	 * Downstream Port 0 has Egress Control enabled with the vector bit for
+	 * the client's Downstream Port 1 set and Request Redirect clear: an ACS
+	 * Violation, so the direct path is unusable and the request has to take
+	 * the host-bridge route.
+	 */
+	f.dn0->acs_cap = 0x100;
+	f.dn0->acs_capabilities = PCI_ACS_EC | (64 << 8);
+	f.dn0_cfg.acs_ctrl = PCI_ACS_EC;
+	f.dn1_cfg.port = 5;
+	f.dn0_cfg.egress[0] = BIT(5);
+
+	KUNIT_EXPECT_EQ(test, acs_walk_map(&f),
+			PCI_P2PDMA_MAP_THRU_HOST_BRIDGE);
+}
+
+static void acs_walk_ec_vector_clear_test(struct kunit *test)
+{
+	struct acs_fabric f = {};
+
+	acs_build_fabric(test, &f);
+	/* Egress Control enabled but the vector bit for the peer is clear. */
+	f.dn0->acs_cap = 0x100;
+	f.dn0->acs_capabilities = PCI_ACS_EC | (64 << 8);
+	f.dn0_cfg.acs_ctrl = PCI_ACS_EC;
+	f.dn1_cfg.port = 5;		/* egress vector left all-zero */
+
+	KUNIT_EXPECT_EQ(test, acs_walk_map(&f), PCI_P2PDMA_MAP_BUS_ADDR);
+}
+
+static void acs_walk_thru_host_bridge_test(struct kunit *test)
+{
+	struct acs_fabric f = {};
+
+	acs_build_fabric(test, &f);
+	/* Request Redirect set: traffic is redirected up to the host bridge. */
+	f.dn0->acs_cap = 0x100;
+	f.dn0->acs_capabilities = PCI_ACS_RR;
+	f.dn0_cfg.acs_ctrl = PCI_ACS_RR;
+
+	/* The Google root port is whitelisted, so the host-bridge path is OK. */
+	KUNIT_EXPECT_EQ(test, acs_walk_map(&f),
+			PCI_P2PDMA_MAP_THRU_HOST_BRIDGE);
+}
+
 static struct kunit_case pci_acs_test_cases[] = {
 	KUNIT_CASE_PARAM(pci_acs_p2pdma_decision_test, acs_decision_gen_params),
 	KUNIT_CASE_PARAM(pci_acs_egress_port_valid_test, egress_valid_gen_params),
@@ -402,6 +602,10 @@ static struct kunit_case pci_acs_test_cases[] = {
 	KUNIT_CASE(acs_egress_target_pcie_bridge_test),
 	KUNIT_CASE(acs_egress_target_other_bus_test),
 	KUNIT_CASE(acs_egress_root_port_test),
+	KUNIT_CASE(acs_walk_bus_addr_test),
+	KUNIT_CASE(acs_walk_ec_violation_test),
+	KUNIT_CASE(acs_walk_ec_vector_clear_test),
+	KUNIT_CASE(acs_walk_thru_host_bridge_test),
 	{}
 };
 
