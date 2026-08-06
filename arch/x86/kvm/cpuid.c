@@ -1029,6 +1029,7 @@ void kvm_initialize_cpu_caps(void)
 		F(SM4),
 		F(AVX_VNNI),
 		F(AVX512_BF16),
+		X86_64_F(LASS),
 		F(CMPCCXADD),
 		F(FZRM),
 		F(FSRS),
