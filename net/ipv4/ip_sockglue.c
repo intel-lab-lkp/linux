@@ -1447,6 +1447,7 @@ static int ip_get_mcast_msfilter(struct sock *sk, sockptr_t optval,
 {
 	const int size0 = offsetof(struct group_filter, gf_slist_flex);
 	struct group_filter gsf;
+	unsigned int max_numsrc;
 	int num, gsf_size;
 	int err;
 
@@ -1454,6 +1455,10 @@ static int ip_get_mcast_msfilter(struct sock *sk, sockptr_t optval,
 		return -EINVAL;
 	if (copy_from_sockptr(&gsf, optval, size0))
 		return -EFAULT;
+
+	/* Maximum number of sources that would fit in the userspace buffer*/
+	max_numsrc = (len - size0) / sizeof(gsf.gf_slist_flex[0]);
+	gsf.gf_numsrc = min_t(u32, gsf.gf_numsrc, max_numsrc);
 
 	num = gsf.gf_numsrc;
 	err = ip_mc_gsfget(sk, &gsf, optval,
@@ -1474,6 +1479,7 @@ static int compat_ip_get_mcast_msfilter(struct sock *sk, sockptr_t optval,
 {
 	const int size0 = offsetof(struct compat_group_filter, gf_slist_flex);
 	struct compat_group_filter gf32;
+	unsigned int max_numsrc;
 	struct group_filter gf;
 	int num;
 	int err;
@@ -1482,6 +1488,9 @@ static int compat_ip_get_mcast_msfilter(struct sock *sk, sockptr_t optval,
 		return -EINVAL;
 	if (copy_from_sockptr(&gf32, optval, size0))
 		return -EFAULT;
+
+	max_numsrc = (len - size0) / sizeof(gf32.gf_slist_flex[0]);
+	gf32.gf_numsrc = min_t(u32, gf32.gf_numsrc, max_numsrc);
 
 	gf.gf_interface = gf32.gf_interface;
 	gf.gf_fmode = gf32.gf_fmode;
@@ -1705,6 +1714,7 @@ int do_ip_getsockopt(struct sock *sk, int level, int optname,
 	switch (optname) {
 	case IP_MSFILTER:
 	{
+		unsigned int max_numsrc;
 		struct ip_msfilter msf;
 
 		if (len < IP_MSFILTER_SIZE(0)) {
@@ -1715,6 +1725,12 @@ int do_ip_getsockopt(struct sock *sk, int level, int optname,
 			err = -EFAULT;
 			goto out;
 		}
+		/* Do not write more sources than the caller said optval can
+		 * hold.
+		 */
+		max_numsrc = (len - IP_MSFILTER_SIZE(0)) /
+			     sizeof(msf.imsf_slist_flex[0]);
+		msf.imsf_numsrc = min_t(u32, msf.imsf_numsrc, max_numsrc);
 		err = ip_mc_msfget(sk, &msf, optval, optlen);
 		goto out;
 	}
