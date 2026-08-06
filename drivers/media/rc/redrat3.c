@@ -1102,18 +1102,17 @@ static int redrat3_dev_probe(struct usb_interface *intf,
 	if (retval)
 		goto redrat_free;
 
-	rr3->rc = redrat3_init_rc_dev(rr3);
-	if (!rr3->rc) {
-		retval = -ENOMEM;
-		goto led_free;
-	}
-
 	/* might be all we need to do? */
 	retval = redrat3_enable_detector(rr3);
 	if (retval < 0)
 		goto led_free;
 
 	/* we can register the device now, as it is ready */
+	rr3->rc = redrat3_init_rc_dev(rr3);
+	if (!rr3->rc) {
+		retval = -ENOMEM;
+		goto led_free;
+	}
 	usb_set_intfdata(intf, rr3);
 
 	return 0;
