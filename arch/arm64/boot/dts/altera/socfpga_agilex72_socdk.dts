@@ -22,6 +22,18 @@
 	};
 };
 
+&cb_intosc_div2_clk {
+	clock-frequency = <500000000>;
+};
+
+&osc1 {
+	clock-frequency = <100000000>;
+};
+
+&f2s_free_clk {
+	clock-frequency = <100000000>;
+};
+
 &uart0 {
 	status = "okay";
 };
