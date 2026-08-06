@@ -287,6 +287,17 @@ static int otx2_set_channels(struct net_device *dev,
 		return -EINVAL;
 	}
 
+	if ((pfvf->flags & OTX2_FLAG_PER_Q_RATE_LIMIT_ENABLED) &&
+	    (channel->tx_count != pfvf->hw.tx_queues ||
+	     channel->rx_count != pfvf->hw.rx_queues)) {
+		err = otx2_mqprio_down(pfvf);
+		if (err)
+			return err;
+
+		netdev_info(dev,
+			    "Removed mqprio bandwidth offload due to channel count change\n");
+	}
+
 	if (if_up)
 		dev->netdev_ops->ndo_stop(dev);
 
