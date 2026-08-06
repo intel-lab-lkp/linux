@@ -4490,18 +4490,25 @@ static inline void skb_set_delivery_type_by_clockid(struct sk_buff *skb,
 
 DECLARE_STATIC_KEY_FALSE(netstamp_needed_key);
 
+static __always_inline void __skb_clear_delivery_time(struct sk_buff *skb,
+						      bool want_tstamp)
+{
+	if (skb->tstamp_type) {
+		skb->tstamp_type = SKB_CLOCK_REALTIME;
+		if (want_tstamp &&
+		    static_branch_unlikely(&netstamp_needed_key))
+			skb->tstamp = ktime_get_real();
+		else
+			skb->tstamp = 0;
+	}
+}
+
 /* It is used in the ingress path to clear the delivery_time.
  * If needed, set the skb->tstamp to the (rcv) timestamp.
  */
 static __always_inline void skb_clear_delivery_time(struct sk_buff *skb)
 {
-	if (skb->tstamp_type) {
-		skb->tstamp_type = SKB_CLOCK_REALTIME;
-		if (static_branch_unlikely(&netstamp_needed_key))
-			skb->tstamp = ktime_get_real();
-		else
-			skb->tstamp = 0;
-	}
+	__skb_clear_delivery_time(skb, true);
 }
 
 static inline void skb_clear_tstamp(struct sk_buff *skb)
