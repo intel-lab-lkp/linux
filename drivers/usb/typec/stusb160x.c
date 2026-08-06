@@ -645,6 +645,8 @@ static int stusb160x_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, chip);
 
 	regmap_config = i2c_get_match_data(client);
+	if (!regmap_config)
+		return -ENODEV;
 
 	chip->regmap = devm_regmap_init_i2c(client, regmap_config);
 	if (IS_ERR(chip->regmap)) {
