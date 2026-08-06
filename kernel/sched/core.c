@@ -2461,6 +2461,10 @@ static void migrate_disable_switch(struct rq *rq, struct task_struct *p)
 	if (p->cpus_ptr != &p->cpus_mask)
 		return;
 
+	/* The per-CPU idle task never migrates, there is nothing to pin. */
+	if (p == rq->idle)
+		return;
+
 	scoped_guard (task_rq_lock, p)
 		do_set_cpus_allowed(p, &ac);
 }
