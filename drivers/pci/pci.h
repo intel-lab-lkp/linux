@@ -1045,15 +1045,41 @@ resource_size_t pci_min_window_alignment(struct pci_bus *bus,
 
 void pci_acs_init(struct pci_dev *dev);
 void pci_enable_acs(struct pci_dev *dev);
+
+/*
+ * PCIe r7.0, sec 6.12.3: ACS P2P Request Redirect does not by itself keep a
+ * peer-to-peer Request off the direct path to its target.
+ *
+ * Direct Translated P2P routes a Request carrying a Translated address to the
+ * peer regardless of Request Redirect, so Request Redirect does not isolate
+ * unless Translation Blocking rejects the Request first (sec 6.12.1.1).  It
+ * says nothing about an Untranslated Request, so a caller asking only about
+ * those is unaffected.
+ *
+ * @ctrl is the ACS Control register, @acs_flags the controls the caller asked
+ * for, and @scope the Requests its answer has to cover.
+ */
+static inline bool pci_acs_rr_ineffective(u32 ctrl, u16 acs_flags,
+					  enum pci_acs_scope scope)
+{
+	if (!(acs_flags & PCI_ACS_RR))
+		return false;
+
+	return scope == PCI_ACS_SCOPE_ALL &&
+	       (ctrl & PCI_ACS_DT) && !(ctrl & PCI_ACS_TB);
+}
+
 #ifdef CONFIG_PCI_QUIRKS
-int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags);
+int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags,
+				 enum pci_acs_scope scope);
 int pci_dev_specific_enable_acs(struct pci_dev *dev);
 int pci_dev_specific_disable_acs_redir(struct pci_dev *dev);
 void pci_disable_broken_acs_cap(struct pci_dev *pdev);
 int pcie_failed_link_retrain(struct pci_dev *dev);
 #else
 static inline int pci_dev_specific_acs_enabled(struct pci_dev *dev,
-					       u16 acs_flags)
+					       u16 acs_flags,
+					       enum pci_acs_scope scope)
 {
 	return -ENOTTY;
 }

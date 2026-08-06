@@ -463,7 +463,16 @@ int pci_enable_pasid(struct pci_dev *pdev, int features)
 	if (!pasid)
 		return -EINVAL;
 
-	if (!pci_acs_path_enabled(pdev, NULL, PCI_ACS_RR | PCI_ACS_UF))
+	/*
+	 * A Request carrying a PASID is routed by address alone (PCIe r7.0,
+	 * sec 2.2.10.4), so it has to be redirected Upstream to reach the
+	 * translation agent. Only Untranslated Requests are at stake here:
+	 * a Translated Request already carries an address the agent produced
+	 * for this PASID (sec 10.1.3), so ACS Direct Translated P2P routing it
+	 * to a peer is not a way around the agent.
+	 */
+	if (!pci_acs_path_enabled(pdev, NULL, PCI_ACS_RR | PCI_ACS_UF,
+				  PCI_ACS_SCOPE_UNTRANSLATED))
 		return -EINVAL;
 
 	pci_read_config_word(pdev, pasid + PCI_PASID_CAP, &supported);

@@ -277,6 +277,26 @@ enum pci_bus_flags {
 	PCI_BUS_FLAGS_NO_EXTCFG	= (__force pci_bus_flags_t) 8,
 };
 
+/**
+ * enum pci_acs_scope - which peer-to-peer Requests an ACS check must cover
+ * @PCI_ACS_SCOPE_ALL: every peer-to-peer Request, including one carrying a
+ *	Translated address.  ACS Direct Translated P2P routes those to the peer
+ *	regardless of P2P Request Redirect (PCIe r7.0, sec 6.12.3), so it
+ *	defeats isolation unless ACS Translation Blocking rejects them first
+ *	(sec 6.12.1.1).
+ * @PCI_ACS_SCOPE_UNTRANSLATED: only Requests carrying an Untranslated address.
+ *	ACS Direct Translated P2P does not apply to those, so it says nothing
+ *	about whether they reach the Root Complex.
+ *
+ * A caller proving that peers cannot reach each other wants
+ * %PCI_ACS_SCOPE_ALL.  A caller that only needs Untranslated Requests routed
+ * Upstream, such as pci_enable_pasid(), wants %PCI_ACS_SCOPE_UNTRANSLATED.
+ */
+enum pci_acs_scope {
+	PCI_ACS_SCOPE_ALL,
+	PCI_ACS_SCOPE_UNTRANSLATED,
+};
+
 /* Values from Link Status register, PCIe r3.1, sec 7.8.8 */
 enum pcie_link_width {
 	PCIE_LNK_WIDTH_RESRV	= 0x00,
@@ -2213,7 +2233,8 @@ static inline struct pci_dev *pci_dev_get(struct pci_dev *dev) { return NULL; }
 
 #define dev_is_pci(d) (false)
 #define dev_is_pf(d) (false)
-static inline bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags)
+static inline bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags,
+				   enum pci_acs_scope scope)
 { return false; }
 static inline int pci_irqd_intx_xlate(struct irq_domain *d,
 				      struct device_node *node,
@@ -2710,9 +2731,10 @@ static inline bool pci_dev_is_disconnected(const struct pci_dev *dev)
 }
 
 void pci_request_acs(void);
-bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags);
-bool pci_acs_path_enabled(struct pci_dev *start,
-			  struct pci_dev *end, u16 acs_flags);
+bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags,
+		     enum pci_acs_scope scope);
+bool pci_acs_path_enabled(struct pci_dev *start, struct pci_dev *end,
+			  u16 acs_flags, enum pci_acs_scope scope);
 int pci_enable_atomic_ops_to_root(struct pci_dev *dev, u32 cap_mask);
 
 #define PCI_VPD_LRDT			0x80	/* Large Resource Data Type */

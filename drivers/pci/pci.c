@@ -3545,13 +3545,19 @@ void pci_configure_ari(struct pci_dev *dev)
 	}
 }
 
-static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags)
+static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
+				  enum pci_acs_scope scope)
 {
 	int pos;
 	u16 ctrl;
 
 	pos = pdev->acs_cap;
 	if (!pos)
+		return false;
+
+	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl);
+
+	if (pci_acs_rr_ineffective(ctrl, acs_flags, scope))
 		return false;
 
 	/*
@@ -3561,7 +3567,6 @@ static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags)
 	 */
 	acs_flags &= (pdev->acs_capabilities | PCI_ACS_EC);
 
-	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl);
 	return (ctrl & acs_flags) == acs_flags;
 }
 
@@ -3569,6 +3574,7 @@ static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags)
  * pci_acs_enabled - test ACS against required flags for a given device
  * @pdev: device to test
  * @acs_flags: required PCI ACS flags
+ * @scope: which peer-to-peer Requests the answer has to cover
  *
  * Return true if the device supports the provided flags.  Automatically
  * filters out flags that are not implemented on multifunction devices.
@@ -3581,11 +3587,12 @@ static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags)
  * it much easier for callers of this function to ignore the actual type
  * or topology of the device when testing ACS support.
  */
-bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags)
+bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags,
+		     enum pci_acs_scope scope)
 {
 	int ret;
 
-	ret = pci_dev_specific_acs_enabled(pdev, acs_flags);
+	ret = pci_dev_specific_acs_enabled(pdev, acs_flags, scope);
 	if (ret >= 0)
 		return ret > 0;
 
@@ -3620,7 +3627,7 @@ bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags)
 	 */
 	case PCI_EXP_TYPE_DOWNSTREAM:
 	case PCI_EXP_TYPE_ROOT_PORT:
-		return pci_acs_flags_enabled(pdev, acs_flags);
+		return pci_acs_flags_enabled(pdev, acs_flags, scope);
 	/*
 	 * PCIe 3.0, 6.12.1.2 specifies ACS capabilities that should be
 	 * implemented by the remaining PCIe types to indicate peer-to-peer
@@ -3635,7 +3642,7 @@ bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags)
 		if (!pdev->multifunction)
 			break;
 
-		return pci_acs_flags_enabled(pdev, acs_flags);
+		return pci_acs_flags_enabled(pdev, acs_flags, scope);
 	}
 
 	/*
@@ -3650,19 +3657,20 @@ bool pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags)
  * @start: starting downstream device
  * @end: ending upstream device or NULL to search to the root bus
  * @acs_flags: required flags
+ * @scope: which peer-to-peer Requests the answer has to cover
  *
  * Walk up a device tree from start to end testing PCI ACS support.  If
  * any step along the way does not support the required flags, return false.
  */
-bool pci_acs_path_enabled(struct pci_dev *start,
-			  struct pci_dev *end, u16 acs_flags)
+bool pci_acs_path_enabled(struct pci_dev *start, struct pci_dev *end,
+			  u16 acs_flags, enum pci_acs_scope scope)
 {
 	struct pci_dev *pdev, *parent = start;
 
 	do {
 		pdev = parent;
 
-		if (!pci_acs_enabled(pdev, acs_flags))
+		if (!pci_acs_enabled(pdev, acs_flags, scope))
 			return false;
 
 		if (pci_is_root_bus(pdev->bus))

@@ -4707,7 +4707,8 @@ static int pci_acs_ctrl_enabled(u16 acs_ctrl_req, u16 acs_ctrl_ena)
  * 1022:780f [AMD] FCH PCI Bridge
  * 1022:7809 [AMD] FCH USB OHCI Controller
  */
-static int pci_quirk_amd_sb_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_amd_sb_acs(struct pci_dev *dev, u16 acs_flags,
+				enum pci_acs_scope scope)
 {
 #ifdef CONFIG_ACPI
 	struct acpi_table_header *header = NULL;
@@ -4752,7 +4753,8 @@ static bool pci_quirk_cavium_acs_match(struct pci_dev *dev)
 	}
 }
 
-static int pci_quirk_cavium_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_cavium_acs(struct pci_dev *dev, u16 acs_flags,
+				enum pci_acs_scope scope)
 {
 	if (!pci_quirk_cavium_acs_match(dev))
 		return -ENOTTY;
@@ -4769,7 +4771,8 @@ static int pci_quirk_cavium_acs(struct pci_dev *dev, u16 acs_flags)
 		PCI_ACS_SV | PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF);
 }
 
-static int pci_quirk_xgene_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_xgene_acs(struct pci_dev *dev, u16 acs_flags,
+			       enum pci_acs_scope scope)
 {
 	/*
 	 * X-Gene Root Ports matching this quirk do not allow peer-to-peer
@@ -4785,7 +4788,8 @@ static int pci_quirk_xgene_acs(struct pci_dev *dev, u16 acs_flags)
  * But the implementation could block peer-to-peer transactions between them
  * and provide ACS-like functionality.
  */
-static int pci_quirk_zhaoxin_pcie_ports_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_zhaoxin_pcie_ports_acs(struct pci_dev *dev, u16 acs_flags,
+					    enum pci_acs_scope scope)
 {
 	if (!pci_is_pcie(dev) ||
 	    ((pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT) &&
@@ -4856,7 +4860,8 @@ static bool pci_quirk_intel_pch_acs_match(struct pci_dev *dev)
 	return false;
 }
 
-static int pci_quirk_intel_pch_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_intel_pch_acs(struct pci_dev *dev, u16 acs_flags,
+				   enum pci_acs_scope scope)
 {
 	if (!pci_quirk_intel_pch_acs_match(dev))
 		return -ENOTTY;
@@ -4878,7 +4883,8 @@ static int pci_quirk_intel_pch_acs(struct pci_dev *dev, u16 acs_flags)
  * Port to pass traffic to another Root Port.  All PCIe transactions are
  * terminated inside the Root Port.
  */
-static int pci_quirk_qcom_rp_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_qcom_rp_acs(struct pci_dev *dev, u16 acs_flags,
+				 enum pci_acs_scope scope)
 {
 	return pci_acs_ctrl_enabled(acs_flags,
 		PCI_ACS_SV | PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF);
@@ -4890,13 +4896,15 @@ static int pci_quirk_qcom_rp_acs(struct pci_dev *dev, u16 acs_flags)
  * and validate bus numbers in requests, but does not provide an ACS
  * capability.
  */
-static int pci_quirk_nxp_rp_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_nxp_rp_acs(struct pci_dev *dev, u16 acs_flags,
+				enum pci_acs_scope scope)
 {
 	return pci_acs_ctrl_enabled(acs_flags,
 		PCI_ACS_SV | PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF);
 }
 
-static int pci_quirk_al_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_al_acs(struct pci_dev *dev, u16 acs_flags,
+			    enum pci_acs_scope scope)
 {
 	if (pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT)
 		return -ENOTTY;
@@ -4976,7 +4984,8 @@ static bool pci_quirk_intel_spt_pch_acs_match(struct pci_dev *dev)
 
 #define INTEL_SPT_ACS_CTRL (PCI_ACS_CAP + 4)
 
-static int pci_quirk_intel_spt_pch_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_intel_spt_pch_acs(struct pci_dev *dev, u16 acs_flags,
+				       enum pci_acs_scope scope)
 {
 	int pos;
 	u32 cap, ctrl;
@@ -4990,14 +4999,18 @@ static int pci_quirk_intel_spt_pch_acs(struct pci_dev *dev, u16 acs_flags)
 
 	/* see pci_acs_flags_enabled() */
 	pci_read_config_dword(dev, pos + PCI_ACS_CAP, &cap);
-	acs_flags &= (cap | PCI_ACS_EC);
-
 	pci_read_config_dword(dev, pos + INTEL_SPT_ACS_CTRL, &ctrl);
+
+	if (pci_acs_rr_ineffective(ctrl, acs_flags, scope))
+		return 0;
+
+	acs_flags &= (cap | PCI_ACS_EC);
 
 	return pci_acs_ctrl_enabled(acs_flags, ctrl);
 }
 
-static int pci_quirk_mf_endpoint_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_mf_endpoint_acs(struct pci_dev *dev, u16 acs_flags,
+				     enum pci_acs_scope scope)
 {
 	/*
 	 * SV, TB, and UF are not relevant to multifunction endpoints.
@@ -5013,7 +5026,8 @@ static int pci_quirk_mf_endpoint_acs(struct pci_dev *dev, u16 acs_flags)
 		PCI_ACS_CR | PCI_ACS_UF | PCI_ACS_DT);
 }
 
-static int pci_quirk_rciep_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_rciep_acs(struct pci_dev *dev, u16 acs_flags,
+			       enum pci_acs_scope scope)
 {
 	/*
 	 * Intel RCiEP's are required to allow p2p only on translated
@@ -5027,7 +5041,8 @@ static int pci_quirk_rciep_acs(struct pci_dev *dev, u16 acs_flags)
 		PCI_ACS_SV | PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF);
 }
 
-static int pci_quirk_brcm_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_brcm_acs(struct pci_dev *dev, u16 acs_flags,
+			      enum pci_acs_scope scope)
 {
 	/*
 	 * iProc PAXB Root Ports don't advertise an ACS capability, but
@@ -5039,7 +5054,8 @@ static int pci_quirk_brcm_acs(struct pci_dev *dev, u16 acs_flags)
 		PCI_ACS_SV | PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF);
 }
 
-static int pci_quirk_loongson_acs(struct pci_dev *dev, u16 acs_flags)
+static int pci_quirk_loongson_acs(struct pci_dev *dev, u16 acs_flags,
+				  enum pci_acs_scope scope)
 {
 	/*
 	 * Loongson PCIe Root Ports don't advertise an ACS capability, but
@@ -5060,7 +5076,8 @@ static int pci_quirk_loongson_acs(struct pci_dev *dev, u16 acs_flags)
  * RP1000/RP2000 10G NICs(sp).
  * FF5xxx 40G/25G/10G NICs(aml).
  */
-static int  pci_quirk_wangxun_nic_acs(struct pci_dev *dev, u16 acs_flags)
+static int  pci_quirk_wangxun_nic_acs(struct pci_dev *dev, u16 acs_flags,
+				      enum pci_acs_scope scope)
 {
 	switch (dev->device) {
 	case 0x0100 ... 0x010F: /* EM */
@@ -5077,7 +5094,8 @@ static int  pci_quirk_wangxun_nic_acs(struct pci_dev *dev, u16 acs_flags)
 static const struct pci_dev_acs_enabled {
 	u16 vendor;
 	u16 device;
-	int (*acs_enabled)(struct pci_dev *dev, u16 acs_flags);
+	int (*acs_enabled)(struct pci_dev *dev, u16 acs_flags,
+			   enum pci_acs_scope scope);
 } pci_dev_acs_enabled[] = {
 	{ PCI_VENDOR_ID_ATI, 0x4385, pci_quirk_amd_sb_acs },
 	{ PCI_VENDOR_ID_ATI, 0x439c, pci_quirk_amd_sb_acs },
@@ -5256,7 +5274,8 @@ static const struct pci_dev_acs_enabled {
  *   0:		Device does not provide all the desired controls
  *   >0:	Device provides all the controls in @acs_flags
  */
-int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags)
+int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags,
+				 enum pci_acs_scope scope)
 {
 	const struct pci_dev_acs_enabled *i;
 	int ret;
@@ -5272,7 +5291,7 @@ int pci_dev_specific_acs_enabled(struct pci_dev *dev, u16 acs_flags)
 		     i->vendor == (u16)PCI_ANY_ID) &&
 		    (i->device == dev->device ||
 		     i->device == (u16)PCI_ANY_ID)) {
-			ret = i->acs_enabled(dev, acs_flags);
+			ret = i->acs_enabled(dev, acs_flags, scope);
 			if (ret >= 0)
 				return ret;
 		}
