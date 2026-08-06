@@ -961,6 +961,7 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 
 map_err:
 	dma_buf_detach(map->buf, map->attach);
+	map->table = NULL;
 attach_err:
 	dma_buf_put(map->buf);
 get_err:
