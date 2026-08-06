@@ -2609,6 +2609,7 @@ efct_hw_bls_send(struct efct *efct, u32 type, struct sli_bls_params *bls_params,
 	if (sli_xmit_bls_rsp64_wqe(&hw->sli, hio->wqe.wqebuf,
 				   &bls, bls_params)) {
 		efc_log_err(hw->os, "XMIT_BLS_RSP64 WQE error\n");
+		efct_hw_io_free(hw, hio);
 		return -EIO;
 	}
 
@@ -2820,24 +2821,27 @@ efct_els_hw_srrs_send(struct efc *efc, struct efc_disc_io *io)
 		rc = -EIO;
 	}
 
-	if (rc == 0) {
-		hio->xbusy = true;
+	if (rc) {
+		efct_hw_io_free(hw, hio);
+		return rc;
+	}
 
-		/*
-		 * Add IO to active io wqe list before submitting, in case the
-		 * wcqe processing preempts this thread.
-		 */
-		hio->wq->use_count++;
-		rc = efct_hw_wq_write(hio->wq, &hio->wqe);
-		if (rc >= 0) {
-			/* non-negative return is success */
-			rc = 0;
-		} else {
-			/* failed to write wqe, remove from active wqe list */
-			efc_log_err(hw->os,
-				    "sli_queue_write failed: %d\n", rc);
-			hio->xbusy = false;
-		}
+	hio->xbusy = true;
+
+	/*
+	 * Add IO to active io wqe list before submitting, in case the
+	 * wcqe processing preempts this thread.
+	 */
+	hio->wq->use_count++;
+	rc = efct_hw_wq_write(hio->wq, &hio->wqe);
+	if (rc >= 0) {
+		/* non-negative return is success */
+		rc = 0;
+	} else {
+		/* failed to write wqe, remove from active wqe list */
+		efc_log_err(hw->os,
+			    "sli_queue_write failed: %d\n", rc);
+		hio->xbusy = false;
 	}
 
 	return rc;
