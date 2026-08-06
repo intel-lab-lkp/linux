@@ -283,6 +283,17 @@ int dwc3_send_gadget_generic_command(struct dwc3 *dwc, unsigned int cmd,
 	return ret;
 }
 
+static int dwc3_gadget_soft_disconnect(struct dwc3 *dwc);
+static int dwc3_gadget_soft_connect(struct dwc3 *dwc);
+
+static void dwc3_gadget_recover(struct dwc3 *dwc)
+{
+	dev_warn(dwc->dev, "controller dead... triggering soft reconnect\n");
+	dwc3_gadget_soft_disconnect(dwc);
+	udelay(100);
+	dwc3_gadget_soft_connect(dwc);
+}
+
 /**
  * dwc3_send_gadget_ep_cmd - issue an endpoint command
  * @dep: the endpoint to which the command is going to be issued
@@ -431,6 +442,23 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned int cmd,
 		ret = -ETIMEDOUT;
 		cmd_status = -ETIMEDOUT;
 	}
+
+	/*
+	 * STAR 5001544 - In some situations, like the cable is
+	 * disconnected or if the Host aborts the transfer on 3
+	 * consecutive failed attempts, the Request-Done handshake is not
+	 * complete. This keeps the RAM interface busy.
+	 *
+	 * The subsequent RAM access cannot proceed until the pending
+	 * transfer is complete. This results in failure of any access
+	 * to RAM address locations. Many of the EndPoint commands need to
+	 * access the RAM and they would fail to complete successfully.
+	 *
+	 * If the depcmd doesn't match the actual command, trigger controller
+	 * recovery.
+	 */
+	if (DWC3_DEPCMD_CMD(reg) != DWC3_DEPCMD_CMD(cmd))
+		dwc3_gadget_recover(dwc);
 
 skip_status:
 	trace_dwc3_gadget_ep_cmd(dep, cmd, params, cmd_status);
