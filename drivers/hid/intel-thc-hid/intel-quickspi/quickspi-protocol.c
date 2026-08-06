@@ -342,7 +342,8 @@ int reset_tic(struct quickspi_device *qsdev)
 }
 
 int quickspi_get_report(struct quickspi_device *qsdev,
-			u8 report_type, unsigned int report_id, void *buf)
+			u8 report_type, unsigned int report_id, void *buf,
+			u32 buf_len)
 {
 	int rep_type;
 	int ret;
@@ -371,6 +372,12 @@ int quickspi_get_report(struct quickspi_device *qsdev,
 		return -ETIMEDOUT;
 	}
 	qsdev->get_report_cmpl = false;
+
+	if (qsdev->report_len > buf_len) {
+		dev_err_once(qsdev->dev, "Get report response too big, %u vs %u\n",
+			     qsdev->report_len, buf_len);
+		return -EINVAL;
+	}
 
 	memcpy(buf, qsdev->report_buf, qsdev->report_len);
 
