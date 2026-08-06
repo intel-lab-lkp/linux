@@ -1213,14 +1213,14 @@ static unsigned long __init zone_spanned_pages_in_node(int nid,
 			/* Move the zone start inside the node if necessary */
 			*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
 
-		/* Adjust for ZONE_MOVABLE starting within this range */
-		} else if (*zone_start_pfn < zone_movable_pfn[nid] &&
-			   *zone_end_pfn > zone_movable_pfn[nid]) {
-			*zone_end_pfn = zone_movable_pfn[nid];
+		/* This range starts below ZONE_MOVABLE */
+		} else if (*zone_start_pfn < zone_movable_pfn[nid]) {
+			*zone_end_pfn = min(*zone_end_pfn, zone_movable_pfn[nid]);
 
-		/* Check if this whole range is within ZONE_MOVABLE */
-		} else if (*zone_start_pfn >= zone_movable_pfn[nid])
+		/* This whole range is within ZONE_MOVABLE */
+		} else {
 			*zone_start_pfn = *zone_end_pfn;
+		}
 	}
 
 	/* Return the spanned pages */
