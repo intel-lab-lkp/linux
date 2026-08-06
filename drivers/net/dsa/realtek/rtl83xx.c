@@ -2,6 +2,7 @@
 
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 #include <linux/of_mdio.h>
 #include <linux/if_bridge.h>
 #include <linux/etherdevice.h>
@@ -113,6 +114,24 @@ err_put_node:
 }
 EXPORT_SYMBOL_NS_GPL(rtl83xx_setup_user_mdio, "REALTEK_DSA");
 
+static int rtl83xx_enable_supplies(struct device *dev,
+				   const char *const *supplies)
+{
+	int i, ret, count = 0;
+
+	for (i = 0; supplies && supplies[i]; i++) {
+		ret = devm_regulator_get_enable_optional(dev, supplies[i]);
+		if (ret == -ENODEV)
+			continue;
+		if (ret)
+			return dev_err_probe(dev, ret, "failed to enable %s supply\n",
+					     supplies[i]);
+		count++;
+	}
+
+	return count;
+}
+
 /**
  * rtl83xx_probe() - probe a Realtek switch
  * @dev: the device being probed
@@ -145,6 +164,7 @@ rtl83xx_probe(struct device *dev,
 		.lock = rtl83xx_lock,
 		.unlock = rtl83xx_unlock,
 	};
+	int num_supplies;
 	int ret;
 
 	var = of_device_get_match_data(dev);
@@ -195,17 +215,22 @@ rtl83xx_probe(struct device *dev,
 	priv->leds_disabled = of_property_read_bool(dev->of_node,
 						    "realtek,disable-leds");
 
-	/* TODO: if power is software controlled, set up any regulators here */
+	/* Enable the supplies before the RESET line is requested and driven,
+	 * so the chip is powered before current is forced into its pins.
+	 */
+	num_supplies = rtl83xx_enable_supplies(dev, var->supplies);
+	if (num_supplies < 0)
+		return ERR_PTR(num_supplies);
+
 	priv->reset_ctl = devm_reset_control_get_optional(dev, NULL);
 	if (IS_ERR(priv->reset_ctl))
 		return dev_err_cast_probe(dev, priv->reset_ctl,
 					  "failed to get reset control\n");
 
 	priv->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(priv->reset)) {
-		dev_err(dev, "failed to get RESET GPIO\n");
-		return ERR_CAST(priv->reset);
-	}
+	if (IS_ERR(priv->reset))
+		return dev_err_cast_probe(dev, priv->reset,
+					  "failed to get RESET GPIO\n");
 
 	dev_set_drvdata(dev, priv);
 
@@ -214,9 +239,12 @@ rtl83xx_probe(struct device *dev,
 		dev_dbg(dev, "asserted RESET\n");
 		msleep(REALTEK_HW_STOP_DELAY);
 		rtl83xx_reset_deassert(priv);
-		msleep(REALTEK_HW_START_DELAY);
 		dev_dbg(dev, "deasserted RESET\n");
 	}
+
+	/* Wait for the chip to come up only if we powered and/or reset it. */
+	if (priv->reset_ctl || priv->reset || num_supplies)
+		msleep(REALTEK_HW_START_DELAY);
 
 	return priv;
 }
