@@ -7,7 +7,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 
 / {
-	compatible = "intel,socfpga-agilex72";
+	compatible = "altr,socfpga-agilex72";
 	#address-cells = <2>;
 	#size-cells = <2>;
 
