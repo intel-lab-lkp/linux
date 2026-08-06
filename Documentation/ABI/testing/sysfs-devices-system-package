@@ -1,0 +1,35 @@
+What:		/sys/devices/system/package/
+Date:		August 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Memory package topology
+
+		A "memory package" groups the NUMA nodes associated with one
+		physical CPU package (socket): the nodes that have CPUs and
+		the nodes that only have memory (e.g. CXL or HBM).
+
+		All attributes are read-only; the topology cannot be
+		overridden from user space.
+
+What:		/sys/devices/system/package/packageN/package_nodes
+Date:		August 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	All NUMA nodes in this package, in nodelist format
+		(e.g. "0,2").
+
+What:		/sys/devices/system/package/packageN/package_cpu_nodes
+Date:		August 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	The nodes that have CPUs in this package, in nodelist
+		format.
+
+What:		/sys/devices/system/package/packageN/package_mem_only_nodes
+Date:		August 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	The nodes that only have memory (e.g. CXL/HBM) in this
+		package, in nodelist format.
+
+What:		/sys/devices/system/package/packageN/physical_package_id
+Date:		August 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	The physical package id this group corresponds to, as
+		reported by CPU topology.
