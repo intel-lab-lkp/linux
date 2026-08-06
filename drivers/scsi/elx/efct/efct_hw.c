@@ -264,7 +264,7 @@ efct_hw_setup(struct efct_hw *hw, void *os, struct pci_dev *pdev)
 					sizeof(struct efct_mbox_rqst_ctx));
 	if (!hw->mbox_rqst_pool) {
 		efc_log_err(hw->os, "failed to allocate mbox request pool\n");
-		return -EIO;
+		goto free_cmd_ctx_pool;
 	}
 
 	spin_lock_init(&hw->io_lock);
@@ -277,7 +277,7 @@ efct_hw_setup(struct efct_hw *hw, void *os, struct pci_dev *pdev)
 	hw->config.speed = SLI4_LINK_SPEED_AUTO_16_8_4;
 	if (sli_setup(&hw->sli, hw->os, pdev, ((struct efct *)os)->reg)) {
 		efc_log_err(hw->os, "SLI setup failed\n");
-		return -EIO;
+		goto free_mbox_rqst_pool;
 	}
 
 	efct_hw_link_event_init(hw);
@@ -313,6 +313,16 @@ efct_hw_setup(struct efct_hw *hw, void *os, struct pci_dev *pdev)
 	(void)efct_hw_read_max_dump_size(hw);
 
 	return 0;
+
+free_mbox_rqst_pool:
+	mempool_destroy(hw->mbox_rqst_pool);
+	hw->mbox_rqst_pool = NULL;
+free_cmd_ctx_pool:
+	mempool_destroy(hw->cmd_ctx_pool);
+	hw->cmd_ctx_pool = NULL;
+	hw->hw_setup_called = false;
+
+	return -EIO;
 }
 
 static void
