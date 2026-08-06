@@ -3631,8 +3631,9 @@ int pci_acs_egress_ctrl_is_set(struct pci_dev *pdev, struct pci_dev *target)
 }
 EXPORT_SYMBOL_IF_KUNIT(pci_acs_egress_ctrl_is_set);
 
-static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
-				  enum pci_acs_scope scope)
+VISIBLE_IF_KUNIT
+bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
+			   enum pci_acs_scope scope)
 {
 	int pos;
 	u16 ctrl;
@@ -3656,6 +3657,7 @@ static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags,
 
 	return (ctrl & acs_flags) == acs_flags;
 }
+EXPORT_SYMBOL_IF_KUNIT(pci_acs_flags_enabled);
 
 /**
  * pci_acs_enabled - test ACS against required flags for a given device

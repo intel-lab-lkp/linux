@@ -121,6 +121,184 @@ static void pci_acs_egress_port_valid_test(struct kunit *test)
 }
 
 /*
+ * pci_acs_flags_enabled(): Direct Translated P2P and Egress Control both let a
+ * peer request reach the peer without Request Redirect, so neither may report
+ * isolation.  Translation Blocking rejects a Translated Request before it is
+ * routed, which restores the Request Redirect guarantee.  A fake pci_ops
+ * supplies the ACS Control register.
+ */
+
+/* Flags an IOMMU asks for; see REQ_ACS_FLAGS in drivers/iommu/iommu.c. */
+#define ACS_REQ_FLAGS	(PCI_ACS_SV | PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF)
+#define ACS_ALL_CAPS	(PCI_ACS_SV | PCI_ACS_TB | PCI_ACS_RR | PCI_ACS_CR | \
+			 PCI_ACS_UF | PCI_ACS_EC | PCI_ACS_DT)
+#define ACS_TEST_CAP	0x100
+/* Flags pci_enable_pasid() asks for; see drivers/pci/ats.c. */
+#define ACS_PASID_FLAGS	(PCI_ACS_RR | PCI_ACS_UF)
+
+struct acs_ctrl_cfg {
+	unsigned int	devfn;
+	u16		cap;		/* offset the ACS capability answers at */
+	u16		ctrl;
+	bool		fail_read;
+};
+
+static int acs_ctrl_read(struct pci_bus *bus, unsigned int devfn,
+			 int where, int size, u32 *val)
+{
+	struct acs_ctrl_cfg *cfg = bus->sysdata;
+
+	*val = 0;
+	if (cfg->fail_read)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
+	if (devfn == cfg->devfn && size == 2 &&
+	    where == cfg->cap + PCI_ACS_CTRL)
+		*val = cfg->ctrl;
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static int acs_ctrl_write(struct pci_bus *bus, unsigned int devfn,
+			  int where, int size, u32 val)
+{
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static struct pci_ops acs_ctrl_ops = {
+	.read	= acs_ctrl_read,
+	.write	= acs_ctrl_write,
+};
+
+struct acs_isolation_case {
+	const char *desc;
+	u16	ctrl;			/* ACS Control register */
+	u16	req;			/* flags the caller asks for */
+	enum pci_acs_scope scope;	/* Requests the answer must cover */
+	bool	expect;			/* isolation reported? */
+};
+
+static const struct acs_isolation_case acs_isolation_cases[] = {
+	{ "plain_rr", ACS_REQ_FLAGS, ACS_REQ_FLAGS, PCI_ACS_SCOPE_ALL, true },
+	/* Direct Translated P2P bypasses Request Redirect ... */
+	{ "dt", ACS_REQ_FLAGS | PCI_ACS_DT, ACS_REQ_FLAGS,
+	  PCI_ACS_SCOPE_ALL, false },
+	/* ... unless Translation Blocking rejects the Translated Request. */
+	{ "dt_tb", ACS_REQ_FLAGS | PCI_ACS_DT | PCI_ACS_TB, ACS_REQ_FLAGS,
+	  PCI_ACS_SCOPE_ALL, true },
+	{ "tb_only", ACS_REQ_FLAGS | PCI_ACS_TB, ACS_REQ_FLAGS,
+	  PCI_ACS_SCOPE_ALL, true },
+	/* Egress Control can override Request Redirect as well. */
+	{ "ec", ACS_REQ_FLAGS | PCI_ACS_EC, ACS_REQ_FLAGS,
+	  PCI_ACS_SCOPE_ALL, false },
+	{ "ec_dt_tb", ACS_REQ_FLAGS | PCI_ACS_EC | PCI_ACS_DT | PCI_ACS_TB,
+	  ACS_REQ_FLAGS, PCI_ACS_SCOPE_ALL, false },
+	/* Without Request Redirect requested, neither bit is consulted. */
+	{ "no_rr_dt", PCI_ACS_SV | PCI_ACS_CR | PCI_ACS_UF | PCI_ACS_DT,
+	  PCI_ACS_SV | PCI_ACS_CR | PCI_ACS_UF, PCI_ACS_SCOPE_ALL, true },
+	/* A control bit the caller asked for is simply missing. */
+	{ "rr_not_enabled", PCI_ACS_SV | PCI_ACS_CR | PCI_ACS_UF, ACS_REQ_FLAGS,
+	  PCI_ACS_SCOPE_ALL, false },
+
+	/*
+	 * An Untranslated-only caller such as pci_enable_pasid() is not
+	 * affected by Direct Translated P2P, but is still affected by Egress
+	 * Control, which acts on Untranslated peer Requests too.
+	 */
+	{ "untrans/plain_rr", ACS_PASID_FLAGS, ACS_PASID_FLAGS,
+	  PCI_ACS_SCOPE_UNTRANSLATED, true },
+	{ "untrans/dt", ACS_PASID_FLAGS | PCI_ACS_DT, ACS_PASID_FLAGS,
+	  PCI_ACS_SCOPE_UNTRANSLATED, true },
+	{ "untrans/dt_tb", ACS_PASID_FLAGS | PCI_ACS_DT | PCI_ACS_TB,
+	  ACS_PASID_FLAGS, PCI_ACS_SCOPE_UNTRANSLATED, true },
+	{ "untrans/ec", ACS_PASID_FLAGS | PCI_ACS_EC, ACS_PASID_FLAGS,
+	  PCI_ACS_SCOPE_UNTRANSLATED, false },
+	{ "untrans/rr_not_enabled", PCI_ACS_UF, ACS_PASID_FLAGS,
+	  PCI_ACS_SCOPE_UNTRANSLATED, false },
+};
+
+static void acs_isolation_desc(const struct acs_isolation_case *c, char *desc)
+{
+	strscpy(desc, c->desc, KUNIT_PARAM_DESC_SIZE);
+}
+
+KUNIT_ARRAY_PARAM(acs_isolation, acs_isolation_cases, acs_isolation_desc);
+
+static void pci_acs_flags_enabled_test(struct kunit *test)
+{
+	const struct acs_isolation_case *c = test->param_value;
+	struct acs_ctrl_cfg cfg = { .devfn = PCI_DEVFN(0, 0),
+				    .cap = ACS_TEST_CAP, .ctrl = c->ctrl };
+	struct pci_bus *bus = kunit_kzalloc(test, sizeof(*bus), GFP_KERNEL);
+	struct pci_dev *pdev = kunit_kzalloc(test, sizeof(*pdev), GFP_KERNEL);
+
+	KUNIT_ASSERT_NOT_NULL(test, bus);
+	KUNIT_ASSERT_NOT_NULL(test, pdev);
+
+	bus->ops = &acs_ctrl_ops;
+	bus->sysdata = &cfg;
+
+	pdev->bus = bus;
+	pdev->devfn = cfg.devfn;
+	pdev->acs_cap = ACS_TEST_CAP;
+	pdev->acs_capabilities = ACS_ALL_CAPS;
+
+	KUNIT_EXPECT_EQ(test, pci_acs_flags_enabled(pdev, c->req, c->scope),
+			c->expect);
+}
+
+static bool acs_isolated(struct kunit *test, struct acs_ctrl_cfg *cfg,
+			 u16 acs_cap, u16 acs_flags)
+{
+	struct pci_bus *bus = kunit_kzalloc(test, sizeof(*bus), GFP_KERNEL);
+	struct pci_dev *pdev = kunit_kzalloc(test, sizeof(*pdev), GFP_KERNEL);
+
+	KUNIT_ASSERT_NOT_NULL(test, bus);
+	KUNIT_ASSERT_NOT_NULL(test, pdev);
+
+	bus->ops = &acs_ctrl_ops;
+	bus->sysdata = cfg;
+
+	pdev->bus = bus;
+	pdev->devfn = cfg->devfn;
+	pdev->acs_cap = acs_cap;
+	pdev->acs_capabilities = ACS_ALL_CAPS;
+
+	return pci_acs_flags_enabled(pdev, acs_flags, PCI_ACS_SCOPE_ALL);
+}
+
+/*
+ * Without an ACS capability there is no control register to consult.  The
+ * fake answers at offset 0 here, so dropping the acs_cap guard would read an
+ * isolating control word rather than nothing.
+ */
+static void pci_acs_flags_no_cap_test(struct kunit *test)
+{
+	struct acs_ctrl_cfg cfg = { .devfn = PCI_DEVFN(0, 0), .cap = 0,
+				    .ctrl = ACS_REQ_FLAGS };
+
+	KUNIT_EXPECT_FALSE(test, acs_isolated(test, &cfg, 0, ACS_REQ_FLAGS));
+}
+
+/*
+ * An unreadable ACS Control register reads back as all ones, which satisfies
+ * any requested control.  Ask without Request Redirect, so that neither
+ * pci_acs_rr_ineffective() nor the control word itself can deny isolation and
+ * the read failure is the only thing left that can.
+ */
+static void pci_acs_flags_read_fails_test(struct kunit *test)
+{
+	u16 no_rr = ACS_REQ_FLAGS & ~PCI_ACS_RR;
+	struct acs_ctrl_cfg cfg = { .devfn = PCI_DEVFN(0, 0),
+				    .cap = ACS_TEST_CAP,
+				    .ctrl = ACS_REQ_FLAGS };
+
+	KUNIT_EXPECT_TRUE(test, acs_isolated(test, &cfg, ACS_TEST_CAP, no_rr));
+
+	cfg.fail_read = true;
+	KUNIT_EXPECT_FALSE(test, acs_isolated(test, &cfg, ACS_TEST_CAP, no_rr));
+}
+
+/*
  * pci_acs_egress_ctrl_is_set(): drive the config-space reads with a fake pci_ops
  * so the Egress Control Vector lookup is exercised without real hardware --
  * the target Port Number from LNKCAP, the vector DWORD at target_port/32, and
@@ -591,6 +769,9 @@ static void acs_walk_thru_host_bridge_test(struct kunit *test)
 static struct kunit_case pci_acs_test_cases[] = {
 	KUNIT_CASE_PARAM(pci_acs_p2pdma_decision_test, acs_decision_gen_params),
 	KUNIT_CASE_PARAM(pci_acs_egress_port_valid_test, egress_valid_gen_params),
+	KUNIT_CASE_PARAM(pci_acs_flags_enabled_test, acs_isolation_gen_params),
+	KUNIT_CASE(pci_acs_flags_no_cap_test),
+	KUNIT_CASE(pci_acs_flags_read_fails_test),
 	KUNIT_CASE(acs_egress_vector_bit_set_test),
 	KUNIT_CASE(acs_egress_vector_bit_clear_test),
 	KUNIT_CASE(acs_egress_high_port_index_test),
