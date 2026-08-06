@@ -2706,15 +2706,15 @@ efct_els_hw_srrs_send(struct efc *efc, struct efc_disc_io *io)
 	u32 sge0_flags;
 	u32 sge1_flags;
 
-	hio = efct_hw_io_alloc(hw);
-	if (!hio) {
-		pr_err("HIO alloc failed\n");
-		return -EIO;
-	}
-
 	if (hw->state != EFCT_HW_STATE_ACTIVE) {
 		efc_log_debug(hw->os,
 			      "cannot send SRRS, HW state=%d\n", hw->state);
+		return -EIO;
+	}
+
+	hio = efct_hw_io_alloc(hw);
+	if (!hio) {
+		pr_err("HIO alloc failed\n");
 		return -EIO;
 	}
 
