@@ -23,6 +23,12 @@
 #define NPU_EN7581_FIRMWARE_RV32_MAX_SIZE	0x200000
 #define NPU_EN7581_FIRMWARE_DATA_MAX_SIZE	0x10000
 #define NPU_DUMP_SIZE				512
+/*
+ * Mailbox DMA payload size. Covers sizeof(struct ppe_mbox_data) (28) and
+ * WLAN TLV messages (header + payload); largest in-tree WLAN payload today
+ * is 16 bytes (INODE_TXRX_REG_ADDR). Keep headroom for future commands.
+ */
+#define AIROHA_NPU_MBOX_SIZE			256
 
 #define REG_NPU_LOCAL_SRAM		0x0
 
@@ -161,21 +167,32 @@ struct wlan_mbox_data {
 };
 
 static int airoha_npu_send_msg(struct airoha_npu *npu, int func_id,
-			       void *p, int size)
+			       const void *req, int size,
+			       void *rsp, int rsp_off, int rsp_len)
 {
 	u16 core = 0; /* FIXME */
+	struct airoha_npu_core *c = &npu->cores[core];
 	u32 val, offset = core << 4;
-	dma_addr_t dma_addr;
 	int ret;
 
-	dma_addr = dma_map_single(npu->dev, p, size, DMA_BIDIRECTIONAL);
-	ret = dma_mapping_error(npu->dev, dma_addr);
-	if (ret)
-		return ret;
+	if (size > AIROHA_NPU_MBOX_SIZE ||
+	    (rsp && (rsp_off < 0 || rsp_len < 0 ||
+		     rsp_off + rsp_len > size)))
+		return -EINVAL;
 
-	spin_lock_bh(&npu->cores[core].lock);
+	/*
+	 * Mailbox payloads are bidirectional (CPU request, NPU response).
+	 * On EN7581+MT7996, streaming DMA_BIDIRECTIONAL against the
+	 * caller kzalloc() buffer can leave WLAN_FUNC_GET_WAIT_NPU_VERSION
+	 * reading as 0.0 despite MBOX success. Reuse a probe-time coherent
+	 * bounce buffer under the per-core lock (also used from PPE
+	 * foe_commit under atomic context).
+	 */
+	spin_lock_bh(&c->lock);
 
-	regmap_write(npu->regmap, REG_CR_MBQ0_CTRL(0) + offset, dma_addr);
+	memcpy(c->buf, req, size);
+
+	regmap_write(npu->regmap, REG_CR_MBQ0_CTRL(0) + offset, c->addr);
 	regmap_write(npu->regmap, REG_CR_MBQ0_CTRL(1) + offset, size);
 	regmap_read(npu->regmap, REG_CR_MBQ0_CTRL(2) + offset, &val);
 	regmap_write(npu->regmap, REG_CR_MBQ0_CTRL(2) + offset, val + 1);
@@ -189,9 +206,10 @@ static int airoha_npu_send_msg(struct airoha_npu *npu, int func_id,
 	if (!ret && FIELD_GET(MBOX_MSG_STATUS, val) != NPU_MBOX_SUCCESS)
 		ret = -EINVAL;
 
-	spin_unlock_bh(&npu->cores[core].lock);
+	if (!ret && rsp)
+		memcpy(rsp, c->buf + rsp_off, rsp_len);
 
-	dma_unmap_single(npu->dev, dma_addr, size, DMA_BIDIRECTIONAL);
+	spin_unlock_bh(&c->lock);
 
 	return ret;
 }
@@ -343,7 +361,7 @@ static int airoha_npu_ppe_init(struct airoha_npu *npu)
 	ppe_data->init_info.wan_mode = QDMA_WAN_ETHER;
 
 	err = airoha_npu_send_msg(npu, NPU_FUNC_PPE, ppe_data,
-				  sizeof(*ppe_data));
+				  sizeof(*ppe_data), NULL, 0, 0);
 	kfree(ppe_data);
 
 	return err;
@@ -362,7 +380,7 @@ static int airoha_npu_ppe_deinit(struct airoha_npu *npu)
 	ppe_data->func_id = PPE_FUNC_SET_WAIT_HWNAT_DEINIT;
 
 	err = airoha_npu_send_msg(npu, NPU_FUNC_PPE, ppe_data,
-				  sizeof(*ppe_data));
+				  sizeof(*ppe_data), NULL, 0, 0);
 	kfree(ppe_data);
 
 	return err;
@@ -386,7 +404,7 @@ static int airoha_npu_ppe_flush_sram_entries(struct airoha_npu *npu,
 	ppe_data->set_info.size = sram_num_entries;
 
 	err = airoha_npu_send_msg(npu, NPU_FUNC_PPE, ppe_data,
-				  sizeof(*ppe_data));
+				  sizeof(*ppe_data), NULL, 0, 0);
 	kfree(ppe_data);
 
 	return err;
@@ -411,7 +429,7 @@ static int airoha_npu_foe_commit_entry(struct airoha_npu *npu,
 					  : PPE_SRAM_SET_ENTRY;
 
 	err = airoha_npu_send_msg(npu, NPU_FUNC_PPE, ppe_data,
-				  sizeof(*ppe_data));
+				  sizeof(*ppe_data), NULL, 0, 0);
 	if (err)
 		goto out;
 
@@ -420,7 +438,7 @@ static int airoha_npu_foe_commit_entry(struct airoha_npu *npu,
 	ppe_data->set_info.size = sizeof(u32);
 
 	err = airoha_npu_send_msg(npu, NPU_FUNC_PPE, ppe_data,
-				  sizeof(*ppe_data));
+				  sizeof(*ppe_data), NULL, 0, 0);
 out:
 	kfree(ppe_data);
 
@@ -443,6 +461,7 @@ static int airoha_npu_ppe_stats_setup(struct airoha_npu *npu,
 	ppe_data->stats_info.foe_stats_addr = foe_stats_addr;
 
 	err = airoha_npu_send_msg(npu, NPU_FUNC_PPE, ppe_data,
+				  sizeof(*ppe_data), ppe_data, 0,
 				  sizeof(*ppe_data));
 	if (err)
 		goto out;
@@ -475,7 +494,8 @@ static int airoha_npu_wlan_msg_send(struct airoha_npu *npu, int ifindex,
 	wlan_data->func_id = func_id;
 	memcpy(wlan_data->d, data, data_len);
 
-	err = airoha_npu_send_msg(npu, NPU_FUNC_WIFI, wlan_data, len);
+	err = airoha_npu_send_msg(npu, NPU_FUNC_WIFI, wlan_data, len,
+				  NULL, 0, 0);
 	kfree(wlan_data);
 
 	return err;
@@ -497,9 +517,9 @@ static int airoha_npu_wlan_msg_get(struct airoha_npu *npu, int ifindex,
 	wlan_data->func_type = NPU_OP_GET;
 	wlan_data->func_id = func_id;
 
-	err = airoha_npu_send_msg(npu, NPU_FUNC_WIFI, wlan_data, len);
-	if (!err)
-		memcpy(data, wlan_data->d, data_len);
+	err = airoha_npu_send_msg(npu, NPU_FUNC_WIFI, wlan_data, len,
+				  data, offsetof(struct wlan_mbox_data, d),
+				  data_len);
 	kfree(wlan_data);
 
 	return err;
@@ -769,6 +789,15 @@ static int airoha_npu_probe(struct platform_device *pdev)
 	err = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
 	if (err)
 		return err;
+
+	for (i = 0; i < ARRAY_SIZE(npu->cores); i++) {
+		struct airoha_npu_core *core = &npu->cores[i];
+
+		core->buf = dmam_alloc_coherent(dev, AIROHA_NPU_MBOX_SIZE,
+						&core->addr, GFP_KERNEL);
+		if (!core->buf)
+			return -ENOMEM;
+	}
 
 	err = airoha_npu_run_firmware(dev, base, &res);
 	if (err)
