@@ -127,6 +127,34 @@ struct page_alloc {
 static struct kmem_cache *req_alloc_cache;
 static struct kmem_cache *page_alloc_cache;
 
+static inline void set_zone_to_alloc_from(int zone_idx, gfp_t *flags_ptr)
+{
+	switch (zone_idx) {
+#ifdef CONFIG_ZONE_DMA
+	case ZONE_DMA:
+		*flags_ptr |= __GFP_DMA;
+		break;
+#endif
+#ifdef CONFIG_ZONE_DMA32
+	case ZONE_DMA32:
+		*flags_ptr |= __GFP_DMA32;
+		break;
+#endif
+#ifdef CONFIG_HIGHMEM
+	case ZONE_HIGHMEM:
+		*flags_ptr |= __GFP_HIGHMEM;
+		break;
+#endif
+	case ZONE_MOVABLE:
+		*flags_ptr |= __GFP_MOVABLE;
+		break;
+	case ZONE_NORMAL:
+	default:
+		*flags_ptr |= 0;
+		break;
+	}
+}
+
 /**
  * req_page_alloc_write() - Allocates the pages on the requested node, zone,
  * order and migrate type. Once the allocation is performed, a file is created
@@ -135,8 +163,10 @@ static struct kmem_cache *page_alloc_cache;
 static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 				     size_t cnt, loff_t *ppos)
 {
+	struct req_alloc *req = file->private_data;
 	unsigned long nr_pages_allocs;
 	unsigned long *allocs_ids;
+	gfp_t flags = 0;
 	int ret;
 
 	ret = kstrtoul_from_user(ubuf, cnt, 10, &nr_pages_allocs);
@@ -147,6 +177,8 @@ static ssize_t req_page_alloc_write(struct file *file, const char __user *ubuf,
 					GFP_KERNEL);
 	if (!allocs_ids)
 		return -ENOMEM;
+
+	set_zone_to_alloc_from(req->zone_idx, &flags);
 
 	kfree(allocs_ids);
 
