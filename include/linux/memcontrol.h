@@ -654,6 +654,8 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 		page_counter_read(&memcg->memory);
 }
 
+bool mem_cgroup_tier_over_limit(struct folio *folio, int dst_nid);
+
 int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp);
 
 /**
@@ -1168,6 +1170,11 @@ static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
 
 static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 					struct mem_cgroup *memcg, int nid)
+{
+	return false;
+}
+
+static inline bool mem_cgroup_tier_over_limit(struct folio *folio, int dst_nid)
 {
 	return false;
 }

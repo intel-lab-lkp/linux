@@ -2590,6 +2590,41 @@ static u64 swap_find_max_overage(struct mem_cgroup *memcg)
 	return max_overage;
 }
 
+bool mem_cgroup_tier_over_limit(struct folio *folio, int dst_nid)
+{
+	struct mem_cgroup *memcg;
+	int dst_slot;
+
+	if (!mem_cgroup_tiered_limits())
+		return false;
+
+	dst_slot = nid_tier_slot(dst_nid);
+	if (nid_tier_slot(folio_nid(folio)) == dst_slot)
+		return false;
+
+	guard(rcu)();
+	memcg = folio_memcg(folio);
+	if (!memcg || mem_cgroup_is_root(memcg))
+		return false;
+
+	do {
+		struct page_counter *tier_counter;
+		unsigned long limit;
+
+		tier_counter = mem_cgroup_tier_counter(memcg, dst_slot);
+		if (!tier_counter)
+			continue;
+
+		limit = min(READ_ONCE(tier_counter->max),
+			    READ_ONCE(tier_counter->high));
+		if (page_counter_read(tier_counter) > limit)
+			return true;
+	} while ((memcg = parent_mem_cgroup(memcg)) &&
+		  !mem_cgroup_is_root(memcg));
+
+	return false;
+}
+
 /*
  * Get the number of jiffies that we should penalise a mischievous cgroup which
  * is exceeding its memory.high by checking both it and its ancestors.
