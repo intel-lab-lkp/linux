@@ -601,9 +601,22 @@
 };
 
 &i2c1 {
-	/* Samsung NFC @ 0x27 */
-
 	status = "okay";
+
+	nfc@27 {
+		compatible = "samsung,s3nrn4v";
+		reg = <0x27>;
+
+		interrupts-extended = <&tlmm 31 IRQ_TYPE_EDGE_RISING>;
+		en-gpios = <&tlmm 56 GPIO_ACTIVE_HIGH>;
+		wake-gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
+		clocks = <&rpmhcc RPMH_LN_BB_CLK2>;
+
+		pvdd-supply = <&vreg_l20b>;
+
+		pinctrl-0 = <&nfc_default>;
+		pinctrl-names = "default";
+	};
 };
 
 &i2c3 {
@@ -824,6 +837,22 @@
 	gpio-reserved-ranges = <8 4>, /* Fingerprint SPI */
 			       <13 1>, /* NC */
 			       <63 2>; /* WLAN UART */
+
+	nfc_default: nfc-default-state {
+		irq-pins {
+			pins = "gpio31";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		pd-pins {
+			pins = "gpio56";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
 
 	sdc2_card_det_n: sdc2-card-det-state {
 		pins = "gpio65";
