@@ -88,6 +88,7 @@ struct htm_target_id {
 	int tracing_active;		/* HTM_TRACING_ACTIVE / HTM_TRACING_INACTIVE */
 	int configured;			/* 1 after H_HTM_OP_CONFIGURE succeeds; 0 otherwise */
 	struct list_head list;
+	u64 hw_buf_size;	/* hardware buffer size from H_HTM_OP_STATUS (1<<byte[0x01]), 0 if unknown */
 };
 
 /* Helper to parse the 28-bit event config into distinct fields */
@@ -97,6 +98,38 @@ static inline void parse_htm_config(u64 config, struct htm_config *cfg)
 	cfg->nodeindex = (config >> 4) & 0xff;
 	cfg->nodalchipindex = (config >> 12) & 0xff;
 	cfg->coreindexonchip = (config >> 20) & 0xff;
+}
+
+struct htm_pmu_buf {
+	int     nr_pages;
+	bool    snapshot;
+	void    *base;
+	void	**pages;
+	u64	head;
+	u64     size;
+	int     collect_htm_trace;
+};
+
+/*
+ * Reset AUX buffer state at the start of a new trace session.
+ * collect_htm_trace is cleared on any hard hcall error; without
+ * this reset, restarting the event via ioctl(ENABLE) after such an
+ * error would permanently drop all future trace data.
+ *
+ * Uses a stack-local handle to avoid aliasing with an in-progress
+ * AUX transaction on the same CPU (e.g. from NMI context).
+ */
+static void aux_buf_reset_for_start(struct perf_event *event)
+{
+	struct perf_output_handle handle;
+	struct htm_pmu_buf *aux_buf;
+
+	aux_buf = perf_aux_output_begin(&handle, event);
+	if (aux_buf) {
+		aux_buf->collect_htm_trace = 1;
+		aux_buf->head = 0;
+		perf_aux_output_end(&handle, 0);
+	}
 }
 
 /*
@@ -191,6 +224,10 @@ static int htm_event_init(struct perf_event *event)
 	u64 config = event->attr.config;
 	struct htm_config cfg;
 	struct htm_target_id *target, *tmp;
+	u8 *status_buf;
+	long src;
+	ssize_t sret;
+	int sretries = 0;
 
 	if (event->attr.inherit)
 		return -EOPNOTSUPP;
@@ -277,6 +314,32 @@ static int htm_event_init(struct perf_event *event)
 	list_add_tail(&target->list, &htm_active_targets_list);
 	mutex_unlock(&htm_targets_lock);
 
+	/*
+	 * Query the hardware-allocated HTM buffer size via H_HTM_OP_STATUS.
+	 * The status output buffer header byte 0x01 holds
+	 * CurrentNestHtmBufferSizeInPowerOf2 (for HTM_NEST) or
+	 * CurrentCoreHtmBufferSizeInPowerOf2 (for HTM_CORE); both types
+	 * use the same offset (0x01) and length (1 byte).
+	 * hw_buf_size is used in htm_dump_sample_data() to bound dump
+	 * offsets, preventing H_HTM_OP_DUMP_DATA calls past the end of the
+	 * hardware buffer.  On failure hw_buf_size stays 0 and the boundary
+	 * check is skipped gracefully — the contiguous-window clamp still
+	 * applies.
+	 */
+	status_buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (status_buf) {
+		do {
+			src = htm_hcall_wrapper(htmflags, cfg.nodeindex,
+					cfg.nodalchipindex, cfg.coreindexonchip,
+					cfg.htmtype, H_HTM_OP_STATUS,
+					virt_to_phys(status_buf), PAGE_SIZE, 0);
+			sret = htm_return_check(src);
+		} while (sret == -EBUSY && ++sretries < MAX_RETRIES);
+		if (sret > 0)
+			target->hw_buf_size = 1ULL << status_buf[0x01];
+		kfree(status_buf);
+	}
+
 	event->pmu_private = target;
 	event->destroy = reset_htm_active;
 	return 0;
@@ -318,6 +381,9 @@ static void htm_event_start(struct perf_event *event, int flags)
 	if (ret > 0) {
 		target->tracing_active = HTM_TRACING_ACTIVE;
 		event->hw.state &= ~PERF_HES_STOPPED;
+
+		if (!(flags & PERF_EF_RELOAD))
+			aux_buf_reset_for_start(event);
 	}
 }
 
@@ -510,8 +576,308 @@ static void htm_event_del(struct perf_event *event, int flags)
 	/* pmu_private freed by event->destroy = reset_htm_active */
 }
 
+static ssize_t htm_dump_sample_data(struct perf_event *event)
+{
+	struct perf_output_handle handle;
+	struct htm_target_id *target = event->pmu_private;
+	struct htm_pmu_buf *aux_buf;
+	struct htm_config cfg = target->cfg;
+	u64 chunk_size, dump_offset, page_index, page_offset;
+	u64 max_contiguous_bytes, expected_phys, scan_index, actual_phys;
+	u64 hypervisor_target_phys;
+	void *target_page_virt;
+	ssize_t ret = 0;
+	int retries = 0;
+	long rc;
+
+	/* Start AUX transaction; use a stack-local handle to prevent
+	 * NMI reentrancy from corrupting an outer transaction's handle.
+	 */
+	aux_buf = perf_aux_output_begin(&handle, event);
+	if (!aux_buf)
+		return 0;
+
+	if (!aux_buf->collect_htm_trace) {
+		/*
+		 * collect_htm_trace is cleared on hcall error and reset to 1
+		 * in htm_event_start() when tracing restarts.  If it is still
+		 * 0 here the event was disabled due to a prior hard error;
+		 * end the AUX transaction and return 0 so the drain loop stops.
+		 */
+		perf_aux_output_end(&handle, 0);
+		return 0;
+	}
+
+	if (target->tracing_active == HTM_TRACING_ACTIVE) {
+		/*
+		 * First pmu->read call of the drain sequence: stop the hardware
+		 * to freeze the HTM buffer before reading it.  This is a
+		 * one-shot dump — the buffer is static for the entire drain;
+		 * the hardware is not restarted between chunks or after the
+		 * dump completes.  Restarting mid-drain would overwrite buffer
+		 * content that has not yet been transferred to the AUX ring.
+		 * A new perf record session issues H_HTM_OP_START afresh.
+		 */
+		htm_event_stop(event, 0);
+		if (target->tracing_active == HTM_TRACING_ACTIVE) {
+			/*
+			 * H_HTM_OP_STOP failed — cannot dump a live buffer.
+			 * Abort the dump; event->count = 0 stops the drain loop.
+			 * The hardware is still running; htm_event_del() will
+			 * call H_HTM_OP_DECONFIGURE which implicitly stops it,
+			 * preventing a resource leak.
+			 */
+			perf_aux_output_end(&handle, 0);
+			return -EIO;
+		}
+	}
+
+	/* Derive the exact target destination point directly out of active ring pointers */
+	dump_offset = handle.head & (aux_buf->size - 1);
+	page_index = dump_offset >> PAGE_SHIFT;
+	page_offset = dump_offset & (PAGE_SIZE - 1);
+
+	/*
+	 * Assess constraints regarding space remaining across the mapping
+	 * context boundary.
+	 * handle.size is always page-aligned: perf_aux_output_begin() computes
+	 * it as the distance from the write pointer to the wakeup boundary,
+	 * rounded to PAGE_SIZE.  Masking with PAGE_MASK is therefore a no-op
+	 * but is kept to make the page-granularity contract explicit.
+	 */
+	chunk_size = handle.size;
+	chunk_size &= PAGE_MASK;
+
+	if (chunk_size > (aux_buf->size - dump_offset))
+		chunk_size = aux_buf->size - dump_offset;
+
+	/*
+	 * HTM driver uses these capabilities:
+	 * PERF_PMU_CAP_AUX_NO_SG | PERF_PMU_CAP_AUX_PREFER_LARGE
+	 * the core perf ring-buffer allocator (rb_alloc_aux) tries to allocate
+	 * physically contiguous page block. If not available, it tries to allocate
+	 * largest possible contiguous block.
+	 *
+	 * Example: If we ask perf for 1024 pages (64MB), the kernel executes a loop
+	 * inside rb_alloc_aux() to fulfill that request using the buddy allocator. it
+	 * always tries to grab the largest possible contiguous block of memory it can
+	 * find first, then takes the next largest, and repeats until request is
+	 * completely filled. Here while writing to aux buffer, to eliminate any
+	 * virtual or physical boundary overruns, check for the page boundary.
+	 *
+	 * Dynamically scan forward page-by-page from our active page_index to
+	 * calculate the absolute boundary limit of this current physically
+	 * contiguous block chunk. Prevents hypervisor macro overruns across
+	 * asymmetrical fragmentation gaps.
+	 */
+	max_contiguous_bytes = PAGE_SIZE - page_offset;
+	scan_index = page_index + 1;
+	expected_phys = (u64)virt_to_phys(aux_buf->pages[page_index]) + PAGE_SIZE;
+
+	while (scan_index < aux_buf->nr_pages && max_contiguous_bytes < chunk_size) {
+		actual_phys = (u64)virt_to_phys(aux_buf->pages[scan_index]);
+
+		if (actual_phys != expected_phys)
+			break; /* Intersected a fragmentation boundary block link! */
+
+		max_contiguous_bytes += PAGE_SIZE;
+		expected_phys += PAGE_SIZE;
+		scan_index++;
+	}
+
+	/* Bound transfer length tightly within the validated contiguous window */
+	if (chunk_size > max_contiguous_bytes)
+		chunk_size = max_contiguous_bytes;
+
+	/*
+	 * Bound the dump to the hardware-allocated buffer size reported by
+	 * H_HTM_OP_STATUS (stored in target->hw_buf_size at configure time).
+	 * aux_buf->head is the byte offset of the next chunk to dump; once
+	 * it reaches hw_buf_size the hardware buffer is exhausted and no
+	 * further H_HTM_OP_DUMP_DATA calls should be issued.
+	 * hw_buf_size == 0 means the status hcall failed at configure time;
+	 * skip the check and let the hcall itself signal end-of-data.
+	 */
+	if (target->hw_buf_size) {
+		if (aux_buf->head >= target->hw_buf_size) {
+			aux_buf->collect_htm_trace = 0;
+			perf_aux_output_end(&handle, 0);
+			return 0;
+		}
+		if (chunk_size > target->hw_buf_size - aux_buf->head)
+			chunk_size = target->hw_buf_size - aux_buf->head;
+	}
+
+	if (!chunk_size) {
+		/*
+		 * No space in the AUX ring buffer right now.  Leave
+		 * collect_htm_trace set. Return -ENOSPC so htm_event_read()
+		 * keeps event->count non-zero, signalling to the caller that
+		 * collection is still ongoing and another pmu->read pass
+		 * should be attempted once the consumer has drained the buffer.
+		 */
+		perf_aux_output_end(&handle, 0);
+		return -ENOSPC;
+	}
+
+	/*
+	 * Compute the precise base target address using
+	 * localized page offset rules
+	 */
+	target_page_virt = aux_buf->pages[page_index];
+	hypervisor_target_phys = (u64)virt_to_phys(target_page_virt) + page_offset;
+
+	do {
+		/*
+		 * Invoke H_HTM call with:
+		 * - operation as htm dump (H_HTM_OP_DUMP_DATA)
+		 * - last three values are address, size and offset
+		 */
+		rc = htm_hcall_wrapper(htmflags, cfg.nodeindex, cfg.nodalchipindex,
+				cfg.coreindexonchip, cfg.htmtype, H_HTM_OP_DUMP_DATA,
+				hypervisor_target_phys, chunk_size, aux_buf->head);
+		ret = htm_return_check(rc);
+	} while (ret == -EBUSY && ++retries < MAX_RETRIES);
+
+	if (ret > 0) {
+		aux_buf->head += chunk_size;
+		perf_aux_output_end(&handle, chunk_size);
+		/*
+		 * Return the number of 128-byte HTM trace records written.
+		 * Dividing here keeps htm_event_read() free of format
+		 * knowledge: it can simply use the returned count directly,
+		 * regardless of which data path (AUX trace or memory config)
+		 * produced it.
+		 */
+		return (ssize_t)(chunk_size / 128);
+	}
+
+	/*
+	 * Hcall failed.  All non-success paths end collection for this
+	 * buffer session.
+	 */
+	aux_buf->collect_htm_trace = 0;
+	perf_aux_output_end(&handle, 0);
+	return ret;
+}
+
 static void htm_event_read(struct perf_event *event)
 {
+	ssize_t ret;
+
+	/*
+	 * Refuse to run from NMI context.  htm_dump_sample_data() issues
+	 * hypervisor calls, mutates target->tracing_active, and writes
+	 * aux_buf->head — none of which are NMI-safe.
+	 *
+	 * perf_event_read_local() (used by BPF helpers such as
+	 * bpf_perf_event_read_value()) does not check PERF_PMU_CAP_NO_NMI,
+	 * so an explicit in_nmi() guard here is required.
+	 *
+	 * Returning without touching event->count preserves whatever value
+	 * was set by the previous pmu->read() call.  If the drain is still
+	 * in progress, event->count remains non-zero and the drain loop
+	 * keeps retrying.  The next scheduled pmu->read() — which will not
+	 * be in NMI context — will proceed normally and complete the dump.
+	 * This mirrors the stack-local handle fix: both let the NMI path
+	 * return without mutating any shared state.
+	 */
+	if (in_nmi())
+		return;
+
+	ret = htm_dump_sample_data(event);
+	/*
+	 * htm_dump_sample_data() returns the record count directly
+	 * (already divided by the per-format record size):
+	 *   AUX trace path:   chunk_size / 128  (128-byte HTM records)
+	 *   Memory cfg path:  to_copy    /  32  (32-byte entries)
+	 *
+	 * ret > 0:        record count written; use directly as event->count.
+	 * ret == -ENOSPC: AUX buffer full, hypervisor stream intact;
+	 *                 count = 1 so the drain loop keeps retrying
+	 *                 once the consumer has drained the buffer.
+	 * ret <= 0:       EOF, stop failed, or hard error; count = 0
+	 *                 so the drain loop stops cleanly.
+	 *
+	 * event->count does not represent an instruction or cycle count;
+	 * actual trace records are decoded in userspace by the perf tool.
+	 */
+	if (ret > 0)
+		local64_set(&event->count, ret);
+	else if (ret == -ENOSPC)
+		local64_set(&event->count, 1);
+	else
+		local64_set(&event->count, 0);
+}
+
+/*
+ * Set up pmu-private data structures for an AUX area
+ * **pages contains the aux buffer allocated for this event
+ * for the corresponding cpu. rb_alloc_aux uses "alloc_pages_node"
+ * and returns pointer to each page address.
+ * PMU capabilities: PERF_PMU_CAP_AUX_NO_SG | PERF_PMU_CAP_AUX_PREFER_LARGE
+ * to try get closest possible physically contiguous page blocks.
+ *
+ * The aux private data structure ie, "struct htm_pmu_buf" mainly
+ * saves
+ * - buf->base: aux buffer base address
+ * - buf->head: offset from base address where data will be written to.
+ * - buf->size: Size of allocated memory
+ */
+static void *htm_setup_aux(struct perf_event *event, void **pages,
+		int nr_pages, bool snapshot)
+{
+	int cpu = event->cpu;
+	struct htm_pmu_buf *buf;
+
+	if (!nr_pages)
+		return NULL;
+
+	/*
+	 * Snapshot (overwrite) mode is not supported.  In overwrite mode
+	 * perf_aux_output_begin() leaves handle->size = 0, which would
+	 * cause htm_dump_sample_data() to return ENOSPC on every call,
+	 * setting event->count = 1 and creating an infinite drain loop
+	 * in userspace.  Reject it here so perf_event_open() returns
+	 * EINVAL to the caller.
+	 */
+	if (snapshot)
+		return NULL;
+
+	if (cpu == -1)
+		cpu = raw_smp_processor_id();
+
+	buf = kzalloc_node(sizeof(*buf), GFP_KERNEL, cpu_to_node(cpu));
+	if (!buf)
+		return NULL;
+
+	buf->nr_pages = nr_pages;
+	buf->snapshot = snapshot;
+	buf->size = (u64)nr_pages << PAGE_SHIFT;
+	buf->pages = pages;
+
+	buf->base = pages[0];
+	if (!buf->base) {
+		kfree(buf);
+		return NULL;
+	}
+
+	buf->collect_htm_trace = 1;
+	buf->head = 0;
+	return buf;
+}
+
+/*
+ * free pmu-private AUX data structures
+ */
+static void htm_free_aux(void *aux)
+{
+	struct htm_pmu_buf *buf = aux;
+
+	if (!buf)
+		return;
+
+	kfree(buf);
 }
 
 static struct pmu htm_pmu = {
@@ -524,7 +890,10 @@ static struct pmu htm_pmu = {
 	.read         = htm_event_read,
 	.start        = htm_event_start,
 	.stop         = htm_event_stop,
-	.capabilities = PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_EXCLUSIVE,
+	.setup_aux    = htm_setup_aux,
+	.free_aux     = htm_free_aux,
+	.capabilities = PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_EXCLUSIVE
+			| PERF_PMU_CAP_AUX_NO_SG | PERF_PMU_CAP_AUX_PREFER_LARGE,
 };
 
 static int htm_init(void)
