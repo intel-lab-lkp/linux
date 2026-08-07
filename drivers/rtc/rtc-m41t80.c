@@ -24,10 +24,6 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #ifdef CONFIG_RTC_DRV_M41T80_WDT
-#include <linux/fs.h>
-#include <linux/ioctl.h>
-#include <linux/miscdevice.h>
-#include <linux/reboot.h>
 #include <linux/watchdog.h>
 #endif
 
@@ -148,6 +144,9 @@ struct m41t80_data {
 	unsigned long features;
 	struct i2c_client *client;
 	struct rtc_device *rtc;
+#ifdef CONFIG_RTC_DRV_M41T80_WDT
+	struct watchdog_device wdt;
+#endif
 #ifdef CONFIG_COMMON_CLK
 	struct clk_hw sqw;
 	unsigned long freq;
@@ -626,273 +625,118 @@ static struct clk *m41t80_sqw_register_clk(struct m41t80_data *m41t80)
  *
  *****************************************************************************
  */
-static DEFINE_MUTEX(m41t80_rtc_mutex);
-static struct i2c_client *save_client;
-
 /* Default margin */
-#define WD_TIMO 60		/* 1..31 seconds */
+#define M41T80_WDT_DEFAULT_TIMEOUT	60
+#define M41T80_WDT_MIN_TIMEOUT	1
+#define M41T80_WDT_MAX_TIMEOUT	124
 
-static int wdt_margin = WD_TIMO;
+static int wdt_margin = M41T80_WDT_DEFAULT_TIMEOUT;
 module_param(wdt_margin, int, 0);
 MODULE_PARM_DESC(wdt_margin, "Watchdog timeout in seconds (default 60s)");
 
-static unsigned long wdt_is_open;
-static int boot_flag;
+static const struct watchdog_info m41t80_wdt_info = {
+	.options = WDIOF_POWERUNDER | WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT,
+	.firmware_version = 1,
+	.identity = "M41T80 Watchdog",
+};
 
 /**
- *	wdt_ping - Reload counter one with the watchdog timeout.
- *	We don't bother reloading the cascade counter.
+ * m41t80_wdt_ping - Reload the watchdog counter.
  */
-static void wdt_ping(void)
+static int m41t80_wdt_ping(struct watchdog_device *wdt)
 {
+	struct m41t80_data *m41t80 = watchdog_get_drvdata(wdt);
+	struct i2c_client *client = m41t80->client;
 	unsigned char i2c_data[2];
-	struct i2c_msg msgs1[1] = {
-		{
-			.addr	= save_client->addr,
-			.flags	= 0,
-			.len	= 2,
-			.buf	= i2c_data,
-		},
+	struct i2c_msg msg = {
+		.addr = client->addr,
+		.flags = 0,
+		.len = 2,
+		.buf = i2c_data,
 	};
-	struct m41t80_data *clientdata = i2c_get_clientdata(save_client);
+	int ret;
 
-	i2c_data[0] = 0x09;		/* watchdog register */
+	i2c_data[0] = 0x09; /* watchdog register */
 
-	if (wdt_margin > 31)
-		i2c_data[1] = (wdt_margin & 0xFC) | 0x83; /* resolution = 4s */
+	if (wdt->timeout > 31)
+		i2c_data[1] = (wdt->timeout & 0xFC) | 0x83;
 	else
 		/*
-		 * WDS = 1 (0x80), mulitplier = WD_TIMO, resolution = 1s (0x02)
+		 * WDS = 1 (0x80), multiplier = timeout, resolution = 1s (0x02)
 		 */
-		i2c_data[1] = wdt_margin << 2 | 0x82;
+		i2c_data[1] = wdt->timeout << 2 | 0x82;
 
 	/*
-	 * M41T65 has three bits for watchdog resolution.  Don't set bit 7, as
+	 * M41T65 has three bits for watchdog resolution. Don't set bit 7, as
 	 * that would be an invalid resolution.
 	 */
-	if (clientdata->features & M41T80_FEATURE_WD)
+	if (m41t80->features & M41T80_FEATURE_WD)
 		i2c_data[1] &= ~M41T80_WATCHDOG_RB2;
 
-	i2c_transfer(save_client->adapter, msgs1, 1);
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	if (ret == 1)
+		return 0;
+
+	return ret < 0 ? ret : -EIO;
 }
 
 /**
- *	wdt_disable - disables watchdog.
+ * m41t80_wdt_stop - Disable the watchdog.
  */
-static void wdt_disable(void)
+static int m41t80_wdt_stop(struct watchdog_device *wdt)
 {
+	struct m41t80_data *m41t80 = watchdog_get_drvdata(wdt);
+	struct i2c_client *client = m41t80->client;
 	unsigned char i2c_data[2], i2c_buf[0x10];
 	struct i2c_msg msgs0[2] = {
 		{
-			.addr	= save_client->addr,
-			.flags	= 0,
-			.len	= 1,
-			.buf	= i2c_data,
+			.addr = client->addr,
+			.flags = 0,
+			.len = 1,
+			.buf = i2c_data,
 		},
 		{
-			.addr	= save_client->addr,
-			.flags	= I2C_M_RD,
-			.len	= 1,
-			.buf	= i2c_buf,
+			.addr = client->addr,
+			.flags = I2C_M_RD,
+			.len = 1,
+			.buf = i2c_buf,
 		},
 	};
-	struct i2c_msg msgs1[1] = {
-		{
-			.addr	= save_client->addr,
-			.flags	= 0,
-			.len	= 2,
-			.buf	= i2c_data,
-		},
+	struct i2c_msg msg = {
+		.addr = client->addr,
+		.flags = 0,
+		.len = 2,
+		.buf = i2c_data,
 	};
+	int ret;
 
 	i2c_data[0] = 0x09;
-	i2c_transfer(save_client->adapter, msgs0, 2);
+	ret = i2c_transfer(client->adapter, msgs0, 2);
+	if (ret != 2)
+		return ret < 0 ? ret : -EIO;
 
 	i2c_data[0] = 0x09;
 	i2c_data[1] = 0x00;
-	i2c_transfer(save_client->adapter, msgs1, 1);
-}
-
-/**
- *	wdt_write - write to watchdog.
- *	@file: file handle to the watchdog
- *	@buf: buffer to write (unused as data does not matter here
- *	@count: count of bytes
- *	@ppos: pointer to the position to write. No seeks allowed
- *
- *	A write to a watchdog device is defined as a keepalive signal. Any
- *	write of data will do, as we don't define content meaning.
- */
-static ssize_t wdt_write(struct file *file, const char __user *buf,
-			 size_t count, loff_t *ppos)
-{
-	if (count) {
-		wdt_ping();
-		return 1;
-	}
-	return 0;
-}
-
-static ssize_t wdt_read(struct file *file, char __user *buf,
-			size_t count, loff_t *ppos)
-{
-	return 0;
-}
-
-/**
- *	wdt_ioctl - ioctl handler to set watchdog.
- *	@file: file handle to the device
- *	@cmd: watchdog command
- *	@arg: argument pointer
- *
- *	The watchdog API defines a common set of functions for all watchdogs
- *	according to their available features. We only actually usefully support
- *	querying capabilities and current status.
- */
-static int wdt_ioctl(struct file *file, unsigned int cmd,
-		     unsigned long arg)
-{
-	int new_margin, rv;
-	static struct watchdog_info ident = {
-		.options = WDIOF_POWERUNDER | WDIOF_KEEPALIVEPING |
-			WDIOF_SETTIMEOUT,
-		.firmware_version = 1,
-		.identity = "M41T80 WTD"
-	};
-
-	switch (cmd) {
-	case WDIOC_GETSUPPORT:
-		return copy_to_user((struct watchdog_info __user *)arg, &ident,
-				    sizeof(ident)) ? -EFAULT : 0;
-
-	case WDIOC_GETSTATUS:
-	case WDIOC_GETBOOTSTATUS:
-		return put_user(boot_flag, (int __user *)arg);
-	case WDIOC_KEEPALIVE:
-		wdt_ping();
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	if (ret == 1)
 		return 0;
-	case WDIOC_SETTIMEOUT:
-		if (get_user(new_margin, (int __user *)arg))
-			return -EFAULT;
-		/* Arbitrary, can't find the card's limits */
-		if (new_margin < 1 || new_margin > 124)
-			return -EINVAL;
-		wdt_margin = new_margin;
-		wdt_ping();
-		fallthrough;
-	case WDIOC_GETTIMEOUT:
-		return put_user(wdt_margin, (int __user *)arg);
 
-	case WDIOC_SETOPTIONS:
-		if (copy_from_user(&rv, (int __user *)arg, sizeof(int)))
-			return -EFAULT;
-
-		if (rv & WDIOS_DISABLECARD) {
-			pr_info("disable watchdog\n");
-			wdt_disable();
-		}
-
-		if (rv & WDIOS_ENABLECARD) {
-			pr_info("enable watchdog\n");
-			wdt_ping();
-		}
-
-		return -EINVAL;
-	}
-	return -ENOTTY;
+	return ret < 0 ? ret : -EIO;
 }
 
-static long wdt_unlocked_ioctl(struct file *file, unsigned int cmd,
-			       unsigned long arg)
+static int m41t80_wdt_set_timeout(struct watchdog_device *wdt, unsigned int timeout)
 {
-	int ret;
+	wdt->timeout = timeout;
 
-	mutex_lock(&m41t80_rtc_mutex);
-	ret = wdt_ioctl(file, cmd, arg);
-	mutex_unlock(&m41t80_rtc_mutex);
-
-	return ret;
+	return m41t80_wdt_ping(wdt);
 }
 
-/**
- *	wdt_open - open a watchdog.
- *	@inode: inode of device
- *	@file: file handle to device
- *
- */
-static int wdt_open(struct inode *inode, struct file *file)
-{
-	if (iminor(inode) == WATCHDOG_MINOR) {
-		mutex_lock(&m41t80_rtc_mutex);
-		if (test_and_set_bit(0, &wdt_is_open)) {
-			mutex_unlock(&m41t80_rtc_mutex);
-			return -EBUSY;
-		}
-		/*
-		 *	Activate
-		 */
-		wdt_is_open = 1;
-		mutex_unlock(&m41t80_rtc_mutex);
-		return stream_open(inode, file);
-	}
-	return -ENODEV;
-}
-
-/**
- *	wdt_release - release a watchdog.
- *	@inode: inode to board
- *	@file: file handle to board
- *
- */
-static int wdt_release(struct inode *inode, struct file *file)
-{
-	if (iminor(inode) == WATCHDOG_MINOR)
-		clear_bit(0, &wdt_is_open);
-	return 0;
-}
-
-/**
- *	wdt_notify_sys - notify to watchdog.
- *	@this: our notifier block
- *	@code: the event being reported
- *	@unused: unused
- *
- *	Our notifier is called on system shutdowns. We want to turn the card
- *	off at reboot otherwise the machine will reboot again during memory
- *	test or worse yet during the following fsck. This would suck, in fact
- *	trust me - if it happens it does suck.
- */
-static int wdt_notify_sys(struct notifier_block *this, unsigned long code,
-			  void *unused)
-{
-	if (code == SYS_DOWN || code == SYS_HALT)
-		/* Disable Watchdog */
-		wdt_disable();
-	return NOTIFY_DONE;
-}
-
-static const struct file_operations wdt_fops = {
-	.owner	= THIS_MODULE,
-	.read	= wdt_read,
-	.unlocked_ioctl = wdt_unlocked_ioctl,
-	.compat_ioctl = compat_ptr_ioctl,
-	.write	= wdt_write,
-	.open	= wdt_open,
-	.release = wdt_release,
-};
-
-static struct miscdevice wdt_dev = {
-	.minor = WATCHDOG_MINOR,
-	.name = "watchdog",
-	.fops = &wdt_fops,
-};
-
-/*
- *	The WDT card needs to learn about soft shutdowns in order to
- *	turn the timebomb registers off.
- */
-static struct notifier_block wdt_notifier = {
-	.notifier_call = wdt_notify_sys,
+static const struct watchdog_ops m41t80_wdt_ops = {
+	.owner = THIS_MODULE,
+	.start = m41t80_wdt_ping,
+	.stop = m41t80_wdt_stop,
+	.ping = m41t80_wdt_ping,
+	.set_timeout = m41t80_wdt_set_timeout,
 };
 #endif /* CONFIG_RTC_DRV_M41T80_WDT */
 
@@ -989,19 +833,6 @@ static int m41t80_probe(struct i2c_client *client)
 		return rc;
 	}
 
-#ifdef CONFIG_RTC_DRV_M41T80_WDT
-	if (m41t80_data->features & M41T80_FEATURE_HT) {
-		save_client = client;
-		rc = misc_register(&wdt_dev);
-		if (rc)
-			return rc;
-		rc = register_reboot_notifier(&wdt_notifier);
-		if (rc) {
-			misc_deregister(&wdt_dev);
-			return rc;
-		}
-	}
-#endif
 #ifdef CONFIG_COMMON_CLK
 	if (m41t80_data->features & M41T80_FEATURE_SQ)
 		m41t80_sqw_register_clk(m41t80_data);
@@ -1011,19 +842,26 @@ static int m41t80_probe(struct i2c_client *client)
 	if (rc)
 		return rc;
 
-	return 0;
-}
-
-static void m41t80_remove(struct i2c_client *client)
-{
 #ifdef CONFIG_RTC_DRV_M41T80_WDT
-	struct m41t80_data *clientdata = i2c_get_clientdata(client);
+	if (m41t80_data->features & M41T80_FEATURE_HT) {
+		m41t80_data->wdt.info = &m41t80_wdt_info;
+		m41t80_data->wdt.ops = &m41t80_wdt_ops;
+		m41t80_data->wdt.timeout = M41T80_WDT_DEFAULT_TIMEOUT;
+		m41t80_data->wdt.min_timeout = M41T80_WDT_MIN_TIMEOUT;
+		m41t80_data->wdt.max_timeout = M41T80_WDT_MAX_TIMEOUT;
 
-	if (clientdata->features & M41T80_FEATURE_HT) {
-		misc_deregister(&wdt_dev);
-		unregister_reboot_notifier(&wdt_notifier);
+		watchdog_init_timeout(&m41t80_data->wdt, wdt_margin, &client->dev);
+		watchdog_stop_on_reboot(&m41t80_data->wdt);
+		watchdog_stop_on_unregister(&m41t80_data->wdt);
+		watchdog_set_drvdata(&m41t80_data->wdt, m41t80_data);
+
+		rc = devm_watchdog_register_device(&client->dev, &m41t80_data->wdt);
+		if (rc)
+			return rc;
 	}
 #endif
+
+	return 0;
 }
 
 static struct i2c_driver m41t80_driver = {
@@ -1033,7 +871,6 @@ static struct i2c_driver m41t80_driver = {
 		.pm = &m41t80_pm,
 	},
 	.probe = m41t80_probe,
-	.remove = m41t80_remove,
 	.id_table = m41t80_id,
 };
 

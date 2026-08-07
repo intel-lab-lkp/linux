@@ -561,7 +561,8 @@ config RTC_DRV_M41T80
 
 config RTC_DRV_M41T80_WDT
 	bool "ST M41T65/M41T80 series RTC watchdog timer"
-	depends on RTC_DRV_M41T80
+	depends on RTC_DRV_M41T80 && WATCHDOG
+	select WATCHDOG_CORE
 	help
 	  If you say Y here you will get support for the
 	  watchdog timer in the ST M41T60 and M41T80 RTC chips series.
